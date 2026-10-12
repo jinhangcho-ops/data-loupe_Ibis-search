@@ -18,6 +18,17 @@ TABLE_NAME = re.compile(r"[A-Za-z0-9_가-힣]+")
 FILE_FORMATS = ["parquet", "csv"]
 
 
+@app.get("/api/recipes")
+def recipes():
+    return jsonify(recipes=settings.recipes())
+
+
+@app.post("/api/recipes")
+def save_recipe():
+    """recipe가 null이면 그 이름을 지운다."""
+    return jsonify(recipes=settings.save_recipe(request.json.get("name"), request.json.get("recipe")))
+
+
 @app.get("/prep")
 def prep_page():
     return server.page("prep.html")

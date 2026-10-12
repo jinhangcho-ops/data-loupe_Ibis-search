@@ -16,8 +16,8 @@ CHOICES = {
     "count": ["on", "off"],  # 검색할 때 전체 행 수를 셀지: 센다 / 세지 않는다
 }
 
-# 끌어서 조절한 크기(px)와 전처리가 미리 볼 행 수(sample): (최소, 최대). 크기는 화면(index.html)의 SIZES와 같아야 한다. 0을 저장하면 기본값으로 돌아간다.
-SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "chart": (200, 1000), "sample": (1000, 1_000_000)}
+# 끌어서 조절한 크기(px)와 전처리가 미리 볼 행 수(sample), 오래 걸린 작업이 끝났을 때 알림을 보내는 기준 시간(notify_after, 초, 기본 30): (최소, 최대). 크기는 화면(index.html)의 SIZES와 같아야 한다. 0을 저장하면 기본값으로 돌아간다.
+SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "chart": (200, 1000), "sample": (1000, 1_000_000), "notify_after": (5, 3600)}
 
 # 직전 실행의 행당 시간(나노초/행). 작업 종류(검색·집계·차트·저장·전처리의 모양 보기·미리보기·실행)와 기준 테이블 행 수의 구간(10배 단위)마다 하나.
 # 이름은 time_종류_구간이고 구간은 행 수의 자릿수 - 1(1,000행 미만은 모두 2)이다. 화면이 예상 시간을 구할 때 같은 구간의 값만 쓴다.
@@ -63,30 +63,50 @@ def save(changes):
     write(PATH.name, {name: value for name, value in {**load(), **changes}.items() if value != 0})
 
 
-MAX_SEARCHES = 100  # 저장해 둘 수 있는 검색 수
+MAX_SAVED = 100  # 이름을 붙여 저장해 둘 수 있는 검색(구성) 수
 MAX_SEARCH_SIZE = 20_000  # 검색 하나의 크기(JSON 글자 수)
+MAX_RECIPE_SIZE = 100_000  # 전처리 구성 하나의 크기. 컬럼 100개에 전처리를 아홉 개씩 정해도 약 3만 자라 검색보다 크게 잡는다.
+
+
+def named(file):
+    """이름을 붙여 저장한 것 {이름: 내용}을 담은 설정 폴더의 JSON 파일. 없거나 읽을 수 없으면 빈 것."""
+    return read(file) or {}
+
+
+def save_named(file, what, limit, name, item, count=MAX_SAVED):
+    """item(what은 "검색"·"구성" 같은 낱말)을 그 이름으로 file에 저장한다(같은 이름은 덮어쓴다). item이 None이면 그 이름을 지운다. 바뀐 전체를 돌려준다.
+    이름은 1~50자, 내용은 객체이고 JSON으로 limit자 이하, 개수는 count개까지(기본 MAX_SAVED)."""
+    name = name.strip() if isinstance(name, str) else ""
+    if not 1 <= len(name) <= 50:
+        raise ValueError(f"{what} 이름은 1자 이상 50자 이하로 입력하세요.")
+    found = named(file)
+    if item is None:
+        found.pop(name, None)
+    elif not isinstance(item, dict):
+        raise ValueError(f"저장할 {what}이 올바르지 않습니다.")
+    elif len(json.dumps(item, ensure_ascii=False)) > limit:
+        raise ValueError(f"저장할 {what}이 너무 큽니다.")
+    elif name not in found and len(found) >= count:
+        raise ValueError(f"저장한 {what}은 {count}개까지입니다. 쓰지 않는 것을 지우세요.")
+    else:
+        found[name] = item
+    write(file, found)
+    return found
 
 
 def searches():
     """이름을 붙여 저장한 검색 {이름: 검색}. 연결 정보는 들어 있지 않다."""
-    return read("searches.json") or {}
+    return named("searches.json")
 
 
 def save_search(name, search):
-    """검색을 그 이름으로 저장한다(같은 이름은 덮어쓴다). search가 None이면 그 이름을 지운다. 바뀐 전체를 돌려준다."""
-    name = name.strip() if isinstance(name, str) else ""
-    if not 1 <= len(name) <= 50:
-        raise ValueError("검색 이름은 1자 이상 50자 이하로 입력하세요.")
-    found = searches()
-    if search is None:
-        found.pop(name, None)
-    elif not isinstance(search, dict):
-        raise ValueError("저장할 검색이 올바르지 않습니다.")
-    elif len(json.dumps(search, ensure_ascii=False)) > MAX_SEARCH_SIZE:
-        raise ValueError("저장할 검색이 너무 큽니다.")
-    elif name not in found and len(found) >= MAX_SEARCHES:
-        raise ValueError(f"저장한 검색은 {MAX_SEARCHES}개까지입니다. 쓰지 않는 것을 지우세요.")
-    else:
-        found[name] = search
-    write("searches.json", found)
-    return found
+    return save_named("searches.json", "검색", MAX_SEARCH_SIZE, name, search)
+
+
+def recipes():
+    """이름을 붙여 저장한 전처리 구성 {이름: 구성}. 연결 정보는 들어 있지 않다."""
+    return named("recipes.json")
+
+
+def save_recipe(name, recipe):
+    return save_named("recipes.json", "구성", MAX_RECIPE_SIZE, name, recipe)

@@ -4,6 +4,7 @@ import threading
 import webview
 from werkzeug.serving import make_server
 
+import notify  # noqa: F401  보내기 라우트가 앱에 달린다.
 import prep_app  # noqa: F401  전처리 라우트가 앱에 달린다.
 import server
 from app import KEY, app

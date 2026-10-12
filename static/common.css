@@ -20,9 +20,9 @@ body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 system-u
 h2 { font-size:13px; margin:14px 0 6px; color:var(--muted); }
 h2:first-child { margin-top:0; }
 h3 { font-size:15px; margin:0 0 10px; }
-input, select, button { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; width:100%; }
-input, select { background:var(--card); color:var(--text); }
-#theme, #resize, #cancel { float:right; }
+input, select, textarea, button { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; width:100%; }
+input, select, textarea { background:var(--card); color:var(--text); }
+#theme, #resize, #dest-open, #cancel { float:right; }
 #cancel { font-size:12px; }  /* 시간 줄(12px)과 같은 높이라 나타나도 줄 높이가 변하지 않는다. */
 #usage, #timing { margin:0; font-variant-numeric:tabular-nums; }
 #usage { clear:both; }  /* 버튼 아래 줄에서 시작. 좁으면 "|" 앞에서만 줄을 바꾼다. */
@@ -42,6 +42,10 @@ button.ghost { background:none; color:var(--muted); padding:0 6px; }
 .err { color:var(--err); font-size:12px; min-height:16px; }
 .cols { font-size:12px; color:var(--muted); max-height:140px; overflow:auto; }
 .hidden { display:none; }
+/* 보낼 곳 패널: 화면 위에 뜨는 상자. 바깥을 누르면 닫힌다. */
+.modal { position:fixed; inset:0; z-index:200; background:rgb(0 0 0 / .45); display:grid; place-items:center; }
+.modal.hidden { display:none; }
+.modal-box { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:8px; padding:16px; width:min(440px, 92vw); max-height:90vh; overflow:auto; }
 #flat { margin-top:6px; }
 #flat .row { align-items:center; margin-bottom:2px; }
 #flat-list label { display:block; white-space:nowrap; }
@@ -63,7 +67,7 @@ th { position:sticky; top:0; background:var(--head); }
 td.num { text-align:right; font-variant-numeric:tabular-nums; }
 .empty { color:var(--muted); }
 /* 고르는 칸을 펼친 목록. 창 엔진이 그리는 목록은 화면 모드의 색을 따르지 않아 직접 그린다(맨 아래 스크립트). */
-.menu { position:fixed; z-index:100; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:4px 0; box-shadow:0 6px 18px rgb(0 0 0 / .25); }
+.menu { position:fixed; z-index:300; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:4px 0; box-shadow:0 6px 18px rgb(0 0 0 / .25); }
 .menu input { display:block; width:calc(100% - 12px); margin:2px 6px 4px; }
 .menu > div { overflow:auto; }
 .menu div div { padding:5px 10px; white-space:nowrap; cursor:default; }

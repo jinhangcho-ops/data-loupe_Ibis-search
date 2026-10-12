@@ -68,7 +68,7 @@ def only_window():
 
 @app.before_request
 def wait_turn():
-    if request.path not in ("/api/usage", "/api/cancel"):
+    if request.path not in ("/api/usage", "/api/cancel", "/api/send"):
         turn.acquire()
         g.turn = True
 

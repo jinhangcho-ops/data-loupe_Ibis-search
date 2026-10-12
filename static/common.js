@@ -83,6 +83,7 @@ async function timed(kind, fn) {
       rates[name] = Math.min(Math.max(Math.round((performance.now() - run.at) * 1e6 / rows), 1), 1e12);  // 상한은 settings.py의 MAX_TIME과 같아야 한다.
       saveSetting({ [name]: rates[name] });
     }
+    notifyDone(kind, (performance.now() - run.at) / 1000, rows);  // 성공한 작업만(오류·취소는 위에서 던져져 여기까지 오지 않는다)
     return out;
   } finally {
     if (going.delete(run)) {
@@ -92,6 +93,83 @@ async function timed(kind, fn) {
     }
   }
 }
+
+// 보낼 곳: 종류와 칸은 서버가 알려 주고(/api/destinations) 화면은 종류를 모른다.
+let dest = { kinds: {}, destinations: {} };
+let notifyAfter = +saved("notify_after") || 30;  // 이만큼(초) 이상 걸린 작업이 끝나면 알린다
+const sendTo = (name, body) => api("/api/send", { name, ...body });
+const takesImage = name => dest.kinds[dest.destinations[name].kind].image;
+const DONE = { search: "검색이", summary: "집계가", chart: "차트가", export: "저장이", profile: "통계가", preview: "미리보기가", run: "전처리 실행이" };
+// 오래 걸린 작업이 끝나면 done인 보낼 곳마다 알린다. 데이터 값은 보내지 않는다.
+function notifyDone(kind, seconds, rows) {
+  if (seconds < notifyAfter) return;
+  for (const [name, d] of Object.entries(dest.destinations)) {
+    if (d.done) sendTo(name, { title: `${DONE[kind]} 끝났습니다`, text: S.base, ...(rows ? { rows } : {}), seconds: +seconds.toFixed(1) }).catch(e => connMsg(e.message));
+  }
+}
+const destMsg = (text, ok) => { $("msg-dest").textContent = text; $("msg-dest").className = ok ? "ok" : "err"; };
+// 목록에서 고른 보낼 곳(없으면 새로 만들기)을 폼에 채운다.
+function pickDest() {
+  const name = $("dest-list").value, saved = dest.destinations[name];
+  $("dest-name").value = name;
+  $("dest-done").checked = !!saved?.done;
+  if (saved) $("dest-kind").value = saved.kind;
+  showFields();
+}
+// 고른 종류의 칸을 서버의 표대로 그린다. 저장된 것이면 비밀이 아닌 칸은 값을, 비밀 칸은 안내 글자를 채운다.
+function showFields() {
+  const kind = $("dest-kind").value, spec = dest.kinds[kind], now = dest.destinations[$("dest-list").value];
+  const saved = now?.kind === kind ? now : null, presets = spec.presets ?? [];
+  $("dest-preset").replaceChildren(new Option("기본 틀", ""), ...presets.map((p, i) => new Option(p.label, i)));
+  $("dest-preset").classList.toggle("hidden", !presets.length);
+  $("dest-fields").replaceChildren(...spec.fields.map(f => {
+    const input = f.options ? el("select", {}, ...f.options.map(([v, t]) => new Option(t, v)))
+      : f.multiline ? el("textarea", { rows: 4 }) : el("input", { type: f.secret ? "password" : "text" });
+    input.dataset.field = f.name;
+    if (f.secret) input.placeholder = !saved ? "" : saved[f.name] ? "저장됨 (바꾸려면 새로 입력)" : "다시 입력 필요";
+    else input.value = saved?.[f.name] ?? f.default ?? "";
+    return el("div", {}, el("div", { className: "hint", textContent: f.label }), input, ...(f.hint ? [el("div", { className: "hint", textContent: f.hint })] : []));
+  }));
+}
+function showDestinations(d, name = $("dest-list").value) {
+  dest = d;
+  fill($("dest-list"), Object.keys(d.destinations), "새로 만들기");
+  $("dest-list").value = name in d.destinations ? name : "";
+  $("dest-kind").replaceChildren(...Object.entries(d.kinds).map(([k, v]) => new Option(v.label, k)));
+  pickDest();
+  document.dispatchEvent(new Event("destinations"));  // 화면이 보낼 곳 목록을 쓰는 칸을 다시 채운다.
+}
+$("dest-list").onchange = pickDest;
+$("dest-kind").onchange = showFields;
+$("dest-preset").onchange = () => {
+  const preset = dest.kinds[$("dest-kind").value].presets[$("dest-preset").value];
+  for (const [k, v] of Object.entries(preset ?? {})) if (k !== "label") $("dest-fields").querySelector(`[data-field="${k}"]`).value = v;
+  $("dest-preset").value = "";
+};
+$("dest-open").onclick = () => $("dest-panel").classList.remove("hidden");
+$("dest-close").onclick = () => $("dest-panel").classList.add("hidden");
+$("dest-panel").onclick = e => { if (e.target === $("dest-panel")) $("dest-panel").classList.add("hidden"); };
+$("notify-after").value = notifyAfter;
+$("notify-after").onchange = () => {
+  const n = Number($("notify-after").value), ok = Number.isInteger(n) && n >= 5 && n <= 3600;
+  destMsg(ok ? "" : "5–3600 사이의 정수를 넣으세요.");
+  if (ok) { notifyAfter = n; saveSetting({ notify_after: n }); }
+};
+$("dest-save").onclick = () => busy($("dest-save"), async () => {
+  const name = $("dest-name").value.trim();
+  const destination = { kind: $("dest-kind").value, done: $("dest-done").checked,
+    ...Object.fromEntries([...$("dest-fields").querySelectorAll("[data-field]")].map(i => [i.dataset.field, i.value])) };  // 비밀 칸을 비우면 서버가 저장된 값을 그대로 둔다.
+  try { showDestinations(await api("/api/destinations", { name, destination }), name); destMsg("저장했습니다", true); } catch (e) { destMsg(e.message); }
+});
+$("dest-del").onclick = () => busy($("dest-del"), async () => {
+  if (!$("dest-list").value) return;
+  try { showDestinations(await api("/api/destinations", { name: $("dest-list").value, destination: null }), ""); destMsg("삭제했습니다", true); } catch (e) { destMsg(e.message); }
+});
+$("dest-test").onclick = () => busy($("dest-test"), async () => {
+  if (!$("dest-list").value) return destMsg("저장한 보낼 곳을 고른 뒤 시험하세요.");
+  try { await sendTo($("dest-list").value, { title: "시험 메시지", text: "Ibis 검색·전처리에서 보낸 시험 메시지입니다." }); destMsg("보냈습니다", true); } catch (e) { destMsg(e.message); }
+});
+api("/api/destinations").then(showDestinations).catch(() => {});
 
 // 1. 연결
 document.querySelectorAll("input[name=kind]").forEach(r => r.onchange = () => {

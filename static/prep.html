@@ -71,7 +71,8 @@
       <label style="display:block; margin-top:8px"><input type="checkbox" id="downcast" checked style="width:auto"> 수 컬럼을 가장 작은 타입으로 (downcast)</label>
       <div class="hint">값이 바뀌지 않는 경우에만 줄입니다(예: int64 → int16)</div>
 
-      <div class="row" style="margin-top:14px"><button id="preview">미리보기</button><button id="run">실행</button></div>
+      <div class="row" style="margin-top:14px"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 구성을 불러옵니다 (미리보기·실행은 하지 않습니다)"></select><input id="rname" placeholder="이름"><button id="rsave">저장</button><button id="rdel" class="ghost">삭제</button></div>
+      <div class="row"><button id="preview">미리보기</button><button id="run">실행</button></div>
     </div>
   </aside>
   <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
@@ -88,6 +89,7 @@
 </div>
 
 
+<!--include notify.html-->
 <script src="/static/common.js"></script>
 <script>
 let prof = null;  // /api/profile의 응답. 테이블을 고르기 전에는 null
@@ -452,7 +454,8 @@ function clearScreen() {
 $("schema").addEventListener("change", () => { S.base = ""; resetTable(); });  // common.js가 테이블 목록을 다시 채운다.
 // 테이블을 고른 것과 같게 한다(목록에서 고를 때, ?base=). ①모양(이름·타입)을 바로 보이고 ②통계 ③타입 추천을 차례로 채운다.
 // 모든 단계가 끝나면 status가 ""이고 이 함수의 Promise가 끝난다.
-async function openTable(base) {
+// config가 있으면(저장한 구성 불러오기) 모양이 온 시점에 선택을 채운다.
+async function openTable(base, config) {
   S.base = base;
   resetTable();
   if (!base) return;
@@ -462,6 +465,7 @@ async function openTable(base) {
     if (mine !== token) return;
     prof = { ...p, columns: p.columns.map(c => ({ ...c, suggest: [], patterns: [] })) };
     edits = Object.fromEntries(p.columns.map(c => [c.name, newEdit()]));
+    if (config) restore(config);
     showAll();
   } catch (e) { if (mine === token) fail(e.message); return; }
   await computeStats(mine);
@@ -493,6 +497,64 @@ async function computeStats(mine) {
   }
 }
 $("base").onchange = () => openTable($("base").value);
+
+// 구성 저장·불러오기: 입력 상태를 그대로 저장한다(서버로 보내는 recipe 값이 아니다). 미리 볼 행 수와 미리보기 결과는 넣지 않는다.
+const config = () => ({ schema: S.schema, base: S.base, edits, copies, drops, filters, dedupe, sorts, downcast: $("downcast").checked,
+  target: { kind: $("t-table").checked ? "table" : "file", format: $("fmt").value, name: $("tname").value } });
+// 구성의 원래 컬럼이 모두 이 테이블에 있으면 선택을 채운다. 없는 것이 있으면 채우지 않고 알린다(구성에 없는 새 컬럼은 선택 없이 둔다).
+function restore(c) {
+  const copyNames = c.copies.map(x => x.name), names = prof.columns.map(x => x.name);
+  const used = [...Object.keys(c.edits).filter(n => !copyNames.includes(n)), ...c.copies.map(x => x.from)];
+  const gone = [...new Set(used)].filter(n => !names.includes(n));
+  if (gone.length) { $("rsaved").value = ""; fail(`구성의 컬럼이 이 테이블에 없습니다: ${gone.join(", ")}`); return; }
+  const d = structuredClone(c);
+  Object.assign(edits, d.edits);
+  ({ copies, drops, filters, dedupe, sorts } = d);
+  $("downcast").checked = d.downcast;
+  $("t-table").checked = d.target.kind === "table";
+  $("t-file").checked = !$("t-table").checked;
+  $("fmt").value = d.target.format;
+  $("tname").value = d.target.name;
+  showTarget();
+}
+let recipes = {};
+function showRecipes(d, name = "") {
+  recipes = d.recipes;
+  fill($("rsaved"), Object.keys(recipes), "불러오기");
+  $("rsaved").value = name;
+}
+api("/api/recipes").then(showRecipes).catch(() => {});
+$("rsave").onclick = () => {
+  if (!prof) return fail("테이블을 고르세요.");
+  return busy($("rsave"), async () => {
+    const name = $("rname").value.trim() || $("rsaved").value;  // 이름을 비우면 지금 고른 구성에 덮어쓴다.
+    try { showRecipes(await api("/api/recipes", { name, recipe: config() }), name); $("rname").value = ""; fail(""); } catch (e) { fail(e.message); }
+  });
+};
+$("rdel").onclick = () => busy($("rdel"), async () => {
+  if (!$("rsaved").value) return;
+  try { showRecipes(await api("/api/recipes", { name: $("rsaved").value, recipe: null })); fail(""); } catch (e) { fail(e.message); }
+});
+// 고르면 그 테이블을 열고 선택을 채운다(미리보기·실행은 하지 않는다). 지금 연결에 그 스키마·테이블이 없으면 아무것도 바꾸지 않고 알린다.
+$("rsaved").onchange = async () => {
+  const c = recipes[$("rsaved").value];
+  if (!c) return;
+  const was = S.schema, moved = c.schema !== was;
+  try {
+    if (moved) {
+      if (![...$("schema").options].some(o => o.value === c.schema)) throw new Error(`‘${c.schema}’ 스키마가 지금 연결에 없습니다`);
+      $("schema").value = c.schema;
+      await loadTables();
+    }
+    if (![...$("base").options].some(o => o.value === c.base)) {
+      if (moved) { $("schema").value = was; await loadTables(); }
+      $("base").value = S.base;
+      throw new Error(`‘${c.base}’ 테이블이 지금 연결에 없습니다`);
+    }
+  } catch (e) { $("rsaved").value = ""; fail(e.message); return; }
+  $("base").value = c.base;
+  await openTable(c.base, c);
+};
 $("sample").value = sample;
 $("sample").onchange = () => {
   const n = Number($("sample").value);

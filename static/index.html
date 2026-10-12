@@ -116,7 +116,8 @@
       <div class="table-wrap" id="summary"></div>
       <div class="row save"><span class="hint">집계 표 저장</span>
         <select id="simage" title="저장할 그림의 모드 (차트 저장과 같이 바뀝니다)"><option value="light">라이트</option><option value="dark">다크</option></select>
-        <button data-table="png">PNG</button><button data-table="jpeg">JPG</button></div>
+        <button data-table="png">PNG</button><button data-table="jpeg">JPG</button>
+        <select id="ssend" title="집계 표를 보낼 곳"></select><button id="ssend-go">보내기</button></div>
       <div class="grip-y" data-size="summary" title="끌어서 집계 표 높이 조절 (더블클릭: 기본)"></div>
     </section>
     <section class="card">
@@ -150,12 +151,14 @@
       <div class="table-wrap hidden" id="ctable"></div>
       <div class="row save"><button id="ctable-show" class="ghost">표로 보기</button><button id="ctable-csv" style="margin-right:auto">CSV</button><span class="hint">차트 저장</span>
         <select id="cimage" title="저장할 그림의 모드 (집계 표 저장과 같이 바뀝니다)"><option value="light">라이트</option><option value="dark">다크</option></select>
-        <button data-image="png">PNG</button><button data-image="jpeg">JPG</button></div>
+        <button data-image="png">PNG</button><button data-image="jpeg">JPG</button>
+        <select id="csend" title="차트를 보낼 곳"></select><button id="csend-go">보내기</button></div>
       <div class="grip-y" data-size="chart" title="끌어서 차트 높이 조절 (더블클릭: 기본)"></div>
     </section>
   </main>
 </div>
 
+<!--include notify.html-->
 <script src="/static/common.js"></script>
 <script>
 const LISTS = ["joins", "periods", "conditions", "sorts", "columns"];  // 한 줄씩 모으는 입력. 서버로 보내는 이름과 같다.
@@ -602,8 +605,7 @@ $("ctable-csv").onclick = () => {
 // 그림 종류(png, jpeg)에 맞는 파일 확장자
 const imageExt = type => type === "jpeg" ? "jpg" : "png";
 // 집계 표 내보내기: 표 전체를 고른 저장 모드의 색으로 그려 저장한다. 글자는 화면의 표와 같게 보인다(글자 수 제한 포함).
-document.querySelectorAll("[data-table]").forEach(b => b.onclick = () => {
-  if (!last?.summary) { $("err-summary").textContent = "먼저 집계를 계산하세요."; return; }
+function summaryImage(type) {
   const { columns, rows } = last.summary, colors = themeColors($("simage").value);
   const cells = [columns.map(c => [c, false]), ...rows.map(r => columns.map(c => [shown(r[c])[0], typeof r[c] === "number"]))];
   const scale = 2, edge = 12, pad = 10, height = 26, font = bold => `${bold ? "600 " : ""}12px system-ui, "Malgun Gothic", sans-serif`;
@@ -631,13 +633,16 @@ document.querySelectorAll("[data-table]").forEach(b => b.onclick = () => {
     ctx.fillStyle = colors.line;
     ctx.fillRect(edge, y + height - 1, width, 1);
   });
-  download(out.toDataURL("image/" + b.dataset.table), "summary." + imageExt(b.dataset.table));
+  return out.toDataURL("image/" + type);
+}
+document.querySelectorAll("[data-table]").forEach(b => b.onclick = () => {
+  if (!last?.summary) { $("err-summary").textContent = "먼저 집계를 계산하세요."; return; }
+  download(summaryImage(b.dataset.table), "summary." + imageExt(b.dataset.table));
   $("err-summary").textContent = "";
 });
 
 // 차트 내보내기: 고른 저장 모드(화면 모드와 무관)의 색으로 화면과 같은 크기에 다시 그려, 그 모드의 배경 위에 옮겨 저장한다.
-document.querySelectorAll("[data-image]").forEach(b => b.onclick = () => {
-  if (!chart) { $("err-chart").textContent = "먼저 차트를 그리세요."; return; }
+function chartImage(type) {
   const colors = themeColors($("cimage").value), src = $("chart");
   const copy = Object.assign(document.createElement("canvas"), { width: src.clientWidth, height: src.clientHeight });
   const redrawn = new Chart(copy, chartConfig(colors, { responsive: false, animation: false, devicePixelRatio: src.width / src.clientWidth }));
@@ -647,8 +652,55 @@ document.querySelectorAll("[data-image]").forEach(b => b.onclick = () => {
   ctx.fillRect(0, 0, out.width, out.height);
   ctx.drawImage(copy, 0, 0);
   redrawn.destroy();
-  download(out.toDataURL("image/" + b.dataset.image), "chart." + imageExt(b.dataset.image));
+  return out.toDataURL("image/" + type);
+}
+document.querySelectorAll("[data-image]").forEach(b => b.onclick = () => {
+  if (!chart) { $("err-chart").textContent = "먼저 차트를 그리세요."; return; }
+  download(chartImage(b.dataset.image), "chart." + imageExt(b.dataset.image));
 });
+
+// 집계 표·차트 보내기: 보낼 곳을 고르고 [보내기]를 두 번 눌러야 보낸다(다른 것을 건드리면 원래대로). 그림은 그 종류가 받을 때만 넣는다.
+const resets = [];
+["click", "input", "change"].forEach(type => document.addEventListener(type, e => resets.forEach(reset => reset(e.target))));
+function sender(select, button, what, err, build) {
+  let asked = false, sent = false;  // sent: 결과 글자를 보이는 중(다음 동작에서 지운다)
+  const msg = (text, ok) => { $(err).textContent = text; $(err).className = ok ? "ok" : "err"; sent = ok; };
+  const reset = target => {
+    if (asked && target !== button) { asked = false; button.textContent = "보내기"; }
+    if (sent) msg("");
+  };
+  resets.push(reset);
+  button.onclick = () => {
+    const name = select.value, body = build(name);
+    if (!body) return;
+    if (!asked) { asked = true; button.textContent = `보낼 곳: ${name} · 보낼 것: ${what}. 한 번 더 누르면 보냅니다`; return; }
+    asked = false;
+    button.textContent = "보내기";
+    return busy(button, async () => {
+      try { await sendTo(name, body); msg("보냈습니다", true); } catch (e) { msg(e.message); }
+    });
+  };
+}
+sender($("ssend"), $("ssend-go"), "집계 표", "err-summary", name => {
+  if (!last?.summary) { $("err-summary").textContent = "먼저 집계를 계산하세요."; return null; }
+  return { title: "집계", text: S.base, table: last.summary, ...(takesImage(name) ? { image: summaryImage("png") } : {}) };
+});
+sender($("csend"), $("csend-go"), "차트", "err-chart", name => {
+  if (!chart) { $("err-chart").textContent = "먼저 차트를 그리세요."; return null; }
+  return { title: "차트", text: `${S.base}, X: ${drawn.x}`, table: chartData(), ...(takesImage(name) ? { image: chartImage("png") } : {}) };
+});
+// 보낼 곳 목록이 바뀌면(패널에서 저장·삭제) 두 칸을 다시 채운다. 없으면 비활성.
+function fillSenders() {
+  const names = Object.keys(dest.destinations);
+  for (const id of ["ssend", "csend"]) {
+    const now = $(id).value;
+    fill($(id), names, names.length ? "" : "보낼 곳 없음");
+    $(id).value = names.includes(now) ? now : names[0] ?? "";
+    $(id).disabled = $(id + "-go").disabled = !names.length;
+  }
+}
+document.addEventListener("destinations", fillSenders);
+fillSenders();  // 목록이 이 스크립트보다 먼저 와 있었을 수도 있다.
 
 $("cratio").onchange = () => { fitChart(); saveSetting({ ratio: $("cratio").value }); };
 // 그림 모드는 차트 저장과 집계 표 저장이 함께 쓴다. 한쪽에서 바꾸면 다른 쪽도 바뀐다.

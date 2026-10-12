@@ -4,6 +4,7 @@
 
 확인마다 OK/FAIL 한 줄을 찍고, 하나라도 실패하면 종료 코드 1로 끝난다.
 """
+import base64
 import datetime as dt
 import io
 import json
@@ -18,6 +19,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 import zipfile
 from collections import Counter
 from pathlib import Path
@@ -33,6 +35,7 @@ import duckdb
 from flask import Flask
 import polars as pl
 
+import notify
 import prep_app
 import prep_ops
 import prep_profile
@@ -635,6 +638,163 @@ def prep_section():
     prep_sampling(pc, got, error)
 
 
+def notify_section(c, got):
+    """다른 앱으로 보내기. 실제로 요청을 보내지 않고 notify.post를 바꿔 끼워 무엇이 나가는지만 본다."""
+    print("== 다른 앱으로 보내기")
+    error = lambda api, **body: got(api, **body).get("error", "")
+    put = lambda name, **destination: got("/api/destinations", name=name, destination=destination)
+    sent, reply = [], [b'{"ok": true}']
+
+    def fake(url, data, headers):
+        sent.append((url, data, headers))
+        answer = reply[0](url) if callable(reply[0]) else reply[0]
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    real, token, hook = notify.post, "xoxb-secret-token-123", "https://hooks.example.com/services/secret-path-456"
+    notify.post = fake
+    try:
+        r = c.get("/api/destinations").get_json()
+        check("보낼 곳 종류 표: 라벨·그림·칸(비밀 여부)", ({k: (v["label"], v["image"], [(f["name"], f["secret"]) for f in v["fields"]]) for k, v in r["kinds"].items()}, r["destinations"]),
+              ({"slack": ("Slack", True, [("token", True), ("channel", False)]), "webhook": ("웹훅(주소로 보내기)", True, [("url", True), ("content", False), ("template", False)])}, {}))
+        webhook = r["kinds"]["webhook"]
+        check("webhook의 선택지·기본값·여러 줄 칸·기본 틀", ([f.get("options") for f in webhook["fields"]][1], [f.get("default") for f in webhook["fields"]][1], webhook["fields"][2].get("multiline"),
+              [p["label"] for p in webhook["presets"]]), ([["json", "JSON"], ["text", "글자"], ["form", "폼(URL 인코딩)"]], "json", True, ["일반 JSON", "Teams", "Discord", "글자"]))
+        check("종류 표에 검사 함수 같은 내부 값이 새지 않음", all(set(f) <= {"name", "label", "secret", "options", "default", "multiline", "hint"} for k in r["kinds"].values() for f in k["fields"]), True)
+
+        print("== 보낼 곳 저장(비밀 값은 암호화)")
+        r = put("slack", kind="slack", done=True, token=token, channel="C0123")
+        check("저장: 목록에 비밀 값이 없고 저장돼 있다는 true만", r["destinations"], {"slack": {"kind": "slack", "done": True, "token": True, "channel": "C0123"}})
+        raw = (settings.PATH.parent / "destinations.json").read_bytes()
+        check("destinations.json에 토큰이 평문으로 없음", (token.encode() in raw, b"xoxb" in raw, b"C0123" in raw), (False, False, True))
+        stored = settings.named("destinations.json")["slack"]["token"]
+        check("암호화한 것을 풀면 같은 값, 글자(한글 포함)도 같음", (notify.reveal(stored), notify.reveal(notify.protect("가나다 abc")), "가나다" in notify.protect("가나다 abc")), (token, "가나다 abc", False))
+        r = put("slack", kind="slack", done=False, token="", channel="C999")
+        check("고칠 때 비밀 칸을 비우면 저장된 값을 그대로 둠", (r["destinations"]["slack"], notify.reveal(settings.named("destinations.json")["slack"]["token"])),
+              ({"kind": "slack", "done": False, "token": True, "channel": "C999"}, token))
+        check("새로 만드는데 비밀 칸이 없으면 거부", error("/api/destinations", name="새것", destination={"kind": "slack", "done": False, "channel": "C1"}), "'봇 토큰' 칸을 입력하세요.")
+        data = settings.named("destinations.json")
+        data["slack"]["token"] = "AAAA"  # 다른 PC·계정에서 복사해 온 것처럼 풀 수 없는 값
+        settings.write("destinations.json", data)
+        check("풀 수 없는 비밀 값은 false(다시 입력 필요)", c.get("/api/destinations").get_json()["destinations"]["slack"]["token"], False)
+        check("풀 수 없는데 비밀 칸을 비우면 거부, 보내기도 거부", (error("/api/destinations", name="slack", destination={"kind": "slack", "done": False, "token": "", "channel": "C999"}),
+              error("/api/send", name="slack", title="t")), ("'봇 토큰' 칸을 입력하세요.", "'slack'의 비밀 값을 읽을 수 없습니다(다른 PC·계정에서 온 파일). 보낼 곳을 다시 저장하세요."))
+        put("slack", kind="slack", done=False, token=token, channel="C999")
+        check("다시 입력하면 true", c.get("/api/destinations").get_json()["destinations"]["slack"]["token"], True)
+        check("검증 거부: 종류·칸·done·https·본문 종류", [error("/api/destinations", name="x", destination=d) for d in (
+              {"kind": "mail"}, {"kind": "slack", "token": "a", "channel": "C", "extra": 1}, {"kind": "slack", "token": "a", "channel": "C", "done": "yes"},
+              {"kind": "webhook", "url": "http://hooks.example.com/a", "content": "json", "template": "{}"},
+              {"kind": "webhook", "url": "https://h.example.com/a", "content": "xml", "template": "{}"},
+              {"kind": "webhook", "url": "https://h.example.com/a", "content": "json", "template": " "})],
+              ["보낼 곳의 종류는 slack, webhook 중 하나입니다.", "보낼 곳에 쓸 수 없는 값이 있습니다: extra", "보낼 곳에 쓸 수 없는 값이 있습니다: done", "주소는 https://로 시작해야 합니다.",
+               "'본문 종류'은 json, text, form 중 하나입니다.", "'본문 틀' 칸을 입력하세요."])
+        check("이름 제한(보낼 곳 이름은 1~50자, 30개까지)", [error("/api/destinations", name=n, destination=None) for n in ("", "x" * 51)], ["보낼 곳 이름은 1자 이상 50자 이하로 입력하세요."] * 2)
+        for i in range(29):
+            put(f"n{i}", kind="slack", done=False, token="t", channel="C")
+        check("30개까지, 있는 이름은 고칠 수 있음", (error("/api/destinations", name="넘침", destination={"kind": "slack", "done": False, "token": "t", "channel": "C"}),
+              len(put("n0", kind="slack", done=True, token="", channel="C2")["destinations"])), ("저장한 보낼 곳은 30개까지입니다. 쓰지 않는 것을 지우세요.", 30))
+        for i in range(29):
+            got("/api/destinations", name=f"n{i}", destination=None)
+
+        print("== Slack으로 보내기")
+        table = {"columns": ["a", "b"], "rows": [[1, "x"], [2, None]]}
+        sent.clear()
+        check("글만: 주소·인증 헤더·본문", (got("/api/send", name="slack", title="완료", text="끝났습니다", table=table), len(sent), sent[0][0], sent[0][2],
+              json.loads(sent[0][1])), ({"ok": True}, 1, "https://slack.com/api/chat.postMessage",
+              {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"}, {"channel": "C999", "text": "*완료*\n끝났습니다\n```\na | b\n1 | x\n2 | \n```"}))
+        png = b"\x89PNG\r\n\x1a\n" + b"image-bytes"
+        url = "data:image/png;base64," + base64.b64encode(png).decode()
+
+        def slack_reply(address):
+            return {"https://slack.com/api/files.getUploadURLExternal": b'{"ok": true, "upload_url": "https://files.example.com/up/1", "file_id": "F1"}',
+                    "https://files.example.com/up/1": b"OK - 11", "https://slack.com/api/files.completeUploadExternal": b'{"ok": true}'}[address]
+
+        sent.clear()
+        reply[0] = slack_reply
+        got("/api/send", name="slack", title="차트", text="본문", image=url)
+        check("그림이 있으면 세 단계: 올릴 주소 받기 → 바이트 올리기 → 완료(채널·설명)", ([s[0] for s in sent], sent[0][1], sent[1][1], sent[1][2], json.loads(sent[2][1])),
+              (["https://slack.com/api/files.getUploadURLExternal", "https://files.example.com/up/1", "https://slack.com/api/files.completeUploadExternal"],
+               f"filename=image.png&length={len(png)}".encode(), png, {"Content-Type": "application/octet-stream"},
+               {"files": [{"id": "F1", "title": "차트"}], "channel_id": "C999", "initial_comment": "*차트*\n본문"}))
+        check("올리기 요청에는 인증 헤더가 없고 Slack 요청에만 있음", ["Authorization" in s[2] for s in sent], [True, False, True])
+        reply[0] = b'{"ok": false, "error": "channel_not_found"}'
+        e = error("/api/send", name="slack", title="t")
+        check("ok가 false면 error 값을 넣은 오류", e, "Slack 오류: channel_not_found")
+        reply[0] = ValueError(f"보내지 못했습니다(상태 401): invalid {token}")
+        e = error("/api/send", name="slack", title="t")
+        check("실패 문구에서 토큰을 가림", (token in e, "***" in e, e.startswith("보내지 못했습니다(상태 401)")), (False, True, True))
+
+        print("== 웹훅으로 보내기")
+        weird = 'He said "hi"\nüber 한글 & a=b\\c'
+        body = lambda name="hook", **more: got("/api/send", name=name, title=weird, text="내용 & x=y", rows=1234, seconds=83, **more)
+        reply[0] = b"ok"
+        for content, template, check_body, content_type in [
+            ("json", '{"t": "{제목}", "n": "{행수}", "s": "{걸린시간}", "z": "{모르는}", "i": "{그림}"}', lambda b: json.loads(b), "application/json"),
+            ("text", "{제목}|{걸린시간}|{모르는}", lambda b: b.decode("utf-8"), "text/plain; charset=utf-8"),
+            ("form", "a={제목}&b={내용}", lambda b: urllib.parse.parse_qs(b.decode(), keep_blank_values=True), "application/x-www-form-urlencoded"),
+        ]:
+            put("hook", kind="webhook", done=False, url=hook, content=content, template=template)
+            sent.clear()
+            body()
+            parsed = check_body(sent[0][1])
+            want = {"json": {"t": weird, "n": "1,234", "s": "1분 23초", "z": "{모르는}", "i": ""}, "text": f"{weird}|1분 23초|{{모르는}}",
+                    "form": {"a": [weird], "b": ["내용 & x=y"]}}[content]
+            check(f"webhook {content}: 주소·Content-Type·이스케이프(따옴표·줄바꿈·한글·&·=·역슬래시)·모르는 자리는 그대로", (sent[0][0], sent[0][2], parsed), (hook, {"Content-Type": content_type}, want))
+        check("저장 목록에 주소가 없음", ("secret-path" in c.get("/api/destinations").get_data(as_text=True), c.get("/api/destinations").get_json()["destinations"]["hook"]["url"]), (False, True))
+        raw = (settings.PATH.parent / "destinations.json").read_bytes()
+        check("destinations.json에 주소가 평문으로 없음", (b"secret-path" in raw, b"hooks.example.com" in raw), (False, False))
+        rows60 = {"columns": ["n", "v"], "rows": [{"n": i, "v": f"r{i}"} for i in range(60)]}
+        text = "\n".join(["n | v"] + [f"{i} | r{i}" for i in range(50)] + ["… 외 10행"])
+        presets = {p["label"]: p for p in c.get("/api/destinations").get_json()["kinds"]["webhook"]["presets"]}
+        for label, want in [("일반 JSON", {"title": weird, "text": "내용 & x=y", "rows": "1,234", "seconds": "1분 23초", "table": text, "image": base64.b64encode(png).decode()}),
+                            ("Teams", {"text": f"**{weird}**\n\n내용 & x=y\n\n{text}"}), ("Discord", {"content": f"**{weird}**\n내용 & x=y\n{text}"}), ("글자", None)]:
+            p = presets[label]
+            put("hook", kind="webhook", done=False, url="", content=p["content"], template=p["template"])
+            sent.clear()
+            body(table=rows60, image=url)
+            data = sent[0][1].decode("utf-8")
+            check(f"기본 틀 {label}: 채운 뒤 유효하고 표는 50행까지({chr(0x2026)} 외 N행)", json.loads(data) if p["content"] == "json" else data,
+                  want if want else f"{weird}\n내용 & x=y\n{text}")
+        put("hook", kind="webhook", done=False, url="", content="json", template='{"a": {제목}')
+        sent.clear()
+        check("틀이 깨진 JSON이면 보내지 않고 거부", (error("/api/send", name="hook", title="t").startswith("본문 틀이 JSON이 아닙니다."), sent), (True, []))
+        put("hook", kind="webhook", done=False, url="", content="text", template="{표}")
+        sent.clear()
+        got("/api/send", name="hook", title="t", table={"columns": ["a"], "rows": [[1], [2]]})
+        check("표 모양: 머리글과 행을 ' | '로, 줄바꿈으로", sent[0][1], b"a\n1\n2")
+        reply[0] = ValueError(f"보내지 못했습니다: {hook} 연결 거부")
+        e = error("/api/send", name="hook", title="t")
+        check("실패 문구에서 주소를 가림", (hook in e, "secret-path" in e, "***" in e), (False, False, True))
+        reply[0] = b"ok"
+        sent.clear()
+        check("보내기 입력 거부: 그림 형식·크기, 표 모양, 숫자", [error("/api/send", name="hook", **b) for b in (
+              {"title": "t", "image": "data:image/jpeg;base64,AAAA"}, {"title": "t", "image": "data:image/png;base64,@@@@"},
+              {"title": "t", "image": "data:image/png;base64," + "A" * (5 * 1024 * 1024 * 4 // 3 + 100)}, {"title": "t", "table": [1]}, {"title": "t", "rows": "3"}, {"title": 1})],
+              ["그림은 PNG data URL(data:image/png;base64,…)이어야 합니다.", "그림을 읽을 수 없습니다.", "그림은 5MB까지 보낼 수 있습니다.",
+               '표는 {"columns": [...], "rows": [...]} 모양이어야 합니다.', "행수는 정수, 걸린 시간은 수(초)여야 합니다.", "제목과 내용은 글자여야 합니다."])
+        check("거부된 요청은 나가지 않음, 없는 이름은 거부", (sent, error("/api/send", name="없음", title="t")), ([], "'없음' 보낼 곳이 없습니다."))
+    finally:
+        notify.post = real
+    done = []
+    thread = threading.Thread(target=lambda: done.append(c.post("/api/send", json={"name": "없음", "title": "t"}).status_code))
+    server.turn.acquire()  # 다른 데이터 작업이 도는 중인 것처럼
+    try:
+        thread.start()
+        thread.join(5)
+        check("/api/send는 차례(turn)를 기다리지 않음", done, [400])
+    finally:
+        server.turn.release()
+    check("시간 표현", [notify.duration_text(s) for s in (23, 59.6, 60, 83, 3600)], ["23초", "1분 0초", "1분 0초", "1분 23초", "60분 0초"])
+    check("알림 기준 시간(notify_after) 범위: 5~3600초 정수", ([got("/api/settings", notify_after=v).get("ok") for v in (5, 45, 3600)], [error("/api/settings", notify_after=v)[:18] for v in (4, 3601, "30", 1.5)],
+          settings.load().get("notify_after")), ([True] * 3, ["'notify_after' 설정에"] * 4, 3600))
+    got("/api/settings", notify_after=0)
+    check("0을 저장하면 기본으로", "notify_after" in settings.load(), False)
+    for name in list(c.get("/api/destinations").get_json()["destinations"]):
+        got("/api/destinations", name=name, destination=None)
+    check("지우면 목록이 빔", c.get("/api/destinations").get_json()["destinations"], {})
+
+
 def sqlite_section(c, got):
     """SQLite 주소 연결. 이 연결은 만든 스레드에서만 쓸 수 있어, 연결을 쓰는 일이 모두 한 스레드에서 도는지 여기서 드러난다."""
     print("== SQLite 주소 연결")
@@ -810,6 +970,27 @@ def main():
     check("같은 이름은 덮어씀", c.get("/api/searches").get_json(), {"searches": {"mine": {"base": "customers"}}})
     check("검색 지우기", got("/api/searches", name="mine", search=None), {"searches": {}})
     check("빈 이름은 거절", error("/api/searches", name=" ", search=saved), "검색 이름은 1자 이상 50자 이하로 입력하세요.")
+    recipe = {"base": "messy", "columns": {"name": {"ops": {"trim": True}}}, "sorts": ["id"]}
+    check("구성 목록은 처음에 비어 있음", c.get("/api/recipes").get_json(), {"recipes": {}})
+    check("구성 저장(이름 앞뒤 공백은 뗌)", got("/api/recipes", name=" 정리 ", recipe=recipe), {"recipes": {"정리": recipe}})
+    check("구성과 검색은 서로 섞이지 않음", (c.get("/api/searches").get_json(), got("/api/searches", name="s", search={"base": "orders"})["searches"], c.get("/api/recipes").get_json()),
+          ({"searches": {}}, {"s": {"base": "orders"}}, {"recipes": {"정리": recipe}}))
+    check("저장 파일도 따로", sorted(p.name for p in settings.PATH.parent.glob("*.json") if p.name in ("recipes.json", "searches.json")), ["recipes.json", "searches.json"])
+    got("/api/recipes", name="정리", recipe={"base": "other"})
+    check("같은 이름은 덮어씀", c.get("/api/recipes").get_json(), {"recipes": {"정리": {"base": "other"}}})
+    check("구성 지우기(없는 이름도 됨)", (got("/api/recipes", name="정리", recipe=None), got("/api/recipes", name="없음", recipe=None)), ({"recipes": {}},) * 2)
+    check("구성 제한: 이름, 객체가 아님, 크기", [error("/api/recipes", name=n, recipe=recipe) for n in ("", "x" * 51)] + [error("/api/recipes", name="a", recipe=[1]),
+          error("/api/recipes", name="a", recipe={"x": "가" * settings.MAX_RECIPE_SIZE})],
+          ["구성 이름은 1자 이상 50자 이하로 입력하세요."] * 2 + ["저장할 구성이 올바르지 않습니다.", "저장할 구성이 너무 큽니다."])
+    check("검색 크기 상한은 구성보다 작음", error("/api/searches", name="a", search={"x": "가" * settings.MAX_SEARCH_SIZE}), "저장할 검색이 너무 큽니다.")
+    check("구성은 검색 상한(2만 자)보다 크게 저장됨", len(got("/api/recipes", name="큼", recipe={"x": "가" * (settings.MAX_SEARCH_SIZE + 100)})["recipes"]), 1)
+    for i in range(settings.MAX_SAVED - 1):
+        got("/api/recipes", name=f"r{i}", recipe={})
+    check("구성은 100개까지, 있는 이름은 덮어쓸 수 있음", (error("/api/recipes", name="넘침", recipe={}), len(got("/api/recipes", name="r0", recipe={"a": 1})["recipes"])),
+          ("저장한 구성은 100개까지입니다. 쓰지 않는 것을 지우세요.", 100))
+    for name in list(c.get("/api/recipes").get_json()["recipes"]):
+        got("/api/recipes", name=name, recipe=None)
+    got("/api/searches", name="s", search=None)
 
     print("== 검색 결과를 파일로 저장하고 그 파일에 연결(handoff)")
     out, asked = ROOT / "out", []
@@ -872,6 +1053,7 @@ def main():
           ("TimeoutError", False, "다음"))
     thread.join(2)
     check("within: 두고 온 일의 늦은 결과는 drop으로 가고 그 스레드는 끝남", (late, thread.is_alive()), (["늦은 결과"], False))
+    notify_section(c, got)
     sqlite_section(c, got)
     prep_section()
 
