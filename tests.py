@@ -108,6 +108,19 @@ WIDE = {
     "kor": ["가나다" if i % 2 == 0 else "한글입니다" for i in range(3000)],  # 글자 수 3, 5(바이트 수가 아니다)
 }
 BAD = {"s": ["x" if i % 2 else "y" for i in range(1100)]}  # 모양 후보가 하나도 없는 표
+# 숫자로 바꾸기의 경계 값 6행. DuckDB·Parquet·SQLite 세 연결에서 같은 결과가 나와야 한다.
+TOP = 2**63 - 1
+NUMS = {
+    "id": list(range(1, 7)),
+    "price": ["1,200원", "3000", "abc", " 45 ", None, "7원"],
+    "numstr": ["10", "20", "-", "40", "50", "+60"],
+    "decs": ["1.5", "2", "-", ".5", "1e3", "inf"],
+    "edge": [str(TOP), str(TOP + 1), str(-TOP), "0012", "1.5", "0x10"],  # int64에 들어가는 가장 큰 값과 그 다음 값
+    "money": ["1,200원", "3,000원", "4,500원", None, "7원", "12원"],
+    "day": ["2026-01-05", "2026-02-10", "2025-12-31", "2024-02-29", "2026-07-07", "2026-03-01"],
+    "rate": [1.0, 2.0, None, -3.0, 1e30, 4.0],
+}
+NUMBERS, NUMBERS_FLAT = ROOT / "numbers", ROOT / "numbers_flat"
 DATA, PREP, PREP_FLAT = ROOT / "data", ROOT / "prep", ROOT / "prep_flat"
 SAMPLING, SAMPLING_FLAT = ROOT / "sampling", ROOT / "sampling_flat"
 fails, done = [], []
@@ -144,6 +157,18 @@ def make_data():
     con.close()
     wide.write_parquet(SAMPLING_FLAT / "wide.parquet")
     bad.write_parquet(SAMPLING_FLAT / "bad.parquet")
+    NUMBERS.mkdir()
+    NUMBERS_FLAT.mkdir()
+    nums = pl.DataFrame(NUMS)
+    con = duckdb.connect(str(NUMBERS / "numbers.duckdb"))
+    con.execute("create table nums as select * from nums")
+    con.close()
+    nums.write_parquet(NUMBERS_FLAT / "nums.parquet")
+    con = sqlite3.connect(NUMBERS / "numbers.db")
+    con.execute(f"create table nums ({', '.join(k + {'id': ' integer', 'rate': ' real'}.get(k, ' text') for k in NUMS)})")
+    con.executemany(f"insert into nums values ({', '.join('?' * len(NUMS))})", list(zip(*NUMS.values())))
+    con.commit()
+    con.close()
 
 
 def check(name, got, want):
@@ -471,6 +496,60 @@ def prep_sampling(pc, got, error):
     finally:
         prep_profile.measure = original
     got("/api/disconnect")
+
+
+def numbers_section():
+    """숫자 모양 통계, 타입 추천, 숫자로 바꾸기. try_cast가 없는 SQLite 주소 연결에서도 DuckDB·Parquet과 같은 값이 나와야 한다."""
+    pc = prep_app.app.test_client()
+    pc.set_cookie("key", KEY)
+    got = lambda api, **body: pc.post(api, json=body).get_json()
+    tables = lambda: sorted(pc.get("/api/tables").get_json()["tables"])
+    recipe = lambda **ops: dict(base="nums", columns={c: ({"ops": ops[c]} if c in ops else {"keep": False}) for c in NUMS})
+
+    def values(**ops):
+        r = got("/api/preview", **recipe(**ops))
+        return r.get("error") or (r["types"], *([row[c] for row in r["rows"]["rows"]] for c in ops))
+
+    to = lambda kind, **more: {"type": {"to": kind, **more}}
+    cases = [  # (이름, 컬럼, ops, 기대 타입, 기대 값)
+        ("정리하고 정수로", "price", to("int", clean=True), "int64", [1200, 3000, None, 45, None, 7]),
+        ("실수로(숫자 모양이 아니면 빈 값)", "price", to("float"), "float64", [None, 3000.0, None, 45.0, None, None]),
+        ("정수로(+ 부호)", "numstr", to("int"), "int64", [10, 20, None, 40, 50, 60]),
+        ("실수로(.5, 1e3은 숫자, inf는 아님)", "decs", to("float"), "float64", [1.5, 2.0, None, 0.5, 1000.0, None]),
+        ("정수로(소수·지수 모양은 빈 값)", "decs", to("int"), "int64", [None, 2, None, None, None, None]),
+        # 빈 값과 2^53보다 큰 정수가 한 컬럼에 있으면 SQLite 연결이 결과를 읽지 못해, 빈 값을 0으로 채워서 본다.
+        ("정수로(int64 범위 밖은 빈 값)", "edge", {**to("int"), "fill": {"how": "value", "value": 0}}, "int64", [TOP, 0, -TOP, 12, 0, 0]),
+        ("실수로(큰 수)", "edge", to("float"), "float64", [float(TOP), float(TOP), float(-TOP), 12.0, 1.5, None]),
+        ("실수 컬럼을 정수로(범위 밖은 빈 값)", "rate", to("int"), "int64", [1, 2, None, -3, None, 4]),
+        ("정수 컬럼을 실수로", "id", to("float"), "float64", [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),
+    ]
+    connections = [
+        ("DuckDB", dict(kind="folder", path=str(NUMBERS), file=str(NUMBERS / "numbers.duckdb"))),
+        ("Parquet", dict(kind="folder", path=str(NUMBERS_FLAT), files=[str(NUMBERS_FLAT / "nums.parquet")])),
+        ("SQLite", dict(kind="url", url=f"sqlite://{NUMBERS / 'numbers.db'}")),
+    ]
+    for tag, connect in connections:
+        print("== 숫자로 바꾸기:", tag)
+        check(tag + " 연결", "schemas" in got("/api/connect", **connect), True)
+        profile = got("/api/profile", base="nums")
+        check(tag + " profile: 행 수와 숫자 모양", (profile.get("rows"), {c["name"]: c["numeric"] for c in profile.get("columns", []) if c["kind"] == "string"}),
+              (6, {"price": 2, "numstr": 5, "decs": 4, "edge": 5, "money": 0, "day": 0}))
+        check(tag + " patterns: 타입 추천", {name: [s["ops"] for s in found] for name, found in got("/api/patterns", base="nums").get("columns", {}).items()},
+              {"numstr": [to("int")], "money": [to("int", clean=True)], "day": [to("date")]})
+        for name, column, ops, dtype, want in cases:
+            check(f"{tag} type: {name}", values(**{column: ops}), ([dtype], want))
+    # 여기서부터는 SQLite 연결이다.
+    made = recipe(id={}, price=to("int", clean=True), numstr=to("int"), decs=to("float"), edge=to("int"))
+    check("SQLite 새 테이블 만들기(숫자로 바꾼 컬럼)", (got("/api/run", recipe=made, target={"kind": "table", "name": "clean"}), tables()), ({"ok": True, "rows": 6}, ["clean", "nums"]))
+    check("SQLite 만든 테이블의 타입", [(c["name"], c["type"]) for c in got("/api/shape", base="clean")["columns"]],
+          [("id", "int64"), ("price", "int64"), ("numstr", "int64"), ("decs", "float64"), ("edge", "int64")])
+    stats = {c["name"]: (c["nulls"], c["min"], c["max"]) for c in got("/api/profile", base="clean")["columns"]}
+    check("SQLite 만든 테이블의 값(빈 값 수, 최소, 최대)", stats,
+          {"id": (0, 1, 6), "price": (2, 7, 3000), "numstr": (1, 10, 60), "decs": (2, 0.5, 1000.0), "edge": (3, -TOP, TOP)})
+    unsupported = [("날짜로 바꾸기", "day", to("date")), ("outlier iqr", "rate", {"outlier": {"how": "clip", "by": "iqr"}}), ("fill median", "rate", {"fill": {"how": "median"}})]
+    for name, column, ops in unsupported:
+        check(f"SQLite가 못 하는 계산은 그 문구로: {name}", str(values(**{column: ops})).startswith("이 연결에서는 지원하지 않는 계산입니다."), True)
+    check("SQLite 연결 해제", got("/api/disconnect"), {"ok": True})
 
 
 def prep_section():
@@ -1056,6 +1135,7 @@ def main():
     notify_section(c, got)
     sqlite_section(c, got)
     prep_section()
+    numbers_section()
 
 
 try:

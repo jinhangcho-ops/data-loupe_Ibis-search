@@ -10,6 +10,7 @@ from ibis.common.exceptions import OperationNotDefinedError, UnsupportedOperatio
 import parse
 
 TYPE_TO = {"int": "int64", "float": "float64", "string": "string", "date": "date"}
+FLOAT_SHAPE = r"^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$"  # 12, -1.5, .5, 1e5. inf·nan은 숫자로 보지 않는다.
 FILLS = ["drop", "value", "mean", "median", "mode", "prev", "next"]
 STRING, NUMBER, DATE = ("string",), ("int", "float"), ("date",)
 KIND_NAMES = {"string": "문자", "int": "정수", "float": "실수", "date": "날짜"}
@@ -92,6 +93,32 @@ def to_date(col, fmt):
     return col.as_timestamp(fmt).cast("timestamp") if any(p in fmt for p in TIME_PARTS) else col.as_date(fmt)  # cast: 시간대 없는 날짜시간으로
 
 
+def int_shape():
+    """int64에 들어가는 정수 글자의 정규식(절댓값이 2^63-1 이하). 열아홉 자리는 가장 큰 값보다 작거나 같은 것만 맞는다."""
+    top = str(2**63 - 1)
+    under = [top[:i] + f"[0-{int(d) - 1}]" + f"[0-9]{{{len(top) - i - 1}}}" * (i < len(top) - 1) for i, d in enumerate(top) if d != "0"]
+    return f"^[+-]?0*([0-9]{{1,{len(top) - 1}}}|{'|'.join(under)}|{top})$"
+
+
+INT_SHAPE = int_shape()
+
+
+def is_number(col, to):
+    """글자 col이 to(int, float)로 바뀌는 모양인지의 조건. 빈 값이면 거짓이다."""
+    return ibis.coalesce(col.re_search(INT_SHAPE if to == "int" else FLOAT_SHAPE), False)
+
+
+def to_number(col, to):
+    """정수·실수로. 바꿀 수 없는 값은 빈 값이 된다. try_cast가 없는 연결이 있어, 바뀌는 값만 남긴 뒤 cast한다."""
+    dtype = col.type()
+    if dtype.is_integer() or dtype.is_boolean() or (dtype.is_numeric() and to == "float"):
+        return col.cast(TYPE_TO[to])
+    if dtype.is_numeric():  # 실수·소수를 정수로: nan·inf와 int64 범위 밖의 값은 빈 값
+        return ((col >= -2.0**63) & (col < 2.0**63)).ifelse(col, ibis.null()).cast(TYPE_TO[to])
+    col = col.cast("string")  # 날짜·시간처럼 숫자가 아닌 컬럼은 숫자 모양이 아니라 빈 값이 된다.
+    return is_number(col, to).ifelse(col, ibis.null()).cast(TYPE_TO[to])
+
+
 def retype(col, arg):
     to = arg["to"]
     if to != "string" and col.type().is_string():  # 앞뒤 공백은 무시한다(백엔드마다 다르게 다루는 것을 맞춘다).
@@ -100,7 +127,7 @@ def retype(col, arg):
         col = col.cast("string").re_replace(r"[^0-9.+\-]", "")
     if to == "date":
         return to_date(col, arg.get("format") or "%Y-%m-%d") if arg.get("format") or col.type().is_string() else col.cast("date")
-    return col.try_cast(TYPE_TO[to])
+    return to_number(col, to)
 
 
 def fill_around(t, name, by, ahead):

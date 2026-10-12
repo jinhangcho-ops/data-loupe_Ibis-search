@@ -5,11 +5,10 @@ import ibis
 import parse
 import result
 from prep import type_text
-from prep_ops import chars, date_pattern, stats
+from prep_ops import chars, date_pattern, is_number, stats
 
 # 빈 값을 뜻하는 글자로 흔한 것. ""는 blank로 센다.
 MARKERS = ["", "-", "N/A", "n/a", "NA", "null", "NULL", "None", "없음", "?"]
-INT_SHAPE = r"^[+-]?[0-9]+$"
 # 기호·숫자·단위 순서의 글자(₩1,200, 1,200원, 45%, 3 kg). 이런 모양일 때만 글자를 지우고 숫자로 바꾸라고 추천한다(a1b2 같은 코드는 아니다).
 UNIT_SHAPE = r"^[^0-9A-Za-z가-힣]{0,3}[0-9][0-9,]*(\.[0-9]+)?\s*[^0-9]{0,5}$"
 DATE_FORMATS = [("%Y%m%d", "YYYYMMDD"), ("%Y-%m-%d %H:%M:%S", "YYYY-MM-DD HH:MM:SS"), ("%Y-%m-%d", "YYYY-MM-DD")]  # 앞의 것이 우선
@@ -32,7 +31,7 @@ def shape(t, rows):
 def text_metrics(col, i):
     """문자 컬럼의 통계 식(글자 수는 따로)."""
     stripped = col.strip()
-    metrics = {f"blank{i}": count(col == ""), f"spaces{i}": count(col != stripped), f"numeric{i}": count(stripped.try_cast("float64").notnull()),
+    metrics = {f"blank{i}": count(col == ""), f"spaces{i}": count(col != stripped), f"numeric{i}": count(is_number(stripped, "float")),
                f"lower{i}": col.lower().nunique(where=col.notnull())}
     metrics.update({f"mark{j}_{i}": count(col == m) for j, m in enumerate(MARKERS) if m})
     return metrics
@@ -109,10 +108,9 @@ def shapes(col):
     """문자 컬럼의 모양 검사. (빈 값도 빈 값 표시도 아닌 값인 조건, {모양 이름: 그 모양인 조건})."""
     stripped = col.strip()
     cleaned = stripped.re_replace(r"[^0-9.+\-]", "")
-    is_int = lambda s: ibis.coalesce(s.re_search(INT_SHAPE), False) & s.try_cast("int64").notnull()
     unit = ibis.coalesce(stripped.re_search(UNIT_SHAPE), False)
     conds = {f"date{j}": ibis.coalesce(stripped.re_search(date_pattern(fmt)), False) for j, (fmt, _) in enumerate(DATE_FORMATS)}
-    conds.update(num=stripped.try_cast("float64").notnull(), int=is_int(stripped), clean_num=unit & cleaned.try_cast("float64").notnull(), clean_int=unit & is_int(cleaned))
+    conds.update(num=is_number(stripped, "float"), int=is_number(stripped, "int"), clean_num=unit & is_number(cleaned, "float"), clean_int=unit & is_number(cleaned, "int"))
     return col.notnull() & ~col.isin(MARKERS), conds
 
 
