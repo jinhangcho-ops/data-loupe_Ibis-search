@@ -214,6 +214,21 @@ const OPS = {
     load: v => Object.fromEntries(PARTS.map(([k]) => [k, v.includes(k)])) },
   label: { label: "값을 번호로 (라벨 인코딩)", group: "새 컬럼", init: {}, value: () => true },
   onehot: { label: "값마다 컬럼으로 (원-핫 인코딩)", group: "새 컬럼", unkeep: true, init: {}, value: () => true },
+  extract: { label: "패턴에 맞는 부분 뽑기", group: "새 컬럼", need: isStr, init: { pattern: "", group: "" },
+    fields: () => [{ name: "pattern", placeholder: "패턴 (정규식) 예: [A-Z]-[0-9]+" }, { name: "group", placeholder: "묶음 번호 (비우면 전체)" }],
+    value: st => {
+      if (!st.pattern || (st.group !== "" && !/^\d+$/.test(st.group))) return null;
+      return { pattern: st.pattern, ...(st.group === "" ? {} : { group: Number(st.group) }) };
+    } },
+  has: { label: "들어 있는지 표시", group: "새 컬럼", need: isStr, init: { words: "", regex: false },
+    fields: () => [{ name: "words", placeholder: "찾을 글자 예: 서울, 부산" }, { name: "regex", check: "정규식으로" }],
+    value: st => {
+      const words = st.words.split(",").map(v => v.trim()).filter(Boolean);
+      return !words.length || words.length > 50 || new Set(words).size < words.length ? null : { words, ...(st.regex ? { regex: true } : {}) };
+    } },
+  counts: { label: "단어별 개수 세기", group: "새 컬럼", need: isStr, init: { sep: "" },
+    fields: () => [{ name: "sep", placeholder: "구분자 (비우면 공백)" }, { hint: '값을 나눠 단어별 개수를 {"서울": 2, "배송": 1} 모양의 글자로 새 컬럼에 넣습니다.' }],
+    value: st => st.sep === "" ? {} : { sep: st.sep } },
 };
 
 const newEdit = () => ({ keep: true, rename: "", ops: {} });

@@ -5,6 +5,7 @@ import operator
 import re
 
 import ibis
+from ibis.common.exceptions import OperationNotDefinedError, UnsupportedOperationError
 
 import parse
 
@@ -216,6 +217,70 @@ def is_outlier(v):
     return v["by"] != "range" or (bool(bounds) and bounds == sorted(bounds))
 
 
+def extract(t, name, arg):
+    """처음 맞은 부분(group이 0이면 전체, k면 정규식의 k번째 묶음)을 새 컬럼으로. 전체를 한 번 더 묶어 1번 이상을 뽑으면 연결마다 같다(0번을 못 뽑는 연결이 있다).
+    맞는 곳이 없을 때 연결마다 ""나 빈 값이 나오므로 ""는 빈 값으로 맞춘다."""
+    found = t[name].re_extract("(" + arg["pattern"] + ")", arg.get("group", 0) + 1)
+    return add_columns(t, {f"{name}_match": found.nullif("")})
+
+
+def has(t, name, arg):
+    """단어마다 들어 있으면 1, 없거나 빈 값이면 0인 int8 컬럼."""
+    test = (lambda word: t[name].re_search(word)) if arg.get("regex") else (lambda word: t[name].contains(word))
+    return add_columns(t, {f"{name}_has_{word}": ibis.coalesce(test(word), False).cast("int8") for word in arg["words"]})
+
+
+def json_text(col):
+    """글자를 JSON 글자 값 안에 넣을 수 있게 \\와 "앞에 \\를 붙인다. 치환 문자열의 \\ 해석이 연결마다 달라, 나눠서 이어 붙이는 방식으로 한다."""
+    bs = chr(92)
+    return col.split(bs).join(bs + bs).split('"').join(bs + '"')
+
+
+def counts_in_row(col, sep):
+    """행 안에서 배열로 조각별 개수를 센 JSON 객체 글자. 배열의 map·filter를 지원하는 연결에서만 컴파일된다."""
+    pieces = col.split(sep) if sep else col.strip().re_replace(r"\s+", " ").split(" ")
+    words = pieces.map(lambda piece: piece.strip()).filter(lambda piece: piece != "")
+    items = words.unique().sort().map(lambda word: '"' + json_text(word) + '": ' + words.filter(lambda other: other == word).length().cast("string"))
+    return (words.length() > 0).ifelse("{" + items.join(", ") + "}", ibis.null("string"))
+
+
+def counts_by_table(t, name, new, sep):
+    """counts를 서로 다른 값마다 조각 수를 센 번호표를 만들어 합쳐서 구한다(배열 안에서 세는 식이 없는 연결용).
+    값마다 한 번 계산하므로 값이 거의 다 다른 큰 표에서는 느리고 행 순서가 바뀐다."""
+    check_new(t, ["__counts_key"])
+    values = t.select(__counts_key=t[name]).distinct()
+    values = values.filter(values["__counts_key"].notnull())
+    key = values["__counts_key"]
+    pieces = key.split(sep) if sep else key.strip().re_replace(r"\s+", " ").split(" ")
+    flat = values.mutate(__counts_piece=pieces.unnest())
+    flat = flat.mutate(__counts_piece=flat["__counts_piece"].strip())
+    flat = flat.filter(flat["__counts_piece"].notnull(), flat["__counts_piece"] != "")
+    each = flat.group_by(["__counts_key", "__counts_piece"]).aggregate(__counts_n=flat.count())
+    item = '"' + json_text(each["__counts_piece"]) + '": ' + each["__counts_n"].cast("string")
+    look = each.group_by("__counts_key").aggregate(__counts_json=item.group_concat(", ", order_by=each["__counts_piece"]))
+    look = look.select("__counts_key", **{new: "{" + look["__counts_json"] + "}"})
+    return t.left_join(look, t[name] == look["__counts_key"]).drop("__counts_key")
+
+
+def counts(t, name, arg):
+    """행마다 글자를 sep으로 나눈 조각별 개수를 JSON 객체 글자({"서울": 2, "주문": 1})로 새 컬럼에 넣는다. 키는 조각의 정렬 순서.
+    sep이 없으면 공백류. 조각의 앞뒤 공백은 지우고 빈 조각은 세지 않는다. 값이 빈 값이거나 조각이 없으면 빈 값.
+    행 안에서 세는 식을 먼저 쓰고(빠르고 행 순서가 그대로), 그 연결이 컴파일하지 못하면 번호표 방식으로 간다(실행하지 않고 컴파일만 해 본다)."""
+    new, sep = f"{name}_counts", arg.get("sep")
+    check_new(t, [new])
+    row = counts_in_row(t[name], sep)
+    try:
+        t.get_backend().compile(t.select(row))
+    except (OperationNotDefinedError, UnsupportedOperationError):
+        return counts_by_table(t, name, new, sep)
+    return t.mutate(**{new: row})
+
+
+def is_has(v):
+    return (isinstance(v, dict) and set(v) <= {"words", "regex"} and isinstance(v.get("regex", False), bool) and is_strs(v.get("words"))
+            and 1 <= len(v["words"]) <= 50 and all(v["words"]) and len(set(v["words"])) == len(v["words"]))
+
+
 # (이름, 쓸 수 있는 컬럼 종류(None이면 모두), 값이 맞는지, 값의 형식, 적용 함수). 적용 순서는 이 표의 순서다.
 # 전처리를 더할 때는 함수를 만들고 여기에 한 줄을 넣는다. 파생 컬럼을 만드는 것(flag, parts, label, onehot)은 add_columns로 컬럼을 더한다.
 OPS = [
@@ -244,6 +309,10 @@ OPS = [
     ("parts", DATE, lambda v: is_strs(v) and all(p in PARTS for p in v), f"{list(PARTS)} 중 하나 이상", date_parts),
     ("label", None, lambda v: v is True, "true", label),
     ("onehot", None, lambda v: v is True, "true", onehot),
+    ("extract", STRING, lambda v: isinstance(v, dict) and set(v) <= {"pattern", "group"} and isinstance(v.get("pattern"), str) and v["pattern"] != ""
+     and type(v.get("group", 0)) is int and v.get("group", 0) >= 0, '{"pattern": "정규식", "group": 0}', extract),
+    ("has", STRING, is_has, '{"words": ["서울", "부산"], "regex": false} (words는 비어 있지 않은 서로 다른 글자 1~50개)', has),
+    ("counts", STRING, lambda v: isinstance(v, dict) and set(v) <= {"sep"} and isinstance(v.get("sep", ""), str), '{"sep": ","}', counts),
 ]
 
 

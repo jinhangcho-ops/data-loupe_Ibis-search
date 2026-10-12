@@ -6,6 +6,7 @@
 """
 import datetime as dt
 import io
+import json
 import os
 import random
 import re
@@ -91,6 +92,8 @@ MESSY = {
     "dnull": pl.Series([None] * 20, dtype=pl.Int64),
     "b8": [127] + [-128] * 19,
     "b16": [128] + [0] * 19,
+    "txt": ["서울 강남  역", "  부산 해운대 ", "", None, "tel 010-1234, 02-555"] * 4,
+    "sentence": ["배송 서울  서울 주문", "  a,b , a ,, c ", "", None, 'say "hi" "hi" a\\b a\\b'] * 4,
 }
 # 앞 1,000행과 전체가 다른 표(모양 검사를 앞부분으로 거르는 것을 확인한다) 3,000행.
 WIDE = {
@@ -153,6 +156,94 @@ def raised(work):
         work()
     except Exception as e:
         return type(e).__name__
+
+
+def prep_text(tag, pc, got, error, only, preview, values):
+    """글자에서 뽑아내는 ops(extract, has, words)."""
+    spec = lambda **o: only("txt", txt={"ops": o})
+    pick = lambda r, name: values(r, name)[:5]
+    r = preview(spec(extract={"pattern": "[0-9]+"}))
+    check(tag + " extract: 처음 맞은 부분, 안 맞거나 빈 값이면 빈 값", (r["rows"]["columns"], pick(r, "txt_match"), r["types"], r["sources"], r["derived"]),
+          (["txt", "txt_match"], [None, None, None, None, "010"], ["string", "string"], ["txt", "txt"], [False, True]))
+    check(tag + " extract: 묶음 번호(0은 전체, 2는 두 번째 묶음)", [pick(preview(spec(extract={"pattern": "([0-9]+)-([0-9]+)", **g})), "txt_match") for g in ({}, {"group": 0}, {"group": 2})],
+          [[None, None, None, None, "010-1234"], [None, None, None, None, "010-1234"], [None, None, None, None, "1234"]])
+    check(tag + " extract: 한글 정규식, 여러 줄 전체", values(preview(spec(extract={"pattern": "[가-힣]+"})), "txt_match"), ["서울", "부산", None, None, None] * 4)
+    check(tag + " extract: 이어서 오는 |는 전체를 묶어 처음 맞은 것", pick(preview(spec(extract={"pattern": "tel|서울"})), "txt_match"), ["서울", None, None, None, "tel"])
+    r = preview(spec(has={"words": ["서울", "부산", "tel"]}))
+    check(tag + " has: 글자 그대로, 단어마다 int8 컬럼(빈 값 행은 0)", (r["rows"]["columns"], [pick(r, f"txt_has_{w}") for w in ("서울", "부산", "tel")], r["types"], r["derived"]),
+          (["txt", "txt_has_서울", "txt_has_부산", "txt_has_tel"], [[1, 0, 0, 0, 0], [0, 1, 0, 0, 0], [0, 0, 0, 0, 1]], ["string", "int8", "int8", "int8"], [False, True, True, True]))
+    r = preview(spec(has={"words": ["서울|부산", "[0-9]{3}-"], "regex": True}))
+    check(tag + " has: 정규식", [pick(r, "txt_has_서울|부산"), pick(r, "txt_has_[0-9]{3}-")], [[1, 1, 0, 0, 0], [0, 0, 0, 0, 1]])
+    check(tag + " has: .은 글자 그대로면 점이 든 값만, 정규식이면 빈 값 빼고 모두",
+          [pick(preview(spec(has={"words": ["."], "regex": r})), "txt_has_.") for r in (False, True)], [[0, 0, 0, 0, 0], [1, 1, 0, 0, 1]])
+    r = preview(spec(trim=True, extract={"pattern": "^[가-힣]+"}, has={"words": ["부산"]}, case="upper"))
+    check(tag + " 파생 컬럼은 다른 ops를 적용한 뒤의 값으로(trim → extract, 앞 공백이 지워져야 ^에 맞음)", pick(r, "txt_match"), ["서울", "부산", None, None, None])
+    r = preview(spec(extract={"pattern": "[0-9]+"}, has={"words": ["서울"]}), drop=["txt_match", "nothing"])
+    check(tag + " drop으로 파생 컬럼을 뺄 수 있음", r["rows"]["columns"], ["txt", "txt_has_서울"])
+    r = preview(only("id", "txt", txt={"keep": False, "ops": {"extract": {"pattern": "[0-9]+"}}}))
+    check(tag + " 원래 컬럼을 빼도 파생 컬럼은 남음", r["rows"]["columns"], ["id", "txt_match"])
+
+    ids = list(range(1, 21))
+    sentence = lambda **o: only("id", "sentence", sentence={"ops": o})
+    loads = lambda r, name="sentence_counts": [None if v is None else json.loads(v) for v in values(r, name)[:5]]
+    used, original = [], prep_ops.counts_by_table
+    prep_ops.counts_by_table = lambda *a: (used.append(1), original(*a))[1]  # 번호표 방식을 탔는지 센다.
+    try:
+        r = preview(sentence(counts={}))
+    finally:
+        prep_ops.counts_by_table = original
+    check(tag + " counts: 행 안에서 세는 식을 못 쓰는 연결만 번호표 방식을 탐(탔으면 합치느라 행 순서가 바뀔 수 있음)", (bool(used), values(r, "id") == ids if not used else None), (tag == "Parquet", True if tag == "DuckDB" else None))
+    r = preview(sentence(counts={}), sorts=["id"])
+    check(tag + " counts: 공백(연속·앞뒤 공백)으로 나눠 조각별 개수, 키는 정렬 순서, 빈 값·빈 문자열 행은 빈 값",
+          (r["rows"]["columns"], values(r, "sentence_counts")[:3], r["types"], r["sources"], r["derived"], r["before"], r["after"]),
+          (["id", "sentence", "sentence_counts"], ['{"배송": 1, "서울": 2, "주문": 1}', '{",": 1, ",,": 1, "a": 1, "a,b": 1, "c": 1}', None], ["int64", "string", "string"],
+           ["id", "sentence", "sentence"], [False, False, True], 20, 20))
+    check(tag + " counts: 따옴표·역슬래시가 든 값도 json.loads로 읽히고 키 순서가 정렬 순서", ([loads(r)[4], list(loads(r)[4])], values(r, "sentence_counts")[3:5]),
+          ([{'"hi"': 2, "a\\b": 2, "say": 1}, ['"hi"', "a\\b", "say"]], [None, '{"\\"hi\\"": 2, "a\\\\b": 2, "say": 1}']))
+    check(tag + " counts: 같은 문장인 행은 같은 결과", (values(r, "sentence_counts")[0] == values(r, "sentence_counts")[5], values(r, "sentence_counts")[4] == values(r, "sentence_counts")[19]), (True, True))
+    r = preview(sentence(counts={"sep": ","}), sorts=["id"])
+    check(tag + " counts: 쉼표로 나누면 조각의 앞뒤 공백을 지우고 빈 조각은 세지 않음", loads(r)[:2], [{"배송 서울  서울 주문": 1}, {"a": 2, "b": 1, "c": 1}])
+    r = preview(sentence(counts={"sep": ""}), sorts=["id"])
+    check(tag + " counts: sep이 빈 글자면 공백", loads(r)[0], {"배송": 1, "서울": 2, "주문": 1})
+    r = preview(sentence(case="upper", counts={}), sorts=["id"])
+    check(tag + " counts: case를 적용한 뒤의 값으로 셈", loads(r)[4], {'"HI"': 2, "A\\B": 2, "SAY": 1})
+    r = preview(only("name", "sentence", name={"ops": {"counts": {}}}, sentence={"ops": {"counts": {}}}), sorts=["name"])
+    check(tag + " counts: 두 컬럼에 동시에, 각각 바로 뒤에", (r["rows"]["columns"], r["before"], r["after"], r["derived"]), (["name", "name_counts", "sentence", "sentence_counts"], 20, 20, [False, True, False, True]))
+    check(tag + " counts: name은 공백을 지운 조각", sorted({v for v in values(r, "name_counts")}), sorted(['{"Alice": 1}', '{"CAROL": 1}', '{"Eve": 1, "Smith": 1}', '{"bob": 1}', '{"dave": 1}']))
+    r = preview(only("id", "sentence", sentence={"keep": False, "ops": {"counts": {}}}))
+    check(tag + " counts: 원래 컬럼을 빼도 만들어짐", r["rows"]["columns"], ["id", "sentence_counts"])
+    r = preview(sentence(counts={}), drop=["sentence_counts"])
+    check(tag + " counts: drop으로 뺌", r["rows"]["columns"], ["id", "sentence"])
+    check(tag + " counts: 행 수 불변(after를 따로 세지 않음)", (preview(sentence(counts={}))["before"], preview(sentence(counts={}))["after"]), (20, 20))
+
+    bad = lambda cols, **extra: error("/api/preview", base="messy", columns=cols, **extra)
+    form = lambda op, text: f"'txt' 컬럼의 '{op}' 값은 {text} 형식으로 쓰세요."
+    pattern_form = '{"pattern": "정규식", "group": 0}'
+    has_form = '{"words": ["서울", "부산"], "regex": false} (words는 비어 있지 않은 서로 다른 글자 1~50개)'
+    for name, found, want in [
+        ("정수 컬럼에 extract", bad(only("id", id={"ops": {"extract": {"pattern": "1"}}})), "'extract'은 문자 컬럼에만 쓸 수 있습니다. 'id' 컬럼은 정수입니다."),
+        ("정수 컬럼에 has", bad(only("id", id={"ops": {"has": {"words": ["1"]}}})), "'has'은 문자 컬럼에만 쓸 수 있습니다. 'id' 컬럼은 정수입니다."),
+        ("정수 컬럼에 counts", bad(only("id", id={"ops": {"counts": {}}})), "'counts'은 문자 컬럼에만 쓸 수 있습니다. 'id' 컬럼은 정수입니다."),
+        ("빈 pattern", bad(spec(extract={"pattern": ""})), form("extract", pattern_form)),
+        ("음수 group", bad(spec(extract={"pattern": "a", "group": -1})), form("extract", pattern_form)),
+        ("group이 정수가 아님", bad(spec(extract={"pattern": "a", "group": 1.5})), form("extract", pattern_form)),
+        ("has words 51개", bad(spec(has={"words": [f"w{i}" for i in range(51)]})), form("has", has_form)),
+        ("has words 없음", bad(spec(has={"words": []})), form("has", has_form)),
+        ("has words 중복", bad(spec(has={"words": ["a", "a"]})), form("has", has_form)),
+        ("has words 빈 항목", bad(spec(has={"words": ["a", ""]})), form("has", has_form)),
+        ("has regex가 true/false가 아님", bad(spec(has={"words": ["a"], "regex": "yes"})), form("has", has_form)),
+        ("counts sep이 글자가 아님", bad(spec(counts={"sep": 1})), form("counts", '{"sep": ","}')),
+        ("extract 이름이 겹침", bad(spec(extract={"pattern": "a"}), copies=[{"from": "id", "name": "txt_match"}]), "'txt_match' 컬럼이 이미 있어 파생 컬럼을 만들 수 없습니다."),
+        ("has 이름이 겹침", bad(spec(has={"words": ["서울"]}), copies=[{"from": "id", "name": "txt_has_서울"}]), "'txt_has_서울' 컬럼이 이미 있어 파생 컬럼을 만들 수 없습니다."),
+        ("counts 이름이 겹침", bad(spec(counts={}), copies=[{"from": "id", "name": "txt_counts"}]), "'txt_counts' 컬럼이 이미 있어 파생 컬럼을 만들 수 없습니다."),
+    ]:
+        check(f"{tag} 거부: {name}", found, want)
+
+    recipe = {"base": "messy", "columns": only("id", "sentence", sentence={"ops": {"counts": {}}}), "sorts": ["id"]}
+    r = pc.post("/api/run", json={"recipe": recipe, "target": {"kind": "file", "format": "parquet"}})
+    saved = pl.read_parquet(io.BytesIO(r.data))
+    check(tag + " run(Parquet 파일): counts 컬럼과 값", (saved.height, saved.columns, json.loads(saved["sentence_counts"][0]), saved["sentence_counts"][2]),
+          (20, ["id", "sentence", "sentence_counts"], {"배송": 1, "서울": 2, "주문": 1}, None))
 
 
 def prep_new(tag, got, error, only, preview, values):
@@ -492,6 +583,7 @@ def prep_section():
         check(tag + " profile: 없는 테이블", error("/api/profile", base="nothing"), "'nothing' 테이블이 없습니다.")
 
         prep_new(tag, got, error, only, preview, values)
+        prep_text(tag, pc, got, error, only, preview, values)
 
         print("== 전처리 파일 저장:", tag)
         data = run_file("parquet").data
@@ -532,6 +624,9 @@ def prep_section():
     check("label이 든 recipe로 테이블 만들기", make("labeled", only("id", "city", city={"ops": {"label": True}}), sorts=["id"]), {"ok": True, "rows": 20})
     r = got("/api/preview", base="labeled", sorts=["id"])
     check("만든 테이블의 label 값", values(r, "city_label"), [None if c is None else {"Busan": 0, "Daegu": 1, "Jeju": 2, "Seoul": 3}[c] for c in MESSY["city"]])
+    check("counts가 든 recipe로 테이블 만들기", make("counts_out", only("id", "sentence", sentence={"ops": {"counts": {}}})), {"ok": True, "rows": 20})
+    r = got("/api/preview", base="counts_out", sorts=["id"])
+    check("만든 테이블의 counts 값", [json.loads(v) for v in values(r, "sentence_counts") if v], [{"배송": 1, "서울": 2, "주문": 1}, {",": 1, ",,": 1, "a": 1, "a,b": 1, "c": 1}, {'"hi"': 2, "a\\b": 2, "say": 1}] * 4)
     got("/api/connect", kind="url", url=f"duckdb://{duck_file}")
     check("주소 연결은 그 연결로 바로 만듦(스키마 지정)", make("from_url", only("id", "name", name={"ops": {"trim": True}}), schema="main"), {"ok": True, "rows": 20})
     r = got("/api/preview", schema="main", base="from_url", sorts=["id desc"])
@@ -567,6 +662,10 @@ def sqlite_section(c, got):
     recipe = {"base": "customers", "columns": {"name": {"ops": {"case": "upper"}}}, "sorts": ["id"]}
     r = got("/api/preview", **recipe)
     check("SQLite 전처리 미리보기", ([row["name"] for row in r["rows"]["rows"]], r["before"], r["after"]), ([p["name"].upper() for p in customers[:20]], 40, 40))
+    r = got("/api/preview", base="customers", columns={"name": {"ops": {"extract": {"pattern": "[0-9]+"}, "has": {"words": ["customer0"]}}}}, sorts=["id"])
+    check("SQLite extract·has: 다른 연결과 같은 값", ([row["name_match"] for row in r["rows"]["rows"]], [row["name_has_customer0"] for row in r["rows"]["rows"]]),
+          ([f"{i:02d}" for i in range(1, 21)], [1] * 9 + [0] * 11))
+    check("SQLite counts는 지원하지 않는 계산", got("/api/preview", base="customers", columns={"name": {"ops": {"counts": {"sep": "r"}}}}).get("error", "")[:22], "이 연결에서는 지원하지 않는 계산입니다.")
     check("SQLite 새 테이블 만들기", (got("/api/run", recipe=recipe, target={"kind": "table", "name": "upper_names"}), tables()),
           ({"ok": True, "rows": 40}, ["customers", "orders", "upper_names"]))
     check("SQLite 만든 테이블의 값", got("/api/query", base="upper_names", sorts=["id"], columns=["name"], limit=1, count=False)["rows"]["rows"], [{"name": "CUSTOMER01"}])
