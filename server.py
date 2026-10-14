@@ -42,8 +42,16 @@ def run(work, drop=lambda value: None):
     """데이터 작업을 따로 돌려 QUERY_TIMEOUT초까지, 취소 요청이 오기 전까지만 기다린다. 그만두면 DB에도 멈추라고 한다.
     그만둔 작업이 뒤에서 늦게 끝나면 결과는 버린다(치울 것이 있으면 drop으로)."""
     state["cancel"] = threading.Event()  # 작업마다 새로 만들어 지난 취소가 남지 않게 한다.
+    con = state["con"]
+
+    def then_release():  # 끝나면 결과만 남기고 쿼리하며 올린 데이터는 비운다(그만둔 작업도 끝난 뒤에).
+        try:
+            return work()
+        finally:
+            source.release(con)
+
     try:
-        return source.within(QUERY_TIMEOUT, work, f"{QUERY_TIMEOUT // 60}분 안에 끝나지 않아 멈췄습니다.", state["cancel"], drop,
+        return source.within(QUERY_TIMEOUT, then_release, f"{QUERY_TIMEOUT // 60}분 안에 끝나지 않아 멈췄습니다.", state["cancel"], drop,
                              lambda: source.interrupt(state["con"]))
     except (TimeoutError, InterruptedError) as e:
         raise ValueError(str(e) or "취소했습니다.") from None

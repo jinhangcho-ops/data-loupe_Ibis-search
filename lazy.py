@@ -3,7 +3,12 @@
 설치되어 있지 않은 것은 건너뛰고, 이미 올라와 있는 것은 그대로 둔다."""
 import importlib
 import importlib.util
+import os
 import sys
+
+# 쿼리가 끝나면 그동안 쓴 메모리를 바로 운영체제에 돌려준다(Polars가 쓰는 메모리 관리자 mimalloc의 설정. 라이브러리를 올리기 전에 정해야 한다).
+# 기본값이면 다음 쿼리 때까지 쥐고 있어, 큰 Parquet·CSV를 집계한 뒤 1GB 넘게 남았다.
+os.environ.setdefault("MIMALLOC_PURGE_DELAY", "0")
 
 for name in ("ibis", "polars", "duckdb", "pyarrow"):
     spec = importlib.util.find_spec(name)

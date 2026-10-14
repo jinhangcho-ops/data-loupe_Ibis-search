@@ -13,6 +13,7 @@ import drivers
 import scratch
 
 STOP_WAIT = 2  # 멈추라고 알린 일이 실제로 끝나기를 기다리는 시간(초).
+FLOOR = "64MB"  # release가 캐시를 비울 때 잠깐 낮추는 상한. 너무 낮으면(1MB) 되돌리는 문장조차 메모리가 모자라 실패했다.
 
 # 연결을 쓰는 일은 모두 스레드 하나(worker)에서 차례로 돌린다. 만든 스레드에서만 쓸 수 있는 연결(SQLite 등)이 있어서다.
 worker, jobs = None, None
@@ -97,15 +98,30 @@ def open_duckdb(path, read_only=True, memory=None):
     """DuckDB 파일을 연다. memory(MB, 정수)를 주면 작업 메모리 상한을 걸고 넘치는 것은 임시 폴더에 쓴다
     (그 폴더는 close가 지운다). None이면 제한 없이(DuckDB 기본) 연다."""
     if not memory:
-        return ibis.duckdb.connect(path, read_only=read_only)
-    folder = scratch.make()
-    try:
-        con = ibis.duckdb.connect(path, read_only=read_only, temp_directory=folder, memory_limit=f"{memory}MB")
-    except Exception:
-        scratch.remove(folder)
-        raise
-    con.scratch = folder
+        con = ibis.duckdb.connect(path, read_only=read_only)
+    else:
+        folder = scratch.make()
+        try:
+            con = ibis.duckdb.connect(path, read_only=read_only, temp_directory=folder, memory_limit=f"{memory}MB")
+        except Exception:
+            scratch.remove(folder)
+            raise
+        con.scratch = folder
+    con.local = f"set memory_limit='{memory}MB'" if memory else "reset memory_limit"  # 이 PC에서 계산하는 연결. release가 캐시를 비운 뒤 상한을 되돌리는 문장
     return con
+
+
+def release(con):
+    """쿼리가 끝난 뒤 DB가 캐시로 쥔 데이터를 비운다. 결과는 이미 받아 갔고, 다음 쿼리는 필요한 만큼 다시 읽는다.
+    작업 메모리 상한을 잠깐 FLOOR로 낮췄다가 원래 값으로 되돌리는 방식이다. 연결 스레드에서 부른다.
+    이 PC에서 계산하는 파일 연결만 한다. 주소로 접속한 DB·DW는 서버가 계산하므로 하지 않는다(쿼리를 더 보내지 않는다)."""
+    restore = getattr(con, "local", None)
+    if not restore:
+        return
+    try:
+        con.con.execute(f"set memory_limit='{FLOOR}'")
+    finally:
+        con.con.execute(restore)  # 보이는 값("1.3 GiB")은 반올림돼 있어, 연 때의 값으로 되돌린다.
 
 
 def table_names(paths):

@@ -1642,7 +1642,7 @@ sys.path.insert(0, sys.argv[1]); sys.dont_write_bytecode = True
 import lazy, server, app, prep_app, notify, collect_app
 names = ("ibis", "polars", "duckdb", "pyarrow")
 is_lazy = lambda: {n: type(sys.modules[n]).__name__ == "_LazyModule" for n in names}
-out = {"imported": is_lazy()}
+out = {"imported": is_lazy(), "purge": __import__("os").environ.get("MIMALLOC_PURGE_DELAY")}
 c = server.app.test_client(); c.set_cookie("key", server.KEY)
 out["connect"] = c.post("/api/connect", json={"kind": "folder", "path": sys.argv[2], "files": [sys.argv[3]]}).get_json()
 out["parquet"] = is_lazy()
@@ -1652,6 +1652,7 @@ print(json.dumps(out))
     found = subprocess.run([sys.executable, "-c", code, str(Path(__file__).parent), str(PREP_FLAT), str(flat)], capture_output=True, text=True, encoding="utf-8")
     out = json.loads(found.stdout.strip().splitlines()[-1]) if found.returncode == 0 else {"error": found.stderr[-300:]}
     check("프로젝트 모듈을 불러온 직후에는 ibis·polars·duckdb·pyarrow가 모두 지연 상태", out.get("imported"), dict.fromkeys(("ibis", "polars", "duckdb", "pyarrow"), True))
+    check("쿼리가 끝나면 Parquet·CSV 계산에 쓴 메모리를 바로 돌려주는 설정(lazy가 라이브러리보다 먼저 정함)", out.get("purge"), "0")
     check("Parquet 연결 뒤: ibis·polars는 올라오고 duckdb는 여전히 지연 상태", (out.get("connect"), {n: out["parquet"][n] for n in ("ibis", "polars", "duckdb")}),
           ({"schemas": []}, {"ibis": False, "polars": False, "duckdb": True}))
 
@@ -1688,6 +1689,26 @@ print(json.dumps(out))
         found = [server.on_error(Exception(text))[0].get_json()["error"] for text in ("Out of Memory Error: failed to allocate", "OUT OF MEMORY", "다른 오류")]
     check("메모리 부족 오류에는 안내 문구가 붙음", found, ["메모리가 모자랍니다. 작업 메모리 상한을 올리거나 조건을 좁히세요. Out of Memory Error: failed to allocate",
           "메모리가 모자랍니다. 작업 메모리 상한을 올리거나 조건을 좁히세요. OUT OF MEMORY", "다른 오류"])
+
+    cached = lambda: server.state["con"].con.execute("select coalesce(sum(memory_usage_bytes), 0) from duckdb_memory() where tag = 'BASE_TABLE'").fetchone()[0]
+    for memory in (1500, 0):
+        got("/api/settings", memory=memory)
+        connect()
+        base = source.list_tables(server.state["con"])[0]
+        before = text()
+        server.state["con"].con.execute(f'select count(*) from "{base}"').fetchall()  # 비우지 않고 돌린 쿼리는 캐시를 남긴다
+        kept = cached() > 0
+        query = got("/api/query", base=base, limit=5)
+        summary = got("/api/summary", base=base)
+        check(f"memory {memory}: 쿼리가 끝나면 DB 캐시를 비우고(64MB 아래로) 상한은 그대로, 결과는 정상",
+              (kept, cached() < 64 * 10**6, text() == before, len(query["rows"]["rows"]), len(summary["summary"]["rows"]) > 0), (True, True, True, 5, True))
+    got("/api/settings", memory=0)
+    got("/api/connect", kind="url", url=f"duckdb://{duck}")
+    sent = []
+    real, server.state["con"].raw_sql = server.state["con"].raw_sql, lambda *a, **k: sent.append(a) or real(*a, **k)
+    source.release(server.state["con"])
+    check("주소로 연결한 DB는 비우지 않음(쿼리를 더 보내지 않음)", (getattr(server.state["con"], "local", False), sent), (False, []))
+    got("/api/disconnect")
 
 
 def sqlite_section(c, got):
