@@ -1,5 +1,6 @@
 """검색과 전처리가 함께 쓰는 Flask 앱 하나와 공통 부분(연결, 설정, 열쇠, 화면 내려주기). app.py·prep_app.py가 여기에 자기 라우트를 단다. 따로 실행하지 않는다."""
 import json
+import os
 import re
 import secrets
 import threading
@@ -19,9 +20,10 @@ app = Flask(__name__, static_folder="static")
 
 # 연결은 메모리에만 둔다. passwords는 오류 문구에서 가릴 값, opened는 다시 열 때 쓸 요청 값, rows는 세어 둔 테이블 행 수, chars는 연결의 length()가 글자 수를 세는지(모르면 None), cancel은 지금 도는 데이터 작업의 취소 신호.
 state = {"con": None, "passwords": [], "opened": None, "rows": {}, "chars": None, "cancel": threading.Event()}
-turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 메모리·CPU 요청과 취소 요청만 기다리지 않는다.
+turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 연결을 쓰지 않는 FREE의 경로만 기다리지 않는다.
+FREE = {"/api/usage", "/api/cancel", "/api/send"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
-ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름 → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
+ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 목록 예: ("Parquet (*.parquet)",) → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
 QUERY_TIMEOUT = 1800  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다.
 
 
@@ -69,7 +71,7 @@ def only_window():
 
 @app.before_request
 def wait_turn():
-    if request.path not in ("/api/usage", "/api/cancel", "/api/send"):
+    if request.path not in FREE:
         turn.acquire()
         g.turn = True
 
@@ -173,6 +175,13 @@ def open_con(info, read_only=True):
             raise ValueError("파일을 고르세요.")
         return source.open_duckdb(info["file"], read_only, settings.load().get("memory"))
     return source.open_url(info["url"], info.get("user", ""), info.get("password", ""))
+
+
+def reading(path):
+    """path가 지금 연결이 읽고 있는 파일인지(대소문자 무시). 읽는 파일에는 덮어쓰지 않는다."""
+    opened = state["opened"] or {}
+    files = [p for p in (opened.get("file"), *opened.get("files", [])) if p]
+    return os.path.normcase(os.path.abspath(path)) in [os.path.normcase(os.path.abspath(p)) for p in files]
 
 
 def switch(new):

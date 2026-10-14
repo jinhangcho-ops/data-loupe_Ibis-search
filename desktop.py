@@ -1,10 +1,12 @@
-"""검색·전처리 화면을 프로그램 창으로 연다. exe의 실행 파일이자 유일한 실행 방법."""
+"""검색·전처리·수집 화면을 프로그램 창으로 연다. exe의 실행 파일이자 유일한 실행 방법."""
 import threading
 
 import lazy  # noqa: F401  데이터 라이브러리를 처음 쓸 때 올린다(다른 프로젝트 모듈보다 먼저).
 import webview
 from werkzeug.serving import make_server
 
+import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
+import collect_job
 import notify  # noqa: F401  보내기 라우트가 앱에 달린다.
 import prep_app  # noqa: F401  전처리 라우트가 앱에 달린다.
 import scratch
@@ -18,16 +20,28 @@ threading.Thread(target=http.serve_forever, daemon=True).start()
 
 webview.settings["ALLOW_DOWNLOADS"] = True  # 결과·차트 내보내기
 # 열쇠를 아는 이 창만 화면을 열 수 있다(브라우저로 주소만 열면 거부된다).
-window = webview.create_window("Ibis 검색·전처리", f"http://127.0.0.1:{http.server_port}/?key={KEY}", width=1400, height=900)
+window = webview.create_window("Ibis 검색·전처리·수집", f"http://127.0.0.1:{http.server_port}/?key={KEY}", width=1400, height=900)
 
 
-def ask_save(name):
-    """저장 대화상자. 고른 경로 또는 취소하면 None. 덮어쓰기는 대화상자가 묻는다."""
-    chosen = window.create_file_dialog(webview.FileDialog.SAVE, save_filename=name, file_types=("Parquet (*.parquet)",))
+def ask_save(name, file_types):
+    """저장 대화상자. file_types는 고를 형식들(예: ("Parquet (*.parquet)",)). 고른 경로 또는 취소하면 None. 덮어쓰기는 대화상자가 묻는다."""
+    chosen = window.create_file_dialog(webview.FileDialog.SAVE, save_filename=name, file_types=file_types)
     return chosen[0] if chosen else None
 
 
+def closing():
+    """수집 중에 창을 닫으면 묻는다. False를 돌려주면 닫기가 취소된다(pywebview의 closing 이벤트). 닫으면 수집을 멈춰 받은 데까지 남긴다."""
+    if not collect_job.running():
+        return True
+    if not window.create_confirmation_dialog("수집 중", "수집이 아직 돌고 있습니다. 닫으면 받은 데까지 남기고 멈춥니다(다시 시작하면 이어 받습니다). 닫을까요?"):
+        return False
+    collect_job.stop()
+    return True
+
+
 server.ask_save = ask_save
+window.events.closing += closing
 webview.start()  # 창을 닫으면 여기서 끝나고, 서버 스레드도 함께 종료된다.
+collect_job.stop(wait=10)  # 수집 작업이 받은 데까지 기록하고 끝나기를 기다린다.
 if server.state["con"] is not None:  # 열어 둔 연결을 닫아 파일을 놓고 임시 폴더를 지운다.
     source.close(server.state["con"])

@@ -99,12 +99,12 @@ let dest = { kinds: {}, destinations: {} };
 let notifyAfter = +saved("notify_after") || 30;  // 이만큼(초) 이상 걸린 작업이 끝나면 알린다
 const sendTo = (name, body) => api("/api/send", { name, ...body });
 const takesImage = name => dest.kinds[dest.destinations[name].kind].image;
-const DONE = { search: "검색이", summary: "집계가", chart: "차트가", export: "저장이", profile: "통계가", preview: "미리보기가", run: "전처리 실행이" };
-// 오래 걸린 작업이 끝나면 done인 보낼 곳마다 알린다. 데이터 값은 보내지 않는다.
-function notifyDone(kind, seconds, rows) {
+const DONE = { search: "검색이", summary: "집계가", chart: "차트가", export: "저장이", profile: "통계가", preview: "미리보기가", run: "전처리 실행이", collect: "수집이" };
+// 오래 걸린 작업이 끝나면 done인 보낼 곳마다 알린다. 데이터 값은 보내지 않는다. text: 알림의 본문(기본은 기준 테이블 이름)
+function notifyDone(kind, seconds, rows, text = S.base) {
   if (seconds < notifyAfter) return;
   for (const [name, d] of Object.entries(dest.destinations)) {
-    if (d.done) sendTo(name, { title: `${DONE[kind]} 끝났습니다`, text: S.base, ...(rows ? { rows } : {}), seconds: +seconds.toFixed(1) }).catch(e => connMsg(e.message));
+    if (d.done) sendTo(name, { title: `${DONE[kind]} 끝났습니다`, text, ...(rows ? { rows } : {}), seconds: +seconds.toFixed(1) }).catch(e => connMsg(e.message));
   }
 }
 const destMsg = (text, ok) => { $("msg-dest").textContent = text; $("msg-dest").className = ok ? "ok" : "err"; };
@@ -223,6 +223,9 @@ function showFlat() {
   $("flat").classList.toggle("hidden", $("file").value !== FLAT);
   $("flat-count").textContent = `${flatBoxes().filter(b => b.checked).length} / ${flatBoxes().length}개 선택`;
 }
+// 연결 칸(connect.html)이 있는 화면에서만 연결 칸의 버튼을 단다. 수집 화면처럼 연결 칸이 없는 화면도 common.js를 쓴다.
+const hasConnect = !!$("connect");
+if (hasConnect) {
 $("file").onchange = showFlat;
 // 작업 메모리 상한(MB, 0 = 제한 없음): 목록에 있는 값이거나 GB로 직접 넣은 값. 저장만 하고 다음 [연결]부터 서버가 쓴다.
 const memory = saved("memory") || "0";
@@ -240,10 +243,11 @@ $("memory-gb").onchange = () => {
 };
 $("flat-list").onchange = showFlat;
 $("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
+}
 let connected = null;  // 지금 연결의 종류: "flat"(Parquet·CSV 파일), "other"(DuckDB 파일·DB 주소), 없으면 null
 // [모두 해제]: 체크를 모두 푼다. Parquet·CSV로 연결돼 있었으면 그 연결을 끊고 화면을 연결 전으로 되돌린다(파일을 다시 골라 새로 연결).
 // DuckDB 파일이나 DB 주소로 연결돼 있었으면 연결은 그대로 두고 화면에 올라온 것만 비운다.
-$("flat-none").onclick = () => busy($("flat-none"), async () => {
+if (hasConnect) $("flat-none").onclick = () => busy($("flat-none"), async () => {
   flatBoxes().forEach(b => b.checked = false);
   showFlat();
   if (!connected) return;
@@ -266,7 +270,7 @@ async function listFiles() {
   showFlat();
   connMsg("");
 }
-$("find").onclick = () => busy($("find"), async () => {
+if (hasConnect) $("find").onclick = () => busy($("find"), async () => {
   try { await listFiles(); } catch (e) { connMsg(e.message); }
 });
 // 연결에 성공한 상태로 만든다([연결]을 누른 뒤와 화면을 새로 연 뒤가 같다). flat: Parquet·CSV 파일 연결인가
@@ -279,7 +283,7 @@ async function showConnected(flat, schemas) {
   $("after-connect").classList.remove("hidden");
   await loadTables();
 }
-$("connect").onclick = () => busy($("connect"), async () => {
+if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
   const kind = document.querySelector("input[name=kind]:checked").value;
   const body = kind === "folder"
     ? { kind, path: $("path").value, ...($("file").value === FLAT ? { files: flatBoxes().filter(b => b.checked).map(b => b.value) } : { file: $("file").value }) }
@@ -296,7 +300,7 @@ async function loadTables() {
   const { tables } = await api("/api/tables?schema=" + encodeURIComponent(S.schema));
   fill($("base"), tables, "기준 테이블 선택");
 }
-$("schema").onchange = loadTables;
+if (hasConnect) $("schema").onchange = loadTables;
 
 // 설정(화면 모드, 차트 비율, 그림 저장 모드, 따옴표 해석, 전체 행 수 세기, 조건 입력 방식, 끌어서 조절한 크기, 직전 실행의 행당 시간): 바꾸면 서버가 설정 파일에 저장해 다음 실행 때도 쓴다.
 const saveSetting = changes => api("/api/settings", changes).catch(e => connMsg(e.message));

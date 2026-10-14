@@ -214,13 +214,13 @@ def recent(info):
     return {"kind": "url", "url": url, "user": info.get("user", "")}
 
 
-def mask(message, passwords):
-    """메시지에서 비밀번호(원래 값과 주소에 넣은 인코딩 값)를 ***로 가린다.
+def mask(message, passwords, mark="***"):
+    """메시지에서 비밀번호(원래 값과 주소에 넣은 인코딩 값)를 mark(기본 ***)로 가린다.
     4자보다 짧은 비밀번호는 다른 글자까지 가리지 않게 주소의 비밀번호 자리(:와 @ 사이)에서만 가린다."""
     for password in passwords:
         for secret in (quote_plus(password, safe=""), password) if password else ():
             if len(password) < 4:
-                message = re.sub("(?<=:)" + re.escape(secret) + "(?=@)", "***", message)
+                message = re.sub("(?<=:)" + re.escape(secret) + "(?=@)", mark, message)
             else:
-                message = message.replace(secret, "***")
+                message = message.replace(secret, mark)
     return message

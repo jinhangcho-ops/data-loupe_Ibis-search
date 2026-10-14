@@ -103,13 +103,11 @@ def handoff():
     if server.ask_save is None:
         raise ValueError("저장 위치를 물을 수 없습니다. 프로그램 창에서만 쓸 수 있습니다.")
     expr = build(request.json)
-    chosen = server.ask_save(f"{request.json['base']}_search.parquet")
+    chosen = server.ask_save(f"{request.json['base']}_search.parquet", ("Parquet (*.parquet)",))
     if not chosen:
         return jsonify(cancelled=True)
     path = Path(chosen if chosen.lower().endswith(".parquet") else chosen + ".parquet")
-    opened = server.state["opened"]
-    reading = [p for p in (opened.get("file"), *opened.get("files", [])) if p]  # 읽고 있는 파일들
-    if os.path.normcase(os.path.abspath(path)) in [os.path.normcase(os.path.abspath(p)) for p in reading]:
+    if server.reading(path):
         raise ValueError("지금 읽고 있는 파일에는 저장할 수 없습니다. 다른 이름을 고르세요.")
     part = path.with_name(path.stem + ".part.parquet")
 

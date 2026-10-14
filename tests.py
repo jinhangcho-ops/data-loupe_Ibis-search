@@ -37,6 +37,7 @@ from flask import Flask
 import polars as pl
 import psutil
 
+import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
 import notify
 import prep_app
 import prep_ops
@@ -876,6 +877,511 @@ def notify_section(c, got):
     check("지우면 목록이 빔", c.get("/api/destinations").get_json()["destinations"], {})
 
 
+class FakeApi:
+    """127.0.0.1의 임의 포트에 띄우는 가짜 API 서버. routes[경로](요청 기록) → (상태, 헤더, 몸통). 헤더의 _cut은 몸통을 그 바이트에서 끊는다."""
+
+    def __init__(self):
+        import http.server
+        self.routes, self.log = {}, []
+        fake = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def answer(self):
+                parts = urllib.parse.urlsplit(self.path)
+                body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                entry = {"t": time.time(), "method": self.command, "path": parts.path, "query": dict(urllib.parse.parse_qsl(parts.query, keep_blank_values=True)),
+                         "raw_query": parts.query, "headers": {k.lower(): v for k, v in self.headers.items()}, "body": body}
+                fake.log.append(entry)
+                route = fake.routes.get(parts.path)
+                status, headers, data = route(entry) if route else (404, {}, b"no route")
+                headers = dict(headers)
+                cut = headers.pop("_cut", None)
+                if "Date" in headers:
+                    self.send_response_only(status)
+                else:
+                    self.send_response(status)
+                for k, v in headers.items():
+                    self.send_header(k, v)
+                if "Content-Length" not in headers:
+                    self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data if cut is None else data[:cut])
+
+            do_GET = do_POST = do_PUT = do_DELETE = answer
+
+        self.http = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.http.daemon_threads = True
+        threading.Thread(target=self.http.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.http.server_port}"
+
+    def hits(self, path):
+        return [e for e in self.log if e["path"] == path]
+
+
+def ranged(data, etag, entry, support=True):
+    """Range 요청에 답한다(지원하지 않으면 200으로 전체). If-Range가 지금 ETag와 다르면 전체."""
+    rng, if_range = entry["headers"].get("range"), entry["headers"].get("if-range")
+    if support and rng and (not if_range or if_range == etag):
+        m = re.match(r"bytes=(\d+)-(\d*)", rng)
+        start, end = int(m[1]), min(int(m[2]) if m[2] else len(data) - 1, len(data) - 1)
+        return 206, {"Content-Range": f"bytes {start}-{end}/{len(data)}", **({"ETag": etag} if etag else {})}, data[start:end + 1]
+    return 200, {"ETag": etag} if etag else {}, data
+
+
+def email_date(seconds):
+    import email.utils
+    return email.utils.formatdate(seconds, usegmt=True)
+
+
+def raised_error(work):
+    try:
+        work()
+    except Exception as e:
+        return e
+
+
+def collect_section(c, got):
+    """수집(1단계 서버). 바깥 인터넷 없이 127.0.0.1의 가짜 서버로만 확인한다. 데이터는 여기서 지어낸다."""
+    import collect_http
+    import collect_limits
+    import collect_request as creq
+    print("== 수집: 예시 읽기")
+    error = lambda api, **body: got(api, **body).get("error", "")
+    parse = lambda text: got("/api/collect/parse", text=text)
+    r = parse("curl 'https://api.example.com/v1/items?serviceKey=abc%2B1&pageNo=1' \\\n  -X POST -H 'Authorization: Bearer tok-123' -H 'X-Api-Key: k-456' \\\n"
+              "  -H 'Content-Length: 9' --compressed -k --data-raw '{\"q\": \"x\", \"auth\": {\"token\": \"t-789\"}}' -H 'Content-Type: application/json' -u me:pw-1")
+    check("curl: 방식·주소(쿼리는 목록으로, -u는 user:pass@)·헤더(Content-Length는 뺌)·본문 종류", (r["format"], r["request"]["method"], r["request"]["url"], r["request"]["query"],
+          [h[0] for h in r["request"]["headers"]], r["request"]["body_kind"]),
+          ("curl", "POST", "https://me:pw-1@api.example.com/v1/items", [["serviceKey", "abc+1"], ["pageNo", "1"]], ["Authorization", "X-Api-Key", "Content-Type"], "json"))
+    check("curl: 모르는 옵션은 unread", r["unread"], ["-k"])
+    check("비밀 찾기: 주소의 비밀번호, Authorization, 이름에 key, 쿼리 serviceKey, JSON 본문 auth.token", [(s["where"], s["name"], s["path"]) for s in r["secrets"]],
+          [("url", "password", ""), ("header", "Authorization", ""), ("header", "X-Api-Key", ""), ("query", "serviceKey", ""), ("body", "token", "auth.token")])
+    cmd = parse('curl ^"https://h.example.com/a?x=1^" ^\n  -H ^"Accept: text/csv^" ^\n  -G --data-urlencode ^"q=a b^&c^" -d ^"n=2^" -A ^"agent/1^" -b ^"sid=s1^"')
+    check("curl cmd(^ 이음): -G로 데이터가 쿼리로, --data-urlencode 인코딩, -A·-b는 헤더", (cmd["request"]["method"], cmd["request"]["query"], cmd["request"]["headers"], cmd["request"]["body_kind"]),
+          ("GET", [["x", "1"], ["q", "a b&c"], ["n", "2"]], [["Accept", "text/csv"], ["User-Agent", "agent/1"], ["Cookie", "sid=s1"]], "none"))
+    ps = parse("curl.exe --url https://h.example.com/b `\n  --json '{\"a\": 1}' -d @body.json --data-urlencode name@file.txt -b cookies.txt --retry 3")
+    check("curl PowerShell(` 이음): --json, @파일 첨부·쿠키 파일·모르는 옵션은 unread", (ps["request"]["method"], ps["request"]["body"], ps["request"]["body_kind"], ps["unread"]),
+          ("POST", '{"a": 1}', "json", ["-d @body.json (파일 첨부는 읽지 않습니다)", "--data-urlencode name@file.txt (파일 첨부는 읽지 않습니다)",
+                                       "-b cookies.txt (쿠키 파일은 읽지 않습니다)", "--retry", "3"]))
+    form = parse("curl https://h.example.com/f -d 'user=a&password=p1&n=2'")
+    check("curl -d form: 본문 종류 form, form 필드 password가 비밀", (form["request"]["body_kind"], [(s["where"], s["name"]) for s in form["secrets"]]), ("form", [("body", "password")]))
+    h = parse("POST /v2/search?page=1&access_token=a1 HTTP/1.1\nHost: api.example.com\nContent-Type: application/x-www-form-urlencoded\nCookie: s=1\nAccept-Encoding: gzip\n\nq=hello&n=1")
+    check("HTTP 요청 글자: Host로 https 주소, 쿼리 나눔, 버릴 헤더(Host·Accept-Encoding) 뺌, form 본문, 비밀(쿼리·Cookie)",
+          (h["format"], h["request"]["url"], h["request"]["query"], [k for k, _ in h["request"]["headers"]], h["request"]["body"], h["request"]["body_kind"],
+           sorted((s["where"], s["name"]) for s in h["secrets"])),
+          ("http", "https://api.example.com/v2/search", [["page", "1"], ["access_token", "a1"]], ["Content-Type", "Cookie"], "q=hello&n=1", "form",
+           [("header", "Cookie"), ("query", "access_token")]))
+    j = parse(json.dumps({"method": "put", "url": "https://h.example.com/j?a=1", "headers": {"X-Session": "s9"}, "query": [["b", "2"]], "body": {"k": [1, 2]}, "extra": 1}))
+    check("JSON 예시: headers 객체·query 목록·객체 본문(json), 모르는 키는 unread", (j["format"], j["request"]["method"], j["request"]["query"], j["request"]["headers"], j["request"]["body"],
+          j["request"]["body_kind"], j["unread"], [s["name"] for s in j["secrets"]]),
+          ("json", "PUT", [["a", "1"], ["b", "2"]], [["X-Session", "s9"], ["Content-Type", "application/json"]], '{"k": [1, 2]}', "json", ["extra"], ["X-Session"]))
+    check("예시 거부: 모르는 모양, ftp 주소, 주소 없는 curl", [error("/api/collect/parse", text=t) for t in ("hello", "curl ftp://x.example.com/a", "curl -H 'A: b'")],
+          ['curl 명령, HTTP 요청 글자, JSON({"method", "url", …}) 중 하나로 붙여 넣으세요.', "주소는 http:// 또는 https://로 시작해야 합니다.", "curl 명령에서 주소를 찾지 못했습니다."])
+
+    print("== 수집: 비밀을 {env:이름}으로, 저장 거부")
+    replace = [{"where": s["where"], "name": s["name"], "path": s["path"], "env": f"E{i}"} for i, s in enumerate(r["secrets"])]
+    s = got("/api/collect/secretize", request=r["request"], replace=replace)["request"]
+    check("secretize: 주소 비밀번호·Bearer 앞말 유지·헤더·쿼리·JSON 본문(모양 유지)", (s["url"], s["headers"][:2], s["query"][0], s["body"]),
+          ("https://me:{env:E0}@api.example.com/v1/items", [["Authorization", "Bearer {env:E1}"], ["X-Api-Key", "{env:E2}"]], ["serviceKey", "{env:E3}"],
+           '{"q": "x", "auth": {"token": "{env:E4}"}}'))
+    check("바꾼 뒤에는 남은 비밀 없음", creq.secrets(s), [])
+    check("secretize: env 이름 검사", error("/api/collect/secretize", request=r["request"], replace=[{**replace[0], "env": "1bad"}]).startswith("env 이름은 "), True)
+    config = {"version": 1, "mode": "api", "request": r["request"], "output": {"format": "parquet", "path": "", "dedupe": []}}
+    e = error("/api/collections", name="raw", collection=config)
+    check("구성 저장 거부: 위치 이름만 알리고 값은 넣지 않음", (e, any(v in e for v in ("tok-123", "k-456", "abc+1", "t-789", "pw-1"))),
+          ("비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 주소의 비밀번호, 헤더 Authorization, 헤더 X-Api-Key, 쿼리 serviceKey, 본문 auth.token. env 파일에 넣고 {env:이름}으로 바꾸세요.", False))
+    check("비밀 이름은 낱말로 봄: keyword·author·monkey_bars는 아님", [n for n in ("serviceKey", "X-API-KEY", "access_token", "apikey", "sessionId", "keyword", "author", "sort", "monkey_bars")
+          if creq.secret_name(n)], ["serviceKey", "X-API-KEY", "access_token", "apikey", "sessionId"])
+    sort_key = {**config, "request": {**s, "query": [*s["query"], ["sort_key", "date"]], "headers": [*s["headers"], ["Cookie", "c=1"]]}}
+    check("비밀이 아니라고 뺀 이름(plain)은 저장됨, Cookie는 plain이어도 비밀", (error("/api/collections", name="p", collection=sort_key),
+          error("/api/collections", name="p", collection={**sort_key, "plain": ["SORT_KEY", "Cookie"]})),
+          ("비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 헤더 Cookie, 쿼리 sort_key. env 파일에 넣고 {env:이름}으로 바꾸세요.",
+           "비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 헤더 Cookie. env 파일에 넣고 {env:이름}으로 바꾸세요."))
+    saved = got("/api/collections", name="공공", collection={**config, "request": s})
+    check("바꾼 구성은 저장됨(빠진 칸은 기본값), 목록", (list(saved["collections"]), saved["collections"]["공공"]["request"]["url"], saved["collections"]["공공"]["paging"]["kind"],
+          c.get("/api/collections").get_json()["collections"]["공공"]["request"]["query"][0]), (["공공"], s["url"], "none", ["serviceKey", "{env:E3}"]))
+    check("구성 검사: version·모르는 키·잘못된 값", [error("/api/collections", name="x", collection=v) for v in (
+          {"version": 2}, {"version": 1, "extra": 1}, {"request": {"nope": 1}}, {"paging": {"kind": "scroll"}}, {"balance": {"concurrency": 0}}, {"request": {"headers": [["a"]]}})],
+          ["구성의 version은 1이어야 합니다.", "구성에 쓸 수 없는 값이 있습니다: extra", "구성에 쓸 수 없는 값이 있습니다: request.nope",
+           "구성의 paging.kind는 none, page, offset, cursor, next_url 중 하나입니다.", "구성의 balance.concurrency는 1~32의 정수여야 합니다.",
+           "구성의 request.headers는 [[이름, 값], …] 모양이어야 합니다."])
+    check("파일 모드의 헤더·주소 쿼리도 검사", error("/api/collections", name="x", collection={"mode": "file", "file": {"url": "https://h.example.com/d.csv?token=zz", "headers": [["Authorization", "Bearer q"]]}}),
+          "비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 파일 주소의 token, 파일 헤더 Authorization. env 파일에 넣고 {env:이름}으로 바꾸세요.")
+    check("구성 지우기", got("/api/collections", name="공공", collection=None), {"collections": {}})
+
+    print("== 수집: env 파일")
+    env_file = ROOT / "collect.env"
+    secret_key, secret_tok = "Key/With+Plus=xyz789", "tok-SECRET-55"
+    env_file.write_bytes(("\ufeff# 주석\n\nexport API_KEY=" + secret_key + "  # 뒤 주석\nTOKEN=\"" + secret_tok + "\"\nQUOTED='a #b'\nESC=\"x\\ny\"\nEMPTY=\n").encode("utf-8"))
+    check("env: BOM·주석·export·따옴표·빈 값, 이름만 돌려줌", (got("/api/collect/env", path=str(env_file)), creq.read_env(env_file)),
+          ({"names": ["API_KEY", "TOKEN", "QUOTED", "ESC", "EMPTY"]}, {"API_KEY": secret_key, "TOKEN": secret_tok, "QUOTED": "a #b", "ESC": "x\ny", "EMPTY": ""}))
+    bad_env = ROOT / "bad.env"
+    bad_env.write_text("OK=1\nthis line secret-value\n", encoding="utf-8")
+    e = error("/api/collect/env", path=str(bad_env))
+    check("env: 읽지 못한 줄은 번호만(값 없음)", (e, "secret-value" in e), ("env 파일 2번째 줄을 읽을 수 없습니다(이름=값 모양이어야 합니다).", False))
+
+    print("== 수집: 자리 채우기")
+    ctx = {"env": {"K": 'a b&c=d/한"\n'}, "page": 3, "offset": 200, "cursor": "", "now": dt.datetime(2026, 1, 2, 3, 4, 5)}
+    built = creq.build({"method": "POST", "url": "https://h.example.com/p/{env:K}/{page}", "query": [["k", "{env:K}"], ["d", "{today:%Y%m%d}"], ["n", "{now}"]],
+                        "headers": [["X-D", "{today}"]], "body_kind": "json", "body": '{"k": "{env:K}", "page": {page}, "o": "{offset}", "c": "{cursor}", "lit": {"a": 1}}'}, ctx)
+    check("주소 경로는 quote, 쿼리는 URL 인코딩, 날짜 형식", (built["url"], built["headers"]),
+          ("https://h.example.com/p/a%20b%26c%3Dd%2F%ED%95%9C%22%0A/3?k=a+b%26c%3Dd%2F%ED%95%9C%22%0A&d=20260102&n=2026-01-02+03%3A04%3A05",
+           [["X-D", "2026-01-02"], ["Content-Type", "application/json"]]))
+    check("JSON 본문: 글자 안은 JSON 이스케이프, 밖({page})은 그대로, 다른 중괄호는 그대로", json.loads(built["body"]),
+          {"k": 'a b&c=d/한"\n', "page": 3, "o": "200", "c": "", "lit": {"a": 1}})
+    built = creq.build({"method": "POST", "url": "https://h.example.com/f", "body_kind": "form", "body": "k={env:K}&p={page}"}, ctx)
+    check("form 본문은 quote_plus, Content-Type", (urllib.parse.parse_qs(built["body"].decode()), built["headers"]),
+          ({"k": ['a b&c=d/한"\n'], "p": ["3"]}, [["Content-Type", "application/x-www-form-urlencoded"]]))
+    check("채운 JSON이 깨지면 거부, 헤더 줄바꿈 거부", [str(raised_error(lambda: creq.build({"url": "https://h.example.com", "body_kind": "json", "body": '{"a": {page'}, ctx))),
+          str(raised_error(lambda: creq.build({"url": "https://h.example.com", "headers": [["X", "{env:K}"]]}, ctx)))],
+          ["자리를 채운 본문이 JSON이 아닙니다. 본문과 자리 표시를 확인하세요.", "헤더 이름·값에 줄바꿈을 넣을 수 없습니다."])
+    check("주소의 user:pass@는 Basic 인증 헤더로(주소에서는 뺌)", (lambda b: (b["url"], b["headers"]))(creq.build({"url": "https://me:{env:K}@h.example.com/a"}, {**ctx, "env": {"K": "p@ss"}})),
+          ("https://h.example.com/a", [["Authorization", "Basic " + base64.b64encode(b"me:p@ss").decode()]]))
+
+    print("== 수집: 응답 매핑(미리보기)")
+    sample_text = json.dumps({"data": {"list": [{"id": 1, "n": 1.5, "m": 1, "o": {"a": {"b": "x"}}, "tags": [1, "가"], "mix": 1},
+                                                 {"id": 2, "n": 2, "m": 2.5, "o": {"a": {"b": "y"}}, "tags": [], "mix": "two", "extra": True}]}, "next": {"cursor": "c2"}, "total": "40"})
+    base_cfg = {"response": {"records": "data.list", "columns": []}, "paging": {"kind": "cursor", "cursor_path": "next.cursor", "total_path": "total"}}
+    r = got("/api/collect/sample", config=base_cfg, text=sample_text)
+    check("평탄화(a.b), 목록은 JSON 글자, 타입(섞이면 문자, 정수+실수는 실수), 커서·전체 수", (r["count"], [(x["name"], x["type"]) for x in r["columns"]], r["rows"][0], r["cursor"], r["total"]),
+          (2, [("id", "정수"), ("n", "실수"), ("m", "실수"), ("o.a.b", "문자"), ("tags", "문자"), ("mix", "문자"), ("extra", "참거짓")],
+           {"id": 1, "n": 1.5, "m": 1, "o.a.b": "x", "tags": '[1, "가"]', "mix": 1}, "c2", 40))
+    r = got("/api/collect/sample", config={"response": {"records": "data.list.1", "columns": [{"name": "아이디", "path": "id"}, {"name": "b", "path": "o.a.b"}, {"name": "없음", "path": "zz"}]}},
+            text=sample_text)
+    check("기록 경로에 숫자(배열 번호), 객체 하나는 기록 하나, columns 경로만", (r["count"], r["rows"]), (1, [{"아이디": 2, "b": "y", "없음": None}]))
+    r = got("/api/collect/sample", config={"response": {"records": ""}}, text="[1, \"a\", null]")
+    check("객체가 아닌 기록은 value 컬럼", (r["rows"], r["columns"]), ([{"value": 1}, {"value": "a"}, {"value": None}], [{"name": "value", "path": "value", "type": "문자"}]))
+    check("기록 경로가 없으면·JSON이 아니면 거부", [error("/api/collect/sample", config={"response": {"records": "nope"}}, text=sample_text), error("/api/collect/sample", config={}, text="<x/>")],
+          ["기록 경로 'nope'를 응답에서 찾지 못했습니다.", "응답 예시가 JSON이 아닙니다."])
+
+    print("== 수집: 작업(가짜 서버)")
+    api = FakeApi()
+    collect_http.BACKOFF = 0.02  # 다시 시도 기다림을 짧게
+    out = ROOT / "collect_out"
+    out.mkdir()
+
+    def item(i):
+        return {"id": i, "name": f"n{i}", "score": i + 0.5, "flag": i % 2 == 0, "tags": ["a", i], "meta": {"a": i, "b": {"c": "x"}}, "mixed": i if i % 2 else f"s{i}", "maybe": None}
+
+    def items_route(e):
+        page = int(e["query"].get("page", 1))
+        rows = [item((page - 1) * 3 + k) for k in (1, 2, 3)] if page <= 5 else []
+        return 200, {"Content-Type": "application/json"}, json.dumps({"response": {"body": {"items": rows, "total": 15}}}).encode()
+
+    api.routes["/items"] = items_route
+
+    def config(path, name, **more):
+        found = {"version": 1, "mode": "api", "env_path": str(env_file), "request": {"method": "GET", "url": api.base + path, "query": [], "headers": []},
+                 "response": {"records": "response.body.items", "columns": []}, "paging": {"kind": "page", "start": 1, "max_pages": 100},
+                 "balance": {"concurrency": 2, "interval": 0, "retries": 3, "timeout": 10}, "output": {"format": "parquet", "path": str(out / name) if name else "", "dedupe": []}}
+        for key, value in more.items():
+            found[key] = {**found.get(key, {}), **value} if isinstance(value, dict) else value
+        return found
+
+    def wait(seconds=30):
+        end = time.time() + seconds
+        while time.time() < end and c.get("/api/collect/status").get_json()["running"]:
+            time.sleep(0.02)
+        return c.get("/api/collect/status").get_json()
+
+    def run(cfg):
+        return got("/api/collect/start", config=cfg), wait()
+
+    cfg = config("/items", "items.parquet", request={"query": [["page", "{page}"], ["key", "{env:API_KEY}"]]})
+    started, st = run(cfg)
+    frame = pl.read_parquet(out / "items.parquet")
+    check("page 쪽 넘기기(동시 2): 빈 쪽에서 멈춤, 15행, 받은 순서", (started, st["phase"], st["rows"], frame["id"].to_list()), ({"ok": True, "resumed": False}, "끝", 15, list(range(1, 16))))
+    check("결과 Parquet 타입: 정수·글자·실수·참거짓·목록은 JSON 글자·a.b·섞이면 글자·전부 빈 값은 글자", {k: str(v) for k, v in frame.schema.items()},
+          {"id": "Int64", "name": "String", "score": "Float64", "flag": "Boolean", "tags": "String", "meta.a": "Int64", "meta.b.c": "String", "mixed": "String", "maybe": "String"})
+    check("결과 값: 목록 JSON 글자, 섞인 값은 글자로", (frame["tags"][0], frame["mixed"].to_list()[:2]), ('["a", 1]', ["1", "s2"]))
+    check("쿼리의 env 값이 인코딩돼 나감, 작업 파일은 정리됨", (api.hits("/items")[0]["query"]["key"], sorted(p.name for p in out.iterdir())), (secret_key, ["items.parquet"]))
+    check("상태: 끝난 결과 경로·요청 수·쪽 수", (st["output"], st["requests"] >= 6, st["pages"] >= 6, st["mode"]), (str(out / "items.parquet"), True, True, "api"))
+
+    api.routes["/dup"] = lambda e: (200, {}, json.dumps([{"id": k, "name": f"p{e['query']['page']}"} for k in (1, 2, 3)] if int(e["query"]["page"]) <= 3 else []).encode())
+    run(config("/dup", "dup.csv", request={"query": [["page", "{page}"]]}, response={"records": ""}, output={"format": "csv", "dedupe": ["id"]}))
+    data = (out / "dup.csv").read_bytes()
+    check("중복 제거(받은 순서로 첫 행), CSV는 UTF-8 BOM", (data[:3], data[3:].decode("utf-8").splitlines()), (b"\xef\xbb\xbf", ["id,name", "1,p1", "2,p1", "3,p1"]))
+
+    locked = out / "locked.parquet"
+    locked.write_bytes(b"old")
+    with open(locked, "rb"):  # 다른 프로그램이 결과 파일을 잡고 있는 것처럼
+        _, st = run(config("/items", "locked.parquet", request={"query": [["page", "{page}"]]}))
+    check("결과 파일이 잡혀 있으면 알리고 받은 것은 남김(바꾸던 파일은 지움)", (st["phase"], st["error"].startswith("다른 프로그램이 파일을 쓰고 있습니다."), locked.read_bytes(),
+          sorted(p.name for p in out.iterdir() if p.name.startswith("locked"))), ("실패", True, b"old", ["locked.parquet", "locked.part", "locked.part.json"]))
+    count = len(api.hits("/items"))
+    started, st = run(config("/items", "locked.parquet", request={"query": [["page", "{page}"]]}))
+    check("놓은 뒤 다시 시작하면 다시 받지 않고 바꾸기만 함", (started["resumed"], st["phase"], len(api.hits("/items")) - count, st["requests"], pl.read_parquet(locked).height),
+          (True, "끝", 0, 0, 15))
+
+    def offset_route(e):
+        start, size = int(e["query"]["offset"]), int(e["query"]["limit"])
+        return 200, {}, json.dumps({"total": 10, "rows": [{"v": i} for i in range(start, min(start + size, 10))]}).encode()
+
+    api.routes["/off"] = offset_route
+    run(config("/off", "off.parquet", request={"query": [["offset", "{offset}"], ["limit", "4"]]}, response={"records": "rows"},
+               paging={"kind": "offset", "start": 0, "step": 4, "total_path": "total"}))
+    check("offset: 전체 수(total)에 닿으면 더 요청하지 않음(3번), 10행", (len(api.hits("/off")), pl.read_parquet(out / "off.parquet")["v"].to_list()), (3, list(range(10))))
+
+    chain = {"": "c1", "c1": "c2", "c2": "c1"}
+    api.routes["/cur"] = lambda e: (200, {}, json.dumps({"items": [{"c": e["query"].get("cursor", "")}], "next": chain[e["query"].get("cursor", "")]}).encode())
+    run(config("/cur", "cur.parquet", request={"query": [["cursor", "{cursor}"]]}, response={"records": "items"}, paging={"kind": "cursor", "cursor_path": "next"}))
+    check("cursor: 첫 커서는 빈 글자, 같은 커서가 다시 오면 멈춤", ([e["query"].get("cursor") for e in api.hits("/cur")], pl.read_parquet(out / "cur.parquet")["c"].to_list()),
+          (["", "c1", "c2"], ["", "c1", "c2"]))
+
+    def link_route(e):
+        p = int(e["query"].get("p", 1))
+        return 200, ({"Link": f'</nx?p={p + 1}&k=1>; rel="next", </nx?p=1>; rel="first"'} if p < 3 else {}), json.dumps([{"p": p}]).encode()
+
+    api.routes["/nx"] = link_route
+    run(config("/nx", "nx.parquet", request={"query": [["p", "1"]], "headers": [["X-Keep", "h1"]]}, response={"records": ""}, paging={"kind": "next_url"}))
+    check("next_url(Link 헤더): 받은 주소를 그대로, 헤더는 유지", ([e["raw_query"] for e in api.hits("/nx")], {e["headers"].get("x-keep") for e in api.hits("/nx")},
+          pl.read_parquet(out / "nx.parquet")["p"].to_list()), (["p=1", "p=2&k=1", "p=3&k=1"], {"h1"}, [1, 2, 3]))
+    api.routes["/np"] = lambda e: (200, {}, json.dumps({"d": [{"p": e["query"]["p"]}], "next": "/np?p=2" if e["query"]["p"] == "1" else "/np?p=1"}).encode())
+    run(config("/np", "np.parquet", request={"query": [["p", "1"]]}, response={"records": "d"}, paging={"kind": "next_url", "next_path": "next"}))
+    check("next_url(next_path, 상대 주소): 같은 주소가 다시 오면 멈춤", [e["raw_query"] for e in api.hits("/np")], ["p=1", "p=2"])
+
+    print("== 수집: 받는 쪽 배려(429·5xx·401)")
+    seen = {"n": 0}
+
+    def limited(e):
+        seen["n"] += 1
+        return (429, {"Retry-After": "1"}, b"slow down") if seen["n"] == 1 else items_route(e)
+
+    api.routes["/rl"] = limited
+    _, st = run(config("/rl", "rl.parquet", request={"query": [["page", "{page}"]]}, balance={"concurrency": 4}))
+    times = [e["t"] for e in api.hits("/rl")]
+    check("429 + Retry-After(초): 그만큼 쉬고 다시, 동시 수 반으로(4→2), 실패 1번", (st["phase"], st["rows"], times[1] - times[0] > 0.95, st["concurrency"], st["failures"]),
+          ("끝", 15, True, 2, 1))
+    later = {"n": 0}
+
+    def limited_date(e):
+        later["n"] += 1
+        return (429, {"Retry-After": email_date(time.time() + 2)}, b"") if later["n"] == 1 else items_route(e)
+
+    api.routes["/rl2"] = limited_date
+    _, st = run(config("/rl2", "rl2.parquet", request={"query": [["page", "{page}"]]}))
+    times = [e["t"] for e in api.hits("/rl2")]
+    check("429 + Retry-After(HTTP 날짜)도 따름", (st["phase"], times[1] - times[0] > 0.9), ("끝", True))
+    api.routes["/far"] = lambda e: (429, {"Retry-After": "3600"}, b"")
+    _, st = run(config("/far", "far.parquet", request={"query": [["page", "{page}"]]}))
+    check("Retry-After가 15분을 넘으면 멈추고 알림(이어 받기 남김)", (st["phase"], st["message"].startswith("429 응답: 서버가 60분 뒤에"), (out / "far.part.json").exists()), ("멈춤", True, True))
+    api.routes["/auth"] = lambda e: (401, {}, b"no")
+    _, st = run(config("/auth", "auth.parquet", request={"query": [["page", "{page}"]]}))
+    check("401은 다시 시도 없이 바로 멈춤", (st["phase"], st["error"], len(api.hits("/auth"))), ("실패", "인증을 확인하세요(상태 401). env 파일의 키와 헤더를 확인하세요.", 1))
+    flaky = {"n": 0}
+
+    def flaky_route(e):
+        flaky["n"] += 1
+        return (500, {}, b"oops") if flaky["n"] <= 2 else (200, {}, b'[{"a": 1}]')
+
+    api.routes["/flaky"] = flaky_route
+    _, st = run(config("/flaky", "flaky.parquet", response={"records": ""}, paging={"kind": "none"}))
+    check("5xx는 다시 시도해 성공", (st["phase"], len(api.hits("/flaky")), st["failures"], st["rows"]), ("끝", 3, 2, 1))
+    api.routes["/echo"] = lambda e: (400, {}, f"bad key {e['query'].get('k')} / {e['headers'].get('x-token')}".encode())
+    _, st = run(config("/echo", "echo.parquet", request={"query": [["k", "{env:API_KEY}"]], "headers": [["X-Token", "{env:TOKEN}"]]}, paging={"kind": "none"}))
+    check("다른 4xx는 멈춤, 오류 문구에서 env 값을 ●●●로 가림", (st["phase"], secret_key in st["error"], secret_tok in st["error"], st["error"]),
+          ("실패", False, False, "요청이 거부됐습니다(상태 400): bad key ●●● / ●●●"))
+
+    print("== 수집: 시험 보내기·넘겨주기")
+    api.routes["/try"] = lambda e: (200, {"Content-Type": "application/json; charset=euc-kr", "X-Echo": e["query"].get("k", "")},
+                                    json.dumps({"msg": "한글", "k": e["query"].get("k")}, ensure_ascii=False).encode("cp949"))
+    r = got("/api/collect/try", config=config("/try", "", request={"query": [["k", "{env:API_KEY}"]], "headers": [["Authorization", "Bearer {env:TOKEN}"]]}))
+    check("시험: sent의 비밀은 ●●●, 응답 charset(euc-kr)을 따름, 응답에 되돌아온 키도 가림", (r["status"], r["sent"]["url"], r["sent"]["headers"], r["json"], dict(r["headers"])["X-Echo"],
+          secret_key in json.dumps(r, ensure_ascii=False)),
+          (200, api.base + "/try?k=●●●", [["Authorization", "Bearer ●●●"]], {"msg": "한글", "k": "●●●"}, "●●●", False))
+    check("시험·시작 전 없는 env 이름은 이름만 알림", [error("/api/collect/try", config=config("/try", "", request={"query": [["k", "{env:NOPE}"], ["j", "{env:NOPE2}"]]})),
+          error("/api/collect/start", config=config("/try", "x.parquet", env_path="", request={"query": [["k", "{env:A}"]]}))],
+          ["env 파일에 없는 이름이 있습니다: NOPE, NOPE2", "env 파일을 고르세요. 쓰인 이름: A"])
+    check("시험·시작 때도 글자 그대로의 비밀은 거부", [error(api_path, config=config("/try", "x.parquet", request={"headers": [["X-Api-Key", "raw"]]})) for api_path in ("/api/collect/try", "/api/collect/start")],
+          ["비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 헤더 X-Api-Key. env 파일에 넣고 {env:이름}으로 바꾸세요."] * 2)
+    port = api.http.server_port
+    api.routes["/hop"] = lambda e: (302, {"Location": f"http://localhost:{port}/land"}, b"")
+    api.routes["/hop2"] = lambda e: (307, {"Location": "/land"}, b"")
+    api.routes["/land"] = lambda e: (200, {}, b"[]")
+    hop = lambda path: config(path, "", paging={"kind": "none"}, request={"headers": [["Authorization", "Bearer {env:TOKEN}"], ["X-Other", "v-{env:TOKEN}"], ["X-Plain", "p"]]})
+    got("/api/collect/try", config=hop("/hop"))
+    landed = api.hits("/land")[-1]["headers"] if api.hits("/land") else {}
+    check("다른 호스트로 넘겨주면 Authorization·env 값이 든 헤더를 뺌", ("authorization" in landed, "x-other" in landed, landed.get("x-plain")), (False, False, "p"))
+    got("/api/collect/try", config=hop("/hop2"))
+    check("같은 호스트로 넘겨주면 그대로", api.hits("/land")[-1]["headers"].get("authorization"), f"Bearer {secret_tok}")
+    api.routes["/loop"] = lambda e: (302, {"Location": "/loop"}, b"")
+    check("넘겨주기는 5번까지", error("/api/collect/try", config=config("/loop", "")), "넘겨주기(redirect)가 5번을 넘었습니다.")
+
+    class FakeReply:
+        status, headers = 302, {"Location": "http://h.example.com/x"}
+
+        def close(self):
+            pass
+
+    real_opener = collect_http.OPENER
+    collect_http.OPENER = type("Opener", (), {"open": lambda self, request, timeout: FakeReply()})()
+    try:
+        check("https에서 http로 넘겨주면 거부", str(raised_error(lambda: collect_http.open_url("GET", "https://h.example.com/a", [], None, 5))),
+              "https 주소에서 http 주소로 넘겨주는 것은 따라가지 않습니다.")
+    finally:
+        collect_http.OPENER = real_opener
+    collect_http.MAX_BYTES = 100
+    api.routes["/big"] = lambda e: (200, {}, b"[" + b"1," * 200 + b"1]")
+    try:
+        check("응답 크기 상한을 넘으면 파일 주소로 받으라고 알림", error("/api/collect/try", config=config("/big", "")).endswith("큰 파일은 파일 주소로 받으세요(파일 모드)."), True)
+    finally:
+        collect_http.MAX_BYTES = 200 * 1024 * 1024
+    check("http·https가 아닌 주소는 거부", error("/api/collect/try", config=config("/x", "", request={"url": "file:///C:/x.json"})), "주소는 http:// 또는 https://로 시작해야 합니다.")
+    api.routes["/skew"] = lambda e: (200, {"Date": email_date(time.time() - 3600)}, b"[1]")
+    _, st = run(config("/skew", "skew.parquet", response={"records": ""}, paging={"kind": "none"}))
+    check("응답 Date가 PC 시계와 5분 넘게 다르면 알림", (st["phase"], st["message"].startswith("서버 시계와 PC 시계가 60분 다릅니다.")), ("끝", True))
+
+    print("== 수집: 사용 한도")
+    check("묶음 검사", [error("/api/limits", name="g", group=v) for v in ({"per_second": 0}, {"reset": "24:00"}, {"tz": "Mars/Base"}, {"margin": 60}, {"x": 1})],
+          ["'per_second'는 비우거나 1 이상의 정수로 쓰세요.", "초기화 시각(reset)은 HH:MM 모양으로 쓰세요.", "알 수 없는 시간대입니다: Mars/Base", "여유(margin)는 0~50%로 쓰세요.",
+           "사용 한도에 쓸 수 없는 값이 있습니다: x"])
+    r = got("/api/limits", name="초당", group={"per_second": 2, "concurrency": 4})
+    check("묶음 저장과 사용량(기본값 채움)", (r["groups"]["초당"]["tz"], r["usage"]["초당"]["day"], r["usage"]["초당"]["broken"], r["usage"]["초당"]["day_limit"]), ("Asia/Seoul", 0, False, None))
+    count = len(api.hits("/items"))
+    _, st = run(config("/items", "persec.parquet", limit_group="초당", request={"query": [["page", "{page}"]]}, balance={"concurrency": 4}))
+    times = sorted(e["t"] for e in api.hits("/items")[count:])
+    check("초당 2번: 어느 1초 안에도 2번 넘게 보내지 않음(보낸 시각 간격)", (st["phase"], len(times) >= 6, min(b - a for a, b in zip(times, times[2:])) >= 0.95, st["usage"]["second"] <= 2),
+          ("끝", True, True, True))
+    check("Asia/Seoul 시간대(tzdata가 없으면 UTC+9로 대신)", collect_limits.zone("Asia/Seoul").utcoffset(dt.datetime(2026, 1, 1)), dt.timedelta(hours=9))
+    got("/api/limits", name="하루", group={"per_day": 3, "concurrency": 1})
+    daily = config("/items", "daily.parquet", limit_group="하루", request={"query": [["page", "{page}"]]}, balance={"concurrency": 1})
+    count = len(api.hits("/items"))
+    _, st = run(daily)
+    reset_at = collect_limits.reset_text(collect_limits.groups()["하루"], time.time())
+    check("하루 한도에 닿으면 멈추고 이어 받기를 남김", (st["phase"], st["message"], len(api.hits("/items")) - count, st["usage"]["day_left"], (out / "daily.part.json").exists()),
+          ("멈춤", f"오늘 한도를 다 썼습니다. {reset_at} 이후 이어 받을 수 있습니다.", 3, 0, True))
+    check("estimate: 남은 요청 수·오늘 남은 횟수·이어 받기", got("/api/collect/estimate", config=daily), {"requests": 97, "day_left": 0, "resume": {"pages": 3, "bytes": st["bytes"]}})
+    got("/api/limits", name="하루", group={"per_day": 100, "margin": 50, "concurrency": 1})
+    started, st = run(daily)
+    check("한도를 늘리면 이어 받음(받은 쪽은 다시 요청하지 않음), 여유 50%면 남은 횟수 50-사용", (started["resumed"], st["phase"], len(api.hits("/items")) - count,
+          pl.read_parquet(out / "daily.parquet")["id"].to_list(), st["usage"]["day_left"]), (True, "끝", 6, list(range(1, 16)), 50 - 6))
+    (settings.PATH.parent / collect_limits.USAGE).write_text("{깨짐", encoding="utf-8")
+    usage = c.get("/api/limits").get_json()["usage"]["하루"]
+    check("기록 파일이 깨지면 다 쓴 것으로 보고 시작 거부", (error("/api/collect/start", config=daily), usage["broken"], usage["day_left"]), (collect_limits.broken_message(), True, 0))
+    r = got("/api/limits/reset", name="하루")
+    check("초기화하면 풀림", (r["usage"]["하루"]["broken"], r["usage"]["하루"]["day"], got("/api/collect/start", config=daily)["ok"]), (False, 0, True))
+    wait()
+    api.routes["/srv"] = lambda e: (200, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1"} if e["query"]["page"] == "1" else {},
+                                    json.dumps([{"p": 1}] if e["query"]["page"] in ("1", "2") else []).encode())
+    got("/api/limits", name="서버", group={})
+    _, st = run(config("/srv", "srv.parquet", limit_group="서버", request={"query": [["page", "{page}"]]}, response={"records": ""}, balance={"concurrency": 1}))
+    times = [e["t"] for e in api.hits("/srv")]
+    check("서버가 남은 횟수 0을 알리면 초기화까지 쉼, 사용량에 서버 값", (st["phase"], times[1] - times[0] > 0.9, st["usage"]["server"]), ("끝", True, {"remaining": 0, "reset": "1"}))
+    check("잠금 파일은 남지 않음", (settings.PATH.parent / collect_limits.LOCK).exists(), False)
+    for name in list(c.get("/api/limits").get_json()["groups"]):
+        got("/api/limits", name=name, group=None)
+
+    print("== 수집: 파일 모드")
+    csv_text = "id,name,city\n" + "".join(f"{i},이름{i},{'서울' if i % 2 else '부산'}\n" for i in range(1, 2001))
+    data = csv_text.encode("cp949")
+    piece = math.ceil(len(data) / 4)
+    api.routes["/k.csv"] = lambda e: ranged(data, '"v1"', e)
+
+    def fcfg(path, name, **more):
+        return config(path, name, mode="file", file={"url": api.base + path, "headers": [["Authorization", "Bearer {env:TOKEN}"]], "chunks": 4, **more},
+                      output={"format": name.rsplit(".", 1)[1]}, balance={"retries": 1})
+
+    _, st = run(fcfg("/k.csv", "k.parquet"))
+    ranges = [e["headers"].get("range") for e in api.hits("/k.csv")]
+    frame = pl.read_parquet(out / "k.parquet")
+    check("파일 모드: Range 0-0으로 확인 후 4조각, cp949 CSV → Parquet", (st["phase"], ranges[0], sorted(ranges[1:]), frame.height, frame["name"][0], frame["city"][1], st["bytes"], st["total_bytes"]),
+          ("끝", "bytes=0-0", sorted(f"bytes={k * piece}-{min(len(data), (k + 1) * piece) - 1}" for k in range(4)), 2000, "이름1", "부산", len(data), len(data)))
+    check("조각 요청에도 인증 헤더(env 값)", {e["headers"].get("authorization") for e in api.hits("/k.csv")}, {f"Bearer {secret_tok}"})
+    run(fcfg("/k.csv", "k.csv"))
+    check("cp949 CSV → CSV: UTF-8로 바꾸고 BOM", (out / "k.csv").read_bytes(), b"\xef\xbb\xbf" + csv_text.encode("utf-8"))
+    plain = csv_text.encode("utf-8")
+    api.routes["/plain.csv"] = lambda e: ranged(plain, None, e, support=False)
+    _, st = run(fcfg("/plain.csv", "plain.parquet"))
+    check("Range를 받지 않는 서버는 한 줄기로(요청 1번)", (st["phase"], len(api.hits("/plain.csv")), pl.read_parquet(out / "plain.parquet").height), ("끝", 1, 2000))
+    dropped = {"done": False}
+    piece = math.ceil(len(plain) / 4)
+
+    def drop(e):
+        status, headers, body = ranged(plain, '"d1"', e)
+        if status == 206 and not e["headers"]["range"].startswith("bytes=0-") and not dropped["done"]:
+            dropped["done"] = True
+            return status, {**headers, "_cut": len(body) // 2}, body
+        return status, headers, body
+
+    api.routes["/drop.csv"] = drop
+    _, st = run(fcfg("/drop.csv", "drop.parquet"))
+    starts = sorted(int(re.match(r"bytes=(\d+)", e["headers"]["range"])[1]) for e in api.hits("/drop.csv"))
+    check("받는 중에 끊기면 끊긴 곳부터 다시 받아 완성", (st["phase"], any(s % piece for s in starts), pl.read_parquet(out / "drop.parquet")["id"].to_list() == list(range(1, 2001))), ("끝", True, True))
+    bad = {"on": True, "etag": '"h1"', "data": plain}
+
+    def halting(e):
+        if bad["on"] and e["headers"].get("range", "").startswith(f"bytes={3 * piece}-"):
+            return 500, {}, b"down"
+        return ranged(bad["data"], bad["etag"], e)
+
+    api.routes["/halt.csv"] = halting
+    _, st = run(fcfg("/halt.csv", "halt.parquet"))
+    record = json.loads((out / "halt.part.json").read_text(encoding="utf-8"))
+    check("조각이 계속 실패하면 멈추고 받은 범위를 기록", (st["phase"], record["done"], (out / "halt.part").stat().st_size), ("실패", [[0, 3 * piece]], len(plain)))
+    bad["on"] = False
+    count = len(api.hits("/halt.csv"))
+    started, st = run(fcfg("/halt.csv", "halt.parquet"))
+    check("다시 시작하면 남은 범위만 이어 받음", (started["resumed"], st["phase"], [e["headers"]["range"] for e in api.hits("/halt.csv")[count:]],
+          pl.read_parquet(out / "halt.parquet").height, sorted(p.name for p in out.iterdir() if p.name.startswith("halt"))),
+          (True, "끝", ["bytes=0-0", f"bytes={3 * piece}-{len(plain) - 1}"], 2000, ["halt.parquet"]))
+    bad["on"] = True
+    run(fcfg("/halt.csv", "etag.parquet"))
+    changed = ("id,name,city\n" + "".join(f"{i},새이름{i},x\n" for i in range(1, 2001))).encode("utf-8")
+    bad.update(on=False, etag='"h2"', data=changed)
+    count = len(api.hits("/halt.csv"))
+    started, st = run(fcfg("/halt.csv", "etag.parquet"))
+    asked = [e["headers"]["range"] for e in api.hits("/halt.csv")[count:]][1:]
+    check("ETag가 바뀌면 처음부터 다시 받음", (started["resumed"], st["phase"], sum(int(b) - int(a) + 1 for a, b in (re.match(r"bytes=(\d+)-(\d+)", x).groups() for x in asked)),
+          pl.read_parquet(out / "etag.parquet")["name"][0]), (True, "끝", len(changed), "새이름1"))
+    buffer = io.BytesIO()
+    pl.DataFrame({"a": [1, 2, 3], "b": ["x", "y", "z"]}).write_parquet(buffer)
+    api.routes["/d.parquet"] = lambda e: ranged(buffer.getvalue(), '"p"', e)
+    run(fcfg("/d.parquet", "d.parquet", chunks=2))
+    run(fcfg("/d.parquet", "dp.csv", chunks=2))
+    check("Parquet 파일은 그대로, Parquet → CSV 변환", (pl.read_parquet(out / "d.parquet").to_dicts(), (out / "dp.csv").read_bytes()),
+          ([{"a": 1, "b": "x"}, {"a": 2, "b": "y"}, {"a": 3, "b": "z"}], b"\xef\xbb\xbfa,b\n1,x\n2,y\n3,z\n"))
+    api.routes["/d.json"] = lambda e: ranged(json.dumps([{"k": 1, "v": "가"}, {"k": 2, "v": "나"}], ensure_ascii=False).encode(), None, e)
+    run(fcfg("/d.json", "dj.csv"))
+    api.routes["/broken.bin"] = lambda e: ranged(b"\x00\x01PAR1garbage", None, e)
+    _, st = run(fcfg("/broken.bin", "broken.parquet", kind="parquet"))
+    check("JSON → CSV, 열 수 없는 파일은 실패로 알림", ((out / "dj.csv").read_bytes().decode("utf-8-sig").splitlines(), st["phase"], st["error"].startswith("받은 파일을 parquet로 열 수 없습니다: ")),
+          (["k,v", "1,가", "2,나"], "실패", True))
+
+    print("== 수집: 멈춤·결과 열기·차례")
+    check("estimate: page는 최대 쪽 수, cursor·file은 모름", [got("/api/collect/estimate", config=cfg)["requests"], got("/api/collect/estimate", config=config("/cur", "zz.parquet", paging={"kind": "cursor"}))["requests"],
+          got("/api/collect/estimate", config=fcfg("/k.csv", "zz.parquet"))["requests"]], [100, None, None])
+    api.routes["/slow"] = lambda e: (time.sleep(0.2), items_route(e))[1]
+    slow = config("/slow", "slow.parquet", request={"query": [["page", "{page}"]]}, balance={"concurrency": 1})
+    check("이미 도는 중이면 시작 거부, 멈춤", (got("/api/collect/start", config=slow)["ok"], error("/api/collect/start", config=cfg), got("/api/collect/stop")),
+          (True, "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요.", {"ok": True}))
+    st = wait()
+    check("멈추면 '멈춤', 진행 기록은 남김", (st["phase"], st["running"], (out / "slow.part.json").exists()), ("멈춤", False, True))
+    asked_path = []
+    server.ask_save = lambda name, types: (asked_path.append((name, types)), str(out / "picked"))[1]
+    check("ask_path: 형식의 대화상자, 확장자를 붙임", (got("/api/collect/ask_path", format="csv", name="items"), asked_path), ({"path": str(out / "picked.csv")}, [("items.csv", ("CSV (*.csv)",))]))
+    server.ask_save = None
+    check("/api/collect/open: 결과 파일에 연결하고 테이블 이름", (got("/api/collect/open", path=str(out / "items.parquet")), c.get("/api/state").get_json()["opened"]["files"],
+          got("/api/query", base="items", limit=1)["count"]), ({"table": "items"}, [str(out / "items.parquet")], 15))
+    check("열 결과가 없으면 거부", error("/api/collect/open", path=str(out / "none.parquet")), "열 결과 파일(Parquet·CSV)이 없습니다.")
+    check("읽고 있는 파일에는 수집 결과를 쓰지 않음", error("/api/collect/start", config=config("/items", "items.parquet", request={"query": [["page", "{page}"]]})),
+          "지금 읽고 있는 파일에는 저장할 수 없습니다. 다른 이름을 고르세요.")
+    got("/api/disconnect")
+    done = []
+    thread = threading.Thread(target=lambda: done.append(c.get("/api/collect/status").status_code))
+    server.turn.acquire()  # 다른 데이터 작업이 도는 중인 것처럼
+    try:
+        thread.start()
+        thread.join(5)
+        check("수집 상태·한도 라우트는 차례(turn)를 기다리지 않음, open은 기다림", (done, "/api/limits" in server.FREE, "/api/collect/open" in server.FREE), ([200], True, False))
+    finally:
+        server.turn.release()
+    check("/collect 화면 라우트", "/collect" in [rule.rule for rule in app.url_map.iter_rules()], True)
+    api.http.shutdown()
+
+
 def memory_section(c, got, duck):
     """데이터 라이브러리 지연 로딩과 DuckDB 파일 조회의 작업 메모리 상한."""
     print("== 지연 로딩·메모리 상한")
@@ -883,7 +1389,7 @@ def memory_section(c, got, duck):
     code = """
 import json, sys
 sys.path.insert(0, sys.argv[1]); sys.dont_write_bytecode = True
-import lazy, server, app, prep_app, notify
+import lazy, server, app, prep_app, notify, collect_app
 names = ("ibis", "polars", "duckdb", "pyarrow")
 is_lazy = lambda: {n: type(sys.modules[n]).__name__ == "_LazyModule" for n in names}
 out = {"imported": is_lazy()}
@@ -1137,7 +1643,7 @@ def main():
 
     def choose(path):
         """저장 대화상자를 대신해 path를 고르는 함수. 묻는 기본 이름을 asked에 적어 둔다."""
-        return lambda name: (asked.append(name), path)[1]
+        return lambda name, types: (asked.append((name, types)), path)[1]
 
     body = dict(base="orders", conditions=["note = =1+1"], columns=["order_id, note"], sorts=["order_id"])
     mine = [o for o in orders if o["note"] == "=1+1"]
@@ -1146,7 +1652,7 @@ def main():
     check("저장 위치를 물을 수 없으면 거부", error("/api/handoff", **body), "저장 위치를 물을 수 없습니다. 프로그램 창에서만 쓸 수 있습니다.")
     server.ask_save = choose(str(out / "picked"))
     check("handoff: 확장자 없으면 .parquet을 붙이고 경로·테이블 이름을 돌려줌", (got("/api/handoff", **body), asked),
-          ({"path": str(out / "picked.parquet"), "table": "picked"}, ["orders_search.parquet"]))
+          ({"path": str(out / "picked.parquet"), "table": "picked"}, [("orders_search.parquet", ("Parquet (*.parquet)",))]))
     saved = pl.read_parquet(out / "picked.parquet")
     check("저장된 Parquet: 조건에 맞는 전체 행, 표시 컬럼, 수식 막기 없는 원래 값", (saved.columns, saved["order_id"].to_list(), set(saved["note"].to_list())),
           (["order_id", "note"], [o["order_id"] for o in mine], {"=1+1"}))
@@ -1161,7 +1667,7 @@ def main():
           ["지금 읽고 있는 파일에는 저장할 수 없습니다. 다른 이름을 고르세요."] * 3)
     after = (out / "picked.parquet").stat()
     check("거부해도 파일과 연결은 그대로", ((before.st_size, before.st_mtime_ns) == (after.st_size, after.st_mtime_ns), tables()), (True, ["picked"]))
-    server.ask_save = lambda name: None
+    server.ask_save = lambda name, types: None
     check("취소하면 cancelled", (got("/api/handoff", **again), tables()), ({"cancelled": True}, ["picked"]))
     server.ask_save = choose(str(out / "x.txt"))
     check("다른 확장자에도 .parquet을 붙임", (got("/api/handoff", base="picked", columns=["order_id"])["path"], tables()), (str(out / "x.txt.parquet"), ["x.txt"]))
@@ -1193,6 +1699,7 @@ def main():
     thread.join(2)
     check("within: 두고 온 일의 늦은 결과는 drop으로 가고 그 스레드는 끝남", (late, thread.is_alive()), (["늦은 결과"], False))
     notify_section(c, got)
+    collect_section(c, got)
     memory_section(c, got, duck)
     sqlite_section(c, got)
     prep_section()

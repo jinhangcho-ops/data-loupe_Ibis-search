@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ibis 수집</title>
+<!--include head.html-->
+<style>
+  .code, .tree, #sent { font-family:Consolas, ui-monospace, monospace; font-size:12px; }
+  textarea { resize:vertical; }
+  .warn { color:var(--err); font-size:12px; }
+  /* 이름·값 표(쿼리·헤더)와 비밀 값·컬럼 목록의 한 줄 */
+  .pair { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 2fr) auto; gap:6px; margin-bottom:4px; align-items:center; }
+  .pair .hint { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* 숫자·고르는 칸 묶음: 칸 위에 이름. 좁으면 줄을 바꾼다. */
+  .fields { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:4px 8px; margin-bottom:6px; }
+  .fields label { display:block; min-width:0; }
+  .fields .hint { margin:0 0 2px; }
+  .split { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
+  .split > div { min-width:0; }
+  button.mini { font-size:12px; padding:2px 8px; }
+  .usage { white-space:pre-line; font-variant-numeric:tabular-nums; }
+  .path { font-family:Consolas, ui-monospace, monospace; font-size:12px; color:var(--accent); word-break:break-all; }
+  #sent { white-space:pre-wrap; word-break:break-all; background:var(--bg); padding:6px 8px; border-radius:6px; margin:6px 0; max-height:200px; overflow:auto; }
+  /* 응답 트리: 펼친 노드의 자식만 그린다. 배열은 앞 몇 개만. */
+  .tree { max-height:420px; overflow:auto; border:1px solid var(--line); border-radius:6px; padding:4px; }
+  .tree .kids { margin-left:16px; }
+  .tree .tr { display:flex; gap:6px; align-items:center; white-space:nowrap; padding:0 4px; border-radius:4px; cursor:pointer; }
+  .tree .tr:hover { background:var(--bg); }
+  .tree .tr.on { outline:1px solid var(--accent); }
+  .tree .tw { width:12px; flex:none; color:var(--muted); }
+  .tree .tv { color:var(--muted); overflow:hidden; text-overflow:ellipsis; }
+  .badge { flex:none; font-size:11px; padding:0 6px; border-radius:6px; background:var(--accent); color:#fff; }
+  #pick { display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-height:28px; margin:6px 0; }
+  /* 진행 막대. 전체를 모르면 움직이는 막대 */
+  .bar { height:8px; background:var(--bg); border-radius:4px; overflow:hidden; margin:6px 0; }
+  .bar > div { height:100%; width:0; background:var(--accent); }
+  .bar.unknown > div { width:30%; animation:slide 1.2s linear infinite; }
+  @keyframes slide { from { margin-left:-30%; } to { margin-left:100%; } }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="panel">
+    <!--include status.html-->
+    <div class="err" id="err-connect"></div><!-- common.js가 설정 저장·알림 오류를 띄우는 칸 -->
+
+    <h2>1. 구성</h2>
+    <div class="row"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 구성을 불러옵니다 (보내지는 않습니다)"></select><input id="rname" placeholder="이름"><button id="rsave">저장</button><button id="rdel" class="ghost">삭제</button></div>
+    <div class="hint">이름을 비우고 저장하면 지금 고른 구성에 덮어씁니다.</div>
+    <div class="err" id="cfg-msg"></div>
+
+    <h2>2. 받는 방식</h2>
+    <div class="tabs">
+      <label><input type="radio" name="mode" value="api" checked style="width:auto"> API</label>
+      <label><input type="radio" name="mode" value="file" style="width:auto"> 파일 주소</label>
+    </div>
+
+    <h2>3. env 파일</h2>
+    <div class="row"><input id="env-path" placeholder="예: C:\work\.env"><button id="env-read">읽기</button></div>
+    <div class="hint">값은 저장하지 않고 경로만 저장합니다. 요청에는 {env:이름}으로 씁니다.</div>
+    <div class="hint" id="env-names"></div>
+    <div class="err" id="env-msg"></div>
+
+    <div class="for-api">
+      <h2>4. 쪽 넘기기</h2>
+      <select id="p-kind" style="margin-bottom:6px">
+        <option value="none">없음 (한 번만 받기)</option><option value="page">쪽 번호 {page}</option><option value="offset">offset {offset}</option><option value="cursor">커서 {cursor}</option><option value="next_url">다음 주소</option>
+      </select>
+      <div class="fields">
+        <label id="p-start-box"><div class="hint" id="p-start-name">첫 쪽 번호</div><input id="p-start" type="number" min="0"></label>
+        <label id="p-step-box"><div class="hint">한 번에 늘릴 값</div><input id="p-step" type="number" min="1"></label>
+        <label id="p-max-box"><div class="hint">최대 쪽 수</div><input id="p-max" type="number" min="1" max="1000000"></label>
+      </div>
+      <label id="p-cursor-box"><div class="hint">다음 커서 위치</div><input id="p-cursor" class="code" placeholder="응답 트리에서 지정" style="margin-bottom:6px"></label>
+      <label id="p-next-box"><div class="hint">다음 주소 위치 (비우면 Link 헤더의 rel=next)</div><input id="p-next" class="code" placeholder="응답 트리에서 지정" style="margin-bottom:6px"></label>
+      <label id="p-total-box"><div class="hint">전체 수 위치 (선택: 예상 요청 수 계산·멈춤 조건)</div><input id="p-total" class="code" placeholder="응답 트리에서 지정"></label>
+      <div class="warn" id="p-warn"></div>
+    </div>
+
+    <h2>5. 받는 속도</h2>
+    <div class="fields">
+      <label><div class="hint">동시 수</div><input id="b-conc" type="number" min="1"></label>
+      <label><div class="hint">간격(초)</div><input id="b-gap" type="number" min="0" step="any"></label>
+      <label><div class="hint">다시 시도 횟수</div><input id="b-retry" type="number" min="0"></label>
+      <label><div class="hint">시간 초과(초)</div><input id="b-timeout" type="number" min="1" step="any"></label>
+    </div>
+    <div class="hint">쪽 번호·offset 방식만 동시에 받습니다.</div>
+
+    <h2>6. 사용 한도</h2>
+    <div class="row"><select id="lgroup" style="flex:1; min-width:0" title="이 구성이 쓰는 사용 한도 묶음. 같은 키를 쓰는 구성끼리 같은 묶음을 고르면 사용량을 함께 셉니다"></select><input id="lname" placeholder="새 이름"><button id="lsave">저장</button><button id="ldel" class="ghost">삭제</button></div>
+    <div class="hint">비우면 제한 없음. 이름을 비우고 저장하면 고른 묶음에 덮어씁니다.</div>
+    <div class="fields">
+      <label><div class="hint">초당</div><input id="l-sec" type="number" min="1"></label>
+      <label><div class="hint">분당</div><input id="l-min" type="number" min="1"></label>
+      <label><div class="hint">시간당</div><input id="l-hour" type="number" min="1"></label>
+      <label><div class="hint">하루</div><input id="l-day" type="number" min="1"></label>
+      <label><div class="hint">동시 수</div><input id="l-conc" type="number" min="1"></label>
+      <label><div class="hint">최소 간격(초)</div><input id="l-gap" type="number" min="0" step="any"></label>
+      <label><div class="hint">하루 초기화 시각</div><input id="l-reset" placeholder="00:00"></label>
+      <label><div class="hint">시간대</div><select id="l-tz"><option value="Asia/Seoul">한국 시간</option><option value="UTC">UTC</option><option value="local">이 PC</option></select></label>
+      <label><div class="hint">여유분(%)</div><input id="l-margin" type="number" min="0" max="50" step="any"></label>
+    </div>
+    <div class="hint usage" id="lusage"></div>
+    <div class="warn" id="lbroken"></div>
+    <div class="row"><button id="lreset" class="ghost" title="고른 묶음의 사용 기록을 지웁니다">사용량 초기화</button></div>
+    <div class="err" id="limit-msg"></div>
+
+    <h2>7. 저장</h2>
+    <select id="o-format" style="margin-bottom:6px"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
+    <div class="row"><input id="o-path" placeholder="저장할 파일 경로"><button id="o-ask">저장 위치 고르기</button></div>
+    <div class="hint">중복 기준 컬럼 (선택, 쉼표로 구분). 값이 모두 같은 행은 하나만 남깁니다.</div>
+    <input id="dd-text" placeholder="예: id" style="margin-bottom:4px">
+    <div class="cols" id="dd-list"></div>
+    <div class="err" id="out-msg"></div>
+  </aside>
+  <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
+
+  <main class="main">
+    <section class="card">
+      <div class="head"><h3>요청 예시 붙여 넣기</h3><button id="parse">읽기</button></div>
+      <textarea id="paste" class="code" rows="5" placeholder="curl 'https://api.example.com/v1/items?page=1' -H 'Accept: application/json'&#10;&#10;GET /v1/items?page=1 HTTP/1.1&#10;Host: api.example.com&#10;&#10;{&quot;method&quot;: &quot;GET&quot;, &quot;url&quot;: &quot;https://api.example.com/v1/items&quot;}"></textarea>
+      <div class="hint">curl 명령, HTTP 요청, JSON 중 하나를 붙여 넣고 [읽기]를 누르면 아래 칸을 채웁니다. 붙여 넣은 글은 저장하지 않습니다.</div>
+      <div class="warn" id="unread"></div>
+      <div id="secret-box" class="hidden">
+        <h2>비밀처럼 보이는 값</h2>
+        <div class="hint">env 이름을 고르고 [env 이름으로 바꾸기]를 누르면 값 대신 {env:이름}이 들어갑니다. 비밀이 아니면 ×로 뺍니다.</div>
+        <div id="secret-list"></div>
+        <div class="row"><button id="secretize">env 이름으로 바꾸기</button></div>
+      </div>
+      <div class="err" id="parse-msg"></div>
+    </section>
+
+    <section class="card for-api">
+      <h3>요청</h3>
+      <div class="row"><select id="method" style="width:auto; flex:none"></select><input id="method-other" class="hidden" placeholder="방식" style="width:90px; flex:none"><input id="req-url" class="code" placeholder="https://api.example.com/v1/items (쿼리 없이)"></div>
+      <div class="split">
+        <div>
+          <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">쿼리</h2><button class="ghost" data-add="query">+ 행 추가</button></div>
+          <div id="query"></div>
+        </div>
+        <div>
+          <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">헤더</h2><button class="ghost" data-add="headers">+ 행 추가</button></div>
+          <div id="headers"></div>
+        </div>
+      </div>
+      <div class="row" style="align-items:center; margin-top:6px"><span class="hint" style="margin:0">본문</span><select id="body-kind" style="width:auto"><option value="none">없음</option><option value="json">JSON</option><option value="form">폼(form)</option><option value="text">글자</option></select></div>
+      <textarea id="body" class="code hidden" rows="4" placeholder="본문"></textarea>
+      <div class="hint">자리 표시: {env:이름} {page} {offset} {cursor} {today:%Y%m%d} {now}</div>
+    </section>
+
+    <section class="card for-file hidden">
+      <h3>파일 주소</h3>
+      <input id="f-url" class="code" placeholder="https://example.com/data.csv" style="margin-bottom:6px">
+      <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">헤더</h2><button class="ghost" data-add="f-headers">+ 행 추가</button></div>
+      <div id="f-headers"></div>
+      <div class="fields" style="margin-top:6px">
+        <label><div class="hint">조각 수 (1~16)</div><input id="f-chunks" type="number" min="1" max="16"></label>
+        <label><div class="hint">파일 종류</div><select id="f-kind"><option value="auto">자동</option><option value="csv">CSV</option><option value="parquet">Parquet</option><option value="json">JSON</option></select></label>
+        <label><div class="hint">인코딩</div><select id="f-enc"><option value="auto">자동</option><option value="utf-8">UTF-8</option><option value="cp949">CP949</option></select></label>
+      </div>
+      <div class="hint">서버가 나눠 받기를 지원하지 않으면 한 줄기로 받습니다. 인코딩은 CSV·JSON에만 씁니다. 자리 표시: {env:이름} {today:%Y%m%d} {now}</div>
+    </section>
+
+    <section class="card for-api">
+      <div class="head"><h3>응답</h3><button id="try" title="첫 쪽을 한 번 보내 봅니다">시험 보내기</button><button id="sample-btn" class="ghost">미리보기</button></div>
+      <div class="hint">[시험 보내기]도 사용 한도에 셉니다. 받은 응답은 아래 칸에 채워집니다.</div>
+      <div id="sent-box" class="hidden"><pre id="sent"></pre></div>
+      <textarea id="resp-text" class="code" rows="4" placeholder="응답 예시 붙여 넣기 (JSON이면 아래에 트리로 보입니다)"></textarea>
+      <div class="split" style="margin-top:6px">
+        <div>
+          <div class="tree" id="tree"></div>
+          <div id="pick"></div>
+        </div>
+        <div>
+          <div class="hint">기록 위치 (점으로 구분, 배열 번호는 숫자. 비우면 응답 전체가 배열)</div>
+          <input id="records" class="code" placeholder="예: response.body.items" style="margin-bottom:6px">
+          <div class="hint">컬럼 (이름을 바꿀 수 있습니다)</div>
+          <div id="columns"></div>
+        </div>
+      </div>
+      <div class="hint" id="sample-info"></div>
+      <div class="table-wrap" id="sample"></div>
+      <div class="err" id="resp-msg"></div>
+    </section>
+
+    <section class="card">
+      <div class="head"><h3>실행</h3><button id="estimate" class="ghost">예상 확인</button><button id="start">시작</button><button id="stop" class="ghost" disabled>멈추기</button></div>
+      <div class="hint" id="est"></div>
+      <div class="warn" id="est-warn"></div>
+      <div class="hint" id="est-resume"></div>
+      <div id="run-box" class="hidden">
+        <div><b id="phase"></b></div>
+        <div class="bar" id="bar"><div></div></div>
+        <div class="hint" id="run-counts"></div>
+        <div class="hint" id="run-note"></div>
+        <div class="hint usage" id="run-usage"></div>
+        <div class="err" id="run-err"></div>
+      </div>
+      <div id="result" class="hidden">
+        <div class="path" id="result-path"></div>
+        <div class="row" style="margin-top:6px"><button id="open-search">검색으로 열기</button><button id="open-prep">전처리로 열기</button></div>
+      </div>
+      <div class="ok" id="run-ok"></div>
+      <div class="err" id="run-msg"></div>
+    </section>
+  </main>
+</div>
+
+<!--include notify.html-->
+<script src="/static/common.js"></script>
+<script>
+// 수집 화면. 서버로 보내는 설정은 config() 하나로 모은다(시험·미리보기·예상·시작·구성 저장이 모두 같은 것을 보낸다).
+const DEFAULT = {
+  version: 1, mode: "api", env_path: "", limit_group: "",
+  request: { method: "GET", url: "", query: [], headers: [], body_kind: "none", body: "" },
+  response: { records: "", columns: [] },
+  paging: { kind: "none", start: 1, step: 100, max_pages: 100, cursor_path: "", next_path: "", total_path: "" },
+  balance: { concurrency: 2, interval: 1.0, retries: 5, timeout: 30 },
+  file: { url: "", headers: [], chunks: 4, kind: "auto", encoding: "auto" },
+  output: { format: "parquet", path: "", dedupe: [] },
+};
+const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"];
+const FORMATS = { curl: "curl 명령", http: "HTTP 요청", json: "JSON" };
+const WHERE = { header: "헤더", query: "쿼리", body: "본문", url: "주소" };
+const NEED = { page: "{page}", offset: "{offset}", cursor: "{cursor}" };  // 쪽 넘기기 종류마다 요청에 있어야 하는 자리 표시
+const SHOW_ITEMS = 3, SHOW_KEYS = 100;  // 트리에서 배열은 앞 3개, 객체는 앞 100개 키만 그린다
+let envNames = [];  // env 파일의 이름들(값은 서버가 주지 않는다)
+let secrets = [];  // [읽기]가 찾은 비밀처럼 보이는 값 [{ where, name, path, env(고른 env 이름) }]
+let plain = [];  // 비밀 같은 이름이지만 비밀이 아니라고 뺀 이름들. 구성에 저장한다(Authorization·Cookie·주소 비밀번호는 서버가 늘 비밀로 본다)
+let parsed = null;  // 파일 주소 방식에서 [읽기]로 읽은 요청(쿼리가 따로 있는 모양). env 이름으로 바꿀 때 보낸다
+let json;  // 응답 예시를 JSON으로 읽은 값. JSON이 아니면 undefined
+let picked = null;  // 트리에서 고른 노드의 경로
+const opened = new Map();  // 트리 노드 경로 → 펼쳤는가(직접 펼치거나 접은 것만)
+let columns = [];  // [{ name, path }] 기록 안의 경로. 비면 전부
+let sampleCols = [];  // 미리보기가 알려 준 컬럼 이름
+let sampleToken = 0;  // 늦게 온 미리보기 응답을 버린다
+let est = null;  // [예상 확인]의 예상 요청 수(진행 막대에 쓴다)
+let limits = { groups: {}, usage: {} };
+let collections = {};
+let output = "";  // 끝난 수집의 결과 파일
+
+const val = id => $(id).value.trim();
+const say = (id, text, ok) => { $(id).textContent = text; $(id).className = ok ? "ok" : "err"; };
+const attr = v => esc(v).replace(/"/g, "&quot;");
+const size = n => n < 1024 ? `${n}B` : n < 1048576 ? `${(n / 1024).toFixed(1)}KB` : n < 1073741824 ? `${(n / 1048576).toFixed(1)}MB` : `${(n / 1073741824).toFixed(2)}GB`;
+const mode = () => document.querySelector("input[name=mode]:checked").value;
+const fileName = p => (p || "").split(/[\\/]/).pop();
+
+// 한 번 더 눌러야 실행하는 버튼(사용량 초기화, 연결이 바뀌는 열기). 다른 곳을 누르면 원래대로 돌아간다.
+let armed = null;
+function disarm() { if (armed) { armed.textContent = armed.dataset.label; armed = null; } }
+function twice(button, ask, fn) {
+  if (armed !== button) { disarm(); armed = button; button.dataset.label = button.textContent; button.textContent = ask; return; }
+  disarm();
+  return busy(button, fn);
+}
+document.addEventListener("click", e => { if (armed && !armed.contains(e.target)) disarm(); }, true);
+
+// 숫자 칸 검사: [id, 이름, 최소, 최대(없으면 null), 정수인가, 비워도 되는가]. 처음 걸린 칸의 안내를 돌려준다(서버가 다시 검사한다).
+function badNumber(rules) {
+  for (const [id, name, min, max, int, blank] of rules) {
+    const v = val(id), n = Number(v);
+    if (blank && v === "") continue;
+    if (v === "" || !Number.isFinite(n) || (int && !Number.isInteger(n)) || n < min || (max !== null && n > max))
+      return `${name}: ${min}${max === null ? " 이상" : `–${max.toLocaleString()}`}의 ${int ? "정수" : "수"}를 넣으세요.`;
+  }
+  return "";
+}
+function problems() {
+  const kind = $("p-kind").value, rules = [["b-conc", "동시 수", 1, null, true], ["b-gap", "간격", 0, null, false], ["b-retry", "다시 시도 횟수", 0, null, true], ["b-timeout", "시간 초과", 1, null, false]];
+  if (mode() === "file") rules.push(["f-chunks", "조각 수", 1, 16, true]);
+  else {
+    if (kind === "page" || kind === "offset") rules.push(["p-start", kind === "page" ? "첫 쪽 번호" : "첫 offset", 0, null, true]);
+    if (kind === "offset") rules.push(["p-step", "한 번에 늘릴 값", 1, null, true]);
+    if (kind !== "none") rules.push(["p-max", "최대 쪽 수", 1, 1000000, true]);
+  }
+  return badNumber(rules);
+}
+// 검사를 통과한 설정. 걸리면 안내를 오류로 던진다.
+function checked() {
+  const bad = problems();
+  if (bad) throw new Error(bad);
+  return config();
+}
+
+// 이름·값 표(쿼리·헤더): 한 줄에 이름, 값, ×. 이름이 빈 줄은 보내지 않는다.
+function pairRow(box, [k, v] = ["", ""]) {
+  const row = el("div", { className: "pair" }, el("input", { placeholder: "이름", value: k }), el("input", { placeholder: "값", value: v }),
+    el("button", { className: "ghost", textContent: "×", title: "빼기", onclick: () => { row.remove(); checkPaging(); } }));
+  box.append(row);
+}
+const setPairs = (box, rows) => { box.replaceChildren(); rows.forEach(r => pairRow(box, r)); };
+const getPairs = box => [...box.children].map(row => [...row.querySelectorAll("input")].map(i => i.value)).filter(([k]) => k.trim());
+document.querySelectorAll("[data-add]").forEach(b => b.onclick = () => pairRow($(b.dataset.add)));
+
+// 요청 칸
+fill($("method"), METHODS);
+$("method").append(new Option("직접 입력", "*"));
+const method = () => $("method").value === "*" ? val("method-other").toUpperCase() : $("method").value;
+const showMethod = () => $("method-other").classList.toggle("hidden", $("method").value !== "*");
+$("method").onchange = showMethod;
+const showBody = () => $("body").classList.toggle("hidden", $("body-kind").value === "none");
+$("body-kind").onchange = showBody;
+const readRequest = () => ({ method: method(), url: val("req-url"), query: getPairs($("query")), headers: getPairs($("headers")),
+  body_kind: $("body-kind").value, body: $("body-kind").value === "none" ? "" : $("body").value });
+function fillRequest(r) {
+  const m = (r.method || "GET").toUpperCase();
+  $("method").value = METHODS.includes(m) ? m : "*";
+  $("method-other").value = METHODS.includes(m) ? "" : m;
+  $("req-url").value = r.url ?? "";
+  setPairs($("query"), r.query ?? []);
+  setPairs($("headers"), r.headers ?? []);
+  $("body-kind").value = r.body_kind ?? "none";
+  $("body").value = r.body ?? "";
+  showMethod();
+  showBody();
+}
+// 파일 주소 방식은 주소 하나라 쿼리를 주소 뒤에 붙인다. 자리 표시({…})는 인코딩하지 않는다.
+const enc = s => s.split(/(\{[^{}]*\})/).map((p, i) => i % 2 ? p : encodeURIComponent(p)).join("");
+function fillFile(r) {
+  const q = (r.query ?? []).map(([k, v]) => `${enc(k)}=${enc(v)}`).join("&"), url = r.url ?? "";
+  $("f-url").value = url + (q ? (url.includes("?") ? "&" : "?") + q : "");
+  setPairs($("f-headers"), r.headers ?? []);
+}
+
+// 받는 방식에 따라 API 칸과 파일 칸을 바꿔 보인다.
+function showMode() {
+  const file = mode() === "file";
+  document.querySelectorAll(".for-api").forEach(e => e.classList.toggle("hidden", file));
+  document.querySelectorAll(".for-file").forEach(e => e.classList.toggle("hidden", !file));
+  checkPaging();
+}
+document.querySelectorAll("input[name=mode]").forEach(r => r.onchange = showMode);
+
+// 쪽 넘기기: 종류에 맞는 칸만 보인다.
+function showPaging() {
+  const kind = $("p-kind").value, show = (id, on) => $(id).classList.toggle("hidden", !on);
+  show("p-start-box", kind === "page" || kind === "offset");
+  show("p-step-box", kind === "offset");
+  show("p-max-box", kind !== "none");
+  show("p-cursor-box", kind === "cursor");
+  show("p-next-box", kind === "next_url");
+  show("p-total-box", kind !== "none");
+  $("p-start-name").textContent = kind === "offset" ? "첫 offset" : "첫 쪽 번호";
+  checkPaging();
+}
+$("p-kind").onchange = showPaging;
+// 고른 종류의 자리 표시가 요청(주소·쿼리·헤더·본문) 어디에도 없으면 알린다.
+function checkPaging() {
+  const need = NEED[$("p-kind").value], r = readRequest();
+  const text = [r.url, ...r.query.flat(), ...r.headers.map(h => h[1]), r.body].join("\n");
+  $("p-warn").textContent = mode() === "api" && need && !text.includes(need) ? `요청에 ${need} 자리 표시가 없습니다. 쿼리 값이나 본문의 그 자리에 넣으세요.` : "";
+}
+document.addEventListener("input", e => { if (e.target.closest(".for-api")) checkPaging(); });
+
+// env 파일: 이름만 받는다.
+async function readEnv() {
+  try {
+    envNames = (await api("/api/collect/env", { path: val("env-path") })).names;
+    $("env-names").textContent = envNames.length ? `이름 ${envNames.length}개: ${envNames.join(", ")}` : "이름이 없습니다.";
+    say("env-msg", "");
+  } catch (e) { envNames = []; $("env-names").textContent = ""; say("env-msg", e.message); }
+  showSecrets();
+}
+$("env-read").onclick = () => busy($("env-read"), readEnv);
+
+// 비밀처럼 보이는 값: 줄마다 env 이름을 고른다(env 파일을 읽었으면 목록, 아니면 입력).
+function showSecrets() {
+  $("secret-box").classList.toggle("hidden", !secrets.length);
+  $("secret-list").replaceChildren(...secrets.map((s, i) => {
+    const pick = envNames.length ? el("select", {}, new Option("env 이름 고르기", ""), ...envNames.map(n => new Option(n, n))) : el("input", { placeholder: "env 이름" });
+    pick.value = s.env ?? "";
+    pick.oninput = pick.onchange = () => s.env = pick.value.trim();
+    const where = `${WHERE[s.where] ?? s.where} ${s.name}${s.path ? ` (${s.path})` : ""}`;
+    return el("div", { className: "pair" }, el("span", { className: "hint", textContent: where, title: where }), pick,
+      el("button", { className: "ghost", textContent: "×", title: "비밀이 아니면 빼기", onclick: () => { if (!plain.includes(s.name)) plain.push(s.name); secrets.splice(i, 1); showSecrets(); } }));
+  }));
+}
+$("parse").onclick = () => busy($("parse"), async () => {
+  try {
+    const d = await api("/api/collect/parse", { text: $("paste").value });
+    parsed = d.request;
+    if (mode() === "file") fillFile(d.request); else fillRequest(d.request);
+    secrets = d.secrets.map(s => ({ ...s, env: "" }));
+    showSecrets();
+    $("unread").textContent = d.unread.length ? `읽지 못한 부분: ${d.unread.join(" / ")}` : "";
+    say("parse-msg", `${FORMATS[d.format] ?? d.format}으로 읽었습니다.`, true);
+    checkPaging();
+  } catch (e) { say("parse-msg", e.message); }
+});
+$("secretize").onclick = () => busy($("secretize"), async () => {
+  const replace = secrets.filter(s => s.env).map(({ where, name, path, env }) => ({ where, name, path, env }));
+  if (!replace.length) return say("parse-msg", "바꿀 env 이름을 고르세요.");
+  try {
+    const file = mode() === "file";
+    const { request } = await api("/api/collect/secretize", { request: file ? parsed ?? { method: "GET", url: val("f-url"), query: [], headers: getPairs($("f-headers")), body_kind: "none", body: "" } : readRequest(), replace });
+    if (file) { parsed = request; fillFile(request); } else fillRequest(request);
+    secrets = secrets.filter(s => !s.env);
+    showSecrets();
+    say("parse-msg", "env 이름으로 바꿨습니다.", true);
+    checkPaging();
+  } catch (e) { say("parse-msg", e.message); }
+});
+
+// 응답 트리. 경로는 점으로 잇고 배열 번호는 숫자다(서버와 같은 모양). 응답 전체는 "".
+const join = (path, key) => path === "" ? String(key) : `${path}.${key}`;
+const at = (v, path) => path === "" ? v : path.split(".").reduce((x, k) => x?.[k], v);
+// 경로가 기록(기록 배열의 한 항목) 안이면 그 항목 안의 경로, 아니면 null
+function inRecord(path) {
+  const records = val("records"), base = records ? records + "." : "";
+  if (!Array.isArray(at(json, records)) || !path.startsWith(base)) return null;
+  const rest = path.slice(base.length).split(".");
+  return rest.length >= 2 && /^\d+$/.test(rest[0]) ? rest.slice(1).join(".") : null;
+}
+function marks(path) {
+  const out = [], rel = inRecord(path);
+  if (path === val("records") && Array.isArray(at(json, path))) out.push("기록");
+  if (rel !== null && columns.some(c => c.path === rel)) out.push("컬럼");
+  if (path && path === val("p-cursor")) out.push("커서");
+  if (path && path === val("p-next")) out.push("다음 주소");
+  if (path && path === val("p-total")) out.push("전체 수");
+  return out;
+}
+// 처음에는 두 단계까지와, 지정한 위치로 가는 길을 펼친다.
+function wanted(path, depth) {
+  if (depth < 2) return true;
+  const records = val("records");
+  return path === records || path === join(records, 0) || [records, val("p-cursor"), val("p-next"), val("p-total")].some(p => p && p.startsWith(path + "."));
+}
+function firstEntries(v) {
+  if (Array.isArray(v)) return v.slice(0, SHOW_ITEMS).map((x, i) => [i, x]);
+  const out = [];
+  for (const k in v) { if (out.length >= SHOW_KEYS) break; out.push([k, v[k]]); }
+  return out;
+}
+function node(key, value, path, depth) {
+  const n = Array.isArray(value) ? value.length : value && typeof value === "object" ? Object.keys(value).length : -1;
+  const open = n > 0 && (opened.get(path) ?? wanted(path, depth));
+  const summary = Array.isArray(value) ? `[${n.toLocaleString()}개]` : n >= 0 ? `{${n.toLocaleString()}개}` : JSON.stringify(value).slice(0, 80);
+  const tw = el("span", { className: "tw", textContent: n > 0 ? (open ? "▾" : "▸") : "" });
+  const row = el("div", { className: "tr" + (path === picked ? " on" : ""), title: path || "(응답 전체)" }, tw, el("span", { textContent: key }), el("span", { className: "tv", textContent: summary }),
+    ...marks(path).map(m => el("span", { className: "badge", textContent: m })));
+  row.onclick = () => { picked = path; renderTree(); };
+  tw.onclick = e => { e.stopPropagation(); if (n > 0) { opened.set(path, !open); renderTree(); } };
+  const box = el("div", {}, row);
+  if (open) {
+    const items = firstEntries(value), more = n - items.length;
+    box.append(el("div", { className: "kids" }, ...items.map(([k, v]) => node(String(k), v, join(path, k), depth + 1)),
+      ...(more > 0 ? [el("div", { className: "tv", textContent: `…외 ${more.toLocaleString()}개` })] : [])));
+  }
+  return box;
+}
+function renderTree() {
+  const top = $("tree").scrollTop;
+  if (json === undefined) $("tree").replaceChildren(el("span", { className: "empty", textContent: $("resp-text").value.trim() ? "JSON이 아니어서 트리로 보여 줄 수 없습니다." : "[시험 보내기]를 누르거나 응답 예시를 붙여 넣으면 여기에 트리로 보입니다." }));
+  else $("tree").replaceChildren(node("(응답 전체)", json, "", 0));
+  $("tree").scrollTop = top;
+  showPick();
+}
+// 고른 노드로 할 수 있는 지정: 배열 → 기록 위치, 기록 안의 값 → 컬럼 넣기·빼기, 아무 값 → 커서·다음 주소·전체 수 위치
+function showPick() {
+  if (picked === null || json === undefined) return $("pick").replaceChildren(el("span", { className: "hint", textContent: "트리에서 값을 누르면 여기서 쓰임을 정합니다." }));
+  const v = at(json, picked), rel = inRecord(picked);
+  const btn = (text, fn) => el("button", { className: "mini", textContent: text, onclick: () => { fn(); designated(); } });
+  const setPath = (id, kind) => () => { $(id).value = picked; if ($("p-kind").value === "none") { $("p-kind").value = kind; showPaging(); } };
+  const items = [el("span", { className: "path", textContent: picked === "" ? "(응답 전체)" : picked })];
+  if (Array.isArray(v)) items.push(btn("기록 위치로", () => $("records").value = picked));
+  if (rel) items.push(columns.some(c => c.path === rel) ? btn("컬럼에서 빼기", () => columns = columns.filter(c => c.path !== rel)) : btn("컬럼으로 넣기", () => columns.push({ name: rel, path: rel })));
+  if (picked !== "") items.push(btn("다음 커서 위치", setPath("p-cursor", "cursor")), btn("다음 주소 위치", setPath("p-next", "next_url")), btn("전체 수 위치", () => $("p-total").value = picked));
+  $("pick").replaceChildren(...items);
+}
+// 지정이 바뀌면 트리 표시와 컬럼 목록을 고치고 미리보기를 다시 받는다.
+function designated() {
+  renderColumns();
+  renderTree();
+  checkPaging();
+  sample();
+}
+function renderColumns() {
+  $("columns").replaceChildren(...(columns.length ? columns.map((c, i) => el("div", { className: "pair" },
+    el("input", { value: c.name, placeholder: c.path, oninput: e => c.name = e.target.value, onchange: () => { showDedupe(); sample(); } }),
+    el("span", { className: "path", textContent: c.path, title: c.path }),
+    el("button", { className: "ghost", textContent: "×", title: "빼기", onclick: () => { columns.splice(i, 1); designated(); } })))
+    : [el("div", { className: "hint", textContent: "비우면 전부 넣습니다 (묶인 값은 a.b 컬럼으로 풀기)." })]));
+  showDedupe();
+}
+["records", "p-cursor", "p-next", "p-total"].forEach(id => $(id).addEventListener("change", () => { renderTree(); sample(); }));  // 직접 고친 위치도 트리 표시와 미리보기에 반영
+function readResponse() {
+  const t = $("resp-text").value.trim();
+  try { json = t ? JSON.parse(t) : undefined; } catch { json = undefined; }
+  if (json === null) json = undefined;
+  picked = null;
+  opened.clear();
+  renderTree();
+}
+$("resp-text").onchange = () => { readResponse(); sample(); };
+
+// 미리보기: 응답 예시에서 지금 지정대로 뽑은 앞 20행과 기록 수, 다음 커서·주소·전체 수
+async function sample() {
+  const text = $("resp-text").value;
+  if (!text.trim()) return;
+  const mine = ++sampleToken;
+  try {
+    const d = await api("/api/collect/sample", { config: config(), text });
+    if (mine !== sampleToken) return;
+    sampleCols = d.columns.map(c => c.name);
+    $("sample-info").textContent = [`기록 ${d.count.toLocaleString()}개`, d.cursor != null && `다음 커서: ${d.cursor}`, d.next != null && `다음 주소: ${d.next}`, d.total != null && `전체 수: ${d.total}`].filter(Boolean).join(" · ");
+    $("sample").innerHTML = sampleCols.length
+      ? `<table><thead><tr>${d.columns.map(c => `<th title="${attr(`${c.path} (${c.type})`)}">${esc(c.name)}</th>`).join("")}</tr></thead><tbody>${d.rows.map(r => "<tr>" + sampleCols.map(n => r[n] == null ? '<td class="empty">null</td>' : cell(r[n])).join("") + "</tr>").join("")}</tbody></table>`
+      : '<span class="empty">기록이 없습니다.</span>';
+    say("resp-msg", "");
+    showDedupe();
+  } catch (e) { if (mine === sampleToken) say("resp-msg", e.message); }
+}
+$("sample-btn").onclick = () => busy($("sample-btn"), async () => {
+  if (!$("resp-text").value.trim()) return say("resp-msg", "응답 예시를 붙여 넣거나 [시험 보내기]를 누르세요.");
+  await sample();
+});
+$("try").onclick = () => busy($("try"), async () => {
+  try {
+    const d = await api("/api/collect/try", { config: checked() });
+    const headers = Array.isArray(d.sent.headers) ? d.sent.headers : Object.entries(d.sent.headers ?? {});
+    $("sent").textContent = [`${d.sent.method} ${d.sent.url}`, ...headers.map(([k, v]) => `${k}: ${v}`), "", `→ 상태 ${d.status}`, ...(d.headers ?? []).map(([k, v]) => `${k}: ${v}`)].join("\n");
+    $("sent-box").classList.remove("hidden");
+    $("resp-text").value = d.text;
+    readResponse();
+    say("resp-msg", "");
+    await sample();
+  } catch (e) { say("resp-msg", e.message); }
+  loadLimits();  // 시험도 사용량에 들어간다.
+});
+
+// 중복 기준: 칸(쉼표로 구분)이 기준이고, 컬럼을 알면 체크 목록으로도 고른다.
+const dedupeNames = () => $("dd-text").value.split(",").map(s => s.trim()).filter(Boolean);
+const knownCols = () => mode() === "file" ? [] : columns.length ? columns.map(c => c.name.trim() || c.path) : sampleCols;
+function showDedupe() {
+  const now = dedupeNames();
+  $("dd-list").replaceChildren(...knownCols().map(n => {
+    const box = el("input", { type: "checkbox", checked: now.includes(n) });
+    box.onchange = () => { const names = dedupeNames().filter(x => x !== n); $("dd-text").value = (box.checked ? [...names, n] : names).join(", "); };
+    return el("label", { style: "display:block; white-space:nowrap" }, box, " " + n);
+  }));
+  $("dd-list").querySelectorAll("input").forEach(i => i.style.width = "auto");
+}
+$("dd-text").onchange = showDedupe;
+
+// 저장 위치: 창의 저장 대화상자. 기본 이름은 주소의 마지막 부분.
+function baseName() {
+  const last = (mode() === "file" ? val("f-url") : val("req-url")).replace(/[?#].*/, "").split("/").filter(Boolean).pop() ?? "";
+  return last.replace(/\.[^.]*$/, "").replace(/[{}:<>"|?*\\/]/g, "") || "collect";
+}
+$("o-ask").onclick = () => busy($("o-ask"), async () => {
+  try {
+    const { path } = await api("/api/collect/ask_path", { format: $("o-format").value, name: baseName() });
+    if (path) $("o-path").value = path;
+    say("out-msg", "");
+  } catch (e) { say("out-msg", e.message); }
+});
+$("o-format").onchange = () => { $("o-path").value = $("o-path").value.replace(/\.(parquet|csv)$/i, "." + $("o-format").value); };
+
+// 사용 한도 묶음과 사용량
+const LIMIT_FIELDS = [["l-sec", "per_second", "초당"], ["l-min", "per_minute", "분당"], ["l-hour", "per_hour", "시간당"], ["l-day", "per_day", "하루"]];
+const NO_LIMIT = { per_second: null, per_minute: null, per_hour: null, per_day: null, concurrency: 2, min_interval: 0, reset: "00:00", tz: "Asia/Seoul", margin: 0 };
+function usageText(u) {
+  if (!u) return "";
+  const lines = [`사용: 초 ${u.second} · 분 ${u.minute} · 시간 ${u.hour} · 하루 ${u.day.toLocaleString()}${u.day_limit != null ? ` / ${u.day_limit.toLocaleString()} (남은 ${(u.day_left ?? 0).toLocaleString()})` : ""}`, `하루 초기화: ${u.reset_at}`];
+  if (u.server) lines.push(`서버가 알려 준 남은 수: ${u.server.remaining ?? "—"}${u.server.reset ? ` (초기화 ${u.server.reset})` : ""}`);
+  return lines.join("\n");
+}
+const BROKEN = "사용 기록을 읽지 못해 한도를 다 쓴 것으로 봅니다. [사용량 초기화]를 누르기 전에는 시작할 수 없습니다.";
+function showLimits(d, name = $("lgroup").value) {
+  limits = d;
+  fill($("lgroup"), Object.keys(d.groups), "사용 한도 없음");
+  $("lgroup").value = name in d.groups ? name : "";
+  pickGroup();
+}
+function pickGroup() {
+  const name = $("lgroup").value, g = { ...NO_LIMIT, ...limits.groups[name] }, u = limits.usage[name];
+  LIMIT_FIELDS.forEach(([id, key]) => $(id).value = g[key] ?? "");
+  $("l-conc").value = g.concurrency;
+  $("l-gap").value = g.min_interval;
+  $("l-reset").value = g.reset;
+  $("l-tz").value = g.tz;
+  $("l-margin").value = g.margin;
+  $("lusage").textContent = usageText(u);
+  $("lbroken").textContent = u?.broken ? BROKEN : "";
+  $("lreset").classList.toggle("hidden", !name);
+}
+$("lgroup").onchange = pickGroup;
+const loadLimits = () => api("/api/limits").then(d => showLimits(d)).catch(e => say("limit-msg", e.message));
+$("lsave").onclick = () => busy($("lsave"), async () => {
+  const name = val("lname") || $("lgroup").value;
+  try {
+    if (!name) throw new Error("묶음 이름을 넣으세요.");
+    const bad = badNumber([...LIMIT_FIELDS.map(([id, , label]) => [id, label, 1, null, true, true]), ["l-conc", "동시 수", 1, null, true], ["l-gap", "최소 간격", 0, null, false], ["l-margin", "여유분", 0, 50, false]]);
+    if (bad) throw new Error(bad);
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(val("l-reset"))) throw new Error("하루 초기화 시각은 00:00 모양(HH:MM)으로 넣으세요.");
+    const group = { ...Object.fromEntries(LIMIT_FIELDS.map(([id, key]) => [key, val(id) === "" ? null : Number(val(id))])),
+      concurrency: Number(val("l-conc")), min_interval: Number(val("l-gap")), reset: val("l-reset"), tz: $("l-tz").value, margin: Number(val("l-margin")) };
+    showLimits(await api("/api/limits", { name, group }), name);
+    $("lname").value = "";
+    say("limit-msg", "저장했습니다", true);
+  } catch (e) { say("limit-msg", e.message); }
+});
+$("ldel").onclick = () => busy($("ldel"), async () => {
+  if (!$("lgroup").value) return;
+  try { showLimits(await api("/api/limits", { name: $("lgroup").value, group: null }), ""); say("limit-msg", "삭제했습니다", true); } catch (e) { say("limit-msg", e.message); }
+});
+$("lreset").onclick = () => twice($("lreset"), "사용 기록을 지웁니다. 한 번 더 누르면 초기화", async () => {
+  try { showLimits(await api("/api/limits/reset", { name: $("lgroup").value })); say("limit-msg", "사용량을 초기화했습니다", true); } catch (e) { say("limit-msg", e.message); }
+});
+
+// 구성 저장·불러오기: 입력 상태(config)를 그대로 저장한다. 붙여 넣은 예시·응답과 env 값은 넣지 않는다.
+const config = () => ({
+  version: 1, mode: mode(), env_path: val("env-path"), limit_group: $("lgroup").value,
+  request: readRequest(),
+  response: { records: val("records"), columns: columns.map(c => ({ name: c.name.trim() || c.path, path: c.path })) },
+  paging: { kind: $("p-kind").value, start: Number(val("p-start")), step: Number(val("p-step")), max_pages: Number(val("p-max")),
+    cursor_path: val("p-cursor"), next_path: val("p-next"), total_path: val("p-total") },
+  balance: { concurrency: Number(val("b-conc")), interval: Number(val("b-gap")), retries: Number(val("b-retry")), timeout: Number(val("b-timeout")) },
+  file: { url: val("f-url"), headers: getPairs($("f-headers")), chunks: Number(val("f-chunks")), kind: $("f-kind").value, encoding: $("f-enc").value },
+  output: { format: $("o-format").value, path: val("o-path"), dedupe: dedupeNames() },
+  plain,
+});
+function restore(c) {
+  const d = { ...DEFAULT, ...c };
+  for (const k of ["request", "response", "paging", "balance", "file", "output"]) d[k] = structuredClone({ ...DEFAULT[k], ...c[k] });
+  document.querySelector(`input[name=mode][value=${d.mode === "file" ? "file" : "api"}]`).checked = true;
+  $("env-path").value = d.env_path;
+  fillRequest(d.request);
+  $("records").value = d.response.records;
+  columns = d.response.columns;
+  const p = d.paging;
+  $("p-kind").value = p.kind;
+  [["p-start", p.start], ["p-step", p.step], ["p-max", p.max_pages], ["p-cursor", p.cursor_path], ["p-next", p.next_path], ["p-total", p.total_path]].forEach(([id, v]) => $(id).value = v);
+  const b = d.balance;
+  [["b-conc", b.concurrency], ["b-gap", b.interval], ["b-retry", b.retries], ["b-timeout", b.timeout]].forEach(([id, v]) => $(id).value = v);
+  $("f-url").value = d.file.url;
+  setPairs($("f-headers"), d.file.headers);
+  $("f-chunks").value = d.file.chunks;
+  $("f-kind").value = d.file.kind;
+  $("f-enc").value = d.file.encoding;
+  $("o-format").value = d.output.format;
+  $("o-path").value = d.output.path;
+  $("dd-text").value = d.output.dedupe.join(", ");
+  $("lgroup").value = d.limit_group in limits.groups ? d.limit_group : "";
+  pickGroup();
+  say("limit-msg", d.limit_group && !(d.limit_group in limits.groups) ? `‘${d.limit_group}’ 사용 한도 묶음이 없습니다. 다시 고르세요.` : "");
+  secrets = [];
+  plain = [...(d.plain ?? [])];
+  parsed = null;
+  envNames = [];
+  $("env-names").textContent = "";
+  showSecrets();
+  $("unread").textContent = "";
+  $("resp-text").value = "";
+  $("sent-box").classList.add("hidden");
+  $("sample").replaceChildren();
+  $("sample-info").textContent = "";
+  sampleCols = [];
+  readResponse();
+  showMode();
+  showPaging();
+  renderColumns();
+  if (d.env_path) readEnv();
+}
+function showCollections(d, name = "") {
+  collections = d.collections;
+  fill($("rsaved"), Object.keys(collections), "불러오기");
+  $("rsaved").value = name;
+}
+$("rsave").onclick = () => busy($("rsave"), async () => {
+  const name = val("rname") || $("rsaved").value;  // 이름을 비우면 지금 고른 구성에 덮어쓴다.
+  try {
+    if (secrets.length) throw new Error("비밀처럼 보이는 값이 남아 있습니다. env 이름으로 바꾸거나, 비밀이 아니면 목록에서 뺀 뒤 저장하세요.");
+    showCollections(await api("/api/collections", { name, collection: checked() }), name);
+    $("rname").value = "";
+    say("cfg-msg", "저장했습니다", true);
+  } catch (e) { say("cfg-msg", e.message); }
+});
+$("rdel").onclick = () => busy($("rdel"), async () => {
+  if (!$("rsaved").value) return;
+  try { showCollections(await api("/api/collections", { name: $("rsaved").value, collection: null })); say("cfg-msg", "삭제했습니다", true); } catch (e) { say("cfg-msg", e.message); }
+});
+$("rsaved").onchange = () => {
+  const c = collections[$("rsaved").value];
+  if (c) { restore(c); say("cfg-msg", ""); }
+};
+
+// 실행: 예상 → 시작 → 1초마다 상태. 화면을 다시 열어도 도는 작업이 있으면 이어서 보여 준다.
+function showEstimate(d) {
+  const parts = [d.requests == null ? "예상 요청 수: 알 수 없음 (전체 수 위치를 정하면 셉니다)" : `예상 요청 ${d.requests.toLocaleString()}번`];
+  if (d.day_left != null) parts.push(`오늘 남은 횟수 ${d.day_left.toLocaleString()}번`);
+  $("est").textContent = parts.join(" · ");
+  $("est-warn").textContent = d.requests != null && d.day_left != null && d.requests > d.day_left ? `오늘 남은 횟수가 모자랍니다. 오늘은 약 ${d.day_left.toLocaleString()}쪽까지 받습니다.` : "";
+  $("est-resume").textContent = d.resume ? `이어 받기: 받아 둔 ${d.resume.pages.toLocaleString()}쪽(${size(d.resume.bytes)}) 다음부터 받습니다.` : "";
+}
+$("estimate").onclick = () => busy($("estimate"), async () => {
+  try {
+    const d = await api("/api/collect/estimate", { config: checked() });
+    est = d.requests;
+    showEstimate(d);
+    say("run-msg", "");
+  } catch (e) { say("run-msg", e.message); }
+});
+function showStatus(s) {
+  $("start").disabled = s.running;
+  $("stop").disabled = !s.running;
+  $("run-box").classList.toggle("hidden", !s.running && s.phase === "대기");
+  $("phase").textContent = s.phase + (s.wait ? ` — ${s.wait}` : "");
+  const counts = s.mode === "file" ? [`받은 ${size(s.bytes)}${s.total_bytes ? ` / ${size(s.total_bytes)}` : ""}`]
+    : [`쪽 ${s.pages.toLocaleString()}`, `요청 ${s.requests.toLocaleString()}`, `행 ${s.rows.toLocaleString()}`, size(s.bytes)];
+  counts.push(`실패 ${s.failures}`, `동시 ${s.concurrency}`, `걸린 시간 ${secs(s.elapsed * 1000)}`);
+  $("run-counts").textContent = counts.join(" · ");
+  const part = s.total_bytes ? s.bytes / s.total_bytes : s.mode === "api" && est ? s.requests / est : null;
+  $("bar").classList.toggle("unknown", s.running && part === null);
+  $("bar").firstElementChild.style.width = part === null ? "" : Math.min(100, part * 100).toFixed(1) + "%";
+  $("bar").title = part === null ? "" : (part * 100).toFixed(1) + "%";
+  $("run-note").textContent = s.message;
+  $("run-usage").textContent = usageText(s.usage) + (s.usage?.broken ? "\n" + BROKEN : "");
+  $("run-err").textContent = s.error;
+  output = !s.running && s.output ? s.output : "";
+  $("result").classList.toggle("hidden", !output);
+  $("result-path").textContent = output;
+}
+let watching = false;
+async function poll() {
+  try { const s = await api("/api/collect/status"); showStatus(s); return s; }
+  catch (e) { say("run-msg", e.message); return null; }
+}
+// 도는 동안 1초마다 상태를 읽는다. 지켜보던 작업이 끝나면 보낼 곳에 알린다(오래 걸린 것만, common.js의 notifyDone).
+// fresh: 방금 [시작]을 눌렀으면 아직 "대기"로 보일 수 있어 몇 번 더 기다린다.
+async function watch(fresh) {
+  if (watching) return;
+  watching = true;
+  try {
+    for (let tries = fresh ? 3 : 0; ; tries--) {
+      const s = await poll();
+      if (s && !s.running && s.phase === "대기" && tries > 0) { await new Promise(r => setTimeout(r, 1000)); continue; }
+      if (!s?.running) {
+        if (s?.phase === "끝") { notifyDone("collect", s.elapsed, s.rows, fileName(s.output)); $("run-ok").textContent = "다 받았습니다"; }
+        loadLimits();
+        break;
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  } finally { watching = false; }
+}
+$("start").onclick = () => busy($("start"), async () => {
+  try {
+    const cfg = checked();
+    if (!cfg.output.path) throw new Error("저장 경로를 정하세요.");
+    const d = await api("/api/collect/start", { config: cfg });
+    $("run-ok").textContent = d.resumed ? "받아 둔 데서 이어 받습니다" : "";
+    say("run-msg", "");
+    watch(true);
+  } catch (e) { say("run-msg", e.message); }
+});
+$("stop").onclick = () => busy($("stop"), async () => {
+  try { await api("/api/collect/stop", {}); $("run-ok").textContent = "멈췄습니다. 다시 [시작]하면 받은 데서 이어 받습니다"; } catch (e) { say("run-msg", e.message); }
+});
+// 결과 파일로 연결을 바꾸고 검색·전처리 화면으로 간다.
+const openWith = (button, prep) => twice(button, "연결이 이 파일로 바뀝니다. 한 번 더 누르면 열기", async () => {
+  try {
+    const { table } = await api("/api/collect/open", { path: output });
+    location.href = prep ? "/prep?base=" + encodeURIComponent(table) : "/search";
+  } catch (e) { say("run-msg", e.message); }
+});
+$("open-search").onclick = () => openWith($("open-search"), false);
+$("open-prep").onclick = () => openWith($("open-prep"), true);
+
+restore(DEFAULT);
+api("/api/collections").then(d => showCollections(d)).catch(() => {});
+loadLimits();
+poll().then(s => { if (s?.running) watch(); });
+</script>
+</body>
+</html>
