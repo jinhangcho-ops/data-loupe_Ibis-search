@@ -1382,6 +1382,256 @@ def collect_section(c, got):
     api.http.shutdown()
 
 
+class FakeSite:
+    """가짜 수집용 창(collect_browser.Page 대신). pages: 쪽 번호(1부터) → 항목 [(글자, 링크)].
+    주소의 page로 쪽을 고르고, 다음 버튼은 마지막 쪽 전까지 있고, 스크롤은 step개씩 더 보여 준다.
+    scroll: 모든 쪽의 항목을 이어 붙여 step개씩 보여 준다. repeat: 없는 쪽 번호면 마지막 쪽을 보여 준다. moved: 이 쪽을 열면 다른 호스트(로그인 화면)로 넘어간다. gone: 이 수만큼 명령을 받은 뒤 창이 닫힌다."""
+
+    def __init__(self, base, pages, step=3, repeat=False, moved=None, gone=None, scroll=False):
+        self.base, self.pages, self.step, self.repeat, self.moved, self.gone, self.scroll = base, pages, step, repeat, moved, gone, scroll
+        self.at, self.shown, self.flags, self.landing, self.log, self.url = 1, step, set(), None, [], base + "/list?page=1"
+
+    def go(self, url):
+        self.log.append(("go", url))
+        self.at = int(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get("page", ["1"])[0])
+        self.url, self.flags, self.shown = url, set(), self.step
+        if self.at == self.moved:
+            self.url = "http://login.example.com/?back=1"
+
+    def items(self):
+        if self.url.startswith("http://login."):
+            return []
+        if self.scroll:
+            return [x for k in sorted(self.pages) for x in self.pages[k]][:self.shown]
+        last = max(self.pages) if self.pages else 0
+        return self.pages.get(self.at, self.pages.get(last, []) if self.repeat and self.at > last else [])
+
+    def run(self, method, *args, timeout=None):
+        import collect_browser
+        if self.gone is not None and len(self.log) >= self.gone:
+            raise collect_browser.Gone()
+        if method == "tag":
+            self.flags.add(args[0])
+            return True
+        if method == "probe":
+            found = self.items()
+            return {"count": len(found), "sig": f"{found[:1]}{found[-1:]}", "url": self.url, "ready": "complete", "same": bool(args[1]) and args[1] in self.flags}
+        if method == "read":
+            _, fields, start, limit = args
+            found = self.items()[start:None if limit is None else start + limit]
+            return {"count": len(self.items()), "url": self.url, "rows": [[text if f["attr"] == "text" else link for f in fields] for text, link in found]}
+        if method == "next":
+            self.log.append(("next", args[1]))
+            if self.at >= max(self.pages):
+                return {"found": False, "href": ""}
+            href = f"{self.base}/list?page={self.at + 1}"
+            if args[1]:
+                self.at, self.flags, self.url = self.at + 1, set(), href
+            return {"found": True, "href": href}
+        if method == "scroll":
+            self.log.append(("scroll",))
+            self.shown += self.step
+            return 1
+        raise AssertionError(method)
+
+
+def web_section(c, got):
+    """수집 2단계(웹페이지)의 서버 쪽. 수집용 창은 가짜(FakeSite)로 바꿔 끼우고, robots.txt는 127.0.0.1의 가짜 서버로만 확인한다."""
+    import collect_browser
+    import collect_job
+    import collect_limits
+    import collect_web
+    from contextlib import contextmanager
+    print("== 수집: 웹페이지")
+    error = lambda api, **body: got(api, **body).get("error", "")
+    api = FakeApi()
+    out = ROOT / "web_out"
+    out.mkdir()
+    collect_web.STABLE, collect_web.POLL = 0.05, 0.01
+    real = {name: getattr(collect_browser, name) for name in ("session", "page", "open_page", "alive")}
+    sessions = []
+    site = {"now": None}
+
+    @contextmanager
+    def fake_session(show, url):
+        sessions.append((show, url))
+        site["now"].landing = url  # 방금 이 주소로 띄운 창처럼
+        site["now"].go(url)
+        site["now"].log.pop()
+        yield site["now"]
+
+    collect_browser.session = fake_session
+    pages = {k: [(f"상품{k}-{j}", f"{api.base}/item/{k}{j}") for j in (1, 2, 3)] for k in (1, 2, 3)}
+    fields = [{"name": "이름", "selector": "a", "attr": "text"}, {"name": "링크", "selector": "a", "attr": "href"}]
+
+    def wcfg(name, kind="url", **more):
+        web = {"url": api.base + "/list?page={page}", "items": "ul > li", "fields": fields, "paging": {"kind": kind, "next": "a.next", "start": 1, "max_pages": 50},
+               "wait": 1, "robots": False, "show": True}
+        for key, value in more.items():
+            web[key] = {**web[key], **value} if isinstance(value, dict) else value
+        return {"mode": "web", "web": web, "balance": {"interval": 0, "timeout": 5}, "output": {"format": "parquet", "path": str(out / name), "dedupe": []}}
+
+    def wait():
+        end = time.time() + 30
+        while time.time() < end and c.get("/api/collect/status").get_json()["running"]:
+            time.sleep(0.02)
+        return c.get("/api/collect/status").get_json()
+
+    def run(cfg, fake):
+        site["now"] = fake
+        return got("/api/collect/start", config=cfg), wait()
+
+    try:
+        fake = FakeSite(api.base, pages)
+        started, st = run(wcfg("url.parquet"), fake)
+        frame = pl.read_parquet(out / "url.parquet")
+        check("url: {page}로 넘기다 0건이면 끝, 항목 순서, 첫 쪽은 띄운 창 그대로(이동 안 함)", (started["resumed"], st["phase"], st["rows"], frame.columns, frame["이름"].to_list()[:4],
+              [u for k, u in fake.log if k == "go"], sessions[-1]), (False, "끝", 9, ["이름", "링크"], ["상품1-1", "상품1-2", "상품1-3", "상품2-1"],
+              [f"{api.base}/list?page={k}" for k in (2, 3, 4)], (True, f"{api.base}/list?page=1")))
+        check("상태: 쪽 수·요청 수(쪽을 연 수)·결과", (st["pages"], st["requests"], st["mode"], st["output"], sorted(p.name for p in out.iterdir())),
+              (3, 4, "web", str(out / "url.parquet"), ["url.parquet"]))
+        fake = FakeSite(api.base, pages, repeat=True)
+        _, st = run(wcfg("repeat.parquet", show=False), fake)
+        check("url: 바로 전 쪽과 같은 항목이면 끝(없는 쪽에 마지막 쪽을 보여 주는 사이트), 숨김 실행", (st["phase"], st["rows"], len([1 for k, _ in fake.log if k == "go"]), sessions[-1][0]),
+              ("끝", 9, 3, False))
+        _, st = run(wcfg("none.parquet", "none"), FakeSite(api.base, pages))
+        check("none: 한 쪽만", (st["phase"], st["rows"], st["requests"]), ("끝", 3, 1))
+        _, st = run(wcfg("max.parquet", paging={"max_pages": 2}), FakeSite(api.base, pages))
+        check("url: 최대 쪽 수", (st["phase"], st["rows"]), ("끝", 6))
+
+        got("/api/limits", name="웹", group={"per_day": 2, "concurrency": 1})
+        daily = {**wcfg("daily.parquet"), "limit_group": "웹"}
+        _, st = run(daily, FakeSite(api.base, pages))
+        check("사용 한도: 쪽 하나를 여는 것이 1번, 다 쓰면 멈추고 이어 받기를 남김", (st["phase"], st["pages"], st["usage"]["day"], (out / "daily.part.json").exists()), ("멈춤", 2, 2, True))
+        check("estimate(url): 남은 쪽 수, 이어 받기", got("/api/collect/estimate", config=daily), {"requests": 48, "day_left": 0, "resume": {"pages": 2, "bytes": st["bytes"]}})
+        got("/api/limits", name="웹", group={"per_day": 100, "concurrency": 1})
+        fake = FakeSite(api.base, pages)
+        started, st = run(daily, fake)
+        check("url 이어 받기: 받은 쪽은 건너뛰고 3쪽부터(창도 3쪽 주소로 띄움)", (started["resumed"], st["phase"], sessions[-1][1], [u for k, u in fake.log if k == "go"],
+              pl.read_parquet(out / "daily.parquet")["이름"].to_list()[-3:], st["rows"]),
+              (True, "끝", f"{api.base}/list?page=3", [f"{api.base}/list?page=4"], ["상품3-1", "상품3-2", "상품3-3"], 9))
+
+        fake = FakeSite(api.base, pages)
+        _, st = run(wcfg("next.parquet", "next"), fake)
+        check("next: 다음 버튼을 눌러 넘기고 버튼이 없으면 끝", (st["phase"], st["rows"], [x for x in fake.log if x == ("next", True)], st["requests"]), ("끝", 9, [("next", True)] * 2, 3))
+        got("/api/limits", name="웹", group={"per_day": 2, "concurrency": 1})
+        collect_limits.reset("웹")
+        nxt = {**wcfg("next2.parquet", "next"), "limit_group": "웹"}
+        _, st = run(nxt, FakeSite(api.base, pages))
+        check("next: 한도에서 멈춤", (st["phase"], st["pages"]), ("멈춤", 2))
+        check("estimate(next): 이어 받아도 처음부터 다시 넘기므로 최대 쪽 수", got("/api/collect/estimate", config=nxt)["requests"], 50)
+        got("/api/limits", name="웹", group={"per_day": 100, "concurrency": 1})
+        fake = FakeSite(api.base, pages)
+        started, st = run(nxt, fake)
+        check("next 이어 받기: 처음부터 다시 넘기되 받은 쪽은 다시 저장하지 않음", (started["resumed"], st["phase"], st["message"].startswith("이어 받습니다. 처음 쪽부터"),
+              [x for x in fake.log if x == ("next", True)], pl.read_parquet(out / "next2.parquet")["이름"].to_list()), (True, "끝", True, [("next", True)] * 2,
+              [t for k in (1, 2, 3) for t, _ in pages[k]]))
+        got("/api/limits", name="웹", group=None)
+
+        fake = FakeSite(api.base, {1: [(f"글{j}", f"{api.base}/p/{j}") for j in range(8)]}, scroll=True)
+        _, st = run(wcfg("scroll.parquet", "scroll"), fake)
+        check("scroll: 내려 새로 생긴 항목만 다음 쪽으로, 더 생기지 않으면 끝", (st["phase"], st["pages"], pl.read_parquet(out / "scroll.parquet")["이름"].to_list()),
+              ("끝", 3, [f"글{j}" for j in range(8)]))
+        _, st = run(wcfg("empty.parquet"), FakeSite(api.base, {1: []}))
+        check("첫 쪽이 0건이면 실패", (st["phase"], st["error"]), ("실패", collect_web.EMPTY))
+        _, st = run(wcfg("moved.parquet"), FakeSite(api.base, pages, moved=2))
+        check("다른 호스트로 넘어가면 다시 로그인이 필요하다고 실패", (st["phase"], st["error"].startswith("다시 로그인이 필요할 수 있습니다: 페이지가 다른 주소(login.example.com)로")), ("실패", True))
+        _, st = run(wcfg("gone.parquet"), FakeSite(api.base, pages, gone=1))
+        check("실행 중 창이 닫히면 알림, 받은 것은 남김", (st["phase"], st["error"], (out / "gone.part.json").exists()), ("실패", "수집용 창이 닫혀 멈췄습니다.", True))
+
+        print("== 수집: robots.txt")
+        robots = {"status": 200, "text": "User-agent: *\nDisallow: /list\nAllow: /\n"}
+        api.routes["/robots.txt"] = lambda e: (robots["status"], {}, robots["text"].encode())
+        fake = FakeSite(api.base, pages)
+        _, st = run(wcfg("robots.parquet", robots=True), fake)
+        check("robots.txt가 막으면 쪽을 열지 않고 실패", (st["phase"], st["error"], fake.log, st["requests"]), ("실패", collect_web.BLOCKED, [], 0))
+        verdict = lambda: got("/api/collect/estimate", config=wcfg("r.parquet", robots=True)).get("robots")
+        texts = [verdict()]
+        robots["status"] = 404
+        texts.append(verdict())
+        robots["status"] = 503
+        texts.append(verdict())
+        robots.update(status=200, text="User-agent: other\nDisallow: /\n")
+        texts.append(verdict())
+        check("estimate의 robots: 금지·4xx는 허용·5xx는 확인 못 함·다른 User-agent 규칙은 상관없음", texts, ["금지: /list", "허용", "확인 못 함: robots.txt 응답 상태가 503입니다", "허용"])
+        check("robots.txt를 받는 것은 사용 한도·요청 수에 세지 않음(호스트마다 한 번)", len(api.hits("/robots.txt")), 5)
+        dead = FakeApi()
+        dead.http.shutdown()
+        dead.http.server_close()
+        cfg_dead = wcfg("d.parquet", robots=True, url=dead.base + "/list")
+        check("연결이 안 되면 확인 못 함", got("/api/collect/estimate", config=cfg_dead)["robots"].startswith("확인 못 함: robots.txt를 받지 못했습니다"), True)
+        check("robots를 끄면 estimate에 없음, none은 1쪽", got("/api/collect/estimate", config=wcfg("r.parquet", "none")), {"requests": 1, "day_left": None, "resume": None})
+
+        print("== 수집: 웹페이지 구성 검사·라우트")
+        check("구성 검사: kind, fields 모양, 컬럼 이름 겹침, wait 범위, 모르는 칸", [error("/api/collections", name="w", collection=v) for v in (
+              {"mode": "web", "web": {"paging": {"kind": "page"}}}, {"web": {"fields": [{"name": "a", "selector": ""}]}},
+              {"web": {"fields": [{"name": "A", "selector": "", "attr": "text"}, {"name": "a", "selector": "", "attr": "href"}]}}, {"web": {"wait": 121}},
+              {"web": {"paging": {"step": 1}}}, {"web": {"fields": [{"name": "a", "selector": "", "attr": "on click"}]}})],
+              ["구성의 web.paging.kind는 none, next, url, scroll 중 하나입니다.", *["구성의 web.fields는 [{\"name\", \"selector\", \"attr\"}, …] 모양이어야 합니다(이름은 비우지 않음, attr은 text 또는 속성 이름, 200개까지)."],
+               "컬럼 이름이 겹칩니다(대소문자 무시).", "구성의 web.wait는 1~120의 수여야 합니다.", "구성에 쓸 수 없는 값이 있습니다: web.paging.step",
+               "구성의 web.fields는 [{\"name\", \"selector\", \"attr\"}, …] 모양이어야 합니다(이름은 비우지 않음, attr은 text 또는 속성 이름, 200개까지)."])
+        check("시작 전 검사: {env}·http 아닌 주소·항목·컬럼·다음 버튼", [error("/api/collect/start", config=v) for v in (
+              wcfg("x.parquet", url="https://h.example.com/{env:K}"), wcfg("x.parquet", url="file:///C:/a.html"), wcfg("x.parquet", items=" "),
+              wcfg("x.parquet", fields=[]), wcfg("x.parquet", "next", paging={"next": ""}))],
+              ["웹페이지 주소에는 {env:…}를 쓸 수 없습니다(로그인은 수집용 창에서 하세요).", "http:// 또는 https:// 주소만 열 수 있습니다.", "항목 선택자를 정하세요.",
+               "컬럼을 하나 이상 정하세요.", "다음 버튼 선택자를 정하세요."])
+        check("웹페이지 주소의 비밀 같은 쿼리도 저장 거부", error("/api/collections", name="w", collection=wcfg("x.parquet", url="https://h.example.com/l?token=zz")),
+              "비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 웹페이지 주소의 token. env 파일에 넣고 {env:이름}으로 바꾸세요.")
+        check("try는 웹페이지 모드에서 쓰지 않음", error("/api/collect/try", config=wcfg("")), "웹페이지 모드는 [브라우저 열기]와 미리보기로 확인하세요.")
+        check("창이 없을 때: 상태, 고르기·미리보기 거부, 닫기는 됨", (c.get("/api/collect/browser/state").get_json(), error("/api/collect/browser/pick", target="field"),
+              error("/api/collect/web/sample", config=wcfg("")), got("/api/collect/browser/close")),
+              ({"open": False, "url": "", "title": "", "picking": "", "pick": None, "busy": False}, collect_browser.CLOSED, collect_browser.CLOSED, {"ok": True}))
+        opened = []
+        collect_browser.open_page = opened.append
+        check("open: {page}는 start(없으면 1)로, http·https·{env} 거부, start는 정수", ([got("/api/collect/browser/open", url=api.base + "/l?p={page}"), got("/api/collect/browser/open", url=api.base + "/l?p={page}", start=3)],
+              opened, [error("/api/collect/browser/open", url=u) for u in ("ftp://h.example.com/", "https://h.example.com/{env:A}")], error("/api/collect/browser/open", url=api.base, start="2")),
+              ([{"ok": True}] * 2, [api.base + "/l?p=1", api.base + "/l?p=3"], ["http:// 또는 https:// 주소만 열 수 있습니다.", "http:// 또는 https:// 주소만 열 수 있습니다({env:…}는 쓸 수 없습니다)."],
+               "start는 정수여야 합니다."))
+        check("pick: target 검사", error("/api/collect/browser/pick", target="all"), "target은 field, next, off 중 하나입니다.")
+        collect_browser.page = lambda: FakeSite(api.base, {1: [(f"n{j}", f"/x{j}") for j in range(30)]})
+        r = got("/api/collect/web/sample", config=wcfg(""))
+        check("미리보기: 지금 페이지의 항목 수, 컬럼, 앞 20행", (r["count"], r["columns"], len(r["rows"]), r["rows"][0]), (30, ["이름", "링크"], 20, {"이름": "n0", "링크": "/x0"}))
+        collect_browser.page = lambda: type("Bad", (), {"run": lambda self, *a, **k: {"count": 1, "rows": [[1, "x"]], "url": "http://h.example.com/"}})()
+        check("페이지가 준 값의 모양이 틀리면 거부", error("/api/collect/web/sample", config=wcfg("")), "페이지에서 읽은 값의 모양이 올바르지 않습니다.")
+        collect_browser.page = real["page"]
+        collect_browser.child["busy"] = True
+        check("작업이 창을 쓰는 중이면 고르기·닫기 거부, 상태의 busy", (error("/api/collect/browser/pick", target="off"), error("/api/collect/browser/close"),
+              c.get("/api/collect/browser/state").get_json()["busy"]), (collect_browser.BUSY, collect_browser.BUSY, True))
+        collect_browser.child["busy"] = False
+        pick = collect_browser.clean_pick({"target": "field", "items": "ul > li", "count": 3, "selector": "a", "text": "가" * 300,
+                                           "attrs": {"href": "https://h.example.com/a", "onclick": "x()", "data-id": "7", "src": 5}})
+        check("고른 결과 검사: 글자 200자, 쓸 만한 속성만, 모양이 틀리면 버림", (pick["text"], pick["attrs"], [collect_browser.clean_pick(v) for v in (
+              {"target": "x"}, {"target": "field", "items": 1, "count": 1, "selector": "", "text": "", "attrs": {}},
+              {"target": "next", "items": "", "count": -1, "selector": "", "text": "", "attrs": {}}, {"target": "field", "items": "a" * 2001, "count": 1, "selector": "", "text": "", "attrs": {}})]),
+              ("가" * 200, {"href": "https://h.example.com/a", "data-id": "7"}, [None] * 4))
+        check("수집용 창 라우트는 차례(turn)를 기다리지 않음", all(p in server.FREE for p in ("/api/collect/browser/open", "/api/collect/browser/close", "/api/collect/browser/state",
+              "/api/collect/browser/pick", "/api/collect/browser/forget", "/api/collect/web/sample")), True)
+
+        print("== 수집: 로그인 정보 지우기(forget)")
+        folder = collect_browser.FOLDER
+        check("수집용 창 폴더는 설정 폴더 아래", folder.parent, settings.PATH.parent)
+        outside = ROOT / "browser_outside"
+        outside.mkdir()
+        (outside / "keep.txt").write_text("x", encoding="utf-8")
+        (folder / "EBWebView" / "Default").mkdir(parents=True)
+        (folder / "EBWebView" / "Default" / "Cookies").write_text("c", encoding="utf-8")
+        inner = subprocess.run(["cmd", "/c", "mklink", "/J", str(folder / "EBWebView" / "link"), str(outside)], capture_output=True).returncode
+        collect_browser.alive = lambda: True
+        check("창이 떠 있으면 거부", (error("/api/collect/browser/forget"), folder.exists()), ("수집용 창을 닫은 뒤에 지우세요.", True))
+        collect_browser.alive = real["alive"]
+        check("지우면 폴더만 없어지고, 안의 정션이 가리키는 바깥 내용은 그대로", (inner, got("/api/collect/browser/forget"), folder.exists(), (outside / "keep.txt").exists()),
+              (0, {"ok": True}, False, True))
+        check("없으면 아무 일도 하지 않음", got("/api/collect/browser/forget"), {"ok": True})
+        made = subprocess.run(["cmd", "/c", "mklink", "/J", str(folder), str(outside)], capture_output=True).returncode
+        check("폴더가 정션이면 거부(가리키는 곳은 그대로)", (made, error("/api/collect/browser/forget").endswith("링크라서 지우지 않습니다."), (outside / "keep.txt").exists()), (0, True, True))
+        os.rmdir(folder)
+    finally:
+        for name, value in real.items():
+            setattr(collect_browser, name, value)
+        collect_browser.child["busy"] = False
+        api.http.shutdown()
+
+
 def memory_section(c, got, duck):
     """데이터 라이브러리 지연 로딩과 DuckDB 파일 조회의 작업 메모리 상한."""
     print("== 지연 로딩·메모리 상한")
@@ -1700,6 +1950,7 @@ def main():
     check("within: 두고 온 일의 늦은 결과는 drop으로 가고 그 스레드는 끝남", (late, thread.is_alive()), (["늦은 결과"], False))
     notify_section(c, got)
     collect_section(c, got)
+    web_section(c, got)
     memory_section(c, got, duck)
     sqlite_section(c, got)
     prep_section()

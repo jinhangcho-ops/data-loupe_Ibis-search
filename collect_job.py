@@ -20,6 +20,7 @@ from lazy import ibis
 import collect_http
 import collect_limits
 import collect_request as req
+import collect_web
 import scratch
 import server
 import settings
@@ -40,13 +41,19 @@ DEFAULT = {
     "balance": {"concurrency": 2, "interval": 1.0, "retries": 5, "timeout": 30},
     "file": {"url": "", "headers": [], "chunks": 4, "kind": "auto", "encoding": "auto"},
     "output": {"format": "parquet", "path": "", "dedupe": []},
+    # 웹페이지: 주소({page}·{today}·{now}), 항목 선택자, 컬럼 [{name, selector(항목 안 상대, ""는 항목 자체), attr("text" 또는 속성 이름)}],
+    # 쪽 넘기기(none·next·url·scroll), 항목을 기다리는 최대 초, robots.txt 지키기, 실행 중 창 보이기
+    "web": {"url": "", "items": "", "fields": [], "paging": {"kind": "none", "next": "", "start": 1, "max_pages": 100}, "wait": 10, "robots": True, "show": True},
     "plain": [],  # 비밀 같은 이름이지만 사용자가 비밀이 아니라고 한 이름들(collect_request.literal_places)
 }
-CHOICES = {("mode",): ("api", "file"), ("request", "body_kind"): req.BODY_KINDS, ("paging", "kind"): ("none", "page", "offset", "cursor", "next_url"),
+CHOICES = {("mode",): ("api", "file", "web"), ("web", "paging", "kind"): ("none", "next", "url", "scroll"), ("request", "body_kind"): req.BODY_KINDS, ("paging", "kind"): ("none", "page", "offset", "cursor", "next_url"),
            ("file", "kind"): ("auto", "csv", "parquet", "json"), ("file", "encoding"): ("auto", "utf-8", "cp949"), ("output", "format"): ("parquet", "csv")}
 NUMBERS = {("paging", "start"): (int, -10**12, 10**12), ("paging", "step"): (int, 1, 10**9), ("paging", "max_pages"): (int, 1, 1_000_000),
            ("balance", "concurrency"): (int, 1, 32), ("balance", "interval"): (float, 0, 3600), ("balance", "retries"): (int, 0, 20),
-           ("balance", "timeout"): (float, 1, 600), ("file", "chunks"): (int, 1, 16)}
+           ("balance", "timeout"): (float, 1, 600), ("file", "chunks"): (int, 1, 16),
+           ("web", "paging", "start"): (int, -10**12, 10**12), ("web", "paging", "max_pages"): (int, 1, 1_000_000), ("web", "wait"): (float, 1, 120)}
+MAX_FIELDS = 200  # 웹페이지 컬럼 수
+FIELD_ATTR = re.compile(r"text|[A-Za-z_:][-A-Za-z0-9_:.]{0,99}")  # 컬럼의 attr: text 또는 속성 이름
 PHASES = ("대기", "받는 중", "쉬는 중", "바꾸는 중", "끝", "멈춤", "실패")
 
 status = {"running": False, "phase": "대기", "mode": "", "pages": 0, "requests": 0, "rows": 0, "bytes": 0, "total_bytes": None, "failures": 0,
@@ -63,30 +70,23 @@ def normalize(config):
         raise ValueError("구성이 올바르지 않습니다.")
     if config.get("version", VERSION) != VERSION:
         raise ValueError(f"구성의 version은 {VERSION}이어야 합니다.")
-    unknown = [k for k in config if k not in DEFAULT]
-    found = {}
-    for key, default in DEFAULT.items():
-        given = config.get(key, default)
-        if isinstance(default, dict):
-            if not isinstance(given, dict):
-                raise ValueError(f"구성의 {key}가 올바르지 않습니다.")
-            unknown += [f"{key}.{k}" for k in given if k not in default]
-            given = {**default, **given}
-        found[key] = given
+    unknown = []
+    found = merged(DEFAULT, config, "", unknown)
     if unknown:
         raise ValueError(f"구성에 쓸 수 없는 값이 있습니다: {', '.join(unknown)}")
     texts = [("env_path",), ("limit_group",), ("request", "method"), ("request", "url"), ("request", "body"), ("response", "records"),
-             ("paging", "cursor_path"), ("paging", "next_path"), ("paging", "total_path"), ("file", "url"), ("output", "path")]
+             ("paging", "cursor_path"), ("paging", "next_path"), ("paging", "total_path"), ("file", "url"), ("output", "path"),
+             ("web", "url"), ("web", "items"), ("web", "paging", "next")]
     for where in texts:
         if not isinstance(at(found, where), str):
             raise ValueError(f"구성의 {'.'.join(where)}는 글자여야 합니다.")
     for where, options in CHOICES.items():
         if at(found, where) not in options:
             raise ValueError(f"구성의 {'.'.join(where)}는 {', '.join(options)} 중 하나입니다.")
-    for (section, key), (kind, low, high) in NUMBERS.items():
-        value = found[section][key]
+    for where, (kind, low, high) in NUMBERS.items():
+        value = at(found, where)
         if type(value) not in ((int,) if kind is int else (int, float)) or not low <= value <= high:
-            raise ValueError(f"구성의 {section}.{key}는 {low}~{high}의 {'정수' if kind is int else '수'}여야 합니다.")
+            raise ValueError(f"구성의 {'.'.join(where)}는 {low}~{high}의 {'정수' if kind is int else '수'}여야 합니다.")
     if not re.fullmatch(r"[A-Za-z]+", found["request"]["method"]):
         raise ValueError("요청 방식(method)은 영문자로 쓰세요(예: GET, POST).")
     found["request"]["method"] = found["request"]["method"].upper()
@@ -105,7 +105,33 @@ def normalize(config):
     dedupe = found["output"]["dedupe"]
     if not isinstance(dedupe, list) or not all(isinstance(c, str) and c for c in dedupe):
         raise ValueError("구성의 output.dedupe는 컬럼 이름 목록이어야 합니다.")
+    check_web(found["web"])
     return found
+
+
+def merged(default, given, where, unknown):
+    """given에 빠진 칸을 default로 채운 새 값(묶인 칸도 안까지). 모르는 칸의 이름은 unknown에 더한다."""
+    if not isinstance(given, dict):
+        raise ValueError(f"구성의 {where}가 올바르지 않습니다." if where else "구성이 올바르지 않습니다.")
+    unknown += [f"{where}.{k}" if where else k for k in given if k not in default]
+    return {key: merged(value, given.get(key, value), f"{where}.{key}" if where else key, unknown) if isinstance(value, dict) else given.get(key, value)
+            for key, value in default.items()}
+
+
+def check_web(web):
+    """웹페이지 칸 검사: 참거짓, 주소·선택자 길이, 컬럼 모양."""
+    for key in ("robots", "show"):
+        if type(web[key]) is not bool:
+            raise ValueError(f"구성의 web.{key}는 true·false여야 합니다.")
+    if max(len(web["url"]), len(web["items"]), len(web["paging"]["next"])) > 2000:
+        raise ValueError("웹페이지 주소·선택자는 2,000자까지입니다.")
+    fields = web["fields"]
+    if not isinstance(fields, list) or len(fields) > MAX_FIELDS or not all(
+            isinstance(f, dict) and set(f) == {"name", "selector", "attr"} and all(isinstance(f[k], str) for k in f) and f["name"].strip()
+            and len(f["name"]) <= 200 and len(f["selector"]) <= 2000 and FIELD_ATTR.fullmatch(f["attr"]) for f in fields):
+        raise ValueError(f'구성의 web.fields는 [{{"name", "selector", "attr"}}, …] 모양이어야 합니다(이름은 비우지 않음, attr은 text 또는 속성 이름, {MAX_FIELDS}개까지).')
+    if len({f["name"].lower() for f in fields}) != len(fields):
+        raise ValueError("컬럼 이름이 겹칩니다(대소문자 무시).")
 
 
 def at(config, where):
@@ -118,9 +144,11 @@ def at(config, where):
 def ready(config, output=True):
     """시험·시작 전 검사. (설정, env 값들). 비밀처럼 보이는 자리에 남은 글자 그대로의 값과 env 파일에 없는 이름은 거부한다."""
     config = normalize(config)
-    target = config["request"]["url"] if config["mode"] == "api" else config["file"]["url"]
+    target = {"api": config["request"]["url"], "file": config["file"]["url"], "web": config["web"]["url"]}[config["mode"]]
     if not target.strip():
         raise ValueError("주소를 입력하세요.")
+    if config["mode"] == "web":
+        collect_web.ready(config["web"])
     check_literals(config)
     if output and not config["output"]["path"].strip():
         raise ValueError("결과 파일 경로를 고르세요.")
@@ -157,8 +185,11 @@ def digest(config):
     if config["mode"] == "api":
         paging = {k: v for k, v in config["paging"].items() if k != "max_pages"}
         key = {"mode": "api", "request": config["request"], "response": config["response"], "paging": paging}
-    else:
+    elif config["mode"] == "file":
         key = {"mode": "file", "url": config["file"]["url"], "headers": config["file"]["headers"]}
+    else:  # 웹페이지: 최대 쪽 수·기다리기·robots·보이기는 받은 내용을 바꾸지 않는다.
+        web = config["web"]
+        key = {"mode": "web", "url": web["url"], "items": web["items"], "fields": web["fields"], "paging": {k: v for k, v in web["paging"].items() if k != "max_pages"}}
     return hashlib.sha256(json.dumps(key, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
@@ -272,7 +303,7 @@ def start(config):
         write_record(found["record"], record)
     halt = threading.Event()
     current.update(halt=halt, balancer=None, hide=req.hidden(env))
-    update(running=True, phase="받는 중", mode=config["mode"], pages=len(record["done"]) if config["mode"] == "api" else 0, requests=0,
+    update(running=True, phase="받는 중", mode=config["mode"], pages=len(record["done"]) if config["mode"] != "file" else 0, requests=0,
            rows=record.get("rows", 0), bytes=record.get("bytes", 0), total_bytes=record.get("size"), failures=0, concurrency=0, wait="",
            message="이어 받습니다." if resumed else "", error="", output="", started=time.time(), elapsed=0.0, group=group)
     thread = threading.Thread(target=work, args=(config, env, path, found, record, halt), daemon=True)
@@ -283,7 +314,7 @@ def start(config):
 
 def work(config, env, path, found, record, halt):
     try:
-        (run_api if config["mode"] == "api" else run_file)(config, env, path, found, record, halt)
+        {"api": run_api, "file": run_file, "web": collect_web.run_web}[config["mode"]](config, env, path, found, record, halt)
         update(phase="끝", output=str(path) if path.exists() else "", wait="")
     except Halt as e:
         update(phase="실패" if e.failed else "멈춤", **({"error": str(e)} if e.failed else {"message": str(e)}), wait="")
@@ -406,6 +437,43 @@ def link_next(reply):
     return None
 
 
+def save_page(found, record, i, rows, size, **more):
+    """쪽 하나(행 {컬럼: 값}들)를 .part 폴더에 쓰고 진행 기록에 더한다. 처음 보는 컬럼은 기록하고 값 종류를 모은다."""
+    lines = []
+    with guard:
+        for n, row in enumerate(rows):
+            out = {}
+            for name, value in row.items():
+                name = record["rename"].get(name, name)
+                if name not in record["kinds"]:
+                    taken = {c.lower() for c in record["columns"]}
+                    if name.lower() in taken or name == ORDER:  # DuckDB 컬럼 이름은 대소문자를 가리지 않는다.
+                        k = 2
+                        while f"{name}_{k}".lower() in taken:
+                            k += 1
+                        record["rename"][name], name = f"{name}_{k}", f"{name}_{k}"
+                    record["columns"].append(name)
+                    record["kinds"][name] = []
+                kind = req.kind_of(value)
+                if kind and kind not in record["kinds"][name]:
+                    record["kinds"][name].append(kind)
+                out[name] = value
+            out[ORDER] = i * 10**7 + n
+            lines.append(json.dumps(out, ensure_ascii=False))
+    if lines:
+        file = found["part"] / f"{i:07d}.jsonl"
+        temp = file.with_name(file.name + ".tmp")
+        temp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        os.replace(temp, file)
+    with guard:
+        record["done"].append(i)
+        record["rows"] += len(rows)
+        record["bytes"] += size
+        record.update(more)
+        write_record(found["record"], record)
+        status.update(pages=len(record["done"]), rows=record["rows"], bytes=record["bytes"])
+
+
 def run_api(config, env, path, found, record, halt):
     paging, response = config["paging"], config["response"]
     found["part"].mkdir(exist_ok=True)
@@ -426,42 +494,6 @@ def run_api(config, env, path, found, record, halt):
         if not there and not record["done"]:
             raise Halt(f"기록 경로 '{response['records']}'를 응답에서 찾지 못했습니다.")
         return data, rows, reply
-
-    def keep(i, rows, size, **more):
-        """쪽 하나를 디스크에 쓰고 진행 기록에 더한다."""
-        lines = []
-        with guard:
-            for n, row in enumerate(rows):
-                out = {}
-                for name, value in row.items():
-                    name = record["rename"].get(name, name)
-                    if name not in record["kinds"]:
-                        taken = {c.lower() for c in record["columns"]}
-                        if name.lower() in taken or name == ORDER:  # DuckDB 컬럼 이름은 대소문자를 가리지 않는다.
-                            k = 2
-                            while f"{name}_{k}".lower() in taken:
-                                k += 1
-                            record["rename"][name], name = f"{name}_{k}", f"{name}_{k}"
-                        record["columns"].append(name)
-                        record["kinds"][name] = []
-                    kind = req.kind_of(value)
-                    if kind and kind not in record["kinds"][name]:
-                        record["kinds"][name].append(kind)
-                    out[name] = value
-                out[ORDER] = i * 10**7 + n
-                lines.append(json.dumps(out, ensure_ascii=False))
-        if lines:
-            file = found["part"] / f"{i:07d}.jsonl"
-            temp = file.with_name(file.name + ".tmp")
-            temp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-            os.replace(temp, file)
-        with guard:
-            record["done"].append(i)
-            record["rows"] += len(rows)
-            record["bytes"] += size
-            record.update(more)
-            write_record(found["record"], record)
-            status.update(pages=len(record["done"]), rows=record["rows"], bytes=record["bytes"])
 
     def note_first(data, rows):
         if "first" not in record:
@@ -488,7 +520,7 @@ def run_api(config, env, path, found, record, halt):
                     if not rows:  # 빈 쪽: 이 번호부터는 요청하지 않는다.
                         with guard:
                             record["end"] = i if record.get("end") is None else min(record["end"], i)
-                    keep(i, rows, len(reply.body))
+                    save_page(found, record, i, rows, len(reply.body))
             except Exception as e:
                 errors.append(e)
                 quit.set()
@@ -501,7 +533,7 @@ def run_api(config, env, path, found, record, halt):
                 note_first(data, rows)
                 if not rows:
                     record["end"] = 0
-            keep(i, rows, len(reply.body))
+            save_page(found, record, i, rows, len(reply.body))
         threads = [threading.Thread(target=worker, daemon=True) for _ in range(max(1, balancer.limit))]
         for t in threads:
             t.start()
@@ -536,7 +568,7 @@ def run_api(config, env, path, found, record, halt):
             end = end or (total is not None and record["rows"] + len(rows) >= total)
             if nxt is not None:
                 seen.add(nxt)
-            keep(i, rows, len(reply.body), seen=sorted(seen), finished=end, **more)
+            save_page(found, record, i, rows, len(reply.body), seen=sorted(seen), finished=end, **more)
             if end:
                 break
             cursor, url, i = more.get("cursor") or "", more.get("next"), i + 1
@@ -872,7 +904,10 @@ def estimate(config):
     config = normalize(config)
     record = resumable(config)
     paging = config["paging"]
-    if config["mode"] == "file":
+    if config["mode"] == "web":  # 쪽 하나를 여는 것이 요청 하나. 다음 버튼·스크롤은 이어 받을 때도 처음부터 다시 넘긴다.
+        web = config["web"]["paging"]
+        requests = 1 if web["kind"] == "none" else web["max_pages"]
+    elif config["mode"] == "file":
         requests = None
     elif paging["kind"] == "none":
         requests = 1
@@ -880,10 +915,13 @@ def estimate(config):
         requests = page_cap(config, record or {})
     else:  # cursor·next_url은 받아 보기 전에는 모른다.
         requests = None
-    if requests is not None and record:
+    if requests is not None and record and not (config["mode"] == "web" and config["web"]["paging"]["kind"] in ("next", "scroll")):
         requests = max(0, requests - len([i for i in record["done"] if i < requests]))
     usage = collect_limits.usage(config["limit_group"]) if config["limit_group"] else None
     resume = None
     if record:
-        resume = {"pages": len(record["done"]) if config["mode"] == "api" else 0, "bytes": record.get("bytes", 0)}
-    return {"requests": requests, "day_left": usage["day_left"] if usage else None, "resume": resume}
+        resume = {"pages": len(record["done"]) if config["mode"] != "file" else 0, "bytes": record.get("bytes", 0)}
+    found = {"requests": requests, "day_left": usage["day_left"] if usage else None, "resume": resume}
+    if config["mode"] == "web" and config["web"]["robots"] and config["web"]["url"].strip():
+        found["robots"] = collect_web.robots_text(config["web"])
+    return found

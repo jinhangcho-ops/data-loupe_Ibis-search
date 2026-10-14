@@ -4,9 +4,11 @@ from pathlib import Path
 
 from flask import jsonify, request
 
+import collect_browser
 import collect_job
 import collect_limits
 import collect_request
+import collect_web
 import server
 import settings
 import source
@@ -18,7 +20,8 @@ FILE_TYPES = {"parquet": ("Parquet (*.parquet)",), "csv": ("CSV (*.csv)",)}
 
 server.FREE.update({"/api/collect/parse", "/api/collect/secretize", "/api/collect/env", "/api/collect/try", "/api/collect/sample",
                     "/api/collect/estimate", "/api/collect/ask_path", "/api/collect/start", "/api/collect/stop", "/api/collect/status",
-                    "/api/collections", "/api/limits", "/api/limits/reset"})
+                    "/api/collections", "/api/limits", "/api/limits/reset", "/api/collect/browser/open", "/api/collect/browser/close",
+                    "/api/collect/browser/state", "/api/collect/browser/pick", "/api/collect/browser/forget", "/api/collect/web/sample"})
 
 
 @app.get("/collect")
@@ -47,6 +50,8 @@ def env_names():
 @app.post("/api/collect/try")
 def try_first():
     config, env = collect_job.ready(request.json.get("config"), output=False)
+    if config["mode"] == "web":
+        raise ValueError("웹페이지 모드는 [브라우저 열기]와 미리보기로 확인하세요.")
     try:
         return jsonify(collect_job.first_page(config, env))
     except Exception as e:  # 오류 문구에서 env 값을 가린다.
@@ -92,6 +97,47 @@ def stop():
 @app.get("/api/collect/status")
 def status():
     return jsonify(collect_job.snapshot())
+
+
+@app.post("/api/collect/browser/open")
+def browser_open():
+    """수집용 창을 띄우거나 그 주소로 옮긴다. 주소의 {page}는 start(없으면 1)로 채운다."""
+    start = request.json.get("start", 1)
+    if type(start) is not int:
+        raise ValueError("start는 정수여야 합니다.")
+    url = request.json.get("url")
+    if not isinstance(url, str) or collect_request.env_names({"url": url}):
+        raise ValueError("http:// 또는 https:// 주소만 열 수 있습니다({env:…}는 쓸 수 없습니다).")
+    collect_browser.open_page(collect_browser.web_url(collect_web.page_url({"url": url, "paging": {"start": start}}, 0)))
+    return jsonify(ok=True)
+
+
+@app.post("/api/collect/browser/close")
+def browser_close():
+    collect_browser.close()
+    return jsonify(ok=True)
+
+
+@app.get("/api/collect/browser/state")
+def browser_state():
+    return jsonify(collect_browser.state())
+
+
+@app.post("/api/collect/browser/pick")
+def browser_pick():
+    collect_browser.pick(request.json.get("target"), request.json.get("items") or "")
+    return jsonify(ok=True)
+
+
+@app.post("/api/collect/browser/forget")
+def browser_forget():
+    collect_browser.forget()
+    return jsonify(ok=True)
+
+
+@app.post("/api/collect/web/sample")
+def web_sample():
+    return jsonify(collect_web.sample(request.json.get("config")))
 
 
 @app.post("/api/collect/open")

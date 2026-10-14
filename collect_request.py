@@ -376,13 +376,14 @@ def literal_places(config):
     """설정에서 비밀처럼 보이는 자리에 글자 그대로 남은 값의 위치 이름들(값은 넣지 않는다).
     config["plain"]에 든 이름(대소문자 무시)은 사용자가 비밀이 아니라고 한 것이라 뺀다. 단 Authorization·Cookie 같은 헤더와 주소의 비밀번호는 늘 비밀이다."""
     label = {"header": "헤더", "query": "쿼리", "body": "본문"}
-    request, file = config.get("request") or {}, config.get("file") or {}
+    request, file, web = config.get("request") or {}, config.get("file") or {}, config.get("web") or {}
     plain = {n.lower() for n in config.get("plain", [])}
     always = lambda where, name: name == "password" and where == "url" or name.lower() in SECRET_HEADERS
     found = [(s["where"], s["name"], ("주소의 비밀번호" if s["name"] == "password" else f"주소의 {s['name']}") if s["where"] == "url"
               else f"{label[s['where']]} {s['path'] or s['name']}") for s in secrets(request)]
     found += [("url", n, f"파일 주소의 {'비밀번호' if n == 'password' else n}") for _, n in url_secrets(file.get("url", ""))]
-    found += [("header", k, f"파일 헤더 {k}") for k, v in file.get("headers", []) if (k.lower() in SECRET_HEADERS or secret_name(k)) and literal(v)]
+    found += [("url", n, f"웹페이지 주소의 {'비밀번호' if n == 'password' else n}") for _, n in url_secrets(web.get("url", ""))]
+    found += [("header", k, f"파일 헤더 {k}")for k, v in file.get("headers", []) if (k.lower() in SECRET_HEADERS or secret_name(k)) and literal(v)]
     return [text for where, name, text in found if always(where, name) or name.lower() not in plain]
 
 
