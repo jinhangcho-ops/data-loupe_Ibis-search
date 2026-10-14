@@ -2,18 +2,16 @@
 import json
 import re
 import secrets
-import shutil
-import tempfile
 import threading
 from pathlib import Path
 
-import ibis
+from lazy import ibis
 from flask import Flask, Response, abort, current_app, g, jsonify, request
-from ibis.common.exceptions import OperationNotDefinedError, UnsupportedOperationError
 from werkzeug.exceptions import HTTPException
 
 import monitor
 import result
+import scratch
 import settings
 import source
 
@@ -53,9 +51,12 @@ def run(work, drop=lambda value: None):
 def on_error(e):
     if isinstance(e, HTTPException):  # 404, 405, 잘못된 JSON 등은 원래 상태 코드로
         return jsonify(error=e.description), e.code
-    if isinstance(e, (OperationNotDefinedError, UnsupportedOperationError)):  # 연결(백엔드)이 하지 못하는 계산
+    if isinstance(e, source.unsupported_errors()):  # 연결(백엔드)이 하지 못하는 계산
         return jsonify(error=f"이 연결에서는 지원하지 않는 계산입니다. ({e})"), 400
-    return jsonify(error=source.mask(str(e), state["passwords"])), 400
+    message = source.mask(str(e), state["passwords"])
+    if "out of memory" in message.lower():
+        message = "메모리가 모자랍니다. 작업 메모리 상한을 올리거나 조건을 좁히세요. " + message
+    return jsonify(error=message), 400
 
 
 @app.before_request
@@ -117,17 +118,17 @@ def rowcount():
 def download(expr, fmt, guard=True):
     """expr의 전체 행을 fmt(parquet, csv, xlsx) 파일로 임시 폴더에 만들어 조금씩 내려보내고, 다 보내면 지운다.
     guard가 False면 CSV·Excel의 수식 막기를 하지 않는다."""
-    folder = tempfile.mkdtemp()
+    folder = scratch.make()
     path = Path(folder, "result." + fmt)
 
     def write():
         try:
             result.export(expr, path, guard)
         except Exception:
-            shutil.rmtree(folder, ignore_errors=True)
+            scratch.remove(folder)
             raise
 
-    run(write, lambda done: shutil.rmtree(folder, ignore_errors=True))  # 그만둔 뒤에 늦게 다 만든 파일도 지운다.
+    run(write, lambda done: scratch.remove(folder))  # 그만둔 뒤에 늦게 다 만든 파일도 지운다.
 
     bom = b"\xef\xbb\xbf" if path.suffix == ".csv" else b""  # Excel이 CSV의 한글을 바로 읽도록 맨 앞에 붙인다.
 
@@ -137,7 +138,7 @@ def download(expr, fmt, guard=True):
             with open(path, "rb") as f:
                 yield from iter(lambda: f.read(1 << 20), b"")
         finally:
-            shutil.rmtree(folder, ignore_errors=True)
+            scratch.remove(folder)
 
     headers = {"Content-Disposition": f"attachment; filename={path.name}", "Content-Length": path.stat().st_size + len(bom)}
     return Response(stream(), mimetype="application/octet-stream", headers=headers)
@@ -170,7 +171,7 @@ def open_con(info, read_only=True):
             return source.open_flat_files(chosen)
         if not info.get("file"):
             raise ValueError("파일을 고르세요.")
-        return source.open_duckdb(info["file"], read_only)
+        return source.open_duckdb(info["file"], read_only, settings.load().get("memory"))
     return source.open_url(info["url"], info.get("user", ""), info.get("password", ""))
 
 

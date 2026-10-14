@@ -1,6 +1,6 @@
 """전처리: recipe(테이블, 행 거르기, 컬럼 복사, 컬럼별 일, 파생 컬럼 빼기, 중복 제거, downcast, 정렬)를 Ibis 식 하나로 만든다.
 컬럼 하나에 하는 일은 prep_ops.py의 OPS 표에 있다."""
-import ibis
+from lazy import ibis
 
 import parse
 import prep_ops

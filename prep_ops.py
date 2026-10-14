@@ -4,10 +4,10 @@ import functools
 import operator
 import re
 
-import ibis
-from ibis.common.exceptions import OperationNotDefinedError, UnsupportedOperationError
+from lazy import ibis
 
 import parse
+import source
 
 TYPE_TO = {"int": "int64", "float": "float64", "string": "string", "date": "date"}
 FLOAT_SHAPE = r"^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$"  # 12, -1.5, .5, 1e5. inf·nan은 숫자로 보지 않는다.
@@ -298,7 +298,7 @@ def counts(t, name, arg):
     row = counts_in_row(t[name], sep)
     try:
         t.get_backend().compile(t.select(row))
-    except (OperationNotDefinedError, UnsupportedOperationError):
+    except source.unsupported_errors():
         return counts_by_table(t, name, new, sep)
     return t.mutate(**{new: row})
 

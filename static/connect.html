@@ -10,6 +10,7 @@
     <div class="row"><button class="ghost" id="flat-all">모두 선택</button><button class="ghost" id="flat-none">모두 해제</button><span class="hint" id="flat-count"></span></div>
     <div class="cols" id="flat-list"></div>
   </div>
+  <div class="row" style="align-items:center" title="DuckDB 파일을 조회할 때 쓰는 메모리의 최대치. 너무 낮으면 큰 집계가 느려지거나 메모리 부족으로 실패할 수 있습니다. 다음 [연결]부터 적용됩니다."><span class="hint" style="margin:0; flex:none">작업 메모리 상한</span><select id="memory"><option value="0">제한 없음 (기본)</option><option value="1000">1GB</option><option value="2000">2GB</option><option value="4000">4GB</option><option value="8000">8GB</option><option value="custom">직접 입력</option></select><input id="memory-gb" type="number" step="any" placeholder="GB" class="hidden" style="width:80px; flex:none"></div>
 </div>
 <div id="url-box" class="hidden">
   <input id="url" placeholder="mssql://host:1433/db" style="margin-bottom:6px">

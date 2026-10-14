@@ -1,6 +1,6 @@
 """테이블의 모양(shape), 컬럼별 통계(profile)와 모양 검사가 필요 없는 추천, 글자 컬럼의 타입 추천(patterns).
 큰 테이블에서 느린 것(글자 수 세기, 모양 검사)은 앞 sample행으로 먼저 걸러 낸다."""
-import ibis
+from lazy import ibis
 
 import parse
 import result

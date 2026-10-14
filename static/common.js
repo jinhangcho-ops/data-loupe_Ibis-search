@@ -224,6 +224,20 @@ function showFlat() {
   $("flat-count").textContent = `${flatBoxes().filter(b => b.checked).length} / ${flatBoxes().length}개 선택`;
 }
 $("file").onchange = showFlat;
+// 작업 메모리 상한(MB, 0 = 제한 없음): 목록에 있는 값이거나 GB로 직접 넣은 값. 저장만 하고 다음 [연결]부터 서버가 쓴다.
+const memory = saved("memory") || "0";
+$("memory").value = [...$("memory").options].some(o => o.value === memory) ? memory : "custom";
+if ($("memory").value === "custom") $("memory-gb").value = memory / 1000;
+$("memory-gb").classList.toggle("hidden", $("memory").value !== "custom");
+$("memory").onchange = () => {
+  $("memory-gb").classList.toggle("hidden", $("memory").value !== "custom");
+  if ($("memory").value !== "custom") saveSetting({ memory: +$("memory").value });
+};
+$("memory-gb").onchange = () => {
+  const gb = Number($("memory-gb").value);
+  if (gb >= 0.256 && gb <= 1000) saveSetting({ memory: Math.round(gb * 1000) });
+  else connMsg("작업 메모리 상한은 0.256GB 이상 1000GB 이하로 넣으세요.");
+};
 $("flat-list").onchange = showFlat;
 $("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
 let connected = null;  // 지금 연결의 종류: "flat"(Parquet·CSV 파일), "other"(DuckDB 파일·DB 주소), 없으면 null

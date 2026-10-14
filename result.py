@@ -2,7 +2,7 @@
 from decimal import Decimal
 from pathlib import Path
 
-import ibis
+from lazy import ibis
 
 from parse import check_name, type_info
 

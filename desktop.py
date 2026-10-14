@@ -1,14 +1,18 @@
 """검색·전처리 화면을 프로그램 창으로 연다. exe의 실행 파일이자 유일한 실행 방법."""
 import threading
 
+import lazy  # noqa: F401  데이터 라이브러리를 처음 쓸 때 올린다(다른 프로젝트 모듈보다 먼저).
 import webview
 from werkzeug.serving import make_server
 
 import notify  # noqa: F401  보내기 라우트가 앱에 달린다.
 import prep_app  # noqa: F401  전처리 라우트가 앱에 달린다.
+import scratch
 import server
+import source
 from app import KEY, app
 
+scratch.sweep()  # 지난번에 강제 종료돼 남은 임시 폴더를 지운다.
 http = make_server("127.0.0.1", 0, app, threaded=True)  # 0: 비어 있는 포트를 자동으로 고른다. threaded: 조회 중에도 메모리·CPU 요청에 답한다.
 threading.Thread(target=http.serve_forever, daemon=True).start()
 
@@ -25,3 +29,5 @@ def ask_save(name):
 
 server.ask_save = ask_save
 webview.start()  # 창을 닫으면 여기서 끝나고, 서버 스레드도 함께 종료된다.
+if server.state["con"] is not None:  # 열어 둔 연결을 닫아 파일을 놓고 임시 폴더를 지운다.
+    source.close(server.state["con"])

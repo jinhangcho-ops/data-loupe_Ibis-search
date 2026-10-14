@@ -7,9 +7,10 @@ import threading
 from pathlib import Path
 from urllib.parse import quote_plus, unquote, urlsplit
 
-import ibis
+from lazy import ibis
 
 import drivers
+import scratch
 
 STOP_WAIT = 2  # 멈추라고 알린 일이 실제로 끝나기를 기다리는 시간(초).
 
@@ -92,8 +93,19 @@ def find_files(folder):
 
 
 @on_worker
-def open_duckdb(path, read_only=True):
-    return ibis.duckdb.connect(path, read_only=read_only)
+def open_duckdb(path, read_only=True, memory=None):
+    """DuckDB 파일을 연다. memory(MB, 정수)를 주면 작업 메모리 상한을 걸고 넘치는 것은 임시 폴더에 쓴다
+    (그 폴더는 close가 지운다). None이면 제한 없이(DuckDB 기본) 연다."""
+    if not memory:
+        return ibis.duckdb.connect(path, read_only=read_only)
+    folder = scratch.make()
+    try:
+        con = ibis.duckdb.connect(path, read_only=read_only, temp_directory=folder, memory_limit=f"{memory}MB")
+    except Exception:
+        scratch.remove(folder)
+        raise
+    con.scratch = folder
+    return con
 
 
 def table_names(paths):
@@ -147,6 +159,13 @@ def close(con):
         con.disconnect()
     except Exception:
         pass
+    if hasattr(con, "scratch"):  # open_duckdb가 만든 임시 폴더
+        scratch.remove(con.scratch)
+
+
+def unsupported_errors():
+    """연결(백엔드)이 하지 못하는 계산에서 Ibis가 내는 오류들."""
+    return ibis.common.exceptions.OperationNotDefinedError, ibis.common.exceptions.UnsupportedOperationError
 
 
 def interrupt(con):

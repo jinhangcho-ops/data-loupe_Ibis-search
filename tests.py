@@ -13,6 +13,7 @@ import random
 import re
 import math
 import shutil
+import subprocess
 import sqlite3
 import statistics
 import sys
@@ -34,6 +35,7 @@ sys.dont_write_bytecode = True  # 프로젝트 폴더에 __pycache__를 남기�
 import duckdb
 from flask import Flask
 import polars as pl
+import psutil
 
 import notify
 import prep_app
@@ -874,6 +876,64 @@ def notify_section(c, got):
     check("지우면 목록이 빔", c.get("/api/destinations").get_json()["destinations"], {})
 
 
+def memory_section(c, got, duck):
+    """데이터 라이브러리 지연 로딩과 DuckDB 파일 조회의 작업 메모리 상한."""
+    print("== 지연 로딩·메모리 상한")
+    error = lambda api, **body: got(api, **body).get("error", "")
+    code = """
+import json, sys
+sys.path.insert(0, sys.argv[1]); sys.dont_write_bytecode = True
+import lazy, server, app, prep_app, notify
+names = ("ibis", "polars", "duckdb", "pyarrow")
+is_lazy = lambda: {n: type(sys.modules[n]).__name__ == "_LazyModule" for n in names}
+out = {"imported": is_lazy()}
+c = server.app.test_client(); c.set_cookie("key", server.KEY)
+out["connect"] = c.post("/api/connect", json={"kind": "folder", "path": sys.argv[2], "files": [sys.argv[3]]}).get_json()
+out["parquet"] = is_lazy()
+print(json.dumps(out))
+"""
+    flat = PREP_FLAT / "messy.parquet"
+    found = subprocess.run([sys.executable, "-c", code, str(Path(__file__).parent), str(PREP_FLAT), str(flat)], capture_output=True, text=True, encoding="utf-8")
+    out = json.loads(found.stdout.strip().splitlines()[-1]) if found.returncode == 0 else {"error": found.stderr[-300:]}
+    check("프로젝트 모듈을 불러온 직후에는 ibis·polars·duckdb·pyarrow가 모두 지연 상태", out.get("imported"), dict.fromkeys(("ibis", "polars", "duckdb", "pyarrow"), True))
+    check("Parquet 연결 뒤: ibis·polars는 올라오고 duckdb는 여전히 지연 상태", (out.get("connect"), {n: out["parquet"][n] for n in ("ibis", "polars", "duckdb")}),
+          ({"schemas": []}, {"ibis": False, "polars": False, "duckdb": True}))
+
+    text = lambda con=None: (con or server.state["con"]).con.execute("select current_setting('memory_limit')").fetchone()[0]
+    text = lambda con=None: (con or server.state["con"]).con.execute("select current_setting('memory_limit')").fetchone()[0]
+    limit = lambda con=None: round(float(text(con).split()[0]) * {"KiB": 2**10, "MiB": 2**20, "GiB": 2**30}[text(con).split()[1]] / 1e9, 1)  # DuckDB의 MB·GB는 10^6·10^9 바이트
+    connect = lambda: got("/api/connect", kind="folder", path=str(DATA), file=duck)
+    check("memory 설정(MB): 256~1,000,000의 정수만", [error("/api/settings", memory=v)[:15] for v in (255, 1_000_001, "2", 1500.0)], ["'memory' 설정에 쓸 수"[:15]] * 4)
+    check("옛 값(글자 \"2\", 비율 \"50\")이 저장돼 있어도 읽을 때 버려짐", (settings.write("settings.json", {"memory": "2", "theme": "dark"}), settings.load()), (None, {"theme": "dark"}))
+    got("/api/settings", memory=0)
+    connect()
+    check("memory 0: 제한 없음(임시 폴더 없음)", hasattr(server.state["con"], "scratch"), False)
+    got("/api/settings", memory=1500)
+    connect()
+    first = server.state["con"].scratch
+    check("memory 1500: 상한이 1.5GB이고 임시 폴더를 씀", (abs(limit() - 1.5) < 0.15, os.path.isdir(first)), (True, True))
+    got("/api/settings", memory=4000)
+    connect()
+    check("연결을 바꾸면 이전 연결의 임시 폴더를 지움", (os.path.exists(first), abs(limit() - 4.0) < 0.15, os.path.isdir(server.state["con"].scratch)), (False, True, True))
+    scratch = server.state["con"].scratch
+    got("/api/disconnect")
+    check("연결을 끊으면 임시 폴더를 지움", os.path.exists(scratch), False)
+    con = source.open_duckdb(duck, False, 1500)  # 새 테이블을 만들 때처럼 쓰기로 열어도 같은 상한
+    writable = (abs(limit(con) - 1.5) < 0.15, os.path.isdir(con.scratch))
+    source.close(con)
+    check("쓰기로 여는 길도 같은 상한, 닫으면 임시 폴더를 지움", (writable, os.path.exists(con.scratch)), ((True, True), False))
+    got("/api/connect", kind="folder", path=str(PREP_FLAT), files=[str(flat)])
+    check("Parquet 연결에는 적용하지 않음", hasattr(server.state["con"], "scratch"), False)
+    got("/api/connect", kind="url", url=f"duckdb://{duck}")
+    check("주소 연결에는 적용하지 않음", hasattr(server.state["con"], "scratch"), False)
+    got("/api/settings", memory=0)
+    got("/api/disconnect")
+    with app.test_request_context():
+        found = [server.on_error(Exception(text))[0].get_json()["error"] for text in ("Out of Memory Error: failed to allocate", "OUT OF MEMORY", "다른 오류")]
+    check("메모리 부족 오류에는 안내 문구가 붙음", found, ["메모리가 모자랍니다. 작업 메모리 상한을 올리거나 조건을 좁히세요. Out of Memory Error: failed to allocate",
+          "메모리가 모자랍니다. 작업 메모리 상한을 올리거나 조건을 좁히세요. OUT OF MEMORY", "다른 오류"])
+
+
 def sqlite_section(c, got):
     """SQLite 주소 연결. 이 연결은 만든 스레드에서만 쓸 수 있어, 연결을 쓰는 일이 모두 한 스레드에서 도는지 여기서 드러난다."""
     print("== SQLite 주소 연결")
@@ -1133,6 +1193,7 @@ def main():
     thread.join(2)
     check("within: 두고 온 일의 늦은 결과는 drop으로 가고 그 스레드는 끝남", (late, thread.is_alive()), (["늦은 결과"], False))
     notify_section(c, got)
+    memory_section(c, got, duck)
     sqlite_section(c, got)
     prep_section()
     numbers_section()
@@ -1146,6 +1207,47 @@ except Exception as e:  # 확인 도중 멈춰도 정리하고 실패로 끝낸�
 finally:
     if state["con"] is not None:
         source.close(state["con"])
+    print("== 임시 폴더")
+    import scratch as temp
+    temp.ROOT = ROOT / "scratch"  # 실제 임시 폴더를 건드리지 않게 검사용 폴더로 바꾼다.
+    mine = Path(temp.make())
+    gone = subprocess.Popen([sys.executable, "-c", "pass"])  # 이미 끝난 프로세스의 번호
+    gone.wait()
+
+    def folder(name, mark=None):
+        made = temp.ROOT / name
+        made.mkdir()
+        (made / "data.tmp").write_text("x", encoding="utf-8")
+        if mark is not None:
+            (made / temp.MARK).write_text(mark, encoding="ascii")
+        return made
+
+    dead = f"{gone.pid} 1.0"
+    left = folder(f"{gone.pid}_abcdefgh", dead)
+    kept = {
+        "표식이 없는 폴더": folder(f"{gone.pid}_nomark00"),
+        "이름이 모양과 다른 폴더": folder(f"x{gone.pid}_abcdefgh", dead),
+        "이름과 표식의 번호가 다른 폴더": folder(f"{gone.pid + 1}_abcdefgh", dead),
+        "표식이 깨진 폴더": folder(f"{gone.pid}_broken00", "여기는 표식이 아님".encode("utf-8").hex()[:9]),
+        "켜져 있는 프로세스의 폴더": mine,
+        "같은 번호지만 시작 시각이 같은(= 켜져 있는) 프로세스": folder(f"{os.getpid()}_sametime", f"{os.getpid()} {psutil.Process().create_time()}"),
+        "ROOT 안의 파일": temp.ROOT / f"{gone.pid}_fileonly",
+    }
+    kept["ROOT 안의 파일"].write_text("x", encoding="utf-8")
+    outside = ROOT / "outside"  # ROOT 밖의 폴더: 정션으로 가리켜도, 남은 폴더 안에서 가리켜도 지워지면 안 된다.
+    outside.mkdir()
+    (outside / "keep.txt").write_text("x", encoding="utf-8")
+    (outside / temp.MARK).write_text(dead, encoding="ascii")
+    link, inner = temp.ROOT / f"{gone.pid}_junction", left / "inner"
+    made = [subprocess.run(["cmd", "/c", "mklink", "/J", str(at), str(outside)], capture_output=True).returncode for at in (link, inner)]
+    reused = folder(f"{os.getpid()}_reusedid", f"{os.getpid()} 1.0")  # 번호는 살아 있지만 시작 시각이 다르면 번호를 다시 쓴 것
+    temp.sweep()
+    check("정션을 만들 수 있었음", made, [0, 0])
+    check("끝난 프로세스가 남긴 폴더만 지움(번호를 다시 쓴 경우 포함)", (left.exists(), reused.exists()), (False, False))
+    check("모르는 것은 모두 그대로 둠", {name: at.exists() for name, at in kept.items()}, {name: True for name in kept})
+    check("정션은 지우지 않고, 남은 폴더 안의 정션이 가리키는 ROOT 밖의 내용도 그대로", (os.path.isjunction(link), (outside / "keep.txt").exists()), (True, True))
+    check("만든 폴더는 ROOT 바로 아래에 있고 표식이 있음", (mine.parent == temp.ROOT, (mine / temp.MARK).read_text(encoding="ascii").split()[0]), (True, str(os.getpid())))
+    os.rmdir(link)
     shutil.rmtree(ROOT, ignore_errors=True)
 print(f"\n확인 {len(done)}개, 실패:", ", ".join(fails) or "없음")
 sys.exit(1 if fails else 0)
