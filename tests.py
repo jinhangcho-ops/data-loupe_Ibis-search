@@ -633,6 +633,7 @@ def prep_section():
         print("== 전처리:", tag)
         check(tag + " 연결", "schemas" in got("/api/connect", **connect), True)
         profile = got("/api/profile", base="messy")
+        check(tag + " profile: 오류 없음", profile.get("error"), None)
         check(tag + " profile: 행 수와 컬럼 순서", (profile["rows"], [c["name"] for c in profile["columns"]]), (20, columns))
         want = [
             stat("id", "int64", "int", 0, 20, 1, 20),

@@ -120,8 +120,9 @@ def release(con):
         return
     try:
         con.con.execute(f"set memory_limit='{FLOOR}'")
-    finally:
-        con.con.execute(restore)  # 보이는 값("1.3 GiB")은 반올림돼 있어, 연 때의 값으로 되돌린다.
+    except Exception:  # 쥔 것이 많아 낮추지 못하면 이번에는 비우지 않는다(쿼리 결과에는 영향이 없게).
+        pass
+    con.con.execute(restore)  # 보이는 값("1.3 GiB")은 반올림돼 있어, 연 때의 값으로 되돌린다.
 
 
 def table_names(paths):
