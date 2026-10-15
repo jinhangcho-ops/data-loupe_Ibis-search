@@ -9,6 +9,7 @@ import collect_job
 import collect_limits
 import collect_request
 import collect_web
+import load_app  # 적재 라우트가 앱에 달린다.
 import server
 import settings
 import source
@@ -85,7 +86,8 @@ def ask_path():
 
 @app.post("/api/collect/start")
 def start():
-    return jsonify(ok=True, resumed=collect_job.start(request.json.get("config")))
+    """secrets.password(적재할 곳의 비밀번호)는 작업 동안 메모리에만 두고 저장하지 않는다."""
+    return jsonify(ok=True, resumed=collect_job.start(request.json.get("config"), load_app.secrets_password(request.json)))
 
 
 @app.post("/api/collect/stop")

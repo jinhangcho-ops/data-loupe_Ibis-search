@@ -99,14 +99,19 @@ def dupes():
     return jsonify(run(lambda: prep.dupes(con, recipe)))
 
 
+def check_table_name(name, what="테이블"):
+    """새로 만들거나 넣을 테이블(스키마) 이름 검사. 적재(load_table)도 같은 규칙을 쓴다."""
+    if not isinstance(name, str) or not TABLE_NAME.fullmatch(name):
+        raise ValueError(f"{what} 이름은 영문·숫자·밑줄·한글만 쓸 수 있습니다(공백·따옴표·점 없이).")
+
+
 def make_table(recipe, name):
     """연결한 DB에 recipe의 결과를 새 테이블로 만들고 그 행 수를 돌려준다.
     폴더의 DuckDB 파일 연결은 읽기 전용이라 만드는 동안만 쓰기로 다시 열고, 끝나면 읽기 전용으로 되돌린다."""
     con, opened, schema = get_con(), state["opened"], recipe.get("schema") or None
     if "files" in opened:
         raise ValueError("Parquet·CSV 파일 연결에는 테이블을 만들 DB가 없습니다. 파일로 저장하세요.")
-    if not TABLE_NAME.fullmatch(name):
-        raise ValueError("테이블 이름은 영문·숫자·밑줄·한글만 쓸 수 있습니다(공백·따옴표·점 없이).")
+    check_table_name(name)
     if name.lower() in [t.lower() for t in source.list_tables(con, schema)]:
         raise ValueError(f"'{name}'은 이미 있는 테이블입니다.")
     reopen = opened["kind"] == "folder"

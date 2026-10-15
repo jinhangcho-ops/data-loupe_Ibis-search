@@ -21,6 +21,7 @@ import collect_http
 import collect_limits
 import collect_request as req
 import collect_web
+import load_job
 import scratch
 import server
 import settings
@@ -45,19 +46,27 @@ DEFAULT = {
     # 쪽 넘기기(none·next·url·scroll), 항목을 기다리는 최대 초, robots.txt 지키기, 실행 중 창 보이기
     "web": {"url": "", "items": "", "fields": [], "paging": {"kind": "none", "next": "", "start": 1, "max_pages": 100}, "wait": 10, "robots": True, "show": True},
     "plain": [],  # 비밀 같은 이름이지만 사용자가 비밀이 아니라고 한 이름들(collect_request.literal_places)
+    # 적재: 결과 파일을 그대로 둘지(file), DB 테이블이나 Kafka 토픽에 넣을지. 비밀번호 칸은 없다(시작할 때 따로 보내고 저장하지 않는다).
+    # 연결은 kind가 folder면 file(내 폴더의 DuckDB 파일), url이면 url·user. how: new·append·replace, key는 append에서 이미 있는 키를 건너뛸 컬럼들.
+    "load": {"target": "file", "table": {"connection": {"kind": "folder", "file": "", "url": "", "user": ""}, "schema": "", "name": "", "how": "new", "key": []},
+             "kafka": {"destination": "", "key": ""}, "unit": "batch", "batch": 10000, "interval": 0.0, "retries": 3},
 }
 CHOICES = {("mode",): ("api", "file", "web"), ("web", "paging", "kind"): ("none", "next", "url", "scroll"), ("request", "body_kind"): req.BODY_KINDS, ("paging", "kind"): ("none", "page", "offset", "cursor", "next_url"),
-           ("file", "kind"): ("auto", "csv", "parquet", "json"), ("file", "encoding"): ("auto", "utf-8", "cp949"), ("output", "format"): ("parquet", "csv")}
+           ("file", "kind"): ("auto", "csv", "parquet", "json"), ("file", "encoding"): ("auto", "utf-8", "cp949"), ("output", "format"): ("parquet", "csv"),
+           ("load", "target"): ("file", "table", "kafka"), ("load", "table", "connection", "kind"): ("folder", "url"), ("load", "table", "how"): ("new", "append", "replace"),
+           ("load", "unit"): ("batch", "single")}
 NUMBERS = {("paging", "start"): (int, -10**12, 10**12), ("paging", "step"): (int, 1, 10**9), ("paging", "max_pages"): (int, 1, 1_000_000),
            ("balance", "concurrency"): (int, 1, 32), ("balance", "interval"): (float, 0, 3600), ("balance", "retries"): (int, 0, 20),
            ("balance", "timeout"): (float, 1, 600), ("file", "chunks"): (int, 1, 16),
-           ("web", "paging", "start"): (int, -10**12, 10**12), ("web", "paging", "max_pages"): (int, 1, 1_000_000), ("web", "wait"): (float, 1, 120)}
+           ("web", "paging", "start"): (int, -10**12, 10**12), ("web", "paging", "max_pages"): (int, 1, 1_000_000), ("web", "wait"): (float, 1, 120),
+           ("load", "batch"): (int, 100, 1_000_000), ("load", "interval"): (float, 0, 3600), ("load", "retries"): (int, 0, 20)}
 MAX_FIELDS = 200  # 웹페이지 컬럼 수
 FIELD_ATTR = re.compile(r"text|[A-Za-z_:][-A-Za-z0-9_:.]{0,99}")  # 컬럼의 attr: text 또는 속성 이름
-PHASES = ("대기", "받는 중", "쉬는 중", "바꾸는 중", "끝", "멈춤", "실패")
+RUNNING = "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요."
+PHASES = ("대기", "받는 중", "쉬는 중", "바꾸는 중", "적재 중", "끝", "멈춤", "실패")
 
 status = {"running": False, "phase": "대기", "mode": "", "pages": 0, "requests": 0, "rows": 0, "bytes": 0, "total_bytes": None, "failures": 0,
-          "concurrency": 0, "wait": "", "message": "", "error": "", "output": "", "started": None, "elapsed": 0.0, "group": ""}
+          "concurrency": 0, "wait": "", "message": "", "error": "", "output": "", "started": None, "elapsed": 0.0, "group": "", "load": None}
 guard = threading.Lock()  # status와 진행 기록을 고칠 때
 current = {"thread": None, "halt": threading.Event(), "balancer": None, "hide": []}
 
@@ -73,6 +82,8 @@ def normalize(config):
     unknown = []
     found = merged(DEFAULT, config, "", unknown)
     if unknown:
+        if any(req.secret_name(name.rsplit(".", 1)[-1]) for name in unknown):
+            raise ValueError("비밀번호 같은 비밀 값은 구성에 넣지 않습니다(저장하지 않고 시작할 때 따로 입력합니다).")
         raise ValueError(f"구성에 쓸 수 없는 값이 있습니다: {', '.join(unknown)}")
     texts = [("env_path",), ("limit_group",), ("request", "method"), ("request", "url"), ("request", "body"), ("response", "records"),
              ("paging", "cursor_path"), ("paging", "next_path"), ("paging", "total_path"), ("file", "url"), ("output", "path"),
@@ -106,6 +117,7 @@ def normalize(config):
     if not isinstance(dedupe, list) or not all(isinstance(c, str) and c for c in dedupe):
         raise ValueError("구성의 output.dedupe는 컬럼 이름 목록이어야 합니다.")
     check_web(found["web"])
+    load_job.check(found["load"])
     return found
 
 
@@ -278,10 +290,10 @@ def stop(wait=0):
 
 # ---------- 시작 ----------
 
-def start(config):
-    """작업을 뒤에서 시작한다. (이어 받는지)"""
+def start(config, password=""):
+    """작업을 뒤에서 시작한다. (이어 받는지). password는 적재할 곳의 비밀번호로, 작업 동안 메모리에만 둔다."""
     if running():
-        raise ValueError("이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요.")
+        raise ValueError(RUNNING)
     config, env = ready(config)
     path = output_path(config)
     if not path.parent.is_dir():
@@ -293,6 +305,7 @@ def start(config):
         raise ValueError(collect_limits.broken_message())
     if shutil.disk_usage(path.parent).free < MIN_FREE:
         raise ValueError(f"디스크 공간이 모자랍니다(적어도 {MIN_FREE // 1024 // 1024}MB가 필요합니다).")
+    load_job.ready(config)
     found = parts(path)
     record = read_record(found["record"])
     resumed = bool(record and record.get("hash") == digest(config))
@@ -301,20 +314,46 @@ def start(config):
             clean(found)
         record = {"hash": digest(config), "mode": config["mode"], "done": [], "rows": 0, "bytes": 0}
         write_record(found["record"], record)
-    halt = threading.Event()
-    current.update(halt=halt, balancer=None, hide=req.hidden(env))
-    update(running=True, phase="받는 중", mode=config["mode"], pages=len(record["done"]) if config["mode"] != "file" else 0, requests=0,
-           rows=record.get("rows", 0), bytes=record.get("bytes", 0), total_bytes=record.get("size"), failures=0, concurrency=0, wait="",
-           message="이어 받습니다." if resumed else "", error="", output="", started=time.time(), elapsed=0.0, group=group)
-    thread = threading.Thread(target=work, args=(config, env, path, found, record, halt), daemon=True)
-    current["thread"] = thread
-    thread.start()
+    launch(config, env, path, found, record, password, pages=len(record["done"]) if config["mode"] != "file" else 0, rows=record.get("rows", 0),
+           bytes=record.get("bytes", 0), total_bytes=record.get("size"), message="이어 받습니다." if resumed else "", group=group)
     return resumed
 
 
-def work(config, env, path, found, record, halt):
+def start_load(config, password=""):
+    """이미 받은 결과 파일(output.path)을 다시 받지 않고 적재만 한다(적재가 실패한 뒤 다시 넣을 때)."""
+    if running():
+        raise ValueError(RUNNING)
+    config = normalize(config)
+    if config["load"]["target"] == "file":
+        raise ValueError("적재할 곳(DB 테이블 또는 Kafka)을 고르세요.")
+    if not config["output"]["path"].strip():
+        raise ValueError("결과 파일 경로를 고르세요.")
+    path = output_path(config)
+    if not path.is_file():
+        raise ValueError("적재할 결과 파일이 없습니다. 먼저 수집하세요.")
+    load_job.ready(config)
+    launch(config, {}, path, None, None, password, phase="적재 중", output=str(path))
+
+
+def launch(config, env, path, found, record, password, **shown):
+    """상태를 처음으로 돌리고(shown으로 고친 칸만 다르게) 작업 스레드를 띄운다."""
+    halt = threading.Event()
+    current.update(halt=halt, balancer=None, hide=req.hidden(env) + ([password] if password else []))
+    update(**{"running": True, "phase": "받는 중", "mode": config["mode"], "pages": 0, "requests": 0, "rows": 0, "bytes": 0, "total_bytes": None, "failures": 0,
+              "concurrency": 0, "wait": "", "message": "", "error": "", "output": "", "started": time.time(), "elapsed": 0.0, "group": "", "load": None, **shown})
+    thread = threading.Thread(target=work, args=(config, env, path, found, record, halt, password), daemon=True)
+    current["thread"] = thread
+    thread.start()
+
+
+def work(config, env, path, found, record, halt, password):
+    """받기(record가 None이면 건너뜀) → 결과 파일이 있고 적재할 곳이 있으면 적재. 적재가 실패해도 결과 파일은 남는다."""
     try:
-        {"api": run_api, "file": run_file, "web": collect_web.run_web}[config["mode"]](config, env, path, found, record, halt)
+        if record is not None:
+            {"api": run_api, "file": run_file, "web": collect_web.run_web}[config["mode"]](config, env, path, found, record, halt)
+        if config["load"]["target"] != "file" and path.exists():
+            update(phase="적재 중", output=str(path), wait="")
+            load_job.run(config, path, password, halt, update)
         update(phase="끝", output=str(path) if path.exists() else "", wait="")
     except Halt as e:
         update(phase="실패" if e.failed else "멈춤", **({"error": str(e)} if e.failed else {"message": str(e)}), wait="")
@@ -326,6 +365,7 @@ def work(config, env, path, found, record, halt):
             if balancer is not None:
                 status.update(requests=balancer.sent, failures=balancer.failures, concurrency=balancer.limit)
             status.update(running=False, elapsed=round(time.time() - status["started"], 1))
+        current["hide"] = []  # 비밀번호·env 값은 작업이 끝나면 버린다.
 
 
 def balancer_for(config, halt, concurrency):
@@ -924,4 +964,7 @@ def estimate(config):
     found = {"requests": requests, "day_left": usage["day_left"] if usage else None, "resume": resume}
     if config["mode"] == "web" and config["web"]["robots"] and config["web"]["url"].strip():
         found["robots"] = collect_web.robots_text(config["web"])
+    note = load_job.note_for(config, output_path(config) if config["output"]["path"].strip() else None)
+    if note:
+        found["load_note"] = note
     return found

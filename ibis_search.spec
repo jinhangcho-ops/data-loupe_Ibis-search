@@ -16,6 +16,8 @@ for name in BACKENDS:
     hidden += collect_submodules(f"ibis.backends.{name}")
 for module in DRIVER_MODULES + ["cryptography", "xlsxwriter"]:  # cryptography: Oracle 접속 암호화, xlsxwriter: Excel 저장
     hidden += collect_submodules(module)
+# Kafka 적재(load_kafka)는 함수 안에서 불러온다. librdkafka DLL(confluent_kafka.libs)은 PyInstaller가 delvewheel 폴더에서 찾아 넣는다.
+hidden += ["confluent_kafka", "confluent_kafka.cimpl"]
 
 a = Analysis(
     ["desktop.py"],

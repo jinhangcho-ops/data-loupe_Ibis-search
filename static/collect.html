@@ -234,18 +234,99 @@
     </section>
 
     <section class="card">
+      <h3>적재</h3>
+      <div class="tabs">
+        <label><input type="radio" name="ltarget" value="file" checked style="width:auto"> 파일만</label>
+        <label><input type="radio" name="ltarget" value="table" style="width:auto"> DB 테이블</label>
+        <label><input type="radio" name="ltarget" value="kafka" style="width:auto"> Kafka 토픽</label>
+      </div>
+      <div class="hint">결과 파일(7. 저장)은 늘 만듭니다. 적재는 저장한 결과 파일을 읽어 넣습니다.</div>
+      <div class="hint load-on hidden">비밀번호는 저장하지 않습니다. 적재할 때마다 입력하세요.</div>
+
+      <div id="ld-table" class="hidden">
+        <h2>연결</h2>
+        <div class="tabs" style="margin-bottom:6px">
+          <label><input type="radio" name="ldkind" value="folder" checked style="width:auto"> 내 폴더의 DB 파일</label>
+          <label><input type="radio" name="ldkind" value="url" style="width:auto"> DB 주소</label>
+        </div>
+        <input id="ld-file" class="code" placeholder="예: C:\work\warehouse.duckdb" style="margin-bottom:6px">
+        <div id="ld-url-box" class="hidden">
+          <input id="ld-url" class="code" placeholder="예: postgres://host:5432/db (비밀번호는 넣지 마세요)" style="margin-bottom:6px">
+          <div class="fields">
+            <label><div class="hint">아이디</div><input id="ld-user" autocomplete="off"></label>
+            <label><div class="hint">비밀번호 (저장 안 함)</div><input id="ld-pass" type="password" autocomplete="off"></label>
+          </div>
+        </div>
+        <h2>테이블</h2>
+        <div class="fields">
+          <label><div class="hint">스키마 (선택)</div><input id="ld-schema" placeholder="기본"></label>
+          <label><div class="hint">테이블 이름</div><input id="ld-name" placeholder="예: items"></label>
+          <label><div class="hint">넣는 방식</div><select id="ld-how"><option value="new">새 테이블</option><option value="append">덧붙이기</option><option value="replace">바꾸기</option></select></label>
+        </div>
+        <div class="hint" id="ld-how-hint"></div>
+        <div id="ld-key-box">
+          <div class="hint">이미 있는 키는 건너뛰기 (선택, 키 컬럼을 쉼표로 구분)</div>
+          <input id="ld-key" placeholder="예: id" style="margin-bottom:4px">
+          <div class="hint">키를 확인하는 조회가 DB에 나갑니다. DW는 요금이 생길 수 있습니다.</div>
+        </div>
+        <div class="row"><button id="ld-check" title="테이블이 있는지, 결과 파일과 컬럼이 맞는지 봅니다 (데이터는 넣지 않습니다)">확인</button></div>
+        <div class="hint" id="ld-check-msg"></div>
+        <div class="table-wrap" id="ld-cols"></div>
+      </div>
+
+      <div id="ld-kafka" class="hidden">
+        <h2>보낼 토픽</h2>
+        <div class="row"><select id="kf-saved" style="flex:1; min-width:0" title="적재할 Kafka 등록"></select><input id="kf-name" placeholder="새 이름"><button id="kf-save">저장</button><button id="kf-del" class="ghost">삭제</button></div>
+        <div class="hint">이름을 비우고 저장하면 고른 등록에 덮어씁니다. 비밀번호는 등록에 넣지 않습니다.</div>
+        <div class="hint">서버 주소 (쉼표로 구분)</div>
+        <input id="kf-servers" class="code" placeholder="예: host1:9092,host2:9092" style="margin-bottom:6px">
+        <div class="fields">
+          <label><div class="hint">토픽</div><input id="kf-topic" placeholder="예: items"></label>
+          <label><div class="hint">보안 방식</div><select id="kf-security"><option>PLAINTEXT</option><option>SSL</option><option>SASL_PLAINTEXT</option><option>SASL_SSL</option></select></label>
+          <label id="kf-mech-box"><div class="hint">SASL 방식</div><select id="kf-mech"><option>PLAIN</option><option>SCRAM-SHA-256</option><option>SCRAM-SHA-512</option></select></label>
+          <label id="kf-user-box"><div class="hint">아이디</div><input id="kf-user" autocomplete="off"></label>
+        </div>
+        <div id="kf-ca-box"><div class="hint">CA 인증서 파일 경로 (선택)</div><input id="kf-ca" class="code" placeholder="예: C:\certs\ca.pem" style="margin-bottom:6px"></div>
+        <div class="err" id="kf-msg"></div>
+        <div class="fields">
+          <label id="kf-pass-box"><div class="hint">비밀번호 (저장 안 함)</div><input id="kf-pass" type="password" autocomplete="off"></label>
+          <label><div class="hint">메시지 키 컬럼 (선택)</div><input id="kf-key" placeholder="예: id"></label>
+        </div>
+        <div class="row"><button id="kf-check" title="저장한 등록으로 접속만 해 봅니다 (메시지는 보내지 않습니다)">접속 확인</button></div>
+        <div class="hint" id="kf-check-msg"></div>
+      </div>
+
+      <div class="load-on hidden">
+        <h2>넣는 단위와 속도</h2>
+        <div class="fields">
+          <label><div class="hint">넣는 단위</div><select id="ld-unit"><option value="batch">묶음</option><option value="single">한 건씩</option></select></label>
+          <label id="ld-batch-box"><div class="hint">묶음 행 수</div><input id="ld-batch" type="number" min="100" max="1000000"></label>
+          <label><div class="hint">간격(초)</div><input id="ld-gap" type="number" min="0" max="3600" step="any"></label>
+          <label><div class="hint">다시 시도</div><input id="ld-retry" type="number" min="0" max="20"></label>
+        </div>
+        <div class="hint">확정 직후 연결이 끊기면 그 묶음이 들어갔는지 알 수 없어, 다시 넣을 때 중복될 수 있습니다(키 건너뛰기를 쓰면 막을 수 있습니다).</div>
+      </div>
+    </section>
+
+    <section class="card">
       <div class="head"><h3>실행</h3><button id="estimate" class="ghost">예상 확인</button><button id="start">시작</button><button id="stop" class="ghost" disabled>멈추기</button></div>
       <div class="hint" id="est"></div>
       <div class="warn" id="est-warn"></div>
       <div class="hint" id="est-robots"></div>
       <div class="hint" id="est-resume"></div>
+      <div class="hint" id="est-load"></div>
       <div id="run-box" class="hidden">
         <div><b id="phase"></b></div>
         <div class="bar" id="bar"><div></div></div>
         <div class="hint" id="run-counts"></div>
         <div class="hint" id="run-note"></div>
+        <div class="hint" id="run-load"></div>
         <div class="hint usage" id="run-usage"></div>
         <div class="err" id="run-err"></div>
+        <div id="load-again-box" class="hidden">
+          <div class="row" style="margin-top:6px"><button id="load-again" title="받아 둔 결과 파일을 다시 받지 않고 적재만 합니다. 넣은 묶음 다음부터 이어 넣습니다">적재만 다시</button></div>
+          <div class="hint">비밀번호가 필요한 곳이면 적재 칸에 다시 입력한 뒤 누르세요.</div>
+        </div>
       </div>
       <div id="result" class="hidden">
         <div class="path" id="result-path"></div>
@@ -270,6 +351,8 @@ const DEFAULT = {
   file: { url: "", headers: [], chunks: 4, kind: "auto", encoding: "auto" },
   web: { url: "", items: "", fields: [], paging: { kind: "none", next: "", start: 1, max_pages: 100 }, wait: 10, robots: true, show: true },
   output: { format: "parquet", path: "", dedupe: [] },
+  load: { target: "file", table: { connection: { kind: "folder", file: "" }, schema: "", name: "", how: "new", key: [] },
+    kafka: { destination: "", key: "" }, unit: "batch", batch: 10000, interval: 0, retries: 3 },
 };
 const MODES = ["api", "file", "web"];
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"];
@@ -292,6 +375,7 @@ let limits = { groups: {}, usage: {} };
 let collections = {};
 let output = "";  // 끝난 수집의 결과 파일
 let running = false;  // 수집 작업이 도는 중인가(상태 폴링이 채운다)
+let kafka = {};  // Kafka 적재할 곳 등록(이름 → 등록). 비밀번호는 없다
 let fields = [];  // 웹페이지 컬럼 [{ name, selector, attr, text, attrs }]. text·attrs는 고를 때 본 값(미리보기용, 저장하지 않는다)
 
 const val = id => $(id).value.trim();
@@ -330,7 +414,12 @@ function problems() {
     if (wkind === "url") rules.push(["w-start", "첫 쪽 번호", 0, null, true]);
     if (wkind !== "none") rules.push(["w-max", "최대 쪽 수", 1, 1000000, true]);
     rules.push(["w-wait", "기다리기", 1, 120, false]);
-  } else {
+  }
+  if (loadTarget() !== "file") {
+    if ($("ld-unit").value === "batch") rules.push(["ld-batch", "묶음 행 수", 100, 1000000, true]);
+    rules.push(["ld-gap", "적재 간격", 0, 3600, false], ["ld-retry", "적재 다시 시도", 0, 20, true]);
+  }
+  if (!web && mode() !== "file") {
     if (kind === "page" || kind === "offset") rules.push(["p-start", kind === "page" ? "첫 쪽 번호" : "첫 offset", 0, null, true]);
     if (kind === "offset") rules.push(["p-step", "한 번에 늘릴 값", 1, null, true]);
     if (kind !== "none") rules.push(["p-max", "최대 쪽 수", 1, 1000000, true]);
@@ -595,7 +684,8 @@ $("try").onclick = () => busy($("try"), async () => {
 });
 
 // 중복 기준: 칸(쉼표로 구분)이 기준이고, 컬럼을 알면 체크 목록으로도 고른다.
-const dedupeNames = () => $("dd-text").value.split(",").map(s => s.trim()).filter(Boolean);
+const names = id => $(id).value.split(",").map(s => s.trim()).filter(Boolean);  // 쉼표로 구분한 컬럼 이름들(중복 기준·적재 키)
+const dedupeNames = () => names("dd-text");
 const knownCols = () => mode() === "file" ? [] : mode() === "web" ? webFields().map(f => f.name) : columns.length ? columns.map(c => c.name.trim() || c.path) : sampleCols;
 function showDedupe() {
   const now = dedupeNames();
@@ -785,6 +875,120 @@ $("lreset").onclick = () => twice($("lreset"), "사용 기록을 지웁니다. �
   try { showLimits(await api("/api/limits/reset", { name: $("lgroup").value })); say("limit-msg", "사용량을 초기화했습니다", true); } catch (e) { say("limit-msg", e.message); }
 });
 
+// 적재: 저장한 결과 파일을 DB 테이블이나 Kafka 토픽에 넣는다. 비밀번호는 칸에만 두고 config()·구성·등록 어디에도 넣지 않는다.
+// 시작·확인 요청에만 따로 실어 보내고, 시작한 뒤에는 칸을 비운다.
+const loadTarget = () => document.querySelector("input[name=ltarget]:checked").value;
+const loadKind = () => document.querySelector("input[name=ldkind]:checked").value;
+const sasl = () => $("kf-security").value.startsWith("SASL");
+const HOW_HINT = { new: "", append: "", replace: "이 프로그램이 만든 테이블만 바꿀 수 있습니다." };
+function showLoad() {
+  const t = loadTarget(), url = loadKind() === "url", show = (id, on) => $(id).classList.toggle("hidden", !on);
+  document.querySelectorAll(".load-on").forEach(e => e.classList.toggle("hidden", t === "file"));
+  show("ld-table", t === "table");
+  show("ld-kafka", t === "kafka");
+  show("ld-file", !url);
+  show("ld-url-box", url);
+  show("ld-key-box", $("ld-how").value === "append");
+  $("ld-how-hint").textContent = HOW_HINT[$("ld-how").value];
+  show("ld-batch-box", $("ld-unit").value === "batch");
+  show("kf-mech-box", sasl());
+  show("kf-user-box", sasl());
+  show("kf-pass-box", sasl());
+  show("kf-ca-box", $("kf-security").value.endsWith("SSL"));
+}
+document.querySelectorAll("input[name=ltarget], input[name=ldkind]").forEach(r => r.onchange = showLoad);
+["ld-how", "ld-unit", "kf-security"].forEach(id => $(id).addEventListener("change", showLoad));
+// 시작·확인에 따로 실어 보낼 비밀번호: 지금 적재할 곳의 칸 것만
+const loadPassword = () => loadTarget() === "table" ? (loadKind() === "url" ? $("ld-pass").value : "") : loadTarget() === "kafka" && sasl() ? $("kf-pass").value : "";
+const forgetPasswords = () => { $("ld-pass").value = ""; $("kf-pass").value = ""; };
+const readLoad = () => ({
+  target: loadTarget(),
+  table: { connection: loadKind() === "url" ? { kind: "url", url: val("ld-url"), user: val("ld-user") } : { kind: "folder", file: val("ld-file") },
+    schema: val("ld-schema"), name: val("ld-name"), how: $("ld-how").value, key: $("ld-how").value === "append" ? names("ld-key") : [] },
+  kafka: { destination: $("kf-saved").value, key: val("kf-key") },
+  unit: $("ld-unit").value, batch: Number(val("ld-batch")), interval: Number(val("ld-gap")), retries: Number(val("ld-retry")),
+});
+function fillLoad(l) {
+  document.querySelector(`input[name=ltarget][value=${["file", "table", "kafka"].includes(l.target) ? l.target : "file"}]`).checked = true;
+  const c = l.table.connection ?? {}, url = c.kind === "url";
+  document.querySelector(`input[name=ldkind][value=${url ? "url" : "folder"}]`).checked = true;
+  $("ld-file").value = url ? "" : c.file ?? "";
+  $("ld-url").value = url ? c.url ?? "" : "";
+  $("ld-user").value = url ? c.user ?? "" : "";
+  $("ld-schema").value = l.table.schema;
+  $("ld-name").value = l.table.name;
+  $("ld-how").value = l.table.how;
+  $("ld-key").value = (l.table.key ?? []).join(", ");
+  $("kf-key").value = l.kafka.key;
+  $("ld-unit").value = l.unit;
+  [["ld-batch", l.batch], ["ld-gap", l.interval], ["ld-retry", l.retries]].forEach(([id, v]) => $(id).value = v);
+  $("kf-saved").value = l.kafka.destination in kafka ? l.kafka.destination : "";
+  pickKafka();
+  say("kf-msg", l.kafka.destination && !(l.kafka.destination in kafka) ? `‘${l.kafka.destination}’ Kafka 등록이 없습니다. 다시 고르세요.` : "");
+  forgetPasswords();
+  clearCheck();
+}
+function clearCheck() {
+  $("ld-check-msg").textContent = "";
+  $("ld-cols").replaceChildren();
+}
+// 적재 칸을 바꾸면 지난 [확인]·[접속 확인] 결과는 맞지 않으므로 지운다.
+$("ld-table").addEventListener("change", clearCheck);
+$("ld-table").addEventListener("input", clearCheck);
+$("ld-kafka").addEventListener("change", () => $("kf-check-msg").textContent = "");
+// [확인]: 테이블이 있는지와 결과 파일과의 컬럼 비교. ok가 아니면 경고 색
+$("ld-check").onclick = () => busy($("ld-check"), async () => {
+  try {
+    const d = await api("/api/load/table/check", { config: checked(), password: loadPassword() });
+    $("ld-check-msg").textContent = d.message + (d.columns ? "" : " (결과 파일이 아직 없어 컬럼은 받은 뒤에 비교합니다.)");
+    $("ld-check-msg").className = d.ok ? "ok" : "warn";
+    const mine = new Map(d.columns ?? []), theirs = new Map(d.table_columns ?? []), table = d.exists ? "테이블" : "테이블 (없음)";
+    $("ld-cols").innerHTML = d.columns || d.table_columns ? sampleTable([{ name: "컬럼" }, { name: "결과 파일" }, { name: table }],
+      [...new Set([...mine.keys(), ...theirs.keys()])].map(n => ({ "컬럼": n, "결과 파일": mine.get(n) ?? "—", [table]: theirs.get(n) ?? "—" })), "") : "";
+  } catch (e) { $("ld-check-msg").textContent = e.message; $("ld-check-msg").className = "err"; $("ld-cols").replaceChildren(); }
+});
+
+// Kafka 적재할 곳 등록: 고르면 칸을 채우고, 저장·삭제한다. 비밀번호는 등록에 없다.
+const KAFKA_DEFAULT = { servers: "", topic: "", security: "PLAINTEXT", mechanism: "PLAIN", user: "", ca: "" };
+function showKafka(d, name = $("kf-saved").value) {
+  kafka = d.kafka;
+  fill($("kf-saved"), Object.keys(kafka), "등록 고르기");
+  $("kf-saved").value = name in kafka ? name : "";
+  pickKafka();
+}
+function pickKafka() {
+  const k = { ...KAFKA_DEFAULT, ...kafka[$("kf-saved").value] };
+  [["kf-servers", k.servers], ["kf-topic", k.topic], ["kf-security", k.security], ["kf-mech", k.mechanism], ["kf-user", k.user], ["kf-ca", k.ca]].forEach(([id, v]) => $(id).value = v);
+  $("kf-check-msg").textContent = "";
+  showLoad();
+}
+$("kf-saved").onchange = pickKafka;
+const loadKafka = () => api("/api/load/kafka").then(d => showKafka(d)).catch(() => {});
+$("kf-save").onclick = () => busy($("kf-save"), async () => {
+  const name = val("kf-name") || $("kf-saved").value;  // 이름을 비우면 고른 등록에 덮어쓴다.
+  try {
+    if (!name) throw new Error("등록 이름을 넣으세요.");
+    if (!val("kf-servers") || !val("kf-topic")) throw new Error("서버 주소와 토픽을 넣으세요.");
+    const item = { servers: val("kf-servers"), topic: val("kf-topic"), security: $("kf-security").value, mechanism: $("kf-mech").value, user: val("kf-user"), ca: val("kf-ca") };
+    showKafka(await api("/api/load/kafka", { name, item }), name);
+    $("kf-name").value = "";
+    say("kf-msg", "저장했습니다", true);
+  } catch (e) { say("kf-msg", e.message); }
+});
+$("kf-del").onclick = () => busy($("kf-del"), async () => {
+  if (!$("kf-saved").value) return;
+  try { showKafka(await api("/api/load/kafka", { name: $("kf-saved").value, item: null }), ""); say("kf-msg", "삭제했습니다", true); } catch (e) { say("kf-msg", e.message); }
+});
+// [접속 확인]: 저장한 등록으로 접속만 해 본다(메시지는 보내지 않는다).
+$("kf-check").onclick = () => busy($("kf-check"), async () => {
+  try {
+    if (!$("kf-saved").value) throw new Error("저장한 등록을 고른 뒤 확인하세요.");
+    const d = await api("/api/load/kafka/check", { name: $("kf-saved").value, password: loadPassword() });
+    $("kf-check-msg").textContent = `접속했습니다. 브로커 ${d.brokers}개 · ${d.topic ? "토픽이 있습니다" : "토픽이 없습니다"}`;
+    $("kf-check-msg").className = d.ok && d.topic ? "ok" : "warn";
+  } catch (e) { $("kf-check-msg").textContent = e.message; $("kf-check-msg").className = "err"; }
+});
+
 // 구성 저장·불러오기: 입력 상태(config)를 그대로 저장한다. 붙여 넣은 예시·응답과 env 값은 넣지 않는다.
 const config = () => ({
   version: 1, mode: mode(), env_path: val("env-path"), limit_group: $("lgroup").value,
@@ -798,12 +1002,15 @@ const config = () => ({
     paging: { kind: $("w-pkind").value, next: val("w-next"), start: Number(val("w-start")), max_pages: Number(val("w-max")) },
     wait: Number(val("w-wait")), robots: $("w-robots").checked, show: $("w-show").checked },
   output: { format: $("o-format").value, path: val("o-path"), dedupe: dedupeNames() },
+  load: readLoad(),  // 비밀번호는 넣지 않는다
   plain,
 });
 function restore(c) {
   const d = { ...DEFAULT, ...c };
-  for (const k of ["request", "response", "paging", "balance", "file", "web", "output"]) d[k] = structuredClone({ ...DEFAULT[k], ...c[k] });
+  for (const k of ["request", "response", "paging", "balance", "file", "web", "output", "load"]) d[k] = structuredClone({ ...DEFAULT[k], ...c[k] });
   d.web.paging = { ...DEFAULT.web.paging, ...d.web.paging };
+  d.load.table = { ...DEFAULT.load.table, ...d.load.table };
+  d.load.kafka = { ...DEFAULT.load.kafka, ...d.load.kafka };
   document.querySelector(`input[name=mode][value=${MODES.includes(d.mode) ? d.mode : "api"}]`).checked = true;
   $("env-path").value = d.env_path;
   fillRequest(d.request);
@@ -833,6 +1040,7 @@ function restore(c) {
   $("o-format").value = d.output.format;
   $("o-path").value = d.output.path;
   $("dd-text").value = d.output.dedupe.join(", ");
+  fillLoad(d.load);
   $("lgroup").value = d.limit_group in limits.groups ? d.limit_group : "";
   pickGroup();
   say("limit-msg", d.limit_group && !(d.limit_group in limits.groups) ? `‘${d.limit_group}’ 사용 한도 묶음이 없습니다. 다시 고르세요.` : "");
@@ -888,6 +1096,7 @@ function showEstimate(d) {
   $("est-warn").textContent = d.requests != null && d.day_left != null && d.requests > d.day_left ? `오늘 남은 횟수가 모자랍니다. 오늘은 약 ${d.day_left.toLocaleString()}쪽까지 받습니다.` : "";
   $("est-robots").textContent = d.robots ? `robots.txt: ${d.robots}` : "";  // 웹페이지에서 robots.txt 지키기를 켰을 때만 온다. 허용이 아니면 경고 색
   $("est-robots").className = d.robots && !d.robots.startsWith("허용") ? "warn" : "hint";
+  $("est-load").textContent = d.load_note ?? "";  // 한 건씩 적재일 때 걸릴 시간 안내
   $("est-resume").textContent = d.resume ? `이어 받기: 받아 둔 ${d.resume.pages.toLocaleString()}쪽(${size(d.resume.bytes)}) 다음부터 받습니다.` : "";
 }
 $("estimate").onclick = () => busy($("estimate"), async () => {
@@ -908,10 +1117,13 @@ function showStatus(s) {
     : [`쪽 ${s.pages.toLocaleString()}`, `요청 ${s.requests.toLocaleString()}`, `행 ${s.rows.toLocaleString()}`, size(s.bytes)];
   counts.push(`실패 ${s.failures}`, `동시 ${s.concurrency}`, `걸린 시간 ${secs(s.elapsed * 1000)}`);
   $("run-counts").textContent = counts.join(" · ");
-  const part = s.total_bytes ? s.bytes / s.total_bytes : s.mode !== "file" && est ? s.requests / est : null;
+  const l = s.load, loading = !!l && s.phase === "적재 중";  // 적재 중이면 막대는 넣은 행 / 전체 행
+  const part = loading ? (l.total ? l.rows / l.total : null) : s.total_bytes ? s.bytes / s.total_bytes : s.mode !== "file" && est ? s.requests / est : null;
   $("bar").classList.toggle("unknown", s.running && part === null);
   $("bar").firstElementChild.style.width = part === null ? "" : Math.min(100, part * 100).toFixed(1) + "%";
   $("bar").title = part === null ? "" : (part * 100).toFixed(1) + "%";
+  $("run-load").textContent = l ? `적재: ${l.where} · 행 ${l.rows.toLocaleString()}${l.total != null ? ` / ${l.total.toLocaleString()}` : ""} · 묶음 ${l.batches.toLocaleString()} · 건너뜀 ${l.skipped.toLocaleString()} · 실패 ${l.failures}` : "";
+  $("load-again-box").classList.toggle("hidden", !(l && !s.running && s.phase === "실패"));  // 적재가 실패해도 결과 파일은 남으니 적재만 다시 한다
   $("run-note").textContent = s.message;
   $("run-usage").textContent = usageText(s.usage) + (s.usage?.broken ? "\n" + BROKEN : "");
   $("run-err").textContent = s.error;
@@ -934,7 +1146,7 @@ async function watch(fresh) {
       const s = await poll();
       if (s && !s.running && s.phase === "대기" && tries > 0) { await new Promise(r => setTimeout(r, 1000)); continue; }
       if (!s?.running) {
-        if (s?.phase === "끝") { notifyDone("collect", s.elapsed, s.rows, fileName(s.output)); $("run-ok").textContent = "다 받았습니다"; }
+        if (s?.phase === "끝") { notifyDone("collect", s.elapsed, s.rows, fileName(s.output)); $("run-ok").textContent = s.load ? "다 받아 적재까지 마쳤습니다" : "다 받았습니다"; }
         loadLimits();
         break;
       }
@@ -946,12 +1158,23 @@ $("start").onclick = () => busy($("start"), async () => {
   try {
     const cfg = checked();
     if (!cfg.output.path) throw new Error("저장 경로를 정하세요.");
-    const d = await api("/api/collect/start", { config: cfg });
+    const d = await api("/api/collect/start", { config: cfg, secrets: { password: loadPassword() } });
+    forgetPasswords();
     $("run-ok").textContent = d.resumed ? "받아 둔 데서 이어 받습니다" : "";
     say("run-msg", "");
     running = true;  // 첫 상태를 읽기 전에도 수집용 창 상태를 따라가게
     watch(true);
     followBrowser();
+  } catch (e) { say("run-msg", e.message); }
+});
+// [적재만 다시]: 결과 파일을 다시 받지 않고 적재만 한다(넣은 묶음 다음부터).
+$("load-again").onclick = () => busy($("load-again"), async () => {
+  try {
+    await api("/api/load/start", { config: checked(), secrets: { password: loadPassword() } });
+    forgetPasswords();
+    $("run-ok").textContent = "적재만 다시 합니다";
+    say("run-msg", "");
+    watch(true);
   } catch (e) { say("run-msg", e.message); }
 });
 $("stop").onclick = () => busy($("stop"), async () => {
@@ -970,6 +1193,7 @@ $("open-prep").onclick = () => openWith($("open-prep"), true);
 restore(DEFAULT);
 api("/api/collections").then(d => showCollections(d)).catch(() => {});
 loadLimits();
+loadKafka();
 poll().then(s => { if (s?.running) watch(); });
 </script>
 </body>

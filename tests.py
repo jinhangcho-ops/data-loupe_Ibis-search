@@ -1633,6 +1633,287 @@ def web_section(c, got):
         api.http.shutdown()
 
 
+def load_section(c, got):
+    """적재(수집 3단계 서버): DB 테이블(임시 DuckDB·SQLite 파일)과 Kafka(librdkafka의 시험용 메모리 브로커, 127.0.0.1). 데이터는 여기서 지어낸다."""
+    import decimal
+    import logging
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    from confluent_kafka import Consumer, Producer
+    import collect_job
+    import load_job
+    import load_kafka
+    import load_table
+    print("== 적재: 준비")
+    error = lambda api, **body: got(api, **body).get("error", "")
+    out = ROOT / "load_out"
+    out.mkdir()
+    db = out / "warehouse.duckdb"
+    secret = "Pw-Load-7781!"  # 지어낸 비밀번호: 끝에 모든 파일·상태에서 찾아본다.
+    load_job.BACKOFF = 0.01
+    rows = [{"id": i, "name": f"품목{i}", "amount": i * 1.5, "day": dt.date(2026, 1, 1) + dt.timedelta(days=i)} for i in range(1, 26)]
+    pl.DataFrame(rows).write_parquet(out / "items.parquet")
+    pl.DataFrame([{"id": i, "name": f"새{i}"} for i in range(1, 11)]).write_parquet(out / "fresh.parquet")
+
+    def lcfg(name, **load):
+        table = {"connection": {"kind": "folder", "file": str(db)}, "name": "items", "how": "new", **load.pop("table", {})}
+        return {"version": 1, "mode": "api", "request": {"url": "http://127.0.0.1:9/none"}, "output": {"format": name.rsplit(".", 1)[1], "path": str(out / name)},
+                "load": {"target": "table", "table": table, "batch": 10, **load}}
+
+    def wait(seconds=60):
+        end = time.time() + seconds
+        while time.time() < end and c.get("/api/collect/status").get_json()["running"]:
+            time.sleep(0.02)
+        return c.get("/api/collect/status").get_json()
+
+    def load(cfg, **body):
+        started = c.post("/api/load/start", json={"config": cfg, **body}).get_json()
+        return started, wait()
+
+    def table_rows(name, file=db):
+        con = duckdb.connect(str(file), read_only=True)
+        try:
+            return con.execute(f'select * from "{name}" order by 1').fetchall()
+        finally:
+            con.close()
+
+    print("== 적재: 구성 검사")
+    check("구성: 비밀번호 칸은 받지 않음, 주소의 비밀번호 거부, 값 범위", [error("/api/collect/estimate", config=v) for v in (
+          {"load": {"table": {"connection": {"kind": "url", "url": "postgres://h/db", "password": "x"}}}},
+          {"load": {"table": {"connection": {"kind": "url", "url": "postgres://me:pw@h/db"}}}},
+          {"load": {"batch": 50}}, {"load": {"target": "s3"}}, {"load": {"table": {"key": "id"}}})],
+          ["비밀번호 같은 비밀 값은 구성에 넣지 않습니다(저장하지 않고 시작할 때 따로 입력합니다).",
+           "DB 주소에 비밀번호를 넣지 마세요. 비밀번호는 저장하지 않고 시작할 때 따로 입력합니다.",
+           "구성의 load.batch는 100~1000000의 정수여야 합니다.", "구성의 load.target는 file, table, kafka 중 하나입니다.",
+           "구성의 load.table.key는 컬럼 이름 목록이어야 합니다."])
+    check("기본 구성은 적재 없음(target file)", collect_job.normalize({})["load"]["target"], "file")
+    limits = collect_job.NUMBERS[("load", "batch")]
+    collect_job.NUMBERS[("load", "batch")] = (int, 1, limits[2])  # 작은 묶음(10행)으로 시험한다.
+    try:
+        print("== 적재: DB 테이블 new·append·replace")
+        check("시작 전 거부: 이름, 파일, key는 append에서만", [error("/api/load/start", config=v) for v in (
+              lcfg("items.parquet", table={"name": "bad name"}), lcfg("items.parquet", table={"connection": {"kind": "folder", "file": str(out / "x.txt")}}),
+              lcfg("items.parquet", table={"key": ["id"]}), lcfg("none.parquet"), {**lcfg("items.parquet"), "load": {"target": "file"}})],
+              ["테이블 이름은 영문·숫자·밑줄·한글만 쓸 수 있습니다(공백·따옴표·점 없이).", "적재할 DB 파일(.duckdb)을 고르세요.",
+               "이미 있는 키를 건너뛰는 것(key)은 덧붙이기(append)에서만 씁니다.", "적재할 결과 파일이 없습니다. 먼저 수집하세요.", "적재할 곳(DB 테이블 또는 Kafka)을 고르세요."])
+        r = got("/api/load/table/check", config=lcfg("items.parquet"), password=secret)
+        check("확인: 없는 테이블은 새로 만듦, 결과 파일의 컬럼", r, {"exists": False, "columns": [["id", "정수"], ["name", "문자"], ["amount", "실수"], ["day", "날짜"]],
+              "table_columns": None, "ours": False, "ok": True, "message": "새 테이블로 만듭니다."})
+        started, st = load(lcfg("items.parquet"), secrets={"password": secret})
+        check("new: 묶음 10행씩 3묶음, 상태의 load 칸, 기록 파일은 다 넣으면 지움", (started, st["phase"], st["load"], (out / "items.load.json").exists()),
+              ({"ok": True}, "끝", {"target": "table", "rows": 25, "total": 25, "batches": 3, "skipped": 0, "failures": 0, "where": "warehouse.duckdb · items"}, False))
+        check("new: 넣은 값(날짜 타입 그대로)", table_rows("items"), [(r["id"], r["name"], r["amount"], r["day"]) for r in rows])
+        made = json.loads((settings.PATH.parent / load_table.FILE).read_text(encoding="utf-8"))["tables"]
+        check("만든 테이블 기록(load_tables.json): 연결·스키마·이름·컬럼", [(t["connection"], t["schema"], t["name"], t["columns"]) for t in made],
+              [(os.path.normcase(str(db)), "", "items", [["id", "정수"], ["name", "문자"], ["amount", "실수"], ["day", "날짜"]])])
+        _, st = load(lcfg("items.parquet"))
+        check("new: 이미 있으면 실패로 알림", (st["phase"], st["error"]), ("실패", "'items'은 이미 있는 테이블입니다. 다른 이름을 쓰거나 덧붙이기·바꾸기를 고르세요."))
+        r = got("/api/load/table/check", config=lcfg("items.parquet", table={"how": "append", "key": ["id"]}))
+        check("확인: 같은 컬럼이면 덧붙일 수 있음, 이 프로그램이 만든 것", (r["ok"], r["message"], r["ours"], r["table_columns"] == r["columns"]), (True, "컬럼이 같아 덧붙일 수 있습니다.", True, True))
+        _, st = load(lcfg("items.parquet", table={"how": "append", "key": ["id"]}))
+        check("append + key: 이미 있는 키는 모두 건너뜀", (st["phase"], st["load"]["skipped"], len(table_rows("items"))), ("끝", 25, 25))
+        _, st = load(lcfg("items.parquet", table={"how": "append"}, unit="single", batch=100))
+        check("append 한 건씩: 25행 더 들어감", (st["phase"], st["load"]["rows"], st["load"]["batches"], len(table_rows("items"))), ("끝", 25, 1, 50))
+        con = duckdb.connect(str(db))
+        con.execute("create table other (id integer, label varchar)")
+        con.execute("insert into other values (1, 'x')")
+        con.close()
+        r = got("/api/load/table/check", config=lcfg("items.parquet", table={"name": "other", "how": "append"}))
+        check("확인: 컬럼이 다르면 다른 점", (r["ok"], r["message"], r["ours"]),
+              (False, "컬럼이 달라 덧붙일 수 없습니다. 다른 점: 결과 파일에만 있는 컬럼 name, amount, day / 테이블에만 있는 컬럼 label", False))
+        _, st = load(lcfg("items.parquet", table={"name": "other", "how": "append"}))
+        check("append: 컬럼이 다르면 넣지 않음", (st["phase"], st["error"].startswith("컬럼이 달라 덧붙일 수 없습니다."), table_rows("other")), ("실패", True, [(1, "x")]))
+        r = got("/api/load/table/check", config=lcfg("fresh.parquet", table={"name": "other", "how": "replace"}))
+        _, st = load(lcfg("fresh.parquet", table={"name": "other", "how": "replace"}))
+        check("replace: 이 프로그램이 만든 테이블이 아니면 거부(확인·시작 모두), 내용 그대로", (r["ok"], r["message"], st["phase"], st["error"], table_rows("other")),
+              (False, "이 프로그램이 만든 테이블이 아니라 바꿀 수 없습니다.", "실패", "이 프로그램이 만든 테이블이 아니라 바꿀 수 없습니다.", [(1, "x")]))
+        _, st = load(lcfg("fresh.parquet", table={"how": "replace"}))
+        con = duckdb.connect(str(db), read_only=True)
+        names = sorted(t for (t,) in con.execute("show tables").fetchall())
+        con.close()
+        made = {t["name"]: t["columns"] for t in json.loads((settings.PATH.parent / load_table.FILE).read_text(encoding="utf-8"))["tables"]}
+        check("replace: 우리가 만든 테이블은 새 내용으로 바뀌고 임시 테이블은 남지 않음, 기록의 컬럼도 바뀜", (st["phase"] + st["error"], table_rows("items"), names, made),
+              ("끝", [(i, f"새{i}") for i in range(1, 11)], ["items", "other"], {"items": [["id", "정수"], ["name", "문자"]]}))
+        con = duckdb.connect(str(db))
+        con.execute("alter table items add column extra integer")
+        con.close()
+        _, st = load(lcfg("fresh.parquet", table={"how": "replace"}))
+        check("replace: 만든 뒤 컬럼이 바뀐 테이블은 바꾸지 않음", (st["phase"], st["error"]), ("실패", "이 프로그램이 만든 뒤 테이블의 컬럼이 바뀌어 바꾸지 않습니다."))
+
+        print("== 적재: 실패한 묶음 다시 시도·이어 넣기·멈춤")
+        real_insert, calls = load_table.insert, {"n": 0, "fail": {3}}
+
+        def flaky(con, schema, name, data):
+            calls["n"] += 1
+            if calls["n"] in calls["fail"]:
+                raise RuntimeError("가짜 실패")
+            return real_insert(con, schema, name, data)
+
+        load_table.insert = flaky
+        try:
+            calls.update(n=0, fail={2})
+            _, st = load(lcfg("items.parquet", table={"name": "retried"}, retries=2))
+            check("묶음이 한 번 실패하면 다시 넣어 성공(행이 겹치지 않음)", (st["phase"], calls["n"], [r[0] for r in table_rows("retried")]), ("끝", 4, list(range(1, 26))))
+            calls.update(n=0, fail={3, 4})
+            _, st = load(lcfg("items.parquet", table={"name": "resumed"}, retries=1))
+            record = json.loads((out / "items.load.json").read_text(encoding="utf-8"))
+            check("다시 시도도 실패하면 멈추고 넣은 묶음까지 기록(결과 파일은 남김)", (st["phase"], st["error"], record["rows"], record["batches"], len(table_rows("resumed")),
+                  (out / "items.parquet").exists()), ("실패", "가짜 실패", 20, 2, 20, True))
+        finally:
+            load_table.insert = real_insert
+        started, st = load(lcfg("items.parquet", table={"name": "resumed"}, retries=1))
+        check("같은 설정으로 다시 하면 넣은 묶음 다음부터(겹치지 않음)", (st["phase"], st["message"], [r[0] for r in table_rows("resumed")], (out / "items.load.json").exists()),
+              ("끝", "이어 넣습니다.", list(range(1, 26)), False))
+        c.post("/api/load/start", json={"config": lcfg("items.parquet", table={"name": "paused"}, interval=0.3)})
+        time.sleep(0.4)
+        got("/api/collect/stop")
+        st = wait()
+        record = json.loads((out / "items.load.json").read_text(encoding="utf-8"))
+        check("멈추기는 묶음 사이에서 멈추고 기록을 남김", (st["phase"], 0 < record["rows"] < 25, record["rows"] % 10, len(table_rows("paused")) == record["rows"]), ("멈춤", True, 0, True))
+        _, st = load(lcfg("items.parquet", table={"name": "paused"}, batch=5))
+        check("묶음 크기 등 서명이 다르면 처음부터(new는 이미 있어 거부)", (st["phase"], st["error"][:23]), ("실패", "'paused'은 이미 있는 테이블입니다."))
+        _, st = load(lcfg("items.parquet", table={"name": "paused"}))
+        check("같은 서명이면(간격은 서명에 없음) 이어서 끝냄", (st["phase"], [r[0] for r in table_rows("paused")]), ("끝", list(range(1, 26))))
+
+        print("== 적재: 검색 화면의 연결·CSV·SQLite·수집에 이어 적재")
+        got("/api/connect", kind="folder", path=str(out), file=str(db))
+        check("검색 화면이 같은 DB 파일을 열고 있으면 거부(확인·시작)", (error("/api/load/table/check", config=lcfg("items.parquet")), error("/api/load/start", config=lcfg("items.parquet"))),
+              (load_table.OPENED_HERE,) * 2)
+        got("/api/disconnect")
+        pl.DataFrame(rows).write_csv(out / "plain.csv")
+        collect_job.with_bom(out / "plain.csv", out / "items.csv")
+        _, st = load(lcfg("items.csv", table={"name": "from_csv"}))
+        check("CSV 결과 파일(BOM)도 묶음으로 읽어 넣음(전체 수는 모름)", (st["phase"], st["load"]["total"], table_rows("from_csv")[0], len(table_rows("from_csv"))),
+              ("끝", 25, (1, "품목1", 1.5, dt.date(2026, 1, 2)), 25))
+        lite = out / "lite.db"
+        con = sqlite3.connect(lite)
+        con.execute("create table items (id integer, name text)")
+        con.commit()
+        con.close()
+        lite_cfg = lcfg("fresh.parquet", table={"connection": {"kind": "url", "url": f"sqlite://{lite}"}, "how": "append"})
+        check("SQLite 주소: 확인", got("/api/load/table/check", config=lite_cfg)["message"], "컬럼이 같아 덧붙일 수 있습니다.")
+        _, st = load(lite_cfg)
+        con = sqlite3.connect(lite)
+        check("SQLite 주소: append(연결 스레드에서 열고 넣고 닫음)", (st["phase"], st["load"]["where"].endswith("lite.db · items"), con.execute("select count(*), max(name) from items").fetchone()),
+              ("끝", True, (10, "새9")))
+        con.close()
+        bad_url = lcfg("items.parquet", table={"connection": {"kind": "url", "url": "nosuch://h/db", "user": "loader"}})
+        e = error("/api/load/table/check", config=bad_url, password=secret)
+        _, st = load(bad_url, secrets={"password": secret})
+        check("주소 연결이 실패해도 비밀번호는 오류 문구에 없음", (bool(e), secret in e, st["phase"], secret in json.dumps(st, ensure_ascii=False)), (True, False, "실패", False))
+
+        api = FakeApi()
+        api.routes["/rows"] = lambda e: (200, {}, json.dumps([{"id": i, "name": f"받음{i}"} for i in range(1, 8)], ensure_ascii=False).encode())
+        cfg = {"version": 1, "mode": "api", "request": {"url": api.base + "/rows"}, "response": {"records": ""}, "balance": {"interval": 0},
+               "output": {"format": "parquet", "path": str(out / "got.parquet")}, "load": {"target": "table", "table": {"connection": {"kind": "folder", "file": str(db)}, "name": "got"}}}
+        seen = []
+        real_run = load_job.run
+        load_job.run = lambda *a: (seen.append(c.get("/api/collect/status").get_json()["phase"]), real_run(*a))[1]
+        try:
+            started = got("/api/collect/start", config=cfg, secrets={"password": secret})
+            st = wait()
+        finally:
+            load_job.run = real_run
+        check("수집이 결과 파일을 만든 뒤 바로 적재(적재 중 → 끝)", (started, seen, st["phase"], st["output"], st["load"]["rows"], len(table_rows("got"))),
+              ({"ok": True, "resumed": False}, ["적재 중"], "끝", str(out / "got.parquet"), 7, 7))
+        got("/api/collect/start", config=cfg)
+        st = wait()
+        check("수집 뒤 적재가 실패해도 결과 파일은 남음", (st["phase"], st["error"][:20], (out / "got.parquet").exists()), ("실패", "'got'은 이미 있는 테이블입니다.", True))
+        api.http.shutdown()
+        single = lcfg("items.parquet", unit="single")
+        check("estimate: 한 건씩이면 load_note(결과 파일이 있으면 예상 시간)", (got("/api/collect/estimate", config=single)["load_note"],
+              got("/api/collect/estimate", config=lcfg("none.parquet", unit="single"))["load_note"], "load_note" in got("/api/collect/estimate", config=lcfg("items.parquet"))),
+              ("한 건씩 넣으면 오래 걸릴 수 있습니다(예상 약 1분).", "한 건씩 넣으면 오래 걸릴 수 있습니다.", False))
+
+        print("== 적재: Kafka(시험용 메모리 브로커)")
+        logs = []
+        catch = logging.getLogger("tests.kafka_mock")
+        catch.addHandler(type("Keep", (logging.Handler,), {"emit": lambda self, r: logs.append(r.getMessage())})())
+        catch.propagate = False
+        catch.setLevel(logging.INFO)
+        holder = Producer({"bootstrap.servers": "127.0.0.1:1", "test.mock.num.brokers": 1, "logger": catch})  # 이것이 살아 있는 동안 브로커가 떠 있다(테스트에서만)
+        holder.poll(0.5)
+        broker = next(m[1] for m in (re.search(r"(127\.0\.0\.1:\d+)", line) for line in logs) if m)
+        check("Kafka 등록 검사: 비밀번호 칸 거부, 서버 모양, 토픽 이름, SASL 아이디", [error("/api/load/kafka", name="x", item=v) for v in (
+              {"servers": broker, "topic": "t", "password": "x"}, {"servers": "nohost", "topic": "t"}, {"servers": broker, "topic": "a b"},
+              {"servers": broker, "topic": "t", "security": "SASL_SSL"})],
+              ["비밀번호는 저장하지 않습니다. 확인·시작할 때 따로 입력하세요.", "서버는 host:port 모양으로, 여럿이면 쉼표로 이어 쓰세요(예: host1:9092,host2:9092).",
+               "토픽 이름은 영문·숫자·점·밑줄·빼기로 1~249자입니다.", "SASL을 쓰면 아이디를 입력하세요."])
+        r = got("/api/load/kafka", name="로컬", item={"servers": broker, "topic": "items"})
+        check("Kafka 등록 저장(빠진 칸 채움)·목록", (r, c.get("/api/load/kafka").get_json()), ({"kafka": {"로컬": {**load_kafka.DEFAULT, "servers": broker, "topic": "items"}}},) * 2)
+        for i in range(load_kafka.MAX_DESTINATIONS - 1):
+            got("/api/load/kafka", name=f"k{i}", item={"servers": broker, "topic": "t"})
+        check("Kafka 등록은 30개까지", error("/api/load/kafka", name="넘침", item={"servers": broker, "topic": "t"}), "저장한 적재할 곳은 30개까지입니다. 쓰지 않는 것을 지우세요.")
+        for i in range(load_kafka.MAX_DESTINATIONS - 1):
+            got("/api/load/kafka", name=f"k{i}", item=None)
+        check("Kafka 접속 확인: 브로커 수, 토픽은 아직 없음(메시지를 보내지 않음)", got("/api/load/kafka/check", name="로컬", password=""), {"ok": True, "topic": False, "brokers": 1})
+
+        def consume(topic, count, seconds=20):
+            reader = Consumer({"bootstrap.servers": broker, "group.id": f"g-{topic}-{time.time()}", "auto.offset.reset": "earliest", "logger": catch})
+            reader.subscribe([topic])
+            found, end = [], time.time() + seconds
+            while time.time() < end and len(found) < count:
+                m = reader.poll(0.2)
+                if m is not None and not m.error():
+                    found.append((m.key(), m.value()))
+            reader.close()
+            return found
+
+        rich = pa.table({"id": pa.array([1, 2, 3], pa.int64()), "name": ["가", None, "다"], "day": pa.array([dt.date(2026, 1, 2)] * 3),
+                         "at": pa.array([dt.datetime(2026, 1, 2, 3, 4, 5)] * 3, pa.timestamp("us")), "price": pa.array([decimal.Decimal("1.20")] * 3, pa.decimal128(10, 2)),
+                         "raw": pa.array([b"\x00\xff"] * 3), "score": [1.5, float("nan"), None]})
+        pq.write_table(rich, out / "rich.parquet")
+        kcfg = lambda name, topic_key="", **load: {"version": 1, "mode": "api", "request": {"url": "http://127.0.0.1:9/none"},
+                                                  "output": {"format": name.rsplit(".", 1)[1], "path": str(out / name)},
+                                                  "load": {"target": "kafka", "kafka": {"destination": "로컬", "key": topic_key}, "batch": 2, **load}}
+        _, st = load(kcfg("rich.parquet", "id"), secrets={"password": secret})
+        sent = consume("items", 3)
+        check("Kafka 묶음: 3행 = 메시지 3개, 상태", (st["phase"], st["load"], len(sent)),
+              ("끝", {"target": "kafka", "rows": 3, "total": 3, "batches": 2, "skipped": 0, "failures": 0, "where": "로컬 · items"}, 3))
+        check("메시지: JSON(한글 그대로, 날짜·시간 ISO, Decimal 글자, bytes base64, NaN null), 키는 컬럼 값 글자", sorted(sent)[0],
+              (b"1", json.dumps({"id": 1, "name": "가", "day": "2026-01-02", "at": "2026-01-02T03:04:05", "price": "1.20", "raw": "AP8=", "score": 1.5}, ensure_ascii=False).encode()))
+        check("NaN과 빈 값은 null", [json.loads(v)["score"] for k, v in sorted(sent)], [1.5, None, None])
+        got("/api/load/kafka", name="로컬", item={"servers": broker, "topic": "single"})
+        _, st = load(kcfg("items.parquet", unit="single"))
+        sent = consume("single", 25)
+        check("Kafka 한 건씩: 25개, 키 없음", (st["phase"], st["load"]["rows"], len(sent), {k for k, _ in sent}, sorted(json.loads(v)["id"] for _, v in sent)),
+              ("끝", 25, 25, {None}, list(range(1, 26))))
+        got("/api/load/kafka", name="로컬", item={"servers": broker, "topic": "big"})
+        pl.DataFrame({"id": [1, 2, 3], "text": ["a", "x" * 2_000_000, "c"]}).write_parquet(out / "big.parquet")
+        _, st = load(kcfg("big.parquet", batch=100))
+        check("너무 큰 행은 실패로 세고 계속", (st["phase"], st["load"]["failures"], sorted(json.loads(v)["id"] for _, v in consume("big", 2))), ("끝", 1, [1, 3]))
+        pl.DataFrame({"id": [1, 2], "text": ["x" * 2_000_000] * 2}).write_parquet(out / "huge.parquet")
+        _, st = load(kcfg("huge.parquet", batch=100))
+        check("묶음이 모두 실패하면 멈춤", (st["phase"], st["error"].startswith("1번째 묶음을 하나도 넣지 못해 멈췄습니다."), st["load"]["failures"]), ("실패", True, 2))
+        _, st = load(kcfg("items.parquet", "nope"))
+        check("메시지 키 컬럼이 결과 파일에 없으면 거부", (st["phase"], st["error"]), ("실패", "메시지 키 컬럼 'nope'이 결과 파일에 없습니다."))
+        got("/api/load/kafka", name="sasl", item={"servers": "127.0.0.1:1", "topic": "t", "security": "SASL_PLAINTEXT", "mechanism": "SCRAM-SHA-256", "user": "u"})
+        load_kafka.CHECK_TIMEOUT = 2
+        e = error("/api/load/kafka/check", name="sasl", password=secret)
+        check("Kafka 접속 실패: 오류 문구에 비밀번호 없음", (e.startswith("Kafka에 접속하지 못했습니다:"), secret in e), (True, False))
+        timeouts = load_kafka.SEND_TIMEOUT, load_kafka.FLUSH_MARGIN
+        load_kafka.SEND_TIMEOUT, load_kafka.FLUSH_MARGIN = 1, 1
+        try:
+            _, st = load({**kcfg("items.parquet", batch=100), "load": {**kcfg("items.parquet")["load"], "kafka": {"destination": "sasl", "key": ""}, "batch": 100, "retries": 1}},
+                         secrets={"password": secret})
+        finally:
+            load_kafka.SEND_TIMEOUT, load_kafka.FLUSH_MARGIN = timeouts
+        check("Kafka 전달이 모두 실패하면 다시 시도한 뒤 멈춤, 넣은 것 없음, 오류에 비밀번호 없음",
+              (st["phase"], st["error"].startswith("Kafka에 전달하지 못했습니다:"), secret in json.dumps(st, ensure_ascii=False), st["load"]["rows"]), ("실패", True, False, 0))
+        del holder
+    finally:
+        collect_job.NUMBERS[("load", "batch")] = limits
+
+    print("== 적재: 비밀번호가 남지 않음")
+    status_text = c.get("/api/collect/status").get_data(as_text=True)
+    found = [str(p) for folder in (ROOT / "appdata", out) for p in folder.rglob("*") if p.is_file() and secret.encode() in p.read_bytes()]
+    check("비밀번호는 설정 폴더(kafka.json·load_tables.json 등)·결과 폴더(.load.json 등)·상태 어디에도 없음",
+          (found, secret in status_text, sorted(p.name for p in (ROOT / "appdata" / "ibis_search").glob("*.json") if p.name in ("kafka.json", "load_tables.json"))),
+          ([], False, ["kafka.json", "load_tables.json"]))
+    check("작업이 끝나면 가릴 값(비밀번호)도 버림", collect_job.current["hide"], [])
+    check("적재 라우트는 차례(turn)를 기다리지 않음", all(p in server.FREE for p in ("/api/load/kafka", "/api/load/kafka/check", "/api/load/table/check", "/api/load/start")), True)
+
+
 def memory_section(c, got, duck):
     """데이터 라이브러리 지연 로딩과 DuckDB 파일 조회의 작업 메모리 상한."""
     print("== 지연 로딩·메모리 상한")
@@ -1973,6 +2254,7 @@ def main():
     notify_section(c, got)
     collect_section(c, got)
     web_section(c, got)
+    load_section(c, got)
     memory_section(c, got, duck)
     sqlite_section(c, got)
     prep_section()
