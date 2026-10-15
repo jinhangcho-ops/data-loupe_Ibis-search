@@ -10,6 +10,7 @@ import collect_limits
 import collect_request
 import collect_web
 import load_app  # 적재 라우트가 앱에 달린다.
+import load_kafka
 import server
 import settings
 import source
@@ -19,6 +20,11 @@ COLLECTIONS = "collections.json"
 MAX_COLLECTION_SIZE = 100_000  # 구성 하나의 크기(JSON 글자 수)
 FILE_TYPES = {"parquet": ("Parquet (*.parquet)",), "csv": ("CSV (*.csv)",)}
 
+number_range = lambda kind, low, high: {"int": kind is int, "min": low, "max": high}  # 숫자 칸 범위를 화면에 줄 모양으로
+# 수집 화면(collect.html)이 쓰는 기본값과 숫자 칸의 범위. 범위 이름은 구성의 경로(paging.max_pages)나 limit.이름.
+server.CONSTANTS.update(collect=collect_job.DEFAULT, kafka=load_kafka.DEFAULT, limit=collect_limits.DEFAULT, numbers={
+    **{".".join(where): number_range(*spec) for where, spec in collect_job.NUMBERS.items()},
+    **{f"limit.{key}": number_range(*spec[:3]) for key, spec in collect_limits.NUMBERS.items()}})  # schedule_app이 예약 간격을 더한다
 server.FREE.update({"/api/collect/parse", "/api/collect/secretize", "/api/collect/env", "/api/collect/try", "/api/collect/sample",
                     "/api/collect/estimate", "/api/collect/ask_path", "/api/collect/start", "/api/collect/stop", "/api/collect/status",
                     "/api/collections", "/api/limits", "/api/limits/reset", "/api/collect/browser/open", "/api/collect/browser/close",

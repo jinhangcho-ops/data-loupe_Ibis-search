@@ -16,6 +16,7 @@ PREVIEW_ROWS = 20
 DEFAULT_SAMPLE = 10_000  # 앞에서부터 미리 볼 행 수의 기본값
 TABLE_NAME = re.compile(r"[A-Za-z0-9_가-힣]+")
 FILE_FORMATS = ["parquet", "csv"]
+server.CONSTANTS["sample"] = DEFAULT_SAMPLE  # 화면(prep.html)의 미리 볼 행 수 기본값
 
 
 @app.get("/api/recipes")

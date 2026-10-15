@@ -16,7 +16,7 @@ MAX_WAIT = 15 * 60  # Retry-After·한도 초기화를 기다리는 최대 시�
 MAX_FAILURES = 20  # 작업 전체의 실패 수가 이것을 넘으면 멈춘다.
 BACKOFF = 1.0  # 다시 시도의 기다림 기준(초). 시도마다 두 배, 60초까지, 무작위로 0.5~1.5배.
 REDIRECTS = (301, 302, 303, 307, 308)
-AUTH_HEADERS = {"authorization", "cookie", "proxy-authorization"}
+SECRET_HEADERS = {"authorization", "cookie", "proxy-authorization"}  # 이름과 상관없이 비밀인 헤더. 다른 호스트로 넘어가면 빼고, 구성에 값을 그대로 두지 못한다(collect_request).
 HIDE = "●●●"  # 오류·상태·표시에서 env 값을 바꿔 넣는 글자
 STOPPED = "멈췄습니다. 같은 설정으로 다시 시작하면 이어 받습니다."
 
@@ -64,7 +64,7 @@ def open_url(method, url, headers, body, timeout, secrets=()):
         if urlsplit(url).scheme.lower() == "https" and urlsplit(target).scheme.lower() == "http":
             raise ValueError("https 주소에서 http 주소로 넘겨주는 것은 따라가지 않습니다.")
         if host_of(target) != host_of(url):
-            headers = [[k, v] for k, v in headers if k.lower() not in AUTH_HEADERS and not any(s and s in v for s in secrets)]
+            headers = [[k, v] for k, v in headers if k.lower() not in SECRET_HEADERS and not any(s and s in v for s in secrets)]
         if reply.status == 303 or (reply.status in (301, 302) and method not in ("GET", "HEAD")):
             method, body = "GET", None
             headers = [[k, v] for k, v in headers if k.lower() != "content-type"]

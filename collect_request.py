@@ -6,6 +6,7 @@ import re
 import shlex
 from urllib.parse import parse_qsl, quote, quote_plus, unquote, urlencode, urlsplit, urlunsplit
 
+from collect_http import SECRET_HEADERS
 from notify import BODIES
 
 # 자리 표시. 이 모양만 바꾸고 다른 중괄호는 그대로 둔다. 무리 1: env 이름, 2: page·offset·cursor, 3: today·now, 4: 날짜 형식
@@ -15,7 +16,6 @@ ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 SECRET_WORDS = {"key", "apikey", "token", "secret", "password", "passwd", "pwd", "auth", "sig", "signature", "session", "sessionid", "sid",
                 "credential", "credentials", "jwt", "cookie"}
 SECRET_ENDS = ("key", "token", "secret", "password", "passwd")
-SECRET_HEADERS = {"authorization", "cookie", "proxy-authorization"}  # 이름과 상관없이 비밀인 헤더
 DROP_HEADERS = {"host", "content-length", "accept-encoding", "connection"}  # 예시에서 가져오지 않는 헤더(보낼 때 정해진다)
 DATE_FORMATS = {"today": "%Y-%m-%d", "now": "%Y-%m-%d %H:%M:%S"}
 BODY_KINDS = ("none", "json", "form", "text")
@@ -37,7 +37,7 @@ def parse(text):
     raise ValueError("curl 명령, HTTP 요청 글자, JSON({\"method\", \"url\", …}) 중 하나로 붙여 넣으세요.")
 
 
-def new_request(method, url, headers, data, unread):
+def new_request(method, url, headers, data):
     """주소의 쿼리는 query 목록으로 나누고, 버릴 헤더는 빼고, 본문 종류를 정해 request 모양으로 만든다."""
     parts = urlsplit(url.strip())
     if parts.scheme.lower() not in ("http", "https"):
@@ -173,7 +173,7 @@ def parse_curl(text):
         url += ("&" if "?" in url else "?") + body
         body = None
         method = method or "GET"
-    return new_request(method, url, headers, body, unread), unread
+    return new_request(method, url, headers, body), unread
 
 
 def parse_http(text):
@@ -194,7 +194,7 @@ def parse_http(text):
         url = ("http://" if host.endswith(":80") else "https://") + host + target
     else:
         raise ValueError("HTTP 요청 글자에 Host 헤더가 없습니다.")
-    return new_request(method, url, headers, body if body.strip() else None, unread), unread
+    return new_request(method, url, headers, body if body.strip() else None), unread
 
 
 def pairs(value, what):
@@ -222,7 +222,7 @@ def parse_json(text):
     headers = pairs(given.get("headers"), "headers")
     if isinstance(given.get("body"), (dict, list)) and not any(k.lower() == "content-type" for k, _ in headers):
         headers.append(["Content-Type", "application/json"])
-    request = new_request(given.get("method"), given["url"], headers, body or None, unread)
+    request = new_request(given.get("method"), given["url"], headers, body or None)
     request["query"] += pairs(given.get("query"), "query")
     return request, unread
 

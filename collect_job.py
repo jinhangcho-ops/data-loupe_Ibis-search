@@ -63,7 +63,6 @@ NUMBERS = {("paging", "start"): (int, -10**12, 10**12), ("paging", "step"): (int
 MAX_FIELDS = 200  # 웹페이지 컬럼 수
 FIELD_ATTR = re.compile(r"text|[A-Za-z_:][-A-Za-z0-9_:.]{0,99}")  # 컬럼의 attr: text 또는 속성 이름
 RUNNING = "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요."
-PHASES = ("대기", "받는 중", "쉬는 중", "바꾸는 중", "적재 중", "끝", "멈춤", "실패")
 
 status = {"running": False, "phase": "대기", "mode": "", "pages": 0, "requests": 0, "rows": 0, "bytes": 0, "total_bytes": None, "failures": 0,
           "concurrency": 0, "wait": "", "message": "", "error": "", "output": "", "started": None, "elapsed": 0.0, "group": "", "load": None}

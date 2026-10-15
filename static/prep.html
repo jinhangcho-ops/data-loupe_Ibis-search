@@ -44,7 +44,7 @@
       <h2>2. 테이블</h2>
       <select id="schema" class="hidden" style="margin-bottom:6px"></select>
       <select id="base"></select>
-      <div class="row" style="margin-top:6px"><input id="sample" type="number" min="1000" max="1000000" style="width:120px; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
+      <div class="row" style="margin-top:6px"><input id="sample" type="number" style="width:120px; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
       <div class="hint">통계를 낼 때 먼저 살펴보는 행 수. 날짜·숫자 모양의 추천과, Parquet·CSV 연결의 글자 길이에 씁니다.</div>
       <div class="cols" id="pcols"></div>
 
@@ -102,7 +102,7 @@ let drops = [];  // 끈 파생 컬럼 이름
 let deriv = [];  // 미리보기에서 알게 된 파생 컬럼 [{ name, source, type }]. 끈 것도 남긴다.
 let status = "";  // 통계를 구하는 단계: "stats"(통계 계산 중), "patterns"(타입 추천 확인 중), "stopped"(통계를 구하지 못함), 끝났으면 ""
 let token = 0;  // 테이블·연결이 바뀔 때마다 올려, 늦게 온 이전 테이블의 응답을 버린다
-let sample = +saved("sample") || 10000;  // 통계를 낼 때 먼저 살펴보는 행 수
+let sample = +saved("sample") || SERVER.sample;  // 통계를 낼 때 먼저 살펴보는 행 수(prep_app.DEFAULT_SAMPLE, 범위는 settings.SIZES)
 let preview = null;  // /api/preview의 응답. 열 구성이 바뀌면 어긋나므로 버린다.
 let shot = null;  // 미리보기를 누른 때의 설정(snap). 지금과 다르면 낡았다고 알린다.
 let confirming = null;  // 새 테이블 만들기를 한 번 더 누르기를 기다리는 이름
@@ -555,11 +555,12 @@ $("rsaved").onchange = async () => {
   $("base").value = c.base;
   await openTable(c.base, c);
 };
-$("sample").value = sample;
+const [SAMPLE_LOW, SAMPLE_HIGH] = SERVER.sizes.sample;
+Object.assign($("sample"), { value: sample, min: SAMPLE_LOW, max: SAMPLE_HIGH });
 $("sample").onchange = () => {
   const n = Number($("sample").value);
-  const ok = Number.isInteger(n) && n >= 1000 && n <= 1000000;
-  $("err-sample").textContent = ok ? "" : "1,000–1,000,000 사이의 정수를 넣으세요.";
+  const ok = Number.isInteger(n) && n >= SAMPLE_LOW && n <= SAMPLE_HIGH;
+  $("err-sample").textContent = ok ? "" : `${SAMPLE_LOW.toLocaleString()}–${SAMPLE_HIGH.toLocaleString()} 사이의 정수를 넣으세요.`;
   if (ok) { sample = n; saveSetting({ sample }); }
 };
 

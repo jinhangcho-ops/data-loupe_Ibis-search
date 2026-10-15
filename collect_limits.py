@@ -21,7 +21,9 @@ STALE_LOCK = 10  # 이보다 오래된 잠금 파일은 끝난 프로세스가 �
 MAX_GROUPS = 50
 MAX_GROUP_SIZE = 2_000
 WINDOWS = {"per_second": 1, "per_minute": 60, "per_hour": 3600}
-KEYS = {"per_second", "per_minute", "per_hour", "per_day", "concurrency", "min_interval", "reset", "tz", "margin"}
+DEFAULT = {"per_second": None, "per_minute": None, "per_hour": None, "per_day": None, "concurrency": 2, "min_interval": 0.0, "reset": "00:00", "tz": "Asia/Seoul", "margin": 0}
+NUMBERS = {"concurrency": (int, 1, 32, "동시 수(concurrency)는", ""), "min_interval": (float, 0, 3600, "최소 간격(min_interval)은", "초"),
+           "margin": (float, 0, 50, "여유(margin)는", "%")}  # (종류, 최소, 최대, 오류 문구의 앞, 단위)
 SEOUL = dt.timezone(dt.timedelta(hours=9), "Asia/Seoul")
 server_seen = {}  # 묶음 이름 → 서버가 알려 준 남은 횟수·초기화 {"remaining", "reset"} (메모리에만)
 here = threading.Lock()  # 같은 프로세스 안의 스레드끼리
@@ -33,18 +35,15 @@ def groups():
 
 def check(group):
     """묶음 값 검사. 고친 묶음을 돌려준다."""
-    if not isinstance(group, dict) or set(group) - KEYS:
-        raise ValueError(f"사용 한도에 쓸 수 없는 값이 있습니다: {', '.join(sorted(set(group) - KEYS)) if isinstance(group, dict) else '모양'}")
-    found = {"per_second": None, "per_minute": None, "per_hour": None, "per_day": None, "concurrency": 2, "min_interval": 0.0, "reset": "00:00", "tz": "Asia/Seoul", "margin": 0, **group}
+    if not isinstance(group, dict) or set(group) - set(DEFAULT):
+        raise ValueError(f"사용 한도에 쓸 수 없는 값이 있습니다: {', '.join(sorted(set(group) - set(DEFAULT))) if isinstance(group, dict) else '모양'}")
+    found = {**DEFAULT, **group}
     for key in ("per_second", "per_minute", "per_hour", "per_day"):
         if found[key] is not None and (type(found[key]) is not int or found[key] < 1):
             raise ValueError(f"'{key}'는 비우거나 1 이상의 정수로 쓰세요.")
-    if type(found["concurrency"]) is not int or not 1 <= found["concurrency"] <= 32:
-        raise ValueError("동시 수(concurrency)는 1~32의 정수로 쓰세요.")
-    if type(found["min_interval"]) not in (int, float) or not 0 <= found["min_interval"] <= 3600:
-        raise ValueError("최소 간격(min_interval)은 0~3600초로 쓰세요.")
-    if type(found["margin"]) not in (int, float) or not 0 <= found["margin"] <= 50:
-        raise ValueError("여유(margin)는 0~50%로 쓰세요.")
+    for key, (kind, low, high, label, unit) in NUMBERS.items():
+        if type(found[key]) not in ((int,) if kind is int else (int, float)) or not low <= found[key] <= high:
+            raise ValueError(f"{label} {low}~{high}{unit}{'의 정수' if kind is int else ''}로 쓰세요.")
     if not isinstance(found["reset"], str) or not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", found["reset"]):
         raise ValueError("초기화 시각(reset)은 HH:MM 모양으로 쓰세요.")
     zone(found["tz"])

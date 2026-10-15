@@ -45,7 +45,8 @@ import prep_ops
 import prep_profile
 import settings
 import source
-from app import KEY, app
+from app import app
+from server import KEY
 import server
 from server import state
 
@@ -190,7 +191,7 @@ def raised(work):
         return type(e).__name__
 
 
-def prep_text(tag, pc, got, error, only, preview, values):
+def prep_text(tag, pc, error, only, preview, values):
     """글자에서 뽑아내는 ops(extract, has, words)."""
     spec = lambda **o: only("txt", txt={"ops": o})
     pick = lambda r, name: values(r, name)[:5]
@@ -466,7 +467,7 @@ def prep_new(tag, got, error, only, preview, values):
     check(tag + " 추천의 ops를 그대로 recipe에 넣으면 동작", broken, [])
 
 
-def prep_sampling(pc, got, error):
+def prep_sampling(got, error):
     """통계·모양 검사를 앞 sample행으로 줄이는 것. 같은 검사를 DuckDB 파일 연결과 Parquet 연결에 돌린다."""
     duck = got("/api/files", path=str(SAMPLING))["files"][0]
     flat = got("/api/files", path=str(SAMPLING_FLAT))["flat"]
@@ -670,7 +671,7 @@ def prep_section():
         check(tag + " profile: 없는 테이블", error("/api/profile", base="nothing"), "'nothing' 테이블이 없습니다.")
 
         prep_new(tag, got, error, only, preview, values)
-        prep_text(tag, pc, got, error, only, preview, values)
+        prep_text(tag, pc, error, only, preview, values)
 
         print("== 전처리 파일 저장:", tag)
         data = run_file("parquet").data
@@ -719,7 +720,7 @@ def prep_section():
     r = got("/api/preview", schema="main", base="from_url", sorts=["id desc"])
     check("주소 연결에서 만든 테이블의 값", (values(r, "name")[:2], r["before"]), (["Eve  Smith", "dave"], 20))
     got("/api/disconnect")
-    prep_sampling(pc, got, error)
+    prep_sampling(got, error)
 
 
 def notify_section(c, got):
@@ -1440,7 +1441,6 @@ class FakeSite:
 def web_section(c, got):
     """수집 2단계(웹페이지)의 서버 쪽. 수집용 창은 가짜(FakeSite)로 바꿔 끼우고, robots.txt는 127.0.0.1의 가짜 서버로만 확인한다."""
     import collect_browser
-    import collect_job
     import collect_limits
     import collect_web
     from contextlib import contextmanager
@@ -2156,7 +2156,7 @@ def schedule_section(c, got):
     api.http.shutdown()
 
 
-def memory_section(c, got, duck):
+def memory_section(got, duck):
     """데이터 라이브러리 지연 로딩과 DuckDB 파일 조회의 작업 메모리 상한."""
     print("== 지연 로딩·메모리 상한")
     error = lambda api, **body: got(api, **body).get("error", "")
@@ -2289,17 +2289,25 @@ def main():
 
     print("== 열쇠")
     check("열쇠 없는 요청은 403", c.get("/api/tables").status_code, 403)
-    for path in ("/", "/search", "/prep"):
+    for path in ("/", "/search", "/prep", "/collect"):
         r = c.get(path + "?key=" + KEY)
         nonce = re.search(r"script-src 'nonce-([^']+)'", r.headers.get("Content-Security-Policy", ""))
         check(f"{path} 화면의 스크립트는 모두 CSP의 nonce를 가짐", (r.status_code, r.text.count("<script") == r.text.count(f'<script nonce="{nonce and nonce.group(1)}"') > 0), (200, True))
+        given = re.search(r"const SERVER = (.*);", r.text)
+        check(f"{path} 화면에 서버의 범위·기본값(CONSTANTS)이 들어감", given and json.loads(given.group(1)), json.loads(json.dumps(server.CONSTANTS)))
+    check("수집 화면이 쓰는 범위가 모두 있음(구성·사용 한도·예약)", {"paging.max_pages", "limit.margin", "schedule.minutes"} <= set(server.CONSTANTS["numbers"]), True)
     static = ROOT / "static"  # 지어낸 파일로 확인한다. 실제 static은 건드리지 않는다.
     static.mkdir()
     (static / "frag.html").write_text("<p>조각</p>", encoding="utf-8")
-    (static / "page.html").write_text("<!--include frag.html--><script>1</script>", encoding="utf-8")
-    with Flask(__name__, static_folder=str(static)).app_context():
-        html = server.page("page.html").get_data(as_text=True)
+    (static / "page.html").write_text("<!--include frag.html--><script>const SERVER = /*SERVER*/{};</script>", encoding="utf-8")
+    server.CONSTANTS["probe"] = "</script><b>"  # 값에 </script>가 있어도 스크립트가 끝나지 않는지
+    try:
+        with Flask(__name__, static_folder=str(static)).app_context():
+            html = server.page("page.html").get_data(as_text=True)
+    finally:
+        del server.CONSTANTS["probe"]
     check("page: include를 내용으로 바꾸고 그 안의 스크립트에도 nonce를 붙임", ("include" in html, "<p>조각</p>" in html, "<script nonce=" in html), (False, True, True))
+    check("page: SERVER 자리의 값은 <를 \\u003c로 넣어 스크립트를 끝내지 않음", (html.count("</script>"), "\\u003c/script>\\u003cb>" in html), (1, True))
     check("그 뒤로는 쿠키로 통과, 최근 연결은 아직 없음", c.get("/api/recent").get_json(), {"recent": None})
 
     print("== 연결")
@@ -2498,7 +2506,7 @@ def main():
     web_section(c, got)
     load_section(c, got)
     schedule_section(c, got)
-    memory_section(c, got, duck)
+    memory_section(got, duck)
     sqlite_section(c, got)
     prep_section()
     numbers_section()

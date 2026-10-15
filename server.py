@@ -25,6 +25,8 @@ FREE = {"/api/usage", "/api/cancel", "/api/send"}  # 차례(turn)를 기다리�
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
 ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 목록 예: ("Parquet (*.parquet)",) → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
 QUERY_TIMEOUT = 1800  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다.
+# 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
+CONSTANTS = {"sizes": settings.SIZES, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}}
 
 
 def to_json(df):
@@ -260,10 +262,12 @@ def home():
 
 
 def page(name):
-    """static 폴더의 name 파일을 화면으로 내려준다. <!--include 파일이름-->은 static의 그 파일 내용으로 바꾼다(한 번만)."""
+    """static 폴더의 name 파일을 화면으로 내려준다. <!--include 파일이름-->은 static의 그 파일 내용으로 바꾼다(한 번만).
+    /*SERVER*/ 자리에는 CONSTANTS를 JSON으로 넣는다(</script>로 끝나지 않게 <는 \\u003c로)."""
     folder = Path(current_app.static_folder)
     html = Path(folder, name).read_text(encoding="utf-8")
     html = re.sub(r"<!--include ([A-Za-z0-9._-]+)-->", lambda m: Path(folder, m[1]).read_text(encoding="utf-8"), html)
+    html = html.replace("/*SERVER*/{}", json.dumps(CONSTANTS, ensure_ascii=False).replace("<", "\\u003c"))
     nonce = secrets.token_urlsafe(16)  # 응답마다 새로 만들어, 이 값이 붙은 스크립트만 실행되게 한다.
     response = Response(html.replace("<script", f'<script nonce="{nonce}"'), mimetype="text/html")
     response.headers["Content-Security-Policy"] = (

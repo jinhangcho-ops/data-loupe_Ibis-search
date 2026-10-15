@@ -1,10 +1,13 @@
 """수집 예약(4단계)의 라우트. server.app에 달린다. 검색 화면의 연결을 쓰지 않으므로 모두 차례(turn)를 기다리지 않는다."""
 from flask import jsonify, request
 
+import collect_app
 import schedule
 import server
 from server import app
 
+server.CONSTANTS["schedule"] = schedule.DEFAULT  # 수집 화면의 예약 칸 기본값
+server.CONSTANTS["numbers"]["schedule.minutes"] = collect_app.number_range(int, *schedule.MINUTES)
 server.FREE.update({"/api/schedules", "/api/schedules/run", "/api/schedules/reregister", "/api/runs", "/api/runs/seen"})
 
 

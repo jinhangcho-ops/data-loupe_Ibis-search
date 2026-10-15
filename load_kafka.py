@@ -10,6 +10,7 @@ import re
 
 import settings
 import source
+from collect_http import HIDE  # 오류 문구에서 비밀번호를 바꿔 넣는 글자(수집과 같은 것)
 
 FILE = "kafka.json"
 MAX_DESTINATIONS = 30
@@ -22,7 +23,6 @@ TOPIC = re.compile(r"[A-Za-z0-9._-]{1,249}")  # Kafka가 받는 토픽 이름
 CHECK_TIMEOUT = 10  # 접속 확인(list_topics)을 기다리는 시간(초)
 SEND_TIMEOUT = 60  # 메시지 하나가 전달되기를 기다리는 시간(초). 넘으면 실패로 센다.
 FLUSH_MARGIN = 10  # 묶음을 다 보낸 뒤 기다리는 시간 = SEND_TIMEOUT + 이것(초). 그 안에 실패 보고까지 온다.
-HIDE = "●●●"
 
 QUIET = logging.getLogger("ibis_search.kafka")  # librdkafka의 로그를 받아 버리는 곳
 QUIET.addHandler(logging.NullHandler())

@@ -31,7 +31,7 @@ import schedule_app  # noqa: F401  예약 라우트가 앱에 달린다.
 import scratch
 import server
 import source
-from app import KEY, app
+from app import app
 
 scratch.sweep()  # 지난번에 강제 종료돼 남은 임시 폴더를 지운다.
 http = make_server("127.0.0.1", 0, app, threaded=True)  # 0: 비어 있는 포트를 자동으로 고른다. threaded: 조회 중에도 메모리·CPU 요청에 답한다.
@@ -39,7 +39,7 @@ threading.Thread(target=http.serve_forever, daemon=True).start()
 
 webview.settings["ALLOW_DOWNLOADS"] = True  # 결과·차트 내보내기
 # 열쇠를 아는 이 창만 화면을 열 수 있다(브라우저로 주소만 열면 거부된다).
-window = webview.create_window("Ibis 검색·전처리·수집", f"http://127.0.0.1:{http.server_port}/?key={KEY}", width=1400, height=900)
+window = webview.create_window("Ibis 검색·전처리·수집", f"http://127.0.0.1:{http.server_port}/?key={server.KEY}", width=1400, height=900)
 
 
 def ask_save(name, file_types):

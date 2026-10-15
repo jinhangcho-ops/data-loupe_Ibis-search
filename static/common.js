@@ -50,8 +50,8 @@ setInterval(showUsage, 2000);
 // 전체 시간: [검색]을 누르면 0에서 다시 시작하고, 그 뒤의 집계·차트·저장 시간을 더해 간다. 도는 동안은 "예상 | 경과", 끝나면 "예상 | 실제".
 // 작업 하나의 예상 = 기준 테이블 행 수 × 그 작업 종류·행 수 구간의 직전 행당 시간(나노초/행, 설정으로 기억). 그 구간에서 안 해 봤으면 예상에 더하지 않는다.
 const rates = {};  // 설정 이름 → 행당 시간. 처음 쓸 때 저장된 값을 읽어 둔다.
-// 행당 시간의 설정 이름: 작업 종류와 행 수의 구간(10배 단위, 1,000행 미만은 한 구간)마다 따로다. settings.py의 TIME과 같아야 한다.
-const rateName = (kind, rows) => `time_${kind}_${Math.max(2, String(rows).length - 1)}`;
+// 행당 시간의 설정 이름: 작업 종류와 행 수의 구간(10배 단위, settings.TIME_BANDS 안으로 맞춘다)마다 따로다.
+const rateName = (kind, rows) => `time_${kind}_${Math.min(SERVER.time.bands[1], Math.max(SERVER.time.bands[0], String(rows).length - 1))}`;
 const secs = ms => (ms / 1000).toFixed(1) + "초";
 let total = { guess: 0, done: 0 }, timer;  // 예상 합계와 끝난 작업의 시간 합계(ms)
 const going = new Set();  // 지금 도는 작업들의 시작 시각
@@ -80,7 +80,7 @@ async function timed(kind, fn) {
     if (rows && (rates[name] ??= +saved(name) || 0)) mine.guess += rates[name] * rows / 1e6;
     const out = await fn();
     if (rows) {
-      rates[name] = Math.min(Math.max(Math.round((performance.now() - run.at) * 1e6 / rows), 1), 1e12);  // 상한은 settings.py의 MAX_TIME과 같아야 한다.
+      rates[name] = Math.min(Math.max(Math.round((performance.now() - run.at) * 1e6 / rows), 1), SERVER.time.max);
       saveSetting({ [name]: rates[name] });
     }
     notifyDone(kind, (performance.now() - run.at) / 1000, rows);  // 성공한 작업만(오류·취소는 위에서 던져져 여기까지 오지 않는다)
@@ -149,10 +149,11 @@ $("dest-preset").onchange = () => {
 $("dest-open").onclick = () => $("dest-panel").classList.remove("hidden");
 $("dest-close").onclick = () => $("dest-panel").classList.add("hidden");
 $("dest-panel").onclick = e => { if (e.target === $("dest-panel")) $("dest-panel").classList.add("hidden"); };
-$("notify-after").value = notifyAfter;
+const [AFTER_LOW, AFTER_HIGH] = SERVER.sizes.notify_after;
+Object.assign($("notify-after"), { value: notifyAfter, min: AFTER_LOW, max: AFTER_HIGH });
 $("notify-after").onchange = () => {
-  const n = Number($("notify-after").value), ok = Number.isInteger(n) && n >= 5 && n <= 3600;
-  destMsg(ok ? "" : "5–3600 사이의 정수를 넣으세요.");
+  const n = Number($("notify-after").value), ok = Number.isInteger(n) && n >= AFTER_LOW && n <= AFTER_HIGH;
+  destMsg(ok ? "" : `${AFTER_LOW}–${AFTER_HIGH} 사이의 정수를 넣으세요.`);
   if (ok) { notifyAfter = n; saveSetting({ notify_after: n }); }
 };
 $("dest-save").onclick = () => busy($("dest-save"), async () => {
@@ -167,7 +168,7 @@ $("dest-del").onclick = () => busy($("dest-del"), async () => {
 });
 $("dest-test").onclick = () => busy($("dest-test"), async () => {
   if (!$("dest-list").value) return destMsg("저장한 보낼 곳을 고른 뒤 시험하세요.");
-  try { await sendTo($("dest-list").value, { title: "시험 메시지", text: "Ibis 검색·전처리에서 보낸 시험 메시지입니다." }); destMsg("보냈습니다", true); } catch (e) { destMsg(e.message); }
+  try { await sendTo($("dest-list").value, { title: "시험 메시지", text: "Ibis에서 보낸 시험 메시지입니다." }); destMsg("보냈습니다", true); } catch (e) { destMsg(e.message); }
 });
 api("/api/destinations").then(showDestinations).catch(() => {});
 
@@ -237,9 +238,9 @@ $("memory").onchange = () => {
   if ($("memory").value !== "custom") saveSetting({ memory: +$("memory").value });
 };
 $("memory-gb").onchange = () => {
-  const gb = Number($("memory-gb").value);
-  if (gb >= 0.256 && gb <= 1000) saveSetting({ memory: Math.round(gb * 1000) });
-  else connMsg("작업 메모리 상한은 0.256GB 이상 1000GB 이하로 넣으세요.");
+  const mb = Math.round(Number($("memory-gb").value) * 1000), [low, high] = SERVER.sizes.memory;
+  if (mb >= low && mb <= high) saveSetting({ memory: mb });
+  else connMsg(`작업 메모리 상한은 ${low / 1000}GB 이상 ${high / 1000}GB 이하로 넣으세요.`);
 };
 $("flat-list").onchange = showFlat;
 $("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };

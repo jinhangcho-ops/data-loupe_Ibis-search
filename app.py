@@ -9,7 +9,7 @@ import result
 import server
 import settings
 import source
-from server import KEY, app, get_con, run, to_json
+from server import app, get_con, run, to_json
 
 
 @app.get("/search")

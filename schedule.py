@@ -3,7 +3,6 @@
 비밀번호는 저장하지 않으므로 비밀번호가 필요한 구성은 예약하지 않는다(password_reason 하나로 판단)."""
 import datetime as dt
 import hashlib
-import json
 import math
 import os
 import re
@@ -27,7 +26,8 @@ MAX_RUNS = 200
 MAX_SCHEDULES = settings.MAX_SAVED
 EVERY = ("daily", "weekly", "interval")
 NOTIFY_ON = ("fail", "always")
-DEFAULT = {"every": "daily", "time": "09:00", "days": [], "minutes": 60, "inapp": True, "windows": False, "notify": "", "notify_on": "fail"}
+DEFAULT = {"every": "daily", "time": "09:00", "days": [0, 1, 2, 3, 4], "minutes": 60, "inapp": True, "windows": False, "notify": "", "notify_on": "fail"}  # 화면(collect.html)도 이 값을 쓴다
+MINUTES = (5, 1440)  # interval 예약의 간격(분) 범위
 TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 ANCHOR = dt.datetime(2000, 1, 1)  # interval 예약의 기준 시각: 이때부터 minutes분마다(프로그램 안 예약과 Windows 작업이 같은 시각에 돈다)
 TICK = 20  # 프로그램 안 예약이 확인하는 간격(초)
@@ -101,8 +101,8 @@ def checked(item):
         raise ValueError("요일(days)은 0(월)~6(일)의 겹치지 않는 목록이어야 합니다.")
     if found["every"] == "weekly" and not days:
         raise ValueError("매주 예약은 요일을 하나 이상 고르세요.")
-    if type(found["minutes"]) is not int or not 5 <= found["minutes"] <= 1440:
-        raise ValueError("간격(minutes)은 5~1440분의 정수여야 합니다.")
+    if type(found["minutes"]) is not int or not MINUTES[0] <= found["minutes"] <= MINUTES[1]:
+        raise ValueError(f"간격(minutes)은 {MINUTES[0]}~{MINUTES[1]}분의 정수여야 합니다.")
     for key in ("inapp", "windows"):
         if type(found[key]) is not bool:
             raise ValueError(f"예약의 {key}는 true·false여야 합니다.")

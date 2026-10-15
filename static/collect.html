@@ -84,9 +84,9 @@
         <option value="none">없음 (한 번만 받기)</option><option value="page">쪽 번호 {page}</option><option value="offset">offset {offset}</option><option value="cursor">커서 {cursor}</option><option value="next_url">다음 주소</option>
       </select>
       <div class="fields">
-        <label id="p-start-box"><div class="hint" id="p-start-name">첫 쪽 번호</div><input id="p-start" type="number" min="0"></label>
-        <label id="p-step-box"><div class="hint">한 번에 늘릴 값</div><input id="p-step" type="number" min="1"></label>
-        <label id="p-max-box"><div class="hint">최대 쪽 수</div><input id="p-max" type="number" min="1" max="1000000"></label>
+        <label id="p-start-box"><div class="hint" id="p-start-name">첫 쪽 번호</div><input id="p-start" type="number"></label>
+        <label id="p-step-box"><div class="hint">한 번에 늘릴 값</div><input id="p-step" type="number"></label>
+        <label id="p-max-box"><div class="hint">최대 쪽 수</div><input id="p-max" type="number"></label>
       </div>
       <label id="p-cursor-box"><div class="hint">다음 커서 위치</div><input id="p-cursor" class="code" placeholder="응답 트리에서 지정" style="margin-bottom:6px"></label>
       <label id="p-next-box"><div class="hint">다음 주소 위치 (비우면 Link 헤더의 rel=next)</div><input id="p-next" class="code" placeholder="응답 트리에서 지정" style="margin-bottom:6px"></label>
@@ -96,10 +96,10 @@
 
     <h2>5. 받는 속도</h2>
     <div class="fields">
-      <label class="not-web"><div class="hint">동시 수</div><input id="b-conc" type="number" min="1"></label>
-      <label><div class="hint">간격(초)</div><input id="b-gap" type="number" min="0" step="any"></label>
-      <label class="not-web"><div class="hint">다시 시도 횟수</div><input id="b-retry" type="number" min="0"></label>
-      <label><div class="hint">시간 초과(초)</div><input id="b-timeout" type="number" min="1" step="any"></label>
+      <label class="not-web"><div class="hint">동시 수</div><input id="b-conc" type="number"></label>
+      <label><div class="hint">간격(초)</div><input id="b-gap" type="number" step="any"></label>
+      <label class="not-web"><div class="hint">다시 시도 횟수</div><input id="b-retry" type="number"></label>
+      <label><div class="hint">시간 초과(초)</div><input id="b-timeout" type="number" step="any"></label>
     </div>
     <div class="hint not-web">쪽 번호·offset 방식만 동시에 받습니다.</div>
     <div class="hint for-web hidden">웹페이지는 수집용 창 하나로 받습니다. 간격은 쪽 사이, 시간 초과는 쪽 하나를 여는 시간입니다.</div>
@@ -112,11 +112,11 @@
       <label><div class="hint">분당</div><input id="l-min" type="number" min="1"></label>
       <label><div class="hint">시간당</div><input id="l-hour" type="number" min="1"></label>
       <label><div class="hint">하루</div><input id="l-day" type="number" min="1"></label>
-      <label><div class="hint">동시 수</div><input id="l-conc" type="number" min="1"></label>
-      <label><div class="hint">최소 간격(초)</div><input id="l-gap" type="number" min="0" step="any"></label>
+      <label><div class="hint">동시 수</div><input id="l-conc" type="number"></label>
+      <label><div class="hint">최소 간격(초)</div><input id="l-gap" type="number" step="any"></label>
       <label><div class="hint">하루 초기화 시각</div><input id="l-reset" placeholder="00:00"></label>
       <label><div class="hint">시간대</div><select id="l-tz"><option value="Asia/Seoul">한국 시간</option><option value="UTC">UTC</option><option value="local">이 PC</option></select></label>
-      <label><div class="hint">여유분(%)</div><input id="l-margin" type="number" min="0" max="50" step="any"></label>
+      <label><div class="hint">여유분(%)</div><input id="l-margin" type="number" step="any"></label>
     </div>
     <div class="hint usage" id="lusage"></div>
     <div class="warn" id="lbroken"></div>
@@ -176,7 +176,7 @@
       <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">헤더</h2><button class="ghost" data-add="f-headers">+ 행 추가</button></div>
       <div id="f-headers"></div>
       <div class="fields" style="margin-top:6px">
-        <label><div class="hint">조각 수 (1~16)</div><input id="f-chunks" type="number" min="1" max="16"></label>
+        <label><div class="hint">조각 수 (<span data-range="file.chunks"></span>)</div><input id="f-chunks" type="number"></label>
         <label><div class="hint">파일 종류</div><select id="f-kind"><option value="auto">자동</option><option value="csv">CSV</option><option value="parquet">Parquet</option><option value="json">JSON</option></select></label>
         <label><div class="hint">인코딩</div><select id="f-enc"><option value="auto">자동</option><option value="utf-8">UTF-8</option><option value="cp949">CP949</option></select></label>
       </div>
@@ -206,9 +206,9 @@
       </select>
       <label id="w-next-box"><div class="hint">다음 버튼 선택자</div><input id="w-next" class="code" placeholder="[다음 버튼 고르기]로 지정" style="margin-bottom:6px"></label>
       <div class="fields">
-        <label id="w-start-box"><div class="hint">첫 쪽 번호</div><input id="w-start" type="number" min="0"></label>
-        <label id="w-max-box"><div class="hint">최대 쪽 수</div><input id="w-max" type="number" min="1" max="1000000"></label>
-        <label><div class="hint">기다리기(초, 1~120)</div><input id="w-wait" type="number" min="1" max="120" step="any"></label>
+        <label id="w-start-box"><div class="hint">첫 쪽 번호</div><input id="w-start" type="number"></label>
+        <label id="w-max-box"><div class="hint">최대 쪽 수</div><input id="w-max" type="number"></label>
+        <label><div class="hint">기다리기(초, <span data-range="web.wait"></span>)</div><input id="w-wait" type="number" step="any"></label>
       </div>
       <div class="hint">기다리기: 항목이 나타나고 개수가 더 늘지 않을 때까지 기다리는 최대 시간</div>
       <div class="warn" id="w-pwarn"></div>
@@ -311,9 +311,9 @@
         <h2>넣는 단위와 속도</h2>
         <div class="fields">
           <label><div class="hint">넣는 단위</div><select id="ld-unit"><option value="batch">묶음</option><option value="single">한 건씩</option></select></label>
-          <label id="ld-batch-box"><div class="hint">묶음 행 수</div><input id="ld-batch" type="number" min="100" max="1000000"></label>
-          <label><div class="hint">간격(초)</div><input id="ld-gap" type="number" min="0" max="3600" step="any"></label>
-          <label><div class="hint">다시 시도</div><input id="ld-retry" type="number" min="0" max="20"></label>
+          <label id="ld-batch-box"><div class="hint">묶음 행 수</div><input id="ld-batch" type="number"></label>
+          <label><div class="hint">간격(초)</div><input id="ld-gap" type="number" step="any"></label>
+          <label><div class="hint">다시 시도</div><input id="ld-retry" type="number"></label>
         </div>
         <div class="hint">확정 직후 연결이 끊기면 그 묶음이 들어갔는지 알 수 없어, 다시 넣을 때 중복될 수 있습니다(키 건너뛰기를 쓰면 막을 수 있습니다).</div>
       </div>
@@ -354,7 +354,7 @@
         <label><div class="hint">대상 구성</div><select id="sc-name" title="예약할 저장한 구성"></select></label>
         <label><div class="hint">주기</div><select id="sc-every"><option value="daily">매일</option><option value="weekly">매주</option><option value="interval">N분마다</option></select></label>
         <label id="sc-time-box"><div class="hint">시각 (이 PC)</div><input id="sc-time" placeholder="09:00"></label>
-        <label id="sc-min-box"><div class="hint">간격(분, 5~1440)</div><input id="sc-minutes" type="number" min="5" max="1440"></label>
+        <label id="sc-min-box"><div class="hint">간격(분, <span data-range="schedule.minutes"></span>)</div><input id="sc-minutes" type="number"></label>
       </div>
       <div id="sc-days-box">
         <div class="hint">요일</div>
@@ -388,18 +388,7 @@
 <script src="/static/common.js"></script>
 <script>
 // 수집 화면. 서버로 보내는 설정은 config() 하나로 모은다(시험·미리보기·예상·시작·구성 저장이 모두 같은 것을 보낸다).
-const DEFAULT = {
-  version: 1, mode: "api", env_path: "", limit_group: "",
-  request: { method: "GET", url: "", query: [], headers: [], body_kind: "none", body: "" },
-  response: { records: "", columns: [] },
-  paging: { kind: "none", start: 1, step: 100, max_pages: 100, cursor_path: "", next_path: "", total_path: "" },
-  balance: { concurrency: 2, interval: 1.0, retries: 5, timeout: 30 },
-  file: { url: "", headers: [], chunks: 4, kind: "auto", encoding: "auto" },
-  web: { url: "", items: "", fields: [], paging: { kind: "none", next: "", start: 1, max_pages: 100 }, wait: 10, robots: true, show: true },
-  output: { format: "parquet", path: "", dedupe: [] },
-  load: { target: "file", table: { connection: { kind: "folder", file: "" }, schema: "", name: "", how: "new", key: [] },
-    kafka: { destination: "", key: "" }, unit: "batch", batch: 10000, interval: 0, retries: 3 },
-};
+const DEFAULT = SERVER.collect;  // 구성의 기본값(collect_job.DEFAULT)
 const MODES = ["api", "file", "web"];
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"];
 const FORMATS = { curl: "curl 명령", http: "HTTP 요청", json: "JSON" };
@@ -441,35 +430,55 @@ function twice(button, ask, fn) {
 }
 document.addEventListener("click", e => { if (armed && !armed.contains(e.target)) disarm(); }, true);
 
+// 숫자 칸: id → [안내 이름, 범위 이름]. 범위는 서버가 검사하는 것(SERVER.numbers)을 그대로 쓰고, 칸의 min·max도 여기서 채운다.
+const NUMBER_FIELDS = {
+  "b-conc": ["동시 수", "balance.concurrency"], "b-gap": ["간격", "balance.interval"], "b-retry": ["다시 시도 횟수", "balance.retries"], "b-timeout": ["시간 초과", "balance.timeout"],
+  "p-start": ["첫 쪽 번호", "paging.start"], "p-step": ["한 번에 늘릴 값", "paging.step"], "p-max": ["최대 쪽 수", "paging.max_pages"],
+  "f-chunks": ["조각 수", "file.chunks"], "w-start": ["첫 쪽 번호", "web.paging.start"], "w-max": ["최대 쪽 수", "web.paging.max_pages"], "w-wait": ["기다리기", "web.wait"],
+  "ld-batch": ["묶음 행 수", "load.batch"], "ld-gap": ["적재 간격", "load.interval"], "ld-retry": ["적재 다시 시도", "load.retries"],
+  "l-conc": ["동시 수", "limit.concurrency"], "l-gap": ["최소 간격", "limit.min_interval"], "l-margin": ["여유분", "limit.margin"],
+  "sc-minutes": ["간격(분)", "schedule.minutes"],
+};
+const HUGE = 1e9;  // 이보다 큰 범위 끝(쪽 번호의 ±10^12 등)은 사실상 제한이 없어 칸과 안내에 적지 않는다.
+const rule = (id, name = NUMBER_FIELDS[id][0]) => { const r = SERVER.numbers[NUMBER_FIELDS[id][1]]; return [id, name, r.min, r.max, r.int]; };
+for (const id in NUMBER_FIELDS) {
+  const r = SERVER.numbers[NUMBER_FIELDS[id][1]];
+  if (Math.abs(r.min) < HUGE) $(id).min = r.min;
+  if (r.max < HUGE) $(id).max = r.max;
+}
+document.querySelectorAll("[data-range]").forEach(e => { const r = SERVER.numbers[e.dataset.range]; e.textContent = `${r.min}~${r.max}`; });
 // 숫자 칸 검사: [id, 이름, 최소, 최대(없으면 null), 정수인가, 비워도 되는가]. 처음 걸린 칸의 안내를 돌려준다(서버가 다시 검사한다).
 function badNumber(rules) {
   for (const [id, name, min, max, int, blank] of rules) {
     const v = val(id), n = Number(v);
     if (blank && v === "") continue;
-    if (v === "" || !Number.isFinite(n) || (int && !Number.isInteger(n)) || n < min || (max !== null && n > max))
-      return `${name}: ${min}${max === null ? " 이상" : `–${max.toLocaleString()}`}의 ${int ? "정수" : "수"}를 넣으세요.`;
+    if (v === "" || !Number.isFinite(n) || (int && !Number.isInteger(n)) || n < min || (max !== null && n > max)) {
+      const low = Math.abs(min) < HUGE, high = max !== null && max < HUGE;
+      const span = low && high ? `${min.toLocaleString()}–${max.toLocaleString()}의 ` : low ? `${min.toLocaleString()} 이상의 ` : high ? `${max.toLocaleString()} 이하의 ` : "";
+      return `${name}: ${span}${int ? "정수" : "수"}를 넣으세요.`;
+    }
   }
   return "";
 }
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;  // 시각 칸(하루 초기화 시각·예약 시각)
 function problems() {
-  const kind = $("p-kind").value, web = mode() === "web", rules = [["b-gap", "간격", 0, null, false], ["b-timeout", "시간 초과", 1, null, false]];
-  if (!web) rules.unshift(["b-conc", "동시 수", 1, null, true], ["b-retry", "다시 시도 횟수", 0, null, true]);
-  if (mode() === "file") rules.push(["f-chunks", "조각 수", 1, 16, true]);
+  const kind = $("p-kind").value, web = mode() === "web", rules = [rule("b-gap"), rule("b-timeout")];
+  if (!web) rules.unshift(rule("b-conc"), rule("b-retry"));
+  if (mode() === "file") rules.push(rule("f-chunks"));
   else if (web) {
     const wkind = $("w-pkind").value;
-    if (wkind === "url") rules.push(["w-start", "첫 쪽 번호", 0, null, true]);
-    if (wkind !== "none") rules.push(["w-max", "최대 쪽 수", 1, 1000000, true]);
-    rules.push(["w-wait", "기다리기", 1, 120, false]);
+    if (wkind === "url") rules.push(rule("w-start"));
+    if (wkind !== "none") rules.push(rule("w-max"));
+    rules.push(rule("w-wait"));
   }
   if (loadTarget() !== "file") {
-    if ($("ld-unit").value === "batch") rules.push(["ld-batch", "묶음 행 수", 100, 1000000, true]);
-    rules.push(["ld-gap", "적재 간격", 0, 3600, false], ["ld-retry", "적재 다시 시도", 0, 20, true]);
+    if ($("ld-unit").value === "batch") rules.push(rule("ld-batch"));
+    rules.push(rule("ld-gap"), rule("ld-retry"));
   }
   if (!web && mode() !== "file") {
-    if (kind === "page" || kind === "offset") rules.push(["p-start", kind === "page" ? "첫 쪽 번호" : "첫 offset", 0, null, true]);
-    if (kind === "offset") rules.push(["p-step", "한 번에 늘릴 값", 1, null, true]);
-    if (kind !== "none") rules.push(["p-max", "최대 쪽 수", 1, 1000000, true]);
+    if (kind === "page" || kind === "offset") rules.push(rule("p-start", kind === "page" ? "첫 쪽 번호" : "첫 offset"));
+    if (kind === "offset") rules.push(rule("p-step"));
+    if (kind !== "none") rules.push(rule("p-max"));
   }
   return badNumber(rules);
 }
@@ -872,7 +881,7 @@ $("w-sample-btn").onclick = () => busy($("w-sample-btn"), async () => {
 
 // 사용 한도 묶음과 사용량
 const LIMIT_FIELDS = [["l-sec", "per_second", "초당"], ["l-min", "per_minute", "분당"], ["l-hour", "per_hour", "시간당"], ["l-day", "per_day", "하루"]];
-const NO_LIMIT = { per_second: null, per_minute: null, per_hour: null, per_day: null, concurrency: 2, min_interval: 0, reset: "00:00", tz: "Asia/Seoul", margin: 0 };
+const NO_LIMIT = SERVER.limit;  // 사용 한도 묶음의 기본값(collect_limits.DEFAULT)
 function usageText(u) {
   if (!u) return "";
   const lines = [`사용: 초 ${u.second} · 분 ${u.minute} · 시간 ${u.hour} · 하루 ${u.day.toLocaleString()}${u.day_limit != null ? ` / ${u.day_limit.toLocaleString()} (남은 ${(u.day_left ?? 0).toLocaleString()})` : ""}`, `하루 초기화: ${u.reset_at}`];
@@ -904,7 +913,7 @@ $("lsave").onclick = () => busy($("lsave"), async () => {
   const name = val("lname") || $("lgroup").value;
   try {
     if (!name) throw new Error("묶음 이름을 넣으세요.");
-    const bad = badNumber([...LIMIT_FIELDS.map(([id, , label]) => [id, label, 1, null, true, true]), ["l-conc", "동시 수", 1, null, true], ["l-gap", "최소 간격", 0, null, false], ["l-margin", "여유분", 0, 50, false]]);
+    const bad = badNumber([...LIMIT_FIELDS.map(([id, , label]) => [id, label, 1, null, true, true]), rule("l-conc"), rule("l-gap"), rule("l-margin")]);
     if (bad) throw new Error(bad);
     if (!HHMM.test(val("l-reset"))) throw new Error("하루 초기화 시각은 00:00 모양(HH:MM)으로 넣으세요.");
     const group = { ...Object.fromEntries(LIMIT_FIELDS.map(([id, key]) => [key, val(id) === "" ? null : Number(val(id))])),
@@ -996,7 +1005,7 @@ $("ld-check").onclick = () => busy($("ld-check"), async () => {
 });
 
 // Kafka 적재할 곳 등록: 고르면 칸을 채우고, 저장·삭제한다. 비밀번호는 등록에 없다.
-const KAFKA_DEFAULT = { servers: "", topic: "", security: "PLAINTEXT", mechanism: "PLAIN", user: "", ca: "" };
+const KAFKA_DEFAULT = SERVER.kafka;  // Kafka 등록의 기본값(load_kafka.DEFAULT)
 function showKafka(d, name = $("kf-saved").value) {
   kafka = d.kafka;
   fill($("kf-saved"), Object.keys(kafka), "등록 고르기");
@@ -1243,8 +1252,8 @@ $("open-prep").onclick = () => openWith($("open-prep"), true);
 // 예약: 저장한 구성을 주기마다 돌린다. 예약 칸은 config()에 넣지 않고 /api/schedules에 구성 이름별로 따로 저장한다.
 // Windows 예약 작업이 새로 등록되거나 지워지는 저장·지우기·다시 등록은 한 번 더 눌러야 요청한다.
 const DAYS = "월화수목금토일";  // 예약의 days: 0=월 … 6=일
-const HOW = { inapp: "프로그램 안", windows: "Windows", now: "지금", manual: "직접" };
-const SCHEDULE_DEFAULT = { every: "daily", time: "09:00", days: [0, 1, 2, 3, 4], minutes: 60, inapp: true, windows: false, notify: "", notify_on: "fail" };
+const HOW = { inapp: "프로그램 안", windows: "Windows", now: "지금" };
+const SCHEDULE_DEFAULT = SERVER.schedule;  // 예약의 기본값(schedule.DEFAULT)
 let sched = { schedules: {}, tasks: {}, next_inapp: {}, stale: [] };
 let wantNotify = "";  // 불러온 예약의 보낼 곳. 보낼 곳 목록이 늦게 와도 고르게 둔다
 const dayBoxes = () => [...DAYS].map((_, i) => $("sc-d" + i));
@@ -1300,7 +1309,7 @@ function readSchedule() {
     if (!s.days.length) throw new Error("요일을 하나 이상 고르세요.");
   }
   if (every === "interval") {
-    const bad = badNumber([["sc-minutes", "간격(분)", 5, 1440, true]]);
+    const bad = badNumber([rule("sc-minutes")]);
     if (bad) throw new Error(bad);
     s.minutes = Number(val("sc-minutes"));
   }
