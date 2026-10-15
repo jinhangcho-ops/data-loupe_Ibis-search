@@ -64,8 +64,9 @@ MAX_FIELDS = 200  # 웹페이지 컬럼 수
 FIELD_ATTR = re.compile(r"text|[A-Za-z_:][-A-Za-z0-9_:.]{0,99}")  # 컬럼의 attr: text 또는 속성 이름
 RUNNING = "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요."
 
-status = {"running": False, "phase": "대기", "mode": "", "pages": 0, "requests": 0, "rows": 0, "bytes": 0, "total_bytes": None, "failures": 0,
-          "concurrency": 0, "wait": "", "message": "", "error": "", "output": "", "started": None, "elapsed": 0.0, "group": "", "load": None}
+IDLE = {"running": False, "phase": "대기", "mode": "", "pages": 0, "requests": 0, "rows": 0, "bytes": 0, "total_bytes": None, "failures": 0,
+        "concurrency": 0, "wait": "", "message": "", "error": "", "output": "", "started": None, "elapsed": 0.0, "group": "", "load": None}  # 처음 상태
+status = dict(IDLE)
 guard = threading.Lock()  # status와 진행 기록을 고칠 때
 current = {"thread": None, "halt": threading.Event(), "balancer": None, "hide": []}
 
@@ -338,8 +339,7 @@ def launch(config, env, path, found, record, password, **shown):
     """상태를 처음으로 돌리고(shown으로 고친 칸만 다르게) 작업 스레드를 띄운다."""
     halt = threading.Event()
     current.update(halt=halt, balancer=None, hide=req.hidden(env) + ([password] if password else []))
-    update(**{"running": True, "phase": "받는 중", "mode": config["mode"], "pages": 0, "requests": 0, "rows": 0, "bytes": 0, "total_bytes": None, "failures": 0,
-              "concurrency": 0, "wait": "", "message": "", "error": "", "output": "", "started": time.time(), "elapsed": 0.0, "group": "", "load": None, **shown})
+    update(**{**IDLE, "running": True, "phase": "받는 중", "mode": config["mode"], "started": time.time(), **shown})
     thread = threading.Thread(target=work, args=(config, env, path, found, record, halt, password), daemon=True)
     current["thread"] = thread
     thread.start()

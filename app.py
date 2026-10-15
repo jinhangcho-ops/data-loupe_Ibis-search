@@ -110,15 +110,7 @@ def handoff():
     if server.reading(path):
         raise ValueError("지금 읽고 있는 파일에는 저장할 수 없습니다. 다른 이름을 고르세요.")
     part = path.with_name(path.stem + ".part.parquet")
-
-    def write():
-        try:
-            result.export(expr, part)
-        except Exception:
-            part.unlink(missing_ok=True)
-            raise
-
-    run(write, lambda done: part.unlink(missing_ok=True))  # 그만둔 뒤에 늦게 다 쓴 파일도 지운다.
+    server.run_writing(lambda: result.export(expr, part), lambda: part.unlink(missing_ok=True))
     os.replace(part, path)
     server.switch({"kind": "folder", "path": str(path.parent), "files": [str(path)]})
     return jsonify(path=str(path), table=source.list_tables(get_con())[0])

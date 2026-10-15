@@ -414,7 +414,6 @@ let kafka = {};  // Kafka 적재할 곳 등록(이름 → 등록). 비밀번호�
 let fields = [];  // 웹페이지 컬럼 [{ name, selector, attr, text, attrs }]. text·attrs는 고를 때 본 값(미리보기용, 저장하지 않는다)
 
 const val = id => $(id).value.trim();
-const say = (id, text, ok) => { $(id).textContent = text; $(id).className = ok ? "ok" : "err"; };
 const attr = v => esc(v).replace(/"/g, "&quot;");
 const size = n => n < 1024 ? `${n}B` : n < 1048576 ? `${(n / 1024).toFixed(1)}KB` : n < 1073741824 ? `${(n / 1048576).toFixed(1)}MB` : `${(n / 1073741824).toFixed(2)}GB`;
 const mode = () => document.querySelector("input[name=mode]:checked").value;

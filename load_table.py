@@ -66,21 +66,24 @@ def sign(config):
 
 def made():
     found = settings.read(FILE) or {}
-    return found.get("tables", []) if isinstance(found.get("tables"), list) else []
+    return [t for t in found.get("tables", []) if isinstance(t, dict)] if isinstance(found.get("tables"), list) else []
+
+
+def same(record, link, schema, name):
+    """기록이 그 연결·스키마·테이블(이름은 대소문자 무시)의 것인지."""
+    return (record.get("connection"), record.get("schema"), str(record.get("name", "")).lower()) == (ident(link), schema, name.lower())
 
 
 def mine(link, schema, name):
     """이 프로그램이 만든 테이블의 기록. 없으면 None."""
-    key = (ident(link), schema, name.lower())
-    return next((t for t in made() if isinstance(t, dict) and (t.get("connection"), t.get("schema"), str(t.get("name", "")).lower()) == key), None)
+    return next((t for t in made() if same(t, link, schema, name)), None)
 
 
 def remember(link, schema, name, columns):
     """만든 테이블을 기록한다(같은 것이 있으면 바꾼다). columns가 None이면 기록을 지운다."""
-    key = (ident(link), schema, name.lower())
-    tables = [t for t in made() if isinstance(t, dict) and (t.get("connection"), t.get("schema"), str(t.get("name", "")).lower()) != key]
+    tables = [t for t in made() if not same(t, link, schema, name)]
     if columns is not None:
-        tables.append({"connection": key[0], "schema": schema, "name": name, "columns": columns, "created": dt.datetime.now().isoformat(timespec="seconds")})
+        tables.append({"connection": ident(link), "schema": schema, "name": name, "columns": columns, "created": dt.datetime.now().isoformat(timespec="seconds")})
     settings.write(FILE, {"tables": tables})
 
 

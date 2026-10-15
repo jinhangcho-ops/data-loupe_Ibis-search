@@ -143,10 +143,11 @@ def run(config, path, password, halt, note):
     load = config["load"]
     module, size = TARGETS[load["target"]], load["batch"]
     sign = signature(config)
+    new_record = lambda: {"sign": sign, "rows": 0, "batches": 0, "inserted": 0, "skipped": 0, "failures": 0}  # 처음부터 넣는 기록
     record = read_record(path)
     resumed = bool(record and record.get("sign") == sign)
     if not resumed:
-        record = {"sign": sign, "rows": 0, "batches": 0, "inserted": 0, "skipped": 0, "failures": 0}
+        record = new_record()
     view = {"target": load["target"], "rows": 0, "total": total_rows(path), "batches": 0, "skipped": 0, "failures": 0, "where": module.where(config)}
 
     def show():
@@ -158,8 +159,7 @@ def run(config, path, password, halt, note):
         sink = module.Sink(config, password, batches.schema, resumed)
         try:
             if sink.fresh and resumed:  # 이어 넣을 곳이 없어져 새로 만들었으면 처음부터
-                record.update(rows=0, batches=0, inserted=0, skipped=0, failures=0)
-                resumed = False
+                record, resumed = new_record(), False
             write_record(path, record)
             if resumed:
                 note(message="이어 넣습니다.")

@@ -291,6 +291,11 @@ def literal(value):
     return bool(text.strip()) and not has_env(text) and ENV_MARK not in text
 
 
+def secret_header(name, value):
+    """헤더 하나가 비밀(Authorization 같은 헤더이거나 이름이 비밀 같음)인데 값이 글자 그대로인지."""
+    return (name.lower() in SECRET_HEADERS or secret_name(name)) and literal(value)
+
+
 def url_secrets(url):
     """주소 안의 비밀: user:pass@의 비밀번호와 이름이 비밀 같은 쿼리. [(where, name)]"""
     parts, found = urlsplit(url), []
@@ -304,8 +309,7 @@ def url_secrets(url):
 def secrets(request):
     """request에서 비밀처럼 보이는데 값이 글자 그대로인 자리: [{"where", "name", "path"}]"""
     found = [{"where": w, "name": n, "path": ""} for w, n in url_secrets(request.get("url", ""))]
-    found += [{"where": "header", "name": k, "path": ""} for k, v in request.get("headers", [])
-              if (k.lower() in SECRET_HEADERS or secret_name(k)) and literal(v)]
+    found += [{"where": "header", "name": k, "path": ""} for k, v in request.get("headers", []) if secret_header(k, v)]
     found += [{"where": "query", "name": k, "path": ""} for k, v in request.get("query", []) if secret_name(k) and literal(v)]
     kind, body = request.get("body_kind"), request.get("body", "")
     if kind == "form":
@@ -383,7 +387,7 @@ def literal_places(config):
               else f"{label[s['where']]} {s['path'] or s['name']}") for s in secrets(request)]
     found += [("url", n, f"파일 주소의 {'비밀번호' if n == 'password' else n}") for _, n in url_secrets(file.get("url", ""))]
     found += [("url", n, f"웹페이지 주소의 {'비밀번호' if n == 'password' else n}") for _, n in url_secrets(web.get("url", ""))]
-    found += [("header", k, f"파일 헤더 {k}")for k, v in file.get("headers", []) if (k.lower() in SECRET_HEADERS or secret_name(k)) and literal(v)]
+    found += [("header", k, f"파일 헤더 {k}") for k, v in file.get("headers", []) if secret_header(k, v)]
     return [text for where, name, text in found if always(where, name) or name.lower() not in plain]
 
 

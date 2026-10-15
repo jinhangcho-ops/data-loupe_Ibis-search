@@ -61,11 +61,9 @@ def prepare(url, password=""):
     db, module, extra, program = DRIVERS[scheme]
     try:
         importlib.import_module(module)
-    except ModuleNotFoundError as e:
-        if module.startswith(e.name):
+    except ImportError as e:  # 그 모듈이 없으면 Ibis 설치 안내, 그 밖(모듈이 쓰는 것이 없음)은 따로 설치할 프로그램이나 불러오기 오류
+        if isinstance(e, ModuleNotFoundError) and e.name and module.startswith(e.name):
             raise ValueError(f"{db} 지원이 설치되어 있지 않습니다. 설치: pip install 'ibis-framework[{extra}]'")
-        raise missing(db, program) if program else ValueError(f"{db} 드라이버를 불러오지 못했습니다: {e}")
-    except ImportError as e:
         raise missing(db, program) if program else ValueError(f"{db} 드라이버를 불러오지 못했습니다: {e}")
 
     if program == "java" and not has_java():

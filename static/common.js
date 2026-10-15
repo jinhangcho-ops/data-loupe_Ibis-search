@@ -27,8 +27,9 @@ function cell(v) {
   return typeof v === "number" ? `<td class="num">${text}</td>`
     : full ? `<td title="${esc(full).replace(/"/g, "&quot;")}">${esc(text)}</td>` : `<td>${esc(text)}</td>`;
 }
-// 연결 메시지: 성공("연결됨")만 초록색, 나머지는 오류 색.
-const connMsg = (text, ok) => { $("err-connect").textContent = text; $("err-connect").className = ok === true ? "ok" : ok || "err"; };  // ok에 "hint"를 주면 안내 색
+// 메시지 칸에 글자를 쓴다. ok가 true면 성공 색, 글자면 그 클래스(예: "hint"는 안내 색), 아니면 오류 색.
+const say = (id, text, ok) => { $(id).textContent = text; $(id).className = ok === true ? "ok" : ok || "err"; };
+const connMsg = (text, ok) => say("err-connect", text, ok);  // 연결 메시지(설정 저장·알림 오류도 여기에)
 // 요청하는 동안 버튼을 잠그고 "…"로 바꿨다가, 실패해도 되돌린다. 너비는 그대로 두고, 잠긴 동안 다시 부르면 무시한다.
 async function busy(button, fn) {
   if (button.disabled) return;
@@ -107,7 +108,7 @@ function notifyDone(kind, seconds, rows, text = S.base) {
     if (d.done) sendTo(name, { title: `${DONE[kind]} 끝났습니다`, text, ...(rows ? { rows } : {}), seconds: +seconds.toFixed(1) }).catch(e => connMsg(e.message));
   }
 }
-const destMsg = (text, ok) => { $("msg-dest").textContent = text; $("msg-dest").className = ok ? "ok" : "err"; };
+const destMsg = (text, ok) => say("msg-dest", text, ok);
 // 목록에서 고른 보낼 곳(없으면 새로 만들기)을 폼에 채운다.
 function pickDest() {
   const name = $("dest-list").value, saved = dest.destinations[name];

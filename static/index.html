@@ -664,7 +664,7 @@ const resets = [];
 ["click", "input", "change"].forEach(type => document.addEventListener(type, e => resets.forEach(reset => reset(e.target))));
 function sender(select, button, what, err, build) {
   let asked = false, sent = false;  // sent: 결과 글자를 보이는 중(다음 동작에서 지운다)
-  const msg = (text, ok) => { $(err).textContent = text; $(err).className = ok ? "ok" : "err"; sent = ok; };
+  const msg = (text, ok) => { say(err, text, ok); sent = ok; };
   const reset = target => {
     if (asked && target !== button) { asked = false; button.textContent = "보내기"; }
     if (sent) msg("");

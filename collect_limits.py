@@ -143,6 +143,11 @@ def load():
         return None
 
 
+def item_of(data, name):
+    """묶음 name의 사용 기록. 없으면 새 빈 기록(take가 고쳐 쓰므로 매번 새로 만든다)."""
+    return data.get(name, {"sent": [], "day": [0, 0]})
+
+
 def write(data):
     path = settings.PATH.parent / USAGE
     temp = path.with_name(USAGE + ".new")
@@ -165,7 +170,7 @@ def usage(name, now=None):
         return None
     now = time.time() if now is None else now
     data = load()
-    item = (data or {}).get(name, {"sent": [], "day": [0, 0]})
+    item = item_of(data or {}, name)
     (second, minute, hour), day = counts(item, group, now)
     limit = allowed(group, "per_day")
     return {"second": second, "minute": minute, "hour": hour, "day": day, "day_limit": group["per_day"],
@@ -188,7 +193,7 @@ def take(name, stop):
             data, now = load(), time.time()
             if data is None:
                 raise Halt(broken_message())
-            item = data.get(name, {"sent": [], "day": [0, 0]})
+            item = item_of(data, name)
             item["sent"] = [t for t in item["sent"] if t > now - 3600]
             windows, day = counts(item, group, now)
             if allowed(group, "per_day") is not None and day >= allowed(group, "per_day"):

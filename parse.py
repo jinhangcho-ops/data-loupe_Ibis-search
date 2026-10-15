@@ -218,23 +218,22 @@ def apply(expr, preds, keys, cols):
 MAX_ROWS = 10_000  # 화면에 한 번에 보여 줄 최대 행 수
 
 
-# 행 수: 1 이상 MAX_ROWS 이하의 정수 (화면에서 JSON 값으로 들어온다)
-def parse_limit(value):
+def whole_number(value, low, high, message):
+    """화면에서 JSON 값으로 들어온 수를 low 이상 high 이하(None이면 위 제한 없음)의 정수로. 아니면 message로 ValueError."""
     try:
         n = int(str(value).strip())
     except ValueError:
-        n = 0
-    if not 1 <= n <= MAX_ROWS:
-        raise ValueError(f"행 수는 1 이상 {MAX_ROWS:,} 이하의 정수로 입력하세요. 더 많은 행은 저장 버튼으로 내려받으세요.")
+        raise ValueError(message) from None
+    if n < low or (high is not None and n > high):
+        raise ValueError(message)
     return n
+
+
+# 행 수: 1 이상 MAX_ROWS 이하의 정수
+def parse_limit(value):
+    return whole_number(value, 1, MAX_ROWS, f"행 수는 1 이상 {MAX_ROWS:,} 이하의 정수로 입력하세요. 더 많은 행은 저장 버튼으로 내려받으세요.")
 
 
 # 시작 위치: 건너뛸 행 수. 0 이상의 정수
 def parse_offset(value):
-    try:
-        n = int(str(value).strip())
-    except ValueError:
-        n = -1
-    if n < 0:
-        raise ValueError("시작 위치는 0 이상의 정수여야 합니다.")
-    return n
+    return whole_number(value, 0, None, "시작 위치는 0 이상의 정수여야 합니다.")

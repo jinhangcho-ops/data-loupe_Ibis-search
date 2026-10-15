@@ -59,6 +59,18 @@ def run(work, drop=lambda value: None):
         raise ValueError(str(e) or "취소했습니다.") from None
 
 
+def run_writing(write, clean):
+    """파일을 쓰는 write()를 run으로 돌린다. 쓰다 실패하면 clean()으로 치우고, 그만둔 뒤에 늦게 다 쓴 것도 치운다."""
+    def guarded():
+        try:
+            return write()
+        except Exception:
+            clean()
+            raise
+
+    return run(guarded, lambda done: clean())
+
+
 @app.errorhandler(Exception)
 def on_error(e):
     if isinstance(e, HTTPException):  # 404, 405, 잘못된 JSON 등은 원래 상태 코드로
@@ -132,15 +144,7 @@ def download(expr, fmt, guard=True):
     guard가 False면 CSV·Excel의 수식 막기를 하지 않는다."""
     folder = scratch.make()
     path = Path(folder, "result." + fmt)
-
-    def write():
-        try:
-            result.export(expr, path, guard)
-        except Exception:
-            scratch.remove(folder)
-            raise
-
-    run(write, lambda done: scratch.remove(folder))  # 그만둔 뒤에 늦게 다 만든 파일도 지운다.
+    run_writing(lambda: result.export(expr, path, guard), lambda: scratch.remove(folder))
 
     bom = b"\xef\xbb\xbf" if path.suffix == ".csv" else b""  # Excel이 CSV의 한글을 바로 읽도록 맨 앞에 붙인다.
 
