@@ -107,7 +107,9 @@ def open_duckdb(path, read_only=True, memory=None):
             scratch.remove(folder)
             raise
         con.scratch = folder
-    con.local = f"set memory_limit='{memory}MB'" if memory else "reset memory_limit"  # 이 PC에서 계산하는 연결. release가 캐시를 비운 뒤 상한을 되돌리는 문장
+    # 이 PC에서 계산하는 연결. release가 캐시를 비운 뒤 상한을 되돌리는 문장. 기본 상한은 연 때의 값을 읽어 둔다(reset은 환경에 따라 되돌리지 못했다).
+    limit = f"{memory}MB" if memory else con.con.execute("select current_setting('memory_limit')").fetchone()[0]
+    con.local = f"set memory_limit='{limit}'"
     return con
 
 
