@@ -43,6 +43,13 @@
   .wfield .peek { grid-column:1 / -1; margin:-2px 0 2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .check { display:block; margin-bottom:2px; }
   .check input { width:auto; }
+  /* 예약: 요일 체크, 예약 목록의 줄(누르면 위 칸에 불러온다, 고른 줄은 .on), 실행 기록·예약 목록의 경고 줄 */
+  .days { display:flex; flex-wrap:wrap; gap:2px 12px; margin-bottom:6px; }
+  .days label { white-space:nowrap; }
+  .days input { width:auto; }
+  tr.pick { cursor:pointer; }
+  tr.pick:hover td, tr.on td { background:var(--bg); }
+  tr.fail td { color:var(--err); }
 </style>
 </head>
 <body>
@@ -127,6 +134,10 @@
   <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
 
   <main class="main">
+    <section class="card hidden" id="unseen-box">
+      <div class="head" style="margin:0"><b class="warn" id="unseen-text" style="font-size:14px"></b><button id="unseen-open" class="ghost">기록 보기</button><button id="unseen-ok" title="실패를 본 것으로 표시합니다">확인함</button></div>
+    </section>
+
     <section class="card not-web">
       <div class="head"><h3>요청 예시 붙여 넣기</h3><button id="parse">읽기</button></div>
       <textarea id="paste" class="code" rows="5" placeholder="curl 'https://api.example.com/v1/items?page=1' -H 'Accept: application/json'&#10;&#10;GET /v1/items?page=1 HTTP/1.1&#10;Host: api.example.com&#10;&#10;{&quot;method&quot;: &quot;GET&quot;, &quot;url&quot;: &quot;https://api.example.com/v1/items&quot;}"></textarea>
@@ -335,6 +346,41 @@
       <div class="ok" id="run-ok"></div>
       <div class="err" id="run-msg"></div>
     </section>
+
+    <section class="card">
+      <h3>예약</h3>
+      <div class="hint">예약은 저장한 구성으로 돕니다. 구성을 고치면 다시 저장하세요.</div>
+      <div class="fields">
+        <label><div class="hint">대상 구성</div><select id="sc-name" title="예약할 저장한 구성"></select></label>
+        <label><div class="hint">주기</div><select id="sc-every"><option value="daily">매일</option><option value="weekly">매주</option><option value="interval">N분마다</option></select></label>
+        <label id="sc-time-box"><div class="hint">시각 (이 PC)</div><input id="sc-time" placeholder="09:00"></label>
+        <label id="sc-min-box"><div class="hint">간격(분, 5~1440)</div><input id="sc-minutes" type="number" min="5" max="1440"></label>
+      </div>
+      <div id="sc-days-box">
+        <div class="hint">요일</div>
+        <div class="days"><label><input type="checkbox" id="sc-d0"> 월</label><label><input type="checkbox" id="sc-d1"> 화</label><label><input type="checkbox" id="sc-d2"> 수</label><label><input type="checkbox" id="sc-d3"> 목</label><label><input type="checkbox" id="sc-d4"> 금</label><label><input type="checkbox" id="sc-d5"> 토</label><label><input type="checkbox" id="sc-d6"> 일</label></div>
+      </div>
+      <label class="check"><input type="checkbox" id="sc-inapp"> 프로그램이 켜져 있는 동안 실행</label>
+      <label class="check"><input type="checkbox" id="sc-windows"> Windows 예약 작업으로 등록 (프로그램을 꺼도 실행)</label>
+      <div class="hint">작업 스케줄러의 \ibis_search\ 폴더에 등록합니다. 로그온해 있을 때만 돌고, 놓친 시각은 켜진 뒤 한 번 돕니다.</div>
+      <div class="fields">
+        <label><div class="hint">알림</div><select id="sc-notify" title="실행이 끝나면 알릴 보낼 곳 (상단 [보낼 곳]에서 등록)"></select></label>
+        <label id="sc-on-box"><div class="hint">알릴 때</div><select id="sc-notify-on"><option value="fail">실패할 때만</option><option value="always">늘</option></select></label>
+      </div>
+      <div class="hint">비밀번호가 필요한 적재(DB 주소의 계정, Kafka SASL)는 예약할 수 없습니다. 비밀번호를 저장하지 않기 때문입니다.</div>
+      <div class="row"><button id="sc-save">예약 저장</button><button id="sc-run" class="ghost" title="저장한 구성을 지금 한 번 예약처럼 실행합니다 (기록·알림 포함)">지금 실행</button><button id="sc-del" class="ghost">예약 지우기</button></div>
+      <div class="err" id="sc-msg"></div>
+      <div class="warn" id="sc-stale"></div>
+      <div class="row"><button id="sc-rereg" class="hidden" title="경로가 맞지 않는 Windows 예약 작업을 지금 프로그램 경로로 다시 등록합니다">다시 등록</button></div>
+      <div class="table-wrap" id="sc-list"></div>
+    </section>
+
+    <section class="card" id="runs-card">
+      <div class="head"><h3>실행 기록</h3><button id="runs-toggle" class="ghost">펼치기</button></div>
+      <div class="hint" id="runs-sum"></div>
+      <div class="table-wrap hidden" id="runs"></div>
+      <div class="err" id="runs-msg"></div>
+    </section>
   </main>
 </div>
 
@@ -405,6 +451,7 @@ function badNumber(rules) {
   }
   return "";
 }
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;  // 시각 칸(하루 초기화 시각·예약 시각)
 function problems() {
   const kind = $("p-kind").value, web = mode() === "web", rules = [["b-gap", "간격", 0, null, false], ["b-timeout", "시간 초과", 1, null, false]];
   if (!web) rules.unshift(["b-conc", "동시 수", 1, null, true], ["b-retry", "다시 시도 횟수", 0, null, true]);
@@ -646,9 +693,9 @@ function readResponse() {
 }
 $("resp-text").onchange = () => { readResponse(); sample(); };
 
-// 미리보기 표(API·웹페이지 같이 씀). cols: [{ name, title }], rows: [{ 이름: 값 }]
-const sampleTable = (cols, rows, none) => cols.length
-  ? `<table><thead><tr>${cols.map(c => `<th${c.title ? ` title="${attr(c.title)}"` : ""}>${esc(c.name)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => "<tr>" + cols.map(c => r[c.name] == null ? '<td class="empty">null</td>' : cell(r[c.name])).join("") + "</tr>").join("")}</tbody></table>`
+// 미리보기 표(API·웹페이지·적재 확인·예약·실행 기록이 같이 씀). cols: [{ name, title }], rows: [{ 이름: 값 }], rowAttr: 줄에 붙일 속성 글자(선택)
+const sampleTable = (cols, rows, none, rowAttr = () => "") => cols.length
+  ? `<table><thead><tr>${cols.map(c => `<th${c.title ? ` title="${attr(c.title)}"` : ""}>${esc(c.name)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr${rowAttr(r)}>` + cols.map(c => r[c.name] == null ? '<td class="empty">null</td>' : cell(r[c.name])).join("") + "</tr>").join("")}</tbody></table>`
   : `<span class="empty">${esc(none)}</span>`;
 // 미리보기: 응답 예시에서 지금 지정대로 뽑은 앞 20행과 기록 수, 다음 커서·주소·전체 수
 async function sample() {
@@ -859,7 +906,7 @@ $("lsave").onclick = () => busy($("lsave"), async () => {
     if (!name) throw new Error("묶음 이름을 넣으세요.");
     const bad = badNumber([...LIMIT_FIELDS.map(([id, , label]) => [id, label, 1, null, true, true]), ["l-conc", "동시 수", 1, null, true], ["l-gap", "최소 간격", 0, null, false], ["l-margin", "여유분", 0, 50, false]]);
     if (bad) throw new Error(bad);
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(val("l-reset"))) throw new Error("하루 초기화 시각은 00:00 모양(HH:MM)으로 넣으세요.");
+    if (!HHMM.test(val("l-reset"))) throw new Error("하루 초기화 시각은 00:00 모양(HH:MM)으로 넣으세요.");
     const group = { ...Object.fromEntries(LIMIT_FIELDS.map(([id, key]) => [key, val(id) === "" ? null : Number(val(id))])),
       concurrency: Number(val("l-conc")), min_interval: Number(val("l-gap")), reset: val("l-reset"), tz: $("l-tz").value, margin: Number(val("l-margin")) };
     showLimits(await api("/api/limits", { name, group }), name);
@@ -1069,6 +1116,8 @@ function showCollections(d, name = "") {
   collections = d.collections;
   fill($("rsaved"), Object.keys(collections), "불러오기");
   $("rsaved").value = name;
+  fillScheduleNames();
+  renderSchedules();
 }
 $("rsave").onclick = () => busy($("rsave"), async () => {
   const name = val("rname") || $("rsaved").value;  // 이름을 비우면 지금 고른 구성에 덮어쓴다.
@@ -1137,8 +1186,8 @@ async function poll() {
   catch (e) { say("run-msg", e.message); return null; }
 }
 // 도는 동안 1초마다 상태를 읽는다. 지켜보던 작업이 끝나면 보낼 곳에 알린다(오래 걸린 것만, common.js의 notifyDone).
-// fresh: 방금 [시작]을 눌렀으면 아직 "대기"로 보일 수 있어 몇 번 더 기다린다.
-async function watch(fresh) {
+// fresh: 방금 [시작]을 눌렀으면 아직 "대기"로 보일 수 있어 몇 번 더 기다린다. quiet: 예약 실행은 서버가 예약의 알림으로 알리므로 여기서는 알리지 않는다.
+async function watch(fresh, quiet) {
   if (watching) return;
   watching = true;
   try {
@@ -1146,8 +1195,9 @@ async function watch(fresh) {
       const s = await poll();
       if (s && !s.running && s.phase === "대기" && tries > 0) { await new Promise(r => setTimeout(r, 1000)); continue; }
       if (!s?.running) {
-        if (s?.phase === "끝") { notifyDone("collect", s.elapsed, s.rows, fileName(s.output)); $("run-ok").textContent = s.load ? "다 받아 적재까지 마쳤습니다" : "다 받았습니다"; }
+        if (s?.phase === "끝") { if (!quiet) notifyDone("collect", s.elapsed, s.rows, fileName(s.output)); $("run-ok").textContent = s.load ? "다 받아 적재까지 마쳤습니다" : "다 받았습니다"; }
         loadLimits();
+        loadRuns();  // 끝난 실행이 기록에 들어갔다
         break;
       }
       await new Promise(r => setTimeout(r, 1000));
@@ -1190,8 +1240,187 @@ const openWith = (button, prep) => twice(button, "연결이 이 파일로 바뀝
 $("open-search").onclick = () => openWith($("open-search"), false);
 $("open-prep").onclick = () => openWith($("open-prep"), true);
 
+// 예약: 저장한 구성을 주기마다 돌린다. 예약 칸은 config()에 넣지 않고 /api/schedules에 구성 이름별로 따로 저장한다.
+// Windows 예약 작업이 새로 등록되거나 지워지는 저장·지우기·다시 등록은 한 번 더 눌러야 요청한다.
+const DAYS = "월화수목금토일";  // 예약의 days: 0=월 … 6=일
+const HOW = { inapp: "프로그램 안", windows: "Windows", now: "지금", manual: "직접" };
+const SCHEDULE_DEFAULT = { every: "daily", time: "09:00", days: [0, 1, 2, 3, 4], minutes: 60, inapp: true, windows: false, notify: "", notify_on: "fail" };
+let sched = { schedules: {}, tasks: {}, next_inapp: {}, stale: [] };
+let wantNotify = "";  // 불러온 예약의 보낼 곳. 보낼 곳 목록이 늦게 와도 고르게 둔다
+const dayBoxes = () => [...DAYS].map((_, i) => $("sc-d" + i));
+const cycleText = s => s.every === "interval" ? `${s.minutes}분마다`
+  : s.every === "weekly" ? `매주 ${(s.days ?? []).map(d => DAYS[d]).join("·")} ${s.time}` : `매일 ${s.time}`;
+// 주기 종류에 맞는 칸만, 보낼 곳을 골랐을 때만 [알릴 때]
+function showEvery() {
+  const every = $("sc-every").value, show = (id, on) => $(id).classList.toggle("hidden", !on);
+  show("sc-time-box", every !== "interval");
+  show("sc-days-box", every === "weekly");
+  show("sc-min-box", every === "interval");
+  show("sc-on-box", !!$("sc-notify").value);
+}
+$("sc-every").onchange = showEvery;
+$("sc-notify").onchange = showEvery;
+function fillNotify(name) {
+  fill($("sc-notify"), Object.keys(dest.destinations), "알리지 않음");
+  $("sc-notify").value = name in dest.destinations ? name : "";
+  showEvery();
+}
+document.addEventListener("destinations", () => fillNotify($("sc-notify").value || wantNotify));  // 보낼 곳 목록이 오거나 바뀌면 다시 채운다
+// 대상 구성: 저장한 구성과, 구성은 지웠지만 남은 예약(지울 수 있게)
+function fillScheduleNames() {
+  const now = $("sc-name").value, names = [...new Set([...Object.keys(collections), ...Object.keys(sched.schedules)])];
+  fill($("sc-name"), names, "구성 고르기");
+  $("sc-name").value = names.includes(now) ? now : "";
+}
+// 고른 구성의 예약을 칸에 채운다(없으면 기본값).
+function pickSchedule() {
+  const s = { ...SCHEDULE_DEFAULT, ...sched.schedules[$("sc-name").value] };
+  $("sc-every").value = s.every;
+  $("sc-time").value = s.time;
+  dayBoxes().forEach((b, i) => b.checked = s.days.includes(i));
+  $("sc-minutes").value = s.minutes;
+  $("sc-inapp").checked = s.inapp;
+  $("sc-windows").checked = s.windows;
+  wantNotify = s.notify;
+  fillNotify(s.notify);
+  $("sc-notify-on").value = s.notify_on;
+  renderSchedules();
+}
+$("sc-name").onchange = () => { pickSchedule(); say("sc-msg", ""); };
+// 칸의 예약. 걸리면 안내를 오류로 던진다(서버가 다시 검사한다). 주기 종류에 쓰는 칸만 보낸다.
+function readSchedule() {
+  const every = $("sc-every").value;
+  const s = { every, inapp: $("sc-inapp").checked, windows: $("sc-windows").checked, notify: $("sc-notify").value, notify_on: $("sc-notify-on").value };
+  if (every !== "interval") {
+    if (!HHMM.test(val("sc-time"))) throw new Error("시각은 09:00 모양(HH:MM)으로 넣으세요.");
+    s.time = val("sc-time");
+  }
+  if (every === "weekly") {
+    s.days = dayBoxes().flatMap((b, i) => b.checked ? [i] : []);
+    if (!s.days.length) throw new Error("요일을 하나 이상 고르세요.");
+  }
+  if (every === "interval") {
+    const bad = badNumber([["sc-minutes", "간격(분)", 5, 1440, true]]);
+    if (bad) throw new Error(bad);
+    s.minutes = Number(val("sc-minutes"));
+  }
+  if (!s.inapp && !s.windows) throw new Error("실행 방식을 하나 이상 고르세요.");
+  return s;
+}
+// 지금 Windows 예약 작업이 있는가: 서버가 작업 상태를 알려 줬으면 그것, 아니면 저장한 예약의 windows
+const registered = name => name in sched.tasks ? !!sched.tasks[name].registered : !!sched.schedules[name]?.windows;
+function showSchedules(d) {
+  sched = { schedules: {}, tasks: {}, next_inapp: {}, stale: [], ...d };
+  fillScheduleNames();
+  renderSchedules();
+}
+const loadSchedules = () => api("/api/schedules").then(showSchedules).catch(e => say("sc-msg", e.message));
+// 예약 목록 표: 줄을 누르면 위 칸에 불러온다. 경로가 맞지 않거나 등록이 안 된 Windows 작업은 경고 색
+function renderSchedules() {
+  const names = Object.keys(sched.schedules), now = $("sc-name").value;
+  $("sc-del").classList.toggle("hidden", !(now in sched.schedules));
+  $("sc-stale").textContent = sched.stale.length ? `Windows 예약 작업의 프로그램 경로가 지금과 다릅니다(프로그램을 옮겼거나 새로 받았을 때): ${sched.stale.join(", ")}. [다시 등록]을 누르세요.` : "";
+  $("sc-rereg").classList.toggle("hidden", !sched.stale.length);
+  const cols = ["구성", "주기", "프로그램 안 다음", "Windows", "Windows 다음", "Windows 마지막", "알림"].map(name => ({ name }));
+  const rows = names.map(name => {
+    const s = sched.schedules[name], t = sched.tasks[name] ?? {}, stale = sched.stale.includes(name);
+    return { name, bad: stale || (s.windows && !t.registered),
+      "구성": name in collections ? name : `${name} (구성 없음)`, "주기": cycleText(s),
+      "프로그램 안 다음": s.inapp ? sched.next_inapp[name] ?? "—" : "끔",
+      "Windows": stale ? "등록됨 · 경로 다름" : t.registered ? "등록됨" : s.windows ? "안 됨" : "—",
+      "Windows 다음": t.next ?? "—", "Windows 마지막": t.last ?? "—",
+      "알림": s.notify ? `${s.notify} · ${s.notify_on === "always" ? "늘" : "실패할 때만"}` : "없음" };
+  });
+  $("sc-list").innerHTML = sampleTable(names.length ? cols : [], rows, "저장한 예약이 없습니다.",
+    r => ` class="pick${r.bad ? " fail" : ""}${r.name === now ? " on" : ""}" data-name="${attr(r.name)}" title="누르면 위 칸에 불러옵니다"`);
+}
+$("sc-list").onclick = e => {
+  const tr = e.target.closest("tr[data-name]");
+  if (!tr) return;
+  $("sc-name").value = tr.dataset.name;
+  pickSchedule();
+  say("sc-msg", "");
+};
+$("sc-save").onclick = () => {
+  const name = $("sc-name").value, on = $("sc-windows").checked, was = registered(name);
+  try {
+    if (!name) throw new Error("예약할 구성을 고르세요.");
+    readSchedule();  // 한 번 더 누르기 전에 칸을 먼저 검사한다
+  } catch (e) { disarm(); return say("sc-msg", e.message); }
+  const save = async () => {
+    try {
+      showSchedules(await api("/api/schedules", { name, schedule: readSchedule() }));
+      say("sc-msg", on && !was ? "저장하고 Windows 예약 작업을 등록했습니다" : !on && was ? "저장하고 Windows 예약 작업을 지웠습니다" : "저장했습니다", true);
+      loadRuns();
+    } catch (e) { say("sc-msg", e.message); }
+  };
+  if (on !== was) return twice($("sc-save"), on ? "Windows 예약 작업을 등록합니다. 한 번 더 누르면 등록" : "Windows 예약 작업을 지웁니다. 한 번 더 누르면 지우기", save);
+  return busy($("sc-save"), save);
+};
+$("sc-del").onclick = () => {
+  const name = $("sc-name").value;
+  if (!(name in sched.schedules)) return;
+  return twice($("sc-del"), registered(name) ? "예약과 Windows 예약 작업을 지웁니다. 한 번 더 누르면 지우기" : "예약을 지웁니다. 한 번 더 누르면 지우기", async () => {
+    try { showSchedules(await api("/api/schedules", { name, schedule: null })); say("sc-msg", "예약을 지웠습니다", true); } catch (e) { say("sc-msg", e.message); }
+  });
+};
+$("sc-run").onclick = () => busy($("sc-run"), async () => {
+  try {
+    if (!$("sc-name").value) throw new Error("실행할 구성을 고르세요.");
+    await api("/api/schedules/run", { name: $("sc-name").value });
+    say("sc-msg", "저장한 구성으로 지금 한 번 실행합니다. 결과는 실행 기록에 남습니다.", true);
+    loadRuns();
+    watch(true, true);
+  } catch (e) { say("sc-msg", e.message); }
+});
+$("sc-rereg").onclick = () => twice($("sc-rereg"), "지금 프로그램 경로로 다시 등록합니다. 한 번 더 누르면 등록", async () => {
+  try { showSchedules(await api("/api/schedules/reregister", {})); say("sc-msg", "다시 등록했습니다", true); } catch (e) { say("sc-msg", e.message); }
+});
+
+// 실행 기록: 접어 두고 펼치면 표를 그린다. 확인하지 않은 실패가 있으면 화면 맨 위에 알리고, 기록을 펼치거나 [확인함]을 누르면 본 것으로 표시한다.
+let runs = { runs: [], unseen: 0 }, runsOpen = false, runsTop;
+async function loadRuns() {
+  try {
+    runs = { runs: [], unseen: 0, ...await api("/api/runs") };
+    const top = JSON.stringify(runs.runs[0] ?? null);
+    if (runsTop !== undefined && top !== runsTop) loadSchedules();  // 새 실행이 있으면 다음 시각·마지막 실행이 바뀌었다
+    runsTop = top;
+    renderRuns();
+    say("runs-msg", "");
+  } catch (e) { say("runs-msg", e.message); }
+}
+function renderRuns() {
+  const list = runs.runs, n = runs.unseen, r0 = list[0];
+  $("unseen-box").classList.toggle("hidden", !n);
+  $("unseen-text").textContent = `확인하지 않은 실패 ${n.toLocaleString()}건`;
+  $("runs-sum").textContent = r0 ? `최근: ${r0.name} · ${HOW[r0.how] ?? r0.how} · ${r0.start} · ${r0.result}` : "아직 실행 기록이 없습니다.";
+  $("runs-sum").className = r0?.result === "실패" ? "warn" : "hint";
+  $("runs-toggle").textContent = runsOpen ? "접기" : `펼치기 (${list.length.toLocaleString()}건)`;
+  $("runs").classList.toggle("hidden", !runsOpen);
+  if (!runsOpen) return;
+  const cols = ["구성", "어떻게", "시작", "끝", "결과", "행 수", "문구"].map(name => ({ name }));
+  $("runs").innerHTML = sampleTable(list.length ? cols : [], list.map(r => ({ fail: r.result === "실패",
+    "구성": r.name, "어떻게": HOW[r.how] ?? r.how, "시작": r.start, "끝": r.end ?? "—", "결과": r.result, "행 수": r.rows ?? "—", "문구": r.message ?? "" })),
+    "아직 실행 기록이 없습니다.", r => r.fail ? ' class="fail"' : "");
+}
+async function markSeen() {
+  try { await api("/api/runs/seen", {}); runs.unseen = 0; renderRuns(); } catch (e) { say("runs-msg", e.message); }
+}
+async function openRuns() {
+  runsOpen = true;
+  renderRuns();
+  if (runs.unseen) await markSeen();
+}
+// busy가 끝나며 버튼 글자를 되돌리므로 그 뒤에 다시 그린다.
+$("runs-toggle").onclick = () => runsOpen ? (runsOpen = false, renderRuns()) : busy($("runs-toggle"), openRuns).then(renderRuns);
+$("unseen-open").onclick = () => { $("runs-card").scrollIntoView({ block: "start" }); return busy($("unseen-open"), openRuns).then(renderRuns); };
+$("unseen-ok").onclick = () => busy($("unseen-ok"), markSeen);
+
 restore(DEFAULT);
-api("/api/collections").then(d => showCollections(d)).catch(() => {});
+api("/api/collections").then(d => showCollections(d)).catch(() => {}).finally(loadSchedules);  // 예약 목록의 "구성 없음" 표시가 구성 목록을 쓴다
+pickSchedule();
+loadRuns();
+setInterval(() => { if (!document.hidden) loadRuns(); }, 30000);  // 창이 가려져 있지 않을 때만
 loadLimits();
 loadKafka();
 poll().then(s => { if (s?.running) watch(); });

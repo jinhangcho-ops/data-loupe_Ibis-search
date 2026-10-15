@@ -1,5 +1,6 @@
 """검색·전처리·수집 화면을 프로그램 창으로 연다. exe의 실행 파일이자 유일한 실행 방법.
-'--browser'로 실행하면 서버·메인 창 없이 수집용 브라우저 창 프로세스만 돈다(collect_browser.launch가 띄운다)."""
+'--browser'로 실행하면 서버·메인 창 없이 수집용 브라우저 창 프로세스만 돈다(collect_browser.launch가 띄운다).
+'--run "구성 이름"'으로 실행하면 서버·메인 창 없이 그 구성을 한 번 수집하고 기록·알림 뒤 끝난다(Windows 예약 작업이 띄운다). 종료 코드는 끝 0, 아니면 1."""
 import sys
 
 if sys.argv[1:2] == ["--browser"]:
@@ -7,6 +8,12 @@ if sys.argv[1:2] == ["--browser"]:
 
     collect_browser.run_child()
     sys.exit()
+
+if sys.argv[1:2] == ["--run"]:
+    import lazy  # noqa: F401  데이터 라이브러리를 처음 쓸 때 올린다(다른 프로젝트 모듈보다 먼저).
+    import schedule
+
+    sys.exit(schedule.run_alone(sys.argv[2] if len(sys.argv) > 2 else ""))
 
 import threading
 
@@ -19,6 +26,8 @@ import collect_browser
 import collect_job
 import notify  # noqa: F401  보내기 라우트가 앱에 달린다.
 import prep_app  # noqa: F401  전처리 라우트가 앱에 달린다.
+import schedule
+import schedule_app  # noqa: F401  예약 라우트가 앱에 달린다.
 import scratch
 import server
 import source
@@ -51,7 +60,9 @@ def closing():
 
 server.ask_save = ask_save
 window.events.closing += closing
+schedule.start_watch()  # 프로그램 안 예약: 켜져 있는 동안 때가 된 예약을 돌린다.
 webview.start()  # 창을 닫으면 여기서 끝나고, 서버 스레드도 함께 종료된다.
+schedule.stop_watch()
 collect_job.stop(wait=10)  # 수집 작업이 받은 데까지 기록하고 끝나기를 기다린다.
 collect_browser.stop_child()  # 수집용 창 프로세스를 끝낸다(남아 있어도 메인과의 연결이 끊기면 스스로 끝난다).
 if server.state["con"] is not None:  # 열어 둔 연결을 닫아 파일을 놓고 임시 폴더를 지운다.

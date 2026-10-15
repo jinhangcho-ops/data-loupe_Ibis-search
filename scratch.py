@@ -19,8 +19,22 @@ def make():
     if ROOT.is_symlink() or os.path.isjunction(ROOT):  # 다른 곳을 가리키는 링크면 그 안에 만들지 않는다.
         raise OSError(f"임시 폴더({ROOT})가 링크라서 쓸 수 없습니다.")
     folder = tempfile.mkdtemp(prefix=f"{os.getpid()}_", dir=ROOT)
-    Path(folder, MARK).write_text(f"{os.getpid()} {psutil.Process().create_time()}", encoding="ascii")
+    Path(folder, MARK).write_text(stamp(), encoding="ascii")
     return folder
+
+
+def stamp():
+    """이 프로세스를 알아보는 글자 "프로세스 번호 시작 시각". 표식·잠금 파일에 적는다."""
+    return f"{os.getpid()} {psutil.Process().create_time()}"
+
+
+def ended(pid, started):
+    """그 번호·그 시작 시각의 프로세스가 지금은 없는지(같은 번호를 다른 프로세스가 다시 쓴 경우도 없는 것이다).
+    글자가 깨졌으면 ValueError, 프로세스를 볼 수 없으면 psutil.Error — 부르는 쪽은 모르는 것으로 다룬다."""
+    try:
+        return abs(psutil.Process(int(pid)).create_time() - float(started)) > 1
+    except psutil.NoSuchProcess:
+        return True
 
 
 def remove(folder):
@@ -46,10 +60,7 @@ def left_behind(folder):
         pid, started = mark.read_text(encoding="ascii").split()
         if pid != match[1]:
             return False
-        try:
-            return abs(psutil.Process(int(pid)).create_time() - float(started)) > 1  # 같은 번호를 다른 프로세스가 다시 쓴 경우
-        except psutil.NoSuchProcess:
-            return True
+        return ended(pid, started)
     except (OSError, ValueError, psutil.Error):  # 읽을 수 없거나 표식이 깨졌으면 모르는 것이다.
         return False
 

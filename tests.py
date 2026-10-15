@@ -38,6 +38,7 @@ import polars as pl
 import psutil
 
 import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
+import schedule_app  # noqa: F401  예약 라우트가 앱에 달린다.
 import notify
 import prep_app
 import prep_ops
@@ -1914,6 +1915,247 @@ def load_section(c, got):
     check("적재 라우트는 차례(turn)를 기다리지 않음", all(p in server.FREE for p in ("/api/load/kafka", "/api/load/kafka/check", "/api/load/table/check", "/api/load/start")), True)
 
 
+class FakeTasks:
+    """schtasks 대신 부르는 가짜. 받은 명령을 모두 적고, 등록한 작업을 {경로: (명령줄, XML)}로 들고 있는다."""
+
+    def __init__(self):
+        self.calls, self.tasks = [], {}
+
+    def __call__(self, args):
+        self.calls.append(list(args))
+        verb, name = args[1], args[args.index("/TN") + 1]
+        if verb == "/Create":
+            text = Path(args[args.index("/XML") + 1]).read_bytes().decode("utf-16")
+            found = lambda tag: re.search(f"<{tag}>(.*?)</{tag}>", text, re.S)[1]
+            plain = lambda value: value.replace("&quot;", '"').replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+            self.tasks[name] = (f"{plain(found('Command'))} {plain(found('Arguments'))}", text)
+            return 0, "성공: 예약 작업을 만들었습니다.", ""
+        if verb == "/Delete":
+            return (0, "성공", "") if self.tasks.pop(name, None) else (1, "", "오류: 지정된 파일을 찾을 수 없습니다.")
+        if name not in self.tasks:
+            return 1, "", "오류: 지정된 파일을 찾을 수 없습니다."
+        head = ",".join(f'"h{i}"' for i in range(28))
+        row = ["PC", name, "2026-10-16 오전 9:00:00", "준비", "대화형만", "2026-10-15 오후 1:05:00", "0", "me", self.tasks[name][0].replace('"', '""')] + ["N/A"] * 19
+        return 0, head + "\n" + ",".join(f'"{v}"' for v in row) + "\n", ""
+
+
+def schedule_section(c, got):
+    """수집 예약(4단계 서버). Windows 작업은 schtasks 대신 가짜(FakeTasks)로, 수집은 127.0.0.1 가짜 API로만 확인한다. 데이터는 여기서 지어낸다."""
+    import collect_job
+    import load_kafka
+    import schedule
+    import wintask
+    print("== 예약: 다음 시각")
+    error = lambda api, **body: got(api, **body).get("error", "")
+    at = dt.datetime
+    daily, weekly, every = {"every": "daily", "time": "09:00"}, {"every": "weekly", "time": "09:00", "days": [0, 6]}, {"every": "interval", "minutes": 45}
+    check("매일: 지금과 같은 시각은 다음 날, 1초 전이면 오늘", (schedule.next_time(daily, at(2026, 10, 15, 9, 0)), schedule.next_time(daily, at(2026, 10, 15, 8, 59, 59))),
+          (at(2026, 10, 16, 9, 0), at(2026, 10, 15, 9, 0)))
+    check("매주(월·일): 일요일 9시 정각이면 다음 월요일, 9시 전이면 그날, 같은 요일 하나면 다음 주", (schedule.next_time(weekly, at(2026, 10, 18, 9, 0)),
+          schedule.next_time(weekly, at(2026, 10, 18, 8, 0)), schedule.next_time({**weekly, "days": [3]}, at(2026, 10, 15, 9, 0)),
+          schedule.next_time({**weekly, "days": [3]}, at(2026, 10, 15, 8, 0))),
+          (at(2026, 10, 19, 9, 0), at(2026, 10, 18, 9, 0), at(2026, 10, 22, 9, 0), at(2026, 10, 15, 9, 0)))
+    check("간격(45분): 기준 시각에서 45분 단위, 같은 시각이면 다음 칸, 날을 넘김", (schedule.next_time(every, at(2026, 10, 15, 9, 0)), schedule.next_time(every, at(2026, 10, 15, 9, 45)),
+          schedule.next_time(every, at(2026, 10, 15, 23, 59))), (at(2026, 10, 15, 9, 45), at(2026, 10, 15, 10, 30), at(2026, 10, 16, 0, 0)))
+
+    print("== 예약: 검사·저장(가짜 schtasks)")
+    fake = FakeTasks()
+    real_execute, real_clock, real_post = wintask.execute, schedule.clock, notify.post
+    wintask.execute = fake
+    out = ROOT / "schedule_out"
+    out.mkdir()
+    api = FakeApi()
+    slow = threading.Event()
+
+    def items(e):
+        if slow.is_set():
+            time.sleep(1.5)
+        return 200, {"Content-Type": "application/json"}, json.dumps({"items": [{"id": i, "name": f"예약{i}"} for i in range(1, 8)]}).encode()
+
+    api.routes["/sched"] = items
+
+    def cfg(name, **more):
+        return {"version": 1, "mode": "api", "request": {"method": "GET", "url": api.base + "/sched"}, "response": {"records": "items", "columns": []},
+                "balance": {"concurrency": 1, "interval": 0, "retries": 1, "timeout": 10}, "output": {"format": "parquet", "path": str(out / name), "dedupe": []}, **more}
+
+    load_kafka.save("sasl", {"servers": "127.0.0.1:9", "topic": "t", "security": "SASL_SSL", "user": "u"})
+    for name, item in (("예약 하나", cfg("one.parquet")), ("예약/둘?", cfg("two.parquet")),
+                       ("비번 DB", cfg("db.parquet", load={"target": "table", "table": {"connection": {"kind": "url", "url": "postgres://h/db", "user": "me"}, "name": "t"}})),
+                       ("비번 Kafka", cfg("k.parquet", load={"target": "kafka", "kafka": {"destination": "sasl"}}))):
+        got("/api/collections", name=name, collection=item)
+    put = lambda name, item: got("/api/schedules", name=name, schedule=item)
+    check("예약 거부: 형식, 없는 구성, 비밀번호가 필요한 구성(DB 주소+아이디, Kafka SASL)", [error("/api/schedules", name=n, schedule=s) for n, s in (
+          ("예약 하나", {"every": "hourly"}), ("예약 하나", {"time": "24:00"}), ("예약 하나", {"every": "weekly", "days": []}), ("예약 하나", {"every": "interval", "minutes": 4}),
+          ("예약 하나", {"days": [7]}), ("예약 하나", {"inapp": 1}), ("예약 하나", {"notify": "없는 곳"}), ("예약 하나", {"extra": 1}),
+          ("없는 구성", daily), ("비번 DB", daily), ("비번 Kafka", daily))],
+          ["예약의 every는 daily, weekly, interval 중 하나입니다.", "시각은 HH:MM(00:00~23:59)으로 쓰세요.", "매주 예약은 요일을 하나 이상 고르세요.",
+           "간격(minutes)은 5~1440분의 정수여야 합니다.", "요일(days)은 0(월)~6(일)의 겹치지 않는 목록이어야 합니다.", "예약의 inapp는 true·false여야 합니다.",
+           "보낼 곳 '없는 곳'이 없습니다.", "예약에 쓸 수 없는 값이 있습니다: extra", "구성 '없는 구성'이 없습니다. 구성을 먼저 저장하세요.",
+           "DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다.",
+           "Kafka에 적재할 때 비밀번호가 필요한 곳(SASL)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다."])
+    check("거부한 것은 저장하지 않고 schtasks도 부르지 않음", (c.get("/api/schedules").get_json()["schedules"], fake.calls), ({}, []))
+    schedule.clock = lambda: at(2026, 10, 15, 8, 30)
+    r = put("예약 하나", {**weekly, "inapp": False, "windows": True})
+    xml = fake.tasks["\\ibis_search\\예약 하나"][1]
+    check("Windows 작업 등록: \\ibis_search\\ 폴더, /XML 파일, /F", [a[:3] + a[4:5] + a[6:] for a in fake.calls if a[1] != "/Query"], [["schtasks", "/Create", "/TN", "/XML", "/F"]])
+    check("작업 XML: InteractiveToken·LeastPrivilege·StartWhenAvailable·IgnoreNew·12시간·전원 조건 없음·매주 월·일·첫 시각",
+          [f for f in ("<LogonType>InteractiveToken</LogonType>", "<RunLevel>LeastPrivilege</RunLevel>", "<StartWhenAvailable>true</StartWhenAvailable>",
+                       "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "<ExecutionTimeLimit>PT12H</ExecutionTimeLimit>",
+                       "<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>", "<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>",
+                       "<DaysOfWeek><Sunday/><Monday/></DaysOfWeek>", "<StartBoundary>2026-10-18T09:00:00</StartBoundary>", "<URI>\\ibis_search\\예약 하나</URI>") if f not in xml], [])
+    check("작업 동작: 지금 python.exe + desktop.py 절대 경로 + --run \"구성 이름\", 작업 폴더는 프로그램 폴더",
+          (fake.tasks["\\ibis_search\\예약 하나"][0], re.search("<WorkingDirectory>(.*)</WorkingDirectory>", xml)[1]),
+          (subprocess.list2cmdline([sys.executable]) + " " + subprocess.list2cmdline([str(Path("desktop.py").resolve()), "--run", "예약 하나"]), str(Path("desktop.py").resolve().parent)))
+    check("GET: 등록됨·경로 맞음·다음·마지막(성공), 프로그램 안 예약은 꺼짐", (r["schedules"]["예약 하나"], r["tasks"], r["next_inapp"], r["stale"]),
+          ({**weekly, "minutes": 60, "inapp": False, "windows": True, "notify": "", "notify_on": "fail"},
+           {"예약 하나": {"registered": True, "path_ok": True, "next": "2026-10-16 09:00", "last": "2026-10-15 13:05 · 성공"}}, {"예약 하나": None}, []))
+    put("예약/둘?", {**every, "windows": True})
+    xml = fake.tasks["\\ibis_search\\예약_둘_"][1]
+    check("간격 작업: 다음 칸부터 PT45M 반복(기간 없음), 작업 이름은 안전한 글자로", ("<Interval>PT45M</Interval>" in xml, "<Duration>" in xml,
+          "<StartBoundary>2026-10-15T09:00:00</StartBoundary>" in xml, sorted(fake.tasks)), (True, False, True, ["\\ibis_search\\예약 하나", "\\ibis_search\\예약_둘_"]))
+    got("/api/collections", name="예약_둘_", collection=cfg("three.parquet"))
+    put("예약_둘_", {**daily, "windows": True})
+    check("이름이 겹치면 _2를 붙이고 schedules.json에 대응을 적음", {n: s.get("task") for n, s in schedule.schedules().items()},
+          {"예약 하나": "예약 하나", "예약/둘?": "예약_둘_", "예약_둘_": "예약_둘__2"})
+    check("작업 이름은 폴더 밖·아래를 가리킬 수 없음", [raised(lambda t=t: wintask.full(t)) for t in ("..\\x", "a\\b", "", " a", "x" * 61)], ["ValueError"] * 5)
+    fake.tasks["\\ibis_search\\예약 하나"] = ("C:\\old\\ibis_search.exe --run \"예약 하나\"", "")
+    r = c.get("/api/schedules").get_json()
+    check("경로가 다른 작업은 stale", (r["stale"], r["tasks"]["예약 하나"]["path_ok"]), (["예약 하나"], False))
+    r = got("/api/schedules/reregister")
+    check("다시 등록하면 지금 경로로", (r["stale"], fake.tasks["\\ibis_search\\예약 하나"][0].startswith(subprocess.list2cmdline([sys.executable]))), ([], True))
+    put("예약_둘_", {**daily, "windows": False})
+    check("windows를 끄면 작업을 지움", ("\\ibis_search\\예약_둘__2" in fake.tasks, "task" in schedule.schedules()["예약_둘_"]), (False, False))
+    put("예약/둘?", None)
+    put("예약_둘_", None)
+    check("예약을 지우면 작업도 지움", (sorted(fake.tasks), sorted(schedule.schedules())), (["\\ibis_search\\예약 하나"], ["예약 하나"]))
+    check("schtasks에 넘긴 작업은 모두 \\ibis_search\\ 바로 안", all(a[a.index("/TN") + 1].startswith("\\ibis_search\\") and a[a.index("/TN") + 1].count("\\") == 2 for a in fake.calls), True)
+    wintask.execute = lambda args: (1, "", "오류: 액세스가 거부되었습니다.")
+    check("schtasks가 실패하면 한국어 안내와 그 문구", str(raised_error(lambda: wintask.register("x", "x", daily, at(2026, 1, 1)))),
+          "Windows 예약 작업을 등록하지 못했습니다. 액세스가 거부되었습니다.")
+    wintask.execute = fake
+    check("시각 읽기: 오전·오후, 없음, 한 번도 안 돈 것, 모르는 형식은 그대로", [wintask.when(t) for t in ("2026-10-16 오후 1:05:00", "2026-10-16 오전 12:30:00", "N/A", "1999-11-30 오전 12:00:00", "10/16/2026 1:05:00 PM")],
+          ["2026-10-16 13:05", "2026-10-16 00:30", None, None, "10/16/2026 1:05:00 PM"])
+
+    print("== 예약: 잠금")
+    gone = subprocess.Popen([sys.executable, "-c", "pass"])
+    gone.wait()
+    lock = schedule.lock_path("잠금 시험")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    cases = {}
+    for label, text in (("살아 있는 프로세스", f"{os.getpid()} {psutil.Process().create_time()}"), ("깨진 잠금 파일", "깨짐"), ("빈 잠금 파일", "")):
+        lock.write_text(text, encoding="utf-8")
+        cases[label] = (schedule.hold(lock), lock.read_text(encoding="utf-8") == text)
+    check("살아 있는 것·깨진 것·빈 것은 그대로 두고 잡지 않음", cases, {k: (False, True) for k in cases})
+    for label, text in (("끝난 프로세스", f"{gone.pid} 1.0"), ("번호를 다시 쓴 프로세스", f"{os.getpid()} 1.0")):
+        lock.write_text(text, encoding="ascii")
+        cases[label] = (schedule.hold(lock), lock.read_text(encoding="ascii").split()[0] == str(os.getpid()))
+        schedule.let_go(lock)
+    check("끝난 프로세스의 잠금은 지우고 잡음, 풀면 파일이 없어짐", ({k: cases[k] for k in ("끝난 프로세스", "번호를 다시 쓴 프로세스")}, lock.exists()),
+          ({"끝난 프로세스": (True, True), "번호를 다시 쓴 프로세스": (True, True)}, False))
+    lock.write_text("다른 것", encoding="utf-8")
+    schedule.let_go(lock)
+    check("남의 잠금은 풀지 않음", lock.exists(), True)
+    lock.unlink()
+
+    print("== 예약: 지금 실행·기록·알림")
+    sent = []
+    notify.post = lambda url, data, headers: sent.append(json.loads(data)) or b"ok"
+    got("/api/destinations", name="알림", destination={"kind": "webhook", "done": True, "url": "https://hooks.example.invalid/sched", "content": "json",
+                                                    "template": '{"title": "{제목}", "text": "{내용}", "rows": "{행수}"}'})
+
+    def settle(seconds=30):
+        end = time.time() + seconds
+        while time.time() < end and (collect_job.running() or any(r["result"] == "도는 중" for r in c.get("/api/runs").get_json()["runs"])):
+            time.sleep(0.05)
+        return c.get("/api/runs").get_json()
+
+    put("예약 하나", {**daily, "inapp": False, "windows": True, "notify": "알림", "notify_on": "always"})
+    check("지금 실행", got("/api/schedules/run", name="예약 하나"), {"ok": True})
+    r = settle()
+    check("기록: 지금 실행·끝·행 수, 결과 파일", ([(x["name"], x["how"], x["result"], x["rows"], x["message"], x["end"] is not None) for x in r["runs"]], r["unseen"], (out / "one.parquet").is_file()),
+          ([("예약 하나", "now", "끝", 7, "", True)], 0, True))
+    check("알림(always): 끝났다는 제목, 구성 이름·행 수", (len(sent), sent and sent[0]["title"], sent and "구성: 예약 하나" in sent[0]["text"], sent and sent[0]["rows"]), (1, "수집이 끝났습니다", True, "7"))
+    check("지금 실행 거부: 비밀번호가 필요한 구성, 없는 구성", [error("/api/schedules/run", name=n) for n in ("비번 DB", "없는 구성")],
+          ["DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다.", "구성 '없는 구성'이 없습니다. 구성을 먼저 저장하세요."])
+    lock = schedule.lock_path("예약 하나")
+    lock.write_text(f"{os.getpid()} {psutil.Process().create_time()}", encoding="ascii")
+    check("같은 구성이 잠겨 있으면 지금 실행 거부", error("/api/schedules/run", name="예약 하나"), schedule.LOCKED)
+    sent.clear()
+    put("예약 하나", {**daily, "inapp": False, "windows": True, "notify": "알림", "notify_on": "fail"})
+    schedule.execute("예약 하나", "inapp")
+    r = settle()
+    check("잠겨 있으면 건너뜀 기록·알림(실패처럼), 남의 잠금은 그대로", (r["runs"][0]["result"], r["runs"][0]["message"], [s["title"] for s in sent], lock.exists()),
+          ("건너뜀", schedule.SKIP_LOCKED, ["수집을 건너뛰었습니다"], True))
+    lock.unlink()
+    api.routes["/sched"] = lambda e: (500, {}, b"server says no")
+    sent.clear()
+    schedule.execute("예약 하나", "inapp")
+    r = settle()
+    check("실패 기록(오류 문구)·unseen·알림(fail)", (r["runs"][0]["result"], bool(r["runs"][0]["message"]), r["unseen"], [s["title"] for s in sent]),
+          ("실패", True, 1, ["수집이 실패했습니다"]))
+    check("본 것으로 표시하면 unseen 0", (got("/api/runs/seen"), c.get("/api/runs").get_json()["unseen"]), ({"ok": True}, 0))
+    api.routes["/sched"] = items
+    sent.clear()
+    schedule.execute("예약 하나", "inapp")
+    settle()
+    check("notify_on fail이면 끝난 것은 알리지 않음, 잠금은 풀림", (sent, lock.exists()), ([], False))
+    schedule.change_runs(lambda runs: runs.insert(0, {"id": "x", "name": "남은 것", "how": "windows", "start": "2026-10-15 09:00:00", "end": None, "result": "도는 중",
+                                                      "rows": None, "message": "", "seen": False, "owner": f"{gone.pid} 1.0"}))
+    r = c.get("/api/runs").get_json()
+    check("끝난 프로세스의 '도는 중' 기록은 실패로", (r["runs"][0]["result"], r["runs"][0]["message"], r["unseen"]), ("실패", schedule.GONE, 1))
+    schedule.change_runs(lambda runs: runs.extend([{**runs[-1], "id": str(i)} for i in range(250)]))
+    check("기록은 최근 200개까지, 화면에는 안의 값(id·seen·owner)을 주지 않음", (len(c.get("/api/runs").get_json()["runs"]), sorted(c.get("/api/runs").get_json()["runs"][0])),
+          (200, ["end", "how", "message", "name", "result", "rows", "start"]))
+    settings.write(schedule.RUNS, {"runs": []})
+
+    print("== 예약: 프로그램 안 예약(시계를 바꿔 끼움)")
+    put("예약 하나", {**every, "minutes": 5, "inapp": True, "windows": False})
+    due, now = {}, [at(2026, 10, 15, 9, 2)]
+    schedule.clock = lambda: now[0]
+    schedule.tick(due)
+    check("처음 본 예약은 다음 칸부터(놓친 것은 돌리지 않음)", (due["예약 하나"][1], c.get("/api/schedules").get_json()["next_inapp"]),
+          (at(2026, 10, 15, 9, 5), {"예약 하나": "2026-10-15 09:05"}))
+    now[0] = at(2026, 10, 15, 9, 4, 59)
+    schedule.tick(due)
+    check("때가 되기 전에는 돌리지 않음", c.get("/api/runs").get_json()["runs"], [])
+    now[0] = at(2026, 10, 15, 9, 5, 10)
+    schedule.tick(due)
+    r = settle()
+    check("때가 되면 돌리고 다음 칸을 잡음", ([(x["how"], x["result"], x["rows"]) for x in r["runs"]], due["예약 하나"][1]), ([("inapp", "끝", 7)], at(2026, 10, 15, 9, 10)))
+    slow.set()
+    got("/api/collect/start", config=cfg("busy.parquet"))
+    now[0] = at(2026, 10, 15, 9, 10)
+    schedule.tick(due)
+    r = c.get("/api/runs").get_json()
+    check("다른 수집이 돌고 있으면 건너뜀", (r["runs"][0]["how"], r["runs"][0]["result"], r["runs"][0]["message"]), ("inapp", "건너뜀", schedule.SKIP_RUNNING))
+    check("다른 수집이 돌고 있으면 지금 실행은 거부", error("/api/schedules/run", name="예약 하나"), collect_job.RUNNING)
+    collect_job.stop(wait=10)
+    slow.clear()
+    put("예약 하나", {**every, "minutes": 5, "inapp": False})
+    schedule.tick(due)
+    check("inapp을 끄면 계획에서 빠짐", (due, schedule.planned), ({}, {}))
+    check("예약 라우트는 차례(turn)를 기다리지 않음", all(p in server.FREE for p in ("/api/schedules", "/api/schedules/run", "/api/schedules/reregister", "/api/runs", "/api/runs/seen")), True)
+
+    print("== 예약: 창 없이 실행(--run, 소스 실행 프로세스)")
+    settings.write(schedule.RUNS, {"runs": []})
+    env = {**os.environ, "TEMP": str(ROOT), "TMP": str(ROOT)}
+    (out / "one.parquet").unlink()
+    done = subprocess.run([sys.executable, "-B", "-W", "ignore", "desktop.py", "--run", "예약 하나"], env=env, capture_output=True, timeout=180)
+    r = c.get("/api/runs").get_json()
+    check("--run: 종료 코드 0, 기록(windows·끝·7행), 결과 파일", (done.returncode, [(x["name"], x["how"], x["result"], x["rows"]) for x in r["runs"]],
+          (out / "one.parquet").is_file() and pl.read_parquet(out / "one.parquet").height), (0, [("예약 하나", "windows", "끝", 7)], 7))
+    done = subprocess.run([sys.executable, "-B", "-W", "ignore", "desktop.py", "--run", "비번 DB"], env=env, capture_output=True, timeout=180)
+    r = c.get("/api/runs").get_json()
+    check("--run: 비밀번호가 필요한 구성은 실행하지 않고 실패로 기록, 종료 코드 1", (done.returncode, r["runs"][0]["result"], r["runs"][0]["message"], (out / "db.parquet").exists()),
+          (1, "실패", "DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다.", False))
+    check("--run이 남긴 잠금 없음", [p.name for p in schedule.locks().glob("*.lock")], [])
+
+    wintask.execute, schedule.clock, notify.post = real_execute, real_clock, real_post
+    settings.write(schedule.FILE, {})
+    got("/api/destinations", name="알림", destination=None)
+    api.http.shutdown()
+
+
 def memory_section(c, got, duck):
     """데이터 라이브러리 지연 로딩과 DuckDB 파일 조회의 작업 메모리 상한."""
     print("== 지연 로딩·메모리 상한")
@@ -2255,6 +2497,7 @@ def main():
     collect_section(c, got)
     web_section(c, got)
     load_section(c, got)
+    schedule_section(c, got)
     memory_section(c, got, duck)
     sqlite_section(c, got)
     prep_section()
