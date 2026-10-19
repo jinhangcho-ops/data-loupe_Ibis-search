@@ -1,7 +1,11 @@
-<div class="pages"><a href="/search">검색</a><a href="/prep">전처리</a><a href="/collect">수집</a></div>
-<button id="theme" class="ghost"></button>
-<button id="dest-open" class="ghost" title="알림이나 집계·차트를 다른 앱으로 보낼 곳을 정합니다">보낼 곳</button>
-<button id="resize" class="ghost" title="켜면 패널·표·차트의 경계를 끌어 크기를 바꿀 수 있습니다"></button>
-<div class="hint" id="usage" title="PC 전체의 점유율 | 이 프로그램(화면 포함)의 점유율. DB 주소로 연결하면 연산은 DB 서버가 합니다">&nbsp;<br>&nbsp;</div>
-<button id="cancel" class="ghost hidden" title="지금 도는 작업을 멈춥니다">취소</button>
-<div class="hint" id="timing" title="검색한 뒤로 돌린 검색·집계·차트·저장 시간의 합계. 예상: 테이블 행 수 × 직전 실행의 행당 시간">&nbsp;</div>
+<header class="topbar">
+  <div class="crumb" id="crumb" title="지금 연결과 고른 테이블"><i></i><span id="crumb-text">연결 안 됨</span></div>
+  <nav class="pages"><a href="/search">검색</a><a href="/prep">전처리</a><a href="/collect">수집</a></nav>
+  <div class="sx" id="usage" title="PC 전체와 이 프로그램(화면 포함)의 점유율. DB 주소로 연결하면 연산은 DB 서버가 합니다"></div>
+  <span class="jobx idle hidden" id="job" title="검색한 뒤로 돌린 검색·집계·차트·저장 시간. 예상: 테이블 행 수 × 직전 실행의 행당 시간"><i></i><span id="job-name"></span><em id="timing"></em><button id="cancel" title="지금 도는 작업을 멈춥니다">취소</button></span>
+  <div class="top-tools">
+    <button id="resize" class="ib" title="켜면 패널·표·차트의 경계를 끌어 크기를 바꿀 수 있습니다"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+    <button id="theme" class="ib"></button>
+    <button id="dest-open" class="btn" title="알림이나 집계·차트를 다른 앱으로 보낼 곳을 정합니다">보낼 곳</button>
+  </div>
+</header>

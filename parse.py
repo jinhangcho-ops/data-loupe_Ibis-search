@@ -1,11 +1,15 @@
-"""한 줄 입력(조인·기간·조건·정렬·표시 컬럼)을 해석해 Ibis 식으로 바꾼다. 입력·출력은 하지 않는다."""
+"""한 줄 입력(조인·기간·조건·정렬·표시 컬럼)과 이어붙이기를 해석해 Ibis 식으로 바꾼다. 입력·출력은 하지 않는다."""
 import datetime as dt
 import difflib
 import functools
 import operator
 import re
 
+from lazy import ibis
+
 JOINS = ["inner", "left", "right", "outer"]
+UNIONS = ["left", "inner"]  # 이어붙이기: left는 기준 테이블의 컬럼을 모두(없는 컬럼은 빈 값), inner는 모든 테이블에 있는 컬럼만
+SOURCE = "출처"  # 이어붙이면 더하는 컬럼: 그 행이 온 테이블 이름
 OPS = {"=": operator.eq, "!=": operator.ne, ">=": operator.ge, "<=": operator.le, ">": operator.gt, "<": operator.lt}
 CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
 SORT_GUIDE = "컬럼 [asc|desc]"
@@ -77,6 +81,42 @@ def check_name(name, names, what="컬럼"):
     if name not in names:
         close = difflib.get_close_matches(name, list(names), n=1)
         raise ValueError(f"'{name}' {what}이 없습니다." + (f" 비슷한 이름: {close[0]}" if close else ""))
+
+
+# 이어붙이기: {"tables": [테이블…], "how": "left" | "inner"}. 테이블을 기준 테이블 아래로 잇는다(행이 늘어난다).
+def parse_union(union, tables, base):
+    """이어붙이기를 검사해 (테이블들, 방식)으로. 없거나 테이블을 고르지 않았으면 None."""
+    if not union:
+        return None
+    names, how = (union.get("tables") or [], union.get("how", "left")) if isinstance(union, dict) else (None, None)
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        raise ValueError('이어붙이기는 {"tables": [테이블…], "how": "left" 또는 "inner"} 모양이어야 합니다.')
+    if not names:
+        return None
+    if how not in UNIONS:
+        raise ValueError(f"이어붙이기 방식은 {', '.join(UNIONS)} 중 하나입니다.")
+    for name in names:
+        check_name(name, tables, "테이블")
+    if base in names or len(set(names)) != len(names):
+        raise ValueError("이어붙일 테이블은 기준 테이블과 다르고 서로 겹치지 않아야 합니다.")
+    return names, how
+
+
+def apply_union(base, base_name, union, get_table):
+    """기준 테이블 아래로 테이블들을 잇고 SOURCE 컬럼에 온 테이블 이름을 넣는다. 타입은 기준 테이블을 따른다(바꿀 수 없는 값은 그 연결의 오류).
+    left: 기준 테이블의 컬럼을 모두 남기고 붙이는 테이블에 없는 컬럼은 빈 값(붙이는 테이블에만 있는 컬럼은 뺀다). inner: 모든 테이블에 있는 컬럼만."""
+    if union is None:
+        return base
+    names, how = union
+    if SOURCE in base.columns:
+        raise ValueError(f"기준 테이블에 '{SOURCE}' 컬럼이 이미 있어 이어붙일 수 없습니다.")
+    others = [(name, get_table(name)) for name in names]
+    columns = [c for c in base.columns if how == "left" or all(c in t.columns for _, t in others)]
+    if not columns:
+        raise ValueError("모든 테이블에 같이 있는 컬럼이 없어 inner로 이어붙일 수 없습니다.")
+    schema = base.schema()
+    shaped = lambda t, name: t.select(*[(t[c] if c in t.columns else ibis.null()).cast(schema[c]).name(c) for c in columns], **{SOURCE: ibis.literal(name)})
+    return ibis.union(shaped(base, base_name), *[shaped(t, name) for name, t in others], distinct=False)
 
 
 # 조인: "테이블 [inner|left|right|outer] 왼쪽=오른쪽, ..."

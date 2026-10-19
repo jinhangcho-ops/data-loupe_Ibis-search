@@ -42,5 +42,9 @@ def client(folder, monkeypatch):
     server.state.update(con=None, passwords=[], opened=None, rows={})
 
 
+def pytest_configure(config):
+    config.addinivalue_line("filterwarnings", "ignore:fetch_arrow_table:DeprecationWarning")  # Ibis 안의 경고(우리 코드가 아님)
+
+
 def pytest_sessionfinish():  # pytest가 다 끝나면(받을 인자는 쓰지 않아 뺀다)
     shutil.rmtree(APPDATA, ignore_errors=True)

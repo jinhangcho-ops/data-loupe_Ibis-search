@@ -18,18 +18,26 @@ def search_page():
     return server.page("index.html")
 
 
-def build(body, select=True):
-    """요청의 테이블·조인·기간·조건·정렬·표시 컬럼 줄을 Ibis 식 하나로 만든다.
-    select=False면 줄은 모두 검사하되 표시 컬럼은 적용하지 않는다(컬럼 목록, 차트)."""
-    con, schema = get_con(), body.get("schema") or None
+def joined(body):
+    """기준 테이블에 이어붙이기와 조인을 한 식, 그리고 컬럼마다 원래 테이블 {컬럼: 테이블}.
+    기준·이어붙인 컬럼은 기준 테이블, 출처 컬럼은 "이어붙인 테이블", 조인으로 들어온 컬럼(이름이 겹쳐 바뀐 것 포함)은 그 테이블."""
+    con, schema, base = get_con(), body.get("schema") or None, body["base"]
     tables = source.list_tables(con, schema)
-    parse.check_name(body["base"], tables, "테이블")
+    parse.check_name(base, tables, "테이블")
     get_table = lambda name: source.get_table(con, name, schema)
-    expr = parse.apply_joins(
-        get_table(body["base"]),
-        [parse.parse_join(line, tables) for line in body.get("joins", [])],
-        get_table,
-    )
+    expr = parse.apply_union(get_table(base), base, parse.parse_union(body.get("union"), tables, base), get_table)
+    origins = {c: "이어붙인 테이블" if body.get("union") and c == parse.SOURCE else base for c in expr.columns}
+    for join in [parse.parse_join(line, tables) for line in body.get("joins", [])]:
+        before = set(expr.columns)
+        expr = parse.apply_joins(expr, [join], get_table)
+        origins.update({c: join[0] for c in expr.columns if c not in before})
+    return expr, origins
+
+
+def build(body, select=True):
+    """요청의 테이블·이어붙이기·조인·기간·조건·정렬·표시 컬럼을 Ibis 식 하나로 만든다.
+    select=False면 줄은 모두 검사하되 표시 컬럼은 적용하지 않는다(컬럼 목록, 차트)."""
+    expr = joined(body)[0]
     preds = [p for line in body.get("periods", []) for p in parse.parse_period(line, expr)]
     preds += [parse.predicate(cond, expr) for cond in body.get("conditions", [])]
     keys = [parse.parse_sort(line, expr) for line in body.get("sorts", [])]
@@ -40,7 +48,8 @@ def build(body, select=True):
 
 @app.post("/api/columns")
 def columns():
-    return jsonify(columns=result.columns(build(request.json, select=False)))
+    """줄을 모두 검사한 식의 [컬럼, 한글 타입]과, 컬럼마다 원래 테이블(origins: 머리글 아래 작은 글씨)."""
+    return jsonify(columns=result.columns(build(request.json, select=False)), origins=joined(request.json)[1])
 
 
 @app.post("/api/values")

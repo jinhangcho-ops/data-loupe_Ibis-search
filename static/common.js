@@ -41,37 +41,47 @@ async function busy(button, fn) {
   finally { button.disabled = false; button.textContent = label; button.style.minWidth = ""; }
 }
 
-// 상단 표시: 메모리·CPU(PC 전체 | 이 프로그램)는 2초마다 읽는다.
+// 위쪽 줄의 점유율: PC 메모리·CPU와 이 프로그램의 메모리를 2초마다 읽는다(프로그램의 CPU·메모리 비율은 마우스를 올리면).
 async function showUsage() {
-  try { const d = await api("/api/usage"); $("usage").innerHTML = `<span>메모리  전체 ${d.pc_memory}%</span> <span>| 프로그램 ${d.memory}% (${d.memory_mb.toLocaleString()}MB)</span><br><span>CPU  전체 ${d.pc_cpu}%</span> <span>| 프로그램 ${d.cpu}%</span>`; } catch (e) {}
+  try {
+    const d = await api("/api/usage");
+    $("usage").innerHTML = `<span>PC 메모리<b>${d.pc_memory}%</b></span><span>PC CPU<b>${d.pc_cpu}%</b></span><span>프로그램<b>${d.memory_mb.toLocaleString()} MB</b></span>`;
+    $("usage").title = `프로그램: 메모리 ${d.memory}%, CPU ${d.cpu}% (화면 포함). DB 주소로 연결하면 연산은 DB 서버가 합니다`;
+  } catch (e) {}
 }
 showUsage();
 setInterval(showUsage, 2000);
 
-// 전체 시간: [검색]을 누르면 0에서 다시 시작하고, 그 뒤의 집계·차트·저장 시간을 더해 간다. 도는 동안은 "예상 | 경과", 끝나면 "예상 | 실제".
+// 전체 시간: [검색]을 누르면 0에서 다시 시작하고, 그 뒤의 집계·차트·저장 시간을 더해 간다.
+// 위쪽 줄의 작업 알약에 도는 동안은 "○○ 중 · 예상 · 걸린 시간"과 [취소], 끝나면 "끝 · 걸린 시간"이 나온다.
 // 작업 하나의 예상 = 기준 테이블 행 수 × 그 작업 종류·행 수 구간의 직전 행당 시간(나노초/행, 설정으로 기억). 그 구간에서 안 해 봤으면 예상에 더하지 않는다.
 const rates = {};  // 설정 이름 → 행당 시간. 처음 쓸 때 저장된 값을 읽어 둔다.
 // 행당 시간의 설정 이름: 작업 종류와 행 수의 구간(10배 단위, settings.TIME_BANDS 안으로 맞춘다)마다 따로다.
 const rateName = (kind, rows) => `time_${kind}_${Math.min(SERVER.time.bands[1], Math.max(SERVER.time.bands[0], String(rows).length - 1))}`;
 const secs = ms => (ms / 1000).toFixed(1) + "초";
 let total = { guess: 0, done: 0 }, timer;  // 예상 합계와 끝난 작업의 시간 합계(ms)
-const going = new Set();  // 지금 도는 작업들의 시작 시각
+const going = new Set();  // 지금 도는 작업들 { at: 시작 시각, kind }
+// 작업 이름. 알림 제목은 subject로 조사(받침이 있으면 "이", 없으면 "가")를 붙인다.
+const JOBS = { search: "검색", summary: "집계", chart: "차트", export: "저장", profile: "통계", preview: "미리보기", run: "전처리 실행", collect: "수집" };
+const subject = word => word + ((word.charCodeAt(word.length - 1) - 0xac00) % 28 ? "이" : "가");
 function showTiming() {
-  const now = performance.now(), ms = total.done + [...going].reduce((sum, run) => sum + now - run.at, 0);
-  $("timing").textContent = `전체  예상 ${total.guess ? secs(total.guess) : "—"} | ${going.size ? "경과" : "실제"} ${secs(ms)}`;
-  $("cancel").classList.toggle("hidden", !going.size);  // [취소]는 도는 작업이 있을 때만 보인다.
+  const now = performance.now(), ms = total.done + [...going].reduce((sum, run) => sum + now - run.at, 0), last = [...going].at(-1);
+  $("job").classList.remove("hidden");
+  $("job").classList.toggle("idle", !going.size);  // 도는 작업이 없으면 옅게, [취소]는 숨김
+  $("cancel").classList.toggle("hidden", !going.size);
+  $("job-name").textContent = going.size ? `${JOBS[last.kind] ?? "작업"} 중` : "끝";
+  $("timing").textContent = [total.guess && `예상 ${secs(total.guess)}`, `걸린 시간 ${secs(ms)}`].filter(Boolean).join(" · ");
 }
 function resetTiming() {
   total = { guess: 0, done: 0 };
   going.clear();
   clearInterval(timer);
-  $("timing").innerHTML = "&nbsp;";
-  $("cancel").classList.add("hidden");
+  $("job").classList.add("hidden");
 }
 $("cancel").onclick = () => api("/api/cancel", {}).catch(() => {});  // 멈춘 작업이 제 오류 칸에 "취소했습니다."를 띄운다.
 async function timed(kind, fn) {
   if (kind === "search") resetTiming();
-  const mine = total, run = { at: performance.now() };  // 도는 사이 새로 검색하면 이 작업의 시간은 새 합계에 넣지 않는다.
+  const mine = total, run = { at: performance.now(), kind };  // 도는 사이 새로 검색하면 이 작업의 시간은 새 합계에 넣지 않는다.
   going.add(run);
   clearInterval(timer);
   timer = setInterval(showTiming, 100);
@@ -100,12 +110,11 @@ let dest = { kinds: {}, destinations: {} };
 let notifyAfter = +saved("notify_after") || 30;  // 이만큼(초) 이상 걸린 작업이 끝나면 알린다
 const sendTo = (name, body) => api("/api/send", { name, ...body });
 const takesImage = name => dest.kinds[dest.destinations[name].kind].image;
-const DONE = { search: "검색이", summary: "집계가", chart: "차트가", export: "저장이", profile: "통계가", preview: "미리보기가", run: "전처리 실행이", collect: "수집이" };
 // 오래 걸린 작업이 끝나면 done인 보낼 곳마다 알린다. 데이터 값은 보내지 않는다. text: 알림의 본문(기본은 기준 테이블 이름)
 function notifyDone(kind, seconds, rows, text = S.base) {
   if (seconds < notifyAfter) return;
   for (const [name, d] of Object.entries(dest.destinations)) {
-    if (d.done) sendTo(name, { title: `${DONE[kind]} 끝났습니다`, text, ...(rows ? { rows } : {}), seconds: +seconds.toFixed(1) }).catch(e => connMsg(e.message));
+    if (d.done) sendTo(name, { title: `${subject(JOBS[kind])} 끝났습니다`, text, ...(rows ? { rows } : {}), seconds: +seconds.toFixed(1) }).catch(e => connMsg(e.message));
   }
 }
 const destMsg = (text, ok) => say("msg-dest", text, ok);
@@ -214,7 +223,7 @@ async function resume() {
       else $("file").value = opened.file;
       showFlat();
     }
-    await showConnected(!!opened.files, schemas);
+    await showConnected(!!opened.files, schemas, opened);
   } catch (e) { connMsg(e.message); }
 }
 // 체크 목록: box 안에 값마다 체크 칸을 만든다. 모두 체크하지 않은 상태로 시작한다.
@@ -270,7 +279,7 @@ if (hasConnect) $("flat-none").onclick = () => busy($("flat-none"), async () => 
   try {
     if (connected === "flat") {
       await api("/api/disconnect", {});
-      connected = null;
+      connected = connName = null;
       $("after-connect").classList.add("hidden");
       connMsg("연결을 해제했습니다. 쓸 파일을 고르고 [연결]을 누르세요.", "hint");
     } else connMsg("연결은 그대로 두고 화면만 비웠습니다. 테이블을 다시 고르세요.", "hint");
@@ -290,8 +299,9 @@ if (hasConnect) $("find").onclick = () => busy($("find"), async () => {
   try { await listFiles(); } catch (e) { connMsg(e.message); }
 });
 // 연결에 성공한 상태로 만든다([연결]을 누른 뒤와 화면을 새로 연 뒤가 같다). flat: Parquet·CSV 파일 연결인가
-async function showConnected(flat, schemas) {
+async function showConnected(flat, schemas, info) {
   connected = flat ? "flat" : "other";
+  connName = connLabel(info);
   clearScreen();  // 이전 연결에서 고른 테이블과 조건은 새 연결과 맞지 않으므로 비운다.
   connMsg("연결됨", true);
   $("schema").classList.toggle("hidden", !schemas.length);
@@ -307,7 +317,7 @@ if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
   try {
     const { schemas } = await api("/api/connect", body);
     showRecentConnections();  // 쓴 횟수가 바뀌었다
-    await showConnected(!!body.files, schemas);
+    await showConnected(!!body.files, schemas, body);
   } catch (e) { connMsg(e.message); }
 });
 
@@ -316,14 +326,37 @@ async function loadTables() {
   S.schema = $("schema").value;
   const { tables } = await api("/api/tables?schema=" + encodeURIComponent(S.schema));
   fill($("base"), tables, "기준 테이블 선택");
+  showCrumb();
 }
 if (hasConnect) $("schema").onchange = loadTables;
 
+// 위쪽 줄의 연결 이름: "파일 / 테이블"(주소면 호스트/DB). 연결이 없으면 "연결 안 됨". 연결 칸이 없는 화면(수집)은 숨긴다.
+let connName = null;
+function connLabel(info) {
+  if (!info) return null;
+  if (info.kind === "url") {
+    try { const u = new URL(info.url); return (u.host + u.pathname).replace(/\/$/, "") || info.url; } catch (e) { return info.url; }
+  }
+  return (info.files ? `파일 ${info.files.length}개` : (info.file || "").split(/[\\/]/).pop()) || info.path;
+}
+function showCrumb() {
+  $("crumb").classList.toggle("hidden", !hasConnect);
+  $("crumb").classList.toggle("on", !!connName);
+  $("crumb-text").innerHTML = connName ? esc(connName) + (S.base ? ` <em>/</em> ${esc(S.base)}` : "") : "연결 안 됨";
+}
+if (hasConnect) $("base").addEventListener("change", () => setTimeout(showCrumb));  // 화면 스크립트가 S.base를 바꾼 뒤에
+showCrumb();
+
 // 설정(화면 모드, 차트 비율, 그림 저장 모드, 따옴표 해석, 전체 행 수 세기, 조건 입력 방식, 끌어서 조절한 크기, 직전 실행의 행당 시간): 바꾸면 서버가 설정 파일에 저장해 다음 실행 때도 쓴다.
 const saveSetting = changes => api("/api/settings", changes).catch(e => connMsg(e.message));
+const ICONS = {  // 화면 모드 버튼: 지금이 밝으면 달(어둡게로), 어두우면 해(밝게로)
+  moon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+  sun: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+};
 function showTheme(theme) {
   document.documentElement.dataset.theme = theme;
-  $("theme").textContent = theme === "dark" ? "라이트 모드" : "다크 모드";
+  $("theme").innerHTML = theme === "dark" ? ICONS.sun : ICONS.moon;
+  $("theme").title = theme === "dark" ? "밝은 화면으로" : "어두운 화면으로";
 }
 $("theme").onclick = () => {
   const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
@@ -335,22 +368,23 @@ showTheme(document.documentElement.dataset.theme);
 // 크기 조절 모드: [크기 조절]을 켰을 때만 경계가 보이고 잡힌다. 켤 때마다 꺼진 상태로 시작한다.
 function showResizing(on) {
   document.documentElement.classList.toggle("resizing", on);
-  $("resize").textContent = on ? "크기 조절 끝" : "크기 조절";
+  $("resize").classList.toggle("on", on);
 }
 $("resize").onclick = () => showResizing(!document.documentElement.classList.contains("resizing"));
 showResizing(false);
 // 경계를 끌면 그 크기의 CSS 변수를 바꾸고, 놓으면 저장한다. 더블클릭하면 기본 크기로 돌아간다(0을 저장).
-const sized = { panel: () => document.querySelector(".panel") };
+const sized = { panel: () => document.querySelector(".panel, .side") };  // 화면이 크기를 바꿀 상자를 더한다
 document.querySelectorAll("[data-size]").forEach(grip => {
   const name = grip.dataset.size, [min, max, axis] = SIZES[name], root = document.documentElement.style;
   const at = e => axis === "x" ? e.clientX : e.clientY;
   grip.onpointerdown = e => {
     const start = at(e), box = sized[name]().getBoundingClientRect(), from = axis === "x" ? box.width : box.height;
+    const sign = axis === "x" && box.left >= grip.getBoundingClientRect().left ? -1 : 1;  // 경계 오른쪽의 상자(오른쪽 패널)는 왼쪽으로 끌면 넓어진다
     let size = 0;
     grip.setPointerCapture(e.pointerId);
     grip.classList.add("on");
     document.body.style.userSelect = "none";
-    grip.onpointermove = m => { size = Math.round(Math.min(max, Math.max(min, from + at(m) - start))); root.setProperty("--" + name, size + "px"); };
+    grip.onpointermove = m => { size = Math.round(Math.min(max, Math.max(min, from + sign * (at(m) - start)))); root.setProperty("--" + name, size + "px"); };
     grip.onpointerup = () => {
       grip.onpointermove = grip.onpointerup = null;
       grip.classList.remove("on");
