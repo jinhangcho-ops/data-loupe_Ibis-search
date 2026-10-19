@@ -50,90 +50,18 @@
   tr.pick { cursor:pointer; }
   tr.pick:hover td, tr.on td { background:var(--bg); }
   tr.fail td { color:var(--err); }
+  /* 가운데는 카드들이 위아래로 이어지고(옅은 바탕), 오른쪽 "수집 설정" 패널의 단계 카드는 웹페이지 방식에서 env·쪽 넘기기가 숨는다. */
+  .collect-pane { background:var(--bg); }
+  .collect-pane > .main { max-width:1100px; margin:0 auto; padding:4px 0 24px; }
+  .cstep.hidden { display:none; }
+  .step .edx .tabs { display:flex; flex-wrap:wrap; gap:4px 12px; margin:4px 0; }
 </style>
 </head>
-<body>
+<body class="app">
 <!--include status.html-->
-<div class="layout">
-  <aside class="panel">
-    <div class="err" id="err-connect"></div><!-- common.js가 설정 저장·알림 오류를 띄우는 칸 -->
-
-    <h2>1. 구성</h2>
-    <div class="row"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 구성을 불러옵니다 (보내지는 않습니다)"></select><input id="rname" placeholder="이름"><button id="rsave">저장</button><button id="rdel" class="ghost">삭제</button></div>
-    <div class="hint">이름을 비우고 저장하면 지금 고른 구성에 덮어씁니다.</div>
-    <div class="err" id="cfg-msg"></div>
-
-    <h2>2. 받는 방식</h2>
-    <div class="tabs">
-      <label><input type="radio" name="mode" value="api" checked style="width:auto"> API</label>
-      <label><input type="radio" name="mode" value="file" style="width:auto"> 파일 주소</label>
-      <label><input type="radio" name="mode" value="web" style="width:auto"> 웹페이지</label>
-    </div>
-
-    <div class="not-web">
-      <h2>3. env 파일</h2>
-      <div class="row"><input id="env-path" placeholder="예: C:\work\.env"><button id="env-read">읽기</button></div>
-      <div class="hint">값은 저장하지 않고 경로만 저장합니다. 요청에는 {env:이름}으로 씁니다.</div>
-      <div class="hint" id="env-names"></div>
-      <div class="err" id="env-msg"></div>
-    </div>
-
-    <div class="for-api">
-      <h2>4. 쪽 넘기기</h2>
-      <select id="p-kind" style="margin-bottom:6px">
-        <option value="none">없음 (한 번만 받기)</option><option value="page">쪽 번호 {page}</option><option value="offset">offset {offset}</option><option value="cursor">커서 {cursor}</option><option value="next_url">다음 주소</option>
-      </select>
-      <div class="fields">
-        <label id="p-start-box"><div class="hint" id="p-start-name">첫 쪽 번호</div><input id="p-start" type="number"></label>
-        <label id="p-step-box"><div class="hint">한 번에 늘릴 값</div><input id="p-step" type="number"></label>
-        <label id="p-max-box"><div class="hint">최대 쪽 수</div><input id="p-max" type="number"></label>
-      </div>
-      <label id="p-cursor-box"><div class="hint">다음 커서 위치</div><input id="p-cursor" class="code" placeholder="응답 트리에서 지정" style="margin-bottom:6px"></label>
-      <label id="p-next-box"><div class="hint">다음 주소 위치 (비우면 Link 헤더의 rel=next)</div><input id="p-next" class="code" placeholder="응답 트리에서 지정" style="margin-bottom:6px"></label>
-      <label id="p-total-box"><div class="hint">전체 수 위치 (선택: 예상 요청 수 계산·멈춤 조건)</div><input id="p-total" class="code" placeholder="응답 트리에서 지정"></label>
-      <div class="warn" id="p-warn"></div>
-    </div>
-
-    <h2>5. 받는 속도</h2>
-    <div class="fields">
-      <label class="not-web"><div class="hint">동시 수</div><input id="b-conc" type="number"></label>
-      <label><div class="hint">간격(초)</div><input id="b-gap" type="number" step="any"></label>
-      <label class="not-web"><div class="hint">다시 시도 횟수</div><input id="b-retry" type="number"></label>
-      <label><div class="hint">시간 초과(초)</div><input id="b-timeout" type="number" step="any"></label>
-    </div>
-    <div class="hint not-web">쪽 번호·offset 방식만 동시에 받습니다.</div>
-    <div class="hint for-web hidden">웹페이지는 수집용 창 하나로 받습니다. 간격은 쪽 사이, 시간 초과는 쪽 하나를 여는 시간입니다.</div>
-
-    <h2>6. 사용 한도</h2>
-    <div class="row"><select id="lgroup" style="flex:1; min-width:0" title="이 구성이 쓰는 사용 한도 묶음. 같은 키를 쓰는 구성끼리 같은 묶음을 고르면 사용량을 함께 셉니다"></select><input id="lname" placeholder="새 이름"><button id="lsave">저장</button><button id="ldel" class="ghost">삭제</button></div>
-    <div class="hint">비우면 제한 없음. 이름을 비우고 저장하면 고른 묶음에 덮어씁니다.</div>
-    <div class="fields">
-      <label><div class="hint">초당</div><input id="l-sec" type="number" min="1"></label>
-      <label><div class="hint">분당</div><input id="l-min" type="number" min="1"></label>
-      <label><div class="hint">시간당</div><input id="l-hour" type="number" min="1"></label>
-      <label><div class="hint">하루</div><input id="l-day" type="number" min="1"></label>
-      <label><div class="hint">동시 수</div><input id="l-conc" type="number"></label>
-      <label><div class="hint">최소 간격(초)</div><input id="l-gap" type="number" step="any"></label>
-      <label><div class="hint">하루 초기화 시각</div><input id="l-reset" placeholder="00:00"></label>
-      <label><div class="hint">시간대</div><select id="l-tz"><option value="Asia/Seoul">한국 시간</option><option value="UTC">UTC</option><option value="local">이 PC</option></select></label>
-      <label><div class="hint">여유분(%)</div><input id="l-margin" type="number" step="any"></label>
-    </div>
-    <div class="hint usage" id="lusage"></div>
-    <div class="warn" id="lbroken"></div>
-    <div class="row"><button id="lreset" class="ghost" title="고른 묶음의 사용 기록을 지웁니다">사용량 초기화</button></div>
-    <div class="err" id="limit-msg"></div>
-
-    <h2>7. 저장</h2>
-    <select id="o-format" style="margin-bottom:6px"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
-    <div class="row"><input id="o-path" placeholder="저장할 파일 경로"><button id="o-ask">저장 위치 고르기</button></div>
-    <div class="hint">중복 기준 컬럼 (선택, 쉼표로 구분). 값이 모두 같은 행은 하나만 남깁니다.</div>
-    <input id="dd-text" placeholder="예: id" style="margin-bottom:4px">
-    <div class="cols" id="dd-list"></div>
-    <div class="err" id="out-msg"></div>
-  </aside>
-  <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
-
-  <main class="main">
+<div class="work" id="work">
+  <main class="results">
+    <section class="pane collect-pane"><div class="main">
     <section class="card hidden" id="unseen-box">
       <div class="head" style="margin:0"><b class="warn" id="unseen-text" style="font-size:14px"></b><button id="unseen-open" class="ghost">기록 보기</button><button id="unseen-ok" title="실패를 본 것으로 표시합니다">확인함</button></div>
     </section>
@@ -251,7 +179,7 @@
         <label><input type="radio" name="ltarget" value="table" style="width:auto"> DB 테이블</label>
         <label><input type="radio" name="ltarget" value="kafka" style="width:auto"> Kafka 토픽</label>
       </div>
-      <div class="hint">결과 파일(7. 저장)은 늘 만듭니다. 적재는 저장한 결과 파일을 읽어 넣습니다.</div>
+      <div class="hint">결과 파일(오른쪽 "저장" 단계)은 늘 만듭니다. 적재는 저장한 결과 파일을 읽어 넣습니다.</div>
       <div class="hint load-on hidden">비밀번호는 저장하지 않습니다. 적재할 때마다 입력하세요.</div>
 
       <div id="ld-table" class="hidden">
@@ -381,7 +309,109 @@
       <div class="table-wrap hidden" id="runs"></div>
       <div class="err" id="runs-msg"></div>
     </section>
+    </div></section>
   </main>
+  <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
+  <aside class="side">
+    <header><h3>수집 설정</h3></header>
+    <div class="sc">
+      <div class="err" id="err-connect"></div><!-- common.js가 설정 저장·알림 오류를 띄우는 칸 -->
+      <div class="flow">
+      <div class="cstep">
+      <div class="step open" data-step="config"><div class="sp"><i>1</i><span class="t">구성</span><b id="sum-c-config"></b><span class="c"></span></div>
+        <div class="edx">
+      <div class="row"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 구성을 불러옵니다 (보내지는 않습니다)"></select><input id="rname" placeholder="이름"><button id="rsave">저장</button><button id="rdel" class="ghost">삭제</button></div>
+      <div class="hint">이름을 비우고 저장하면 지금 고른 구성에 덮어씁니다.</div>
+      <div class="err" id="cfg-msg"></div>
+
+
+        </div></div></div>
+      <div class="cstep"><div class="cn">↓</div>
+      <div class="step" data-step="mode"><div class="sp"><i>2</i><span class="t">받는 방식</span><b id="sum-c-mode"></b><span class="c"></span></div>
+        <div class="edx">
+      <div class="tabs">
+      <label><input type="radio" name="mode" value="api" checked style="width:auto"> API</label>
+      <label><input type="radio" name="mode" value="file" style="width:auto"> 파일 주소</label>
+      <label><input type="radio" name="mode" value="web" style="width:auto"> 웹페이지</label>
+      </div>
+
+
+        </div></div></div>
+      <div class="cstep not-web"><div class="cn">↓</div>
+      <div class="step" data-step="env"><div class="sp"><i>3</i><span class="t">env 파일</span><b id="sum-c-env"></b><span class="c"></span></div>
+        <div class="edx">
+      <div class="row"><input id="env-path" placeholder="예: C:\work\.env"><button id="env-read">읽기</button></div>
+      <div class="hint">값은 저장하지 않고 경로만 저장합니다. 요청에는 {env:이름}으로 씁니다.</div>
+      <div class="hint" id="env-names"></div>
+      <div class="err" id="env-msg"></div>
+        </div></div></div>
+      <div class="cstep for-api"><div class="cn">↓</div>
+      <div class="step" data-step="paging"><div class="sp"><i>4</i><span class="t">쪽 넘기기</span><b id="sum-c-paging"></b><span class="c"></span></div>
+        <div class="edx">
+      <select id="p-kind" style="margin-bottom:6px">
+      <option value="none">없음 (한 번만 받기)</option><option value="page">쪽 번호 {page}</option><option value="offset">offset {offset}</option><option value="cursor">커서 {cursor}</option><option value="next_url">다음 주소</option>
+      </select>
+      <div class="fields">
+      <label id="p-start-box"><div class="hint" id="p-start-name">첫 쪽 번호</div><input id="p-start" type="number"></label>
+      <label id="p-step-box"><div class="hint">한 번에 늘릴 값</div><input id="p-step" type="number"></label>
+      <label id="p-max-box"><div class="hint">최대 쪽 수</div><input id="p-max" type="number"></label>
+      </div>
+      <label id="p-cursor-box"><div class="hint">다음 커서 위치</div><input id="p-cursor" class="code" placeholder="응답 트리에서 지정" style="margin-bottom:6px"></label>
+      <label id="p-next-box"><div class="hint">다음 주소 위치 (비우면 Link 헤더의 rel=next)</div><input id="p-next" class="code" placeholder="응답 트리에서 지정" style="margin-bottom:6px"></label>
+      <label id="p-total-box"><div class="hint">전체 수 위치 (선택: 예상 요청 수 계산·멈춤 조건)</div><input id="p-total" class="code" placeholder="응답 트리에서 지정"></label>
+      <div class="warn" id="p-warn"></div>
+        </div></div></div>
+      <div class="cstep"><div class="cn">↓</div>
+      <div class="step" data-step="speed"><div class="sp"><i>5</i><span class="t">받는 속도</span><b id="sum-c-speed"></b><span class="c"></span></div>
+        <div class="edx">
+      <div class="fields">
+      <label class="not-web"><div class="hint">동시 수</div><input id="b-conc" type="number"></label>
+      <label><div class="hint">간격(초)</div><input id="b-gap" type="number" step="any"></label>
+      <label class="not-web"><div class="hint">다시 시도 횟수</div><input id="b-retry" type="number"></label>
+      <label><div class="hint">시간 초과(초)</div><input id="b-timeout" type="number" step="any"></label>
+      </div>
+      <div class="hint not-web">쪽 번호·offset 방식만 동시에 받습니다.</div>
+      <div class="hint for-web hidden">웹페이지는 수집용 창 하나로 받습니다. 간격은 쪽 사이, 시간 초과는 쪽 하나를 여는 시간입니다.</div>
+
+
+        </div></div></div>
+      <div class="cstep"><div class="cn">↓</div>
+      <div class="step" data-step="limits"><div class="sp"><i>6</i><span class="t">사용 한도</span><b id="sum-c-limits"></b><span class="c"></span></div>
+        <div class="edx">
+      <div class="row"><select id="lgroup" style="flex:1; min-width:0" title="이 구성이 쓰는 사용 한도 묶음. 같은 키를 쓰는 구성끼리 같은 묶음을 고르면 사용량을 함께 셉니다"></select><input id="lname" placeholder="새 이름"><button id="lsave">저장</button><button id="ldel" class="ghost">삭제</button></div>
+      <div class="hint">비우면 제한 없음. 이름을 비우고 저장하면 고른 묶음에 덮어씁니다.</div>
+      <div class="fields">
+      <label><div class="hint">초당</div><input id="l-sec" type="number" min="1"></label>
+      <label><div class="hint">분당</div><input id="l-min" type="number" min="1"></label>
+      <label><div class="hint">시간당</div><input id="l-hour" type="number" min="1"></label>
+      <label><div class="hint">하루</div><input id="l-day" type="number" min="1"></label>
+      <label><div class="hint">동시 수</div><input id="l-conc" type="number"></label>
+      <label><div class="hint">최소 간격(초)</div><input id="l-gap" type="number" step="any"></label>
+      <label><div class="hint">하루 초기화 시각</div><input id="l-reset" placeholder="00:00"></label>
+      <label><div class="hint">시간대</div><select id="l-tz"><option value="Asia/Seoul">한국 시간</option><option value="UTC">UTC</option><option value="local">이 PC</option></select></label>
+      <label><div class="hint">여유분(%)</div><input id="l-margin" type="number" step="any"></label>
+      </div>
+      <div class="hint usage" id="lusage"></div>
+      <div class="warn" id="lbroken"></div>
+      <div class="row"><button id="lreset" class="ghost" title="고른 묶음의 사용 기록을 지웁니다">사용량 초기화</button></div>
+      <div class="err" id="limit-msg"></div>
+
+
+        </div></div></div>
+      <div class="cstep"><div class="cn">↓</div>
+      <div class="step" data-step="output"><div class="sp"><i>7</i><span class="t">저장</span><b id="sum-c-output"></b><span class="c"></span></div>
+        <div class="edx">
+      <select id="o-format" style="margin-bottom:6px"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
+      <div class="row"><input id="o-path" placeholder="저장할 파일 경로"><button id="o-ask">저장 위치 고르기</button></div>
+      <div class="hint">중복 기준 컬럼 (선택, 쉼표로 구분). 값이 모두 같은 행은 하나만 남깁니다.</div>
+      <input id="dd-text" placeholder="예: id" style="margin-bottom:4px">
+      <div class="cols" id="dd-list"></div>
+      <div class="err" id="out-msg"></div>
+        </div></div></div>
+      </div>
+    </div>
+    <footer><button id="c-estimate" class="btn" title="실행 카드의 [예상 확인]">예상 확인</button><button id="c-start" class="btn p" title="실행 카드의 [시작]">시작</button></footer>
+  </aside>
 </div>
 
 <!--include notify.html-->
@@ -1432,6 +1462,37 @@ setInterval(() => { if (!document.hidden) loadRuns(); }, 30000);  // 창이 가�
 loadLimits();
 loadKafka();
 poll().then(s => { if (s?.running) watch(); });
+// 수집 설정 패널: 단계 카드를 누르면 그 단계만 펼친다(쿼리·분석과 같다). 접힌 단계는 한 줄 요약을 보이고,
+// 받는 방식에 따라 숨는 단계(env·쪽 넘기기)가 있어 번호는 보이는 차례대로 매긴다.
+document.querySelectorAll(".side .step .sp").forEach(sp => sp.onclick = () => {
+  const step = sp.parentElement, open = !step.classList.contains("open");
+  document.querySelectorAll(".side .step").forEach(s => s.classList.toggle("open", s === step && open));
+  showCollectSummaries();
+});
+function showCollectSummaries() {
+  const put = (key, value) => $("sum-c-" + key).textContent = value;
+  const picked = id => $(id).selectedOptions[0]?.textContent ?? "";
+  const file = path => path.split(/[\\/]/).pop();
+  put("config", $("rsaved").value || "새 구성");
+  put("mode", document.querySelector("input[name=mode]:checked")?.parentElement.textContent.trim() ?? "");
+  put("env", $("env-path").value.trim() ? file($("env-path").value.trim()) : "없음");
+  put("paging", picked("p-kind"));
+  put("speed", [$("b-conc").closest("label").classList.contains("hidden") || mode() === "web" ? "" : `동시 ${$("b-conc").value || 1}`, `간격 ${$("b-gap").value || 0}초`].filter(Boolean).join(" · "));
+  put("limits", $("lgroup").value || "제한 없음");
+  put("output", $("o-path").value.trim() ? `${file($("o-path").value.trim())}` : `${picked("o-format")} · 경로를 정하세요`);
+  let n = 0;
+  document.querySelectorAll(".side .cstep").forEach(c => { if (!c.classList.contains("hidden")) c.querySelector(".sp i").textContent = ++n; });
+  document.querySelectorAll(".side .step").forEach(s => s.querySelector(".c").textContent = s.classList.contains("open") ? "편집 중" : "⌄");
+}
+["click", "input", "change"].forEach(type => document.addEventListener(type, () => setTimeout(showCollectSummaries)));  // 화면 스크립트가 값을 바꾼 뒤에
+// 패널 아래의 [예상 확인]·[시작]: 실행 카드를 보이고 그 카드의 버튼을 누른다. 잠김은 실행 카드의 버튼을 따른다.
+[["c-estimate", "estimate"], ["c-start", "start"]].forEach(([mine, theirs]) => {
+  $(mine).onclick = () => { $(theirs).closest(".card").scrollIntoView({ behavior: "smooth", block: "nearest" }); $(theirs).click(); };
+  const follow = () => { $(mine).disabled = $(theirs).disabled; };
+  new MutationObserver(follow).observe($(theirs), { attributes: true, attributeFilter: ["disabled"] });
+  follow();
+});
+showCollectSummaries();
 </script>
 </body>
 </html>

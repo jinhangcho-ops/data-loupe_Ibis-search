@@ -400,7 +400,7 @@ function showResizing(on) {
 $("resize").onclick = () => showResizing(!document.documentElement.classList.contains("resizing"));
 showResizing(false);
 // 경계를 끌면 그 크기의 CSS 변수를 바꾸고, 놓으면 저장한다. 더블클릭하면 기본 크기로 돌아간다(0을 저장).
-const sized = { panel: () => document.querySelector(".panel, .side") };  // 화면이 크기를 바꿀 상자를 더한다
+const sized = { panel: () => document.querySelector(".side") };  // 화면이 크기를 바꿀 상자를 더한다
 document.querySelectorAll("[data-size]").forEach(grip => {
   const name = grip.dataset.size, [min, max, axis] = SIZES[name], root = document.documentElement.style;
   const at = e => axis === "x" ? e.clientX : e.clientY;

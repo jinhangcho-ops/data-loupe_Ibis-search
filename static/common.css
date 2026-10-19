@@ -54,18 +54,14 @@ button.ghost { background:none; border-color:transparent; color:var(--muted); pa
 .jobx button { background:var(--card); border:0; color:var(--err); height:26px; padding:0 12px; }
 .top-tools { display:flex; gap:8px; align-items:center; }
 
-/* 예전 배치(왼쪽 패널 + 카드): 전처리·수집 화면 */
-.layout { display:grid; grid-template-columns:var(--panel, 340px) 16px 1fr; padding:16px; min-height:calc(100vh - 58px); }
-.panel, .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; }
-.card { position:relative; }
-.panel { align-self:start; position:sticky; top:74px; max-height:calc(100vh - 90px); overflow:auto; }
+/* 카드와 카드를 위아래로 잇는 묶음(.main): 수집 화면의 가운데 */
+.card { position:relative; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; }
 .main { display:flex; flex-direction:column; gap:16px; min-width:0; }
 
 /* 끌어서 크기를 바꾸는 경계. 세로 틈(.grip-x)과 가장자리(.grip-y). 더블클릭하면 기본 크기.
    [크기 조절]을 켰을 때(.resizing)만 잡히고 옅게 보이며, 올리거나 끄는 동안 진해진다. 꺼져 있으면 없는 것과 같다. */
 .grip-x { position:sticky; top:58px; height:calc(100vh - 58px); cursor:col-resize; --grip:0%; pointer-events:none;
   background:linear-gradient(to right, transparent 6px, color-mix(in srgb, var(--accent) var(--grip), transparent) 6px 10px, transparent 10px); }
-.layout > .grip-x { margin:-16px 0; }
 .grip-y { position:absolute; left:0; right:0; bottom:0; height:10px; border-radius:0 0 8px 8px; cursor:row-resize; --grip:0%; pointer-events:none;
   background:color-mix(in srgb, var(--accent) var(--grip), transparent); }
 .resizing :is(.grip-x, .grip-y) { --grip:25%; pointer-events:auto; }
@@ -220,7 +216,7 @@ tr.miss { display:none; }
 ::-webkit-scrollbar-thumb { background:color-mix(in srgb, var(--text) 25%, transparent); border-radius:4px; }
 ::-webkit-scrollbar-thumb:hover { background:color-mix(in srgb, var(--text) 45%, transparent); }
 @media (max-width:900px) {
-  .layout { grid-template-columns:1fr; gap:16px; } .panel { position:static; max-height:none; } .grip-x { display:none; }
+  .grip-x { display:none; }
   .work { grid-template-columns:1fr; height:auto; } .side { border-left:0; border-top:1px solid var(--line); }
   .topbar { flex-wrap:wrap; height:auto; padding:8px 16px; gap:10px; } .sx { margin-left:0; }
 }
