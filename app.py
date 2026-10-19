@@ -1,5 +1,8 @@
-"""Ibis 검색 화면의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
+"""Ibis 쿼리 화면(탐색·대시보드)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
+import base64
+import binascii
 import os
+import re
 from pathlib import Path
 
 from flask import jsonify, request
@@ -11,6 +14,13 @@ import settings
 import source
 import use_counts
 from server import app, get_con, run, to_json
+
+# 그래프 그림 저장(/api/images): 연결을 쓰지 않으므로 차례를 기다리지 않는다.
+server.FREE.add("/api/images")
+server.CONSTANTS["board"] = {"max": settings.MAX_BOARD_CHARTS}  # 대시보드 하나에 넣을 수 있는 그래프 수
+IMAGE_TYPES = {"data:image/png;base64,": ".png", "data:image/jpeg;base64,": ".jpg"}  # 화면이 보내는 그림(data URL 머리) → 확장자
+MAX_IMAGE_BYTES = 30 * 1024 * 1024  # 그림 하나의 크기
+RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}  # Windows가 파일 이름으로 쓰지 못하는 이름
 
 
 @app.get("/search")
@@ -143,6 +153,64 @@ def handoff():
     os.replace(part, path)
     server.switch({"kind": "folder", "path": str(path.parent), "files": [str(path)]})
     return jsonify(path=str(path), table=source.list_tables(get_con())[0])
+
+
+@app.get("/api/dashboards")
+def dashboards():
+    return jsonify(dashboards=settings.dashboards())
+
+
+@app.post("/api/dashboards")
+def save_dashboard():
+    """board가 null이면 그 이름을 지운다."""
+    return jsonify(dashboards=settings.save_dashboard(request.json.get("name"), request.json.get("board")))
+
+
+def image_stem(name):
+    """그래프 이름을 파일 이름으로: 쓸 수 없는 글자는 _로, 앞뒤 공백·점은 빼고 80자까지. 비거나 예약된 이름이면 바꾼다."""
+    stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", name if isinstance(name, str) else "").strip(" .")[:80].strip(" .") or "chart"
+    return "_" + stem if stem.split(".")[0].upper() in RESERVED else stem
+
+
+@app.post("/api/images")
+def save_images():
+    """그래프 그림 여러 개({name, data: PNG·JPG data URL})를 창에서 고른 폴더에 저장한다. 같은 이름이 있으면 " (2)"처럼 번호를 붙인다(덮어쓰지 않는다).
+    창 없이 돌 때(ask_folder가 None)는 window=false를 돌려주고, 화면이 하나씩 내려받는다."""
+    images = request.json.get("images")
+    if not isinstance(images, list) or not 1 <= len(images) <= settings.MAX_BOARD_CHARTS:
+        raise ValueError(f"저장할 그림은 1개 이상 {settings.MAX_BOARD_CHARTS}개 이하입니다.")
+    decoded = []
+    for item in images:
+        data = item.get("data") if isinstance(item, dict) else None
+        head = next((h for h in IMAGE_TYPES if isinstance(data, str) and data.startswith(h)), None)
+        if head is None:
+            raise ValueError("PNG·JPG 그림만 저장할 수 있습니다.")
+        try:
+            raw = base64.b64decode(data[len(head):], validate=True)
+        except binascii.Error:
+            raise ValueError("그림 데이터가 올바르지 않습니다.") from None
+        if len(raw) > MAX_IMAGE_BYTES:
+            raise ValueError(f"그림 하나는 {MAX_IMAGE_BYTES // 1024 // 1024}MB까지입니다.")
+        decoded.append((image_stem(item.get("name")), IMAGE_TYPES[head], raw))
+    if server.ask_folder is None:
+        return jsonify(window=False)
+    chosen = server.ask_folder()
+    if not chosen:
+        return jsonify(cancelled=True)
+    folder, saved = Path(chosen), []
+    for stem, ext, raw in decoded:
+        for n in range(1, 1000):
+            path = folder / (f"{stem}{ext}" if n == 1 else f"{stem} ({n}){ext}")
+            try:
+                with open(path, "xb") as f:  # x: 있는 파일은 덮어쓰지 않는다
+                    f.write(raw)
+                break
+            except FileExistsError:
+                continue
+        else:
+            raise ValueError(f"같은 이름의 파일이 너무 많습니다: {stem}{ext}")
+        saved.append(path.name)
+    return jsonify(folder=str(folder), saved=saved)
 
 
 @app.post("/api/chart")

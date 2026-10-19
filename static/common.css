@@ -1,7 +1,7 @@
-/* 색: 밝게(기본)·어둡게. --accent-bg는 강조색의 옅은 바탕(고른 단계, 진행 중 작업). --c1~8은 차트 계열 색. */
-:root { --bg:#f6f6f8; --card:#fff; --head:#fff; --line:#e6e6ea; --text:#111114; --muted:#6b6b76; --faint:#9a9aa6; --accent:#5b3df5; --on-accent:#fff; --accent-bg:#eeeaff; --accent-line:#d4ccfa;
+/* 색: 밝게(기본, 흰 바탕에 짙은 청록)·어둡게(남색 회색 바탕에 청록). --accent-bg는 강조색의 옅은 바탕(고른 단계, 진행 중 작업). --c1~8은 차트 계열 색. */
+:root { --bg:#f5f6f6; --card:#fff; --head:#fff; --line:#dedfdf; --text:#16191b; --muted:#5f666b; --faint:#9ba1a5; --accent:#11706f; --on-accent:#fff; --accent-bg:#dcefee; --accent-line:#a8d2d0;
         --err:#c0392b; --ok:#1c7448; --dot:#2e9e6f; color-scheme:light;
-        --c1:#5b3df5; --c2:#e8590c; --c3:#2b8a3e; --c4:#c2255c; --c5:#1c7ed6; --c6:#0c8599; --c7:#e67700; --c8:#5c7080; }
+        --c1:#11706f; --c2:#e8590c; --c3:#2b8a3e; --c4:#c2255c; --c5:#1c7ed6; --c6:#7048e8; --c7:#e67700; --c8:#5c7080; }
 /* 어둡게: 남색 회색 바탕에 청록 강조(선택한 줄은 청록 왼쪽 막대와 옅은 청록 바탕). 강조색 위 글자는 어둡게. */
 :root[data-theme=dark] { --bg:#161b20; --card:#1c2127; --head:#1c2127; --line:#2c333a; --text:#e6eaee; --muted:#8f979f; --faint:#626a72; --accent:#4cc4c8; --on-accent:#0e1d1f; --accent-bg:#17363a; --accent-line:#2a5f63;
         --err:#f2777a; --ok:#5fc48b; --dot:#4cc4c8; color-scheme:dark;
@@ -41,8 +41,8 @@ button.ghost { background:none; border-color:transparent; color:var(--muted); pa
 .crumb i { width:8px; height:8px; border-radius:50%; background:var(--faint); flex:none; }
 .crumb.on i { background:var(--dot); }
 .crumb em { font-style:normal; color:var(--muted); font-weight:400; }
-.pages { display:flex; gap:6px; }
-.pages a { height:34px; padding:0 16px; display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:999px; color:var(--muted); text-decoration:none; font-weight:500; }
+.pages { display:flex; gap:6px; flex:none; }
+.pages a { height:34px; padding:0 16px; display:inline-flex; align-items:center; border:1px solid var(--line); border-radius:999px; color:var(--muted); text-decoration:none; font-weight:500; white-space:nowrap; }
 .pages a.on { background:var(--text); border-color:var(--text); color:var(--card); font-weight:700; }
 .sx { margin-left:auto; display:flex; gap:16px; align-items:center; color:var(--muted); font-size:13px; white-space:nowrap; }
 .sx b { color:var(--text); font-weight:600; margin-left:4px; }
@@ -93,12 +93,12 @@ button.ghost { background:none; border-color:transparent; color:var(--muted); pa
 .pager label { display:flex; align-items:center; gap:6px; white-space:nowrap; font-size:13px; }
 .pager input[type=checkbox] { width:auto; height:auto; }
 .drop { position:relative; }
-.drop .pop { position:absolute; right:0; top:42px; z-index:40; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:6px; box-shadow:0 10px 30px rgb(20 16 50 / .14); display:flex; flex-direction:column; min-width:150px; }
+.drop .pop { position:absolute; right:0; top:42px; z-index:40; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:6px; box-shadow:0 10px 30px rgb(15 25 30 / .14); display:flex; flex-direction:column; min-width:150px; }
 .drop .pop button { background:none; border:0; color:var(--text); text-align:left; border-radius:8px; font-weight:500; }
 .drop .pop button:hover { background:var(--accent-bg); }
 
 /* 오른쪽 설정 패널: 제목, 단계 카드 목록(.flow), 아래 버튼 */
-.side { background:var(--card); border-left:1px solid var(--line); box-shadow:-16px 0 40px rgb(20 16 50 / .08); display:flex; flex-direction:column; min-height:0; }
+.side { background:var(--card); border-left:1px solid var(--line); box-shadow:-16px 0 40px rgb(15 25 30 / .08); display:flex; flex-direction:column; min-height:0; }
 .side > header { display:flex; align-items:center; justify-content:space-between; padding:14px 22px 8px; }
 .side > header h3 { margin:0; font-size:18px; }
 .side .sc { flex:1; overflow:auto; padding:4px 22px 12px; }
@@ -116,7 +116,7 @@ button.ghost { background:none; border-color:transparent; color:var(--muted); pa
 .step .edx { display:none; padding:2px 14px 14px; }
 .step.open { border:2px solid var(--accent); background:var(--accent-bg); }
 .step.open .sp i { background:var(--accent); color:var(--on-accent); }
-:root[data-theme=dark] .step.open { border-width:1px 1px 1px 3px; }  /* 어둡게: 고른 단계는 청록 왼쪽 막대 */
+.step.open { border-width:1px 1px 1px 3px; }  /* 고른 단계는 옅은 청록 바탕에 청록 왼쪽 막대 */
 .step.open .sp .c { color:var(--accent); font-weight:600; }
 .step.open .edx { display:block; }
 .step.off { opacity:.55; }
@@ -151,6 +151,34 @@ tr.miss { display:none; }
 .chip { flex:none; background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:1px 2px 1px 10px; font-size:12px; white-space:nowrap; }
 .chip.more { padding:2px 10px; color:var(--accent); cursor:pointer; }
 
+/* 화면 안의 큰 탭(쿼리: 탐색·대시보드). 탭 줄 아래 내용은 남은 높이를 쓴다. */
+.subnav { display:flex; gap:4px; padding:0 24px; height:44px; align-items:flex-end; background:var(--card); border-bottom:1px solid var(--line); }
+.subnav button { background:none; border:0; border-bottom:2px solid transparent; border-radius:0; color:var(--muted); padding:10px 14px; font-weight:600; }
+.subnav button.on { color:var(--accent); border-bottom-color:var(--accent); }
+.subnav em { font-style:normal; font-size:11.5px; background:var(--accent-bg); color:var(--accent); border-radius:999px; padding:1px 7px; margin-left:6px; }
+.subnav em:empty { display:none; }
+.subnav ~ .work { height:calc(100vh - 58px - 44px); }
+/* 그래프 카드 모음(board.js): 대시보드·그래프 탭. 고른 카드는 강조색 테두리와 체크(어둡게는 왼쪽 막대). */
+.board-view { height:calc(100vh - 58px - 44px); overflow:auto; background:var(--bg); }
+.board-view .board-ctl { padding:0 28px; margin:0 0 8px; }
+.board-view .board-ctl select { flex:0 0 110px; }
+.board-view > .err { padding:0 28px; }
+.board-view > .err:empty { display:none; }
+.board { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap:14px; padding:6px 28px 28px; align-items:start; }
+.board-empty { grid-column:1 / -1; padding:48px 0; text-align:center; }
+.bcard { border:1px solid var(--line); border-radius:14px; background:var(--card); padding:10px 12px 12px; cursor:pointer; }
+.bcard:hover { border-color:var(--accent-line); }
+.bcard.sel { border-color:var(--accent); }
+.bcard.sel { border-width:1px 1px 1px 4px; padding-left:9px; }  /* 고른 카드는 청록 왼쪽 막대 */
+.bhead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.bcheck { flex:none; width:16px; height:16px; border:1.5px solid var(--faint); border-radius:5px; display:grid; place-items:center; }
+.bcard.sel .bcheck { background:var(--accent); border-color:var(--accent); }
+.bcard.sel .bcheck::after { content:""; width:8px; height:4px; border:solid var(--on-accent); border-width:0 0 2px 2px; transform:translateY(-1px) rotate(-45deg); }
+.btitle { flex:1; min-width:0; height:30px; border:1px solid transparent; background:none; font-weight:600; padding:2px 6px; }
+.btitle:hover, .btitle:focus { border-color:var(--line); background:var(--bg); }
+.bbody { aspect-ratio:var(--ratio, 16 / 9); position:relative; }
+.bnote { display:grid; place-items:center; height:100%; margin:0; text-align:center; padding:0 12px; }
+
 /* 연결 카드: 가운데 로그인 창 모양(connect.html) */
 .conn-card { width:min(500px, 94vw); padding:22px 24px; display:flex; flex-direction:column; gap:8px; }
 .conn-card .head { margin-bottom:2px; }
@@ -170,15 +198,15 @@ tr.miss { display:none; }
 .crumb.link:hover span { text-decoration:underline; }
 
 /* 보낼 곳 패널 등 화면 위에 뜨는 상자. 바깥을 누르면 닫힌다. */
-.modal { position:fixed; inset:0; z-index:200; background:rgb(10 8 30 / .40); display:grid; place-items:center; }
-.modal-box { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:16px; padding:18px; width:min(440px, 92vw); max-height:90vh; overflow:auto; box-shadow:0 20px 60px rgb(20 16 50 / .25); }
+.modal { position:fixed; inset:0; z-index:200; background:rgb(10 18 22 / .40); display:grid; place-items:center; }
+.modal-box { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:16px; padding:18px; width:min(440px, 92vw); max-height:90vh; overflow:auto; box-shadow:0 20px 60px rgb(15 25 30 / .25); }
 #flat { margin-top:6px; }
 #flat .row { align-items:center; margin-bottom:2px; }
 #flat-list label { display:block; white-space:nowrap; }
 #flat-list input { width:auto; }
 
 /* 고르는 칸을 펼친 목록. 창 엔진이 그리는 목록은 화면 모드의 색을 따르지 않아 직접 그린다(common.js). */
-.menu { position:fixed; z-index:300; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:4px 0; box-shadow:0 10px 30px rgb(20 16 50 / .18); }
+.menu { position:fixed; z-index:300; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:4px 0; box-shadow:0 10px 30px rgb(15 25 30 / .18); }
 .menu input { display:block; width:calc(100% - 12px); margin:2px 6px 4px; }
 .menu > div { overflow:auto; }
 .menu div div { padding:5px 12px; white-space:nowrap; cursor:default; }

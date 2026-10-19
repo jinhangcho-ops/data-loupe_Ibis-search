@@ -79,14 +79,15 @@ function resetTiming() {
   $("job").classList.add("hidden");
 }
 $("cancel").onclick = () => api("/api/cancel", {}).catch(() => {});  // 멈춘 작업이 제 오류 칸에 "취소했습니다."를 띄운다.
-async function timed(kind, fn) {
+// table: 행 수로 예상할 테이블(기본은 지금 고른 기준 테이블). 테이블이 없으면 예상을 구하지 않는다.
+async function timed(kind, fn, table = { schema: S.schema, base: S.base }) {
   if (kind === "search") resetTiming();
   const mine = total, run = { at: performance.now(), kind };  // 도는 사이 새로 검색하면 이 작업의 시간은 새 합계에 넣지 않는다.
   going.add(run);
   clearInterval(timer);
   timer = setInterval(showTiming, 100);
   try {
-    const rows = $("count")?.checked !== false && (await api("/api/rowcount", { schema: S.schema, base: S.base })).rows;  // 전체 행 수를 세지 않으면 예상도 구하지 않는다. (#count가 없는 화면은 늘 센다)
+    const rows = $("count")?.checked !== false && !!table.base && (await api("/api/rowcount", table)).rows;  // 전체 행 수를 세지 않으면 예상도 구하지 않는다. (#count가 없는 화면은 늘 센다)
     const name = rows && rateName(kind, rows);  // 같은 구간에서 돌려 본 적이 없으면 예상에 더하지 않는다.
     if (rows && (rates[name] ??= +saved(name) || 0)) mine.guess += rates[name] * rows / 1e6;
     const out = await fn();

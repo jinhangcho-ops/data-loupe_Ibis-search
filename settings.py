@@ -15,6 +15,8 @@ CHOICES = {
     "quotes": ["on", "off"],  # 조건을 넣을 때 따옴표 해석: 값을 감싸는 기호로 / 글자 그대로
     "cond": ["fields", "line"],  # 조건 입력 방식: 칸으로 선택 / 한 줄 입력
     "count": ["on", "off"],  # 검색할 때 전체 행 수를 셀지: 센다 / 세지 않는다
+    "board_ratio": ["screen", "square", "4:3", "wide"],  # 대시보드·그래프 그림의 비율: 화면대로 / 1:1 / 4:3 / 16:9
+    "board_format": ["png", "jpeg"],  # 대시보드·그래프 그림의 형식
 }
 
 # 끌어서 조절한 크기(px)와 전처리가 미리 볼 행 수(sample), 오래 걸린 작업이 끝났을 때 알림을 보내는 기준 시간(notify_after, 초, 기본 30), DuckDB 파일 조회의 작업 메모리 상한(memory, MB, 기본은 제한 없음): (최소, 최대). 화면은 이 범위를 server.CONSTANTS로 받는다. 0을 저장하면 기본값으로 돌아간다.
@@ -88,6 +90,15 @@ def save(changes):
 MAX_SAVED = 100  # 이름을 붙여 저장해 둘 수 있는 검색(구성) 수
 MAX_SEARCH_SIZE = 20_000  # 검색 하나의 크기(JSON 글자 수)
 MAX_RECIPE_SIZE = 100_000  # 전처리 구성 하나의 크기. 컬럼 100개에 전처리를 아홉 개씩 정해도 약 3만 자라 검색보다 크게 잡는다.
+MAX_BOARD_CHARTS = 24  # 대시보드 하나에 넣을 수 있는 그래프 수
+MAX_BOARD_SIZE = MAX_BOARD_CHARTS * MAX_SEARCH_SIZE  # 대시보드 하나의 크기. 그래프마다 검색 하나만큼
+
+
+def josa(word, with_final, without_final):
+    """word 끝 글자에 받침이 있으면 with_final("이"·"은"), 없으면 without_final("가"·"는")을 붙인다."""
+    last = word[-1:]
+    final = "가" <= last <= "힣" and (ord(last) - ord("가")) % 28 != 0
+    return word + (with_final if final else without_final)
 
 
 def named(file):
@@ -105,11 +116,11 @@ def save_named(file, what, limit, name, item, count=MAX_SAVED):
     if item is None:
         found.pop(name, None)
     elif not isinstance(item, dict):
-        raise ValueError(f"저장할 {what}이 올바르지 않습니다.")
+        raise ValueError(f"저장할 {josa(what, '이', '가')} 올바르지 않습니다.")
     elif len(json.dumps(item, ensure_ascii=False)) > limit:
-        raise ValueError(f"저장할 {what}이 너무 큽니다.")
+        raise ValueError(f"저장할 {josa(what, '이', '가')} 너무 큽니다.")
     elif name not in found and len(found) >= count:
-        raise ValueError(f"저장한 {what}은 {count}개까지입니다. 쓰지 않는 것을 지우세요.")
+        raise ValueError(f"저장한 {josa(what, '은', '는')} {count}개까지입니다. 쓰지 않는 것을 지우세요.")
     else:
         found[name] = item
     write(file, found)
@@ -132,3 +143,14 @@ def recipes():
 
 def save_recipe(name, recipe):
     return save_named("recipes.json", "구성", MAX_RECIPE_SIZE, name, recipe)
+
+
+def dashboards():
+    """이름을 붙여 저장한 대시보드 {이름: {"charts": [그래프]}}. 그래프마다 다시 그릴 조회(테이블·조건·X·계열)만 있고 연결 정보와 값은 없다."""
+    return named("dashboards.json")
+
+
+def save_dashboard(name, board):
+    if board is not None and not (isinstance(board, dict) and isinstance(board.get("charts"), list) and 1 <= len(board["charts"]) <= MAX_BOARD_CHARTS):
+        raise ValueError(f"대시보드에는 그래프가 1개 이상 {MAX_BOARD_CHARTS}개 이하로 있어야 합니다.")
+    return save_named("dashboards.json", "대시보드", MAX_BOARD_SIZE, name, board)

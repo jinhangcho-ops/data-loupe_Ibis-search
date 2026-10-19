@@ -48,6 +48,12 @@ def ask_save(name, file_types):
     return chosen[0] if chosen else None
 
 
+def ask_folder():
+    """폴더 고르기 대화상자. 고른 폴더 또는 취소하면 None."""
+    chosen = window.create_file_dialog(webview.FileDialog.FOLDER)
+    return chosen[0] if chosen else None
+
+
 def closing():
     """수집 중에 창을 닫으면 묻는다. False를 돌려주면 닫기가 취소된다(pywebview의 closing 이벤트). 닫으면 수집을 멈춰 받은 데까지 남긴다."""
     if not collect_job.running():
@@ -59,6 +65,7 @@ def closing():
 
 
 server.ask_save = ask_save
+server.ask_folder = ask_folder
 window.events.closing += closing
 schedule.start_watch()  # 프로그램 안 예약: 켜져 있는 동안 때가 된 예약을 돌린다.
 webview.start()  # 창을 닫으면 여기서 끝나고, 서버 스레드도 함께 종료된다.
