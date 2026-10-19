@@ -62,11 +62,6 @@ def literal(text):
     return re.sub(r"([\\.^$|?*+()\[\]{}])", r"\\\1", text)
 
 
-def chars(col):
-    """글자 수. 글자마다 한 글자로 바꾼 뒤 센다(Polars 백엔드의 length는 바이트 수다)."""
-    return col.re_replace(r"(?s).", "x").length()
-
-
 MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 # 날짜 형식에 쓸 수 있는 글자와 그 모양. DuckDB·Polars 양쪽에서 같은 값이 나오는 것만 받는다(%f는 자릿수를 다르게 읽어 뺐다).
 DATE_PARTS = {

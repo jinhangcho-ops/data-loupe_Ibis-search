@@ -5,7 +5,7 @@ from lazy import ibis
 import parse
 import result
 from prep import type_text
-from prep_ops import chars, date_pattern, is_number, stats
+from prep_ops import date_pattern, is_number, stats
 
 # 빈 값을 뜻하는 글자로 흔한 것. ""는 blank로 센다.
 MARKERS = ["", "-", "N/A", "n/a", "NA", "null", "NULL", "None", "없음", "?"]
@@ -37,9 +37,9 @@ def text_metrics(col, i):
     return metrics
 
 
-def length_metrics(table, names, length):
-    """names({컬럼 번호: 컬럼 이름})의 글자 수 최소·최대 식. length는 컬럼 → 글자 수 식."""
-    return {f"{key}_len{i}": getattr(length(table[name]), key)() for i, name in names.items() for key in ("min", "max")}
+def length_metrics(table, names):
+    """names({컬럼 번호: 컬럼 이름})의 글자 수 최소·최대 식."""
+    return {f"{key}_len{i}": getattr(table[name].length(), key)() for i, name in names.items() for key in ("min", "max")}
 
 
 def suggestions(info, found, i, rows):
@@ -69,10 +69,10 @@ def suggestions(info, found, i, rows):
     return out
 
 
-def profile(t, sample, counts_chars):
+def profile(t):
     """행 수와 컬럼별 통계, 모양 검사가 필요 없는 추천을 집계 조회 한 번으로 구한다. unique는 빈 값을 뺀 서로 다른 값 수다.
     min·max는 숫자·날짜·시간 컬럼만(나머지는 null), 글자 수·blank·spaces·numeric은 문자 컬럼에만 있다.
-    연결의 length()가 글자 수를 세면(counts_chars) 글자 수를 전체에서 함께 구하고, 아니면 앞 sample행에서 따로 구해 len_sampled를 붙인다."""
+    t는 표본을 이 PC에서 계산하는 표(DuckDB)라 length()가 글자 수를 센다."""
     kinds = {name: parse.kind(dtype) for name, dtype in t.schema().items()}
     texts = {i: name for i, (name, kind) in enumerate(kinds.items()) if kind == "string"}
     metrics = {"rows": t.count()}
@@ -83,23 +83,15 @@ def profile(t, sample, counts_chars):
             metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})
         if kind == "string":
             metrics.update(text_metrics(col, i))
-    if counts_chars:
-        metrics.update(length_metrics(t, texts, lambda col: col.length()))
+    metrics.update(length_metrics(t, texts))
     found = stats(t, **metrics)
-    if texts and not counts_chars:
-        head = t.limit(sample)
-        lengths = stats(head, **length_metrics(head, texts, chars))
-    else:
-        lengths = found
     columns = []
     for i, (name, kind) in enumerate(kinds.items()):
         info = {"name": name, "type": type_text(t[name].type()), "kind": kind, "nulls": found[f"nulls{i}"] or 0, "unique": found[f"unique{i}"],
                 "min": result.plain(found.get(f"min{i}")), "max": result.plain(found.get(f"max{i}"))}
         if kind == "string":
             info.update({key: found[f"{key}{i}"] or 0 for key in ("blank", "spaces", "numeric")})
-            info.update({key: lengths[f"{key}{i}"] for key in ("min_len", "max_len")})
-            if not counts_chars:
-                info["len_sampled"] = True
+            info.update({key: found[f"{key}{i}"] for key in ("min_len", "max_len")})
         columns.append({**info, "suggest": suggestions(info, found, i, found["rows"])})
     return {"rows": found["rows"], "columns": columns}
 

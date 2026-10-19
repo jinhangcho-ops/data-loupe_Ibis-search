@@ -2,12 +2,15 @@
 import datetime as dt
 import json
 import re
+from pathlib import Path
 
 from flask import jsonify, request
+from lazy import ibis
 
 import parse
 import prep
 import prep_profile
+import profiler
 import result
 import server
 import settings
@@ -16,12 +19,13 @@ import use_counts
 from server import app, get_con, run, state, to_json
 
 PREVIEW_ROWS = 20
-DEFAULT_SAMPLE = 10_000  # 앞에서부터 미리 볼 행 수의 기본값
+DEFAULT_SAMPLE = 5_000  # 통계를 낼 표본 행 수의 기본값
 TABLE_NAME = re.compile(r"[A-Za-z0-9_가-힣]+")
 FILE_FORMATS = ["parquet", "csv"]
-server.CONSTANTS["sample"] = DEFAULT_SAMPLE  # 화면(prep.html)의 미리 볼 행 수 기본값
+server.CONSTANTS.update(sample=DEFAULT_SAMPLE, sample_methods=profiler.METHODS)  # 화면(prep.html)의 표본 행 수 기본값과 표본 방법 이름
 TABLE_PREPS = "table_preps.json"  # 테이블별로 마지막에 쓴 전처리 {테이블 열쇠: {"config", "saved"}}
 MAX_TABLE_PREPS = 200
+SAMPLES = {}  # 마지막으로 읽은 표본 하나 {테이블 열쇠: (크기, pyarrow 표, 표본 정보)}. 통계에 이어 타입 추천이 같은 표본을 쓴다.
 
 
 @app.get("/api/recipes")
@@ -85,11 +89,11 @@ def base_table(body):
 
 
 def sample_size(body):
-    """body의 sample(앞에서부터 미리 볼 행 수). 없으면 DEFAULT_SAMPLE."""
+    """body의 sample(통계를 낼 표본 행 수). 없으면 DEFAULT_SAMPLE."""
     low, high = settings.SIZES["sample"]
     n = body.get("sample", DEFAULT_SAMPLE)
     if type(n) is not int or not low <= n <= high:
-        raise ValueError(f"미리 볼 행 수(sample)는 {low:,} 이상 {high:,} 이하의 정수로 입력하세요.")
+        raise ValueError(f"표본 행 수(sample)는 {low:,} 이상 {high:,} 이하의 정수로 입력하세요.")
     return n
 
 
@@ -101,20 +105,84 @@ def shape():
     return jsonify(prep_profile.shape(table, server.row_count(body.get("schema"), body["base"])))
 
 
+def sampled(body, key, size, fresh):
+    """이 테이블의 표본 (pyarrow 표, 표본 정보 {rows, method, passed}). 방금 같은 크기로 읽은 것이 있으면 그것(fresh면 새로 읽는다).
+    표본은 profiler가 싼 방법부터 차례로 읽는다. 행 수는 /api/shape가 세어 둔 것을 쓴다."""
+    held = SAMPLES.get(key)
+    if held and held[0] == size and not fresh:
+        return held[1], held[2]
+    con, table, base = get_con(), base_table(body), body["base"]
+    rows = server.row_count(body.get("schema"), base)
+    part = profiler.spec_table(body.get("schema") or "", base).get("partition")
+    arrow, method, passed = run(lambda: profiler.sample(con, table, body.get("schema") or "", base, size, rows, part))
+    info = {"rows": arrow.num_rows, "method": method, "passed": passed}
+    SAMPLES.clear()  # 표본은 마지막 테이블 하나만 메모리에 둔다.
+    SAMPLES[key] = (size, arrow, info)
+    return arrow, info
+
+
+def file_facts(base):
+    """Parquet 파일에 연결했으면 그 테이블 파일의 정보로 구한 전체 기준 값(profiler.parquet_facts). 아니면 None."""
+    files = sorted(Path(f) for f in (state["opened"] or {}).get("files", []))  # 연결할 때와 같은 차례(source.table_names)
+    for path, name in zip(files, source.table_names(files)):
+        if name == base and path.suffix.lower() == ".parquet":
+            return profiler.parquet_facts(path)
+    return None
+
+
+def described(found, body):
+    """캐시에서 꺼낸 통계에 지금 데이터 명세서의 설명을 붙인다(명세서를 바꾸면 바로 보이게 캐시에는 넣지 않는다)."""
+    spec = profiler.spec_table(body.get("schema") or "", body["base"])
+    columns = spec.get("columns", {})
+    for column in found["columns"]:
+        column["infer"] = {**column.get("infer", {}), "description": columns.get(column["name"], {}).get("description", "")}
+    return {**found, "description": spec.get("description", "")}
+
+
 @app.post("/api/profile")
 def profile():
-    """컬럼별 통계와 모양 검사가 필요 없는 추천. 글자 수는 연결이 글자 수를 세지 않으면 앞 sample행에서만 구한다(len_sampled)."""
+    """컬럼별 통계·추천과 추론(infer: 빈 값 비율, 단일값, 날짜 형식, 플래그, Parquet 파일 정보의 전체 기준 값, 명세서 설명).
+    테이블 전체가 아니라 profiler의 표본으로 구하고 테이블별로 캐시한다. refresh가 true면 표본을 새로 읽어 다시 구한다."""
     body = request.json
-    table, sample, counts_chars = base_table(body), sample_size(body), server.length_counts_chars()
-    return jsonify(run(lambda: prep_profile.profile(table, sample, counts_chars)))
+    key, size, fresh = table_key(body), sample_size(body), body.get("refresh") is True
+    found = None if fresh else profiler.cached(key, size)
+    if found is None or "profile" not in found:
+        arrow, info = sampled(body, key, size, fresh)
+        stats = run(lambda: prep_profile.profile(ibis.memtable(arrow)))  # 표본은 이 PC에서 센다
+        guesses, facts = profiler.infer(arrow), file_facts(body["base"])
+        for column in stats["columns"]:
+            column["infer"] = {**guesses.get(column["name"], {}), **({"exact": facts["columns"][column["name"]]} if facts and column["name"] in facts["columns"] else {})}
+        found = profiler.remember(key, size, profile={**stats, **({"file_rows": facts["rows"]} if facts else {})}, sampled=info)
+    return jsonify({**described(found["profile"], body), "sampled": {**found["sampled"], "saved": found["saved"]}})
 
 
 @app.post("/api/patterns")
 def patterns():
-    """글자 컬럼의 타입 추천(날짜로, 숫자로, 글자를 지우고 숫자로). 앞 sample행에서 걸러 낸 뒤 전체에서 확인한다."""
+    """글자 컬럼의 타입 추천(날짜로, 숫자로, 글자를 지우고 숫자로). profile과 같은 표본에서 구하고 캐시한다(refresh면 다시)."""
     body = request.json
-    table, sample = base_table(body), sample_size(body)
-    return jsonify(columns=run(lambda: prep_profile.patterns(table, sample)))
+    key, size, fresh = table_key(body), sample_size(body), body.get("refresh") is True
+    found = None if fresh else profiler.cached(key, size)
+    if found is None or "patterns" not in found:
+        arrow, info = sampled(body, key, size, False)  # profile이 방금 읽은(refresh면 새로 읽은) 표본
+        found = profiler.remember(key, size, patterns=run(lambda: prep_profile.patterns(ibis.memtable(arrow), size)), sampled=info)
+    return jsonify(columns=found["patterns"])
+
+
+@app.get("/api/spec")
+def spec():
+    """고른 데이터 명세서의 경로와 그 안의 테이블 이름들. 명세서를 읽을 수 없으면 그 이유(error)도."""
+    path = profiler.spec_path()
+    try:
+        return jsonify(path=path, tables=sorted(profiler.read_spec(path)["tables"]) if path else [])
+    except ValueError as e:
+        return jsonify(path=path, tables=[], error=str(e))
+
+
+@app.post("/api/spec")
+def save_spec():
+    """데이터 명세서 경로를 읽어 검사한 뒤 저장한다(빈 글자면 명세서를 쓰지 않음). 설명은 바로, 파티션은 다음에 표본을 읽을 때부터 쓴다."""
+    tables = profiler.save_spec_path(request.json.get("path"))
+    return jsonify(path=profiler.spec_path(), tables=tables)
 
 
 @app.post("/api/preview")

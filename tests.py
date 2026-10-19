@@ -43,6 +43,7 @@ import notify
 import prep_app
 import prep_ops
 import prep_profile
+import profiler
 import settings
 import source
 from app import app
@@ -468,38 +469,45 @@ def prep_new(tag, got, error, only, preview, values):
 
 
 def prep_sampling(got, error):
-    """통계·모양 검사를 앞 sample행으로 줄이는 것. 같은 검사를 DuckDB 파일 연결과 Parquet 연결에 돌린다."""
+    """통계·타입 추천을 테이블 전체가 아니라 표본(profiler)으로 구하고 테이블별로 저장해 두는 것. DuckDB 파일 연결과 Parquet 연결에 같은 검사를 돌린다.
+    표본에 어느 행이 들어가는지는 방법(블록 샘플링 등)에 따라 달라, 그 결과에 기대지 않는 것만 확인한다."""
     duck = got("/api/files", path=str(SAMPLING))["files"][0]
     flat = got("/api/files", path=str(SAMPLING_FLAT))["flat"]
-    calls, original = [], prep_profile.measure
-    prep_profile.measure = lambda t, wanted: (calls.append(wanted), original(t, wanted))[1]  # 모양을 검사한 조회를 센다.
+    calls, original = [], profiler.sample
+    profiler.sample = lambda *a: (calls.append(a[4]), original(*a))[1]  # 표본을 읽은 횟수와 크기(size)를 센다.
     try:
         for tag, connect in [("DuckDB", dict(kind="folder", path=str(SAMPLING), file=duck)), ("Parquet", dict(kind="folder", path=str(SAMPLING_FLAT), files=flat))]:
-            print("== 앞 sample행으로 거르기:", tag)
+            print("== 표본으로 통계:", tag)
             got("/api/connect", **connect)
             r = got("/api/shape", base="wide")
             check(tag + " /api/shape", (r["rows"], [(c["name"], c["type"], c["kind"]) for c in r["columns"]]),
                   (3000, [("n", "int64", "int"), ("num_all", "string", "string"), ("num_late", "string", "string"), ("bad_head", "string", "string"),
                           ("date_late", "string", "string"), ("kor", "string", "string")]))
             check(tag + " sample 범위·형식 거부", [error(api, base="wide", sample=v) for api in ("/api/profile", "/api/patterns") for v in (999, 1_000_001, "5000", 1500.0)],
-                  ["미리 볼 행 수(sample)는 1,000 이상 1,000,000 이하의 정수로 입력하세요."] * 8)
-            check(tag + " sample 안 주면 기본값, 경계값은 됨", ("rows" in got("/api/profile", base="wide"), "rows" in got("/api/profile", base="wide", sample=1000),
-                  "columns" in got("/api/patterns", base="wide", sample=1_000_000)), (True, True, True))
-            kor = next(c for c in got("/api/profile", base="wide", sample=1000)["columns"] if c["name"] == "kor")
-            check(tag + " 한글 값의 글자 수(바이트 수가 아님), len_sampled는 글자 수를 못 세는 연결에만", ({k: kor[k] for k in ("min_len", "max_len")}, kor.get("len_sampled")),
-                  ({"min_len": 3, "max_len": 5}, True if tag == "Parquet" else None))
+                  ["표본 행 수(sample)는 1,000 이상 1,000,000 이하의 정수로 입력하세요."] * 8)
             calls.clear()
-            r = got("/api/patterns", base="wide", sample=1000)["columns"]
-            check(tag + " patterns: 앞부분만 맞는 컬럼은 전체에서 걸러짐, 앞이 모두 빈 값이면 전체에서 확인해 추천", {k: [s["ops"] for s in v] for k, v in r.items()},
-                  {"num_all": [{"type": {"to": "int"}}], "date_late": [{"type": {"to": "date", "format": "%Y%m%d"}}]})
-            check(tag + " patterns: why의 개수는 전체 기준", [s["why"] for k in ("num_all", "date_late") for s in r[k]],
+            whole = got("/api/profile", base="wide")
+            check(tag + " 기본 표본(5,000행)보다 작은 테이블은 그대로 읽음", (whole["rows"], whole["sampled"]["rows"], whole["sampled"]["method"], calls), (3000, 3000, "whole", [5000]))
+            again = got("/api/profile", base="wide")
+            check(tag + " 다시 열면 저장해 둔 통계(표본을 다시 읽지 않음)", (again["sampled"]["saved"] == whole["sampled"]["saved"], calls), (True, [5000]))
+            r = got("/api/patterns", base="wide")["columns"]
+            check(tag + " patterns: 같은 표본에서(다시 읽지 않음). 전체를 읽은 표본이라 뒤의 글자(num_late)도 걸러짐", ({k: [s["ops"] for s in v] for k, v in r.items()}, calls),
+                  ({"num_all": [{"type": {"to": "int"}}], "date_late": [{"type": {"to": "date", "format": "%Y%m%d"}}]}, [5000]))
+            check(tag + " patterns: why의 개수는 표본 기준", [s["why"] for k in ("num_all", "date_late") for s in r[k]],
                   ["빈 값과 빈 값 표시를 뺀 3,000개가 모두 숫자로 바뀝니다.", "빈 값과 빈 값 표시를 뺀 1,500개가 모두 YYYYMMDD 모양입니다."])
-            check(tag + " patterns: 앞에서 걸러진 컬럼(bad_head)은 전체 조회에 넣지 않고, 전체에서 틀린 컬럼(num_late)만 다음 모양을 확인", [sorted(w) for w in calls],
-                  [["bad_head", "date_late", "kor", "num_all", "num_late"], ["date_late", "num_all", "num_late"], ["num_late"]])
+            fresh = got("/api/profile", base="wide", refresh=True)
+            check(tag + " [다시 구하기](refresh)는 표본을 새로 읽음", (calls, fresh["rows"]), ([5000, 5000], 3000))
             calls.clear()
-            check(tag + " patterns: 후보가 없으면 전체 조회를 보내지 않음", (got("/api/patterns", base="bad", sample=1000), len(calls)), ({"columns": {}}, 1))
+            part = got("/api/profile", base="wide", sample=1000)
+            check(tag + " 테이블보다 작은 표본: 표본 크기만큼만, 블록 샘플링이 모자라면 앞 행", (part["rows"] == part["sampled"]["rows"], 0 < part["rows"] <= 1000,
+                  part["sampled"]["method"] in ("block", "head"), calls), (True, True, True, [1000]))
+            kor = next(c for c in part["columns"] if c["name"] == "kor")
+            check(tag + " 한글 값의 글자 수(바이트 수가 아님)", {k: kor[k] for k in ("min_len", "max_len")}, {"min_len": 3, "max_len": 5})
+            check(tag + " 추론: 단일값 아님, 값이 되풀이되는 컬럼은 플래그(번호 컬럼은 아님)", (kor["infer"]["constant"], kor["infer"]["flags"], "flags" in next(c for c in part["columns"] if c["name"] == "n")["infer"]),
+                  (False, ["가나다", "한글입니다"], False))
+            check(tag + " patterns: 후보가 없으면 빈 것", got("/api/patterns", base="bad", sample=1000), {"columns": {}})
     finally:
-        prep_profile.measure = original
+        profiler.sample = original
     got("/api/disconnect")
 
 
@@ -653,7 +661,7 @@ def prep_section():
             stat("flag", "boolean", "bool", 0, 2),
         ]
         for w, g in zip(want, profile["columns"]):
-            check(f"{tag} profile: {w['name']}", {k: v for k, v in g.items() if k not in ("suggest", "len_sampled")}, w)
+            check(f"{tag} profile: {w['name']}", {k: v for k, v in g.items() if k not in ("suggest", "infer")}, w)
         for name, col, o, want in cases:
             check(f"{tag} {name}", values(preview(ops(col, **o)), col), want)
         r = preview(ops("score", fill={"how": "mean"}))

@@ -45,7 +45,9 @@
       <select id="schema" class="hidden" style="margin-bottom:6px"></select>
       <select id="base"></select>
       <div class="row" style="margin-top:6px"><input id="sample" type="number" style="width:120px; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
-      <div class="hint">통계를 낼 때 먼저 살펴보는 행 수. 날짜·숫자 모양의 추천과, Parquet·CSV 연결의 글자 길이에 씁니다.</div>
+      <div class="hint">통계를 낼 표본 행 수. 테이블 전체가 아니라 이만큼만(싼 방법부터) 읽어 통계·추천을 구하고, 테이블별로 저장해 둡니다.</div>
+      <div class="row" style="margin-top:6px"><input id="spec-path" class="code" placeholder="데이터 명세서 (JSON·YAML, 선택)" title="테이블·컬럼 설명과 파티션 키를 적은 파일. 비우고 [읽기]를 누르면 쓰지 않습니다"><button id="spec-read">읽기</button></div>
+      <div class="hint" id="spec-info"></div>
       <div class="cols" id="pcols"></div>
 
       <h2>3. 행 거르기</h2>
@@ -79,7 +81,7 @@
 
   <main class="main">
     <section class="card">
-      <div class="head"><h3>컬럼</h3><span class="hint" id="shape"></span><button id="sug-all" class="hidden" title="추천을 모두 선택에 넣습니다">추천 모두 적용</button></div>
+      <div class="head"><h3>컬럼</h3><span class="hint" id="shape"></span><span class="hint" id="sampled"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계·추천을 다시 구합니다">다시 구하기</button><button id="sug-all" class="hidden" title="추천을 모두 선택에 넣습니다">추천 모두 적용</button></div>
       <div class="table-wrap" id="grid"></div>
       <div class="hint"><span id="counts"></span> <span id="stale" class="warn"></span></div>
       <div class="ok" id="ok-run"></div>
@@ -102,7 +104,7 @@ let drops = [];  // 끈 파생 컬럼 이름
 let deriv = [];  // 미리보기에서 알게 된 파생 컬럼 [{ name, source, type }]. 끈 것도 남긴다.
 let status = "";  // 통계를 구하는 단계: "stats"(통계 계산 중), "patterns"(타입 추천 확인 중), "stopped"(통계를 구하지 못함), 끝났으면 ""
 let token = 0;  // 테이블·연결이 바뀔 때마다 올려, 늦게 온 이전 테이블의 응답을 버린다
-let sample = +saved("sample") || SERVER.sample;  // 통계를 낼 때 먼저 살펴보는 행 수(prep_app.DEFAULT_SAMPLE, 범위는 settings.SIZES)
+let sample = +saved("sample") || SERVER.sample;  // 통계를 낼 표본 행 수(prep_app.DEFAULT_SAMPLE, 범위는 settings.SIZES)
 let preview = null;  // /api/preview의 응답. 열 구성이 바뀌면 어긋나므로 버린다.
 let shot = null;  // 미리보기를 누른 때의 설정(snap). 지금과 다르면 낡았다고 알린다.
 let confirming = null;  // 새 테이블 만들기를 한 번 더 누르기를 기다리는 이름
@@ -306,15 +308,21 @@ $("sug-all").onclick = () => { prof.columns.forEach(c => allSuggest(c).forEach(s
 function statsHtml(c, now) {
   const type = `<b>${esc(now && now !== c.type ? `${c.type} → ${now}` : c.type)}</b>`;
   if (!("unique" in c)) return `<div>${type}</div><div class="empty">${status === "stopped" ? "통계를 구하지 않았습니다" : "통계 계산 중…"}</div>`;
+  const guess = c.infer ?? {}, exact = guess.exact;  // 표본 추론과, Parquet 파일 정보로 구한 전체 기준 값
   const rows = [
+    guess.description && `<i>${esc(guess.description)}</i>`,
     type,
     c.nulls ? `<b class="warn">빈 값 ${c.nulls.toLocaleString()}</b>` : "빈 값 0",
     `서로 다른 값 ${c.unique.toLocaleString()}`,
     c.min != null && `${esc(shown(c.min)[0])}–${esc(shown(c.max)[0])}`,
-    c.min_len != null && `글자 길이 ${c.min_len}–${c.max_len}${c.len_sampled ? ` (앞 ${prof.sample.toLocaleString()}행)` : ""}`,
+    c.min_len != null && `글자 길이 ${c.min_len}–${c.max_len}`,
     c.blank && `빈 문자열 ${c.blank.toLocaleString()}`,
     c.spaces && `앞뒤 공백 ${c.spaces.toLocaleString()}`,
-    c.numeric && `숫자 모양 ${c.numeric.toLocaleString()}/${prof.rows.toLocaleString()}`,
+    c.numeric && `숫자 모양 ${c.numeric.toLocaleString()}/${(prof.sampled?.rows ?? prof.rows).toLocaleString()}`,
+    guess.constant && "값이 하나뿐",
+    guess.date_format && `날짜 형식 ${esc(guess.date_format)}`,
+    guess.flags && `값: ${esc(guess.flags.map(v => shown(v)[0]).join(", "))}`,
+    exact && `<span title="Parquet 파일 정보로 구한 전체 기준 값(데이터는 읽지 않음)">파일 전체: 빈 값 ${exact.nulls.toLocaleString()}${exact.min != null ? ` · ${esc(shown(exact.min)[0])}–${esc(shown(exact.max)[0])}` : ""}${exact.constant ? " · 한 값뿐" : ""}</span>`,
   ];
   return rows.filter(Boolean).map(r => `<div>${r}</div>`).join("");
 }
@@ -343,7 +351,8 @@ function showCounts() {
 function renderGrid() {
   lines.clear();
   heads.clear();
-  $("shape").textContent = prof ? `행 ${prof.rows.toLocaleString()} × 컬럼 ${prof.columns.length}` : "";
+  $("shape").textContent = prof ? `행 ${prof.rows.toLocaleString()} × 컬럼 ${prof.columns.length}${prof.description ? ` · ${prof.description}` : ""}` : "";
+  showSampled();
   $("sug-all").classList.toggle("hidden", !prof?.columns.some(c => allSuggest(c).length));
   $("sug-all").textContent = "추천 모두 적용" + (status === "patterns" ? " (타입 추천 확인 중)" : "");
   showCounts();
@@ -473,15 +482,24 @@ async function openTable(base, config) {
   } catch (e) { if (mine === token) fail(e.message); return; }
   await computeStats(mine);
 }
-// ②와 ③. 오류나 취소로 ②가 멈추면 통계 칸에 "구하지 않았습니다"와 [다시]가 나온다.
-async function computeStats(mine) {
-  const body = { schema: S.schema, base: S.base, sample };
+// 통계가 어느 표본에서 나왔는지: 표본 행 수, 읽은 방법(넘어간 방법은 마우스를 올리면), 구한 때. [다시 구하기]는 통계가 있을 때만.
+function showSampled() {
+  const s = prof?.sampled;
+  $("sampled").textContent = s ? `표본 ${s.rows.toLocaleString()}행 · ${SERVER.sample_methods[s.method] ?? s.method} · ${s.saved.replace("T", " ")} 구함` : "";
+  $("sampled").title = s?.passed.length ? "넘어간 방법: " + s.passed.map(([m, why]) => `${SERVER.sample_methods[m] ?? m}(${why})`).join(" / ") : "";
+  $("resample").classList.toggle("hidden", !s || !!status);
+}
+$("resample").onclick = () => computeStats(token, true);
+// ②와 ③. 통계는 테이블 전체가 아니라 표본으로 구하고 서버가 테이블별로 저장해 둔다(fresh면 표본을 새로 읽는다).
+// 오류나 취소로 ②가 멈추면 통계 칸에 "구하지 않았습니다"와 [다시]가 나온다.
+async function computeStats(mine, fresh = false) {
+  const body = { schema: S.schema, base: S.base, sample, refresh: fresh };
   status = "stats";
-  prof.sample = sample;
   renderGrid();
   try {
     const p = await timed("profile", () => api("/api/profile", body));
     if (mine !== token) return;
+    Object.assign(prof, { sampled: p.sampled, description: p.description });
     const byName = Object.fromEntries(p.columns.map(c => [c.name, c]));
     prof.columns.forEach(c => Object.assign(c, byName[c.name]));
     status = prof.columns.some(isStr) ? "patterns" : "";
@@ -500,6 +518,20 @@ async function computeStats(mine) {
   }
 }
 $("base").onchange = () => openTable($("base").value);
+
+// 데이터 명세서: 테이블·컬럼 설명과 파티션 키(표본을 최신 파티션에서 읽을 때). 경로만 저장한다.
+const showSpec = d => {
+  $("spec-path").value = d.path;
+  $("spec-info").textContent = d.error ?? (d.path ? `명세서의 테이블 ${d.tables.length}개${d.tables.length ? ": " + d.tables.slice(0, 10).join(", ") + (d.tables.length > 10 ? " …" : "") : ""}` : "");
+  $("spec-info").className = d.error ? "err" : "hint";
+};
+api("/api/spec").then(showSpec).catch(() => {});
+$("spec-read").onclick = () => busy($("spec-read"), async () => {
+  try {
+    showSpec(await api("/api/spec", { path: $("spec-path").value.trim() }));
+    if (prof && status === "") await computeStats(token);  // 설명을 바로 보인다(통계는 저장해 둔 것을 쓴다)
+  } catch (e) { showSpec({ path: $("spec-path").value, tables: [], error: e.message }); }
+});
 
 // 구성 저장·불러오기: 입력 상태를 그대로 저장한다(서버로 보내는 recipe 값이 아니다). 미리 볼 행 수와 미리보기 결과는 넣지 않는다.
 const config = () => ({ schema: S.schema, base: S.base, edits, copies, drops, filters, dedupe, sorts, downcast: $("downcast").checked,

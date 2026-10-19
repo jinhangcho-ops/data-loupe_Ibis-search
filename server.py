@@ -6,7 +6,6 @@ import secrets
 import threading
 from pathlib import Path
 
-from lazy import ibis
 from flask import Flask, Response, abort, current_app, g, jsonify, request
 from werkzeug.exceptions import HTTPException
 
@@ -19,8 +18,8 @@ import use_counts
 
 app = Flask(__name__, static_folder="static")
 
-# 연결은 메모리에만 둔다. passwords는 오류 문구에서 가릴 값, opened는 다시 열 때 쓸 요청 값, rows는 세어 둔 테이블 행 수, chars는 연결의 length()가 글자 수를 세는지(모르면 None), cancel은 지금 도는 데이터 작업의 취소 신호.
-state = {"con": None, "passwords": [], "opened": None, "rows": {}, "chars": None, "cancel": threading.Event()}
+# 연결은 메모리에만 둔다. passwords는 오류 문구에서 가릴 값, opened는 다시 열 때 쓸 요청 값, rows는 세어 둔 테이블 행 수, cancel은 지금 도는 데이터 작업의 취소 신호.
+state = {"con": None, "passwords": [], "opened": None, "rows": {}, "cancel": threading.Event()}
 turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 연결을 쓰지 않는 FREE의 경로만 기다리지 않는다.
 FREE = {"/api/usage", "/api/cancel", "/api/send"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
@@ -126,14 +125,6 @@ def row_count(schema, base):
     return state["rows"][schema, base]
 
 
-def length_counts_chars():
-    """연결의 length()가 글자 수를 세는지(바이트 수가 아닌지). 연결마다 한 번 리터럴로 확인한다."""
-    if state["chars"] is None:
-        con = get_con()
-        state["chars"] = run(lambda: con.execute(ibis.literal("가").length())) == 1
-    return state["chars"]
-
-
 @app.post("/api/rowcount")
 def rowcount():
     """기준 테이블의 전체 행 수. 예상 시간을 구할 때 쓴다."""
@@ -206,7 +197,7 @@ def switch(new):
     if state["con"] is not None:  # 이전 연결을 닫아야 같은 파일을 다시 열 수 있다.
         source.close(state["con"])
         state.update(con=None, passwords=[], opened=None)
-    state.update(rows={}, chars=None)
+    state.update(rows={})
     try:
         con = open_con(new)
     except Exception as e:
@@ -259,7 +250,7 @@ def disconnect():
     """연결을 끊고 파일·접속을 놓는다. 연결이 없으면 아무 일도 하지 않는다."""
     if state["con"] is not None:
         source.close(state["con"])
-    state.update(con=None, passwords=[], opened=None, rows={}, chars=None)
+    state.update(con=None, passwords=[], opened=None, rows={})
     return jsonify(ok=True)
 
 

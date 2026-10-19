@@ -35,12 +35,12 @@ def client(folder, monkeypatch):
     monkeypatch.setattr(server, "open_con", lambda info, read_only=True: object())
     monkeypatch.setattr(source, "list_schemas", lambda con: [])
     monkeypatch.setattr(source, "close", lambda con: None)
-    server.state.update(con=None, passwords=[], opened=None, rows={}, chars=None)
+    server.state.update(con=None, passwords=[], opened=None, rows={})
     c = app.test_client()
     c.get("/?key=" + server.KEY)
     yield c
-    server.state.update(con=None, passwords=[], opened=None, rows={}, chars=None)
+    server.state.update(con=None, passwords=[], opened=None, rows={})
 
 
-def pytest_sessionfinish(session, exitstatus):
+def pytest_sessionfinish():  # pytest가 다 끝나면(받을 인자는 쓰지 않아 뺀다)
     shutil.rmtree(APPDATA, ignore_errors=True)
