@@ -1,4 +1,4 @@
-"""적재할 곳: DB 테이블. 검색 화면의 연결(server.state["con"])과 따로 연결을 열고, 연결을 쓰는 일은 모두 source의 연결 스레드에서 돌린다
+"""적재할 곳: DB 테이블. 쿼리·분석 화면의 연결(server.state["con"])과 따로 연결을 열고, 연결을 쓰는 일은 모두 source의 연결 스레드에서 돌린다
 (만든 스레드에서만 쓸 수 있는 SQLite 같은 연결 때문). 비밀번호는 인자로만 받고 어디에도 적지 않는다.
 바꾸기(replace)는 이 프로그램이 만든 테이블에만 한다: 만든 테이블은 설정 폴더의 load_tables.json에 {연결, 스키마, 이름, 컬럼, 만든 때}로 남긴다."""
 import datetime as dt
@@ -17,13 +17,13 @@ import source
 FILE = "load_tables.json"
 STAGING = "_ibis_load"  # 바꾸기: 새 내용을 먼저 넣어 둘 테이블 이름의 꼬리. 다 넣은 뒤 원래 테이블과 바꿔치기한다.
 OLD = "_ibis_old"  # 바꿔치기하는 동안 원래 테이블을 잠깐 옮겨 둘 이름의 꼬리
-OPENED_HERE = "검색·전처리 화면이 이 DB 파일을 열고 있습니다. 검색·전처리의 연결을 끊고 적재하세요."
+OPENED_HERE = "쿼리·분석 화면이 이 DB 파일을 열고 있습니다. 쿼리·분석의 연결을 끊고 적재하세요."
 
 
 # ---------- 구성 ----------
 
 def ready(config):
-    """시작 전 검사(연결 없이): 이름, 연결 칸, 검색 화면이 같은 파일을 열고 있는지."""
+    """시작 전 검사(연결 없이): 이름, 연결 칸, 쿼리·분석 화면이 같은 파일을 열고 있는지."""
     table = config["load"]["table"]
     prep_app.check_table_name(table["name"])
     if table["schema"]:
@@ -90,7 +90,7 @@ def remember(link, schema, name, columns):
 # ---------- 연결 ----------
 
 def connect(link, password):
-    """적재용 연결을 따로 연다. 파일은 쓰기로 연다(검색 화면이 같은 파일을 열고 있으면 거부)."""
+    """적재용 연결을 따로 연다. 파일은 쓰기로 연다(쿼리·분석 화면이 같은 파일을 열고 있으면 거부)."""
     if link["kind"] == "folder":
         if server.reading(link["file"]):
             raise ValueError(OPENED_HERE)
@@ -102,7 +102,7 @@ def connect(link, password):
 
 
 def columns_of(schema):
-    """Ibis 스키마 → [[이름, 한글 타입]] (검색 화면의 컬럼 목록과 같은 타입 이름)."""
+    """Ibis 스키마 → [[이름, 한글 타입]] (쿼리 화면의 컬럼 목록과 같은 타입 이름)."""
     return [[name, parse.type_info(dtype)[0]] for name, dtype in schema.items()]
 
 

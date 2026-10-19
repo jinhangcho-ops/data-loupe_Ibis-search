@@ -35,8 +35,8 @@ button.ghost { background:none; border-color:transparent; color:var(--muted); pa
 .empty { color:var(--muted); }
 
 /* 위쪽 줄: 연결 이름, 화면 전환, 점유율, 진행 중 작업, 크기 조절·화면 모드, 보낼 곳. 모든 화면이 같이 쓴다(status.html). */
-.topbar { position:sticky; top:0; z-index:50; height:58px; display:flex; align-items:center; gap:20px; padding:0 24px; background:var(--card); border-bottom:1px solid var(--line); }
-.crumb { display:flex; align-items:center; gap:9px; font-size:15px; font-weight:700; min-width:0; max-width:360px; }
+.topbar { position:sticky; top:0; z-index:50; min-height:58px; flex:none; display:flex; align-items:center; gap:20px; padding:0 24px; background:var(--card); border-bottom:1px solid var(--line); }
+.crumb { display:flex; align-items:center; gap:9px; font-size:15px; font-weight:700; min-width:min(110px, 20vw); max-width:clamp(160px, 24vw, 420px); }
 .crumb span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .crumb i { width:8px; height:8px; border-radius:50%; background:var(--faint); flex:none; }
 .crumb.on i { background:var(--dot); }
@@ -60,19 +60,20 @@ button.ghost { background:none; border-color:transparent; color:var(--muted); pa
 
 /* 끌어서 크기를 바꾸는 경계. 세로 틈(.grip-x)과 가장자리(.grip-y). 더블클릭하면 기본 크기.
    [크기 조절]을 켰을 때(.resizing)만 잡히고 옅게 보이며, 올리거나 끄는 동안 진해진다. 꺼져 있으면 없는 것과 같다. */
-.grip-x { position:sticky; top:58px; height:calc(100vh - 58px); cursor:col-resize; --grip:0%; pointer-events:none;
+.grip-x { position:relative; height:100%; cursor:col-resize; --grip:0%; pointer-events:none;
   background:linear-gradient(to right, transparent 6px, color-mix(in srgb, var(--accent) var(--grip), transparent) 6px 10px, transparent 10px); }
 .grip-y { position:absolute; left:0; right:0; bottom:0; height:10px; border-radius:0 0 8px 8px; cursor:row-resize; --grip:0%; pointer-events:none;
   background:color-mix(in srgb, var(--accent) var(--grip), transparent); }
 .resizing :is(.grip-x, .grip-y) { --grip:25%; pointer-events:auto; }
 .resizing :is(.grip-x, .grip-y):is(:hover, .on) { --grip:70%; }
 
-/* 결과가 크고 설정은 오른쪽 패널인 배치(검색 화면): .work = .results + 경계 + .side */
-.app { background:var(--card); }
-.work { display:grid; grid-template-columns:minmax(0, 1fr) 16px var(--panel, 404px); height:calc(100vh - 58px); }
+/* 결과가 크고 설정은 오른쪽 패널인 배치(쿼리·분석·수집): .work = .results + 경계 + .side
+   화면(.app)은 창 높이의 세로 묶음이고, 위쪽 줄·탭 줄을 뺀 남은 높이를 .work·.board-view가 채운다(창 크기를 바꾸면 따라 바뀐다).
+   패널 너비는 끌어서 정한 값(--panel)이 없으면 창 너비에 비례(28%, 300~520px)하고, 어느 쪽이든 창의 60%를 넘지 않는다. */
+.app { background:var(--card); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+.work { display:grid; grid-template-columns:minmax(0, 1fr) 16px min(var(--panel, clamp(300px, 28vw, 520px)), 60vw); flex:1; min-height:0; }
 .work.closed { grid-template-columns:minmax(0, 1fr); }
 .work.closed > :is(.side, .grip-x) { display:none; }
-.work > .grip-x { top:0; height:100%; }
 .results { display:flex; flex-direction:column; min-width:0; min-height:0; }
 .tool { display:flex; align-items:center; gap:10px; padding:18px 28px 12px; }
 .q { flex:1; height:40px; border:1px solid var(--line); border-radius:999px; display:flex; align-items:center; gap:10px; padding:0 16px; color:var(--muted); }
@@ -148,20 +149,19 @@ tr.miss { display:none; }
 .chip.more { padding:2px 10px; color:var(--accent); cursor:pointer; }
 
 /* 화면 안의 큰 탭(쿼리: 탐색·대시보드, 분석: 전처리·분석·그래프). 탭 줄 아래 내용은 남은 높이를 쓴다. */
-.subnav { display:flex; gap:4px; padding:0 24px; height:44px; align-items:flex-end; background:var(--card); border-bottom:1px solid var(--line); }
+.subnav { display:flex; gap:4px; padding:0 24px; min-height:44px; flex:none; align-items:flex-end; background:var(--card); border-bottom:1px solid var(--line); }
 .subnav button { background:none; border:0; border-bottom:2px solid transparent; border-radius:0; color:var(--muted); padding:10px 14px; font-weight:600; }
 .subnav button.on { color:var(--accent); border-bottom-color:var(--accent); }
 .subnav em { font-style:normal; font-size:11.5px; background:var(--accent-bg); color:var(--accent); border-radius:999px; padding:1px 7px; margin-left:6px; }
 .subnav em:empty { display:none; }
-.subnav ~ .work { height:calc(100vh - 58px - 44px); }
 /* 그래프 카드 모음(board.js): 대시보드·그래프 탭. 고른 카드는 강조색 테두리와 체크(어둡게는 왼쪽 막대). */
-.board-view { height:calc(100vh - 58px - 44px); overflow:auto; background:var(--bg); }
+.board-view { flex:1; min-height:0; overflow:auto; background:var(--bg); }
 .board-view .board-ctl { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:0 28px; margin:0 0 8px; }
 .board-view .board-ctl select { flex:0 0 110px; width:auto; }
 .board-view .board-ctl .grow { margin:0 auto 0 0; }
-.board-view > .err { padding:0 28px; }
-.board-view > .err:empty { display:none; }
-.board { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap:14px; padding:6px 28px 28px; align-items:start; }
+.board-view > [id^="err-"] { padding:0 28px; }  /* say()가 클래스를 ok·err로 바꿔도 같은 자리 */
+.board-view > [id^="err-"]:empty { display:none; }
+.board { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, clamp(320px, 30vw, 640px)), 1fr)); gap:14px; padding:6px 28px 28px; align-items:start; }
 .board-empty { grid-column:1 / -1; padding:48px 0; text-align:center; }
 .bcard { border:1px solid var(--line); border-radius:14px; background:var(--card); padding:10px 12px 12px; cursor:pointer; }
 .bcard:hover { border-color:var(--accent-line); }
@@ -173,11 +173,11 @@ tr.miss { display:none; }
 .bcard.sel .bcheck::after { content:""; width:8px; height:4px; border:solid var(--on-accent); border-width:0 0 2px 2px; transform:translateY(-1px) rotate(-45deg); }
 .btitle { flex:1; min-width:0; height:30px; border:1px solid transparent; background:none; font-weight:600; padding:2px 6px; }
 .btitle:hover, .btitle:focus { border-color:var(--line); background:var(--bg); }
-.bbody { aspect-ratio:var(--ratio, 16 / 9); position:relative; }
+.bbody { aspect-ratio:var(--ratio, 16 / 9); max-height:50vh; position:relative; }  /* 큰 창에서 1:1 카드가 너무 길어지지 않게 */
 .bnote { display:grid; place-items:center; height:100%; margin:0; text-align:center; padding:0 12px; }
 
 /* 연결 카드: 가운데 로그인 창 모양(connect.html) */
-.conn-card { width:min(500px, 94vw); padding:22px 24px; display:flex; flex-direction:column; gap:8px; }
+.conn-card { width:min(clamp(380px, 36vw, 560px), 94vw); padding:22px 24px; display:flex; flex-direction:column; gap:8px; }
 .conn-card .head { margin-bottom:2px; }
 .conn-card .head h3 { font-size:18px; }
 .conn-go { height:44px; justify-content:center; font-size:15px; margin-top:6px; }
@@ -215,8 +215,17 @@ tr.miss { display:none; }
 ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background:transparent; }
 ::-webkit-scrollbar-thumb { background:color-mix(in srgb, var(--text) 25%, transparent); border-radius:4px; }
 ::-webkit-scrollbar-thumb:hover { background:color-mix(in srgb, var(--text) 45%, transparent); }
+/* 중간 크기 창: 위쪽 줄을 줄인다(PC 메모리·CPU는 숨기고 프로그램 메모리만, 간격·여백도 좁게). */
+@media (max-width:1280px) {
+  .topbar { gap:12px; padding:0 16px; }
+  .sx span:not(:last-child) { display:none; }
+  .tool, .big, .tabs2, .pane, .pager, .board, .board-view .board-ctl, .board-view > [id^="err-"] { padding-left:18px; padding-right:18px; }
+  .big b { font-size:26px; }
+}
+/* 좁은 창: 패널을 결과 아래로 내리고 화면 전체가 스크롤된다. */
 @media (max-width:900px) {
   .grip-x { display:none; }
-  .work { grid-template-columns:1fr; height:auto; } .side { border-left:0; border-top:1px solid var(--line); }
-  .topbar { flex-wrap:wrap; height:auto; padding:8px 16px; gap:10px; } .sx { margin-left:0; }
+  .app { height:auto; overflow:visible; }
+  .work { grid-template-columns:1fr; } .side { border-left:0; border-top:1px solid var(--line); }
+  .topbar { flex-wrap:wrap; padding:8px 16px; gap:10px; } .sx { margin-left:0; }
 }

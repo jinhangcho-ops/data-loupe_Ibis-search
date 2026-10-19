@@ -1,4 +1,4 @@
-"""검색·전처리·수집 화면을 프로그램 창으로 연다. exe의 실행 파일이자 유일한 실행 방법.
+"""쿼리·분석·수집 화면을 프로그램 창으로 연다. exe의 실행 파일이자 유일한 실행 방법.
 '--browser'로 실행하면 서버·메인 창 없이 수집용 브라우저 창 프로세스만 돈다(collect_browser.launch가 띄운다).
 '--run "구성 이름"'으로 실행하면 서버·메인 창 없이 그 구성을 한 번 수집하고 기록·알림 뒤 끝난다(Windows 예약 작업이 띄운다). 종료 코드는 끝 0, 아니면 1."""
 import sys
@@ -39,7 +39,20 @@ threading.Thread(target=http.serve_forever, daemon=True).start()
 
 webview.settings["ALLOW_DOWNLOADS"] = True  # 결과·차트 내보내기
 # 열쇠를 아는 이 창만 화면을 열 수 있다(브라우저로 주소만 열면 거부된다).
-window = webview.create_window("Ibis 검색·전처리·수집", f"http://127.0.0.1:{http.server_port}/?key={server.KEY}", width=1400, height=900)
+MIN_SIZE = (1024, 640)  # 이보다 작게는 창을 줄이지 못한다. 화면은 창 크기에 따라 배치가 바뀐다(common.css).
+
+
+def first_size():
+    """첫 창 크기: 주 모니터의 85%(MIN_SIZE 이상). 모니터를 알 수 없으면 1400×900."""
+    try:
+        screen = webview.screens[0]
+        return max(MIN_SIZE[0], int(screen.width * 0.85)), max(MIN_SIZE[1], int(screen.height * 0.85))
+    except Exception:
+        return 1400, 900
+
+
+width, height = first_size()
+window = webview.create_window("Ibis 쿼리·분석·수집", f"http://127.0.0.1:{http.server_port}/?key={server.KEY}", width=width, height=height, min_size=MIN_SIZE)
 
 
 def ask_save(name, file_types):

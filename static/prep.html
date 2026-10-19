@@ -10,7 +10,8 @@
   .pcol { display:flex; gap:6px; align-items:center; white-space:nowrap; }
   .pcol input { width:auto; }
   .pcol .name { color:var(--text); cursor:pointer; }
-  #grid { max-height:calc(100vh - 230px); overflow:auto; }
+  #prep-view .pane { display:flex; flex-direction:column; }
+  #grid { flex:1; min-height:200px; max-height:none; overflow:auto; }  /* 남은 높이를 채우고 그 안에서 스크롤(머리글은 위에 붙는다) */
   #prep-view .pane > .head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
   #prep-view .pane > .head h3 { margin:0; }
   /* 컬럼마다 한 열(220px). 머리글 세 줄은 한 덩어리(thead)로 위에 붙는다. */
@@ -39,7 +40,7 @@
   .seg2.seg4 label { padding:6px 2px; font-size:13px; }
   .a-form { margin-top:12px; }
   .a-form .hint { margin:8px 0 4px; }
-  #a-pane .chart-box { width:min(100%, calc(440px * var(--ratio, 16 / 9))); aspect-ratio:var(--ratio, 16 / 9); margin:0 auto; position:relative; }
+  #a-pane .chart-box { width:min(100%, calc(var(--chart, clamp(260px, 52vh, 900px)) * var(--ratio, 16 / 9))); aspect-ratio:var(--ratio, 16 / 9); margin:0 auto; position:relative; }
   #a-pane .table-wrap { margin-top:16px; }
   #a-corr-cols { max-height:260px; overflow:auto; display:flex; flex-direction:column; gap:4px; }
   #a-corr-cols label { display:flex; align-items:center; gap:8px; }
@@ -480,7 +481,7 @@ function renderGrid() {
   }
   $("grid").replaceChildren(el("table", {}, el("thead", {}, ...rows), body));
 }
-// 왼쪽 컬럼 목록: 체크를 끄면 결과에서 빠지고 표의 열도 사라진다. 이름을 누르면 그 열로 간다.
+// 컬럼 목록(① 데이터 단계): 체크를 끄면 결과에서 빠지고 표의 열도 사라진다. 이름을 누르면 그 열로 간다.
 // 미리보기 뒤에는 파생 컬럼이 그 원래 컬럼 아래에 들여 써서 나온다. 끄면 drop에 들어간다.
 function pcol(name, type, checked, onchange, sub) {
   const box = el("input", { type: "checkbox", checked, onchange: () => onchange(box.checked) });

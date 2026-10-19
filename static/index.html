@@ -29,13 +29,13 @@
   #err-search, #err-export { padding:0 28px; }
   #err-search:empty, #err-export:empty, #err-summary:empty { display:none; }
   .ctl { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; align-items:center; }
-  .ctl select, .ctl input { flex:1 1 120px; width:auto; }
+  .ctl select, .ctl input { flex:1 1 120px; width:auto; max-width:clamp(160px, 18vw, 280px); }  /* 큰 창에서 칸이 끝없이 늘지 않게 */
   .ctl .hint { margin:0; white-space:nowrap; }
   .ctl .grow { margin-left:auto; }
   #summary { height:var(--summary, auto); max-height:var(--summary, none); overflow:auto; }
   #ctable { margin-top:10px; }
-  /* 차트: 높이(--chart, 기본 400px)를 기준으로 비율(--ratio = 가로/세로)만큼 넓어진다. 카드보다 넓어지면 너비에 맞춰 줄어든다. */
-  .chart-box { width:min(100%, calc(var(--chart, 400px) * var(--ratio, 16 / 9))); aspect-ratio:var(--ratio, 16 / 9); margin:0 auto; position:relative; }
+  /* 차트: 높이(끌어서 정한 --chart, 없으면 창 높이의 52%를 260~900px 안으로)를 기준으로 비율(--ratio = 가로/세로)만큼 넓어진다. 결과 영역보다 넓어지면 너비에 맞춰 줄어든다. */
+  .chart-box { width:min(100%, calc(var(--chart, clamp(260px, 52vh, 900px)) * var(--ratio, 16 / 9))); aspect-ratio:var(--ratio, 16 / 9); margin:0 auto; position:relative; }
   .chart-box .grip-y { bottom:-12px; }
 </style>
 </head>
@@ -113,7 +113,7 @@
       <label title="이보다 긴 글자는 줄여 보이고 마우스를 올리면 전체가 보입니다 (0 = 전체)">글자 <input id="maxlen" type="number" value="40" min="0"> 까지</label>
       <label title="끄면 검색할 때 조회가 한 번으로 줄고, 예상 시간도 구하지 않습니다 (과금되는 DB에서 유용)"><input type="checkbox" id="count" checked> 전체 행 수 세기</label>
       <span style="margin-left:auto"></span>
-      <button id="handoff" class="btn k" title="조건에 맞는 전체 행을 Parquet 파일로 저장하고, 그 파일을 전처리 화면에서 엽니다. 연결이 그 파일로 바뀝니다.">전처리로 보내기</button>
+      <button id="handoff" class="btn k" title="조건에 맞는 전체 행을 Parquet 파일로 저장하고, 그 파일을 분석 화면의 전처리 탭에서 엽니다. 연결이 그 파일로 바뀝니다.">전처리로 보내기</button>
     </div>
   </main>
   <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
@@ -724,7 +724,7 @@ document.querySelectorAll("[data-export]").forEach(b => b.onclick = () => {
   });
 });
 
-// 전처리로 보내기: 프로그램이 저장 대화상자를 띄워 Parquet으로 저장하고 그 파일에 연결한 뒤, 전처리 화면으로 간다. 취소하면 그대로 둔다.
+// 전처리로 보내기: 프로그램이 저장 대화상자를 띄워 Parquet으로 저장하고 그 파일에 연결한 뒤, 분석 화면(전처리 탭)으로 간다. 취소하면 그대로 둔다.
 $("handoff").onclick = () => {
   if (!S.base) { $("err-export").textContent = "기준 테이블을 고르세요."; return; }
   return busy($("handoff"), async () => {

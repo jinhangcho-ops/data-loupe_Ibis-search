@@ -1,4 +1,4 @@
-"""수집 예약(4단계)의 라우트. server.app에 달린다. 검색 화면의 연결을 쓰지 않으므로 모두 차례(turn)를 기다리지 않는다."""
+"""수집 예약(4단계)의 라우트. server.app에 달린다. 쿼리·분석 화면의 연결을 쓰지 않으므로 모두 차례(turn)를 기다리지 않는다."""
 from flask import jsonify, request
 
 import collect_app

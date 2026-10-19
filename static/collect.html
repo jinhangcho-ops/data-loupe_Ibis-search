@@ -52,7 +52,7 @@
   tr.fail td { color:var(--err); }
   /* 가운데는 카드들이 위아래로 이어지고(옅은 바탕), 오른쪽 "수집 설정" 패널의 단계 카드는 웹페이지 방식에서 env·쪽 넘기기가 숨는다. */
   .collect-pane { background:var(--bg); }
-  .collect-pane > .main { max-width:1100px; margin:0 auto; padding:4px 0 24px; }
+  .collect-pane > .main { max-width:clamp(900px, 78vw, 1600px); margin:0 auto; padding:4px 0 24px; }
   .cstep.hidden { display:none; }
   .step .edx .tabs { display:flex; flex-wrap:wrap; gap:4px 12px; margin:4px 0; }
 </style>
@@ -269,7 +269,7 @@
       </div>
       <div id="result" class="hidden">
         <div class="path" id="result-path"></div>
-        <div class="row" style="margin-top:6px"><button id="open-search">검색으로 열기</button><button id="open-prep">전처리로 열기</button></div>
+        <div class="row" style="margin-top:6px"><button id="open-search">쿼리로 열기</button><button id="open-prep">분석으로 열기</button></div>
       </div>
       <div class="ok" id="run-ok"></div>
       <div class="err" id="run-msg"></div>
@@ -1268,7 +1268,7 @@ $("load-again").onclick = () => busy($("load-again"), async () => {
 $("stop").onclick = () => busy($("stop"), async () => {
   try { await api("/api/collect/stop", {}); $("run-ok").textContent = "멈췄습니다. 다시 [시작]하면 받은 데서 이어 받습니다"; } catch (e) { say("run-msg", e.message); }
 });
-// 결과 파일로 연결을 바꾸고 검색·전처리 화면으로 간다.
+// 결과 파일로 연결을 바꾸고 쿼리·분석 화면으로 간다.
 const openWith = (button, prep) => twice(button, "연결이 이 파일로 바뀝니다. 한 번 더 누르면 열기", async () => {
   try {
     const { table } = await api("/api/collect/open", { path: output });

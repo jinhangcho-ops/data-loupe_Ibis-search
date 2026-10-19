@@ -1784,9 +1784,9 @@ def load_section(c, got):
         _, st = load(lcfg("items.parquet", table={"name": "paused"}))
         check("같은 서명이면(간격은 서명에 없음) 이어서 끝냄", (st["phase"], [r[0] for r in table_rows("paused")]), ("끝", list(range(1, 26))))
 
-        print("== 적재: 검색 화면의 연결·CSV·SQLite·수집에 이어 적재")
+        print("== 적재: 쿼리 화면의 연결·CSV·SQLite·수집에 이어 적재")
         got("/api/connect", kind="folder", path=str(out), file=str(db))
-        check("검색 화면이 같은 DB 파일을 열고 있으면 거부(확인·시작)", (error("/api/load/table/check", config=lcfg("items.parquet")), error("/api/load/start", config=lcfg("items.parquet"))),
+        check("쿼리·분석 화면이 같은 DB 파일을 열고 있으면 거부(확인·시작)", (error("/api/load/table/check", config=lcfg("items.parquet")), error("/api/load/start", config=lcfg("items.parquet"))),
               (load_table.OPENED_HERE,) * 2)
         got("/api/disconnect")
         pl.DataFrame(rows).write_csv(out / "plain.csv")

@@ -1,4 +1,4 @@
-"""Ibis 전처리 화면의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
+"""Ibis 분석 화면(전처리·분석·그래프)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
 import datetime as dt
 import json
 import re
@@ -202,7 +202,7 @@ def preview():
 @app.post("/api/analyze")
 def analyze():
     """분석(analysis.analyze). body = {recipe, how, sample, full}. recipe의 정렬은 분석에 쓰지 않아 뺀다.
-    기본은 전처리 화면과 같은 표본(sample행, 같은 테이블이면 읽어 둔 것)에 recipe를 적용해 이 PC에서 구한다.
+    기본은 전처리 탭과 같은 표본(sample행, 같은 테이블이면 읽어 둔 것)에 recipe를 적용해 이 PC에서 구한다.
     full이면 테이블 전체에 recipe를 적용한 식을 연결(DB)에서 구한다. 결과에 어느 쪽으로 구했는지(data)를 붙인다."""
     body = request.json
     recipe, how = {**body.get("recipe", {}), "sorts": []}, body.get("how") or {}

@@ -6,18 +6,18 @@
 <title>Ibis 쿼리·분석·수집</title>
 <!--include head.html-->
 <style>
-  .hero { min-height:calc(100vh - 58px); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:28px; padding:24px; }
+  .hero { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:28px; padding:24px; }
   .hero h1 { margin:0; font-size:30px; letter-spacing:-.02em; }
   .hero p { margin:0; color:var(--muted); }
   .choices { display:flex; flex-wrap:wrap; gap:16px; justify-content:center; }
-  .choice { width:290px; padding:26px; border:1px solid var(--line); border-radius:18px; background:var(--card); color:var(--text); cursor:pointer; text-align:left; font-weight:400; display:flex; flex-direction:column; align-items:flex-start; gap:10px; white-space:normal; height:auto; }
+  .choice { width:clamp(240px, 26vw, 400px); padding:clamp(18px, 2vw, 30px); border:1px solid var(--line); border-radius:18px; background:var(--card); color:var(--text); cursor:pointer; text-align:left; font-weight:400; display:flex; flex-direction:column; align-items:flex-start; gap:10px; white-space:normal; height:auto; }
   .choice:hover { border-color:var(--accent); }
   .choice b { font-size:22px; }
   .choice span { color:var(--muted); line-height:1.5; }
   .choice em { font-style:normal; font-size:12.5px; color:var(--accent); font-weight:600; }
 </style>
 </head>
-<body>
+<body class="app">
 <!--include status.html-->
 <div class="hero">
   <div style="text-align:center"><h1>무엇을 할까요?</h1><p>쿼리와 분석은 데이터에 먼저 연결합니다.</p></div>
