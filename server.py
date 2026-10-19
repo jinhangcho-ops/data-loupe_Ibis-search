@@ -15,6 +15,7 @@ import result
 import scratch
 import settings
 import source
+import use_counts
 
 app = Flask(__name__, static_folder="static")
 
@@ -217,8 +218,9 @@ def switch(new):
                 message += " 이전 연결도 다시 열 수 없어 연결이 끊겼습니다."
         raise ValueError(message) from None
     state.update(con=con, passwords=passwords, opened=new)
+    info = source.recent(new)  # 비밀번호 없는 칸 값
     try:
-        settings.write("recent.json", source.recent(new))
+        use_counts.use("connections", use_counts.connection_key(info), info)
     except OSError:  # 적어 두지 못해도 연결은 된 것이다.
         pass
     return source.list_schemas(con)
@@ -243,7 +245,13 @@ def current():
 @app.get("/api/recent")
 def recent():
     """마지막으로 연결에 성공한 폴더나 주소(비밀번호 없음). 없으면 null. 화면이 연결 칸을 채울 때 쓴다."""
-    return jsonify(recent=settings.read("recent.json"))
+    return jsonify(recent=use_counts.last_connection())
+
+
+@app.get("/api/connections")
+def connections():
+    """연결에 성공한 폴더·주소(비밀번호 없음)를 많이 쓴 순으로: [{"info", "count", "last"}]. 화면의 최근 연결 목록."""
+    return jsonify(connections=use_counts.connections())
 
 
 @app.post("/api/disconnect")

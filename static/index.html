@@ -410,10 +410,11 @@ $("sql-show").onclick = () => busy($("sql-show"), async () => {
   } catch (e) { $("err-search").textContent = e.message; }
 });
 // 저장한 검색: 테이블과 조인·기간·조건·정렬·표시 컬럼·행 수를 이름으로 저장해 두고 불러온다. 연결 정보는 담지 않아 연결을 바꿔도 남는다.
+// 목록은 많이 불러온 순(d.order)이다.
 let searches = {};
 function showSearches(d, name = "") {
   searches = d.searches;
-  fill($("saved"), Object.keys(searches), "불러오기");
+  fill($("saved"), d.order, "불러오기");
   $("saved").value = name;
 }
 api("/api/searches").then(d => showSearches(d)).catch(() => {});
@@ -447,6 +448,7 @@ $("saved").onchange = async () => {
     LISTS.forEach(renderList);
     await refreshColumns();
     $("err-search").textContent = "";
+    api("/api/searches/use", { name: $("saved").value }).then(d => showSearches(d, $("saved").value)).catch(() => {});  // 불러온 횟수를 센다
   } catch (e) {
     Object.assign(S, before);
     $("limit").value = limit;

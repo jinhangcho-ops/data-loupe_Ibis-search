@@ -1,0 +1,2 @@
+# 개발·테스트에만 쓰는 패키지(프로그램 exe에는 들어가지 않는다). pip install -r requirements-dev.txt
+pytest==9.1.1

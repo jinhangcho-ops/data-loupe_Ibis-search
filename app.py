@@ -9,6 +9,7 @@ import result
 import server
 import settings
 import source
+import use_counts
 from server import app, get_con, run, to_json
 
 
@@ -70,15 +71,34 @@ def sql():
     return jsonify(sql=result.get_sql(*paged(request.json)))
 
 
+def searches_view(found):
+    """저장한 검색과 많이 쓴 순의 이름 목록(order). JSON 객체는 순서를 지키지 않아 순서를 따로 준다."""
+    return jsonify(searches=found, order=use_counts.order("searches", found))
+
+
 @app.get("/api/searches")
 def searches():
-    return jsonify(searches=settings.searches())
+    return searches_view(settings.searches())
 
 
 @app.post("/api/searches")
 def save_search():
-    """search가 null이면 그 이름을 지운다."""
-    return jsonify(searches=settings.save_search(request.json.get("name"), request.json.get("search")))
+    """search가 null이면 그 이름(과 사용 횟수)을 지운다."""
+    name, search = request.json.get("name"), request.json.get("search")
+    found = settings.save_search(name, search)
+    if search is None:
+        use_counts.forget("searches", name.strip())
+    return searches_view(found)
+
+
+@app.post("/api/searches/use")
+def use_search():
+    """저장한 검색을 불러왔다고 센다(목록을 많이 쓴 순으로 보인다)."""
+    name = request.json.get("name")
+    if name not in settings.searches():
+        raise ValueError(f"저장한 검색 '{name}'이 없습니다.")
+    use_counts.use("searches", name)
+    return searches_view(settings.searches())
 
 
 @app.post("/api/summary")

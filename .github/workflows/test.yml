@@ -1,4 +1,4 @@
-# push와 pull request마다 tests.py를 돌린다.
+# push와 pull request마다 tests.py와 pytest(tests_pytest)를 돌린다.
 name: test
 on: [push, pull_request]
 
@@ -13,5 +13,6 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt -r requirements-dev.txt
       - run: python tests.py
+      - run: python -m pytest tests_pytest -q

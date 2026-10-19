@@ -181,12 +181,20 @@ document.querySelectorAll("input[name=kind]").forEach(r => r.onchange = () => {
 });
 // 연결 칸 채우기(비밀번호는 빼고): 종류 라디오와 경로 또는 주소·아이디
 function fillConnection(info) {
+  document.querySelector(`input[name=kind][value=${info.kind === "url" ? "url" : "folder"}]`).click();
   if (info.kind === "folder") $("path").value = info.path;
   if (info.kind === "url") {
-    document.querySelector("input[name=kind][value=url]").click();
     $("url").value = info.url;
     $("user").value = info.user;
   }
+}
+// 최근 연결: 연결에 성공했던 폴더·주소를 많이 쓴 순으로. 고르면 칸을 채운다(비밀번호는 저장하지 않아 다시 넣는다).
+let recentConnections = [];
+async function showRecentConnections() {
+  try { recentConnections = (await api("/api/connections")).connections; } catch (e) { return; }
+  const label = c => (c.info.kind === "url" ? `${c.info.url}${c.info.user ? ` (${c.info.user})` : ""}` : c.info.path) + ` · ${c.count}회`;
+  $("recent-conn").replaceChildren(new Option("최근 연결 (많이 쓴 순)", ""), ...recentConnections.map((c, i) => new Option(label(c), i)));
+  $("recent-conn").classList.toggle("hidden", !recentConnections.length);
 }
 // 두 화면은 따로 열리지만 연결은 서버에 남아 있다. 화면이 열린 뒤 화면 스크립트의 끝에서 부른다.
 // 연결돼 있으면 방금 [연결]에 성공했을 때와 같은 상태로 만든다. 아니면 지난번 연결을 칸에 채워 둔다(연결은 [연결]을 눌러야 한다).
@@ -228,6 +236,12 @@ function showFlat() {
 // 연결 칸(connect.html)이 있는 화면에서만 연결 칸의 버튼을 단다. 수집 화면처럼 연결 칸이 없는 화면도 common.js를 쓴다.
 const hasConnect = !!$("connect");
 if (hasConnect) {
+showRecentConnections();
+$("recent-conn").onchange = () => {
+  const c = recentConnections[$("recent-conn").value];
+  if (c) { fillConnection(c.info); $(c.info.kind === "url" ? "password" : "find").focus(); }
+  $("recent-conn").value = "";
+};
 $("file").onchange = showFlat;
 // 작업 메모리 상한(MB, 0 = 제한 없음): 목록에 있는 값이거나 GB로 직접 넣은 값. 저장만 하고 다음 [연결]부터 서버가 쓴다.
 const memory = saved("memory") || "0";
@@ -292,6 +306,7 @@ if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
     : { kind, url: $("url").value, user: $("user").value, password: $("password").value };
   try {
     const { schemas } = await api("/api/connect", body);
+    showRecentConnections();  // 쓴 횟수가 바뀌었다
     await showConnected(!!body.files, schemas);
   } catch (e) { connMsg(e.message); }
 });

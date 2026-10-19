@@ -1,5 +1,6 @@
 """데이터 연결. 폴더의 파일을 열거나, 연결 주소로 DB에 접속한다."""
 import functools
+import gc
 import os
 import queue
 import re
@@ -173,13 +174,14 @@ def open_url(url, user="", password=""):
 
 @on_worker
 def close(con):
-    """연결을 닫아 파일·접속을 놓는다. 닫기를 지원하지 않는 백엔드는 그냥 둔다."""
+    """연결을 닫아 파일·접속을 놓는다. 닫기를 지원하지 않는 백엔드는 그냥 둔다. 닫은 연결이 쥐던 메모리는 바로 돌려준다."""
     try:
         con.disconnect()
     except Exception:
         pass
     if hasattr(con, "scratch"):  # open_duckdb가 만든 임시 폴더
         scratch.remove(con.scratch)
+    gc.collect()
 
 
 def unsupported_errors():

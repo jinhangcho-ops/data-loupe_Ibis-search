@@ -2,6 +2,7 @@
 import json
 import os
 import re
+import shutil
 from pathlib import Path
 
 PATH = Path(os.environ.get("APPDATA") or Path.home()) / "ibis_search" / "settings.json"
@@ -35,18 +36,38 @@ def valid(name, value):
     return value in CHOICES.get(name, [])
 
 
-def read(name):
-    """설정 폴더의 JSON 파일에 든 객체. 파일이 없거나 읽을 수 없으면 None."""
+def read_file(path):
+    """JSON 파일에 든 객체. 파일이 없거나 읽을 수 없으면 None."""
     try:
-        data = json.loads((PATH.parent / name).read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
 
 
+def read(name):
+    """설정 폴더의 JSON 파일에 든 객체. 없으면 None. 깨져서 읽을 수 없으면 덮어쓰기 전에 남긴 name.bak을 읽는다(그것도 없으면 None)."""
+    path = PATH.parent / name
+    found = read_file(path)
+    return found if found is not None or not path.exists() else read_file(backup_of(path))
+
+
+def backup_of(path):
+    return path.with_name(path.name + ".bak")
+
+
+def backup(path):
+    """덮어쓰기 전에 원래 파일을 path.bak으로 남긴다(한 세대). 원래 파일이 깨졌으면 남기지 않아, 그 전의 성한 .bak을 지킨다."""
+    if read_file(path) is not None:
+        shutil.copyfile(path, backup_of(path))
+
+
 def write(name, data):
+    """설정 폴더에 name 파일로 data를 JSON으로 쓴다. 덮어쓰기 전에 원래 파일을 name.bak으로 남긴다."""
     PATH.parent.mkdir(parents=True, exist_ok=True)
-    (PATH.parent / name).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    path = PATH.parent / name
+    backup(path)
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
 
 def load():

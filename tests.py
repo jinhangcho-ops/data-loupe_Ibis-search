@@ -2413,16 +2413,16 @@ def main():
     check("설정 저장", (got("/api/settings", theme="dark"), settings.load()), ({"ok": True}, {"theme": "dark"}))
     check("쓸 수 없는 설정 값은 거절", (error("/api/settings", theme="blue")[:11], settings.load()), ("'theme' 설정에", {"theme": "dark"}))
     saved = {"base": "orders", "conditions": ["amount > 100"], "limit": "20"}
-    check("검색 저장", got("/api/searches", name="mine", search=saved), {"searches": {"mine": saved}})
+    check("검색 저장", got("/api/searches", name="mine", search=saved), {"searches": {"mine": saved}, "order": ["mine"]})
     got("/api/searches", name="mine", search={"base": "customers"})
-    check("같은 이름은 덮어씀", c.get("/api/searches").get_json(), {"searches": {"mine": {"base": "customers"}}})
-    check("검색 지우기", got("/api/searches", name="mine", search=None), {"searches": {}})
+    check("같은 이름은 덮어씀", c.get("/api/searches").get_json(), {"searches": {"mine": {"base": "customers"}}, "order": ["mine"]})
+    check("검색 지우기", got("/api/searches", name="mine", search=None), {"searches": {}, "order": []})
     check("빈 이름은 거절", error("/api/searches", name=" ", search=saved), "검색 이름은 1자 이상 50자 이하로 입력하세요.")
     recipe = {"base": "messy", "columns": {"name": {"ops": {"trim": True}}}, "sorts": ["id"]}
     check("구성 목록은 처음에 비어 있음", c.get("/api/recipes").get_json(), {"recipes": {}})
     check("구성 저장(이름 앞뒤 공백은 뗌)", got("/api/recipes", name=" 정리 ", recipe=recipe), {"recipes": {"정리": recipe}})
     check("구성과 검색은 서로 섞이지 않음", (c.get("/api/searches").get_json(), got("/api/searches", name="s", search={"base": "orders"})["searches"], c.get("/api/recipes").get_json()),
-          ({"searches": {}}, {"s": {"base": "orders"}}, {"recipes": {"정리": recipe}}))
+          ({"searches": {}, "order": []}, {"s": {"base": "orders"}}, {"recipes": {"정리": recipe}}))
     check("저장 파일도 따로", sorted(p.name for p in settings.PATH.parent.glob("*.json") if p.name in ("recipes.json", "searches.json")), ["recipes.json", "searches.json"])
     got("/api/recipes", name="정리", recipe={"base": "other"})
     check("같은 이름은 덮어씀", c.get("/api/recipes").get_json(), {"recipes": {"정리": {"base": "other"}}})

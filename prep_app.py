@@ -1,4 +1,6 @@
 """Ibis 전처리 화면의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
+import datetime as dt
+import json
 import re
 
 from flask import jsonify, request
@@ -10,6 +12,7 @@ import result
 import server
 import settings
 import source
+import use_counts
 from server import app, get_con, run, state, to_json
 
 PREVIEW_ROWS = 20
@@ -17,6 +20,8 @@ DEFAULT_SAMPLE = 10_000  # 앞에서부터 미리 볼 행 수의 기본값
 TABLE_NAME = re.compile(r"[A-Za-z0-9_가-힣]+")
 FILE_FORMATS = ["parquet", "csv"]
 server.CONSTANTS["sample"] = DEFAULT_SAMPLE  # 화면(prep.html)의 미리 볼 행 수 기본값
+TABLE_PREPS = "table_preps.json"  # 테이블별로 마지막에 쓴 전처리 {테이블 열쇠: {"config", "saved"}}
+MAX_TABLE_PREPS = 200
 
 
 @app.get("/api/recipes")
@@ -33,6 +38,38 @@ def save_recipe():
 @app.get("/prep")
 def prep_page():
     return server.page("prep.html")
+
+
+def table_key(body):
+    """지금 연결의 테이블을 알아보는 열쇠(비밀번호 없음): 연결(폴더 경로나 주소·아이디), 스키마, 테이블 이름."""
+    if state["opened"] is None:
+        raise ValueError("먼저 연결하세요.")
+    base = body.get("base")
+    if not isinstance(base, str) or not base:
+        raise ValueError("테이블을 고르세요.")
+    return "|".join([use_counts.connection_key(source.recent(state["opened"])), body.get("schema") or "", base])
+
+
+@app.get("/api/prep/table")
+def table_prep():
+    """이 테이블에 마지막으로 쓴 전처리(화면의 입력 상태). 없으면 null. 같은 테이블을 열면 화면이 이것으로 칸을 채운다."""
+    found = settings.read(TABLE_PREPS) or {}
+    saved = found.get(table_key(request.args))
+    return jsonify(config=saved.get("config") if isinstance(saved, dict) else None)
+
+
+@app.post("/api/prep/table")
+def save_table_prep():
+    """[미리보기]·[실행]에 쓴 전처리를 그 테이블의 것으로 저장한다. 테이블은 MAX_TABLE_PREPS개까지(넘으면 오래전에 쓴 것부터 뺀다)."""
+    key, config = table_key(request.json), request.json.get("config")
+    if not isinstance(config, dict) or len(json.dumps(config, ensure_ascii=False)) > settings.MAX_RECIPE_SIZE:
+        raise ValueError("저장할 전처리가 올바르지 않거나 너무 큽니다.")
+    found = {k: v for k, v in (settings.read(TABLE_PREPS) or {}).items() if isinstance(v, dict) and k != key}
+    found[key] = {"config": config, "saved": dt.datetime.now().isoformat(timespec="microseconds")}
+    for old in sorted(found, key=lambda k: str(found[k].get("saved", "")))[:-MAX_TABLE_PREPS]:
+        found.pop(old)
+    settings.write(TABLE_PREPS, found)
+    return jsonify(ok=True)
 
 
 def built(recipe):

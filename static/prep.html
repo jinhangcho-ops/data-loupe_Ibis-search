@@ -454,7 +454,7 @@ function clearScreen() {
 $("schema").addEventListener("change", () => { S.base = ""; resetTable(); });  // common.js가 테이블 목록을 다시 채운다.
 // 테이블을 고른 것과 같게 한다(목록에서 고를 때, ?base=). ①모양(이름·타입)을 바로 보이고 ②통계 ③타입 추천을 차례로 채운다.
 // 모든 단계가 끝나면 status가 ""이고 이 함수의 Promise가 끝난다.
-// config가 있으면(저장한 구성 불러오기) 모양이 온 시점에 선택을 채운다.
+// config가 있으면(저장한 구성 불러오기) 모양이 온 시점에 선택을 채운다. 없으면 이 테이블에 지난번 쓴 전처리(있으면)로 채운다.
 async function openTable(base, config) {
   S.base = base;
   resetTable();
@@ -465,8 +465,11 @@ async function openTable(base, config) {
     if (mine !== token) return;
     prof = { ...p, columns: p.columns.map(c => ({ ...c, suggest: [], patterns: [] })) };
     edits = Object.fromEntries(p.columns.map(c => [c.name, newEdit()]));
-    if (config) restore(config);
+    const remembered = config ? null : await api("/api/prep/table?" + new URLSearchParams({ schema: S.schema, base })).then(d => d.config, () => null);
+    if (mine !== token) return;
+    if (config || remembered) restore(config || remembered);
     showAll();
+    if (remembered && !$("err-prep").textContent) $("ok-run").textContent = "지난번에 이 테이블에 쓴 전처리를 채웠습니다. [미리보기]로 확인하세요.";
   } catch (e) { if (mine === token) fail(e.message); return; }
   await computeStats(mine);
 }
@@ -517,6 +520,8 @@ function restore(c) {
   $("tname").value = d.target.name;
   showTarget();
 }
+// 이 테이블에 쓴 전처리를 기억한다([미리보기]·[실행]이 성공하면). 같은 테이블을 다시 열면 openTable이 이것으로 채운다.
+const rememberTable = () => api("/api/prep/table", { schema: S.schema, base: S.base, config: config() }).catch(() => {});
 let recipes = {};
 function showRecipes(d, name = "") {
   recipes = d.recipes;
@@ -596,6 +601,7 @@ function act(button, fn) {
 $("preview").onclick = () => act($("preview"), async r => {
   preview = await timed("preview", () => api("/api/preview", r));
   shot = snap();
+  rememberTable();
   const now = preview.rows.columns.map((name, k) => ({ name, source: preview.sources[k], type: preview.types[k] })).filter((_, k) => preview.derived[k]);
   deriv = [...now, ...deriv.filter(d => drops.includes(d.name) && !now.some(n => n.name === d.name))];  // 끈 파생 컬럼은 응답에 없어도 목록에 남긴다.
   showAll();
@@ -625,6 +631,7 @@ $("run").onclick = () => {
       const blob = await timed("run", async () => (await send("/api/run", { recipe: r, target: { kind: "file", format } })).blob());
       download(URL.createObjectURL(blob), `${S.base}_prep.${format}`);
     }
+    rememberTable();
   });
 };
 ["click", "input", "change"].forEach(type => document.addEventListener(type, e => { if (e.target !== $("run")) { resetRun(); showCounts(); } }));
