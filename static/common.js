@@ -205,14 +205,24 @@ async function showRecentConnections() {
   $("recent-conn").replaceChildren(new Option("최근 연결 (많이 쓴 순)", ""), ...recentConnections.map((c, i) => new Option(label(c), i)));
   $("recent-conn").classList.toggle("hidden", !recentConnections.length);
 }
-// 두 화면은 따로 열리지만 연결은 서버에 남아 있다. 화면이 열린 뒤 화면 스크립트의 끝에서 부른다.
-// 연결돼 있으면 방금 [연결]에 성공했을 때와 같은 상태로 만든다. 아니면 지난번 연결을 칸에 채워 둔다(연결은 [연결]을 눌러야 한다).
+// 연결 카드(connect.html): 화면 가운데에 띄운다. 연결이 없으면 닫을 수 없다(첫 화면은 고르기를 그만둘 수 있어 닫힌다).
+// forText: 카드 제목 옆의 글(예: "쿼리로 들어갑니다")
+const connClosable = () => !!connected || typeof afterConnect === "function";
+function openConnect(forText = "") {
+  $("conn-for").textContent = forText;
+  $("conn-close").classList.toggle("hidden", !connClosable());
+  $("conn-panel").classList.remove("hidden");
+}
+const closeConnect = () => $("conn-panel").classList.add("hidden");
+// 쿼리·분석 화면은 따로 열리지만 연결은 서버에 남아 있다. 화면이 열린 뒤 화면 스크립트의 끝에서 부른다.
+// 연결돼 있으면 방금 [연결]에 성공했을 때와 같은 상태로 만든다. 아니면 지난번 연결을 칸에 채워 두고, 연결이 필요한 화면이면 연결 카드를 띄운다.
 async function resume() {
   try {
     const state = await api("/api/state");
     if (!state.connected) {
       const { recent } = await api("/api/recent");
       if (recent) fillConnection(recent);
+      if (hasTables) openConnect("먼저 데이터에 연결하세요");
       return;
     }
     const { opened, schemas } = state;
@@ -235,7 +245,7 @@ function checks(box, values) {
   }));
 }
 
-// Parquet·CSV는 여러 개를 골라 연다(파일마다 테이블 하나). 파일 목록에서 이 항목을 고르면 체크 목록이 나온다.
+// 테이블 파일(Parquet·CSV·JSON·Excel)은 여러 개를 골라 연다(파일마다 테이블 하나). 파일 목록에서 이 항목을 고르면 체크 목록이 나온다.
 const FLAT = "*flat";  // 파일 이름에 쓸 수 없는 글자로 시작해 실제 경로와 겹치지 않는다.
 const flatBoxes = () => [...document.querySelectorAll("#flat-list input")];
 function showFlat() {
@@ -244,8 +254,17 @@ function showFlat() {
 }
 // 연결 칸(connect.html)이 있는 화면에서만 연결 칸의 버튼을 단다. 수집 화면처럼 연결 칸이 없는 화면도 common.js를 쓴다.
 const hasConnect = !!$("connect");
+const hasTables = !!$("base");  // 테이블을 고르는 화면(쿼리·분석). 첫 화면은 연결 카드만 있다.
+const KIND_LABELS = { duckdb: "DuckDB", parquet: "Parquet", csv: "CSV", json: "JSON", excel: "Excel" };  // 찾을 파일 종류(서버의 source.KINDS)의 이름
 if (hasConnect) {
 showRecentConnections();
+$("kinds").replaceChildren(...SERVER.file_kinds.map(k => el("label", {}, el("input", { type: "checkbox", value: k, checked: true }), KIND_LABELS[k] ?? k)));
+$("path").onkeydown = e => { if (e.key === "Enter") $("find").click(); };
+$("conn-close").onclick = closeConnect;
+$("conn-panel").onclick = e => { if (e.target === $("conn-panel") && connClosable()) closeConnect(); };
+$("crumb").classList.add("link");
+$("crumb").title = "누르면 연결을 바꿉니다";
+$("crumb").onclick = () => openConnect();
 $("recent-conn").onchange = () => {
   const c = recentConnections[$("recent-conn").value];
   if (c) { fillConnection(c.info); $(c.info.kind === "url" ? "password" : "find").focus(); }
@@ -269,8 +288,8 @@ $("memory-gb").onchange = () => {
 $("flat-list").onchange = showFlat;
 $("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
 }
-let connected = null;  // 지금 연결의 종류: "flat"(Parquet·CSV 파일), "other"(DuckDB 파일·DB 주소), 없으면 null
-// [모두 해제]: 체크를 모두 푼다. Parquet·CSV로 연결돼 있었으면 그 연결을 끊고 화면을 연결 전으로 되돌린다(파일을 다시 골라 새로 연결).
+let connected = null;  // 지금 연결의 종류: "flat"(테이블 파일), "other"(DuckDB 파일·DB 주소), 없으면 null
+// [모두 해제]: 체크를 모두 푼다. 테이블 파일로 연결돼 있었으면 그 연결을 끊고 화면을 연결 전으로 되돌린다(파일을 다시 골라 새로 연결).
 // DuckDB 파일이나 DB 주소로 연결돼 있었으면 연결은 그대로 두고 화면에 올라온 것만 비운다.
 if (hasConnect) $("flat-none").onclick = () => busy($("flat-none"), async () => {
   flatBoxes().forEach(b => b.checked = false);
@@ -280,17 +299,20 @@ if (hasConnect) $("flat-none").onclick = () => busy($("flat-none"), async () => 
     if (connected === "flat") {
       await api("/api/disconnect", {});
       connected = connName = null;
-      $("after-connect").classList.add("hidden");
+      $("after-connect")?.classList.add("hidden");
       connMsg("연결을 해제했습니다. 쓸 파일을 고르고 [연결]을 누르세요.", "hint");
     } else connMsg("연결은 그대로 두고 화면만 비웠습니다. 테이블을 다시 고르세요.", "hint");
-    clearScreen();
+    if (typeof clearScreen === "function") clearScreen();
   } catch (e) { connMsg(e.message); }
 });
+// 경로(폴더나 파일 하나)에서 체크한 종류의 파일을 찾는다. 하위 폴더까지 찾을지는 체크로. 파일이 하나뿐이면 바로 고른 상태로 둔다.
 async function listFiles() {
-  const d = await api("/api/files", { path: $("path").value });
+  const kinds = [...$("kinds").querySelectorAll("input:checked")].map(b => b.value);
+  const d = await api("/api/files", { path: $("path").value.trim(), kinds, deep: $("deep").checked });
   fill($("file"), d.files);
-  if (d.flat.length) $("file").append(new Option(`Parquet·CSV 파일 고르기 (${d.flat.length}개)`, FLAT));
+  if (d.flat.length) $("file").append(new Option(`테이블 파일 고르기: Parquet·CSV·JSON·Excel (${d.flat.length}개)`, FLAT));
   checks($("flat-list"), d.flat);  // 처음에는 아무것도 고르지 않은 상태. 쓸 파일만 체크한다.
+  if (!d.files.length && d.flat.length === 1) { $("file").value = FLAT; flatBoxes()[0].checked = true; }
   $("file").classList.remove("hidden");
   showFlat();
   connMsg("");
@@ -298,12 +320,15 @@ async function listFiles() {
 if (hasConnect) $("find").onclick = () => busy($("find"), async () => {
   try { await listFiles(); } catch (e) { connMsg(e.message); }
 });
-// 연결에 성공한 상태로 만든다([연결]을 누른 뒤와 화면을 새로 연 뒤가 같다). flat: Parquet·CSV 파일 연결인가
+// 연결에 성공한 상태로 만든다([연결]을 누른 뒤와 화면을 새로 연 뒤가 같다). flat: 테이블 파일(Parquet·CSV·JSON·Excel) 연결인가
+// 테이블을 고르는 화면(쿼리·분석)에서만 스키마·테이블 칸을 채운다. 첫 화면은 연결만 하고 afterConnect로 넘어간다.
 async function showConnected(flat, schemas, info) {
   connected = flat ? "flat" : "other";
   connName = connLabel(info);
-  clearScreen();  // 이전 연결에서 고른 테이블과 조건은 새 연결과 맞지 않으므로 비운다.
   connMsg("연결됨", true);
+  closeConnect();
+  if (!hasTables) return showCrumb();
+  clearScreen();  // 이전 연결에서 고른 테이블과 조건은 새 연결과 맞지 않으므로 비운다.
   $("schema").classList.toggle("hidden", !schemas.length);
   fill($("schema"), schemas, "기본 스키마");
   $("after-connect").classList.remove("hidden");
@@ -318,6 +343,7 @@ if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
     const { schemas } = await api("/api/connect", body);
     showRecentConnections();  // 쓴 횟수가 바뀌었다
     await showConnected(!!body.files, schemas, body);
+    if (typeof afterConnect === "function") afterConnect();  // 첫 화면: 고른 화면으로 넘어간다
   } catch (e) { connMsg(e.message); }
 });
 
@@ -328,7 +354,7 @@ async function loadTables() {
   fill($("base"), tables, "기준 테이블 선택");
   showCrumb();
 }
-if (hasConnect) $("schema").onchange = loadTables;
+if (hasTables) $("schema").onchange = loadTables;
 
 // 위쪽 줄의 연결 이름: "파일 / 테이블"(주소면 호스트/DB). 연결이 없으면 "연결 안 됨". 연결 칸이 없는 화면(수집)은 숨긴다.
 let connName = null;
@@ -344,7 +370,7 @@ function showCrumb() {
   $("crumb").classList.toggle("on", !!connName);
   $("crumb-text").innerHTML = connName ? esc(connName) + (S.base ? ` <em>/</em> ${esc(S.base)}` : "") : "연결 안 됨";
 }
-if (hasConnect) $("base").addEventListener("change", () => setTimeout(showCrumb));  // 화면 스크립트가 S.base를 바꾼 뒤에
+if (hasTables) $("base").addEventListener("change", () => setTimeout(showCrumb));  // 화면 스크립트가 S.base를 바꾼 뒤에
 showCrumb();
 
 // 설정(화면 모드, 차트 비율, 그림 저장 모드, 따옴표 해석, 전체 행 수 세기, 조건 입력 방식, 끌어서 조절한 크기, 직전 실행의 행당 시간): 바꾸면 서버가 설정 파일에 저장해 다음 실행 때도 쓴다.

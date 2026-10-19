@@ -81,17 +81,30 @@ def on_worker(f):
     return functools.wraps(f)(lambda *args, **kwargs: within(None, lambda: f(*args, **kwargs), ""))
 
 
-def find_files(folder):
-    """폴더에서 DuckDB 파일과 Parquet·CSV 파일을 찾는다. 확장자는 대소문자를 가리지 않는다.
-    이름이 .으로 시작하는 폴더(.venv, .git 등)는 들어가지 않는다."""
-    files = []
-    for root, dirs, names in os.walk(folder):
-        dirs[:] = [d for d in dirs if not d.startswith(".")]
-        files += [Path(root, name) for name in names]
-    files.sort()
-    duckdb_files = [p for p in files if p.suffix.lower() == ".duckdb"]
-    flat_files = [p for p in files if p.suffix.lower() in (".parquet", ".csv")]
-    return duckdb_files, flat_files
+# 열 수 있는 파일의 확장자 → 종류. duckdb는 파일 하나를 DB로 열고, 나머지는 파일마다 테이블 하나(Polars)로 연다.
+FILE_KINDS = {".duckdb": "duckdb", ".parquet": "parquet", ".csv": "csv", ".json": "json", ".jsonl": "json", ".ndjson": "json", ".xlsx": "excel"}
+KINDS = ("duckdb", "parquet", "csv", "json", "excel")
+
+
+def kind_of(path):
+    return FILE_KINDS.get(Path(path).suffix.lower())
+
+
+def find_files(folder, kinds=KINDS, deep=True):
+    """폴더에서 고른 종류(kinds)의 파일을 찾아 (DuckDB 파일들, 테이블 파일들)로. 확장자는 대소문자를 가리지 않는다.
+    deep이면 하위 폴더까지 찾고, 이름이 .으로 시작하는 폴더(.venv, .git 등)는 들어가지 않는다. folder가 파일이면 그 파일 하나(종류가 맞을 때)."""
+    root = Path(folder)
+    if root.is_file():
+        files = [root]
+    elif deep:
+        files = []
+        for top, dirs, names in os.walk(root):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            files += [Path(top, name) for name in names]
+    else:
+        files = [p for p in root.iterdir() if p.is_file()] if root.is_dir() else []
+    picked = sorted(p for p in files if kind_of(p) in kinds)
+    return [p for p in picked if kind_of(p) == "duckdb"], [p for p in picked if kind_of(p) != "duckdb"]
 
 
 @on_worker
@@ -149,11 +162,24 @@ def table_names(paths):
 
 @on_worker
 def open_flat_files(paths):
-    """Parquet·CSV 파일을 Polars 백엔드(LazyFrame)에 table_names의 이름으로 등록한다."""
+    """Parquet·CSV·JSON·Excel 파일을 Polars 백엔드에 table_names의 이름으로 등록한다.
+    Parquet·CSV·줄마다 객체인 JSON은 필요할 때 읽고(LazyFrame), 배열 JSON과 Excel(첫 시트)은 열 때 읽어 메모리에 둔다."""
+    import polars as pl
     con = ibis.polars.connect()
     for p, name in zip(paths, table_names(paths)):
-        read = con.read_parquet if p.suffix.lower() == ".parquet" else con.read_csv
-        read(p, table_name=name)
+        kind = kind_of(p)
+        if kind == "parquet":
+            con.read_parquet(p, table_name=name)
+        elif kind == "csv":
+            con.read_csv(p, table_name=name)
+        elif kind == "excel":
+            con.create_table(name, pl.read_excel(p))
+        else:
+            try:
+                pl.scan_ndjson(p).head(1).collect()  # 줄마다 객체 하나인 JSON
+                con.read_json(p, table_name=name)
+            except Exception:
+                con.create_table(name, pl.read_json(p))  # [{…}, …] 배열 JSON
     return con
 
 

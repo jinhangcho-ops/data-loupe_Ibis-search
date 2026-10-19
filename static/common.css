@@ -1,10 +1,11 @@
 /* 색: 밝게(기본)·어둡게. --accent-bg는 강조색의 옅은 바탕(고른 단계, 진행 중 작업). --c1~8은 차트 계열 색. */
-:root { --bg:#f6f6f8; --card:#fff; --head:#fff; --line:#e6e6ea; --text:#111114; --muted:#6b6b76; --faint:#9a9aa6; --accent:#5b3df5; --accent-bg:#eeeaff; --accent-line:#d4ccfa;
+:root { --bg:#f6f6f8; --card:#fff; --head:#fff; --line:#e6e6ea; --text:#111114; --muted:#6b6b76; --faint:#9a9aa6; --accent:#5b3df5; --on-accent:#fff; --accent-bg:#eeeaff; --accent-line:#d4ccfa;
         --err:#c0392b; --ok:#1c7448; --dot:#2e9e6f; color-scheme:light;
         --c1:#5b3df5; --c2:#e8590c; --c3:#2b8a3e; --c4:#c2255c; --c5:#1c7ed6; --c6:#0c8599; --c7:#e67700; --c8:#5c7080; }
-:root[data-theme=dark] { --bg:#111116; --card:#18181e; --head:#18181e; --line:#2c2c35; --text:#ededf2; --muted:#a0a0ac; --faint:#74747f; --accent:#8b74ff; --accent-bg:#26214a; --accent-line:#463c86;
-        --err:#ef6b6b; --ok:#5fc48b; --dot:#4cc38a; color-scheme:dark;
-        --c1:#8b74ff; --c2:#ff922b; --c3:#51cf66; --c4:#f06595; --c5:#4dabf7; --c6:#3bc9db; --c7:#fcc419; --c8:#adb5bd; }
+/* 어둡게: 남색 회색 바탕에 청록 강조(선택한 줄은 청록 왼쪽 막대와 옅은 청록 바탕). 강조색 위 글자는 어둡게. */
+:root[data-theme=dark] { --bg:#161b20; --card:#1c2127; --head:#1c2127; --line:#2c333a; --text:#e6eaee; --muted:#8f979f; --faint:#626a72; --accent:#4cc4c8; --on-accent:#0e1d1f; --accent-bg:#17363a; --accent-line:#2a5f63;
+        --err:#f2777a; --ok:#5fc48b; --dot:#4cc4c8; color-scheme:dark;
+        --c1:#4cc4c8; --c2:#ff922b; --c3:#69db7c; --c4:#f783ac; --c5:#74c0fc; --c6:#b197fc; --c7:#ffd43b; --c8:#adb5bd; }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; font-variant-numeric:tabular-nums; }
 h2 { font-size:13px; margin:14px 0 6px; color:var(--muted); }
@@ -14,12 +15,12 @@ input, select, textarea, button { font:inherit; color:inherit; }
 input, select, textarea { padding:6px 10px; border:1px solid var(--line); border-radius:9px; width:100%; background:var(--card); color:var(--text); }
 input:focus, select:focus, textarea:focus { outline:2px solid var(--accent-line); outline-offset:0; border-color:var(--accent); }
 /* 버튼: 기본은 강조색으로 채운 알약. .ghost는 글자만, .btn은 테두리만, .btn.k는 검게 채움. */
-button { background:var(--accent); color:#fff; border:1px solid var(--accent); border-radius:999px; cursor:pointer; width:auto; padding:6px 14px; flex:none; white-space:nowrap; font-weight:600; }
+button { background:var(--accent); color:var(--on-accent); border:1px solid var(--accent); border-radius:999px; cursor:pointer; width:auto; padding:6px 14px; flex:none; white-space:nowrap; font-weight:600; }
 button:disabled { opacity:.5; cursor:default; }
 button.ghost { background:none; border-color:transparent; color:var(--muted); padding:0 6px; font-weight:500; }
 .btn { background:var(--card); color:var(--text); border:1px solid var(--line); height:36px; padding:0 16px; display:inline-flex; align-items:center; gap:8px; }
 .btn.k { background:var(--text); border-color:var(--text); color:var(--card); }
-.btn.p { background:var(--accent); border-color:var(--accent); color:#fff; }
+.btn.p { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
 .ib { width:34px; height:34px; padding:0; border:1px solid var(--line); border-radius:50%; background:var(--card); color:var(--muted); display:inline-grid; place-items:center; }
 .ib.on { color:var(--accent); border-color:var(--accent); }
 .row { display:flex; gap:6px; margin-bottom:6px; }
@@ -114,7 +115,8 @@ button.ghost { background:none; border-color:transparent; color:var(--muted); pa
 .step .sp .c { margin-left:auto; color:var(--muted); flex:none; font-size:13px; }
 .step .edx { display:none; padding:2px 14px 14px; }
 .step.open { border:2px solid var(--accent); background:var(--accent-bg); }
-.step.open .sp i { background:var(--accent); color:#fff; }
+.step.open .sp i { background:var(--accent); color:var(--on-accent); }
+:root[data-theme=dark] .step.open { border-width:1px 1px 1px 3px; }  /* 어둡게: 고른 단계는 청록 왼쪽 막대 */
 .step.open .sp .c { color:var(--accent); font-weight:600; }
 .step.open .edx { display:block; }
 .step.off { opacity:.55; }
@@ -148,6 +150,24 @@ tr.miss { display:none; }
 .chips .hint { margin:0; white-space:nowrap; }
 .chip { flex:none; background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:1px 2px 1px 10px; font-size:12px; white-space:nowrap; }
 .chip.more { padding:2px 10px; color:var(--accent); cursor:pointer; }
+
+/* 연결 카드: 가운데 로그인 창 모양(connect.html) */
+.conn-card { width:min(500px, 94vw); padding:22px 24px; display:flex; flex-direction:column; gap:8px; }
+.conn-card .head { margin-bottom:2px; }
+.conn-card .head h3 { font-size:18px; }
+.conn-go { height:44px; justify-content:center; font-size:15px; margin-top:6px; }
+.seg2 { display:flex; border:1px solid var(--line); border-radius:999px; padding:3px; }
+.seg2 label { flex:1; text-align:center; padding:6px; border-radius:999px; color:var(--muted); cursor:pointer; font-weight:600; }
+.seg2 input { display:none; }
+.seg2 label:has(input:checked) { background:var(--text); color:var(--card); }
+.kinds { display:flex; flex-wrap:wrap; gap:6px; }
+.kinds label { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:999px; padding:3px 12px; font-size:13px; cursor:pointer; color:var(--muted); }
+.kinds label:has(input:checked) { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); font-weight:600; }
+.kinds input { display:none; }
+.check { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); }
+.check input { width:auto; }
+.crumb.link { cursor:pointer; }
+.crumb.link:hover span { text-decoration:underline; }
 
 /* 보낼 곳 패널 등 화면 위에 뜨는 상자. 바깥을 누르면 닫힌다. */
 .modal { position:fixed; inset:0; z-index:200; background:rgb(10 8 30 / .40); display:grid; place-items:center; }

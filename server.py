@@ -26,7 +26,7 @@ KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. 
 ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 목록 예: ("Parquet (*.parquet)",) → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
 QUERY_TIMEOUT = 1800  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
-CONSTANTS = {"sizes": settings.SIZES, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}}
+CONSTANTS = {"sizes": settings.SIZES, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS}
 
 
 def to_json(df):
@@ -160,22 +160,30 @@ def save_settings():
 
 @app.post("/api/files")
 def files():
-    """폴더에서 찾은 파일. files는 DuckDB 파일(하나를 골라 연다), flat은 Parquet·CSV 파일(여러 개를 골라 연다)."""
-    duckdb_files, flat_files = source.find_files(request.json["path"])
+    """폴더(또는 파일 하나)에서 찾은 파일. files는 DuckDB 파일(하나를 골라 연다), flat은 Parquet·CSV·JSON·Excel 파일(여러 개를 골라 연다).
+    kinds(없으면 전부)는 찾을 종류, deep(없으면 true)은 하위 폴더까지 찾을지."""
+    body = request.json
+    kinds = body.get("kinds", list(source.KINDS))
+    if not isinstance(kinds, list) or not kinds or not set(kinds) <= set(source.KINDS):
+        raise ValueError(f"찾을 파일 종류를 하나 이상 고르세요({', '.join(source.KINDS)}).")
+    path = Path(body.get("path") or "")
+    if not path.exists():
+        raise ValueError("그런 폴더나 파일이 없습니다.")
+    duckdb_files, flat_files = source.find_files(path, kinds, body.get("deep", True) is not False)
     if not duckdb_files and not flat_files:
-        raise ValueError("DuckDB·Parquet·CSV 파일이 없습니다.")
+        raise ValueError("고른 종류의 파일이 없습니다." if path.is_dir() else "열 수 있는 파일이 아니거나 고른 종류가 아닙니다.")
     return jsonify(files=[*map(str, duckdb_files)], flat=[*map(str, flat_files)])
 
 
 def open_con(info, read_only=True):
     """연결 요청 값(folder는 path와 file 또는 files, url은 url·user·password)으로 연결을 연다.
-    file은 DuckDB 파일 하나, files는 고른 Parquet·CSV 파일들이다(파일마다 테이블 하나).
+    file은 DuckDB 파일 하나, files는 고른 Parquet·CSV·JSON·Excel 파일들이다(파일마다 테이블 하나).
     DuckDB 파일은 read_only가 False일 때만 쓰기로 연다."""
     if info["kind"] == "folder":
-        if "files" in info:  # 그 폴더에서 찾은 파일 중 고른 것만 연다.
-            chosen = [p for p in source.find_files(info["path"])[1] if str(p) in info["files"]]
+        if "files" in info:  # 고른 테이블 파일들(다시 찾지 않는다. 있는지와 종류만 본다)
+            chosen = sorted(Path(f) for f in info["files"] if Path(f).is_file() and source.kind_of(f) not in (None, "duckdb"))
             if not chosen:
-                raise ValueError("Parquet·CSV 파일을 하나 이상 고르세요.")
+                raise ValueError("Parquet·CSV·JSON·Excel 파일을 하나 이상 고르세요.")
             return source.open_flat_files(chosen)
         if not info.get("file"):
             raise ValueError("파일을 고르세요.")

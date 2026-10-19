@@ -3,12 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ibis 검색</title>
+<title>Ibis 쿼리</title>
 <script src="/static/chart.umd.min.js"></script>
 <!--include head.html-->
 <style>
-  /* 검색 조건 패널 안의 연결 칸: 단계 제목이 대신하므로 연결 칸의 제목은 숨긴다. */
-  #step-data .edx > h2:first-child { display:none; }
   .edx .row { margin-bottom:6px; }
   ul.items { list-style:none; margin:0 0 4px; padding:0; }
   ul.items li { display:flex; justify-content:space-between; gap:6px; background:var(--card); border:1px solid var(--accent-line); border-radius:9px; padding:4px 8px; margin-bottom:4px; }
@@ -122,7 +120,7 @@
     <div class="sc"><div class="flow" id="flow">
       <div class="step open" id="step-data" data-step="data"><div class="sp"><i>1</i><span class="t">데이터</span><b id="sum-data"></b><span class="c"></span></div>
         <div class="edx">
-          <!--include connect.html-->
+          <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></span><button id="conn-open" class="btn">연결 바꾸기</button></div>
           <div id="table-box" class="hidden">
             <div class="hint" style="margin-top:8px">기준 테이블</div>
             <select id="schema" class="hidden" style="margin-bottom:6px"></select>
@@ -190,6 +188,7 @@
   </aside>
 </div>
 
+<!--include connect.html-->
 <!--include notify.html-->
 <script src="/static/common.js"></script>
 <script>
@@ -237,7 +236,9 @@ function showSummaries() {
   put("sum-columns", S.columns.length ? `${columnCount()}개` : "전체");
   document.querySelectorAll(".step").forEach(s => s.querySelector(".c").textContent = s.classList.contains("open") ? "편집 중" : "⌄");
   $("table-box").classList.toggle("hidden", !connected);
+  $("conn-now").textContent = connected ? `연결: ${connName}` : "연결 안 됨";
 }
+$("conn-open").onclick = () => openConnect();
 
 // 집계할 컬럼: 고르지 않으면 전체(표시 컬럼을 정했으면 그 컬럼들), 고르면 그 컬럼만 집계한다. 컬럼 목록이 바뀌어도 고른 것은 남긴다.
 // 제목 옆 칸에서 고르면 그 오른쪽에 ×가 달린 칩으로 놓인다. 한 줄에 다 안 들어가면 들어가는 만큼만 보이고 나머지는 "… 외 N개"로 줄인다(누르면 펼침).

@@ -216,7 +216,7 @@ def make_table(recipe, name):
     폴더의 DuckDB 파일 연결은 읽기 전용이라 만드는 동안만 쓰기로 다시 열고, 끝나면 읽기 전용으로 되돌린다."""
     con, opened, schema = get_con(), state["opened"], recipe.get("schema") or None
     if "files" in opened:
-        raise ValueError("Parquet·CSV 파일 연결에는 테이블을 만들 DB가 없습니다. 파일로 저장하세요.")
+        raise ValueError("Parquet·CSV·JSON·Excel 파일 연결에는 테이블을 만들 DB가 없습니다. 파일로 저장하세요.")
     check_table_name(name)
     if name.lower() in [t.lower() for t in source.list_tables(con, schema)]:
         raise ValueError(f"'{name}'은 이미 있는 테이블입니다.")

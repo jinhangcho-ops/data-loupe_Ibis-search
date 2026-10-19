@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ibis 전처리</title>
+<title>Ibis 분석</title>
 <!--include head.html-->
 <style>
   .pcol { display:flex; gap:6px; align-items:center; white-space:nowrap; }
@@ -38,7 +38,8 @@
 <!--include status.html-->
 <div class="layout">
   <aside class="panel">
-    <!--include connect.html-->
+    <h2>1. 연결</h2>
+    <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1">연결 안 됨</span><button id="conn-open" class="btn">연결 바꾸기</button></div>
 
     <div id="after-connect" class="hidden">
       <h2>2. 테이블</h2>
@@ -91,6 +92,7 @@
 </div>
 
 
+<!--include connect.html-->
 <!--include notify.html-->
 <script src="/static/common.js"></script>
 <script>
@@ -422,7 +424,7 @@ const addFilter = () => {
 $("f-add").onclick = addFilter;
 $("f-in").onkeydown = e => { if (e.key === "Enter") addFilter(); };
 
-// 저장 대상: Parquet·CSV 파일에 연결했으면 새 테이블은 고를 수 없다.
+// 저장 대상: 테이블 파일(Parquet·CSV·JSON·Excel)에 연결했으면 새 테이블은 고를 수 없다.
 function showTarget() {
   $("t-table").disabled = connected === "flat";
   if ($("t-table").disabled) $("t-file").checked = true;
@@ -518,6 +520,8 @@ async function computeStats(mine, fresh = false) {
   }
 }
 $("base").onchange = () => openTable($("base").value);
+$("conn-open").onclick = () => openConnect();
+new MutationObserver(() => $("conn-now").textContent = connected ? `연결: ${connName}` : "연결 안 됨").observe($("crumb-text"), { childList: true });  // 연결 이름이 바뀌면 따라 바꾼다
 
 // 데이터 명세서: 테이블·컬럼 설명과 파티션 키(표본을 최신 파티션에서 읽을 때). 경로만 저장한다.
 const showSpec = d => {

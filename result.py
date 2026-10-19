@@ -38,7 +38,7 @@ def get_rows(expr, limit, offset=0):
 
 
 def get_sql(expr, limit, offset=0):
-    """get_rows가 실행할 조회를 SQL 글로. 실행하지는 않는다. SQL을 쓰지 않는 연결(Parquet·CSV 파일)은 보여 줄 수 없다."""
+    """get_rows가 실행할 조회를 SQL 글로. 실행하지는 않는다. SQL을 쓰지 않는 연결(Parquet·CSV·JSON·Excel 파일)은 보여 줄 수 없다."""
     try:
         return str(ibis.to_sql(expr.limit(limit, offset=offset)))
     except NotImplementedError:

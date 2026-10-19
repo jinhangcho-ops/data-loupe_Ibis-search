@@ -695,7 +695,7 @@ def prep_section():
     print("== 전처리: 새 테이블 만들기")
     got("/api/connect", **connections[1][1])
     check("Parquet 연결에서 table은 거부", error("/api/run", recipe={"base": "messy"}, target={"kind": "table", "name": "out"}),
-          "Parquet·CSV 파일 연결에는 테이블을 만들 DB가 없습니다. 파일로 저장하세요.")
+          "Parquet·CSV·JSON·Excel 파일 연결에는 테이블을 만들 DB가 없습니다. 파일로 저장하세요.")
     got("/api/connect", **connections[0][1])
     make = lambda name, cols=run_columns, **recipe: got("/api/run", recipe={"base": "messy", "columns": cols, **recipe}, target={"kind": "table", "name": name})
     check("DuckDB 파일에 새 테이블", make("clean_out", sorts=["id"]), {"ok": True, "rows": 20})
