@@ -4,12 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ibis 분석</title>
+<script src="/static/chart.umd.min.js"></script>
 <!--include head.html-->
 <style>
   .pcol { display:flex; gap:6px; align-items:center; white-space:nowrap; }
   .pcol input { width:auto; }
   .pcol .name { color:var(--text); cursor:pointer; }
-  #grid { max-height:75vh; }
+  #grid { max-height:calc(100vh - 230px); overflow:auto; }
+  #prep-view .pane > .head { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  #prep-view .pane > .head h3 { margin:0; }
   /* 컬럼마다 한 열(220px). 머리글 세 줄은 한 덩어리(thead)로 위에 붙는다. */
   #grid th, #grid td { width:220px; min-width:220px; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
   #grid th { position:static; vertical-align:top; }
@@ -32,56 +35,25 @@
   .sug .why { color:var(--muted); }
   .sug.done { opacity:.45; }
   .pcol.sub { margin-left:18px; }
+  /* 분석: 오른쪽 패널에서 고르고 가운데에 그래프와 표. 그래프는 높이 440px 기준으로 비율(--ratio)만큼 넓어진다. */
+  .seg2.seg4 label { padding:6px 2px; font-size:13px; }
+  .a-form { margin-top:12px; }
+  .a-form .hint { margin:8px 0 4px; }
+  #a-pane .chart-box { width:min(100%, calc(440px * var(--ratio, 16 / 9))); aspect-ratio:var(--ratio, 16 / 9); margin:0 auto; position:relative; }
+  #a-pane .table-wrap { margin-top:16px; }
+  #a-corr-cols { max-height:260px; overflow:auto; display:flex; flex-direction:column; gap:4px; }
+  #a-corr-cols label { display:flex; align-items:center; gap:8px; }
+  #a-corr-cols input { width:auto; margin:0; }
+  #err-ana { padding:0 28px; }
+  #err-ana:empty { display:none; }
 </style>
 </head>
-<body>
+<body class="app">
 <!--include status.html-->
-<div class="layout">
-  <aside class="panel">
-    <h2>1. 연결</h2>
-    <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1">연결 안 됨</span><button id="conn-open" class="btn">연결 바꾸기</button></div>
-
-    <div id="after-connect" class="hidden">
-      <h2>2. 테이블</h2>
-      <select id="schema" class="hidden" style="margin-bottom:6px"></select>
-      <select id="base"></select>
-      <div class="row" style="margin-top:6px"><input id="sample" type="number" style="width:120px; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
-      <div class="hint">통계를 낼 표본 행 수. 테이블 전체가 아니라 이만큼만(싼 방법부터) 읽어 통계·추천을 구하고, 테이블별로 저장해 둡니다.</div>
-      <div class="row" style="margin-top:6px"><input id="spec-path" class="code" placeholder="데이터 명세서 (JSON·YAML, 선택)" title="테이블·컬럼 설명과 파티션 키를 적은 파일. 비우고 [읽기]를 누르면 쓰지 않습니다"><button id="spec-read">읽기</button></div>
-      <div class="hint" id="spec-info"></div>
-      <div class="cols" id="pcols"></div>
-
-      <h2>3. 행 거르기</h2>
-      <div class="hint">price &gt;= 100 / city = 서울 / name like 김% / 컬럼 in 값1, 값2 / 컬럼 is null</div>
-      <div class="row"><input id="f-in" placeholder="조건 입력 후 Enter"><button id="f-add">추가</button></div>
-      <div id="filters"></div>
-
-      <h2>4. 중복 기준</h2>
-      <div class="hint">고른 컬럼의 값이 모두 같은 행은 하나만 남깁니다. 고르지 않은 컬럼은 어느 행의 값이 남을지 정해지지 않습니다.</div>
-      <div class="row"><select id="dd-col" style="flex:1; min-width:0"></select><button id="dd-all">전체 컬럼</button></div>
-      <div class="chips open" id="dd-chips"></div>
-      <div class="row"><button id="dupes" disabled>중복 세기</button><span class="hint" id="dd-result" style="align-self:center"></span></div>
-
-      <h2>5. 정렬</h2>
-      <div class="row"><select id="sort-col" style="flex:1; min-width:0" title="결과의 컬럼 이름"></select><select id="sort-dir" style="width:auto"><option value="asc">오름차순</option><option value="desc">내림차순</option></select><button id="sort-add">추가</button></div>
-      <div class="chips open" id="sorts"></div>
-
-      <h2>6. 저장</h2>
-      <label><input type="radio" name="target" id="t-file" checked style="width:auto"> 파일</label>
-      <select id="fmt" style="margin-bottom:6px"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
-      <label><input type="radio" name="target" id="t-table" style="width:auto"> 같은 DB의 새 테이블</label>
-      <input id="tname" placeholder="새 테이블 이름">
-      <label style="display:block; margin-top:8px"><input type="checkbox" id="downcast" checked style="width:auto"> 수 컬럼을 가장 작은 타입으로 (downcast)</label>
-      <div class="hint">값이 바뀌지 않는 경우에만 줄입니다(예: int64 → int16)</div>
-
-      <div class="row" style="margin-top:14px"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 구성을 불러옵니다 (미리보기·실행은 하지 않습니다)"></select><input id="rname" placeholder="이름"><button id="rsave">저장</button><button id="rdel" class="ghost">삭제</button></div>
-      <div class="row"><button id="preview">미리보기</button><button id="run">실행</button></div>
-    </div>
-  </aside>
-  <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
-
-  <main class="main">
-    <section class="card">
+<nav class="subnav" id="views"><button data-view="prep" class="on">전처리</button><button data-view="ana">분석</button><button data-view="graphs">그래프<em id="graph-count"></em></button></nav>
+<div class="work" id="prep-view">
+  <main class="results">
+    <section class="pane">
       <div class="head"><h3>컬럼</h3><span class="hint" id="shape"></span><span class="hint" id="sampled"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계·추천을 다시 구합니다">다시 구하기</button><button id="sug-all" class="hidden" title="추천을 모두 선택에 넣습니다">추천 모두 적용</button></div>
       <div class="table-wrap" id="grid"></div>
       <div class="hint"><span id="counts"></span> <span id="stale" class="warn"></span></div>
@@ -89,12 +61,135 @@
       <div class="err" id="err-prep"></div>
     </section>
   </main>
+  <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
+  <aside class="side">
+    <header><h3>전처리 조건</h3></header>
+    <div class="sc"><div class="flow">
+      <div class="step open" data-step="data"><div class="sp"><i>1</i><span class="t">데이터</span><b id="sum-p-data"></b><span class="c"></span></div>
+        <div class="edx">
+          <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">연결 안 됨</span><button id="conn-open" class="btn">연결 바꾸기</button></div>
+          <div id="table-box">
+            <div class="hint" style="margin-top:8px">테이블</div>
+            <select id="schema" class="hidden" style="margin-bottom:6px"></select>
+            <select id="base"></select>
+            <div class="row" style="margin-top:6px; align-items:center"><span class="hint" style="margin:0; flex:none">표본 행 수</span><input id="sample" type="number" style="width:120px; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
+            <div class="hint">테이블 전체가 아니라 이만큼만(싼 방법부터) 읽어 통계·추천·분석을 구하고, 테이블별로 저장해 둡니다.</div>
+            <div class="row" style="margin-top:6px"><input id="spec-path" class="code" placeholder="데이터 명세서 (JSON·YAML, 선택)" title="테이블·컬럼 설명과 파티션 키를 적은 파일. 비우고 [읽기]를 누르면 쓰지 않습니다"><button id="spec-read">읽기</button></div>
+            <div class="hint" id="spec-info"></div>
+            <div class="cols" id="pcols"></div>
+          </div>
+        </div></div>
+      <div id="after-connect" class="hidden">
+        <div class="cn">↓</div>
+        <div class="step" data-step="filters"><div class="sp"><i>2</i><span class="t">행 거르기</span><b id="sum-p-filters"></b><span class="c"></span></div>
+          <div class="edx">
+            <div class="hint">price &gt;= 100 / city = 서울 / name like 김% / 컬럼 in 값1, 값2 / 컬럼 is null</div>
+            <div class="row"><input id="f-in" placeholder="조건 입력 후 Enter"><button id="f-add">추가</button></div>
+            <div id="filters"></div>
+          </div></div>
+        <div class="cn">↓</div>
+        <div class="step" data-step="dedupe"><div class="sp"><i>3</i><span class="t">중복 기준</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
+          <div class="edx">
+            <div class="hint">고른 컬럼의 값이 모두 같은 행은 하나만 남깁니다. 고르지 않은 컬럼은 어느 행의 값이 남을지 정해지지 않습니다.</div>
+            <div class="row"><select id="dd-col" style="flex:1; min-width:0"></select><button id="dd-all">전체 컬럼</button></div>
+            <div class="chips open" id="dd-chips"></div>
+            <div class="row"><button id="dupes" disabled>중복 세기</button><span class="hint" id="dd-result" style="align-self:center"></span></div>
+          </div></div>
+        <div class="cn">↓</div>
+        <div class="step" data-step="sorts"><div class="sp"><i>4</i><span class="t">정렬</span><b id="sum-p-sorts"></b><span class="c"></span></div>
+          <div class="edx">
+            <div class="row"><select id="sort-col" style="flex:1; min-width:0" title="결과의 컬럼 이름"></select><select id="sort-dir" style="width:auto"><option value="asc">오름차순</option><option value="desc">내림차순</option></select><button id="sort-add">추가</button></div>
+            <div class="chips open" id="sorts"></div>
+          </div></div>
+        <div class="cn">↓</div>
+        <div class="step" data-step="save"><div class="sp"><i>5</i><span class="t">저장</span><b id="sum-p-save"></b><span class="c"></span></div>
+          <div class="edx">
+            <label><input type="radio" name="target" id="t-file" checked style="width:auto"> 파일</label>
+            <select id="fmt" style="margin-bottom:6px"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
+            <label><input type="radio" name="target" id="t-table" style="width:auto"> 같은 DB의 새 테이블</label>
+            <input id="tname" placeholder="새 테이블 이름">
+            <label style="display:block; margin-top:8px"><input type="checkbox" id="downcast" checked style="width:auto"> 수 컬럼을 가장 작은 타입으로 (downcast)</label>
+            <div class="hint">값이 바뀌지 않는 경우에만 줄입니다(예: int64 → int16)</div>
+            <div class="hint" style="margin-top:12px">구성 저장·불러오기</div>
+            <div class="row"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 구성을 불러옵니다 (미리보기·실행은 하지 않습니다)"></select></div>
+            <div class="row"><input id="rname" placeholder="이름"><button id="rsave">저장</button><button id="rdel" class="ghost">삭제</button></div>
+          </div></div>
+      </div>
+    </div></div>
+    <footer><button id="preview" class="btn">미리보기</button><button id="run" class="btn p">실행</button></footer>
+  </aside>
+</div>
+<!-- 분석: 전처리 탭에서 고른 테이블(체크하면 지금 전처리를 적용한 결과)을 표본으로 분석한다. [전체로 다시 구하기]는 테이블 전체로. -->
+<div class="work hidden" id="ana">
+  <main class="results">
+    <div class="tool"><span class="hint" id="a-data" style="margin:0; flex:1"></span>
+      <button id="a-full" class="btn" title="표본이 아니라 테이블 전체로 다시 구합니다. 큰 테이블에서는 오래 걸리고, 과금되는 DB에서는 비용이 듭니다">전체로 다시 구하기</button>
+      <button id="a-add" class="btn p" title="지금 보이는 그래프를 그래프 탭에 넣습니다">그래프에 추가</button></div>
+    <div class="big"><b id="a-title">분석</b><span id="a-sub">오른쪽에서 분석을 고르고 [구하기]를 누르세요.</span></div>
+    <div class="err" id="err-ana"></div>
+    <div class="tabs2 hidden" id="a-tabs"></div>
+    <section class="pane" id="a-pane">
+      <div class="chart-box hidden" id="a-box"><canvas id="a-chart"></canvas></div>
+      <div class="table-wrap" id="a-table"></div>
+    </section>
+  </main>
+  <div></div>
+  <aside class="side">
+    <header><h3>분석</h3></header>
+    <div class="sc">
+      <label class="check" title="끄면 전처리 없이 원래 테이블을 분석합니다"><input type="checkbox" id="a-prep" checked> 지금 전처리를 적용한 결과로</label>
+      <div class="seg2 seg4" style="margin-top:10px">
+        <label><input type="radio" name="akind" value="distribution" checked> 분포</label>
+        <label><input type="radio" name="akind" value="correlation"> 상관관계</label>
+        <label><input type="radio" name="akind" value="groups"> 그룹 비교</label>
+        <label><input type="radio" name="akind" value="trend"> 시계열 추이</label>
+      </div>
+      <div class="a-form" data-kind="distribution">
+        <div class="hint">컬럼</div><select id="a-col"></select>
+        <div class="hint">숫자 컬럼은 히스토그램·상자 그림·값 빈도를, 그 밖의 컬럼은 값 빈도를 봅니다.</div>
+      </div>
+      <div class="a-form hidden" data-kind="correlation">
+        <select id="a-cmode"><option value="heatmap">히트맵 (여러 숫자 컬럼)</option><option value="scatter">산점도 (두 숫자 컬럼)</option></select>
+        <div id="a-heat"><div class="hint">숫자 컬럼 (2~<span id="a-max-corr"></span>개)</div><div class="cols" id="a-corr-cols"></div>
+          <div class="hint">고른 컬럼이 모두 비어 있지 않은 행으로 피어슨 상관계수를 구합니다.</div></div>
+        <div id="a-scat" class="hidden"><div class="hint">X</div><select id="a-sx"></select><div class="hint">Y</div><select id="a-sy"></select>
+          <div class="hint">점은 앞에서 <span id="a-max-points"></span>개까지 그립니다.</div></div>
+      </div>
+      <div class="a-form hidden" data-kind="groups">
+        <div class="hint">그룹 컬럼</div><select id="a-gby"></select>
+        <div class="hint">집계</div><select id="a-gagg"><option value="mean">평균</option><option value="sum">합계</option><option value="count">개수</option></select>
+        <div class="hint">값 컬럼</div><select id="a-gval"></select>
+      </div>
+      <div class="a-form hidden" data-kind="trend">
+        <div class="hint">날짜 컬럼</div><select id="a-tcol"></select>
+        <div class="hint">묶음 단위</div><select id="a-tunit"><option value="day">일</option><option value="week">주 (월요일 시작)</option><option value="month">월</option></select>
+        <div class="hint">집계</div><select id="a-tagg"><option value="count">개수</option><option value="sum">합계</option><option value="mean">평균</option></select>
+        <div class="hint">값 컬럼</div><select id="a-tval"></select>
+      </div>
+    </div>
+    <footer><button id="a-run" class="btn p" title="표본으로 구합니다(전처리 탭의 표본 행 수)">구하기</button></footer>
+  </aside>
+</div>
+<!-- 그래프: 분석에서 [그래프에 추가]한 그래프 카드. 카드를 누르면 고르고, [다운로드]는 고른 그래프를 각각 그림으로 저장한다. -->
+<div class="board-view hidden" id="graphs">
+  <div class="tool"><span style="margin-left:auto"></span><button id="g-all" class="btn">모두 선택</button><button id="g-none" class="btn">선택 해제</button></div>
+  <div class="big"><b>그래프</b><span id="g-sub"></span></div>
+  <div class="ctl board-ctl">
+    <span class="hint grow" id="g-picked"></span>
+    <select id="g-ratio" title="그림 비율"><option value="screen">화면대로</option><option value="square">1:1</option><option value="4:3">4:3</option><option value="wide">16:9</option></select>
+    <select id="g-mode" title="그림의 모드"><option value="light">라이트</option><option value="dark">다크</option></select>
+    <select id="g-format" title="그림 형식"><option value="png">PNG</option><option value="jpeg">JPG</option></select>
+    <button id="g-down" class="btn p" title="고른 그래프를 각각 그림 파일로 저장합니다. 프로그램 창에서는 저장할 폴더를 한 번 묻습니다">다운로드</button>
+  </div>
+  <div class="err" id="err-graphs"></div>
+  <div class="board" id="g-grid"></div>
 </div>
 
 
 <!--include connect.html-->
 <!--include notify.html-->
 <script src="/static/common.js"></script>
+<script src="/static/board.js"></script>
 <script>
 let prof = null;  // /api/profile의 응답. 테이블을 고르기 전에는 null
 let edits = {};  // 컬럼(복사 포함) 이름 → { keep, rename, ops: { op 이름: 입력 상태 } }
@@ -670,12 +765,268 @@ $("run").onclick = () => {
     rememberTable();
   });
 };
-["click", "input", "change"].forEach(type => document.addEventListener(type, e => { if (e.target !== $("run")) { resetRun(); showCounts(); } }));
+["click", "input", "change"].forEach(type => document.addEventListener(type, e => { if (e.target !== $("run")) { resetRun(); showCounts(); } showPrepSummaries(); }));
+
+// 전처리 조건 패널: 단계 카드를 누르면 그 단계만 펼친다(탐색과 같다). 접힌 단계는 한 줄 요약을 보인다.
+document.querySelectorAll("#prep-view .step .sp").forEach(sp => sp.onclick = () => {
+  const step = sp.parentElement, open = !step.classList.contains("open");
+  document.querySelectorAll("#prep-view .step").forEach(s => s.classList.toggle("open", s === step && open));
+  showPrepSummaries();
+});
+function showPrepSummaries() {
+  const put = (id, value) => $(id).textContent = value;
+  put("sum-p-data", S.base || (connected ? "테이블을 고르세요" : "연결하세요"));
+  put("sum-p-filters", filters.length ? `${filters.length}개` : "없음");
+  put("sum-p-dedupe", dedupe.length ? dedupe.join(", ") : "없음");
+  put("sum-p-sorts", sorts.length ? sorts.join(", ") : "없음");
+  put("sum-p-save", $("t-table").checked ? `새 테이블 ${$("tname").value.trim()}` : $("fmt").value === "csv" ? "CSV 파일" : "Parquet 파일");
+  document.querySelectorAll("#prep-view .step").forEach(s => s.querySelector(".c").textContent = s.classList.contains("open") ? "편집 중" : "⌄");
+}
+
+// ---------- 화면 안의 탭: 전처리 · 분석 · 그래프 (주소의 #analysis, #graphs로 남긴다) ----------
+const VIEWS = { prep: "prep-view", ana: "ana", graphs: "graphs" }, HASHES = { ana: "#analysis", graphs: "#graphs" };
+function showView(name) {
+  document.querySelectorAll("#views button").forEach(b => b.classList.toggle("on", b.dataset.view === name));
+  Object.entries(VIEWS).forEach(([v, id]) => $(id).classList.toggle("hidden", v !== name));
+  history.replaceState(null, "", HASHES[name] ?? location.pathname + location.search);
+  if (name === "ana") { loadAnaColumns(); drawAna(); }
+  if (name === "graphs") graphs.draw();  // 감춰져 있는 동안은 크기를 몰라 그리지 않았다.
+}
+document.querySelectorAll("#views button").forEach(b => b.onclick = () => showView(b.dataset.view));
+
+// ---------- 분석 ----------
+// A.cols: 분석할 표의 [컬럼, 종류(num·date·text)]. A.result: 마지막 /api/analyze 결과(how·조건 글 포함). A.view: 보고 있는 그래프.
+const A = { cols: [], result: null, view: null, chart: null };
+const AGG_NAMES = { count: "개수", sum: "합계", mean: "평균" };
+const UNIT_NAMES = { day: "일", week: "주", month: "월" };
+const VIEW_NAMES = { hist: "히스토그램", box: "상자 그림", values: "값 빈도", heat: "히트맵", scatter: "산점도", groups: "그룹 비교", trend: "추이" };
+const VIEW_RATIOS = { box: 2.4, heat: 1, scatter: 4 / 3 };  // 나머지는 16:9
+$("a-max-corr").textContent = SERVER.analysis.max_corr;
+$("a-max-points").textContent = SERVER.analysis.max_points.toLocaleString();
+// 숫자는 자릿수 쉼표와 소수 넷째 자리까지
+const shownum = v => v == null ? "" : typeof v === "number" ? v.toLocaleString(undefined, { maximumFractionDigits: 4 }) : String(v);
+const akind = () => document.querySelector("input[name=akind]:checked").value;
+// 분석할 표: 체크하면 지금 전처리(recipe), 아니면 원래 테이블
+const anaRecipe = () => $("a-prep").checked ? recipe() : { schema: S.schema, base: S.base };
+function showAnaForm() {
+  document.querySelectorAll(".a-form").forEach(f => f.classList.toggle("hidden", f.dataset.kind !== akind()));
+  $("a-heat").classList.toggle("hidden", $("a-cmode").value !== "heatmap");
+  $("a-scat").classList.toggle("hidden", $("a-cmode").value === "heatmap");
+}
+document.querySelectorAll("input[name=akind]").forEach(b => b.onchange = showAnaForm);
+$("a-cmode").onchange = showAnaForm;
+$("a-prep").onchange = loadAnaColumns;
+// 분석할 표의 컬럼(전처리 결과의 이름·타입)을 표본으로 받아 고르는 칸들을 채운다.
+async function loadAnaColumns() {
+  A.cols = [];
+  if (!prof) say("err-ana", "전처리 탭에서 테이블을 고르세요.");
+  else {
+    try { A.cols = (await api("/api/analyze", { recipe: anaRecipe(), how: { kind: "columns" }, sample })).columns; say("err-ana", ""); }
+    catch (e) { say("err-ana", e.message); }
+  }
+  const names = k => A.cols.filter(c => !k || c[1] === k).map(c => c[0]), nums = names("num");
+  const keep = (id, list, blank) => { const now = $(id).value; fill($(id), list, blank); if (list.includes(now)) $(id).value = now; };
+  keep("a-col", names());
+  keep("a-sx", nums);
+  keep("a-sy", nums);
+  if ($("a-sy").value === $("a-sx").value && nums[1]) $("a-sy").value = nums[1];
+  keep("a-gby", names());
+  keep("a-gval", nums, "값 없음 (개수)");
+  keep("a-tcol", names("date"));
+  keep("a-tval", nums, "값 없음 (개수)");
+  const picked = new Set([...$("a-corr-cols").querySelectorAll("input:checked")].map(b => b.value));
+  $("a-corr-cols").replaceChildren(...nums.map((n, i) => el("label", {}, el("input", { type: "checkbox", value: n, checked: picked.size ? picked.has(n) : i < 8 }), " " + n)));
+  $("a-tcol").title = names("date").length ? "" : "날짜 컬럼이 없습니다. 전처리에서 타입을 날짜로 바꾸면 고를 수 있습니다";
+}
+// 오른쪽 패널에서 고른 분석(서버의 how)
+function anaHow() {
+  const k = akind();
+  if (k === "distribution") return { kind: k, column: $("a-col").value };
+  if (k === "correlation") return $("a-cmode").value === "heatmap"
+    ? { kind: "correlation", columns: [...$("a-corr-cols").querySelectorAll("input:checked")].map(b => b.value) }
+    : { kind: "scatter", x: $("a-sx").value, y: $("a-sy").value };
+  if (k === "groups") return { kind: k, by: $("a-gby").value, agg: $("a-gagg").value, value: $("a-gval").value };
+  return { kind: k, column: $("a-tcol").value, unit: $("a-tunit").value, agg: $("a-tagg").value, value: $("a-tval").value };
+}
+// 구하기(표본) 또는 전체로 다시 구하기(마지막 분석을 테이블 전체로)
+async function runAna(full) {
+  if (!prof) return say("err-ana", "전처리 탭에서 테이블을 고르세요.");
+  if (full && !A.result) return say("err-ana", "먼저 [구하기]로 표본에서 분석하세요.");
+  try {
+    const how = full ? A.result.how : anaHow(), prepped = full ? A.result.prepped : $("a-prep").checked;
+    const r = prepped ? recipe() : { schema: S.schema, base: S.base };
+    const d = await timed("analyze", () => api("/api/analyze", { recipe: r, how, sample, full }));
+    const views = d.kind === "distribution" ? (d.histogram ? ["hist", "box", "values"] : ["values"])
+      : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"] }[d.kind];
+    A.result = { ...d, how, prepped, base: S.base, views };
+    A.view = views.includes(A.view) ? A.view : views[0];
+    say("err-ana", "");
+    drawAna();
+  } catch (e) { say("err-ana", e.message); }
+}
+$("a-run").onclick = () => busy($("a-run"), () => runAna(false));
+$("a-full").onclick = () => busy($("a-full"), () => runAna(true));
+// 분석 결과의 제목과 아래 줄(어느 데이터로 구했는지, 줄인 것)
+function anaTitle(d, view) {
+  const value = x => x.agg === "count" ? "개수" : `${x.value} ${AGG_NAMES[x.agg]}`;
+  return { hist: `${d.column} 분포`, box: `${d.column} 상자 그림`, values: `${d.column} 값 빈도`, heat: "상관관계",
+           scatter: `${d.x} × ${d.y}`, groups: `${d.by}별 ${value(d)}`, trend: `${d.column} ${UNIT_NAMES[d.unit]}별 ${value(d)}` }[view];
+}
+function anaNote(d) {
+  const data = d.data.full ? "테이블 전체" : `표본 ${d.data.rows.toLocaleString()}행 · 읽은 방법: ${SERVER.sample_methods[d.data.method] ?? d.data.method}`;
+  const lim = SERVER.analysis, more = [
+    d.kind === "groups" && d.more ? `행이 많은 ${lim.max_groups}개 그룹만` : "",
+    d.kind === "trend" && d.more ? `앞 ${lim.max_periods}개 기간만` : "",
+    d.kind === "scatter" ? `점 ${d.points.length.toLocaleString()}개 · 상관계수 ${d.r == null ? "-" : d.r.toFixed(3)} (${d.n.toLocaleString()}행)` : "",
+    d.kind === "correlation" ? `${d.n.toLocaleString()}행으로 구함` : ""];
+  return [`${d.base} · ${d.prepped ? "전처리 적용" : "원래 테이블"} · ${data}`, ...more].filter(Boolean).join(" · ");
+}
+// 색 글자(#rrggbb 또는 rgb)에 투명도를 준다(히트맵 칸).
+function alpha(color, a) {
+  const hex = color.match(/^#([0-9a-f]{6})$/i);
+  const [r, g, b] = hex ? [0, 2, 4].map(i => parseInt(hex[1].slice(i, i + 2), 16)) : (color.match(/\d+/g) || [0, 0, 0]).map(Number);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+// 분석 결과 하나를 그 색으로 그릴 Chart.js 설정. 그래프 탭 카드도 쓴다.
+function anaConfig(d, view, colors, options = {}) {
+  const axis = { ticks: { color: colors.text }, grid: { color: colors.line } };
+  const title = text => ({ display: true, text, color: colors.text });
+  const main = colors.series[0], second = colors.series[1];
+  const chart = (type, labels, datasets, scales, extra = {}) => ({ type, data: { labels, datasets },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false, labels: { color: colors.text } } }, scales, ...extra, ...options } });
+  if (view === "hist") {
+    const e = d.histogram.edges;
+    return chart("bar", d.histogram.counts.map((_, i) => `${shownum(e[i])}–${shownum(e[i + 1])}`),
+      [{ label: "행 수", data: d.histogram.counts, backgroundColor: main, barPercentage: 1, categoryPercentage: 0.96 }],
+      { x: { ...axis, title: title(d.column) }, y: { ...axis, title: title("행 수") } });
+  }
+  if (view === "box") {
+    const b = d.box, eps = ((b.high ?? b.q3) - (b.low ?? b.q1)) / 160 || 0.5;  // 중앙값 선의 반 두께(값 단위)
+    return chart("bar", [d.column], [
+      { label: "수염 (1.5×IQR 안의 최소~최대)", data: [[b.low, b.high]], backgroundColor: colors.text, barThickness: 2, grouped: false, order: 3 },
+      { label: "Q1~Q3", data: [[b.q1, b.q3]], backgroundColor: alpha(main, 0.85), borderColor: main, borderWidth: 1, borderSkipped: false, barThickness: 56, grouped: false, order: 2 },  // order가 작을수록 위에 그린다
+      { label: "중앙값", data: [[b.median - eps, b.median + eps]], backgroundColor: second, barThickness: 56, grouped: false, order: 1 }],
+      { x: axis, y: { ...axis, grid: { display: false } } }, { indexAxis: "y", plugins: { legend: { display: true, labels: { color: colors.text } } } });
+  }
+  if (view === "values") {
+    const v = d.values, labels = [...v.labels, ...(v.nulls ? ["(빈 값)"] : []), ...(v.other ? ["그 밖"] : [])];
+    const data = [...v.counts, ...(v.nulls ? [v.nulls] : []), ...(v.other ? [v.other] : [])];
+    return chart("bar", labels, [{ label: "행 수", data, backgroundColor: labels.map(l => l === "그 밖" || l === "(빈 값)" ? colors.line : main) }],
+      { x: axis, y: { ...axis, title: title("행 수") } });
+  }
+  if (view === "heat") {
+    const k = d.columns.length, ticks = { ...axis.ticks, autoSkip: false, callback: v => d.columns[v] ?? "" };
+    const at = s => { s.ticks = d.columns.map((_, i) => ({ value: i })); };  // 눈금은 칸 가운데(0, 1, …)에만
+    const cells = d.matrix.flatMap((row, i) => row.map((r, j) => ({ x: j, y: i, r })));
+    const heat = { id: "heat", beforeDatasetsDraw(c) {
+      const { ctx, scales: { x, y } } = c, w = Math.abs(x.getPixelForValue(1) - x.getPixelForValue(0)), h = Math.abs(y.getPixelForValue(1) - y.getPixelForValue(0));
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `${Math.max(9, Math.min(14, w / 4.5))}px "Segoe UI", "Malgun Gothic", sans-serif`;
+      cells.forEach(({ x: j, y: i, r }) => {
+        const cx = x.getPixelForValue(j), cy = y.getPixelForValue(i);
+        ctx.fillStyle = r == null ? colors.line : alpha(r >= 0 ? main : second, 0.1 + 0.9 * Math.abs(r));
+        ctx.fillRect(cx - w / 2 + 1, cy - h / 2 + 1, w - 2, h - 2);
+        ctx.fillStyle = r != null && Math.abs(r) > 0.55 ? "#fff" : colors.ink;
+        ctx.fillText(r == null ? "-" : (Math.abs(r) < 0.005 ? 0 : r).toFixed(2), cx, cy);  // -0.00으로 보이지 않게
+      });
+      ctx.restore();
+    } };
+    return { ...chart("scatter", undefined, [{ data: cells, pointRadius: 0, pointHitRadius: 18 }],
+      { x: { type: "linear", min: -0.5, max: k - 0.5, ticks, afterBuildTicks: at, grid: { display: false } },
+        y: { type: "linear", min: -0.5, max: k - 0.5, reverse: true, ticks, afterBuildTicks: at, grid: { display: false } } },
+      { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${d.columns[c.raw.y]} × ${d.columns[c.raw.x]}: ${c.raw.r == null ? "-" : c.raw.r.toFixed(3)}` } } } }),
+      plugins: [heat] };
+  }
+  if (view === "scatter") return chart("scatter", undefined, [{ data: d.points.map(([x, y]) => ({ x, y })), backgroundColor: alpha(main, 0.55), pointRadius: 2.5 }],
+    { x: { ...axis, title: title(d.x) }, y: { ...axis, title: title(d.y) } });
+  if (view === "groups") return chart("bar", d.labels, [{ label: AGG_NAMES[d.agg], data: d.values, backgroundColor: main }],
+    { x: { ...axis, title: title(d.by) }, y: { ...axis, title: title(d.agg === "count" ? "개수" : `${d.value} ${AGG_NAMES[d.agg]}`) } });
+  return chart("line", d.labels, [{ label: AGG_NAMES[d.agg], data: d.values, borderColor: main, backgroundColor: main, borderWidth: 2, pointRadius: d.labels.length > 60 ? 0 : 2, spanGaps: true }],
+    { x: { ...axis, title: title(UNIT_NAMES[d.unit]) }, y: { ...axis, title: title(d.agg === "count" ? "개수" : `${d.value} ${AGG_NAMES[d.agg]}`) } });
+}
+// 그래프 아래의 표
+function anaTable(d, view) {
+  const pct = n => d.values ? `${(n * 100 / Math.max(1, d.values.counts.reduce((a, b) => a + b, 0) + d.values.nulls + d.values.other)).toFixed(1)}%` : "";
+  if (view === "hist" || view === "box") {
+    const s = d.stats, b = d.box;
+    return { columns: ["통계", "값"], rows: [["행 수 (빈 값 제외)", s.n], ["최소", s.min], ["Q1", s.q1], ["중앙값", s.median], ["Q3", s.q3], ["최대", s.max], ["평균", s.mean], ["표준편차", s.std],
+      ["1.5×IQR 밖의 값", b.outliers], ["빈 값", d.values.nulls]].map(([k, v]) => ({ 통계: k, 값: v })) };
+  }
+  if (view === "values") return { columns: ["값", "행 수", "비율"], rows: [
+    ...d.values.labels.map((l, i) => ({ 값: l, "행 수": d.values.counts[i], 비율: pct(d.values.counts[i]) })),
+    ...(d.values.nulls ? [{ 값: "(빈 값)", "행 수": d.values.nulls, 비율: pct(d.values.nulls) }] : []),
+    ...(d.values.other ? [{ 값: `그 밖 (값 ${(d.values.unique - d.values.labels.length).toLocaleString()}종류)`, "행 수": d.values.other, 비율: pct(d.values.other) }] : [])] };
+  if (view === "heat") return { columns: ["", ...d.columns], rows: d.matrix.map((row, i) => ({ "": d.columns[i], ...Object.fromEntries(row.map((r, j) => [d.columns[j], r == null ? "-" : +r.toFixed(3)])) })) };
+  if (view === "scatter") return { columns: ["", "값"], rows: [["상관계수 r", d.r == null ? "-" : +d.r.toFixed(4)], ["쓴 행 수", d.n], ["그린 점 수", d.points.length]].map(([k, v]) => ({ "": k, 값: v })) };
+  const name = view === "groups" ? d.by : UNIT_NAMES[d.unit], value = d.agg === "count" ? "개수" : `${d.value} ${AGG_NAMES[d.agg]}`;
+  return { columns: [name, value, ...(d.counts ? ["행 수"] : [])], rows: d.labels.map((l, i) => ({ [name]: l, [value]: d.values[i], ...(d.counts ? { "행 수": d.counts[i] } : {}) })) };
+}
+const tableHtml = ({ columns, rows }) => `<table><thead><tr>${columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
+  rows.map(r => `<tr>${columns.map(c => cell(r[c])).join("")}</tr>`).join("") + "</tbody></table>";
+// 마지막 분석 결과를 보고 있는 그래프로 그린다(화면 모드가 바뀌어도).
+function drawAna() {
+  if (A.chart) A.chart.destroy();
+  A.chart = null;
+  const d = A.result;
+  $("a-box").classList.toggle("hidden", !d);
+  $("a-tabs").classList.toggle("hidden", !d || d.views.length < 2);
+  $("a-full").disabled = $("a-add").disabled = !d;
+  if (!d) { $("a-title").textContent = "분석"; $("a-table").innerHTML = ""; $("a-data").textContent = ""; return; }
+  $("a-tabs").replaceChildren(...d.views.map(v => el("button", { textContent: VIEW_NAMES[v], className: v === A.view ? "on" : "", onclick: () => { A.view = v; drawAna(); } })));
+  $("a-title").textContent = anaTitle(d, A.view);
+  $("a-sub").textContent = "";
+  $("a-data").textContent = anaNote(d);
+  $("a-box").style.setProperty("--ratio", VIEW_RATIOS[A.view] ?? 16 / 9);
+  $("a-table").innerHTML = tableHtml(anaTable(d, A.view));
+  if ($("ana").classList.contains("hidden")) return;  // 감춰져 있으면 보일 때 그린다
+  A.chart = new Chart($("a-chart"), anaConfig(d, A.view, themeColors(document.documentElement.dataset.theme)));
+}
+
+// ---------- 그래프: 분석 결과를 모은 카드 ----------
+// 카드 { title, ratio, d(분석 결과), view, note }는 이 창이 열려 있는 동안 sessionStorage에 남는다. 이름 붙여 저장하지는 않는다.
+const GRAPHS_KEY = "ibis_graphs";
+const graphCard = c => Object.assign(c, { config: (colors, options) => anaConfig(c.d, c.view, colors, options) });
+const graphs = new Board($("g-grid"), { empty: "분석 탭에서 그래프를 구하고 [그래프에 추가]를 누르면 여기에 모입니다.", changed: graphsChanged });
+function graphsChanged() {
+  const n = graphs.cards.length, picked = graphs.picked.size;
+  $("graph-count").textContent = n || "";
+  $("g-sub").textContent = n ? `그래프 ${n}개 · 카드를 누르면 고릅니다` : "";
+  $("g-picked").textContent = picked ? `고른 그래프 ${picked}개` : "다운로드할 그래프를 고르세요";
+  try { sessionStorage.setItem(GRAPHS_KEY, JSON.stringify(graphs.cards.map(({ config, canvas, ...c }) => c))); } catch (e) { /* 저장소를 못 쓰면 이 화면에서만 */ }
+}
+$("a-add").onclick = () => {
+  if (!A.result) return;
+  if (graphs.cards.length >= SERVER.board.max) return say("err-ana", `그래프 탭에는 ${SERVER.board.max}개까지 넣을 수 있습니다.`);
+  graphs.set([...graphs.cards, graphCard({ title: `${A.result.base} · ${anaTitle(A.result, A.view)}`, ratio: VIEW_RATIOS[A.view] ?? 16 / 9, d: A.result, view: A.view })]);
+  say("err-ana", `그래프 탭에 넣었습니다(${graphs.cards.length}개).`, true);
+};
+$("g-all").onclick = () => graphs.pickAll(true);
+$("g-none").onclick = () => graphs.pickAll(false);
+$("g-down").onclick = () => busy($("g-down"), async () => {
+  try { await saveBoard(graphs, { ratio: $("g-ratio").value, mode: $("g-mode").value, type: $("g-format").value, err: "err-graphs" }); }
+  catch (e) { say("err-graphs", e.message); }
+});
+$("g-ratio").onchange = () => saveSetting({ board_ratio: $("g-ratio").value });
+$("g-format").onchange = () => saveSetting({ board_format: $("g-format").value });
+$("g-mode").onchange = () => saveSetting({ image: $("g-mode").value });
+$("g-ratio").value = saved("board_ratio") || "screen";
+$("g-format").value = saved("board_format") || "png";
+$("g-mode").value = saved("image") || "light";
+try { graphs.cards = (JSON.parse(sessionStorage.getItem(GRAPHS_KEY) || "[]") || []).map(graphCard); } catch (e) { /* 깨졌으면 빈 모음 */ }
+graphsChanged();
+$("theme").addEventListener("click", () => { drawAna(); graphs.draw(); });  // common.js의 onclick이 화면 모드를 바꾼 뒤에 다시 그린다.
+showAnaForm();
+drawAna();
 
 showAll();
 showTarget();
 // 연결을 이어받은 뒤, 주소에 ?base=이름이 있고 그 테이블이 목록에 있으면 고른 것과 같게 한다(전처리로 보내기).
+showView({ "#analysis": "ana", "#graphs": "graphs" }[location.hash] ?? "prep");
+showPrepSummaries();
 resume().then(() => {
+  showPrepSummaries();
   const base = new URLSearchParams(location.search).get("base");
   if ([...$("base").options].some(o => o.value === base)) { $("base").value = base; return $("base").onchange(); }
 });

@@ -58,11 +58,14 @@ def downcast(t):
     return t.mutate(**casts) if casts else t
 
 
-def shape(con, recipe):
-    """filters → copies → 컬럼별 ops → keep·파생 컬럼 배치·rename → drop까지 만든 식과, 결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지)."""
-    schema = recipe.get("schema") or None
-    parse.check_name(recipe["base"], source.list_tables(con, schema), "테이블")
-    t = source.get_table(con, recipe["base"], schema)
+def shape(con, recipe, table=None):
+    """filters → copies → 컬럼별 ops → keep·파생 컬럼 배치·rename → drop까지 만든 식과, 결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지).
+    table을 주면 연결의 테이블 대신 그 식(예: 표본을 담은 메모리 표)에서 시작한다."""
+    if table is None:
+        schema = recipe.get("schema") or None
+        parse.check_name(recipe["base"], source.list_tables(con, schema), "테이블")
+        table = source.get_table(con, recipe["base"], schema)
+    t = table
     filters = recipe.get("filters") or []
     if filters:
         t = t.filter(*[parse.predicate(cond, t) for cond in filters])
@@ -100,9 +103,9 @@ def dedupe_columns(t, recipe):
     return columns
 
 
-def build(con, recipe):
-    """recipe를 Ibis 식 하나로 만든다. (식, 결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지))를 돌려준다."""
-    t, origin = shape(con, recipe)
+def build(con, recipe, table=None):
+    """recipe를 Ibis 식 하나로 만든다. (식, 결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지))를 돌려준다. table은 shape와 같다."""
+    t, origin = shape(con, recipe, table)
     columns = dedupe_columns(t, recipe)
     if columns:
         t = t.distinct() if set(columns) == set(t.columns) else t.distinct(on=columns, keep="first")

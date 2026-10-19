@@ -7,6 +7,7 @@ from pathlib import Path
 from flask import jsonify, request
 from lazy import ibis
 
+import analysis
 import parse
 import prep
 import prep_profile
@@ -22,7 +23,7 @@ PREVIEW_ROWS = 20
 DEFAULT_SAMPLE = 5_000  # 통계를 낼 표본 행 수의 기본값
 TABLE_NAME = re.compile(r"[A-Za-z0-9_가-힣]+")
 FILE_FORMATS = ["parquet", "csv"]
-server.CONSTANTS.update(sample=DEFAULT_SAMPLE, sample_methods=profiler.METHODS)  # 화면(prep.html)의 표본 행 수 기본값과 표본 방법 이름
+server.CONSTANTS.update(sample=DEFAULT_SAMPLE, sample_methods=profiler.METHODS, analysis=analysis.LIMITS)  # 화면(prep.html)의 표본 행 수 기본값, 표본 방법 이름, 분석의 상한들
 TABLE_PREPS = "table_preps.json"  # 테이블별로 마지막에 쓴 전처리 {테이블 열쇠: {"config", "saved"}}
 MAX_TABLE_PREPS = 200
 SAMPLES = {}  # 마지막으로 읽은 표본 하나 {테이블 열쇠: (크기, pyarrow 표, 표본 정보)}. 통계에 이어 타입 추천이 같은 표본을 쓴다.
@@ -196,6 +197,23 @@ def preview():
     after = run(lambda: result.get_count(expr)) if prep.changes_rows(recipe) else before
     return jsonify(rows=to_json(rows), types=[prep.type_text(t) for t in expr.schema().values()], before=before, after=after,
                    sources=[origin[name][0] for name in expr.columns], derived=[origin[name][1] for name in expr.columns])
+
+
+@app.post("/api/analyze")
+def analyze():
+    """분석(analysis.analyze). body = {recipe, how, sample, full}. recipe의 정렬은 분석에 쓰지 않아 뺀다.
+    기본은 전처리 화면과 같은 표본(sample행, 같은 테이블이면 읽어 둔 것)에 recipe를 적용해 이 PC에서 구한다.
+    full이면 테이블 전체에 recipe를 적용한 식을 연결(DB)에서 구한다. 결과에 어느 쪽으로 구했는지(data)를 붙인다."""
+    body = request.json
+    recipe, how = {**body.get("recipe", {}), "sorts": []}, body.get("how") or {}
+    if body.get("full") is True:
+        expr = built(recipe)[0]
+        return jsonify({**run(lambda: analysis.analyze(expr, how)), "data": {"full": True}})
+    key, size = table_key(recipe), sample_size(body)
+    arrow, info = sampled(recipe, key, size, False)
+    con = get_con()
+    found = run(lambda: analysis.analyze(prep.build(con, recipe, ibis.memtable(arrow))[0], how))  # 표본은 이 PC에서 센다
+    return jsonify({**found, "data": {"full": False, **info}})
 
 
 @app.post("/api/dupes")
