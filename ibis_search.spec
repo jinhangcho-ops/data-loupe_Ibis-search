@@ -18,6 +18,8 @@ for module in DRIVER_MODULES + ["cryptography", "xlsxwriter"]:  # cryptography: 
     hidden += collect_submodules(module)
 # Kafka 적재(load_kafka)는 함수 안에서 불러온다. librdkafka DLL(confluent_kafka.libs)은 PyInstaller가 delvewheel 폴더에서 찾아 넣는다.
 hidden += ["confluent_kafka", "confluent_kafka.cimpl", "fastexcel"]  # fastexcel: polars가 Excel을 읽을 때만 불러온다
+# Slack 봇(adapters.slack_bot)은 봇을 켤 때 slack_sdk를 불러온다(Socket Mode 웹소켓은 slack_sdk 안의 것).
+hidden += collect_submodules("slack_sdk.socket_mode.builtin") + ["slack_sdk.web", "slack_sdk.webhook", "slack_sdk.socket_mode.response"]
 
 a = Analysis(
     ["desktop.py"],

@@ -138,9 +138,23 @@ function pickDest() {
   $("dest-name").value = name;
   $("dest-done").checked = !!saved?.done;
   if (saved) $("dest-kind").value = saved.kind;
+  $("dest-keep").value = saved?.keep ?? "saved";
   showFields();
 }
-// 고른 종류의 칸을 서버의 표대로 그린다. 저장된 것이면 비밀이 아닌 칸은 값을, 비밀 칸은 안내 글자를 채운다.
+// 비밀 칸의 안내: 보관 방식이 env면 환경변수 이름 칸(있는지 표시), 아니면 저장돼 있는지. state는 서버가 준 상태(true/false 또는 {env, set}).
+function secretInput(input, keep, saved, state) {
+  const same = saved && saved.keep === keep;
+  if (keep === "env") {
+    input.type = "text";
+    input.value = same ? state?.env ?? "" : "";
+    input.placeholder = "환경변수 이름 (예: IBIS_SLACK_TOKEN)";
+    return same ? (state?.set ? "환경변수가 있습니다." : "지금 이 환경변수가 없습니다.") : "";
+  }
+  input.type = "password";
+  input.placeholder = !same ? (keep === "session" ? "이번 실행 동안만 둡니다" : "") : state ? "저장됨 (바꾸려면 새로 입력)" : keep === "session" ? "다시 입력 필요 (프로그램을 다시 켰음)" : "다시 입력 필요";
+  return "";
+}
+// 고른 종류의 칸을 서버의 표대로 그린다. 저장된 것이면 비밀이 아닌 칸은 값을, 비밀 칸은 보관 방식에 맞는 안내를 채운다.
 function showFields() {
   const kind = $("dest-kind").value, spec = dest.kinds[kind], now = dest.destinations[$("dest-list").value];
   const saved = now?.kind === kind ? now : null, presets = spec.presets ?? [];
@@ -150,9 +164,9 @@ function showFields() {
     const input = f.options ? el("select", {}, ...f.options.map(([v, t]) => new Option(t, v)))
       : f.multiline ? el("textarea", { rows: 4 }) : el("input", { type: f.secret ? "password" : "text" });
     input.dataset.field = f.name;
-    if (f.secret) input.placeholder = !saved ? "" : saved[f.name] ? "저장됨 (바꾸려면 새로 입력)" : "다시 입력 필요";
-    else input.value = saved?.[f.name] ?? f.default ?? "";
-    return el("div", {}, el("div", { className: "hint", textContent: f.label }), input, ...(f.hint ? [el("div", { className: "hint", textContent: f.hint })] : []));
+    const note = f.secret ? secretInput(input, $("dest-keep").value, saved, saved?.[f.name]) : "";
+    if (!f.secret) input.value = saved?.[f.name] ?? f.default ?? "";
+    return el("div", {}, el("div", { className: "hint", textContent: f.label }), input, ...[f.hint, note].filter(Boolean).map(h => el("div", { className: "hint", textContent: h })));
   }));
 }
 function showDestinations(d, name = $("dest-list").value) {
@@ -160,11 +174,12 @@ function showDestinations(d, name = $("dest-list").value) {
   fill($("dest-list"), Object.keys(d.destinations), "새로 만들기");
   $("dest-list").value = name in d.destinations ? name : "";
   $("dest-kind").replaceChildren(...Object.entries(d.kinds).map(([k, v]) => new Option(v.label, k)));
+  $("dest-keep").replaceChildren(...Object.entries(d.keeps).map(([k, v]) => new Option("비밀 값: " + v, k)));
   pickDest();
   document.dispatchEvent(new Event("destinations"));  // 화면이 보낼 곳 목록을 쓰는 칸을 다시 채운다.
 }
 $("dest-list").onchange = pickDest;
-$("dest-kind").onchange = showFields;
+$("dest-kind").onchange = $("dest-keep").onchange = showFields;
 $("dest-preset").onchange = () => {
   const preset = dest.kinds[$("dest-kind").value].presets[$("dest-preset").value];
   for (const [k, v] of Object.entries(preset ?? {})) if (k !== "label") $("dest-fields").querySelector(`[data-field="${k}"]`).value = v;
@@ -182,7 +197,7 @@ $("notify-after").onchange = () => {
 };
 $("dest-save").onclick = () => busy($("dest-save"), async () => {
   const name = $("dest-name").value.trim();
-  const destination = { kind: $("dest-kind").value, done: $("dest-done").checked,
+  const destination = { kind: $("dest-kind").value, done: $("dest-done").checked, keep: $("dest-keep").value,
     ...Object.fromEntries([...$("dest-fields").querySelectorAll("[data-field]")].map(i => [i.dataset.field, i.value])) };  // 비밀 칸을 비우면 서버가 저장된 값을 그대로 둔다.
   try { showDestinations(await api("/api/destinations", { name, destination }), name); destMsg("저장했습니다", true); } catch (e) { destMsg(e.message); }
 });
@@ -194,7 +209,40 @@ $("dest-test").onclick = () => busy($("dest-test"), async () => {
   if (!$("dest-list").value) return destMsg("저장한 보낼 곳을 고른 뒤 시험하세요.");
   try { await sendTo($("dest-list").value, { title: "시험 메시지", text: "Ibis에서 보낸 시험 메시지입니다." }); destMsg("보냈습니다", true); } catch (e) { destMsg(e.message); }
 });
+$("dest-check").onclick = () => busy($("dest-check"), async () => {
+  if (!$("dest-list").value) return destMsg("저장한 보낼 곳을 고른 뒤 확인하세요.");
+  try { destMsg((await api("/api/destinations/check", { name: $("dest-list").value })).message, true); } catch (e) { destMsg(e.message); }
+});
 api("/api/destinations").then(showDestinations).catch(() => {});
+
+// Slack 봇(받기): 설정 저장, 연동 확인, 켜기·끄기. 토큰 칸을 비우고 저장하면 같은 보관 방식으로 둔 값을 그대로 쓴다.
+const botMsg = (text, ok) => say("msg-bot", text, ok);
+// keep: 칸에 보일 보관 방식(고르는 칸을 바꾸면 그것, 아니면 저장한 것). 저장한 방식과 같을 때만 저장된 상태를 보인다.
+function showBot(d, keep = d.keep) {
+  $("bot-keep").replaceChildren(...Object.entries(d.keeps).map(([k, v]) => new Option("토큰: " + v, k)));
+  $("bot-keep").value = keep;
+  [["bot-token", d.bot_token], ["bot-app", d.app_token]].forEach(([id, state]) => { $(id).title = secretInput($(id), keep, d.saved ? { keep: d.keep } : null, state); });
+  $("bot-users").value = d.users.join(", ");
+  $("bot-channels").value = d.channels.join(", ");
+  $("bot-state").textContent = d.running ? `켜짐${d.team ? " · " + d.team : ""}` : "꺼짐";
+  $("bot-log").textContent = d.log.length ? ["최근 요청:", ...d.log.map(r => `${r.at.slice(11)} ${r.user} ${r.allowed ? "" : "(거부) "}/ibis ${r.text}`)].join("\n") : "";
+}
+$("bot-keep").onchange = () => api("/api/bot").then(d => showBot(d, $("bot-keep").value)).catch(e => botMsg(e.message));
+$("bot-save").onclick = () => busy($("bot-save"), async () => {
+  try {
+    showBot(await api("/api/bot", { keep: $("bot-keep").value, bot_token: $("bot-token").value, app_token: $("bot-app").value, users: $("bot-users").value, channels: $("bot-channels").value }));
+    $("bot-token").value = $("bot-keep").value === "env" ? $("bot-token").value : "";
+    $("bot-app").value = $("bot-keep").value === "env" ? $("bot-app").value : "";
+    botMsg("저장했습니다", true);
+  } catch (e) { botMsg(e.message); }
+});
+[["bot-check", "/api/bot/check"], ["bot-start", "/api/bot/start"], ["bot-stop", "/api/bot/stop"]].forEach(([id, url]) => $(id).onclick = () => busy($(id), async () => {
+  try {
+    const d = await api(url, {});
+    if (d.message) botMsg(d.message, true); else { showBot(d); botMsg(d.running ? "봇을 켰습니다. Slack에서 /ibis 도움 을 보내 보세요." : "봇을 멈췄습니다.", true); }
+  } catch (e) { botMsg(e.message); }
+}));
+$("dest-open").addEventListener("click", () => api("/api/bot").then(showBot).catch(() => {}));  // 열 때마다 켜짐 상태·최근 요청을 새로
 
 // 1. 연결
 document.querySelectorAll("input[name=kind]").forEach(r => r.onchange = () => {

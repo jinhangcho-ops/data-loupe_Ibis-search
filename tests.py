@@ -40,6 +40,7 @@ import psutil
 import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
 import schedule_app  # noqa: F401  예약 라우트가 앱에 달린다.
 import notify
+from adapters import transport
 import prep_app
 import prep_ops
 import prep_profile
@@ -732,7 +733,7 @@ def prep_section():
 
 
 def notify_section(c, got):
-    """다른 앱으로 보내기. 실제로 요청을 보내지 않고 notify.post를 바꿔 끼워 무엇이 나가는지만 본다."""
+    """다른 앱으로 보내기. 실제로 요청을 보내지 않고 transport.post를 바꿔 끼워 무엇이 나가는지만 본다."""
     print("== 다른 앱으로 보내기")
     error = lambda api, **body: got(api, **body).get("error", "")
     put = lambda name, **destination: got("/api/destinations", name=name, destination=destination)
@@ -745,8 +746,8 @@ def notify_section(c, got):
             raise answer
         return answer
 
-    real, token, hook = notify.post, "xoxb-secret-token-123", "https://hooks.example.com/services/secret-path-456"
-    notify.post = fake
+    real, token, hook = transport.post, "xoxb-secret-token-123", "https://hooks.example.com/services/secret-path-456"
+    transport.post = fake
     try:
         r = c.get("/api/destinations").get_json()
         check("보낼 곳 종류 표: 라벨·그림·칸(비밀 여부)", ({k: (v["label"], v["image"], [(f["name"], f["secret"]) for f in v["fields"]]) for k, v in r["kinds"].items()}, r["destinations"]),
@@ -758,21 +759,21 @@ def notify_section(c, got):
 
         print("== 보낼 곳 저장(비밀 값은 암호화)")
         r = put("slack", kind="slack", done=True, token=token, channel="C0123")
-        check("저장: 목록에 비밀 값이 없고 저장돼 있다는 true만", r["destinations"], {"slack": {"kind": "slack", "done": True, "token": True, "channel": "C0123"}})
+        check("저장: 목록에 비밀 값이 없고 저장돼 있다는 true만", r["destinations"], {"slack": {"kind": "slack", "done": True, "keep": "saved", "token": True, "channel": "C0123"}})
         raw = (settings.PATH.parent / "destinations.json").read_bytes()
         check("destinations.json에 토큰이 평문으로 없음", (token.encode() in raw, b"xoxb" in raw, b"C0123" in raw), (False, False, True))
         stored = settings.named("destinations.json")["slack"]["token"]
         check("암호화한 것을 풀면 같은 값, 글자(한글 포함)도 같음", (notify.reveal(stored), notify.reveal(notify.protect("가나다 abc")), "가나다" in notify.protect("가나다 abc")), (token, "가나다 abc", False))
         r = put("slack", kind="slack", done=False, token="", channel="C999")
         check("고칠 때 비밀 칸을 비우면 저장된 값을 그대로 둠", (r["destinations"]["slack"], notify.reveal(settings.named("destinations.json")["slack"]["token"])),
-              ({"kind": "slack", "done": False, "token": True, "channel": "C999"}, token))
+              ({"kind": "slack", "done": False, "keep": "saved", "token": True, "channel": "C999"}, token))
         check("새로 만드는데 비밀 칸이 없으면 거부", error("/api/destinations", name="새것", destination={"kind": "slack", "done": False, "channel": "C1"}), "'봇 토큰' 칸을 입력하세요.")
         data = settings.named("destinations.json")
         data["slack"]["token"] = "AAAA"  # 다른 PC·계정에서 복사해 온 것처럼 풀 수 없는 값
         settings.write("destinations.json", data)
         check("풀 수 없는 비밀 값은 false(다시 입력 필요)", c.get("/api/destinations").get_json()["destinations"]["slack"]["token"], False)
         check("풀 수 없는데 비밀 칸을 비우면 거부, 보내기도 거부", (error("/api/destinations", name="slack", destination={"kind": "slack", "done": False, "token": "", "channel": "C999"}),
-              error("/api/send", name="slack", title="t")), ("'봇 토큰' 칸을 입력하세요.", "'slack'의 비밀 값을 읽을 수 없습니다(다른 PC·계정에서 온 파일). 보낼 곳을 다시 저장하세요."))
+              error("/api/send", name="slack", title="t")), ("'봇 토큰' 칸을 입력하세요.", "'slack': '봇 토큰'을 읽을 수 없습니다(다른 PC·계정에서 온 파일). 다시 입력해 저장하세요."))
         put("slack", kind="slack", done=False, token=token, channel="C999")
         check("다시 입력하면 true", c.get("/api/destinations").get_json()["destinations"]["slack"]["token"], True)
         check("검증 거부: 종류·칸·done·https·본문 종류", [error("/api/destinations", name="x", destination=d) for d in (
@@ -868,7 +869,7 @@ def notify_section(c, got):
                '표는 {"columns": [...], "rows": [...]} 모양이어야 합니다.', "행수는 정수, 걸린 시간은 수(초)여야 합니다.", "제목과 내용은 글자여야 합니다."])
         check("거부된 요청은 나가지 않음, 없는 이름은 거부", (sent, error("/api/send", name="없음", title="t")), ([], "'없음' 보낼 곳이 없습니다."))
     finally:
-        notify.post = real
+        transport.post = real
     done = []
     thread = threading.Thread(target=lambda: done.append(c.post("/api/send", json={"name": "없음", "title": "t"}).status_code))
     server.turn.acquire()  # 다른 데이터 작업이 도는 중인 것처럼
@@ -1968,7 +1969,7 @@ def schedule_section(c, got):
 
     print("== 예약: 검사·저장(가짜 schtasks)")
     fake = FakeTasks()
-    real_execute, real_clock, real_post = wintask.execute, schedule.clock, notify.post
+    real_execute, real_clock, real_post = wintask.execute, schedule.clock, transport.post
     wintask.execute = fake
     out = ROOT / "schedule_out"
     out.mkdir()
@@ -2067,7 +2068,7 @@ def schedule_section(c, got):
 
     print("== 예약: 지금 실행·기록·알림")
     sent = []
-    notify.post = lambda url, data, headers: sent.append(json.loads(data)) or b"ok"
+    transport.post = lambda url, data, headers: sent.append(json.loads(data)) or b"ok"
     got("/api/destinations", name="알림", destination={"kind": "webhook", "done": True, "url": "https://hooks.example.invalid/sched", "content": "json",
                                                     "template": '{"title": "{제목}", "text": "{내용}", "rows": "{행수}"}'})
 
@@ -2158,7 +2159,7 @@ def schedule_section(c, got):
           (1, "실패", "DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다.", False))
     check("--run이 남긴 잠금 없음", [p.name for p in schedule.locks().glob("*.lock")], [])
 
-    wintask.execute, schedule.clock, notify.post = real_execute, real_clock, real_post
+    wintask.execute, schedule.clock, transport.post = real_execute, real_clock, real_post
     settings.write(schedule.FILE, {})
     got("/api/destinations", name="알림", destination=None)
     api.http.shutdown()

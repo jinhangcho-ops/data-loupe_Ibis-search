@@ -21,6 +21,7 @@ import lazy  # noqa: F401  데이터 라이브러리를 처음 쓸 때 올린다
 import webview
 from werkzeug.serving import make_server
 
+import bot_app
 import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
 import collect_browser
 import collect_job
@@ -83,6 +84,7 @@ window.events.closing += closing
 schedule.start_watch()  # 프로그램 안 예약: 켜져 있는 동안 때가 된 예약을 돌린다.
 webview.start()  # 창을 닫으면 여기서 끝나고, 서버 스레드도 함께 종료된다.
 schedule.stop_watch()
+bot_app.stop()  # 켜 둔 Slack 봇의 연결을 끊는다.
 collect_job.stop(wait=10)  # 수집 작업이 받은 데까지 기록하고 끝나기를 기다린다.
 collect_browser.stop_child()  # 수집용 창 프로세스를 끝낸다(남아 있어도 메인과의 연결이 끊기면 스스로 끝난다).
 if server.state["con"] is not None:  # 열어 둔 연결을 닫아 파일을 놓고 임시 폴더를 지운다.

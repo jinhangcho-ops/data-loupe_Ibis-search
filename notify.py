@@ -1,140 +1,32 @@
-"""다른 앱으로 보내기: 보낼 곳의 종류(KINDS 표), 보낼 곳의 저장(비밀 값은 Windows DPAPI로 암호화), 보내기, 그 라우트.
-새 앱을 더하려면 KINDS에 항목 하나와 보내는 함수(send_이름)만 더하면 된다. 화면은 /api/destinations로 이 표를 받아 칸을 그린다."""
+"""다른 앱으로 보내기의 코어와 라우트: 보낼 곳 저장(settings의 destinations.json), 메시지 만들기, 보내기, 연동 확인.
+앱마다 다른 부분(API 부르기)은 adapters의 어댑터가, 비밀 값(토큰·주소)을 어디에 둘지는 credentials가 맡는다(보낼 곳마다 keep: saved·session·env).
+화면은 /api/destinations로 종류 표와 보관 방식을 받아 칸을 그린다. 새 앱은 adapters에 어댑터만 더하면 된다."""
 import base64
 import binascii
-import ctypes
-import json
-import re
-import urllib.error
-import urllib.parse
-import urllib.request
-from ctypes import wintypes
 
 from flask import jsonify, request
 
+import credentials
 import settings
 import source
-from server import app
+from adapters import SENDERS
+from server import FREE, app
 
-SLACK_API = "https://slack.com/api"
-TIMEOUT = 15  # 요청 하나를 기다리는 시간(초)
 MAX_DESTINATIONS = 30
 MAX_DESTINATION_SIZE = 20_000  # 보낼 곳 하나의 크기(JSON 글자 수)
 MAX_TABLE_ROWS = 50  # 글자로 만들어 보내는 표의 최대 행 수
 MAX_IMAGE = 5 * 1024 * 1024  # 그림(PNG)의 최대 바이트 수
 PNG_PREFIX = "data:image/png;base64,"
 FILE = "destinations.json"
-
-
-class Blob(ctypes.Structure):
-    _fields_ = [("size", wintypes.DWORD), ("data", ctypes.POINTER(ctypes.c_char))]
-
-
-def dpapi(function, data):
-    """Windows DPAPI(crypt32의 CryptProtectData/CryptUnprotectData)로 data(bytes)를 암호화하거나 되돌린다.
-    지금 로그인한 Windows 계정만 풀 수 있다. 실패하면 None."""
-    buffer = ctypes.create_string_buffer(data, len(data))
-    given, out = Blob(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_char))), Blob()
-    call = getattr(ctypes.windll.crypt32, function)
-    call.argtypes = [ctypes.POINTER(Blob), ctypes.c_void_p, ctypes.POINTER(Blob), ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.POINTER(Blob)]
-    call.restype = wintypes.BOOL
-    if not call(ctypes.byref(given), None, None, None, None, 0, ctypes.byref(out)):
-        return None
-    result = ctypes.string_at(out.data, out.size)
-    ctypes.windll.kernel32.LocalFree.argtypes = [ctypes.c_void_p]
-    ctypes.windll.kernel32.LocalFree(ctypes.cast(out.data, ctypes.c_void_p))
-    return result
-
-
-def protect(text):
-    locked = dpapi("CryptProtectData", text.encode("utf-8"))
-    if locked is None:
-        raise ValueError("비밀 값을 암호화하지 못했습니다.")
-    return base64.b64encode(locked).decode()
-
-
-def reveal(stored):
-    """protect로 저장한 글자를 되돌린다. 풀 수 없으면(다른 PC·계정에서 온 파일, 깨진 값) None."""
-    try:
-        opened = dpapi("CryptUnprotectData", base64.b64decode(stored, validate=True))
-    except (binascii.Error, ValueError, TypeError):
-        return None
-    return None if opened is None else opened.decode("utf-8", "replace")
-
-
-def post(url, data, headers):
-    """요청을 보내고 응답 몸통(bytes)을 돌려준다. 실패하면 상태 코드와 응답 앞부분을 넣은 한국어 오류."""
-    try:
-        with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method="POST"), timeout=TIMEOUT) as reply:
-            return reply.read()
-    except urllib.error.HTTPError as e:
-        raise ValueError(f"보내지 못했습니다(상태 {e.code}): {e.read().decode('utf-8', 'replace')[:200]}") from None
-    except (urllib.error.URLError, OSError) as e:
-        raise ValueError(f"보내지 못했습니다: {getattr(e, 'reason', e)}") from None
-
-
-def slack_call(token, method, body, form=False):
-    data = urllib.parse.urlencode(body).encode() if form else json.dumps(body, ensure_ascii=False).encode()
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/x-www-form-urlencoded" if form else "application/json; charset=utf-8"}
-    reply = json.loads(post(f"{SLACK_API}/{method}", data, headers))
-    if not reply.get("ok"):
-        raise ValueError(f"Slack 오류: {reply.get('error')}")
-    return reply
-
-
-def send_slack(fields, m):
-    """글은 chat.postMessage로. 그림이 있으면 파일 올리기(getUploadURLExternal → 받은 주소에 바이트 → completeUploadExternal)로 글과 함께."""
-    token, channel = fields["token"], fields["channel"]
-    text = f"*{m['title']}*\n{m['text']}" + (f"\n```\n{m['table']}\n```" if m["table"] else "")
-    if not m["image"]:
-        slack_call(token, "chat.postMessage", {"channel": channel, "text": text})
-        return
-    upload = slack_call(token, "files.getUploadURLExternal", {"filename": "image.png", "length": len(m["image"])}, form=True)
-    post(upload["upload_url"], m["image"], {"Content-Type": "application/octet-stream"})
-    slack_call(token, "files.completeUploadExternal", {"files": [{"id": upload["file_id"], "title": m["title"]}], "channel_id": channel, "initial_comment": text})
-
-
-# 본문 종류 → (Content-Type, 넣는 값의 이스케이프)
-BODIES = {
-    "json": ("application/json", lambda value: json.dumps(value, ensure_ascii=False)[1:-1]),  # JSON 글자 안에 들어갈 수 있게(바깥 따옴표 없이)
-    "text": ("text/plain; charset=utf-8", lambda value: value),
-    "form": ("application/x-www-form-urlencoded", urllib.parse.quote_plus),
-}
-SLOTS = ["제목", "내용", "행수", "걸린시간", "표", "그림"]
-PRESETS = [  # 서비스가 받는 모양의 본문 틀. 실제 서비스에 보내 확인한 것이 아니다.
-    {"label": "일반 JSON", "content": "json", "template": '{"title": "{제목}", "text": "{내용}", "rows": "{행수}", "seconds": "{걸린시간}", "table": "{표}", "image": "{그림}"}'},
-    {"label": "Teams", "content": "json", "template": r'{"text": "**{제목}**\n\n{내용}\n\n{표}"}'},
-    {"label": "Discord", "content": "json", "template": r'{"content": "**{제목}**\n{내용}\n{표}"}'},
-    {"label": "글자", "content": "text", "template": "{제목}\n{내용}\n{표}"},
-]
-
-
-def send_webhook(fields, m):
-    """본문 틀의 {제목} {내용} {행수} {걸린시간} {표} {그림} 자리를 본문 종류에 맞게 이스케이프해 채워 보낸다. 모르는 {…}는 그대로 둔다."""
-    content_type, escape = BODIES[fields["content"]]
-    values = {"제목": m["title"], "내용": m["text"], "행수": m["rows"], "걸린시간": m["duration"], "표": m["table"], "그림": base64.b64encode(m["image"]).decode() if m["image"] else ""}
-    body = re.sub(r"\{(" + "|".join(SLOTS) + r")\}", lambda found: escape(values[found[1]]), fields["template"])
-    if fields["content"] == "json":
-        try:
-            json.loads(body)
-        except ValueError:
-            raise ValueError("본문 틀이 JSON이 아닙니다. 값을 채운 결과가 JSON으로 읽히지 않아 보내지 않았습니다.") from None
-    post(fields["url"], body.encode("utf-8"), {"Content-Type": content_type})
-
-
-# 보낼 곳의 종류. label: 화면에 보일 이름, image: 그림을 보낼 수 있는지(webhook은 틀의 {그림} 자리로),
-# fields: 설정 칸 [{name, label, secret, options?, default?, multiline?, hint?(칸 아래에 보일 안내), check?(검사 함수), error?(검사에 걸렸을 때 문구)}], send: 보내는 함수(칸 값, 메시지).
-KINDS = {
-    "slack": {"label": "Slack", "image": True, "send": send_slack, "fields": [
-        {"name": "token", "label": "봇 토큰", "secret": True},
-        {"name": "channel", "label": "채널 ID(예: C0123456789)", "secret": False}]},
-    "webhook": {"label": "웹훅(주소로 보내기)", "image": True, "send": send_webhook, "presets": PRESETS, "fields": [
-        {"name": "url", "label": "주소", "secret": True, "check": lambda v: v.startswith("https://"), "error": "주소는 https://로 시작해야 합니다."},
-        {"name": "content", "label": "본문 종류", "secret": False, "options": [["json", "JSON"], ["text", "글자"], ["form", "폼(URL 인코딩)"]], "default": "json"},
-        {"name": "template", "label": "본문 틀", "secret": False, "multiline": True, "default": PRESETS[0]["template"],
-         "hint": "쓸 수 있는 자리: {제목} {내용} {행수} {걸린시간} {표} {그림}"}]},
-}
+KINDS = SENDERS  # 보낼 곳의 종류(adapters.SENDERS). label·image·fields[{name, label, secret, options?, default?, multiline?, hint?, check?, error?}]·send·check
 API_KEYS = ("name", "label", "secret", "options", "default", "multiline", "hint")
+FREE.add("/api/destinations/check")  # 연동 확인은 연결을 쓰지 않는다
+protect, reveal = credentials.protect, credentials.reveal  # 예전 이름(예약·테스트가 쓴다)
+
+
+def secret_key(name, field):
+    """세션에 둘 때의 열쇠."""
+    return f"dest:{name}:{field}"
 
 
 def kinds_view():
@@ -143,30 +35,40 @@ def kinds_view():
 
 
 def overview():
-    """화면에 줄 종류 표와 저장한 보낼 곳. 비밀 값은 넣지 않고 저장돼 있는지(true)·다시 입력해야 하는지(false)만 알린다."""
+    """화면에 줄 종류 표·보관 방식과 저장한 보낼 곳. 비밀 값은 넣지 않고 쓸 수 있는지(true/false, env는 변수 이름과 있는지)만 알린다."""
     destinations = {}
     for name, saved in settings.named(FILE).items():
+        keep = credentials.keep_of(saved)
         secret = {f["name"] for f in KINDS[saved["kind"]]["fields"] if f["secret"]}
-        destinations[name] = {k: (reveal(v) is not None if k in secret else v) for k, v in saved.items()}
-    return {"kinds": kinds_view(), "destinations": destinations}
+        destinations[name] = {**{k: (credentials.shown(secret_key(name, k), keep, v) if k in secret else v) for k, v in saved.items()}, "keep": keep}
+    return {"kinds": kinds_view(), "keeps": credentials.KEEPS, "destinations": destinations}
 
 
 def save(name, destination):
-    """보낼 곳을 저장한다(null이면 지운다). 비밀 칸을 비우면 저장된 값을 그대로 둔다."""
+    """보낼 곳을 저장한다(null이면 지운다). 비밀 칸을 비우면 같은 보관 방식으로 둔 값을 그대로 쓴다.
+    keep(없으면 saved): saved는 암호문, session은 메모리에만(파일에는 빈 글자), env는 환경변수 이름을 파일에 쓴다."""
     name = name.strip() if isinstance(name, str) else ""
     if destination is None:
+        credentials.forget(f"dest:{name}:")
         return settings.save_named(FILE, "보낼 곳", MAX_DESTINATION_SIZE, name, None, MAX_DESTINATIONS)
     if not isinstance(destination, dict) or destination.get("kind") not in KINDS:
         raise ValueError(f"보낼 곳의 종류는 {', '.join(KINDS)} 중 하나입니다.")
     kind, old = KINDS[destination["kind"]], settings.named(FILE).get(name, {})
-    unknown = set(destination) - {"kind", "done", *(f["name"] for f in kind["fields"])}
+    keep = credentials.check_keep(destination.get("keep", credentials.DEFAULT_KEEP))
+    unknown = set(destination) - {"kind", "done", "keep", *(f["name"] for f in kind["fields"])}
     if unknown or not isinstance(destination.get("done", False), bool):
         raise ValueError(f"보낼 곳에 쓸 수 없는 값이 있습니다: {', '.join(sorted(unknown)) or 'done'}")
-    item = {"kind": destination["kind"], "done": destination.get("done", False)}
+    item = {"kind": destination["kind"], "done": destination.get("done", False), "keep": keep}
+    same = old.get("kind") == destination["kind"]
     for f in kind["fields"]:
         value = destination.get(f["name"])
-        if f["secret"] and not value and old.get("kind") == destination["kind"] and reveal(old.get(f["name"], "")) is not None:
-            item[f["name"]] = old[f["name"]]  # 비밀 칸을 비우면 저장된 값을 그대로 둔다.
+        if f["secret"]:
+            if value and "check" in f and keep != "env" and not f["check"](value.strip()):
+                raise ValueError(f["error"])
+            kept = credentials.store(secret_key(name, f["name"]), keep, value, credentials.keep_of(old) if same else None, old.get(f["name"]))
+            if kept is None:
+                raise ValueError(f"'{f['label']}' 칸을 입력하세요." + (" (환경변수 이름)" if keep == "env" else ""))
+            item[f["name"]] = kept
             continue
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"'{f['label']}' 칸을 입력하세요.")
@@ -174,7 +76,7 @@ def save(name, destination):
             raise ValueError(f"'{f['label']}'은 {', '.join(v for v, _ in f['options'])} 중 하나입니다.")
         if "check" in f and not f["check"](value):
             raise ValueError(f["error"])
-        item[f["name"]] = protect(value) if f["secret"] else value
+        item[f["name"]] = value
     return settings.save_named(FILE, "보낼 곳", MAX_DESTINATION_SIZE, name, item, MAX_DESTINATIONS)
 
 
@@ -216,19 +118,39 @@ def message(body):
             "table": table_text(body["table"]) if body.get("table") is not None else "", "image": png}
 
 
-def send(name, body):
+def fields_of(name):
+    """저장한 보낼 곳 name의 (종류, 칸 값(비밀 값은 풀어서), 비밀 값들). 비밀 값이 없으면(세션 끝남, 환경변수 없음, 풀 수 없음) 그 이유로 ValueError."""
     saved = settings.named(FILE).get(name)
     if saved is None:
         raise ValueError(f"'{name}' 보낼 곳이 없습니다.")
-    kind = KINDS[saved["kind"]]
-    fields = {f["name"]: reveal(saved[f["name"]]) if f["secret"] else saved[f["name"]] for f in kind["fields"]}
-    secrets = [fields[f["name"]] for f in kind["fields"] if f["secret"]]
-    if None in secrets:
-        raise ValueError(f"'{name}'의 비밀 값을 읽을 수 없습니다(다른 PC·계정에서 온 파일). 보낼 곳을 다시 저장하세요.")
+    kind, keep = KINDS[saved["kind"]], credentials.keep_of(saved)
+    fields, secrets = {}, []
+    for f in kind["fields"]:
+        if not f["secret"]:
+            fields[f["name"]] = saved[f["name"]]
+            continue
+        value = credentials.resolve(secret_key(name, f["name"]), keep, saved.get(f["name"]))
+        if value is None:
+            raise ValueError(f"'{name}': " + credentials.missing(keep, f["label"], saved.get(f["name"], "")))
+        fields[f["name"]], secrets = value, secrets + [value]
+    return kind, fields, secrets
+
+
+def send(name, body):
+    kind, fields, secrets = fields_of(name)
     try:
         kind["send"](fields, message(body))
     except ValueError as e:
         raise ValueError(source.mask(str(e), secrets)) from None  # 오류 문구에서 비밀 값(토큰, 주소)을 가린다.
+
+
+def check(name):
+    """저장한 보낼 곳을 메시지 없이 확인한다(어댑터의 check). 확인 글을 돌려준다."""
+    kind, fields, secrets = fields_of(name)
+    try:
+        return kind["check"](fields)
+    except ValueError as e:
+        raise ValueError(source.mask(str(e), secrets)) from None
 
 
 @app.get("/api/destinations")
@@ -248,3 +170,9 @@ def send_message():
     """저장한 보낼 곳으로 보낸다. 데이터 작업과 상관없어 차례(turn)를 기다리지 않는다."""
     send(request.json.get("name"), request.json)
     return jsonify(ok=True)
+
+
+@app.post("/api/destinations/check")
+def check_destination():
+    """저장한 보낼 곳의 연동 확인(메시지는 보내지 않는다)."""
+    return jsonify(message=check(request.json.get("name")))

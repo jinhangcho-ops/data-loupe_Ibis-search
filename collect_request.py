@@ -7,7 +7,7 @@ import shlex
 from urllib.parse import parse_qsl, quote, quote_plus, unquote, urlencode, urlsplit, urlunsplit
 
 from collect_http import SECRET_HEADERS
-from notify import BODIES
+from adapters.webhook import BODIES
 
 # 자리 표시. 이 모양만 바꾸고 다른 중괄호는 그대로 둔다. 무리 1: env 이름, 2: page·offset·cursor, 3: today·now, 4: 날짜 형식
 PLACE = re.compile(r"\{(?:env:([A-Za-z_][A-Za-z0-9_]*)|(page|offset|cursor)|(today|now)(?::([^{}]+))?)\}")
