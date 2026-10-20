@@ -1,5 +1,6 @@
-"""명세 5번 NL2SQL 뼈대: 문맥(명세서·캐시 추론·지표, 데이터 값 없음) → 시스템 프롬프트 → LLM(가짜) → SafeIbisSQLExecutor 검사.
+"""명세 5번 NL2SQL: 문맥(명세서·캐시 추론·지표, 데이터 값 없음) → 시스템 프롬프트 → LLM(가짜) → SafeIbisSQLExecutor 검사.
 LLM은 부르지 않는다(스텁과 가짜만). 데이터·명세서·지표 파일은 테스트 안에서 지어낸다."""
+
 import duckdb
 import polars as pl
 import pytest
@@ -49,7 +50,7 @@ def shop(client, tmp_path, folder):
 def test_prompt_has_context_without_values(client, shop):
     d = client.post("/api/nl2sql/prompt", json={"question": "매출 합계"}).get_json()
     system = d["system"]
-    assert d["llm"] == "없음(스텁)" and d["tables"] == 1 and d["metrics"] == 1 and d["question"] == "매출 합계"
+    assert d["llm"] == "없음" and d["tables"] == 1 and d["metrics"] == 1 and d["question"] == "매출 합계"
     for want in ("### orders — 주문 내역 (파티션 컬럼: day)", "- amount int64 — 결제 금액(원)", "날짜 형식 YYYY-MM-DD", "빈 값 25%",
                  "값 종류가 적은 구분 컬럼", "- 객단가: 합계(amount) ÷ 개수", "SELECT 문 하나", "```sql", "너는 DuckDB SQL을"):
         assert want in system, want
@@ -59,7 +60,7 @@ def test_prompt_has_context_without_values(client, shop):
 
 def test_stub_and_ask(client, shop):
     r = client.post("/api/nl2sql/ask", json={"question": "매출 합계"})
-    assert r.status_code == 400 and "LLM이 연결되어 있지 않습니다" in r.get_json()["error"]
+    assert r.status_code == 400 and "LLM이 설정되어 있지 않습니다" in r.get_json()["error"]
     ctx, known = nl2sql.context(shop.state["con"], shop.connection_key()), ["orders"]
     fake = Fake("설명입니다.\n```sql\nselect sum(amount) as 매출 from orders\n```")
     assert nl2sql.ask(" 매출 합계 ", ctx, "duckdb", known, fake) == "select sum(amount) as 매출 from orders"
@@ -76,7 +77,6 @@ def test_stub_and_ask(client, shop):
 
 def test_route_uses_active_client(client, shop, monkeypatch):
     fake = Fake("```sql\nselect status, count(*) from orders group by status\n```")
-    monkeypatch.setitem(llm.CLIENTS, "fake", fake)
-    monkeypatch.setattr(llm, "ACTIVE", "fake")
+    monkeypatch.setattr(llm, "client", lambda: fake)
     assert client.post("/api/nl2sql/ask", json={"question": "상태별 건수"}).get_json() == {"sql": "select status, count(*) from orders group by status"}
     assert "secret-flag" not in fake.seen[0]

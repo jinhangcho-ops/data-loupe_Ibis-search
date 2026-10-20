@@ -380,7 +380,11 @@ def nl2sql_prompt():
     """LLM에 보낼 내용(시스템 프롬프트와 질문)을 보여 준다. 묻지는 않는다."""
     _, ctx = nl2sql_context()
     question = request.json.get("question") or ""
-    return jsonify(system=nl2sql.system_prompt(ctx), question=question.strip()[:nl2sql.MAX_QUESTION], llm=nl2sql.llm.client().name,
+    try:
+        name = nl2sql.llm.client().name
+    except ValueError as e:
+        name = f"설정 오류({e})"
+    return jsonify(system=nl2sql.system_prompt(ctx), question=question.strip()[:nl2sql.MAX_QUESTION], llm=name,
                    tables=len(ctx["tables"]), metrics=len(ctx["metrics"]))
 
 
@@ -390,3 +394,24 @@ def nl2sql_ask():
     con, ctx = nl2sql_context()
     known = known_tables(con) + list(server.virtual_tables())
     return jsonify(sql=nl2sql.ask(request.json.get("question"), ctx, sql_exec.dialect_of(con), known))
+
+
+def llm_view(error=None):
+    """LLM env 파일 경로와 지금 어댑터 이름(키는 보이지 않는다). 파일을 읽을 수 없으면 error."""
+    try:
+        name = nl2sql.llm.client().name
+    except ValueError as e:
+        name, error = "없음", str(e)
+    return jsonify(env=nl2sql.llm.env_path(), llm=name, **({"error": error} if error else {}))
+
+
+@app.get("/api/llm")
+def llm_state():
+    return llm_view()
+
+
+@app.post("/api/llm")
+def save_llm():
+    """LLM env 파일 경로를 읽어 검사한 뒤 저장한다(빈 글자면 LLM을 쓰지 않음). 키는 저장하지 않는다."""
+    nl2sql.llm.save_env_path(request.json.get("env"))
+    return llm_view()

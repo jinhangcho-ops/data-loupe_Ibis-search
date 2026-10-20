@@ -227,6 +227,7 @@
       <div class="row nl-row"><input id="nl-q" placeholder="질문으로 SQL 만들기 (예: 지난달 매장별 매출 합계)" title="LLM이 만든 SQL은 실행하지 않고 편집기에 넣습니다. 검사를 보고 [실행]하세요">
         <button id="nl-ask" class="btn" title="LLM에 물어 SQL을 만듭니다(지금은 LLM이 연결되어 있지 않은 뼈대)">SQL 만들기</button>
         <button id="nl-prompt" class="btn" title="LLM에 보낼 내용을 봅니다. 테이블·컬럼 이름과 타입, 명세서 설명, 지표 정의만 들어가고 데이터 값은 넣지 않습니다">프롬프트 보기</button></div>
+      <div class="row nl-row"><span class="hint" style="margin:0" id="llm-name">LLM: 없음</span><input id="llm-env" class="code" placeholder="LLM env 파일 경로 (LLM_PROVIDER·LLM_API_KEY·LLM_MODEL)" title="키는 저장하지 않고 이 파일에서 물을 때마다 읽습니다. 비우고 [읽기]를 누르면 LLM을 쓰지 않습니다"><button id="llm-read" class="btn">읽기</button></div>
       <pre class="nl-prompt hidden" id="nl-view"></pre>
       <textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea>
       <div class="sql-check" id="sql-check"></div>
@@ -1182,6 +1183,15 @@ $("nl-prompt").onclick = () => busy($("nl-prompt"), async () => {
   } catch (e) { say("err-sql", e.message); }
 });
 $("nl-q").addEventListener("keydown", e => { if (e.key === "Enter") $("nl-ask").click(); });
+function showLlm(d) {
+  $("llm-env").value = d.env;
+  $("llm-name").textContent = "LLM: " + d.llm;
+  if (d.error) say("err-sql", d.error);
+}
+$("llm-read").onclick = () => busy($("llm-read"), async () => {
+  try { showLlm(await api("/api/llm", { env: $("llm-env").value.trim() })); say("err-sql", "LLM 설정을 읽었습니다.", true); } catch (e) { say("err-sql", e.message); }
+});
+api("/api/llm").then(showLlm).catch(() => {});
 $("sql-deep").onclick = () => busy($("sql-deep"), () => checkSql(true));
 $("sql-text").onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("sql-run").click(); } };
 toggleDrop($("sql-save-open"), $("sql-save-pop"));

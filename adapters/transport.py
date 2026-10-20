@@ -5,10 +5,10 @@ import urllib.request
 TIMEOUT = 15  # 요청 하나를 기다리는 시간(초)
 
 
-def post(url, data, headers):
+def post(url, data, headers, timeout=TIMEOUT):
     """요청을 보내고 응답 몸통(bytes)을 돌려준다. 실패하면 상태 코드와 응답 앞부분을 넣은 한국어 오류."""
     try:
-        with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method="POST"), timeout=TIMEOUT) as reply:
+        with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers, method="POST"), timeout=timeout) as reply:
             return reply.read()
     except urllib.error.HTTPError as e:
         raise ValueError(f"보내지 못했습니다(상태 {e.code}): {e.read().decode('utf-8', 'replace')[:200]}") from None
