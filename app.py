@@ -60,8 +60,9 @@ def build(body, select=True):
 
 @app.post("/api/columns")
 def columns():
-    """줄을 모두 검사한 식의 [컬럼, 한글 타입]과, 컬럼마다 원래 테이블(origins: 머리글 아래 작은 글씨)."""
-    return jsonify(columns=result.columns(build(request.json, select=False)), origins=joined(request.json)[1])
+    """줄을 모두 검사한 식의 [컬럼, 한글 타입], 구조 컬럼 안의 필드(fields: [user.name, 타입]), 컬럼마다 원래 테이블(origins: 머리글 아래 작은 글씨)."""
+    expr = build(request.json, select=False)
+    return jsonify(columns=result.columns(expr), fields=result.fields(expr), origins=joined(request.json)[1])
 
 
 @app.post("/api/values")
@@ -232,6 +233,41 @@ def sql_expr(body):
     vts = server.virtual_tables()
     tree = sql_exec.check(body.get("sql"), sql_exec.dialect_of(con))
     return run(lambda: sql_exec.to_expr(con, body["sql"], vts)), [n for n in sql_exec.table_names(tree) if n in vts]
+
+
+KNOWN_TABLES = {}  # 연결마다 한 번 받은 테이블 목록 {"con": 연결, "names": [...]}. 입력하는 동안의 검사가 DB에 자꾸 묻지 않게 한다.
+
+
+def known_tables(con):
+    if KNOWN_TABLES.get("con") is not con:
+        KNOWN_TABLES.update(con=con, names=source.list_tables(con))
+    return KNOWN_TABLES["names"]
+
+
+@app.post("/api/sql/check")
+def sql_check():
+    """SQL을 실행하지 않고 검사한다: 문법(오류면 줄·칸), 바꾸는 문장·여러 문장, 이 연결에 없는 테이블(테이블·가상 테이블·WITH 이름 기준).
+    deep이면 컬럼까지: 연결에서 짜 보기만 하고(결과 컬럼 알아보기) 데이터는 읽지 않는다. {ok, message, line, col}."""
+    body, con = request.json, get_con()
+    try:
+        tree = sql_exec.check(body.get("sql"), sql_exec.dialect_of(con))
+    except sql_exec.SqlSyntaxError as e:
+        return jsonify(ok=False, message=str(e), line=e.line, col=e.col)
+    except ValueError as e:
+        return jsonify(ok=False, message=str(e))
+    vts = server.virtual_tables()
+    known = {t.lower() for t in known_tables(con)} | {n.lower() for n in vts}
+    missing = [n for n in dict.fromkeys(sql_exec.table_names(tree)) if n.lower() not in known]
+    if missing:
+        return jsonify(ok=False, message=f"이 연결에 없는 테이블입니다: {', '.join(missing)}")
+    if body.get("deep") is True:
+        try:
+            columns = run(lambda: sql_exec.to_expr(con, body["sql"], vts).columns)
+        except Exception as e:
+            text = source.mask(str(e), server.state["passwords"]).strip().splitlines()
+            return jsonify(ok=False, message="연결에서 짜 보지 못했습니다: " + (text[0] if text else type(e).__name__))
+        return jsonify(ok=True, message=f"이상 없음 · 결과 컬럼 {len(columns)}개: {', '.join(columns[:12])}{' …' if len(columns) > 12 else ''}")
+    return jsonify(ok=True, message="문법 이상 없음")
 
 
 @app.post("/api/sql/run")

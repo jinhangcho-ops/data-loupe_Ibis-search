@@ -16,17 +16,30 @@ const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.crea
 // 칩: 이름 옆의 ×를 누르면 remove를 부른다.
 const chip = (text, remove) => el("span", { className: "chip" }, text, el("button", { className: "ghost", textContent: "×", title: "빼기", onclick: remove }));
 const download = (href, name) => el("a", { href, download: name }).click();
+// 중첩 값(구조·목록·맵): 한 줄로 {name: 가람, age: 30}, [a, b]처럼 줄여 보인다. 빈 값은 null.
+const isNested = v => v !== null && typeof v === "object";
+const inline = v => Array.isArray(v) ? "[" + v.map(inline).join(", ") + "]"
+  : isNested(v) ? "{" + Object.entries(v).map(([k, x]) => `${k}: ${inline(x)}`).join(", ") + "}" : v === null ? "null" : String(v);
 // 값이 표에 보이는 글자와 전체 글자(잘렸을 때만, 마우스를 올리면 보인다). 숫자는 자릿수 쉼표를 넣고, 문자열은 최대 글자 수(#maxlen, 없는 화면은 40)에서 자른다.
+// 중첩 값의 전체 글자는 들여쓴 JSON이다.
 function shown(v) {
   if (typeof v === "number") return [v.toLocaleString(), ""];
-  const s = String(v ?? ""), max = +($("maxlen")?.value ?? 40);
-  return max > 0 && s.length > max ? [s.slice(0, max) + "…", s] : [s, ""];
+  const s = isNested(v) ? inline(v) : String(v ?? ""), max = +($("maxlen")?.value ?? 40);
+  const full = isNested(v) ? JSON.stringify(v, null, 2) : s;
+  return max > 0 && s.length > max ? [s.slice(0, max) + "…", full] : [s, isNested(v) && full !== s ? full : ""];
 }
+// 표 칸. 중첩 값 칸(.nest)은 누르면 들여쓴 전체를 칸 안에 펼치고, 다시 누르면 접는다.
 function cell(v) {
-  const [text, full] = shown(v);
-  return typeof v === "number" ? `<td class="num">${text}</td>`
-    : full ? `<td title="${esc(full).replace(/"/g, "&quot;")}">${esc(text)}</td>` : `<td>${esc(text)}</td>`;
+  const [text, full] = shown(v), title = full ? ` title="${esc(full).replace(/"/g, "&quot;")}"` : "";
+  if (isNested(v)) return `<td class="nest"${title} data-full="${esc(full || text).replace(/"/g, "&quot;")}">${esc(text)}</td>`;
+  return typeof v === "number" ? `<td class="num">${text}</td>` : `<td${title}>${esc(text)}</td>`;
 }
+document.addEventListener("click", e => {
+  const td = e.target.closest("td.nest");
+  if (!td) return;
+  if (td.dataset.short === undefined) { td.dataset.short = td.textContent; td.replaceChildren(el("pre", { className: "nest-full", textContent: td.dataset.full })); }
+  else { td.textContent = td.dataset.short; delete td.dataset.short; }
+});
 // 메시지 칸에 글자를 쓴다. ok가 true면 성공 색, 글자면 그 클래스(예: "hint"는 안내 색), 아니면 오류 색.
 const say = (id, text, ok) => { $(id).textContent = text; $(id).className = ok === true ? "ok" : ok || "err"; };
 const connMsg = (text, ok) => say("err-connect", text, ok);  // 연결 메시지(설정 저장·알림 오류도 여기에)

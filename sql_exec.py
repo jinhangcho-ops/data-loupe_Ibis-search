@@ -34,6 +34,32 @@ class SecurityViolationError(ValueError):
     """읽기만 하는 SQL이 아니다(바꾸는 문장, 여러 문장 등)."""
 
 
+class SqlSyntaxError(ValueError):
+    """SQL 문법 오류. line·col은 오류가 난 자리(1부터, 모르면 None)."""
+
+    def __init__(self, message, line=None, col=None):
+        super().__init__(message)
+        self.line, self.col = line, col
+
+
+SYNTAX_WORDS = [  # sqlglot의 영어 오류 설명 → 한국어(앞에서부터 처음 맞는 것)
+    (re.compile(r"Expected table name but got <Token[^>]*text: ([^,>]*)"), lambda m: f"테이블 이름이 와야 하는데 '{m[1]}'가 있습니다"),
+    (re.compile(r"Expecting \)"), lambda m: "닫는 괄호 ')'가 필요합니다"),
+    (re.compile(r"Expecting \("), lambda m: "여는 괄호 '('가 필요합니다"),
+    (re.compile(r"Invalid expression / Unexpected token"), lambda m: "알 수 없는 표현이나 예상하지 못한 낱말이 있습니다"),
+    (re.compile(r"Required keyword: '(\w+)' missing"), lambda m: "빠진 부분이 있습니다"),
+    (re.compile(r"Expected (\w+)"), lambda m: f"{m[1]}가 와야 합니다"),
+]
+
+
+def syntax_message(description):
+    """sqlglot 오류 설명을 한국어로. 모르는 것은 토큰 덤프만 낱말로 줄여 그대로."""
+    for pattern, say in SYNTAX_WORDS:
+        if m := pattern.search(description):
+            return say(m)
+    return re.sub(r"<Token[^>]*text: ([^,>]*)[^>]*>", lambda m: f"'{m[1]}'", description).split(". Line")[0]
+
+
 def dialect_of(con):
     """연결의 SQL 방언(sqlglot이 읽고 쓸 이름 또는 클래스). 모르면 None(일반 SQL)."""
     return getattr(con, "dialect", None)
@@ -49,7 +75,12 @@ def check(sql, dialect=None):
     try:
         parsed = [p for p in sqlglot.parse(sql, read=dialect) if p is not None]
     except sqlglot.errors.ParseError as e:
-        raise ValueError(f"SQL을 읽을 수 없습니다: {str(e).splitlines()[0]}") from None
+        first = (e.errors or [{}])[0]
+        line, col = first.get("line"), first.get("col")
+        where = f"{line}줄 {col}칸: " if line else ""
+        raise SqlSyntaxError(f"SQL을 읽을 수 없습니다. {where}{syntax_message(first.get('description') or str(e))}", line, col) from None
+    except sqlglot.errors.TokenError:
+        raise SqlSyntaxError("SQL을 읽을 수 없습니다. 따옴표나 괄호가 닫히지 않았습니다.") from None
     if len(parsed) != 1:
         raise SecurityViolationError("SQL 문장은 하나만 실행할 수 있습니다(; 로 여러 문장을 이을 수 없음).")
     tree = parsed[0]

@@ -54,6 +54,11 @@ button.ghost { background:none; border-color:transparent; color:var(--muted); pa
 .jobx button { background:var(--card); border:0; color:var(--err); height:26px; padding:0 12px; }
 .top-tools { display:flex; gap:8px; align-items:center; }
 
+/* 중첩 값 칸(구조·목록): 누르면 들여쓴 전체를 펼친다(common.js cell) */
+td.nest { cursor:pointer; color:var(--accent); }
+td.nest:hover { text-decoration:underline dotted; }
+td.nest .nest-full { margin:0; font:12px/1.4 Consolas, ui-monospace, monospace; color:var(--text); white-space:pre; max-height:260px; overflow:auto; }
+
 /* 카드와 카드를 위아래로 잇는 묶음(.main): 수집 화면의 가운데 */
 .card { position:relative; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; }
 .main { display:flex; flex-direction:column; gap:16px; min-width:0; }

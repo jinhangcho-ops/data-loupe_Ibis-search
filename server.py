@@ -18,6 +18,7 @@ import sql_exec
 import use_counts
 
 app = Flask(__name__, static_folder="static")
+app.json.sort_keys = False  # 구조 컬럼의 필드·행의 컬럼을 원래 차례대로 보낸다(Flask 기본은 이름 순)
 
 # 연결은 메모리에만 둔다. passwords는 오류 문구에서 가릴 값, opened는 다시 열 때 쓸 요청 값, rows는 세어 둔 테이블 행 수, cancel은 지금 도는 데이터 작업의 취소 신호.
 state = {"con": None, "passwords": [], "opened": None, "rows": {}, "cancel": threading.Event()}

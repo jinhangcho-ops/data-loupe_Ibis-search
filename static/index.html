@@ -35,6 +35,9 @@
   .sql-edit .row label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; white-space:nowrap; }
   .sql-edit .row input { width:100px; }
   #err-sql { padding:0 28px; }
+  .sql-check { font-size:12.5px; min-height:18px; color:var(--muted); }
+  .sql-check.ok { color:var(--ok); } .sql-check.err { color:var(--err); }
+  #sql-text.bad { border-color:var(--err); outline-color:color-mix(in srgb, var(--err) 40%, transparent); }
   #err-sql:empty, #err-vt:empty { display:none; }
   .vt { display:flex; align-items:center; gap:6px; padding:5px 8px; border:1px solid var(--line); border-radius:9px; margin-bottom:4px; }
   .vt b { cursor:pointer; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -211,7 +214,9 @@
     </div>
     <div class="sql-edit">
       <textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea>
-      <div class="row"><label title="화면에 받을 행 수. 전체는 [결과 저장]으로 받습니다">받을 행 <input id="sql-rows" type="number" min="1"></label>
+      <div class="sql-check" id="sql-check"></div>
+      <div class="row"><button id="sql-deep" class="btn" title="연결에서 짜 보기만 해서 테이블·컬럼 이름까지 확인합니다(데이터는 읽지 않습니다)">검사</button>
+        <label title="화면에 받을 행 수. 전체는 [결과 저장]으로 받습니다">받을 행 <input id="sql-rows" type="number" min="1"></label>
         <span class="hint" style="margin:0">읽기만 하는 SELECT 문 하나만 실행합니다(WITH·JOIN·LIKE·* 가능, DROP·DELETE·INSERT·여러 문장 불가).</span></div>
     </div>
     <div class="big"><b id="sql-count">실행 전</b><span id="sql-sub"></span></div>
@@ -392,16 +397,19 @@ async function refreshColumns() {
   if (!S.base) return;
   const d = await api("/api/columns", state());
   S.cols = d.columns;
+  S.fields = d.fields ?? [];  // 구조 컬럼 안의 필드(user.name). 조건·정렬·표시 컬럼에 컬럼처럼 쓴다(차트·집계는 컬럼만).
   S.origins = d.origins;
-  $("cols").innerHTML = S.cols.map(([n, t]) => `${esc(n)} (${esc(t)})`).join("<br>");
+  $("cols").innerHTML = S.cols.map(([n, t]) => `${esc(n)} (${esc(t)})`).join("<br>") +
+    S.fields.map(([n, t]) => `<br><span class="hint" style="margin:0">　${esc(n)} (${esc(t)})</span>`).join("");
   fill($("cx"), S.cols.map(c => c[0]));
   fill($("cy"), S.cols.filter(c => c[1] === "정수" || c[1] === "실수").map(c => c[0]), "Y 없음");
   const split = $("csplit").value;  // 나눌 컬럼도 고른 것은 남아 있으면 그대로 둔다.
   fill($("csplit"), S.cols.map(c => c[0]), "나누지 않음");
   if (S.cols.some(c => c[0] === split)) $("csplit").value = split;
   const col = $("bcol").value;  // 조건 칸의 컬럼 목록도 새로 채우되, 고른 컬럼은 남아 있으면 그대로 둔다.
-  fill($("bcol"), S.cols.map(c => c[0]));
-  if (S.cols.some(c => c[0] === col)) $("bcol").value = col; else $("bpick").classList.add("hidden");
+  const condCols = [...S.cols, ...S.fields];
+  fill($("bcol"), condCols.map(c => c[0]));
+  if (condCols.some(c => c[0] === col)) $("bcol").value = col; else $("bpick").classList.add("hidden");
   showBuilder();
   fillSummaryCols();
   showUnion();
@@ -538,7 +546,7 @@ function renderList(key) {
 // 조건끼리의 and/or는 목록의 연결 버튼으로 정한다.
 const OPS_TEXT = ["=", "!=", "like", "in", "except", "is null", "is not null"];
 const OPS_OTHER = ["=", "!=", ">=", "<=", ">", "<", "between", "in", "except", "is null", "is not null"];
-const isText = () => (S.cols.find(c => c[0] === $("bcol").value) || [])[1] === "문자";
+const isText = () => ([...S.cols, ...(S.fields ?? [])].find(c => c[0] === $("bcol").value) || [])[1] === "문자";
 const isMulti = () => ["in", "except"].includes($("bop").value);
 // 따옴표 해석이 켜져 있으면, or·쉼표가 들었거나 따옴표로 시작하는 값을 따옴표로 감싸 한 값으로 읽히게 한다.
 const wrap = v => !$("quotes").checked || !/(^|\s)or(\s|$)|,|^['"]/i.test(v) ? v : v.includes("'") ? `"${v}"` : `'${v}'`;
@@ -1088,6 +1096,30 @@ async function runSql() {
   } catch (e) { say("err-sql", e.message); }
 }
 $("sql-run").onclick = () => busy($("sql-run"), runSql);
+// 문법 검사: 입력을 0.6초 멈추면 서버에서 실행하지 않고 검사한다(문법·바꾸는 문장·없는 테이블). [검사]는 컬럼까지 보고 오류 자리를 고른다.
+let checkTimer = null, checkSeq = 0;
+async function checkSql(deep) {
+  const sql = $("sql-text").value, seq = ++checkSeq, box = $("sql-check");
+  if (!sql.trim()) { box.textContent = ""; box.className = "sql-check"; $("sql-text").classList.remove("bad"); return; }
+  if (!connected) { box.textContent = "연결하면 검사합니다."; box.className = "sql-check"; return; }
+  try {
+    const d = await api("/api/sql/check", { sql, deep });
+    if (seq !== checkSeq) return;  // 그사이 다시 고쳤으면 늦게 온 결과는 버린다
+    box.textContent = (d.ok ? "✓ " : "✕ ") + d.message;
+    box.className = "sql-check " + (d.ok ? "ok" : "err");
+    $("sql-text").classList.toggle("bad", !d.ok);
+    if (deep && d.line) selectAt($("sql-text"), d.line, d.col);
+  } catch (e) { if (seq === checkSeq) { box.textContent = "✕ " + e.message; box.className = "sql-check err"; } }
+}
+// 편집기에서 line줄 col칸(1부터) 앞의 낱말을 골라 오류 자리를 보인다.
+function selectAt(box, line, col) {
+  const lines = box.value.split("\n"), text = lines[line - 1] ?? "", upto = text.slice(0, Math.min(col, text.length));
+  const start = lines.slice(0, line - 1).reduce((n, l) => n + l.length + 1, 0), word = upto.match(/\S*$/)[0].length;
+  box.focus();
+  box.setSelectionRange(start + upto.length - Math.max(word, 1), start + upto.length);
+}
+$("sql-text").addEventListener("input", () => { clearTimeout(checkTimer); checkTimer = setTimeout(() => checkSql(false), 600); });
+$("sql-deep").onclick = () => busy($("sql-deep"), () => checkSql(true));
 $("sql-text").onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("sql-run").click(); } };
 toggleDrop($("sql-save-open"), $("sql-save-pop"));
 document.querySelectorAll("[data-sqlexport]").forEach(b => b.onclick = () => {
@@ -1165,7 +1197,7 @@ function showSqlTables() {
   const names = [...$("base").querySelectorAll(":scope > option")].map(o => o.value).filter(Boolean);
   $("sql-tables").replaceChildren(...names.map(n => el("span", { className: "chip", textContent: n, onclick: () => insertSql(n) })));
 }
-document.addEventListener("tables", showSqlTables);
+document.addEventListener("tables", () => { if ($("sqlv").classList.contains("hidden")) showSqlTables(); else showSqlSide(); });  // 연결이 바뀌면 SQL 탭의 연결 이름·가상 테이블도
 function showSqlSide() {
   $("sql-conn").textContent = connected ? `연결: ${connName}` : "연결 안 됨";
   showVirtual();
@@ -1189,7 +1221,7 @@ drawChart();
 showView({ "#sql": "sql", "#dashboard": "dash" }[location.hash] ?? "explore");
 Object.assign(sized, { summary: () => $("summary"), chart: () => $("chart").parentElement });
 showSummaries();
-resume().then(() => { showSummaries(); if (connected) document.querySelectorAll(".step").forEach(s => s.classList.toggle("open", false)); showSummaries(); if (!$("sqlv").classList.contains("hidden")) showSqlSide(); });
+resume().then(() => { showSummaries(); if (connected) document.querySelectorAll(".step").forEach(s => s.classList.toggle("open", false)); showSummaries(); });
 </script>
 </body>
 </html>

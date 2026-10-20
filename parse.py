@@ -35,9 +35,57 @@ COMMA_RE = re.compile(",")
 QUOTE_RE = re.compile(r"""(?<![^\s,=<>])(['"])(?:.*?\1(?![^\s,]))?""")
 
 
+def type_name(dtype):
+    """한글 타입 이름. 중첩 타입은 구조{필드, …}, 목록<값 타입>, 맵<키 타입, 값 타입>."""
+    if dtype.is_struct():
+        return "구조{" + ", ".join(dtype.names) + "}"
+    if dtype.is_array():
+        return f"목록<{type_name(dtype.value_type)}>"
+    if dtype.is_map():
+        return f"맵<{type_name(dtype.key_type)}, {type_name(dtype.value_type)}>"
+    return next((name for check, _, name, _ in TYPES if check(dtype)), str(dtype))
+
+
 def type_info(dtype):
-    """(한글 이름, 변환 함수). 모르는 타입은 문자로 다룬다."""
-    return next(((name, cast) for check, _, name, cast in TYPES if check(dtype)), (str(dtype), str))
+    """(한글 이름, 변환 함수). 모르는 타입(중첩 포함)은 값을 문자로 다룬다."""
+    return next(((name, cast) for check, _, name, cast in TYPES if check(dtype)), (type_name(dtype), str))
+
+
+MAX_DEPTH = 3  # 구조 안의 구조를 몇 단계까지 필드로 펼칠지
+
+
+def struct_fields(name, dtype, depth=1):
+    """구조 컬럼 name 안의 필드 [(경로 "name.필드", 타입)]. 구조 안의 구조는 MAX_DEPTH 단계까지. 목록 안은 펼치지 않는다."""
+    if not dtype.is_struct() or depth > MAX_DEPTH:
+        return []
+    found = []
+    for field, sub in dtype.items():
+        path = f"{name}.{field}"
+        found += [(path, sub)] + struct_fields(path, sub, depth + 1)
+    return found
+
+
+def nested_names(expr):
+    """표의 구조 컬럼 안 필드 경로들(user.name 등)."""
+    return [path for name, dtype in expr.schema().items() for path, _ in struct_fields(name, dtype)]
+
+
+def column(expr, name):
+    """컬럼 식. 컬럼 이름에 없고 a.b처럼 점이 있으면 구조 컬럼 a 안의 필드 b(여러 단계 가능). 없으면 비슷한 이름을 알려 주는 ValueError."""
+    if name in expr.columns:
+        return expr[name]
+    head, *rest = name.split(".")
+    if rest and head in expr.columns:
+        value = expr[head]
+        for part in rest:
+            dtype = value.type()
+            if not dtype.is_struct() or part not in dtype.names:
+                break
+            value = value[part]
+        else:
+            return value
+    check_name(name, list(expr.columns) + nested_names(expr))
+    raise ValueError(f"'{name}' 컬럼이 없습니다.")
 
 
 def kind(dtype):
@@ -186,33 +234,35 @@ def parse_condition(line, expr, quotes=True):
 
 
 def parse_one(line, expr, quotes=True):
-    schema = expr.schema()
+    """조건 한 줄. 컬럼 자리에는 구조 안의 필드(user.name)도 쓸 수 있다(column)."""
     if m := NULL_RE.match(line):
         col, negate = m.groups()
-        check_name(col, schema.names)
-        return expr[col].notnull() if negate else expr[col].isnull()
+        c = column(expr, col)
+        return c.notnull() if negate else c.isnull()
     if m := BETWEEN_RE.match(line):
         col, lo, hi = m.groups()
-        check_name(col, schema.names)
-        lo, hi = convert(schema[col], unquote(lo, quotes)), convert(schema[col], unquote(hi, quotes))
-        return expr[col].between(lo, hi)
+        c = column(expr, col)
+        lo, hi = convert(c.type(), unquote(lo, quotes)), convert(c.type(), unquote(hi, quotes))
+        return c.between(lo, hi)
     if m := IN_RE.match(line):  # except는 in의 반대: 적은 값을 뺀다
         col, word, raw = m.groups()
-        check_name(col, schema.names)
-        values = [convert(schema[col], unquote(v, quotes)) for v in split(COMMA_RE, raw, quotes) if v.strip()]
-        return expr[col].isin(values) if word.lower() == "in" else expr[col].notin(values)
+        c = column(expr, col)
+        values = [convert(c.type(), unquote(v, quotes)) for v in split(COMMA_RE, raw, quotes) if v.strip()]
+        return c.isin(values) if word.lower() == "in" else c.notin(values)
     if m := LIKE_RE.match(line):  # 포함 검색. 대소문자는 가리지 않는다
         col, raw = m.groups()
-        check_name(col, schema.names)
-        if not schema[col].is_string():
+        c = column(expr, col)
+        if not c.type().is_string():
             raise ValueError("like는 문자 컬럼에만 쓸 수 있습니다.")
         raw = unquote(raw, quotes)
-        return expr[col].lower().contains(raw.lower())
+        return c.lower().contains(raw.lower())
     if m := COND_RE.match(line):
         col, op, raw = m.groups()
-        check_name(col, schema.names)
-        value = convert(schema[col], unquote(raw, quotes))
-        return OPS[op](expr[col], value)
+        c = column(expr, col)
+        if c.type().is_nested():
+            raise ValueError(f"'{col}'은 {type_name(c.type())} 컬럼이라 비교할 수 없습니다. 안의 필드(예: {col}.이름)나 is null을 쓰세요.")
+        value = convert(c.type(), unquote(raw, quotes))
+        return OPS[op](c, value)
     raise ValueError(f"형식: {CONDITION_GUIDE}")
 
 
@@ -232,17 +282,17 @@ def predicate(cond, expr):
 def parse_sort(line, expr):
     col, _, how = line.partition(" ")
     how = how.strip().lower() or "asc"
-    check_name(col, expr.columns)
+    c = column(expr, col)
     if how not in ("asc", "desc"):
         raise ValueError(f"형식: {SORT_GUIDE}")
-    return expr[col].desc() if how == "desc" else expr[col].asc()
+    return c.desc() if how == "desc" else c.asc()
 
 
 # 표시 컬럼: "컬럼1, 컬럼2"
 def parse_columns(line, expr):
     cols = [c.strip() for c in line.split(",") if c.strip()]
     for c in cols:
-        check_name(c, expr.columns)
+        column(expr, c)  # 구조 안의 필드(user.name)도 된다
     return cols
 
 
@@ -252,7 +302,7 @@ def apply(expr, preds, keys, cols):
         expr = expr.filter(*preds)
     if keys:
         expr = expr.order_by(keys)
-    return expr.select(list(dict.fromkeys(cols))) if cols else expr
+    return expr.select([column(expr, c).name(c) for c in dict.fromkeys(cols)]) if cols else expr
 
 
 MAX_ROWS = 10_000  # 화면에 한 번에 보여 줄 최대 행 수

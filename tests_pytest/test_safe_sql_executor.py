@@ -146,3 +146,32 @@ def test_routes(client, tmp_path, folder):
 
     stored = json.loads((folder / "virtual_tables.json").read_text(encoding="utf-8"))
     assert list(stored) == ["folder:" + os.path.normcase(os.path.abspath(str(tmp_path)))]  # 연결 열쇠는 폴더 경로뿐(비밀번호 없음)
+
+
+def test_syntax_errors():
+    with pytest.raises(sql_exec.SqlSyntaxError) as e:
+        sql_exec.check("select a\nfrom t\nwhere (a = 1", "duckdb")
+    assert (e.value.line, e.value.col) == (3, 12) and "3줄 12칸" in str(e.value) and "괄호" in str(e.value)
+    with pytest.raises(sql_exec.SqlSyntaxError, match="따옴표"):
+        sql_exec.check("select 'abc from t", "duckdb")
+    with pytest.raises(sql_exec.SqlSyntaxError, match="테이블 이름이 와야"):
+        sql_exec.check("select a from where", "duckdb")
+
+
+def test_check_route(client, tmp_path):
+    import server
+    path = tmp_path / "shop.duckdb"
+    with duckdb.connect(str(path)) as raw:
+        raw.register("df", ORDERS.to_arrow())
+        raw.execute("create table orders as select * from df")
+    server.state.update(con=ibis.duckdb.connect(str(path), read_only=True), opened={"kind": "folder", "path": str(tmp_path), "file": str(path)})
+    check = lambda sql, deep=False: client.post("/api/sql/check", json={"sql": sql, "deep": deep}).get_json()
+    assert check("with x as (select * from orders) select id from x") == {"ok": True, "message": "문법 이상 없음"}
+    bad = check("select id\nfrom orders where (id = 1")
+    assert (bad["ok"], bad["line"], bad["col"]) == (False, 2, 25)
+    assert check("select * from orderz")["message"] == "이 연결에 없는 테이블입니다: orderz"
+    assert "DELETE" in check("delete from orders")["message"]
+    assert check("select nope from orders")["ok"] is True  # 컬럼은 [검사](deep)에서만 본다
+    deep = check("select nope from orders", deep=True)
+    assert deep["ok"] is False and "nope" in deep["message"]
+    assert check("select id, amount from orders", deep=True)["message"].startswith("이상 없음 · 결과 컬럼 2개: id, amount")

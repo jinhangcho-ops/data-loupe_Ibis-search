@@ -4,7 +4,7 @@ from pathlib import Path
 
 from lazy import ibis
 
-from parse import check_name, type_info
+from parse import check_name, column as field_of, struct_fields, type_info
 
 SUMMARY_COLS = ["name", "type", "count", "nulls", "unique", "min", "max", "mean"]
 MAX_GROUPS = 50  # 차트에 표시할 최대 그룹 수
@@ -13,15 +13,41 @@ MAX_VALUES = 200  # 조건을 만들 때 보여 줄 컬럼 값 목록의 최대 
 EXCEL_MAX_ROWS = 1_048_575  # Excel 시트 한 장의 행 수(제목 줄 제외)
 
 
+def json_text(df):
+    """중첩 컬럼(구조·목록·맵)을 JSON 글자로 바꾼 Polars 표(CSV·Excel은 중첩 타입을 쓸 수 없다)."""
+    import polars as pl
+    nested = [name for name, dtype in df.schema.items() if dtype.is_nested()]
+    # {"v": 값}으로 감싸 JSON으로 만든 뒤 앞의 {"v": 와 끝의 }를 뗀다(목록·구조 모두 한 번에).
+    return df.with_columns(pl.struct(pl.col(c).alias("v")).struct.json_encode().str.slice(5).str.head(-1).alias(c) for c in nested) if nested else df
+
+
+def has_nested(expr):
+    return any(t.is_nested() for t in expr.schema().values())
+
+
+def write_csv(expr, path):
+    """CSV로 저장. 중첩 컬럼이 있으면 묶음(batch)마다 JSON 글자로 바꿔 이어 쓴다."""
+    if not has_nested(expr):
+        return expr.to_csv(path)
+    import polars as pl
+    with open(path, "wb") as f:
+        wrote = False
+        for batch in expr.to_pyarrow_batches():
+            json_text(pl.from_arrow(batch)).write_csv(f, include_header=not wrote)
+            wrote = True
+        if not wrote:  # 행이 없으면 머리글만
+            f.write((",".join(expr.columns) + "\n").encode("utf-8"))
+
+
 def write_excel(expr, path):
     if get_count(expr) > EXCEL_MAX_ROWS:
         raise ValueError(f"Excel은 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있습니다. CSV나 Parquet으로 저장하세요.")
-    expr.to_polars().write_excel(path)
+    json_text(expr.to_polars()).write_excel(path)
 
 
 # 확장자: 저장 함수
 EXPORTS = {
-    ".csv": lambda expr, path: expr.to_csv(path),
+    ".csv": write_csv,
     ".xlsx": write_excel,
     ".parquet": lambda expr, path: expr.to_parquet(path),
 }
@@ -30,6 +56,11 @@ EXPORTS = {
 def columns(expr):
     """[(컬럼, 한글 타입)]"""
     return [(name, type_info(dtype)[0]) for name, dtype in expr.schema().items()]
+
+
+def fields(expr):
+    """구조 컬럼 안의 필드 [(경로 user.name, 한글 타입)]. 조건·정렬·표시 컬럼에 컬럼처럼 쓴다."""
+    return [(path, type_info(sub)[0]) for name, dtype in expr.schema().items() for path, sub in struct_fields(name, dtype)]
 
 
 def get_rows(expr, limit, offset=0):
@@ -77,10 +108,10 @@ def get_summary(expr, columns=()):
 
 
 def get_values(expr, column, limit=MAX_VALUES):
-    """컬럼의 서로 다른 값(빈 값 제외)을 정렬해 limit개까지 문자로 돌려준다. 더 있으면 두 번째 값이 True."""
-    check_name(column, expr.columns)
-    values = expr.filter(expr[column].notnull()).select(column).distinct().order_by(column).limit(limit + 1)
-    values = [str(v) for v in values.to_polars()[column].to_list()]
+    """컬럼(구조 안의 필드 user.name도)의 서로 다른 값(빈 값 제외)을 정렬해 limit개까지 문자로 돌려준다. 더 있으면 두 번째 값이 True."""
+    col = field_of(expr, column)
+    values = expr.filter(col.notnull()).select(col.name("v")).distinct().order_by("v").limit(limit + 1)
+    values = [str(v) for v in values.to_polars()["v"].to_list()]
     return values[:limit], len(values) > limit
 
 
