@@ -751,7 +751,7 @@ def notify_section(c, got):
     try:
         r = c.get("/api/destinations").get_json()
         check("보낼 곳 종류 표: 라벨·그림·칸(비밀 여부)", ({k: (v["label"], v["image"], [(f["name"], f["secret"]) for f in v["fields"]]) for k, v in r["kinds"].items()}, r["destinations"]),
-              ({"slack": ("Slack", True, [("token", True), ("channel", False)]), "webhook": ("웹훅(주소로 보내기)", True, [("url", True), ("content", False), ("template", False)])}, {}))
+              ({"slack": ("Slack", True, [("token", True), ("channel", False)]), "notion": ("Notion(페이지에 덧붙이기)", False, [("token", True), ("page", False)]), "webhook": ("웹훅(주소로 보내기)", True, [("url", True), ("content", False), ("template", False)])}, {}))
         webhook = r["kinds"]["webhook"]
         check("webhook의 선택지·기본값·여러 줄 칸·기본 틀", ([f.get("options") for f in webhook["fields"]][1], [f.get("default") for f in webhook["fields"]][1], webhook["fields"][2].get("multiline"),
               [p["label"] for p in webhook["presets"]]), ([["json", "JSON"], ["text", "글자"], ["form", "폼(URL 인코딩)"]], "json", True, ["일반 JSON", "Teams", "Discord", "글자"]))
@@ -781,7 +781,7 @@ def notify_section(c, got):
               {"kind": "webhook", "url": "http://hooks.example.com/a", "content": "json", "template": "{}"},
               {"kind": "webhook", "url": "https://h.example.com/a", "content": "xml", "template": "{}"},
               {"kind": "webhook", "url": "https://h.example.com/a", "content": "json", "template": " "})],
-              ["보낼 곳의 종류는 slack, webhook 중 하나입니다.", "보낼 곳에 쓸 수 없는 값이 있습니다: extra", "보낼 곳에 쓸 수 없는 값이 있습니다: done", "주소는 https://로 시작해야 합니다.",
+              ["보낼 곳의 종류는 slack, notion, webhook 중 하나입니다.", "보낼 곳에 쓸 수 없는 값이 있습니다: extra", "보낼 곳에 쓸 수 없는 값이 있습니다: done", "주소는 https://로 시작해야 합니다.",
                "'본문 종류'은 json, text, form 중 하나입니다.", "'본문 틀' 칸을 입력하세요."])
         check("이름 제한(보낼 곳 이름은 1~50자, 30개까지)", [error("/api/destinations", name=n, destination=None) for n in ("", "x" * 51)], ["보낼 곳 이름은 1자 이상 50자 이하로 입력하세요."] * 2)
         for i in range(29):

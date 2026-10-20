@@ -3,6 +3,6 @@
   메시지는 notify.message가 만든 {title, text, rows, duration, table, image(PNG bytes 또는 None)}.
 - 받기: slack_bot(Slack Socket Mode). 받은 글은 commands.answer(코어)가 답한다.
 비밀 값(토큰·주소)은 어댑터가 저장하지 않는다. 부르는 쪽이 credentials로 풀어 칸 값으로 넘긴다."""
-from adapters import slack_out, webhook
+from adapters import notion, slack_out, webhook
 
-SENDERS = {"slack": slack_out.KIND, "webhook": webhook.KIND}
+SENDERS = {"slack": slack_out.KIND, "notion": notion.KIND, "webhook": webhook.KIND}

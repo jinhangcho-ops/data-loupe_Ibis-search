@@ -5,6 +5,7 @@
   지표 <이름> 검색=<저장한 검색> [나누기=<컬럼>]   저장한 검색 위에서 지표 값(나누면 값마다 표)
   검색                                          저장한 검색 목록(많이 쓴 순)
   검색 <저장한 검색> [행=<1~50>]                 행 수와 앞 행들
+  질문 <자연어>                                  LLM으로 SQL을 만들어 보여 준다(실행하지 않음, nl2sql)
 SQL 직접 실행처럼 저장해 두지 않은 조회는 받지 않는다. 데이터는 core.using()으로 화면과 같은 차례를 잡고 읽는다."""
 import shlex
 
@@ -24,6 +25,7 @@ HELP = """쓸 수 있는 명령:
 • 지표 <이름> 검색=<저장한 검색> [나누기=<컬럼>] — 지표 값
 • 검색 — 저장한 검색 목록
 • 검색 <저장한 검색> [행=20] — 행 수와 앞 행들
+• 질문 <자연어> — SQL을 만들어 보여 줌(실행하지 않음)
 값에 빈칸이 있으면 "따옴표"로 감싸세요."""
 
 
@@ -95,9 +97,25 @@ def search_answer(plain, named):
     return f"{name}: {count:,}행" + (f" (앞 {len(table['rows'])}행)" if count > len(table["rows"]) else "") + f"\n```\n{table_text(table)}\n```"
 
 
+def question_answer(text):
+    """자연어 질문으로 SQL을 만들어 보여 준다. 실행하지 않는다(실행은 프로그램 화면에서 사람이)."""
+    import nl2sql
+    import sql_exec
+    with core.using():
+        con = server.state["con"]
+        vts = server.virtual_tables()
+        ctx = server.run(lambda: nl2sql.context(con, server.connection_key(), None, vts))
+        known = source.list_tables(con) + list(vts)
+    sql = nl2sql.ask(text, ctx, sql_exec.dialect_of(con), known)  # LLM에 묻는 동안은 차례를 잡지 않는다
+    return f"만든 SQL(실행하지 않았습니다. 프로그램의 SQL 탭에서 확인하고 실행하세요):\n```\n{sql}\n```"
+
+
 def answer(text):
     """글 한 줄에 답할 글. 잘못 쓴 명령·오류는 안내 글로 돌려준다(예외를 내지 않는다)."""
     try:
+        head, _, rest = (text or "").strip().partition(" ")
+        if head == "질문":  # 자연어는 따옴표가 섞일 수 있어 나누지 않고 그대로 넘긴다
+            return question_answer(rest.strip()) if rest.strip() else "질문을 쓰세요. 예: 질문 지난달 매장별 매출 합계"
         command, plain, named = split(text or "")
         if command in ("도움", "help", "?"):
             return HELP

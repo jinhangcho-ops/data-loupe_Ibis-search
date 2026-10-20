@@ -23,6 +23,7 @@ from werkzeug.serving import make_server
 
 import bot_app
 import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
+import integrations_app  # noqa: F401  연동 라우트가 앱에 달린다.
 import collect_browser
 import collect_job
 import notify  # noqa: F401  보내기 라우트가 앱에 달린다.
