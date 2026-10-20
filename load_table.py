@@ -13,6 +13,7 @@ import prep_app
 import server
 import settings
 import source
+import uploads
 
 FILE = "load_tables.json"
 STAGING = "_ibis_load"  # 바꾸기: 새 내용을 먼저 넣어 둘 테이블 이름의 꼬리. 다 넣은 뒤 원래 테이블과 바꿔치기한다.
@@ -205,6 +206,8 @@ def check(config, password, file_columns):
         real, columns = look(con, table["schema"], table["name"])
     finally:
         source.close(con)
+    if table["load_id"] and file_columns is not None:  # 적재 ID 컬럼도 함께 넣는다
+        file_columns = [*file_columns, [uploads.LOAD_ID, "문자"]]
     ours = real is not None and mine(table["connection"], table["schema"], real) is not None
     found = {"exists": real is not None, "columns": file_columns, "table_columns": columns, "ours": ours, "ok": True}
     try:
@@ -245,12 +248,30 @@ def plan(table, real, columns, file_columns, resume=False):
 
 # ---------- 넣기 ----------
 
+def key_range(data, keys):
+    """묶음의 키 컬럼마다 [최소, 최대](업로드 기록). 비교할 수 없는 값이면 그 컬럼은 뺀다."""
+    found = {}
+    for k in keys:
+        values = [v for v in data.column(k).to_pylist() if v is not None]
+        try:
+            if values:
+                lo, hi = min(values), max(values)
+                found[k] = [lo if isinstance(lo, (int, float, str)) else str(lo), hi if isinstance(hi, (int, float, str)) else str(hi)]
+        except TypeError:
+            pass
+    return found
+
+
 class Sink:
     """한 번의 적재 동안 쓰는 연결과 넣을 곳. put으로 묶음을 넣고, 다 넣으면 done, 끝나면 늘 close."""
 
-    def __init__(self, config, password, arrow_schema, resume):
+    def __init__(self, config, password, arrow_schema, resume, load_id=None):
         self.table = table = config["load"]["table"]
         self.schema, self.keys, self.last = table["schema"], table["key"], ""
+        self.load_id, self.placed = load_id, {}  # placed: 마지막 put이 넣은 키의 범위(업로드 기록) {"keys": {컬럼: [최소, 최대]}}
+        if load_id:  # 적재 ID 컬럼: 새 테이블이면 만들 때 넣고, 있는 테이블이면 그 컬럼이 있어야 한다(plan이 컬럼 차이로 알려 준다)
+            import pyarrow as pa
+            arrow_schema = arrow_schema.append(pa.field(uploads.LOAD_ID, pa.string()))
         self.link = link = table["connection"]
         self.con = connect(link, password)
         try:
@@ -289,7 +310,11 @@ class Sink:
                 keys = list(zip(*(data.column(k).to_pylist() for k in self.keys)))
                 data = data.filter(pa.array([k not in have for k in keys]))
         if data.num_rows:
+            if self.load_id:
+                import pyarrow as pa
+                data = data.append_column(uploads.LOAD_ID, pa.array([self.load_id] * data.num_rows, pa.string()))
             insert(self.con, self.schema, self.staging or self.name, data)
+        self.placed = {"keys": key_range(data, self.keys)} if self.keys and data.num_rows else {}
         return data.num_rows, rows - data.num_rows, 0
 
     def done(self):

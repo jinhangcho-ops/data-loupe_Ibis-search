@@ -208,6 +208,8 @@
           <input id="ld-key" placeholder="예: id" style="margin-bottom:4px">
           <div class="hint">키를 확인하는 조회가 DB에 나갑니다. DW는 요금이 생길 수 있습니다.</div>
         </div>
+        <label style="display:block; margin:6px 0"><input type="checkbox" id="ld-loadid" style="width:auto"> 적재 ID 컬럼 넣기 (_ibis_load_id)</label>
+        <div class="hint">켜면 행마다 이 적재의 ID를 넣어, 나중에 [업로드 기록]에서 이 적재의 행만 정확히 골라 지울 수 있습니다. 덧붙이기·바꾸기라면 테이블에도 이 컬럼이 있어야 합니다.</div>
         <div class="row"><button id="ld-check" title="테이블이 있는지, 결과 파일과 컬럼이 맞는지 봅니다 (데이터는 넣지 않습니다)">확인</button></div>
         <div class="hint" id="ld-check-msg"></div>
         <div class="table-wrap" id="ld-cols"></div>
@@ -301,6 +303,20 @@
       <div class="warn" id="sc-stale"></div>
       <div class="row"><button id="sc-rereg" class="hidden" title="경로가 맞지 않는 Windows 예약 작업을 지금 프로그램 경로로 다시 등록합니다">다시 등록</button></div>
       <div class="table-wrap" id="sc-list"></div>
+    </section>
+
+    <!-- 업로드 기록: 저장한 결과 파일과 테이블·Kafka에 적재한 것(행·바이트·범위). 지울 때 쓸 명령을 보여 주기만 한다. -->
+    <section class="card" id="up-card">
+      <div class="head"><h3>업로드 기록</h3><button id="up-toggle" class="ghost">펼치기</button></div>
+      <div class="hint" id="up-sum"></div>
+      <div id="up-body" class="hidden">
+        <div class="row" style="flex-wrap:wrap"><select id="up-kind" style="width:auto"><option value="">모두</option><option value="file">파일</option><option value="table">DB 테이블</option><option value="kafka">Kafka</option></select>
+          <input id="up-find" placeholder="찾기 (파일·테이블·토픽·적재 ID)" style="flex:1 1 200px"></div>
+        <div class="table-wrap" id="up-list"></div>
+        <pre class="code hidden" id="up-cmd" style="white-space:pre-wrap; margin-top:8px"></pre>
+        <div class="hint" id="up-note"></div>
+      </div>
+      <div class="err" id="up-msg"></div>
     </section>
 
     <section class="card" id="runs-card">
@@ -989,7 +1005,7 @@ const forgetPasswords = () => { $("ld-pass").value = ""; $("kf-pass").value = ""
 const readLoad = () => ({
   target: loadTarget(),
   table: { connection: loadKind() === "url" ? { kind: "url", url: val("ld-url"), user: val("ld-user") } : { kind: "folder", file: val("ld-file") },
-    schema: val("ld-schema"), name: val("ld-name"), how: $("ld-how").value, key: $("ld-how").value === "append" ? names("ld-key") : [] },
+    schema: val("ld-schema"), name: val("ld-name"), how: $("ld-how").value, key: $("ld-how").value === "append" ? names("ld-key") : [], load_id: $("ld-loadid").checked },
   kafka: { destination: $("kf-saved").value, key: val("kf-key") },
   unit: $("ld-unit").value, batch: Number(val("ld-batch")), interval: Number(val("ld-gap")), retries: Number(val("ld-retry")),
 });
@@ -1004,6 +1020,7 @@ function fillLoad(l) {
   $("ld-name").value = l.table.name;
   $("ld-how").value = l.table.how;
   $("ld-key").value = (l.table.key ?? []).join(", ");
+  $("ld-loadid").checked = !!l.table.load_id;
   $("kf-key").value = l.kafka.key;
   $("ld-unit").value = l.unit;
   [["ld-batch", l.batch], ["ld-gap", l.interval], ["ld-retry", l.retries]].forEach(([id, v]) => $(id).value = v);
@@ -1457,8 +1474,52 @@ $("unseen-ok").onclick = () => busy($("unseen-ok"), markSeen);
 restore(DEFAULT);
 api("/api/collections").then(d => showCollections(d)).catch(() => {}).finally(loadSchedules);  // 예약 목록의 "구성 없음" 표시가 구성 목록을 쓴다
 pickSchedule();
+// 업로드 기록: 저장한 파일과 적재한 것을 행·크기·범위와 함께 보이고, 고르면 지울 때 쓸 명령을 보인다(실행하지 않음).
+let uploadsData = { entries: [], statuses: {} }, upOpen = false, upPicked = "";
+const UP_KINDS = { file: "파일", table: "DB 테이블", kafka: "Kafka" };
+const bytesText = n => n == null ? "—" : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : n < 1073741824 ? `${(n / 1048576).toFixed(1)} MB` : `${(n / 1073741824).toFixed(2)} GB`;
+function upTarget(e) {
+  const t = e.target ?? {};
+  return e.kind === "file" ? t.path : e.kind === "kafka" ? `${t.destination ?? ""} · ${t.topic ?? ""}` : `${t.connection ?? ""} · ${[t.schema, t.name].filter(Boolean).join(".")}`;
+}
+function upRange(e) {
+  const r = e.range ?? {};
+  const parts = Object.entries(r.partitions ?? {}).map(([p, [lo, hi]]) => `p${p}: ${lo}~${hi}`);
+  const keys = Object.entries(r.keys ?? {}).map(([k, [lo, hi]]) => `${k}: ${lo}~${hi}`);
+  return [r.load_id ? `적재 ID ${r.load_id}` : "", ...parts, ...keys].filter(Boolean).join(", ") || "—";
+}
+async function loadUploads() {
+  try { uploadsData = await api("/api/uploads"); renderUploads(); say("up-msg", ""); } catch (e) { say("up-msg", e.message); }
+}
+function renderUploads() {
+  const all = uploadsData.entries, find = $("up-find").value.trim().toLowerCase(), kind = $("up-kind").value;
+  $("up-sum").textContent = all.length ? `${all.length.toLocaleString()}건 · 최근: ${UP_KINDS[all[0].kind]} ${upTarget(all[0])} · ${all[0].started}` : "아직 기록이 없습니다.";
+  $("up-toggle").textContent = upOpen ? "접기" : "펼치기";
+  $("up-body").classList.toggle("hidden", !upOpen);
+  if (!upOpen) return;
+  const list = all.filter(e => (!kind || e.kind === kind) && (!find || JSON.stringify([e.source, e.target, e.range]).toLowerCase().includes(find)));
+  const cols = ["시작", "종류", "대상", "결과 파일", "행", "크기", "범위", "결과"].map(name => ({ name }));
+  $("up-list").innerHTML = sampleTable(list.length ? cols : [], list.map(e => ({ id: e.id, "시작": e.started, "종류": UP_KINDS[e.kind] ?? e.kind, "대상": upTarget(e),
+    "결과 파일": e.kind === "file" ? "—" : e.source, "행": e.rows ?? "—", "크기": bytesText(e.bytes), "범위": upRange(e),
+    "결과": (uploadsData.statuses[e.status] ?? e.status) + (e.resumed ? " (이어 넣음)" : "") + (e.error ? ` · ${e.error}` : "") })),
+    "맞는 기록이 없습니다.", r => ` data-up="${attr(r.id)}" style="cursor:pointer"${r.id === upPicked ? ' class="on"' : ""}`);
+  $("up-list").querySelectorAll("tr[data-up]").forEach(tr => tr.onclick = () => { upPicked = tr.dataset.up; renderUploads(); });
+  const picked = all.find(e => e.id === upPicked);
+  $("up-cmd").classList.toggle("hidden", !picked?.removal.text);
+  $("up-cmd").textContent = picked ? `[${picked.removal.how}]\n${picked.removal.text}` : "";
+  const forget = el("button", { className: "ghost", textContent: "목록에서 빼기", title: "이 기록만 목록에서 뺍니다. 데이터는 그대로입니다" });
+  forget.onclick = () => busy(forget, async () => {
+    try { uploadsData = await api("/api/uploads/forget", { id: picked.id }); upPicked = ""; renderUploads(); } catch (e) { say("up-msg", e.message); }
+  });
+  $("up-note").replaceChildren(...(picked ? [document.createTextNode(picked.removal.note + " (프로그램은 지우지 않습니다) "), forget]
+    : [document.createTextNode("행을 누르면 지울 때 쓸 명령을 보여 줍니다.")]));
+}
+$("up-toggle").onclick = () => { upOpen = !upOpen; renderUploads(); if (upOpen) loadUploads(); };
+$("up-kind").onchange = $("up-find").oninput = renderUploads;
+
 loadRuns();
-setInterval(() => { if (!document.hidden) loadRuns(); }, 30000);  // 창이 가려져 있지 않을 때만
+loadUploads();
+setInterval(() => { if (!document.hidden) { loadRuns(); if (upOpen) loadUploads(); } }, 30000);  // 창이 가려져 있지 않을 때만
 loadLimits();
 loadKafka();
 poll().then(s => { if (s?.running) watch(); });

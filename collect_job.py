@@ -26,6 +26,7 @@ import scratch
 import server
 import settings
 import source
+import uploads
 from collect_http import Balancer, Halt, Reply
 
 VERSION = 1
@@ -48,7 +49,8 @@ DEFAULT = {
     "plain": [],  # 비밀 같은 이름이지만 사용자가 비밀이 아니라고 한 이름들(collect_request.literal_places)
     # 적재: 결과 파일을 그대로 둘지(file), DB 테이블이나 Kafka 토픽에 넣을지. 비밀번호 칸은 없다(시작할 때 따로 보내고 저장하지 않는다).
     # 연결은 kind가 folder면 file(내 폴더의 DuckDB 파일), url이면 url·user. how: new·append·replace, key는 append에서 이미 있는 키를 건너뛸 컬럼들.
-    "load": {"target": "file", "table": {"connection": {"kind": "folder", "file": "", "url": "", "user": ""}, "schema": "", "name": "", "how": "new", "key": []},
+    # load_id: 행마다 적재 ID 컬럼(uploads.LOAD_ID)을 넣어 나중에 그 적재의 행만 고를 수 있게 한다.
+    "load": {"target": "file", "table": {"connection": {"kind": "folder", "file": "", "url": "", "user": ""}, "schema": "", "name": "", "how": "new", "key": [], "load_id": False},
              "kafka": {"destination": "", "key": ""}, "unit": "batch", "batch": 10000, "interval": 0.0, "retries": 3},
 }
 CHOICES = {("mode",): ("api", "file", "web"), ("web", "paging", "kind"): ("none", "next", "url", "scroll"), ("request", "body_kind"): req.BODY_KINDS, ("paging", "kind"): ("none", "page", "offset", "cursor", "next_url"),
@@ -350,6 +352,8 @@ def work(config, env, path, found, record, halt, password):
     try:
         if record is not None:
             {"api": run_api, "file": run_file, "web": collect_web.run_web}[config["mode"]](config, env, path, found, record, halt)
+            if path.exists():
+                uploads.log_file(path, load_job.total_rows(path))  # 업로드 기록: 저장한 결과 파일
         if config["load"]["target"] != "file" and path.exists():
             update(phase="적재 중", output=str(path), wait="")
             load_job.run(config, path, password, halt, update)

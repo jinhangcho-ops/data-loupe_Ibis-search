@@ -14,6 +14,7 @@ import load_kafka
 import server
 import settings
 import source
+import uploads
 from server import app, get_con
 
 COLLECTIONS = "collections.json"
@@ -28,7 +29,8 @@ server.CONSTANTS.update(collect=collect_job.DEFAULT, kafka=load_kafka.DEFAULT, l
 server.FREE.update({"/api/collect/parse", "/api/collect/secretize", "/api/collect/env", "/api/collect/try", "/api/collect/sample",
                     "/api/collect/estimate", "/api/collect/ask_path", "/api/collect/start", "/api/collect/stop", "/api/collect/status",
                     "/api/collections", "/api/limits", "/api/limits/reset", "/api/collect/browser/open", "/api/collect/browser/close",
-                    "/api/collect/browser/state", "/api/collect/browser/pick", "/api/collect/browser/forget", "/api/collect/web/sample"})
+                    "/api/collect/browser/state", "/api/collect/browser/pick", "/api/collect/browser/forget", "/api/collect/web/sample",
+                    "/api/uploads", "/api/uploads/forget"})
 
 
 @app.get("/collect")
@@ -197,3 +199,16 @@ def reset_limit():
         raise ValueError("묶음 이름을 주세요.")
     collect_limits.reset(name.strip())
     return jsonify(limits_view())
+
+
+@app.get("/api/uploads")
+def uploads_list():
+    """업로드 기록(새것이 앞)과 기록마다 지울 때 쓸 명령(removal). 보여 주기만 하고 지우지 않는다."""
+    return jsonify(entries=[{**e, "removal": uploads.removal(e)} for e in uploads.entries()], statuses=uploads.STATUSES)
+
+
+@app.post("/api/uploads/forget")
+def uploads_forget():
+    """기록 하나를 목록에서 뺀다(데이터는 그대로)."""
+    uploads.forget(request.json.get("id"))
+    return uploads_list()

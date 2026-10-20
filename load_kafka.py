@@ -87,6 +87,7 @@ def where(config):
 
 
 def sign(config):
+    """이어 넣기를 정하는 대상: 서버, 토픽, 키 컬럼(업로드 기록의 대상에도 쓴다)."""
     kafka = config["load"]["kafka"]
     item = destination(kafka["destination"])
     return {"servers": item["servers"], "topic": item["topic"], "key": kafka["key"]}
@@ -147,19 +148,27 @@ def key_of(value):
 class Sink:
     """한 번의 적재 동안 쓰는 Producer. put으로 묶음(pyarrow 표)을 보내고 전달 보고를 기다린다."""
 
-    def __init__(self, config, password, arrow_schema, resume):
+    def __init__(self, config, password, arrow_schema, resume, load_id=None):
         kafka = config["load"]["kafka"]
         self.item, self.key, self.password = destination(kafka["destination"]), kafka["key"], password
         if self.key and self.key not in arrow_schema.names:
             raise ValueError(f"메시지 키 컬럼 '{self.key}'이 결과 파일에 없습니다.")
         self.last, self.fresh = "", False
+        self.placed = {}  # 마지막 put이 전달한 것(업로드 기록): {"size": 바이트, "partitions": {파티션: [첫 offset, 끝 offset]}}
         self.producer = producer(self.item, password, self.note)
 
     def put(self, data):
         """(전달된 수, 0, 실패 수). 메시지가 너무 큰 행처럼 보내지 못한 행은 실패로 센다. 보낸 것이 하나도 전달되지 않으면 오류(다시 시도는 부르는 쪽이)."""
         from confluent_kafka import KafkaException
-        failed, sent, reports = 0, 0, []
-        report = lambda error, _: reports.append(error)
+        failed, sent, reports, partitions, size = 0, 0, [], {}, [0]
+
+        def report(error, msg):  # 전달 보고: 전달된 메시지의 파티션·offset으로 범위를 넓힌다
+            reports.append(error)
+            if error is None and msg is not None and msg.offset() is not None and msg.offset() >= 0:
+                p, o = msg.partition(), msg.offset()
+                lo, hi = partitions.get(p, (o, o))
+                partitions[p] = (min(lo, o), max(hi, o))
+                size[0] += len(msg.value() or b"") + len(msg.key() or b"")
         for row in data.to_pylist():
             try:
                 body = message(row)
@@ -179,6 +188,7 @@ class Sink:
         for e in bad[-1:]:
             self.note(e)
         lost = len(bad) + left
+        self.placed = {"size": size[0], "partitions": partitions}
         if sent and lost == sent:
             raise ValueError(f"Kafka에 전달하지 못했습니다: {self.last or '응답 없음'}")
         return sent - lost, 0, failed + lost

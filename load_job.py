@@ -9,6 +9,7 @@ from urllib.parse import urlsplit
 
 import load_kafka
 import load_table
+import uploads
 from collect_http import STOPPED, Halt
 
 TARGETS = {"table": load_table, "kafka": load_kafka}
@@ -30,6 +31,8 @@ def check(load):
             raise ValueError(f"구성의 load.{where}는 글자여야 합니다.")
     if not isinstance(table["key"], list) or not all(isinstance(k, str) and k for k in table["key"]):
         raise ValueError("구성의 load.table.key는 컬럼 이름 목록이어야 합니다.")
+    if not isinstance(table["load_id"], bool):
+        raise ValueError("구성의 load.table.load_id는 true 또는 false여야 합니다.")
     if urlsplit(table["connection"]["url"].strip()).password is not None:
         raise ValueError("DB 주소에 비밀번호를 넣지 마세요. 비밀번호는 저장하지 않고 시작할 때 따로 입력합니다.")
 
@@ -139,7 +142,8 @@ def attempt(work, retries, halt, note):
 
 
 def run(config, path, password, halt, note):
-    """결과 파일을 적재한다. note(**바뀐 상태)로 진행을 알린다(load 칸과 message). 실패하면 넣은 데까지 기록을 남기고 오류를 낸다."""
+    """결과 파일을 적재한다. note(**바뀐 상태)로 진행을 알린다(load 칸과 message). 실패하면 넣은 데까지 기록을 남기고 오류를 낸다.
+    적재 한 번마다 업로드 기록(uploads.Run)에 넣은 행·바이트·범위를 남긴다. 테이블에 적재 ID를 넣기로 했으면 이어 넣어도 같은 ID를 쓴다."""
     load = config["load"]
     module, size = TARGETS[load["target"]], load["batch"]
     sign = signature(config)
@@ -148,6 +152,9 @@ def run(config, path, password, halt, note):
     resumed = bool(record and record.get("sign") == sign)
     if not resumed:
         record = new_record()
+    if load["target"] == "table" and load["table"]["load_id"]:
+        record.setdefault("load_id", uploads.new_id())
+    load_id = record.get("load_id")
     view = {"target": load["target"], "rows": 0, "total": total_rows(path), "batches": 0, "skipped": 0, "failures": 0, "where": module.where(config)}
 
     def show():
@@ -155,41 +162,56 @@ def run(config, path, password, halt, note):
         note(load=dict(view))
 
     show()
-    with Batches(path, size) as batches:
-        sink = module.Sink(config, password, batches.schema, resumed)
-        try:
-            if sink.fresh and resumed:  # 이어 넣을 곳이 없어져 새로 만들었으면 처음부터
-                record, resumed = new_record(), False
-            write_record(path, record)
-            if resumed:
-                note(message="이어 넣습니다.")
-            show()
-            start, first = divmod(record["rows"], size)
-            for n, part in enumerate(batches):
-                if n < start:
-                    continue
-                at = first if n == start else 0
-                units = [part.slice(at)] if load["unit"] == "batch" else [part.slice(i, 1) for i in range(at, part.num_rows)]
-                handled = failed = 0
-                for unit in units:
-                    if halt.is_set():
-                        raise Halt(STOPPED, failed=False)
-                    put, skipped, bad = attempt(lambda: sink.put(unit), load["retries"], halt, note)
-                    handled, failed = handled + unit.num_rows, failed + bad
-                    record.update(rows=record["rows"] + unit.num_rows, inserted=record["inserted"] + put, skipped=record["skipped"] + skipped,
-                                  failures=record["failures"] + bad)
-                    write_record(path, record)
-                    show()
-                    if load["interval"] and halt.wait(load["interval"]):
-                        raise Halt(STOPPED, failed=False)
-                record["batches"] = n + 1
+    ledger = None
+    try:
+        with Batches(path, size) as batches:
+            sink = module.Sink(config, password, batches.schema, resumed, load_id)
+            try:
+                if sink.fresh and resumed:  # 이어 넣을 곳이 없어져 새로 만들었으면 처음부터
+                    record, resumed = {**new_record(), **({"load_id": load_id} if load_id else {})}, False
+                target = {**module.sign(config), **({"name": load["table"]["name"]} if load["target"] == "table" else {"destination": load["kafka"]["destination"]})}
+                ledger = uploads.Run(load["target"], path, target, load_id, resumed)
                 write_record(path, record)
+                if resumed:
+                    note(message="이어 넣습니다.")
                 show()
-                if handled and failed == handled:
-                    raise Halt(f"{n + 1}번째 묶음을 하나도 넣지 못해 멈췄습니다. {sink.last}".strip())
-            sink.done()
-        finally:
-            sink.close()
+                start, first = divmod(record["rows"], size)
+                for n, part in enumerate(batches):
+                    if n < start:
+                        continue
+                    at = first if n == start else 0
+                    units = [part.slice(at)] if load["unit"] == "batch" else [part.slice(i, 1) for i in range(at, part.num_rows)]
+                    handled = failed = 0
+                    for unit in units:
+                        if halt.is_set():
+                            raise Halt(STOPPED, failed=False)
+                        put, skipped, bad = attempt(lambda: sink.put(unit), load["retries"], halt, note)
+                        ledger.add(put, **sink.placed)
+                        handled, failed = handled + unit.num_rows, failed + bad
+                        record.update(rows=record["rows"] + unit.num_rows, inserted=record["inserted"] + put, skipped=record["skipped"] + skipped,
+                                      failures=record["failures"] + bad)
+                        write_record(path, record)
+                        show()
+                        if load["interval"] and halt.wait(load["interval"]):
+                            raise Halt(STOPPED, failed=False)
+                    record["batches"] = n + 1
+                    write_record(path, record)
+                    ledger.save()
+                    show()
+                    if handled and failed == handled:
+                        raise Halt(f"{n + 1}번째 묶음을 하나도 넣지 못해 멈췄습니다. {sink.last}".strip())
+                sink.done()
+            finally:
+                sink.close()
+    except Halt as e:
+        if ledger:
+            ledger.end("failed" if e.failed else "stopped", str(e) if e.failed else "")
+        raise
+    except Exception as e:
+        if ledger:
+            ledger.end("failed", str(e) or type(e).__name__)
+        raise
+    ledger.end("done")
     view["total"] = record["rows"]
     show()
     record_path(path).unlink(missing_ok=True)  # 다 넣었다: 다음에 같은 설정으로 하면 처음부터 넣는다.
