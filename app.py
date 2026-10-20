@@ -9,6 +9,7 @@ from flask import jsonify, request
 
 import core
 import metrics
+import nl2sql
 import parse
 import result
 import server
@@ -364,3 +365,28 @@ def metrics_run():
         raise ValueError("구할 지표를 고르세요.")
     found, labels, values, more = core.metric_values(body, names, body.get("by"))
     return jsonify(labels=labels, values=values, formats={n: found[n]["format"] for n in names}, more=more, max_groups=metrics.MAX_GROUPS)
+
+
+# ---------- 자연어 질문 → SQL(nl2sql.py, 뼈대) ----------
+
+def nl2sql_context():
+    """지금 연결의 NL2SQL 문맥(테이블·컬럼·명세서·캐시 추론·지표 정의, 데이터 값 없음)."""
+    con = get_con()
+    return con, run(lambda: nl2sql.context(con, server.connection_key(), None, server.virtual_tables()))
+
+
+@app.post("/api/nl2sql/prompt")
+def nl2sql_prompt():
+    """LLM에 보낼 내용(시스템 프롬프트와 질문)을 보여 준다. 묻지는 않는다."""
+    _, ctx = nl2sql_context()
+    question = request.json.get("question") or ""
+    return jsonify(system=nl2sql.system_prompt(ctx), question=question.strip()[:nl2sql.MAX_QUESTION], llm=nl2sql.llm.client().name,
+                   tables=len(ctx["tables"]), metrics=len(ctx["metrics"]))
+
+
+@app.post("/api/nl2sql/ask")
+def nl2sql_ask():
+    """질문을 LLM에 물어 검사한 SQL을 돌려준다. 실행하지 않는다(화면이 편집기에 넣고 사람이 [실행])."""
+    con, ctx = nl2sql_context()
+    known = known_tables(con) + list(server.virtual_tables())
+    return jsonify(sql=nl2sql.ask(request.json.get("question"), ctx, sql_exec.dialect_of(con), known))
