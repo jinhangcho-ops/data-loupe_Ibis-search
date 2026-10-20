@@ -6,12 +6,14 @@ import re
 from pathlib import Path
 
 from flask import jsonify, request
+from lazy import ibis
 
 import core
 import metrics
 import nl2sql
 import parse
 import result
+import scan_size
 import server
 import settings
 import source
@@ -51,6 +53,16 @@ def values():
 def paged(body):
     """(검색 식, 행 수, 건너뛸 행 수)"""
     return build(body), parse.parse_limit(body.get("limit", 20)), parse.parse_offset(body.get("offset", 0))
+
+
+@app.post("/api/scan")
+def scan():
+    """탐색 식을 실행하지 않고 처리할 용량을 알린다(scan_size). 표시 컬럼까지 적용한 식의 SQL로 센다."""
+    con, expr = get_con(), build(request.json)
+    files = con.name == "polars"  # 파일 연결은 SQL을 쓰지 않으므로 duckdb 방언으로 만들어 읽는 테이블·컬럼만 고른다
+    sql = lambda: str(ibis.to_sql(expr, dialect="duckdb") if files else ibis.to_sql(expr))
+    found = scan_size.safe(lambda: run(lambda: scan_size.estimate(con, sql(), server.state["opened"], "duckdb" if files else None)))
+    return jsonify(message=scan_size.message(found), **found)
 
 
 @app.post("/api/query")
@@ -235,14 +247,16 @@ def sql_check():
     missing = [n for n in dict.fromkeys(sql_exec.table_names(tree)) if n.lower() not in known]
     if missing:
         return jsonify(ok=False, message=f"이 연결에 없는 테이블입니다: {', '.join(missing)}")
+    expanded = sql_exec.expand(con, tree, vts).sql(dialect=sql_exec.dialect_of(con))  # 가상 테이블을 풀어 넣은 SQL
+    scan = scan_size.message(scan_size.safe(lambda: run(lambda: scan_size.estimate(con, expanded, server.state["opened"]))))
     if body.get("deep") is True:
         try:
             columns = run(lambda: sql_exec.to_expr(con, body["sql"], vts).columns)
         except Exception as e:
             text = source.mask(str(e), server.state["passwords"]).strip().splitlines()
             return jsonify(ok=False, message="연결에서 짜 보지 못했습니다: " + (text[0] if text else type(e).__name__))
-        return jsonify(ok=True, message=f"이상 없음 · 결과 컬럼 {len(columns)}개: {', '.join(columns[:12])}{' …' if len(columns) > 12 else ''}")
-    return jsonify(ok=True, message="문법 이상 없음")
+        return jsonify(ok=True, message=f"이상 없음 · 결과 컬럼 {len(columns)}개: {', '.join(columns[:12])}{' …' if len(columns) > 12 else ''}", scan=scan)
+    return jsonify(ok=True, message="문법 이상 없음", scan=scan)
 
 
 @app.post("/api/sql/run")

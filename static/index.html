@@ -35,7 +35,9 @@
   .sql-edit .row label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; white-space:nowrap; }
   .sql-edit .row input { width:100px; }
   #err-sql { padding:0 28px; }
-  .sql-check { font-size:12.5px; min-height:18px; color:var(--muted); }
+  .sql-check { font-size:12.5px; min-height:18px; color:var(--muted); white-space:pre-line; }
+  .scan-hint { margin:0; padding:6px 16px 0; }
+  .scan-hint:empty { display:none; }
   .sql-check.ok { color:var(--ok); } .sql-check.err { color:var(--err); }
   #sql-text.bad { border-color:var(--err); outline-color:color-mix(in srgb, var(--err) 40%, transparent); }
   #err-sql:empty, #err-vt:empty { display:none; }
@@ -206,6 +208,7 @@
           <div class="edx"><div class="hint">컬럼1, 컬럼2 (비우면 전체)</div><div id="columns"></div></div></div>
       </div>
     </div></div>
+    <div class="hint scan-hint" id="scan-hint" title="실행하지 않고 센 값입니다. BigQuery는 dry run(요금 없음)의 정확한 값, 그 밖에는 파일 정보·통계로 추정합니다"></div>
     <footer>
       <div class="drop up" style="flex:1; display:flex"><button id="saved-open" class="btn" style="flex:1; justify-content:center">저장한 검색</button>
         <div class="pop hidden" id="saved-pop">
@@ -457,6 +460,18 @@ async function refreshColumns() {
   fillSummaryCols();
   showUnion();
   renderJoins();
+  showScan();
+}
+// 실행하면 처리할 용량(실행하지 않고 셈). 검색이 바뀔 때마다 잠깐 기다렸다가 다시 센다. 늦게 온 답은 버린다.
+let scanTimer, scanSeq = 0;
+function showScan() {
+  clearTimeout(scanTimer);
+  if (!connected || !S.base) { $("scan-hint").textContent = ""; return; }
+  scanTimer = setTimeout(async () => {
+    const seq = ++scanSeq;
+    try { const d = await api("/api/scan", state()); if (seq === scanSeq) $("scan-hint").textContent = d.message; }
+    catch (e) { if (seq === scanSeq) $("scan-hint").textContent = ""; }
+  }, 500);
 }
 
 // 2. 이어붙이기: 고른 테이블들을 기준 테이블 아래로 잇는다(left·inner). 바꿀 때마다 서버에서 검사하고, 오류면 되돌린다.
@@ -1150,7 +1165,7 @@ async function checkSql(deep) {
   try {
     const d = await api("/api/sql/check", { sql, deep });
     if (seq !== checkSeq) return;  // 그사이 다시 고쳤으면 늦게 온 결과는 버린다
-    box.textContent = (d.ok ? "✓ " : "✕ ") + d.message;
+    box.textContent = (d.ok ? "✓ " : "✕ ") + d.message + (d.scan ? "\n" + d.scan : "");  // 처리 용량(실행하지 않고 센 값)
     box.className = "sql-check " + (d.ok ? "ok" : "err");
     $("sql-text").classList.toggle("bad", !d.ok);
     if (deep && d.line) selectAt($("sql-text"), d.line, d.col);

@@ -166,7 +166,8 @@ def test_check_route(client, tmp_path):
         raw.execute("create table orders as select * from df")
     server.state.update(con=ibis.duckdb.connect(str(path), read_only=True), opened={"kind": "folder", "path": str(tmp_path), "file": str(path)})
     check = lambda sql, deep=False: client.post("/api/sql/check", json={"sql": sql, "deep": deep}).get_json()
-    assert check("with x as (select * from orders) select id from x") == {"ok": True, "message": "문법 이상 없음"}
+    got = check("with x as (select * from orders) select id from x")
+    assert (got["ok"], got["message"]) == (True, "문법 이상 없음") and got["scan"].startswith("실행하면 약 ")
     bad = check("select id\nfrom orders where (id = 1")
     assert (bad["ok"], bad["line"], bad["col"]) == (False, 2, 25)
     assert check("select * from orderz")["message"] == "이 연결에 없는 테이블입니다: orderz"
