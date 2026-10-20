@@ -26,7 +26,7 @@ SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "char
 # 이름은 time_종류_구간이고 구간은 행 수의 자릿수 - 1을 TIME_BANDS 안으로 맞춘 것(1,000행 미만은 모두 2)이다. 화면이 예상 시간을 구할 때 같은 구간의 값만 쓴다.
 # 화면(common.js)은 구간과 상한(MAX_TIME)을 server.CONSTANTS로 받는다.
 TIME_BANDS = (2, 12)
-TIME = re.compile(rf"time_(search|summary|chart|export|profile|preview|run|analyze)_({'|'.join(str(n) for n in range(TIME_BANDS[0], TIME_BANDS[1] + 1))})")
+TIME = re.compile(rf"time_(search|summary|chart|metric|export|profile|preview|run|analyze)_({'|'.join(str(n) for n in range(TIME_BANDS[0], TIME_BANDS[1] + 1))})")
 MAX_TIME = 10**12
 
 

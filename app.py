@@ -1,4 +1,4 @@
-"""Ibis 쿼리 화면(탐색·대시보드)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
+"""Ibis 쿼리 화면(탐색·SQL·지표·대시보드)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
 import base64
 import binascii
 import os
@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flask import jsonify, request
 
+import metrics
 import parse
 import result
 import server
@@ -353,3 +354,43 @@ def chart():
     return jsonify(labels=[str(v) for v in labels], datasets=datasets, more_splits=more,
                    max_groups=result.MAX_GROUPS, max_splits=result.MAX_SPLITS)
 
+
+
+# ---------- 사전 설정 지표(metrics.py) ----------
+
+def metrics_view(path, found=None, error=None):
+    """지표 파일 경로, 지표 [{name, description, format, text}], 많이 쓴 순의 이름(order). 파일을 읽을 수 없으면 그 이유(error)도."""
+    found = found or {}
+    listed = [{"name": n, "description": m["description"], "format": m["format"], "text": metrics.describe(m)} for n, m in found.items()]
+    return jsonify(path=path, metrics=listed, order=use_counts.order("metrics", list(found)), max_run=metrics.MAX_RUN,
+                   **({"error": error} if error else {}))
+
+
+@app.get("/api/metrics")
+def metrics_list():
+    path = metrics.file_path()
+    try:
+        return metrics_view(path, metrics.registry())
+    except ValueError as e:
+        return metrics_view(path, error=str(e))
+
+
+@app.post("/api/metrics")
+def save_metrics_file():
+    """지표 파일 경로를 읽어 검사한 뒤 저장한다(빈 글자면 쓰지 않음). 다시 읽기도 이것으로 한다."""
+    found = metrics.save_file_path(request.json.get("path"))
+    return metrics_view(metrics.file_path(), found)
+
+
+@app.post("/api/metrics/run")
+def metrics_run():
+    """탐색의 식(기준 테이블·조인·기간·조건) 위에서 지표들(names)을 구한다. by를 주면 그 컬럼 값마다. 구한 지표는 한 번씩 센다."""
+    body = request.json
+    names = body.get("names")
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        raise ValueError("구할 지표를 고르세요.")
+    found, expr = metrics.registry(), build(body, select=False)
+    labels, values, more = run(lambda: metrics.compute(expr, names, found, body.get("by") or None))
+    for name in names:
+        use_counts.use("metrics", name)
+    return jsonify(labels=labels, values=values, formats={n: found[n]["format"] for n in names}, more=more, max_groups=metrics.MAX_GROUPS)

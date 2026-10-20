@@ -75,7 +75,7 @@ const secs = ms => (ms / 1000).toFixed(1) + "초";
 let total = { guess: 0, done: 0 }, timer;  // 예상 합계와 끝난 작업의 시간 합계(ms)
 const going = new Set();  // 지금 도는 작업들 { at: 시작 시각, kind }
 // 작업 이름. 알림 제목은 subject로 조사(받침이 있으면 "이", 없으면 "가")를 붙인다.
-const JOBS = { search: "검색", sql: "SQL 실행", summary: "집계", chart: "차트", export: "저장", profile: "통계", preview: "미리보기", run: "전처리 실행", analyze: "분석", collect: "수집" };
+const JOBS = { search: "검색", sql: "SQL 실행", summary: "집계", chart: "차트", metric: "지표", export: "저장", profile: "통계", preview: "미리보기", run: "전처리 실행", analyze: "분석", collect: "수집" };
 const subject = word => word + ((word.charCodeAt(word.length - 1) - 0xac00) % 28 ? "이" : "가");
 function showTiming() {
   const now = performance.now(), ms = total.done + [...going].reduce((sum, run) => sum + now - run.at, 0), last = [...going].at(-1);
