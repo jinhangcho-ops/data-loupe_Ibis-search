@@ -68,6 +68,8 @@ API 문서에 `curl 'https://api.example.com/v1/items?page=1' -H 'Authorization:
 
 ### 업로드 기록
 
+![업로드 기록](screen-uploads.png)
+
 저장한 파일과 DB·Kafka에 넣은 것이 한 번마다 장부처럼 남습니다(2,000건까지). **나중에 "그때 넣은 것만 지워야 할 때" 바로 찾기 위한 것**입니다.
 
 | 남는 것 | 예 |
