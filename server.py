@@ -14,6 +14,7 @@ import result
 import scratch
 import settings
 import source
+import sql_exec
 import use_counts
 
 app = Flask(__name__, static_folder="static")
@@ -117,11 +118,32 @@ def cancel():
     return jsonify(ok=True)
 
 
+def connection_key():
+    """지금 연결을 알아보는 열쇠(비밀번호 없음). 가상 테이블을 연결마다 따로 둘 때 쓴다."""
+    if state["opened"] is None:
+        raise ValueError("먼저 연결하세요.")
+    return use_counts.connection_key(source.recent(state["opened"]))
+
+
+def virtual_tables():
+    """지금 연결의 가상 테이블 {이름: 정의}. 연결이 없으면 빈 것."""
+    return sql_exec.virtual(connection_key()) if state["opened"] is not None else {}
+
+
+@source.on_worker
+def any_table(con, name, schema=None, vts=None):
+    """테이블 식. 스키마를 고르지 않았고 그 이름이 가상 테이블이면 가상 테이블(sql_exec), 아니면 연결의 테이블."""
+    vts = virtual_tables() if vts is None else vts
+    if not schema and name in vts:
+        return sql_exec.virtual_table(con, name, vts)
+    return con.table(name, database=schema) if schema else con.table(name)
+
+
 def row_count(schema, base):
-    """테이블의 전체 행 수. 테이블마다 한 번만 세고 연결이 바뀔 때까지 기억한다."""
+    """테이블(가상 테이블 포함)의 전체 행 수. 테이블마다 한 번만 세고 연결이 바뀌거나 가상 테이블을 고칠 때까지 기억한다."""
     schema = schema or None
     if (schema, base) not in state["rows"]:
-        table = source.get_table(get_con(), base, schema)
+        table = any_table(get_con(), base, schema)
         state["rows"][schema, base] = run(lambda: result.get_count(table))
     return state["rows"][schema, base]
 
@@ -265,7 +287,14 @@ def disconnect():
 
 @app.get("/api/tables")
 def tables():
-    return jsonify(tables=source.list_tables(get_con(), request.args.get("schema") or None))
+    """스키마(없으면 기본)의 테이블 목록. virtual=1이면 지금 연결의 가상 테이블 이름(많이 쓴 순)도 virtual로(기본 스키마일 때만)."""
+    schema = request.args.get("schema") or None
+    found = source.list_tables(get_con(), schema)
+    if request.args.get("virtual") != "1":
+        return jsonify(tables=found)
+    names = [] if schema else [n for n in virtual_tables() if n.lower() not in {t.lower() for t in found}]
+    ordered = use_counts.order("virtual_tables", [f"{connection_key()}|{n}" for n in names])
+    return jsonify(tables=found, virtual=[k.rpartition("|")[2] for k in ordered])
 
 
 @app.get("/")

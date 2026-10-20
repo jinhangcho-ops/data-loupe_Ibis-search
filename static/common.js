@@ -62,7 +62,7 @@ const secs = ms => (ms / 1000).toFixed(1) + "초";
 let total = { guess: 0, done: 0 }, timer;  // 예상 합계와 끝난 작업의 시간 합계(ms)
 const going = new Set();  // 지금 도는 작업들 { at: 시작 시각, kind }
 // 작업 이름. 알림 제목은 subject로 조사(받침이 있으면 "이", 없으면 "가")를 붙인다.
-const JOBS = { search: "검색", summary: "집계", chart: "차트", export: "저장", profile: "통계", preview: "미리보기", run: "전처리 실행", analyze: "분석", collect: "수집" };
+const JOBS = { search: "검색", sql: "SQL 실행", summary: "집계", chart: "차트", export: "저장", profile: "통계", preview: "미리보기", run: "전처리 실행", analyze: "분석", collect: "수집" };
 const subject = word => word + ((word.charCodeAt(word.length - 1) - 0xac00) % 28 ? "이" : "가");
 function showTiming() {
   const now = performance.now(), ms = total.done + [...going].reduce((sum, run) => sum + now - run.at, 0), last = [...going].at(-1);
@@ -349,11 +349,17 @@ if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
 });
 
 // 2. 테이블
+// 가상 테이블(쿼리 화면만, body의 data-virtual="1")은 "가상 테이블" 묶음으로 뒤에 붙인다. 고른 테이블이 목록에 남아 있으면 그대로 둔다.
 async function loadTables() {
   S.schema = $("schema").value;
-  const { tables } = await api("/api/tables?schema=" + encodeURIComponent(S.schema));
+  const withVirtual = document.body.dataset.virtual === "1";
+  const { tables, virtual = [] } = await api("/api/tables?schema=" + encodeURIComponent(S.schema) + (withVirtual ? "&virtual=1" : ""));
+  const now = $("base").value;
   fill($("base"), tables, "기준 테이블 선택");
+  if (virtual.length) $("base").append(el("optgroup", { label: "가상 테이블" }, ...virtual.map(v => new Option(v, v))));
+  if ([...$("base").options].some(o => o.value === now && now)) $("base").value = now;
   showCrumb();
+  document.dispatchEvent(new Event("tables"));  // 화면이 테이블 목록을 따로 쓰면(SQL 탭) 다시 그린다
 }
 if (hasTables) $("schema").onchange = loadTables;
 
@@ -400,7 +406,7 @@ function showResizing(on) {
 $("resize").onclick = () => showResizing(!document.documentElement.classList.contains("resizing"));
 showResizing(false);
 // 경계를 끌면 그 크기의 CSS 변수를 바꾸고, 놓으면 저장한다. 더블클릭하면 기본 크기로 돌아간다(0을 저장).
-const sized = { panel: () => document.querySelector(".side") };  // 화면이 크기를 바꿀 상자를 더한다
+const sized = { panel: () => document.querySelector(".work:not(.hidden) .side") };  // 보이는 화면의 패널  // 화면이 크기를 바꿀 상자를 더한다
 document.querySelectorAll("[data-size]").forEach(grip => {
   const name = grip.dataset.size, [min, max, axis] = SIZES[name], root = document.documentElement.style;
   const at = e => axis === "x" ? e.clientX : e.clientY;

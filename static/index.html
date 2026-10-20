@@ -28,6 +28,19 @@
   th.num { text-align:right; }
   #err-search, #err-export { padding:0 28px; }
   #err-search:empty, #err-export:empty, #err-summary:empty { display:none; }
+  /* SQL 탭: 편집기는 결과 위에서 높이를 조금만 쓰고(끌어서 늘림), 결과 표가 남은 높이를 쓴다. */
+  #sql-text { font:13px/1.5 Consolas, ui-monospace, monospace; min-height:120px; height:clamp(120px, 24vh, 320px); resize:vertical; }
+  .sql-edit { padding:0 28px; display:flex; flex-direction:column; gap:8px; }
+  .sql-edit .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .sql-edit .row label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; white-space:nowrap; }
+  .sql-edit .row input { width:100px; }
+  #err-sql { padding:0 28px; }
+  #err-sql:empty, #err-vt:empty { display:none; }
+  .vt { display:flex; align-items:center; gap:6px; padding:5px 8px; border:1px solid var(--line); border-radius:9px; margin-bottom:4px; }
+  .vt b { cursor:pointer; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .vt .hint { margin:0 auto 0 0; white-space:nowrap; }
+  #sql-tables { flex-wrap:wrap; }
+  #sql-tables .chip { cursor:pointer; }
   .ctl { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; align-items:center; }
   .ctl select, .ctl input { flex:1 1 120px; width:auto; max-width:clamp(160px, 18vw, 280px); }  /* 큰 창에서 칸이 끝없이 늘지 않게 */
   .ctl .hint { margin:0; white-space:nowrap; }
@@ -39,9 +52,9 @@
   .chart-box .grip-y { bottom:-12px; }
 </style>
 </head>
-<body class="app">
+<body class="app" data-virtual="1">
 <!--include status.html-->
-<nav class="subnav" id="views"><button data-view="explore" class="on">탐색</button><button data-view="dash">대시보드<em id="dash-count"></em></button></nav>
+<nav class="subnav" id="views"><button data-view="explore" class="on">탐색</button><button data-view="sql">SQL</button><button data-view="dash">대시보드<em id="dash-count"></em></button></nav>
 <div class="work" id="work">
   <main class="results">
     <div class="tool">
@@ -187,6 +200,42 @@
         </div></div>
       <button id="search" class="btn p">검색 실행</button>
     </footer>
+  </aside>
+</div>
+<!-- SQL: 읽기만 하는 SELECT 문을 직접 써서 실행한다(WITH·JOIN·LIKE 등). 가상 테이블 이름은 테이블처럼 쓰고 실행할 때 WITH로 풀린다. -->
+<div class="work hidden" id="sqlv">
+  <main class="results">
+    <div class="tool"><span class="hint" id="sql-conn" style="margin:0; flex:1"></span>
+      <div class="drop"><button id="sql-save-open" class="btn" title="SQL 결과 전체를 파일로 저장합니다">결과 저장<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button>
+        <div class="pop hidden" id="sql-save-pop"><button data-sqlexport="csv">CSV</button><button data-sqlexport="xlsx">Excel</button><button data-sqlexport="parquet">Parquet</button></div></div>
+    </div>
+    <div class="sql-edit">
+      <textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea>
+      <div class="row"><label title="화면에 받을 행 수. 전체는 [결과 저장]으로 받습니다">받을 행 <input id="sql-rows" type="number" min="1"></label>
+        <span class="hint" style="margin:0">읽기만 하는 SELECT 문 하나만 실행합니다(WITH·JOIN·LIKE·* 가능, DROP·DELETE·INSERT·여러 문장 불가).</span></div>
+    </div>
+    <div class="big"><b id="sql-count">실행 전</b><span id="sql-sub"></span></div>
+    <div class="err" id="err-sql"></div>
+    <section class="pane"><div class="table-wrap" id="sql-result"></div></section>
+  </main>
+  <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
+  <aside class="side">
+    <header><h3>SQL</h3></header>
+    <div class="sc">
+      <h2>저장한 SQL</h2>
+      <select id="sql-saved" title="고르면 편집기에 불러옵니다(실행은 하지 않습니다). 많이 불러온 순"></select>
+      <div class="row" style="margin-top:6px"><input id="sql-name" placeholder="이름 (비우면 고른 SQL에 덮어씀)"><button id="sql-save">저장</button><button id="sql-del" class="btn">삭제</button></div>
+      <h2>가상 테이블</h2>
+      <div class="hint">이 연결에서만 쓰는 이름 붙인 SQL(또는 Parquet 파일)입니다. SQL과 탐색의 기준 테이블에서 테이블처럼 씁니다. DB에는 아무것도 만들지 않습니다. 많이 쓴 순.</div>
+      <div id="vt-list"></div>
+      <div class="row" style="margin-top:6px"><input id="vt-name" placeholder="가상 테이블 이름"><button id="vt-save-sql" title="편집기의 SQL을 이 이름의 가상 테이블로 저장합니다">지금 SQL로</button></div>
+      <div class="row"><input id="vt-path" placeholder="Parquet 파일 경로 (DuckDB·파일 연결)"><button id="vt-save-pq" class="btn">Parquet으로</button></div>
+      <div class="err" id="err-vt"></div>
+      <h2>테이블</h2>
+      <div class="hint">누르면 편집기에 이름을 넣습니다.</div>
+      <div class="chips open" id="sql-tables"></div>
+    </div>
+    <footer><button id="sql-run" class="btn p">실행</button></footer>
   </aside>
 </div>
 <!-- 대시보드: 탐색의 차트를 모은 카드. 카드를 누르면 고르고(여럿), [다운로드]는 고른 그래프를 각각 그림으로 저장한다. -->
@@ -640,7 +689,7 @@ const toggleDrop = (button, pop) => { button.onclick = e => { e.stopPropagation(
 toggleDrop($("saved-open"), $("saved-pop"));
 toggleDrop($("save-open"), $("save-pop"));
 document.addEventListener("click", e => {  // 밖을 누르면 떠 있는 상자를 닫는다(목록 고르기는 제외)
-  if (!e.target.closest(".pop, .menu")) ["saved-pop", "save-pop", "dash-pop"].forEach(id => $(id).classList.add("hidden"));
+  if (!e.target.closest(".pop, .menu")) ["saved-pop", "save-pop", "dash-pop", "sql-save-pop"].forEach(id => $(id).classList.add("hidden"));
 });
 $("ssave").onclick = () => busy($("ssave"), async () => {
   if (!S.base) { $("err-search").textContent = "기준 테이블을 고르세요."; return; }
@@ -922,13 +971,14 @@ function fillSenders() {
 document.addEventListener("destinations", fillSenders);
 fillSenders();  // 목록이 이 스크립트보다 먼저 와 있었을 수도 있다.
 
-// 화면 안의 탭: 탐색(검색 조건 패널과 결과)과 대시보드. 고른 탭은 주소의 #dashboard로 남겨 새로 열어도 그 탭이다.
+// 화면 안의 탭: 탐색, SQL, 대시보드. 고른 탭은 주소의 #sql·#dashboard로 남겨 새로 열어도 그 탭이다.
+const VIEWS = { explore: "work", sql: "sqlv", dash: "dash" }, VIEW_HASH = { sql: "#sql", dash: "#dashboard" };
 function showView(name) {
   document.querySelectorAll("#views button").forEach(b => b.classList.toggle("on", b.dataset.view === name));
-  $("work").classList.toggle("hidden", name !== "explore");
-  $("dash").classList.toggle("hidden", name !== "dash");
-  history.replaceState(null, "", name === "dash" ? "#dashboard" : location.pathname + location.search);
+  Object.entries(VIEWS).forEach(([v, id]) => $(id).classList.toggle("hidden", v !== name));
+  history.replaceState(null, "", VIEW_HASH[name] ?? location.pathname + location.search);
   if (name === "dash") board.draw();  // 감춰져 있는 동안은 크기를 몰라 그리지 않았다.
+  if (name === "sql") showSqlSide();
 }
 document.querySelectorAll("#views button").forEach(b => b.onclick = () => showView(b.dataset.view));
 
@@ -1021,6 +1071,107 @@ try {
   dashChanged();
 } catch (e) { /* 저장소를 못 쓰거나 깨졌으면 빈 대시보드 */ }
 
+// ---------- SQL 탭 ----------
+const sqlTable = ({ columns, rows }) => !rows.length ? '<span class="empty">결과가 없습니다.</span>'
+  : `<table><thead><tr>${columns.map(c => `<th class="${rows.some(r => typeof r[c] === "number") ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
+    rows.map(r => "<tr>" + columns.map(c => cell(r[c])).join("") + "</tr>").join("") + "</tbody></table>";
+$("sql-rows").value = 1000;
+async function runSql() {
+  if (!connected) return say("err-sql", "먼저 데이터에 연결하세요.");
+  try {
+    const d = await timed("sql", () => api("/api/sql/run", { sql: $("sql-text").value, rows: Number($("sql-rows").value) }), {});
+    $("sql-count").textContent = `${d.rows.rows.length.toLocaleString()}행`;
+    $("sql-sub").textContent = d.more ? `앞 ${d.limit.toLocaleString()}행까지만 보입니다. 전체는 [결과 저장]으로 받습니다.` : "";
+    $("sql-result").innerHTML = sqlTable(d.rows);
+    say("err-sql", "");
+    showVirtual();  // 쓴 횟수가 바뀌었다
+  } catch (e) { say("err-sql", e.message); }
+}
+$("sql-run").onclick = () => busy($("sql-run"), runSql);
+$("sql-text").onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("sql-run").click(); } };
+toggleDrop($("sql-save-open"), $("sql-save-pop"));
+document.querySelectorAll("[data-sqlexport]").forEach(b => b.onclick = () => {
+  $("sql-save-pop").classList.add("hidden");
+  const format = b.dataset.sqlexport;
+  return busy($("sql-save-open"), async () => {
+    try {
+      const blob = await timed("export", async () => (await send("/api/sql/export", { sql: $("sql-text").value, format })).blob(), {});
+      download(URL.createObjectURL(blob), "sql_result." + format);
+      say("err-sql", "");
+    } catch (e) { say("err-sql", e.message); }
+  });
+});
+// 편집기의 커서 자리에 글자를 넣는다(테이블·가상 테이블 이름을 누를 때).
+function insertSql(text) {
+  const box = $("sql-text"), at = box.selectionStart ?? box.value.length;
+  box.value = box.value.slice(0, at) + text + box.value.slice(box.selectionEnd ?? at);
+  box.focus();
+  box.selectionStart = box.selectionEnd = at + text.length;
+}
+// 저장한 SQL: 많이 불러온 순. 고르면 편집기에 불러온다.
+let sqls = {};
+function showSqls(d, pick) {
+  sqls = d.sqls;
+  fill($("sql-saved"), d.order, d.order.length ? "저장한 SQL 고르기" : "저장한 SQL 없음");
+  $("sql-saved").value = d.order.includes(pick) ? pick : "";
+}
+$("sql-saved").onchange = async () => {
+  const name = $("sql-saved").value;
+  if (!sqls[name]) return;
+  $("sql-text").value = sqls[name].sql;
+  try { showSqls(await api("/api/sqls/use", { name }), name); } catch (e) { say("err-sql", e.message); }
+};
+$("sql-save").onclick = () => busy($("sql-save"), async () => {
+  const name = $("sql-name").value.trim() || $("sql-saved").value;
+  try { showSqls(await api("/api/sqls", { name, sql: $("sql-text").value }), name); $("sql-name").value = ""; say("err-sql", `저장했습니다: ${name}`, true); }
+  catch (e) { say("err-sql", e.message); }
+});
+$("sql-del").onclick = () => busy($("sql-del"), async () => {
+  const name = $("sql-saved").value;
+  if (!name) return;
+  try { showSqls(await api("/api/sqls", { name, sql: null })); } catch (e) { say("err-sql", e.message); }
+});
+api("/api/sqls").then(d => showSqls(d)).catch(() => {});
+// 가상 테이블: 지금 연결의 것을 많이 쓴 순으로. 이름을 누르면 편집기에 넣고, [정의]는 편집기에 정의를 불러오며, ×로 지운다.
+async function showVirtual() {
+  if (!connected) { $("vt-list").replaceChildren(el("div", { className: "hint", textContent: "연결하면 보입니다." })); return; }
+  try {
+    const d = await api("/api/virtual");
+    $("vt-list").replaceChildren(...(d.order.length ? d.order.map(name => {
+      const def = d.virtual[name];
+      return el("div", { className: "vt" },
+        el("b", { textContent: name, title: "편집기에 이름 넣기", onclick: () => insertSql(name) }),
+        el("span", { className: "hint", textContent: def.sql ? "SQL" : "Parquet" }),
+        el("button", { className: "ghost", textContent: "정의", title: "편집기에 정의를 불러오고 이름 칸을 채웁니다(고쳐서 같은 이름으로 다시 저장)", onclick: () => {
+          $("vt-name").value = name;
+          if (def.sql) $("sql-text").value = def.sql; else $("vt-path").value = def.parquet;
+        } }),
+        el("button", { className: "ghost", textContent: "×", title: "가상 테이블 지우기", onclick: () => saveVirtual({ name, sql: null, parquet: null }) }));
+    }) : [el("div", { className: "hint", textContent: "아직 없습니다." })]));
+  } catch (e) { say("err-vt", e.message); }
+}
+async function saveVirtual(body) {
+  try {
+    await api("/api/virtual", body);
+    say("err-vt", body.sql === null && body.parquet === null ? `지웠습니다: ${body.name}` : `저장했습니다: ${body.name}`, true);
+    await showVirtual();
+    await loadTables();  // 탐색의 기준 테이블 목록에도 들어간다
+  } catch (e) { say("err-vt", e.message); }
+}
+$("vt-save-sql").onclick = () => busy($("vt-save-sql"), () => saveVirtual({ name: $("vt-name").value, sql: $("sql-text").value }));
+$("vt-save-pq").onclick = () => busy($("vt-save-pq"), () => saveVirtual({ name: $("vt-name").value, parquet: $("vt-path").value }));
+// 테이블 칩: 지금 연결(기본 스키마)의 진짜 테이블. 누르면 편집기에 이름을 넣는다.
+function showSqlTables() {
+  const names = [...$("base").querySelectorAll(":scope > option")].map(o => o.value).filter(Boolean);
+  $("sql-tables").replaceChildren(...names.map(n => el("span", { className: "chip", textContent: n, onclick: () => insertSql(n) })));
+}
+document.addEventListener("tables", showSqlTables);
+function showSqlSide() {
+  $("sql-conn").textContent = connected ? `연결: ${connName}` : "연결 안 됨";
+  showVirtual();
+  showSqlTables();
+}
+
 $("cratio").onchange = () => { fitChart(); saveSetting({ ratio: $("cratio").value }); };
 // 그림 모드는 차트 저장, 집계 표 저장, 대시보드 다운로드가 함께 쓴다. 한쪽에서 바꾸면 다른 쪽도 바뀐다.
 $("cimage").onchange = $("simage").onchange = $("dash-mode").onchange = e => { $("cimage").value = $("simage").value = $("dash-mode").value = e.target.value; saveSetting({ image: e.target.value }); };
@@ -1035,10 +1186,10 @@ $("quotes").onchange = () => saveSetting({ quotes: $("quotes").checked ? "on" : 
 $("count").onchange = () => saveSetting({ count: $("count").checked ? "on" : "off" });
 $("theme").addEventListener("click", () => { drawChart(); board.draw(); });  // common.js의 onclick이 화면 모드를 바꾼 뒤에 다시 그린다.
 drawChart();
-showView(location.hash === "#dashboard" ? "dash" : "explore");
+showView({ "#sql": "sql", "#dashboard": "dash" }[location.hash] ?? "explore");
 Object.assign(sized, { summary: () => $("summary"), chart: () => $("chart").parentElement });
 showSummaries();
-resume().then(() => { showSummaries(); if (connected) document.querySelectorAll(".step").forEach(s => s.classList.toggle("open", false)); showSummaries(); });
+resume().then(() => { showSummaries(); if (connected) document.querySelectorAll(".step").forEach(s => s.classList.toggle("open", false)); showSummaries(); if (!$("sqlv").classList.contains("hidden")) showSqlSide(); });
 </script>
 </body>
 </html>

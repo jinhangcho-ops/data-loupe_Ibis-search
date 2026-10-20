@@ -12,6 +12,7 @@ import result
 import server
 import settings
 import source
+import sql_exec
 import use_counts
 from server import app, get_con, run, to_json
 
@@ -32,9 +33,10 @@ def joined(body):
     """기준 테이블에 이어붙이기와 조인을 한 식, 그리고 컬럼마다 원래 테이블 {컬럼: 테이블}.
     기준·이어붙인 컬럼은 기준 테이블, 출처 컬럼은 "이어붙인 테이블", 조인으로 들어온 컬럼(이름이 겹쳐 바뀐 것 포함)은 그 테이블."""
     con, schema, base = get_con(), body.get("schema") or None, body["base"]
-    tables = source.list_tables(con, schema)
+    vts = {} if schema else server.virtual_tables()  # 가상 테이블은 기본 스키마에서만 고른다
+    tables = source.list_tables(con, schema) + [n for n in vts]
     parse.check_name(base, tables, "테이블")
-    get_table = lambda name: source.get_table(con, name, schema)
+    get_table = lambda name: server.any_table(con, name, schema, vts)
     expr = parse.apply_union(get_table(base), base, parse.parse_union(body.get("union"), tables, base), get_table)
     origins = {c: "이어붙인 테이블" if body.get("union") and c == parse.SOURCE else base for c in expr.columns}
     for join in [parse.parse_join(line, tables) for line in body.get("joins", [])]:
@@ -81,6 +83,8 @@ def query():
     body = request.json
     expr, limit, offset = paged(body)
     count, rows = run(lambda: (result.get_count(expr) if body.get("count", True) else None, result.get_rows(expr, limit, offset)))
+    if offset == 0:  # 새로 검색할 때만(쪽 넘기기는 세지 않는다)
+        count_virtual([body["base"], *(body.get("union") or {}).get("tables", []), *[line.split()[0] for line in body.get("joins", []) if line.split()]])
     return jsonify(count=count, rows=to_json(rows))
 
 
@@ -211,6 +215,96 @@ def save_images():
             raise ValueError(f"같은 이름의 파일이 너무 많습니다: {stem}{ext}")
         saved.append(path.name)
     return jsonify(folder=str(folder), saved=saved)
+
+
+# ---------- SQL 직접 쓰기와 가상 테이블 ----------
+
+def count_virtual(names):
+    """쓴 가상 테이블을 한 번씩 센다(목록을 많이 쓴 순으로)."""
+    vts = server.virtual_tables()
+    for name in {n for n in names if n in vts}:
+        use_counts.use("virtual_tables", f"{server.connection_key()}|{name}")
+
+
+def sql_expr(body):
+    """요청의 SQL을 검사하고 가상 테이블을 풀어 넣은 식과 쓴 가상 테이블 이름들."""
+    con = get_con()
+    vts = server.virtual_tables()
+    tree = sql_exec.check(body.get("sql"), sql_exec.dialect_of(con))
+    return run(lambda: sql_exec.to_expr(con, body["sql"], vts)), [n for n in sql_exec.table_names(tree) if n in vts]
+
+
+@app.post("/api/sql/run")
+def sql_run():
+    """SQL을 검사해 실행하고 앞 rows행(기본 1,000)을 돌려준다. more는 그보다 많은지. 읽기만 하는 SELECT 문 하나만 된다."""
+    import polars as pl
+    n = sql_exec.rows_limit(request.json.get("rows"))
+    expr, used = sql_expr(request.json)
+    rows = run(lambda: result.get_rows(expr, n + 1))
+    count_virtual(used)
+    shown = rows.head(n).with_columns(pl.col(pl.Decimal).cast(pl.Float64))  # SUM 등이 돌려주는 큰 소수 타입은 화면에서 숫자로(파일 저장은 원래 타입)
+    return jsonify(rows=to_json(shown), more=rows.height > n, limit=n)
+
+
+@app.post("/api/sql/export")
+def sql_export():
+    """SQL 결과 전체를 파일(csv, xlsx, parquet)로 내려보낸다."""
+    return server.download(sql_expr(request.json)[0], request.json.get("format", ""))
+
+
+def sqls_view(found):
+    return jsonify(sqls=found, order=use_counts.order("sqls", found))
+
+
+@app.get("/api/sqls")
+def sqls():
+    return sqls_view(settings.named("sqls.json"))
+
+
+@app.post("/api/sqls")
+def save_sql():
+    """이름을 붙여 SQL을 저장한다(연결 정보 없음). sql이 null이면 지운다. 저장할 때 검사한다."""
+    name, sql = request.json.get("name"), request.json.get("sql")
+    if sql is not None:
+        sql_exec.check(sql)
+    found = settings.save_named("sqls.json", "SQL 문", sql_exec.MAX_SQL_SIZE + 100, name, None if sql is None else {"sql": sql})
+    if sql is None:
+        use_counts.forget("sqls", name.strip())
+    return sqls_view(found)
+
+
+@app.post("/api/sqls/use")
+def use_sql():
+    name = request.json.get("name")
+    if name not in settings.named("sqls.json"):
+        raise ValueError(f"저장한 SQL '{name}'이 없습니다.")
+    use_counts.use("sqls", name)
+    return sqls_view(settings.named("sqls.json"))
+
+
+def virtual_view(vts):
+    """지금 연결의 가상 테이블과 많이 쓴 순의 이름 목록."""
+    key = server.connection_key()
+    return jsonify(virtual=vts, order=[k.rpartition("|")[2] for k in use_counts.order("virtual_tables", [f"{key}|{n}" for n in vts])])
+
+
+@app.get("/api/virtual")
+def virtual():
+    return virtual_view(server.virtual_tables())
+
+
+@app.post("/api/virtual")
+def save_virtual():
+    """지금 연결의 가상 테이블을 저장한다({name, sql} 또는 {name, parquet}). 둘 다 없으면(null) 지운다. 지금 연결에서 한 행을 읽어 본다."""
+    body, con = request.json, get_con()
+    name, key = body.get("name"), server.connection_key()
+    definition = {"sql": body["sql"]} if body.get("sql") is not None else {"parquet": body["parquet"]} if body.get("parquet") is not None else None
+    verify = lambda trial: run(lambda: result.get_rows(sql_exec.virtual_table(con, name.strip(), trial), 1))
+    found = sql_exec.save_virtual(key, name, definition, source.list_tables(con), verify)
+    if definition is None:
+        use_counts.forget("virtual_tables", f"{key}|{name.strip()}")
+    server.state["rows"].pop((None, name.strip()), None)  # 정의가 바뀌었으면 세어 둔 행 수는 버린다
+    return virtual_view(found)
 
 
 @app.post("/api/chart")

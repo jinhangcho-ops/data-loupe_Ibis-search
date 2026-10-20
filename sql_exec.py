@@ -1,0 +1,175 @@
+"""SQL 직접 쓰기(SafeIbisSQLExecutor)와 가상 테이블.
+- 검사: sqlglot으로 읽어 문장이 하나이고 맨 위가 SELECT·UNION·INTERSECT·EXCEPT인지, 어디에도 바꾸는 문장(DROP·DELETE·INSERT 등)이 없는지 본다.
+  어기면 SecurityViolationError. WITH, 여러 테이블 JOIN, LIKE, * 는 된다.
+- 실행: 검사한 SQL을 연결의 con.sql()로 Ibis 식으로 만들고, 화면에 보일 때는 max_rows행까지만(limit) 받는다.
+- 가상 테이블: 이름 붙인 SQL(또는 Parquet 파일 경로). 쓰는 SQL 앞에 WITH 이름 AS (…)로 풀어 넣어 DB에는 아무것도 만들지 않는다.
+  연결마다 따로 둔다(virtual_tables.json {연결 열쇠: {이름: 정의}}, 연결 정보·비밀번호 없음). Parquet은 DuckDB·파일(Polars) 연결에서만 쓴다."""
+import datetime as dt
+import functools
+import re
+
+import settings
+
+VT_FILE = "virtual_tables.json"
+MAX_VIRTUAL = 100  # 연결 하나에 둘 수 있는 가상 테이블 수
+MAX_SQL_SIZE = 20_000  # SQL 하나의 글자 수
+DEFAULT_ROWS, MAX_ROWS = 1_000, 100_000  # 화면에 받을 행 수의 기본값과 상한
+NAME = re.compile(r"[A-Za-z_가-힣][A-Za-z0-9_가-힣]{0,49}")
+ROOTS = ("Select", "Union", "Intersect", "Except", "Subquery")  # 맨 위에 올 수 있는 것(괄호로 감싼 SELECT 포함)
+FORBIDDEN = ("Drop", "Delete", "Insert", "Update", "Create", "Alter", "TruncateTable", "Grant", "Revoke", "Command", "Merge", "Into",  # 어디에 있어도 막는 것:
+             "Pragma", "Set", "Copy", "Attach", "Detach", "Use", "Transaction", "Commit", "Rollback", "LoadData", "Kill", "Refresh",  # 데이터·권한·설정을 바꾸거나
+             "Cache", "Uncache", "Analyze")  # 파일·DB를 붙이는 문장
+PARQUET_BACKENDS = ("duckdb", "polars")
+
+
+@functools.cache
+def glot():
+    """(sqlglot, sqlglot.exp, ROOTS 클래스들, FORBIDDEN 클래스들). sqlglot은 무거워 처음 SQL을 다룰 때 올린다(지연 로딩)."""
+    import sqlglot
+    from sqlglot import exp
+    return sqlglot, exp, tuple(getattr(exp, n) for n in ROOTS), tuple(getattr(exp, n) for n in FORBIDDEN if hasattr(exp, n))
+
+
+class SecurityViolationError(ValueError):
+    """읽기만 하는 SQL이 아니다(바꾸는 문장, 여러 문장 등)."""
+
+
+def dialect_of(con):
+    """연결의 SQL 방언(sqlglot이 읽고 쓸 이름 또는 클래스). 모르면 None(일반 SQL)."""
+    return getattr(con, "dialect", None)
+
+
+def check(sql, dialect=None):
+    """sql을 검사해 sqlglot 식으로 돌려준다. 읽기만 하는 문장 하나가 아니면 SecurityViolationError, 문법 오류는 ValueError."""
+    if not isinstance(sql, str) or not sql.strip():
+        raise ValueError("SQL을 입력하세요.")
+    if len(sql) > MAX_SQL_SIZE:
+        raise ValueError(f"SQL은 {MAX_SQL_SIZE:,}자까지입니다.")
+    sqlglot, _, roots, forbidden = glot()
+    try:
+        parsed = [p for p in sqlglot.parse(sql, read=dialect) if p is not None]
+    except sqlglot.errors.ParseError as e:
+        raise ValueError(f"SQL을 읽을 수 없습니다: {str(e).splitlines()[0]}") from None
+    if len(parsed) != 1:
+        raise SecurityViolationError("SQL 문장은 하나만 실행할 수 있습니다(; 로 여러 문장을 이을 수 없음).")
+    tree = parsed[0]
+    if not isinstance(tree, roots):
+        raise SecurityViolationError(f"읽기만 하는 SELECT 문만 실행할 수 있습니다({type(tree).__name__.upper()} 문은 실행하지 않습니다).")
+    bad = next((node for node in tree.walk() if isinstance(node, forbidden)), None)
+    if bad is not None:
+        raise SecurityViolationError(f"데이터나 설정을 바꾸는 부분({type(bad).__name__.upper()})이 있어 실행하지 않습니다.")
+    return tree
+
+
+def table_names(tree):
+    """식에서 읽는 테이블 이름들(스키마로 가리지 않은 것). 식 안의 WITH 이름은 뺀다."""
+    exp = glot()[1]
+    own = {cte.alias_or_name.lower() for cte in tree.find_all(exp.CTE)}
+    return [t.name for t in tree.find_all(exp.Table) if not t.args.get("db") and t.name and t.name.lower() not in own]
+
+
+# ---------- 가상 테이블 저장소 ----------
+
+def all_virtual():
+    """{연결 열쇠: {이름: {"sql" 또는 "parquet", "saved"}}}. 망가진 항목은 뺀다."""
+    found = settings.read(VT_FILE) or {}
+    return {key: {n: d for n, d in vts.items() if isinstance(d, dict) and ("sql" in d or "parquet" in d)}
+            for key, vts in found.items() if isinstance(vts, dict)}
+
+
+def virtual(key):
+    """그 연결의 가상 테이블 {이름: 정의}."""
+    return all_virtual().get(key, {})
+
+
+def save_virtual(key, name, definition, real_tables, verify):
+    """가상 테이블을 저장한다(같은 이름은 덮어쓴다). definition이 None이면 지운다. 바뀐 그 연결의 가상 테이블을 돌려준다.
+    definition은 {"sql"} 또는 {"parquet": 경로}. verify(저장한 뒤의 가상 테이블들)가 지금 연결에서 읽어 보고 안 되면 예외를 낸다.
+    진짜 테이블과 같은 이름은 쓸 수 없다."""
+    name = name.strip() if isinstance(name, str) else ""
+    if not NAME.fullmatch(name):
+        raise ValueError("가상 테이블 이름은 영문·한글·밑줄로 시작하고 영문·숫자·밑줄·한글만 50자까지 쓸 수 있습니다.")
+    data = all_virtual()
+    vts = data.setdefault(key, {})
+    if definition is None:
+        vts.pop(name, None)
+    else:
+        if name.lower() in {t.lower() for t in real_tables}:
+            raise ValueError(f"'{name}'은 이 연결에 있는 테이블 이름입니다. 다른 이름을 쓰세요.")
+        if not isinstance(definition, dict) or not (isinstance(definition.get("sql"), str) or isinstance(definition.get("parquet"), str)):
+            raise ValueError("가상 테이블은 SQL이나 Parquet 파일 경로로 정의합니다.")
+        item = {"sql": definition["sql"]} if isinstance(definition.get("sql"), str) else {"parquet": definition["parquet"].strip()}
+        if name not in vts and len(vts) >= MAX_VIRTUAL:
+            raise ValueError(f"가상 테이블은 연결마다 {MAX_VIRTUAL}개까지입니다. 쓰지 않는 것을 지우세요.")
+        verify({**vts, name: item})  # 검사, 이름 고리, 지금 연결에서 읽히는지
+        vts[name] = {**item, "saved": dt.datetime.now().isoformat(timespec="seconds")}
+    settings.write(VT_FILE, data)
+    return vts
+
+
+def quote(name):
+    return '"' + name.replace('"', '""') + '"'
+
+
+# ---------- 풀어 넣기와 실행 ----------
+
+def definition_tree(con, name, item):
+    """가상 테이블 하나의 정의를 식으로. Parquet은 DuckDB·Polars 연결에서만(read_parquet)."""
+    if "sql" in item:
+        return check(item["sql"], dialect_of(con))
+    if con.name not in PARQUET_BACKENDS:
+        raise ValueError(f"Parquet 가상 테이블 '{name}'은 DuckDB 파일이나 파일 연결에서만 쓸 수 있습니다.")
+    path = item["parquet"].replace("\\", "/").replace("'", "''")
+    return glot()[0].parse_one(f"SELECT * FROM read_parquet('{path}')", read="duckdb")
+
+
+def expand(con, tree, vts):
+    """tree가 읽는 가상 테이블(그 정의가 읽는 가상 테이블까지)을 WITH로 앞에 넣은 식. 정의가 서로를 고리로 부르면 ValueError."""
+    order, visiting = [], []
+
+    def visit(name):
+        if name in order:
+            return
+        if name in visiting:
+            raise ValueError("가상 테이블이 서로를 고리처럼 부릅니다: " + " → ".join(visiting + [name]))
+        visiting.append(name)
+        sub = definition_tree(con, name, vts[name])
+        for used in table_names(sub):
+            if used in vts:
+                visit(used)
+        visiting.pop()
+        order.append(name)
+
+    lower = {n.lower(): n for n in vts}
+    for used in table_names(tree):
+        if used.lower() in lower:
+            visit(lower[used.lower()])
+    if not order:
+        return tree
+    exp = glot()[1]
+    ctes = [exp.CTE(this=definition_tree(con, n, vts[n]), alias=exp.TableAlias(this=exp.to_identifier(n, quoted=True))) for n in order]
+    tree = tree.copy()
+    if isinstance(tree, exp.Subquery):
+        tree = tree.unnest()
+    own = tree.args.get("with_")  # sqlglot은 WITH를 with_ 인자에 둔다
+    tree.set("with_", exp.With(expressions=ctes + (own.expressions if own else []), recursive=bool(own and own.args.get("recursive"))))
+    return tree
+
+
+def to_expr(con, sql, vts):
+    """검사하고 가상 테이블을 풀어 넣은 SQL을 그 연결의 Ibis 식으로(아직 실행하지 않는다)."""
+    tree = expand(con, check(sql, dialect_of(con)), vts)
+    return con.sql(tree.sql(dialect=dialect_of(con)))
+
+
+def virtual_table(con, name, vts):
+    """가상 테이블 하나를 Ibis 식으로(탐색의 기준·조인·이어붙이기 테이블로 쓴다)."""
+    return to_expr(con, f"SELECT * FROM {quote(name)}", vts)
+
+
+def rows_limit(value):
+    """화면에 받을 행 수. 없으면 DEFAULT_ROWS."""
+    n = DEFAULT_ROWS if value in (None, "") else value
+    if type(n) is not int or not 1 <= n <= MAX_ROWS:
+        raise ValueError(f"받을 행 수는 1 이상 {MAX_ROWS:,} 이하의 정수로 입력하세요.")
+    return n
