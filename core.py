@@ -70,8 +70,8 @@ def arrange(body, table, last, select=True):
     select=False면 표시 컬럼은 적용하지 않는다(build와 같이)."""
     expr = staged(body, table)
     keys, cols = shown(body, expr)
-    expr = parse.apply(expr, [], [*keys, expr[last]], cols if select else [])
-    return expr if cols and select else expr.drop(last)
+    shown_cols = cols if cols and select else [c for c in expr.columns if c != last]  # drop은 SELECT를 한 겹 더 만들어 남길 컬럼을 고른다
+    return parse.apply(expr, [], [*keys, expr[last]], shown_cols)
 
 
 STAGE = ("schema", "base", "union", "joins", "periods", "conditions")  # 받아 둘 결과(기간·조건까지)를 정하는 요청 값. 계산·정렬·표시 컬럼은 받아 둔 것 위에서 한다
@@ -105,12 +105,11 @@ NUMBER = "__ibis_n"  # numbered가 붙이는 행 번호(0부터)
 
 def numbered(body, limit, offset):
     """offset부터 limit행을 행 번호로 거르는 식. LIMIT·OFFSET을 SQL로 못 쓰는 DB(Oracle 등)의 쪽 넘기기에 쓴다.
-    번호는 요청의 정렬 순서로 매기고(정렬이 없으면 DB가 주는 순서), 표시 컬럼은 번호로 거른 뒤에 고른다."""
+    번호는 요청의 정렬 순서로 매기고(정렬이 없으면 정렬할 수 있는 컬럼 전부의 순서), 표시 컬럼은 번호로 거른 뒤에 고른다."""
     expr = staged(body, filtered(body))
     keys, cols = shown(body, expr)
-    expr = expr.mutate(**{NUMBER: ibis.row_number().over(ibis.window(order_by=keys) if keys else ibis.window())})
-    expr = parse.apply(expr, [expr[NUMBER].between(offset, offset + limit - 1)], [expr[NUMBER]], cols)
-    return expr if cols else expr.drop(NUMBER)
+    expr = expr.mutate(**{NUMBER: ibis.row_number().over(ibis.window(order_by=keys or parse.orderable(expr)))})  # 정렬이 없으면 모든 컬럼 순(쪽이 섞이지 않게)
+    return parse.apply(expr, [expr[NUMBER].between(offset, offset + limit - 1)], [expr[NUMBER]], cols or [c for c in expr.columns if c != NUMBER])
 
 
 def metric_values(body, names, by=None):

@@ -197,6 +197,11 @@ def parse_join(line, tables):
 ASOF_ID, ASOF_RANK = "__ibis_left", "__ibis_near"  # asof를 대신하는 식이 잠깐 쓰는 컬럼
 
 
+def orderable(expr):
+    """정렬할 수 있는 컬럼 전부(목록·구조·맵·JSON 제외). 정렬 없이 행 번호를 매길 때의 순서로 쓴다(ORDER BY 없는 ROW_NUMBER를 막는 DB가 있다, Oracle 등)."""
+    return [expr[c] for c, t in expr.schema().items() if not (t.is_nested() or t.is_json())]
+
+
 def asof(left, right, on, keys):
     """asof 조인: 왼쪽 행마다 키가 같고 시각이 같거나 앞선 오른쪽 행 중 가장 가까운 하나를 붙인다(없으면 빈 값).
     연결이 ASOF JOIN을 하지 못하면(SQLite·Databricks 등) 왼쪽 조인 + 시각 순 행 번호로 같은 결과를 만든다."""
@@ -204,11 +209,12 @@ def asof(left, right, on, keys):
     found = left.asof_join(right, on=left[on[0]] >= right[on[1]], predicates=[left[a] == right[b] for a, b in keys])
     if source.compiles(found):
         return found
-    numbered = left.mutate(**{ASOF_ID: ibis.row_number().over(ibis.window())})
+    numbered = left.mutate(**{ASOF_ID: ibis.row_number().over(ibis.window(order_by=orderable(left)))})
     joined = numbered.left_join(right, [numbered[on[0]] >= right[on[1]], *[numbered[a] == right[b] for a, b in keys]])
     when = joined[on[1] if on[1] not in left.columns else on[1] + "_right"]  # 오른쪽 시각(이름이 겹치면 _right가 붙는다)
     near = ibis.row_number().over(ibis.window(group_by=joined[ASOF_ID], order_by=ibis.desc(when)))
-    return joined.mutate(**{ASOF_RANK: near}).filter(ibis._[ASOF_RANK] == 0).drop(ASOF_ID, ASOF_RANK)
+    ranked = joined.mutate(**{ASOF_RANK: near})
+    return ranked.filter(ranked[ASOF_RANK] == 0).select(*[c for c in joined.columns if c != ASOF_ID])  # drop은 SELECT를 한 겹 더 만든다
 
 
 def apply_joins(base, joins, get_table):

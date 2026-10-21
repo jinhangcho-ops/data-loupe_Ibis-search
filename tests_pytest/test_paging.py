@@ -132,6 +132,8 @@ def test_oracle_sql_uses_row_numbers(monkeypatch):
     monkeypatch.setattr(core, "filtered", lambda body: t)
     sql = " ".join(ibis.to_sql(core.numbered({"sorts": ["grp desc"]}, 4, 8), dialect="oracle").split()).upper()
     assert "ROW_NUMBER() OVER (ORDER BY" in sql and "BETWEEN 8 AND 11" in sql and "OFFSET" not in sql
+    unsorted = " ".join(ibis.to_sql(core.numbered({}, 4, 8), dialect="oracle").split()).upper()  # 정렬이 없어도 Oracle은 ORDER BY가 있어야 한다
+    assert 'ROW_NUMBER() OVER (ORDER BY "T0"."ID" ASC, "T0"."GRP" ASC)' in unsorted
     with pytest.raises(ibis.common.exceptions.UnsupportedArgumentError):  # can_offset가 알아보는 오류
         ibis.to_sql(t.limit(4, offset=8), dialect="oracle")
     assert result.can_offset(t)  # SQL로 바꿀 연결이 없는 식은 막지 않는다

@@ -103,12 +103,24 @@ def dedupe_columns(t, recipe):
     return columns
 
 
+FIRST = "__ibis_first"  # first_rows가 잠깐 쓰는 행 번호
+
+
+def first_rows(t, columns):
+    """columns가 같은 행 중 하나만 남긴다(어느 행인지는 정하지 않는다). 연결이 DISTINCT ON(keep first)을 못 하면(MSSQL·Oracle 등) 행 번호로 대신한다."""
+    found = t.distinct(on=columns, keep="first")
+    if source.compiles(found):
+        return found
+    numbered = t.mutate(**{FIRST: ibis.row_number().over(ibis.window(group_by=[t[c] for c in columns], order_by=parse.orderable(t)))})
+    return numbered.filter(numbered[FIRST] == 0).select(*t.columns)
+
+
 def build(con, recipe, table=None):
     """recipe를 Ibis 식 하나로 만든다. (식, 결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지))를 돌려준다. table은 shape와 같다."""
     t, origin = shape(con, recipe, table)
     columns = dedupe_columns(t, recipe)
     if columns:
-        t = t.distinct() if set(columns) == set(t.columns) else t.distinct(on=columns, keep="first")
+        t = t.distinct() if set(columns) == set(t.columns) else first_rows(t, columns)
     if recipe.get("downcast") is True:
         t = downcast(t)
     keys = [parse.parse_sort(line, t) for line in recipe.get("sorts", [])]

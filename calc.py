@@ -16,6 +16,7 @@ EXAMPLES = ["순위 기준 금액 desc 그룹 매장코드", "이동평균 금�
             "이전값 금액 기준 주문일", "차이 금액 기준 주문일", "상위 3 기준 금액 desc 그룹 매장코드", "반올림 0 숫자", "곱하기 1.1 금액",
             "빈값채우기 0 숫자", "공백지우기 글자", "펼치기 태그", "세로로 금액, 수량"]  # 화면의 [예시 넣기]
 WINDOWS = ("순위", "이동평균", "이동합계", "누적합", "이전값", "차이", "상위")
+COLUMNS = ("순위", "이동평균", "이동합계", "누적합", "이전값", "차이")  # 새 컬럼 하나를 만드는 창 함수. 서로 기대지 않으면 mutate 하나로 묶는다
 EACH = ("반올림", "곱하기", "빈값채우기", "공백지우기")
 KINDS = (*WINDOWS, *EACH, "펼치기", "세로로")
 OPTIONS = ("기준", "그룹", "이름")  # 줄 안에서 뒤따르는 값을 묶는 낱말
@@ -59,9 +60,10 @@ def window(expr, opts, need_order=True):
     return keys, groups or None
 
 
-def new_name(expr, opts, default):
+def new_name(expr, opts, default, taken=()):
+    """새 컬럼 이름(이름 옵션 또는 default). 이미 있거나 같은 묶음에서 만든 이름이면 ValueError."""
     name = " ".join(opts.get("이름") or []) or default
-    if name in expr.columns:
+    if name in expr.columns or name in taken:
         raise ValueError(f"'{name}' 컬럼이 이미 있습니다. 끝에 '이름 다른이름'을 붙이세요.")
     return name
 
@@ -138,26 +140,32 @@ def apply_line(line, expr):
         if len(cols) < 2:
             raise ValueError("세로로 세울 컬럼을 두 개 이상 넣으세요. 예: 세로로 금액, 수량")
         return longer(expr, cols)
-    keys, groups = window(expr, opts)
-    order = (opts.get("기준") or [""])[0]
-    if kind == "순위":
-        return expr.mutate(**{new_name(expr, opts, f"{order}_순위"): ibis.rank().over(ibis.window(group_by=groups, order_by=keys)) + 1})
     if kind == "상위":
+        keys, groups = window(expr, opts)
         n = int(number(main[0] if main else None, "상위 몇 개"))
         if n < 1:
             raise ValueError("상위 몇 개는 1 이상입니다.")
         ranked = expr.mutate(**{TOP: ibis.row_number().over(ibis.window(group_by=groups, order_by=keys))})
-        return ranked.filter(ranked[TOP] < n).drop(TOP)
+        return ranked.filter(ranked[TOP] < n).select(*expr.columns)  # drop은 SELECT를 한 겹 더 만든다
+    return expr.mutate(**dict([column(kind, main, opts, expr)]))
+
+
+def column(kind, main, opts, expr, taken=()):
+    """새 컬럼 하나를 만드는 창 함수 줄(COLUMNS)의 (이름, 식). 식은 expr의 컬럼만 쓴다. taken은 같은 mutate에서 이미 만든 이름."""
+    keys, groups = window(expr, opts)
+    order = (opts.get("기준") or [""])[0]
+    if kind == "순위":
+        return new_name(expr, opts, f"{order}_순위", taken), ibis.rank().over(ibis.window(group_by=groups, order_by=keys)) + 1
     col = names(main[:1], expr)[0] if main else None
     if col is None or not expr[col].type().is_numeric() and kind != "이전값":
         raise ValueError(f"{kind}할 숫자 컬럼을 넣으세요.")
     value = expr[col]
     if kind == "누적합":
         win = ibis.window(group_by=groups, order_by=keys, preceding=None, following=0)
-        return expr.mutate(**{new_name(expr, opts, f"{col}_누적합"): value.sum().over(win)})
+        return new_name(expr, opts, f"{col}_누적합", taken), value.sum().over(win)
     if kind in ("이전값", "차이"):
         prev = value.lag(1).over(ibis.window(group_by=groups, order_by=keys))
-        return expr.mutate(**{new_name(expr, opts, f"{col}_{kind}"): prev if kind == "이전값" else value - prev})
+        return new_name(expr, opts, f"{col}_{kind}", taken), prev if kind == "이전값" else value - prev
     size = SIZE.fullmatch(main[1]) if len(main) > 1 else None
     if not size or int(size[1]) < 1:
         raise ValueError(f"{kind}의 크기를 '3행'이나 '7일'처럼 넣으세요.")
@@ -170,14 +178,33 @@ def apply_line(line, expr):
     else:
         win = ibis.window(group_by=groups, order_by=keys, preceding=n - 1, following=0)
     how = value.mean() if kind == "이동평균" else value.sum()
-    return expr.mutate(**{new_name(expr, opts, f"{col}_{kind}{n}{unit}"): how.over(win)})
+    return new_name(expr, opts, f"{col}_{kind}{n}{unit}", taken), how.over(win)
+
+
+def mentions(main, opts):
+    """줄이 가리키는 컬럼 이름들(본문의 첫 낱말, 기준, 그룹)."""
+    found = set(" ".join(main[:1]).split(",")) | set((opts.get("기준") or [""])[:1]) | set(" ".join(opts.get("그룹") or []).split(","))
+    return {n.strip() for n in found if n.strip()}
 
 
 def apply(lines, expr):
-    """계산 줄들을 차례로 건다. 비었으면 그대로."""
+    """계산 줄들을 차례로 건다. 비었으면 그대로. 이어진 창 함수 줄(COLUMNS)은 앞 줄이 만든 컬럼을 쓰지 않는 한 mutate 하나로 묶는다
+    (줄마다 mutate하면 SELECT가 한 겹씩 늘어난다)."""
+    batch = {}
     for line in lines or []:
-        expr = apply_line(line, expr)
-    return expr
+        kind, main, opts = split_words(line)
+        if kind in COLUMNS and not mentions(main, opts) & set(batch):
+            name, value = column(kind, main, opts, expr, batch)
+            batch[name] = value
+            continue
+        if batch:
+            expr, batch = expr.mutate(**batch), {}
+        if kind in COLUMNS:
+            name, value = column(kind, main, opts, expr)
+            batch[name] = value
+        else:
+            expr = apply_line(line, expr)
+    return expr.mutate(**batch) if batch else expr
 
 
 def metric(expr, how, value, where):
