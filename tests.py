@@ -512,6 +512,11 @@ def prep_sampling(got, error):
     got("/api/disconnect")
 
 
+def prep_where(value):
+    """설정 prep_where(원격 DB의 전처리를 이 PC에서 계산하는 범위)를 바꾼다. 다른 설정은 그대로 둔다."""
+    settings.write(settings.PATH.name, {**(settings.read(settings.PATH.name) or {}), "prep_where": value})
+
+
 def numbers_section():
     """숫자 모양 통계, 타입 추천, 숫자로 바꾸기. try_cast가 없는 SQLite 주소 연결에서도 DuckDB·Parquet과 같은 값이 나와야 한다."""
     pc = prep_app.app.test_client()
@@ -561,8 +566,12 @@ def numbers_section():
     check("SQLite 만든 테이블의 값(빈 값 수, 최소, 최대)", stats,
           {"id": (0, 1, 6), "price": (2, 7, 3000), "numstr": (1, 10, 60), "decs": (2, 0.5, 1000.0), "edge": (3, -TOP, TOP)})
     unsupported = [("날짜로 바꾸기", "day", to("date")), ("outlier iqr", "rate", {"outlier": {"how": "clip", "by": "iqr"}}), ("fill median", "rate", {"fill": {"how": "median"}})]
+    for name, column, ops in unsupported:  # 기본(prep_where all): 원격 DB도 이 PC의 작업 사본(DuckDB)에서 계산하므로 된다
+        check(f"SQLite가 못 하는 계산도 이 PC에서는 됨: {name}", str(values(**{column: ops})).startswith("이 연결에서는"), False)
+    prep_where("new")  # 계산 컬럼·PCA가 없으면 DB에서 계산
     for name, column, ops in unsupported:
-        check(f"SQLite가 못 하는 계산은 그 문구로: {name}", str(values(**{column: ops})).startswith("이 연결에서는 지원하지 않는 계산입니다."), True)
+        check(f"DB에서 계산하면 SQLite가 못 하는 계산은 그 문구로: {name}", str(values(**{column: ops})).startswith("이 연결에서는 지원하지 않는 계산입니다."), True)
+    prep_where("all")
     check("SQLite 연결 해제", got("/api/disconnect"), {"ok": True})
 
 
@@ -2275,9 +2284,13 @@ def sqlite_section(c, got):
     r = got("/api/preview", base="customers", columns={"name": {"ops": {"extract": {"pattern": "[0-9]+"}, "has": {"words": ["customer0"]}}}}, sorts=["id"])
     check("SQLite extract·has: 다른 연결과 같은 값", ([row["name_match"] for row in r["rows"]["rows"]], [row["name_has_customer0"] for row in r["rows"]["rows"]]),
           ([f"{i:02d}" for i in range(1, 21)], [1] * 9 + [0] * 11))
-    check("SQLite counts는 지원하지 않는 계산", got("/api/preview", base="customers", columns={"name": {"ops": {"counts": {"sep": "r"}}}}).get("error", "")[:22], "이 연결에서는 지원하지 않는 계산입니다.")
-    check("SQLite 새 테이블 만들기", (got("/api/run", recipe=recipe, target={"kind": "table", "name": "upper_names"}), tables()),
+    counts = {"name": {"ops": {"counts": {"sep": "r"}}}}
+    check("SQLite counts: 이 PC의 작업 사본에서는 됨(기본)", got("/api/preview", base="customers", columns=counts).get("local"), True)
+    prep_where("new")  # 계산 컬럼·PCA가 없으면 DB에서 계산
+    check("SQLite counts: DB에서 계산하면 지원하지 않는 계산", got("/api/preview", base="customers", columns=counts).get("error", "")[:22], "이 연결에서는 지원하지 않는 계산입니다.")
+    check("SQLite 새 테이블 만들기(DB에서 계산)", (got("/api/run", recipe=recipe, target={"kind": "table", "name": "upper_names"}), tables()),
           ({"ok": True, "rows": 40}, ["customers", "orders", "upper_names"]))
+    prep_where("all")
     check("SQLite 만든 테이블의 값", got("/api/query", base="upper_names", sorts=["id"], columns=["name"], limit=1, count=False)["rows"]["rows"], [{"name": "CUSTOMER01"}])
     thread, forever = source.worker, "with recursive n(i) as (select 1 union all select i + 1 from n) select count(*) from n"
     threading.Timer(0.3, lambda: c.post("/api/cancel")).start()

@@ -1,8 +1,9 @@
-"""전처리: recipe(테이블, 행 거르기, 컬럼 복사, 컬럼별 일, 파생 컬럼 빼기, 중복 제거, downcast, 정렬)를 Ibis 식 하나로 만든다.
-컬럼 하나에 하는 일은 prep_ops.py의 OPS 표에 있다."""
+"""전처리: recipe(테이블, 행 거르기, 컬럼 복사, 컬럼별 일, 계산 컬럼·PCA, 파생 컬럼 빼기, 중복 제거, downcast, 정렬)를 Ibis 식 하나로 만든다.
+컬럼 하나에 하는 일은 prep_ops.py의 OPS 표에, 계산 컬럼·PCA는 prep_derive.py에 있다."""
 from lazy import ibis
 
 import parse
+import prep_derive
 import prep_ops
 import source
 from prep_ops import stats
@@ -58,9 +59,11 @@ def downcast(t):
     return t.mutate(**casts) if casts else t
 
 
-def shape(con, recipe, table=None):
-    """filters → copies → 컬럼별 ops → keep·파생 컬럼 배치·rename → drop까지 만든 식과, 결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지).
-    table을 주면 연결의 테이블 대신 그 식(예: 표본을 담은 메모리 표)에서 시작한다."""
+def shape(con, recipe, table=None, info=None):
+    """filters → copies → 컬럼별 ops → 계산 컬럼(formulas) → PCA → keep·파생 컬럼 배치·rename → drop까지 만든 식과,
+    결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지). 계산 컬럼·PCA 성분은 원래 컬럼이 없어 이름이 ""이고 맨 뒤에 놓인다.
+    계산 식은 이름을 바꾸기 전의 컬럼 이름을 쓴다. table을 주면 연결의 테이블 대신 그 식(예: 표본을 담은 메모리 표)에서 시작한다.
+    info(dict)를 주면 PCA의 설명된 분산 비율 등을 남긴다."""
     if table is None:
         schema = recipe.get("schema") or None
         parse.check_name(recipe["base"], source.list_tables(con, schema), "테이블")
@@ -79,11 +82,16 @@ def shape(con, recipe, table=None):
         before = set(t.columns)
         t = prep_ops.apply_ops(t, name, specs.get(name, {}).get("ops", {}))
         made.update({new: name for new in t.columns if new not in before})
+    t, new = prep_derive.apply_formulas(t, recipe.get("formulas") or [])
+    if recipe.get("pca"):
+        t, components = prep_derive.pca(t, recipe["pca"], {} if info is None else info)
+        new += components
     layout = []  # (t의 컬럼, 결과 이름, recipe상 컬럼, 파생 컬럼인지)
-    for name in [n for n in t.columns if n not in made]:
+    for name in [n for n in t.columns if n not in made and n not in new]:
         if specs.get(name, {}).get("keep", True):
             layout.append((name, specs.get(name, {}).get("rename") or name, name, False))
         layout += [(new, new, name, True) for new, source_name in made.items() if source_name == name]
+    layout += [(name, name, "", True) for name in new]
     dropped = names_of(recipe, "drop")
     layout = [item for item in layout if not (item[3] and item[1] in dropped)]  # 파생 컬럼만 뺀다. 없는 이름은 무시한다.
     if not layout:
@@ -115,9 +123,9 @@ def first_rows(t, columns):
     return numbered.filter(numbered[FIRST] == 0).select(*t.columns)
 
 
-def build(con, recipe, table=None):
-    """recipe를 Ibis 식 하나로 만든다. (식, 결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지))를 돌려준다. table은 shape와 같다."""
-    t, origin = shape(con, recipe, table)
+def build(con, recipe, table=None, info=None):
+    """recipe를 Ibis 식 하나로 만든다. (식, 결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지))를 돌려준다. table·info는 shape와 같다."""
+    t, origin = shape(con, recipe, table, info)
     columns = dedupe_columns(t, recipe)
     if columns:
         t = t.distinct() if set(columns) == set(t.columns) else first_rows(t, columns)
@@ -127,9 +135,9 @@ def build(con, recipe, table=None):
     return (t.order_by(keys) if keys else t), origin
 
 
-def dupes(con, recipe):
-    """dedupe를 적용하기 직전의 식에서 중복 묶음 수(같은 기준 값이 2행 이상)와 빠질 행 수를 센다."""
-    t = shape(con, recipe)[0]
+def dupes(con, recipe, table=None):
+    """dedupe를 적용하기 직전의 식에서 중복 묶음 수(같은 기준 값이 2행 이상)와 빠질 행 수를 센다. table은 shape와 같다."""
+    t = shape(con, recipe, table)[0]
     columns = dedupe_columns(t, recipe)
     if not columns:
         raise ValueError("중복 기준 컬럼을 고르세요.")

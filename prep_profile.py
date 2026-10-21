@@ -151,3 +151,59 @@ def patterns(t, sample):
                 out[name] = found
         queue = {name: groups[1:] for name, groups in queue.items() if name not in out}
     return {name: out[name] for name in texts if name in out}
+
+
+PRUNE_TOP = 0.99  # 한 값이 이 비율 이상이면 빼라고 제안한다(빈 값 포함 전체 행 기준)
+PRUNE_CORR = 0.95  # 두 숫자 컬럼의 상관(절댓값)이 이 이상이면 하나를 빼라고 제안한다
+PRUNE_MIN_PAIRS = 30  # 상관을 구할 때 두 컬럼이 모두 있는 행이 이보다 적으면 보지 않는다
+PRUNE_MAX_NUMERIC = 200  # 상관을 볼 숫자 컬럼 수(앞에서부터)
+
+
+def prune(arrow):
+    """표본(pyarrow 표)으로 뺄 만한 컬럼을 고른다: 값이 모두 비었거나 하나뿐이거나 한 값이 PRUNE_TOP 이상인 컬럼,
+    상관이 PRUNE_CORR 이상인 숫자 컬럼 쌍에서는 빈 값이 더 많은 쪽(같으면 뒤쪽). 이 PC의 표본만 쓰고 DB에 묻지 않는다.
+    [{column, reason, with(상관이면 남길 컬럼), r}]"""
+    import numpy as np
+    import polars as pl
+    df = pl.from_arrow(arrow)
+    rows, found, picked = df.height, [], set()
+    if not rows:
+        return found
+    for name, dtype in df.schema.items():
+        if dtype.is_nested():
+            continue
+        col = df[name]
+        filled = rows - col.null_count()
+        if not filled:
+            found.append({"column": name, "reason": "값이 모두 비어 있습니다"})
+        elif col.n_unique() - (1 if col.null_count() else 0) == 1:
+            found.append({"column": name, "reason": f"값이 하나뿐입니다({col.drop_nulls()[0]})" + (" (나머지는 빈 값)" if col.null_count() else "")})
+        else:
+            counts = col.value_counts(sort=True)
+            top = counts["count"][0] / rows
+            if top < PRUNE_TOP:
+                continue
+            found.append({"column": name, "reason": f"빈 값이 {top:.1%}입니다" if counts[name][0] is None else f"한 값이 {top:.1%}입니다({counts[name][0]})"})
+        picked.add(name)
+    numeric = [n for n, d in df.schema.items() if d.is_numeric() and n not in picked][:PRUNE_MAX_NUMERIC]
+    if len(numeric) < 2:
+        return found
+    values = df.select(pl.col(n).cast(pl.Float64) for n in numeric).to_numpy()
+    nulls = {n: df[n].null_count() for n in numeric}
+    for i in range(len(numeric)):
+        for j in range(i + 1, len(numeric)):
+            a, b = numeric[i], numeric[j]
+            if a in picked or b in picked:
+                continue
+            both = ~np.isnan(values[:, i]) & ~np.isnan(values[:, j])
+            if both.sum() < PRUNE_MIN_PAIRS:
+                continue
+            x, y = values[both, i], values[both, j]
+            if x.std() == 0 or y.std() == 0:
+                continue
+            r = float(np.corrcoef(x, y)[0, 1])
+            if abs(r) >= PRUNE_CORR:
+                drop, keep = (a, b) if nulls[a] > nulls[b] else (b, a)
+                found.append({"column": drop, "reason": f"'{keep}'와 상관이 {r:.3f}로 거의 같은 정보입니다", "with": keep, "r": round(r, 4)})
+                picked.add(drop)
+    return found

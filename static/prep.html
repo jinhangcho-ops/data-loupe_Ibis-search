@@ -55,7 +55,8 @@
 <div class="work" id="prep-view">
   <main class="results">
     <section class="pane">
-      <div class="head"><h3>컬럼</h3><span class="hint" id="shape"></span><span class="hint" id="sampled"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계·추천을 다시 구합니다">다시 구하기</button><button id="sug-all" class="hidden" title="추천을 모두 선택에 넣습니다">추천 모두 적용</button></div>
+      <div class="head"><h3>컬럼</h3><span class="hint" id="shape"></span><span class="hint" id="sampled"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계·추천을 다시 구합니다">다시 구하기</button><button id="sug-all" class="hidden" title="추천을 모두 선택에 넣습니다">추천 모두 적용</button><button id="prune" class="hidden" title="표본(이 PC)으로 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾습니다. DB에는 묻지 않습니다">뺄 만한 컬럼</button></div>
+      <div class="hint" id="prune-box"></div>
       <div class="table-wrap" id="grid"></div>
       <div class="hint"><span id="counts"></span> <span id="stale" class="warn"></span></div>
       <div class="ok" id="ok-run"></div>
@@ -76,6 +77,7 @@
             <div class="row" style="margin-top:6px; align-items:center"><span class="hint" style="margin:0; flex:none">표본 행 수</span><input id="sample" type="number" style="width:120px; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
             <div class="hint">테이블 전체가 아니라 이만큼만(싼 방법부터) 읽어 통계·추천·분석을 구하고, 테이블별로 저장해 둡니다.</div>
             <label class="check" title="끄면 테이블을 골라도 데이터를 읽지 않고 컬럼 이름·타입만 보입니다(행 수도 세지 않음). 추천은 나오지 않고, 분석 탭은 그대로 표본을 읽습니다"><input type="checkbox" id="stats-on"> 컬럼 통계·추천 구하기</label>
+            <div class="row" style="margin-top:6px; align-items:center" title="주소로 연결한 DB에서만 씁니다. 이 PC에서 계산하면 DB에는 행 거르기까지의 조회 한 번만 가고(그 결과를 이 PC로 받아 둠), 통계·전처리·저장 계산은 이 PC가 합니다. 테이블이 크면 받는 데 오래 걸리고 디스크를 씁니다"><span class="hint" style="margin:0; flex:none">원격 DB 계산</span><select id="prep-where" style="flex:1; min-width:0"><option value="all">이 PC에서 (전처리 전체)</option><option value="new">이 PC에서 (계산 컬럼·PCA만)</option></select></div>
             <div class="row" style="margin-top:6px"><input id="spec-path" class="code" placeholder="데이터 명세서 (JSON·YAML, 선택)" title="테이블·컬럼 설명과 파티션 키를 적은 파일. 비우고 [읽기]를 누르면 쓰지 않습니다"><button id="spec-read">읽기</button></div>
             <div class="hint" id="spec-info"></div>
             <div class="cols" id="pcols"></div>
@@ -90,7 +92,19 @@
             <div id="filters"></div>
           </div></div>
         <div class="cn">↓</div>
-        <div class="step" data-step="dedupe"><div class="sp"><i>3</i><span class="t">중복 기준</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
+        <div class="step" data-step="derive"><div class="sp"><i>3</i><span class="t">새 컬럼</span><b id="sum-p-derive"></b><span class="c"></span></div>
+          <div class="edx">
+            <div class="hint">계산 컬럼 (컬럼은 이름을 바꾸기 전의 이름으로)</div>
+            <div class="row"><input id="fx-name" placeholder="새 컬럼 이름" style="width:110px; flex:none"><input id="fx-expr" class="code" placeholder="예: 금액 * 수량"><button id="fx-add">추가</button></div>
+            <div class="hint" id="fx-guide"></div>
+            <div id="formulas"></div>
+            <div class="hint" style="margin-top:12px">PCA (차원 축소): 고른 숫자 컬럼을 성분 컬럼 pca_1, pca_2 …로 줄입니다</div>
+            <div class="cols" id="pca-cols"></div>
+            <div class="row" style="align-items:center"><span class="hint" style="margin:0; flex:none">성분 수</span><input id="pca-n" type="number" min="1" value="2" style="width:70px; flex:none"><button id="pca-clear" class="ghost">고른 것 비우기</button></div>
+            <div class="hint" id="pca-info"></div>
+          </div></div>
+        <div class="cn">↓</div>
+        <div class="step" data-step="dedupe"><div class="sp"><i>4</i><span class="t">중복 기준</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
           <div class="edx">
             <div class="hint">고른 컬럼의 값이 모두 같은 행은 하나만 남깁니다. 고르지 않은 컬럼은 어느 행의 값이 남을지 정해지지 않습니다.</div>
             <div class="row"><select id="dd-col" style="flex:1; min-width:0"></select><button id="dd-all">전체 컬럼</button></div>
@@ -98,13 +112,13 @@
             <div class="row"><button id="dupes" disabled>중복 세기</button><span class="hint" id="dd-result" style="align-self:center"></span></div>
           </div></div>
         <div class="cn">↓</div>
-        <div class="step" data-step="sorts"><div class="sp"><i>4</i><span class="t">정렬</span><b id="sum-p-sorts"></b><span class="c"></span></div>
+        <div class="step" data-step="sorts"><div class="sp"><i>5</i><span class="t">정렬</span><b id="sum-p-sorts"></b><span class="c"></span></div>
           <div class="edx">
             <div class="row"><select id="sort-col" style="flex:1; min-width:0" title="결과의 컬럼 이름"></select><select id="sort-dir" style="width:auto"><option value="asc">오름차순</option><option value="desc">내림차순</option></select><button id="sort-add">추가</button></div>
             <div class="chips open" id="sorts"></div>
           </div></div>
         <div class="cn">↓</div>
-        <div class="step" data-step="save"><div class="sp"><i>5</i><span class="t">저장</span><b id="sum-p-save"></b><span class="c"></span></div>
+        <div class="step" data-step="save"><div class="sp"><i>6</i><span class="t">저장</span><b id="sum-p-save"></b><span class="c"></span></div>
           <div class="edx">
             <label><input type="radio" name="target" id="t-file" checked style="width:auto"> 파일</label>
             <select id="fmt" style="margin-bottom:6px"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
@@ -200,6 +214,8 @@ let filters = [];  // 행 거르기 조건 줄
 let dedupe = [];  // 중복 기준 (결과 컬럼 이름)
 let sorts = [];  // ["결과 컬럼 asc", ...]
 let drops = [];  // 끈 파생 컬럼 이름
+let formulas = [];  // 계산 컬럼 [{ name, expr }] (③ 새 컬럼)
+let pca = { columns: [], n: 2 };  // PCA에 넣을 숫자 컬럼과 성분 수 (③ 새 컬럼). 컬럼이 없으면 하지 않는다
 let deriv = [];  // 미리보기에서 알게 된 파생 컬럼 [{ name, source, type }]. 끈 것도 남긴다.
 let status = "";  // 통계를 구하는 단계: "stats"(통계 계산 중), "patterns"(타입 추천 확인 중), "stopped"(통계를 구하지 못함), "off"(통계를 끔), 끝났으면 ""
 let statsOn = saved("stats") !== "off";  // 테이블을 고를 때 표본을 읽어 통계·추천을 구할지(설정 stats)
@@ -342,7 +358,7 @@ const kept = () => cols().filter(c => edits[c.name].keep);
 const outName = c => edits[c.name].rename.trim() || c.name;  // 결과에서의 컬럼 이름
 const resultNames = () => [...kept().map(outName), ...(preview ? deriv.filter(d => !drops.includes(d.name)).map(d => d.name) : [])];
 const fail = text => { $("err-prep").textContent = text; };
-const snap = () => JSON.stringify([edits, copies, filters, dedupe, sorts, drops, $("downcast").checked]);
+const snap = () => JSON.stringify([edits, copies, filters, formulas, pca, dedupe, sorts, drops, $("downcast").checked]);
 const stateOf = (key, v) => OPS[key].load?.(v) ?? {};
 
 // 입력 칸 하나
@@ -445,7 +461,7 @@ function gridColumns() {
   return preview.rows.columns.map((name, k) => ({ name, k, derived: preview.derived[k], c: all.find(x => x.name === preview.sources[k]) })).filter(x => !drops.includes(x.name));
 }
 function showCounts() {
-  $("counts").textContent = !prof ? "" : preview ? `행 수: 전 ${preview.before.toLocaleString()} → 후 ${preview.after.toLocaleString()}` : "[미리보기]를 누르면 전처리한 결과 20행이 여기에 표시됩니다.";
+  $("counts").textContent = !prof ? "" : preview ? `행 수: 전 ${preview.before.toLocaleString()} → 후 ${preview.after.toLocaleString()}${preview.local ? " · 이 PC에서 계산" : ""}` : "[미리보기]를 누르면 전처리한 결과 20행이 여기에 표시됩니다.";
   $("stale").textContent = preview && snap() !== shot ? "설정이 바뀌었습니다. 미리보기를 다시 누르세요" : "";
 }
 function renderGrid() {
@@ -454,6 +470,7 @@ function renderGrid() {
   $("shape").textContent = prof ? `${prof.rows === null ? "행 수 세지 않음" : "행 " + prof.rows.toLocaleString()} × 컬럼 ${prof.columns.length}${prof.description ? ` · ${prof.description}` : ""}` : "";
   showSampled();
   $("sug-all").classList.toggle("hidden", !prof?.columns.some(c => allSuggest(c).length));
+  $("prune").classList.toggle("hidden", !prof);
   $("sug-all").textContent = "추천 모두 적용" + (status === "patterns" ? " (타입 추천 확인 중)" : "");
   showCounts();
   if (!prof) { $("grid").innerHTML = '<span class="empty">테이블을 고르면 컬럼이 여기에 표시됩니다.</span>'; return; }
@@ -463,7 +480,7 @@ function renderGrid() {
       const name = el("th", { textContent: x.name, title: x.name });
       heads.set(x.name, name);
       rows[0].append(name);
-      rows[1].append(el("th", { className: "stats", innerHTML: `<b>${esc(preview.types[x.k])}</b><div>${esc(preview.sources[x.k])}에서 만든 컬럼</div>` }));
+      rows[1].append(el("th", { className: "stats", innerHTML: `<b>${esc(preview.types[x.k])}</b><div>${preview.sources[x.k] ? esc(preview.sources[x.k]) + "에서 만든 컬럼" : "③ 새 컬럼"}</div>` }));
       rows[2].append(el("th"));
       continue;
     }
@@ -522,6 +539,45 @@ const addFilter = () => {
 $("f-add").onclick = addFilter;
 $("f-in").onkeydown = e => { if (e.key === "Enter") addFilter(); };
 
+// ③ 새 컬럼: 계산 컬럼 목록과 PCA에 넣을 숫자 컬럼(남긴 원래·복사 컬럼 중 숫자인 것). 계산 식은 서버가 검사한다.
+function renderDerive() {
+  $("formulas").replaceChildren(...formulas.map((f, i) => el("div", {}, chip(`${f.name} = ${f.expr}`, () => { formulas.splice(i, 1); preview = null; showAll(); }))));
+  const nums = prof ? kept().filter(c => isNum(c, edits[c.name].ops)).map(c => c.name) : [];
+  pca.columns = pca.columns.filter(n => nums.includes(n));
+  $("pca-cols").replaceChildren(...nums.map(n => el("label", {}, el("input", { type: "checkbox", checked: pca.columns.includes(n), onchange: e => {
+    if (e.target.checked && pca.columns.length >= SERVER.pca_max) { e.target.checked = false; return fail(`PCA에는 ${SERVER.pca_max}개까지 넣을 수 있습니다.`); }
+    pca.columns = e.target.checked ? [...pca.columns, n] : pca.columns.filter(x => x !== n);
+    preview = null; renderGrid(); showPrepSummaries();
+  } }), " " + n)));
+  $("pca-n").value = pca.n;
+}
+$("fx-guide").textContent = SERVER.formula_guide;
+$("fx-add").onclick = () => {
+  const name = $("fx-name").value.trim(), expr = $("fx-expr").value.trim();
+  if (!name || !expr) return fail("계산 컬럼의 이름과 식을 입력하세요.");
+  if (formulas.some(f => f.name === name)) return fail(`'${name}' 계산 컬럼이 이미 있습니다.`);
+  formulas.push({ name, expr });
+  $("fx-name").value = $("fx-expr").value = "";
+  fail(""); preview = null; showAll();
+};
+$("fx-expr").onkeydown = e => { if (e.key === "Enter") $("fx-add").click(); };
+$("pca-n").onchange = () => { pca.n = Math.max(1, Math.round(+$("pca-n").value) || 1); preview = null; renderDerive(); renderGrid(); };
+$("pca-clear").onclick = () => { pca = { columns: [], n: pca.n }; $("pca-info").textContent = ""; preview = null; showAll(); };
+// 뺄 만한 컬럼: 표본으로 서버가 고른 것과 이유. [빼기]는 그 컬럼의 선택(keep)을 끈다.
+$("prune").onclick = () => busy($("prune"), async () => {
+  try { showPrune((await api("/api/prune", { schema: S.schema, base: S.base, sample })).columns); fail(""); } catch (e) { fail(e.message); }
+});
+function showPrune(found) {
+  if (!found.length) { $("prune-box").textContent = "뺄 만한 컬럼이 없습니다(표본 기준)."; return; }
+  const left = found.filter(x => edits[x.column]?.keep);
+  const drop = names => { names.forEach(n => { if (edits[n]) edits[n].keep = false; }); preview = null; showAll(); showPrune(found); };
+  $("prune-box").replaceChildren(el("div", {}, "뺄 만한 컬럼(표본 기준) ", ...(left.length ? [el("button", { className: "ghost", textContent: "모두 빼기", onclick: () => drop(left.map(x => x.column)) })] : [])),
+    ...found.map(x => el("div", {}, `${x.column}: ${x.reason} `, edits[x.column]?.keep ? el("button", { className: "ghost", textContent: "빼기", onclick: () => drop([x.column]) }) : el("span", { className: "hint", textContent: "(뺌)" }))));
+}
+// 원격 DB의 전처리를 어디서 계산할지(설정 prep_where). 서버가 미리보기·실행 때 읽는다.
+$("prep-where").value = saved("prep_where") || "all";
+$("prep-where").onchange = () => saveSetting({ prep_where: $("prep-where").value });
+
 // 저장 대상: 테이블 파일(Parquet·CSV·JSON·Excel)에 연결했으면 새 테이블은 고를 수 없다.
 function showTarget() {
   $("t-table").disabled = connected === "flat";
@@ -531,7 +587,7 @@ function showTarget() {
 }
 document.querySelectorAll("input[name=target]").forEach(r => r.onchange = showTarget);
 
-const showAll = () => { renderCols(); syncNames(); syncFilters(); renderGrid(); };
+const showAll = () => { renderCols(); syncNames(); syncFilters(); renderDerive(); renderGrid(); };
 function resetRun() {
   if (confirming === null) return;
   confirming = null;
@@ -549,6 +605,10 @@ function resetTable() {
   sorts = [];
   drops = [];
   deriv = [];
+  formulas = [];
+  pca = { columns: [], n: 2 };
+  $("prune-box").replaceChildren();
+  $("pca-info").textContent = "";
   resetRun();
   fail("");
   $("ok-run").textContent = "";
@@ -647,7 +707,7 @@ $("spec-read").onclick = () => busy($("spec-read"), async () => {
 });
 
 // 구성 저장·불러오기: 입력 상태를 그대로 저장한다(서버로 보내는 recipe 값이 아니다). 미리 볼 행 수와 미리보기 결과는 넣지 않는다.
-const config = () => ({ schema: S.schema, base: S.base, edits, copies, drops, filters, dedupe, sorts, downcast: $("downcast").checked,
+const config = () => ({ schema: S.schema, base: S.base, edits, copies, drops, filters, formulas, pca, dedupe, sorts, downcast: $("downcast").checked,
   target: { kind: $("t-table").checked ? "table" : "file", format: $("fmt").value, name: $("tname").value } });
 // 구성의 원래 컬럼이 모두 이 테이블에 있으면 선택을 채운다. 없는 것이 있으면 채우지 않고 알린다(구성에 없는 새 컬럼은 선택 없이 둔다).
 function restore(c) {
@@ -658,6 +718,8 @@ function restore(c) {
   const d = structuredClone(c);
   Object.assign(edits, d.edits);
   ({ copies, drops, filters, dedupe, sorts } = d);
+  formulas = d.formulas ?? [];  // 이 기능 전에 저장한 구성에는 없다
+  pca = d.pca ?? { columns: [], n: 2 };
   $("downcast").checked = d.downcast;
   $("t-table").checked = d.target.kind === "table";
   $("t-file").checked = !$("t-table").checked;
@@ -732,7 +794,9 @@ function recipe() {
     bad.forEach(([, st]) => lines.get(st)?.classList.add("bad"));
     throw new Error(`입력이 비어 있거나 쓸 수 없는 전처리가 있습니다: ${[...new Set(bad.map(([name]) => name))].join(", ")}`);
   }
+  if (pca.columns.length === 1) throw new Error("PCA에는 숫자 컬럼을 2개 이상 고르세요.");
   return { schema: S.schema, base: S.base, columns, filters, copies, drop: drops, sorts,
+    ...(formulas.length ? { formulas } : {}), ...(pca.columns.length ? { pca: { columns: pca.columns, n: pca.n } } : {}),
     ...(dedupe.length ? { dedupe } : {}), ...($("downcast").checked ? { downcast: true } : {}) };
 }
 // [미리보기]·[실행]·[중복 세기]가 함께 쓴다: 테이블을 골랐는지 보고, 레시피를 만들어 fn에 넘기고, 오류는 카드에 보인다.
@@ -749,6 +813,8 @@ $("preview").onclick = () => act($("preview"), async r => {
   rememberTable();
   const now = preview.rows.columns.map((name, k) => ({ name, source: preview.sources[k], type: preview.types[k] })).filter((_, k) => preview.derived[k]);
   deriv = [...now, ...deriv.filter(d => drops.includes(d.name) && !now.some(n => n.name === d.name))];  // 끈 파생 컬럼은 응답에 없어도 목록에 남긴다.
+  const p = preview.info?.pca;
+  $("pca-info").textContent = p ? `설명된 분산: ${p.names.map((n, i) => `${n} ${(p.ratio[i] * 100).toFixed(1)}%`).join(", ")} (누적 ${(p.cumulative.at(-1) * 100).toFixed(1)}%) · 계산에 쓴 행 ${p.rows.toLocaleString()}` : "";
   showAll();
 });
 $("dupes").onclick = () => act($("dupes"), async r => {
@@ -791,6 +857,7 @@ function showPrepSummaries() {
   const put = (id, value) => $(id).textContent = value;
   put("sum-p-data", S.base || (connected ? "테이블을 고르세요" : "연결하세요"));
   put("sum-p-filters", filters.length ? `${filters.length}개` : "없음");
+  put("sum-p-derive", [formulas.length ? `계산 ${formulas.length}개` : "", pca.columns.length ? `PCA ${pca.columns.length}→${pca.n}` : ""].filter(Boolean).join(", ") || "없음");
   put("sum-p-dedupe", dedupe.length ? dedupe.join(", ") : "없음");
   put("sum-p-sorts", sorts.length ? sorts.join(", ") : "없음");
   put("sum-p-save", $("t-table").checked ? `새 테이블 ${$("tname").value.trim()}` : $("fmt").value === "csv" ? "CSV 파일" : "Parquet 파일");

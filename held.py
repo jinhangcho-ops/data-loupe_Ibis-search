@@ -65,22 +65,22 @@ def keep(key, item):
     return item
 
 
-def fetch(key, expr, stop, known=None):
+def fetch(key, expr, stop, known=None, cap=True):
     """expr의 결과를 묶음씩(result.batches) 받아 이 PC의 DuckDB 테이블에 쓴다. (테이블 이름, 행 수)를 돌려준다. 상한+1행까지만 묻는다.
     known(미리 센 행 수)이나 받는 중의 행 수·크기가 상한을 넘으면 받던 것을 지우고 (None, 아는 행 수 또는 None).
-    stop이 켜지면(취소) 받던 것을 지우고 InterruptedError."""
-    if known is not None and known > MAX_ROWS:
+    cap이 거짓이면 상한 없이 다 받는다(전처리의 작업 사본). stop이 켜지면(취소) 받던 것을 지우고 InterruptedError."""
+    if cap and known is not None and known > MAX_ROWS:
         return keep(key, (None, known))
     import pyarrow as pa
     con, name = local(), f"r{store['made']}"
     store["made"] += 1
     rows = size = 0
     try:
-        for batch in result.batches(expr.limit(MAX_ROWS + 1)):  # 상한을 넘는지만 알면 되므로 DB도 그만큼만 보낸다
+        for batch in result.batches(expr.limit(MAX_ROWS + 1) if cap else expr):  # 상한을 넘는지만 알면 되므로 DB도 그만큼만 보낸다
             if stop.is_set():
                 raise InterruptedError()
             size += batch.nbytes
-            if rows + batch.num_rows > MAX_ROWS or size > MAX_BYTES:
+            if cap and (rows + batch.num_rows > MAX_ROWS or size > MAX_BYTES):
                 drop(name)
                 return keep(key, (None, None))
             part = pa.Table.from_batches([batch]).append_column(ROW, pa.array(range(rows, rows + batch.num_rows), pa.int64()))
@@ -97,14 +97,14 @@ def fetch(key, expr, stop, known=None):
     return keep(key, (name, rows))
 
 
-def ensure(key, expr, stop, counter=None, fresh=False):
+def ensure(key, expr, stop, counter=None, fresh=False, cap=True):
     """받아 둔 결과(없거나 fresh면 지금 받아서)의 (테이블 이름, 받은 행 수). counter를 주면 받기 전에 행 수를 세어 상한을 넘으면 받지 않는다.
     상한을 넘어 받지 않았으면 (None, 아는 행 수 또는 None)."""
     if fresh:
         forget(key)
     item = store["items"].get(key)
     if item is None:
-        return fetch(key, expr, stop, counter() if counter else None)
+        return fetch(key, expr, stop, counter() if counter else None, cap)
     store["items"].move_to_end(key)
     return item
 

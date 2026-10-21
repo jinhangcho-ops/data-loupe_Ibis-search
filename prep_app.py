@@ -7,21 +7,25 @@ from flask import jsonify, request
 from lazy import ibis
 
 import analysis
+import held
 import parse
 import prep
+import prep_derive
 import prep_profile
 import profiler
 import result
 import server
 import settings
 import source
+import sql_exec
 import use_counts
 from server import app, get_con, run, state, to_json
 
 PREVIEW_ROWS = 20
 DEFAULT_SAMPLE = 5_000  # 통계를 낼 표본 행 수의 기본값
 FILE_FORMATS = ["parquet", "csv"]
-server.CONSTANTS.update(sample=DEFAULT_SAMPLE, sample_methods=profiler.METHODS, analysis=analysis.LIMITS)  # 화면(prep.html)의 표본 행 수 기본값, 표본 방법 이름, 분석의 상한들
+server.CONSTANTS.update(sample=DEFAULT_SAMPLE, sample_methods=profiler.METHODS, analysis=analysis.LIMITS,  # 화면(prep.html)의 표본 행 수 기본값, 표본 방법 이름, 분석의 상한들
+                        formula_guide=prep_derive.FORMULA_GUIDE, pca_max=prep_derive.PCA_MAX)  # 계산 식 안내, PCA에 넣을 컬럼 수 상한
 TABLE_PREPS = "table_preps.json"  # 테이블별로 마지막에 쓴 전처리 {테이블 열쇠: {"config", "saved"}}
 MAX_TABLE_PREPS = 200
 SAMPLES = {}  # 마지막으로 읽은 표본 하나 {테이블 열쇠: (크기, pyarrow 표, 표본 정보)}. 통계에 이어 타입 추천이 같은 표본을 쓴다.
@@ -75,10 +79,37 @@ def save_table_prep():
     return jsonify(ok=True)
 
 
-def built(recipe):
-    """recipe를 (Ibis 식, 결과 컬럼마다 (recipe상 컬럼, 파생 컬럼인지))로 만든다. 평균 등을 구하는 조회가 있어 run으로 돌린다."""
+def local_mode(recipe):
+    """recipe를 이 PC의 작업 사본(working_copy)에서 계산할지. 원격 DB(주소로 접속)일 때만: 설정 prep_where가 all(기본)이면 늘,
+    new면 계산 컬럼·PCA가 있을 때만. 파일·DuckDB 파일 연결은 원래 이 PC에서 계산하므로 사본을 만들지 않는다."""
+    if not held.remote(get_con()):
+        return False
+    return settings.load().get("prep_where", "all") == "all" or bool(recipe.get("formulas") or recipe.get("pca"))
+
+
+def working_copy(recipe):
+    """원격 DB의 기준 테이블에 행 거르기(filters)만 걸어 이 PC의 DuckDB로 한 번 받아 둔 표(held, 상한 없음, 묶음씩 받음).
+    같은 테이블·거르기면 다시 쓴다. DB에는 이 단순한 조회 하나만 가고, 평균 같은 통계와 전처리 계산은 이 표에서 한다."""
+    con, schema = get_con(), recipe.get("schema") or None
+    parse.check_name(recipe["base"], server.table_names(con, schema), "테이블")  # 목록·스키마는 기억해 둔 것(사본을 다시 쓸 때 DB에 묻지 않게)
+    t = server.any_table(con, recipe["base"], schema, vts={})
+    filters = recipe.get("filters") or []
+    if filters:
+        t = t.filter(*[parse.predicate(cond, t) for cond in filters])
+    key = ("prep", table_key(recipe), json.dumps(filters, ensure_ascii=False))
+    name = run(lambda: held.ensure(key, t, state["cancel"], cap=False))[0]
+    local = held.table(name)
+    return local.select(*[c for c in local.columns if c != held.ROW])
+
+
+def built(recipe, info=None):
+    """recipe를 (Ibis 식, 결과 컬럼마다 (recipe상 컬럼, 파생 컬럼인지))로 만든다. 평균 등을 구하는 조회가 있어 run으로 돌린다.
+    local_mode면 작업 사본에서(행 거르기는 사본을 받을 때 이미 걸었다). info는 prep.build와 같다(PCA의 설명된 분산 비율)."""
+    if local_mode(recipe):
+        table = working_copy(recipe)
+        return run(lambda: prep.build(held.local(), {**recipe, "filters": []}, table, info))
     con = get_con()
-    return run(lambda: prep.build(con, recipe))
+    return run(lambda: prep.build(con, recipe, None, info))
 
 
 def base_table(body):
@@ -188,20 +219,30 @@ def save_spec():
 def preview():
     """앞 20행, 결과 컬럼의 타입, 컬럼마다 어느 recipe 컬럼에서 나왔는지(sources)와 파생 컬럼인지(derived), 전처리 전후의 행 수.
     행 수를 바꿀 수 있는 일이 없으면 후는 전과 같다."""
-    recipe = request.json
-    expr, origin = built(recipe)
+    recipe, info = request.json, {}
+    expr, origin = built(recipe, info)
     rows = run(lambda: result.get_rows(expr, PREVIEW_ROWS))
     before = server.row_count(recipe.get("schema"), recipe["base"])
     after = run(lambda: result.get_count(expr)) if prep.changes_rows(recipe) else before
     return jsonify(rows=to_json(rows), types=[prep.type_text(t) for t in expr.schema().values()], before=before, after=after,
-                   sources=[origin[name][0] for name in expr.columns], derived=[origin[name][1] for name in expr.columns])
+                   sources=[origin[name][0] for name in expr.columns], derived=[origin[name][1] for name in expr.columns], info=info,
+                   local=local_mode(recipe))
+
+
+@app.post("/api/prune")
+def prune():
+    """뺄 만한 컬럼 제안(prep_profile.prune): 값이 하나뿐·거의 한 값·상관이 아주 높은 숫자 컬럼. 전처리 탭의 표본(이 PC)으로만 구한다
+    (표본을 아직 읽지 않았으면 그때 한 번 읽는다). 빼는 것은 화면에서 사용자가 고른다."""
+    body = request.json
+    arrow, info = sampled(body, table_key(body), sample_size(body), False)
+    return jsonify(columns=prep_profile.prune(arrow), sampled=info)
 
 
 @app.post("/api/analyze")
 def analyze():
     """분석(analysis.analyze). body = {recipe, how, sample, full}. recipe의 정렬은 분석에 쓰지 않아 뺀다.
     기본은 전처리 탭과 같은 표본(sample행, 같은 테이블이면 읽어 둔 것)에 recipe를 적용해 이 PC에서 구한다.
-    full이면 테이블 전체에 recipe를 적용한 식을 연결(DB)에서 구한다. 결과에 어느 쪽으로 구했는지(data)를 붙인다."""
+    full이면 테이블 전체에 recipe를 적용한 식을 연결(DB, local_mode면 이 PC의 작업 사본)에서 구한다. 결과에 어느 쪽으로 구했는지(data)를 붙인다."""
     body = request.json
     recipe, how = {**body.get("recipe", {}), "sorts": []}, body.get("how") or {}
     if body.get("full") is True:
@@ -216,20 +257,27 @@ def analyze():
 
 @app.post("/api/dupes")
 def dupes():
-    """dedupe 기준으로 중복 묶음 수와 빠질 행 수."""
+    """dedupe 기준으로 중복 묶음 수와 빠질 행 수. local_mode면 작업 사본에서 센다."""
     recipe, con = request.json, get_con()
+    if local_mode(recipe):
+        table = working_copy(recipe)
+        return jsonify(run(lambda: prep.dupes(held.local(), {**recipe, "filters": []}, table)))
     return jsonify(run(lambda: prep.dupes(con, recipe)))
 
 
 def make_table(recipe, name):
     """연결한 DB에 recipe의 결과를 새 테이블로 만들고 그 행 수를 돌려준다.
-    폴더의 DuckDB 파일 연결은 읽기 전용이라 만드는 동안만 쓰기로 다시 열고, 끝나면 읽기 전용으로 되돌린다."""
+    폴더의 DuckDB 파일 연결은 읽기 전용이라 만드는 동안만 쓰기로 다시 열고, 끝나면 읽기 전용으로 되돌린다.
+    local_mode면 이 PC의 작업 사본에서 계산한 결과를 묶음씩 넣기만 한다(DB는 계산하지 않는다). 넣다가 실패하면 만들던 테이블을 지운다."""
     con, opened, schema = get_con(), state["opened"], recipe.get("schema") or None
     if "files" in opened:
         raise ValueError("Parquet·CSV·JSON·Excel 파일 연결에는 테이블을 만들 DB가 없습니다. 파일로 저장하세요.")
     parse.check_table_name(name)
     if name.lower() in [t.lower() for t in source.list_tables(con, schema)]:
         raise ValueError(f"'{name}'은 이미 있는 테이블입니다.")
+    if local_mode(recipe):
+        expr, db = built(recipe)[0], con
+        return run(lambda: insert_all(db, name, schema, expr))
     reopen = opened["kind"] == "folder"
     if reopen:
         source.close(con)
@@ -253,6 +301,51 @@ def make_table(recipe, name):
             if state["con"] is not None:
                 source.close(state["con"])
             state["con"] = server.open_con(opened)
+
+
+def plain_rows(arrow):
+    """Arrow 표를 Ibis가 DB에 올릴 pandas 표로. Ibis의 SQL 연결은 memtable을 pandas로 바꿔 한 행씩 넣는데, 기본 변환은 빈 값이 있는
+    정수 컬럼을 실수로 바꿔 큰 정수가 틀어지고(2^53 넘는 값) 빈 날짜시각은 NaT가 되어 넣지 못한다. 그래서 값을 Python 값(정수·날짜·None)으로 둔다."""
+    frame = arrow.to_pandas(integer_object_nulls=True, date_as_object=True, timestamp_as_object=True)
+    return frame.astype(object).where(frame.notna(), None)
+
+
+def drop_memtable(db, op):
+    """insert가 DB에 올린 임시 테이블(memtable)을 지운다. Ibis의 drop_table이 안 되는 연결(SQLite: 'incomplete input')은
+    그 방언으로 따옴표를 친 DROP TABLE IF EXISTS를 직접 보낸다. 지우지 못해도 넣은 결과에는 영향이 없어 오류는 내지 않는다."""
+    import contextlib
+    try:
+        db.drop_table(op.name, force=True)
+    except Exception:
+        exp = sql_exec.glot()[1]
+        with contextlib.suppress(Exception):
+            cursor = db.raw_sql(f"DROP TABLE IF EXISTS {exp.to_identifier(op.name, quoted=True).sql(sql_exec.dialect_of(db))}")
+            if cursor is not getattr(db, "con", None):
+                getattr(cursor, "close", lambda: None)()
+    getattr(db, "_memtables", set()).discard(op)  # Ibis가 다시 올리지 않았다고 여기지 않게
+
+
+def insert_all(db, name, schema, expr):
+    """db에 name 테이블을 expr의 스키마로 만들고 expr(이 PC의 식)의 결과를 묶음씩 넣는다. 행 수를 돌려준다. 실패하면 만든 테이블을 지운다.
+    Ibis는 묶음을 DB의 임시 테이블(memtable)로 올린 뒤 INSERT … SELECT로 넣는데, 그 임시 테이블을 프로그램이 끝날 때까지 두고
+    SQLite에서는 지우는 코드가 돌지 않는다. 묶음마다 바로 지운다(이름이 ibis_pyarrow_memtable_무작위라 사용자 테이블과 겹치지 않는다)."""
+    import pyarrow as pa
+    db.create_table(name, schema=expr.schema(), database=schema)
+    try:
+        rows = 0
+        for batch in result.batches(expr):
+            part = ibis.memtable(plain_rows(pa.Table.from_batches([batch])), schema=expr.schema())
+            try:
+                db.insert(name, part, database=schema)
+            finally:
+                drop_memtable(db, part.op())
+            rows += batch.num_rows
+    except BaseException:
+        db.drop_table(name, database=schema, force=True)
+        raise
+    finally:
+        server.forget_tables()  # 새 테이블이 생겼다
+    return rows
 
 
 @app.post("/api/run")
