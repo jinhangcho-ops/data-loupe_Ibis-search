@@ -18,7 +18,7 @@ MAX_BYTES = 500 * 1024 * 1024  # 받아 둘 결과의 최대 크기(받은 Arrow
 KEEP = 5  # 받아 둘 결과 수. 넘으면 오래 쓰지 않은 것부터 지운다
 ROW = "__ibis_row"  # 받은 차례(0부터). 정렬의 마지막 키로 쓰고 화면에는 보이지 않는다
 
-store = {"con": None, "folder": None, "items": collections.OrderedDict(), "made": 0}
+store = {"con": None, "folder": None, "items": collections.OrderedDict(), "made": 0, "jobs": {}}  # jobs: 서버에 둔 결과 테이블(server_page) {열쇠: (결과 테이블, 행 수)}
 
 
 def remote(con):
@@ -124,9 +124,32 @@ def page(key, expr, shape, limit, offset, stop, counter=None, fresh=False):
     return shaped.count().to_pyarrow().as_py(), shaped.limit(limit, offset=offset).to_polars()
 
 
+def pager(con):
+    """쿼리 결과를 서버에 둔 채 쪽마다 읽을 수 있는 연결의 클라이언트(query로 결과 테이블을 만들고 list_rows로 쪽을 읽는다, BigQuery). 없으면 None."""
+    client = getattr(con, "client", None)
+    return client if all(hasattr(client, a) for a in ("query", "list_rows")) else None
+
+
+def server_page(key, con, expr, limit, offset, fresh=False):
+    """결과가 커서 이 PC에 받아 두지 못할 때: 쿼리를 한 번만 돌려 결과를 서버의 임시 결과 테이블(BigQuery는 24시간)에 두고,
+    쪽마다 그 테이블을 list_rows로 읽는다(쿼리를 다시 보내지 않아 요금이 다시 나지 않는다). (전체 행 수, Polars 표). fresh면 쿼리를 다시 돌린다."""
+    import polars as pl
+    client, jobs = pager(con), store["jobs"]
+    if fresh:
+        jobs.pop(key, None)
+    if key not in jobs:
+        job = client.query(str(ibis.to_sql(expr)), project=getattr(con, "billing_project", None))
+        jobs[key] = (job.destination, job.result().total_rows)
+        while len(jobs) > KEEP:
+            jobs.pop(next(iter(jobs)))
+    destination, total = jobs[key]
+    return total, pl.from_arrow(client.list_rows(destination, start_index=offset, max_results=limit).to_arrow())
+
+
 def clear():
     """받아 둔 결과를 모두 지운다(연결을 바꾸거나 끊을 때). 연결 스레드에서 부른다."""
     store["items"].clear()
+    store["jobs"].clear()
     if store["con"] is not None:
         try:
             store["con"].disconnect()

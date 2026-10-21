@@ -193,3 +193,46 @@ def test_fetch_stops_on_cancel(tmp_path):
         assert not source.on_worker(lambda: held.local().list_tables())()  # 받던 테이블은 지웠다
     finally:
         source.on_worker(held.clear)()
+
+
+class FakeServerResults:
+    """BigQuery 클라이언트 대신: query는 결과 테이블 이름을 주고(몇 번 불렸는지 센다), list_rows는 그 결과의 start_index부터 max_results행.
+    결과 내용은 같은 SQL을 시험용 SQLite 연결에서 돌린 것. 실제 BigQuery에는 보내지 않는다."""
+
+    def __init__(self, rows):
+        self.rows, self.queries, self.reads = rows, [], []
+
+    def query(self, sql, project=None):
+        self.queries.append(sql)
+        rows = self.rows
+
+        class Job:
+            destination = f"temp.result{len(self.queries)}"
+
+            def result(self):
+                return type("Done", (), {"total_rows": len(rows)})()
+        return Job()
+
+    def list_rows(self, table, start_index=0, max_results=None):
+        import pyarrow as pa
+        self.reads.append((table, start_index, max_results))
+        part = self.rows[start_index:start_index + max_results]
+        return type("Rows", (), {"to_arrow": lambda _: pa.Table.from_pylist(part)})()
+
+
+def test_big_results_page_from_server_table(remote, monkeypatch):
+    import held
+    every = [{"id": i} for i in sorted(range(ROWS), reverse=True)]
+    fake = FakeServerResults(every)
+    monkeypatch.setattr(held, "MAX_ROWS", 3)  # 이 PC에 받아 두기에는 큰 결과
+    monkeypatch.setattr(held, "pager", lambda con: fake)
+    body = {"base": "orders", "limit": 5, "sorts": ["id desc"], "columns": ["id"]}
+    first = remote("/api/query", offset=0, fresh=True, **body)
+    second = remote("/api/query", offset=5, **body)
+    assert [r["id"] for r in first["rows"]["rows"]] == [22, 21, 20, 19, 18] and [r["id"] for r in second["rows"]["rows"]] == [17, 16, 15, 14, 13]
+    assert len(fake.queries) == 1 and "ORDER BY" in fake.queries[0].upper()  # 쪽을 넘겨도 쿼리는 한 번
+    assert [r[1:] for r in fake.reads] == [(0, 5), (5, 5)] and first["count"] == ROWS and "결과 임시 테이블" in first["note"]
+    remote("/api/query", offset=0, fresh=True, **body)
+    assert len(fake.queries) == 2  # [검색 실행]은 다시 조회
+    sql = remote("/api/sql/run", sql="SELECT id FROM orders ORDER BY id DESC", rows=4, offset=4, fresh=True)
+    assert len(fake.queries) == 3 and fake.reads[-1][1:] == (4, 5) and sql["count"] == ROWS and sql["more"]

@@ -69,6 +69,8 @@ def scan():
 
 
 TOO_BIG = f"결과가 커서({held.MAX_ROWS:,}행·{held.MAX_BYTES // 1024 // 1024}MB 넘음) 이 PC에 받아 두지 않고 DB에서 쪽마다 가져옵니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요."
+SERVER_PAGES = ("결과가 커서 이 PC에 받아 두지 않고, 쿼리를 한 번만 돌려 DB의 결과 임시 테이블(BigQuery는 24시간)에서 쪽마다 읽습니다. "
+                "쪽을 넘겨도 다시 조회하지 않아 요금이 다시 나지 않고, 정렬·조건을 바꾸거나 [검색 실행]을 누르면 다시 조회합니다.")
 
 
 def db_page(con, body, expr, limit, offset, count=None):
@@ -98,11 +100,15 @@ def query():
         note = TOO_BIG if rows is None else ""
         count = count if rows is not None or not body.get("calcs") else None  # 받기 전에 센 수는 계산 전의 행 수
     kept = rows is not None
-    if not kept:
+    if not kept and held.remote(con) and held.pager(con) is not None:  # 결과를 서버에 둔 채 쪽마다 읽을 수 있는 DB(BigQuery)
+        key = core.held_key("server", {k: v for k, v in body.items() if k not in ("limit", "offset", "count", "fresh")})
+        count, rows = run(lambda: held.server_page(key, con, expr, limit, offset, body.get("fresh")))
+        note = SERVER_PAGES
+    elif not kept:
         count, rows = db_page(con, body, expr, limit, offset, count)
     if offset == 0:  # 새로 검색할 때만(쪽 넘기기는 세지 않는다)
         count_virtual([body["base"], *(body.get("union") or {}).get("tables", []), *[line.split()[0] for line in body.get("joins", []) if line.split()]])
-    return jsonify(count=count, rows=to_json(rows), held=kept, note=note)
+    return jsonify(count=count, rows=to_json(rows), held=kept, server=note == SERVER_PAGES, note=note)
 
 
 @app.post("/api/sql")
@@ -316,17 +322,20 @@ def sql_run():
     con, count, rows, note = get_con(), None, None, ""
     if held.remote(con):
         key = core.held_key("sql", {"sql": body["sql"]})
-        count, rows = run(lambda: held.page(key, expr, lambda t: t.order_by(held.ROW).drop(held.ROW), n + 1, offset, server.state["cancel"], fresh=body.get("fresh")))
+        count, rows = run(lambda: held.page(key, expr, lambda t: t.order_by(held.ROW).select(*[c for c in t.columns if c != held.ROW]), n + 1, offset, server.state["cancel"], fresh=body.get("fresh")))
         note = TOO_BIG.replace(" 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요.", " SQL에 고유한 컬럼의 ORDER BY를 넣어야 쪽이 섞이지 않습니다.") if rows is None else ""
     kept = rows is not None
-    if not kept:
+    if not kept and held.remote(con) and held.pager(con) is not None:
+        count, rows = run(lambda: held.server_page(core.held_key("server", {"sql": body["sql"]}), con, expr, n + 1, offset, body.get("fresh")))
+        note = SERVER_PAGES
+    elif not kept:
         if offset and not result.can_offset(expr):
             raise ValueError("이 DB는 SQL 결과에서 앞 행을 건너뛰지 못하고, 결과가 커서 이 PC에 받아 두지도 못했습니다. 조건을 좁히거나 [결과 저장]으로 받으세요.")
         rows = run(lambda: result.get_rows(expr, n + 1, offset))
     if offset == 0:
         count_virtual(used)
     shown = rows.head(n).with_columns(pl.col(pl.Decimal).cast(pl.Float64))  # SUM 등이 돌려주는 큰 소수 타입은 화면에서 숫자로(파일 저장은 원래 타입)
-    return jsonify(rows=to_json(shown), more=rows.height > n, limit=n, offset=offset, count=count if kept else None, held=kept, note=note)
+    return jsonify(rows=to_json(shown), more=rows.height > n, limit=n, offset=offset, count=count, held=kept, server=note == SERVER_PAGES, note=note)
 
 
 @app.post("/api/sql/export")

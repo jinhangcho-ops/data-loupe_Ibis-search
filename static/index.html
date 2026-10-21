@@ -708,9 +708,9 @@ function showBig(d, offset = 0) {
   if (!d) { $("big-count").textContent = "검색 전"; $("big-sub").textContent = "오른쪽에서 데이터와 조건을 고르고 [검색 실행]을 누르세요."; $("page-info").textContent = ""; return; }
   const n = d.rows.rows.length, range = n ? `${(offset + 1).toLocaleString()}–${(offset + n).toLocaleString()}행` : "0행", limit = +$("limit").value;
   $("big-count").textContent = d.count === null ? range : `${d.count.toLocaleString()}행`;
-  $("big-sub").textContent = [d.count === null ? "" : `중 ${range}`, ...conditionTexts(), d.held ? "PC에 받아 둔 결과" : ""].filter(Boolean).join(" · ");
-  $("big-sub").title = d.held ? "결과를 한 번 받아 이 PC에 두었습니다. 쪽 넘기기·머리글 정렬은 DB에 다시 묻지 않고, [검색 실행]을 누르면 새로 받습니다." : "";
-  $("err-search").textContent = d.note || "";
+  $("big-sub").textContent = [d.count === null ? "" : `중 ${range}`, ...conditionTexts(), d.held ? "PC에 받아 둔 결과" : d.server ? "DB의 결과 임시 테이블" : ""].filter(Boolean).join(" · ");
+  $("big-sub").title = d.held ? "결과를 한 번 받아 이 PC에 두었습니다. 쪽 넘기기·머리글 정렬은 DB에 다시 묻지 않고, [검색 실행]을 누르면 새로 받습니다." : d.server ? d.note : "";
+  $("err-search").textContent = d.server ? "" : d.note || "";  // 받아 두지 못한 경고만(결과 임시 테이블에서 읽는 것은 안내라 요약 줄에)
   $("page-info").textContent = d.count === null ? `${Math.floor(offset / limit) + 1}쪽` : `${Math.floor(offset / limit) + 1} / ${Math.max(1, Math.ceil(d.count / limit)).toLocaleString()}쪽`;
 }
 // offset행을 건너뛰고 검색한다. [검색 실행]과 머리글 정렬은 0에서, [이전]·[다음]은 행 수만큼 옮겨서 부른다.
@@ -1203,12 +1203,13 @@ async function runSql(offset = 0, fresh = true) {
     const n = d.rows.rows.length, range = n ? `${(offset + 1).toLocaleString()}–${(offset + n).toLocaleString()}행` : "0행";
     sqlSkip = offset; sqlRan = sql;
     $("sql-count").textContent = d.count === null ? range : `${d.count.toLocaleString()}행`;
-    $("sql-sub").textContent = [d.count === null ? "" : `중 ${range}`, d.held ? "PC에 받아 둔 결과" : "", d.more || offset ? "전체는 [결과 저장]으로 받습니다" : ""].filter(Boolean).join(" · ");
+    $("sql-sub").textContent = [d.count === null ? "" : `중 ${range}`, d.held ? "PC에 받아 둔 결과" : d.server ? "DB의 결과 임시 테이블" : "", d.more || offset ? "전체는 [결과 저장]으로 받습니다" : ""].filter(Boolean).join(" · ");
+    $("sql-sub").title = d.server ? d.note : "";
     $("sql-page").textContent = d.count === null ? `${Math.floor(offset / d.limit) + 1}쪽` : `${Math.floor(offset / d.limit) + 1} / ${Math.max(1, Math.ceil(d.count / d.limit)).toLocaleString()}쪽`;
     $("sql-prev").disabled = !offset;
     $("sql-next").disabled = !d.more;
     $("sql-result").innerHTML = sqlTable(d.rows);
-    say("err-sql", d.note || "");
+    say("err-sql", d.server ? "" : d.note || "");
     if (!offset) showVirtual();  // 쓴 횟수가 바뀌었다
   } catch (e) { say("err-sql", e.message); }
 }
