@@ -120,3 +120,15 @@ def test_insert_all_keeps_big_ints_and_leaves_no_temp_tables(tmp_path):
     raw = sqlite3.connect(tmp_path / "s.db")
     assert raw.execute("select i, typeof(i) from out order by rowid").fetchall() == [(big, "integer"), (None, "null"), (-big, "integer")]
     raw.close()
+
+
+def test_head_and_spec_table_for_tabs(remote, tmp_path):
+    c = remote[0]
+    rows = c.post("/api/head", json={"base": "t", "sample": 1000}).get_json()["rows"]
+    assert len(rows["rows"]) == 20 and rows["columns"][:2] == ["id", "amt"]  # 정보 탭: 표본의 앞 20행
+    assert c.post("/api/spec/table", json={"base": "t"}).get_json() == {"path": "", "description": "", "partition": None, "columns": {}}
+    spec = tmp_path / "spec.yaml"
+    spec.write_text("tables:\n  t:\n    description: 지어낸 표\n    columns:\n      amt: {description: 금액}\n", encoding="utf-8")
+    assert c.post("/api/spec", json={"path": str(spec)}).status_code == 200
+    found = c.post("/api/spec/table", json={"base": "t"}).get_json()
+    assert found["description"] == "지어낸 표" and found["columns"] == {"amt": "금액"}

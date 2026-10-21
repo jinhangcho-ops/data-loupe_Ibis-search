@@ -215,6 +215,25 @@ def save_spec():
     return jsonify(path=profiler.spec_path(), tables=tables)
 
 
+@app.post("/api/head")
+def head():
+    """정보 탭에 보일 앞 20행(전처리 전): 통계를 구할 때 읽어 둔 표본(이 PC)의 앞부분. 통계를 캐시에서 꺼내 표본이 없으면 통계와 같은 방법으로
+    표본을 한 번 읽는다(화면은 통계를 켰을 때만 부른다)."""
+    import polars as pl
+    body = request.json
+    arrow = sampled(body, table_key(body), sample_size(body), False)[0]
+    return jsonify(rows=to_json(pl.from_arrow(arrow.slice(0, PREVIEW_ROWS))))
+
+
+@app.post("/api/spec/table")
+def spec_for_table():
+    """이 테이블의 명세서 부분: 테이블 설명, 파티션, 컬럼마다 설명. 명세서가 없거나 이 테이블이 없으면 빈 값. 데이터는 읽지 않는다(명세서 탭)."""
+    body = request.json
+    found = profiler.spec_table(body.get("schema") or "", body["base"])
+    return jsonify(path=profiler.spec_path(), description=found.get("description", ""), partition=found.get("partition"),
+                   columns={name: item.get("description", "") for name, item in found.get("columns", {}).items()})
+
+
 @app.post("/api/preview")
 def preview():
     """앞 20행, 결과 컬럼의 타입, 컬럼마다 어느 recipe 컬럼에서 나왔는지(sources)와 파생 컬럼인지(derived), 전처리 전후의 행 수.

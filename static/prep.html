@@ -36,6 +36,24 @@
   .sug .why { color:var(--muted); }
   .sug.done { opacity:.45; }
   .pcol.sub { margin-left:18px; }
+  /* 컬럼 머리글: 누르면 오른쪽 ③ 컬럼 정리에서 그 컬럼을 고친다. 쉬운 말 요약(종류 표, 빈칸, 범위, 값 종류) */
+  #grid thead th.pick { cursor:pointer; }
+  #grid thead th.on { background:var(--accent-bg); }
+  #grid .stats div, #cl-body .facts div { margin:1px 0; }
+  .kind { display:inline-block; padding:0 6px; border-radius:4px; background:var(--accent-bg); color:var(--accent); font-size:11px; }
+  .good { color:var(--ok); }
+  .worked { font-size:11px; color:var(--accent); font-weight:normal; }
+  #cl-body .facts { font-size:12px; color:var(--muted); border:1px solid var(--line); border-radius:6px; padding:6px 8px; margin:6px 0; }
+  #cl-body > input, #cl-body > select, #cl-body > button { margin-top:6px; }
+  #spec-view table { width:100%; }
+  #spec-view td { vertical-align:top; white-space:normal; font-size:12px; }
+  #spec-view tbody tr { cursor:pointer; }
+  #spec-view tbody tr.on { background:var(--accent-bg); }
+  #spec-view td.cname { font-weight:600; font-size:13px; width:160px; }
+  #spec-view td.sugs { width:260px; }
+  #pca-cols { max-height:200px; overflow:auto; display:flex; flex-direction:column; gap:4px; }
+  #pca-cols label { display:flex; align-items:center; gap:8px; }
+  #pca-cols input { width:auto; margin:0; }
   /* 분석: 오른쪽 패널에서 고르고 가운데에 그래프와 표. 그래프는 높이 440px 기준으로 비율(--ratio)만큼 넓어진다. */
   .seg2.seg4 label { padding:6px 2px; font-size:13px; }
   .a-form { margin-top:12px; }
@@ -54,13 +72,21 @@
 <nav class="subnav" id="views"><button data-view="prep" class="on">전처리</button><button data-view="ana">분석</button><button data-view="graphs">그래프<em id="graph-count"></em></button></nav>
 <div class="work" id="prep-view">
   <main class="results">
-    <section class="pane">
-      <div class="head"><h3>컬럼</h3><span class="hint" id="shape"></span><span class="hint" id="sampled"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계·추천을 다시 구합니다">다시 구하기</button><button id="sug-all" class="hidden" title="추천을 모두 선택에 넣습니다">추천 모두 적용</button><button id="prune" class="hidden" title="표본(이 PC)으로 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾습니다. DB에는 묻지 않습니다">뺄 만한 컬럼</button></div>
-      <div class="hint" id="prune-box"></div>
+    <div class="big"><b id="p-big">테이블을 고르세요</b><span id="p-sub">오른쪽 ① 데이터에서 연결과 테이블을 고르세요.</span></div>
+    <div class="ok" id="ok-run" style="padding:0 28px"></div>
+    <div class="err" id="err-prep" style="padding:0 28px"></div>
+    <div class="tabs2" id="p-tabs"><button data-ptab="info" class="on">정보</button><button data-ptab="spec">명세서</button></div>
+    <section class="pane" id="p-info">
+      <div class="hint" id="info-note"></div>
       <div class="table-wrap" id="grid"></div>
       <div class="hint"><span id="counts"></span> <span id="stale" class="warn"></span></div>
-      <div class="ok" id="ok-run"></div>
-      <div class="err" id="err-prep"></div>
+    </section>
+    <section class="pane hidden" id="p-spec">
+      <div class="head"><span class="hint" id="sampled"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계·추천을 다시 구합니다">다시 구하기</button><button id="sug-all" class="hidden" title="추천을 모두 선택에 넣습니다">추천 모두 적용</button><button id="prune" class="hidden" title="표본(이 PC)으로 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾습니다. DB에는 묻지 않습니다">뺄 만한 컬럼</button></div>
+      <div class="hint" id="prune-box"></div>
+      <div id="spec-view"></div>
+      <div class="row" style="margin-top:12px; max-width:720px; align-items:center" title="테이블·컬럼 설명과 파티션 키를 적은 파일(JSON·YAML). 설명은 [질문으로 SQL 만들기]도 씁니다. 비우고 [읽기]를 누르면 쓰지 않습니다"><span class="hint" style="margin:0; flex:none">명세서 파일</span><input id="spec-path" class="code" placeholder="JSON·YAML 경로 (선택)"><button id="spec-read">읽기</button></div>
+      <div class="hint" id="spec-info"></div>
     </section>
   </main>
   <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
@@ -78,8 +104,6 @@
             <div class="hint">테이블 전체가 아니라 이만큼만(싼 방법부터) 읽어 통계·추천·분석을 구하고, 테이블별로 저장해 둡니다.</div>
             <label class="check" title="끄면 테이블을 골라도 데이터를 읽지 않고 컬럼 이름·타입만 보입니다(행 수도 세지 않음). 추천은 나오지 않고, 분석 탭은 그대로 표본을 읽습니다"><input type="checkbox" id="stats-on"> 컬럼 통계·추천 구하기</label>
             <div class="row" style="margin-top:6px; align-items:center" title="주소로 연결한 DB에서만 씁니다. 이 PC에서 계산하면 DB에는 행 거르기까지의 조회 한 번만 가고(그 결과를 이 PC로 받아 둠), 통계·전처리·저장 계산은 이 PC가 합니다. 테이블이 크면 받는 데 오래 걸리고 디스크를 씁니다"><span class="hint" style="margin:0; flex:none">원격 DB 계산</span><select id="prep-where" style="flex:1; min-width:0"><option value="all">이 PC에서 (전처리 전체)</option><option value="new">이 PC에서 (계산 컬럼·PCA만)</option></select></div>
-            <div class="row" style="margin-top:6px"><input id="spec-path" class="code" placeholder="데이터 명세서 (JSON·YAML, 선택)" title="테이블·컬럼 설명과 파티션 키를 적은 파일. 비우고 [읽기]를 누르면 쓰지 않습니다"><button id="spec-read">읽기</button></div>
-            <div class="hint" id="spec-info"></div>
             <div class="cols" id="pcols"></div>
           </div>
         </div></div>
@@ -92,7 +116,14 @@
             <div id="filters"></div>
           </div></div>
         <div class="cn">↓</div>
-        <div class="step" data-step="derive"><div class="sp"><i>3</i><span class="t">새 컬럼</span><b id="sum-p-derive"></b><span class="c"></span></div>
+        <div class="step" data-step="clean"><div class="sp"><i>3</i><span class="t">컬럼 정리</span><b id="sum-p-clean"></b><span class="c"></span></div>
+          <div class="edx">
+            <div class="hint">가운데 표에서 컬럼을 누르거나 여기서 고르세요. 컬럼마다 정리 방법을 여러 개 넣을 수 있고, 위에서 아래 순서로 적용합니다.</div>
+            <select id="cl-col"></select>
+            <div id="cl-body"></div>
+          </div></div>
+        <div class="cn">↓</div>
+        <div class="step" data-step="derive"><div class="sp"><i>4</i><span class="t">새 컬럼</span><b id="sum-p-derive"></b><span class="c"></span></div>
           <div class="edx">
             <div class="hint">계산 컬럼 (컬럼은 이름을 바꾸기 전의 이름으로)</div>
             <div class="row"><input id="fx-name" placeholder="새 컬럼 이름" style="width:110px; flex:none"><input id="fx-expr" class="code" placeholder="예: 금액 * 수량"><button id="fx-add">추가</button></div>
@@ -104,7 +135,7 @@
             <div class="hint" id="pca-info"></div>
           </div></div>
         <div class="cn">↓</div>
-        <div class="step" data-step="dedupe"><div class="sp"><i>4</i><span class="t">중복 기준</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
+        <div class="step" data-step="dedupe"><div class="sp"><i>5</i><span class="t">중복 기준</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
           <div class="edx">
             <div class="hint">고른 컬럼의 값이 모두 같은 행은 하나만 남깁니다. 고르지 않은 컬럼은 어느 행의 값이 남을지 정해지지 않습니다.</div>
             <div class="row"><select id="dd-col" style="flex:1; min-width:0"></select><button id="dd-all">전체 컬럼</button></div>
@@ -112,13 +143,13 @@
             <div class="row"><button id="dupes" disabled>중복 세기</button><span class="hint" id="dd-result" style="align-self:center"></span></div>
           </div></div>
         <div class="cn">↓</div>
-        <div class="step" data-step="sorts"><div class="sp"><i>5</i><span class="t">정렬</span><b id="sum-p-sorts"></b><span class="c"></span></div>
+        <div class="step" data-step="sorts"><div class="sp"><i>6</i><span class="t">정렬</span><b id="sum-p-sorts"></b><span class="c"></span></div>
           <div class="edx">
             <div class="row"><select id="sort-col" style="flex:1; min-width:0" title="결과의 컬럼 이름"></select><select id="sort-dir" style="width:auto"><option value="asc">오름차순</option><option value="desc">내림차순</option></select><button id="sort-add">추가</button></div>
             <div class="chips open" id="sorts"></div>
           </div></div>
         <div class="cn">↓</div>
-        <div class="step" data-step="save"><div class="sp"><i>6</i><span class="t">저장</span><b id="sum-p-save"></b><span class="c"></span></div>
+        <div class="step" data-step="save"><div class="sp"><i>7</i><span class="t">저장</span><b id="sum-p-save"></b><span class="c"></span></div>
           <div class="edx">
             <label><input type="radio" name="target" id="t-file" checked style="width:auto"> 파일</label>
             <select id="fmt" style="margin-bottom:6px"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
@@ -214,8 +245,11 @@ let filters = [];  // 행 거르기 조건 줄
 let dedupe = [];  // 중복 기준 (결과 컬럼 이름)
 let sorts = [];  // ["결과 컬럼 asc", ...]
 let drops = [];  // 끈 파생 컬럼 이름
-let formulas = [];  // 계산 컬럼 [{ name, expr }] (③ 새 컬럼)
-let pca = { columns: [], n: 2 };  // PCA에 넣을 숫자 컬럼과 성분 수 (③ 새 컬럼). 컬럼이 없으면 하지 않는다
+let first = null;  // 정보 탭의 앞 20행(/api/head, 표본의 앞부분). 미리보기 전에 보인다
+let specView = null;  // /api/spec/table의 응답(지금 테이블). 명세서 탭이 그린다
+let picked = "";  // ③ 컬럼 정리에서 고치는 컬럼(복사 컬럼 포함) 이름
+let formulas = [];  // 계산 컬럼 [{ name, expr }] (④ 새 컬럼)
+let pca = { columns: [], n: 2 };  // PCA에 넣을 숫자 컬럼과 성분 수 (④ 새 컬럼). 컬럼이 없으면 하지 않는다
 let deriv = [];  // 미리보기에서 알게 된 파생 컬럼 [{ name, source, type }]. 끈 것도 남긴다.
 let status = "";  // 통계를 구하는 단계: "stats"(통계 계산 중), "patterns"(타입 추천 확인 중), "stopped"(통계를 구하지 못함), "off"(통계를 끔), 끝났으면 ""
 let statsOn = saved("stats") !== "off";  // 테이블을 고를 때 표본을 읽어 통계·추천을 구할지(설정 stats)
@@ -351,6 +385,20 @@ const OPS = {
     value: st => st.sep === "" ? {} : { sep: st.sep } },
 };
 
+// 정리 방법마다 한 줄 예시(고르는 목록에서 마우스를 올리거나, 고른 뒤 그 줄 아래에 보인다)
+const DESC = {
+  trim: "' 서울 ' → '서울'", squeeze: "'서울   시' → '서울 시'", nulls: "'-', 'N/A' 같은 값을 빈칸으로", remove: "'1,000원'에서 '원'만 지우기",
+  case: "'abc' → 'ABC'", replace: "'Y' → '완료'처럼 값을 바꾸기", regex: "규칙(정규식)에 맞는 글자를 바꾸기", type: "글자 '123'을 숫자로, '20250131'을 날짜로",
+  flag: "빈칸이었던 행에 true를 적은 새 컬럼", fill: "빈칸을 채우거나 그 행을 빼기", outlier: "너무 크거나 작은 값을 빼거나 끝값으로 자르기",
+  scale: "값의 크기를 비슷하게 맞추기(모델에 넣을 때)", round: "3.14159 → 3.14", bins: "나이 23 → '20~30'처럼 구간으로", rare: "몇 번 안 나오는 값을 '기타'로 묶기",
+  parts: "날짜에서 연·월·요일을 새 컬럼으로", label: "'서울'→0, '부산'→1처럼 번호로", onehot: "값마다 0/1 컬럼으로 펼치기(원래 컬럼은 빠짐)",
+  extract: "'A-123'에서 '123'만 뽑기", has: "'서울'이 들어 있으면 1인 새 컬럼", counts: "단어가 몇 번 나오는지 세기",
+};
+// 컬럼 종류의 쉬운 이름. 원래 타입(int64 등)은 마우스를 올리면 보인다.
+const KIND_TEXT = { int: "숫자 (정수)", float: "숫자 (소수)", string: "글자", date: "날짜", ts: "날짜·시각", bool: "참·거짓", time: "시각", other: "기타" };
+const kindOf = type => /^u?int/.test(type) ? "int" : /^(float|decimal)/.test(type) ? "float" : type.startsWith("string") ? "string"
+  : type.startsWith("timestamp") ? "ts" : type === "date" ? "date" : type === "boolean" ? "bool" : type.startsWith("time") ? "time" : "other";
+const isWorked = c => { const e = edits[c.name]; return !e.keep || !!e.rename.trim() || Object.keys(e.ops).length > 0; };
 const newEdit = () => ({ keep: true, rename: "", ops: {} });
 // 원래 컬럼과 그 바로 뒤의 복사 컬럼들. 복사 컬럼은 원래 컬럼의 통계를 그대로 쓴다(from이 원래 컬럼 이름).
 const cols = () => prof.columns.flatMap(c => [c, ...copies.filter(x => x.from === c.name).map(x => ({ ...c, name: x.name, from: c.name }))]);
@@ -374,7 +422,8 @@ function control(f, st) {
 function opLine(c, e, key) {
   const op = OPS[key], st = e.ops[key];
   const li = el("div", { className: "op" }, el("div", { className: "op-head" }, op.label,
-    el("button", { className: "ghost", textContent: "×", title: "빼기", onclick: () => { delete e.ops[key]; renderGrid(); } })));
+    el("button", { className: "ghost", textContent: "×", title: "빼기", onclick: () => { delete e.ops[key]; renderClean(); renderGrid(); showPrepSummaries(); } })),
+    el("div", { className: "hint", textContent: DESC[key] ?? "" }));
   lines.set(st, li);
   for (const f of op.fields?.(st, c, e.ops) ?? []) {
     if (f.hint) { li.append(el("div", { className: "hint", textContent: f.hint })); continue; }
@@ -382,30 +431,57 @@ function opLine(c, e, key) {
     input.oninput = input.onchange = () => {
       st[f.name] = input.type === "checkbox" ? input.checked : input.value;
       li.classList.remove("bad");
-      if (f.redraw) renderGrid();
+      if (f.redraw) { renderClean(); renderGrid(); }
     };
     li.append(f.check ? el("label", { className: "hint" }, input, " " + f.check) : input);
   }
   return li;
 }
-// 머리글 3행의 칸: 전처리 추가(묶음마다 고를 수 없는 구분 항목을 둔다), 고른 전처리들, 이름 바꾸기
-function prepCell(c) {
+// ③ 컬럼 정리: 고른 컬럼의 요약·추천, 결과에 남길지, 새 이름, 고른 정리 방법들, 정리 방법 추가, 복사
+function pickColumn(name) {
+  picked = name;
+  const step = document.querySelector('#prep-view .step[data-step="clean"]');
+  document.querySelectorAll("#prep-view .step").forEach(x => x.classList.toggle("open", x === step));
+  renderClean();
+  renderGrid();
+  showPrepSummaries();
+}
+function renderClean() {
+  lines.clear();
+  const all = prof ? cols() : [];
+  if (!all.some(c => c.name === picked)) picked = all[0]?.name ?? "";
+  $("cl-col").replaceChildren(...all.map(c => new Option(c.name + (c.from ? " (복사)" : "") + (isWorked(c) ? " · 정리함" : ""), c.name)));
+  $("cl-col").value = picked;
+  const c = all.find(x => x.name === picked);
+  if (!c) { $("cl-body").replaceChildren(el("div", { className: "empty", textContent: "테이블을 고르면 컬럼을 정리할 수 있습니다." })); return; }
   const e = edits[c.name];
+  const keep = el("input", { type: "checkbox", checked: e.keep, onchange: () => { e.keep = keep.checked; preview = null; showAll(); } });
+  const rename = el("input", { placeholder: "새 이름 (비우면 그대로)", value: e.rename });
+  rename.onchange = () => { e.rename = rename.value; syncNames(); renderClean(); showPrepSummaries(); };
   const open = Object.entries(OPS).filter(([key, op]) => !(key in e.ops) && (op.need?.(c, e.ops) ?? true));
   const items = GROUPS.flatMap(g => {
     const group = open.filter(([, op]) => op.group === g);
-    return group.length ? [Object.assign(new Option(`— ${g} —`, ""), { disabled: true }), ...group.map(([key, op]) => new Option(op.label, key))] : [];
+    return group.length ? [Object.assign(new Option(`— ${g} —`, ""), { disabled: true }), ...group.map(([key, op]) => Object.assign(new Option(op.label, key), { title: DESC[key] ?? "" }))] : [];
   });
-  const add = el("select", {}, new Option("전처리 추가", ""), ...items);
+  const add = el("select", {}, new Option("+ 정리 방법 추가", ""), ...items);
   add.onchange = () => {
     const op = OPS[add.value];
-    if (op) e.ops[add.value] = { ...op.init };
-    if (op?.unkeep) { e.keep = false; preview = null; showAll(); } else renderGrid();
+    if (!op) return;
+    e.ops[add.value] = { ...op.init };
+    if (op.unkeep) { e.keep = false; preview = null; showAll(); } else { renderClean(); renderGrid(); showPrepSummaries(); }
   };
-  const rename = el("input", { placeholder: "이름 바꾸기", value: e.rename });
-  rename.onchange = () => { e.rename = rename.value; syncNames(); };
-  return el("th", {}, add, ...Object.keys(OPS).filter(key => key in e.ops).map(key => opLine(c, e, key)), rename);
+  $("cl-body").replaceChildren(
+    el("div", { className: "facts", innerHTML: statsHtml(c) }), ...(c.from ? [] : suggests(c)),
+    el("label", { className: "check" }, keep, " 결과에 남기기"), rename,
+    ...Object.keys(OPS).filter(key => key in e.ops).map(key => opLine(c, e, key)), add,
+    el("button", { className: "ghost", textContent: c.from ? "이 복사 컬럼 지우기" : "이 컬럼을 복사해 따로 정리",
+      onclick: () => {
+        if (c.from) { copies = copies.filter(x => x.name !== c.name); delete edits[c.name]; picked = c.from; }
+        else { const name = copyName(c.name); copies.push({ from: c.name, name }); edits[name] = newEdit(); picked = name; }
+        preview = null; showAll();
+      } }));
 }
+$("cl-col").onchange = () => pickColumn($("cl-col").value);
 // 추천: 누르면 그 컬럼의 선택에 들어간다. 이미 들어간 것은 흐리다.
 function applySuggest(c, s) {
   const e = edits[c.name];
@@ -420,25 +496,31 @@ const suggests = c => allSuggest(c).map(s => {
   return el("button", { className: "sug" + (done ? " done" : ""), onclick: () => { applySuggest(c, s); showAll(); } }, s.text, el("span", { className: "why", textContent: " " + s.why }));
 });
 $("sug-all").onclick = () => { prof.columns.forEach(c => allSuggest(c).forEach(s => applySuggest(c, s))); showAll(); };
-// 머리글 2행의 칸: 타입(미리보기 뒤에는 바뀐 타입)과 통계. now는 미리보기의 결과 타입
+// 머리글 2행의 칸(③ 컬럼 정리의 요약과 같다): 종류(쉬운 이름, 원래 타입은 마우스를 올리면), 미리보기 뒤 바뀐 타입, 빈칸, 범위·글자 수, 값 종류, 고칠 점.
+// 통계는 표본으로 구한 것이다(위의 "표본 N행"). now는 미리보기의 결과 타입
 function statsHtml(c, now) {
-  const type = `<b>${esc(now && now !== c.type ? `${c.type} → ${now}` : c.type)}</b>`;
-  if (!("unique" in c)) return `<div>${type}</div><div class="empty">${status === "stopped" ? "통계를 구하지 않았습니다" : status === "off" ? "통계 꺼짐 (①에서 켜면 표본으로 구합니다)" : "통계 계산 중…"}</div>`;
-  const guess = c.infer ?? {}, exact = guess.exact;  // 표본 추론과, Parquet 파일 정보로 구한 전체 기준 값
+  const tag = `<span class="kind" title="원래 타입: ${esc(c.type)}">${c.type.startsWith("timestamp") ? KIND_TEXT.ts : KIND_TEXT[c.kind] ?? KIND_TEXT.other}</span>`;
+  const change = !now || now === c.type ? "" : kindOf(now) === kindOf(c.type)
+    ? `<div title="${esc(c.type)} → ${esc(now)}">저장할 때 작은 크기로 줄여요</div>` : `<div>→ ${KIND_TEXT[kindOf(now)] ?? esc(now)}(으)로 바뀜</div>`;
+  if (!("unique" in c)) return `<div>${tag}</div>${change}<div class="empty">${status === "stopped" ? "통계를 구하지 않았습니다" : status === "off" ? "통계 꺼짐 (①에서 켜면 표본으로 구합니다)" : "통계 계산 중…"}</div>`;
+  const guess = c.infer ?? {}, exact = guess.exact, n = prof.sampled?.rows ?? prof.rows ?? 0;
+  const count = v => v.toLocaleString(), pct = v => n ? ` (${(v / n * 100).toFixed(v / n < 0.01 ? 1 : 0)}%)` : "";
+  const range = (lo, hi) => lo == null ? "" : c.kind === "date" ? `${esc(shown(lo)[0])}부터 ${esc(shown(hi)[0])}까지` : `${esc(shown(lo)[0])} ~ ${esc(shown(hi)[0])} 사이`;
+  const filled = n - c.nulls;
+  const variety = guess.constant ? "값이 하나뿐이에요"
+    : guess.flags ? `${count(c.unique)}가지 값뿐: ${esc(guess.flags.map(v => shown(v)[0]).join(", "))}`
+    : filled > 1 && c.unique === filled ? "모두 다른 값이에요 (번호·ID 같아요)" : `${count(c.unique)}가지 값`;
   const rows = [
-    guess.description && `<i>${esc(guess.description)}</i>`,
-    type,
-    c.nulls ? `<b class="warn">빈 값 ${c.nulls.toLocaleString()}</b>` : "빈 값 0",
-    `서로 다른 값 ${c.unique.toLocaleString()}`,
-    c.min != null && `${esc(shown(c.min)[0])}–${esc(shown(c.max)[0])}`,
-    c.min_len != null && `글자 길이 ${c.min_len}–${c.max_len}`,
-    c.blank && `빈 문자열 ${c.blank.toLocaleString()}`,
-    c.spaces && `앞뒤 공백 ${c.spaces.toLocaleString()}`,
-    c.numeric && `숫자 모양 ${c.numeric.toLocaleString()}/${(prof.sampled?.rows ?? prof.rows).toLocaleString()}`,
-    guess.constant && "값이 하나뿐",
-    guess.date_format && `날짜 형식 ${esc(guess.date_format)}`,
-    guess.flags && `값: ${esc(guess.flags.map(v => shown(v)[0]).join(", "))}`,
-    exact && `<span title="Parquet 파일 정보로 구한 전체 기준 값(데이터는 읽지 않음)">파일 전체: 빈 값 ${exact.nulls.toLocaleString()}${exact.min != null ? ` · ${esc(shown(exact.min)[0])}–${esc(shown(exact.max)[0])}` : ""}${exact.constant ? " · 한 값뿐" : ""}</span>`,
+    tag, change,
+    c.nulls ? `<b class="warn">⚠ 빈칸 ${count(c.nulls)}${pct(c.nulls)}</b>` : `<span class="good">✓ 빈칸 없음</span>`,
+    range(c.min, c.max),
+    c.min_len != null && (c.min_len === c.max_len ? `모두 ${c.min_len}글자` : `${c.min_len}~${c.max_len}글자`),
+    variety,
+    c.blank && `<span class="warn">⚠ 아무 글자도 없는 칸 ${count(c.blank)}</span>`,
+    c.spaces && `<span class="warn">⚠ 앞뒤에 공백이 있는 칸 ${count(c.spaces)}</span>`,
+    c.numeric && `숫자처럼 생긴 칸 ${count(c.numeric)} / ${count(n)}`,
+    guess.date_format && c.kind === "string" && `날짜처럼 생겼어요 (${esc(guess.date_format)})`,
+    exact && `<span title="Parquet 파일 정보로 구한 전체 기준 값(데이터는 읽지 않음)">파일 전체: ${exact.nulls ? `빈칸 ${count(exact.nulls)}` : "빈칸 없음"}${exact.min != null ? ` · ${range(exact.min, exact.max)}` : ""}${exact.constant ? " · 값이 하나뿐" : ""}</span>`,
   ];
   return rows.filter(Boolean).map(r => `<div>${r}</div>`).join("");
 }
@@ -448,12 +530,6 @@ const copyName = from => {
   for (let i = 2; taken.includes(name); i++) name = `${from}_copy${i}`;
   return name;
 };
-// 복사·복사 취소는 열 구성을 바꾸므로 미리보기를 비운다.
-function copyButton(c) {
-  return c.from
-    ? el("button", { className: "ghost", textContent: "×", title: "복사 취소", onclick: () => { copies = copies.filter(x => x.name !== c.name); delete edits[c.name]; preview = null; showAll(); } })
-    : el("button", { className: "ghost", textContent: "복사", title: "이 컬럼을 복사해 따로 전처리합니다", onclick: () => { const name = copyName(c.name); copies.push({ from: c.name, name }); edits[name] = newEdit(); preview = null; showAll(); } });
-}
 // 표의 열: 미리보기가 있으면 응답의 결과 컬럼 순서(파생 컬럼 포함, 끈 것은 숨김), 없으면 남긴 원래·복사 컬럼
 function gridColumns() {
   if (!preview) return kept().map(c => ({ c }));
@@ -464,41 +540,49 @@ function showCounts() {
   $("counts").textContent = !prof ? "" : preview ? `행 수: 전 ${preview.before.toLocaleString()} → 후 ${preview.after.toLocaleString()}${preview.local ? " · 이 PC에서 계산" : ""}` : "[미리보기]를 누르면 전처리한 결과 20행이 여기에 표시됩니다.";
   $("stale").textContent = preview && snap() !== shot ? "설정이 바뀌었습니다. 미리보기를 다시 누르세요" : "";
 }
+// 머리 줄(큰 행 수)과 정보 탭의 데이터 표: 미리보기 뒤에는 전처리한 결과 20행, 전에는 표본의 앞 20행(원래 값). 컬럼 이름을 누르면 ③ 컬럼 정리.
+// 명세서 탭(renderSpec)도 함께 다시 그린다.
 function renderGrid() {
-  lines.clear();
   heads.clear();
-  $("shape").textContent = prof ? `${prof.rows === null ? "행 수 세지 않음" : "행 " + prof.rows.toLocaleString()} × 컬럼 ${prof.columns.length}${prof.description ? ` · ${prof.description}` : ""}` : "";
+  $("p-big").textContent = !prof ? "테이블을 고르세요" : prof.rows === null ? "행 수 세지 않음" : `${prof.rows.toLocaleString()}행`;
+  $("p-sub").textContent = prof ? `${S.base} · 컬럼 ${prof.columns.length}개` : "오른쪽 ① 데이터에서 연결과 테이블을 고르세요.";
   showSampled();
   $("sug-all").classList.toggle("hidden", !prof?.columns.some(c => allSuggest(c).length));
   $("prune").classList.toggle("hidden", !prof);
   $("sug-all").textContent = "추천 모두 적용" + (status === "patterns" ? " (타입 추천 확인 중)" : "");
   showCounts();
-  if (!prof) { $("grid").innerHTML = '<span class="empty">테이블을 고르면 컬럼이 여기에 표시됩니다.</span>'; return; }
-  const rows = [el("tr"), el("tr"), el("tr")], body = el("tbody"), items = gridColumns();
+  showPrepSummaries();
+  renderSpec();
+  if (!prof) { $("info-note").textContent = ""; $("grid").innerHTML = '<span class="empty">테이블을 고르면 데이터가 여기에 표시됩니다.</span>'; return; }
+  $("info-note").textContent = preview ? "전처리한 결과의 앞 20행입니다." : first ? "원래 데이터(표본)의 앞 20행입니다. [미리보기]를 누르면 전처리한 결과로 바뀝니다." : statsOn ? "데이터를 읽는 중…" : "통계를 꺼서 데이터를 읽지 않았습니다. [미리보기]를 누르면 전처리한 결과 20행이 보입니다.";
+  const head = el("tr"), body = el("tbody"), items = gridColumns();
   for (const x of items) {
     if (x.derived) {
-      const name = el("th", { textContent: x.name, title: x.name });
-      heads.set(x.name, name);
-      rows[0].append(name);
-      rows[1].append(el("th", { className: "stats", innerHTML: `<b>${esc(preview.types[x.k])}</b><div>${preview.sources[x.k] ? esc(preview.sources[x.k]) + "에서 만든 컬럼" : "③ 새 컬럼"}</div>` }));
-      rows[2].append(el("th"));
+      const th = el("th", { title: `${x.name}: ${preview.sources[x.k] ? preview.sources[x.k] + "에서 만든" : "④에서 만든"} 새 컬럼 (${KIND_TEXT[kindOf(preview.types[x.k])]})` },
+        el("div", { className: "colhead" }, el("span", { textContent: x.name }), el("span", { className: "worked", textContent: "새 컬럼" })));
+      heads.set(x.name, th);
+      head.append(th);
       continue;
     }
-    const name = el("th", { title: x.c.name }, el("div", { className: "colhead" }, el("span", { textContent: x.c.name }), copyButton(x.c)));
-    heads.set(x.c.name, name);
-    rows[0].append(name);
-    rows[1].append(el("th", { className: "stats", innerHTML: statsHtml(x.c, preview?.types[x.k]) }, ...(x.c.from ? [] : [
-      ...(status === "stopped" && !("unique" in x.c) ? [el("button", { className: "ghost", textContent: "다시", title: "통계를 다시 구합니다", onclick: () => computeStats(token) })] : []),
-      ...suggests(x.c),
-      ...(status === "patterns" && isStr(x.c) ? [el("div", { className: "empty", textContent: "타입 추천 확인 중…" })] : []),
-    ])));
-    rows[2].append(prepCell(x.c));
+    const rename = edits[x.c.name].rename.trim();
+    const th = el("th", { title: `${x.c.name} (누르면 오른쪽 ③ 컬럼 정리에서 고칩니다)`, className: "pick" + (x.c.name === picked ? " on" : ""), onclick: () => pickColumn(x.c.name) },
+      el("div", { className: "colhead" }, el("span", { textContent: x.c.name + (x.c.from ? " (복사)" : "") + (rename ? ` → ${rename}` : "") }), ...(isWorked(x.c) ? [el("span", { className: "worked", textContent: "정리함" })] : [])));
+    heads.set(x.c.name, th);
+    head.append(th);
   }
-  if (preview) {
-    const names = items.map(x => x.name);
-    body.innerHTML = preview.rows.rows.map(r => "<tr>" + names.map(n => r[n]).map(v => v === null ? '<td class="null">null</td>' : cell(v)).join("") + "</tr>").join("");
+  const data = preview ? preview.rows : first;
+  if (data) {
+    const keys = items.map(x => preview ? x.name : x.c.from || x.c.name);  // 미리보기 전의 복사 컬럼은 원래 컬럼의 값
+    body.innerHTML = data.rows.map(r => "<tr>" + keys.map(n => r[n]).map(v => v == null ? '<td class="null">null</td>' : cell(v)).join("") + "</tr>").join("");
   }
-  $("grid").replaceChildren(el("table", {}, el("thead", {}, ...rows), body));
+  $("grid").replaceChildren(el("table", {}, el("thead", {}, head), body));
+}
+async function loadFirst() {
+  const mine = token;
+  const d = S.base && statsOn ? await api("/api/head", { schema: S.schema, base: S.base, sample }).catch(() => null) : null;  // 통계를 끄면 데이터를 읽지 않는다
+  if (mine !== token) return;
+  first = d?.rows ?? null;
+  renderGrid();
 }
 // 컬럼 목록(① 데이터 단계): 체크를 끄면 결과에서 빠지고 표의 열도 사라진다. 이름을 누르면 그 열로 간다.
 // 미리보기 뒤에는 파생 컬럼이 그 원래 컬럼 아래에 들여 써서 나온다. 끄면 drop에 들어간다.
@@ -539,7 +623,7 @@ const addFilter = () => {
 $("f-add").onclick = addFilter;
 $("f-in").onkeydown = e => { if (e.key === "Enter") addFilter(); };
 
-// ③ 새 컬럼: 계산 컬럼 목록과 PCA에 넣을 숫자 컬럼(남긴 원래·복사 컬럼 중 숫자인 것). 계산 식은 서버가 검사한다.
+// ④ 새 컬럼: 계산 컬럼 목록과 PCA에 넣을 숫자 컬럼(남긴 원래·복사 컬럼 중 숫자인 것). 계산 식은 서버가 검사한다.
 function renderDerive() {
   $("formulas").replaceChildren(...formulas.map((f, i) => el("div", {}, chip(`${f.name} = ${f.expr}`, () => { formulas.splice(i, 1); preview = null; showAll(); }))));
   const nums = prof ? kept().filter(c => isNum(c, edits[c.name].ops)).map(c => c.name) : [];
@@ -587,7 +671,7 @@ function showTarget() {
 }
 document.querySelectorAll("input[name=target]").forEach(r => r.onchange = showTarget);
 
-const showAll = () => { renderCols(); syncNames(); syncFilters(); renderDerive(); renderGrid(); };
+const showAll = () => { renderCols(); syncNames(); syncFilters(); renderClean(); renderDerive(); renderGrid(); };
 function resetRun() {
   if (confirming === null) return;
   confirming = null;
@@ -607,11 +691,13 @@ function resetTable() {
   deriv = [];
   formulas = [];
   pca = { columns: [], n: 2 };
+  picked = "";
   $("prune-box").replaceChildren();
   $("pca-info").textContent = "";
   resetRun();
   fail("");
   $("ok-run").textContent = "";
+  specView = first = null;
   showAll();
 }
 function clearScreen() {
@@ -638,10 +724,12 @@ async function openTable(base, config) {
     if (mine !== token) return;
     if (config || remembered) restore(config || remembered);
     showAll();
+    loadSpecView();
     if (remembered && !$("err-prep").textContent) $("ok-run").textContent = "지난번에 이 테이블에 쓴 전처리를 채웠습니다. [미리보기]로 확인하세요.";
   } catch (e) { if (mine === token) fail(e.message); return; }
   if (statsOn) await computeStats(mine);
   else { status = "off"; renderGrid(); }
+  if (mine === token) await loadFirst();
 }
 // 통계 켜고 끄기: 저장해 두고, 켜면 지금 테이블의 통계를 바로 구한다(끄면 이미 구한 것은 그대로 둔다).
 $("stats-on").checked = statsOn;
@@ -651,7 +739,7 @@ $("stats-on").onchange = () => {
   if (!(statsOn && prof && status === "off")) return;
   const mine = token;
   api("/api/shape", { schema: S.schema, base: S.base }).then(p => { if (mine === token) { prof.rows = p.rows; showAll(); } }, () => {});  // 세지 않았던 행 수도
-  computeStats(mine);
+  computeStats(mine).then(() => loadFirst());
 };
 // 통계가 어느 표본에서 나왔는지: 표본 행 수, 읽은 방법(넘어간 방법은 마우스를 올리면), 구한 때. [다시 구하기]는 통계가 있을 때만.
 function showSampled() {
@@ -660,7 +748,7 @@ function showSampled() {
   $("sampled").title = s?.passed.length ? "넘어간 방법: " + s.passed.map(([m, why]) => `${SERVER.sample_methods[m] ?? m}(${why})`).join(" / ") : "";
   $("resample").classList.toggle("hidden", !s || !!status);
 }
-$("resample").onclick = () => computeStats(token, true);
+$("resample").onclick = async () => { await computeStats(token, true); await loadFirst(); };
 // ②와 ③. 통계는 테이블 전체가 아니라 표본으로 구하고 서버가 테이블별로 저장해 둔다(fresh면 표본을 새로 읽는다).
 // 오류나 취소로 ②가 멈추면 통계 칸에 "구하지 않았습니다"와 [다시]가 나온다.
 async function computeStats(mine, fresh = false) {
@@ -699,10 +787,44 @@ const showSpec = d => {
   $("spec-info").className = d.error ? "err" : "hint";
 };
 api("/api/spec").then(showSpec).catch(() => {});
+// [정보 | 명세서] 탭. 명세서 탭은 이 테이블의 명세서 부분(설명·파티션·컬럼 설명)만 보이고 데이터는 읽지 않는다.
+function showPTab(name) {
+  document.querySelectorAll("#p-tabs button").forEach(b => b.classList.toggle("on", b.dataset.ptab === name));
+  $("p-info").classList.toggle("hidden", name !== "info");
+  $("p-spec").classList.toggle("hidden", name !== "spec");
+}
+document.querySelectorAll("#p-tabs button").forEach(b => b.onclick = () => showPTab(b.dataset.ptab));
+async function loadSpecView() {
+  const mine = token;
+  specView = S.base ? await api("/api/spec/table", { schema: S.schema, base: S.base }).catch(() => null) : null;
+  if (mine === token) renderSpec();
+}
+// 명세서 탭: 테이블 설명·파티션(명세서 파일)과 컬럼마다 한 줄 — 이름, 쉬운 요약(표본 통계), 명세서의 설명, 추천. 줄을 누르면 ③ 컬럼 정리.
+function renderSpec() {
+  const box = $("spec-view"), v = specView ?? { columns: {} };
+  if (!prof) return box.replaceChildren(el("div", { className: "empty", textContent: "테이블을 고르면 컬럼마다의 요약이 여기에 보입니다." }));
+  const part = v.partition && `파티션: ${v.partition.column} (${"recent_days" in v.partition ? `최근 ${v.partition.recent_days}일만 표본으로` : `${v.partition.latest}만 표본으로`})`;
+  const rows = cols().map(c => {
+    const rename = edits[c.name].rename.trim(), name = el("td", { className: "cname" }, c.name + (c.from ? " (복사)" : "") + (rename ? ` → ${rename}` : ""));
+    if (isWorked(c)) name.append(el("div", { className: "worked", textContent: "정리함" }));
+    const sugs = c.from ? [] : [
+      ...(status === "stopped" && !("unique" in c) ? [el("button", { className: "ghost", textContent: "통계 다시 구하기", onclick: () => computeStats(token) })] : []),
+      ...suggests(c),
+      ...(status === "patterns" && isStr(c) ? [el("div", { className: "empty", textContent: "타입 추천 확인 중…" })] : []),
+    ];
+    return el("tr", { className: c.name === picked ? "on" : "", onclick: () => pickColumn(c.name) }, name, el("td", { innerHTML: statsHtml(c) }),
+      el("td", {}, v.columns[c.from || c.name] || el("span", { className: "empty", textContent: v.path ? "설명 없음" : "—" })), el("td", { className: "sugs" }, ...sugs));
+  });
+  const have = prof.columns.map(c => c.name), gone = Object.keys(v.columns).filter(n => !have.includes(n));
+  rows.push(...gone.map(n => el("tr", {}, el("td", { className: "cname" }, n), el("td", {}, el("span", { className: "warn", textContent: "명세서에만 있고 테이블에는 없음" })), el("td", {}, v.columns[n]), el("td"))));
+  box.replaceChildren(
+    ...(v.description ? [el("p", {}, el("b", { textContent: S.base }), " — " + v.description)] : []), ...(part ? [el("p", { className: "hint", textContent: part })] : []),
+    el("div", { className: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ...["컬럼", "요약 (표본 기준)", "설명 (명세서)", "추천"].map(t => el("th", { textContent: t })))), el("tbody", {}, ...rows))));
+}
 $("spec-read").onclick = () => busy($("spec-read"), async () => {
   try {
     showSpec(await api("/api/spec", { path: $("spec-path").value.trim() }));
-    if (prof && status === "") await computeStats(token);  // 설명을 바로 보인다(통계는 저장해 둔 것을 쓴다)
+    await loadSpecView();
   } catch (e) { showSpec({ path: $("spec-path").value, tables: [], error: e.message }); }
 });
 
@@ -791,6 +913,7 @@ function recipe() {
     if (Object.keys(entry).length) columns[c.name] = entry;
   }
   if (bad.length) {
+    pickColumn(bad[0][0]);
     bad.forEach(([, st]) => lines.get(st)?.classList.add("bad"));
     throw new Error(`입력이 비어 있거나 쓸 수 없는 전처리가 있습니다: ${[...new Set(bad.map(([name]) => name))].join(", ")}`);
   }
@@ -857,6 +980,8 @@ function showPrepSummaries() {
   const put = (id, value) => $(id).textContent = value;
   put("sum-p-data", S.base || (connected ? "테이블을 고르세요" : "연결하세요"));
   put("sum-p-filters", filters.length ? `${filters.length}개` : "없음");
+  const worked = prof ? cols().filter(c => isWorked(c)).length : 0;
+  put("sum-p-clean", worked ? `${worked}개 컬럼` : "없음");
   put("sum-p-derive", [formulas.length ? `계산 ${formulas.length}개` : "", pca.columns.length ? `PCA ${pca.columns.length}→${pca.n}` : ""].filter(Boolean).join(", ") || "없음");
   put("sum-p-dedupe", dedupe.length ? dedupe.join(", ") : "없음");
   put("sum-p-sorts", sorts.length ? sorts.join(", ") : "없음");
