@@ -32,21 +32,74 @@ def lazy(expr):
     return backend.compile(expr) if backend.name == "polars" else None
 
 
+def whole_fetch(backend):
+    """Ibis의 묶음 받기가 결과 전체를 한 번에 받은 뒤 나누는 연결인지(그 연결의 to_pyarrow_batches가 _fetch_from_cursor로 다 읽는다.
+    ibis 12에서 SQLite·MySQL·SingleStore). 이런 연결은 cursor_batches로 커서에서 묶음씩 받는다. DB 이름이 아니라 Ibis의 받는 방식으로 고른다."""
+    import inspect
+    method = inspect.unwrap(getattr(type(backend), "to_pyarrow_batches", None) or (lambda: None))
+    code = getattr(method, "__code__", None)
+    return code is not None and "_fetch_from_cursor" in code.co_names and all(
+        hasattr(backend, name) for name in ("_safe_raw_sql", "_fetch_from_cursor", "compile"))
+
+
+class Rows(list):
+    """커서에서 받은 한 묶음의 행. 연결의 변환(_fetch_from_cursor)이 커서처럼 다룬다(돌기·fetchall·description)."""
+    def __init__(self, rows, cursor):
+        super().__init__(rows)
+        self.description = cursor.description
+
+    def fetchall(self):
+        return list(self)
+
+
+def cursor_batches(backend, expr, size):
+    """커서에서 size행씩 받아(fetchmany) 묶음마다 그 연결의 Ibis 변환(타입 맞추기)을 거친 Arrow 묶음으로. 전체를 한 번에 올리지 않는다."""
+    import pyarrow as pa
+    schema = expr.as_table().schema()
+    arrow = schema.to_pyarrow()
+    getattr(backend, "_run_pre_execute_hooks", lambda e: None)(expr)  # memtable 등록 등 Ibis가 실행 전에 하는 일
+    with backend._safe_raw_sql(backend.compile(expr)) as cursor:
+        while rows := cursor.fetchmany(size):
+            yield from pa.Table.from_pandas(backend._fetch_from_cursor(Rows(rows, cursor), schema), schema=arrow, preserve_index=False).to_batches(size)
+
+
 def batches(expr, size=None):
-    """식의 결과를 size(없으면 CHUNK)행 안팎의 Arrow 묶음(RecordBatch)으로 차례로 준다. 전체를 한 번에 메모리에 올리지 않는다."""
+    """식의 결과를 size(없으면 CHUNK)행 안팎의 Arrow 묶음(RecordBatch)으로 차례로 준다. 전체를 한 번에 메모리에 올리지 않는다.
+    파일 연결은 LazyFrame에서, 결과 전체를 받아 버리는 연결(whole_fetch)은 커서에서 묶음씩. 커서 받기가 첫 묶음 전에 Ibis 내부가 달라
+    안 되면(AttributeError·TypeError) Ibis의 묶음 받기로 돌아간다. DB의 오류는 그대로 낸다."""
     size = size or CHUNK
     frame = lazy(expr)
     if frame is not None:
         for df in frame.collect_batches(chunk_size=size):
             yield from df.to_arrow().to_batches()
         return
+    backend = ibis.get_backend(expr)
+    if whole_fetch(backend):
+        found = cursor_batches(backend, expr, size)
+        try:
+            first = next(found, None)
+        except (AttributeError, TypeError):
+            found = first = None
+        if found is not None:
+            if first is not None:
+                yield first
+                yield from found
+            return
     with expr.to_pyarrow_batches(chunk_size=size) as reader:
         yield from reader
 
 
 def write_parquet(expr, path):
+    """Parquet으로 저장. 파일 연결은 LazyFrame에서 흘려 쓰고, 결과 전체를 받아 버리는 연결은 묶음씩 받아 이어 쓴다."""
     frame = lazy(expr)
-    return frame.sink_parquet(path) if frame is not None else expr.to_parquet(path)
+    if frame is not None:
+        return frame.sink_parquet(path)
+    if not whole_fetch(ibis.get_backend(expr)):
+        return expr.to_parquet(path)
+    import pyarrow.parquet as pq
+    with pq.ParquetWriter(path, expr.schema().to_pyarrow()) as writer:
+        for batch in batches(expr):
+            writer.write_batch(batch)
 
 
 def write_csv(expr, path):
@@ -54,8 +107,14 @@ def write_csv(expr, path):
     frame = lazy(expr)
     if frame is not None:
         return json_text(frame).sink_csv(path)
-    if not has_nested(expr):
+    if not has_nested(expr) and not whole_fetch(ibis.get_backend(expr)):
         return expr.to_csv(path)
+    if not has_nested(expr):  # 결과 전체를 받아 버리는 연결: Ibis의 to_csv와 같은 쓰기(pyarrow)를 묶음마다
+        import pyarrow.csv as pcsv
+        with pcsv.CSVWriter(path, expr.schema().to_pyarrow()) as writer:
+            for batch in batches(expr):
+                writer.write_batch(batch)
+        return
     import polars as pl
     with open(path, "wb") as f:
         wrote = False
