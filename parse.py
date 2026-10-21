@@ -12,7 +12,7 @@ UNIONS = ["left", "inner", "intersect", "except"]  # 이어붙이기: left는 �
 STACKS = ("left", "inner")  # 아래로 잇는 방식(출처 컬럼을 붙인다). intersect·except는 행을 고르는 방식이라 붙이지 않는다
 SOURCE = "출처"  # 이어붙이면 더하는 컬럼: 그 행이 온 테이블 이름
 OPS = {"=": operator.eq, "!=": operator.ne, ">=": operator.ge, "<=": operator.le, ">": operator.gt, "<": operator.lt}
-CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
+CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
 SORT_GUIDE = "컬럼 [asc|desc]"
 
 # (판별, 종류, 한글 이름, 입력값 변환). 종류는 전처리가 컬럼을 나눌 때 쓴다.
@@ -28,7 +28,7 @@ TYPES = [
 COND_RE = re.compile(r"^(\S+?)\s*(!=|>=|<=|=|>|<)\s*(.+)$")
 BETWEEN_RE = re.compile(r"^(\S+)\s+between\s+(\S+)\s+(?:and\s+)?(\S+)$", re.I)
 IN_RE = re.compile(r"^(\S+)\s+(in|except)\s+(.+)$", re.I)
-LIKE_RE = re.compile(r"^(\S+)\s+like\s+(.+)$", re.I)
+LIKE_RE = re.compile(r"^(\S+)\s+(like|starts)\s+(.+)$", re.I)  # like: 포함(대소문자 무시), starts: 이 글자로 시작
 NULL_RE = re.compile(r"^(\S+)\s+is\s+(not\s+)?null$", re.I)
 OR_RE = re.compile(r"(?<!\S)or(?!\S)", re.I)  # 앞뒤가 공백인 단어 or
 COMMA_RE = re.compile(",")
@@ -286,13 +286,17 @@ def parse_one(line, expr, quotes=True):
         c = column(expr, col)
         values = [convert(c.type(), unquote(v, quotes)) for v in split(COMMA_RE, raw, quotes) if v.strip()]
         return c.isin(values) if word.lower() == "in" else c.notin(values)
-    if m := LIKE_RE.match(line):  # 포함 검색. 대소문자는 가리지 않는다
-        col, raw = m.groups()
+    if m := LIKE_RE.match(line):
+        col, word, raw = m.groups()
         c = column(expr, col)
         if not c.type().is_string():
-            raise ValueError("like는 문자 컬럼에만 쓸 수 있습니다.")
+            raise ValueError(f"{word.lower()}는 문자 컬럼에만 쓸 수 있습니다.")
         raw = unquote(raw, quotes)
-        return c.lower().contains(raw.lower())
+        found = starts(c, raw) if word.lower() == "starts" else contains(c, raw)
+        import source
+        if source.compiles(expr.filter(found)):
+            return found
+        return c.startswith(raw) if word.lower() == "starts" else c.lower().contains(raw.lower())  # LIKE를 못 하는 연결(파일)
     if m := COND_RE.match(line):
         col, op, raw = m.groups()
         c = column(expr, col)
@@ -301,6 +305,22 @@ def parse_one(line, expr, quotes=True):
         value = convert(c.type(), unquote(raw, quotes))
         return OPS[op](c, value)
     raise ValueError(f"형식: {CONDITION_GUIDE}")
+
+
+WILD = re.compile(r"[%_\\[]")  # LIKE에서 특별한 뜻이 있는 글자(MSSQL은 [도). 값에 있으면 LIKE를 쓰지 않는다
+
+
+def contains(c, text):
+    """포함 검색(대소문자 무시). 모든 DB에서 LOWER(컬럼) LIKE '%값%'로(contains는 MSSQL에서 전문 검색 CONTAINS로 바뀌어 안 된다).
+    값에 LIKE 특수 글자가 있으면 와일드카드가 되지 않게 위치 찾기(INSTR 등)로."""
+    text = text.lower()
+    return c.lower().find(text) >= 0 if WILD.search(text) else c.lower().like(f"%{text}%")
+
+
+def starts(c, text):
+    """이 글자로 시작(대소문자 구분). 컬럼에 함수를 씌우지 않는 LIKE '값%'라 인덱스를 탈 수 있다(startswith는 STARTS_WITH·SUBSTR 등 함수로 바뀐다).
+    값에 LIKE 특수 글자가 있으면 위치 찾기로(인덱스는 못 탄다)."""
+    return c.find(text) == 0 if WILD.search(text) else c.like(f"{text}%")
 
 
 def predicate(cond, expr):
@@ -322,7 +342,22 @@ def parse_sort(line, expr):
     c = column(expr, col)
     if how not in ("asc", "desc"):
         raise ValueError(f"형식: {SORT_GUIDE}")
-    return c.desc() if how == "desc" else c.asc()
+    return native_key(expr, c, how == "desc")
+
+
+def native_key(expr, col, desc, dialect=None):
+    """정렬 키. 빈 값의 위치(앞·뒤)는 그 연결의 기본을 따른다: Ibis는 빈 값을 늘 뒤로 맞추려고 DB에 따라 NULLS LAST나
+    CASE WHEN … IS NULL을 붙이는데, 그러면 인덱스로 정렬하지 못한다(MSSQL·MySQL의 오름차순, Postgres·Oracle의 내림차순 등).
+    두 위치를 SQL로 바꿔 보고(dialect가 없으면 expr의 연결 방언) ORDER BY에 NULLS·CASE가 붙지 않는 쪽을 고른다. SQL로 바꿀 수 없는 연결(파일)은 빈 값을 뒤로."""
+    keys = [col.desc(nulls_first=first) if desc else col.asc(nulls_first=first) for first in (False, True)]
+    try:
+        for key in keys:
+            tail = str(ibis.to_sql(expr.order_by(key), dialect=dialect)).upper().rpartition("ORDER BY")[2]
+            if "NULLS" not in tail and "CASE" not in tail:
+                return key
+    except Exception:
+        pass
+    return keys[0]
 
 
 # 표시 컬럼: "컬럼1, 컬럼2"

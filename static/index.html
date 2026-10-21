@@ -76,6 +76,7 @@
     <div class="tool">
       <label class="q" title="지금 보이는 쪽의 행에서만 찾습니다"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="row-find" placeholder="결과 안에서 찾기"><span class="hint" id="find-count" style="margin:0; white-space:nowrap"></span></label>
       <button id="sql-show" class="btn">SQL 보기</button>
+      <button id="plan-show" class="btn" title="DB가 이 조회를 어떻게 읽을지(인덱스를 타는지, 테이블 전체를 읽는지) 봅니다. 조회는 돌리지 않습니다(EXPLAIN)">실행 계획</button>
       <div class="drop"><button id="save-open" class="btn" title="조건에 맞는 전체 행을 파일로 저장합니다">저장<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button>
         <div class="pop hidden" id="save-pop"><button data-export="csv">CSV</button><button data-export="xlsx">Excel</button><button data-export="parquet">Parquet</button></div></div>
       <button id="side-open" class="btn hidden">검색 조건</button>
@@ -198,7 +199,7 @@
                 <label><input type="radio" name="cmode" value="fields" checked style="width:auto"> 칸으로 선택</label>
                 <label><input type="radio" name="cmode" value="line" style="width:auto"> 한 줄 입력</label>
               </div>
-              <div class="hint format">컬럼 &gt;= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'</div>
+              <div class="hint format">컬럼 &gt;= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'</div>
               <div id="conditions"></div>
               <div id="builder">
                 <div class="row"><select id="bcol" title="컬럼"></select><select id="bop" title="연산자"></select></div>
@@ -248,7 +249,9 @@
       <pre class="nl-prompt hidden" id="nl-view"></pre>
       <textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea>
       <div class="sql-check" id="sql-check"></div>
+      <pre class="nl-prompt hidden" id="sql-plan"></pre>
       <div class="row"><button id="sql-deep" class="btn" title="연결에서 짜 보기만 해서 테이블·컬럼 이름까지 확인합니다(데이터는 읽지 않습니다)">검사</button>
+        <button id="sql-plan-show" class="btn" title="DB가 이 SQL을 어떻게 읽을지(인덱스를 타는지, 테이블 전체를 읽는지) 봅니다. 조회는 돌리지 않습니다(EXPLAIN)">실행 계획</button>
         <label title="한 쪽에 보일 행 수. 전체는 [결과 저장]으로 받습니다">쪽당 행 <input id="sql-rows" type="number" min="1"></label>
         <span class="hint" style="margin:0">읽기만 하는 SELECT 문 하나만 실행합니다(WITH·JOIN·LIKE·* 가능, DROP·DELETE·INSERT·여러 문장 불가).</span></div>
     </div>
@@ -625,7 +628,7 @@ function renderList(key) {
 
 // 5. 조건을 칸으로 만들기: 컬럼·연산자·값을 골라 조건 하나를 만든다. 만든 조건은 한 줄 입력과 똑같이 검사되어 같은 목록에 들어간다.
 // 조건끼리의 and/or는 목록의 연결 버튼으로 정한다.
-const OPS_TEXT = ["=", "!=", "like", "in", "except", "is null", "is not null"];
+const OPS_TEXT = ["=", "!=", "like", "starts", "in", "except", "is null", "is not null"];  // like: 포함, starts: 로 시작(인덱스를 탈 수 있음)
 const OPS_OTHER = ["=", "!=", ">=", "<=", ">", "<", "between", "in", "except", "is null", "is not null"];
 const isText = () => ([...S.cols, ...(S.fields ?? [])].find(c => c[0] === $("bcol").value) || [])[1] === "문자";
 const isMulti = () => ["in", "except"].includes($("bop").value);
@@ -746,6 +749,22 @@ $("sql-show").onclick = () => busy($("sql-show"), async () => {
   if (!$("sql").classList.contains("hidden")) { $("sql").classList.add("hidden"); return; }
   try {
     $("sql").textContent = (await api("/api/sql", query(skip))).sql;
+    $("sql").classList.remove("hidden");
+    showTab("rows");
+    $("err-search").textContent = "";
+  } catch (e) { $("err-search").textContent = e.message; }
+});
+// 실행 계획: 판정(전체 읽기한 테이블), 읽는 법, DB가 보여 준 계획. full_scans가 null이면 그 DB는 자동으로 판정하지 않는다.
+function planText(d) {
+  const verdict = d.full_scans === null ? "전체 읽기 여부는 이 DB에서 자동으로 판단하지 않습니다. 아래 계획을 보세요."
+    : d.full_scans.length ? `⚠ 테이블 전체를 읽습니다: ${d.full_scans.join(", ")} — 조건·정렬 컬럼에 인덱스가 있는지 DB 담당자와 확인하세요(작은 테이블은 전체 읽기가 더 빠를 수 있음).`
+    : "✓ 테이블 전체를 읽지 않습니다(인덱스로 찾거나 필요한 부분만 읽음).";
+  return [verdict, d.note, "", d.text, "", "-- 계획을 본 SQL", d.sql].filter(v => v !== undefined).join("\n");
+}
+$("plan-show").onclick = () => busy($("plan-show"), async () => {
+  if (!S.base) { $("err-search").textContent = "기준 테이블을 고르세요."; return; }
+  try {
+    $("sql").textContent = planText(await api("/api/plan", query(skip)));
     $("sql").classList.remove("hidden");
     showTab("rows");
     $("err-search").textContent = "";
@@ -1214,6 +1233,15 @@ async function runSql(offset = 0, fresh = true) {
   } catch (e) { say("err-sql", e.message); }
 }
 $("sql-run").onclick = () => busy($("sql-run"), () => runSql(0, true));
+$("sql-plan-show").onclick = () => busy($("sql-plan-show"), async () => {
+  if (!$("sql-plan").classList.contains("hidden")) { $("sql-plan").classList.add("hidden"); return; }  // 다시 누르면 접는다
+  if (!connected) return say("err-sql", "먼저 데이터에 연결하세요.");
+  try {
+    $("sql-plan").textContent = planText(await api("/api/sql/plan", { sql: $("sql-text").value }));
+    $("sql-plan").classList.remove("hidden");
+    say("err-sql", "");
+  } catch (e) { say("err-sql", e.message); }
+});
 $("sql-prev").onclick = () => busy($("sql-prev"), () => runSql(Math.max(0, sqlSkip - Number($("sql-rows").value)), false));
 $("sql-next").onclick = () => busy($("sql-next"), () => runSql(sqlSkip + Number($("sql-rows").value), false));
 // 문법 검사: 입력을 0.6초 멈추면 서버에서 실행하지 않고 검사한다(문법·바꾸는 문장·없는 테이블). [검사]는 컬럼까지 보고 오류 자리를 고른다.

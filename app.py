@@ -14,6 +14,7 @@ import held
 import metrics
 import nl2sql
 import parse
+import plan
 import result
 import scan_size
 import server
@@ -111,18 +112,54 @@ def query():
     return jsonify(count=count, rows=to_json(rows), held=kept, server=note == SERVER_PAGES, note=note)
 
 
+def sent(con, body, expr, limit, offset):
+    """/api/query가 DB에 보내는 조회의 (SQL, 받아 두는지). 받아 두면 기간·조건까지의 조회, 아니면 그 쪽의 조회."""
+    item = held.store["items"].get(core.search_key(body))
+    if (held.remote(con) or not source.compiles(expr)) and not (item and item[0] is None):
+        return result.get_sql(core.filtered(body)), True
+    if offset and not result.can_offset(expr):
+        return result.get_sql(core.numbered(body, limit, offset)), False
+    return result.get_sql(expr, limit, offset), False
+
+
 @app.post("/api/sql")
 def sql():
     """/api/query가 실행할 SQL. 실행하지는 않는다. 결과를 받아 두는 연결이면 받아 둘 때의 조회(정렬·쪽은 이 PC에서)를 보여 준다."""
     body = request.json
     expr, limit, offset = paged(body)
-    con = get_con()
-    item = held.store["items"].get(core.search_key(body))
-    if (held.remote(con) or not source.compiles(expr)) and not (item and item[0] is None):
-        return jsonify(sql="-- 이 조회로 결과를 한 번 받아 두고, 계산·정렬·쪽 넘기기는 이 PC에서 합니다.\n" + result.get_sql(core.filtered(body)))
-    if offset and not result.can_offset(expr):
-        return jsonify(sql=result.get_sql(core.numbered(body, limit, offset)))
-    return jsonify(sql=result.get_sql(expr, limit, offset))
+    text, kept = sent(get_con(), body, expr, limit, offset)
+    return jsonify(sql=("-- 이 조회로 결과를 한 번 받아 두고, 계산·정렬·쪽 넘기기는 이 PC에서 합니다.\n" if kept else "") + text)
+
+
+def plannable(con):
+    """실행 계획을 볼 수 있는 연결인지 본다. 파일 연결은 SQL로 묻지 않아 계획이 없다(ValueError)."""
+    if con.name == "polars":
+        raise ValueError("파일 연결(Parquet·CSV 등)은 SQL로 묻지 않아 실행 계획이 없습니다. DuckDB 파일이나 DB에서 보세요.")
+    return con
+
+
+def explained(con, text):
+    """SQL의 실행 계획(plan.explain)을 연결 스레드에서."""
+    return run(lambda: plan.explain(con, text, sql_exec.dialect_of(con)))
+
+
+@app.post("/api/plan")
+def query_plan():
+    """탐색이 DB에 보내는 조회의 실행 계획: 인덱스를 타는지, 테이블 전체를 읽는지(full_scans). EXPLAIN만 하고 조회는 돌리지 않는다."""
+    body = request.json
+    expr, limit, offset = paged(body)
+    con = plannable(get_con())
+    text = sent(con, body, expr, limit, offset)[0]
+    return jsonify(sql=text, **explained(con, text))
+
+
+@app.post("/api/sql/plan")
+def sql_plan():
+    """SQL 탭의 SQL(검사를 통과한 것)의 실행 계획. EXPLAIN만 하고 조회는 돌리지 않는다."""
+    expr = sql_expr(request.json)[0]
+    con = plannable(get_con())
+    text = result.get_sql(expr)
+    return jsonify(sql=text, **explained(con, text))
 
 
 def searches_view(found):
