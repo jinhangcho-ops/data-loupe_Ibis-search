@@ -19,6 +19,7 @@ import settings
 import source
 from collect_http import Balancer, Halt
 
+SAVE_EVERY = 0.5  # 진행 기록을 적는 간격(초). 쪽·조각마다 쓰면 기록이 커질수록 느려진다(쪽 수의 제곱)
 SKEW = 300  # 응답의 Date와 PC 시계가 이보다 많이 다르면(초) 알린다.
 ORDER = "__ibis_n"  # JSON 줄에 같이 적는 받은 순서(결과에서는 뺀다)
 PAGE_FILE = re.compile(r"\d{7}\.jsonl(\.tmp)?")  # .part/ 폴더 안에서 이 작업이 만드는 파일
@@ -31,6 +32,15 @@ current = {"thread": None, "halt": threading.Event(), "balancer": None, "hide": 
 
 def write_record(path, record):
     path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+
+
+def keep_record(found, record, now=False):
+    """진행 기록을 쓴다. now가 아니면 SAVE_EVERY초에 한 번만. guard 안에서 부른다(쓰는 기록이 한 시점의 모습이게).
+    갑자기 끝나면 마지막으로 쓴 뒤에 받은 쪽은 이어 받을 때 다시 받는다(쪽 파일은 번호로 덮어써 겹치지 않는다)."""
+    at = time.monotonic()
+    if now or at - found.get("saved", -SAVE_EVERY) >= SAVE_EVERY:
+        write_record(found["record"], record)
+        found["saved"] = at
 
 
 def clean(found):
@@ -126,7 +136,7 @@ def save_page(found, record, i, rows, size, **more):
         record["rows"] += len(rows)
         record["bytes"] += size
         record.update(more)
-        write_record(found["record"], record)
+        keep_record(found, record)
         status.update(pages=len(record["done"]), rows=record["rows"], bytes=record["bytes"])
 
 

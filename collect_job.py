@@ -26,11 +26,10 @@ import settings
 import uploads
 from collect_config import normalize
 from collect_http import Halt, Reply
-from collect_store import (IDLE, balancer_for, clean, current, duck, finish_api, guard, replace, req_mask, save_page, status, update,
-                           with_bom, write_output, write_record)
+from collect_store import (IDLE, SAVE_EVERY, balancer_for, clean, current, duck, finish_api, guard, keep_record, replace, req_mask, save_page, status,
+                           update, with_bom, write_output, write_record)
 
 MIN_FREE = 200 * 1024 * 1024  # 시작할 때 결과 폴더의 디스크에 적어도 남아 있어야 하는 공간
-SAVE_EVERY = 0.5  # 파일 조각의 진행 기록을 적는 간격(초)
 RUNNING = "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요."
 
 
@@ -211,6 +210,9 @@ def work(config, env, path, found, record, halt, password):
             if balancer is not None:
                 status.update(requests=balancer.sent, failures=balancer.failures, concurrency=balancer.limit)
             status.update(running=False, elapsed=round(time.time() - status["started"], 1))
+        if record is not None and found["part"].exists():  # 끝나지 않은 받기(멈춤·실패): 이어 받기용 진행 기록을 지금 모습으로 마저 쓴다
+            with guard:
+                keep_record(found, record, now=True)
         current["hide"] = []  # 비밀번호·env 값은 작업이 끝나면 버린다.
 
 
@@ -365,7 +367,13 @@ def run_api(config, env, path, found, record, halt):
         if errors:
             raise min(errors, key=lambda e: not getattr(e, "failed", True))  # 실패가 있으면 그것을, 아니면 멈춤
     elif not record.get("finished"):  # cursor·next_url: 하나씩, 받은 커서·주소를 따라간다.
-        seen = set(record.get("seen", []))
+        order = record.setdefault("seen", [])  # 지나온 커서·주소(받은 순서). 쪽마다 정렬하지 않고 덧붙인다
+        seen = set(order)
+
+        def see(value):
+            if value not in seen:
+                seen.add(value)
+                order.append(value)
         cursor, url = record.get("cursor", ""), record.get("next")
         i = len(record["done"])
         while i < paging["max_pages"]:
@@ -375,7 +383,7 @@ def run_api(config, env, path, found, record, halt):
             if i == 0:
                 note_first(data, rows)
                 if paging["kind"] == "next_url":
-                    seen.add(reply.url)
+                    see(reply.url)
             more = {}
             if paging["kind"] == "cursor":
                 nxt = req.extract(data, paging["cursor_path"])
@@ -390,8 +398,8 @@ def run_api(config, env, path, found, record, halt):
             total = record.get("total")
             end = end or (total is not None and record["rows"] + len(rows) >= total)
             if nxt is not None:
-                seen.add(nxt)
-            save_page(found, record, i, rows, len(reply.body), seen=sorted(seen), finished=end, **more)
+                see(nxt)
+            save_page(found, record, i, rows, len(reply.body), finished=end, **more)
             if end:
                 break
             cursor, url, i = more.get("cursor") or "", more.get("next"), i + 1

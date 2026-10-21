@@ -228,7 +228,9 @@ class Walk:
     def keep(self, i, rows):
         """쪽 i를 저장한다. 이어 받기에서 이미 받은 쪽(다시 넘기며 지나는 쪽)은 저장하지 않는다."""
         if i not in self.done:
-            collect_store.save_page(self.found, self.record, i, rows, len(json.dumps(rows, ensure_ascii=False).encode()), sigs={**self.record["sigs"], str(i): signature(rows)})
+            with collect_store.guard:
+                self.record["sigs"][str(i)] = signature(rows)  # 쪽마다 묶음 전체를 복사하지 않고 더한다
+            collect_store.save_page(self.found, self.record, i, rows, len(json.dumps(rows, ensure_ascii=False).encode()))
 
     def first(self):
         url = page_url(self.web, 0)
