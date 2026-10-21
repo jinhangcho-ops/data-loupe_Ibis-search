@@ -98,21 +98,31 @@ def fetch(key, expr, stop, known=None):
     return keep(key, (name, rows))
 
 
-def page(key, expr, shape, limit, offset, stop, counter=None, fresh=False):
-    """받아 둔 결과(없거나 fresh면 지금 받아서)의 (전체 행 수, offset부터 limit행의 Polars 표).
-    shape(받아 둔 테이블)은 정렬·표시 컬럼을 적용한 식을 돌려준다. counter를 주면 받기 전에 행 수를 세어 상한을 넘으면 받지 않는다.
-    상한을 넘어 받지 않았으면 (아는 행 수 또는 None, None)."""
+def ensure(key, expr, stop, counter=None, fresh=False):
+    """받아 둔 결과(없거나 fresh면 지금 받아서)의 (테이블 이름, 받은 행 수). counter를 주면 받기 전에 행 수를 세어 상한을 넘으면 받지 않는다.
+    상한을 넘어 받지 않았으면 (None, 아는 행 수 또는 None)."""
     if fresh:
         forget(key)
     item = store["items"].get(key)
     if item is None:
-        item = fetch(key, expr, stop, counter() if counter else None)
-    else:
-        store["items"].move_to_end(key)
-    name, rows = item
+        return fetch(key, expr, stop, counter() if counter else None)
+    store["items"].move_to_end(key)
+    return item
+
+
+def table(name):
+    """받아 둔 테이블의 식."""
+    return local().table(name)
+
+
+def page(key, expr, shape, limit, offset, stop, counter=None, fresh=False):
+    """받아 둔 결과(ensure)의 (전체 행 수, offset부터 limit행의 Polars 표). shape(받아 둔 테이블)은 계산·정렬·표시 컬럼을 건 식을 돌려주고,
+    행 수는 그 식에서 센다(계산이 행 수를 바꿀 수 있어서). 상한을 넘어 받지 않았으면 (아는 행 수 또는 None, None)."""
+    name, rows = ensure(key, expr, stop, counter, fresh)
     if name is None:
         return rows, None
-    return rows, shape(local().table(name)).limit(limit, offset=offset).to_polars()
+    shaped = shape(table(name))
+    return shaped.count().to_pyarrow().as_py(), shaped.limit(limit, offset=offset).to_polars()
 
 
 def clear():

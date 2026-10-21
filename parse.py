@@ -7,8 +7,9 @@ import re
 
 from lazy import ibis
 
-JOINS = ["inner", "left", "right", "outer"]
-UNIONS = ["left", "inner"]  # 이어붙이기: left는 기준 테이블의 컬럼을 모두(없는 컬럼은 빈 값), inner는 모든 테이블에 있는 컬럼만
+JOINS = ["inner", "left", "right", "outer", "semi", "anti", "asof"]  # semi: 짝이 있는 행만, anti: 짝이 없는 행만(둘은 오른쪽 컬럼을 붙이지 않음), asof: 시각이 같거나 앞선 가장 가까운 행
+UNIONS = ["left", "inner", "intersect", "except"]  # 이어붙이기: left는 기준 테이블의 컬럼을 모두(없는 컬럼은 빈 값), inner는 모든 테이블에 있는 컬럼만, intersect는 모든 테이블에 있는 행만, except는 기준 테이블에만 있는 행
+STACKS = ("left", "inner")  # 아래로 잇는 방식(출처 컬럼을 붙인다). intersect·except는 행을 고르는 방식이라 붙이지 않는다
 SOURCE = "출처"  # 이어붙이면 더하는 컬럼: 그 행이 온 테이블 이름
 OPS = {"=": operator.eq, "!=": operator.ne, ">=": operator.ge, "<=": operator.le, ">": operator.gt, "<": operator.lt}
 CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
@@ -138,7 +139,7 @@ def parse_union(union, tables, base):
         return None
     names, how = (union.get("tables") or [], union.get("how", "left")) if isinstance(union, dict) else (None, None)
     if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
-        raise ValueError('이어붙이기는 {"tables": [테이블…], "how": "left" 또는 "inner"} 모양이어야 합니다.')
+        raise ValueError('이어붙이기는 {"tables": [테이블…], "how": "left"·"inner"·"intersect"·"except"} 모양이어야 합니다.')
     if not names:
         return None
     if how not in UNIONS:
@@ -152,46 +153,76 @@ def parse_union(union, tables, base):
 
 def apply_union(base, base_name, union, get_table):
     """기준 테이블 아래로 테이블들을 잇고 SOURCE 컬럼에 온 테이블 이름을 넣는다. 타입은 기준 테이블을 따른다(바꿀 수 없는 값은 그 연결의 오류).
-    left: 기준 테이블의 컬럼을 모두 남기고 붙이는 테이블에 없는 컬럼은 빈 값(붙이는 테이블에만 있는 컬럼은 뺀다). inner: 모든 테이블에 있는 컬럼만."""
+    left: 기준 테이블의 컬럼을 모두 남기고 붙이는 테이블에 없는 컬럼은 빈 값(붙이는 테이블에만 있는 컬럼은 뺀다). inner: 모든 테이블에 있는 컬럼만.
+    intersect: 모든 테이블에 같이 있는 행만(INTERSECT), except: 기준 테이블에만 있는 행(EXCEPT). 둘은 모든 테이블에 있는 컬럼으로 비교하고 SOURCE는 붙이지 않는다(같은 행은 하나로)."""
     if union is None:
         return base
     names, how = union
-    if SOURCE in base.columns:
+    if how in STACKS and SOURCE in base.columns:
         raise ValueError(f"기준 테이블에 '{SOURCE}' 컬럼이 이미 있어 이어붙일 수 없습니다.")
     others = [(name, get_table(name)) for name in names]
     columns = [c for c in base.columns if how == "left" or all(c in t.columns for _, t in others)]
     if not columns:
-        raise ValueError("모든 테이블에 같이 있는 컬럼이 없어 inner로 이어붙일 수 없습니다.")
+        raise ValueError(f"모든 테이블에 같이 있는 컬럼이 없어 {how}로 이어붙일 수 없습니다.")
     schema = base.schema()
+    if how not in STACKS:
+        same = lambda t: t.select(*[t[c].cast(schema[c]).name(c) for c in columns])
+        return (ibis.intersect if how == "intersect" else ibis.difference)(same(base), *[same(t) for _, t in others])
     shaped = lambda t, name: t.select(*[(t[c] if c in t.columns else ibis.null()).cast(schema[c]).name(c) for c in columns], **{SOURCE: ibis.literal(name)})
     return ibis.union(shaped(base, base_name), *[shaped(t, name) for name, t in others], distinct=False)
 
 
-# 조인: "테이블 [inner|left|right|outer] 왼쪽=오른쪽, ..."
+# 조인: "테이블 [inner|left|right|outer|semi|anti] 왼쪽=오른쪽, ..." 또는 "테이블 asof 왼쪽시각>=오른쪽시각, 왼쪽=오른쪽, ..."
 def parse_join(line, tables):
+    """(테이블, 종류, [(왼쪽, 오른쪽)], asof의 (왼쪽 시각, 오른쪽 시각) 또는 None)."""
     name, _, rest = line.partition(" ")
     check_name(name, tables, "테이블")
     first, _, after = rest.strip().partition(" ")
     how, keys = (first.lower(), after) if first.lower() in JOINS else ("inner", rest)
-    pairs = []
+    pairs, on = [], None
     for k in keys.split(","):
+        if how == "asof" and ">=" in k and on is None:
+            on = tuple(s.strip() for s in k.split(">=", 1))
+            continue
         left, _, right = (s.strip() for s in k.partition("="))
         if left:
             pairs.append((left, right or left))
-    if not pairs:
+    if how == "asof" and not (on and all(on)):
+        raise ValueError("asof 조인은 시각 쌍을 '왼쪽시각>=오른쪽시각'으로 하나 넣으세요. 예: prices asof 주문시각>=가격시각, 상품ID=상품ID")
+    if not pairs and how != "asof":
         raise ValueError("조인 컬럼을 입력하세요. 예: customers left customer_id=id")
-    return name, how, pairs
+    return name, how, pairs, on
+
+
+ASOF_ID, ASOF_RANK = "__ibis_left", "__ibis_near"  # asof를 대신하는 식이 잠깐 쓰는 컬럼
+
+
+def asof(left, right, on, keys):
+    """asof 조인: 왼쪽 행마다 키가 같고 시각이 같거나 앞선 오른쪽 행 중 가장 가까운 하나를 붙인다(없으면 빈 값).
+    연결이 ASOF JOIN을 하지 못하면(SQLite·Databricks 등) 왼쪽 조인 + 시각 순 행 번호로 같은 결과를 만든다."""
+    import source
+    found = left.asof_join(right, on=left[on[0]] >= right[on[1]], predicates=[left[a] == right[b] for a, b in keys])
+    if source.compiles(found):
+        return found
+    numbered = left.mutate(**{ASOF_ID: ibis.row_number().over(ibis.window())})
+    joined = numbered.left_join(right, [numbered[on[0]] >= right[on[1]], *[numbered[a] == right[b] for a, b in keys]])
+    when = joined[on[1] if on[1] not in left.columns else on[1] + "_right"]  # 오른쪽 시각(이름이 겹치면 _right가 붙는다)
+    near = ibis.row_number().over(ibis.window(group_by=joined[ASOF_ID], order_by=ibis.desc(when)))
+    return joined.mutate(**{ASOF_RANK: near}).filter(ibis._[ASOF_RANK] == 0).drop(ASOF_ID, ASOF_RANK)
 
 
 def apply_joins(base, joins, get_table):
-    """joins: [(테이블, 종류, [(왼쪽, 오른쪽)])]. 컬럼이 없으면 ValueError."""
+    """joins: [(테이블, 종류, [(왼쪽, 오른쪽)], asof 시각 쌍)]. 컬럼이 없으면 ValueError."""
     expr = base
-    for name, how, pairs in joins:
+    for name, how, pairs, on in joins:
         right = get_table(name)
-        for left, r in pairs:
+        for left, r in [*pairs, *([on] if on else [])]:
             check_name(left, expr.columns)
             check_name(r, right.columns)
-        expr = expr.join(right, [expr[left] == right[r] for left, r in pairs], how=how)
+        if how == "asof":
+            expr = asof(expr, right, on, pairs)
+        else:
+            expr = expr.join(right, [expr[left] == right[r] for left, r in pairs], how=how)
     return expr
 
 

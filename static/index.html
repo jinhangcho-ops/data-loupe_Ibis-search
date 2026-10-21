@@ -99,6 +99,16 @@
         <select id="simage" title="저장할 그림의 모드 (차트 저장과 같이 바뀝니다)" style="flex:0 0 100px"><option value="light">라이트</option><option value="dark">다크</option></select>
         <button data-table="png" class="btn">PNG</button><button data-table="jpeg" class="btn">JPG</button>
         <select id="ssend" title="집계 표를 보낼 곳" style="flex:0 1 160px"></select><button id="ssend-go">보내기</button></div>
+      <div class="ctl" style="margin-top:14px" title="행 기준 컬럼별로 묶고, 열로 펼칠 컬럼의 값마다 칸을 만듭니다(최대 30개). 조건을 넣으면 그 행만 셉니다(조건부 집계)">
+        <span class="hint" style="margin:0; flex:none">피벗</span>
+        <select id="pv-rows" title="행 기준: 이 컬럼의 값마다 한 줄" style="flex:0 1 150px"></select>
+        <select id="pv-col" title="열로 펼칠 컬럼: 이 컬럼의 값마다 한 칸" style="flex:0 1 150px"></select>
+        <select id="pv-how" title="집계" style="flex:0 0 90px"></select>
+        <select id="pv-val" title="값 컬럼(개수는 비워도 됩니다)" style="flex:0 1 150px"></select>
+        <input id="pv-where" placeholder="조건 (예: 상태 = 완료, 비우면 전체)" style="flex:1 1 160px">
+        <button id="pv-run">피벗</button></div>
+      <div class="err" id="err-pivot"></div>
+      <div class="table-wrap" id="pivot"></div>
       <div class="grip-y" data-size="summary" title="끌어서 집계 표 높이 조절 (더블클릭: 기본)"></div>
     </section>
     <section class="pane hidden" id="pane-chart">
@@ -163,8 +173,8 @@
         <div class="cn">↓</div>
         <div class="step" data-step="union"><div class="sp"><i>2</i><span class="t">이어붙이기</span><b id="sum-union"></b><span class="c"></span></div>
           <div class="edx">
-            <div class="hint">같은 모양의 테이블을 기준 테이블 아래로 잇습니다. 어느 테이블의 행인지는 "출처" 컬럼에 나옵니다.</div>
-            <select id="u-how" style="margin-bottom:6px"><option value="left">left: 기준 테이블의 컬럼을 모두 (없는 컬럼은 빈 값)</option><option value="inner">inner: 모든 테이블에 있는 컬럼만</option></select>
+            <div class="hint">같은 모양의 테이블을 기준 테이블 아래로 잇습니다. 어느 테이블의 행인지는 "출처" 컬럼에 나옵니다. 교집합·차집합은 행을 고르기만 합니다(출처 없음).</div>
+            <select id="u-how" style="margin-bottom:6px"><option value="left">left: 기준 테이블의 컬럼을 모두 (없는 컬럼은 빈 값)</option><option value="inner">inner: 모든 테이블에 있는 컬럼만</option><option value="intersect">intersect: 모든 테이블에 같이 있는 행만 (교집합)</option><option value="except">except: 기준 테이블에만 있는 행 (차집합)</option></select>
             <div class="chips open" id="u-chips" style="margin-bottom:6px"></div>
             <select id="u-add"></select>
             <div class="err" id="err-union"></div>
@@ -174,7 +184,7 @@
           <div class="edx">
             <div id="join-blocks"></div>
             <button class="linkish" id="join-add">+ 조인 추가</button>
-            <div class="row" style="margin-top:6px"><input id="join-line" placeholder="한 줄로: 테이블 [inner|left|right|outer] 왼쪽=오른쪽"><button id="join-line-add">추가</button></div>
+            <div class="row" style="margin-top:6px"><input id="join-line" placeholder="한 줄로: 테이블 [inner|left|right|outer|semi|anti] 왼쪽=오른쪽 / 테이블 asof 왼쪽시각>=오른쪽시각, 왼쪽=오른쪽" title="semi: 짝이 있는 행만, anti: 짝이 없는 행만(둘은 오른쪽 컬럼을 붙이지 않음), asof: 시각이 같거나 앞선 가장 가까운 행 하나"><button id="join-line-add">추가</button></div>
             <div class="err" id="err-join"></div>
           </div></div>
         <div class="cn">↓</div>
@@ -201,10 +211,14 @@
             </div>
           </div></div>
         <div class="cn">↓</div>
-        <div class="step" data-step="sorts"><div class="sp"><i>6</i><span class="t">정렬</span><b id="sum-sorts"></b><span class="c"></span></div>
+        <div class="step" data-step="calcs"><div class="sp"><i>6</i><span class="t">계산</span><b id="sum-calcs"></b><span class="c"></span></div>
+          <div class="edx"><div class="hint" id="calc-guide">순위·이동 평균·누적 합계·이전 값·그룹별 상위 N, 여러 컬럼 한꺼번에, 목록 펼치기, 세로로 세우기. 한 줄에 하나, 위에서부터 차례로 합니다.</div>
+            <select id="calc-example" title="고르면 아래 입력칸에 예시를 넣습니다. 컬럼 이름을 바꿔 쓰세요"></select><div id="calcs"></div></div></div>
+        <div class="cn">↓</div>
+        <div class="step" data-step="sorts"><div class="sp"><i>7</i><span class="t">정렬</span><b id="sum-sorts"></b><span class="c"></span></div>
           <div class="edx"><div class="hint">컬럼 [asc|desc]. 결과 표의 머리글을 눌러도 됩니다.</div><div id="sorts"></div></div></div>
         <div class="cn">↓</div>
-        <div class="step" data-step="columns"><div class="sp"><i>7</i><span class="t">표시 컬럼</span><b id="sum-columns"></b><span class="c"></span></div>
+        <div class="step" data-step="columns"><div class="sp"><i>8</i><span class="t">표시 컬럼</span><b id="sum-columns"></b><span class="c"></span></div>
           <div class="edx"><div class="hint">컬럼1, 컬럼2 (비우면 전체)</div><div id="columns"></div></div></div>
       </div>
     </div></div>
@@ -320,7 +334,7 @@
 <script src="/static/common.js"></script>
 <script src="/static/board.js"></script>
 <script>
-const LISTS = ["joins", "periods", "conditions", "sorts", "columns"];  // 한 줄씩 모으는 입력. 서버로 보내는 이름과 같다.
+const LISTS = ["joins", "periods", "conditions", "calcs", "sorts", "columns"];  // 한 줄씩 모으는 입력. 서버로 보내는 이름과 같다.
 Object.assign(S, Object.fromEntries(LISTS.map(k => [k, []])), { union: { tables: [], how: "left" }, origins: {} });
 let last = null;  // 마지막 검색 결과(rows)와 집계(summary). 글자 수를 바꾸면 다시 조회하지 않고 표만 다시 그린다.
 let chart = null;
@@ -360,6 +374,7 @@ function showSummaries() {
   put("sum-joins", S.joins.length ? `테이블 ${S.joins.length}개` : "없음");
   put("sum-periods", S.periods.length ? S.periods.join(", ") : "없음");
   put("sum-conditions", S.conditions.length ? text(S.conditions[0]) + (S.conditions.length > 1 ? ` 외 ${S.conditions.length - 1}개` : "") : "없음");
+  put("sum-calcs", S.calcs.length ? S.calcs[0].split(/\s+/)[0] + (S.calcs.length > 1 ? ` 외 ${S.calcs.length - 1}개` : "") : "없음");
   put("sum-sorts", S.sorts.length ? S.sorts.map(sortText).join(", ") : "없음");
   put("sum-columns", S.columns.length ? `${columnCount()}개` : "전체");
   document.querySelectorAll(".step").forEach(s => s.querySelector(".c").textContent = s.classList.contains("open") ? "편집 중" : "⌄");
@@ -429,7 +444,8 @@ function clearScreen() {
   $("saved").value = "";
   showBig(null);
   renderTables();
-  ["err-search", "err-export", "err-summary", "err-chart", "err-builder", "err-union", "err-join"].forEach(id => $(id).textContent = "");
+  ["err-search", "err-export", "err-summary", "err-chart", "err-builder", "err-union", "err-join", "err-pivot"].forEach(id => $(id).textContent = "");
+  $("pivot").innerHTML = "";
   resetTiming();
   showSummaries();
 }
@@ -449,6 +465,11 @@ async function refreshColumns() {
   $("cols").innerHTML = S.cols.map(([n, t]) => `${esc(n)} (${esc(t)})`).join("<br>") +
     S.fields.map(([n, t]) => `<br><span class="hint" style="margin:0">　${esc(n)} (${esc(t)})</span>`).join("");
   fill($("cx"), S.cols.map(c => c[0]));
+  for (const [id, blank] of [["pv-rows", "행 기준 없음"], ["pv-col", "열로 펼치지 않음"], ["pv-val", "값 없음 (개수)"]]) {  // 고른 것은 남아 있으면 그대로
+    const was = $(id).value;
+    fill($(id), S.cols.map(c => c[0]), blank);
+    if (S.cols.some(c => c[0] === was)) $(id).value = was;
+  }
   fill($("cy"), S.cols.filter(c => c[1] === "정수" || c[1] === "실수").map(c => c[0]), "Y 없음");
   const split = $("csplit").value;  // 나눌 컬럼도 고른 것은 남아 있으면 그대로 둔다.
   fill($("csplit"), S.cols.map(c => c[0]), "나누지 않음");
@@ -494,16 +515,16 @@ $("u-add").onchange = () => { if ($("u-add").value) setUnion({ ...S.union, table
 $("u-how").onchange = () => setUnion({ ...S.union, how: $("u-how").value });
 
 // 3. 조인: 덩어리마다 종류·테이블과 키 쌍(왼쪽 = 오른쪽)을 고른다. 다 고른 덩어리만 "테이블 종류 왼쪽=오른쪽, …" 줄로 서버에 보낸다(한 줄로 넣어도 된다).
-const JOIN_HOWS = ["inner", "left", "right", "outer"];
+const JOIN_HOWS = ["inner", "left", "right", "outer", "semi", "anti", "asof"];  // asof의 첫 키 쌍은 시각(왼쪽 >= 오른쪽)
 let joinsUI = [];  // [{ table, how, pairs: [[왼쪽, 오른쪽]] }] 아직 다 고르지 않은 것 포함
 const tableCols = {};  // 테이블 → 컬럼 이름들(오른쪽 키를 고를 때)
 function joinParts(line) {
   const [table, ...rest] = line.trim().split(/\s+/);
   const how = JOIN_HOWS.includes(rest[0]?.toLowerCase()) ? rest.shift().toLowerCase() : "inner";
-  const pairs = rest.join(" ").split(",").map(k => k.split("=").map(s => s.trim())).filter(p => p[0]).map(([l, r]) => [l, r || l]);
+  const pairs = rest.join(" ").split(",").map(k => k.split(/>?=/).map(s => s.trim())).filter(p => p[0]).map(([l, r]) => [l, r || l]);
   return { table, how, pairs };
 }
-const joinLine = j => `${j.table} ${j.how} ${j.pairs.filter(([l, r]) => l && r).map(([l, r]) => `${l}=${r}`).join(", ")}`;
+const joinLine = j => `${j.table} ${j.how} ${j.pairs.filter(([l, r]) => l && r).map(([l, r], k) => `${l}${j.how === "asof" && !k ? ">=" : "="}${r}`).join(", ")}`;
 const joinDone = j => j.table && j.pairs.some(([l, r]) => l && r);
 async function colsOf(table) {
   if (!table) return [];
@@ -528,12 +549,13 @@ async function renderJoins() {
   const blocks = await Promise.all(joinsUI.map(async (j, i) => {
     const right = await colsOf(j.table).catch(() => []);
     const pairRow = ([l, r], k) => el("div", { className: "r2" },
-      select(leftCols, l, "왼쪽 키", v => { j.pairs[k][0] = v; applyJoins(); }), el("span", { textContent: "=" }),
+      select(leftCols, l, j.how === "asof" && !k ? "왼쪽 시각" : "왼쪽 키", v => { j.pairs[k][0] = v; applyJoins(); }),
+      el("span", { textContent: j.how === "asof" && !k ? "≥" : "=", title: j.how === "asof" && !k ? "왼쪽 시각과 같거나 앞선 가장 가까운 오른쪽 행 하나를 붙입니다" : "" }),
       select(right, r, "오른쪽 키", v => { j.pairs[k][1] = v; applyJoins(); }),
       el("button", { className: "ghost", textContent: "×", title: "키 빼기", onclick: () => { j.pairs.splice(k, 1); renderJoins(); applyJoins(); } }));
     return el("div", { className: "jb" },
       el("div", { className: "r1" },
-        select(JOIN_HOWS, j.how, null, v => { j.how = v; applyJoins(); }),
+        select(JOIN_HOWS, j.how, null, v => { j.how = v; renderJoins(); applyJoins(); }),
         select(tableNames(), j.table, "테이블", v => { j.table = v; j.pairs = [["", ""]]; renderJoins(); }),
         el("button", { className: "ghost", textContent: "×", title: "조인 빼기", onclick: () => { joinsUI.splice(i, 1); renderJoins(); applyJoins(); } })),
       ...j.pairs.map(pairRow),
@@ -784,7 +806,7 @@ $("saved").onchange = async () => {
   try {
     if (s.schema !== S.schema && [...$("schema").options].some(o => o.value === s.schema)) { $("schema").value = s.schema; await loadTables(); }
     S.base = $("base").value = s.base;
-    LISTS.forEach(k => S[k] = [...s[k]]);
+    LISTS.forEach(k => S[k] = [...(s[k] ?? [])]);  // 계산이 없던 때의 검색도 읽는다
     S.union = s.union ? { tables: [...s.union.tables], how: s.union.how } : { tables: [], how: "left" };  // 이어붙이기가 없던 때의 검색도 읽는다
     $("limit").value = s.limit;
     await api("/api/columns", state());
@@ -816,6 +838,28 @@ $("summarize").onclick = () => {
       $("err-summary").textContent = "";
     } catch (e) { if (last === before) $("err-summary").textContent = e.message; }
   });
+};
+
+// 피벗·조건부 집계: 행 기준 컬럼별로 묶고 열로 펼칠 컬럼의 값마다 칸을 만든다. 조건을 넣으면 그 행만 센다. 지금 검색 조건(계산 포함) 위에서 구한다.
+$("pv-how").innerHTML = Object.entries(SERVER.calc.hows).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+$("pv-run").onclick = () => {
+  if (!S.base) { $("err-pivot").textContent = "기준 테이블을 고르세요."; return; }
+  return busy($("pv-run"), async () => {
+    try {
+      const pivot = { rows: $("pv-rows").value ? [$("pv-rows").value] : [], column: $("pv-col").value, value: $("pv-val").value, how: $("pv-how").value, where: $("pv-where").value };
+      const d = await timed("summary", () => api("/api/pivot", { ...state(), pivot }));
+      $("pivot").innerHTML = table(d.rows) + (d.more ? '<div class="hint">앞 500줄까지만 보입니다.</div>' : "");
+      $("err-pivot").textContent = "";
+    } catch (e) { $("err-pivot").textContent = e.message; }
+  });
+};
+// 계산 단계: [예시 넣기]를 고르면 입력칸에 예시를 넣는다. 형식 전체는 안내에 마우스를 올리면 보인다.
+$("calc-guide").title = SERVER.calc.guide;
+$("calc-example").innerHTML = '<option value="">예시 넣기</option>' + SERVER.calc.examples.map(e => `<option>${esc(e)}</option>`).join("");
+$("calc-example").onchange = () => {
+  const input = $("calcs").querySelector("input");
+  if ($("calc-example").value && input) { input.value = $("calc-example").value; input.focus(); }
+  $("calc-example").value = "";
 };
 
 const ROWS_HINT = '<span class="empty">검색하면 결과가 여기에 표시됩니다.</span>';

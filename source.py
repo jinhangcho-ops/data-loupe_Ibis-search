@@ -251,6 +251,19 @@ def close(con):
     gc.collect()
 
 
+def compiles(expr):
+    """expr을 그 연결이 실행할 모양(SQL, Polars 계획)으로 바꿀 수 있는지. 실행하지는 않는다. 연결이 하지 못하는 계산(파일 연결의 창 함수,
+    SQLite의 ASOF 등)이면 False. 연결이 없는 식이나 그 밖의 오류는 True로 보고 실행할 때 알린다."""
+    errors = (*unsupported_errors(), ibis.common.exceptions.UnsupportedArgumentError)
+    try:
+        ibis.get_backend(expr).compile(expr)
+    except errors:
+        return False
+    except Exception:
+        pass
+    return True
+
+
 def unsupported_errors():
     """연결(백엔드)이 하지 못하는 계산에서 Ibis가 내는 오류들."""
     return ibis.common.exceptions.OperationNotDefinedError, ibis.common.exceptions.UnsupportedOperationError

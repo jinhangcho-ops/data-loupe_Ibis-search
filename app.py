@@ -1,7 +1,6 @@
 """Ibis 쿼리 화면(탐색·SQL·지표·대시보드)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
 import base64
 import binascii
-import json
 import os
 import re
 from pathlib import Path
@@ -9,6 +8,7 @@ from pathlib import Path
 from flask import jsonify, request
 from lazy import ibis
 
+import calc
 import core
 import held
 import metrics
@@ -27,6 +27,7 @@ from server import app, get_con, run, to_json
 # 그래프 그림 저장(/api/images): 연결을 쓰지 않으므로 차례를 기다리지 않는다.
 server.FREE.add("/api/images")
 server.CONSTANTS["board"] = {"max": settings.MAX_BOARD_CHARTS}  # 대시보드 하나에 넣을 수 있는 그래프 수
+server.CONSTANTS["calc"] = {"guide": calc.GUIDE, "examples": calc.EXAMPLES, "hows": calc.HOWS, "max_pivot": calc.MAX_PIVOT}  # 계산 줄 형식·예시, 피벗 집계
 IMAGE_TYPES = {"data:image/png;base64,": ".png", "data:image/jpeg;base64,": ".jpg"}  # 화면이 보내는 그림(data URL 머리) → 확장자
 MAX_IMAGE_BYTES = 30 * 1024 * 1024  # 그림 하나의 크기
 RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}  # Windows가 파일 이름으로 쓰지 못하는 이름
@@ -47,7 +48,7 @@ def columns():
 @app.post("/api/values")
 def values():
     """조건을 만들 때 고를 수 있게 컬럼의 값 목록을 돌려준다. 화면에서 [목록]을 누를 때만 부른다."""
-    expr, column = build(request.json, select=False), request.json.get("column", "")
+    expr, column = core.runnable(request.json, select=False), request.json.get("column", "")
     found, more = run(lambda: result.get_values(expr, column))
     return jsonify(values=found, more=more)
 
@@ -67,13 +68,7 @@ def scan():
     return jsonify(message=scan_size.message(found), **found)
 
 
-VIEW_KEYS = ("limit", "offset", "count", "sorts", "columns", "fresh")  # 받아 둔 결과를 바꾸지 않는 요청 값(정렬·표시 컬럼·쪽은 받아 둔 것에서 한다)
 TOO_BIG = f"결과가 커서({held.MAX_ROWS:,}행·{held.MAX_BYTES // 1024 // 1024}MB 넘음) 이 PC에 받아 두지 않고 DB에서 쪽마다 가져옵니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요."
-
-
-def held_key(kind, body):
-    """받아 둔 결과를 찾는 열쇠: 연결, 종류(search·sql), 가상 테이블 정의, 결과를 정하는 요청 값."""
-    return json.dumps([server.connection_key(), kind, server.virtual_tables(), body], sort_keys=True, ensure_ascii=False, default=str)
 
 
 def db_page(con, body, expr, limit, offset, count=None):
@@ -87,16 +82,21 @@ def db_page(con, body, expr, limit, offset, count=None):
 @app.post("/api/query")
 def query():
     """count를 false로 주면 전체 행 수를 세지 않고 null로 돌려준다. offset을 주면 그만큼 건너뛴 다음 행부터 준다(count는 그대로).
-    주소로 접속한 DB는 결과를 한 번 받아 두고(held) 정렬·쪽 넘기기를 이 PC에서 한다(fresh면 새로 받는다). 받아 두면 행 수는 세지 않아도 안다.
-    held: 받아 둔 결과에서 왔는지, note: 받아 두지 못한 까닭."""
+    주소로 접속한 DB와 연결이 하지 못하는 계산(파일 연결의 창 함수 등)은 기간·조건까지의 결과를 한 번 받아 두고(held) 계산·정렬·쪽 넘기기를 이 PC에서 한다
+    (fresh면 새로 받는다). 받아 두면 행 수는 세지 않아도 안다. held: 받아 둔 결과에서 왔는지, note: 받아 두지 못한 까닭."""
     body = request.json
     expr, limit, offset = paged(body)  # 받기 전에 줄을 모두 검사한다
     con, count, rows, note = get_con(), None, None, ""
-    if held.remote(con):
-        source_expr, key = core.filtered(body), held_key("search", {k: v for k, v in body.items() if k not in VIEW_KEYS})
+    able = source.compiles(expr)
+    if held.remote(con) or not able:
+        source_expr = core.filtered(body)
         counter = (lambda: result.get_count(source_expr)) if body.get("count", True) else None
-        count, rows = run(lambda: held.page(key, source_expr, lambda t: core.arrange(body, t, held.ROW), limit, offset, server.state["cancel"], counter, body.get("fresh")))
+        count, rows = run(lambda: held.page(core.search_key(body), source_expr, lambda t: core.arrange(body, t, held.ROW), limit, offset,
+                                            server.state["cancel"], counter, body.get("fresh")))
+        if rows is None and not able:
+            raise ValueError(core.PC_TOO_BIG)
         note = TOO_BIG if rows is None else ""
+        count = count if rows is not None or not body.get("calcs") else None  # 받기 전에 센 수는 계산 전의 행 수
     kept = rows is not None
     if not kept:
         count, rows = db_page(con, body, expr, limit, offset, count)
@@ -111,9 +111,9 @@ def sql():
     body = request.json
     expr, limit, offset = paged(body)
     con = get_con()
-    item = held.store["items"].get(held_key("search", {k: v for k, v in body.items() if k not in VIEW_KEYS}))
-    if held.remote(con) and not (item and item[0] is None):
-        return jsonify(sql="-- 이 조회로 결과를 한 번 받아 두고, 정렬·쪽 넘기기는 이 PC에서 합니다.\n" + result.get_sql(core.filtered(body)))
+    item = held.store["items"].get(core.search_key(body))
+    if (held.remote(con) or not source.compiles(expr)) and not (item and item[0] is None):
+        return jsonify(sql="-- 이 조회로 결과를 한 번 받아 두고, 계산·정렬·쪽 넘기기는 이 PC에서 합니다.\n" + result.get_sql(core.filtered(body)))
     if offset and not result.can_offset(expr):
         return jsonify(sql=result.get_sql(core.numbered(body, limit, offset)))
     return jsonify(sql=result.get_sql(expr, limit, offset))
@@ -153,15 +153,24 @@ def use_search():
 def summary():
     """컬럼별 집계. 큰 테이블에서는 오래 걸리므로 검색과 따로, 화면에서 요청할 때만 계산한다."""
     columns = request.json.get("summary_columns") or []  # 화면에서 고른 컬럼. 없으면 표시 컬럼(없으면 전체).
-    expr = build(request.json, select=not columns)
+    expr = core.runnable(request.json, select=not columns)
     rows = run(lambda: result.get_summary(expr, columns))
     return jsonify(summary={"columns": result.SUMMARY_COLS, "rows": rows})
+
+
+@app.post("/api/pivot")
+def pivot():
+    """피벗(조건부 집계): 검색 결과를 행 기준 컬럼별로 묶고, 열로 펼칠 컬럼의 값마다 집계 칸을 만든다(calc.pivot). more는 행이 calc.MAX_ROWS보다 많은지."""
+    expr, spec = core.runnable(request.json, select=False), request.json.get("pivot")
+    values = lambda e: e.to_pyarrow()["v"].to_pylist()
+    table = run(lambda: calc.pivot(expr, spec, values).to_polars())
+    return jsonify(rows=to_json(table.head(calc.MAX_ROWS)), more=table.height > calc.MAX_ROWS)
 
 
 @app.post("/api/export")
 def export():
     """조건에 맞는 전체 행을 임시 파일로 만들어 조금씩 내려보내고, 다 보내면 지운다."""
-    return server.download(build(request.json), request.json.get("format", ""))
+    return server.download(core.runnable(request.json), request.json.get("format", ""))
 
 
 @app.post("/api/handoff")
@@ -170,7 +179,7 @@ def handoff():
     확장자가 .parquet이 아니면 붙인다. 지금 읽고 있는 파일에는 덮어쓰지 않는다. 임시 이름으로 쓰고 끝나면 바꿔치기해 실패해도 원래 파일이 남는다."""
     if server.ask_save is None:
         raise ValueError("저장 위치를 물을 수 없습니다. 프로그램 창에서만 쓸 수 있습니다.")
-    expr = build(request.json)
+    expr = core.runnable(request.json)
     chosen = server.ask_save(f"{request.json['base']}_search.parquet", ("Parquet (*.parquet)",))
     if not chosen:
         return jsonify(cancelled=True)
@@ -306,7 +315,7 @@ def sql_run():
     expr, used = sql_expr(body)
     con, count, rows, note = get_con(), None, None, ""
     if held.remote(con):
-        key = held_key("sql", {"sql": body["sql"]})
+        key = core.held_key("sql", {"sql": body["sql"]})
         count, rows = run(lambda: held.page(key, expr, lambda t: t.order_by(held.ROW).drop(held.ROW), n + 1, offset, server.state["cancel"], fresh=body.get("fresh")))
         note = TOO_BIG.replace(" 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요.", " SQL에 고유한 컬럼의 ORDER BY를 넣어야 쪽이 섞이지 않습니다.") if rows is None else ""
     kept = rows is not None
@@ -385,7 +394,7 @@ def save_virtual():
 def chart():
     """x별 집계. series는 [{"y", "agg"}]이고, split을 주면 그 컬럼의 값마다 계열을 나눈다."""
     body = request.json
-    expr = build(body, select=False)
+    expr = core.runnable(body, select=False)
     labels, datasets, more = run(lambda: result.get_chart(
         expr, body["x"], body.get("series") or [], body.get("split") or None, body.get("order", "x")))
     return jsonify(labels=[str(v) for v in labels], datasets=datasets, more_splits=more,
