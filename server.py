@@ -9,6 +9,7 @@ from pathlib import Path
 from flask import Flask, Response, abort, current_app, g, jsonify, request
 from werkzeug.exceptions import HTTPException
 
+import held
 import monitor
 import result
 import scratch
@@ -211,7 +212,8 @@ def open_con(info, read_only=True):
             return source.open_flat_files(chosen)
         if not info.get("file"):
             raise ValueError("파일을 고르세요.")
-        return source.open_duckdb(info["file"], read_only, settings.load().get("memory"))
+        found = settings.load()
+        return source.open_duckdb(info["file"], read_only, found.get("memory"), found.get("threads"))
     return source.open_url(info["url"], info.get("user", ""), info.get("password", ""))
 
 
@@ -230,6 +232,7 @@ def switch(new):
         source.close(state["con"])
         state.update(con=None, passwords=[], opened=None)
     state.update(rows={})
+    source.on_worker(held.clear)()  # 받아 둔 결과는 이전 연결의 것
     try:
         con = open_con(new)
     except Exception as e:
@@ -282,6 +285,7 @@ def disconnect():
     """연결을 끊고 파일·접속을 놓는다. 연결이 없으면 아무 일도 하지 않는다."""
     if state["con"] is not None:
         source.close(state["con"])
+    source.on_worker(held.clear)()
     state.update(con=None, passwords=[], opened=None, rows={})
     return jsonify(ok=True)
 

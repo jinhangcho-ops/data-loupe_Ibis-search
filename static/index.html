@@ -235,12 +235,13 @@
       <textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea>
       <div class="sql-check" id="sql-check"></div>
       <div class="row"><button id="sql-deep" class="btn" title="연결에서 짜 보기만 해서 테이블·컬럼 이름까지 확인합니다(데이터는 읽지 않습니다)">검사</button>
-        <label title="화면에 받을 행 수. 전체는 [결과 저장]으로 받습니다">받을 행 <input id="sql-rows" type="number" min="1"></label>
+        <label title="한 쪽에 보일 행 수. 전체는 [결과 저장]으로 받습니다">쪽당 행 <input id="sql-rows" type="number" min="1"></label>
         <span class="hint" style="margin:0">읽기만 하는 SELECT 문 하나만 실행합니다(WITH·JOIN·LIKE·* 가능, DROP·DELETE·INSERT·여러 문장 불가).</span></div>
     </div>
     <div class="big"><b id="sql-count">실행 전</b><span id="sql-sub"></span></div>
     <div class="err" id="err-sql"></div>
     <section class="pane"><div class="table-wrap" id="sql-result"></div></section>
+    <div class="pager"><button id="sql-prev" class="btn" disabled>이전</button><button id="sql-next" class="btn" disabled>다음</button><span id="sql-page"></span></div>
   </main>
   <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
   <aside class="side">
@@ -685,26 +686,29 @@ function showBig(d, offset = 0) {
   if (!d) { $("big-count").textContent = "검색 전"; $("big-sub").textContent = "오른쪽에서 데이터와 조건을 고르고 [검색 실행]을 누르세요."; $("page-info").textContent = ""; return; }
   const n = d.rows.rows.length, range = n ? `${(offset + 1).toLocaleString()}–${(offset + n).toLocaleString()}행` : "0행", limit = +$("limit").value;
   $("big-count").textContent = d.count === null ? range : `${d.count.toLocaleString()}행`;
-  $("big-sub").textContent = [d.count === null ? "" : `중 ${range}`, ...conditionTexts()].filter(Boolean).join(" · ");
+  $("big-sub").textContent = [d.count === null ? "" : `중 ${range}`, ...conditionTexts(), d.held ? "PC에 받아 둔 결과" : ""].filter(Boolean).join(" · ");
+  $("big-sub").title = d.held ? "결과를 한 번 받아 이 PC에 두었습니다. 쪽 넘기기·머리글 정렬은 DB에 다시 묻지 않고, [검색 실행]을 누르면 새로 받습니다." : "";
+  $("err-search").textContent = d.note || "";
   $("page-info").textContent = d.count === null ? `${Math.floor(offset / limit) + 1}쪽` : `${Math.floor(offset / limit) + 1} / ${Math.max(1, Math.ceil(d.count / limit)).toLocaleString()}쪽`;
 }
 // offset행을 건너뛰고 검색한다. [검색 실행]과 머리글 정렬은 0에서, [이전]·[다음]은 행 수만큼 옮겨서 부른다.
-function runSearch(offset) {
+// fresh: DB에서 새로 받는다([검색 실행]). 주소로 접속한 DB는 결과를 이 PC에 받아 두므로 쪽 넘기기·머리글 정렬은 DB에 다시 묻지 않는다.
+function runSearch(offset, fresh = false) {
   if (!S.base) { $("err-search").textContent = "기준 테이블을 고르세요."; return; }
   return busy($("search"), async () => {
     try {
-      const d = await timed("search", () => api("/api/query", { ...query(offset), count: $("count").checked }));
+      const d = await timed("search", () => api("/api/query", { ...query(offset), count: $("count").checked, fresh }));
       skip = offset;
       $("prev").disabled = !offset;
       $("next").disabled = d.rows.rows.length < $("limit").value;
       last = { rows: d.rows, summary: null, count: d.count };  // 이전 조건의 집계는 지운다.
-      showBig(d, offset);
+      $("err-summary").textContent = "";
+      showBig(d, offset);  // 받아 두지 못한 까닭(note)은 err-search에
       renderTables();
-      $("err-search").textContent = $("err-summary").textContent = "";
     } catch (e) { $("err-search").textContent = e.message; }
   });
 }
-$("search").onclick = () => runSearch(0);
+$("search").onclick = () => runSearch(0, true);
 $("prev").onclick = () => runSearch(Math.max(0, skip - $("limit").value));
 $("next").onclick = () => runSearch(skip + +$("limit").value);
 // 결과 표의 머리글을 누르면 그 컬럼 하나로 정렬해 다시 검색한다. 이미 그 컬럼의 오름차순이면 내림차순으로 바꾼다.
@@ -1144,18 +1148,29 @@ const sqlTable = ({ columns, rows }) => !rows.length ? '<span class="empty">결�
   : `<table><thead><tr>${columns.map(c => `<th class="${rows.some(r => typeof r[c] === "number") ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
     rows.map(r => "<tr>" + columns.map(c => cell(r[c])).join("") + "</tr>").join("") + "</tbody></table>";
 $("sql-rows").value = 1000;
-async function runSql() {
+// offset행을 건너뛰고 쪽당 행만큼 실행 결과를 본다. [실행]은 0에서 새로(fresh), [이전]·[다음]은 쪽당 행만큼 옮겨서 부른다.
+// 주소로 접속한 DB는 결과를 이 PC에 받아 두므로 쪽을 넘겨도 DB에 다시 묻지 않는다(그때는 전체 행 수도 안다).
+let sqlSkip = 0, sqlRan = "";
+async function runSql(offset = 0, fresh = true) {
   if (!connected) return say("err-sql", "먼저 데이터에 연결하세요.");
   try {
-    const d = await timed("sql", () => api("/api/sql/run", { sql: $("sql-text").value, rows: Number($("sql-rows").value) }), {});
-    $("sql-count").textContent = `${d.rows.rows.length.toLocaleString()}행`;
-    $("sql-sub").textContent = d.more ? `앞 ${d.limit.toLocaleString()}행까지만 보입니다. 전체는 [결과 저장]으로 받습니다.` : "";
+    const sql = fresh ? $("sql-text").value : sqlRan;  // 쪽 넘기기는 실행한 SQL로(편집기를 고쳤어도)
+    const d = await timed("sql", () => api("/api/sql/run", { sql, rows: Number($("sql-rows").value), offset, fresh }), {});
+    const n = d.rows.rows.length, range = n ? `${(offset + 1).toLocaleString()}–${(offset + n).toLocaleString()}행` : "0행";
+    sqlSkip = offset; sqlRan = sql;
+    $("sql-count").textContent = d.count === null ? range : `${d.count.toLocaleString()}행`;
+    $("sql-sub").textContent = [d.count === null ? "" : `중 ${range}`, d.held ? "PC에 받아 둔 결과" : "", d.more || offset ? "전체는 [결과 저장]으로 받습니다" : ""].filter(Boolean).join(" · ");
+    $("sql-page").textContent = d.count === null ? `${Math.floor(offset / d.limit) + 1}쪽` : `${Math.floor(offset / d.limit) + 1} / ${Math.max(1, Math.ceil(d.count / d.limit)).toLocaleString()}쪽`;
+    $("sql-prev").disabled = !offset;
+    $("sql-next").disabled = !d.more;
     $("sql-result").innerHTML = sqlTable(d.rows);
-    say("err-sql", "");
-    showVirtual();  // 쓴 횟수가 바뀌었다
+    say("err-sql", d.note || "");
+    if (!offset) showVirtual();  // 쓴 횟수가 바뀌었다
   } catch (e) { say("err-sql", e.message); }
 }
-$("sql-run").onclick = () => busy($("sql-run"), runSql);
+$("sql-run").onclick = () => busy($("sql-run"), () => runSql(0, true));
+$("sql-prev").onclick = () => busy($("sql-prev"), () => runSql(Math.max(0, sqlSkip - Number($("sql-rows").value)), false));
+$("sql-next").onclick = () => busy($("sql-next"), () => runSql(sqlSkip + Number($("sql-rows").value), false));
 // 문법 검사: 입력을 0.6초 멈추면 서버에서 실행하지 않고 검사한다(문법·바꾸는 문장·없는 테이블). [검사]는 컬럼까지 보고 오류 자리를 고른다.
 let checkTimer = null, checkSeq = 0;
 async function checkSql(deep) {

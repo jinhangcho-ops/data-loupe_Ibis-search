@@ -96,7 +96,7 @@ def connect(link, password):
         if server.reading(link["file"]):
             raise ValueError(OPENED_HERE)
         try:
-            return source.open_duckdb(link["file"].strip(), read_only=False, memory=settings.load().get("memory"))
+            return source.open_duckdb(link["file"].strip(), read_only=False, memory=settings.load().get("memory"), threads=settings.load().get("threads"))
         except Exception as e:
             raise ValueError(f"DB 파일을 쓰기로 열 수 없습니다. 다른 프로그램이 이 파일을 열고 있는지 확인하세요. ({e})") from None
     return source.open_url(link["url"].strip(), link["user"], password)

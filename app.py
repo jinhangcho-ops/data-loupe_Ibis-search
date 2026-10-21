@@ -1,6 +1,7 @@
 """Ibis 쿼리 화면(탐색·SQL·지표·대시보드)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
 import base64
 import binascii
+import json
 import os
 import re
 from pathlib import Path
@@ -9,6 +10,7 @@ from flask import jsonify, request
 from lazy import ibis
 
 import core
+import held
 import metrics
 import nl2sql
 import parse
@@ -65,21 +67,56 @@ def scan():
     return jsonify(message=scan_size.message(found), **found)
 
 
+VIEW_KEYS = ("limit", "offset", "count", "sorts", "columns", "fresh")  # 받아 둔 결과를 바꾸지 않는 요청 값(정렬·표시 컬럼·쪽은 받아 둔 것에서 한다)
+TOO_BIG = f"결과가 커서({held.MAX_ROWS:,}행·{held.MAX_BYTES // 1024 // 1024}MB 넘음) 이 PC에 받아 두지 않고 DB에서 쪽마다 가져옵니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요."
+
+
+def held_key(kind, body):
+    """받아 둔 결과를 찾는 열쇠: 연결, 종류(search·sql), 가상 테이블 정의, 결과를 정하는 요청 값."""
+    return json.dumps([server.connection_key(), kind, server.virtual_tables(), body], sort_keys=True, ensure_ascii=False, default=str)
+
+
+def db_page(con, body, expr, limit, offset, count=None):
+    """DB에서 쪽 하나와 전체 행 수(body의 count가 false면 세지 않음, count를 주면 그 값)를 함께 받는다.
+    행 수 세기와 쪽 받기는 같은 연결을 따로 읽을 수 있으면(DuckDB·파일) 동시에 돌린다. 건너뛰기를 SQL로 못 쓰는 DB는 행 번호로 거른다."""
+    page, skip = (expr, offset) if not offset or result.can_offset(expr) else (core.numbered(body, limit, offset), 0)
+    counter = (lambda backend: result.get_count(expr, backend)) if count is None and body.get("count", True) else (lambda backend: count)
+    return run(lambda: source.together(con, counter, lambda: result.get_rows(page, limit, skip)))
+
+
 @app.post("/api/query")
 def query():
-    """count를 false로 주면 전체 행 수를 세지 않고 null로 돌려준다. offset을 주면 그만큼 건너뛴 다음 행부터 준다(count는 그대로)."""
+    """count를 false로 주면 전체 행 수를 세지 않고 null로 돌려준다. offset을 주면 그만큼 건너뛴 다음 행부터 준다(count는 그대로).
+    주소로 접속한 DB는 결과를 한 번 받아 두고(held) 정렬·쪽 넘기기를 이 PC에서 한다(fresh면 새로 받는다). 받아 두면 행 수는 세지 않아도 안다.
+    held: 받아 둔 결과에서 왔는지, note: 받아 두지 못한 까닭."""
     body = request.json
-    expr, limit, offset = paged(body)
-    count, rows = run(lambda: (result.get_count(expr) if body.get("count", True) else None, result.get_rows(expr, limit, offset)))
+    expr, limit, offset = paged(body)  # 받기 전에 줄을 모두 검사한다
+    con, count, rows, note = get_con(), None, None, ""
+    if held.remote(con):
+        source_expr, key = core.filtered(body), held_key("search", {k: v for k, v in body.items() if k not in VIEW_KEYS})
+        counter = (lambda: result.get_count(source_expr)) if body.get("count", True) else None
+        count, rows = run(lambda: held.page(key, source_expr, lambda t: core.arrange(body, t, held.ROW), limit, offset, server.state["cancel"], counter, body.get("fresh")))
+        note = TOO_BIG if rows is None else ""
+    kept = rows is not None
+    if not kept:
+        count, rows = db_page(con, body, expr, limit, offset, count)
     if offset == 0:  # 새로 검색할 때만(쪽 넘기기는 세지 않는다)
         count_virtual([body["base"], *(body.get("union") or {}).get("tables", []), *[line.split()[0] for line in body.get("joins", []) if line.split()]])
-    return jsonify(count=count, rows=to_json(rows))
+    return jsonify(count=count, rows=to_json(rows), held=kept, note=note)
 
 
 @app.post("/api/sql")
 def sql():
-    """/api/query가 행을 가져올 때 실행할 SQL. 실행하지는 않는다."""
-    return jsonify(sql=result.get_sql(*paged(request.json)))
+    """/api/query가 실행할 SQL. 실행하지는 않는다. 결과를 받아 두는 연결이면 받아 둘 때의 조회(정렬·쪽은 이 PC에서)를 보여 준다."""
+    body = request.json
+    expr, limit, offset = paged(body)
+    con = get_con()
+    item = held.store["items"].get(held_key("search", {k: v for k, v in body.items() if k not in VIEW_KEYS}))
+    if held.remote(con) and not (item and item[0] is None):
+        return jsonify(sql="-- 이 조회로 결과를 한 번 받아 두고, 정렬·쪽 넘기기는 이 PC에서 합니다.\n" + result.get_sql(core.filtered(body)))
+    if offset and not result.can_offset(expr):
+        return jsonify(sql=result.get_sql(core.numbered(body, limit, offset)))
+    return jsonify(sql=result.get_sql(expr, limit, offset))
 
 
 def searches_view(found):
@@ -261,14 +298,26 @@ def sql_check():
 
 @app.post("/api/sql/run")
 def sql_run():
-    """SQL을 검사해 실행하고 앞 rows행(기본 1,000)을 돌려준다. more는 그보다 많은지. 읽기만 하는 SELECT 문 하나만 된다."""
+    """SQL을 검사해 실행하고 offset행 다음부터 rows행(기본 1,000)을 돌려준다. more는 그 뒤에 더 있는지. 읽기만 하는 SELECT 문 하나만 된다.
+    주소로 접속한 DB는 결과를 한 번 받아 두고(held, fresh면 새로) 쪽 넘기기를 이 PC에서 한다. 그때는 전체 행 수(count)도 준다."""
     import polars as pl
-    n = sql_exec.rows_limit(request.json.get("rows"))
-    expr, used = sql_expr(request.json)
-    rows = run(lambda: result.get_rows(expr, n + 1))
-    count_virtual(used)
+    body = request.json
+    n, offset = sql_exec.rows_limit(body.get("rows")), parse.parse_offset(body.get("offset", 0))
+    expr, used = sql_expr(body)
+    con, count, rows, note = get_con(), None, None, ""
+    if held.remote(con):
+        key = held_key("sql", {"sql": body["sql"]})
+        count, rows = run(lambda: held.page(key, expr, lambda t: t.order_by(held.ROW).drop(held.ROW), n + 1, offset, server.state["cancel"], fresh=body.get("fresh")))
+        note = TOO_BIG.replace(" 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요.", " SQL에 고유한 컬럼의 ORDER BY를 넣어야 쪽이 섞이지 않습니다.") if rows is None else ""
+    kept = rows is not None
+    if not kept:
+        if offset and not result.can_offset(expr):
+            raise ValueError("이 DB는 SQL 결과에서 앞 행을 건너뛰지 못하고, 결과가 커서 이 PC에 받아 두지도 못했습니다. 조건을 좁히거나 [결과 저장]으로 받으세요.")
+        rows = run(lambda: result.get_rows(expr, n + 1, offset))
+    if offset == 0:
+        count_virtual(used)
     shown = rows.head(n).with_columns(pl.col(pl.Decimal).cast(pl.Float64))  # SUM 등이 돌려주는 큰 소수 타입은 화면에서 숫자로(파일 저장은 원래 타입)
-    return jsonify(rows=to_json(shown), more=rows.height > n, limit=n)
+    return jsonify(rows=to_json(shown), more=rows.height > n, limit=n, offset=offset, count=count if kept else None, held=kept, note=note)
 
 
 @app.post("/api/sql/export")

@@ -2256,7 +2256,7 @@ def sqlite_section(c, got):
     mine = [o for o in orders if o["status"] == "paid" and o["amount"] >= 20000]
     names = {p["id"]: p["name"] for p in customers}
     check("SQLite 검색(조인·조건·정렬·표시 컬럼)", r, {"count": len(mine), "rows": {"columns": ["order_id", "name"],
-          "rows": [{"order_id": o["order_id"], "name": names.get(o["customer_id"])} for o in mine[:3]]}})
+          "rows": [{"order_id": o["order_id"], "name": names.get(o["customer_id"])} for o in mine[:3]]}, "held": True, "note": ""})  # 주소로 접속한 DB는 결과를 받아 둔다
     check("SQLite 행 수·값 목록", (got("/api/rowcount", base="orders"), got("/api/values", base="orders", column="status")),
           ({"rows": len(orders)}, {"values": sorted(STATUSES), "more": False}))
     rows = {row["name"]: row for row in got("/api/summary", base="orders")["summary"]["rows"]}
@@ -2360,7 +2360,7 @@ def main():
     r = query(joins=join, sorts=["amount desc", "order_id"], columns=["order_id, name"], limit=5, offset=5)
     top = sorted(orders, key=lambda o: (-o["amount"], o["order_id"]))[5:10]
     check("조인·정렬·표시 컬럼·건너뛰기", r, {"count": len(orders), "rows": {"columns": ["order_id", "name"],
-          "rows": [{"order_id": o["order_id"], "name": name_of.get(o["customer_id"])} for o in top]}})
+          "rows": [{"order_id": o["order_id"], "name": name_of.get(o["customer_id"])} for o in top]}, "held": False, "note": ""})
     march = lambda o: dt.date(2024, 3, 1) <= o["paid_at"].date() <= dt.date(2024, 3, 31)
     check("기간(끝 날짜는 그날 끝까지)", query(periods=["paid_at 2024-03-01 ~ 2024-03-31"]).get("count"), n(march))
     note = lambda o: o["note"] or ""

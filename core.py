@@ -3,6 +3,8 @@
 데이터를 읽는 함수는 server.run으로 연결 스레드에서 돈다. 화면 밖(봇)에서 부를 때는 using()으로 화면 요청과 같은 차례(turn)를 잡는다."""
 import contextlib
 
+from lazy import ibis
+
 import metrics
 import parse
 import result
@@ -32,15 +34,46 @@ def joined(body):
     return expr, origins
 
 
-def build(body, select=True):
-    """요청의 테이블·이어붙이기·조인·기간·조건·정렬·표시 컬럼을 Ibis 식 하나로 만든다.
-    select=False면 줄은 모두 검사하되 표시 컬럼은 적용하지 않는다(컬럼 목록, 차트)."""
+def filtered(body):
+    """기준 테이블·이어붙이기·조인에 기간·조건까지 건 식(정렬·표시 컬럼 전). 결과 받아 두기(held)는 이것을 받는다."""
     expr = joined(body)[0]
     preds = [p for line in body.get("periods", []) for p in parse.parse_period(line, expr)]
     preds += [parse.predicate(cond, expr) for cond in body.get("conditions", [])]
+    return expr.filter(preds) if preds else expr
+
+
+def shown(body, expr):
+    """(정렬 키들, 표시 컬럼들)을 expr 위에서 검사해 만든다."""
     keys = [parse.parse_sort(line, expr) for line in body.get("sorts", [])]
-    cols = [c for line in body.get("columns", []) for c in parse.parse_columns(line, expr)]
-    return parse.apply(expr, preds, keys, cols if select else [])
+    return keys, [c for line in body.get("columns", []) for c in parse.parse_columns(line, expr)]
+
+
+def build(body, select=True):
+    """요청의 테이블·이어붙이기·조인·기간·조건·정렬·표시 컬럼을 Ibis 식 하나로 만든다.
+    select=False면 줄은 모두 검사하되 표시 컬럼은 적용하지 않는다(컬럼 목록, 차트)."""
+    expr = filtered(body)
+    keys, cols = shown(body, expr)
+    return parse.apply(expr, [], keys, cols if select else [])
+
+
+def arrange(body, table, last):
+    """받아 둔 결과(held 테이블)에 요청의 정렬·표시 컬럼을 건 식. 정렬의 마지막 키는 last(받은 차례)라 같은 값끼리도 순서가 고정되고, last는 보이지 않는다."""
+    keys, cols = shown(body, table)
+    expr = parse.apply(table, [], [*keys, table[last]], cols)
+    return expr if cols else expr.drop(last)
+
+
+NUMBER = "__ibis_n"  # numbered가 붙이는 행 번호(0부터)
+
+
+def numbered(body, limit, offset):
+    """offset부터 limit행을 행 번호로 거르는 식. LIMIT·OFFSET을 SQL로 못 쓰는 DB(Oracle 등)의 쪽 넘기기에 쓴다.
+    번호는 요청의 정렬 순서로 매기고(정렬이 없으면 DB가 주는 순서), 표시 컬럼은 번호로 거른 뒤에 고른다."""
+    expr = filtered(body)
+    keys, cols = shown(body, expr)
+    expr = expr.mutate(**{NUMBER: ibis.row_number().over(ibis.window(order_by=keys) if keys else ibis.window())})
+    expr = parse.apply(expr, [expr[NUMBER].between(offset, offset + limit - 1)], [expr[NUMBER]], cols)
+    return expr if cols else expr.drop(NUMBER)
 
 
 def metric_values(body, names, by=None):

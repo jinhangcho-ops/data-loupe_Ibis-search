@@ -108,15 +108,16 @@ def find_files(folder, kinds=KINDS, deep=True):
 
 
 @on_worker
-def open_duckdb(path, read_only=True, memory=None):
+def open_duckdb(path, read_only=True, memory=None, threads=None):
     """DuckDB 파일을 연다. memory(MB, 정수)를 주면 작업 메모리 상한을 걸고 넘치는 것은 임시 폴더에 쓴다
-    (그 폴더는 close가 지운다). None이면 제한 없이(DuckDB 기본) 연다."""
+    (그 폴더는 close가 지운다). None이면 제한 없이(DuckDB 기본) 연다. threads(정수)를 주면 계산에 쓰는 코어 수, None이면 전부(DuckDB 기본)."""
+    cores = {"threads": threads} if threads else {}
     if not memory:
-        con = ibis.duckdb.connect(path, read_only=read_only)
+        con = ibis.duckdb.connect(path, read_only=read_only, **cores)
     else:
         folder = scratch.make()
         try:
-            con = ibis.duckdb.connect(path, read_only=read_only, temp_directory=folder, memory_limit=f"{memory}MB")
+            con = ibis.duckdb.connect(path, read_only=read_only, temp_directory=folder, memory_limit=f"{memory}MB", **cores)
         except Exception:
             scratch.remove(folder)
             raise
@@ -198,9 +199,49 @@ def open_url(url, user="", password=""):
     return within(CONNECT_TIMEOUT, lambda: ibis.connect(url, **extra), late, drop=close)
 
 
+beside = None  # side 연결로 함께 돌리는 일을 맡는 스레드 하나(처음 쓸 때 만든다)
+
+
+def side(con):
+    """같은 데이터를 다른 스레드에서 함께 읽을 연결. 없으면 None(그 연결은 일을 차례로 돌린다).
+    DuckDB는 커서(같은 DB를 따로 읽는 연결, 연결 스레드에서 한 번 만든다), Polars(파일)는 그 연결 그대로(파일을 읽기만 한다).
+    주소로 접속한 DB는 연결 하나를 두 스레드가 써도 되는지 드라이버마다 달라 함께 돌리지 않는다(연결을 하나 더 열려면 비밀번호가 다시 필요하다)."""
+    if con.name == "polars":
+        return con
+    if con.name == "duckdb":
+        if getattr(con, "side", None) is None:
+            con.side = ibis.duckdb.from_connection(con.con.cursor())
+        return con.side
+    return None
+
+
+def together(con, first, second):
+    """first(backend)와 second()를 함께 돌려 (first 결과, second 결과). second는 지금 스레드(연결 스레드)에서, first는 side 연결로 다른 스레드에서 돈다.
+    side 연결이 없거나 side에서 실패하면(커서에서 못 보는 임시 테이블 등) first도 지금 스레드에서 차례로 돌린다."""
+    global beside
+    other = side(con)
+    if other is None:
+        return first(None), second()
+    from concurrent.futures import ThreadPoolExecutor
+    beside = beside or ThreadPoolExecutor(max_workers=1, thread_name_prefix="side")
+    pending = beside.submit(first, other)
+    done = second()
+    try:
+        return pending.result(), done
+    except Exception as e:
+        if "interrupt" in type(e).__name__.lower():  # [취소]로 멈춘 것은 다시 돌리지 않는다
+            raise
+        return first(None), done
+
+
 @on_worker
 def close(con):
     """연결을 닫아 파일·접속을 놓는다. 닫기를 지원하지 않는 백엔드는 그냥 둔다. 닫은 연결이 쥐던 메모리는 바로 돌려준다."""
+    if getattr(con, "side", None) is not None and con.side is not con:
+        try:
+            con.side.disconnect()
+        except Exception:
+            pass
     try:
         con.disconnect()
     except Exception:
@@ -217,16 +258,18 @@ def unsupported_errors():
 
 def interrupt(con):
     """연결이 돌리고 있는 작업을 멈추라고 드라이버에 알린다. 드라이버 연결(con.con)에 interrupt나 cancel이 있을 때만, 되는 만큼만 한다.
-    알렸으면 True. 다른 스레드에서 부르는 것이라 연결 스레드로 보내지 않는다."""
-    raw = getattr(con, "con", None)
-    stop = getattr(raw, "interrupt", None) or getattr(raw, "cancel", None)
-    try:
-        if stop:
-            stop()
-            return True
-    except Exception:
-        pass
-    return False
+    알렸으면 True. 다른 스레드에서 부르는 것이라 연결 스레드로 보내지 않는다. side 연결(DuckDB 커서)이 있으면 그것에도 알린다."""
+    told = False
+    for backend in (con, getattr(con, "side", None)):
+        raw = getattr(backend, "con", None)
+        stop = getattr(raw, "interrupt", None) or getattr(raw, "cancel", None)
+        try:
+            if stop:
+                stop()
+                told = told or backend is con
+        except Exception:
+            pass
+    return told
 
 
 @on_worker

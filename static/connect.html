@@ -26,6 +26,7 @@
       <input id="user" placeholder="아이디 (없으면 비움)" style="margin-bottom:8px" autocomplete="off">
       <input id="password" type="password" placeholder="비밀번호 (없으면 비움)" autocomplete="off">
     </div>
+    <div class="row" style="align-items:center; margin-top:8px" title="DuckDB 파일과 PC에 받아 둔 결과를 계산할 때 쓰는 CPU 코어 수. 줄이면 계산 중에도 PC가 덜 무겁지만 큰 계산은 느려집니다. Parquet·CSV 등 파일은 해당 없음. 다음 [연결]부터 적용됩니다."><span class="hint" style="margin:0; flex:none">계산 코어 수</span><select id="threads"></select></div>
     <button id="connect" class="btn p conn-go">연결</button>
     <div class="err" id="err-connect"></div>
   </div>

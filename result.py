@@ -68,16 +68,30 @@ def get_rows(expr, limit, offset=0):
     return expr.limit(limit, offset=offset).to_polars()
 
 
-def get_sql(expr, limit, offset=0):
-    """get_rows가 실행할 조회를 SQL 글로. 실행하지는 않는다. SQL을 쓰지 않는 연결(Parquet·CSV·JSON·Excel 파일)은 보여 줄 수 없다."""
+def can_offset(expr):
+    """expr의 연결이 LIMIT·OFFSET(건너뛰기)을 SQL로 쓸 수 있는지. 못 쓰는 DB(Oracle 등)는 Ibis가 SQL을 만들 때 막는다.
+    SQL을 쓰지 않는 연결(Parquet·CSV 등 파일)은 쓸 수 있는 것으로 본다."""
     try:
-        return str(ibis.to_sql(expr.limit(limit, offset=offset)))
+        ibis.to_sql(expr.limit(1, offset=1))
+    except ibis.common.exceptions.UnsupportedArgumentError:
+        return False
+    except Exception:
+        pass
+    return True
+
+
+def get_sql(expr, limit=None, offset=0):
+    """get_rows가 실행할 조회를 SQL 글로(limit이 None이면 행 수를 자르지 않은 식 그대로). 실행하지는 않는다.
+    SQL을 쓰지 않는 연결(Parquet·CSV·JSON·Excel 파일)은 보여 줄 수 없다."""
+    try:
+        return str(ibis.to_sql(expr if limit is None else expr.limit(limit, offset=offset)))
     except NotImplementedError:
         raise ValueError("이 연결의 조회는 SQL로 보여 줄 수 없습니다.") from None
 
 
-def get_count(expr):
-    return expr.count().to_pyarrow().as_py()
+def get_count(expr, backend=None):
+    """전체 행 수. backend를 주면 그 연결(같은 DB를 다른 스레드에서 읽는 연결, source.side)에서 센다."""
+    return (backend.to_pyarrow(expr.count()) if backend else expr.count().to_pyarrow()).as_py()
 
 
 def plain(value):
