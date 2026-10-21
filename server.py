@@ -22,7 +22,8 @@ app = Flask(__name__, static_folder="static")
 app.json.sort_keys = False  # 구조 컬럼의 필드·행의 컬럼을 원래 차례대로 보낸다(Flask 기본은 이름 순)
 
 # 연결은 메모리에만 둔다. passwords는 오류 문구에서 가릴 값, opened는 다시 열 때 쓸 요청 값, rows는 세어 둔 테이블 행 수, cancel은 지금 도는 데이터 작업의 취소 신호.
-state = {"con": None, "passwords": [], "opened": None, "rows": {}, "cancel": threading.Event()}
+state = {"con": None, "passwords": [], "opened": None, "rows": {}, "names": {}, "tables": {}, "cancel": threading.Event()}
+# names: 스키마 → 테이블 목록, tables: (스키마, 이름) → 테이블 식. 검색 칸을 바꿀 때마다 DB에 목록·스키마를 다시 묻지 않게 연결마다 기억한다(forget_tables로 비운다).
 turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 연결을 쓰지 않는 FREE의 경로만 기다리지 않는다.
 FREE = {"/api/usage", "/api/cancel", "/api/send"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
@@ -133,12 +134,29 @@ def virtual_tables():
 
 
 @source.on_worker
+def forget_tables():
+    """기억한 테이블 목록·스키마를 비운다(연결을 바꾸거나 다시 열 때, 테이블을 만들 때, 화면이 목록을 새로 받을 때)."""
+    state.update(names={}, tables={})
+
+
+def table_names(con, schema=None):
+    """스키마(없으면 기본)의 테이블 목록. 연결마다 한 번 묻고 기억한다."""
+    schema = schema or None
+    if schema not in state["names"]:
+        state["names"][schema] = source.list_tables(con, schema)
+    return state["names"][schema]
+
+
 def any_table(con, name, schema=None, vts=None):
-    """테이블 식. 스키마를 고르지 않았고 그 이름이 가상 테이블이면 가상 테이블(sql_exec), 아니면 연결의 테이블."""
+    """테이블 식. 스키마를 고르지 않았고 그 이름이 가상 테이블이면 가상 테이블(sql_exec), 아니면 연결의 테이블.
+    연결의 테이블 식(스키마)은 한 번 받아 기억한다(식을 만들 때마다 DB에 스키마를 묻지 않게)."""
     vts = virtual_tables() if vts is None else vts
     if not schema and name in vts:
         return sql_exec.virtual_table(con, name, vts)
-    return con.table(name, database=schema) if schema else con.table(name)
+    key = (schema or None, name)
+    if key not in state["tables"]:
+        state["tables"][key] = source.get_table(con, name, schema)  # 연결 스레드에서(SQLite는 만든 스레드에서만 쓸 수 있다)
+    return state["tables"][key]
 
 
 def row_count(schema, base):
@@ -232,6 +250,7 @@ def switch(new):
         source.close(state["con"])
         state.update(con=None, passwords=[], opened=None)
     state.update(rows={})
+    forget_tables()
     source.on_worker(held.clear)()  # 받아 둔 결과는 이전 연결의 것
     try:
         con = open_con(new)
@@ -286,6 +305,7 @@ def disconnect():
     if state["con"] is not None:
         source.close(state["con"])
     source.on_worker(held.clear)()
+    forget_tables()
     state.update(con=None, passwords=[], opened=None, rows={})
     return jsonify(ok=True)
 
@@ -294,7 +314,8 @@ def disconnect():
 def tables():
     """스키마(없으면 기본)의 테이블 목록. virtual=1이면 지금 연결의 가상 테이블 이름(많이 쓴 순)도 virtual로(기본 스키마일 때만)."""
     schema = request.args.get("schema") or None
-    found = source.list_tables(get_con(), schema)
+    forget_tables()  # 화면이 목록을 새로 받을 때는 DB에 다시 묻는다(그사이 만든 테이블·바뀐 컬럼)
+    found = table_names(get_con(), schema)
     if request.args.get("virtual") != "1":
         return jsonify(tables=found)
     names = [] if schema else [n for n in virtual_tables() if n.lower() not in {t.lower() for t in found}]

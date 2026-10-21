@@ -75,6 +75,7 @@
             <select id="base"></select>
             <div class="row" style="margin-top:6px; align-items:center"><span class="hint" style="margin:0; flex:none">표본 행 수</span><input id="sample" type="number" style="width:120px; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
             <div class="hint">테이블 전체가 아니라 이만큼만(싼 방법부터) 읽어 통계·추천·분석을 구하고, 테이블별로 저장해 둡니다.</div>
+            <label class="check" title="끄면 테이블을 골라도 데이터를 읽지 않고 컬럼 이름·타입만 보입니다(행 수도 세지 않음). 추천은 나오지 않고, 분석 탭은 그대로 표본을 읽습니다"><input type="checkbox" id="stats-on"> 컬럼 통계·추천 구하기</label>
             <div class="row" style="margin-top:6px"><input id="spec-path" class="code" placeholder="데이터 명세서 (JSON·YAML, 선택)" title="테이블·컬럼 설명과 파티션 키를 적은 파일. 비우고 [읽기]를 누르면 쓰지 않습니다"><button id="spec-read">읽기</button></div>
             <div class="hint" id="spec-info"></div>
             <div class="cols" id="pcols"></div>
@@ -200,7 +201,8 @@ let dedupe = [];  // 중복 기준 (결과 컬럼 이름)
 let sorts = [];  // ["결과 컬럼 asc", ...]
 let drops = [];  // 끈 파생 컬럼 이름
 let deriv = [];  // 미리보기에서 알게 된 파생 컬럼 [{ name, source, type }]. 끈 것도 남긴다.
-let status = "";  // 통계를 구하는 단계: "stats"(통계 계산 중), "patterns"(타입 추천 확인 중), "stopped"(통계를 구하지 못함), 끝났으면 ""
+let status = "";  // 통계를 구하는 단계: "stats"(통계 계산 중), "patterns"(타입 추천 확인 중), "stopped"(통계를 구하지 못함), "off"(통계를 끔), 끝났으면 ""
+let statsOn = saved("stats") !== "off";  // 테이블을 고를 때 표본을 읽어 통계·추천을 구할지(설정 stats)
 let token = 0;  // 테이블·연결이 바뀔 때마다 올려, 늦게 온 이전 테이블의 응답을 버린다
 let sample = +saved("sample") || SERVER.sample;  // 통계를 낼 표본 행 수(prep_app.DEFAULT_SAMPLE, 범위는 settings.SIZES)
 let preview = null;  // /api/preview의 응답. 열 구성이 바뀌면 어긋나므로 버린다.
@@ -405,7 +407,7 @@ $("sug-all").onclick = () => { prof.columns.forEach(c => allSuggest(c).forEach(s
 // 머리글 2행의 칸: 타입(미리보기 뒤에는 바뀐 타입)과 통계. now는 미리보기의 결과 타입
 function statsHtml(c, now) {
   const type = `<b>${esc(now && now !== c.type ? `${c.type} → ${now}` : c.type)}</b>`;
-  if (!("unique" in c)) return `<div>${type}</div><div class="empty">${status === "stopped" ? "통계를 구하지 않았습니다" : "통계 계산 중…"}</div>`;
+  if (!("unique" in c)) return `<div>${type}</div><div class="empty">${status === "stopped" ? "통계를 구하지 않았습니다" : status === "off" ? "통계 꺼짐 (①에서 켜면 표본으로 구합니다)" : "통계 계산 중…"}</div>`;
   const guess = c.infer ?? {}, exact = guess.exact;  // 표본 추론과, Parquet 파일 정보로 구한 전체 기준 값
   const rows = [
     guess.description && `<i>${esc(guess.description)}</i>`,
@@ -449,7 +451,7 @@ function showCounts() {
 function renderGrid() {
   lines.clear();
   heads.clear();
-  $("shape").textContent = prof ? `행 ${prof.rows.toLocaleString()} × 컬럼 ${prof.columns.length}${prof.description ? ` · ${prof.description}` : ""}` : "";
+  $("shape").textContent = prof ? `${prof.rows === null ? "행 수 세지 않음" : "행 " + prof.rows.toLocaleString()} × 컬럼 ${prof.columns.length}${prof.description ? ` · ${prof.description}` : ""}` : "";
   showSampled();
   $("sug-all").classList.toggle("hidden", !prof?.columns.some(c => allSuggest(c).length));
   $("sug-all").textContent = "추천 모두 적용" + (status === "patterns" ? " (타입 추천 확인 중)" : "");
@@ -568,7 +570,7 @@ async function openTable(base, config) {
   if (!base) return;
   const mine = token;
   try {
-    const p = await timed("profile", () => api("/api/shape", { schema: S.schema, base }));
+    const p = await timed("profile", () => api("/api/shape", { schema: S.schema, base, count: statsOn }));
     if (mine !== token) return;
     prof = { ...p, columns: p.columns.map(c => ({ ...c, suggest: [], patterns: [] })) };
     edits = Object.fromEntries(p.columns.map(c => [c.name, newEdit()]));
@@ -578,8 +580,19 @@ async function openTable(base, config) {
     showAll();
     if (remembered && !$("err-prep").textContent) $("ok-run").textContent = "지난번에 이 테이블에 쓴 전처리를 채웠습니다. [미리보기]로 확인하세요.";
   } catch (e) { if (mine === token) fail(e.message); return; }
-  await computeStats(mine);
+  if (statsOn) await computeStats(mine);
+  else { status = "off"; renderGrid(); }
 }
+// 통계 켜고 끄기: 저장해 두고, 켜면 지금 테이블의 통계를 바로 구한다(끄면 이미 구한 것은 그대로 둔다).
+$("stats-on").checked = statsOn;
+$("stats-on").onchange = () => {
+  statsOn = $("stats-on").checked;
+  saveSetting({ stats: statsOn ? "on" : "off" });
+  if (!(statsOn && prof && status === "off")) return;
+  const mine = token;
+  api("/api/shape", { schema: S.schema, base: S.base }).then(p => { if (mine === token) { prof.rows = p.rows; showAll(); } }, () => {});  // 세지 않았던 행 수도
+  computeStats(mine);
+};
 // 통계가 어느 표본에서 나왔는지: 표본 행 수, 읽은 방법(넘어간 방법은 마우스를 올리면), 구한 때. [다시 구하기]는 통계가 있을 때만.
 function showSampled() {
   const s = prof?.sampled;

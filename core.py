@@ -25,7 +25,7 @@ def joined(body):
     기준·이어붙인 컬럼은 기준 테이블, 출처 컬럼은 "이어붙인 테이블", 조인으로 들어온 컬럼(이름이 겹쳐 바뀐 것 포함)은 그 테이블."""
     con, schema, base = get_con(), body.get("schema") or None, body["base"]
     vts = {} if schema else server.virtual_tables()  # 가상 테이블은 기본 스키마에서만 고른다
-    tables = source.list_tables(con, schema) + [n for n in vts]
+    tables = server.table_names(con, schema) + [n for n in vts]
     parse.check_name(base, tables, "테이블")
     get_table = lambda name: server.any_table(con, name, schema, vts)
     expr = parse.apply_union(get_table(base), base, parse.parse_union(body.get("union"), tables, base), get_table)

@@ -100,10 +100,10 @@ def sample_size(body):
 
 @app.post("/api/shape")
 def shape():
-    """행 수와 컬럼의 이름·타입·종류. 조회는 행 수 세기뿐이다."""
+    """행 수와 컬럼의 이름·타입·종류. 조회는 행 수 세기뿐이다. count가 false면(통계를 끈 때) 행 수도 세지 않고 null(데이터를 읽지 않는다)."""
     body = request.json
     table = base_table(body)
-    return jsonify(prep_profile.shape(table, server.row_count(body.get("schema"), body["base"])))
+    return jsonify(prep_profile.shape(table, server.row_count(body.get("schema"), body["base"]) if body.get("count", True) else None))
 
 
 def sampled(body, key, size, fresh):
@@ -256,6 +256,7 @@ def make_table(recipe, name):
 
         return run(create)
     finally:
+        server.forget_tables()  # 새 테이블이 생겼고, 다시 연 연결의 테이블 식을 써야 한다
         if reopen:
             if state["con"] is not None:
                 source.close(state["con"])
