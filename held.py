@@ -9,12 +9,12 @@ from pathlib import Path
 
 from lazy import ibis
 
+import result
 import scratch
 import settings
 
 MAX_ROWS = 1_000_000  # 받아 둘 결과의 최대 행 수
 MAX_BYTES = 500 * 1024 * 1024  # 받아 둘 결과의 최대 크기(받은 Arrow 묶음의 바이트)
-CHUNK = 100_000  # 한 번에 받는 행 수
 KEEP = 5  # 받아 둘 결과 수. 넘으면 오래 쓰지 않은 것부터 지운다
 ROW = "__ibis_row"  # 받은 차례(0부터). 정렬의 마지막 키로 쓰고 화면에는 보이지 않는다
 
@@ -66,7 +66,7 @@ def keep(key, item):
 
 
 def fetch(key, expr, stop, known=None):
-    """expr의 결과를 CHUNK행씩 받아 이 PC의 DuckDB 테이블에 쓴다. (테이블 이름, 행 수)를 돌려준다.
+    """expr의 결과를 묶음씩(result.batches) 받아 이 PC의 DuckDB 테이블에 쓴다. (테이블 이름, 행 수)를 돌려준다. 상한+1행까지만 묻는다.
     known(미리 센 행 수)이나 받는 중의 행 수·크기가 상한을 넘으면 받던 것을 지우고 (None, 아는 행 수 또는 None).
     stop이 켜지면(취소) 받던 것을 지우고 InterruptedError."""
     if known is not None and known > MAX_ROWS:
@@ -76,20 +76,19 @@ def fetch(key, expr, stop, known=None):
     store["made"] += 1
     rows = size = 0
     try:
-        with expr.to_pyarrow_batches(chunk_size=CHUNK) as reader:
-            for batch in reader:
-                if stop.is_set():
-                    raise InterruptedError()
-                size += batch.nbytes
-                if rows + batch.num_rows > MAX_ROWS or size > MAX_BYTES:
-                    drop(name)
-                    return keep(key, (None, None))
-                part = pa.Table.from_batches([batch]).append_column(ROW, pa.array(range(rows, rows + batch.num_rows), pa.int64()))
-                if rows or name in con.list_tables():
-                    con.insert(name, part)
-                else:
-                    con.create_table(name, ibis.memtable(part))  # Arrow 표를 바로 주면 이 조합(ibis 12 + duckdb 1.5)에서 오류가 난다
-                rows += batch.num_rows
+        for batch in result.batches(expr.limit(MAX_ROWS + 1)):  # 상한을 넘는지만 알면 되므로 DB도 그만큼만 보낸다
+            if stop.is_set():
+                raise InterruptedError()
+            size += batch.nbytes
+            if rows + batch.num_rows > MAX_ROWS or size > MAX_BYTES:
+                drop(name)
+                return keep(key, (None, None))
+            part = pa.Table.from_batches([batch]).append_column(ROW, pa.array(range(rows, rows + batch.num_rows), pa.int64()))
+            if rows or name in con.list_tables():
+                con.insert(name, part)
+            else:
+                con.create_table(name, ibis.memtable(part))  # Arrow 표를 바로 주면 이 조합(ibis 12 + duckdb 1.5)에서 오류가 난다
+            rows += batch.num_rows
         if name not in con.list_tables():  # 결과가 없으면 컬럼만 있는 빈 테이블
             con.create_table(name, schema=ibis.schema({**expr.schema(), ROW: "int64"}))
     except BaseException:

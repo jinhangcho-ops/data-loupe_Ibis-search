@@ -2413,7 +2413,8 @@ def main():
     export = lambda kind: c.post("/api/export", json={"base": "orders", "sorts": ["order_id"], "columns": ["order_id, note"], "format": kind}).data
     data = export("csv")
     check("CSV: BOM, 전체 행, 수식 값 앞에 '", (data[:3], len(data.decode("utf-8").splitlines()), b"'=1+1" in data), (b"\xef\xbb\xbf", len(orders) + 1, True))
-    check("Excel: 수식 값 앞에 '", "'=1+1" in zipfile.ZipFile(io.BytesIO(export("xlsx"))).read("xl/sharedStrings.xml").decode("utf-8"), True)
+    book = zipfile.ZipFile(io.BytesIO(export("xlsx")))  # 메모리 절약 모드는 글자를 시트 안에 바로 쓴다(sharedStrings가 아니라)
+    check("Excel: 수식 값 앞에 '", any("'=1+1" in book.read(n).decode("utf-8") for n in book.namelist() if n.endswith(".xml")), True)
     check("Parquet: 값을 그대로", pl.read_parquet(io.BytesIO(export("parquet")))["note"].to_list(), [o["note"] for o in orders])
     check("모르는 형식은 거절", error("/api/export", base="orders", format="txt")[:6], "파일 이름은")
 

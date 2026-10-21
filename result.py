@@ -11,12 +11,13 @@ MAX_GROUPS = 50  # 차트에 표시할 최대 그룹 수
 MAX_SPLITS = 8  # 차트에서 한 컬럼의 값별로 나눌 때 최대 값 개수
 MAX_VALUES = 200  # 조건을 만들 때 보여 줄 컬럼 값 목록의 최대 개수
 EXCEL_MAX_ROWS = 1_048_575  # Excel 시트 한 장의 행 수(제목 줄 제외)
+CHUNK = 100_000  # 큰 결과를 한 번에 받는 행 수(저장·결과 받아 두기)
 
 
 def json_text(df):
-    """중첩 컬럼(구조·목록·맵)을 JSON 글자로 바꾼 Polars 표(CSV·Excel은 중첩 타입을 쓸 수 없다)."""
+    """중첩 컬럼(구조·목록·맵)을 JSON 글자로 바꾼 Polars 표(CSV·Excel은 중첩 타입을 쓸 수 없다). LazyFrame도 된다."""
     import polars as pl
-    nested = [name for name, dtype in df.schema.items() if dtype.is_nested()]
+    nested = [name for name, dtype in df.collect_schema().items() if dtype.is_nested()]
     # {"v": 값}으로 감싸 JSON으로 만든 뒤 앞의 {"v": 와 끝의 }를 뗀다(목록·구조 모두 한 번에).
     return df.with_columns(pl.struct(pl.col(c).alias("v")).struct.json_encode().str.slice(5).str.head(-1).alias(c) for c in nested) if nested else df
 
@@ -25,14 +26,40 @@ def has_nested(expr):
     return any(t.is_nested() for t in expr.schema().values())
 
 
+def lazy(expr):
+    """파일 연결(Polars)이면 식의 LazyFrame, 아니면 None. Polars는 ibis의 묶음 받기·저장이 전체를 메모리에 올린 뒤 나눠서, LazyFrame의 스트리밍을 직접 쓴다."""
+    backend = ibis.get_backend(expr)
+    return backend.compile(expr) if backend.name == "polars" else None
+
+
+def batches(expr, size=None):
+    """식의 결과를 size(없으면 CHUNK)행 안팎의 Arrow 묶음(RecordBatch)으로 차례로 준다. 전체를 한 번에 메모리에 올리지 않는다."""
+    size = size or CHUNK
+    frame = lazy(expr)
+    if frame is not None:
+        for df in frame.collect_batches(chunk_size=size):
+            yield from df.to_arrow().to_batches()
+        return
+    with expr.to_pyarrow_batches(chunk_size=size) as reader:
+        yield from reader
+
+
+def write_parquet(expr, path):
+    frame = lazy(expr)
+    return frame.sink_parquet(path) if frame is not None else expr.to_parquet(path)
+
+
 def write_csv(expr, path):
-    """CSV로 저장. 중첩 컬럼이 있으면 묶음(batch)마다 JSON 글자로 바꿔 이어 쓴다."""
+    """CSV로 저장. 중첩 컬럼이 있으면 묶음(batch)마다 JSON 글자로 바꿔 이어 쓴다. 파일 연결은 LazyFrame에서 바로 흘려 쓴다."""
+    frame = lazy(expr)
+    if frame is not None:
+        return json_text(frame).sink_csv(path)
     if not has_nested(expr):
         return expr.to_csv(path)
     import polars as pl
     with open(path, "wb") as f:
         wrote = False
-        for batch in expr.to_pyarrow_batches():
+        for batch in batches(expr):
             json_text(pl.from_arrow(batch)).write_csv(f, include_header=not wrote)
             wrote = True
         if not wrote:  # 행이 없으면 머리글만
@@ -40,16 +67,38 @@ def write_csv(expr, path):
 
 
 def write_excel(expr, path):
+    """Excel로 저장. 묶음씩 받아 xlsxwriter의 메모리 절약 모드(constant_memory: 행을 바로 파일에 씀)로 쓴다.
+    글자는 수식·숫자·주소로 해석하지 않는다(수식 막기는 export가 따로 한다). 날짜·날짜시간은 그 형식으로."""
+    import polars as pl
+    import xlsxwriter
     if get_count(expr) > EXCEL_MAX_ROWS:
         raise ValueError(f"Excel은 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있습니다. CSV나 Parquet으로 저장하세요.")
-    json_text(expr.to_polars()).write_excel(path)
+    options = {"constant_memory": True, "strings_to_formulas": False, "strings_to_numbers": False, "strings_to_urls": False, "remove_timezone": True}
+    with xlsxwriter.Workbook(str(path), options) as book:
+        sheet = book.add_worksheet()
+        bold = book.add_format({"bold": True})
+        shapes = {pl.Date: book.add_format({"num_format": "yyyy-mm-dd"}), pl.Datetime: book.add_format({"num_format": "yyyy-mm-dd hh:mm:ss"}),
+                  pl.Time: book.add_format({"num_format": "hh:mm:ss"})}  # 날짜·시각 타입의 칸 형식
+        sheet.write_row(0, 0, expr.columns, bold)
+        row = 1
+        for batch in batches(expr):
+            frame = json_text(pl.from_arrow(batch))
+            kinds = [shapes.get(t.base_type()) for t in frame.dtypes]
+            for values in frame.iter_rows():
+                for col, value in enumerate(values):
+                    if value is None:
+                        continue
+                    if isinstance(value, Decimal):
+                        value = float(value)
+                    sheet.write(row, col, value, kinds[col]) if kinds[col] else sheet.write(row, col, value)
+                row += 1
 
 
 # 확장자: 저장 함수
 EXPORTS = {
     ".csv": write_csv,
     ".xlsx": write_excel,
-    ".parquet": lambda expr, path: expr.to_parquet(path),
+    ".parquet": write_parquet,
 }
 
 
