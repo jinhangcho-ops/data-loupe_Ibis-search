@@ -7,11 +7,11 @@ import shlex
 from urllib.parse import parse_qsl, quote, quote_plus, unquote, urlencode, urlsplit, urlunsplit
 
 from collect_http import SECRET_HEADERS
+from settings import ENV_NAME
 from adapters.webhook import BODIES
 
 # 자리 표시. 이 모양만 바꾸고 다른 중괄호는 그대로 둔다. 무리 1: env 이름, 2: page·offset·cursor, 3: today·now, 4: 날짜 형식
 PLACE = re.compile(r"\{(?:env:([A-Za-z_][A-Za-z0-9_]*)|(page|offset|cursor)|(today|now)(?::([^{}]+))?)\}")
-ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 # 이름을 낱말로 나눴을 때(밑줄·하이픈·대소문자 경계) 이 낱말이 있거나, 이름이 SECRET_ENDS로 끝나면 비밀로 본다. keyword·author 같은 이름은 아니다.
 SECRET_WORDS = {"key", "apikey", "token", "secret", "password", "passwd", "pwd", "auth", "sig", "signature", "session", "sessionid", "sid",
                 "credential", "credentials", "jwt", "cookie"}
@@ -398,37 +398,6 @@ def env_names(config):
 
 
 # ---------- env 파일 ----------
-
-def read_env(path):
-    """KEY=VALUE 줄의 env 파일을 {이름: 값}으로. export 앞말, 따옴표, # 주석, BOM, 빈 줄을 다룬다. 오류 문구에는 값을 넣지 않는다."""
-    try:
-        text = open(path, encoding="utf-8-sig").read()
-    except OSError as e:
-        raise ValueError(f"env 파일을 읽을 수 없습니다: {e.strerror or e}") from None
-    except UnicodeDecodeError:
-        raise ValueError("env 파일은 UTF-8이어야 합니다.") from None
-    found = {}
-    for number, line in enumerate(text.splitlines(), 1):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        name, eq, value = re.sub(r"^export\s+", "", line).partition("=")
-        name, value = name.strip(), value.strip()
-        if not eq or not ENV_NAME.fullmatch(name):
-            raise ValueError(f"env 파일 {number}번째 줄을 읽을 수 없습니다(이름=값 모양이어야 합니다).")
-        if value[:1] in ("'", '"'):
-            end = value.find(value[0], 1)
-            while value[0] == '"' and end > 0 and value[end - 1] == "\\":
-                end = value.find('"', end + 1)
-            if end < 0:
-                raise ValueError(f"env 파일 {number}번째 줄의 따옴표가 닫히지 않았습니다.")
-            inner = value[1:end]
-            value = re.sub(r"\\([nt\"\\])", lambda m: {"n": "\n", "t": "\t"}.get(m[1], m[1]), inner) if value[0] == '"' else inner
-        else:
-            value = re.split(r"\s+#", value, maxsplit=1)[0].strip()
-        found[name] = value
-    return found
-
 
 def hidden(env):
     """오류·표시에서 가릴 env 값들. 주소에 넣은 모양(quote)도 함께."""

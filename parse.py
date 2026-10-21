@@ -126,6 +126,12 @@ def unquote(text, quotes=True):
     return text[1:-1] if m and len(text) > 1 and m.end() == len(text) else text
 
 
+def check_table_name(name, what="테이블"):
+    """새로 만들거나 넣을 테이블(스키마) 이름 검사. 전처리(prep_app)와 적재(load_table)가 쓴다."""
+    if not isinstance(name, str) or not TABLE_NAME.fullmatch(name):
+        raise ValueError(f"{what} 이름은 영문·숫자·밑줄·한글만 쓸 수 있습니다(공백·따옴표·점 없이).")
+
+
 def check_name(name, names, what="컬럼"):
     if name not in names:
         close = difflib.get_close_matches(name, list(names), n=1)
@@ -307,6 +313,7 @@ def parse_one(line, expr, quotes=True):
     raise ValueError(f"형식: {CONDITION_GUIDE}")
 
 
+TABLE_NAME = re.compile(r"[A-Za-z0-9_가-힣]+")  # 새로 만들 테이블·스키마 이름(check_table_name)
 WILD = re.compile(r"[%_\\[]")  # LIKE에서 특별한 뜻이 있는 글자(MSSQL은 [도). 값에 있으면 LIKE를 쓰지 않는다
 
 

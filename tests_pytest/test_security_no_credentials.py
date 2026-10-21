@@ -3,7 +3,7 @@ from urllib.parse import quote, quote_plus
 
 import pytest
 
-import collect_job
+import collect_config
 import load_kafka
 import server
 
@@ -48,7 +48,7 @@ def test_restart_requires_login_again(client):
 
 def test_saved_configs_refuse_passwords(folder):
     with pytest.raises(ValueError, match="비밀번호"):
-        collect_job.normalize({"load": {"target": "table", "table": {"connection": {"kind": "url", "url": f"postgres://u:{INLINE}@h/db"}}}})
+        collect_config.normalize({"load": {"target": "table", "table": {"connection": {"kind": "url", "url": f"postgres://u:{INLINE}@h/db"}}}})
     with pytest.raises(ValueError, match="비밀번호"):
         load_kafka.save("k", {"servers": "h:9092", "topic": "t", "password": FIELD})
     assert FIELD.encode() not in everything(folder) and INLINE.encode() not in everything(folder)

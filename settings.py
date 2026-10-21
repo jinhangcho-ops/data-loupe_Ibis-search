@@ -29,6 +29,7 @@ SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "char
 TIME_BANDS = (2, 12)
 TIME = re.compile(rf"time_(search|summary|chart|metric|export|profile|preview|run|analyze)_({'|'.join(str(n) for n in range(TIME_BANDS[0], TIME_BANDS[1] + 1))})")
 MAX_TIME = 10**12
+ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")  # env 파일의 이름
 
 
 def valid(name, value):
@@ -155,3 +156,34 @@ def save_dashboard(name, board):
     if board is not None and not (isinstance(board, dict) and isinstance(board.get("charts"), list) and 1 <= len(board["charts"]) <= MAX_BOARD_CHARTS):
         raise ValueError(f"대시보드에는 그래프가 1개 이상 {MAX_BOARD_CHARTS}개 이하로 있어야 합니다.")
     return save_named("dashboards.json", "대시보드", MAX_BOARD_SIZE, name, board)
+
+
+def read_env(path):
+    """KEY=VALUE 줄의 env 파일을 {이름: 값}으로. export 앞말, 따옴표, # 주석, BOM, 빈 줄을 다룬다. 오류 문구에는 값을 넣지 않는다. 수집({env:이름})과 LLM 설정이 쓴다."""
+    try:
+        text = open(path, encoding="utf-8-sig").read()
+    except OSError as e:
+        raise ValueError(f"env 파일을 읽을 수 없습니다: {e.strerror or e}") from None
+    except UnicodeDecodeError:
+        raise ValueError("env 파일은 UTF-8이어야 합니다.") from None
+    found = {}
+    for number, line in enumerate(text.splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        name, eq, value = re.sub(r"^export\s+", "", line).partition("=")
+        name, value = name.strip(), value.strip()
+        if not eq or not ENV_NAME.fullmatch(name):
+            raise ValueError(f"env 파일 {number}번째 줄을 읽을 수 없습니다(이름=값 모양이어야 합니다).")
+        if value[:1] in ("'", '"'):
+            end = value.find(value[0], 1)
+            while value[0] == '"' and end > 0 and value[end - 1] == "\\":
+                end = value.find('"', end + 1)
+            if end < 0:
+                raise ValueError(f"env 파일 {number}번째 줄의 따옴표가 닫히지 않았습니다.")
+            inner = value[1:end]
+            value = re.sub(r"\\([nt\"\\])", lambda m: {"n": "\n", "t": "\t"}.get(m[1], m[1]), inner) if value[0] == '"' else inner
+        else:
+            value = re.split(r"\s+#", value, maxsplit=1)[0].strip()
+        found[name] = value
+    return found

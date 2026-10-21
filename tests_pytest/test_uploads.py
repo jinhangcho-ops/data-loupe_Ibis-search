@@ -7,7 +7,7 @@ import duckdb
 import polars as pl
 import pytest
 
-import collect_job
+import collect_config
 import load_job
 import load_kafka
 import uploads
@@ -16,7 +16,7 @@ ROWS = pl.DataFrame({"id": [1, 2, 3, 4, 5], "name": ["a", "b", "c", "d", "e"]})
 
 
 def config(target, **table):
-    c = copy.deepcopy(collect_job.DEFAULT)
+    c = copy.deepcopy(collect_config.DEFAULT)
     c["load"]["target"] = target
     c["load"]["batch"] = 100
     c["load"]["table"].update(table)
@@ -129,6 +129,6 @@ def test_file_log_and_routes(client, folder, result):
 
 
 def test_legacy_config_gets_load_id_default():
-    c = copy.deepcopy(collect_job.DEFAULT)
+    c = copy.deepcopy(collect_config.DEFAULT)
     del c["load"]["table"]["load_id"]
-    assert collect_job.normalize(c)["load"]["table"]["load_id"] is False
+    assert collect_config.normalize(c)["load"]["table"]["load_id"] is False

@@ -1,5 +1,5 @@
 """수집의 웹페이지 모드: 수집용 창(collect_browser)에서 쪽을 열고 항목·컬럼을 읽어 쪽마다 저장한다(쪽 넘기기 none·next·url·scroll).
-robots.txt 판단과 미리보기(지금 페이지에서 읽기)도 여기에 있다. 저장·이어 받기·결과 파일 만들기는 API 모드의 것(collect_job)을 그대로 쓴다.
+robots.txt 판단과 미리보기(지금 페이지에서 읽기)도 여기에 있다. 저장·이어 받기·결과 파일 만들기는 API 모드와 같은 것(collect_store)을 쓴다. collect_job을 부르지 않는다(collect_job이 이 모듈을 부른다).
 창은 collect_browser.session이 주는 Page(go, run)로만 다룬다(검사에서는 가짜 Page로 바꿔 끼운다)."""
 import datetime as dt
 import hashlib
@@ -11,9 +11,10 @@ import urllib.robotparser
 from urllib.parse import urlsplit
 
 import collect_browser
+import collect_config
 import collect_http
-import collect_job
 import collect_request as req
+import collect_store
 from collect_http import Halt
 
 STABLE = 0.5  # 항목 수가 이만큼(초) 그대로면 다 그려진 것으로 본다.
@@ -66,7 +67,7 @@ def rows_of(found, web):
 
 def sample(config):
     """수집용 창의 지금 페이지에서 읽기만 한다(이동하지 않음, 사용 한도에 세지 않음)."""
-    web = collect_job.normalize(config)["web"]
+    web = collect_config.normalize(config)["web"]
     if not web["items"].strip() or not web["fields"]:
         raise ValueError("항목 선택자와 컬럼을 정하세요.")
     try:
@@ -227,7 +228,7 @@ class Walk:
     def keep(self, i, rows):
         """쪽 i를 저장한다. 이어 받기에서 이미 받은 쪽(다시 넘기며 지나는 쪽)은 저장하지 않는다."""
         if i not in self.done:
-            collect_job.save_page(self.found, self.record, i, rows, len(json.dumps(rows, ensure_ascii=False).encode()), sigs={**self.record["sigs"], str(i): signature(rows)})
+            collect_store.save_page(self.found, self.record, i, rows, len(json.dumps(rows, ensure_ascii=False).encode()), sigs={**self.record["sigs"], str(i): signature(rows)})
 
     def first(self):
         url = page_url(self.web, 0)
@@ -246,9 +247,9 @@ class Walk:
         kind, limit = paging["kind"], 1 if paging["kind"] == "none" else paging["max_pages"]
         ended = getattr(self, kind if kind in ("next", "scroll") else "by_url")(limit)
         if ended:
-            with collect_job.guard:
+            with collect_store.guard:
                 self.record["finished"] = True
-                collect_job.write_record(self.found["record"], self.record)
+                collect_store.write_record(self.found["record"], self.record)
 
     def by_url(self, limit):
         """주소의 {page}로 넘긴다. 받은 쪽은 건너뛴다. 0건이거나 바로 전 쪽과 같으면 끝."""
@@ -326,8 +327,8 @@ def run_web(config, env, path, found, record, halt):
         record.setdefault(key, empty)
     if not record.get("finished"):
         if record["done"] and web["paging"]["kind"] in ("next", "scroll"):
-            collect_job.update(message="이어 받습니다. 처음 쪽부터 다시 넘기며 받은 쪽은 저장하지 않습니다.")
-        balancer = collect_job.balancer_for(config, halt, 1)
+            collect_store.update(message="이어 받습니다. 처음 쪽부터 다시 넘기며 받은 쪽은 저장하지 않습니다.")
+        balancer = collect_store.balancer_for(config, halt, 1)
         done = set(record["done"])
         first = 0 if web["paging"]["kind"] in ("next", "scroll") else min(set(range(len(done) + 1)) - done)  # 처음 열 쪽(창을 띄울 주소)
         try:
@@ -335,4 +336,4 @@ def run_web(config, env, path, found, record, halt):
                 Walk(config, page, found, record, halt, balancer).run()
         except collect_browser.Gone:
             raise Halt(CLOSED) from None
-    collect_job.finish_api(config, path, found, record)
+    collect_store.finish_api(config, path, found, record)

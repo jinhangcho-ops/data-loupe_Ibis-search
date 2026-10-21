@@ -12,8 +12,9 @@ import time
 
 import psutil
 
-import collect_app
+import collect_config
 import collect_job
+import collect_store
 import load_kafka
 import notify
 import scratch
@@ -59,11 +60,11 @@ def public(item):
 
 def collection(name):
     """저장한 구성(검사를 마친 것). 없거나 올바르지 않거나 비밀번호가 필요하면 이유를 담은 ValueError."""
-    found = settings.named(collect_app.COLLECTIONS).get(name)
+    found = settings.named(collect_config.COLLECTIONS).get(name)
     if found is None:
         raise ValueError(f"구성 '{name}'이 없습니다. 구성을 먼저 저장하세요.")
     try:
-        config = collect_job.normalize(found)
+        config = collect_config.normalize(found)
     except ValueError as e:
         raise ValueError(f"구성 '{name}'이 올바르지 않습니다: {e}") from None
     reason = password_reason(config)
@@ -347,7 +348,7 @@ def execute(name, how):
             except Exception:
                 let_go(path)
                 raise
-            job = collect_job.current["thread"]
+            job = collect_store.current["thread"]
     except Skip as e:
         finish(run_id, name, "건너뜀", None, time.time() - began, str(e))
         return run_id, None

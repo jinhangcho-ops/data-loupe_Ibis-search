@@ -9,7 +9,6 @@ from urllib.parse import urlsplit
 from lazy import ibis
 
 import parse
-import prep_app
 import server
 import settings
 import source
@@ -26,9 +25,9 @@ OPENED_HERE = "쿼리·분석 화면이 이 DB 파일을 열고 있습니다. �
 def ready(config):
     """시작 전 검사(연결 없이): 이름, 연결 칸, 쿼리·분석 화면이 같은 파일을 열고 있는지."""
     table = config["load"]["table"]
-    prep_app.check_table_name(table["name"])
+    parse.check_table_name(table["name"])
     if table["schema"]:
-        prep_app.check_table_name(table["schema"], "스키마")
+        parse.check_table_name(table["schema"], "스키마")
     if table["key"] and table["how"] != "append":
         raise ValueError("이미 있는 키를 건너뛰는 것(key)은 덧붙이기(append)에서만 씁니다.")
     link = table["connection"]

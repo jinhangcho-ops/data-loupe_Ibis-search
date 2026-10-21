@@ -5,7 +5,9 @@ from pathlib import Path
 from flask import jsonify, request
 
 import collect_browser
+import collect_config
 import collect_job
+import collect_store
 import collect_limits
 import collect_request
 import collect_web
@@ -17,15 +19,14 @@ import source
 import uploads
 from server import app, get_con
 
-COLLECTIONS = "collections.json"
 MAX_COLLECTION_SIZE = 100_000  # 구성 하나의 크기(JSON 글자 수)
 FILE_TYPES = {"parquet": ("Parquet (*.parquet)",), "csv": ("CSV (*.csv)",)}
 
-number_range = lambda kind, low, high: {"int": kind is int, "min": low, "max": high}  # 숫자 칸 범위를 화면에 줄 모양으로
 # 수집 화면(collect.html)이 쓰는 기본값과 숫자 칸의 범위. 범위 이름은 구성의 경로(paging.max_pages)나 limit.이름.
-server.CONSTANTS.update(collect=collect_job.DEFAULT, kafka=load_kafka.DEFAULT, limit=collect_limits.DEFAULT, numbers={
-    **{".".join(where): number_range(*spec) for where, spec in collect_job.NUMBERS.items()},
-    **{f"limit.{key}": number_range(*spec[:3]) for key, spec in collect_limits.NUMBERS.items()}})  # schedule_app이 예약 간격을 더한다
+server.CONSTANTS.update(collect=collect_config.DEFAULT, kafka=load_kafka.DEFAULT, limit=collect_limits.DEFAULT)
+server.CONSTANTS.setdefault("numbers", {}).update({
+    **{".".join(where): server.number_range(*spec) for where, spec in collect_config.NUMBERS.items()},
+    **{f"limit.{key}": server.number_range(*spec[:3]) for key, spec in collect_limits.NUMBERS.items()}})  # schedule_app이 예약 간격을 더한다
 server.FREE.update({"/api/collect/parse", "/api/collect/secretize", "/api/collect/env", "/api/collect/try", "/api/collect/sample",
                     "/api/collect/estimate", "/api/collect/ask_path", "/api/collect/start", "/api/collect/stop", "/api/collect/status",
                     "/api/collections", "/api/limits", "/api/limits/reset", "/api/collect/browser/open", "/api/collect/browser/close",
@@ -47,13 +48,13 @@ def parse_example():
 @app.post("/api/collect/secretize")
 def secretize():
     body = request.json
-    return jsonify(request=collect_request.secretize(collect_job.normalize({"request": body.get("request")})["request"], body.get("replace") or []))
+    return jsonify(request=collect_request.secretize(collect_config.normalize({"request": body.get("request")})["request"], body.get("replace") or []))
 
 
 @app.post("/api/collect/env")
 def env_names():
     """env 파일의 이름들. 값은 주지 않는다."""
-    return jsonify(names=list(collect_request.read_env(request.json.get("path", ""))))
+    return jsonify(names=list(settings.read_env(request.json.get("path", ""))))
 
 
 @app.post("/api/collect/try")
@@ -64,7 +65,7 @@ def try_first():
     try:
         return jsonify(collect_job.first_page(config, env))
     except Exception as e:  # 오류 문구에서 env 값을 가린다.
-        raise ValueError(collect_job.req_mask(str(e), collect_request.hidden(env))) from None
+        raise ValueError(collect_store.req_mask(str(e), collect_request.hidden(env))) from None
 
 
 @app.post("/api/collect/sample")
@@ -162,7 +163,7 @@ def open_result():
 
 @app.get("/api/collections")
 def collections():
-    return jsonify(collections=settings.named(COLLECTIONS))
+    return jsonify(collections=settings.named(collect_config.COLLECTIONS))
 
 
 @app.post("/api/collections")
@@ -170,9 +171,9 @@ def save_collection():
     """collection이 null이면 그 이름을 지운다. 비밀처럼 보이는 자리에 값이 그대로 있으면 저장하지 않는다."""
     item = request.json.get("collection")
     if item is not None:
-        item = collect_job.normalize(item)
+        item = collect_config.normalize(item)
         collect_job.check_literals(item)
-    return jsonify(collections=settings.save_named(COLLECTIONS, "구성", MAX_COLLECTION_SIZE, request.json.get("name"), item))
+    return jsonify(collections=settings.save_named(collect_config.COLLECTIONS, "구성", MAX_COLLECTION_SIZE, request.json.get("name"), item))
 
 
 def limits_view():

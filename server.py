@@ -34,6 +34,11 @@ QUERY_TIMEOUT = 1800  # 데이터 작업 하나를 기다리는 시간(초). 넘
 CONSTANTS = {"sizes": settings.SIZES, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS}
 
 
+def number_range(kind, low, high):
+    """숫자 칸의 범위를 화면(CONSTANTS["numbers"])에 줄 모양으로."""
+    return {"int": kind is int, "min": low, "max": high}
+
+
 def to_json(df):
     """Polars DataFrame → {columns, rows}. 날짜는 ISO 문자열이 된다."""
     return {"columns": df.columns, "rows": json.loads(df.write_json())}

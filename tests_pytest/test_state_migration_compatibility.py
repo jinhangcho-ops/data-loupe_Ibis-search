@@ -1,7 +1,7 @@
 """예전 버전이 남긴 상태 파일을 오류 없이 읽고 새 칸을 기본값으로 채우는지, 덮어쓰기 전에 .bak을 남기는지."""
 import json
 
-import collect_job
+import collect_config
 import collect_limits
 import load_kafka
 import schedule
@@ -27,7 +27,7 @@ def test_legacy_settings_and_configs_get_defaults(folder):
     write_legacy(folder, "settings.json", {"theme": "dark", "removed_option": 1})
     assert settings.load() == {"theme": "dark"}
     old_collection = {"version": 1, "mode": "api", "request": {"url": "https://api.example.invalid/items"}}  # web·load·plain이 없던 때의 구성
-    found = collect_job.normalize(old_collection)
+    found = collect_config.normalize(old_collection)
     assert found["load"]["target"] == "file" and found["plain"] == [] and found["web"]["robots"] is True
     assert found["request"]["url"] == old_collection["request"]["url"]
     assert schedule.public({"every": "daily", "time": "07:00", "task": "x"}) == {**schedule.DEFAULT, "every": "daily", "time": "07:00"}

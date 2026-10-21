@@ -29,8 +29,7 @@ class NotConfigured:
 
 def read_config(path):
     """env 파일을 읽어 검사한 설정 {provider, key, model, base, max_tokens}. 오류 문구에는 키를 넣지 않는다."""
-    from collect_request import read_env
-    env = read_env(path)
+    env = settings.read_env(path)
     provider = env.get("LLM_PROVIDER", "").strip().lower()
     if provider not in PROVIDERS:
         raise ValueError(f"env 파일의 LLM_PROVIDER는 {' 또는 '.join(PROVIDERS)}여야 합니다.")

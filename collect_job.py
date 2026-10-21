@@ -1,9 +1,9 @@
 """수집 작업: 설정(config) 검사, 한 번에 하나씩 뒤에서 도는 작업(API 쪽 넘기기, 파일 조각 받기), 받은 것을 결과 파일로 바꾸기, 상태.
 받는 것은 바로 디스크에 둔다: 결과 경로 옆 '이름.part/'(API, 쪽마다 JSON 줄 파일)나 '이름.part'(파일 모드), 진행 기록 '이름.part.json'.
-같은 설정으로 다시 시작하면 이어 받는다. 지우는 것은 이 이름 규칙의 것뿐이다."""
+같은 설정으로 다시 시작하면 이어 받는다. 지우는 것은 이 이름 규칙의 것뿐이다.
+구성의 기본값·검사는 collect_config, 상태와 쪽 저장·결과 파일 만들기(웹페이지 방식과 같이 쓰는 것)는 collect_store에 있다."""
 import codecs
 import datetime as dt
-import email.utils
 import hashlib
 import json
 import math
@@ -15,8 +15,6 @@ import time
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
-from lazy import ibis
-
 import collect_http
 import collect_limits
 import collect_request as req
@@ -25,135 +23,18 @@ import load_job
 import scratch
 import server
 import settings
-import source
 import uploads
-from collect_http import Balancer, Halt, Reply
+from collect_config import normalize
+from collect_http import Halt, Reply
+from collect_store import (IDLE, balancer_for, clean, current, duck, finish_api, guard, replace, req_mask, save_page, status, update,
+                           with_bom, write_output, write_record)
 
-VERSION = 1
 MIN_FREE = 200 * 1024 * 1024  # 시작할 때 결과 폴더의 디스크에 적어도 남아 있어야 하는 공간
-SKEW = 300  # 응답의 Date와 PC 시계가 이보다 많이 다르면(초) 알린다.
 SAVE_EVERY = 0.5  # 파일 조각의 진행 기록을 적는 간격(초)
-ORDER = "__ibis_n"  # JSON 줄에 같이 적는 받은 순서(결과에서는 뺀다)
-PAGE_FILE = re.compile(r"\d{7}\.jsonl(\.tmp)?")  # .part/ 폴더 안에서 이 작업이 만드는 파일
-DEFAULT = {
-    "version": VERSION, "mode": "api", "env_path": "", "limit_group": "",
-    "request": {"method": "GET", "url": "", "query": [], "headers": [], "body_kind": "none", "body": ""},
-    "response": {"records": "", "columns": []},
-    "paging": {"kind": "none", "start": 1, "step": 100, "max_pages": 100, "cursor_path": "", "next_path": "", "total_path": ""},
-    "balance": {"concurrency": 2, "interval": 1.0, "retries": 5, "timeout": 30},
-    "file": {"url": "", "headers": [], "chunks": 4, "kind": "auto", "encoding": "auto"},
-    "output": {"format": "parquet", "path": "", "dedupe": []},
-    # 웹페이지: 주소({page}·{today}·{now}), 항목 선택자, 컬럼 [{name, selector(항목 안 상대, ""는 항목 자체), attr("text" 또는 속성 이름)}],
-    # 쪽 넘기기(none·next·url·scroll), 항목을 기다리는 최대 초, robots.txt 지키기, 실행 중 창 보이기
-    "web": {"url": "", "items": "", "fields": [], "paging": {"kind": "none", "next": "", "start": 1, "max_pages": 100}, "wait": 10, "robots": True, "show": True},
-    "plain": [],  # 비밀 같은 이름이지만 사용자가 비밀이 아니라고 한 이름들(collect_request.literal_places)
-    # 적재: 결과 파일을 그대로 둘지(file), DB 테이블이나 Kafka 토픽에 넣을지. 비밀번호 칸은 없다(시작할 때 따로 보내고 저장하지 않는다).
-    # 연결은 kind가 folder면 file(내 폴더의 DuckDB 파일), url이면 url·user. how: new·append·replace, key는 append에서 이미 있는 키를 건너뛸 컬럼들.
-    # load_id: 행마다 적재 ID 컬럼(uploads.LOAD_ID)을 넣어 나중에 그 적재의 행만 고를 수 있게 한다.
-    "load": {"target": "file", "table": {"connection": {"kind": "folder", "file": "", "url": "", "user": ""}, "schema": "", "name": "", "how": "new", "key": [], "load_id": False},
-             "kafka": {"destination": "", "key": ""}, "unit": "batch", "batch": 10000, "interval": 0.0, "retries": 3},
-}
-CHOICES = {("mode",): ("api", "file", "web"), ("web", "paging", "kind"): ("none", "next", "url", "scroll"), ("request", "body_kind"): req.BODY_KINDS, ("paging", "kind"): ("none", "page", "offset", "cursor", "next_url"),
-           ("file", "kind"): ("auto", "csv", "parquet", "json"), ("file", "encoding"): ("auto", "utf-8", "cp949"), ("output", "format"): ("parquet", "csv"),
-           ("load", "target"): ("file", "table", "kafka"), ("load", "table", "connection", "kind"): ("folder", "url"), ("load", "table", "how"): ("new", "append", "replace"),
-           ("load", "unit"): ("batch", "single")}
-NUMBERS = {("paging", "start"): (int, -10**12, 10**12), ("paging", "step"): (int, 1, 10**9), ("paging", "max_pages"): (int, 1, 1_000_000),
-           ("balance", "concurrency"): (int, 1, 32), ("balance", "interval"): (float, 0, 3600), ("balance", "retries"): (int, 0, 20),
-           ("balance", "timeout"): (float, 1, 600), ("file", "chunks"): (int, 1, 16),
-           ("web", "paging", "start"): (int, -10**12, 10**12), ("web", "paging", "max_pages"): (int, 1, 1_000_000), ("web", "wait"): (float, 1, 120),
-           ("load", "batch"): (int, 100, 1_000_000), ("load", "interval"): (float, 0, 3600), ("load", "retries"): (int, 0, 20)}
-MAX_FIELDS = 200  # 웹페이지 컬럼 수
-FIELD_ATTR = re.compile(r"text|[A-Za-z_:][-A-Za-z0-9_:.]{0,99}")  # 컬럼의 attr: text 또는 속성 이름
 RUNNING = "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요."
-
-IDLE = {"running": False, "phase": "대기", "mode": "", "pages": 0, "requests": 0, "rows": 0, "bytes": 0, "total_bytes": None, "failures": 0,
-        "concurrency": 0, "wait": "", "message": "", "error": "", "output": "", "started": None, "elapsed": 0.0, "group": "", "load": None}  # 처음 상태
-status = dict(IDLE)
-guard = threading.Lock()  # status와 진행 기록을 고칠 때
-current = {"thread": None, "halt": threading.Event(), "balancer": None, "hide": []}
 
 
 # ---------- 설정 ----------
-
-def normalize(config):
-    """설정을 검사하고 빠진 칸을 기본값으로 채운 새 설정. 모르는 칸이 있으면 거부한다."""
-    if not isinstance(config, dict):
-        raise ValueError("구성이 올바르지 않습니다.")
-    if config.get("version", VERSION) != VERSION:
-        raise ValueError(f"구성의 version은 {VERSION}이어야 합니다.")
-    unknown = []
-    found = merged(DEFAULT, config, "", unknown)
-    if unknown:
-        if any(req.secret_name(name.rsplit(".", 1)[-1]) for name in unknown):
-            raise ValueError("비밀번호 같은 비밀 값은 구성에 넣지 않습니다(저장하지 않고 시작할 때 따로 입력합니다).")
-        raise ValueError(f"구성에 쓸 수 없는 값이 있습니다: {', '.join(unknown)}")
-    texts = [("env_path",), ("limit_group",), ("request", "method"), ("request", "url"), ("request", "body"), ("response", "records"),
-             ("paging", "cursor_path"), ("paging", "next_path"), ("paging", "total_path"), ("file", "url"), ("output", "path"),
-             ("web", "url"), ("web", "items"), ("web", "paging", "next")]
-    for where in texts:
-        if not isinstance(at(found, where), str):
-            raise ValueError(f"구성의 {'.'.join(where)}는 글자여야 합니다.")
-    for where, options in CHOICES.items():
-        if at(found, where) not in options:
-            raise ValueError(f"구성의 {'.'.join(where)}는 {', '.join(options)} 중 하나입니다.")
-    for where, (kind, low, high) in NUMBERS.items():
-        value = at(found, where)
-        if type(value) not in ((int,) if kind is int else (int, float)) or not low <= value <= high:
-            raise ValueError(f"구성의 {'.'.join(where)}는 {low}~{high}의 {'정수' if kind is int else '수'}여야 합니다.")
-    if not re.fullmatch(r"[A-Za-z]+", found["request"]["method"]):
-        raise ValueError("요청 방식(method)은 영문자로 쓰세요(예: GET, POST).")
-    found["request"]["method"] = found["request"]["method"].upper()
-    for where in (("request", "query"), ("request", "headers"), ("file", "headers")):
-        value = at(found, where)
-        if not isinstance(value, list) or not all(isinstance(p, list) and len(p) == 2 and all(isinstance(x, str) for x in p) for p in value):
-            raise ValueError(f"구성의 {'.'.join(where)}는 [[이름, 값], …] 모양이어야 합니다.")
-    columns = found["response"]["columns"]
-    if not isinstance(columns, list) or not all(isinstance(c, dict) and set(c) == {"name", "path"} and isinstance(c["name"], str) and c["name"].strip()
-                                                and isinstance(c["path"], str) for c in columns):
-        raise ValueError('구성의 response.columns는 [{"name", "path"}, …] 모양이어야 합니다(이름은 비우지 않음).')
-    if len({c["name"].lower() for c in columns}) != len(columns):
-        raise ValueError("컬럼 이름이 겹칩니다(대소문자 무시).")
-    if not isinstance(found["plain"], list) or not all(isinstance(n, str) and n for n in found["plain"]):
-        raise ValueError("구성의 plain은 이름 목록이어야 합니다.")
-    dedupe = found["output"]["dedupe"]
-    if not isinstance(dedupe, list) or not all(isinstance(c, str) and c for c in dedupe):
-        raise ValueError("구성의 output.dedupe는 컬럼 이름 목록이어야 합니다.")
-    check_web(found["web"])
-    load_job.check(found["load"])
-    return found
-
-
-def merged(default, given, where, unknown):
-    """given에 빠진 칸을 default로 채운 새 값(묶인 칸도 안까지). 모르는 칸의 이름은 unknown에 더한다."""
-    if not isinstance(given, dict):
-        raise ValueError(f"구성의 {where}가 올바르지 않습니다." if where else "구성이 올바르지 않습니다.")
-    unknown += [f"{where}.{k}" if where else k for k in given if k not in default]
-    return {key: merged(value, given.get(key, value), f"{where}.{key}" if where else key, unknown) if isinstance(value, dict) else given.get(key, value)
-            for key, value in default.items()}
-
-
-def check_web(web):
-    """웹페이지 칸 검사: 참거짓, 주소·선택자 길이, 컬럼 모양."""
-    for key in ("robots", "show"):
-        if type(web[key]) is not bool:
-            raise ValueError(f"구성의 web.{key}는 true·false여야 합니다.")
-    if max(len(web["url"]), len(web["items"]), len(web["paging"]["next"])) > 2000:
-        raise ValueError("웹페이지 주소·선택자는 2,000자까지입니다.")
-    fields = web["fields"]
-    if not isinstance(fields, list) or len(fields) > MAX_FIELDS or not all(
-            isinstance(f, dict) and set(f) == {"name", "selector", "attr"} and all(isinstance(f[k], str) for k in f) and f["name"].strip()
-            and len(f["name"]) <= 200 and len(f["selector"]) <= 2000 and FIELD_ATTR.fullmatch(f["attr"]) for f in fields):
-        raise ValueError(f'구성의 web.fields는 [{{"name", "selector", "attr"}}, …] 모양이어야 합니다(이름은 비우지 않음, attr은 text 또는 속성 이름, {MAX_FIELDS}개까지).')
-    if len({f["name"].lower() for f in fields}) != len(fields):
-        raise ValueError("컬럼 이름이 겹칩니다(대소문자 무시).")
-
-
-def at(config, where):
-    value = config
-    for key in where:
-        value = value[key]
-    return value
-
 
 def ready(config, output=True):
     """시험·시작 전 검사. (설정, env 값들). 비밀처럼 보이는 자리에 남은 글자 그대로의 값과 env 파일에 없는 이름은 거부한다."""
@@ -167,7 +48,7 @@ def ready(config, output=True):
     if output and not config["output"]["path"].strip():
         raise ValueError("결과 파일 경로를 고르세요.")
     names = req.env_names(config)
-    env = req.read_env(config["env_path"]) if config["env_path"].strip() else {}
+    env = settings.read_env(config["env_path"]) if config["env_path"].strip() else {}
     missing = [n for n in names if n not in env]
     if missing:
         raise ValueError(f"env 파일{'을 고르세요. 쓰인 이름' if not config['env_path'].strip() else '에 없는 이름이 있습니다'}: {', '.join(missing)}")
@@ -215,27 +96,6 @@ def read_record(path):
         return None
 
 
-def write_record(path, record):
-    path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
-
-
-def clean(found):
-    """이 작업이 만든 것만 지운다: .part 폴더 안의 쪽 파일과 빈 폴더(또는 .part 파일), 진행 기록, 바꾸는 중의 결과."""
-    part = found["part"]
-    if part.is_dir() and not part.is_symlink() and not os.path.isjunction(part):
-        for item in part.iterdir():
-            if PAGE_FILE.fullmatch(item.name) and item.is_file():
-                item.unlink()
-        try:
-            part.rmdir()
-        except OSError:  # 모르는 것이 남아 있으면 폴더는 둔다.
-            pass
-    elif part.is_file():
-        part.unlink()
-    for name in ("record", "out"):
-        found[name].unlink(missing_ok=True)
-
-
 def resumable(config):
     """같은 설정으로 이어 받을 수 있는 진행 기록. 없으면 None."""
     if not config["output"]["path"].strip():
@@ -245,23 +105,6 @@ def resumable(config):
 
 
 # ---------- 상태 ----------
-
-def update(**changes):
-    with guard:
-        for key in ("message", "error", "wait"):
-            if key in changes:
-                changes[key] = mask(changes[key])
-        status.update(changes)
-
-
-def mask(text):
-    return req_mask(text, current["hide"])
-
-
-def req_mask(text, hide):
-    """env 값을 ●●●로 가린다."""
-    return source.mask(str(text), hide, collect_http.HIDE)
-
 
 def snapshot():
     """상태(약속의 모양)."""
@@ -371,32 +214,6 @@ def work(config, env, path, found, record, halt, password):
         current["hide"] = []  # 비밀번호·env 값은 작업이 끝나면 버린다.
 
 
-def balancer_for(config, halt, concurrency):
-    """설정의 balance와 사용 한도 묶음으로 Balancer를 만든다. 동시 수·간격은 둘 중 엄한 쪽."""
-    name = config["limit_group"]
-    group = collect_limits.groups().get(name) if name else None
-    if group:
-        concurrency = min(concurrency, group["concurrency"])
-    interval = max(config["balance"]["interval"], group["min_interval"] if group else 0)
-    clock = {"checked": False}
-
-    def heard(reply):
-        if not clock["checked"] and reply.header("Date"):  # 서버 시계가 PC와 많이 다르면 하루 기간이 어긋날 수 있다.
-            clock["checked"] = True
-            try:
-                gap = email.utils.parsedate_to_datetime(reply.header("Date")).timestamp() - time.time()
-                if abs(gap) > SKEW:
-                    update(message=f"서버 시계와 PC 시계가 {round(abs(gap) / 60)}분 다릅니다. PC 시계를 확인하세요(하루 한도의 기준 시각이 어긋날 수 있습니다).")
-            except (TypeError, ValueError):
-                pass
-        return collect_limits.server_says(name, reply.headers)
-
-    balancer = Balancer(concurrency, interval, config["balance"]["retries"], halt, note=lambda text: update(wait=text, phase="쉬는 중" if text else "받는 중"),
-                        take=(lambda: collect_limits.take(name, halt)) if group else (lambda: None), heard=heard, secrets=current["hide"])
-    current["balancer"] = balancer
-    return balancer
-
-
 # ---------- API ----------
 
 def first_page(config, env):
@@ -478,43 +295,6 @@ def link_next(reply):
         if m and re.search(r'rel\s*=\s*"?([^";]*\s)?next(\s[^";]*)?"?', m[2]):
             return m[1]
     return None
-
-
-def save_page(found, record, i, rows, size, **more):
-    """쪽 하나(행 {컬럼: 값}들)를 .part 폴더에 쓰고 진행 기록에 더한다. 처음 보는 컬럼은 기록하고 값 종류를 모은다."""
-    lines = []
-    with guard:
-        for n, row in enumerate(rows):
-            out = {}
-            for name, value in row.items():
-                name = record["rename"].get(name, name)
-                if name not in record["kinds"]:
-                    taken = {c.lower() for c in record["columns"]}
-                    if name.lower() in taken or name == ORDER:  # DuckDB 컬럼 이름은 대소문자를 가리지 않는다.
-                        k = 2
-                        while f"{name}_{k}".lower() in taken:
-                            k += 1
-                        record["rename"][name], name = f"{name}_{k}", f"{name}_{k}"
-                    record["columns"].append(name)
-                    record["kinds"][name] = []
-                kind = req.kind_of(value)
-                if kind and kind not in record["kinds"][name]:
-                    record["kinds"][name].append(kind)
-                out[name] = value
-            out[ORDER] = i * 10**7 + n
-            lines.append(json.dumps(out, ensure_ascii=False))
-    if lines:
-        file = found["part"] / f"{i:07d}.jsonl"
-        temp = file.with_name(file.name + ".tmp")
-        temp.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        os.replace(temp, file)
-    with guard:
-        record["done"].append(i)
-        record["rows"] += len(rows)
-        record["bytes"] += size
-        record.update(more)
-        write_record(found["record"], record)
-        status.update(pages=len(record["done"]), rows=record["rows"], bytes=record["bytes"])
 
 
 def run_api(config, env, path, found, record, halt):
@@ -616,91 +396,6 @@ def run_api(config, env, path, found, record, halt):
                 break
             cursor, url, i = more.get("cursor") or "", more.get("next"), i + 1
     finish_api(config, path, found, record)
-
-
-def duck():
-    """결과를 만들 DuckDB(메모리). 설정의 작업 메모리 상한과 넘칠 때 쓸 임시 폴더를 준다. (연결, 임시 폴더)"""
-    folder = scratch.make()
-    memory = settings.load().get("memory")
-    try:
-        con = ibis.duckdb.connect(temp_directory=folder, **({"memory_limit": f"{memory}MB"} if memory else {}))
-    except Exception:
-        scratch.remove(folder)
-        raise
-    return con, folder
-
-
-def finish_api(config, path, found, record):
-    """받은 쪽 파일들을 하나의 결과 파일로 바꾼다(타입은 전체를 보고 정함, 중복 제거)."""
-    update(phase="바꾸는 중", wait="")
-    end = record.get("end")
-    files = [found["part"] / f"{i:07d}.jsonl" for i in sorted(record["done"]) if end is None or i < end]
-    files = [str(f) for f in files if f.exists()]
-    if not files:
-        clean(found)
-        update(message="받은 기록이 없어 결과 파일을 만들지 않았습니다.")
-        return
-    types = {name: req.column_type(record["kinds"].get(name, [])) for name in record["columns"]}
-    con, folder = duck()
-    try:
-        table = con.read_json(files, columns={**types, ORDER: "BIGINT"}, format="newline_delimited")
-        table = deduped(table, config["output"]["dedupe"], record["rename"])
-        rows = write_output(con, table.order_by(ORDER).drop(ORDER), config["output"]["format"], found["out"], folder)
-    finally:
-        con.disconnect()
-        scratch.remove(folder)
-    replace(found, path)
-    update(rows=rows)
-
-
-def deduped(table, columns, rename=None):
-    """columns가 같은 행 중 받은 순서로 첫 행만 남긴다."""
-    if not columns:
-        return table
-    columns = [(rename or {}).get(c, c) for c in columns]
-    missing = [c for c in columns if c not in table.columns]
-    if missing:
-        raise Halt(f"중복 기준 컬럼이 결과에 없습니다: {', '.join(missing)}")
-    first = ibis.row_number().over(group_by=columns, order_by=table[ORDER])
-    return table.mutate(_first=first).filter(lambda t: t._first == 0).drop("_first")
-
-
-def write_output(con, table, fmt, out, folder):
-    """table을 out(parquet 또는 csv)으로 쓰고 행 수를 돌려준다. CSV는 Excel이 한글을 바로 읽도록 UTF-8 BOM을 붙인다."""
-    if fmt == "parquet":
-        con.to_parquet(table, out)
-    else:
-        plain = Path(folder, "result.csv")
-        con.to_csv(table, plain)
-        with_bom(plain, out)
-    return con.execute(table.count())
-
-
-def with_bom(given, out, decode=None):
-    """given 파일을 맨 앞에 UTF-8 BOM을 붙여 out에 쓴다. decode가 있으면(예: cp949) 그 인코딩을 UTF-8로 바꾼다. 원래 있던 BOM은 하나로."""
-    decoder = codecs.getincrementaldecoder(decode)("replace") if decode else None
-    with open(given, "rb") as f, open(out, "wb") as w:
-        w.write(codecs.BOM_UTF8)
-        first = True
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            if decoder:
-                chunk = decoder.decode(chunk).encode("utf-8")
-            if first and chunk.startswith(codecs.BOM_UTF8):
-                chunk = chunk[len(codecs.BOM_UTF8):]
-            first = False
-            w.write(chunk)
-        if decoder:
-            w.write(decoder.decode(b"", final=True).encode("utf-8"))
-
-
-def replace(found, path):
-    """다 만든 결과(.part.형식)로 결과 파일을 바꿔치기하고 작업 파일을 정리한다."""
-    try:
-        os.replace(found["out"], path)
-    except PermissionError:
-        found["out"].unlink(missing_ok=True)
-        raise Halt("다른 프로그램이 파일을 쓰고 있습니다. 그 프로그램에서 결과 파일을 닫고 다시 시작하세요(받은 것은 남아 있어 이어서 바꿉니다).") from None
-    clean(found)
 
 
 # ---------- 파일 ----------

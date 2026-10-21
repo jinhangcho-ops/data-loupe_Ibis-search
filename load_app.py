@@ -2,6 +2,7 @@
 비밀번호는 요청에서 받아 그 일에만 쓰고 저장하지 않는다. 오류 문구에서는 ●●●로 가린다."""
 from flask import jsonify, request
 
+import collect_config
 import collect_job
 import load_job
 import load_kafka
@@ -56,7 +57,7 @@ def kafka_check():
 def table_check():
     """적재 전 확인: 테이블이 있는지, 결과 파일과 컬럼이 맞는지, 이 프로그램이 만든 테이블인지. 결과 파일이 아직 없으면 columns는 null."""
     password = password_of(request.json.get("password"))
-    config = collect_job.normalize(request.json.get("config"))
+    config = collect_config.normalize(request.json.get("config"))
     if config["load"]["target"] != "table":
         raise ValueError("적재할 곳이 DB 테이블이 아닙니다.")
     load_table.ready(config)

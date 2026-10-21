@@ -1028,7 +1028,7 @@ def collect_section(c, got):
     env_file = ROOT / "collect.env"
     secret_key, secret_tok = "Key/With+Plus=xyz789", "tok-SECRET-55"
     env_file.write_bytes(("\ufeff# 주석\n\nexport API_KEY=" + secret_key + "  # 뒤 주석\nTOKEN=\"" + secret_tok + "\"\nQUOTED='a #b'\nESC=\"x\\ny\"\nEMPTY=\n").encode("utf-8"))
-    check("env: BOM·주석·export·따옴표·빈 값, 이름만 돌려줌", (got("/api/collect/env", path=str(env_file)), creq.read_env(env_file)),
+    check("env: BOM·주석·export·따옴표·빈 값, 이름만 돌려줌", (got("/api/collect/env", path=str(env_file)), settings.read_env(env_file)),
           ({"names": ["API_KEY", "TOKEN", "QUOTED", "ESC", "EMPTY"]}, {"API_KEY": secret_key, "TOKEN": secret_tok, "QUOTED": "a #b", "ESC": "x\ny", "EMPTY": ""}))
     bad_env = ROOT / "bad.env"
     bad_env.write_text("OK=1\nthis line secret-value\n", encoding="utf-8")
@@ -1650,7 +1650,8 @@ def load_section(c, got):
     import pyarrow as pa
     import pyarrow.parquet as pq
     from confluent_kafka import Consumer, Producer
-    import collect_job
+    import collect_config
+    import collect_store
     import load_job
     import load_kafka
     import load_table
@@ -1696,9 +1697,9 @@ def load_section(c, got):
            "DB 주소에 비밀번호를 넣지 마세요. 비밀번호는 저장하지 않고 시작할 때 따로 입력합니다.",
            "구성의 load.batch는 100~1000000의 정수여야 합니다.", "구성의 load.target는 file, table, kafka 중 하나입니다.",
            "구성의 load.table.key는 컬럼 이름 목록이어야 합니다."])
-    check("기본 구성은 적재 없음(target file)", collect_job.normalize({})["load"]["target"], "file")
-    limits = collect_job.NUMBERS[("load", "batch")]
-    collect_job.NUMBERS[("load", "batch")] = (int, 1, limits[2])  # 작은 묶음(10행)으로 시험한다.
+    check("기본 구성은 적재 없음(target file)", collect_config.normalize({})["load"]["target"], "file")
+    limits = collect_config.NUMBERS[("load", "batch")]
+    collect_config.NUMBERS[("load", "batch")] = (int, 1, limits[2])  # 작은 묶음(10행)으로 시험한다.
     try:
         print("== 적재: DB 테이블 new·append·replace")
         check("시작 전 거부: 이름, 파일, key는 append에서만", [error("/api/load/start", config=v) for v in (
@@ -1791,7 +1792,7 @@ def load_section(c, got):
               (load_table.OPENED_HERE,) * 2)
         got("/api/disconnect")
         pl.DataFrame(rows).write_csv(out / "plain.csv")
-        collect_job.with_bom(out / "plain.csv", out / "items.csv")
+        collect_store.with_bom(out / "plain.csv", out / "items.csv")
         _, st = load(lcfg("items.csv", table={"name": "from_csv"}))
         check("CSV 결과 파일(BOM)도 묶음으로 읽어 넣음(전체 수는 모름)", (st["phase"], st["load"]["total"], table_rows("from_csv")[0], len(table_rows("from_csv"))),
               ("끝", 25, (1, "품목1", 1.5, dt.date(2026, 1, 2)), 25))
@@ -1912,7 +1913,7 @@ def load_section(c, got):
               (st["phase"], st["error"].startswith("Kafka에 전달하지 못했습니다:"), secret in json.dumps(st, ensure_ascii=False), st["load"]["rows"]), ("실패", True, False, 0))
         del holder
     finally:
-        collect_job.NUMBERS[("load", "batch")] = limits
+        collect_config.NUMBERS[("load", "batch")] = limits
 
     print("== 적재: 비밀번호가 남지 않음")
     status_text = c.get("/api/collect/status").get_data(as_text=True)
@@ -1920,7 +1921,7 @@ def load_section(c, got):
     check("비밀번호는 설정 폴더(kafka.json·load_tables.json 등)·결과 폴더(.load.json 등)·상태 어디에도 없음",
           (found, secret in status_text, sorted(p.name for p in (ROOT / "appdata" / "ibis_search").glob("*.json") if p.name in ("kafka.json", "load_tables.json"))),
           ([], False, ["kafka.json", "load_tables.json"]))
-    check("작업이 끝나면 가릴 값(비밀번호)도 버림", collect_job.current["hide"], [])
+    check("작업이 끝나면 가릴 값(비밀번호)도 버림", collect_store.current["hide"], [])
     check("적재 라우트는 차례(turn)를 기다리지 않음", all(p in server.FREE for p in ("/api/load/kafka", "/api/load/kafka/check", "/api/load/table/check", "/api/load/start")), True)
 
 
