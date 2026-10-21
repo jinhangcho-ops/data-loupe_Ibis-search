@@ -206,13 +206,12 @@ def work(config, env, path, found, record, halt, password):
         update(phase="실패", error=str(e) or type(e).__name__, wait="")
     finally:
         with guard:
+            if record is not None and found["part"].exists():  # 끝나지 않은 받기(멈춤·실패): 이어 받기용 진행 기록을 지금 모습으로 마저 쓴다(끝났다고 알리기 전에)
+                keep_record(found, record, now=True)
             balancer = current["balancer"]
             if balancer is not None:
                 status.update(requests=balancer.sent, failures=balancer.failures, concurrency=balancer.limit)
             status.update(running=False, elapsed=round(time.time() - status["started"], 1))
-        if record is not None and found["part"].exists():  # 끝나지 않은 받기(멈춤·실패): 이어 받기용 진행 기록을 지금 모습으로 마저 쓴다
-            with guard:
-                keep_record(found, record, now=True)
         current["hide"] = []  # 비밀번호·env 값은 작업이 끝나면 버린다.
 
 
