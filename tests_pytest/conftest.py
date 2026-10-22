@@ -28,6 +28,7 @@ def client(folder, monkeypatch):
     """프로그램 창처럼 열쇠를 가진 Flask 시험 클라이언트. 연결은 가짜로 바꿔 끼워 DB에 붙지 않는다(연결 요청 값만 확인한다)."""
     import bot_app  # noqa: F401  Slack 봇 라우트
     import collect_app  # noqa: F401  수집 라우트
+    import dash_app  # noqa: F401  대시보드 라우트
     import integrations_app  # noqa: F401  연동 라우트
     import prep_app  # noqa: F401  전처리 라우트
     import schedule_app  # noqa: F401  예약 라우트

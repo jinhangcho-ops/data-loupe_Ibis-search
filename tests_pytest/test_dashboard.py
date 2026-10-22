@@ -1,15 +1,16 @@
-"""대시보드: 이름별 저장·지우기와 크기·개수 검사, 고른 그래프 그림을 폴더에 저장(덮어쓰지 않음, 파일 이름 정리), 받침에 맞는 조사."""
+"""대시보드 라우트(/api/dash): 저장·열기·지우기·카드 더하기와 크기·개수 검사, 고른 그래프 그림을 폴더에 저장(덮어쓰지 않음, 파일 이름 정리), 받침에 맞는 조사."""
 import base64
 
 import pytest
 
+import dash_store
 import server
 import settings
 
 PNG = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 20).decode()
 JPG = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff" + b"0" * 20).decode()
-CHART = {"title": "매출", "ratio": 1.5, "ranges": {"y": {}, "y1": {}},
-         "query": {"base": "orders", "x": "매장", "series": [{"y": "금액", "agg": "sum"}]}, "used": [{"y": "금액", "agg": "sum", "type": "bar"}]}
+CARD = {"kind": "chart", "title": "매출", "view": {"ratio": 1.5, "styles": [{"type": "bar"}]},
+        "source": {"schema": "", "table": "orders", "body": {"base": "orders", "x": "매장", "series": [{"y": "금액", "agg": "sum"}]}}}
 
 
 def post(client, url, **body):
@@ -17,17 +18,33 @@ def post(client, url, **body):
 
 
 def test_save_open_delete(client):
-    assert post(client, "/api/dashboards", name=" 주간 ", board={"charts": [CHART]})["dashboards"] == {"주간": {"charts": [CHART]}}
-    assert client.get("/api/dashboards").get_json()["dashboards"]["주간"]["charts"][0]["query"]["base"] == "orders"
-    assert post(client, "/api/dashboards", name="주간", board=None)["dashboards"] == {}
+    saved = post(client, "/api/dash", name=" 주간 ", cards=[CARD])["dashboard"]
+    assert saved["name"] == "주간" and saved["cards"][0]["source"]["body"]["base"] == "orders" and saved["cards"][0]["layout"] == {"x": 0, "y": 0, "w": 6, "h": 6}
+    listed = client.get("/api/dash").get_json()
+    assert listed == {"dashboards": [{"id": saved["id"], "name": "주간", "cards": 1, "updated": saved["updated"]}], "locked": False}
+    assert client.get(f"/api/dash/{saved['id']}").get_json()["dashboard"]["cards"][0]["id"] == saved["cards"][0]["id"]
+    assert post(client, "/api/dash", id=saved["id"], name="주간(고침)", cards=[])["dashboards"][0]["name"] == "주간(고침)"  # 같은 id는 덮어쓴다
+    assert post(client, "/api/dash/delete", id=saved["id"]) == {"dashboards": [], "locked": False}
+    assert "찾을 수 없" in client.get(f"/api/dash/{saved['id']}").get_json()["error"]
 
 
 def test_board_checks(client):
-    assert "1개 이상" in post(client, "/api/dashboards", name="빈", board={"charts": []})["error"]
-    assert "1개 이상" in post(client, "/api/dashboards", name="많음", board={"charts": [CHART] * (settings.MAX_BOARD_CHARTS + 1)})["error"]
-    assert "이름" in post(client, "/api/dashboards", name="", board={"charts": [CHART]})["error"]
-    big = {**CHART, "title": "가" * settings.MAX_BOARD_SIZE}
-    assert post(client, "/api/dashboards", name="큼", board={"charts": [big]})["error"] == "저장할 대시보드가 너무 큽니다."
+    assert "이름" in post(client, "/api/dash", name="", cards=[CARD])["error"]
+    assert "48개" in post(client, "/api/dash", name="많음", cards=[CARD] * (dash_store.MAX_CARDS + 1))["error"]
+    big = {**CARD, "title": "가" * 101}
+    assert "100자" in post(client, "/api/dash", name="큼", cards=[big])["error"]
+    post(client, "/api/dash", name="같은 이름", cards=[])
+    assert "이미 있습니다" in post(client, "/api/dash", name="같은 이름", cards=[])["error"]
+
+
+def test_add_card_to_saved_or_new(client):
+    """분석 화면의 [대시보드에 추가]: 저장한 대시보드에 더하거나 새로 만든다. 카드는 맨 아래에 놓인다."""
+    first = post(client, "/api/dash/card/add", dashboard="", name="새것", card=CARD)["dashboard"]
+    assert first["name"] == "새것" and first["cards"] == 1
+    again = post(client, "/api/dash/card/add", dashboard=first["id"], card=CARD)["dashboard"]
+    assert again["cards"] == 2
+    cards = client.get(f"/api/dash/{first['id']}").get_json()["dashboard"]["cards"]
+    assert [c["layout"]["y"] for c in cards] == [0, 6]
 
 
 def test_josa():
@@ -53,7 +70,7 @@ def test_images_cancel_and_checks(client, monkeypatch, tmp_path):
     asked = []
     monkeypatch.setattr(server, "ask_folder", lambda: asked.append(1))
     assert post(client, "/api/images", images=[{"name": "a", "data": PNG}]) == {"cancelled": True}
-    for images, error in [([], "1개 이상"), ([{"name": "a", "data": PNG}] * (settings.MAX_BOARD_CHARTS + 1), "1개 이상"),
+    for images, error in [([], "1개 이상"), ([{"name": "a", "data": PNG}] * (dash_store.MAX_CARDS + 1), "1개 이상"),
                           ([{"name": "a", "data": "data:image/svg+xml;base64,AAAA"}], "PNG·JPG"),
                           ([{"name": "a", "data": "data:image/png;base64,@@@"}], "올바르지")]:
         assert error in post(client, "/api/images", images=images)["error"]

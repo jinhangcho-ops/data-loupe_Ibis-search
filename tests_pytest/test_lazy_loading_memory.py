@@ -11,7 +11,7 @@ PROBE = """
 import json, sys, psutil
 import lazy  # desktop.py와 같은 차례로 먼저
 import webview
-import app, collect_app, notify, prep_app, schedule_app, server, source  # desktop.py가 창을 띄우기 전에 올리는 것
+import app, collect_app, dash_app, notify, prep_app, schedule_app, server, source  # desktop.py가 창을 띄우기 전에 올리는 것
 def kind(name):
     m = sys.modules.get(name)
     return "none" if m is None else type(m).__name__

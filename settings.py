@@ -93,8 +93,6 @@ def save(changes):
 MAX_SAVED = 100  # 이름을 붙여 저장해 둘 수 있는 검색(구성) 수
 MAX_SEARCH_SIZE = 20_000  # 검색 하나의 크기(JSON 글자 수)
 MAX_RECIPE_SIZE = 100_000  # 전처리 구성 하나의 크기. 컬럼 100개에 전처리를 아홉 개씩 정해도 약 3만 자라 검색보다 크게 잡는다.
-MAX_BOARD_CHARTS = 24  # 대시보드 하나에 넣을 수 있는 그래프 수
-MAX_BOARD_SIZE = MAX_BOARD_CHARTS * MAX_SEARCH_SIZE  # 대시보드 하나의 크기. 그래프마다 검색 하나만큼
 
 
 def josa(word, with_final, without_final):
@@ -146,17 +144,6 @@ def recipes():
 
 def save_recipe(name, recipe):
     return save_named("recipes.json", "구성", MAX_RECIPE_SIZE, name, recipe)
-
-
-def dashboards():
-    """이름을 붙여 저장한 대시보드 {이름: {"charts": [그래프]}}. 그래프마다 다시 그릴 조회(테이블·조건·X·계열)만 있고 연결 정보와 값은 없다."""
-    return named("dashboards.json")
-
-
-def save_dashboard(name, board):
-    if board is not None and not (isinstance(board, dict) and isinstance(board.get("charts"), list) and 1 <= len(board["charts"]) <= MAX_BOARD_CHARTS):
-        raise ValueError(f"대시보드에는 그래프가 1개 이상 {MAX_BOARD_CHARTS}개 이하로 있어야 합니다.")
-    return save_named("dashboards.json", "대시보드", MAX_BOARD_SIZE, name, board)
 
 
 def read_env(path):

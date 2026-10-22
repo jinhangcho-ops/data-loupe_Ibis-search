@@ -38,6 +38,7 @@ import polars as pl
 import psutil
 
 import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
+import dash_app  # noqa: F401  대시보드 라우트가 앱에 달린다.
 import schedule_app  # noqa: F401  예약 라우트가 앱에 달린다.
 import notify
 from adapters import transport

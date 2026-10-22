@@ -10,6 +10,7 @@ from lazy import ibis
 
 import calc
 import core
+import dash_store
 import held
 import metrics
 import nl2sql
@@ -27,7 +28,6 @@ from server import app, get_con, run, to_json
 
 # 그래프 그림 저장(/api/images): 연결을 쓰지 않으므로 차례를 기다리지 않는다.
 server.FREE.add("/api/images")
-server.CONSTANTS["board"] = {"max": settings.MAX_BOARD_CHARTS}  # 대시보드 하나에 넣을 수 있는 그래프 수
 server.CONSTANTS["calc"] = {"guide": calc.GUIDE, "examples": calc.EXAMPLES, "hows": calc.HOWS, "max_pivot": calc.MAX_PIVOT}  # 계산 줄 형식·예시, 피벗 집계
 IMAGE_TYPES = {"data:image/png;base64,": ".png", "data:image/jpeg;base64,": ".jpg"}  # 화면이 보내는 그림(data URL 머리) → 확장자
 MAX_IMAGE_BYTES = 30 * 1024 * 1024  # 그림 하나의 크기
@@ -236,17 +236,6 @@ def handoff():
     return jsonify(path=str(path), table=source.list_tables(get_con())[0])
 
 
-@app.get("/api/dashboards")
-def dashboards():
-    return jsonify(dashboards=settings.dashboards())
-
-
-@app.post("/api/dashboards")
-def save_dashboard():
-    """board가 null이면 그 이름을 지운다."""
-    return jsonify(dashboards=settings.save_dashboard(request.json.get("name"), request.json.get("board")))
-
-
 def image_stem(name):
     """그래프 이름을 파일 이름으로: 쓸 수 없는 글자는 _로, 앞뒤 공백·점은 빼고 80자까지. 비거나 예약된 이름이면 바꾼다."""
     stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", name if isinstance(name, str) else "").strip(" .")[:80].strip(" .") or "chart"
@@ -258,8 +247,8 @@ def save_images():
     """그래프 그림 여러 개({name, data: PNG·JPG data URL})를 창에서 고른 폴더에 저장한다. 같은 이름이 있으면 " (2)"처럼 번호를 붙인다(덮어쓰지 않는다).
     창 없이 돌 때(ask_folder가 None)는 window=false를 돌려주고, 화면이 하나씩 내려받는다."""
     images = request.json.get("images")
-    if not isinstance(images, list) or not 1 <= len(images) <= settings.MAX_BOARD_CHARTS:
-        raise ValueError(f"저장할 그림은 1개 이상 {settings.MAX_BOARD_CHARTS}개 이하입니다.")
+    if not isinstance(images, list) or not 1 <= len(images) <= dash_store.MAX_CARDS:
+        raise ValueError(f"저장할 그림은 1개 이상 {dash_store.MAX_CARDS}개 이하입니다.")
     decoded = []
     for item in images:
         data = item.get("data") if isinstance(item, dict) else None

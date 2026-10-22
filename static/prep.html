@@ -69,7 +69,7 @@
 </head>
 <body class="app">
 <!--include status.html-->
-<nav class="subnav" id="views"><button data-view="prep" class="on">전처리</button><button data-view="ana">분석</button><button data-view="graphs">그래프<em id="graph-count"></em></button></nav>
+<nav class="subnav" id="views"><button data-view="prep" class="on">전처리</button><button data-view="ana">분석</button></nav>
 <div class="work" id="prep-view">
   <main class="results">
     <div class="big"><b id="p-big">테이블을 고르세요</b><span id="p-sub">오른쪽 ① 데이터에서 연결과 테이블을 고르세요.</span></div>
@@ -171,7 +171,14 @@
   <main class="results">
     <div class="tool"><span class="hint" id="a-data" style="margin:0; flex:1"></span>
       <button id="a-full" class="btn" title="표본이 아니라 테이블 전체로 다시 구합니다. 큰 테이블에서는 오래 걸리고, 과금되는 DB에서는 비용이 듭니다">전체로 다시 구하기</button>
-      <button id="a-add" class="btn p" title="지금 보이는 그래프를 그래프 탭에 넣습니다">그래프에 추가</button></div>
+      <div class="drop"><button id="a-add" class="btn p" title="지금 보이는 그래프를 구한 값과 함께 대시보드 카드로 넣습니다">대시보드에 추가</button>
+        <div class="pop hidden" id="a-pop">
+          <div class="hint" style="margin:0">어느 대시보드에 넣을까요?</div>
+          <div class="row"><select id="a-dash" title="저장한 대시보드 또는 새 대시보드"></select></div>
+          <div class="row"><input id="a-dash-name" placeholder="새 대시보드 이름"></div>
+          <div class="row"><button id="a-dash-go" class="btn p">넣기</button></div>
+          <div class="hint" style="margin:0">구한 값이 카드에 들어 있어 이 PC·이 계정에서만 풀 수 있게 암호화해 저장합니다. 쿼리 화면의 [대시보드] 탭에서 봅니다.</div>
+        </div></div></div>
     <div class="big"><b id="a-title">분석</b><span id="a-sub">오른쪽에서 분석을 고르고 [구하기]를 누르세요.</span></div>
     <div class="err" id="err-ana"></div>
     <div class="tabs2 hidden" id="a-tabs"></div>
@@ -217,26 +224,11 @@
     <footer><button id="a-run" class="btn p" title="표본으로 구합니다(전처리 탭의 표본 행 수)">구하기</button></footer>
   </aside>
 </div>
-<!-- 그래프: 분석에서 [그래프에 추가]한 그래프 카드. 카드를 누르면 고르고, [다운로드]는 고른 그래프를 각각 그림으로 저장한다. -->
-<div class="board-view hidden" id="graphs">
-  <div class="tool"><span style="margin-left:auto"></span><button id="g-all" class="btn">모두 선택</button><button id="g-none" class="btn">선택 해제</button></div>
-  <div class="big"><b>그래프</b><span id="g-sub"></span></div>
-  <div class="ctl board-ctl">
-    <span class="hint grow" id="g-picked"></span>
-    <select id="g-ratio" title="그림 비율"><option value="screen">화면대로</option><option value="square">1:1</option><option value="4:3">4:3</option><option value="wide">16:9</option></select>
-    <select id="g-mode" title="그림의 모드"><option value="light">라이트</option><option value="dark">다크</option></select>
-    <select id="g-format" title="그림 형식"><option value="png">PNG</option><option value="jpeg">JPG</option></select>
-    <button id="g-down" class="btn p" title="고른 그래프를 각각 그림 파일로 저장합니다. 프로그램 창에서는 저장할 폴더를 한 번 묻습니다">다운로드</button>
-  </div>
-  <div class="err" id="err-graphs"></div>
-  <div class="board" id="g-grid"></div>
-</div>
-
-
 <!--include connect.html-->
 <!--include notify.html-->
 <script src="/static/common.js"></script>
 <script src="/static/board.js"></script>
+<script src="/static/dash.js"></script>
 <script>
 let prof = null;  // /api/profile의 응답. 테이블을 고르기 전에는 null
 let edits = {};  // 컬럼(복사 포함) 이름 → { keep, rename, ops: { op 이름: 입력 상태 } }
@@ -989,28 +981,23 @@ function showPrepSummaries() {
   document.querySelectorAll("#prep-view .step").forEach(s => s.querySelector(".c").textContent = s.classList.contains("open") ? "편집 중" : "⌄");
 }
 
-// ---------- 화면 안의 탭: 전처리 · 분석 · 그래프 (주소의 #analysis, #graphs로 남긴다) ----------
-const VIEWS = { prep: "prep-view", ana: "ana", graphs: "graphs" }, HASHES = { ana: "#analysis", graphs: "#graphs" };
+// ---------- 화면 안의 탭: 전처리 · 분석 (주소의 #analysis로 남긴다) ----------
+const VIEWS = { prep: "prep-view", ana: "ana" }, HASHES = { ana: "#analysis" };
 function showView(name) {
   document.querySelectorAll("#views button").forEach(b => b.classList.toggle("on", b.dataset.view === name));
   Object.entries(VIEWS).forEach(([v, id]) => $(id).classList.toggle("hidden", v !== name));
   history.replaceState(null, "", HASHES[name] ?? location.pathname + location.search);
   if (name === "ana") { loadAnaColumns(); drawAna(); }
-  if (name === "graphs") graphs.draw();  // 감춰져 있는 동안은 크기를 몰라 그리지 않았다.
 }
 document.querySelectorAll("#views button").forEach(b => b.onclick = () => showView(b.dataset.view));
 
 // ---------- 분석 ----------
 // A.cols: 분석할 표의 [컬럼, 종류(num·date·text)]. A.result: 마지막 /api/analyze 결과(how·조건 글 포함). A.view: 보고 있는 그래프.
 const A = { cols: [], result: null, view: null, chart: null };
-const AGG_NAMES = { count: "개수", sum: "합계", mean: "평균" };
-const UNIT_NAMES = { day: "일", week: "주", month: "월" };
 const VIEW_NAMES = { hist: "히스토그램", box: "상자 그림", values: "값 빈도", heat: "히트맵", scatter: "산점도", groups: "그룹 비교", trend: "추이" };
 const VIEW_RATIOS = { box: 2.4, heat: 1, scatter: 4 / 3 };  // 나머지는 16:9
 $("a-max-corr").textContent = SERVER.analysis.max_corr;
 $("a-max-points").textContent = SERVER.analysis.max_points.toLocaleString();
-// 숫자는 자릿수 쉼표와 소수 넷째 자리까지
-const shownum = v => v == null ? "" : typeof v === "number" ? v.toLocaleString(undefined, { maximumFractionDigits: 4 }) : String(v);
 const akind = () => document.querySelector("input[name=akind]:checked").value;
 // 분석할 표: 체크하면 지금 전처리(recipe), 아니면 원래 테이블
 const anaRecipe = () => $("a-prep").checked ? recipe() : { schema: S.schema, base: S.base };
@@ -1064,7 +1051,7 @@ async function runAna(full) {
     const d = await timed("analyze", () => api("/api/analyze", { recipe: r, how, sample, full }));
     const views = d.kind === "distribution" ? (d.histogram ? ["hist", "box", "values"] : ["values"])
       : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"] }[d.kind];
-    A.result = { ...d, how, prepped, base: S.base, views };
+    A.result = { ...d, how, prepped, base: S.base, recipe: r, views };
     A.view = views.includes(A.view) ? A.view : views[0];
     say("err-ana", "");
     drawAna();
@@ -1086,71 +1073,6 @@ function anaNote(d) {
     d.kind === "scatter" ? `점 ${d.points.length.toLocaleString()}개 · 상관계수 ${d.r == null ? "-" : d.r.toFixed(3)} (${d.n.toLocaleString()}행)` : "",
     d.kind === "correlation" ? `${d.n.toLocaleString()}행으로 구함` : ""];
   return [`${d.base} · ${d.prepped ? "전처리 적용" : "원래 테이블"} · ${data}`, ...more].filter(Boolean).join(" · ");
-}
-// 색 글자(#rrggbb 또는 rgb)에 투명도를 준다(히트맵 칸).
-function alpha(color, a) {
-  const hex = color.match(/^#([0-9a-f]{6})$/i);
-  const [r, g, b] = hex ? [0, 2, 4].map(i => parseInt(hex[1].slice(i, i + 2), 16)) : (color.match(/\d+/g) || [0, 0, 0]).map(Number);
-  return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
-// 분석 결과 하나를 그 색으로 그릴 Chart.js 설정. 그래프 탭 카드도 쓴다.
-function anaConfig(d, view, colors, options = {}) {
-  const axis = { ticks: { color: colors.text }, grid: { color: colors.line } };
-  const title = text => ({ display: true, text, color: colors.text });
-  const main = colors.series[0], second = colors.series[1];
-  const chart = (type, labels, datasets, scales, extra = {}) => ({ type, data: { labels, datasets },
-    options: { maintainAspectRatio: false, plugins: { legend: { display: false, labels: { color: colors.text } } }, scales, ...extra, ...options } });
-  if (view === "hist") {
-    const e = d.histogram.edges;
-    return chart("bar", d.histogram.counts.map((_, i) => `${shownum(e[i])}–${shownum(e[i + 1])}`),
-      [{ label: "행 수", data: d.histogram.counts, backgroundColor: main, barPercentage: 1, categoryPercentage: 0.96 }],
-      { x: { ...axis, title: title(d.column) }, y: { ...axis, title: title("행 수") } });
-  }
-  if (view === "box") {
-    const b = d.box, eps = ((b.high ?? b.q3) - (b.low ?? b.q1)) / 160 || 0.5;  // 중앙값 선의 반 두께(값 단위)
-    return chart("bar", [d.column], [
-      { label: "수염 (1.5×IQR 안의 최소~최대)", data: [[b.low, b.high]], backgroundColor: colors.text, barThickness: 2, grouped: false, order: 3 },
-      { label: "Q1~Q3", data: [[b.q1, b.q3]], backgroundColor: alpha(main, 0.85), borderColor: main, borderWidth: 1, borderSkipped: false, barThickness: 56, grouped: false, order: 2 },  // order가 작을수록 위에 그린다
-      { label: "중앙값", data: [[b.median - eps, b.median + eps]], backgroundColor: second, barThickness: 56, grouped: false, order: 1 }],
-      { x: axis, y: { ...axis, grid: { display: false } } }, { indexAxis: "y", plugins: { legend: { display: true, labels: { color: colors.text } } } });
-  }
-  if (view === "values") {
-    const v = d.values, labels = [...v.labels, ...(v.nulls ? ["(빈 값)"] : []), ...(v.other ? ["그 밖"] : [])];
-    const data = [...v.counts, ...(v.nulls ? [v.nulls] : []), ...(v.other ? [v.other] : [])];
-    return chart("bar", labels, [{ label: "행 수", data, backgroundColor: labels.map(l => l === "그 밖" || l === "(빈 값)" ? colors.line : main) }],
-      { x: axis, y: { ...axis, title: title("행 수") } });
-  }
-  if (view === "heat") {
-    const k = d.columns.length, ticks = { ...axis.ticks, autoSkip: false, callback: v => d.columns[v] ?? "" };
-    const at = s => { s.ticks = d.columns.map((_, i) => ({ value: i })); };  // 눈금은 칸 가운데(0, 1, …)에만
-    const cells = d.matrix.flatMap((row, i) => row.map((r, j) => ({ x: j, y: i, r })));
-    const heat = { id: "heat", beforeDatasetsDraw(c) {
-      const { ctx, scales: { x, y } } = c, w = Math.abs(x.getPixelForValue(1) - x.getPixelForValue(0)), h = Math.abs(y.getPixelForValue(1) - y.getPixelForValue(0));
-      ctx.save();
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = `${Math.max(9, Math.min(14, w / 4.5))}px "Segoe UI", "Malgun Gothic", sans-serif`;
-      cells.forEach(({ x: j, y: i, r }) => {
-        const cx = x.getPixelForValue(j), cy = y.getPixelForValue(i);
-        ctx.fillStyle = r == null ? colors.line : alpha(r >= 0 ? main : second, 0.1 + 0.9 * Math.abs(r));
-        ctx.fillRect(cx - w / 2 + 1, cy - h / 2 + 1, w - 2, h - 2);
-        ctx.fillStyle = r != null && Math.abs(r) > 0.55 ? "#fff" : colors.ink;
-        ctx.fillText(r == null ? "-" : (Math.abs(r) < 0.005 ? 0 : r).toFixed(2), cx, cy);  // -0.00으로 보이지 않게
-      });
-      ctx.restore();
-    } };
-    return { ...chart("scatter", undefined, [{ data: cells, pointRadius: 0, pointHitRadius: 18 }],
-      { x: { type: "linear", min: -0.5, max: k - 0.5, ticks, afterBuildTicks: at, grid: { display: false } },
-        y: { type: "linear", min: -0.5, max: k - 0.5, reverse: true, ticks, afterBuildTicks: at, grid: { display: false } } },
-      { plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${d.columns[c.raw.y]} × ${d.columns[c.raw.x]}: ${c.raw.r == null ? "-" : c.raw.r.toFixed(3)}` } } } }),
-      plugins: [heat] };
-  }
-  if (view === "scatter") return chart("scatter", undefined, [{ data: d.points.map(([x, y]) => ({ x, y })), backgroundColor: alpha(main, 0.55), pointRadius: 2.5 }],
-    { x: { ...axis, title: title(d.x) }, y: { ...axis, title: title(d.y) } });
-  if (view === "groups") return chart("bar", d.labels, [{ label: AGG_NAMES[d.agg], data: d.values, backgroundColor: main }],
-    { x: { ...axis, title: title(d.by) }, y: { ...axis, title: title(d.agg === "count" ? "개수" : `${d.value} ${AGG_NAMES[d.agg]}`) } });
-  return chart("line", d.labels, [{ label: AGG_NAMES[d.agg], data: d.values, borderColor: main, backgroundColor: main, borderWidth: 2, pointRadius: d.labels.length > 60 ? 0 : 2, spanGaps: true }],
-    { x: { ...axis, title: title(UNIT_NAMES[d.unit]) }, y: { ...axis, title: title(d.agg === "count" ? "개수" : `${d.value} ${AGG_NAMES[d.agg]}`) } });
 }
 // 그래프 아래의 표
 function anaTable(d, view) {
@@ -1190,46 +1112,39 @@ function drawAna() {
   A.chart = new Chart($("a-chart"), anaConfig(d, A.view, themeColors(document.documentElement.dataset.theme)));
 }
 
-// ---------- 그래프: 분석 결과를 모은 카드 ----------
-// 카드 { title, ratio, d(분석 결과), view, note }는 이 창이 열려 있는 동안 sessionStorage에 남는다. 이름 붙여 저장하지는 않는다.
-const GRAPHS_KEY = "ibis_graphs";
-const graphCard = c => Object.assign(c, { config: (colors, options) => anaConfig(c.d, c.view, colors, options) });
-const graphs = new Board($("g-grid"), { empty: "분석 탭에서 그래프를 구하고 [그래프에 추가]를 누르면 여기에 모입니다.", changed: graphsChanged });
-function graphsChanged() {
-  const n = graphs.cards.length, picked = graphs.picked.size;
-  $("graph-count").textContent = n || "";
-  $("g-sub").textContent = n ? `그래프 ${n}개 · 카드를 누르면 고릅니다` : "";
-  $("g-picked").textContent = picked ? `고른 그래프 ${picked}개` : "다운로드할 그래프를 고르세요";
-  try { sessionStorage.setItem(GRAPHS_KEY, JSON.stringify(graphs.cards.map(({ config, canvas, ...c }) => c))); } catch (e) { /* 저장소를 못 쓰면 이 화면에서만 */ }
+// ---------- 대시보드에 추가: 지금 보이는 분석 그래프를 카드로 ----------
+// 카드 = 다시 구할 기록(source: 테이블·전처리 recipe·분석 how)과 지금 결과(data.values). 저장한 대시보드나 새 대시보드에 서버가 더해 저장한다(연결의 key·label은 서버가 채운다).
+toggleDrop($("a-add"), $("a-pop"));
+document.addEventListener("click", e => { if (!e.target.closest(".pop")) $("a-pop").classList.add("hidden"); });
+const NEW_DASH = "";
+async function fillDashboards() {
+  const found = (await api("/api/dash")).dashboards;
+  $("a-dash").replaceChildren(el("option", { value: NEW_DASH, textContent: "새 대시보드" }), ...found.map(d => el("option", { value: d.id, textContent: `${d.name} (카드 ${d.cards}개)` })));
+  $("a-dash-name").classList.toggle("hidden", $("a-dash").value !== NEW_DASH);
 }
-$("a-add").onclick = () => {
-  if (!A.result) return;
-  if (graphs.cards.length >= SERVER.board.max) return say("err-ana", `그래프 탭에는 ${SERVER.board.max}개까지 넣을 수 있습니다.`);
-  graphs.set([...graphs.cards, graphCard({ title: `${A.result.base} · ${anaTitle(A.result, A.view)}`, ratio: VIEW_RATIOS[A.view] ?? 16 / 9, d: A.result, view: A.view })]);
-  say("err-ana", `그래프 탭에 넣었습니다(${graphs.cards.length}개).`, true);
-};
-$("g-all").onclick = () => graphs.pickAll(true);
-$("g-none").onclick = () => graphs.pickAll(false);
-$("g-down").onclick = () => busy($("g-down"), async () => {
-  try { await saveBoard(graphs, { ratio: $("g-ratio").value, mode: $("g-mode").value, type: $("g-format").value, err: "err-graphs" }); }
-  catch (e) { say("err-graphs", e.message); }
+$("a-add").addEventListener("click", () => fillDashboards().catch(e => say("err-ana", e.message)));
+$("a-dash").onchange = () => $("a-dash-name").classList.toggle("hidden", $("a-dash").value !== NEW_DASH);
+$("a-dash-go").onclick = () => busy($("a-dash-go"), async () => {
+  const d = A.result;
+  if (!d) return;
+  const { how, prepped, base, recipe, views, ...values } = d;  // 구한 값만 data에 둔다
+  const card = { kind: "analysis", title: `${base} · ${anaTitle(d, A.view)}`, colors: { series: {}, parts: {}, order: [], parts_order: [] },
+    view: { type: "", ratio: VIEW_RATIOS[A.view] ?? 16 / 9, analysis_view: A.view }, source: { schema: recipe.schema || "", table: base, recipe, analysis: how, full: !!values.data?.full, sample },
+    data: { values, computed_at: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19), note: anaNote(d) } };
+  try {
+    const added = await api("/api/dash/card/add", { dashboard: $("a-dash").value, name: $("a-dash-name").value, card });
+    $("a-pop").classList.add("hidden");
+    say("err-ana", `대시보드 '${added.dashboard.name}'에 넣었습니다(카드 ${added.dashboard.cards}개). 쿼리 화면의 [대시보드] 탭에서 열어 보세요.`, true);
+  } catch (e) { say("err-ana", e.message); }
 });
-$("g-ratio").onchange = () => saveSetting({ board_ratio: $("g-ratio").value });
-$("g-format").onchange = () => saveSetting({ board_format: $("g-format").value });
-$("g-mode").onchange = () => saveSetting({ image: $("g-mode").value });
-$("g-ratio").value = saved("board_ratio") || "screen";
-$("g-format").value = saved("board_format") || "png";
-$("g-mode").value = saved("image") || "light";
-try { graphs.cards = (JSON.parse(sessionStorage.getItem(GRAPHS_KEY) || "[]") || []).map(graphCard); } catch (e) { /* 깨졌으면 빈 모음 */ }
-graphsChanged();
-$("theme").addEventListener("click", () => { drawAna(); graphs.draw(); });  // common.js의 onclick이 화면 모드를 바꾼 뒤에 다시 그린다.
+$("theme").addEventListener("click", drawAna);  // common.js의 onclick이 화면 모드를 바꾼 뒤에 다시 그린다.
 showAnaForm();
 drawAna();
 
 showAll();
 showTarget();
 // 연결을 이어받은 뒤, 주소에 ?base=이름이 있고 그 테이블이 목록에 있으면 고른 것과 같게 한다(전처리로 보내기).
-showView({ "#analysis": "ana", "#graphs": "graphs" }[location.hash] ?? "prep");
+showView(location.hash === "#analysis" || location.hash === "#graphs" ? "ana" : "prep");  // 예전 주소 #graphs도 분석으로
 showPrepSummaries();
 resume().then(() => {
   showPrepSummaries();

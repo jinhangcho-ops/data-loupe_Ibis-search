@@ -16,6 +16,8 @@ const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.crea
 // 칩: 이름 옆의 ×를 누르면 remove를 부른다.
 const chip = (text, remove) => el("span", { className: "chip" }, text, el("button", { className: "ghost", textContent: "×", title: "빼기", onclick: remove }));
 const download = (href, name) => el("a", { href, download: name }).click();
+// 단추를 누르면 떠 있는 상자(.drop 안의 .pop)를 열고 닫는다. 밖을 누르면 닫는 일은 화면이 한다.
+const toggleDrop = (button, pop) => { button.onclick = e => { e.stopPropagation(); pop.classList.toggle("hidden"); }; };
 // 중첩 값(구조·목록·맵): 한 줄로 {name: 가람, age: 30}, [a, b]처럼 줄여 보인다. 빈 값은 null.
 const isNested = v => v !== null && typeof v === "object";
 const inline = v => Array.isArray(v) ? "[" + v.map(inline).join(", ") + "]"

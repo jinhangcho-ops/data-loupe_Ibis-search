@@ -26,6 +26,7 @@ import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
 import integrations_app  # noqa: F401  연동 라우트가 앱에 달린다.
 import collect_browser
 import collect_job
+import dash_app  # noqa: F401  대시보드 라우트가 앱에 달린다.
 import notify  # noqa: F401  보내기 라우트가 앱에 달린다.
 import prep_app  # noqa: F401  전처리 라우트가 앱에 달린다.
 import schedule
