@@ -135,7 +135,7 @@ def test_bad_palette(palette):
 def test_colors_view_and_layout_checks():
     card = store.check_card({**CARD, "colors": {"series": {"합계": "#abc"}, "order": ["합계"]}, "view": {"type": "area", "unit": "month"}, "layout": {"x": 6, "y": 2, "w": 6, "h": 4}})
     assert card["colors"] == {"series": {"합계": "#abc"}, "parts": {}, "order": ["합계"], "parts_order": []} and card["view"]["type"] == "area"
-    for bad in ({"colors": {"series": {"합계": "빨강"}}}, {"view": {"type": "scatter"}}, {"view": {"unit": "hour"}}, {"layout": {"x": 8, "y": 0, "w": 6, "h": 4}},
+    for bad in ({"colors": {"series": {"합계": "빨강"}}}, {"view": {"type": "pie3d"}}, {"view": {"unit": "hour"}}, {"layout": {"x": 8, "y": 0, "w": 6, "h": 4}},
                 {"layout": {"x": 0, "y": 0, "w": 1, "h": 4}}, {"kind": "마법"}, {"colors": {"모름": {}}}):
         with pytest.raises(ValueError):
             store.check_card({**CARD, **bad})
@@ -157,3 +157,12 @@ def test_north_star_must_point_to_cards():
         store.check_dashboard(board(cards=[{**CARD, "id": "a1"}], north_star={"card": "zz", "counters": []}))
     with pytest.raises(ValueError, match="겹칩니다"):
         store.check_dashboard(board(cards=[{**CARD, "id": "a1"}, {**CARD, "id": "a1"}]))
+
+
+def test_scatter_bubble_view_and_points_data():
+    assert {"scatter", "bubble"} <= set(store.CHART_TYPES) and len(store.CHART_TYPES) == 11 and not {"scatter", "bubble"} & set(store.TIME_TYPES)
+    card = store.check_card({**CARD, "view": {"type": "bubble", "points": {"size": "금액"}, "trend": True, "show_r": False}, "data": {"x_kind": "num", "num_cols": ["금액"], "points": {"points": [[1, 2, 3]]}}})
+    assert card["view"]["points"] == {"size": "금액"} and card["view"]["trend"] is True and card["data"]["points"]["points"] == [[1, 2, 3]]
+    for bad in ({"points": {"size": "a", "x": 1}}, {"trend": "yes"}, {"points": "금액"}):
+        with pytest.raises(ValueError):
+            store.check_card({**CARD, "view": {"type": "scatter", **bad}})

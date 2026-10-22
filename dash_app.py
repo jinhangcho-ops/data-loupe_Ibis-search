@@ -13,6 +13,7 @@ from server import app
 server.CONSTANTS["dash"] = {"max_cards": dash_store.MAX_CARDS, "max_dashboards": dash_store.MAX_DASHBOARDS, "max_palette": dash_store.MAX_PALETTE,
                             "types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS,
                             "palette": dash_store.DEFAULT_PALETTE, "locked": dash_store.LOCKED}  # 화면(dash.js)이 서버와 같은 상한·종류·기본 색을 쓴다
+server.CONSTANTS["dash"]["max_points"] = dash_calc.MAX_POINTS  # 산점도·버블의 점 수 상한
 server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add"})
 
 
@@ -71,3 +72,14 @@ def card_compute():
     if now and card["source"].get("key") and card["source"]["key"] != now["key"]:
         raise ValueError(f"이 카드는 다른 연결({card['source'].get('label') or card['source']['key']})에서 구한 것입니다. 그 연결로 바꾼 뒤 다시 구하세요.")
     return jsonify(data=dash_calc.compute(card, dt.datetime.now().isoformat(timespec="seconds")), source=now)
+
+
+@app.post("/api/chart/points")
+def chart_points():
+    """산점도·버블의 점: body = 차트 조회(테이블·조건 …, x, series[0].y 또는 y, split)와 size(버블의 크기 컬럼). 점·전체 수·뽑았는지·r·추세선을 돌려준다.
+    source_key가 있는데 지금 연결과 다르면 거부한다."""
+    body = request.json
+    now = current_source()
+    if now and body.get("source_key") and body["source_key"] != now["key"]:
+        raise ValueError("이 카드는 다른 연결에서 구한 것입니다. 그 연결로 바꾼 뒤 다시 구하세요.")
+    return jsonify(points=dash_calc.points_of(body, body.get("size")))

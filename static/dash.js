@@ -114,9 +114,13 @@ function byUnit(by, unit) {
 }
 // 분석 카드가 어떤 그림인지(없으면 분석 종류에서)
 const anaView = card => card.view.analysis_view || { distribution: "hist", correlation: "heat", scatter: "scatter", groups: "groups", trend: "trend" }[card.data?.values?.kind];
+// 산점도·버블: 점은 data.points(서버가 구한 점·r·추세선), 버블의 [크기] 컬럼·추세선·r 보이기는 view.points·trend·show_r
+const isPoints = card => ["scatter", "bubble"].includes(card.view?.type) && !!card.data?.points;
+const pointGroups = p => p.groups.length ? p.groups : [p.y];
 // 카드의 값을 그릴 모양 { labels, datasets: [{ label, values, type?, dash?, axis? }], time(날짜 X축), chartable(종류를 바꿀 수 있는지) }. 값이 아직 없으면 null.
 function cardSeries(card) {
   if (card.norm) return { time: false, chartable: true, ...card.norm };  // 탐색 탭의 지금 차트처럼 이미 이 모양인 것
+  if (isPoints(card)) return { labels: [], datasets: pointGroups(card.data.points).map(label => ({ label, values: [] })), time: false, chartable: true };
   const d = card.data ?? {}, view = card.view ?? {};
   if (d.by_unit?.day) return { ...byUnit(d.by_unit, view.unit || "day"), time: true, chartable: true };
   if (card.kind === "analysis" && d.values) {
@@ -132,6 +136,11 @@ function typeReason(card, type) {
   const s = cardSeries(card), names = SERVER.dash.types;
   if (!s) return "아직 값이 없어서 종류를 바꿀 수 없어요. 연결한 뒤 [다시 구하기]를 누르세요.";
   if (!s.chartable) return "이 분석 그림은 종류를 바꿀 수 없어요. 그룹 비교와 시계열 추이만 바꿀 수 있어요.";
+  if (type === "scatter" || type === "bubble") {  // X와 값이 숫자 컬럼일 때만(버블은 [크기]도)
+    const d = card.data ?? {}, body = card.source?.body ?? {}, y = body.series?.[0]?.y ?? body.y;
+    if (d.x_kind !== "num" || !(d.num_cols ?? []).includes(y)) return "산점도·버블은 X가 숫자 컬럼이고 값이 숫자 컬럼일 때만 쓸 수 있어요.";
+    return type === "bubble" && !card.view.points?.size ? "버블은 [크기]에 숫자 컬럼을 먼저 고르세요." : "";
+  }
   if (s.time && !SERVER.dash.time_types.includes(type)) return `날짜 X축 그림에는 ${SERVER.dash.time_types.map(t => names[t]).join("·")}만 쓸 수 있어요.`;
   if (type === "stacked" && s.datasets.length < 2) return "누적 막대는 계열이 2개 이상일 때만 쓸 수 있어요.";
   return "";
@@ -147,6 +156,26 @@ function colorNames(card) {
 }
 
 // ---------- 차트 설정 ----------
+// 산점도·버블 설정. 점 하나는 [x, y, (크기), (그룹)]. 버블 반지름 = 3 + 17·√((v−min)/(max−min)) px(면적 비례). 추세선 y = a + b·x와 r은 서버가 전체 행으로 구한 값.
+function pointsConfig(card, colors, options) {
+  const p = card.data.points, view = card.view, bubble = view.type === "bubble", axis = { ticks: { color: colors.text }, grid: { color: colors.line } };
+  const [lo, hi] = p.size_range ?? [0, 0], radius = v => hi > lo ? 3 + 17 * Math.sqrt((v - lo) / (hi - lo)) : 10;
+  const datasets = pointGroups(p).map((name, i) => {
+    const c = pickColor(card, "series", name, colors, i), rows = p.points.filter(r => !p.groups.length || r[r.length - 1] === name);
+    return bubble ? { label: name, data: rows.map(r => ({ x: r[0], y: r[1], r: radius(r[2]) })), backgroundColor: alpha(c, 0.55), borderColor: c }
+                  : { label: name, data: rows.map(r => ({ x: r[0], y: r[1] })), backgroundColor: alpha(c, 0.7), pointRadius: 3 };
+  });
+  if (view.trend && p.b != null) {
+    const xs = p.points.map(r => r[0]), lo2 = Math.min(...xs), hi2 = Math.max(...xs);
+    datasets.push({ type: "line", label: "추세선", data: [lo2, hi2].map(x => ({ x, y: p.a + p.b * x })), borderColor: colors.text, borderDash: [6, 4], borderWidth: 2, pointRadius: 0 });
+  }
+  const title = view.show_r && p.r != null ? { display: true, text: `r = ${p.r.toFixed(3)} (${p.n.toLocaleString()}개)`, color: colors.text } : { display: false };
+  return { type: bubble ? "bubble" : "scatter", data: { datasets },
+           options: { maintainAspectRatio: false, plugins: { legend: { display: datasets.length > 1, labels: { color: colors.text } }, title },
+                      scales: { x: { type: "linear", ...axis, title: { display: true, text: p.x, color: colors.text } },
+                                y: { type: "linear", ...axis, ...(view.ranges?.y ?? {}), title: { display: true, text: p.y, color: colors.text } } }, ...options } };
+}
+
 // 카드 하나(종류 view.type, 값 data, 색 colors)를 그 색(colors: themeColors + 대시보드 palette)으로 그릴 Chart.js 설정.
 // view.type이 비어 있으면 계열마다 정한 대로(막대·선 겹치기, 점선, 오른쪽 축). 도넛·파이는 첫 계열만 그린다.
 function chartConfig(card, colors, options = {}) {
@@ -155,6 +184,7 @@ function chartConfig(card, colors, options = {}) {
     const main = [pickColor(card, "series", "주 색", colors, 0), pickColor(card, "series", "보조 색", colors, 1)];
     return anaConfig(card.data.values, anaView(card), { ...colors, series: [...main, ...colors.series.slice(2)] }, options);
   }
+  if (isPoints(card)) return pointsConfig(card, colors, options);
   const s = cardSeries(card), axis = { ticks: { color: colors.text }, grid: { color: colors.line } };
   const pie = type === "doughnut" || type === "pie", hbar = type === "hbar", stacked = type === "stacked", right = !type && s.datasets.some(d => d.axis === "right");
   const color = (d, i) => pickColor(card, "series", d.label, colors, i);
@@ -208,19 +238,36 @@ class DashBoard extends Board {
     const msg = el("div", { className: "hint btype-msg" });
     const again = () => { this.changed?.(); this.draw(); };
     const buttons = Object.entries(SERVER.dash.types).map(([id, name]) => el("button", { className: "btype" + (card.view.type === id ? " on" : "") + (typeReason(card, id) ? " off" : ""), textContent: name,
-      onclick: () => {
+      onclick: async () => {
         const why = typeReason(card, id);
         if (why) return void (msg.textContent = why);
-        card.view.type = card.view.type === id ? "" : id;  // 한 번 더 누르면 계열마다 정한 대로
+        const before = card.view.type;
+        card.view.type = before === id ? "" : id;  // 한 번 더 누르면 계열마다 정한 대로
+        try { await this.loadPoints(card); } catch (e) { card.view.type = before; return void (msg.textContent = e.message); }
         again();
       } }));
+    const pointy = ["scatter", "bubble"].includes(card.view.type);
+    const size = pointy || card.data?.x_kind === "num" ? el("select", { className: "bunit", title: "버블의 [크기] 컬럼(숫자)", onchange: async e => {
+      card.view.points = { size: e.target.value };
+      try { await this.loadPoints(card); } catch (err) { return void (msg.textContent = err.message); }
+      again();
+    } }, el("option", { value: "", textContent: "크기 없음" }), ...(card.data?.num_cols ?? []).map(c => el("option", { value: c, textContent: c, selected: card.view.points?.size === c }))) : "";
+    const flags = pointy ? [["trend", "추세선"], ["show_r", "r"]].map(([k, name]) => el("button", { className: "btype" + (card.view[k] ? " on" : ""), textContent: name, title: k === "r" ? "상관계수 r 보이기" : "최소제곱 추세선 보이기",
+      onclick: () => { card.view[k] = !card.view[k]; again(); } })) : [];
     const unit = card.data?.by_unit ? el("select", { className: "bunit", title: "시간 단위. 일 값을 다시 묶어 그립니다", onchange: e => { card.view.unit = e.target.value; again(); } },
       ...Object.entries(SERVER.dash.units).map(([id, name]) => el("option", { value: id, textContent: name, selected: (card.view.unit || "day") === id }))) : "";
     const paint = el("button", { className: "btype" + (card.openColors ? " on" : ""), textContent: "색", onclick: () => { card.openColors = !card.openColors; this.draw(); } });
-    const tools = el("div", { className: "btools" }, ...buttons, unit, paint);
+    const tools = el("div", { className: "btools" }, ...buttons, size, ...flags, unit, paint);
     tools.onclick = e => e.stopPropagation();  // 카드 고르기(Board의 box.onclick)로 번지지 않게
     const d = card.data ?? {}, when = [d.computed_at && "구한 시각 " + d.computed_at.replace("T", " "), d.note].filter(Boolean).join(" · ");  // 값이 언제 것인지, 줄인 것
     return el("div", { className: "bextra" }, tools, msg, el("div", { className: "hint bwhen", textContent: when }), card.openColors ? this.colorEditor(card) : "");
+  }
+  // 산점도·버블이면 서버에서 점을 받아 카드에 둔다(연결 필요). 다른 종류로 바꾸면 점은 버린다(카드 크기).
+  async loadPoints(card) {
+    const type = card.view.type;
+    if (!["scatter", "bubble"].includes(type)) { delete card.data.points; return; }
+    const body = card.source.body, size = type === "bubble" ? card.view.points?.size ?? "" : "";
+    card.data.points = (await api("/api/chart/points", { ...body, y: body.series?.[0]?.y, size, source_key: card.source.key })).points;
   }
   // 이름마다 HEX 칸. 틀린 값은 칸 옆에 이유를 보이고 이전 색을 그대로 둔다.
   colorEditor(card) {

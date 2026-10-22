@@ -29,7 +29,7 @@ MAX_COLORS = 100  # 카드 하나의 지정 색 수
 KINDS = ("chart", "analysis", "metric", "kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks",
          "target_trend", "map", "alerts", "deviation", "funnel")  # 앞의 셋만 1단계에서 만든다
 CHART_TYPES = {"bar": "막대", "hbar": "가로 막대", "stacked": "누적 막대", "line": "라인", "polyline": "꺾인 선", "area": "영역형 라인",
-               "doughnut": "도넛", "pie": "파이", "radar": "레이더"}
+               "doughnut": "도넛", "pie": "파이", "radar": "레이더", "scatter": "산점도", "bubble": "버블"}
 TIME_TYPES = ("bar", "stacked", "line", "polyline", "area")  # 날짜 X축 카드에서 고를 수 있는 종류
 UNITS = {"day": "일", "week": "주", "month": "월", "year": "연"}
 DEFAULT_PALETTE = ["#11706f", "#e8590c", "#2b8a3e", "#c2255c", "#1c7ed6", "#7048e8", "#e67700", "#5c7080"]  # 화면의 라이트 색 묶음(--c1~--c8)과 같다
@@ -128,7 +128,7 @@ def check_view(view):
     """보기 설정: type(차트 종류, ""이면 계열마다 정한 대로), unit(일·주·월·연), compare.mode(span·point), better(up·down).
     차트 탭에서 온 것은 styles(계열마다 {type, dash, axis})·ranges(세로축 범위)·ratio(가로/세로), 분석 카드는 analysis_view."""
     view = {} if view is None else view
-    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view"}:
+    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r"}:
         raise ValueError("보기(view)에 쓸 수 없는 항목이 있습니다.")
     out = {"type": view.get("type") or "", "unit": view.get("unit") or "day", "compare": view.get("compare") or {"mode": "span"}, "better": view.get("better") or "up"}
     if out["type"] and out["type"] not in CHART_TYPES:
@@ -155,6 +155,15 @@ def check_view(view):
         if type(view["ratio"]) not in (int, float) or not 0.2 <= view["ratio"] <= 5:
             raise ValueError("가로/세로 비율(ratio)은 0.2~5 사이의 숫자입니다.")
         out["ratio"] = view["ratio"]
+    if "points" in view:  # 산점도·버블: 버블의 [크기] 컬럼
+        if not isinstance(view["points"], dict) or set(view["points"]) - {"size"}:
+            raise ValueError("점 설정(points)은 {size: 컬럼} 모양이어야 합니다.")
+        out["points"] = {"size": text(view["points"].get("size"), "크기 컬럼 이름", 200)}
+    for name in ("trend", "show_r"):  # 추세선, 상관계수 r 보이기
+        if name in view:
+            if not isinstance(view[name], bool):
+                raise ValueError(f"{name}은 켬(true)이나 끔(false)입니다.")
+            out[name] = view[name]
     if "analysis_view" in view:
         out["analysis_view"] = text(view["analysis_view"], "분석 보기 이름", 20)
     return out
@@ -185,7 +194,7 @@ def check_data(data, kind):
     data = {} if data is None else data
     if not isinstance(data, dict):
         raise ValueError("구한 값(data)은 객체여야 합니다.")
-    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values"}
+    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "points", "x_kind", "num_cols"}
     if unknown := set(data) - allowed:
         if kind == "recent_rows":
             raise ValueError("recent_rows 카드에는 행 값을 저장할 수 없습니다. 보일 때마다 연결에서 읽습니다.")

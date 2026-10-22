@@ -77,7 +77,14 @@ const cat = (n, view = {}) => ({ kind: "chart", colors: fc(), view,
   data: { values: { labels: ["a", "b", "c"], series: Array.from({ length: n }, (_, i) => ({ name: "s" + i, values: [1, 2, 3] })) } } });
 for (const t of ["bar", "stacked", "line", "polyline", "area"]) assert.strictEqual(typeReason(time, t), "", t);
 for (const t of ["hbar", "doughnut", "pie", "radar"]) assert.match(typeReason(time, t), /날짜 X축 그림에는 막대·누적 막대·라인·꺾인 선·영역형 라인만/, t);
-for (const t of Object.keys(SERVER.dash.types)) if (t !== "stacked") assert.strictEqual(typeReason(cat(2), t), "", t);
+for (const t of Object.keys(SERVER.dash.types)) if (!["stacked", "scatter", "bubble"].includes(t)) assert.strictEqual(typeReason(cat(2), t), "", t);
+assert.match(typeReason(cat(2), "scatter"), /X가 숫자 컬럼이고 값이 숫자 컬럼일 때만/);  // X가 글자 컬럼
+const num = (view = {}) => ({ ...cat(1), view, source: { body: { x: "x", series: [{ y: "y", agg: "sum" }] } }, data: { x_kind: "num", num_cols: ["x", "y", "s"], values: cat(1).data.values } });
+assert.strictEqual(typeReason(num(), "scatter"), "");
+assert.match(typeReason(num(), "bubble"), /크기.에 숫자 컬럼/);
+assert.strictEqual(typeReason(num({ points: { size: "s" } }), "bubble"), "");
+assert.match(typeReason({ ...num(), data: { ...num().data, num_cols: ["x"] } }, "scatter"), /숫자 컬럼일 때만/);  // 값이 숫자 컬럼이 아님
+assert.match(typeReason({ ...num(), data: { ...num().data, x_kind: "date" } }, "scatter"), /숫자 컬럼일 때만/);
 assert.match(typeReason(cat(1), "stacked"), /계열이 2개 이상/);
 assert.strictEqual(typeReason(cat(2), "stacked"), "");
 assert.match(typeReason({ kind: "chart", colors: fc(), view: {}, data: {} }, "bar"), /아직 값이 없어서/);
@@ -128,6 +135,21 @@ assert.strictEqual(anaGroups.type, "pie"); assert.deepStrictEqual(anaGroups.data
 // 예전 탐색 차트처럼 이미 그릴 모양(norm)이 있는 임시 카드
 const drawn = chartConfig({ view: { type: "", ranges: { y: {}, y1: {} } }, norm: { labels: ["a"], datasets: [{ label: "x", values: [1], type: "bar", axis: "left" }] } }, theme);
 assert.strictEqual(drawn.data.datasets[0].backgroundColor, "#100000");
+// 산점도·버블: 점·크기 범위·추세선·r
+const points = { x: "x", y: "y", size: "s", split: "g", groups: ["a", "b"], total: 4, n: 4, r: 0.96474, a: -0.5, b: 2.2, size_range: [10, 40],
+  points: [[1, 2, 10, "a"], [2, 4, 20, "b"], [3, 5, 30, "a"], [4, 9, 40, "a"]] };
+const sc = chartConfig({ ...cat(1), view: { type: "scatter", trend: true, show_r: true }, data: { points } }, colors);
+assert.strictEqual(sc.type, "scatter"); assert.deepStrictEqual(sc.data.datasets.map(d => d.label), ["a", "b", "추세선"]);
+assert.deepStrictEqual(sc.data.datasets[0].data, [{ x: 1, y: 2 }, { x: 3, y: 5 }, { x: 4, y: 9 }]);
+assert.deepStrictEqual(sc.data.datasets[2].data, [{ x: 1, y: 1.7000000000000002 }, { x: 4, y: 8.3 }]);  // a + b·x
+assert.strictEqual(sc.options.plugins.title.text, "r = 0.965 (4개)"); assert.strictEqual(sc.options.scales.x.title.text, "x");
+const bub = chartConfig({ ...cat(1), view: { type: "bubble" }, data: { points } }, colors);
+assert.strictEqual(bub.type, "bubble"); assert.strictEqual(bub.data.datasets.length, 2); assert(!bub.options.plugins.title.display);
+assert.strictEqual(bub.data.datasets[0].data[0].r, 3);  // 최소 크기는 3px
+assert.strictEqual(bub.data.datasets[0].data[2].r, 20);  // 최대 크기는 3 + 17 = 20px
+assert.strictEqual(bub.data.datasets[1].data[0].r, 3 + 17 * Math.sqrt(10 / 30));  // 면적 비례
+const one = chartConfig({ ...cat(1), view: { type: "scatter" }, data: { points: { ...points, groups: [], split: "", points: points.points.map(r => r.slice(0, 3)) } } }, colors);
+assert.deepStrictEqual(one.data.datasets.map(d => d.label), ["y"]); assert(!one.options.plugins.legend.display);
 console.log("ok");
 """
 

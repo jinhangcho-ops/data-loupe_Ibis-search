@@ -165,3 +165,61 @@ def test_compute_metric_card(db, tmp_path):
     assert one["series"][0]["values"] == [155] and one["series"][1]["values"] == [round(5 / 7 * 100, 6)]  # 비율은 %로(×100)
     by = compute(db, card=card("metric", body={"base": "orders", "names": ["매출"], "by": "store"}))["data"]
     assert by["x"] == "store" and by["values"]["labels"] == ["A", "B"] and by["values"]["series"][0]["values"] == [100, 55]
+
+
+# ---------- 산점도·버블 ----------
+
+PTS = pl.DataFrame({"x": [1, 2, 3, 4, None], "y": [2.0, 4.0, 5.0, 9.0, 7.0], "s": [10, 20, 30, 40, 50], "g": ["a", "b", "a", "a", "b"], "t": ["p", "q", "r", "s", "t"]})
+
+
+@pytest.fixture(params=["memory", "polars"])
+def pt(request):
+    return ibis.memtable(PTS.to_arrow()) if request.param == "memory" else ibis.polars.connect().create_table("pts", PTS)
+
+
+def test_points_r_and_trend_line_by_hand(pt):
+    # 빈 값 행(x가 None)은 뺀다: x=1..4, y=2,4,5,9. x̄=2.5 ȳ=5 Σdxdy=11 Σdx²=5 Σdy²=26 → b=2.2, a=-0.5, r=11/√130
+    d = dash_calc.points_data(pt, "x", "y")
+    assert d["points"] == [[1, 2], [2, 4], [3, 5], [4, 9]] and d["total"] == 4 and d["sampled"] == "" and d["note"] == ""
+    assert d["n"] == 4 and d["b"] == pytest.approx(2.2) and d["a"] == pytest.approx(-0.5) and d["r"] == pytest.approx(11 / 130 ** 0.5)
+    assert d["size_range"] is None and d["groups"] == []
+
+
+def test_points_size_split_and_range(pt):
+    d = dash_calc.points_data(pt, "x", "y", "s", "g")
+    assert d["points"] == [[1, 2, 10, "a"], [2, 4, 20, "b"], [3, 5, 30, "a"], [4, 9, 40, "a"]] and d["groups"] == ["a", "b"] and d["size_range"] == [10, 40]
+
+
+def test_points_limit_even_and_head(pt, monkeypatch):
+    monkeypatch.setattr(dash_calc, "MAX_POINTS", 3)
+    d = dash_calc.points_data(pt, "x", "y")
+    assert d["total"] == 4 and d["sampled"] in ("even", "head") and 0 < len(d["points"]) <= 3 and "전체 4개" in d["note"]
+    assert d["r"] == pytest.approx(11 / 130 ** 0.5) and d["b"] == pytest.approx(2.2)  # r·추세선은 뽑은 점이 아니라 전체 행으로
+    monkeypatch.setattr(dash_calc.connection, "compiles", lambda expr: False)  # 뽑기가 안 되는 연결
+    head = dash_calc.points_data(pt, "x", "y")
+    assert head["sampled"] == "head" and len(head["points"]) == 3 and head["note"].startswith("점이 많아 앞에서 3개만")
+    again = dash_calc.points_data(pt, "x", "y")
+    assert again["points"] == head["points"]
+
+
+def test_points_reject_non_numeric_and_degenerate(pt):
+    for args in (("t", "y"), ("x", "t"), ("x", "y", "t"), ("nope", "y")):
+        with pytest.raises(ValueError):
+            dash_calc.points_data(pt, *args)
+    flat = ibis.memtable(pl.DataFrame({"x": [1, 1, 1], "y": [1, 2, 3]}).to_arrow())
+    d = dash_calc.points_data(flat, "x", "y")
+    assert d["b"] is None and d["a"] is None and d["r"] is None
+
+
+def test_points_route_and_card(db):
+    body = {"base": "orders", "x": "amt", "y": "amt", "split": "store"}
+    got = db.post("/api/chart/points", json={**body, "y": "amt"}).get_json()["points"]
+    assert got["total"] == 6 and got["r"] == pytest.approx(1.0) and got["groups"] == ["A", "B"]
+    assert "숫자 컬럼" in db.post("/api/chart/points", json={**body, "x": "store"}).get_json()["error"]
+    assert "다른 연결" in db.post("/api/chart/points", json={**body, "source_key": "folder:other"}).get_json()["error"]
+    c = card("chart", body={"base": "orders", "x": "amt", "series": [{"y": "amt", "agg": "sum"}]})
+    c["view"] = {"type": "bubble", "points": {"size": "amt"}, "trend": True, "show_r": True}
+    data = compute(db, card=c)["data"]
+    assert data["x_kind"] == "num" and data["num_cols"] == ["amt"] and data["points"]["size"] == "amt" and len(data["points"]["points"]) == 6 and "values" in data
+    plain = compute(db, card=card("chart", body={"base": "orders", "x": "store", "series": [{"y": "amt", "agg": "sum"}]}))["data"]
+    assert plain["x_kind"] == "text" and "points" not in plain

@@ -3,12 +3,14 @@
 일 값이 많아 카드 크기를 넘으면 앞을 자르고 월·연은 여기서 따로 구한다. 항목별 차트는 result.get_chart, 분석은 prep_app.analyzed, 지표는 core.metric_values를 쓴다."""
 import json
 
+import analysis
 import core
 import dash_store
 import metrics
 import parse
 import prep_app
 import result
+import source as connection
 from server import run
 
 AGGS = ("count", "sum", "mean", "min", "max", "nunique")  # 날짜 X축 차트의 집계
@@ -16,6 +18,10 @@ PARTS = ("sum", "count", "min", "max")  # 일 값 성분. 다시 묶는 방법: 
 TRUNC = {"day": "D", "week": "W", "month": "M", "year": "Y"}  # 단위 → Ibis truncate 단위(주는 월요일 시작, analysis.trend와 같다)
 ROOM = 0.8  # 일 값이 카드 크기 상한의 이만큼까지만 차지하게 한다(나머지는 source 같은 다른 항목)
 PERCENT = "percent"
+MAX_POINTS = analysis.MAX_POINTS  # 산점도·버블의 점 수(분석의 산점도와 같다)
+SEED = 20260101  # 고르게 뽑을 때의 고정 씨앗(다시 구해도 같은 점)
+POINT_TYPES = ("scatter", "bubble")
+MAX_NUM_COLS = 200  # 카드에 알려 줄 숫자 컬럼 이름 수(버블의 [크기] 후보)
 
 
 def series_name(s):
@@ -157,6 +163,80 @@ def category_data(expr, body, series):
     return {"x": body["x"], "values": {"labels": [str(v) for v in labels], "series": [{"name": name(k), "values": k["values"]} for k in datasets]}, "note": " ".join(filter(None, notes))}
 
 
+def is_number(t, name):
+    """t의 컬럼 name이 숫자(참거짓 제외)인지."""
+    dtype = t[name].type()
+    return dtype.is_numeric() and not dtype.is_boolean()
+
+
+def number_column(t, name, what):
+    """숫자 컬럼 name(없거나 숫자가 아니면 ValueError)."""
+    parse.check_name(name, t.columns, what)
+    if not is_number(t, name):
+        raise ValueError(f"'{name}'은 숫자 컬럼이 아니라 {what}로 쓸 수 없습니다. 산점도·버블은 숫자 컬럼만 쓸 수 있어요.")
+    return name
+
+
+def fit_line(t, x, y):
+    """전체 행(x·y가 비어 있지 않은)의 개수 n, 상관계수 r, 추세선 y = a + b·x. analysis.correlation과 같이 평균을 먼저 구하고 평균을 뺀 곱의 합으로 구한다.
+    b = Σ(x−x̄)(y−ȳ)/Σ(x−x̄)², a = ȳ − b·x̄. 행이 2개 미만이거나 x가 모두 같으면 a·b는 None, y가 모두 같으면 r은 None."""
+    s = t.filter(t[x].notnull(), t[y].notnull())
+    xs, ys = s[x].cast("float64"), s[y].cast("float64")
+    m = analysis.one(s.aggregate(n=s.count(), mx=xs.mean(), my=ys.mean()))
+    if m["n"] < 2:
+        return {"n": m["n"], "r": None, "a": None, "b": None}
+    dx, dy = xs - m["mx"], ys - m["my"]
+    p = analysis.one(s.aggregate(sxx=(dx * dx).sum(), sxy=(dx * dy).sum(), syy=(dy * dy).sum()))
+    b = p["sxy"] / p["sxx"] if p["sxx"] else None
+    den = (p["sxx"] * p["syy"]) ** 0.5
+    return {"n": m["n"], "r": max(-1.0, min(1.0, p["sxy"] / den)) if den else None, "a": None if b is None else m["my"] - b * m["mx"], "b": b}
+
+
+def points_data(expr, x, y, size=None, split=None):
+    """산점도·버블의 값: 두(세) 숫자 컬럼의 점 [x, y, (크기), (그룹)]과 전체 점 수·상관계수 r·추세선(a, b)·크기의 범위.
+    점은 MAX_POINTS개까지: 넘으면 Table.sample(고정 씨앗)로 고르게 뽑고(sampled "even", 조금 넘으면 상한에서 자름), 연결이 못 하면 앞에서부터(sampled "head").
+    r·추세선은 뽑은 점이 아니라 전체 행으로 구한다. 나누기(split)가 있으면 행이 많은 result.MAX_SPLITS개 값과 나머지는 '그 밖'."""
+    number_column(expr, x, "X")
+    number_column(expr, y, "값(Y)")
+    if size:
+        number_column(expr, size, "크기")
+    if split:
+        parse.check_name(split, expr.columns)
+        if expr[split].type().is_nested():
+            raise ValueError(f"'{split}'은 중첩 컬럼이라 나눌 수 없습니다.")
+    t = expr.filter(*[expr[c].notnull() for c in (x, y, *([size] if size else []))])
+    total = analysis.one(t.aggregate(n=t.count()))["n"]
+    cols = {"x": t[x].cast("float64"), "y": t[y].cast("float64"), **({"s": t[size].cast("float64")} if size else {}), **({"g": t[split].cast("string")} if split else {})}
+    picked, sampled = t.select(**cols), ""
+    if total > MAX_POINTS:
+        even = picked.sample(MAX_POINTS / total, seed=SEED)
+        picked, sampled = (even, "even") if connection.compiles(even) else (picked, "head")
+    rows = picked.limit(MAX_POINTS).to_polars().rows()
+    groups = []
+    if split:
+        counts = {}
+        for r in rows:
+            counts[r[-1]] = counts.get(r[-1], 0) + 1
+        top = [g for g, _ in sorted(counts.items(), key=lambda kv: (-kv[1], str(kv[0])))[:result.MAX_SPLITS]]
+        name = lambda g: "(빈 값)" if g is None else g if g in top else "그 밖"
+        rows = [[*r[:-1], name(r[-1])] for r in rows]
+        groups = ["(빈 값)" if g is None else g for g in top] + (["그 밖"] if any(r[-1] == "그 밖" for r in rows) else [])
+    span = analysis.one(t.aggregate(lo=cols["s"].min(), hi=cols["s"].max())) if size else {}
+    note = {"even": f"점이 많아 고르게 {len(rows):,}개만 그렸어요(전체 {total:,}개).", "head": f"점이 많아 앞에서 {len(rows):,}개만 그렸어요(전체 {total:,}개)."}.get(sampled, "")
+    return {"x": x, "y": y, "size": size or "", "split": split or "", "points": [list(r) for r in rows], "groups": groups, "total": total, "sampled": sampled,
+            **fit_line(expr, x, y), "size_range": [span["lo"], span["hi"]] if size else None, "note": note}
+
+
+def points_of(body, size):
+    """차트 조회(body: X, series[0].y 또는 y, split)와 [크기] 컬럼으로 연결에서 points_data를 구한다."""
+    expr = core.runnable(body, select=False)
+    series = body.get("series") or [{}]
+    y = body.get("y") or (series[0].get("y") if isinstance(series[0], dict) else None)
+    if not isinstance(body.get("x"), str) or not y:
+        raise ValueError("산점도·버블은 X와 값(Y)으로 숫자 컬럼을 고르세요.")
+    return run(lambda: points_data(expr, body["x"], y, size or None, body.get("split") or None))
+
+
 def chart_data(body):
     """chart 카드의 값. X가 날짜(날짜·시각 컬럼)면 일 값 중심(time_data), 아니면 항목별(category_data)."""
     expr = core.runnable(body, select=False)
@@ -165,9 +245,11 @@ def chart_data(body):
         raise ValueError("X 컬럼을 고르세요.")
     parse.check_name(x, expr.columns)
     t = expr[x].type()
-    if t.is_date() or t.is_timestamp():
-        return run(lambda: time_data(expr, x, clean_series(body.get("series")), body.get("split") or None))
-    return category_data(expr, body, clean_series(body.get("series")))
+    kinds = {"x_kind": "date" if t.is_date() or t.is_timestamp() else "num" if is_number(expr, x) else "text",
+             "num_cols": [c for c in expr.columns if is_number(expr, c)][:MAX_NUM_COLS]}  # 산점도·버블을 고를 수 있는지 화면이 알 수 있게
+    if kinds["x_kind"] == "date":
+        return {**run(lambda: time_data(expr, x, clean_series(body.get("series")), body.get("split") or None)), **kinds}
+    return {**category_data(expr, body, clean_series(body.get("series"))), **kinds}
 
 
 def metric_data(body):
@@ -192,7 +274,8 @@ def analysis_data(source):
 def definition(card):
     """카드를 다시 구하는 정의(연결과 이름 빼고): 이 JSON의 지문이 def_hash다."""
     source = card["source"]
-    return {"kind": card["kind"], **{k: source[k] for k in ("schema", "table", "body", "recipe", "analysis", "metric_id", "flow_id", "full", "sample") if k in source}}
+    points = {"points": card["view"].get("points")} if card["view"]["type"] in POINT_TYPES else {}
+    return {"kind": card["kind"], **{k: source[k] for k in ("schema", "table", "body", "recipe", "analysis", "metric_id", "flow_id", "full", "sample") if k in source}, **points}
 
 
 def compute(card, now):
@@ -202,6 +285,8 @@ def compute(card, now):
         if not isinstance(source.get("body"), dict):
             raise ValueError("이 카드에는 다시 구할 조회(source.body)가 없습니다.")
         found = chart_data(source["body"]) if card["kind"] == "chart" else metric_data(source["body"])
+        if card["kind"] == "chart" and card["view"]["type"] in POINT_TYPES:  # 점 종류를 고른 카드는 점도 다시 구한다
+            found["points"] = points_of(source["body"], (card["view"].get("points") or {}).get("size"))
     elif card["kind"] == "analysis":
         if not isinstance(source.get("recipe"), dict) or not isinstance(source.get("analysis"), dict):
             raise ValueError("이 카드에는 다시 구할 분석(source.recipe, source.analysis)이 없습니다.")
