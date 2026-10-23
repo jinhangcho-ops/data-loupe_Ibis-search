@@ -313,7 +313,7 @@ function SentenceView(host, ctx) {
       showExplore(); if (notes.length) body.querySelector(".sset-note").textContent = notes.join(" / ");
     };
     const save = el("button", { className: "btn", textContent: "저장", onclick: e => busy(e.currentTarget, async () => {
-      try { const n = name.value.trim() || current; sets = (await api("/api/question_sets", { name: n, set: sentSetOf(shared.on, { column: shared.column, text: shared.text }, items.map(i => ({ ...i, period: i.period && { column: i.period.column, text: i.period.text } }))) })).sets; current = n; err.textContent = ""; showExplore(); } catch (er) { err.textContent = er.message; }
+      try { const n = name.value.trim() || current; sets = (await api("/api/question_sets", { name: n, set: sentSetOf(shared.on, { column: shared.column, text: shared.text }, items.map(i => ({ ...i, period: i.period && { column: i.period.column, text: i.period.text } }))) })).sets; current = n; err.textContent = ""; ctx.saved?.(); showExplore(); } catch (er) { err.textContent = er.message; }
     }) });
     const del = el("button", { className: "btn", textContent: "삭제", onclick: e => busy(e.currentTarget, async () => { if (!sel.value) return; try { sets = (await api("/api/question_sets", { name: sel.value, set: null })).sets; current = ""; showExplore(); } catch (er) { err.textContent = er.message; } }) });
     const share = el("input", { type: "checkbox", checked: shared.on, style: "width:auto" });
@@ -438,5 +438,8 @@ function SentenceView(host, ctx) {
     await loadSets(); await loadMetrics();
     if (tab === "explore") showExplore(); else showMetric();
   }
-  return { show, items: () => items };
+  // 임시 저장(초안)에 담는 작성 중인 문장(고른 틀·빈칸·기간). 구한 결과는 담지 않는다.
+  const draft = () => ({ items: items.map(i => ({ template: i.template, slots: i.slots, period: i.period && { column: i.period.column, text: i.period.text } })), shared: { on: shared.on, column: shared.column, text: shared.text } });
+  const setDraft = d => { items = d.items.map(i => ({ id: ++seq, ...i })); shared = { ...d.shared, span: null }; };
+  return { show, items: () => items, draft, setDraft };
 }

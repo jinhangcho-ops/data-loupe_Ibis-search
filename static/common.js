@@ -431,6 +431,7 @@ async function showConnected(flat, schemas, info) {
   fill($("schema"), schemas, "기본 스키마");
   $("after-connect").classList.remove("hidden");
   await loadTables();
+  if (typeof afterTables === "function") afterTables();  // 쿼리·분석: 남은 초안이 있으면 묻는다(기다리지 않는다)
 }
 if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
   const kind = document.querySelector("input[name=kind]:checked").value;

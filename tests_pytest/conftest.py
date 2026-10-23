@@ -29,6 +29,7 @@ def client(folder, monkeypatch):
     import bot_app  # noqa: F401  Slack 봇 라우트
     import collect_app  # noqa: F401  수집 라우트
     import dash_app  # noqa: F401  대시보드 라우트
+    import draft_app  # noqa: F401  화면 임시 저장(초안) 라우트
     import flow_app  # noqa: F401  흐름·문장·내 지표 라우트
     import catalog_app  # noqa: F401  지표 사전 라우트
     import integrations_app  # noqa: F401  연동 라우트

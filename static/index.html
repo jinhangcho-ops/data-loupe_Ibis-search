@@ -328,6 +328,7 @@
 <!--include dash_refresh.html-->
 <!--include notify.html-->
 <script src="/static/common.js"></script>
+<script src="/static/draft.js"></script>
 <script src="/static/funcs.js"></script>
 <script src="/static/dash_refresh.js"></script>
 <script src="/static/board.js"></script>
@@ -988,6 +989,7 @@ document.querySelectorAll("[data-export]").forEach(b => b.onclick = () => {
       const blob = await timed("export", async () => (await send("/api/export", { ...state(), format })).blob());
       download(URL.createObjectURL(blob), "result." + format);
       $("err-export").textContent = "";
+      searchDraft.clear();
     } catch (e) { $("err-export").textContent = e.message; }
   });
 });
@@ -999,6 +1001,7 @@ $("handoff").onclick = () => {
     try {
       const d = await timed("export", () => api("/api/handoff", state()));
       if (d.cancelled) return;
+      await searchDraft.clear();
       location.href = "/prep?base=" + encodeURIComponent(d.table);
     } catch (e) { $("err-export").textContent = e.message; }
   });
@@ -1210,6 +1213,7 @@ document.querySelectorAll("#views button").forEach(b => b.onclick = () => showVi
 // 세 보기는 같은 검색 body를 본다. 떠날 때 지금 보기의 내용을 단계 카드(S)로 모으고, 들어갈 때 S에서 그 보기를 만든다(서버 /api/flow/to_body·from_body).
 // 단계 카드가 나타내지 못하는 집계·차트·카드 단계(꼬리)는 흐름 보기가 떠날 때 기억해 두었다가 body가 그대로면 흐름에 되살린다.
 let view = "cards", flowView = null, sentView = null, keptFlow = null, keptTail = { nodes: [], edges: [], feed: [] };
+const sentenceView = () => sentView ??= SentenceView($("sent-host"), { body: state, columns: () => S.cols, tables: tableNames, saved: () => searchDraft.clear() });
 const bodyNow = () => ({ ...state(), ...($("limit").value ? { limit: $("limit").value } : {}) });  // 보기들이 주고받는 검색 body
 const bodyKey = () => JSON.stringify(bodyNow());
 // 검색 body를 단계 카드 화면에 올린다(저장한 검색을 불러올 때와 같은 길). 지금 연결에 없는 테이블·컬럼이면 이전 화면으로 되돌리고 이유를 던진다.
@@ -1235,6 +1239,16 @@ async function loadBody(b) {
   }
   showSummaries();
 }
+// 임시 저장(초안): 조건이 바뀌고 2초 조용하면 서버에 쓴다(draft.js). 흐름 보기는 아직 단계 카드로 모으기 전이라 그래프를, 문장 보기는 작성 중인 문장을 함께 담는다. 결과를 저장하면 지운다.
+const searchDraft = Draft("search",
+  () => S.base ? { view, body: bodyNow(), ...(view === "flow" && flowView ? { graph: flowView.get() } : {}), ...(sentView?.items().length ? { sentence: sentView.draft() } : {}) } : null,
+  async d => {
+    await loadBody(d.body);
+    if (d.sentence) sentenceView().setDraft(d.sentence);
+    if (d.view !== "cards" && !await setView(d.view)) throw new Error($("err-search").textContent || "그 보기로 바꾸지 못했어요.");
+    if (d.graph && view === "flow") await flowView.set(d.graph, { layout: false });
+  });
+const afterTables = () => searchDraft.ask();
 // 보기 글자만 바꾼다(변환 없이)
 function paintView(name) {
   view = name;
@@ -1267,7 +1281,7 @@ async function setView(next) {
       else if (S.base) await flowView.set(flowAttach((await api("/api/flow/from_body", { body: bodyNow() })).graph, keptTail));
       else await flowView.set({ nodes: [], edges: [] });
     } else if (next === "sentence") {
-      sentView ??= SentenceView($("sent-host"), { body: state, columns: () => S.cols, tables: tableNames });
+      sentenceView();
       paintView("sentence");
       await sentView.show();
     } else paintView("cards");
@@ -1397,6 +1411,7 @@ document.querySelectorAll("[data-sqlexport]").forEach(b => b.onclick = () => {
       const blob = await timed("export", async () => (await send("/api/sql/export", { sql: $("sql-text").value, format })).blob(), {});
       download(URL.createObjectURL(blob), "sql_result." + format);
       say("err-sql", "");
+      searchDraft.clear();
     } catch (e) { say("err-sql", e.message); }
   });
 });
@@ -1452,6 +1467,7 @@ async function showVirtual() {
 async function saveVirtual(body) {
   try {
     await api("/api/virtual", body);
+    if (body.sql !== null || body.parquet !== null) searchDraft.clear();
     say("err-vt", body.sql === null && body.parquet === null ? `지웠습니다: ${body.name}` : `저장했습니다: ${body.name}`, true);
     await showVirtual();
     await loadTables();  // 탐색의 기준 테이블 목록에도 들어간다

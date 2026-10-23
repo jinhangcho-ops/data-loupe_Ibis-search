@@ -78,6 +78,7 @@
 <!--include dash_refresh.html-->
 <!--include notify.html-->
 <script src="/static/common.js"></script>
+<script src="/static/draft.js"></script>
 <script src="/static/funcs.js"></script>
 <script src="/static/dash_refresh.js"></script>
 <script src="/static/board.js"></script>
@@ -121,9 +122,26 @@ async function save() {
     dashMeta = metaOf(d);
     board.star = { card: "", counters: [], limits: {}, ...d.north_star };
     lastSaved = snapshot();
+    dashDraft.clear();
     $("d-state").textContent = "저장했어요";
   } catch (e) { $("d-state").textContent = ""; say("err-dash", e.message); }
 }
+// 임시 저장(초안): 저장하지 않은 편집(카드·배치·팔레트·북극성)이 2초 넘게 남으면 서버에 쓴다(draft.js). 카드 값(data)은 담지 않는다. [저장]이 되면 지운다.
+// 이어서 하면 그 대시보드를 열고 초안으로 바꾼 뒤 일반 자동 저장이 이어서 쓴다.
+const dashDraft = Draft("dashboard",
+  () => dashId && snapshot() !== lastSaved ? { id: dashId, palette: board.palette, north_star: board.star, cards: board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; }) } : null,
+  async d => {
+    if (!dashboards.some(x => x.id === d.id)) throw new Error("그 대시보드가 지금은 없어요.");
+    if (dashId !== d.id) { $("d-pick").value = d.id; await openDash(d.id); }
+    const values = new Map(board.cards.map(c => [c.id, c.data]));
+    quiet = true;
+    board.star = { card: "", counters: [], limits: {}, ...d.north_star };
+    board.palette = d.palette;
+    $("d-palette").value = d.palette.join(", ");
+    board.set(d.cards.map(c => needsValues({ ...c, data: values.get(c.id) ?? {} })));
+    quiet = false;
+    boardChanged();
+  });
 function boardChanged() {
   const n = board.cards.length, picked = board.picked.size;
   ctl.showLast(board.cards);
@@ -398,6 +416,7 @@ resume().then(async () => {
   const list = await api("/api/dash");
   showList(list);
   await openDash($("d-pick").value);
+  dashDraft.ask();
 }).catch(e => say("err-dash", e.message));
 </script>
 </body>
