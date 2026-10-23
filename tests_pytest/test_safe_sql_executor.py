@@ -176,3 +176,77 @@ def test_check_route(client, tmp_path):
     deep = check("select nope from orders", deep=True)
     assert deep["ok"] is False and "nope" in deep["message"]
     assert check("select id, amount from orders", deep=True)["message"].startswith("이상 없음 · 결과 컬럼 2개: id, amount")
+
+
+# ---------- 사용자 SQL의 파일·환경 읽기 막기 ----------
+
+FILE_READS = [
+    "select * from read_csv('x.csv')", "select * from READ_CSV('x.csv')", "select * from read_csv_auto('x.csv')", "select * from main.read_csv('x.csv')",
+    "select * from \"read_csv\"('x.csv')", "select * from read_parquet('x.parquet')", "select * from read_json('x.json')",
+    "select * from read_json_auto('x.json')", "select * from read_ndjson_objects('x.json')", "select * from read_xlsx('x.xlsx')",
+    "select content from read_blob('x.bin')", "select * from read_text('x.txt')", "select * from glob('*')", "select * from main.glob('*')",
+    "select * from sniff_csv('x.csv')", "select * from parquet_metadata('x.parquet')", "select * from parquet_schema('x.parquet')",
+    "select * from delta_scan('d')", "select * from iceberg_scan('d')", "select * from excel_scan('x.xlsx')",
+    "select * from 'x.csv'", "select * from 'x.parquet' t", "select * from orders o join 'x.csv' c on o.id = c.id", "select * from orders, 'x.csv'",
+    "select * from (select * from read_csv('x.csv')) t", "with t as (select * from read_csv('x.csv')) select * from t",
+    "select (select content from read_text('x.txt')) as x", "select * from orders where id in (select a from read_csv('x.csv'))",
+    "select * from orders o join read_csv('x.csv') c on o.id = c.id", "select read_text('x.txt')",
+    "select * from orders union all select * from read_csv('x.csv')", "(select * from read_csv('x.csv'))",
+    "select * from orders o, lateral read_csv(o.id)", "from 'x.csv'",
+]
+ENV_READS = ["select getenv('PATH')", "select GETENV('PATH') from orders", "select current_setting('home_directory')",
+             "select * from duckdb_settings()", "select main.getenv('X')"]
+
+
+@pytest.mark.parametrize("sql", FILE_READS)
+def test_file_reads_blocked(sql):
+    with pytest.raises(SecurityViolationError, match="파일을 직접 읽을 수 없어요"):
+        sql_exec.check(sql, "duckdb")
+
+
+@pytest.mark.parametrize("sql", ENV_READS)
+def test_env_reads_blocked(sql):
+    with pytest.raises(SecurityViolationError, match="환경·설정"):
+        sql_exec.check(sql, "duckdb")
+
+
+def test_blocked_never_runs(tmp_path):
+    """막힌 SQL은 DuckDB에서 실제로 실행되지 않는다(파일이 있어도 읽히지 않고, 막은 오류가 먼저 난다)."""
+    data = tmp_path / "secret.csv"
+    data.write_text("a\n1\n", encoding="utf-8")
+    con = ibis.duckdb.connect()
+    p = str(data).replace("\\", "/")
+    for sql in (f"select * from read_csv('{p}')", f"select content from read_blob('{p}')", f"select * from glob('{tmp_path.as_posix()}/*')",
+                f"select (select content from read_text('{p}')) as x", f"select * from '{p}'", "select getenv('PATH') as x"):
+        with pytest.raises(SecurityViolationError):
+            sql_exec.to_expr(con, sql, {})
+    assert con.sql(f"select * from read_csv('{p}')").to_pyarrow().num_rows == 1  # 막지 않은 길로는 파일이 실제로 읽힌다(막는 쪽이 검사임을 확인)
+
+
+@pytest.mark.parametrize("sql", [
+    "select * from orders where id = 1", "select 'read_csv' as f, id from orders", "select * from custs where name = 'read_csv'",
+    "select * from custs where name in ('glob', 'getenv', 'read_text', 'x.csv')", "select 'x.csv' as path from orders",
+    "select \"id\" from \"orders\"", "select id as read_value from orders", "select * from custs where name like '%read_%'",
+])
+def test_plain_select_passes(con, sql):
+    sql_exec.check(sql, "duckdb")
+
+
+def test_string_values_run(con):
+    assert rows(con, "select count(*) as n from custs where name = 'read_csv'") == [{"n": 0}]
+    assert rows(con, "select 'glob' as f from custs where name = '가람'") == [{"f": "glob"}]
+
+
+def test_parquet_virtual_expands_after_check(tmp_path):
+    """가상 테이블(Parquet)의 read_parquet은 검사 뒤에 풀어 넣으므로 막히지 않고, 그 가상 테이블을 쓰는 SQL도 된다."""
+    path = tmp_path / "extra.parquet"
+    ORDERS.write_parquet(path)
+    con = ibis.duckdb.connect()
+    vts = {"extra": {"parquet": str(path)}}
+    assert rows(con, "select count(*) as n from extra", vts) == [{"n": 4}]
+    assert rows(con, "select sum(amount) as s from extra where id > 1", vts) == [{"s": 700}]
+    assert sql_exec.virtual_table(con, "extra", vts).count().to_pyarrow().as_py() == 4
+    with pytest.raises(SecurityViolationError):  # 사용자가 직접 쓴 같은 경로 읽기는 막힌다
+        rows(con, f"select * from read_parquet('{path.as_posix()}')", vts)
+    with pytest.raises(SecurityViolationError):  # SQL 가상 테이블 정의도 사용자 SQL이라 검사한다
+        rows(con, "select * from bad", {"bad": {"sql": f"select * from read_parquet('{path.as_posix()}')"}})

@@ -1,6 +1,6 @@
 """SQL 직접 쓰기(SafeIbisSQLExecutor)와 가상 테이블.
 - 검사: sqlglot으로 읽어 문장이 하나이고 맨 위가 SELECT·UNION·INTERSECT·EXCEPT인지, 어디에도 바꾸는 문장(DROP·DELETE·INSERT 등)이 없는지 본다.
-  어기면 SecurityViolationError. WITH, 여러 테이블 JOIN, LIKE, * 는 된다.
+  파일·폴더를 읽는 함수(read_*·glob·*_scan 등)와 FROM '경로', 환경·설정 읽기(getenv 등)도 막는다. 어기면 SecurityViolationError. WITH, 여러 테이블 JOIN, LIKE, * 는 된다.
 - 실행: 검사한 SQL을 연결의 con.sql()로 Ibis 식으로 만들고, 화면에 보일 때는 max_rows행까지만(limit) 받는다.
 - 가상 테이블: 이름 붙인 SQL(또는 Parquet 파일 경로). 쓰는 SQL 앞에 WITH 이름 AS (…)로 풀어 넣어 DB에는 아무것도 만들지 않는다.
   연결마다 따로 둔다(virtual_tables.json {연결 열쇠: {이름: 정의}}, 연결 정보·비밀번호 없음). Parquet은 DuckDB·파일(Polars) 연결에서만 쓴다."""
@@ -20,6 +20,13 @@ FORBIDDEN = ("Drop", "Delete", "Insert", "Update", "Create", "Alter", "TruncateT
              "Pragma", "Set", "Copy", "Attach", "Detach", "Use", "Transaction", "Commit", "Rollback", "LoadData", "Kill", "Refresh",  # 데이터·권한·설정을 바꾸거나
              "Cache", "Uncache", "Analyze")  # 파일·DB를 붙이는 문장
 PARQUET_BACKENDS = ("duckdb", "polars")
+FILE_FUNCS = {"glob", "sniff_csv", "st_read", "query", "query_table"}  # 파일·폴더를 읽거나 문자열을 SQL로 돌리는 함수 이름
+FILE_PREFIXES = ("read_", "parquet_", "iceberg_", "delta_")  # 이름이 이렇게 시작하는 함수
+FILE_SUFFIXES = ("_scan",)  # 이름이 이렇게 끝나는 함수(delta_scan, iceberg_scan, excel_scan …)
+ENV_FUNCS = {"getenv", "current_setting", "current_settings", "duckdb_settings", "duckdb_secrets", "which_secret"}  # 환경·설정·비밀을 읽는 함수
+FILE_CLASSES = ("ReadCSV", "ReadParquet")  # sqlglot이 함수 이름 대신 따로 만드는 클래스(없는 버전이면 건너뜀)
+READ_MESSAGE = "SQL 안에서 파일을 직접 읽을 수 없어요. 파일은 [연결]로 열거나 가상 테이블(Parquet)로 등록하세요."
+ENV_MESSAGE = "SQL 안에서 환경·설정 값을 읽을 수 없어요."
 
 
 @functools.cache
@@ -89,7 +96,33 @@ def check(sql, dialect=None):
     bad = next((node for node in tree.walk() if isinstance(node, forbidden)), None)
     if bad is not None:
         raise SecurityViolationError(f"데이터나 설정을 바꾸는 부분({type(bad).__name__.upper()})이 있어 실행하지 않습니다.")
+    if problem := file_read_problem(tree, sql):
+        raise SecurityViolationError(problem)
     return tree
+
+
+def file_read_problem(tree, sql):
+    """식 어디에든(하위 쿼리·CTE·조인·값 자리) 파일을 읽거나 환경·설정을 읽는 부분이 있으면 그 오류 글, 없으면 None.
+    함수는 sqlglot 전용 클래스(ReadCSV 등)와 Anonymous 이름 둘 다 보고(스키마·대소문자·따옴표 무관), 글자로 쓴 테이블(FROM '경로')도 본다."""
+    exp = glot()[1]
+    classes = tuple(getattr(exp, n) for n in FILE_CLASSES if hasattr(exp, n))
+    for node in tree.walk():
+        if isinstance(node, classes):
+            return READ_MESSAGE
+        if isinstance(node, exp.Func):
+            name = (node.name if isinstance(node, exp.Anonymous) else node.sql_name()).lower()
+            if name in ENV_FUNCS:
+                return ENV_MESSAGE
+            if name in FILE_FUNCS or name.startswith(FILE_PREFIXES) or name.endswith(FILE_SUFFIXES):
+                return READ_MESSAGE
+        elif isinstance(node, exp.Table) and isinstance(node.this, exp.Identifier):
+            ident = node.this
+            start = ident.meta.get("start")
+            if start is not None and sql[start:start + 1] == "'":  # 작은따옴표 글자가 테이블 자리에 온 것
+                return READ_MESSAGE
+            if start is None and ident.args.get("quoted") and re.search(r"[/\\]", ident.name):  # 자리를 모르면 경로 모양으로
+                return READ_MESSAGE
+    return None
 
 
 def table_names(tree):
