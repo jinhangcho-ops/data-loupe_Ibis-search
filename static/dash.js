@@ -105,12 +105,43 @@ function rollup(s, days, unit) {
   return new Map([...groups].map(([key, g]) => [key, value(g)]));
 }
 // 시간별 값(data.by_unit)을 unit으로. 서버가 그 단위로 따로 구한 계열(고유 개수, 일 값을 자른 월·연)은 그 값을 쓰고, 나머지는 일 값을 다시 묶는다.
-function byUnit(by, unit) {
+// range({start, end}: "YYYY-MM-DD", 없으면 열린 쪽)를 주면 그 기간의 칸만 남긴다(월·연 칸은 그 기간과 겹치는 것).
+function byUnit(by, unit, range) {
   const day = by.day, server = new Map((unit === "day" ? [] : by[unit]?.series ?? []).map(s => [s.name, new Map(by[unit].labels.map((l, i) => [l, s.values[i]]))]));
   const maps = day.series.map(s => server.get(s.name) ?? (s.agg !== "nunique" ? rollup(s, day.labels, unit) : unit === "day" ? new Map(day.labels.map((l, i) => [l, s.values[i]])) : new Map()));
-  const labels = [...new Set(maps.flatMap(m => [...m.keys()]))].sort();
+  const from = range?.start ? BUCKET[unit](range.start) : "", to = range?.end ?? "9999";
+  const labels = [...new Set(maps.flatMap(m => [...m.keys()]))].sort().filter(l => l >= from && l.slice(0, 10) <= to);
   return { keys: labels, labels: labels.map(l => unit === "month" ? l.slice(0, 7) : unit === "year" ? l.slice(0, 4) : l),
            datasets: day.series.map((s, i) => ({ label: s.name, values: labels.map(l => maps[i].get(l) ?? null) })) };
+}
+// ---------- 기간·비교 (기간 규칙은 서버 period.py, 문장은 compare.py. 여기서는 저장된 일 값으로 두 기간의 값만 구한다) ----------
+const dayNumber = day => Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10)) / 86400000;
+const shiftDay = (day, n) => new Date((dayNumber(day) + n) * 86400000).toISOString().slice(0, 10);
+const daysBetween = (start, end) => dayNumber(end) - dayNumber(start) + 1;
+// 일 값 계열 s의 from~to(포함, 일 글자) 구간 값: 계열의 집계(sum·count·mean·min·max)대로 한 값으로 묶는다. 구간에 일 값이 없으면 null.
+function windowValue(s, days, from, to) {
+  const keep = days.map((_, i) => i).filter(i => (!from || days[i] >= from) && (!to || days[i] <= to));
+  if (!keep.length) return null;
+  const pick = a => a && keep.map(i => a[i]);
+  return rollup({ agg: s.agg, sum: pick(s.sum), count: pick(s.count), min: pick(s.min), max: pick(s.max) }, keep.map(() => "2000-01-01"), "day").get("2000-01-01") ?? null;
+}
+// date의 값(그날 값이 없으면 그 전 마지막 값)
+function pointValue(s, days, date) {
+  for (let i = days.length - 1; i >= 0; i--) if (days[i] <= date) { const v = windowValue(s, days, days[i], days[i]); if (v != null) return v; }
+  return null;
+}
+// 시간별 카드의 첫 계열을 두 기간(또는 두 시점)으로 비교할 값 {cur, prev, mode, label, better, partial}. /api/compare가 문장으로 바꾼다. 안 되는 카드(고유 개수, 기간 없음)는 null.
+// span: 기간 값과 직전 기간(prev: {start, end, text}) 값, point: 끝 날의 값과 기간 길이만큼 앞 날의 값. 직전이 저장된 일 값보다 앞서면 partial.
+function compareItem(card, range, prev) {
+  const by = card.data?.by_unit, s = by?.day?.series[0];
+  if (!s || s.agg === "nunique" || !range?.start || !range?.end) return null;
+  const days = by.day.labels, mode = card.view.compare?.mode ?? "span", better = card.view.better ?? "up", n = daysBetween(range.start, range.end);
+  if (mode === "point") {
+    const before = shiftDay(range.end, -n);
+    return { cur: pointValue(s, days, range.end), prev: pointValue(s, days, before), mode, label: `${n}일 전`, better, partial: before < days[0] };
+  }
+  if (!prev?.start) return null;
+  return { cur: windowValue(s, days, range.start, range.end), prev: windowValue(s, days, prev.start, prev.end), mode, label: prev.text, better, partial: prev.start < days[0] };
 }
 // 분석 카드가 어떤 그림인지(없으면 분석 종류에서)
 const anaView = card => card.view.analysis_view || { distribution: "hist", correlation: "heat", scatter: "scatter", groups: "groups", trend: "trend" }[card.data?.values?.kind];
@@ -122,7 +153,7 @@ function cardSeries(card) {
   if (card.norm) return { time: false, chartable: true, ...card.norm };  // 탐색 탭의 지금 차트처럼 이미 이 모양인 것
   if (isPoints(card)) return { labels: [], datasets: pointGroups(card.data.points).map(label => ({ label, values: [] })), time: false, chartable: true };
   const d = card.data ?? {}, view = card.view ?? {};
-  if (d.by_unit?.day) return { ...byUnit(d.by_unit, view.unit || "day"), time: true, chartable: true };
+  if (d.by_unit?.day) return { ...byUnit(d.by_unit, view.unit || "day", card.range), time: true, chartable: true };
   if (card.kind === "analysis" && d.values) {
     const v = d.values, name = anaView(card);
     if (name === "groups" || name === "trend") return { labels: v.labels, datasets: [{ label: AGG_NAMES[v.agg], values: v.values }], time: name === "trend", chartable: true };
@@ -210,6 +241,9 @@ function chartConfig(card, colors, options = {}) {
            options: { maintainAspectRatio: false, ...(hbar ? { indexAxis: "y" } : {}), plugins: { legend }, scales, ...options } };
 }
 
+// 값이 아직 없는 카드(예전 파일에서 옮긴 것)는 안내만 보인다.
+const needsValues = c => (c.note = cardSeries(c) ? undefined : "아직 구한 값이 없어요. 연결한 뒤 [다시 구하기]를 누르세요.", c);
+
 // ---------- 카드 모음 ----------
 // board.js의 Board에 카드마다 차트 종류·시간 단위·색을 고르는 줄을 더한다. palette는 대시보드의 색 묶음(HEX 목록).
 // 카드는 wrap()으로 감싸 쓴다(config를 붙이고 보이는 비율을 view.ratio에서 가져온다). 저장할 때는 plain()으로 서버 모양만 남긴다.
@@ -217,12 +251,33 @@ class DashBoard extends Board {
   constructor(grid, options) {
     super(grid, options);
     this.palette = [];
+    this.range = null;  // 보는 기간 {start, end}(기준일로 자른 것, 열린 쪽은 없음). 시간별 카드는 이 기간의 일 값만 그린다.
+    this.prev = null;  // 직전 기간 {start, end, text}(비교 문장용)
+    this.compares = new Map();  // 카드 → 비교 문장 {text, tone, ...}
+    this.connKey = "";  // 지금 연결의 열쇠(비밀번호·계정 없음). 있으면 다른 연결의 카드를 "이전 값"으로 보인다.
+  }
+  // 보는 기간과 직전 기간을 바꾸고 비교 문장을 다시 받아 그린다(서버 /api/compare).
+  async setRange(range, prev) {
+    this.range = range;
+    this.prev = prev;
+    await this.recompare();
+  }
+  async recompare() {
+    this.cards.forEach(c => { c.range = this.range; });
+    const items = [], who = [];
+    this.cards.forEach(c => { const item = compareItem(c, this.range, this.prev); if (item) { items.push(item); who.push(c); } });
+    this.compares = new Map();
+    if (items.length) {
+      try { (await api("/api/compare", { items })).results.forEach((r, i) => this.compares.set(who[i], r)); } catch (e) { /* 문장을 못 받으면 문장 없이 그린다 */ }
+    }
+    this.draw();
   }
   wrap(card) {
-    return Object.assign(card, { ratio: card.view?.ratio || 16 / 9, config: (colors, options) => chartConfig(card, { ...colors, palette: this.palette }, options) });
+    return Object.assign(card, { range: this.range, ratio: card.view?.ratio || 16 / 9, config: (colors, options) => chartConfig(card, { ...colors, palette: this.palette }, options) });
   }
   set(cards) {
     super.set(cards.map(c => this.wrap(c)));
+    if (this.range) this.recompare();
   }
   // 저장하는 카드 모양 { id, kind, title, layout, colors, view, source, data }. 화면에서만 쓰는 항목(config, canvas, note…)은 뺀다.
   static plain({ id, kind, title, layout, colors, view, source, data }) {
@@ -259,8 +314,18 @@ class DashBoard extends Board {
     const paint = el("button", { className: "btype" + (card.openColors ? " on" : ""), textContent: "색", onclick: () => { card.openColors = !card.openColors; this.draw(); } });
     const tools = el("div", { className: "btools" }, ...buttons, size, ...flags, unit, paint);
     tools.onclick = e => e.stopPropagation();  // 카드 고르기(Board의 box.onclick)로 번지지 않게
-    const d = card.data ?? {}, when = [d.computed_at && "구한 시각 " + d.computed_at.replace("T", " "), d.note].filter(Boolean).join(" · ");  // 값이 언제 것인지, 줄인 것
-    return el("div", { className: "bextra" }, tools, msg, el("div", { className: "hint bwhen", textContent: when }), card.openColors ? this.colorEditor(card) : "");
+    const d = card.data ?? {}, first = d.by_unit?.day?.labels[0], range = this.range;
+    const applies = range && (card.kind === "chart" || card.kind === "metric") && !d.by_unit && !isPoints(card) ? "기간·기준일은 날짜 X축 카드에만 적용돼요" : "";
+    const early = range?.start && first && range.start < first ? `저장된 일 값은 ${first}부터예요` : "";  // 보려는 기간이 저장된 값보다 앞서면
+    const stale = this.connKey && card.source?.key && card.source.key !== this.connKey ? "이전 값(다른 연결)" : "";  // 지금 연결이 아닌 곳에서 구한 값
+    const when = [stale, d.computed_at && "구한 시각 " + d.computed_at.replace("T", " "), d.note, early, applies].filter(Boolean).join(" · ");  // 값이 언제 것인지, 줄인 것
+    const said = this.compares.get(card), timed = !!d.by_unit?.day && d.by_unit.day.series[0]?.agg !== "nunique";
+    const pick = (value, options, set) => el("select", { className: "bunit", style: "flex-basis:auto", onchange: e => { set(e.target.value); this.changed?.(); this.recompare(); } },
+      ...options.map(([v, name]) => el("option", { value: v, textContent: name, selected: v === value })));
+    const how = timed ? el("div", { className: "btools" }, pick(card.view.compare?.mode ?? "span", [["span", "기간 비교"], ["point", "시점 비교"]], v => { card.view.compare = { mode: v }; }),
+      pick(card.view.better ?? "up", [["up", "늘수록 좋음"], ["down", "줄수록 좋음"]], v => { card.view.better = v; })) : "";
+    return el("div", { className: "bextra" }, tools, msg, el("div", { className: "hint bwhen", textContent: when }),
+      said ? el("div", { className: "bcmp " + said.tone, textContent: said.text, title: said.delta_text }) : "", how, card.openColors ? this.colorEditor(card) : "");
   }
   // 산점도·버블이면 서버에서 점을 받아 카드에 둔다(연결 필요). 다른 종류로 바꾸면 점은 버린다(카드 크기).
   async loadPoints(card) {

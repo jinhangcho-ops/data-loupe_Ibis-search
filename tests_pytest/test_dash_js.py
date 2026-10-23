@@ -150,6 +150,25 @@ assert.strictEqual(bub.data.datasets[0].data[2].r, 20);  // 최대 크기는 3 +
 assert.strictEqual(bub.data.datasets[1].data[0].r, 3 + 17 * Math.sqrt(10 / 30));  // 면적 비례
 const one = chartConfig({ ...cat(1), view: { type: "scatter" }, data: { points: { ...points, groups: [], split: "", points: points.points.map(r => r.slice(0, 3)) } } }, colors);
 assert.deepStrictEqual(one.data.datasets.map(d => d.label), ["y"]); assert(!one.options.plugins.legend.display);
+// 기간·비교: 보는 기간으로 자르기, 구간 값, 시점 값, 비교할 두 값(기간 비교·시점 비교, 직전이 저장된 값보다 앞서면 partial)
+assert.deepStrictEqual(byUnit(by, "day", { start: "2026-01-06", end: "2026-01-31" }).labels, ["2026-01-06", "2026-01-12"]);
+assert.deepStrictEqual(byUnit(by, "month", { start: "2026-01-06", end: "2026-01-31" }).labels, ["2026-01"]);
+assert.deepStrictEqual(byUnit(by, "day", { start: null, end: "2026-01-06" }).labels, ["2026-01-05", "2026-01-06"]);  // 열린 시작
+const days = by.day.labels, [sum, mean] = by.day.series;
+assert.strictEqual(windowValue(sum, days, "2026-01-05", "2026-01-12"), 105);
+assert.strictEqual(windowValue(mean, days, "2026-01-05", "2026-01-12"), 21);
+assert.strictEqual(windowValue(sum, days, "2025-01-01", "2025-12-31"), null);
+assert.strictEqual(pointValue(sum, days, "2026-01-10"), 35);  // 그날 값이 없으면 그 전 마지막 값
+assert.strictEqual(pointValue(sum, days, "2026-01-01"), null);
+assert.strictEqual(shiftDay("2026-03-01", -1), "2026-02-28"); assert.strictEqual(shiftDay("2024-03-01", -1), "2024-02-29");
+assert.strictEqual(daysBetween("2026-01-12", "2026-02-02"), 22);
+const range = { start: "2026-01-12", end: "2026-02-02" }, prev = { start: "2025-12-21", end: "2026-01-11", text: "직전 22일" };
+assert.deepStrictEqual(compareItem(time, range, prev), { cur: 90, prev: 65, mode: "span", label: "직전 22일", better: "up", partial: true });
+const pointCard = { ...time, view: { compare: { mode: "point" }, better: "down" } };
+assert.deepStrictEqual(compareItem(pointCard, range, null), { cur: 50, prev: 35, mode: "point", label: "22일 전", better: "down", partial: false });
+assert.strictEqual(compareItem(time, null, prev), null); assert.strictEqual(compareItem(cat(1), range, prev), null);
+assert.strictEqual(compareItem({ ...time, data: { by_unit: { day: { ...by.day, series: [by.day.series[4]] } } } }, range, prev), null);  // 고유 개수는 다시 묶을 수 없다
+assert.deepStrictEqual(chartConfig({ ...time, range: { start: "2026-01-12", end: "2026-02-02" }, view: { type: "line", unit: "day" } }, colors).data.labels, ["2026-01-12", "2026-02-02"]);
 console.log("ok");
 """
 

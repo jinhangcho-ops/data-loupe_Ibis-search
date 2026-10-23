@@ -365,6 +365,32 @@ def add_card(dash_id, name, card):
         return save_dashboard({**d, "cards": [*d["cards"], {**card, "layout": {"x": 0, "y": min(bottom, 999), "w": 6, "h": 6}}]})
 
 
+def set_card_data(dash_id, card_id, data):
+    """저장한 대시보드의 카드 하나의 값(data)만 바꾼다(최신화 결과). 카드 크기 상한을 다시 검사한다. 카드가 없으면(그사이 지워졌으면) False."""
+    with LOCK:
+        dashboards = editable()
+        d = dashboards.get(dash_id)
+        card = next((c for c in (d or {}).get("cards", []) if c["id"] == card_id), None)
+        if card is None:
+            return False
+        card["data"] = check_card({**card, "data": data})["data"]
+        write(dashboards)
+        return True
+
+
+def update_settings(dash_id, fields):
+    """저장한 대시보드의 기준일(as_of)·기간(period)·최신화(refresh)·실시간(live)만 바꾼다(카드는 그대로). 바뀐 대시보드를 돌려준다."""
+    with LOCK:
+        dashboards = editable()
+        if dash_id not in dashboards:
+            raise ValueError("대시보드를 찾을 수 없습니다.")
+        old = dashboards[dash_id]
+        new = check_dashboard({**old, **{k: v for k, v in fields.items() if k in ("as_of", "period", "refresh", "live")}})
+        dashboards[dash_id] = {**old, **{k: new[k] for k in ("as_of", "period", "refresh", "live")}}
+        write(dashboards)
+        return dashboards[dash_id]
+
+
 # ---------- 예전 평문 파일 옮기기 ----------
 
 def plain_card(chart):

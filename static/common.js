@@ -412,6 +412,7 @@ if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
     const { schemas } = await api("/api/connect", body);
     showRecentConnections();  // 쓴 횟수가 바뀌었다
     await showConnected(!!body.files, schemas, body);
+    if (typeof startRefresh === "function") startRefresh();  // 연결에 성공하면 어느 화면에서나 대시보드 최신화를 시작한다(dash_refresh.js)
     if (typeof afterConnect === "function") afterConnect();  // 첫 화면: 고른 화면으로 넘어간다
   } catch (e) { connMsg(e.message); }
 });

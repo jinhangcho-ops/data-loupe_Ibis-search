@@ -13,6 +13,8 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel)에 연결해 �
 | 수집 | 웹 API·파일 주소·웹페이지에서 받아 저장, DB 테이블·Kafka에 적재, 업로드 기록, 예약 실행 | [docs/collect.md](docs/collect.md) |
 | 연동 | Slack·Notion·웹훅으로 보내기, Slack `/ibis` 명령, GA4 가져오기, LLM 설정 | [docs/integrations.md](docs/integrations.md) |
 
+대시보드(기준일·기간·최신화·실시간)는 [docs/dashboard.md](docs/dashboard.md)에 있습니다.
+
 화면 설정, 진행 상황과 취소, 기억되는 것, DB별 드라이버는 [docs/settings.md](docs/settings.md)에 있습니다.
 
 ## 프로그램 받기

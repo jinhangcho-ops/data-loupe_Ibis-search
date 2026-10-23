@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ibis 쿼리·분석·수집</title>
 <!--include head.html-->
+<script src="/static/chart.umd.min.js"></script>
 <style>
-  .hero { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:28px; padding:24px; }
+  .hero { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; align-items:center; justify-content:safe center; gap:28px; padding:24px; }
   .hero h1 { margin:0; font-size:30px; letter-spacing:-.02em; }
   .hero p { margin:0; color:var(--muted); }
   .choices { display:flex; flex-wrap:wrap; gap:16px; justify-content:center; }
@@ -15,6 +16,10 @@
   .choice b { font-size:22px; }
   .choice span { color:var(--muted); line-height:1.5; }
   .choice em { font-style:normal; font-size:12.5px; color:var(--accent); font-weight:600; }
+  .dhome { width:min(1500px, 100%); border-top:1px solid var(--line); padding-top:18px; }
+  .dhome-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:0 28px 10px; }
+  .dhome-head h2 { margin:0 8px 0 0; font-size:20px; }
+  .dhome-head select { flex:0 1 220px; width:auto; }
 </style>
 </head>
 <body class="app">
@@ -27,20 +32,96 @@
     <button class="choice" data-go="/collect"><b>수집</b><span>웹 API·파일 주소·웹페이지에서 데이터를 받아 파일로 저장하고, DB 테이블이나 Kafka에 넣습니다.</span><em>연결 없이 시작</em></button>
     <button class="choice" data-go="/integrations"><b>연동</b><span>Slack·Notion·웹훅으로 보내고, Slack 명령을 받고, GA4 보고서를 가져오고, LLM을 설정합니다.</span><em>연결 없이 시작</em></button>
   </div>
+  <!-- 대시보드: 저장해 둔 카드를 저장된 값으로 바로 그린다. 연결하면 주기가 지난 카드를 다시 구한다(최신화). 기준일·기간은 쿼리 화면의 대시보드 탭과 같은 칸이다. -->
+  <section class="dhome">
+    <div class="dhome-head">
+      <h2>대시보드</h2>
+      <select id="h-dash" title="저장한 대시보드(마지막으로 연 것을 기억합니다)"></select>
+      <button id="h-connect" class="btn" title="연결하면 주기가 지난 카드를 다시 구합니다">연결</button>
+      <button id="h-edit" class="btn" title="이 대시보드를 쿼리 화면의 대시보드 탭에서 고칩니다">쿼리에서 편집</button>
+    </div>
+    <div id="h-ctl"></div>
+    <div class="err" id="err-home" style="padding:0 28px"></div>
+    <div class="board" id="h-grid"></div>
+  </section>
 </div>
 <!--include connect.html-->
+<!--include dash_refresh.html-->
 <!--include notify.html-->
 <script src="/static/common.js"></script>
+<script src="/static/dash_refresh.js"></script>
+<script src="/static/board.js"></script>
+<script src="/static/dash.js"></script>
+<script src="/static/dash_ctl.js"></script>
 <script>
 // 쿼리·분석은 연결이 있으면 바로, 없으면 가운데 연결 카드를 띄워 연결한 뒤에 들어간다(afterConnect). 수집·연동은 연결 없이 들어간다.
+// 대시보드 구역에서 연결하면 들어가지 않는다(최신화는 연결 경로가 시작한다).
 let target = null;
-function afterConnect() { if (target) location.href = target; }
+function afterConnect() {
+  if (target) return void (location.href = target);
+  showConn();
+}
 document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => {
   target = b.dataset.go;
   if (target === "/collect" || target === "/integrations" || connected) return location.href = target;
   openConnect(`${b.querySelector("b").textContent}로 들어갑니다`);
 });
-resume();
+
+// ---------- 대시보드 ----------
+let dashId = "";
+const board = new DashBoard($("h-grid"), { empty: "저장한 대시보드가 없어요. 쿼리 화면에서 차트를 모아 저장하면 여기에 보입니다.", changed: () => ctl.showLast(board.cards) });
+// 칸을 바꾸면 저장한 대시보드의 기준일·기간·주기만 서버에 쓴다(카드는 그대로). 거부되면(예: 주기가 너무 짧음) 이유를 보이고 저장된 값으로 되돌린다.
+const ctl = new DashCtl($("h-ctl"), {
+  board, liveRun: () => liveCards(board, !!connected), visible: () => !document.hidden,
+  changed: async fields => {
+    if (!dashId) return;
+    try { await api("/api/dash/settings", { id: dashId, ...fields }); say("err-home", ""); }
+    catch (e) { say("err-home", e.message); await openDash(dashId); }
+  } });
+// 지금 연결 열쇠: 다른 연결에서 구한 카드는 "이전 값"으로 보인다
+async function showConn() {
+  $("h-connect").textContent = connected ? connName || "연결됨" : "연결";
+  board.connKey = (await api("/api/dash/live_min")).source?.key;
+  board.draw();
+  ctl.loadMin();
+}
+function showList({ dashboards, last }, pick) {
+  $("h-dash").replaceChildren(...(dashboards.length ? dashboards : [{ id: "", name: "저장한 대시보드 없음", cards: 0 }]).map(d => el("option", { value: d.id, textContent: `${d.name} (카드 ${d.cards}개)` })));
+  $("h-dash").value = dashboards.some(d => d.id === (pick || last)) ? pick || last : dashboards[0]?.id ?? "";
+}
+async function openDash(id) {
+  dashId = id;
+  if (!id) { board.set([]); return; }
+  const d = (await api("/api/dash/" + id)).dashboard;
+  board.palette = d.palette;
+  board.set(d.cards.map(needsValues));
+  await ctl.set(d);
+  ctl.showLast(d.cards);
+  api("/api/dash/last", { id }).catch(() => {});
+}
+$("h-dash").onchange = () => openDash($("h-dash").value).catch(e => say("err-home", e.message));
+$("h-connect").onclick = () => { target = null; openConnect(connected ? "연결을 바꿉니다" : "연결하면 대시보드를 최신화합니다"); };
+// [쿼리에서 편집]: 쿼리 화면의 대시보드 탭이 읽는 지금 대시보드(sessionStorage, 키는 index.html의 DASH_KEY)에 넣고 그 탭으로 간다.
+$("h-edit").onclick = async () => {
+  if (!dashId) return say("err-home", "고칠 대시보드를 먼저 고르세요.");
+  try {
+    const { id, name, palette, cards, ...meta } = (await api("/api/dash/" + dashId)).dashboard;
+    sessionStorage.setItem("ibis_dashboard", JSON.stringify({ id, name, meta, palette, cards }));
+    location.href = "/search#dashboard";
+  } catch (e) { say("err-home", e.message); }
+};
+$("theme")?.addEventListener("click", () => board.draw());
+
+// 최신화(팝업·알약)는 dash_refresh.js가 맡는다. 끝나면 새로 구한 값으로 다시 연다.
+document.addEventListener("dash-refreshed", e => { if (dashId && e.detail.results.some(r => r.state === "ok")) openDash(dashId).catch(err => say("err-home", err.message)); });
+
+resume().then(async () => {
+  showConn();
+  const list = await api("/api/dash");
+  showList(list);
+  if (list.locked) say("err-home", SERVER.dash.locked);
+  await openDash($("h-dash").value);
+}).catch(e => say("err-home", e.message));
 </script>
 </body>
 </html>

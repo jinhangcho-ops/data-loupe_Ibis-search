@@ -21,7 +21,7 @@ def test_save_open_delete(client):
     saved = post(client, "/api/dash", name=" 주간 ", cards=[CARD])["dashboard"]
     assert saved["name"] == "주간" and saved["cards"][0]["source"]["body"]["base"] == "orders" and saved["cards"][0]["layout"] == {"x": 0, "y": 0, "w": 6, "h": 6}
     listed = client.get("/api/dash").get_json()
-    assert listed == {"dashboards": [{"id": saved["id"], "name": "주간", "cards": 1, "updated": saved["updated"]}], "locked": False}
+    assert listed == {"dashboards": [{"id": saved["id"], "name": "주간", "cards": 1, "updated": saved["updated"]}], "locked": False, "last": ""}
     assert client.get(f"/api/dash/{saved['id']}").get_json()["dashboard"]["cards"][0]["id"] == saved["cards"][0]["id"]
     assert post(client, "/api/dash", id=saved["id"], name="주간(고침)", cards=[])["dashboards"][0]["name"] == "주간(고침)"  # 같은 id는 덮어쓴다
     assert post(client, "/api/dash/delete", id=saved["id"]) == {"dashboards": [], "locked": False}
