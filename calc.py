@@ -306,7 +306,7 @@ def pivot(expr, spec, values_of):
             raise ValueError("합계·평균은 숫자 컬럼에만 됩니다.")
     elif sql_funcs.needs_column(how):
         raise ValueError("값 컬럼을 고르세요(개수는 비워도 됩니다).")
-    cond = parse.predicate(spec["where"], expr) if (spec.get("where") or "").strip() else None
+    cond = parse.predicate(spec["where"], expr) if spec.get("where") and (not isinstance(spec["where"], str) or spec["where"].strip()) else None
     total = f"전체 {sql_funcs.label_of(how)}"
     aggs = {total: metric(expr, how, value, cond, opts)}
     if column is not None:

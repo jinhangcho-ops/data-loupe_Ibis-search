@@ -5,7 +5,8 @@ text_match {match: 포함·으로 시작·으로 끝, text} · cond 조건 줄(�
 metric 지표 이름(지표 파일) · choice 고른 글자 · table 테이블 이름 · text 글자 · transform {func(함수 사전 행 함수 id), args}.
 check(tid, slots, columns) → [{slot, level(bad·warn·info), text}] (bad면 실행하지 않는다). columns = {컬럼: 종류}.
 compile(tid, slots, body, columns) → {ok, text, body, runs: [{label, route, body}], combine?, notes} 또는 {ok: False, reason}.
-runs의 route는 /api/query(행)·/api/pivot(묶어 집계, calc.pivot의 order·top 포함)·/api/metrics/run뿐이다. 값 하나로 합쳐야 하면 combine {op: ratio·percent·share, a, b}을 준다(화면이 나눈다)."""
+runs의 route는 /api/query(행)·/api/pivot(묶어 집계, calc.pivot의 order·top 포함)·metric(지표 값)·nested(대상마다 구한 값을 다시 집계)이다. 값 하나로 합쳐야 하면 combine {op: ratio·percent·share·sub·add·mean_of·change·cumsum, a, b}을 준다.
+요청을 실제로 돌려 합치는 것은 sentence_exec(POST /api/sentence/run)가 한다 — 화면은 나누거나 합치지 않는다."""
 import copy
 import re
 
@@ -17,7 +18,7 @@ import sql_funcs
 
 PREPS = {"after_q": "? 뒤 자르기", "first_n": "앞 N글자", "date_only": "날짜만", "lower": "소문자로"}  # 컬럼 가공 옵션 → 계산 줄로
 MAX_TOP = 50
-TEXT_MATCH = {"포함": "like", "으로 시작": "starts"}  # 조건 줄에 있는 글자 비교(끝은 없다)
+TEXT_MATCH = {"포함": "like", "으로 시작": "starts", "으로 끝": "ends"}  # 조건 줄에 있는 글자 비교(parse.LIKE_RE)
 SUBTOTAL_BY = {"소계·총계": "rollup", "모든 조합(CUBE)": "cube", "고른 조합(GROUPING SETS)": "sets"}
 WORD = re.compile(r"\{([^{}]+)\}")
 COMPARED = ("e03", "e04", "e12")  # 값 빈칸을 같은 문장의 {컬럼}과 견주는 틀(컬럼 종류로 읽히는지 본다)
@@ -123,8 +124,6 @@ def check(tid, slots, columns=None):
             out += value_issues(t, slots, s, raw, columns)
         elif kind == "period" and not (isinstance(raw, str) or isinstance(raw, dict)):
             out.append(issue(name, "bad", "기간은 ‘날짜컬럼 시작 ~ 끝’ 글이나 {column, start, end}로 넣어 주세요."))
-    if tid == "e05" and isinstance(slots.get("글자"), dict) and slots["글자"].get("match") == "으로 끝":
-        out.append(issue("글자", "bad", "‘으로 끝’은 아직 조건 줄로 만들 수 없어요. ‘포함’이나 ‘으로 시작’을 쓰세요."))
     if tid in ("e14", "e46") and (tid == "e46" or slots.get("정확도") == "빠르게(근사)"):
         out.append(issue("정확도", "info", "근사 값이에요. 정확한 값과 조금 다를 수 있어요."))
     if tid == "e47":
@@ -214,7 +213,7 @@ class Plan:
     def period(self):
         """앞에 붙는 {기간}을 body.periods에."""
         p = self.get("기간")
-        if p:
+        if p and (isinstance(p, str) or p.get("start") or p.get("end")):
             self.body["periods"].append(p if isinstance(p, str) else f"{p['column']} {p.get('start', '')} ~ {p.get('end', '')}")
 
     def run(self, label, route, body, **extra):
@@ -256,11 +255,18 @@ def quote(v):
     return f'"{text}"' if re.search(r"[,\s]|\bor\b|['\"]", text, re.I) else text
 
 
-def formula_of(line, cols=None):
-    """탐색 조건 한 줄을 계산 식(Formula) 글로. 한 줄 안의 and/or는 못 바꾼다."""
-    text = line.strip()
-    if parse.OR_RE.search(text):
-        raise Bad(f"조건 ‘{line}’을 계산 식으로 바꿀 수 없어요.")
+def formula_of(cond):
+    """탐색 조건(글자 한 줄·목록(and)·{any}(or)·{line})을 계산 식(Formula) 글로. 한 줄 안의 or도 나눠서 잇는다."""
+    if isinstance(cond, list):
+        return " and ".join(f"({formula_of(c)})" for c in cond)
+    if isinstance(cond, dict):
+        return " or ".join(f"({formula_of(c)})" for c in cond["any"]) if "any" in cond else formula_of(cond["line"])
+    parts = [x.strip() for x in parse.split(parse.OR_RE, cond.strip())]
+    return parts[0] and (formula_one(parts[0]) if len(parts) == 1 else " or ".join(f"({formula_one(x)})" for x in parts))
+
+
+def formula_one(text):
+    """조건 한 줄(or 없음)을 계산 식 글로."""
     m = parse.NULL_RE.match(text)
     if m:
         return f"{'notnull' if m.group(2) else 'isnull'}(col({m.group(1)!r}))"
@@ -274,12 +280,13 @@ def formula_of(line, cols=None):
         return inner if m.group(2).lower() == "in" else f"not {inner}"
     m = parse.LIKE_RE.match(text)
     if m:
-        return f"{'startswith' if m.group(2).lower() == 'starts' else 'contains'}(col({m.group(1)!r}), {m.group(3).strip().strip(chr(39) + chr(34))!r})"
+        name = {"starts": "startswith", "ends": "endswith"}.get(m.group(2).lower(), "contains")
+        return f"{name}(col({m.group(1)!r}), {m.group(3).strip().strip(chr(39) + chr(34))!r})"
     m = parse.COND_RE.match(text)
     if m:
         op = {"=": "==", "!=": "!="}.get(m.group(2), m.group(2))
         return f"col({m.group(1)!r}) {op} {num(m.group(3).strip().strip(chr(39) + chr(34)))}"
-    raise Bad(f"조건 ‘{line}’을 계산 식으로 바꿀 수 없어요.")
+    raise Bad(f"조건 ‘{text}’을 계산 식으로 바꿀 수 없어요.")
 
 
 def num(text):
@@ -364,7 +371,7 @@ def e05(p):
     g = p.need("글자")
     mode, text = (g.get("match", "포함"), g.get("text")) if isinstance(g, dict) else ("포함", g)
     if mode not in TEXT_MATCH:
-        raise Bad("‘으로 끝’은 아직 조건 줄로 만들 수 없어요. ‘포함’이나 ‘으로 시작’을 쓰세요.")
+        raise Bad(f"글자 비교는 {', '.join(TEXT_MATCH)} 중 하나예요.")
     p.where(f"{p.col('컬럼')} {TEXT_MATCH[mode]} {quote(text)}")
     p.rows("행")
 
@@ -378,11 +385,7 @@ def e07(p):
 
 
 def cond_line(c):
-    """조건 빈칸(글자 또는 한 줄짜리 목록)의 조건 줄 하나. 여러 줄은 한 칸에 담을 수 없다."""
-    if isinstance(c, list) and len(c) == 1:
-        return c[0]
-    if isinstance(c, list):
-        raise Bad("이 칸에는 조건을 한 줄만 넣을 수 있어요(여러 조건은 or로 이어 한 줄로).")
+    """조건 빈칸의 조건: 글자 한 줄, 여러 줄 목록(모두 and), {any: […]}(or 묶음) 그대로. parse.predicate가 모두 받는다."""
     return c
 
 
@@ -461,9 +464,8 @@ def e20(p):
 
 
 def e21(p):
-    a, b = p.need("지표 A"), p.need("지표 B")
-    i = p.run("지표 A · B", "/api/metrics/run", {**p.body, "names": [a, b]})
-    p.combine = {"op": "ratio", "a": a, "b": b, "run": i}
+    a, b = metric_run(p, "지표 A", metric_ref(p, "지표 A")), metric_run(p, "지표 B", metric_ref(p, "지표 B"))
+    p.combine = {"op": "ratio", "a": a, "b": b}
 
 
 def unit_line(p, new="기간"):
@@ -605,7 +607,7 @@ def e41(p):
     new, parts = p.need("새 이름"), []
     for i in ("1", "2"):
         if p.get("조건" + i):
-            parts.append(f"{formula_of(cond_line(p.get('조건' + i)))}, {num(p.need('값' + i))}")
+            parts.append(f"{formula_of(p.get('조건' + i))}, {num(p.need('값' + i))}")
     if not parts:
         raise Bad("조건을 하나 이상 넣어 주세요.")
     p.calc(f"식 case({', '.join(parts)}, {num(p.need('값3'))}) 이름 {new}")
@@ -651,28 +653,132 @@ def part(agg, column=None, where=None, opts=None):
     return {"agg": agg, "column": column, "where": [where] if where else [], **({"opts": opts} if opts else {})}
 
 
+def known_metric(ref):
+    """지표 파일의 이름이거나 내 지표 id인지."""
+    import my_metrics
+    try:
+        if ref in metrics.registry():
+            return True
+    except ValueError:
+        pass
+    try:
+        my_metrics.get(ref)
+        return True
+    except ValueError:
+        return False
+
+
+def metric_ref(p, name):
+    """지표 빈칸의 지표(이름 또는 id). 목록에 없으면 Bad."""
+    ref = p.need(name)
+    if not known_metric(ref):
+        raise Bad(f"지표 ‘{ref}’를 지표 목록에서 찾지 못했어요. 지표 파일의 지표나 내 지표를 골라 주세요.")
+    return ref
+
+
+def metric_run(p, label, ref, by=None, body=None):
+    """지표 하나를 (by가 있으면 그 값마다) 구하는 요청. 서버가 지표 정의로 식을 만들어 구한다(sentence_exec)."""
+    return p.run(label, "metric", copy.deepcopy(body or p.body), ref=ref, **({"by": by} if by else {}))
+
+
+def period_parts(p):
+    """{기간} 빈칸에서 (날짜 컬럼, 시작, 끝). 시작·끝이 날짜가 아니면 Bad."""
+    import datetime as dt
+    v = p.get("기간")
+    if v is None:
+        raise Bad("이 지표는 날짜 컬럼이 필요해요. 앞의 {기간}에 ‘날짜컬럼 시작 ~ 끝’을 넣어 주세요.")
+    if isinstance(v, str):
+        col, _, rng = v.partition(" ")
+        start, _, end = (x.strip() for x in rng.partition("~"))
+    else:
+        col, start, end = v["column"], v.get("start", ""), v.get("end", "")
+    try:
+        return col, dt.date.fromisoformat(start), dt.date.fromisoformat(end)
+    except ValueError:
+        raise Bad("직전 같은 기간과 견주려면 {기간}에 시작과 끝 날짜를 모두 넣어 주세요.") from None
+
+
 def metric_def(p):
-    """지표 틀 → metrics.py 모양의 지표 정의 {numerator, denominator}. 그 모양으로 못 나타내는 틀(처음 값 기준·빼기·더하기·묶음별 평균·단위별·변화율·누적)은 이유와 함께 ok False."""
-    no, deps = p.t["no"], p.s
-    name = p.t["name"]
+    """지표 틀 → 요청들(runs)과 합치는 방법(combine). 지표 정의(metrics.py 모양)로 나타낼 수 있는 틀(1·2·3·5·6·9, 분모 없는 지표끼리)은 definition도 준다.
+    1~3·9는 묶음 없는 집계(/api/pivot), 4는 처음 값 기준 계산 줄, 5~8·13~15는 지표를 구하는 요청(route "metric")을 합치고,
+    10~12는 대상마다 구한 값을 다시 집계하는 요청(route "nested")이다."""
+    no, definition = p.t["no"], None
     if no == 1:
-        d = {"numerator": part("count")}
+        p.group("행 수", [], "count")
+        definition = {"numerator": part("count")}
     elif no == 2:
-        d = {"numerator": part("count_distinct", p.col("대상"))}
+        p.group("고유 대상 수", [], "count_distinct", p.col("대상"))
+        definition = {"numerator": part("count_distinct", p.col("대상"))}
     elif no == 3:
         how, opts = agg_of(p.need("집계"))
-        d = {"numerator": part(how, p.col("값") if sql_funcs.needs_column(how) else None, None, opts)}
+        value = p.col("값") if sql_funcs.needs_column(how) else None
+        p.group("값의 집계", [], how, value, opts)
+        definition = {"numerator": part(how, value, None, opts)}
+    elif no == 4:
+        t, c, order = p.col("대상"), p.col("컬럼"), p.need("정렬 기준")
+        new = f"처음_{c}"
+        p.calc(window_line("first_value", c, order, t) + f" 이름 {new}")
+        p.group("처음 값 기준 대상 수", [], "count_distinct", t, where=f"{new} = {quote(p.need('값'))}")
     elif no == 9:
-        d = {"numerator": part("sum", p.col("값")), "denominator": part("count_distinct", p.col("대상"))}
-    elif no in (5, 6):
-        found = metrics.registry()
-        a, b = (found.get(deps.get("지표 A")), found.get(deps.get("지표 B")))
-        if a is None or b is None:
-            raise Bad("지표 A·B를 지표 목록에서 골라 주세요.")
-        if a["denominator"] or b["denominator"]:
-            raise Bad("분모가 있는 지표끼리는 아직 한 정의로 합칠 수 없어요. 각각 구해서 나누세요.")
-        d = {"numerator": a["numerator"], "denominator": b["numerator"], **({"format": "percent"} if no == 6 else {})}
+        a = p.group("값 전체 합", [], "sum", p.col("값"))
+        b = p.group("대상 수", [], "count_distinct", p.col("대상"))
+        p.combine = {"op": "ratio", "a": a, "b": b}
+        definition = {"numerator": part("sum", p.col("값")), "denominator": part("count_distinct", p.col("대상"))}
+    elif no in (5, 6, 7, 8):
+        ra, rb = metric_ref(p, "지표 A"), metric_ref(p, "지표 B")
+        a, b = metric_run(p, "지표 A", ra), metric_run(p, "지표 B", rb)
+        p.combine = {"op": {5: "ratio", 6: "percent", 7: "sub", 8: "add"}[no], "a": a, "b": b}
+        try:
+            found = metrics.registry()
+        except ValueError:
+            found = {}
+        x, y = found.get(ra), found.get(rb)
+        if no in (5, 6) and x and y and not x["denominator"] and not y["denominator"]:
+            definition = {"numerator": x["numerator"], "denominator": y["numerator"], **({"format": "percent"} if no == 6 else {})}
+    elif no == 10:
+        how, opts = agg_of(p.need("집계"))
+        p.run("대상마다 구한 값", "nested", copy.deepcopy(p.body), entity=p.col("대상"),
+              inner={"how": how, "value": p.col("값") if sql_funcs.needs_column(how) else None, "opts": opts}, outer={"op": "mean"})
+    elif no == 11:
+        p.run("N번 이상 한 대상 비율", "nested", copy.deepcopy(p.body), entity=p.col("대상"),
+              inner={"how": "count_if", "opts": {"cond": cond_line(p.need("조건"))}}, outer={"op": "share_ge", "n": int(p.get("N", 2))})
+    elif no == 12:
+        p.run("단계 A 중 단계 B까지 간 비율", "nested", copy.deepcopy(p.body), entity=p.col("대상"),
+              inner={"flags": {"a": cond_line(p.need("단계 A")), "b": cond_line(p.need("단계 B"))}}, outer={"op": "both_ratio"})
+        p.notes.append("두 단계를 한 번이라도 했는지로 봐요(순서·시간은 보지 않아요). 순서까지 보려면 퍼널을 쓰세요.")
+    elif no == 13:
+        col = period_column(p)
+        new = "기간"
+        p.calc(f"식 truncate(col({col!r}), {p.get('단위', 'day')!r}) 이름 {new}")
+        i = metric_run(p, "단위마다 지표", metric_ref(p, "지표"), by=new)
+        p.combine = {"op": "mean_of", "a": i}
+    elif no == 14:
+        col, start, end = period_parts(p)
+        import datetime as dt
+        days = (end - start).days + 1
+        before = f"{col} {start - dt.timedelta(days=days)} ~ {start - dt.timedelta(days=1)}"
+        prev = copy.deepcopy(p.body)
+        prev["periods"] = [x for x in prev["periods"] if not str(x).startswith(f"{col} ")] + [before]
+        ref = metric_ref(p, "지표")
+        a, b = metric_run(p, "이번 기간", ref), metric_run(p, "직전 같은 기간", ref, body=prev)
+        p.combine = {"op": "change", "a": a, "b": b}
+        p.notes.append(f"직전 같은 기간은 {start - dt.timedelta(days=days)} ~ {start - dt.timedelta(days=1)}({days}일)이에요.")
+    elif no == 15:
+        order = str(p.need("정렬 기준")).split()[0]
+        i = metric_run(p, "정렬 기준마다 지표", metric_ref(p, "지표"), by=order)
+        p.combine = {"op": "cumsum", "a": i}
     else:
-        raise Bad(f"‘{name}’ 지표는 아직 지표 정의(분자·분모) 한 개로 나타낼 수 없어요. 지표 사전(7단계)에서 계산해요.")
-    d = {"description": render(p.tid, p.s), "format": d.pop("format", "number"), "denominator": None, **d}
-    return {"ok": True, "template": p.tid, "text": render(p.tid, p.s), "kind": "metric", "definition": d, "body": p.body, "runs": [], "notes": p.notes}
+        raise Bad(f"‘{p.t['name']}’ 지표를 아직 요청으로 만들 수 없어요.")
+    out = p.result()
+    if definition:
+        definition = {"description": render(p.tid, p.s), "format": definition.pop("format", "number"), "denominator": None, **definition}
+    return {**out, "kind": "metric", "definition": definition}
+
+
+def period_column(p):
+    """{기간} 빈칸의 날짜 컬럼 이름(시작·끝이 없어도 된다). 없으면 Bad."""
+    v = p.get("기간")
+    col = v.get("column") if isinstance(v, dict) else str(v).split()[0] if v else None
+    if not col:
+        raise Bad("단위마다 나누려면 날짜 컬럼이 필요해요. 앞의 {기간}에 날짜 컬럼을 넣어 주세요.")
+    return col

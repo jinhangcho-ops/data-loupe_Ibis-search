@@ -58,7 +58,7 @@ def test_check_gives_reasons():
     assert first("e08", {}) == [("무엇", "bad", "‘나눌 기준 컬럼’ 칸을 채워 주세요."), ("대상", "bad", "‘대상(사람·물건) 컬럼’ 칸을 채워 주세요.")]
     assert first("e09", {"무엇": "store", "N": 0}) == [("N", "bad", "‘N 이상’에는 1 이상의 정수를 넣어 주세요.")]
     assert first("e13", {"무엇": "store", "값": "store", "집계": "sum", "N": 3}) == [("집계", "bad", "‘store’은 글자 컬럼이라 합계을(를) 구할 수 없어요. 숫자 컬럼을 고르거나 개수·고유 개수를 쓰세요.")]
-    assert first("e05", {"컬럼": "store", "글자": {"match": "으로 끝", "text": "A"}}) == [("글자", "bad", "‘으로 끝’은 아직 조건 줄로 만들 수 없어요. ‘포함’이나 ‘으로 시작’을 쓰세요.")]
+    assert first("e05", {"컬럼": "store", "글자": {"match": "으로 끝", "text": "A"}}) == []
     assert first("e05", {"컬럼": "amt", "글자": "A"}) == [("컬럼", "bad", "‘amt’은 숫자 컬럼이라 쓸 수 없어요(글자 컬럼이 필요해요)."), ("글자", "warn", "대소문자를 가리지 않고 찾아요.")]
     assert first("e14", {"무엇": "store", "대상": "uid", "정확도": "빠르게(근사)"}) == [("정확도", "info", "근사 값이에요. 정확한 값과 조금 다를 수 있어요.")]
     assert first("e07", {"조건": "zz > 1", "대상": "uid"}) == [("조건", "bad", "조건의 ‘zz’ 컬럼이 이 테이블에 없어요.")]
@@ -182,34 +182,7 @@ def test_period_prefix_and_filters(c):
 
 
 def test_unsupported_templates_say_why(c):
-    done = sr.compile("e05", {"컬럼": "uid", "글자": {"match": "으로 끝", "text": "1"}}, BASE, COLS)
-    assert done["ok"] is False and "으로 끝" in done["reason"]
-    assert sr.compile("e41", {"컬럼": "amt", "조건1": "amt >= 1 or amt <= 0", "값1": "x", "값3": "y", "새 이름": "z"}, BASE, COLS)["reason"] == "조건 ‘amt >= 1 or amt <= 0’을 계산 식으로 바꿀 수 없어요."
-    assert sr.compile("e07", {"조건": ["amt > 1", "amt < 5"], "대상": "uid"}, BASE, COLS)["reason"] == "이 칸에는 조건을 한 줄만 넣을 수 있어요(여러 조건은 or로 이어 한 줄로)."
-
-
-# ---------- 지표 틀 ----------
-
-def test_metric_templates_become_metric_definitions(folder, tmp_path):
-    import json
-
-    import metrics
-    done = sr.compile("m02", {"대상": "uid"}, BASE, COLS)
-    assert done["ok"] and done["kind"] == "metric" and done["definition"]["numerator"] == {"agg": "count_distinct", "column": "uid", "where": []} and done["definition"]["denominator"] is None
-    arpu = sr.compile("m09", {"값": "amt", "대상": "uid"}, BASE, COLS)["definition"]
-    assert arpu["numerator"]["agg"] == "sum" and arpu["denominator"]["agg"] == "count_distinct" and arpu["denominator"]["column"] == "uid"
-    assert metrics.metric("ARPU", arpu)["numerator"]["column"] == "amt"  # metrics.py가 읽는 모양이다
-    assert sr.compile("m01", {}, BASE, COLS)["definition"]["numerator"] == {"agg": "count", "column": None, "where": []}
-    avg = sr.compile("m03", {"값": "amt", "집계": "mean"}, BASE, COLS)["definition"]
-    assert avg["numerator"] == {"agg": "mean", "column": "amt", "where": []}
-    path = tmp_path / "m.json"
-    path.write_text(json.dumps({"metrics": {"클릭": {"numerator": {"agg": "count", "where": "store = A"}}, "노출": {"numerator": {"agg": "count"}}}}), encoding="utf-8")
-    metrics.save_file_path(str(path))
-    pct = sr.compile("m06", {"지표 A": "클릭", "지표 B": "노출"}, BASE, COLS)["definition"]
-    assert pct["format"] == "percent" and pct["numerator"]["where"] == ["store = A"] and pct["denominator"]["where"] == []
-    ratio = sr.compile("m05", {"지표 A": "클릭", "지표 B": "노출"}, BASE, COLS)["definition"]
-    assert ratio["format"] == "number"
-    hard = sr.compile("m07", {"지표 A": "클릭", "지표 B": "노출"}, BASE, COLS)
-    assert hard["ok"] is False and hard["reason"] == "‘A−B’ 지표는 아직 지표 정의(분자·분모) 한 개로 나타낼 수 없어요. 지표 사전(7단계)에서 계산해요."
-    assert sr.compile("m04", {}, BASE, COLS)["ok"] is False
-    assert sr.compile("m05", {"지표 A": "없는", "지표 B": "노출"}, BASE, COLS)["reason"] == "지표 A·B를 지표 목록에서 골라 주세요."
+    assert sr.compile("e41", {"컬럼": "amt", "조건1": "hello", "값1": "x", "값3": "y", "새 이름": "z"}, BASE, COLS)["reason"] == "조건의 ‘hello’ 컬럼이 이 테이블에 없어요."
+    assert sr.compile("e05", {"컬럼": "uid", "글자": {"match": "엉뚱", "text": "1"}}, BASE, COLS)["reason"] == "글자 비교는 포함, 으로 시작, 으로 끝 중 하나예요."
+    assert sr.compile("e41", {"컬럼": "amt", "값1": "x", "값3": "y", "새 이름": "z"}, BASE, COLS)["reason"] == "‘조건1’ 칸을 채워 주세요."
+    assert sr.compile("m05", {"지표 A": "없는", "지표 B": "없는2"}, BASE, COLS)["reason"] == "지표 ‘없는’를 지표 목록에서 찾지 못했어요. 지표 파일의 지표나 내 지표를 골라 주세요."

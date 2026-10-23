@@ -11,6 +11,7 @@ import held
 import join_keys
 import my_metrics
 import result
+import sentence_exec
 import sentence_run
 import sentences
 import server
@@ -338,3 +339,15 @@ def sentence_compile():
     data = body_of(request.json)
     sentences.get(data.get("template"))
     return jsonify(**sentence_run.compile(data.get("template"), body_of(data.get("slots")), body_of(data.get("body")), columns_of(data)))
+
+
+@app.post("/api/sentence/run")
+def sentence_run_route():
+    """문장을 만들어 실행하고 합쳐 끝난 표 {columns, rows, more, notes, text}로 돌려준다(화면은 나누거나 합치지 않는다). 만들 수 없으면 400과 이유.
+    columns가 없으면 body의 테이블에서 읽는다."""
+    data = body_of(request.json)
+    sentences.get(data.get("template"))
+    body = body_of(data.get("body"))
+    if not body.get("base"):
+        raise ValueError("기준 테이블이 있는 검색 body가 필요해요.")
+    return jsonify(**sentence_exec.run_sentence(data["template"], body_of(data.get("slots")), body, columns_of(data)))

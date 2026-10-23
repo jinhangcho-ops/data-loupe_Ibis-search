@@ -12,7 +12,7 @@ UNIONS = ["left", "inner", "intersect", "except"]  # 이어붙이기: left는 �
 STACKS = ("left", "inner")  # 아래로 잇는 방식(출처 컬럼을 붙인다). intersect·except는 행을 고르는 방식이라 붙이지 않는다
 SOURCE = "출처"  # 이어붙이면 더하는 컬럼: 그 행이 온 테이블 이름
 OPS = {"=": operator.eq, "!=": operator.ne, ">=": operator.ge, "<=": operator.le, ">": operator.gt, "<": operator.lt}
-CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
+CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
 SORT_GUIDE = "컬럼 [asc|desc]"
 
 # (판별, 종류, 한글 이름, 입력값 변환). 종류는 전처리가 컬럼을 나눌 때 쓴다.
@@ -28,7 +28,7 @@ TYPES = [
 COND_RE = re.compile(r"^(\S+?)\s*(!=|>=|<=|=|>|<)\s*(.+)$")
 BETWEEN_RE = re.compile(r"^(\S+)\s+between\s+(\S+)\s+(?:and\s+)?(\S+)$", re.I)
 IN_RE = re.compile(r"^(\S+)\s+(in|except)\s+(.+)$", re.I)
-LIKE_RE = re.compile(r"^(\S+)\s+(like|starts)\s+(.+)$", re.I)  # like: 포함(대소문자 무시), starts: 이 글자로 시작
+LIKE_RE = re.compile(r"^(\S+)\s+(like|starts|ends)\s+(.+)$", re.I)  # like: 포함(대소문자 무시), starts: 이 글자로 시작, ends: 이 글자로 끝
 NULL_RE = re.compile(r"^(\S+)\s+is\s+(not\s+)?null$", re.I)
 OR_RE = re.compile(r"(?<!\S)or(?!\S)", re.I)  # 앞뒤가 공백인 단어 or
 COMMA_RE = re.compile(",")
@@ -298,11 +298,12 @@ def parse_one(line, expr, quotes=True):
         if not c.type().is_string():
             raise ValueError(f"{word.lower()}는 문자 컬럼에만 쓸 수 있습니다.")
         raw = unquote(raw, quotes)
-        found = starts(c, raw) if word.lower() == "starts" else contains(c, raw)
+        word = word.lower()
+        found = starts(c, raw) if word == "starts" else ends(c, raw) if word == "ends" else contains(c, raw)
         import source
         if source.compiles(expr.filter(found)):
             return found
-        return c.startswith(raw) if word.lower() == "starts" else c.lower().contains(raw.lower())  # LIKE를 못 하는 연결(파일)
+        return c.startswith(raw) if word == "starts" else c.endswith(raw) if word == "ends" else c.lower().contains(raw.lower())  # LIKE를 못 하는 연결(파일)
     if m := COND_RE.match(line):
         col, op, raw = m.groups()
         c = column(expr, col)
@@ -330,9 +331,18 @@ def starts(c, text):
     return c.find(text) == 0 if WILD.search(text) else c.like(f"{text}%")
 
 
+def ends(c, text):
+    """이 글자로 끝(대소문자 구분): LIKE '%값'. 값에 LIKE 특수 글자가 있으면 endswith로."""
+    return c.endswith(text) if WILD.search(text) else c.like(f"%{text}")
+
+
 def predicate(cond, expr):
     """조건 하나를 Ibis 식으로. 문자열, 따옴표 해석을 끈 {"line": ..., "quotes": False},
-    화면에서 or로 이은 묶음 {"any": [조건, ...]} 중 하나다. 묶음 안은 or, 조건끼리는 and."""
+    화면에서 or로 이은 묶음 {"any": [조건, ...]}, 조건 목록(모두 and) 중 하나다. 묶음 안은 or, 조건끼리는 and."""
+    if isinstance(cond, list):
+        if not cond:
+            raise ValueError("and로 묶을 조건이 없습니다.")
+        return functools.reduce(operator.and_, [predicate(c, expr) for c in cond])
     if isinstance(cond, str):
         return parse_condition(cond, expr)
     if "any" in cond:

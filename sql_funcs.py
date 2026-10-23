@@ -139,7 +139,7 @@ def number_value(raw, spec, f):
 def condition_value(t, raw, spec, f):
     if isinstance(raw, ibis.expr.types.Value):
         return raw
-    if isinstance(raw, (str, dict)) and raw:
+    if isinstance(raw, (str, dict, list)) and raw:
         return parse.predicate(raw, t)
     raise ValueError(f"{f['label']}: '{spec['label']}'을 넣으세요.")
 
