@@ -550,8 +550,11 @@ def value_data(card, ctx):
             found = {**found, "window": fetch}
         unique = [i for i, s in enumerate(series) if not merges(s["agg"])]
         if unique and window and (window.get("start") or window.get("end")):  # 고유 개수는 일 값을 다시 묶을 수 없어 그 기간으로 따로 구한다
-            at = card_expr(card, ctx, window)
-            found["values"] = {"window_nunique": {"start": window.get("start"), "end": window.get("end"), "values": {str(i): v for i, v in zip(unique, run(lambda: scalars(at, [series[i] for i in unique])))}}}
+            def distinct(w):  # 그 기간의 고유 개수류 값 {계열 번호: 값}: 집계 한 번
+                at = card_expr(card, ctx, w)
+                return {"start": w.get("start"), "end": w.get("end"), "values": {str(i): v for i, v in zip(unique, run(lambda: scalars(at, [series[i] for i in unique])))}}
+            before = (ctx or {}).get("prev")  # 직전 기간(기준일 규칙은 dash_refresh.context가 이미 적용)도 같은 집계로: 화면 compareItem의 비교용
+            found["values"] = {"window_nunique": {**distinct(window), **({"prev": distinct(before)} if before and before.get("start") and before.get("end") else {})}}
     else:
         series, expr = clean_series(body.get("series")), card_expr(card, ctx, window)
         found = {"values": {"scalar": run(lambda: scalars(expr, series)), "names": [series_name(s) for s in series]}}

@@ -135,7 +135,7 @@ function pointValue(s, days, date) {
   for (let i = days.length - 1; i >= 0; i--) if (days[i] <= date) { const v = windowValue(s, days, days[i], days[i]); if (v != null) return v; }
   return null;
 }
-// 시간별 카드의 첫 계열을 두 기간(또는 두 시점)으로 비교할 값 {cur, prev, mode, label, better, partial}. /api/compare가 문장으로 바꾼다. 안 되는 카드(고유 개수, 기간 없음)는 null.
+// 시간별 카드의 첫 계열을 두 기간(또는 두 시점)으로 비교할 값 {cur, prev, mode, label, better, partial}. /api/compare가 문장으로 바꾼다. 안 되는 카드(기간 없음, 고유 개수의 시점 비교·서버가 구한 값 없음)는 null. 고유 개수 계열은 서버의 window_nunique(현재·prev)를 쓴다.
 // span: 기간 값과 직전 기간(prev: {start, end, text}) 값, point: 끝 날의 값과 기간 길이만큼 앞 날의 값. 직전이 저장된 일 값보다 앞서면 partial.
 // 대시보드 기간이 비면 카드 자신의 기간 줄(날짜컬럼 시작 ~ 끝, 양쪽 날짜)을 보는 기간으로 삼고, 직전은 바로 앞 같은 일수로 본다. 기간 줄이 없으면 null.
 function ownRange(card) {
@@ -149,8 +149,13 @@ function ownRange(card) {
 function compareItem(card, range, prev) {
   if (!range) { const own = ownRange(card); if (!own) return null; ({ range, prev } = own); }
   const by = card.data?.by_unit, s = by?.day?.series[0];
-  if (!s || !merges(s.agg) || !range?.start || !range?.end) return null;
+  if (!s || !range?.start || !range?.end) return null;
   const days = by.day.labels, mode = card.view.compare?.mode ?? "span", better = card.view.better ?? "up", n = daysBetween(range.start, range.end);
+  if (!merges(s.agg)) {  // 고유 개수 같은 집계는 일 값을 묶을 수 없어, 서버가 두 기간으로 따로 구한 값(window_nunique와 그 prev)을 쓴다. 기간 비교만.
+    const w = card.data?.values?.window_nunique, same = (a, b) => a && a.start === b?.start && a.end === b?.end;
+    if (mode !== "span" || !prev?.start || !same(w, range) || !same(w.prev, prev) || w.values["0"] == null || w.prev.values["0"] == null) return null;
+    return { cur: w.values["0"], prev: w.prev.values["0"], mode, label: prev.text, better, partial: prev.start < days[0] };
+  }
   if (mode === "point") {
     const before = shiftDay(range.end, -n);
     return { cur: pointValue(s, days, range.end), prev: pointValue(s, days, before), mode, label: `${n}일 전`, better, partial: before < days[0] };

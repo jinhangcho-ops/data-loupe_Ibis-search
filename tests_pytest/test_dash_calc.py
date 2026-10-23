@@ -348,6 +348,14 @@ def test_nunique_over_selected_period_is_recomputed(db):
     assert "values" not in compute(db, card=value_card("kpi", SUM, "day"), ctx=RANGE)["data"]
 
 
+def test_nunique_previous_period_is_recomputed_with_overlapping_users(db):
+    c = value_card("kpi", [{"y": "uid", "agg": "nunique"}, *SUM], "day")
+    ctx = {"range": {"start": "2026-01-06", "end": "2026-01-12"}, "prev": {"start": "2026-01-05", "end": "2026-01-05", "text": "직전 1일"}}
+    w = compute(db, card=c, ctx=ctx)["data"]["values"]["window_nunique"]
+    assert w["values"] == {"0": 3} and w["prev"] == {"start": "2026-01-05", "end": "2026-01-05", "values": {"0": 1}}  # 이번 u2·u3·u1(겹침 u1은 한 번), 직전 u1 (일 값을 더하면 4)
+    assert "prev" not in compute(db, card=c, ctx={"range": ctx["range"]})["data"]["values"]["window_nunique"]  # 직전 기간이 없으면 이번 기간 값만
+
+
 def test_watch_cards_status_since_and_impact(db):
     view = {"entity": "name", "time_col": "seen", "kind_col": "kind", "link_col": "peer", "stale": 30, "rules": [{"column": "cpu", "op": ">=", "value": 95, "level": "bad"}], "links": [["b", "z"]]}
     c = card("status", body={"base": "nodes"})

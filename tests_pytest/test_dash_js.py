@@ -169,7 +169,11 @@ assert.deepStrictEqual(compareItem(time, range, prev), { cur: 90, prev: 65, mode
 const pointCard = { ...time, view: { compare: { mode: "point" }, better: "down" } };
 assert.deepStrictEqual(compareItem(pointCard, range, null), { cur: 50, prev: 35, mode: "point", label: "22일 전", better: "down", partial: false });
 assert.strictEqual(compareItem(time, null, prev), null); assert.strictEqual(compareItem(cat(1), range, prev), null);
-assert.strictEqual(compareItem({ ...time, data: { by_unit: { day: { ...by.day, series: [by.day.series[4]] } } } }, range, prev), null);  // 고유 개수는 다시 묶을 수 없다
+assert.strictEqual(compareItem({ ...time, data: { by_unit: { day: { ...by.day, series: [by.day.series[4]] } } } }, range, prev), null);  // 고유 개수는 다시 묶을 수 없다(서버 값이 없으면 비교 없음)
+const uniq = { ...time, data: { by_unit: { day: { ...by.day, series: [by.day.series[4]] } }, values: { window_nunique: { ...range, values: { 0: 3 }, prev: { start: prev.start, end: prev.end, values: { 0: 1 } } } } } };
+assert.deepStrictEqual(compareItem(uniq, range, prev), { cur: 3, prev: 1, mode: "span", label: "직전 22일", better: "up", partial: true });  // 고유 개수: 서버가 두 기간으로 따로 구한 값
+assert.strictEqual(compareItem(uniq, range, { ...prev, start: "2025-12-22" }), null);  // 기간이 다르면(옛 값) 비교 없음
+assert.strictEqual(compareItem({ ...uniq, view: { compare: { mode: "point" } } }, range, prev), null);  // 시점 비교는 안 한다
 assert.deepStrictEqual(chartConfig({ ...time, range: { start: "2026-01-12", end: "2026-02-02" }, view: { type: "line", unit: "day" } }, colors).data.labels, ["2026-01-12", "2026-02-02"]);
 // 3단계 카드의 모양 계산(dash_cards.js): 호·고리·게이지 조각·칸·블록·교차·다각형·값 글자
 const near = (a, b) => assert(Math.abs(a - b) < 1e-9, `${a} != ${b}`);

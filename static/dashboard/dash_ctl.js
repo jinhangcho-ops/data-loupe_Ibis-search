@@ -161,7 +161,7 @@ async function recomputeRange(board, cards, connected) {
       });
     } catch (e) { todo.forEach(c => { c.rangeNote = e.message; }); }
   }
-  board.draw();
+  await board.recompare();  // 고유 개수 카드의 비교는 방금 받은 값으로 다시 만든다(끝에 그린다)
 }
 // 초를 "1시간"·"30분"·"45초" 글자로(서버 dash_refresh.minimum_text와 같다)
 const minimumText = seconds => seconds % 3600 === 0 ? `${seconds / 3600}시간` : seconds % 60 === 0 ? `${seconds / 60}분` : `${seconds}초`;
