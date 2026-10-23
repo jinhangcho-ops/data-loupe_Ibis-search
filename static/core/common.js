@@ -384,7 +384,7 @@ const KIND_LABELS = { duckdb: "DuckDB", parquet: "Parquet", csv: "CSV", json: "J
 if (hasConnect) {
 showRecentConnections();
 $("kinds").replaceChildren(...SERVER.file_kinds.map(k => el("label", {}, el("input", { type: "checkbox", value: k, checked: true }), KIND_LABELS[k] ?? k)));
-$("path").onkeydown = e => { if (e.key === "Enter") $("find").click(); };
+$("path").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) $("find").click(); };
 $("conn-close").onclick = closeConnect;
 $("conn-panel").onclick = e => { if (e.target === $("conn-panel") && connClosable()) closeConnect(); };
 $("crumb").classList.add("link");
@@ -645,18 +645,20 @@ function placeMenu(anchor) {
 // 친 글자가 들어 있는 값만 남고, 고르면 칸에 들어간다. datalist 요소는 값을 담는 데만 쓴다.
 let comboQuiet = false;  // 고른 뒤 칸에 커서를 돌려줄 때 목록이 다시 뜨지 않게
 function showCombo(inp) {
-  const want = inp.value.trim().toLowerCase(), hits = [...document.getElementById(inp.dataset.list)?.children ?? []].map(o => o.value).filter(v => v.toLowerCase().includes(want) && v !== inp.value);
+  const want = inp.value.trim().toLowerCase(), hits = [...document.getElementById(inp.dataset.list)?.children ?? []].map(o => ({ v: o.value, hint: o.label && o.label !== o.value ? o.label : "" })).filter(({ v }) => v.toLowerCase().includes(want) && v !== inp.value);
   if (inp.disabled || !hits.length) return menuFor === inp ? closeMenu() : undefined;
   menuFor = inp;
-  menuList.replaceChildren(...hits.map(v => Object.assign(document.createElement("div"), { textContent: v })));
+  menuList.replaceChildren(...hits.map(({ v, hint }) => { const d = Object.assign(document.createElement("div"), { textContent: v }); if (hint) d.setAttribute("data-hint", hint); return d; }));  // 라벨(타입 힌트)은 CSS로 덧붙여 textContent가 값 그대로이게
   menuFind.classList.add("hidden");
+  menuList.style.maxHeight = "";
   placeMenu(inp);
   pointMenu(null);
 }
-const comboOn = e => !comboQuiet && !e.isComposing && e.target.matches?.("input[data-list]") && showCombo(e.target);
+const comboOn = e => !comboQuiet && !e.isComposing && e.target.matches?.("input[data-list]") && showCombo(e.target);  // compositionend: 한글 조합이 끝나는 글자도 걸러야 한다
 document.addEventListener("focusin", comboOn);
 document.addEventListener("click", comboOn);
 document.addEventListener("input", comboOn);
+document.addEventListener("compositionend", comboOn);
 function pickMenu(item) {
   const sel = menuFor, i = [...menuList.children].indexOf(item);
   if (sel.tagName === "INPUT") {
@@ -746,11 +748,12 @@ function showTip(host, wait) {
   }, wait);
 }
 const tipHost = e => e.target.closest?.("[title]") ?? null;
-document.addEventListener("mouseover", e => { const h = tipHost(e); if (h) showTip(h, 350); });
-document.addEventListener("focusin", e => { const h = tipHost(e); if (h) showTip(h, 0); });
-document.addEventListener("mouseout", e => { if (tipFor && !tipFor.contains(e.relatedTarget)) hideTip(); });
+let tipMouseAt = 0;  // 마우스로 눌러 생긴 포커스는 말풍선을 띄우지 않는다(팝오버를 가린다)
+document.addEventListener("mouseover", e => { const h = tipHost(e); if (h) showTip(h, 350); else if (tipFor && (!tipFor.isConnected || !tipFor.contains(e.target))) hideTip(); });  // 보이던 요소가 다시 그려져 사라지면 mouseout이 없다
+document.addEventListener("focusin", e => { const h = tipHost(e); if (h && Date.now() - tipMouseAt > 400) showTip(h, 0); });
+document.addEventListener("mouseout", e => { if (tipFor && (!tipFor.isConnected || !tipFor.contains(e.relatedTarget))) hideTip(); });
 document.addEventListener("focusout", hideTip);
-document.addEventListener("mousedown", hideTip);
+document.addEventListener("mousedown", () => { tipMouseAt = Date.now(); hideTip(); });
 document.addEventListener("keydown", hideTip, true);
 document.addEventListener("scroll", hideTip, true);
 addEventListener("blur", hideTip);

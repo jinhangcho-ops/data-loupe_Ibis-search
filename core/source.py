@@ -223,7 +223,10 @@ def utf8_csv(path, con):
         raise ValueError(f"{Path(path).name}: UTF-16/UTF-32로 저장된 CSV는 읽을 수 없어요. UTF-8 또는 CP949(한글 엑셀의 'CSV')로 다시 저장해 주세요.")
     if not hasattr(con, "scratch"):
         con.scratch = scratch.make()
-    out = Path(con.scratch, f"{len(list(Path(con.scratch).iterdir()))}.csv")
+    n = 1
+    while Path(con.scratch, f"{n}.csv").exists():  # 지운 사본이 있어도 살아 있는 사본의 이름과 겹치지 않게
+        n += 1
+    out = Path(con.scratch, f"{n}.csv")
     decoder = codecs.getincrementaldecoder("cp949")(errors="replace")
     with open(path, "rb") as f, open(out, "w", encoding="utf-8", newline="") as w:
         while chunk := f.read(1 << 20):
@@ -242,21 +245,49 @@ def stamp_of(path):
 
 
 def read_csv_table(con, path, name):
-    """CSV를 UTF-8로 맞춰 name 테이블로 등록하고 (경로, mtime, 크기)를 기록한다. refresh_csv가 이것으로 원본이 바뀌었는지 본다."""
+    """CSV를 UTF-8로 맞춰 name 테이블로 등록한다. CP949라서 임시 사본으로 바꾼 파일만 (경로, mtime, 크기, 사본)을 기록한다(UTF-8은 Polars가 필요할 때 원본을 읽으므로 다시 등록할 일이 없다).
+    refresh_csv가 이 기록으로 원본이 바뀌었는지 본다. 새 표를 등록한 뒤에는 예전 사본(임시 폴더 안의 것만)을 지운다."""
     stamp = stamp_of(path)
-    con.read_csv(utf8_csv(path, con), table_name=name)
-    if not hasattr(con, "csv_sources"):
-        con.csv_sources = {}
-    con.csv_sources[name] = (path, stamp)
+    use = utf8_csv(path, con)
+    con.read_csv(use, table_name=name)
+    sources = con.__dict__.setdefault("csv_sources", {})
+    old = sources.pop(name, None)
+    if use != path:
+        sources[name] = (path, stamp, use)
+    if old and old[2] != use:
+        drop_copy(con, old[2])
+
+
+def drop_copy(con, copy):
+    """CP949 임시 사본을 지운다. con.scratch 안의 파일일 때만(원본·범위 밖은 건드리지 않는다). 읽는 중이라 못 지우면 그대로 둔다(close가 폴더째 지운다)."""
+    try:
+        if Path(copy).parent == Path(con.scratch):
+            Path(copy).unlink()
+    except (OSError, AttributeError):
+        pass
 
 
 def refresh_csv(con):
-    """원본 CSV의 (mtime, 크기)가 열 때와 달라졌으면 다시 변환해 같은 이름으로 다시 등록한다(CP949 임시본이 옛 값에 머물지 않게).
-    파일 연결의 결과를 계산하기 전(result.lazy)에 부른다. 파일 연결이 아니거나 CSV가 없으면 아무 일도 하지 않는다."""
-    for name, (path, stamp) in list(getattr(con, "csv_sources", {}).items()):
+    """CP949라서 임시 사본으로 바꾼 CSV의 원본 (mtime, 크기)가 열 때와 달라졌으면 다시 변환해 같은 이름으로 다시 등록한다(임시본이 옛 값에 머물지 않게).
+    표를 꺼낼 때(server.any_table)와 내보내기 전에 부른다. 파일 연결이 아니거나 변환한 CSV가 없으면 아무 일도 하지 않는다.
+    파일마다 따로 처리한다: 다시 변환하지 못한 표(UTF-16로 다시 저장 등)는 그 표를 읽을 때만 그 이유로 오류가 나게 하고, 다른 표는 그대로 쓴다."""
+    for name, (path, stamp, copy) in list(getattr(con, "csv_sources", {}).items()):
         now = stamp_of(path)
-        if now is not None and now != stamp:
+        if now is None or now == stamp:
+            continue
+        try:
             read_csv_table(con, path, name)
+        except Exception as e:
+            con.csv_sources[name] = (path, now, copy)  # 같은 상태로 되풀이해 실패하지 않게 새 스탬프를 기록한다
+            fail_table(con, name, str(e))
+
+
+def fail_table(con, name, message):
+    """name 표를 읽으면 message 오류가 나는 표로 바꾼다(스키마는 그대로). 다른 표는 건드리지 않는다."""
+    def fail(df):
+        raise ValueError(message)
+    old = con._tables[name]
+    con._add_table(name, old.map_batches(fail, schema=old.collect_schema(), streamable=True))
 
 
 @on_worker

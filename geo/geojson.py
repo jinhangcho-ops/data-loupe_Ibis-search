@@ -93,10 +93,11 @@ def ring_centroid(ring):
 def crosses_dateline(xs):
     """경도들이 날짜 변경선을 사이에 두고 모여 있는지: 경도를 정렬했을 때 안쪽의 가장 큰 빈 구간이 270도를 넘을 때(= 변경선을 건너 모인 범위가 90도 미만).
     세계 전체(-180~180, 범위가 정확히 360), 성긴 도형, -100→100 같은 넓은 선은 아니다."""
-    v = sorted(set(xs))
+    import numpy as np
+    v = np.unique(np.fromiter(xs, dtype=float))
     if len(v) < 2 or v[-1] - v[0] >= 360:
         return False
-    return max(b - a for a, b in zip(v, v[1:])) > 360 - DATELINE_SPAN
+    return bool(np.diff(v).max() > 360 - DATELINE_SPAN)
 
 
 def unwrapped(pieces):

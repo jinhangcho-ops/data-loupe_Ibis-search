@@ -657,7 +657,7 @@ const addFilter = () => {
   if (line) { filters.push(line); $("f-in").value = ""; syncFilters(); }
 };
 $("f-add").onclick = addFilter;
-$("f-in").onkeydown = e => { if (e.key === "Enter") addFilter(); };
+$("f-in").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) addFilter(); };
 
 // 함수 사전(sql_funcs)에서 고르는 칸들: 분석의 집계, 중복 제거에서 남길 대표 값, 계산 컬럼의 함수 찾기. 인자 칸(구분자·정렬 기준·분위수 P …)은 사전의 args로 그린다.
 const REPS = {};  // 사전의 함수 id → recipe의 dedupe_keep.how (대표 값 고르기 선택지)
@@ -725,7 +725,7 @@ $("fx-add").onclick = () => {
   $("fx-name").value = $("fx-expr").value = $("fx-order").value = $("fx-group").value = "";
   fail(""); preview = null; showAll();
 };
-$("fx-expr").onkeydown = e => { if (e.key === "Enter") $("fx-add").click(); };
+$("fx-expr").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) $("fx-add").click(); };
 $("pca-n").onchange = () => { pca.n = Math.max(1, Math.round(+$("pca-n").value) || 1); preview = null; renderDerive(); renderGrid(); };
 $("pca-clear").onclick = () => { pca = { columns: [], n: pca.n }; $("pca-info").textContent = ""; preview = null; showAll(); };
 // ④ 좌표 단계: 고른 종류의 칸을 보이고, 더하면 목록에 chip으로 쌓인다. 계산은 서버가 하고(고유 좌표마다 한 번), 지점·영역 테이블은 쓸 컬럼만 읽는다.
@@ -916,7 +916,7 @@ async function computeStats(mine, fresh = false) {
     renderGrid();
   }
 }
-$("base").onchange = () => openTable($("base").value);
+$("base").onchange = () => { prepUndo.reset(); return openTable($("base").value); };  // 다른 테이블의 되돌리기 기록은 쓰지 않는다
 $("conn-open").onclick = () => openConnect();
 new MutationObserver(() => $("conn-now").textContent = connected ? `연결: ${connName}` : "연결 안 됨").observe($("crumb-text"), { childList: true });  // 연결 이름이 바뀌면 따라 바꾼다
 
@@ -978,6 +978,7 @@ function restore(c) {
   const gone = [...new Set(used)].filter(n => !names.includes(n));
   if (gone.length) { $("rsaved").value = ""; fail(`구성의 컬럼이 이 테이블에 없습니다: ${gone.join(", ")}`); return; }
   const d = structuredClone(c);
+  for (const k of Object.keys(edits)) if (!names.includes(k)) delete edits[k];  // 지금 없는 복사 컬럼의 입력이 남지 않게(테이블 컬럼의 기본 입력은 둔다)
   Object.assign(edits, d.edits);
   ({ copies, drops, filters, dedupe, sorts } = d);
   formulas = d.formulas ?? [];  // 이 기능 전에 저장한 구성에는 없다
@@ -1195,7 +1196,7 @@ function addStep() {
   showSteps();
 }
 $("a-fadd").onclick = addStep;
-$("a-fvalue").onkeydown = e => { if (e.key === "Enter") addStep(); };
+$("a-fvalue").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) addStep(); };
 // 단계 컬럼을 고르면 그 컬럼의 값(많이 나온 순, 20개까지)을 목록으로 받는다. 단계 컬럼이 바뀌면 고른 단계는 비운다.
 async function loadStepValues() {
   const column = $("a-fstep").value;

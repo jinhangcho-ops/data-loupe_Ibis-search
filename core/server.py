@@ -180,11 +180,15 @@ def end_turn(error):
 GZIP_FROM = 16 * 1024  # 이보다 큰 응답은 gzip으로 보낸다. 로컬(127.0.0.1) 통신을 검사하는 보안 프로그램이 큰 응답을 가끔 19초 뒤 끊는다(측정: 60KB는 안 끊기고 200KB는 30번에 4번)
 
 
+PACKED_TYPES = {"application/zip", "application/gzip", "application/x-gzip", "application/x-zip-compressed", "application/vnd.apache.parquet", "application/x-parquet", "application/pdf"}  # 이미 압축된(또는 줄어들지 않는) 형식
+
+
 @app.after_request
 def squeeze(response):
-    """큰 응답(JSON 등)을 gzip으로 줄여 보낸다. 파일 내려주기(direct_passthrough)·스트림(길이 모름)·이미 압축한 것은 그대로."""
-    if (response.direct_passthrough or response.content_length is None or response.content_length < GZIP_FROM
-            or response.headers.get("Content-Encoding") or "gzip" not in request.headers.get("Accept-Encoding", "")):
+    """큰 응답(JSON 등)을 gzip으로 줄여 보낸다. 파일 내려주기(direct_passthrough)·스트림(내보내기는 길이를 알아도 스트림이라 통째로 메모리에 올리지 않는다)·이미 압축한 것(이미지·zip·parquet 등)은 그대로."""
+    if (response.direct_passthrough or response.is_streamed or response.content_length is None or response.content_length < GZIP_FROM
+            or response.headers.get("Content-Encoding")
+            or response.mimetype.startswith(("image/", "video/", "audio/")) or response.mimetype in PACKED_TYPES or "gzip" not in request.headers.get("Accept-Encoding", "")):
         return response
     response.set_data(gzip.compress(response.get_data(), 5))
     response.headers["Content-Encoding"] = "gzip"
@@ -246,6 +250,7 @@ def table_names(con, schema=None):
 def any_table(con, name, schema=None, vts=None):
     """테이블 식. 스키마를 고르지 않았고 그 이름이 가상 테이블이면 가상 테이블(sql_exec), 아니면 연결의 테이블.
     연결의 테이블 식(스키마)은 한 번 받아 기억한다(식을 만들 때마다 DB에 스키마를 묻지 않게)."""
+    source.refresh_csv(con)  # 원본 CSV가 바뀌었으면 다시 변환(CP949 임시본이 낡지 않게)
     vts = virtual_tables() if vts is None else vts
     if not schema and name in vts:
         return sql_exec.virtual_table(con, name, vts)

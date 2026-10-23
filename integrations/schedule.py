@@ -196,21 +196,30 @@ def reregister():
         register(name, found[name], [])
 
 
+MOVED = "old_tasks_moved.json"  # 예전 작업을 다 옮겼다는 표식(설정 폴더). 있으면 시작 때 작업 스케줄러를 다시 조회하지 않는다.
+
+
 def move_old_tasks():
-    """앱 시작 때 한 번: 예전 작업 폴더(wintask.OLD_FOLDER)에 있는 우리 작업(예약 목록의 windows 예약만)을 새 폴더·지금 프로그램으로 다시 등록하고 예전 것을 지운다.
-    그 밖의 작업은 보지도 않는다. 옮기지 못한 작업은 그대로 두어 다음 시작 때 다시 한다. 옮긴 예약 이름 목록을 돌려준다."""
-    moved = []
-    for name, item in schedules().items():
-        task = item.get("task")
-        if not (item.get("windows") and task):
-            continue
+    """앱 시작 때: 예전 작업 폴더(wintask.OLD_FOLDER)에 있는 우리 작업(예약 목록의 windows 예약만)을 새 폴더·지금 프로그램으로 다시 등록하고 예전 것을 지운다.
+    그 밖의 작업은 보지도 않는다. 옮기지 못한 작업은 그대로 두어 다음 시작 때 다시 하고, 하나도 빠짐없이 끝나면 표식(MOVED)을 남겨 이후 시작 때는 아무것도 조회하지 않는다.
+    옮기는 동안은 예약 저장(save)과 같은 잠금(settings.updating(FILE))을 잡고 예약을 다시 읽어 쓴다. 옮긴 예약 이름 목록을 돌려준다."""
+    if settings.read(MOVED):
+        return []
+    moved, complete = [], True
+    for name in list(schedules()):
         try:
-            if wintask.query(task, wintask.OLD_FOLDER)["registered"]:
-                register(name, item, [])
-                wintask.delete(task, wintask.OLD_FOLDER)
-                moved.append(name)
-        except Exception:  # 작업 스케줄러가 답하지 않는 등: 이번엔 건너뛴다(시작을 막지 않는다).
-            continue
+            with settings.updating(FILE):
+                item = schedules().get(name) or {}
+                task = item.get("task")
+                if item.get("windows") and task and wintask.query(task, wintask.OLD_FOLDER)["registered"]:
+                    register(name, item, [])
+                    wintask.delete(task, wintask.OLD_FOLDER)
+                    moved.append(name)
+        except Exception:  # 작업 스케줄러가 답하지 않는 등: 이번엔 건너뛰고 다음 시작 때 다시 한다(시작을 막지 않는다).
+            complete = False
+    if complete:
+        with settings.updating(MOVED):
+            settings.write(MOVED, {"done": True})
     return moved
 
 

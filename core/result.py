@@ -34,8 +34,6 @@ def lazy(expr):
     backend = ibis.get_backend(expr)
     if backend.name != "polars":
         return None
-    from core import source
-    source.refresh_csv(backend)  # 원본 CSV가 바뀌었으면 다시 변환한 뒤 계산(CP949 임시본이 낡지 않게)
     return backend.compile(expr)
 
 

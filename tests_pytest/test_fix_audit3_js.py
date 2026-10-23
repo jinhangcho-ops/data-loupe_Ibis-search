@@ -8,6 +8,10 @@ import pytest
 from test_fix_audit_js import COMMON, STATIC, STUBS, index_slice, run_node
 from test_fix_audit2_js import DASH_HTML, dash_slice
 
+# draft.js의 isTyping(대시보드 typing()이 쓴다)
+_D = (__import__("pathlib").Path(__file__).resolve().parents[1] / "static" / "core" / "draft.js").read_text(encoding="utf-8")
+ISTYPING = _D[_D.index("const isTyping"):_D.index("\n", _D.index("const isTyping")) + 1]
+
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
 # 대시보드 화면의 저장·실시간 부분을 돌리는 가짜 환경. 진짜 snapshot·save·scheduleSave를 잘라 쓴다.
@@ -141,11 +145,11 @@ def test_live_tick_reports_skipped_turn(tmp_path):
 
 def test_dash_live_run_returns_false_when_typing(tmp_path):
     live = dash_slice("  liveRun: async () => {", "  changed: async fields")
-    typing = dash_slice("const typing = ", "const snapshot = ")
+    typing = ISTYPING + dash_slice("const typing = ", "const snapshot = ")
     body = """
 (async () => {
   globalThis.liveCards = async () => {};
-  document.activeElement = { tagName: "INPUT" }; $("d-grid").contains = n => !!n;
+  document.activeElement = { tagName: "INPUT", type: "text" }; $("d-grid").contains = n => !!n;
   const skipped = await opts.liveRun();
   document.activeElement = null;
   console.log(JSON.stringify({ skipped, ran: (await opts.liveRun()) !== false }));
@@ -183,7 +187,7 @@ def test_live_and_range_values_are_not_stored(tmp_path):
 def test_refreshed_event_only_reopens_open_dashboard_and_waits_while_typing(tmp_path):
     helper = dash_slice("function reopenAfterRefresh", 'document.addEventListener("dash-refreshed"')
     listener = next(line for line in DASH_HTML.splitlines() if line.startswith('document.addEventListener("dash-refreshed"'))
-    typing = dash_slice("const typing = ", "const snapshot = ")
+    typing = ISTYPING + dash_slice("const typing = ", "const snapshot = ")
     prelude = """
 let handler; document.addEventListener = (n, f) => { handler = f; };
 const opened = [], later = []; globalThis.setTimeout = f => { later.push(f); return 1; };

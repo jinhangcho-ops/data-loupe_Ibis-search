@@ -64,11 +64,13 @@ def catalog_available():
 
 # ---------- 구하기 ----------
 
-def needs_copy(con, e):
-    """이 항목을 이 PC의 DuckDB 사본에서 구할지. 파일(Polars) 연결은 늘, 원격 DB는 prep_where가 all(기본)이면 늘 new면 창 함수를 쓰는 항목만. DuckDB 파일 연결은 아니다."""
+def needs_copy(con, e, align=None):
+    """이 항목을 이 PC의 DuckDB 사본에서 구할지. 파일(Polars) 연결은 늘, 원격 DB는 prep_where가 all(기본)이면 늘 new면 창 함수를 쓰는 항목만. DuckDB 파일 연결은 아니다.
+    두 테이블 지표(cross)의 창 함수는 공통 키로 맞출 때만 쓴다(기간으로 맞추면 원격에서 구한다)."""
     if con.name == "polars":
         return True
-    return held.remote(con) and (settings.load().get("prep_where", "all") == "all" or e["window"])
+    window = e["window"] and not (e["cross"] and (align or {}).get("kind") == "period")
+    return held.remote(con) and (settings.load().get("prep_where", "all") == "all" or window)
 
 
 def stage(body, keep):
@@ -84,10 +86,10 @@ def local_table(key, expr):
     return table.select(*[c for c in table.columns if c != held.ROW])
 
 
-def table_for(e, body, keep):
+def table_for(e, body, keep, align=None):
     """항목이 읽을 표: 사본에서 구하는 항목이면 사본, 아니면 연결의 식 그대로."""
     expr = stage(body, keep)
-    return local_table(querying.search_key(body, keep or expr.columns), expr) if needs_copy(get_con(), e) else expr
+    return local_table(querying.search_key(body, keep or expr.columns), expr) if needs_copy(get_con(), e, align) else expr
 
 
 def other_columns(e, slots, align):
@@ -105,14 +107,14 @@ def other_for(e, body, slots, align):
         expr = server.any_table(con, name, schema)
         cols = [c for c in other_columns(e, slots, align) if c in expr.columns]
         expr = expr.select(*(cols or expr.columns[:1]))
-        return local_table(querying.held_key("catalog_other", {"schema": schema, "table": name, "keep": cols}), expr) if needs_copy(con, e) else expr
+        return local_table(querying.held_key("catalog_other", {"schema": schema, "table": name, "keep": cols}), expr) if needs_copy(con, e, align) else expr
     return get
 
 
 def scan_ask(e, slots, body, request_body, align=None):
     """실행 전 처리 용량 확인(server.scan_gate): 읽을 표마다(이미 사본이 있으면 DB를 읽지 않으므로 묻지 않는다) 묻고, 확인이 필요하면 돌려줄 응답, 아니면 None."""
     con, keep = get_con(), metric_catalog.used_columns(e, slots)
-    copy = needs_copy(con, e)
+    copy = needs_copy(con, e, align)
     if not (copy and querying.search_key(body, keep or stage(body, keep).columns) in held.store["items"]):
         if ask := server.scan_gate(request_body, lambda: server.expr_sql(con, stage(body, keep))):
             return with_passes(ask, e, copy)
@@ -143,7 +145,7 @@ def compute_entry(e, slots, body, align=None, limit=None):
     if not isinstance(body, dict) or not body.get("base"):
         raise ValueError("기준 테이블이 있는 검색 body가 필요해요.")
     slots = slots if isinstance(slots, dict) else {}
-    ctx = metric_catalog.Ctx(fetch=lambda b, keep: table_for(e, b, keep), other=other_for(e, body, slots, align) if e["cross"] else None)
+    ctx = metric_catalog.Ctx(fetch=lambda b, keep: table_for(e, b, keep, align), other=other_for(e, body, slots, align) if e["cross"] else None)
     return run(lambda: metric_catalog.compute(e, slots, body, ctx, align, limit))
 
 

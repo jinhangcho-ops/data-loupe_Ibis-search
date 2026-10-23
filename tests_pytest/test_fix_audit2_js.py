@@ -7,6 +7,10 @@ import pytest
 
 from test_fix_audit_js import COMMON, STATIC, STUBS, between, index_slice, run_node
 
+# draft.js의 isTyping(대시보드 typing()이 쓴다)
+_D = (__import__("pathlib").Path(__file__).resolve().parents[1] / "static" / "core" / "draft.js").read_text(encoding="utf-8")
+ISTYPING = _D[_D.index("const isTyping"):_D.index("\n", _D.index("const isTyping")) + 1]
+
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
 DASH_HTML = (STATIC / "dashboard" / "dashboard.html").read_text(encoding="utf-8")
@@ -94,7 +98,7 @@ def test_recompute_values_are_saved_then_cleared(tmp_path):
 
 def test_live_run_schedules_pending_edit_and_defers_while_typing(tmp_path):
     live = dash_slice("  liveRun: async () => {", "  changed: async fields")
-    typing = dash_slice("const typing = ", "const snapshot = ")
+    typing = ISTYPING + dash_slice("const typing = ", "const snapshot = ")
     schedule = dash_slice("function scheduleSave()", "\n\n// ---------- 대시보드 고르기")
     prelude = SAVE_PRELUDE + """
 let connected = true, ran = 0;
@@ -105,7 +109,7 @@ const opts = {""" + live + "};\n"
     body = """
 (async () => {
   const sub = []; globalThis.setTimeout = (f, ms) => { sub.push(ms); return 1; };
-  document.activeElement = { tagName: "INPUT", inGrid: true };
+  document.activeElement = { tagName: "INPUT", type: "text", inGrid: true };
   await opts.liveRun(); const typed = { ran, sub: [...sub] };
   document.activeElement = null;
   await opts.liveRun();

@@ -116,7 +116,7 @@ const ctl = new DashCtl($("d-ctl"), {
   } });
 
 // ---------- 저장: 카드·팔레트가 바뀌면 열어 둔 대시보드에 자동으로 쓴다(값(data)만 바뀐 것은 다시 구할 때 저장) ----------
-const typing = () => $("d-grid").contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+const typing = () => $("d-grid").contains(document.activeElement) && (isTyping(document.activeElement) || document.activeElement.tagName === "SELECT");  // isTyping: draft.js
 const snapshot = () => JSON.stringify([board.palette, board.star, board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; })]);
 async function save() {  // 저장했으면(저장할 대시보드가 없어도) true, 실패하면 false
   clearTimeout(saveTimer);
@@ -137,19 +137,22 @@ async function save() {  // 저장했으면(저장할 대시보드가 없어도)
 // 임시 저장(초안): 저장하지 않은 편집(카드·배치·팔레트·북극성)이 2초 넘게 남으면 서버에 쓴다(draft.js). 카드 값(data)은 담지 않는다. [저장]이 되면 지운다.
 // 이어서 하면 그 대시보드를 열고 초안으로 바꾼 뒤 일반 자동 저장이 이어서 쓴다.
 // 되돌리기(Ctrl+Z, draft.js의 Undo)도 같은 상태 읽기·복원을 쓴다. 복원 뒤 boardChanged가 일반 자동 저장을 탄다.
-const dashState = () => dashId ? { id: dashId, palette: board.palette, north_star: board.star, cards: board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; }) } : null;
+// 카드 값(data)은 되돌리기 대상이 아니다: 지운 카드를 되살리면 마지막으로 본 값을 쓴다. 대시보드 id·카드 id → 그 카드의 마지막 값. dashState가 0.5초마다 갱신한다.
+const lastVals = new Map();
+const rememberVals = () => board.cards.forEach(c => lastVals.set(`${dashId}/${c.id}`, { data: c.data, liveData: c.liveData, stored: c.stored }));
+const dashState = () => dashId ? (rememberVals(), { id: dashId, palette: board.palette, north_star: board.star, cards: board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; }) }) : null;
 async function restoreDash(d) {
   if (!dashboards.some(x => x.id === d.id)) throw new Error("그 대시보드가 지금은 없어요.");
   if (dashId !== d.id) { $("d-pick").value = d.id; await openDash(d.id); }
-  const was = new Map(board.cards.map(c => [c.id, c]));
+  rememberVals();
   quiet = true;
   try {
     board.star = { card: "", counters: [], limits: {}, ...d.north_star };
     board.palette = d.palette;
     $("d-palette").value = d.palette.join(", ");
-    board.set(d.cards.map(c => {  // 종류·원천이 그대로인 카드는 지금 값(실시간·기간 값이면 저장용 stored도)을 이어받고, 바뀐 카드는 값을 비워 다시 구하게 한다
-      const o = was.get(c.id), same = o && JSON.stringify([o.kind, o.source]) === JSON.stringify([c.kind, c.source]);
-      return needsValues({ ...c, data: same ? o.data : {}, ...(same && o.liveData ? { liveData: o.liveData, stored: o.stored } : {}) });
+    board.set(d.cards.map(c => {  // 마지막으로 본 값(지금 없는 카드는 지우기 전 값, 실시간·기간 값이면 저장용 stored도)을 이어받는다. 종류·원천이 바뀌어도 예전 값을 둔다(어차피 그 값으로 저장되던 카드)
+      const o = lastVals.get(`${dashId}/${c.id}`);
+      return needsValues({ ...c, data: o?.data ?? {}, ...(o?.liveData ? { liveData: o.liveData, stored: o.stored } : {}) });
     }));
   } finally { quiet = false; }
   boardChanged();
@@ -229,7 +232,7 @@ $("d-new-go").onclick = () => busy($("d-new-go"), async () => {
     await openDash(made.dashboard.id);
   } catch (e) { say("err-dash", e.message); }
 });
-$("d-new-name").onkeydown = e => { if (e.key === "Enter") $("d-new-go").click(); };
+$("d-new-name").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) $("d-new-go").click(); };
 $("d-rename-go").onclick = () => busy($("d-rename-go"), async () => {
   try {
     const name = $("d-rename").value.trim();
@@ -405,7 +408,7 @@ $("d-add-open").onclick = async e => {
   cardMenu.refill();
 };
 $("d-add-pop").onclick = e => e.stopPropagation();
-document.addEventListener("click", () => $("d-add-pop").classList.add("hidden"));
+document.addEventListener("click", e => { if (!e.target.closest(".menu")) $("d-add-pop").classList.add("hidden"); });  // body 수준 목록(.menu)의 클릭은 닫지 않는다
 
 // ---------- 다시 구하기·연결·그림 저장 ----------
 // 모든 카드를 지금 연결에서 다시 구해 저장한다. 실패한 카드는 이전 값을 두고 이유를 모아 보인다. 다른 연결에서 구한 카드는 서버가 거부한다.

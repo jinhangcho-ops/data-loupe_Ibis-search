@@ -196,15 +196,15 @@ def working_copy(recipe):
 
 
 def computes_stats(recipe):
-    """recipe에 통계를 내는 일이 있는지: fill mean·median·mode, outlier iqr·std, scale standard·minmax, rare(전체 GROUP BY), label·onehot(서로 다른 값 읽기), 중복 제거(dedupe)."""
-    if recipe.get("dedupe"):
+    """recipe에 통계를 내는 일이 있는지: fill mean·median·mode, outlier iqr·std, scale standard·minmax·log(최솟값 확인), pca(전체 집계), rare(전체 GROUP BY), label·onehot(서로 다른 값 읽기), 중복 제거(dedupe)."""
+    if recipe.get("dedupe") or recipe.get("pca"):
         return True
     for spec in (recipe.get("columns") or {}).values():
         ops = spec.get("ops") if isinstance(spec, dict) else None
         if not isinstance(ops, dict):
             continue
         fill, outlier = ops.get("fill"), ops.get("outlier")
-        if ops.get("scale") in ("standard", "minmax") or "rare" in ops or "label" in ops or "onehot" in ops or (isinstance(fill, dict) and fill.get("how") in ("mean", "median", "mode")) or (isinstance(outlier, dict) and outlier.get("by") in ("iqr", "std")):
+        if ops.get("scale") in ("standard", "minmax", "log") or "rare" in ops or "label" in ops or "onehot" in ops or (isinstance(fill, dict) and fill.get("how") in ("mean", "median", "mode")) or (isinstance(outlier, dict) and outlier.get("by") in ("iqr", "std")):
             return True
     return False
 

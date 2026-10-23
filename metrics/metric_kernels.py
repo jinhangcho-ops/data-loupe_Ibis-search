@@ -765,7 +765,10 @@ def payback(t, s, p, ctx):
     rows = [{"day": n, "cum_arpu": v, "cac": cac_all} for n, v in enumerate(cum)]
     if day is None:
         ctx.notes.append(f"{top}일 안에는 CAC를 회수하지 못했어요.")
-    return result(day, rows[:: max(1, len(rows) // MAX_POINTS)], {"day": "첫 활동 후 일수", "cum_arpu": "누적 ARPU", "cac": "CAC"}, {"cac": cac_all, "new_users": new}, label="누적 ARPU가 CAC 이상이 되는 첫 일수")
+    step = max(1, len(rows) // MAX_POINTS)
+    if step > 1:
+        ctx.notes.append(f"점이 많아 {step}일마다 하나씩만 표에 실었어요(대표 값은 전체 기준).")
+    return result(day, rows[::step], {"day": "첫 활동 후 일수", "cum_arpu": "누적 ARPU", "cac": "CAC"}, {"cac": cac_all, "new_users": new}, label="누적 ARPU가 CAC 이상이 되는 첫 일수")
 
 
 # ---------- 6 게임 경제 ----------

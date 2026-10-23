@@ -274,7 +274,7 @@ def formula_one(text, columns=None):
     if m and len(m.group(2).replace(",", " ").split()) == parse.GEO_COUNTS[m.group(1).lower()]:  # 좌표 조건 near·box는 함수 사전의 within_km·in_box
         w = m.group(2).replace(",", " ").split()
         return f"{'within_km' if m.group(1).lower() == 'near' else 'in_box'}(col({w[0]!r}), col({w[1]!r}), {', '.join(num(x) for x in w[2:])})"
-    head = flow.head_name(text, columns)
+    shown, head = text, flow.head_name(text, columns)  # shown: 오류 문구에 보일 원래 글(자리표시로 바꾸기 전)
     if head:
         text = parse.SPACED + text.lstrip()[len(head):]
 
@@ -299,7 +299,7 @@ def formula_one(text, columns=None):
     if m:
         op = {"=": "==", "!=": "!="}.get(m.group(2), m.group(2))
         return f"col({name(m.group(1))!r}) {op} {num(m.group(3).strip().strip(chr(39) + chr(34)))}"
-    raise Bad(f"조건 ‘{text}’을 계산 식으로 바꿀 수 없어요.")
+    raise Bad(f"조건 ‘{shown}’을 계산 식으로 바꿀 수 없어요.")
 
 
 def num(text):

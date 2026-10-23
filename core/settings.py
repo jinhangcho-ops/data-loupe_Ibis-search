@@ -18,15 +18,24 @@ def migrate(path=None):
     새 폴더로 시작하고 예전 폴더는 그대로 두며, 이유를 새 폴더의 FAILED 파일에 적는다. 옮기지 못한 이유 글자 또는 None을 돌려준다."""
     new = (path or PATH).parent
     old = new.with_name(OLD_NAME)
-    if new.exists() or not old.is_dir():
+    if not old.is_dir():
         return None
+    if new.exists():
+        # 지난번에 옮기지 못해 비었거나 실패 표식만 있는 새 폴더는 "아직 안 옮김": 치우고 다시 옮긴다. 뭔가 들어 있으면 이미 쓰는 폴더라 건드리지 않는다.
+        try:
+            if not new.is_dir() or any(child.name != FAILED for child in new.iterdir()):
+                return None
+            (new / FAILED).unlink(missing_ok=True)
+            new.rmdir()
+        except OSError:
+            return None
     try:
         os.replace(old, new)
-        return None
+        return None  # 새 폴더는 예전 폴더 그대로라 실패 표식이 남지 않는다
     except OSError as e:
-        reason = f"예전 설정 폴더({old})를 새 폴더({new})로 옮기지 못했습니다: {e}\n예전 앱을 모두 끈 뒤 새 폴더의 내용을 지우고 예전 폴더 이름을 {new.name}로 바꾸면 이어 쓸 수 있습니다."
+        reason = f"예전 설정 폴더({old})를 새 폴더({new})로 옮기지 못했습니다: {e}\n예전 앱을 모두 끈 뒤 새 폴더의 내용을 지우고 예전 폴더 이름을 {new.name}로 바꾸면 이어 쓸 수 있습니다. 앱을 다시 켜면 비어 있는 새 폴더는 다시 옮기려 합니다."
         with contextlib.suppress(OSError):
-            new.mkdir(parents=True)
+            new.mkdir(parents=True, exist_ok=True)
             (new / FAILED).write_text(reason, encoding="utf-8")
         return reason
 

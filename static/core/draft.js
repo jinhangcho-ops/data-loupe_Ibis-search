@@ -103,6 +103,8 @@ const pressBtn = b => !b || b.disabled || b.closest(".hidden") ? false : (b.clic
 // save·run은 눌렀으면(할 수 있으면) true를 돌려주는 함수, find는 찾기 칸을 돌려주는 함수. 없는 것은 건드리지 않는다. 안 맞으면 창 엔진의 기본 동작이 그대로 간다.
 // 한글 조합 중, 이미 다른 곳에서 처리한 키(SQL 칸의 Ctrl+Enter), 모달·펼친 목록이 있을 때, active()가 false(다른 탭)일 때는 무시한다.
 function Shortcuts({ undo, save, run, find, active = () => true }) {
+  // 입력 중인 칸은 change로 값을 반영하므로 저장·실행 전에 blur→focus로 반영시킨다
+  const commit = () => { const a = document.activeElement; if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) { a.blur(); a.focus(); } };
   document.addEventListener("keydown", e => {
     if (e.defaultPrevented || e.isComposing || e.altKey || !(e.ctrlKey || e.metaKey) || !active() || document.querySelector(".modal:not(.hidden), .menu:not(.hidden)")) return;
     const k = e.key.toLowerCase();
@@ -110,11 +112,11 @@ function Shortcuts({ undo, save, run, find, active = () => true }) {
       const redo = k === "y" || e.shiftKey;
       e.preventDefault();
       (redo ? undo.redo() : undo.undo()).then(ok => ok && flash(redo ? "다시 했어요" : "되돌렸어요"));
-    } else if (k === "s" && !e.shiftKey && save) { e.preventDefault(); save(); }
-    else if (k === "enter" && run && run()) e.preventDefault();
+    } else if (k === "s" && !e.shiftKey && save) { e.preventDefault(); commit(); save(); }
+    else if (k === "enter" && run && (commit(), run())) e.preventDefault();
     else if (k === "f" && !e.shiftKey && find) {
       const box = find();
-      if (box && !box.disabled && !box.closest(".hidden")) { e.preventDefault(); box.focus(); box.select?.(); }
+      if (box && !box.disabled && !box.closest(".hidden") && box.offsetParent !== null) { e.preventDefault(); box.focus(); box.select?.(); }
     }
   });
 }

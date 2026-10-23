@@ -14,6 +14,22 @@ def test_big_json_is_gzipped_and_same_after_unzip(client):
     assert json.loads(gzip.decompress(zipped.data)) == plain.get_json()
 
 
+def test_streamed_download_is_not_pulled_or_gzipped():
+    from flask import Response
+    pulled = []
+
+    def chunks():
+        for i in range(4):
+            pulled.append(i)
+            yield b"x" * 30000
+
+    download = Response(chunks(), headers={"Content-Length": "120000", "Content-Disposition": "attachment; filename=a.csv"})  # server.download과 같은 모양
+    with server.app.test_request_context(headers={"Accept-Encoding": "gzip"}):
+        got = server.squeeze(download)
+    assert got.headers.get("Content-Encoding") is None and pulled == []  # 내보내기를 통째로 읽어 압축하지 않는다
+    assert len(b"".join(got.response)) == 120000
+
+
 def test_small_response_is_left_alone(client):
     small = client.get("/api/usage", headers={"Accept-Encoding": "gzip"})
     assert small.status_code == 200 and small.headers.get("Content-Encoding") is None

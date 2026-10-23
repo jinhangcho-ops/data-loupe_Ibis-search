@@ -13,9 +13,11 @@ jobs:
   build:
     runs-on: windows-latest
     permissions:
-      contents: write  # 태그일 때 Releases에 설치 파일을 올린다
+      contents: read  # 만들기만 한다. Releases에 올리는 쓰기 권한은 아래 release 작업에만 있다.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
@@ -40,8 +42,26 @@ jobs:
         with:
           name: DataLoupe-setup
           path: installer/Output/DataLoupe-setup.exe
+
+  release:
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Releases에 설치 파일을 올린다
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: DataLoupe-setup
       - name: Releases에 올리기
-        if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" installer/Output/DataLoupe-setup.exe --title "${{ github.ref_name }}" --generate-notes
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # 같은 태그로 다시 돌려도 실패하지 않게: 릴리스가 있으면 파일만 덮어 올리고, 없으면 만든다.
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" DataLoupe-setup.exe --clobber
+          else
+            gh release create "$TAG" DataLoupe-setup.exe --title "$TAG" --generate-notes
+          fi

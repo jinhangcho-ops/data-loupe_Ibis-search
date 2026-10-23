@@ -274,6 +274,7 @@ tr.miss { display:none; }
 .menu > div { overflow:auto; }
 .menu div div { padding:5px 12px; white-space:nowrap; cursor:default; }
 .menu div div.now { color:var(--accent); }
+.menu div div[data-hint]::after { content:" · " attr(data-hint); color:var(--muted); }
 .menu div div.on { background:var(--accent-bg); }
 /* 스크롤바(전역): 얇고 반투명하며 화살표 버튼과 바탕이 없다. 창 엔진의 겹침 스크롤바가 모양을 바꾸지 않게 직접 정한다. */
 ::-webkit-scrollbar { width:8px; height:8px; }

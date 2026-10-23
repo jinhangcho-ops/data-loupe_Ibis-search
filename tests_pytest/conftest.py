@@ -23,6 +23,7 @@ from metrics import catalog_app  # noqa: E402,F401  지표 사전 라우트
 from integrations import integrations_app  # noqa: E402,F401  연동 라우트
 from prep import prep_app  # noqa: E402,F401  전처리 라우트
 from integrations import schedule_app  # noqa: E402,F401  예약 라우트
+from integrations import notify  # noqa: E402,F401  보내기 라우트
 
 
 @pytest.fixture

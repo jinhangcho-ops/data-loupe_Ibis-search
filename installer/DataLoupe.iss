@@ -50,3 +50,7 @@ Name: "{autodesktop}\Data Loupe"; Filename: "{app}\DataLoupe.exe"; Tasks: deskto
 
 [Run]
 Filename: "{app}\DataLoupe.exe"; Description: "{cm:LaunchProgram,Data Loupe}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+; 앱에서 등록한 Windows 예약 작업(작업 스케줄러의 \DataLoupe\ 폴더 안)만 지운다. 그 폴더 밖의 작업은 건드리지 않는다. 없으면 아무 일도 하지 않는다.
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ""Get-ScheduledTask -TaskPath '\DataLoupe\' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue"""; Flags: runhidden waituntilterminated; RunOnceId: "RemoveDataLoupeTasks"

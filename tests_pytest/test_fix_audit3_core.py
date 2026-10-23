@@ -37,13 +37,14 @@ def test_find_with_start_on_null_matches_between_engines():
 # ---------- 3B2 CP949 CSV 다시 변환 ----------
 
 def test_cp949_csv_is_reconverted_after_the_original_changes(tmp_path):
-    from core import result, source
+    from core import result, server, source
     path = tmp_path / "a.csv"
     path.write_bytes("이름,값\n가나,1\n".encode("cp949"))
     con = source.open_flat_files([path])
-    t = con.table("a")
+    t = server.any_table(con, "a", None, vts={})
     assert result.lazy(t).collect()["이름"].to_list() == ["가나"]
     path.write_bytes("이름,값\n다라마,2\n바사,3\n".encode("cp949"))  # 크기가 바뀌므로 (mtime, 크기)로 알아챈다
+    t = server.any_table(con, "a", None, vts={})  # 표를 꺼낼 때 다시 변환한다(refresh_csv)
     assert result.lazy(t).collect()["이름"].to_list() == ["다라마", "바사"]
     source.close(con)
 

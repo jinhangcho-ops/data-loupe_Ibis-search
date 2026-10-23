@@ -56,7 +56,7 @@ def test_fresh_copy_keeps_copies_with_fewer_columns(two_copies):
 # ---------- 3C2 computes_stats ----------
 
 @pytest.mark.parametrize("ops,want", [({"rare": {"min": 5}}, True), ({"label": True}, True), ({"onehot": True}, True), ({"scale": "standard"}, True),
-                                      ({"scale": "minmax"}, True), ({"scale": "log"}, False), ({"fill": {"how": "mean"}}, True), ({"fill": {"how": "value", "value": 1}}, False)])
+                                      ({"scale": "minmax"}, True), ({"scale": "log"}, True), ({"fill": {"how": "mean"}}, True), ({"fill": {"how": "value", "value": 1}}, False)])
 def test_computes_stats(ops, want):
     assert prep_app.computes_stats({"columns": {"c": {"ops": ops}}}) is want
 

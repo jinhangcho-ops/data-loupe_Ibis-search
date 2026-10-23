@@ -581,7 +581,7 @@ $("join-line-add").onclick = () => {
   renderJoins();
   applyJoins();
 };
-$("join-line").onkeydown = e => { if (e.key === "Enter") $("join-line-add").click(); };
+$("join-line").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) $("join-line-add").click(); };
 
 // 4~7. 기간·조건·정렬·표시 컬럼: 한 줄 입력 → 서버에서 검사 → 목록에 추가
 // 한 줄을 서버에서 검사해 목록에 넣는다. 넣었으면 true, 오류면 err에 이유를 적고 false.
@@ -611,7 +611,7 @@ function renderList(key) {
     if (line) await addItem(key, line, err, at);
   });
   button.onclick = add;
-  input.onkeydown = e => { if (e.key === "Enter") add(); };
+  input.onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) add(); };
   box.querySelectorAll("button[data-edit]").forEach(b => b.onclick = () => {
     at = +b.dataset.edit;
     if (key === "conditions") showCondMode("line");  // 한 줄 입력칸이 보여야 고칠 수 있다.
@@ -664,7 +664,7 @@ const addBuilt = () => busy($("badd"), async () => {
   if (part && await addItem("conditions", part, $("err-builder"))) $("bval").value = $("bval2").value = "";
 });
 $("badd").onclick = addBuilt;
-$("bval").onkeydown = $("bval2").onkeydown = e => { if (e.key === "Enter") addBuilt(); };
+$("bval").onkeydown = $("bval2").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) addBuilt(); };
 // 값 목록: [목록]을 누를 때만 조회한다. 고르면 값 칸에 넣고, in·except에서는 쉼표로 이어 붙인다.
 $("blist").onclick = () => busy($("blist"), async () => {
   try {
@@ -1263,10 +1263,10 @@ async function restoreSearch(d) {
   if (d.sentence) { await need(...SENTENCE_JS); sentenceView().setDraft(d.sentence); }
   if (d.view !== "cards" && !await setView(d.view)) throw new Error($("err-search").textContent || "그 보기로 바꾸지 못했어요.");
   if (d.graph && view === "flow") await flowView.set(d.graph, { layout: false });
-  draftBase = { base: S.base, key: bodyKey() };
 }
-const searchDraft = Draft("search", () => S.base && draftChanged() ? searchState() : null, restoreSearch);
-const searchUndo = Undo(searchState, restoreSearch);
+// 초안을 복원했을 때만 초안 기준을 바꾼다(되돌리기는 기준을 건드리지 않는다)
+const searchDraft = Draft("search", () => S.base && draftChanged() ? searchState() : null, async d => { await restoreSearch(d); draftBase = { base: S.base, key: bodyKey() }; });
+const searchUndo = Undo(() => view === "cards" ? searchState() : null, restoreSearch);  // 되돌리기는 카드 보기에서만(흐름·문장 보기는 보이는 것을 되돌리지 못한다)
 const inExplore = () => !$("work").classList.contains("hidden");
 // 단축키: 되돌리기는 탐색 탭만(SQL·지표 탭의 글자 칸은 창 엔진 기본). 저장·실행은 보이는 탭의 단추, Ctrl+F는 결과 찾기 칸.
 Shortcuts({
@@ -1420,7 +1420,7 @@ $("nl-prompt").onclick = () => busy($("nl-prompt"), async () => {
     $("nl-view").classList.remove("hidden");
   } catch (e) { say("err-sql", e.message); }
 });
-$("nl-q").addEventListener("keydown", e => { if (e.key === "Enter") $("nl-ask").click(); });
+$("nl-q").addEventListener("keydown", e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) $("nl-ask").click(); });
 function showLlm(d) {
   $("llm-env").value = d.env;
   $("llm-name").textContent = "LLM: " + d.llm;

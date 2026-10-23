@@ -83,7 +83,7 @@ function shelfPanel(host) {
       host.say("");
       host.change(next, `필터에 ${name}`);
     };
-    value.onkeydown = e => { if (e.key === "Enter") go(); };
+    value.onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) go(); };
     value.onclick = op.onclick = e => e.stopPropagation();
     return el("span", { className: "shelf-form" }, el("b", { textContent: pending.name }), op, value, el("button", { className: "btn", textContent: "넣기", onclick: e => { e.stopPropagation(); go(); } }),
       el("button", { className: "ghost", textContent: "×", onclick: e => { e.stopPropagation(); pending = null; host.say(""); refresh(); } }));

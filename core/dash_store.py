@@ -519,8 +519,9 @@ def delete_template(template_id):
     return found
 
 
-def check_dashboard(d):
-    """대시보드 하나를 검사해 정리한 사본을 돌려준다(id·카드 id는 없으면 새로 만든다). 이름 겹침과 개수는 저장할 때 본다."""
+def check_dashboard(d, old=None):
+    """대시보드 하나를 검사해 정리한 사본을 돌려준다(id·카드 id는 없으면 새로 만든다). 이름 겹침과 개수는 저장할 때 본다.
+    old: 이미 저장된 같은 대시보드. 기준일이 저장된 값 그대로이면 오늘 뒤인지는 다시 보지 않는다(예전에 미래 날짜로 저장된 것도 카드 옮기기 같은 다른 편집은 저장되게)."""
     if not isinstance(d, dict):
         raise ValueError("대시보드는 객체여야 합니다.")
     dash_id = d.get("id") or secrets.token_hex(8)
@@ -538,7 +539,7 @@ def check_dashboard(d):
         try:
             if not DAY.fullmatch(as_of):
                 raise ValueError
-            if dt.date.fromisoformat(as_of) > dt.date.today():
+            if dt.date.fromisoformat(as_of) > dt.date.today() and as_of != (old or {}).get("as_of"):
                 raise OverflowError
         except (ValueError, TypeError):
             raise ValueError("기준일(as_of)은 비워 두거나 YYYY-MM-DD 모양의 있는 날짜여야 합니다.") from None
@@ -659,7 +660,7 @@ def save_dashboard(d):
     """대시보드 하나를 검사해 저장하고(id가 같으면 덮어쓴다) 저장한 모양을 돌려준다. 이름이 겹치거나 100개를 넘으면 오류."""
     with LOCK:
         dashboards = editable()
-        d = check_dashboard(d)
+        d = check_dashboard(d, dashboards.get(d.get("id")) if isinstance(d, dict) and isinstance(d.get("id"), str) else None)
         old = dashboards.get(d["id"])
         if any(o["name"] == d["name"] and o["id"] != d["id"] for o in dashboards.values()):
             raise ValueError(f"'{d['name']}' 이름의 대시보드가 이미 있습니다.")
@@ -722,7 +723,7 @@ def update_settings(dash_id, fields):
         if dash_id not in dashboards:
             raise ValueError("대시보드를 찾을 수 없습니다.")
         old = dashboards[dash_id]
-        new = check_dashboard({**old, **{k: v for k, v in fields.items() if k in ("as_of", "period", "refresh", "live")}})
+        new = check_dashboard({**old, **{k: v for k, v in fields.items() if k in ("as_of", "period", "refresh", "live")}}, old)
         dashboards[dash_id] = {**old, **{k: new[k] for k in ("as_of", "period", "refresh", "live")}}
         write(dashboards)
         return dashboards[dash_id]

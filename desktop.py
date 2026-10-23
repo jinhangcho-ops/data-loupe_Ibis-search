@@ -5,7 +5,10 @@ import sys
 
 from core import drivers, settings
 
-settings.migrate()  # 예전 이름(ibis_search)의 설정 폴더를 새 폴더로 옮긴다. 설정을 처음 읽기 전, 단일 실행 잠금 전, 드라이버 폴더(그 안)를 쓰기 전에.
+moved_failed = settings.migrate()  # 예전 이름(ibis_search)의 설정 폴더를 새 폴더로 옮긴다. 설정을 처음 읽기 전, 단일 실행 잠금 전, 드라이버 폴더(그 안)를 쓰기 전에.
+if moved_failed:  # 옮기지 못한 이유를 알리고 새 폴더로 계속한다(사용자가 빈 앱만 보고 영문을 모르지 않게). 다음 시작 때 다시 옮기려 한다.
+    import ctypes
+    ctypes.windll.user32.MessageBoxW(None, moved_failed, "Data Loupe", 0x30)
 drivers.use_installed()  # exe: 따로 설치한 드라이버 폴더를 백엔드를 불러오기 전에 import 경로에 더한다.
 
 if sys.argv[1:2] == ["--browser"]:
