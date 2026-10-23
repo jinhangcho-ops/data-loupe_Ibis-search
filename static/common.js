@@ -4,8 +4,26 @@ const S = { schema: "", base: "", cols: [] };
 async function send(url, body) {
   const res = await fetch(url, body === undefined ? {} : {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!res.ok) throw new Error((await res.json()).error);
+  if (!res.ok) { const d = await res.json(), err = new Error(d.error); err.driver = d.driver; throw err; }  // driver: 드라이버가 없어 못 붙었을 때의 안내
+  if (res.headers.get("X-Needs-Confirm")) {  // 서버가 처리 용량이 기준을 넘는다고 물으면 팝업으로 묻고, 확인하면 그 실행만 confirmed를 붙여 다시 보낸다.
+    const d = await res.json(), ok = await confirmScan(d);
+    if (d.blocked || !ok) throw new Error(d.blocked ? d.text : "취소했습니다.");
+    return send(url, { ...body, confirmed: true });
+  }
   return res;
+}
+// 처리 용량 확인 팝업: 내용과 [확인] [취소](알 수 없는데 차단으로 정했으면 이유와 [닫기]만). 확인하면 true.
+function confirmScan(d) {
+  return new Promise(done => {
+    const pick = ok => () => { box.remove(); done(ok); };
+    const buttons = d.blocked ? [el("button", { className: "btn", textContent: "닫기", onclick: pick(false) })]
+      : [el("button", { className: "ghost", textContent: "취소", onclick: pick(false) }), el("button", { className: "btn p", textContent: "확인", onclick: pick(true) })];
+    const box = el("div", { className: "modal", onclick: e => { if (e.target === box) pick(false)(); } },
+      el("div", { className: "modal-box" }, el("h3", { textContent: d.blocked ? "실행하지 않습니다" : "처리 용량이 큽니다" }),
+        el("p", { textContent: d.text, style: "white-space:pre-wrap; margin:10px 0 14px" }), el("div", { className: "row", style: "justify-content:flex-end" }, ...buttons)));
+    document.body.append(box);
+    box.querySelector("button:last-child").focus();
+  });
 }
 const api = async (url, body) => (await send(url, body)).json();
 const esc = v => String(v ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
@@ -354,6 +372,17 @@ const cores = SERVER.sizes.threads[1], coreSteps = [...new Set([1, 2, 4, 8, 16, 
 $("threads").innerHTML = `<option value="0">전부 ${cores}개 (기본)</option>` + coreSteps.filter(n => n < cores).map(n => `<option value="${n}">${n}개</option>`).join("");
 $("threads").value = [...$("threads").options].some(o => o.value === String(saved("threads") || 0)) ? String(saved("threads") || 0) : "0";
 $("threads").onchange = () => saveSetting({ threads: +$("threads").value });
+// 자세히: 처리 용량을 알 수 없을 때(scan_unknown: run·block)와 표본이 너무 적게 오는 기준(sample_too_few, 화면은 %, 비우면 기본 20%).
+$("scan-unknown").value = saved("scan_unknown") || "run";
+$("scan-unknown").onchange = () => saveSetting({ scan_unknown: $("scan-unknown").value });
+const [FEW_LOW, FEW_HIGH] = SERVER.floats.sample_too_few;
+if (saved("sample_too_few")) $("too-few").value = Math.round(saved("sample_too_few") * 100);
+$("too-few").onchange = () => {
+  const text = $("too-few").value.trim(), n = Number(text) / 100;
+  if (!text) { saveSetting({ sample_too_few: 0 }); connMsg(""); }
+  else if (n >= FEW_LOW - 1e-9 && n <= FEW_HIGH + 1e-9) { saveSetting({ sample_too_few: n }); connMsg(""); }
+  else connMsg(`표본 기준은 ${Math.round(FEW_LOW * 100)}% 이상 ${Math.round(FEW_HIGH * 100)}% 이하로 넣으세요(비우면 20%).`);
+};
 $("flat-list").onchange = showFlat;
 $("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
 }
@@ -408,14 +437,46 @@ if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
   const body = kind === "folder"
     ? { kind, path: $("path").value, ...($("file").value === FLAT ? { files: flatBoxes().filter(b => b.checked).map(b => b.value) } : { file: $("file").value }) }
     : { kind, url: $("url").value, user: $("user").value, password: $("password").value };
+  $("driver-hint").classList.add("hidden");
   try {
     const { schemas } = await api("/api/connect", body);
     showRecentConnections();  // 쓴 횟수가 바뀌었다
     await showConnected(!!body.files, schemas, body);
     if (typeof startRefresh === "function") startRefresh();  // 연결에 성공하면 어느 화면에서나 대시보드 최신화를 시작한다(dash_refresh.js)
     if (typeof afterConnect === "function") afterConnect();  // 첫 화면: 고른 화면으로 넘어간다
-  } catch (e) { connMsg(e.message); }
+  } catch (e) { connMsg(e.message); if (e.driver) showDriverHint(e.driver); }
 });
+// 드라이버 안내(drivers.py의 entry): 설명, 설치 명령과 [복사], 따로 설치할 프로그램, exe 안내. 연결이 드라이버 때문에 실패한 자리와 드라이버 표가 함께 쓴다.
+const DRIVER_STATUS = { installed: "설치됨", missing: "없음", program_needed: "프로그램 필요" };
+function copyCommand(text) {
+  const b = el("button", { className: "ghost", textContent: "복사", onclick: async () => {
+    try { await navigator.clipboard.writeText(text); b.textContent = "복사됨"; } catch (e) { b.textContent = "직접 선택해 복사"; }
+    setTimeout(() => b.textContent = "복사", 1500);
+  } });
+  return b;
+}
+const driverExtra = d => [d.program && `따로 설치할 프로그램: ${d.program.name} (${d.program.url})`, d.after, d.notice].filter(Boolean);
+function showDriverHint(d) {
+  $("driver-hint").replaceChildren(el("div", { className: "drv-guide" }, el("div", { textContent: d.explanation }),
+    el("div", { className: "row", style: "align-items:center" }, el("code", { textContent: d.command }), copyCommand(d.command)),
+    ...driverExtra(d).map(t => el("div", { className: "hint", textContent: t, style: "margin:0; user-select:text" }))));
+  $("driver-hint").classList.remove("hidden");
+}
+if (hasConnect) {
+  $("drv-close").onclick = () => $("drivers-panel").classList.add("hidden");
+  $("drivers-panel").onclick = e => { if (e.target === $("drivers-panel")) $("drivers-panel").classList.add("hidden"); };
+  $("drv-open").onclick = () => busy($("drv-open"), async () => {
+    try {
+      const { drivers } = await api("/api/drivers");
+      $("drv-rows").replaceChildren(...drivers.map(d => el("tr", {}, el("td", { textContent: d.group }), el("td", { textContent: d.name, title: "주소 예: " + d.address }),
+        el("td", { className: d.status, textContent: DRIVER_STATUS[d.status] }),
+        el("td", {}, d.explanation, ...[`주소 예: ${d.address}`, ...driverExtra(d)].map(t => el("div", { className: "hint", textContent: t, style: "margin:2px 0 0; user-select:text" }))),
+        el("td", {}, el("code", { textContent: d.command }), " ", copyCommand(d.command)))));
+      say("err-drivers", "", true);
+      $("drivers-panel").classList.remove("hidden");
+    } catch (e) { connMsg(e.message); }
+  });
+}
 
 // 2. 테이블
 // 가상 테이블(쿼리 화면만, body의 data-virtual="1")은 "가상 테이블" 묶음으로 뒤에 붙인다. 고른 테이블이 목록에 남아 있으면 그대로 둔다.

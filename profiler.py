@@ -17,7 +17,6 @@ SPEC = "data_spec.json"  # 고른 데이터 명세서의 경로 {"path"}
 MAX_SPEC_BYTES = 5 * 1024 * 1024
 FLAG_MAX = 20  # 표본에서 서로 다른 값이 이 수 이하인 컬럼은 플래그로 보고 값 목록을 남긴다.
 FLAG_TEXT = 100  # 플래그 값 하나의 최대 글자 수(이보다 길면 플래그로 보지 않는다)
-TOO_FEW = 0.2  # 블록 샘플링이 기대한 행의 이만큼도 못 가져오면(작은 테이블·뷰) 다음 방법으로 넘어간다.
 METHODS = {"preview": "무과금 미리보기", "whole": "전체(행 수가 표본보다 적음)", "block": "블록 샘플링", "partition": "최신 파티션", "head": "앞 행"}
 
 
@@ -26,7 +25,7 @@ METHODS = {"preview": "무과금 미리보기", "whole": "전체(행 수가 표�
 def read_spec(path):
     """데이터 명세서(JSON·YAML)를 읽어 검사한다. 모양:
     {"tables": {"테이블" 또는 "스키마.테이블": {"description": 글자, "partition": {"column": 컬럼, "latest": 값} 또는 {"column", "recent_days": 정수},
-                                             "columns": {컬럼: {"description": 글자}}}}}"""
+                                             "columns": {컬럼: {"description": 글자, "bytes": 양의 정수(선택: 이 컬럼 한 칸의 평균 크기, 원격 DB에서 PC로 받는 양을 어림할 때 씀)}}}}}"""
     path = Path(path)
     if path.suffix.lower() not in (".json", ".yaml", ".yml"):
         raise ValueError("데이터 명세서는 .json, .yaml, .yml 파일이어야 합니다.")
@@ -60,6 +59,8 @@ def read_spec(path):
         for column, info in table.get("columns", {}).items():
             if not isinstance(info, dict) or not isinstance(info.get("description", ""), str):
                 raise ValueError(f"{where}의 {column}: description은 글자여야 합니다.")
+            if isinstance(info.get("bytes"), bool) or ("bytes" in info and (type(info["bytes"]) is not int or info["bytes"] < 1)):
+                raise ValueError(f"{where}의 {column}: bytes는 1 이상 정수여야 합니다.")
     return spec
 
 
@@ -151,7 +152,7 @@ def block(con, t, schema, base, size, rows, part):
     if rows is None:
         return None
     found = fetch(con, t.sample(min(1.0, size * 1.2 / rows), method="block").limit(size))
-    return found if found.num_rows >= min(size, rows) * TOO_FEW else None
+    return found if found.num_rows >= min(size, rows) * settings.get("sample_too_few") else None  # 기대한 행의 이만큼도 못 가져오면(작은 테이블·뷰) 다음 방법으로(설정 sample_too_few, 기본 0.2)
 
 
 def partition(con, t, schema, base, size, rows, part):

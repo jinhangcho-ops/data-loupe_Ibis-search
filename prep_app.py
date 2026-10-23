@@ -87,6 +87,11 @@ def local_mode(recipe):
     return settings.load().get("prep_where", "all") == "all" or bool(recipe.get("formulas") or recipe.get("pca"))
 
 
+def copy_key(recipe):
+    """작업 사본(working_copy)을 가리키는 held 열쇠."""
+    return ("prep", table_key(recipe), json.dumps(recipe.get("filters") or [], ensure_ascii=False))
+
+
 def working_copy(recipe):
     """원격 DB의 기준 테이블에 행 거르기(filters)만 걸어 이 PC의 DuckDB로 한 번 받아 둔 표(held, 상한 없음, 묶음씩 받음).
     같은 테이블·거르기면 다시 쓴다. DB에는 이 단순한 조회 하나만 가고, 평균 같은 통계와 전처리 계산은 이 표에서 한다."""
@@ -96,7 +101,7 @@ def working_copy(recipe):
     filters = recipe.get("filters") or []
     if filters:
         t = t.filter(*[parse.predicate(cond, t) for cond in filters])
-    key = ("prep", table_key(recipe), json.dumps(filters, ensure_ascii=False))
+    key = copy_key(recipe)
     name = run(lambda: held.ensure(key, t, state["cancel"], cap=False))[0]
     local = held.table(name)
     return local.select(*[c for c in local.columns if c != held.ROW])
@@ -370,10 +375,24 @@ def insert_all(db, name, schema, expr):
     return rows
 
 
+def scan_sql(recipe):
+    """전처리 실행이 읽을 기준 테이블(행 거르기 포함)의 (SQL, 방언). 처리 용량 확인에 쓴다. 작업 사본으로 계산해도 DB에서 읽는 양은 이것이다."""
+    con, schema = get_con(), recipe.get("schema") or None
+    parse.check_name(recipe["base"], server.table_names(con, schema), "테이블")
+    t = server.any_table(con, recipe["base"], schema, vts={})
+    if recipe.get("filters"):
+        t = t.filter(*[parse.predicate(cond, t) for cond in recipe["filters"]])
+    return server.expr_sql(con, t)
+
+
 @app.post("/api/run")
 def run_recipe():
     """target이 {"kind": "file", "format": "parquet" | "csv"}면 파일로 내려보내고, {"kind": "table", "name": 이름}이면 DB에 새 테이블로 만든다."""
     recipe, target = request.json["recipe"], request.json["target"]
+    con = get_con()  # 실행 전 처리 용량 확인: 원격 DB는 작업 사본으로 받을 때(아직 없으면)만, 나머지는 읽는 양
+    if not held.remote(con) or (local_mode(recipe) and copy_key(recipe) not in held.store["items"]):
+        if ask := server.scan_gate(request.json, lambda: scan_sql(recipe)):
+            return ask
     if target.get("kind") == "table":
         return jsonify(ok=True, rows=make_table(recipe, target.get("name", "")))
     if target.get("kind") != "file" or target.get("format") not in FILE_FORMATS:

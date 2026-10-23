@@ -4,6 +4,8 @@
 import datetime as dt
 import json
 
+from lazy import ibis
+
 import analysis
 import compare
 import core
@@ -145,6 +147,117 @@ def fit(section):
     n = len(section["labels"])
     per_day = len(json.dumps(section, ensure_ascii=False, separators=(",", ":"))) / max(n, 1)
     return max(1, min(n, dash_store.MAX_DAYS, int(dash_store.MAX_CARD_BYTES * ROOM / max(per_day, 1))))
+
+
+def group_key(body):
+    """같은 테이블·같은 조건(이어붙이기·조인·기간·조건)을 알아보는 글: 이것이 같은 카드들은 한 번에 읽는다."""
+    return json.dumps({k: body.get(k) for k in core.STAGE}, sort_keys=True, ensure_ascii=False, default=str)
+
+
+def body_columns(body, *more):
+    """쿼리 body가 집계에 쓰는 컬럼(계열 컬럼·X·나누기)과 more. 계산 줄(calcs)이 있거나 지표를 쓰면 None(줄이지 않는다). 쓰는 컬럼이 없으면 None."""
+    if body.get("calcs") or body.get("names"):
+        return None
+    found = {s.get("y") for s in body.get("series") or [] if isinstance(s, dict)} | {body.get("x"), body.get("split"), *more}
+    return sorted(c for c in found if isinstance(c, str) and c) or None
+
+
+def card_columns(card, ctx=None):
+    """카드가 읽는 컬럼들(없으면 None = 줄이지 않음). 최신화가 같은 테이블·조건의 카드들을 묶었으면(ctx.plan) 그 카드들이 쓰는 컬럼의 합집합이다."""
+    src, view = card["source"], card["view"]
+    if card["kind"] == "recent_rows" or (card["kind"] == "table" and not src["body"].get("series")):
+        return None  # 원래 행을 보이는 카드는 모든 컬럼
+    cols = body_columns(src["body"], src.get("date"), view.get("group"), *(view.get("group_cols") or []), view.get("entity"), view.get("time_col"), view.get("kind_col"), view.get("link_col"),
+                        *(b.get("y") for b in view.get("blanks") or []), *(r.get("column") for r in view.get("rules") or []))  # 상태 규칙이 보는 컬럼도 읽는다
+    union = ((ctx or {}).get("plan") or {}).get("union", {}).get(group_key(src["body"]))
+    return union if cols is not None and union is not None else cols
+
+
+def fetch_window(ctx):
+    """다시 구할 때 읽을 날짜 범위 {start, end}: 보는 기간의 시작과 직전 기간의 시작 중 앞선 것부터 보는 기간의 끝까지(비교에 직전 기간이 필요하다). 기간이 없으면 None(전체)."""
+    rng, prev = (ctx or {}).get("range"), (ctx or {}).get("prev")
+    if not rng or not (rng.get("start") or rng.get("end")):
+        return None
+    starts = [d for d in (rng.get("start"), (prev or {}).get("start")) if d]
+    return {"start": min(starts) if starts else None, "end": rng.get("end")}
+
+
+def card_expr(card, ctx=None, window=None):
+    """카드가 읽을 식: 날짜 컬럼(source.date)에 window의 기간을 걸고 쓰는 컬럼으로 줄인 것(core.runnable의 keep)."""
+    body = card["source"]["body"]
+    return core.runnable(with_period(body, card["source"].get("date"), window), select=False, keep=card_columns(card, ctx))
+
+
+def copies_to_pc(card, ctx=None):
+    """이 카드를 구할 때 읽는 행이 이 PC로 옮겨지는지(core.runnable이 연결이 못 하는 계산이라 받아 두는 경우, 아직 받아 둔 것이 없을 때). 그렇지 않으면
+    집계는 DB 안에서 하고 결과만 오므로(표 500행, 시간별 값, 점 MAX_POINTS개 이하) 작다."""
+    import held
+    body = (card["source"] or {}).get("body")
+    if not isinstance(body, dict) or card["kind"] in ("recent_rows", "analysis"):
+        return False
+    shaped = with_period(body, card["source"].get("date") or (body.get("x") if card["kind"] == "chart" else None), fetch_window(ctx))
+    if connection.compiles(core.build(shaped, select=False)):
+        return False
+    return core.search_key(shaped, card_columns(card, ctx)) not in held.store["items"]
+
+
+def read_sql(card, ctx=None):
+    """카드가 읽는 식(필요한 컬럼·기간만)의 SQL 글. 실행하지 않는다. 처리 용량 추정에 쓴다. 식을 만들 수 없는 종류는 None."""
+    body = (card["source"] or {}).get("body")
+    if not isinstance(body, dict) or card["kind"] in ("recent_rows", "analysis"):
+        return None
+    window = fetch_window(ctx)
+    expr = core.slim(core.build(with_period(body, card["source"].get("date") or (body.get("x") if card["kind"] == "chart" else None), window), select=False), card_columns(card, ctx))
+    dialect = "duckdb" if getattr(source_con(), "name", "") == "polars" else None  # 파일 연결은 duckdb 방언으로(scan 라우트와 같다)
+    return str(ibis.to_sql(expr, dialect=dialect) if dialect else ibis.to_sql(expr))
+
+
+def source_con():
+    """지금 연결(없으면 None)."""
+    import server
+    return server.state["con"]
+
+
+def time_key(body, x, split, window):
+    return json.dumps([group_key(body), x, split, window], sort_keys=True, ensure_ascii=False, default=str)
+
+
+def sliced(full, series):
+    """묶어서 구한 시간별 값(full)에서 series 계열만 남긴다(이름으로 찾는다)."""
+    names = [series_name(s) for s in series]
+    pick = lambda section: {**section, "series": [next(s for s in section["series"] if s["name"] == n) for n in names if any(s["name"] == n for s in section["series"])]}
+    by_unit = {unit: pick(section) for unit, section in full["by_unit"].items()}
+    return {**full, "by_unit": {u: s for u, s in by_unit.items() if s["series"]}}
+
+
+def shared_time(expr, body, x, series, split, window, ctx):
+    """time_data. 최신화가 같은 테이블·조건·날짜 컬럼의 카드들을 묶었으면(ctx.plan) 그 카드들의 계열을 한 번에 구해 두고(ctx.shared) 카드마다 자기 계열만 돌려준다."""
+    shared, key = (ctx or {}).get("shared"), time_key(body, x, split, window)
+    union = ((ctx or {}).get("plan") or {}).get("series", {}).get(key)
+    if shared is None or union is None or split:
+        return time_data(expr, x, series, split)
+    if key not in shared:
+        shared[key] = time_data(expr, x, union, None)
+    return sliced(shared[key], series)
+
+
+def plan_shared(cards, ctx=None):
+    """같은 테이블·조건의 카드들을 묶어 한 번에 읽을 계획 {union: {그룹: 쓸 컬럼 합집합(줄일 수 없으면 None 없음)}, series: {시간별 값 열쇠: 계열 합집합}}.
+    날짜 컬럼이 있는 값 카드(kpi 등)는 계열을 합쳐 일 값 집계 하나로 구한다(같은 group by면 집계 하나)."""
+    union, series, window = {}, {}, fetch_window(ctx)
+    for card in cards:
+        body = card["source"].get("body")
+        if not isinstance(body, dict):
+            continue
+        g, cols = group_key(body), card_columns(card)
+        if cols is None:
+            union[g] = None
+        elif union.get(g, 0) is not None:
+            union[g] = sorted({*union.get(g, []), *cols})
+        if card["kind"] in VALUE_KINDS and card["kind"] not in ("gauge", "summary") and card["source"].get("date") and not body.get("names") and body.get("series"):
+            mine = series.setdefault(time_key(body, card["source"]["date"], None, window), [])
+            mine += [s for s in clean_series(body["series"]) if s not in mine]
+    return {"union": {g: c for g, c in union.items() if c is not None}, "series": {k: v for k, v in series.items() if v}}
 
 
 def time_data(expr, x, series, split):
@@ -319,7 +432,7 @@ def summary_data(card, ctx):
     src, view, body = card["source"], card["view"], card["source"]["body"]
     series, date = clean_series(body.get("series")), src.get("date")
     window, before = (ctx or {}).get("range"), (ctx or {}).get("prev")
-    at = lambda w: core.runnable(with_period(body, date, w), select=False)
+    at = lambda w: card_expr(card, ctx, w)
     cur = run(lambda: scalars(at(window), series[:1]))[0]
     prev = run(lambda: scalars(at(before), series[:1]))[0] if date and before else None
     groups = None
@@ -345,23 +458,26 @@ def value_data(card, ctx):
         value, pair, fmt = run(lambda: metric_scalar(with_period(body, date, window), name))
         found = {"values": {"scalar": [value], "names": [name], "format": fmt}, "pair": pair}
     elif card["kind"] == "gauge":
-        found = category_data(core.runnable(with_period(body, date, window), select=False), body, clean_series(body.get("series")))
+        found = category_data(card_expr(card, ctx, window), body, clean_series(body.get("series")))
     elif date:
-        expr = core.runnable(body, select=False)
-        parse.check_name(date, expr.columns, "날짜 컬럼")
-        if date not in date_columns(expr):
+        shape = core.build(body, select=False)  # 컬럼 종류만 본다
+        parse.check_name(date, shape.columns, "날짜 컬럼")
+        if date not in date_columns(shape):
             raise ValueError(f"'{date}'은 날짜 컬럼이 아닙니다.")
-        series = clean_series(body.get("series"))
-        found = run(lambda: time_data(expr, date, series, None))
+        series, fetch = clean_series(body.get("series")), fetch_window(ctx)  # 읽을 범위: 직전 기간 시작 ~ 보는 기간 끝
+        expr = card_expr(card, ctx, fetch)
+        found = run(lambda: shared_time(expr, body, date, series, None, fetch, ctx))
+        if fetch:
+            found = {**found, "window": fetch}
         unique = [i for i, s in enumerate(series) if s["agg"] == "nunique"]
         if unique and window and (window.get("start") or window.get("end")):  # 고유 개수는 일 값을 다시 묶을 수 없어 그 기간으로 따로 구한다
-            at = core.runnable(with_period(body, date, window), select=False)
+            at = card_expr(card, ctx, window)
             found["values"] = {"window_nunique": {"start": window.get("start"), "end": window.get("end"), "values": {str(i): v for i, v in zip(unique, run(lambda: scalars(at, [series[i] for i in unique])))}}}
     else:
-        series, expr = clean_series(body.get("series")), core.runnable(with_period(body, date, window), select=False)
+        series, expr = clean_series(body.get("series")), card_expr(card, ctx, window)
         found = {"values": {"scalar": run(lambda: scalars(expr, series)), "names": [series_name(s) for s in series]}}
     return {**found, **({"target": resolve_target(view.get("target"))} if card["kind"] != "summary" else {}),
-            "date_cols": date_columns(core.runnable(body, select=False))}
+            "date_cols": date_columns(core.build(body, select=False))}
 
 
 def table_rows(expr, group_cols, series):
@@ -382,9 +498,9 @@ def table_data(card, ctx):
     src, view, body = card["source"], card["view"], card["source"]["body"]
     series, date = body.get("series") or [], src.get("date")
     if not series:
-        return {"columns": list(core.runnable(body).columns)}
+        return {"columns": list(core.build(body).columns)}
     series, groups = clean_series(series), view.get("group_cols") or []
-    at = lambda w: core.runnable(with_period(body, date, w), select=False)
+    at = lambda w: card_expr(card, ctx, w)
     now = run(lambda: table_rows(at((ctx or {}).get("range")), groups, series))
     before = (ctx or {}).get("prev")
     old = run(lambda: table_rows(at(before), groups, series)) if date and before and groups else None
@@ -398,7 +514,7 @@ def table_data(card, ctx):
 def sentence_data(card, ctx):
     """sentence 카드: 문장 틀(view.template)의 빈칸마다 값. 빈칸 종류: value(이번 기간 값), prev(직전 기간 값), delta(비교 문장, compare.py), asof(기준일).
     계산하지 못하는 빈칸은 값 없이 이유(error)만 담는다(화면이 '—'와 이유를 보임)."""
-    src, view, body = card["source"], card["view"], card["source"]["body"]
+    src, view = card["source"], card["view"]
     date, window, before = src.get("date"), (ctx or {}).get("range"), (ctx or {}).get("prev")
     out = {}
     for blank in view.get("blanks") or []:
@@ -408,7 +524,7 @@ def sentence_data(card, ctx):
             continue
         try:
             s = clean_series([{"y": blank.get("y") or None, "agg": blank.get("agg") or ("sum" if blank.get("y") else "count")}])
-            at = lambda w: core.runnable(with_period(body, date, w), select=False)
+            at = lambda w: card_expr(card, ctx, w)
             cur = run(lambda: scalars(at(window), s))[0]
             prev = run(lambda: scalars(at(before), s))[0] if date and before and kind in ("prev", "delta") else None
             item = {"kind": kind, "cur": cur, "prev": prev, "format": fmt}
@@ -426,7 +542,7 @@ def watch_data(card, now, previous):
     view, body = card["view"], card["source"]["body"]
     if not view.get("entity"):
         raise ValueError("엔티티(서버·장비 이름) 컬럼을 고르세요.")
-    expr = core.runnable(body, select=False)
+    expr = core.runnable(body, select=False, keep=card_columns(card))
     for c in (view["entity"], view.get("time_col"), view.get("kind_col"), view.get("link_col")):
         if c:
             parse.check_name(c, expr.columns, "컬럼")
@@ -448,7 +564,7 @@ def deviation_data(card, ctx):
     if not entity or not date:
         raise ValueError("편차 표는 엔티티 컬럼과 날짜(시각) 컬럼을 고르세요.")
     series = clean_series(body.get("series"))[:1]
-    expr = core.runnable(with_period(body, date, (ctx or {}).get("range")), select=False)
+    expr = card_expr(card, ctx, (ctx or {}).get("range"))
     parse.check_name(entity, expr.columns, "엔티티 컬럼")
     parse.check_name(date, expr.columns, "날짜 컬럼")
     if unit == "hour" and not expr[date].type().is_timestamp():
@@ -462,19 +578,23 @@ def deviation_data(card, ctx):
     return {"values": {"buckets": buckets, "entities": [{"name": n, "values": [cells[n].get(b) for b in buckets]} for n in names], "more": len(cells) > MAX_ENTITIES}}
 
 
-def chart_data(body):
-    """chart 카드의 값. X가 날짜(날짜·시각 컬럼)면 일 값 중심(time_data), 아니면 항목별(category_data)."""
-    expr = core.runnable(body, select=False)
+def chart_data(body, window=None):
+    """chart 카드의 값. X가 날짜(날짜·시각 컬럼)면 일 값 중심(time_data, window가 있으면 그 날짜 범위만 읽는다), 아니면 항목별(category_data). 쓰는 컬럼만 읽는다."""
+    shape = core.build(body, select=False)  # 컬럼 종류만 본다(읽지 않는다)
     x = body.get("x")
     if not isinstance(x, str):
         raise ValueError("X 컬럼을 고르세요.")
-    parse.check_name(x, expr.columns)
+    parse.check_name(x, shape.columns)
+    t = shape[x].type()
+    if t.is_date() or t.is_timestamp():
+        body = with_period(body, x, window)
+    expr = core.runnable(body, select=False, keep=body_columns(body))
     t = expr[x].type()
-    kinds = {"x_kind": "date" if t.is_date() or t.is_timestamp() else "num" if is_number(expr, x) else "text",
-             "num_cols": [c for c in expr.columns if is_number(expr, c)][:MAX_NUM_COLS]}  # 산점도·버블을 고를 수 있는지 화면이 알 수 있게
-    kinds["date_cols"] = date_columns(expr)
+    kinds = {"x_kind": "date" if t.is_date() or t.is_timestamp() else "num" if is_number(shape, x) else "text",
+             "num_cols": [c for c in shape.columns if is_number(shape, c)][:MAX_NUM_COLS]}  # 산점도·버블을 고를 수 있는지 화면이 알 수 있게
+    kinds["date_cols"] = date_columns(shape)
     if kinds["x_kind"] == "date":
-        return {**run(lambda: time_data(expr, x, clean_series(body.get("series")), body.get("split") or None)), **kinds}
+        return {**run(lambda: time_data(expr, x, clean_series(body.get("series")), body.get("split") or None)), **kinds, **({"window": window} if window else {})}
     return {**category_data(expr, body, clean_series(body.get("series"))), **kinds}
 
 
@@ -516,7 +636,7 @@ def compute(card, now, ctx=None):
             raise ValueError("이 카드에는 다시 구할 조회(source.body)가 없습니다.")
         body = with_period(source["body"], source.get("date"), (ctx or {}).get("range")) if card["kind"] in ("chart", "metric") else source["body"]
         if card["kind"] == "recent_rows":
-            found = {"columns": list(core.runnable(body).columns)}  # 행 값은 저장하지 않는다(보일 때마다 연결에서 읽는다)
+            found = {"columns": list(core.build(body).columns)}  # 행 값은 저장하지 않는다(보일 때마다 연결에서 읽는다)
         elif card["kind"] in VALUE_KINDS:
             found = value_data(card, ctx)
         elif card["kind"] == "table":
@@ -528,9 +648,9 @@ def compute(card, now, ctx=None):
         elif card["kind"] in WATCH_KINDS:
             found = watch_data(card, now, (card.get("data") or {}).get("since"))
         else:
-            found = chart_data(body) if card["kind"] == "chart" else metric_data(body)
+            found = chart_data(body, fetch_window(ctx)) if card["kind"] == "chart" else metric_data(body)
         if card["kind"] in ("table", "sentence", "deviation"):  # 기간 기준 날짜 컬럼 후보(하나뿐이면 화면이 자동으로 채운다)
-            found.setdefault("date_cols", date_columns(core.runnable(source["body"], select=False)))
+            found.setdefault("date_cols", date_columns(core.build(source["body"], select=False)))
         if card["kind"] == "chart" and card["view"]["type"] in POINT_TYPES:  # 점 종류를 고른 카드는 점도 다시 구한다
             found["points"] = points_of(source["body"], (card["view"].get("points") or {}).get("size"))
     elif card["kind"] == "analysis":

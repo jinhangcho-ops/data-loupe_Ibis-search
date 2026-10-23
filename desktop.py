@@ -3,6 +3,10 @@
 '--run "구성 이름"'으로 실행하면 서버·메인 창 없이 그 구성을 한 번 수집하고 기록·알림 뒤 끝난다(Windows 예약 작업이 띄운다). 종료 코드는 끝 0, 아니면 1."""
 import sys
 
+import drivers
+
+drivers.use_installed()  # exe: 따로 설치한 드라이버 폴더를 백엔드를 불러오기 전에 import 경로에 더한다.
+
 if sys.argv[1:2] == ["--browser"]:
     import collect_browser
 

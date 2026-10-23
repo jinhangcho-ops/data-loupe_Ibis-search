@@ -313,7 +313,7 @@ def check_data(data, kind):
     data = {} if data is None else data
     if not isinstance(data, dict):
         raise ValueError("구한 값(data)은 객체여야 합니다.")
-    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair", "since"}
+    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair", "since", "window"}
     if unknown := set(data) - allowed:
         if kind == "recent_rows":
             raise ValueError("recent_rows 카드에는 행 값을 저장할 수 없습니다. 보일 때마다 연결에서 읽습니다.")

@@ -244,6 +244,10 @@ assert.strictEqual(cardValue({ ...unique, range: { start: "2026-01-05", end: "20
 assert.strictEqual(cardValue({ ...unique, range: { start: "2026-01-06", end: "2026-01-06" } }, 4), 2);  // 하루 값은 일 값 그대로
 assert.strictEqual(cardValue({ ...unique, range: { start: "2027-01-01", end: "2027-01-31" } }, 4), null);
 assert.strictEqual(cardValue(unique, 0), 65);  // 합계 계열은 일 값을 묶는다
+// 읽은 날짜 범위(window) 밖으로 보는 기간이 나가면 다시 읽는다
+const win = { data: { window: { start: "2025-12-21", end: "2026-02-02" } } };
+assert(!outsideWindow(win, { start: "2026-01-12", end: "2026-02-02" }) && outsideWindow(win, { start: "2025-12-01", end: "2026-02-02" }) && outsideWindow(win, { start: "2026-01-12", end: "2026-03-01" }));
+assert(!outsideWindow({ data: {} }, { start: "2020-01-01", end: "2030-01-01" }) && !outsideWindow(win, null) && !outsideWindow(win, { start: null, end: "2026-01-01" }));  // 범위가 없으면 해당 없음
 console.log("ok");
 """
 

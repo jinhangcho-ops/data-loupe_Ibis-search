@@ -25,9 +25,24 @@
       <div class="hint">아이디·비밀번호 (비밀번호는 저장하지 않습니다)</div>
       <input id="user" placeholder="아이디 (없으면 비움)" style="margin-bottom:8px" autocomplete="off">
       <input id="password" type="password" placeholder="비밀번호 (없으면 비움)" autocomplete="off">
+      <div class="row" style="align-items:center; margin-top:8px"><button class="ghost" id="drv-open" title="DB·DW·DL별로 필요한 드라이버가 이 PC에 있는지 확인하고 설치 명령을 보여 줍니다(아무것도 받지 않습니다)">드라이버 확인</button></div>
     </div>
     <div class="row" style="align-items:center; margin-top:8px" title="DuckDB 파일과 PC에 받아 둔 결과를 계산할 때 쓰는 CPU 코어 수. 줄이면 계산 중에도 PC가 덜 무겁지만 큰 계산은 느려집니다. Parquet·CSV 등 파일은 해당 없음. 다음 [연결]부터 적용됩니다."><span class="hint" style="margin:0; flex:none">계산 코어 수</span><select id="threads"></select></div>
+    <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">자세히</summary>
+      <div class="row" style="align-items:center; margin-top:6px" title="실행 전 처리 용량을 미리 셀 수 없는 연결(Postgres·BigQuery·파일·DuckDB 밖의 DB 등)에서 어떻게 할지. 용량이 작업 메모리 상한(제한 없음이면 지금 PC의 사용 가능 메모리)을 넘으면 어느 쪽이든 실행 전에 묻습니다."><span class="hint" style="margin:0; flex:none">용량을 알 수 없을 때</span><select id="scan-unknown"><option value="run">그대로 실행 (기본)</option><option value="block">실행하지 않음</option></select></div>
+      <div class="row" style="align-items:center; margin-top:6px" title="컬럼 추론에서 블록 샘플링이 기대한 행의 이만큼도 못 가져오면 다음 방법(최신 파티션·앞 행)으로 넘어갑니다. 비우면 20%. 5~90%."><span class="hint" style="margin:0; flex:none">표본 최소 비율(%)</span><input id="too-few" type="number" min="5" max="90" step="1" placeholder="20" style="width:80px; flex:none"></div>
+    </details>
     <button id="connect" class="btn p conn-go">연결</button>
     <div class="err" id="err-connect"></div>
+    <div id="driver-hint" class="hidden"></div>
+  </div>
+</div>
+<!-- 드라이버 확인: 묶음(DB·DW·DL)별 이름·상태·설명·설치 명령 -->
+<div id="drivers-panel" class="modal hidden">
+  <div class="modal-box drv-box">
+    <div class="head"><h3>드라이버 확인</h3><button id="drv-close" class="ib" title="닫기" style="margin-left:auto"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
+    <div class="hint">이 PC에 있는 드라이버만 확인합니다. 아무것도 자동으로 받거나 설치하지 않으니, 필요한 명령을 복사해 직접 실행하세요.</div>
+    <div class="table-wrap"><table class="drv-table"><thead><tr><th>묶음</th><th>이름</th><th>상태</th><th>설명</th><th>설치 명령</th></tr></thead><tbody id="drv-rows"></tbody></table></div>
+    <div class="err" id="err-drivers"></div>
   </div>
 </div>

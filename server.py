@@ -7,11 +7,14 @@ import threading
 from pathlib import Path
 
 from flask import Flask, Response, abort, current_app, g, jsonify, request
+from lazy import ibis
 from werkzeug.exceptions import HTTPException
 
+import drivers
 import held
 import monitor
 import result
+import scan_size
 import scratch
 import settings
 import source
@@ -25,13 +28,13 @@ app.json.sort_keys = False  # 구조 컬럼의 필드·행의 컬럼을 원래 �
 state = {"con": None, "passwords": [], "opened": None, "rows": {}, "names": {}, "tables": {}, "cancel": threading.Event()}
 # names: 스키마 → 테이블 목록, tables: (스키마, 이름) → 테이블 식. 검색 칸을 바꿀 때마다 DB에 목록·스키마를 다시 묻지 않게 연결마다 기억한다(forget_tables로 비운다).
 turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 연결을 쓰지 않는 FREE의 경로만 기다리지 않는다.
-FREE = {"/api/usage", "/api/cancel", "/api/send"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
+FREE = {"/api/usage", "/api/cancel", "/api/send", "/api/drivers"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
 ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 목록 예: ("Parquet (*.parquet)",) → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
 ask_folder = None  # 저장할 폴더를 묻는 함수(→ 고른 폴더 또는 None). ask_save처럼 desktop.py가 채운다.
 QUERY_TIMEOUT = 1800  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
-CONSTANTS = {"sizes": settings.SIZES, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS}
+CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS}
 
 
 def number_range(kind, low, high):
@@ -42,6 +45,39 @@ def number_range(kind, low, high):
 def to_json(df):
     """Polars DataFrame → {columns, rows}. 날짜는 ISO 문자열이 된다."""
     return {"columns": df.columns, "rows": json.loads(df.write_json())}
+
+
+def expr_sql(con, expr):
+    """(SQL 글, 방언 또는 None): 처리 용량을 셀 때 읽을 Ibis 식의 SQL. 파일 연결(Polars)은 SQL을 쓰지 않으므로 duckdb 방언으로 만든다."""
+    files = con.name == "polars"
+    return str(ibis.to_sql(expr, dialect="duckdb") if files else ibis.to_sql(expr)), ("duckdb" if files else None)
+
+
+def scan_gate(body, make_sql, rows=None):
+    """실행 전 처리 용량 확인(scan_size.limit_check)을 서버에서도 한다(화면을 거치지 않는 요청 대비). make_sql()은 (SQL, 방언)을 돌려주는 함수, rows는 이미 아는 행 수(원격 DB에서 COUNT를 아끼려고).
+    원격 DB(held.remote)는 DB가 읽는 양이 아니라 이 PC로 받는 양을 견준다(scan_size.limit_check). 받지 않는 일(파일로 흘려 쓰기, DB 안의 계산)은 부르는 쪽이 이 함수를 부르지 않는다.
+    기준을 넘는데 body에 confirmed가 true가 아니면, 알 수 없는데 설정 scan_unknown이 block이면(확인해도) 실행하지 않고 돌려줄 응답
+    {needs_confirm, blocked, text, bytes, limit, …}(머리 X-Needs-Confirm)을 돌려준다. 그 밖에는 None(그대로 실행)."""
+    config = settings.load()
+    confirmed = body.get("confirmed") is True
+    if confirmed and config.get("scan_unknown") != "block":
+        return None
+    con, opened = get_con(), state["opened"]
+
+    def work():
+        try:
+            sql, dialect = make_sql()
+        except Exception as e:
+            return {"over": False, "unknown": True, "blocked": config.get("scan_unknown") == "block", "bytes": None, "limit": None,
+                    "text": "처리 용량을 미리 알 수 없어요(" + ((str(e).strip().splitlines() or [type(e).__name__])[0][:120]) + ")."}
+        return scan_size.limit_check(con, sql, opened, dialect, config, rows)
+
+    found = run(work)
+    if not (found["blocked"] or (found["over"] and not confirmed)):
+        return None
+    response = jsonify(needs_confirm=True, **found)
+    response.headers["X-Needs-Confirm"] = "1"
+    return response
 
 
 def get_con():
@@ -88,6 +124,8 @@ def on_error(e):
     if isinstance(e, source.unsupported_errors()):  # 연결(백엔드)이 하지 못하는 계산
         return jsonify(error=f"이 연결에서는 지원하지 않는 계산입니다. ({e})"), 400
     message = source.mask(str(e), state["passwords"])
+    if isinstance(e, drivers.DriverError):  # 드라이버가 없어서 못 붙음: 화면이 설명·명령을 그 자리에 그리도록 안내를 함께 보낸다.
+        return jsonify(error=message, driver=e.driver), 400
     if "out of memory" in message.lower():
         message = "메모리가 모자랍니다. 작업 메모리 상한을 올리거나 조건을 좁히세요. " + message
     return jsonify(error=message), 400
@@ -266,6 +304,8 @@ def switch(new):
                 state.update(con=open_con(old), passwords=source.passwords(old), opened=old)
             except Exception:
                 message += " 이전 연결도 다시 열 수 없어 연결이 끊겼습니다."
+        if isinstance(e, drivers.DriverError):
+            raise drivers.DriverError(message, e.driver) from None
         raise ValueError(message) from None
     state.update(con=con, passwords=passwords, opened=new)
     info = source.recent(new)  # 비밀번호 없는 칸 값
@@ -281,6 +321,12 @@ def connect():
     body = request.json
     keys = ("path", "file", "files") if body["kind"] == "folder" else ("url", "user", "password")
     return jsonify(schemas=switch({"kind": body["kind"], **{k: body[k] for k in keys if k in body}}))
+
+
+@app.get("/api/drivers")
+def driver_list():
+    """DB·DW·DL별 드라이버 상태와 설치 안내: [{key, group, name, status(installed·missing·program_needed), explanation, command, program, address, notice, after}]. 조사만 하고 받지 않는다."""
+    return jsonify(drivers=drivers.overview())
 
 
 @app.get("/api/state")

@@ -295,3 +295,10 @@ tr.miss { display:none; }
   .work { grid-template-columns:1fr; } .side { border-left:0; border-top:1px solid var(--line); }
   .topbar { flex-wrap:wrap; padding:8px 16px; gap:10px; } .sx { margin-left:0; }
 }
+.drv-box { width:min(1100px, 96vw); display:flex; flex-direction:column; gap:8px; }
+.drv-table { white-space:normal; width:100%; font-size:12.5px; }
+.drv-table th, .drv-table td { padding:5px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+.drv-table code, .drv-guide code { font-size:12px; word-break:break-all; user-select:text; }
+.drv-table .installed { color:var(--ok); }
+.drv-table .missing, .drv-table .program_needed { color:var(--err); }
+.drv-guide { border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12.5px; display:flex; flex-direction:column; gap:4px; }

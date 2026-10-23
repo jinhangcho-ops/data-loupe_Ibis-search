@@ -40,6 +40,15 @@
 | 임시 파일 | `%TEMP%\ibis_search\` 아래에 만들고 다 쓰면 지웁니다. 회사 DB에서 받아 둔 검색 결과도 여기에 두고 연결을 바꾸거나 끊으면 지웁니다. 이 프로그램이 만든 표시가 있는 폴더만 지웁니다 |
 | 다른 프로그램의 접속 | 실행할 때마다 새 열쇠를 만들어 이 프로그램 창의 요청만 받습니다 |
 
+## 자세히 정하는 값
+
+[연결] 카드의 '자세히'에 있습니다.
+
+- **용량을 알 수 없을 때**: 처리 용량을 미리 셀 수 없으면 그대로 실행(기본)할지, 실행하지 않을지. 검색·SQL 실행, 결과 저장, 전처리 실행 전에 용량이 작업 메모리 상한(제한 없음이면 그때 PC의 사용 가능 메모리)을 넘으면 [확인]을 눌러야 실행합니다. 쪽 넘기기는 묻지 않습니다. 회사 DB는 **PC로 받는 양**만 견주고, 요금이 나올 수 있어 행을 세거나 표본을 읽지 않고 DB가 가진 정보(파티션·실행 계획·통계·명세서의 컬럼별 `"bytes"`·타입)로 어림합니다. 받는 도중 상한을 넘으면 멈추고 지웁니다. 파일 저장과 집계 결과는 묻지 않습니다.
+- **표본 최소 비율(%)**: 컬럼 추론의 블록 샘플링이 기대한 행의 이 비율도 못 가져오면 다음 방법으로 넘어갑니다. 5~90%, 비우면 20%.
+
+표본 5,000행과 20%는 근거 없이 정한 기본값일 뿐이며 바꿀 수 있습니다(표본 행 수는 전처리 화면에서, 비율은 위 칸에서).
+
 ## 기억되는 것
 
 설정은 `%APPDATA%\ibis_search\` 폴더(파일 탐색기 주소창에 그대로 넣으면 열림)에 저장됩니다. 저장한 검색·SQL·전처리 구성·대시보드·수집 구성·예약, 보낼 곳, 업로드 기록, 화면 설정 등이 들어 있고 **비밀번호는 없습니다.** 파일을 지우면 그 내용만 처음 상태로 돌아가고, 덮어쓰기 전에는 `.bak`으로 하나 남겨 둡니다.
@@ -60,6 +69,8 @@
 | Databricks / Athena | `databricks://?server_hostname=…&http_path=…` / `athena://?s3_staging_dir=s3://…&region_name=…` |
 | DuckDB / SQLite 파일 | `duckdb://data.duckdb` / `sqlite://data.db` |
 
-그 밖에 Druid, Exasol, Impala, Materialize, RisingWave, SingleStore도 됩니다. Spark·Flink는 Java가 필요하고 소스로 실행할 때만 씁니다.
+그 밖에 Druid, Exasol, Materialize, RisingWave, SingleStore도 됩니다. DW(Redshift는 `postgres://`, Synapse는 `mssql://`로 접속)와 DL(Trino, Spark·Flink는 Java가 필요하고 소스로 실행할 때만, DuckDB 확장 httpfs·delta·iceberg)도 같은 방식입니다.
+
+**드라이버 확인**: 연결 카드의 [DB 주소] 탭에서 [드라이버 확인]을 누르면 DB·DW·DL별로 설치됨·없음·프로그램 필요와 설명, 설치 명령([복사])이 나옵니다. 연결이 드라이버 때문에 실패해도 같은 설명과 명령이 그 자리에 뜹니다. 프로그램은 아무것도 자동으로 받거나 설치하지 않으니 명령을 직접 실행하세요. 소스 실행은 `pip install "ibis-framework[x]==버전"`, exe는 `py -3.14 -m pip install --target "%APPDATA%\ibis_search\drivers" "ibis-framework[x]==버전"`을 실행한 뒤 프로그램을 다시 켭니다(Python 3.14 필요, [python.org](https://www.python.org/downloads/)).
 
 **예**: 회사 Postgres 서버 `db.company.local`의 `sales` DB → 주소 `postgres://db.company.local:5432/sales`, 아이디·비밀번호는 칸에 따로(주소에 비밀번호를 쓰지 마세요).

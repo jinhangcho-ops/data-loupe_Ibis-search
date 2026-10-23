@@ -63,10 +63,37 @@ def paged(body):
 def scan():
     """탐색 식을 실행하지 않고 처리할 용량을 알린다(scan_size). 표시 컬럼까지 적용한 식의 SQL로 센다."""
     con, expr = get_con(), build(request.json)
-    files = con.name == "polars"  # 파일 연결은 SQL을 쓰지 않으므로 duckdb 방언으로 만들어 읽는 테이블·컬럼만 고른다
-    sql = lambda: str(ibis.to_sql(expr, dialect="duckdb") if files else ibis.to_sql(expr))
-    found = scan_size.safe(lambda: run(lambda: scan_size.estimate(con, sql(), server.state["opened"], "duckdb" if files else None)))
+    sql, dialect = server.expr_sql(con, expr)
+    found = scan_size.safe(lambda: run(lambda: scan_size.estimate(con, sql, server.state["opened"], dialect)))
     return jsonify(message=scan_size.message(found), **found)
+
+
+def explore_gate(body, streams=False):
+    """탐색 식의 실행 전 처리 용량 확인(server.scan_gate). 확인이 필요하면 돌려줄 응답, 아니면 None.
+    로컬(DuckDB·파일)은 읽는 양을 센다. 원격 DB는 이 PC로 받는 양만 센다: 검색은 기간·조건까지의 결과를 받아 두므로(이미 받아 둔 것이 있으면 안 셈) 그 식을,
+    저장·내보내기(streams)는 파일로 흘려 쓰므로 안 셈(연결이 못 하는 계산이라 받아 둔 사본으로 만들 때만 그 식을 센다)."""
+    con = get_con()
+    if not held.remote(con):
+        return server.scan_gate(body, lambda: server.expr_sql(con, build(body)))
+    if streams and source.compiles(build(body)):
+        return None
+    if not body.get("fresh") and core.search_key(body) in held.store["items"]:
+        return None
+    plain = not (body.get("conditions") or body.get("periods") or body.get("joins") or body.get("union"))
+    known = server.state["rows"].get((body.get("schema") or None, body.get("base"))) if plain else None
+    return server.scan_gate(body, lambda: server.expr_sql(con, core.filtered(body)), known)
+
+
+def sql_gate(body, streams=False):
+    """SQL 탭 실행·저장의 실행 전 처리 용량 확인. 검사를 통과한 SQL에 가상 테이블을 풀어 넣은 글로 센다.
+    원격 DB는 실행(받아 둠)에서만, 이미 받아 둔 결과가 있으면 안 센다. 저장(streams)은 파일로 흘려 쓰므로 안 센다."""
+    con = get_con()
+    if held.remote(con) and (streams or (not body.get("fresh") and core.held_key("sql", {"sql": body.get("sql")}) in held.store["items"])):
+        return None
+
+    def make():
+        return sql_exec.expand(con, sql_exec.check(body.get("sql"), sql_exec.dialect_of(con)), server.virtual_tables()).sql(dialect=sql_exec.dialect_of(con)), None
+    return server.scan_gate(body, make)
 
 
 TOO_BIG = f"결과가 커서({held.MAX_ROWS:,}행·{held.MAX_BYTES // 1024 // 1024}MB 넘음) 이 PC에 받아 두지 않고 DB에서 쪽마다 가져옵니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요."
@@ -89,6 +116,8 @@ def query():
     (fresh면 새로 받는다). 받아 두면 행 수는 세지 않아도 안다. held: 받아 둔 결과에서 왔는지, note: 받아 두지 못한 까닭."""
     body = request.json
     expr, limit, offset = paged(body)  # 받기 전에 줄을 모두 검사한다
+    if not offset and (ask := explore_gate(body)):  # 새로 검색할 때만(쪽 넘기기는 묻지 않는다)
+        return ask
     con, count, rows, note = get_con(), None, None, ""
     able = source.compiles(expr)
     if held.remote(con) or not able:
@@ -102,7 +131,7 @@ def query():
         count = count if rows is not None or not body.get("calcs") else None  # 받기 전에 센 수는 계산 전의 행 수
     kept = rows is not None
     if not kept and held.remote(con) and held.pager(con) is not None:  # 결과를 서버에 둔 채 쪽마다 읽을 수 있는 DB(BigQuery)
-        key = core.held_key("server", {k: v for k, v in body.items() if k not in ("limit", "offset", "count", "fresh")})
+        key = core.held_key("server", {k: v for k, v in body.items() if k not in ("limit", "offset", "count", "fresh", "confirmed")})
         count, rows = run(lambda: held.server_page(key, con, expr, limit, offset, body.get("fresh")))
         note = SERVER_PAGES
     elif not kept:
@@ -213,6 +242,8 @@ def pivot():
 @app.post("/api/export")
 def export():
     """조건에 맞는 전체 행을 임시 파일로 만들어 조금씩 내려보내고, 다 보내면 지운다."""
+    if ask := explore_gate(request.json, streams=True):
+        return ask
     return server.download(core.runnable(request.json), request.json.get("format", ""))
 
 
@@ -222,6 +253,8 @@ def handoff():
     확장자가 .parquet이 아니면 붙인다. 지금 읽고 있는 파일에는 덮어쓰지 않는다. 임시 이름으로 쓰고 끝나면 바꿔치기해 실패해도 원래 파일이 남는다."""
     if server.ask_save is None:
         raise ValueError("저장 위치를 물을 수 없습니다. 프로그램 창에서만 쓸 수 있습니다.")
+    if ask := explore_gate(request.json, streams=True):
+        return ask
     expr = core.runnable(request.json)
     chosen = server.ask_save(f"{request.json['base']}_search.parquet", ("Parquet (*.parquet)",))
     if not chosen:
@@ -345,6 +378,8 @@ def sql_run():
     body = request.json
     n, offset = sql_exec.rows_limit(body.get("rows")), parse.parse_offset(body.get("offset", 0))
     expr, used = sql_expr(body)
+    if not offset and (ask := sql_gate(body)):  # 쪽 넘기기는 묻지 않는다
+        return ask
     con, count, rows, note = get_con(), None, None, ""
     if held.remote(con):
         key = core.held_key("sql", {"sql": body["sql"]})
@@ -367,7 +402,10 @@ def sql_run():
 @app.post("/api/sql/export")
 def sql_export():
     """SQL 결과 전체를 파일(csv, xlsx, parquet)로 내려보낸다."""
-    return server.download(sql_expr(request.json)[0], request.json.get("format", ""))
+    expr = sql_expr(request.json)[0]
+    if ask := sql_gate(request.json, streams=True):
+        return ask
+    return server.download(expr, request.json.get("format", ""))
 
 
 def sqls_view(found):

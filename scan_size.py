@@ -5,10 +5,16 @@
 - DuckDB 테이블: 테이블의 추정 행 수 × 읽는 컬럼의 타입 크기(글자는 STRING_BYTES로 가정). 추정.
 - Postgres: 통계(pg_class.reltuples × pg_stats.avg_width)로 읽는 컬럼만. 통계가 없으면 모름.
 - 그 밖의 DB: 모름(None).
+실행 전 확인(limit_check): 센 용량이 작업 메모리 상한(설정 memory, 제한 없으면 지금 PC의 사용 가능 메모리)을 넘으면 알린다.
 읽는 테이블·컬럼은 SQL을 sqlglot으로 읽어 고른다(SELECT *·테이블.*는 그 테이블의 모든 컬럼). 같은 이름의 컬럼은 그 이름을 가진 모든 테이블에서 읽는다고 본다."""
+import datetime as dt
 import os
+import re
 from pathlib import Path
 
+import held
+import monitor
+import settings
 import source
 import sql_exec
 
@@ -144,3 +150,231 @@ def message(found):
     if found["bytes"] is None:
         return f"처리 용량: 알 수 없음({found['how']})"
     return f"실행하면 {'' if found['exact'] else '약 '}{size_text(found['bytes'])}를 처리합니다({'정확' if found['exact'] else '추정'} · {found['how']})"
+
+
+WIDE_STRING = 32  # 글자 컬럼 한 칸을 이만큼으로 본다(메타데이터도 명세서도 없을 때. 원격 DB는 표본을 읽지 않는다)
+NESTED_BYTES = 64  # 구조·목록·맵·JSON 컬럼 한 칸
+ROW_PATTERNS = (r"rows=(\d+)", r"Estimates: \{rows: ([\d,]+)", r"~\s*([\d,]+)\s+rows", r"EC:\s*(\d+)")  # 실행 계획 글에서 행 수 추정을 찾는 모양(앞에서부터)
+DATE = re.compile(r"(\d{4})-(\d{2})-(\d{2})|(?:MAKE_DATE|DATE)\(\s*(\d{4})\s*,\s*(\d{1,2})\s*,\s*(\d{1,2})\s*\)", re.I)
+FLIP = {"GT": "LT", "GTE": "LTE", "LT": "GT", "LTE": "GTE", "EQ": "EQ"}  # 값이 왼쪽에 있는 비교를 컬럼이 왼쪽인 모양으로
+
+
+def default_width(dtype):
+    """타입만으로 어림한 한 칸의 크기: 숫자·날짜·불리언은 타입 크기, 글자는 WIDE_STRING, 구조·목록·맵·JSON은 NESTED_BYTES."""
+    if dtype.is_string() or dtype.is_binary():
+        return WIDE_STRING
+    if dtype.is_struct() or dtype.is_array() or dtype.is_map() or dtype.is_json():
+        return NESTED_BYTES
+    return TYPE_BYTES.get(str(dtype).lstrip("!").split("(")[0].lower(), 8)
+
+
+def is_aggregate(sql, dialect):
+    """맨 바깥 SELECT가 집계(GROUP BY가 있거나 고르는 값이 모두 집계 함수)인지. 집계 결과는 작아서 원격 DB에서는 세지 않는다."""
+    try:
+        sqlglot, exp = sql_exec.glot()[:2]
+        tree = sqlglot.parse_one(sql, read=dialect)
+    except Exception:
+        return False
+    if not isinstance(tree, exp.Select):
+        return False
+    if tree.args.get("group"):
+        return True
+    return bool(tree.expressions) and all(p.find(exp.AggFunc) is not None and p.find(exp.Window) is None for p in tree.expressions)
+
+
+def spec_widths(tables):
+    """데이터 명세서에 적힌 컬럼별 크기 {컬럼(소문자): 바이트}. 명세서 컬럼에 선택 항목 bytes(양의 정수)를 적으면 쓴다. 없으면 {}."""
+    import profiler
+    found = {}
+    for table in tables:
+        for column, info in (profiler.spec_table(None, table).get("columns") or {}).items():
+            if isinstance(info, dict) and type(info.get("bytes")) is int and info["bytes"] > 0:
+                found[column.lower()] = info["bytes"]
+    return found
+
+
+def stat_widths(con, tables):
+    """DB의 통계로 컬럼마다 평균 크기 {컬럼(소문자): 바이트}(데이터를 읽지 않는다). Postgres는 pg_stats의 avg_width. 없거나 못 읽으면 {}."""
+    if getattr(con, "name", "") != "postgres" or len(tables) != 1:
+        return {}
+    try:
+        with con.con.cursor() as cur:
+            cur.execute("select attname, avg_width from pg_stats where lower(tablename) = lower(%s)", (tables[0],))
+            return {n.lower(): w for n, w in cur.fetchall() if w}
+    except Exception:
+        return {}
+
+
+def table_row_bytes(con, tables):
+    """테이블 한 행의 평균 크기: BigQuery 테이블 정보의 num_bytes / num_rows(데이터를 읽지 않는다). 모르면 None."""
+    client = getattr(con, "client", None)
+    if getattr(con, "name", "") != "bigquery" or client is None or len(tables) != 1:
+        return None
+    try:
+        info = client.get_table(bigquery_name(con, tables[0]))
+        return info.num_bytes / info.num_rows if info.num_rows else None
+    except Exception:
+        return None
+
+
+def bigquery_name(con, table):
+    """프로젝트.데이터셋.테이블(알 수 있는 앞부분만)."""
+    return ".".join(p for p in (getattr(con, "current_catalog", None), getattr(con, "current_database", None), table) if p)
+
+
+def row_width(con, expr, tables):
+    """(원격 DB 식 한 행이 PC에서 차지할 크기, 근거 글). 컬럼마다 명세서의 bytes > DB 통계(Postgres avg_width) > 타입으로 어림.
+    BigQuery는 테이블의 평균 행 크기를 타입 어림 비율로 컬럼에 나눈다. 행을 읽어 재지 않는다(원격은 읽는 만큼 요금·시간이 든다)."""
+    widths = {n: default_width(t) for n, t in expr.schema().items()}
+    basis = set()
+    average = table_row_bytes(con, tables)
+    if average:
+        whole = sum(widths.values()) or 1
+        widths = {n: w * average / whole for n, w in widths.items()}
+        basis.add("테이블 메타")
+    stats, spec = stat_widths(con, tables), spec_widths(tables)
+    for name in widths:
+        if name.lower() in spec:
+            widths[name] = spec[name.lower()]
+            basis.add("데이터 명세서")
+        elif name.lower() in stats:
+            widths[name] = stats[name.lower()]
+            basis.add("DB 통계")
+    return max(1, round(sum(widths.values()))), "·".join(sorted(basis)) or "스키마"
+
+
+def plan_rows(con, sql, dialect):
+    """DB의 실행 계획(EXPLAIN, 조회를 돌리지 않는 것)에서 읽는 행 수 추정. 글 모양은 DB마다 달라 ROW_PATTERNS를 차례로 찾고, 표 모양(MySQL: rows 칸)도 본다. 못 찾으면 None."""
+    import plan
+    try:
+        text = plan.explain(con, sql, dialect or sql_exec.dialect_of(con))["text"]
+    except Exception:
+        return None
+    lines = text.splitlines()
+    if len(lines) > 1 and "rows" in lines[0].split("\t"):  # 표 모양: 머리글의 rows 칸
+        cell = lines[1].split("\t")
+        at = lines[0].split("\t").index("rows")
+        if at < len(cell) and cell[at].strip().isdigit():
+            return int(cell[at])
+    for pattern in ROW_PATTERNS:
+        if found := re.search(pattern, text):
+            return int(found[1].replace(",", ""))
+    return None
+
+
+def date_bounds(sql, dialect, column):
+    """SQL의 조건에서 그 날짜 컬럼에 건 범위 (처음, 끝)(datetime.date, 없는 쪽은 None). ISO 글자나 DATE(년,월,일)·MAKE_DATE 모양의 값만 읽는다."""
+    sqlglot, exp = sql_exec.glot()[:2]
+    try:
+        tree = sqlglot.parse_one(sql, read=dialect)
+    except Exception:
+        return None, None
+    low = high = None
+    for node in tree.find_all(exp.GT, exp.GTE, exp.LT, exp.LTE, exp.EQ):
+        left, right, kind = node.this, node.expression, type(node).__name__
+        if isinstance(right, exp.Column) and not isinstance(left, exp.Column):
+            left, right, kind = right, left, FLIP[kind]
+        if not isinstance(left, exp.Column) or left.name.lower() != column.lower():
+            continue
+        m = DATE.search(right.sql())
+        if not m:
+            continue
+        try:
+            day = dt.date(*[int(x) for x in (m.groups()[:3] if m[1] else m.groups()[3:])])
+        except ValueError:
+            continue
+        if kind in ("GT", "GTE", "EQ"):
+            low = day if low is None else max(low, day)
+        if kind in ("LT", "LTE", "EQ"):
+            high = day if high is None else min(high, day)
+    return low, high
+
+
+def partition_rows(con, sql, dialect, tables):
+    """BigQuery에서 그 테이블이 데이터 명세서의 파티션 컬럼(날짜)으로 나뉘어 있으면, 조건의 날짜 범위에 드는 파티션들의 행 수 합(INFORMATION_SCHEMA.PARTITIONS 메타데이터, 테이블을 읽지 않는다).
+    일 단위 파티션(partition_id가 YYYYMMDD)만 다루고, 아니면 None."""
+    client = getattr(con, "client", None)
+    if getattr(con, "name", "") != "bigquery" or client is None or len(tables) != 1:
+        return None
+    import profiler
+    part = profiler.spec_table(None, tables[0]).get("partition") or {}
+    if not part.get("column"):
+        return None
+    low, high = date_bounds(sql, dialect, part["column"])
+    try:
+        schema = bigquery_name(con, "x").rsplit(".", 1)[0]  # 프로젝트.데이터셋(앞부분)
+        name = tables[0].replace("'", "")
+        rows = client.query(f"select partition_id, total_rows from `{schema}.INFORMATION_SCHEMA.PARTITIONS` where table_name = '{name}'").result()
+        total = 0
+        for row in rows:
+            pid = str(row["partition_id"])
+            if not re.fullmatch(r"\d{8}", pid):
+                continue
+            day = dt.date(int(pid[:4]), int(pid[4:6]), int(pid[6:]))
+            if (low is None or day >= low) and (high is None or day <= high):
+                total += int(row["total_rows"] or 0)
+        return total
+    except Exception:
+        return None
+
+
+def man(n):
+    """행 수를 읽기 쉽게: 1만 이상은 '4,100만'."""
+    return f"{n / 10000:,.0f}만" if n >= 10000 else f"{n:,}"
+
+
+def fetched(con, sql, rows=None, dialect=None):
+    """원격 DB에서 sql의 결과를 이 PC로 받을 때의 {"bytes", "exact": False, "how", "rows"}. 조회를 더 보내 세지 않고(COUNT·표본 없음) 메타데이터만 쓴다.
+    행 수: 아는 값(rows) > BigQuery 파티션 메타 > 실행 계획(EXPLAIN) 추정 > BigQuery dry run 바이트(받는 양의 최대). 행 크기는 row_width. 알 수 없으면 ValueError."""
+    expr = con.sql(sql)
+    tables, _ = referenced(sql, dialect or sql_exec.dialect_of(con))
+    if rows is not None:
+        count, basis_rows = rows, "아는 행 수"
+    elif (count := partition_rows(con, sql, dialect, tables)) is not None:
+        basis_rows = "파티션 메타"
+    elif (count := plan_rows(con, sql, dialect)) is not None:
+        basis_rows = "실행 계획 추정"
+    elif getattr(con, "name", "") == "bigquery":
+        return {"bytes": bigquery_bytes(con, sql), "exact": False, "how": "BigQuery dry run(처리 바이트, 받는 양의 최대)", "rows": None}
+    else:
+        raise ValueError("이 연결은 받을 행 수를 메타데이터로 알 수 없음")
+    width, basis = row_width(con, expr, tables)
+    return {"bytes": int(count) * width, "exact": False, "how": f"약 {man(int(count))}행 × 행당 약 {width}바이트({basis_rows}·{basis} 기준 추정)", "rows": int(count)}
+
+
+def limit(config=None):
+    """(기준 바이트, 기준 글자). 설정 memory(MB, 1GB=1000MB)가 있으면 그 값, 없으면(제한 없음) 지금 PC의 사용 가능 메모리."""
+    mb = (config if config is not None else settings.load()).get("memory")
+    if mb:
+        return monitor.bound_bytes(config), f"작업 메모리 상한 {mb / 1000:g} GB"
+    free = monitor.bound_bytes(config)
+    return free, f"지금 PC의 사용 가능 메모리 {size_text(free)}(작업 메모리 상한 제한 없음)"
+
+
+def limit_check(con, sql, opened=None, dialect=None, config=None, rows=None):
+    """실행 전 처리 용량 확인(데이터는 읽지 않는다). 대시보드 최신화와 서버 라우트가 같이 쓴다. 안쪽에서 DB를 묻는 것은 호출하는 쪽이 연결 스레드에서 부른다.
+    돌려주는 값: over(센 용량이 기준을 넘음), unknown(용량을 알 수 없음), blocked(알 수 없는데 설정 scan_unknown이 block),
+    bytes(셀 수 없으면 None), exact, how, limit(기준 바이트), tables, columns(None이면 모든 컬럼), text(팝업·건너뛴 까닭에 보일 글).
+    원격 DB 연결이면 sql의 결과를 이 PC로 받는 양(fetched, 메타데이터로만)을 견준다. 맨 바깥이 집계면 세지 않는다(how="집계 결과라 작음").
+    받는 식이 아닌 일(파일로 흘려 쓰기, DB 안의 계산)은 부르는 쪽이 부르지 않는다. rows는 원격에서 이미 아는 행 수. 돌려주는 값에 remote(원격 기준인지)를 더했다.
+    over이거나 blocked일 때만 실행을 멈추고 묻는다(blocked는 확인해도 실행하지 않는다)."""
+    config = settings.load() if config is None else config
+    remote = held.remote(con)
+    small = remote and is_aggregate(sql, dialect or sql_exec.dialect_of(con))  # 집계 결과는 작아서 원격 DB에서는 세지 않는다
+    found = ({"bytes": 0, "exact": False, "how": "집계 결과라 작음"} if small
+             else safe(lambda: fetched(con, sql, rows, dialect) if remote else estimate(con, sql, opened, dialect)))
+    bound, bound_text = limit(config)
+    try:
+        tables, columns = referenced(sql, dialect or sql_exec.dialect_of(con))
+    except Exception:
+        tables, columns = [], None
+    unknown = found["bytes"] is None
+    over = not unknown and found["bytes"] > bound
+    blocked = unknown and config.get("scan_unknown") == "block"
+    what = f"테이블 {', '.join(tables) or '없음'} · 컬럼 {'모두' if columns is None else ', '.join(sorted(columns)[:12]) + (' …' if len(columns) > 12 else '')}"
+    if unknown:
+        text = f"처리 용량을 미리 알 수 없어요({found['how']}). " + ("설정에서 '알 수 없으면 실행하지 않음'으로 정해 두어 실행하지 않아요." if blocked else "")
+    else:
+        text = f"PC로 약 {size_text(found['bytes'])}를 받아요(추정 · {found['how']}) · {bound_text} · {what}" if remote else f"{'' if found['exact'] else '약 '}{size_text(found['bytes'])}를 읽어요({'정확' if found['exact'] else '추정'} · {found['how']}) · {bound_text} · {what}"
+    return {"over": over, "unknown": unknown, "blocked": blocked, "bytes": found["bytes"], "exact": found["exact"], "how": found["how"],
+            "limit": bound, "remote": remote, "tables": tables, "columns": None if columns is None else sorted(columns), "text": text.strip()}

@@ -2,6 +2,7 @@
 /api/period/parse·day, /api/compare, /api/dash/settings. 값은 테스트 안에서 지어낸다."""
 import contextlib
 import datetime as dt
+import types
 
 import pytest
 
@@ -163,3 +164,61 @@ def test_context_for_refresh_uses_period_and_as_of():
     assert refresh.context({"period": "최근 7일", "as_of": ""}, dt.date(2026, 10, 22))["range"] == {"start": "2026-10-16", "end": "2026-10-22"}
     assert refresh.context({"period": "~ 2026-03-31", "as_of": ""}, dt.date(2026, 10, 22))["range"] == {"start": None, "end": "2026-03-31"} and refresh.context({"period": "엉터리"}) is None
     assert {"kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend"} <= set(refresh.REFRESHABLE) and "recent_rows" not in refresh.REFRESHABLE
+
+
+def test_scan_decision_adapter(fake, monkeypatch):
+    import scan_size
+    import settings
+    c = store.check_card({"kind": "chart", "title": "t", "source": {"key": KEY, "body": {"base": "t", "x": "a"}}})
+    monkeypatch.setattr(refresh.dash_calc, "read_sql", lambda card, ctx: "SELECT 1")
+    monkeypatch.setattr(refresh, "run", lambda work: work())  # 연결 스레드 대신 바로(연결이 가짜)
+    monkeypatch.setitem(server.state, "con", types.SimpleNamespace(name="duckdb"))  # 로컬 연결: 읽는 양을 센다
+    monkeypatch.delattr(scan_size, "limit_check", raising=False)
+    assert refresh.scan_decision(c, {}) == ""  # 판정 함수가 아직 없으면 막지 않는다
+    answer = {}
+    monkeypatch.setattr(scan_size, "limit_check", lambda con, sql, opened=None, dialect=None: answer, raising=False)
+    answer.update(over=True, unknown=False, text="약 12GB를 읽어요 · 상한 4GB")
+    assert refresh.scan_decision(c, {}) == "약 12GB를 읽어요 · 상한 4GB"  # 기준을 넘으면 그 이유로 건너뜀
+    answer.update(over=False, unknown=True, blocked=False, text="이 연결은 미리 알 수 없어요")
+    assert refresh.scan_decision(c, {}) == ""  # 추정할 수 없어도 기본은 실행
+    answer.update(blocked=True)
+    assert refresh.scan_decision(c, {}) == "이 연결은 미리 알 수 없어요"  # 설정이 차단이면(blocked) 건너뜀
+    answer.update(over=False, unknown=False, blocked=False)
+    assert refresh.scan_decision(c, {}) == ""
+    monkeypatch.setattr(settings, "load", lambda: {"scan_unknown": "차단"})
+    monkeypatch.setattr(scan_size, "limit_check", lambda *a: (_ for _ in ()).throw(RuntimeError("측정 실패")), raising=False)
+    assert "측정 실패" in refresh.scan_decision(c, {})  # 추정이 실패하면 추정 불가로 보고 차단 설정이면 건너뜀
+    monkeypatch.setattr(settings, "load", lambda: {})
+    assert refresh.scan_decision(c, {}) == ""
+    monkeypatch.setattr(refresh.dash_calc, "read_sql", lambda card, ctx: None)
+    assert refresh.scan_decision(c, {}) == ""  # 읽는 식이 없는 카드는 묻지 않는다
+
+
+def test_scan_decision_remote_asks_only_when_data_is_copied(fake, monkeypatch):
+    """원격 DB(요금이 나올 수 있음): DB 안의 집계로 구하는 카드는 크기를 알아보려고 DB에 묻지 않고, PC로 옮기는 카드만 판정한다."""
+    import scan_size
+    c = store.check_card({"kind": "chart", "title": "t", "source": {"key": KEY, "body": {"base": "t", "x": "a"}}})
+    monkeypatch.setattr(refresh.dash_calc, "read_sql", lambda card, ctx: "SELECT 1")
+    monkeypatch.setattr(refresh, "run", lambda work: work())
+    monkeypatch.setitem(server.state, "con", types.SimpleNamespace(name="postgres"))
+    asked = []
+    monkeypatch.setattr(scan_size, "limit_check", lambda con, sql, opened=None, dialect=None: asked.append(sql) or {"over": True, "text": "크다"}, raising=False)
+    monkeypatch.setattr(refresh.dash_calc, "copies_to_pc", lambda card, ctx: False)
+    assert refresh.scan_decision(c, {}) == "" and asked == []  # 집계는 묻지 않는다
+    monkeypatch.setattr(refresh.dash_calc, "copies_to_pc", lambda card, ctx: True)
+    assert refresh.scan_decision(c, {}) == "크다" and asked == ["SELECT 1"]
+
+
+def test_job_skips_card_over_the_limit_without_computing(fake, monkeypatch):
+    d = save("용량", [card("크다"), card("작다")])
+    computed = []
+    monkeypatch.setattr(dash_calc, "compute", lambda c, now, ctx=None: computed.append(c["title"]) or {"values": {"labels": ["new"], "series": []}})
+    monkeypatch.setattr(refresh, "scan_decision", lambda c, ctx: "약 12GB를 읽어요" if c["title"] == "크다" else "")
+    refresh.start(NOW)
+    refresh.wait()
+    done = refresh.status()
+    by = {r["title"]: r for r in done["results"]}
+    assert by["크다"]["state"] == "skipped" and by["크다"]["message"] == "약 12GB를 읽어요" and by["작다"]["state"] == "ok" and computed == ["작다"]
+    assert done["done"] == 2 and not done["running"]  # 건너뛴 카드도 끝난 것으로 센다
+    saved = {c["title"]: c["data"]["values"]["labels"] for c in store.get_dashboard(d["id"])["cards"]}
+    assert saved == {"크다": ["old"], "작다": ["new"]}  # 건너뛴 카드는 이전 값 그대로

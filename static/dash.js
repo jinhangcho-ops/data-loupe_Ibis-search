@@ -242,6 +242,8 @@ function chartConfig(card, colors, options = {}) {
            options: { maintainAspectRatio: false, ...(hbar ? { indexAxis: "y" } : {}), plugins: { legend }, scales, ...options } };
 }
 
+// 최신화가 읽은 날짜 범위(data.window: 직전 기간 시작 ~ 보는 기간 끝) 밖으로 보는 기간이 나갔는지. 나갔으면 그 기간으로 다시 읽어야 한다.
+const outsideWindow = (card, range) => !!(range && card.data?.window && ((range.start && card.data.window.start && range.start < card.data.window.start) || (range.end && card.data.window.end && range.end > card.data.window.end)));
 // 값이 아직 없는 카드(예전 파일에서 옮긴 것)는 안내만 보인다. SVG 카드는 일 값·값·컬럼 이름 중 하나라도 있으면 그린다.
 const noValues = c => SVG_KINDS.includes(c.kind) ? !(c.data?.by_unit || c.data?.values || c.data?.columns) : !cardSeries(c);
 const needsValues = c => (c.note = noValues(c) ? "아직 구한 값이 없어요. 연결한 뒤 [다시 구하기]를 누르세요." : undefined, c);
@@ -266,7 +268,7 @@ class DashBoard extends Board {
     this.prev = prev;
     await this.recompare();
     const unique = c => SVG_KINDS.includes(c.kind) && c.data?.by_unit?.day?.series.some(s => s.agg === "nunique");  // 고유 개수는 기간으로 다시 구해야 한다
-    const stale = this.cards.filter(c => (c.source?.date && !c.data?.by_unit && c.kind !== "recent_rows") || unique(c));  // 날짜 X축이 아닌데 기간 기준 날짜 컬럼이 있는 카드는 그 기간으로 다시 구한다
+    const stale = this.cards.filter(c => (c.source?.date && !c.data?.by_unit && c.kind !== "recent_rows") || unique(c) || outsideWindow(c, this.range));  // 날짜 X축이 아닌데 기간 기준 날짜 컬럼이 있는 카드는 그 기간으로 다시 구한다
     if (stale.length) await this.recompute?.(stale);
   }
   // 새 카드·다시 구할 때 서버에 알려 줄 보는 기간(없으면 undefined)

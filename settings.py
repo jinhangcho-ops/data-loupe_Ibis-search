@@ -18,11 +18,17 @@ CHOICES = {
     "board_ratio": ["screen", "square", "4:3", "wide"],  # 대시보드·그래프 그림의 비율: 화면대로 / 1:1 / 4:3 / 16:9
     "board_format": ["png", "jpeg"],  # 대시보드·그래프 그림의 형식
     "stats": ["on", "off"],
+    "scan_unknown": ["run", "block"],  # 처리 용량을 미리 알 수 없을 때(그 연결이 추정을 못 함): 그대로 실행한다 / 실행하지 않는다(기본은 실행)
     "prep_where": ["all", "new"],  # 원격 DB(주소로 접속)의 전처리를 이 PC의 작업 사본에서 계산하는 범위: 전처리 전체 / 계산 컬럼·PCA가 있을 때만(나머지는 DB에서)  # 전처리 화면에서 테이블을 고를 때 표본을 읽어 컬럼 통계·추천을 구할지(끄면 이름·타입만, 데이터를 읽지 않는다)
 }
 
 # 끌어서 조절한 크기(px)와 전처리가 미리 볼 행 수(sample), 오래 걸린 작업이 끝났을 때 알림을 보내는 기준 시간(notify_after, 초, 기본 30), DuckDB 파일 조회의 작업 메모리 상한(memory, MB, 기본은 제한 없음), DuckDB 계산에 쓰는 코어 수(threads, 기본은 전부): (최소, 최대). 화면은 이 범위를 server.CONSTANTS로 받는다. 0을 저장하면 기본값으로 돌아간다.
 SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "chart": (200, 1000), "sample": (1000, 1_000_000), "notify_after": (5, 3600), "memory": (256, 1_000_000), "threads": (1, os.cpu_count() or 1)}
+
+# 비율 설정: (최소, 최대). 비우거나 0을 저장하면 기본값(DEFAULTS)으로 돌아간다.
+# sample_too_few: 블록 샘플링이 기대한 행의 이만큼도 못 가져오면 다음 표본 방법으로 넘어가는 기준(profiler).
+FLOATS = {"sample_too_few": (0.05, 0.9)}
+DEFAULTS = {"sample_too_few": 0.2}
 
 # 직전 실행의 행당 시간(나노초/행). 작업 종류(검색·집계·차트·저장·전처리의 모양 보기·미리보기·실행)와 기준 테이블 행 수의 구간(10배 단위)마다 하나.
 # 이름은 time_종류_구간이고 구간은 행 수의 자릿수 - 1을 TIME_BANDS 안으로 맞춘 것(1,000행 미만은 모두 2)이다. 화면이 예상 시간을 구할 때 같은 구간의 값만 쓴다.
@@ -38,7 +44,14 @@ def valid(name, value):
         return type(value) is int and 1 <= value <= MAX_TIME
     if name in SIZES:
         return type(value) is int and SIZES[name][0] <= value <= SIZES[name][1]
+    if name in FLOATS:
+        return type(value) in (int, float) and FLOATS[name][0] <= value <= FLOATS[name][1]
     return value in CHOICES.get(name, [])
+
+
+def get(name):
+    """저장된 설정 값. 없거나 쓸 수 없으면 기본값(DEFAULTS, 없으면 None)."""
+    return load().get(name, DEFAULTS.get(name))
 
 
 def read_file(path):
@@ -85,7 +98,7 @@ def save(changes):
     if not isinstance(changes, dict) or not changes:
         raise ValueError("저장할 설정이 없습니다.")
     for name, value in changes.items():
-        if not valid(name, value) and not (name in SIZES and value == 0 and type(value) is int):
+        if not valid(name, value) and not ((name in SIZES or name in FLOATS) and value == 0 and type(value) in (int, float)):
             raise ValueError(f"'{name}' 설정에 쓸 수 없는 값입니다: {value}")
     write(PATH.name, {name: value for name, value in {**load(), **changes}.items() if value != 0})
 

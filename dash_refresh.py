@@ -7,10 +7,13 @@ import threading
 import core
 import dash_calc
 import dash_store
+import held
 import period
+import scan_size
 import server
 import settings
 import source
+from server import run
 
 MIN_REFRESH = 3600  # 최신화 주기의 최소(초)
 LIVE_FILE = "live_min.json"  # {source_key: 실시간 간격 최소(초)}
@@ -97,6 +100,32 @@ def context(d, today=None):
     return {"range": {"start": span["start"] and span["start"][:10], "end": end}, "prev": prev}
 
 
+SCAN_BLOCK = ("차단", "block")  # 설정 scan_unknown의 값: 추정할 수 없을 때 막기
+
+
+def scan_decision(card, ctx):
+    """이 카드를 읽기 전 처리 용량 판정(8-3). 건너뛸 이유 글(괜찮으면 빈 글자).
+    scan_size.limit_check(con, sql, opened, dialect)가 돌려주는 {over, unknown, blocked, bytes, limit, text}를 본다(그 함수가 없으면 막지 않는다).
+    기준을 넘으면(over), 추정할 수 없는데 설정 scan_unknown이 차단이면(blocked) 그 이유로 건너뛴다. 최신화는 묻지 않는다(그 카드만 건너뜀).
+    DB를 묻는 판정이라 연결 스레드(server.run)에서 부른다. 식을 만들 수 없거나 판정이 실패하면 추정 불가로 보고 설정을 따른다."""
+    check = getattr(scan_size, "limit_check", None)
+    if check is None:
+        return ""
+    try:
+        sql = dash_calc.read_sql(card, ctx)
+        if sql is None:
+            return ""
+        con = server.state["con"]
+        if held.remote(con) and not dash_calc.copies_to_pc(card, ctx):
+            return ""  # 원격 DB에서 DB 안의 집계로 구하는 카드는 결과만 오므로 작다. 크기를 알아보려고 DB에 묻지 않는다(요금)
+        found = run(lambda: check(con, sql, server.state["opened"], "duckdb" if getattr(con, "name", "") == "polars" else None))  # 파일 연결은 duckdb 방언으로(scan 라우트와 같다)
+    except Exception as e:
+        found = {"over": False, "blocked": settings.load().get("scan_unknown") in SCAN_BLOCK, "text": f"처리 용량을 알 수 없어요 ({e})"}
+    if found.get("over") or found.get("blocked"):
+        return found.get("text") or "처리 용량이 기준을 넘거나 알 수 없어 건너뛰었어요"
+    return ""
+
+
 def parse_time(text):
     try:
         return dt.datetime.fromisoformat(text)
@@ -180,6 +209,13 @@ def start(now=None):
 def work(plan, now):
     """작업 스레드: 카드를 차례로 구한다. 멈추기를 누르면 남은 카드는 건너뜀. 끝나면 running을 끈다."""
     try:
+        contexts, shared = {}, {}  # 대시보드마다 보는 기간, 같은 테이블·조건의 카드가 함께 읽은 값
+        for d, card in plan:
+            contexts.setdefault(d["id"], context(d))
+        plans = {}
+        for d, card in plan:
+            plans.setdefault(d["id"], []).append(dash_store.check_card({**card, "data": {}}))
+        plans = {did: dash_calc.plan_shared(cards, contexts[did]) for did, cards in plans.items()}  # 같은 테이블·조건의 카드들을 묶는다
         for d, card in plan:
             slot = next(r for r in JOB["results"] if r["dashboard"] == d["id"] and r["card"] == card["id"])
             if STOP.is_set():
@@ -190,10 +226,16 @@ def work(plan, now):
                 JOB["current"] = card["title"]
             try:
                 with core.using():
-                    data = dash_calc.compute(dash_store.check_card({**card, "data": {k: v for k, v in (card.get("data") or {}).items() if k == "since"}}), now.isoformat(timespec="seconds"), context(d))
-                if not dash_store.set_card_data(d["id"], card["id"], data):
-                    raise ValueError("그사이 지운 카드예요")
-                outcome = ("ok", "")
+                    checked = dash_store.check_card({**card, "data": {k: v for k, v in (card.get("data") or {}).items() if k == "since"}})
+                    ctx = {**(contexts[d["id"]] or {}), "plan": plans[d["id"]], "shared": shared.setdefault(d["id"], {})}
+                    why = scan_decision(checked, ctx)
+                    if why:
+                        outcome = ("skipped", why)
+                    else:
+                        data = dash_calc.compute(checked, now.isoformat(timespec="seconds"), ctx)
+                        if not dash_store.set_card_data(d["id"], card["id"], data):
+                            raise ValueError("그사이 지운 카드예요")
+                        outcome = ("ok", "")
             except Exception as e:  # 이전 값은 그대로 두고 이유만 남긴다
                 outcome = ("failed", source.mask(str(e), server.state["passwords"]))
             with LOCK:

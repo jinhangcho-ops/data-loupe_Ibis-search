@@ -84,17 +84,26 @@ def held_key(kind, what):
     return json.dumps([server.connection_key(), kind, server.virtual_tables(), what], sort_keys=True, ensure_ascii=False, default=str)
 
 
-def search_key(body):
-    return held_key("search", {k: body.get(k) for k in STAGE})
+def search_key(body, keep=None):
+    """검색의 열쇠. keep(받아 둘 컬럼들)이 있으면 열쇠에 넣는다(같은 조건이어도 컬럼이 다르면 다른 사본)."""
+    return held_key("search", {**{k: body.get(k) for k in STAGE}, **({"keep": sorted(keep)} if keep else {})})
 
 
-def runnable(body, select=True):
+def slim(expr, keep):
+    """expr를 keep에 든 컬럼(식에 있는 것만, 식의 컬럼 순서대로)으로 줄인다. 이미 그 컬럼뿐이거나 keep이 비면 그대로. 집계가 읽을 컬럼만 SQL에 나가게 하고 PC 사본도 그 컬럼만 받게 한다."""
+    cols = [c for c in expr.columns if c in set(keep or ())]
+    return expr.select(*cols) if cols and len(cols) < len(expr.columns) else expr
+
+
+def runnable(body, select=True, keep=None):
     """build의 식을 연결이 할 수 있으면 그대로, 못 하는 계산이면(파일 연결의 창 함수, 일부 DB의 펼치기 등) 기간·조건까지의 결과를
-    이 PC(held의 DuckDB)에 받아 그 위에서 만든 식. 받을 수 없을 만큼 크면 PC_TOO_BIG."""
-    expr = build(body, select)
+    이 PC(held의 DuckDB)에 받아 그 위에서 만든 식. 받을 수 없을 만큼 크면 PC_TOO_BIG.
+    keep(쓸 컬럼들)을 주면 식을 그 컬럼으로 줄이고, PC에 받는 사본도 조건을 건 뒤 그 컬럼만 받는다(테이블 전체를 받지 않는다). 계산 줄(calcs)이 있으면 줄이지 않는다."""
+    keep = None if body.get("calcs") else keep
+    expr = slim(build(body, select), keep) if keep else build(body, select)
     if source.compiles(expr):
         return expr
-    name = run(lambda: held.ensure(search_key(body), filtered(body), server.state["cancel"]))[0]
+    name = run(lambda: held.ensure(search_key(body, keep), slim(filtered(body), keep) if keep else filtered(body), server.state["cancel"]))[0]
     if name is None:
         raise ValueError(PC_TOO_BIG)
     return arrange(body, held.table(name), held.ROW, select)

@@ -1,6 +1,8 @@
 """PC 전체와 이 프로그램의 메모리·CPU 점유율. 프로그램 쪽에는 화면을 그리는 WebView2 같은 자식 프로세스도 더한다."""
 import psutil
 
+import settings
+
 ME = psutil.Process()
 last = {}  # 직전에 잰 CPU 시간(초): 모든 코어의 전체(total)·쉰 시간(idle)·이 프로그램이 쓴 시간(mine)
 
@@ -25,3 +27,14 @@ def usage():
     last.update(now)
     ram = psutil.virtual_memory()
     return {"pc_memory": round(ram.percent), "memory": round(memory / ram.total * 100), "memory_mb": round(memory / 2**20), **cpu}
+
+
+def available():
+    """지금 이 PC에서 쓸 수 있는 메모리(바이트)."""
+    return psutil.virtual_memory().available
+
+
+def bound_bytes(config=None):
+    """이 PC로 받아 올릴 수 있는 양의 기준(바이트): 설정 memory(MB, 1GB=1000MB)가 있으면 그 값, 없으면(제한 없음) 지금 사용 가능한 메모리."""
+    mb = (config if config is not None else settings.load()).get("memory")
+    return mb * 1_000_000 if mb else available()
