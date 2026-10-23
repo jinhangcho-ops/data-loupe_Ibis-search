@@ -23,7 +23,7 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel)에 연결해 �
 
 1. GitHub 저장소의 Actions 탭 → `build-exe` → `Run workflow`를 누릅니다.
 2. 완료된 실행 화면 아래 Artifacts에서 `ibis_search-windows`(zip)를 내려받습니다.
-3. 압축을 풀고 `ibis_search.exe`를 실행합니다. 폴더 안의 다른 파일은 지우지 않습니다.
+3. 압축을 풀고 `ibis_search.exe`를 실행합니다. 폴더 안의 다른 파일은 지우지 않습니다. 이미 실행 중일 때 다시 열면 '이미 실행 중입니다' 안내만 뜨고 먼저 연 창이 그대로 남습니다.
 
 서명되지 않은 프로그램이라 Windows SmartScreen 경고가 나오면 [추가 정보] → [실행]을 누릅니다.
 

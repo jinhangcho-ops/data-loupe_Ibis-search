@@ -5,7 +5,8 @@ Supabase는 PostgreSQL이라 `postgres` 드라이버(psycopg)로 접속합니다
 1. Supabase 대시보드 **Connect**에서 **Session pooler** 주소(포트 5432)를 복사합니다.
    예: `postgresql://postgres.<프로젝트ref>:[YOUR-PASSWORD]@aws-0-<리전>.pooler.supabase.com:5432/postgres`
 2. 연결 카드의 [DB 주소]에 그대로 붙여넣습니다. `[YOUR-PASSWORD]` 자리는 프로그램이 빼니, **비밀번호는 비밀번호 칸**에 쓰세요(저장하지 않습니다). 주소에 실제 비밀번호를 붙여넣어도 쓸 수 있지만, 최근 연결에는 남지 않습니다.
-3. `sslmode=require` 같은 주소 뒤 매개변수는 그대로 전달됩니다.
+3. 접속은 10초까지 기다립니다. 느리면 주소 끝에 `?connect_timeout=30`처럼 붙이세요.
+4. `sslmode=require` 같은 주소 뒤 매개변수는 그대로 전달됩니다.
 
 | 주소 | 설명 |
 |---|---|
