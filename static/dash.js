@@ -133,7 +133,17 @@ function pointValue(s, days, date) {
 }
 // 시간별 카드의 첫 계열을 두 기간(또는 두 시점)으로 비교할 값 {cur, prev, mode, label, better, partial}. /api/compare가 문장으로 바꾼다. 안 되는 카드(고유 개수, 기간 없음)는 null.
 // span: 기간 값과 직전 기간(prev: {start, end, text}) 값, point: 끝 날의 값과 기간 길이만큼 앞 날의 값. 직전이 저장된 일 값보다 앞서면 partial.
+// 대시보드 기간이 비면 카드 자신의 기간 줄(날짜컬럼 시작 ~ 끝, 양쪽 날짜)을 보는 기간으로 삼고, 직전은 바로 앞 같은 일수로 본다. 기간 줄이 없으면 null.
+function ownRange(card) {
+  for (const line of card.source?.body?.periods ?? []) {
+    const m = /^\S+\s+(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})$/.exec(line.trim());
+    const real = d => !isNaN(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d;  // 2026-02-30 같은 없는 날은 건너뛴다
+    if (m && real(m[1]) && real(m[2]) && m[1] <= m[2]) { const n = daysBetween(m[1], m[2]); return { range: { start: m[1], end: m[2] }, prev: { start: shiftDay(m[1], -n), end: shiftDay(m[1], -1), text: `직전 ${n}일` } }; }
+  }
+  return null;
+}
 function compareItem(card, range, prev) {
+  if (!range) { const own = ownRange(card); if (!own) return null; ({ range, prev } = own); }
   const by = card.data?.by_unit, s = by?.day?.series[0];
   if (!s || s.agg === "nunique" || !range?.start || !range?.end) return null;
   const days = by.day.labels, mode = card.view.compare?.mode ?? "span", better = card.view.better ?? "up", n = daysBetween(range.start, range.end);

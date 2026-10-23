@@ -5,13 +5,13 @@ class DashCtl {
   // board: DashBoard. changed(fields): 칸을 바꿔 확정할 때 {as_of, period, refresh: {every}, live: {every}}를 받는다(저장은 쓰는 화면이 한다).
   // liveRun(): 실시간 한 번(카드 값을 다시 구해 그리기), visible(): 지금 이 대시보드가 보이는지.
   constructor(root, { board, changed, liveRun, visible = () => true }) {
-    Object.assign(this, { board, changed, liveRun, visible, today: "", state: { as_of: "", period: "최근 30일", refresh: "", live: "" }, liveOn: false, timer: null, seconds: 0, times: [] });
+    Object.assign(this, { board, changed, liveRun, visible, today: "", state: { as_of: "", period: "", refresh: "", live: "" }, liveOn: false, timer: null, seconds: 0, times: [] });
     const field = (label, input, note) => el("div", { className: "dc-field" }, el("label", { className: "hint", textContent: label }), input, note);
     this.asof = el("input", { placeholder: "오늘", title: "기준일: 2026-10-01, 2026.10.01, 20261001, 어제, 지난달 말. 비우면 오늘" });
     this.pick = el("input", { type: "date", className: "dc-pick", tabIndex: -1 });
     this.pickBtn = el("button", { className: "btn", textContent: "달력", title: "달력에서 기준일 고르기", onclick: () => this.pick.showPicker ? this.pick.showPicker() : this.pick.click() });
     this.asofNote = el("div", { className: "hint dc-note" });
-    this.per = el("input", { placeholder: "예: 최근 30일, 2026-Q3", title: "최근 N일·주·달·년, 2026-10, 2026-Q3, 2026, 시작 ~ 끝, 지난주·지난달·작년·이번 달…" });
+    this.per = el("input", { placeholder: "비우면 카드의 원래 기간", title: "비우면 대시보드 기간을 걸지 않고 카드마다 자기 조건(기간 줄)대로 보입니다. 최근 N일·주·달·년, 2026-10, 2026-Q3, 2026, 시작 ~ 끝, 지난주·지난달·작년·이번 달…" });
     this.perNote = el("div", { className: "hint dc-note" });
     this.every = el("input", { placeholder: "비우면 안 함 (예: 1일)", title: `연결한 뒤 이 주기가 지난 카드만 다시 구합니다. 최소 ${minimumText(SERVER.dash.min_refresh)}` });
     this.lastNote = el("div", { className: "hint dc-note" });
@@ -42,7 +42,7 @@ class DashCtl {
   async set(d) {
     await this.ready;
     this.stopLive("");
-    this.state = { as_of: d.as_of || "", period: d.period || "최근 30일", refresh: d.refresh?.every || "", live: d.live?.every || "" };
+    this.state = { as_of: d.as_of || "", period: d.period || "", refresh: d.refresh?.every || "", live: d.live?.every || "" };
     this.asof.value = this.state.as_of;
     this.per.value = this.state.period;
     this.every.value = this.state.refresh;
@@ -58,7 +58,8 @@ class DashCtl {
     await this.ready;
     const day = await api("/api/period/day", { text: this.asof.value });
     if (day.error) { this.asof.value = this.state.as_of; return this.note(this.asofNote, day.error, true); }
-    const past = day.date !== this.today, parsed = await api("/api/period/parse", { text: this.per.value, as_of: day.date }), span = parsed.span;
+    const past = day.date !== this.today, blank = !this.per.value.trim();
+    const parsed = blank ? { span: { start: null, end: null, label: "기간을 걸지 않아요. 카드의 원래 조건대로 보입니다" }, previous: null } : await api("/api/period/parse", { text: this.per.value, as_of: day.date }), span = parsed.span;
     if (span.error) { this.per.value = this.state.period; return this.note(this.perNote, span.error, true); }
     this.state.as_of = past ? day.date : "";
     this.state.period = this.per.value.trim();
@@ -68,8 +69,8 @@ class DashCtl {
     this.past.classList.toggle("hidden", !past);
     if (past) this.stopLive("과거 시점을 보는 중이라 실시간 갱신은 멈춰 있어요");
     const prev = parsed.previous;
-    await this.board.setRange({ start: span.start?.slice(0, 10) ?? null, end: [span.end?.slice(0, 10), day.date].filter(Boolean).sort()[0] },
-      prev && !prev.error && prev.start ? { start: prev.start.slice(0, 10), end: prev.end.slice(0, 10), text: span.to_date ? prev.label : `직전 ${prev.days}일` } : null);
+    await this.board.setRange(blank ? null : { start: span.start?.slice(0, 10) ?? null, end: [span.end?.slice(0, 10), day.date].filter(Boolean).sort()[0] },
+      blank ? null : prev && !prev.error && prev.start ? { start: prev.start.slice(0, 10), end: prev.end.slice(0, 10), text: span.to_date ? prev.label : `직전 ${prev.days}일` } : null);
     if (commit) this.changed(this.fields());
   }
   // 최신화 주기·실시간 간격 칸을 서버로 검사한다(최신화는 1시간 이상, 실시간은 이 연결의 최소 이상).

@@ -75,3 +75,10 @@ def test_old_dashboard_tab_leftovers_are_gone():
 def test_docs_do_not_point_to_old_tab(doc):
     text = (STATIC.parent / doc).read_text(encoding="utf-8")
     assert "[대시보드] 탭" not in text and "대시보드 탭" not in text, doc
+
+
+def test_empty_period_ui_and_own_range():
+    ctl = (STATIC / "dash_ctl.js").read_text(encoding="utf-8")
+    assert "비우면 카드의 원래 기간" in ctl and 'period: "최근 30일"' not in ctl and 'd.period || "최근 30일"' not in ctl
+    assert "blank = !this.per.value.trim()" in ctl
+    assert "function ownRange(card)" in (STATIC / "dash.js").read_text(encoding="utf-8")

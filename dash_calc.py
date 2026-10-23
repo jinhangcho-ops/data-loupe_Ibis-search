@@ -2,6 +2,7 @@
 날짜 X축 차트는 일 단위로 계열마다 {sum, count, min, max}를 구해 두고(화면이 주·월·연으로 다시 묶는다), 다시 묶을 수 없는 고유 개수(nunique)는 네 단위를 여기서 따로 구한다.
 일 값이 많아 카드 크기를 넘으면 앞을 자르고 월·연은 여기서 따로 구한다. 항목별 차트는 result.get_chart, 분석은 prep_app.analyzed, 지표는 core.metric_values를 쓴다."""
 import datetime as dt
+import re
 import json
 
 from lazy import ibis
@@ -390,6 +391,39 @@ def with_period(body, date, window):
     return {**body, "periods": [*(body.get("periods") or []), f"{date} {window.get('start') or ''} ~ {window.get('end') or ''}"]}
 
 
+OWN_PERIOD = re.compile(r"(\S+)\s+(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})")  # 카드의 기간 줄 '날짜컬럼 시작 ~ 끝'(양쪽이 날짜인 것만)
+
+
+def own_range(card):
+    """대시보드 기간이 비었을 때 카드 자신의 기간 줄(source.body.periods 중 양쪽 날짜가 다 있고 시작이 끝보다 늦지 않은 첫 줄)을 보는 기간으로,
+    바로 앞 같은 일수를 직전 기간으로 삼은 {range, prev: {start, end, text}, column, line}. 열린 쪽이 있는 줄은 건너뛰고, 없으면 None. static/dash.js의 ownRange와 같은 규칙이다."""
+    for i, line in enumerate(((card.get("source") or {}).get("body") or {}).get("periods") or []):
+        m = OWN_PERIOD.fullmatch(str(line).strip())
+        if not m or m[2] > m[3]:
+            continue
+        try:
+            start, end = dt.date.fromisoformat(m[2]), dt.date.fromisoformat(m[3])
+        except ValueError:  # 2026-02-30 같은 없는 날
+            continue
+        n = (end - start).days + 1
+        prev = {"start": (start - dt.timedelta(days=n)).isoformat(), "end": (start - dt.timedelta(days=1)).isoformat(), "text": f"직전 {n}일"}
+        return {"range": {"start": m[2], "end": m[3]}, "prev": prev, "column": m[1], "line": i}
+    return None
+
+
+def comparison(card, ctx):
+    """(보는 기간, 직전 기간, at) at(window)는 그 기간으로 건 카드의 식. 대시보드 기간(ctx.range)이 있으면 그것과 ctx.prev(기간 기준 날짜 컬럼이 있어야)를 쓰고,
+    비었으면 카드 자신의 기간 줄(own_range)을 쓴다(직전 기간은 그 줄을 빼고 같은 컬럼에 직전 기간을 건다). 둘 다 없으면 직전 기간이 없다(비교 문장·직전 칸을 뺀다)."""
+    if (ctx or {}).get("range"):
+        return ctx["range"], (ctx.get("prev") if card["source"].get("date") else None), lambda w: card_expr(card, ctx, w)
+    own = own_range(card)
+    if not own:
+        return None, None, lambda w: card_expr(card, ctx, w)
+    body = card["source"]["body"]
+    before = {**card, "source": {**card["source"], "date": own["column"], "body": {**body, "periods": [l for i, l in enumerate(body["periods"]) if i != own["line"]]}}}
+    return None, own["prev"], lambda w: card_expr(before if w is own["prev"] else card, ctx, w)
+
+
 def scalars(expr, series):
     """계열마다 한 값(식 전체의 집계) [값…]."""
     row = analysis.one(expr.aggregate(**{f"v{i}": final_expr(expr, s) for i, s in enumerate(series)}))
@@ -441,16 +475,15 @@ def group_values(expr, column, s):
 
 def summary_data(card, ctx):
     """summary 카드: 지표(첫 계열)의 이번 기간·직전 기간 값과 그룹별 값(view.group)으로 summary_text의 문장을 만든다. 직전 기간·날짜 컬럼이 없으면 그 문장은 뺀다."""
-    src, view, body = card["source"], card["view"], card["source"]["body"]
-    series, date = clean_series(body.get("series")), src.get("date")
-    window, before = (ctx or {}).get("range"), (ctx or {}).get("prev")
-    at = lambda w: card_expr(card, ctx, w)
+    view, body = card["view"], card["source"]["body"]
+    series = clean_series(body.get("series"))
+    window, before, at = comparison(card, ctx)
     cur = run(lambda: scalars(at(window), series[:1]))[0]
-    prev = run(lambda: scalars(at(before), series[:1]))[0] if date and before else None
+    prev = run(lambda: scalars(at(before), series[:1]))[0] if before else None
     groups = None
     if view.get("group"):
         now = run(lambda: group_values(at(window), view["group"], series[0]))
-        old = run(lambda: group_values(at(before), view["group"], series[0])) if date and before else {}
+        old = run(lambda: group_values(at(before), view["group"], series[0])) if before else {}
         groups = {g: (now.get(g), old.get(g)) for g in {*now, *old}}
     target = resolve_target(view.get("target"))
     found = summary_text.summarize(series_name(series[0]), cur, prev, view.get("format", "number"), view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"], False,
@@ -507,15 +540,14 @@ def table_rows(expr, group_cols, series):
 def table_data(card, ctx):
     """table 카드: 쿼리의 집계(묶음 컬럼 + 계열)를 표로(최대 MAX_TABLE_ROWS행). 날짜 컬럼과 직전 기간이 있으면 직전 기간 값도 줘 ▲▼ 칸을 그린다.
     계열이 없으면 원래 행 표라 값은 저장하지 않고 컬럼 이름만 준다(보일 때마다 연결에서 읽는다)."""
-    src, view, body = card["source"], card["view"], card["source"]["body"]
-    series, date = body.get("series") or [], src.get("date")
+    view, body = card["view"], card["source"]["body"]
+    series = body.get("series") or []
     if not series:
         return {"columns": list(core.build(body).columns)}
     series, groups = clean_series(series), view.get("group_cols") or []
-    at = lambda w: card_expr(card, ctx, w)
-    now = run(lambda: table_rows(at((ctx or {}).get("range")), groups, series))
-    before = (ctx or {}).get("prev")
-    old = run(lambda: table_rows(at(before), groups, series)) if date and before and groups else None
+    window, before, at = comparison(card, ctx)
+    now = run(lambda: table_rows(at(window), groups, series))
+    old = run(lambda: table_rows(at(before), groups, series)) if before and groups else None
     more = len(now) > MAX_TABLE_ROWS
     columns = [{"name": c, "kind": "group"} for c in groups] + [{"name": series_name(s), "kind": "value", "agg": s["agg"]} for s in series]
     key = lambda row: "\x01".join(str(v) for v in row[:len(groups)])
@@ -526,8 +558,8 @@ def table_data(card, ctx):
 def sentence_data(card, ctx):
     """sentence 카드: 문장 틀(view.template)의 빈칸마다 값. 빈칸 종류: value(이번 기간 값), prev(직전 기간 값), delta(비교 문장, compare.py), asof(기준일).
     계산하지 못하는 빈칸은 값 없이 이유(error)만 담는다(화면이 '—'와 이유를 보임)."""
-    src, view = card["source"], card["view"]
-    date, window, before = src.get("date"), (ctx or {}).get("range"), (ctx or {}).get("prev")
+    view = card["view"]
+    window, before, at = comparison(card, ctx)
     out = {}
     for blank in view.get("blanks") or []:
         name, kind, fmt = blank["name"], blank["kind"], blank["format"]
@@ -536,9 +568,8 @@ def sentence_data(card, ctx):
             continue
         try:
             s = clean_series([{"y": blank.get("y") or None, "agg": blank.get("agg") or ("sum" if blank.get("y") else "count")}])
-            at = lambda w: card_expr(card, ctx, w)
             cur = run(lambda: scalars(at(window), s))[0]
-            prev = run(lambda: scalars(at(before), s))[0] if date and before and kind in ("prev", "delta") else None
+            prev = run(lambda: scalars(at(before), s))[0] if before and kind in ("prev", "delta") else None
             item = {"kind": kind, "cur": cur, "prev": prev, "format": fmt}
             if kind == "delta":
                 item["text"] = compare.compare(cur, prev, fmt, view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"])["text"]

@@ -375,3 +375,43 @@ def test_deviation_table_buckets_and_entities(db):
     daily["view"] = {"entity": "store", "bucket": "month"}
     month = compute(db, card=daily)["data"]["values"]
     assert month["buckets"] == ["2026-01-01", "2026-02-01"] and month["entities"] == [{"name": "A", "values": [100, None]}, {"name": "B", "values": [5, 50]}]
+
+
+# ---------- 대시보드 기간이 비면 카드 자신의 기간 줄이 보는 기간, 바로 앞 같은 일수가 직전 기간 ----------
+OWN = "day 2026-01-12 ~ 2026-02-02"  # RANGE와 같은 22일 → 값도 위 RANGE 테스트와 같다(이번 90, 직전 2025-12-21~2026-01-11은 65)
+
+
+def test_own_range_rules():
+    own = lambda *periods: dash_calc.own_range({"source": {"body": {"periods": list(periods)}}})
+    got = own(OWN)
+    assert got["range"] == {"start": "2026-01-12", "end": "2026-02-02"} and got["prev"] == {"start": "2025-12-21", "end": "2026-01-11", "text": "직전 22일"} and got["column"] == "day"
+    assert own("day 2026-01-01 ~ ", "day ~ 2026-03-31") is None  # 열린 줄은 쓰지 않는다
+    assert own("day 2026-01-01 ~ ", "when 2026-03-01 ~ 2026-03-31")["column"] == "when"  # 줄이 여럿이면 쓸 수 있는 첫 줄
+    assert own("day 2026-03-31 ~ 2026-03-01", "day 2026-02-30 ~ 2026-03-01") is None  # 거꾸로 된 줄·없는 날
+    assert own("day 2026-03-01 ~ 2026-03-01")["prev"] == {"start": "2026-02-28", "end": "2026-02-28", "text": "직전 1일"}
+    assert own() is None and dash_calc.own_range({"source": {"body": {}}}) is None
+
+
+@pytest.mark.parametrize("date", [None, "day"])
+def test_own_period_gives_previous_range_to_summary_sentence_table(db, date):
+    body = {"periods": [OWN]}
+    summary = compute(db, card=value_card("summary", SUM, date, {}, **body), ctx=None)["data"]
+    assert summary["values"]["scalar"] == [90] and summary["values"]["prev"] == [65]  # 날짜 컬럼을 안 골라도 카드의 기간 줄로
+    assert "직전 22일" in summary["text"]
+    view = {"template": "{전} {비교}", "compare": {"mode": "span"}, "better": "up", "blanks": [
+        {"name": "전", "y": "amt", "agg": "sum", "kind": "prev"}, {"name": "비교", "y": "amt", "agg": "sum", "kind": "delta"}]}
+    blanks = compute(db, card=value_card("sentence", SUM, date, view, **body))["data"]["values"]["blanks"]
+    assert blanks["전"]["cur"] == 90 and blanks["전"]["prev"] == 65 and "직전 22일보다 38.5% 늘었어요" in blanks["비교"]["text"]
+    table = compute(db, card=value_card("table", SUM, date, {"group_cols": ["store"]}, **body))["data"]["values"]
+    assert table["rows"] == [["A", 40], ["B", 50]] and table["prev"] == {"A": [60], "B": [5]}
+
+
+def test_no_period_line_means_no_previous(db):
+    s = compute(db, card=value_card("summary", SUM, "day"), ctx=None)["data"]
+    assert s["values"]["prev"] == [None]  # 대시보드 기간도 카드 기간 줄도 없으면 비교 문장이 없다
+    t = compute(db, card=value_card("table", SUM, "day", {"group_cols": ["store"]}))["data"]["values"]
+    assert t["prev"] is None
+    open_ended = compute(db, card=value_card("table", SUM, "day", {"group_cols": ["store"]}, periods=["day 2026-01-12 ~ "]))["data"]["values"]
+    assert open_ended["prev"] is None
+    withdash = compute(db, card=value_card("table", SUM, "day", {"group_cols": ["store"]}), ctx=RANGE)["data"]["values"]
+    assert withdash["prev"] == {"A": [60], "B": [5]}  # 대시보드 기간이 있으면 그것을 쓴다(지금까지와 같다)

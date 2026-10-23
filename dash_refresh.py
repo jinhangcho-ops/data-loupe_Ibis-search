@@ -90,6 +90,8 @@ def check_dashboard_every(d):
 
 def context(d, today=None):
     """대시보드의 보는 기간·직전 기간 {range: {start, end}, prev: {start, end, text}}(기준일 as_of로 자름). 읽을 수 없으면 None."""
+    if not (d.get("period") or "").strip():
+        return None  # 기간이 비면 대시보드의 기간을 걸지 않는다(카드의 원래 조건대로)
     day = (d.get("as_of") or "") or (today or dt.date.today()).isoformat()  # 기준일(비면 오늘)
     span = period.parse(d.get("period"), day)
     if span["error"]:

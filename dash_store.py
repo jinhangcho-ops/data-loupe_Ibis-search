@@ -380,7 +380,7 @@ def check_dashboard(d):
     if any(c and c not in ids for c in [north["card"], *north["counters"]]):
         raise ValueError("북극성·카운터 지표로 고른 카드가 이 대시보드에 없습니다.")
     return {"id": dash_id, "name": text(d.get("name"), "대시보드 이름", 50, 1), "template": text(d.get("template"), "템플릿 이름", 50),
-            "palette": check_palette(d.get("palette") or []), "period": text(d.get("period") or "최근 30일", "기간", 40), "as_of": as_of,
+            "palette": check_palette(d.get("palette") or []), "period": text(d.get("period") or "", "기간", 40), "as_of": as_of,
             "refresh": check_every(d.get("refresh"), "refresh"), "live": check_every(d.get("live"), "live"), "cards": cards, "created": text(d.get("created"), "만든 시각", 40),
             "updated": text(d.get("updated"), "고친 시각", 40), "north_star": north}
 

@@ -134,3 +134,24 @@ def test_columns_used_by_each_kind(wide):
     assert dash_calc.card_columns(card("kpi", [{"y": "amt", "agg": "sum"}], conditions=["store = A"])) == ["amt", "day"]  # 조건 컬럼은 거르기에만 쓰고 읽지 않는다
     assert dash_calc.body_columns({"series": [{"y": "amt"}], "calcs": ["x"]}) is None and dash_calc.body_columns({"names": ["지표"]}) is None
     assert dash_calc.fetch_window(RANGE) == WINDOW and dash_calc.fetch_window(None) is None and dash_calc.fetch_window({"range": {"start": None, "end": "2026-03-01"}}) == {"start": None, "end": "2026-03-01"}
+
+
+def test_empty_dashboard_period_keeps_the_cards_own_period(wide):
+    """카드에 자기 기간 줄이 있고 대시보드 기간이 비면 기간을 걸지 않아 카드의 기간 안 값이 모두 나온다(대시보드 기간이 있으면 그 안으로 좁아진다)."""
+    import dash_refresh
+    c = card("kpi", [{"y": "amt", "agg": "sum"}], periods=["day 2026-01-01 ~ 2026-03-31"])
+    assert dash_refresh.context({"period": "", "as_of": ""}) is None and dash_refresh.context({"period": "  "}) is None
+    labels = lambda ctx: dash_calc.compute(c, "2026-10-22T09:00:00", ctx)["by_unit"]["day"]["labels"]
+    assert labels(dash_refresh.context({"period": ""})) == ["2026-01-05", "2026-01-12", "2026-01-20", "2026-02-02", "2026-03-01"]  # 카드의 기간 안은 전부
+    assert "2026-03-01" not in labels(RANGE) and labels(RANGE) != labels(None)  # 대시보드 기간을 걸면 좁아진다
+    assert dash_store.check_dashboard({"name": "x", "cards": []})["period"] == ""  # 새 대시보드의 기간은 비어 있다
+    assert dash_store.check_dashboard({"name": "x", "cards": [], "period": "최근 30일"})["period"] == "최근 30일"  # 예전 값은 그대로
+
+
+def test_refresh_context_without_dashboard_period_uses_own_period(wide):
+    """최신화가 넘기는 ctx(기간 없음, plan·shared만)에서도 요약 카드는 카드의 기간 줄과 그 바로 앞 같은 일수로 비교한다. 값은 손으로 계산: 2026-01-12~02-02는 12+13+14=39, 직전 2025-12-21~2026-01-11은 11."""
+    import dash_refresh
+    c = card("summary", [{"y": "amt", "agg": "sum"}], periods=["day 2026-01-12 ~ 2026-02-02"])
+    ctx = {**(dash_refresh.context({"period": ""}) or {}), "plan": dash_calc.plan_shared([c], None), "shared": {}}
+    data = dash_calc.compute(c, "2026-10-22T09:00:00", ctx)
+    assert data["values"]["scalar"] == [39] and data["values"]["prev"] == [11] and "직전 22일" in data["text"]
