@@ -2,9 +2,7 @@
 예약처럼 한 번 실행(execute), 프로그램 안 예약 스레드(watch), 창 없이 실행(run_alone, desktop.py --run).
 비밀번호는 저장하지 않으므로 비밀번호가 필요한 구성은 예약하지 않는다(password_reason 하나로 판단)."""
 import datetime as dt
-import hashlib
 import math
-import os
 import re
 import secrets
 import threading
@@ -15,6 +13,7 @@ import psutil
 import collect_config
 import collect_job
 import collect_store
+import filelock
 import load_kafka
 import notify
 import scratch
@@ -32,7 +31,6 @@ MINUTES = (5, 1440)  # interval 예약의 간격(분) 범위
 TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 ANCHOR = dt.datetime(2000, 1, 1)  # interval 예약의 기준 시각: 이때부터 minutes분마다(프로그램 안 예약과 Windows 작업이 같은 시각에 돈다)
 TICK = 20  # 프로그램 안 예약이 확인하는 간격(초)
-LOCK_WAIT = 5  # 실행 기록 파일을 다른 프로세스와 번갈아 쓰려고 기다리는 시간(초)
 SKIP_RUNNING = "다른 수집이 돌고 있어 건너뛰었습니다."
 SKIP_LOCKED = "같은 구성이 다른 곳(프로그램 안 예약, Windows 예약 작업)에서 돌고 있어 건너뛰었습니다."
 LOCKED = "같은 구성이 다른 곳(프로그램 안 예약, Windows 예약 작업)에서 돌고 있습니다. 끝난 뒤에 실행하세요."
@@ -192,50 +190,8 @@ def reregister():
 
 
 # ---------- 잠금 ----------
-
-def locks():
-    return settings.PATH.parent / "locks"
-
-
-def lock_path(name):
-    return locks() / (hashlib.sha256(name.encode("utf-8")).hexdigest()[:24] + ".lock")
-
-
-def left_behind(path):
-    """잠금 파일이 끝난 프로세스의 것인지. 읽을 수 없거나 깨졌으면 모르는 것이라 거짓(지우지 않는다)."""
-    try:
-        if path.is_symlink() or not path.is_file():
-            return False
-        pid, started = path.read_text(encoding="ascii").split()
-        return scratch.ended(pid, started)
-    except (OSError, ValueError, psutil.Error):
-        return False
-
-
-def hold(path):
-    """잠금 파일을 만든다(이미 있으면 그 프로세스가 끝났을 때만 지우고 다시). 잡았으면 True."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    for _ in range(2):
-        try:
-            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            if not left_behind(path):
-                return False
-            path.unlink(missing_ok=True)
-            continue
-        with os.fdopen(fd, "w", encoding="ascii") as f:
-            f.write(scratch.stamp())
-        return True
-    return False
-
-
-def let_go(path):
-    """이 프로세스가 잡은 잠금만 푼다."""
-    try:
-        if path.read_text(encoding="ascii") == scratch.stamp():
-            path.unlink()
-    except (OSError, ValueError):  # 없거나 남의 것(읽을 수 없는 글자)
-        pass
+# 잠금 파일은 filelock에 있다. 수집은 결과 파일 경로마다 collect_job.start가 잡는다(같은 결과 파일에 두 곳이 쓰지 않게).
+locks, lock_path, hold, let_go = filelock.locks, filelock.lock_path, filelock.hold, filelock.let_go
 
 
 # ---------- 실행 기록 ----------
@@ -248,21 +204,11 @@ def read_runs():
 
 def change_runs(change):
     """실행 기록을 읽어 change(목록)로 고치고 최근 MAX_RUNS개만 저장한다. 다른 프로세스(Windows 작업)와 번갈아 쓴다."""
-    guard = locks() / "runs.lock"
-    with writing:
-        end = time.monotonic() + LOCK_WAIT
-        held = hold(guard)
-        while not held and time.monotonic() < end:
-            time.sleep(0.05)
-            held = hold(guard)
-        try:
-            runs = read_runs()
-            result = change(runs)
-            settings.write(RUNS, {"runs": runs[:MAX_RUNS]})
-            return result
-        finally:
-            if held:
-                let_go(guard)
+    with writing, filelock.guarded("runs.lock"):
+        runs = read_runs()
+        result = change(runs)
+        settings.write(RUNS, {"runs": runs[:MAX_RUNS]})
+        return result
 
 
 def stamp_time(at=None):
@@ -335,19 +281,15 @@ def execute(name, how):
     """구성 name을 예약처럼 한 번 실행한다(기록·잠금·알림). (기록 번호, 끝을 기다려 기록하는 스레드). 시작하지 못했으면(기록은 남김) 스레드는 None."""
     run_id = add_run(name, how)
     began = time.time()
-    path = lock_path(name)
     try:
         config = collection(name)
         with starting:
             if collect_job.running():
                 raise Skip(SKIP_RUNNING)
-            if not hold(path):
-                raise Skip(SKIP_LOCKED)
             try:
-                collect_job.start(config)
-            except Exception:
-                let_go(path)
-                raise
+                collect_job.start(config)  # 결과 파일의 잠금은 start가 잡고, 작업이 끝나면 work가 푼다
+            except collect_job.Busy:
+                raise Skip(SKIP_LOCKED) from None
             job = collect_store.current["thread"]
     except Skip as e:
         finish(run_id, name, "건너뜀", None, time.time() - began, str(e))
@@ -357,14 +299,11 @@ def execute(name, how):
         return run_id, None
 
     def follow():
-        try:
-            job.join()
-            state = collect_job.snapshot()
-            done = state["phase"] == "끝"
-            message = state["message"] if done else (state["error"] or state["message"] or f"수집이 {state['phase']} 상태로 끝났습니다.")
-            finish(run_id, name, "끝" if done else "실패", state["rows"], state["elapsed"], message)
-        finally:
-            let_go(path)
+        job.join()
+        state = collect_job.snapshot()
+        done = state["phase"] == "끝"
+        message = state["message"] if done else (state["error"] or state["message"] or f"수집이 {state['phase']} 상태로 끝났습니다.")
+        finish(run_id, name, "끝" if done else "실패", state["rows"], state["elapsed"], message)
 
     thread = threading.Thread(target=follow, daemon=True)
     thread.start()
@@ -375,10 +314,10 @@ def run_now(name):
     """POST /api/schedules/run: 다른 수집이 돌고 있거나 구성에 문제가 있으면 기록 없이 거부하고, 아니면 예약처럼 실행한다."""
     if collect_job.running():
         raise ValueError(collect_job.RUNNING)
-    collection(name)
-    if not hold(lock_path(name)):
+    lock = collect_job.lock_of(collection(name))
+    if not hold(lock):
         raise ValueError(LOCKED)
-    let_go(lock_path(name))
+    let_go(lock)
     execute(name, "now")
 
 
@@ -401,7 +340,7 @@ def run_alone(name):
 def tick(due):
     """한 번 확인한다. due({이름: (예약, 다음 시각)})는 부르는 쪽이 들고 있는다. 처음 본 예약·바뀐 예약은 지금 뒤의 시각부터(놓친 것은 돌리지 않는다)."""
     now = clock()
-    found = {name: item for name, item in schedules().items() if item.get("inapp")}
+    found = {name: item for name, item in schedules().items() if item.get("inapp") and not item.get("windows")}  # Windows 작업이 도는 예약은 여기서 또 돌리지 않는다
     for name in list(due):
         if name not in found:
             due.pop(name)

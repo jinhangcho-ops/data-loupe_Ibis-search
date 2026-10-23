@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 from lazy import ibis
 
+import filelock
 import parse
 import server
 import settings
@@ -81,10 +82,11 @@ def mine(link, schema, name):
 
 def remember(link, schema, name, columns):
     """만든 테이블을 기록한다(같은 것이 있으면 바꾼다). columns가 None이면 기록을 지운다."""
-    tables = [t for t in made() if not same(t, link, schema, name)]
-    if columns is not None:
-        tables.append({"connection": ident(link), "schema": schema, "name": name, "columns": columns, "created": dt.datetime.now().isoformat(timespec="seconds")})
-    settings.write(FILE, {"tables": tables})
+    with filelock.guarded("load_tables.lock"):  # 프로그램 창과 Windows 예약 작업이 함께 읽고 쓴다
+        tables = [t for t in made() if not same(t, link, schema, name)]
+        if columns is not None:
+            tables.append({"connection": ident(link), "schema": schema, "name": name, "columns": columns, "created": dt.datetime.now().isoformat(timespec="seconds")})
+        settings.write(FILE, {"tables": tables})
 
 
 # ---------- 연결 ----------

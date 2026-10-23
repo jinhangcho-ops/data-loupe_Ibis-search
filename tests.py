@@ -2098,7 +2098,7 @@ def schedule_section(c, got):
     check("알림(always): 끝났다는 제목, 구성 이름·행 수", (len(sent), sent and sent[0]["title"], sent and "구성: 예약 하나" in sent[0]["text"], sent and sent[0]["rows"]), (1, "수집이 끝났습니다", True, "7"))
     check("지금 실행 거부: 비밀번호가 필요한 구성, 없는 구성", [error("/api/schedules/run", name=n) for n in ("비번 DB", "없는 구성")],
           ["DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다.", "구성 '없는 구성'이 없습니다. 구성을 먼저 저장하세요."])
-    lock = schedule.lock_path("예약 하나")
+    lock = collect_job.lock_of(schedule.collection("예약 하나"))  # 수집은 결과 파일마다 잠근다
     lock.write_text(f"{os.getpid()} {psutil.Process().create_time()}", encoding="ascii")
     check("같은 구성이 잠겨 있으면 지금 실행 거부", error("/api/schedules/run", name="예약 하나"), schedule.LOCKED)
     sent.clear()

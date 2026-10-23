@@ -19,6 +19,7 @@ import collect_http
 import collect_limits
 import collect_request as req
 import collect_web
+import filelock
 import load_job
 import scratch
 import server
@@ -31,6 +32,11 @@ from collect_store import (IDLE, SAVE_EVERY, balancer_for, clean, current, duck,
 
 MIN_FREE = 200 * 1024 * 1024  # 시작할 때 결과 폴더의 디스크에 적어도 남아 있어야 하는 공간
 RUNNING = "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요."
+BUSY = "같은 결과 파일에 다른 곳(다른 창, 프로그램 안 예약, Windows 예약 작업)이 수집하고 있습니다. 끝난 뒤에 시작하세요."
+
+
+class Busy(ValueError):
+    """같은 결과 파일에 다른 곳이 수집하고 있다(잠금을 잡지 못함)."""
 
 
 # ---------- 설정 ----------
@@ -74,8 +80,13 @@ def parts(path):
     return {"part": stem, "record": path.with_name(path.stem + ".part.json"), "out": path.with_name(f"{path.stem}.part{path.suffix}")}
 
 
+def today():
+    return dt.date.today().isoformat()
+
+
 def digest(config):
-    """이어 받기를 정하는 설정의 해시. 동시 수·간격·최대 쪽 수·결과 형식처럼 받은 내용이 바뀌지 않는 칸은 넣지 않는다."""
+    """이어 받기를 정하는 설정의 해시. 동시 수·간격·최대 쪽 수·결과 형식처럼 받은 내용이 바뀌지 않는 칸은 넣지 않는다.
+    주소·요청에 {today}·{now}가 있으면 오늘 날짜도 넣는다(어제 받다 만 것을 오늘 이어 받으면 날짜가 섞이므로)."""
     if config["mode"] == "api":
         paging = {k: v for k, v in config["paging"].items() if k != "max_pages"}
         key = {"mode": "api", "request": config["request"], "response": config["response"], "paging": paging}
@@ -84,7 +95,10 @@ def digest(config):
     else:  # 웹페이지: 최대 쪽 수·기다리기·robots·보이기는 받은 내용을 바꾸지 않는다.
         web = config["web"]
         key = {"mode": "web", "url": web["url"], "items": web["items"], "fields": web["fields"], "paging": {k: v for k, v in web["paging"].items() if k != "max_pages"}}
-    return hashlib.sha256(json.dumps(key, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    text = json.dumps(key, sort_keys=True, ensure_ascii=False)
+    if any(m[3] for m in req.PLACE.finditer(text)):
+        text += today()
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
 def read_record(path):
@@ -119,6 +133,11 @@ def snapshot():
     return found
 
 
+def lock_of(config):
+    """이 구성의 결과 파일에 대한 잠금 파일 경로(결과 경로가 열쇠). 같은 결과 파일에 두 곳이 쓰지 않게 start·start_load가 잡는다."""
+    return filelock.lock_path("collect:" + os.path.normcase(os.path.abspath(output_path(config))))
+
+
 def running():
     thread = current["thread"]
     return thread is not None and thread.is_alive()
@@ -150,16 +169,22 @@ def start(config, password=""):
     if shutil.disk_usage(path.parent).free < MIN_FREE:
         raise ValueError(f"디스크 공간이 모자랍니다(적어도 {MIN_FREE // 1024 // 1024}MB가 필요합니다).")
     load_job.ready(config)
-    found = parts(path)
-    record = read_record(found["record"])
-    resumed = bool(record and record.get("hash") == digest(config))
-    if not resumed:
-        if record is not None or found["part"].exists() or found["out"].exists():
-            clean(found)
-        record = {"hash": digest(config), "mode": config["mode"], "done": [], "rows": 0, "bytes": 0}
-        write_record(found["record"], record)
-    launch(config, env, path, found, record, password, pages=len(record["done"]) if config["mode"] != "file" else 0, rows=record.get("rows", 0),
-           bytes=record.get("bytes", 0), total_bytes=record.get("size"), message="이어 받습니다." if resumed else "", group=group)
+    found, lock = parts(path), lock_of(config)
+    if not filelock.hold(lock):
+        raise Busy(BUSY)
+    try:
+        record = read_record(found["record"])
+        resumed = bool(record and record.get("hash") == digest(config))
+        if not resumed:
+            if record is not None or found["part"].exists() or found["out"].exists():
+                clean(found)
+            record = {"hash": digest(config), "mode": config["mode"], "done": [], "rows": 0, "bytes": 0}
+            write_record(found["record"], record)
+        launch(config, env, path, found, record, password, lock=lock, pages=len(record["done"]) if config["mode"] != "file" else 0, rows=record.get("rows", 0),
+               bytes=record.get("bytes", 0), total_bytes=record.get("size"), message="이어 받습니다." if resumed else "", group=group)
+    except BaseException:
+        filelock.let_go(lock)
+        raise
     return resumed
 
 
@@ -176,30 +201,39 @@ def start_load(config, password=""):
     if not path.is_file():
         raise ValueError("적재할 결과 파일이 없습니다. 먼저 수집하세요.")
     load_job.ready(config)
-    launch(config, {}, path, None, None, password, phase="적재 중", output=str(path))
+    lock = lock_of(config)
+    if not filelock.hold(lock):
+        raise Busy(BUSY)
+    try:
+        launch(config, {}, path, None, None, password, lock=lock, phase="적재 중", output=str(path))
+    except BaseException:
+        filelock.let_go(lock)
+        raise
 
 
-def launch(config, env, path, found, record, password, **shown):
-    """상태를 처음으로 돌리고(shown으로 고친 칸만 다르게) 작업 스레드를 띄운다."""
+def launch(config, env, path, found, record, password, lock=None, **shown):
+    """상태를 처음으로 돌리고(shown으로 고친 칸만 다르게) 작업 스레드를 띄운다. lock은 작업이 끝날 때(work의 finally) 푼다."""
     halt = threading.Event()
     current.update(halt=halt, balancer=None, hide=req.hidden(env) + ([password] if password else []))
     update(**{**IDLE, "running": True, "phase": "받는 중", "mode": config["mode"], "started": time.time(), **shown})
-    thread = threading.Thread(target=work, args=(config, env, path, found, record, halt, password), daemon=True)
+    thread = threading.Thread(target=work, args=(config, env, path, found, record, halt, password, lock), daemon=True)
     current["thread"] = thread
     thread.start()
 
 
-def work(config, env, path, found, record, halt, password):
-    """받기(record가 None이면 건너뜀) → 결과 파일이 있고 적재할 곳이 있으면 적재. 적재가 실패해도 결과 파일은 남는다."""
+def work(config, env, path, found, record, halt, password, lock=None):
+    """받기(record가 None이면 건너뜀) → 결과 파일이 있고 적재할 곳이 있으면 적재. 적재가 실패해도 결과 파일은 남는다.
+    받기가 결과 파일을 새로 만들지 않았으면(받은 기록이 0건) 옛 결과 파일은 기록도 적재도 하지 않는다."""
     try:
+        made = record is None  # 적재만 할 때는 있는 결과 파일을 쓴다
         if record is not None:
-            {"api": run_api, "file": run_file, "web": collect_web.run_web}[config["mode"]](config, env, path, found, record, halt)
-            if path.exists():
+            made = RUNNERS[config["mode"]](config, env, path, found, record, halt)
+            if made:
                 uploads.log_file(path, load_job.total_rows(path))  # 업로드 기록: 저장한 결과 파일
-        if config["load"]["target"] != "file" and path.exists():
+        if config["load"]["target"] != "file" and made:
             update(phase="적재 중", output=str(path), wait="")
             load_job.run(config, path, password, halt, update)
-        update(phase="끝", output=str(path) if path.exists() else "", wait="")
+        update(phase="끝", output=str(path) if made else "", wait="")
     except Halt as e:
         update(phase="실패" if e.failed else "멈춤", **({"error": str(e)} if e.failed else {"message": str(e)}), wait="")
     except Exception as e:
@@ -211,6 +245,8 @@ def work(config, env, path, found, record, halt, password):
             balancer = current["balancer"]
             if balancer is not None:
                 status.update(requests=balancer.sent, failures=balancer.failures, concurrency=balancer.limit)
+            if lock is not None:  # 끝났다고 알리기 전에 푼다(알린 직후 다시 시작해도 잠겨 있지 않게)
+                filelock.let_go(lock)
             status.update(running=False, elapsed=round(time.time() - status["started"], 1))
         current["hide"] = []  # 비밀번호·env 값은 작업이 끝나면 버린다.
 
@@ -374,6 +410,7 @@ def run_api(config, env, path, found, record, halt):
                 seen.add(value)
                 order.append(value)
         cursor, url = record.get("cursor", ""), record.get("next")
+        home = collect_http.host_of(req.build(config["request"], context(config, env, 0))["url"])  # 처음 요청의 호스트
         i = len(record["done"])
         while i < paging["max_pages"]:
             if paging["kind"] == "next_url" and i > 0 and not url:
@@ -392,6 +429,8 @@ def run_api(config, env, path, found, record, halt):
             else:
                 nxt = req.extract(data, paging["next_path"]) if paging["next_path"] else link_next(reply)
                 nxt = None if nxt is None else urljoin(reply.url, str(nxt))
+                if nxt is not None and collect_http.host_of(nxt) != home:  # 인증 헤더를 다른 서버로 보내지 않는다
+                    raise Halt(f"다음 주소가 처음 요청과 다른 호스트({urlsplit(nxt).hostname})를 가리켜 멈췄습니다. 믿을 수 있는 주소인지 확인하세요.")
                 end = not rows or nxt is None or nxt in seen
                 more["next"] = nxt
             total = record.get("total")
@@ -402,7 +441,7 @@ def run_api(config, env, path, found, record, halt):
             if end:
                 break
             cursor, url, i = more.get("cursor") or "", more.get("next"), i + 1
-    finish_api(config, path, found, record)
+    return finish_api(config, path, found, record)
 
 
 # ---------- 파일 ----------
@@ -535,7 +574,7 @@ def run_file(config, env, path, found, record, halt):
         piece = max(1, math.ceil(size / spec["chunks"]))
         todo = [[s + piece * k, min(e, s + piece * (k + 1))] for s, e in gaps(record["done"], size) for k in range(math.ceil((e - s) / piece))]
         errors, quit = [], threading.Event()
-        if_range = info["etag"] or info["modified"]
+        validator = if_range(info["etag"], info["modified"])
 
         def chunk(start, end):
             def attempt():
@@ -544,7 +583,7 @@ def run_file(config, env, path, found, record, halt):
                 position = next((max(s, start) for s, e in left if e > start and s < end), end)
                 if position >= end:
                     return Reply(206, [], b"", info["url"])
-                headers = sent["headers"] + [["Range", f"bytes={position}-{end - 1}"]] + ([["If-Range", if_range]] if if_range else [])
+                headers = sent["headers"] + [["Range", f"bytes={position}-{end - 1}"]] + ([["If-Range", validator]] if validator else [])
                 reply, url = collect_http.open_url("GET", info["url"], headers, None, timeout, hide)
                 with reply:
                     if reply.status == 200:  # 파일이 바뀌었거나 범위를 더는 받지 않음: 다음에는 처음부터
@@ -581,7 +620,12 @@ def run_file(config, env, path, found, record, halt):
     got = raw.stat().st_size
     if info.get("size") is not None and got != info["size"]:
         raise Halt(f"받은 크기({got:,}바이트)가 서버가 알려 준 크기({info['size']:,}바이트)와 다릅니다. 다시 시작하세요.")
-    finish_file(config, path, found, info)
+    return finish_file(config, path, found, info)
+
+
+def if_range(etag, modified):
+    """If-Range에 보낼 값: 강한 ETag, 약한 ETag(W/)면 Last-Modified(약한 것은 If-Range에 쓸 수 없다). 없으면 None."""
+    return etag if etag and not etag.startswith("W/") else modified
 
 
 def output_kind(config, url, content_type, head=b""):
@@ -642,6 +686,7 @@ def finish_file(config, path, found, info):
         scratch.remove(folder)
     replace(found, path)
     update(rows=rows)
+    return True
 
 
 def estimate(config):
@@ -673,3 +718,6 @@ def estimate(config):
     if note:
         found["load_note"] = note
     return found
+
+
+RUNNERS = {"api": run_api, "file": run_file, "web": collect_web.run_web}  # 방식 → 받기. 결과 파일을 새로 만들었으면 True

@@ -151,10 +151,8 @@ def item_of(data, name):
 def write(data):
     """사용 기록을 임시 파일에 쓴 뒤 바꿔치기한다. 바꾸기 전에 원래 파일을 .bak으로 남긴다(깨진 기록은 .bak으로 되살리지 않고 한도를 다 쓴 것으로 본다)."""
     path = settings.PATH.parent / USAGE
-    temp = path.with_name(USAGE + ".new")
-    temp.write_text(json.dumps(data), encoding="utf-8")
     settings.backup(path)
-    os.replace(temp, path)
+    settings.write_atomic(path, data)
 
 
 def counts(item, group, now):

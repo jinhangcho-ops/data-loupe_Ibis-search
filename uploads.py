@@ -9,6 +9,7 @@ import threading
 import uuid
 from pathlib import Path
 
+import filelock
 import settings
 
 FILE = "uploads.json"
@@ -35,7 +36,7 @@ def entries():
 
 def put(entry):
     """기록 하나를 넣거나(같은 id면) 바꾼다. 맨 앞에 둔다."""
-    with lock:
+    with lock, filelock.guarded("uploads.lock"):  # 프로그램 창과 Windows 예약 작업이 함께 읽고 쓴다
         items = [e for e in entries() if e["id"] != entry["id"]]
         settings.write(FILE, {"entries": ([entry] + items)[:MAX_ENTRIES]})
     return entry
@@ -43,7 +44,7 @@ def put(entry):
 
 def forget(entry_id):
     """기록 하나를 목록에서 뺀다(데이터는 건드리지 않는다)."""
-    with lock:
+    with lock, filelock.guarded("uploads.lock"):
         items = entries()
         settings.write(FILE, {"entries": [e for e in items if e["id"] != entry_id]})
 

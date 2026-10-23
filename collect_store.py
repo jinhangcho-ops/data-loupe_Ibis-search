@@ -32,9 +32,7 @@ current = {"thread": None, "halt": threading.Event(), "balancer": None, "hide": 
 
 def write_record(path, record):
     """진행 기록을 임시 파일에 쓴 뒤 바꿔치기한다(쓰는 중에 꺼져도 기록이 반쯤 깨지지 않게)."""
-    temp = path.with_name(path.name + ".new")
-    temp.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
-    os.replace(temp, path)
+    settings.write_atomic(path, record)
 
 
 def keep_record(found, record, now=False):
@@ -156,7 +154,7 @@ def duck():
 
 
 def finish_api(config, path, found, record):
-    """받은 쪽 파일들을 하나의 결과 파일로 바꾼다(타입은 전체를 보고 정함, 중복 제거)."""
+    """받은 쪽 파일들을 하나의 결과 파일로 바꾼다(타입은 전체를 보고 정함, 중복 제거). 결과 파일을 새로 만들었으면 True, 받은 기록이 없어 만들지 않았으면 False."""
     update(phase="바꾸는 중", wait="")
     end = record.get("end")
     files = [found["part"] / f"{i:07d}.jsonl" for i in sorted(record["done"]) if end is None or i < end]
@@ -164,7 +162,7 @@ def finish_api(config, path, found, record):
     if not files:
         clean(found)
         update(message="받은 기록이 없어 결과 파일을 만들지 않았습니다.")
-        return
+        return False
     types = {name: req.column_type(record["kinds"].get(name, [])) for name in record["columns"]}
     con, folder = duck()
     try:
@@ -176,6 +174,7 @@ def finish_api(config, path, found, record):
         scratch.remove(folder)
     replace(found, path)
     update(rows=rows)
+    return True
 
 
 def deduped(table, columns, rename=None):

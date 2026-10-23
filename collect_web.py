@@ -322,7 +322,7 @@ class Walk:
 
 
 def run_web(config, env, path, found, record, halt):
-    """웹페이지 작업. 받은 쪽은 API 모드와 같은 모양으로 .part 폴더에 두고, 끝나면 같은 방법으로 결과 파일을 만든다."""
+    """웹페이지 작업. 받은 쪽은 API 모드와 같은 모양으로 .part 폴더에 두고, 끝나면 같은 방법으로 결과 파일을 만든다(만들었으면 True)."""
     web = config["web"]
     found["part"].mkdir(exist_ok=True)
     for key, empty in (("columns", []), ("kinds", {}), ("rename", {}), ("sigs", {})):
@@ -338,4 +338,4 @@ def run_web(config, env, path, found, record, halt):
                 Walk(config, page, found, record, halt, balancer).run()
         except collect_browser.Gone:
             raise Halt(CLOSED) from None
-    collect_store.finish_api(config, path, found, record)
+    return collect_store.finish_api(config, path, found, record)

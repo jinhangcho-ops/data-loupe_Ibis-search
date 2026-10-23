@@ -4,14 +4,15 @@
 import hashlib
 import json
 import math
-import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import load_kafka
 import load_table
+import settings
+import source
 import uploads
-from collect_http import STOPPED, Halt
+from collect_http import HIDE, STOPPED, Halt
 
 TARGETS = {"table": load_table, "kafka": load_kafka}
 BACKOFF = 1.0  # 실패한 묶음을 다시 넣기 전에 기다리는 시간(초). 시도마다 두 배, MAX_BACKOFF까지.
@@ -66,13 +67,16 @@ def read_record(path):
 
 def write_record(path, record):
     """진행 기록을 임시 파일에 쓴 뒤 바꿔치기한다. 쓰는 중에 꺼져 기록이 깨지면 처음부터 다시 넣어 행이 두 번 들어가기 때문이다."""
-    target = record_path(path)
-    temp = target.with_name(target.name + ".new")
-    temp.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
-    os.replace(temp, target)
+    settings.write_atomic(record_path(path), record)
 
 
 # ---------- 결과 파일 읽기 ----------
+
+def file_stamp(path):
+    """결과 파일의 크기·수정 시각(ns). 적재 기록에 적어 두었다가 같은 파일일 때만 이어 넣는다."""
+    found = Path(path).stat()
+    return [found.st_size, found.st_mtime_ns]
+
 
 def total_rows(path):
     """결과 파일의 행 수. Parquet은 파일 정보로 알고, CSV는 다 읽어 보기 전에는 모른다(None)."""
@@ -152,9 +156,10 @@ def run(config, path, password, halt, note):
     load = config["load"]
     module, size = TARGETS[load["target"]], load["batch"]
     sign = signature(config)
-    new_record = lambda: {"sign": sign, "rows": 0, "batches": 0, "inserted": 0, "skipped": 0, "failures": 0}  # 처음부터 넣는 기록
+    stamp = file_stamp(path)
+    new_record = lambda: {"sign": sign, "file": stamp, "rows": 0, "batches": 0, "inserted": 0, "skipped": 0, "failures": 0}  # 처음부터 넣는 기록
     record = read_record(path)
-    resumed = bool(record and record.get("sign") == sign)
+    resumed = bool(record and record.get("sign") == sign and record.get("file", stamp) == stamp)  # 결과 파일이 그사이 바뀌었으면 처음부터
     if not resumed:
         record = new_record()
     if load["target"] == "table" and load["table"]["load_id"]:
@@ -210,11 +215,11 @@ def run(config, path, password, halt, note):
                 sink.close()
     except Halt as e:
         if ledger:
-            ledger.end("failed" if e.failed else "stopped", str(e) if e.failed else "")
+            ledger.end("failed" if e.failed else "stopped", source.mask(str(e), [password], HIDE) if e.failed else "")
         raise
     except Exception as e:
         if ledger:
-            ledger.end("failed", str(e) or type(e).__name__)
+            ledger.end("failed", source.mask(str(e), [password], HIDE) or type(e).__name__)
         raise
     ledger.end("done")
     view["total"] = record["rows"]

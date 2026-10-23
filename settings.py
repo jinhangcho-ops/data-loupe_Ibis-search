@@ -3,6 +3,8 @@ import json
 import os
 import re
 import shutil
+import threading
+import time
 from pathlib import Path
 
 PATH = Path(os.environ.get("APPDATA") or Path.home()) / "ibis_search" / "settings.json"
@@ -80,12 +82,32 @@ def backup(path):
         shutil.copyfile(path, backup_of(path))
 
 
+REPLACE_TRIES = 10  # 다른 프로세스가 바꿀 파일을 읽는 중이면 바꿔치기가 거부될 수 있어(Windows) 잠깐씩 기다리며 다시 한다.
+
+
+def write_atomic(path, data):
+    """data를 JSON으로 path 옆 임시 파일에 쓴 뒤 바꿔치기한다(쓰는 중에 꺼져도 path가 반쯤 깨지지 않는다). 임시 파일 이름은 프로세스·스레드마다 달라 함께 써도 부딪치지 않는다."""
+    temp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.new")
+    try:
+        temp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        for tries in range(REPLACE_TRIES):
+            try:
+                os.replace(temp, path)
+                return
+            except PermissionError:
+                if tries == REPLACE_TRIES - 1:
+                    raise
+                time.sleep(0.02)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
 def write(name, data):
-    """설정 폴더에 name 파일로 data를 JSON으로 쓴다. 덮어쓰기 전에 원래 파일을 name.bak으로 남긴다."""
+    """설정 폴더에 name 파일로 data를 JSON으로 쓴다(임시 파일 → 바꿔치기). 덮어쓰기 전에 원래 파일을 name.bak으로 남긴다."""
     PATH.parent.mkdir(parents=True, exist_ok=True)
     path = PATH.parent / name
     backup(path)
-    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    write_atomic(path, data)
 
 
 def load():
