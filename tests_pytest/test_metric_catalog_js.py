@@ -1,4 +1,4 @@
-"""static/metric_catalog.js(지표 사전 화면)의 화면 없는 계산을 node로 돌려 본다. node가 없으면 건너뛴다.
+"""static/query/metric_catalog.js(지표 사전 화면)의 화면 없는 계산을 node로 돌려 본다. node가 없으면 건너뛴다.
 영역 묶기, 값 보이기(비율은 %), 검색 body에 기간 더하기, 서버로 보낼 빈칸, 맞춤 구절. 항목 자료는 서버 metric_catalog.catalog()를 그대로 쓴다."""
 import json
 import shutil
@@ -6,18 +6,18 @@ import subprocess
 
 import pytest
 
-import flow_app  # noqa: F401  server.CONSTANTS["flow"]
-import metric_catalog
-import server
+from query import flow_app  # noqa: F401  server.constants("query")["flow"]
+from metrics import metric_catalog
+from core import server
 from conftest import ROOT
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
 
 def run_node(tmp_path, body):
-    head = "globalThis.SERVER = {flow: %s};\n" % json.dumps(server.CONSTANTS["flow"], ensure_ascii=False)
+    head = "globalThis.SERVER = {flow: %s};\n" % json.dumps(server.constants("query")["flow"], ensure_ascii=False)
     script = tmp_path / "case.js"
-    script.write_text(head + "".join((ROOT / "static" / f).read_text(encoding="utf-8") for f in ("flow.js", "sentences.js", "metric_catalog.js")) + body, encoding="utf-8")
+    script.write_text(head + "".join(next((ROOT / "static").rglob(f)).read_text(encoding="utf-8") for f in ("flow.js", "sentences.js", "metric_catalog.js")) + body, encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0, done.stderr[-3000:]
     return json.loads(done.stdout.strip().splitlines()[-1])

@@ -4,8 +4,8 @@ import re
 
 import pytest
 
-import sentences as S
-import sql_funcs
+from query import sentences as S
+from core import sql_funcs
 
 EXPLORE_NAMES = {  # 대화에서 정한 탐색 틀 1~25
     1: "모든 데이터 보기", 2: "컬럼들만 보기", 3: "컬럼=값인 행의 컬럼들", 4: "값 목록 중 하나인 행", 5: "글자 포함·시작·끝", 6: "행 수", 7: "조건인 대상 수",

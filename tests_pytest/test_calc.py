@@ -28,8 +28,8 @@ def amt(o):
 
 
 def client(connect):
-    import server
-    from app import app
+    from core import server
+    from query.search_app import app
     c = app.test_client()
     c.get("/?key=" + server.KEY)
     assert c.post("/api/connect", json=connect).status_code == 200
@@ -123,7 +123,7 @@ def test_pivot(db):
 
 
 def test_pivot_too_many_values(db, monkeypatch):
-    import calc
+    from core import calc
     monkeypatch.setattr(calc, "MAX_PIVOT", 5)
     assert "5개보다 많아" in db("/api/pivot", pivot={"rows": ["store"], "column": "id", "how": "count"})["error"]
 
@@ -153,7 +153,7 @@ def test_file_connection_calcs_on_pc(files):
 
 
 def test_file_connection_too_big_for_pc(files, monkeypatch):
-    import held
+    from core import held
     monkeypatch.setattr(held, "MAX_ROWS", 5)
     assert "받지 않았습니다" in files(calcs=["누적합 amt 기준 id"], fresh=True)["error"]
 
@@ -180,8 +180,8 @@ def test_sqlite_asof_falls_back(folder, tmp_path):
 
 
 def test_longer_falls_back_to_union(tmp_path):
-    import calc
-    import source
+    from core import calc
+    from core import source
     from lazy import ibis
 
     def run():  # SQLite 연결은 만든 스레드에서만 쓸 수 있어 연결 스레드에서

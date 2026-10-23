@@ -5,11 +5,11 @@ import json
 import duckdb
 import pytest
 
-import metrics
-import my_metrics as mm
-import sentence_exec as ex
-import sentences
-import server
+from core import metric_file
+from metrics import my_metrics as mm
+from query import sentence_exec as ex
+from query import sentences
+from core import server
 
 COLS = {"id": "num", "uid": "text", "store": "text", "amt": "num", "day": "date", "tags": "array", "url": "text"}
 BASE = {"base": "ev", "joins": [], "periods": [], "conditions": [], "calcs": []}
@@ -18,10 +18,10 @@ SCOPE = {"key": "k", "label": "k", "table": "ev"}
 
 @pytest.fixture
 def c(folder, tmp_path):
-    import dash_app  # noqa: F401
-    import flow_app  # noqa: F401
-    import prep_app  # noqa: F401
-    from app import app
+    from dashboard import dash_app  # noqa: F401
+    from query import flow_app  # noqa: F401
+    from prep import prep_app  # noqa: F401
+    from query.search_app import app
     path = tmp_path / "x.duckdb"
     raw = duckdb.connect(str(path))
     raw.execute("""create table ev as select i::int as id, 'u' || (i % 4) as uid, case when i < 5 then 'A' when i < 9 then 'B' else 'C' end as store,
@@ -30,11 +30,11 @@ def c(folder, tmp_path):
     raw.execute("""create table jt as select 1::int as id, '{"k": "seven"}'::JSON as js""")
     raw.close()
     (tmp_path / "m.json").write_text(json.dumps({"metrics": {"클릭": {"numerator": {"agg": "count", "where": "store = A"}}, "노출": {"numerator": {"agg": "count"}}}}), encoding="utf-8")
-    metrics.save_file_path(str(tmp_path / "m.json"))
+    metric_file.save_file_path(str(tmp_path / "m.json"))
     client = app.test_client()
     client.get("/?key=" + server.KEY)
     assert client.post("/api/connect", json={"kind": "folder", "path": str(tmp_path), "file": str(path)}).status_code == 200
-    from dash_refresh import current_source
+    from core.dash_store import current_source
     SCOPE["key"] = current_source()["key"]  # 내 지표의 scope는 지금 연결의 열쇠여야 쓸 수 있다
     yield client
     client.post("/api/disconnect", json={})
@@ -177,7 +177,7 @@ def test_every_metric_template_has_a_case():
 
 
 def test_metric_definitions_are_given_when_one_definition_can_say_it(c):
-    import sentence_run as sr
+    from query import sentence_run as sr
     assert sr.compile("m09", {"값": "amt", "대상": "uid"}, BASE, COLS)["definition"]["denominator"]["agg"] == "count_distinct"
     assert sr.compile("m06", {"지표 A": "클릭", "지표 B": "노출"}, BASE, COLS)["definition"]["format"] == "percent"
     assert sr.compile("m07", {"지표 A": "클릭", "지표 B": "노출"}, BASE, COLS)["definition"] is None  # 빼기는 정의 한 개로 못 나타내서 요청으로만

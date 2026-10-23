@@ -9,8 +9,8 @@ from lazy import ibis
 
 
 def client(connect):
-    import server
-    from app import app
+    from core import server
+    from query.search_app import app
     c = app.test_client()
     c.get("/?key=" + server.KEY)
     assert c.post("/api/connect", json=connect).status_code == 200
@@ -61,7 +61,7 @@ def test_plan_keeps_duckdb_connection_open(folder, tmp_path):
 
 @pytest.mark.parametrize("dialect, words", [("oracle", "PLAN_TABLE"), ("MSSQL", "SHOWPLAN"), ("bigquery", "처리 용량")])
 def test_refused_dialects_explain_why(dialect, words):
-    import plan
+    from core import plan
     with pytest.raises(ValueError, match=words):
         plan.explain(None, "SELECT 1", dialect)
 
@@ -78,7 +78,7 @@ def test_file_connection_has_no_plan(folder, tmp_path):
 
 @pytest.mark.parametrize("dialect", ["mssql", "mysql", "postgres", "oracle", "snowflake", "sqlite", "bigquery", "duckdb"])
 def test_sort_keeps_native_null_order(dialect):
-    import parse
+    from core import parse
     t = ibis.table({"id": "int64"}, name="t")
     for desc in (False, True):  # Ibis가 빈 값을 뒤로 맞추려 붙이는 NULLS LAST·CASE WHEN이 없어야 인덱스로 정렬할 수 있다
         tail = ibis.to_sql(t.order_by(parse.native_key(t, t.id, desc, dialect)), dialect=dialect).upper().rpartition("ORDER BY")[2]
@@ -87,7 +87,7 @@ def test_sort_keeps_native_null_order(dialect):
 
 @pytest.mark.parametrize("dialect", ["mssql", "postgres", "mysql", "oracle", "sqlite", "bigquery"])
 def test_like_and_starts_shapes(dialect):
-    import parse
+    from core import parse
     t = ibis.table({"s": "string"}, name="t")
     where = lambda line: " ".join(ibis.to_sql(t.filter(parse.parse_one(line, t)), dialect=dialect).split()).upper().partition("WHERE")[2]
     assert "LIKE '%AB%'" in where("s like Ab") and "CONTAINS(" not in where("s like Ab")  # MSSQL의 전문 검색 CONTAINS가 아니다

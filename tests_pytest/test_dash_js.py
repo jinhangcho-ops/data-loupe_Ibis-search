@@ -6,9 +6,9 @@ import subprocess
 
 import pytest
 
-import dash_calc
-import dash_store
-import sql_funcs
+from dashboard import dash_calc
+from core import dash_store
+from core import sql_funcs
 from conftest import ROOT
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
@@ -264,8 +264,8 @@ console.log("ok");
 def test_dash_js(tmp_path):
     dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE, "aggs": list(dash_calc.AGGS)}, ensure_ascii=False)
     script = tmp_path / "dash_test.js"
-    script.write_text((ROOT / "static" / "board.js").read_text(encoding="utf-8") + (ROOT / "static" / "dash.js").read_text(encoding="utf-8")
-                      + (ROOT / "static" / "dash_cards.js").read_text(encoding="utf-8") + (ROOT / "static" / "dash_rules.js").read_text(encoding="utf-8")
+    script.write_text((ROOT / "static" / "core" / "board.js").read_text(encoding="utf-8") + (ROOT / "static" / "core" / "dash.js").read_text(encoding="utf-8")
+                      + (ROOT / "static" / "dashboard" / "dash_cards.js").read_text(encoding="utf-8") + (ROOT / "static" / "dashboard" / "dash_rules.js").read_text(encoding="utf-8")
                       + SCRIPT.replace("%(dash)s", json.dumps(dash, ensure_ascii=False)).replace("%(merge)s", json.dumps(json.dumps(list(sql_funcs.MERGE)))), encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr[-3000:]
@@ -277,7 +277,7 @@ OWN_CASES = [["day 2026-01-12 ~ 2026-02-02"], ["day 2026-01-01 ~ ", "day ~ 2026-
 
 def test_own_range_same_in_python_and_js(tmp_path):
     """dash_calc.own_range(서버)와 dash.js ownRange(화면)가 같은 입력에서 같은 기간·직전 기간을 낸다(열린 줄, 여러 줄, 거꾸로 된 줄, 없는 날, 기간 줄 없음)."""
-    import dash_calc
+    from dashboard import dash_calc
     want = []
     for periods in OWN_CASES:
         got = dash_calc.own_range({"source": {"body": {"periods": periods}}})
@@ -286,8 +286,8 @@ def test_own_range_same_in_python_and_js(tmp_path):
     dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE}, ensure_ascii=False)
     body = ("const assert = require('assert'); globalThis.SERVER = { dash: JSON.parse(%s), merge: [] };\nconst cases = %s;\n" % (json.dumps(dash, ensure_ascii=False), json.dumps(OWN_CASES, ensure_ascii=False))
             + "const got = cases.map(p => ownRange({ source: { body: { periods: p } } }));\nconsole.log(JSON.stringify(got));\n")
-    script.write_text((ROOT / "static" / "board.js").read_text(encoding="utf-8") + (ROOT / "static" / "dash.js").read_text(encoding="utf-8")
-                      + (ROOT / "static" / "dash_cards.js").read_text(encoding="utf-8") + (ROOT / "static" / "dash_rules.js").read_text(encoding="utf-8") + body, encoding="utf-8")
+    script.write_text((ROOT / "static" / "core" / "board.js").read_text(encoding="utf-8") + (ROOT / "static" / "core" / "dash.js").read_text(encoding="utf-8")
+                      + (ROOT / "static" / "dashboard" / "dash_cards.js").read_text(encoding="utf-8") + (ROOT / "static" / "dashboard" / "dash_rules.js").read_text(encoding="utf-8") + body, encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0, done.stderr[-3000:]
     assert json.loads(done.stdout.strip().splitlines()[-1]) == want

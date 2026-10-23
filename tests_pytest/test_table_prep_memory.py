@@ -1,5 +1,5 @@
 """테이블마다 마지막에 쓴 전처리를 기억했다가, 같은 테이블(같은 연결·스키마·이름)을 열면 돌려주는지."""
-import prep_app
+from prep import prep_app
 
 CONFIG = {"schema": "", "base": "orders", "edits": {"name": {"keep": True, "rename": "", "ops": {"trim": {}}}}, "copies": [], "drops": [], "filters": [],
           "dedupe": [], "sorts": [], "downcast": True, "target": {"kind": "file", "format": "parquet", "name": ""}}

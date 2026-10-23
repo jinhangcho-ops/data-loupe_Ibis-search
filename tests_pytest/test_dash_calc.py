@@ -7,9 +7,9 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import dash_calc
-import dash_store
-import server
+from dashboard import dash_calc
+from core import dash_store
+from core import server
 
 D = dt.date
 # 2026-01-05는 월요일. 1월 첫째 주(5~11일), 둘째 주(12~18일), 2월 2일(월)
@@ -92,9 +92,9 @@ def test_bad_series(t):
 
 @pytest.fixture
 def db(folder, tmp_path):
-    import dash_app  # noqa: F401  대시보드 라우트
-    import prep_app  # noqa: F401  전처리 라우트
-    from app import app
+    from dashboard import dash_app  # noqa: F401  대시보드 라우트
+    from prep import prep_app  # noqa: F401  전처리 라우트
+    from query.search_app import app
     raw = duckdb.connect(str(tmp_path / "s.duckdb"))
     raw.execute("create table orders (day date, store varchar, amt double, uid varchar)")
     raw.executemany("insert into orders values (?, ?, ?, ?)", [tuple(r) for r in DF.iter_rows()])
@@ -162,10 +162,10 @@ def test_add_card_fills_connection_without_account(db):
 
 
 def test_compute_metric_card(db, tmp_path):
-    import metrics
+    from core import metric_file
     path = tmp_path / "m.yaml"
     path.write_text("metrics:\n  매출:\n    numerator: {agg: sum, column: amt}\n  A비율:\n    format: percent\n    numerator: {agg: count, where: store = A}\n    denominator: {agg: count}\n", encoding="utf-8")
-    metrics.save_file_path(str(path))
+    metric_file.save_file_path(str(path))
     one = compute(db, card=card("metric", body={"base": "orders", "names": ["매출", "A비율"]}))["data"]["values"]
     assert one["labels"] == ["전체"] and [s["name"] for s in one["series"]] == ["매출", "A비율 (%)"]
     assert one["series"][0]["values"] == [155] and one["series"][1]["values"] == [round(5 / 7 * 100, 6)]  # 비율은 %로(×100)
@@ -297,10 +297,10 @@ def test_targets_file_routes_and_named_target(db, tmp_path):
 
 
 def test_metric_kpi_has_pair_amounts(db, tmp_path):
-    import metrics
+    from core import metric_file
     path = tmp_path / "m.yaml"
     path.write_text("metrics:\n  A비율:\n    format: percent\n    numerator: {agg: count, where: store = A}\n    denominator: {agg: count}\n", encoding="utf-8")
-    metrics.save_file_path(str(path))
+    metric_file.save_file_path(str(path))
     data = compute(db, card=value_card("kpi", SUM, names=["A비율"]))["data"]
     assert data["values"]["scalar"] == [pytest.approx(5 / 7)] and data["values"]["format"] == "percent"
     assert data["pair"] == {"num_label": "개수 [store = A]", "num": 5, "den_label": "개수", "den": 7}

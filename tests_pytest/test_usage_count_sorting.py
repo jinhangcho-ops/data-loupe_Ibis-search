@@ -1,5 +1,5 @@
 """사용 횟수: 연결과 저장한 검색을 많이 쓴 순(같으면 최근에 쓴 순)으로 보이는지."""
-import use_counts
+from core import use_counts
 
 
 def test_ranked_by_count_then_recent(folder):

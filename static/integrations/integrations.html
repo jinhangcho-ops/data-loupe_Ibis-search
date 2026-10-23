@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ibis 연동</title>
+<!--include core/head.html-->
+<style>
+  .hub { flex:1; min-height:0; overflow:auto; padding:22px 28px 40px; }
+  .hub h1 { margin:0 0 4px; font-size:24px; letter-spacing:-.01em; }
+  .hub > p { margin:0 0 18px; color:var(--muted); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap:16px; align-items:start; }
+  .svc .head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .svc .head h3 { margin:0; }
+  .tag { font-size:11.5px; padding:2px 8px; border-radius:999px; border:1px solid var(--accent-line); color:var(--accent); }
+  .state { margin-left:auto; font-size:12.5px; color:var(--muted); }
+  .state.on { color:var(--ok); font-weight:600; }
+  .svc .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .svc label { display:block; margin-top:6px; }
+  .svc .two { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .dests { margin:8px 0 0; padding:0; list-style:none; }
+  .dests li { padding:4px 0; border-bottom:1px solid var(--line); font-size:13px; }
+  #err-hub:empty { display:none; }
+</style>
+</head>
+<body class="app">
+<!--include core/status.html-->
+<div class="hub">
+  <h1>연동</h1>
+  <p>다른 앱·서비스와 잇는 곳입니다. 서비스마다 하는 일(보내기·받기·가져오기·묻기)이 다르고, 토큰·키는 서비스마다 고른 방식으로만 둡니다.</p>
+  <div class="err" id="err-hub"></div>
+  <div class="grid">
+    <!-- 보내기: 등록한 보낼 곳(Slack·Notion·웹훅). 관리는 상태 줄의 [보낼 곳] 패널 -->
+    <section class="card svc" id="svc-send">
+      <div class="head"><h3>보내기</h3><span class="tag">보내기</span><span class="state" id="send-state"></span></div>
+      <div class="hint">알림, 집계 표, 차트를 보냅니다. 종류: <span id="send-kinds"></span></div>
+      <ul class="dests" id="send-list"></ul>
+      <div class="row"><button id="send-manage">보낼 곳 관리</button></div>
+    </section>
+
+    <section class="card svc" id="svc-bot">
+      <div class="head"><h3>Slack 봇</h3><span class="tag">받기</span><span class="state" id="bot-hub-state"></span></div>
+      <div class="hint">Slack의 <b>/ibis</b> 명령으로 저장한 검색·지표를 묻고, 질문으로 SQL을 만들어 받습니다(SQL은 실행하지 않음).</div>
+      <div class="row"><button id="bot-manage">봇 설정</button></div>
+    </section>
+
+    <section class="card svc" id="svc-ga4">
+      <div class="head"><h3>Google Analytics 4</h3><span class="tag">가져오기</span><span class="state" id="ga4-state"></span></div>
+      <div class="hint">GA4 보고서(측정기준·측정항목·기간)를 받아 Parquet 파일로 저장하고 쿼리·분석으로 엽니다. 서비스 계정 JSON은 경로만 저장합니다.</div>
+      <label><div class="hint">서비스 계정 JSON 경로</div><input id="ga4-key" class="code" placeholder="C:\keys\ga4-reader.json"></label>
+      <label><div class="hint">GA4 속성 ID (숫자)</div><input id="ga4-prop" placeholder="123456789"></label>
+      <div class="two">
+        <label><div class="hint">시작</div><input id="ga4-start" placeholder="28daysAgo"></label>
+        <label><div class="hint">끝</div><input id="ga4-end" placeholder="yesterday"></label>
+      </div>
+      <label><div class="hint">측정기준 (쉼표로, 9개까지)</div><input id="ga4-dims" placeholder="date, country"></label>
+      <label><div class="hint">측정항목 (쉼표로, 10개까지)</div><input id="ga4-mets" placeholder="activeUsers, sessions"></label>
+      <label><div class="hint">저장할 파일 (.parquet, 덮어쓰지 않음)</div><input id="ga4-out" class="code" placeholder="C:\data\ga4_daily.parquet"></label>
+      <div class="row"><button id="ga4-save">저장</button><button id="ga4-check" class="ghost" title="보고서를 받지 않고 인증과 속성 접근만 확인합니다">연동 확인</button>
+        <button id="ga4-fetch" class="btn p">가져오기</button><button id="ga4-open" class="ghost hidden">쿼리로 열기</button></div>
+      <div class="err" id="ga4-msg"></div>
+    </section>
+
+    <section class="card svc" id="svc-llm">
+      <div class="head"><h3>LLM</h3><span class="tag">묻기</span><span class="state" id="llm-state"></span></div>
+      <div class="hint">질문으로 SQL을 만들 때 묻는 곳입니다. env 파일(LLM_PROVIDER·LLM_API_KEY·LLM_MODEL)의 경로만 저장하고 키는 물을 때마다 읽습니다. 데이터 값은 보내지 않습니다.</div>
+      <label><div class="hint">LLM env 파일 경로</div><input id="hub-llm-env" class="code" placeholder="C:\keys\llm.env"></label>
+      <div class="row"><button id="hub-llm-read">읽기</button></div>
+      <div class="err" id="llm-msg"></div>
+    </section>
+
+    <section class="card svc">
+      <div class="head"><h3>업로드 기록</h3></div>
+      <div class="hint">수집·GA4로 저장한 파일과 DB 테이블·Kafka에 적재한 것의 크기·범위, 지울 때 쓸 명령은 수집 화면의 [업로드 기록]에 있습니다.</div>
+      <div class="row"><a class="btn" href="/collect#uploads">업로드 기록 보기</a></div>
+    </section>
+
+    <section class="card svc">
+      <div class="head"><h3>새 서비스 더하기</h3></div>
+      <div class="hint">서비스 하나는 <code>adapters/</code>의 파일 하나입니다. 보내기 어댑터(label·fields·send·check)는 <code>adapters/__init__.py</code>의 SENDERS에 넣으면 보낼 곳 종류와 이 화면에 바로 나옵니다. 가져오기·받기는 어댑터와 카드 하나를 더합니다.</div>
+    </section>
+  </div>
+</div>
+<!--include core/connect.html-->
+<!--include core/dash_refresh.html-->
+<!--include core/notify.html-->
+<script src="/static/core/common.js"></script>
+<script src="/static/core/dash_refresh.js"></script>
+<script>
+const ABIL = {};
+async function loadHub() {
+  try {
+    const d = await api("/api/integrations");
+    Object.assign(ABIL, d.abilities);
+    const by = Object.fromEntries(d.services.map(s => [s.key, s]));
+    const senders = d.services.filter(s => s.abilities.includes("send"));
+    $("send-kinds").textContent = senders.map(s => s.label).join(", ");
+    $("send-state").textContent = senders.some(s => s.ready) ? "쓸 수 있음" : "등록 안 됨";
+    $("send-state").className = "state" + (senders.some(s => s.ready) ? " on" : "");
+    $("send-list").replaceChildren(...senders.map(s => el("li", { textContent: `${s.label}: ${s.status}` })));
+    for (const [key, id] of [["slack_bot", "bot-hub-state"], ["ga4", "ga4-state"], ["llm", "llm-state"]]) {
+      $(id).textContent = by[key].status;
+      $(id).className = "state" + (by[key].ready ? " on" : "");
+    }
+    say("err-hub", "");
+  } catch (e) { say("err-hub", e.message); }
+}
+$("send-manage").onclick = () => $("dest-open").click();
+$("bot-manage").onclick = () => { $("dest-open").click(); setTimeout(() => $("bot-keep").scrollIntoView({ block: "center" }), 50); };
+document.addEventListener("destinations", loadHub);  // 보낼 곳을 고치면 상태도
+$("dest-close").addEventListener("click", loadHub);
+
+// GA4
+const GA4_FIELDS = { key_path: "ga4-key", property: "ga4-prop", start: "ga4-start", end: "ga4-end", dimensions: "ga4-dims", metrics: "ga4-mets", output: "ga4-out" };
+const ga4Body = () => Object.fromEntries(Object.entries(GA4_FIELDS).map(([k, id]) => [k, $(id).value.trim()]));
+const showGa4 = d => Object.entries(GA4_FIELDS).forEach(([k, id]) => $(id).value = d[k] ?? "");
+let ga4Output = "";
+$("ga4-save").onclick = () => busy($("ga4-save"), async () => {
+  try { showGa4(await api("/api/ga4", ga4Body())); say("ga4-msg", "저장했습니다", true); loadHub(); } catch (e) { say("ga4-msg", e.message); }
+});
+$("ga4-check").onclick = () => busy($("ga4-check"), async () => {
+  try { await api("/api/ga4", ga4Body()); say("ga4-msg", (await api("/api/ga4/check", {})).message, true); } catch (e) { say("ga4-msg", e.message); }
+});
+$("ga4-fetch").onclick = () => busy($("ga4-fetch"), async () => {
+  try {
+    await api("/api/ga4", ga4Body());
+    const d = await api("/api/ga4/fetch", {});
+    ga4Output = d.path;
+    $("ga4-open").classList.remove("hidden");
+    say("ga4-msg", `${d.rows.toLocaleString()}행을 저장했습니다: ${d.path} (컬럼: ${d.columns.join(", ")})`, true);
+  } catch (e) { say("ga4-msg", e.message); }
+});
+$("ga4-open").onclick = () => busy($("ga4-open"), async () => {
+  try { await api("/api/collect/open", { path: ga4Output }); location.href = "/search"; } catch (e) { say("ga4-msg", e.message); }
+});
+api("/api/ga4").then(showGa4).catch(() => {});
+
+// LLM
+$("hub-llm-read").onclick = () => busy($("hub-llm-read"), async () => {
+  try { const d = await api("/api/llm", { env: $("hub-llm-env").value.trim() }); $("hub-llm-env").value = d.env; say("llm-msg", "읽었습니다: " + d.llm, true); loadHub(); }
+  catch (e) { say("llm-msg", e.message); }
+});
+api("/api/llm").then(d => $("hub-llm-env").value = d.env).catch(() => {});
+loadHub();
+resume();
+</script>
+</body>
+</html>

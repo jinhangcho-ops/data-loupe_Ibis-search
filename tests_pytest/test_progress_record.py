@@ -8,8 +8,8 @@ import pytest
 
 @pytest.fixture
 def job(tmp_path, monkeypatch):
-    import collect_job
-    import collect_store
+    from collect import collect_job
+    from collect import collect_store
     clock = [1000.0]
     monkeypatch.setattr(collect_store.time, "monotonic", lambda: clock[0])
     writes = []
@@ -60,8 +60,8 @@ def test_record_write_never_leaves_a_half_file(tmp_path, monkeypatch):
     """적재·수집 진행 기록은 임시 파일에 쓴 뒤 바꿔치기한다: 바꾸기 전에 꺼져도 이전 기록이 그대로 읽힌다(깨진 기록이면 처음부터 다시 넣어 행이 두 번 들어간다)."""
     import os
 
-    import collect_store
-    import load_job
+    from collect import collect_store
+    from collect import load_job
     out = tmp_path / "out.parquet"
     load_job.write_record(out, {"rows": 100, "sign": "s"})
     collect_store.write_record(tmp_path / "rec.json", {"done": [1]})

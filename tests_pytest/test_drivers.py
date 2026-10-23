@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-import drivers
-import server
+from core import drivers
+from core import server
 
 ROOT = Path(__file__).resolve().parent.parent
 

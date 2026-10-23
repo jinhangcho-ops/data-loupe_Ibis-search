@@ -7,8 +7,8 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import sql_exec
-import sql_funcs as S
+from core import sql_exec
+from core import sql_funcs as S
 
 # ev: 묶음 a(3행) b(4행) c(1행). val·other는 숫자, txt는 글자(빈 값 하나), flag는 참거짓, d는 하루씩 늘어나는 날짜.
 EV = [(1, "a", 1.0, 2.0, "x", True), (2, "a", 2.0, 4.0, " y ", True), (3, "a", 3.0, 6.0, "x", False), (4, "b", 10.0, 1.0, "p-q", True),
@@ -322,7 +322,7 @@ def test_raw_sql_expression(ev):
         S.raw_expr(files, "z", "a + 1")
     with pytest.raises(sql_exec.SecurityViolationError):  # 파일 연결도 PC 사본에 보내기 전에 검사한다
         S.raw_expr(files, "z", "getenv('PATH')")
-    from source import compiles
+    from core.source import compiles
     placeholder = S.local_only(files, "z")
     assert list(placeholder.columns) == ["a", "z"] and not compiles(placeholder)  # 계획으로 못 바뀌어야 PC 사본으로 간다
 

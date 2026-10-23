@@ -5,7 +5,7 @@ import json
 import polars as pl
 import pytest
 
-import source
+from core import source
 
 ROWS = [{"지역": "가", "값": 1}, {"지역": "나", "값": 2}]
 

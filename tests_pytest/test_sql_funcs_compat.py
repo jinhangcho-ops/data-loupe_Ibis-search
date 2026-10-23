@@ -6,12 +6,12 @@ import duckdb
 import pytest
 from lazy import ibis
 
-import calc
-import dash_calc
-import metrics
-import prep
-import prep_derive
-import result
+from core import calc
+from dashboard import dash_calc
+from core import metric_file
+from prep import prep_expr
+from core import prep_derive
+from core import result
 
 ROWS = [(1, "a", 1.0, "x"), (2, "a", 2.0, "y"), (3, "a", 3.0, "x"), (4, "b", 10.0, "p"), (5, "b", 20.0, "p"), (6, "c", 5.0, None)]
 
@@ -28,24 +28,24 @@ def t():
 # ---------- 지표 ----------
 
 def test_metric_parts_keep_their_old_shape():
-    assert metrics.part("p", {"agg": "nunique", "column": "user"}) == {"agg": "nunique", "column": "user", "where": []}  # opts가 없으면 예전 모양 그대로
-    assert metrics.part("p", {"agg": "count"}) == {"agg": "count", "column": None, "where": []}
-    assert metrics.AGGS[:6] == ("count", "sum", "mean", "min", "max", "nunique") and metrics.AGG_NAMES["nunique"] == "고유 개수"
-    assert metrics.AGG_NAMES["count"] == "개수" and metrics.AGG_NAMES["median"] == "중앙값"
+    assert metric_file.part("p", {"agg": "nunique", "column": "user"}) == {"agg": "nunique", "column": "user", "where": []}  # opts가 없으면 예전 모양 그대로
+    assert metric_file.part("p", {"agg": "count"}) == {"agg": "count", "column": None, "where": []}
+    assert metric_file.AGGS[:6] == ("count", "sum", "mean", "min", "max", "nunique") and metric_file.AGG_NAMES["nunique"] == "고유 개수"
+    assert metric_file.AGG_NAMES["count"] == "개수" and metric_file.AGG_NAMES["median"] == "중앙값"
 
 
 def test_old_and_new_metrics_compute(t):
-    found = {"고유": metrics.metric("고유", {"numerator": {"agg": "nunique", "column": "grp"}}),
-             "중앙": metrics.metric("중앙", {"numerator": {"agg": "median", "column": "val", "where": "grp = a"}}),
-             "분위": metrics.metric("분위", {"numerator": {"agg": "quantile", "column": "val", "opts": {"p": 0.5}}, "denominator": {"agg": "count"}}),
-             "참": metrics.metric("참", {"numerator": {"agg": "count_if", "opts": {"cond": "val > 2"}}})}
-    _, values, _ = metrics.compute(t, list(found), found)
+    found = {"고유": metric_file.metric("고유", {"numerator": {"agg": "nunique", "column": "grp"}}),
+             "중앙": metric_file.metric("중앙", {"numerator": {"agg": "median", "column": "val", "where": "grp = a"}}),
+             "분위": metric_file.metric("분위", {"numerator": {"agg": "quantile", "column": "val", "opts": {"p": 0.5}}, "denominator": {"agg": "count"}}),
+             "참": metric_file.metric("참", {"numerator": {"agg": "count_if", "opts": {"cond": "val > 2"}}})}
+    _, values, _ = metric_file.compute(t, list(found), found)
     assert values["고유"] == [3] and values["중앙"] == [2.0] and values["참"] == [4]
     assert values["분위"] == [pytest.approx(4.0 / 6)]  # 중앙값(1,2,3,5,10,20 → 4) ÷ 행 수 6
     with pytest.raises(ValueError, match="숫자 컬럼이 아니라"):
-        metrics.compute(t, ["합"], {"합": metrics.metric("합", {"numerator": {"agg": "sum", "column": "txt"}})})
+        metric_file.compute(t, ["합"], {"합": metric_file.metric("합", {"numerator": {"agg": "sum", "column": "txt"}})})
     with pytest.raises(ValueError, match="column이 있어야"):
-        metrics.metric("m", {"numerator": {"agg": "median"}})
+        metric_file.metric("m", {"numerator": {"agg": "median"}})
 
 
 # ---------- 피벗 ----------
@@ -107,7 +107,7 @@ def test_dash_time_data_old_and_new_series():
 # ---------- 전처리 ----------
 
 def build(t, **recipe):
-    expr, _ = prep.build(None, {"base": "t", **recipe}, table=t)
+    expr, _ = prep_expr.build(None, {"base": "t", **recipe}, table=t)
     return expr
 
 
@@ -120,7 +120,7 @@ def test_old_dedupe_recipe_unchanged(t):
     assert sorted(build(t, dedupe=["grp"]).to_polars()["grp"].to_list()) == ["a", "b", "c"]  # 예전처럼 기준마다 한 행
     assert build(t, dedupe=["grp"], dedupe_keep="first").count().execute() == 3  # "first"만 있는 recipe도 같다
     assert build(t, dedupe=["grp", "txt", "id", "val"]).count().execute() == 6
-    assert prep.dupes(None, {"base": "t", "dedupe": ["grp"]}, t) == {"groups": 2, "rows": 3}  # 예전 모양 그대로(conflicts 없음)
+    assert prep_expr.dupes(None, {"base": "t", "dedupe": ["grp"]}, t) == {"groups": 2, "rows": 3}  # 예전 모양 그대로(conflicts 없음)
 
 
 def test_dedupe_keep_choices(t):
@@ -133,7 +133,7 @@ def test_dedupe_keep_choices(t):
     assert by_grp(merged, "val") == {"a": "1.0|2.0|3.0", "b": "10.0|20.0", "c": "5.0"} and merged.columns == t.columns
     warned = build(t, dedupe=["grp"], dedupe_keep="warn")
     assert by_grp(warned, "val") == {"a": None, "b": None, "c": 5} and by_grp(warned, "txt") == {"a": None, "b": "p", "c": None}  # 값이 둘 이상이면 빈 값
-    assert prep.dupes(None, {"base": "t", "dedupe": ["grp"], "dedupe_keep": "warn"}, t) == {"groups": 2, "rows": 3, "conflicts": 2}  # a와 b에서 값이 여럿
+    assert prep_expr.dupes(None, {"base": "t", "dedupe": ["grp"], "dedupe_keep": "warn"}, t) == {"groups": 2, "rows": 3, "conflicts": 2}  # a와 b에서 값이 여럿
 
 
 @pytest.mark.parametrize("keep, message", [({"how": "median"}, "how는"), ({"how": "last"}, "order"), ({"zzz": 1}, "모양"), ({"how": "first", "order": "val"}, "order는"),

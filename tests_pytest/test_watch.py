@@ -3,7 +3,7 @@ import datetime as dt
 
 import pytest
 
-import watch
+from core import watch
 
 NOW = dt.datetime(2026, 10, 22, 12, 0, 0)
 RULES = [{"column": "cpu", "op": ">=", "value": 80, "level": "warn"}, {"column": "cpu", "op": ">=", "value": 95, "level": "bad"}, {"column": "state", "op": "=", "value": "DOWN", "level": "bad"}]

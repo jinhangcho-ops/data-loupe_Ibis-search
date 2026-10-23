@@ -4,9 +4,9 @@ import duckdb
 import pytest
 from lazy import ibis
 
-import core
-import flow
-import server
+from core import querying
+from query import flow
+from core import server
 
 SCHEMAS = {
     "orders": {"columns": {"id": "num", "user_id": "num", "code": "text", "amt": "num", "day": "date"}, "source_key": "k1"},
@@ -139,7 +139,7 @@ def test_body_round_trip_matches_core_build(served):
     assert flow.check_graph(graph, flow.schemas_of(graph, lambda n, s=None: served.table(n), "k")) == []
     again = flow.to_body(graph)
     assert again == BODY  # 줄과 순서, 정렬·표시 컬럼(extra)까지 그대로
-    first, second = core.build(BODY), core.build(again)
+    first, second = querying.build(BODY), querying.build(again)
     assert str(ibis.to_sql(first)) == str(ibis.to_sql(second))
     assert first.to_polars().to_dicts() == second.to_polars().to_dicts()
     # 손으로 센 값: KR(user 0·1)이고 2026-01-02~10인 id 1·3·4·6·7·9 중 amt가 20 초과이거나 15 미만인 것(id 1은 amt 20이라 빠진다)

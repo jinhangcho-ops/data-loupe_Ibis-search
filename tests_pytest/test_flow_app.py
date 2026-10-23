@@ -4,9 +4,9 @@ import duckdb
 import pytest
 from conftest import spy_queries
 
-import flow
-import held
-import server
+from query import flow
+from core import held
+from core import server
 
 FREE = ["/api/flow/check_edge", "/api/flow/check", "/api/flow/to_body", "/api/flow/from_body", "/api/flow/keys/remember", "/api/flow/keys/forget", "/api/my_metrics",
         "/api/my_metrics/validate", "/api/my_metrics/update", "/api/my_metrics/delete", "/api/my_metrics/copy", "/api/my_metrics/status", "/api/my_metrics/check_use",
@@ -18,10 +18,10 @@ BODY = {"base": "sales", "joins": ["shops inner shop_id=shop_id"], "conditions":
 
 @pytest.fixture
 def c(folder, tmp_path):
-    import dash_app  # noqa: F401
-    import flow_app  # noqa: F401
-    import prep_app  # noqa: F401
-    from app import app
+    from dashboard import dash_app  # noqa: F401
+    from query import flow_app  # noqa: F401
+    from prep import prep_app  # noqa: F401
+    from query.search_app import app
     path = tmp_path / "r.duckdb"
     raw = duckdb.connect(str(path))
     raw.execute("create table sales as select i::int as id, (i % 3)::int as shop_id, ((i + 1) * 10)::double as amt from range(12) t(i)")
@@ -44,7 +44,7 @@ def test_free_and_connection_routes_are_registered_correctly(c):
     assert not any(path in server.FREE for path in READS)
     rules = {r.rule for r in server.app.url_map.iter_rules()}
     assert all(path in rules for path in FREE + READS)
-    assert server.CONSTANTS["flow"]["ranks"]["join"] == 2 and server.CONSTANTS["flow"]["order"] == flow.ORDER_TEXT
+    assert server.constants("query")["flow"]["ranks"]["join"] == 2 and server.constants("query")["flow"]["order"] == flow.ORDER_TEXT
 
 
 def test_free_routes_answer_while_another_job_holds_the_turn(c):

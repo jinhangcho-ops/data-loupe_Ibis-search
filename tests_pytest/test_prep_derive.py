@@ -18,9 +18,9 @@ def frame(n=400, seed=0):
 @pytest.fixture
 def remote(folder, tmp_path, monkeypatch):
     """SQLite 파일에 주소로 연결한 클라이언트와 DB에 간 조회 수(작업 사본을 받은 뒤에는 늘지 않아야 한다)."""
-    import server
-    from app import app
-    import prep_app  # noqa: F401  전처리 라우트
+    from core import server
+    from query.search_app import app
+    from prep import prep_app  # noqa: F401  전처리 라우트
     data = frame()
     raw = sqlite3.connect(tmp_path / "s.db")
     raw.execute("create table t (id integer, amt real, qty integer, x real, y real, z real, name text, same text)")
@@ -68,8 +68,8 @@ def test_make_table_inserts_locally_computed_result(remote):
 
 
 def test_setting_new_runs_plain_recipes_on_db(remote):
-    import held
-    import settings
+    from core import held
+    from core import settings
     c = remote[0]
     settings.write(settings.PATH.name, {"prep_where": "new"})
     plain = c.post("/api/preview", json={"base": "t", "filters": ["qty >= 2"]}).get_json()
@@ -91,7 +91,7 @@ def test_prune_suggests_from_sample_only(remote):
 @pytest.mark.parametrize("text, message", [("__import__('os')", "함수"), ("amt.real", "Attribute"), ("amt ** 2", "**"), ("amt + name", "숫자끼리"),
                                            ("nothing + 1", "'nothing' 컬럼이 없습니다"), ("iif(amt, 1, 2)", "참거짓"), ("", "식을 입력"), ("(" * 300, "")])
 def test_formula_rejects(text, message):
-    import prep_derive
+    from core import prep_derive
     t = ibis.table({"amt": "float64", "name": "string"}, name="t")
     with pytest.raises(ValueError, match=None) as found:
         prep_derive.Formula(t, text).build()
@@ -99,7 +99,7 @@ def test_formula_rejects(text, message):
 
 
 def test_formula_column_names_and_errors():
-    import prep_derive
+    from core import prep_derive
     t = ibis.table({"금액": "float64", "my col": "int64"}, name="t")
     assert prep_derive.Formula(t, '금액 + col("my col")').build().type().is_floating()
     with pytest.raises(ValueError, match="이미 있어"):
@@ -110,7 +110,7 @@ def test_formula_column_names_and_errors():
 
 def test_insert_all_keeps_big_ints_and_leaves_no_temp_tables(tmp_path):
     import pyarrow as pa
-    import prep_app
+    from prep import prep_app
     big = 2**62 + 1  # 실수로 바뀌면 끝자리가 틀어지는 값
     local = ibis.duckdb.connect()
     expr = local.create_table("src", ibis.memtable(pa.table({"i": pa.array([big, None, -big], pa.int64()), "s": ["a", None, "c"]})))

@@ -3,8 +3,8 @@ import math
 
 import pytest
 
-import compare
-from compare import compare as cmp
+from core import compare
+from core.compare import compare as cmp
 
 
 def test_number_up_and_down_with_percent_and_delta():

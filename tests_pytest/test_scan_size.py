@@ -7,8 +7,8 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import scan_size
-import source
+from core import scan_size
+from core import source
 
 
 @pytest.fixture
@@ -67,7 +67,7 @@ def test_safe_never_raises():
 
 
 def test_scan_route(client, tmp_path, folder):
-    import server
+    from core import server
     path = tmp_path / "s.duckdb"
     with duckdb.connect(str(path)) as c:
         c.execute("create table orders as select i as id, 'x' || i as name from range(100) t(i)")
@@ -83,7 +83,7 @@ def test_limit_check(db, monkeypatch):
     small = scan_size.limit_check(db, sql, config={"memory": 256})
     assert small["bytes"] == 16_000 and not small["over"] and not small["unknown"] and small["limit"] == 256_000_000
     assert small["tables"] == ["orders"] and small["columns"] == ["name"] and "작업 메모리 상한 0.256 GB" in small["text"]
-    import monitor
+    from core import monitor
     monkeypatch.setattr(monitor, "available", lambda: 10_000)  # 제한 없음 → 지금 PC의 사용 가능 메모리
     big = scan_size.limit_check(db, "select * from orders", config={})
     assert big["limit"] == 10_000 and big["over"] and "약 " in big["text"] and "모두" in big["text"] and "사용 가능 메모리" in big["text"]
@@ -100,7 +100,7 @@ def test_limit_check_unknown(db):
 
 
 def test_too_few_setting(folder):
-    import settings
+    from core import settings
     assert settings.get("sample_too_few") == 0.2
     settings.save({"sample_too_few": 0.5})
     assert settings.get("sample_too_few") == 0.5
@@ -116,8 +116,8 @@ def test_too_few_setting(folder):
 
 
 def test_profiler_uses_setting(folder, monkeypatch):
-    import profiler
-    import settings
+    from core import profiler
+    from core import settings
     monkeypatch.setattr(profiler, "fetch", lambda con, t: types.SimpleNamespace(num_rows=30))
     table = types.SimpleNamespace(sample=lambda *a, **k: types.SimpleNamespace(limit=lambda n: None))
     assert profiler.block(None, table, None, "t", 100, 1000, None) is not None  # 30행 ≥ 기대 100행의 20%
@@ -131,16 +131,16 @@ def post_json(client, url, **body):
 
 def test_server_gate(client, tmp_path, folder):
     """서버도 같은 판정: 기준을 넘으면 실행하지 않고 needs_confirm, confirmed를 붙이면 실행. 차단 설정이면 알 수 없을 때 확인해도 실행하지 않는다."""
-    import server
+    from core import server
     path = tmp_path / "s.duckdb"
     with duckdb.connect(str(path)) as c:
         c.execute("create table orders as select i as id, 'x' || i as name from range(1000) t(i)")
     server.state.update(con=ibis.duckdb.connect(str(path), read_only=True), opened={"kind": "folder", "path": str(tmp_path), "file": str(path)})
-    import settings
+    from core import settings
     settings.save({"memory": 256})
     ok = post_json(client, "/api/sql/run", sql="select * from orders", rows=5)
     assert ok.status_code == 200 and "rows" in ok.get_json()  # 기준(256MB) 아래면 그대로
-    import monitor
+    from core import monitor
     mp = pytest.MonkeyPatch()
     try:
         mp.setattr(scan_size, "limit", lambda config=None: (1000, "작업 메모리 상한 테스트"))
@@ -168,7 +168,7 @@ def test_server_gate(client, tmp_path, folder):
 
 
 def test_gate_on_explore_and_prep(client, tmp_path, folder, monkeypatch):
-    import server
+    from core import server
     path = tmp_path / "s.duckdb"
     with duckdb.connect(str(path)) as c:
         c.execute("create table orders as select i as id, 'x' || i as name from range(1000) t(i)")
@@ -210,8 +210,8 @@ def scanning(sqls):
 @pytest.fixture
 def pretend_remote(tmp_path, monkeypatch, client):
     """DuckDB 파일 연결을 원격으로 보게 한다(held.remote가 참). 1000행: id 정수, name·note 글자, day 날짜."""
-    import held
-    import server
+    from core import held
+    from core import server
     path = tmp_path / "r.duckdb"
     with duckdb.connect(str(path)) as c:
         c.execute("create table orders as select i as id, 'abcd' as name, repeat('n', 40) as note, date '2026-01-01' + (i % 30)::int as day from range(1000) t(i)")
@@ -257,7 +257,7 @@ def test_remote_known_rows_and_unknown(pretend_remote, sent):
 
 
 def test_plan_row_patterns(monkeypatch):
-    import plan
+    from core import plan
     texts = {"Seq Scan on t  (cost=0.00..1.00 rows=1234 width=8)": 1234, "Estimates: {rows: 41,000,000 (1GB), cpu: ?}": 41_000_000,
              "physical_plan\t│ ~2,500 rows │": 2500, "EC: 77": 77, "id\tselect_type\ttable\trows\n1\tSIMPLE\tt\t900": 900, "아무것도 없음": None}
     for text, want in texts.items():
@@ -268,7 +268,7 @@ def test_plan_row_patterns(monkeypatch):
 
 
 def test_row_width_sources(folder, tmp_path):
-    import profiler
+    from core import profiler
     expr = ibis.table({"id": "int64", "name": "string", "note": "string", "tags": "array<string>"}, name="orders")
     plain = types.SimpleNamespace(name="mysql")
     assert scan_size.row_width(plain, expr, ["orders"]) == (8 + 32 + 32 + 64, "스키마")
@@ -304,7 +304,7 @@ def test_row_width_sources(folder, tmp_path):
 def test_bigquery_partitions_and_dry_run(folder, tmp_path, monkeypatch):
     import sys
 
-    import profiler
+    from core import profiler
     cloud = types.ModuleType("google.cloud")
     cloud.bigquery = types.SimpleNamespace(QueryJobConfig=lambda **k: k)  # 이 PC에 BigQuery 라이브러리가 없어도 시험하도록 가짜
     monkeypatch.setitem(sys.modules, "google", types.ModuleType("google"))
@@ -385,8 +385,8 @@ def test_fetch_stops_at_byte_limit(pretend_remote, monkeypatch):
     """받는 중 받은 크기가 작업 메모리 상한을 넘으면 곧 멈추고, 받던 것을 지운다."""
     import threading
 
-    import held
-    import monitor
+    from core import held
+    from core import monitor
     table = pretend_remote.table("orders")
     monkeypatch.setattr(monitor, "bound_bytes", lambda config=None: 1000)
     before = set(held.local().list_tables())
@@ -401,9 +401,9 @@ def test_fetch_stops_at_byte_limit(pretend_remote, monkeypatch):
 
 def test_dashboard_refresh_remote_aggregate_sends_nothing(pretend_remote, sent, monkeypatch):
     """대시보드 최신화: 원격 DB에서 DB 안의 집계로 구하는 카드는 크기를 알아보려고 아무 조회도 보내지 않는다."""
-    import dash_calc
-    import dash_refresh
-    import dash_store
+    from dashboard import dash_calc
+    from dashboard import dash_refresh
+    from core import dash_store
     card = dash_store.check_card({"kind": "kpi", "title": "t", "source": {"table": "orders", "body": {"base": "orders", "series": [{"y": "id", "agg": "sum"}]}, "date": "day"}, "view": {}})
     assert dash_calc.copies_to_pc(card, {}) is False
     assert dash_refresh.scan_decision(card, {}) == ""

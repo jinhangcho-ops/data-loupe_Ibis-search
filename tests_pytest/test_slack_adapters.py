@@ -8,9 +8,9 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import commands
-import credentials
-from adapters import slack_bot, transport
+from integrations import commands
+from core import credentials
+from integrations.adapters import slack_bot, transport
 
 TOKEN, APP = "xoxb-made-up-token-1", "xapp-made-up-token-2"
 
@@ -32,7 +32,7 @@ def sent(monkeypatch):
 
 
 def test_keep_modes(client, sent, monkeypatch, folder):
-    import settings
+    from core import settings
     put = lambda name, **d: client.post("/api/destinations", json={"name": name, "destination": {"kind": "slack", "channel": "C1", **d}}).get_json()
 
     # session: 파일에는 토큰이 없고, 이번 실행 동안만 쓴다
@@ -86,8 +86,8 @@ ORDERS = pl.DataFrame({"day": ["d1", "d1", "d2"], "status": ["ok", "cancel", "ok
 
 @pytest.fixture
 def shop(client, tmp_path, folder):
-    import server
-    import settings
+    from core import server
+    from core import settings
     path = tmp_path / "shop.duckdb"
     with duckdb.connect(str(path)) as raw:
         raw.register("df", ORDERS.to_arrow())
@@ -122,8 +122,8 @@ def test_commands(shop):
 
 
 def test_grouped():
-    import core
-    assert core.grouped(["a = 1", {"line": "b = 2", "or": True}, {"line": "c = 3", "quotes": False}, "d = 4"]) == \
+    from core import querying
+    assert querying.grouped(["a = 1", {"line": "b = 2", "or": True}, {"line": "c = 3", "quotes": False}, "d = 4"]) == \
         ["a = 1", {"any": ["b = 2", {"line": "c = 3", "quotes": False}]}, "d = 4"]
 
 
@@ -176,7 +176,7 @@ def test_bot_allow_and_answer(monkeypatch):
 
 def test_bot_routes(client, monkeypatch, folder):
     monkeypatch.setattr(slack_bot, "clients", fake_clients)
-    import bot_app
+    from integrations import bot_app
     save = lambda **d: client.post("/api/bot", json={"keep": "session", "bot_token": TOKEN, "app_token": APP, "users": "", "channels": "", **d}).get_json()
     assert save(bot_token="abc")["error"] == "봇 토큰은 xoxb-로 시작합니다."
     assert "Slack ID가 아닌" in save(users="u1; drop")["error"]

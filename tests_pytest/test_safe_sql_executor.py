@@ -7,8 +7,8 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import sql_exec
-from sql_exec import SecurityViolationError
+from core import sql_exec
+from core.sql_exec import SecurityViolationError
 
 ORDERS = pl.DataFrame({"id": [1, 2, 3, 4], "cust": [10, 20, 10, 30], "amount": [100, 250, 50, 400]})
 CUSTS = pl.DataFrame({"cust": [10, 20, 30], "name": ["가람", "나래", "다솜"]})
@@ -113,7 +113,7 @@ def test_routes(client, tmp_path, folder):
     """SQL 실행·저장, 가상 테이블 저장과 탐색(기준 테이블·조인·행 수) 연동. 연결은 지어낸 DuckDB 파일."""
     import json
 
-    import server
+    from core import server
     path = tmp_path / "shop.duckdb"
     with duckdb.connect(str(path)) as raw:
         for name, df in (("orders", ORDERS), ("custs", CUSTS)):
@@ -159,7 +159,7 @@ def test_syntax_errors():
 
 
 def test_check_route(client, tmp_path):
-    import server
+    from core import server
     path = tmp_path / "shop.duckdb"
     with duckdb.connect(str(path)) as raw:
         raw.register("df", ORDERS.to_arrow())

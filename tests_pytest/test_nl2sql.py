@@ -6,9 +6,9 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import nl2sql
-from adapters import llm
-from sql_exec import SecurityViolationError, SqlSyntaxError
+from query import nl2sql
+from integrations.adapters import llm
+from core.sql_exec import SecurityViolationError, SqlSyntaxError
 
 ORDERS = pl.DataFrame({"day": ["2026-01-01", "2026-01-02", "2026-01-02"], "status": ["secret-flag-a", "secret-flag-b", "secret-flag-a"], "amount": [100, 98765, 300]})
 
@@ -26,8 +26,8 @@ class Fake:
 
 @pytest.fixture
 def shop(client, tmp_path, folder):
-    import profiler
-    import server
+    from core import profiler
+    from core import server
     path = tmp_path / "shop.duckdb"
     with duckdb.connect(str(path)) as raw:
         raw.register("df", ORDERS.to_arrow())

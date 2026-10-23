@@ -3,19 +3,19 @@
 '--run "구성 이름"'으로 실행하면 서버·메인 창 없이 그 구성을 한 번 수집하고 기록·알림 뒤 끝난다(Windows 예약 작업이 띄운다). 종료 코드는 끝 0, 아니면 1."""
 import sys
 
-import drivers
+from core import drivers
 
 drivers.use_installed()  # exe: 따로 설치한 드라이버 폴더를 백엔드를 불러오기 전에 import 경로에 더한다.
 
 if sys.argv[1:2] == ["--browser"]:
-    import collect_browser
+    from collect import collect_browser
 
     collect_browser.run_child()
     sys.exit()
 
 if sys.argv[1:2] == ["--run"]:
     import lazy  # noqa: F401  데이터 라이브러리를 처음 쓸 때 올린다(다른 프로젝트 모듈보다 먼저).
-    import schedule
+    from integrations import schedule
 
     sys.exit(schedule.run_alone(sys.argv[2] if len(sys.argv) > 2 else ""))
 
@@ -25,22 +25,21 @@ import lazy  # noqa: F401  데이터 라이브러리를 처음 쓸 때 올린다
 import webview
 from werkzeug.serving import make_server
 
-import bot_app
-import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
-import integrations_app  # noqa: F401  연동 라우트가 앱에 달린다.
-import collect_browser
-import collect_job
-import dash_app  # noqa: F401  대시보드 라우트가 앱에 달린다.
-import draft_app  # noqa: F401  화면 임시 저장(초안) 라우트가 앱에 달린다.
-import flow_app  # noqa: F401  흐름·문장·내 지표 라우트가 앱에 달린다.
-import catalog_app  # noqa: F401  지표 사전 라우트가 앱에 달린다.
-import notify  # noqa: F401  보내기 라우트가 앱에 달린다.
-import prep_app  # noqa: F401  전처리 라우트가 앱에 달린다.
-import schedule
-import schedule_app  # noqa: F401  예약 라우트가 앱에 달린다.
-import scratch
-import server
-from app import app
+# 시작할 때 올리는 것은 core/와 각 패키지의 라우트 파일(주소 등록)뿐이다. 기능 모듈은 처음 쓸 때(또는 화면을 열 때 뒤에서) 올라온다.
+from collect import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
+from core import draft_app  # noqa: F401  화면 임시 저장(초안) 라우트가 앱에 달린다.
+from core import scratch
+from core import server
+from dashboard import dash_app  # noqa: F401  대시보드 라우트가 앱에 달린다.
+from integrations import bot_app
+from integrations import integrations_app  # noqa: F401  연동 라우트가 앱에 달린다.
+from integrations import notify  # noqa: F401  보내기 라우트가 앱에 달린다.
+from integrations import schedule  # 프로그램 안 예약 스레드를 띄워야 하므로 올린다(수집·알림은 예약을 돌릴 때 올라온다).
+from integrations import schedule_app  # noqa: F401  예약 라우트가 앱에 달린다.
+from metrics import catalog_app  # noqa: F401  지표 사전 라우트가 앱에 달린다.
+from prep import prep_app  # noqa: F401  전처리 라우트가 앱에 달린다.
+from query import flow_app  # noqa: F401  흐름·문장·내 지표 라우트가 앱에 달린다.
+from query.search_app import app
 
 scratch.sweep()  # 지난번에 강제 종료돼 남은 임시 폴더를 지운다.
 http = make_server("127.0.0.1", 0, app, threaded=True)  # 0: 비어 있는 포트를 자동으로 고른다. threaded: 조회 중에도 메모리·CPU 요청에 답한다.
@@ -78,7 +77,8 @@ def ask_folder():
 
 def closing():
     """수집 중에 창을 닫으면 묻는다. False를 돌려주면 닫기가 취소된다(pywebview의 closing 이벤트). 닫으면 수집을 멈춰 받은 데까지 남긴다."""
-    if not collect_job.running():
+    collect_job = lazy.loaded("collect.collect_job")  # 올라와 있지 않으면 수집이 돈 적이 없다
+    if collect_job is None or not collect_job.running():
         return True
     if not window.create_confirmation_dialog("수집 중", "수집이 아직 돌고 있습니다. 닫으면 받은 데까지 남기고 멈춥니다(다시 시작하면 이어 받습니다). 닫을까요?"):
         return False
@@ -93,6 +93,8 @@ schedule.start_watch()  # 프로그램 안 예약: 켜져 있는 동안 때가 �
 webview.start()  # 창을 닫으면 여기서 끝나고, 서버 스레드도 함께 종료된다.
 schedule.stop_watch()
 bot_app.stop()  # 켜 둔 Slack 봇의 연결을 끊는다.
-collect_job.stop(wait=10)  # 수집 작업이 받은 데까지 기록하고 끝나기를 기다린다.
-collect_browser.stop_child()  # 수집용 창 프로세스를 끝낸다(남아 있어도 메인과의 연결이 끊기면 스스로 끝난다).
+if lazy.loaded("collect.collect_job"):
+    lazy.loaded("collect.collect_job").stop(wait=10)  # 수집 작업이 받은 데까지 기록하고 끝나기를 기다린다.
+if lazy.loaded("collect.collect_browser"):
+    lazy.loaded("collect.collect_browser").stop_child()  # 수집용 창 프로세스를 끝낸다(남아 있어도 메인과의 연결이 끊기면 스스로 끝난다).
 server.release_connection()  # 열어 둔 연결을 닫아 파일을 놓고 임시 폴더를 지운다(도는 쿼리가 있으면 취소하고 5초까지만 기다린다).

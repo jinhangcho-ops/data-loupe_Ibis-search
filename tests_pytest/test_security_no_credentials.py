@@ -3,9 +3,9 @@ from urllib.parse import quote, quote_plus
 
 import pytest
 
-import collect_config
-import load_kafka
-import server
+from collect import collect_config
+from collect import load_kafka
+from core import server
 
 FIELD = "Field-S3cret!"  # 비밀번호 칸에 넣은 값(지어낸 값)
 INLINE = "Inline-P4ss"  # 주소 안에 넣은 비밀번호(지어낸 값)

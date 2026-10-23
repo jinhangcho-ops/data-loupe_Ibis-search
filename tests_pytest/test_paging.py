@@ -17,8 +17,8 @@ def made():
 @pytest.fixture
 def remote(folder, tmp_path):
     """sqlite:// 주소로 연결한 시험 클라이언트(held.remote가 참인 연결)."""
-    import server
-    from app import app
+    from core import server
+    from query.search_app import app
     raw = sqlite3.connect(tmp_path / "shop.db")
     raw.execute("create table orders (id integer, grp integer, name text)")
     raw.executemany("insert into orders values (?, ?, ?)", made())
@@ -34,8 +34,8 @@ def remote(folder, tmp_path):
 @pytest.fixture
 def local(folder, tmp_path):
     """지어낸 DuckDB 파일에 연결한 시험 클라이언트(PC 안에서 계산하는 연결)."""
-    import server
-    from app import app
+    from core import server
+    from query.search_app import app
     raw = duckdb.connect(str(tmp_path / "shop.duckdb"))
     raw.execute(f"create table orders as select i as id, i % 5 as grp, 'n' || i as name from range({ROWS}) t(i)")
     raw.close()
@@ -58,7 +58,7 @@ def pages(got, size, **body):
 
 
 def test_held_pages_cover_every_row_once(remote, monkeypatch):
-    import held
+    from core import held
     fetched = []
     real = held.fetch
     monkeypatch.setattr(held, "fetch", lambda *a, **k: fetched.append(1) or real(*a, **k))
@@ -71,7 +71,7 @@ def test_held_pages_cover_every_row_once(remote, monkeypatch):
 
 
 def test_held_sort_and_columns_without_refetch(remote, monkeypatch):
-    import held
+    from core import held
     first = remote("/api/query", base="orders", limit=5, fresh=True)
     monkeypatch.setattr(held, "fetch", lambda *a, **k: pytest.fail("머리글 정렬·표시 컬럼은 받아 둔 결과에서 한다"))
     found = remote("/api/query", base="orders", limit=5, sorts=["id desc"], columns=["id, name"])
@@ -86,7 +86,7 @@ def test_held_new_conditions_are_fetched(remote):
 
 
 def test_too_big_falls_back_to_db_pages(remote, monkeypatch):
-    import held
+    from core import held
     monkeypatch.setattr(held, "MAX_ROWS", 3)
     found = remote("/api/query", base="orders", limit=5, offset=5, sorts=["id asc"], fresh=True)
     assert not found["held"] and "받아 두지 않고" in found["note"]
@@ -116,7 +116,7 @@ def test_local_connection_pages_from_db(local):
 
 
 def test_row_number_pages_match_offset(local, monkeypatch):
-    import result
+    from core import result
     want = local("/api/query", base="orders", limit=4, offset=8, sorts=["grp desc", "id asc"], columns=["id"])
     monkeypatch.setattr(result, "can_offset", lambda expr: False)  # 건너뛰기를 못 쓰는 DB(Oracle 등)처럼
     got = local("/api/query", base="orders", limit=4, offset=8, sorts=["grp desc", "id asc"], columns=["id"])
@@ -126,13 +126,13 @@ def test_row_number_pages_match_offset(local, monkeypatch):
 
 def test_oracle_sql_uses_row_numbers(monkeypatch):
     from lazy import ibis
-    import core
-    import result
+    from core import querying
+    from core import result
     t = ibis.table({"id": "int64", "grp": "int64"}, name="orders")
-    monkeypatch.setattr(core, "filtered", lambda body: t)
-    sql = " ".join(ibis.to_sql(core.numbered({"sorts": ["grp desc"]}, 4, 8), dialect="oracle").split()).upper()
+    monkeypatch.setattr(querying, "filtered", lambda body: t)
+    sql = " ".join(ibis.to_sql(querying.numbered({"sorts": ["grp desc"]}, 4, 8), dialect="oracle").split()).upper()
     assert "ROW_NUMBER() OVER (ORDER BY" in sql and "BETWEEN 8 AND 11" in sql and "OFFSET" not in sql
-    unsorted = " ".join(ibis.to_sql(core.numbered({}, 4, 8), dialect="oracle").split()).upper()  # 정렬이 없어도 Oracle은 ORDER BY가 있어야 한다
+    unsorted = " ".join(ibis.to_sql(querying.numbered({}, 4, 8), dialect="oracle").split()).upper()  # 정렬이 없어도 Oracle은 ORDER BY가 있어야 한다
     assert 'ROW_NUMBER() OVER (ORDER BY "T0"."ID" ASC, "T0"."GRP" ASC)' in unsorted
     with pytest.raises(ibis.common.exceptions.UnsupportedArgumentError):  # can_offset가 알아보는 오류
         ibis.to_sql(t.limit(4, offset=8), dialect="oracle")
@@ -140,8 +140,8 @@ def test_oracle_sql_uses_row_numbers(monkeypatch):
 
 
 def test_count_and_rows_run_together(local, monkeypatch):
-    import result
-    import source
+    from core import result
+    from core import source
     seen = []
     real = result.get_count
     monkeypatch.setattr(result, "get_count", lambda expr, backend=None: seen.append((threading.current_thread().name, backend is not None)) or real(expr, backend))
@@ -152,8 +152,8 @@ def test_count_and_rows_run_together(local, monkeypatch):
 
 
 def test_threads_setting_applies_to_duckdb(folder, tmp_path):
-    import server
-    from app import app
+    from core import server
+    from query.search_app import app
     duckdb.connect(str(tmp_path / "a.duckdb")).close()
     c = app.test_client()
     c.get("/?key=" + server.KEY)
@@ -167,7 +167,7 @@ def test_threads_setting_applies_to_duckdb(folder, tmp_path):
 
 
 def test_held_clear_and_cancel(remote):
-    import held
+    from core import held
     remote("/api/query", base="orders", limit=5, fresh=True)
     folder = held.store["folder"]
     assert folder and os.path.isdir(folder)
@@ -176,8 +176,8 @@ def test_held_clear_and_cancel(remote):
 
 
 def test_fetch_stops_on_cancel(tmp_path):
-    import held
-    import source
+    from core import held
+    from core import source
     from lazy import ibis
     stop = threading.Event()
     stop.set()
@@ -221,7 +221,7 @@ class FakeServerResults:
 
 
 def test_big_results_page_from_server_table(remote, monkeypatch):
-    import held
+    from core import held
     every = [{"id": i} for i in sorted(range(ROWS), reverse=True)]
     fake = FakeServerResults(every)
     monkeypatch.setattr(held, "MAX_ROWS", 3)  # 이 PC에 받아 두기에는 큰 결과

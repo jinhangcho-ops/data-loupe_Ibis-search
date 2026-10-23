@@ -6,8 +6,8 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import parse
-import result
+from core import parse
+from core import result
 
 DF = pl.DataFrame({"id": [1, 2, 3],
                    "user": [{"name": "가람", "age": 30, "addr": {"city": "부산"}}, {"name": "나래", "age": None, "addr": {"city": "서울"}},

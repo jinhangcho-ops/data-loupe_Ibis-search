@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import join_keys as jk
+from query import join_keys as jk
 from conftest import spy_queries
 
 

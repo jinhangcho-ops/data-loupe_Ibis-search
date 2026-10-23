@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from adapters import ga4, notion, transport
+from integrations.adapters import ga4, notion, transport
 
 PAGE = "1a2b3c4d5e6f708192a3b4c5d6e7f809"
 TOKEN = "ntn_made_up_token"
@@ -108,7 +108,7 @@ def test_ga4_bad_spec(spec, message):
 
 
 def test_ga4_routes(client, key_file, google, tmp_path, folder):
-    import uploads
+    from collect import uploads
     path, _ = key_file
     out = tmp_path / "ga4.parquet"
     body = {"key_path": str(path), "property": "123", "start": "7daysAgo", "end": "yesterday", "dimensions": "date", "metrics": "activeUsers, bounceRate", "output": str(out)}
@@ -130,9 +130,9 @@ def test_slack_question(client, tmp_path, folder, monkeypatch):
     import duckdb
     from lazy import ibis
 
-    import commands
-    import server
-    from adapters import llm
+    from integrations import commands
+    from core import server
+    from integrations.adapters import llm
     path = tmp_path / "shop.duckdb"
     with duckdb.connect(str(path)) as raw:
         raw.execute("create table orders as select 1 as id, 100 as amount")

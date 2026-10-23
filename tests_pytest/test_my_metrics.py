@@ -5,8 +5,8 @@ import re
 
 import pytest
 
-import metrics
-import my_metrics as mm
+from core import metric_file
+from metrics import my_metrics as mm
 
 S1 = {"key": "folder:c:/data", "label": "데이터", "table": "sales"}
 S2 = {"key": "folder:c:/data", "label": "데이터", "table": "orders"}
@@ -165,7 +165,7 @@ def test_legacy_file_metrics_are_common_definitions_bound_on_use(folder, tmp_pat
     path = tmp_path / "metrics.json"
     path.write_text(json.dumps({"metrics": {"CTR": {"numerator": {"agg": "count", "where": "status = click"}, "denominator": {"agg": "count", "where": "status = view"}, "format": "percent"},
                                             "매출": {"numerator": {"agg": "sum", "column": "amt"}}}}), encoding="utf-8")
-    metrics.save_file_path(str(path))
+    metric_file.save_file_path(str(path))
     listed = mm.legacy_list()
     assert [(m["id"], m["name"], m["scope"], m["legacy"]) for m in listed] == [("legacy:CTR", "CTR", None, True), ("legacy:매출", "매출", None, True)]
     assert mm.check_use({"name": "CTR", "scope": None}, S1) == "‘CTR’은(는) 공통 정의예요. 이 테이블에 묶어 저장한 뒤 쓰세요."

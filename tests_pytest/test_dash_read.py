@@ -6,13 +6,13 @@ import duckdb
 import pytest
 from lazy import ibis
 
-import core
-import dash_calc
-import dash_store
-import held
-import scan_size
-import server
-import source
+from core import querying
+from dashboard import dash_calc
+from core import dash_store
+from core import held
+from core import scan_size
+from core import server
+from core import source
 
 RANGE = {"range": {"start": "2026-01-12", "end": "2026-02-02"}, "prev": {"start": "2025-12-21", "end": "2026-01-11", "text": "직전 22일"}}
 WINDOW = {"start": "2025-12-21", "end": "2026-02-02"}  # 직전 기간 시작 ~ 보는 기간 끝
@@ -22,9 +22,9 @@ START, END = "MAKE_DATE(2025, 12, 21)", "MAKE_DATE(2026, 2, 2)"  # 읽을 범위
 
 @pytest.fixture
 def wide(folder, tmp_path):
-    import dash_app  # noqa: F401
-    import prep_app  # noqa: F401
-    from app import app
+    from dashboard import dash_app  # noqa: F401
+    from prep import prep_app  # noqa: F401
+    from query.search_app import app
     raw = duckdb.connect(str(tmp_path / "w.duckdb"))
     raw.execute("create table wide (day date, store varchar, amt double, uid varchar, memo varchar, blob varchar, region varchar)")
     days = [dt.date(2025, 6, 1), dt.date(2026, 1, 5), dt.date(2026, 1, 12), dt.date(2026, 1, 20), dt.date(2026, 2, 2), dt.date(2026, 3, 1)]
@@ -109,11 +109,11 @@ def test_local_copy_takes_only_the_columns_and_rows_needed(wide, monkeypatch):
     body = {"base": "wide", "conditions": ["store = A"]}
     for keep in (["day", "amt"], None):
         with pytest.raises(ValueError, match="받지 않았습니다"):
-            core.runnable(body, select=False, keep=keep)
+            querying.runnable(body, select=False, keep=keep)
     assert kept[0][1] == ["day", "amt"] and kept[1][1] == ["day", "store", "amt", "uid", "memo", "blob", "region"]  # 쓰는 컬럼만 / 줄이지 않으면 전체
-    assert kept[0][0] != kept[1][0] and core.search_key(body, ["amt", "day"]) == core.search_key(body, ["day", "amt"])  # 컬럼이 다르면 다른 사본, 순서는 상관없음
+    assert kept[0][0] != kept[1][0] and querying.search_key(body, ["amt", "day"]) == querying.search_key(body, ["day", "amt"])  # 컬럼이 다르면 다른 사본, 순서는 상관없음
     with pytest.raises(ValueError):
-        core.runnable({**body, "calcs": ["순위 기준 amt desc"]}, select=False, keep=["day"])
+        querying.runnable({**body, "calcs": ["순위 기준 amt desc"]}, select=False, keep=["day"])
     assert kept[2][1][:2] == ["day", "store"]  # 계산 줄이 있으면 줄이지 않는다
 
 
@@ -138,7 +138,7 @@ def test_columns_used_by_each_kind(wide):
 
 def test_empty_dashboard_period_keeps_the_cards_own_period(wide):
     """카드에 자기 기간 줄이 있고 대시보드 기간이 비면 기간을 걸지 않아 카드의 기간 안 값이 모두 나온다(대시보드 기간이 있으면 그 안으로 좁아진다)."""
-    import dash_refresh
+    from dashboard import dash_refresh
     c = card("kpi", [{"y": "amt", "agg": "sum"}], periods=["day 2026-01-01 ~ 2026-03-31"])
     assert dash_refresh.context({"period": "", "as_of": ""}) is None and dash_refresh.context({"period": "  "}) is None
     labels = lambda ctx: dash_calc.compute(c, "2026-10-22T09:00:00", ctx)["by_unit"]["day"]["labels"]
@@ -150,7 +150,7 @@ def test_empty_dashboard_period_keeps_the_cards_own_period(wide):
 
 def test_refresh_context_without_dashboard_period_uses_own_period(wide):
     """최신화가 넘기는 ctx(기간 없음, plan·shared만)에서도 요약 카드는 카드의 기간 줄과 그 바로 앞 같은 일수로 비교한다. 값은 손으로 계산: 2026-01-12~02-02는 12+13+14=39, 직전 2025-12-21~2026-01-11은 11."""
-    import dash_refresh
+    from dashboard import dash_refresh
     c = card("summary", [{"y": "amt", "agg": "sum"}], periods=["day 2026-01-12 ~ 2026-02-02"])
     ctx = {**(dash_refresh.context({"period": ""}) or {}), "plan": dash_calc.plan_shared([c], None), "shared": {}}
     data = dash_calc.compute(c, "2026-10-22T09:00:00", ctx)

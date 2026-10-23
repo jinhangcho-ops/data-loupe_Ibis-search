@@ -10,7 +10,7 @@ import pytest
 
 from lazy import ibis
 
-import profiler
+from core import profiler
 
 
 @pytest.fixture

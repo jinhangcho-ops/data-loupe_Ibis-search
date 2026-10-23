@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ibis 쿼리·분석·대시보드·수집</title>
+<!--include core/head.html-->
+<style>
+  .hero { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; align-items:center; justify-content:safe center; gap:28px; padding:24px; }
+  .hero h1 { margin:0; font-size:30px; letter-spacing:-.02em; }
+  .hero p { margin:0; color:var(--muted); }
+  .choices { display:flex; flex-wrap:wrap; gap:16px; justify-content:center; }
+  .choice { width:clamp(240px, 26vw, 400px); padding:clamp(18px, 2vw, 30px); border:1px solid var(--line); border-radius:18px; background:var(--card); color:var(--text); cursor:pointer; text-align:left; font-weight:400; display:flex; flex-direction:column; align-items:flex-start; gap:10px; white-space:normal; height:auto; }
+  .choice:hover { border-color:var(--accent); }
+  .choice b { font-size:22px; }
+  .choice span { color:var(--muted); line-height:1.5; }
+  .choice em { font-style:normal; font-size:12.5px; color:var(--accent); font-weight:600; }
+</style>
+</head>
+<body class="app">
+<!--include core/status.html-->
+<div class="hero">
+  <div style="text-align:center"><h1>무엇을 할까요?</h1><p>쿼리와 분석은 데이터에 먼저 연결합니다.</p></div>
+  <div class="choices">
+    <button class="choice" data-go="/search"><b>쿼리</b><span>DB나 파일의 테이블을 조건이나 SQL로 탐색하고, 지표를 구하고, 차트를 그려 대시보드에 모읍니다.</span><em>탐색 · SQL · 지표</em></button>
+    <button class="choice" data-go="/prep"><b>분석</b><span>테이블을 정리하고, 분포·상관관계·그룹 비교·추이를 그래프로 봅니다.</span><em>전처리 · 분석</em></button>
+    <button class="choice" data-go="/dashboard"><b>대시보드</b><span>모아 둔 차트·KPI·표·상태를 저장된 값으로 바로 보고, 연결하면 최신으로 바꿉니다.</span><em>연결 없이 시작</em></button>
+    <button class="choice" data-go="/collect"><b>수집</b><span>웹 API·파일 주소·웹페이지에서 데이터를 받아 파일로 저장하고, DB 테이블이나 Kafka에 넣습니다.</span><em>연결 없이 시작</em></button>
+    <button class="choice" data-go="/integrations"><b>연동</b><span>Slack·Notion·웹훅으로 보내고, Slack 명령을 받고, GA4 보고서를 가져오고, LLM을 설정합니다.</span><em>연결 없이 시작</em></button>
+  </div>
+</div>
+<!--include core/connect.html-->
+<!--include core/dash_refresh.html-->
+<!--include core/notify.html-->
+<script src="/static/core/common.js"></script>
+<script src="/static/core/dash_refresh.js"></script>
+<script>
+// 쿼리·분석은 연결이 있으면 바로, 없으면 가운데 연결 카드를 띄워 연결한 뒤에 들어간다(afterConnect). 대시보드·수집·연동은 연결 없이 들어간다.
+// 연결에 성공하면 대시보드 최신화가 시작되고(dash_refresh.js) 진행은 팝업과 위쪽 줄 알약에 보인다.
+let target = null;
+function afterConnect() { if (target) location.href = target; }
+document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => {
+  target = b.dataset.go;
+  if (["/collect", "/integrations", "/dashboard"].includes(target) || connected) return location.href = target;
+  openConnect(`${b.querySelector("b").textContent}로 들어갑니다`);
+});
+resume();
+</script>
+</body>
+</html>

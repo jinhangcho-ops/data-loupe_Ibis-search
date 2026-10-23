@@ -37,24 +37,24 @@ from flask import Flask
 import polars as pl
 import psutil
 
-import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
-import dash_app  # noqa: F401  대시보드 라우트가 앱에 달린다.
-import draft_app  # noqa: F401  화면 임시 저장(초안) 라우트가 앱에 달린다.
-import flow_app  # noqa: F401  흐름·문장·내 지표 라우트가 앱에 달린다.
-import catalog_app  # noqa: F401  지표 사전 라우트가 앱에 달린다.
-import schedule_app  # noqa: F401  예약 라우트가 앱에 달린다.
-import notify
-from adapters import transport
-import prep_app
-import prep_ops
-import prep_profile
-import profiler
-import settings
-import source
-from app import app
-from server import KEY
-import server
-from server import state
+from collect import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
+from dashboard import dash_app  # noqa: F401  대시보드 라우트가 앱에 달린다.
+from core import draft_app  # noqa: F401  화면 임시 저장(초안) 라우트가 앱에 달린다.
+from query import flow_app  # noqa: F401  흐름·문장·내 지표 라우트가 앱에 달린다.
+from metrics import catalog_app  # noqa: F401  지표 사전 라우트가 앱에 달린다.
+from integrations import schedule_app  # noqa: F401  예약 라우트가 앱에 달린다.
+from integrations import notify
+from integrations.adapters import transport
+from prep import prep_app
+from core import prep_ops
+from prep import prep_profile
+from core import profiler
+from core import settings
+from core import source
+from query.search_app import app
+from core.server import KEY
+from core import server
+from core.server import state
 
 # 지어낸 데이터: 고객 40명과 주문 300건. 고객 번호 41~45는 고객 표에 없다(조인에서 빈 값이 된다).
 random.seed(1)
@@ -970,9 +970,9 @@ def raised_error(work):
 
 def collect_section(c, got):
     """수집(1단계 서버). 바깥 인터넷 없이 127.0.0.1의 가짜 서버로만 확인한다. 데이터는 여기서 지어낸다."""
-    import collect_http
-    import collect_limits
-    import collect_request as creq
+    from collect import collect_http
+    from collect import collect_limits
+    from collect import collect_request as creq
     print("== 수집: 예시 읽기")
     error = lambda api, **body: got(api, **body).get("error", "")
     parse = lambda text: got("/api/collect/parse", text=text)
@@ -1432,7 +1432,7 @@ class FakeSite:
         return self.pages.get(self.at, self.pages.get(last, []) if self.repeat and self.at > last else [])
 
     def run(self, method, *args, timeout=None):
-        import collect_browser
+        from collect import collect_browser
         if self.gone is not None and len(self.log) >= self.gone:
             raise collect_browser.Gone()
         if method == "tag":
@@ -1462,9 +1462,9 @@ class FakeSite:
 
 def web_section(c, got):
     """수집 2단계(웹페이지)의 서버 쪽. 수집용 창은 가짜(FakeSite)로 바꿔 끼우고, robots.txt는 127.0.0.1의 가짜 서버로만 확인한다."""
-    import collect_browser
-    import collect_limits
-    import collect_web
+    from collect import collect_browser
+    from collect import collect_limits
+    from collect import collect_web
     from contextlib import contextmanager
     print("== 수집: 웹페이지")
     error = lambda api, **body: got(api, **body).get("error", "")
@@ -1663,11 +1663,11 @@ def load_section(c, got):
     import pyarrow as pa
     import pyarrow.parquet as pq
     from confluent_kafka import Consumer, Producer
-    import collect_config
-    import collect_store
-    import load_job
-    import load_kafka
-    import load_table
+    from collect import collect_config
+    from collect import collect_store
+    from collect import load_job
+    from collect import load_kafka
+    from collect import load_table
     print("== 적재: 준비")
     error = lambda api, **body: got(api, **body).get("error", "")
     out = ROOT / "load_out"
@@ -1964,10 +1964,10 @@ class FakeTasks:
 
 def schedule_section(c, got):
     """수집 예약(4단계 서버). Windows 작업은 schtasks 대신 가짜(FakeTasks)로, 수집은 127.0.0.1 가짜 API로만 확인한다. 데이터는 여기서 지어낸다."""
-    import collect_job
-    import load_kafka
-    import schedule
-    import wintask
+    from collect import collect_job
+    from collect import load_kafka
+    from integrations import schedule
+    from integrations import wintask
     print("== 예약: 다음 시각")
     error = lambda api, **body: got(api, **body).get("error", "")
     at = dt.datetime
@@ -2186,7 +2186,12 @@ def memory_section(got, duck):
     code = """
 import json, sys
 sys.path.insert(0, sys.argv[1]); sys.dont_write_bytecode = True
-import lazy, server, app, prep_app, notify, collect_app
+import lazy
+from core import server
+from query import search_app
+from prep import prep_app
+from integrations import notify
+from collect import collect_app
 names = ("ibis", "polars", "duckdb", "pyarrow")
 is_lazy = lambda: {n: type(sys.modules[n]).__name__ == "_LazyModule" for n in names}
 out = {"imported": is_lazy(), "purge": __import__("os").environ.get("MIMALLOC_PURGE_DELAY")}
@@ -2321,8 +2326,8 @@ def main():
         nonce = re.search(r"script-src 'nonce-([^']+)'", r.headers.get("Content-Security-Policy", ""))
         check(f"{path} 화면의 스크립트는 모두 CSP의 nonce를 가짐", (r.status_code, r.text.count("<script") == r.text.count(f'<script nonce="{nonce and nonce.group(1)}"') > 0), (200, True))
         given = re.search(r"const SERVER = (.*);", r.text)
-        check(f"{path} 화면에 서버의 범위·기본값(CONSTANTS)이 들어감", given and json.loads(given.group(1)), json.loads(json.dumps(server.CONSTANTS)))
-    check("수집 화면이 쓰는 범위가 모두 있음(구성·사용 한도·예약)", {"paging.max_pages", "limit.margin", "schedule.minutes"} <= set(server.CONSTANTS["numbers"]), True)
+        check(f"{path} 화면에 서버의 범위·기본값(CONSTANTS)이 들어감", given and json.loads(given.group(1)), json.loads(json.dumps(server.constants({"/": "core", "/search": "query", "/prep": "prep", "/collect": "collect"}[path]))))
+    check("수집 화면이 쓰는 범위가 모두 있음(구성·사용 한도·예약)", {"paging.max_pages", "limit.margin", "schedule.minutes"} <= set(server.constants("collect")["numbers"]), True)
     static = ROOT / "static"  # 지어낸 파일로 확인한다. 실제 static은 건드리지 않는다.
     static.mkdir()
     (static / "frag.html").write_text("<p>조각</p>", encoding="utf-8")
@@ -2549,7 +2554,7 @@ finally:
     if state["con"] is not None:
         source.close(state["con"])
     print("== 임시 폴더")
-    import scratch as temp
+    from core import scratch as temp
     temp.ROOT = ROOT / "scratch"  # 실제 임시 폴더를 건드리지 않게 검사용 폴더로 바꾼다.
     mine = Path(temp.make())
     gone = subprocess.Popen([sys.executable, "-c", "pass"])  # 이미 끝난 프로세스의 번호

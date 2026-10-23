@@ -2,11 +2,11 @@
 문장 틀 목록 라우트(/api/sentences)와 질문 묶음 저장 라우트(/api/question_sets)의 모양·한도·차례를 기다리지 않는지. 데이터는 테스트 안에서 지어낸다."""
 import pytest
 
-import flow
-import flow_app  # noqa: F401
-import sentence_run
-import sentences
-import server
+from query import flow
+from query import flow_app  # noqa: F401
+from query import sentence_run
+from query import sentences
+from core import server
 
 BODY = {"schema": "", "base": "sales", "joins": ["shops inner shop_id=shop_id"], "periods": ["day 2026-03-01 ~ 2026-03-31"],
         "conditions": ["amt >= 20", {"any": ["status = 완료", {"line": "status like 배송", "quotes": False}]}], "calcs": ["식 amt * 2 이름 두배"], "sorts": ["amt desc"], "columns": ["id, amt"], "limit": "20"}

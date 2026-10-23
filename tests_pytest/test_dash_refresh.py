@@ -6,11 +6,11 @@ import types
 
 import pytest
 
-import core
-import dash_calc
-import dash_refresh as refresh
-import dash_store as store
-import server
+from core import querying
+from dashboard import dash_calc
+from dashboard import dash_refresh as refresh
+from core import dash_store as store
+from core import server
 
 NOW = dt.datetime(2026, 10, 22, 12, 0, 0)
 FOLDER = {"kind": "folder", "path": "C:/data/sales"}
@@ -27,7 +27,7 @@ def card(title, key=KEY, computed=None, kind="chart", data=None):
 def fake(folder, monkeypatch):
     """연결을 흉내 낸다(열린 연결 요청 값만). 카드를 구하는 일은 시험이 바꿔 끼운다."""
     monkeypatch.setitem(server.state, "opened", FOLDER)
-    monkeypatch.setattr(core, "using", lambda: contextlib.nullcontext())
+    monkeypatch.setattr(querying, "using", lambda: contextlib.nullcontext())
     refresh.JOB.update(running=False, total=0, done=0, current="", results=[])
     yield
     refresh.wait(10)
@@ -167,8 +167,8 @@ def test_context_for_refresh_uses_period_and_as_of():
 
 
 def test_scan_decision_adapter(fake, monkeypatch):
-    import scan_size
-    import settings
+    from core import scan_size
+    from core import settings
     c = store.check_card({"kind": "chart", "title": "t", "source": {"key": KEY, "body": {"base": "t", "x": "a"}}})
     monkeypatch.setattr(refresh.dash_calc, "read_sql", lambda card, ctx: "SELECT 1")
     monkeypatch.setattr(refresh, "run", lambda work: work())  # 연결 스레드 대신 바로(연결이 가짜)
@@ -196,7 +196,7 @@ def test_scan_decision_adapter(fake, monkeypatch):
 
 def test_scan_decision_remote_asks_only_when_data_is_copied(fake, monkeypatch):
     """원격 DB(요금이 나올 수 있음): DB 안의 집계로 구하는 카드는 크기를 알아보려고 DB에 묻지 않고, PC로 옮기는 카드만 판정한다."""
-    import scan_size
+    from core import scan_size
     c = store.check_card({"kind": "chart", "title": "t", "source": {"key": KEY, "body": {"base": "t", "x": "a"}}})
     monkeypatch.setattr(refresh.dash_calc, "read_sql", lambda card, ctx: "SELECT 1")
     monkeypatch.setattr(refresh, "run", lambda work: work())

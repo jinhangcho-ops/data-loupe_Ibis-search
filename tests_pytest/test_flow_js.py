@@ -1,4 +1,4 @@
-"""static/flow.js(흐름 보기)와 static/sentences.js(문장 보기)의 화면 없는 계산을 node로 돌려 본다. node가 없으면 건너뛴다.
+"""static/query/flow.js(흐름 보기)와 static/query/sentences.js(문장 보기)의 화면 없는 계산을 node로 돌려 본다. node가 없으면 건너뛴다.
 배치(깊이·겹침), 이음 규칙(서버 flow.edge_problem의 모양·순서·순환과 같은 판단), 끼우기·지우기·꼬리 붙이기, 조건 묶음 되돌리기(index.html의 grouped와 서로 반대),
 문장 조각·빈칸 보임·기본값·컬럼 맞춤·기간 칸·결과 차트·카드 만들기. SERVER.flow는 서버 값을 그대로 쓴다. 값은 손으로 센 작은 예제다."""
 import json
@@ -8,10 +8,10 @@ import subprocess
 
 import pytest
 
-import flow
-import flow_app  # noqa: F401  server.CONSTANTS["flow"]
-import sentences
-import server
+from query import flow
+from query import flow_app  # noqa: F401  server.constants("query")["flow"]
+from query import sentences
+from core import server
 from conftest import ROOT
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
@@ -19,9 +19,9 @@ pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 �
 
 def run_node(tmp_path, body, name="case"):
     """flow.js·sentences.js를 이어 붙이고 body를 실행한 마지막 줄(JSON)을 돌려준다."""
-    head = "const assert = require('assert'); globalThis.SERVER = {flow: %s};\n" % json.dumps(server.CONSTANTS["flow"], ensure_ascii=False)
+    head = "const assert = require('assert'); globalThis.SERVER = {flow: %s};\n" % json.dumps(server.constants("query")["flow"], ensure_ascii=False)
     script = tmp_path / f"{name}.js"
-    script.write_text(head + (ROOT / "static" / "flow.js").read_text(encoding="utf-8") + (ROOT / "static" / "sentences.js").read_text(encoding="utf-8") + body, encoding="utf-8")
+    script.write_text(head + (ROOT / "static" / "query" / "flow.js").read_text(encoding="utf-8") + (ROOT / "static" / "query" / "sentences.js").read_text(encoding="utf-8") + body, encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0, done.stderr[-3000:]
     return json.loads(done.stdout.strip().splitlines()[-1])
@@ -108,7 +108,7 @@ def test_join_columns_match_server():
 
 def server_grouped_from_index():
     """index.html의 grouped()(단계 카드 → 서버로 보낼 조건 모양)를 그대로 뽑는다."""
-    html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
+    html = (ROOT / "static" / "query" / "index.html").read_text(encoding="utf-8")
     start = html.index("function grouped() {")
     return html[start:html.index("\n}\n", start) + 2]
 
@@ -186,10 +186,10 @@ def test_sentence_set_shape(tmp_path):
 
 def test_page_has_views_and_ends_operator():
     """단계 카드 화면에 세 보기 전환과 새 파일들이 달려 있고, 조건 연산자 목록에 ends가 있다(서버 parse가 지원한다)."""
-    html = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
-    for needle in ('id="vswitch"', 'data-v="flow"', 'data-v="sentence"', 'src="/static/flow.js"', 'src="/static/sentences.js"', 'href="/static/flow.css"'):
+    html = (ROOT / "static" / "query" / "index.html").read_text(encoding="utf-8")
+    for needle in ('id="vswitch"', 'data-v="flow"', 'data-v="sentence"', '"/static/query/flow.js"', '"/static/query/sentences.js"', 'href="/static/query/flow.css"'):
         assert needle in html
     ops = re.search(r"const OPS_TEXT = \[(.*?)\]", html).group(1)
     assert '"ends"' in ops and "컬럼 ends 값" in html
-    import parse
+    from core import parse
     assert "ends" in parse.CONDITION_GUIDE and "|ends)" in parse.LIKE_RE.pattern

@@ -7,10 +7,10 @@ import duckdb
 import polars as pl
 import pytest
 
-import collect_config
-import load_job
-import load_kafka
-import uploads
+from collect import collect_config
+from collect import load_job
+from collect import load_kafka
+from collect import uploads
 
 ROWS = pl.DataFrame({"id": [1, 2, 3, 4, 5], "name": ["a", "b", "c", "d", "e"]})
 

@@ -9,11 +9,11 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import analysis
-import dash_calc
-import dash_refresh
-import dash_store
-import server
+from analysis import stats
+from dashboard import dash_calc
+from dashboard import dash_refresh
+from core import dash_store
+from core import server
 from conftest import ROOT
 
 T0 = dt.datetime(2026, 1, 1, 12, 0, 0)
@@ -40,22 +40,22 @@ def t(request):
 
 
 def test_funnel_analysis_counts(t):
-    found = analysis.analyze(t, HOW)
+    found = stats.analyze(t, HOW)
     assert found["kind"] == "funnel" and users(found) == [6, 4, 3]  # view 6명, cart까지 u1·u2·u3·u6, pay까지 u1·u2·u6
     assert found["window"] is None and found["window_seconds"] is None and found["range"] is None
     assert [round(s["from_first"], 4) for s in found["steps"]] == [1.0, round(4 / 6, 4), 0.5] and [s["drop"] for s in found["steps"]] == [0, 2, 1]
 
 
 def test_funnel_analysis_window_and_range(t):
-    half = analysis.analyze(t, {**HOW, "window": {"n": 30, "unit": "minute"}})
+    half = stats.analyze(t, {**HOW, "window": {"n": 30, "unit": "minute"}})
     assert users(half) == [6, 3, 3] and half["window_seconds"] == 1800  # u3은 1시간 뒤라 빠진다
-    assert users(analysis.analyze(t, {**HOW, "window": {"n": 60, "unit": "minute"}})) == [6, 4, 3]  # 경계(정확히 1시간)는 포함
-    assert users(analysis.analyze(t, {**HOW, "window": {"n": 1, "unit": "hour"}})) == [6, 4, 3]
-    assert users(analysis.analyze(t, {**HOW, "window": {"n": 1, "unit": "day"}})) == [6, 4, 3]
-    span = analysis.analyze(t, {**HOW, "range": {"start": "2026-01-01", "end": "2026-01-31"}})
+    assert users(stats.analyze(t, {**HOW, "window": {"n": 60, "unit": "minute"}})) == [6, 4, 3]  # 경계(정확히 1시간)는 포함
+    assert users(stats.analyze(t, {**HOW, "window": {"n": 1, "unit": "hour"}})) == [6, 4, 3]
+    assert users(stats.analyze(t, {**HOW, "window": {"n": 1, "unit": "day"}})) == [6, 4, 3]
+    span = stats.analyze(t, {**HOW, "range": {"start": "2026-01-01", "end": "2026-01-31"}})
     assert users(span) == [5, 3, 2]  # 한 달 뒤의 u6은 기간 밖
-    assert users(analysis.analyze(t, {**HOW, "range": {"start": "2026-02-01", "end": None}})) == [1, 1, 1]
-    assert users(analysis.analyze(t, {**HOW, "steps": ["view"]})) == [6]  # 단계 하나
+    assert users(stats.analyze(t, {**HOW, "range": {"start": "2026-02-01", "end": None}})) == [1, 1, 1]
+    assert users(stats.analyze(t, {**HOW, "steps": ["view"]})) == [6]  # 단계 하나
 
 
 def test_funnel_range_counts_later_steps_after_the_end():
@@ -63,7 +63,7 @@ def test_funnel_range_counts_later_steps_after_the_end():
     night = dt.datetime(2026, 1, 31, 23, 50)
     df = pl.DataFrame({"uid": ["a", "a", "a", "b"], "ev": ["view", "cart", "pay", "view"],
                        "ts": [night, night + dt.timedelta(minutes=5), night + dt.timedelta(minutes=20), dt.datetime(2026, 2, 1, 9)]}, schema_overrides={"ts": pl.Datetime("us")})
-    found = analysis.analyze(ibis.memtable(df.to_arrow()), {**HOW, "range": {"start": "2026-01-01", "end": "2026-01-31"}})
+    found = stats.analyze(ibis.memtable(df.to_arrow()), {**HOW, "range": {"start": "2026-01-01", "end": "2026-01-31"}})
     assert users(found) == [1, 1, 1]  # a의 결제(2월 1일 0시 10분)도 센다, b는 첫 단계가 기간 밖이라 빠진다
 
 
@@ -71,7 +71,7 @@ def test_funnel_analysis_errors(t):
     for how, error in [({**HOW, "window": {"n": 0, "unit": "minute"}}, "0보다"), ({**HOW, "window": {"n": 5, "unit": "year"}}, "단위"), ({**HOW, "window": 30}, "단위"),
                        ({**HOW, "steps": []}, "단계는"), ({**HOW, "steps": ["view", "view"]}, "두 번"), ({**HOW, "time": "memo"}, "날짜"), ({**HOW, "who": "nope"}, "nope")]:
         with pytest.raises(ValueError, match=error):
-            analysis.analyze(t, how)
+            stats.analyze(t, how)
 
 
 @pytest.fixture
@@ -128,16 +128,16 @@ def test_funnel_card_is_refreshed():
 
 def test_screens_have_funnel(client):
     prep = client.get("/prep").get_data(as_text=True)
-    for part in ('value="funnel"', 'id="a-fuser"', 'id="a-fstep"', 'id="a-ftime"', 'id="a-fsteps"', 'id="a-fwin"', 'id="a-funit"', 'id="a-funnel"', "/static/funnel.js"):
+    for part in ('value="funnel"', 'id="a-fuser"', 'id="a-fstep"', 'id="a-ftime"', 'id="a-fsteps"', 'id="a-fwin"', 'id="a-funit"', 'id="a-funnel"', "/static/core/funnel.js"):
         assert part in prep, part
     assert 'kind: flow ? "funnel" : "analysis"' in prep
     dash = client.get("/dashboard").get_data(as_text=True)
-    assert "/static/funnel.js" in dash
+    assert "/static/core/funnel.js" in dash
     for name in ("dash_cards.js", "dash_menu.js"):
-        text = (ROOT / "static" / name).read_text(encoding="utf-8")
+        text = next((ROOT / "static").rglob(name)).read_text(encoding="utf-8")
         assert "funnel" in text, name
-    assert "paintFunnel" in (ROOT / "static" / "dash_cards.js").read_text(encoding="utf-8") and "흐름(퍼널" in (ROOT / "static" / "dash_menu.js").read_text(encoding="utf-8")
-    assert 'if (k === "funnel")' in (ROOT / "static" / "dash_menu.js").read_text(encoding="utf-8")
+    assert "paintFunnel" in (ROOT / "static" / "dashboard" / "dash_cards.js").read_text(encoding="utf-8") and "흐름(퍼널" in (ROOT / "static" / "dashboard" / "dash_menu.js").read_text(encoding="utf-8")
+    assert 'if (k === "funnel")' in (ROOT / "static" / "dashboard" / "dash_menu.js").read_text(encoding="utf-8")
 
 
 SCRIPT = """
@@ -185,6 +185,6 @@ console.log("ok");
 @pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 def test_sankey_geometry_in_node(tmp_path):
     script = tmp_path / "funnel_test.js"
-    script.write_text((ROOT / "static" / "funnel.js").read_text(encoding="utf-8") + SCRIPT, encoding="utf-8")
+    script.write_text((ROOT / "static" / "core" / "funnel.js").read_text(encoding="utf-8") + SCRIPT, encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr[-3000:]

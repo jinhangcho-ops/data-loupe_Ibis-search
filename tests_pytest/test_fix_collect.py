@@ -8,17 +8,17 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-import collect_config
-import collect_http
-import collect_job
-import collect_store
-import filelock
-import load_job
-import load_table
-import schedule
-import settings
-import uploads
-from collect_http import Halt, Reply
+from collect import collect_config
+from collect import collect_http
+from collect import collect_job
+from collect import collect_store
+from core import filelock
+from collect import load_job
+from collect import load_table
+from integrations import schedule
+from core import settings
+from collect import uploads
+from collect.collect_http import Halt, Reply
 
 
 def reply(body, url):
@@ -236,7 +236,7 @@ def test_tick_skips_windows_schedules(folder, monkeypatch):
 
 
 def test_screen_turns_inapp_off_when_windows_on():
-    html = open("static/collect.html", encoding="utf-8").read()
+    html = open("static/collect/collect.html", encoding="utf-8").read()
     assert '$("sc-windows").onchange' in html and '$("sc-inapp").checked = false' in html
 
 

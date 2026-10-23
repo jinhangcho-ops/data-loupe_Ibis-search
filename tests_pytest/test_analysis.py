@@ -6,7 +6,7 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import analysis
+from analysis import stats
 
 DF = pl.DataFrame({"g": ["a", "b", "a", "c", None, "a"] * 50, "x": [1, 2, 3, 4, 5, 100] * 50, "y": [2.0, 4, 6, 8, 10, None] * 50,
                    "z": [5, 3, 4, 1, 2, 6] * 50, "d": [dt.date(2026, 1, 1) + dt.timedelta(days=i) for i in range(300)]})
@@ -18,30 +18,30 @@ def t(request):
 
 
 def test_distribution(t):
-    d = analysis.analyze(t, {"kind": "distribution", "column": "x"})
+    d = stats.analyze(t, {"kind": "distribution", "column": "x"})
     assert d["kind"] == "distribution" and d["type"] == "num"
     assert (d["stats"]["n"], d["stats"]["min"], d["stats"]["max"], d["stats"]["median"]) == (300, 1, 100, 3.5)
     assert sum(d["histogram"]["counts"]) == 300 and d["histogram"]["counts"][-1] == 50
     assert (d["box"]["low"], d["box"]["high"], d["box"]["outliers"]) == (1, 5, 50)
-    text = analysis.analyze(t, {"kind": "distribution", "column": "g"})
+    text = stats.analyze(t, {"kind": "distribution", "column": "g"})
     assert "stats" not in text and text["values"] == {"labels": ["a", "b", "c"], "counts": [150, 50, 50], "nulls": 50, "other": 0, "unique": 3}
 
 
 def test_correlation_and_scatter(t):
-    d = analysis.analyze(t, {"kind": "correlation", "columns": ["x", "y", "z"]})
+    d = stats.analyze(t, {"kind": "correlation", "columns": ["x", "y", "z"]})
     assert d["n"] == 250 and d["matrix"][0][1] == pytest.approx(1.0) and d["matrix"][0][0] == pytest.approx(1.0)
     expected = DF.drop_nulls(["x", "y", "z"]).select(pl.corr("y", "z")).item()
     assert d["matrix"][1][2] == pytest.approx(expected) and d["matrix"][2][1] == pytest.approx(expected)
-    s = analysis.analyze(t, {"kind": "scatter", "x": "x", "y": "z"})
+    s = stats.analyze(t, {"kind": "scatter", "x": "x", "y": "z"})
     assert len(s["points"]) == 300 and s["r"] == pytest.approx(DF.select(pl.corr("x", "z")).item())
 
 
 def test_groups_and_trend(t):
-    g = analysis.analyze(t, {"kind": "groups", "by": "g", "value": "x", "agg": "sum"})
+    g = stats.analyze(t, {"kind": "groups", "by": "g", "value": "x", "agg": "sum"})
     assert dict(zip(g["labels"], g["values"])) == {"a": 5200, "(빈 값)": 250, "c": 200, "b": 100} and g["labels"][0] == "a"
-    m = analysis.analyze(t, {"kind": "trend", "column": "d", "unit": "month", "value": "", "agg": "count"})
+    m = stats.analyze(t, {"kind": "trend", "column": "d", "unit": "month", "value": "", "agg": "count"})
     assert m["labels"][:2] == ["2026-01-01", "2026-02-01"] and m["values"][:2] == [31, 28] and sum(m["values"]) == 300
-    w = analysis.analyze(t, {"kind": "trend", "column": "d", "unit": "week", "value": "x", "agg": "sum"})
+    w = stats.analyze(t, {"kind": "trend", "column": "d", "unit": "week", "value": "x", "agg": "sum"})
     assert w["labels"][0] == "2025-12-29"  # 주는 월요일부터
 
 
@@ -53,13 +53,13 @@ def test_groups_and_trend(t):
 ])
 def test_checks(t, how, error):
     with pytest.raises(ValueError, match=error):
-        analysis.analyze(t, how)
+        stats.analyze(t, how)
 
 
 def test_route_sample_and_full(client, tmp_path):
     """표본(전처리 적용)과 전체. 연결은 지어낸 DuckDB 파일."""
     import duckdb
-    import server
+    from core import server
     path = tmp_path / "shop.duckdb"
     with duckdb.connect(str(path)) as raw:
         raw.register("df", DF.to_arrow())

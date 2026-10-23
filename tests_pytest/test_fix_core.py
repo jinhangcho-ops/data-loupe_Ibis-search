@@ -9,16 +9,16 @@ import pyarrow as pa
 import pytest
 from lazy import ibis
 
-import analysis
-import funnel
-import metrics
-import nl2sql
-import profiler
-import result
-import scan_size
-import server
-import source
-import sql_exec
+from analysis import stats
+from core import funnel
+from core import metric_file
+from query import nl2sql
+from core import profiler
+from core import result
+from core import scan_size
+from core import server
+from core import source
+from core import sql_exec
 
 
 # ---------- M1 큰따옴표 경로 파일 읽기 ----------
@@ -51,15 +51,15 @@ def test_recent_keeps_url_without_secrets_exactly():
 # ---------- M4 NL2SQL 지표 조건 값 ----------
 
 def test_nl2sql_prompt_has_no_metric_condition_values(folder, monkeypatch):
-    found = metrics.metric("CTR", {"numerator": {"agg": "count", "where": "event = secret_value_xyz"},
+    found = metric_file.metric("CTR", {"numerator": {"agg": "count", "where": "event = secret_value_xyz"},
                                    "denominator": {"agg": "count", "where": ["event = other_value_abc", "region in 서울, 부산"]}})
-    monkeypatch.setattr(metrics, "registry", lambda: {"CTR": found})
+    monkeypatch.setattr(metric_file, "registry", lambda: {"CTR": found})
     con = ibis.polars.connect()
     con.create_table("t", pl.DataFrame({"event": ["a"], "region": ["b"]}))
     text = nl2sql.system_prompt(nl2sql.context(con, "k"))
     assert "secret_value_xyz" not in text and "other_value_abc" not in text and "서울" not in text
     assert "개수 [event 조건] ÷ 개수 [event, region 조건]" in text
-    assert "secret_value_xyz" in metrics.describe(found)  # 지표 화면의 글은 그대로
+    assert "secret_value_xyz" in metric_file.describe(found)  # 지표 화면의 글은 그대로
 
 
 # ---------- M6 NaN·무한·Decimal ----------
@@ -80,18 +80,18 @@ def test_get_chart_values_are_plain():
 
 def test_analysis_treats_nan_as_empty():
     t = ibis.memtable(pa.table({"a": [1.0, 2.0, 3.0, float("nan")], "b": [1.0, 3.0, 2.0, 5.0]}))
-    d = analysis.analyze(t, {"kind": "correlation", "columns": ["a", "b"]})
+    d = stats.analyze(t, {"kind": "correlation", "columns": ["a", "b"]})
     assert d["n"] == 3 and d["matrix"][0][1] == pytest.approx(0.5)  # (1,1) (2,3) (3,2)의 상관
-    s = analysis.analyze(t, {"kind": "scatter", "x": "a", "y": "b"})
+    s = stats.analyze(t, {"kind": "scatter", "x": "a", "y": "b"})
     assert len(s["points"]) == 3 and s["r"] == pytest.approx(0.5)
-    dist = analysis.analyze(t, {"kind": "distribution", "column": "a"})
+    dist = stats.analyze(t, {"kind": "distribution", "column": "a"})
     assert dist["stats"]["n"] == 3 and (dist["stats"]["min"], dist["stats"]["max"]) == (1, 3) and sum(dist["histogram"]["counts"]) == 3
     assert dist["values"]["nulls"] == 1
 
 
 def test_analysis_decimal_becomes_number():
     t = ibis.memtable(pa.table({"d": pa.array([Decimal("1.50"), Decimal("2.00")], pa.decimal128(10, 2))}))
-    total = analysis.one(t.aggregate(s=t.d.sum()))["s"]
+    total = stats.one(t.aggregate(s=t.d.sum()))["s"]
     assert total == 3.5 and isinstance(total, float)
 
 
@@ -128,7 +128,7 @@ def test_virtual_table_inside_reference_ignores_case():
 # ---------- calc 패턴 앞 고정 ----------
 
 def test_name_pattern_is_anchored_at_start():
-    import calc
+    from core import calc
     t = ibis.memtable(pa.table({"amt_a": [1], "my_amt_b": [2], "amt_c": [3]}))
     assert list(t.select(calc.targets(["amt_*"], t)).columns) == ["amt_a", "amt_c"]
 
@@ -145,8 +145,8 @@ def test_count_star_does_not_read_every_column():
 # ---------- 테이블 목록·함수 지원 기억 ----------
 
 def test_sql_check_uses_server_table_names_and_forgets(client, monkeypatch):
-    import app
-    assert not hasattr(app, "KNOWN_TABLES")
+    from query import search_app
+    assert not hasattr(search_app, "KNOWN_TABLES")
     server.state.update(con=object(), opened={"kind": "folder", "path": "x"})
     names = [["a"]]
     monkeypatch.setattr(source, "list_tables", lambda con, schema=None: names[0])
@@ -201,7 +201,7 @@ def test_parquet_constant_needs_stats_in_every_row_group(tmp_path):
 # ---------- 내려받기의 날짜 변환 오류 ----------
 
 def test_download_date_conversion_error_is_friendly(monkeypatch):
-    import prep_app  # noqa: F401
+    from prep import prep_app  # noqa: F401
     monkeypatch.setattr(result, "export", lambda expr, path, guard=True: (_ for _ in ()).throw(RuntimeError("Conversion Error: invalid date field value")))
     with pytest.raises(ValueError, match="날짜로 바꿀 수 없는 값이 있어요"):
         server.download(object(), "csv")

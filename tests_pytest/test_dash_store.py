@@ -5,8 +5,8 @@ import os
 
 import pytest
 
-import credentials
-import dash_store as store
+from core import credentials
+from core import dash_store as store
 
 CARD = {"kind": "chart", "title": "매출", "source": {"schema": "", "table": "orders", "body": {"base": "orders", "x": "매장", "series": [{"y": "금액", "agg": "sum"}]}},
         "data": {"x": "매장", "values": {"labels": ["강남", "홍대"], "series": [{"name": "합계 (금액)", "values": [10, 20]}]}}}
@@ -222,6 +222,6 @@ def test_old_file_keys_are_still_matched(folder):
     d["cards"][0]["source"]["key"] = old  # 예전에 저장된 파일 그대로
     store.write({"d2": {**d, "id": "d2"}})
     assert store.load()["dashboards"]["d2"]["cards"][0]["source"]["key"] == new
-    import dash_refresh
+    from dashboard import dash_refresh
     dash_refresh.set_live_min(old, 60)
     assert dash_refresh.live_min(new) == 60 and dash_refresh.live_min(old) == 60 and list(dash_refresh.live_mins()) == [new]

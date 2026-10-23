@@ -22,14 +22,14 @@ def table(tmp_path):
 
 
 def test_batches_cover_all_rows_in_pieces(table):
-    import result
+    from core import result
     sizes = [b.num_rows for b in result.batches(table, size=1_000)]
     assert sum(sizes) == N and len(sizes) >= 3 and max(sizes) <= 1_000
     assert result.lazy(table) is not None
 
 
 def test_parquet_and_csv_from_file_connection(table, tmp_path):
-    import result
+    from core import result
     result.write_parquet(table.filter(table.id >= 10), tmp_path / "o.parquet")
     assert pl.read_parquet(tmp_path / "o.parquet").height == N - 10
     result.write_csv(table, tmp_path / "o.csv")
@@ -38,7 +38,7 @@ def test_parquet_and_csv_from_file_connection(table, tmp_path):
 
 
 def test_excel_written_in_pieces(table, tmp_path, monkeypatch):
-    import result
+    from core import result
     monkeypatch.setattr(result, "CHUNK", 700)  # 여러 묶음에 걸쳐 쓰게
     result.export(table.mutate(memo=ibis.ifelse(table.id == 1, "=1+1", table.memo)), tmp_path / "o.xlsx")
     back = pl.read_excel(tmp_path / "o.xlsx")

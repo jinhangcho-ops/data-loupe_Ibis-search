@@ -5,7 +5,7 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import funnel
+from core import funnel
 
 T0 = dt.datetime(2026, 1, 1, 12, 0, 0)
 

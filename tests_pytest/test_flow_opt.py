@@ -6,9 +6,9 @@ import duckdb
 import pytest
 from lazy import ibis
 
-import flow
-import flow_opt
-import held
+from query import flow
+from query import flow_opt
+from core import held
 from conftest import spy_queries
 
 

@@ -28,7 +28,7 @@ def orders():
 
 @pytest.mark.parametrize("dialect", DIALECTS)
 def test_window_lines_share_one_select(orders, dialect):
-    import calc
+    from core import calc
     many = calc.apply(["순위 기준 amt desc 그룹 store", "누적합 amt 기준 id", "이전값 amt 기준 id", "이동평균 amt 3행 기준 id"], orders)
     one = calc.apply(["누적합 amt 기준 id"], orders)
     assert depth(many, dialect) == depth(one, dialect) <= 2
@@ -36,15 +36,15 @@ def test_window_lines_share_one_select(orders, dialect):
 
 @pytest.mark.parametrize("dialect", DIALECTS)
 def test_top_rows_add_one_level(orders, dialect):
-    import calc
-    import parse
+    from core import calc
+    from core import parse
     top = calc.apply(["상위 2 기준 amt desc 그룹 store"], orders)
     assert depth(top, dialect) <= 2 and depth(parse.apply(top, [], [parse.parse_sort("amt desc", top)], []), dialect) <= 2
     assert "__ibis_top" not in top.columns
 
 
 def test_batched_lines_still_see_earlier_columns(orders):
-    import calc
+    from core import calc
     expr = calc.apply(["누적합 amt 기준 id", "차이 amt_누적합 기준 id", "순위 기준 amt_누적합 desc"], orders)
     assert expr.columns[-3:] == ("amt_누적합", "amt_누적합_차이", "amt_누적합_순위")
     with pytest.raises(ValueError, match="이미 있습니다"):
@@ -52,10 +52,10 @@ def test_batched_lines_still_see_earlier_columns(orders):
 
 
 def test_first_rows_fall_back_to_row_numbers(orders, monkeypatch):
-    import prep
-    import source
+    from prep import prep_expr
+    from core import source
     monkeypatch.setattr(source, "compiles", lambda expr: False)  # DISTINCT ON(keep first)을 못 하는 연결처럼
-    kept = prep.first_rows(orders, ["store"])
+    kept = prep_expr.first_rows(orders, ["store"])
     assert kept.columns == orders.columns
     for dialect in ("mssql", "oracle"):
         sql = "".join(ibis.to_sql(kept, dialect=dialect).split()).upper()  # 줄바꿈·공백은 방언마다 달라 빼고 본다
@@ -64,9 +64,9 @@ def test_first_rows_fall_back_to_row_numbers(orders, monkeypatch):
 
 def test_first_rows_on_duckdb_keep_one_per_key():
     import duckdb
-    import prep
+    from prep import prep_expr
     raw = duckdb.connect()
     raw.execute("create table t as select i as id, i % 3 as store from range(10) r(i)")
     con = ibis.duckdb.from_connection(raw)
-    found = prep.first_rows(con.table("t"), ["store"]).to_pyarrow()
+    found = prep_expr.first_rows(con.table("t"), ["store"]).to_pyarrow()
     assert sorted(found["store"].to_pylist()) == [0, 1, 2] and found.num_rows == 3

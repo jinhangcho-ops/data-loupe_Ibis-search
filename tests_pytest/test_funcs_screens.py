@@ -9,7 +9,7 @@ import subprocess
 
 import pytest
 
-import sql_funcs
+from core import sql_funcs
 from conftest import ROOT
 
 STATIC = ROOT / "static"
@@ -23,10 +23,10 @@ def connect(client, info):
 @pytest.fixture
 def real(folder, tmp_path):
     """진짜 연결(가짜 연결이 아닌)을 쓰는 시험 클라이언트."""
-    import dash_app  # noqa: F401  대시보드 라우트
-    import prep_app  # noqa: F401  전처리 라우트
-    import server
-    from app import app
+    from dashboard import dash_app  # noqa: F401  대시보드 라우트
+    from prep import prep_app  # noqa: F401  전처리 라우트
+    from core import server
+    from query.search_app import app
     c = app.test_client()
     c.get("/?key=" + server.KEY)
     yield c, tmp_path
@@ -47,7 +47,7 @@ def lite_client(real):
 # ---------- 함수 사전 라우트 ----------
 
 def test_funcs_route_serves_the_catalog_with_etag(client):
-    import server
+    from core import server
     reply = client.get("/api/funcs")
     assert reply.status_code == 200 and reply.get_json() == json.loads(json.dumps(sql_funcs.catalog()))
     tag = reply.headers["ETag"]
@@ -59,7 +59,7 @@ def test_funcs_route_serves_the_catalog_with_etag(client):
 
 
 def test_constants_keep_only_small_lists(client):
-    import server
+    from core import server
     assert "funcs" not in server.CONSTANTS and server.CONSTANTS["funcs_ver"] == sql_funcs.version()
     assert server.CONSTANTS["agg_names"]["nunique"] == "고유 개수" and server.CONSTANTS["agg_names"]["median"] == "중앙값" and server.CONSTANTS["merge"] == list(sql_funcs.MERGE)
     assert len(json.dumps(server.CONSTANTS, ensure_ascii=False)) < 12_000  # 모든 화면에 들어가는 값이라 작게(사전 전체는 66KB쯤)
@@ -90,7 +90,7 @@ def test_support_route_needs_a_connection(client):
 # ---------- 연결이 못 하는 집계는 대체 식이나 이 PC 사본으로 ----------
 
 def test_unsupported_aggregates_run_on_the_pc_copy(real):
-    import held
+    from core import held
     held.store["items"].clear()
     c = lite_client(real)
     pivot = c.post("/api/pivot", json={"base": "orders", "pivot": {"rows": ["region"], "how": "median", "value": "amt"}}).get_json()
@@ -106,14 +106,14 @@ def test_unsupported_aggregates_run_on_the_pc_copy(real):
     for label, got in zip(chart["labels"], chart["datasets"][0]["values"]):
         values = sorted(o[3] for o in ORDERS if o[2] == label)
         assert got == pytest.approx((values[len(values) // 2 - 1] + values[len(values) // 2]) / 2)
-    import held
+    from core import held
     assert held.store["items"]  # 이 PC 사본에서 구했다
 
 
 def test_substitute_is_used_when_the_original_does_not_compile(real):
     """상관계수는 SQLite가 못 해 평균·개수로 구하는 대체 식을 쓴다(PC 사본으로 가지 않는다). 값은 numpy로 따로 구한 것과 같다."""
     import numpy as np
-    import held
+    from core import held
     held.store["items"].clear()
     c = lite_client(real)
     got = c.post("/api/pivot", json={"base": "orders", "pivot": {"rows": ["region"], "how": "corr", "value": "amt", "opts": {"y": "qty"}}}).get_json()
@@ -122,7 +122,7 @@ def test_substitute_is_used_when_the_original_does_not_compile(real):
         mine = [o for o in ORDERS if o[2] == region]
         want = np.corrcoef([o[3] for o in mine], [o[4] for o in mine])[0, 1]
         assert {r["region"]: r["전체 상관계수"] for r in got["rows"]["rows"]}[region] == pytest.approx(want)
-    import held
+    from core import held
     assert not held.store["items"]  # 대체 식을 연결에서 바로 구했다(PC 사본으로 가지 않았다)
 
 
@@ -135,7 +135,7 @@ def test_calc_pivot_route_still_rejects_bad_options(real):
 # ---------- 화면에 집계 목록을 직접 적어 두지 않았다 ----------
 
 AGG_WORDS = "count|sum|mean|min|max|nunique|median"
-SCREEN_FILES = [p for p in sorted(STATIC.iterdir()) if p.suffix in (".js", ".html") and "chart.umd" not in p.name]
+SCREEN_FILES = [p for p in sorted(STATIC.rglob('*')) if p.suffix in (".js", ".html") and "chart.umd" not in p.name]
 ALLOWED = {  # (파일, 그 줄에 든 글) → 집계 목록이 아니라 다른 뜻인 곳
     ("dash.js", "{ sum: null, count: 0, min: null, max: null }"): "일 값을 다시 묶는 계산(MERGE의 구현)",
     ("dash.js", "mean: g => g.count"): "일 값을 다시 묶는 계산(MERGE의 구현)",
@@ -169,33 +169,33 @@ def test_no_hardcoded_aggregate_lists_in_screens():
 def test_allowed_exceptions_still_exist():
     """허용 목록이 낡아 아무것도 못 잡는 일이 없도록: 적어 둔 줄이 지금 파일에 있다."""
     for (name, text), why in ALLOWED.items():
-        assert text in (STATIC / name).read_text(encoding="utf-8"), (name, text, why)
+        assert text in next(STATIC.rglob(name)).read_text(encoding="utf-8"), (name, text, why)
 
 
 def test_screens_pick_from_the_catalog():
-    pages = {name: (STATIC / name).read_text(encoding="utf-8") for name in ("index.html", "prep.html", "dashboard.html")}
+    pages = {name: next(STATIC.rglob(name)).read_text(encoding="utf-8") for name in ("index.html", "prep.html", "dashboard.html")}
     for name, text in pages.items():
-        assert '<script src="/static/funcs.js"></script>' in text and text.index("funcs.js") > text.index("common.js"), name
+        assert '<script src="/static/core/funcs.js"></script>' in text and text.index("funcs.js") > text.index("common.js"), name
     assert "Funcs.picker" in pages["index.html"] and "pickers.chart" in pages["index.html"] and "pickers.pivot" in pages["index.html"] and "pickers.calc" in pages["index.html"]
     assert "Funcs.picker" in pages["prep.html"] and "a-gagg" in pages["prep.html"] and "pickers[key]" in pages["prep.html"] and "pickers.keep" in pages["prep.html"] and "Funcs.panel" in pages["prep.html"]
-    assert "Funcs.picker" in (STATIC / "dash_menu.js").read_text(encoding="utf-8")
+    assert "Funcs.picker" in (STATIC / "dashboard" / "dash_menu.js").read_text(encoding="utf-8")
     assert "Object.entries(SERVER.calc.hows)" not in pages["index.html"] and "SERVER.funcs" not in pages["index.html"]
-    assert "SERVER.dash.aggs" in (STATIC / "dash_rules.js").read_text(encoding="utf-8")
-    dash = (STATIC / "dash.js").read_text(encoding="utf-8")
+    assert "SERVER.dash.aggs" in (STATIC / "dashboard" / "dash_rules.js").read_text(encoding="utf-8")
+    dash = (STATIC / "core" / "dash.js").read_text(encoding="utf-8")
     assert "SERVER.merge" in dash and '"nunique"' not in dash and "SERVER.agg_names" in dash
     for name in ("dash_cards.js", "dash_menu.js"):
-        assert '"nunique"' not in (STATIC / name).read_text(encoding="utf-8"), name
+        assert '"nunique"' not in next(STATIC.rglob(name)).read_text(encoding="utf-8"), name
 
 
 def test_every_screen_list_comes_from_the_catalog():
     """서버가 화면에 주는 목록(상수·라우트)이 모두 함수 사전에서 나온다."""
-    import calc
-    import dash_calc
-    import metrics
-    import result
+    from core import calc
+    from dashboard import dash_calc
+    from core import metric_file
+    from core import result
     aggs = set(sql_funcs.aggregate_ids())
     assert set(calc.HOWS) == aggs
-    assert aggs <= set(result.chart_aggs()) and aggs <= set(metrics.AGGS) and aggs <= set(dash_calc.AGGS)
+    assert aggs <= set(result.chart_aggs()) and aggs <= set(metric_file.AGGS) and aggs <= set(dash_calc.AGGS)
     assert set(calc.NEW_WINDOWS) == {i for i, f in sql_funcs.FUNCS.items() if f["window"]}
     assert set(dash_calc.MERGE) == set(sql_funcs.MERGE) and set(sql_funcs.agg_names()) >= aggs | set(sql_funcs.ALIASES)
 
@@ -289,7 +289,7 @@ const cols = [["amt", "실수"], ["qty", "정수"], ["name", "문자"], ["day", 
 
 @node
 def test_funcs_js_renders_pickers_and_panel(tmp_path):
-    code = (STATIC / "funcs.js").read_text(encoding="utf-8")
+    code = (STATIC / "core" / "funcs.js").read_text(encoding="utf-8")
     catalog = json.loads(json.dumps(sql_funcs.catalog()))
     script = SCRIPT.replace("%(catalog)s", json.dumps(json.dumps(catalog, ensure_ascii=False))).replace("%(names)s", json.dumps(json.dumps(sql_funcs.agg_names(), ensure_ascii=False))).replace("%(code)s", code)
     path = tmp_path / "funcs_test.js"

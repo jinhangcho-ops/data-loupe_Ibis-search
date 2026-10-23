@@ -7,13 +7,13 @@ import pytest
 
 from lazy import ibis
 
-import prep
+from prep import prep_expr
 
 
 def build(data, columns, **more):
     """data(dict)를 메모리 표로 만들어 recipe(columns, …)를 적용한 결과를 파이썬 dict로."""
     t = ibis.memtable(pa.table(data))
-    expr, _ = prep.build(None, {"base": "t", "columns": columns, **more}, t)
+    expr, _ = prep_expr.build(None, {"base": "t", "columns": columns, **more}, t)
     return expr.to_pyarrow().to_pydict(), expr
 
 
@@ -35,7 +35,7 @@ def test_outlier_iqr_on_decimal_column():
 
 
 def test_ln_log_sqrt_empty_for_out_of_domain():
-    import sql_funcs
+    from core import sql_funcs
     t = ibis.memtable(pa.table({"x": [-1.0, 0.0, 1.0, 100.0, None]}))
     cols = {"ln": sql_funcs.get("ln"), "log10": sql_funcs.get("log10"), "sqrt": sql_funcs.get("sqrt")}
     got = {n: t.select(v=f["build"](sql_funcs.resolve(f, t, {"x": t.x}))).v.to_pyarrow().to_pylist() for n, f in cols.items()}
@@ -48,7 +48,7 @@ def test_ln_log_sqrt_empty_for_out_of_domain():
 
 
 def test_formula_ln_sqrt_use_same_guard():
-    import prep_derive
+    from core import prep_derive
     t = ibis.memtable(pa.table({"x": [-4.0, 0.0, 4.0]}))
     t2, _ = prep_derive.apply_formulas(t, [{"name": "a", "expr": "ln(x)"}, {"name": "b", "expr": "sqrt(x)"}, {"name": "c", "expr": "log10(x)"}])
     out = t2.to_pyarrow().to_pydict()
@@ -58,7 +58,7 @@ def test_formula_ln_sqrt_use_same_guard():
 
 
 def test_prune_with_column_named_count():
-    import prep_profile
+    from prep import prep_profile
     n = 100
     arrow = pa.table({"count": [1] * 99 + [2], "other": list(range(n))})
     found = prep_profile.prune(arrow)
@@ -90,7 +90,7 @@ def test_fill_prev_next_fixed_by_ties():
 
 
 def test_pca_offset_data_is_stable():
-    import prep_derive
+    from core import prep_derive
     base = 1e9
     t = ibis.memtable(pa.table({"x": [base + i for i in range(4)], "y": [base + 2 * i for i in range(4)]}))
     info = {}
@@ -103,9 +103,9 @@ def test_pca_offset_data_is_stable():
 
 @pytest.fixture
 def remote(folder, tmp_path):
-    import server
-    from app import app
-    import prep_app  # noqa: F401
+    from core import server
+    from query.search_app import app
+    from prep import prep_app  # noqa: F401
     raw = sqlite3.connect(tmp_path / "s.db")
     raw.execute("create table t (id integer, d text, v real)")
     raw.executemany("insert into t values (?, ?, ?)", [(1, "2026-02-30", 1.0), (2, "2026-01-05", 2.0), (3, "2026-01-06", 2.0)])
@@ -119,8 +119,8 @@ def remote(folder, tmp_path):
 
 
 def test_new_local_copy_goes_through_scan_gate(remote, monkeypatch):
-    import held
-    import server
+    from core import held
+    from core import server
     seen = []
 
     def gate(body, make_sql, rows=None):

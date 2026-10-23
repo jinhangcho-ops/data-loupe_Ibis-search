@@ -8,15 +8,15 @@ import duckdb
 import pytest
 from lazy import ibis
 
-import calc
-import dash_calc
-import metrics
-import prep
-import prep_derive
-import result
-import sentences
-import server
-import sql_funcs as S
+from core import calc
+from dashboard import dash_calc
+from core import metric_file
+from prep import prep_expr
+from core import prep_derive
+from core import result
+from query import sentences
+from core import server
+from core import sql_funcs as S
 
 AGG = ("pivot", "chart", "metrics", "dash", "prep", "sentence")  # 집계를 고르는 화면
 WIN = ("calc", "prep", "sentence")  # 창 함수를 고르는 화면
@@ -132,7 +132,7 @@ def test_screen_lists_offer_the_feature(client, name, ids, screens):
     """화면의 서버 쪽 목록·상수가 그 기능을 담는다(화면 목록은 모두 사전에서 나온다)."""
     served = client.get("/api/funcs").get_json()["screens"]
     lists = {
-        "pivot": set(calc.HOWS) | set(S.ids_for("pivot")), "chart": set(result.chart_aggs()), "metrics": set(metrics.AGGS), "dash": set(dash_calc.AGGS),
+        "pivot": set(calc.HOWS) | set(S.ids_for("pivot")), "chart": set(result.chart_aggs()), "metrics": set(metric_file.AGGS), "dash": set(dash_calc.AGGS),
         "calc": set(calc.NEW_WINDOWS) | set(S.ids_for("calc")), "prep": set(S.ids_for("prep")), "sentence": {i for ids_ in sentences.uses_map().values() for i in ids_},
     }
     for i in ids:
@@ -162,8 +162,8 @@ def test_aggregate_runs_in_pivot_chart_metrics_and_dash(px, id):
     assert table.height == 2 and f"전체 {f['label']}" in table.columns
     labels, datasets, _ = result.get_chart(px, "b", [{"y": y, "agg": id, "opts": opts or None}])
     assert len(labels) == 2 and len(datasets[0]["values"]) == 2
-    found = {"m": metrics.metric("m", {"numerator": {"agg": id, "column": y, **({"opts": opts} if opts else {}), "where": "n > 0"}})}
-    _, values, _ = metrics.compute(px, ["m"], found, by="b")
+    found = {"m": metric_file.metric("m", {"numerator": {"agg": id, "column": y, **({"opts": opts} if opts else {}), "where": "n > 0"}})}
+    _, values, _ = metric_file.compute(px, ["m"], found, by="b")
     assert len(values["m"]) == 2
     series = dash_calc.clean_series([{"y": y, "agg": id, **({"opts": opts} if opts else {})}])
     data = dash_calc.time_data(px, "d", series, None)
@@ -177,7 +177,7 @@ def test_old_aggregate_name_still_runs_everywhere(px):
     assert "전체 고유 개수" in table.columns and sorted(table["전체 고유 개수"].to_list()) == [3, 3]
     assert result.get_chart(px, "b", [{"y": "s", "agg": "nunique"}])[1][0]["values"] == [3, 3]
     assert dash_calc.clean_series([{"y": "s", "agg": "nunique"}])[0]["agg"] == "nunique"
-    assert metrics.AGG_NAMES["nunique"] == "고유 개수"
+    assert metric_file.AGG_NAMES["nunique"] == "고유 개수"
 
 
 FORMULA_SKIP = {"sql_expr"}
@@ -257,8 +257,8 @@ def test_pivot_subtotals_and_having(px):
 
 def test_prep_dedupe_distinct_and_choices(px):
     t = px.select("n", "b")
-    assert prep.dedupe_rows(t, ["b"], {}).count().execute() == 2
-    assert prep.dedupe_rows(t, ["n", "b"], {}).count().execute() == 6  # 모든 컬럼이 기준 = DISTINCT
+    assert prep_expr.dedupe_rows(t, ["b"], {}).count().execute() == 2
+    assert prep_expr.dedupe_rows(t, ["n", "b"], {}).count().execute() == 6  # 모든 컬럼이 기준 = DISTINCT
 
 
 # ---------- (3) 문장 틀에서 쓰인다 ----------

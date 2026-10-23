@@ -1,12 +1,12 @@
 """예전 버전이 남긴 상태 파일을 오류 없이 읽고 새 칸을 기본값으로 채우는지, 덮어쓰기 전에 .bak을 남기는지."""
 import json
 
-import collect_config
-import collect_limits
-import load_kafka
-import schedule
-import settings
-import use_counts
+from collect import collect_config
+from collect import collect_limits
+from collect import load_kafka
+from integrations import schedule
+from core import settings
+from core import use_counts
 
 
 def write_legacy(folder, name, data):

@@ -6,9 +6,9 @@ import pytest
 
 @pytest.fixture
 def got(folder, tmp_path):
-    import server
-    from app import app
-    import prep_app  # noqa: F401  전처리 라우트
+    from core import server
+    from query.search_app import app
+    from prep import prep_app  # noqa: F401  전처리 라우트
     raw = duckdb.connect(str(tmp_path / "s.duckdb"))
     raw.execute("create table orders as select i as id, i % 3 as store from range(30) t(i)")
     raw.execute("create table stores as select i as store, 's' || i as name from range(3) t(i)")
@@ -21,7 +21,7 @@ def got(folder, tmp_path):
 
 
 def test_tables_asked_once_per_connection(got, monkeypatch):
-    import source
+    from core import source
     asked = {"list": 0, "table": 0}
     real_list, real_table = source.list_tables, source.get_table
     monkeypatch.setattr(source, "list_tables", lambda *a, **k: asked.__setitem__("list", asked["list"] + 1) or real_list(*a, **k))
@@ -37,8 +37,8 @@ def test_tables_asked_once_per_connection(got, monkeypatch):
 
 
 def test_stats_off_reads_no_rows(got, monkeypatch):
-    import result
-    import settings
+    from core import result
+    from core import settings
     assert got.post("/api/settings", json={"stats": "off"}).status_code == 200 and settings.load()["stats"] == "off"
     monkeypatch.setattr(result, "get_count", lambda *a, **k: pytest.fail("통계를 끄면 행 수도 세지 않는다"))
     shape = got.post("/api/shape", json={"base": "orders", "count": False}).get_json()

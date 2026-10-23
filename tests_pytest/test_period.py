@@ -1,7 +1,7 @@
 """기간 직접 입력: 문법, 윤년·월말·분기, 열린 범위, 시각, 기준일, 직전 기간, 날짜 읽기(미래 거부), 주기, 잘못된 입력."""
 import pytest
 
-import period
+from dashboard import period
 
 TODAY = "2026-10-22"  # 목요일
 

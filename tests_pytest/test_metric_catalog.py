@@ -12,10 +12,10 @@ import pytest
 from conftest import spy_queries
 from lazy import ibis
 
-import held
-import metric_calc as mc
-import metric_catalog as cat
-import server
+from core import held
+from metrics import metric_calc as mc
+from metrics import metric_catalog as cat
+from core import server
 
 D = dt.datetime
 
@@ -65,11 +65,11 @@ def test_every_entry_has_korean_texts_and_valid_links():
         names = [s["name"] for s in e["slots"]]
         assert len(set(names)) == len(names), e["id"]
         assert set(re.findall(r"\{([^}]+)\}", e["sentence"])) <= set(names), e["id"]  # 문장의 빈칸은 모두 빈칸 목록에 있다
-        assert e["calc"] in __import__("metric_kernels").KERNELS and e["format"] in ("number", "percent") and e["hint"] in ("", *cat.HINTS)
+        assert e["calc"] in __import__("metrics.metric_kernels", fromlist=["KERNELS"]).KERNELS and e["format"] in ("number", "percent") and e["hint"] in ("", *cat.HINTS)
         assert all(p in cat.BY_ID or p in cat.PARTS for p in e["pair"]), e["id"]
         assert all(s["name"] in names for s in e["slots"] if s["constant"]) and e["constants"] == [s["name"] for s in e["slots"] if s["constant"]]
         for s in e["slots"]:
-            assert s["role"] and s["type"] in __import__("sentences").SLOT_TYPES and s["label"], (e["id"], s["name"])
+            assert s["role"] and s["type"] in __import__("query.sentences", fromlist=["SLOT_TYPES"]).SLOT_TYPES and s["label"], (e["id"], s["name"])
         for need in e["needs"]:
             assert need["name"] in names and hangul.search(need["name"]), e["id"]
 
@@ -537,7 +537,7 @@ def test_guardrail_and_limits():
     daily = mem(uid=[1, 2, 3], ts=[D(2026, 3, 1)] * 3)
     got = run("uv", {"사용자": "uid"}, daily, limit={"op": ">=", "value": 5})
     assert got["alert"] and run("uv", {"사용자": "uid"}, daily, limit={"op": ">=", "value": 2})["alert"] is None
-    import dash_store
+    from core import dash_store
     assert set(dash_store.LIMIT_OPS) == {">=", "<="}
 
 
@@ -571,10 +571,10 @@ def test_survival_is_fast_on_many_users():
 
 @pytest.fixture
 def c(folder, tmp_path):
-    import dash_app  # noqa: F401
-    import flow_app  # noqa: F401
-    import catalog_app  # noqa: F401
-    from app import app
+    from dashboard import dash_app  # noqa: F401
+    from query import flow_app  # noqa: F401
+    from metrics import catalog_app  # noqa: F401
+    from query.search_app import app
     path = tmp_path / "r.duckdb"
     raw = duckdb.connect(str(path))
     raw.execute("create table events (uid int, ts timestamp, ev varchar, amt double)")
@@ -650,7 +650,7 @@ def test_compute_on_remote_copies_needed_columns_without_counting(c, monkeypatch
 
 
 def test_compute_on_remote_with_prep_where_new_sends_only_the_metric_query(c, monkeypatch):
-    import settings
+    from core import settings
     settings.write(settings.PATH.name, {**(settings.read(settings.PATH.name) or {}), "prep_where": "new"})
     monkeypatch.setattr(held, "remote", lambda con: True)
     sent = spy_queries(monkeypatch)
@@ -665,7 +665,7 @@ def test_compute_on_remote_with_prep_where_new_sends_only_the_metric_query(c, mo
 
 
 def test_remote_asks_before_reading_when_over_the_limit(c, monkeypatch):
-    import scan_size
+    from core import scan_size
     monkeypatch.setattr(held, "remote", lambda con: True)
     monkeypatch.setattr(scan_size, "limit_check", lambda *a, **k: {"over": True, "unknown": False, "blocked": False, "bytes": 10**12, "limit": 1, "text": "읽는 양 약 1 TB"})
     sent = spy_queries(monkeypatch)
@@ -677,8 +677,8 @@ def test_remote_asks_before_reading_when_over_the_limit(c, monkeypatch):
 
 def test_file_connection_computes_on_a_local_duckdb_copy(folder, tmp_path):
     """Polars(파일) 연결: 창 함수가 필요한 세션 지표도 이 PC의 DuckDB 사본에서 구한다."""
-    import catalog_app  # noqa: F401
-    from app import app
+    from metrics import catalog_app  # noqa: F401
+    from query.search_app import app
     pl.DataFrame({"uid": [r[0] for r in ROWS], "ts": [r[1] for r in ROWS], "ev": [r[2] for r in ROWS], "amt": [float(r[3]) for r in ROWS]}).write_parquet(tmp_path / "events.parquet")
     client = app.test_client()
     client.get("/?key=" + server.KEY)
@@ -698,8 +698,8 @@ def test_file_connection_computes_on_a_local_duckdb_copy(folder, tmp_path):
 
 
 def test_save_as_my_metric_and_run_it_in_a_sentence(c):
-    import my_metrics
-    import sentence_exec
+    from metrics import my_metrics
+    from query import sentence_exec
     cols = {"uid": "num", "ts": "date", "ev": "text", "amt": "num"}
     code, made = post(c, "/api/catalog/save", id="arpu", slots={"사용자": "uid", "금액": "amt"}, scope={"table": "events"}, columns=cols)
     assert code == 200 and made["metric"]["template"] == "catalog:arpu" and made["metric"]["unit"] == "원" and made["metric"]["better"] == "up" and made["metric"]["scope"]["table"] == "events"

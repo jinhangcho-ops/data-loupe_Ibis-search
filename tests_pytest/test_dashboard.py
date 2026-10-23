@@ -3,9 +3,9 @@ import base64
 
 import pytest
 
-import dash_store
-import server
-import settings
+from core import dash_store
+from core import server
+from core import settings
 
 PNG = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"0" * 20).decode()
 JPG = "data:image/jpeg;base64," + base64.b64encode(b"\xff\xd8\xff" + b"0" * 20).decode()

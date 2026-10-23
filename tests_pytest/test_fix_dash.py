@@ -11,15 +11,15 @@ import time
 import duckdb
 import pytest
 
-import core
-import credentials
-import dash_calc
-import dash_refresh as refresh
-import dash_store as store
-import metrics
-import period
-import server
-import watch
+from core import querying
+from core import credentials
+from dashboard import dash_calc
+from dashboard import dash_refresh as refresh
+from core import dash_store as store
+from core import metric_file
+from dashboard import period
+from core import server
+from core import watch
 from conftest import ROOT, spy_queries
 
 NOW = dt.datetime(2026, 10, 22, 12, 0, 0)
@@ -98,8 +98,8 @@ def test_open_dashboard_does_not_wait_for_the_turn(client):
 
 @pytest.fixture
 def nandb(folder, tmp_path):
-    import dash_app  # noqa: F401
-    from app import app
+    from dashboard import dash_app  # noqa: F401
+    from query.search_app import app
     raw = duckdb.connect(str(tmp_path / "n.duckdb"))
     raw.execute("create table nn (day date, v double)")
     raw.executemany("insert into nn values (?, ?)", [(dt.date(2026, 1, 5), float("nan")), (dt.date(2026, 1, 5), 1.0), (dt.date(2026, 1, 6), 2.0)])
@@ -133,7 +133,7 @@ def test_stored_nan_is_cleaned_when_read(folder):
 @pytest.fixture
 def fake(folder, monkeypatch):
     monkeypatch.setitem(server.state, "opened", FOLDER)
-    monkeypatch.setattr(core, "using", lambda: contextlib.nullcontext())
+    monkeypatch.setattr(querying, "using", lambda: contextlib.nullcontext())
     refresh.JOB.update(running=False, total=0, done=0, current="", results=[])
     yield
     refresh.wait(10)
@@ -230,9 +230,9 @@ pytest_node = pytest.mark.skipif(shutil.which("node") is None, reason="node가 �
 
 
 def run_node(tmp_path, files, body):
-    parts = "".join((ROOT / "static" / f).read_text(encoding="utf-8") for f in files)
+    parts = "".join(next((ROOT / "static").rglob(f)).read_text(encoding="utf-8") for f in files)
     script = tmp_path / "t.js"
-    script.write_text("const assert = require('assert'); globalThis.SERVER = { dash: { types: {}, time_types: [], units: {}, max_palette: 12, aggs: [] }, merge: [], agg_names: JSON.parse(%s) };\n" % json.dumps(json.dumps(metrics.AGG_NAMES, ensure_ascii=False))
+    script.write_text("const assert = require('assert'); globalThis.SERVER = { dash: { types: {}, time_types: [], units: {}, max_palette: 12, aggs: [] }, merge: [], agg_names: JSON.parse(%s) };\n" % json.dumps(json.dumps(metric_file.AGG_NAMES, ensure_ascii=False))
                       + parts + body, encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0, done.stderr[-3000:]
@@ -293,7 +293,7 @@ def test_period_parse_returns_context(client):
 
 
 def test_ctl_uses_server_context_not_its_own_arithmetic():
-    ctl = (ROOT / "static" / "dash_ctl.js").read_text(encoding="utf-8")
+    ctl = (ROOT / "static" / "dashboard" / "dash_ctl.js").read_text(encoding="utf-8")
     assert "parsed.context" in ctl and ".slice(0, 10)" not in ctl.split("async apply")[1].split("async check")[0]
 
 
@@ -311,8 +311,8 @@ def test_group_values_over_limit_gives_none(monkeypatch):
 
 @pytest.fixture
 def sumdb(folder, tmp_path):
-    import dash_app  # noqa: F401
-    from app import app
+    from dashboard import dash_app  # noqa: F401
+    from query.search_app import app
     raw = duckdb.connect(str(tmp_path / "s.duckdb"))
     raw.execute("create table s (day date, g varchar, v double)")
     rows = [(dt.date(2026, 1, 12), "a", 10.0), (dt.date(2026, 1, 12), "b", 30.0), (dt.date(2026, 1, 12), "c", 5.0), (dt.date(2025, 12, 25), "a", 10.0), (dt.date(2025, 12, 25), "b", 10.0), (dt.date(2025, 12, 25), "c", 5.0)]
@@ -339,8 +339,8 @@ def test_summary_drops_share_sentence_when_groups_exceed_limit(sumdb, monkeypatc
 
 @pytest.fixture
 def hours(folder, tmp_path):
-    import dash_app  # noqa: F401
-    from app import app
+    from dashboard import dash_app  # noqa: F401
+    from query.search_app import app
     raw = duckdb.connect(str(tmp_path / "h.duckdb"))
     raw.execute("create table h (host varchar, ts timestamp, val double)")
     raw.executemany("insert into h values (?, ?, ?)", [("x", dt.datetime(2026, 1, 1, 8, 5), 1.0), ("x", dt.datetime(2026, 1, 1, 9, 5), 10.0), ("x", dt.datetime(2026, 1, 1, 10, 5), 30.0),
@@ -394,7 +394,7 @@ def test_editing_a_loaded_copy_does_not_leak_into_the_cache(folder):
 # ---------- N 쓰지 않는 상수 ----------
 
 def test_unused_constants_removed():
-    import compare
+    from core import compare
     assert not hasattr(compare, "BETTER") and not hasattr(watch, "LEVEL_NAMES")
 
 
@@ -408,3 +408,18 @@ console.log(JSON.stringify([shelfSeries(series), setAgg(series, 1, "sum")[1]]));
     got = json.loads(run_node(tmp_path, ["board.js", "dash.js", "dash_cards.js", "dash_rules.js", "dash_shelf.js", "dash_panel.js"], body))
     assert got[0] == [{"y": "amt", "agg": "quantile", "opts": {"p": 0.5}}, {"y": "amt", "agg": "quantile", "opts": {"p": 0.9}}, {"y": "amt", "agg": "sum"}]
     assert got[1] == {"y": "amt", "agg": "sum"}
+
+
+@pytest_node
+def test_panel_close_does_not_loop_through_board_edit(tmp_path):
+    """[×] 닫기: close → board.edit(null) → onEdit(null) → open(null) → close 가 한 번에서 멈춘다(예전에는 끝없이 돌아 스택 넘침)."""
+    body = """
+const root = { classList: { add() {} } }, host = { popRoot: { append() {} }, menuRoot: {} };
+let edits = 0;
+host.board = { editing: { id: "a" }, edit(card) { edits++; this.editing = card; panel.open(card); } };  // EditBoard.edit과 같은 차례
+const panel = new CardPanel(root, host);
+panel.close();
+console.log(JSON.stringify({ edits, editing: host.board.editing }));
+"""
+    got = json.loads(run_node(tmp_path, ["board.js", "dash.js", "dash_cards.js", "dash_rules.js", "dash_shelf.js", "dash_panel.js"], body))
+    assert got == {"edits": 1, "editing": None}

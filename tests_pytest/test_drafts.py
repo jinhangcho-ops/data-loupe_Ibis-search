@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 
-import draft_app
+from core import draft_app
 from conftest import ROOT
 
 SECRET = "Draft-S3cret!"  # 지어낸 비밀번호
@@ -87,7 +87,7 @@ def test_no_connection_saves_without_it(client):
 def test_debounce_logic(tmp_path):
     """draftTick: 바뀐 뒤 조용해야 보내고, 같은 것은 다시 보내지 않으며, 저장할 것이 없으면(null) 보내지 않는다."""
     script = tmp_path / "tick.js"
-    script.write_text((ROOT / "static" / "draft.js").read_text(encoding="utf-8") + """
+    script.write_text((ROOT / "static" / "core" / "draft.js").read_text(encoding="utf-8") + """
 const m = { sent: "", seen: "", at: 0 }, out = [];
 const t = (now, snap) => out.push(draftTick(m, now, snap, 2000));
 t(0, '{"a":1}'); t(1000, '{"a":1}'); t(1999, '{"a":1}'); t(2000, '{"a":1}'); t(3000, '{"a":1}');   // false false false true false

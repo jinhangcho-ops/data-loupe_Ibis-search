@@ -25,14 +25,14 @@ def lite(tmp_path):
 
 
 def test_whole_fetch_is_chosen_by_how_ibis_fetches(lite, tmp_path):
-    import result
+    from core import result
     assert result.whole_fetch(lite)
     assert not result.whole_fetch(ibis.duckdb.connect())  # DuckDB는 Ibis가 이미 묶음씩 받는다
     assert not result.whole_fetch(ibis.polars.connect())
 
 
 def test_same_values_and_types_in_small_batches(lite, monkeypatch):
-    import result
+    from core import result
     seen = []
     real = type(lite)._fetch_from_cursor
     monkeypatch.setattr(type(lite), "_fetch_from_cursor", lambda self, cursor, schema: (seen.append(len(cursor)), real(self, cursor, schema))[1])
@@ -46,7 +46,7 @@ def test_same_values_and_types_in_small_batches(lite, monkeypatch):
 
 
 def test_falls_back_when_ibis_internals_change(lite, monkeypatch):
-    import result
+    from core import result
 
     def broken(self, cursor, schema):
         raise AttributeError("바뀐 Ibis")
@@ -58,7 +58,7 @@ def test_falls_back_when_ibis_internals_change(lite, monkeypatch):
 
 
 def test_db_errors_are_not_hidden(lite):
-    import result
+    from core import result
     t = lite.table("t")
     lite.raw_sql("drop table t")
     with pytest.raises(Exception) as found:
@@ -67,7 +67,7 @@ def test_db_errors_are_not_hidden(lite):
 
 
 def test_files_match_ibis_writers(lite, tmp_path):
-    import result
+    from core import result
     t = lite.table("t").order_by("id")
     result.write_parquet(t, tmp_path / "new.parquet")
     t.to_parquet(tmp_path / "old.parquet")

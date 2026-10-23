@@ -3,10 +3,10 @@ ev: id 0~11, store = A(id 0~4)·B(5~8)·C(9~11), amt = (id+1)*10 → A 합 150(5
 import duckdb
 import pytest
 
-import sentence_run as sr
-import sentences
-import server
-import sql_funcs
+from query import sentence_run as sr
+from query import sentences
+from core import server
+from core import sql_funcs
 
 COLS = {"id": "num", "uid": "text", "store": "text", "amt": "num", "day": "date", "tags": "array", "url": "text"}
 BASE = {"base": "ev", "joins": [], "periods": [], "conditions": [], "calcs": []}
@@ -14,10 +14,10 @@ BASE = {"base": "ev", "joins": [], "periods": [], "conditions": [], "calcs": []}
 
 @pytest.fixture
 def c(folder, tmp_path):
-    import dash_app  # noqa: F401
-    import flow_app  # noqa: F401
-    import prep_app  # noqa: F401
-    from app import app
+    from dashboard import dash_app  # noqa: F401
+    from query import flow_app  # noqa: F401
+    from prep import prep_app  # noqa: F401
+    from query.search_app import app
     path = tmp_path / "s.duckdb"
     raw = duckdb.connect(str(path))
     raw.execute("""create table ev as select i::int as id, 'u' || (i % 4) as uid, case when i < 5 then 'A' when i < 9 then 'B' else 'C' end as store,

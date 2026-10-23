@@ -8,7 +8,7 @@ import polars as pl
 import pytest
 from lazy import ibis
 
-import metric_calc as mc
+from metrics import metric_calc as mc
 
 T0 = dt.datetime(2026, 3, 1, 9, 0, 0)
 

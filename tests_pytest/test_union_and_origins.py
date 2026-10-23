@@ -5,8 +5,8 @@ import pytest
 
 @pytest.fixture
 def searching(folder, tmp_path):
-    import server
-    from app import app
+    from core import server
+    from query.search_app import app
     raw = duckdb.connect(str(tmp_path / "shop.duckdb"))
     raw.execute("create table orders as select i as id, i % 3 + 1 as cust, 'o' as kind, i * 10 as amount from range(1, 6) t(i)")
     raw.execute("create table old_orders as select i + 100 as id, 1 as cust, 99 as amount, 'x' as extra from range(2) t(i)")

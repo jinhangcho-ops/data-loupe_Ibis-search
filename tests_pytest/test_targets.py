@@ -5,7 +5,7 @@ import os
 import pytest
 import xlsxwriter
 
-import targets
+from core import targets
 
 
 def write(tmp_path, name, text, encoding="utf-8"):

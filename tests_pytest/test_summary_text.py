@@ -1,8 +1,8 @@
 """요약 문장: 변화 → 기여 분해 → 목표 대비. 분해 규칙(부호·최대 그룹·몫 범위), 숫자가 없으면 문장을 빼는 것."""
 import pytest
 
-import summary_text
-from summary_text import summarize
+from dashboard import summary_text
+from dashboard.summary_text import summarize
 
 
 def test_full_sentence_with_decomposition_and_target():

@@ -4,14 +4,14 @@ import json
 
 import pytest
 
-from adapters import llm
+from integrations.adapters import llm
 
 KEY = "sk-made-up-key-123"
 
 
 @pytest.fixture
 def posted(monkeypatch):
-    from adapters import transport
+    from integrations.adapters import transport
     out = []
 
     def fake(url, data, headers, timeout=15):
