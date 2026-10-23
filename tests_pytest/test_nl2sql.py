@@ -33,6 +33,7 @@ def shop(client, tmp_path, folder):
         raw.register("df", ORDERS.to_arrow())
         raw.execute("create table orders as select * from df")
     server.state.update(con=ibis.duckdb.connect(str(path), read_only=True), opened={"kind": "folder", "path": str(tmp_path), "file": str(path)})
+    server.forget_tables()  # 앱의 switch처럼, 앞 시험의 연결에서 기억한 테이블 목록을 비운다
     (tmp_path / "spec.yaml").write_text("tables:\n  orders:\n    description: 주문 내역\n    partition: {column: day, recent_days: 7}\n"
                                         "    columns:\n      amount: {description: 결제 금액(원)}\n", encoding="utf-8")
     profiler.save_spec_path(str(tmp_path / "spec.yaml"))

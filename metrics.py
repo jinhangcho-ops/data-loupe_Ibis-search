@@ -13,6 +13,7 @@
   opts는 그 집계의 나머지 인자(분위수 p, 구분자 sep, 둘째 컬럼 y …, 선택). 식(코드)은 쓰지 않으므로 파일이 무엇을 실행할 수는 없다.
 - 분모가 있으면 분자 / 분모이고, 분모가 0이면 nullif(0)로 빈 값이 된다(0으로 나누기 오류 없음).
 - 계산은 식.group_by(나눌 컬럼).aggregate(지표들) 한 번(나누지 않으면 aggregate만)이다."""
+import re
 from pathlib import Path
 
 from lazy import ibis
@@ -110,9 +111,16 @@ def part(where, p):
     return {"agg": p["agg"], "column": column.strip() if column else None, "where": [c.strip() for c in conds], **({"opts": opts} if opts else {})}
 
 
-def describe(m):
-    """지표의 계산을 사람이 읽을 글로(목록에 보인다). 예: 개수 [event = click] ÷ 개수 [event = impression]"""
-    text = lambda p: AGG_NAMES[p["agg"]] + (f"({p['column']})" if p["column"] else "") + (f" [{' and '.join(p['where'])}]" if p["where"] else "")
+def condition_columns(lines):
+    """조건 줄들이 가리키는 컬럼 이름들(값은 빼고, 겹치는 것은 한 번만)."""
+    return list(dict.fromkeys(m[0] for line in lines for part in re.split(r"\s+or\s+", line, flags=re.I) if (m := re.match(r"[^\s=<>!]+", part.strip()))))
+
+
+def describe(m, values=True):
+    """지표의 계산을 사람이 읽을 글로(목록에 보인다). 예: 개수 [event = click] ÷ 개수 [event = impression]
+    values가 False면 조건의 값은 빼고 컬럼 이름만(LLM에 보낼 글이라 데이터 값이 나가지 않게): 개수 [event 조건] ÷ 개수 [event 조건]"""
+    where = lambda p: ' and '.join(p['where']) if values else ', '.join(condition_columns(p['where'])) + " 조건"
+    text = lambda p: AGG_NAMES[p["agg"]] + (f"({p['column']})" if p["column"] else "") + (f" [{where(p)}]" if p["where"] else "")
     return text(m["numerator"]) + (f" ÷ {text(m['denominator'])}" if m["denominator"] else "")
 
 

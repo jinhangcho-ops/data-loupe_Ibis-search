@@ -88,7 +88,7 @@ def targets(words, expr):
     if text in picks:
         return picks[text]
     if any(ch in text for ch in "*?"):
-        return s.matches(fnmatch.translate(text).replace(r"\Z", "$"))
+        return s.matches("^" + fnmatch.translate(text).replace(r"\Z", "$"))
     if not text:
         raise ValueError("대상을 넣으세요: 숫자, 글자, 날짜, 이름 패턴(amt_*), 또는 컬럼1, 컬럼2")
     return s.cols(*names(words, expr))

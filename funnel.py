@@ -1,7 +1,8 @@
 """퍼널(단계별 도달) 계산: 사용자가 단계를 순서대로 거쳐 간 사람 수를 Ibis 식으로 구한다. 중간에 한 다른 행동과 되돌아간 행동은 무시한다.
-- 첫 단계 T1 = 그 단계 행의 사용자별 가장 이른 시각. 다음 단계 Ti = (그 단계 행)과 T(i-1)을 사용자로 이어 붙여 t ≥ T(i-1)인 행의 사용자별 가장 이른 시각.
+- 첫 단계 T1 = 그 단계 행의 사용자별 가장 이른 시각(기간 제한이 있으면 시각마다). 다음 단계 Ti = (그 단계 행)과 T(i-1)을 사용자로 이어 붙여 t ≥ T(i-1)인 행의 사용자별 가장 이른 시각.
 - 같은 시각에 두 단계가 있으면 ≥ 이므로 도달한 것으로 센다.
-- 기간 제한이 있으면 첫 단계 시각부터 그 시간 안(경계 포함)에 도달한 것만 센다.
+- 기간 제한이 있으면 첫 단계 시각부터 그 시간 안(경계 포함)에 도달한 것만 센다. 이때는 첫 단계를 한 시각마다 각각 한 번의 "시도"로 보고,
+  어느 한 시도에서라도 기간 안에 끝까지 가면 도달로 센다(재방문 서비스). 사람 수는 사람 기준이라 한 사람은 한 번만 센다. 기간 제한이 없으면 사용자별 가장 이른 시각 하나만 쓴다.
 - 단계가 k개면 이어 붙이기 k-1번과 조회 한 번이다. 어느 연결에서나 같은 식이다(창 함수를 쓰지 않는다)."""
 from lazy import ibis
 
@@ -48,13 +49,16 @@ def step_value(dtype, value):
 
 
 def reached(base, steps, window_seconds, entry=None):
-    """단계마다 도달한 사용자 표(사용자 u, 이번 단계 시각 tp, 첫 단계 시각 t1)의 목록.
+    """단계마다 도달한 표(사용자 u, 이번 단계 시각 tp, 첫 단계 시각 t1)의 목록. 기간 제한이 없으면 사용자마다 한 줄, 있으면 시도(첫 단계 시각)마다 한 줄이다.
     entry = (시작 날짜, 끝 날짜): 첫 단계 행만 그 날짜 안의 것으로 거른다. 뒤 단계는 기간 밖이어도 센다(기간 끝 무렵에 시작한 사람의 전환이 빠지지 않게)."""
     starts = base.filter(base.s == steps[0])
     if entry:
         day = starts.t.cast("date")
         starts = starts.filter(*([day >= entry[0]] if entry[0] else []), *([day <= entry[1]] if entry[1] else []))
-    first = starts.group_by("u").aggregate(tp=starts.t.min())
+    if window_seconds is None:
+        first = starts.group_by("u").aggregate(tp=starts.t.min())
+    else:  # 기간 제한이 있으면 첫 단계를 한 시각마다 한 번의 시도로 본다(재방문하는 사람의 전환이 낮게 나오지 않게)
+        first = starts.select("u", tp=starts.t).distinct()
     levels = [first.mutate(t1=first.tp)]
     for value in steps[1:]:
         prev = levels[-1]
@@ -68,8 +72,8 @@ def reached(base, steps, window_seconds, entry=None):
 
 
 def counts(levels):
-    """단계별 사용자 수 목록(조회 한 번)."""
-    parts = [level.aggregate(n=level.u.count()).mutate(i=ibis.literal(i)) for i, level in enumerate(levels)]
+    """단계별 사용자 수 목록(조회 한 번). 한 사람은 시도가 여럿이어도 한 번만 센다."""
+    parts = [level.aggregate(n=level.u.nunique()).mutate(i=ibis.literal(i)) for i, level in enumerate(levels)]
     table = parts[0]
     for part in parts[1:]:
         table = table.union(part)

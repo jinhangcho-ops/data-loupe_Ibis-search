@@ -301,19 +301,35 @@ def get_table(con, name, schema=None):
     return con.table(name, database=schema) if schema else con.table(name)
 
 
+SECRET_PARAMS = {"password", "pwd", "passwd", "token", "access_token", "secret"}  # 주소 query에서 비밀 값을 담는 이름(그 밖에 *_key·*_secret·*_token·*_password)
+
+
+def secret_param(piece):
+    """주소 query의 한 조각(이름=값)이 비밀 값을 담았는지."""
+    key = unquote(piece.partition("=")[0]).lower()
+    return key in SECRET_PARAMS or key.endswith(("_key", "_secret", "_token", "_password"))
+
+
 def passwords(info):
-    """연결 요청에서 가릴 비밀번호들: 비밀번호 칸의 값, 주소 안에 쓴 값(쓴 그대로와 인코딩을 푼 값)."""
-    inside = urlsplit(info.get("url", "")).password or ""
-    return [info.get("password", ""), inside, unquote(inside)]
+    """연결 요청에서 가릴 비밀번호들: 비밀번호 칸의 값, 주소 안에 쓴 값(쓴 그대로와 인코딩을 푼 값), 주소 query의 비밀 값(password·token·*_key 등)."""
+    parts = urlsplit(info.get("url", ""))
+    inside = parts.password or ""
+    queried = [v for piece in parts.query.split("&") if secret_param(piece) and (v := piece.partition("=")[2])]
+    return [info.get("password", ""), inside, unquote(inside), *queried, *[unquote(v) for v in queried]]
 
 
 def recent(info):
-    """연결 요청에서 다음 실행 때 칸을 채워 줄 값만. 비밀번호는 칸의 값도, 주소 안에 쓴 값도 남기지 않는다."""
+    """연결 요청에서 다음 실행 때 칸을 채워 줄 값만. 비밀번호는 칸의 값도, 주소 안에 쓴 값도, 주소 query의 비밀 값도 남기지 않는다."""
     if info["kind"] == "folder":
         return {"kind": "folder", "path": info.get("path", "")}
     parts = urlsplit(info["url"])
     login, at, host = parts.netloc.rpartition("@")
-    url = parts._replace(netloc=login.partition(":")[0] + at + host).geturl() if parts.password else info["url"]
+    pieces = parts.query.split("&")
+    clean = [p for p in pieces if not secret_param(p)]
+    if not parts.password and len(clean) == len(pieces):
+        url = info["url"]  # 지울 것이 없으면 쓴 그대로
+    else:
+        url = parts._replace(netloc=login.partition(":")[0] + at + host if parts.password else parts.netloc, query="&".join(clean)).geturl()
     return {"kind": "url", "url": url, "user": info.get("user", "")}
 
 

@@ -28,7 +28,7 @@ def referenced(sql, dialect):
     exp = sql_exec.glot()[1]
     tree = sql_exec.check(sql, dialect)
     tables = sql_exec.table_names(tree)
-    star = any(isinstance(s, exp.Star) for s in tree.find_all(exp.Star))
+    star = any(not isinstance(s.parent, exp.Count) for s in tree.find_all(exp.Star))  # COUNT(*)의 *는 컬럼을 읽지 않는다
     columns = None if star else {c.name.lower() for c in tree.find_all(exp.Column) if c.name}
     return list(dict.fromkeys(tables)), columns
 

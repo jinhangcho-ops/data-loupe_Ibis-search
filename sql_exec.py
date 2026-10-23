@@ -9,6 +9,7 @@ import functools
 import re
 
 import settings
+import source
 
 VT_FILE = "virtual_tables.json"
 MAX_VIRTUAL = 100  # 연결 하나에 둘 수 있는 가상 테이블 수
@@ -120,7 +121,7 @@ def file_read_problem(tree, sql):
             start = ident.meta.get("start")
             if start is not None and sql[start:start + 1] == "'":  # 작은따옴표 글자가 테이블 자리에 온 것
                 return READ_MESSAGE
-            if start is None and ident.args.get("quoted") and re.search(r"[/\\]", ident.name):  # 자리를 모르면 경로 모양으로
+            if re.search(r"[/\\]", ident.name) or source.kind_of(ident.name):  # 따옴표 종류와 관계없이 경로 모양이거나 파일 확장자로 끝나는 이름
                 return READ_MESSAGE
     return None
 
@@ -190,6 +191,7 @@ def definition_tree(con, name, item):
 def expand(con, tree, vts):
     """tree가 읽는 가상 테이블(그 정의가 읽는 가상 테이블까지)을 WITH로 앞에 넣은 식. 정의가 서로를 고리로 부르면 ValueError."""
     order, visiting = [], []
+    lower = {n.lower(): n for n in vts}
 
     def visit(name):
         if name in order:
@@ -199,12 +201,11 @@ def expand(con, tree, vts):
         visiting.append(name)
         sub = definition_tree(con, name, vts[name])
         for used in table_names(sub):
-            if used in vts:
-                visit(used)
+            if used.lower() in lower:
+                visit(lower[used.lower()])
         visiting.pop()
         order.append(name)
 
-    lower = {n.lower(): n for n in vts}
     for used in table_names(tree):
         if used.lower() in lower:
             visit(lower[used.lower()])

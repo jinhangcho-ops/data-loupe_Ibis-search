@@ -7,8 +7,7 @@ from lazy import ibis
 
 import funnel
 from parse import check_name
-from profiler import plain
-from result import chart_metric
+from result import chart_metric, plain
 
 BINS = 20  # 히스토그램 구간 수
 TOP_VALUES = 20  # 값 빈도에 보일 값 수(나머지는 "그 밖")
@@ -45,6 +44,12 @@ def column_of(t, name, want=None, what="컬럼"):
     return t[name]
 
 
+def finite(c):
+    """숫자 컬럼을 실수로. NaN·무한은 빈 값으로 본다(계산이 NaN으로 번지지 않게)."""
+    x = c.cast("float64")
+    return ibis.ifelse(x.isnan() | x.isinf(), ibis.null().cast("float64"), x) if c.type().is_floating() else x
+
+
 def values(t, c):
     """값 빈도: 행이 많은 TOP_VALUES개 값과 그 수, 빈 값 수, 그 밖의 값 수."""
     top = rows(t.group_by(c.name("value")).aggregate(n=t.count()).order_by([ibis.desc("n"), "value"]).limit(TOP_VALUES + 1))
@@ -60,6 +65,9 @@ def values(t, c):
 def distribution(t, column):
     """컬럼 하나의 분포. 숫자면 요약 통계·히스토그램(BINS 구간)·상자 그림 값, 모든 종류에 값 빈도."""
     c = column_of(t, column)
+    if c.type().is_floating():  # NaN·무한은 빈 값으로 본다
+        t = t.mutate(**{column: finite(c)})
+        c = t[column]
     out = {"column": column, "type": kind(c.type()), "values": values(t, c)}
     if out["type"] != "num":
         return out
@@ -90,9 +98,9 @@ def correlation(t, columns):
     평균을 먼저 구하고 평균을 뺀 곱의 합으로 구한다(두 번 집계, 큰 값에서도 정확도를 지킨다). 값이 하나뿐인 컬럼과는 None."""
     if not isinstance(columns, list) or not 2 <= len(columns) <= MAX_CORR or len(set(columns)) != len(columns):
         raise ValueError(f"상관관계는 서로 다른 숫자 컬럼 2~{MAX_CORR}개를 고르세요.")
-    xs = [column_of(t, name, "num").cast("float64") for name in columns]
+    xs = [finite(column_of(t, name, "num")) for name in columns]
     s = t.filter([x.notnull() for x in xs])
-    xs = [s[name].cast("float64") for name in columns]
+    xs = [finite(s[name]) for name in columns]
     means = one(s.aggregate(n=s.count(), **{f"m{i}": x.mean() for i, x in enumerate(xs)}))
     n = means["n"]
     if n < 2:
@@ -111,8 +119,8 @@ def scatter(t, x, y):
     if x == y:
         raise ValueError("X와 Y는 다른 컬럼으로 고르세요.")
     cx, cy = column_of(t, x, "num"), column_of(t, y, "num")
-    s = t.filter(cx.notnull(), cy.notnull())
-    found = rows(s.select(cx.cast("float64").name("x"), cy.cast("float64").name("y")).limit(MAX_POINTS))
+    s = t.filter(finite(cx).notnull(), finite(cy).notnull())
+    found = rows(s.select(finite(s[x]).name("x"), finite(s[y]).name("y")).limit(MAX_POINTS))
     corr = correlation(t, [x, y])
     return {"x": x, "y": y, "points": [[p["x"], p["y"]] for p in found], "n": corr["n"], "r": corr["matrix"][0][1]}
 

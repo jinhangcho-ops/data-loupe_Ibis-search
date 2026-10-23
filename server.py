@@ -107,8 +107,8 @@ def run(work, drop=lambda value: None):
         raise ValueError(str(e) or "취소했습니다.") from None
 
 
-def run_writing(write, clean):
-    """파일을 쓰는 write()를 run으로 돌린다. 쓰다 실패하면 clean()으로 치우고, 그만둔 뒤에 늦게 다 쓴 것도 치운다."""
+def run_writing(write, clean, runner=None):
+    """파일을 쓰는 write()를 run(또는 runner)으로 돌린다. 쓰다 실패하면 clean()으로 치우고, 그만둔 뒤에 늦게 다 쓴 것도 치운다."""
     def guarded():
         try:
             return write()
@@ -116,7 +116,7 @@ def run_writing(write, clean):
             clean()
             raise
 
-    return run(guarded, lambda done: clean())
+    return (runner or run)(guarded, lambda done: clean())
 
 
 @app.errorhandler(Exception)
@@ -182,6 +182,19 @@ def virtual_tables():
 def forget_tables():
     """기억한 테이블 목록·스키마를 비운다(연결을 바꾸거나 다시 열 때, 테이블을 만들 때, 화면이 목록을 새로 받을 때)."""
     state.update(names={}, tables={})
+    SUPPORT.clear()  # 함수 지원 시험도 테이블이 바뀌었을 수 있다
+
+
+def release_connection(wait=5):
+    """프로그램을 끝낼 때 열어 둔 연결을 놓는다: 도는 작업에 취소를 알리고(cancel·interrupt) 닫는다. 도는 쿼리 때문에 닫기가 끝나지 않을 수 있어 wait초까지만 기다린다."""
+    con = state["con"]
+    if con is None:
+        return
+    state["cancel"].set()
+    source.interrupt(con)
+    closer = threading.Thread(target=source.close, args=(con,), daemon=True)
+    closer.start()
+    closer.join(wait)
 
 
 def table_names(con, schema=None):
@@ -224,7 +237,8 @@ def download(expr, fmt, guard=True):
     guard가 False면 CSV·Excel의 수식 막기를 하지 않는다."""
     folder = scratch.make()
     path = Path(folder, "result." + fmt)
-    run_writing(lambda: result.export(expr, path, guard), lambda: scratch.remove(folder))
+    import prep_app  # 없는 날짜를 날짜로 바꾸다 난 DB 오류의 안내 문장은 전처리와 같은 것을 쓴다
+    run_writing(lambda: result.export(expr, path, guard), lambda: scratch.remove(folder), prep_app.run)
 
     bom = b"\xef\xbb\xbf" if path.suffix == ".csv" else b""  # Excel이 CSV의 한글을 바로 읽도록 맨 앞에 붙인다.
 

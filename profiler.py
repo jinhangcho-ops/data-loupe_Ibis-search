@@ -9,6 +9,7 @@ from pathlib import Path
 
 from lazy import ibis
 
+import result
 import settings
 
 CACHE = "profile_cache.json"  # {테이블 열쇠: {"saved", "size", "sampled", "profile", "patterns"}}
@@ -103,16 +104,15 @@ def parquet_facts(path):
         bounded = [s for s in stats if s.has_min_max]
         low = min((s.min for s in bounded), default=None)
         high = max((s.max for s in bounded), default=None)
+        every = len(bounded) == len(stats)  # 최소·최대는 모든 행 묶음에 있을 때만 믿는다(NaN만 있는 묶음 등은 통계가 없다)
         columns[name] = {"nulls": nulls, "min": plain(low), "max": plain(high),
-                         "constant": nulls == meta.num_rows or (nulls == 0 and bounded and low == high)}
+                         "constant": bool(nulls == meta.num_rows or (nulls == 0 and every and low == high))}
     return {"rows": meta.num_rows, "columns": columns}
 
 
 def plain(value):
-    """JSON으로 보낼 수 있는 값(날짜·바이트 등은 글자로)."""
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    return value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value)
+    """JSON으로 보낼 수 있는 값(result.plain: NaN·무한은 빈 값, Decimal은 실수, 날짜 등은 글자로. 바이트는 글자로 푼다)."""
+    return result.plain(value.decode("utf-8", "replace") if isinstance(value, bytes) else value)
 
 
 # ---------- 표본 ----------

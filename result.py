@@ -1,4 +1,5 @@
 """결과 계산과 파일 저장. 이 단계에서 처음으로 연산이 실행된다."""
+import math
 from decimal import Decimal
 from pathlib import Path
 
@@ -146,10 +147,9 @@ def write_excel(expr, path):
             kinds = [shapes.get(t.base_type()) for t in frame.dtypes]
             for values in frame.iter_rows():
                 for col, value in enumerate(values):
+                    value = number(value)  # NaN·무한은 빈 칸(xlsxwriter가 쓰지 못한다), Decimal은 실수로
                     if value is None:
                         continue
-                    if isinstance(value, Decimal):
-                        value = float(value)
                     sheet.write(row, col, value, kinds[col]) if kinds[col] else sheet.write(row, col, value)
                 row += 1
 
@@ -203,9 +203,17 @@ def get_count(expr, backend=None):
     return (backend.to_pyarrow(expr.count()) if backend else expr.count().to_pyarrow()).as_py()
 
 
+def number(value):
+    """숫자 값을 JSON으로 보낼 수 있게: NaN·무한은 빈 값(None), Decimal은 실수로. 그 밖의 값은 그대로."""
+    if isinstance(value, Decimal):
+        value = float(value)
+    return None if isinstance(value, float) and not math.isfinite(value) else value
+
+
 def plain(value):
-    """JSON으로 보낼 수 있는 값. 숫자와 빈 값은 그대로, Decimal은 실수로, 나머지(날짜 등)는 글자로."""
-    return value if value is None or isinstance(value, (int, float)) else float(value) if isinstance(value, Decimal) else str(value)
+    """JSON으로 보낼 수 있는 값. 숫자와 빈 값은 그대로(NaN·무한은 빈 값), Decimal은 실수로, 나머지(날짜 등)는 글자로."""
+    value = number(value)
+    return value if value is None or isinstance(value, (int, float)) else str(value)
 
 
 def get_summary(expr, columns=()):
@@ -268,7 +276,7 @@ def get_chart(expr, x, series, split=None, order="x"):
     top = top.order_by([top.v0.desc(), top[x]] if order == "value" else [top[x]]).limit(MAX_GROUPS).to_polars()
     labels = top[x].to_list()
     if not split:
-        return labels, [{"series": i, "split": None, "values": top[f"v{i}"].to_list()} for i in range(len(series))], False
+        return labels, [{"series": i, "split": None, "values": [number(v) for v in top[f"v{i}"].to_list()]} for i in range(len(series))], False
     check_name(split, expr.columns)
     filled = expr.filter(expr[split].notnull())
     sizes = filled.group_by(split).aggregate(n=filled.count())
@@ -278,7 +286,7 @@ def get_chart(expr, x, series, split=None, order="x"):
     inside = expr.filter(expr[x].isin(known), expr[split].isin(parts))
     cells = inside.group_by([x, split]).aggregate(**metrics(inside)).to_polars()
     found = {(row[x], row[split]): row for row in cells.iter_rows(named=True)}
-    return labels, [{"series": i, "split": str(part), "values": [found.get((label, part), {}).get(f"v{i}") for label in labels]}
+    return labels, [{"series": i, "split": str(part), "values": [number(found.get((label, part), {}).get(f"v{i}")) for label in labels]}
                     for i in range(len(series)) for part in parts], more
 
 

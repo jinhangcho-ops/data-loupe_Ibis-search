@@ -56,7 +56,7 @@ def context(con, conn_key, schema=None, vts=None):
         found = metrics.registry()
     except ValueError:
         found = {}
-    listed = [{"name": n, "description": m["description"], "definition": metrics.describe(m), "format": m["format"]}
+    listed = [{"name": n, "description": m["description"], "definition": metrics.describe(m, values=False), "format": m["format"]}
               for n, m in found.items()]
     dialect = sql_exec.dialect_of(con)
     return {"dialect": getattr(dialect, "__name__", dialect) or "ANSI", "tables": tables, "metrics": listed, "virtual": sorted(vts or {})}

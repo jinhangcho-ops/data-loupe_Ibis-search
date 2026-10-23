@@ -6,7 +6,6 @@ import re
 from pathlib import Path
 
 from flask import jsonify, request
-from lazy import ibis
 
 import calc
 import core
@@ -336,15 +335,6 @@ def sql_expr(body):
     return run(lambda: sql_exec.to_expr(con, body["sql"], vts)), [n for n in sql_exec.table_names(tree) if n in vts]
 
 
-KNOWN_TABLES = {}  # 연결마다 한 번 받은 테이블 목록 {"con": 연결, "names": [...]}. 입력하는 동안의 검사가 DB에 자꾸 묻지 않게 한다.
-
-
-def known_tables(con):
-    if KNOWN_TABLES.get("con") is not con:
-        KNOWN_TABLES.update(con=con, names=source.list_tables(con))
-    return KNOWN_TABLES["names"]
-
-
 @app.post("/api/sql/check")
 def sql_check():
     """SQL을 실행하지 않고 검사한다: 문법(오류면 줄·칸), 바꾸는 문장·여러 문장, 이 연결에 없는 테이블(테이블·가상 테이블·WITH 이름 기준).
@@ -357,7 +347,7 @@ def sql_check():
     except ValueError as e:
         return jsonify(ok=False, message=str(e))
     vts = server.virtual_tables()
-    known = {t.lower() for t in known_tables(con)} | {n.lower() for n in vts}
+    known = {t.lower() for t in server.table_names(con)} | {n.lower() for n in vts}
     missing = [n for n in dict.fromkeys(sql_exec.table_names(tree)) if n.lower() not in known]
     if missing:
         return jsonify(ok=False, message=f"이 연결에 없는 테이블입니다: {', '.join(missing)}")
@@ -540,7 +530,7 @@ def nl2sql_prompt():
 def nl2sql_ask():
     """질문을 LLM에 물어 검사한 SQL을 돌려준다. 실행하지 않는다(화면이 편집기에 넣고 사람이 [실행])."""
     con, ctx = nl2sql_context()
-    known = known_tables(con) + list(server.virtual_tables())
+    known = server.table_names(con) + list(server.virtual_tables())
     return jsonify(sql=nl2sql.ask(request.json.get("question"), ctx, sql_exec.dialect_of(con), known))
 
 
