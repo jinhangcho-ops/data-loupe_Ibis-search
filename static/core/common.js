@@ -700,13 +700,13 @@ document.addEventListener("keydown", e => {
   if (e.key === "Tab") return closeMenu();
   if (menuFor.tagName === "INPUT") {  // 입력 칸의 목록: 글자(Space 포함)는 칸이 받고, ↑↓로 가리킨 항목이 있을 때만 Enter로 고른다
     if (e.key === "Escape") closeMenu();
-    else if (e.key === "Enter" && menuAt) { pickMenu(menuAt); e.stopPropagation(); }  // 칸의 Enter 동작(추가 등)은 하지 않는다
+    else if (e.key === "Enter" && menuAt && !e.ctrlKey && !e.metaKey) { pickMenu(menuAt); e.stopPropagation(); }  // 칸의 Enter 동작(추가 등)은 하지 않는다
     else if (step) pointMenu(items[Math.min(Math.max(items.indexOf(menuAt) + step, 0), items.length - 1)], true);
     else return;
     return e.preventDefault();
   }
   if (e.key === "Escape") { const sel = menuFor; closeMenu(); sel.focus(); }
-  else if (e.key === "Enter" || (e.key === " " && e.target !== menuFind)) pickMenu(menuAt);
+  else if ((e.key === "Enter" && !e.ctrlKey && !e.metaKey) || (e.key === " " && e.target !== menuFind)) pickMenu(menuAt);
   else if (step) pointMenu(items[Math.min(Math.max(items.indexOf(menuAt) + step, 0), items.length - 1)], true);
   else return;
   e.preventDefault();
@@ -762,9 +762,9 @@ addEventListener("blur", hideTip);
 // 잠깐 보이는 안내("되돌렸어요" 등). 화면 아래 가운데에 1.5초.
 const toastBox = document.body.appendChild(Object.assign(document.createElement("div"), { className: "toast hidden", role: "status" }));
 let toastTimer = 0;
-function flash(text) {
+function flash(text, ms = 1500) {  // 실패 안내는 읽을 시간이 더 필요해 부르는 쪽이 길게(약 4초) 준다
   toastBox.textContent = text;
   toastBox.classList.remove("hidden");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toastBox.classList.add("hidden"), 1500);
+  toastTimer = setTimeout(() => toastBox.classList.add("hidden"), ms);
 }

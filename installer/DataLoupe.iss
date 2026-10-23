@@ -49,10 +49,18 @@ Name: "{autoprograms}\Data Loupe"; Filename: "{app}\DataLoupe.exe"
 Name: "{autodesktop}\Data Loupe"; Filename: "{app}\DataLoupe.exe"; Tasks: desktopicon
 
 [Run]
-; 업그레이드로 예전 ibis_search.exe가 지워지므로, 예전 이름으로 등록한 예약 작업을 설치가 끝날 때 새 exe로 옮긴다(앱을 열기 전에도 예약이 돌게). 조용한 설치에서도 돈다.
-Filename: "{app}\DataLoupe.exe"; Parameters: "--move-tasks"; Flags: runhidden waituntilterminated
+; 옮길 예약이 있을 때만(예전 폴더의 schedules.json, 또는 새 폴더에 있고 옮김 표식이 없을 때), 원래 사용자 권한으로. 업그레이드로 예전 ibis_search.exe가 지워지므로, 예전 이름으로 등록한 예약 작업을 설치가 끝날 때 새 exe로 옮긴다(앱을 열기 전에도 예약이 돌게). 조용한 설치에서도 돈다.
+Filename: "{app}\DataLoupe.exe"; Parameters: "--move-tasks"; Flags: runhidden waituntilterminated runasoriginaluser; Check: HasTasksToMove
 Filename: "{app}\DataLoupe.exe"; Description: "{cm:LaunchProgram,Data Loupe}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 ; 앱에서 등록한 Windows 예약 작업(작업 스케줄러의 \DataLoupe\ 폴더 안)만 지운다. 그 폴더 밖의 작업은 건드리지 않는다. 없으면 아무 일도 하지 않는다.
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ""Get-ScheduledTask -TaskPath '\DataLoupe\' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false -ErrorAction SilentlyContinue"""; Flags: runhidden waituntilterminated; RunOnceId: "RemoveDataLoupeTasks"
+
+[Code]
+function HasTasksToMove: Boolean;
+begin
+  Result := FileExists(ExpandConstant('{userappdata}\ibis_search\schedules.json')) or
+    (FileExists(ExpandConstant('{userappdata}\DataLoupe\schedules.json')) and
+     not FileExists(ExpandConstant('{userappdata}\DataLoupe\old_tasks_moved.json')));
+end;

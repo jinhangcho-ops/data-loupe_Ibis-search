@@ -710,7 +710,7 @@ def set_cards_data(dash_id, items):
                 try:
                     new = {"cards": [check_card({**card, "data": data})]}
                     keep_newer(new, {"cards": [card]})  # 저장된 값이 더 늦게 구한 것이면(같은 정의) 그것을 둔다
-                    kept = new["cards"][0]["data"] is card.get("data")  # 저장값이 이겼다(쓴 것이 없다)
+                    kept = new["cards"][0]["data"] is not None and new["cards"][0]["data"] is card.get("data")  # 저장값이 이겼다(쓴 것이 없다)
                     card["data"] = new["cards"][0]["data"]
                     found.append(KEPT if kept else True)
                 except Exception as e:  # 이 카드만 실패(예: 크기 상한). 나머지 카드는 쓴다

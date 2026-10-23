@@ -200,7 +200,7 @@ def formula_reads_all(expr):
     """계산식에 함수 사전의 집계(mean 등)·창 함수가 있는지: 표 전체를 읽는다."""
     import ast
     try:
-        calls = [n.func.id for n in ast.walk(ast.parse(expr, mode="eval")) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
+        calls = [n.func.id for n in ast.walk(ast.parse(expr.strip(), mode="eval")) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
     except (SyntaxError, ValueError):
         return False
     return any((f := sql_funcs.get(name))["aggregate"] or f["window"] for name in calls if name in sql_funcs.FUNCS or name in sql_funcs.ALIASES)

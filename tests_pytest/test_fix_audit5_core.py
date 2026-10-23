@@ -30,6 +30,7 @@ def test_migrate_retries_when_new_folder_only_has_locks_and_failure_mark(tmp_pat
     (old / "settings.json").write_text("{}")
     (new / "locks").mkdir(parents=True)
     (new / "locks" / "app.lock").write_text("")
+    os.utime(new / "locks" / "app.lock", (1, 1))  # 쓰다 멈춘 지 오래된 빈 잠금(방금 만든 빈 잠금은 살아 있는 것으로 본다)
     (new / "빈 폴더").mkdir()
     (new / settings.FAILED).write_text("x", encoding="utf-8")
     assert settings.migrate(new / "settings.json") is None

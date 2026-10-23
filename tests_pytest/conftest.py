@@ -26,6 +26,13 @@ from integrations import schedule_app  # noqa: E402,F401  예약 라우트
 from integrations import notify  # noqa: E402,F401  보내기 라우트
 
 
+@pytest.fixture(autouse=True)
+def csv_checked_every_call(monkeypatch):
+    """refresh_csv는 실제로는 1초에 한 번만 CSV를 확인한다. 시험은 CSV를 고친 바로 뒤에 읽으므로 매번 확인하게 한다."""
+    from core import source
+    monkeypatch.setattr(source, "CHECK_EVERY", 0)
+
+
 @pytest.fixture
 def folder():
     """테스트마다 빈 설정 폴더."""

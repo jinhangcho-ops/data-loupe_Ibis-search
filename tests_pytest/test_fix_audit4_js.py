@@ -33,7 +33,7 @@ def run(tmp_path, body, *parts, fake=True):
 
 def test_4e1_dash_restore_keeps_last_values(tmp_path):
     html = page("dashboard/dashboard.html")
-    funcs = fn(html, "const lastVals", "\n") + fn(html, "const sigOf", "\n") + fn(html, "const rememberVals", "\n") + fn(html, "async function restoreDash(d) {")
+    funcs = fn(html, "let restoreSeq", "\n") + fn(html, "const lastVals", "\n") + fn(html, "const sigOf", "\n") + fn(html, "const rememberVals", "\n") + fn(html, "async function restoreDash(d) {")
     body = """
 (async () => {
   const card = { id: "c1", kind: "number", source: { key: "k", table: "t" }, title: "매출", data: { values: [1, 2, 3] }, liveData: { x: 1 }, stored: { values: [9] } };
@@ -61,7 +61,7 @@ def test_4e1_dash_restore_keeps_last_values(tmp_path):
 })();""" % funcs
     got = run(tmp_path, body, fake=False)
     assert got["deleted"] == [["c1", {"values": [1, 2, 3]}, {"values": [9]}]]
-    assert got["kindChanged"] == [{"other": 1}]
+    assert got["kindChanged"] == [{}]  # 6E3: 종류가 바뀐 카드는 예전 값을 버린다
     assert got["other"] == [{}]
 
 

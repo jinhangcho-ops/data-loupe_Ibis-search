@@ -5,6 +5,7 @@ import os
 import queue
 import re
 import threading
+import time
 from pathlib import Path
 from urllib.parse import quote_plus, unquote, urlsplit
 
@@ -217,8 +218,9 @@ def utf8_csv(path, con):
                 decoder.decode(chunk)
         decoder.decode(b"", final=True)
         return path
-    except UnicodeDecodeError:
-        pass
+    except UnicodeDecodeError as e:
+        if e.reason == "unexpected end of data":
+            return path  # 파일 끝의 마지막 글자만 잘렸다: 다른 프로그램이 UTF-8 CSV를 쓰는 중이다. CP949로 바꾸면 한글이 깨지므로 원본 그대로 두고, 파일이 다시 바뀌면(refresh_csv) 그때 다시 본다
     with open(path, "rb") as f:
         head = f.read(4)
     if head[:2] in (b"\xff\xfe", b"\xfe\xff"):  # UTF-16·32는 CP949로 읽으면 깨진 글자가 나오므로 읽지 않는다
@@ -268,13 +270,22 @@ def drop_copy(con, copy):
         pass
 
 
+CHECK_EVERY = 1.0  # refresh_csv가 CSV를 다시 확인하는 최소 간격(초)
+
+
 def refresh_csv(con):
     """CSV 원본의 (mtime, 크기)가 열 때와 달라졌으면 다시 변환해 같은 이름으로 다시 등록한다(CP949 임시본이 옛 값에 머물지 않게).
     표를 꺼낼 때(server.any_table)와 SQL을 식으로 만들 때(sql_exec.to_expr: SQL 탭·검사·내보내기) 부른다. 파일 연결이 아니거나 CSV가 없으면 아무 일도 하지 않는다.
     파일마다 따로 처리한다: 다시 변환하지 못한 표(UTF-16로 다시 저장 등)는 그 표를 읽을 때만 그 이유로 오류가 나게 하고, 다른 표는 그대로 쓴다.
-    다시 등록했거나 실패 표로 바꾼 표의 이름 목록을 돌려준다(호출한 쪽이 그 표에 기억해 둔 옛 식을 버리게)."""
+    다시 등록했거나 실패 표로 바꾼 표의 이름 목록을 돌려준다(호출한 쪽이 그 표에 기억해 둔 옛 식을 버리게).
+    CSV가 많으면 호출마다 모두 stat하는 것도 크므로(300개에 약 30ms) 직전 확인이 CHECK_EVERY초 안이면 건너뛴다: 바뀐 것을 최대 그만큼 늦게 알 수 있다."""
+    sources = getattr(con, "csv_sources", None)
+    if not sources:
+        return []
+    if time.monotonic() - con.__dict__.get("csv_checked", -CHECK_EVERY) < CHECK_EVERY:
+        return []
     changed = []
-    for name, (path, stamp, copy) in list(getattr(con, "csv_sources", {}).items()):
+    for name, (path, stamp, copy) in list(sources.items()):
         now = stamp_of(path)
         if now is None or now == stamp:
             continue
@@ -286,6 +297,7 @@ def refresh_csv(con):
         except Exception as e:
             con.csv_sources[name] = (path, now, copy)  # 같은 상태로 되풀이해 실패하지 않게 새 스탬프를 기록한다
             fail_table(con, name, str(e))
+    con.__dict__["csv_checked"] = time.monotonic()
     return changed
 
 

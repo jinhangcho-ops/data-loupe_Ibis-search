@@ -11,14 +11,15 @@ from pathlib import Path
 PATH = Path(os.environ.get("APPDATA") or Path.home()) / "DataLoupe" / "settings.json"
 OLD_NAME = "ibis_search"  # 앱 이름을 바꾸기 전의 설정 폴더 이름
 FAILED = "옮기기_실패.txt"
+TASKS_MOVED = "old_tasks_moved.json"  # integrations/schedule.MOVED와 같은 이름: 예약 옮기기가 새 폴더에 남기는 표식(설정 파일이 아니다)
 
 
 def _has_content(folder):
-    """folder 안에 실패 표식·locks 폴더 밖의 파일이 있는가(빈 하위 폴더는 무시)."""
+    """folder 안에 실패 표식·예약 옮기기 표식·locks 폴더 밖의 파일이 있는가(빈 하위 폴더는 무시)."""
     for root, dirs, files in os.walk(folder):
         if Path(root) == folder:
             dirs[:] = [d for d in dirs if d != "locks"]
-            files = [f for f in files if f != FAILED]
+            files = [f for f in files if f not in (FAILED, TASKS_MOVED)]
         if files:
             return True
     return False
@@ -36,6 +37,10 @@ def migrate(path=None):
         try:
             if not new.is_dir() or _has_content(new):
                 return None
+            from core import filelock  # 순환 import를 피하려고 여기서
+            locks = new / "locks"
+            if locks.is_dir() and any(not filelock.left_behind(f) for f in locks.iterdir()):
+                return None  # 살아 있는 잠금(앱이 켜져 있음)이 있으면 지우지 않는다: 지우면 단일 실행 잠금이 사라져 두 번째 실행이 된다
             shutil.rmtree(new)  # 다른 앱이 locks 안의 잠금을 쥐고 있으면 지워지지 않아 OSError: 이미 쓰는 중이니 건드리지 않는다
         except OSError:
             return None

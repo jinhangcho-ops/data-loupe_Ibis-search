@@ -142,6 +142,7 @@ const lastVals = new Map();
 const sigOf = c => JSON.stringify([c.kind, c.source]);  // 값(data)이 어떤 종류·원천에서 나왔는지. 설정을 바꾸면 값도 다시 구해지므로 되돌릴 때 이 짝이 어긋나는지 본다
 const rememberVals = () => board.cards.forEach(c => lastVals.set(`${dashId}/${c.id}`, { data: c.data, liveData: c.liveData, stored: c.stored, sig: sigOf(c) }));
 const dashState = () => dashId ? (rememberVals(), { id: dashId, palette: board.palette, north_star: board.star, cards: board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; }) }) : null;
+let restoreSeq = 0;
 async function restoreDash(d) {
   if (!dashboards.some(x => x.id === d.id)) throw new Error("그 대시보드가 지금은 없어요.");
   if (dashId !== d.id) { $("d-pick").value = d.id; await openDash(d.id); }
@@ -152,15 +153,19 @@ async function restoreDash(d) {
     board.star = { card: "", counters: [], limits: {}, ...d.north_star };
     board.palette = d.palette;
     $("d-palette").value = d.palette.join(", ");
-    board.set(d.cards.map(c => {  // 마지막으로 본 값(지금 없는 카드는 지우기 전 값, 실시간·기간 값이면 저장용 stored도)을 이어받는다. 종류·원천이 바뀌어도 예전 값을 둔다(어차피 그 값으로 저장되던 카드)
-      const o = lastVals.get(`${dashId}/${c.id}`);
-      const card = needsValues({ ...c, data: o?.data ?? {}, ...(o?.liveData ? { liveData: o.liveData, stored: o.stored } : {}) });
-      if (o && o.sig !== sigOf(c)) { card.note = "값이 설정과 달라요(다시 구하기)"; stale.push(c.id); }  // 되돌린 설정과 마지막 값의 짝이 어긋난 카드
+    board.set(d.cards.map(c => {  // 마지막으로 본 값(지금 없는 카드는 지우기 전 값, 실시간·기간 값이면 저장용 stored도)을 이어받는다. 종류·원천이 바뀐 카드는 예전 값을 버린다(어긋난 값이 저장되지 않게. 차트는 note로 숨고 needsValues가 안내한다)
+      const o = lastVals.get(`${dashId}/${c.id}`), off = !!o && o.sig !== sigOf(c);
+      const card = needsValues({ ...c, data: off ? {} : o?.data ?? {}, ...(!off && o?.liveData ? { liveData: o.liveData, stored: o.stored } : {}) });
+      if (off) { card.note = "값이 설정과 달라요(다시 구하기)"; stale.push(c.id); }  // 되돌린 설정과 마지막 값의 짝이 어긋난 카드
       return card;
     }));
   } finally { quiet = false; }
   boardChanged();
-  if (connected) board.cards.filter(c => stale.includes(c.id)).forEach(c => panelHost.recompute(c).catch(e => say("err-dash", e.message)));  // 연결돼 있으면 그 카드만 다시 구한다(아니면 안내만 남는다)
+  const seq = ++restoreSeq;  // 빠르게 여러 번 되돌려도 마지막 되돌리기의 카드만, 차례로 다시 구한다(되돌리기는 기다리지 않는다)
+  if (connected) (async () => { for (const c of board.cards.filter(c => stale.includes(c.id))) {  // 연결돼 있으면 그 카드만 다시 구한다(아니면 안내만 남는다)
+    if (seq !== restoreSeq) break;
+    try { await panelHost.recompute(c); } catch (e) { say("err-dash", e.message); }
+  } })();
 }
 const dashDraft = Draft("dashboard", () => snapshot() !== lastSaved ? dashState() : null, restoreDash);
 const dashUndo = Undo(dashState, restoreDash);

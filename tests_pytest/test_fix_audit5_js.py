@@ -94,7 +94,7 @@ def test_5e3_add_dash_pop_stays_open_on_menu_click():
 
 def _dash_funcs():
     html = page("dashboard/dashboard.html")
-    return fn(html, "const lastVals", "\n") + fn(html, "const sigOf", "\n") + fn(html, "const rememberVals", "\n") + fn(html, "async function restoreDash(d) {")
+    return fn(html, "let restoreSeq", "\n") + fn(html, "const lastVals", "\n") + fn(html, "const sigOf", "\n") + fn(html, "const rememberVals", "\n") + fn(html, "async function restoreDash(d) {")
 
 
 DASH_BODY = """
@@ -124,7 +124,7 @@ def test_5e4_dash_restore_recomputes_when_source_differs(tmp_path):
 
 def test_5e4_dash_restore_notes_when_not_connected(tmp_path):
     got = run(tmp_path, DASH_BODY % ("false", _dash_funcs()), fake=False)
-    assert got["recomputed"] == [] and "설정과 달라요" in got["note"] and got["data"] == {"values": [2]}
+    assert got["recomputed"] == [] and "설정과 달라요" in got["note"] and got["data"] == {}
 
 
 def test_5e5_shortcuts_commit_keeps_combo_quiet_and_reports_undo_failure(tmp_path):

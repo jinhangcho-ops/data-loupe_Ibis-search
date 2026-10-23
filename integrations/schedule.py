@@ -43,6 +43,7 @@ TITLES = {"끝": "수집이 끝났습니다", "실패": "수집이 실패했습�
 clock = dt.datetime.now  # 지금 시각. 테스트는 바꿔 끼운다.
 starting = threading.Lock()  # 이 프로세스 안에서 "도는 작업 확인 → 잠금 → 시작"을 한 번에 하나씩
 writing = threading.Lock()  # 실행 기록 파일
+task_names = threading.Lock()  # Windows 작업 이름 고르기·등록·다시 읽기(save, move_old_tasks). 설정 잠금과 별개
 planned = {}  # 프로그램 안 예약의 다음 시각 {이름: datetime}. watch 스레드가 채운다.
 watcher = {"thread": None, "halt": threading.Event()}
 
@@ -144,32 +145,44 @@ def save(name, item):
     name = name.strip() if isinstance(name, str) else ""
     if not 1 <= len(name) <= 50:
         raise ValueError("구성 이름은 1자 이상 50자 이하로 입력하세요.")
-    with settings.updating(FILE):  # 잠금은 읽고-합치고-쓰기만: 읽을 때와 쓸 때 각각 짧게 잡고, 느린 schtasks는 그 사이 잠금 밖에서 돈다(다른 설정 저장이 기다리지 않게)
-        found = schedules()
-        old = found.get(name, {})
-        if item is not None:
-            item = checked(item)
-            collection(name)
-            if name not in found and len(found) >= MAX_SCHEDULES:
-                raise ValueError(f"예약은 {MAX_SCHEDULES}개까지입니다. 쓰지 않는 것을 지우세요.")
-        taken = [s["task"] for n, s in found.items() if n != name and s.get("task")]
-    if item is None:
-        if old.get("task"):
-            wintask.delete(old["task"])
-    elif item["windows"]:
-        item["task"] = register(name, {**item, "task": old.get("task")}, taken)
-    elif old.get("task"):
-        wintask.delete(old["task"])
-    with settings.updating(FILE):
-        found = schedules()
-        if found.get(name, {}) != old or (name not in found and item is not None and len(found) >= MAX_SCHEDULES):  # 그 사이 같은 예약이 바뀌었다: 덮어쓰지 않는다
-            raise ValueError("저장하는 동안 같은 예약이 다른 곳에서 바뀌었습니다. 화면을 새로 고치고 다시 저장하세요.")
+    with task_names:  # 작업 이름 고르기 + 등록 + 다시 읽어 쓰기를 한 번에 하나씩(비슷한 이름 두 개가 같은 작업 이름을 고르지 않게). 설정 잠금은 아니다
+        with settings.updating(FILE):  # 설정 잠금은 읽고-합치고-쓰기만: 읽을 때와 쓸 때 각각 짧게 잡고, 느린 schtasks는 그 사이 잠금 밖에서 돈다(다른 설정 저장이 기다리지 않게)
+            found = schedules()
+            old = found.get(name, {})
+            if item is not None:
+                item = checked(item)
+                collection(name)
+                if name not in found and len(found) >= MAX_SCHEDULES:
+                    raise ValueError(f"예약은 {MAX_SCHEDULES}개까지입니다. 쓰지 않는 것을 지우세요.")
+            taken = [s["task"] for n, s in found.items() if n != name and s.get("task")]
         if item is None:
-            found.pop(name, None)
-        else:
-            found[name] = item
-        settings.write(FILE, found)
-        return found
+            if old.get("task"):
+                wintask.delete(old["task"])
+        elif item["windows"]:
+            item["task"] = register(name, {**item, "task": old.get("task")}, taken)
+        elif old.get("task"):
+            wintask.delete(old["task"])
+        with settings.updating(FILE):
+            found = schedules()
+            now = found.get(name, {})
+            if now == old and not (name not in found and item is not None and len(found) >= MAX_SCHEDULES):
+                if item is None:
+                    found.pop(name, None)
+                else:
+                    found[name] = item
+                settings.write(FILE, found)
+                return found
+        if item is not None and item["windows"]:  # 거부하기 전에 방금 등록한 작업을 되돌린다(예전 항목에 작업이 없었으면 지우고, 있었으면 파일의 지금 값으로 다시 등록)
+            try:
+                if not old.get("task"):
+                    wintask.delete(item["task"])
+                elif now.get("windows") and now.get("task"):
+                    register(name, now, [])
+                else:
+                    wintask.delete(old["task"])
+            except Exception:  # 되돌리지 못해도 거부 이유는 그대로 알린다
+                pass
+        raise ValueError("저장하는 동안 같은 예약이 다른 곳에서 바뀌었습니다. 화면을 새로 고치고 다시 저장하세요.")
 
 
 def tasks(found):
@@ -201,6 +214,7 @@ def reregister():
         register(name, found[name], [])
 
 
+BUDGET = 30  # move_old_tasks가 쓸 수 있는 전체 시간(초)
 MOVED = "old_tasks_moved.json"  # 예전 작업을 다 옮겼다는 표식(설정 폴더). 있으면 시작 때 작업 스케줄러를 다시 조회하지 않는다.
 
 
@@ -208,22 +222,29 @@ def move_old_tasks():
     """앱 시작 때: 예전 작업 폴더(wintask.OLD_FOLDER)에 있는 우리 작업(예약 목록의 windows 예약만)을 새 폴더·지금 프로그램으로 다시 등록하고 예전 것을 지운다.
     그 밖의 작업은 보지도 않는다. 옮기지 못한 작업은 그대로 두어 다음 시작 때 다시 하고, 하나도 빠짐없이 끝나면 표식(MOVED)을 남겨 이후 시작 때는 아무것도 조회하지 않는다.
     조회에 실패한 것(작업 스케줄러 오류)은 '없음'이 아니라 옮기지 못한 것으로 센다. 옮긴 예약 이름 목록을 돌려준다."""
-    if settings.read(MOVED):
+    if (settings.PATH.parent / settings.FAILED).exists() or settings.read(MOVED):  # 설정 폴더 옮기기에 실패한 새 폴더에는 표식도 남기지 않는다
         return []
-    moved, complete = [], True
+    moved, complete, deadline = [], True, time.monotonic() + BUDGET
     for name in list(schedules()):
-        try:  # schtasks는 잠금 밖에서 돈다(느린 작업 스케줄러가 설정 저장을 막지 않게). 도는 사이 예약이 바뀌었으면 바뀐 것으로 한 번 더 등록한다.
+        if time.monotonic() > deadline:  # 너무 오래 걸리면 멈춘다(표식 없이: 앱 시작 때 다시)
+            complete = False
+            break
+        try:  # schtasks는 설정 잠금 밖에서 돈다(느린 작업 스케줄러가 설정 저장을 막지 않게). 도는 사이 예약이 바뀌었으면 바뀐 것으로 한 번 더 등록한다.
             item = schedules().get(name) or {}
             task = item.get("task")
             if item.get("windows") and task and wintask.query(task, wintask.OLD_FOLDER, strict=True)["registered"]:
-                register(name, item, [])
-                now = schedules().get(name) or {}
-                if now != item and now.get("windows") and now.get("task") == task:
-                    register(name, now, [])
+                with task_names:  # save와 겹치지 않게: 등록 → 다시 읽기를 한 번에
+                    register(name, item, [])
+                    now = schedules().get(name) or {}
+                    if not (now.get("windows") and now.get("task") == task):  # 그사이 예약이 없어졌거나 windows가 꺼졌다: 방금 만든 새 폴더 작업을 지운다
+                        wintask.delete(task)
+                    elif now != item:
+                        register(name, now, [])
                 wintask.delete(task, wintask.OLD_FOLDER, known=True)
                 moved.append(name)
-        except Exception:  # 작업 스케줄러가 답하지 않는 등: 이번엔 건너뛰고 다음 시작 때 다시 한다(시작을 막지 않는다).
+        except Exception:  # 작업 스케줄러가 답하지 않는 등: 첫 오류에서 멈추고 다음 시작 때 다시 한다(시작을 막지 않는다).
             complete = False
+            break
     if complete:
         with settings.updating(MOVED):
             settings.write(MOVED, {"done": True})

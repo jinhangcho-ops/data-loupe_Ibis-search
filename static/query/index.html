@@ -1301,7 +1301,7 @@ async function setView(next) {
       const g = flowView.get();
       if (g.nodes.length) {
         const found = await api("/api/flow/to_body", { graph: g, target: flowBodyTarget(g) });
-        try { await loadBody(found.body); } catch (e) { throw new Error("단계 카드에 올리지 못했어요: " + e.message); }
+        try { await loadBody({ ...found.body, limit: found.body.limit ?? ($("limit").value || undefined) }); } catch (e) { throw new Error("단계 카드에 올리지 못했어요: " + e.message); }  // 쪽 크기는 지금 값을 유지(서버가 안 줄 수 있다)
         keptTail = flowTail(g);
         keptFlow = { graph: g, key: bodyKey() };
       }

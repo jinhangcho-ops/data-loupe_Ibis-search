@@ -257,19 +257,24 @@ def any_table(con, name, schema=None, vts=None):
     key = (schema or None, name)
     gen = getattr(con, "csv_gen", {}).get(name, 0)  # CSV가 바뀌어 다시 등록(또는 실패 표로 교체)될 때마다 늘어난다: 옛 스키마의 식을 버린다
     if state["tables"].get(key, (None,))[0] != gen:
-        if key in state["tables"]:
-            state["rows"].pop(key, None)  # 원본이 바뀌었으면 세어 둔 행 수도 버린다
         state["tables"][key] = (gen, source.get_table(con, name, schema))  # 연결 스레드에서(SQLite는 만든 스레드에서만 쓸 수 있다)
     return state["tables"][key][1]
 
 
 def row_count(schema, base):
-    """테이블(가상 테이블 포함)의 전체 행 수. 테이블마다 한 번만 세고 연결이 바뀌거나 가상 테이블·원본 CSV가 바뀔 때까지 기억한다."""
+    """테이블(가상 테이블 포함)의 전체 행 수. 테이블마다 한 번만 세고 연결이 바뀌거나 원본 CSV가 바뀔 때까지 기억한다.
+    세어 둘 때의 CSV 변경 횟수(csv_gen)를 함께 두고, 같으면 표 식을 만들지 않고(원격 DB에 스키마를 묻지 않고) 그 수를 그대로 쓴다."""
     schema = schema or None
-    table = any_table(get_con(), base, schema)  # 먼저 꺼내야 원본 CSV가 바뀐 것을 알고 세어 둔 수를 버린다
-    if (schema, base) not in state["rows"]:
-        state["rows"][schema, base] = run(lambda: result.get_count(table))
-    return state["rows"][schema, base]
+    con = get_con()
+    source.refresh_csv(con)  # 원본 CSV가 바뀌었으면 변경 횟수가 늘어난다
+    gen = dict(getattr(con, "csv_gen", {}))
+    hit = state["rows"].get((schema, base))
+    if hit and hit[1] == gen:
+        return hit[0]
+    table = any_table(con, base, schema)
+    count = run(lambda: result.get_count(table))
+    state["rows"][schema, base] = (count, dict(getattr(con, "csv_gen", {})))
+    return count
 
 
 @app.post("/api/rowcount")

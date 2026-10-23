@@ -101,7 +101,7 @@ const isTyping = t => !!t && (t.isContentEditable || t.tagName === "TEXTAREA" ||
 // 단추를 눌러 준다(없거나 꺼졌거나 숨겨졌으면 false).
 const pressBtn = b => !b || b.disabled || b.closest(".hidden") ? false : (b.click(), true);
 // 한 화면에 Undo가 탭마다 있을 때: 지금 그 탭(inX())일 때만 움직이는 undo 객체(Shortcuts에 넘긴다)
-const scoped = (u, inX) => ({ undo: () => inX() ? u.undo() : Promise.resolve(false), redo: () => inX() ? u.redo() : Promise.resolve(false), why: () => u.why() });
+const scoped = (u, inX) => ({ undo: () => inX() ? u.undo() : Promise.resolve(false), redo: () => inX() ? u.redo() : Promise.resolve(false), why: () => inX() ? u.why() : "" });
 // Shortcuts({ undo, save, run, find, active }): Ctrl+Z 되돌리기, Ctrl+Y·Ctrl+Shift+Z 다시 하기, Ctrl+S 저장, Ctrl+Enter 실행, Ctrl+F 찾기.
 // save·run은 눌렀으면(할 수 있으면) true를 돌려주는 함수, find는 찾기 칸을 돌려주는 함수. 없는 것은 건드리지 않는다. 안 맞으면 창 엔진의 기본 동작이 그대로 간다.
 // 한글 조합 중, 이미 다른 곳에서 처리한 키(SQL 칸의 Ctrl+Enter), 모달·펼친 목록이 있을 때, active()가 false(다른 탭)일 때는 무시한다.
@@ -114,7 +114,7 @@ function Shortcuts({ undo, save, run, find, active = () => true }) {
     if ((k === "z" || k === "y") && undo && !isTyping(e.target)) {
       const redo = k === "y" || e.shiftKey;
       e.preventDefault();
-      (redo ? undo.redo() : undo.undo()).then(ok => { const why = ok ? "" : undo.why?.(); if (ok || why) flash(ok ? (redo ? "다시 했어요" : "되돌렸어요") : `${redo ? "다시 하지" : "되돌리지"} 못했어요: ${why}`); });
+      (redo ? undo.redo() : undo.undo()).then(ok => { const why = ok ? "" : undo.why?.(); if (ok || why) flash(ok ? (redo ? "다시 했어요" : "되돌렸어요") : `${redo ? "다시 하지" : "되돌리지"} 못했어요: ${String(why).slice(0, 80)}`, ok ? 1500 : 4000); });
     } else if (k === "s" && !e.shiftKey && save) { e.preventDefault(); commit(); save(); }
     else if (k === "enter" && run && (commit(), run())) e.preventDefault();
     else if (k === "f" && !e.shiftKey && find) {

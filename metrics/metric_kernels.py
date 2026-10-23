@@ -1087,8 +1087,10 @@ def power(t, s, p, ctx):
     else:
         sd = math.sqrt((c["sd"] ** 2 + e["sd"] ** 2) / 2)
         if sd == 0:
-            raise ValueError("두 군의 값이 모두 같아 검정력을 구할 수 없어요.")
-        pw = mc.power_two_means(e["mean"] - c["mean"], sd, c["n"], e["n"], s["alpha"])
+            pw = None
+            ctx.notes.append("각 군 안의 값이 모두 같아 표준편차가 0이라 검정력을 구할 수 없어요.")
+        else:
+            pw = mc.power_two_means(e["mean"] - c["mean"], sd, c["n"], e["n"], s["alpha"])
         delta = e["mean"] - c["mean"]
     return result(pw, parts={"control_n": c["n"], "treat_n": e["n"]}, label=f"지금 보인 차이({delta:.4g})를 유의수준 {s['alpha']:g}에서 잡아낼 확률(정규 근사)")
 
@@ -1107,7 +1109,7 @@ def mde(t, s, p, ctx):
             ctx.notes.append("한 군에 값이 1개뿐이라 표준편차를 구할 수 없어 최소 검출 효과를 구할 수 없어요.")
         elif (sd := math.sqrt((c["sd"] ** 2 + e["sd"] ** 2) / 2)) == 0:
             value = None
-            ctx.notes.append("두 군의 값이 모두 같아 표준편차가 0이라 최소 검출 효과를 구할 수 없어요.")
+            ctx.notes.append("각 군 안의 값이 모두 같아 표준편차가 0이라 최소 검출 효과를 구할 수 없어요.")
         else:
             value = mc.mde_two_means(sd, c["n"], e["n"], s["alpha"], s["power"])
     return result(value, [{"name": "MDE(절대)", "value": value}, {"name": "대조군 평균", "value": c["mean"]}, {"name": "MDE(대조군 대비)", "value": None if value is None else mc.ratio(value, c["mean"])}],

@@ -847,7 +847,7 @@ $("schema").addEventListener("change", () => { S.base = ""; resetTable(); });  /
 // 테이블을 고른 것과 같게 한다(목록에서 고를 때, ?base=). ①모양(이름·타입)을 바로 보이고 ②통계 ③타입 추천을 차례로 채운다.
 // 모든 단계가 끝나면 status가 ""이고 이 함수의 Promise가 끝난다.
 // config가 있으면(저장한 구성 불러오기) 모양이 온 시점에 선택을 채운다. 없으면 이 테이블에 지난번 쓴 전처리(있으면)로 채운다.
-async function openTable(base, config) {
+async function openTable(base, config, strict) {  // strict: 표를 못 열면 던진다(되돌리기가 "되돌렸어요"라 하지 않게)
   S.base = base;
   resetTable();
   if (!base) return;
@@ -865,7 +865,7 @@ async function openTable(base, config) {
     if (pickers.keep) Funcs.loadSupport(S.base, S.schema).then(() => Object.values(pickers).forEach(p => p.refresh()));  // 이 연결이 못 하는 함수는 안내를 붙이거나 막는다
     loadSpecView();
     if (remembered && !$("err-prep").textContent) $("ok-run").textContent = "지난번에 이 테이블에 쓴 전처리를 채웠습니다. [미리보기]로 확인하세요.";
-  } catch (e) { if (mine === token) fail(e.message); return; }
+  } catch (e) { if (mine === token) { if (strict) throw e; fail(e.message); } return; }
   if (statsOn) await computeStats(mine);
   else { status = "off"; renderGrid(); }
   if (mine === token) await loadFirst();
@@ -1026,7 +1026,7 @@ async function openConfig(c) {
     throw new Error(`‘${c.base}’ 테이블이 지금 연결에 없습니다`);
   }
   $("base").value = c.base;
-  await openTable(c.base, c);
+  await openTable(c.base, c, true);  // 되돌리기·초안·저장한 구성 모두 실패를 받아 안내한다
 }
 $("rsaved").onchange = async () => {
   const c = recipes[$("rsaved").value];
