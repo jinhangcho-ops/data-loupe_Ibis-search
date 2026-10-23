@@ -165,6 +165,40 @@ def test_remote_asks_before_reading_reference_tables(remote, monkeypatch):
     held.store["items"].clear()
 
 
+def test_remote_reference_tables_are_fetched_once_per_connection(remote, monkeypatch):
+    """같은 연결·테이블·컬럼의 지점·영역 표는 한 번 받으면 미리보기를 거듭해도 다시 묻거나 받지 않고, 연결을 바꾸면 버린다."""
+    from core import held
+    asked = []
+
+    def gate(body, make_sql, rows=None):
+        asked.append(make_sql()[0])
+        return None
+
+    monkeypatch.setattr(server, "scan_gate", gate)
+    recipe = {"base": "pts", "geo": [{"op": "nearest", "lat": "lat", "lon": "lon", "table": "st", "ref_lat": "slat", "ref_lon": "slon", "label": "name"}]}
+    first = remote.post("/api/preview", json=recipe).get_json()
+    n = len(asked)
+    assert n == 2 and any("slat" in q for q in asked)  # 기준 테이블 사본 + 지점 표
+    assert [k for k in held.store["items"] if k[0] == "geo"] == [("geo", None, "st", ("slat", "slon", "name"))]
+    fetched = []
+    real = held.fetch
+    monkeypatch.setattr(held, "fetch", lambda *a, **k: (fetched.append(a[0]), real(*a, **k))[1])
+    second = remote.post("/api/preview", json=recipe).get_json()
+    assert len(asked) == n and not fetched  # 두 번째는 묻지도 받지도 않는다
+    assert second["rows"]["rows"] == first["rows"]["rows"]
+    assert remote.post("/api/disconnect", json={}).status_code == 200 and not held.store["items"]
+
+
+def test_remote_confirm_popup_comes_once_for_reference_tables(remote, monkeypatch):
+    """처리 용량이 기준을 넘는 지점 표도 한 번 확인(confirmed)해 받으면, 다음 미리보기에서는 다시 묻지 않는다."""
+    from core import scan_size
+    monkeypatch.setattr(scan_size, "limit_check", lambda con, sql, opened=None, dialect=None, config=None, rows=None: {"over": "slat" in sql, "blocked": False, "unknown": False, "bytes": 1, "limit": 0, "text": "큼"})
+    recipe = {"base": "pts", "geo": [{"op": "nearest", "lat": "lat", "lon": "lon", "table": "st", "ref_lat": "slat", "ref_lon": "slon"}]}
+    assert remote.post("/api/preview", json=recipe).get_json().get("needs_confirm") is True
+    assert "rows" in remote.post("/api/preview", json={**recipe, "confirmed": True}).get_json()
+    assert "rows" in remote.post("/api/preview", json=recipe).get_json()  # 확인 없이도 통과(이미 받아 둔 표)
+
+
 def test_profile_response_carries_coordinate_hints(remote):
     got = remote.post("/api/profile", json={"base": "pts", "sample": 1000}).get_json()
     geo = got["geo"]

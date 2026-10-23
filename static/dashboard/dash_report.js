@@ -48,6 +48,23 @@ function nodeToImage(node, width, height) {
   });
 }
 
+// 지도 카드의 타일(<image href="https://…">): 직렬화한 SVG 그림은 바깥 그림을 불러오지 못하므로, CORS를 허용하는 img로 받아 data URL로 바꿔 넣는다. 못 받은 타일은 뺀다.
+function inlineTiles(root) {
+  return Promise.all([...root.querySelectorAll("image")].filter(n => /^https?:/.test(n.getAttribute("href") ?? "")).map(n => new Promise(done => {
+    const img = new Image(), giveUp = setTimeout(() => { n.remove(); done(); }, 8000);
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      clearTimeout(giveUp);
+      const c = Object.assign(document.createElement("canvas"), { width: img.naturalWidth, height: img.naturalHeight });
+      c.getContext("2d").drawImage(img, 0, 0);
+      n.setAttribute("href", c.toDataURL("image/png"));
+      done();
+    };
+    img.onerror = () => { clearTimeout(giveUp); n.remove(); done(); };
+    img.src = n.getAttribute("href");
+  })));
+}
+
 // SVG·HTML 카드(card.paint)를 그 모드의 색으로 width × height canvas에. 화면 밖에 잠깐 그려 스타일을 박는다.
 async function paintedCanvas(card, mode, width, height, scale) {
   const root = document.documentElement, now = root.dataset.theme, colors = themeColors(mode);
@@ -57,6 +74,7 @@ async function paintedCanvas(card, mode, width, height, scale) {
   try {
     stage.append(card.paint(colors));
     await new Promise(r => setTimeout(r, 30));  // 그려질 틈(창이 가려져 있어도 도는 타이머)
+    await inlineTiles(stage);
     const img = await nodeToImage(stage, width, height);
     const out = Object.assign(document.createElement("canvas"), { width: Math.round(width * scale), height: Math.round(height * scale) });
     const ctx = out.getContext("2d");

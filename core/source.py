@@ -204,11 +204,18 @@ def without_placeholder(url):
     return re.sub(r":\[[^\]@/?#]*\](?=@)", "", url, count=1)
 
 
+def drive_path(url):
+    """duckdb://·sqlite://의 Windows 경로(C:/…, /C:/…)를 Ibis가 읽는 모양(C:\\…)으로 바꾼다.
+    Ibis는 netloc(C:)과 path를 이어 붙여 드라이브 상대 경로 C:Users…를 만들어, 파일을 못 열거나 엉뚱한 곳에 새 DB를 만든다."""
+    found = re.match(r"(duckdb|sqlite):///?([A-Za-z]:[\\/][^?]*)(\?.*)?$", url)
+    return f"{found[1]}://{found[2].replace('/', '\\')}{found[3] or ''}" if found else url
+
+
 def clean_url(url, user="", password=""):
     """붙여넣은 주소를 접속용으로 다듬어 (주소, 아이디, 비밀번호)를 돌려준다.
-    비밀번호 자리 `[YOUR-PASSWORD]`는 뺀다(비밀번호는 칸에서 받는다).
+    비밀번호 자리 `[YOUR-PASSWORD]`는 뺀다(비밀번호는 칸에서 받는다). DuckDB·SQLite 파일의 Windows 경로는 drive_path로.
     주소에 아이디·비밀번호가 있는데 칸에도 썼으면 칸 쪽을 쓴다(칸이 빈 쪽만 주소 값으로 채운다)."""
-    url = without_placeholder(url)
+    url = drive_path(without_placeholder(url))
     parts = urlsplit(url)
     if parts.username is not None and (user or password):
         user, password = user or parts.username, password or unquote(parts.password or "")

@@ -193,6 +193,22 @@ def test_postgres_timeout_reads_in_korean(monkeypatch):
         source.open_url("postgres://u@h:5432/db")
 
 
+def test_windows_drive_paths_open_the_same_file(tmp_path):
+    """duckdb://C:/…·sqlite:///C:/… 도 그 파일을 연다(예전에는 Ibis가 C:Users… 드라이브 상대 경로를 만들어 못 열거나 새 DB를 만들었다)."""
+    import sqlite3
+    import duckdb
+    from core import source
+    lite, duck = tmp_path / "r.db", tmp_path / "k.duckdb"
+    sqlite3.connect(lite).execute("create table t (a)").connection.commit()
+    duckdb.connect(str(duck)).execute("create table u (a int)").close()
+    slash = lambda p: str(p).replace("\\", "/")
+    for url, table in ((f"sqlite:///{slash(lite)}", "t"), (f"sqlite://{slash(lite)}", "t"), (f"duckdb:///{slash(duck)}?read_only=true", "u")):
+        fixed = source.clean_url(url)[0]
+        assert source.within(30, lambda: source.ibis.connect(fixed).list_tables(), "late") == [table], url
+    assert source.drive_path("duckdb://data.duckdb") == "duckdb://data.duckdb" and source.drive_path("postgres://h:5432/db") == "postgres://h:5432/db"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["k.duckdb", "r.db"]  # 엉뚱한 새 DB 파일이 생기지 않는다
+
+
 def test_psycopg_gets_prepare_threshold_and_sslmode(monkeypatch):
     """ibis.connect가 주소 쿼리와 추가 인자를 psycopg.connect로 넘기는지(psycopg.connect는 가짜)."""
     import ibis

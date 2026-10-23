@@ -9,6 +9,7 @@ import re
 import numpy as np
 from lazy import ibis
 
+from core import held
 from core import parse
 from core import prep_derive
 from core import source
@@ -86,14 +87,26 @@ def reference(step, refs, columns, what):
     table = source.get_table(refs, step["table"], schema)
     for c in columns:
         parse.check_name(c, table.columns, f"{what} 컬럼")
+    if held.remote(refs):  # 원격 DB: 같은 연결·테이블·컬럼이면 한 번 받은 것을 다시 쓴다(미리보기마다 DB를 읽지 않게). 연결을 바꾸면 held.clear가 버린다.
+        from core import server
+        name, rows = held.ensure(ref_key(step, columns), table.select(*columns), server.state["cancel"], cap=False)
+        if rows > MAX_REFERENCE:
+            held.forget(ref_key(step, columns))
+            raise ValueError(f"{what} 테이블이 {MAX_REFERENCE:,}행을 넘어 이 PC에서 계산하지 않았어요.")
+        return held.table(name).select(*columns).to_polars()
     frame = table.select(*columns).limit(MAX_REFERENCE + 1).to_polars()
     if len(frame) > MAX_REFERENCE:
         raise ValueError(f"{what} 테이블이 {MAX_REFERENCE:,}행을 넘어 이 PC에서 계산하지 않았어요.")
     return frame
 
 
+def ref_key(step, columns):
+    """원격 DB에서 받아 둔 지점·영역 표를 가리키는 held 열쇠(스키마·테이블·컬럼)."""
+    return ("geo", step.get("schema") or None, step["table"], tuple(columns))
+
+
 def reference_exprs(steps, refs):
-    """처리 용량 확인에 쓸, 각 단계가 읽는 테이블 식들(쓸 컬럼만). 파일 경로(path)는 DB를 읽지 않으니 뺀다. 테이블·컬럼이 틀리면 ValueError."""
+    """처리 용량 확인에 쓸, 각 단계가 읽는 (held 열쇠, 테이블 식)들(쓸 컬럼만). 파일 경로(path)는 DB를 읽지 않으니 뺀다. 테이블·컬럼이 틀리면 ValueError."""
     out = []
     for step in steps or []:
         if step.get("op") == "tm" or step.get("path") or not step.get("table"):
@@ -105,7 +118,8 @@ def reference_exprs(steps, refs):
         for c in want:
             if c:
                 parse.check_name(c, table.columns, "컬럼")
-        out.append(table.select(*[c for c in dict.fromkeys(want) if c]))
+        cols = [c for c in dict.fromkeys(want) if c]
+        out.append((ref_key(step, cols), table.select(*cols)))
     return out
 
 

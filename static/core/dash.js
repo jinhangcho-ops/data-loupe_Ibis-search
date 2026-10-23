@@ -404,7 +404,8 @@ class DashBoard extends Board {
   colorEditor(card) {
     const colors = { ...themeColors(document.documentElement.dataset.theme), palette: this.palette }, { group, names } = colorNames(card);
     const rows = names.map((name, i) => {
-      const now = pickColor(card, group, name, colors, i), err = el("span", { className: "err" }), swatch = el("i", { className: "swatch" });
+      // 지도 카드: 정하지 않은 영역은 모두 바탕 색(값에 따라 진하기만 다름)
+      const now = card.kind === "geomap" && !card.colors[group]?.[name] ? card.view.geo?.color ?? colors.palette?.[0] ?? colors.series[0] : pickColor(card, group, name, colors, i), err = el("span", { className: "err" }), swatch = el("i", { className: "swatch" });
       swatch.style.background = now;
       const input = el("input", { value: now, title: "HEX 색(예: #11706f)" });
       input.onchange = () => {

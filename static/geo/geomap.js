@@ -59,7 +59,7 @@ function paintGeoMap(card, colors, board) {
     const back = svg("g", {});
     for (const t of tilesFor(frame, tileZoom(frame))) {
       const img = svg("image", { href: t.url, x: t.px.toFixed(1), y: t.py.toFixed(1), width: t.size.toFixed(1), height: t.size.toFixed(1), preserveAspectRatio: "none" });
-      img.addEventListener("error", () => img.remove());
+      img.addEventListener("error", () => { img.remove(); if (!back.children.length) credit.remove(); });  // 하나도 못 받았으면 출처 표기도 뺀다
       back.append(img);
     }
     root.append(back);
@@ -83,6 +83,7 @@ function paintGeoMap(card, colors, board) {
       svg("rect", { x: 8, y, width: 90, height: 8, fill: `url(#${id})`, stroke: colors.line }), stext(8, y - 3, v.label, { "font-size": 10, fill: colors.text }),
       stext(8, y + 19, showValue(lo, fmt), { "font-size": 10, fill: colors.text }), stext(98, y + 19, showValue(hi, fmt), { "font-size": 10, fill: colors.text, "text-anchor": "end" }));
   }
-  if (geo.tiles) root.append(stext(frame.w - 4, frame.h - 4, OSM_CREDIT, { "font-size": 9, fill: "#333", "text-anchor": "end", stroke: "#fff", "stroke-width": 2, "paint-order": "stroke" }));
+  const credit = stext(frame.w - 4, frame.h - 4, OSM_CREDIT, { "font-size": 9, fill: "#333", "text-anchor": "end", stroke: "#fff", "stroke-width": 2, "paint-order": "stroke" });
+  if (geo.tiles) root.append(credit);
   return root;
 }

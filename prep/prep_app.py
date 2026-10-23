@@ -148,7 +148,9 @@ def geo_gate(recipe):
     con = get_con()
     if not recipe.get("geo") or not held.remote(con):
         return None
-    for expr in run(lambda: prep_geo.reference_exprs(prep_geo.check(recipe["geo"]), con)):
+    for key, expr in run(lambda: prep_geo.reference_exprs(prep_geo.check(recipe["geo"]), con)):
+        if key in held.store["items"]:  # 이미 받아 둔 지점·영역 표는 DB를 읽지 않으니 묻지 않는다
+            continue
         if ask := server.scan_gate(request.json, lambda e=expr: server.expr_sql(con, e)):
             return ask
     return None
