@@ -99,7 +99,7 @@ class Board {
 // 고른 그래프를 그림 파일로 저장한다. 프로그램 창에서는 폴더를 한 번 묻고 그 폴더에 모두 저장한다(같은 이름은 번호를 붙인다).
 // 창 없이 열었으면(브라우저) 하나씩 내려받는다. err: 결과를 쓸 칸의 id.
 async function saveBoard(board, { ratio, mode, type, err }) {
-  const pictures = board.pictures(ratio, mode, type), skipped = [...board.picked].filter(c => c.note || !c.config).length;
+  const pictures = await board.pictures(ratio, mode, type), skipped = [...board.picked].filter(c => c.note || (!c.config && !board.paints)).length;  // paints: SVG·HTML 카드도 그림으로 저장하는 카드 모음(EditBoard)
   if (!pictures.length) return say(err, skipped ? "고른 그래프가 아직 그려지지 않았습니다." : "다운로드할 그래프를 고르세요. 카드를 누르면 고릅니다.");
   const d = await api("/api/images", { images: pictures });
   const more = skipped ? ` 그려지지 않은 ${skipped}개는 뺐습니다.` : "";

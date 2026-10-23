@@ -6,6 +6,7 @@
 <title>Ibis 쿼리</title>
 <script src="/static/chart.umd.min.js"></script>
 <!--include head.html-->
+<link rel="stylesheet" href="/static/dash_edit.css">
 <style>
   .edx .row { margin-bottom:6px; }
   ul.items { list-style:none; margin:0 0 4px; padding:0; }
@@ -115,6 +116,7 @@
       <div class="grip-y" data-size="summary" title="끌어서 집계 표 높이 조절 (더블클릭: 기본)"></div>
     </section>
     <section class="pane hidden" id="pane-chart">
+      <details class="shelf-box" id="shelf-box"><summary class="hint" title="컬럼 칩을 끌어 [X축]·[값]·[색(나누기)]·[필터] 칸에 놓으면 차트가 바로 바뀝니다(칩을 누르고 칸을 눌러도 됩니다)">끌어 놓기로 차트 만들기</summary><div id="shelf-host"></div></details>
       <div class="ctl">
         <select id="cx" title="X 컬럼"></select>
         <select id="csplit" title="이 컬럼의 값마다 계열을 나눕니다 (최대 8개)"></select>
@@ -328,6 +330,7 @@
 <script src="/static/board.js"></script>
 <script src="/static/dash.js"></script>
 <script src="/static/dash_add.js"></script>
+<script src="/static/dash_shelf.js"></script>
 <script>
 if (location.hash === "#dashboard") location.replace("/dashboard");  // 대시보드 탭은 대시보드 화면(/dashboard)으로 옮겼다(예전 주소도 그리로 보낸다)
 const pickers = {};  // 함수 사전에서 고르는 칸들(chart·pivot·calc). initFuncs가 채운다.
@@ -1025,6 +1028,25 @@ $("series-add").onclick = () => {
   showSeries();
 };
 $("ctype").onchange = () => { $("cdash").disabled = $("ctype").value === "bar"; };  // 막대에는 선 모양이 없다.
+// 끌어 놓기 선반(dash_shelf.js): 컬럼 칩을 X축·값·색(나누기)·필터 칸에 놓으면 위의 칸들이 바뀌고 차트를 다시 그린다. 안 되는 놓기는 이유 문장이 chart 오류 칸에 뜬다.
+const shelf = shelfPanel({
+  columns: () => S.cols,
+  state: () => ({ x: $("cx").value, split: $("csplit").value, series: series.map(s => ({ y: s.y || null, agg: s.agg })), conditions: S.conditions.map(text) }),
+  say: t => { $("err-chart").textContent = t; },
+  change: async (next, why) => {
+    const now = shelf.now();
+    $("cx").value = next.x || "";
+    $("csplit").value = next.split || "";
+    series = next.series.map((s, i) => { const old = series.find(o => (o.y || null) === s.y && o.agg === s.agg) ?? null; return old ?? { y: s.y ?? "", agg: s.agg, type: $("ctype").value, dash: $("cdash").value, axis: "left" }; });
+    showSeries();
+    if (next.conditions.length > S.conditions.length) await addItem("conditions", next.conditions.at(-1), $("err-chart"));
+    else if (next.conditions.length < S.conditions.length) { S.conditions = S.conditions.filter(c => next.conditions.includes(text(c))); renderList("conditions"); }
+    shelf.refresh();
+    if ($("cx").value && (series.length || now.series.length)) $("draw").click();
+    $("err-chart").textContent = $("err-chart").textContent || `${why} 반영했어요.`;
+  } });
+$("shelf-host").append(shelf.el);
+$("shelf-box").addEventListener("toggle", () => shelf.refresh());
 // 차트 비율(가로/세로). 자동이면 그룹이 5개 이하일 때 1:1, 늘수록 넓어져 25개 이상이면 16:9.
 const RATIOS = { square: 1, wide: 16 / 9 };
 function fitChart() {

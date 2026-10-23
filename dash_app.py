@@ -1,6 +1,7 @@
 """대시보드의 라우트. server.app에 달린다. 저장·목록·지우기·카드 더하기·기간 읽기·비교 문장·최신화 상태는 연결을 쓰지 않으므로 차례(turn)를 기다리지 않는다.
 카드 값을 구하는 /api/dash/card/compute와 /api/dash/cards/compute만 연결에서 구한다(차례를 기다린다). 최신화는 dash_refresh의 작업 스레드가 한다."""
 import datetime as dt
+import re
 import time
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from flask import Response, jsonify, request
 import compare
 import dash_calc
 import dash_refresh
+import dash_pdf
 import dash_store
 import metrics
 import period
@@ -27,7 +29,7 @@ IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min", "/api/dash/refresh/start",
-                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard"})
+                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete"})
 
 
 def with_source(card):
@@ -244,3 +246,51 @@ def dash_image():
     if path.stat().st_size > MAX_IMAGE_BYTES:
         raise ValueError(f"그림은 {MAX_IMAGE_BYTES // 1024 // 1024}MB까지 쓸 수 있어요.")
     return Response(path.read_bytes(), mimetype=IMAGE_TYPES[path.suffix.lower()], headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "Cache-Control": "no-store"})
+
+
+# ---------- 내 템플릿(kind·title·layout·colors만 저장) ----------
+
+@app.get("/api/dash/templates")
+def templates_list():
+    return jsonify(templates=dash_store.load_templates())
+
+
+@app.post("/api/dash/templates")
+def templates_save():
+    """내 템플릿 저장: {name, cards: [{kind, title, layout, colors}]}. 같은 이름이면 바꾼다."""
+    return jsonify(templates=dash_store.save_template(request.json or {}))
+
+
+@app.post("/api/dash/templates/delete")
+def templates_delete():
+    return jsonify(templates=dash_store.delete_template((request.json or {}).get("id")))
+
+
+# ---------- 보고서 PDF ----------
+
+RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}  # Windows가 파일 이름으로 쓰지 못하는 이름
+
+
+def pdf_stem(name):
+    """PDF 파일 이름(확장자 앞): 파일 이름에 못 쓰는 글자를 바꾸고 비면 '대시보드'."""
+    stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", str(name or "")).strip(" .")[:80]
+    return stem if stem and stem.upper() not in RESERVED else "대시보드"
+
+
+@app.post("/api/dash/pdf")
+def dash_pdf_save():
+    """보고서 그림(JPEG data URL) 하나를 1쪽 PDF로 만들어 창의 저장 대화상자로 고른 곳에 쓴다(dash_pdf.py). 창 없이 돌 때는 PDF 자체(data URL)를 돌려줘 화면이 내려받게 한다."""
+    body = request.json or {}
+    pdf = dash_pdf.make_pdf(dash_pdf.decode_image(body.get("image")))
+    name = pdf_stem(body.get("name")) + ".pdf"
+    if server.ask_save is None:
+        import base64
+        return jsonify(window=False, name=name, pdf="data:application/pdf;base64," + base64.b64encode(pdf).decode("ascii"))
+    chosen = server.ask_save(name, ("PDF (*.pdf)",))
+    if not chosen:
+        return jsonify(cancelled=True)
+    path = Path(chosen if chosen.lower().endswith(".pdf") else chosen + ".pdf")
+    part = path.with_name(path.name + ".part")
+    part.write_bytes(pdf)
+    part.replace(path)  # 임시 이름으로 쓴 뒤 바꿔치기(실패해도 원래 파일이 남는다)
+    return jsonify(path=str(path))

@@ -396,6 +396,70 @@ def check_every(found, name):
     return {"every": text((found or {}).get("every"), f"{name}.every", 20)}
 
 
+LIMIT_OPS = (">=", "<=")  # 카운터 지표의 한계: 값이 이 선보다 작아지면(>=) 또는 커지면(<=) 경고
+
+
+def check_limits(limits, counters):
+    """카운터 지표의 한계 {카드 id: {op: >=|<=, value: 숫자}}. 카운터로 고른 카드에만 둘 수 있다."""
+    if limits in (None, {}):
+        return {}
+    if not isinstance(limits, dict) or any(k not in counters for k in limits):
+        raise ValueError("카운터 지표의 한계(limits)는 카운터로 고른 카드의 {op, value}여야 합니다.")
+    out = {}
+    for card_id, item in limits.items():
+        if not isinstance(item, dict) or item.get("op") not in LIMIT_OPS or isinstance(item.get("value"), bool) or not isinstance(item.get("value"), (int, float)):
+            raise ValueError(f"카운터 지표의 한계는 연산자({', '.join(LIMIT_OPS)})와 숫자여야 합니다.")
+        out[card_id] = {"op": item["op"], "value": item["value"]}
+    return out
+
+
+MAX_TEMPLATES = 30  # 내 템플릿 수
+TEMPLATES = "dash_templates.json"  # 설정 폴더의 내 템플릿 {templates: [{id, name, cards: [{kind, title, layout, colors}]}]}. 값·연결·조회는 저장하지 않는다
+
+
+def check_template(t):
+    """내 템플릿 하나를 검사해 정리한 사본(kind·title·layout·colors만 남긴다). source·data는 받지 않고 버린다."""
+    if not isinstance(t, dict):
+        raise ValueError("템플릿은 객체여야 합니다.")
+    cards = t.get("cards")
+    if not isinstance(cards, list) or not 1 <= len(cards) <= MAX_CARDS:
+        raise ValueError(f"템플릿에는 카드가 1개 이상 {MAX_CARDS}개 이하여야 합니다.")
+    out = []
+    for c in cards:
+        if not isinstance(c, dict) or c.get("kind") not in KINDS:
+            raise ValueError(f"템플릿 카드의 종류(kind)는 {', '.join(KINDS)} 중 하나입니다.")
+        out.append({"kind": c["kind"], "title": text(c.get("title"), "카드 이름", 100, 1), "layout": check_layout(c.get("layout")), "colors": check_colors(c.get("colors"))})
+    return {"id": t.get("id") or secrets.token_hex(8), "name": text(t.get("name"), "템플릿 이름", 50, 1), "cards": out}
+
+
+def load_templates():
+    """저장한 내 템플릿 목록(깨진 항목은 뺀다)."""
+    found = []
+    for t in (settings.read(TEMPLATES) or {}).get("templates", []):
+        try:
+            found.append(check_template(t))
+        except ValueError:
+            continue
+    return found
+
+
+def save_template(t):
+    """내 템플릿을 저장한다(같은 이름이면 바꾼다). 저장한 목록을 돌려준다."""
+    new = check_template(t)
+    found = [x for x in load_templates() if x["name"] != new["name"]]
+    if len(found) >= MAX_TEMPLATES:
+        raise ValueError(f"내 템플릿은 {MAX_TEMPLATES}개까지 저장할 수 있습니다. 쓰지 않는 것을 지우세요.")
+    found.append(new)
+    settings.write(TEMPLATES, {"templates": found})
+    return found
+
+
+def delete_template(template_id):
+    found = [x for x in load_templates() if x["id"] != template_id]
+    settings.write(TEMPLATES, {"templates": found})
+    return found
+
+
 def check_dashboard(d):
     """대시보드 하나를 검사해 정리한 사본을 돌려준다(id·카드 id는 없으면 새로 만든다). 이름 겹침과 개수는 저장할 때 본다."""
     if not isinstance(d, dict):
@@ -422,6 +486,8 @@ def check_dashboard(d):
     if not isinstance(star, dict) or not isinstance(star.get("counters", []), list):
         raise ValueError("북극성(north_star)은 {card, counters: [카드 id]} 모양이어야 합니다.")
     north = {"card": star.get("card") or "", "counters": star.get("counters", [])}
+    if limits := check_limits(star.get("limits"), north["counters"]):
+        north["limits"] = limits
     if any(c and c not in ids for c in [north["card"], *north["counters"]]):
         raise ValueError("북극성·카운터 지표로 고른 카드가 이 대시보드에 없습니다.")
     return {"id": dash_id, "name": text(d.get("name"), "대시보드 이름", 50, 1), "template": text(d.get("template"), "템플릿 이름", 50),

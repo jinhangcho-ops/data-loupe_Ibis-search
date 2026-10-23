@@ -1,0 +1,43 @@
+/* 대시보드 편집 화면(dashboard.html): 12칸 격자, 카드 모음(왼쪽), 카드 설정(오른쪽), 차트 선반, 카운터 경고 */
+.d-main { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:start; gap:12px; padding:0 18px 18px; }
+.d-main > aside { position:sticky; top:0; width:min(280px, 28vw); max-height:calc(100vh - 160px); overflow:auto; border:1px solid var(--line); border-radius:14px; background:var(--card); padding:10px 12px; }
+.d-main > div { min-width:0; }
+.d-main > aside h5 { margin:12px 0 6px; font-size:13px; }
+.d-main > aside.hidden { display:none; }
+.d-alerts { margin:0 28px 8px; padding:8px 12px; border:1px solid var(--err); border-radius:10px; color:var(--err); font-size:13px; }
+.d-alerts.hidden { display:none; }
+.board.grid { grid-template-columns:repeat(12, minmax(0, 1fr)); grid-auto-rows:40px; gap:10px; align-items:stretch; padding-left:10px; padding-right:10px; }
+.board.grid.drop-ready { outline:2px dashed var(--accent); outline-offset:-4px; }
+.board.grid .bcard { display:flex; flex-direction:column; min-height:0; overflow:hidden; position:relative; cursor:default; }
+.board.grid .bhead.movable { cursor:grab; touch-action:none; user-select:none; }
+.board.grid .bcard.dragging { opacity:.8; box-shadow:0 8px 24px rgba(0, 0, 0, .25); z-index:2; }
+.board.grid .bcard.dragging .bhead.movable { cursor:grabbing; }
+.board.grid .bcard.editing { border-color:var(--accent); }
+.board.grid .bbody { flex:1; aspect-ratio:auto; max-height:none; min-height:0; }
+.board.grid .bhead .ib { width:26px; height:26px; flex:none; font-size:13px; }
+.bbadge { color:var(--accent); font-weight:700; flex:none; }
+.bresize { position:absolute; right:0; bottom:0; width:18px; height:18px; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg, transparent 52%, var(--faint) 52%, var(--faint) 60%, transparent 60%, transparent 72%, var(--faint) 72%, var(--faint) 80%, transparent 80%); }
+.gal { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.gal-tile { display:flex; flex-direction:column; gap:2px; border:1px solid var(--line); border-radius:10px; padding:6px 8px; cursor:grab; background:var(--bg); font-size:12px; }
+.gal-tile:hover { border-color:var(--accent); }
+.gal-tile .hint { margin:0; font-size:11px; }
+.phead { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.prow { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; margin:6px 0; }
+.pfield { display:flex; flex-direction:column; gap:2px; margin:6px 0; }
+.pfield input, .pfield select { width:100%; }
+.prow .pfield { margin:0; }
+.pdata .cardmenu, .pdata > div { max-width:100%; }
+.shelf { display:flex; flex-direction:column; gap:8px; }
+.shelf-cols { display:flex; flex-wrap:wrap; gap:4px; max-height:120px; overflow:auto; }
+.shelf-chip, .shelf-on { display:inline-block; border-radius:999px; padding:1px 10px; font-size:12px; border:1px solid var(--line); background:var(--bg); cursor:grab; user-select:none; }
+.shelf-chip.n { border-color:var(--c1); } .shelf-chip.d { border-color:var(--c2); } .shelf-chip.t { border-color:var(--c3); }
+.shelf-chip.held { outline:2px solid var(--accent); }
+.shelf-slots { display:grid; gap:6px; }
+.shelf-slot { border:1px dashed var(--line); border-radius:10px; padding:6px 8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-height:34px; }
+.shelf-slot.over { border-color:var(--accent); background:var(--bg); }
+.shelf-slot b { font-size:12px; min-width:70px; }
+.shelf-on { cursor:pointer; background:var(--card); }
+.shelf-wrap { display:inline-flex; align-items:center; gap:2px; }
+.shelf-wrap .ghost { padding:0 6px; }
+.shelf-form { display:inline-flex; gap:4px; align-items:center; flex-wrap:wrap; }
+.shelf-msg { margin:0; }

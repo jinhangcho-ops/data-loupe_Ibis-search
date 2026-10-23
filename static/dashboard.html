@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ibis 대시보드</title>
 <!--include head.html-->
+<link rel="stylesheet" href="/static/dash_edit.css">
 <script src="/static/chart.umd.min.js"></script>
 <style>
   .settings-box { width:min(760px, 94vw); display:flex; flex-direction:column; gap:12px; }
@@ -22,12 +23,15 @@
   <div class="tool" style="flex-wrap:wrap; gap:8px">
     <select id="d-pick" title="저장한 대시보드(마지막으로 연 것을 기억합니다)" style="width:auto; min-width:180px"></select>
     <button id="d-new" class="btn" title="빈 대시보드를 만듭니다">새 대시보드</button>
-    <span class="row hidden" id="d-new-box" style="display:inline-flex; gap:6px"><input id="d-new-name" placeholder="새 대시보드 이름" style="width:180px"><button id="d-new-go" class="btn p">만들기</button></span>
+    <span class="row hidden" id="d-new-box" style="display:inline-flex; gap:6px"><input id="d-new-name" placeholder="새 대시보드 이름" style="width:180px"><select id="d-template" title="템플릿(카드 틀만 놓이고 데이터는 카드마다 정합니다)" style="width:auto"></select><button id="d-new-go" class="btn p">만들기</button></span>
+    <button id="d-gallery" class="btn" title="카드 모음: 끌어서 격자에 놓거나 더블클릭하면 빈 카드가 생겨요">카드 모음</button>
     <button id="d-settings" class="btn" title="기준일·기간·최신화 주기·실시간 간격·팔레트·목표 파일">설정</button>
     <div class="drop"><button id="d-add-open" class="btn" title="KPI·도넛 KPI·게이지·요약 문장·표·문장·상태·경고 목록·배치도·편차 표 같은 카드를 만듭니다">카드 추가</button>
       <div class="pop hidden cardmenu" id="d-add-pop"></div></div>
     <a class="btn" style="white-space:nowrap" href="/search" title="탐색에서 차트·지표를 만들고 [대시보드에 추가]를 누르면 이곳에 모입니다">쿼리에서 카드 만들기</a>
     <button id="d-refresh" class="btn" title="모든 카드를 지금 연결에서 다시 구해 저장합니다">다시 구하기</button>
+    <button id="d-report-png" class="btn" title="모든 카드를 격자 자리대로 한 장의 PNG로 저장합니다(SVG 카드 포함)">보고서 PNG</button>
+    <button id="d-report-pdf" class="btn" title="모든 카드를 격자 자리대로 한 쪽짜리 PDF로 저장합니다">보고서 PDF</button>
     <button id="d-connect" class="btn" title="연결하면 주기가 지난 카드를 다시 구합니다">연결</button>
     <span style="margin-left:auto"></span>
     <button id="d-all" class="btn">모두 선택</button><button id="d-none" class="btn">선택 해제</button>
@@ -41,7 +45,12 @@
     <button id="d-down" class="btn p" title="고른 차트 카드를 각각 그림 파일로 저장합니다. 프로그램 창에서는 저장할 폴더를 한 번 묻습니다">다운로드</button>
   </div>
   <div class="err" id="err-dash"></div>
-  <div class="board" id="d-grid"></div>
+  <div class="d-alerts hidden" id="d-alerts"></div>
+  <div class="d-main">
+    <aside class="hidden" id="d-gallery-box"></aside>
+    <div><div class="board" id="d-grid"></div></div>
+    <aside class="hidden" id="d-panel"></aside>
+  </div>
 </div>
 
 <!-- 설정: 기준일·기간·최신화 주기·실시간 간격·이 연결의 실시간 최소(dash_ctl.js), 팔레트, 목표 파일, 이름·지우기 -->
@@ -56,6 +65,10 @@
     <h4>목표 파일</h4>
     <div class="row"><input id="d-targets" placeholder="목표 파일 경로(.xlsx·.csv·.yaml·.json·.md·.txt)"><button id="d-targets-save" class="btn">저장</button></div>
     <div class="hint" id="d-targets-note" style="margin:0"></div>
+    <h4>내 템플릿</h4>
+    <div class="row"><input id="d-tpl-name" placeholder="템플릿 이름"><button id="d-tpl-save" class="btn" title="지금 카드의 종류·자리·색·이름만 저장합니다(값·연결·조회는 저장하지 않아요)">내 템플릿으로 저장</button></div>
+    <div class="hint" id="d-tpl-note" style="margin:0"></div>
+    <div id="d-tpl-list"></div>
     <h4>이름·지우기</h4>
     <div class="row"><input id="d-rename"><button id="d-rename-go" class="btn">이름 바꾸기</button><button id="d-delete" class="btn">이 대시보드 지우기</button></div>
     <div class="hint" style="margin:0">카드에는 구한 값이 들어 있어, 이 PC·이 계정에서만 풀 수 있게 암호화해 저장합니다. 연결의 계정 이름과 비밀번호는 저장하지 않습니다.</div>
@@ -74,6 +87,12 @@
 <script src="/static/dash_rules.js"></script>
 <script src="/static/dash_ctl.js"></script>
 <script src="/static/dash_menu.js"></script>
+<script src="/static/dash_grid.js"></script>
+<script src="/static/dash_edit.js"></script>
+<script src="/static/dash_templates.js"></script>
+<script src="/static/dash_report.js"></script>
+<script src="/static/dash_shelf.js"></script>
+<script src="/static/dash_panel.js"></script>
 <script>
 // 쿼리 화면에서 오는 연결·화면 이동: 연결에 성공하면 연결 열쇠를 다시 받는다(최신화는 연결 경로가 시작한다).
 function afterConnect() { showConn(); }
@@ -81,7 +100,7 @@ function afterConnect() { showConn(); }
 let dashId = "", dashName = "", dashMeta = {}, dashboards = [], lastSaved = "", quiet = false, saveTimer = null;
 const metaOf = d => Object.fromEntries(Object.entries(d).filter(([k]) => !["id", "name", "palette", "cards"].includes(k)));
 const randomId = () => [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, "0")).join("");
-const board = new DashBoard($("d-grid"), { empty: "이 대시보드에는 카드가 없어요. [카드 추가]나 쿼리 화면의 [대시보드에 추가]로 만드세요.", changed: boardChanged, recompute: cards => recomputeRange(board, cards, !!connected) });
+const board = new EditBoard($("d-grid"), { onEdit: card => panel.open(card), empty: "이 대시보드에는 카드가 없어요. [카드 추가]나 쿼리 화면의 [대시보드에 추가]로 만드세요.", changed: boardChanged, recompute: cards => recomputeRange(board, cards, !!connected) });
 // 설정 칸(기준일·기간·주기): 바꾸면 저장한 대시보드의 그 항목만 서버에 쓴다(카드는 그대로). 거부되면(예: 주기가 너무 짧음) 이유를 보이고 저장된 값으로 되돌린다.
 const ctl = new DashCtl($("d-ctl"), {
   board, visible: () => !document.hidden && !$("dash").classList.contains("hidden"),
@@ -93,13 +112,14 @@ const ctl = new DashCtl($("d-ctl"), {
   } });
 
 // ---------- 저장: 카드·팔레트가 바뀌면 열어 둔 대시보드에 자동으로 쓴다(값(data)만 바뀐 것은 다시 구할 때 저장) ----------
-const snapshot = () => JSON.stringify([board.palette, board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; })]);
+const snapshot = () => JSON.stringify([board.palette, board.star, board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; })]);
 async function save() {
   clearTimeout(saveTimer);
   if (!dashId) return;
   try {
-    const d = (await api("/api/dash", { ...dashMeta, id: dashId, name: dashName, palette: board.palette, cards: board.cards.map(DashBoard.plain) })).dashboard;
+    const d = (await api("/api/dash", { ...dashMeta, id: dashId, name: dashName, palette: board.palette, cards: board.cards.map(DashBoard.plain), north_star: liveStar(board.star, board.cards) })).dashboard;
     dashMeta = metaOf(d);
+    board.star = { card: "", counters: [], limits: {}, ...d.north_star };
     lastSaved = snapshot();
     $("d-state").textContent = "저장했어요";
   } catch (e) { $("d-state").textContent = ""; say("err-dash", e.message); }
@@ -109,7 +129,9 @@ function boardChanged() {
   ctl.showLast(board.cards);
   $("d-title").textContent = dashName || "대시보드";
   $("d-sub").textContent = n ? `카드 ${n}개 · 카드를 누르면 고릅니다` : "";
-  $("d-picked").textContent = picked ? `고른 카드 ${picked}개` : "다운로드할 차트 카드를 고르세요";
+  $("d-picked").textContent = picked ? `고른 카드 ${picked}개` : "다운로드할 카드를 고르세요";
+  showAlerts();
+  if (panel.card && !board.cards.includes(panel.card)) panel.close(); else if (panel.card) panel.show();
   if (quiet || !dashId || snapshot() === lastSaved) return;
   $("d-state").textContent = "저장 중…";
   clearTimeout(saveTimer);
@@ -131,6 +153,8 @@ async function openDash(id) {
   quiet = true;
   dashName = $("d-rename").value = d.name;
   dashMeta = metaOf(d);
+  board.star = { card: "", counters: [], limits: {}, ...d.north_star };
+  panel.close();
   board.palette = d.palette;
   $("d-palette").value = d.palette.join(", ");
   board.set(d.cards.map(needsValues));
@@ -146,7 +170,8 @@ $("d-pick").onchange = () => save().then(() => openDash($("d-pick").value)).catc
 $("d-new").onclick = () => { $("d-new-box").classList.toggle("hidden"); $("d-new-name").focus(); };
 $("d-new-go").onclick = () => busy($("d-new-go"), async () => {
   try {
-    const made = await api("/api/dash", { name: $("d-new-name").value, cards: [] });
+    const tpl = allTemplates().find(t => t.id === $("d-template").value) ?? DASH_TEMPLATES.at(-1);
+    const made = await api("/api/dash", { name: $("d-new-name").value, cards: templateCards(tpl, randomId), template: tpl.id === "blank" ? "" : tpl.name });
     $("d-new-name").value = "";
     $("d-new-box").classList.add("hidden");
     showList(made, made.dashboard.id);
@@ -210,24 +235,106 @@ $("d-targets-save").onclick = () => busy($("d-targets-save"), async () => {
 
 // ---------- 카드 추가 메뉴(dash_menu.js): 테이블을 메뉴에서 고른다 ----------
 let metricList = [];
-const cardMenu = initCardMenu($("d-add-pop"), {
+const menuRoot = el("div"), popRoot = $("d-add-pop");  // 카드 만들기 입력 칸: [카드 추가] 메뉴에 있다가 카드 설정의 [데이터]를 열면 그 안으로 옮겨 간다
+popRoot.append(menuRoot);
+const itemsNow = () => board.cards.map(c => ({ id: c.id, layout: c.layout }));
+// 카드 하나의 값을 서버에서 구한다(날짜 컬럼이 하나뿐이면 기간 기준으로 자동으로 채운다)
+async function computeCard(card) {
+  let d = await timed("chart", () => api("/api/dash/card/compute", { card, ctx: board.ctx() }), { schema: "", base: card.source.table });
+  card.source = { ...card.source, ...d.source };
+  if (!card.source.date && !d.data.by_unit && d.data.date_cols?.length === 1 && card.kind !== "recent_rows" && card.kind !== "funnel") {
+    card.source.date = d.data.date_cols[0];
+    d = await api("/api/dash/card/compute", { card: { ...card, data: {} }, ctx: board.ctx() });
+  }
+  card.data = d.data;
+}
+// 빈 틀 카드의 데이터를 정한다: 카드 모음·템플릿에서 놓은 카드에 종류·조회를 채우고(자리·id는 그대로) 값을 구한다
+async function fillCard(target, built) {
+  target.kind = built.kind;
+  target.source = built.source;
+  target.view = { ...target.view, ...built.view };
+  target.data = {};
+  delete target.note;
+  await computeCard(target);
+  needsValues(target);
+  await panelHost.prepare(target);  // 차트 선반이 쓸 컬럼
+  panel.builderOpen = false;
+  board.set([...board.cards]);
+  await save();
+  say("err-dash", "데이터를 정했어요.", true);
+}
+const cardMenu = initCardMenu(menuRoot, {
   metricNames: () => metricList,
-  layout: () => ({ x: 0, y: Math.min(999, Math.max(0, ...board.cards.map(c => c.layout.y + c.layout.h))), w: 6, h: 6 }),
+  layout: () => nextLayout(itemsNow(), 6, 8),
   add: async card => {
     if (!dashId) throw new Error("대시보드를 먼저 고르거나 새로 만드세요.");
+    if (panelHost.menuTarget) return fillCard(panelHost.menuTarget, card);
     if (board.cards.length >= SERVER.dash.max_cards) throw new Error(`대시보드에는 카드를 ${SERVER.dash.max_cards}개까지 넣을 수 있습니다.`);
     card.id ??= randomId();
-    let d = await timed("chart", () => api("/api/dash/card/compute", { card, ctx: board.ctx() }), { schema: "", base: card.source.table });
-    card.source = { ...card.source, ...d.source };
-    if (!card.source.date && !d.data.by_unit && d.data.date_cols?.length === 1 && card.kind !== "recent_rows") {  // 날짜 컬럼이 하나뿐이면 기간 기준으로 자동으로 채운다
-      card.source.date = d.data.date_cols[0];
-      d = await api("/api/dash/card/compute", { card: { ...card, data: {} }, ctx: board.ctx() });
-    }
-    card.data = d.data;
+    await computeCard(card);
     board.set([...board.cards, card]);
     await save();
     say("err-dash", `카드를 넣었습니다(${board.cards.length}개).`, true);
   } });
+
+// ---------- 카드 모음(왼쪽)·카드 설정(오른쪽) ----------
+const columnCache = new Map();  // 테이블 → [[컬럼, 한글 타입]] (차트 선반이 쓴다)
+const panelHost = { board, menu: cardMenu, menuRoot, popRoot, menuTarget: null, changed: () => boardChanged(),
+  prepare: async card => {
+    const table = card.source?.table;
+    if (!table || !connected || columnCache.has(table)) return;
+    try { columnCache.set(table, (await api("/api/columns", { schema: card.source.schema || "", base: table })).columns); } catch (e) { /* 선반을 못 보일 뿐 */ }
+  },
+  columns: card => columnCache.get(card.source?.table) ?? [],
+  recompute: async card => {
+    const d = await api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: card.data?.since ? { since: card.data.since } : {} }, ctx: board.ctx() });
+    card.data = d.data;
+    needsValues(card);
+    board.draw();
+  },
+  star: () => board.star,
+  setStar: star => { board.star = { card: "", counters: [], limits: {}, ...star }; dashMeta.north_star = board.star; board.draw(); } };
+const panel = new CardPanel($("d-panel"), panelHost);
+function addShell(spec, cell) {
+  if (!dashId) return say("err-dash", "대시보드를 먼저 고르거나 새로 만드세요.");
+  if (board.cards.length >= SERVER.dash.max_cards) return say("err-dash", `대시보드에는 카드를 ${SERVER.dash.max_cards}개까지 넣을 수 있습니다.`);
+  const card = shellOf(spec, nextLayout(itemsNow(), 6, 8), randomId), cards = [...board.cards, card];
+  if (cell) {  // 놓은 칸 자리로(겹치면 다른 카드가 아래로 밀린다)
+    const at = moveCard(cards.map(c => ({ id: c.id, layout: c.layout })), card.id, { x: Math.min(Math.max(0, cell.x), GRID_COLS - 6), y: Math.max(0, cell.y) });
+    cards.forEach(c => { c.layout = at[c.id]; });
+  }
+  board.set(cards);
+  say("err-dash", `빈 ${spec.name} 카드를 놓았어요. 카드의 ⚙에서 데이터를 정하세요.`, true);
+  board.edit(card);
+}
+initGallery($("d-gallery-box"), { add: addShell });
+acceptGalleryDrops(board, { add: addShell });
+$("d-gallery").onclick = () => $("d-gallery-box").classList.toggle("hidden");
+// 카운터 지표가 한계를 벗어나면 위쪽에 경고로 올린다
+function showAlerts() {
+  const found = counterAlerts(board.cards, board.star);
+  $("d-alerts").classList.toggle("hidden", !found.length);
+  $("d-alerts").replaceChildren(...(found.length ? [el("b", { textContent: "카운터 지표 경고" }), ...found.map(f => el("div", { textContent: f.text }))] : []));
+}
+
+// ---------- 템플릿: 분석 개요형·목표 달성형·모니터링형·직접 구성(dash_templates.js)과 내 템플릿 ----------
+let myTemplates = [];
+const allTemplates = () => [...DASH_TEMPLATES, ...myTemplates.map(t => ({ ...t, id: "my:" + t.id, name: "내 템플릿 · " + t.name, help: "저장해 둔 카드 틀" }))];
+function showTemplates() {
+  $("d-template").replaceChildren(...allTemplates().map(t => el("option", { value: t.id, textContent: t.name, title: t.help ?? "" })));
+  $("d-tpl-list").replaceChildren(...myTemplates.map(t => el("div", { className: "row" }, el("span", { className: "hint", style: "flex:1", textContent: `${t.name} (카드 ${t.cards.length}개)` }),
+    el("button", { className: "ghost", textContent: "지우기", onclick: async () => { try { myTemplates = (await api("/api/dash/templates/delete", { id: t.id })).templates; showTemplates(); } catch (e) { $("d-tpl-note").textContent = e.message; } } }))));
+}
+$("d-tpl-save").onclick = () => busy($("d-tpl-save"), async () => {
+  try {
+    if (!board.cards.length) throw new Error("카드가 있는 대시보드에서 저장하세요.");
+    myTemplates = (await api("/api/dash/templates", toTemplate($("d-tpl-name").value, board.cards.map(DashBoard.plain)))).templates;
+    $("d-tpl-note").textContent = "내 템플릿으로 저장했어요(카드 종류·자리·색·이름만).";
+    showTemplates();
+  } catch (e) { $("d-tpl-note").textContent = e.message; }
+});
+api("/api/dash/templates").then(d => { myTemplates = d.templates; showTemplates(); }).catch(() => showTemplates());
+
 $("d-add-open").onclick = async e => {
   e.stopPropagation();
   $("d-add-pop").classList.toggle("hidden");
@@ -243,6 +350,7 @@ async function refreshDash() {
   if (!connected) return say("err-dash", "먼저 데이터에 연결하세요.");
   const failed = [];
   for (const card of [...board.cards]) {
+    if (isShell(card)) continue;  // 데이터를 아직 정하지 않은 빈 카드
     const { schema, table } = card.source;
     try {
       card.data = (await timed(card.kind === "metric" ? "metric" : "chart", () => api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: card.data?.since ? { since: card.data.since } : {} }, ctx: board.ctx() }), { schema, base: table })).data;
@@ -261,6 +369,12 @@ $("d-connect").onclick = () => openConnect(connected ? "연결을 바꿉니다" 
 $("d-down").onclick = () => busy($("d-down"), async () => {
   try { await saveBoard(board, { ratio: $("d-ratio").value, mode: $("d-mode").value, type: $("d-format").value, err: "err-dash" }); }
   catch (e) { say("err-dash", e.message); }
+});
+$("d-report-png").onclick = () => busy($("d-report-png"), async () => {
+  try { await saveReportPng(board, dashName || "대시보드", { mode: $("d-mode").value, err: "err-dash" }); } catch (e) { say("err-dash", e.message); }
+});
+$("d-report-pdf").onclick = () => busy($("d-report-pdf"), async () => {
+  try { await saveReportPdf(board, dashName || "대시보드", { mode: $("d-mode").value, err: "err-dash" }); } catch (e) { say("err-dash", e.message); }
 });
 $("d-ratio").onchange = () => saveSetting({ board_ratio: $("d-ratio").value });
 $("d-format").onchange = () => saveSetting({ board_format: $("d-format").value });
