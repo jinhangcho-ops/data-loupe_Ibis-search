@@ -10,7 +10,6 @@ import operator
 
 LEVELS = ("ok", "warn", "bad")
 RANK = {"ok": 0, "warn": 1, "bad": 2}
-LEVEL_NAMES = {"ok": "정상", "warn": "주의", "bad": "이상"}
 OPS = {">=": operator.ge, ">": operator.gt, "<=": operator.le, "<": operator.lt, "=": operator.eq, "!=": operator.ne}
 MAX_RULES = 20
 
@@ -60,15 +59,17 @@ def rule_hit(row, rule):
 
 
 def moment(value):
-    """datetime·date·ISO 글자를 datetime으로(못 읽으면 None)."""
+    """datetime·date·ISO 글자를 이 PC의 시각(시간대 없는 datetime)으로(못 읽으면 None). 시간대가 있는 값은 이 PC의 시간대로 바꾼 뒤 시간대를 뗀다."""
     if isinstance(value, dt.datetime):
-        return value.replace(tzinfo=None)
-    if isinstance(value, dt.date):
+        found = value
+    elif isinstance(value, dt.date):
         return dt.datetime.combine(value, dt.time())
-    try:
-        return dt.datetime.fromisoformat(str(value)).replace(tzinfo=None)
-    except (TypeError, ValueError):
-        return None
+    else:
+        try:
+            found = dt.datetime.fromisoformat(str(value))
+        except (TypeError, ValueError):
+            return None
+    return found.astimezone().replace(tzinfo=None) if found.tzinfo else found
 
 
 def entity_level(row, rules, stale_minutes, now, time_column):
@@ -130,7 +131,7 @@ def evaluate(rows, rules, entity_column, now, time_column=None, stale_minutes=No
             continue
         name, at = str(name), moment(row.get(time_column)) if time_column else None
         old = latest.get(name)
-        if old is None or at is None or old[1] is None or at >= old[1]:
+        if old is None or old[1] is None or (at is not None and at >= old[1]):  # 시각이 빈 행은 시각이 있는 행을 가리지 않는다(시각 컬럼이 없으면 마지막 행)
             latest[name] = (row, at)
     entities, kept = [], {}
     for name, (row, at) in sorted(latest.items()):

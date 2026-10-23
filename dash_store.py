@@ -4,6 +4,7 @@
 연결을 가리킬 때는 계정 이름과 비밀번호를 뺀 source_key를 쓴다. 비밀번호·계정 이름은 어디에도 저장하지 않는다."""
 import datetime as dt
 import hashlib
+import copy
 import json
 import os
 import re
@@ -13,6 +14,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import credentials
+import result
 import settings
 import watch
 
@@ -48,6 +50,15 @@ LOCK = threading.RLock()  # 읽고 고쳐 쓰는 동안(요청이 여럿 겹쳐�
 def def_hash(definition):
     """정의(JSON으로 쓸 수 있는 값)의 지문: 키를 정렬한 JSON 글자의 sha256 앞 16자."""
     return hashlib.sha256(json.dumps(definition, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()[:16]
+
+
+def finite(value):
+    """dict·list 안의 숫자 값을 result.number 규칙(NaN·무한은 None, Decimal은 실수)으로 바꾼 사본. JSON에 NaN이 들어가면 브라우저가 읽지 못한다."""
+    if isinstance(value, dict):
+        return {k: finite(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [finite(v) for v in value]
+    return result.number(value)
 
 
 FILE_SCHEMES = ("sqlite", "duckdb")  # 주소가 파일 경로인 종류
@@ -363,7 +374,7 @@ def check_data(data, kind):
     for name in ("computed_at", "def_hash", "note", "x"):
         if name in data and not isinstance(data[name], str):
             raise ValueError(f"data.{name}은 글자여야 합니다.")
-    return data
+    return finite(data)
 
 
 def check_card(card):
@@ -506,27 +517,43 @@ def now_text():
     return dt.datetime.now().isoformat(timespec="seconds")
 
 
-def load():
+CACHE = {"stamp": None, "text": None, "dashboards": None}  # 마지막으로 푼 파일의 (경로, mtime_ns, 크기), 푼 JSON 글자, 읽기 전용으로 쓰는 푼 결과
+
+
+def tidy(dashboards):
+    """푼 모음을 고쳐 쓴다: 예전 모양의 연결 열쇠를 지금 모양으로(다음에 쓸 때 저장된다), 저장된 NaN·무한은 None으로."""
+    for d in dashboards.values():
+        for c in d.get("cards", []) if isinstance(d, dict) else []:
+            if isinstance(c, dict) and isinstance(c.get("source"), dict) and c["source"].get("key"):
+                c["source"]["key"] = canon_key(c["source"]["key"])
+            if isinstance(c, dict) and isinstance(c.get("data"), dict):
+                c["data"] = finite(c["data"])
+    return dashboards
+
+
+def load(fresh=False):
     """저장된 대시보드 {"dashboards": {id: 대시보드}, "locked": 풀 수 없는지}. 풀 수 없으면(다른 PC·계정, 깨짐) 빈 모음과 locked=True이고 파일은 지우지 않는다.
-    .dat이 없고 예전 평문 dashboards.json이 있으면 먼저 옮긴다."""
+    .dat이 없고 예전 평문 dashboards.json이 있으면 먼저 옮긴다. 파일이 그대로((경로, mtime_ns, 크기)가 같으면) 다시 풀지 않고 푼 결과를 쓴다:
+    그 결과는 읽기 전용이다(고쳐 쓸 때는 fresh=True로 새 사본을 받는다)."""
     with LOCK:
         migrate_plain()
-        if not path_of().exists():
+        path = path_of()
+        if not path.exists():
             return {"dashboards": {}, "locked": False}
-        found = settings.read(FILE) or {}
-        blob = found.get("blob") if found.get("v") == VERSION else None
-        opened = credentials.reveal(blob) if isinstance(blob, str) else None
-        try:
-            dashboards = json.loads(opened)["dashboards"] if opened else None
-        except (ValueError, KeyError, TypeError):
-            dashboards = None
-        if not isinstance(dashboards, dict):
-            return {"dashboards": {}, "locked": True}
-        for d in dashboards.values():  # 예전 모양의 연결 열쇠를 지금 모양으로(다음에 쓸 때 저장된다)
-            for c in d.get("cards", []) if isinstance(d, dict) else []:
-                if isinstance(c, dict) and isinstance(c.get("source"), dict) and c["source"].get("key"):
-                    c["source"]["key"] = canon_key(c["source"]["key"])
-        return {"dashboards": dashboards, "locked": False}
+        info = path.stat()
+        stamp = (str(path), info.st_mtime_ns, info.st_size)
+        if CACHE["stamp"] != stamp:
+            found = settings.read(FILE) or {}
+            blob = found.get("blob") if found.get("v") == VERSION else None
+            opened = credentials.reveal(blob) if isinstance(blob, str) else None
+            try:
+                dashboards = json.loads(opened)["dashboards"] if opened else None
+            except (ValueError, KeyError, TypeError):
+                dashboards = None
+            if not isinstance(dashboards, dict):
+                return {"dashboards": {}, "locked": True}
+            CACHE.update(stamp=stamp, text=opened, dashboards=tidy(dashboards))
+        return {"dashboards": tidy(json.loads(CACHE["text"])["dashboards"]) if fresh else CACHE["dashboards"], "locked": False}
 
 
 def write(dashboards):
@@ -544,8 +571,8 @@ def write(dashboards):
 
 
 def editable():
-    """읽고 고쳐 쓸 모음. 풀 수 없는 파일이면 덮어쓰지 않도록 오류를 낸다."""
-    store = load()
+    """읽고 고쳐 쓸 모음(새 사본). 풀 수 없는 파일이면 덮어쓰지 않도록 오류를 낸다."""
+    store = load(fresh=True)
     if store["locked"]:
         raise ValueError(LOCKED)
     return store["dashboards"]
@@ -562,7 +589,7 @@ def get_dashboard(dash_id):
     found = load()["dashboards"].get(dash_id)
     if found is None:
         raise ValueError("대시보드를 찾을 수 없습니다.")
-    return found
+    return copy.deepcopy(found)
 
 
 def save_dashboard(d):
@@ -599,14 +626,17 @@ def add_card(dash_id, name, card):
         return save_dashboard({**d, "cards": [*d["cards"], {**card, "layout": {"x": 0, "y": min(bottom, 999), "w": 6, "h": 6}}]})
 
 
-def set_card_data(dash_id, card_id, data):
-    """저장한 대시보드의 카드 하나의 값(data)만 바꾼다(최신화 결과). 카드 크기 상한을 다시 검사한다. 카드가 없으면(그사이 지워졌으면) False."""
+def set_card_data(dash_id, card_id, data, same=None):
+    """저장한 대시보드의 카드 하나의 값(data)만 바꾼다(최신화 결과). 카드 크기 상한을 다시 검사한다. 카드가 없으면(그사이 지워졌으면) False.
+    same(지금 저장된 카드 → 참거짓)을 주면 쓰기 직전에 지금 카드로 물어, 거짓(그사이 정의를 고쳤다)이면 쓰지 않고 None을 돌려준다."""
     with LOCK:
         dashboards = editable()
         d = dashboards.get(dash_id)
         card = next((c for c in (d or {}).get("cards", []) if c["id"] == card_id), None)
         if card is None:
             return False
+        if same is not None and not same(card):
+            return None
         card["data"] = check_card({**card, "data": data})["data"]
         write(dashboards)
         return True

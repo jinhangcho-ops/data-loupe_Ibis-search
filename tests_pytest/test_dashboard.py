@@ -22,10 +22,10 @@ def test_save_open_delete(client):
     assert saved["name"] == "주간" and saved["cards"][0]["source"]["body"]["base"] == "orders" and saved["cards"][0]["layout"] == {"x": 0, "y": 0, "w": 6, "h": 6}
     listed = client.get("/api/dash").get_json()
     assert listed == {"dashboards": [{"id": saved["id"], "name": "주간", "cards": 1, "updated": saved["updated"]}], "locked": False, "last": ""}
-    assert client.get(f"/api/dash/{saved['id']}").get_json()["dashboard"]["cards"][0]["id"] == saved["cards"][0]["id"]
+    assert client.get("/api/dash/get", query_string={"id": saved["id"]}).get_json()["dashboard"]["cards"][0]["id"] == saved["cards"][0]["id"]
     assert post(client, "/api/dash", id=saved["id"], name="주간(고침)", cards=[])["dashboards"][0]["name"] == "주간(고침)"  # 같은 id는 덮어쓴다
     assert post(client, "/api/dash/delete", id=saved["id"]) == {"dashboards": [], "locked": False}
-    assert "찾을 수 없" in client.get(f"/api/dash/{saved['id']}").get_json()["error"]
+    assert "찾을 수 없" in client.get("/api/dash/get", query_string={"id": saved["id"]}).get_json()["error"]
 
 
 def test_board_checks(client):
@@ -43,7 +43,7 @@ def test_add_card_to_saved_or_new(client):
     assert first["name"] == "새것" and first["cards"] == 1
     again = post(client, "/api/dash/card/add", dashboard=first["id"], card=CARD)["dashboard"]
     assert again["cards"] == 2
-    cards = client.get(f"/api/dash/{first['id']}").get_json()["dashboard"]["cards"]
+    cards = client.get("/api/dash/get", query_string={"id": first["id"]}).get_json()["dashboard"]["cards"]
     assert [c["layout"]["y"] for c in cards] == [0, 6]
 
 

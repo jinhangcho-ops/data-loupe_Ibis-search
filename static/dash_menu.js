@@ -10,8 +10,9 @@ const WATCH = ["status", "alerts", "map"];  // 엔티티별 최근 행을 상태
 let menuCols = [], menuBase = "";  // 메뉴에서 고른 테이블과 그 컬럼 [[이름, 한글 타입]]
 const colsOfType = names => menuCols.filter(c => names.includes(c[1])).map(c => c[0]);
 const dateCols = () => colsOfType(["날짜", "날짜시간"]);
-// 서버(dash_calc.series_name)와 같은 계열 이름: 개수 / 합계 (컬럼)
-const seriesTitle = s => aggName(s.agg) + (s.agg === "count" || !s.y ? "" : ` (${s.y})`);
+// 서버(dash_calc.series_name)와 같은 계열 이름: 개수 / 합계 (컬럼) / 옵션이 있으면 분위수 (컬럼) p=0.9 (order는 뺀다)
+const seriesTitle = s => aggName(s.agg) + (s.agg === "count" || !s.y ? "" : ` (${s.y})`) +
+  Object.entries(s.opts ?? {}).filter(([k]) => k !== "order").map(([k, v]) => ` ${k}=${[].concat(v).join(",")}`).join("");
 
 // 메뉴 칸들을 root에 만든다. 값 줄은 종류의 최소~최대 개수까지 더하고 뺄 수 있다.
 function initCardMenu(root, host) {

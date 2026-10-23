@@ -132,11 +132,11 @@ class CardPanel {
     if (card.kind !== "chart" || !body || !this.host.columns) return [];
     const cols = this.host.columns(card);
     if (!cols.length) return [el("h5", { textContent: "차트 칸" }), el("div", { className: "hint", textContent: "연결하면 컬럼 칩을 끌어 X축·값·색·필터를 바꿀 수 있어요." })];
-    const state = () => ({ x: body.x ?? "", series: (body.series ?? []).map(s => ({ y: s.y ?? null, agg: s.agg })), split: body.split ?? "", conditions: (body.conditions ?? []).map(c => c.line ?? c) });
+    const state = () => ({ x: body.x ?? "", series: shelfSeries(body.series ?? []), split: body.split ?? "", conditions: (body.conditions ?? []).map(c => c.line ?? c) });
     const say = text => { this.note = text; err.textContent = text; };
     const panel = shelfPanel({ columns: () => cols, state, say, change: async (next, why) => {
       const before = JSON.stringify(body);
-      body.x = next.x; body.series = next.series.map(s => ({ y: s.y, agg: s.agg, ...(body.series.find(o => o.y === s.y && o.agg === s.agg)?.opts ? { opts: body.series.find(o => o.y === s.y && o.agg === s.agg).opts } : {}) }));
+      body.x = next.x; body.series = shelfSeries(next.series);
       body.split = next.split; body.conditions = next.conditions;
       if (!body.split) delete body.split;
       try { await this.host.recompute(card); this.note = `${why} 반영했어요.`; this.host.changed(); }
@@ -146,3 +146,5 @@ class CardPanel {
     return [el("h5", { textContent: "차트 칸 (컬럼 칩을 끌어 놓기)" }), panel.el];
   }
 }
+// 선반이 다루는 계열 모양: 컬럼·집계와 그 계열의 옵션(같은 컬럼·집계라도 옵션이 다르면 다른 계열이라 계열마다 자기 옵션을 들고 다닌다)
+const shelfSeries = series => series.map(s => ({ y: s.y ?? null, agg: s.agg, ...(s.opts ? { opts: s.opts } : {}) }));

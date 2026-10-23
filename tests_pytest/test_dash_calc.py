@@ -156,7 +156,7 @@ def test_compute_analysis_card(db):
 
 def test_add_card_fills_connection_without_account(db):
     added = db.post("/api/dash/card/add", json={"dashboard": "", "name": "분석 모음", "card": card("analysis", recipe={"base": "orders"}, analysis={"kind": "groups", "by": "store", "agg": "count", "value": ""})}).get_json()
-    saved = db.get(f"/api/dash/{added['dashboard']['id']}").get_json()["dashboard"]
+    saved = db.get("/api/dash/get", query_string={"id": added["dashboard"]["id"]}).get_json()["dashboard"]
     key = saved["cards"][0]["source"]["key"]
     assert key.startswith("folder:") and saved["cards"][0]["source"]["label"]
 

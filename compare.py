@@ -8,7 +8,6 @@ import settings
 
 FORMATS = ("number", "percent", "currency")
 MODES = ("span", "point")
-BETTER = ("up", "down", None)
 PARTIAL_NOTES = {"span": "직전 기간 일부만 있음", "point": "비교 시점 값이 일부만 있음"}
 DIGIT_READING = "영일이삼사오육칠팔구"
 

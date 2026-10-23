@@ -149,7 +149,7 @@ function showList({ dashboards: found, locked, last }, pick) {
 async function openDash(id) {
   dashId = board.dashId = id;
   if (!id) { quiet = true; board.set([]); quiet = false; dashName = ""; dashMeta = {}; lastSaved = ""; boardChanged(); return; }
-  const d = (await api("/api/dash/" + id)).dashboard;
+  const d = (await api("/api/dash/get?id=" + encodeURIComponent(id))).dashboard;
   quiet = true;
   dashName = $("d-rename").value = d.name;
   dashMeta = metaOf(d);

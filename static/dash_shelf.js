@@ -37,7 +37,7 @@ function applyDrop(shelf, column, type, state, value = "", op = "=") {
 
 // 값 칸의 집계를 바꾼다((행 개수) 칩은 바꾸지 않는다). 집계 이름은 서버가 주는 함수 사전의 집계(SERVER.dash.aggs) 중에서 고른다.
 function setAgg(series, i, agg) {
-  return series.map((x, j) => (j === i && x.y ? { ...x, agg } : x));
+  return series.map((x, j) => (j === i && x.y ? { y: x.y, agg } : x));
 }
 
 // 칸의 현재 내용을 칩 글자로

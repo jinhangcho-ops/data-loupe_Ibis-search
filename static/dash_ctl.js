@@ -68,9 +68,8 @@ class DashCtl {
     this.note(this.perNote, span.label + (span.days ? ` (${span.days}일)` : ""));
     this.past.classList.toggle("hidden", !past);
     if (past) this.stopLive("과거 시점을 보는 중이라 실시간 갱신은 멈춰 있어요");
-    const prev = parsed.previous;
-    await this.board.setRange(blank ? null : { start: span.start?.slice(0, 10) ?? null, end: [span.end?.slice(0, 10), day.date].filter(Boolean).sort()[0] },
-      blank ? null : prev && !prev.error && prev.start ? { start: prev.start.slice(0, 10), end: prev.end.slice(0, 10), text: span.to_date ? prev.label : `직전 ${prev.days}일` } : null);
+    const ctx = parsed.context;  // 보는 기간(기준일로 자른 것)과 직전 기간은 서버(dash_refresh.context)가 구한 대로 쓴다
+    await this.board.setRange(blank ? null : ctx?.range ?? null, blank ? null : ctx?.prev ?? null);
     if (commit) this.changed(this.fields());
   }
   // 최신화 주기·실시간 간격 칸을 서버로 검사한다(최신화는 1시간 이상, 실시간은 이 연결의 최소 이상).
@@ -136,10 +135,12 @@ class DashCtl {
     if (text) this.note(this.liveNote, text);
   }
 }
+// 서버에 다시 구해 달라고 보낼 카드: 값은 빼고, 상태·경고·배치도가 "N분째"를 이어 가도록 나빠진 시각(data.since)만 남긴다.
+const cardRequest = c => ({ ...DashBoard.plain(c), data: c.data?.since ? { since: c.data.since } : {} });
 // 실시간 한 번: 연결이 있는 카드의 값을 서버(/api/dash/cards/compute)에서 다시 구해 카드에 넣고 그린다(저장하지 않는다). 다른 연결의 카드는 서버가 건너뛴다.
 async function liveCards(board, connected) {
   if (!connected) throw new Error("먼저 데이터에 연결하세요.");
-  const cards = board.cards.filter(c => c.source?.key && c.id).map(c => ({ ...DashBoard.plain(c), data: {} }));
+  const cards = board.cards.filter(c => c.source?.key && c.id).map(cardRequest);
   (await api("/api/dash/cards/compute", { cards, ctx: board.ctx() })).results.forEach(r => { const c = board.cards.find(x => x.id === r.id); if (c && r.data) c.data = r.data; });
   await board.recompare();
 }
@@ -152,7 +153,7 @@ async function recomputeRange(board, cards, connected) {
   });
   if (todo.length) {
     try {
-      (await api("/api/dash/cards/compute", { cards: todo.map(c => ({ ...DashBoard.plain(c), data: {} })), ctx })).results.forEach(r => {
+      (await api("/api/dash/cards/compute", { cards: todo.map(cardRequest), ctx })).results.forEach(r => {
         const c = todo.find(x => x.id === r.id);
         if (c) { if (r.data) { c.data = r.data; c.rangeNote = ""; } else c.rangeNote = r.error; }
       });

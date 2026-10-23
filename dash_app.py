@@ -28,7 +28,7 @@ server.CONSTANTS["dash"].update(aggs=list(dash_calc.AGGS), merge=list(dash_calc.
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml"}  # 배치도 바탕 그림으로 내려줄 수 있는 것
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
-server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min", "/api/dash/refresh/start",
+server.FREE.update({"/api/dash", "/api/dash/get", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min", "/api/dash/refresh/start",
                     "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete"})
 
 
@@ -50,9 +50,10 @@ def dash_list():
     return jsonify(**dash_store.listing(), last=(settings.read(LAST) or {}).get("id", ""))
 
 
-@app.get("/api/dash/<dash_id>")
-def dash_get(dash_id):
-    return jsonify(dashboard=dash_store.get_dashboard(dash_id))
+@app.get("/api/dash/get")
+def dash_get():
+    """대시보드 하나(카드·값 포함): /api/dash/get?id=…. 연결을 쓰지 않으므로 차례를 기다리지 않는다(경로 변수를 쓰면 FREE에 넣을 수 없다)."""
+    return jsonify(dashboard=dash_store.get_dashboard(request.args.get("id")))
 
 
 @app.post("/api/dash")
@@ -105,14 +106,16 @@ def cards_compute():
     구한 데 걸린 초(seconds)도 준다. 다른 연결의 카드는 error로 돌려준다."""
     now, started, out = current_source(), time.monotonic(), []
     stamp = dt.datetime.now().isoformat(timespec="seconds")
-    for given in (request.json or {}).get("cards") or []:
+    given = (request.json or {}).get("cards") or []
+    ctx = dash_calc.shared_context([c for c in given if isinstance(c, dict)], (request.json or {}).get("ctx"))  # 같은 테이블·조건의 카드들은 한 번에 읽는다(최신화와 같은 계획)
+    for one in given:
         try:
-            card = dash_store.check_card(given)
+            card = dash_store.check_card(one)
             if now and card["source"].get("key") and card["source"]["key"] != now["key"]:
                 raise ValueError("다른 연결에서 구한 카드예요")
-            out.append({"id": card["id"], "data": dash_calc.compute(card, stamp, (request.json or {}).get("ctx"))})
+            out.append({"id": card["id"], "data": dash_calc.compute(card, stamp, ctx)})
         except ValueError as e:
-            out.append({"id": (given or {}).get("id", ""), "error": str(e)})
+            out.append({"id": (one or {}).get("id", ""), "error": str(e)})
     return jsonify(results=out, seconds=round(time.monotonic() - started, 2))
 
 
@@ -169,11 +172,12 @@ def refresh_stop():
 
 @app.post("/api/period/parse")
 def period_parse():
-    """기간 글자(text)를 기준일(as_of, 비면 오늘) 기준으로 읽는다. {span: {start, end, days, label, error, ...}, previous: 직전 기간 또는 None}. 규칙은 period.py 한 곳에 있다."""
+    """기간 글자(text)를 기준일(as_of, 비면 오늘) 기준으로 읽는다. {span: {start, end, days, label, error, ...}, previous: 직전 기간 또는 None, context: 카드를 구할 때 쓰는 {range, prev}(기준일로 자른 것, 비었거나 읽을 수 없으면 None)}.
+    규칙은 period.py와 dash_refresh.context 한 곳에 있다(화면은 이 응답만 쓴다)."""
     body = request.json or {}
     day = (body.get("as_of") or "").strip() or None
     span = period.parse(body.get("text"), day)
-    return jsonify(span=span, previous=None if span["error"] else period.previous(span))
+    return jsonify(span=span, previous=None if span["error"] else period.previous(span), context=dash_refresh.context({"period": body.get("text"), "as_of": day}))
 
 
 @app.post("/api/period/day")

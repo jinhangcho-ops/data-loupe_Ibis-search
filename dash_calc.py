@@ -51,8 +51,10 @@ MAX_NUM_COLS = 200  # 카드에 알려 줄 숫자 컬럼 이름 수(버블의 [�
 
 
 def series_name(s):
-    """계열 이름. 화면의 seriesName과 같다: 개수, 합계 (컬럼)."""
-    return metrics.AGG_NAMES[s["agg"]] + ("" if s["agg"] == "count" or not s["y"] else f" ({s['y']})")
+    """계열 이름. 화면의 seriesTitle(dash_menu.js)·seriesName(index.html)과 같다: 개수, 합계 (컬럼), 옵션이 있으면 분위수 (컬럼) p=0.9처럼 뒤에 붙인다(옵션만 다른 두 계열이 이름이 같아지지 않게)."""
+    name = metrics.AGG_NAMES[s["agg"]] + ("" if s["agg"] == "count" or not s["y"] else f" ({s['y']})")
+    opts = " ".join(f"{k}={','.join(str(x) for x in (v if isinstance(v, list) else [v]))}" for k, v in (s.get("opts") or {}).items() if k != "order")
+    return f"{name} {opts}" if opts else name
 
 
 def clean_series(found):
@@ -163,8 +165,8 @@ def fit(section):
 
 
 def group_key(body):
-    """같은 테이블·같은 조건(이어붙이기·조인·기간·조건)을 알아보는 글: 이것이 같은 카드들은 한 번에 읽는다."""
-    return json.dumps({k: body.get(k) for k in core.STAGE}, sort_keys=True, ensure_ascii=False, default=str)
+    """같은 테이블·같은 조건(이어붙이기·조인·기간·조건·계산 줄)을 알아보는 글: 이것이 같은 카드들은 한 번에 읽는다."""
+    return json.dumps({k: body.get(k) for k in (*core.STAGE, "calcs")}, sort_keys=True, ensure_ascii=False, default=str)
 
 
 def body_columns(body, *more):
@@ -268,9 +270,25 @@ def plan_shared(cards, ctx=None):
         elif union.get(g, 0) is not None:
             union[g] = sorted({*union.get(g, []), *cols})
         if card["kind"] in VALUE_KINDS and card["kind"] not in ("gauge", "summary") and card["source"].get("date") and not body.get("names") and body.get("series"):
+            try:
+                found = clean_series(body["series"])
+            except ValueError:
+                continue  # 계열이 틀린 카드는 구할 때 자기 오류를 낸다. 다른 카드의 계획은 막지 않는다
             mine = series.setdefault(time_key(body, card["source"]["date"], None, window), [])
-            mine += [s for s in clean_series(body["series"]) if s not in mine]
+            mine += [s for s in found if s not in mine]
     return {"union": {g: c for g, c in union.items() if c is not None}, "series": {k: v for k, v in series.items() if v}}
+
+
+def shared_context(cards, ctx=None):
+    """같은 테이블·조건의 카드들을 한 번에 읽는 ctx: 기간(ctx)에 plan(plan_shared)과 shared(읽은 값을 나눠 쓰는 곳)를 더한 사본. 최신화(dash_refresh)와 실시간·기간 다시 구하기(dash_app)가 함께 쓴다.
+    cards는 dash_store.check_card를 거친 카드가 아니어도 된다: 검사에 실패하거나 계획을 세울 수 없는 카드는 계획에서 빼고(그 카드는 구할 때 자기 오류를 낸다) 나머지만 묶는다."""
+    ok = []
+    for card in cards:
+        try:
+            ok.append(dash_store.check_card({**card, "data": {}}))
+        except ValueError:
+            continue
+    return {**(ctx or {}), "plan": plan_shared(ok, ctx), "shared": {}}
 
 
 def time_data(expr, x, series, split):
@@ -466,10 +484,12 @@ def metric_scalar(body, name):
 
 
 def group_values(expr, column, s):
-    """그룹(column)별 집계 {그룹: 값}(최대 MAX_GROUPS개)."""
+    """그룹(column)별 집계 {그룹: 값}. 그룹이 MAX_GROUPS개를 넘으면 None(잘린 그룹으로는 기여를 말할 수 없다)."""
     parse.check_name(column, expr.columns)
     t = expr.filter(expr[column].notnull())
-    frame = t.group_by(t[column].name("g")).aggregate(v=final_expr(t, s)).order_by("g").limit(MAX_GROUPS).to_polars()
+    frame = t.group_by(t[column].name("g")).aggregate(v=final_expr(t, s)).order_by("g").limit(MAX_GROUPS + 1).to_polars()
+    if len(frame) > MAX_GROUPS:
+        return None
     return {str(g): v for g, v in zip(frame["g"].to_list(), frame["v"].to_list())}
 
 
@@ -480,15 +500,18 @@ def summary_data(card, ctx):
     window, before, at = comparison(card, ctx)
     cur = run(lambda: scalars(at(window), series[:1]))[0]
     prev = run(lambda: scalars(at(before), series[:1]))[0] if before else None
-    groups = None
+    groups, note = None, ""
     if view.get("group"):
         now = run(lambda: group_values(at(window), view["group"], series[0]))
         old = run(lambda: group_values(at(before), view["group"], series[0])) if before else {}
-        groups = {g: (now.get(g), old.get(g)) for g in {*now, *old}}
+        if now is None or old is None:
+            note = f"그룹이 {MAX_GROUPS}개를 넘어 어느 그룹 덕분인지는 말하지 않았어요."
+        else:
+            groups = {g: (now.get(g), old.get(g)) for g in {*now, *old}}
     target = resolve_target(view.get("target"))
     found = summary_text.summarize(series_name(series[0]), cur, prev, view.get("format", "number"), view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"], False,
                                    groups, (target or {}).get("value"))
-    return {"values": {"scalar": [cur], "prev": [prev]}, "text": found["text"], "sentences": found["sentences"], "target": target}
+    return {"values": {"scalar": [cur], "prev": [prev]}, "text": found["text"], "sentences": found["sentences"], "target": target, **({"note": note} if note else {})}
 
 
 def value_data(card, ctx):
@@ -612,7 +635,15 @@ def deviation_data(card, ctx):
     parse.check_name(date, expr.columns, "날짜 컬럼")
     if unit == "hour" and not expr[date].type().is_timestamp():
         raise ValueError(f"'{date}'은 날짜만 있는 컬럼이라 시간대(시)로 묶을 수 없어요. 일·주·월로 묶으세요.")
-    frame = run(lambda: expr.group_by([expr[entity].name("e"), expr[date].truncate(BUCKET_UNITS[unit]).name("b")]).aggregate(v=final_expr(expr, series[0])).to_polars())
+    t = expr.filter(expr[date].notnull())  # 시각이 빈 행은 시간대를 만들지 않는다
+    def recent():
+        """가장 최근 MAX_BUCKETS개 시간대 중 가장 이른 것: 그보다 오래된 행은 읽지 않는다."""
+        found = t.select(b=t[date].truncate(BUCKET_UNITS[unit])).distinct()
+        return found.order_by(found.b.desc()).limit(MAX_BUCKETS).to_polars()["b"].to_list()
+    latest = run(recent)
+    if latest:
+        t = t.filter(t[date] >= min(latest))
+    frame = run(lambda: t.group_by([t[entity].name("e"), t[date].truncate(BUCKET_UNITS[unit]).name("b")]).aggregate(v=final_expr(t, series[0])).to_polars())
     buckets = sorted({str(b) for b in frame["b"].to_list()})[-MAX_BUCKETS:]
     cells = {}
     for e, b, v in frame.rows():
@@ -707,4 +738,4 @@ def compute(card, now, ctx=None):
         found = analysis_data(source, ctx)
     else:
         raise ValueError(f"'{card['kind']}' 카드는 아직 다시 구할 수 없습니다.")
-    return {**found, "computed_at": now, "def_hash": dash_store.def_hash(definition(card))}
+    return dash_store.finite({**found, "computed_at": now, "def_hash": dash_store.def_hash(definition(card))})  # NaN·무한은 JSON에 못 쓰므로 빈 값으로

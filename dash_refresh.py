@@ -181,43 +181,39 @@ def result(d, card, state, message=""):
 
 def start(now=None):
     """지금 연결로 주기가 지난 카드의 최신화를 작업 스레드에서 시작한다. 이미 돌고 있으면 그 상태를 돌려준다. 연결이 없으면 오류.
-    저장한 대시보드마다 주기가 있는 것만 보며, 이번에 안 구하는 카드는 이유와 함께 건너뜀으로 적는다."""
+    저장한 대시보드마다 주기가 있는 것만 보며, 이번에 안 구하는 카드는 이유와 함께 건너뜀으로 적는다. 돌고 있는지 확인하는 데서 작업 상태를 쓰는 데까지 한 잠금 안이라 동시에 두 번 눌러도 한 번만 시작한다."""
     now_source = current_source()
     if now_source is None:
         raise ValueError("먼저 데이터에 연결하세요.")
+    now = now or dt.datetime.now()
     with LOCK:
         if JOB["running"]:
             return {**JOB, "results": [dict(r) for r in JOB["results"]]}
-    now = now or dt.datetime.now()
-    dashboards = [d for d in dash_store.editable().values() if (d.get("refresh") or {}).get("every")]
-    plan, results = [], []
-    for d in sorted(dashboards, key=lambda x: x["name"]):
-        for card in d["cards"]:
-            why = skip_reason(d, card, now_source["key"], now)
-            if why:
-                results.append(result(d, card, "skipped", why))
-            else:
-                plan.append((d, card))
-                results.append(result(d, card, "waiting"))
-    STOP.clear()
-    with LOCK:
+        dashboards = [d for d in dash_store.editable().values() if (d.get("refresh") or {}).get("every")]
+        plan, results = [], []
+        for d in sorted(dashboards, key=lambda x: x["name"]):
+            for card in d["cards"]:
+                why = skip_reason(d, card, now_source["key"], now)
+                if why:
+                    results.append(result(d, card, "skipped", why))
+                else:
+                    plan.append((d, card))
+                    results.append(result(d, card, "waiting"))
+        STOP.clear()
         JOB.update(running=bool(plan), total=len(plan), done=0, current="", results=results)
-    if plan:
-        THREAD[0] = threading.Thread(target=work, args=(plan, now), daemon=True)
-        THREAD[0].start()
+        if plan:
+            THREAD[0] = threading.Thread(target=work, args=(plan, now), daemon=True)
+            THREAD[0].start()
     return status()
 
 
 def work(plan, now):
-    """작업 스레드: 카드를 차례로 구한다. 멈추기를 누르면 남은 카드는 건너뜀. 끝나면 running을 끈다."""
+    """작업 스레드: 카드를 차례로 구한다. 멈추기를 누르면 남은 카드는 건너뜀. 끝나면 running을 끈다.
+    대시보드마다 보는 기간과 같은 테이블·조건을 묶은 읽기 계획은 그 대시보드의 첫 카드를 구할 때 세운다(실패하면 그 카드만 실패로 남는다)."""
     try:
-        contexts, shared = {}, {}  # 대시보드마다 보는 기간, 같은 테이블·조건의 카드가 함께 읽은 값
+        contexts, plans, mine = {}, {}, {}
         for d, card in plan:
-            contexts.setdefault(d["id"], context(d))
-        plans = {}
-        for d, card in plan:
-            plans.setdefault(d["id"], []).append(dash_store.check_card({**card, "data": {}}))
-        plans = {did: dash_calc.plan_shared(cards, contexts[did]) for did, cards in plans.items()}  # 같은 테이블·조건의 카드들을 묶는다
+            mine.setdefault(d["id"], []).append(card)
         for d, card in plan:
             slot = next(r for r in JOB["results"] if r["dashboard"] == d["id"] and r["card"] == card["id"])
             if STOP.is_set():
@@ -228,16 +224,24 @@ def work(plan, now):
                 JOB["current"] = card["title"]
             try:
                 with core.using():
+                    if d["id"] not in plans:
+                        contexts[d["id"]] = context(d)
+                        plans[d["id"]] = dash_calc.shared_context(mine[d["id"]], contexts[d["id"]])  # 같은 테이블·조건의 카드들을 묶는다
+                    ctx = plans[d["id"]]
                     checked = dash_store.check_card({**card, "data": {k: v for k, v in (card.get("data") or {}).items() if k == "since"}})
-                    ctx = {**(contexts[d["id"]] or {}), "plan": plans[d["id"]], "shared": shared.setdefault(d["id"], {})}
                     why = scan_decision(checked, ctx)
                     if why:
                         outcome = ("skipped", why)
                     else:
                         data = dash_calc.compute(checked, now.isoformat(timespec="seconds"), ctx)
-                        if not dash_store.set_card_data(d["id"], card["id"], data):
+                        want = dash_store.def_hash(dash_calc.definition(checked))
+                        saved = dash_store.set_card_data(d["id"], card["id"], data, same=lambda c: dash_store.def_hash(dash_calc.definition(dash_store.check_card(c))) == want)
+                        if saved is None:  # 구하는 동안 사용자가 조회를 고쳐 저장했다: 옛 정의로 구한 값을 새 정의에 붙이지 않는다
+                            outcome = ("skipped", "구하는 동안 카드를 고쳤어요. 다음에 다시 구해요")
+                        elif not saved:
                             raise ValueError("그사이 지운 카드예요")
-                        outcome = ("ok", "")
+                        else:
+                            outcome = ("ok", "")
             except Exception as e:  # 이전 값은 그대로 두고 이유만 남긴다
                 outcome = ("failed", source.mask(str(e), server.state["passwords"]))
             with LOCK:

@@ -121,8 +121,11 @@ def relative(text, today):
             raise ValueError(f"‘{compact}’에서 단위를 알 수 없어요. 일·주·달(개월)·년 중 하나를 붙여 주세요. 예: 최근 3개월")
         if count < 1:
             raise ValueError(f"‘{compact}’{ending(compact, '은', '는')} 1 이상으로 써 주세요. 예: 최근 7일")
-        first = {"day": lambda: today - timedelta(days=count - 1), "week": lambda: today - timedelta(days=7 * count - 1),
-                 "month": lambda: add_months(today, -count) + timedelta(days=1), "year": lambda: add_months(today, -12 * count) + timedelta(days=1)}[unit]()
+        try:
+            first = {"day": lambda: today - timedelta(days=count - 1), "week": lambda: today - timedelta(days=7 * count - 1),
+                     "month": lambda: add_months(today, -count) + timedelta(days=1), "year": lambda: add_months(today, -12 * count) + timedelta(days=1)}[unit]()
+        except (OverflowError, ValueError):  # 달력 범위(1~9999년)를 벗어나는 큰 숫자
+            raise ValueError(f"‘{compact}’{ending(compact, '은', '는')} 너무 먼 과거예요. 더 작은 숫자로 써 주세요. 예: 최근 3개월") from None
         return whole(first, today, f"최근 {count}{named.group(2)}", "recent")
     if compact == "오늘":
         return whole(today, today, "오늘", "day")
