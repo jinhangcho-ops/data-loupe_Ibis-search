@@ -39,14 +39,25 @@ function confirmScan(d) {
   });
 }
 const api = async (url, body) => (await send(url, body)).json();
-const esc = v => String(v ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// value를 적어 두지 않으면 앞뒤·연속 공백이 줄어든 글자가 값이 된다("금액 " → "금액").
 const fill = (sel, items, blank) => sel.innerHTML = (blank ? `<option value="">${blank}</option>` : "") +
-  items.map(v => `<option>${esc(v)}</option>`).join("");
+  items.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
 // 요소 만들기: 속성을 주고 자식(요소나 글자)을 붙인다.
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+// SVG 요소 만들기(el의 SVG판): 속성(null은 건너뜀)과 자식을 준다. 카드 그림·흐름·생키가 함께 쓴다.
+const svg = (tag, attrs = {}, ...kids) => {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v);
+  e.append(...kids);
+  return e;
+};
 // 칩: 이름 옆의 ×를 누르면 remove를 부른다.
 const chip = (text, remove) => el("span", { className: "chip" }, text, el("button", { className: "ghost", textContent: "×", title: "빼기", onclick: remove }));
-const download = (href, name) => el("a", { href, download: name }).click();
+const download = (href, name) => {
+  el("a", { href, download: name }).click();
+  if (href.startsWith("blob:")) setTimeout(() => URL.revokeObjectURL(href), 60000);  // 내려받기가 시작된 뒤 메모리를 돌려준다
+};
 // 단추를 누르면 떠 있는 상자(.drop 안의 .pop)를 열고 닫는다. 밖을 누르면 닫는 일은 화면이 한다.
 const toggleDrop = (button, pop) => { button.onclick = e => { e.stopPropagation(); pop.classList.toggle("hidden"); }; };
 // 중첩 값(구조·목록·맵): 한 줄로 {name: 가람, age: 30}, [a, b]처럼 줄여 보인다. 빈 값은 null.
@@ -55,18 +66,24 @@ const inline = v => Array.isArray(v) ? "[" + v.map(inline).join(", ") + "]"
   : isNested(v) ? "{" + Object.entries(v).map(([k, x]) => `${k}: ${inline(x)}`).join(", ") + "}" : v === null ? "null" : String(v);
 // 값이 표에 보이는 글자와 전체 글자(잘렸을 때만, 마우스를 올리면 보인다). 숫자는 자릿수 쉼표를 넣고, 문자열은 최대 글자 수(#maxlen, 없는 화면은 40)에서 자른다.
 // 중첩 값의 전체 글자는 들여쓴 JSON이다.
+// 큰 정수는 서버가 글자("12345678901234567890")로 보내므로 숫자처럼 오른쪽에 맞춘다. 자릿수 쉼표로 소수나 큰 지수가 잘려 보이면 전체 값을 title로.
+const bigInt = v => typeof v === "string" && /^-?\d{16,}$/.test(v);
 function shown(v) {
-  if (typeof v === "number") return [v.toLocaleString(), ""];
+  if (typeof v === "number") { const t = v.toLocaleString(); return [t, t.replace(/,/g, "") === String(v) ? "" : String(v)]; }
   const s = isNested(v) ? inline(v) : String(v ?? ""), max = +($("maxlen")?.value ?? 40);
   const full = isNested(v) ? JSON.stringify(v, null, 2) : s;
   return max > 0 && s.length > max ? [s.slice(0, max) + "…", full] : [s, isNested(v) && full !== s ? full : ""];
 }
 // 표 칸. 중첩 값 칸(.nest)은 누르면 들여쓴 전체를 칸 안에 펼치고, 다시 누르면 접는다.
 function cell(v) {
-  const [text, full] = shown(v), title = full ? ` title="${esc(full).replace(/"/g, "&quot;")}"` : "";
-  if (isNested(v)) return `<td class="nest"${title} data-full="${esc(full || text).replace(/"/g, "&quot;")}">${esc(text)}</td>`;
-  return typeof v === "number" ? `<td class="num">${text}</td>` : `<td${title}>${esc(text)}</td>`;
+  const [text, full] = shown(v), title = full ? ` title="${esc(full)}"` : "";
+  if (isNested(v)) return `<td class="nest"${title} data-full="${esc(full || text)}">${esc(text)}</td>`;
+  return typeof v === "number" ? `<td class="num"${title}>${text}</td>` : bigInt(v) ? `<td class="num">${esc(text)}</td>` : `<td${title}>${esc(text)}</td>`;
 }
+// 결과 표 {columns, rows}: 숫자 컬럼은 머리글도 오른쪽에. SQL 실행과 문장 보기의 결과가 함께 쓴다.
+const resultTable = ({ columns, rows }) => !rows.length ? '<span class="empty">결과가 없습니다.</span>'
+  : `<table><thead><tr>${columns.map(c => `<th class="${rows.some(r => typeof r[c] === "number") ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
+    rows.map(r => "<tr>" + columns.map(c => cell(r[c])).join("") + "</tr>").join("") + "</tbody></table>";
 document.addEventListener("click", e => {
   const td = e.target.closest("td.nest");
   if (!td) return;
@@ -324,7 +341,7 @@ async function resume() {
     fillConnection(opened);
     if (opened.kind === "folder") {
       await listFiles();
-      if (opened.files) { $("file").value = FLAT; flatBoxes().forEach(b => b.checked = opened.files.includes(b.value)); }
+      if (opened.files) { $("file").value = FLAT; restoreFlat(opened.files); }
       else $("file").value = opened.file;
       showFlat();
     }
@@ -345,7 +362,17 @@ const FLAT = "*flat";  // 파일 이름에 쓸 수 없는 글자로 시작해 �
 const flatBoxes = () => [...document.querySelectorAll("#flat-list input")];
 function showFlat() {
   $("flat").classList.toggle("hidden", $("file").value !== FLAT);
-  $("flat-count").textContent = `${flatBoxes().filter(b => b.checked).length} / ${flatBoxes().length}개 선택`;
+  $("flat-count").textContent = `${flatBoxes().filter(b => b.checked).length} / ${flatBoxes().length}개 선택` + (offList.size ? ` · 고른 파일 중 ${offList.size}개는 목록 밖` : "");
+}
+// 고른 파일 중 화면 목록(LIST_MAX개까지)에 안 그린 것. 연결할 때 함께 보낸다.
+const offList = new Set();
+const pickedFiles = () => [...flatBoxes().filter(b => b.checked).map(b => b.value), ...offList];
+function restoreFlat(files) {
+  const drawn = new Set(flatBoxes().map(b => b.value));
+  flatBoxes().forEach(b => b.checked = files.includes(b.value));
+  offList.clear();
+  files.filter(f => !drawn.has(f)).forEach(f => offList.add(f));
+  showFlat();
 }
 // 연결 칸(connect.html)이 있는 화면에서만 연결 칸의 버튼을 단다. 수집 화면처럼 연결 칸이 없는 화면도 common.js를 쓴다.
 const hasConnect = !!$("connect");
@@ -404,6 +431,7 @@ let connected = null;  // 지금 연결의 종류: "flat"(테이블 파일), "ot
 // DuckDB 파일이나 DB 주소로 연결돼 있었으면 연결은 그대로 두고 화면에 올라온 것만 비운다.
 if (hasConnect) $("flat-none").onclick = () => busy($("flat-none"), async () => {
   flatBoxes().forEach(b => b.checked = false);
+  offList.clear();
   showFlat();
   if (!connected) return;
   try {
@@ -417,16 +445,20 @@ if (hasConnect) $("flat-none").onclick = () => busy($("flat-none"), async () => 
   } catch (e) { connMsg(e.message); }
 });
 // 경로(폴더나 파일 하나)에서 체크한 종류의 파일을 찾는다. 하위 폴더까지 찾을지는 체크로. 파일이 하나뿐이면 바로 고른 상태로 둔다.
+const LIST_MAX = 2000;  // 화면에 올리는 파일 수의 상한(수만 개를 한 번에 그리면 화면이 멎는다)
 async function listFiles() {
   const kinds = [...$("kinds").querySelectorAll("input:checked")].map(b => b.value);
   const d = await api("/api/files", { path: $("path").value.trim(), kinds, deep: $("deep").checked });
-  fill($("file"), d.files);
+  const files = d.files.slice(0, LIST_MAX), flat = d.flat.slice(0, LIST_MAX);
+  fill($("file"), files);
   if (d.flat.length) $("file").append(new Option(`테이블 파일 고르기: Parquet·CSV·JSON·Excel·GeoJSON (${d.flat.length}개)`, FLAT));
-  checks($("flat-list"), d.flat);  // 처음에는 아무것도 고르지 않은 상태. 쓸 파일만 체크한다.
+  offList.clear();
+  checks($("flat-list"), flat);  // 처음에는 아무것도 고르지 않은 상태. 쓸 파일만 체크한다.
   if (!d.files.length && d.flat.length === 1) { $("file").value = FLAT; flatBoxes()[0].checked = true; }
   $("file").classList.remove("hidden");
   showFlat();
-  connMsg("");
+  const more = Math.max(d.files.length, d.flat.length) > LIST_MAX;
+  connMsg(more ? `파일이 많아 앞의 ${LIST_MAX.toLocaleString()}개만 보여요. 경로나 종류를 좁혀 주세요.` : "", "hint");
 }
 if (hasConnect) $("find").onclick = () => busy($("find"), async () => {
   try { await listFiles(); } catch (e) { connMsg(e.message); }
@@ -449,7 +481,7 @@ async function showConnected(flat, schemas, info) {
 if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
   const kind = document.querySelector("input[name=kind]:checked").value;
   const body = kind === "folder"
-    ? { kind, path: $("path").value, ...($("file").value === FLAT ? { files: flatBoxes().filter(b => b.checked).map(b => b.value) } : { file: $("file").value }) }
+    ? { kind, path: $("path").value, ...($("file").value === FLAT ? { files: pickedFiles() } : { file: $("file").value }) }
     : { kind, url: $("url").value, user: $("user").value, password: $("password").value };
   $("driver-hint").classList.add("hidden");
   try {

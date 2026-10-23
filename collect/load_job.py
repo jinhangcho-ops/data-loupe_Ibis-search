@@ -35,7 +35,8 @@ def check(load):
         raise ValueError("구성의 load.table.key는 컬럼 이름 목록이어야 합니다.")
     if not isinstance(table["load_id"], bool):
         raise ValueError("구성의 load.table.load_id는 true 또는 false여야 합니다.")
-    if urlsplit(table["connection"]["url"].strip()).password is not None:
+    link = urlsplit(table["connection"]["url"].strip())
+    if link.password is not None or any(source.secret_param(piece) for piece in link.query.split("&")):  # user:pw@ 또는 ?password=·?api_key= 같은 query
         raise ValueError("DB 주소에 비밀번호를 넣지 마세요. 비밀번호는 저장하지 않고 시작할 때 따로 입력합니다.")
 
 

@@ -9,6 +9,7 @@ from core import source
 from core import sql_funcs
 from core.prep_ops import stats
 
+FLOAT32_MAX = 3.4e38  # float32로 바꿔도 되는 절댓값의 상한(실제 최댓값 3.4028e38보다 조금 작게)
 INT_TYPES = [("int8", -(2**7), 2**7 - 1), ("int16", -(2**15), 2**15 - 1), ("int32", -(2**31), 2**31 - 1), ("int64", -(2**63), 2**63 - 1)]
 
 
@@ -45,7 +46,10 @@ def downcast(t):
     ints = [n for n, d in t.schema().items() if d.is_integer()]
     floats = [n for n, d in t.schema().items() if d.is_float64()]
     metrics = {f"{kind}{i}": expr for i, n in enumerate(ints) for kind, expr in (("lo", t[n].min()), ("hi", t[n].max()))}
-    metrics.update({f"diff{i}": (t[n] != t[n].cast("float32").cast("float64")).sum() for i, n in enumerate(floats)})
+    for i, n in enumerate(floats):  # float32에 안 들어가는 큰 값(1e300)은 cast가 DB 오류를 내므로 cast 전에 범위 안의 값만 남겨 견주고, 밖의 값 수는 따로 센다
+        big = (t[n].abs() > FLOAT32_MAX) & ~t[n].isinf() & ~t[n].isnan()
+        safe = (~big).ifelse(t[n], 0.0)
+        metrics.update({f"diff{i}": (safe != safe.cast("float32").cast("float64")).sum(), f"big{i}": big.cast("int64").sum()})
     if not metrics:
         return t
     found = stats(t, **metrics)
@@ -56,7 +60,7 @@ def downcast(t):
             small = next((name for name, low, high in INT_TYPES if low <= lo and hi <= high), None)  # uint64의 int64 밖 값은 건너뛴다.
             if small and ibis.dtype(small).nbytes < t[n].type().nbytes:
                 casts[n] = t[n].cast(small)
-    casts.update({n: t[n].cast("float32") for i, n in enumerate(floats) if found[f"diff{i}"] == 0})  # 전부 빈 값이면 합이 비어 그대로 둔다.
+    casts.update({n: t[n].cast("float32") for i, n in enumerate(floats) if found[f"diff{i}"] == 0 and not found[f"big{i}"]})  # 전부 빈 값이면 합이 비어 그대로 둔다.
     return t.mutate(**casts) if casts else t
 
 
@@ -79,10 +83,12 @@ def shape(con, recipe, table=None, info=None, refs=None):
         parse.check_name(name, t.columns)
         check_spec(name, spec)
     made = {}  # 파생 컬럼 → 그것을 만든 컬럼
-    for name in t.columns:
-        before = set(t.columns)
-        t = prep_ops.apply_ops(t, name, specs.get(name, {}).get("ops", {}))
-        made.update({new: name for new in t.columns if new not in before})
+    names = list(t.columns)  # 앞 단계가 만든 파생 컬럼에는 ops를 적용하지 않는다
+    for part in ("rows", "rest"):  # 행을 줄이는 일(fill·outlier drop)을 모든 컬럼에 먼저 하고 나서 통계를 쓰는 일을 한다(컬럼 순서로 결과가 달라지지 않게)
+        for name in names:
+            before = set(t.columns)
+            t = prep_ops.apply_ops(t, name, specs.get(name, {}).get("ops", {}), part)
+            made.update({new: name for new in t.columns if new not in before})
     t, new = prep_derive.apply_formulas(t, recipe.get("formulas") or [])
     if recipe.get("pca"):
         t, components = prep_derive.pca(t, recipe["pca"], {} if info is None else info)
@@ -154,7 +160,7 @@ def flipped(line):
 
 def nth_row(t, columns, order, last):
     """columns가 같은 행 중 정렬 기준(order)으로 첫(last면 마지막) 행 하나만 남긴다(행 번호 0)."""
-    keys = [parse.parse_sort(flipped(line) if last else line, t) for line in order]
+    keys = [parse.parse_sort(flipped(line) if last else line, t).op().copy(nulls_first=False).to_expr() for line in order]  # 빈 값은 DB 기본 위치에 맡기지 않고 늘 뒤로
     numbered = t.mutate(**{FIRST: ibis.row_number().over(ibis.window(group_by=[t[c] for c in columns], order_by=keys))})
     return numbered.filter(numbered[FIRST] == 0).select(*t.columns)
 

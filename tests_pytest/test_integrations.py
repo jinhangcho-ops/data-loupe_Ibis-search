@@ -151,3 +151,18 @@ def test_slack_question(client, tmp_path, folder, monkeypatch):
     monkeypatch.setattr(llm, "client", lambda: type("F", (), {"name": "f", "complete": lambda self, s, q: "delete from orders"})())
     assert commands.answer("질문 다 지워").startswith("할 수 없습니다")
     assert commands.answer("질문").startswith("질문을 쓰세요")
+
+
+def test_ga4_fetch_writes_part_then_replaces(client, key_file, google, tmp_path, folder, monkeypatch):
+    """감사 D: 쓰다 끊기면 결과 이름의 파일이 남지 않는다(.part만 쓰고 지운다)."""
+    import polars as pl
+    path, _ = key_file
+    out = tmp_path / "broken.parquet"
+    client.post("/api/ga4", json={"key_path": str(path), "property": "123", "start": "7daysAgo", "end": "yesterday", "dimensions": "date", "metrics": "activeUsers, bounceRate", "output": str(out)})
+
+    def broken(self, target, *a, **k):
+        open(target, "wb").write(b"PAR1 half")
+        raise OSError("디스크가 가득 찼습니다")
+    monkeypatch.setattr(pl.DataFrame, "write_parquet", broken)
+    assert "디스크" in client.post("/api/ga4/fetch", json={}).get_json()["error"]
+    assert not out.exists() and not list(tmp_path.glob("broken*"))

@@ -288,7 +288,7 @@ def test_period_parse_returns_context(client):
     got = post(text="최근 7일", as_of="2026-10-22")
     assert got["context"] == {"range": {"start": "2026-10-16", "end": "2026-10-22"}, "prev": {"start": "2026-10-09", "end": "2026-10-15", "text": "직전 7일"}}
     month = post(text="2026-10", as_of="2026-10-20")["context"]  # 기준일로 자른다
-    assert month["range"] == {"start": "2026-10-01", "end": "2026-10-20"} and month["prev"] == {"start": "2026-09-01", "end": "2026-09-30", "text": "직전 30일"}
+    assert month["range"] == {"start": "2026-10-01", "end": "2026-10-20"} and month["prev"] == {"start": "2026-09-01", "end": "2026-09-20", "text": "지난달 같은 기간"}
     assert post(text="", as_of="")["context"] is None and post(text="엉터리", as_of="")["context"] is None
 
 

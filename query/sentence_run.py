@@ -188,7 +188,7 @@ class Plan:
                 "date_only": f"to_date(col({c!r}))", "lower": f"lower(col({c!r}))"}.get(prep)
         if text is None:
             raise Bad(f"컬럼 가공은 {', '.join(PREPS.values())} 중 하나예요.")
-        new = f"{c}_{prep}"
+        new = re.sub(r"[\W_]+", "_", f"{c}_{prep}").strip("_")  # 공백·기호는 _로(새 컬럼 이름이 계산 줄에서 한 낱말이어야 한다)
         self.calc(f"식 {text} 이름 {new}")
         return new
 
@@ -295,12 +295,8 @@ def formula_one(text):
 
 
 def num(text):
-    """식에 넣을 값: 수로 읽히면 그대로, 아니면 글자 상수."""
-    try:
-        float(text)
-        return str(text)
-    except ValueError:
-        return repr(str(text))
+    """식에 넣을 값: 평범한 십진수(-1.5)면 그대로, 아니면 글자 상수('007'·nan·1e3은 글자)."""
+    return str(text) if re.fullmatch(r"[+-]?(0|[1-9]\d*)(\.\d+)?", str(text)) else repr(str(text))
 
 
 def func_call(spec, column):

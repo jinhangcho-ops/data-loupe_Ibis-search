@@ -145,7 +145,7 @@ def test_routes(client, tmp_path, folder):
     assert post("/api/virtual", name="vip", sql=None, parquet=None).get_json()["virtual"] == {}
 
     stored = json.loads((folder / "virtual_tables.json").read_text(encoding="utf-8"))
-    assert list(stored) == ["folder:" + os.path.normcase(os.path.abspath(str(tmp_path)))]  # 연결 열쇠는 폴더 경로뿐(비밀번호 없음)
+    assert len(stored) == 1 and next(iter(stored)).startswith("folder:" + os.path.normcase(os.path.abspath(str(tmp_path))) + "#")  # 연결 열쇠는 폴더 경로와 고른 파일뿐(비밀번호 없음)
 
 
 def test_syntax_errors():

@@ -133,7 +133,8 @@ def query():
         return ask
     con, count, rows, note = get_con(), None, None, ""
     able = source.compiles(expr)
-    if held.remote(con) or not able:
+    pages = able and held.remote(con) and held.pager(con) is not None  # 서버에 결과를 두는 DB(BigQuery): 받아 두거나 세지 않고 처음부터 server_page 한 번
+    if (held.remote(con) or not able) and not pages:
         source_expr = querying.filtered(body)
         counter = (lambda: result.get_count(source_expr)) if body.get("count", True) else None
         count, rows = run(lambda: held.page(querying.search_key(body), source_expr, lambda t: querying.arrange(body, t, held.ROW), limit, offset,
@@ -143,7 +144,7 @@ def query():
         note = TOO_BIG if rows is None else ""
         count = count if rows is not None or not body.get("calcs") else None  # 받기 전에 센 수는 계산 전의 행 수
     kept = rows is not None
-    if not kept and held.remote(con) and held.pager(con) is not None:  # 결과를 서버에 둔 채 쪽마다 읽을 수 있는 DB(BigQuery)
+    if pages:
         key = querying.held_key("server", {k: v for k, v in body.items() if k not in ("limit", "offset", "count", "fresh", "confirmed")})
         count, rows = run(lambda: held.server_page(key, con, expr, limit, offset, body.get("fresh")))
         note = SERVER_PAGES
@@ -157,7 +158,7 @@ def query():
 def sent(con, body, expr, limit, offset):
     """/api/query가 DB에 보내는 조회의 (SQL, 받아 두는지). 받아 두면 기간·조건까지의 조회, 아니면 그 쪽의 조회."""
     item = held.store["items"].get(querying.search_key(body))
-    if (held.remote(con) or not source.compiles(expr)) and not (item and item[0] is None):
+    if (held.remote(con) or not source.compiles(expr)) and not (item and item[0] is None) and not (held.pager(con) and source.compiles(expr)):
         return result.get_sql(querying.filtered(body)), True
     if offset and not result.can_offset(expr):
         return result.get_sql(querying.numbered(body, limit, offset)), False
@@ -385,12 +386,13 @@ def sql_run():
     if not offset and (ask := sql_gate(body)):  # 쪽 넘기기는 묻지 않는다
         return ask
     con, count, rows, note = get_con(), None, None, ""
-    if held.remote(con):
+    pages = held.remote(con) and held.pager(con) is not None  # 서버에 결과를 두는 DB(BigQuery): 받아 두지 않고 server_page 한 번
+    if held.remote(con) and not pages:
         key = querying.held_key("sql", {"sql": body["sql"]})
         count, rows = run(lambda: held.page(key, expr, lambda t: t.order_by(held.ROW).select(*[c for c in t.columns if c != held.ROW]), n + 1, offset, server.state["cancel"], fresh=body.get("fresh")))
         note = TOO_BIG.replace(" 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요.", " SQL에 고유한 컬럼의 ORDER BY를 넣어야 쪽이 섞이지 않습니다.") if rows is None else ""
     kept = rows is not None
-    if not kept and held.remote(con) and held.pager(con) is not None:
+    if pages:
         count, rows = run(lambda: held.server_page(querying.held_key("server", {"sql": body["sql"]}), con, expr, n + 1, offset, body.get("fresh")))
         note = SERVER_PAGES
     elif not kept:

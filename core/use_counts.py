@@ -12,10 +12,15 @@ MAX_CONNECTIONS = 30  # 기억할 연결 수. 넘으면 적게·오래전에 쓴
 count_of = lambda entry: entry.get("count") if type(entry.get("count")) is int else 0  # 손으로 고친 파일의 이상한 값은 0번
 
 
+def files_part(info):
+    """연결 요청에 든 고른 파일(file 하나, files 여러 개)을 경로 정규화·정렬해 '#'로 이은 글자. 없으면 ''. 같은 폴더의 a.duckdb와 b.duckdb를 가른다."""
+    return "#".join(sorted(os.path.abspath(p).replace("\\", "/").lower() for p in (info.get("file"), *info.get("files", [])) if p))
+
+
 def connection_key(info):
-    """연결을 알아보는 열쇠(비밀번호 없음): 폴더는 경로, 주소는 주소와 아이디."""
+    """연결을 알아보는 열쇠(비밀번호 없음): 폴더는 경로(고른 file·files가 info에 있으면 그것도), 주소는 주소와 아이디."""
     if info["kind"] == "folder":
-        return "folder:" + os.path.normcase(os.path.abspath(info.get("path", "")))
+        return "folder:" + os.path.normcase(os.path.abspath(info.get("path", ""))) + (("#" + files_part(info)) if files_part(info) else "")
     return f"url:{info.get('url', '')}|{info.get('user', '')}"
 
 
@@ -31,6 +36,11 @@ def load():
 
 def use(kind, key, info=None):
     """kind의 key를 한 번 썼다고 센다. info를 주면 함께 둔다(바꾼다)."""
+    with settings.updating(FILE):
+        _use(kind, key, info)
+
+
+def _use(kind, key, info):
     data = load()
     entries = data.setdefault(kind, {})
     entry = entries.get(key, {})
@@ -40,14 +50,16 @@ def use(kind, key, info=None):
     entries[key] = entry
     if kind == "connections" and len(entries) > MAX_CONNECTIONS:
         for old in ranked(entries)[MAX_CONNECTIONS:]:
-            entries.pop(old)
+            if old != key:  # 방금 쓴 연결은 첫 사용이라 순위가 맨 뒤여도 지우지 않는다
+                entries.pop(old)
     settings.write(FILE, data)
 
 
 def forget(kind, key):
-    data = load()
-    if data.get(kind, {}).pop(key, None) is not None:
-        settings.write(FILE, data)
+    with settings.updating(FILE):
+        data = load()
+        if data.get(kind, {}).pop(key, None) is not None:
+            settings.write(FILE, data)
 
 
 def ranked(entries, keys=None):

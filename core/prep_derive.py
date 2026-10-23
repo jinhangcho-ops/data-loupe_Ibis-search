@@ -276,7 +276,7 @@ def pca(t, spec, info):
     names = [f"{prefix}_{k + 1}" for k in range(n)]
     for name in names:
         check_name(name, t, "PCA 성분")
-    x = [t[c].cast("float64") for c in columns]
+    x = [prep_ops.nan_to_null(t[c].cast("float64")) for c in columns]  # 진짜 NaN은 빈 값으로(그 행은 성분도 빈 값)
     whole = t.filter(*[v.notnull() for v in x])
     xs = [whole[c].cast("float64") for c in columns]
     k = len(columns)

@@ -56,10 +56,16 @@ class Board {
     if (!this.cards.length) this.grid.replaceChildren(el("div", { className: "hint board-empty", textContent: this.empty }));
     else if (this.grid.offsetParent) {
       const colors = themeColors(document.documentElement.dataset.theme);
-      this.grid.replaceChildren(...this.cards.map(card => this.cardBox(card, colors)));
+      this.grid.replaceChildren(...this.cards.map(card => { try { return this.cardBox(card, colors); } catch (e) { return this.errorBox(card, e); } }));  // 카드 하나가 던져도 나머지는 그린다
       if (typeof Chart === "undefined" && this.cards.some(c => !c.note && !c.paint)) need(CHART_JS).then(() => this.draw());  // 첫 차트: 라이브러리를 불러온 뒤 다시 그린다
     }
     this.changed?.();
+  }
+  // 그리다 던진 카드: 이름과 오류 글만 보이고 [×]로 뺄 수 있다.
+  errorBox(card, e) {
+    const remove = el("button", { className: "ib", textContent: "×", title: "이 그래프를 뺍니다", onclick: ev => { ev.stopPropagation(); this.set(this.cards.filter(c => c !== card)); } });
+    return el("div", { className: "bcard" }, el("div", { className: "bhead" }, el("b", { textContent: card.title }), remove),
+      el("div", { className: "bbody" }, el("div", { className: "hint bnote err", textContent: `이 카드를 그리지 못했어요: ${e.message}` })));
   }
   cardBox(card, colors) {
     const canvas = el("canvas");

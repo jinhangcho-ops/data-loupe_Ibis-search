@@ -62,11 +62,12 @@ def build(regions, points, geo):
         values = regions[geo["region_value"]].to_list() if geo.get("region_value") else [None] * len(shapes)
     lat = lon = np.empty(0)
     got = None
+    if points is not None and len(points) > MAX_POINT_ROWS:
+        points = points.head(MAX_POINT_ROWS)
+        notes.append(f"점이 많아 앞 {MAX_POINT_ROWS:,}행만 썼어요.")
     if points is not None and len(points):
         lat, lon = points["lat"].cast(float).to_numpy(), points["lon"].cast(float).to_numpy()
         got = points["value"].to_list() if "value" in points.columns else None
-        if len(points) > MAX_POINT_ROWS:
-            notes.append(f"점이 많아 앞 {MAX_POINT_ROWS:,}행만 썼어요.")
     assigned = 0
     if shapes and len(lat) and not geo.get("region_value"):
         index = spatial.assign(lat, lon, shapes)

@@ -4,8 +4,6 @@
 - region: 점이 든 영역의 속성. 영역은 GeoJSON을 연결한 테이블(geometry 컬럼) 또는 GeoJSON 파일 경로. {op, lat, lon, table 또는 path, schema?, geometry?(기본 geometry), take: [영역 컬럼들], prefix(기본 영역_)}
 계산은 점이 아니라 서로 다른 (위도, 경도) 쌍마다 한 번만 하고(고유 쌍 수는 MAX_PAIRS까지), 결과를 작은 표로 만들어 원래 식에 왼쪽 조인한다. 같은 좌표의 행은 같은 값이 붙는다.
 지점·영역 테이블은 쓸 컬럼만 읽는다. 원격 DB면 읽기 전에 처리 용량 확인을 거친다(prep_app.copy_gate). 원본 테이블은 이 PC의 작업 사본이다."""
-import re
-
 import numpy as np
 from lazy import ibis
 
@@ -21,7 +19,6 @@ MAX_PAIRS = 5_000_000  # 고유 (위도, 경도) 쌍의 최대 수
 MAX_REFERENCE = 2_000_000  # 지점·영역 행의 최대 수
 KEYS = {"tm": {"op", "x", "y", "epsg", "lon", "lat"}, "nearest": {"op", "lat", "lon", "table", "schema", "ref_lat", "ref_lon", "label", "out", "dist"},
         "region": {"op", "lat", "lon", "table", "schema", "path", "geometry", "take", "prefix"}}
-NAME = re.compile(r"[A-Za-z_가-힣][A-Za-z0-9_가-힣]{0,62}")
 
 
 def number_column(t, name, what):
@@ -36,7 +33,7 @@ def new_names(step, defaults):
     out = {}
     for key, default in defaults.items():
         name = step.get(key) or default
-        if not isinstance(name, str) or not NAME.fullmatch(name):
+        if not isinstance(name, str) or not prep_derive.NAME.fullmatch(name):
             raise ValueError(f"새 컬럼 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 합니다(63자까지): {name!r}")
         out[key] = name
     if len(set(out.values())) != len(out):
@@ -89,7 +86,7 @@ def reference(step, refs, columns, what):
         parse.check_name(c, table.columns, f"{what} 컬럼")
     if held.remote(refs):  # 원격 DB: 같은 연결·테이블·컬럼이면 한 번 받은 것을 다시 쓴다(미리보기마다 DB를 읽지 않게). 연결을 바꾸면 held.clear가 버린다.
         from core import server
-        name, rows = held.ensure(ref_key(step, columns), table.select(*columns), server.state["cancel"], cap=False)
+        name, rows = held.ensure(ref_key(step, columns), table.select(*columns).limit(MAX_REFERENCE + 1), server.state["cancel"], cap=False)
         if rows > MAX_REFERENCE:
             held.forget(ref_key(step, columns))
             raise ValueError(f"{what} 테이블이 {MAX_REFERENCE:,}행을 넘어 이 PC에서 계산하지 않았어요.")

@@ -62,10 +62,10 @@ def parse_value(text):
     body = body[:-1] if percent else body
     sign = -1 if body.startswith("-") else 1
     body = body.lstrip("+-")
-    if not VALUE_BODY.fullmatch(body):
+    total = sum(float(number) * UNIT.get(unit, 1) for number, unit in VALUE_PART.findall(body)) if VALUE_BODY.fullmatch(body) else math.nan
+    if not math.isfinite(total):  # 읽을 수 없는 글자, 그리고 너무 커서 무한이 된 값
         shown = raw if len(raw) <= 30 else raw[:30] + "…"
         raise ValueError(f"‘{shown}’{ending(shown, '은', '는')} 숫자로 읽을 수 없어요. 예: 5000000, ₩5,000,000, 5,000만, 1.2억, 85%")
-    total = sum(float(number) * UNIT.get(unit, 1) for number, unit in VALUE_PART.findall(body))
     return tidy(round(sign * total / 100, 12) if percent else sign * total)
 
 

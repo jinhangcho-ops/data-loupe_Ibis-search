@@ -80,7 +80,9 @@ function anaConfig(d, view, colors, options = {}) {
 
 // ---------- 색 ----------
 // 라벨의 번호: 카드가 그 라벨을 처음 본 차례(order). 새 라벨은 뒤에 붙여 카드에 남기므로 다시 구한 뒤에도 같은 라벨은 같은 번호(같은 색)다.
-const labelIndex = (order, name) => { const i = order.indexOf(name); return i < 0 ? order.push(name) - 1 : i; };
+// 서버가 order를 200개까지만 받으므로(core/dash_store.py) 그 이상은 붙이지 않고 같은 번호(200)를 쓴다 — 색은 팔레트·기본 색을 돌려 쓴다.
+const MAX_ORDER = 200;
+const labelIndex = (order, name) => { const i = order.indexOf(name); return i >= 0 ? i : order.length >= MAX_ORDER ? MAX_ORDER : order.push(name) - 1; };
 // 색 정하기: 카드가 지정한 색 → 대시보드 팔레트의 번호째 → 화면 모드의 기본 색. group은 "series"(계열) 또는 "parts"(도넛·파이의 조각).
 // 카드에 colors가 없는 임시 카드(탐색 차트)는 계열 순서(index)로 정한다. 지정 색은 라이트·다크가 같다.
 function pickColor(card, group, name, colors, index = 0) {
@@ -295,11 +297,15 @@ class DashBoard extends Board {
   }
   async recompare() {
     this.cards.forEach(c => { c.range = this.range; });
-    const items = [], who = [];
+    const items = [], who = [], seq = this.cmpSeq = (this.cmpSeq ?? 0) + 1;  // 기간을 연달아 바꾸면 늦게 온 옛 응답이 새 기간의 문장을 덮지 않게 번호로 가린다
     this.cards.forEach(c => { const item = compareItem(c, this.range, this.prev); if (item) { items.push(item); who.push(c); } });
     this.compares = new Map();
     if (items.length) {
-      try { (await api("/api/compare", { items })).results.forEach((r, i) => this.compares.set(who[i], r)); } catch (e) { /* 문장을 못 받으면 문장 없이 그린다 */ }
+      try {
+        const got = (await api("/api/compare", { items })).results;
+        if (seq !== this.cmpSeq) return;
+        got.forEach((r, i) => this.compares.set(who[i], r));
+      } catch (e) { if (seq !== this.cmpSeq) return; /* 문장을 못 받으면 문장 없이 그린다 */ }
     }
     this.draw();
   }
@@ -336,7 +342,7 @@ class DashBoard extends Board {
   // SVG 카드의 설정 줄: 목표 값, 값 모양, 종류별 칸(고리 방식·칸 수·블록 크기·행 수)
   svgTools(card, msg, again) {
     const view = card.view, field = (label, input) => el("label", { className: "hint bset" }, label, input);
-    const number = (key, label, width = 70) => field(label, el("input", { type: "number", value: view[key] ?? "", style: `width:${width}px`, onchange: e => { if (e.target.value === "") delete view[key]; else view[key] = +e.target.value; again(); } }));
+    const number = (key, label, width = 70, limit = {}) => field(label, el("input", { type: "number", ...limit, value: view[key] ?? "", style: `width:${width}px`, onchange: e => { if (e.target.value === "") delete view[key]; else view[key] = e.target.value = Math.min(limit.max ?? Infinity, Math.max(limit.min ?? -Infinity, +e.target.value)); again(); } }));  // 칸 수·행 수는 서버 범위(1~100)로 맞춘다
     const choice = (key, label, options) => field(label, el("select", { className: "bunit", style: "flex-basis:auto", onchange: e => { view[key] = e.target.value; again(); } }, ...options.map(([v, n]) => el("option", { value: v, textContent: n, selected: (view[key] || options[0][0]) === v }))));
     const named = view.target?.name;
     const target = named ? el("span", { className: "hint", textContent: `목표: ${named}${card.data?.target?.error ? " (" + card.data.target.error + ")" : ""}` })
@@ -344,8 +350,8 @@ class DashBoard extends Board {
     const tiles = field("지도 배경(OpenStreetMap)", el("input", { type: "checkbox", checked: !!view.geo?.tiles, title: "켜면 지금 보는 지도 범위가 타일 서버(tile.openstreetmap.org)로 요청돼요. 끄면 경계만 그려요(서버 요청 없음).",
       onchange: e => { view.geo = { ...view.geo, tiles: e.target.checked }; again(); } }));
     const kinds = { geomap: [choice("format", "값", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), tiles, el("span", { className: "hint", textContent: view.geo?.tiles ? "지도 배경을 켜면 보는 범위가 tile.openstreetmap.org로 요청돼요." : "" })],
-                    donut_kpi: [choice("ring", "고리", [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리+목표 눈금"]])], stripes: [number("cells", "칸 수", 50), number("full", "가득 찬 값", 80)],
-                    blocks: [number("size", "한 칸 크기", 80)], recent_rows: [number("rows", "행 수", 50)] }[card.kind] ?? [];
+                    donut_kpi: [choice("ring", "고리", [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리+목표 눈금"]])], stripes: [number("cells", "칸 수", 50, { min: 1, max: 100, step: 1 }), number("full", "가득 찬 값", 80)],
+                    blocks: [number("size", "한 칸 크기", 80)], recent_rows: [number("rows", "행 수", 50, { min: 1, max: 100, step: 1 })] }[card.kind] ?? [];
     const plain = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap"].includes(card.kind);  // 목표·값 모양이 없는 종류
     const settings = plain ? [...kinds] : [target, choice("format", "값", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), ...kinds];
     const rules = ["table", "sentence"].includes(card.kind) ? [el("button", { className: "btype" + (card.openRules ? " on" : ""), textContent: "색 규칙", title: "조건에 맞는 칸만 색·화살표를 입힙니다", onclick: () => { card.openRules = !card.openRules; this.draw(); } })] : [];

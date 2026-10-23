@@ -1,4 +1,4 @@
-"""대시보드 최신화(dash_refresh)와 기간·비교 라우트: 주기 검사, 연결별 실시간 간격 최소, due_cards, 최신화 작업(가짜 연결, 실패한 카드는 이전 값 유지, 멈추기),
+"""대시보드 최신화(dash_refresh)와 기간·비교 라우트: 주기 검사, 연결별 실시간 간격 최소, 최신화 작업(가짜 연결, 실패한 카드는 이전 값 유지, 멈추기),
 /api/period/parse·day, /api/compare, /api/dash/settings. 값은 테스트 안에서 지어낸다."""
 import contextlib
 import datetime as dt
@@ -61,16 +61,13 @@ def test_every_checks_and_live_min_per_connection(folder):
         refresh.set_live_min(None, 5)
 
 
-def test_due_cards_by_key_and_age():
+def test_skip_reason_by_key_and_age():
     old, fresh = (NOW - dt.timedelta(days=2)).isoformat(), (NOW - dt.timedelta(hours=5)).isoformat()
     d = {"id": "d1", "name": "a", "refresh": {"every": "1일"}, "cards": [
         {**card("오래됨", computed=old), "id": "c1"}, {**card("방금", computed=fresh), "id": "c2"}, {**card("값 없음"), "id": "c3"},
         {**card("다른 연결", key=OTHER, computed=old), "id": "c4"}, {**card("recent", kind="recent_rows", computed=old), "id": "c5"}]}
-    off = {"id": "d2", "name": "b", "refresh": {"every": ""}, "cards": [{**card("주기 없음", computed=old), "id": "c6"}]}
-    assert [c["id"] for _, c in refresh.due_cards([d, off], KEY, NOW)] == ["c1", "c3"]  # 구한 시각이 없거나 주기(1일)가 지난 것, 같은 연결만
     assert refresh.skip_reason(d, d["cards"][1], KEY, NOW) == "아직 주기가 지나지 않았어요"
     assert "다른 연결" in refresh.skip_reason(d, d["cards"][3], KEY, NOW) and "종류" in refresh.skip_reason(d, d["cards"][4], KEY, NOW)
-    assert [c["id"] for _, c in refresh.due_cards([d], KEY, NOW + dt.timedelta(days=1))] == ["c1", "c2", "c3"]  # now는 실제 지금 시각
 
 
 def test_job_saves_ok_keeps_old_value_on_failure(fake, monkeypatch):
@@ -160,7 +157,7 @@ def test_live_min_routes(client, monkeypatch):
 
 def test_context_for_refresh_uses_period_and_as_of():
     got = refresh.context({"period": "2026-03", "as_of": "2026-03-15"})
-    assert got == {"range": {"start": "2026-03-01", "end": "2026-03-15"}, "prev": {"start": "2026-02-01", "end": "2026-02-28", "text": "직전 28일"}}
+    assert got == {"range": {"start": "2026-03-01", "end": "2026-03-15"}, "prev": {"start": "2026-02-01", "end": "2026-02-15", "text": "지난달 같은 기간"}}
     assert refresh.context({"period": "최근 7일", "as_of": ""}, dt.date(2026, 10, 22))["range"] == {"start": "2026-10-16", "end": "2026-10-22"}
     assert refresh.context({"period": "~ 2026-03-31", "as_of": ""}, dt.date(2026, 10, 22))["range"] == {"start": None, "end": "2026-03-31"} and refresh.context({"period": "엉터리"}) is None
     assert {"kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend"} <= set(refresh.REFRESHABLE) and "recent_rows" not in refresh.REFRESHABLE

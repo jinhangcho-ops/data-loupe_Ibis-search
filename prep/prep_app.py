@@ -13,7 +13,6 @@ from core import server
 from core import settings
 from core import source
 from core import sql_exec
-from core import use_counts
 from core.server import app, get_con, state, to_json
 
 
@@ -50,7 +49,7 @@ def run(work, drop=lambda value: None):
         raise
     except Exception as e:
         if DATE_FAILED.search(str(e)):
-            raise ValueError(f"날짜로 바꿀 수 없는 값이 있어요(없는 날짜일 수 있어요). 형식을 확인하거나 그 값을 먼저 빈 값으로 바꾸세요. ({e})") from None
+            raise ValueError(f"날짜로 바꿀 수 없는 값이 있어요(없는 날짜일 수 있어요). 형식을 확인하거나 그 값을 먼저 빈 값으로 바꾸세요. 예: 그 컬럼에 '글자 바꾸기'로 20260230 같은 값을 빈 값으로 바꾸거나, 행 거르기로 그 행을 뺀 뒤 날짜로 바꾸세요. ({e})") from None
         raise
 
 
@@ -81,7 +80,7 @@ def table_key(body):
     base = body.get("base")
     if not isinstance(base, str) or not base:
         raise ValueError("테이블을 고르세요.")
-    return "|".join([use_counts.connection_key(source.recent(state["opened"])), body.get("schema") or "", base])
+    return "|".join([server.connection_key(), body.get("schema") or "", base])
 
 
 @app.get("/api/prep/table")
@@ -114,21 +113,43 @@ def local_mode(recipe):
     return settings.load().get("prep_where", "all") == "all" or bool(recipe.get("formulas") or recipe.get("pca") or recipe.get("geo"))
 
 
+def unused_columns(recipe):
+    """작업 사본에 받지 않을 컬럼: 남기지 않고(keep false) 전처리도 없으며 계산식·복사·중복 기준·정렬·좌표·PCA·fill 기준 어디에도 이름이 안 나오는 컬럼."""
+    specs = recipe.get("columns") or {}
+    if not isinstance(specs, dict):
+        return []
+    named = json.dumps({k: recipe.get(k) for k in ("formulas", "copies", "dedupe", "dedupe_keep", "sorts", "geo", "pca")}, ensure_ascii=False)
+    named += json.dumps([s.get("ops", {}).get("fill", {}).get("by") for s in specs.values() if isinstance(s, dict) and isinstance(s.get("ops"), dict) and isinstance(s["ops"].get("fill"), dict)], ensure_ascii=False)
+    return sorted(c for c, s in specs.items() if isinstance(s, dict) and s.get("keep", True) is False and not s.get("ops") and c not in named and json.dumps(c, ensure_ascii=False)[1:-1] not in named)
+
+
 def copy_key(recipe):
-    """작업 사본(working_copy)을 가리키는 held 열쇠."""
-    return ("prep", table_key(recipe), json.dumps(recipe.get("filters") or [], ensure_ascii=False))
+    """작업 사본(working_copy)을 가리키는 held 열쇠(받지 않는 컬럼이 다르면 다른 사본)."""
+    return ("prep", table_key(recipe), json.dumps(recipe.get("filters") or [], ensure_ascii=False), tuple(unused_columns(recipe)))
 
 
-def working_copy(recipe):
-    """원격 DB의 기준 테이블에 행 거르기(filters)만 걸어 이 PC의 DuckDB로 한 번 받아 둔 표(held, 상한 없음, 묶음씩 받음).
-    같은 테이블·거르기면 다시 쓴다. DB에는 이 단순한 조회 하나만 가고, 평균 같은 통계와 전처리 계산은 이 표에서 한다."""
+def local_recipe(recipe):
+    """사본 위에서 계산할 recipe: 행 거르기는 사본을 받을 때 걸었고, 받지 않은 컬럼의 설정은 뺀다."""
+    skipped = unused_columns(recipe)
+    return {**recipe, "filters": [], "columns": {k: v for k, v in (recipe.get("columns") or {}).items() if k not in skipped}}
+
+
+def source_table(recipe):
+    """DB에서 읽을 기준 테이블: 행 거르기를 걸고, 사본으로 받을 때는 쓰는 컬럼만 고른다."""
     con, schema = get_con(), recipe.get("schema") or None
     parse.check_name(recipe["base"], server.table_names(con, schema), "테이블")  # 목록·스키마는 기억해 둔 것(사본을 다시 쓸 때 DB에 묻지 않게)
     t = server.any_table(con, recipe["base"], schema, vts={})
     filters = recipe.get("filters") or []
     if filters:
         t = t.filter(*[parse.predicate(cond, t) for cond in filters])
-    key = copy_key(recipe)
+    skipped = unused_columns(recipe) if local_mode(recipe) else []
+    return t.select(*[c for c in t.columns if c not in skipped]) if skipped else t
+
+
+def working_copy(recipe):
+    """원격 DB의 기준 테이블에 행 거르기(filters)만 걸어 이 PC의 DuckDB로 한 번 받아 둔 표(held, 상한 없음, 묶음씩 받음).
+    같은 테이블·거르기면 다시 쓴다. DB에는 이 단순한 조회 하나만 가고, 평균 같은 통계와 전처리 계산은 이 표에서 한다."""
+    t, key = source_table(recipe), copy_key(recipe)
     name = run(lambda: held.ensure(key, t, state["cancel"], cap=False))[0]
     local = held.table(name)
     return local.select(*[c for c in local.columns if c != held.ROW])
@@ -137,9 +158,11 @@ def working_copy(recipe):
 def copy_gate(recipe):
     """이 PC 사본을 새로 받아야 하면(local_mode이고 같은 사본이 아직 없으면) 처리 용량 확인(server.scan_gate). 확인이 필요하면 돌려줄 응답, 아니면 None.
     미리보기·중복 세기·분석(전체)·실행이 같이 쓴다. 이미 받은 사본을 다시 쓰는 때는 DB를 읽지 않으므로 묻지 않는다."""
-    if local_mode(recipe) and copy_key(recipe) not in held.store["items"]:
-        if ask := server.scan_gate(request.json, lambda: scan_sql(recipe)):
+    if local_mode(recipe):
+        if copy_key(recipe) not in held.store["items"] and (ask := server.scan_gate(request.json, lambda: scan_sql(recipe))):
             return ask
+    elif held.remote(get_con()) and (ask := server.scan_gate(request.json, lambda: scan_sql(recipe))):  # prep_where=new여도 DB가 평균·distinct·COUNT로 테이블을 읽으니 확인한다
+        return ask
     return geo_gate(recipe)
 
 
@@ -161,7 +184,7 @@ def built(recipe, info=None):
     local_mode면 작업 사본에서(행 거르기는 사본을 받을 때 이미 걸었다). info는 prep.build와 같다(PCA의 설명된 분산 비율)."""
     if local_mode(recipe):
         table = working_copy(recipe)
-        return run(lambda: prep_expr.build(held.local(), {**recipe, "filters": []}, table, info, get_con()))  # 지점·영역 테이블은 원래 연결에서 읽는다
+        return run(lambda: prep_expr.build(held.local(), local_recipe(recipe), table, info, get_con()))  # 지점·영역 테이블은 원래 연결에서 읽는다
     con = get_con()
     return run(lambda: prep_expr.build(con, recipe, None, info))
 
@@ -189,6 +212,14 @@ def shape():
     return jsonify(prep_profile.shape(table, server.row_count(body.get("schema"), body["base"]) if body.get("count", True) else None))
 
 
+def known_rows(body):
+    """기준 테이블의 행 수. count가 false면 세지 않고 None. 같은 테이블의 사본(행 거르기 없음)이 이미 있으면 그 행 수라 DB에 COUNT를 보내지 않는다."""
+    if body.get("count", True) is False:
+        return None
+    item = held.store["items"].get(copy_key(body)) if not body.get("filters") and held.remote(get_con()) else None
+    return item[1] if item and item[0] else server.row_count(body.get("schema"), body["base"])
+
+
 def sampled(body, key, size, fresh):
     """이 테이블의 표본 (pyarrow 표, 표본 정보 {rows, method, passed}). 방금 같은 크기로 읽은 것이 있으면 그것(fresh면 새로 읽는다).
     표본은 profiler가 싼 방법부터 차례로 읽는다. 행 수는 /api/shape가 세어 둔 것을 쓴다."""
@@ -196,7 +227,7 @@ def sampled(body, key, size, fresh):
     if held and held[0] == size and not fresh:
         return held[1], held[2]
     con, table, base = get_con(), base_table(body), body["base"]
-    rows = server.row_count(body.get("schema"), base)
+    rows = known_rows(body)
     part = profiler.spec_table(body.get("schema") or "", base).get("partition")
     arrow, method, passed = run(lambda: profiler.sample(con, table, body.get("schema") or "", base, size, rows, part))
     info = {"rows": arrow.num_rows, "method": method, "passed": passed}
@@ -297,8 +328,8 @@ def preview():
         return ask
     expr, origin = built(recipe, info)
     rows = run(lambda: result.get_rows(expr, PREVIEW_ROWS))
-    before = server.row_count(recipe.get("schema"), recipe["base"])
-    after = run(lambda: result.get_count(expr)) if prep_expr.changes_rows(recipe) else before
+    before = known_rows(recipe)
+    after = None if before is None and recipe.get("count") is False else run(lambda: result.get_count(expr)) if prep_expr.changes_rows(recipe) else before
     return jsonify(rows=to_json(rows), types=[prep_expr.type_text(t) for t in expr.schema().values()], before=before, after=after,
                    sources=[origin[name][0] for name in expr.columns], derived=[origin[name][1] for name in expr.columns], info=info,
                    local=local_mode(recipe))
@@ -331,7 +362,8 @@ def analyzed(body):
 @app.post("/api/analyze")
 def analyze():
     body = request.json
-    if body.get("full") is True and (ask := copy_gate(body.get("recipe", {}))):
+    recipe = body.get("recipe", {})
+    if ask := (copy_gate(recipe) if body.get("full") is True else geo_gate(recipe)):  # 표본 분석도 원격 지점·영역 테이블은 통째로 받으므로 확인한다
         return ask
     return jsonify(analyzed(body))
 
@@ -344,7 +376,7 @@ def dupes():
         return ask
     if local_mode(recipe):
         table = working_copy(recipe)
-        return jsonify(run(lambda: prep_expr.dupes(held.local(), {**recipe, "filters": []}, table)))
+        return jsonify(run(lambda: prep_expr.dupes(held.local(), local_recipe(recipe), table)))
     return jsonify(run(lambda: prep_expr.dupes(con, recipe)))
 
 
@@ -433,12 +465,7 @@ def insert_all(db, name, schema, expr):
 
 def scan_sql(recipe):
     """전처리 실행이 읽을 기준 테이블(행 거르기 포함)의 (SQL, 방언). 처리 용량 확인에 쓴다. 작업 사본으로 계산해도 DB에서 읽는 양은 이것이다."""
-    con, schema = get_con(), recipe.get("schema") or None
-    parse.check_name(recipe["base"], server.table_names(con, schema), "테이블")
-    t = server.any_table(con, recipe["base"], schema, vts={})
-    if recipe.get("filters"):
-        t = t.filter(*[parse.predicate(cond, t) for cond in recipe["filters"]])
-    return server.expr_sql(con, t)
+    return server.expr_sql(get_con(), source_table(recipe))
 
 
 @app.post("/api/run")

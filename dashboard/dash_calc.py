@@ -215,7 +215,8 @@ def copies_to_pc(card, ctx=None):
     if not isinstance(body, dict) or card["kind"] in ("recent_rows", "analysis"):
         return False
     shaped = with_period(body, card["source"].get("date") or (body.get("x") if card["kind"] == "chart" else None), fetch_window(ctx))
-    if connection.compiles(querying.build(shaped, select=False)):
+    points = card["kind"] == "geomap" and bool(((card.get("view") or {}).get("geo") or {}).get("lat"))  # 지도의 점은 행을 limit로 잘라 받아 오므로 집계가 아니다
+    if not points and connection.compiles(querying.build(shaped, select=False)):
         return False
     return querying.search_key(shaped, card_columns(card, ctx)) not in held.store["items"]
 
@@ -497,6 +498,12 @@ def group_values(expr, column, s):
     return {str(g): v for g, v in zip(frame["g"].to_list(), frame["v"].to_list())}
 
 
+def group_pairs(now, old, agg):
+    """그룹별 (이번, 직전). 합계·개수는 한쪽 기간에 없는 그룹을 0으로 본다(새로 생긴 그룹의 기여를 뺴지 않게). 평균·최소·최대는 없으면 None(건너뜀)."""
+    zero = 0 if agg in ("sum", "count") else None
+    return {g: (now.get(g, zero) if now.get(g) is not None else zero, old.get(g, zero) if old.get(g) is not None else zero) for g in {*now, *old}}
+
+
 def summary_data(card, ctx):
     """summary 카드: 지표(첫 계열)의 이번 기간·직전 기간 값과 그룹별 값(view.group)으로 summary_text의 문장을 만든다. 직전 기간·날짜 컬럼이 없으면 그 문장은 뺀다."""
     view, body = card["view"], card["source"]["body"]
@@ -511,7 +518,7 @@ def summary_data(card, ctx):
         if now is None or old is None:
             note = f"그룹이 {MAX_GROUPS}개를 넘어 어느 그룹 덕분인지는 말하지 않았어요."
         else:
-            groups = {g: (now.get(g), old.get(g)) for g in {*now, *old}}
+            groups = group_pairs(now, old, series[0]["agg"] if before else None)
     target = resolve_target(view.get("target"))
     found = summary_text.summarize(series_name(series[0]), cur, prev, view.get("format", "number"), view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"], False,
                                    groups, (target or {}).get("value"))

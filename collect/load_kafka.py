@@ -148,6 +148,8 @@ def key_of(value):
 class Sink:
     """한 번의 적재 동안 쓰는 Producer. put으로 묶음(pyarrow 표)을 보내고 전달 보고를 기다린다."""
 
+    unit = None  # 지금 보내는 묶음(같은 묶음을 다시 put하면 전달하지 못한 행만 다시 보낸다)
+
     def __init__(self, config, password, arrow_schema, resume, load_id=None):
         kafka = config["load"]["kafka"]
         self.item, self.key, self.password = destination(kafka["destination"]), kafka["key"], password
@@ -158,40 +160,47 @@ class Sink:
         self.producer = producer(self.item, password, self.note)
 
     def put(self, data):
-        """(전달된 수, 0, 실패 수). 메시지가 너무 큰 행처럼 보내지 못한 행은 실패로 센다. 보낸 것이 하나도 전달되지 않으면 오류(다시 시도는 부르는 쪽이)."""
+        """(전달된 수, 0, 실패 수). 메시지가 너무 큰 행처럼 보내지 못한 행은 실패로 센다. 전달하지 못한 행이 있으면 오류(다시 시도는 부르는 쪽이).
+        같은 묶음(data)으로 다시 부르면 이미 전달된 행은 빼고 전달하지 못한 행만 다시 보낸다."""
         from confluent_kafka import KafkaException
-        failed, sent, reports, partitions, size = 0, 0, [], {}, [0]
+        if data is not self.unit:  # 새 묶음
+            self.unit, self.rows, self.todo, self.ok, self.failed, self.partitions, self.size = data, data.to_pylist(), range(data.num_rows), set(), 0, {}, 0
+        sent, reports = set(), {}
 
-        def report(error, msg):  # 전달 보고: 전달된 메시지의 파티션·offset으로 범위를 넓힌다
-            reports.append(error)
+        def report(i, error, msg):  # 전달 보고: 전달된 메시지의 파티션·offset으로 범위를 넓힌다
+            reports[i] = error
             if error is None and msg is not None and msg.offset() is not None and msg.offset() >= 0:
                 p, o = msg.partition(), msg.offset()
-                lo, hi = partitions.get(p, (o, o))
-                partitions[p] = (min(lo, o), max(hi, o))
-                size[0] += len(msg.value() or b"") + len(msg.key() or b"")
-        for row in data.to_pylist():
+                lo, hi = self.partitions.get(p, (o, o))
+                self.partitions[p] = (min(lo, o), max(hi, o))
+                self.size += len(msg.value() or b"") + len(msg.key() or b"")
+        for i in self.todo:
+            row = self.rows[i]
             try:
                 body = message(row)
                 key = key_of(row[self.key]) if self.key else None
                 while True:
                     try:
-                        self.producer.produce(self.item["topic"], body, key, on_delivery=report)
+                        self.producer.produce(self.item["topic"], body, key, on_delivery=lambda error, msg, i=i: report(i, error, msg))
                         break
                     except BufferError:  # 보낼 줄이 가득 참: 조금 보내고 다시
                         self.producer.poll(1)
-                sent += 1
+                sent.add(i)
             except (KafkaException, ValueError, TypeError) as e:
-                failed += 1
+                self.failed += 1
                 self.note(e)
-        left = self.producer.flush(SEND_TIMEOUT + FLUSH_MARGIN)
-        bad = [e for e in reports if e is not None]
-        for e in bad[-1:]:
+        self.producer.flush(SEND_TIMEOUT + FLUSH_MARGIN)
+        for e in [e for e in reports.values() if e is not None][-1:]:
             self.note(e)
-        lost = len(bad) + left
-        self.placed = {"size": size[0], "partitions": partitions}
-        if sent and lost == sent:
+        delivered = {i for i in sent if i in reports and reports[i] is None}
+        self.ok |= delivered
+        self.todo = sorted(sent - delivered)  # 전달 보고가 실패이거나 끝내 오지 않은 행: 다음에 이것만 다시 보낸다
+        self.placed = {"size": self.size, "partitions": self.partitions}
+        if sent and not delivered:
             raise ValueError(f"Kafka에 전달하지 못했습니다: {self.last or '응답 없음'}")
-        return sent - lost, 0, failed + lost
+        if self.todo:  # 일부만 전달됐다: 오류로 알려 다시 시도하게 한다(끝내 안 되면 부른 쪽이 멈춘다)
+            raise ValueError(f"Kafka에 {len(self.todo)}행을 전달하지 못했습니다: {self.last or '응답 없음'}")
+        return len(self.ok), 0, self.failed
 
     def note(self, error):
         self.last = source.mask(str(error), [self.password], HIDE)

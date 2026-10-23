@@ -3,6 +3,7 @@
 - 비율 값(format percent)은 0~1 비율이고 화면에 ×100 %로 보인다. 변화는 %p로 쓴다.
 - 직전 값이 없거나 0이면 비율은 구하지 않는다(비율 값은 0도 값이라 %p로 쓴다). 숫자가 없으면 지어내지 않는다."""
 import math
+from decimal import ROUND_HALF_UP, Decimal
 
 from core import settings
 
@@ -42,7 +43,7 @@ def finite(value):
 
 def trimmed(value, digits):
     """digits 자리까지 반올림해 끝의 0을 뗀 글자(천 단위 쉼표 포함). -0은 0."""
-    text = f"{round(value, digits):,.{digits}f}"
+    text = f"{Decimal(repr(value)).quantize(Decimal(1).scaleb(-digits), ROUND_HALF_UP):,.{digits}f}"  # 5를 올리는 반올림(2.5 → 3)
     text = text.rstrip("0").rstrip(".") if "." in text else text
     return "0" if text in ("-0", "") else text
 
@@ -55,7 +56,8 @@ def format_value(value, fmt="number"):
     if fmt == "percent":
         return trimmed(value * 100, 2) + "%"
     if fmt == "currency":
-        return ("-" if round(value) < 0 else "") + "₩" + trimmed(abs(value), 0)
+        shown = trimmed(abs(value), 0)
+        return ("-" if value < 0 and shown != "0" else "") + "₩" + shown
     return trimmed(value, 2)
 
 

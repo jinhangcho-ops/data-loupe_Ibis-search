@@ -12,6 +12,7 @@ from core import sql_funcs
 from query.sentences import slot
 
 UNITS = ("day", "week", "month")  # 기간 묶음 단위(metric_calc.UNITS와 같다. 계산 모듈은 numpy를 올리므로 시작할 때 불러오지 않는다)
+MAX_N = 3650  # 정수 칸(N·일수·K 등)의 상한. 크게 적으면 코호트·곡선 표가 터무니없이 길어진다
 PREFIX = "catalog:"  # 내 지표의 template 값 접두사("catalog:uv")
 AREAS = [{"id": "traffic", "name": "트래픽·활성도"}, {"id": "funnel", "name": "퍼널·온보딩"}, {"id": "retention", "name": "리텐션·코호트"}, {"id": "revenue", "name": "수익화·LTV"},
          {"id": "marketing", "name": "마케팅·UA"}, {"id": "economy", "name": "게임 경제"}, {"id": "commerce", "name": "이커머스"}, {"id": "model", "name": "실험·모델"}]
@@ -29,6 +30,11 @@ PARTS = {"users_first": "첫 단계(A)를 한 사용자 수", "users_reached": "
          "zero_searches": "결과 0건 검색 수", "search_sessions": "검색한 세션 수", "exit_sessions": "검색에서 끝난 세션 수", "tp": "맞게 찾은 수(TP)", "fp": "잘못 찾은 수(FP)", "fn": "놓친 수(FN)",
          "control_mean": "대조군 평균", "treat_mean": "실험군 평균", "control_n": "대조군 표본 수", "treat_n": "실험군 표본 수", "queries": "질의 수", "items": "항목 수", "holders": "보유자 수",
          "prev_revenue": "지난달 매출", "kept_revenue": "그 고객의 이번 달 매출", "users": "사용자 수", "mrr": "MRR"}
+
+# 계산(calc)마다 표를 읽는 조회 수의 어림(없으면 1). 사본 없이 원격에서 바로 구할 때 확인창에 "표를 약 N번 읽어요"로 알린다.
+PASSES = {"uv": 2, "pv_per_uv": 2, "stickiness": 2, "time_between": 2, "conversion": 2, "ftue": 3, "retention": 4, "flattening": 4, "states": 4, "power_curve": 3, "survival": 2, "new_payers": 2,
+          "pur": 4, "arpu": 2, "arppu": 2, "arpdau": 2, "ltv": 4, "nrr": 3, "cac": 4, "roas": 5, "payback": 5, "frequency": 2, "tiers": 2, "gini": 2, "aov": 2, "purchase_frequency": 2,
+          "pareto": 2, "pity": 2, "stage_clear": 3, "organic_uplift": 2, "velocity": 3, "money_supply": 3}
 
 # ---------- 빈칸 도서관: 역할마다 한 번만 적고 항목은 역할 이름으로 고른다 ----------
 # (이름, 타입, 안내, 컬럼 종류, 이름 단서(없으면 종류만 본다), 단서가 꼭 있어야 하는지)
@@ -134,7 +140,7 @@ def make_slot(role, over):
     if over_name:
         base["label"] = over.get("label", over_name)
     return {**base, "role": role, "hints": list(COLS[role][3]) if role in COLS else [], "strict": role in STRICT, "constant": role in CONSTANTS,
-            "min": RANGES.get(role, (None, None))[0], "max": RANGES.get(role, (None, None))[1]}
+            "min": RANGES.get(role, (None, None))[0], "max": MAX_N if base["type"] == "n" else RANGES.get(role, (None, None))[1]}
 
 
 def other(**over):
@@ -479,7 +485,7 @@ def check_value(slot_, raw, table):
     if kind == "n":
         if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
             raise ValueError(f"‘{name}’ 칸에는 1 이상의 정수를 넣어 주세요.")
-        return raw
+        return check_number(slot_, raw, name)
     if kind == "number":
         return check_number(slot_, raw, name)
     if kind == "value":

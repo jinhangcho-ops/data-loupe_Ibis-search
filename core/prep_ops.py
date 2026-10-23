@@ -16,6 +16,7 @@ STRING, NUMBER, DATE = ("string",), ("int", "float"), ("date",)
 KIND_NAMES = {"string": "문자", "int": "정수", "float": "실수", "date": "날짜"}
 RARE_MAX = 1000  # rare로 바꿀 값 목록의 최대 개수
 LABEL_MAX = 1000  # label로 번호를 붙일 서로 다른 값의 최대 개수
+BIN_START = re.compile(r"^(-?[0-9.]+(?:e[-+]?[0-9]+)?)–", re.I)  # bins가 만든 구간 글자의 시작 숫자
 ONEHOT_MAX = 50  # onehot으로 펼칠 서로 다른 값의 최대 개수
 PARTS = {  # 날짜에서 뽑는 값. 정수는 int64로 맞춘다(백엔드마다 int16·int32로 다르다).
     "year": lambda col: col.year().cast("int64"), "month": lambda col: col.month().cast("int64"), "day": lambda col: col.day().cast("int64"),
@@ -108,10 +109,37 @@ def to_number(col, to):
     dtype = col.type()
     if dtype.is_integer() or dtype.is_boolean() or (dtype.is_numeric() and to == "float"):
         return col.cast(TYPE_TO[to])
-    if dtype.is_numeric():  # 실수·소수를 정수로: nan·inf와 int64 범위 밖의 값은 빈 값
-        return ((col >= -2.0**63) & (col < 2.0**63)).ifelse(col, ibis.null()).cast(TYPE_TO[to])
+    if dtype.is_numeric():  # 실수·소수를 정수로: nan·inf와 int64 범위 밖의 값은 빈 값, 소수점은 버림(0 쪽으로; 백엔드마다 반올림·버림이 달라 직접 정한다)
+        col = ((col >= -2.0**63) & (col < 2.0**63)).ifelse(col, ibis.null())
+        return (col >= 0).ifelse(col.floor(), col.ceil()).cast(TYPE_TO[to])
     col = col.cast("string")  # 날짜·시간처럼 숫자가 아닌 컬럼은 숫자 모양이 아니라 빈 값이 된다.
-    return is_number(col, to).ifelse(col, ibis.null()).cast(TYPE_TO[to])
+    found = is_number(col, to).ifelse(col, ibis.null()).cast(TYPE_TO[to])
+    return found.isinf().ifelse(ibis.null(), found) if to == "float" else found  # "1e400"처럼 실수에 안 들어가는 값은 inf 대신 빈 값
+
+
+SPACES = "\t\n\v\f\r\u0085\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000"  # 보통 공백 말고 Polars가 strip에서 지우는 공백류(NBSP·전각 공백 등)
+
+
+def strip(col):
+    """앞뒤 공백 지우기. DuckDB의 strip은 보통 공백만 지우므로 다른 공백류를 공백으로 바꾼 뒤 지워 Polars와 맞춘다(re_replace는 다른 함수 안에 넣으면 컴파일 오류가 난다)."""
+    return col.translate(SPACES, " " * len(SPACES)).strip() if col.get_backend().name == "duckdb" else col.strip()
+
+
+def half_up(col, digits):
+    """반올림: 0.5는 0에서 먼 쪽으로(백엔드마다 달라 직접 정한다. Polars는 짝수 쪽). 정수·소수(Decimal) 컬럼은 그대로 round."""
+    if not col.type().is_floating():
+        return col.round(digits)
+    scale = 10.0**digits
+    done = (col.abs() * scale + 0.5).floor() / scale
+    return (col.abs() >= 2.0**52).ifelse(col, (col < 0).ifelse(-done, done))  # 2^52 이상은 이미 정수라 그대로(곱하면 넘칠 수 있다)
+
+
+def regex_replace(t, name, pair):
+    """정규식으로 바꾸기. 바꿀 글자의 \\1은 묶음 번호(DuckDB 방식). Polars는 ${1} 방식이라 거기서는 \\1을 ${1}로 바꿔 넘겨 같은 값이 나오게 한다."""
+    pattern, text = pair
+    if t.get_backend().name == "polars":
+        text = re.sub(r"\\(\d)", r"${\1}", text)
+    return t.mutate(**{name: t[name].re_replace(pattern, text)})
 
 
 def retype(col, arg):
@@ -119,9 +147,10 @@ def retype(col, arg):
     if to == "string":  # 글자로는 값을 바꾸지 않고 타입만 바꾼다(숫자 모양 검사·공백 지우기를 거치지 않는다).
         return col.cast("string")
     if col.type().is_string():  # 앞뒤 공백은 무시한다(백엔드마다 다르게 다루는 것을 맞춘다).
-        col = col.strip()
-    if arg.get("clean") and to in ("int", "float"):  # 숫자·부호·소수점이 아닌 글자를 먼저 지운다.
-        col = col.cast("string").re_replace(r"[^0-9.+\-]", "")
+        col = strip(col)
+    if arg.get("clean") and to in ("int", "float"):  # 숫자·부호·소수점이 아닌 글자를 먼저 지운다. 이미 1e5·2.5E-3 같은 숫자 모양이면 e를 지워 값이 바뀌지 않게 그대로 둔다.
+        col = col.cast("string")
+        col = col.re_search(FLOAT_SHAPE).ifelse(col, col.re_replace(r"[^0-9.+\-]", ""))
     if to == "date":
         return to_date(col, arg.get("format") or "%Y-%m-%d") if arg.get("format") or col.type().is_string() else col.cast("date")
     return to_number(col, to)
@@ -220,6 +249,9 @@ def rare(t, name, arg):
 def label(t, name, _):
     """값을 정렬한 순서의 0부터의 번호. 빈 값은 빈 값."""
     values = distinct_values(t, name, LABEL_MAX, "label")
+    starts = [BIN_START.match(v) if isinstance(v, str) else None for v in values]
+    if all(starts):  # bins로 만든 구간 글자("5–10", "10–20")는 글자순이 아니라 시작 숫자 순
+        values = [v for _, v in sorted(zip((float(m[1]) for m in starts), values))]
     return add_columns(t, {f"{name}_label": ibis.cases(*[(t[name] == v, i) for i, v in enumerate(values)], else_=ibis.null("int64")).cast("int64")})
 
 
@@ -309,14 +341,14 @@ def is_has(v):
 # (이름, 쓸 수 있는 컬럼 종류(None이면 모두), 값이 맞는지, 값의 형식, 적용 함수). 적용 순서는 이 표의 순서다.
 # 전처리를 더할 때는 함수를 만들고 여기에 한 줄을 넣는다. 파생 컬럼을 만드는 것(flag, parts, label, onehot)은 add_columns로 컬럼을 더한다.
 OPS = [
-    ("trim", STRING, lambda v: v is True, "true", column(lambda col, _: col.strip())),
+    ("trim", STRING, lambda v: v is True, "true", column(lambda col, _: strip(col))),
     ("squeeze", STRING, lambda v: v is True, "true", column(lambda col, _: col.re_replace(r"\s{2,}", " "))),
     ("nulls", STRING, is_strs, '["-", "N/A", ""]', column(lambda col, values: col.isin(values).ifelse(ibis.null(), col))),
     ("remove", STRING, lambda v: isinstance(v, str) and v != "", '"지울 글자들"', column(lambda col, text: col.re_replace(literal(text), ""))),
     ("case", STRING, lambda v: v in ("upper", "lower"), '"upper" 또는 "lower"', column(lambda col, how: getattr(col, how)())),
     ("replace", STRING, lambda v: isinstance(v, list) and bool(v) and all(is_strs(p) and len(p) == 2 for p in v),
      '[["찾을 값", "바꿀 값"], ...]', column(replace_values)),
-    ("regex", STRING, lambda v: is_strs(v) and len(v) == 2 and v[0] != "", '["패턴", "바꿀 글자"]', column(lambda col, pair: col.re_replace(*pair))),
+    ("regex", STRING, lambda v: is_strs(v) and len(v) == 2 and v[0] != "", '["패턴", "바꿀 글자"]', regex_replace),
     ("type", None, lambda v: isinstance(v, dict) and v.get("to") in TYPE_TO and set(v) <= {"to", "clean", "format"}
      and isinstance(v.get("clean", False), bool) and isinstance(v.get("format", ""), str),
      '{"to": "int" | "float" | "string" | "date", "clean": true, "format": "%Y%m%d"}', column(retype)),
@@ -326,7 +358,7 @@ OPS = [
      '{"how": "drop" | "value" | "mean" | "median" | "mode" | "prev" | "next", "value": 채울 값, "by": 순서를 정할 컬럼(prev·next)}', fill),
     ("outlier", NUMBER, is_outlier, '{"how": "drop" | "clip", "by": "range" | "iqr" | "std", "low": 수, "high": 수, "k": 수}', outlier),
     ("scale", NUMBER, lambda v: v in ("standard", "minmax", "log"), '"standard", "minmax" 또는 "log"', scale),
-    ("round", NUMBER, lambda v: type(v) is int and v >= 0, "0 이상의 정수", column(lambda col, digits: col.round(digits))),
+    ("round", NUMBER, lambda v: type(v) is int and v >= 0, "0 이상의 정수", column(half_up)),
     ("bins", NUMBER, lambda v: isinstance(v, list) and len(v) >= 2 and all(is_num(e) for e in v) and all(a < b for a, b in zip(v, v[1:])),
      "오름차순 경계값 2개 이상. 예: [0, 10, 100]", column(bins)),
     ("rare", STRING, lambda v: isinstance(v, dict) and set(v) <= {"min", "label"} and type(v.get("min")) is int and v["min"] >= 2
@@ -344,17 +376,34 @@ OPS = [
 OPS_NAMES = [op[0] for op in OPS]
 
 
-def apply_ops(t, name, ops):
-    """컬럼 하나의 ops를 OPS의 순서대로 적용한다. 컬럼 타입은 앞 단계를 적용한 뒤의 것을 따른다."""
+def nan_to_null(col):
+    """실수 컬럼의 진짜 NaN을 빈 값으로(NaN이 평균·표준편차·IQR을 NaN으로 만들거나 DuckDB 오류를 내고 빈 값 표시에서 빠지는 것을 막는다). 실수가 아니면 그대로."""
+    return col.isnan().ifelse(ibis.null(), col) if col.type().is_floating() else col
+
+
+NAN_OPS = ("flag", "fill", "outlier", "scale")  # 빈 값을 따지거나 통계를 내는 일: 먼저 NaN을 빈 값으로
+
+
+def drops_rows(key, value):
+    return key in ("fill", "outlier") and isinstance(value, dict) and value.get("how") == "drop"
+
+
+def apply_ops(t, name, ops, part="all"):
+    """컬럼 하나의 ops를 OPS의 순서대로 적용한다. 컬럼 타입은 앞 단계를 적용한 뒤의 것을 따른다.
+    part가 rows면 마지막 행 줄이기(fill·outlier의 drop)까지만, rest면 그 뒤 것만(행 줄이기가 없으면 모두) 적용한다.
+    컬럼마다 차례로 통계(평균 등)를 내면 앞 컬럼의 통계가 뒤 컬럼이 줄이는 행을 포함하므로, 호출하는 쪽이 rows를 모든 컬럼에 먼저 하고 rest를 한다."""
     for key in ops:
         parse.check_name(key, OPS_NAMES, "전처리 항목")
-    for key, kinds, valid, form, fn in OPS:
-        if key not in ops:
+    last = max((i for i, op in enumerate(OPS) if op[0] in ops and drops_rows(op[0], ops[op[0]])), default=-1)
+    for i, (key, kinds, valid, form, fn) in enumerate(OPS):
+        if key not in ops or (part == "rows" and i > last) or (part == "rest" and i <= last):
             continue
         dtype = t[name].type()
         if kinds and parse.kind(dtype) not in kinds:
             raise ValueError(f"'{key}'은 {'·'.join(KIND_NAMES[k] for k in kinds)} 컬럼에만 쓸 수 있습니다. '{name}' 컬럼은 {parse.type_info(dtype)[0]}입니다.")
         if not valid(ops[key]):
             raise ValueError(f"'{name}' 컬럼의 '{key}' 값은 {form} 형식으로 쓰세요.")
+        if key in NAN_OPS:
+            t = t.mutate(**{name: nan_to_null(t[name])})
         t = fn(t, name, ops[key])
     return t

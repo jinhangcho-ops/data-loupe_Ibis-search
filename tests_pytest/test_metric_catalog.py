@@ -388,7 +388,7 @@ def test_cross_table_values_by_common_key(ads):
     cac = run("cac", s, users, other=ads, align=key)  # 채널 A: 광고비 120 ÷ 사용자 {1, 3} = 60, 채널 B: 30 ÷ {2} = 30
     assert {r["key"]: r["cac"] for r in cac["rows"]} == {"A": 60.0, "B": 30.0} and cac["value"] == pytest.approx(150 / 3)
     paid = run("cac_paid", {**s, "유입 경로": "ch", "유료 값": "A"}, users, other=ads, align=key)
-    assert paid["value"] == pytest.approx(150 / 2)  # 유료(채널 A) 신규는 사용자 1·3
+    assert paid["value"] == pytest.approx(120 / 2)  # 유료(채널 A) 신규는 사용자 1·3, 사용자가 없는 채널 B의 광고비는 세지 않는다
     roas = run("roas", {**s, "금액": "amt", "N일": 7}, users, other=ads, align=key)
     assert {r["key"]: r["roas"] for r in roas["rows"]} == {"A": pytest.approx(35 / 120), "B": pytest.approx(5 / 30)}
     with pytest.raises(ValueError, match="맞춤 구절은"):
@@ -673,6 +673,16 @@ def test_remote_asks_before_reading_when_over_the_limit(c, monkeypatch):
     assert resp.headers.get("X-Needs-Confirm") == "1" and resp.get_json()["needs_confirm"]
     assert reads(sent) == []  # 확인 전에는 값을 읽지 않는다
     assert c.post("/api/catalog/compute", json={"id": "uv", "slots": {"사용자": "uid"}, "body": BODY, "confirmed": True}).get_json()["value"] == 3
+
+
+def test_remote_direct_compute_confirm_tells_how_many_times_the_table_is_read(c, monkeypatch):
+    from core import scan_size, settings
+    settings.write(settings.PATH.name, {**(settings.read(settings.PATH.name) or {}), "prep_where": "new"})  # 사본 없이 원격에서 바로 구한다
+    monkeypatch.setattr(held, "remote", lambda con: True)
+    monkeypatch.setattr(scan_size, "limit_check", lambda *a, **k: {"over": True, "unknown": False, "blocked": False, "bytes": 10**12, "limit": 1, "text": "읽는 양 약 1 TB"})
+    resp = c.post("/api/catalog/compute", json={"id": "pv_per_uv", "slots": {"사용자": "uid"}, "body": BODY})  # 조회 합·사용자별 분포를 따로 읽는다
+    got = resp.get_json()
+    assert resp.headers.get("X-Needs-Confirm") == "1" and got["needs_confirm"] and got["text"].startswith("읽는 양 약 1 TB") and "표를 약 2번 읽어요" in got["text"]
 
 
 def test_file_connection_computes_on_a_local_duckdb_copy(folder, tmp_path):

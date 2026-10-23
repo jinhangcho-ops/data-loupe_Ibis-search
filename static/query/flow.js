@@ -189,23 +189,21 @@ const flowCurveMid = (x1, y1, x2, y2) => ({ x: (x1 + x2) / 2, y: (y1 + y2) / 2 }
 const flowBox = g => g.nodes.reduce((m, n) => { const p = flowPos(n); return { w: Math.max(m.w, p.x + FLOW.W + FLOW.PAD), h: Math.max(m.h, p.y + FLOW.H + FLOW.PAD + 14) }; }, { w: 320, h: 160 });
 
 // ---------- SVG 그리기 ----------
-const SVGNS = "http://www.w3.org/2000/svg";
-const sv = (tag, attrs = {}, ...kids) => { const e = document.createElementNS(SVGNS, tag); for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v); e.append(...kids); return e; };
 // 흐름 그림 하나. o = { sel, hi(밝힐 id 목록), rows({id: 행 수}), marks({id: add·chg·del}), scale, on: { node(id, ev), port(id, ev), plus(a, b, ev), cut(a, b), over(id) } }
 function flowSvg(g, o = {}) {
   const { W, H } = FLOW, box = flowBox(g), scale = o.scale ?? 1, on = o.on ?? {}, hi = o.hi ? new Set(o.hi) : null;
-  const root = sv("svg", { class: "fsvg", width: box.w * scale, height: box.h * scale, viewBox: `0 0 ${box.w} ${box.h}` });
-  const edges = sv("g"), nodes = sv("g");
+  const root = svg("svg", { class: "fsvg", width: box.w * scale, height: box.h * scale, viewBox: `0 0 ${box.w} ${box.h}` });
+  const edges = svg("g"), nodes = svg("g");
   g.edges.forEach(([a, b], k) => {
     const A = flowNode(g, a), B = flowNode(g, b);
     if (!A || !B) return;
     const pa = flowPos(A), pb = flowPos(B), x1 = pa.x + W, y1 = pa.y + H / 2, x2 = pb.x, y2 = pb.y + H / 2, m = flowCurveMid(x1, y1, x2, y2);
     const lit = !hi || (hi.has(a) && hi.has(b));
-    edges.append(sv("path", { d: flowCurve(x1, y1, x2, y2), class: "fedge" + (lit ? "" : " dim") + (hi && lit ? " hi" : "") }));
-    if (B.kind === "join") edges.append(sv("text", { x: x2 - 8, y: y2 + (flowIns(g, b).indexOf(a) ? 16 : -6), class: "fside", "text-anchor": "end" }, flowIns(g, b).indexOf(a) ? "오른쪽" : "왼쪽"));
+    edges.append(svg("path", { d: flowCurve(x1, y1, x2, y2), class: "fedge" + (lit ? "" : " dim") + (hi && lit ? " hi" : "") }));
+    if (B.kind === "join") edges.append(svg("text", { x: x2 - 8, y: y2 + (flowIns(g, b).indexOf(a) ? 16 : -6), class: "fside", "text-anchor": "end" }, flowIns(g, b).indexOf(a) ? "오른쪽" : "왼쪽"));
     if (!o.readonly) {
       const mk = (dx, label, title, fn) => {
-        const c = sv("g", { class: "fbtn", transform: `translate(${m.x + dx},${m.y})` }, sv("title", {}, title), sv("circle", { r: 9 }), sv("text", { "text-anchor": "middle", dy: "4" }, label));
+        const c = svg("g", { class: "fbtn", transform: `translate(${m.x + dx},${m.y})` }, svg("title", {}, title), svg("circle", { r: 9 }), svg("text", { "text-anchor": "middle", dy: "4" }, label));
         c.addEventListener("pointerdown", ev => ev.stopPropagation());
         c.addEventListener("click", ev => { ev.stopPropagation(); fn?.(a, b, ev); });
         return c;
@@ -215,14 +213,14 @@ function flowSvg(g, o = {}) {
   });
   g.nodes.forEach(n => {
     const p = flowPos(n), mark = o.marks?.[n.id], lit = !hi || hi.has(n.id);
-    const group = sv("g", { class: `fnode fk-${n.kind}${o.sel === n.id ? " sel" : ""}${lit ? "" : " dim"}${mark ? " mk-" + mark : ""}`, transform: `translate(${p.x},${p.y})`, "data-node": n.id },
-      sv("title", {}, `${flowName(n.kind)} ${flowNodeText(n)}`.trim()), sv("rect", { width: W, height: H, rx: 12 }),
-      sv("text", { x: 12, y: 21, class: "ft" }, flowName(n.kind) + (mark ? ({ add: " · 새로", chg: " · 바뀜", del: " · 빠짐" })[mark] : "")),
-      sv("text", { x: 12, y: 41, class: "fs" }, flowClip(flowNodeText(n), 25)));
-    if (o.rows?.[n.id] != null) group.append(sv("text", { x: W / 2, y: H + 13, "text-anchor": "middle", class: "frows" }, `${Number(o.rows[n.id]).toLocaleString()}행`));
+    const group = svg("g", { class: `fnode fk-${n.kind}${o.sel === n.id ? " sel" : ""}${lit ? "" : " dim"}${mark ? " mk-" + mark : ""}`, transform: `translate(${p.x},${p.y})`, "data-node": n.id },
+      svg("title", {}, `${flowName(n.kind)} ${flowNodeText(n)}`.trim()), svg("rect", { width: W, height: H, rx: 12 }),
+      svg("text", { x: 12, y: 21, class: "ft" }, flowName(n.kind) + (mark ? ({ add: " · 새로", chg: " · 바뀜", del: " · 빠짐" })[mark] : "")),
+      svg("text", { x: 12, y: 41, class: "fs" }, flowClip(flowNodeText(n), 25)));
+    if (o.rows?.[n.id] != null) group.append(svg("text", { x: W / 2, y: H + 13, "text-anchor": "middle", class: "frows" }, `${Number(o.rows[n.id]).toLocaleString()}행`));
     if (!o.readonly) {
-      if (n.kind !== "table") group.append(sv("circle", { cx: 0, cy: H / 2, r: 6, class: "fport in", "data-in": n.id }));
-      if (!FLOW.ENDS.includes(n.kind)) group.append(sv("circle", { cx: W, cy: H / 2, r: 6, class: "fport out", "data-out": n.id }));
+      if (n.kind !== "table") group.append(svg("circle", { cx: 0, cy: H / 2, r: 6, class: "fport in", "data-in": n.id }));
+      if (!FLOW.ENDS.includes(n.kind)) group.append(svg("circle", { cx: W, cy: H / 2, r: 6, class: "fport out", "data-out": n.id }));
       group.addEventListener("pointerdown", ev => { if (ev.target.dataset?.out) on.port?.(n.id, ev); else on.node?.(n.id, ev); });
     }
     nodes.append(group);
@@ -298,7 +296,7 @@ function FlowView(host, ctx) {
   function portDown(from, ev) {
     ev.stopPropagation();
     const box = svgBox(), A = flowNode(g, from), pa = flowPos(A), x1 = pa.x + FLOW.W, y1 = pa.y + FLOW.H / 2;
-    const line = sv("path", { class: "fedge temp", d: flowCurve(x1, y1, x1, y1) });
+    const line = svg("path", { class: "fedge temp", d: flowCurve(x1, y1, x1, y1) });
     stage.querySelector("svg").append(line);
     const near = e => { const t = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-node]"); return t?.dataset.node; };
     const move = e => {

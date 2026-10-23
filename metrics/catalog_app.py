@@ -114,7 +114,7 @@ def scan_ask(e, slots, body, request_body, align=None):
     copy = needs_copy(con, e)
     if not (copy and querying.search_key(body, keep or stage(body, keep).columns) in held.store["items"]):
         if ask := server.scan_gate(request_body, lambda: server.expr_sql(con, stage(body, keep))):
-            return ask
+            return with_passes(ask, e, copy)
     if e["cross"] and isinstance(slots.get("광고 테이블"), str):
         schema = body.get("schema") or None
 
@@ -122,8 +122,19 @@ def scan_ask(e, slots, body, request_body, align=None):
             expr = server.any_table(con, slots["광고 테이블"], schema)
             cols = [c for c in other_columns(e, slots, align) if c in expr.columns]
             return server.expr_sql(con, expr.select(*(cols or expr.columns[:1])))
-        return server.scan_gate(request_body, other_sql)
+        return with_passes(server.scan_gate(request_body, other_sql), e, copy)
     return None
+
+
+def with_passes(ask, e, copy):
+    """사본 없이 원격에서 바로 구하는 지표의 확인 응답에는 표를 읽는 횟수를 덧붙인다(처리 용량은 한 번 읽는 양이고 지표는 여러 번 읽는다)."""
+    if ask is None or copy or not held.remote(get_con()):
+        return ask
+    data = ask.get_json()
+    data["text"] = f"{data.get('text', '')} 이 지표는 표를 약 {metric_catalog.PASSES.get(e['calc'], 1)}번 읽어요.".strip()
+    out = jsonify(**data)
+    out.headers["X-Needs-Confirm"] = "1"
+    return out
 
 
 def compute_entry(e, slots, body, align=None, limit=None):

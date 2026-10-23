@@ -152,9 +152,11 @@ def metric_values(body, names, by=None):
 
 
 def search_rows(body, limit):
-    """검색 결과의 앞 limit행({columns, rows})과 전체 행 수."""
+    """검색 결과의 앞 limit행({columns, rows})과 전체 행 수. limit+1행을 받아 더 없으면 그 수가 전체이고, 더 있을 때만 COUNT를 보낸다."""
     expr = runnable(body)
-    return server.to_json(run(lambda: result.get_rows(expr, limit))), run(lambda: result.get_count(expr))
+    rows = run(lambda: result.get_rows(expr, limit + 1))
+    count = rows.height if rows.height <= limit else run(lambda: result.get_count(expr))
+    return server.to_json(rows.head(limit)), count
 
 
 def grouped(conditions):

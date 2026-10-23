@@ -14,12 +14,18 @@ function reportLayout(cards, { col, gap, pad, head } = REPORT) {
   return { width: pad * 2 + GRID_COLS * col + (GRID_COLS - 1) * gap, height: head + Math.max(1, rows) * (GRID_ROW + gap) - gap + pad, rects };
 }
 
-// 요소와 자손의 계산된 스타일을 style 속성에 박는다(직렬화한 그림에는 페이지의 CSS가 없으므로)
+// 요소와 자손의 계산된 스타일을 style 속성에 박는다(직렬화한 그림에는 페이지의 CSS가 없으므로).
+// 모든 속성(350여 개)을 박으면 500행 표가 5초·57MB가 되므로 그리는 데 쓰이는 속성만 박는다.
+const INLINE_PROPS = ("display position top right bottom left float box-sizing width height min-width max-width min-height max-height z-index overflow-x overflow-y text-overflow visibility opacity transform transform-origin box-shadow aspect-ratio object-fit " +
+  "margin-top margin-right margin-bottom margin-left padding-top padding-right padding-bottom padding-left " +
+  "border-top-width border-right-width border-bottom-width border-left-width border-top-style border-right-style border-bottom-style border-left-style border-top-color border-right-color border-bottom-color border-left-color " +
+  "border-top-left-radius border-top-right-radius border-bottom-right-radius border-bottom-left-radius border-collapse border-spacing table-layout " +
+  "background-color background-image background-size background-position background-repeat color font-family font-size font-weight font-style line-height letter-spacing text-align text-decoration-line text-transform text-indent vertical-align white-space word-break overflow-wrap " +
+  "flex-direction flex-wrap flex-grow flex-shrink flex-basis align-items align-self align-content justify-content justify-items order row-gap column-gap grid-template-columns grid-template-rows grid-column-start grid-column-end grid-row-start grid-row-end grid-auto-flow " +
+  "fill fill-opacity stroke stroke-width stroke-opacity stroke-dasharray stroke-linecap stroke-linejoin text-anchor dominant-baseline").split(" ");
 function inlineStyles(source, copy) {
   const css = getComputedStyle(source);
-  let text = "";
-  for (const name of css) text += `${name}:${css.getPropertyValue(name)};`;
-  copy.setAttribute("style", text);
+  copy.setAttribute("style", INLINE_PROPS.map(name => { const v = css.getPropertyValue(name); return v === "" || (name !== "display" && (v === "none" || v === "normal")) ? "" : `${name}:${v};`; }).join(""));  // 빈 값·기본값(none·normal)은 복사본에서도 기본이라 뺀다
   [...source.children].forEach((child, i) => inlineStyles(child, copy.children[i]));
 }
 
@@ -132,7 +138,7 @@ async function reportCanvas(board, title, { mode = "light", scale = 2 } = {}) {
   ctx.fillStyle = colors.text;
   ctx.font = font(12);
   ctx.textAlign = "right";
-  ctx.fillText(new Date().toISOString().slice(0, 10), (lay.width - REPORT.pad) * scale, (REPORT.head / 2 + 4) * scale);
+  ctx.fillText(new Date().toLocaleDateString("sv"), (lay.width - REPORT.pad) * scale, (REPORT.head / 2 + 4) * scale);
   ctx.textAlign = "left";
   for (const card of cards) {
     const r = lay.rects[card.id], [x, y, w, h] = [r.x * scale, r.y * scale, r.w * scale, r.h * scale];

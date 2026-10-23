@@ -112,8 +112,8 @@ def part(where, p):
 
 
 def condition_columns(lines):
-    """조건 줄들이 가리키는 컬럼 이름들(값은 빼고, 겹치는 것은 한 번만)."""
-    return list(dict.fromkeys(m[0] for line in lines for part in re.split(r"\s+or\s+", line, flags=re.I) if (m := re.match(r"[^\s=<>!]+", part.strip()))))
+    """조건 줄들이 가리키는 컬럼 이름들(값은 빼고, 겹치는 것은 한 번만). 따옴표 안의 or는 나누지 않고, 따옴표로 시작하는 낱말은 값이라 뺀다."""
+    return list(dict.fromkeys(m[0] for line in lines for part in parse.split(parse.OR_RE, line) if (m := re.match(r"[^\s=<>!'\"]+", part.strip()))))
 
 
 def describe(m, values=True):

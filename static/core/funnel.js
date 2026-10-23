@@ -28,27 +28,21 @@ function sankeyLayout(steps, { width = 720, height = 340, pad = 12, barW = 22, t
 }
 
 const fpct = v => (v == null ? "-" : `${(v * 100).toFixed(1)}%`);
-const fsvg = (tag, attrs = {}, ...kids) => {
-  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v);
-  e.append(...kids);
-  return e;
-};
 
 // 생키 SVG 요소. colors = {bar, next, drop, text, line}(없으면 기본). 막대 위에 단계 이름, 아래에 사람 수와 처음 대비 비율.
 function sankeySvg(steps, colors = {}, size = {}) {
   const c = { ...FUNNEL_COLORS, text: "currentColor", ...colors }, g = sankeyLayout(steps, size);
-  const label = (x, y, text, anchor, extra = {}) => fsvg("text", { x, y, "text-anchor": anchor, fill: c.text, "font-size": 11, ...extra }, text);
+  const label = (x, y, text, anchor, extra = {}) => svg("text", { x, y, "text-anchor": anchor, fill: c.text, "font-size": 11, ...extra }, text);
   const short = s => (s.length > 14 ? s.slice(0, 13) + "…" : s);
   const kids = [
-    ...g.nexts.map(b => fsvg("path", { d: b.path, fill: c.next, opacity: 0.45 }, fsvg("title", {}, `${steps[b.from].name} → ${steps[b.to].name}: ${b.users.toLocaleString()}명`))),
-    ...g.drops.map(b => fsvg("path", { d: b.path, fill: c.drop, opacity: 0.55 }, fsvg("title", {}, `${steps[b.step - 1].name}에서 ${b.users.toLocaleString()}명 이탈`))),
-    ...g.bars.map(b => fsvg("rect", { x: b.x, y: b.y, width: b.w, height: Math.max(b.h, 1), fill: c.bar, rx: 2 }, fsvg("title", {}, `${b.name}: ${b.users.toLocaleString()}명`))),
+    ...g.nexts.map(b => svg("path", { d: b.path, fill: c.next, opacity: 0.45 }, svg("title", {}, `${steps[b.from].name} → ${steps[b.to].name}: ${b.users.toLocaleString()}명`))),
+    ...g.drops.map(b => svg("path", { d: b.path, fill: c.drop, opacity: 0.55 }, svg("title", {}, `${steps[b.step - 1].name}에서 ${b.users.toLocaleString()}명 이탈`))),
+    ...g.bars.map(b => svg("rect", { x: b.x, y: b.y, width: b.w, height: Math.max(b.h, 1), fill: c.bar, rx: 2 }, svg("title", {}, `${b.name}: ${b.users.toLocaleString()}명`))),
     ...g.bars.map((b, i) => {
       const anchor = i === 0 ? "start" : i === g.bars.length - 1 ? "end" : "middle", lx = anchor === "start" ? b.x : anchor === "end" ? b.x + b.w : b.x + b.w / 2;
-      return fsvg("g", {}, label(lx, 16, short(b.name), anchor, { "font-weight": 600 }), label(lx, g.height - 22, `${b.users.toLocaleString()}명`, anchor), label(lx, g.height - 8, i ? fpct(steps[i].from_first) : "100%", anchor, { opacity: 0.7 }));
+      return svg("g", {}, label(lx, 16, short(b.name), anchor, { "font-weight": 600 }), label(lx, g.height - 22, `${b.users.toLocaleString()}명`, anchor), label(lx, g.height - 8, i ? fpct(steps[i].from_first) : "100%", anchor, { opacity: 0.7 }));
     })];
-  return fsvg("svg", { viewBox: `0 0 ${g.width} ${g.height}`, preserveAspectRatio: "xMidYMid meet", style: "width:100%;height:100%", role: "img" }, ...kids);
+  return svg("svg", { viewBox: `0 0 ${g.width} ${g.height}`, preserveAspectRatio: "xMidYMid meet", style: "width:100%;height:100%", role: "img" }, ...kids);
 }
 
 // 표: 단계별 수, 다음 단계 전환율(이 단계 → 다음 단계), 처음 대비 비율, 이탈 수(이 단계에서 다음 단계로 못 간 사람). 마지막 단계는 다음이 없다.

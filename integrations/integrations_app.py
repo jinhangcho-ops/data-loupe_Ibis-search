@@ -1,6 +1,7 @@
 """연동 화면(/integrations): 다른 앱·서비스와 잇는 곳을 한데 모은다. 서비스마다 하는 일(보내기·받기·가져오기·묻기)과 상태를 보이고,
 GA4 가져오기의 설정·확인·실행 라우트를 둔다. 보내기(Slack·Notion·웹훅)는 notify, Slack 봇은 bot_app, LLM은 app의 /api/llm을 쓴다.
 연결(데이터 작업)을 쓰지 않으므로 라우트는 차례(turn)를 기다리지 않는다(GA4 결과를 쿼리로 열 때는 /api/collect/open)."""
+import os
 from pathlib import Path
 
 from flask import jsonify, request
@@ -102,6 +103,11 @@ def fetch_ga4():
     if not out.parent.is_dir():
         raise ValueError("저장할 폴더가 없습니다.")
     frame, total = ga4.fetch(g["key_path"], g)
-    frame.write_parquet(out)
+    part = out.with_name(out.name + ".part")  # 쓰다 끊겨도 반쯤 쓴 파일이 결과 이름으로 남지 않게
+    try:
+        frame.write_parquet(part)
+        os.replace(part, out)
+    finally:
+        part.unlink(missing_ok=True)
     uploads.log_file(out, frame.height)
     return jsonify(path=str(out), rows=frame.height, columns=frame.columns, total=total)

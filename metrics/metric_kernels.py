@@ -55,11 +55,22 @@ def with_user(t, s):
     return t.filter(t[s["user"]].notnull())
 
 
+def event_mask(t, s, event="event", value="event_value"):
+    """이벤트 컬럼과 값이 있으면 '그 이벤트인 행' 참거짓 식, 없으면 None."""
+    if s.get(event) and s.get(value) not in (None, ""):
+        return t[s[event]] == funnel.step_value(t[s[event]].type(), s[value])
+    return None
+
+
 def only_event(t, s, event="event", value="event_value"):
     """이벤트 컬럼과 값이 있으면 그 이벤트의 행만."""
-    if s.get(event) and s.get(value) not in (None, ""):
-        return t.filter(t[s[event]] == funnel.step_value(t[s[event]].type(), s[value]))
-    return t
+    mask = event_mask(t, s, event, value)
+    return t if mask is None else t.filter(mask)
+
+
+def with_time(t, s):
+    """사용자·시각이 비어 있지 않은 행만(시각이 빈 행은 기간 번호를 못 만들어 가짜 사용자-날이 된다)."""
+    return with_user(t, s).filter(t[s["time"]].notnull())
 
 
 def label_of(index, unit):
@@ -76,16 +87,10 @@ def last_rows(rows, ctx, what="기간"):
 
 
 def users_by_unit(t, s, unit):
-    """기간 버킷마다 고유 사용자 수 [{period, users}](오래된 것부터)."""
+    """기간 버킷마다 고유 사용자 수 [{period, users}](오래된 것부터, 첫~마지막 기간 사이 활동이 없는 기간은 0명으로 채운다)."""
     act = mc.active_buckets(t, s["user"], s["time"], unit)
-    per = mc.rows(act.group_by("p").aggregate(n=act.u.count()).order_by("p"))
-    return [{"period": label_of(r["p"], unit), "users": int(r["n"])} for r in per]
-
-
-def mean_of(values):
-    """None을 뺀 평균(없으면 None)."""
-    v = [x for x in values if x is not None]
-    return sum(v) / len(v) if v else None
+    found = {int(r["p"]): int(r["n"]) for r in mc.rows(act.group_by("p").aggregate(n=act.u.count()))}
+    return [{"period": label_of(p, unit), "users": found.get(p, 0)} for p in range(min(found), max(found) + 1)] if found else []
 
 
 # ---------- 1 트래픽·활성도 ----------
@@ -115,19 +120,19 @@ def pv(t, s, p, ctx):
 def pv_per_uv(t, s, p, ctx):
     """PV/UV: 사용자 1명당 조회 수. 분포는 사용자별 조회 수."""
     t = with_user(t, s)
-    hit = only_event(t, s)
-    views = int(one(hit.aggregate(n=hit.count()))["n"])
-    users = int(one(t.aggregate(n=t[s["user"]].nunique()))["n"])
-    per = hit.group_by(s["user"]).aggregate(n=hit.count())
+    mask = event_mask(t, s)
+    per = t.group_by(s["user"]).aggregate(n=t.count() if mask is None else mask.cast("int64").sum())  # 조회가 0번인 사용자도 분포에 든다
+    r = one(per.aggregate(views=per.n.sum(), users=per.count()))
+    views, users = int(r["views"] or 0), int(r["users"])
     return result(mc.ratio(views, users), parts={"pv": views, "uv": users}, dist=column_array(per, "n", ctx), label="사용자 1명당 조회 수")
 
 
 @kernel("active")
 def active(t, s, p, ctx):
-    """DAU·WAU·MAU: 기간 버킷마다 고유 사용자 수의 평균. 분포는 기간별 값."""
+    """DAU·WAU·MAU: 기간 버킷마다 고유 사용자 수의 평균(활동 없는 기간은 0명). 분포는 기간별 값."""
     rows = users_by_unit(t, s, p["unit"])
     values = [r["users"] for r in rows]
-    return result(mean_of(values), last_rows(rows, ctx), {"period": "기간", "users": "활성 사용자 수"}, dist=np.array(values, float), label=f"{p['unit_name']} 평균")
+    return result(mc.mean_defined(values), last_rows(rows, ctx), {"period": "기간", "users": "활성 사용자 수"}, dist=np.array(values, float), label=f"{p['unit_name']} 평균")
 
 
 @kernel("stickiness")
@@ -140,9 +145,9 @@ def stickiness(t, s, p, ctx):
         days.setdefault(int(r["m"]), []).append(int(r["n"]))
     mau = {int(r["m"]): int(r["n"]) for r in mc.rows(x.group_by("m").aggregate(n=x.u.nunique()))}
     rows = [{"period": label_of(m, "month"), "dau": sum(v) / len(v), "mau": mau[m], "stickiness": mc.ratio(sum(v) / len(v), mau[m])} for m, v in sorted(days.items())]
-    ctx.notes.append("DAU는 그 달에 활동이 있는 날들의 평균이에요(일부만 든 달은 값이 달라질 수 있어요).")
-    return result(mean_of([r["stickiness"] for r in rows]), last_rows(rows, ctx), {"period": "월", "dau": "DAU(평균)", "mau": "MAU", "stickiness": "DAU/MAU"},
-                  {"dau": mean_of([r["dau"] for r in rows]), "mau": mean_of([r["mau"] for r in rows])}, label="월별 평균")
+    ctx.notes.append("DAU는 그 달에 활동이 있는 날들의 평균이고 활동이 없는 날·달은 평균에서 빠져서, 띄엄띄엄 쓰는 서비스는 고착도가 실제보다 높게 나와요.")
+    return result(mc.mean_defined([r["stickiness"] for r in rows]), last_rows(rows, ctx), {"period": "월", "dau": "DAU(평균)", "mau": "MAU", "stickiness": "DAU/MAU"},
+                  {"dau": mc.mean_defined([r["dau"] for r in rows]), "mau": mc.mean_defined([r["mau"] for r in rows])}, label="월별 평균")
 
 
 @kernel("concurrency")
@@ -159,6 +164,7 @@ def concurrency(t, s, p, ctx):
 
 def sessions(t, s):
     """(세션 컬럼을 단 표, 세션마다 한 줄인 표 per(session, u, first, last, events, length, d))."""
+    t = t.filter(t[s["user"]].notnull(), t[s["time"]].notnull())  # 사용자·시각이 빈 행은 한 세션으로 묶이거나 길이를 망가뜨리므로 뺀다
     ses = mc.add_sessions(t, s["user"], s["time"], gap_minutes=s.get("gap"), key=s.get("sess_cols") or None)
     per = ses.group_by("session").aggregate(u=ses[s["user"]].max(), first=ses[s["time"]].min(), last=ses[s["time"]].max(), events=ses.count())
     return ses, per.mutate(length=mc.epoch(per["last"]) - mc.epoch(per["first"]), d=mc.day_index(per["first"]))
@@ -296,7 +302,7 @@ def states(t, s, p, ctx):
     key = {"dau_split": "active", "churn": "churn_rate", "resurrection": "resurrection_rate", "quick": "quick_ratio"}[pick]
     parts = {"churned": sum(r["churned"] or 0 for r in found), "new": sum(r["new"] for r in found), "resurrected": sum(r["resurrected"] for r in found)}
     rows = [{"period": r["period"], **{k: r[k] for k in shown}} for r in found]
-    return result(mean_of([r[key] for r in found]), last_rows(rows, ctx), {"period": "기간", **{k: names[k] for k in shown}}, parts, label="기간 평균")
+    return result(mc.mean_defined([r[key] for r in found]), last_rows(rows, ctx), {"period": "기간", **{k: names[k] for k in shown}}, parts, label="기간 평균")
 
 
 @kernel("power_curve")
@@ -372,7 +378,8 @@ def payers(t, s, p, ctx):
 def new_payers(t, s, p, ctx):
     """NPA: 기간마다 처음 결제한 사용자 수."""
     unit = s["unit"]
-    x = paid(t, s).select(u=t[s["user"]], p=mc.bucket_index(t[s["time"]], unit))
+    x = paid(t, s)
+    x = x.filter(x[s["time"]].notnull()).select(u=x[s["user"]], p=mc.bucket_index(x[s["time"]], unit))
     first = x.group_by("u").aggregate(p=x.p.min())
     rows = [{"period": label_of(r["p"], unit), "npa": int(r["n"])} for r in mc.rows(first.group_by("p").aggregate(n=first.u.count()).order_by("p"))]
     ctx.notes.append("고른 기간 앞의 결제 기록은 보이지 않아, 기간 안에서 처음 결제한 사용자를 신규로 세요.")
@@ -383,7 +390,7 @@ def new_payers(t, s, p, ctx):
 def pur(t, s, p, ctx):
     """PUR(DPUR·MPUR): 기간마다 결제자 ÷ 활동자."""
     unit = p["unit"] if p.get("unit") else s["unit"]
-    x = with_user(t, s)
+    x = with_time(t, s)
     x = x.select(u=x[s["user"]], p=mc.bucket_index(x[s["time"]], unit), a=x[s["amount"]])
     active_n = {int(r["p"]): int(r["n"]) for r in mc.rows(x.group_by("p").aggregate(n=x.u.nunique()))}
     y = x.filter(x.a > 0)
@@ -391,7 +398,7 @@ def pur(t, s, p, ctx):
     rows = [{"period": label_of(k, unit), "payers": paid_n.get(k, 0), "users": v, "pur": mc.ratio(paid_n.get(k, 0), v)} for k, v in sorted(active_n.items())]
     total_users = int(one(x.aggregate(n=x.u.nunique()))["n"])
     total_payers = int(one(y.aggregate(n=y.u.nunique()))["n"])
-    return result(mean_of([r["pur"] for r in rows]), last_rows(rows, ctx), {"period": "기간", "payers": "결제자", "users": "활동자", "pur": "결제 비율"},
+    return result(mc.mean_defined([r["pur"] for r in rows]), last_rows(rows, ctx), {"period": "기간", "payers": "결제자", "users": "활동자", "pur": "결제 비율"},
                   {"pu": total_payers, "uv": total_users}, label="기간별 결제 비율의 평균")
 
 
@@ -418,7 +425,7 @@ def arppu(t, s, p, ctx):
 @kernel("arpdau")
 def arpdau(t, s, p, ctx):
     """ARPDAU: 매출 ÷ 일별 활동자의 합. 분포는 사용자·날별 매출."""
-    x = with_user(t, s)
+    x = with_time(t, s)
     days = x.group_by([s["user"], mc.day_index(x[s["time"]]).name("d")]).aggregate(v=x[s["amount"]].fill_null(0).sum())
     r = one(days.aggregate(rev=days.v.sum(), n=days.count()))
     rev, n = num(r["rev"]) or 0.0, int(r["n"])
@@ -431,7 +438,7 @@ def ltv(t, s, p, ctx):
     n_days, unit = s["n_days"], s.get("unit") or "day"
     if s["method"] == "ARPU÷이탈률":
         found = mc.user_states(t, s["user"], s["time"], "month")
-        churn = mean_of([r["churn_rate"] for r in found])
+        churn = mc.mean_defined([r["churn_rate"] for r in found])
         x = with_user(t, s)
         per = x.select(u=x[s["user"]], m=mc.bucket_index(x[s["time"]], "month"), a=x[s["amount"]].fill_null(0))
         r = one(per.aggregate(rev=per.a.sum()))
@@ -650,7 +657,14 @@ def cross_context(t, s, ctx, align, paid_only=False, max_days=0):
     ad = ad_table(s, ctx, align)
     spend = spend_groups(ad, s, align)
     x = cohort_frame(t, {**s, "paid_only": paid_only}, align, with_amount=max_days > 0 or "amount" in s)
-    return spend, new_users(x, align), x, align
+    users = new_users(x, align)
+    if align["kind"] == "period":  # 광고비 테이블에는 기간이 안 걸려 있으니 사용자 쪽 활동 범위로 자른다
+        r = one(x.aggregate(lo=x.p.min(), hi=x.p.max()))
+        spend = {k: v for k, v in spend.items() if r["lo"] is not None and r["lo"] <= k <= r["hi"]}
+    else:  # 공통 키는 사용자가 있는 키만
+        spend = {k: v for k, v in spend.items() if k in users}
+    ctx.notes.append("고른 기간 앞의 활동은 보이지 않아, 기간 안에서 처음 나타난 사용자를 신규로 세요(기존 사용자가 섞일 수 있어요).")
+    return spend, users, x, align
 
 
 @kernel("cac")
@@ -682,9 +696,10 @@ def roas(t, s, p, ctx):
         ltv_n, cac_all = mc.ratio(total_rev, new), mc.ratio(total_spend, new)
         rows = [{"key": r["key"], "ltv": mc.ratio(r["revenue"], users.get(k, 0)), "cac": mc.ratio(r["spend"], users.get(k, 0)),
                  "ltv_cac": mc.ratio(mc.ratio(r["revenue"], users.get(k, 0)), mc.ratio(r["spend"], users.get(k, 0)))} for r, k in zip(rows, keys)]
+        ctx.notes.append(f"자료의 끝에서 {n_days}일이 덜 지난 코호트는 매출이 덜 잡혀 LTV가 낮게 나올 수 있어요.")
         return result(mc.ratio(ltv_n, cac_all), last_rows(rows, ctx, "키"), {"key": "맞춘 키", "ltv": f"LTV{n_days}", "cac": "CAC", "ltv_cac": "LTV:CAC"},
                       {"ltv": ltv_n, "cac": cac_all}, label=f"LTV{n_days} ÷ CAC")
-    ctx.notes.append(f"각 사용자의 첫 활동일로부터 {n_days}일 안의 매출 ÷ 광고비예요.")
+    ctx.notes.append(f"각 사용자의 첫 활동일로부터 {n_days}일 안의 매출 ÷ 광고비예요. 자료의 끝에서 {n_days}일이 덜 지난 코호트는 매출이 덜 잡혀 낮게 나올 수 있어요.")
     return result(mc.roas(total_rev, total_spend), last_rows(rows, ctx, "키"), {"key": "맞춘 키", "spend": "광고비", "revenue": f"{n_days}일 매출", "roas": f"ROAS D{n_days}"},
                   {"revenue_n": total_rev, "spend": total_spend}, label=f"D{n_days} 누적 매출 ÷ 광고비")
 
@@ -846,10 +861,11 @@ def take_rate(t, s, p, ctx):
 @kernel("aov")
 def aov(t, s, p, ctx):
     """AOV: 주문 1건당 금액. 분포는 주문별 금액."""
+    x = t.filter(t[s["amount"]].notnull())  # 금액이 빈 행은 주문 수에도 세지 않는다
     if s.get("orders"):
-        per = t.filter(t[s["orders"]].notnull()).group_by(s["orders"]).aggregate(v=t[s["amount"]].sum())
+        per = x.filter(x[s["orders"]].notnull()).group_by(s["orders"]).aggregate(v=x[s["amount"]].sum())
     else:
-        per = t.select(v=t[s["amount"]])
+        per = x.select(v=x[s["amount"]])
     r = one(per.aggregate(total=per.v.sum(), n=per.count()))
     total, n = num(r["total"]) or 0.0, int(r["n"])
     return result(mc.ratio(total, n), parts={"gmv": total, "orders": n}, dist=column_array(per, "v", ctx), label="주문 1건당 금액")
@@ -1008,6 +1024,8 @@ def power(t, s, p, ctx):
     if binary:
         pw = mc.power_two_proportions(c["mean"], e["mean"], c["n"], e["n"], s["alpha"])
         delta = e["mean"] - c["mean"]
+        if pw is None:
+            ctx.notes.append("두 군의 비율이 모두 0 또는 1이라 표준오차가 0이어서 검정력을 구할 수 없어요.")
     else:
         sd = math.sqrt(((c["sd"] or 0.0) ** 2 + (e["sd"] or 0.0) ** 2) / 2)
         if sd == 0:

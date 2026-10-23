@@ -57,9 +57,7 @@ def gridded(lat, lon, rlat, rlon):
                 found = [cells[(y, x)] for y in range(cy - r, cy + r + 1) for x in range(cx - r, cx + r + 1) if (y, x) in cells]
                 pick = np.concatenate(found) if found else everything[:0]
             if len(pick):
-                d = haversine(lat[mine, None], lon[mine, None], rlat[None, pick], rlon[None, pick])
-                best = d.argmin(axis=1)
-                found_km = d[np.arange(len(best)), best]
+                best, found_km = brute(lat[mine], lon[mine], rlat[pick], rlon[pick])  # 같은 칸 점이 많아도 행렬이 BLOCK칸을 넘지 않게 묶음씩
                 safe = min(r * CELL * KM_PER_DEGREE, 2 * EARTH_KM * np.arcsin(min(1.0, cos_top * np.sin(np.radians(min(r * CELL, 180) / 2)))))
                 if len(pick) == len(everything) or found_km.max() <= safe:
                     index[mine], dist[mine] = pick[best], found_km
@@ -92,18 +90,35 @@ def closed(ring):
     return a if len(a) and (a[0] == a[-1]).all() else np.vstack([a, a[:1]]) if len(a) else a
 
 
-def in_ring(px, py, ring):
-    """고리 안인 점(교차 수가 홀수이거나 경계 위)의 참거짓 배열."""
-    x0, y0, x1, y1 = ring[:-1, 0], ring[:-1, 1], ring[1:, 0], ring[1:, 1]
+def y_chunks(py, ring):
+    """(점 번호들, 그 점들의 y 범위와 겹치는 변 번호들)을 묶음씩. 점을 y로 정렬해 묶으므로 점이 많아도 변 후보가 크게 준다(점 30만 × 꼭짓점 5000)."""
+    lo, hi = np.minimum(ring[:-1, 1], ring[1:, 1]), np.maximum(ring[:-1, 1], ring[1:, 1])
+    margin = TOLERANCE * (1 + max(np.abs(ring).max(), 1))
+    order = np.argsort(py, kind="stable")
+    step = max(1, BLOCK // max(len(lo), 1))
+    for s in range(0, len(order), step):
+        at = order[s:s + step]
+        yield at, np.flatnonzero((lo <= py[at[-1]] + margin) & (hi >= py[at[0]] - margin))
+
+
+def inside(px, py, ring):
+    """교차 수가 홀수인 점(경계 위는 보장하지 않는다)."""
     out = np.zeros(len(px), dtype=bool)
-    step = max(1, BLOCK // max(len(x0), 1))
-    for s in range(0, len(px), step):
-        x, y = px[s:s + step, None], py[s:s + step, None]
-        crossing = (y0 > y) != (y1 > y)
+    for at, edges in y_chunks(py, ring):
+        x0, y0, x1, y1 = ring[edges, 0], ring[edges, 1], ring[edges + 1, 0], ring[edges + 1, 1]
+        x, y = px[at, None], py[at, None]
         with np.errstate(divide="ignore", invalid="ignore"):
-            at = x0 + (y - y0) * (x1 - x0) / (y1 - y0)
-        out[s:s + step] = (crossing & (x < at)).sum(axis=1) % 2 == 1
-    return out | on_edge(px, py, ring)
+            cross = ((y0 > y) != (y1 > y)) & (x < x0 + (y - y0) * (x1 - x0) / (y1 - y0))
+        out[at] = cross.sum(axis=1) % 2 == 1
+    return out
+
+
+def in_ring(px, py, ring):
+    """고리 안인 점(교차 수가 홀수이거나 경계 위)의 참거짓 배열. 이미 안으로 가려진 점은 경계 검사를 건너뛴다."""
+    out = inside(px, py, ring)
+    rest = np.flatnonzero(~out)
+    out[rest] = on_edge(px[rest], py[rest], ring)
+    return out
 
 
 def in_polygon(px, py, polygon):
@@ -115,24 +130,23 @@ def in_polygon(px, py, polygon):
     for hole in rings[1:]:
         if not hit.any():
             break
-        inner = in_ring(px[hit], py[hit], hole)
-        edge = on_edge(px[hit], py[hit], hole)
-        hit[np.flatnonzero(hit)[inner & ~edge]] = False
+        at = np.flatnonzero(hit)
+        inner = inside(px[at], py[at], hole) & ~on_edge(px[at], py[at], hole)
+        hit[at[inner]] = False
     return hit
 
 
 def on_edge(px, py, ring):
     """고리의 선분 위에 있는 점."""
-    x0, y0, x1, y1 = ring[:-1, 0], ring[:-1, 1], ring[1:, 0], ring[1:, 1]
     scale = 1 + max(np.abs(ring).max(), 1)
     out = np.zeros(len(px), dtype=bool)
-    step = max(1, BLOCK // max(len(x0), 1))
-    for s in range(0, len(px), step):
-        x, y = px[s:s + step, None], py[s:s + step, None]
+    for at, edges in y_chunks(py, ring):
+        x0, y0, x1, y1 = ring[edges, 0], ring[edges, 1], ring[edges + 1, 0], ring[edges + 1, 1]
+        x, y = px[at, None], py[at, None]
         along = (x1 - x0) * (y - y0) - (y1 - y0) * (x - x0)
         edge = (np.abs(along) <= TOLERANCE * scale * scale) & (x >= np.minimum(x0, x1) - TOLERANCE * scale) & (x <= np.maximum(x0, x1) + TOLERANCE * scale) \
             & (y >= np.minimum(y0, y1) - TOLERANCE * scale) & (y <= np.maximum(y0, y1) + TOLERANCE * scale)
-        out[s:s + step] = edge.any(axis=1)
+        out[at] = edge.any(axis=1)
     return out
 
 
@@ -150,11 +164,15 @@ def assign(lat, lon, regions):
             if outer is None or len(outer) < 4:
                 continue
             x, y = lon[todo], lat[todo]
+            if outer[:, 0].max() > 180:  # 날짜 변경선을 넘어 이어진 좌표(경도 170~190): 서쪽(음수) 점을 +360으로 옮겨 견준다
+                x = np.where(x < 0, x + 360, x)
+            elif outer[:, 0].min() < -180:
+                x = np.where(x > 0, x - 360, x)
             near = (x >= outer[:, 0].min()) & (x <= outer[:, 0].max()) & (y >= outer[:, 1].min()) & (y <= outer[:, 1].max())
             pick = todo[near]
             if not len(pick):
                 continue
-            hit = in_polygon(lon[pick], lat[pick], polygon)
+            hit = in_polygon(x[near], lat[pick], polygon)
             out[pick[hit]] = number
             todo = todo[out[todo] < 0]
     return out

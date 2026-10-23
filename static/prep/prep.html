@@ -1067,7 +1067,7 @@ function recipe() {
   if (pca.columns.length === 1) throw new Error("PCA에는 숫자 컬럼을 2개 이상 고르세요.");
   return { schema: S.schema, base: S.base, columns, filters, copies, drop: drops, sorts,
     ...(formulas.length ? { formulas } : {}), ...(pca.columns.length ? { pca: { columns: pca.columns, n: pca.n } } : {}), ...(geoSteps.length ? { geo: geoSteps } : {}),
-    ...(dedupe.length ? { dedupe, ...(keepNow() ? { dedupe_keep: keepNow() } : {}) } : {}), ...($("downcast").checked ? { downcast: true } : {}) };
+    ...(dedupe.length ? { dedupe, ...(keepNow() ? { dedupe_keep: keepNow() } : {}) } : {}), ...($("downcast").checked ? { downcast: true } : {}), ...(statsOn ? {} : { count: false }) };  // 통계를 끄면 원격 COUNT도 안 한다
 }
 // [미리보기]·[실행]·[중복 세기]가 함께 쓴다: 테이블을 골랐는지 보고, 레시피를 만들어 fn에 넘기고, 오류는 카드에 보인다.
 function act(button, fn) {
@@ -1254,11 +1254,11 @@ async function runAna(full) {
   if (full && !A.result) return say("err-ana", "먼저 [구하기]로 표본에서 분석하세요.");
   try {
     const how = full ? A.result.how : anaHow(), prepped = full ? A.result.prepped : $("a-prep").checked;
-    const r = prepped ? recipe() : { schema: S.schema, base: S.base };
+    const base = S.base, r = prepped ? recipe() : { schema: S.schema, base };  // 기다리는 동안 테이블이 바뀔 수 있어 시작 때 값을 잡아 둔다
     const d = await timed("analyze", () => api("/api/analyze", { recipe: r, how, sample, full }));
     const views = d.kind === "distribution" ? (d.histogram ? ["hist", "box", "values"] : ["values"])
       : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"], funnel: ["funnel"] }[d.kind];
-    A.result = { ...d, how, prepped, base: S.base, recipe: r, views };
+    A.result = { ...d, how, prepped, base, recipe: r, views };
     A.view = views.includes(A.view) ? A.view : views[0];
     say("err-ana", "");
     drawAna();

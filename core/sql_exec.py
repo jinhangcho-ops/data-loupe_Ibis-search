@@ -21,13 +21,15 @@ FORBIDDEN = ("Drop", "Delete", "Insert", "Update", "Create", "Alter", "TruncateT
              "Pragma", "Set", "Copy", "Attach", "Detach", "Use", "Transaction", "Commit", "Rollback", "LoadData", "Kill", "Refresh",  # 데이터·권한·설정을 바꾸거나
              "Cache", "Uncache", "Analyze")  # 파일·DB를 붙이는 문장
 PARQUET_BACKENDS = ("duckdb", "polars")
-FILE_FUNCS = {"glob", "sniff_csv", "st_read", "query", "query_table"}  # 파일·폴더를 읽거나 문자열을 SQL로 돌리는 함수 이름
-FILE_PREFIXES = ("read_", "parquet_", "iceberg_", "delta_")  # 이름이 이렇게 시작하는 함수
-FILE_SUFFIXES = ("_scan",)  # 이름이 이렇게 끝나는 함수(delta_scan, iceberg_scan, excel_scan …)
-ENV_FUNCS = {"getenv", "current_setting", "current_settings", "duckdb_settings", "duckdb_secrets", "which_secret"}  # 환경·설정·비밀을 읽는 함수
+FILE_FUNCS = {"glob", "sniff_csv", "st_read", "query", "query_table",  # 파일·폴더를 읽거나 문자열을 SQL로 돌리는 함수 이름
+              "pg_read_file", "pg_read_binary_file", "pg_ls_dir", "lo_import", "lo_export", "load_file", "openrowset", "opendatasource", "openquery"}  # Postgres·MySQL·MSSQL 서버의 파일·원격 읽기
+FILE_PREFIXES = ("read_", "parquet_", "iceberg_", "delta_", "dblink", "xp_")  # 이름이 이렇게 시작하는 함수
+FILE_SUFFIXES = ("_scan", "_query")  # 이름이 이렇게 끝나는 함수(delta_scan, iceberg_scan, excel_scan, DuckDB의 postgres_query·mysql_query …)
+ENV_FUNCS = {"getenv", "current_setting", "current_settings", "duckdb_settings", "duckdb_secrets", "which_secret",
+             "setval", "nextval", "set_config", "pg_terminate_backend", "pg_cancel_backend", "sleep"}  # 환경·설정·비밀을 읽거나 서버 상태를 바꾸는 함수
 FILE_CLASSES = ("ReadCSV", "ReadParquet")  # sqlglot이 함수 이름 대신 따로 만드는 클래스(없는 버전이면 건너뜀)
 READ_MESSAGE = "SQL 안에서 파일을 직접 읽을 수 없어요. 파일은 [연결]로 열거나 가상 테이블(Parquet)로 등록하세요."
-ENV_MESSAGE = "SQL 안에서 환경·설정 값을 읽을 수 없어요."
+ENV_MESSAGE = "SQL 안에서 환경·설정 값을 읽거나 서버 상태를 바꿀 수 없어요."
 
 
 @functools.cache

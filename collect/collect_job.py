@@ -27,7 +27,7 @@ from core import settings
 from collect import uploads
 from collect.collect_config import normalize
 from collect.collect_http import Halt, Reply
-from collect.collect_store import (IDLE, SAVE_EVERY, balancer_for, clean, current, duck, finish_api, guard, keep_record, replace, req_mask, save_page, status,
+from collect.collect_store import (IDLE, began, SAVE_EVERY, balancer_for, clean, current, duck, finish_api, guard, keep_record, replace, req_mask, save_page, status,
                            update, with_bom, write_output, write_record)
 
 MIN_FREE = 200 * 1024 * 1024  # 시작할 때 결과 폴더의 디스크에 적어도 남아 있어야 하는 공간
@@ -232,7 +232,9 @@ def work(config, env, path, found, record, halt, password, lock=None):
                 uploads.log_file(path, load_job.total_rows(path))  # 업로드 기록: 저장한 결과 파일
         if config["load"]["target"] != "file" and made:
             update(phase="적재 중", output=str(path), wait="")
-            load_job.run(config, path, password, halt, update)
+            loaded = load_job.run(config, path, password, halt, update)
+            if loaded["failures"]:  # 넣지 못한 행이 있으면 끝났다고만 하지 않고 문구로 남긴다(예약 실행은 이것을 실패로 알린다)
+                update(message=f"적재에서 실패 {loaded['failures']:,}행이 있습니다. 넣은 행은 그대로입니다.")
         update(phase="끝", output=str(path) if made else "", wait="")
     except Halt as e:
         update(phase="실패" if e.failed else "멈춤", **({"error": str(e)} if e.failed else {"message": str(e)}), wait="")
@@ -274,9 +276,9 @@ def first_page(config, env):
             "status": reply.status, "headers": [[k, shown(v)] for k, v in reply.headers], "text": text, "json": data}
 
 
-def context(config, env, i, cursor=""):
+def context(config, env, i, cursor="", now=None):
     paging = config["paging"]
-    return {"env": env, "page": paging["start"] + i, "offset": paging["start"] + i * paging["step"], "cursor": cursor, "now": dt.datetime.now()}
+    return {"env": env, "page": paging["start"] + i, "offset": paging["start"] + i * paging["step"], "cursor": cursor, "now": now or dt.datetime.now()}
 
 
 def sample(config, text):
@@ -342,9 +344,10 @@ def run_api(config, env, path, found, record, halt):
     record.setdefault("columns", [])
     record.setdefault("kinds", {})
     record.setdefault("rename", {})
+    began(record)  # {today}를 시작 때 시각으로 고정(쪽 일꾼들이 나눠 정하지 않게 미리)
 
     def get(i, cursor="", url=None):
-        sent = req.build(config["request"], context(config, env, i, cursor), url)
+        sent = req.build(config["request"], context(config, env, i, cursor, began(record)), url)
         reply = balancer.call(lambda: collect_http.fetch(sent, timeout, hide))
         try:
             data = json.loads(reply.text())
@@ -394,6 +397,19 @@ def run_api(config, env, path, found, record, halt):
                 if not rows:
                     record["end"] = 0
             save_page(found, record, i, rows, len(reply.body))
+            if paging["kind"] == "offset" and 0 < len(rows) < paging["step"]:  # 서버가 step보다 적게 주면 다음 offset(step 간격)에서 그 사이 행이 빠진다
+                total, short = record.get("total"), len(rows)
+                if total is None:  # 전체 수를 모르면 다음 쪽이 비지 않은지로 본다
+                    i = claim()
+                    if i is not None:
+                        _, rows, reply = get(i)
+                        with guard:
+                            if not rows:
+                                record["end"] = i
+                        save_page(found, record, i, rows, len(reply.body))
+                        total = short + 1 if rows else None
+                if total is not None and total > short:
+                    raise Halt(f"서버가 한 번에 {short}행만 줍니다. 한 번에 받는 수를 {short}으로 줄이세요.")
         threads = [threading.Thread(target=worker, daemon=True) for _ in range(max(1, balancer.limit))]
         for t in threads:
             t.start()
@@ -410,7 +426,7 @@ def run_api(config, env, path, found, record, halt):
                 seen.add(value)
                 order.append(value)
         cursor, url = record.get("cursor", ""), record.get("next")
-        home = collect_http.host_of(req.build(config["request"], context(config, env, 0))["url"])  # 처음 요청의 호스트
+        home = collect_http.host_of(req.build(config["request"], context(config, env, 0, "", began(record)))["url"])  # 처음 요청의 호스트
         i = len(record["done"])
         while i < paging["max_pages"]:
             if paging["kind"] == "next_url" and i > 0 and not url:
@@ -483,7 +499,7 @@ def need_space(folder, size):
 
 def run_file(config, env, path, found, record, halt):
     spec, timeout, hide = config["file"], config["balance"]["timeout"], current["hide"]
-    sent = req.build({"method": "GET", "url": spec["url"], "headers": spec["headers"]}, context(config, env, 0))
+    sent = req.build({"method": "GET", "url": spec["url"], "headers": spec["headers"]}, context(config, env, 0, "", began(record)))
     balancer = balancer_for(config, halt, spec["chunks"])
     balancer.slow_on = (429, 503)
     raw = found["part"]
@@ -560,7 +576,7 @@ def run_file(config, env, path, found, record, halt):
         balancer.call(whole)
     if info["ranges"]:
         size = info["size"]
-        same = record.get("size") == size and record.get("etag") == info["etag"] and record.get("modified") == info["modified"] and raw.is_file() and raw.stat().st_size == size
+        same = (info["etag"] or info["modified"]) and record.get("size") == size and record.get("etag") == info["etag"] and record.get("modified") == info["modified"] and raw.is_file()  # 바뀜을 알아볼 값이 하나도 없으면 이어 받지 않는다 and raw.stat().st_size == size
         if not same:  # 처음이거나 파일이 바뀜: 처음부터
             with guard:
                 record.update(done=[], bytes=0, size=size, etag=info["etag"], modified=info["modified"])

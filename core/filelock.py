@@ -32,6 +32,21 @@ def left_behind(path):
         return False
 
 
+def clear_stale(path):
+    """끝난 프로세스가 남긴 잠금을 지운다. 판단한 뒤 지우기 전에 다른 프로세스가 새로 잡았을 수 있으므로, 먼저 다른 이름으로 옮기고 옮긴 것이 정말 남은 것인지 다시 본다(아니면 되돌린다)."""
+    moved = path.with_name(f"{path.name}.{os.getpid()}.old")
+    try:
+        os.replace(path, moved)
+    except OSError:
+        return
+    if not left_behind(moved):
+        try:
+            os.link(moved, path)  # 남의 살아 있는 잠금을 옮겼다: 그 자리가 비어 있으면 돌려놓는다
+        except OSError:
+            pass
+    moved.unlink(missing_ok=True)
+
+
 def hold(path):
     """잠금 파일을 만든다(이미 있으면 그 프로세스가 끝났을 때만 지우고 다시). 잡았으면 True."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -41,7 +56,7 @@ def hold(path):
         except FileExistsError:
             if not left_behind(path):
                 return False
-            path.unlink(missing_ok=True)
+            clear_stale(path)
             continue
         with os.fdopen(fd, "w", encoding="ascii") as f:
             f.write(scratch.stamp())

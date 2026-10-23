@@ -31,9 +31,9 @@ CLOSED = "수집용 창이 닫혀 멈췄습니다."
 
 # ---------- 설정 ----------
 
-def page_url(web, i):
+def page_url(web, i, now=None):
     """i번째 쪽(0부터)의 주소: {page}는 start + i, {today}·{now}는 지금 시각."""
-    return req.fill_url(web["url"], {"env": {}, "page": web["paging"]["start"] + i, "offset": None, "cursor": "", "now": dt.datetime.now()})
+    return req.fill_url(web["url"], {"env": {}, "page": web["paging"]["start"] + i, "offset": None, "cursor": "", "now": now or dt.datetime.now()})
 
 
 def ready(web):
@@ -233,7 +233,7 @@ class Walk:
             collect_store.save_page(self.found, self.record, i, rows, len(json.dumps(rows, ensure_ascii=False).encode()))
 
     def first(self):
-        url = page_url(self.web, 0)
+        url = page_url(self.web, 0, collect_store.began(self.record))
         self.allowed(url)
         self.turn()
         self.open(url)
@@ -263,7 +263,7 @@ class Walk:
             if i == 0:
                 rows = self.first()
             else:
-                url = page_url(self.web, i)
+                url = page_url(self.web, i, collect_store.began(self.record))
                 self.allowed(url)
                 self.turn()
                 self.open(url)
@@ -334,7 +334,7 @@ def run_web(config, env, path, found, record, halt):
         done = set(record["done"])
         first = 0 if web["paging"]["kind"] in ("next", "scroll") else min(set(range(len(done) + 1)) - done)  # 처음 열 쪽(창을 띄울 주소)
         try:
-            with collect_browser.session(web["show"], page_url(web, first)) as page:
+            with collect_browser.session(web["show"], page_url(web, first, collect_store.began(record))) as page:
                 Walk(config, page, found, record, halt, balancer).run()
         except collect_browser.Gone:
             raise Halt(CLOSED) from None

@@ -254,12 +254,26 @@ def mark_seen():
     change_runs(lambda runs: [run.update(seen=True) for run in runs if run.get("result") == "실패"])
 
 
+VALUE_ERRORS = re.compile(r"Constraint|Conversion|Could not convert|Invalid Input|Out of Range|Parser Error|Duplicate key", re.I)  # DuckDB 등이 데이터 값을 문장에 넣는 오류 유형
+SEE_LOG = "(자세한 내용은 프로그램의 실행 기록)"
+
+
+def notice_text(message):
+    """Slack·웹훅 같은 밖으로 나가는 알림에 넣을 오류 글. 값이 든 오류 유형은 일반 문구로, 나머지는 앞 80자만 보낸다(전체는 실행 기록에 있다)."""
+    message = (message or "").strip()
+    if not message:
+        return ""
+    if VALUE_ERRORS.search(message):
+        return f"데이터 값 문제로 실패했습니다 {SEE_LOG}"
+    return message if len(message) <= 80 else f"{message[:80]}… {SEE_LOG}"
+
+
 def tell(name, result, rows, seconds, message):
     """예약의 보낼 곳으로 알린다(notify_on이 fail이면 끝난 것은 알리지 않는다). 보내지 못하면 그 문구를 돌려준다."""
     item = schedules().get(name) or {}
     if not item.get("notify") or (result == "끝" and item.get("notify_on") != "always"):
         return ""
-    lines = [f"구성: {name}", f"행 수: {rows:,}" if rows is not None else "", f"걸린 시간: {notify.duration_text(seconds)}", f"오류: {message}" if message else ""]
+    lines = [f"구성: {name}", f"행 수: {rows:,}" if rows is not None else "", f"걸린 시간: {notify.duration_text(seconds)}", f"오류: {notice_text(message)}" if message else ""]
     try:
         notify.send(item["notify"], {"title": TITLES[result], "text": "\n".join(x for x in lines if x), "rows": rows, "seconds": seconds})
     except ValueError as e:
@@ -303,7 +317,8 @@ def execute(name, how):
     def follow():
         job.join()
         state = collect_job.snapshot()
-        done = state["phase"] == "끝"
+        bad = (state.get("load") or {}).get("failures")  # 적재에서 넣지 못한 행이 있으면 끝났어도 실패로 알린다
+        done = state["phase"] == "끝" and not bad
         message = state["message"] if done else (state["error"] or state["message"] or f"수집이 {state['phase']} 상태로 끝났습니다.")
         finish(run_id, name, "끝" if done else "실패", state["rows"], state["elapsed"], message)
 

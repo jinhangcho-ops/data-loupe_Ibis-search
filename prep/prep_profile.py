@@ -190,18 +190,27 @@ def prune(arrow):
         return found
     values = df.select(pl.col(n).cast(pl.Float64) for n in numeric).to_numpy()
     nulls = {n: df[n].null_count() for n in numeric}
+    full = [k for k, n in enumerate(numeric) if not nulls[n] and rows >= PRUNE_MIN_PAIRS]  # 빈 값 없는 컬럼끼리는 상관 행렬을 한 번에 구한다
+    with np.errstate(all="ignore"):
+        matrix = np.corrcoef(values[:, full].T) if len(full) > 1 else None
+    at = {k: m for m, k in enumerate(full)}
     for i in range(len(numeric)):
         for j in range(i + 1, len(numeric)):
             a, b = numeric[i], numeric[j]
             if a in picked or b in picked:
                 continue
-            both = ~np.isnan(values[:, i]) & ~np.isnan(values[:, j])
-            if both.sum() < PRUNE_MIN_PAIRS:
+            if matrix is not None and i in at and j in at:
+                r = float(matrix[at[i], at[j]])
+            else:
+                both = ~np.isnan(values[:, i]) & ~np.isnan(values[:, j])
+                if both.sum() < PRUNE_MIN_PAIRS:
+                    continue
+                x, y = values[both, i], values[both, j]
+                if x.std() == 0 or y.std() == 0:
+                    continue
+                r = float(np.corrcoef(x, y)[0, 1])
+            if np.isnan(r):
                 continue
-            x, y = values[both, i], values[both, j]
-            if x.std() == 0 or y.std() == 0:
-                continue
-            r = float(np.corrcoef(x, y)[0, 1])
             if abs(r) >= PRUNE_CORR:
                 drop, keep = (a, b) if nulls[a] > nulls[b] else (b, a)
                 found.append({"column": drop, "reason": f"'{keep}'와 상관이 {r:.3f}로 거의 같은 정보입니다", "with": keep, "r": round(r, 4)})

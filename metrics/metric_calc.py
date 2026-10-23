@@ -1,6 +1,6 @@
 """지표 계산 바탕: 지표 사전(metric_catalog)이 조합해 쓰는 작은 계산들. 행 단위·그룹 단위 일은 Ibis 식으로(어느 연결에서나 같게), 배열 계산은 numpy로 한다.
 - 세션·동시 수·사건 사이 시간·사용자 상태·코호트·LTV·NRR: 표(Ibis 식)를 받고, 큰 표는 Ibis가 집계해 작은 결과만 PC로 가져온다. 창 함수를 쓰는 것은 세션뿐이다(Polars 연결에서는 안 된다).
-- 분포·생존(Kaplan-Meier)·예측 평가·실험 통계: 숫자 배열을 받는다(열 하나를 가져오는 fetch_column 포함). 실험 통계는 math·numpy만 쓴다.
+- 분포·생존(Kaplan-Meier)·예측 평가·실험 통계: 숫자 배열을 받는다. 실험 통계는 math·numpy만 쓴다.
 - 시각은 초 단위로 센다(epoch_seconds). 기간 버킷 번호는 day/week(월요일 시작)/month 또는 N일 묶음이다.
 - 구할 수 없는 값(0으로 나누기 등)은 None이다."""
 import datetime as dt
@@ -17,7 +17,6 @@ EPOCH = dt.date(1970, 1, 1)
 UNITS = ("day", "week", "month")
 FLAT_EPS = 0.005  # 수평 유지점: 이어진 두 N의 차이가 이보다 작아야 한다(0.5%p)
 FLAT_RUN = 3  # 수평 유지점: 이만큼 이어져야 한다
-Q = (0.5, 0.9, 0.99)  # quantiles 기본
 MONTH = np.timedelta64(1, "M")
 
 
@@ -34,6 +33,14 @@ def need(table, *names):
 def rows(expr):
     """식의 결과를 [{컬럼: 값}]으로."""
     return expr.to_pyarrow().to_pylist()
+
+
+def fetch_rows(expr, what):
+    """rows지만 상한(MAX_FETCH_ROWS)+1행까지만 묻고, 넘으면 이유와 함께 거부한다(앞부분만 쓰면 값이 조용히 틀려진다)."""
+    got = rows(expr.limit(MAX_FETCH_ROWS + 1))
+    if len(got) > MAX_FETCH_ROWS:
+        raise ValueError(f"{what}이(가) {MAX_FETCH_ROWS:,}개를 넘어 한 번에 가져올 수 없어요. 기간이나 조건으로 범위를 좁혀 주세요.")
+    return got
 
 
 def epoch(col):
@@ -101,23 +108,6 @@ def add_sessions(table, user, time, gap_minutes=None, key=None):
     return t.mutate(session=t[user].cast("string") + ibis.literal("#") + t._n.cast("string")).drop("_sec", "_new", "_n")
 
 
-def session_stats(table, session, time, only=None):
-    """세션 요약 {sessions, mean_length, median_length(초), bounces, bounce_rate}. 길이 = 마지막 − 처음 시각.
-    bounce = 이벤트가 하나뿐인 세션. only(표 → 참거짓 식, 예: 페이지 이벤트)를 주면 그 이벤트만 세고, 그 이벤트가 있는 세션만 분모로 쓴다."""
-    need(table, session, time)
-    aggs = {"first": table[time].min(), "last": table[time].max(), "events": table.count()}
-    if only is not None:
-        aggs["events"] = only(table).cast("int64").sum()
-    per = table.group_by(session).aggregate(**aggs)
-    per = per.mutate(length=epoch(per["last"]) - epoch(per["first"]))
-    if only is not None:
-        per = per.filter(per.events > 0)
-    one = per.aggregate(sessions=per.count(), mean=per.length.mean(), median=per.length.median(), bounces=(per.events == 1).cast("int64").sum())
-    r = rows(one)[0]
-    n, bounces = int(r["sessions"]), int(r["bounces"] or 0)
-    return {"sessions": n, "mean_length": r["mean"], "median_length": r["median"], "bounces": bounces, "bounce_rate": ratio(bounces, n)}
-
-
 def exit_rates(table, session, time, page):
     """페이지별 이탈률 [{page, views, exits, exit_rate}](조회 많은 순). exit = 세션의 마지막 페이지가 그 페이지인 세션 수, exit_rate = exits / views."""
     need(table, session, time, page)
@@ -125,8 +115,8 @@ def exit_rates(table, session, time, page):
     last = t.group_by(session).aggregate(pg=t[page].argmax(t[time]))
     exits = last.group_by("pg").aggregate(exits=last.pg.count())
     views = t.group_by(page).aggregate(views=t.count()).rename(pg=page)
-    found = {r["pg"]: r["exits"] for r in rows(exits)}
-    out = [{"page": r["pg"], "views": int(r["views"]), "exits": int(found.get(r["pg"], 0))} for r in rows(views)]
+    found = {r["pg"]: r["exits"] for r in fetch_rows(exits, "페이지 종류")}
+    out = [{"page": r["pg"], "views": int(r["views"]), "exits": int(found.get(r["pg"], 0))} for r in fetch_rows(views, "페이지 종류")]
     out.sort(key=lambda r: (-r["views"], str(r["page"])))
     return [{**r, "exit_rate": ratio(r["exits"], r["views"])} for r in out]
 
@@ -141,7 +131,7 @@ def concurrency_series(table, start, end):
     opens = s.select(t=s[start].cast("timestamp"), d=ibis.literal(1))
     closes = s.filter(s[end].notnull()).select(t=s[end].cast("timestamp"), d=ibis.literal(-1))
     events = opens.union(closes)
-    steps = rows(events.group_by("t").aggregate(d=events.d.sum()).order_by("t"))
+    steps = fetch_rows(events.group_by("t").aggregate(d=events.d.sum()).order_by("t"), "동시 접속이 바뀌는 시각")
     times = np.array([r["t"] for r in steps], dtype="datetime64[us]")
     return times, np.cumsum([r["d"] for r in steps]).astype(np.int64)
 
@@ -189,22 +179,8 @@ def seconds_between(table, user, time, event, first, second):
     joined = base.filter(base.e == b).select("u", "t").join(starts, "u").filter(lambda j: j.t >= j.ta)
     done = joined.group_by("u").aggregate(ta=joined.ta.min(), tb=joined.t.min())
     gaps = done.select(sec=epoch(done.tb) - epoch(done.ta))
-    values = np.array([r["sec"] for r in rows(gaps)], dtype=float)
+    values = np.array([r["sec"] for r in fetch_rows(gaps, "사용자")], dtype=float)
     return values, int(rows(starts.aggregate(n=starts.u.count()))[0]["n"])
-
-
-def summarize_seconds(values):
-    """초 배열의 요약 {n, mean, median, p90}. 비면 값은 None."""
-    v = np.asarray(values, dtype=float)
-    if len(v) == 0:
-        return {"n": 0, "mean": None, "median": None, "p90": None}
-    return {"n": int(len(v)), "mean": float(v.mean()), "median": float(np.median(v)), "p90": float(np.quantile(v, 0.9))}
-
-
-def time_between(table, user, time, event, first, second):
-    """TTV·TTFP 같은 사건 사이 시간 {users_first, n, mean, median, p90}(초)."""
-    values, users_first = seconds_between(table, user, time, event, first, second)
-    return {"users_first": users_first, **summarize_seconds(values)}
 
 
 def payback_day(cum_arpu, cac):
@@ -416,27 +392,6 @@ def nrr(table, user, time, amount):
 
 
 # ---------- 분포 ----------
-
-def fetch_column(table, column, limit=MAX_FETCH_ROWS):
-    """표의 숫자 컬럼을 빈 값을 빼고 numpy로 가져온다. 행이 limit보다 많으면 표본을 가져온다. (배열, 표본 여부, 전체 행 수)."""
-    need(table, column)
-    col = table[column]
-    if not (col.type().is_numeric() and not col.type().is_boolean()):
-        raise ValueError(f"'{column}' 컬럼은 숫자여야 합니다.")
-    total = int(rows(table.aggregate(n=table.count()))[0]["n"])
-    t = table.filter(col.notnull())
-    sampled = total > limit
-    if sampled:
-        t = t.sample(min(1.0, limit * 1.05 / total)).limit(limit)
-    values = np.array([r["v"] for r in rows(t.select(v=t[column].cast("float64")))], dtype=float)
-    return values, sampled, total
-
-
-def quantiles(values, qs=Q):
-    """분위수 {q: 값}(선형 보간). 값이 없으면 빈 dict."""
-    v = np.asarray(values, dtype=float)
-    return {q: float(np.quantile(v, q)) for q in qs} if len(v) else {}
-
 
 def gini(values):
     """지니 계수 = (2Σ i·x_(i)) / (nΣx) − (n+1)/n (x 오름차순, i=1..n). 모두 같으면 0. 음수가 있거나 합이 0이면 None."""
@@ -682,14 +637,6 @@ def welch_from_stats(mean1, sd1, n1, mean2, sd2, n2):
     return {"diff": mean2 - mean1, "t": t, "df": df, "p": t_two_sided_p(t, df)}
 
 
-def welch_t_test(control, treatment):
-    """Welch t 검정(값 배열에서)."""
-    a, b = np.asarray(control, dtype=float), np.asarray(treatment, dtype=float)
-    if min(len(a), len(b)) < 2:
-        raise ValueError("각 집단의 표본은 2개 이상이어야 합니다.")
-    return welch_from_stats(float(a.mean()), float(a.std(ddof=1)), len(a), float(b.mean()), float(b.std(ddof=1)), len(b))
-
-
 def check_alpha(alpha, power=0.8):
     """유의수준·검정력이 0과 1 사이인지 본다."""
     if not (0 < alpha < 1 and 0 < power < 1):
@@ -697,8 +644,10 @@ def check_alpha(alpha, power=0.8):
 
 
 def power_normal(effect, se, alpha=0.05):
-    """정규 근사 검정력(양측): Φ(|효과|/se − z) + Φ(−|효과|/se − z), z = Φ⁻¹(1 − α/2)."""
+    """정규 근사 검정력(양측): Φ(|효과|/se − z) + Φ(−|효과|/se − z), z = Φ⁻¹(1 − α/2). 표준오차가 0이면 None."""
     check_alpha(alpha)
+    if se == 0:
+        return None
     z, shift = norm_ppf(1 - alpha / 2), abs(effect) / se
     return norm_cdf(shift - z) + norm_cdf(-shift - z)
 

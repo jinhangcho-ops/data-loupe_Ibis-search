@@ -41,6 +41,14 @@ from prep import prep_app  # noqa: F401  전처리 라우트가 앱에 달린다
 from query import flow_app  # noqa: F401  흐름·문장·내 지표 라우트가 앱에 달린다.
 from query.search_app import app
 
+from core import filelock
+
+APP_LOCK = filelock.lock_path("app.lock")  # 단일 실행: 두 번째 실행은 임시 폴더 정리(아래 sweep)로 첫 실행의 작업 폴더를 지우기 전에 막는다
+if not filelock.hold(APP_LOCK):
+    import ctypes
+    ctypes.windll.user32.MessageBoxW(None, "이미 실행 중입니다.", "Ibis", 0x40)
+    sys.exit(1)
+
 scratch.sweep()  # 지난번에 강제 종료돼 남은 임시 폴더를 지운다.
 http = make_server("127.0.0.1", 0, app, threaded=True)  # 0: 비어 있는 포트를 자동으로 고른다. threaded: 조회 중에도 메모리·CPU 요청에 답한다.
 threading.Thread(target=http.serve_forever, daemon=True).start()
@@ -78,7 +86,8 @@ def ask_folder():
 def closing():
     """수집 중에 창을 닫으면 묻는다. False를 돌려주면 닫기가 취소된다(pywebview의 closing 이벤트). 닫으면 수집을 멈춰 받은 데까지 남긴다."""
     collect_job = lazy.loaded("collect.collect_job")  # 올라와 있지 않으면 수집이 돈 적이 없다
-    if collect_job is None or not collect_job.running():
+    running = getattr(collect_job, "running", None)  # 반쯤 올라온 모듈이면 아직 돈 적이 없다
+    if running is None or not running():
         return True
     if not window.create_confirmation_dialog("수집 중", "수집이 아직 돌고 있습니다. 닫으면 받은 데까지 남기고 멈춥니다(다시 시작하면 이어 받습니다). 닫을까요?"):
         return False
@@ -93,8 +102,9 @@ schedule.start_watch()  # 프로그램 안 예약: 켜져 있는 동안 때가 �
 webview.start()  # 창을 닫으면 여기서 끝나고, 서버 스레드도 함께 종료된다.
 schedule.stop_watch()
 bot_app.stop()  # 켜 둔 Slack 봇의 연결을 끊는다.
-if lazy.loaded("collect.collect_job"):
+if hasattr(lazy.loaded("collect.collect_job"), "stop"):  # 반쯤 올라온 모듈이면 건너뛴다
     lazy.loaded("collect.collect_job").stop(wait=10)  # 수집 작업이 받은 데까지 기록하고 끝나기를 기다린다.
-if lazy.loaded("collect.collect_browser"):
+if hasattr(lazy.loaded("collect.collect_browser"), "stop_child"):
     lazy.loaded("collect.collect_browser").stop_child()  # 수집용 창 프로세스를 끝낸다(남아 있어도 메인과의 연결이 끊기면 스스로 끝난다).
 server.release_connection()  # 열어 둔 연결을 닫아 파일을 놓고 임시 폴더를 지운다(도는 쿼리가 있으면 취소하고 5초까지만 기다린다).
+filelock.let_go(APP_LOCK)

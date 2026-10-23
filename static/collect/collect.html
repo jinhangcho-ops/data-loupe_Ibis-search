@@ -459,8 +459,7 @@ let kafka = {};  // Kafka 적재할 곳 등록(이름 → 등록). 비밀번호�
 let fields = [];  // 웹페이지 컬럼 [{ name, selector, attr, text, attrs }]. text·attrs는 고를 때 본 값(미리보기용, 저장하지 않는다)
 
 const val = id => $(id).value.trim();
-const attr = v => esc(v).replace(/"/g, "&quot;");
-const size = n => n < 1024 ? `${n}B` : n < 1048576 ? `${(n / 1024).toFixed(1)}KB` : n < 1073741824 ? `${(n / 1048576).toFixed(1)}MB` : `${(n / 1073741824).toFixed(2)}GB`;
+const bytesText = n => n == null ? "—" : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : n < 1073741824 ? `${(n / 1048576).toFixed(1)} MB` : `${(n / 1073741824).toFixed(2)} GB`;
 const mode = () => document.querySelector("input[name=mode]:checked").value;
 const fileName = p => (p || "").split(/[\\/]/).pop();
 
@@ -748,7 +747,7 @@ $("resp-text").onchange = () => { readResponse(); sample(); };
 
 // 미리보기 표(API·웹페이지·적재 확인·예약·실행 기록이 같이 씀). cols: [{ name, title }], rows: [{ 이름: 값 }], rowAttr: 줄에 붙일 속성 글자(선택)
 const sampleTable = (cols, rows, none, rowAttr = () => "") => cols.length
-  ? `<table><thead><tr>${cols.map(c => `<th${c.title ? ` title="${attr(c.title)}"` : ""}>${esc(c.name)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr${rowAttr(r)}>` + cols.map(c => r[c.name] == null ? '<td class="empty">null</td>' : cell(r[c.name])).join("") + "</tr>").join("")}</tbody></table>`
+  ? `<table><thead><tr>${cols.map(c => `<th${c.title ? ` title="${esc(c.title)}"` : ""}>${esc(c.name)}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr${rowAttr(r)}>` + cols.map(c => r[c.name] == null ? '<td class="empty">null</td>' : cell(r[c.name])).join("") + "</tr>").join("")}</tbody></table>`
   : `<span class="empty">${esc(none)}</span>`;
 // 미리보기: 응답 예시에서 지금 지정대로 뽑은 앞 20행과 기록 수, 다음 커서·주소·전체 수
 async function sample() {
@@ -1200,7 +1199,7 @@ function showEstimate(d) {
   $("est-robots").textContent = d.robots ? `robots.txt: ${d.robots}` : "";  // 웹페이지에서 robots.txt 지키기를 켰을 때만 온다. 허용이 아니면 경고 색
   $("est-robots").className = d.robots && !d.robots.startsWith("허용") ? "warn" : "hint";
   $("est-load").textContent = d.load_note ?? "";  // 한 건씩 적재일 때 걸릴 시간 안내
-  $("est-resume").textContent = d.resume ? `이어 받기: 받아 둔 ${d.resume.pages.toLocaleString()}쪽(${size(d.resume.bytes)}) 다음부터 받습니다.` : "";
+  $("est-resume").textContent = d.resume ? `이어 받기: 받아 둔 ${d.resume.pages.toLocaleString()}쪽(${bytesText(d.resume.bytes)}) 다음부터 받습니다.` : "";
 }
 $("estimate").onclick = () => busy($("estimate"), async () => {
   try {
@@ -1216,8 +1215,8 @@ function showStatus(s) {
   $("stop").disabled = !s.running;
   $("run-box").classList.toggle("hidden", !s.running && s.phase === "대기");
   $("phase").textContent = s.phase + (s.wait ? ` — ${s.wait}` : "");
-  const counts = s.mode === "file" ? [`받은 ${size(s.bytes)}${s.total_bytes ? ` / ${size(s.total_bytes)}` : ""}`]
-    : [`쪽 ${s.pages.toLocaleString()}`, `요청 ${s.requests.toLocaleString()}`, `행 ${s.rows.toLocaleString()}`, size(s.bytes)];
+  const counts = s.mode === "file" ? [`받은 ${bytesText(s.bytes)}${s.total_bytes ? ` / ${bytesText(s.total_bytes)}` : ""}`]
+    : [`쪽 ${s.pages.toLocaleString()}`, `요청 ${s.requests.toLocaleString()}`, `행 ${s.rows.toLocaleString()}`, bytesText(s.bytes)];
   counts.push(`실패 ${s.failures}`, `동시 ${s.concurrency}`, `걸린 시간 ${secs(s.elapsed * 1000)}`);
   $("run-counts").textContent = counts.join(" · ");
   const l = s.load, loading = !!l && s.phase === "적재 중";  // 적재 중이면 막대는 넣은 행 / 전체 행
@@ -1245,8 +1244,10 @@ async function watch(fresh, quiet) {
   if (watching) return;
   watching = true;
   try {
-    for (let tries = fresh ? 3 : 0; ; tries--) {
+    for (let tries = fresh ? 3 : 0, fails = 0; ; tries--) {
       const s = await poll();
+      fails = s ? 0 : fails + 1;
+      if (!s && fails < 5) { await new Promise(r => setTimeout(r, 1000)); continue; }  // 상태를 한 번 못 읽었다고 감시를 끝내지 않는다(연달아 5번 못 읽으면 끝)
       if (s && !s.running && s.phase === "대기" && tries > 0) { await new Promise(r => setTimeout(r, 1000)); continue; }
       if (!s?.running) {
         if (s?.phase === "끝") { if (!quiet) notifyDone("collect", s.elapsed, s.rows, fileName(s.output)); $("run-ok").textContent = s.load ? "다 받아 적재까지 마쳤습니다" : "다 받았습니다"; }
@@ -1388,7 +1389,7 @@ function renderSchedules() {
       "알림": s.notify ? `${s.notify} · ${s.notify_on === "always" ? "늘" : "실패할 때만"}` : "없음" };
   });
   $("sc-list").innerHTML = sampleTable(names.length ? cols : [], rows, "저장한 예약이 없습니다.",
-    r => ` class="pick${r.bad ? " fail" : ""}${r.name === now ? " on" : ""}" data-name="${attr(r.name)}" title="누르면 위 칸에 불러옵니다"`);
+    r => ` class="pick${r.bad ? " fail" : ""}${r.name === now ? " on" : ""}" data-name="${esc(r.name)}" title="누르면 위 칸에 불러옵니다"`);
 }
 $("sc-list").onclick = e => {
   const tr = e.target.closest("tr[data-name]");
@@ -1478,11 +1479,9 @@ pickSchedule();
 // 업로드 기록: 저장한 파일과 적재한 것을 행·크기·범위와 함께 보이고, 고르면 지울 때 쓸 명령을 보인다(실행하지 않음).
 let uploadsData = { entries: [], statuses: {} }, upOpen = false, upPicked = "";
 const UP_KINDS = { file: "파일", table: "DB 테이블", kafka: "Kafka" };
-const bytesText = n => n == null ? "—" : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(1)} KB` : n < 1073741824 ? `${(n / 1048576).toFixed(1)} MB` : `${(n / 1073741824).toFixed(2)} GB`;
-const fileOf = p => String(p ?? "").split(/[\\/]/).pop();  // 표에는 파일 이름만(전체 경로는 행을 누르면 아래에)
 function upTarget(e) {
   const t = e.target ?? {};
-  return e.kind === "file" ? fileOf(t.path) : e.kind === "kafka" ? `${t.destination ?? ""} · ${t.topic ?? ""}` : `${fileOf(t.connection)} · ${[t.schema, t.name].filter(Boolean).join(".")}`;
+  return e.kind === "file" ? fileName(t.path) : e.kind === "kafka" ? `${t.destination ?? ""} · ${t.topic ?? ""}` : `${fileName(t.connection)} · ${[t.schema, t.name].filter(Boolean).join(".")}`;
 }
 function upRange(e) {
   const r = e.range ?? {};
@@ -1504,9 +1503,9 @@ function renderUploads() {
   const cols = ["시작", "종류", "대상", "결과 파일", "행", "크기", "범위", "결과"].map(name => ({ name }));
   const when = s => s ? s.slice(5, 16).replace("T", " ") : "—";  // 월-일 시:분
   $("up-list").innerHTML = sampleTable(list.length ? cols : [], list.map(e => ({ id: e.id, "시작": when(e.started), "종류": UP_KINDS[e.kind] ?? e.kind, "대상": upTarget(e),
-    "결과 파일": e.kind === "file" ? "—" : fileOf(e.source), "행": e.rows ?? "—", "크기": bytesText(e.bytes), "범위": upRange(e),
+    "결과 파일": e.kind === "file" ? "—" : fileName(e.source), "행": e.rows ?? "—", "크기": bytesText(e.bytes), "범위": upRange(e),
     "결과": (uploadsData.statuses[e.status] ?? e.status) + (e.resumed ? " (이어 넣음)" : "") + (e.error ? ` · ${e.error}` : "") })),
-    "맞는 기록이 없습니다.", r => ` data-up="${attr(r.id)}" style="cursor:pointer"${r.id === upPicked ? ' class="on"' : ""}`);
+    "맞는 기록이 없습니다.", r => ` data-up="${esc(r.id)}" style="cursor:pointer"${r.id === upPicked ? ' class="on"' : ""}`);
   $("up-list").querySelectorAll("tr[data-up]").forEach(tr => tr.onclick = () => { upPicked = tr.dataset.up; renderUploads(); });
   const picked = all.find(e => e.id === upPicked);
   $("up-cmd").classList.toggle("hidden", !picked?.removal.text);

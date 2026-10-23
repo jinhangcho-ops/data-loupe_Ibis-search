@@ -201,7 +201,7 @@ CONNECT_TIMEOUT = 60  # 주소로 접속할 때 기다리는 시간(초). 틀린
 
 def without_placeholder(url):
     """비밀번호 자리 `[YOUR-PASSWORD]`(Supabase 대시보드 문자열)를 뺀다. 대괄호가 있으면 urlsplit이 주소를 IPv6로 보고 실패하므로 주소를 처음 받는 곳에서 부른다."""
-    return re.sub(r":\[[^\]@/?#]*\](?=@)", "", url, count=1)
+    return re.sub(r":\[[A-Z-]+\](?=@)", "", url, count=1)  # 대문자·하이픈만(진짜 [abc] 비밀번호는 둔다)
 
 
 def drive_path(url):
@@ -239,7 +239,7 @@ def open_url(url, user="", password=""):
             return ibis.connect(url, **extra)
         except Exception as e:
             if type(e).__name__ == "ConnectionTimeout":  # psycopg: connect_timeout(drivers.PG_WAIT)을 넘김
-                raise TimeoutError("접속 대기 시간 안에 연결되지 않았습니다. 주소·포트와 네트워크를 확인하세요.") from e
+                raise TimeoutError("접속 대기 시간 안에 연결되지 않았습니다. 주소·포트와 네트워크를 확인하세요. 느린 DB는 주소 끝에 ?connect_timeout=30 을 붙여 보세요.") from e
             raise
     return within(CONNECT_TIMEOUT, connect, late, drop=close)
 
@@ -346,13 +346,10 @@ def get_table(con, name, schema=None):
     return con.table(name, database=schema) if schema else con.table(name)
 
 
-SECRET_PARAMS = {"password", "pwd", "passwd", "token", "access_token", "secret"}  # 주소 query에서 비밀 값을 담는 이름(그 밖에 *_key·*_secret·*_token·*_password)
-
-
 def secret_param(piece):
-    """주소 query의 한 조각(이름=값)이 비밀 값을 담았는지."""
+    """주소 query의 한 조각(이름=값)이 비밀 값을 담았는지: 이름에 pass·pwd·secret·token·key가 들어 있으면 비밀."""
     key = unquote(piece.partition("=")[0]).lower()
-    return key in SECRET_PARAMS or key.endswith(("_key", "_secret", "_token", "_password"))
+    return any(w in key for w in ("pass", "pwd", "secret", "token", "key"))
 
 
 def passwords(info):

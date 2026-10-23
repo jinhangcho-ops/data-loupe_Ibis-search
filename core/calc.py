@@ -170,7 +170,7 @@ def column(kind, main, opts, expr, taken=()):
         raise ValueError(f"{kind}할 숫자 컬럼을 넣으세요.")
     value = expr[col]
     if kind == "누적합":
-        win = ibis.window(group_by=groups, order_by=keys, preceding=None, following=0)
+        win = ibis.range_window(group_by=groups, order_by=keys, preceding=None, following=0)  # 같은 기준 값의 행은 같은 합(ROWS면 행마다 부분합이 달라진다)
         return new_name(expr, opts, f"{col}_누적합", taken), value.sum().over(win)
     if kind in ("이전값", "차이"):
         prev = value.lag(1).over(ibis.window(group_by=groups, order_by=keys))

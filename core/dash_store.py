@@ -18,6 +18,7 @@ from core import result
 from core import server
 from core import settings
 from core import source
+from core import use_counts
 from core import watch
 
 FILE = "dashboards.dat"
@@ -65,7 +66,6 @@ def finite(value):
 
 
 FILE_SCHEMES = ("sqlite", "duckdb")  # 주소가 파일 경로인 종류
-DRIVE = re.compile(r"[A-Za-z]:([\/]|$)")
 
 
 def file_key(scheme, netloc, path):
@@ -85,7 +85,7 @@ def source_key(recent):
     """연결 요청 값(source.recent)에서 user·password를 뺀 열쇠. 파일 연결 = 종류 + 경로(소문자), 주소 연결 = scheme + host + port + database.
     sqlite·duckdb 주소(그리고 host·port를 읽을 수 없는 주소)는 파일 경로로 보고 file_key로 만든다. 어떤 글자가 와도 예외를 내지 않는다."""
     if recent.get("kind") == "folder":
-        return "folder:" + os.path.abspath(recent.get("path", "")).replace("\\", "/").lower()
+        return "folder:" + os.path.abspath(recent.get("path", "")).replace("\\", "/").lower() + (("#" + use_counts.files_part(recent)) if use_counts.files_part(recent) else "")
     url = str(recent.get("url", "") or "")
     scheme, sep, rest = url.partition("://")
     scheme = scheme.lower()
@@ -670,19 +670,28 @@ def add_card(dash_id, name, card):
 
 
 def set_card_data(dash_id, card_id, data, same=None):
-    """저장한 대시보드의 카드 하나의 값(data)만 바꾼다(최신화 결과). 카드 크기 상한을 다시 검사한다. 카드가 없으면(그사이 지워졌으면) False.
-    same(지금 저장된 카드 → 참거짓)을 주면 쓰기 직전에 지금 카드로 물어, 거짓(그사이 정의를 고쳤다)이면 쓰지 않고 None을 돌려준다."""
+    """카드 하나의 값만 바꾼다. set_cards_data의 한 건짜리."""
+    return set_cards_data(dash_id, [(card_id, data, same)])[0]
+
+
+def set_cards_data(dash_id, items):
+    """저장한 대시보드의 카드들의 값(data)만 한 번에 바꾼다(최신화 결과). items: [(카드 id, data, same)]. 저장소는 한 번만 풀고 한 번만 쓴다(카드마다 하면 큰 저장소는 장당 몇 초).
+    카드 크기 상한을 다시 검사한다. 카드마다 결과: 카드가 없으면(그사이 지워졌으면) False, same(지금 저장된 카드 → 참거짓)이 거짓(그사이 정의를 고쳤다)이면 쓰지 않고 None, 썼으면 True."""
     with LOCK:
         dashboards = editable()
-        d = dashboards.get(dash_id)
-        card = next((c for c in (d or {}).get("cards", []) if c["id"] == card_id), None)
-        if card is None:
-            return False
-        if same is not None and not same(card):
-            return None
-        card["data"] = check_card({**card, "data": data})["data"]
-        write(dashboards)
-        return True
+        d, found = dashboards.get(dash_id), []
+        for card_id, data, same in items:
+            card = next((c for c in (d or {}).get("cards", []) if c["id"] == card_id), None)
+            if card is None:
+                found.append(False)
+            elif same is not None and not same(card):
+                found.append(None)
+            else:
+                card["data"] = check_card({**card, "data": data})["data"]
+                found.append(True)
+        if True in found:
+            write(dashboards)
+        return found
 
 
 def update_settings(dash_id, fields):
@@ -742,5 +751,5 @@ def current_source():
     """지금 연결의 {key, label}(비밀번호·계정 이름 없음). 연결이 없으면 None."""
     if server.state["opened"] is None:
         return None
-    recent = source.recent(server.state["opened"])
+    recent = {**source.recent(server.state["opened"]), **{k: v for k, v in server.state["opened"].items() if k in ("file", "files")}}
     return {"key": source_key(recent), "label": source_label(recent)}

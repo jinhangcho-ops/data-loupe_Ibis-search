@@ -1,6 +1,6 @@
 """대시보드 최신화(2단계): 연결에 성공한 뒤 주기가 지난 카드를 작업 스레드 하나가 차례로 다시 구해 저장한다. 최신화 주기·실시간 간격 검사와 연결별 실시간 간격 최소도 여기 있다.
 주기 글자는 period.parse_every가 읽는다(숫자 + 초·분·시간·일·주·달·개월·년). 최신화 주기는 MIN_REFRESH(1시간) 이상, 실시간 간격의 최소는 연결(source_key)마다 사용자가 정한다(설정 live_min.json, 없으면 제한 없음).
-카드 하나씩 화면 요청과 같은 차례(querying.using)를 잡고 dash_calc.compute로 구해 dash_store.set_card_data로 쓴다. 실패한 카드는 이전 값을 두고 이유만 남긴다."""
+카드 하나씩 화면 요청과 같은 차례(querying.using)를 잡고 dash_calc.compute로 구해 dash_store.set_cards_data로 대시보드마다 한 번에 쓴다. 실패한 카드는 이전 값을 두고 이유만 남긴다."""
 import datetime as dt
 import threading
 
@@ -89,12 +89,24 @@ def context(d, today=None):
     if span["error"]:
         return None
     end = min(e for e in (span["end"] and span["end"][:10], day) if e)
+    cut = span["start"] and span["end"] and span["start"][:10] <= day < span["end"][:10]  # 기준일이 기간 안이라 잘렸으면 직전 기간도 잘라 맞춘다
+    if cut:  # 한 달 안의 기간(2026-10)은 "이번 달"과 같게 지난달의 같은 위치까지, 그 밖에는 같은 일수만큼 바로 앞
+        span = {**span, "end": day, "to_date": "month" if span["start"][:7] == day[:7] and span["start"][8:10] == "01" else None}
     before = period.previous(span)
     prev = None if before["error"] else {"start": before["start"][:10], "end": before["end"][:10], "text": before["label"] if span.get("to_date") else f"직전 {before['days']}일"}
     return {"range": {"start": span["start"] and span["start"][:10], "end": end}, "prev": prev}
 
 
 SCAN_BLOCK = ("차단", "block")  # 설정 scan_unknown의 값: 추정할 수 없을 때 막기
+
+
+def geo_sqls(card, con):
+    """analysis·funnel 카드의 recipe에 좌표(geo) 단계가 있고 원격 연결이면, 아직 받아 두지 않은 지점·영역 표를 읽는 SQL들(prep_app.geo_gate와 같은 대상)."""
+    recipe = card["source"].get("recipe") or {}
+    if card["kind"] not in ("analysis", "funnel") or not recipe.get("geo") or not held.remote(con):
+        return []
+    from geo import prep_geo  # 좌표 단계가 있을 때만 올린다
+    return [server.expr_sql(con, expr) for key, expr in run(lambda: prep_geo.reference_exprs(prep_geo.check(recipe["geo"]), con)) if key not in held.store["items"]]
 
 
 def scan_decision(card, ctx):
@@ -107,12 +119,18 @@ def scan_decision(card, ctx):
         return ""
     try:
         sql = dash_calc.read_sql(card, ctx)
-        if sql is None:
-            return ""
         con = server.state["con"]
-        if held.remote(con) and not dash_calc.copies_to_pc(card, ctx):
+        sqls = [sql] if sql is not None else geo_sqls(card, con)  # 분석 카드는 식이 없어도 좌표 단계의 지점·영역 표를 통째로 받는다
+        if not sqls:
+            return ""
+        if sql is not None and held.remote(con) and not dash_calc.copies_to_pc(card, ctx):
             return ""  # 원격 DB에서 DB 안의 집계로 구하는 카드는 결과만 오므로 작다. 크기를 알아보려고 DB에 묻지 않는다(요금)
-        found = run(lambda: check(con, sql, server.state["opened"], "duckdb" if getattr(con, "name", "") == "polars" else None))  # 파일 연결은 duckdb 방언으로(scan 라우트와 같다)
+        dialect = "duckdb" if getattr(con, "name", "") == "polars" else None  # 파일 연결은 duckdb 방언으로(scan 라우트와 같다)
+        found = {}
+        for one in sqls:
+            found = run(lambda one=one: check(con, one, server.state["opened"], dialect))
+            if found.get("over") or found.get("blocked"):
+                break
     except Exception as e:
         found = {"over": False, "blocked": settings.load().get("scan_unknown") in SCAN_BLOCK, "text": f"처리 용량을 알 수 없어요 ({e})"}
     if found.get("over") or found.get("blocked"):
@@ -138,12 +156,6 @@ def skip_reason(d, card, key, now):
     if done is not None and (now - done).total_seconds() < every:
         return "아직 주기가 지나지 않았어요"
     return ""
-
-
-def due_cards(dashboards, key, now):
-    """다시 구할 카드 [(대시보드, 카드)]: 최신화 주기가 있는 대시보드의 카드 중 연결 열쇠가 지금 연결(key)이고
-    (구한 시각이 없거나 now − 구한 시각 ≥ 주기)인 것. now는 늘 실제 지금 시각이다(기준일과 무관)."""
-    return [(d, c) for d in dashboards if (d.get("refresh") or {}).get("every") for c in d.get("cards", []) if not skip_reason(d, c, key, now)]
 
 
 def status():
@@ -203,10 +215,26 @@ def work(plan, now):
     """작업 스레드: 카드를 차례로 구한다. 멈추기를 누르면 남은 카드는 건너뜀. 끝나면 running을 끈다.
     대시보드마다 보는 기간과 같은 테이블·조건을 묶은 읽기 계획은 그 대시보드의 첫 카드를 구할 때 세운다(실패하면 그 카드만 실패로 남는다)."""
     try:
-        contexts, plans, mine = {}, {}, {}
+        contexts, plans, mine, pending = {}, {}, {}, {}  # pending: 대시보드 id → [(slot, 카드 id, 값, 같은지 확인)]. 한 대시보드를 다 구한 뒤 저장소를 한 번만 쓴다
+
+        def flush(dash_id):
+            items = pending.pop(dash_id, [])
+            if items:
+                try:
+                    saved = dash_store.set_cards_data(dash_id, [(c, v, s) for _, c, v, s in items])
+                except Exception as e:
+                    saved = [e] * len(items)
+                for (slot, *_), got in zip(items, saved):
+                    # 구하는 동안 사용자가 조회를 고쳐 저장했으면(None) 옛 정의로 구한 값을 새 정의에 붙이지 않는다
+                    outcome = ("failed", source.mask(str(got), server.state["passwords"])) if isinstance(got, Exception) else (
+                        ("skipped", "구하는 동안 카드를 고쳤어요. 다음에 다시 구해요") if got is None else ("failed", "그사이 지운 카드예요") if not got else ("ok", ""))
+                    with LOCK:
+                        slot.update(state=outcome[0], message=outcome[1])
         for d, card in plan:
             mine.setdefault(d["id"], []).append(card)
         for d, card in plan:
+            for other in [k for k in pending if k != d["id"]]:
+                flush(other)
             slot = next(r for r in JOB["results"] if r["dashboard"] == d["id"] and r["card"] == card["id"])
             if STOP.is_set():
                 with LOCK:
@@ -227,18 +255,16 @@ def work(plan, now):
                     else:
                         data = dash_calc.compute(checked, now.isoformat(timespec="seconds"), ctx)
                         want = dash_store.def_hash(dash_calc.definition(checked))
-                        saved = dash_store.set_card_data(d["id"], card["id"], data, same=lambda c: dash_store.def_hash(dash_calc.definition(dash_store.check_card(c))) == want)
-                        if saved is None:  # 구하는 동안 사용자가 조회를 고쳐 저장했다: 옛 정의로 구한 값을 새 정의에 붙이지 않는다
-                            outcome = ("skipped", "구하는 동안 카드를 고쳤어요. 다음에 다시 구해요")
-                        elif not saved:
-                            raise ValueError("그사이 지운 카드예요")
-                        else:
-                            outcome = ("ok", "")
+                        pending.setdefault(d["id"], []).append((slot, card["id"], data, lambda c, want=want: dash_store.def_hash(dash_calc.definition(dash_store.check_card(c))) == want))
+                        outcome = None  # 저장하며 정한다(flush)
             except Exception as e:  # 이전 값은 그대로 두고 이유만 남긴다
                 outcome = ("failed", source.mask(str(e), server.state["passwords"]))
             with LOCK:
-                slot.update(state=outcome[0], message=outcome[1])
+                if outcome:
+                    slot.update(state=outcome[0], message=outcome[1])
                 JOB["done"] += 1
     finally:
+        for k in list(pending):
+            flush(k)
         with LOCK:
             JOB.update(running=False, current="")

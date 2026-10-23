@@ -68,7 +68,7 @@ def test_other_scope_metric_needs_a_copy_or_an_align_clause(folder):
     assert ok["align"] == {"kind": "period", "unit": "month"} and ok["deps"] == [mine["id"], base["id"]]
     key = mm.create({**attempt, "name": "키로 맞춤", "align": {"kind": "key", "keys": [["user", "user"]]}}, C2)
     assert key["align"]["keys"] == [["user", "user"]]
-    with pytest.raises(ValueError, match="기간 단위는 day, week, month, year 중 하나예요."):
+    with pytest.raises(ValueError, match="기간 단위는 day, week, month 중 하나예요."):
         mm.create({**attempt, "name": "나쁜 단위", "align": {"kind": "period", "unit": "hour"}}, C2)
     with pytest.raises(ValueError, match="공통 키는 \\[\\[A 컬럼, B 컬럼\\], …\\] 모양"):
         mm.create({**attempt, "name": "나쁜 키", "align": {"kind": "key", "keys": []}}, C2)

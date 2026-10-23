@@ -1,17 +1,17 @@
 /* 색: 밝게(기본, 흰 바탕에 짙은 청록)·어둡게(남색 회색 바탕에 청록). --accent-bg는 강조색의 옅은 바탕(고른 단계, 진행 중 작업). --c1~8은 차트 계열 색. */
 :root { --bg:#f5f6f6; --card:#fff; --head:#fff; --line:#dedfdf; --text:#16191b; --muted:#5f666b; --faint:#9ba1a5; --accent:#11706f; --on-accent:#fff; --accent-bg:#dcefee; --accent-line:#a8d2d0;
-        --err:#c0392b; --ok:#1c7448; --dot:#2e9e6f; color-scheme:light;
+        --err:#c0392b; --warn:#8a5300; --ok:#1c7448; --dot:#2e9e6f; color-scheme:light;
         --c1:#11706f; --c2:#e8590c; --c3:#2b8a3e; --c4:#c2255c; --c5:#1c7ed6; --c6:#7048e8; --c7:#e67700; --c8:#5c7080; }
 /* 어둡게: 남색 회색 바탕에 청록 강조(선택한 줄은 청록 왼쪽 막대와 옅은 청록 바탕). 강조색 위 글자는 어둡게. */
 :root[data-theme=dark] { --bg:#161b20; --card:#1c2127; --head:#1c2127; --line:#2c333a; --text:#e6eaee; --muted:#8f979f; --faint:#626a72; --accent:#4cc4c8; --on-accent:#0e1d1f; --accent-bg:#17363a; --accent-line:#2a5f63;
-        --err:#f2777a; --ok:#5fc48b; --dot:#4cc4c8; color-scheme:dark;
+        --err:#f2777a; --warn:#e0a030; --ok:#5fc48b; --dot:#4cc4c8; color-scheme:dark;
         --c1:#4cc4c8; --c2:#ff922b; --c3:#69db7c; --c4:#f783ac; --c5:#74c0fc; --c6:#b197fc; --c7:#ffd43b; --c8:#adb5bd; }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; font-variant-numeric:tabular-nums; }
 h2 { font-size:13px; margin:14px 0 6px; color:var(--muted); }
 h2:first-child { margin-top:0; }
 h3 { font-size:15px; margin:0 0 10px; }
-input, select, textarea, button { font:inherit; color:inherit; }
+input, select, textarea, button { font:inherit; }
 input, select, textarea { padding:6px 10px; border:1px solid var(--line); border-radius:9px; width:100%; background:var(--card); color:var(--text); }
 input:focus, select:focus, textarea:focus { outline:2px solid var(--accent-line); outline-offset:0; border-color:var(--accent); }
 /* 버튼: 기본은 강조색으로 채운 알약. .ghost는 글자만, .btn은 테두리만, .btn.k는 검게 채움. */

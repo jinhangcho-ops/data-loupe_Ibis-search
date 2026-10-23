@@ -39,6 +39,8 @@ def program():
 
 def command(name):
     """(명령, 인자 글자, 작업 폴더). 인자는 Windows 명령줄 규칙으로 따옴표를 붙인다."""
+    if "%" in name:  # 작업 스케줄러는 인자의 %이름%을 환경 변수로 바꾸므로 다른 이름으로 실행될 수 있다
+        raise ValueError("Windows 예약 작업으로 등록하려면 구성 이름에 %를 쓰지 마세요.")
     exe, before, folder = program()
     return exe, subprocess.list2cmdline([*before, "--run", name]), folder
 

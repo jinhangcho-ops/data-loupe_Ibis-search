@@ -26,6 +26,8 @@ CALL_TIMEOUT = 20  # 명령 하나의 답을 기다리는 기본 시간(초)
 NAME = "__ibis" + secrets.token_hex(6)  # 페이지에 두는 고르기 상태의 이름. 실행마다 바꿔 사이트의 이름과 겹치지 않게 한다.
 MAX_SELECTOR = 2000
 MAX_TEXT = 200
+MAX_URL = 2000  # 상태에 싣는 주소의 길이. 페이지가 주소(#뒤)를 아주 길게 만들어도 상태 확인마다 그만큼 오가지 않게 한다.
+MAX_REPLY = 64 * 1024 * 1024  # 자식이 한 번에 돌려주는 답의 크기(바이트). 넘으면 오류로 바꾼다(메인의 메모리를 지킨다).
 ATTR = re.compile(r"href|src|title|alt|value|data-[a-z0-9_.:-]{1,50}")  # 고른 요소에서 보여 줄 속성
 BUSY = "수집이 수집용 창을 쓰는 중입니다. 끝나거나 멈춘 뒤에 하세요."
 CLOSED = "수집용 창이 열려 있지 않습니다. 먼저 [브라우저 열기]를 누르세요."
@@ -91,7 +93,12 @@ def start_child(url, show):
         proc.kill()
         raise ConnectionError()
     conn = got[0]
-    conn.send_bytes(json.dumps({"url": url, "show": bool(show)}).encode())
+    try:
+        conn.send_bytes(json.dumps({"url": url, "show": bool(show)}).encode())
+    except OSError:  # 접속은 했는데 첫 명령을 못 보냈다. 자식을 남기지 않는다.
+        proc.kill()
+        conn.close()
+        raise ConnectionError() from None
     child.update(proc=proc, conn=conn, gone=False, replies={}, waiting=set(), picking="", items="", url=url, title="")
     threading.Thread(target=listen, args=(conn,), daemon=True).start()
 
@@ -283,7 +290,7 @@ def state():
     except (Gone, TimeoutError, ValueError):
         info = None
     if isinstance(info, dict):
-        child["url"] = info.get("url") if isinstance(info.get("url"), str) else ""
+        child["url"] = info.get("url")[:MAX_URL] if isinstance(info.get("url"), str) else ""
         child["title"] = info.get("title")[:300] if isinstance(info.get("title"), str) else ""
         for raw in info.get("picks") if isinstance(info.get("picks"), list) else []:
             pick = clean_pick(raw)
@@ -317,7 +324,7 @@ def pick(target, items=""):
 def forget():
     """수집용 창의 로그인 정보(FOLDER)를 지운다. 창이 떠 있거나 폴더·그 위 폴더가 링크·정션이면 거부한다."""
     with lock:
-        if alive():
+        if alive() or (child["proc"] is not None and child["proc"].poll() is None):  # 연결만 끊기고 프로세스가 도는 창도 폴더를 쥐고 있다.
             raise ValueError("수집용 창을 닫은 뒤에 지우세요.")
         for folder in (FOLDER.parent, FOLDER):
             if folder.is_symlink() or os.path.isjunction(folder):
@@ -351,7 +358,7 @@ def run_child():
     def reply(message):
         with lock_send:
             try:
-                conn.send_bytes(json.dumps(message).encode())
+                conn.send_bytes(encode(message))
             except (OSError, TypeError, ValueError):
                 pass
 
@@ -375,6 +382,14 @@ def run_child():
 
     webview.start(serve, private_mode=False, storage_path=str(FOLDER))
     conn.close()
+
+
+def encode(message):
+    """답을 JSON 바이트로. MAX_REPLY를 넘으면 오류 답으로 바꾼다."""
+    data = json.dumps(message).encode()
+    if len(data) > MAX_REPLY:
+        data = json.dumps({"id": message.get("id"), "error": "페이지가 돌려준 값이 너무 큽니다. 항목 선택자를 좁히세요."}).encode()
+    return data
 
 
 def command(window, message):

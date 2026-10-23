@@ -271,9 +271,8 @@ function SentenceView(host, ctx) {
   }
   function showResult(out, d) {
     const colors = [1, 2, 3, 4, 5, 6, 7, 8].map(i => getComputedStyle(document.documentElement).getPropertyValue("--c" + i).trim()), cfg = sentChart(d, colors);
-    const table = el("div", { className: "table-wrap" }), tableHtml = !d.rows.length ? '<span class="empty">결과가 없습니다.</span>'
-      : `<table><thead><tr>${d.columns.map(c => `<th class="${d.rows.some(r => typeof r[c] === "number") ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>${d.rows.map(r => "<tr>" + d.columns.map(c => cell(r[c])).join("") + "</tr>").join("")}</tbody></table>`;
-    table.innerHTML = tableHtml;
+    const table = el("div", { className: "table-wrap" });
+    table.innerHTML = resultTable(d);
     const box = el("div", { className: "schart hidden" }, el("canvas"));
     let chartObj = null;
     const switchTo = view => {

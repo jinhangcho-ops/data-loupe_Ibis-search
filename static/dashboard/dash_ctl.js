@@ -5,7 +5,7 @@ class DashCtl {
   // board: DashBoard. changed(fields): 칸을 바꿔 확정할 때 {as_of, period, refresh: {every}, live: {every}}를 받는다(저장은 쓰는 화면이 한다).
   // liveRun(): 실시간 한 번(카드 값을 다시 구해 그리기), visible(): 지금 이 대시보드가 보이는지.
   constructor(root, { board, changed, liveRun, visible = () => true }) {
-    Object.assign(this, { board, changed, liveRun, visible, today: "", state: { as_of: "", period: "", refresh: "", live: "" }, liveOn: false, timer: null, seconds: 0, times: [] });
+    Object.assign(this, { board, changed, liveRun, visible, today: "", state: { as_of: "", period: "", refresh: "", live: "" }, liveOn: false, gen: 0, timer: null, seconds: 0, times: [] });
     const field = (label, input, note) => el("div", { className: "dc-field" }, el("label", { className: "hint", textContent: label }), input, note);
     this.asof = el("input", { placeholder: "오늘", title: "기준일: 2026-10-01, 2026.10.01, 20261001, 어제, 지난달 말. 비우면 오늘" });
     this.pick = el("input", { type: "date", className: "dc-pick", tabIndex: -1 });
@@ -113,10 +113,11 @@ class DashCtl {
     this.liveOn = true;
     this.times = [];
     this.liveBtn.textContent = "멈추기";
-    this.tick();
+    this.tick(++this.gen);
   }
-  async tick() {
-    if (!this.liveOn) return;
+  // gen: 시작할 때마다 새 번호. 멈췄다 바로 다시 시작해도 앞 사슬(아직 조회 중이던 tick)은 번호가 달라 끊긴다.
+  async tick(gen) {
+    if (!this.liveOn || gen !== this.gen) return;
     const interval = this.seconds * 1000;
     let took = 0;
     if (this.visible()) {
@@ -126,10 +127,11 @@ class DashCtl {
       this.times.push(took);
       if (took > interval) this.note(this.liveNote, `조회가 간격보다 오래 걸려요(평균 ${(this.times.reduce((a, b) => a + b, 0) / this.times.length / 1000).toFixed(1)}초)`, true);
     }
-    if (this.liveOn) this.timer = setTimeout(() => this.tick(), Math.max(interval, took));
+    if (this.liveOn && gen === this.gen) this.timer = setTimeout(() => this.tick(gen), Math.max(interval, took));
   }
   stopLive(text) {
     this.liveOn = false;
+    this.gen++;
     clearTimeout(this.timer);
     this.liveBtn.textContent = "시작";
     if (text) this.note(this.liveNote, text);

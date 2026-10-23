@@ -541,7 +541,7 @@ def numbers_section():
         ("실수로(.5, 1e3은 숫자, inf는 아님)", "decs", to("float"), "float64", [1.5, 2.0, None, 0.5, 1000.0, None]),
         ("정수로(소수·지수 모양은 빈 값)", "decs", to("int"), "int64", [None, 2, None, None, None, None]),
         # 빈 값과 2^53보다 큰 정수가 한 컬럼에 있으면 SQLite 연결이 결과를 읽지 못해, 빈 값을 0으로 채워서 본다.
-        ("정수로(int64 범위 밖은 빈 값)", "edge", {**to("int"), "fill": {"how": "value", "value": 0}}, "int64", [TOP, 0, -TOP, 12, 0, 0]),
+        ("정수로(int64 범위 밖은 빈 값)", "edge", {**to("int"), "fill": {"how": "value", "value": 0}}, "int64", [str(v) for v in (TOP, 0, -TOP, 12, 0, 0)]),  # ±2^53 넘는 정수가 든 컬럼은 서버가 값을 모두 글자로 보낸다
         ("실수로(큰 수)", "edge", to("float"), "float64", [float(TOP), float(TOP), float(-TOP), 12.0, 1.5, None]),
         ("실수 컬럼을 정수로(범위 밖은 빈 값)", "rate", to("int"), "int64", [1, 2, None, -3, None, 4]),
         ("정수 컬럼을 실수로", "id", to("float"), "float64", [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),

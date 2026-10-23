@@ -735,20 +735,21 @@ function runSearch(offset, fresh = false) {
       $("err-summary").textContent = "";
       showBig(d, offset);  // 받아 두지 못한 까닭(note)은 err-search에
       renderTables();
-    } catch (e) { $("err-search").textContent = e.message; }
+      return true;
+    } catch (e) { $("err-search").textContent = e.message; return false; }
   });
 }
 $("search").onclick = () => runSearch(0, true);
 $("prev").onclick = () => runSearch(Math.max(0, skip - $("limit").value));
 $("next").onclick = () => runSearch(skip + +$("limit").value);
 // 결과 표의 머리글을 누르면 그 컬럼 하나로 정렬해 다시 검색한다. 이미 그 컬럼의 오름차순이면 내림차순으로 바꾼다.
-$("rows").onclick = e => {
+$("rows").onclick = async e => {
   const th = e.target.closest("th");
   if (!th || $("search").disabled) return;
-  const col = th.firstChild.textContent.replace(/ [↑↓]$/, "");
+  const col = th.firstChild.textContent.replace(/ [↑↓]$/, ""), before = S.sorts;
   S.sorts = [S.sorts.length === 1 && S.sorts[0] === col + " asc" ? col + " desc" : col + " asc"];
   renderList("sorts");
-  runSearch(0);
+  if (!await runSearch(0)) { S.sorts = before; renderList("sorts"); }  // 서버가 거부하면(잘못된 정렬 등) 이전 정렬로 되돌려 칩이 박히지 않게
 };
 $("sql-show").onclick = () => busy($("sql-show"), async () => {
   if (!$("sql").classList.contains("hidden")) { $("sql").classList.add("hidden"); return; }
@@ -776,8 +777,12 @@ $("plan-show").onclick = () => busy($("plan-show"), async () => {
   } catch (e) { $("err-search").textContent = e.message; }
 });
 // 결과 안에서 찾기: 지금 보이는 쪽의 행만 거른다(서버에 다시 묻지 않는다). 맞는 글자는 강조한다.
+let finding = false;  // 이전 표에 찾기 강조·거름이 남아 있나(빈 찾기에 1만 행을 다시 쓰지 않으려고)
 function applyFind() {
-  const want = $("row-find").value.trim().toLowerCase(), rows = [...$("rows").querySelectorAll("tbody tr")];
+  const want = $("row-find").value.trim().toLowerCase();
+  if (!want && !finding) return;
+  finding = !!want;
+  const rows = [...$("rows").querySelectorAll("tbody tr")];
   let shown = 0;
   rows.forEach(tr => {
     const hit = !want || tr.textContent.toLowerCase().includes(want);
@@ -791,7 +796,8 @@ function applyFind() {
   });
   $("find-count").textContent = want && rows.length ? `${shown} / ${rows.length}행` : "";
 }
-$("row-find").oninput = applyFind;
+let findTimer;
+$("row-find").oninput = () => { clearTimeout(findTimer); findTimer = setTimeout(applyFind, 150); };  // 한 글자마다 1만 행을 다시 쓰지 않게
 // 저장한 검색: 테이블과 이어붙이기·조인·기간·조건·정렬·표시 컬럼·행 수를 이름으로 저장해 두고 불러온다. 연결 정보는 담지 않아 연결을 바꿔도 남는다.
 // 목록은 많이 불러온 순(d.order)이다.
 let searches = {};
@@ -957,7 +963,7 @@ $("cf-find").onclick = async () => {
 initFuncs();
 // 계산 단계: [예시 넣기]를 고르면 입력칸에 예시를 넣는다. 형식 전체는 안내에 마우스를 올리면 보인다.
 $("calc-guide").title = SERVER.calc.guide;
-$("calc-example").innerHTML = '<option value="">예시 넣기</option>' + SERVER.calc.examples.map(e => `<option>${esc(e)}</option>`).join("");
+$("calc-example").innerHTML = '<option value="">예시 넣기</option>' + SERVER.calc.examples.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join("");
 $("calc-example").onchange = () => {
   const input = $("calcs").querySelector("input");
   if ($("calc-example").value && input) { input.value = $("calc-example").value; input.focus(); }
@@ -1240,13 +1246,20 @@ async function loadBody(b) {
   showSummaries();
 }
 // 임시 저장(초안): 조건이 바뀌고 2초 조용하면 서버에 쓴다(draft.js). 흐름 보기는 아직 단계 카드로 모으기 전이라 그래프를, 문장 보기는 작성 중인 문장을 함께 담는다. 결과를 저장하면 지운다.
+// 테이블만 골랐을 때는 저장할 초안이 아니다: 테이블을 연 직후(또는 초안을 복원한 직후)의 body와 달라졌을 때만 초안이다.
+let draftBase = { base: "", key: "" };
+const draftChanged = () => {
+  if (draftBase.base !== S.base) draftBase = { base: S.base, key: bodyKey() };
+  return view !== "cards" || bodyKey() !== draftBase.key;  // 흐름·문장 보기의 편집은 body에 나타나지 않아 보기를 바꿨으면 초안으로 본다
+};
 const searchDraft = Draft("search",
-  () => S.base ? { view, body: bodyNow(), ...(view === "flow" && flowView ? { graph: flowView.get() } : {}), ...(sentView?.items().length ? { sentence: sentView.draft() } : {}) } : null,
+  () => S.base && draftChanged() ? { view, body: bodyNow(), ...(view === "flow" && flowView ? { graph: flowView.get() } : {}), ...(sentView?.items().length ? { sentence: sentView.draft() } : {}) } : null,
   async d => {
     await loadBody(d.body);
     if (d.sentence) { await need(...SENTENCE_JS); sentenceView().setDraft(d.sentence); }
     if (d.view !== "cards" && !await setView(d.view)) throw new Error($("err-search").textContent || "그 보기로 바꾸지 못했어요.");
     if (d.graph && view === "flow") await flowView.set(d.graph, { layout: false });
+    draftBase = { base: S.base, key: bodyKey() };
   });
 const afterTables = () => searchDraft.ask();
 // 보기 글자만 바꾼다(변환 없이)
@@ -1314,9 +1327,6 @@ $("dash-add").onclick = () => busy($("dash-add"), async () => {
 });
 
 // ---------- SQL 탭 ----------
-const sqlTable = ({ columns, rows }) => !rows.length ? '<span class="empty">결과가 없습니다.</span>'
-  : `<table><thead><tr>${columns.map(c => `<th class="${rows.some(r => typeof r[c] === "number") ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
-    rows.map(r => "<tr>" + columns.map(c => cell(r[c])).join("") + "</tr>").join("") + "</tbody></table>";
 $("sql-rows").value = 1000;
 // offset행을 건너뛰고 쪽당 행만큼 실행 결과를 본다. [실행]은 0에서 새로(fresh), [이전]·[다음]은 쪽당 행만큼 옮겨서 부른다.
 // 주소로 접속한 DB는 결과를 이 PC에 받아 두므로 쪽을 넘겨도 DB에 다시 묻지 않는다(그때는 전체 행 수도 안다).
@@ -1334,7 +1344,7 @@ async function runSql(offset = 0, fresh = true) {
     $("sql-page").textContent = d.count === null ? `${Math.floor(offset / d.limit) + 1}쪽` : `${Math.floor(offset / d.limit) + 1} / ${Math.max(1, Math.ceil(d.count / d.limit)).toLocaleString()}쪽`;
     $("sql-prev").disabled = !offset;
     $("sql-next").disabled = !d.more;
-    $("sql-result").innerHTML = sqlTable(d.rows);
+    $("sql-result").innerHTML = resultTable(d.rows);
     say("err-sql", d.server ? "" : d.note || "");
     if (!offset) showVirtual();  // 쓴 횟수가 바뀌었다
   } catch (e) { say("err-sql", e.message); }

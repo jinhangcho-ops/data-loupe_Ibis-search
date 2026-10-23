@@ -236,3 +236,16 @@ def test_big_results_page_from_server_table(remote, monkeypatch):
     assert len(fake.queries) == 2  # [검색 실행]은 다시 조회
     sql = remote("/api/sql/run", sql="SELECT id FROM orders ORDER BY id DESC", rows=4, offset=4, fresh=True)
     assert len(fake.queries) == 3 and fake.reads[-1][1:] == (4, 5) and sql["count"] == ROWS and sql["more"]
+
+
+def test_pager_connection_goes_straight_to_server_page(remote, monkeypatch):
+    """서버에 결과를 두는 DB(BigQuery)는 큰 결과가 아니어도 처음부터 server_page 한 번: COUNT도, 받아 두기도 없다."""
+    from core import held
+    from core import result
+    fake = FakeServerResults([{"id": i} for i in range(ROWS)])
+    monkeypatch.setattr(held, "pager", lambda con: fake)
+    counted = []
+    monkeypatch.setattr(result, "get_count", lambda *a, **k: counted.append(a) or 0)
+    monkeypatch.setattr(held, "fetch", lambda *a, **k: pytest.fail("PC로 받아 두면 안 된다"))
+    got = remote("/api/query", base="orders", limit=5, offset=0, fresh=True, sorts=["id"], columns=["id"])
+    assert len(fake.queries) == 1 and not counted and got["count"] == ROWS and len(got["rows"]["rows"]) == 5

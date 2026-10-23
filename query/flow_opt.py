@@ -144,10 +144,13 @@ def result_of(graph, target, get_table):
 def bytes_of(graph, target, get_table, con, opened=None):
     """대상 식이 읽는 양의 어림 {bytes(없으면 None), exact, how}. 메타데이터만 보고(scan_size.estimate) 데이터를 읽지 않는다."""
     from lazy import ibis
-    expr = flow.to_expr(graph, target, get_table)
-    dialect = "duckdb" if con.name == "polars" else None
-    sql = str(ibis.to_sql(expr, dialect=dialect) if dialect else ibis.to_sql(expr))
-    return scan_size.safe(lambda: scan_size.estimate(con, sql, opened, dialect))
+
+    def estimate():  # 식을 만들다 실패해도(한 규칙의 흐름이 이상해도) 어림만 '알 수 없음'으로 두고 제안 전체는 이어 간다
+        expr = flow.to_expr(graph, target, get_table)
+        dialect = "duckdb" if con.name == "polars" else None
+        sql = str(ibis.to_sql(expr, dialect=dialect) if dialect else ibis.to_sql(expr))
+        return scan_size.estimate(con, sql, opened, dialect)
+    return scan_size.safe(estimate)
 
 
 def bytes_text(before, after):
@@ -395,9 +398,10 @@ def fanout_warnings(graph, ctx):
 
 # ---------- 제안 ----------
 
-def propose(graph, get_table, con, schemas=None, target=None, remote=False, scan_ok=False, only=None, opened=None, source_key=None):
+def propose(graph, get_table, con, schemas=None, target=None, remote=False, scan_ok=False, only=None, opened=None, source_key=None, warn=True):
     """최적화를 제안한다(흐름은 바꾸지 않고 새 흐름을 돌려줄 뿐). only = 규칙 번호 목록(없으면 1~4 전부).
     {ok, reason?, target, rules: [{no, id, title, status(kept·dropped·skipped·unverified), items, refused, equal, bytes}], warnings, graph, changed, bytes, verified, remote, note}.
+    warn=False면 부풂 경고를 구하지 않는다(적용할 때는 이미 본 경고라 원격 조회를 또 보내지 않는다).
     status: kept(적용하고 결과가 같음을 확인), dropped(결과가 달라서 뺌), unverified(원격이라 비교 안 함), skipped(할 것 없음 또는 못 함)."""
     graph = flow.check_shape(graph)
     target = target_of(graph, target)
@@ -433,13 +437,15 @@ def propose(graph, get_table, con, schemas=None, target=None, remote=False, scan
                 entry["bytes"] = bytes_of(current, target, get_table, con, opened)
         rules.append(entry)
     after = bytes_of(current, target, get_table, con, opened)
-    return {"ok": True, "target": target, "rules": rules, "warnings": fanout_warnings(graph, ctx), "graph": current, "changed": current is not graph,
-            "bytes": {"before": before, "after": after, "text": bytes_text(before, after)}, "verified": verify, "remote": remote, "note": "" if verify else REMOTE_NOTE}
+    joins = sum(1 for n in graph["nodes"] if n["kind"] == "join")
+    note = "" if verify else f"{REMOTE_NOTE} 확인하면 DB에 최대 {1 + len(RULES) + 2 * joins}번 조회해요."  # 원래 결과 1 + 규칙마다 결과 비교 + 조인마다 양쪽 키 고유 확인
+    return {"ok": True, "target": target, "rules": rules, "warnings": fanout_warnings(graph, ctx) if warn else [], "graph": current, "changed": current is not graph,
+            "bytes": {"before": before, "after": after, "text": bytes_text(before, after)}, "verified": verify, "remote": remote, "note": note}
 
 
 def apply(graph, numbers, get_table, con, **kwargs):
     """고른 규칙 번호들만 다시 제안해(결과 같음을 다시 확인) 확인된 것만 적용한 새 흐름을 돌려준다. {graph, applied, dropped}. 빠진 규칙은 dropped에 이유."""
-    found = propose(graph, get_table, con, only=list(numbers), **kwargs)
+    found = propose(graph, get_table, con, only=list(numbers), warn=False, **kwargs)
     if not found["ok"]:
         raise ValueError(found["reason"])
     applied = [r["no"] for r in found["rules"] if r["status"] in ("kept", "unverified")]

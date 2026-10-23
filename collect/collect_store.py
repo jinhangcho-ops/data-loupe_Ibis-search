@@ -1,6 +1,7 @@
 """수집 작업의 상태(status·current·update)와 받은 것 저장(쪽 파일·진행 기록), 결과 파일 만들기(finish_api).
 API 방식(collect_job)과 웹페이지 방식(collect_web)이 같이 쓴다. 지우는 것은 collect_job의 이름 규칙(.part)의 것뿐이다."""
 import codecs
+import datetime as dt
 import email.utils
 import json
 import os
@@ -102,6 +103,11 @@ def balancer_for(config, halt, concurrency):
                         take=(lambda: collect_limits.take(name, halt)) if group else (lambda: None), heard=heard, secrets=current["hide"])
     current["balancer"] = balancer
     return balancer
+
+
+def began(record):
+    """이 수집이 시작된 시각(진행 기록에 처음 한 번 저장). {today}·{now}는 쪽마다 새로 재지 않고 이 시각으로 고정한다(이어 받아도 같다)."""
+    return dt.datetime.fromisoformat(record.setdefault("began", dt.datetime.now().isoformat(timespec="seconds")))
 
 
 def save_page(found, record, i, rows, size, **more):

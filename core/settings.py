@@ -1,4 +1,5 @@
 """사용자 설정(화면 모드, 차트 비율, 차트 저장 모드, 따옴표 해석, 조건 입력 방식, 전체 행 수 세기, 끌어서 조절한 크기, 직전 실행의 행당 시간)을 사용자 폴더의 파일에 저장해 다음 실행 때도 쓴다."""
+import contextlib
 import json
 import os
 import re
@@ -79,10 +80,21 @@ def backup_of(path):
 def backup(path):
     """덮어쓰기 전에 원래 파일을 path.bak으로 남긴다(한 세대). 원래 파일이 깨졌으면 남기지 않아, 그 전의 성한 .bak을 지킨다."""
     if read_file(path) is not None:
-        shutil.copyfile(path, backup_of(path))
+        retrying(lambda: shutil.copyfile(path, backup_of(path)))
 
 
 REPLACE_TRIES = 10  # 다른 프로세스가 바꿀 파일을 읽는 중이면 바꿔치기가 거부될 수 있어(Windows) 잠깐씩 기다리며 다시 한다.
+
+
+def retrying(action):
+    """action()을 하다 PermissionError가 나면 잠깐씩 기다리며 REPLACE_TRIES번까지 다시 한다(Windows에서 다른 프로세스가 그 파일을 열어 둘 때)."""
+    for tries in range(REPLACE_TRIES):
+        try:
+            return action()
+        except PermissionError:
+            if tries == REPLACE_TRIES - 1:
+                raise
+            time.sleep(0.02)
 
 
 def write_atomic(path, data):
@@ -90,14 +102,7 @@ def write_atomic(path, data):
     temp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.new")
     try:
         temp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        for tries in range(REPLACE_TRIES):
-            try:
-                os.replace(temp, path)
-                return
-            except PermissionError:
-                if tries == REPLACE_TRIES - 1:
-                    raise
-                time.sleep(0.02)
+        retrying(lambda: os.replace(temp, path))
     finally:
         temp.unlink(missing_ok=True)
 
@@ -108,6 +113,17 @@ def write(name, data):
     path = PATH.parent / name
     backup(path)
     write_atomic(path, data)
+
+
+LOCK = threading.RLock()  # 같은 프로세스의 스레드끼리: 읽고-고치고-쓰기를 한 번에 하나씩
+
+
+@contextlib.contextmanager
+def updating(name):
+    """name 파일을 읽고-고치고-쓰는 동안 다른 스레드와 다른 프로세스가 같은 일을 하지 못하게 묶는다(안 그러면 동시에 저장한 키가 사라진다). filelock은 settings를 import하므로 쓸 때 불러온다."""
+    from core import filelock
+    with LOCK, filelock.guarded("settings-" + name):
+        yield
 
 
 def load():
@@ -122,7 +138,8 @@ def save(changes):
     for name, value in changes.items():
         if not valid(name, value) and not ((name in SIZES or name in FLOATS) and value == 0 and type(value) in (int, float)):
             raise ValueError(f"'{name}' 설정에 쓸 수 없는 값입니다: {value}")
-    write(PATH.name, {name: value for name, value in {**load(), **changes}.items() if value != 0})
+    with updating(PATH.name):
+        write(PATH.name, {name: value for name, value in {**load(), **changes}.items() if value != 0})
 
 
 MAX_SAVED = 100  # 이름을 붙여 저장해 둘 수 있는 검색(구성) 수
@@ -148,19 +165,20 @@ def save_named(file, what, limit, name, item, count=MAX_SAVED):
     name = name.strip() if isinstance(name, str) else ""
     if not 1 <= len(name) <= 50:
         raise ValueError(f"{what} 이름은 1자 이상 50자 이하로 입력하세요.")
-    found = named(file)
-    if item is None:
-        found.pop(name, None)
-    elif not isinstance(item, dict):
-        raise ValueError(f"저장할 {josa(what, '이', '가')} 올바르지 않습니다.")
-    elif len(json.dumps(item, ensure_ascii=False)) > limit:
-        raise ValueError(f"저장할 {josa(what, '이', '가')} 너무 큽니다.")
-    elif name not in found and len(found) >= count:
-        raise ValueError(f"저장한 {josa(what, '은', '는')} {count}개까지입니다. 쓰지 않는 것을 지우세요.")
-    else:
-        found[name] = item
-    write(file, found)
-    return found
+    with updating(file):
+        found = named(file)
+        if item is None:
+            found.pop(name, None)
+        elif not isinstance(item, dict):
+            raise ValueError(f"저장할 {josa(what, '이', '가')} 올바르지 않습니다.")
+        elif len(json.dumps(item, ensure_ascii=False)) > limit:
+            raise ValueError(f"저장할 {josa(what, '이', '가')} 너무 큽니다.")
+        elif name not in found and len(found) >= count:
+            raise ValueError(f"저장한 {josa(what, '은', '는')} {count}개까지입니다. 쓰지 않는 것을 지우세요.")
+        else:
+            found[name] = item
+        write(file, found)
+        return found
 
 
 def searches():
@@ -199,10 +217,10 @@ def read_env(path):
         if not eq or not ENV_NAME.fullmatch(name):
             raise ValueError(f"env 파일 {number}번째 줄을 읽을 수 없습니다(이름=값 모양이어야 합니다).")
         if value[:1] in ("'", '"'):
-            end = value.find(value[0], 1)
-            while value[0] == '"' and end > 0 and value[end - 1] == "\\":
-                end = value.find('"', end + 1)
-            if end < 0:
+            end = 1
+            while end < len(value) and value[end] != value[0]:
+                end += 2 if value[0] == '"' and value[end] == "\\" else 1  # 큰따옴표 안의 \" 와 \ 는 두 글자가 한 글자
+            if end >= len(value):
                 raise ValueError(f"env 파일 {number}번째 줄의 따옴표가 닫히지 않았습니다.")
             inner = value[1:end]
             value = re.sub(r"\\([nt\"\\])", lambda m: {"n": "\n", "t": "\t"}.get(m[1], m[1]), inner) if value[0] == '"' else inner

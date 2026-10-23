@@ -98,13 +98,6 @@ const cardTarget = card => card.data?.target?.value ?? card.view?.target?.value 
 const cardFormat = card => card.view?.format || card.data?.values?.format || "number";
 
 // ---------- SVG 만들기 ----------
-const SVG_NS = "http://www.w3.org/2000/svg";
-function svg(tag, attrs = {}, ...kids) {
-  const e = document.createElementNS(SVG_NS, tag);
-  for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v);
-  e.append(...kids);
-  return e;
-}
 const stext = (x, y, text, attrs = {}) => svg("text", { x, y, ...attrs }, text);
 const ICON_PATHS = { chart: "M3 20h18M6 16v-5M11 16V7M16 16v-8", up: "M4 16l6-6 4 4 6-8M15 6h5v5", user: "M12 12a4 4 0 100-8 4 4 0 000 8zM5 20c0-4 3-6 7-6s7 2 7 6", cart: "M3 4h3l2 11h10l2-8H7M10 20h.01M17 20h.01", coin: "M12 3a9 9 0 100 18 9 9 0 000-18zM9 12h6M12 8v8", clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2" };
 const iconSvg = name => svg("svg", { viewBox: "0 0 24 24", width: 22, height: 22, fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" }, svg("path", { d: ICON_PATHS[name] ?? ICON_PATHS.chart }));
@@ -168,10 +161,10 @@ function paintGauge(card, colors) {
 
 // summary: 요약 문장(서버의 summary_text) + 목표 대비 막대
 function paintSummary(card, colors) {
-  const d = card.data ?? {}, v = cardValue(card), target = cardTarget(card), fmt = cardFormat(card), ratio = target ? v / target : null;
+  const d = card.data ?? {}, v = cardValue(card), target = cardTarget(card), fmt = cardFormat(card), ratio = target && v != null ? v / target : null;  // 값이 없으면 막대·"목표 대비 0%"를 그리지 않는다
   return box("summary", el("div", { className: "sum-text", textContent: d.text || "—" }), d.target?.error ? el("div", { className: "err", textContent: d.target.error }) : "",
     ratio != null ? el("div", { className: "sum-bar", title: `${showValue(v, fmt)} / ${showValue(target, fmt)}` }, el("i", { style: `width:${clamp(ratio, 0, 1) * 100}%;background:${ratio > 1 ? darken(colors.series[0]) : colors.series[0]}` }),
-      el("span", { className: "hint", textContent: `목표 대비 ${+(ratio * 100).toFixed(1)}%` })) : "");
+      el("span", { className: "hint", textContent: `목표 대비 ${+(ratio * 100).toFixed(1)}%` })) : target && v == null ? el("span", { className: "hint", textContent: "목표 대비 —" }) : "");
 }
 
 // stripes: 칸 수 N, 채운 칸 = round(비율 × N), 목표 칸 강조. 비율 = 값 / 가득 찬 값(view.full, 없으면 목표, 비율 값이면 1)
@@ -202,7 +195,7 @@ function paintTargetTrend(card, colors) {
   if (target != null) belowPolygons(xs, vs, target, yOf).forEach(p => kids.push(svg("polygon", { points: p.map(q => q.map(n => n.toFixed(1)).join(",")).join(" "), fill: colors.series[1], opacity: 0.3 })));
   kids.push(svg("polyline", { points: vs.map((v, i) => v == null ? null : `${xs[i].toFixed(1)},${yOf(v).toFixed(1)}`).filter(Boolean).join(" "), fill: "none", stroke: color, "stroke-width": 2 }));
   if (target != null) kids.push(svg("line", { x1: pad, x2: W - pad, y1: yOf(target), y2: yOf(target), stroke: colors.ink, "stroke-dasharray": "6 4" }));
-  const now = cardValue(card), says = target == null ? (card.data?.target?.error || "목표가 없어요") : `목표보다 ${showGap(now - target, fmt)} ${now < target ? "낮아요" : now > target ? "높아요" : "같아요"} · 기간 중 ${crossDown(vs, target)}번 내려감`;
+  const now = cardValue(card), says = target == null ? (card.data?.target?.error || "목표가 없어요") : now == null ? "—" : `목표보다 ${showGap(now - target, fmt)} ${now < target ? "낮아요" : now > target ? "높아요" : "같아요"} · 기간 중 ${crossDown(vs, target)}번 내려감`;
   return frame(W, H, ...kids, stext(pad, H - 6, says, { "font-size": 11, fill: colors.text }));
 }
 
@@ -343,19 +336,25 @@ function paintMap(card, colors, board) {
     }).catch(e => { card.imageTried = false; back.replaceChildren(stext(W / 2, H / 2, e.message, { "text-anchor": "middle", "font-size": 11, fill: levelColor("bad") })); });
   }
   const links = [...(view.links ?? []), ...entities.flatMap(e => (e.impact ?? []).map(t => [e.name, t]))];
+  // 점 요소는 한 번만 만들고 끄는 동안에는 위치만 옮긴다(다시 만들면 포인터 캡처가 풀려 끌기가 끊긴다)
+  const spots = entities.map(e => {
+    const circle = svg("circle", { r: e.level === "ok" ? 8 : 10, fill: levelColor(e.level), stroke: colors.card, "stroke-width": 2 }, svg("title", {}, `${e.name} · ${LEVEL_NAMES[e.level]}${e.since_text ? " · " + e.since_text : ""}${e.reasons.length ? " · " + e.reasons.join(", ") : ""}`));
+    const name = stext(0, 0, e.name, { "text-anchor": "middle", "font-size": 10, fill: colors.ink }), g = svg("g", { style: "cursor:grab" }, circle, name);
+    g.onpointerdown = ev => {
+      try { g.setPointerCapture(ev.pointerId); } catch (err) { /* 포인터를 못 잡아도 끌기는 된다 */ }
+      const move = m => { const p = svgPoint(root, m.clientX, m.clientY); pos[e.name] = [clamp(p.x / W, 0, 1), clamp(p.y / H, 0, 1)]; draw(); };
+      const up = () => { g.removeEventListener("pointermove", move); g.removeEventListener("pointerup", up); view.positions = Object.fromEntries(Object.entries(pos).map(([k, p]) => [k, p.map(n => +n.toFixed(3))])); board?.changed?.(); };
+      g.addEventListener("pointermove", move); g.addEventListener("pointerup", up);
+    };
+    return { e, circle, name, g };
+  });
+  dots.replaceChildren(...spots.map(x => x.g));
   const draw = () => {
     lines.replaceChildren(...links.filter(([a, b]) => pos[a] && pos[b]).map(([a, b]) => svg("line", { x1: pos[a][0] * W, y1: pos[a][1] * H, x2: pos[b][0] * W, y2: pos[b][1] * H, stroke: colors.text, "stroke-width": 1.2, opacity: 0.6 })));
-    dots.replaceChildren(...entities.map(e => {
-      const [x, y] = [pos[e.name][0] * W, pos[e.name][1] * H], g = svg("g", { style: "cursor:grab" }, svg("circle", { cx: x, cy: y, r: e.level === "ok" ? 8 : 10, fill: levelColor(e.level), stroke: colors.card, "stroke-width": 2 }, svg("title", {}, `${e.name} · ${LEVEL_NAMES[e.level]}${e.since_text ? " · " + e.since_text : ""}${e.reasons.length ? " · " + e.reasons.join(", ") : ""}`)),
-        stext(x, y + 22, e.name, { "text-anchor": "middle", "font-size": 10, fill: colors.ink }));
-      g.onpointerdown = ev => {
-        try { g.setPointerCapture(ev.pointerId); } catch (e) { /* 포인터를 못 잡아도 끌기는 된다 */ }
-        const move = m => { const p = svgPoint(root, m.clientX, m.clientY); pos[e.name] = [clamp(p.x / W, 0, 1), clamp(p.y / H, 0, 1)]; draw(); };
-        const up = () => { g.removeEventListener("pointermove", move); g.removeEventListener("pointerup", up); view.positions = Object.fromEntries(Object.entries(pos).map(([k, p]) => [k, p.map(n => +n.toFixed(3))])); board?.changed?.(); };
-        g.addEventListener("pointermove", move); g.addEventListener("pointerup", up);
-      };
-      return g;
-    }));
+    spots.forEach(({ e, circle, name }) => {
+      const [x, y] = [pos[e.name][0] * W, pos[e.name][1] * H];
+      circle.setAttribute("cx", x); circle.setAttribute("cy", y); name.setAttribute("x", x); name.setAttribute("y", y + 22);
+    });
   };
   draw();
   root.append(back, lines, dots);

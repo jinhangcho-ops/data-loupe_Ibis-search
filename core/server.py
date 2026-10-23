@@ -64,7 +64,9 @@ def number_range(kind, low, high):
 
 
 def to_json(df):
-    """Polars DataFrame → {columns, rows}. 날짜는 ISO 문자열이 된다."""
+    """Polars DataFrame → {columns, rows}. 날짜는 ISO 문자열이 된다. ±2^53을 넘는 정수가 든 컬럼은 글자로 보낸다(화면 JSON.parse가 정밀도를 잃는다)."""
+    wide = [c for c in df.columns if df[c].dtype.is_integer() and max(abs(df[c].max() or 0), abs(df[c].min() or 0)) > 2**53]
+    df = df.with_columns(*[df[c].cast(str) for c in wide])
     return {"columns": df.columns, "rows": json.loads(df.write_json())}
 
 
@@ -189,7 +191,7 @@ def connection_key():
     """지금 연결을 알아보는 열쇠(비밀번호 없음). 가상 테이블을 연결마다 따로 둘 때 쓴다."""
     if state["opened"] is None:
         raise ValueError("먼저 연결하세요.")
-    return use_counts.connection_key(source.recent(state["opened"]))
+    return use_counts.connection_key({**source.recent(state["opened"]), **{k: v for k, v in state["opened"].items() if k in ("file", "files")}})
 
 
 def virtual_tables():
@@ -205,13 +207,13 @@ def forget_tables():
 
 
 def release_connection(wait=5):
-    """프로그램을 끝낼 때 열어 둔 연결을 놓는다: 도는 작업에 취소를 알리고(cancel·interrupt) 닫는다. 도는 쿼리 때문에 닫기가 끝나지 않을 수 있어 wait초까지만 기다린다."""
+    """프로그램을 끝낼 때 열어 둔 연결을 놓는다: 도는 작업에 취소를 알리고(cancel·interrupt) 닫고 받아 둔 결과(held)를 지운다. 도는 쿼리 때문에 닫기가 끝나지 않을 수 있어 wait초까지만 기다린다."""
     con = state["con"]
     if con is None:
         return
     state["cancel"].set()
     source.interrupt(con)
-    closer = threading.Thread(target=source.close, args=(con,), daemon=True)
+    closer = threading.Thread(target=lambda: (source.close(con), source.on_worker(held.clear)()), daemon=True)  # 닫은 뒤 받아 둔 결과(임시 폴더)도 지운다
     closer.start()
     closer.join(wait)
 

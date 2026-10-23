@@ -12,7 +12,8 @@ const Funcs = (() => {
   let cat = null, loading = null, support = {}, supportKey = "";
 
   async function load() {
-    loading ??= api(`/api/funcs?v=${SERVER.funcs_ver ?? ""}`).then(c => { cat = c; cat.byId = Object.fromEntries(c.funcs.map(f => [f.id, f])); return cat; });
+    loading ??= api(`/api/funcs?v=${SERVER.funcs_ver ?? ""}`).then(c => { cat = c; cat.byId = Object.fromEntries(c.funcs.map(f => [f.id, f])); return cat; })
+      .catch(e => { loading = null; throw e; });  // 실패한 약속을 붙들어 두면 다시 시도할 수 없다
     return loading;
   }
   const get = id => cat?.byId[cat.aliases[id] ?? id];

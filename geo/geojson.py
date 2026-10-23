@@ -145,6 +145,8 @@ def column_values(name, values):
     try:
         return pl.Series(name, values)
     except Exception:
+        if all(v is None or (type(v) in (int, float)) for v in values):  # 정수와 실수가 섞이면(1, 2.5, 3) 실수로
+            return pl.Series(name, values, dtype=pl.Float64)
         return pl.Series(name, [None if v is None else v if isinstance(v, str) else json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else str(v) for v in values], dtype=pl.String)
 
 
@@ -174,9 +176,21 @@ def table(doc):
     return pl.DataFrame(columns)
 
 
+CACHE = {}  # 마지막으로 읽은 파일 하나 {(경로, 수정 시각, 크기): 표}. 미리보기마다 큰 파일을 다시 읽지 않게
+
+
 def read(path):
-    """GeoJSON 파일 → Polars 표. 파일이 너무 크거나 GeoJSON이 아니면 이유와 함께 ValueError."""
+    """GeoJSON 파일 → Polars 표. 파일이 너무 크거나 GeoJSON이 아니면 이유와 함께 ValueError. 같은 파일(경로·수정 시각·크기)은 다시 읽지 않는다."""
     p = Path(path)
+    stat = p.stat()
+    key = (str(p), stat.st_mtime_ns, stat.st_size)
+    if key not in CACHE:
+        CACHE.clear()
+        CACHE[key] = read_file(p)
+    return CACHE[key]
+
+
+def read_file(p):
     if p.stat().st_size > MAX_BYTES:
         raise ValueError(f"{p.name}이 {MAX_BYTES // 1024 // 1024}MB보다 커서 읽지 않았어요. 영역을 나누어 쓰세요.")
     try:

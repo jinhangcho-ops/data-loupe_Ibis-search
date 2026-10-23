@@ -23,7 +23,6 @@ YEAR = re.compile(r"\d{4}")
 CLOCK = re.compile(r"(\d{1,2}):(\d{2})")
 RECENT = re.compile(r"최근\s*(\d+)\s*(\S*)")
 EVERY = re.compile(r"(\d+(?:\.\d+)?)\s*(초|시간|분|일|주|달|개월|년)")
-WORDS = ("오늘", "어제", "지난주", "지난달", "작년", "이번 주", "이번 달", "올해")
 
 
 def as_date(value):

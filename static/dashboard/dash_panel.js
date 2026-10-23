@@ -54,6 +54,7 @@ class CardPanel {
     Object.assign(this, { root, host, card: null, builderOpen: false });
   }
   close() {
+    this.seq = (this.seq ?? 0) + 1;  // 아직 준비 중인 open은 닫힌 뒤에 패널을 다시 열지 않는다
     this.card = null;
     this.root.classList.add("hidden");
     this.host.menuTarget = null;
@@ -62,7 +63,9 @@ class CardPanel {
   }
   async open(card) {
     if (!card) return this.close();
+    const seq = this.seq = (this.seq ?? 0) + 1;  // 카드를 연달아 누르면 마지막 요청만 연다
     await this.host.prepare?.(card);
+    if (seq !== this.seq) return;
     this.card = card;
     this.note = "";
     this.builderOpen = isShell(card);

@@ -32,19 +32,9 @@ def sessions_table():
 def test_sessions_by_gap_and_stats():
     t = mc.add_sessions(sessions_table(), "uid", "ts", gap_minutes=30)
     assert t.count().to_pyarrow().as_py() == 7
-    stats = mc.session_stats(t, "session", "ts")
-    # 세션: u1 {0,10} {50,55}, u2 {0}, u3 {0,30} → 길이 600, 300, 0, 1800초
-    assert stats["sessions"] == 4
-    assert stats["mean_length"] == pytest.approx((600 + 300 + 0 + 1800) / 4)
-    assert stats["median_length"] == pytest.approx((300 + 600) / 2)
-    assert (stats["bounces"], stats["bounce_rate"]) == (1, 0.25)
-
-
-def test_session_bounce_counts_only_selected_events():
-    t = mc.add_sessions(sessions_table(), "uid", "ts", gap_minutes=30)
-    stats = mc.session_stats(t, "session", "ts", only=lambda x: x.kind == "page")
-    # 페이지 이벤트 수: u1 첫 세션 1, 둘째 2, u2 1, u3 2 → 이탈 2/4
-    assert (stats["sessions"], stats["bounces"], stats["bounce_rate"]) == (4, 2, 0.5)
+    per = t.group_by("session").aggregate(first=t.ts.min(), last=t.ts.max(), n=t.count())
+    # 세션: u1 {0,10} {50,55}, u2 {0}, u3 {0,30}(정확히 30분은 같은 세션) → (길이 초, 이벤트 수) = (0, 1), (300, 2), (600, 2), (1800, 2)
+    assert sorted(((r["last"] - r["first"]).total_seconds(), r["n"]) for r in mc.rows(per)) == [(0, 1), (300, 2), (600, 2), (1800, 2)]
 
 
 def test_sessions_by_key_and_exit_rates():
@@ -97,12 +87,9 @@ def test_concurrency_open_and_invalid_rows_and_month_peak():
 def test_time_between_events():
     ev = [(1, "signup", 0), (1, "buy", -50), (1, "buy", 100), (2, "signup", 0), (2, "buy", 500), (2, "buy", 300), (3, "signup", 0), (4, "buy", 10)]
     t = mem(uid=[e[0] for e in ev], ev=[e[1] for e in ev], ts=[T0 + dt.timedelta(seconds=e[2]) for e in ev])
-    got = mc.time_between(t, "uid", "ts", "ev", "signup", "buy")
+    values, users_first = mc.seconds_between(t, "uid", "ts", "ev", "signup", "buy")
     # 사용자 1: signup 이후 첫 buy는 100초(-50은 앞), 사용자 2: 300초, 사용자 3: buy 없음
-    assert got["users_first"] == 3 and got["n"] == 2
-    assert (got["mean"], got["median"]) == (200, 200)
-    assert got["p90"] == pytest.approx(280)
-    assert mc.summarize_seconds([]) == {"n": 0, "mean": None, "median": None, "p90": None}
+    assert users_first == 3 and sorted(values) == [100, 300]
 
 
 def test_payback_day():
@@ -219,12 +206,10 @@ def test_ltv_and_nrr_and_roas():
 
 # ---------- 분포 ----------
 
-def test_gini_pareto_quantiles_tiers():
+def test_gini_pareto_tiers():
     assert mc.gini([1, 1, 1, 1]) == pytest.approx(0)
     assert mc.gini([0, 0, 0, 1]) == pytest.approx(0.75)
     assert mc.gini([0, 0]) is None and mc.gini([-1, 2]) is None and mc.gini([]) is None
-    assert mc.quantiles([1, 2, 3, 4, 5]) == {0.5: 3.0, 0.9: pytest.approx(4.6), 0.99: pytest.approx(4.96)}
-    assert mc.quantiles([]) == {}
     assert mc.pareto_share([10, 10, 1, 1, 1, 1, 1, 1, 1, 1]) == pytest.approx(20 / 28)  # 상위 20% = 2개
     assert mc.pareto_share([5, 5, 5], top=0.2) == pytest.approx(1 / 3)  # 올림 → 1개
     tiers = mc.tier_shares([1, 2, 3, 10, 100], whale_min=100, dolphin_min=10)
@@ -232,16 +217,6 @@ def test_gini_pareto_quantiles_tiers():
     assert (tiers["dolphin"]["users"], tiers["minnow"]["users"], tiers["minnow"]["total"]) == (1, 3, 6.0)
     with pytest.raises(ValueError, match="Whale"):
         mc.tier_shares([1], whale_min=1, dolphin_min=5)
-
-
-def test_fetch_column_nulls_and_sampling():
-    t = mem(v=[1.0, None, 3.0] * 100, s=["a"] * 300)
-    values, sampled, total = mc.fetch_column(t, "v")
-    assert (len(values), sampled, total) == (200, False, 300)
-    values, sampled, total = mc.fetch_column(t, "v", limit=50)
-    assert sampled and total == 300 and 0 < len(values) <= 50
-    with pytest.raises(ValueError, match="숫자"):
-        mc.fetch_column(t, "s")
 
 
 # ---------- 생존 ----------
@@ -369,16 +344,14 @@ def test_welch_t_test_sleep_data_matches_r():
     #   t = -1.8608, df = 17.776, p-value = 0.07939 (group 1 − group 2 이므로 부호만 반대)
     g1 = [0.7, -1.6, -0.2, -1.2, -0.1, 3.4, 3.7, 0.8, 0.0, 2.0]
     g2 = [1.9, 0.8, 1.1, 0.1, -0.1, 4.4, 5.5, 1.6, 4.6, 3.4]
-    got = mc.welch_t_test(g1, g2)
+    got = mc.welch_from_stats(np.mean(g1), np.std(g1, ddof=1), 10, np.mean(g2), np.std(g2, ddof=1), 10)
     assert round(got["t"], 4) == 1.8608 and round(got["df"], 3) == 17.776
     assert round(got["p"], 4) == 0.0794 and got["p"] == pytest.approx(0.07939, abs=5e-6)
     assert got["diff"] == pytest.approx(1.58)
-    from_stats = mc.welch_from_stats(np.mean(g1), np.std(g1, ddof=1), 10, np.mean(g2), np.std(g2, ddof=1), 10)
-    assert from_stats["p"] == pytest.approx(got["p"])
     with pytest.raises(ValueError):
-        mc.welch_t_test([1], [1, 2])
+        mc.welch_from_stats(1, 0, 1, 1, 1, 2)
     with pytest.raises(ValueError, match="같아"):
-        mc.welch_t_test([1, 1], [1, 1])
+        mc.welch_from_stats(1, 0, 2, 1, 0, 2)
 
 
 def test_power_and_mde():

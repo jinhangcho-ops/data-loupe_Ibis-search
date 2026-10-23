@@ -120,6 +120,17 @@ def split(pattern, text, quotes=True):
     return parts + [text[pos:]]
 
 
+SPACED = "\x00col"  # 공백 있는 컬럼 이름 자리에 잠깐 넣는 한 낱말
+
+
+def spaced(line, expr):
+    """줄이 공백 있는 컬럼 이름으로 시작하면 (그 이름, 이름 자리를 SPACED로 바꾼 줄), 아니면 (None, line). 알려진 이름 중 가장 긴 것을 먼저 찾는다."""
+    for name in sorted((c for c in expr.columns if " " in c), key=len, reverse=True):
+        if line.startswith(name) and line[len(name):len(name) + 1] in ("", " ", "=", "!", "<", ">"):
+            return name, SPACED + line[len(name):]
+    return None, line
+
+
 def unquote(text, quotes=True):
     """앞뒤 공백을 떼고, 값 전체를 감싼 따옴표 한 쌍이 있으면 벗긴다. quotes가 False면 벗기지 않는다."""
     text = text.strip()
@@ -243,7 +254,8 @@ def apply_joins(base, joins, get_table):
 
 # 기간: "날짜컬럼 시작 ~ 끝" (한쪽은 비워도 됨)
 def parse_period(line, expr):
-    col, _, rng = line.partition(" ")
+    name, rest = spaced(line, expr)
+    col, _, rng = (name, "", rest[len(SPACED):]) if name else line.partition(" ")
     date_cols = [c for c, t in expr.schema().items() if t.is_date() or t.is_timestamp()]
     check_name(col, date_cols, "날짜 컬럼")
     start, sep, end = (s.strip() for s in rng.partition("~"))
@@ -293,25 +305,30 @@ def geo_condition(word, rest, expr):
 
 def parse_one(line, expr, quotes=True):
     """조건 한 줄. 컬럼 자리에는 구조 안의 필드(user.name)도 쓸 수 있다(column). near·box는 좌표 조건."""
+    name, line = spaced(line, expr)  # 공백 있는 컬럼 이름은 자리표시로 바꿔 아래 정규식이 한 낱말로 읽게 한다
+    get = lambda col: column(expr, name if name and col == SPACED else col)
     if (m := GEO_RE.match(line)) and len(m.group(2).replace(",", " ").split()) == GEO_COUNTS[m.group(1).lower()] and m.group(2).split()[0].lower() not in NOT_GEO:
         return geo_condition(m.group(1).lower(), m.group(2), expr)
     if m := NULL_RE.match(line):
         col, negate = m.groups()
-        c = column(expr, col)
+        c = get(col)
         return c.notnull() if negate else c.isnull()
     if m := BETWEEN_RE.match(line):
         col, lo, hi = m.groups()
-        c = column(expr, col)
-        lo, hi = convert(c.type(), unquote(lo, quotes)), convert(c.type(), unquote(hi, quotes))
-        return c.between(lo, hi)
+        c = get(col)
+        lo, hi = unquote(lo, quotes), unquote(hi, quotes)
+        after = c.type().is_timestamp() and next_day(hi)  # 끝을 날짜로만 쓰면 그날 끝까지(기간과 같은 규칙)
+        if after:
+            return (c >= convert(c.type(), lo)) & (c < after)
+        return c.between(convert(c.type(), lo), convert(c.type(), hi))
     if m := IN_RE.match(line):  # except는 in의 반대: 적은 값을 뺀다
         col, word, raw = m.groups()
-        c = column(expr, col)
+        c = get(col)
         values = [convert(c.type(), unquote(v, quotes)) for v in split(COMMA_RE, raw, quotes) if v.strip()]
         return c.isin(values) if word.lower() == "in" else c.notin(values)
     if m := LIKE_RE.match(line):
         col, word, raw = m.groups()
-        c = column(expr, col)
+        c = get(col)
         if not c.type().is_string():
             raise ValueError(f"{word.lower()}는 문자 컬럼에만 쓸 수 있습니다.")
         raw = unquote(raw, quotes)
@@ -323,9 +340,9 @@ def parse_one(line, expr, quotes=True):
         return c.startswith(raw) if word == "starts" else c.endswith(raw) if word == "ends" else c.lower().contains(raw.lower())  # LIKE를 못 하는 연결(파일)
     if m := COND_RE.match(line):
         col, op, raw = m.groups()
-        c = column(expr, col)
+        c = get(col)
         if c.type().is_nested():
-            raise ValueError(f"'{col}'은 {type_name(c.type())} 컬럼이라 비교할 수 없습니다. 안의 필드(예: {col}.이름)나 is null을 쓰세요.")
+            raise ValueError(f"'{name or col}'은 {type_name(c.type())} 컬럼이라 비교할 수 없습니다. 안의 필드(예: {name or col}.이름)나 is null을 쓰세요.")
         value = convert(c.type(), unquote(raw, quotes))
         return OPS[op](c, value)
     raise ValueError(f"형식: {CONDITION_GUIDE}")
@@ -371,7 +388,8 @@ def predicate(cond, expr):
 
 # 정렬: "컬럼 [asc|desc]"
 def parse_sort(line, expr):
-    col, _, how = line.partition(" ")
+    name, rest = spaced(line, expr)
+    col, _, how = (name, "", rest[len(SPACED):]) if name else line.partition(" ")
     how = how.strip().lower() or "asc"
     c = column(expr, col)
     if how not in ("asc", "desc"):

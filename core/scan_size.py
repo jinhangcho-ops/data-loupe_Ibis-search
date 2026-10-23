@@ -269,6 +269,8 @@ def date_bounds(sql, dialect, column):
         tree = sqlglot.parse_one(sql, read=dialect)
     except Exception:
         return None, None
+    if tree.find(exp.Or, exp.Not) or len(list(tree.find_all(exp.Select))) > 1:  # OR·NOT·하위쿼리·CTE가 있으면 조건이 범위를 좁히는지 알 수 없다
+        return None, None
     low = high = None
     for node in tree.find_all(exp.GT, exp.GTE, exp.LT, exp.LTE, exp.EQ):
         left, right, kind = node.this, node.expression, type(node).__name__

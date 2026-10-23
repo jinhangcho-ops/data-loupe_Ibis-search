@@ -463,11 +463,18 @@ row("length", "text", "글자 수", "글자가 몇 개인지.", [T1], lambda c: 
 row("upper", "text", "대문자로", "영문을 대문자로.", [T1], lambda c: c.x.upper(), "upper(이름)", TXT, TXT)
 row("lower", "text", "소문자로", "영문을 소문자로.", [T1], lambda c: c.x.lower(), "lower(이름)", TXT, TXT)
 row("capitalize", "text", "첫 글자 대문자", "첫 글자만 대문자로.", [T1], lambda c: c.x.capitalize(), "capitalize(이름)", TXT, TXT)
+def not_zero(n, label):
+    """1부터 세는 위치 칸의 값: 0은 DB마다 뜻이 달라 거부한다."""
+    if n == 0:
+        raise ValueError(f"'{label}'은 1부터 셉니다. 0은 쓸 수 없습니다.")
+    return n
+
+
 row("trim", "text", "앞뒤 공백 지우기", "양쪽 공백을 지워요.", [T1], lambda c: c.x.strip(), "trim(이름)", TXT, TXT)
 row("ltrim", "text", "앞 공백 지우기", "왼쪽 공백을 지워요.", [T1], lambda c: c.x.lstrip(), "ltrim(이름)", TXT, TXT)
 row("rtrim", "text", "뒤 공백 지우기", "오른쪽 공백을 지워요.", [T1], lambda c: c.x.rstrip(), "rtrim(이름)", TXT, TXT)
 row("substr", "text", "일부 자르기", "시작 위치(1부터)부터 길이만큼.", [T1, num("start", "시작(1부터)", 1, kind="int"), num("length", "길이", 3, True, "int")],
-    lambda c: c.x.substr(c.start - 1, c.length), "substr(이름, 1, 3)", TXT, TXT)
+    lambda c: c.x.substr(not_zero(c.start, "시작") - 1, c.length), "substr(이름, 1, 3)", TXT, TXT)
 row("left", "text", "앞 N글자", "앞에서 N글자.", [T1, num("n", "글자 수", 3, kind="int")], lambda c: c.x.left(c.n), "left(이름, 3)", TXT, TXT)
 row("right", "text", "뒤 N글자", "뒤에서 N글자.", [T1, num("n", "글자 수", 3, kind="int")], lambda c: c.x.right(c.n), "right(이름, 3)", TXT, TXT)
 row("replace", "text", "바꾸기", "글자를 다른 글자로 바꿔요.", [T1, text("find", "찾을 글자", "a"), text("to", "바꿀 글자", "", True)],
@@ -479,7 +486,7 @@ row("regex_replace", "text", "패턴 바꾸기", "정규식에 맞는 부분을 
     lambda c: c.x.re_replace(c.pattern, c.to or ""), "regex_replace(이름, '\\s+', ' ')", TXT, TXT)
 row("split", "text", "나누기(목록)", "구분자로 나눠 목록으로.", [T1, text("sep", "구분자", ",")], lambda c: c.x.split(c.sep), "split(태그, ',')", TXT, "array")
 row("split_part", "text", "나눈 N번째", "구분자로 나눈 N번째 조각(1부터).", [T1, text("sep", "구분자", ","), num("n", "N번째", 1, kind="int")],
-    lambda c: c.x.split(c.sep)[c.n - 1], "split_part(태그, ',', 1)", TXT, TXT)
+    lambda c: c.x.split(c.sep)[not_zero(c.n, "N번째") - 1], "split_part(태그, ',', 1)", TXT, TXT)
 row("concat", "text", "이어 쓰기", "여러 컬럼·글자를 한 글자로(사이에 구분자).", [many(), text("sep", "구분자", "", True)],
     lambda c: ibis.literal(c.sep or "").join([v.cast("string") for v in c.columns]), "concat(성, 이름)", "any", TXT)
 row("lpad", "text", "왼쪽 채우기", "길이가 N이 되도록 왼쪽을 채워요.", [T1, num("width", "길이", 5, kind="int"), text("fill", "채울 글자", "0")],
@@ -563,16 +570,27 @@ def interval(c, sign):
 
 row("date_add", "date", "더하기", "날짜에 N 단위를 더해요.", [D_, num("n", "N", 1, kind="int"), choice("unit", "단위", list(UNITS), "day")], lambda c: interval(c, 1), "date_add(주문일, 7, 'day')", DAT, DAT)
 row("date_sub", "date", "빼기", "날짜에서 N 단위를 빼요.", [D_, num("n", "N", 1, kind="int"), choice("unit", "단위", list(UNITS), "day")], lambda c: interval(c, -1), "date_sub(주문일, 7, 'day')", DAT, DAT)
-row("date_diff", "date", "두 날짜 차이", "날짜 A에서 날짜 B까지 지난 시간(B−A, 단위로).", [D_, col("y", "날짜 B", DAT), choice("unit", "단위", list(UNITS), "day")],
-    lambda c: c.y.cast("timestamp").delta(c.x.cast("timestamp"), unit=c.unit), "date_diff(가입일, 주문일, 'day')", DAT, NUM)
+def passed(start, end, unit):
+    """start부터 end까지 지난 단위 수. 연·월은 경계를 센 수가 아니라 가득 찬 단위 수(만 나이: 1990-12-31 → 2026-10-23은 35). 나머지 단위는 delta 그대로."""
+    start, end = start.cast("timestamp"), end.cast("timestamp")
+    if unit not in ("year", "month"):
+        return end.delta(start, unit=unit)
+    months = end.delta(start, unit="month")
+    moved = start + months.as_interval("M")
+    months = months - ((months > 0) & (moved > end)).cast("int64") + ((months < 0) & (moved < end)).cast("int64")  # 더해 보니 끝을 넘었으면 한 달 모자란 것
+    return months if unit == "month" else months.sign() * (months.abs() // 12)
+
+
+row("date_diff", "date", "두 날짜 차이", "날짜 A에서 날짜 B까지 지난 시간(B−A, 단위로). 연·월은 가득 찬 수.", [D_, col("y", "날짜 B", DAT), choice("unit", "단위", list(UNITS), "day")],
+    lambda c: passed(c.x, c.y, c.unit), "date_diff(가입일, 주문일, 'day')", DAT, NUM)
 row("strftime", "date", "형식 글자로", "날짜를 형식(%Y-%m-%d 등)의 글자로.", [D_, text("format", "형식", "%Y-%m-%d")], lambda c: c.x.strftime(c.format), "strftime(주문일, '%Y-%m')", DAT, TXT)
 row("parse_date", "date", "글자에서 날짜 읽기", "글자를 형식에 맞춰 날짜시간으로.", [T1, text("format", "형식", "%Y-%m-%d")], lambda c: c.x.as_timestamp(c.format).cast("timestamp"), "parse_date(날짜글자, '%Y-%m-%d')", TXT, DAT)
 row("to_date", "date", "날짜만", "날짜시간에서 날짜만.", [D_], lambda c: c.x.cast("date"), "to_date(주문시각)", DAT, DAT)
 row("to_time", "date", "시각만", "날짜시간에서 시각만.", [D_], lambda c: c.x.cast("timestamp").time(), "to_time(주문시각)", DAT, DAT)
 row("diff_now", "date", "지금까지 지난 시간", "그 날짜부터 지금까지 지난 시간(단위로).", [D_, choice("unit", "단위", list(UNITS), "day")],
-    lambda c: ibis.now().delta(c.x.cast("timestamp"), unit=c.unit), "diff_now(가입일, 'day')", DAT, NUM)
+    lambda c: passed(c.x, ibis.now(), c.unit), "diff_now(가입일, 'day')", DAT, NUM)
 row("diff_today", "date", "오늘까지 지난 날", "그 날짜부터 오늘까지 지난 단위 수.", [D_, choice("unit", "단위", ["day", "week", "month", "year"], "day")],
-    lambda c: ibis.today().cast("timestamp").delta(c.x.cast("timestamp"), unit=c.unit), "diff_today(가입일, 'day')", DAT, NUM)
+    lambda c: passed(c.x, ibis.today(), c.unit), "diff_today(가입일, 'day')", DAT, NUM)
 
 # ---------- 조건 ----------
 
@@ -787,7 +805,6 @@ def conflicts(t, by, columns):
 # ---------- 화면에 주는 목록 ----------
 
 SCREENS = ("pivot", "chart", "metrics", "dash", "calc", "prep", "sentence")  # 함수를 고르는 화면
-SIMPLE = ("pivot", "chart", "metrics", "dash")  # {집계, 컬럼, 옵션} 한 칸으로 고르는 화면: 집계 함수 전부
 
 
 GROUP_PIVOT = ("rollup", "cube", "grouping_sets", "having")  # 피벗(집계 탭)이 더 해 주는 묶음 함수
@@ -887,7 +904,8 @@ sub("approx_count_distinct", "근사 대신 정확한 고유 개수를 세요(�
 sub("median", "분위수 0.5로 구해요.", lambda c: c.x.quantile(0.5, where=c.where))
 sub("p50", "분위수 0.5로 구해요.", lambda c: c.x.quantile(0.5, where=c.where))
 sub("string_agg", "값을 목록으로 모아 이어 붙여요.", lambda c: c.x.cast("string").collect(where=c.where, distinct=c.distinct == "yes").join(c.sep))
-sub("first", "정렬 기준이 하나면 가장 작은 쪽의 값으로 구해요.", lambda c: c.x.argmin(c.order[0].op().arg.to_expr(), where=c.where) if len(c.order) == 1 else c.x.first(where=c.where, order_by=c.order))
+sub("first", "정렬 기준이 하나면 가장 작은 쪽(내림차순이면 가장 큰 쪽)의 값으로 구해요.",
+    lambda c: (c.x.argmax if c.order[0].op().descending else c.x.argmin)(c.order[0].op().arg.to_expr(), where=c.where) if len(c.order) == 1 else c.x.first(where=c.where, order_by=c.order))
 sub("arg_min", "정렬 기준의 첫 값으로 구해요.", lambda c: c.x.first(where=c.where, order_by=[c.by.asc()]))
 sub("arg_max", "정렬 기준의 마지막 값으로 구해요.", lambda c: c.x.last(where=c.where, order_by=[c.by.asc()]))
 
@@ -1035,11 +1053,13 @@ def raw_sql(expr, name, text):
     full = f"SELECT *, ({text.strip()}) AS {sql_exec.quote(name)} FROM ({'ibis_base' if local else backend.compile(expr)}) AS ibis_raw"
     tree = sql_exec.check(full, dialect)
     exp = sql_exec.glot()[1]
-    if not isinstance(tree, exp.Select) or len(tree.expressions) != 2 or tree.expressions[1].alias != name:
+    frm = tree.args.get("from") or tree.args.get("from_")  # 앞 단계를 감싼 FROM이 그대로 ibis_raw 서브쿼리 하나인지(주석 -- 로 FROM이 바뀌지 않았는지)
+    if (not isinstance(tree, exp.Select) or len(tree.expressions) != 2 or tree.expressions[1].alias != name
+            or not isinstance(frm and frm.this, exp.Subquery) or frm.this.alias != "ibis_raw" or {k for k, v in tree.args.items() if v} - {"expressions", "from", "from_"}):
         raise sql_exec.SecurityViolationError("SQL 식은 값 하나를 계산하는 식이어야 합니다(괄호를 닫거나 컬럼을 더 만들 수 없어요).")
     if local:
         raise NeedsLocal("파일 연결은 SQL 식을 바로 붙일 수 없어요. 이 PC 사본에서 계산해요.")
-    return full
+    return tree.sql(dialect=dialect)  # 검사한 트리를 다시 만든 글을 실행한다(검사한 것과 실행하는 것이 같다)
 
 
 def raw_expr(expr, name, text):

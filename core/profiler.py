@@ -23,7 +23,24 @@ METHODS = {"preview": "무과금 미리보기", "whole": "전체(행 수가 표�
 
 # ---------- 데이터 명세서 ----------
 
+SPECS = {}  # {(경로, 바뀐 시각 ns, 크기): 검사한 명세서} 하나만 둔다(화면이 열릴 때마다 YAML을 다시 읽지 않게)
+
+
 def read_spec(path):
+    """load_spec과 같되, 같은 파일(경로·바뀐 시각·크기)을 다시 읽으면 읽어 둔 것을 돌려준다. 돌려준 값은 고치지 않는다."""
+    try:
+        stat = Path(path).stat()
+    except OSError:
+        return load_spec(path)  # 오류 문구는 load_spec이 만든다
+    key = (str(path), stat.st_mtime_ns, stat.st_size)
+    if key not in SPECS:
+        found = load_spec(path)
+        SPECS.clear()
+        SPECS[key] = found
+    return SPECS[key]
+
+
+def load_spec(path):
     """데이터 명세서(JSON·YAML)를 읽어 검사한다. 모양:
     {"tables": {"테이블" 또는 "스키마.테이블": {"description": 글자, "partition": {"column": 컬럼, "latest": 값} 또는 {"column", "recent_days": 정수},
                                              "columns": {컬럼: {"description": 글자, "bytes": 양의 정수(선택: 이 컬럼 한 칸의 평균 크기, 원격 DB에서 PC로 받는 양을 어림할 때 씀)}}}}}"""

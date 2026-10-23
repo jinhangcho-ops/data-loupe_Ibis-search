@@ -133,26 +133,30 @@ def write_excel(expr, path):
     글자는 수식·숫자·주소로 해석하지 않는다(수식 막기는 export가 따로 한다). 날짜·날짜시간은 그 형식으로."""
     import polars as pl
     import xlsxwriter
-    if get_count(expr) > EXCEL_MAX_ROWS:
-        raise ValueError(f"Excel은 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있습니다. CSV나 Parquet으로 저장하세요.")
     options = {"constant_memory": True, "strings_to_formulas": False, "strings_to_numbers": False, "strings_to_urls": False, "remove_timezone": True}
-    with xlsxwriter.Workbook(str(path), options) as book:
-        sheet = book.add_worksheet()
-        bold = book.add_format({"bold": True})
-        shapes = {pl.Date: book.add_format({"num_format": "yyyy-mm-dd"}), pl.Datetime: book.add_format({"num_format": "yyyy-mm-dd hh:mm:ss"}),
-                  pl.Time: book.add_format({"num_format": "hh:mm:ss"})}  # 날짜·시각 타입의 칸 형식
-        sheet.write_row(0, 0, expr.columns, bold)
-        row = 1
-        for batch in batches(expr):
-            frame = json_text(pl.from_arrow(batch))
-            kinds = [shapes.get(t.base_type()) for t in frame.dtypes]
-            for values in frame.iter_rows():
-                for col, value in enumerate(values):
-                    value = number(value)  # NaN·무한은 빈 칸(xlsxwriter가 쓰지 못한다), Decimal은 실수로
-                    if value is None:
-                        continue
-                    sheet.write(row, col, value, kinds[col]) if kinds[col] else sheet.write(row, col, value)
-                row += 1
+    try:
+        with xlsxwriter.Workbook(str(path), options) as book:  # 행 수는 따로 세지 않고(원격 DB에 COUNT를 보내지 않는다) 쓰면서 상한을 넘는지 본다
+            sheet = book.add_worksheet()
+            bold = book.add_format({"bold": True})
+            shapes = {pl.Date: book.add_format({"num_format": "yyyy-mm-dd"}), pl.Datetime: book.add_format({"num_format": "yyyy-mm-dd hh:mm:ss"}),
+                      pl.Time: book.add_format({"num_format": "hh:mm:ss"})}  # 날짜·시각 타입의 칸 형식
+            sheet.write_row(0, 0, expr.columns, bold)
+            row = 1
+            for batch in batches(expr):
+                frame = json_text(pl.from_arrow(batch))
+                kinds = [shapes.get(t.base_type()) for t in frame.dtypes]
+                for values in frame.iter_rows():
+                    if row > EXCEL_MAX_ROWS:
+                        raise ValueError(f"Excel은 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있습니다. CSV나 Parquet으로 저장하세요.")
+                    for col, value in enumerate(values):
+                        value = number(value)  # NaN·무한은 빈 칸(xlsxwriter가 쓰지 못한다), Decimal은 실수로
+                        if value is None:
+                            continue
+                        sheet.write(row, col, value, kinds[col]) if kinds[col] else sheet.write(row, col, value)
+                    row += 1
+    except BaseException:
+        Path(path).unlink(missing_ok=True)  # 쓰다 만 파일은 남기지 않는다
+        raise
 
 
 # 확장자: 저장 함수

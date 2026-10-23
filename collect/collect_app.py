@@ -185,7 +185,13 @@ def save_collection():
     if item is not None:
         item = collect_config.normalize(item)
         collect_job.check_literals(item)
-    return jsonify(collections=settings.save_named(collect_config.COLLECTIONS, "구성", MAX_COLLECTION_SIZE, request.json.get("name"), item))
+    name = request.json.get("name")
+    saved = settings.save_named(collect_config.COLLECTIONS, "구성", MAX_COLLECTION_SIZE, name, item)
+    if item is None:  # 구성을 지우면 그 예약과 Windows 작업도 지운다(남으면 없는 구성을 계속 실행하려다 실패한다)
+        from integrations import schedule
+        if name in schedule.schedules():
+            schedule.save(name, None)
+    return jsonify(collections=saved)
 
 
 def limits_view():
