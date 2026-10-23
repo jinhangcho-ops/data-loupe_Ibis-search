@@ -188,16 +188,16 @@ def saved_search(name):
 
 
 @contextlib.contextmanager
-def using(fresh=False):
+def using(fresh=False, renewed=None):
     """화면 밖에서 데이터를 쓸 때: 화면 요청과 같은 차례(turn)를 TURN_WAIT초까지 기다려 잡는다. 연결이 없으면 ValueError.
-    fresh면 잡은 뒤 PC에 받아 둔 사본을 모두 지운다(최신화·Slack 질의가 시작할 때 한 번: 그 안의 카드·질의는 사본을 새로 받아 나눠 쓴다)."""
+    fresh면 이 안에서 쓰는 PC 사본을 처음 쓸 때 새로 받는다(Slack 질의: 안의 질의는 새로 받은 사본을 나눠 쓴다). renewed(열쇠 집합)를 주면
+    여러 번의 using이 그 집합을 나눠 써 사본을 작업 하나에 한 번만 새로 받는다(새로고침: 카드마다 차례를 다시 잡는다). 쓰지 않는 사본은 건드리지 않는다."""
     if not server.turn.acquire(timeout=TURN_WAIT):
         raise ValueError("프로그램이 다른 작업 중입니다. 잠시 뒤 다시 하세요.")
     try:
         if server.state["con"] is None:
             raise ValueError("프로그램에서 먼저 데이터에 연결하세요.")
-        if fresh:
-            run(held.forget_all)
-        yield
+        with held.renewing(set() if fresh else renewed):
+            yield
     finally:
         server.turn.release()

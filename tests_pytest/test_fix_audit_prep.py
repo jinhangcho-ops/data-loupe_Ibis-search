@@ -110,7 +110,7 @@ def test_row_dropping_runs_before_statistics_regardless_of_column_order(make):
     drop_b = {"ops": {"fill": {"how": "drop"}}}
     first = build(make(data), {"a": fill_a, "b": drop_b})
     second = build(make({"b": data["b"], "a": data["a"]}), {"a": fill_a, "b": drop_b})
-    # b가 빈 행(마지막)을 먼저 빼면 a의 평균은 (1+2)/2 = 1.5
+    # 원래 설계(앞 컬럼에서 뺀 행을 빼고 평균): b가 빈 행(마지막)을 먼저 빼면 a의 평균은 (1+2)/2 = 1.5
     assert first["a"] == [1.0, 2.0, 1.5] and second["a"] == [1.0, 2.0, 1.5]
 
 

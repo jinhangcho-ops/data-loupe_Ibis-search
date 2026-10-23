@@ -166,7 +166,7 @@ class Sink:
         from confluent_kafka import KafkaException
         if data is not self.unit:  # 새 묶음
             self.unit, self.rows, self.todo, self.ok, self.failed, self.partitions, self.size = data, data.to_pylist(), range(data.num_rows), set(), 0, {}, 0
-        sent, rejected, skipped, reports = set(), set(), set(), {}
+        sent, reports = set(), {}
 
         def report(i, error, msg):  # 전달 보고: 전달된 메시지의 파티션·offset으로 범위를 넓힌다
             reports[i] = error
@@ -175,32 +175,37 @@ class Sink:
                 lo, hi = self.partitions.get(p, (o, o))
                 self.partitions[p] = (min(lo, o), max(hi, o))
                 self.size += len(msg.value() or b"") + len(msg.key() or b"")
-        for n, i in enumerate(self.todo):
-            row = self.rows[i]
-            try:
-                body = message(row)
-                key = key_of(row[self.key]) if self.key else None
-                while True:
-                    try:
-                        self.producer.produce(self.item["topic"], body, key, on_delivery=lambda error, msg, i=i: report(i, error, msg))
+        pending = list(self.todo)
+        while True:
+            skipped = set()
+            for n, i in enumerate(pending):
+                row = self.rows[i]
+                try:
+                    body = message(row)
+                    key = key_of(row[self.key]) if self.key else None
+                    while True:
+                        try:
+                            self.producer.produce(self.item["topic"], body, key, on_delivery=lambda error, msg, i=i: report(i, error, msg))
+                            break
+                        except BufferError:  # 보낼 줄이 가득 참: 조금 보내고 다시
+                            self.producer.poll(1)
+                    sent.add(i)
+                except (KafkaException, ValueError, TypeError) as e:
+                    self.failed += 1
+                    self.note(e)
+                if self.key:  # 키가 있으면 같은 키의 순서가 중요하다: 전달 실패가 보고되면 뒤 행은 보내지 않고 다시 시도 때 차례대로 보낸다
+                    self.producer.poll(0)
+                    if any(e is not None for e in reports.values()):
+                        skipped = set(pending[n + 1:])
                         break
-                    except BufferError:  # 보낼 줄이 가득 참: 조금 보내고 다시
-                        self.producer.poll(1)
-                sent.add(i)
-            except (KafkaException, ValueError, TypeError) as e:
-                rejected.add(i)
-                self.failed += 1
+            self.producer.flush(SEND_TIMEOUT + FLUSH_MARGIN)
+            for e in [e for e in reports.values() if e is not None][-1:]:
                 self.note(e)
-            if self.key:  # 키가 있으면 같은 키의 순서가 중요하다: 전달 실패가 보고되면 뒤 행은 보내지 않고 다시 시도 때 차례대로 보낸다
-                self.producer.poll(0)
-                if any(e is not None for e in reports.values()):
-                    skipped = set(self.todo[n + 1:])
-                    break
-        self.producer.flush(SEND_TIMEOUT + FLUSH_MARGIN)
-        for e in [e for e in reports.values() if e is not None][-1:]:
-            self.note(e)
-        delivered = {i for i in sent if i in reports and reports[i] is None}
-        forever = {i for i in sent if reports.get(i) is not None and any(name in str(reports[i]) for name in PERMANENT)}  # 이 행만 안 되는 오류: 실패로 세고 계속한다
+            delivered = {i for i in sent if i in reports and reports[i] is None}
+            forever = {i for i in sent if reports.get(i) is not None and any(name in str(reports[i]) for name in PERMANENT)}  # 이 행만 안 되는 오류: 실패로 세고 계속한다
+            if not skipped or sent - delivered - forever:  # 멈춘 까닭이 영구 오류뿐이면(일시 오류가 없으면) 남은 행을 이어 보낸다
+                break
+            pending = sorted(skipped)
         self.failed += len(forever)
         self.ok |= delivered
         self.todo = sorted(skipped | (sent - delivered - forever))  # 일시 오류이거나 보고가 끝내 오지 않은 행(+ 보내지 않고 둔 행): 다음에 이것만 차례대로 다시 보낸다
@@ -212,10 +217,10 @@ class Sink:
         return len(self.ok), 0, self.failed
 
     def partial(self):
-        """지금 묶음에서 끝내 못 넣고 멈출 때 남길 것: (앞에서부터 이어서 처리된 행 수, 전달된 행 수). 이어 넣기가 그 뒤부터 하게 한다(앞 구멍 뒤에 전달된 행은 다시 보내져 겹칠 수 있다)."""
+        """지금 묶음에서 끝내 못 넣고 멈출 때 남길 것: (앞에서부터 이어서 처리된 행 수, 전달된 행 수, 영구 실패로 센 행 수). 이어 넣기가 그 뒤부터 하게 한다(앞 구멍 뒤에 전달된 행은 다시 보내져 겹칠 수 있다)."""
         if self.unit is None:
-            return 0, 0
-        return (min(self.todo) if self.todo else self.unit.num_rows), len(self.ok)
+            return 0, 0, 0
+        return (min(self.todo) if self.todo else self.unit.num_rows), len(self.ok), self.failed
 
     def note(self, error):
         self.last = source.mask(str(error), [self.password], HIDE)

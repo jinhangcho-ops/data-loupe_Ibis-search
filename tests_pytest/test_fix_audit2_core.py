@@ -81,24 +81,21 @@ def test_held_ensure_fresh_reads_changed_source(tmp_path):
         assert held.ensure("k", expr, threading.Event())[1] == 3  # 사본을 그대로 쓴다
         assert held.ensure("k", expr, threading.Event(), fresh=True)[1] == 5
         path.write_text("n\n1\n", encoding="utf-8")
-        held.forget_all()
-        assert held.ensure("k", expr, threading.Event())[1] == 1  # 최신화·Slack 질의가 시작할 때 비운 뒤라 새로
+        with held.renewing(set()):  # 최신화·Slack 질의가 차례를 잡았다: 쓰는 사본은 처음 쓸 때 새로
+            assert held.ensure("k", expr, threading.Event())[1] == 1
     finally:
         held.clear()
 
 
-def test_using_fresh_clears_copies(client, monkeypatch):
+def test_using_fresh_starts_and_ends_renewal(client, monkeypatch):
     from core import held, querying, server
     server.state["con"] = object()
-    called = []
-    monkeypatch.setattr(held, "forget_all", lambda: called.append(1))
     monkeypatch.setattr(querying, "run", lambda f: f())
     with querying.using():
-        pass
-    assert called == []
+        assert held.RENEWED[0] is None
     with querying.using(fresh=True):
-        pass
-    assert called == [1]
+        assert held.RENEWED[0] == set()
+    assert held.RENEWED[0] is None
 
 
 # ---------- 2A4 연결 열쇠: 폴더만 있던 예전 열쇠 ----------

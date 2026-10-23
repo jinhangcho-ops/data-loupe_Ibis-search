@@ -101,7 +101,7 @@ def test_apply_skips_fanout_warnings_and_remote_note_tells_query_count(tmp_path,
     real = flow_opt.fanout_warnings
     monkeypatch.setattr(flow_opt, "fanout_warnings", lambda g, c: calls.append(1) or real(g, c))
     found = flow_opt.propose(graph, get, con, remote=True, source_key="k")
-    assert len(calls) == 1 and found["note"].startswith("원격 DB라") and "최대 9번 조회해요" in found["note"]  # 원래 결과 1 + 규칙 4개 + 조인 1개의 양쪽 키 확인 4(키 하나에 행 수·고유 행 수 2번씩)
+    assert len(calls) == 1 and found["note"].startswith("원격 DB라") and "최대 11번 조회해요" in found["note"]  # 원래 결과 1 + 규칙 4개 + 조인 1개의 양쪽 키 확인 4(키 하나에 행 수·고유 행 수 2번씩) + 밀린 오른쪽 확인 2
     flow_opt.apply(graph, [1], get, con, remote=True, scan_ok=True, source_key="k")
     assert len(calls) == 1  # apply는 경고를 다시 계산하지 않는다
     con.disconnect()

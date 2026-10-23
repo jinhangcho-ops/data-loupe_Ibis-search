@@ -84,11 +84,11 @@ def shape(con, recipe, table=None, info=None, refs=None):
         check_spec(name, spec)
     made = {}  # 파생 컬럼 → 그것을 만든 컬럼
     names = list(t.columns)  # 앞 단계가 만든 파생 컬럼에는 ops를 적용하지 않는다
-    start = t  # 행을 줄이는 단계(rows)의 통계는 모두 이 표로 구한다(앞 컬럼이 줄인 행을 빼고 구하면 컬럼 순서로 결과가 달라진다)
+    start = t  # 행을 뺄지 정하는 통계(outlier 경계)는 이 표로 구한다(컬럼 순서와 무관). 채울 값(fill mean 등)은 rest에서 행을 다 뺀 뒤의 표로 구한다
     for part in ("rows", "rest"):  # 행을 줄이는 일(fill·outlier drop)을 모든 컬럼에 먼저 하고 나서 통계를 쓰는 일을 한다(컬럼 순서로 결과가 달라지지 않게)
         for name in names:
             before = set(t.columns)
-            t = prep_ops.apply_ops(t, name, specs.get(name, {}).get("ops", {}), part, start if part == "rows" else None)
+            t = prep_ops.apply_ops(t, name, specs.get(name, {}).get("ops", {}), part, start)
             made.update({new: name for new in t.columns if new not in before})
     t, new = prep_derive.apply_formulas(t, recipe.get("formulas") or [])
     if recipe.get("pca"):

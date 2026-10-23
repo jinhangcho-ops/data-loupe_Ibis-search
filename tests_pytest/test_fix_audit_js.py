@@ -204,6 +204,7 @@ const board = { cards: [], set(c) { this.cards = c; }, star: {} };
 globalThis.say = () => {}; async function save() { saves++; lastSaved = current; return true; }
 const waits = {}; globalThis.api = url => url.includes("/get") ? new Promise(r => { waits[decodeURIComponent(url.split("id=")[1])] = r; }) : Promise.resolve({});
 let handler; document.addEventListener = (n, f) => { handler = f; };
+const typing = () => false; $("d-panel").contains = () => false;
 """
     body = """
 (async () => {
@@ -213,13 +214,14 @@ let handler; document.addEventListener = (n, f) => { handler = f; };
   const open = { dashId, cards: board.cards.map(c => c.id) };
   // 최신화 뒤: 저장할 것이 없으면 save를 부르지 않고 바로 연다
   lastSaved = current = "same"; saves = 0;
-  handler({ detail: { results: [{ state: "ok" }] } }); await sleep(0);
+  handler({ detail: { results: [{ state: "ok", dashboard: "B" }] } }); await sleep(0);
   const clean = saves;
-  current = "edited"; handler({ detail: { results: [{ state: "ok" }] } }); await sleep(0);
+  current = "edited"; handler({ detail: { results: [{ state: "ok", dashboard: "B" }] } }); await sleep(0);
   console.log(JSON.stringify({ open, clean, dirty: saves }));
 })();
 """
-    got = run_node(tmp_path, body, parts=[prelude, code, refresh])
+    helper = html[html.index("function reopenAfterRefresh"):html.index('document.addEventListener("dash-refreshed"')]
+    got = run_node(tmp_path, body, parts=[prelude, code, helper, refresh])
     assert got["open"] == {"dashId": "B", "cards": ["b1"]}  # 고치기 전에는 늦게 온 A가 B의 id 위에 A 카드를 덮는다
     assert got["clean"] == 0 and got["dirty"] == 1
 
@@ -371,8 +373,8 @@ let ok = false; const runSearch = async () => { rendered.push("run:" + JSON.stri
 def test_apply_find_skips_when_empty_and_nothing_marked(tmp_path):
     code = index_slice("let finding = false", '$("row-find").oninput')
     prelude = """
-let queries = 0, want = "";
-const rows = [mk("tr", { textContent: "abc" })]; rows[0].querySelectorAll = () => []; rows[0].classList = { toggle() {} };
+let queries = 0, want = ""; const esc = s => s;
+const rows = [mk("tr", { textContent: "abc" })]; rows[0].querySelectorAll = () => [{ dataset: {}, textContent: "abc", querySelector: () => null, set innerHTML(v) {} }]; rows[0].querySelector = () => null; rows[0].classList = { toggle() {} };
 globalThis.$ = id => id === "row-find" ? { value: want } : id === "rows" ? { querySelectorAll: () => { queries++; return rows; } } : { textContent: "" };
 """
     body = """

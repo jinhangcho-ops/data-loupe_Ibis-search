@@ -218,7 +218,8 @@ def copies_to_pc(card, ctx=None):
     points = card["kind"] == "geomap" and bool(((card.get("view") or {}).get("geo") or {}).get("lat"))  # 지도의 점은 행을 limit로 잘라 받아 오므로 집계가 아니다
     if not points and connection.compiles(querying.build(shaped, select=False)):
         return False
-    return querying.search_key(shaped, card_columns(card, ctx)) not in held.store["items"]
+    key = querying.search_key(shaped, card_columns(card, ctx))
+    return not held.has(key)  # 최신화가 새로 받을 사본이면 받아 둔 것이 없는 것과 같다
 
 
 def unique_per_period(card, ctx=None):

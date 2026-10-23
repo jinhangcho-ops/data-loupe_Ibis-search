@@ -177,7 +177,7 @@ polars_fixed = False
 
 
 def fix_polars_text():
-    """Ibis의 Polars 변환은 length·find를 바이트 단위로 세고(한글 3배) 빈 값의 find를 -1로 준다. DuckDB와 같게 글자 단위·빈 값은 빈 값으로 바꿔 한 번만 등록한다."""
+    """Ibis의 Polars 변환은 length·find를 바이트 단위로 세고(한글 3배) 빈 값의 find를 -1로 준다. DuckDB와 같게 글자 단위·빈 값은 빈 값(시작 위치를 주면 DuckDB처럼 -1)으로 바꿔 한 번만 등록한다."""
     global polars_fixed
     if polars_fixed:
         return
@@ -196,7 +196,7 @@ def fix_polars_text():
         arg, sub = translate(op.arg, **kw), _literal_value(op.substr)
         part = arg.str.slice(start, end)
         before = part.str.splitn(sub, 2).struct.field("field_0").str.len_chars().cast(pl.Int64)  # 찾은 글자 앞의 글자 수
-        return pl.when(arg.is_null()).then(None).when(part.str.contains(sub, literal=True)).then(before + start).otherwise(-1)
+        return pl.when(arg.is_null()).then(None if op.start is None else -1).when(part.str.contains(sub, literal=True)).then(before + start).otherwise(-1)
 
     @translate.register(ops.ArrayIndex)
     def index(op, **kw):
@@ -217,6 +217,10 @@ def utf8_csv(path, con):
         return path
     except UnicodeDecodeError:
         pass
+    with open(path, "rb") as f:
+        head = f.read(4)
+    if head[:2] in (b"\xff\xfe", b"\xfe\xff"):  # UTF-16·32는 CP949로 읽으면 깨진 글자가 나오므로 읽지 않는다
+        raise ValueError(f"{Path(path).name}: UTF-16/UTF-32로 저장된 CSV는 읽을 수 없어요. UTF-8 또는 CP949(한글 엑셀의 'CSV')로 다시 저장해 주세요.")
     if not hasattr(con, "scratch"):
         con.scratch = scratch.make()
     out = Path(con.scratch, f"{len(list(Path(con.scratch).iterdir()))}.csv")
@@ -226,6 +230,33 @@ def utf8_csv(path, con):
             w.write(decoder.decode(chunk))
         w.write(decoder.decode(b"", final=True))
     return out
+
+
+def stamp_of(path):
+    """파일이 바뀌었는지 알아보는 (수정 시각, 크기). 읽을 수 없으면 None."""
+    try:
+        s = os.stat(path)
+    except OSError:
+        return None
+    return s.st_mtime_ns, s.st_size
+
+
+def read_csv_table(con, path, name):
+    """CSV를 UTF-8로 맞춰 name 테이블로 등록하고 (경로, mtime, 크기)를 기록한다. refresh_csv가 이것으로 원본이 바뀌었는지 본다."""
+    stamp = stamp_of(path)
+    con.read_csv(utf8_csv(path, con), table_name=name)
+    if not hasattr(con, "csv_sources"):
+        con.csv_sources = {}
+    con.csv_sources[name] = (path, stamp)
+
+
+def refresh_csv(con):
+    """원본 CSV의 (mtime, 크기)가 열 때와 달라졌으면 다시 변환해 같은 이름으로 다시 등록한다(CP949 임시본이 옛 값에 머물지 않게).
+    파일 연결의 결과를 계산하기 전(result.lazy)에 부른다. 파일 연결이 아니거나 CSV가 없으면 아무 일도 하지 않는다."""
+    for name, (path, stamp) in list(getattr(con, "csv_sources", {}).items()):
+        now = stamp_of(path)
+        if now is not None and now != stamp:
+            read_csv_table(con, path, name)
 
 
 @on_worker
@@ -241,7 +272,7 @@ def open_flat_files(paths):
         if kind == "parquet":
             con.read_parquet(p, table_name=name)
         elif kind == "csv":
-            con.read_csv(utf8_csv(p, con), table_name=name)
+            read_csv_table(con, p, name)
         elif kind == "excel":
             con.create_table(name, pl.read_excel(p))
         elif kind == "geojson" or (kind == "json" and geojson_file(p)):

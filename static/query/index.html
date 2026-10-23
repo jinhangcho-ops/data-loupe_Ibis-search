@@ -786,13 +786,14 @@ function applyFind() {
   const rows = [...$("rows").querySelectorAll("tbody tr")];
   let shown = 0;
   rows.forEach(tr => {
-    const hit = !want || tr.textContent.toLowerCase().includes(want);
+    const cells = [...tr.querySelectorAll("td")], hit = !want || cells.some(td => td.textContent.toLowerCase().includes(want));  // 칸마다 따로 본다(칸 사이를 건너 일치하지 않게)
     tr.classList.toggle("miss", !hit);
     shown += hit;
     if (!hit && !tr.querySelector("mark")) return;  // 안 맞고 강조도 없던 행은 칸을 다시 쓸 것이 없다
-    tr.querySelectorAll("td").forEach(td => {
-      td.dataset.plain ??= td.textContent;
-      const plain = td.dataset.plain, at = want ? plain.toLowerCase().indexOf(want) : -1;
+    cells.forEach(td => {
+      if (td.dataset.short !== undefined) return;  // 펼쳐 둔 중첩 값 칸은 그대로 둔다(다시 쓰면 펼침이 깨진다)
+      const plain = td.textContent, at = want ? plain.toLowerCase().indexOf(want) : -1;
+      if (at < 0 && !td.querySelector("mark")) return;  // 일치도 강조도 없는 칸은 건드리지 않는다
       td.innerHTML = at < 0 ? esc(plain) : esc(plain.slice(0, at)) + `<mark>${esc(plain.slice(at, at + want.length))}</mark>` + esc(plain.slice(at + want.length));
     });
   });

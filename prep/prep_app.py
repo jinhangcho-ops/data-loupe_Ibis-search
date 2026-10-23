@@ -159,8 +159,13 @@ def cached_key(recipe):
     items = held.store["items"]
     if key in items:
         return key
+    return next(iter(usable_keys(key)), key)
+
+
+def usable_keys(key):
+    """key의 사본 대신 쓸 수 있는 받아 둔 사본의 열쇠들: 같은 테이블·거르기이고 받지 않은 컬럼이 key의 것의 부분집합(= 컬럼이 같거나 더 많은)인 것."""
     mine = set(key[3])
-    return next((k for k, item in items.items() if item[0] and isinstance(k, tuple) and len(k) == 4 and k[:3] == key[:3] and set(k[3]) <= mine), key)
+    return [k for k, item in held.store["items"].items() if item[0] and isinstance(k, tuple) and len(k) == 4 and k[:3] == key[:3] and set(k[3]) <= mine]
 
 
 def local_recipe(recipe):
@@ -191,7 +196,7 @@ def working_copy(recipe):
 
 
 def computes_stats(recipe):
-    """recipe에 통계를 내는 일이 있는지: fill mean·median·mode, outlier iqr·std, scale, 중복 제거(dedupe)."""
+    """recipe에 통계를 내는 일이 있는지: fill mean·median·mode, outlier iqr·std, scale standard·minmax, rare(전체 GROUP BY), label·onehot(서로 다른 값 읽기), 중복 제거(dedupe)."""
     if recipe.get("dedupe"):
         return True
     for spec in (recipe.get("columns") or {}).values():
@@ -199,7 +204,7 @@ def computes_stats(recipe):
         if not isinstance(ops, dict):
             continue
         fill, outlier = ops.get("fill"), ops.get("outlier")
-        if "scale" in ops or (isinstance(fill, dict) and fill.get("how") in ("mean", "median", "mode")) or (isinstance(outlier, dict) and outlier.get("by") in ("iqr", "std")):
+        if ops.get("scale") in ("standard", "minmax") or "rare" in ops or "label" in ops or "onehot" in ops or (isinstance(fill, dict) and fill.get("how") in ("mean", "median", "mode")) or (isinstance(outlier, dict) and outlier.get("by") in ("iqr", "std")):
             return True
     return False
 
@@ -229,7 +234,8 @@ def copy_gate(recipe, reads=False, fresh=False):
 def fresh_copy(recipe):
     """산출물(실행·저장·전체 분석)을 만들기 직전에 이 recipe의 작업 사본을 버린다. 그 사이 DB가 바뀌었을 수 있어 미리보기에서 받은 낡은 사본을 쓰지 않고 새로 받는다."""
     if local_mode(recipe):
-        held.forget(cached_key(recipe))
+        for k in {cached_key(recipe), *usable_keys(copy_key(recipe))}:  # 쓸 수 있는 사본이 여럿이면 모두(하나만 지우면 working_copy가 남은 낡은 사본을 고른다)
+            held.forget(k)
 
 
 def geo_gate(recipe):

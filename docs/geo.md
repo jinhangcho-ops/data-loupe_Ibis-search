@@ -11,7 +11,7 @@
 | 속성 이름들 | GeoJSON의 properties가 그대로 컬럼이 됩니다. 중첩 값은 JSON 글자 |
 | `geom_type` | Point, LineString, Polygon, MultiPolygon … |
 | `center_lon` `center_lat` | 중심(폴리곤은 구멍을 뺀 면적 무게중심, 점·선은 꼭짓점 평균) |
-| `min_lon` `min_lat` `max_lon` `max_lat` | 범위 상자 |
+| `min_lon` `min_lat` `max_lon` `max_lat` | 범위 상자(경도는 -180~180. 날짜 변경선을 넘는 도형은 `min_lon`이 `max_lon`보다 큼, 예: 178·-179) |
 | `geometry` | 도형 원본(JSON 글자) |
 
 파일의 `crs`가 WGS84가 아니면(예: EPSG:5179) 경도·위도로 바꾼 값을 둡니다. 속성 이름이 위 컬럼과 같으면 `_속성`을 붙입니다.

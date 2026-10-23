@@ -199,10 +199,10 @@ def run(config, path, password, halt, note):
                         try:
                             put, skipped, bad = attempt(lambda: sink.put(unit), load["retries"], halt, note)
                         except Exception:  # 끝내 못 넣거나 멈췄다: 이 묶음에서 이미 전달된 만큼은 기록에 남겨 이어 넣기가 겹치지 않게 한다
-                            done, sent = getattr(sink, "partial", lambda: (0, 0))()
-                            if done or sent:
+                            done, sent, bad = getattr(sink, "partial", lambda: (0, 0, 0))()
+                            if done or sent or bad:
                                 ledger.add(sent, **sink.placed)
-                                record.update(rows=record["rows"] + done, inserted=record["inserted"] + sent)
+                                record.update(rows=record["rows"] + done, inserted=record["inserted"] + sent, failures=record["failures"] + bad)
                                 write_record(path, record)
                             raise
                         ledger.add(put, **sink.placed)

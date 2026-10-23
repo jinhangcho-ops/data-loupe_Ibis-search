@@ -126,8 +126,9 @@ def test_refresh_flushes_midway_and_reports_failed_card(folder, monkeypatch):
     import datetime as dt
     from core import dash_store as store, querying, server
     from dashboard import dash_calc, dash_refresh as refresh
-    d = store.save_dashboard({"name": "중간", "refresh": {"every": "1일"}, "cards": [_card("가"), _card("나"), _card("다")]})
     monkeypatch.setitem(server.state, "opened", {"kind": "folder", "path": "C:/x"})
+    here = lambda c: {**c, "source": {**c["source"], "key": store.current_source()["key"]}}  # 지금 연결에서 구한 카드(카드를 구하기 전에 연결이 같은지 다시 본다)
+    d = store.save_dashboard({"name": "중간", "refresh": {"every": "1일"}, "cards": [here(_card("가")), here(_card("나")), here(_card("다"))]})
     monkeypatch.setattr(querying, "using", lambda **k: contextlib.nullcontext())
     monkeypatch.setattr(refresh, "scan_decision", lambda card, ctx: "")
     monkeypatch.setattr(refresh, "FLUSH_SECONDS", 0)  # 카드 하나 구할 때마다 저장
@@ -279,6 +280,8 @@ def test_notice_text_sends_only_known_phrases():
     assert schedule.notice_text("[Errno 110] Connection timed out").startswith("시간이 초과")
     assert schedule.notice_text("[Errno 28] No space left on device").startswith("디스크 공간")
     assert schedule.notice_text("Permission denied: kim_salary.csv").startswith("권한이 없습니다") and "kim_salary" not in schedule.notice_text("Permission denied: kim_salary.csv")
+    assert schedule.notice_text("[WinError 5] 액세스가 거부되었습니다").startswith("권한이 없습니다")
+    assert schedule.notice_text("[WinError 53] network path").startswith("실패했습니다")  # 5로 시작하는 다른 번호는 권한이 아니다
     assert schedule.notice_text(schedule.SKIP_RUNNING) == schedule.SKIP_RUNNING
 
 

@@ -538,9 +538,12 @@ def check_dashboard(d):
         try:
             if not DAY.fullmatch(as_of):
                 raise ValueError
-            dt.date.fromisoformat(as_of)
+            if dt.date.fromisoformat(as_of) > dt.date.today():
+                raise OverflowError
         except (ValueError, TypeError):
             raise ValueError("기준일(as_of)은 비워 두거나 YYYY-MM-DD 모양의 있는 날짜여야 합니다.") from None
+        except OverflowError:
+            raise ValueError("기준일(as_of)은 오늘 뒤의 날은 쓸 수 없습니다.") from None
     star = d.get("north_star") or {}
     if not isinstance(star, dict) or not isinstance(star.get("counters", []), list):
         raise ValueError("북극성(north_star)은 {card, counters: [카드 id]} 모양이어야 합니다.")
@@ -701,7 +704,9 @@ def set_cards_data(dash_id, items):
                 found.append(None)
             else:
                 try:
-                    card["data"] = check_card({**card, "data": data})["data"]
+                    new = {"cards": [check_card({**card, "data": data})]}
+                    keep_newer(new, {"cards": [card]})  # 저장된 값이 더 늦게 구한 것이면(같은 정의) 그것을 둔다
+                    card["data"] = new["cards"][0]["data"]
                     found.append(True)
                 except Exception as e:  # 이 카드만 실패(예: 크기 상한). 나머지 카드는 쓴다
                     found.append(e)

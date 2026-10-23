@@ -438,7 +438,7 @@ def propose(graph, get_table, con, schemas=None, target=None, remote=False, scan
         rules.append(entry)
     after = bytes_of(current, target, get_table, con, opened)
     joins = sum(1 for n in graph["nodes"] if n["kind"] == "join")
-    note = "" if verify else f"{REMOTE_NOTE} 확인하면 DB에 최대 {1 + len(RULES) + 4 * joins}번 조회해요."  # 원래 결과 1 + 규칙마다 결과 비교 + 조인마다 양쪽 키 고유 확인(키 하나가 고유한지는 행 수·고유 행 수로 2번 조회하니 양쪽 4번)
+    note = "" if verify else f"{REMOTE_NOTE} 확인하면 DB에 최대 {1 + len(RULES) + 6 * joins}번 조회해요."  # 원래 결과 1 + 규칙마다 결과 비교 + 조인마다 양쪽 키 고유 확인(키 하나가 고유한지는 행 수·고유 행 수로 2번 조회하니 양쪽 4번) + 규칙 1이 조인 오른쪽에 조건을 밀어 새 단계 id가 되면 그 오른쪽을 한 번 더(2번)
     return {"ok": True, "target": target, "rules": rules, "warnings": fanout_warnings(graph, ctx) if warn else [], "graph": current, "changed": current is not graph,
             "bytes": {"before": before, "after": after, "text": bytes_text(before, after)}, "verified": verify, "remote": remote, "note": note}
 

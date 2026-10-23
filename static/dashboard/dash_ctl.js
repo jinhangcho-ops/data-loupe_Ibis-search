@@ -56,10 +56,13 @@ class DashCtl {
   // 기준일과 기간 칸을 서버로 읽어 보는 기간(기준일로 자른 것)과 직전 기간을 정한다. 틀리면 이유를 보이고 이전 값으로 되돌린다.
   async apply(commit) {
     await this.ready;
+    const seq = this.applySeq = (this.applySeq ?? 0) + 1;  // 칸을 연달아 바꾸면 늦게 온 옛 응답이 새 기간을 덮지 않게 번호로 가린다
     const day = await api("/api/period/day", { text: this.asof.value });
+    if (seq !== this.applySeq) return;
     if (day.error) { this.asof.value = this.state.as_of; return this.note(this.asofNote, day.error, true); }
     const past = day.date !== this.today, blank = !this.per.value.trim();
     const parsed = blank ? { span: { start: null, end: null, label: "기간을 걸지 않아요. 카드의 원래 조건대로 보입니다" }, previous: null } : await api("/api/period/parse", { text: this.per.value, as_of: day.date }), span = parsed.span;
+    if (seq !== this.applySeq) return;
     if (span.error) { this.per.value = this.state.period; return this.note(this.perNote, span.error, true); }
     this.state.as_of = past ? day.date : "";
     this.state.period = this.per.value.trim();
@@ -122,7 +125,7 @@ class DashCtl {
     let took = 0;
     if (this.visible()) {
       const start = performance.now();
-      try { await this.liveRun(); this.note(this.liveNote, `갱신함 ${new Date().toLocaleTimeString()}`); } catch (e) { this.note(this.liveNote, e.message, true); }
+      try { const ran = await this.liveRun(); this.note(this.liveNote, ran === false ? "입력 중이라 미뤘어요" : `갱신함 ${new Date().toLocaleTimeString()}`); } catch (e) { this.note(this.liveNote, e.message, true); }
       took = performance.now() - start;
       this.times.push(took);
       if (took > interval) this.note(this.liveNote, `조회가 간격보다 오래 걸려요(평균 ${(this.times.reduce((a, b) => a + b, 0) / this.times.length / 1000).toFixed(1)}초)`, true);
@@ -139,17 +142,26 @@ class DashCtl {
 }
 // 서버에 다시 구해 달라고 보낼 카드: 값은 빼고, 상태·경고·배치도가 "N분째"를 이어 가도록 나빠진 시각(data.since)만 남긴다.
 const cardRequest = c => ({ ...DashBoard.plain(c), data: c.data?.since ? { since: c.data.since } : {} });
+// 실시간·기간으로 받은 값은 화면에만 보이고 저장하지 않는다(docs/dashboard.md). showLive가 처음 덮을 때의 값을 c.stored에 두고, 저장할 때(storedCard)는 그 값을 쓴다.
+// 다시 구하기처럼 c.data를 새로 넣으면 c.data !== c.liveData가 되어 그 값이 저장 대상이 된다.
+function showLive(c, data) {
+  if (!(c.liveData && c.data === c.liveData)) c.stored = c.data ?? {};
+  c.data = c.liveData = data;
+}
+const storedCard = c => ({ ...DashBoard.plain(c), data: c.liveData && c.data === c.liveData ? c.stored : c.data });
 // 실시간 한 번: 연결이 있는 카드의 값을 서버(/api/dash/cards/compute)에서 다시 구해 카드에 넣고 그린다(저장하지 않는다). 다른 연결의 카드는 서버가 건너뛴다.
 async function liveCards(board, connected) {
   if (!connected) throw new Error("먼저 데이터에 연결하세요.");
   const cards = board.cards.filter(c => c.source?.key && c.id).map(cardRequest);
-  (await api("/api/dash/cards/compute", { cards, ctx: board.ctx() })).results.forEach(r => { const c = board.cards.find(x => x.id === r.id); if (c && r.data) c.data = r.data; });
+  (await api("/api/dash/cards/compute", { cards, ctx: board.ctx() })).results.forEach(r => { const c = board.cards.find(x => x.id === r.id); if (c && r.data) showLive(c, r.data); });
   await board.recompare();
 }
 // 기간 기준 날짜 컬럼이 있는 날짜 X축이 아닌 카드(cards)를 보는 기간(board.ctx())으로 다시 구한다. 연결이 없거나 다른 연결의 카드는 이유를 카드에 적고 이전 값을 둔다.
+let rangeCall = 0;  // 기간으로 다시 구하는 요청 번호: 기간을 연달아 바꾸면 늦게 온 옛 응답은 버린다(카드마다 가장 최근 요청의 것만 받는다)
 async function recomputeRange(board, cards, connected) {
-  const ctx = board.ctx();
+  const ctx = board.ctx(), call = ++rangeCall;
   const todo = cards.filter(c => {
+    c.rangeCall = call;
     c.rangeNote = !connected ? "연결하면 이 기간으로 구합니다" : c.source.key && board.connKey && !sameSource(c.source.key, board.connKey) ? "다른 연결의 카드라 이 기간으로 구하지 못했어요" : "";
     return !c.rangeNote && c.id;
   });
@@ -157,9 +169,9 @@ async function recomputeRange(board, cards, connected) {
     try {
       (await api("/api/dash/cards/compute", { cards: todo.map(cardRequest), ctx })).results.forEach(r => {
         const c = todo.find(x => x.id === r.id);
-        if (c) { if (r.data) { c.data = r.data; c.rangeNote = ""; } else c.rangeNote = r.error; }
+        if (c && c.rangeCall === call) { if (r.data) { showLive(c, r.data); c.rangeNote = ""; } else c.rangeNote = r.error; }
       });
-    } catch (e) { todo.forEach(c => { c.rangeNote = e.message; }); }
+    } catch (e) { todo.forEach(c => { if (c.rangeCall === call) c.rangeNote = e.message; }); }
   }
   await board.recompare();  // 고유 개수 카드의 비교는 방금 받은 값으로 다시 만든다(끝에 그린다)
 }

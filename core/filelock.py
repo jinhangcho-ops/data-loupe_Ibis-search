@@ -23,13 +23,15 @@ def lock_path(name):
 
 
 def left_behind(path):
-    """잠금 파일이 끝난 프로세스의 것인지. 읽을 수 없거나 깨졌으면(만든 프로세스가 쓰기 전에 멈춘 빈 파일 등) 고친 지 BROKEN_AFTER초가 넘었을 때만 남은 것으로 본다."""
+    """잠금 파일이 끝난 프로세스의 것인지. 비었거나 깨졌으면(만든 프로세스가 쓰기 전에 멈춘 빈 파일 등) 고친 지 BROKEN_AFTER초가 넘었을 때만 남은 것으로 본다."""
     try:
         if path.is_symlink() or not path.is_file():
             return False
         pid, started = path.read_text(encoding="ascii").split()
         return scratch.ended(pid, started)
-    except (OSError, ValueError, psutil.Error):
+    except (OSError, psutil.Error):  # 프로세스를 볼 수 없다(권한 등): 살아 있을 수 있으니 빼앗지 않는다
+        return False
+    except ValueError:  # 비었거나 깨진 내용
         try:
             return time.time() - path.stat().st_mtime > BROKEN_AFTER
         except OSError:

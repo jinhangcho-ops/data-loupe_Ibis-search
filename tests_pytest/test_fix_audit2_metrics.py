@@ -197,7 +197,7 @@ def test_remote_propose_query_count_matches_the_note(tmp_path, monkeypatch):
     path = tmp_path / "o.duckdb"
     raw = duckdb.connect(str(path))
     raw.execute("create table sales as select i as id, (i % 3)::int as shop_id, ((i + 1) * 10)::double as amt from range(12) t(i)")
-    raw.execute("create table shops as select i::int as shop_id, 'x' as name from range(3) t(i)")
+    raw.execute("create table shops as select i::int as shop_id, 'x' as name, case when i < 2 then 'KR' else 'US' end as country from range(3) t(i)")
     raw.close()
     con = ibis.duckdb.connect(str(path))
     monkeypatch.setattr(held, "remote", lambda con: True)
@@ -208,5 +208,12 @@ def test_remote_propose_query_count_matches_the_note(tmp_path, monkeypatch):
     sent = spy_queries(monkeypatch)
     flow_opt.propose(graph, get, con, remote=True, scan_ok=True, source_key="k")
     scans = [q for q in sent if not q.lstrip().upper().startswith(("EXPLAIN", "DESCRIBE")) and "duckdb_tables" not in q and "SELECT CURRENT_" not in q.upper()]
-    assert len(scans) == 8 and len(scans) <= limit == 9, (len(scans), limit)  # 원래 1 + 규칙 비교 3(3번은 할 것 없음) + 키 고유 확인 2곳 x 2번
+    assert len(scans) == 8 and len(scans) <= limit, (len(scans), limit)  # 원래 1 + 규칙 비교 3(3번은 할 것 없음) + 키 고유 확인 2곳 x 2번
+    # 규칙 1이 조인 오른쪽에 조건을 밀면 새 단계 id로 고유 확인이 한 번 더 돈다(3B8): 그래도 안내한 최대 안이어야 한다
+    pushed = flow.from_body({"base": "sales", "joins": ["shops inner shop_id=shop_id"], "conditions": ["country = KR", "amt > 50"], "aggregate": {"by": ["shop_id"], "series": [{"agg": "sum", "y": "amt", "name": "total"}]}})
+    limit = int(flow_opt.propose(pushed, get, con, remote=True, source_key="k")["note"].split("최대 ")[1].split("번")[0])
+    del sent[:]
+    flow_opt.propose(pushed, get, con, remote=True, scan_ok=True, source_key="k")
+    scans = [q for q in sent if not q.lstrip().upper().startswith(("EXPLAIN", "DESCRIBE")) and "duckdb_tables" not in q and "SELECT CURRENT_" not in q.upper()]
+    assert len(scans) <= limit, (len(scans), limit)
     con.disconnect()

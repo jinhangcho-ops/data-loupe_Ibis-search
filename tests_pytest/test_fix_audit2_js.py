@@ -20,13 +20,14 @@ def dash_slice(start, end):
 # 대시보드 화면의 저장 부분을 돌리는 가짜 환경. failing이 참이면 서버가 저장을 거부한다.
 SAVE_PRELUDE = """
 const els = {}; globalThis.$ = id => els[id] ??= mk("x", { value: "" });
-let dashId = "A", dashName = "A", dashMeta = {}, dashboards = [], lastSaved = "s0", quiet = false, saveTimer = null, valuesDirty = false, current = "s0";
+let dashId = "A", dashName = "A", dashMeta = {}, dashboards = [], lastSaved = "s0", quiet = false, saveTimer = null, valuesDirty = false, valuesSeq = 0, current = "s0";
 const board = { cards: [], palette: [], star: {}, picked: new Set(), ctx: () => undefined, draw() {}, set(c) { this.cards = c; } };
 const snapshot = () => current, metaOf = () => ({}), liveStar = s => s, needsValues = c => c, boardChanged = () => {};
 const ctl = { set: async () => {} }; let panel = null;
 globalThis.say = (id, text) => { globalThis.said = text; };
 const dashDraft = { clear() {} };
 globalThis.DashBoard = { plain: c => c };
+const storedCard = c => c;
 let failing = false, opened = [], saved = 0;
 globalThis.api = async (url, body) => {
   if (url.includes("/get")) { opened.push(decodeURIComponent(url.split("id=")[1])); return { dashboard: { name: "B", palette: [], cards: [] } }; }
@@ -63,18 +64,19 @@ def test_refresh_does_not_reopen_when_save_fails(tmp_path):
     body = """
 (async () => {
   current = "edited"; failing = true;
-  handler({ detail: { results: [{ state: "ok" }] } }); await sleep(5);
+  handler({ detail: { results: [{ state: "ok", dashboard: "A" }] } }); await sleep(5);
   console.log(JSON.stringify({ opened }));
 })();
 """
-    prelude = SAVE_PRELUDE + "let handler; document.addEventListener = (n, f) => { handler = f; };\n"
-    assert run_node(tmp_path, body, parts=[prelude, SAVE, OPEN, refresh]) == {"opened": []}
+    prelude = SAVE_PRELUDE + "let handler; document.addEventListener = (n, f) => { handler = f; };\nconst typing = () => false; $(\"d-panel\").contains = () => false;\n"
+    helper = dash_slice("function reopenAfterRefresh", 'document.addEventListener("dash-refreshed"')
+    assert run_node(tmp_path, body, parts=[prelude, SAVE, OPEN, helper, refresh]) == {"opened": []}
 
 
 def test_recompute_values_are_saved_then_cleared(tmp_path):
     """값 다시 구하기는 snapshot(값 제외)에 나타나지 않아도 저장 대상이다. 저장하면 표시를 지운다."""
     recompute = dash_slice("  recompute: async card", "  star: () =>")
-    prelude = SAVE_PRELUDE + "const host = {" + recompute + "};\n"
+    prelude = SAVE_PRELUDE + "const scheduleSave = () => {};\nconst host = {" + recompute + "};\n"
     body = """
 (async () => {
   const card = { id: "c", data: { since: "" } }; board.cards = [card];
@@ -133,7 +135,7 @@ def test_apply_find_skips_missed_rows_without_mark(tmp_path):
     code = index_slice("let finding = false", '$("row-find").oninput')
     prelude = """
 let want = "", writes = 0;
-const mkrow = (text, marked) => { const td = { dataset: {}, textContent: text, set innerHTML(v) { writes++; } }; return Object.assign(mk("tr", { textContent: text }), { querySelectorAll: () => [td], querySelector: () => marked ? {} : null, classList: { toggle() {} } }); };
+const mkrow = (text, marked) => { const td = { dataset: {}, textContent: text, querySelector: () => marked ? {} : null, set innerHTML(v) { writes++; } }; return Object.assign(mk("tr", { textContent: text }), { querySelectorAll: () => [td], querySelector: () => marked ? {} : null, classList: { toggle() {} } }); };
 const rows = [mkrow("abc"), mkrow("xyz"), mkrow("qqq", true)];
 globalThis.$ = id => id === "row-find" ? { value: want } : id === "rows" ? { querySelectorAll: () => rows } : { textContent: "" };
 """

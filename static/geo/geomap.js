@@ -28,13 +28,15 @@ function tileZoom(frame) {
 }
 function tileRange(frame, z) {
   const n = 2 ** z, clamp = v => Math.max(0, Math.min(n - 1, v));
-  return { x0: clamp(Math.floor(frame.x0 * n)), x1: clamp(Math.floor(frame.x1 * n - 1e-9)), y0: clamp(Math.floor(frame.y0 * n)), y1: clamp(Math.floor(frame.y1 * n - 1e-9)), n };
+  const wide = frame.x0 < 0 && frame.x1 > 1;  // 세계 전체를 양쪽으로 넘으면 한 바퀴만, 한쪽만 넘으면(180 넘는 경도) 넘친 쪽을 감싸 이어 붙인다
+  const edge = v => wide ? clamp(v) : v;
+  return { x0: edge(Math.floor(frame.x0 * n)), x1: edge(Math.floor(frame.x1 * n - 1e-9)), y0: clamp(Math.floor(frame.y0 * n)), y1: clamp(Math.floor(frame.y1 * n - 1e-9)), n };
 }
 function tileCount(frame, z) { const r = tileRange(frame, z); return (r.x1 - r.x0 + 1) * (r.y1 - r.y0 + 1); }
 // 줌 z에서 틀과 겹치는 타일들 [{ z, x, y, url, px, py, size }](px·py·size는 그림 안 위치·크기)
 function tilesFor(frame, z) {
   const r = tileRange(frame, z), size = frame.scale / r.n, out = [];
-  for (let y = r.y0; y <= r.y1; y++) for (let x = r.x0; x <= r.x1; x++) out.push({ z, x, y, url: `${OSM_TILES}/${z}/${x}/${y}.png`, px: (x / r.n - frame.x0) * frame.scale, py: (y / r.n - frame.y0) * frame.scale, size });
+  for (let y = r.y0; y <= r.y1; y++) for (let x = r.x0; x <= r.x1; x++) out.push({ z, x, y, url: `${OSM_TILES}/${z}/${((x % r.n) + r.n) % r.n}/${y}.png`, px: (x / r.n - frame.x0) * frame.scale, py: (y / r.n - frame.y0) * frame.scale, size });
   return out;
 }
 // 영역 값 → 칠 투명도(0.18~0.9). 값이 모두 같으면 가운데 정도. 빈 값은 null(칠하지 않음).

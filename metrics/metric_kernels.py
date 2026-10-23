@@ -86,6 +86,14 @@ def last_rows(rows, ctx, what="기간"):
     return rows
 
 
+def top_rows(rows, ctx, what):
+    """표가 길면 앞의 MAX_ROWS개(이미 많은 순으로 정렬된 것)만 싣고 알린다."""
+    if len(rows) > MAX_ROWS:
+        ctx.notes.append(f"{what}이 많아 앞의 {MAX_ROWS}개만 표에 실었어요(대표 값은 전체 기준).")
+        return rows[:MAX_ROWS]
+    return rows
+
+
 def users_by_unit(t, s, unit, ctx):
     """기간 버킷마다 고유 사용자 수 → (표에 실을 [{period, users}], 첫~마지막 기간 칸 수, {기간 번호: 사용자 수}).
     표는 오래된 것부터 최근 MAX_ROWS칸만 만든다(활동 없는 기간은 0명). 칸이 아주 많아도(날짜 이상값) 칸마다 dict를 만들지 않으니, 평균 등은 칸 수·found로 계산한다."""
@@ -238,7 +246,7 @@ def exit_rate(t, s, p, ctx):
     ses, _ = sessions(t, s)
     found = mc.exit_rates(ses, "session", s["time"], s["page"])
     views, exits = sum(r["views"] for r in found), sum(r["exits"] for r in found)
-    rows = [{"page": str(r["page"]), "views": r["views"], "exits": r["exits"], "exit_rate": r["exit_rate"]} for r in found[:MAX_ROWS]]
+    rows = [{"page": str(r["page"]), "views": r["views"], "exits": r["exits"], "exit_rate": r["exit_rate"]} for r in top_rows(found, ctx, "페이지")]
     return result(mc.ratio(exits, views), rows, {"page": "페이지", "views": "조회 수", "exits": "마지막으로 본 세션 수", "exit_rate": "이탈률"},
                   {"views": views, "exits": exits}, label="전체 이탈률")
 
@@ -641,24 +649,33 @@ def key_names(align):
     return ["p0"] if align["kind"] == "period" else [f"k{i}" for i in range(len(align["keys"]))]
 
 
+def first_keys(x, names):
+    """공통 키 맞춤에서 사용자마다 첫 활동(같은 날이면 키 순)의 키 한 줄: (u, 키 컬럼들). 신규 수와 매출이 같은 키를 쓰게 한 곳에서 고른다(창 함수 row_number)."""
+    ranked = x.mutate(_r=ibis.row_number().over(ibis.window(group_by="u", order_by=["day", *names])))
+    return ranked.filter(ranked._r == 0).select("u", *names)
+
+
 def new_users(x, align):
     """맞춤 키마다 신규 사용자 수. 기간 맞춤은 첫 활동 기간, 공통 키 맞춤은 사용자의 첫 활동(같은 날이면 키 순) 키 하나에만(한 사용자를 여러 키로 세지 않는다)."""
     if align["kind"] == "period":
         first = x.group_by("u").aggregate(p0=x.p.min())
         return {int(r["p0"]): int(r["n"]) for r in mc.fetch_rows(first.group_by("p0").aggregate(n=first.u.count()), "기간 수")}
     names = key_names(align)
-    ranked = x.mutate(_r=ibis.row_number().over(ibis.window(group_by="u", order_by=["day", *names])))
-    first = ranked.filter(ranked._r == 0)
+    first = first_keys(x, names)
     return {tuple(r[k] for k in names): int(r["n"]) for r in mc.fetch_rows(first.group_by(names).aggregate(n=first.u.count()), "키 수")}
 
 
 def revenue_by_offset(x, align, max_days):
-    """{(맞춤 키, 첫 활동일로부터의 일수): 매출}. 사용자별 첫 활동일을 기준으로 max_days일 안만."""
-    first = x.group_by("u").aggregate(d0=x.day.min(), **({"p0": x.p.min()} if align["kind"] == "period" else {}))
-    j = x.join(first, "u")
+    """{(맞춤 키, 첫 활동일로부터의 일수): 매출}. 사용자별 첫 활동일을 기준으로 max_days일 안만. 공통 키 맞춤은 매출도 사용자의 첫 키(new_users가 센 키)로 묶는다."""
+    names = key_names(align)
+    if align["kind"] == "period":
+        first = x.group_by("u").aggregate(d0=x.day.min(), p0=x.p.min())
+        j = x.join(first, "u")
+    else:
+        first = x.group_by("u").aggregate(d0=x.day.min())
+        j = x.select("u", "day", "amt").join(first, "u").join(first_keys(x, names), "u")
     j = j.mutate(off=j.day - j.d0)
     j = j.filter(j.off <= max_days)
-    names = key_names(align)
     got = mc.fetch_rows(j.group_by([*names, "off"]).aggregate(r=j.amt.sum()), "키·일수 조합")
     return {((int(r["p0"]) if align["kind"] == "period" else tuple(r[k] for k in names)), int(r["off"])): num(r["r"]) or 0.0 for r in got}
 
@@ -770,7 +787,11 @@ def money_supply(t, s, ctx):
     x = with_user(t, s)
     x = x.select(u=x[s["user"]], d=mc.day_index(x[s["time"]]), b=x[s["balance"]], tm=x[s["time"]])
     x = x.filter(x.d.notnull())
-    per = x.group_by("u").aggregate(bal=x.b.argmax(x.tm, where=x.b.notnull()), last=x.d.max())  # 마지막 행의 잔액이 비면 마지막으로 알려진 잔액
+    known = x.filter(x.b.notnull())  # 마지막 행의 잔액이 비면 마지막으로 알려진 잔액. 같은 시각이 여럿이면 그중 큰 잔액
+    at = known.group_by("u").aggregate(tm=known.tm.max())
+    same = known.join(at, ["u", "tm"])
+    bal = same.group_by("u").aggregate(bal=same.b.max())
+    per = x.group_by("u").aggregate(last=x.d.max()).left_join(bal, "u")
     end = one(per.aggregate(m=per.last.max()))["m"]
     if end is None:
         return 0.0, 0
@@ -824,7 +845,7 @@ def stage_clear(t, s, p, ctx):
     win = t[s["result"]] == funnel.step_value(t[s["result"]].type(), s["win_value"])
     x = t.select(g=t[s["stage"]], u=t[s["user"]] if s.get("user") else ibis.literal(0), w=win.cast("int64"))
     per = x.group_by("g").aggregate(tries=x.count(), clears=x.w.sum(), users=x.u.nunique())
-    found = sorted(mc.fetch_rows(per, "스테이지 수"), key=lambda r: r["g"])  # 스테이지 값의 원래 타입 순(숫자는 숫자 순)
+    found = sorted(mc.fetch_rows(per, "스테이지 수"), key=lambda r: (r["g"] != r["g"], r["g"]))  # 스테이지 값의 원래 타입 순(숫자는 숫자 순, NaN은 맨 뒤)
     rows = [{"stage": str(r["g"]), "tries": int(r["tries"]), "clears": int(r["clears"] or 0), "users": int(r["users"]), "clear_rate": mc.ratio(int(r["clears"] or 0), int(r["tries"])),
              "try_per_user": mc.ratio(int(r["tries"]), int(r["users"]))} for r in found]
     tries, clears = sum(r["tries"] for r in rows), sum(r["clears"] for r in rows)
@@ -852,7 +873,7 @@ def meta(t, s, p, ctx):
     top = rows[0]
     wins = sum(r["wins"] for r in rows)
     value = top["pick_rate"] if p["pick"] == "pick" else mc.ratio(wins, total)
-    return result(value, rows[:MAX_ROWS], cols, {"picks": total, "wins": wins}, label=f"가장 많이 고른 ‘{top['item']}’의 비율" if p["pick"] == "pick" else "전체 승률")
+    return result(value, top_rows(rows, ctx, "항목"), cols, {"picks": total, "wins": wins}, label=f"가장 많이 고른 ‘{top['item']}’의 비율" if p["pick"] == "pick" else "전체 승률")
 
 
 @kernel("pity")
@@ -1071,8 +1092,11 @@ def mde(t, s, p, ctx):
         if value is None:
             ctx.notes.append("대조군 비율이 0 또는 1이라 분산이 0이어서 최소 검출 효과를 구할 수 없어요.")
     else:
-        sd = math.sqrt(((c["sd"] or 0.0) ** 2 + (e["sd"] or 0.0) ** 2) / 2)
-        value = mc.mde_two_means(sd, c["n"], e["n"], s["alpha"], s["power"])
+        if c["sd"] is None or e["sd"] is None:
+            value = None
+            ctx.notes.append("한 군에 값이 1개뿐이라 표준편차를 구할 수 없어 최소 검출 효과를 구할 수 없어요.")
+        else:
+            value = mc.mde_two_means(math.sqrt((c["sd"] ** 2 + e["sd"] ** 2) / 2), c["n"], e["n"], s["alpha"], s["power"])
     return result(value, [{"name": "MDE(절대)", "value": value}, {"name": "대조군 평균", "value": c["mean"]}, {"name": "MDE(대조군 대비)", "value": None if value is None else mc.ratio(value, c["mean"])}],
                   {"name": "항목", "value": "값"}, {"control_n": c["n"], "treat_n": e["n"]}, label=f"검정력 {s['power']:g}, 유의수준 {s['alpha']:g}에서 잡아낼 수 있는 최소 차이(정규 근사)")
 

@@ -158,8 +158,7 @@ def fill_around(t, name, by, ahead):
     return t.drop("__group")
 
 
-def fill(t, name, arg, base=None):
-    """base를 주면 mean·median·mode 통계를 t 대신 base(단계 시작 표)로 구한다."""
+def fill(t, name, arg):
     how, col = arg["how"], t[name]
     if how == "drop":
         return t.filter(col.notnull())
@@ -170,7 +169,7 @@ def fill(t, name, arg, base=None):
     else:
         if how != "mode" and parse.kind(col.type()) not in NUMBER:
             raise ValueError(f"'{how}'은 정수·실수 컬럼에만 쓸 수 있습니다. '{name}' 컬럼은 {parse.type_info(col.type())[0]}입니다.")
-        value = getattr((base if base is not None else t)[name], how)().to_pyarrow().as_py()
+        value = getattr(t[name], how)().to_pyarrow().as_py()
     return t.mutate(**{name: col.fill_null(value)})
 
 
@@ -384,33 +383,46 @@ def drops_rows(key, value):
     return key in ("fill", "outlier") and isinstance(value, dict) and value.get("how") == "drop"
 
 
-STATS_FROM_BASE = ("fill", "outlier")  # 통계를 단계 시작 표(base)로 구할 수 있는 일
+OUTLIER_AT = OPS_NAMES.index("outlier")  # 행을 뺄지 정하는 통계(outlier)는 단계 시작 표로 구하니, 그 앞의 일만 시작 표(base)에도 한다
+
+
+def fills_stat(key, value):
+    """빈칸을 채울 값을 통계(mean·median·mode)로 구하는 fill: 행을 다 뺀 뒤의 표로 구하려고 rest로 미룬다."""
+    return key == "fill" and isinstance(value, dict) and value.get("how") in ("mean", "median", "mode")
 
 
 def apply_ops(t, name, ops, part="all", base=None):
     """컬럼 하나의 ops를 OPS의 순서대로 적용한다. 컬럼 타입은 앞 단계를 적용한 뒤의 것을 따른다.
-    part가 rows면 마지막 행 줄이기(fill·outlier의 drop)까지만, rest면 그 뒤 것만(행 줄이기가 없으면 모두) 적용한다.
-    컬럼마다 차례로 통계(평균 등)를 내면 앞 컬럼의 통계가 뒤 컬럼이 줄이는 행을 포함하므로, 호출하는 쪽이 rows를 모든 컬럼에 먼저 하고 rest를 한다.
-    rows일 때 base(그 단계를 시작하는 표)를 주면 fill·outlier의 통계를 앞 컬럼이 행을 줄인 뒤의 t가 아니라 base로 구한다(필터는 차례로 걸어도 같다 = 컬럼 순서와 무관).
-    이 컬럼의 앞선 일(타입 바꾸기 등)은 base에도 같이 적용해 통계가 같은 값에서 나오게 한다."""
+    part가 rows면 마지막 행 줄이기(fill·outlier의 drop)까지만, rest면 그 뒤 것과 fill의 통계 채우기(mean·median·mode)를 적용한다(행 줄이기가 없으면 모두 rest).
+    규칙: 행을 뺄지 정하는 통계(outlier의 경계)는 base(그 단계를 시작하는 표)로 구해 컬럼 순서와 무관하고,
+    채울 값(fill mean 등)과 scale 같은 값 통계는 모든 컬럼의 행 줄이기가 끝난 t로 구한다(앞 컬럼이 뺀 행을 빼고 평균을 구함).
+    이 컬럼의 outlier 앞선 일(타입 바꾸기 등)은 base에도 같이 해 경계가 같은 값에서 나오게 한다(빈 값은 통계에서 빠지므로 fill은 base에 하지 않는다)."""
     for key in ops:
         parse.check_name(key, OPS_NAMES, "전처리 항목")
     last = max((i for i, op in enumerate(OPS) if op[0] in ops and drops_rows(op[0], ops[op[0]])), default=-1)
     for i, (key, kinds, valid, form, fn) in enumerate(OPS):
-        if key not in ops or (part == "rows" and i > last) or (part == "rest" and i <= last):
+        if key not in ops:
             continue
-        dtype = t[name].type()
-        if kinds and parse.kind(dtype) not in kinds:
-            raise ValueError(f"'{key}'은 {'·'.join(KIND_NAMES[k] for k in kinds)} 컬럼에만 쓸 수 있습니다. '{name}' 컬럼은 {parse.type_info(dtype)[0]}입니다.")
-        if not valid(ops[key]):
+        deferred = fills_stat(key, ops[key])
+        mine = (i <= last and not deferred) if part == "rows" else (i > last or deferred) if part == "rest" else True
+        src = t if mine or base is None else base  # 이 part의 일이 아니어도 base에 하는 일(outlier 앞)은 base에 하기 전에 검사한다
+        if mine or (base is not None and i <= OUTLIER_AT):
+            dtype = src[name].type()
+            if kinds and parse.kind(dtype) not in kinds:
+                raise ValueError(f"'{key}'은 {'·'.join(KIND_NAMES[k] for k in kinds)} 컬럼에만 쓸 수 있습니다. '{name}' 컬럼은 {parse.type_info(dtype)[0]}입니다.")
+        if not valid(ops[key]):  # 값 형식은 이 part의 일이 아니어도 먼저 본다(base에 하다 엉뚱한 오류가 나지 않게)
             raise ValueError(f"'{name}' 컬럼의 '{key}' 값은 {form} 형식으로 쓰세요.")
         if key in NAN_OPS:
-            t = t.mutate(**{name: nan_to_null(t[name])})
-            base = None if base is None else base.mutate(**{name: nan_to_null(base[name])})
-        if base is None:
+            if mine:
+                t = t.mutate(**{name: nan_to_null(t[name])})
+            if base is not None and i <= OUTLIER_AT:
+                base = base.mutate(**{name: nan_to_null(base[name])})
+        if key == "outlier" and base is not None:
+            if mine:
+                t = fn(t, name, ops[key], base)
+            continue
+        if mine:
             t = fn(t, name, ops[key])
-        elif key in STATS_FROM_BASE:
-            t, base = fn(t, name, ops[key], base), base if drops_rows(key, ops[key]) else fn(base, name, ops[key], base)
-        else:
-            t, base = fn(t, name, ops[key]), fn(base, name, ops[key])
+        if base is not None and i < OUTLIER_AT and not deferred and not drops_rows(key, ops[key]):
+            base = fn(base, name, ops[key])
     return t

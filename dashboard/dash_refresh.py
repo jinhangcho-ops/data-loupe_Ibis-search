@@ -21,6 +21,7 @@ from core.server import run
 MIN_REFRESH = dash_store.MIN_REFRESH  # 최신화 주기의 최소(초)
 LIVE_FILE = "live_min.json"  # {source_key: 실시간 간격 최소(초)}
 MAX_LIVE_MIN = 86400
+GROW = 4 * 1024 * 1024  # 저장소가 이 크기를 넘을 때마다 중간 저장 간격을 FLUSH_SECONDS만큼 늘린다
 FLUSH_SECONDS = 30  # 한 대시보드를 구하는 동안 이만큼 지나면 그때까지 구한 카드를 먼저 저장한다(중간에 꺼져도 다 잃지 않게)
 REFRESHABLE = ("chart", "analysis", "funnel", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation", "geomap")  # 지금 다시 구할 수 있는 카드 종류
 JOB = {"running": False, "total": 0, "done": 0, "current": "", "results": []}  # 마지막 최신화 작업의 상태(status가 복사해 준다)
@@ -124,14 +125,14 @@ def geo_sqls(card, con):
     if card["kind"] not in ("analysis", "funnel") or not recipe.get("geo") or not held.remote(con):
         return []
     from geo import prep_geo  # 좌표 단계가 있을 때만 올린다
-    return [server.expr_sql(con, expr)[0] for key, expr in run(lambda: prep_geo.reference_exprs(prep_geo.check(recipe["geo"]), con)) if key not in held.store["items"]]
+    return [server.expr_sql(con, expr)[0] for key, expr in run(lambda: prep_geo.reference_exprs(prep_geo.check(recipe["geo"]), con)) if not held.has(key)]
 
 
 def copy_sqls(card, con):
     """원격 연결에서 full 분석·흐름 카드가 아직 없는 작업 사본(prep_app.working_copy)을 새로 받아야 하면, 그 사본이 읽을 표의 SQL(prep_app.copy_gate와 같은 대상)."""
     source = card["source"]
     recipe = source.get("recipe") or {}
-    if card["kind"] not in ("analysis", "funnel") or source.get("full") is not True or not recipe or not held.remote(con) or not prep_app.local_mode(recipe) or prep_app.copy_key(recipe) in held.store["items"]:
+    if card["kind"] not in ("analysis", "funnel") or source.get("full") is not True or not recipe or not held.remote(con) or not prep_app.local_mode(recipe) or held.has(prep_app.cached_key(recipe)):
         return []
     return [run(lambda: prep_app.scan_sql(recipe))[0]]
 
@@ -171,6 +172,10 @@ def parse_time(text):
         return dt.datetime.fromisoformat(text)
     except (TypeError, ValueError):
         return None
+
+
+class Changed(Exception):
+    """카드를 구하기 직전에 연결이 바뀐 것을 알았다(그 카드를 건너뛰고 작업을 멈춘다)."""
 
 
 def skip_reason(d, card, key, now):
@@ -217,7 +222,7 @@ def start(now=None):
     now_source = dash_store.current_source()
     if now_source is None:
         raise ValueError("먼저 데이터에 연결하세요.")
-    now = now or dt.datetime.now()
+    given, now = now, now or dt.datetime.now()  # given: 시험이 정한 시각(없으면 카드마다 구한 시각을 찍는다)
     with LOCK:
         if JOB["running"]:
             return {**JOB, "results": [dict(r) for r in JOB["results"]]}
@@ -234,13 +239,22 @@ def start(now=None):
         STOP.clear()
         JOB.update(running=bool(plan), total=len(plan), done=0, current="", results=results)
         if plan:
-            THREAD[0] = threading.Thread(target=work, args=(plan, now), daemon=True)
+            THREAD[0] = threading.Thread(target=work, args=(plan, given), daemon=True)
             THREAD[0].start()
     return status()
 
 
-def work(plan, now):
-    """작업 스레드: 카드를 차례로 구한다. 멈추기를 누르면 남은 카드는 건너뜀. 끝나면 running을 끈다.
+def flush_gap():
+    """중간 저장 간격(초): 저장소를 통째로 풀고 다시 쓰므로 저장소가 클수록(GROW 바이트마다 한 배씩) 드물게 한다."""
+    try:
+        size = dash_store.path_of().stat().st_size
+    except OSError:
+        size = 0
+    return FLUSH_SECONDS * max(1, size // GROW)
+
+
+def work(plan, given):
+    """작업 스레드: 카드를 차례로 구한다. 멈추기를 누르면 남은 카드는 건너뜀. 끝나면 running을 끈다. 카드마다 연결이 아직 같은지 다시 보고 바뀌었으면 그 카드부터 멈춘다.
     대시보드마다 보는 기간과 같은 테이블·조건을 묶은 읽기 계획은 그 대시보드의 첫 카드를 구할 때 세운다(실패하면 그 카드만 실패로 남는다)."""
     try:
         contexts, plans, mine, pending = {}, {}, {}, {}  # pending: 대시보드 id → [(slot, 카드 id, 값, 같은지 확인)]. 한 대시보드를 다 구한 뒤 저장소를 한 번만 쓴다
@@ -263,7 +277,7 @@ def work(plan, now):
                         slot.update(state=outcome[0], message=outcome[1])
         for d, card in plan:
             mine.setdefault(d["id"], []).append(card)
-        renewed = False  # 최신화를 시작하고 첫 카드에서 한 번만 PC 사본을 새로 받게 한다
+        renewed = set()  # 이 작업이 읽는 PC 사본은 처음 쓸 때 한 번만 새로 받는다(카드마다 차례를 다시 잡아도 같은 집합)
         for d, card in plan:
             for other in [k for k in pending if k != d["id"]]:
                 flush(other)
@@ -275,8 +289,11 @@ def work(plan, now):
             with LOCK:
                 JOB["current"] = card["title"]
             try:
-                with querying.using(fresh=not renewed):
-                    renewed = True
+                with querying.using(renewed=renewed):
+                    here =(dash_store.current_source() or {}).get("key")
+                    if not here or not use_counts.same_source((card.get("source") or {}).get("key"), here):  # 카드 사이에 사용자가 다른 연결로 바꿨다
+                        STOP.set()
+                        raise Changed("연결이 바뀌어 건너뛰었어요")
                     if d["id"] not in plans:
                         contexts[d["id"]] = context(d)
                         plans[d["id"]] = dash_calc.shared_context(mine[d["id"]], contexts[d["id"]])  # 같은 테이블·조건의 카드들을 묶는다
@@ -286,17 +303,19 @@ def work(plan, now):
                     if why:
                         outcome = ("skipped", why)
                     else:
-                        data = dash_calc.compute(checked, now.isoformat(timespec="seconds"), ctx)
+                        data = dash_calc.compute(checked, (given or dt.datetime.now()).isoformat(timespec="seconds"), ctx)
                         want = dash_store.def_hash(dash_calc.definition(checked))
                         pending.setdefault(d["id"], []).append((slot, card["id"], data, lambda c, want=want: dash_store.def_hash(dash_calc.definition(dash_store.check_card(c))) == want))
                         outcome = None  # 저장하며 정한다(flush)
+            except Changed as e:
+                outcome = ("skipped", str(e))
             except Exception as e:  # 이전 값은 그대로 두고 이유만 남긴다
                 outcome = ("failed", source.mask(str(e), server.state["passwords"]))
             with LOCK:
                 if outcome:
                     slot.update(state=outcome[0], message=outcome[1])
                 JOB["done"] += 1
-            if time.monotonic() - last[0] >= FLUSH_SECONDS:
+            if time.monotonic() - last[0] >= flush_gap():
                 flush(d["id"])
     finally:
         for k in list(pending):

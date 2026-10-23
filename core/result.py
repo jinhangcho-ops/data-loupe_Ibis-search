@@ -32,7 +32,11 @@ def has_nested(expr):
 def lazy(expr):
     """파일 연결(Polars)이면 식의 LazyFrame, 아니면 None. Polars는 ibis의 묶음 받기·저장이 전체를 메모리에 올린 뒤 나눠서, LazyFrame의 스트리밍을 직접 쓴다."""
     backend = ibis.get_backend(expr)
-    return backend.compile(expr) if backend.name == "polars" else None
+    if backend.name != "polars":
+        return None
+    from core import source
+    source.refresh_csv(backend)  # 원본 CSV가 바뀌었으면 다시 변환한 뒤 계산(CP949 임시본이 낡지 않게)
+    return backend.compile(expr)
 
 
 def whole_fetch(backend):

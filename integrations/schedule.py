@@ -108,6 +108,8 @@ def checked(item):
     for key in ("inapp", "windows"):
         if type(found[key]) is not bool:
             raise ValueError(f"예약의 {key}는 true·false여야 합니다.")
+    if found["inapp"] and found["windows"]:
+        raise ValueError("프로그램 안 예약(inapp)과 Windows 작업(windows)은 같이 고를 수 없습니다. 하나만 고르세요.")
     if not isinstance(found["notify"], str) or (found["notify"] and found["notify"] not in settings.named(notify.FILE)):
         raise ValueError(f"보낼 곳 '{found['notify']}'이 없습니다." if isinstance(found["notify"], str) else "보낼 곳 이름은 글자여야 합니다.")
     if found["notify_on"] not in NOTIFY_ON:
@@ -142,26 +144,27 @@ def save(name, item):
     name = name.strip() if isinstance(name, str) else ""
     if not 1 <= len(name) <= 50:
         raise ValueError("구성 이름은 1자 이상 50자 이하로 입력하세요.")
-    found = schedules()
-    old = found.get(name, {})
-    if item is None:
-        if old.get("task"):
+    with settings.updating(FILE):  # 읽고-고치고-쓰기를 한 번에 하나씩(동시에 저장한 예약이 사라지지 않게)
+        found = schedules()
+        old = found.get(name, {})
+        if item is None:
+            if old.get("task"):
+                wintask.delete(old["task"])
+            found.pop(name, None)
+            settings.write(FILE, found)
+            return found
+        item = checked(item)
+        collection(name)
+        if name not in found and len(found) >= MAX_SCHEDULES:
+            raise ValueError(f"예약은 {MAX_SCHEDULES}개까지입니다. 쓰지 않는 것을 지우세요.")
+        if item["windows"]:
+            taken = [s["task"] for n, s in found.items() if n != name and s.get("task")]
+            item["task"] = register(name, {**item, "task": old.get("task")}, taken)
+        elif old.get("task"):
             wintask.delete(old["task"])
-        found.pop(name, None)
+        found[name] = item
         settings.write(FILE, found)
         return found
-    item = checked(item)
-    collection(name)
-    if name not in found and len(found) >= MAX_SCHEDULES:
-        raise ValueError(f"예약은 {MAX_SCHEDULES}개까지입니다. 쓰지 않는 것을 지우세요.")
-    if item["windows"]:
-        taken = [s["task"] for n, s in found.items() if n != name and s.get("task")]
-        item["task"] = register(name, {**item, "task": old.get("task")}, taken)
-    elif old.get("task"):
-        wintask.delete(old["task"])
-    found[name] = item
-    settings.write(FILE, found)
-    return found
 
 
 def tasks(found):
@@ -265,7 +268,7 @@ SEE_LOG = "(자세한 내용은 프로그램의 실행 기록)"
 KNOWN_NOTICES = ((re.compile(r"연결이? 거부|connection refused|ECONNREFUSED|WinError 10061", re.I), "연결이 거부되었습니다"),
                  (re.compile(r"시간 ?초과|timed? ?out", re.I), "시간이 초과되었습니다"),
                  (re.compile(r"디스크|저장 공간|no space left|disk full|WinError 112", re.I), "디스크 공간이 부족합니다"),
-                 (re.compile(r"권한|permission denied|access (is )?denied|WinError 5", re.I), "권한이 없습니다"),
+                 (re.compile(r"권한|permission denied|access (is )?denied|WinError 5\b", re.I), "권한이 없습니다"),
                  (re.compile(r"찾을 수 없|not found|no such file|does not exist|FileNotFound", re.I), "찾을 수 없습니다"))  # 정해진 어휘(오류 글에서 이것을 알아보면 이 문구만 보낸다)
 
 
@@ -290,18 +293,23 @@ def tell(name, result, rows, seconds, message):
     item = schedules().get(name) or {}
     if not item.get("notify") or (result == "끝" and item.get("notify_on") != "always"):
         return ""
-    lines = [f"구성: {name}", f"행 수: {rows:,}" if rows is not None else "", f"걸린 시간: {notify.duration_text(seconds)}", f"오류: {notice_text(message)}" if message else ""]
+    lines = [f"구성: {name}", f"행 수: {rows:,}" if rows is not None else "", f"걸린 시간: {notify.duration_text(seconds)}", f"오류: {notice_text(message)}" if message and result != "끝" else ""]
     try:
         notify.send(item["notify"], {"title": TITLES[result], "text": "\n".join(x for x in lines if x), "rows": rows, "seconds": seconds})
     except ValueError as e:
         return f"알림을 보내지 못했습니다: {e}"
+    except Exception as e:  # 연결 도중 끊김(IncompleteRead) 같은 것: 글에 주소가 들 수 있어 종류만 적는다. 실행 기록은 끝내야 한다
+        return f"알림을 보내지 못했습니다: {type(e).__name__}"
     return ""
 
 
 def finish(run_id, name, result, rows=None, seconds=0.0, message=""):
     """기록을 끝내고 알린다. 알림이 실패하면 그 문구를 기록에 덧붙인다. message는 이미 가린 것이다(수집 상태의 오류는 collect_job이 가린다)."""
-    problem = tell(name, result, rows, seconds, message)
-    end_run(run_id, result, rows, " ".join(x for x in (message, problem) if x))
+    problem = ""
+    try:
+        problem = tell(name, result, rows, seconds, message)
+    finally:  # 알림에서 무슨 일이 있어도 "도는 중"으로 남기지 않는다
+        end_run(run_id, result, rows, " ".join(x for x in (message, problem) if x))
 
 
 # ---------- 실행 ----------

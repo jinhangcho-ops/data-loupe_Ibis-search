@@ -5,6 +5,7 @@ DB는 정렬이 없으면(또는 정렬 값이 같은 행끼리는) 순서를 �
 PC 안에서 계산하는 연결(DuckDB 파일, Parquet·CSV 등 파일)은 받지 않는다. 받아 둔 파일은 scratch 임시 폴더에 두고 연결을 바꾸면 지운다.
 데이터를 읽는 함수는 server.run으로 연결 스레드에서 부른다."""
 import collections
+import contextlib
 from pathlib import Path
 
 from lazy import ibis
@@ -55,11 +56,32 @@ def forget(key):
         drop(item[0])
 
 
-def forget_all():
-    """받아 둔 결과를 모두 지운다(연결은 그대로). 최신화·Slack 질의가 시작할 때 한 번 불러, 그 안에서는 원본이 바뀐 것을 새로 받은 사본으로 본다."""
-    for key in list(store["items"]):
-        forget(key)
-    store["jobs"].clear()
+RENEWED = [None]  # 차례를 잡은 새로고침·Slack 명령이 이미 새로 받은 사본의 열쇠들(그 밖이면 None: 새로 받지 않는다)
+
+
+@contextlib.contextmanager
+def renewing(done):
+    """이 안에서 쓰는 사본은 처음 쓸 때 한 번만 새로 받는다(쓰지 않는 검색·전처리 사본은 그대로 둔다). done은 작업 하나가 나눠 쓰는 열쇠 집합이다:
+    새로고침은 카드마다 차례를 다시 잡으므로 같은 집합을 넘긴다. 차례를 놓은 사이의 화면 요청은 새로 받지 않는다. None이면 아무것도 새로 받지 않는다."""
+    RENEWED[0] = done
+    try:
+        yield
+    finally:
+        RENEWED[0] = None
+
+
+def has(key):
+    """받아 둔 사본을 그대로 쓸 수 있는지(받아 두었고, 지금 작업이 새로 받을 차례가 아니다). 처리 용량 확인이 읽을 표를 고를 때 쓴다."""
+    return key in store["items"] and (RENEWED[0] is None or key in RENEWED[0])
+
+
+def renews(key):
+    """이 사본을 지금 새로 받아야 하는지(작업 중이고 이 작업이 아직 새로 받지 않았으면 True, 받은 것으로 적는다)."""
+    done = RENEWED[0]
+    if done is None or key in done:
+        return False
+    done.add(key)
+    return True
 
 
 def keep(key, item):
@@ -115,7 +137,7 @@ def fetch(key, expr, stop, known=None, cap=True):
 def ensure(key, expr, stop, counter=None, fresh=False, cap=True):
     """받아 둔 결과(없거나 fresh면 지금 받아서)의 (테이블 이름, 받은 행 수). counter를 주면 받기 전에 행 수를 세어 상한을 넘으면 받지 않는다.
     상한을 넘어 받지 않았으면 (None, 아는 행 수 또는 None)."""
-    if fresh:
+    if fresh or renews(key):
         forget(key)
     item = store["items"].get(key)
     if item is None:

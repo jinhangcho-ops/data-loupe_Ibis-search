@@ -2035,12 +2035,12 @@ def schedule_section(c, got):
     check("GET: 등록됨·경로 맞음·다음·마지막(성공), 프로그램 안 예약은 꺼짐", (r["schedules"]["예약 하나"], r["tasks"], r["next_inapp"], r["stale"]),
           ({**weekly, "minutes": 60, "inapp": False, "windows": True, "notify": "", "notify_on": "fail"},
            {"예약 하나": {"registered": True, "path_ok": True, "next": "2026-10-16 09:00", "last": "2026-10-15 13:05 · 성공"}}, {"예약 하나": None}, []))
-    put("예약/둘?", {**every, "windows": True})
+    put("예약/둘?", {**every, "inapp": False, "windows": True})
     xml = fake.tasks["\\ibis_search\\예약_둘_"][1]
     check("간격 작업: 다음 칸부터 PT45M 반복(기간 없음), 작업 이름은 안전한 글자로", ("<Interval>PT45M</Interval>" in xml, "<Duration>" in xml,
           "<StartBoundary>2026-10-15T09:00:00</StartBoundary>" in xml, sorted(fake.tasks)), (True, False, True, ["\\ibis_search\\예약 하나", "\\ibis_search\\예약_둘_"]))
     got("/api/collections", name="예약_둘_", collection=cfg("three.parquet"))
-    put("예약_둘_", {**daily, "windows": True})
+    put("예약_둘_", {**daily, "inapp": False, "windows": True})
     check("이름이 겹치면 _2를 붙이고 schedules.json에 대응을 적음", {n: s.get("task") for n, s in schedule.schedules().items()},
           {"예약 하나": "예약 하나", "예약/둘?": "예약_둘_", "예약_둘_": "예약_둘__2"})
     check("작업 이름은 폴더 밖·아래를 가리킬 수 없음", [raised(lambda t=t: wintask.full(t)) for t in ("..\\x", "a\\b", "", " a", "x" * 61)], ["ValueError"] * 5)

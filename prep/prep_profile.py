@@ -5,7 +5,7 @@ from lazy import ibis
 from core import parse
 from core import result
 from prep.prep_expr import type_text
-from core.prep_ops import date_pattern, is_number, nan_to_null, stats
+from core.prep_ops import date_pattern, is_number, stats
 
 # 빈 값을 뜻하는 글자로 흔한 것. ""는 blank로 센다.
 MARKERS = ["", "-", "N/A", "n/a", "NA", "null", "NULL", "None", "없음", "?"]
@@ -77,7 +77,9 @@ def profile(t):
     texts = {i: name for i, (name, kind) in enumerate(kinds.items()) if kind == "string"}
     metrics = {"rows": t.count()}
     for i, (name, kind) in enumerate(kinds.items()):
-        col = nan_to_null(t[name])  # 실수의 NaN은 빈 값으로(빈 값 수에 들고 min·max가 NaN이 되지 않게)
+        col = t[name]
+        if col.type().is_floating():  # 실수의 NaN·무한은 빈 값으로(빈 값 수에 들고 min·max가 NaN·inf가 되지 않게, inf를 고유 값으로 세지 않게)
+            col = (col.isnan() | col.isinf()).ifelse(ibis.null(), col)
         metrics.update({f"nulls{i}": count(col.isnull()), f"unique{i}": col.nunique(where=col.notnull())})
         if kind in ("int", "float", "date", "time"):
             metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})

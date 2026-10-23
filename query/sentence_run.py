@@ -258,41 +258,47 @@ def quote(v):
     return f'"{text}"' if re.search(r"[,\s]|\bor\b|['\"]", text, re.I) else text
 
 
-def formula_of(cond):
-    """탐색 조건(글자 한 줄·목록(and)·{any}(or)·{line})을 계산 식(Formula) 글로. 한 줄 안의 or도 나눠서 잇는다."""
+def formula_of(cond, columns=None):
+    """탐색 조건(글자 한 줄·목록(and)·{any}(or)·{line})을 계산 식(Formula) 글로. 한 줄 안의 or도 나눠서 잇는다. columns를 주면 공백 있는 컬럼 이름도 한 낱말로 읽는다."""
     if isinstance(cond, list):
-        return " and ".join(f"({formula_of(c)})" for c in cond)
+        return " and ".join(f"({formula_of(c, columns)})" for c in cond)
     if isinstance(cond, dict):
-        return " or ".join(f"({formula_of(c)})" for c in cond["any"]) if "any" in cond else formula_of(cond["line"])
+        return " or ".join(f"({formula_of(c, columns)})" for c in cond["any"]) if "any" in cond else formula_of(cond["line"], columns)
     parts = [x.strip() for x in parse.split(parse.OR_RE, cond.strip())]
-    return parts[0] and (formula_one(parts[0]) if len(parts) == 1 else " or ".join(f"({formula_one(x)})" for x in parts))
+    return parts[0] and (formula_one(parts[0], columns) if len(parts) == 1 else " or ".join(f"({formula_one(x, columns)})" for x in parts))
 
 
-def formula_one(text):
-    """조건 한 줄(or 없음)을 계산 식 글로."""
+def formula_one(text, columns=None):
+    """조건 한 줄(or 없음)을 계산 식 글로. 공백 있는 컬럼 이름으로 시작하면 그 자리를 잠깐 한 낱말(parse.SPACED)로 바꿔 읽는다."""
     m = parse.GEO_RE.match(text)
     if m and len(m.group(2).replace(",", " ").split()) == parse.GEO_COUNTS[m.group(1).lower()]:  # 좌표 조건 near·box는 함수 사전의 within_km·in_box
         w = m.group(2).replace(",", " ").split()
         return f"{'within_km' if m.group(1).lower() == 'near' else 'in_box'}(col({w[0]!r}), col({w[1]!r}), {', '.join(num(x) for x in w[2:])})"
+    head = flow.head_name(text, columns)
+    if head:
+        text = parse.SPACED + text.lstrip()[len(head):]
+
+    def name(g):
+        return head if g == parse.SPACED else g
     m = parse.NULL_RE.match(text)
     if m:
-        return f"{'notnull' if m.group(2) else 'isnull'}(col({m.group(1)!r}))"
+        return f"{'notnull' if m.group(2) else 'isnull'}(col({name(m.group(1))!r}))"
     m = parse.BETWEEN_RE.match(text)
     if m:
-        return f"between(col({m.group(1)!r}), {num(m.group(2))}, {num(m.group(3))})"
+        return f"between(col({name(m.group(1))!r}), {num(m.group(2))}, {num(m.group(3))})"
     m = parse.IN_RE.match(text)
     if m:
         items = [num(parse.unquote(x)) for x in parse.split(parse.COMMA_RE, m.group(3)) if x.strip()]  # 따옴표 안의 쉼표는 값의 일부
-        inner = f"isin(col({m.group(1)!r}), [{', '.join(items)}])"
+        inner = f"isin(col({name(m.group(1))!r}), [{', '.join(items)}])"
         return inner if m.group(2).lower() == "in" else f"not {inner}"
     m = parse.LIKE_RE.match(text)
     if m:
-        name = {"starts": "startswith", "ends": "endswith"}.get(m.group(2).lower(), "contains")
-        return f"{name}(col({m.group(1)!r}), {m.group(3).strip().strip(chr(39) + chr(34))!r})"
+        fn = {"starts": "startswith", "ends": "endswith"}.get(m.group(2).lower(), "contains")
+        return f"{fn}(col({name(m.group(1))!r}), {m.group(3).strip().strip(chr(39) + chr(34))!r})"
     m = parse.COND_RE.match(text)
     if m:
         op = {"=": "==", "!=": "!="}.get(m.group(2), m.group(2))
-        return f"col({m.group(1)!r}) {op} {num(m.group(3).strip().strip(chr(39) + chr(34)))}"
+        return f"col({name(m.group(1))!r}) {op} {num(m.group(3).strip().strip(chr(39) + chr(34)))}"
     raise Bad(f"조건 ‘{text}’을 계산 식으로 바꿀 수 없어요.")
 
 
@@ -605,7 +611,7 @@ def e41(p):
     new, parts = p.need("새 이름"), []
     for i in ("1", "2"):
         if p.get("조건" + i):
-            parts.append(f"{formula_of(p.get('조건' + i))}, {num(p.need('값' + i))}")
+            parts.append(f"{formula_of(p.get('조건' + i), p.columns)}, {num(p.need('값' + i))}")
     if not parts:
         raise Bad("조건을 하나 이상 넣어 주세요.")
     p.calc(f"식 case({', '.join(parts)}, {num(p.need('값3'))}) 이름 {new}")

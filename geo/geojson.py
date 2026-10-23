@@ -1,12 +1,13 @@
 """GeoJSON 읽기. Feature마다 한 행: 속성은 컬럼으로, 그리고 geom_type(도형 종류), center_lon·center_lat(중심), min_lon·min_lat·max_lon·max_lat(범위),
 geometry(도형 원본, JSON 글자)를 더한다. 파일의 crs가 WGS84가 아니면 경도·위도로 바꾼 값을 쓴다(geo.tm, pyproj).
-표준 json과 Polars만 쓴다. 중심은 폴리곤이면 겉 고리에서 구멍을 뺀 면적 무게중심, 그 밖(점·선)은 꼭짓점 평균이다."""
+변경선을 넘는 도형은 min_lon > max_lon(예: 178, -179)으로 적는다(in_box와 같은 규칙). 표준 json과 Polars만 쓴다. 중심은 폴리곤이면 겉 고리에서 구멍을 뺀 면적 무게중심, 그 밖(점·선)은 꼭짓점 평균이다."""
 import json
 import re
 from pathlib import Path
 
 from core import monitor
 
+DATELINE_SPAN = 90  # 변경선을 건너 모인 도형으로 보는 경도 범위의 상한(도)
 GEO_COLUMNS = ("geom_type", "center_lon", "center_lat", "min_lon", "min_lat", "max_lon", "max_lat", "geometry")
 NUMBER_COLUMNS = GEO_COLUMNS[1:7]
 GEOMETRY_TYPES = ("Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon", "GeometryCollection")
@@ -90,12 +91,12 @@ def ring_centroid(ring):
 
 
 def crosses_dateline(xs):
-    """경도들이 날짜 변경선을 사이에 두고 모여 있는지: 범위가 180도를 넘고, 음수에 360을 더하면 범위가 더 좁아질 때. (-170~170처럼 정말 넓은 것은 아니다)"""
-    xs = list(xs)
-    if not xs or max(xs) - min(xs) <= 180:
+    """경도들이 날짜 변경선을 사이에 두고 모여 있는지: 경도를 정렬했을 때 안쪽의 가장 큰 빈 구간이 270도를 넘을 때(= 변경선을 건너 모인 범위가 90도 미만).
+    세계 전체(-180~180, 범위가 정확히 360), 성긴 도형, -100→100 같은 넓은 선은 아니다."""
+    v = sorted(set(xs))
+    if len(v) < 2 or v[-1] - v[0] >= 360:
         return False
-    moved = [x + 360 if x < 0 else x for x in xs]
-    return max(moved) - min(moved) < max(xs) - min(xs)
+    return max(b - a for a, b in zip(v, v[1:])) > 360 - DATELINE_SPAN
 
 
 def unwrapped(pieces):
@@ -188,7 +189,8 @@ def table(doc):
         geom = shape(f.get("geometry"), epsg)
         lon, lat = center(geom) if geom else (None, None)
         low = bounds(geom) if geom else (None,) * 4
-        row = {"geom_type": geom.get("type") if geom else None, "center_lon": lon, "center_lat": lat, "min_lon": low[0], "min_lat": low[1], "max_lon": low[2], "max_lat": low[3],
+        edge = lambda v: None if v is None else back(v)  # 표에는 -180~180 안의 값으로(변경선을 넘으면 min_lon > max_lon, in_box와 같은 규칙)
+        row = {"geom_type": geom.get("type") if geom else None, "center_lon": lon, "center_lat": lat, "min_lon": edge(low[0]), "min_lat": low[1], "max_lon": edge(low[2]), "max_lat": low[3],
                "geometry": json.dumps(geom, ensure_ascii=False, separators=(",", ":")) if geom else None}
         mine = f.get("properties") if isinstance(f.get("properties"), dict) else {}
         if f.get("id") is not None:
@@ -220,7 +222,7 @@ def read(path):
 
 
 def read_file(p):
-    limit = min(MAX_BYTES, monitor.bound_bytes())  # 작업 메모리 상한(없으면 지금 쓸 수 있는 메모리)이 더 작으면 그것
+    limit = min(MAX_BYTES, monitor.bound_bytes() // 6)  # 작업 메모리 상한(없으면 지금 쓸 수 있는 메모리)의 6분의 1이 더 작으면 그것(파싱에 파일의 약 6배 메모리가 든다)
     if p.stat().st_size > limit:
         raise ValueError(f"{p.name}이 {limit // 1024 // 1024}MB보다 커서 읽지 않았어요. 영역을 나누어 쓰세요.")
     try:
