@@ -20,7 +20,7 @@ PNG_PREFIX = "data:image/png;base64,"
 FILE = "destinations.json"
 KINDS = SENDERS  # 보낼 곳의 종류(adapters.SENDERS). label·image·fields[{name, label, secret, options?, default?, multiline?, hint?, check?, error?}]·send·check
 API_KEYS = ("name", "label", "secret", "options", "default", "multiline", "hint")
-FREE.add("/api/destinations/check")  # 연동 확인은 연결을 쓰지 않는다
+FREE.update({"/api/destinations", "/api/destinations/check"})  # 보낼 곳 저장·연동 확인은 연결을 쓰지 않는다
 protect, reveal = credentials.protect, credentials.reveal  # 예전 이름(예약·테스트가 쓴다)
 
 

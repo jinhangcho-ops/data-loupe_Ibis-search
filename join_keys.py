@@ -255,6 +255,18 @@ def suggest(a, b, a_name="", b_name="", remote=False, samples=None, full=False, 
     return {"decision": decision, "candidates": top, "date": date_alignment(a, b, a_name, b_name) if decision == "none" else None, "basis": basis, "note": note}
 
 
+def wider(left, right):
+    """두 polars 타입을 값이 잘리지 않게 비교할 타입: 같으면 그대로, 숫자끼리 다르면 Float64, 날짜와 시각이면 시각, 그 밖은 왼쪽."""
+    import polars as pl
+    if left == right:
+        return left
+    if left.is_numeric() and right.is_numeric():
+        return pl.Float64
+    if {left.base_type(), right.base_type()} == {pl.Date, pl.Datetime}:
+        return pl.Datetime("us")
+    return left
+
+
 def composites(a, b, top, fa, a_name, b_name):
     """상위 후보 짝(서로 다른 컬럼)의 두 컬럼 묶음 후보. A 표본의 값 쌍이 B에 있는 비율(B의 서로 다른 값 쌍을 받아 PC에서 비교, COMPOSITE_B_MAX까지)."""
     import polars as pl
@@ -270,8 +282,10 @@ def composites(a, b, top, fa, a_name, b_name):
         if bt.height > COMPOSITE_B_MAX:
             continue
         cast = x["cast"] or y["cast"]
-        left = tuples.select([pl.col(c).cast(pl.String) if cast else pl.col(c) for c in ca]).rename(dict(zip(ca, cb)))
-        right = bt.select([pl.col(c).cast(pl.String) if cast else pl.col(c) for c in cb])
+        # 두 쪽을 같은 타입으로: 글자로 바꾸는 짝이면 글자, 정수↔실수는 실수(1.5가 1로 잘려 맞지 않게), 날짜↔시각은 시각
+        kinds = [pl.String if cast else wider(fa.schema[a_col], bt.schema[c]) for a_col, c in zip(ca, cb)]
+        left = tuples.select([pl.col(c).cast(k, strict=False) for c, k in zip(ca, kinds)]).rename(dict(zip(ca, cb)))
+        right = bt.select([pl.col(c).cast(k, strict=False) for c, k in zip(cb, kinds)])
         contain = left.join(right.unique(), on=cb, how="semi").height / left.height
         mine = fa.select(ca).drop_nulls()
         uniq = mine.height > 0 and mine.n_unique() == mine.height

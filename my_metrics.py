@@ -11,10 +11,12 @@ import datetime as dt
 import json
 import re
 import secrets
+import threading
 
 import dash_store
 import flow
 import metrics
+import sentence_run
 import sentences
 import settings
 import sql_funcs
@@ -27,6 +29,7 @@ LEGACY = "legacy"  # metrics.py 파일 지표를 묶은 지표의 틀 이름
 ALIGN_UNITS = ("day", "week", "month", "year")
 SCOPE_TEXT = "{name} · {table} ({label})"
 ORDER_WORDS = re.compile(r"^\s*([^\s,]+)")
+LOCK = threading.RLock()  # 저장 파일을 읽고 고쳐 쓰는 일(만들기·고치기·지우기·복사)은 한 번에 하나씩
 
 
 # ---------- 저장 ----------
@@ -49,11 +52,6 @@ def get(metric_id, items=None):
         if m["id"] == metric_id:
             return m
     raise ValueError("그 지표를 찾지 못했어요. 지워졌거나 다른 PC에서 만든 지표일 수 있어요.")
-
-
-def templates():
-    """지표 틀(scope 없음) 목록. 화면은 sentences 카탈로그에서도 받는다."""
-    return [t for t in sentences.METRICS]
 
 
 # ---------- scope ----------
@@ -99,8 +97,10 @@ def check_align(align):
 
 # ---------- 빈칸 ----------
 
-def kind_ok(kinds, kind):
-    return kinds in ("any", None) or kind in ([kinds] if isinstance(kinds, str) else kinds)
+def order_column(text):
+    """정렬 글('컬럼 [asc|desc]')의 컬럼 이름. 컬럼이 없는 글이면 None."""
+    found = ORDER_WORDS.match(text) if isinstance(text, str) else None
+    return found.group(1) if found else None
 
 
 def columns_in_text(text):
@@ -122,30 +122,37 @@ def check_slot(slot, raw, columns, items):
         names = [raw] if kind == "column" else raw
         if kind == "columns" and not isinstance(raw, list):
             raise ValueError(f"{where}에는 컬럼 목록을 넣어 주세요.")
-        for name in names:
+        for item in names:
+            name = sentence_run.name_of(item)  # 컬럼 이름 또는 {column, prep}(가공은 문장 실행 때 계산 줄로 바뀐다)
             if not isinstance(name, str) or not name:
                 raise ValueError(f"{where}에는 컬럼 이름을 넣어 주세요.")
+            if isinstance(item, dict) and item.get("prep") not in (None, *sentence_run.PREPS):
+                raise ValueError(f"{where}: 컬럼 가공은 {', '.join(sentence_run.PREPS.values())} 중 하나예요.")
             if columns is not None:
                 if name not in columns:
                     raise ValueError(f"{where}: ‘{name}’ 컬럼이 이 테이블에 없어요.")
-                if not kind_ok(slot.get("kinds"), columns[name]):
+                if not sentence_run.fits(slot.get("kinds"), columns[name]):
                     raise ValueError(f"{where}: ‘{name}’은 {flow.kind_text(columns[name])} 컬럼이라 쓸 수 없어요({sql_funcs.kinds_text(slot['kinds'])} 컬럼이 필요해요).")
         return raw
     if kind in ("cond", "order", "text"):
         if not isinstance(raw, str) or not raw.strip():
             raise ValueError(f"{where}에는 글을 넣어 주세요.")
         if columns is not None and kind in ("cond", "order"):
-            missing = sorted(c for c in (columns_in_text(raw) if kind == "cond" else {ORDER_WORDS.match(raw).group(1)}) if c not in columns)
+            found = columns_in_text(raw) if kind == "cond" else {order_column(raw)}
+            if None in found:
+                raise ValueError(f"{where}에는 ‘컬럼 [asc|desc]’ 모양으로 넣어 주세요.")
+            missing = sorted(c for c in found if c not in columns)
             if missing:
                 raise ValueError(f"{where}: ‘{missing[0]}’ 컬럼이 이 테이블에 없어요.")
         return raw.strip()
     if kind == "agg":
-        if not isinstance(raw, str):
+        name = raw.get("agg") if isinstance(raw, dict) else raw  # 집계 이름 또는 {agg, opts}
+        if not isinstance(name, str) or (isinstance(raw, dict) and raw.get("opts") is not None and not isinstance(raw["opts"], dict)):
             raise ValueError(f"{where}에는 집계 이름을 넣어 주세요.")
-        sql_funcs.get(raw)  # 모르는 집계면 비슷한 이름을 알려 주는 ValueError
-        if not sql_funcs.get(raw)["aggregate"]:
-            raise ValueError(f"{where}: ‘{raw}’은(는) 집계 함수가 아니에요.")
-        return sql_funcs.ALIASES.get(raw, raw)
+        if not sql_funcs.get(name)["aggregate"]:  # 모르는 집계면 비슷한 이름을 알려 주는 ValueError
+            raise ValueError(f"{where}: ‘{name}’은(는) 집계 함수가 아니에요.")
+        name = sql_funcs.ALIASES.get(name, name)
+        return {**raw, "agg": name} if isinstance(raw, dict) else name
     if kind == "n":
         if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1:
             raise ValueError(f"{where}에는 1 이상의 정수를 넣어 주세요.")
@@ -169,14 +176,14 @@ def used_columns(template, slots):
     found = set()
     for s in template["slots"]:
         v = slots.get(s["name"])
-        if s["type"] == "column" and isinstance(v, str):
-            found.add(v)
+        if s["type"] == "column" and isinstance(sentence_run.name_of(v), str):
+            found.add(sentence_run.name_of(v))
         elif s["type"] == "columns" and isinstance(v, list):
-            found |= {x for x in v if isinstance(x, str)}
+            found |= {sentence_run.name_of(x) for x in v if isinstance(sentence_run.name_of(x), str)}
         elif s["type"] == "cond":
             found |= columns_in_text(v)
-        elif s["type"] == "order" and isinstance(v, str) and v.strip():
-            found.add(ORDER_WORDS.match(v).group(1))
+        elif s["type"] == "order" and order_column(v):
+            found.add(order_column(v))
     return found
 
 
@@ -217,7 +224,7 @@ def effective_hash(metric, items, seen=()):
         return ""
     by = {m["id"]: m for m in items}
     parts = {d: effective_hash(by[d], items, (*seen, metric["id"])) if d in by else "missing" for d in metric.get("deps") or []}
-    return dash_store.def_hash({"template": metric["template"], "slots": metric["slots"], "align": metric.get("align"), "deps": parts})
+    return dash_store.def_hash({"template": metric["template"], "slots": metric["slots"], "align": metric.get("align"), "scope": scope_id(metric.get("scope")), "deps": parts})
 
 
 def dependents(metric_id, items=None):
@@ -279,7 +286,8 @@ def build(defn, columns, items, metric_id=None):
             if value is not None:
                 slots[s["name"]] = value
         used = used_columns(template, slots)
-    agg, value = slots.get("집계"), slots.get("값")
+    agg, value = slots.get("집계"), sentence_run.name_of(slots.get("값"))
+    agg = sentence_run.agg_of(agg)[0] if agg else None
     if columns and agg and value in columns and sql_funcs.get(agg)["kind_in"] == "num" and columns[value] != "num":
         raise ValueError(f"‘{value}’은 {flow.kind_text(columns[value])} 컬럼이라 {sql_funcs.label_of(agg)}을(를) 구할 수 없어요. 숫자 컬럼을 고르거나 개수·고유 개수를 쓰세요.")
     deps = list(dict.fromkeys(deps_of(template, slots)))
@@ -302,10 +310,20 @@ def build(defn, columns, items, metric_id=None):
             "cols": cols, **({"align": align} if align else {})}
 
 
+def locked(work):
+    """저장 파일을 읽고 고쳐 쓰는 일이 겹쳐 서로의 변경을 덮어쓰지 않게 LOCK을 잡고 한다."""
+    def inner(*args, **kwargs):
+        with LOCK:
+            return work(*args, **kwargs)
+    inner.__name__, inner.__doc__ = work.__name__, work.__doc__
+    return inner
+
+
 def now_text():
     return dt.datetime.now().isoformat(timespec="seconds")
 
 
+@locked
 def create(defn, columns=None):
     """내 지표를 만든다. 저장한 지표를 돌려준다."""
     items = load()
@@ -317,12 +335,17 @@ def create(defn, columns=None):
     return get(metric["id"], items)
 
 
+@locked
 def update(metric_id, patch, columns=None):
     """지표를 고친다(이름·scope·틀·빈칸·단위·좋은 방향·맞춤 구절). {metric, changed(정의가 바뀌었는지), dependents(영향받는 지표들), users(쓰는 카드·목표)}."""
     items = load()
     old = get(metric_id, items)
     base = {k: old.get(k) for k in ("name", "scope", "template", "slots", "unit", "better", "align")}
     made = build({**base, **(patch or {})}, columns, items, metric_id)
+    if scope_id(made["scope"]) != scope_id(old.get("scope")):  # 테이블(흐름)을 옮기면 이 지표를 쓰던 지표가 남의 테이블 지표를 쓰게 되니 거부한다
+        users = [m for m in items if metric_id in (m.get("deps") or []) and not m.get("align") and scope_id(m.get("scope")) != scope_id(made["scope"])]
+        if users:
+            raise ValueError(f"‘{old['name']}’을(를) 쓰는 지표({', '.join(m['name'] for m in users[:5])})가 있어 다른 테이블(흐름)로 옮길 수 없어요. 쓰는 지표를 먼저 바꾸세요.")
     before = old.get("def_hash")
     old.pop("align", None)
     old.update(made, updated=now_text())
@@ -333,6 +356,7 @@ def update(metric_id, patch, columns=None):
     return {"metric": now, "changed": now["def_hash"] != before, "dependents": [{"id": m["id"], "name": scope_text(m)} for m in deps], "users": used_by(metric_id)}
 
 
+@locked
 def remove(metric_id):
     """지표를 지운다. 다른 지표가 쓰고 있으면 거부한다."""
     items = load()
@@ -351,6 +375,13 @@ def rename_in(text, mapping):
     return re.sub(r"[\w가-힣.]+", lambda m: mapping.get(m.group(0), m.group(0)), text)
 
 
+def rename_column(value, mapping):
+    """컬럼 빈칸 값(이름 또는 {column, prep})의 컬럼을 짝(mapping)대로 바꾼다."""
+    if isinstance(value, dict):
+        return {**value, "column": mapping.get(value.get("column"), value.get("column"))}
+    return mapping.get(value, value)
+
+
 def copy_chain(metric_id, items):
     """metric_id와 그것이 (건너서) 의존하는 지표들을 의존이 먼저 오게 한 목록."""
     order, seen = [], set()
@@ -367,6 +398,7 @@ def copy_chain(metric_id, items):
     return order
 
 
+@locked
 def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
     """[이 테이블에 맞춰 복사]: 지표(와 의존하는 지표들)를 다른 scope로 새 id로 복사한다. mapping = {원래 컬럼: 새 컬럼}(같은 이름 컬럼이 새 테이블에 있으면 생략 가능).
     새 테이블에 없는 컬럼이 남으면 짝을 골라 달라고 알린다. {metrics: [새 지표들], id_map: {원래 id: 새 id}}."""
@@ -392,10 +424,10 @@ def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
             template = sentences.get(tid)
             for s in template["slots"]:
                 v = slots.get(s["name"])
-                if s["type"] == "column" and isinstance(v, str):
-                    slots[s["name"]] = mapping.get(v, v)
+                if s["type"] == "column" and v:
+                    slots[s["name"]] = rename_column(v, mapping)
                 elif s["type"] == "columns" and isinstance(v, list):
-                    slots[s["name"]] = [mapping.get(x, x) for x in v]
+                    slots[s["name"]] = [rename_column(x, mapping) for x in v]
                 elif s["type"] in ("cond", "order") and isinstance(v, str):
                     slots[s["name"]] = rename_in(v, mapping)
                 elif s["type"] == "metric" and v in id_map:

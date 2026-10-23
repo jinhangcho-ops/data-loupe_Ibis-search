@@ -225,7 +225,7 @@ def view(metric):
 def my_metrics_list():
     """내 지표 목록과 지표 틀(scope 없음), 예전 지표 파일의 공통 정의."""
     items = my_metrics.load()
-    return jsonify(metrics=[view(m) for m in items], templates=my_metrics.templates(), legacy=my_metrics.legacy_list(), source=current_source())
+    return jsonify(metrics=[view(m) for m in items], templates=sentences.METRICS, legacy=my_metrics.legacy_list(), source=current_source())
 
 
 @app.post("/api/my_metrics")
@@ -350,4 +350,7 @@ def sentence_run_route():
     body = body_of(data.get("body"))
     if not body.get("base"):
         raise ValueError("기준 테이블이 있는 검색 body가 필요해요.")
-    return jsonify(**sentence_exec.run_sentence(data["template"], body_of(data.get("slots")), body, columns_of(data)))
+    done = sentence_exec.prepare(data["template"], body_of(data.get("slots")), body, columns_of(data))
+    if ask := sentence_exec.scan_ask(done, data):  # 처리 용량이 기준을 넘으면 실행 전에 묻는다(confirmed로 다시 보내면 실행)
+        return ask
+    return jsonify(**sentence_exec.execute_compiled(done))

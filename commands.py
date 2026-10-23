@@ -11,6 +11,7 @@ import shlex
 
 import core
 import metrics
+import scan_size
 import server
 import settings
 import source
@@ -58,6 +59,15 @@ def listed(names, more_word):
     return "\n".join(f"• {n}" for n in shown) + (f"\n… 외 {len(names) - MAX_LIST}개" if len(names) > MAX_LIST else "") if shown else more_word
 
 
+def check_size(body):
+    """Slack에서는 확인 팝업을 띄울 수 없어서, 처리 용량이 기준을 넘거나 알 수 없으면 실행하지 않는다(server.scan_gate와 같은 scan_size.limit_check 판정). 차례를 잡은 채로 부른다."""
+    con = server.state["con"]
+    sql, dialect = server.expr_sql(con, core.filtered(body))
+    found = server.run(lambda: scan_size.limit_check(con, sql, server.state["opened"], dialect))
+    if found["over"] or found["unknown"]:
+        raise ValueError(f"처리할 데이터가 커서(또는 크기를 알 수 없어서) Slack에서는 실행하지 않습니다. {found['text']} 프로그램에서 실행하세요.")
+
+
 def metric_list():
     found = metrics.registry()
     if not found:
@@ -72,6 +82,7 @@ def metric_answer(plain, named):
         raise ValueError('어느 저장한 검색 위에서 구할지 검색=<이름>으로 쓰세요. 예: 지표 CTR 검색="이번 달"')
     body = core.saved_search(named["검색"])
     with core.using():
+        check_size(body)
         found, labels, values, more = core.metric_values(body, [name], named.get("나누기"))
     fmt = found[name]["format"]
     text = lambda v: "—" if v is None else f"{v * 100:,.2f}%" if fmt == "percent" else f"{v:,.2f}".rstrip("0").rstrip(".") if isinstance(v, float) else f"{v:,}" if isinstance(v, int) else str(v)
@@ -92,6 +103,7 @@ def search_answer(plain, named):
     limit = number(named.get("행", str(DEFAULT_ROWS)), 1, MAX_ROWS, "행")
     body = core.saved_search(name)
     with core.using():
+        check_size(body)
         table, count = core.search_rows(body, limit)
     use_counts.use("searches", name)
     return f"{name}: {count:,}행" + (f" (앞 {len(table['rows'])}행)" if count > len(table["rows"]) else "") + f"\n```\n{table_text(table)}\n```"

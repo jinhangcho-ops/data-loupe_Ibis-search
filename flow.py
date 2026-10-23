@@ -216,7 +216,7 @@ def cond_columns(cond):
 
 
 def refs(node):
-    """단계가 앞 단계에서 읽는 컬럼 이름들(알 수 있는 만큼). 조인은 왼쪽 키만(오른쪽 키는 right_refs)."""
+    """단계가 앞 단계에서 읽는 컬럼 이름들(알 수 있는 만큼). 조인은 왼쪽 키만(오른쪽 키는 오른쪽 입력의 컬럼이라 join_problem이 본다)."""
     p, kind = params(node), node["kind"]
     if kind == "period":
         return {bare(p["column"])} if p.get("column") else cond_columns(p.get("line", ""))
@@ -249,12 +249,6 @@ def refs(node):
     return set()
 
 
-def right_refs(node):
-    """조인의 오른쪽 키 컬럼 이름들."""
-    p = params(node)
-    return {r for _, r in (p.get("keys") or [])} | ({p["on"][1]} if p.get("on") else set())
-
-
 def kind_text(kind):
     return KIND_TEXT.get(kind, kind)
 
@@ -284,8 +278,8 @@ def kind_pair_ok(ka, kb):
     return ka == kb or "other" in (ka, kb)
 
 
-def cast_suggestion(left, lk, right, rk, kl, kr):
-    """조인 키 타입이 다를 때 바꿔 잇기 제안: 글자 쪽을 상대 종류로(둘 다 글자가 아니면 오른쪽을 왼쪽 종류로)."""
+def cast_suggestion(left, right, kl, kr):
+    """조인 키 타입이 다를 때 바꿔 잇기 제안: 글자 쪽을 상대 종류로(둘 다 글자가 아니면 오른쪽을 왼쪽 종류로). left·right = 키 컬럼 이름, kl·kr = 그 종류."""
     if kl == "text" and kr != "text":
         return {"side": "left", "column": left, "to": kr}
     if kr == "text" and kl != "text":
@@ -382,7 +376,7 @@ def join_problem(p, left, right, after=(False, False)):
                     return problem("aggregate_lost", f"{side}는 집계한 뒤라 묶은 컬럼({', '.join(list(cols)[:6])})만 남아서 조인 키 ‘{name}’을(를) 쓸 수 없어요. 집계에 그 컬럼을 묶음 기준으로 넣어 주세요.", columns=[name])
                 return problem("missing_column", f"{side}에 ‘{name}’ 컬럼이 없어요.", columns=[name])
         if not kind_pair_ok(left[l], right[r]):
-            suggest = cast_suggestion(l, left[l], r, right[r], left[l], right[r])
+            suggest = cast_suggestion(l, r, left[l], right[r])
             side = "왼쪽" if suggest["side"] == "left" else "오른쪽"
             return problem("key_type", f"조인 키 ‘{l}’({kind_text(left[l])})과 ‘{r}’({kind_text(right[r])})의 종류가 달라 이을 수 없어요. "
                                        f"{side} ‘{suggest['column']}’을(를) {ro(kind_text(suggest['to']))} 바꿔(cast) 이어 보세요.", suggest=suggest)

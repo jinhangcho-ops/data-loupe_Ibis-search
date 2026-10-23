@@ -86,7 +86,10 @@ def leaves(value):
 
 def loose(node):
     """단계 params의 글자 값 안 낱말 전부(컬럼 이름일 수 있는 것, 넉넉하게). 쓰는 컬럼을 확신할 수 없을 때 '안 쓴다'를 증명하는 데 쓴다."""
-    found = {w for text in leaves(params(node)) for w in flow.WORD.findall(text)}
+    found = set()
+    for text in leaves(params(node)):  # 낱말 조각 + 공백 조각 + 첫 낱말(flow.refs의 기준): '금액(원)' 같은 이름도 빠뜨리지 않는다
+        head = flow.COND_HEAD.match(text)
+        found |= {*flow.WORD.findall(text), *text.split(), *([head.group(1)] if head else [])}
     return found | {w.split(".")[0] for w in found}
 
 
@@ -263,22 +266,26 @@ def drop_join(graph, ctx):
         if unique is not True:
             refused.append({"node": jid, "text": f"{flow.label(node)}를 빼지 않았어요: " + (why or "오른쪽 키가 고유하지 않아요(빼면 오른쪽 중복만큼 늘던 행 수가 달라져요).")})
             continue
-        gone = {right} | exclusive_upstream(g, right, jid)
+        gone = {right} | exclusive_upstream(g, right, jid, [left])
         (after,) = outputs(g, jid)
         at = edge_at(g, jid, after)
         g["edges"][at] = [left, after]
-        g["edges"] = [e for e in g["edges"] if e[1] != jid and e[0] not in gone | {jid}]
+        g["edges"] = [e for e in g["edges"] if e[1] != jid and not {e[0], e[1]} & (gone | {jid})]
         g["nodes"] = [n for n in g["nodes"] if n["id"] not in gone | {jid}]
         items.append({"node": jid, "text": f"오른쪽 컬럼을 쓰지 않고 오른쪽 키가 고유해서 {flow.label(node)}를 뺐어요."})
     return (g if items else None), {"items": items, "refused": refused}
 
 
-def exclusive_upstream(graph, nid, stop):
-    """nid의 앞쪽 단계 중 stop을 지나지 않고는 아무 데도 나가지 않는 것(같이 지워도 되는 가지)."""
-    found = set()
-    for i in flow.upstream(graph, nid):
-        if all(o in found | {nid, stop} for o in outputs(graph, i)):
-            found.add(i)
+def exclusive_upstream(graph, nid, stop, keep=()):
+    """nid의 앞쪽 단계 중 stop을 지나지 않고는 아무 데도 나가지 않는 것(같이 지워도 되는 가지). 더 늘지 않을 때까지 모은다(순서와 상관없이). keep과 그 앞쪽은 지우지 않는다."""
+    safe = set(keep).union(*[flow.upstream(graph, k) for k in keep])
+    found, changed = set(), True
+    while changed:
+        changed = False
+        for i in flow.upstream(graph, nid) - safe - found:
+            if all(o in found | {nid, stop} for o in outputs(graph, i)):
+                found.add(i)
+                changed = True
     return found
 
 

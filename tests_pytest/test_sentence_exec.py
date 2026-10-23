@@ -34,6 +34,8 @@ def c(folder, tmp_path):
     client = app.test_client()
     client.get("/?key=" + server.KEY)
     assert client.post("/api/connect", json={"kind": "folder", "path": str(tmp_path), "file": str(path)}).status_code == 200
+    from dash_refresh import current_source
+    SCOPE["key"] = current_source()["key"]  # 내 지표의 scope는 지금 연결의 열쇠여야 쓸 수 있다
     yield client
     client.post("/api/disconnect", json={})
 

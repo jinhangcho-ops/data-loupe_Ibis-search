@@ -110,28 +110,26 @@ def run_report(token, spec, offset, limit):
         raise ValueError(f"GA4 보고서를 받지 못했습니다: {e}") from None
 
 
-def fetch(key_path, spec, halt=None):
-    """보고서 전체를 받아 Polars 표로. 측정기준은 글자, 측정항목은 타입대로 정수·실수. (표, 전체 행 수)."""
+def fetch(key_path, spec):
+    """보고서 전체를 받아 Polars 표로. 측정기준은 글자, 측정항목은 타입대로 정수·실수. (표, 전체 행 수). 쪽마다 표로 만들어 모은다(파이썬 목록에 행을 쌓지 않는다)."""
     import polars as pl
     spec = check_report(spec)
     token = access_token(read_key(key_path))
-    rows, total, offset, types = [], None, 0, {}
+    columns = spec["dimensions"] + spec["metrics"]
+    frames, total, offset, types = [], None, 0, {}
     while total is None or offset < total:
-        if halt is not None and halt.is_set():
-            raise ValueError("멈췄습니다.")
         page = run_report(token, spec, offset, PAGE_ROWS)
         total = int(page.get("rowCount", 0))
         if total > MAX_ROWS:
             raise ValueError(f"보고서가 {total:,}행으로 너무 큽니다({MAX_ROWS:,}행까지). 기간이나 측정기준을 줄이세요.")
         types = {h["name"]: h.get("type", "") for h in page.get("metricHeaders", [])} or types
         got = page.get("rows", [])
-        for r in got:
-            rows.append([v.get("value") for v in r.get("dimensionValues", [])] + [v.get("value") for v in r.get("metricValues", [])])
         if not got:
             break
+        frames.append(pl.DataFrame([[v.get("value") for v in r.get("dimensionValues", [])] + [v.get("value") for v in r.get("metricValues", [])] for r in got],
+                                   schema={c: pl.String for c in columns}, orient="row"))
         offset += len(got)
-    columns = spec["dimensions"] + spec["metrics"]
-    frame = pl.DataFrame(rows, schema={c: pl.String for c in columns}, orient="row")
+    frame = pl.concat(frames) if frames else pl.DataFrame(schema={c: pl.String for c in columns})
     frame = frame.with_columns(pl.col(m).cast(pl.Int64 if types.get(m) in INTEGER_TYPES else pl.Float64, strict=False) for m in spec["metrics"])
     return frame, total or 0
 

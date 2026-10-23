@@ -2,6 +2,8 @@
 요청의 route: /api/query(행), /api/pivot(묶어 집계, 기존 라우트와 같은 core.runnable·calc.pivot), metric(지표 이름 또는 내 지표 id의 값을 지표 정의로 구함, by가 있으면 그 값마다),
 nested(대상마다 구한 값을 다시 집계: 평균·N번 이상 한 대상 비율·두 단계를 다 한 비율)이다. 합치는 방법 combine: ratio·percent·share(a ÷ b, by 컬럼이 같은 줄끼리)·sub·add·mean_of·change·cumsum.
 데이터를 읽는 함수는 server.run으로 연결 스레드에서 돈다. 내 지표가 다른 내 지표를 쓰면(조합) 안쪽까지 풀어 구한다(MAX_DEPTH단계)."""
+import json
+
 import calc
 import core
 import metrics
@@ -11,6 +13,7 @@ import result
 import sentence_run
 import server
 import sql_funcs
+from dash_refresh import current_source
 from server import run
 
 QUERY_ROWS = 1000  # 행을 보는 요청에서 돌려줄 행 수
@@ -18,8 +21,8 @@ MAX_DEPTH = 3  # 내 지표가 내 지표를 쓰는 단계
 NAMES = {"ratio": "값", "percent": "비율(%)", "share": "비중", "sub": "차이", "add": "합", "mean_of": "평균", "change": "변화율", "cumsum": "누적"}
 
 
-def one(keys, col, rows, more=False):
-    return {"keys": keys, "col": col, "rows": rows, "more": more}
+def one(keys, col, rows, more=False, columns=None):
+    return {"keys": keys, "col": col, "rows": rows, "more": more, **({"columns": columns} if columns is not None else {})}
 
 
 def execute_run(r, depth=0):
@@ -27,8 +30,8 @@ def execute_run(r, depth=0):
     route = r["route"]
     if route == "/api/query":
         expr = core.runnable(r["body"])
-        table = server.to_json(run(lambda: result.get_rows(expr, QUERY_ROWS)))
-        return one([], None, table["rows"])
+        table = server.to_json(run(lambda: result.get_rows(expr, QUERY_ROWS + 1)))  # 한 줄 더 받아 더 있는지 안다
+        return one([], None, table["rows"][:QUERY_ROWS], len(table["rows"]) > QUERY_ROWS, table["columns"])
     if route == "/api/pivot":
         spec = r["body"]["pivot"]
         expr = core.runnable(r["body"], select=False)
@@ -41,6 +44,17 @@ def execute_run(r, depth=0):
     raise ValueError(f"알 수 없는 요청 종류: {route}")
 
 
+def check_scope(mine, body):
+    """내 지표가 지금 검색 body의 테이블(연결·스키마·테이블이 같은 scope)의 것인지. 다른 테이블의 지표를 ‘맞춰서’ 쓰는 구절(align)은 아직 실행하지 않으므로 거부한다.
+    흐름(flow_id)에 묶은 지표는 body만으로 같은 흐름인지 알 수 없어 검사하지 않는다."""
+    scope = mine.get("scope") or {}
+    if scope.get("flow_id") and not scope.get("table"):
+        return
+    now = current_source()
+    if scope.get("table") != body.get("base") or (scope.get("schema") or "") != (body.get("schema") or "") or (now and scope.get("key") != now["key"]):
+        raise ValueError(f"‘{my_metrics.scope_text(mine)}’은(는) 다른 테이블(흐름)의 지표라 지금 검색에서 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]해서 쓰세요.")
+
+
 def definition_of(ref, body):
     """지표 이름(지표 파일) 또는 내 지표 id의 (표시 이름, metrics.py 모양 정의 또는 None(조합 지표), 내 지표)."""
     try:
@@ -50,6 +64,7 @@ def definition_of(ref, body):
     if ref in found:
         return ref, found[ref], None
     mine = my_metrics.get(ref)
+    check_scope(mine, body)
     if mine["template"] == my_metrics.LEGACY:
         return mine["name"], metrics.metric(mine["name"], mine["slots"]["def"]), mine
     made = sentence_run.compile(mine["template"], mine["slots"], body, None)
@@ -123,12 +138,13 @@ def combine(spec, results):
         by = spec.get("by") or a["keys"]
         total = None if b["keys"] else scalar(b)
         under = {tuple(r[k] for k in by): r[b["col"]] for r in b["rows"]} if b["keys"] else {}
+        show = spec.get("show_b") and b["keys"]  # b의 값 컬럼도 함께 보인다
         rows = []
         for r in a["rows"]:
             y = total if not b["keys"] else under.get(tuple(r[k] for k in by))
             v = div(r[a["col"]], y)
-            rows.append({**r, name: None if v is None else v * scale})
-        return {"columns": [*a["keys"], a["col"], name], "rows": rows}
+            rows.append({**r, **({b["col"]: y} if show else {}), name: None if v is None else v * scale})
+        return {"columns": [*a["keys"], a["col"], *([b["col"]] if show else []), name], "rows": rows}
     if op in ("sub", "add"):
         x, y = scalar(a), scalar(b)
         return {"columns": [name], "rows": [{name: None if x is None or y is None else (x - y if op == "sub" else x + y)}]}
@@ -157,7 +173,7 @@ def execute_compiled(done, depth=0):
         table = combine(done["combine"], results)
     else:
         first = results[0]
-        table = {"columns": list(first["rows"][0]) if first["rows"] else [*first["keys"], first["col"]], "rows": first["rows"]}
+        table = {"columns": first.get("columns") or (list(first["rows"][0]) if first["rows"] else [*first["keys"], first["col"]]), "rows": first["rows"]}
     return {**table, "more": more, "notes": done.get("notes") or [], "text": done.get("text", "")}
 
 
@@ -166,7 +182,28 @@ def columns_of(body):
     return {c: sql_funcs.kind_of(t) for c, t in core.joined(body)[0].schema().items()}
 
 
+def prepare(tid, slots, body, columns=None):
+    """문장을 검사·만든 결과(sentence_run.compile). 만들 수 없는 문장이면 ok False."""
+    columns = columns if columns is not None else columns_of(body)
+    return sentence_run.compile(tid, slots, body, columns)
+
+
+def scan_ask(done, request_body):
+    """실행 전 처리 용량 확인(server.scan_gate): 요청이 읽을 body마다(같은 body는 한 번) 묻고, 확인이 필요하면 돌려줄 응답, 아니면 None."""
+    if not done["ok"]:
+        return None
+    con = server.get_con()
+    seen = set()
+    for r in done["runs"]:
+        key = json.dumps(r["body"], sort_keys=True, ensure_ascii=False)
+        if key in seen:
+            continue
+        seen.add(key)
+        if ask := server.scan_gate(request_body, lambda b=r["body"]: server.expr_sql(con, core.filtered(b))):
+            return ask
+    return None
+
+
 def run_sentence(tid, slots, body, columns=None):
     """문장을 검사·만들고 실행해 끝난 표를 돌려준다."""
-    columns = columns if columns is not None else columns_of(body)
-    return execute_compiled(sentence_run.compile(tid, slots, body, columns))
+    return execute_compiled(prepare(tid, slots, body, columns))

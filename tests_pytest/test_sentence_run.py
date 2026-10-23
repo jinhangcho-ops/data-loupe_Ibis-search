@@ -157,7 +157,7 @@ def test_time_units_and_combined_sentences(c):
     assert [(r["기간"], r["전체 고유 개수"]) for r in rows] == [("2025-12-29", 4), ("2026-01-05", 4), ("2026-01-12", 1)]  # 월요일 시작
     both = out("e23", {"날짜": "day", "단위": "month", "대상": "uid", "값": "amt"})
     assert [r["전체 고유 개수"] for r in go(c, both, 0)] == [4] and [r["전체 합계"] for r in go(c, both, 1)] == [780.0]
-    assert both["combine"] == {"op": "ratio", "a": 1, "b": 0, "by": ["기간"]}  # 대상 1명당 평균 = 합계 ÷ 대상 수 = 195
+    assert both["combine"] == {"op": "ratio", "a": 1, "b": 0, "by": ["기간"], "show_b": True}  # 대상 1명당 평균 = 합계 ÷ 대상 수 = 195
     pct = out("e17", {"조건": "amt >= 60"})
     assert (go(c, pct, 0)[0]["전체 개수"], go(c, pct, 1)[0]["전체 개수"]) == (7, 12) and pct["combine"] == {"op": "percent", "a": 0, "b": 1}
     share = out("e18", {"무엇": "store"})

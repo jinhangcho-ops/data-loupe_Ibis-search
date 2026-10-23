@@ -229,7 +229,7 @@ class Plan:
         how = sql_funcs.ALIASES.get(how, how)
         spec = {"rows": list(rows), "how": how, **{k: v for k, v in (("value", value), ("opts", opts), ("where", where), ("having", having), ("order", order),
                                                                   ("top", top), ("column", column), ("subtotals", subtotals), ("sets", sets)) if v}}
-        return self.run(label, "/api/pivot", {**self.body, "pivot": spec}, result=f"전체 {sql_funcs.label_of(how)}")
+        return self.run(label, "/api/pivot", {**self.body, "pivot": spec}, result=result_col(how))
 
     def result(self, text=None):
         if not self.runs:
@@ -239,6 +239,7 @@ class Plan:
 
 
 def result_col(how):
+    """묶어 집계한 값 컬럼의 이름: ‘전체 …’."""
     return f"전체 {sql_funcs.label_of(sql_funcs.ALIASES.get(how, how))}"
 
 
@@ -381,12 +382,7 @@ def e06(p):
 
 
 def e07(p):
-    p.group("대상 수", [], "count_distinct", p.col("대상"), where=cond_line(p.need("조건")))
-
-
-def cond_line(c):
-    """조건 빈칸의 조건: 글자 한 줄, 여러 줄 목록(모두 and), {any: […]}(or 묶음) 그대로. parse.predicate가 모두 받는다."""
-    return c
+    p.group("대상 수", [], "count_distinct", p.col("대상"), where=p.need("조건"))
 
 
 def e08(p):
@@ -436,7 +432,7 @@ def e16(p):
 
 
 def e17(p):
-    c = cond_line(p.need("조건"))
+    c = p.need("조건")
     a = p.group("조건인 행", [], "count", where=c)
     b = p.group("전체 행", [], "count")
     p.combine = {"op": "percent", "a": a, "b": b}
@@ -451,7 +447,7 @@ def e18(p):
 
 def e19(p):
     g, t = p.col("무엇"), p.col("대상")
-    a = p.group("조건을 한 대상", [g], "count_distinct", t, where=cond_line(p.need("조건")))
+    a = p.group("조건을 한 대상", [g], "count_distinct", t, where=p.need("조건"))
     b = p.group("전체 대상", [g], "count_distinct", t)
     p.combine = {"op": "ratio", "a": a, "b": b, "by": [g]}
 
@@ -484,7 +480,7 @@ def e23(p):
     t = p.col("대상")
     a = p.group("대상 수", [new], "count_distinct", t)
     b = p.group("값 합계", [new], "sum", p.col("값"))
-    p.combine = {"op": "ratio", "a": b, "b": a, "by": [new]}
+    p.combine = {"op": "ratio", "a": b, "b": a, "by": [new], "show_b": True}  # 대상 수도 함께 보인다
 
 
 def e24(p):
@@ -547,12 +543,12 @@ def e31(p):
 
 
 def e32(p):
-    p.group("참거짓", [p.col("무엇")], "all" if p.need("범위") == "모두" else "any", None, {"cond": cond_line(p.need("조건"))})
+    p.group("참거짓", [p.col("무엇")], "all" if p.need("범위") == "모두" else "any", None, {"cond": p.need("조건")})
 
 
 def e33(p):
     desc = p.need("방향") == "가장 늦은"
-    p.calc(f"창거르기 row_number <= 1 기준 {p.need('정렬 기준')} {'desc' if desc else 'asc'} 그룹 {p.col('무엇')}")
+    p.calc(f"창거르기 row_number <= 1 기준 {str(p.need('정렬 기준')).split()[0]} {'desc' if desc else 'asc'} 그룹 {p.col('무엇')}")  # 방향은 ‘가장 이른/늦은’이 정한다
     p.rows("행")
 
 
@@ -741,10 +737,10 @@ def metric_def(p):
               inner={"how": how, "value": p.col("값") if sql_funcs.needs_column(how) else None, "opts": opts}, outer={"op": "mean"})
     elif no == 11:
         p.run("N번 이상 한 대상 비율", "nested", copy.deepcopy(p.body), entity=p.col("대상"),
-              inner={"how": "count_if", "opts": {"cond": cond_line(p.need("조건"))}}, outer={"op": "share_ge", "n": int(p.get("N", 2))})
+              inner={"how": "count_if", "opts": {"cond": p.need("조건")}}, outer={"op": "share_ge", "n": int(p.get("N", 2))})
     elif no == 12:
         p.run("단계 A 중 단계 B까지 간 비율", "nested", copy.deepcopy(p.body), entity=p.col("대상"),
-              inner={"flags": {"a": cond_line(p.need("단계 A")), "b": cond_line(p.need("단계 B"))}}, outer={"op": "both_ratio"})
+              inner={"flags": {"a": p.need("단계 A"), "b": p.need("단계 B")}}, outer={"op": "both_ratio"})
         p.notes.append("두 단계를 한 번이라도 했는지로 봐요(순서·시간은 보지 않아요). 순서까지 보려면 퍼널을 쓰세요.")
     elif no == 13:
         col = period_column(p)
