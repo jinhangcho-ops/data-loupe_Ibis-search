@@ -81,7 +81,7 @@ def test_bad_series(t):
     with pytest.raises(ValueError, match="계열을 하나 이상"):
         dash_calc.clean_series([])
     with pytest.raises(ValueError, match="집계 방식"):
-        dash_calc.clean_series([{"y": "amt", "agg": "median"}])
+        dash_calc.clean_series([{"y": "amt", "agg": "bogus"}])
     with pytest.raises(ValueError, match="숫자 컬럼"):
         dash_calc.time_data(t, "day", [{"y": "store", "agg": "sum"}], None)
     with pytest.raises(ValueError, match="없습니다|찾을 수"):

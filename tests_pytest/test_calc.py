@@ -191,3 +191,48 @@ def test_longer_falls_back_to_union(tmp_path):
         assert "UNION ALL" in ibis.to_sql(expr).upper()
         return sorted(expr.to_pyarrow().to_pylist(), key=lambda r: r["항목"])
     assert source.on_worker(run)() == [{"id": 1, "항목": "a", "값": 2.0}, {"id": 1, "항목": "b", "값": 3.0}]
+
+
+# ---------- 함수 사전(sql_funcs)의 줄·피벗 옵션이 라우트까지 ----------
+
+def test_new_calc_lines_through_the_route(db):
+    found = db(calcs=["dense_rank 기준 amt desc 그룹 store 이름 dr", "lead amt 1 기준 id 그룹 store 이름 nxt", "cum_mean amt 기준 id 이름 cm", "식 amt * 2 이름 twice", "식 upper(memo) 이름 up"])
+    assert not found.get("error"), found
+    nxt, twice, up = by_id(found, "nxt"), by_id(found, "twice"), by_id(found, "up")
+    for o in ORDERS:
+        later = [x for x in ORDERS if x["store"] == o["store"] and x["id"] > o["id"]]
+        assert nxt[o["id"]] == (amt(later[0]) if later else None)
+        assert twice[o["id"]] == (None if amt(o) is None else amt(o) * 2) and up[o["id"]] == o["memo"].upper()
+    assert not db(calcs=["창거르기 row_number <= 2 기준 id 그룹 store"]).get("error")
+    assert db(calcs=["창거르기 row_number <= 2 기준 id 그룹 store"])["count"] == 6
+    assert "쓰지 않습니다" in db(calcs=["share_of_group amt 기준 id"])["error"]
+    assert "끝에 '이름 새이름'" in db(calcs=["식 amt * 2"])["error"]
+
+
+def test_sql_expression_line_on_duckdb(db):
+    found = db(calcs=["SQL식 upper(memo) || '!' 이름 shout"])
+    assert not found.get("error"), found
+    assert {r["id"]: r["shout"] for r in found["rows"]["rows"]}[1] == " M1 !"
+    assert "읽을 수 없습니다" in db(calcs=["SQL식 (1 이름 x"])["error"] or "SQL" in db(calcs=["SQL식 (1 이름 x"])["error"]
+    assert "파일" in db(calcs=["SQL식 (select count(*) from read_csv('x.csv')) 이름 x"])["error"]
+
+
+def test_sql_expression_line_on_file_connection_uses_pc_copy(files):
+    found = files(calcs=["SQL식 amt * 2 이름 twice"], fresh=True)
+    assert not found.get("error"), found
+    assert found["held"] and {r["id"]: r["twice"] for r in found["rows"]["rows"]}[1] == 74
+
+
+def test_pivot_new_options(db):
+    got = db("/api/pivot", pivot={"rows": ["store"], "how": "median", "value": "amt"})
+    rows = {r["store"]: r["전체 중앙값"] for r in got["rows"]["rows"]}
+    for s in range(3):
+        values = sorted(amt(o) for o in ORDERS if o["store"] == s and amt(o) is not None)
+        mid = len(values) // 2
+        assert rows[s] == (values[mid] if len(values) % 2 else (values[mid - 1] + values[mid]) / 2)
+    total = db("/api/pivot", pivot={"rows": ["store"], "how": "sum", "value": "amt", "subtotals": "rollup"})
+    assert not total.get("error"), total
+    assert [r["store"] for r in total["rows"]["rows"]][-1] == "(전체)" and total["rows"]["rows"][-1]["전체 합계"] == sum(amt(o) or 0 for o in ORDERS)
+    big = db("/api/pivot", pivot={"rows": ["store"], "how": "count", "having": "전체 개수 > 6"})
+    assert [r["store"] for r in big["rows"]["rows"]] == [s for s in range(3) if sum(o["store"] == s for o in ORDERS) > 6]
+    assert "소계" in db("/api/pivot", pivot={"how": "count", "subtotals": "rollup"})["error"]

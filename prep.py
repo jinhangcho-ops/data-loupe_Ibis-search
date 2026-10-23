@@ -6,6 +6,7 @@ import parse
 import prep_derive
 import prep_ops
 import source
+import sql_funcs
 from prep_ops import stats
 
 INT_TYPES = [("int8", -(2**7), 2**7 - 1), ("int16", -(2**15), 2**15 - 1), ("int32", -(2**31), 2**31 - 1), ("int64", -(2**63), 2**63 - 1)]
@@ -123,12 +124,71 @@ def first_rows(t, columns):
     return numbered.filter(numbered[FIRST] == 0).select(*t.columns)
 
 
+KEEP_ROWS = ("any", "any_value", "first", "last")  # 겹치는 행 중 행 하나를 남기는 선택지(나머지는 겹치는 값을 대표 값 하나로 합친다)
+
+
+def keep_choice(recipe):
+    """dedupe_keep(겹치는 행에서 무엇을 남길지)을 검사해 (선택지, 정렬 기준 목록, 구분자)로. 없으면 아무 행 하나(예전 recipe와 같다).
+    값은 글자("first" …) 또는 {how, order, sep}. how는 any(아무 행)·first·last(정렬 기준의 첫·마지막 행)와 합치기(min·max·mode·string_agg·warn …, sql_funcs.REPRESENTATIVE)."""
+    keep = recipe.get("dedupe_keep")
+    keep = {"how": keep} if isinstance(keep, str) and keep else keep or {}
+    if not isinstance(keep, dict) or not set(keep) <= {"how", "order", "sep"}:
+        raise ValueError('dedupe_keep은 글자나 {"how": …, "order": ["컬럼 [desc]"], "sep": ","} 모양이어야 합니다.')
+    how, order, sep = keep.get("how") or "any", keep.get("order") or [], keep.get("sep", ",")
+    if how not in (*KEEP_ROWS, *sql_funcs.REPRESENTATIVE):
+        raise ValueError(f"dedupe_keep의 how는 {', '.join(dict.fromkeys((*KEEP_ROWS, *sql_funcs.REPRESENTATIVE)))} 중 하나입니다.")
+    if not isinstance(order, list) or not all(isinstance(o, str) for o in order) or not isinstance(sep, str):
+        raise ValueError("dedupe_keep의 order는 '컬럼 [asc|desc]' 글자의 목록, sep는 글자여야 합니다.")
+    return how, order, sep
+
+
+def flipped(line):
+    """정렬 줄 '컬럼 [asc|desc]'의 방향을 뒤집는다(마지막 행을 고를 때)."""
+    col, _, how = line.partition(" ")
+    return f"{col} {'asc' if how.strip().lower() == 'desc' else 'desc'}"
+
+
+def nth_row(t, columns, order, last):
+    """columns가 같은 행 중 정렬 기준(order)으로 첫(last면 마지막) 행 하나만 남긴다(행 번호 0)."""
+    keys = [parse.parse_sort(flipped(line) if last else line, t) for line in order]
+    numbered = t.mutate(**{FIRST: ibis.row_number().over(ibis.window(group_by=[t[c] for c in columns], order_by=keys))})
+    return numbered.filter(numbered[FIRST] == 0).select(*t.columns)
+
+
+def merged(t, columns, how, order, sep):
+    """columns가 같은 행들을 한 줄로 합친다: 나머지 컬럼마다 대표 값 고르기(sql_funcs.pick)를 건다. 컬럼 순서는 그대로."""
+    for line in order:
+        parse.check_name(line.partition(" ")[0], t.columns)
+    aggs = {}
+    for name in [c for c in t.columns if c not in columns]:
+        try:
+            aggs[name] = sql_funcs.pick(how, t, name, order, sep)
+        except ValueError as e:
+            raise ValueError(f"'{name}' 컬럼에 '{sql_funcs.REPRESENTATIVE[how][0]}'을(를) 쓸 수 없습니다: {e}") from None
+    found = t.group_by([t[c] for c in columns]).aggregate(**aggs)
+    return found.select(*t.columns)
+
+
+def dedupe_rows(t, columns, recipe):
+    """중복 제거. 모든 컬럼이 기준이면 DISTINCT, 아니면 dedupe_keep대로: 아무 행·정렬 기준의 첫/마지막 행·합치기."""
+    how, order, sep = keep_choice(recipe)
+    if set(columns) == set(t.columns):
+        return t.distinct()
+    if how in ("any", "any_value") or (how == "first" and not order):  # 정렬 기준 없는 first는 예전처럼 아무 행
+        return first_rows(t, columns)
+    if how in ("first", "last"):
+        if not order:
+            raise ValueError("마지막 행을 남기려면 dedupe_keep의 order(정렬 기준)가 필요합니다.")
+        return nth_row(t, columns, order, how == "last")
+    return merged(t, columns, how, order, sep)
+
+
 def build(con, recipe, table=None, info=None):
     """recipe를 Ibis 식 하나로 만든다. (식, 결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지))를 돌려준다. table·info는 shape와 같다."""
     t, origin = shape(con, recipe, table, info)
     columns = dedupe_columns(t, recipe)
     if columns:
-        t = t.distinct() if set(columns) == set(t.columns) else first_rows(t, columns)
+        t = dedupe_rows(t, columns, recipe)
     if recipe.get("downcast") is True:
         t = downcast(t)
     keys = [parse.parse_sort(line, t) for line in recipe.get("sorts", [])]
@@ -144,7 +204,11 @@ def dupes(con, recipe, table=None):
     sizes = t.group_by(columns).aggregate(n=t.count())
     big = sizes.filter(sizes.n > 1)
     found = stats(big, groups=big.count(), extra=(big.n - 1).sum())
-    return {"groups": found["groups"], "rows": found["extra"] or 0}
+    out = {"groups": found["groups"], "rows": found["extra"] or 0}
+    others = [c for c in t.columns if c not in columns]
+    if keep_choice(recipe)[0] == "warn" and others:  # 여러 개면 알리기: 같은 기준인데 값이 둘 이상인 묶음 수(그 칸은 빈 값이 된다)
+        out["conflicts"] = sql_funcs.conflicts(t, columns, others).to_pyarrow().as_py()
+    return out
 
 
 def changes_rows(recipe):

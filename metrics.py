@@ -8,8 +8,9 @@
         denominator: {agg: count, where: "event = impression"}
       매출:
         numerator: {agg: sum, column: amount}
-- 분자·분모는 집계 하나: agg는 count·sum·mean·min·max·nunique, column(count는 없어도 됨, user.name 같은 구조 안 필드도 됨),
-  where는 탐색의 조건 줄 하나나 그 목록(and로 잇는다, 한 줄 안의 or도 된다). 식(코드)은 쓰지 않으므로 파일이 무엇을 실행할 수는 없다.
+- 분자·분모는 집계 하나: agg는 함수 사전(sql_funcs)의 집계 id(count·sum·mean·min·max·nunique·median·quantile·mode·std·string_agg … 전부),
+  column(count는 없어도 됨, user.name 같은 구조 안 필드도 됨), where는 탐색의 조건 줄 하나나 그 목록(and로 잇는다, 한 줄 안의 or도 된다),
+  opts는 그 집계의 나머지 인자(분위수 p, 구분자 sep, 둘째 컬럼 y …, 선택). 식(코드)은 쓰지 않으므로 파일이 무엇을 실행할 수는 없다.
 - 분모가 있으면 분자 / 분모이고, 분모가 0이면 nullif(0)로 빈 값이 된다(0으로 나누기 오류 없음).
 - 계산은 식.group_by(나눌 컬럼).aggregate(지표들) 한 번(나누지 않으면 aggregate만)이다."""
 from pathlib import Path
@@ -18,6 +19,7 @@ from lazy import ibis
 
 import parse
 import settings
+import sql_funcs
 from result import plain
 
 FILE = "metrics_file.json"  # 고른 지표 파일의 경로 {"path"}
@@ -25,10 +27,11 @@ MAX_FILE_BYTES = 1024 * 1024
 MAX_METRICS = 200  # 파일 하나의 지표 수
 MAX_RUN = 20  # 한 번에 구할 지표 수
 MAX_GROUPS = 50  # 나눌 때 보여 줄 그룹 수(값 순)
-AGGS = ("count", "sum", "mean", "min", "max", "nunique")
+OLD_AGGS = ("count", "sum", "mean", "min", "max", "nunique")  # 처음부터 있던 집계(목록의 앞에 둔다)
+AGGS = (*OLD_AGGS, *[i for i in sql_funcs.ids_for("metrics") if i not in OLD_AGGS])  # 함수 사전의 집계 전부(예전 이름 nunique는 count_distinct와 같다)
 NUMERIC_AGGS = ("sum", "mean")
 FORMATS = ("number", "percent")
-AGG_NAMES = {"count": "개수", "sum": "합계", "mean": "평균", "min": "최소", "max": "최대", "nunique": "고유 개수"}
+AGG_NAMES = {i: sql_funcs.label_of(i) for i in AGGS}  # 집계 id → 한국어 이름(예전 이름 nunique도 '고유 개수')
 
 
 # ---------- 지표 파일 ----------
@@ -88,19 +91,23 @@ def part(where, p):
     """분자·분모 하나 {"agg", "column"(없으면 None), "where": [조건 줄]}."""
     if not isinstance(p, dict) or p.get("agg") not in AGGS:
         raise ValueError(f"{where}: agg는 {', '.join(AGGS)} 중 하나여야 합니다.")
-    unknown = set(p) - {"agg", "column", "where"}
+    unknown = set(p) - {"agg", "column", "where", "opts"}
     if unknown:
-        raise ValueError(f"{where}: 모르는 항목 {', '.join(sorted(map(str, unknown)))}. agg·column·where만 씁니다.")
+        raise ValueError(f"{where}: 모르는 항목 {', '.join(sorted(map(str, unknown)))}. agg·column·where·opts만 씁니다.")
     column = p.get("column")
     if column is not None and (not isinstance(column, str) or not column.strip()):
         raise ValueError(f"{where}: column은 컬럼 이름(글자)이어야 합니다.")
-    if column is None and p["agg"] != "count":
+    if column is None and sql_funcs.needs_column(p["agg"]):  # 컬럼 칸이 필수인 집계(count와 조건만 받는 count_if·all·any는 아님)
+
         raise ValueError(f"{where}: {p['agg']}에는 column이 있어야 합니다.")
+    opts = p.get("opts")
+    if opts is not None and not isinstance(opts, dict):
+        raise ValueError(f"{where}: opts는 집계의 나머지 인자를 담은 객체여야 합니다.")
     conds = p.get("where", [])
     conds = [conds] if isinstance(conds, str) else conds
     if not isinstance(conds, list) or not all(isinstance(c, str) and c.strip() for c in conds):
         raise ValueError(f"{where}: where는 조건 줄(글자)이나 그 목록이어야 합니다.")
-    return {"agg": p["agg"], "column": column.strip() if column else None, "where": [c.strip() for c in conds]}
+    return {"agg": p["agg"], "column": column.strip() if column else None, "where": [c.strip() for c in conds], **({"opts": opts} if opts else {})}
 
 
 def describe(m):
@@ -134,12 +141,11 @@ def aggregate(expr, p):
     """분자·분모 하나의 집계 식(where 조건은 그 집계에만 건다)."""
     preds = [parse.predicate(line, expr) for line in p["where"]]
     where = ibis.and_(*preds) if preds else None
-    if p["column"] is None:
+    if p["column"] is None and p["agg"] == "count":
         return expr.count(where=where)
-    col = parse.column(expr, p["column"])
-    if p["agg"] in NUMERIC_AGGS and not col.type().is_numeric():
+    if p["column"] is not None and p["agg"] in NUMERIC_AGGS and not parse.column(expr, p["column"]).type().is_numeric():
         raise ValueError(f"'{p['column']}'은 숫자 컬럼이 아니라 {AGG_NAMES[p['agg']]}를 구할 수 없습니다.")
-    return getattr(col, p["agg"])(where=where)
+    return sql_funcs.aggregate(p["agg"], expr, p["column"], where, p.get("opts"))
 
 
 def metric_expr(expr, name, m):

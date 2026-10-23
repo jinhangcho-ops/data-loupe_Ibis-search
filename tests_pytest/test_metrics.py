@@ -47,7 +47,7 @@ def test_read_and_describe(found):
     ("metrics: {}", "하나 이상"),
     ("other: 1", "metrics"),
     ("metrics: {A: {denominator: {agg: count}}}", "numerator"),
-    ("metrics: {A: {numerator: {agg: median, column: x}}}", "agg는"),
+    ("metrics: {A: {numerator: {agg: bogus, column: x}}}", "agg는"),
     ("metrics: {A: {numerator: {agg: sum}}}", "column이 있어야"),
     ("metrics: {A: {numerator: {agg: count}, format: money}}", "format"),
     ("metrics: {A: {numerator: {agg: count, where: 3}}}", "where"),

@@ -8,6 +8,7 @@ import re
 from lazy import ibis
 
 import parse
+import sql_funcs
 
 GUIDE = ("순위 기준 금액 desc [그룹 매장코드] / 이동평균·이동합계 금액 3행(또는 7일) 기준 주문일 / 누적합 금액 기준 주문일 / "
          "이전값·차이 금액 기준 주문일 / 상위 3 기준 금액 desc 그룹 매장코드 / 반올림 0 숫자 / 곱하기 1.1 금액, 수량 / 빈값채우기 0 숫자 / "
@@ -16,23 +17,27 @@ EXAMPLES = ["순위 기준 금액 desc 그룹 매장코드", "이동평균 금�
             "이전값 금액 기준 주문일", "차이 금액 기준 주문일", "상위 3 기준 금액 desc 그룹 매장코드", "반올림 0 숫자", "곱하기 1.1 금액",
             "빈값채우기 0 숫자", "공백지우기 글자", "펼치기 태그", "세로로 금액, 수량"]  # 화면의 [예시 넣기]
 WINDOWS = ("순위", "이동평균", "이동합계", "누적합", "이전값", "차이", "상위")
-COLUMNS = ("순위", "이동평균", "이동합계", "누적합", "이전값", "차이")  # 새 컬럼 하나를 만드는 창 함수. 서로 기대지 않으면 mutate 하나로 묶는다
+NEW_WINDOWS = tuple(i for i in sql_funcs.ids_for("calc") if sql_funcs.FUNCS[i]["window"])  # 함수 사전의 창 함수 id(dense_rank·lead·cum_mean·ntile …): 줄을 id로 시작한다
+COLUMNS = ("순위", "이동평균", "이동합계", "누적합", "이전값", "차이", *NEW_WINDOWS)  # 새 컬럼 하나를 만드는 창 함수. 서로 기대지 않으면 mutate 하나로 묶는다
 EACH = ("반올림", "곱하기", "빈값채우기", "공백지우기")
-KINDS = (*WINDOWS, *EACH, "펼치기", "세로로")
+FORMULAS = ("식", "SQL식", "창거르기")  # 식 = 계산 컬럼의 식(함수 사전의 행 함수 전부), SQL식 = DB 고유 함수(직접 쓰기), 창거르기 = QUALIFY
+KINDS = (*WINDOWS, *EACH, "펼치기", "세로로", *FORMULAS, *NEW_WINDOWS)
 OPTIONS = ("기준", "그룹", "이름")  # 줄 안에서 뒤따르는 값을 묶는 낱말
 LONG_NAMES = ("항목", "값")  # 세로로 세울 때 만드는 컬럼(원래 컬럼 이름, 값)
 SIZE = re.compile(r"(\d+)(행|일)")
 TOP = "__ibis_top"  # 상위 N을 거를 때 잠깐 쓰는 행 번호
 MAX_PIVOT = 30  # 피벗에서 열로 펼칠 값의 최대 개수
 MAX_ROWS = 500  # 피벗 결과의 최대 행 수
-HOWS = {"count": "개수", "sum": "합계", "mean": "평균", "min": "최소", "max": "최대"}
+OLD_HOWS = ("count", "sum", "mean", "min", "max")  # 처음부터 있던 피벗 집계(목록의 앞에 둔다)
+HOWS = {i: sql_funcs.label_of(i) for i in (*OLD_HOWS, *[i for i in sql_funcs.ids_for("pivot") if i not in OLD_HOWS and sql_funcs.FUNCS[i]["aggregate"]])}  # 함수 사전의 집계 전부
+SUBTOTALS = ("rollup", "cube", "sets")  # 피벗의 소계·총계 방식(ROLLUP·CUBE·GROUPING SETS)
 
 
 def split_words(line):
     """(종류, 본문 낱말들, {기준·그룹·이름: 낱말들})."""
     words = line.split()
     if not words or words[0] not in KINDS:
-        raise ValueError(f"계산 종류는 {', '.join(KINDS)} 중 하나로 시작합니다. 형식: {GUIDE}")
+        raise ValueError(f"계산 종류는 {', '.join(KINDS[:len(WINDOWS) + len(EACH) + 2 + len(FORMULAS)])} 중 하나로 시작합니다(함수 사전의 창 함수 id도 됩니다: {', '.join(NEW_WINDOWS[:4])} …). 형식: {GUIDE}")
     main, opts, at = [], {}, None
     for w in words[1:]:
         if w in OPTIONS:
@@ -140,6 +145,8 @@ def apply_line(line, expr):
         if len(cols) < 2:
             raise ValueError("세로로 세울 컬럼을 두 개 이상 넣으세요. 예: 세로로 금액, 수량")
         return longer(expr, cols)
+    if kind in FORMULAS:
+        return formula_line(kind, main, opts, expr)
     if kind == "상위":
         keys, groups = window(expr, opts)
         n = int(number(main[0] if main else None, "상위 몇 개"))
@@ -152,6 +159,8 @@ def apply_line(line, expr):
 
 def column(kind, main, opts, expr, taken=()):
     """새 컬럼 하나를 만드는 창 함수 줄(COLUMNS)의 (이름, 식). 식은 expr의 컬럼만 쓴다. taken은 같은 mutate에서 이미 만든 이름."""
+    if kind in NEW_WINDOWS:
+        return catalog_window(kind, main, opts, expr, taken)
     keys, groups = window(expr, opts)
     order = (opts.get("기준") or [""])[0]
     if kind == "순위":
@@ -181,6 +190,59 @@ def column(kind, main, opts, expr, taken=()):
     return new_name(expr, opts, f"{col}_{kind}{n}{unit}", taken), how.over(win)
 
 
+def word_value(spec, word):
+    """줄의 낱말 하나를 함수 사전 칸의 값으로: 컬럼은 이름 그대로, 숫자 칸은 수, 그 밖은 글자(숫자로 읽히면 값 칸은 수)."""
+    if spec["kind"] in ("number", "int") or (spec["kind"] == "value" and re.fullmatch(r"-?\d+(\.\d+)?", word)):
+        value = number(word, spec["label"])
+        return int(value) if spec["kind"] == "int" or value == int(value) else value
+    return word
+
+
+def window_args(f, main, opts, expr):
+    """함수 사전의 창 함수 줄 '<id> [컬럼] [인자…] 기준 … 그룹 …'을 함수의 인자로. 본문 낱말은 칸 차례(정렬·묶음·조건 칸 제외), 기준·그룹은 옵션에서."""
+    specs = [a for a in f["args"] if a["name"] not in sql_funcs.HAS_ARGS]
+    if len(main) > len(specs):
+        raise ValueError(f"{f['id']}의 인자는 {', '.join(s['label'] for s in specs) or '없음'}입니다. 형식: {f['example']} 기준 컬럼 [그룹 컬럼]")
+    raw = {s["name"]: word_value(s, w) for s, w in zip(specs, main)}
+    keys, groups = window(expr, opts, need_order=False)
+    have = {a["name"] for a in f["args"]}
+    for key, word, found in (("order", "기준", keys), ("group", "그룹", groups)):
+        if found and key not in have:
+            raise ValueError(f"{f['id']}는 '{word}'을 쓰지 않습니다. 형식: {f['example']}")
+    return {**raw, **({"order": keys} if keys else {}), **({"group": groups} if groups else {})}
+
+
+def catalog_window(kind, main, opts, expr, taken):
+    """함수 사전의 창 함수 줄의 (이름, 식)."""
+    f = sql_funcs.FUNCS[kind]
+    raw = window_args(f, main, opts, expr)
+    first = next((w for w in main if w in expr.columns), "")
+    return new_name(expr, opts, f"{first}_{kind}".lstrip("_"), taken), f["build"](sql_funcs.resolve(f, expr, raw))
+
+
+def formula_line(kind, main, opts, expr):
+    """식·SQL식·창거르기 줄을 건다. 식 <식> 이름 새이름 [기준 …] [그룹 …] / SQL식 <SQL 식> 이름 새이름 / 창거르기 <창 함수 id> [인자…] <비교> <값> 기준 … [그룹 …]."""
+    if kind == "창거르기":
+        if len(main) < 3 or main[0] not in NEW_WINDOWS and not (main[0] in sql_funcs.FUNCS and sql_funcs.FUNCS[main[0]]["window"]):
+            raise ValueError("창거르기 <창 함수 id> [인자…] <비교(<= 등)> <값> 기준 컬럼 [그룹 컬럼]. 예: 창거르기 rank <= 3 기준 금액 desc 그룹 매장")
+        f = sql_funcs.FUNCS[main[0]]
+        raw = window_args(f, main[1:-2], opts, expr)
+        return sql_funcs.apply("qualify", expr, {"func": main[0], "func_args": raw, "op": main[-2], "value": number(main[-1], "비교 값")})
+    name = " ".join(opts.get("이름") or [])
+    if not name:
+        raise ValueError(f"{kind}에는 끝에 '이름 새이름'을 넣으세요. 예: {kind} 금액 * 수량 이름 합계금액")
+    text = " ".join(main)
+    if kind == "SQL식":
+        try:
+            return sql_funcs.raw_expr(expr, name, text)
+        except sql_funcs.NeedsLocal:  # 파일 연결: 컬럼만 보이는 자리 표시, 값은 PC 사본에서
+            return sql_funcs.local_only(expr, name)
+    import prep_derive
+    prep_derive.check_name(name, expr, "계산 컬럼")
+    keys, _ = window(expr, opts, need_order=False)
+    return expr.mutate(**{name: prep_derive.Formula(expr, text, keys, names(opts.get("그룹") or [], expr)).build()})
+
+
 def mentions(main, opts):
     """줄이 가리키는 컬럼 이름들(본문의 첫 낱말, 기준, 그룹)."""
     found = set(" ".join(main[:1]).split(",")) | set((opts.get("기준") or [""])[:1]) | set(" ".join(opts.get("그룹") or []).split(","))
@@ -207,15 +269,24 @@ def apply(lines, expr):
     return expr.mutate(**batch) if batch else expr
 
 
-def metric(expr, how, value, where):
-    """피벗 칸 하나의 집계 식(where를 만족하는 행만)."""
-    if how == "count":
-        return expr.count(where=where) if value is None else expr[value].count(where=where)
-    return getattr(expr[value], how)(where=where)
+def metric(expr, how, value, where, opts=None):
+    """피벗 칸 하나의 집계 식(where를 만족하는 행만). how는 함수 사전의 집계 id, opts는 그 집계의 나머지 인자(분위수 p, 구분자 sep …)."""
+    return sql_funcs.aggregate(how, expr, value, where, opts)
+
+
+def having(table, line):
+    """집계한 결과 표를 조건 한 줄로 거른다(HAVING). 결과 컬럼 이름에 공백이 있으면('전체 합계') 조건 줄에도 그대로 쓸 수 있게, 잠깐 밑줄로 바꿔 읽는다."""
+    plain = {name: name.replace(" ", "_") for name in table.columns if " " in name}
+    for name in sorted(plain, key=len, reverse=True):
+        line = line.replace(name, plain[name])
+    shown = table.rename({new: old for old, new in plain.items()}) if plain else table
+    shown = shown.filter(parse.predicate(line, shown))
+    return shown.rename({old: new for old, new in plain.items()}) if plain else shown
 
 
 def pivot(expr, spec, values_of):
-    """피벗(조건부 집계) 식. spec: {rows: [행 기준 컬럼], column: 열로 펼칠 컬럼(없으면 펼치지 않음), value: 값 컬럼(개수는 없어도 됨), how, where: 조건 한 줄}.
+    """피벗(조건부 집계) 식. spec: {rows: [행 기준 컬럼], column: 열로 펼칠 컬럼(없으면 펼치지 않음), value: 값 컬럼(개수는 없어도 됨), how(함수 사전의 집계 id), opts(그 집계의 나머지 인자),
+    where: 조건 한 줄, subtotals: rollup·cube·sets(소계·총계 줄), sets: 소계 조합(sets일 때), having: 집계한 뒤 거르는 조건 한 줄(결과 컬럼 이름으로)}.
     values_of(식)은 열로 펼칠 값 목록을 구하는 조회(MAX_PIVOT+1개까지)를 돌린다. 값마다 조건부 집계 하나와 '전체'를 만든다."""
     if not isinstance(spec, dict):
         raise ValueError("피벗 설정이 없습니다.")
@@ -223,17 +294,20 @@ def pivot(expr, spec, values_of):
     for r in rows:
         parse.check_name(r, expr.columns, "행 기준 컬럼")
     how, value, column = spec.get("how", "count"), spec.get("value") or None, spec.get("column") or None
-    if how not in HOWS:
-        raise ValueError(f"집계는 {', '.join(HOWS)} 중 하나입니다.")
+    if how not in HOWS and how not in sql_funcs.ALIASES:
+        raise ValueError(f"집계는 {', '.join(list(HOWS)[:8])} … 중 하나입니다(함수 사전의 집계 {len(HOWS)}가지).")
+    opts = spec.get("opts")
+    if opts is not None and not isinstance(opts, dict):
+        raise ValueError("집계의 옵션(opts)은 객체여야 합니다.")
     if value is not None:
         parse.check_name(value, expr.columns, "값 컬럼")
         if how in ("sum", "mean") and not expr[value].type().is_numeric():
             raise ValueError("합계·평균은 숫자 컬럼에만 됩니다.")
-    elif how != "count":
+    elif sql_funcs.needs_column(how):
         raise ValueError("값 컬럼을 고르세요(개수는 비워도 됩니다).")
     cond = parse.predicate(spec["where"], expr) if (spec.get("where") or "").strip() else None
-    total = f"전체 {HOWS[how]}"
-    aggs = {total: metric(expr, how, value, cond)}
+    total = f"전체 {sql_funcs.label_of(how)}"
+    aggs = {total: metric(expr, how, value, cond, opts)}
     if column is not None:
         parse.check_name(column, expr.columns, "열로 펼칠 컬럼")
         found = values_of(expr.filter(expr[column].notnull()).select(v=expr[column]).distinct().order_by("v").limit(MAX_PIVOT + 1))
@@ -244,6 +318,15 @@ def pivot(expr, spec, values_of):
             if name in aggs or name in rows:
                 name = f"{column}={v}"
             is_v = expr[column] == v
-            aggs[name] = metric(expr, how, value, is_v if cond is None else is_v & cond)
-    table = expr.group_by(rows).aggregate(**aggs).order_by(rows) if rows else expr.aggregate(**aggs)
+            aggs[name] = metric(expr, how, value, is_v if cond is None else is_v & cond, opts)
+    subtotals = spec.get("subtotals")
+    if subtotals and (subtotals not in SUBTOTALS or not rows):
+        raise ValueError(f"소계는 행 기준 컬럼이 있어야 하고 {', '.join(SUBTOTALS)} 중 하나입니다.")
+    if subtotals:  # 소계·총계 줄: 기준 조합마다 집계해 잇는다(기준 칸은 글자, 빠진 칸은 '(소계)'·'(전체)')
+        table = sql_funcs.grouping(expr, rows, aggs, sql_funcs.group_sets("rollup" if subtotals == "rollup" else "cube" if subtotals == "cube" else "grouping_sets", rows, spec.get("sets")))
+        table = table.order_by(sql_funcs.grouped_order(table, rows))
+    else:
+        table = expr.group_by(rows).aggregate(**aggs).order_by(rows) if rows else expr.aggregate(**aggs)
+    if (spec.get("having") or "").strip():  # HAVING: 집계한 뒤 결과 컬럼으로 거른다
+        table = having(table, spec["having"])
     return table.limit(MAX_ROWS + 1)

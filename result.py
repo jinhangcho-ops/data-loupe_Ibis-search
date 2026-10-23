@@ -4,6 +4,7 @@ from pathlib import Path
 
 from lazy import ibis
 
+import sql_funcs
 from parse import check_name, column as field_of, struct_fields, type_info
 
 SUMMARY_COLS = ["name", "type", "count", "nulls", "unique", "min", "max", "mean"]
@@ -237,15 +238,21 @@ def get_values(expr, column, limit=MAX_VALUES):
     return values[:limit], len(values) > limit
 
 
-def chart_metric(expr, y, agg):
-    """계열 하나의 집계 식. count는 y 없이 행 수, sum·mean은 숫자 컬럼 y가 있어야 한다."""
+def chart_aggs():
+    """차트 계열에서 고를 수 있는 집계 id들(함수 사전의 집계 전부 + 예전 이름 nunique). 화면이 이 목록으로 고른다."""
+    return sql_funcs.ids_for("chart") + list(sql_funcs.ALIASES)
+
+
+def chart_metric(expr, y, agg, opts=None):
+    """계열 하나의 집계 식. count는 y 없이 행 수, sum·mean은 숫자 컬럼 y가 있어야 한다. 그 밖의 집계(중앙값·분위수·최빈값·표준편차·이어 붙이기 …)는
+    함수 사전(sql_funcs)의 집계이고, opts는 그 집계의 나머지 인자(분위수 p, 구분자 sep …)다. 저장돼 있는 예전 이름(nunique)도 읽는다."""
     if agg == "count":
         return expr.count()
-    if agg not in ("sum", "mean"):
-        raise ValueError("집계 방식은 count, sum, mean 중 하나입니다.")
-    if y not in expr.columns or not expr[y].type().is_numeric():
+    if agg not in chart_aggs():
+        raise ValueError(f"집계 방식 '{agg}'은 쓸 수 없습니다. count, sum, mean, min, max, median, quantile … 중에서 고르세요(함수 사전의 집계).")
+    if agg in ("sum", "mean") and (y not in expr.columns or not expr[y].type().is_numeric()):
         raise ValueError("합계·평균은 숫자 컬럼을 Y로 골라야 합니다.")
-    return getattr(expr[y], agg)()
+    return sql_funcs.aggregate(agg, expr, y, None, opts)
 
 
 def get_chart(expr, x, series, split=None, order="x"):
@@ -256,7 +263,7 @@ def get_chart(expr, x, series, split=None, order="x"):
     if not series:
         raise ValueError("계열을 하나 이상 넣으세요.")
     # 집계 식은 집계할 그 테이블 식에서 만들어야 한다(행 수는 다른 식에서 만든 것을 쓸 수 없다).
-    metrics = lambda table: {f"v{i}": chart_metric(table, s.get("y"), s.get("agg")) for i, s in enumerate(series)}
+    metrics = lambda table: {f"v{i}": chart_metric(table, s.get("y"), s.get("agg"), s.get("opts")) for i, s in enumerate(series)}
     top = expr.group_by(x).aggregate(**metrics(expr))
     top = top.order_by([top.v0.desc(), top[x]] if order == "value" else [top[x]]).limit(MAX_GROUPS).to_polars()
     labels = top[x].to_list()
