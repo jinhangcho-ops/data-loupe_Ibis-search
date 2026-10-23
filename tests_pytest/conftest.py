@@ -29,6 +29,7 @@ def client(folder, monkeypatch):
     import bot_app  # noqa: F401  Slack 봇 라우트
     import collect_app  # noqa: F401  수집 라우트
     import dash_app  # noqa: F401  대시보드 라우트
+    import flow_app  # noqa: F401  흐름·문장·내 지표 라우트
     import integrations_app  # noqa: F401  연동 라우트
     import prep_app  # noqa: F401  전처리 라우트
     import schedule_app  # noqa: F401  예약 라우트
@@ -43,6 +44,21 @@ def client(folder, monkeypatch):
     c.get("/?key=" + server.KEY)
     yield c
     server.state.update(con=None, passwords=[], opened=None, rows={})
+
+
+def spy_queries(monkeypatch):
+    """연결(DuckDB)로 나가는 조회 글을 모으는 목록을 돌려준다: 표·값 하나(Scalar)·열의 실행과 raw_sql을 가로챈다. 원격 DB에 COUNT 같은 조회를 보내지 않았는지 볼 때 쓴다."""
+    from ibis.backends.duckdb import Backend
+    from ibis.expr.types import Column, Scalar, Table
+    from lazy import ibis
+    found = []
+    for cls, names in ((Table, ("to_pyarrow", "to_polars", "execute", "to_pyarrow_batches")), (Scalar, ("to_pyarrow", "execute")), (Column, ("to_pyarrow", "execute"))):
+        for name in names:
+            original = getattr(cls, name)
+            monkeypatch.setattr(cls, name, lambda self, *a, _o=original, **k: (found.append(str(ibis.to_sql(self))), _o(self, *a, **k))[1])
+    raw = Backend.raw_sql
+    monkeypatch.setattr(Backend, "raw_sql", lambda self, query, **k: (found.append(str(query)), raw(self, query, **k))[1])
+    return found
 
 
 def pytest_configure(config):

@@ -286,7 +286,8 @@ def having(table, line):
 
 def pivot(expr, spec, values_of):
     """피벗(조건부 집계) 식. spec: {rows: [행 기준 컬럼], column: 열로 펼칠 컬럼(없으면 펼치지 않음), value: 값 컬럼(개수는 없어도 됨), how(함수 사전의 집계 id), opts(그 집계의 나머지 인자),
-    where: 조건 한 줄, subtotals: rollup·cube·sets(소계·총계 줄), sets: 소계 조합(sets일 때), having: 집계한 뒤 거르는 조건 한 줄(결과 컬럼 이름으로)}.
+    where: 조건 한 줄, subtotals: rollup·cube·sets(소계·총계 줄), sets: 소계 조합(sets일 때), having: 집계한 뒤 거르는 조건 한 줄(결과 컬럼 이름으로),
+    order: 결과 컬럼 순서 한 줄('전체 개수 desc', 없으면 행 기준 순), top: 정렬한 뒤 앞 N행만}.
     values_of(식)은 열로 펼칠 값 목록을 구하는 조회(MAX_PIVOT+1개까지)를 돌린다. 값마다 조건부 집계 하나와 '전체'를 만든다."""
     if not isinstance(spec, dict):
         raise ValueError("피벗 설정이 없습니다.")
@@ -329,4 +330,11 @@ def pivot(expr, spec, values_of):
         table = expr.group_by(rows).aggregate(**aggs).order_by(rows) if rows else expr.aggregate(**aggs)
     if (spec.get("having") or "").strip():  # HAVING: 집계한 뒤 결과 컬럼으로 거른다
         table = having(table, spec["having"])
+    if (spec.get("order") or "").strip():  # 결과 컬럼 순서('전체 개수 desc'), top이 있으면 앞 N행만(많은 순 상위 N)
+        key, _, way = spec["order"].strip().rpartition(" ")
+        key, way = (key, way.lower()) if way.lower() in ("asc", "desc") else (spec["order"].strip(), "asc")
+        parse.check_name(key, table.columns, "정렬 컬럼")
+        table = table.order_by(table[key].desc() if way == "desc" else table[key].asc())
+    if spec.get("top"):
+        table = table.limit(min(parse.whole_number(spec["top"], 1, MAX_ROWS, f"상위 N은 1 이상 {MAX_ROWS} 이하의 정수예요."), MAX_ROWS))
     return table.limit(MAX_ROWS + 1)
