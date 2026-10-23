@@ -1,9 +1,11 @@
-"""분석 화면의 분석: 분포, 상관관계, 그룹 비교, 시계열 추이. 표본(메모리 표)이든 테이블 전체(DB)든 같은 Ibis 집계로 구한다.
+"""분석 화면의 분석: 분포, 상관관계, 그룹 비교, 시계열 추이, 흐름(퍼널). 표본(메모리 표)이든 테이블 전체(DB)든 같은 Ibis 집계로 구한다.
 상관관계도 DB마다 다른 corr 함수 대신 합계 집계로 구해 어느 연결에서나 같다. 결과는 화면이 그릴 값과 표로 보일 값이다."""
+import datetime as dt
 import math
 
 from lazy import ibis
 
+import funnel
 from parse import check_name
 from profiler import plain
 from result import chart_metric
@@ -15,7 +17,8 @@ MAX_POINTS = 5_000  # 산점도의 점 수
 MAX_GROUPS = 30  # 그룹 비교에 보일 그룹 수(행이 많은 순)
 MAX_PERIODS = 400  # 시계열 추이에 보일 기간 수
 UNITS = {"day": "D", "week": "W", "month": "M"}  # 시계열 묶음 단위 → Ibis truncate 단위
-LIMITS = {"bins": BINS, "top_values": TOP_VALUES, "max_corr": MAX_CORR, "max_points": MAX_POINTS, "max_groups": MAX_GROUPS, "max_periods": MAX_PERIODS}
+WINDOW_UNITS = {"minute": 60, "hour": 3600, "day": 86400}  # 퍼널 기간 제한의 단위 → 초
+LIMITS = {"max_steps": funnel.MAX_STEPS, "bins": BINS, "top_values": TOP_VALUES, "max_corr": MAX_CORR, "max_points": MAX_POINTS, "max_groups": MAX_GROUPS, "max_periods": MAX_PERIODS}
 
 
 def rows(expr):
@@ -140,12 +143,40 @@ def trend(t, column, unit, value, agg, opts=None):
             "values": [r["v"] for r in found[:MAX_PERIODS]], "more": len(found) > MAX_PERIODS}
 
 
+def window_seconds(window):
+    """퍼널 기간 제한 {n, unit}(unit은 minute·hour·day)을 초로. 비면(None) 제한 없음."""
+    if window in (None, {}, ""):
+        return None
+    if not isinstance(window, dict) or window.get("unit") not in WINDOW_UNITS:
+        raise ValueError("기간 제한은 숫자와 단위(분·시간·일)로 입력하세요.")
+    n = window.get("n")
+    if isinstance(n, bool) or not isinstance(n, (int, float)) or not n > 0:
+        raise ValueError("기간 제한의 숫자는 0보다 커야 합니다.")
+    return n * WINDOW_UNITS[window["unit"]]
+
+
+def funnel_flow(t, user, step, time, steps, window=None, span=None):
+    """흐름(퍼널): 사용자(user)가 단계 컬럼(step)의 값 steps를 순서대로 거쳐 간 사람 수(funnel.compute). 중간에 한 다른 행동과 되돌아간 행동은 무시한다.
+    window = {n, unit} 첫 단계부터 이 시간 안에 도달한 것만, span = {start, end} 시각 컬럼의 날짜가 이 안인 행만(대시보드 기간). 필요한 컬럼은 사용자·단계·시각 셋뿐이다."""
+    seconds = window_seconds(window)
+    funnel.check(t, user, step, time, steps, seconds)
+    if span and (span.get("start") or span.get("end")):
+        day = t[time].cast("date")
+        try:
+            start, end = (dt.date.fromisoformat(span[k]) if span.get(k) else None for k in ("start", "end"))
+        except (TypeError, ValueError):
+            raise ValueError("기간(range)의 시작과 끝은 YYYY-MM-DD 모양이어야 합니다.") from None
+        t = t.filter(*([day >= start] if start else []), *([day <= end] if end else []))
+    found = funnel.compute(t, user, step, time, steps, seconds)
+    return {"who": user, "step": step, "time": time, "steps": found["steps"], "window": window or None, "window_seconds": seconds, "range": span or None}
+
+
 def columns(t):
     """분석할 표의 [컬럼, 종류]. 화면이 고르는 칸을 채운다."""
     return {"columns": [[name, kind(dtype)] for name, dtype in t.schema().items()]}
 
 
-KINDS = {"columns": columns, "distribution": distribution, "correlation": correlation, "scatter": scatter, "groups": groups, "trend": trend}
+KINDS = {"columns": columns, "distribution": distribution, "correlation": correlation, "scatter": scatter, "groups": groups, "trend": trend, "funnel": funnel_flow}
 
 
 def analyze(t, how):
@@ -154,5 +185,6 @@ def analyze(t, how):
     if name not in KINDS:
         raise ValueError(f"분석 종류는 {', '.join(KINDS)} 중 하나입니다.")
     args = {"columns": (), "distribution": ("column",), "correlation": ("columns",), "scatter": ("x", "y"),
-            "groups": ("by", "value", "agg", "opts"), "trend": ("column", "unit", "value", "agg", "opts")}[name]
+            "groups": ("by", "value", "agg", "opts"), "trend": ("column", "unit", "value", "agg", "opts"),
+            "funnel": ("who", "step", "time", "steps", "window", "range")}[name]
     return {"kind": name, **KINDS[name](t, *[how.get(a) for a in args])}

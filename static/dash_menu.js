@@ -1,11 +1,11 @@
-// 대시보드 화면의 [카드 추가] 메뉴: KPI·도넛 KPI·게이지·요약 문장·최근 행·두 계열 추이·칸 채우기·블록·목표 추이·표·문장·상태·경고 목록·배치도·편차 표 카드를 지금 탐색의 테이블·조건으로 만든다.
+// 대시보드 화면의 [카드 추가] 메뉴: KPI·도넛 KPI·게이지·요약 문장·최근 행·두 계열 추이·칸 채우기·블록·목표 추이·표·문장·상태·경고 목록·배치도·편차 표·흐름(퍼널) 카드를 지금 탐색의 테이블·조건으로 만든다.
 // 테이블은 메뉴에서 고른다(연결돼 있어야 한다). 탐색의 지금 검색이 필요한 차트·지표 카드는 쿼리 화면의 [대시보드에 추가]로 만든다.
 // 종류마다 값(컬럼·집계)·날짜 컬럼(기간 기준, 하나뿐이면 자동)·목표(직접 숫자 또는 목표 파일의 이름)·모양, 표·문장은 조건 색 규칙, 상태·경고·배치도는 엔티티 컬럼과 상태 규칙·연결선을 정한다. 전체 끌어 놓기 편집은 5단계 몫이다.
 // host = { add(card): 카드를 값과 함께 대시보드에 넣는다(실패하면 오류), layout(): 새 카드의 자리, metricNames(): 지표 이름들 }. dash_rules.js, dash.js(freshColors)가 먼저 불려 있어야 한다.
 const CARD_KINDS = { kpi: ["KPI(아이콘·큰 값·비교·스파크라인)", 1, 1], donut_kpi: ["도넛 KPI(가운데+꼭지점 칸)", 1, 5], gauge: ["게이지(항목 몫)", 1, 1], summary: ["요약 문장(목표 대비)", 1, 1],
                      recent_rows: ["최근 행(연결할 때만 보임)", 0, 0], dual_trend: ["두 계열 추이", 2, 2], stripes: ["칸 채우기", 1, 1], blocks: ["블록", 1, 1], target_trend: ["목표 추이", 1, 1],
                      table: ["표(집계 또는 원래 행)", 0, 5], sentence: ["문장(빈칸에 값·비교·기준일)", 0, 0], status: ["상태(정상·주의·이상)", 0, 0], alerts: ["경고 목록(N분째·영향)", 0, 0],
-                     map: ["배치도(끌어 옮김)", 0, 0], deviation: ["편차 표(엔티티×시간대)", 1, 1] };
+                     map: ["배치도(끌어 옮김)", 0, 0], deviation: ["편차 표(엔티티×시간대)", 1, 1], funnel: ["흐름(퍼널: 단계별 도달)", 0, 0] };
 const WATCH = ["status", "alerts", "map"];  // 엔티티별 최근 행을 상태 규칙으로 보는 카드
 let menuCols = [], menuBase = "";  // 메뉴에서 고른 테이블과 그 컬럼 [[이름, 한글 타입]]
 const colsOfType = names => menuCols.filter(c => names.includes(c[1])).map(c => c[0]);
@@ -28,6 +28,9 @@ function initCardMenu(root, host) {
   const entity = el("select", { title: "서버·장비·매장처럼 상태를 보는 대상의 이름 컬럼" }), timeCol = el("select", { title: "마지막 데이터 시각 컬럼(끊김·신선도 판정)" }), kindCol = el("select", { title: "배치도에서 종류별로 줄을 나눌 컬럼" }), linkCol = el("select", { title: "이 엔티티가 영향을 주는 대상(연결선 도착)의 이름 컬럼" });
   const stale = el("input", { type: "number", min: 1, placeholder: "예: 30", style: "width:80px" }), bg = el("select", {}, ...[["rack", "서버실 칸"], ["network", "네트워크"], ["image", "그림 파일"]].map(([v, n]) => el("option", { value: v, textContent: n }))), imagePath = el("input", { placeholder: "그림 파일 경로(.png·.jpg·.svg, 8MB까지). 카드를 저장하면 보입니다" });
   const bucket = el("select", {}, ...[["hour", "시간"], ["day", "일"], ["week", "주"], ["month", "월"]].map(([v, n]) => el("option", { value: v, textContent: n }))), baseline = el("input", { type: "number", placeholder: "비우면 엔티티 평균", style: "width:130px" }), threshold = el("input", { type: "number", placeholder: "비우면 기준의 20%", style: "width:130px" });
+  const fUser = el("select", { title: "사용자(사람)를 구분하는 컬럼" }), fStep = el("select", { title: "단계(행동) 이름이 들어 있는 컬럼" }), fTime = el("select", { title: "행동이 일어난 시각(날짜·날짜시간) 컬럼. 대시보드 기간의 기준 날짜 컬럼이 됩니다" });
+  const fSteps = el("input", { placeholder: "단계 값을 순서대로, 쉼표로 (1~10개) 예: 방문, 장바구니, 결제" }), fWin = el("input", { type: "number", min: 0, step: "any", placeholder: "비움", style: "width:80px" });
+  const fUnit = el("select", {}, ...[["minute", "분"], ["hour", "시간"], ["day", "일"]].map(([v, n]) => el("option", { value: v, textContent: n })));
   const template = el("textarea", { rows: 2, placeholder: "예: 오늘 매출은 {매출}이고 어제보다 {비교}예요 ({기준일} 기준)", style: "width:100%;font-size:12px" });
   const condRules = lineEditor("", parseRuleLine, "색 규칙(한 줄에 하나): 컬럼 | 식 | #색 | 화살표 | 칸·줄\n예: 상태 | *지연* | #e03131 | 없음 | 줄");
   const stateRules = lineEditor("", parseStateLine, "상태 규칙(한 줄에 하나): 컬럼 연산자 값 단계\n예: cpu >= 90 이상 / 상태 = DOWN 주의");
@@ -36,13 +39,14 @@ function initCardMenu(root, host) {
   const path = el("input", { placeholder: "목표 파일 경로(.xlsx·.csv·.yaml·.json·.md·.txt)" }), pathNote = el("div", { className: "hint cm-note" });
   const only = (label, input, ...kinds) => { const f = el("label", { className: "hint cm-field" }, label, input); f.dataset.kinds = kinds.join(" "); return f; };
   const block = (input, ...kinds) => { const f = el("div", { className: "cm-block" }, input); f.dataset.kinds = kinds.join(" "); return f; };
-  const withDate = Object.keys(CARD_KINDS).filter(k => k !== "recent_rows" && !WATCH.includes(k));
+  const withDate = Object.keys(CARD_KINDS).filter(k => k !== "recent_rows" && k !== "funnel" && !WATCH.includes(k));  // 흐름은 시각 컬럼이 기간 기준 날짜 컬럼
   const fields = [only("값 모양", format, "kpi", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation"), only("지표", metric, "kpi"), only("나눌 컬럼", group, "gauge", "summary"),
     only("날짜 컬럼", date, ...withDate), only("목표", el("span", {}, targetValue, " 또는 ", targetName), "kpi", "donut_kpi", "summary", "stripes", "blocks", "target_trend"),
     only("고리", ring, "donut_kpi"), only("칸 수", cells, "stripes"), only("한 칸 크기", size, "blocks"), only("행 수", rowCount, "recent_rows", "table"),
     only("묶음 컬럼", groupCols, "table"), only("합계 줄", total, "table"), block(condRules.root, "table", "sentence"),
     only("엔티티 컬럼", entity, ...WATCH, "deviation"), only("시각 컬럼", timeCol, ...WATCH), only("종류 컬럼", kindCol, ...WATCH), only("연결 대상 컬럼", linkCol, ...WATCH), only("끊김(분)", stale, ...WATCH),
     block(stateRules.root, ...WATCH), block(linkLines.root, ...WATCH), only("바탕", bg, "map"), only("그림 경로", imagePath, "map"),
+    only("사용자 컬럼", fUser, "funnel"), only("단계 컬럼", fStep, "funnel"), only("시각 컬럼", fTime, "funnel"), only("단계 순서", fSteps, "funnel"), only("기간 제한", el("span", {}, fWin, " ", fUnit, " 안에(비우면 없음)"), "funnel"),
     only("시간대 묶음", bucket, "deviation"), only("기준", baseline, "deviation"), only("허용 폭", threshold, "deviation"), block(template, "sentence"), block(blankLines.root, "sentence")];
   const options = (select, names, blank) => select.replaceChildren(...(blank ? [el("option", { value: "", textContent: blank })] : []), ...names.map(n => el("option", { value: n, textContent: n })));
   const makeRow = () => {
@@ -84,6 +88,10 @@ function initCardMenu(root, host) {
     if (dates.length === 1) date.value = dates[0];  // 하나뿐이면 자동
     options(entity, all, "(고르세요)");
     [timeCol, kindCol, linkCol].forEach(s => options(s, all, "(없음)"));
+    options(fUser, all, "(고르세요)");
+    options(fStep, all, "(고르세요)");
+    options(fTime, dates, "(고르세요)");
+    if (dates.length === 1) fTime.value = dates[0];
     if (dates.length === 1) timeCol.value = dates[0];
     options(metric, host.metricNames(), "(쓰지 않음)");
     [...rows.children].forEach(syncRow);
@@ -103,7 +111,17 @@ function initCardMenu(root, host) {
   };
   const build = () => {
     if (!menuBase) throw new Error("테이블을 고르세요.");
-    const k = kind.value, values = [...rows.children].map(r => {  // 컬럼이 꼭 필요한 집계인데 컬럼을 안 고르면 개수
+    const k = kind.value;
+    if (k === "funnel") {  // 흐름은 쿼리(body) 대신 전처리 없는 테이블(recipe)과 흐름 분석(analysis)을 다시 구할 기록으로 둔다. 읽는 컬럼은 사용자·단계·시각 셋뿐이다.
+      const steps = fSteps.value.split(",").map(s => s.trim()).filter(Boolean);
+      if (!fUser.value || !fStep.value || !fTime.value) throw new Error("사용자·단계·시각 컬럼을 모두 고르세요.");
+      if (!steps.length || steps.length > 10) throw new Error("단계는 1~10개를 쉼표로 적어 주세요.");
+      if (fWin.value !== "" && !(+fWin.value > 0)) throw new Error("기간 제한은 0보다 큰 숫자이거나 비워 두세요.");
+      return { kind: k, title: title.value.trim() || `흐름 · ${menuBase}`, layout: host.layout(), colors: freshColors(), view: { type: "", ratio: 4 / 3 }, data: {},
+               source: { schema: "", table: menuBase, recipe: { schema: "", base: menuBase }, full: true, date: fTime.value,
+                         analysis: { kind: "funnel", who: fUser.value, step: fStep.value, time: fTime.value, steps, window: fWin.value === "" ? null : { n: +fWin.value, unit: fUnit.value } } } };
+    }
+    const values = [...rows.children].map(r => {  // 컬럼이 꼭 필요한 집계인데 컬럼을 안 고르면 개수
       const y = r.col.value || null, { agg, opts } = r.picker.get(), needs = r.picker.yMode() === "required";
       return { label: r.querySelector(".cm-label").value.trim(), y, ...(needs && !y ? { agg: "count" } : { agg, ...(opts ? { opts } : {}) }) };
     });

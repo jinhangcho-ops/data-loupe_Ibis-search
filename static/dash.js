@@ -282,7 +282,10 @@ class DashBoard extends Board {
     this.prev = prev;
     await this.recompare();
     const unique = c => SVG_KINDS.includes(c.kind) && c.data?.by_unit?.day?.series.some(s => !merges(s.agg));  // 고유 개수·중앙값 같은 집계는 기간으로 다시 구해야 한다
-    const stale = this.cards.filter(c => (c.source?.date && !c.data?.by_unit && c.kind !== "recent_rows") || unique(c) || outsideWindow(c, this.range));  // 날짜 X축이 아닌데 기간 기준 날짜 컬럼이 있는 카드는 그 기간으로 다시 구한다
+    const was = this.hadRange;  // 기간이 비었으면(카드의 원래 조건대로) 방금 전까지 기간이 걸려 있던 때만 다시 구한다
+    this.hadRange = !!range;
+    const dated = c => (range || was) && c.source?.date && !c.data?.by_unit && c.kind !== "recent_rows";
+    const stale = this.cards.filter(c => dated(c) || unique(c) || outsideWindow(c, this.range));  // 날짜 X축이 아닌데 기간 기준 날짜 컬럼이 있는 카드는 그 기간으로 다시 구한다
     if (stale.length) await this.recompute?.(stale);
   }
   // 새 카드·다시 구할 때 서버에 알려 줄 보는 기간(없으면 undefined)
@@ -339,7 +342,7 @@ class DashBoard extends Board {
       : field("목표", el("input", { type: "number", value: view.target?.value ?? "", style: "width:90px", onchange: e => { if (e.target.value === "") { delete view.target; card.data.target = null; } else { view.target = { value: +e.target.value }; card.data.target = { value: +e.target.value, label: "", error: "" }; } again(); } }));
     const kinds = { donut_kpi: [choice("ring", "고리", [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리+목표 눈금"]])], stripes: [number("cells", "칸 수", 50), number("full", "가득 찬 값", 80)],
                     blocks: [number("size", "한 칸 크기", 80)], recent_rows: [number("rows", "행 수", 50)] }[card.kind] ?? [];
-    const plain = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence"].includes(card.kind);  // 목표·값 모양이 없는 종류
+    const plain = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel"].includes(card.kind);  // 목표·값 모양이 없는 종류
     const settings = plain ? [...kinds] : [target, choice("format", "값", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), ...kinds];
     const rules = ["table", "sentence"].includes(card.kind) ? [el("button", { className: "btype" + (card.openRules ? " on" : ""), textContent: "색 규칙", title: "조건에 맞는 칸만 색·화살표를 입힙니다", onclick: () => { card.openRules = !card.openRules; this.draw(); } })] : [];
     const row = el("div", { className: "btools" }, this.dateSelect(card), ...settings, ...rules, el("button", { className: "btype" + (card.openColors ? " on" : ""), textContent: "색", onclick: () => { card.openColors = !card.openColors; this.draw(); } }));

@@ -379,6 +379,10 @@ def check_card(card):
            "layout": check_layout(card["layout"]) if card.get("layout") is not None else {"x": 0, "y": 0, "w": 6, "h": 6},
            "colors": check_colors(card.get("colors")), "view": check_view(card.get("view")),
            "source": check_source(card.get("source")), "data": check_data(card.get("data"), card["kind"])}
+    if out["kind"] == "funnel":  # 흐름(퍼널) 카드: 다시 구할 전처리(recipe)와 흐름 분석(analysis.kind = funnel)이 있어야 한다
+        how = out["source"].get("analysis") or {}
+        if not isinstance(out["source"].get("recipe"), dict) or how.get("kind") != "funnel" or not isinstance(how.get("steps"), list) or not 1 <= len(how["steps"]) <= 10:
+            raise ValueError("흐름 카드에는 다시 구할 분석(source.recipe, source.analysis의 kind=funnel, 단계 1~10개)이 있어야 합니다.")
     size = len(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
     if size > MAX_CARD_BYTES:
         raise ValueError(f"카드 '{out['title']}'이 {size:,}자로 카드 하나의 상한 {MAX_CARD_BYTES:,}자를 넘습니다.")

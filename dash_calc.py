@@ -652,9 +652,14 @@ def metric_data(body):
     return {"x": by or "전체", "values": {"labels": labels or ["전체"], "series": series}, "note": f"값이 많아 앞 {metrics.MAX_GROUPS}개만 표시합니다." if more else ""}
 
 
-def analysis_data(source):
-    """analysis 카드의 값: 분석 결과(prep_app.analyzed)와 어느 쪽(표본·전체)으로 구했는지."""
-    found = prep_app.analyzed({"recipe": source.get("recipe"), "how": source.get("analysis"), "full": source.get("full") is True,
+def analysis_data(source, ctx=None):
+    """analysis·funnel 카드의 값: 분석 결과(prep_app.analyzed)와 어느 쪽(표본·전체)으로 구했는지.
+    funnel 카드는 기간 기준 날짜 컬럼(source.date, 보통 시각 컬럼)이 있고 대시보드 기간(ctx.range)이 있으면 그 날짜 안의 행만 센다. 읽는 컬럼은 사용자·단계·시각 셋뿐이다(analysis.funnel_flow)."""
+    how = source.get("analysis")
+    window = (ctx or {}).get("range")
+    if how and how.get("kind") == "funnel" and source.get("date") == how.get("time") and window and (window.get("start") or window.get("end")):
+        how = {**how, "range": {"start": window.get("start"), "end": window.get("end")}}
+    found = prep_app.analyzed({"recipe": source.get("recipe"), "how": how, "full": source.get("full") is True,
                                **({"sample": source["sample"]} if "sample" in source else {})})
     info = found.get("data", {})
     return {"values": found, "note": "테이블 전체" if info.get("full") else f"표본 {info.get('rows', 0):,}행"}
@@ -696,10 +701,10 @@ def compute(card, now, ctx=None):
             found.setdefault("date_cols", date_columns(core.build(source["body"], select=False)))
         if card["kind"] == "chart" and card["view"]["type"] in POINT_TYPES:  # 점 종류를 고른 카드는 점도 다시 구한다
             found["points"] = points_of(source["body"], (card["view"].get("points") or {}).get("size"))
-    elif card["kind"] == "analysis":
+    elif card["kind"] in ("analysis", "funnel"):
         if not isinstance(source.get("recipe"), dict) or not isinstance(source.get("analysis"), dict):
             raise ValueError("이 카드에는 다시 구할 분석(source.recipe, source.analysis)이 없습니다.")
-        found = analysis_data(source)
+        found = analysis_data(source, ctx)
     else:
         raise ValueError(f"'{card['kind']}' 카드는 아직 다시 구할 수 없습니다.")
     return {**found, "computed_at": now, "def_hash": dash_store.def_hash(definition(card))}

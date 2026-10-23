@@ -55,7 +55,18 @@
   #pca-cols label { display:flex; align-items:center; gap:8px; }
   #pca-cols input { width:auto; margin:0; }
   /* 분석: 오른쪽 패널에서 고르고 가운데에 그래프와 표. 그래프는 높이 440px 기준으로 비율(--ratio)만큼 넓어진다. */
-  .seg2.seg4 label { padding:6px 2px; font-size:13px; }
+  .seg2.seg4 { flex-wrap:wrap; border-radius:18px; }
+  .seg2.seg4 label { padding:6px 2px; font-size:13px; flex:1 1 30%; }
+  #a-funnel { width:min(100%, 900px); height:clamp(240px, 42vh, 380px); margin:0 auto; }
+  #a-funnel-text { text-align:center; margin:8px 0 0; }
+  .f-steps { display:flex; flex-wrap:wrap; gap:6px; min-height:30px; margin:4px 0; }
+  .f-step { display:inline-flex; align-items:center; gap:4px; border:1px solid var(--line); border-radius:999px; padding:2px 4px 2px 10px; font-size:12px; background:var(--bg); cursor:grab; }
+  .f-step.over { outline:2px dashed var(--accent); }
+  .f-step button { padding:0 6px; }
+  .f-add { display:flex; gap:6px; }
+  .f-add input { flex:1; min-width:0; }
+  .f-win { display:flex; gap:6px; align-items:center; }
+  .f-win input { width:80px; }
   .a-form { margin-top:12px; }
   .a-form .hint { margin:8px 0 4px; }
   #a-pane .chart-box { width:min(100%, calc(var(--chart, clamp(260px, 52vh, 900px)) * var(--ratio, 16 / 9))); aspect-ratio:var(--ratio, 16 / 9); margin:0 auto; position:relative; }
@@ -187,6 +198,8 @@
     <div class="tabs2 hidden" id="a-tabs"></div>
     <section class="pane" id="a-pane">
       <div class="chart-box hidden" id="a-box"><canvas id="a-chart"></canvas></div>
+      <div class="hidden" id="a-funnel"></div>
+      <div class="hint hidden" id="a-funnel-text"></div>
       <div class="table-wrap" id="a-table"></div>
     </section>
   </main>
@@ -200,6 +213,7 @@
         <label><input type="radio" name="akind" value="correlation"> 상관관계</label>
         <label><input type="radio" name="akind" value="groups"> 그룹 비교</label>
         <label><input type="radio" name="akind" value="trend"> 시계열 추이</label>
+        <label><input type="radio" name="akind" value="funnel"> 흐름(퍼널)</label>
       </div>
       <div class="a-form" data-kind="distribution">
         <div class="hint">컬럼</div><select id="a-col"></select>
@@ -223,6 +237,17 @@
         <div class="hint">집계 (함수 사전의 집계 전부)</div><div id="a-tagg"></div>
         <div class="hint">값 컬럼</div><select id="a-tval"></select>
       </div>
+      <div class="a-form hidden" data-kind="funnel">
+        <div class="hint">사용자 컬럼 (사람을 구분)</div><select id="a-fuser"></select>
+        <div class="hint">단계 컬럼 (행동 이름)</div><select id="a-fstep"></select>
+        <div class="hint">시각 컬럼 (날짜·날짜시간)</div><select id="a-ftime"></select>
+        <div class="hint">단계 순서 (최대 <span id="a-max-steps"></span>개, 끌어서 순서를 바꿉니다)</div>
+        <div class="f-steps" id="a-fsteps"></div>
+        <div class="f-add"><input id="a-fvalue" list="a-fvalues" placeholder="단계 컬럼의 값 고르기·쓰기"><datalist id="a-fvalues"></datalist><button class="btn" id="a-fadd">추가</button></div>
+        <div class="hint">기간 제한 (첫 단계부터 이 시간 안에 도달한 사람만. 비우면 제한 없음)</div>
+        <div class="f-win"><input id="a-fwin" type="number" min="0" step="any" placeholder="비움"><select id="a-funit"><option value="minute">분</option><option value="hour">시간</option><option value="day">일</option></select></div>
+        <div class="hint">사용자가 단계를 순서대로 거친 사람 수를 셉니다. 중간에 한 다른 행동과 되돌아간 행동은 무시하고, 같은 시각의 두 단계는 도달한 것으로 봅니다.</div>
+      </div>
     </div>
     <footer><button id="a-run" class="btn p" title="표본으로 구합니다(전처리 탭의 표본 행 수)">구하기</button></footer>
   </aside>
@@ -234,6 +259,7 @@
 <script src="/static/funcs.js"></script>
 <script src="/static/dash_refresh.js"></script>
 <script src="/static/board.js"></script>
+<script src="/static/funnel.js"></script>
 <script src="/static/dash.js"></script>
 <script>
 let prof = null;  // /api/profile의 응답. 테이블을 고르기 전에는 null
@@ -1049,10 +1075,54 @@ document.querySelectorAll("#views button").forEach(b => b.onclick = () => showVi
 // ---------- 분석 ----------
 // A.cols: 분석할 표의 [컬럼, 종류(num·date·text)]. A.result: 마지막 /api/analyze 결과(how·조건 글 포함). A.view: 보고 있는 그래프.
 const A = { cols: [], result: null, view: null, chart: null };
-const VIEW_NAMES = { hist: "히스토그램", box: "상자 그림", values: "값 빈도", heat: "히트맵", scatter: "산점도", groups: "그룹 비교", trend: "추이" };
+const VIEW_NAMES = { hist: "히스토그램", box: "상자 그림", values: "값 빈도", heat: "히트맵", scatter: "산점도", groups: "그룹 비교", trend: "추이", funnel: "흐름" };
 const VIEW_RATIOS = { box: 2.4, heat: 1, scatter: 4 / 3 };  // 나머지는 16:9
 $("a-max-corr").textContent = SERVER.analysis.max_corr;
 $("a-max-points").textContent = SERVER.analysis.max_points.toLocaleString();
+$("a-max-steps").textContent = SERVER.analysis.max_steps;
+// 흐름(퍼널): 단계 칩(끌어서 순서 바꾸기, ×로 빼기, 최대 max_steps개)과 단계 컬럼의 값 목록
+const FLOW = { steps: [], values: [] };
+function showSteps() {
+  $("a-fsteps").replaceChildren(...FLOW.steps.map((name, i) => {
+    const chip = el("span", { className: "f-step", draggable: true, title: "끌어서 순서를 바꿉니다" }, `${i + 1}. ${name}`,
+      el("button", { className: "ghost", textContent: "×", title: "이 단계 빼기", onclick: () => { FLOW.steps.splice(i, 1); showSteps(); } }));
+    chip.ondragstart = e => { e.dataTransfer.setData("text/plain", String(i)); e.dataTransfer.effectAllowed = "move"; };
+    chip.ondragover = e => { e.preventDefault(); chip.classList.add("over"); };
+    chip.ondragleave = () => chip.classList.remove("over");
+    chip.ondrop = e => {
+      e.preventDefault();
+      const from = +e.dataTransfer.getData("text/plain");
+      if (Number.isInteger(from) && from !== i) FLOW.steps.splice(i, 0, FLOW.steps.splice(from, 1)[0]);
+      showSteps();
+    };
+    return chip;
+  }));
+}
+function addStep() {
+  const value = $("a-fvalue").value.trim();
+  if (!value) return;
+  if (FLOW.steps.includes(value)) return say("err-ana", `같은 단계(${value})를 두 번 넣을 수 없어요.`);
+  if (FLOW.steps.length >= SERVER.analysis.max_steps) return say("err-ana", `단계는 ${SERVER.analysis.max_steps}개까지 고를 수 있어요.`);
+  FLOW.steps.push(value);
+  $("a-fvalue").value = "";
+  say("err-ana", "");
+  showSteps();
+}
+$("a-fadd").onclick = addStep;
+$("a-fvalue").onkeydown = e => { if (e.key === "Enter") addStep(); };
+// 단계 컬럼을 고르면 그 컬럼의 값(많이 나온 순, 20개까지)을 목록으로 받는다. 단계 컬럼이 바뀌면 고른 단계는 비운다.
+async function loadStepValues() {
+  const column = $("a-fstep").value;
+  FLOW.values = [];
+  $("a-fvalues").replaceChildren();
+  if (!column || !prof) return;
+  try {
+    const d = await api("/api/analyze", { recipe: anaRecipe(), how: { kind: "distribution", column }, sample });
+    FLOW.values = d.values.labels;
+    $("a-fvalues").replaceChildren(...FLOW.values.map(v => el("option", { value: v })));
+  } catch (e) { say("err-ana", e.message); }
+}
+$("a-fstep").onchange = () => { FLOW.steps = []; showSteps(); loadStepValues(); };
 const akind = () => document.querySelector("input[name=akind]:checked").value;
 // 분석할 표: 체크하면 지금 전처리(recipe), 아니면 원래 테이블
 const anaRecipe = () => $("a-prep").checked ? recipe() : { schema: S.schema, base: S.base };
@@ -1081,6 +1151,11 @@ async function loadAnaColumns() {
   keep("a-gby", names());
   fillAnaValues();
   keep("a-tcol", names("date"));
+  keep("a-fuser", names());
+  const before = $("a-fstep").value;
+  keep("a-fstep", names());
+  keep("a-ftime", names("date"));
+  if ($("a-fstep").value !== before || !FLOW.values.length) loadStepValues();
   const picked = new Set([...$("a-corr-cols").querySelectorAll("input:checked")].map(b => b.value));
   $("a-corr-cols").replaceChildren(...nums.map((n, i) => el("label", {}, el("input", { type: "checkbox", value: n, checked: picked.size ? picked.has(n) : i < 8 }), " " + n)));
   $("a-tcol").title = names("date").length ? "" : "날짜 컬럼이 없습니다. 전처리에서 타입을 날짜로 바꾸면 고를 수 있습니다";
@@ -1094,6 +1169,8 @@ function anaHow() {
     : { kind: "scatter", x: $("a-sx").value, y: $("a-sy").value };
   const pick = (key, value) => ({ agg: pickers[key].get().agg, ...(pickers[key].get().opts ? { opts: pickers[key].get().opts } : {}), value });
   if (k === "groups") return { kind: k, by: $("a-gby").value, ...pick("groups", $("a-gval").value) };
+  if (k === "funnel") return { kind: k, who: $("a-fuser").value, step: $("a-fstep").value, time: $("a-ftime").value, steps: [...FLOW.steps],
+    window: $("a-fwin").value === "" ? null : { n: +$("a-fwin").value, unit: $("a-funit").value } };
   return { kind: k, column: $("a-tcol").value, unit: $("a-tunit").value, ...pick("trend", $("a-tval").value) };
 }
 // 구하기(표본) 또는 전체로 다시 구하기(마지막 분석을 테이블 전체로)
@@ -1105,7 +1182,7 @@ async function runAna(full) {
     const r = prepped ? recipe() : { schema: S.schema, base: S.base };
     const d = await timed("analyze", () => api("/api/analyze", { recipe: r, how, sample, full }));
     const views = d.kind === "distribution" ? (d.histogram ? ["hist", "box", "values"] : ["values"])
-      : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"] }[d.kind];
+      : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"], funnel: ["funnel"] }[d.kind];
     A.result = { ...d, how, prepped, base: S.base, recipe: r, views };
     A.view = views.includes(A.view) ? A.view : views[0];
     say("err-ana", "");
@@ -1118,7 +1195,7 @@ $("a-full").onclick = () => busy($("a-full"), () => runAna(true));
 function anaTitle(d, view) {
   const value = x => x.agg === "count" ? "개수" : `${x.value} ${aggName(x.agg)}`;
   return { hist: `${d.column} 분포`, box: `${d.column} 상자 그림`, values: `${d.column} 값 빈도`, heat: "상관관계",
-           scatter: `${d.x} × ${d.y}`, groups: `${d.by}별 ${value(d)}`, trend: `${d.column} ${UNIT_NAMES[d.unit]}별 ${value(d)}` }[view];
+           scatter: `${d.x} × ${d.y}`, groups: `${d.by}별 ${value(d)}`, trend: `${d.column} ${UNIT_NAMES[d.unit]}별 ${value(d)}`, funnel: `${d.step} 흐름 (${d.steps.length}단계)` }[view];
 }
 function anaNote(d) {
   const data = d.data.full ? "테이블 전체" : `표본 ${d.data.rows.toLocaleString()}행 · 읽은 방법: ${SERVER.sample_methods[d.data.method] ?? d.data.method}`;
@@ -1126,7 +1203,8 @@ function anaNote(d) {
     d.kind === "groups" && d.more ? `행이 많은 ${lim.max_groups}개 그룹만` : "",
     d.kind === "trend" && d.more ? `앞 ${lim.max_periods}개 기간만` : "",
     d.kind === "scatter" ? `점 ${d.points.length.toLocaleString()}개 · 상관계수 ${d.r == null ? "-" : d.r.toFixed(3)} (${d.n.toLocaleString()}행)` : "",
-    d.kind === "correlation" ? `${d.n.toLocaleString()}행으로 구함` : ""];
+    d.kind === "correlation" ? `${d.n.toLocaleString()}행으로 구함` : "",
+    d.kind === "funnel" ? `${windowText(d.window)} · 같은 시각의 두 단계는 도달한 것으로 봄` : ""];
   return [`${d.base} · ${d.prepped ? "전처리 적용" : "원래 테이블"} · ${data}`, ...more].filter(Boolean).join(" · ");
 }
 // 그래프 아래의 표
@@ -1143,6 +1221,7 @@ function anaTable(d, view) {
     ...(d.values.other ? [{ 값: `그 밖 (값 ${(d.values.unique - d.values.labels.length).toLocaleString()}종류)`, "행 수": d.values.other, 비율: pct(d.values.other) }] : [])] };
   if (view === "heat") return { columns: ["", ...d.columns], rows: d.matrix.map((row, i) => ({ "": d.columns[i], ...Object.fromEntries(row.map((r, j) => [d.columns[j], r == null ? "-" : +r.toFixed(3)])) })) };
   if (view === "scatter") return { columns: ["", "값"], rows: [["상관계수 r", d.r == null ? "-" : +d.r.toFixed(4)], ["쓴 행 수", d.n], ["그린 점 수", d.points.length]].map(([k, v]) => ({ "": k, 값: v })) };
+  if (view === "funnel") return { columns: FUNNEL_COLUMNS, rows: funnelRows(d.steps) };
   const name = view === "groups" ? d.by : UNIT_NAMES[d.unit], value = d.agg === "count" ? "개수" : `${d.value} ${aggName(d.agg)}`;
   return { columns: [name, value, ...(d.counts ? ["행 수"] : [])], rows: d.labels.map((l, i) => ({ [name]: l, [value]: d.values[i], ...(d.counts ? { "행 수": d.counts[i] } : {}) })) };
 }
@@ -1154,7 +1233,11 @@ function drawAna() {
   A.chart = null;
   const d = A.result;
   const text = !!d && ["groups", "trend"].includes(A.view) && d.values.some(v => v != null && typeof v !== "number");  // 최빈값·이어 붙이기 같은 글자 결과는 그래프 없이 표로만
-  $("a-box").classList.toggle("hidden", !d || text);
+  const flow = !!d && A.view === "funnel";
+  $("a-box").classList.toggle("hidden", !d || text || flow);
+  $("a-funnel").classList.toggle("hidden", !flow);
+  $("a-funnel-text").classList.toggle("hidden", !flow);
+  $("a-funnel").replaceChildren();
   $("a-tabs").classList.toggle("hidden", !d || d.views.length < 2);
   $("a-full").disabled = !d;
   $("a-add").disabled = !d || text;
@@ -1165,6 +1248,11 @@ function drawAna() {
   $("a-data").textContent = anaNote(d);
   $("a-box").style.setProperty("--ratio", VIEW_RATIOS[A.view] ?? 16 / 9);
   $("a-table").innerHTML = tableHtml(anaTable(d, A.view));
+  if (flow) {
+    $("a-funnel").append(sankeySvg(d.steps, { text: getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "currentColor" }));
+    $("a-funnel-text").textContent = funnelSentence(d.steps);
+    return;
+  }
   if ($("ana").classList.contains("hidden") || text) return;  // 감춰져 있으면 보일 때 그린다
   A.chart = new Chart($("a-chart"), anaConfig(d, A.view, themeColors(document.documentElement.dataset.theme)));
 }
@@ -1185,8 +1273,8 @@ $("a-dash-go").onclick = () => busy($("a-dash-go"), async () => {
   const d = A.result;
   if (!d) return;
   const { how, prepped, base, recipe, views, ...values } = d;  // 구한 값만 data에 둔다
-  const card = { kind: "analysis", title: `${base} · ${anaTitle(d, A.view)}`, colors: { series: {}, parts: {}, order: [], parts_order: [] },
-    view: { type: "", ratio: VIEW_RATIOS[A.view] ?? 16 / 9, analysis_view: A.view }, source: { schema: recipe.schema || "", table: base, recipe, analysis: how, full: !!values.data?.full, sample },
+  const flow = d.kind === "funnel", card = { kind: flow ? "funnel" : "analysis", title: `${base} · ${anaTitle(d, A.view)}`, colors: { series: {}, parts: {}, order: [], parts_order: [] },
+    view: { type: "", ratio: VIEW_RATIOS[A.view] ?? 16 / 9, analysis_view: A.view }, source: { schema: recipe.schema || "", table: base, recipe, analysis: how, full: !!values.data?.full, sample, ...(flow ? { date: how.time } : {}) },
     data: { values, computed_at: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19), note: anaNote(d) } };
   try {
     const added = await api("/api/dash/card/add", { dashboard: $("a-dash").value, name: $("a-dash-name").value, card });

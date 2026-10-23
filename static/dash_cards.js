@@ -2,7 +2,7 @@
 // 위쪽은 값 → 모양 계산(호·고리·칸·교차·다각형)이라 화면 없이 시험할 수 있다. 아래는 그 계산으로 SVG를 만드는 부분이다(dash.js의 windowValue·pickColor를 쓰므로 dash.js 다음에 불러 온다).
 // 카드의 값은 data.by_unit.day(일 값, 기간 card.range로 묶음)나 data.values.scalar(날짜 컬럼 없이 구한 값)이고, 목표는 data.target.value(없으면 null)다.
 
-const SVG_KINDS = ["kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation"];
+const SVG_KINDS = ["kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation", "funnel"];
 const TAU = Math.PI * 2, RING_GAP = 0.06;  // 게이지 조각 사이 간격(라디안)
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 // 12시 방향이 0, 시계 방향으로 커지는 각도의 점
@@ -394,7 +394,16 @@ function paintSentence(card, colors) {
   return box("summary", el("div", { className: "sum-text" }, ...spans));
 }
 
+// funnel: 흐름(퍼널) 생키 + 한 줄 설명 + 단계별 표(funnel.js). 색: 막대는 팔레트 첫 색, 다음 단계 띠는 초록, 이탈 띠는 주황(카드 색 설정 "단계 막대"·"다음 단계"·"이탈"로 바꿈)
+function paintFunnel(card, colors) {
+  const d = card.data.values, steps = d.steps || [], pick = (name, fallback) => card.colors?.series?.[name] ?? fallback;
+  const chart = el("div", { style: "flex:1; min-height:140px" }, sankeySvg(steps, { bar: pick("단계 막대", colors.palette?.[0] ?? FUNNEL_COLORS.bar), next: pick("다음 단계", FUNNEL_COLORS.next), drop: pick("이탈", FUNNEL_COLORS.drop), text: colors.text }));
+  const rows = funnelRows(steps);
+  const table = el("table", {}, el("thead", {}, el("tr", {}, ...FUNNEL_COLUMNS.map(c => el("th", { textContent: c })))), el("tbody", {}, ...rows.map(r => el("tr", {}, ...FUNNEL_COLUMNS.map((c, i) => el("td", { className: i ? "num" : "", textContent: typeof r[c] === "number" ? r[c].toLocaleString() : r[c] }))))));
+  return box("table", el("div", { className: "hint", textContent: `${funnelSentence(steps)} (${windowText(d.window)})` }), chart, table);
+}
+
 const PAINTERS = { kpi: paintKpi, donut_kpi: paintDonut, gauge: paintGauge, summary: paintSummary, recent_rows: paintRecent, dual_trend: paintDual, stripes: paintStripes, blocks: paintBlocks, target_trend: paintTargetTrend,
-                   table: paintTable, status: paintStatus, sentence: paintSentence, alerts: paintAlerts, map: paintMap, deviation: paintDeviation };
+                   table: paintTable, funnel: paintFunnel, status: paintStatus, sentence: paintSentence, alerts: paintAlerts, map: paintMap, deviation: paintDeviation };
 // 카드 하나를 그린 요소(없는 값이면 안내). board는 비교 문장·연결 열쇠·다시 그리기를 위해 받는다.
 const paintCard = (card, colors, board) => card.data && (card.data.by_unit || card.data.values || card.data.columns) ? PAINTERS[card.kind](card, colors, board) : box("summary", el("div", { className: "sum-text", textContent: "아직 구한 값이 없어요" }));
