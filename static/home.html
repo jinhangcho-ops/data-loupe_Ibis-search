@@ -52,6 +52,7 @@
 <script src="/static/dash_refresh.js"></script>
 <script src="/static/board.js"></script>
 <script src="/static/dash.js"></script>
+<script src="/static/dash_cards.js"></script>
 <script src="/static/dash_ctl.js"></script>
 <script>
 // 쿼리·분석은 연결이 있으면 바로, 없으면 가운데 연결 카드를 띄워 연결한 뒤에 들어간다(afterConnect). 수집·연동은 연결 없이 들어간다.
@@ -69,7 +70,7 @@ document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => {
 
 // ---------- 대시보드 ----------
 let dashId = "";
-const board = new DashBoard($("h-grid"), { empty: "저장한 대시보드가 없어요. 쿼리 화면에서 차트를 모아 저장하면 여기에 보입니다.", changed: () => ctl.showLast(board.cards) });
+const board = new DashBoard($("h-grid"), { empty: "저장한 대시보드가 없어요. 쿼리 화면에서 차트를 모아 저장하면 여기에 보입니다.", changed: () => ctl.showLast(board.cards), recompute: cards => recomputeRange(board, cards, !!connected) });
 // 칸을 바꾸면 저장한 대시보드의 기준일·기간·주기만 서버에 쓴다(카드는 그대로). 거부되면(예: 주기가 너무 짧음) 이유를 보이고 저장된 값으로 되돌린다.
 const ctl = new DashCtl($("h-ctl"), {
   board, liveRun: () => liveCards(board, !!connected), visible: () => !document.hidden,

@@ -15,7 +15,7 @@ import source
 MIN_REFRESH = 3600  # 최신화 주기의 최소(초)
 LIVE_FILE = "live_min.json"  # {source_key: 실시간 간격 최소(초)}
 MAX_LIVE_MIN = 86400
-REFRESHABLE = ("chart", "analysis", "metric")  # 지금 다시 구할 수 있는 카드 종류
+REFRESHABLE = ("chart", "analysis", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend")  # 지금 다시 구할 수 있는 카드 종류
 JOB = {"running": False, "total": 0, "done": 0, "current": "", "results": []}  # 마지막 최신화 작업의 상태(status가 복사해 준다)
 LOCK = threading.Lock()
 STOP = threading.Event()
@@ -83,6 +83,18 @@ def check_dashboard_every(d):
         if live and live < least:
             label = next((c["source"].get("label") for c in d["cards"] if c["source"].get("key") == key and c["source"].get("label")), key)
             raise ValueError(f"‘{label}’ 연결의 실시간 간격은 {minimum_text(least)} 이상으로 정해 두었어요. 더 짧게 쓰려면 그 연결의 최소를 먼저 바꾸세요.")
+
+
+def context(d, today=None):
+    """대시보드의 보는 기간·직전 기간 {range: {start, end}, prev: {start, end, text}}(기준일 as_of로 자름). 읽을 수 없으면 None."""
+    day = (d.get("as_of") or "") or (today or dt.date.today()).isoformat()  # 기준일(비면 오늘)
+    span = period.parse(d.get("period"), day)
+    if span["error"]:
+        return None
+    end = min(e for e in (span["end"] and span["end"][:10], day) if e)
+    before = period.previous(span)
+    prev = None if before["error"] else {"start": before["start"][:10], "end": before["end"][:10], "text": before["label"] if span.get("to_date") else f"직전 {before['days']}일"}
+    return {"range": {"start": span["start"] and span["start"][:10], "end": end}, "prev": prev}
 
 
 def parse_time(text):
@@ -178,7 +190,7 @@ def work(plan, now):
                 JOB["current"] = card["title"]
             try:
                 with core.using():
-                    data = dash_calc.compute(dash_store.check_card({**card, "data": {}}), now.isoformat(timespec="seconds"))
+                    data = dash_calc.compute(dash_store.check_card({**card, "data": {}}), now.isoformat(timespec="seconds"), context(d))
                 if not dash_store.set_card_data(d["id"], card["id"], data):
                     raise ValueError("그사이 지운 카드예요")
                 outcome = ("ok", "")

@@ -1,0 +1,255 @@
+// 대시보드 카드 종류(3단계)를 SVG·HTML로 직접 그린다: kpi, donut_kpi, gauge, summary, recent_rows, dual_trend, stripes, blocks, target_trend. Chart.js를 쓰지 않는다.
+// 위쪽은 값 → 모양 계산(호·고리·칸·교차·다각형)이라 화면 없이 시험할 수 있다. 아래는 그 계산으로 SVG를 만드는 부분이다(dash.js의 windowValue·pickColor를 쓰므로 dash.js 다음에 불러 온다).
+// 카드의 값은 data.by_unit.day(일 값, 기간 card.range로 묶음)나 data.values.scalar(날짜 컬럼 없이 구한 값)이고, 목표는 data.target.value(없으면 null)다.
+
+const SVG_KINDS = ["kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks", "target_trend"];
+const TAU = Math.PI * 2, RING_GAP = 0.06;  // 게이지 조각 사이 간격(라디안)
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+// 12시 방향이 0, 시계 방향으로 커지는 각도의 점
+const polar = (cx, cy, r, a) => [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+// 각도 a0에서 a1까지(시계 방향) 호의 SVG 경로. 한 바퀴 가까우면 둘로 나눈다.
+function arcPath(cx, cy, r, a0, a1) {
+  if (a1 - a0 >= TAU - 1e-6) return arcPath(cx, cy, r, a0, a0 + Math.PI) + " " + arcPath(cx, cy, r, a0 + Math.PI, a0 + TAU - 1e-4);
+  const [x0, y0] = polar(cx, cy, r, a0), [x1, y1] = polar(cx, cy, r, a1);
+  return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+// 고리(circle)의 stroke-dasharray: 원주 2πr 중 비율만큼만 칠한다.
+function ringDash(r, ratio) {
+  const circ = TAU * r, len = circ * clamp(ratio, 0, 1);
+  return { circ, len, dash: `${len.toFixed(2)} ${(circ - len).toFixed(2)}` };
+}
+// 항목 값들의 몫으로 나눈 호들(조각 사이 간격 RING_GAP). 값이 0 이하이거나 빈 항목은 뺀다. 가장 큰 항목에 max 표시(굵게 그린다).
+function gaugeSegments(values, gap = RING_GAP) {
+  const items = values.map((v, i) => ({ i, v })).filter(x => x.v != null && x.v > 0), total = items.reduce((a, x) => a + x.v, 0);
+  if (!total) return [];
+  const room = TAU - gap * items.length, top = Math.max(...items.map(x => x.v));
+  let at = 0;
+  return items.map(x => { const span = room * x.v / total, seg = { index: x.i, share: x.v / total, a0: at, a1: at + span, max: x.v === top }; at += span + gap; return seg; });
+}
+// 칸 채우기: 채운 칸 = round(비율 × n), 목표 칸(1~n)은 목표 비율로
+function stripeCells(ratio, n, targetRatio) {
+  return { filled: Math.round(clamp(ratio, 0, 1) * n), target: targetRatio == null ? null : clamp(Math.round(targetRatio * n), 1, n) };
+}
+// 블록: 한 칸 = size. 실제 칸, 목표까지 모자란 칸, 목표를 넘은 칸. 칸이 cap을 넘으면 같은 비율로 줄인다(scale = 줄인 배수).
+function blockCells(value, target, size, cap = 200) {
+  const actual = Math.floor(value / size), goal = target == null ? actual : Math.floor(target / size), scale = Math.max(1, Math.ceil(Math.max(actual, goal) / cap));
+  return { actual: Math.floor(actual / scale), toTarget: Math.max(0, Math.floor(goal / scale) - Math.floor(actual / scale)), over: Math.max(0, Math.floor((actual - goal) / scale)), scale };
+}
+// 값이 목표선을 위에서 아래로 지나간 횟수(앞 값 ≥ 목표 > 지금 값). 빈 값은 건너뛴다.
+function crossDown(values, target) {
+  let n = 0, before = null;
+  for (const v of values) { if (v == null) continue; if (before != null && before >= target && v < target) n++; before = v; }
+  return n;
+}
+// 선(xs, vs)이 목표(target) 아래에 있는 구간과 목표선 사이의 다각형들 [[x, y], …]. 목표선을 지나는 곳은 선분 위에서 보간한다. yOf는 값 → 화면 y.
+function belowPolygons(xs, vs, target, yOf) {
+  const polys = [], ty = yOf(target);
+  let run = null;
+  const close = x => { if (run) { run.push([x, ty]); polys.push(run); run = null; } };
+  for (let i = 0; i < vs.length; i++) {
+    const v = vs[i];
+    if (v == null) { close(xs[i - 1]); continue; }
+    const prev = i > 0 ? vs[i - 1] : null;
+    if (prev != null && (prev < target) !== (v < target)) {  // 목표선을 지나는 선분: 지나는 x
+      const x = xs[i - 1] + (xs[i] - xs[i - 1]) * (target - prev) / (v - prev);
+      if (v < target) run = [[x, ty]]; else close(x);
+    }
+    if (v < target) { if (!run) run = [[xs[i], ty]]; run.push([xs[i], yOf(v)]); }
+  }
+  close(xs[xs.length - 1]);
+  return polys;
+}
+// 값들을 w×h 칸에 선으로 놓은 점들 "x,y x,y …"(빈 값은 건너뜀). 모두 같으면 가운데 줄.
+function sparkPoints(values, w, h, pad = 2) {
+  const real = values.filter(v => v != null), lo = Math.min(...real), hi = Math.max(...real), n = values.length;
+  return values.map((v, i) => v == null ? null : `${(pad + (n < 2 ? (w - 2 * pad) / 2 : (w - 2 * pad) * i / (n - 1))).toFixed(1)},${(hi === lo ? h / 2 : h - pad - (h - 2 * pad) * (v - lo) / (hi - lo)).toFixed(1)}`).filter(Boolean).join(" ");
+}
+// 값 글자: number는 쉼표·소수 둘째 자리, percent는 ×100 %, currency는 ₩ + 쉼표. unit은 뒤에 붙인다.
+function showValue(v, format = "number", unit = "") {
+  if (v == null) return "—";
+  const text = format === "percent" ? `${+(v * 100).toFixed(1)}%` : format === "currency" ? "₩" + Math.round(v).toLocaleString() : (+v.toFixed(2)).toLocaleString();
+  return text + unit;
+}
+// 목표와의 차이 글자: percent는 %p, 그 밖은 값 모양대로
+const showGap = (v, format) => format === "percent" ? `${+(Math.abs(v) * 100).toFixed(1)}%p` : showValue(Math.abs(v), format);
+// 어두운 색(목표를 넘은 부분): #rrggbb를 비율만큼 어둡게
+function darken(hex, k = 0.35) {
+  const h = hex6(hex);
+  return "#" + [1, 3, 5].map(i => Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, "0")).join("");
+}
+
+// ---------- 카드의 값 ----------
+// 기간(card.range)의 계열 i 값: 일 값이 있으면 기간으로 묶고, 없으면 날짜 컬럼 없이 구한 값
+function cardValue(card, i = 0) {
+  const by = card.data?.by_unit?.day;
+  if (by) return by.series[i] ? windowValue(by.series[i], by.labels, card.range?.start, card.range?.end) : null;
+  return card.data?.values?.scalar?.[i] ?? null;
+}
+// 기간 안의 날마다 값 [{ day, v }]. card.view.window(보는 구간)가 있으면 그 구간만.
+function cardDays(card, i = 0) {
+  const by = card.data?.by_unit?.day, s = by?.series[i], win = card.view?.window, from = win?.from ?? card.range?.start, to = win?.to ?? card.range?.end;
+  return s ? by.labels.filter(d => (!from || d >= from) && (!to || d <= to)).map(day => ({ day, v: windowValue(s, by.labels, day, day) })) : [];
+}
+const cardTarget = card => card.data?.target?.value ?? card.view?.target?.value ?? null;
+const cardFormat = card => card.view?.format || card.data?.values?.format || "number";
+
+// ---------- SVG 만들기 ----------
+const SVG_NS = "http://www.w3.org/2000/svg";
+function svg(tag, attrs = {}, ...kids) {
+  const e = document.createElementNS(SVG_NS, tag);
+  for (const [k, v] of Object.entries(attrs)) if (v != null) e.setAttribute(k, v);
+  e.append(...kids);
+  return e;
+}
+const stext = (x, y, text, attrs = {}) => svg("text", { x, y, ...attrs }, text);
+const ICON_PATHS = { chart: "M3 20h18M6 16v-5M11 16V7M16 16v-8", up: "M4 16l6-6 4 4 6-8M15 6h5v5", user: "M12 12a4 4 0 100-8 4 4 0 000 8zM5 20c0-4 3-6 7-6s7 2 7 6", cart: "M3 4h3l2 11h10l2-8H7M10 20h.01M17 20h.01", coin: "M12 3a9 9 0 100 18 9 9 0 000-18zM9 12h6M12 8v8", clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2" };
+const iconSvg = name => svg("svg", { viewBox: "0 0 24 24", width: 22, height: 22, fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" }, svg("path", { d: ICON_PATHS[name] ?? ICON_PATHS.chart }));
+const box = (cls, ...kids) => el("div", { className: "cbox " + cls }, ...kids);
+const frame = (w, h, ...kids) => svg("svg", { viewBox: `0 0 ${w} ${h}`, preserveAspectRatio: "xMidYMid meet", style: "width:100%;height:100%" }, ...kids);
+
+// kpi: 아이콘 · 큰 값 · 비교 문장 · 스파크라인(일 값 선) · 비율이면 짝 절대량
+function paintKpi(card, colors, board) {
+  const v = cardValue(card), fmt = cardFormat(card), said = board?.compares.get(card), days = cardDays(card).map(d => d.v), pair = card.data?.pair;
+  const color = pickColor(card, "series", card.data?.by_unit?.day?.series[0]?.name ?? card.data?.values?.names?.[0] ?? card.title, colors, 0);
+  const spark = days.filter(x => x != null).length > 1 ? svg("svg", { viewBox: "0 0 120 30", class: "kpi-spark", preserveAspectRatio: "none" }, svg("polyline", { points: sparkPoints(days, 120, 30), fill: "none", stroke: color, "stroke-width": 1.8 })) : "";
+  return box("kpi", el("div", { className: "kpi-top" }, el("span", { className: "kpi-icon", style: `color:${color}` }, iconSvg(card.view?.icon)), el("span", { className: "hint", textContent: card.title })),
+    el("div", { className: "kpi-val", textContent: showValue(v, fmt, card.view?.unit_text) }), said ? el("div", { className: "bcmp " + said.tone, textContent: said.text }) : "", spark,
+    pair ? el("div", { className: "hint kpi-pair", textContent: `${pair.num_label} ${showValue(pair.num)} · ${pair.den_label} ${showValue(pair.den)}` }) : "");
+}
+
+// donut_kpi: 가운데 칸(0)과 네 꼭지점 칸(1~4), 고리 4방식(view.ring). 목표(target)를 넘은 부분은 진한 색.
+function paintDonut(card, colors) {
+  const slots = card.view?.slots?.length ? card.view.slots : (card.data?.by_unit?.day?.series ?? []).map(s => ({ label: s.name })), ring = card.view?.ring || "stack";
+  const vals = slots.map((_, i) => cardValue(card, i)), target = cardTarget(card), main = vals[0] ?? 0, color = i => slots[i]?.color || pickColor(card, "series", slots[i]?.label ?? String(i), colors, i);
+  const W = 260, H = 200, cx = W / 2, cy = 100, r = 62, sw = 16, track = colors.line, c0 = color(0), over = darken(c0), fmt = i => showValue(vals[i], slots[i]?.format || cardFormat(card), slots[i]?.unit_text);
+  const kids = [];
+  const circle = (rad, ratio, stroke, width = sw, off = 0) => svg("circle", { cx, cy, r: rad, fill: "none", stroke, "stroke-width": width, "stroke-dasharray": ringDash(rad, ratio).dash, "stroke-dashoffset": -ringDash(rad, off).len, transform: `rotate(-90 ${cx} ${cy})` });
+  const base = (rad, width = sw) => svg("circle", { cx, cy, r: rad, fill: "none", stroke: track, "stroke-width": width });
+  if (ring === "half") {  // 반원 게이지 + 목표 점
+    const ratio = target ? clamp(main / target, 0, 1) : clamp(main, 0, 1), a = -Math.PI / 2 + Math.PI * ratio;
+    kids.push(svg("path", { d: arcPath(cx, cy + 20, r, -Math.PI / 2, Math.PI / 2), fill: "none", stroke: track, "stroke-width": sw, "stroke-linecap": "round" }),
+      svg("path", { d: arcPath(cx, cy + 20, r, -Math.PI / 2, Math.max(a, -Math.PI / 2 + 0.001)), fill: "none", stroke: target && main > target ? over : c0, "stroke-width": sw, "stroke-linecap": "round" }));
+    if (target) { const [x, y] = polar(cx, cy + 20, r, Math.PI / 2); kids.push(svg("circle", { cx: x, cy: y, r: 5, fill: colors.ink })); }
+  } else if (ring === "double") {  // 겹친 두 고리: 바깥 = 칸0, 안 = 칸1 (목표 대비)
+    const full = target || Math.max(main, vals[1] ?? 0, 1);
+    kids.push(base(r), circle(r, main / full, main > full ? over : c0), base(r - sw - 4, sw - 4), circle(r - sw - 4, (vals[1] ?? 0) / full, color(1), sw - 4));
+  } else {  // stack(실제·모자람·넘은 부분), ticks(고리 + 목표 눈금)
+    const full = ring === "ticks" ? Math.max(target ?? 0, main) || 1 : target || Math.max(main, 1);
+    kids.push(base(r));
+    if (ring === "stack") {
+      kids.push(circle(r, Math.min(main, full) / full, c0));
+      if (target && main < target) kids.push(circle(r, (target - main) / full, colors.text, sw, main / full));  // 모자람
+      if (target && main > target) kids.push(circle(r, (main - target) / full, over, sw, 1 - (main - target) / full));  // 넘은 부분
+    } else {
+      kids.push(circle(r, main / full, target && main > target ? over : c0));
+      if (target) { const a = TAU * clamp(target / full, 0, 1), [x0, y0] = polar(cx, cy, r - sw / 2 - 3, a), [x1, y1] = polar(cx, cy, r + sw / 2 + 3, a); kids.push(svg("line", { x1: x0, y1: y0, x2: x1, y2: y1, stroke: colors.ink, "stroke-width": 2.5 })); }
+    }
+  }
+  kids.push(stext(cx, cy + 6, fmt(0), { "text-anchor": "middle", "font-size": 22, "font-weight": 700, fill: colors.ink }), stext(cx, cy + 24, slots[0]?.label ?? "", { "text-anchor": "middle", "font-size": 11, fill: colors.text }));
+  [[8, 18, "start"], [W - 8, 18, "end"], [8, H - 22, "start"], [W - 8, H - 22, "end"]].forEach(([x, y, anchor], j) => {  // 네 꼭지점 칸
+    if (slots[j + 1]) kids.push(stext(x, y, slots[j + 1].label, { "text-anchor": anchor, "font-size": 11, fill: colors.text }), stext(x, y + 14, fmt(j + 1), { "text-anchor": anchor, "font-size": 14, "font-weight": 600, fill: colors.ink }));
+  });
+  return frame(W, H, ...kids);
+}
+
+// gauge: 항목 몫으로 나눈 호(간격 0.06rad), 가장 큰 항목은 굵게
+function paintGauge(card, colors) {
+  const v = card.data?.values, labels = v?.labels ?? [], vals = v?.series?.[0]?.values ?? [], segs = gaugeSegments(vals), total = vals.filter(x => x > 0).reduce((a, b) => a + b, 0);
+  const W = 260, H = 200, cx = 90, cy = 100, r = 62;
+  const arcs = segs.map(s => svg("path", { d: arcPath(cx, cy, r, s.a0, s.a1), fill: "none", stroke: pickColor(card, "parts", labels[s.index], colors, s.index), "stroke-width": s.max ? 24 : 14 }, svg("title", {}, `${labels[s.index]}: ${showValue(vals[s.index], cardFormat(card))} (${+(s.share * 100).toFixed(1)}%)`)));
+  const legend = segs.slice(0, 8).map((s, k) => svg("g", {}, svg("rect", { x: 170, y: 40 + k * 18, width: 10, height: 10, rx: 2, fill: pickColor(card, "parts", labels[s.index], colors, s.index) }),
+    stext(185, 49 + k * 18, `${labels[s.index]} ${+(s.share * 100).toFixed(1)}%`, { "font-size": 11, fill: colors.text })));
+  return frame(W, H, ...arcs, stext(cx, cy + 6, showValue(total, cardFormat(card)), { "text-anchor": "middle", "font-size": 16, "font-weight": 700, fill: colors.ink }), ...legend);
+}
+
+// summary: 요약 문장(서버의 summary_text) + 목표 대비 막대
+function paintSummary(card, colors) {
+  const d = card.data ?? {}, v = cardValue(card), target = cardTarget(card), fmt = cardFormat(card), ratio = target ? v / target : null;
+  return box("summary", el("div", { className: "sum-text", textContent: d.text || "—" }), d.target?.error ? el("div", { className: "err", textContent: d.target.error }) : "",
+    ratio != null ? el("div", { className: "sum-bar", title: `${showValue(v, fmt)} / ${showValue(target, fmt)}` }, el("i", { style: `width:${clamp(ratio, 0, 1) * 100}%;background:${ratio > 1 ? darken(colors.series[0]) : colors.series[0]}` }),
+      el("span", { className: "hint", textContent: `목표 대비 ${+(ratio * 100).toFixed(1)}%` })) : "");
+}
+
+// stripes: 칸 수 N, 채운 칸 = round(비율 × N), 목표 칸 강조. 비율 = 값 / 가득 찬 값(view.full, 없으면 목표, 비율 값이면 1)
+function paintStripes(card, colors) {
+  const n = card.view?.cells || 10, v = cardValue(card) ?? 0, target = cardTarget(card), fmt = cardFormat(card), full = card.view?.full || target || (fmt === "percent" ? 1 : Math.max(v, 1));
+  const cells = stripeCells(v / full, n, target == null ? null : target / full), W = 260, gap = 4, w = (W - gap * (n - 1)) / n, color = pickColor(card, "series", card.title, colors, 0);
+  const rects = Array.from({ length: n }, (_, i) => svg("rect", { x: i * (w + gap), y: 20, width: w, height: 40, rx: 3, fill: i < cells.filled ? color : colors.line, stroke: cells.target === i + 1 ? colors.ink : "none", "stroke-width": 2 }));
+  return frame(W, 90, ...rects, stext(0, 82, `${showValue(v, fmt, card.view?.unit_text)}${target != null ? ` / 목표 ${showValue(target, fmt)}` : ""}`, { "font-size": 12, fill: colors.text }));
+}
+
+// blocks: 칸 하나 = view.size. 실제(채움) · 목표까지(빗금 윤곽) · 목표를 넘은 칸(진한 색)
+function paintBlocks(card, colors) {
+  const v = cardValue(card) ?? 0, target = cardTarget(card), fmt = cardFormat(card), size = card.view?.size || Math.max(+(Math.max(v, target ?? 0) / 20).toPrecision(1), 1e-9);
+  const b = blockCells(v, target, size), per = 20, W = 260, cell = W / per - 3, color = pickColor(card, "series", card.title, colors, 0), total = b.actual + b.toTarget + b.over;
+  const rects = Array.from({ length: total }, (_, i) => svg("rect", { x: (i % per) * (cell + 3), y: Math.floor(i / per) * (cell + 3), width: cell, height: cell, rx: 2,
+    fill: i < b.actual ? color : i < b.actual + b.toTarget ? "none" : darken(color), stroke: i < b.actual ? "none" : i < b.actual + b.toTarget ? color : "none", "stroke-dasharray": i < b.actual ? null : "3 2" }));
+  const H = Math.ceil(total / per) * (cell + 3) + 28;
+  return frame(W, H, ...rects, stext(0, H - 8, `칸 하나 ${showValue(size * b.scale, fmt)} · ${showValue(v, fmt)}${target != null ? ` / 목표 ${showValue(target, fmt)}` : ""}`, { "font-size": 11, fill: colors.text }));
+}
+
+// target_trend: 일 값 선 + 목표 가로 점선 + 목표 아래 구간 채움 + "목표보다 1.7%p 낮아요 · 기간 중 N번 내려감"
+function paintTargetTrend(card, colors) {
+  const days = cardDays(card), vs = days.map(d => d.v), target = cardTarget(card), fmt = cardFormat(card), W = 300, H = 160, pad = 12, color = pickColor(card, "series", card.title, colors, 0);
+  const real = vs.filter(x => x != null);
+  if (!real.length) return box("summary", el("div", { className: "sum-text", textContent: "이 기간의 값이 없어요" }));
+  const lo = Math.min(...real, target ?? Infinity), hi = Math.max(...real, target ?? -Infinity), yOf = v => H - 24 - (H - 24 - pad) * (hi === lo ? 0.5 : (v - lo) / (hi - lo));
+  const xs = vs.map((_, i) => pad + (W - 2 * pad) * (vs.length < 2 ? 0.5 : i / (vs.length - 1))), kids = [];
+  if (target != null) belowPolygons(xs, vs, target, yOf).forEach(p => kids.push(svg("polygon", { points: p.map(q => q.map(n => n.toFixed(1)).join(",")).join(" "), fill: colors.series[1], opacity: 0.3 })));
+  kids.push(svg("polyline", { points: vs.map((v, i) => v == null ? null : `${xs[i].toFixed(1)},${yOf(v).toFixed(1)}`).filter(Boolean).join(" "), fill: "none", stroke: color, "stroke-width": 2 }));
+  if (target != null) kids.push(svg("line", { x1: pad, x2: W - pad, y1: yOf(target), y2: yOf(target), stroke: colors.ink, "stroke-dasharray": "6 4" }));
+  const now = cardValue(card), says = target == null ? (card.data?.target?.error || "목표가 없어요") : `목표보다 ${showGap(now - target, fmt)} ${now < target ? "낮아요" : now > target ? "높아요" : "같아요"} · 기간 중 ${crossDown(vs, target)}번 내려감`;
+  return frame(W, H, ...kids, stext(pad, H - 6, says, { "font-size": 11, fill: colors.text }));
+}
+
+// dual_trend: 두 계열 선, 마우스를 올리면 그날 값 상자, 오늘 이후는 빗금, 아래 구간 막대를 끌어 보는 범위(view.window)를 정한다
+function paintDual(card, colors, board) {
+  const a = cardDays({ ...card, view: { ...card.view, window: null } }, 0), whole = a.map(d => d.day), win = card.view?.window, W = 320, H = 190, pad = 14, top = 10, plot = 118, brushY = 150;
+  if (!whole.length) return box("summary", el("div", { className: "sum-text", textContent: "이 기간의 값이 없어요" }));
+  const shown = cardDays(card, 0).map(d => d.day), from = shown[0], to = shown[shown.length - 1];
+  const rows = [cardDays(card, 0), cardDays(card, 1)], all = rows.flat().map(d => d.v).filter(v => v != null), lo = Math.min(...all), hi = Math.max(...all);
+  const xOf = i => pad + (W - 2 * pad) * (shown.length < 2 ? 0.5 : i / (shown.length - 1)), yOf = v => top + plot - plot * (hi === lo ? 0.5 : (v - lo) / (hi - lo));
+  const names = [0, 1].map(i => card.data?.by_unit?.day?.series[i]?.name ?? `계열 ${i + 1}`), cols = names.map((n, i) => pickColor(card, "series", n, colors, i)), today = new Date().toLocaleDateString("sv");
+  const kids = [svg("defs", {}, svg("pattern", { id: "hatch" + card.id, width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, svg("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: colors.text, "stroke-width": 1.5 })))];
+  const future = shown.findIndex(d => d > today);
+  if (future >= 0) kids.push(svg("rect", { x: xOf(Math.max(0, future - 1)), y: top, width: W - pad - xOf(Math.max(0, future - 1)), height: plot, fill: `url(#hatch${card.id})`, opacity: 0.35 }));  // 오늘 이후
+  rows.forEach((r, k) => kids.push(svg("polyline", { points: r.map((d, i) => d.v == null ? null : `${xOf(i).toFixed(1)},${yOf(d.v).toFixed(1)}`).filter(Boolean).join(" "), fill: "none", stroke: cols[k], "stroke-width": 2 })));
+  const tip = svg("g", { visibility: "hidden" }, svg("rect", { width: 150, height: 52, rx: 6, fill: colors.card, stroke: colors.line }), stext(8, 15, "", { "font-size": 11, fill: colors.text }), stext(8, 30, "", { "font-size": 11, fill: cols[0] }), stext(8, 45, "", { "font-size": 11, fill: cols[1] }));
+  const over = svg("rect", { x: pad, y: top, width: W - 2 * pad, height: plot, fill: "transparent" });
+  over.onpointermove = e => {
+    const p = over.getBoundingClientRect(), i = clamp(Math.round((e.clientX - p.left) / p.width * (shown.length - 1)), 0, shown.length - 1), t = tip.querySelectorAll("text");
+    t[0].textContent = shown[i]; t[1].textContent = `${names[0]} ${showValue(rows[0][i]?.v, cardFormat(card))}`; t[2].textContent = `${names[1]} ${showValue(rows[1][i]?.v, cardFormat(card))}`;
+    tip.setAttribute("transform", `translate(${clamp(xOf(i) + 8, 0, W - 152)} ${top})`); tip.setAttribute("visibility", "visible");
+  };
+  over.onpointerleave = () => tip.setAttribute("visibility", "hidden");
+  const bx = i => pad + (W - 2 * pad) * (whole.length < 2 ? 0.5 : i / (whole.length - 1)), bars = a.map((d, i) => svg("rect", { x: bx(i) - 1, y: brushY + 28 - (d.v == null ? 0 : 28 * (d.v - lo) / ((hi - lo) || 1)), width: 2, height: d.v == null ? 0 : 28 * (d.v - lo) / ((hi - lo) || 1) + 1, fill: colors.text }));
+  const i0 = whole.indexOf(from), i1 = whole.indexOf(to), sel = svg("rect", { x: bx(i0), y: brushY - 2, width: Math.max(4, bx(i1) - bx(i0)), height: 34, fill: colors.series[0], opacity: 0.25, stroke: colors.series[0] });
+  const strip = svg("rect", { x: pad, y: brushY - 2, width: W - 2 * pad, height: 34, fill: "transparent", style: "cursor:col-resize" });
+  strip.onpointerdown = e => {  // 아래 구간 막대를 끌어 보는 범위를 고른다
+    const p = strip.getBoundingClientRect(), at = ev => clamp(Math.round((ev.clientX - p.left) / p.width * (whole.length - 1)), 0, whole.length - 1), start = at(e);
+    strip.setPointerCapture(e.pointerId);
+    const move = ev => { const k = at(ev); sel.setAttribute("x", bx(Math.min(start, k))); sel.setAttribute("width", Math.max(4, bx(Math.max(start, k)) - bx(Math.min(start, k)))); };
+    const up = ev => { strip.removeEventListener("pointermove", move); strip.removeEventListener("pointerup", up); const k = at(ev);
+      card.view.window = start === k ? null : { from: whole[Math.min(start, k)], to: whole[Math.max(start, k)] }; if (!card.view.window) delete card.view.window; board?.changed?.(); board?.draw(); };
+    strip.addEventListener("pointermove", move); strip.addEventListener("pointerup", up);
+  };
+  kids.push(over, tip, ...bars, sel, strip, stext(pad, H - 2, names.join(" · ") + (win ? "  (구간 선택됨, 한 번 눌러 해제)" : ""), { "font-size": 10, fill: colors.text }));
+  return frame(W, H, ...kids);
+}
+
+// recent_rows: 연결돼 있을 때만 /api/query로 앞 N행을 읽어 보인다. 행 값은 저장하지 않는다(카드에는 컬럼 이름만).
+function paintRecent(card, colors, board) {
+  const holder = box("recent"), key = card.source?.key;
+  if (!board?.connKey || (key && key !== board.connKey)) { holder.append(el("div", { className: "hint", textContent: board?.connKey ? "이 카드는 다른 연결의 것이라 지금은 보이지 않아요" : "연결하면 보입니다" })); return holder; }
+  holder.append(el("div", { className: "hint", textContent: "읽는 중…" }));
+  api("/api/query", { ...card.source.body, limit: card.view?.rows || 10, count: false }).then(d => {
+    const { columns, rows } = d.rows;
+    holder.replaceChildren(el("table", {}, el("thead", {}, el("tr", {}, ...columns.map(c => el("th", { textContent: c })))),
+      el("tbody", {}, ...rows.map(r => el("tr", {}, ...columns.map(c => el("td", { textContent: r[c] == null ? "" : String(r[c]) })))))));
+  }).catch(e => holder.replaceChildren(el("div", { className: "err", textContent: e.message })));
+  return holder;
+}
+
+const PAINTERS = { kpi: paintKpi, donut_kpi: paintDonut, gauge: paintGauge, summary: paintSummary, recent_rows: paintRecent, dual_trend: paintDual, stripes: paintStripes, blocks: paintBlocks, target_trend: paintTargetTrend };
+// 카드 하나를 그린 요소(없는 값이면 안내). board는 비교 문장·연결 열쇠·다시 그리기를 위해 받는다.
+const paintCard = (card, colors, board) => card.data && (card.data.by_unit || card.data.values || card.data.columns) ? PAINTERS[card.kind](card, colors, board) : box("summary", el("div", { className: "sum-text", textContent: "아직 구한 값이 없어요" }));

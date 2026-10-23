@@ -10,7 +10,10 @@ import metrics
 import parse
 import prep_app
 import result
+import settings
 import source as connection
+import summary_text
+import targets
 from server import run
 
 AGGS = ("count", "sum", "mean", "min", "max", "nunique")  # 날짜 X축 차트의 집계
@@ -21,6 +24,9 @@ PERCENT = "percent"
 MAX_POINTS = analysis.MAX_POINTS  # 산점도·버블의 점 수(분석의 산점도와 같다)
 SEED = 20260101  # 고르게 뽑을 때의 고정 씨앗(다시 구해도 같은 점)
 POINT_TYPES = ("scatter", "bubble")
+VALUE_KINDS = ("kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend")  # 값 하나(또는 일 값)로 그리는 카드 종류
+MAX_GROUPS = 100  # 요약의 기여 분해에 쓰는 그룹 수
+TARGETS_FILE = "targets_file.json"  # 목표 파일 경로만 둔다 {path}
 MAX_NUM_COLS = 200  # 카드에 알려 줄 숫자 컬럼 이름 수(버블의 [크기] 후보)
 
 
@@ -237,6 +243,112 @@ def points_of(body, size):
     return run(lambda: points_data(expr, body["x"], y, size or None, body.get("split") or None))
 
 
+def date_columns(t):
+    """날짜·시각 컬럼 이름들(카드의 '기간 기준 날짜 컬럼' 후보)."""
+    return [c for c, d in t.schema().items() if d.is_date() or d.is_timestamp()]
+
+
+def with_period(body, date, window):
+    """body의 기간 줄에 '날짜컬럼 시작 ~ 끝'(window {start, end}, 열린 쪽은 비움)을 더한 사본. 날짜 컬럼이나 기간이 없으면 그대로."""
+    if not date or not window or not (window.get("start") or window.get("end")):
+        return body
+    return {**body, "periods": [*(body.get("periods") or []), f"{date} {window.get('start') or ''} ~ {window.get('end') or ''}"]}
+
+
+def scalars(expr, series):
+    """계열마다 한 값(식 전체의 집계) [값…]."""
+    row = analysis.one(expr.aggregate(**{f"v{i}": final_expr(expr, s) for i, s in enumerate(series)}))
+    return [row[f"v{i}"] for i in range(len(series))]
+
+
+def resolve_target(spec):
+    """카드의 목표(view.target)를 {value, label, error}로. {value}는 그대로, {name, period, scope}는 설정의 목표 파일(targets.py)에서 찾는다. 없으면 None."""
+    if not spec:
+        return None
+    if "value" in spec:
+        return {"value": spec["value"], "label": "", "error": ""}
+    path = (settings.read(TARGETS_FILE) or {}).get("path")
+    if not path:
+        return {"value": None, "label": spec["name"], "error": "목표 파일을 먼저 정해 주세요(연결 아래 [목표 파일])."}
+    try:
+        rows = targets.read(path)["rows"]
+    except ValueError as e:
+        return {"value": None, "label": spec["name"], "error": str(e)}
+    found = targets.lookup(rows, spec["name"], spec.get("period"), spec.get("scope"))
+    return {"value": found["row"]["value"], "label": found["row"]["name"], "error": ""} if found["row"] else {"value": None, "label": spec["name"], "error": found["error"]}
+
+
+def part_text(p):
+    """지표의 분자·분모 하나를 글로: 개수 [event = click] 같은 모양."""
+    return metrics.AGG_NAMES[p["agg"]] + (f"({p['column']})" if p["column"] else "") + (f" [{' and '.join(p['where'])}]" if p["where"] else "")
+
+
+def metric_scalar(body, name):
+    """지표 하나의 (값, 짝 절대량). 비율 지표(분모가 있는)는 분자·분모의 값을 {num_label, num, den_label, den}로 함께 준다(비율만 보면 규모를 알 수 없어서)."""
+    found = metrics.registry()
+    parse.check_name(name, list(found), "지표")
+    m, expr = found[name], core.runnable(body, select=False)
+    row = analysis.one(expr.aggregate(v=metrics.metric_expr(expr, name, m)))
+    pair = None
+    if m["denominator"] is not None:
+        both = analysis.one(expr.aggregate(num=metrics.aggregate(expr, m["numerator"]), den=metrics.aggregate(expr, m["denominator"])))
+        pair = {"num_label": part_text(m["numerator"]), "num": both["num"], "den_label": part_text(m["denominator"]), "den": both["den"]}
+    return row["v"], pair, m["format"]
+
+
+def group_values(expr, column, s):
+    """그룹(column)별 집계 {그룹: 값}(최대 MAX_GROUPS개)."""
+    parse.check_name(column, expr.columns)
+    t = expr.filter(expr[column].notnull())
+    frame = t.group_by(t[column].name("g")).aggregate(v=final_expr(t, s)).order_by("g").limit(MAX_GROUPS).to_polars()
+    return {str(g): v for g, v in zip(frame["g"].to_list(), frame["v"].to_list())}
+
+
+def summary_data(card, ctx):
+    """summary 카드: 지표(첫 계열)의 이번 기간·직전 기간 값과 그룹별 값(view.group)으로 summary_text의 문장을 만든다. 직전 기간·날짜 컬럼이 없으면 그 문장은 뺀다."""
+    src, view, body = card["source"], card["view"], card["source"]["body"]
+    series, date = clean_series(body.get("series")), src.get("date")
+    window, before = (ctx or {}).get("range"), (ctx or {}).get("prev")
+    at = lambda w: core.runnable(with_period(body, date, w), select=False)
+    cur = run(lambda: scalars(at(window), series[:1]))[0]
+    prev = run(lambda: scalars(at(before), series[:1]))[0] if date and before else None
+    groups = None
+    if view.get("group"):
+        now = run(lambda: group_values(at(window), view["group"], series[0]))
+        old = run(lambda: group_values(at(before), view["group"], series[0])) if date and before else {}
+        groups = {g: (now.get(g), old.get(g)) for g in {*now, *old}}
+    target = resolve_target(view.get("target"))
+    found = summary_text.summarize(series_name(series[0]), cur, prev, view.get("format", "number"), view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"], False,
+                                   groups, (target or {}).get("value"))
+    return {"values": {"scalar": [cur], "prev": [prev]}, "text": found["text"], "sentences": found["sentences"], "target": target}
+
+
+def value_data(card, ctx):
+    """3단계 카드(VALUE_KINDS)의 값. 지표 이름(body.names)이 있으면 지표 하나의 값과 짝 절대량, 게이지는 항목별 값(category_data),
+    날짜 컬럼(source.date)이 있으면 일 값(time_data, 화면이 기간으로 묶음), 없으면 식 전체의 집계 값 하나씩. 목표(view.target)도 찾는다."""
+    src, view, body = card["source"], card["view"], card["source"]["body"]
+    date, window = src.get("date"), (ctx or {}).get("range")
+    if card["kind"] == "summary":
+        found = summary_data(card, ctx)
+    elif body.get("names"):
+        name = body["names"][0]
+        value, pair, fmt = run(lambda: metric_scalar(with_period(body, date, window), name))
+        found = {"values": {"scalar": [value], "names": [name], "format": fmt}, "pair": pair}
+    elif card["kind"] == "gauge":
+        found = category_data(core.runnable(with_period(body, date, window), select=False), body, clean_series(body.get("series")))
+    elif date:
+        expr = core.runnable(body, select=False)
+        parse.check_name(date, expr.columns, "날짜 컬럼")
+        if date not in date_columns(expr):
+            raise ValueError(f"'{date}'은 날짜 컬럼이 아닙니다.")
+        found = run(lambda: time_data(expr, date, clean_series(body.get("series")), None))
+    else:
+        series, expr = clean_series(body.get("series")), core.runnable(with_period(body, date, window), select=False)
+        found = {"values": {"scalar": run(lambda: scalars(expr, series)), "names": [series_name(s) for s in series]}}
+    return {**found, **({"target": resolve_target(view.get("target"))} if card["kind"] != "summary" else {}),
+            "date_cols": date_columns(core.runnable(body, select=False))}
+
+
 def chart_data(body):
     """chart 카드의 값. X가 날짜(날짜·시각 컬럼)면 일 값 중심(time_data), 아니면 항목별(category_data)."""
     expr = core.runnable(body, select=False)
@@ -247,6 +359,7 @@ def chart_data(body):
     t = expr[x].type()
     kinds = {"x_kind": "date" if t.is_date() or t.is_timestamp() else "num" if is_number(expr, x) else "text",
              "num_cols": [c for c in expr.columns if is_number(expr, c)][:MAX_NUM_COLS]}  # 산점도·버블을 고를 수 있는지 화면이 알 수 있게
+    kinds["date_cols"] = date_columns(expr)
     if kinds["x_kind"] == "date":
         return {**run(lambda: time_data(expr, x, clean_series(body.get("series")), body.get("split") or None)), **kinds}
     return {**category_data(expr, body, clean_series(body.get("series"))), **kinds}
@@ -275,16 +388,25 @@ def definition(card):
     """카드를 다시 구하는 정의(연결과 이름 빼고): 이 JSON의 지문이 def_hash다."""
     source = card["source"]
     points = {"points": card["view"].get("points")} if card["view"]["type"] in POINT_TYPES else {}
-    return {"kind": card["kind"], **{k: source[k] for k in ("schema", "table", "body", "recipe", "analysis", "metric_id", "flow_id", "full", "sample") if k in source}, **points}
+    view = card["view"]
+    extra = {"view": {k: view[k] for k in ("target", "group", "format") if k in view}} if card["kind"] in VALUE_KINDS else {}  # 값에 영향을 주는 설정
+    return {"kind": card["kind"], **{k: source[k] for k in ("schema", "table", "body", "recipe", "analysis", "metric_id", "flow_id", "full", "sample", "date") if k in source}, **points, **extra}
 
 
-def compute(card, now):
-    """검사한 카드(dash_store.check_card)의 source로 data를 구해 돌려준다(저장하지 않는다). now는 구한 시각 글자."""
+def compute(card, now, ctx=None):
+    """검사한 카드(dash_store.check_card)의 source로 data를 구해 돌려준다(저장하지 않는다). now는 구한 시각 글자.
+    ctx = {range: {start, end}, prev: {start, end, text}}(대시보드의 보는 기간과 직전 기간)는 source.date(기간 기준 날짜 컬럼)가 있는 날짜 X축이 아닌 카드에 기간 줄로 걸리고, 요약 문장이 쓴다."""
     source = card["source"]
-    if card["kind"] in ("chart", "metric"):
+    if card["kind"] in ("chart", "metric", "recent_rows", *VALUE_KINDS):
         if not isinstance(source.get("body"), dict):
             raise ValueError("이 카드에는 다시 구할 조회(source.body)가 없습니다.")
-        found = chart_data(source["body"]) if card["kind"] == "chart" else metric_data(source["body"])
+        body = with_period(source["body"], source.get("date"), (ctx or {}).get("range")) if card["kind"] in ("chart", "metric") else source["body"]
+        if card["kind"] == "recent_rows":
+            found = {"columns": list(core.runnable(body).columns)}  # 행 값은 저장하지 않는다(보일 때마다 연결에서 읽는다)
+        elif card["kind"] in VALUE_KINDS:
+            found = value_data(card, ctx)
+        else:
+            found = chart_data(body) if card["kind"] == "chart" else metric_data(body)
         if card["kind"] == "chart" and card["view"]["type"] in POINT_TYPES:  # 점 종류를 고른 카드는 점도 다시 구한다
             found["points"] = points_of(source["body"], (card["view"].get("points") or {}).get("size"))
     elif card["kind"] == "analysis":

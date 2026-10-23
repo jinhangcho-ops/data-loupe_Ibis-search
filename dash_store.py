@@ -32,6 +32,10 @@ CHART_TYPES = {"bar": "막대", "hbar": "가로 막대", "stacked": "누적 막�
                "doughnut": "도넛", "pie": "파이", "radar": "레이더", "scatter": "산점도", "bubble": "버블"}
 TIME_TYPES = ("bar", "stacked", "line", "polyline", "area")  # 날짜 X축 카드에서 고를 수 있는 종류
 UNITS = {"day": "일", "week": "주", "month": "월", "year": "연"}
+RINGS = ("stack", "double", "half", "ticks")  # 도넛 KPI 고리 4방식: 한 고리 누적, 겹친 두 고리, 반원 게이지, 고리+목표 눈금
+ICONS = ("chart", "up", "user", "cart", "coin", "clock")  # KPI 카드 아이콘
+FORMATS = ("number", "percent", "currency")  # 값 모양(compare.py와 같다)
+MAX_SLOTS = 5  # 도넛 KPI의 칸(가운데 + 네 꼭지점)
 DEFAULT_PALETTE = ["#11706f", "#e8590c", "#2b8a3e", "#c2255c", "#1c7ed6", "#7048e8", "#e67700", "#5c7080"]  # 화면의 라이트 색 묶음(--c1~--c8)과 같다
 HEX = re.compile(r"#([0-9a-f]{3}|[0-9a-f]{6})", re.I)
 ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
@@ -124,11 +128,56 @@ def check_colors(colors):
     return out
 
 
+EXTRA_VIEW = ("icon", "format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window")  # 3단계 카드 종류의 설정
+
+
+def number_of(value, what, low=None, high=None):
+    """설정의 숫자(참거짓 제외). 범위를 주면 그 안인지도 본다."""
+    if type(value) not in (int, float) or (low is not None and not low <= value <= high):
+        raise ValueError(f"{what}은 숫자여야 합니다." if low is None else f"{what}은 {low}~{high} 사이의 숫자여야 합니다.")
+    return value
+
+
+def check_extra(view):
+    """KPI·도넛 KPI·게이지·요약·최근 행·두 계열 추이·칸 채우기·블록·목표 추이 카드의 설정: icon, format(number·percent·currency), unit_text(값 뒤 글자),
+    ring(도넛 고리 4방식), slots(도넛의 칸 {label, y, agg, format, unit_text, color}, 최대 5), target({value} 또는 목표 파일의 {name, period, scope}),
+    full(칸 채우기가 가득 찬 값), cells(칸 수), size(블록 한 칸의 값), rows(최근 행 수), group(요약의 기여 분해 컬럼), window(보는 구간 {from, to})."""
+    out = {}
+    for name, allowed in (("icon", ICONS), ("format", FORMATS), ("ring", RINGS)):
+        if view.get(name):
+            if view[name] not in allowed:
+                raise ValueError(f"{name}은 {', '.join(allowed)} 중 하나입니다.")
+            out[name] = view[name]
+    for name, high in (("unit_text", 10), ("group", 200)):
+        if view.get(name):
+            out[name] = text(view[name], name, high)
+    for name, low, high in (("full", 0, 1e15), ("size", 0, 1e15), ("cells", 1, 100), ("rows", 1, 100)):
+        if view.get(name) is not None:
+            out[name] = number_of(view[name], name, low, high)
+    if view.get("target") is not None:
+        target = view["target"]
+        if not isinstance(target, dict) or set(target) - {"value", "name", "period", "scope"} or not (("value" in target) != bool(target.get("name"))):
+            raise ValueError("목표(target)는 {value: 숫자} 또는 목표 파일의 {name, period, scope} 중 하나여야 합니다.")
+        out["target"] = {"value": number_of(target["value"], "목표 값")} if "value" in target else {k: text(target.get(k), f"목표의 {k}", 100) for k in ("name", "period", "scope") if target.get(k)}
+    if view.get("slots") is not None:
+        slots = view["slots"]
+        if not isinstance(slots, list) or len(slots) > MAX_SLOTS or not all(isinstance(s, dict) for s in slots):
+            raise ValueError(f"칸(slots)은 객체 목록이며 {MAX_SLOTS}개까지입니다.")
+        out["slots"] = [{"label": text(s.get("label"), "칸 이름", 30), "format": s.get("format") if s.get("format") in FORMATS else "number", "unit_text": text(s.get("unit_text"), "칸 단위", 10),
+                         "color": check_hex(s["color"], "칸 색") if s.get("color") else ""} for s in slots]
+    if view.get("window") is not None:
+        found = view["window"]
+        if not isinstance(found, dict) or not all(isinstance(found.get(k), str) and DAY.fullmatch(found[k]) for k in ("from", "to")):
+            raise ValueError("보는 구간(window)은 {from, to}(YYYY-MM-DD)여야 합니다.")
+        out["window"] = {"from": found["from"], "to": found["to"]}
+    return out
+
+
 def check_view(view):
     """보기 설정: type(차트 종류, ""이면 계열마다 정한 대로), unit(일·주·월·연), compare.mode(span·point), better(up·down).
     차트 탭에서 온 것은 styles(계열마다 {type, dash, axis})·ranges(세로축 범위)·ratio(가로/세로), 분석 카드는 analysis_view."""
     view = {} if view is None else view
-    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r"}:
+    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", *EXTRA_VIEW}:
         raise ValueError("보기(view)에 쓸 수 없는 항목이 있습니다.")
     out = {"type": view.get("type") or "", "unit": view.get("unit") or "day", "compare": view.get("compare") or {"mode": "span"}, "better": view.get("better") or "up"}
     if out["type"] and out["type"] not in CHART_TYPES:
@@ -164,6 +213,7 @@ def check_view(view):
             if not isinstance(view[name], bool):
                 raise ValueError(f"{name}은 켬(true)이나 끔(false)입니다.")
             out[name] = view[name]
+    out.update(check_extra(view))
     if "analysis_view" in view:
         out["analysis_view"] = text(view["analysis_view"], "분석 보기 이름", 20)
     return out
@@ -174,10 +224,10 @@ def check_source(source):
     source = {} if source is None else source
     if not isinstance(source, dict):
         raise ValueError("다시 구할 기록(source)은 객체여야 합니다.")
-    if unknown := set(source) - {"key", "label", "schema", "table", "body", "recipe", "analysis", "metric_id", "flow_id", "full", "sample"}:
+    if unknown := set(source) - {"key", "label", "schema", "table", "body", "recipe", "analysis", "metric_id", "flow_id", "full", "sample", "date"}:
         raise ValueError(f"source에 쓸 수 없는 항목이 있습니다: {', '.join(sorted(unknown))}")
     no_secrets(source, "source")
-    out = {name: text(source.get(name), f"source.{name}", 500) for name in ("key", "label", "schema", "table", "metric_id", "flow_id")}
+    out = {name: text(source.get(name), f"source.{name}", 500) for name in ("key", "label", "schema", "table", "metric_id", "flow_id", "date")}
     for name in ("body", "recipe", "analysis"):
         if source.get(name) is not None:
             if not isinstance(source[name], dict):
@@ -194,7 +244,7 @@ def check_data(data, kind):
     data = {} if data is None else data
     if not isinstance(data, dict):
         raise ValueError("구한 값(data)은 객체여야 합니다.")
-    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "points", "x_kind", "num_cols"}
+    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair"}
     if unknown := set(data) - allowed:
         if kind == "recent_rows":
             raise ValueError("recent_rows 카드에는 행 값을 저장할 수 없습니다. 보일 때마다 연결에서 읽습니다.")

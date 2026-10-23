@@ -12,6 +12,7 @@ import dash_store
 import period
 import server
 import settings
+import targets
 from dash_refresh import current_source
 from server import app
 
@@ -21,7 +22,7 @@ server.CONSTANTS["dash"] = {"max_cards": dash_store.MAX_CARDS, "max_dashboards":
 server.CONSTANTS["dash"]["max_points"] = dash_calc.MAX_POINTS  # 산점도·버블의 점 수 상한
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min", "/api/dash/refresh/start",
-                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare"})
+                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets"})
 
 
 def with_source(card):
@@ -71,7 +72,7 @@ def card_compute():
     now = current_source()
     if now and card["source"].get("key") and card["source"]["key"] != now["key"]:
         raise ValueError(f"이 카드는 다른 연결({card['source'].get('label') or card['source']['key']})에서 구한 것입니다. 그 연결로 바꾼 뒤 다시 구하세요.")
-    return jsonify(data=dash_calc.compute(card, dt.datetime.now().isoformat(timespec="seconds")), source=now)
+    return jsonify(data=dash_calc.compute(card, dt.datetime.now().isoformat(timespec="seconds"), request.json.get("ctx")), source=now)
 
 
 @app.post("/api/chart/points")
@@ -96,7 +97,7 @@ def cards_compute():
             card = dash_store.check_card(given)
             if now and card["source"].get("key") and card["source"]["key"] != now["key"]:
                 raise ValueError("다른 연결에서 구한 카드예요")
-            out.append({"id": card["id"], "data": dash_calc.compute(card, stamp)})
+            out.append({"id": card["id"], "data": dash_calc.compute(card, stamp, (request.json or {}).get("ctx"))})
         except ValueError as e:
             out.append({"id": (given or {}).get("id", ""), "error": str(e)})
     return jsonify(results=out, seconds=round(time.monotonic() - started, 2))
@@ -191,3 +192,26 @@ def compare_sentences():
         raise ValueError(f"비교할 값은 {dash_store.MAX_CARDS}개까지 보낼 수 있습니다.")
     keys = ("cur", "prev", "fmt", "mode", "label", "better", "partial")
     return jsonify(results=[compare.compare(**{k: i[k] for k in keys if k in i}) for i in items])
+
+
+@app.get("/api/targets")
+def targets_get():
+    """목표 파일 경로(설정 targets_file.json)와 그 파일에서 읽은 목표 줄·문제 줄. 경로가 없으면 빈 값, 읽을 수 없으면 error."""
+    path = (settings.read(dash_calc.TARGETS_FILE) or {}).get("path", "")
+    if not path:
+        return jsonify(path="", rows=[], errors=[], error="")
+    try:
+        found = targets.read(path)
+    except ValueError as e:
+        return jsonify(path=path, rows=[], errors=[], error=str(e))
+    return jsonify(path=path, rows=found["rows"], errors=found["errors"], error="")
+
+
+@app.post("/api/targets")
+def targets_set():
+    """목표 파일 경로를 저장한다(경로만. 읽어 보고 읽을 수 있을 때만 저장, 비우면 지움). 읽은 결과를 돌려준다."""
+    path = ((request.json or {}).get("path") or "").strip()
+    if path:
+        targets.read(path)
+    settings.write(dash_calc.TARGETS_FILE, {"path": path})
+    return targets_get()

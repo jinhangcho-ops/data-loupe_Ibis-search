@@ -204,6 +204,24 @@ tr.miss { display:none; }
 .rf-list li.failed b { color:var(--err); }
 .rf-list li.ok b { color:var(--ok); }
 .rf-list li.now { font-weight:600; }
+.drop .cardmenu { width:min(460px, 92vw); max-height:80vh; overflow:auto; gap:6px; padding:12px; right:auto; left:0; }
+.cardmenu .cm-row { display:flex; gap:4px; align-items:center; }
+.cardmenu .cm-row select, .cardmenu .cm-row input { flex:1 1 90px; min-width:0; }
+.cardmenu .cm-field { display:flex; gap:8px; align-items:center; justify-content:space-between; margin:0; }
+.cardmenu .cm-field > select, .cardmenu .cm-field > input { flex:0 1 220px; }
+.cardmenu .cm-note { margin:0; }
+.cbox { height:100%; overflow:auto; display:flex; flex-direction:column; gap:6px; }
+.bbody.paint { aspect-ratio:auto; min-height:170px; max-height:none; }
+.kpi-top { display:flex; align-items:center; gap:8px; }
+.kpi-val { font-size:30px; font-weight:700; letter-spacing:-.02em; }
+.kpi-spark { width:100%; height:34px; }
+.kpi-pair { margin:0; }
+.sum-text { font-size:15px; line-height:1.6; }
+.sum-bar { position:relative; height:12px; background:var(--line); border-radius:999px; }
+.sum-bar i { display:block; height:100%; border-radius:999px; }
+.sum-bar span { position:absolute; left:0; top:16px; margin:0; }
+.cbox.recent table { font-size:12px; }
+.bset { display:inline-flex; gap:4px; align-items:center; margin:0; }
 .bcmp { margin:4px 0 0; font-size:12.5px; font-weight:600; color:var(--muted); }
 .bcmp.good { color:var(--ok); }
 .bcmp.bad { color:var(--err); }

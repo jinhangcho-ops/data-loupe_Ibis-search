@@ -122,6 +122,7 @@ const daysBetween = (start, end) => dayNumber(end) - dayNumber(start) + 1;
 function windowValue(s, days, from, to) {
   const keep = days.map((_, i) => i).filter(i => (!from || days[i] >= from) && (!to || days[i] <= to));
   if (!keep.length) return null;
+  if (s.agg === "nunique") return keep.length === 1 ? s.values[keep[0]] ?? null : null;  // 고유 개수는 여러 날을 다시 묶을 수 없다(하루 값만)
   const pick = a => a && keep.map(i => a[i]);
   return rollup({ agg: s.agg, sum: pick(s.sum), count: pick(s.count), min: pick(s.min), max: pick(s.max) }, keep.map(() => "2000-01-01"), "day").get("2000-01-01") ?? null;
 }
@@ -241,8 +242,9 @@ function chartConfig(card, colors, options = {}) {
            options: { maintainAspectRatio: false, ...(hbar ? { indexAxis: "y" } : {}), plugins: { legend }, scales, ...options } };
 }
 
-// 값이 아직 없는 카드(예전 파일에서 옮긴 것)는 안내만 보인다.
-const needsValues = c => (c.note = cardSeries(c) ? undefined : "아직 구한 값이 없어요. 연결한 뒤 [다시 구하기]를 누르세요.", c);
+// 값이 아직 없는 카드(예전 파일에서 옮긴 것)는 안내만 보인다. SVG 카드는 일 값·값·컬럼 이름 중 하나라도 있으면 그린다.
+const noValues = c => SVG_KINDS.includes(c.kind) ? !(c.data?.by_unit || c.data?.values || c.data?.columns) : !cardSeries(c);
+const needsValues = c => (c.note = noValues(c) ? "아직 구한 값이 없어요. 연결한 뒤 [다시 구하기]를 누르세요." : undefined, c);
 
 // ---------- 카드 모음 ----------
 // board.js의 Board에 카드마다 차트 종류·시간 단위·색을 고르는 줄을 더한다. palette는 대시보드의 색 묶음(HEX 목록).
@@ -254,6 +256,7 @@ class DashBoard extends Board {
     this.range = null;  // 보는 기간 {start, end}(기준일로 자른 것, 열린 쪽은 없음). 시간별 카드는 이 기간의 일 값만 그린다.
     this.prev = null;  // 직전 기간 {start, end, text}(비교 문장용)
     this.compares = new Map();  // 카드 → 비교 문장 {text, tone, ...}
+    this.recompute = options.recompute;  // (카드들) → 그 카드들을 보는 기간으로 다시 구한다(연결이 있어야 한다). 화면이 정한다.
     this.connKey = "";  // 지금 연결의 열쇠(비밀번호·계정 없음). 있으면 다른 연결의 카드를 "이전 값"으로 보인다.
   }
   // 보는 기간과 직전 기간을 바꾸고 비교 문장을 다시 받아 그린다(서버 /api/compare).
@@ -261,6 +264,12 @@ class DashBoard extends Board {
     this.range = range;
     this.prev = prev;
     await this.recompare();
+    const stale = this.cards.filter(c => c.source?.date && !c.data?.by_unit && c.kind !== "recent_rows");  // 날짜 X축이 아닌데 기간 기준 날짜 컬럼이 있는 카드는 그 기간으로 다시 구한다
+    if (stale.length) await this.recompute?.(stale);
+  }
+  // 새 카드·다시 구할 때 서버에 알려 줄 보는 기간(없으면 undefined)
+  ctx() {
+    return this.range ? { range: this.range, prev: this.prev } : undefined;
   }
   async recompare() {
     this.cards.forEach(c => { c.range = this.range; });
@@ -273,7 +282,9 @@ class DashBoard extends Board {
     this.draw();
   }
   wrap(card) {
-    return Object.assign(card, { range: this.range, ratio: card.view?.ratio || 16 / 9, config: (colors, options) => chartConfig(card, { ...colors, palette: this.palette }, options) });
+    const paint = SVG_KINDS.includes(card.kind);  // SVG·HTML로 직접 그리는 카드는 config 대신 paint
+    return Object.assign(card, { range: this.range, ratio: card.view?.ratio || (paint ? 4 / 3 : 16 / 9), paint: paint ? colors => paintCard(card, { ...colors, palette: this.palette }, this) : undefined,
+                                 config: paint ? undefined : (colors, options) => chartConfig(card, { ...colors, palette: this.palette }, options) });
   }
   set(cards) {
     super.set(cards.map(c => this.wrap(c)));
@@ -289,6 +300,32 @@ class DashBoard extends Board {
     return box;
   }
   // 종류 버튼들(바꿀 수 없는 종류는 흐리게, 눌러도 이유만), 시간 단위, 색 편집
+  // 카드의 "기간 기준 날짜 컬럼": 날짜 X축이 아닌 카드에 대시보드의 기간·기준일을 걸 컬럼. 후보는 테이블의 날짜 컬럼(서버가 data.date_cols로 줌). 바꾸면 그 기간으로 다시 구한다.
+  dateSelect(card) {
+    const cols = card.data?.date_cols ?? [];
+    if (!cols.length) return "";
+    return el("select", { className: "bunit", style: "flex-basis:auto", title: "기간 기준 날짜 컬럼: 대시보드의 기간·기준일을 이 컬럼으로 걸어 다시 구합니다", onchange: async e => {
+      if (e.target.value) card.source.date = e.target.value; else delete card.source.date;
+      this.changed?.();
+      if (card.source.date) await this.recompute?.([card]);
+      this.draw();
+    } }, el("option", { value: "", textContent: "기간 기준: 없음" }), ...cols.map(c => el("option", { value: c, textContent: "기간 기준: " + c, selected: card.source.date === c })));
+  }
+  // SVG 카드의 설정 줄: 목표 값, 값 모양, 종류별 칸(고리 방식·칸 수·블록 크기·행 수)
+  svgTools(card, msg, again) {
+    const view = card.view, field = (label, input) => el("label", { className: "hint bset" }, label, input);
+    const number = (key, label, width = 70) => field(label, el("input", { type: "number", value: view[key] ?? "", style: `width:${width}px`, onchange: e => { if (e.target.value === "") delete view[key]; else view[key] = +e.target.value; again(); } }));
+    const choice = (key, label, options) => field(label, el("select", { className: "bunit", style: "flex-basis:auto", onchange: e => { view[key] = e.target.value; again(); } }, ...options.map(([v, n]) => el("option", { value: v, textContent: n, selected: (view[key] || options[0][0]) === v }))));
+    const named = view.target?.name;
+    const target = named ? el("span", { className: "hint", textContent: `목표: ${named}${card.data?.target?.error ? " (" + card.data.target.error + ")" : ""}` })
+      : field("목표", el("input", { type: "number", value: view.target?.value ?? "", style: "width:90px", onchange: e => { if (e.target.value === "") { delete view.target; card.data.target = null; } else { view.target = { value: +e.target.value }; card.data.target = { value: +e.target.value, label: "", error: "" }; } again(); } }));
+    const kinds = { donut_kpi: [choice("ring", "고리", [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리+목표 눈금"]])], stripes: [number("cells", "칸 수", 50), number("full", "가득 찬 값", 80)],
+                    blocks: [number("size", "한 칸 크기", 80)], recent_rows: [number("rows", "행 수", 50)] }[card.kind] ?? [];
+    const settings = card.kind === "recent_rows" || card.kind === "gauge" ? [...kinds] : [target, choice("format", "값", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), ...kinds];
+    const row = el("div", { className: "btools" }, this.dateSelect(card), ...settings, el("button", { className: "btype" + (card.openColors ? " on" : ""), textContent: "색", onclick: () => { card.openColors = !card.openColors; this.draw(); } }));
+    row.onclick = e => e.stopPropagation();
+    return row;
+  }
   tools(card) {
     const msg = el("div", { className: "hint btype-msg" });
     const again = () => { this.changed?.(); this.draw(); };
@@ -312,20 +349,21 @@ class DashBoard extends Board {
     const unit = card.data?.by_unit ? el("select", { className: "bunit", title: "시간 단위. 일 값을 다시 묶어 그립니다", onchange: e => { card.view.unit = e.target.value; again(); } },
       ...Object.entries(SERVER.dash.units).map(([id, name]) => el("option", { value: id, textContent: name, selected: (card.view.unit || "day") === id }))) : "";
     const paint = el("button", { className: "btype" + (card.openColors ? " on" : ""), textContent: "색", onclick: () => { card.openColors = !card.openColors; this.draw(); } });
-    const tools = el("div", { className: "btools" }, ...buttons, size, ...flags, unit, paint);
+    const tools = SVG_KINDS.includes(card.kind) ? this.svgTools(card, msg, again) : el("div", { className: "btools" }, ...buttons, size, ...flags, unit, !card.data?.by_unit ? this.dateSelect(card) : "", paint);
     tools.onclick = e => e.stopPropagation();  // 카드 고르기(Board의 box.onclick)로 번지지 않게
     const d = card.data ?? {}, first = d.by_unit?.day?.labels[0], range = this.range;
-    const applies = range && (card.kind === "chart" || card.kind === "metric") && !d.by_unit && !isPoints(card) ? "기간·기준일은 날짜 X축 카드에만 적용돼요" : "";
+    const noDate = range && !d.by_unit && !card.source?.date && card.kind !== "recent_rows" && !isPoints(card);  // 기간 기준 날짜 컬럼이 없으면 기간이 걸리지 않는다
+    const applies = card.source?.date && !d.by_unit ? `기간 기준 날짜: ${card.source.date}` : noDate ? "기간·기준일은 날짜 X축 카드나 기간 기준 날짜 컬럼을 고른 카드에만 적용돼요" : "";
     const early = range?.start && first && range.start < first ? `저장된 일 값은 ${first}부터예요` : "";  // 보려는 기간이 저장된 값보다 앞서면
     const stale = this.connKey && card.source?.key && card.source.key !== this.connKey ? "이전 값(다른 연결)" : "";  // 지금 연결이 아닌 곳에서 구한 값
-    const when = [stale, d.computed_at && "구한 시각 " + d.computed_at.replace("T", " "), d.note, early, applies].filter(Boolean).join(" · ");  // 값이 언제 것인지, 줄인 것
-    const said = this.compares.get(card), timed = !!d.by_unit?.day && d.by_unit.day.series[0]?.agg !== "nunique";
+    const when = [stale, d.computed_at && "구한 시각 " + d.computed_at.replace("T", " "), d.note, early, applies, card.rangeNote].filter(Boolean).join(" · ");  // 값이 언제 것인지, 줄인 것
+    const said = this.compares.get(card), timed = !!d.by_unit?.day && d.by_unit.day.series[0]?.agg !== "nunique" && card.kind !== "dual_trend";
     const pick = (value, options, set) => el("select", { className: "bunit", style: "flex-basis:auto", onchange: e => { set(e.target.value); this.changed?.(); this.recompare(); } },
       ...options.map(([v, name]) => el("option", { value: v, textContent: name, selected: v === value })));
     const how = timed ? el("div", { className: "btools" }, pick(card.view.compare?.mode ?? "span", [["span", "기간 비교"], ["point", "시점 비교"]], v => { card.view.compare = { mode: v }; }),
       pick(card.view.better ?? "up", [["up", "늘수록 좋음"], ["down", "줄수록 좋음"]], v => { card.view.better = v; })) : "";
     return el("div", { className: "bextra" }, tools, msg, el("div", { className: "hint bwhen", textContent: when }),
-      said ? el("div", { className: "bcmp " + said.tone, textContent: said.text, title: said.delta_text }) : "", how, card.openColors ? this.colorEditor(card) : "");
+      said && card.kind !== "kpi" ? el("div", { className: "bcmp " + said.tone, textContent: said.text, title: said.delta_text }) : "", how, card.openColors ? this.colorEditor(card) : "");
   }
   // 산점도·버블이면 서버에서 점을 받아 카드에 둔다(연결 필요). 다른 종류로 바꾸면 점은 버린다(카드 크기).
   async loadPoints(card) {

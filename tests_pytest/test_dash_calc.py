@@ -140,7 +140,7 @@ def test_other_connection_rejected(db):
     other["source"].update(key="url:postgres://elsewhere:5432/x", label="elsewhere/x")
     assert "다른 연결(elsewhere/x)" in compute(db, card=other)["error"]
     assert "다시 구할 조회" in compute(db, card=card("chart"))["error"]
-    assert "아직 다시 구할 수 없" in compute(db, card=card("kpi"))["error"]
+    assert "아직 다시 구할 수 없" in compute(db, card=card("funnel"))["error"]
 
 
 def test_compute_analysis_card(db):
@@ -223,3 +223,83 @@ def test_points_route_and_card(db):
     assert data["x_kind"] == "num" and data["num_cols"] == ["amt"] and data["points"]["size"] == "amt" and len(data["points"]["points"]) == 6 and "values" in data
     plain = compute(db, card=card("chart", body={"base": "orders", "x": "store", "series": [{"y": "amt", "agg": "sum"}]}))["data"]
     assert plain["x_kind"] == "text" and "points" not in plain
+
+
+# ---------- 3단계 카드 종류: kpi·gauge·summary·recent_rows, 기간 기준 날짜 컬럼, 목표 파일 ----------
+
+def value_card(kind, series, date=None, view=None, **body):
+    c = card(kind, body={"base": "orders", "series": series, **body})
+    if date:
+        c["source"]["date"] = date
+    c["view"] = view or {}
+    return c
+
+
+SUM = [{"y": "amt", "agg": "sum"}]
+
+
+def test_kpi_with_date_column_keeps_daily_values_and_lists_date_columns(db):
+    data = compute(db, card=value_card("kpi", SUM, "day"))["data"]
+    assert named(data["by_unit"]["day"])["합계 (amt)"]["sum"] == [30, 35, 40, 50] and data["date_cols"] == ["day"] and "target" in data and data["target"] is None
+    bad = compute(db, card=value_card("kpi", SUM, "store"))
+    assert "날짜 컬럼" in bad["error"]
+
+
+def test_kpi_without_date_is_scalar_and_period_line_is_ignored(db):
+    data = compute(db, card=value_card("kpi", [*SUM, {"y": None, "agg": "count"}]))["data"]
+    assert data["values"] == {"scalar": [155, 7], "names": ["합계 (amt)", "개수"]}
+
+
+def test_gauge_uses_item_values(db):
+    found = compute(db, card=value_card("gauge", SUM, x="store"))["data"]["values"]
+    assert found["labels"] == ["A", "B"] and found["series"][0]["values"] == [100, 55]
+
+
+def test_period_applies_to_non_date_cards_with_date_column(db):
+    ctx = {"range": {"start": "2026-01-12", "end": "2026-02-02"}, "prev": {"start": "2025-12-21", "end": "2026-01-11", "text": "직전 22일"}}
+    c = card("chart", body={"base": "orders", "x": "store", "series": SUM})
+    c["source"]["date"] = "day"
+    got = compute(db, card=c, ctx=ctx)["data"]
+    assert got["values"]["labels"] == ["A", "B"] and got["values"]["series"][0]["values"] == [40, 50] and got["date_cols"] == ["day"]  # 그 기간(1-12~2-2)의 행만
+    no_date = compute(db, card=card("chart", body={"base": "orders", "x": "store", "series": SUM}), ctx=ctx)["data"]
+    assert no_date["values"]["series"][0]["values"] == [100, 55]  # 날짜 컬럼이 없으면 기간을 걸지 않는다
+
+
+def test_summary_sentences_with_groups_and_target(db):
+    ctx = {"range": {"start": "2026-01-12", "end": "2026-02-02"}, "prev": {"start": "2025-12-21", "end": "2026-01-11", "text": "직전 22일"}}
+    c = value_card("summary", SUM, "day", {"group": "store", "target": {"value": 180}})
+    data = compute(db, card=c, ctx=ctx)["data"]
+    assert data["values"]["scalar"] == [90] and data["values"]["prev"] == [65]
+    assert "직전 22일보다 38.5% 늘었어요" in data["sentences"][0] and "목표" in data["sentences"][-1] and data["target"]["value"] == 180
+    plain = compute(db, card=value_card("summary", SUM), ctx=None)["data"]
+    assert plain["values"]["scalar"] == [155] and plain["values"]["prev"] == [None] and "값이 없었어요" in plain["text"]
+
+
+def test_targets_file_routes_and_named_target(db, tmp_path):
+    path = tmp_path / "목표.csv"
+    path.write_text("이름,값,기간\n매출,1억,\n건수,5,2026-10\n건수,7,2026-11\n", encoding="utf-8")
+    assert db.get("/api/targets").get_json() == {"path": "", "rows": [], "errors": [], "error": ""}
+    got = db.post("/api/targets", json={"path": str(path)}).get_json()
+    assert got["path"] == str(path) and [r["value"] for r in got["rows"]] == [1e8, 5, 7] and got["error"] == ""
+    assert "찾을 수 없어요" in db.post("/api/targets", json={"path": str(tmp_path / "없음.csv")}).get_json()["error"]
+    assert db.get("/api/targets").get_json()["path"] == str(path)  # 읽을 수 없는 경로는 저장하지 않는다
+    named_target = lambda **spec: compute(db, card=value_card("kpi", SUM, view={"target": spec}))["data"]["target"]
+    assert named_target(name="매출") == {"value": 1e8, "label": "매출", "error": ""}
+    assert "어느 기간인지 알 수 없어요" in named_target(name="건수")["error"] and named_target(name="건수", period="2026-11")["value"] == 7
+    assert "찾지 못했어요" in named_target(name="없는 목표")["error"]
+    assert db.post("/api/targets", json={"path": ""}).get_json()["path"] == "" and "목표 파일을 먼저" in named_target(name="매출")["error"]
+
+
+def test_metric_kpi_has_pair_amounts(db, tmp_path):
+    import metrics
+    path = tmp_path / "m.yaml"
+    path.write_text("metrics:\n  A비율:\n    format: percent\n    numerator: {agg: count, where: store = A}\n    denominator: {agg: count}\n", encoding="utf-8")
+    metrics.save_file_path(str(path))
+    data = compute(db, card=value_card("kpi", SUM, names=["A비율"]))["data"]
+    assert data["values"]["scalar"] == [pytest.approx(5 / 7)] and data["values"]["format"] == "percent"
+    assert data["pair"] == {"num_label": "개수 [store = A]", "num": 5, "den_label": "개수", "den": 7}
+
+
+def test_recent_rows_stores_columns_only(db):
+    data = compute(db, card=card("recent_rows", body={"base": "orders"}))["data"]
+    assert data["columns"] == ["day", "store", "amt", "uid"] and set(data) <= {"columns", "computed_at", "def_hash"}

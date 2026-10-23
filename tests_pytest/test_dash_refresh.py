@@ -76,7 +76,7 @@ def test_job_saves_ok_keeps_old_value_on_failure(fake, monkeypatch):
     d = save("주간", [card("성공"), card("실패"), card("다른 연결", key=OTHER)])
     ids = {c["title"]: c["id"] for c in d["cards"]}
 
-    def compute(c, now):
+    def compute(c, now, ctx=None):
         if c["title"] == "실패":
             raise ValueError("조회가 실패했어요")
         return {"values": {"labels": ["new"], "series": []}, "computed_at": now}
@@ -101,7 +101,7 @@ def test_job_stop_skips_the_rest(fake, monkeypatch):
     d = save("멈춤", [card("하나"), card("둘"), card("셋")])
     seen = []
 
-    def compute(c, now):
+    def compute(c, now, ctx=None):
         seen.append(c["title"])
         refresh.stop()  # 첫 카드를 구하는 도중에 멈추기를 누른다
         return {"values": {"labels": ["new"], "series": []}}
@@ -155,3 +155,11 @@ def test_live_min_routes(client, monkeypatch):
     assert "45초 이상" in d["error"]
     assert client.post("/api/dash/live_min", json={"seconds": 0}).get_json()["seconds"] == 0
     monkeypatch.setitem(server.state, "opened", None)
+
+
+def test_context_for_refresh_uses_period_and_as_of():
+    got = refresh.context({"period": "2026-03", "as_of": "2026-03-15"})
+    assert got == {"range": {"start": "2026-03-01", "end": "2026-03-15"}, "prev": {"start": "2026-02-01", "end": "2026-02-28", "text": "직전 28일"}}
+    assert refresh.context({"period": "최근 7일", "as_of": ""}, dt.date(2026, 10, 22))["range"] == {"start": "2026-10-16", "end": "2026-10-22"}
+    assert refresh.context({"period": "~ 2026-03-31", "as_of": ""}, dt.date(2026, 10, 22))["range"] == {"start": None, "end": "2026-03-31"} and refresh.context({"period": "엉터리"}) is None
+    assert {"kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend"} <= set(refresh.REFRESHABLE) and "recent_rows" not in refresh.REFRESHABLE

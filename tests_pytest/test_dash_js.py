@@ -169,6 +169,36 @@ assert.deepStrictEqual(compareItem(pointCard, range, null), { cur: 50, prev: 35,
 assert.strictEqual(compareItem(time, null, prev), null); assert.strictEqual(compareItem(cat(1), range, prev), null);
 assert.strictEqual(compareItem({ ...time, data: { by_unit: { day: { ...by.day, series: [by.day.series[4]] } } } }, range, prev), null);  // 고유 개수는 다시 묶을 수 없다
 assert.deepStrictEqual(chartConfig({ ...time, range: { start: "2026-01-12", end: "2026-02-02" }, view: { type: "line", unit: "day" } }, colors).data.labels, ["2026-01-12", "2026-02-02"]);
+// 3단계 카드의 모양 계산(dash_cards.js): 호·고리·게이지 조각·칸·블록·교차·다각형·값 글자
+const near = (a, b) => assert(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
+const [px, py] = polar(0, 0, 10, Math.PI / 2); near(px, 10); near(py, 0);
+assert.deepStrictEqual(polar(0, 0, 10, 0), [0, -10]);
+assert.match(arcPath(0, 0, 10, 0, Math.PI / 2), /^M 0[.]00 -10[.]00 A 10 10 0 0 1 10[.]00 -?0[.]00$/);
+assert.match(arcPath(0, 0, 10, 0, Math.PI * 1.5), / A 10 10 0 1 1 /);  // 반 바퀴를 넘으면 큰 호
+assert.strictEqual(ringDash(10, 0.25).dash, "15.71 47.12"); assert.strictEqual(ringDash(10, 2).len, ringDash(10, 1).circ); assert.strictEqual(ringDash(10, -1).len, 0);
+const segs = gaugeSegments([1, 1, 2, 0, null]);
+assert.deepStrictEqual(segs.map(g => [g.index, g.share, g.max]), [[0, 0.25, false], [1, 0.25, false], [2, 0.5, true]]);  // 몫대로, 0·빈 값은 뺌, 가장 큰 항목에 max
+near(segs[1].a0, segs[0].a1 + RING_GAP); near(segs[2].a1 + RING_GAP, TAU);  // 조각 사이 간격 0.06rad, 한 바퀴를 채운다
+assert.deepStrictEqual(gaugeSegments([0, null]), []);
+assert.deepStrictEqual(stripeCells(0.34, 10, 0.5), { filled: 3, target: 5 }); assert.deepStrictEqual(stripeCells(1.7, 10, null), { filled: 10, target: null }); assert.strictEqual(stripeCells(0, 10, 0.01).target, 1);
+assert.deepStrictEqual(blockCells(45, 80, 10), { actual: 4, toTarget: 4, over: 0, scale: 1 });
+assert.deepStrictEqual(blockCells(95, 80, 10), { actual: 9, toTarget: 0, over: 1, scale: 1 });  // 목표를 넘은 칸
+assert.deepStrictEqual(blockCells(10000, null, 1, 200), { actual: 200, toTarget: 0, over: 0, scale: 50 });  // 칸이 너무 많으면 줄인다
+assert.strictEqual(crossDown([5, 3, 6, 2, null, 1], 4), 2); assert.strictEqual(crossDown([1, 2, 3], 4), 0); assert.strictEqual(crossDown([4, 3], 4), 1);  // 목표와 같으면 아직 안 내려간 것
+const yOf = v => 100 - v * 10;
+assert.deepStrictEqual(belowPolygons([0, 10, 20, 30], [6, 2, 2, 6], 4, yOf), [[[5, 60], [10, 80], [20, 80], [25, 60]]]);  // 목표선(y=60)과 선분이 만나는 곳에서 시작·끝
+assert.deepStrictEqual(belowPolygons([0, 10], [2, 6], 4, yOf), [[[0, 60], [0, 80], [5, 60]]]);  // 처음부터 아래
+assert.deepStrictEqual(belowPolygons([0, 10], [5, 6], 4, yOf), []);
+assert.strictEqual(sparkPoints([1, 2, 3], 10, 10, 0), "0.0,10.0 5.0,5.0 10.0,0.0"); assert.strictEqual(sparkPoints([2, null, 2], 10, 10, 0), "0.0,5.0 10.0,5.0");
+assert.strictEqual(showValue(null), "—"); assert.strictEqual(showValue(0.256, "percent"), "25.6%"); assert.strictEqual(showValue(1234.5, "currency"), "₩1,235"); assert.strictEqual(showValue(1234.567), "1,234.57"); assert.strictEqual(showValue(3, "number", "건"), "3건");
+assert.strictEqual(showGap(-0.017, "percent"), "1.7%p"); assert.strictEqual(showGap(-1500, "currency"), "₩1,500");
+assert.strictEqual(darken("#ffffff", 0.5), "#808080"); assert.strictEqual(darken("#fff", 0), "#ffffff");
+const kpi = { kind: "kpi", colors: fc(), view: {}, data: { by_unit: by, target: { value: 100 } }, range: { start: "2026-01-12", end: "2026-02-02" } };
+assert.strictEqual(cardValue(kpi), 90); assert.strictEqual(cardValue({ ...kpi, range: null }), 155); assert.strictEqual(cardTarget(kpi), 100); assert.strictEqual(cardTarget({ ...kpi, data: {}, view: { target: { value: 7 } } }), 7);
+assert.deepStrictEqual(cardDays(kpi), [{ day: "2026-01-12", v: 40 }, { day: "2026-02-02", v: 50 }]);
+assert.deepStrictEqual(cardDays({ ...kpi, view: { window: { from: "2026-02-01", to: "2026-02-28" } } }), [{ day: "2026-02-02", v: 50 }]);  // 보는 구간
+assert.strictEqual(cardValue({ kind: "kpi", data: { values: { scalar: [7, 8] } } }, 1), 8); assert.strictEqual(cardFormat({ view: {}, data: { values: { format: "percent" } } }), "percent");
+assert(!noValues({ kind: "kpi", data: { values: { scalar: [1] } } }) && noValues({ kind: "kpi", data: {} }) && !noValues({ kind: "recent_rows", data: { columns: ["a"] } }) && noValues({ kind: "chart", data: {} }));
 console.log("ok");
 """
 
@@ -177,6 +207,7 @@ def test_dash_js(tmp_path):
     dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE}, ensure_ascii=False)
     script = tmp_path / "dash_test.js"
     script.write_text((ROOT / "static" / "board.js").read_text(encoding="utf-8") + (ROOT / "static" / "dash.js").read_text(encoding="utf-8")
-                      + SCRIPT % {"dash": json.dumps(dash, ensure_ascii=False)}, encoding="utf-8")
+                      + (ROOT / "static" / "dash_cards.js").read_text(encoding="utf-8")
+                      + SCRIPT.replace("%(dash)s", json.dumps(dash, ensure_ascii=False)), encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr[-3000:]

@@ -5,6 +5,7 @@
 let refreshTimer = null;
 const REFRESH_STATE = { ok: "끝", failed: "실패", skipped: "건너뜀", waiting: "기다림" };
 async function startRefresh() {
+  document.dispatchEvent(new Event("dash-connected"));
   try {
     const st = await api("/api/dash/refresh/start", {});
     renderRefresh(st);

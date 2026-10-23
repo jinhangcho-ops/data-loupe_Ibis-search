@@ -31,6 +31,7 @@ class DashCtl {
     this.pick.onchange = () => { if (this.pick.value) { this.asof.value = this.pick.value; this.apply(true); } };
     this.every.onchange = () => this.check(this.every, "refresh", this.lastNote);
     this.live.onchange = () => this.check(this.live, "live", this.liveNote);
+    document.addEventListener("dash-connected", () => this.loadMin());  // 연결에 성공하면(dash_refresh.js) 연결 열쇠를 다시 받는다
     this.ready = api("/api/period/day", { text: "" }).then(d => { this.today = d.date; this.pick.max = d.date; });
   }
   note(box, text, bad) {
@@ -89,7 +90,8 @@ class DashCtl {
   }
   async loadMin() {
     try {
-      const d = await api("/api/dash/live_min");
+      const d = await api("/api/dash/live_min"), key = d.source?.key ?? "";
+      if (this.board.connKey !== key) { this.board.connKey = key; this.board.draw(); }  // 지금 연결 열쇠: 다른 연결의 카드는 이전 값, 최근 행은 연결돼야 보임
       this.min.disabled = this.minBtn.disabled = !d.source;
       this.min.value = d.seconds || "";
       this.note(this.minNote, d.source ? d.source.label : "연결하면 정할 수 있어요");
@@ -137,8 +139,25 @@ class DashCtl {
 async function liveCards(board, connected) {
   if (!connected) throw new Error("먼저 데이터에 연결하세요.");
   const cards = board.cards.filter(c => c.source?.key && c.id).map(c => ({ ...DashBoard.plain(c), data: {} }));
-  (await api("/api/dash/cards/compute", { cards })).results.forEach(r => { const c = board.cards.find(x => x.id === r.id); if (c && r.data) c.data = r.data; });
+  (await api("/api/dash/cards/compute", { cards, ctx: board.ctx() })).results.forEach(r => { const c = board.cards.find(x => x.id === r.id); if (c && r.data) c.data = r.data; });
   await board.recompare();
+}
+// 기간 기준 날짜 컬럼이 있는 날짜 X축이 아닌 카드(cards)를 보는 기간(board.ctx())으로 다시 구한다. 연결이 없거나 다른 연결의 카드는 이유를 카드에 적고 이전 값을 둔다.
+async function recomputeRange(board, cards, connected) {
+  const ctx = board.ctx();
+  const todo = cards.filter(c => {
+    c.rangeNote = !connected ? "연결하면 이 기간으로 구합니다" : c.source.key && board.connKey && c.source.key !== board.connKey ? "다른 연결의 카드라 이 기간으로 구하지 못했어요" : "";
+    return !c.rangeNote && c.id;
+  });
+  if (todo.length) {
+    try {
+      (await api("/api/dash/cards/compute", { cards: todo.map(c => ({ ...DashBoard.plain(c), data: {} })), ctx })).results.forEach(r => {
+        const c = todo.find(x => x.id === r.id);
+        if (c) { if (r.data) { c.data = r.data; c.rangeNote = ""; } else c.rangeNote = r.error; }
+      });
+    } catch (e) { todo.forEach(c => { c.rangeNote = e.message; }); }
+  }
+  board.draw();
 }
 // 초를 "1시간"·"30분"·"45초" 글자로(서버 dash_refresh.minimum_text와 같다)
 const minimumText = seconds => seconds % 3600 === 0 ? `${seconds / 3600}시간` : seconds % 60 === 0 ? `${seconds / 60}분` : `${seconds}초`;

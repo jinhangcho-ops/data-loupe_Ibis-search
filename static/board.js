@@ -62,7 +62,7 @@ class Board {
   }
   cardBox(card, colors) {
     const canvas = el("canvas");
-    const body = el("div", { className: "bbody" }, card.note ? el("div", { className: "hint bnote", textContent: card.note }) : canvas);
+    const body = el("div", { className: "bbody" + (card.paint ? " paint" : "") }, card.note ? el("div", { className: "hint bnote", textContent: card.note }) : card.paint ? card.paint(colors) : canvas);  // paint: SVG·HTML로 직접 그리는 카드(dash_cards.js)
     body.style.setProperty("--ratio", card.ratio || 16 / 9);
     const title = el("input", { className: "btitle", value: card.title, title: "그래프 이름. 그림 파일 이름이 됩니다" });
     title.onclick = e => e.stopPropagation();
@@ -73,7 +73,7 @@ class Board {
       el("div", { className: "bhead" }, el("i", { className: "bcheck" }), title, remove), body);
     box.onclick = () => this.toggle(card, box);
     card.canvas = canvas;
-    if (!card.note) this.charts.push(new Chart(canvas, card.config(colors)));
+    if (!card.note && !card.paint) this.charts.push(new Chart(canvas, card.config(colors)));
     return box;
   }
   toggle(card, box) {
@@ -88,7 +88,7 @@ class Board {
   }
   // 고른 그래프(글만 보이는 카드는 빼고)의 그림 [{ name, data }]. 순서는 카드 순서.
   pictures(ratio, mode, type) {
-    return this.cards.filter(c => this.picked.has(c) && !c.note).map(c => {
+    return this.cards.filter(c => this.picked.has(c) && !c.note && c.config).map(c => {  // SVG·HTML 카드는 그림 파일로 저장하지 않는다
       const r = BOARD_RATIOS[ratio], width = r ? Math.round(PICTURE_HEIGHT * r) : c.canvas.clientWidth;
       const height = r ? PICTURE_HEIGHT : c.canvas.clientHeight + TITLE_BAND;
       return { name: c.title, data: chartPicture(c.config, mode, type, width, height, 2, c.title) };
@@ -99,7 +99,7 @@ class Board {
 // 고른 그래프를 그림 파일로 저장한다. 프로그램 창에서는 폴더를 한 번 묻고 그 폴더에 모두 저장한다(같은 이름은 번호를 붙인다).
 // 창 없이 열었으면(브라우저) 하나씩 내려받는다. err: 결과를 쓸 칸의 id.
 async function saveBoard(board, { ratio, mode, type, err }) {
-  const pictures = board.pictures(ratio, mode, type), skipped = [...board.picked].filter(c => c.note).length;
+  const pictures = board.pictures(ratio, mode, type), skipped = [...board.picked].filter(c => c.note || !c.config).length;
   if (!pictures.length) return say(err, skipped ? "고른 그래프가 아직 그려지지 않았습니다." : "다운로드할 그래프를 고르세요. 카드를 누르면 고릅니다.");
   const d = await api("/api/images", { images: pictures });
   const more = skipped ? ` 그려지지 않은 ${skipped}개는 뺐습니다.` : "";
