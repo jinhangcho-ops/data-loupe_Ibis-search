@@ -200,6 +200,7 @@ const els = {}; globalThis.$ = id => els[id] ??= mk("x", { value: "" });
 let dashId = "", dashName = "", dashMeta = {}, lastSaved = "", quiet = false, current = "s0", panel = null, saves = 0, valuesDirty = false;
 const metaOf = () => ({}), needsValues = c => c, boardChanged = () => {}, snapshot = () => current;
 const ctl = { set: async () => {} };
+const dashUndo = { reset() {} };
 const board = { cards: [], set(c) { this.cards = c; }, star: {} };
 globalThis.say = () => {}; async function save() { saves++; lastSaved = current; return true; }
 const waits = {}; globalThis.api = url => url.includes("/get") ? new Promise(r => { waits[decodeURIComponent(url.split("id=")[1])] = r; }) : Promise.resolve({});

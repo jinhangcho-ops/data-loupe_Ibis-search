@@ -249,7 +249,7 @@
         <div class="hint">시각 컬럼 (날짜·날짜시간)</div><select id="a-ftime"></select>
         <div class="hint">단계 순서 (최대 <span id="a-max-steps"></span>개, 끌어서 순서를 바꿉니다)</div>
         <div class="f-steps" id="a-fsteps"></div>
-        <div class="f-add"><input id="a-fvalue" list="a-fvalues" placeholder="단계 컬럼의 값 고르기·쓰기"><datalist id="a-fvalues"></datalist><button class="btn" id="a-fadd">추가</button></div>
+        <div class="f-add"><input id="a-fvalue" data-list="a-fvalues" placeholder="단계 컬럼의 값 고르기·쓰기"><datalist id="a-fvalues"></datalist><button class="btn" id="a-fadd">추가</button></div>
         <div class="hint">기간 제한 (첫 단계부터 이 시간 안에 도달한 사람만. 비우면 제한 없음)</div>
         <div class="f-win"><input id="a-fwin" type="number" min="0" step="any" placeholder="비움"><select id="a-funit"><option value="minute">분</option><option value="hour">시간</option><option value="day">일</option></select></div>
         <div class="hint">사용자가 단계를 순서대로 거친 사람 수를 셉니다. 중간에 한 다른 행동과 되돌아간 행동은 무시하고, 같은 시각의 두 단계는 도달한 것으로 봅니다.</div>
@@ -1004,7 +1004,7 @@ $("rsave").onclick = () => {
   if (!prof) return fail("테이블을 고르세요.");
   return busy($("rsave"), async () => {
     const name = $("rname").value.trim() || $("rsaved").value;  // 이름을 비우면 지금 고른 구성에 덮어쓴다.
-    try { showRecipes(await api("/api/recipes", { name, recipe: config() }), name); $("rname").value = ""; fail(""); } catch (e) { fail(e.message); }
+    try { showRecipes(await api("/api/recipes", { name, recipe: config() }), name); $("rname").value = ""; fail(""); flash("구성을 저장했어요"); } catch (e) { fail(e.message); }
   });
 };
 $("rdel").onclick = () => busy($("rdel"), async () => {
@@ -1035,6 +1035,17 @@ $("rsaved").onchange = async () => {
 // 임시 저장(초안): 고친 전처리 단계가 2초 조용하면 서버에 쓴다(draft.js). 테이블을 연 직후 모양(draftBase)과 같으면 저장할 것이 없다. [실행]으로 결과를 저장하면 지운다.
 const draftSnap = () => JSON.stringify(config());
 const prepDraft = Draft("prep", () => prof && draftBase && draftSnap() !== draftBase ? config() : null, openConfig);
+// 되돌리기(Ctrl+Z, draft.js의 Undo): 같은 테이블이면 표를 다시 읽지 않고 구성만 채우고 다시 그린다(미리보기 결과는 낡아 버린다).
+const prepUndo = Undo(() => prof ? config() : null, async c => {
+  if (prof && c.base === S.base && c.schema === S.schema) { restore(c); preview = null; showAll(); }
+  else await openConfig(c);
+});
+const inPrep = () => !$("prep-view").classList.contains("hidden");
+Shortcuts({
+  undo: { undo: () => inPrep() ? prepUndo.undo() : Promise.resolve(false), redo: () => inPrep() ? prepUndo.redo() : Promise.resolve(false) },
+  save: () => { if (inPrep()) $("rsave").click(); },
+  run: () => pressBtn($("preview")) || pressBtn($("a-run")),
+});
 const afterTables = () => prepDraft.ask();
 const [SAMPLE_LOW, SAMPLE_HIGH] = SERVER.sizes.sample;
 Object.assign($("sample"), { value: sample, min: SAMPLE_LOW, max: SAMPLE_HIGH });

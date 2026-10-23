@@ -35,7 +35,7 @@ function initCardMenu(root, host) {
   const fSteps = el("input", { placeholder: "단계 값을 순서대로, 쉼표로 (1~10개) 예: 방문, 장바구니, 결제" }), fWin = el("input", { type: "number", min: 0, step: "any", placeholder: "비움", style: "width:80px" });
   const fUnit = el("select", {}, ...[["minute", "분"], ["hour", "시간"], ["day", "일"]].map(([v, n]) => el("option", { value: v, textContent: n })));
   const gTable = el("select", { title: "GeoJSON을 연결한 영역 테이블(없으면 점만 찍어요). 위 테이블은 점 테이블이에요" }), gPath = el("input", { placeholder: "또는 GeoJSON 파일 경로(영역 테이블 대신)" });
-  const listed = input => (input.setAttribute("list", "g-cols"), input);  // list는 읽기 전용 속성이라 attribute로
+  const listed = input => (input.setAttribute("data-list", "g-cols"), input);  // common.js가 이 datalist의 값을 앱 안의 목록으로 보인다(list 속성은 별도 창이 뜬다)
   const gName = listed(el("input", { placeholder: "영역 이름 컬럼" })), gGeom = listed(el("input", { value: "geometry", placeholder: "도형 컬럼" })), gRegion = listed(el("input", { placeholder: "비우면 점으로 센 값" })), gCols = el("datalist", { id: "g-cols" });
   const gLat = el("select", { title: "점의 위도 컬럼" }), gLon = el("select", { title: "점의 경도 컬럼" }), gValue = el("select", { title: "영역마다 합계·평균 …을 구할 점의 값 컬럼(점 수만 세려면 비워 둡니다)" });
   const gAgg = el("select", { title: "영역마다 구하는 값(점의 값 컬럼이 있을 때)" }, ...[["sum", "합계"], ["mean", "평균"], ["min", "최소"], ["max", "최대"], ["count", "점 수"]].map(([v, n]) => el("option", { value: v, textContent: n })));

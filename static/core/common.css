@@ -316,3 +316,6 @@ tr.miss { display:none; }
 .fpanel-item code { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .fpanel-item .hint { grid-column:2; margin:0; }
 .fpanel-item.dim { opacity:.45; }
+/* title 힌트·되돌림 안내: 창만 공유해도 보이도록 별도 창(네이티브 툴팁) 대신 페이지 안에 그린다 */
+.tip, .toast { position:fixed; z-index:500; max-width:min(320px, calc(100vw - 16px)); padding:5px 9px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); font-size:12px; line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; box-shadow:0 6px 20px rgb(15 25 30 / .18); pointer-events:none; }
+.toast { left:50%; bottom:24px; transform:translateX(-50%); }

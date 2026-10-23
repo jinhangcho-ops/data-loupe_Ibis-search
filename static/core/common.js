@@ -630,16 +630,45 @@ function openMenu(sel) {
   menuFind.value = "";
   menuFind.classList.toggle("hidden", !find);
   menuList.style.maxHeight = "";
-  menuBox.classList.remove("hidden");
-  // 칸 아래에 펼치되, 아래가 좁고 위가 더 넓으면 위로 펼친다. 목록은 300px까지만 커지고 넘으면 스크롤된다.
-  const r = sel.getBoundingClientRect(), below = innerHeight - r.bottom - 8, above = r.top - 8, up = below < Math.min(menuBox.offsetHeight, 160) && above > below;
-  Object.assign(menuBox.style, { left: r.left + "px", minWidth: r.width + "px", top: up ? "" : r.bottom + 2 + "px", bottom: up ? innerHeight - r.top + 2 + "px" : "" });
-  menuList.style.maxHeight = Math.min(300, (up ? above : below) - (menuBox.offsetHeight - menuList.offsetHeight)) + "px";
+  placeMenu(sel);
   pointMenu(menuList.children[sel.selectedIndex], true);
   if (find) menuFind.focus();
 }
+// 칸 아래에 펼치되, 아래가 좁고 위가 더 넓으면 위로 펼친다. 목록은 300px까지만 커지고 넘으면 스크롤된다.
+function placeMenu(anchor) {
+  menuBox.classList.remove("hidden");
+  const r = anchor.getBoundingClientRect(), below = innerHeight - r.bottom - 8, above = r.top - 8, up = below < Math.min(menuBox.offsetHeight, 160) && above > below;
+  Object.assign(menuBox.style, { left: r.left + "px", minWidth: r.width + "px", top: up ? "" : r.bottom + 2 + "px", bottom: up ? innerHeight - r.top + 2 + "px" : "" });
+  menuList.style.maxHeight = Math.min(300, (up ? above : below) - (menuBox.offsetHeight - menuList.offsetHeight)) + "px";
+}
+// 입력 칸의 data-list="아이디"가 가리키는 <datalist>의 값을 같은 목록으로 보인다(<input list>의 목록은 별도 창이라 창만 공유하면 안 보인다).
+// 친 글자가 들어 있는 값만 남고, 고르면 칸에 들어간다. datalist 요소는 값을 담는 데만 쓴다.
+let comboQuiet = false;  // 고른 뒤 칸에 커서를 돌려줄 때 목록이 다시 뜨지 않게
+function showCombo(inp) {
+  const want = inp.value.trim().toLowerCase(), hits = [...document.getElementById(inp.dataset.list)?.children ?? []].map(o => o.value).filter(v => v.toLowerCase().includes(want) && v !== inp.value);
+  if (inp.disabled || !hits.length) return menuFor === inp ? closeMenu() : undefined;
+  menuFor = inp;
+  menuList.replaceChildren(...hits.map(v => Object.assign(document.createElement("div"), { textContent: v })));
+  menuFind.classList.add("hidden");
+  placeMenu(inp);
+  pointMenu(null);
+}
+const comboOn = e => !comboQuiet && !e.isComposing && e.target.matches?.("input[data-list]") && showCombo(e.target);
+document.addEventListener("focusin", comboOn);
+document.addEventListener("click", comboOn);
+document.addEventListener("input", comboOn);
 function pickMenu(item) {
   const sel = menuFor, i = [...menuList.children].indexOf(item);
+  if (sel.tagName === "INPUT") {
+    if (i < 0) return;
+    sel.value = item.textContent;
+    closeMenu();
+    comboQuiet = true;
+    sel.focus();
+    sel.dispatchEvent(new Event("input", { bubbles: true }));
+    comboQuiet = false;
+    return;
+  }
   closeMenu();
   sel.focus();
   if (i < 0 || i === sel.selectedIndex) return;
@@ -666,6 +695,13 @@ document.addEventListener("keydown", e => {
   if (e.isComposing) return;  // 한글을 조합하는 동안의 키는 입력기가 쓴다.
   const items = menuItems(), step = { ArrowDown: 1, ArrowUp: -1 }[e.key];
   if (e.key === "Tab") return closeMenu();
+  if (menuFor.tagName === "INPUT") {  // 입력 칸의 목록: 글자(Space 포함)는 칸이 받고, ↑↓로 가리킨 항목이 있을 때만 Enter로 고른다
+    if (e.key === "Escape") closeMenu();
+    else if (e.key === "Enter" && menuAt) { pickMenu(menuAt); e.stopPropagation(); }  // 칸의 Enter 동작(추가 등)은 하지 않는다
+    else if (step) pointMenu(items[Math.min(Math.max(items.indexOf(menuAt) + step, 0), items.length - 1)], true);
+    else return;
+    return e.preventDefault();
+  }
   if (e.key === "Escape") { const sel = menuFor; closeMenu(); sel.focus(); }
   else if (e.key === "Enter" || (e.key === " " && e.target !== menuFind)) pickMenu(menuAt);
   else if (step) pointMenu(items[Math.min(Math.max(items.indexOf(menuAt) + step, 0), items.length - 1)], true);
@@ -676,3 +712,55 @@ document.addEventListener("keydown", e => {
 document.addEventListener("scroll", e => { if (!menuBox.contains(e.target)) closeMenu(); }, true);
 addEventListener("resize", closeMenu);
 addEventListener("blur", closeMenu);
+
+// title 힌트를 페이지 안 말풍선으로 그린다(창 엔진의 툴팁은 별도 창이라 창만 공유하면 보이지 않는다). 마우스를 올리거나 키보드 포커스가 가면 보인다.
+// 보이는 동안 title은 data-tip으로 옮겨 네이티브 툴팁이 같이 뜨지 않게 하고, 벗어나면 되돌린다. 이벤트 위임이라 나중에 만든 요소도 된다.
+// 글자 없는 단추처럼 title이 이름 노릇을 하던 요소는 옮기는 동안 aria-label을 달아 이름이 사라지지 않게 한다.
+const tipBox = document.body.appendChild(Object.assign(document.createElement("div"), { className: "tip hidden", role: "tooltip" }));
+let tipFor = null, tipTimer = 0;
+function hideTip() {
+  clearTimeout(tipTimer);
+  tipBox.classList.add("hidden");
+  const host = tipFor;
+  tipFor = null;
+  if (!host) return;
+  if (host.dataset.tipAria !== undefined) { host.removeAttribute("aria-label"); delete host.dataset.tipAria; }
+  if (!host.hasAttribute("title")) host.setAttribute("title", host.dataset.tip);  // 그 사이 코드가 새 title을 달았으면 그것을 둔다. setAttribute: SVG 요소에는 .title 속성이 없다
+  delete host.dataset.tip;
+}
+function showTip(host, wait) {
+  if (host === tipFor) return;
+  hideTip();
+  if (!host.getAttribute("title")) return;
+  tipFor = host;
+  host.dataset.tip = host.getAttribute("title");
+  host.removeAttribute("title");
+  if (!host.hasAttribute("aria-label") && !host.textContent.trim() && !host.labels?.length) { host.setAttribute("aria-label", host.dataset.tip); host.dataset.tipAria = ""; }
+  tipTimer = setTimeout(() => {
+    if (tipFor !== host || !host.isConnected) return;
+    tipBox.textContent = host.dataset.tip;
+    tipBox.classList.remove("hidden");
+    const r = host.getBoundingClientRect(), w = tipBox.offsetWidth, h = tipBox.offsetHeight;
+    const top = r.bottom + 6 + h <= innerHeight - 4 ? r.bottom + 6 : Math.max(4, r.top - 6 - h);  // 아래에 자리가 없으면 위에
+    Object.assign(tipBox.style, { left: Math.min(Math.max(4, r.left), Math.max(4, innerWidth - w - 4)) + "px", top: top + "px" });
+  }, wait);
+}
+const tipHost = e => e.target.closest?.("[title]") ?? null;
+document.addEventListener("mouseover", e => { const h = tipHost(e); if (h) showTip(h, 350); });
+document.addEventListener("focusin", e => { const h = tipHost(e); if (h) showTip(h, 0); });
+document.addEventListener("mouseout", e => { if (tipFor && !tipFor.contains(e.relatedTarget)) hideTip(); });
+document.addEventListener("focusout", hideTip);
+document.addEventListener("mousedown", hideTip);
+document.addEventListener("keydown", hideTip, true);
+document.addEventListener("scroll", hideTip, true);
+addEventListener("blur", hideTip);
+
+// 잠깐 보이는 안내("되돌렸어요" 등). 화면 아래 가운데에 1.5초.
+const toastBox = document.body.appendChild(Object.assign(document.createElement("div"), { className: "toast hidden", role: "status" }));
+let toastTimer = 0;
+function flash(text) {
+  toastBox.textContent = text;
+  toastBox.classList.remove("hidden");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastBox.classList.add("hidden"), 1500);
+}

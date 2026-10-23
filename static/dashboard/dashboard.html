@@ -136,21 +136,27 @@ async function save() {  // 저장했으면(저장할 대시보드가 없어도)
 }
 // 임시 저장(초안): 저장하지 않은 편집(카드·배치·팔레트·북극성)이 2초 넘게 남으면 서버에 쓴다(draft.js). 카드 값(data)은 담지 않는다. [저장]이 되면 지운다.
 // 이어서 하면 그 대시보드를 열고 초안으로 바꾼 뒤 일반 자동 저장이 이어서 쓴다.
-const dashDraft = Draft("dashboard",
-  () => dashId && snapshot() !== lastSaved ? { id: dashId, palette: board.palette, north_star: board.star, cards: board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; }) } : null,
-  async d => {
-    if (!dashboards.some(x => x.id === d.id)) throw new Error("그 대시보드가 지금은 없어요.");
-    if (dashId !== d.id) { $("d-pick").value = d.id; await openDash(d.id); }
-    const values = new Map(board.cards.map(c => [c.id, c.data]));
-    quiet = true;
-    try {
-      board.star = { card: "", counters: [], limits: {}, ...d.north_star };
-      board.palette = d.palette;
-      $("d-palette").value = d.palette.join(", ");
-      board.set(d.cards.map(c => needsValues({ ...c, data: values.get(c.id) ?? {} })));
-    } finally { quiet = false; }
-    boardChanged();
-  });
+// 되돌리기(Ctrl+Z, draft.js의 Undo)도 같은 상태 읽기·복원을 쓴다. 복원 뒤 boardChanged가 일반 자동 저장을 탄다.
+const dashState = () => dashId ? { id: dashId, palette: board.palette, north_star: board.star, cards: board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; }) } : null;
+async function restoreDash(d) {
+  if (!dashboards.some(x => x.id === d.id)) throw new Error("그 대시보드가 지금은 없어요.");
+  if (dashId !== d.id) { $("d-pick").value = d.id; await openDash(d.id); }
+  const was = new Map(board.cards.map(c => [c.id, c]));
+  quiet = true;
+  try {
+    board.star = { card: "", counters: [], limits: {}, ...d.north_star };
+    board.palette = d.palette;
+    $("d-palette").value = d.palette.join(", ");
+    board.set(d.cards.map(c => {  // 종류·원천이 그대로인 카드는 지금 값(실시간·기간 값이면 저장용 stored도)을 이어받고, 바뀐 카드는 값을 비워 다시 구하게 한다
+      const o = was.get(c.id), same = o && JSON.stringify([o.kind, o.source]) === JSON.stringify([c.kind, c.source]);
+      return needsValues({ ...c, data: same ? o.data : {}, ...(same && o.liveData ? { liveData: o.liveData, stored: o.stored } : {}) });
+    }));
+  } finally { quiet = false; }
+  boardChanged();
+}
+const dashDraft = Draft("dashboard", () => snapshot() !== lastSaved ? dashState() : null, restoreDash);
+const dashUndo = Undo(dashState, restoreDash);
+Shortcuts({ undo: dashUndo, save: () => { if (dashId) saveIfDirty().catch(e => say("err-dash", e.message)); } });
 function boardChanged() {
   const n = board.cards.length, picked = board.picked.size;
   ctl.showLast(board.cards);
@@ -199,6 +205,7 @@ async function openDash(id) {
     board.set(d.cards.map(needsValues));
     lastSaved = snapshot();
     valuesDirty = false;
+    dashUndo.reset();
   } finally { quiet = false; }
   $("d-modal-name").textContent = d.name;
   $("d-state").textContent = "";

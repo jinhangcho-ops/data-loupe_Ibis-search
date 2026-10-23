@@ -820,6 +820,7 @@ $("ssave").onclick = () => busy($("ssave"), async () => {
   const name = $("sname").value.trim() || $("saved").value;  // 이름을 비우면 지금 고른 검색에 덮어쓴다.
   try {
     showSearches(await api("/api/searches", { name, search: { schema: S.schema, base: S.base, union: S.union, ...Object.fromEntries(LISTS.map(k => [k, S[k]])), limit: $("limit").value } }), name);
+    flash("검색을 저장했어요");
     $("sname").value = $("err-search").textContent = "";
   } catch (e) { $("err-search").textContent = e.message; }
 });
@@ -1255,15 +1256,29 @@ const draftChanged = () => {
   if (draftBase.base !== S.base) draftBase = { base: S.base, key: bodyKey() };
   return view !== "cards" || bodyKey() !== draftBase.key;  // 흐름·문장 보기의 편집은 body에 나타나지 않아 보기를 바꿨으면 초안으로 본다
 };
-const searchDraft = Draft("search",
-  () => S.base && draftChanged() ? { view, body: bodyNow(), ...(view === "flow" && flowView ? { graph: flowView.get() } : {}), ...(sentView?.items().length ? { sentence: sentView.draft() } : {}) } : null,
-  async d => {
-    await loadBody(d.body);
-    if (d.sentence) { await need(...SENTENCE_JS); sentenceView().setDraft(d.sentence); }
-    if (d.view !== "cards" && !await setView(d.view)) throw new Error($("err-search").textContent || "그 보기로 바꾸지 못했어요.");
-    if (d.graph && view === "flow") await flowView.set(d.graph, { layout: false });
-    draftBase = { base: S.base, key: bodyKey() };
-  });
+// 되돌리기(Ctrl+Z, draft.js의 Undo)도 같은 상태 읽기·복원을 쓴다(초안은 바뀐 것만, 되돌리기는 항상 전체).
+const searchState = () => S.base ? { view, body: bodyNow(), ...(view === "flow" && flowView ? { graph: flowView.get() } : {}), ...(sentView?.items().length ? { sentence: sentView.draft() } : {}) } : null;
+async function restoreSearch(d) {
+  await loadBody(d.body);
+  if (d.sentence) { await need(...SENTENCE_JS); sentenceView().setDraft(d.sentence); }
+  if (d.view !== "cards" && !await setView(d.view)) throw new Error($("err-search").textContent || "그 보기로 바꾸지 못했어요.");
+  if (d.graph && view === "flow") await flowView.set(d.graph, { layout: false });
+  draftBase = { base: S.base, key: bodyKey() };
+}
+const searchDraft = Draft("search", () => S.base && draftChanged() ? searchState() : null, restoreSearch);
+const searchUndo = Undo(searchState, restoreSearch);
+const inExplore = () => !$("work").classList.contains("hidden");
+// 단축키: 되돌리기는 탐색 탭만(SQL·지표 탭의 글자 칸은 창 엔진 기본). 저장·실행은 보이는 탭의 단추, Ctrl+F는 결과 찾기 칸.
+Shortcuts({
+  undo: { undo: () => inExplore() ? searchUndo.undo() : Promise.resolve(false), redo: () => inExplore() ? searchUndo.redo() : Promise.resolve(false) },
+  save: () => {
+    if (!inExplore()) return pressBtn($("sql-save"));
+    if (!$("sname").value.trim() && !$("saved").value) { if ($("saved-pop").classList.contains("hidden")) $("saved-open").click(); return $("sname").focus(); }  // 이름이 없으면 저장 상자를 열어 이름부터
+    $("ssave").click();
+  },
+  run: () => pressBtn($("search")) || pressBtn($("sql-run")),
+  find: () => $("row-find"),
+});
 const afterTables = () => searchDraft.ask();
 // 보기 글자만 바꾼다(변환 없이)
 function paintView(name) {
