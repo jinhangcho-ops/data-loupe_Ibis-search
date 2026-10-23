@@ -244,6 +244,8 @@ function chartConfig(card, colors, options = {}) {
 
 // 최신화가 읽은 날짜 범위(data.window: 직전 기간 시작 ~ 보는 기간 끝) 밖으로 보는 기간이 나갔는지. 나갔으면 그 기간으로 다시 읽어야 한다.
 const outsideWindow = (card, range) => !!(range && card.data?.window && ((range.start && card.data.window.start && range.start < card.data.window.start) || (range.end && card.data.window.end && range.end > card.data.window.end)));
+// 새 카드의 빈 색 설정(지정 색과 라벨이 처음 나온 순서)
+const freshColors = () => ({ series: {}, parts: {}, order: [], parts_order: [] });
 // 값이 아직 없는 카드(예전 파일에서 옮긴 것)는 안내만 보인다. SVG 카드는 일 값·값·컬럼 이름 중 하나라도 있으면 그린다.
 const noValues = c => SVG_KINDS.includes(c.kind) ? !(c.data?.by_unit || c.data?.values || c.data?.columns) : !cardSeries(c);
 const needsValues = c => (c.note = noValues(c) ? "아직 구한 값이 없어요. 연결한 뒤 [다시 구하기]를 누르세요." : undefined, c);

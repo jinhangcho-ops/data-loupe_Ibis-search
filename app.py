@@ -28,7 +28,10 @@ from server import app, get_con, run, to_json
 
 # 그래프 그림 저장(/api/images): 연결을 쓰지 않으므로 차례를 기다리지 않는다.
 server.FREE.add("/api/images")
-server.CONSTANTS["calc"] = {"guide": calc.GUIDE, "examples": calc.EXAMPLES, "hows": calc.HOWS, "max_pivot": calc.MAX_PIVOT}  # 계산 줄 형식·예시, 피벗 집계
+server.CONSTANTS["calc"] = {"guide": calc.GUIDE, "examples": calc.EXAMPLES, "hows": calc.HOWS, "max_pivot": calc.MAX_PIVOT, "subtotals": calc.SUBTOTALS,
+                            "windows": list(calc.NEW_WINDOWS), "formulas": list(calc.FORMULAS)}  # 계산 줄 형식·예시, 피벗 집계(함수 사전의 집계 전부)·소계 방식, 함수 사전의 창 함수·식 줄
+server.CONSTANTS["chart"] = {"aggs": result.chart_aggs(), "names": metrics.AGG_NAMES}  # 탐색 차트·분석 계열의 집계(함수 사전의 집계 전부)와 보이는 이름
+server.CONSTANTS["metrics"] = {"aggs": list(metrics.AGGS)}  # 지표 파일의 분자·분모에 쓸 수 있는 집계
 IMAGE_TYPES = {"data:image/png;base64,": ".png", "data:image/jpeg;base64,": ".jpg"}  # 화면이 보내는 그림(data URL 머리) → 확장자
 MAX_IMAGE_BYTES = 30 * 1024 * 1024  # 그림 하나의 크기
 RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}  # Windows가 파일 이름으로 쓰지 못하는 이름

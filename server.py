@@ -19,6 +19,7 @@ import scratch
 import settings
 import source
 import sql_exec
+import sql_funcs
 import use_counts
 
 app = Flask(__name__, static_folder="static")
@@ -34,7 +35,8 @@ ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 �
 ask_folder = None  # 저장할 폴더를 묻는 함수(→ 고른 폴더 또는 None). ask_save처럼 desktop.py가 채운다.
 QUERY_TIMEOUT = 1800  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
-CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS}
+CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS,
+             "funcs": sql_funcs.catalog()}  # 함수 사전: 모든 화면이 같은 목록에서 함수를 고른다(sql_funcs)
 
 
 def number_range(kind, low, high):

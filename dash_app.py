@@ -10,6 +10,7 @@ import compare
 import dash_calc
 import dash_refresh
 import dash_store
+import metrics
 import period
 import server
 import settings
@@ -21,17 +22,24 @@ server.CONSTANTS["dash"] = {"max_cards": dash_store.MAX_CARDS, "max_dashboards":
                             "types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS,
                             "palette": dash_store.DEFAULT_PALETTE, "locked": dash_store.LOCKED, "min_refresh": dash_refresh.MIN_REFRESH}  # 화면(dash.js)이 서버와 같은 상한·종류·기본 색을 쓴다
 server.CONSTANTS["dash"]["max_points"] = dash_calc.MAX_POINTS  # 산점도·버블의 점 수 상한
+server.CONSTANTS["dash"].update(aggs=list(dash_calc.AGGS), merge=list(dash_calc.MERGE), agg_names=metrics.AGG_NAMES)  # 카드 계열의 집계(함수 사전의 집계 전부), 일 값을 다시 묶을 수 있는 집계, 보이는 이름
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml"}  # 배치도 바탕 그림으로 내려줄 수 있는 것
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min", "/api/dash/refresh/start",
-                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image"})
+                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard"})
 
 
 def with_source(card):
     """카드의 source에 지금 연결의 key·label을 넣은 사본(연결이 없으면 그대로)."""
     now = current_source()
     return {**card, "source": {**(card.get("source") or {}), **(now or {})}} if now else card
+
+
+@app.get("/dashboard")
+def dashboard_page():
+    """대시보드 화면(dashboard.html). 저장한 대시보드를 보고 고치는 한 곳이다. 연결 없이도 저장된 값으로 보인다."""
+    return server.page("dashboard.html")
 
 
 @app.get("/api/dash")

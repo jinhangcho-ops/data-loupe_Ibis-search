@@ -1,19 +1,22 @@
-// 쿼리 화면 대시보드 탭의 [카드 추가] 메뉴: KPI·도넛 KPI·게이지·요약 문장·최근 행·두 계열 추이·칸 채우기·블록·목표 추이·표·문장·상태·경고 목록·배치도·편차 표 카드를 지금 탐색의 테이블·조건으로 만든다.
+// 대시보드 화면의 [카드 추가] 메뉴: KPI·도넛 KPI·게이지·요약 문장·최근 행·두 계열 추이·칸 채우기·블록·목표 추이·표·문장·상태·경고 목록·배치도·편차 표 카드를 지금 탐색의 테이블·조건으로 만든다.
+// 테이블은 메뉴에서 고른다(연결돼 있어야 한다). 탐색의 지금 검색이 필요한 차트·지표 카드는 쿼리 화면의 [대시보드에 추가]로 만든다.
 // 종류마다 값(컬럼·집계)·날짜 컬럼(기간 기준, 하나뿐이면 자동)·목표(직접 숫자 또는 목표 파일의 이름)·모양, 표·문장은 조건 색 규칙, 상태·경고·배치도는 엔티티 컬럼과 상태 규칙·연결선을 정한다. 전체 끌어 놓기 편집은 5단계 몫이다.
-// index.html의 S·state()·metrics·addCard·nextLayout·freshColors·board와 dash_cards.js의 SVG_KINDS, dash_rules.js가 있어야 한다.
+// host = { add(card): 카드를 값과 함께 대시보드에 넣는다(실패하면 오류), layout(): 새 카드의 자리, metricNames(): 지표 이름들 }. dash_rules.js, dash.js(freshColors)가 먼저 불려 있어야 한다.
 const CARD_KINDS = { kpi: ["KPI(아이콘·큰 값·비교·스파크라인)", 1, 1], donut_kpi: ["도넛 KPI(가운데+꼭지점 칸)", 1, 5], gauge: ["게이지(항목 몫)", 1, 1], summary: ["요약 문장(목표 대비)", 1, 1],
                      recent_rows: ["최근 행(연결할 때만 보임)", 0, 0], dual_trend: ["두 계열 추이", 2, 2], stripes: ["칸 채우기", 1, 1], blocks: ["블록", 1, 1], target_trend: ["목표 추이", 1, 1],
                      table: ["표(집계 또는 원래 행)", 0, 5], sentence: ["문장(빈칸에 값·비교·기준일)", 0, 0], status: ["상태(정상·주의·이상)", 0, 0], alerts: ["경고 목록(N분째·영향)", 0, 0],
                      map: ["배치도(끌어 옮김)", 0, 0], deviation: ["편차 표(엔티티×시간대)", 1, 1] };
 const WATCH = ["status", "alerts", "map"];  // 엔티티별 최근 행을 상태 규칙으로 보는 카드
 const CARD_AGGS = { count: "개수", sum: "합계", mean: "평균", min: "최소", max: "최대", nunique: "고유 개수" };
-const colsOfType = names => [...S.cols].filter(c => names.includes(c[1])).map(c => c[0]);
+let menuCols = [], menuBase = "";  // 메뉴에서 고른 테이블과 그 컬럼 [[이름, 한글 타입]]
+const colsOfType = names => menuCols.filter(c => names.includes(c[1])).map(c => c[0]);
 const dateCols = () => colsOfType(["날짜", "날짜시간"]);
 // 서버(dash_calc.series_name)와 같은 계열 이름: 개수 / 합계 (컬럼)
 const seriesTitle = s => CARD_AGGS[s.agg] + (s.agg === "count" ? "" : ` (${s.y})`);
 
 // 메뉴 칸들을 root에 만든다. 값 줄은 종류의 최소~최대 개수까지 더하고 뺄 수 있다.
-function initCardMenu(root) {
+function initCardMenu(root, host) {
+  const table = el("select", { title: "카드가 읽을 테이블(연결돼 있어야 합니다)" });
   const kind = el("select", {}, ...Object.entries(CARD_KINDS).map(([k, v]) => el("option", { value: k, textContent: v[0] })));
   const title = el("input", { placeholder: "카드 이름 (비우면 자동)" }), rows = el("div", { className: "cm-rows" }), err = el("div", { className: "err" });
   const group = el("select", { title: "게이지는 이 컬럼의 값마다 한 조각, 요약은 변화에 가장 크게 기여한 값을 찾는 데 씁니다" }), date = el("select", { title: "기간 기준 날짜 컬럼: 대시보드의 기간·기준일을 이 컬럼으로 건다. 날짜 컬럼이 하나뿐이면 자동으로 고른다" });
@@ -45,7 +48,7 @@ function initCardMenu(root) {
   const options = (select, names, blank) => select.replaceChildren(...(blank ? [el("option", { value: "", textContent: blank })] : []), ...names.map(n => el("option", { value: n, textContent: n })));
   const makeRow = () => {
     const col = el("select", {}), agg = el("select", {}, ...Object.entries(CARD_AGGS).map(([k, v]) => el("option", { value: k, textContent: v })));
-    options(col, S.cols.map(c => c[0]), "(컬럼 없음: 개수)");
+    options(col, menuCols.map(c => c[0]), "(컬럼 없음: 개수)");
     const row = el("div", { className: "cm-row" }, el("input", { placeholder: "이름(칸 제목)", className: "cm-label" }), col, agg, el("button", { className: "ghost", textContent: "×", onclick: () => { row.remove(); show(); } }));
     row.col = col; row.agg = agg;
     rows.append(row);
@@ -62,14 +65,19 @@ function initCardMenu(root) {
   const add = el("button", { className: "btn", textContent: "+ 값 더하기", onclick: () => { makeRow(); show(); } });
   // 지금 탐색의 컬럼·지표·목표 파일로 선택지를 새로 채운다(메뉴를 열 때마다)
   async function refill() {
-    const all = S.cols.map(c => c[0]), dates = dateCols();
+    try {  // 연결의 테이블 목록(연결이 없으면 이유를 보인다)
+      const names = (await api("/api/tables?schema=")).tables, now = table.value;
+      options(table, names, "(테이블을 고르세요)");
+      table.value = names.includes(now) ? now : "";
+    } catch (e) { err.textContent = e.message; }
+    const all = menuCols.map(c => c[0]), dates = dateCols();
     options(group, all, "(없음)");
     options(date, dates, "(없음: 기간을 걸지 않음)");
     if (dates.length === 1) date.value = dates[0];  // 하나뿐이면 자동
     options(entity, all, "(고르세요)");
     [timeCol, kindCol, linkCol].forEach(s => options(s, all, "(없음)"));
     if (dates.length === 1) timeCol.value = dates[0];
-    options(metric, (typeof metrics === "object" && metrics?.metrics ? metrics.metrics.map(m => m.name) : []), "(쓰지 않음)");
+    options(metric, host.metricNames(), "(쓰지 않음)");
     [...rows.children].forEach(r => { const now = r.col.value; options(r.col, all, "(컬럼 없음: 개수)"); r.col.value = all.includes(now) ? now : ""; });
     try {
       const t = await api("/api/targets");
@@ -86,12 +94,12 @@ function initCardMenu(root) {
     return found.map(f => f[key]);
   };
   const build = () => {
-    if (!S.base) throw new Error("탐색에서 기준 테이블을 고르세요.");
+    if (!menuBase) throw new Error("테이블을 고르세요.");
     const k = kind.value, values = [...rows.children].map(r => ({ label: r.querySelector(".cm-label").value.trim(), y: r.col.value || null, agg: r.col.value ? r.agg.value : r.agg.value === "nunique" ? "count" : r.agg.value }));
     const series = values.map(l => ({ y: l.y, agg: l.y ? l.agg : "count" })), byMetric = k === "kpi" && metric.value;
     if (!byMetric && CARD_KINDS[k][1] && !series.length) throw new Error("값을 하나 이상 넣으세요.");
     if (k === "gauge" && !group.value) throw new Error("게이지는 나눌 컬럼을 고르세요.");
-    const body = { ...state(), series: byMetric ? [] : series, ...(k === "gauge" ? { x: group.value } : {}), ...(byMetric ? { names: [metric.value] } : {}) };
+    const body = { schema: "", base: menuBase, joins: [], periods: [], conditions: [], calcs: [], sorts: [], columns: [], series: byMetric ? [] : series, ...(k === "gauge" ? { x: group.value } : {}), ...(byMetric ? { names: [metric.value] } : {}) };
     const view = { type: "", ratio: 4 / 3, format: format.value, icon: "chart", compare: { mode: "span" }, better: "up" };
     if (targetValue.value !== "") view.target = { value: +targetValue.value };
     else if (targetName.value) view.target = { name: targetName.value };
@@ -127,17 +135,24 @@ function initCardMenu(root) {
       if (baseline.value !== "") view.baseline = +baseline.value;
       if (threshold.value !== "") view.threshold = +threshold.value;
     }
-    return { kind: k, title: title.value.trim() || `${CARD_KINDS[k][0].split("(")[0]} · ${S.base}`, layout: nextLayout(), colors: freshColors(), view, data: {},
-             source: { schema: S.schema || "", table: S.base, body, ...(date.value && withDate.includes(k) ? { date: date.value } : {}) } };
+    return { kind: k, title: title.value.trim() || `${CARD_KINDS[k][0].split("(")[0]} · ${menuBase}`, layout: host.layout(), colors: freshColors(), view, data: {},
+             source: { schema: "", table: menuBase, body, ...(date.value && withDate.includes(k) ? { date: date.value } : {}) } };
   };
   const go = el("button", { className: "btn p", textContent: "카드 추가", onclick: () => busy(go, async () => {
-    try { await addCard(build(), "chart", { schema: S.schema, base: S.base }); err.textContent = ""; say("err-dash", `카드를 넣었습니다(${board.cards.length}개).`, true); }
+    try { await host.add(build()); err.textContent = ""; }
     catch (e) { err.textContent = e.message; }
   }) });
   const save = el("button", { className: "btn", textContent: "저장", onclick: async () => {
     try { const t = await api("/api/targets", { path: path.value.trim() }); pathNote.textContent = t.error || `목표 ${t.rows.length}개를 읽었어요`; refill(); } catch (e) { pathNote.textContent = e.message; }
   } });
   kind.onchange = show;
-  root.replaceChildren(el("div", { className: "row" }, kind), title, rows, add, ...fields, el("div", { className: "row" }, path, save), pathNote, err, go);
+  table.onchange = async () => {  // 테이블을 고르면 그 컬럼을 받아 선택지를 다시 채운다
+    menuBase = table.value;
+    menuCols = [];
+    if (menuBase) { try { menuCols = (await api("/api/columns", { schema: "", base: menuBase })).columns; err.textContent = ""; } catch (e) { err.textContent = e.message; } }
+    [...rows.children].forEach(r => r.remove());
+    refill();
+  };
+  root.replaceChildren(el("div", { className: "row" }, table), el("div", { className: "row" }, kind), title, rows, add, ...fields, el("div", { className: "row" }, path, save), pathNote, err, go);
   return { refill };
 }

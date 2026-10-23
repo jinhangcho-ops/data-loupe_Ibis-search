@@ -70,7 +70,7 @@
 </head>
 <body class="app" data-virtual="1">
 <!--include status.html-->
-<nav class="subnav" id="views"><button data-view="explore" class="on">탐색</button><button data-view="sql">SQL</button><button data-view="metric">지표</button><button data-view="dash">대시보드<em id="dash-count"></em></button></nav>
+<nav class="subnav" id="views"><button data-view="explore" class="on">탐색</button><button data-view="sql">SQL</button><button data-view="metric">지표</button></nav>
 <div class="work" id="work">
   <main class="results">
     <div class="tool">
@@ -307,40 +307,6 @@
     </div>
   </aside>
 </div>
-<!-- 대시보드: 탐색의 차트·지표와 분석의 그림을 모은 카드(구한 값이 들어 있다). 카드마다 차트 종류·시간 단위·색을 고르고, 카드를 누르면 고르고(여럿), [다운로드]는 고른 카드를 각각 그림으로 저장한다. -->
-<div class="board-view hidden" id="dash">
-  <div class="tool">
-    <div class="drop"><button id="dash-saved-open" class="btn">저장한 대시보드<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button>
-      <div class="pop hidden" id="dash-pop">
-        <div class="row"><select id="dash-saved" title="저장한 대시보드"></select><button id="dash-load">열기</button><button id="dash-del" class="btn">삭제</button></div>
-        <div class="row"><input id="dash-name" placeholder="이름 (같은 이름은 덮어씀)"><button id="dash-save">저장</button></div>
-        <div class="hint" style="margin:0">구한 값이 카드에 들어 있어, 이 PC·이 계정에서만 풀 수 있게 암호화해 저장합니다. 연결의 계정 이름과 비밀번호는 저장하지 않습니다. 열면 저장된 값으로 바로 그립니다.</div>
-      </div></div>
-    <div class="drop"><button id="dash-color-open" class="btn" title="대시보드의 색 묶음(카드에서 정한 색이 먼저입니다)">팔레트</button>
-      <div class="pop hidden" id="dash-color-pop">
-        <div class="row"><input id="dash-palette" placeholder="#11706f, #e8590c, …" title="HEX 색을 쉼표로 나눠 적습니다"><button id="dash-palette-apply">적용</button></div>
-        <div class="row"><button id="dash-palette-default" class="btn">기본 색 넣기</button><button id="dash-palette-clear" class="btn">비우기</button></div>
-        <div class="err" id="err-palette"></div>
-        <div class="hint" style="margin:0">비워 두면 화면 모드의 기본 색을 씁니다. 정한 색은 라이트·다크에서 같습니다.</div>
-      </div></div>
-    <div class="drop"><button id="dash-newcard-open" class="btn" title="KPI·도넛 KPI·게이지·요약 문장·최근 행·두 계열 추이·칸 채우기·블록·목표 추이 카드를 만듭니다">카드 추가</button>
-      <div class="pop hidden cardmenu" id="dash-newcard-pop"></div></div>
-    <button id="dash-refresh" class="btn" title="모든 카드를 지금 연결에서 다시 구해 그립니다">다시 구하기</button>
-    <span style="margin-left:auto"></span>
-    <button id="dash-all" class="btn">모두 선택</button><button id="dash-none" class="btn">선택 해제</button>
-  </div>
-  <div class="big"><b id="dash-title">대시보드</b><span id="dash-sub"></span></div>
-  <div id="dash-ctl"></div>
-  <div class="ctl board-ctl">
-    <span class="hint grow" id="dash-picked"></span>
-    <select id="dash-ratio" title="그림 비율"><option value="screen">화면대로</option><option value="square">1:1</option><option value="4:3">4:3</option><option value="wide">16:9</option></select>
-    <select id="dash-mode" title="그림의 모드 (차트·집계 표 저장과 같이 바뀝니다)"><option value="light">라이트</option><option value="dark">다크</option></select>
-    <select id="dash-format" title="그림 형식"><option value="png">PNG</option><option value="jpeg">JPG</option></select>
-    <button id="dash-down" class="btn p" title="고른 그래프를 각각 그림 파일로 저장합니다. 프로그램 창에서는 저장할 폴더를 한 번 묻습니다">다운로드</button>
-  </div>
-  <div class="err" id="err-dash"></div>
-  <div class="board" id="dash-grid"></div>
-</div>
 
 <!--include connect.html-->
 <!--include dash_refresh.html-->
@@ -349,11 +315,9 @@
 <script src="/static/dash_refresh.js"></script>
 <script src="/static/board.js"></script>
 <script src="/static/dash.js"></script>
-<script src="/static/dash_cards.js"></script>
-<script src="/static/dash_ctl.js"></script>
-<script src="/static/dash_rules.js"></script>
-<script src="/static/dash_menu.js"></script>
+<script src="/static/dash_add.js"></script>
 <script>
+if (location.hash === "#dashboard") location.replace("/dashboard");  // 대시보드 탭은 대시보드 화면(/dashboard)으로 옮겼다(예전 주소도 그리로 보낸다)
 const LISTS = ["joins", "periods", "conditions", "calcs", "sorts", "columns"];  // 한 줄씩 모으는 입력. 서버로 보내는 이름과 같다.
 Object.assign(S, Object.fromEntries(LISTS.map(k => [k, []])), { union: { tables: [], how: "left" }, origins: {} });
 let last = null;  // 마지막 검색 결과(rows)와 집계(summary). 글자 수를 바꾸면 다시 조회하지 않고 표만 다시 그린다.
@@ -816,7 +780,7 @@ api("/api/searches").then(d => showSearches(d)).catch(() => {});
 toggleDrop($("saved-open"), $("saved-pop"));
 toggleDrop($("save-open"), $("save-pop"));
 document.addEventListener("click", e => {  // 밖을 누르면 떠 있는 상자를 닫는다(목록 고르기는 제외)
-  if (!e.target.closest(".pop, .menu")) ["saved-pop", "save-pop", "dash-pop", "dash-color-pop", "dash-newcard-pop", "sql-save-pop"].forEach(id => $(id).classList.add("hidden"));
+  if (!e.target.closest(".pop, .menu")) ["saved-pop", "save-pop", "sql-save-pop"].forEach(id => $(id).classList.add("hidden"));
 });
 $("ssave").onclick = () => busy($("ssave"), async () => {
   if (!S.base) { $("err-search").textContent = "기준 테이블을 고르세요."; return; }
@@ -1106,158 +1070,27 @@ function fillSenders() {
 document.addEventListener("destinations", fillSenders);
 fillSenders();  // 목록이 이 스크립트보다 먼저 와 있었을 수도 있다.
 
-// 화면 안의 탭: 탐색, SQL, 대시보드. 고른 탭은 주소의 #sql·#dashboard로 남겨 새로 열어도 그 탭이다.
-const VIEWS = { explore: "work", sql: "sqlv", metric: "metv", dash: "dash" }, VIEW_HASH = { sql: "#sql", metric: "#metrics", dash: "#dashboard" };
+// 화면 안의 탭: 탐색, SQL, 지표. 고른 탭은 주소의 #sql·#metrics로 남겨 새로 열어도 그 탭이다.
+const VIEWS = { explore: "work", sql: "sqlv", metric: "metv" }, VIEW_HASH = { sql: "#sql", metric: "#metrics" };
 function showView(name) {
   document.querySelectorAll("#views button").forEach(b => b.classList.toggle("on", b.dataset.view === name));
   Object.entries(VIEWS).forEach(([v, id]) => $(id).classList.toggle("hidden", v !== name));
   history.replaceState(null, "", VIEW_HASH[name] ?? location.pathname + location.search);
-  if (name === "dash") board.draw();  // 감춰져 있는 동안은 크기를 몰라 그리지 않았다.
   if (name === "sql") showSqlSide();
   if (name === "metric") { showMetricSide(); drawMetric(); }
 }
 document.querySelectorAll("#views button").forEach(b => b.onclick = () => showView(b.dataset.view));
 
-// 대시보드: 카드마다 구한 값(data)과 다시 구할 기록(source)을 가진다(모양은 dash_store.py). 값으로 바로 그리고, [다시 구하기]는 연결에서 다시 구해 값을 바꾼다(실패하면 이전 값을 둔다).
-// 지금 대시보드는 이 창이 열려 있는 동안 sessionStorage에 남아 화면을 오가도 그대로다. 이름을 붙여 저장하면 서버가 암호화해 둔다(연결의 계정 이름·비밀번호는 저장하지 않는다).
-const DASH_KEY = "ibis_dashboard";
-let dashId = "", dashName = "", dashMeta = {};  // 열어 둔 저장본의 id·이름, 그 밖의 항목(기간·기준일·최신화…)은 그대로 되돌려 저장한다.
-const freshColors = () => ({ series: {}, parts: {}, order: [], parts_order: [] });
-const board = new DashBoard($("dash-grid"), { empty: "탐색의 차트·지표 탭에서 [대시보드에 추가]를 누르거나 [카드 추가]로 KPI 같은 카드를 만들면 여기에 모입니다.", changed: dashChanged,
-  recompute: cards => recomputeRange(board, cards, !!connected) });
-// 기준일·기간·최신화·실시간 칸(dash_ctl.js): 바꾸면 지금 대시보드의 항목(dashMeta)에 적고, 저장할 때 함께 서버로 간다.
-const ctl = new DashCtl($("dash-ctl"), { board, changed: fields => { Object.assign(dashMeta, fields); dashChanged(); }, liveRun: () => liveCards(board, !!connected), visible: () => !$("dash").classList.contains("hidden") });
-function dashChanged() {
-  const n = board.cards.length, picked = board.picked.size;
-  ctl.showLast(board.cards);
-  $("dash-count").textContent = n || "";
-  $("dash-title").textContent = dashName || "대시보드";
-  $("dash-sub").textContent = n ? `카드 ${n}개 · 카드를 누르면 고릅니다` : "";
-  $("dash-picked").textContent = picked ? `고른 카드 ${picked}개` : "다운로드할 카드를 고르세요";
-  try { sessionStorage.setItem(DASH_KEY, JSON.stringify({ id: dashId, name: dashName, meta: dashMeta, palette: board.palette, cards: board.cards.map(DashBoard.plain) })); } catch (e) { /* 저장소를 못 쓰거나 가득 차면 이 화면에서만 */ }
-}
-// 새 카드의 자리: 맨 아래 왼쪽
-const nextLayout = () => ({ x: 0, y: Math.min(999, Math.max(0, ...board.cards.map(c => c.layout.y + c.layout.h))), w: 6, h: 6 });
-// 카드를 더한다: 서버가 source로 값을 구해(연결 필요) 카드에 넣는다. 연결의 key·label도 서버가 알려 준다.
-async function addCard(card, kind, table) {
-  if (board.cards.length >= SERVER.dash.max_cards) throw new Error(`대시보드에는 카드를 ${SERVER.dash.max_cards}개까지 넣을 수 있습니다.`);
-  card.id ??= [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, "0")).join("");  // 저장 전에도 카드를 알아보게
-  let d = await timed(kind, () => api("/api/dash/card/compute", { card, ctx: board.ctx() }), table);
-  card.source = { ...card.source, ...d.source };
-  if (!card.source.date && !d.data.by_unit && d.data.date_cols?.length === 1 && card.kind !== "recent_rows") {  // 날짜 컬럼이 하나뿐이면 기간 기준으로 자동으로 채운다
-    card.source.date = d.data.date_cols[0];
-    d = await api("/api/dash/card/compute", { card: { ...card, data: {} }, ctx: board.ctx() });
-  }
-  card.data = d.data;
-  board.set([...board.cards, card]);
-}
+// [대시보드에 추가]: 지금 그린 차트를 카드로(다시 구할 조회와 값) 고른 대시보드에 넣는다. 대시보드를 보고 고치는 곳은 대시보드 화면(/dashboard)이다.
 $("dash-add").onclick = () => busy($("dash-add"), async () => {
   if (!drawn) return say("err-chart", "먼저 차트를 그리세요.");
   const { query, used } = drawn, title = `${query.base} · ${used.map(seriesName).join(", ")} / ${drawn.x}`;
   try {
-    await addCard({ kind: "chart", title, layout: nextLayout(), colors: freshColors(), source: { schema: query.schema || "", table: query.base, body: query }, data: {},
+    const added = await addToDashboard({ kind: "chart", title, colors: { series: {}, parts: {}, order: [], parts_order: [] }, source: { schema: query.schema || "", table: query.base, body: query }, data: {},
       view: { type: "", ratio: +$("chart").parentElement.style.getPropertyValue("--ratio") || 16 / 9, ranges: axisRanges(), styles: used.map(({ type, dash, axis }) => ({ type, dash, axis })) } }, "chart", { schema: query.schema, base: query.base });
-    say("err-chart", `대시보드에 넣었습니다(${board.cards.length}개).`, true);
+    if (added) showAdded("err-chart", added);
   } catch (e) { say("err-chart", e.message); }
 });
-// 모든 카드를 지금 연결에서 다시 구한다. 실패한 카드는 이전 값을 두고 이유를 모아 보인다. 다른 연결에서 구한 카드는 서버가 거부한다.
-async function refreshDash() {
-  if (!connected) return say("err-dash", "먼저 데이터에 연결하세요.");
-  const failed = [];
-  for (const card of [...board.cards]) {
-    const { schema, table } = card.source;
-    try {
-      card.data = (await timed(card.kind === "metric" ? "metric" : "chart", () => api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: {} }, ctx: board.ctx() }), { schema, base: table })).data;
-    } catch (e) { failed.push(`${card.title}: ${e.message}`); }
-    needsValues(card);
-    board.draw();
-  }
-  await board.recompare();
-  say("err-dash", failed.length ? `다시 구하지 못한 카드가 ${failed.length}개 있어요(이전 값을 그대로 뒀어요). ` + failed.join(" / ") : "");
-}
-$("dash-refresh").onclick = () => busy($("dash-refresh"), refreshDash);
-// [카드 추가] 메뉴(dash_menu.js): 열 때마다 지금 탐색의 컬럼·지표·목표 파일로 선택지를 채운다
-const cardMenu = initCardMenu($("dash-newcard-pop"));
-$("dash-newcard-open").onclick = e => { e.stopPropagation(); $("dash-newcard-pop").classList.toggle("hidden"); cardMenu.refill(); };
-$("dash-newcard-pop").onclick = e => e.stopPropagation();
-$("dash-all").onclick = () => board.pickAll(true);
-$("dash-none").onclick = () => board.pickAll(false);
-$("dash-down").onclick = () => busy($("dash-down"), async () => {
-  try { await saveBoard(board, { ratio: $("dash-ratio").value, mode: $("dash-mode").value, type: $("dash-format").value, err: "err-dash" }); }
-  catch (e) { say("err-dash", e.message); }
-});
-$("dash-ratio").onchange = () => saveSetting({ board_ratio: $("dash-ratio").value });
-$("dash-format").onchange = () => saveSetting({ board_format: $("dash-format").value });
-// 팔레트: HEX를 쉼표로 나눠 적는다. 틀린 색이 있으면 칸 옆에 이유를 보이고 이전 팔레트를 그대로 둔다.
-toggleDrop($("dash-color-open"), $("dash-color-pop"));
-function applyPalette(found) {
-  const bad = found.filter(c => !HEX.test(c));
-  if (bad.length || found.length > SERVER.dash.max_palette) return say("err-palette", bad.length ? `HEX 색이 아니에요: ${bad.join(", ")} (예: #11706f). 이전 색을 그대로 뒀어요.` : `색은 ${SERVER.dash.max_palette}개까지예요. 이전 색을 그대로 뒀어요.`);
-  say("err-palette", "");
-  board.palette = found;
-  $("dash-palette").value = found.join(", ");
-  dashChanged();
-  board.draw();
-}
-$("dash-palette-apply").onclick = () => applyPalette($("dash-palette").value.split(/[\s,]+/).filter(Boolean));
-$("dash-palette-default").onclick = () => applyPalette(SERVER.dash.palette);
-$("dash-palette-clear").onclick = () => applyPalette([]);
-// 저장한 대시보드: 이름별로 저장·열기·삭제. 같은 이름으로 저장하면 그 대시보드를 덮어쓴다. 열면 저장된 값으로 바로 그린다.
-let dashboards = [];
-function showDashboards({ dashboards: found, locked }, pick) {
-  dashboards = found;
-  $("dash-saved").replaceChildren(...(found.length ? found : [{ id: "", name: "저장한 대시보드 없음" }]).map(d => el("option", { value: d.id, textContent: d.name })));
-  $("dash-saved").value = found.some(d => d.id === pick) ? pick : found[0]?.id ?? "";
-  if (locked) say("err-dash", SERVER.dash.locked);
-}
-function showDash(d) {
-  dashId = board.dashId = d.id;
-  dashName = $("dash-name").value = d.name;
-  dashMeta = Object.fromEntries(Object.entries(d).filter(([k]) => !["id", "name", "palette", "cards"].includes(k)));
-  $("dash-palette").value = d.palette.join(", ");
-  board.palette = d.palette;
-  board.set(d.cards.map(needsValues));
-  ctl.set(dashMeta);
-}
-toggleDrop($("dash-saved-open"), $("dash-pop"));
-$("dash-save").onclick = () => busy($("dash-save"), async () => {
-  const name = $("dash-name").value.trim();
-  if (!board.cards.length) return say("err-dash", "저장할 카드가 없습니다.");
-  try {
-    const saved = await api("/api/dash", { ...dashMeta, id: dashboards.find(d => d.name === name)?.id ?? "", name, palette: board.palette, cards: board.cards.map(DashBoard.plain) });
-    showDashboards(saved, saved.dashboard.id);
-    showDash(saved.dashboard);  // 서버가 정한 id·시각을 받아 온다
-    say("err-dash", `저장했습니다: ${name}`, true);
-  } catch (e) { say("err-dash", e.message); }
-});
-$("dash-load").onclick = () => busy($("dash-load"), async () => {
-  const id = $("dash-saved").value;
-  if (!id) return;
-  $("dash-pop").classList.add("hidden");
-  try { showDash((await api("/api/dash/" + id)).dashboard); say("err-dash", ""); } catch (e) { say("err-dash", e.message); }
-});
-$("dash-del").onclick = () => busy($("dash-del"), async () => {
-  const id = $("dash-saved").value;
-  if (!id) return;
-  try {
-    showDashboards(await api("/api/dash/delete", { id }));
-    if (id === dashId) dashId = "";  // 열어 둔 카드는 그대로 두고 저장본만 없어진다
-  } catch (e) { say("err-dash", e.message); }
-});
-api("/api/dash").then(showDashboards).catch(e => say("err-dash", e.message));
-try {
-  const kept = JSON.parse(sessionStorage.getItem(DASH_KEY) || "null");
-  if (kept) {
-    [dashId, dashName, dashMeta] = [kept.id || "", kept.name || "", kept.meta || {}];
-    board.dashId = dashId;
-    $("dash-name").value = dashName;
-    $("dash-palette").value = (kept.palette || []).join(", ");
-    board.palette = kept.palette || [];
-    board.set(kept.cards.map(needsValues));
-  }
-  ctl.set(dashMeta);
-  dashChanged();
-} catch (e) { /* 저장소를 못 쓰거나 깨졌으면 빈 대시보드 */ }
 
 // ---------- SQL 탭 ----------
 const sqlTable = ({ columns, rows }) => !rows.length ? '<span class="empty">결과가 없습니다.</span>'
@@ -1501,28 +1334,26 @@ $("met-dash").onclick = () => busy($("met-dash"), async () => {
   if (!metDrawn) return say("err-met", "먼저 지표를 구하세요.");
   const { query, used } = metDrawn, title = `${query.base} · ${used.join(", ")}` + (query.by ? ` / ${query.by}` : "");
   try {
-    await addCard({ kind: "metric", title, layout: nextLayout(), colors: freshColors(), source: { schema: query.schema || "", table: query.base, body: query }, data: {}, view: { type: "", ratio: 16 / 9 } },
+    const added = await addToDashboard({ kind: "metric", title, colors: { series: {}, parts: {}, order: [], parts_order: [] }, source: { schema: query.schema || "", table: query.base, body: query }, data: {}, view: { type: "", ratio: 16 / 9 } },
       "metric", { schema: query.schema, base: query.base });
-    say("err-met", `대시보드에 넣었습니다(${board.cards.length}개).`, true);
+    if (added) showAdded("err-met", added);
   } catch (e) { say("err-met", e.message); }
 });
 api("/api/metrics").then(showMetrics).catch(e => say("err-met", e.message));
 
 $("cratio").onchange = () => { fitChart(); saveSetting({ ratio: $("cratio").value }); };
-// 그림 모드는 차트 저장, 집계 표 저장, 대시보드 다운로드가 함께 쓴다. 한쪽에서 바꾸면 다른 쪽도 바뀐다.
-$("cimage").onchange = $("simage").onchange = $("dash-mode").onchange = e => { $("cimage").value = $("simage").value = $("dash-mode").value = e.target.value; saveSetting({ image: e.target.value }); };
+// 그림 모드는 차트 저장과 집계 표 저장이 함께 쓴다. 한쪽에서 바꾸면 다른 쪽도 바뀐다.
+$("cimage").onchange = $("simage").onchange = e => { $("cimage").value = $("simage").value = e.target.value; saveSetting({ image: e.target.value }); };
 $("cratio").value = saved("ratio") || "auto";
-$("cimage").value = $("simage").value = $("dash-mode").value = saved("image") || "light";
-$("dash-ratio").value = saved("board_ratio") || "screen";
-$("dash-format").value = saved("board_format") || "png";
+$("cimage").value = $("simage").value = saved("image") || "light";
 $("quotes").checked = saved("quotes") !== "off";
 $("count").checked = saved("count") !== "off";
 showCondMode(saved("cond") || "fields");
 $("quotes").onchange = () => saveSetting({ quotes: $("quotes").checked ? "on" : "off" });
 $("count").onchange = () => saveSetting({ count: $("count").checked ? "on" : "off" });
-$("theme").addEventListener("click", () => { drawChart(); drawMetric(); board.draw(); });  // common.js의 onclick이 화면 모드를 바꾼 뒤에 다시 그린다.
+$("theme").addEventListener("click", () => { drawChart(); drawMetric(); });  // common.js의 onclick이 화면 모드를 바꾼 뒤에 다시 그린다.
 drawChart();
-showView({ "#sql": "sql", "#metrics": "metric", "#dashboard": "dash" }[location.hash] ?? "explore");
+showView({ "#sql": "sql", "#metrics": "metric" }[location.hash] ?? "explore");
 Object.assign(sized, { summary: () => $("summary"), chart: () => $("chart").parentElement });
 showSummaries();
 resume().then(() => { showSummaries(); if (connected) document.querySelectorAll(".step").forEach(s => s.classList.toggle("open", false)); showSummaries(); });

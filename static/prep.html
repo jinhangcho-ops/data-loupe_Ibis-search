@@ -177,7 +177,7 @@
           <div class="row"><select id="a-dash" title="저장한 대시보드 또는 새 대시보드"></select></div>
           <div class="row"><input id="a-dash-name" placeholder="새 대시보드 이름"></div>
           <div class="row"><button id="a-dash-go" class="btn p">넣기</button></div>
-          <div class="hint" style="margin:0">구한 값이 카드에 들어 있어 이 PC·이 계정에서만 풀 수 있게 암호화해 저장합니다. 쿼리 화면의 [대시보드] 탭에서 봅니다.</div>
+          <div class="hint" style="margin:0">구한 값이 카드에 들어 있어 이 PC·이 계정에서만 풀 수 있게 암호화해 저장합니다. 대시보드 화면에서 봅니다.</div>
         </div></div></div>
     <div class="big"><b id="a-title">분석</b><span id="a-sub">오른쪽에서 분석을 고르고 [구하기]를 누르세요.</span></div>
     <div class="err" id="err-ana"></div>
@@ -1136,7 +1136,8 @@ $("a-dash-go").onclick = () => busy($("a-dash-go"), async () => {
   try {
     const added = await api("/api/dash/card/add", { dashboard: $("a-dash").value, name: $("a-dash-name").value, card });
     $("a-pop").classList.add("hidden");
-    say("err-ana", `대시보드 '${added.dashboard.name}'에 넣었습니다(카드 ${added.dashboard.cards}개). 쿼리 화면의 [대시보드] 탭에서 열어 보세요.`, true);
+    say("err-ana", `대시보드 '${added.dashboard.name}'에 넣었습니다(카드 ${added.dashboard.cards}개). `, true);
+    $("err-ana").append(el("a", { href: "/dashboard?open=" + encodeURIComponent(added.dashboard.id), textContent: "대시보드에서 보기" }));
   } catch (e) { say("err-ana", e.message); }
 });
 $("theme").addEventListener("click", drawAna);  // common.js의 onclick이 화면 모드를 바꾼 뒤에 다시 그린다.

@@ -16,13 +16,20 @@ import prep_app
 import result
 import settings
 import source as connection
+import sql_funcs
 import summary_text
 import targets
 import watch
 from server import run
 
-AGGS = ("count", "sum", "mean", "min", "max", "nunique")  # 날짜 X축 차트의 집계
+AGGS = metrics.AGGS  # 날짜 X축 차트의 집계: 함수 사전(sql_funcs)의 집계 전부(예전 이름 nunique 포함)
 PARTS = ("sum", "count", "min", "max")  # 일 값 성분. 다시 묶는 방법: sum=Σsum, count=Σcount, mean=Σsum/Σcount, min·max=min·max
+MERGE = ("count", "sum", "mean", "min", "max")  # 일 값을 주·월·연으로 다시 묶을 수 있는 집계. 나머지(고유 개수·중앙값·분위수 …)는 단위마다 서버가 따로 구한다
+
+
+def merges(agg):
+    """일 값을 다시 묶을 수 있는 집계인지(아니면 일 값은 하루 몫의 값 v 하나이고, 주·월·연은 서버가 따로 구한다)."""
+    return agg in MERGE
 TRUNC = {"day": "D", "week": "W", "month": "M", "year": "Y"}  # 단위 → Ibis truncate 단위(주는 월요일 시작, analysis.trend와 같다)
 ROOM = 0.8  # 일 값이 카드 크기 상한의 이만큼까지만 차지하게 한다(나머지는 source 같은 다른 항목)
 PERCENT = "percent"
@@ -55,8 +62,11 @@ def clean_series(found):
     for s in found:
         agg = s.get("agg") if isinstance(s, dict) else None
         if agg not in AGGS:
-            raise ValueError(f"집계 방식은 {', '.join(AGGS)} 중 하나입니다.")
-        out.append({"y": s.get("y") or None, "agg": agg})
+            raise ValueError(f"집계 방식은 {', '.join(AGGS[:8])} … 중 하나입니다(함수 사전의 집계 {len(AGGS)}가지).")
+        opts = s.get("opts")
+        if opts is not None and not isinstance(opts, dict):
+            raise ValueError("집계의 옵션(opts)은 객체여야 합니다.")
+        out.append({"y": s.get("y") or None, "agg": agg, **({"opts": opts} if opts else {})})
     return out
 
 
@@ -66,12 +76,12 @@ def label(value):
 
 
 def component_exprs(t, i, s):
-    """계열 i의 일 값 성분 식 {열 이름: 식}. count는 행 수, nunique는 고유 개수 하나(v), 그 밖은 PARTS(숫자 컬럼 필요)."""
+    """계열 i의 일 값 성분 식 {열 이름: 식}. count는 행 수, 다시 묶을 수 없는 집계(고유 개수·중앙값 …)는 하루 몫의 값 하나(v), 그 밖은 PARTS(숫자 컬럼 필요)."""
     if s["agg"] == "count":
         return {f"s{i}_count": t.count()}
+    if not merges(s["agg"]):
+        return {f"s{i}_v": final_expr(t, s)}
     parse.check_name(s["y"], t.columns, "Y 컬럼")
-    if s["agg"] == "nunique":
-        return {f"s{i}_v": t[s["y"]].nunique()}
     if not t[s["y"]].type().is_numeric():
         raise ValueError("합계·평균·최소·최대는 숫자 컬럼을 Y로 골라야 합니다.")
     col = t[s["y"]].cast("float64")
@@ -82,9 +92,11 @@ def final_expr(t, s):
     """계열 하나의 단위별 최종 값 식(월·연을 서버에서 구할 때)."""
     if s["agg"] == "count":
         return t.count()
+    if not merges(s["agg"]):
+        if s["y"] is not None:
+            parse.check_name(s["y"], t.columns, "Y 컬럼")
+        return sql_funcs.aggregate(s["agg"], t, s["y"], None, s.get("opts"))
     parse.check_name(s["y"], t.columns, "Y 컬럼")
-    if s["agg"] == "nunique":
-        return t[s["y"]].nunique()
     if not t[s["y"]].type().is_numeric():
         raise ValueError("합계·평균·최소·최대는 숫자 컬럼을 Y로 골라야 합니다.")
     return getattr(t[s["y"]].cast("float64"), s["agg"])()
@@ -125,16 +137,16 @@ def day_section(frame, series, parts, split):
     out = []
     for name, i, agg, part in outputs(series, parts):
         row = lambda lab: found.get((lab, part), {})
-        names = ("v",) if agg == "nunique" else ("count",) if agg == "count" else PARTS
-        out.append({"name": name, "agg": agg, **{("values" if n == "v" else n): [row(lab).get(f"s{i}_{n}") for lab in labels] for n in names}})
+        names = ("v",) if not merges(agg) else ("count",) if agg == "count" else PARTS
+        out.append({"name": name, "agg": agg, **({"merge": False} if not merges(agg) else {}), **{("values" if n == "v" else n): [row(lab).get(f"s{i}_{n}") for lab in labels] for n in names}})
     return {"labels": labels, "series": out}
 
 
 def unit_section(frame, series, parts, split, only=None):
-    """단위별 최종 값 {labels, series: [{name, values}]}. only를 주면 그 집계의 계열만."""
+    """단위별 최종 값 {labels, series: [{name, values}]}. only(집계 → 참거짓)를 주면 그 집계의 계열만."""
     found, labels = cells(frame, split), sorted({label(v) for v in frame["x"]})
     return {"labels": labels, "series": [{"name": name, "values": [found.get((lab, part), {}).get(f"s{i}_v") for lab in labels]}
-                                         for name, i, agg, part in outputs(series, parts) if only is None or agg == only]}
+                                         for name, i, agg, part in outputs(series, parts) if only is None or only(agg)]}
 
 
 def trim(section, keep):
@@ -272,13 +284,13 @@ def time_data(expr, x, series, split):
     cut = len(section["labels"]) - keep
     by_unit = {"day": trim(section, keep) if cut else section}
     def values(unit, only=None):
-        picked = {i: s for i, s in enumerate(series) if only is None or s["agg"] == only}
+        picked = {i: s for i, s in enumerate(series) if only is None or only(s["agg"])}
         return unit_section(grouped(t, x, unit, split, parts, lambda tt: {f"s{i}_v": final_expr(tt, s) for i, s in picked.items()}), series, parts, split, only)
     for unit in ("week", "month", "year"):
         if cut and unit != "week":
             by_unit[unit] = values(unit)  # 잘라 낸 앞부분까지 월·연은 서버가 구한다
-        elif any(s["agg"] == "nunique" for s in series):
-            by_unit[unit] = values(unit, "nunique")  # 고유 개수는 다시 묶을 수 없다
+        elif any(not merges(s["agg"]) for s in series):
+            by_unit[unit] = values(unit, lambda agg: not merges(agg))  # 고유 개수·중앙값 같은 집계는 일 값을 다시 묶을 수 없다
     note = f"앞 {cut:,}일은 월 단위만 있어요." if cut else ""
     return {"x": x, "by_unit": by_unit, "note": " ".join(filter(None, [note, f"나눌 값이 많아 행이 많은 {result.MAX_SPLITS}개만 표시합니다." if more else ""]))}
 
@@ -469,7 +481,7 @@ def value_data(card, ctx):
         found = run(lambda: shared_time(expr, body, date, series, None, fetch, ctx))
         if fetch:
             found = {**found, "window": fetch}
-        unique = [i for i, s in enumerate(series) if s["agg"] == "nunique"]
+        unique = [i for i, s in enumerate(series) if not merges(s["agg"])]
         if unique and window and (window.get("start") or window.get("end")):  # 고유 개수는 일 값을 다시 묶을 수 없어 그 기간으로 따로 구한다
             at = card_expr(card, ctx, window)
             found["values"] = {"window_nunique": {"start": window.get("start"), "end": window.get("end"), "values": {str(i): v for i, v in zip(unique, run(lambda: scalars(at, [series[i] for i in unique])))}}}

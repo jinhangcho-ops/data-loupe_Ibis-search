@@ -8,12 +8,12 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel)에 연결해 �
 
 | 화면 | 하는 일 | 자세히 |
 |---|---|---|
-| 쿼리 | 조건을 골라 탐색, SQL 직접 쓰기·질문으로 SQL 만들기, 지표, 차트·대시보드. 실행 전에 처리 용량 안내 | [docs/query.md](docs/query.md) |
+| 쿼리 | 조건을 골라 탐색, SQL 직접 쓰기·질문으로 SQL 만들기, 지표, 차트. 실행 전에 처리 용량 안내 | [docs/query.md](docs/query.md) |
 | 분석 | 컬럼마다 전처리해 새 파일·테이블로, 분포·상관관계·그룹 비교·추이 그래프 | [docs/analysis.md](docs/analysis.md) |
 | 수집 | 웹 API·파일 주소·웹페이지에서 받아 저장, DB 테이블·Kafka에 적재, 업로드 기록, 예약 실행 | [docs/collect.md](docs/collect.md) |
 | 연동 | Slack·Notion·웹훅으로 보내기, Slack `/ibis` 명령, GA4 가져오기, LLM 설정 | [docs/integrations.md](docs/integrations.md) |
 
-대시보드(기준일·기간·최신화·실시간)는 [docs/dashboard.md](docs/dashboard.md)(카드 종류는 [docs/dashboard_cards.md](docs/dashboard_cards.md))에 있습니다.
+대시보드 화면(저장된 값으로 보기, 기준일·기간·최신화·실시간)은 [docs/dashboard.md](docs/dashboard.md)(카드 종류는 [docs/dashboard_cards.md](docs/dashboard_cards.md))에 있습니다.
 
 화면 설정, 진행 상황과 취소, 기억되는 것, DB별 드라이버는 [docs/settings.md](docs/settings.md)에 있습니다.
 
@@ -29,11 +29,11 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel)에 연결해 �
 
 ## 화면 고르기
 
-실행하면 첫 화면에서 [쿼리] [분석] [수집] [연동] 중 하나를 고릅니다. 쿼리와 분석은 먼저 [데이터에 연결](docs/query.md#연결)하고, 수집과 연동은 연결 없이 들어갑니다.
+실행하면 첫 화면에서 [쿼리] [분석] [대시보드] [수집] [연동] 중 하나를 고릅니다. 쿼리와 분석은 먼저 [데이터에 연결](docs/query.md#연결)하고, 수집과 연동은 연결 없이 들어갑니다.
 
 ![첫 화면](docs/screen-home.png)
 
-- 들어간 뒤에는 위쪽 줄의 [쿼리] [분석] [수집] [연동]으로 오갑니다. 쿼리 화면 안에서는 [탐색] [SQL] [지표] [대시보드] 탭으로 오갑니다.
+- 들어간 뒤에는 위쪽 줄의 [쿼리] [분석] [대시보드] [수집] [연동]으로 오갑니다. 쿼리 화면 안에서는 [탐색] [SQL] [지표] 탭으로 오갑니다.
 - 연결은 쿼리와 분석이 함께 씁니다. 수집이 도는 동안에도 쿼리·분석을 할 수 있습니다.
 - 위쪽 줄에는 지금 연결, 메모리·CPU, 진행 중인 작업과 [취소], 크기 조절·화면 모드, [보낼 곳]이 있습니다.
 - 화면을 오가면 넣어 둔 조건은 사라집니다. [검색 저장](docs/query.md#탐색-오른쪽-패널-18번)으로 남겨 두고, 결과를 분석으로 넘길 때는 [전처리로 보내기](docs/query.md#결과에서-할-수-있는-것)를 씁니다.
