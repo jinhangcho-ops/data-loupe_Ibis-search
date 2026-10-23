@@ -192,3 +192,36 @@ def test_table_status_map_sentence_view_settings():
         with pytest.raises(ValueError):
             store.check_card({**CARD, "view": bad})
     assert store.check_card({**CARD, "kind": "alerts", "data": {"since": {"a": "2026-10-22T12:00:00"}}})["data"]["since"] == {"a": "2026-10-22T12:00:00"}
+
+
+
+def test_source_key_for_file_urls_all_spellings():
+    """sqlite·duckdb 주소는 어떻게 써도(슬래시 3개·역슬래시·대소문자·드라이브 글자) 같은 파일이면 같은 열쇠고, 예외를 내지 않는다. 계정·비밀번호는 없다."""
+    key = lambda url: store.source_key({"kind": "url", "url": url})
+    forms = ["sqlite:///C:/data/shop.db", "sqlite:///C:\\data\\shop.db", "sqlite://C:\\data\\shop.db", "sqlite://C:/data/shop.db", "SQLITE:///c:/Data/Shop.db"]
+    assert {key(u) for u in forms} == {"url:sqlite://c:/data/shop.db"}
+    assert key("duckdb:///C:/data/x.duckdb") == key("duckdb://C:\\data\\x.duckdb") == "url:duckdb://c:/data/x.duckdb"
+    assert key("sqlite:///C:/data/shop.db") != key("duckdb:///C:/data/shop.db") and key("sqlite:///C:/data/a.db") != key("sqlite:///C:/data/b.db")
+    here = os.path.abspath("/data/shop.db").replace("\\", "/").lower()
+    assert key("sqlite:///data/shop.db") == "url:sqlite://" + here  # 드라이브 글자가 없으면 지금 드라이브의 절대 경로(ibis와 같다)
+    assert key("sqlite://") == key("sqlite:///:memory:") == "url:sqlite://:memory:" and key("duckdb://") == "url:duckdb://:memory:"
+    for odd in ("", "nonsense", "postgres://kim:pw@h:abc/db", "mssql+pyodbc://kim:pw@h/db?x=1", "sqlite://C:\\한글\\쇼핑.db", "://", "sqlite://@", "sqlite://\\\\srv\\share\\a.db"):
+        got = key(odd)  # 예외 없음
+        assert "pw" not in got and "kim" not in got
+    assert key("postgres://kim:pw@h:abc/db") == "url:postgres://h:abc/db"  # 포트를 읽을 수 없어도 예외 없이
+    assert key("postgres://kim:pw@db.example.com:5432/sales") == "url:postgres://db.example.com:5432/sales"  # 네트워크 주소는 그대로
+
+
+def test_old_file_keys_are_still_matched(folder):
+    """예전 모양의 열쇠(url:sqlite://:/C:/data/shop.db)로 저장한 카드·실시간 최소는 지금 열쇠로 이어진다."""
+    old = "url:sqlite://:/C:/data/shop.db"
+    new = store.source_key({"kind": "url", "url": "sqlite:///C:/data/shop.db"})
+    assert store.canon_key(old) == new and store.canon_key(new) == new and store.canon_key("folder:c:/x") == "folder:c:/x" and store.canon_key(None) is None
+    assert store.check_card({**CARD, "source": {**CARD["source"], "key": old}})["source"]["key"] == new
+    d = store.check_dashboard(board(cards=[CARD]))
+    d["cards"][0]["source"]["key"] = old  # 예전에 저장된 파일 그대로
+    store.write({"d2": {**d, "id": "d2"}})
+    assert store.load()["dashboards"]["d2"]["cards"][0]["source"]["key"] == new
+    import dash_refresh
+    dash_refresh.set_live_min(old, 60)
+    assert dash_refresh.live_min(new) == 60 and dash_refresh.live_min(old) == 60 and list(dash_refresh.live_mins()) == [new]

@@ -255,7 +255,30 @@ def aggregate(id, t, column=None, where=None, opts=None):
         raw["x"] = column
     if where is not None:
         raw["where"] = where
-    return f["build"](resolve(f, t, raw))
+    c = resolve(f, t, raw)
+    return usable(f, t, c, f["build"](c))
+
+
+def usable(f, t, c, value):
+    """집계 식 value를 t의 연결이 SQL(계획)로 바꿀 수 있으면 그대로, 못 하면 같은 결과의 대체 식(SUBS) 중 되는 것으로. 대체도 안 되면 원래 식(부르는 쪽이 이 PC 사본에서 한다).
+    대체 식이 없는 함수나 연결이 없는 식은 따져 보지 않는다."""
+    if f["id"] not in SUBS:
+        return value
+    import source
+    try:
+        ibis.get_backend(t)
+    except Exception:
+        return value
+    if source.compiles(t.aggregate(v=value)):
+        return value
+    for _, build in SUBS[f["id"]]:
+        try:
+            other = build(c)
+        except Exception:
+            continue
+        if source.compiles(t.aggregate(v=other)):
+            return other
+    return value
 
 
 def both(*conds):
@@ -749,6 +772,21 @@ def ids_for(screen):
     return [i for i, f in FUNCS.items() if pick_(f)]
 
 
+MERGE = ("count", "sum", "mean", "min", "max")  # 일 값을 주·월·연으로 다시 묶을 수 있는 집계(대시보드 카드). 나머지는 단위마다 서버가 따로 구한다
+
+
+def agg_names():
+    """집계 id(예전 이름 포함) → 한국어 이름. 화면이 작은 목록으로 바로 쓰는 값(server.CONSTANTS)."""
+    return {**{i: FUNCS[i]["label"] for i in aggregate_ids()}, **{a: FUNCS[t]["label"] for a, t in ALIASES.items()}}
+
+
+def version():
+    """사전의 내용이 바뀌면 바뀌는 글(화면이 /api/funcs를 다시 받을지 정하는 ETag)."""
+    import hashlib
+    import json
+    return hashlib.sha256(json.dumps(catalog(), sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]
+
+
 def public(f):
     """JSON으로 화면에 보낼 항목(build 없음)."""
     return {k: v for k, v in f.items() if k != "build"}
@@ -912,7 +950,8 @@ def support(t, ids=None):
     """지금 연결(표 t)이 각 함수를 하는지 {id: {status, note}}. source.compiles로 SQL(계획)만 만들어 보고 실행하지 않는다.
     status: ok / substitute(같은 결과의 대체, note에 설명) / local(이 PC 사본에서 계산) / unavailable(note에 이유)."""
     import source
-    return {i: judge(FUNCS[i], t, source.compiles) for i in (ids or FUNCS)}
+    ok = {"status": "ok", "note": ""}  # SQL 식 직접 쓰기는 식을 만들어 시험할 수 없어(파일 연결은 PC 사본) 그대로 둔다
+    return {i: ok if FUNCS[i]["raw"] else judge(FUNCS[i], t, source.compiles) for i in (ids or FUNCS)}
 
 
 def dialect_status(id, dialect, t=None):

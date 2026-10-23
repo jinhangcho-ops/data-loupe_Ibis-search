@@ -7,12 +7,11 @@ const CARD_KINDS = { kpi: ["KPI(아이콘·큰 값·비교·스파크라인)", 1
                      table: ["표(집계 또는 원래 행)", 0, 5], sentence: ["문장(빈칸에 값·비교·기준일)", 0, 0], status: ["상태(정상·주의·이상)", 0, 0], alerts: ["경고 목록(N분째·영향)", 0, 0],
                      map: ["배치도(끌어 옮김)", 0, 0], deviation: ["편차 표(엔티티×시간대)", 1, 1] };
 const WATCH = ["status", "alerts", "map"];  // 엔티티별 최근 행을 상태 규칙으로 보는 카드
-const CARD_AGGS = { count: "개수", sum: "합계", mean: "평균", min: "최소", max: "최대", nunique: "고유 개수" };
 let menuCols = [], menuBase = "";  // 메뉴에서 고른 테이블과 그 컬럼 [[이름, 한글 타입]]
 const colsOfType = names => menuCols.filter(c => names.includes(c[1])).map(c => c[0]);
 const dateCols = () => colsOfType(["날짜", "날짜시간"]);
 // 서버(dash_calc.series_name)와 같은 계열 이름: 개수 / 합계 (컬럼)
-const seriesTitle = s => CARD_AGGS[s.agg] + (s.agg === "count" ? "" : ` (${s.y})`);
+const seriesTitle = s => aggName(s.agg) + (s.agg === "count" || !s.y ? "" : ` (${s.y})`);
 
 // 메뉴 칸들을 root에 만든다. 값 줄은 종류의 최소~최대 개수까지 더하고 뺄 수 있다.
 function initCardMenu(root, host) {
@@ -47,11 +46,20 @@ function initCardMenu(root, host) {
     only("시간대 묶음", bucket, "deviation"), only("기준", baseline, "deviation"), only("허용 폭", threshold, "deviation"), block(template, "sentence"), block(blankLines.root, "sentence")];
   const options = (select, names, blank) => select.replaceChildren(...(blank ? [el("option", { value: "", textContent: blank })] : []), ...names.map(n => el("option", { value: n, textContent: n })));
   const makeRow = () => {
-    const col = el("select", {}), agg = el("select", {}, ...Object.entries(CARD_AGGS).map(([k, v]) => el("option", { value: k, textContent: v })));
-    options(col, menuCols.map(c => c[0]), "(컬럼 없음: 개수)");
-    const row = el("div", { className: "cm-row" }, el("input", { placeholder: "이름(칸 제목)", className: "cm-label" }), col, agg, el("button", { className: "ghost", textContent: "×", onclick: () => { row.remove(); show(); } }));
-    row.col = col; row.agg = agg;
+    if (!Funcs.cat) return;  // 함수 사전을 받은 뒤에(받으면 show가 다시 줄을 채운다)
+    const col = el("select", {}), cat = Funcs.cat;
+    const picker = Funcs.picker({ ids: cat.screens.dash.filter(i => cat.byId[i].aggregate), columns: () => menuCols, onchange: () => syncRow(row) });  // 카드 계열의 집계: 함수 사전의 집계 전부 + 인자 칸
+    const row = el("div", { className: "cm-row" }, el("input", { placeholder: "이름(칸 제목)", className: "cm-label" }), col, picker.el, el("button", { className: "ghost", textContent: "×", onclick: () => { row.remove(); show(); } }));
+    row.col = col; row.picker = picker;
     rows.append(row);
+    syncRow(row);
+  };
+  // 줄의 컬럼 칸: 고른 집계의 첫 컬럼 칸이 받는 종류만 보이고, 컬럼이 필요 없는 집계(조건 개수 …)이면 숨긴다. 고른 컬럼은 남아 있으면 그대로.
+  const syncRow = r => {
+    const now = r.col.value, names = r.picker.xColumns(menuCols).map(c => c[0]);
+    options(r.col, names, "(컬럼 없음: 개수)");
+    r.col.value = names.includes(now) ? now : "";
+    r.col.classList.toggle("hidden", r.picker.yMode() === "none");
   };
   const show = () => {  // 종류에 맞게 칸을 보이고, 값 줄 수를 최소~최대에 맞춘다
     const [, low, high] = CARD_KINDS[kind.value];
@@ -78,7 +86,7 @@ function initCardMenu(root, host) {
     [timeCol, kindCol, linkCol].forEach(s => options(s, all, "(없음)"));
     if (dates.length === 1) timeCol.value = dates[0];
     options(metric, host.metricNames(), "(쓰지 않음)");
-    [...rows.children].forEach(r => { const now = r.col.value; options(r.col, all, "(컬럼 없음: 개수)"); r.col.value = all.includes(now) ? now : ""; });
+    [...rows.children].forEach(syncRow);
     try {
       const t = await api("/api/targets");
       path.value = t.path;
@@ -95,8 +103,11 @@ function initCardMenu(root, host) {
   };
   const build = () => {
     if (!menuBase) throw new Error("테이블을 고르세요.");
-    const k = kind.value, values = [...rows.children].map(r => ({ label: r.querySelector(".cm-label").value.trim(), y: r.col.value || null, agg: r.col.value ? r.agg.value : r.agg.value === "nunique" ? "count" : r.agg.value }));
-    const series = values.map(l => ({ y: l.y, agg: l.y ? l.agg : "count" })), byMetric = k === "kpi" && metric.value;
+    const k = kind.value, values = [...rows.children].map(r => {  // 컬럼이 꼭 필요한 집계인데 컬럼을 안 고르면 개수
+      const y = r.col.value || null, { agg, opts } = r.picker.get(), needs = r.picker.yMode() === "required";
+      return { label: r.querySelector(".cm-label").value.trim(), y, ...(needs && !y ? { agg: "count" } : { agg, ...(opts ? { opts } : {}) }) };
+    });
+    const series = values.map(({ y, agg, opts }) => ({ y, agg, ...(opts ? { opts } : {}) })), byMetric = k === "kpi" && metric.value;
     if (!byMetric && CARD_KINDS[k][1] && !series.length) throw new Error("값을 하나 이상 넣으세요.");
     if (k === "gauge" && !group.value) throw new Error("게이지는 나눌 컬럼을 고르세요.");
     const body = { schema: "", base: menuBase, joins: [], periods: [], conditions: [], calcs: [], sorts: [], columns: [], series: byMetric ? [] : series, ...(k === "gauge" ? { x: group.value } : {}), ...(byMetric ? { names: [metric.value] } : {}) };
@@ -152,7 +163,9 @@ function initCardMenu(root, host) {
     if (menuBase) { try { menuCols = (await api("/api/columns", { schema: "", base: menuBase })).columns; err.textContent = ""; } catch (e) { err.textContent = e.message; } }
     [...rows.children].forEach(r => r.remove());
     refill();
+    Funcs.loadSupport(menuBase).then(() => [...rows.children].forEach(r => r.picker.refresh()));  // 이 연결이 못 하는 집계는 안내를 붙이거나 막는다
   };
+  Funcs.load().then(show);  // 함수 사전을 받으면 값 줄을 채운다
   root.replaceChildren(el("div", { className: "row" }, table), el("div", { className: "row" }, kind), title, rows, add, ...fields, el("div", { className: "row" }, path, save), pathNote, err, go);
   return { refill };
 }

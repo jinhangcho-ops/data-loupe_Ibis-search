@@ -302,3 +302,17 @@ tr.miss { display:none; }
 .drv-table .installed { color:var(--ok); }
 .drv-table .missing, .drv-table .program_needed { color:var(--err); }
 .drv-guide { border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:12.5px; display:flex; flex-direction:column; gap:4px; }
+
+/* 함수 사전 고르기(funcs.js): 집계 고르는 칸과 인자 칸, 찾기 패널 */
+.fp { display:inline-flex; flex-wrap:wrap; gap:6px; align-items:center; min-width:0; }
+.fp-args { display:contents; }
+.fp-pair { display:inline-flex; gap:4px; }
+.fp-in { flex:0 1 120px; min-width:70px; }
+.fp-note { flex:1 1 100%; margin:0; }
+.fpanel { border:1px solid var(--line); border-radius:8px; padding:8px; margin:6px 0; }
+.fpanel-list { max-height:220px; overflow:auto; display:flex; flex-direction:column; gap:2px; margin-top:6px; }
+.fpanel-item { display:grid; grid-template-columns:130px minmax(0,1fr); gap:2px 8px; text-align:left; background:none; border:1px solid transparent; color:var(--text); height:auto; padding:4px 6px; font-weight:400; border-radius:6px; }
+.fpanel-item:hover { background:var(--bg); border-color:var(--line); }
+.fpanel-item code { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fpanel-item .hint { grid-column:2; margin:0; }
+.fpanel-item.dim { opacity:.45; }

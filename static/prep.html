@@ -126,7 +126,9 @@
         <div class="step" data-step="derive"><div class="sp"><i>4</i><span class="t">새 컬럼</span><b id="sum-p-derive"></b><span class="c"></span></div>
           <div class="edx">
             <div class="hint">계산 컬럼 (컬럼은 이름을 바꾸기 전의 이름으로)</div>
-            <div class="row"><input id="fx-name" placeholder="새 컬럼 이름" style="width:110px; flex:none"><input id="fx-expr" class="code" placeholder="예: 금액 * 수량"><button id="fx-add">추가</button></div>
+            <div class="row"><input id="fx-name" placeholder="새 컬럼 이름" style="width:110px; flex:none"><input id="fx-expr" class="code" placeholder="예: 금액 * 수량, median(금액), lag(금액, 1)"><button id="fx-add">추가</button></div>
+            <div class="row"><input id="fx-order" placeholder="정렬 기준 (창 함수·누적: 예 날짜 asc)" title="식 안의 순위·이전 값·누적 같은 창 함수가 쓸 정렬 기준(선택)"><input id="fx-group" placeholder="묶음 기준 (집계·창 함수: 컬럼, 쉼표로 여러 개)" title="식 안의 집계(중앙값·합계 …)와 창 함수가 묶어서 계산할 기준(선택). 없으면 표 전체"><button id="fx-find" class="ghost" title="함수를 찾아 예시를 식에 넣습니다">함수 찾기</button></div>
+            <div id="fx-panel"></div>
             <div class="hint" id="fx-guide"></div>
             <div id="formulas"></div>
             <div class="hint" style="margin-top:12px">PCA (차원 축소): 고른 숫자 컬럼을 성분 컬럼 pca_1, pca_2 …로 줄입니다</div>
@@ -140,6 +142,7 @@
             <div class="hint">고른 컬럼의 값이 모두 같은 행은 하나만 남깁니다. 고르지 않은 컬럼은 어느 행의 값이 남을지 정해지지 않습니다.</div>
             <div class="row"><select id="dd-col" style="flex:1; min-width:0"></select><button id="dd-all">전체 컬럼</button></div>
             <div class="chips open" id="dd-chips"></div>
+            <div class="row" style="align-items:center"><select id="dd-keep" title="겹치는 행에서 무엇을 남길지"><option value="">남길 것: 아무 행 하나 (기본)</option><option value="pick">대표 값 고르기 (정렬 기준의 첫·마지막 행, 최소·최대·최빈, 이어 붙이기, 여러 개면 알리기)</option></select><span id="dd-pick"></span></div>
             <div class="row"><button id="dupes" disabled>중복 세기</button><span class="hint" id="dd-result" style="align-self:center"></span></div>
           </div></div>
         <div class="cn">↓</div>
@@ -211,13 +214,13 @@
       </div>
       <div class="a-form hidden" data-kind="groups">
         <div class="hint">그룹 컬럼</div><select id="a-gby"></select>
-        <div class="hint">집계</div><select id="a-gagg"><option value="mean">평균</option><option value="sum">합계</option><option value="count">개수</option></select>
+        <div class="hint">집계 (함수 사전의 집계 전부)</div><div id="a-gagg"></div>
         <div class="hint">값 컬럼</div><select id="a-gval"></select>
       </div>
       <div class="a-form hidden" data-kind="trend">
         <div class="hint">날짜 컬럼</div><select id="a-tcol"></select>
         <div class="hint">묶음 단위</div><select id="a-tunit"><option value="day">일</option><option value="week">주 (월요일 시작)</option><option value="month">월</option></select>
-        <div class="hint">집계</div><select id="a-tagg"><option value="count">개수</option><option value="sum">합계</option><option value="mean">평균</option></select>
+        <div class="hint">집계 (함수 사전의 집계 전부)</div><div id="a-tagg"></div>
         <div class="hint">값 컬럼</div><select id="a-tval"></select>
       </div>
     </div>
@@ -228,11 +231,13 @@
 <!--include dash_refresh.html-->
 <!--include notify.html-->
 <script src="/static/common.js"></script>
+<script src="/static/funcs.js"></script>
 <script src="/static/dash_refresh.js"></script>
 <script src="/static/board.js"></script>
 <script src="/static/dash.js"></script>
 <script>
 let prof = null;  // /api/profile의 응답. 테이블을 고르기 전에는 null
+const pickers = {};  // 함수 사전에서 고르는 칸들(groups·trend: 분석의 집계, keep: 중복 제거의 대표 값). initFuncs가 채운다.
 let edits = {};  // 컬럼(복사 포함) 이름 → { keep, rename, ops: { op 이름: 입력 상태 } }
 let copies = [];  // [{ from: 원래 컬럼, name: 복사 컬럼 이름 }]
 let filters = [];  // 행 거르기 조건 줄
@@ -400,7 +405,7 @@ const kept = () => cols().filter(c => edits[c.name].keep);
 const outName = c => edits[c.name].rename.trim() || c.name;  // 결과에서의 컬럼 이름
 const resultNames = () => [...kept().map(outName), ...(preview ? deriv.filter(d => !drops.includes(d.name)).map(d => d.name) : [])];
 const fail = text => { $("err-prep").textContent = text; };
-const snap = () => JSON.stringify([edits, copies, filters, formulas, pca, dedupe, sorts, drops, $("downcast").checked]);
+const snap = () => JSON.stringify([edits, copies, filters, formulas, pca, dedupe, keepNow(), sorts, drops, $("downcast").checked]);
 const stateOf = (key, v) => OPS[key].load?.(v) ?? {};
 
 // 입력 칸 하나
@@ -597,6 +602,7 @@ function syncNames() {
   const names = prof ? resultNames() : [];
   sorts = sorts.filter(s => names.includes(s.slice(0, s.lastIndexOf(" "))));
   dedupe = dedupe.filter(n => names.includes(n));
+  if (pickers.keep) pickers.keep.refresh();
   fill($("sort-col"), names);
   fill($("dd-col"), names.filter(n => !dedupe.includes(n)), "컬럼 추가");
   $("sorts").replaceChildren(...sorts.map((s, i) => chip(s, () => { sorts.splice(i, 1); syncNames(); })));
@@ -617,9 +623,53 @@ const addFilter = () => {
 $("f-add").onclick = addFilter;
 $("f-in").onkeydown = e => { if (e.key === "Enter") addFilter(); };
 
+// 함수 사전(sql_funcs)에서 고르는 칸들: 분석의 집계, 중복 제거에서 남길 대표 값, 계산 컬럼의 함수 찾기. 인자 칸(구분자·정렬 기준·분위수 P …)은 사전의 args로 그린다.
+const REPS = {};  // 사전의 함수 id → recipe의 dedupe_keep.how (대표 값 고르기 선택지)
+const resultCols = () => prof ? resultNames().map(n => [n, "?"]) : [];
+function keepNow() {  // 중복 제거에서 남길 것(recipe의 dedupe_keep). 기본(아무 행 하나)이면 null
+  if (!pickers.keep || $("dd-keep").value !== "pick") return null;
+  const { agg, opts = {} } = pickers.keep.get();
+  return { how: REPS[agg], ...(opts.order ? { order: opts.order } : {}), ...(agg === "string_agg" && opts.sep != null ? { sep: opts.sep } : {}) };
+}
+function setKeep(keep) {  // 저장한 구성(글자 또는 객체)에서 칸을 채운다. 예전 구성에는 없다.
+  const { how, order, sep } = typeof keep === "string" ? { how: keep } : keep ?? {};
+  const func = Object.keys(REPS).find(f => REPS[f] === how);
+  $("dd-keep").value = pickers.keep && func ? "pick" : "";
+  if (func && pickers.keep) pickers.keep.set({ agg: func, opts: { ...(order ? { order } : {}), ...(sep != null ? { sep } : {}) } });
+  $("dd-pick").classList.toggle("hidden", $("dd-keep").value !== "pick");
+}
+const fillAnaValues = () => {  // 값 컬럼: 고른 집계의 첫 컬럼 칸이 받는 종류만
+  for (const [id, key] of [["a-gval", "groups"], ["a-tval", "trend"]]) {
+    const p = pickers[key], was = $(id).value, cols = p ? p.xColumns(A.cols) : A.cols.filter(c => c[1] === "num");
+    fill($(id), cols.map(c => c[0]), "값 없음 (개수)");
+    if (cols.some(c => c[0] === was)) $(id).value = was;
+    $(id).classList.toggle("hidden", !!p && p.yMode() === "none");
+  }
+};
+async function initFuncs() {
+  const cat = await Funcs.load();
+  for (const [key, host] of [["groups", "a-gagg"], ["trend", "a-tagg"]]) {
+    pickers[key] = Funcs.picker({ ids: cat.screens.chart.filter(i => cat.byId[i].aggregate), columns: () => A.cols, onchange: fillAnaValues });
+    $(host).replaceChildren(pickers[key].el);
+  }
+  for (const [how, v] of Object.entries(cat.representative)) REPS[v.func] = how;
+  pickers.keep = Funcs.picker({ ids: Object.keys(REPS).filter(f => f !== "any_value"), columns: resultCols, repFirst: true, onchange: () => { preview = null; showPrepSummaries(); } });
+  $("dd-pick").replaceChildren(pickers.keep.el);
+  $("dd-keep").onchange = () => { $("dd-pick").classList.toggle("hidden", $("dd-keep").value !== "pick"); $("dd-result").textContent = ""; preview = null; showPrepSummaries(); };
+  setKeep(null);
+  fillAnaValues();
+  if (prof) Funcs.loadSupport(S.base, S.schema).then(() => Object.values(pickers).forEach(p => p.refresh()));
+}
+$("fx-find").onclick = async () => {
+  if ($("fx-panel").firstChild) return $("fx-panel").replaceChildren();
+  const cat = await Funcs.load();
+  $("fx-panel").replaceChildren(Funcs.panel({ ids: cat.screens.prep.filter(i => !cat.byId[i].table), columns: () => resultCols().map(([n]) => { const c = prof?.columns.find(x => x.name === n); return [n, !c ? "문자" : NUM.includes(c.kind) ? "실수" : c.kind === "date" ? "날짜" : "문자"]; }),
+    onpick: f => { $("fx-expr").value = ($("fx-expr").value ? $("fx-expr").value + " " : "") + f.example; $("fx-expr").focus(); } }).el);
+};
+initFuncs();
 // ④ 새 컬럼: 계산 컬럼 목록과 PCA에 넣을 숫자 컬럼(남긴 원래·복사 컬럼 중 숫자인 것). 계산 식은 서버가 검사한다.
 function renderDerive() {
-  $("formulas").replaceChildren(...formulas.map((f, i) => el("div", {}, chip(`${f.name} = ${f.expr}`, () => { formulas.splice(i, 1); preview = null; showAll(); }))));
+  $("formulas").replaceChildren(...formulas.map((f, i) => el("div", {}, chip(`${f.name} = ${f.expr}${f.order ? ` · 정렬 ${f.order.join(", ")}` : ""}${f.group ? ` · 묶음 ${f.group.join(", ")}` : ""}`, () => { formulas.splice(i, 1); preview = null; showAll(); }))));
   const nums = prof ? kept().filter(c => isNum(c, edits[c.name].ops)).map(c => c.name) : [];
   pca.columns = pca.columns.filter(n => nums.includes(n));
   $("pca-cols").replaceChildren(...nums.map(n => el("label", {}, el("input", { type: "checkbox", checked: pca.columns.includes(n), onchange: e => {
@@ -632,10 +682,11 @@ function renderDerive() {
 $("fx-guide").textContent = SERVER.formula_guide;
 $("fx-add").onclick = () => {
   const name = $("fx-name").value.trim(), expr = $("fx-expr").value.trim();
+  const order = $("fx-order").value.split(";").map(x => x.trim()).filter(Boolean), group = $("fx-group").value.split(",").map(x => x.trim()).filter(Boolean);
   if (!name || !expr) return fail("계산 컬럼의 이름과 식을 입력하세요.");
   if (formulas.some(f => f.name === name)) return fail(`'${name}' 계산 컬럼이 이미 있습니다.`);
-  formulas.push({ name, expr });
-  $("fx-name").value = $("fx-expr").value = "";
+  formulas.push({ name, expr, ...(order.length ? { order } : {}), ...(group.length ? { group } : {}) });
+  $("fx-name").value = $("fx-expr").value = $("fx-order").value = $("fx-group").value = "";
   fail(""); preview = null; showAll();
 };
 $("fx-expr").onkeydown = e => { if (e.key === "Enter") $("fx-add").click(); };
@@ -718,6 +769,7 @@ async function openTable(base, config) {
     if (mine !== token) return;
     if (config || remembered) restore(config || remembered);
     showAll();
+    if (pickers.keep) Funcs.loadSupport(S.base, S.schema).then(() => Object.values(pickers).forEach(p => p.refresh()));  // 이 연결이 못 하는 함수는 안내를 붙이거나 막는다
     loadSpecView();
     if (remembered && !$("err-prep").textContent) $("ok-run").textContent = "지난번에 이 테이블에 쓴 전처리를 채웠습니다. [미리보기]로 확인하세요.";
   } catch (e) { if (mine === token) fail(e.message); return; }
@@ -823,7 +875,7 @@ $("spec-read").onclick = () => busy($("spec-read"), async () => {
 });
 
 // 구성 저장·불러오기: 입력 상태를 그대로 저장한다(서버로 보내는 recipe 값이 아니다). 미리 볼 행 수와 미리보기 결과는 넣지 않는다.
-const config = () => ({ schema: S.schema, base: S.base, edits, copies, drops, filters, formulas, pca, dedupe, sorts, downcast: $("downcast").checked,
+const config = () => ({ schema: S.schema, base: S.base, edits, copies, drops, filters, formulas, pca, dedupe, ...(keepNow() ? { dedupe_keep: keepNow() } : {}), sorts, downcast: $("downcast").checked,
   target: { kind: $("t-table").checked ? "table" : "file", format: $("fmt").value, name: $("tname").value } });
 // 구성의 원래 컬럼이 모두 이 테이블에 있으면 선택을 채운다. 없는 것이 있으면 채우지 않고 알린다(구성에 없는 새 컬럼은 선택 없이 둔다).
 function restore(c) {
@@ -835,6 +887,7 @@ function restore(c) {
   Object.assign(edits, d.edits);
   ({ copies, drops, filters, dedupe, sorts } = d);
   formulas = d.formulas ?? [];  // 이 기능 전에 저장한 구성에는 없다
+  setKeep(d.dedupe_keep);
   pca = d.pca ?? { columns: [], n: 2 };
   $("downcast").checked = d.downcast;
   $("t-table").checked = d.target.kind === "table";
@@ -914,7 +967,7 @@ function recipe() {
   if (pca.columns.length === 1) throw new Error("PCA에는 숫자 컬럼을 2개 이상 고르세요.");
   return { schema: S.schema, base: S.base, columns, filters, copies, drop: drops, sorts,
     ...(formulas.length ? { formulas } : {}), ...(pca.columns.length ? { pca: { columns: pca.columns, n: pca.n } } : {}),
-    ...(dedupe.length ? { dedupe } : {}), ...($("downcast").checked ? { downcast: true } : {}) };
+    ...(dedupe.length ? { dedupe, ...(keepNow() ? { dedupe_keep: keepNow() } : {}) } : {}), ...($("downcast").checked ? { downcast: true } : {}) };
 }
 // [미리보기]·[실행]·[중복 세기]가 함께 쓴다: 테이블을 골랐는지 보고, 레시피를 만들어 fn에 넘기고, 오류는 카드에 보인다.
 function act(button, fn) {
@@ -936,7 +989,7 @@ $("preview").onclick = () => act($("preview"), async r => {
 });
 $("dupes").onclick = () => act($("dupes"), async r => {
   const d = await timed("preview", () => api("/api/dupes", r));
-  $("dd-result").textContent = `중복 묶음 ${d.groups.toLocaleString()}개, 빠질 행 ${d.rows.toLocaleString()}개`;
+  $("dd-result").textContent = `중복 묶음 ${d.groups.toLocaleString()}개, 빠질 행 ${d.rows.toLocaleString()}개` + (d.conflicts != null ? `, 값이 여럿이라 빈 값이 되는 묶음 ${d.conflicts.toLocaleString()}개` : "");
 });
 // 새 테이블을 만들 때는 한 번 더 눌러야 실행한다. 다른 것을 건드리면 원래대로 돌아간다.
 $("run").onclick = () => {
@@ -1026,9 +1079,8 @@ async function loadAnaColumns() {
   keep("a-sy", nums);
   if ($("a-sy").value === $("a-sx").value && nums[1]) $("a-sy").value = nums[1];
   keep("a-gby", names());
-  keep("a-gval", nums, "값 없음 (개수)");
+  fillAnaValues();
   keep("a-tcol", names("date"));
-  keep("a-tval", nums, "값 없음 (개수)");
   const picked = new Set([...$("a-corr-cols").querySelectorAll("input:checked")].map(b => b.value));
   $("a-corr-cols").replaceChildren(...nums.map((n, i) => el("label", {}, el("input", { type: "checkbox", value: n, checked: picked.size ? picked.has(n) : i < 8 }), " " + n)));
   $("a-tcol").title = names("date").length ? "" : "날짜 컬럼이 없습니다. 전처리에서 타입을 날짜로 바꾸면 고를 수 있습니다";
@@ -1040,8 +1092,9 @@ function anaHow() {
   if (k === "correlation") return $("a-cmode").value === "heatmap"
     ? { kind: "correlation", columns: [...$("a-corr-cols").querySelectorAll("input:checked")].map(b => b.value) }
     : { kind: "scatter", x: $("a-sx").value, y: $("a-sy").value };
-  if (k === "groups") return { kind: k, by: $("a-gby").value, agg: $("a-gagg").value, value: $("a-gval").value };
-  return { kind: k, column: $("a-tcol").value, unit: $("a-tunit").value, agg: $("a-tagg").value, value: $("a-tval").value };
+  const pick = (key, value) => ({ agg: pickers[key].get().agg, ...(pickers[key].get().opts ? { opts: pickers[key].get().opts } : {}), value });
+  if (k === "groups") return { kind: k, by: $("a-gby").value, ...pick("groups", $("a-gval").value) };
+  return { kind: k, column: $("a-tcol").value, unit: $("a-tunit").value, ...pick("trend", $("a-tval").value) };
 }
 // 구하기(표본) 또는 전체로 다시 구하기(마지막 분석을 테이블 전체로)
 async function runAna(full) {
@@ -1063,7 +1116,7 @@ $("a-run").onclick = () => busy($("a-run"), () => runAna(false));
 $("a-full").onclick = () => busy($("a-full"), () => runAna(true));
 // 분석 결과의 제목과 아래 줄(어느 데이터로 구했는지, 줄인 것)
 function anaTitle(d, view) {
-  const value = x => x.agg === "count" ? "개수" : `${x.value} ${AGG_NAMES[x.agg]}`;
+  const value = x => x.agg === "count" ? "개수" : `${x.value} ${aggName(x.agg)}`;
   return { hist: `${d.column} 분포`, box: `${d.column} 상자 그림`, values: `${d.column} 값 빈도`, heat: "상관관계",
            scatter: `${d.x} × ${d.y}`, groups: `${d.by}별 ${value(d)}`, trend: `${d.column} ${UNIT_NAMES[d.unit]}별 ${value(d)}` }[view];
 }
@@ -1090,7 +1143,7 @@ function anaTable(d, view) {
     ...(d.values.other ? [{ 값: `그 밖 (값 ${(d.values.unique - d.values.labels.length).toLocaleString()}종류)`, "행 수": d.values.other, 비율: pct(d.values.other) }] : [])] };
   if (view === "heat") return { columns: ["", ...d.columns], rows: d.matrix.map((row, i) => ({ "": d.columns[i], ...Object.fromEntries(row.map((r, j) => [d.columns[j], r == null ? "-" : +r.toFixed(3)])) })) };
   if (view === "scatter") return { columns: ["", "값"], rows: [["상관계수 r", d.r == null ? "-" : +d.r.toFixed(4)], ["쓴 행 수", d.n], ["그린 점 수", d.points.length]].map(([k, v]) => ({ "": k, 값: v })) };
-  const name = view === "groups" ? d.by : UNIT_NAMES[d.unit], value = d.agg === "count" ? "개수" : `${d.value} ${AGG_NAMES[d.agg]}`;
+  const name = view === "groups" ? d.by : UNIT_NAMES[d.unit], value = d.agg === "count" ? "개수" : `${d.value} ${aggName(d.agg)}`;
   return { columns: [name, value, ...(d.counts ? ["행 수"] : [])], rows: d.labels.map((l, i) => ({ [name]: l, [value]: d.values[i], ...(d.counts ? { "행 수": d.counts[i] } : {}) })) };
 }
 const tableHtml = ({ columns, rows }) => `<table><thead><tr>${columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
@@ -1100,9 +1153,11 @@ function drawAna() {
   if (A.chart) A.chart.destroy();
   A.chart = null;
   const d = A.result;
-  $("a-box").classList.toggle("hidden", !d);
+  const text = !!d && ["groups", "trend"].includes(A.view) && d.values.some(v => v != null && typeof v !== "number");  // 최빈값·이어 붙이기 같은 글자 결과는 그래프 없이 표로만
+  $("a-box").classList.toggle("hidden", !d || text);
   $("a-tabs").classList.toggle("hidden", !d || d.views.length < 2);
-  $("a-full").disabled = $("a-add").disabled = !d;
+  $("a-full").disabled = !d;
+  $("a-add").disabled = !d || text;
   if (!d) { $("a-title").textContent = "분석"; $("a-table").innerHTML = ""; $("a-data").textContent = ""; return; }
   $("a-tabs").replaceChildren(...d.views.map(v => el("button", { textContent: VIEW_NAMES[v], className: v === A.view ? "on" : "", onclick: () => { A.view = v; drawAna(); } })));
   $("a-title").textContent = anaTitle(d, A.view);
@@ -1110,7 +1165,7 @@ function drawAna() {
   $("a-data").textContent = anaNote(d);
   $("a-box").style.setProperty("--ratio", VIEW_RATIOS[A.view] ?? 16 / 9);
   $("a-table").innerHTML = tableHtml(anaTable(d, A.view));
-  if ($("ana").classList.contains("hidden")) return;  // 감춰져 있으면 보일 때 그린다
+  if ($("ana").classList.contains("hidden") || text) return;  // 감춰져 있으면 보일 때 그린다
   A.chart = new Chart($("a-chart"), anaConfig(d, A.view, themeColors(document.documentElement.dataset.theme)));
 }
 

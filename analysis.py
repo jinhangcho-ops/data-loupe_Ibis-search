@@ -114,25 +114,27 @@ def scatter(t, x, y):
     return {"x": x, "y": y, "points": [[p["x"], p["y"]] for p in found], "n": corr["n"], "r": corr["matrix"][0][1]}
 
 
-def groups(t, by, value, agg):
+def groups(t, by, value, agg, opts=None):
     """그룹 비교: by의 값마다 value의 agg(count·sum·mean). 행이 많은 MAX_GROUPS개 그룹을 값이 큰 순으로."""
     g = column_of(t, by, what="그룹 컬럼")
-    metric = chart_metric(t, value, agg)
+    metric = chart_metric(t, value, agg, opts)
     found = rows(t.group_by(g.name("group")).aggregate(v=metric, n=t.count()).order_by([ibis.desc("n"), "group"]).limit(MAX_GROUPS + 1))
     more = len(found) > MAX_GROUPS
-    found = sorted(found[:MAX_GROUPS], key=lambda r: (r["v"] is None, -(r["v"] or 0)))
+    found = found[:MAX_GROUPS]
+    if all(r["v"] is None or isinstance(r["v"], (int, float)) for r in found):  # 숫자면 값이 큰 순, 글자·목록(최빈값·이어 붙이기 …)이면 행이 많은 순 그대로
+        found = sorted(found, key=lambda r: (r["v"] is None, -(r["v"] or 0)))
     return {"by": by, "value": value, "agg": agg, "labels": ["(빈 값)" if r["group"] is None else str(r["group"]) for r in found],
             "values": [r["v"] for r in found], "counts": [r["n"] for r in found], "more": more}
 
 
-def trend(t, column, unit, value, agg):
+def trend(t, column, unit, value, agg, opts=None):
     """시계열 추이: 날짜 컬럼을 unit(day·week·month)으로 묶어 value의 agg. 앞 기간부터 MAX_PERIODS개. 빈 날짜는 뺀다."""
     if unit not in UNITS:
         raise ValueError("묶음 단위는 day, week, month 중 하나입니다.")
     d = column_of(t, column, "date")
-    chart_metric(t, value, agg)  # 고른 값·집계를 먼저 검사한다
+    chart_metric(t, value, agg, opts)  # 고른 값·집계를 먼저 검사한다
     s = t.filter(d.notnull())
-    metric = chart_metric(s, value, agg)
+    metric = chart_metric(s, value, agg, opts)
     found = rows(s.group_by(s[column].truncate(UNITS[unit]).name("period")).aggregate(v=metric).order_by("period").limit(MAX_PERIODS + 1))
     return {"column": column, "unit": unit, "value": value, "agg": agg, "labels": [str(r["period"])[:10] for r in found[:MAX_PERIODS]],
             "values": [r["v"] for r in found[:MAX_PERIODS]], "more": len(found) > MAX_PERIODS}
@@ -152,5 +154,5 @@ def analyze(t, how):
     if name not in KINDS:
         raise ValueError(f"분석 종류는 {', '.join(KINDS)} 중 하나입니다.")
     args = {"columns": (), "distribution": ("column",), "correlation": ("columns",), "scatter": ("x", "y"),
-            "groups": ("by", "value", "agg"), "trend": ("column", "unit", "value", "agg")}[name]
+            "groups": ("by", "value", "agg", "opts"), "trend": ("column", "unit", "value", "agg", "opts")}[name]
     return {"kind": name, **KINDS[name](t, *[how.get(a) for a in args])}

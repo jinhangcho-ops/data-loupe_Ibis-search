@@ -14,6 +14,7 @@ import result
 import server
 import settings
 import source
+import sql_funcs
 import use_counts
 from server import get_con, run
 
@@ -95,13 +96,31 @@ def slim(expr, keep):
     return expr.select(*cols) if cols and len(cols) < len(expr.columns) else expr
 
 
-def runnable(body, select=True, keep=None):
+def agg_unsupported(body, expr, extra=()):
+    """요청의 계열(series)·피벗(pivot)과 extra([(집계, 컬럼, 옵션)])가 고른 집계를 연결이 못 하면(같은 결과의 대체 식도 안 되면) True. 쉬운 집계(개수·합계·평균·최소·최대)는 따져 보지 않는다."""
+    specs = [(s.get("agg"), s.get("y"), s.get("opts")) for s in body.get("series") or [] if isinstance(s, dict)] + list(extra)
+    pivot = body.get("pivot")
+    if isinstance(pivot, dict) and pivot.get("how"):
+        specs.append((pivot["how"], pivot.get("value") or None, pivot.get("opts")))
+    for agg, y, opts in specs:
+        if agg in sql_funcs.MERGE or not isinstance(agg, str):
+            continue
+        try:
+            made = sql_funcs.aggregate(agg, expr, y or None, None, opts if isinstance(opts, dict) else None)
+        except ValueError:
+            continue  # 쓸 수 없는 인자는 실행할 때 이유와 함께 알린다
+        if not source.compiles(expr.aggregate(v=made)):
+            return True
+    return False
+
+
+def runnable(body, select=True, keep=None, extra=()):
     """build의 식을 연결이 할 수 있으면 그대로, 못 하는 계산이면(파일 연결의 창 함수, 일부 DB의 펼치기 등) 기간·조건까지의 결과를
-    이 PC(held의 DuckDB)에 받아 그 위에서 만든 식. 받을 수 없을 만큼 크면 PC_TOO_BIG.
+    이 PC(held의 DuckDB)에 받아 그 위에서 만든 식(요청의 계열·피벗이 고른 집계를 연결이 못 해도 같다: 중앙값 등). 받을 수 없을 만큼 크면 PC_TOO_BIG.
     keep(쓸 컬럼들)을 주면 식을 그 컬럼으로 줄이고, PC에 받는 사본도 조건을 건 뒤 그 컬럼만 받는다(테이블 전체를 받지 않는다). 계산 줄(calcs)이 있으면 줄이지 않는다."""
     keep = None if body.get("calcs") else keep
     expr = slim(build(body, select), keep) if keep else build(body, select)
-    if source.compiles(expr):
+    if source.compiles(expr) and not agg_unsupported(body, expr, extra):
         return expr
     name = run(lambda: held.ensure(search_key(body, keep), slim(filtered(body), keep) if keep else filtered(body), server.state["cancel"]))[0]
     if name is None:
@@ -123,7 +142,9 @@ def numbered(body, limit, offset):
 
 def metric_values(body, names, by=None):
     """검색 식 위에서 지표들을 구하고 한 번씩 센다. ({이름: 지표}, 나눈 값들 또는 None, {이름: 값들}, 더 있는지)."""
-    found, expr = metrics.registry(), runnable(body, select=False)
+    found = metrics.registry()
+    parts = [p for n in names if n in found for p in (found[n]["numerator"], found[n]["denominator"]) if p]
+    expr = runnable(body, select=False, extra=[(p["agg"], p["column"], p.get("opts")) for p in parts])  # 연결이 못 하는 집계(중앙값 등)면 이 PC 사본에서
     labels, values, more = run(lambda: metrics.compute(expr, names, found, by or None))
     for name in names:
         use_counts.use("metrics", name)

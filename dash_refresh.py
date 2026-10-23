@@ -54,11 +54,11 @@ def minimum_text(seconds):
 def live_mins():
     """연결별 실시간 간격 최소 {source_key: 초}(잘못된 항목은 뺀다)."""
     found = settings.read(LIVE_FILE) or {}
-    return {k: v for k, v in found.items() if isinstance(k, str) and type(v) is int and 0 < v <= MAX_LIVE_MIN}
+    return {dash_store.canon_key(k): v for k, v in found.items() if isinstance(k, str) and type(v) is int and 0 < v <= MAX_LIVE_MIN}  # 예전 모양의 열쇠도 지금 모양으로
 
 
 def live_min(key):
-    return live_mins().get(key, 0)
+    return live_mins().get(dash_store.canon_key(key), 0)
 
 
 def set_live_min(key, seconds):
@@ -67,7 +67,7 @@ def set_live_min(key, seconds):
         raise ValueError("먼저 데이터에 연결하세요.")
     if type(seconds) is not int or not 0 <= seconds <= MAX_LIVE_MIN:
         raise ValueError(f"실시간 간격 최소는 0~{MAX_LIVE_MIN}초의 정수입니다(0이면 제한 없음).")
-    found = live_mins()
+    found, key = live_mins(), dash_store.canon_key(key)
     if seconds:
         found[key] = seconds
     else:

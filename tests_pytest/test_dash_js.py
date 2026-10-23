@@ -6,14 +6,16 @@ import subprocess
 
 import pytest
 
+import dash_calc
 import dash_store
+import sql_funcs
 from conftest import ROOT
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
 SCRIPT = """
 const assert = require("assert");
-globalThis.SERVER = { dash: JSON.parse(%(dash)s) };
+globalThis.SERVER = { dash: JSON.parse(%(dash)s), merge: JSON.parse(%(merge)s), agg_names: {} };
 const by = { day: { labels: ["2026-01-05", "2026-01-06", "2026-01-12", "2026-02-02"], series: [
   { name: "합계", agg: "sum", sum: [30, 35, 40, 50], count: [2, 2, 1, 1], min: [10, 5, 40, 50], max: [20, 30, 40, 50] },
   { name: "평균", agg: "mean", sum: [30, 35, 40, 50], count: [2, 2, 1, 1] },
@@ -248,16 +250,23 @@ assert.strictEqual(cardValue(unique, 0), 65);  // 합계 계열은 일 값을 �
 const win = { data: { window: { start: "2025-12-21", end: "2026-02-02" } } };
 assert(!outsideWindow(win, { start: "2026-01-12", end: "2026-02-02" }) && outsideWindow(win, { start: "2025-12-01", end: "2026-02-02" }) && outsideWindow(win, { start: "2026-01-12", end: "2026-03-01" }));
 assert(!outsideWindow({ data: {} }, { start: "2020-01-01", end: "2030-01-01" }) && !outsideWindow(win, null) && !outsideWindow(win, { start: null, end: "2026-01-01" }));  // 범위가 없으면 해당 없음
+// 다시 묶을 수 없는 집계(서버가 SERVER.merge로 알려 준다): 중앙값도 고유 개수처럼 일 값은 그대로, 주·월·연은 서버가 따로 구한 값
+const by2 = { day: { labels: ["2026-01-05", "2026-01-06", "2026-02-02"], series: [{ name: "중앙", agg: "median", merge: false, values: [5, 6, 8] }, { name: "합계", agg: "sum", sum: [1, 2, 3], count: [1, 1, 1] }] },
+  month: { labels: ["2026-01-01", "2026-02-01"], series: [{ name: "중앙", values: [5.5, 8] }] } };
+assert.deepStrictEqual(byUnit(by2, "day").datasets.map(d => d.values), [[5, 6, 8], [1, 2, 3]]);
+assert.deepStrictEqual(byUnit(by2, "month").datasets.map(d => d.values), [[5.5, 8], [3, 3]]);  // 중앙값은 서버 값, 합계는 일 값을 다시 묶음
+assert.strictEqual(merges("sum") && merges("count") && !merges("median") && !merges("nunique") && !merges("p90"), true);
+assert.strictEqual(aggName("median"), "median");  // 이름 표가 없으면 id 그대로(서버가 SERVER.agg_names로 준다)
 console.log("ok");
 """
 
 
 def test_dash_js(tmp_path):
-    dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE}, ensure_ascii=False)
+    dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE, "aggs": list(dash_calc.AGGS)}, ensure_ascii=False)
     script = tmp_path / "dash_test.js"
     script.write_text((ROOT / "static" / "board.js").read_text(encoding="utf-8") + (ROOT / "static" / "dash.js").read_text(encoding="utf-8")
                       + (ROOT / "static" / "dash_cards.js").read_text(encoding="utf-8") + (ROOT / "static" / "dash_rules.js").read_text(encoding="utf-8")
-                      + SCRIPT.replace("%(dash)s", json.dumps(dash, ensure_ascii=False)), encoding="utf-8")
+                      + SCRIPT.replace("%(dash)s", json.dumps(dash, ensure_ascii=False)).replace("%(merge)s", json.dumps(json.dumps(list(sql_funcs.MERGE)))), encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr[-3000:]
 
@@ -275,7 +284,7 @@ def test_own_range_same_in_python_and_js(tmp_path):
         want.append(got and {"range": got["range"], "prev": got["prev"]})
     script = tmp_path / "own_test.js"
     dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE}, ensure_ascii=False)
-    body = ("const assert = require('assert'); globalThis.SERVER = { dash: JSON.parse(%s) };\nconst cases = %s;\n" % (json.dumps(dash, ensure_ascii=False), json.dumps(OWN_CASES, ensure_ascii=False))
+    body = ("const assert = require('assert'); globalThis.SERVER = { dash: JSON.parse(%s), merge: [] };\nconst cases = %s;\n" % (json.dumps(dash, ensure_ascii=False), json.dumps(OWN_CASES, ensure_ascii=False))
             + "const got = cases.map(p => ownRange({ source: { body: { periods: p } } }));\nconsole.log(JSON.stringify(got));\n")
     script.write_text((ROOT / "static" / "board.js").read_text(encoding="utf-8") + (ROOT / "static" / "dash.js").read_text(encoding="utf-8")
                       + (ROOT / "static" / "dash_cards.js").read_text(encoding="utf-8") + (ROOT / "static" / "dash_rules.js").read_text(encoding="utf-8") + body, encoding="utf-8")

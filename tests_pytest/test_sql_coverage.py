@@ -117,18 +117,20 @@ def test_every_function_has_text_and_example():
         assert f["label"] and f["help"] and f["example"] and f["category"] in dict(S.CATEGORIES), f["id"]
 
 
-def test_catalog_goes_to_screens():
-    """서버 상수(CONSTANTS["funcs"])로 화면에 가는 목록이 사전 전체를 담고 JSON이 된다."""
-    funcs = server.CONSTANTS["funcs"]
+def test_catalog_goes_to_screens(client):
+    """화면이 받는 사전(GET /api/funcs)이 사전 전체를 담고, 작은 목록은 상수(CONSTANTS)로 간다."""
+    funcs = client.get("/api/funcs").get_json()
     json.dumps(server.CONSTANTS)
     assert [f["id"] for f in funcs["funcs"]] == list(S.FUNCS) and set(funcs["screens"]) == set(S.SCREENS)
+    assert set(server.CONSTANTS["agg_names"]) >= set(S.aggregate_ids())
 
 
 # ---------- (2) 화면마다 고를 수 있다 ----------
 
 @pytest.mark.parametrize("name, ids, screens", FEATURES, ids=[f[0] for f in FEATURES])
-def test_screen_lists_offer_the_feature(name, ids, screens):
+def test_screen_lists_offer_the_feature(client, name, ids, screens):
     """화면의 서버 쪽 목록·상수가 그 기능을 담는다(화면 목록은 모두 사전에서 나온다)."""
+    served = client.get("/api/funcs").get_json()["screens"]
     lists = {
         "pivot": set(calc.HOWS) | set(S.ids_for("pivot")), "chart": set(result.chart_aggs()), "metrics": set(metrics.AGGS), "dash": set(dash_calc.AGGS),
         "calc": set(calc.NEW_WINDOWS) | set(S.ids_for("calc")), "prep": set(S.ids_for("prep")), "sentence": {i for ids_ in sentences.uses_map().values() for i in ids_},
@@ -137,7 +139,7 @@ def test_screen_lists_offer_the_feature(name, ids, screens):
         alias = next((a for a, target in S.ALIASES.items() if target == i), None)
         for screen in screens:
             assert i in lists[screen] or alias in lists[screen], f"{i}가 {screen} 화면 목록에 없음"
-            assert i in server.CONSTANTS["funcs"]["screens"][screen], f"{i}가 CONSTANTS의 {screen} 목록에 없음"
+            assert i in served[screen], f"{i}가 /api/funcs의 {screen} 목록에 없음"
 
 
 def test_screens_that_must_not_offer_wrong_kinds():

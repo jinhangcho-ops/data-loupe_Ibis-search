@@ -18,7 +18,6 @@ import server
 import settings
 import source
 import sql_exec
-import sql_funcs
 import use_counts
 from server import app, get_con, run, state, to_json
 
@@ -26,8 +25,7 @@ PREVIEW_ROWS = 20
 DEFAULT_SAMPLE = 5_000  # 통계를 낼 표본 행 수의 기본값
 FILE_FORMATS = ["parquet", "csv"]
 server.CONSTANTS.update(sample=DEFAULT_SAMPLE, sample_methods=profiler.METHODS, analysis=analysis.LIMITS,  # 화면(prep.html)의 표본 행 수 기본값, 표본 방법 이름, 분석의 상한들
-                        formula_guide=prep_derive.FORMULA_GUIDE, pca_max=prep_derive.PCA_MAX,  # 계산 식 안내, PCA에 넣을 컬럼 수 상한
-                        dedupe_keep={"rows": list(prep.KEEP_ROWS), "merge": {k: v[0] for k, v in sql_funcs.REPRESENTATIVE.items()}, "funcs": sql_funcs.ids_for("prep")})  # 중복 제거에서 남길 것, 계산 컬럼에 쓸 수 있는 함수
+                        formula_guide=prep_derive.FORMULA_GUIDE, pca_max=prep_derive.PCA_MAX)  # 계산 식 안내, PCA에 넣을 컬럼 수 상한
 TABLE_PREPS = "table_preps.json"  # 테이블별로 마지막에 쓴 전처리 {테이블 열쇠: {"config", "saved"}}
 MAX_TABLE_PREPS = 200
 SAMPLES = {}  # 마지막으로 읽은 표본 하나 {테이블 열쇠: (크기, pyarrow 표, 표본 정보)}. 통계에 이어 타입 추천이 같은 표본을 쓴다.

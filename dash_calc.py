@@ -25,7 +25,7 @@ from server import run
 
 AGGS = metrics.AGGS  # 날짜 X축 차트의 집계: 함수 사전(sql_funcs)의 집계 전부(예전 이름 nunique 포함)
 PARTS = ("sum", "count", "min", "max")  # 일 값 성분. 다시 묶는 방법: sum=Σsum, count=Σcount, mean=Σsum/Σcount, min·max=min·max
-MERGE = ("count", "sum", "mean", "min", "max")  # 일 값을 주·월·연으로 다시 묶을 수 있는 집계. 나머지(고유 개수·중앙값·분위수 …)는 단위마다 서버가 따로 구한다
+MERGE = sql_funcs.MERGE  # 일 값을 주·월·연으로 다시 묶을 수 있는 집계. 나머지(고유 개수·중앙값·분위수 …)는 단위마다 서버가 따로 구한다
 
 
 def merges(agg):
@@ -52,7 +52,7 @@ MAX_NUM_COLS = 200  # 카드에 알려 줄 숫자 컬럼 이름 수(버블의 [�
 
 def series_name(s):
     """계열 이름. 화면의 seriesName과 같다: 개수, 합계 (컬럼)."""
-    return metrics.AGG_NAMES[s["agg"]] + ("" if s["agg"] == "count" else f" ({s['y']})")
+    return metrics.AGG_NAMES[s["agg"]] + ("" if s["agg"] == "count" or not s["y"] else f" ({s['y']})")
 
 
 def clean_series(found):

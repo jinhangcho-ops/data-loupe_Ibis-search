@@ -50,12 +50,52 @@ def def_hash(definition):
     return hashlib.sha256(json.dumps(definition, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()[:16]
 
 
+FILE_SCHEMES = ("sqlite", "duckdb")  # 주소가 파일 경로인 종류
+DRIVE = re.compile(r"[A-Za-z]:([\/]|$)")
+
+
+def file_key(scheme, netloc, path):
+    """파일 주소의 열쇠: scheme + 절대 경로(소문자, / 구분, 드라이브 글자 유지). ibis가 sqlite·duckdb 주소를 읽는 규칙(netloc과 path를 이어 절대 경로로)을 따르고,
+    sqlite:///C:/x.db, 역슬래시를 쓴 sqlite:///C:, sqlite://C:, 그리고 sqlite://C:/x.db 처럼 같은 파일을 가리키는 쓰기는 같은 열쇠가 된다. 예외를 내지 않는다."""
+    if (netloc, path) in (("", ""), ("", "/:memory:"), (":memory:", ""), ("", ":memory:")) or not (netloc + path).strip("/\\"):
+        return f"url:{scheme}://:memory:"
+    if netloc:
+        joined = netloc + ("/" + path.lstrip("/\\") if path.strip("/\\") else "")
+    else:
+        joined = path[1:] if re.match(r"[/\\][A-Za-z]:", path) else path  # /C:/x → C:/x
+    full = os.path.abspath(joined.replace("\\", "/"))
+    return f"url:{scheme}://" + full.replace("\\", "/").lower()
+
+
 def source_key(recent):
-    """연결 요청 값(source.recent)에서 user·password를 뺀 열쇠. 파일 연결 = 종류 + 경로(소문자), 주소 연결 = scheme + host + port + database."""
+    """연결 요청 값(source.recent)에서 user·password를 뺀 열쇠. 파일 연결 = 종류 + 경로(소문자), 주소 연결 = scheme + host + port + database.
+    sqlite·duckdb 주소(그리고 host·port를 읽을 수 없는 주소)는 파일 경로로 보고 file_key로 만든다. 어떤 글자가 와도 예외를 내지 않는다."""
     if recent.get("kind") == "folder":
         return "folder:" + os.path.abspath(recent.get("path", "")).replace("\\", "/").lower()
-    parts = urlsplit(recent.get("url", ""))
-    return f"url:{parts.scheme}://{parts.hostname or ''}:{parts.port or ''}/{parts.path.strip('/')}"
+    url = str(recent.get("url", "") or "")
+    scheme, sep, rest = url.partition("://")
+    scheme = scheme.lower()
+    if not sep:
+        return f"url:{url.split('@')[-1]}"  # scheme://가 없는 이상한 값: 계정 부분만 뺀다
+    if scheme in FILE_SCHEMES:
+        return file_key(scheme, *re.match(r"([^/\?#]*)([^?#]*)", rest).groups())
+    try:
+        parts = urlsplit(url)
+        return f"url:{parts.scheme}://{parts.hostname or ''}:{parts.port or ''}/{parts.path.strip('/')}"
+    except ValueError:  # host·port를 읽을 수 없는 주소(예: 포트가 숫자가 아님)는 경로로 본다
+        netloc, path = re.match(r"([^/\?#]*)([^?#]*)", rest).groups()
+        return f"url:{scheme}://{netloc.split('@')[-1].lower()}/{path.replace(chr(92), '/').strip('/')}"  # 계정 부분만 빼고 그대로
+
+
+def canon_key(key):
+    """저장해 둔 예전 열쇠를 지금 모양으로. 예전 sqlite·duckdb 열쇠(url:sqlite://:/경로)는 file_key로 다시 만들고, 그 밖의 열쇠는 그대로 둔다. 예외를 내지 않는다."""
+    if isinstance(key, str):
+        for scheme in FILE_SCHEMES:
+            head = f"url:{scheme}://:/"
+            if key.startswith(head):
+                path = key[len(head):]
+                return file_key(scheme, "", "/" + path)
+    return key
 
 
 def source_label(recent):
@@ -297,6 +337,7 @@ def check_source(source):
         raise ValueError(f"source에 쓸 수 없는 항목이 있습니다: {', '.join(sorted(unknown))}")
     no_secrets(source, "source")
     out = {name: text(source.get(name), f"source.{name}", 500) for name in ("key", "label", "schema", "table", "metric_id", "flow_id", "date")}
+    out["key"] = canon_key(out["key"])  # 예전 모양의 열쇠도 지금 모양으로
     for name in ("body", "recipe", "analysis"):
         if source.get(name) is not None:
             if not isinstance(source[name], dict):
@@ -411,6 +452,10 @@ def load():
             dashboards = None
         if not isinstance(dashboards, dict):
             return {"dashboards": {}, "locked": True}
+        for d in dashboards.values():  # 예전 모양의 연결 열쇠를 지금 모양으로(다음에 쓸 때 저장된다)
+            for c in d.get("cards", []) if isinstance(d, dict) else []:
+                if isinstance(c, dict) and isinstance(c.get("source"), dict) and c["source"].get("key"):
+                    c["source"]["key"] = canon_key(c["source"]["key"])
         return {"dashboards": dashboards, "locked": False}
 
 

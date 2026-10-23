@@ -111,7 +111,7 @@ function parseBlankLine(line) {
   if (!m) return { error: "‘이름 = 종류 [컬럼 [집계 [모양]]]’ 모양으로 적어 주세요. 예: 매출 = 값 amt sum 금액" };
   if (!(m[2] in BLANK_WORDS)) return { error: `종류는 값·직전·비교·기준일 중 하나예요(‘${m[2]}’)` };
   const agg = m[4] ?? (m[3] ? "sum" : "count");
-  if (!["count", "sum", "mean", "min", "max", "nunique"].includes(agg)) return { error: `집계는 count·sum·mean·min·max·nunique 중 하나예요(‘${agg}’)` };
+  if (!SERVER.dash.aggs.includes(agg)) return { error: `집계는 ${SERVER.dash.aggs.slice(0, 6).join("·")} … 중 하나예요(‘${agg}’). 전체 목록은 카드 추가 메뉴의 집계 칸에서 볼 수 있어요` };
   if (m[5] && !(m[5] in FORMAT_WORDS)) return { error: `모양은 숫자·%·금액 중 하나예요(‘${m[5]}’)` };
   return { blank: { name: m[1], kind: BLANK_WORDS[m[2]], y: m[3] ?? "", agg, format: FORMAT_WORDS[m[5]] ?? "number" } };
 }

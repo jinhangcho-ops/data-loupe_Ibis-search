@@ -29,14 +29,14 @@ app.json.sort_keys = False  # 구조 컬럼의 필드·행의 컬럼을 원래 �
 state = {"con": None, "passwords": [], "opened": None, "rows": {}, "names": {}, "tables": {}, "cancel": threading.Event()}
 # names: 스키마 → 테이블 목록, tables: (스키마, 이름) → 테이블 식. 검색 칸을 바꿀 때마다 DB에 목록·스키마를 다시 묻지 않게 연결마다 기억한다(forget_tables로 비운다).
 turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 연결을 쓰지 않는 FREE의 경로만 기다리지 않는다.
-FREE = {"/api/usage", "/api/cancel", "/api/send", "/api/drivers"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
+FREE = {"/api/usage", "/api/cancel", "/api/send", "/api/drivers", "/api/funcs"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
 ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 목록 예: ("Parquet (*.parquet)",) → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
 ask_folder = None  # 저장할 폴더를 묻는 함수(→ 고른 폴더 또는 None). ask_save처럼 desktop.py가 채운다.
 QUERY_TIMEOUT = 1800  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
 CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS,
-             "funcs": sql_funcs.catalog()}  # 함수 사전: 모든 화면이 같은 목록에서 함수를 고른다(sql_funcs)
+             "funcs_ver": sql_funcs.version(), "agg_names": sql_funcs.agg_names(), "merge": list(sql_funcs.MERGE)}  # 함수 사전은 GET /api/funcs로 받는다(버전이 같으면 화면이 가진 것을 쓴다). 여기에는 작은 목록만
 
 
 def number_range(kind, low, high):
@@ -374,6 +374,35 @@ def tables():
     names = [] if schema else [n for n in virtual_tables() if n.lower() not in {t.lower() for t in found}]
     ordered = use_counts.order("virtual_tables", [f"{connection_key()}|{n}" for n in names])
     return jsonify(tables=found, virtual=[k.rpartition("|")[2] for k in ordered])
+
+
+@app.get("/api/funcs")
+def funcs():
+    """함수 사전 전체(sql_funcs.catalog). 연결을 쓰지 않는다. ETag가 같으면 304로 답해 화면이 받아 둔 것을 쓰게 한다."""
+    tag = f'"{sql_funcs.version()}"'
+    if request.headers.get("If-None-Match") == tag:
+        return Response(status=304, headers={"ETag": tag})
+    reply = jsonify(sql_funcs.catalog())
+    reply.headers["ETag"] = tag
+    reply.headers["Cache-Control"] = "private, max-age=3600"
+    return reply
+
+
+SUPPORT = {}  # 마지막으로 시험한 (연결, 스키마, 테이블)과 그 결과. 같은 테이블이면 다시 만들어 보지 않는다.
+
+
+@app.post("/api/funcs/support")
+def funcs_support():
+    """지금 연결이 함수 사전의 각 함수를 하는지 {id: {status, note}} (status: ok·substitute·local·unavailable). 테이블 base의 컬럼으로 시험하고 실행하지 않는다."""
+    body = request.json or {}
+    con, schema, base = get_con(), body.get("schema") or None, body.get("base") or ""
+    import parse
+    parse.check_name(base, table_names(con, schema) + ([] if schema else list(virtual_tables())), "테이블")
+    key = (id(con), schema, base)
+    if SUPPORT.get("key") != key:
+        table = run(lambda: any_table(con, base, schema))
+        SUPPORT.update(key=key, found=run(lambda: sql_funcs.support(table)))
+    return jsonify(support=SUPPORT["found"])
 
 
 @app.get("/")

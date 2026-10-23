@@ -3,7 +3,9 @@
 // 카드 모양은 dash_store.py: { id, kind, title, layout, colors, view, source, data }. data.by_unit은 시간별(일 값 + 서버가 따로 구한 값), data.values는 항목별·지표·분석 결과.
 
 // ---------- 분석 그림 (분석 화면과 대시보드의 분석 카드가 함께 쓴다) ----------
-const AGG_NAMES = { count: "개수", sum: "합계", mean: "평균" };
+// 집계 이름과 일 값을 다시 묶을 수 있는 집계는 서버(함수 사전)가 주는 목록이다: SERVER.agg_names, SERVER.merge
+const aggName = id => SERVER.agg_names?.[id] ?? id;
+const merges = agg => SERVER.merge.includes(agg);  // 아니면 일 값을 주·월·연으로 다시 묶을 수 없다(고유 개수·중앙값·분위수 …). 서버가 단위마다 따로 구한다
 const UNIT_NAMES = { day: "일", week: "주", month: "월" };
 // 숫자는 자릿수 쉼표와 소수 넷째 자리까지
 const shownum = v => v == null ? "" : typeof v === "number" ? v.toLocaleString(undefined, { maximumFractionDigits: 4 }) : String(v);
@@ -70,10 +72,10 @@ function anaConfig(d, view, colors, options = {}) {
   }
   if (view === "scatter") return chart("scatter", undefined, [{ data: d.points.map(([x, y]) => ({ x, y })), backgroundColor: alpha(main, 0.55), pointRadius: 2.5 }],
     { x: { ...axis, title: title(d.x) }, y: { ...axis, title: title(d.y) } });
-  if (view === "groups") return chart("bar", d.labels, [{ label: AGG_NAMES[d.agg], data: d.values, backgroundColor: main }],
-    { x: { ...axis, title: title(d.by) }, y: { ...axis, title: title(d.agg === "count" ? "개수" : `${d.value} ${AGG_NAMES[d.agg]}`) } });
-  return chart("line", d.labels, [{ label: AGG_NAMES[d.agg], data: d.values, borderColor: main, backgroundColor: main, borderWidth: 2, pointRadius: d.labels.length > 60 ? 0 : 2, spanGaps: true }],
-    { x: { ...axis, title: title(UNIT_NAMES[d.unit]) }, y: { ...axis, title: title(d.agg === "count" ? "개수" : `${d.value} ${AGG_NAMES[d.agg]}`) } });
+  if (view === "groups") return chart("bar", d.labels, [{ label: aggName(d.agg), data: d.values, backgroundColor: main }],
+    { x: { ...axis, title: title(d.by) }, y: { ...axis, title: title(d.agg === "count" ? "개수" : `${d.value} ${aggName(d.agg)}`) } });
+  return chart("line", d.labels, [{ label: aggName(d.agg), data: d.values, borderColor: main, backgroundColor: main, borderWidth: 2, pointRadius: d.labels.length > 60 ? 0 : 2, spanGaps: true }],
+    { x: { ...axis, title: title(UNIT_NAMES[d.unit]) }, y: { ...axis, title: title(d.agg === "count" ? "개수" : `${d.value} ${aggName(d.agg)}`) } });
 }
 
 // ---------- 색 ----------
@@ -108,7 +110,7 @@ function rollup(s, days, unit) {
 // range({start, end}: "YYYY-MM-DD", 없으면 열린 쪽)를 주면 그 기간의 칸만 남긴다(월·연 칸은 그 기간과 겹치는 것).
 function byUnit(by, unit, range) {
   const day = by.day, server = new Map((unit === "day" ? [] : by[unit]?.series ?? []).map(s => [s.name, new Map(by[unit].labels.map((l, i) => [l, s.values[i]]))]));
-  const maps = day.series.map(s => server.get(s.name) ?? (s.agg !== "nunique" ? rollup(s, day.labels, unit) : unit === "day" ? new Map(day.labels.map((l, i) => [l, s.values[i]])) : new Map()));
+  const maps = day.series.map(s => server.get(s.name) ?? (merges(s.agg) ? rollup(s, day.labels, unit) : unit === "day" ? new Map(day.labels.map((l, i) => [l, s.values[i]])) : new Map()));
   const from = range?.start ? BUCKET[unit](range.start) : "", to = range?.end ?? "9999";
   const labels = [...new Set(maps.flatMap(m => [...m.keys()]))].sort().filter(l => l >= from && l.slice(0, 10) <= to);
   return { keys: labels, labels: labels.map(l => unit === "month" ? l.slice(0, 7) : unit === "year" ? l.slice(0, 4) : l),
@@ -122,7 +124,7 @@ const daysBetween = (start, end) => dayNumber(end) - dayNumber(start) + 1;
 function windowValue(s, days, from, to) {
   const keep = days.map((_, i) => i).filter(i => (!from || days[i] >= from) && (!to || days[i] <= to));
   if (!keep.length) return null;
-  if (s.agg === "nunique") return keep.length === 1 ? s.values[keep[0]] ?? null : null;  // 고유 개수는 여러 날을 다시 묶을 수 없다(하루 값만)
+  if (!merges(s.agg)) return keep.length === 1 ? s.values[keep[0]] ?? null : null;  // 고유 개수·중앙값 같은 집계는 여러 날을 다시 묶을 수 없다(하루 값만)
   const pick = a => a && keep.map(i => a[i]);
   return rollup({ agg: s.agg, sum: pick(s.sum), count: pick(s.count), min: pick(s.min), max: pick(s.max) }, keep.map(() => "2000-01-01"), "day").get("2000-01-01") ?? null;
 }
@@ -145,7 +147,7 @@ function ownRange(card) {
 function compareItem(card, range, prev) {
   if (!range) { const own = ownRange(card); if (!own) return null; ({ range, prev } = own); }
   const by = card.data?.by_unit, s = by?.day?.series[0];
-  if (!s || s.agg === "nunique" || !range?.start || !range?.end) return null;
+  if (!s || !merges(s.agg) || !range?.start || !range?.end) return null;
   const days = by.day.labels, mode = card.view.compare?.mode ?? "span", better = card.view.better ?? "up", n = daysBetween(range.start, range.end);
   if (mode === "point") {
     const before = shiftDay(range.end, -n);
@@ -167,7 +169,7 @@ function cardSeries(card) {
   if (d.by_unit?.day) return { ...byUnit(d.by_unit, view.unit || "day", card.range), time: true, chartable: true };
   if (card.kind === "analysis" && d.values) {
     const v = d.values, name = anaView(card);
-    if (name === "groups" || name === "trend") return { labels: v.labels, datasets: [{ label: AGG_NAMES[v.agg], values: v.values }], time: name === "trend", chartable: true };
+    if (name === "groups" || name === "trend") return { labels: v.labels, datasets: [{ label: aggName(v.agg), values: v.values }], time: name === "trend", chartable: true };
     return { labels: [], datasets: [], time: false, chartable: false };
   }
   if (d.values?.series) return { labels: d.values.labels, datasets: d.values.series.map((s, i) => ({ label: s.name, values: s.values, ...(view.styles?.[i] ?? {}) })), time: false, chartable: true };
@@ -279,7 +281,7 @@ class DashBoard extends Board {
     this.range = range;
     this.prev = prev;
     await this.recompare();
-    const unique = c => SVG_KINDS.includes(c.kind) && c.data?.by_unit?.day?.series.some(s => s.agg === "nunique");  // 고유 개수는 기간으로 다시 구해야 한다
+    const unique = c => SVG_KINDS.includes(c.kind) && c.data?.by_unit?.day?.series.some(s => !merges(s.agg));  // 고유 개수·중앙값 같은 집계는 기간으로 다시 구해야 한다
     const stale = this.cards.filter(c => (c.source?.date && !c.data?.by_unit && c.kind !== "recent_rows") || unique(c) || outsideWindow(c, this.range));  // 날짜 X축이 아닌데 기간 기준 날짜 컬럼이 있는 카드는 그 기간으로 다시 구한다
     if (stale.length) await this.recompute?.(stale);
   }
@@ -373,10 +375,10 @@ class DashBoard extends Board {
     const noDate = range && !d.by_unit && !card.source?.date && !["recent_rows", "status", "alerts", "map"].includes(card.kind) && !isPoints(card);  // 기간 기준 날짜 컬럼이 없으면 기간이 걸리지 않는다
     const applies = card.source?.date && !d.by_unit ? `기간 기준 날짜: ${card.source.date}` : noDate ? "기간·기준일은 날짜 X축 카드나 기간 기준 날짜 컬럼을 고른 카드에만 적용돼요" : "";
     const early = range?.start && first && range.start < first ? `저장된 일 값은 ${first}부터예요` : "";  // 보려는 기간이 저장된 값보다 앞서면
-    const lostUnique = range && SVG_KINDS.includes(card.kind) && d.by_unit?.day?.series.some((s, i) => s.agg === "nunique" && cardValue(card, i) == null) ? "고유 개수는 기간을 바꾸면 연결해서 다시 구해야 해요" : "";
+    const lostUnique = range && SVG_KINDS.includes(card.kind) && d.by_unit?.day?.series.some((s, i) => !merges(s.agg) && cardValue(card, i) == null) ? "이 집계(고유 개수·중앙값 …)는 기간을 바꾸면 연결해서 다시 구해야 해요" : "";
     const stale = this.connKey && card.source?.key && card.source.key !== this.connKey ? "이전 값(다른 연결)" : "";  // 지금 연결이 아닌 곳에서 구한 값
     const when = [stale, d.computed_at && "구한 시각 " + d.computed_at.replace("T", " "), d.note, early, applies, card.rangeNote, lostUnique].filter(Boolean).join(" · ");  // 값이 언제 것인지, 줄인 것
-    const said = this.compares.get(card), timed = !!d.by_unit?.day && d.by_unit.day.series[0]?.agg !== "nunique" && card.kind !== "dual_trend";
+    const said = this.compares.get(card), timed = !!d.by_unit?.day && merges(d.by_unit.day.series[0]?.agg) && card.kind !== "dual_trend";
     const pick = (value, options, set) => el("select", { className: "bunit", style: "flex-basis:auto", onchange: e => { set(e.target.value); this.changed?.(); this.recompare(); } },
       ...options.map(([v, name]) => el("option", { value: v, textContent: name, selected: v === value })));
     const how = timed ? el("div", { className: "btools" }, pick(card.view.compare?.mode ?? "span", [["span", "기간 비교"], ["point", "시점 비교"]], v => { card.view.compare = { mode: v }; }),

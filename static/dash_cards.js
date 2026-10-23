@@ -82,7 +82,7 @@ function darken(hex, k = 0.35) {
 // 기간(card.range)의 계열 i 값: 일 값이 있으면 기간으로 묶고, 없으면 날짜 컬럼 없이 구한 값
 function cardValue(card, i = 0) {
   const by = card.data?.by_unit?.day;
-  if (by && by.series[i]?.agg === "nunique" && card.range && by.labels.some(d => (!card.range.start || d >= card.range.start) && (!card.range.end || d <= card.range.end)) && windowValue(by.series[i], by.labels, card.range.start, card.range.end) == null) {
+  if (by && by.series[i] && !merges(by.series[i].agg) && card.range && by.labels.some(d => (!card.range.start || d >= card.range.start) && (!card.range.end || d <= card.range.end)) && windowValue(by.series[i], by.labels, card.range.start, card.range.end) == null) {
     const w = card.data.values?.window_nunique;  // 고유 개수는 일 값을 묶을 수 없어, 서버가 이 기간으로 따로 구한 값만 쓴다(없으면 —)
     return w && (w.start ?? null) === (card.range.start ?? null) && (w.end ?? null) === (card.range.end ?? null) ? w.values[i] ?? null : null;
   }
