@@ -9,3 +9,4 @@ build/
 dist/
 check.py
 CLAUDE.md
+installer/Output/

@@ -21,9 +21,11 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel)에 연결해 �
 
 ## 프로그램 받기
 
-1. GitHub 저장소의 Actions 탭 → `build-exe` → `Run workflow`를 누릅니다.
-2. 완료된 실행 화면 아래 Artifacts에서 `ibis_search-windows`(zip)를 내려받습니다.
-3. 압축을 풀고 `ibis_search.exe`를 실행합니다. 폴더 안의 다른 파일은 지우지 않습니다. 이미 실행 중일 때 다시 열면 '이미 실행 중입니다' 안내만 뜨고 먼저 연 창이 그대로 남습니다.
+1. 저장소의 **Releases**에서 최신 버전의 `ibis_search-setup.exe`를 내려받아 실행합니다.
+2. 설치 방식(현재 사용자용 권장, 관리자 권한 없음)과 **설치 위치**를 고르고, **바탕 화면에 바로 가기 만들기**를 체크할지 정합니다. 시작 메뉴에는 `Ibis Search`가 생깁니다.
+3. 바로 가기나 시작 메뉴로 실행합니다. 이미 실행 중일 때 다시 열면 '이미 실행 중입니다' 안내만 뜨고 먼저 연 창이 그대로 남습니다.
+
+지우려면 Windows 설정 → 앱에서 `Ibis Search`를 제거합니다. 설정·대시보드(`%APPDATA%\ibis_search`)는 남아 다시 설치하면 이어 씁니다. 설치 없이 쓰려면 Actions 탭 → `build-exe` → `Run workflow` 결과의 `ibis_search-windows`(zip)를 풀어 `ibis_search.exe`를 실행합니다(폴더 안 다른 파일은 지우지 않음).
 
 서명되지 않은 프로그램이라 Windows SmartScreen 경고가 나오면 [추가 정보] → [실행]을 누릅니다.
 
