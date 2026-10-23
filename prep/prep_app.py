@@ -25,6 +25,7 @@ prep_expr = Later("prep.prep_expr")
 prep_profile = Later("prep.prep_profile")
 profiler = Later("core.profiler")
 stats = Later("analysis.stats")
+sql_funcs = Later("core.sql_funcs")
 
 PREVIEW_ROWS = 20
 DEFAULT_SAMPLE = 5_000  # 통계를 낼 표본 행 수의 기본값
@@ -154,12 +155,12 @@ def copy_key(recipe):
 
 
 def cached_key(recipe):
-    """recipe가 쓸 사본의 열쇠: 같은 사본이 있으면 그것, 없으면 같은 테이블·거르기이고 받지 않은 컬럼이 더 적은(= 컬럼이 더 많은) 사본이 있으면 그것, 아니면 새로 받을 열쇠."""
+    """recipe가 쓸 사본의 열쇠: 같은 사본이 있으면 그것, 없으면 같은 테이블·거르기이고 받지 않은 컬럼이 더 적은(= 컬럼이 더 많은) 사본 중 가장 최근에 쓴 것, 아니면 새로 받을 열쇠."""
     key = copy_key(recipe)
     items = held.store["items"]
     if key in items:
         return key
-    return next(iter(usable_keys(key)), key)
+    return next(iter(reversed(usable_keys(key))), key)  # 가장 최근에 쓴 사본
 
 
 def usable_keys(key):
@@ -195,16 +196,29 @@ def working_copy(recipe):
     return local.select(*[c for c in local.columns if c != held.ROW and c not in skipped])
 
 
+def formula_reads_all(expr):
+    """계산식에 함수 사전의 집계(mean 등)·창 함수가 있는지: 표 전체를 읽는다."""
+    import ast
+    try:
+        calls = [n.func.id for n in ast.walk(ast.parse(expr, mode="eval")) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)]
+    except (SyntaxError, ValueError):
+        return False
+    return any((f := sql_funcs.get(name))["aggregate"] or f["window"] for name in calls if name in sql_funcs.FUNCS or name in sql_funcs.ALIASES)
+
+
 def computes_stats(recipe):
-    """recipe에 통계를 내는 일이 있는지: fill mean·median·mode, outlier iqr·std, scale standard·minmax·log(최솟값 확인), pca(전체 집계), rare(전체 GROUP BY), label·onehot(서로 다른 값 읽기), 중복 제거(dedupe)."""
-    if recipe.get("dedupe") or recipe.get("pca"):
+    """recipe에 통계를 내는 일이 있는지: fill mean·median·mode·prev·next(전체 정렬), outlier iqr·std, scale standard·minmax·log(최솟값 확인), pca(전체 집계), rare(전체 GROUP BY), label·onehot(서로 다른 값 읽기),
+    counts(서로 다른 값 읽기), 중복 제거(dedupe), 정렬(sorts), 집계·창 함수가 든 계산식(표 전체 window)."""
+    if recipe.get("dedupe") or recipe.get("pca") or recipe.get("sorts"):
+        return True
+    if any(isinstance(f, dict) and isinstance(f.get("expr"), str) and formula_reads_all(f["expr"]) for f in recipe.get("formulas") or [] if isinstance(f, dict)):
         return True
     for spec in (recipe.get("columns") or {}).values():
         ops = spec.get("ops") if isinstance(spec, dict) else None
         if not isinstance(ops, dict):
             continue
         fill, outlier = ops.get("fill"), ops.get("outlier")
-        if ops.get("scale") in ("standard", "minmax", "log") or "rare" in ops or "label" in ops or "onehot" in ops or (isinstance(fill, dict) and fill.get("how") in ("mean", "median", "mode")) or (isinstance(outlier, dict) and outlier.get("by") in ("iqr", "std")):
+        if ops.get("scale") in ("standard", "minmax", "log") or "rare" in ops or "label" in ops or "onehot" in ops or "counts" in ops or (isinstance(fill, dict) and fill.get("how") in ("mean", "median", "mode", "prev", "next")) or (isinstance(outlier, dict) and outlier.get("by") in ("iqr", "std")):
             return True
     return False
 

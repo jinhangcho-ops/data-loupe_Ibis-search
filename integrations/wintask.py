@@ -123,9 +123,9 @@ def register(task, name, trigger, start):
         raise failed("등록하지", err, out)
 
 
-def delete(task, folder=FOLDER):
-    """작업을 지운다. 이미 없으면 그대로 둔다."""
-    if not query(task, folder)["registered"]:
+def delete(task, folder=FOLDER, known=False):
+    """작업을 지운다. 이미 없으면 그대로 둔다. known=True: 방금 조회해 있는 것을 아는 호출이라 다시 조회하지 않는다."""
+    if not known and not query(task, folder)["registered"]:
         return
     code, out, err = execute(["schtasks", "/Delete", "/TN", full(task, folder), "/F"])
     if code:
@@ -163,10 +163,12 @@ def task_info(row):
 MISSING = {"registered": False, "command": "", "next": None, "last": None}
 
 
-def query(task, folder=FOLDER):
+def query(task, folder=FOLDER, strict=False):
     """작업 하나의 {registered, command, next, last}. schtasks의 /FO CSV /V 열 차례(언어와 상관없음): 1 작업 이름, 2 다음 실행 시간, 5 마지막 실행 시간, 6 마지막 결과, 8 실행할 작업."""
-    code, out, _ = execute(["schtasks", "/Query", "/TN", full(task, folder), "/FO", "CSV", "/V"])
+    code, out, err = execute(["schtasks", "/Query", "/TN", full(task, folder), "/FO", "CSV", "/V"])
     rows = [r for r in csv.reader(out.splitlines()) if len(r) > 8]
+    if code and strict and execute(["schtasks", "/Query", "/FO", "CSV", "/NH"])[0]:  # strict: 작업 스케줄러가 답하지 못한 것(오류)과 그 작업이 없는 것을 구분한다. 목록 조회까지 실패하면 오류(언어와 상관없이 가린다)
+        raise failed("조회하지", err, out)
     if code or len(rows) < 2 or rows[1][1].lower() != full(task, folder).lower():
         return dict(MISSING)
     return task_info(rows[1])

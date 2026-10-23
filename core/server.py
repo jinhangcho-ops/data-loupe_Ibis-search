@@ -186,7 +186,7 @@ PACKED_TYPES = {"application/zip", "application/gzip", "application/x-gzip", "ap
 @app.after_request
 def squeeze(response):
     """큰 응답(JSON 등)을 gzip으로 줄여 보낸다. 파일 내려주기(direct_passthrough)·스트림(내보내기는 길이를 알아도 스트림이라 통째로 메모리에 올리지 않는다)·이미 압축한 것(이미지·zip·parquet 등)은 그대로."""
-    if (response.direct_passthrough or response.is_streamed or response.content_length is None or response.content_length < GZIP_FROM
+    if (response.status_code != 200 or response.direct_passthrough or response.is_streamed or response.content_length is None or response.content_length < GZIP_FROM
             or response.headers.get("Content-Encoding")
             or response.mimetype.startswith(("image/", "video/", "audio/")) or response.mimetype in PACKED_TYPES or "gzip" not in request.headers.get("Accept-Encoding", "")):
         return response
@@ -255,16 +255,19 @@ def any_table(con, name, schema=None, vts=None):
     if not schema and name in vts:
         return sql_exec.virtual_table(con, name, vts)
     key = (schema or None, name)
-    if key not in state["tables"]:
-        state["tables"][key] = source.get_table(con, name, schema)  # 연결 스레드에서(SQLite는 만든 스레드에서만 쓸 수 있다)
-    return state["tables"][key]
+    gen = getattr(con, "csv_gen", {}).get(name, 0)  # CSV가 바뀌어 다시 등록(또는 실패 표로 교체)될 때마다 늘어난다: 옛 스키마의 식을 버린다
+    if state["tables"].get(key, (None,))[0] != gen:
+        if key in state["tables"]:
+            state["rows"].pop(key, None)  # 원본이 바뀌었으면 세어 둔 행 수도 버린다
+        state["tables"][key] = (gen, source.get_table(con, name, schema))  # 연결 스레드에서(SQLite는 만든 스레드에서만 쓸 수 있다)
+    return state["tables"][key][1]
 
 
 def row_count(schema, base):
-    """테이블(가상 테이블 포함)의 전체 행 수. 테이블마다 한 번만 세고 연결이 바뀌거나 가상 테이블을 고칠 때까지 기억한다."""
+    """테이블(가상 테이블 포함)의 전체 행 수. 테이블마다 한 번만 세고 연결이 바뀌거나 가상 테이블·원본 CSV가 바뀔 때까지 기억한다."""
     schema = schema or None
+    table = any_table(get_con(), base, schema)  # 먼저 꺼내야 원본 CSV가 바뀐 것을 알고 세어 둔 수를 버린다
     if (schema, base) not in state["rows"]:
-        table = any_table(get_con(), base, schema)
         state["rows"][schema, base] = run(lambda: result.get_count(table))
     return state["rows"][schema, base]
 

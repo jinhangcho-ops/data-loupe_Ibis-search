@@ -230,6 +230,7 @@ def expand(con, tree, vts):
 
 def to_expr(con, sql, vts):
     """검사하고 가상 테이블을 풀어 넣은 SQL을 그 연결의 Ibis 식으로(아직 실행하지 않는다)."""
+    source.refresh_csv(con)  # 원본 CSV가 바뀌었으면 다시 변환(SQL 탭·검사·내보내기도 옛 값에 머물지 않게)
     tree = expand(con, check(sql, dialect_of(con)), vts)
     return con.sql(tree.sql(dialect=dialect_of(con)))
 

@@ -33,13 +33,14 @@ def run(tmp_path, body, *parts, fake=True):
 
 def test_4e1_dash_restore_keeps_last_values(tmp_path):
     html = page("dashboard/dashboard.html")
-    funcs = fn(html, "const lastVals", "\n") + fn(html, "const rememberVals", "\n") + fn(html, "async function restoreDash(d) {")
+    funcs = fn(html, "const lastVals", "\n") + fn(html, "const sigOf", "\n") + fn(html, "const rememberVals", "\n") + fn(html, "async function restoreDash(d) {")
     body = """
 (async () => {
   const card = { id: "c1", kind: "number", source: { key: "k", table: "t" }, title: "매출", data: { values: [1, 2, 3] }, liveData: { x: 1 }, stored: { values: [9] } };
   let dashId = "d1", quiet = false; const dashboards = [{ id: "d1" }];
   const board = { cards: [card], palette: [], star: {}, set(c) { this.cards = c; } };
   const $ = () => ({ value: "" }); const needsValues = c => c; const boardChanged = () => {};
+  const connected = false, panelHost = {}, say = () => {};
   %s
   const before = { id: "d1", palette: [], north_star: {}, cards: [{ id: "c1", kind: "number", source: { key: "k", table: "t" }, title: "매출" }] };
   rememberVals();                 // dashState가 0.5초마다 하는 일
@@ -136,7 +137,7 @@ def test_4e_static_edits():
     query, dash, prep = page("query/index.html"), page("dashboard/dashboard.html"), page("prep/prep.html")
     assert 'view === "cards" ? searchState() : null' in query                    # 4E3
     assert 'if (!e.target.closest(".menu")) $("d-add-pop")' in dash              # 4E7
-    assert "prepUndo.reset(); return openTable" in prep                          # 4E8
+    assert "prepUndo.reset()" in fn(prep, "function resetTable() {")             # 4E8(5E2: prof를 비운 뒤 reset)
     assert "draftBase" not in fn(query, "async function restoreSearch(d) {")      # 4E8
     for src in (query, dash, prep, page("core/common.js"), page("core/dash_shelf.js")):
         assert not [ln for ln in src.splitlines() if 'e.key === "Enter")' in ln and "onkeydown" in ln]   # Enter 칸은 Ctrl+Enter를 제외

@@ -13,6 +13,17 @@ OLD_NAME = "ibis_search"  # 앱 이름을 바꾸기 전의 설정 폴더 이름
 FAILED = "옮기기_실패.txt"
 
 
+def _has_content(folder):
+    """folder 안에 실패 표식·locks 폴더 밖의 파일이 있는가(빈 하위 폴더는 무시)."""
+    for root, dirs, files in os.walk(folder):
+        if Path(root) == folder:
+            dirs[:] = [d for d in dirs if d != "locks"]
+            files = [f for f in files if f != FAILED]
+        if files:
+            return True
+    return False
+
+
 def migrate(path=None):
     """앱이 시작할 때 한 번: 예전 설정 폴더(OLD_NAME)가 있고 새 폴더가 없으면 폴더째 옮긴다. 옮기지 못하면(예: 예전 앱이 켜져 있어 파일이 잠김)
     새 폴더로 시작하고 예전 폴더는 그대로 두며, 이유를 새 폴더의 FAILED 파일에 적는다. 옮기지 못한 이유 글자 또는 None을 돌려준다."""
@@ -21,19 +32,20 @@ def migrate(path=None):
     if not old.is_dir():
         return None
     if new.exists():
-        # 지난번에 옮기지 못해 비었거나 실패 표식만 있는 새 폴더는 "아직 안 옮김": 치우고 다시 옮긴다. 뭔가 들어 있으면 이미 쓰는 폴더라 건드리지 않는다.
+        # 지난번에 옮기지 못한 새 폴더는 "아직 안 옮김": 실제 설정 파일이 없으면(실패 표식·locks 폴더·빈 하위 폴더만) 치우고 다시 옮긴다. 파일이 있으면 이미 쓰는 폴더라 건드리지 않는다.
         try:
-            if not new.is_dir() or any(child.name != FAILED for child in new.iterdir()):
+            if not new.is_dir() or _has_content(new):
                 return None
-            (new / FAILED).unlink(missing_ok=True)
-            new.rmdir()
+            shutil.rmtree(new)  # 다른 앱이 locks 안의 잠금을 쥐고 있으면 지워지지 않아 OSError: 이미 쓰는 중이니 건드리지 않는다
         except OSError:
             return None
     try:
         os.replace(old, new)
         return None  # 새 폴더는 예전 폴더 그대로라 실패 표식이 남지 않는다
     except OSError as e:
-        reason = f"예전 설정 폴더({old})를 새 폴더({new})로 옮기지 못했습니다: {e}\n예전 앱을 모두 끈 뒤 새 폴더의 내용을 지우고 예전 폴더 이름을 {new.name}로 바꾸면 이어 쓸 수 있습니다. 앱을 다시 켜면 비어 있는 새 폴더는 다시 옮기려 합니다."
+        if not old.exists():
+            return None  # 다른 프로세스가 동시에 옮겼다
+        reason = f"예전 설정 폴더({old})를 새 폴더({new})로 옮기지 못했습니다: {e}\n예전 앱을 모두 끈 뒤 새 폴더의 내용을 지우고 예전 폴더 이름을 {new.name}로 바꾸면 이어 쓸 수 있습니다. 앱을 다시 켜면 새 폴더에 설정 파일이 아직 없을 때는 다시 옮기려 합니다."
         with contextlib.suppress(OSError):
             new.mkdir(parents=True, exist_ok=True)
             (new / FAILED).write_text(reason, encoding="utf-8")

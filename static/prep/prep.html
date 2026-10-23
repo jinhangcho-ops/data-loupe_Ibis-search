@@ -834,7 +834,7 @@ function resetTable() {
   resetRun();
   fail("");
   $("ok-run").textContent = "";
-  specView = first = null;
+  specView = first = null;  prepUndo.reset();  // prof가 비워진 뒤라 첫 실제 상태가 기준이 된다(다른 테이블·연결의 되돌리기 기록은 쓰지 않는다)
   showAll();
 }
 function clearScreen() {
@@ -860,7 +860,7 @@ async function openTable(base, config) {
     const remembered = config ? null : await api("/api/prep/table?" + new URLSearchParams({ schema: S.schema, base })).then(d => d.config, () => null);
     if (mine !== token) return;
     if (config || remembered) restore(config || remembered);
-    draftBase = draftSnap();
+    draftBase = draftSnap(); prepUndo.reset();  // 저장한 구성을 채운 상태가 기준(복원 중이면 reset은 무시된다)
     showAll();
     if (pickers.keep) Funcs.loadSupport(S.base, S.schema).then(() => Object.values(pickers).forEach(p => p.refresh()));  // 이 연결이 못 하는 함수는 안내를 붙이거나 막는다
     loadSpecView();
@@ -916,7 +916,7 @@ async function computeStats(mine, fresh = false) {
     renderGrid();
   }
 }
-$("base").onchange = () => { prepUndo.reset(); return openTable($("base").value); };  // 다른 테이블의 되돌리기 기록은 쓰지 않는다
+$("base").onchange = () => openTable($("base").value);
 $("conn-open").onclick = () => openConnect();
 new MutationObserver(() => $("conn-now").textContent = connected ? `연결: ${connName}` : "연결 안 됨").observe($("crumb-text"), { childList: true });  // 연결 이름이 바뀌면 따라 바꾼다
 
@@ -1043,7 +1043,7 @@ const prepUndo = Undo(() => prof ? config() : null, async c => {
 });
 const inPrep = () => !$("prep-view").classList.contains("hidden");
 Shortcuts({
-  undo: { undo: () => inPrep() ? prepUndo.undo() : Promise.resolve(false), redo: () => inPrep() ? prepUndo.redo() : Promise.resolve(false) },
+  undo: scoped(prepUndo, inPrep),
   save: () => { if (inPrep()) $("rsave").click(); },
   run: () => pressBtn($("preview")) || pressBtn($("a-run")),
 });
@@ -1191,7 +1191,7 @@ function addStep() {
   if (FLOW.steps.includes(value)) return say("err-ana", `같은 단계(${value})를 두 번 넣을 수 없어요.`);
   if (FLOW.steps.length >= SERVER.analysis.max_steps) return say("err-ana", `단계는 ${SERVER.analysis.max_steps}개까지 고를 수 있어요.`);
   FLOW.steps.push(value);
-  $("a-fvalue").value = "";
+  $("a-fvalue").value = ""; closeMenu();
   say("err-ana", "");
   showSteps();
 }
@@ -1346,7 +1346,7 @@ function drawAna() {
 // ---------- 대시보드에 추가: 지금 보이는 분석 그래프를 카드로 ----------
 // 카드 = 다시 구할 기록(source: 테이블·전처리 recipe·분석 how)과 지금 결과(data.values). 저장한 대시보드나 새 대시보드에 서버가 더해 저장한다(연결의 key·label은 서버가 채운다).
 toggleDrop($("a-add"), $("a-pop"));
-document.addEventListener("click", e => { if (!e.target.closest(".pop")) $("a-pop").classList.add("hidden"); });
+document.addEventListener("click", e => { if (!e.target.closest(".pop, .menu")) $("a-pop").classList.add("hidden"); });
 const NEW_DASH = "";
 async function fillDashboards() {
   const found = (await api("/api/dash")).dashboards;

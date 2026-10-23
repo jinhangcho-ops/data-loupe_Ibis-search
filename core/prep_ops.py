@@ -353,7 +353,7 @@ OPS = [
      '{"how": "drop" | "value" | "mean" | "median" | "mode" | "prev" | "next", "value": 채울 값, "by": 순서를 정할 컬럼(prev·next)}', fill),
     ("outlier", NUMBER, is_outlier, '{"how": "drop" | "clip", "by": "range" | "iqr" | "std", "low": 수, "high": 수, "k": 수}', outlier),
     ("scale", NUMBER, lambda v: v in ("standard", "minmax", "log"), '"standard", "minmax" 또는 "log"', scale),
-    ("round", NUMBER, lambda v: type(v) is int and v >= 0, "0 이상의 정수", column(sql_funcs.half_up)),
+    ("round", NUMBER, lambda v: type(v) is int and 0 <= v <= 15, "0 이상 15 이하의 정수", column(sql_funcs.half_up)),
     ("bins", NUMBER, lambda v: isinstance(v, list) and len(v) >= 2 and all(is_num(e) for e in v) and all(a < b for a, b in zip(v, v[1:])),
      "오름차순 경계값 2개 이상. 예: [0, 10, 100]", column(bins)),
     ("rare", STRING, lambda v: isinstance(v, dict) and set(v) <= {"min", "label"} and type(v.get("min")) is int and v["min"] >= 2
@@ -372,8 +372,8 @@ OPS_NAMES = [op[0] for op in OPS]
 
 
 def nan_to_null(col):
-    """실수 컬럼의 진짜 NaN을 빈 값으로(NaN이 평균·표준편차·IQR을 NaN으로 만들거나 DuckDB 오류를 내고 빈 값 표시에서 빠지는 것을 막는다). 실수가 아니면 그대로."""
-    return col.isnan().ifelse(ibis.null(), col) if col.type().is_floating() else col
+    """실수 컬럼의 진짜 NaN과 ±inf를 빈 값으로(prep_profile과 같게. NaN·inf가 평균·표준편차·IQR을 NaN으로 만들거나 DuckDB 오류를 내고 빈 값 표시에서 빠지는 것을 막는다). 실수가 아니면 그대로."""
+    return (col.isnan() | col.isinf()).ifelse(ibis.null(), col) if col.type().is_floating() else col
 
 
 NAN_OPS = ("flag", "fill", "outlier", "scale")  # 빈 값을 따지거나 통계를 내는 일: 먼저 NaN을 빈 값으로
@@ -396,9 +396,12 @@ def apply_ops(t, name, ops, part="all", base=None):
     part가 rows면 마지막 행 줄이기(fill·outlier의 drop)까지만, rest면 그 뒤 것과 fill의 통계 채우기(mean·median·mode)를 적용한다(행 줄이기가 없으면 모두 rest).
     규칙: 행을 뺄지 정하는 통계(outlier의 경계)는 base(그 단계를 시작하는 표)로 구해 컬럼 순서와 무관하고,
     채울 값(fill mean 등)과 scale 같은 값 통계는 모든 컬럼의 행 줄이기가 끝난 t로 구한다(앞 컬럼이 뺀 행을 빼고 평균을 구함).
-    이 컬럼의 outlier 앞선 일(타입 바꾸기 등)은 base에도 같이 해 경계가 같은 값에서 나오게 한다(빈 값은 통계에서 빠지므로 fill은 base에 하지 않는다)."""
+    이 컬럼의 outlier 앞선 일(타입 바꾸기 등)은 base에도 같이 해 경계가 같은 값에서 나오게 한다(상수·prev·next 채우기도 값을 바꾸니 base에 한다. 통계 채우기(mean·median·mode)와 drop만 base에 하지 않는다).
+    컬럼에 outlier가 없으면 base는 쓰지 않는다."""
     for key in ops:
         parse.check_name(key, OPS_NAMES, "전처리 항목")
+    if "outlier" not in ops:
+        base = None
     last = max((i for i, op in enumerate(OPS) if op[0] in ops and drops_rows(op[0], ops[op[0]])), default=-1)
     for i, (key, kinds, valid, form, fn) in enumerate(OPS):
         if key not in ops:

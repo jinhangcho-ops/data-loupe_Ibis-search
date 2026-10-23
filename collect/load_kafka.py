@@ -166,6 +166,7 @@ class Sink:
         from confluent_kafka import KafkaException
         if data is not self.unit:  # 새 묶음
             self.unit, self.rows, self.todo, self.ok, self.failed, self.partitions, self.size = data, data.to_pylist(), range(data.num_rows), set(), 0, {}, 0
+            self.dead = set()  # 영구 실패로 센 행 번호(이어 받기는 min(todo) 앞의 것만 센다. 뒤의 것은 다시 보내져 다시 세어진다)
         sent, reports, seen = set(), {}, set()  # seen: 앞 회에서 이미 처리한(영구 오류로 센) 행. 이번 회에 새로 온 오류만 보고 멈춘다
 
         def report(i, error, msg):  # 전달 보고: 전달된 메시지의 파티션·offset으로 범위를 넓힌다
@@ -192,6 +193,7 @@ class Sink:
                     sent.add(i)
                 except (KafkaException, ValueError, TypeError) as e:
                     self.failed += 1
+                    self.dead.add(i)
                     self.note(e)
                 if self.key:  # 키가 있으면 같은 키의 순서가 중요하다: 전달 실패가 보고되면 뒤 행은 보내지 않고 다시 시도 때 차례대로 보낸다
                     self.producer.poll(0)
@@ -208,6 +210,7 @@ class Sink:
             seen = {i for i, e in reports.items() if e is not None}
             pending = sorted(skipped)
         self.failed += len(forever)
+        self.dead |= forever
         self.ok |= delivered
         self.todo = sorted(skipped | (sent - delivered - forever))  # 일시 오류이거나 보고가 끝내 오지 않은 행(+ 보내지 않고 둔 행): 다음에 이것만 차례대로 다시 보낸다
         self.placed = {"size": self.size, "partitions": self.partitions}
@@ -221,7 +224,8 @@ class Sink:
         """지금 묶음에서 끝내 못 넣고 멈출 때 남길 것: (앞에서부터 이어서 처리된 행 수, 전달된 행 수, 영구 실패로 센 행 수). 이어 넣기가 그 뒤부터 하게 한다(앞 구멍 뒤에 전달된 행은 다시 보내져 겹칠 수 있다)."""
         if self.unit is None:
             return 0, 0, 0
-        return (min(self.todo) if self.todo else self.unit.num_rows), len(self.ok), self.failed
+        done = min(self.todo) if self.todo else self.unit.num_rows
+        return done, len(self.ok), sum(1 for i in self.dead if i < done)
 
     def note(self, error):
         self.last = source.mask(str(error), [self.password], HIDE)

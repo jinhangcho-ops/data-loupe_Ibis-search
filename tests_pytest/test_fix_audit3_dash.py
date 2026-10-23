@@ -84,7 +84,7 @@ def test_set_cards_data_keeps_newer_saved_value(folder):
     h = store.def_hash(dash_calc.definition(store.check_card(d["cards"][0])))
     mine = lambda at, label: {"x": "a", "values": {"labels": [label], "series": []}, "computed_at": at, "def_hash": h}
     assert store.set_cards_data(d["id"], [(cid, mine("2026-10-24T10:30:00", "UI"), None)]) == [True]
-    assert store.set_cards_data(d["id"], [(cid, mine("2026-10-24T10:00:00", "late job"), None)]) == [True]  # 늦게 도착한 옛 값
+    assert store.set_cards_data(d["id"], [(cid, mine("2026-10-24T10:00:00", "late job"), None)]) == [store.KEPT]  # 늦게 도착한 옛 값
     assert store.get_dashboard(d["id"])["cards"][0]["data"]["values"]["labels"] == ["UI"]
     store.set_cards_data(d["id"], [(cid, mine("2026-10-24T11:00:00", "newer"), None)])
     assert store.get_dashboard(d["id"])["cards"][0]["data"]["values"]["labels"] == ["newer"]

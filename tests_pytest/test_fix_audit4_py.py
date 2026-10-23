@@ -58,17 +58,17 @@ def test_screen_path_sees_edited_cp949_csv(tmp_path, opened):
 
 # ---------- 4B2 UTF-8 CSV는 다시 등록하지 않는다 ----------
 
-def test_utf8_csv_is_not_tracked_or_rechecked(tmp_path, opened, monkeypatch):
+def test_utf8_csv_is_rechecked_only_when_changed(tmp_path, opened, monkeypatch):
     p = tmp_path / "u.csv"
     p.write_text("a,b\n1,2\n", encoding="utf-8")
     con = opened(p)
-    assert not getattr(con, "csv_sources", {})
     calls = []
-    monkeypatch.setattr(source, "utf8_csv", lambda *a: calls.append(a))
+    real = source.utf8_csv
+    monkeypatch.setattr(source, "utf8_csv", lambda *a: calls.append(a) or real(*a))
+    assert source.refresh_csv(con) == [] and calls == []  # 바뀌지 않았으면 다시 확인하지 않는다
     p.write_text("a,b\n1,2\n3,4\n", encoding="utf-8")
-    source.refresh_csv(con)
-    assert calls == []
-    assert count(con, "u") == 2  # Polars가 필요할 때 원본을 읽으니 오류 없이 센다
+    assert source.refresh_csv(con) == ["u"] and len(calls) == 1
+    assert count(con, "u") == 2
 
 
 # ---------- 4B4 한 파일이 실패해도 다른 표는 된다 ----------
@@ -120,7 +120,7 @@ def test_first_keys_and_revenue_by_offset_pick_first_key_in_key_order():
     assert first == {1: "a", 2: "b"}
     align = {"kind": "key", "keys": [["k", "k"]]}
     got = mk.revenue_by_offset(x, align, 5)
-    assert got == {(("a",), 0): 12.0, (("a",), 2): 10.0, (("b",), 0): 1.0} or got == {("a", 0): 12.0, ("a", 2): 10.0, ("b", 0): 1.0}
+    assert got == {(("a",), 0): 12.0, (("a",), 2): 10.0, (("b",), 0): 1.0}
 
 
 def test_top_rows_notes_when_long():
@@ -185,10 +185,9 @@ def test_payback_thinning_is_noted():
     assert len(got["rows"]) < 1001 and any("하나씩만" in n for n in got["notes"])
 
 
-def test_crosses_dateline_matches_old_rule_and_is_fast():
-    old = lambda xs: (lambda v: len(v) >= 2 and v[-1] - v[0] < 360 and max(b - a for a, b in zip(v, v[1:])) > 360 - geojson.DATELINE_SPAN)(sorted(set(xs)))
-    for xs in ([178, -179], [-180, 0, 180], [-100, 100], [5], [], [10, 20, 30], [179.5, -179.5, 178]):
-        assert geojson.crosses_dateline(xs) == old(xs), xs
+def test_crosses_dateline_hand_table_and_is_fast():
+    for xs, want in (([178, -179], True), ([-180, 0, 180], False), ([-100, 100], False), ([5], False), ([], False), ([10, 20, 30], False), ([179.5, -179.5, 178], True)):
+        assert geojson.crosses_dateline(xs) is want, xs
     big = [i * 0.00035 - 175 for i in range(1_000_000)]  # 서로 다른 경도 100만 개
     t0 = time.perf_counter()
     geojson.crosses_dateline(iter(big))

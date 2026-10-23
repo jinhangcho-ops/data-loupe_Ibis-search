@@ -41,7 +41,7 @@ def two_copies(monkeypatch):
 
 def test_cached_key_and_fresh_copy_with_two_copies(two_copies):
     r = recipe_skipping("x", "y")
-    assert prep_app.cached_key(r)[3] == ("x",)  # 먼저 찾은 쓸 수 있는 사본
+    assert prep_app.cached_key(r)[3] == ()  # 쓸 수 있는 사본 중 가장 최근에 쓴 것(5P4)
     prep_app.fresh_copy(r)
     assert not held.store["items"]  # A도 지워서 working_copy가 낡은 사본을 고르지 않는다
     assert prep_app.cached_key(r) == prep_app.copy_key(r) and prep_app.cached_key(r) not in held.store["items"]

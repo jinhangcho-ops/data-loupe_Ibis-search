@@ -22,9 +22,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: >
-          pip install -r requirements.txt pyinstaller==6.22.3 "psycopg[binary]"
+          pip install -r requirements.txt -r requirements-dev.txt pyinstaller==6.22.3 "psycopg[binary]"
           "ibis-framework[athena,bigquery,clickhouse,databricks,druid,exasol,impala,materialize,mssql,mysql,oracle,postgres,risingwave,singlestoredb,snowflake,sqlite,trino]==12.0.0"
       - run: python tests.py
+      - run: python -m pytest tests_pytest -q
       - run: pyinstaller DataLoupe.spec
       - name: 설치 파일 만들기
         shell: pwsh

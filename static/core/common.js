@@ -654,6 +654,7 @@ function showCombo(inp) {
   placeMenu(inp);
   pointMenu(null);
 }
+function quietFocus(a) { comboQuiet = true; try { a.focus(); } finally { comboQuiet = false; } }  // Ctrl+S 같은 단축키가 값을 반영하려 blur→focus 할 때 목록·말풍선이 다시 뜨지 않게
 const comboOn = e => !comboQuiet && !e.isComposing && e.target.matches?.("input[data-list]") && showCombo(e.target);  // compositionend: 한글 조합이 끝나는 글자도 걸러야 한다
 document.addEventListener("focusin", comboOn);
 document.addEventListener("click", comboOn);
@@ -691,7 +692,7 @@ menuList.onmousemove = e => { if (e.target.parentElement === menuList) pointMenu
 menuList.onclick = e => { if (e.target.parentElement === menuList) pickMenu(e.target); };
 document.addEventListener("keydown", e => {
   if (!menuFor) {
-    if ([" ", "Enter", "ArrowDown", "ArrowUp", "F4"].includes(e.key) && e.target.matches("select")) { e.preventDefault(); openMenu(e.target); }
+    if ([" ", "Enter", "ArrowDown", "ArrowUp", "F4"].includes(e.key) && !e.ctrlKey && !e.metaKey && e.target.matches("select")) { e.preventDefault(); openMenu(e.target); }
     return;
   }
   if (e.isComposing) return;  // 한글을 조합하는 동안의 키는 입력기가 쓴다.
@@ -750,7 +751,7 @@ function showTip(host, wait) {
 const tipHost = e => e.target.closest?.("[title]") ?? null;
 let tipMouseAt = 0;  // 마우스로 눌러 생긴 포커스는 말풍선을 띄우지 않는다(팝오버를 가린다)
 document.addEventListener("mouseover", e => { const h = tipHost(e); if (h) showTip(h, 350); else if (tipFor && (!tipFor.isConnected || !tipFor.contains(e.target))) hideTip(); });  // 보이던 요소가 다시 그려져 사라지면 mouseout이 없다
-document.addEventListener("focusin", e => { const h = tipHost(e); if (h && Date.now() - tipMouseAt > 400) showTip(h, 0); });
+document.addEventListener("focusin", e => { const h = tipHost(e); if (h && !comboQuiet && Date.now() - tipMouseAt > 400) showTip(h, 0); });
 document.addEventListener("mouseout", e => { if (tipFor && (!tipFor.isConnected || !tipFor.contains(e.relatedTarget))) hideTip(); });
 document.addEventListener("focusout", hideTip);
 document.addEventListener("mousedown", () => { tipMouseAt = Date.now(); hideTip(); });

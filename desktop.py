@@ -6,7 +6,7 @@ import sys
 from core import drivers, settings
 
 moved_failed = settings.migrate()  # 예전 이름(ibis_search)의 설정 폴더를 새 폴더로 옮긴다. 설정을 처음 읽기 전, 단일 실행 잠금 전, 드라이버 폴더(그 안)를 쓰기 전에.
-if moved_failed:  # 옮기지 못한 이유를 알리고 새 폴더로 계속한다(사용자가 빈 앱만 보고 영문을 모르지 않게). 다음 시작 때 다시 옮기려 한다.
+if moved_failed and sys.argv[1:2] not in (["--run"], ["--browser"], ["--move-tasks"]):  # 옮기지 못한 이유를 알리고 새 폴더로 계속한다(사용자가 빈 앱만 보고 영문을 모르지 않게). 다음 시작 때 다시 옮기려 한다. 예약 실행·수집 창은 창이 멈추므로 새 폴더의 실패 표식 기록만 한다.
     import ctypes
     ctypes.windll.user32.MessageBoxW(None, moved_failed, "Data Loupe", 0x30)
 drivers.use_installed()  # exe: 따로 설치한 드라이버 폴더를 백엔드를 불러오기 전에 import 경로에 더한다.
@@ -15,6 +15,16 @@ if sys.argv[1:2] == ["--browser"]:
     from collect import collect_browser
 
     collect_browser.run_child()
+    sys.exit()
+
+if sys.argv[1:2] == ["--move-tasks"]:  # 설치 프로그램이 끝날 때 부른다: 창·서버 없이 예전 이름(\ibis_search\)의 예약 작업을 새 폴더·새 exe로 옮기고 끝난다. 못 옮겨도 조용히 끝낸다(표식이 없으니 앱을 열 때 다시 한다).
+    import lazy  # noqa: F401  데이터 라이브러리를 처음 쓸 때 올린다(다른 프로젝트 모듈보다 먼저).
+    from integrations import schedule
+
+    try:
+        schedule.move_old_tasks()
+    except Exception:
+        pass
     sys.exit()
 
 if sys.argv[1:2] == ["--run"]:

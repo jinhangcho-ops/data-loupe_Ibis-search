@@ -49,6 +49,8 @@ Name: "{autoprograms}\Data Loupe"; Filename: "{app}\DataLoupe.exe"
 Name: "{autodesktop}\Data Loupe"; Filename: "{app}\DataLoupe.exe"; Tasks: desktopicon
 
 [Run]
+; 업그레이드로 예전 ibis_search.exe가 지워지므로, 예전 이름으로 등록한 예약 작업을 설치가 끝날 때 새 exe로 옮긴다(앱을 열기 전에도 예약이 돌게). 조용한 설치에서도 돈다.
+Filename: "{app}\DataLoupe.exe"; Parameters: "--move-tasks"; Flags: runhidden waituntilterminated
 Filename: "{app}\DataLoupe.exe"; Description: "{cm:LaunchProgram,Data Loupe}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]

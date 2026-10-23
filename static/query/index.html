@@ -427,7 +427,7 @@ function clearLists() {
 }
 // 화면에 올라온 것(고른 테이블, 조건 등의 목록, 결과·집계·차트)을 비운다. 연결은 건드리지 않는다.
 function clearScreen() {
-  S.base = $("base").value = "";
+  S.base = $("base").value = ""; searchUndo.reset();  // 다른 연결의 되돌리기 기록은 쓰지 않는다
   S.cols = [];
   S.origins = {};
   clearLists();
@@ -1234,7 +1234,7 @@ async function loadBody(b) {
     S.base = $("base").value = b.base;
     LISTS.forEach(k => S[k] = k === "conditions" ? flowUngroup(b.conditions) : [...(b[k] ?? [])]);
     S.union = b.union ? { tables: [...b.union.tables], how: b.union.how } : { tables: [], how: "left" };
-    if (b.limit != null) $("limit").value = b.limit;
+    $("limit").value = b.limit ?? "";  // limit이 없던 상태로도 돌아가야 한다
     await api("/api/columns", state());
     $("bpick").classList.add("hidden");
     LISTS.forEach(renderList);
@@ -1270,7 +1270,7 @@ const searchUndo = Undo(() => view === "cards" ? searchState() : null, restoreSe
 const inExplore = () => !$("work").classList.contains("hidden");
 // 단축키: 되돌리기는 탐색 탭만(SQL·지표 탭의 글자 칸은 창 엔진 기본). 저장·실행은 보이는 탭의 단추, Ctrl+F는 결과 찾기 칸.
 Shortcuts({
-  undo: { undo: () => inExplore() ? searchUndo.undo() : Promise.resolve(false), redo: () => inExplore() ? searchUndo.redo() : Promise.resolve(false) },
+  undo: scoped(searchUndo, inExplore),
   save: () => {
     if (!inExplore()) return pressBtn($("sql-save"));
     if (!$("sname").value.trim() && !$("saved").value) { if ($("saved-pop").classList.contains("hidden")) $("saved-open").click(); return $("sname").focus(); }  // 이름이 없으면 저장 상자를 열어 이름부터

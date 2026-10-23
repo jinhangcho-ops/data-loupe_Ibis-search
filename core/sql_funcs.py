@@ -535,6 +535,8 @@ def half_up(col, digits):
     """반올림: 0.5는 0에서 먼 쪽으로(백엔드마다 달라 직접 정한다. Polars는 짝수 쪽). 정수·소수(Decimal) 컬럼은 그대로 round. 사전 round·계산 줄 반올림·계산 컬럼 round·전처리 반올림이 함께 쓴다.
     컬럼 값 자체가 2^52 이상(이미 정수)이거나 nan·inf면 그대로 둔다. 값에 자릿수를 곱한 수가 2^52 이상이면 그 수는 이미 정수라 올림 없이 나눈다.
     floor를 정수로 바꾸는 곳이 넘치지 않게 그런 값은 floor에 넣지 않고, 0.5는 +0.5 대신 소수 부분 비교로 본다(0.49999999999999994가 1이 되지 않게)."""
+    if abs(digits) > 15:
+        raise ValueError("반올림 자릿수는 -15 이상 15 이하여야 합니다.")
     if not col.type().is_floating():
         return col.round(digits)
     scale = 10.0**digits

@@ -20,7 +20,7 @@ def cut(start, end):
     return COMMON[a:COMMON.index(end, a)]
 
 
-TIP = cut("const tipBox", "// 잠깐 보이는 안내") + cut("// 잠깐 보이는 안내", "\n}\n") + "\n}\n"
+TIP = "let comboQuiet = false;\n" + cut("const tipBox", "// 잠깐 보이는 안내") + cut("// 잠깐 보이는 안내", "\n}\n") + "\n}\n"
 MENU = cut("const menuBox", 'addEventListener("blur", closeMenu);') + 'addEventListener("blur", closeMenu);\n'
 
 # 가짜 화면: 이벤트 위임(document 리스너)과 요소의 속성·dataset·closest·classList만 흉내 낸다.
@@ -58,6 +58,7 @@ const lists = {};
 const fire = (type, target, extra = {}) => { const ev = { type, target, defaultPrevented: false, stopped: false, isComposing: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; }, ...extra }; (handlers[type] ?? []).forEach(f => f(ev)); return ev; };
 globalThis.document = { body: { appendChild: x => x }, createElement: t => new E(t), getElementById: id => lists[id] ?? null, querySelector: () => globalThis.modalOpen ? {} : null,
   addEventListener: (t, f) => { (handlers[t] ??= []).push(f); } };
+globalThis.quietFocus = a => a.focus();
 const flashes = []; globalThis.flash = t => flashes.push(t);
 const tick = () => new Promise(r => setImmediate(r));
 """

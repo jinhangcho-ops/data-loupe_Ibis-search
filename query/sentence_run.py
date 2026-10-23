@@ -274,21 +274,25 @@ def formula_one(text, columns=None):
     if m and len(m.group(2).replace(",", " ").split()) == parse.GEO_COUNTS[m.group(1).lower()]:  # 좌표 조건 near·box는 함수 사전의 within_km·in_box
         w = m.group(2).replace(",", " ").split()
         return f"{'within_km' if m.group(1).lower() == 'near' else 'in_box'}(col({w[0]!r}), col({w[1]!r}), {', '.join(num(x) for x in w[2:])})"
-    shown, head = text, flow.head_name(text, columns)  # shown: 오류 문구에 보일 원래 글(자리표시로 바꾸기 전)
+    shown, head = text, flow.head_name(text, columns, condition=True)  # shown: 오류 문구에 보일 원래 글(자리표시로 바꾸기 전)
     if head:
         text = parse.SPACED + text.lstrip()[len(head):]
 
     def name(g):
         return head if g == parse.SPACED else g
+
+    def lit(g, v):  # 값을 식에 넣을 글로: 글자 컬럼이면 숫자처럼 보여도 글자로(탐색의 parse.convert와 같은 규칙)
+        kind = columns.get(name(g)) if isinstance(columns, dict) else None
+        return repr(str(v)) if kind == "text" else num(v)
     m = parse.NULL_RE.match(text)
     if m:
         return f"{'notnull' if m.group(2) else 'isnull'}(col({name(m.group(1))!r}))"
     m = parse.BETWEEN_RE.match(text)
     if m:
-        return f"between(col({name(m.group(1))!r}), {num(m.group(2))}, {num(m.group(3))})"
+        return f"between(col({name(m.group(1))!r}), {lit(m.group(1), m.group(2))}, {lit(m.group(1), m.group(3))})"
     m = parse.IN_RE.match(text)
     if m:
-        items = [num(parse.unquote(x)) for x in parse.split(parse.COMMA_RE, m.group(3)) if x.strip()]  # 따옴표 안의 쉼표는 값의 일부
+        items = [lit(m.group(1), parse.unquote(x)) for x in parse.split(parse.COMMA_RE, m.group(3)) if x.strip()]  # 따옴표 안의 쉼표는 값의 일부
         inner = f"isin(col({name(m.group(1))!r}), [{', '.join(items)}])"
         return inner if m.group(2).lower() == "in" else f"not {inner}"
     m = parse.LIKE_RE.match(text)
@@ -298,7 +302,7 @@ def formula_one(text, columns=None):
     m = parse.COND_RE.match(text)
     if m:
         op = {"=": "==", "!=": "!="}.get(m.group(2), m.group(2))
-        return f"col({name(m.group(1))!r}) {op} {num(m.group(3).strip().strip(chr(39) + chr(34)))}"
+        return f"col({name(m.group(1))!r}) {op} {lit(m.group(1), m.group(3).strip().strip(chr(39) + chr(34)))}"
     raise Bad(f"조건 ‘{shown}’을 계산 식으로 바꿀 수 없어요.")
 
 

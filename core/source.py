@@ -194,6 +194,8 @@ def fix_polars_text():
         start = translate(op.start, **kw) if op.start is not None else 0
         end = translate(op.end, **kw) if op.end is not None else None
         arg, sub = translate(op.arg, **kw), _literal_value(op.substr)
+        if sub == "":  # 빈 글은 어디서나 처음 나온다(DuckDB와 같게 시작 위치, 없으면 0)
+            return pl.when(arg.is_null()).then(None if op.start is None else -1).otherwise(pl.lit(0, dtype=pl.Int64) + start)
         part = arg.str.slice(start, end)
         before = part.str.splitn(sub, 2).struct.field("field_0").str.len_chars().cast(pl.Int64)  # 찾은 글자 앞의 글자 수
         return pl.when(arg.is_null()).then(None if op.start is None else -1).when(part.str.contains(sub, literal=True)).then(before + start).otherwise(-1)
@@ -245,15 +247,14 @@ def stamp_of(path):
 
 
 def read_csv_table(con, path, name):
-    """CSV를 UTF-8로 맞춰 name 테이블로 등록한다. CP949라서 임시 사본으로 바꾼 파일만 (경로, mtime, 크기, 사본)을 기록한다(UTF-8은 Polars가 필요할 때 원본을 읽으므로 다시 등록할 일이 없다).
-    refresh_csv가 이 기록으로 원본이 바뀌었는지 본다. 새 표를 등록한 뒤에는 예전 사본(임시 폴더 안의 것만)을 지운다."""
+    """CSV를 UTF-8로 맞춰 name 테이블로 등록한다. 모든 CSV의 (경로, mtime, 크기, 쓰는 파일)을 기록한다(쓰는 파일은 CP949라서 바꾼 임시 사본이거나 UTF-8 원본 그대로).
+    refresh_csv가 이 기록으로 원본이 바뀌었는지 본다(UTF-8이던 것이 CP949로 다시 저장된 경우도 잡는다). 새 표를 등록한 뒤에는 예전 사본(임시 폴더 안의 것만)을 지운다."""
     stamp = stamp_of(path)
     use = utf8_csv(path, con)
     con.read_csv(use, table_name=name)
     sources = con.__dict__.setdefault("csv_sources", {})
     old = sources.pop(name, None)
-    if use != path:
-        sources[name] = (path, stamp, use)
+    sources[name] = (path, stamp, use)
     if old and old[2] != use:
         drop_copy(con, old[2])
 
@@ -268,18 +269,24 @@ def drop_copy(con, copy):
 
 
 def refresh_csv(con):
-    """CP949라서 임시 사본으로 바꾼 CSV의 원본 (mtime, 크기)가 열 때와 달라졌으면 다시 변환해 같은 이름으로 다시 등록한다(임시본이 옛 값에 머물지 않게).
-    표를 꺼낼 때(server.any_table)와 내보내기 전에 부른다. 파일 연결이 아니거나 변환한 CSV가 없으면 아무 일도 하지 않는다.
-    파일마다 따로 처리한다: 다시 변환하지 못한 표(UTF-16로 다시 저장 등)는 그 표를 읽을 때만 그 이유로 오류가 나게 하고, 다른 표는 그대로 쓴다."""
+    """CSV 원본의 (mtime, 크기)가 열 때와 달라졌으면 다시 변환해 같은 이름으로 다시 등록한다(CP949 임시본이 옛 값에 머물지 않게).
+    표를 꺼낼 때(server.any_table)와 SQL을 식으로 만들 때(sql_exec.to_expr: SQL 탭·검사·내보내기) 부른다. 파일 연결이 아니거나 CSV가 없으면 아무 일도 하지 않는다.
+    파일마다 따로 처리한다: 다시 변환하지 못한 표(UTF-16로 다시 저장 등)는 그 표를 읽을 때만 그 이유로 오류가 나게 하고, 다른 표는 그대로 쓴다.
+    다시 등록했거나 실패 표로 바꾼 표의 이름 목록을 돌려준다(호출한 쪽이 그 표에 기억해 둔 옛 식을 버리게)."""
+    changed = []
     for name, (path, stamp, copy) in list(getattr(con, "csv_sources", {}).items()):
         now = stamp_of(path)
         if now is None or now == stamp:
             continue
+        changed.append(name)
+        gen = con.__dict__.setdefault("csv_gen", {})
+        gen[name] = gen.get(name, 0) + 1  # 식을 기억해 둔 쪽(server.any_table)이 어느 쪽이 먼저 불렀든 옛 식을 알아보게
         try:
             read_csv_table(con, path, name)
         except Exception as e:
             con.csv_sources[name] = (path, now, copy)  # 같은 상태로 되풀이해 실패하지 않게 새 스탬프를 기록한다
             fail_table(con, name, str(e))
+    return changed
 
 
 def fail_table(con, name, message):

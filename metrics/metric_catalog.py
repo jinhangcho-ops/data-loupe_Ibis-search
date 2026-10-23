@@ -34,7 +34,7 @@ PARTS = {"users_first": "첫 단계(A)를 한 사용자 수", "users_reached": "
 # 계산(calc)마다 표를 읽는 조회 수의 어림(없으면 1). 사본 없이 원격에서 바로 구할 때 확인창에 "표를 약 N번 읽어요"로 알린다.
 PASSES = {"uv": 2, "pv_per_uv": 2, "stickiness": 2, "time_between": 2, "conversion": 2, "ftue": 3, "retention": 4, "flattening": 4, "states": 4, "power_curve": 3, "survival": 2, "new_payers": 2,
           "pur": 4, "arpu": 2, "arppu": 2, "arpdau": 2, "ltv": 4, "nrr": 3, "cac": 4, "roas": 5, "payback": 5, "frequency": 2, "tiers": 2, "gini": 2, "aov": 2, "purchase_frequency": 2,
-          "pareto": 2, "pity": 2, "stage_clear": 3, "organic_uplift": 2, "velocity": 3, "money_supply": 3}
+          "pareto": 2, "pity": 2, "stage_clear": 3, "organic_uplift": 2, "velocity": 5, "money_supply": 4}
 
 # ---------- 빈칸 도서관: 역할마다 한 번만 적고 항목은 역할 이름으로 고른다 ----------
 # (이름, 타입, 안내, 컬럼 종류, 이름 단서(없으면 종류만 본다), 단서가 꼭 있어야 하는지)

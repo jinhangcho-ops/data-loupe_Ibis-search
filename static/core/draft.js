@@ -64,7 +64,7 @@ function Draft(screen, get, restore) {
 // 상태가 바뀌고 quiet ms 동안 그대로이면 바뀌기 전 상태를 쌓는다(글자를 치는 동안은 한 번으로 묶인다). 복원 중에 생긴 변화는 쌓지 않는다.
 // 아직 쌓이기 전의 편집은 undo()가 그 편집만 취소한다. poll ms마다 비교하며, 0이면 tick()을 직접 부른다(시험용).
 function Undo(get, restore, { max = 50, quiet = 600, poll = 500 } = {}) {
-  let base = null, seen = null, at = 0, back = [], fwd = [], busy = false;  // base: 쌓은 마지막 상태, seen·at: 지금 보이는 상태와 그것이 처음 보인 때
+  let base = null, seen = null, at = 0, back = [], fwd = [], busy = false, why = "";  // why: 마지막 되돌리기가 실패한 이유. reset은 복원 중(테이블을 다시 열며 부르는 경우)에는 기록을 지우지 않는다. base: 쌓은 마지막 상태, seen·at: 지금 보이는 상태와 그것이 처음 보인 때
   const snap = () => { const v = get(); return v == null ? null : JSON.stringify(v); };
   const push = (list, s) => { list.push(s); if (list.length > max) list.shift(); };
   function tick(now = Date.now()) {
@@ -78,6 +78,7 @@ function Undo(get, restore, { max = 50, quiet = 600, poll = 500 } = {}) {
     fwd = [];
   }
   async function move(from, to) {
+    why = "";
     const s = busy ? null : snap();
     if (s === null) return false;
     if (from === fwd && s !== base) return false;  // 쌓기 전의 새 편집이 있으면 다시 하기는 없다
@@ -87,31 +88,33 @@ function Undo(get, restore, { max = 50, quiet = 600, poll = 500 } = {}) {
     push(to, s);
     busy = true;
     try { await restore(JSON.parse(target)); }
-    catch { to.pop(); if (popped) from.push(target); return false; }
+    catch (e) { to.pop(); if (popped) from.push(target); why = e?.message || String(e); return false; }
     finally { busy = false; }
     base = seen = snap() ?? target;
     return true;
   }
   if (poll) setInterval(tick, poll);
-  return { tick, undo: () => move(back, fwd), redo: () => move(fwd, back), reset() { base = seen = snap(); back = []; fwd = []; }, size: () => [back.length, fwd.length] };
+  return { tick, undo: () => move(back, fwd), redo: () => move(fwd, back), reset() { if (busy) return; base = seen = snap(); back = []; fwd = []; }, why: () => why, size: () => [back.length, fwd.length] };
 }
 // 글자를 쓰는 칸(커서가 있으면 창 엔진의 글자 되돌리기에 맡긴다). 체크·라디오·단추 같은 칸은 화면 되돌리기를 쓴다.
 const isTyping = t => !!t && (t.isContentEditable || t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && /^(|text|search|number|email|url|tel|password|date|datetime-local|month|week|time)$/.test(t.type)));
 // 단추를 눌러 준다(없거나 꺼졌거나 숨겨졌으면 false).
 const pressBtn = b => !b || b.disabled || b.closest(".hidden") ? false : (b.click(), true);
+// 한 화면에 Undo가 탭마다 있을 때: 지금 그 탭(inX())일 때만 움직이는 undo 객체(Shortcuts에 넘긴다)
+const scoped = (u, inX) => ({ undo: () => inX() ? u.undo() : Promise.resolve(false), redo: () => inX() ? u.redo() : Promise.resolve(false), why: () => u.why() });
 // Shortcuts({ undo, save, run, find, active }): Ctrl+Z 되돌리기, Ctrl+Y·Ctrl+Shift+Z 다시 하기, Ctrl+S 저장, Ctrl+Enter 실행, Ctrl+F 찾기.
 // save·run은 눌렀으면(할 수 있으면) true를 돌려주는 함수, find는 찾기 칸을 돌려주는 함수. 없는 것은 건드리지 않는다. 안 맞으면 창 엔진의 기본 동작이 그대로 간다.
 // 한글 조합 중, 이미 다른 곳에서 처리한 키(SQL 칸의 Ctrl+Enter), 모달·펼친 목록이 있을 때, active()가 false(다른 탭)일 때는 무시한다.
 function Shortcuts({ undo, save, run, find, active = () => true }) {
   // 입력 중인 칸은 change로 값을 반영하므로 저장·실행 전에 blur→focus로 반영시킨다
-  const commit = () => { const a = document.activeElement; if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) { a.blur(); a.focus(); } };
+  const commit = () => { const a = document.activeElement; if (a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) { a.blur(); quietFocus(a); } };  // quietFocus(common.js): 되돌아온 포커스가 추천 목록·말풍선을 다시 띄우지 않게
   document.addEventListener("keydown", e => {
     if (e.defaultPrevented || e.isComposing || e.altKey || !(e.ctrlKey || e.metaKey) || !active() || document.querySelector(".modal:not(.hidden), .menu:not(.hidden)")) return;
     const k = e.key.toLowerCase();
     if ((k === "z" || k === "y") && undo && !isTyping(e.target)) {
       const redo = k === "y" || e.shiftKey;
       e.preventDefault();
-      (redo ? undo.redo() : undo.undo()).then(ok => ok && flash(redo ? "다시 했어요" : "되돌렸어요"));
+      (redo ? undo.redo() : undo.undo()).then(ok => { const why = ok ? "" : undo.why?.(); if (ok || why) flash(ok ? (redo ? "다시 했어요" : "되돌렸어요") : `${redo ? "다시 하지" : "되돌리지"} 못했어요: ${why}`); });
     } else if (k === "s" && !e.shiftKey && save) { e.preventDefault(); commit(); save(); }
     else if (k === "enter" && run && (commit(), run())) e.preventDefault();
     else if (k === "f" && !e.shiftKey && find) {

@@ -272,7 +272,7 @@ def work(plan, given):
                 for (slot, *_), got in zip(items, saved):
                     # 구하는 동안 사용자가 조회를 고쳐 저장했으면(None) 옛 정의로 구한 값을 새 정의에 붙이지 않는다
                     outcome = ("failed", source.mask(str(got), server.state["passwords"])) if isinstance(got, Exception) else (
-                        ("skipped", "구하는 동안 카드를 고쳤어요. 다음에 다시 구해요") if got is None else ("failed", "그사이 지운 카드예요") if not got else ("ok", ""))
+                        ("skipped", "구하는 동안 카드를 고쳤어요. 다음에 다시 구해요") if got is None else ("skipped", "저장된 값이 더 최근이라 그대로 뒀어요") if got == dash_store.KEPT else ("failed", "그사이 지운 카드예요") if not got else ("ok", ""))
                     with LOCK:
                         slot.update(state=outcome[0], message=outcome[1])
         for d, card in plan:
@@ -290,7 +290,7 @@ def work(plan, given):
                 JOB["current"] = card["title"]
             try:
                 with querying.using(renewed=renewed):
-                    here =(dash_store.current_source() or {}).get("key")
+                    here = (dash_store.current_source() or {}).get("key")
                     if not here or not use_counts.same_source((card.get("source") or {}).get("key"), here):  # 카드 사이에 사용자가 다른 연결로 바꿨다
                         STOP.set()
                         raise Changed("연결이 바뀌어 건너뛰었어요")

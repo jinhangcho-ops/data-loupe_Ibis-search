@@ -731,6 +731,7 @@ def roas(t, s, p, ctx):
     keys = sorted(spend, key=str)
     rows = [{"key": key_text(k, align), "spend": spend[k], "revenue": rev.get(k, 0.0), "roas": mc.roas(rev.get(k, 0.0), spend[k])} for k in keys]
     total_spend, total_rev = sum(spend.values()), sum(rev.get(k, 0.0) for k in keys)
+    ctx.notes.append("광고비가 있는 기간(키)의 신규 사용자·매출만 견줘요.")
     if p.get("ltv_cac"):
         new = sum(users.get(k, 0) for k in keys)
         ltv_n, cac_all = mc.ratio(total_rev, new), mc.ratio(total_spend, new)
@@ -768,7 +769,10 @@ def payback(t, s, p, ctx):
     step = max(1, len(rows) // MAX_POINTS)
     if step > 1:
         ctx.notes.append(f"점이 많아 {step}일마다 하나씩만 표에 실었어요(대표 값은 전체 기준).")
-    return result(day, rows[::step], {"day": "첫 활동 후 일수", "cum_arpu": "누적 ARPU", "cac": "CAC"}, {"cac": cac_all, "new_users": new}, label="누적 ARPU가 CAC 이상이 되는 첫 일수")
+    shown = rows[::step]
+    if shown[-1] is not rows[-1]:
+        shown.append(rows[-1])  # 솎아도 마지막 날은 싣는다
+    return result(day, shown, {"day": "첫 활동 후 일수", "cum_arpu": "누적 ARPU", "cac": "CAC"}, {"cac": cac_all, "new_users": new}, label="누적 ARPU가 CAC 이상이 되는 첫 일수")
 
 
 # ---------- 6 게임 경제 ----------
@@ -795,7 +799,7 @@ def money_supply(t, s, ctx):
     same = known.join(at, ["u", "tm"])
     bal = same.group_by("u").aggregate(bal=same.b.max())
     per = x.group_by("u").aggregate(last=x.d.max()).left_join(bal, "u")
-    end = one(per.aggregate(m=per.last.max()))["m"]
+    end = one(x.aggregate(m=x.d.max()))["m"]  # 사용자별 마지막 날의 최댓값 = 전체의 마지막 날(사용자별 집계 없이 한 번에)
     if end is None:
         return 0.0, 0
     live = per.filter(per["last"] > end - s["active_days"])
@@ -1077,8 +1081,11 @@ def power(t, s, p, ctx):
         delta = e["mean"] - c["mean"]
         if pw is None:
             ctx.notes.append("두 군의 비율이 모두 0 또는 1이라 표준오차가 0이어서 검정력을 구할 수 없어요.")
+    elif c["sd"] is None or e["sd"] is None:
+        pw, delta = None, e["mean"] - c["mean"]
+        ctx.notes.append("한 군에 값이 1개뿐이라 표준편차를 구할 수 없어 검정력을 구할 수 없어요.")
     else:
-        sd = math.sqrt(((c["sd"] or 0.0) ** 2 + (e["sd"] or 0.0) ** 2) / 2)
+        sd = math.sqrt((c["sd"] ** 2 + e["sd"] ** 2) / 2)
         if sd == 0:
             raise ValueError("두 군의 값이 모두 같아 검정력을 구할 수 없어요.")
         pw = mc.power_two_means(e["mean"] - c["mean"], sd, c["n"], e["n"], s["alpha"])
@@ -1098,8 +1105,11 @@ def mde(t, s, p, ctx):
         if c["sd"] is None or e["sd"] is None:
             value = None
             ctx.notes.append("한 군에 값이 1개뿐이라 표준편차를 구할 수 없어 최소 검출 효과를 구할 수 없어요.")
+        elif (sd := math.sqrt((c["sd"] ** 2 + e["sd"] ** 2) / 2)) == 0:
+            value = None
+            ctx.notes.append("두 군의 값이 모두 같아 표준편차가 0이라 최소 검출 효과를 구할 수 없어요.")
         else:
-            value = mc.mde_two_means(math.sqrt((c["sd"] ** 2 + e["sd"] ** 2) / 2), c["n"], e["n"], s["alpha"], s["power"])
+            value = mc.mde_two_means(sd, c["n"], e["n"], s["alpha"], s["power"])
     return result(value, [{"name": "MDE(절대)", "value": value}, {"name": "대조군 평균", "value": c["mean"]}, {"name": "MDE(대조군 대비)", "value": None if value is None else mc.ratio(value, c["mean"])}],
                   {"name": "항목", "value": "값"}, {"control_n": c["n"], "treat_n": e["n"]}, label=f"검정력 {s['power']:g}, 유의수준 {s['alpha']:g}에서 잡아낼 수 있는 최소 차이(정규 근사)")
 

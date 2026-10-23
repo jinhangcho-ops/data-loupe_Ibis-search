@@ -92,10 +92,12 @@ def ring_centroid(ring):
 
 def crosses_dateline(xs):
     """경도들이 날짜 변경선을 사이에 두고 모여 있는지: 경도를 정렬했을 때 안쪽의 가장 큰 빈 구간이 270도를 넘을 때(= 변경선을 건너 모인 범위가 90도 미만).
-    세계 전체(-180~180, 범위가 정확히 360), 성긴 도형, -100→100 같은 넓은 선은 아니다."""
+    -180과 180은 같은 경도로 본다(±180에서 자른 도형은 둘 다 가지며, 세계 상자는 180 하나로 줄어 아니다). 성긴 도형, -100→100 같은 넓은 선도 아니다. NaN·inf는 뺀다."""
     import numpy as np
-    v = np.unique(np.fromiter(xs, dtype=float))
-    if len(v) < 2 or v[-1] - v[0] >= 360:
+    v = np.fromiter(xs, dtype=float)
+    v = v[np.isfinite(v)]
+    v = np.unique(np.where(v == -180, 180.0, v))
+    if len(v) < 2:
         return False
     return bool(np.diff(v).max() > 360 - DATELINE_SPAN)
 
@@ -190,7 +192,9 @@ def table(doc):
         geom = shape(f.get("geometry"), epsg)
         lon, lat = center(geom) if geom else (None, None)
         low = bounds(geom) if geom else (None,) * 4
-        edge = lambda v: None if v is None else back(v)  # 표에는 -180~180 안의 값으로(변경선을 넘으면 min_lon > max_lon, in_box와 같은 규칙)
+        xs = [p[0] for kind, coords in parts(geom) for p in leaves(coords)] if geom else []
+        moved = bool(xs) and min(xs) < 0 and crosses_dateline(xs)  # unwrapped가 실제로 점을 옮긴 때
+        edge = lambda v: None if v is None else back(v) if moved else v  # 변경선을 넘어 점을 옮긴 때만 -180~180 안으로(min_lon > max_lon, in_box와 같은 규칙). 0~360 경도 파일은 그대로
         row = {"geom_type": geom.get("type") if geom else None, "center_lon": lon, "center_lat": lat, "min_lon": edge(low[0]), "min_lat": low[1], "max_lon": edge(low[2]), "max_lat": low[3],
                "geometry": json.dumps(geom, ensure_ascii=False, separators=(",", ":")) if geom else None}
         mine = f.get("properties") if isinstance(f.get("properties"), dict) else {}

@@ -399,7 +399,7 @@ def prep_new(tag, got, error, only, preview, values):
         ("log 최솟값", "'neg' 컬럼의 최솟값이 -9로 -1 이하라 log로 바꿀 수 없습니다.", bad("neg", scale="log")),
         ("표준편차 0", "'flat' 컬럼은 표준편차가 0이거나 구할 수 없어 standard로 바꿀 수 없습니다.", bad("flat", scale="standard")),
         ("범위 0", "'flat' 컬럼은 값이 모두 같거나 비어 있어(범위가 0) minmax로 바꿀 수 없습니다.", bad("flat", scale="minmax")),
-        ("round 음수", "'amt' 컬럼의 'round' 값은 0 이상의 정수 형식으로 쓰세요.", bad("amt", round=-1)),
+        ("round 음수", "'amt' 컬럼의 'round' 값은 0 이상 15 이하의 정수 형식으로 쓰세요.", bad("amt", round=-1)),
         ("bins 순서", "'amt' 컬럼의 'bins' 값은 오름차순 경계값 2개 이상. 예: [0, 10, 100] 형식으로 쓰세요.", bad("amt", bins=[10, 5])),
         ("rare min", "'city' 컬럼의 'rare' 값은 {\"min\": 2 이상의 정수, \"label\": \"기타\"} 형식으로 쓰세요.", bad("city", rare={"min": 1})),
         ("outlier range에 한계 없음", "'amt' 컬럼의 'outlier' 값은 ", bad("amt", outlier={"how": "drop", "by": "range"})),

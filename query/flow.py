@@ -203,11 +203,12 @@ def bare(name):
     return str(name).split(".")[0]
 
 
-def head_name(text, columns):
-    """글이 공백 있는 알려진 컬럼 이름으로 시작하면 그 이름(가장 긴 것), 아니면 None. 이름 뒤는 끝·공백·비교 기호여야 한다(parse.spaced와 같은 규칙)."""
+def head_name(text, columns, condition=False):
+    """글이 공백 있는 알려진 컬럼 이름으로 시작하면 그 이름(가장 긴 것), 아니면 None. 이름 뒤는 끝·공백·비교 기호여야 한다(parse.spaced와 같은 규칙).
+    condition이면(조건에 쓸 때) 이름 뒤에 연산자가 와야 그 이름으로 읽는다(parse.AFTER_NAME)."""
     text = text.lstrip()
     for name in sorted((c for c in columns or () if " " in c), key=len, reverse=True):
-        if text.startswith(name) and text[len(name):len(name) + 1] in ("", " ", "=", "!", "<", ">"):
+        if text.startswith(name) and text[len(name):len(name) + 1] in ("", " ", "=", "!", "<", ">") and (not condition or parse.AFTER_NAME.match(text[len(name):])):
             return name
 
 
@@ -223,7 +224,7 @@ def cond_columns(cond, columns=None):
             geo = parse.GEO_RE.match(piece.strip())
             if geo and len(geo.group(2).replace(",", " ").split()) == parse.GEO_COUNTS[geo.group(1).lower()]:  # 좌표 조건 near·box는 앞의 두 낱말이 위도·경도 컬럼
                 found |= {bare(w) for w in geo.group(2).replace(",", " ").split()[:2]}
-            elif name := head_name(piece, columns):
+            elif name := head_name(piece, columns, condition=True):
                 found.add(name)
             elif m := COND_HEAD.match(piece):
                 found.add(bare(m.group(1)))

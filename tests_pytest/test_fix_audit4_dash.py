@@ -121,7 +121,7 @@ def test_uninstall_removes_only_dataloupe_folder_tasks():
     text = (ROOT / "installer" / "DataLoupe.iss").read_text(encoding="utf-8")
     run = text[text.index("[UninstallRun]"):]
     assert "Unregister-ScheduledTask" in run and "-TaskPath '\\DataLoupe\\'" in run and "runhidden" in run
-    assert "앱을 한 번 열어야" in (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "설치할 때 설치 프로그램이 새 이름으로 옮깁니다" in (ROOT / "README.md").read_text(encoding="utf-8")
 
 
 # ---------- 4D5 이미지·압축 형식은 gzip하지 않는다 ----------
@@ -149,13 +149,13 @@ class FakeTasks:
     def __init__(self, fail=False):
         self.queries, self.deleted, self.fail = [], [], fail
 
-    def query(self, task, folder):
+    def query(self, task, folder, strict=False):
         self.queries.append(task)
         if self.fail:
             raise OSError("작업 스케줄러가 답하지 않음")
         return {"registered": True}
 
-    def delete(self, task, folder):
+    def delete(self, task, folder, known=False):
         self.deleted.append(task)
 
 

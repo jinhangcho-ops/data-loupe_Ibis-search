@@ -691,9 +691,12 @@ def add_card(dash_id, name, card):
         return save_dashboard({**d, "cards": [*d["cards"], {**card, "layout": {"x": 0, "y": min(bottom, 999), "w": 6, "h": 6}}]})
 
 
+KEPT = "kept"  # set_cards_data: 저장된 값이 더 늦게 구한 것이라 새 값을 쓰지 않았다
+
+
 def set_cards_data(dash_id, items):
     """저장한 대시보드의 카드들의 값(data)만 한 번에 바꾼다(최신화 결과). items: [(카드 id, data, same)]. 저장소는 한 번만 풀고 한 번만 쓴다(카드마다 하면 큰 저장소는 장당 몇 초).
-    카드 크기 상한을 다시 검사한다. 카드마다 결과: 카드가 없으면(그사이 지워졌으면) False, same(지금 저장된 카드 → 참거짓)이 거짓(그사이 정의를 고쳤다)이면 쓰지 않고 None, 썼으면 True, 이 카드의 값이 검사에 걸리면 그 오류(다른 카드는 쓴다)."""
+    카드 크기 상한을 다시 검사한다. 카드마다 결과: 카드가 없으면(그사이 지워졌으면) False, same(지금 저장된 카드 → 참거짓)이 거짓(그사이 정의를 고쳤다)이면 쓰지 않고 None, 썼으면 True(저장된 값이 더 늦게 구한 것이라 그대로 뒀으면 KEPT), 이 카드의 값이 검사에 걸리면 그 오류(다른 카드는 쓴다)."""
     with LOCK:
         dashboards = editable()
         d, found = dashboards.get(dash_id), []
@@ -707,8 +710,9 @@ def set_cards_data(dash_id, items):
                 try:
                     new = {"cards": [check_card({**card, "data": data})]}
                     keep_newer(new, {"cards": [card]})  # 저장된 값이 더 늦게 구한 것이면(같은 정의) 그것을 둔다
+                    kept = new["cards"][0]["data"] is card.get("data")  # 저장값이 이겼다(쓴 것이 없다)
                     card["data"] = new["cards"][0]["data"]
-                    found.append(True)
+                    found.append(KEPT if kept else True)
                 except Exception as e:  # 이 카드만 실패(예: 크기 상한). 나머지 카드는 쓴다
                     found.append(e)
         if True in found:
