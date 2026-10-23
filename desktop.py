@@ -3,8 +3,9 @@
 '--run "구성 이름"'으로 실행하면 서버·메인 창 없이 그 구성을 한 번 수집하고 기록·알림 뒤 끝난다(Windows 예약 작업이 띄운다). 종료 코드는 끝 0, 아니면 1."""
 import sys
 
-from core import drivers
+from core import drivers, settings
 
+settings.migrate()  # 예전 이름(ibis_search)의 설정 폴더를 새 폴더로 옮긴다. 설정을 처음 읽기 전, 단일 실행 잠금 전, 드라이버 폴더(그 안)를 쓰기 전에.
 drivers.use_installed()  # exe: 따로 설치한 드라이버 폴더를 백엔드를 불러오기 전에 import 경로에 더한다.
 
 if sys.argv[1:2] == ["--browser"]:
@@ -46,7 +47,7 @@ from core import filelock
 APP_LOCK = filelock.lock_path("app.lock")  # 단일 실행: 두 번째 실행은 임시 폴더 정리(아래 sweep)로 첫 실행의 작업 폴더를 지우기 전에 막는다
 if not filelock.hold(APP_LOCK):
     import ctypes
-    ctypes.windll.user32.MessageBoxW(None, "이미 실행 중입니다.", "Ibis", 0x40)
+    ctypes.windll.user32.MessageBoxW(None, "이미 실행 중입니다.", "Data Loupe", 0x40)
     sys.exit(1)
 
 scratch.sweep()  # 지난번에 강제 종료돼 남은 임시 폴더를 지운다.
@@ -68,7 +69,7 @@ def first_size():
 
 
 width, height = first_size()
-window = webview.create_window("Ibis 쿼리·분석·수집", f"http://127.0.0.1:{http.server_port}/?key={server.KEY}", width=width, height=height, min_size=MIN_SIZE)
+window = webview.create_window("Data Loupe", f"http://127.0.0.1:{http.server_port}/?key={server.KEY}", width=width, height=height, min_size=MIN_SIZE)
 
 
 def ask_save(name, file_types):
@@ -98,6 +99,7 @@ def closing():
 server.ask_save = ask_save
 server.ask_folder = ask_folder
 window.events.closing += closing
+threading.Thread(target=schedule.move_old_tasks, daemon=True).start()  # 예전 이름(\ibis_search\ 폴더)으로 등록한 Windows 작업을 새 폴더로 옮긴다(작업 스케줄러가 느려도 창을 막지 않게 뒤에서).
 schedule.start_watch()  # 프로그램 안 예약: 켜져 있는 동안 때가 된 예약을 돌린다.
 webview.start()  # 창을 닫으면 여기서 끝나고, 서버 스레드도 함께 종료된다.
 schedule.stop_watch()

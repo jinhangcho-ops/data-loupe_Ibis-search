@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 from core import settings
 
 FOLDER = settings.PATH.parent / "browser"  # 수집용 창의 쿠키·저장소. forget이 지우는 것은 이 폴더뿐이다.
-TITLE = "Ibis 수집용 브라우저"
+TITLE = "Data Loupe 수집용 브라우저"
 ENV_ADDRESS, ENV_KEY = "IBIS_BROWSER_ADDRESS", "IBIS_BROWSER_KEY"
 START_TIMEOUT = 60  # 자식이 접속하기를 기다리는 시간(초)
 CALL_TIMEOUT = 20  # 명령 하나의 답을 기다리는 기본 시간(초)

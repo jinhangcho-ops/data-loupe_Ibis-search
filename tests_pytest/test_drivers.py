@@ -81,7 +81,7 @@ def test_frozen_adds_driver_folder_only_if_exists(monkeypatch, tmp_path):
     assert str(drivers.driver_folder()) not in sys.path  # 폴더가 없으면 더하지 않는다.
     drivers.driver_folder().mkdir(parents=True)
     drivers.use_installed()
-    assert sys.path.count(str(tmp_path / "ibis_search" / "drivers")) == 1
+    assert sys.path.count(str(tmp_path / "DataLoupe" / "drivers")) == 1
     drivers.use_installed()
     assert sys.path.count(str(drivers.driver_folder())) == 1
 
@@ -99,7 +99,7 @@ def test_frozen_command_and_restart_note(monkeypatch):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(drivers, "module_found", lambda m: False)
     d = drivers.entry("snowflake")
-    assert d["command"] == f'py -3.14 -m pip install --target "%APPDATA%\\ibis_search\\drivers" "ibis-framework[snowflake]=={pinned()}"'
+    assert d["command"] == f'py -3.14 -m pip install --target "%APPDATA%\\DataLoupe\\drivers" "ibis-framework[snowflake]=={pinned()}"'
     assert d["after"] == "설치 뒤 프로그램을 다시 켜세요." and d["notice"] == ""
 
 

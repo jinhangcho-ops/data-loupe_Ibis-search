@@ -25,7 +25,7 @@ SEND_TIMEOUT = 60  # 메시지 하나가 전달되기를 기다리는 시간(초
 PERMANENT = ("MSG_SIZE_TOO_LARGE", "INVALID_MSG", "CORRUPT_MESSAGE", "INVALID_RECORD", "RECORD_LIST_TOO_LARGE")  # 그 행 자체가 안 되는 오류(다시 보내도 같다). 그 밖의 오류(시간 초과·연결 끊김…)는 일시 오류로 보고 다시 시도한다
 FLUSH_MARGIN = 10  # 묶음을 다 보낸 뒤 기다리는 시간 = SEND_TIMEOUT + 이것(초). 그 안에 실패 보고까지 온다.
 
-QUIET = logging.getLogger("ibis_search.kafka")  # librdkafka의 로그를 받아 버리는 곳
+QUIET = logging.getLogger("data_loupe.kafka")  # librdkafka의 로그를 받아 버리는 곳
 QUIET.addHandler(logging.NullHandler())
 QUIET.propagate = False
 

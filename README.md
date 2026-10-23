@@ -1,4 +1,4 @@
-# ibis_search
+# Data Loupe (Ibis-search)
 
 DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel)에 연결해 조건이나 SQL로 검색하고, 표·집계·차트로 보는 Windows 프로그램입니다. DB의 데이터는 읽기만 하고 바꾸지 않습니다.
 
@@ -21,11 +21,11 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel)에 연결해 �
 
 ## 프로그램 받기
 
-1. 저장소의 **Releases**에서 최신 버전의 `ibis_search-setup.exe`를 내려받아 실행합니다.
-2. 설치 방식(현재 사용자용 권장, 관리자 권한 없음)과 **설치 위치**를 고르고, **바탕 화면에 바로 가기 만들기**를 체크할지 정합니다. 시작 메뉴에는 `Ibis Search`가 생깁니다.
+1. 저장소의 **Releases**에서 최신 버전의 `DataLoupe-setup.exe`를 내려받아 실행합니다.
+2. 설치 방식(현재 사용자용 권장, 관리자 권한 없음)과 **설치 위치**를 고르고, **바탕 화면에 바로 가기 만들기**를 체크할지 정합니다. 시작 메뉴에는 `Data Loupe`가 생깁니다.
 3. 바로 가기나 시작 메뉴로 실행합니다. 이미 실행 중일 때 다시 열면 '이미 실행 중입니다' 안내만 뜨고 먼저 연 창이 그대로 남습니다.
 
-지우려면 Windows 설정 → 앱에서 `Ibis Search`를 제거합니다. 설정·대시보드(`%APPDATA%\ibis_search`)는 남아 다시 설치하면 이어 씁니다. 설치 없이 쓰려면 Actions 탭 → `build-exe` → `Run workflow` 결과의 `ibis_search-windows`(zip)를 풀어 `ibis_search.exe`를 실행합니다(폴더 안 다른 파일은 지우지 않음).
+지우려면 Windows 설정 → 앱에서 `Data Loupe`를 제거합니다. 설정·대시보드(`%APPDATA%\DataLoupe`)는 남아 다시 설치하면 이어 씁니다. 예전 이름(`ibis_search`)으로 쓰던 설정 폴더는 새 버전을 처음 열 때 자동으로 옮겨지고, 옮기지 못하면 이유가 새 폴더의 `옮기기_실패.txt`에 남습니다. 설치 없이 쓰려면 Actions 탭 → `build-exe` → `Run workflow` 결과의 `DataLoupe-windows`(zip)를 풀어 `DataLoupe.exe`를 실행합니다(폴더 안 다른 파일은 지우지 않음).
 
 서명되지 않은 프로그램이라 Windows SmartScreen 경고가 나오면 [추가 정보] → [실행]을 누릅니다.
 

@@ -101,8 +101,8 @@ def frozen():
 
 
 def driver_folder():
-    """exe에서 따로 설치한 드라이버를 두는 폴더: %APPDATA%\\ibis_search\\drivers."""
-    return Path(os.environ.get("APPDATA") or Path.home()) / "ibis_search" / "drivers"
+    """exe에서 따로 설치한 드라이버를 두는 폴더: %APPDATA%\\DataLoupe\\drivers."""
+    return Path(os.environ.get("APPDATA") or Path.home()) / "DataLoupe" / "drivers"
 
 
 def use_installed():
@@ -142,7 +142,7 @@ def pip_command(extra):
     """Ibis 드라이버(extra)를 설치하는 명령. 소스 실행은 평범한 pip, exe는 따로 설치 폴더로 받는다."""
     spec = f'"ibis-framework[{extra}]=={ibis_version()}"'
     if frozen():
-        return f'py -{FROZEN_PYTHON} -m pip install --target "%APPDATA%\\ibis_search\\drivers" {spec}'
+        return f'py -{FROZEN_PYTHON} -m pip install --target "%APPDATA%\\DataLoupe\\drivers" {spec}'
     return f"pip install {spec}"
 
 

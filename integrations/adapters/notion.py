@@ -34,7 +34,7 @@ def rich(text):
 
 def blocks(m):
     """메시지를 Notion 블록들로: 제목(heading_3), 내용(문단), 행 수·걸린 시간(문단), 표(코드 블록)."""
-    out = [{"object": "block", "type": "heading_3", "heading_3": {"rich_text": rich(m["title"] or "Ibis")}}]
+    out = [{"object": "block", "type": "heading_3", "heading_3": {"rich_text": rich(m["title"] or "Data Loupe")}}]
     if m["text"]:
         out.append({"object": "block", "type": "paragraph", "paragraph": {"rich_text": rich(m["text"])}})
     facts = " · ".join(x for x in (m["rows"] and f"행 수 {m['rows']}", m["duration"] and f"걸린 시간 {m['duration']}") if x)

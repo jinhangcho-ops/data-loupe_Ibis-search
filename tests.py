@@ -27,7 +27,7 @@ from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")  # 콘솔 인코딩이 달라도 한글을 찍을 수 있게 한다.
 # 실제 설정 파일과 임시 폴더를 건드리지 않게, settings·app을 불러오기 전에 임시 폴더 하나로 돌린다.
-ROOT = Path(tempfile.mkdtemp(prefix="ibis_search_tests_"))
+ROOT = Path(tempfile.mkdtemp(prefix="data_loupe_tests_"))
 tempfile.tempdir = str(ROOT)  # 프로그램이 만드는 임시 폴더(내보내기)도 이 안에 생긴다.
 os.environ["APPDATA"] = str(ROOT / "appdata")
 sys.dont_write_bytecode = True  # 프로젝트 폴더에 __pycache__를 남기지 않는다.
@@ -1932,7 +1932,7 @@ def load_section(c, got):
     status_text = c.get("/api/collect/status").get_data(as_text=True)
     found = [str(p) for folder in (ROOT / "appdata", out) for p in folder.rglob("*") if p.is_file() and secret.encode() in p.read_bytes()]
     check("비밀번호는 설정 폴더(kafka.json·load_tables.json 등)·결과 폴더(.load.json 등)·상태 어디에도 없음",
-          (found, secret in status_text, sorted(p.name for p in (ROOT / "appdata" / "ibis_search").glob("*.json") if p.name in ("kafka.json", "load_tables.json"))),
+          (found, secret in status_text, sorted(p.name for p in (ROOT / "appdata" / "DataLoupe").glob("*.json") if p.name in ("kafka.json", "load_tables.json"))),
           ([], False, ["kafka.json", "load_tables.json"]))
     check("작업이 끝나면 가릴 값(비밀번호)도 버림", collect_store.current["hide"], [])
     check("적재 라우트는 차례(turn)를 기다리지 않음", all(p in server.FREE for p in ("/api/load/kafka", "/api/load/kafka/check", "/api/load/table/check", "/api/load/start")), True)
@@ -2022,39 +2022,45 @@ def schedule_section(c, got):
     check("거부한 것은 저장하지 않고 schtasks도 부르지 않음", (c.get("/api/schedules").get_json()["schedules"], fake.calls), ({}, []))
     schedule.clock = lambda: at(2026, 10, 15, 8, 30)
     r = put("예약 하나", {**weekly, "inapp": False, "windows": True})
-    xml = fake.tasks["\\ibis_search\\예약 하나"][1]
-    check("Windows 작업 등록: \\ibis_search\\ 폴더, /XML 파일, /F", [a[:3] + a[4:5] + a[6:] for a in fake.calls if a[1] != "/Query"], [["schtasks", "/Create", "/TN", "/XML", "/F"]])
+    xml = fake.tasks["\\DataLoupe\\예약 하나"][1]
+    check("Windows 작업 등록: \\DataLoupe\\ 폴더, /XML 파일, /F", [a[:3] + a[4:5] + a[6:] for a in fake.calls if a[1] != "/Query"], [["schtasks", "/Create", "/TN", "/XML", "/F"]])
     check("작업 XML: InteractiveToken·LeastPrivilege·StartWhenAvailable·IgnoreNew·12시간·전원 조건 없음·매주 월·일·첫 시각",
           [f for f in ("<LogonType>InteractiveToken</LogonType>", "<RunLevel>LeastPrivilege</RunLevel>", "<StartWhenAvailable>true</StartWhenAvailable>",
                        "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "<ExecutionTimeLimit>PT12H</ExecutionTimeLimit>",
                        "<DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>", "<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>",
-                       "<DaysOfWeek><Sunday/><Monday/></DaysOfWeek>", "<StartBoundary>2026-10-18T09:00:00</StartBoundary>", "<URI>\\ibis_search\\예약 하나</URI>") if f not in xml], [])
+                       "<DaysOfWeek><Sunday/><Monday/></DaysOfWeek>", "<StartBoundary>2026-10-18T09:00:00</StartBoundary>", "<URI>\\DataLoupe\\예약 하나</URI>") if f not in xml], [])
     check("작업 동작: 지금 python.exe + desktop.py 절대 경로 + --run \"구성 이름\", 작업 폴더는 프로그램 폴더",
-          (fake.tasks["\\ibis_search\\예약 하나"][0], re.search("<WorkingDirectory>(.*)</WorkingDirectory>", xml)[1]),
+          (fake.tasks["\\DataLoupe\\예약 하나"][0], re.search("<WorkingDirectory>(.*)</WorkingDirectory>", xml)[1]),
           (subprocess.list2cmdline([sys.executable]) + " " + subprocess.list2cmdline([str(Path("desktop.py").resolve()), "--run", "예약 하나"]), str(Path("desktop.py").resolve().parent)))
     check("GET: 등록됨·경로 맞음·다음·마지막(성공), 프로그램 안 예약은 꺼짐", (r["schedules"]["예약 하나"], r["tasks"], r["next_inapp"], r["stale"]),
           ({**weekly, "minutes": 60, "inapp": False, "windows": True, "notify": "", "notify_on": "fail"},
            {"예약 하나": {"registered": True, "path_ok": True, "next": "2026-10-16 09:00", "last": "2026-10-15 13:05 · 성공"}}, {"예약 하나": None}, []))
     put("예약/둘?", {**every, "inapp": False, "windows": True})
-    xml = fake.tasks["\\ibis_search\\예약_둘_"][1]
+    xml = fake.tasks["\\DataLoupe\\예약_둘_"][1]
     check("간격 작업: 다음 칸부터 PT45M 반복(기간 없음), 작업 이름은 안전한 글자로", ("<Interval>PT45M</Interval>" in xml, "<Duration>" in xml,
-          "<StartBoundary>2026-10-15T09:00:00</StartBoundary>" in xml, sorted(fake.tasks)), (True, False, True, ["\\ibis_search\\예약 하나", "\\ibis_search\\예약_둘_"]))
+          "<StartBoundary>2026-10-15T09:00:00</StartBoundary>" in xml, sorted(fake.tasks)), (True, False, True, ["\\DataLoupe\\예약 하나", "\\DataLoupe\\예약_둘_"]))
     got("/api/collections", name="예약_둘_", collection=cfg("three.parquet"))
     put("예약_둘_", {**daily, "inapp": False, "windows": True})
     check("이름이 겹치면 _2를 붙이고 schedules.json에 대응을 적음", {n: s.get("task") for n, s in schedule.schedules().items()},
           {"예약 하나": "예약 하나", "예약/둘?": "예약_둘_", "예약_둘_": "예약_둘__2"})
     check("작업 이름은 폴더 밖·아래를 가리킬 수 없음", [raised(lambda t=t: wintask.full(t)) for t in ("..\\x", "a\\b", "", " a", "x" * 61)], ["ValueError"] * 5)
-    fake.tasks["\\ibis_search\\예약 하나"] = ("C:\\old\\ibis_search.exe --run \"예약 하나\"", "")
+    fake.tasks["\\DataLoupe\\예약 하나"] = ("C:\\old\\DataLoupe.exe --run \"예약 하나\"", "")
     r = c.get("/api/schedules").get_json()
     check("경로가 다른 작업은 stale", (r["stale"], r["tasks"]["예약 하나"]["path_ok"]), (["예약 하나"], False))
     r = got("/api/schedules/reregister")
-    check("다시 등록하면 지금 경로로", (r["stale"], fake.tasks["\\ibis_search\\예약 하나"][0].startswith(subprocess.list2cmdline([sys.executable]))), ([], True))
+    check("다시 등록하면 지금 경로로", (r["stale"], fake.tasks["\\DataLoupe\\예약 하나"][0].startswith(subprocess.list2cmdline([sys.executable]))), ([], True))
     put("예약_둘_", {**daily, "windows": False})
-    check("windows를 끄면 작업을 지움", ("\\ibis_search\\예약_둘__2" in fake.tasks, "task" in schedule.schedules()["예약_둘_"]), (False, False))
+    check("windows를 끄면 작업을 지움", ("\\DataLoupe\\예약_둘__2" in fake.tasks, "task" in schedule.schedules()["예약_둘_"]), (False, False))
     put("예약/둘?", None)
     put("예약_둘_", None)
-    check("예약을 지우면 작업도 지움", (sorted(fake.tasks), sorted(schedule.schedules())), (["\\ibis_search\\예약 하나"], ["예약 하나"]))
-    check("schtasks에 넘긴 작업은 모두 \\ibis_search\\ 바로 안", all(a[a.index("/TN") + 1].startswith("\\ibis_search\\") and a[a.index("/TN") + 1].count("\\") == 2 for a in fake.calls), True)
+    check("예약을 지우면 작업도 지움", (sorted(fake.tasks), sorted(schedule.schedules())), (["\\DataLoupe\\예약 하나"], ["예약 하나"]))
+    check("schtasks에 넘긴 작업은 모두 \\DataLoupe\\ 바로 안", all(a[a.index("/TN") + 1].startswith("\\DataLoupe\\") and a[a.index("/TN") + 1].count("\\") == 2 for a in fake.calls), True)
+    fake.tasks["\\ibis_search\\예약 하나"] = ("C:\\old\\ibis_search.exe --run \"예약 하나\"", "")
+    fake.tasks["\\ibis_search\\남의 작업"] = ("other.exe", "")  # 예약 목록에 없는 작업은 예전 폴더 안이어도 건드리지 않는다
+    fake.tasks["\\Other\\예약 하나"] = ("other.exe", "")
+    check("예전 폴더의 우리 작업을 새 폴더·지금 프로그램으로 옮기고 예전 것은 지움", (schedule.move_old_tasks(), sorted(fake.tasks), fake.tasks["\\DataLoupe\\예약 하나"][0].startswith(subprocess.list2cmdline([sys.executable]))),
+          (["예약 하나"], ["\\DataLoupe\\예약 하나", "\\Other\\예약 하나", "\\ibis_search\\남의 작업"], True))
+    check("한 번 옮기면 다시 옮길 것이 없음", schedule.move_old_tasks(), [])
     wintask.execute = lambda args: (1, "", "오류: 액세스가 거부되었습니다.")
     check("schtasks가 실패하면 한국어 안내와 그 문구", str(raised_error(lambda: wintask.register("x", "x", daily, at(2026, 1, 1)))),
           "Windows 예약 작업을 등록하지 못했습니다. 액세스가 거부되었습니다.")

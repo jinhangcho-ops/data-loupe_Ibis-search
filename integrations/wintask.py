@@ -1,4 +1,4 @@
-"""Windows 예약 작업: 수집 예약을 작업 스케줄러의 FOLDER(\\ibis_search\\) 안에 등록·조회·삭제한다. 이 폴더 밖의 작업은 조회도 하지 않는다.
+"""Windows 예약 작업: 수집 예약을 작업 스케줄러의 FOLDER(\\DataLoupe\\) 안에 등록·조회·삭제한다. 이 폴더 밖의 작업은 조회도 하지 않는다(예외: 예전 폴더 OLD_FOLDER의 우리 작업을 옮길 때).
 작업은 관리자 권한 없이 "사용자가 로그온했을 때만"(InteractiveToken, LeastPrivilege) 돌고, 놓친 시각은 켜진 뒤 한 번(StartWhenAvailable),
 이미 돌고 있으면 새 실행은 하지 않는다(IgnoreNew). 동작은 이 프로그램을 '--run "구성 이름"'으로 실행하는 것이다.
 schtasks는 execute로만 부른다(테스트는 이 함수를 바꿔 끼워 실제로 등록하지 않는다)."""
@@ -13,7 +13,8 @@ from xml.sax.saxutils import escape
 
 from core import scratch
 
-FOLDER = "\\ibis_search\\"
+FOLDER = "\\DataLoupe\\"
+OLD_FOLDER = "\\ibis_search\\"  # 앱 이름을 바꾸기 전의 폴더. 예전에 등록한 작업을 FOLDER로 옮길 때만 조회·삭제한다(이름은 schedules.json에 있는 것만).
 NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")  # 0=월 … 6=일
 SCHEMA_DAYS = ("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")  # XML에 적는 차례
@@ -56,11 +57,11 @@ def task_name(name, taken):
     return found
 
 
-def full(task):
+def full(task, folder=FOLDER):
     """폴더를 붙인 작업 경로. 이 폴더 밖이나 아래 폴더를 가리킬 수 없게 작업 이름을 다시 검사한다."""
     if not isinstance(task, str) or not task or UNSAFE.search(task) or task.strip(" .") != task or len(task) > 60:
         raise ValueError("작업 이름이 올바르지 않습니다.")
-    return FOLDER + task
+    return folder + task
 
 
 def xml(task, name, trigger, start):
@@ -80,7 +81,7 @@ def xml(task, name, trigger, start):
     text = lambda value: escape(value, {'"': "&quot;"})
     return f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="{NAMESPACE}">
-  <RegistrationInfo><Description>{text(f"ibis_search 수집 예약: {name}")}</Description><URI>{text(full(task))}</URI></RegistrationInfo>
+  <RegistrationInfo><Description>{text(f"Data Loupe 수집 예약: {name}")}</Description><URI>{text(full(task))}</URI></RegistrationInfo>
   <Triggers>{when}</Triggers>
   <Principals><Principal id="Author"><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals>
   <Settings>
@@ -122,11 +123,11 @@ def register(task, name, trigger, start):
         raise failed("등록하지", err, out)
 
 
-def delete(task):
+def delete(task, folder=FOLDER):
     """작업을 지운다. 이미 없으면 그대로 둔다."""
-    if not query(task)["registered"]:
+    if not query(task, folder)["registered"]:
         return
-    code, out, err = execute(["schtasks", "/Delete", "/TN", full(task), "/F"])
+    code, out, err = execute(["schtasks", "/Delete", "/TN", full(task, folder), "/F"])
     if code:
         raise failed("지우지", err, out)
 
@@ -162,11 +163,11 @@ def task_info(row):
 MISSING = {"registered": False, "command": "", "next": None, "last": None}
 
 
-def query(task):
+def query(task, folder=FOLDER):
     """작업 하나의 {registered, command, next, last}. schtasks의 /FO CSV /V 열 차례(언어와 상관없음): 1 작업 이름, 2 다음 실행 시간, 5 마지막 실행 시간, 6 마지막 결과, 8 실행할 작업."""
-    code, out, _ = execute(["schtasks", "/Query", "/TN", full(task), "/FO", "CSV", "/V"])
+    code, out, _ = execute(["schtasks", "/Query", "/TN", full(task, folder), "/FO", "CSV", "/V"])
     rows = [r for r in csv.reader(out.splitlines()) if len(r) > 8]
-    if code or len(rows) < 2 or rows[1][1].lower() != full(task).lower():
+    if code or len(rows) < 2 or rows[1][1].lower() != full(task, folder).lower():
         return dict(MISSING)
     return task_info(rows[1])
 

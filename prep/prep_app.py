@@ -1,4 +1,4 @@
-"""Ibis 분석 화면(전처리·분석·그래프)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
+"""Data Loupe 분석 화면(전처리·분석·그래프)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
 import datetime as dt
 import json
 import re

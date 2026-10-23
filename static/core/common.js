@@ -260,7 +260,7 @@ $("dest-del").onclick = () => busy($("dest-del"), async () => {
 });
 $("dest-test").onclick = () => busy($("dest-test"), async () => {
   if (!$("dest-list").value) return destMsg("저장한 보낼 곳을 고른 뒤 시험하세요.");
-  try { await sendTo($("dest-list").value, { title: "시험 메시지", text: "Ibis에서 보낸 시험 메시지입니다." }); destMsg("보냈습니다", true); } catch (e) { destMsg(e.message); }
+  try { await sendTo($("dest-list").value, { title: "시험 메시지", text: "Data Loupe에서 보낸 시험 메시지입니다." }); destMsg("보냈습니다", true); } catch (e) { destMsg(e.message); }
 });
 $("dest-check").onclick = () => busy($("dest-check"), async () => {
   if (!$("dest-list").value) return destMsg("저장한 보낼 곳을 고른 뒤 확인하세요.");

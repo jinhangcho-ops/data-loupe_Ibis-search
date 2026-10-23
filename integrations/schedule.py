@@ -196,6 +196,24 @@ def reregister():
         register(name, found[name], [])
 
 
+def move_old_tasks():
+    """앱 시작 때 한 번: 예전 작업 폴더(wintask.OLD_FOLDER)에 있는 우리 작업(예약 목록의 windows 예약만)을 새 폴더·지금 프로그램으로 다시 등록하고 예전 것을 지운다.
+    그 밖의 작업은 보지도 않는다. 옮기지 못한 작업은 그대로 두어 다음 시작 때 다시 한다. 옮긴 예약 이름 목록을 돌려준다."""
+    moved = []
+    for name, item in schedules().items():
+        task = item.get("task")
+        if not (item.get("windows") and task):
+            continue
+        try:
+            if wintask.query(task, wintask.OLD_FOLDER)["registered"]:
+                register(name, item, [])
+                wintask.delete(task, wintask.OLD_FOLDER)
+                moved.append(name)
+        except Exception:  # 작업 스케줄러가 답하지 않는 등: 이번엔 건너뛴다(시작을 막지 않는다).
+            continue
+    return moved
+
+
 # ---------- 잠금 ----------
 # 잠금 파일은 filelock에 있다. 수집은 결과 파일 경로마다 collect_job.start가 잡는다(같은 결과 파일에 두 곳이 쓰지 않게).
 locks, lock_path, hold, let_go = filelock.locks, filelock.lock_path, filelock.hold, filelock.let_go

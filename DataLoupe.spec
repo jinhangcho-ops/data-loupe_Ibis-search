@@ -1,4 +1,4 @@
-# PyInstaller 빌드 설정: pyinstaller ibis_search.spec → dist/ibis_search/ (exe + 라이브러리 폴더)
+# PyInstaller 빌드 설정: pyinstaller DataLoupe.spec → dist/DataLoupe/ (exe + 라이브러리 폴더)
 import sys
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
@@ -33,5 +33,5 @@ a = Analysis(
     hiddenimports=hidden,
 )
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, exclude_binaries=True, name="ibis_search", console=False)
-COLLECT(exe, a.binaries, a.datas, name="ibis_search")
+exe = EXE(pyz, a.scripts, exclude_binaries=True, name="DataLoupe", console=False)
+COLLECT(exe, a.binaries, a.datas, name="DataLoupe")

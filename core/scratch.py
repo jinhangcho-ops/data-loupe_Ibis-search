@@ -8,8 +8,8 @@ from pathlib import Path
 
 import psutil
 
-ROOT = Path(tempfile.gettempdir(), "ibis_search")  # 이 프로그램만 쓰는 폴더. 이 밖은 건드리지 않는다.
-MARK = ".ibis_search"  # 만든 프로세스를 적어 두는 표식 파일: "프로세스 번호 시작 시각"
+ROOT = Path(tempfile.gettempdir(), "DataLoupe")  # 이 프로그램만 쓰는 폴더. 이 밖은 건드리지 않는다.
+MARK = ".DataLoupe"  # 만든 프로세스를 적어 두는 표식 파일: "프로세스 번호 시작 시각"
 NAME = re.compile(r"(\d+)_\w{8}")  # 폴더 이름: 프로세스 번호_무작위 8자(tempfile이 붙인다)
 
 

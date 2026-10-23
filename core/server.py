@@ -1,5 +1,6 @@
 """검색과 전처리가 함께 쓰는 Flask 앱 하나와 공통 부분(연결, 설정, 열쇠, 화면 내려주기). app.py·prep_app.py가 여기에 자기 라우트를 단다. 따로 실행하지 않는다."""
 import copy
+import gzip
 import json
 import os
 import re
@@ -174,6 +175,21 @@ def wait_turn():
 def end_turn(error):
     if g.pop("turn", False):
         turn.release()
+
+
+GZIP_FROM = 16 * 1024  # 이보다 큰 응답은 gzip으로 보낸다. 로컬(127.0.0.1) 통신을 검사하는 보안 프로그램이 큰 응답을 가끔 19초 뒤 끊는다(측정: 60KB는 안 끊기고 200KB는 30번에 4번)
+
+
+@app.after_request
+def squeeze(response):
+    """큰 응답(JSON 등)을 gzip으로 줄여 보낸다. 파일 내려주기(direct_passthrough)·스트림(길이 모름)·이미 압축한 것은 그대로."""
+    if (response.direct_passthrough or response.content_length is None or response.content_length < GZIP_FROM
+            or response.headers.get("Content-Encoding") or "gzip" not in request.headers.get("Accept-Encoding", "")):
+        return response
+    response.set_data(gzip.compress(response.get_data(), 5))
+    response.headers["Content-Encoding"] = "gzip"
+    response.vary.add("Accept-Encoding")
+    return response
 
 
 @app.get("/api/usage")

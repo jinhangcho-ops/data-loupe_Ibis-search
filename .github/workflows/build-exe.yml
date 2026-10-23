@@ -1,4 +1,4 @@
-# Actions 탭 → build-exe → Run workflow 를 누르면 Windows용 프로그램 폴더와 설치 파일(ibis_search-setup.exe)을 만든다.
+# Actions 탭 → build-exe → Run workflow 를 누르면 Windows용 프로그램 폴더와 설치 파일(DataLoupe-setup.exe)을 만든다.
 # v1.0.0 같은 태그를 올리면 설치 파일을 그 버전의 Releases에 붙인다.
 name: build-exe
 on:
@@ -23,25 +23,25 @@ jobs:
           pip install -r requirements.txt pyinstaller==6.22.3 "psycopg[binary]"
           "ibis-framework[athena,bigquery,clickhouse,databricks,druid,exasol,impala,materialize,mssql,mysql,oracle,postgres,risingwave,singlestoredb,snowflake,sqlite,trino]==12.0.0"
       - run: python tests.py
-      - run: pyinstaller ibis_search.spec
+      - run: pyinstaller DataLoupe.spec
       - name: 설치 파일 만들기
         shell: pwsh
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
           $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.0.0" }
-          & $iscc "/DAppVersion=$version" installer\ibis_search.iss
+          & $iscc "/DAppVersion=$version" installer\DataLoupe.iss
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ibis_search-windows
-          path: dist/ibis_search/
+          name: DataLoupe-windows
+          path: dist/DataLoupe/
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: ibis_search-setup
-          path: installer/Output/ibis_search-setup.exe
+          name: DataLoupe-setup
+          path: installer/Output/DataLoupe-setup.exe
       - name: Releases에 올리기
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" installer/Output/ibis_search-setup.exe --title "${{ github.ref_name }}" --generate-notes
+        run: gh release create "${{ github.ref_name }}" installer/Output/DataLoupe-setup.exe --title "${{ github.ref_name }}" --generate-notes
