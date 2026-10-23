@@ -138,7 +138,7 @@ def test_sentence_tokens_visible_defaults(tmp_path):
 def test_every_template_text_tokens_match_slots(tmp_path):
     """모든 문장 틀(탐색·지표 62개): 글 속 {빈칸} 조각이 그 틀의 빈칸 이름에 모두 있다(그려지지 않는 칸이 없다)."""
     got = run_node(tmp_path, "const all = %s; console.log(JSON.stringify(all.map(t => [t.id, sentTokens(t.text).filter(x => x.slot).map(x => x.slot).filter(n => !t.slots.some(s => s.name === n))])));" % json.dumps(sentences.TEMPLATES, ensure_ascii=False))
-    assert len(got) == 62 and [row for row in got if row[1]] == []
+    assert len(got) == 65 and [row for row in got if row[1]] == []
 
 
 def test_fit_columns_other_table(tmp_path):
@@ -159,7 +159,7 @@ def test_period_slot_filter_kinds(tmp_path):
                    " f: sentFilter(%s, '중앙값').map(t => t.id), all: sentFilter(%s, '').length, kinds: sentKinds([['a', '정수'], ['b', '문자']], t => t === '정수' ? 'num' : 'text'), chip: ['num', 'date', 'text', 'json'].map(sentChip), fit: [sentFits('any', 'num'), sentFits(['num', 'date'], 'text'), sentFits('text', 'text')] }));"
                    % (json.dumps(sentences.EXPLORE, ensure_ascii=False), json.dumps(sentences.EXPLORE, ensure_ascii=False)))
     assert got["ok"] == {"column": "day", "start": "2026-03-01", "end": "2026-03-31"} and got["open"] == {"column": "day", "start": "2026-03-01", "end": ""}
-    assert got["err"] is None and got["none"] is None and got["f"] == ["e26"] and got["all"] == 47
+    assert got["err"] is None and got["none"] is None and got["f"] == ["e26"] and got["all"] == 50
     assert got["kinds"] == {"a": "num", "b": "text"} and got["chip"] == ["num", "date", "text", "other"] and got["fit"] == [True, False, True]
 
 

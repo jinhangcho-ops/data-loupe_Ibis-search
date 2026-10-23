@@ -24,7 +24,7 @@ def mine():
     return sorted(n for n, m in list(sys.modules.items()) if type(m).__name__ != "_LazyModule" and (getattr(m, "__file__", None) or "").startswith(HERE) and ".venv" not in m.__file__ and n != "probe")  # 지연 모듈은 속성을 읽으면 올라오므로 건드리지 않는다
 out = {}
 %s
-names = ["ibis", "polars", "duckdb", "pyarrow", "pandas", "numpy", "sqlglot", "confluent_kafka", "pyodbc", "psycopg", "psycopg2", "MySQLdb",
+names = ["ibis", "polars", "duckdb", "pyarrow", "pandas", "numpy", "pyproj", "sqlglot", "confluent_kafka", "pyodbc", "psycopg", "psycopg2", "MySQLdb",
          "oracledb", "snowflake.connector", "google.cloud.bigquery", "trino", "clickhouse_connect", "databricks.sql", "pyspark", "sqlalchemy"]
 out.update(modules={n: kind(n) for n in names}, mb=psutil.Process().memory_info().rss / 2**20, mine=mine())
 print(json.dumps(out))
@@ -34,7 +34,7 @@ LIMIT_MB = 80  # 명세의 시작 메모리 목표(50~80MB 이하). 화면을 �
 # 시작할 때 올라와도 되는 기능 패키지의 모듈: 주소를 등록하는 라우트 파일, 그리고 프로그램 안 예약 스레드를 띄우는 schedule(수집·알림은 예약을 돌릴 때 올라온다)
 ROUTES = {"collect.collect_app", "collect.load_app", "dashboard.dash_app", "integrations.bot_app", "integrations.integrations_app", "integrations.notify",
           "integrations.schedule", "integrations.schedule_app", "metrics.catalog_app", "prep.prep_app", "query.flow_app", "query.search_app"}
-FEATURE = ("collect", "dashboard", "integrations", "metrics", "prep", "query", "analysis")
+FEATURE = ("collect", "dashboard", "integrations", "metrics", "prep", "query", "analysis", "geo")  # geo(좌표)는 어느 화면의 묶음에도 넣지 않는다: 좌표 기능을 쓸 때만 올라온다
 BUNDLES = {"/search": {"query.flow", "query.flow_opt", "query.join_keys", "query.sentences", "query.sentence_run", "query.sentence_exec", "query.nl2sql",
                        "metrics.my_metrics", "metrics.metric_catalog", "metrics.metric_kernels"},
            "/prep": {"prep.prep_profile", "prep.prep_expr", "analysis.stats"},
@@ -74,6 +74,10 @@ def test_startup_loads_only_core_and_route_files():
     assert not extra, f"시작할 때 기능 모듈이 올라옴: {sorted(extra)}"
 
 
+def geo_loaded(found):
+    return sorted(n for n in found["mine"] if n == "geo" or n.startswith("geo."))
+
+
 # 페이지를 열면 뒤 스레드가 그 묶음을 올린다. 올라올 때까지 기다린 뒤(최대 60초) 올라온 기능 모듈을 본다.
 OPEN = """
 from query.search_app import app
@@ -91,6 +95,7 @@ out.update(status=status, want_loaded=sorted(want - set(mine())))
 def test_page_loads_only_its_bundle(path):
     found = run(OPEN % (sorted(BUNDLES[path]), path))
     assert found["status"] == 200 and found["want_loaded"] == [], found
+    assert geo_loaded(found) == [] and found["modules"]["pyproj"] == "none", f"{path}를 열었는데 좌표 모듈이 올라옴: {geo_loaded(found)}"
     loaded = feature_modules(found["mine"]) - ROUTES
     others = set().union(*(b for p, b in BUNDLES.items() if p != path))
     # 다른 화면 묶음에만 있는 모듈은 올라오지 않는다. 같은 화면의 모듈이 끌고 오는 것(예: 쿼리 화면의 지표 사전이 쓰는 모듈)은 허용한다.
@@ -115,3 +120,25 @@ def test_feature_api_works_without_opening_its_page():
     paths = ["/api/sentences", "/api/dash", "/api/catalog", "/api/collections", "/api/schedules", "/api/integrations", "/api/bot", "/api/destinations", "/api/my_metrics"]
     found = run(CALLS % (paths,))
     assert all(code == 200 for code in found["calls"].values()), found["calls"]
+
+
+# 좌표 기능은 처음 쓸 때 올라온다(그 전에는 geo도 pyproj도 없다).
+FIRST_USE = """
+import ibis
+from core import sql_funcs, source
+start = sorted(n for n in sys.modules if n == "geo" or n.startswith("geo."))
+t = ibis.memtable({"lat": [37.5], "lon": [127.0]})
+sql_funcs.make("haversine", t, {"lat": "lat", "lon": "lon"})
+after_func = sorted(n for n in sys.modules if n.startswith("geo."))
+pyproj_after_func = kind("pyproj")
+from geo import tm
+tm.to_wgs84([953898.0], [1952036.0], 5179)
+out.update(start=start, after_func=after_func, pyproj_after_func=pyproj_after_func, pyproj_after_tm=kind("pyproj"))
+"""
+
+
+def test_geo_and_pyproj_load_on_first_use():
+    found = run(FIRST_USE)
+    assert found["start"] == []  # 시작할 때는 geo가 없다
+    assert found["after_func"] == ["geo.funcs"] and found["pyproj_after_func"] == "none"  # 거리 함수는 geo.funcs만(numpy·pyproj 없이)
+    assert found["pyproj_after_tm"] == "module"  # TM 변환을 부를 때 pyproj가 올라온다

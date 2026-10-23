@@ -350,7 +350,7 @@ function showFlat() {
 // 연결 칸(connect.html)이 있는 화면에서만 연결 칸의 버튼을 단다. 수집 화면처럼 연결 칸이 없는 화면도 common.js를 쓴다.
 const hasConnect = !!$("connect");
 const hasTables = !!$("base");  // 테이블을 고르는 화면(쿼리·분석). 첫 화면은 연결 카드만 있다.
-const KIND_LABELS = { duckdb: "DuckDB", parquet: "Parquet", csv: "CSV", json: "JSON", excel: "Excel" };  // 찾을 파일 종류(서버의 source.KINDS)의 이름
+const KIND_LABELS = { duckdb: "DuckDB", parquet: "Parquet", csv: "CSV", json: "JSON", excel: "Excel", geojson: "GeoJSON" };  // 찾을 파일 종류(서버의 source.KINDS)의 이름
 if (hasConnect) {
 showRecentConnections();
 $("kinds").replaceChildren(...SERVER.file_kinds.map(k => el("label", {}, el("input", { type: "checkbox", value: k, checked: true }), KIND_LABELS[k] ?? k)));
@@ -421,7 +421,7 @@ async function listFiles() {
   const kinds = [...$("kinds").querySelectorAll("input:checked")].map(b => b.value);
   const d = await api("/api/files", { path: $("path").value.trim(), kinds, deep: $("deep").checked });
   fill($("file"), d.files);
-  if (d.flat.length) $("file").append(new Option(`테이블 파일 고르기: Parquet·CSV·JSON·Excel (${d.flat.length}개)`, FLAT));
+  if (d.flat.length) $("file").append(new Option(`테이블 파일 고르기: Parquet·CSV·JSON·Excel·GeoJSON (${d.flat.length}개)`, FLAT));
   checks($("flat-list"), d.flat);  // 처음에는 아무것도 고르지 않은 상태. 쓸 파일만 체크한다.
   if (!d.files.length && d.flat.length === 1) { $("file").value = FLAT; flatBoxes()[0].checked = true; }
   $("file").classList.remove("hidden");

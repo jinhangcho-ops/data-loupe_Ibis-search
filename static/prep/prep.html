@@ -145,6 +145,13 @@
             <div class="cols" id="pca-cols"></div>
             <div class="row" style="align-items:center"><span class="hint" style="margin:0; flex:none">성분 수</span><input id="pca-n" type="number" min="1" value="2" style="width:70px; flex:none"><button id="pca-clear" class="ghost">고른 것 비우기</button></div>
             <div class="hint" id="pca-info"></div>
+            <div class="hint" style="margin-top:12px">좌표 (이 PC에서 계산): TM 좌표를 경도·위도로 바꾸고, 가까운 지점이나 들어 있는 영역을 새 컬럼으로 붙입니다</div>
+            <div class="hint" id="geo-hints"></div>
+            <div id="geo-list"></div>
+            <div class="row"><select id="geo-op" style="flex:none"><option value="tm">TM 좌표 → 경도·위도</option><option value="nearest">가장 가까운 지점 찾기</option><option value="region">들어 있는 영역 붙이기</option></select></div>
+            <div class="row" id="geo-form" style="flex-wrap:wrap"></div>
+            <div class="row"><button id="geo-add">좌표 단계 더하기</button></div>
+            <div class="hint" id="geo-info"></div>
           </div></div>
         <div class="cn">↓</div>
         <div class="step" data-step="dedupe"><div class="sp"><i>5</i><span class="t">중복 기준</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
@@ -275,6 +282,8 @@ let specView = null;  // /api/spec/table의 응답(지금 테이블). 명세서 
 let picked = "";  // ③ 컬럼 정리에서 고치는 컬럼(복사 컬럼 포함) 이름
 let formulas = [];  // 계산 컬럼 [{ name, expr }] (④ 새 컬럼)
 let pca = { columns: [], n: 2 };  // PCA에 넣을 숫자 컬럼과 성분 수 (④ 새 컬럼). 컬럼이 없으면 하지 않는다
+let geoSteps = [];  // 좌표 단계 [{ op: tm | nearest | region, … }] (④ 새 컬럼). 서버가 이 PC에서 계산한다
+const EPSG_LIST = [[5179, "UTM-K (5179, 전국 한 장)"], [5186, "중부원점 2010 (5186)"], [5185, "서부원점 2010 (5185)"], [5187, "동부원점 2010 (5187)"], [5188, "동해원점 2010 (5188)"], [5174, "중부원점 Bessel (5174, 옛 자료)"], [5181, "중부원점 (5181)"]];  // geo/tm.py의 SYSTEMS와 같은 번호
 let deriv = [];  // 미리보기에서 알게 된 파생 컬럼 [{ name, source, type }]. 끈 것도 남긴다.
 let status = "";  // 통계를 구하는 단계: "stats"(통계 계산 중), "patterns"(타입 추천 확인 중), "stopped"(통계를 구하지 못함), "off"(통계를 끔), 끝났으면 ""
 let statsOn = saved("stats") !== "off";  // 테이블을 고를 때 표본을 읽어 통계·추천을 구할지(설정 stats)
@@ -432,7 +441,7 @@ const kept = () => cols().filter(c => edits[c.name].keep);
 const outName = c => edits[c.name].rename.trim() || c.name;  // 결과에서의 컬럼 이름
 const resultNames = () => [...kept().map(outName), ...(preview ? deriv.filter(d => !drops.includes(d.name)).map(d => d.name) : [])];
 const fail = text => { $("err-prep").textContent = text; };
-const snap = () => JSON.stringify([edits, copies, filters, formulas, pca, dedupe, keepNow(), sorts, drops, $("downcast").checked]);
+const snap = () => JSON.stringify([edits, copies, filters, formulas, pca, geoSteps, dedupe, keepNow(), sorts, drops, $("downcast").checked]);
 const stateOf = (key, v) => OPS[key].load?.(v) ?? {};
 
 // 입력 칸 하나
@@ -719,6 +728,59 @@ $("fx-add").onclick = () => {
 $("fx-expr").onkeydown = e => { if (e.key === "Enter") $("fx-add").click(); };
 $("pca-n").onchange = () => { pca.n = Math.max(1, Math.round(+$("pca-n").value) || 1); preview = null; renderDerive(); renderGrid(); };
 $("pca-clear").onclick = () => { pca = { columns: [], n: pca.n }; $("pca-info").textContent = ""; preview = null; showAll(); };
+// ④ 좌표 단계: 고른 종류의 칸을 보이고, 더하면 목록에 chip으로 쌓인다. 계산은 서버가 하고(고유 좌표마다 한 번), 지점·영역 테이블은 쓸 컬럼만 읽는다.
+let geoTables = [], geoRefCols = [];
+const geoOutputs = st => st.op === "tm" ? [st.lon || "경도", st.lat || "위도"] : st.op === "nearest" ? [st.dist || "가까운_거리km"] : [];
+const geoText = st => st.op === "tm" ? `TM ${st.x}, ${st.y} (EPSG ${st.epsg}) → ${st.lon || "경도"}, ${st.lat || "위도"}` : st.op === "nearest" ? `가까운 지점 ${st.table}${st.label ? "." + st.label : ""} ← ${st.lat}, ${st.lon}`
+  : `영역 ${st.path || st.table} ← ${st.lat}, ${st.lon}${st.take?.length ? " · " + st.take.join(", ") : ""}`;
+function renderGeo() {
+  const nums = (prof ? kept().filter(c => isNum(c, edits[c.name].ops)).map(c => c.name) : []).concat(geoSteps.flatMap(geoOutputs).filter(n => n !== "가까운_거리km")), op = $("geo-op").value;
+  const names = list => list.map(n => el("option", { value: n, textContent: n })), pick = (id, list, title, blank) => el("select", { id, title, style: "flex:none" }, ...(blank ? [el("option", { value: "", textContent: blank })] : []), ...names(list));
+  const text = (id, ph, w = 110) => el("input", { id, placeholder: ph, style: `width:${w}px; flex:none` });
+  const refs = [pick("geo-ref-lat", geoRefCols, "지점 테이블의 위도 컬럼"), pick("geo-ref-lon", geoRefCols, "지점 테이블의 경도 컬럼")];
+  const table = title => el("select", { id: "geo-table", style: "flex:none", title, onchange: geoLoadCols }, ...names(["", ...geoTables]));
+  const typed = Object.fromEntries([...$("geo-form").querySelectorAll("select, input")].map(e => [e.id, e.value]));  // 다시 그려도 고른·적은 값은 남긴다
+  $("geo-form").replaceChildren(...{
+    tm: [pick("geo-x", nums, "x(동서) 컬럼"), pick("geo-y", nums, "y(남북) 컬럼"), el("select", { id: "geo-epsg", style: "flex:none", title: "좌표계: 값의 범위로 서버가 맞는 것을 추천해요(위 안내)" }, ...EPSG_LIST.map(([n, t]) => el("option", { value: n, textContent: t }))), text("geo-lon-name", "경도 이름(경도)", 100), text("geo-lat-name", "위도 이름(위도)", 100)],
+    nearest: [pick("geo-lat", nums, "점의 위도 컬럼"), pick("geo-lon", nums, "점의 경도 컬럼"), table("지점 목록 테이블"), ...refs, pick("geo-label", geoRefCols, "지점 이름 컬럼", "(이름 없이 거리만)")],
+    region: [pick("geo-lat", nums, "점의 위도 컬럼"), pick("geo-lon", nums, "점의 경도 컬럼"), table("GeoJSON을 연결한 영역 테이블"), text("geo-path", "또는 GeoJSON 파일 경로", 180), text("geo-take", "붙일 영역 컬럼(쉼표)", 150), text("geo-prefix", "앞 글자(영역_)", 90)] }[op]);
+  for (const e of $("geo-form").querySelectorAll("select, input")) if (typed[e.id] !== undefined && (e.tagName === "INPUT" || [...e.options].some(o => o.value === typed[e.id]))) e.value = typed[e.id];
+  $("geo-list").replaceChildren(...geoSteps.map((st, i) => el("div", {}, chip(geoText(st), () => { geoSteps.splice(i, 1); preview = null; showAll(); }))));
+  const hints = prof?.geo, pairs = hints?.pairs ?? [];
+  $("geo-hints").replaceChildren(...(hints?.columns?.length ? [el("div", {}, "좌표 컬럼으로 보여요: " + hints.columns.map(c => `${c.name}(${{ lat: "위도", lon: "경도", x: "x", y: "y" }[c.role]})`).join(", "))] : []),
+    ...pairs.filter(p => p.kind === "tm").map(p => el("div", {}, `‘${p.x}’·‘${p.y}’는 미터 단위 TM 좌표로 보여요. ${p.epsg.length ? "값 범위로 보면 EPSG " + p.epsg.join(" 또는 ") + "일 가능성이 커요." : "맞는 좌표계를 값 범위로 찾지 못했어요. 자료의 좌표계를 확인해 고르세요."}`)),
+    ...(hints?.warnings ?? []).map(w => el("div", { className: "err", textContent: w })));
+  $("geo-info").textContent = (preview?.info?.geo ?? []).map(g => g.op === "tm" ? `TM: 서로 다른 좌표 ${g.pairs.toLocaleString()}개 변환${g.failed ? `, 바뀌지 않은 ${g.failed}개` : ""}`
+    : g.op === "nearest" ? `가까운 지점: 서로 다른 좌표 ${g.pairs.toLocaleString()}개 중 ${g.matched.toLocaleString()}개에 지점을 찾음(지점 ${g.reference.toLocaleString()}개)`
+    : `영역: 서로 다른 좌표 ${g.pairs.toLocaleString()}개 중 ${g.matched.toLocaleString()}개가 영역 ${g.regions.toLocaleString()}개 안`).join(" · ");
+}
+async function geoLoadCols() {
+  const base = $("geo-table").value;
+  if (!base) return;
+  try { geoRefCols = (await api("/api/columns", { schema: S.schema, base })).columns.map(c => c[0]); renderGeo(); } catch (e) { fail(e.message); }
+}
+$("geo-op").onchange = async () => {
+  if ($("geo-op").value !== "tm" && !geoTables.length) { try { geoTables = (await api("/api/tables?schema=" + encodeURIComponent(S.schema))).tables; } catch (e) { fail(e.message); } }
+  renderGeo();
+};
+$("geo-add").onclick = () => {
+  const op = $("geo-op").value, v = id => $(id)?.value.trim() ?? "";
+  if (op === "tm") {
+    if (!v("geo-x") || !v("geo-y")) return fail("x·y 컬럼을 고르세요(숫자 컬럼).");
+    geoSteps.push({ op, x: v("geo-x"), y: v("geo-y"), epsg: +v("geo-epsg"), ...(v("geo-lon-name") ? { lon: v("geo-lon-name") } : {}), ...(v("geo-lat-name") ? { lat: v("geo-lat-name") } : {}) });
+  } else {
+    if (!v("geo-lat") || !v("geo-lon")) return fail("점의 위도·경도 컬럼을 고르세요.");
+    if (op === "nearest") {
+      if (!v("geo-table") || !v("geo-ref-lat") || !v("geo-ref-lon")) return fail("지점 테이블과 그 위도·경도 컬럼을 고르세요.");
+      geoSteps.push({ op, lat: v("geo-lat"), lon: v("geo-lon"), table: v("geo-table"), ...(S.schema ? { schema: S.schema } : {}), ref_lat: v("geo-ref-lat"), ref_lon: v("geo-ref-lon"), ...(v("geo-label") ? { label: v("geo-label") } : {}) });
+    } else {
+      if (!v("geo-table") && !v("geo-path")) return fail("영역 테이블(GeoJSON을 연결한 것)이나 GeoJSON 파일 경로를 적으세요.");
+      geoSteps.push({ op, lat: v("geo-lat"), lon: v("geo-lon"), ...(v("geo-path") ? { path: v("geo-path") } : { table: v("geo-table"), ...(S.schema ? { schema: S.schema } : {}) }),
+        take: v("geo-take").split(",").map(x => x.trim()).filter(Boolean), ...(v("geo-prefix") ? { prefix: v("geo-prefix") } : {}) });
+    }
+  }
+  fail(""); preview = null; showAll();
+};
 // 뺄 만한 컬럼: 표본으로 서버가 고른 것과 이유. [빼기]는 그 컬럼의 선택(keep)을 끈다.
 $("prune").onclick = () => busy($("prune"), async () => {
   try { showPrune((await api("/api/prune", { schema: S.schema, base: S.base, sample })).columns); fail(""); } catch (e) { fail(e.message); }
@@ -743,7 +805,7 @@ function showTarget() {
 }
 document.querySelectorAll("input[name=target]").forEach(r => r.onchange = showTarget);
 
-const showAll = () => { renderCols(); syncNames(); syncFilters(); renderClean(); renderDerive(); renderGrid(); };
+const showAll = () => { renderCols(); syncNames(); syncFilters(); renderClean(); renderDerive(); renderGeo(); renderGrid(); };
 function resetRun() {
   if (confirming === null) return;
   confirming = null;
@@ -764,6 +826,8 @@ function resetTable() {
   deriv = [];
   formulas = [];
   pca = { columns: [], n: 2 };
+  geoSteps = [];
+  geoTables = []; geoRefCols = [];
   picked = "";
   $("prune-box").replaceChildren();
   $("pca-info").textContent = "";
@@ -833,10 +897,11 @@ async function computeStats(mine, fresh = false) {
   try {
     const p = await timed("profile", () => api("/api/profile", body));
     if (mine !== token) return;
-    Object.assign(prof, { sampled: p.sampled, description: p.description });
+    Object.assign(prof, { sampled: p.sampled, description: p.description, geo: p.geo });
     const byName = Object.fromEntries(p.columns.map(c => [c.name, c]));
     prof.columns.forEach(c => Object.assign(c, byName[c.name]));
     status = prof.columns.some(isStr) ? "patterns" : "";
+    renderGeo();
     renderGrid();
     if (!status) return;
     const d = await timed("profile", () => api("/api/patterns", body));
@@ -904,7 +969,7 @@ $("spec-read").onclick = () => busy($("spec-read"), async () => {
 });
 
 // 구성 저장·불러오기: 입력 상태를 그대로 저장한다(서버로 보내는 recipe 값이 아니다). 미리 볼 행 수와 미리보기 결과는 넣지 않는다.
-const config = () => ({ schema: S.schema, base: S.base, edits, copies, drops, filters, formulas, pca, dedupe, ...(keepNow() ? { dedupe_keep: keepNow() } : {}), sorts, downcast: $("downcast").checked,
+const config = () => ({ schema: S.schema, base: S.base, edits, copies, drops, filters, formulas, pca, geo: geoSteps, dedupe, ...(keepNow() ? { dedupe_keep: keepNow() } : {}), sorts, downcast: $("downcast").checked,
   target: { kind: $("t-table").checked ? "table" : "file", format: $("fmt").value, name: $("tname").value } });
 // 구성의 원래 컬럼이 모두 이 테이블에 있으면 선택을 채운다. 없는 것이 있으면 채우지 않고 알린다(구성에 없는 새 컬럼은 선택 없이 둔다).
 function restore(c) {
@@ -918,6 +983,7 @@ function restore(c) {
   formulas = d.formulas ?? [];  // 이 기능 전에 저장한 구성에는 없다
   setKeep(d.dedupe_keep);
   pca = d.pca ?? { columns: [], n: 2 };
+  geoSteps = d.geo ?? [];  // 이 기능 전에 저장한 구성에는 없다
   $("downcast").checked = d.downcast;
   $("t-table").checked = d.target.kind === "table";
   $("t-file").checked = !$("t-table").checked;
@@ -1000,7 +1066,7 @@ function recipe() {
   }
   if (pca.columns.length === 1) throw new Error("PCA에는 숫자 컬럼을 2개 이상 고르세요.");
   return { schema: S.schema, base: S.base, columns, filters, copies, drop: drops, sorts,
-    ...(formulas.length ? { formulas } : {}), ...(pca.columns.length ? { pca: { columns: pca.columns, n: pca.n } } : {}),
+    ...(formulas.length ? { formulas } : {}), ...(pca.columns.length ? { pca: { columns: pca.columns, n: pca.n } } : {}), ...(geoSteps.length ? { geo: geoSteps } : {}),
     ...(dedupe.length ? { dedupe, ...(keepNow() ? { dedupe_keep: keepNow() } : {}) } : {}), ...($("downcast").checked ? { downcast: true } : {}) };
 }
 // [미리보기]·[실행]·[중복 세기]가 함께 쓴다: 테이블을 골랐는지 보고, 레시피를 만들어 fn에 넘기고, 오류는 카드에 보인다.
@@ -1064,7 +1130,7 @@ function showPrepSummaries() {
   put("sum-p-filters", filters.length ? `${filters.length}개` : "없음");
   const worked = prof ? cols().filter(c => isWorked(c)).length : 0;
   put("sum-p-clean", worked ? `${worked}개 컬럼` : "없음");
-  put("sum-p-derive", [formulas.length ? `계산 ${formulas.length}개` : "", pca.columns.length ? `PCA ${pca.columns.length}→${pca.n}` : ""].filter(Boolean).join(", ") || "없음");
+  put("sum-p-derive", [formulas.length ? `계산 ${formulas.length}개` : "", pca.columns.length ? `PCA ${pca.columns.length}→${pca.n}` : "", geoSteps.length ? `좌표 ${geoSteps.length}개` : ""].filter(Boolean).join(", ") || "없음");
   put("sum-p-dedupe", dedupe.length ? dedupe.join(", ") : "없음");
   put("sum-p-sorts", sorts.length ? sorts.join(", ") : "없음");
   put("sum-p-save", $("t-table").checked ? `새 테이블 ${$("tname").value.trim()}` : $("fmt").value === "csv" ? "CSV 파일" : "Parquet 파일");

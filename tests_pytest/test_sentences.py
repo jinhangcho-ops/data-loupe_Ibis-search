@@ -1,4 +1,4 @@
-"""문장 틀 데이터(sentences.py): 탐색 1~47번·지표 1~15번이 모두 있고, 글의 빈칸이 빈칸 정의와 맞고, 함수 사전의 함수와 이어진다."""
+"""문장 틀 데이터(sentences.py): 탐색 1~50번(48~50은 좌표 틀)·지표 1~15번이 모두 있고, 글의 빈칸이 빈칸 정의와 맞고, 함수 사전의 함수와 이어진다."""
 import json
 import re
 
@@ -19,8 +19,8 @@ METRIC_NAMES = {1: "행 수", 2: "고유 대상 수", 3: "값의 집계", 4: "�
 
 def test_counts_and_numbers():
     explore, metric = [t for t in S.TEMPLATES if t["kind"] == "explore"], [t for t in S.TEMPLATES if t["kind"] == "metric"]
-    assert [t["no"] for t in explore] == list(range(1, 48)) and [t["no"] for t in metric] == list(range(1, 16))
-    assert len({t["id"] for t in S.TEMPLATES}) == len(S.TEMPLATES) == 62
+    assert [t["no"] for t in explore] == list(range(1, 51)) and [t["no"] for t in metric] == list(range(1, 16))
+    assert len({t["id"] for t in S.TEMPLATES}) == len(S.TEMPLATES) == 65
     assert {t["no"]: t["name"] for t in explore if t["no"] <= 25} == EXPLORE_NAMES and {t["no"]: t["name"] for t in metric} == METRIC_NAMES
     assert S.get("e26")["name"] == "중앙값·분위수" and S.get("m15")["name"] == "누적"
     with pytest.raises(ValueError, match="문장 틀이 없"):
@@ -64,7 +64,7 @@ def test_each_new_template_names_its_functions():
     expected = {26: {"median", "quantile", "p90", "p99"}, 27: {"std", "var", "range"}, 28: {"mode"}, 29: {"any_value", "first", "last", "min", "max", "mode", "string_agg", "unique_or_null"},
                 30: {"string_agg"}, 31: {"collect"}, 32: {"all", "any"}, 33: {"arg_min", "arg_max", "first", "last"}, 34: {"rank", "qualify"}, 35: {"lag", "lead", "diff", "pct_change"},
                 36: {"cum_sum", "moving_mean"}, 37: {"share_of_group"}, 38: {"percent_rank", "cume_dist", "ntile"}, 39: {"rollup", "cube", "grouping_sets"},
-                41: {"case", "ifelse"}, 42: {"date_diff"}, 43: {"json_get"}, 44: {"cast", "try_cast"}, 45: {"corr", "cov", "cov_pop"}, 47: {sql_funcs.RAW}}
+                41: {"case", "ifelse"}, 42: {"date_diff"}, 43: {"json_get"}, 44: {"cast", "try_cast"}, 45: {"corr", "cov", "cov_pop"}, 47: {sql_funcs.RAW}, 49: {"within_km"}, 50: {"grid_id", "grid_lat", "grid_lon"}}
     for no, ids in expected.items():
         assert ids <= set(S.funcs_for(f"e{no}")), no
 

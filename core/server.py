@@ -446,6 +446,9 @@ def home():
     return page("core/home.html")
 
 
+OSM_TILES = "https://tile.openstreetmap.org"  # 지도 카드의 [지도 배경(OpenStreetMap)]을 켰을 때만 쓰는 타일 그림 주소. 화면 CSP에서 이 주소의 img만 허용한다
+
+
 def page(name):
     """static 폴더의 name 파일을 화면으로 내려준다. <!--include 파일이름-->은 static의 그 파일 내용으로 바꾼다(한 번만).
     /*SERVER*/ 자리에는 CONSTANTS를 JSON으로 넣는다(</script>로 끝나지 않게 <는 \\u003c로)."""
@@ -457,7 +460,7 @@ def page(name):
     response = Response(html.replace("<script", f'<script nonce="{nonce}"'), mimetype="text/html")
     response.headers["Content-Security-Policy"] = (
         f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'self' 'unsafe-inline'; connect-src 'self'; "
-        "img-src data: blob:; base-uri 'none'; form-action 'none'")
+        f"img-src data: blob: {OSM_TILES}; base-uri 'none'; form-action 'none'")
     response.set_cookie("key", KEY, httponly=True, samesite="Strict")
     for key, value in settings.load().items():  # 저장된 설정을 쿠키로 알려 준다. 화면이 그리기 전에 읽는다.
         response.set_cookie(key, str(value), samesite="Strict")

@@ -10,11 +10,12 @@ function galleryItems() {
                       ["stripes", "칸 채우기", "목표까지 칸"], ["blocks", "블록", "양을 블록으로"], ["target_trend", "목표 추이", "목표선과 일 값"], ["dual_trend", "두 계열 추이", "두 값을 겹쳐"]]),
     ...some("표·글", [["table", "표", "집계 또는 원래 행"], ["sentence", "문장", "빈칸에 값·비교"], ["recent_rows", "최근 행", "연결할 때 보임"]]),
     ...some("모니터링", [["status", "상태", "정상·주의·이상"], ["alerts", "경고 목록", "N분째·영향"], ["map", "배치도", "끌어 옮기는 점"], ["deviation", "편차 표", "엔티티×시간대"]]),
-    ...some("흐름", [["funnel", "흐름(퍼널)", "단계별 도달"]])];
+    ...some("흐름", [["funnel", "흐름(퍼널)", "단계별 도달"]]),
+    ...some("지도", [["geomap", "지도", "경계·점·영역별 색(GeoJSON)"]])];
 }
 const CARD_MIME = "application/x-dash-card";
 const KIND_NAMES = { chart: "차트", analysis: "분석", metric: "지표", kpi: "KPI", donut_kpi: "도넛 KPI", gauge: "게이지", summary: "요약 문장", recent_rows: "최근 행", dual_trend: "두 계열 추이", stripes: "칸 채우기",
-                     blocks: "블록", target_trend: "목표 추이", map: "배치도", alerts: "경고 목록", deviation: "편차 표", funnel: "흐름(퍼널)", table: "표", status: "상태", sentence: "문장" };
+                     blocks: "블록", target_trend: "목표 추이", map: "배치도", alerts: "경고 목록", deviation: "편차 표", funnel: "흐름(퍼널)", table: "표", status: "상태", sentence: "문장", geomap: "지도" };
 
 // 빈 틀 카드(source 없음): 카드 모음·템플릿이 만든다. 데이터는 설정 패널의 [데이터]에서 정한다.
 function shellOf(spec, layout, newId) {

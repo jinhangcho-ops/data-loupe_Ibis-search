@@ -15,6 +15,8 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel)에 연결해 �
 
 대시보드 화면(저장된 값으로 보기, 기준일·기간·최신화·실시간)은 [docs/dashboard.md](docs/dashboard.md)(카드 종류는 [docs/dashboard_cards.md](docs/dashboard_cards.md))에 있습니다. 집계·계산에 고를 수 있는 함수는 [docs/functions.md](docs/functions.md)에 있습니다.
 
+좌표(GeoJSON 연결, 거리·반경·격자, 가까운 지점·점-영역, TM 변환, 지도 카드와 지도 배경)는 [docs/geo.md](docs/geo.md)에 있습니다.
+
 화면 설정, 진행 상황과 취소, 기억되는 것, DB별 드라이버는 [docs/settings.md](docs/settings.md)에 있습니다.
 
 ## 프로그램 받기

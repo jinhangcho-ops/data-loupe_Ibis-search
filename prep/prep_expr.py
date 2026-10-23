@@ -60,11 +60,11 @@ def downcast(t):
     return t.mutate(**casts) if casts else t
 
 
-def shape(con, recipe, table=None, info=None):
+def shape(con, recipe, table=None, info=None, refs=None):
     """filters → copies → 컬럼별 ops → 계산 컬럼(formulas) → PCA → keep·파생 컬럼 배치·rename → drop까지 만든 식과,
     결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지). 계산 컬럼·PCA 성분은 원래 컬럼이 없어 이름이 ""이고 맨 뒤에 놓인다.
     계산 식은 이름을 바꾸기 전의 컬럼 이름을 쓴다. table을 주면 연결의 테이블 대신 그 식(예: 표본을 담은 메모리 표)에서 시작한다.
-    info(dict)를 주면 PCA의 설명된 분산 비율 등을 남긴다."""
+    info(dict)를 주면 PCA의 설명된 분산 비율 등을 남긴다. 좌표 단계(recipe.geo, 이 PC에서 계산)는 PCA 뒤에 붙고, 지점·영역 테이블은 refs(없으면 con)에서 읽는다."""
     if table is None:
         schema = recipe.get("schema") or None
         parse.check_name(recipe["base"], source.list_tables(con, schema), "테이블")
@@ -87,6 +87,10 @@ def shape(con, recipe, table=None, info=None):
     if recipe.get("pca"):
         t, components = prep_derive.pca(t, recipe["pca"], {} if info is None else info)
         new += components
+    if recipe.get("geo"):
+        from geo import prep_geo  # 좌표 단계를 쓸 때만 geo 패키지가 올라온다
+        t, made_geo = prep_geo.apply(t, recipe["geo"], info.setdefault("geo", []) if info is not None else None, con if refs is None else refs)
+        new += made_geo
     layout = []  # (t의 컬럼, 결과 이름, recipe상 컬럼, 파생 컬럼인지)
     for name in [n for n in t.columns if n not in made and n not in new]:
         if specs.get(name, {}).get("keep", True):
@@ -183,9 +187,9 @@ def dedupe_rows(t, columns, recipe):
     return merged(t, columns, how, order, sep)
 
 
-def build(con, recipe, table=None, info=None):
-    """recipe를 Ibis 식 하나로 만든다. (식, 결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지))를 돌려준다. table·info는 shape와 같다."""
-    t, origin = shape(con, recipe, table, info)
+def build(con, recipe, table=None, info=None, refs=None):
+    """recipe를 Ibis 식 하나로 만든다. (식, 결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지))를 돌려준다. table·info·refs는 shape와 같다."""
+    t, origin = shape(con, recipe, table, info, refs)
     columns = dedupe_columns(t, recipe)
     if columns:
         t = dedupe_rows(t, columns, recipe)

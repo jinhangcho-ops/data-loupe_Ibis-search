@@ -33,7 +33,7 @@ MAX_DAYS = 3660  # 시간별 카드에 두는 일 값의 최대 일수
 MAX_PALETTE = 12  # 대시보드 팔레트의 색 수
 MAX_COLORS = 100  # 카드 하나의 지정 색 수
 KINDS = ("chart", "analysis", "metric", "kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks",
-         "target_trend", "map", "alerts", "deviation", "funnel", "table", "status", "sentence")  # 앞의 셋만 1단계에서 만든다
+         "target_trend", "map", "alerts", "deviation", "funnel", "table", "status", "sentence", "geomap")  # 앞의 셋만 1단계에서 만든다. geomap: 좌표 지도(경계·점·영역별 색)
 CHART_TYPES = {"bar": "막대", "hbar": "가로 막대", "stacked": "누적 막대", "line": "라인", "polyline": "꺾인 선", "area": "영역형 라인",
                "doughnut": "도넛", "pie": "파이", "radar": "레이더", "scatter": "산점도", "bubble": "버블"}
 TIME_TYPES = ("bar", "stacked", "line", "polyline", "area")  # 날짜 X축 카드에서 고를 수 있는 종류
@@ -190,7 +190,7 @@ BUCKETS = ("hour", "day", "week", "month")
 MAX_RULES = 20
 EXTRA_VIEW = ("icon", "format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window",
               "cond_rules", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "positions", "bg", "image_path", "group_cols", "formats", "total",
-              "template", "blanks", "bucket", "baseline", "threshold")  # 3단계 카드 종류의 설정
+              "template", "blanks", "bucket", "baseline", "threshold", "geo")  # 3단계 카드 종류의 설정
 
 
 def number_of(value, what, low=None, high=None):
@@ -260,6 +260,44 @@ def check_more(view):
     return out
 
 
+GEO_AGGS = ("count", "sum", "mean", "min", "max")  # 지도 카드가 영역마다 구하는 값
+GEO_KEYS = {"regions", "name", "geometry", "region_value", "lat", "lon", "value", "agg", "points", "tiles", "color"}
+
+
+def check_geo(geo):
+    """지도 카드(geomap)의 설정 view.geo: regions({table[, schema]} 또는 {path}: GeoJSON 영역), name(영역 이름 컬럼), geometry(도형 JSON 컬럼, 기본 geometry), region_value(영역 테이블의 값 컬럼),
+    lat·lon(점 컬럼), value·agg(영역마다 구할 값: 점의 값 컬럼과 count·sum·mean·min·max), points(점 그리기), tiles(OpenStreetMap 배경, 기본 꺼짐), color(HEX 바탕 색). 영역이나 점이 있어야 한다."""
+    if not isinstance(geo, dict) or set(geo) - GEO_KEYS:
+        raise ValueError(f"지도 설정(geo)에 쓸 수 없는 항목이 있습니다. 쓰는 항목: {', '.join(sorted(GEO_KEYS))}")
+    out = {}
+    if geo.get("regions") is not None:
+        regions = geo["regions"]
+        if not isinstance(regions, dict) or set(regions) - {"table", "schema", "path"} or bool(regions.get("table")) == bool(regions.get("path")):
+            raise ValueError("영역(regions)은 {table[, schema]} 또는 {path} 중 하나입니다.")
+        out["regions"] = {k: text(v, f"영역의 {k}", 500) for k, v in regions.items() if v}
+    for name in ("name", "geometry", "region_value", "lat", "lon", "value"):
+        if geo.get(name):
+            out[name] = text(geo[name], f"지도의 {name}", 200)
+    if geo.get("agg"):
+        if geo["agg"] not in GEO_AGGS:
+            raise ValueError(f"영역마다 구하는 값(agg)은 {', '.join(GEO_AGGS)} 중 하나입니다.")
+        out["agg"] = geo["agg"]
+    for name in ("points", "tiles"):
+        if name in geo:
+            if not isinstance(geo[name], bool):
+                raise ValueError(f"{name}은 켬(true)이나 끔(false)입니다.")
+            out[name] = geo[name]
+    if geo.get("color"):
+        out["color"] = check_hex(geo["color"], "지도 색")
+    if bool(out.get("lat")) != bool(out.get("lon")):
+        raise ValueError("점은 위도 컬럼과 경도 컬럼을 함께 고르세요.")
+    if not out.get("regions") and not out.get("lat"):
+        raise ValueError("지도 카드에는 영역(GeoJSON 테이블)이나 점의 위도·경도 컬럼이 있어야 합니다.")
+    if out.get("regions") and not out.get("name"):
+        raise ValueError("영역의 이름 컬럼을 고르세요.")
+    return out
+
+
 def check_extra(view):
     """KPI·도넛 KPI·게이지·요약·최근 행·두 계열 추이·칸 채우기·블록·목표 추이 카드의 설정: icon, format(number·percent·currency), unit_text(값 뒤 글자),
     ring(도넛 고리 4방식), slots(도넛의 칸 {label, y, agg, format, unit_text, color}, 최대 5), target({value} 또는 목표 파일의 {name, period, scope}),
@@ -288,6 +326,8 @@ def check_extra(view):
         out["slots"] = [{"label": text(s.get("label"), "칸 이름", 30), "format": s.get("format") if s.get("format") in FORMATS else "number", "unit_text": text(s.get("unit_text"), "칸 단위", 10),
                          "color": check_hex(s["color"], "칸 색") if s.get("color") else ""} for s in slots]
     out.update(check_more(view))
+    if view.get("geo") is not None:
+        out["geo"] = check_geo(view["geo"])
     if view.get("window") is not None:
         found = view["window"]
         if not isinstance(found, dict) or not all(isinstance(found.get(k), str) and DAY.fullmatch(found[k]) for k in ("from", "to")):

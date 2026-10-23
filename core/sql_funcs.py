@@ -10,12 +10,14 @@
 - SQL 식 직접 쓰기: raw_expr이 'SELECT *, <식> AS 이름 FROM (<지금 식의 SQL>)'을 sql_exec.check(파일 읽기 막기 포함)로 검사한 뒤 연결의 sql()로 붙인다."""
 import re
 
-from lazy import ibis
+from lazy import Later, ibis
 
 from core import parse
 
+geo_funcs = Later("geo.funcs")  # 좌표 함수의 식은 geo 패키지가 만든다(좌표 함수를 처음 쓸 때 올라온다)
+
 CATEGORIES = [("aggregate", "집계"), ("window", "창 함수"), ("text", "글자"), ("number", "숫자"), ("date", "날짜"), ("cond", "조건"),
-              ("cast", "형 변환"), ("struct", "구조"), ("group", "묶음")]
+              ("cast", "형 변환"), ("struct", "구조"), ("geo", "좌표"), ("group", "묶음")]
 ALIASES = {"nunique": "count_distinct"}  # 저장돼 있는 예전 이름 → 지금 id
 KIND_NAMES = {"num": "숫자", "text": "글자", "date": "날짜", "bool": "참거짓", "json": "JSON", "array": "목록", "struct": "구조", "any": "모든"}
 UNITS = {"year": "Y", "quarter": "Q", "month": "M", "week": "W", "day": "D", "hour": "h", "minute": "m", "second": "s"}
@@ -637,6 +639,28 @@ row("struct_field", "struct", "구조 필드", "구조 컬럼 안의 필드 하�
 row("array_length", "struct", "목록 길이", "목록에 값이 몇 개인지.", [col(kinds="array")], lambda c: c.x.length(), "array_length(태그)", "array", NUM)
 row("array_get", "struct", "목록 N번째", "목록의 N번째 값(1부터).", [col(kinds="array"), num("n", "N번째", 1, kind="int")], lambda c: c.x[c.n - 1], "array_get(태그, 1)", "array", "any")
 add("unnest", "struct", "목록 펼치기", "목록 컬럼의 값마다 행을 하나씩 만들어요.", [col(kinds="array")], lambda c: c.t.unnest(c.x.get_name()), "unnest(태그)", "array", table=True)
+
+# ---------- 좌표 ----------
+# 식은 geo.funcs가 만든다(sin·cos·asin 같은 기본 수식뿐이라 원격 DB에서도 DB 안에서 계산). 위도·경도는 도 단위 숫자 컬럼.
+
+LAT, LON = col("lat", "위도 컬럼", NUM), col("lon", "경도 컬럼", NUM)
+SEOUL = (37.5665, 126.978)  # 서울시청: 칸의 기본값(예시)
+
+add("haversine", "geo", "두 점 거리(km)", "두 점(위도·경도)의 큰 원 거리를 km로(haversine). 둘째 점은 숫자 또는 다른 컬럼.",
+    [LAT, LON, value("lat2", "상대 위도", SEOUL[0]), value("lon2", "상대 경도", SEOUL[1])], lambda c: geo_funcs.haversine(c.lat, c.lon, c.lat2, c.lon2),
+    "haversine(위도, 경도, 37.5665, 126.978)", NUM, NUM)
+add("within_km", "geo", "반경 안(km)", "기준점에서 N km 안(경계 포함)이면 참. 조건 줄로는 near 위도 경도 기준위도 기준경도 반경.",
+    [LAT, LON, num("clat", "기준 위도", SEOUL[0]), num("clon", "기준 경도", SEOUL[1]), num("km", "반경(km)", 5)], lambda c: geo_funcs.within_km(c.lat, c.lon, c.clat, c.clon, c.km),
+    "within_km(위도, 경도, 37.5665, 126.978, 5)", NUM, BOOL)
+add("in_box", "geo", "범위 상자 안", "최소·최대 위경도 상자 안(경계 포함)이면 참. 조건 줄로는 box 위도 경도 최소위도 최소경도 최대위도 최대경도.",
+    [LAT, LON, num("min_lat", "최소 위도", 33), num("min_lon", "최소 경도", 124), num("max_lat", "최대 위도", 39), num("max_lon", "최대 경도", 132)],
+    lambda c: geo_funcs.in_box(c.lat, c.lon, c.min_lat, c.min_lon, c.max_lat, c.max_lon), "in_box(위도, 경도, 33, 124, 39, 132)", NUM, BOOL)
+add("grid_id", "geo", "격자 칸 id", "점을 칸 크기(도 단위, 예 0.01 = 약 1.1km)의 격자로 묶는 칸 id(위도칸_경도칸).",
+    [LAT, LON, num("size", "칸 크기(도)", 0.01)], lambda c: geo_funcs.grid_id(c.lat, c.lon, c.size), "grid_id(위도, 경도, 0.01)", NUM, TXT)
+add("grid_lat", "geo", "격자 칸 중심 위도", "점이 든 격자 칸의 중심 위도.", [col("lat", "위도 컬럼", NUM), num("size", "칸 크기(도)", 0.01)],
+    lambda c: geo_funcs.grid_center(c.lat, c.size), "grid_lat(위도, 0.01)", NUM, NUM)
+add("grid_lon", "geo", "격자 칸 중심 경도", "점이 든 격자 칸의 중심 경도.", [col("lon", "경도 컬럼", NUM), num("size", "칸 크기(도)", 0.01)],
+    lambda c: geo_funcs.grid_center(c.lon, c.size), "grid_lon(경도, 0.01)", NUM, NUM)
 
 # ---------- 묶음 ----------
 

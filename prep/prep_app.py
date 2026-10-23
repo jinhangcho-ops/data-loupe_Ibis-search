@@ -18,6 +18,8 @@ from core.server import app, get_con, state, to_json
 
 
 parse = Later("core.parse")
+geo_detect = Later("geo.detect")  # 좌표 컬럼 인식(프로파일 응답에 얹는다)
+prep_geo = Later("geo.prep_geo")  # 좌표 단계(recipe.geo)가 있을 때만 올라온다
 prep_derive = Later("core.prep_derive")
 prep_expr = Later("prep.prep_expr")
 prep_profile = Later("prep.prep_profile")
@@ -106,10 +108,10 @@ def save_table_prep():
 
 def local_mode(recipe):
     """recipe를 이 PC의 작업 사본(working_copy)에서 계산할지. 원격 DB(주소로 접속)일 때만: 설정 prep_where가 all(기본)이면 늘,
-    new면 계산 컬럼·PCA가 있을 때만. 파일·DuckDB 파일 연결은 원래 이 PC에서 계산하므로 사본을 만들지 않는다."""
+    new면 계산 컬럼·PCA·좌표 단계가 있을 때만. 파일·DuckDB 파일 연결은 원래 이 PC에서 계산하므로 사본을 만들지 않는다."""
     if not held.remote(get_con()):
         return False
-    return settings.load().get("prep_where", "all") == "all" or bool(recipe.get("formulas") or recipe.get("pca"))
+    return settings.load().get("prep_where", "all") == "all" or bool(recipe.get("formulas") or recipe.get("pca") or recipe.get("geo"))
 
 
 def copy_key(recipe):
@@ -136,7 +138,19 @@ def copy_gate(recipe):
     """이 PC 사본을 새로 받아야 하면(local_mode이고 같은 사본이 아직 없으면) 처리 용량 확인(server.scan_gate). 확인이 필요하면 돌려줄 응답, 아니면 None.
     미리보기·중복 세기·분석(전체)·실행이 같이 쓴다. 이미 받은 사본을 다시 쓰는 때는 DB를 읽지 않으므로 묻지 않는다."""
     if local_mode(recipe) and copy_key(recipe) not in held.store["items"]:
-        return server.scan_gate(request.json, lambda: scan_sql(recipe))
+        if ask := server.scan_gate(request.json, lambda: scan_sql(recipe)):
+            return ask
+    return geo_gate(recipe)
+
+
+def geo_gate(recipe):
+    """좌표 단계(recipe.geo)가 읽을 지점·영역 테이블의 처리 용량 확인(원격 DB만, 쓸 컬럼만 읽는 조회로). 확인이 필요하면 돌려줄 응답, 아니면 None."""
+    con = get_con()
+    if not recipe.get("geo") or not held.remote(con):
+        return None
+    for expr in run(lambda: prep_geo.reference_exprs(prep_geo.check(recipe["geo"]), con)):
+        if ask := server.scan_gate(request.json, lambda e=expr: server.expr_sql(con, e)):
+            return ask
     return None
 
 
@@ -145,7 +159,7 @@ def built(recipe, info=None):
     local_mode면 작업 사본에서(행 거르기는 사본을 받을 때 이미 걸었다). info는 prep.build와 같다(PCA의 설명된 분산 비율)."""
     if local_mode(recipe):
         table = working_copy(recipe)
-        return run(lambda: prep_expr.build(held.local(), {**recipe, "filters": []}, table, info))
+        return run(lambda: prep_expr.build(held.local(), {**recipe, "filters": []}, table, info, get_con()))  # 지점·영역 테이블은 원래 연결에서 읽는다
     con = get_con()
     return run(lambda: prep_expr.build(con, recipe, None, info))
 
@@ -221,7 +235,7 @@ def profile():
         for column in stats["columns"]:
             column["infer"] = {**guesses.get(column["name"], {}), **({"exact": facts["columns"][column["name"]]} if facts and column["name"] in facts["columns"] else {})}
         found = profiler.remember(key, size, profile={**stats, **({"file_rows": facts["rows"]} if facts else {})}, sampled=info)
-    return jsonify({**described(found["profile"], body), "sampled": {**found["sampled"], "saved": found["saved"]}})
+    return jsonify({**described(found["profile"], body), "sampled": {**found["sampled"], "saved": found["saved"]}, "geo": geo_detect.hints(found["profile"]["columns"])})
 
 
 @app.post("/api/patterns")

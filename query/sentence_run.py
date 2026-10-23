@@ -268,6 +268,10 @@ def formula_of(cond):
 
 def formula_one(text):
     """조건 한 줄(or 없음)을 계산 식 글로."""
+    m = parse.GEO_RE.match(text)
+    if m and len(m.group(2).replace(",", " ").split()) == parse.GEO_COUNTS[m.group(1).lower()]:  # 좌표 조건 near·box는 함수 사전의 within_km·in_box
+        w = m.group(2).replace(",", " ").split()
+        return f"{'within_km' if m.group(1).lower() == 'near' else 'in_box'}(col({w[0]!r}), col({w[1]!r}), {', '.join(num(x) for x in w[2:])})"
     m = parse.NULL_RE.match(text)
     if m:
         return f"{'notnull' if m.group(2) else 'isnull'}(col({m.group(1)!r}))"
@@ -343,7 +347,7 @@ def compile(tid, slots, body=None, columns=None):
     return {**out, "issues": found}
 
 
-# ---------- 탐색 틀 1~47 ----------
+# ---------- 탐색 틀 1~50 ----------
 
 def e01(p):
     p.rows("모든 데이터")
@@ -638,7 +642,47 @@ def e47(p):
     p.notes.append("SQL 식은 실행 전에 읽기만 하는지 한 번 더 검사해요.")
 
 
-COMPILERS = {f"e{n:02d}": globals()[f"e{n:02d}"] for n in range(1, 48) if f"e{n:02d}" in globals()}
+def measure(p):
+    """좌표 틀 48~50의 {값}·{집계}: (집계 id, 옵션, 값 컬럼 또는 None). 집계가 컬럼을 요구하는데 값 칸이 비었으면 Bad."""
+    how, opts = agg_of(p.need("집계"))
+    if not sql_funcs.needs_column(how):
+        return how, opts, None
+    if p.get("값") is None:
+        raise Bad(f"‘{sql_funcs.label_of(how)}’을(를) 구하려면 ‘값’ 칸을 채워 주세요.")
+    return how, opts, p.col("값")
+
+
+def number_slot(p, name, default=None):
+    """숫자 칸(글자로 와도 숫자면 된다)의 값."""
+    raw = p.get(name, default)
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        raise Bad(f"‘{name}’에는 숫자를 넣어 주세요.") from None
+
+
+def e48(p):
+    how, opts, value = measure(p)
+    p.group("영역별", [p.col("영역")], how, value, opts, order=f"{result_col(how)} desc", top=MAX_TOP)
+    p.notes.append("영역 이름 컬럼은 전처리의 [좌표] → 영역 붙이기로 만들 수 있어요.")
+
+
+def e49(p):
+    how, opts, value = measure(p)
+    lat, lon = p.col("위도"), p.col("경도")
+    km = number_slot(p, "반경")
+    p.where(f"near {lat} {lon} {number_slot(p, '기준 위도', 37.5665):g} {number_slot(p, '기준 경도', 126.978):g} {km:g}")
+    p.group(f"{km:g}km 안", [], how, value, opts)
+
+
+def e50(p):
+    how, opts, value = measure(p)
+    size = number_slot(p, "칸 크기", 0.01)
+    p.calc(f"식 grid_id(col({p.col('위도')!r}), col({p.col('경도')!r}), {size:g}) 이름 격자")
+    p.group("격자별", ["격자"], how, value, opts, order=f"{result_col(how)} desc", top=MAX_TOP)
+
+
+COMPILERS = {f"e{n:02d}": globals()[f"e{n:02d}"] for n in range(1, 51) if f"e{n:02d}" in globals()}
 COMPILERS["e46"] = e14
 
 

@@ -60,6 +60,8 @@ FEATURES = [
     ("cast", ["cast"], ROW), ("try_cast(실패 → 빈 값)", ["try_cast"], ROW),
     # 구조
     ("JSON 경로 값", ["json_get"], ROW), ("구조 필드", ["struct_field"], ROW), ("목록 길이·N번째", ["array_length", "array_get"], ROW), ("펼치기", ["unnest"], ("calc", "sentence")),
+    # 좌표
+    ("좌표: 두 점 거리·반경 안·범위 상자·격자 칸 id·칸 중심", ["haversine", "within_km", "in_box", "grid_id", "grid_lat", "grid_lon"], ROW),
     # 묶음
     ("HAVING", ["having"], ("pivot", "sentence")), ("QUALIFY", ["qualify"], ("calc", "sentence")),
     ("ROLLUP·CUBE·GROUPING SETS", ["rollup", "cube", "grouping_sets"], ("pivot", "sentence")), ("DISTINCT", ["distinct"], ("prep", "sentence")),

@@ -82,8 +82,8 @@ def on_worker(f):
 
 
 # 열 수 있는 파일의 확장자 → 종류. duckdb는 파일 하나를 DB로 열고, 나머지는 파일마다 테이블 하나(Polars)로 연다.
-FILE_KINDS = {".duckdb": "duckdb", ".parquet": "parquet", ".csv": "csv", ".json": "json", ".jsonl": "json", ".ndjson": "json", ".xlsx": "excel"}
-KINDS = ("duckdb", "parquet", "csv", "json", "excel")
+FILE_KINDS = {".duckdb": "duckdb", ".parquet": "parquet", ".csv": "csv", ".json": "json", ".jsonl": "json", ".ndjson": "json", ".xlsx": "excel", ".geojson": "geojson"}
+KINDS = ("duckdb", "parquet", "csv", "json", "excel", "geojson")
 
 
 def kind_of(path):
@@ -161,10 +161,19 @@ def table_names(paths):
     return names
 
 
+def geojson_file(path):
+    """.json 파일이 GeoJSON(FeatureCollection)인지: 앞부분만 본다. geo 패키지는 GeoJSON일 때만 올라온다."""
+    if Path(path).suffix.lower() != ".json" or b"Feature" not in open(path, "rb").read(4096):
+        return False
+    from geo import geojson
+    return geojson.is_geojson(path)
+
+
 @on_worker
 def open_flat_files(paths):
-    """Parquet·CSV·JSON·Excel 파일을 Polars 백엔드에 table_names의 이름으로 등록한다.
-    Parquet·CSV·줄마다 객체인 JSON은 필요할 때 읽고(LazyFrame), 배열 JSON과 Excel(첫 시트)은 열 때 읽어 메모리에 둔다."""
+    """Parquet·CSV·JSON·Excel·GeoJSON 파일을 Polars 백엔드에 table_names의 이름으로 등록한다.
+    Parquet·CSV·줄마다 객체인 JSON은 필요할 때 읽고(LazyFrame), 배열 JSON과 Excel(첫 시트)은 열 때 읽어 메모리에 둔다.
+    GeoJSON(.geojson, 그리고 FeatureCollection인 .json)은 열 때 geo.geojson이 읽어 Feature마다 한 행인 표로 둔다(이때 geo 패키지가 올라온다)."""
     import polars as pl
     con = ibis.polars.connect()
     for p, name in zip(paths, table_names(paths)):
@@ -175,6 +184,9 @@ def open_flat_files(paths):
             con.read_csv(p, table_name=name)
         elif kind == "excel":
             con.create_table(name, pl.read_excel(p))
+        elif kind == "geojson" or (kind == "json" and geojson_file(p)):
+            from geo import geojson
+            con.create_table(name, geojson.read(p))
         else:
             try:
                 pl.scan_ndjson(p).head(1).collect()  # 줄마다 객체 하나인 JSON

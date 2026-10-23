@@ -18,7 +18,7 @@ from core.server import run
 MIN_REFRESH = dash_store.MIN_REFRESH  # 최신화 주기의 최소(초)
 LIVE_FILE = "live_min.json"  # {source_key: 실시간 간격 최소(초)}
 MAX_LIVE_MIN = 86400
-REFRESHABLE = ("chart", "analysis", "funnel", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation")  # 지금 다시 구할 수 있는 카드 종류
+REFRESHABLE = ("chart", "analysis", "funnel", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation", "geomap")  # 지금 다시 구할 수 있는 카드 종류
 JOB = {"running": False, "total": 0, "done": 0, "current": "", "results": []}  # 마지막 최신화 작업의 상태(status가 복사해 준다)
 LOCK = threading.Lock()
 STOP = threading.Event()

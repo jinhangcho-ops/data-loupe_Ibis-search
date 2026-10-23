@@ -206,6 +206,9 @@ def bare(name):
 def cond_columns(cond):
     """조건(글자·{line}·{any})이 가리키는 컬럼 이름들."""
     if isinstance(cond, str):
+        geo = parse.GEO_RE.match(cond.strip())
+        if geo and len(geo.group(2).replace(",", " ").split()) == parse.GEO_COUNTS[geo.group(1).lower()]:  # 좌표 조건 near·box는 앞의 두 낱말이 위도·경도 컬럼
+            return {bare(w) for w in geo.group(2).replace(",", " ").split()[:2]}
         m = COND_HEAD.match(cond)
         return {bare(m.group(1))} if m else set()
     if isinstance(cond, dict):

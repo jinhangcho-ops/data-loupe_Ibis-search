@@ -120,8 +120,8 @@ def test_templates_that_need_other_tables(c):
 
 
 def test_every_explore_template_has_an_end_to_end_case():
-    covered = {t[0] for t in TABLE} | {"e16", "e43"}
-    assert covered == {t["id"] for t in sentences.EXPLORE}  # 47개 모두
+    covered = {t[0] for t in TABLE} | {"e16", "e43", "e48", "e49", "e50"}  # e48~50(좌표 틀)은 test_geo_sentences.py에서 돌린다
+    assert covered == {t["id"] for t in sentences.EXPLORE}  # 50개 모두
 
 
 def test_condition_lists_and_or_groups(c):

@@ -22,6 +22,9 @@ from dashboard import summary_text
 from core import targets
 from core import watch
 from core.server import run
+from lazy import Later
+
+mapcard = Later("geo.mapcard")  # 지도 카드(geomap)의 값 만들기: 지도 카드를 쓸 때만 geo 패키지가 올라온다
 
 AGGS = metric_file.AGGS  # 날짜 X축 차트의 집계: 함수 사전(sql_funcs)의 집계 전부(예전 이름 nunique 포함)
 PARTS = ("sum", "count", "min", "max")  # 일 값 성분. 다시 묶는 방법: sum=Σsum, count=Σcount, mean=Σsum/Σcount, min·max=min·max
@@ -183,7 +186,8 @@ def card_columns(card, ctx=None):
     if card["kind"] == "recent_rows" or (card["kind"] == "table" and not src["body"].get("series")):
         return None  # 원래 행을 보이는 카드는 모든 컬럼
     cols = body_columns(src["body"], src.get("date"), view.get("group"), *(view.get("group_cols") or []), view.get("entity"), view.get("time_col"), view.get("kind_col"), view.get("link_col"),
-                        *(b.get("y") for b in view.get("blanks") or []), *(r.get("column") for r in view.get("rules") or []))  # 상태 규칙이 보는 컬럼도 읽는다
+                        *(b.get("y") for b in view.get("blanks") or []), *(r.get("column") for r in view.get("rules") or []),  # 상태 규칙이 보는 컬럼도 읽는다
+                        *([(view.get("geo") or {}).get(k) for k in ("lat", "lon", "value")] if card["kind"] == "geomap" else []))  # 지도 카드의 점 컬럼
     union = ((ctx or {}).get("plan") or {}).get("union", {}).get(group_key(src["body"]))
     return union if cols is not None and union is not None else cols
 
@@ -652,6 +656,46 @@ def deviation_data(card, ctx):
     return {"values": {"buckets": buckets, "entities": [{"name": n, "values": [cells[n].get(b) for b in buckets]} for n in names], "more": len(cells) > MAX_ENTITIES}}
 
 
+def geomap_data(card, ctx):
+    """geomap 카드: 영역 표(view.geo.regions: 연결의 테이블 또는 GeoJSON 파일)와 점(위도·경도 컬럼, 값 컬럼)을 읽어 geo.mapcard.build로 카드에 저장할 값을 만든다.
+    점은 카드의 조회(source.body, 기간·조건 포함)에서 쓸 컬럼만 MAX_POINT_ROWS행까지 읽는다. 영역은 쓸 컬럼만 읽는다."""
+    geo = card["view"].get("geo")
+    if not geo:
+        raise ValueError("지도 설정(영역 테이블, 점의 위도·경도 컬럼)이 없어요. 카드의 데이터를 정하세요.")
+    regions = None
+    if geo.get("regions"):
+        regions = run(lambda: read_regions(geo))
+    points = None
+    if geo.get("lat"):
+        expr = card_expr(card, ctx, (ctx or {}).get("range"))
+        for c in (geo["lat"], geo["lon"], geo.get("value")):
+            if c:
+                parse.check_name(c, expr.columns, "컬럼")
+        cols = {"lat": expr[geo["lat"]].cast("float64"), "lon": expr[geo["lon"]].cast("float64"), **({"value": expr[geo["value"]]} if geo.get("value") and geo.get("agg", "count") != "count" else {})}
+        points = run(lambda: expr.select(**cols).limit(mapcard.MAX_POINT_ROWS + 1).to_polars())
+    return mapcard.build(regions, points, geo)
+
+
+def read_regions(geo):
+    """영역 표(Polars): 이름·도형(·값) 컬럼만. 연결의 테이블이거나 GeoJSON 파일 경로."""
+    from core import server
+    want = [c for c in dict.fromkeys([geo["name"], geo.get("geometry") or "geometry", geo.get("region_value")]) if c]
+    where = geo["regions"]
+    if where.get("path"):
+        from geo import geojson
+        frame = geojson.read(where["path"])
+        for c in want:
+            parse.check_name(c, frame.columns, "영역 컬럼")
+        return frame.select(want)
+    con, schema = server.get_con(), where.get("schema") or None
+    parse.check_name(where["table"], connection.list_tables(con, schema), "영역 테이블")
+    table = connection.get_table(con, where["table"], schema)
+    for c in want:
+        parse.check_name(c, table.columns, "영역 컬럼")
+    frame = table.select(*want).limit(mapcard.MAX_REGIONS + 1).to_polars()
+    return frame
+
+
 def chart_data(body, window=None):
     """chart 카드의 값. X가 날짜(날짜·시각 컬럼)면 일 값 중심(time_data, window가 있으면 그 날짜 범위만 읽는다), 아니면 항목별(category_data). 쓰는 컬럼만 읽는다."""
     shape = querying.build(body, select=False)  # 컬럼 종류만 본다(읽지 않는다)
@@ -701,7 +745,7 @@ def definition(card):
     source = card["source"]
     points = {"points": card["view"].get("points")} if card["view"]["type"] in POINT_TYPES else {}
     view = card["view"]
-    keys = ("target", "group", "format") if card["kind"] in VALUE_KINDS else ("group_cols", "template", "blanks", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "bucket") if card["kind"] in TABLE_KINDS else ()
+    keys = ("target", "group", "format") if card["kind"] in VALUE_KINDS else ("group_cols", "template", "blanks", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "bucket") if card["kind"] in TABLE_KINDS else ("geo",) if card["kind"] == "geomap" else ()
     extra = {"view": {k: view[k] for k in keys if k in view}} if keys else {}  # 값에 영향을 주는 설정
     return {"kind": card["kind"], **{k: source[k] for k in ("schema", "table", "body", "recipe", "analysis", "metric_id", "flow_id", "full", "sample", "date") if k in source}, **points, **extra}
 
@@ -710,7 +754,7 @@ def compute(card, now, ctx=None):
     """검사한 카드(dash_store.check_card)의 source로 data를 구해 돌려준다(저장하지 않는다). now는 구한 시각 글자.
     ctx = {range: {start, end}, prev: {start, end, text}}(대시보드의 보는 기간과 직전 기간)는 source.date(기간 기준 날짜 컬럼)가 있는 날짜 X축이 아닌 카드에 기간 줄로 걸리고, 요약 문장이 쓴다."""
     source = card["source"]
-    if card["kind"] in ("chart", "metric", "recent_rows", *VALUE_KINDS, *TABLE_KINDS):
+    if card["kind"] in ("chart", "metric", "recent_rows", "geomap", *VALUE_KINDS, *TABLE_KINDS):
         if not isinstance(source.get("body"), dict):
             raise ValueError("이 카드에는 다시 구할 조회(source.body)가 없습니다.")
         body = with_period(source["body"], source.get("date"), (ctx or {}).get("range")) if card["kind"] in ("chart", "metric") else source["body"]
@@ -726,6 +770,8 @@ def compute(card, now, ctx=None):
             found = deviation_data(card, ctx)
         elif card["kind"] in WATCH_KINDS:
             found = watch_data(card, now, (card.get("data") or {}).get("since"))
+        elif card["kind"] == "geomap":
+            found = geomap_data(card, ctx)
         else:
             found = chart_data(body, fetch_window(ctx)) if card["kind"] == "chart" else metric_data(body)
         if card["kind"] in ("table", "sentence", "deviation"):  # 기간 기준 날짜 컬럼 후보(하나뿐이면 화면이 자동으로 채운다)

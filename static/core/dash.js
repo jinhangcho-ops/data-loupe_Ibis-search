@@ -193,6 +193,7 @@ function typeReason(card, type) {
 const usesAna = card => card.kind === "analysis" && !!card.data?.values && (!card.view.type || !cardSeries(card).chartable);
 // 색을 고를 수 있는 이름들: 분석 그림은 주 색·보조 색, 도넛·파이는 조각 이름, 나머지는 계열 이름
 function colorNames(card) {
+  if (card.kind === "geomap") return { group: "parts", names: (card.data?.values?.regions ?? []).map(r => r.name).slice(0, 30) };  // 지도 카드: 영역마다 색을 따로 정할 수 있다(정하지 않으면 값에 따라 바탕 색의 진하기)
   const s = cardSeries(card);
   if (usesAna(card)) return { group: "series", names: ["주 색", "보조 색"] };
   if (!s) return { group: "series", names: [] };
@@ -340,9 +341,12 @@ class DashBoard extends Board {
     const named = view.target?.name;
     const target = named ? el("span", { className: "hint", textContent: `목표: ${named}${card.data?.target?.error ? " (" + card.data.target.error + ")" : ""}` })
       : field("목표", el("input", { type: "number", value: view.target?.value ?? "", style: "width:90px", onchange: e => { if (e.target.value === "") { delete view.target; card.data.target = null; } else { view.target = { value: +e.target.value }; card.data.target = { value: +e.target.value, label: "", error: "" }; } again(); } }));
-    const kinds = { donut_kpi: [choice("ring", "고리", [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리+목표 눈금"]])], stripes: [number("cells", "칸 수", 50), number("full", "가득 찬 값", 80)],
+    const tiles = field("지도 배경(OpenStreetMap)", el("input", { type: "checkbox", checked: !!view.geo?.tiles, title: "켜면 지금 보는 지도 범위가 타일 서버(tile.openstreetmap.org)로 요청돼요. 끄면 경계만 그려요(서버 요청 없음).",
+      onchange: e => { view.geo = { ...view.geo, tiles: e.target.checked }; again(); } }));
+    const kinds = { geomap: [choice("format", "값", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), tiles, el("span", { className: "hint", textContent: view.geo?.tiles ? "지도 배경을 켜면 보는 범위가 tile.openstreetmap.org로 요청돼요." : "" })],
+                    donut_kpi: [choice("ring", "고리", [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리+목표 눈금"]])], stripes: [number("cells", "칸 수", 50), number("full", "가득 찬 값", 80)],
                     blocks: [number("size", "한 칸 크기", 80)], recent_rows: [number("rows", "행 수", 50)] }[card.kind] ?? [];
-    const plain = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel"].includes(card.kind);  // 목표·값 모양이 없는 종류
+    const plain = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap"].includes(card.kind);  // 목표·값 모양이 없는 종류
     const settings = plain ? [...kinds] : [target, choice("format", "값", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), ...kinds];
     const rules = ["table", "sentence"].includes(card.kind) ? [el("button", { className: "btype" + (card.openRules ? " on" : ""), textContent: "색 규칙", title: "조건에 맞는 칸만 색·화살표를 입힙니다", onclick: () => { card.openRules = !card.openRules; this.draw(); } })] : [];
     const row = el("div", { className: "btools" }, this.dateSelect(card), ...settings, ...rules, el("button", { className: "btype" + (card.openColors ? " on" : ""), textContent: "색", onclick: () => { card.openColors = !card.openColors; this.draw(); } }));

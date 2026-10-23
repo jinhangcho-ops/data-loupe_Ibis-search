@@ -84,7 +84,7 @@ def test_sentence_catalog_route(client):
     finally:
         server.turn.release()
     data = resp.get_json()
-    assert resp.status_code == 200 and len(data["templates"]) == 62 and sum(t["kind"] == "explore" for t in data["templates"]) == 47
+    assert resp.status_code == 200 and len(data["templates"]) == 65 and sum(t["kind"] == "explore" for t in data["templates"]) == 50
     assert data["preps"] == sentence_run.PREPS and data["max_top"] == sentence_run.MAX_TOP and data["slot_types"] == list(sentences.SLOT_TYPES)
 
 

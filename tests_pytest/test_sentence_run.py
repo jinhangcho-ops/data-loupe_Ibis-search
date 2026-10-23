@@ -71,7 +71,7 @@ def test_check_gives_reasons():
 
 
 def test_every_explore_template_is_compiled_or_refused_with_a_reason():
-    """47개 틀 모두 문장 글을 만들고, 못 만드는 것은 이유를 낸다(빈칸이 비었을 때는 검사 이유)."""
+    """50개 틀 모두 문장 글을 만들고, 못 만드는 것은 이유를 낸다(빈칸이 비었을 때는 검사 이유)."""
     for t in sentences.EXPLORE:
         done = sr.compile(t["id"], {}, BASE, COLS)
         required = [x for x in t["slots"] if not x["optional"] and x["default"] is None and not x["when"]]

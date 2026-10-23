@@ -1,4 +1,4 @@
-"""문장 틀 데이터(6-4, 10-4): 탐색 틀 1~47번과 지표 틀 1~15번. 틀은 데이터로만 두고(계산은 하지 않는다) GET /api/sentences(flow_app.py)로 화면에 보낸다(모든 화면에 싣지 않으려고 CONSTANTS에 넣지 않는다).
+"""문장 틀 데이터(6-4, 10-4): 탐색 틀 1~50번(48~50은 좌표 틀)과 지표 틀 1~15번. 틀은 데이터로만 두고(계산은 하지 않는다) GET /api/sentences(flow_app.py)로 화면에 보낸다(모든 화면에 싣지 않으려고 CONSTANTS에 넣지 않는다).
 - 틀 하나 = {id, kind(explore·metric), no, name, text(빈칸을 {이름}으로 쓴 문장), slots: [빈칸], uses: [함수 사전 id], extends(변형이면 원래 틀 번호), preset(변형이 정해 둔 빈칸 값)}.
   어느 틀이든 앞에 {기간}을 붙일 수 있다(PERIOD, 틀마다 period: True).
 - 빈칸 = {name, type, label, kinds(컬럼 종류 제한), options(고르는 값), default, optional}. 빈칸 타입은 SLOT_TYPES.
@@ -27,7 +27,7 @@ def choice(name, options, default=None, label=None):
 
 
 def temp(no, name, text, slots=(), uses=(), kind="explore", **extra):
-    """틀 하나. no는 종류 안의 번호(탐색 1~47, 지표 1~15)."""
+    """틀 하나. no는 종류 안의 번호(탐색 1~50, 지표 1~15)."""
     return {"id": f"{'e' if kind == 'explore' else 'm'}{no:02d}", "kind": kind, "no": no, "name": name, "text": text, "slots": list(slots), "uses": list(uses),
             "period": True, **extra}
 
@@ -110,6 +110,13 @@ EXPLORE = [
          [slot("값 A", "column", "값 A", NUM), slot("값 B", "column", "값 B", NUM), choice("종류", ["상관계수", "공분산"]), slot("기준", "choice", "기준", options=["표본", "모집단"], default="표본", when={"종류": ["공분산"]})], ["corr", "cov", "cov_pop"]),
     temp(46, "근사 고유 개수", "{무엇}별 고유 {대상} 수를 빠르게(근사) 어림해요", [G, T_], ["approx_count_distinct"], extends=14, preset={"정확도": "빠르게(근사)"}),
     temp(47, "SQL 식 직접", "{새 이름}은 SQL 식 {식}의 값이에요", [slot("새 이름", "text"), slot("식", "text", "SQL 식")], [sql_funcs.RAW]),
+    # 좌표 틀 48~50: 값 칸은 개수면 비워 둔다
+    temp(48, "영역별 값", "{영역}별 {값}의 {집계}를 봐요", [column("영역", "영역 이름 컬럼"), slot("값", "column", "값 컬럼", optional=True), AGG]),
+    temp(49, "기준점 반경 안", "{위도}·{경도}로 기준점 {기준 위도}, {기준 경도}에서 {반경}km 안의 {값}의 {집계}를 봐요",
+         [column("위도", "위도 컬럼", NUM), column("경도", "경도 컬럼", NUM), slot("기준 위도", "number", "기준 위도", default=37.5665), slot("기준 경도", "number", "기준 경도", default=126.978),
+          slot("반경", "number", "반경(km)", default=5), slot("값", "column", "값 컬럼", optional=True), AGG], ["within_km"]),
+    temp(50, "격자별 값", "{위도}·{경도}를 {칸 크기}도 칸으로 나눈 격자별 {값}의 {집계}를 봐요",
+         [column("위도", "위도 컬럼", NUM), column("경도", "경도 컬럼", NUM), slot("칸 크기", "number", "칸 크기(도)", default=0.01), slot("값", "column", "값 컬럼", optional=True), AGG], ["grid_id", "grid_lat", "grid_lon"]),
 ]
 
 METRICS = [

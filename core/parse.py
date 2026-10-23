@@ -12,7 +12,7 @@ UNIONS = ["left", "inner", "intersect", "except"]  # 이어붙이기: left는 �
 STACKS = ("left", "inner")  # 아래로 잇는 방식(출처 컬럼을 붙인다). intersect·except는 행을 고르는 방식이라 붙이지 않는다
 SOURCE = "출처"  # 이어붙이면 더하는 컬럼: 그 행이 온 테이블 이름
 OPS = {"=": operator.eq, "!=": operator.ne, ">=": operator.ge, "<=": operator.le, ">": operator.gt, "<": operator.lt}
-CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
+CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도 / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
 SORT_GUIDE = "컬럼 [asc|desc]"
 
 # (판별, 종류, 한글 이름, 입력값 변환). 종류는 전처리가 컬럼을 나눌 때 쓴다.
@@ -30,6 +30,9 @@ BETWEEN_RE = re.compile(r"^(\S+)\s+between\s+(\S+)\s+(?:and\s+)?(\S+)$", re.I)
 IN_RE = re.compile(r"^(\S+)\s+(in|except)\s+(.+)$", re.I)
 LIKE_RE = re.compile(r"^(\S+)\s+(like|starts|ends)\s+(.+)$", re.I)  # like: 포함(대소문자 무시), starts: 이 글자로 시작, ends: 이 글자로 끝
 NULL_RE = re.compile(r"^(\S+)\s+is\s+(not\s+)?null$", re.I)
+GEO_RE = re.compile(r"^(near|box)\s+(.+)$", re.I)  # 좌표 조건: near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도
+GEO_COUNTS = {"near": 5, "box": 6}
+NOT_GEO = {"in", "except", "like", "starts", "ends", "between", "is", "=", "!=", ">=", "<=", ">", "<"}  # near·box가 컬럼 이름일 때의 조건('near in 1, 2')은 좌표 조건이 아니다
 OR_RE = re.compile(r"(?<!\S)or(?!\S)", re.I)  # 앞뒤가 공백인 단어 or
 COMMA_RE = re.compile(",")
 # 따옴표로 감싼 값: 값의 맨 앞(줄 처음이나 공백 , = < > 뒤)에서 열고, 값의 맨 뒤(줄 끝이나 공백 , 앞)에서 닫는다
@@ -276,8 +279,22 @@ def parse_condition(line, expr, quotes=True):
     return functools.reduce(operator.or_, [parse_one(p.strip(), expr, quotes) for p in parts])
 
 
+def geo_condition(word, rest, expr):
+    """좌표 조건(near·box). 값 자리는 쉼표나 공백으로 나눈다. 위도·경도 컬럼은 숫자 컬럼이어야 한다. 식은 geo.funcs가 만든다(DB 안에서 계산)."""
+    from geo import funcs
+    parts = rest.replace(",", " ").split()
+    lat, lon = column(expr, parts[0]), column(expr, parts[1])
+    for name, c in ((parts[0], lat), (parts[1], lon)):
+        if not c.type().is_numeric():
+            raise ValueError(f"'{name}'은 숫자 컬럼이 아니라 위도·경도로 쓸 수 없습니다.")
+    values = [convert(ibis.dtype("float64"), v) for v in parts[2:]]
+    return funcs.within_km(lat, lon, *values) if word == "near" else funcs.in_box(lat, lon, *values)
+
+
 def parse_one(line, expr, quotes=True):
-    """조건 한 줄. 컬럼 자리에는 구조 안의 필드(user.name)도 쓸 수 있다(column)."""
+    """조건 한 줄. 컬럼 자리에는 구조 안의 필드(user.name)도 쓸 수 있다(column). near·box는 좌표 조건."""
+    if (m := GEO_RE.match(line)) and len(m.group(2).replace(",", " ").split()) == GEO_COUNTS[m.group(1).lower()] and m.group(2).split()[0].lower() not in NOT_GEO:
+        return geo_condition(m.group(1).lower(), m.group(2), expr)
     if m := NULL_RE.match(line):
         col, negate = m.groups()
         c = column(expr, col)
