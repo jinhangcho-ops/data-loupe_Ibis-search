@@ -1,4 +1,5 @@
 """DB·DW·DL별로 필요한 드라이버를 확인한다. 없으면 어디서 받는지, 어떤 명령으로 설치하는지 알려 준다. 스스로 받거나 설치하지 않는다."""
+import functools
 import importlib
 import importlib.util
 import os
@@ -120,6 +121,7 @@ def ibis_version():
     return version("ibis-framework")
 
 
+@functools.cache  # py 런처를 부르는 데 3초쯤 걸려 실행마다 한 번만 묻는다(설치하면 프로그램을 다시 켜라고 안내한다)
 def has_python():
     """exe의 드라이버 설치에 쓸 Python 3.14가 있는지: py 런처의 목록, 없으면 PATH의 python 버전. 버전만 묻는다."""
     def ask(*cmd):

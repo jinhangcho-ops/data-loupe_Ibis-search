@@ -117,7 +117,9 @@ def test_frozen_without_python_shows_notice(monkeypatch):
 def test_has_python_looks_at_launcher_then_path(monkeypatch):
     monkeypatch.undo()
     monkeypatch.setattr(drivers.shutil, "which", lambda n: None)
+    drivers.has_python.cache_clear()  # 실행마다 한 번만 묻고 기억하므로 시험마다 비운다
     assert drivers.has_python() is False
+    drivers.has_python.cache_clear()
 
     class Done:
         stdout, stderr = " -V:3.14 *   Python 3.14\n", ""
