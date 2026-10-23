@@ -22,8 +22,9 @@ function chooseDashboard() {
   });
 }
 // card(값은 아직 없음)를 고른 대시보드에 넣는다. 서버가 값을 구해(연결 필요) 저장한다. 취소하면 null, 되면 {id, name, cards}.
-async function addToDashboard(card, kind, table) {
-  const pick = await chooseDashboard();
+// picked({id, name})를 주면 대시보드를 다시 묻지 않는다(여러 카드를 한꺼번에 넣을 때).
+async function addToDashboard(card, kind, table, picked) {
+  const pick = picked ?? await chooseDashboard();
   if (!pick) return null;
   let d = await timed(kind, () => api("/api/dash/card/compute", { card }), table);
   card.source = { ...card.source, ...d.source };

@@ -1,11 +1,12 @@
 """문장 실행(6-4): sentence_run.compile이 만든 요청들(runs)을 연결에서 실행하고 combine대로 합쳐 끝난 표 하나 {columns, rows, more, notes}로 돌려준다. 화면은 나누거나 합치지 않는다.
 요청의 route: /api/query(행), /api/pivot(묶어 집계, 기존 라우트와 같은 core.runnable·calc.pivot), metric(지표 이름 또는 내 지표 id의 값을 지표 정의로 구함, by가 있으면 그 값마다),
 nested(대상마다 구한 값을 다시 집계: 평균·N번 이상 한 대상 비율·두 단계를 다 한 비율)이다. 합치는 방법 combine: ratio·percent·share(a ÷ b, by 컬럼이 같은 줄끼리)·sub·add·mean_of·change·cumsum.
-데이터를 읽는 함수는 server.run으로 연결 스레드에서 돈다. 내 지표가 다른 내 지표를 쓰면(조합) 안쪽까지 풀어 구한다(MAX_DEPTH단계)."""
+지표 사전 항목('catalog:id')으로 만든 내 지표는 catalog_app이 구한다(값 하나). 데이터를 읽는 함수는 server.run으로 연결 스레드에서 돈다. 내 지표가 다른 내 지표를 쓰면(조합) 안쪽까지 풀어 구한다(MAX_DEPTH단계)."""
 import json
 
 import calc
 import core
+import metric_catalog
 import metrics
 import my_metrics
 import parse
@@ -65,6 +66,8 @@ def definition_of(ref, body):
         return ref, found[ref], None
     mine = my_metrics.get(ref)
     check_scope(mine, body)
+    if metric_catalog.is_catalog(mine["template"]):  # 지표 사전 항목: catalog_app이 구한다(metric_run이 이 표시를 보고 처리)
+        return mine["name"], None, {"catalog": mine}
     if mine["template"] == my_metrics.LEGACY:
         return mine["name"], metrics.metric(mine["name"], mine["slots"]["def"]), mine
     made = sentence_run.compile(mine["template"], mine["slots"], body, None)
@@ -77,6 +80,11 @@ def metric_run(r, depth):
     """지표 하나의 값(by가 있으면 그 값마다)."""
     name, definition, made = definition_of(r["ref"], r["body"])
     by = r.get("by")
+    if isinstance(made, dict) and "catalog" in made:  # 지표 사전 항목으로 만든 내 지표: 값 하나(묶음은 지원하지 않는다)
+        if by:
+            raise ValueError(f"‘{name}’은 지표 사전의 지표라 값마다 나눠 구할 수 없어요.")
+        import catalog_app
+        return one([], name, [{name: catalog_app.compute_saved(made["catalog"], r["body"])["value"]}])
     if definition is None:  # 다른 지표를 합친 내 지표: 안쪽을 풀어 구한다(묶음은 지원하지 않는다)
         if by:
             raise ValueError(f"‘{name}’은 다른 지표를 합친 지표라 값마다 나눠 구할 수 없어요.")

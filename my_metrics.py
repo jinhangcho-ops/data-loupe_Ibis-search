@@ -1,5 +1,5 @@
 """내 지표(6-5): 지표 틀(sentences.METRICS, scope 없음)에 빈칸을 채우고 테이블(또는 흐름)에 묶어 둔 것. 정의만 설정 my_metrics.json에 평문으로 둔다(값·계정·비밀번호 없음).
-지표 = {id, name, scope: {key, label, schema, table | flow_id}, template, slots, deps, def_hash, unit, better, cols, align?, created, updated}.
+지표 = {id, name, scope: {key, label, schema, table | flow_id}, template, slots, deps, def_hash, unit, better, cols, align?, created, updated}. template은 지표 틀 id 또는 지표 사전 항목('catalog:id', metric_catalog).
 - scope 안에서 이름이 겹칠 수 없다(다른 scope는 같은 이름 가능, 화면은 '이름 · 테이블 (연결)').
 - 다른 scope의 지표는 쓸 수 없다. [이 테이블에 맞춰 복사]로 컬럼 짝을 골라 새 id로 복사한다(copy_to). 예외: align(‘{기간 단위}로 맞춰’ 또는 ‘{공통 키}로 맞춰’)을 넣은 조합.
 - 의존(deps)은 순환할 수 없다(DFS). def_hash는 자기 정의 + 의존하는 지표의 def_hash를 합쳐 만들어, 의존 지표의 정의가 바뀌면 쓰는 쪽도 바뀐다.
@@ -15,6 +15,7 @@ import threading
 
 import dash_store
 import flow
+import metric_catalog
 import metrics
 import sentence_run
 import sentences
@@ -271,7 +272,7 @@ def build(defn, columns, items, metric_id=None):
         used = legacy_columns(slots["def"])
     else:
         try:
-            template = sentences.get(tid) if isinstance(tid, str) else None
+            template = template_of(tid) if isinstance(tid, str) else None
         except ValueError:
             template = None
         if template is None or template["kind"] != "metric":
@@ -317,6 +318,11 @@ def locked(work):
             return work(*args, **kwargs)
     inner.__name__, inner.__doc__ = work.__name__, work.__doc__
     return inner
+
+
+def template_of(tid):
+    """지표 틀(sentences.METRICS) 또는 지표 사전 항목('catalog:id')의 틀. 없으면 ValueError."""
+    return metric_catalog.template(tid) if metric_catalog.is_catalog(tid) else sentences.get(tid)
 
 
 def now_text():
@@ -421,7 +427,7 @@ def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
                     part["where"] = [rename_in(w, mapping) for w in part.get("where") or []]
             slots = {"def": definition}
         else:
-            template = sentences.get(tid)
+            template = template_of(tid)
             for s in template["slots"]:
                 v = slots.get(s["name"])
                 if s["type"] == "column" and v:

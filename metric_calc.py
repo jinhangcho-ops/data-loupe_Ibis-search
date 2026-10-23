@@ -478,9 +478,8 @@ def kaplan_meier(durations, observed):
         raise ValueError("기간과 사건 여부는 같은 길이의 비어 있지 않은 목록이어야 합니다.")
     if (d < 0).any():
         raise ValueError("기간은 0 이상이어야 합니다.")
-    times = np.unique(d[e])
-    at_risk = np.array([(d >= t).sum() for t in times])
-    events = np.array([(e & (d == t)).sum() for t in times])
+    times, events = np.unique(d[e], return_counts=True)  # 정렬 한 번 + 이진 탐색으로 O(N log N)
+    at_risk = len(d) - np.searchsorted(np.sort(d), times, side="left")  # 그 시각 이상 남은 수
     survival = np.cumprod(1 - events / at_risk) if len(times) else np.array([])
     below = np.nonzero(survival <= 0.5)[0]
     return {"times": times.tolist(), "survival": survival.tolist(), "at_risk": at_risk.tolist(), "events": events.tolist(),
@@ -530,7 +529,7 @@ def classification_metrics(y_true, y_pred=None, score=None, threshold=0.5):
         y_pred = np.asarray(score, dtype=float) >= threshold
     c = confusion(y_true, y_pred)
     precision, recall = ratio(c["tp"], c["tp"] + c["fp"]), ratio(c["tp"], c["tp"] + c["fn"])
-    f1 = ratio(2 * precision * recall, precision + recall) if precision is not None and recall is not None else None
+    f1 = None if precision is None or recall is None else (0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall))  # 둘 다 0이면 0
     return {**c, "precision": precision, "recall": recall, "f1": f1, "accuracy": ratio(c["tp"] + c["tn"], sum(c.values())),
             "pr_auc": average_precision(y_true, score) if score is not None else None}
 

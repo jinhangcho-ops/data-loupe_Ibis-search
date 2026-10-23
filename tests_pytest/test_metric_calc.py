@@ -266,6 +266,20 @@ def test_kaplan_meier_edge_cases():
         mc.kaplan_meier([1, 2], [True])
 
 
+def test_kaplan_meier_is_fast_on_many_rows():
+    # 정렬 한 번 + 이진 탐색(O(N log N)): 10만 행이 2초 안에 끝나고, 값은 느린 정의 그대로(작은 예제로 대조)
+    import time
+    rng = np.random.default_rng(7)
+    d, e = rng.integers(0, 5000, 100_000), rng.random(100_000) < 0.6
+    start = time.perf_counter()
+    km = mc.kaplan_meier(d, e)
+    assert time.perf_counter() - start < 2
+    small_d, small_e = d[:300], e[:300]
+    slow = np.cumprod([1 - (small_e & (small_d == t)).sum() / (small_d >= t).sum() for t in np.unique(small_d[small_e])])
+    assert mc.kaplan_meier(small_d, small_e)["survival"] == pytest.approx(slow.tolist())
+    assert km["survival"][-1] <= km["survival"][0] <= 1
+
+
 # ---------- 예측 평가 ----------
 
 def test_pr_auc_four_points():
@@ -283,6 +297,8 @@ def test_classification_metrics():
     by_score = mc.classification_metrics([0, 0, 1, 1], score=[0.1, 0.4, 0.35, 0.8], threshold=0.35)
     assert (by_score["tp"], by_score["fp"]) == (2, 1) and by_score["pr_auc"] == pytest.approx(5 / 6)
     assert mc.classification_metrics([0, 0], y_pred=[0, 0])["precision"] is None
+    zero = mc.classification_metrics([1, 1, 0, 0], y_pred=[0, 0, 1, 1])  # 맞게 찾은 것이 없다: 정밀도·재현율이 모두 0이면 F1은 0(없음이 아님)
+    assert (zero["precision"], zero["recall"], zero["f1"]) == (0.0, 0.0, 0.0)
     with pytest.raises(ValueError):
         mc.classification_metrics([0, 2], y_pred=[0, 1])
 

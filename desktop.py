@@ -32,6 +32,7 @@ import collect_browser
 import collect_job
 import dash_app  # noqa: F401  대시보드 라우트가 앱에 달린다.
 import flow_app  # noqa: F401  흐름·문장·내 지표 라우트가 앱에 달린다.
+import catalog_app  # noqa: F401  지표 사전 라우트가 앱에 달린다.
 import notify  # noqa: F401  보내기 라우트가 앱에 달린다.
 import prep_app  # noqa: F401  전처리 라우트가 앱에 달린다.
 import schedule

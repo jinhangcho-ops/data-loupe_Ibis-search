@@ -7,6 +7,7 @@
 <script src="/static/chart.umd.min.js"></script>
 <!--include head.html-->
 <link rel="stylesheet" href="/static/dash_edit.css">
+<link rel="stylesheet" href="/static/flow.css">
 <style>
   .edx .row { margin-bottom:6px; }
   ul.items { list-style:none; margin:0 0 4px; padding:0; }
@@ -74,6 +75,7 @@
 <nav class="subnav" id="views"><button data-view="explore" class="on">탐색</button><button data-view="sql">SQL</button><button data-view="metric">지표</button></nav>
 <div class="work" id="work">
   <main class="results">
+    <div class="vwide hidden" id="vwide"><div id="flow-host" class="hidden"></div><div id="sent-host" class="hidden"></div></div>
     <div class="tool">
       <label class="q" title="지금 보이는 쪽의 행에서만 찾습니다"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="row-find" placeholder="결과 안에서 찾기"><span class="hint" id="find-count" style="margin:0; white-space:nowrap"></span></label>
       <button id="sql-show" class="btn">SQL 보기</button>
@@ -163,7 +165,8 @@
   <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
   <aside class="side" id="side">
     <header><h3>검색 조건</h3><button id="side-close" class="ib" title="패널 닫기"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></header>
-    <div class="sc"><div class="flow" id="flow">
+    <div class="vswitch" id="vswitch" title="세 보기는 같은 검색 조건을 보여 줍니다. 하나에서 고치면 다른 보기에도 그대로 나옵니다."><button data-v="cards" class="on">단계 카드</button><button data-v="flow">흐름</button><button data-v="sentence">문장</button></div>
+    <div class="sc"><div class="node-edit hidden" id="node-edit"></div><div class="flow" id="flow">
       <div class="step open" id="step-data" data-step="data"><div class="sp"><i>1</i><span class="t">데이터</span><b id="sum-data"></b><span class="c"></span></div>
         <div class="edx">
           <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></span><button id="conn-open" class="btn">연결 바꾸기</button></div>
@@ -203,7 +206,7 @@
                 <label><input type="radio" name="cmode" value="fields" checked style="width:auto"> 칸으로 선택</label>
                 <label><input type="radio" name="cmode" value="line" style="width:auto"> 한 줄 입력</label>
               </div>
-              <div class="hint format">컬럼 &gt;= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'</div>
+              <div class="hint format">컬럼 &gt;= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'</div>
               <div id="conditions"></div>
               <div id="builder">
                 <div class="row"><select id="bcol" title="컬럼"></select><select id="bop" title="연산자"></select></div>
@@ -331,6 +334,9 @@
 <script src="/static/dash.js"></script>
 <script src="/static/dash_add.js"></script>
 <script src="/static/dash_shelf.js"></script>
+<script src="/static/flow.js"></script>
+<script src="/static/sentences.js"></script>
+<script src="/static/metric_catalog.js"></script>
 <script>
 if (location.hash === "#dashboard") location.replace("/dashboard");  // 대시보드 탭은 대시보드 화면(/dashboard)으로 옮겼다(예전 주소도 그리로 보낸다)
 const pickers = {};  // 함수 사전에서 고르는 칸들(chart·pivot·calc). initFuncs가 채운다.
@@ -447,6 +453,9 @@ function clearScreen() {
   ["err-search", "err-export", "err-summary", "err-chart", "err-builder", "err-union", "err-join", "err-pivot"].forEach(id => $(id).textContent = "");
   $("pivot").innerHTML = "";
   resetTiming();
+  keptFlow = null;
+  keptTail = { nodes: [], edges: [], feed: [] };
+  if (view !== "cards") paintView("cards");  // 연결이 바뀌면 이전 연결의 흐름·문장은 남기지 않는다
   showSummaries();
 }
 $("base").onchange = async () => {
@@ -455,6 +464,7 @@ $("base").onchange = async () => {
   clearLists();
   await refreshColumns();
   showSummaries();
+  if (view === "sentence") sentView.show();  // 문장 보기의 컬럼 목록을 새 테이블로
 };
 async function refreshColumns() {
   if (!S.base) return;
@@ -626,7 +636,7 @@ function renderList(key) {
 
 // 5. 조건을 칸으로 만들기: 컬럼·연산자·값을 골라 조건 하나를 만든다. 만든 조건은 한 줄 입력과 똑같이 검사되어 같은 목록에 들어간다.
 // 조건끼리의 and/or는 목록의 연결 버튼으로 정한다.
-const OPS_TEXT = ["=", "!=", "like", "starts", "in", "except", "is null", "is not null"];  // like: 포함, starts: 로 시작(인덱스를 탈 수 있음)
+const OPS_TEXT = ["=", "!=", "like", "starts", "ends", "in", "except", "is null", "is not null"];  // like: 포함, starts: 로 시작(인덱스를 탈 수 있음), ends: 로 끝
 const OPS_OTHER = ["=", "!=", ">=", "<=", ">", "<", "between", "in", "except", "is null", "is not null"];
 const isText = () => ([...S.cols, ...(S.fields ?? [])].find(c => c[0] === $("bcol").value) || [])[1] === "문자";
 const isMulti = () => ["in", "except"].includes($("bop").value);
@@ -1195,6 +1205,86 @@ function showView(name) {
   if (name === "metric") { showMetricSide(); drawMetric(); }
 }
 document.querySelectorAll("#views button").forEach(b => b.onclick = () => showView(b.dataset.view));
+
+// ---------- 검색 조건 보기: 단계 카드 | 흐름 | 문장 ----------
+// 세 보기는 같은 검색 body를 본다. 떠날 때 지금 보기의 내용을 단계 카드(S)로 모으고, 들어갈 때 S에서 그 보기를 만든다(서버 /api/flow/to_body·from_body).
+// 단계 카드가 나타내지 못하는 집계·차트·카드 단계(꼬리)는 흐름 보기가 떠날 때 기억해 두었다가 body가 그대로면 흐름에 되살린다.
+let view = "cards", flowView = null, sentView = null, keptFlow = null, keptTail = { nodes: [], edges: [], feed: [] };
+const bodyNow = () => ({ ...state(), ...($("limit").value ? { limit: $("limit").value } : {}) });  // 보기들이 주고받는 검색 body
+const bodyKey = () => JSON.stringify(bodyNow());
+// 검색 body를 단계 카드 화면에 올린다(저장한 검색을 불러올 때와 같은 길). 지금 연결에 없는 테이블·컬럼이면 이전 화면으로 되돌리고 이유를 던진다.
+async function loadBody(b) {
+  const before = { ...S }, limit = $("limit").value, schema = S.schema;
+  try {
+    if ((b.schema ?? "") !== S.schema && [...$("schema").options].some(o => o.value === b.schema)) { $("schema").value = b.schema; await loadTables(); }
+    S.base = $("base").value = b.base;
+    LISTS.forEach(k => S[k] = k === "conditions" ? flowUngroup(b.conditions) : [...(b[k] ?? [])]);
+    S.union = b.union ? { tables: [...b.union.tables], how: b.union.how } : { tables: [], how: "left" };
+    if (b.limit != null) $("limit").value = b.limit;
+    await api("/api/columns", state());
+    $("bpick").classList.add("hidden");
+    LISTS.forEach(renderList);
+    await refreshColumns();
+    $("err-search").textContent = "";
+  } catch (e) {
+    Object.assign(S, before);
+    $("limit").value = limit;
+    if ($("schema").value !== schema) { $("schema").value = schema; await loadTables(); }
+    $("base").value = S.base;
+    throw e;
+  }
+  showSummaries();
+}
+// 보기 글자만 바꾼다(변환 없이)
+function paintView(name) {
+  view = name;
+  document.querySelectorAll("#vswitch button").forEach(b => b.classList.toggle("on", b.dataset.v === name));
+  $("work").classList.toggle("v-flow", name === "flow");
+  $("work").classList.toggle("v-sentence", name === "sentence");
+  $("vwide").classList.toggle("hidden", name === "cards");
+  $("flow-host").classList.toggle("hidden", name !== "flow");
+  $("sent-host").classList.toggle("hidden", name !== "sentence");
+  $("node-edit").classList.toggle("hidden", name !== "flow");
+}
+async function setView(next) {
+  if (next === view) return true;
+  if (!connected && next !== "cards") { $("err-search").textContent = "먼저 연결하세요."; return false; }
+  try {
+    if (view === "flow") {  // 흐름 → 단계 카드로 모은다. 만들 수 없는 모양이면 서버가 주는 이유를 보이고 흐름에 머문다.
+      const g = flowView.get();
+      if (g.nodes.length) {
+        const found = await api("/api/flow/to_body", { graph: g, target: flowBodyTarget(g) });
+        try { await loadBody(found.body); } catch (e) { throw new Error("단계 카드에 올리지 못했어요: " + e.message); }
+        keptTail = flowTail(g);
+        keptFlow = { graph: g, key: bodyKey() };
+      }
+    }
+    if (next === "flow") {
+      if (!flowView) flowView = FlowView($("flow-host"), { tables: tableNames, edit: $("node-edit") });
+      paintView("flow");
+      const reuse = keptFlow && keptFlow.key === bodyKey();
+      if (reuse) await flowView.set(keptFlow.graph, { layout: false });
+      else if (S.base) await flowView.set(flowAttach((await api("/api/flow/from_body", { body: bodyNow() })).graph, keptTail));
+      else await flowView.set({ nodes: [], edges: [] });
+    } else if (next === "sentence") {
+      sentView ??= SentenceView($("sent-host"), { body: state, columns: () => S.cols, tables: tableNames });
+      paintView("sentence");
+      await sentView.show();
+    } else paintView("cards");
+    return true;
+  } catch (e) {
+    if (view === "flow") flowView.say(e.message.startsWith("단계 카드에") ? e.message : "단계 카드로 바꿀 수 없어요: " + e.message, "err");
+    else $("err-search").textContent = e.message;
+    return false;
+  }
+}
+document.querySelectorAll("#vswitch button").forEach(b => b.onclick = () => setView(b.dataset.v));
+// 흐름·문장 보기에서 [검색 실행]을 누르면 단계 카드로 돌아가 검색한다
+$("search").addEventListener("click", async e => {
+  if (view === "cards") return;
+  e.stopImmediatePropagation();
+  if (await setView("cards")) $("search").click();
+}, true);
 
 // [대시보드에 추가]: 지금 그린 차트를 카드로(다시 구할 조회와 값) 고른 대시보드에 넣는다. 대시보드를 보고 고치는 곳은 대시보드 화면(/dashboard)이다.
 $("dash-add").onclick = () => busy($("dash-add"), async () => {

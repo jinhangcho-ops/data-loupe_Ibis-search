@@ -1,4 +1,4 @@
-"""문장 틀 데이터(6-4, 10-4): 탐색 틀 1~47번과 지표 틀 1~15번. 틀은 데이터로만 두고(계산은 하지 않는다) server.CONSTANTS["sentences"]로 화면에 보낸다.
+"""문장 틀 데이터(6-4, 10-4): 탐색 틀 1~47번과 지표 틀 1~15번. 틀은 데이터로만 두고(계산은 하지 않는다) GET /api/sentences(flow_app.py)로 화면에 보낸다(모든 화면에 싣지 않으려고 CONSTANTS에 넣지 않는다).
 - 틀 하나 = {id, kind(explore·metric), no, name, text(빈칸을 {이름}으로 쓴 문장), slots: [빈칸], uses: [함수 사전 id], extends(변형이면 원래 틀 번호), preset(변형이 정해 둔 빈칸 값)}.
   어느 틀이든 앞에 {기간}을 붙일 수 있다(PERIOD, 틀마다 period: True).
 - 빈칸 = {name, type, label, kinds(컬럼 종류 제한), options(고르는 값), default, optional}. 빈칸 타입은 SLOT_TYPES.

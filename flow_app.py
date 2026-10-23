@@ -10,19 +10,23 @@ import flow_opt
 import held
 import join_keys
 import my_metrics
+import parse
 import result
 import sentence_exec
 import sentence_run
 import sentences
 import server
+import settings
 from dash_refresh import current_source
 from server import app, get_con, run
 
 server.CONSTANTS["flow"] = {"ranks": flow.RANK, "names": flow.NAMES, "order": flow.ORDER_TEXT, "same_rank": list(flow.SAME_OK), "kinds": flow.KIND_TEXT,
+                            "joins": list(parse.JOINS), "unions": list(parse.UNIONS),
                             "opt_rules": {n: t for n, (_, t) in flow_opt.RULES.items()}, "keys": {"min": join_keys.DECIDE_MIN, "gap": join_keys.DECIDE_GAP,
                                                                                                "weights": join_keys.WEIGHTS, "sample_values": join_keys.SAMPLE_VALUES},
                             "my_metrics": {"max": my_metrics.MAX_METRICS, "align_units": list(my_metrics.ALIGN_UNITS), "better": list(my_metrics.BETTER)}}
-server.FREE.update({"/api/flow/check_edge", "/api/flow/check", "/api/flow/to_body", "/api/flow/from_body", "/api/flow/keys/remember", "/api/flow/keys/forget",
+server.CONSTANTS["question_sets"] = {"max_items": 30, "max_size": 40_000}
+server.FREE.update({"/api/sentences", "/api/question_sets", "/api/flow/check_edge", "/api/flow/check", "/api/flow/to_body", "/api/flow/from_body", "/api/flow/keys/remember", "/api/flow/keys/forget",
                     "/api/my_metrics", "/api/my_metrics/validate", "/api/my_metrics/update", "/api/my_metrics/delete", "/api/my_metrics/copy", "/api/my_metrics/status",
                     "/api/my_metrics/check_use", "/api/my_metrics/used_by", "/api/my_metrics/stale", "/api/my_metrics/legacy", "/api/my_metrics/bind_legacy",
                     "/api/sentence/check", "/api/sentence/compile"})
@@ -322,6 +326,42 @@ def my_metrics_bind_legacy():
 
 
 # ---------- 문장 ----------
+
+QUESTION_SETS = "question_sets.json"
+
+
+@app.get("/api/sentences")
+def sentences_catalog():
+    """문장 틀(탐색·지표)과 빈칸 타입·컬럼 가공 옵션. 문장 화면이 처음 열릴 때 한 번 받는다(모든 화면에 싣지 않으려고 CONSTANTS에 두지 않는다)."""
+    return jsonify(**sentences.catalog(), preps=sentence_run.PREPS, max_top=sentence_run.MAX_TOP)
+
+
+def check_set(item):
+    """질문 묶음 {period?: 글, shared?: 참거짓, items: [{template, slots}]}의 모양. 아니면 ValueError."""
+    if item is None:
+        return None
+    items = item.get("items") if isinstance(item, dict) else None
+    if not isinstance(items, list) or not items or len(items) > server.CONSTANTS["question_sets"]["max_items"]:
+        raise ValueError(f"질문 묶음에는 문장이 1개 이상 {server.CONSTANTS['question_sets']['max_items']}개 이하로 있어야 해요.")
+    for one in items:
+        if not isinstance(one, dict):
+            raise ValueError("질문 묶음의 문장이 올바르지 않아요.")
+        sentences.get(one.get("template"))
+    return item
+
+
+@app.get("/api/question_sets")
+def question_sets_list():
+    """저장한 질문 묶음 {이름: 묶음}."""
+    return jsonify(sets=settings.named(QUESTION_SETS))
+
+
+@app.post("/api/question_sets")
+def question_sets_save():
+    """질문 묶음을 이름으로 저장한다(같은 이름은 덮어씀). set이 null이면 그 이름을 지운다. 바뀐 전체를 돌려준다."""
+    data = body_of(request.json)
+    return jsonify(sets=settings.save_named(QUESTION_SETS, "질문 묶음", server.CONSTANTS["question_sets"]["max_size"], data.get("name"), check_set(data.get("set"))))
+
 
 @app.post("/api/sentence/check")
 def sentence_check():
