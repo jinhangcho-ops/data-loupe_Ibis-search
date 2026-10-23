@@ -14,6 +14,7 @@ from urllib.parse import urlsplit
 
 import credentials
 import settings
+import watch
 
 FILE = "dashboards.dat"
 PLAIN = "dashboards.json"  # 예전 평문 파일(그래프 이름별 조회만 있었다)
@@ -27,7 +28,7 @@ MAX_DAYS = 3660  # 시간별 카드에 두는 일 값의 최대 일수
 MAX_PALETTE = 12  # 대시보드 팔레트의 색 수
 MAX_COLORS = 100  # 카드 하나의 지정 색 수
 KINDS = ("chart", "analysis", "metric", "kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks",
-         "target_trend", "map", "alerts", "deviation", "funnel")  # 앞의 셋만 1단계에서 만든다
+         "target_trend", "map", "alerts", "deviation", "funnel", "table", "status", "sentence")  # 앞의 셋만 1단계에서 만든다
 CHART_TYPES = {"bar": "막대", "hbar": "가로 막대", "stacked": "누적 막대", "line": "라인", "polyline": "꺾인 선", "area": "영역형 라인",
                "doughnut": "도넛", "pie": "파이", "radar": "레이더", "scatter": "산점도", "bubble": "버블"}
 TIME_TYPES = ("bar", "stacked", "line", "polyline", "area")  # 날짜 X축 카드에서 고를 수 있는 종류
@@ -128,7 +129,14 @@ def check_colors(colors):
     return out
 
 
-EXTRA_VIEW = ("icon", "format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window")  # 3단계 카드 종류의 설정
+ARROWS = ("none", "up", "down", "auto")  # 조건 색 규칙의 화살표
+BGS = ("rack", "network", "image")  # 배치도 바탕: 서버실 칸 / 네트워크 / 그림 파일
+BLANK_KINDS = ("value", "prev", "delta", "asof")  # 문장 빈칸: 이번 기간 값 / 직전 기간 값 / 비교 문장 / 기준일
+BUCKETS = ("hour", "day", "week", "month")
+MAX_RULES = 20
+EXTRA_VIEW = ("icon", "format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window",
+              "cond_rules", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "positions", "bg", "image_path", "group_cols", "formats", "total",
+              "template", "blanks", "bucket", "baseline", "threshold")  # 3단계 카드 종류의 설정
 
 
 def number_of(value, what, low=None, high=None):
@@ -136,6 +144,66 @@ def number_of(value, what, low=None, high=None):
     if type(value) not in (int, float) or (low is not None and not low <= value <= high):
         raise ValueError(f"{what}은 숫자여야 합니다." if low is None else f"{what}은 {low}~{high} 사이의 숫자여야 합니다.")
     return value
+
+
+def check_more(view):
+    """표·상태·경고·배치도·편차·문장 카드의 설정: cond_rules(조건 색 규칙 {column, match, color, arrow, scope}), rules(상태 규칙, watch.py), stale(끊김 분),
+    entity·time_col·kind_col·link_col(엔티티·시각·종류·연결 대상 컬럼), links(연결선 [[출발, 도착]]), positions({이름: [x, y]} 0~1), bg(rack·network·image)와 image_path,
+    group_cols·formats·total(표), template·blanks(문장), bucket·baseline·threshold(편차 표)."""
+    out = {}
+    if view.get("cond_rules") is not None:
+        found = view["cond_rules"]
+        if not isinstance(found, list) or len(found) > MAX_RULES or not all(isinstance(r, dict) for r in found):
+            raise ValueError(f"조건 색 규칙은 객체 목록이며 {MAX_RULES}개까지입니다.")
+        out["cond_rules"] = [{"column": text(r.get("column"), "규칙의 컬럼", 100, 1), "match": text(r.get("match"), "규칙의 식", 100, 1), "color": check_hex(r.get("color"), "규칙의 색"),
+                              "arrow": r.get("arrow") if r.get("arrow") in ARROWS else "none", "scope": "row" if r.get("scope") == "row" else "cell"} for r in found]
+    if view.get("rules") is not None:
+        out["rules"] = watch.check_rules(view["rules"])
+    for name, high in (("entity", 200), ("time_col", 200), ("kind_col", 200), ("link_col", 200), ("image_path", 500), ("template", 500)):
+        if view.get(name):
+            out[name] = text(view[name], name, high)
+    if view.get("stale") is not None:
+        out["stale"] = number_of(view["stale"], "끊김 분", 1, 100_000)
+    for name in ("baseline", "threshold"):
+        if view.get(name) is not None:
+            out[name] = number_of(view[name], name, -1e15, 1e15)
+    if view.get("links") is not None:
+        links = view["links"]
+        if not isinstance(links, list) or len(links) > 200 or not all(isinstance(l, list) and len(l) == 2 and all(isinstance(n, str) and 0 < len(n) <= 100 for n in l) for l in links):
+            raise ValueError("연결선(links)은 [출발, 도착] 글자 쌍의 목록이며 200개까지입니다.")
+        out["links"] = links
+    if view.get("positions") is not None:
+        found = view["positions"]
+        if not isinstance(found, dict) or len(found) > 500 or not all(isinstance(k, str) and isinstance(v, list) and len(v) == 2 and all(type(n) in (int, float) and 0 <= n <= 1 for n in v) for k, v in found.items()):
+            raise ValueError("점 위치(positions)는 {이름: [x, y]}이고 x·y는 0~1 사이 비율이어야 합니다(500개까지).")
+        out["positions"] = found
+    if view.get("bg"):
+        if view["bg"] not in BGS:
+            raise ValueError(f"배치도 바탕은 {', '.join(BGS)} 중 하나입니다.")
+        out["bg"] = view["bg"]
+    if view.get("bucket"):
+        if view["bucket"] not in BUCKETS:
+            raise ValueError(f"시간대 묶음은 {', '.join(BUCKETS)} 중 하나입니다.")
+        out["bucket"] = view["bucket"]
+    if view.get("group_cols") is not None:
+        found = view["group_cols"]
+        if not isinstance(found, list) or len(found) > 3 or not all(isinstance(c, str) and c for c in found):
+            raise ValueError("표의 묶음 컬럼(group_cols)은 3개까지입니다.")
+        out["group_cols"] = found
+    if view.get("formats") is not None:
+        found = view["formats"]
+        if not isinstance(found, dict) or len(found) > 50:
+            raise ValueError("표의 값 모양(formats)은 {컬럼: 모양} 객체입니다.")
+        out["formats"] = {text(k, "컬럼 이름", 100, 1): v for k, v in found.items() if v in FORMATS}
+    if view.get("total") is not None:
+        out["total"] = bool(view["total"])
+    if view.get("blanks") is not None:
+        found = view["blanks"]
+        if not isinstance(found, list) or len(found) > 10 or not all(isinstance(b, dict) for b in found):
+            raise ValueError("문장의 빈칸(blanks)은 객체 목록이며 10개까지입니다.")
+        out["blanks"] = [{"name": text(b.get("name"), "빈칸 이름", 30, 1), "y": text(b.get("y"), "빈칸 컬럼", 200), "agg": text(b.get("agg"), "빈칸 집계", 20),
+                          "kind": b.get("kind") if b.get("kind") in BLANK_KINDS else "value", "format": b.get("format") if b.get("format") in FORMATS else "number"} for b in found]
+    return out
 
 
 def check_extra(view):
@@ -165,6 +233,7 @@ def check_extra(view):
             raise ValueError(f"칸(slots)은 객체 목록이며 {MAX_SLOTS}개까지입니다.")
         out["slots"] = [{"label": text(s.get("label"), "칸 이름", 30), "format": s.get("format") if s.get("format") in FORMATS else "number", "unit_text": text(s.get("unit_text"), "칸 단위", 10),
                          "color": check_hex(s["color"], "칸 색") if s.get("color") else ""} for s in slots]
+    out.update(check_more(view))
     if view.get("window") is not None:
         found = view["window"]
         if not isinstance(found, dict) or not all(isinstance(found.get(k), str) and DAY.fullmatch(found[k]) for k in ("from", "to")):
@@ -244,7 +313,7 @@ def check_data(data, kind):
     data = {} if data is None else data
     if not isinstance(data, dict):
         raise ValueError("구한 값(data)은 객체여야 합니다.")
-    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair"}
+    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair", "since"}
     if unknown := set(data) - allowed:
         if kind == "recent_rows":
             raise ValueError("recent_rows 카드에는 행 값을 저장할 수 없습니다. 보일 때마다 연결에서 읽습니다.")

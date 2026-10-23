@@ -53,6 +53,7 @@
 <script src="/static/board.js"></script>
 <script src="/static/dash.js"></script>
 <script src="/static/dash_cards.js"></script>
+<script src="/static/dash_rules.js"></script>
 <script src="/static/dash_ctl.js"></script>
 <script>
 // 쿼리·분석은 연결이 있으면 바로, 없으면 가운데 연결 카드를 띄워 연결한 뒤에 들어간다(afterConnect). 수집·연동은 연결 없이 들어간다.
@@ -91,7 +92,7 @@ function showList({ dashboards, last }, pick) {
   $("h-dash").value = dashboards.some(d => d.id === (pick || last)) ? pick || last : dashboards[0]?.id ?? "";
 }
 async function openDash(id) {
-  dashId = id;
+  dashId = board.dashId = id;
   if (!id) { board.set([]); return; }
   const d = (await api("/api/dash/" + id)).dashboard;
   board.palette = d.palette;

@@ -256,6 +256,7 @@ class DashBoard extends Board {
     this.range = null;  // 보는 기간 {start, end}(기준일로 자른 것, 열린 쪽은 없음). 시간별 카드는 이 기간의 일 값만 그린다.
     this.prev = null;  // 직전 기간 {start, end, text}(비교 문장용)
     this.compares = new Map();  // 카드 → 비교 문장 {text, tone, ...}
+    this.dashId = "";  // 지금 열어 둔 저장본의 id(배치도의 그림 파일을 서버에서 받을 때 쓴다). 화면이 정한다.
     this.recompute = options.recompute;  // (카드들) → 그 카드들을 보는 기간으로 다시 구한다(연결이 있어야 한다). 화면이 정한다.
     this.connKey = "";  // 지금 연결의 열쇠(비밀번호·계정 없음). 있으면 다른 연결의 카드를 "이전 값"으로 보인다.
   }
@@ -264,7 +265,8 @@ class DashBoard extends Board {
     this.range = range;
     this.prev = prev;
     await this.recompare();
-    const stale = this.cards.filter(c => c.source?.date && !c.data?.by_unit && c.kind !== "recent_rows");  // 날짜 X축이 아닌데 기간 기준 날짜 컬럼이 있는 카드는 그 기간으로 다시 구한다
+    const unique = c => SVG_KINDS.includes(c.kind) && c.data?.by_unit?.day?.series.some(s => s.agg === "nunique");  // 고유 개수는 기간으로 다시 구해야 한다
+    const stale = this.cards.filter(c => (c.source?.date && !c.data?.by_unit && c.kind !== "recent_rows") || unique(c));  // 날짜 X축이 아닌데 기간 기준 날짜 컬럼이 있는 카드는 그 기간으로 다시 구한다
     if (stale.length) await this.recompute?.(stale);
   }
   // 새 카드·다시 구할 때 서버에 알려 줄 보는 기간(없으면 undefined)
@@ -321,8 +323,10 @@ class DashBoard extends Board {
       : field("목표", el("input", { type: "number", value: view.target?.value ?? "", style: "width:90px", onchange: e => { if (e.target.value === "") { delete view.target; card.data.target = null; } else { view.target = { value: +e.target.value }; card.data.target = { value: +e.target.value, label: "", error: "" }; } again(); } }));
     const kinds = { donut_kpi: [choice("ring", "고리", [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리+목표 눈금"]])], stripes: [number("cells", "칸 수", 50), number("full", "가득 찬 값", 80)],
                     blocks: [number("size", "한 칸 크기", 80)], recent_rows: [number("rows", "행 수", 50)] }[card.kind] ?? [];
-    const settings = card.kind === "recent_rows" || card.kind === "gauge" ? [...kinds] : [target, choice("format", "값", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), ...kinds];
-    const row = el("div", { className: "btools" }, this.dateSelect(card), ...settings, el("button", { className: "btype" + (card.openColors ? " on" : ""), textContent: "색", onclick: () => { card.openColors = !card.openColors; this.draw(); } }));
+    const plain = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence"].includes(card.kind);  // 목표·값 모양이 없는 종류
+    const settings = plain ? [...kinds] : [target, choice("format", "값", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), ...kinds];
+    const rules = ["table", "sentence"].includes(card.kind) ? [el("button", { className: "btype" + (card.openRules ? " on" : ""), textContent: "색 규칙", title: "조건에 맞는 칸만 색·화살표를 입힙니다", onclick: () => { card.openRules = !card.openRules; this.draw(); } })] : [];
+    const row = el("div", { className: "btools" }, this.dateSelect(card), ...settings, ...rules, el("button", { className: "btype" + (card.openColors ? " on" : ""), textContent: "색", onclick: () => { card.openColors = !card.openColors; this.draw(); } }));
     row.onclick = e => e.stopPropagation();
     return row;
   }
@@ -352,17 +356,18 @@ class DashBoard extends Board {
     const tools = SVG_KINDS.includes(card.kind) ? this.svgTools(card, msg, again) : el("div", { className: "btools" }, ...buttons, size, ...flags, unit, !card.data?.by_unit ? this.dateSelect(card) : "", paint);
     tools.onclick = e => e.stopPropagation();  // 카드 고르기(Board의 box.onclick)로 번지지 않게
     const d = card.data ?? {}, first = d.by_unit?.day?.labels[0], range = this.range;
-    const noDate = range && !d.by_unit && !card.source?.date && card.kind !== "recent_rows" && !isPoints(card);  // 기간 기준 날짜 컬럼이 없으면 기간이 걸리지 않는다
+    const noDate = range && !d.by_unit && !card.source?.date && !["recent_rows", "status", "alerts", "map"].includes(card.kind) && !isPoints(card);  // 기간 기준 날짜 컬럼이 없으면 기간이 걸리지 않는다
     const applies = card.source?.date && !d.by_unit ? `기간 기준 날짜: ${card.source.date}` : noDate ? "기간·기준일은 날짜 X축 카드나 기간 기준 날짜 컬럼을 고른 카드에만 적용돼요" : "";
     const early = range?.start && first && range.start < first ? `저장된 일 값은 ${first}부터예요` : "";  // 보려는 기간이 저장된 값보다 앞서면
+    const lostUnique = range && SVG_KINDS.includes(card.kind) && d.by_unit?.day?.series.some((s, i) => s.agg === "nunique" && cardValue(card, i) == null) ? "고유 개수는 기간을 바꾸면 연결해서 다시 구해야 해요" : "";
     const stale = this.connKey && card.source?.key && card.source.key !== this.connKey ? "이전 값(다른 연결)" : "";  // 지금 연결이 아닌 곳에서 구한 값
-    const when = [stale, d.computed_at && "구한 시각 " + d.computed_at.replace("T", " "), d.note, early, applies, card.rangeNote].filter(Boolean).join(" · ");  // 값이 언제 것인지, 줄인 것
+    const when = [stale, d.computed_at && "구한 시각 " + d.computed_at.replace("T", " "), d.note, early, applies, card.rangeNote, lostUnique].filter(Boolean).join(" · ");  // 값이 언제 것인지, 줄인 것
     const said = this.compares.get(card), timed = !!d.by_unit?.day && d.by_unit.day.series[0]?.agg !== "nunique" && card.kind !== "dual_trend";
     const pick = (value, options, set) => el("select", { className: "bunit", style: "flex-basis:auto", onchange: e => { set(e.target.value); this.changed?.(); this.recompare(); } },
       ...options.map(([v, name]) => el("option", { value: v, textContent: name, selected: v === value })));
     const how = timed ? el("div", { className: "btools" }, pick(card.view.compare?.mode ?? "span", [["span", "기간 비교"], ["point", "시점 비교"]], v => { card.view.compare = { mode: v }; }),
       pick(card.view.better ?? "up", [["up", "늘수록 좋음"], ["down", "줄수록 좋음"]], v => { card.view.better = v; })) : "";
-    return el("div", { className: "bextra" }, tools, msg, el("div", { className: "hint bwhen", textContent: when }),
+    return el("div", { className: "bextra" }, tools, card.openRules ? ruleEditor(card, again) : "", msg, el("div", { className: "hint bwhen", textContent: when }),
       said && card.kind !== "kpi" ? el("div", { className: "bcmp " + said.tone, textContent: said.text, title: said.delta_text }) : "", how, card.openColors ? this.colorEditor(card) : "");
   }
   // 산점도·버블이면 서버에서 점을 받아 카드에 둔다(연결 필요). 다른 종류로 바꾸면 점은 버린다(카드 크기).

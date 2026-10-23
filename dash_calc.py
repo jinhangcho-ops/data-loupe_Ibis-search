@@ -1,9 +1,11 @@
 """대시보드 카드의 값 구하기: 카드의 source(다시 구할 기록)로 data를 만든다. 저장은 dash_store, 라우트는 dash_app이 맡는다.
 날짜 X축 차트는 일 단위로 계열마다 {sum, count, min, max}를 구해 두고(화면이 주·월·연으로 다시 묶는다), 다시 묶을 수 없는 고유 개수(nunique)는 네 단위를 여기서 따로 구한다.
 일 값이 많아 카드 크기를 넘으면 앞을 자르고 월·연은 여기서 따로 구한다. 항목별 차트는 result.get_chart, 분석은 prep_app.analyzed, 지표는 core.metric_values를 쓴다."""
+import datetime as dt
 import json
 
 import analysis
+import compare
 import core
 import dash_store
 import metrics
@@ -14,6 +16,7 @@ import settings
 import source as connection
 import summary_text
 import targets
+import watch
 from server import run
 
 AGGS = ("count", "sum", "mean", "min", "max", "nunique")  # 날짜 X축 차트의 집계
@@ -27,6 +30,13 @@ POINT_TYPES = ("scatter", "bubble")
 VALUE_KINDS = ("kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend")  # 값 하나(또는 일 값)로 그리는 카드 종류
 MAX_GROUPS = 100  # 요약의 기여 분해에 쓰는 그룹 수
 TARGETS_FILE = "targets_file.json"  # 목표 파일 경로만 둔다 {path}
+WATCH_KINDS = ("status", "alerts", "map")  # 엔티티별 최근 행을 상태 규칙(watch.py)으로 보는 카드
+TABLE_KINDS = ("table", "sentence", "deviation", *WATCH_KINDS)
+MAX_TABLE_ROWS = 500  # 표 카드에 저장하는 집계 행 수
+MAX_ENTITY_ROWS = 2000  # 상태·경고·배치도가 읽는 행 수
+MAX_ENTITIES = 50  # 편차 표의 엔티티 수
+MAX_BUCKETS = 48  # 편차 표의 시간대 수(최근 것)
+BUCKET_UNITS = {"hour": "h", "day": "D", "week": "W", "month": "M"}
 MAX_NUM_COLS = 200  # 카드에 알려 줄 숫자 컬럼 이름 수(버블의 [크기] 후보)
 
 
@@ -341,12 +351,115 @@ def value_data(card, ctx):
         parse.check_name(date, expr.columns, "날짜 컬럼")
         if date not in date_columns(expr):
             raise ValueError(f"'{date}'은 날짜 컬럼이 아닙니다.")
-        found = run(lambda: time_data(expr, date, clean_series(body.get("series")), None))
+        series = clean_series(body.get("series"))
+        found = run(lambda: time_data(expr, date, series, None))
+        unique = [i for i, s in enumerate(series) if s["agg"] == "nunique"]
+        if unique and window and (window.get("start") or window.get("end")):  # 고유 개수는 일 값을 다시 묶을 수 없어 그 기간으로 따로 구한다
+            at = core.runnable(with_period(body, date, window), select=False)
+            found["values"] = {"window_nunique": {"start": window.get("start"), "end": window.get("end"), "values": {str(i): v for i, v in zip(unique, run(lambda: scalars(at, [series[i] for i in unique])))}}}
     else:
         series, expr = clean_series(body.get("series")), core.runnable(with_period(body, date, window), select=False)
         found = {"values": {"scalar": run(lambda: scalars(expr, series)), "names": [series_name(s) for s in series]}}
     return {**found, **({"target": resolve_target(view.get("target"))} if card["kind"] != "summary" else {}),
             "date_cols": date_columns(core.runnable(body, select=False))}
+
+
+def table_rows(expr, group_cols, series):
+    """집계 표의 행: 묶음 컬럼 값들과 계열 집계들 [[…]](묶음 컬럼 순, 최대 MAX_TABLE_ROWS+1행). 묶음 컬럼이 없으면 한 줄."""
+    for c in group_cols:
+        parse.check_name(c, expr.columns, "묶음 컬럼")
+    metrics_ = {f"v{i}": final_expr(expr, s) for i, s in enumerate(series)}
+    if not group_cols:
+        return [[result.plain(v) for v in analysis.one(expr.aggregate(**metrics_)).values()]]
+    keys = [expr[c].name(c) for c in group_cols]
+    frame = expr.group_by(keys).aggregate(**metrics_).order_by(group_cols).limit(MAX_TABLE_ROWS + 1).to_polars()
+    return [[result.plain(v) if not hasattr(v, "isoformat") else str(v) for v in row] for row in frame.rows()]
+
+
+def table_data(card, ctx):
+    """table 카드: 쿼리의 집계(묶음 컬럼 + 계열)를 표로(최대 MAX_TABLE_ROWS행). 날짜 컬럼과 직전 기간이 있으면 직전 기간 값도 줘 ▲▼ 칸을 그린다.
+    계열이 없으면 원래 행 표라 값은 저장하지 않고 컬럼 이름만 준다(보일 때마다 연결에서 읽는다)."""
+    src, view, body = card["source"], card["view"], card["source"]["body"]
+    series, date = body.get("series") or [], src.get("date")
+    if not series:
+        return {"columns": list(core.runnable(body).columns)}
+    series, groups = clean_series(series), view.get("group_cols") or []
+    at = lambda w: core.runnable(with_period(body, date, w), select=False)
+    now = run(lambda: table_rows(at((ctx or {}).get("range")), groups, series))
+    before = (ctx or {}).get("prev")
+    old = run(lambda: table_rows(at(before), groups, series)) if date and before and groups else None
+    more = len(now) > MAX_TABLE_ROWS
+    columns = [{"name": c, "kind": "group"} for c in groups] + [{"name": series_name(s), "kind": "value", "agg": s["agg"]} for s in series]
+    key = lambda row: "\x01".join(str(v) for v in row[:len(groups)])
+    return {"values": {"columns": columns, "rows": now[:MAX_TABLE_ROWS], "more": more, "prev": {key(r): r[len(groups):] for r in old} if old else None},
+            "note": f"행이 많아 앞 {MAX_TABLE_ROWS}개만 저장했어요." if more else ""}
+
+
+def sentence_data(card, ctx):
+    """sentence 카드: 문장 틀(view.template)의 빈칸마다 값. 빈칸 종류: value(이번 기간 값), prev(직전 기간 값), delta(비교 문장, compare.py), asof(기준일).
+    계산하지 못하는 빈칸은 값 없이 이유(error)만 담는다(화면이 '—'와 이유를 보임)."""
+    src, view, body = card["source"], card["view"], card["source"]["body"]
+    date, window, before = src.get("date"), (ctx or {}).get("range"), (ctx or {}).get("prev")
+    out = {}
+    for blank in view.get("blanks") or []:
+        name, kind, fmt = blank["name"], blank["kind"], blank["format"]
+        if kind == "asof":
+            out[name] = {"kind": kind, "text": (window or {}).get("end") or dt.date.today().isoformat(), "format": fmt}
+            continue
+        try:
+            s = clean_series([{"y": blank.get("y") or None, "agg": blank.get("agg") or ("sum" if blank.get("y") else "count")}])
+            at = lambda w: core.runnable(with_period(body, date, w), select=False)
+            cur = run(lambda: scalars(at(window), s))[0]
+            prev = run(lambda: scalars(at(before), s))[0] if date and before and kind in ("prev", "delta") else None
+            item = {"kind": kind, "cur": cur, "prev": prev, "format": fmt}
+            if kind == "delta":
+                item["text"] = compare.compare(cur, prev, fmt, view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"])["text"]
+            out[name] = item
+        except ValueError as e:
+            out[name] = {"kind": kind, "error": str(e), "format": fmt}
+    return {"values": {"blanks": out}}
+
+
+def watch_data(card, now, previous):
+    """status·alerts·map 카드: 엔티티(view.entity 컬럼)별 최근 행을 상태 규칙(view.rules)·끊김 규칙(view.stale)으로 판정한다(watch.evaluate).
+    연결선은 view.links와 각 행의 연결 대상 컬럼(view.link_col). 나빠진 시각(since)은 이전 값(previous)을 이어 data.since에 둔다."""
+    view, body = card["view"], card["source"]["body"]
+    if not view.get("entity"):
+        raise ValueError("엔티티(서버·장비 이름) 컬럼을 고르세요.")
+    expr = core.runnable(body, select=False)
+    for c in (view["entity"], view.get("time_col"), view.get("kind_col"), view.get("link_col")):
+        if c:
+            parse.check_name(c, expr.columns, "컬럼")
+    frame = run(lambda: result.get_rows(expr, MAX_ENTITY_ROWS))
+    rows = frame.to_dicts()
+    links = [tuple(l) for l in view.get("links") or []]
+    if view.get("link_col"):
+        links += [(str(r[view["entity"]]), str(r[view["link_col"]])) for r in rows if r.get(view["entity"]) is not None and r.get(view["link_col"]) is not None]
+    found = watch.evaluate(rows, view.get("rules"), view["entity"], dt.datetime.fromisoformat(now), view.get("time_col"), view.get("stale"), previous, links, view.get("kind_col"))
+    return {"values": {"entities": found["entities"], "counts": found["counts"], "fresh": found["fresh"], "more": len(rows) >= MAX_ENTITY_ROWS}, "since": found["since"],
+            "note": f"행이 많아 앞 {MAX_ENTITY_ROWS}행만 읽었어요." if len(rows) >= MAX_ENTITY_ROWS else ""}
+
+
+def deviation_data(card, ctx):
+    """deviation 카드: 엔티티(view.entity) × 시간대(날짜 컬럼 source.date를 view.bucket으로 자름)의 첫 계열 값. 기준(baseline)은 화면이 정한다(직접 숫자 또는 엔티티 평균).
+    엔티티는 MAX_ENTITIES개, 시간대는 최근 MAX_BUCKETS개까지."""
+    src, view, body = card["source"], card["view"], card["source"]["body"]
+    date, entity, unit = src.get("date"), view.get("entity"), view.get("bucket") or "hour"
+    if not entity or not date:
+        raise ValueError("편차 표는 엔티티 컬럼과 날짜(시각) 컬럼을 고르세요.")
+    series = clean_series(body.get("series"))[:1]
+    expr = core.runnable(with_period(body, date, (ctx or {}).get("range")), select=False)
+    parse.check_name(entity, expr.columns, "엔티티 컬럼")
+    parse.check_name(date, expr.columns, "날짜 컬럼")
+    if unit == "hour" and not expr[date].type().is_timestamp():
+        raise ValueError(f"'{date}'은 날짜만 있는 컬럼이라 시간대(시)로 묶을 수 없어요. 일·주·월로 묶으세요.")
+    frame = run(lambda: expr.group_by([expr[entity].name("e"), expr[date].truncate(BUCKET_UNITS[unit]).name("b")]).aggregate(v=final_expr(expr, series[0])).to_polars())
+    buckets = sorted({str(b) for b in frame["b"].to_list()})[-MAX_BUCKETS:]
+    cells = {}
+    for e, b, v in frame.rows():
+        cells.setdefault(str(e), {})[str(b)] = result.plain(v)
+    names = sorted(cells)[:MAX_ENTITIES]
+    return {"values": {"buckets": buckets, "entities": [{"name": n, "values": [cells[n].get(b) for b in buckets]} for n in names], "more": len(cells) > MAX_ENTITIES}}
 
 
 def chart_data(body):
@@ -389,7 +502,8 @@ def definition(card):
     source = card["source"]
     points = {"points": card["view"].get("points")} if card["view"]["type"] in POINT_TYPES else {}
     view = card["view"]
-    extra = {"view": {k: view[k] for k in ("target", "group", "format") if k in view}} if card["kind"] in VALUE_KINDS else {}  # 값에 영향을 주는 설정
+    keys = ("target", "group", "format") if card["kind"] in VALUE_KINDS else ("group_cols", "template", "blanks", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "bucket") if card["kind"] in TABLE_KINDS else ()
+    extra = {"view": {k: view[k] for k in keys if k in view}} if keys else {}  # 값에 영향을 주는 설정
     return {"kind": card["kind"], **{k: source[k] for k in ("schema", "table", "body", "recipe", "analysis", "metric_id", "flow_id", "full", "sample", "date") if k in source}, **points, **extra}
 
 
@@ -397,7 +511,7 @@ def compute(card, now, ctx=None):
     """검사한 카드(dash_store.check_card)의 source로 data를 구해 돌려준다(저장하지 않는다). now는 구한 시각 글자.
     ctx = {range: {start, end}, prev: {start, end, text}}(대시보드의 보는 기간과 직전 기간)는 source.date(기간 기준 날짜 컬럼)가 있는 날짜 X축이 아닌 카드에 기간 줄로 걸리고, 요약 문장이 쓴다."""
     source = card["source"]
-    if card["kind"] in ("chart", "metric", "recent_rows", *VALUE_KINDS):
+    if card["kind"] in ("chart", "metric", "recent_rows", *VALUE_KINDS, *TABLE_KINDS):
         if not isinstance(source.get("body"), dict):
             raise ValueError("이 카드에는 다시 구할 조회(source.body)가 없습니다.")
         body = with_period(source["body"], source.get("date"), (ctx or {}).get("range")) if card["kind"] in ("chart", "metric") else source["body"]
@@ -405,8 +519,18 @@ def compute(card, now, ctx=None):
             found = {"columns": list(core.runnable(body).columns)}  # 행 값은 저장하지 않는다(보일 때마다 연결에서 읽는다)
         elif card["kind"] in VALUE_KINDS:
             found = value_data(card, ctx)
+        elif card["kind"] == "table":
+            found = table_data(card, ctx)
+        elif card["kind"] == "sentence":
+            found = sentence_data(card, ctx)
+        elif card["kind"] == "deviation":
+            found = deviation_data(card, ctx)
+        elif card["kind"] in WATCH_KINDS:
+            found = watch_data(card, now, (card.get("data") or {}).get("since"))
         else:
             found = chart_data(body) if card["kind"] == "chart" else metric_data(body)
+        if card["kind"] in ("table", "sentence", "deviation"):  # 기간 기준 날짜 컬럼 후보(하나뿐이면 화면이 자동으로 채운다)
+            found.setdefault("date_cols", date_columns(core.runnable(source["body"], select=False)))
         if card["kind"] == "chart" and card["view"]["type"] in POINT_TYPES:  # 점 종류를 고른 카드는 점도 다시 구한다
             found["points"] = points_of(source["body"], (card["view"].get("points") or {}).get("size"))
     elif card["kind"] == "analysis":

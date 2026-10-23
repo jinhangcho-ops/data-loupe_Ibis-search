@@ -351,6 +351,7 @@
 <script src="/static/dash.js"></script>
 <script src="/static/dash_cards.js"></script>
 <script src="/static/dash_ctl.js"></script>
+<script src="/static/dash_rules.js"></script>
 <script src="/static/dash_menu.js"></script>
 <script>
 const LISTS = ["joins", "periods", "conditions", "calcs", "sorts", "columns"];  // 한 줄씩 모으는 입력. 서버로 보내는 이름과 같다.
@@ -1210,7 +1211,7 @@ function showDashboards({ dashboards: found, locked }, pick) {
   if (locked) say("err-dash", SERVER.dash.locked);
 }
 function showDash(d) {
-  dashId = d.id;
+  dashId = board.dashId = d.id;
   dashName = $("dash-name").value = d.name;
   dashMeta = Object.fromEntries(Object.entries(d).filter(([k]) => !["id", "name", "palette", "cards"].includes(k)));
   $("dash-palette").value = d.palette.join(", ");
@@ -1248,6 +1249,7 @@ try {
   const kept = JSON.parse(sessionStorage.getItem(DASH_KEY) || "null");
   if (kept) {
     [dashId, dashName, dashMeta] = [kept.id || "", kept.name || "", kept.meta || {}];
+    board.dashId = dashId;
     $("dash-name").value = dashName;
     $("dash-palette").value = (kept.palette || []).join(", ");
     board.palette = kept.palette || [];

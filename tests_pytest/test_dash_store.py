@@ -179,3 +179,16 @@ def test_card_kind_view_settings_checks():
         with pytest.raises(ValueError):
             store.check_card({**CARD, "view": bad})
     assert store.check_card({**CARD, "source": {**CARD["source"], "date": "day"}})["source"]["date"] == "day"
+
+
+def test_table_status_map_sentence_view_settings():
+    v = store.check_card({**CARD, "kind": "map", "view": {"cond_rules": [{"column": "상태", "match": "*지연*", "color": "#c00", "arrow": "auto", "scope": "row"}], "rules": [{"column": "cpu", "op": ">=", "value": 90, "level": "bad"}],
+                                                          "stale": 30, "entity": "name", "links": [["a", "b"]], "positions": {"a": [0.1, 0.9]}, "bg": "network", "group_cols": ["store"], "formats": {"금액": "currency", "x": "엉터리"},
+                                                          "total": 1, "blanks": [{"name": "매출", "y": "amt", "agg": "sum", "kind": "delta"}], "template": "{매출}", "bucket": "hour", "baseline": 3, "threshold": 1.5}})["view"]
+    assert v["cond_rules"] == [{"column": "상태", "match": "*지연*", "color": "#c00", "arrow": "auto", "scope": "row"}] and v["positions"] == {"a": [0.1, 0.9]} and v["formats"] == {"금액": "currency"} and v["total"] is True
+    assert v["blanks"][0]["kind"] == "delta" and v["rules"][0]["level"] == "bad" and store.check_card({**CARD, "kind": "status"})["kind"] == "status"
+    for bad in ({"cond_rules": [{"column": "a", "match": "1", "color": "red"}]}, {"cond_rules": [{"column": "", "match": "1", "color": "#fff"}]}, {"rules": [{"column": "a", "op": "~", "value": 1, "level": "bad"}]},
+                {"positions": {"a": [2, 0]}}, {"positions": {"a": [0.1]}}, {"links": [["a"]]}, {"bg": "sky"}, {"bucket": "year"}, {"group_cols": ["a", "b", "c", "d"]}, {"blanks": [{}] * 11}, {"stale": 0}):
+        with pytest.raises(ValueError):
+            store.check_card({**CARD, "view": bad})
+    assert store.check_card({**CARD, "kind": "alerts", "data": {"since": {"a": "2026-10-22T12:00:00"}}})["data"]["since"] == {"a": "2026-10-22T12:00:00"}

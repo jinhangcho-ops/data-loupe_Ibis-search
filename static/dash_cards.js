@@ -2,7 +2,7 @@
 // 위쪽은 값 → 모양 계산(호·고리·칸·교차·다각형)이라 화면 없이 시험할 수 있다. 아래는 그 계산으로 SVG를 만드는 부분이다(dash.js의 windowValue·pickColor를 쓰므로 dash.js 다음에 불러 온다).
 // 카드의 값은 data.by_unit.day(일 값, 기간 card.range로 묶음)나 data.values.scalar(날짜 컬럼 없이 구한 값)이고, 목표는 data.target.value(없으면 null)다.
 
-const SVG_KINDS = ["kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks", "target_trend"];
+const SVG_KINDS = ["kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation"];
 const TAU = Math.PI * 2, RING_GAP = 0.06;  // 게이지 조각 사이 간격(라디안)
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 // 12시 방향이 0, 시계 방향으로 커지는 각도의 점
@@ -82,6 +82,10 @@ function darken(hex, k = 0.35) {
 // 기간(card.range)의 계열 i 값: 일 값이 있으면 기간으로 묶고, 없으면 날짜 컬럼 없이 구한 값
 function cardValue(card, i = 0) {
   const by = card.data?.by_unit?.day;
+  if (by && by.series[i]?.agg === "nunique" && card.range && by.labels.some(d => (!card.range.start || d >= card.range.start) && (!card.range.end || d <= card.range.end)) && windowValue(by.series[i], by.labels, card.range.start, card.range.end) == null) {
+    const w = card.data.values?.window_nunique;  // 고유 개수는 일 값을 묶을 수 없어, 서버가 이 기간으로 따로 구한 값만 쓴다(없으면 —)
+    return w && (w.start ?? null) === (card.range.start ?? null) && (w.end ?? null) === (card.range.end ?? null) ? w.values[i] ?? null : null;
+  }
   if (by) return by.series[i] ? windowValue(by.series[i], by.labels, card.range?.start, card.range?.end) : null;
   return card.data?.values?.scalar?.[i] ?? null;
 }
@@ -250,6 +254,147 @@ function paintRecent(card, colors, board) {
   return holder;
 }
 
-const PAINTERS = { kpi: paintKpi, donut_kpi: paintDonut, gauge: paintGauge, summary: paintSummary, recent_rows: paintRecent, dual_trend: paintDual, stripes: paintStripes, blocks: paintBlocks, target_trend: paintTargetTrend };
+// ---------- 표·상태·문장·경고·배치도·편차 (3-2b·3-4) ----------
+const LEVEL_NAMES = { ok: "정상", warn: "주의", bad: "이상" };
+const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const levelColor = level => level === "bad" ? cssVar("--err") : level === "warn" ? "#f08c00" : cssVar("--ok");
+// 행 값 읽기: 연결돼 있을 때만 /api/query로 앞 N행(저장하지 않는다). show(컬럼 이름들, 행들[[…]])를 부른다.
+function loadRows(card, board, holder, show, limit) {
+  const key = card.source?.key;
+  if (!board?.connKey || (key && key !== board.connKey)) return void holder.append(el("div", { className: "hint", textContent: board?.connKey ? "이 카드는 다른 연결의 것이라 지금은 보이지 않아요" : "연결하면 보입니다" }));
+  holder.append(el("div", { className: "hint", textContent: "읽는 중…" }));
+  api("/api/query", { ...card.source.body, limit, count: false }).then(d => show(d.rows.columns, d.rows.rows.map(r => d.rows.columns.map(c => r[c]))))
+    .catch(e => holder.replaceChildren(el("div", { className: "err", textContent: e.message })));
+}
+// 칸 글자와 조건 색·화살표를 입힌 td. rule이 맞으면 배경색(칸), arrow는 규칙 화살표 또는 직전 값 비교 ▲▼
+function styledCell(text, rule, arrow, align) {
+  const td = el("td", { textContent: text, className: align });
+  if (rule) td.style.background = alpha(rule.color, 0.28);
+  if (arrow) td.append(el("span", { className: "carrow " + arrow.tone, textContent: " " + arrow.text, style: arrow.color ? `color:${arrow.color}` : "" }));
+  return td;
+}
+// table: 집계된 값(또는 원래 행) 표. 컬럼별 모양, 머리글 정렬, 합계 줄, 직전 기간 대비 ▲▼, 조건 색 규칙(맞는 칸만 칠함)
+function renderTable(holder, card, columns, rows, prev) {
+  const view = card.view, names = columns.map(c => c.name ?? c), kinds = Object.fromEntries(names.map((n, i) => [n, kindOfValues(rows.map(r => r[i]))]));
+  const compiled = compileRules(view.cond_rules, kinds), groups = columns.filter(c => c.kind === "group").length, sort = card.sortBy;
+  const order = rows.map((_, i) => i);
+  if (sort) order.sort((a, b) => { const [x, y] = [rows[a][sort.i], rows[b][sort.i]]; return (x == null) - (y == null) || (x > y ? 1 : x < y ? -1 : 0) * sort.dir; });
+  const head = el("tr", {}, ...names.map((n, i) => el("th", { textContent: n + (sort?.i === i ? (sort.dir > 0 ? " ▲" : " ▼") : ""), style: "cursor:pointer", title: "눌러 정렬", onclick: () => { card.sortBy = { i, dir: sort?.i === i ? -sort.dir : 1 }; renderTable(holder, card, columns, rows, prev); } })));
+  const body = order.map(r => {
+    const row = rows[r], hits = names.map((n, i) => matchRule(compiled, n, row[i])), whole = hits.find(h => h?.scope === "row");
+    const key = row.slice(0, groups).map(String).join("\x01"), old = prev?.[key];
+    const tr = el("tr", {}, ...row.map((v, i) => {
+      const fmt = view.formats?.[names[i]] ?? "number", before = columns[i].kind === "value" ? old?.[i - groups] : null, num = typeof v === "number";
+      const arrow = hits[i] && ruleArrow(hits[i], v, before, view.better) || (num && before != null && !hits[i]?.arrow ? ruleArrow({ arrow: "auto", color: "" }, v, before, view.better) : null);
+      return styledCell(num ? showValue(v, fmt) : v == null ? "" : String(v), hits[i]?.scope === "cell" ? hits[i] : null, arrow, num ? "num" : "");
+    }));
+    if (whole) tr.style.background = alpha(whole.color, 0.22);
+    return tr;
+  });
+  const total = view.total ? el("tr", { className: "ctotal" }, ...columns.map((c, i) => el("td", { className: "num", textContent: i < groups ? (i === 0 ? "합계" : "") : ["sum", "count"].includes(c.agg) ? showValue(rows.reduce((a, r) => a + (r[i] ?? 0), 0), view.formats?.[names[i]] ?? "number") : "—" }))) : "";
+  holder.replaceChildren(el("table", {}, el("thead", {}, head), el("tbody", {}, ...body, total)));
+}
+function paintTable(card, colors, board) {
+  const holder = box("table"), v = card.data?.values;
+  if (v) renderTable(holder, card, v.columns, v.rows, v.prev);
+  else loadRows(card, board, holder, (names, rows) => renderTable(holder, card, names.map(n => ({ name: n, kind: "value" })), rows, null), card.view?.rows || 20);
+  return holder;
+}
+// status: 정상·주의·이상 배지와 수 + 데이터 신선도 문장
+function paintStatus(card) {
+  const v = card.data?.values, counts = v?.counts ?? {};
+  return box("status", el("div", { className: "badges" }, ...["ok", "warn", "bad"].map(l => el("span", { className: "badge", style: `border-color:${levelColor(l)};color:${levelColor(l)}` }, el("b", { textContent: String(counts[l] ?? 0) }), " " + LEVEL_NAMES[l]))),
+    v?.fresh ? el("div", { className: "hint", textContent: v.fresh }) : "", card.data?.note ? el("div", { className: "hint", textContent: card.data.note }) : "");
+}
+// alerts: 나쁜 엔티티 목록(이상 먼저, 오래된 순) "이름 · 이상 · 12분째 · 이유 · 영향: …"
+function paintAlerts(card) {
+  const bad = (card.data?.values?.entities ?? []).filter(e => e.level !== "ok").sort((a, b) => (b.level === "bad") - (a.level === "bad") || String(a.since).localeCompare(String(b.since)));
+  if (!bad.length) return box("alerts", el("div", { className: "hint", textContent: "경고가 없어요" }));
+  return box("alerts", ...bad.map(e => el("div", { className: "alert lv-" + e.level }, el("b", { textContent: e.name }), el("span", { className: "badge", style: `border-color:${levelColor(e.level)};color:${levelColor(e.level)}`, textContent: LEVEL_NAMES[e.level] }),
+    el("span", { textContent: e.since_text }), el("span", { className: "hint", textContent: e.reasons.join(", ") }), e.impact.length ? el("span", { className: "hint", textContent: "영향: " + e.impact.join(", ") }) : "")));
+}
+// 처음 배치: 종류별로 한 줄씩, 한 줄 안에서 고르게(0~1 비율)
+function autoGrid(entities) {
+  const kinds = [...new Set(entities.map(e => e.kind || ""))], out = {};
+  kinds.forEach((k, row) => { const same = entities.filter(e => (e.kind || "") === k); same.forEach((e, j) => { out[e.name] = [(j + 1) / (same.length + 1), (row + 1) / (kinds.length + 1)]; }); });
+  return out;
+}
+// 화면 좌표(clientX·Y)를 SVG 안 좌표로(끌기용)
+function svgPoint(svgEl, clientX, clientY) {
+  const p = svgEl.createSVGPoint();
+  [p.x, p.y] = [clientX, clientY];
+  return p.matrixTransform(svgEl.getScreenCTM().inverse());
+}
+// map: 배경(서버실 칸·네트워크·그림) 위에 엔티티를 상태 색 점으로. 끌어 옮기면 위치를 0~1 비율로 카드(view.positions)에 저장한다. 연결선은 view.links와 영향받는 대상
+function paintMap(card, colors, board) {
+  const v = card.data?.values, entities = v?.entities ?? [], W = 400, H = 260, view = card.view, bg = view.bg || "rack";
+  const pos = { ...autoGrid(entities), ...(view.positions ?? {}) }, root = svg("svg", { viewBox: `0 0 ${W} ${H}`, style: "width:100%;height:100%;touch-action:none" });
+  const back = svg("g", {}), lines = svg("g", {}), dots = svg("g", {});
+  if (bg === "rack") for (let i = 0; i < 6; i++) back.append(svg("rect", { x: 20 + i * 62, y: 14, width: 52, height: H - 28, rx: 4, fill: "none", stroke: colors.line, "stroke-width": 1.5 }));
+  else if (bg === "network") for (let i = 1; i < 10; i++) back.append(svg("line", { x1: i * 40, y1: 0, x2: i * 40, y2: H, stroke: colors.line, "stroke-dasharray": "2 6" }), svg("line", { x1: 0, y1: i * 26, x2: W, y2: i * 26, stroke: colors.line, "stroke-dasharray": "2 6" }));
+  else if (card.imageUrl) back.append(svg("image", { href: card.imageUrl, x: 0, y: 0, width: W, height: H, preserveAspectRatio: "xMidYMid meet" }));
+  else back.append(stext(W / 2, H / 2, board?.dashId ? "그림을 읽는 중…" : "카드를 저장하면 그림이 보여요", { "text-anchor": "middle", "font-size": 12, fill: colors.text }));
+  if (bg === "image" && !card.imageUrl && board?.dashId && !card.imageTried) {  // 그림은 저장된 카드의 경로로 서버에서 받아 blob 주소로 쓴다
+    card.imageTried = true;
+    fetch(`/api/dash/image?dash=${encodeURIComponent(board.dashId)}&card=${encodeURIComponent(card.id)}`).then(async r => {
+      if (!r.ok) throw new Error((await r.json()).error);
+      card.imageUrl = URL.createObjectURL(await r.blob());
+      board.draw();
+    }).catch(e => { card.imageTried = false; back.replaceChildren(stext(W / 2, H / 2, e.message, { "text-anchor": "middle", "font-size": 11, fill: levelColor("bad") })); });
+  }
+  const links = [...(view.links ?? []), ...entities.flatMap(e => (e.impact ?? []).map(t => [e.name, t]))];
+  const draw = () => {
+    lines.replaceChildren(...links.filter(([a, b]) => pos[a] && pos[b]).map(([a, b]) => svg("line", { x1: pos[a][0] * W, y1: pos[a][1] * H, x2: pos[b][0] * W, y2: pos[b][1] * H, stroke: colors.text, "stroke-width": 1.2, opacity: 0.6 })));
+    dots.replaceChildren(...entities.map(e => {
+      const [x, y] = [pos[e.name][0] * W, pos[e.name][1] * H], g = svg("g", { style: "cursor:grab" }, svg("circle", { cx: x, cy: y, r: e.level === "ok" ? 8 : 10, fill: levelColor(e.level), stroke: colors.card, "stroke-width": 2 }, svg("title", {}, `${e.name} · ${LEVEL_NAMES[e.level]}${e.since_text ? " · " + e.since_text : ""}${e.reasons.length ? " · " + e.reasons.join(", ") : ""}`)),
+        stext(x, y + 22, e.name, { "text-anchor": "middle", "font-size": 10, fill: colors.ink }));
+      g.onpointerdown = ev => {
+        try { g.setPointerCapture(ev.pointerId); } catch (e) { /* 포인터를 못 잡아도 끌기는 된다 */ }
+        const move = m => { const p = svgPoint(root, m.clientX, m.clientY); pos[e.name] = [clamp(p.x / W, 0, 1), clamp(p.y / H, 0, 1)]; draw(); };
+        const up = () => { g.removeEventListener("pointermove", move); g.removeEventListener("pointerup", up); view.positions = Object.fromEntries(Object.entries(pos).map(([k, p]) => [k, p.map(n => +n.toFixed(3))])); board?.changed?.(); };
+        g.addEventListener("pointermove", move); g.addEventListener("pointerup", up);
+      };
+      return g;
+    }));
+  };
+  draw();
+  root.append(back, lines, dots);
+  return entities.length ? root : box("alerts", el("div", { className: "hint", textContent: "엔티티가 없어요" }));
+}
+// deviation: 엔티티 × 시간대 표. 칸 = 값, 기준(view.baseline, 없으면 그 엔티티 평균) 대비 ±. 기준 넘는 칸(허용 폭 view.threshold, 없으면 기준의 20%)을 강조
+function deviationCells(values, baseline, threshold) {
+  const real = values.filter(v => v != null), base = baseline ?? (real.length ? real.reduce((a, b) => a + b, 0) / real.length : null), limit = threshold ?? (base == null ? 0 : Math.abs(base) * 0.2);
+  return { base, cells: values.map(v => v == null || base == null ? { v, dev: null, over: false } : { v, dev: v - base, over: Math.abs(v - base) > limit }) };
+}
+function paintDeviation(card, colors) {
+  const v = card.data?.values, view = card.view, fmt = cardFormat(card);
+  if (!v?.entities.length) return box("alerts", el("div", { className: "hint", textContent: "값이 없어요" }));
+  const label = b => String(b).replace(" 00:00:00", "").slice(0, view.bucket === "hour" || !view.bucket ? 16 : 10);
+  return box("deviation", el("table", {}, el("thead", {}, el("tr", {}, el("th", { textContent: "" }), el("th", { textContent: "기준" }), ...v.buckets.map(b => el("th", { textContent: label(b) })))),
+    el("tbody", {}, ...v.entities.map(e => { const d = deviationCells(e.values, view.baseline, view.threshold);
+      return el("tr", {}, el("th", { textContent: e.name }), el("td", { className: "num", textContent: showValue(d.base, fmt) }), ...d.cells.map(c => {
+        const td = el("td", { className: "num", textContent: c.v == null ? "" : showValue(c.v, fmt) }, c.dev == null ? "" : el("div", { className: "hint", textContent: (c.dev > 0 ? "+" : c.dev < 0 ? "−" : "±") + showValue(Math.abs(c.dev), fmt) }));
+        if (c.over) td.style.background = alpha(c.dev > 0 ? cssVar("--err") : colors.series[0], 0.3);
+        return td; })); }))));
+}
+// sentence: 사용자가 쓴 문장 틀의 {빈칸}에 값·직전·비교·기준일을 넣는다. 계산 못 한 빈칸은 —(이유는 마우스를 올리면). 빈칸에도 조건 색·화살표 규칙(규칙의 컬럼 = 빈칸 이름)
+function paintSentence(card, colors) {
+  const blanks = card.data?.values?.blanks ?? {}, view = card.view, compiled = compileRules(view.cond_rules, Object.fromEntries(Object.entries(blanks).map(([n, b]) => [n, b.kind === "value" || b.kind === "prev" ? "num" : "word"])));
+  const spans = templateParts(view.template).map(p => {
+    if (p.text != null) return document.createTextNode(p.text);
+    const b = blanks[p.blank];
+    if (!b) return el("span", { className: "blank err", textContent: "—", title: `‘${p.blank}’ 빈칸이 정의돼 있지 않아요` });
+    if (b.error) return el("span", { className: "blank err", textContent: "—", title: b.error });
+    const value = b.kind === "value" ? b.cur : b.kind === "prev" ? b.prev : b.text, rule = matchRule(compiled, p.blank, value);
+    const arrow = rule && ruleArrow(rule, b.cur, b.prev, view.better), span = el("span", { className: "blank", textContent: typeof value === "number" || value == null ? showValue(value, b.format) : String(value) });
+    if (rule) span.style.cssText = `background:${alpha(rule.color, 0.28)};border-radius:4px;padding:0 4px`;
+    if (arrow) span.append(el("span", { className: "carrow " + arrow.tone, textContent: " " + arrow.text, style: arrow.color ? `color:${arrow.color}` : "" }));
+    return span;
+  });
+  return box("summary", el("div", { className: "sum-text" }, ...spans));
+}
+
+const PAINTERS = { kpi: paintKpi, donut_kpi: paintDonut, gauge: paintGauge, summary: paintSummary, recent_rows: paintRecent, dual_trend: paintDual, stripes: paintStripes, blocks: paintBlocks, target_trend: paintTargetTrend,
+                   table: paintTable, status: paintStatus, sentence: paintSentence, alerts: paintAlerts, map: paintMap, deviation: paintDeviation };
 // 카드 하나를 그린 요소(없는 값이면 안내). board는 비교 문장·연결 열쇠·다시 그리기를 위해 받는다.
 const paintCard = (card, colors, board) => card.data && (card.data.by_unit || card.data.values || card.data.columns) ? PAINTERS[card.kind](card, colors, board) : box("summary", el("div", { className: "sum-text", textContent: "아직 구한 값이 없어요" }));

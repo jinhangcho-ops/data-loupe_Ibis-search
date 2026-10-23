@@ -98,6 +98,12 @@ def db(folder, tmp_path):
     raw = duckdb.connect(str(tmp_path / "s.duckdb"))
     raw.execute("create table orders (day date, store varchar, amt double, uid varchar)")
     raw.executemany("insert into orders values (?, ?, ?, ?)", [tuple(r) for r in DF.iter_rows()])
+    stamp = lambda minutes: dt.datetime.now() - dt.timedelta(minutes=minutes)  # 지금 기준(끊김 규칙이 실제 지금 시각을 쓴다)
+    raw.execute("create table nodes (name varchar, kind varchar, cpu double, seen timestamp, peer varchar)")
+    raw.executemany("insert into nodes values (?, ?, ?, ?, ?)", [("a", "서버", 99.0, stamp(1), "b"), ("b", "서버", 10.0, stamp(2), None), ("c", "라우터", 10.0, stamp(120), "a")])
+    raw.execute("create table temps (host varchar, ts timestamp, val double)")
+    raw.executemany("insert into temps values (?, ?, ?)", [("x", dt.datetime(2026, 1, 1, 9, 5), 10.0), ("x", dt.datetime(2026, 1, 1, 9, 50), 20.0), ("x", dt.datetime(2026, 1, 1, 10, 5), 30.0),
+                                                          ("y", dt.datetime(2026, 1, 1, 10, 30), 7.0)])
     raw.close()
     c = app.test_client()
     c.get("/?key=" + server.KEY)
@@ -303,3 +309,69 @@ def test_metric_kpi_has_pair_amounts(db, tmp_path):
 def test_recent_rows_stores_columns_only(db):
     data = compute(db, card=card("recent_rows", body={"base": "orders"}))["data"]
     assert data["columns"] == ["day", "store", "amt", "uid"] and set(data) <= {"columns", "computed_at", "def_hash"}
+
+
+# ---------- 3단계 B: 표·문장·상태·경고·편차, 고유 개수 기간 값 ----------
+RANGE = {"range": {"start": "2026-01-12", "end": "2026-02-02"}, "prev": {"start": "2025-12-21", "end": "2026-01-11", "text": "직전 22일"}}
+
+
+def test_table_card_groups_rows_and_previous_period(db):
+    c = value_card("table", SUM, "day", {"group_cols": ["store"]})
+    data = compute(db, card=c, ctx=RANGE)["data"]["values"]
+    assert data["columns"] == [{"name": "store", "kind": "group"}, {"name": "합계 (amt)", "kind": "value", "agg": "sum"}] and data["rows"] == [["A", 40], ["B", 50]]
+    assert data["prev"] == {"A": [60], "B": [5]} and data["more"] is False  # 직전 기간 값(▲▼ 칸용)
+    whole = compute(db, card=value_card("table", SUM, view={"group_cols": ["store"]}))["data"]["values"]
+    assert whole["rows"] == [["A", 100], ["B", 55]] and whole["prev"] is None
+    total = compute(db, card=value_card("table", [*SUM, {"y": None, "agg": "count"}]))["data"]["values"]
+    assert total["rows"] == [[155, 7]]  # 묶음 컬럼이 없으면 한 줄
+    raw = compute(db, card=card("table", body={"base": "orders"}))["data"]
+    assert raw["columns"] == ["day", "store", "amt", "uid"] and "values" not in raw  # 원래 행 표는 값을 저장하지 않는다
+    assert "묶음 컬럼" in compute(db, card=value_card("table", SUM, view={"group_cols": ["nope"]}))["error"]
+
+
+def test_sentence_blanks(db):
+    view = {"template": "{매출}은 {비교}, {전}에서, {기준일} 기준", "compare": {"mode": "span"}, "better": "up", "blanks": [
+        {"name": "매출", "y": "amt", "agg": "sum", "kind": "value", "format": "currency"}, {"name": "전", "y": "amt", "agg": "sum", "kind": "prev"},
+        {"name": "비교", "y": "amt", "agg": "sum", "kind": "delta"}, {"name": "기준일", "kind": "asof"}, {"name": "나쁨", "y": "store", "agg": "sum", "kind": "value"}]}
+    c = value_card("sentence", SUM, "day", view)
+    blanks = compute(db, card=c, ctx=RANGE)["data"]["values"]["blanks"]
+    assert blanks["매출"]["cur"] == 90 and blanks["전"]["cur"] == 90 and blanks["전"]["prev"] == 65 and "직전 22일보다 38.5% 늘었어요" in blanks["비교"]["text"]
+    assert blanks["기준일"]["text"] == "2026-02-02" and "숫자 컬럼" in blanks["나쁨"]["error"]  # 계산 못 하는 빈칸은 이유만
+
+
+def test_nunique_over_selected_period_is_recomputed(db):
+    uniq = [{"y": "uid", "agg": "nunique"}, *SUM]
+    c = value_card("kpi", uniq, "day")
+    got = compute(db, card=c, ctx={"range": {"start": "2026-01-05", "end": "2026-01-06"}})["data"]
+    assert got["values"]["window_nunique"] == {"start": "2026-01-05", "end": "2026-01-06", "values": {"0": 3}}  # u1·u2·u3
+    assert "values" not in compute(db, card=c)["data"]  # 기간이 없으면 따로 구하지 않는다
+    assert "values" not in compute(db, card=value_card("kpi", SUM, "day"), ctx=RANGE)["data"]
+
+
+def test_watch_cards_status_since_and_impact(db):
+    view = {"entity": "name", "time_col": "seen", "kind_col": "kind", "link_col": "peer", "stale": 30, "rules": [{"column": "cpu", "op": ">=", "value": 95, "level": "bad"}], "links": [["b", "z"]]}
+    c = card("status", body={"base": "nodes"})
+    c["view"] = view
+    first = compute(db, card=c)["data"]
+    got = {e["name"]: e for e in first["values"]["entities"]}
+    assert {n: e["level"] for n, e in got.items()} == {"a": "bad", "b": "ok", "c": "bad"} and first["values"]["counts"] == {"ok": 1, "warn": 0, "bad": 2}  # a는 cpu, c는 끊김
+    assert got["a"]["impact"] == ["b"] and got["c"]["impact"] == [] and got["a"]["kind"] == "서버" and set(first["since"]) == {"a", "c"}
+    assert "마지막 데이터" in first["values"]["fresh"]
+    again = compute(db, card={**c, "data": {"since": first["since"]}})["data"]
+    assert again["since"] == first["since"]  # 계속 나쁘면 처음 나빠진 시각 그대로
+    assert "엔티티" in compute(db, card=card("alerts", body={"base": "nodes"}))["error"]
+
+
+def test_deviation_table_buckets_and_entities(db):
+    c = card("deviation", body={"base": "temps", "series": [{"y": "val", "agg": "mean"}]})
+    c["source"]["date"] = "ts"
+    c["view"] = {"entity": "host", "bucket": "hour"}
+    data = compute(db, card=c)["data"]["values"]
+    assert data["buckets"] == ["2026-01-01 09:00:00", "2026-01-01 10:00:00"] and data["entities"] == [{"name": "x", "values": [15, 30]}, {"name": "y", "values": [None, 7]}]
+    daily = card("deviation", body={"base": "orders", "series": SUM})
+    daily["source"]["date"] = "day"
+    daily["view"] = {"entity": "store", "bucket": "hour"}
+    assert "시간대(시)" in compute(db, card=daily)["error"]
+    daily["view"] = {"entity": "store", "bucket": "month"}
+    month = compute(db, card=daily)["data"]["values"]
+    assert month["buckets"] == ["2026-01-01", "2026-02-01"] and month["entities"] == [{"name": "A", "values": [100, None]}, {"name": "B", "values": [5, 50]}]

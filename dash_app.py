@@ -2,8 +2,9 @@
 카드 값을 구하는 /api/dash/card/compute와 /api/dash/cards/compute만 연결에서 구한다(차례를 기다린다). 최신화는 dash_refresh의 작업 스레드가 한다."""
 import datetime as dt
 import time
+from pathlib import Path
 
-from flask import jsonify, request
+from flask import Response, jsonify, request
 
 import compare
 import dash_calc
@@ -20,9 +21,11 @@ server.CONSTANTS["dash"] = {"max_cards": dash_store.MAX_CARDS, "max_dashboards":
                             "types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS,
                             "palette": dash_store.DEFAULT_PALETTE, "locked": dash_store.LOCKED, "min_refresh": dash_refresh.MIN_REFRESH}  # 화면(dash.js)이 서버와 같은 상한·종류·기본 색을 쓴다
 server.CONSTANTS["dash"]["max_points"] = dash_calc.MAX_POINTS  # 산점도·버블의 점 수 상한
+IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml"}  # 배치도 바탕 그림으로 내려줄 수 있는 것
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min", "/api/dash/refresh/start",
-                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets"})
+                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image"})
 
 
 def with_source(card):
@@ -215,3 +218,21 @@ def targets_set():
         targets.read(path)
     settings.write(dash_calc.TARGETS_FILE, {"path": path})
     return targets_get()
+
+
+@app.get("/api/dash/image")
+def dash_image():
+    """배치도 카드(map, 바탕 image)에 저장된 그림 파일 경로의 png·jpg·svg를 8MB까지 내려준다. 경로는 저장된 카드의 것만 쓰고(요청이 정하지 않는다) 그 밖의 파일은 주지 않는다.
+    ?dash=대시보드 id&card=카드 id."""
+    d = dash_store.get_dashboard(request.args.get("dash"))
+    card = next((c for c in d["cards"] if c["id"] == request.args.get("card")), None)
+    if card is None or card["kind"] != "map" or card["view"].get("bg") != "image" or not card["view"].get("image_path"):
+        raise ValueError("그림 바탕이 정해진 배치도 카드가 아닙니다. 카드를 저장한 뒤 다시 여세요.")
+    path = Path(card["view"]["image_path"])
+    if path.suffix.lower() not in IMAGE_TYPES:
+        raise ValueError("그림은 png·jpg·svg 파일만 쓸 수 있어요.")
+    if not path.is_file():
+        raise ValueError("그림 파일을 찾을 수 없어요. 경로를 확인해 주세요.")
+    if path.stat().st_size > MAX_IMAGE_BYTES:
+        raise ValueError(f"그림은 {MAX_IMAGE_BYTES // 1024 // 1024}MB까지 쓸 수 있어요.")
+    return Response(path.read_bytes(), mimetype=IMAGE_TYPES[path.suffix.lower()], headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "Cache-Control": "no-store"})

@@ -199,6 +199,51 @@ assert.deepStrictEqual(cardDays(kpi), [{ day: "2026-01-12", v: 40 }, { day: "202
 assert.deepStrictEqual(cardDays({ ...kpi, view: { window: { from: "2026-02-01", to: "2026-02-28" } } }), [{ day: "2026-02-02", v: 50 }]);  // 보는 구간
 assert.strictEqual(cardValue({ kind: "kpi", data: { values: { scalar: [7, 8] } } }, 1), 8); assert.strictEqual(cardFormat({ view: {}, data: { values: { format: "percent" } } }), "percent");
 assert(!noValues({ kind: "kpi", data: { values: { scalar: [1] } } }) && noValues({ kind: "kpi", data: {} }) && !noValues({ kind: "recent_rows", data: { columns: ["a"] } }) && noValues({ kind: "chart", data: {} }));
+// 조건 색 규칙(dash_rules.js): 숫자·단어 식, 맞는 칸만, 위의 규칙 하나, 오류 문장, 화살표
+const m = (text, v) => { const f = parseMatch(text); assert(!f.error, text + ": " + f.error); return f.test(v); };
+assert(m("= 0", 0) && !m("= 0", 1) && m("> 100", 101) && !m("> 100", 100) && m(">= 1,000", 1000) && !m(">= 1,000", 999) && m("<= 5", 5) && m("!= 5", 4));
+assert(m("< -5%", -0.06) && !m("< -5%", -0.05) && m("10 ~ 20", 10) && m("10 ~ 20", 20) && !m("10 ~ 20", 21) && m("20 ~ 10", 15));  // %는 비율, 사이는 양끝 포함
+assert(m("1, 3, 7", 3) && !m("1, 3, 7", 4) && m("1,000", 1000) && !m("1,000", 1));  // 목록, 1,000은 천 단위 숫자 하나
+assert(m("취소", "취소") && !m("취소", "취소선") && m("취소, 환불", "환불") && !m("취소, 환불", "배송") && m("취소", "취소".toLowerCase()));
+assert(m("*지연*", "a지연b") && !m("*지연*", "정상") && m("ERR*", "err001") && !m("ERR*", "xerr") && m("*실패", "로그인 실패") && !m("*실패", "실패 처리"));  // 포함·시작·끝, 대소문자 무시
+for (const [bad, why] of [["", "식을 적어"], ["> abc", "숫자가 아니에요"], ["10 ~ x", "양쪽은 숫자"], ["*", "앞뒤에만"], ["a*b*", "앞뒤에만"], [">", "숫자가 아니에요"]]) assert.match(parseMatch(bad).error, new RegExp(why), bad);
+assert.strictEqual(ruleNumber("₩1,234.5"), 1234.5); assert.strictEqual(ruleNumber("70%"), 0.7); assert.strictEqual(ruleNumber("1,3"), null); assert.strictEqual(ruleNumber("abc"), null);
+const rules = [{ column: "상태", match: "*지연*", color: "#e03131", arrow: "none", scope: "row" }, { column: "금액", match: "> 100", color: "#2b8a3e", arrow: "auto", scope: "cell" }, { column: "금액", match: "> 10", color: "#f08c00", arrow: "up", scope: "cell" },
+               { column: "금액", match: "취소", color: "#000000", arrow: "none", scope: "cell" }, { column: "건수", match: "= 0", color: "red", arrow: "none", scope: "cell" }];
+const compiled = compileRules(rules, { 상태: "word", 금액: "num", 건수: "num" });
+assert.deepStrictEqual(compiled.map(c => !!c.error), [false, false, false, true, true]);  // 숫자 칸에 단어 식, 틀린 HEX는 오류
+assert.match(compiled[3].error, /숫자 칸이라 단어 식은 쓸 수 없어요/); assert.match(compiled[4].error, /HEX가 아니에요/);
+assert.match(compileRule({ column: "상태", match: "> 1", color: "#fff" }, { 상태: "word" }).error, /글자 칸이라 숫자 식은 쓸 수 없어요/);
+assert.strictEqual(matchRule(compiled, "금액", 150), rules[1]);  // 여러 규칙이 맞으면 위의 규칙 하나
+assert.strictEqual(matchRule(compiled, "금액", 50), rules[2]); assert.strictEqual(matchRule(compiled, "금액", 5), null);  // 맞지 않는 칸은 그대로
+assert.strictEqual(matchRule(compiled, "상태", "배송 지연"), rules[0]); assert.strictEqual(matchRule(compiled, "상태", 7), null);  // 숫자 값에는 단어 식이 맞지 않는다
+assert.strictEqual(matchRule(compiled, "건수", 0), null); assert.strictEqual(matchRule(compiled, "금액", null), null); assert.strictEqual(matchRule(compiled, "없는 컬럼", 1), null);
+assert.deepStrictEqual(ruleArrow(rules[1], 150, 100), { text: "▲", color: "#2b8a3e", tone: "good" }); assert.strictEqual(ruleArrow(rules[1], 150, 100, "down").tone, "bad");
+assert.deepStrictEqual(ruleArrow(rules[1], 80, 100), { text: "▼", color: "#2b8a3e", tone: "bad" }); assert.deepStrictEqual(ruleArrow(rules[1], 100, 100), { text: "–", color: "#2b8a3e", tone: "neutral" });
+assert.strictEqual(ruleArrow(rules[1], 150, null), null); assert.strictEqual(ruleArrow(rules[0], 1, 0), null); assert.strictEqual(ruleArrow(rules[2], 1, 5).text, "▲"); assert.strictEqual(ruleArrow({ ...rules[2], arrow: "down", color: "" }, 1, 5).color, null);
+assert.deepStrictEqual([kindOfValues([null, "", 3]), kindOfValues(["a"]), kindOfValues([null])], ["num", "word", null]);
+assert.deepStrictEqual(parseRuleLine("상태 | *지연* | #e03131 | 자동 | 줄").rule, { column: "상태", match: "*지연*", color: "#e03131", arrow: "auto", scope: "row" });
+assert.strictEqual(parseRuleLine("금액 | > 1 | #fff").rule.arrow, "none");
+for (const [bad, why] of [["금액 | > 1", "모양으로"], [" | > 1 | #fff", "컬럼 이름"], ["금액 | > 1 | #fff | 옆", "화살표"], ["금액 | > 1 | #fff | 위 | 열", "적용 범위"], ["금액 | > x | #fff", "숫자가 아니에요"], ["금액 | > 1 | 빨강", "HEX"]]) assert.match(parseRuleLine(bad).error, new RegExp(why), bad);
+assert.deepStrictEqual(parseStateLine("cpu >= 90 이상").rule, { column: "cpu", op: ">=", value: 90, level: "bad" }); assert.deepStrictEqual(parseStateLine("상태 = DOWN 주의").rule, { column: "상태", op: "=", value: "DOWN", level: "warn" });
+assert.match(parseStateLine("cpu 90").error, /모양으로/); assert.match(parseStateLine("cpu > 9 심각").error, /단계는 주의나 이상/);
+assert.deepStrictEqual(parseLinkLine("a -> b").link, ["a", "b"]); assert.deepStrictEqual(parseLinkLine("라우터 → 서버 1").link, ["라우터", "서버 1"]); assert.match(parseLinkLine("a b").error, /출발/);
+assert.deepStrictEqual(parseBlankLine("매출 = 값 amt sum 금액").blank, { name: "매출", kind: "value", y: "amt", agg: "sum", format: "currency" }); assert.deepStrictEqual(parseBlankLine("기준 = 기준일").blank, { name: "기준", kind: "asof", y: "", agg: "count", format: "number" });
+assert.strictEqual(parseBlankLine("전 = 직전 amt").blank.agg, "sum"); assert.match(parseBlankLine("매출 = 합 amt").error, /종류는/); assert.match(parseBlankLine("매출 = 값 amt avg").error, /집계는/); assert.match(parseBlankLine("매출").error, /모양으로/);
+assert.deepStrictEqual(readLines(["a -> b", "", "나쁨", "c -> d"].join(String.fromCharCode(10)), parseLinkLine).map(r => r.link ?? r.error.slice(0, 2)), [["a", "b"], "‘출", ["c", "d"]]);
+assert.deepStrictEqual(templateParts("오늘 {매출}은 {비교}"), [{ text: "오늘 " }, { blank: "매출" }, { text: "은 " }, { blank: "비교" }]);
+// 배치도 처음 배치(종류별 줄), 편차 칸, 고유 개수의 기간 값
+assert.deepStrictEqual(autoGrid([{ name: "a", kind: "서버" }, { name: "b", kind: "서버" }, { name: "c", kind: "스위치" }, { name: "d" }]), { a: [1 / 3, 1 / 4], b: [2 / 3, 1 / 4], c: [1 / 2, 2 / 4], d: [1 / 2, 3 / 4] });  // 종류마다 한 줄, 줄 안에서 고르게
+assert.deepStrictEqual(autoGrid([]), {});
+const dev = deviationCells([10, 20, null, 30], null, null);  // 기준 = 평균 20, 허용 폭 = 기준의 20% = 4
+near(dev.base, 20); assert.deepStrictEqual(dev.cells.map(c => [c.v, c.dev, c.over]), [[10, -10, true], [20, 0, false], [null, null, false], [30, 10, true]]);
+assert.deepStrictEqual(deviationCells([10, 12], 10, 3).cells.map(c => c.over), [false, false]); assert.deepStrictEqual(deviationCells([10, 14], 10, 3).cells.map(c => c.over), [false, true]); assert.strictEqual(deviationCells([null], null, null).base, null);
+const unique = { kind: "kpi", colors: fc(), view: {}, range: { start: "2026-01-05", end: "2026-01-06" }, data: { by_unit: by, values: { window_nunique: { start: "2026-01-05", end: "2026-01-06", values: { 4: 3 } } } } };
+assert.strictEqual(cardValue(unique, 4), 3);  // 서버가 이 기간으로 따로 구한 고유 개수
+assert.strictEqual(cardValue({ ...unique, range: { start: "2026-01-05", end: "2026-01-12" } }, 4), null);  // 기간이 바뀌면 값이 없다(다시 구해야 함)
+assert.strictEqual(cardValue({ ...unique, range: { start: "2026-01-06", end: "2026-01-06" } }, 4), 2);  // 하루 값은 일 값 그대로
+assert.strictEqual(cardValue({ ...unique, range: { start: "2027-01-01", end: "2027-01-31" } }, 4), null);
+assert.strictEqual(cardValue(unique, 0), 65);  // 합계 계열은 일 값을 묶는다
 console.log("ok");
 """
 
@@ -207,7 +252,7 @@ def test_dash_js(tmp_path):
     dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE}, ensure_ascii=False)
     script = tmp_path / "dash_test.js"
     script.write_text((ROOT / "static" / "board.js").read_text(encoding="utf-8") + (ROOT / "static" / "dash.js").read_text(encoding="utf-8")
-                      + (ROOT / "static" / "dash_cards.js").read_text(encoding="utf-8")
+                      + (ROOT / "static" / "dash_cards.js").read_text(encoding="utf-8") + (ROOT / "static" / "dash_rules.js").read_text(encoding="utf-8")
                       + SCRIPT.replace("%(dash)s", json.dumps(dash, ensure_ascii=False)), encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr[-3000:]

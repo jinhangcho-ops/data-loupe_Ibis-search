@@ -81,3 +81,22 @@ def test_images_cancel_and_checks(client, monkeypatch, tmp_path):
 def test_board_settings(folder, name, value):
     settings.save({name: value})
     assert settings.load()[name] == value
+
+
+def test_map_image_only_from_the_card_path(client, tmp_path):
+    png = tmp_path / "room.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\n" + b"0" * 20)
+    secret = tmp_path / "secret.txt"
+    secret.write_text("비밀", encoding="utf-8")
+    body = {"base": "t"}
+    mk = lambda path, bg="image", kind="map": {"kind": kind, "title": "배치도", "view": {"bg": bg, "image_path": str(path)}, "source": {"body": body}}
+    d = post(client, "/api/dash", name="그림", cards=[mk(png), mk(secret), mk(tmp_path / "없음.png"), mk(png, bg="rack"), mk(png, kind="status")])["dashboard"]
+    ids = [c["id"] for c in d["cards"]]
+    got = client.get(f"/api/dash/image?dash={d['id']}&card={ids[0]}")
+    assert got.status_code == 200 and got.mimetype == "image/png" and got.data.startswith(b"\x89PNG") and "sandbox" in got.headers["Content-Security-Policy"]
+    for i, message in ((1, "png·jpg·svg"), (2, "찾을 수 없"), (3, "그림 바탕이 정해진"), (4, "그림 바탕이 정해진")):
+        assert message in client.get(f"/api/dash/image?dash={d['id']}&card={ids[i]}").get_json()["error"]
+    assert "그림 바탕이 정해진" in client.get(f"/api/dash/image?dash={d['id']}&card=nope").get_json()["error"]
+    assert "찾을 수 없" in client.get("/api/dash/image?dash=nope&card=x").get_json()["error"]
+    png.write_bytes(b"0" * (8 * 1024 * 1024 + 1))
+    assert "8MB" in client.get(f"/api/dash/image?dash={d['id']}&card={ids[0]}").get_json()["error"]  # 8MB 넘는 그림은 거부

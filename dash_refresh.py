@@ -15,7 +15,7 @@ import source
 MIN_REFRESH = 3600  # 최신화 주기의 최소(초)
 LIVE_FILE = "live_min.json"  # {source_key: 실시간 간격 최소(초)}
 MAX_LIVE_MIN = 86400
-REFRESHABLE = ("chart", "analysis", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend")  # 지금 다시 구할 수 있는 카드 종류
+REFRESHABLE = ("chart", "analysis", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation")  # 지금 다시 구할 수 있는 카드 종류
 JOB = {"running": False, "total": 0, "done": 0, "current": "", "results": []}  # 마지막 최신화 작업의 상태(status가 복사해 준다)
 LOCK = threading.Lock()
 STOP = threading.Event()
@@ -190,7 +190,7 @@ def work(plan, now):
                 JOB["current"] = card["title"]
             try:
                 with core.using():
-                    data = dash_calc.compute(dash_store.check_card({**card, "data": {}}), now.isoformat(timespec="seconds"), context(d))
+                    data = dash_calc.compute(dash_store.check_card({**card, "data": {k: v for k, v in (card.get("data") or {}).items() if k == "since"}}), now.isoformat(timespec="seconds"), context(d))
                 if not dash_store.set_card_data(d["id"], card["id"], data):
                     raise ValueError("그사이 지운 카드예요")
                 outcome = ("ok", "")

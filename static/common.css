@@ -222,6 +222,17 @@ tr.miss { display:none; }
 .sum-bar span { position:absolute; left:0; top:16px; margin:0; }
 .cbox.recent table { font-size:12px; }
 .bset { display:inline-flex; gap:4px; align-items:center; margin:0; }
+.cbox.table table, .cbox.deviation table { font-size:12px; border-collapse:collapse; }
+.cbox.table th, .cbox.table td, .cbox.deviation th, .cbox.deviation td { padding:3px 8px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+.cbox td.num { text-align:right; font-variant-numeric:tabular-nums; }
+.carrow.good { color:var(--ok); } .carrow.bad { color:var(--err); } .carrow.neutral { color:var(--muted); }
+.ctotal td { font-weight:700; border-top:2px solid var(--line); }
+.badges { display:flex; gap:8px; flex-wrap:wrap; }
+.badge { border:1.5px solid; border-radius:999px; padding:2px 12px; font-size:13px; }
+.badge b { font-size:18px; }
+.alert { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:13px; padding:3px 0; border-bottom:1px solid var(--line); }
+.blank { font-weight:700; }
+.blank.err { color:var(--err); }
 .bcmp { margin:4px 0 0; font-size:12.5px; font-weight:600; color:var(--muted); }
 .bcmp.good { color:var(--ok); }
 .bcmp.bad { color:var(--err); }
