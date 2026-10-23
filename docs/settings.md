@@ -61,7 +61,7 @@
 
 | DB | 주소 예 |
 |---|---|
-| PostgreSQL / MySQL | `postgres://host:5432/db` / `mysql://host:3306/db` |
+| PostgreSQL([Supabase](supabase.md)) / MySQL | `postgres://host:5432/db` / `mysql://host:3306/db` |
 | MSSQL | `mssql://host:1433/db` ([ODBC Driver 17/18](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) 필요. 아이디·비밀번호를 비우면 Windows 로그인) |
 | Oracle / ClickHouse / Trino | `oracle://host:1521/db` / `clickhouse://host:8123/db` / `trino://host:8080/catalog/schema` |
 | Snowflake | `snowflake://계정/데이터베이스/스키마?warehouse=WH` |

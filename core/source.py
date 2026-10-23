@@ -187,16 +187,42 @@ def open_flat_files(paths):
 CONNECT_TIMEOUT = 60  # 주소로 접속할 때 기다리는 시간(초). 틀린 주소에서 드라이버가 몇 분씩 붙잡는 것을 막는다.
 
 
+def without_placeholder(url):
+    """비밀번호 자리 `[YOUR-PASSWORD]`(Supabase 대시보드 문자열)를 뺀다. 대괄호가 있으면 urlsplit이 주소를 IPv6로 보고 실패하므로 주소를 처음 받는 곳에서 부른다."""
+    return re.sub(r":\[[^\]@/?#]*\](?=@)", "", url, count=1)
+
+
+def clean_url(url, user="", password=""):
+    """붙여넣은 주소를 접속용으로 다듬어 (주소, 아이디, 비밀번호)를 돌려준다.
+    비밀번호 자리 `[YOUR-PASSWORD]`는 뺀다(비밀번호는 칸에서 받는다).
+    주소에 아이디·비밀번호가 있는데 칸에도 썼으면 칸 쪽을 쓴다(칸이 빈 쪽만 주소 값으로 채운다)."""
+    url = without_placeholder(url)
+    parts = urlsplit(url)
+    if parts.username is not None and (user or password):
+        user, password = user or parts.username, password or unquote(parts.password or "")
+        url = parts._replace(netloc=parts.netloc.rpartition("@")[2]).geturl()
+    return url, user, password
+
+
 def open_url(url, user="", password=""):
     """duckdb://, mssql://, postgres:// 등 Ibis가 지원하는 주소로 접속한다.
     드라이버를 먼저 확인하고, 아이디·비밀번호는 입력한 것만 주소에 넣는다(비밀번호 특수문자는 인코딩)."""
+    url, user, password = clean_url(url, user, password)
     extra = drivers.prepare(url, password)
     if user or password:
         parts = urlsplit(url)
         login = user + (":" + quote_plus(password, safe="") if password else "")
         url = parts._replace(netloc=f"{login}@{parts.netloc}").geturl()
     late = f"{CONNECT_TIMEOUT}초 안에 연결되지 않았습니다. 주소와 네트워크를 확인하세요."
-    return within(CONNECT_TIMEOUT, lambda: ibis.connect(url, **extra), late, drop=close)
+
+    def connect():
+        try:
+            return ibis.connect(url, **extra)
+        except Exception as e:
+            if type(e).__name__ == "ConnectionTimeout":  # psycopg: connect_timeout(drivers.PG_WAIT)을 넘김
+                raise TimeoutError("접속 대기 시간 안에 연결되지 않았습니다. 주소·포트와 네트워크를 확인하세요.") from e
+            raise
+    return within(CONNECT_TIMEOUT, connect, late, drop=close)
 
 
 beside = None  # side 연결로 함께 돌리는 일을 맡는 스레드 하나(처음 쓸 때 만든다)

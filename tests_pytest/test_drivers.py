@@ -152,3 +152,68 @@ def test_drivers_route(client):
     items = res.get_json()["drivers"]
     assert res.status_code == 200 and len(items) == len(drivers.keys()) and all(d["command"] for d in items)
     assert "/api/drivers" in server.FREE
+
+
+def test_supabase_entry_borrows_postgres():
+    info = drivers.entry("supabase")
+    assert info["group"] == "DB" and "pooler.supabase.com:5432" in info["address"] and "Session pooler" in info["explanation"]
+    assert "[postgres]" in info["command"] and "6543" in info["explanation"]
+
+
+@pytest.mark.parametrize("url,expected", [
+    ("postgres://u@aws-0-ap.pooler.supabase.com:5432/postgres", {"connect_timeout": drivers.PG_WAIT}),
+    ("postgres://u@aws-0-ap.pooler.supabase.com:6543/postgres", {"connect_timeout": drivers.PG_WAIT, "prepare_threshold": None}),
+    ("postgres://u@h:5432/postgres?pgbouncer=true", {"connect_timeout": drivers.PG_WAIT, "prepare_threshold": None, "pgbouncer": None}),
+    ("postgres://u@h:5432/postgres?connect_timeout=3", {}),  # 주소에 있으면 그것을 쓴다
+])
+def test_prepare_pooler_turns_off_prepared_statements(url, expected):
+    assert drivers.prepare(url) == expected
+
+
+def test_open_url_supabase_paste(monkeypatch):
+    """붙여넣은 문자열의 [YOUR-PASSWORD]는 빠지고, 칸의 비밀번호가 들어가며, 6543이면 prepare_threshold=None, sslmode는 주소에 그대로 남는다."""
+    from core import source
+    seen = []
+    monkeypatch.setattr(source.ibis, "connect", lambda url, **kw: seen.append((url, kw)) or "con")
+    monkeypatch.setattr(source, "within", lambda seconds, work, *a, **k: work())
+    for port in (5432, 6543):
+        source.open_url(f"postgresql://postgres.abc:[YOUR-PASSWORD]@aws-0-ap.pooler.supabase.com:{port}/postgres?sslmode=require", "", "p@ss")
+    (url1, kw1), (url2, kw2) = seen
+    assert url1 == "postgresql://postgres.abc:p%40ss@aws-0-ap.pooler.supabase.com:5432/postgres?sslmode=require" and kw1 == {"connect_timeout": drivers.PG_WAIT}
+    assert "YOUR-PASSWORD" not in url2 and kw2 == {"connect_timeout": drivers.PG_WAIT, "prepare_threshold": None}
+
+
+def test_postgres_timeout_reads_in_korean(monkeypatch):
+    """psycopg의 ConnectionTimeout(영어)은 한국어 안내로 바뀐다."""
+    from core import source
+    ConnectionTimeout = type("ConnectionTimeout", (Exception,), {})
+    monkeypatch.setattr(source.ibis, "connect", lambda url, **kw: (_ for _ in ()).throw(ConnectionTimeout("connection timeout expired")))
+    monkeypatch.setattr(source, "within", lambda seconds, work, *a, **k: work())
+    with pytest.raises(TimeoutError, match="접속 대기 시간 안에"):
+        source.open_url("postgres://u@h:5432/db")
+
+
+def test_psycopg_gets_prepare_threshold_and_sslmode(monkeypatch):
+    """ibis.connect가 주소 쿼리와 추가 인자를 psycopg.connect로 넘기는지(psycopg.connect는 가짜)."""
+    import ibis
+    import psycopg
+    got = {}
+    monkeypatch.setattr(psycopg, "connect", lambda **kw: got.update(kw) or (_ for _ in ()).throw(RuntimeError("stop")))
+    with pytest.raises(RuntimeError):
+        ibis.connect("postgres://u:pw@h:6543/db?sslmode=require", prepare_threshold=None)
+    assert got["sslmode"] == "require" and got["prepare_threshold"] is None and got["port"] == 6543
+
+
+def test_clean_url_without_placeholder_untouched():
+    from core import source
+    assert source.clean_url("postgres://u@h:5432/db") == ("postgres://u@h:5432/db", "", "")
+    assert source.clean_url("postgres://u:real@h/db") == ("postgres://u:real@h/db", "", "")
+
+
+def test_connect_route_strips_placeholder_before_anything_parses_it(client, monkeypatch):
+    """[YOUR-PASSWORD]가 든 주소가 passwords()·recent()의 urlsplit에서 터지지 않는다(대괄호는 IPv6 표기로 읽힌다)."""
+    seen = []
+    monkeypatch.setattr(server, "open_con", lambda info, read_only=True: seen.append(info) or (_ for _ in ()).throw(ValueError("거부")))
+    res = client.post("/api/connect", json={"kind": "url", "url": "postgresql://postgres.a:[YOUR-PASSWORD]@127.0.0.1:6543/x", "password": "x"})
+    assert res.status_code == 400 and res.get_json()["error"] == "거부"
+    assert seen[0]["url"] == "postgresql://postgres.a@127.0.0.1:6543/x"

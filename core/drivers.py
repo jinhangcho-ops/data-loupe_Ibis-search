@@ -68,6 +68,9 @@ DETAILS = {
 BORROWED = {
     "redshift": ("Amazon Redshift", "DW", "postgres", "postgres://host:5439/db",
                  "AWS의 웨어하우스입니다. PostgreSQL 방식으로 접속하므로 postgres 드라이버를 씁니다(주소도 postgres://)."),
+    "supabase": ("Supabase", "DB", "postgres", "postgres://postgres.프로젝트ref@aws-0-리전.pooler.supabase.com:5432/postgres",
+                 "Supabase(PostgreSQL)입니다. postgres 드라이버(psycopg)를 씁니다. 대시보드 Connect에서 Session pooler 주소(5432)를 복사해 붙여넣고 비밀번호는 칸에 따로 쓰세요. "
+                 "Direct(db.<ref>.supabase.co:5432)는 무료 플랜에서 IPv6 전용이라 네트워크에 따라 안 붙을 수 있고, Transaction pooler(포트 6543)는 prepared statement를 끄고 접속합니다. 읽기 전용 계정을 권장합니다."),
     "synapse": ("Azure Synapse", "DW", "mssql", "mssql://host:1433/db",
                 "Azure의 웨어하우스입니다. SQL Server 방식으로 접속하므로 mssql 드라이버와 ODBC 프로그램을 씁니다."),
 }
@@ -249,6 +252,22 @@ def missing(db, program):
     return ValueError(f"{db} 접속에 필요한 {name}가 이 PC에 없습니다. 다운로드: {url}")
 
 
+POOLER_PORT = 6543  # Supabase Transaction pooler(PgBouncer) 포트
+PG_WAIT = 10  # PostgreSQL 접속을 기다리는 초(주소의 connect_timeout이 있으면 그것)
+
+
+def pooler_args(url):
+    """Transaction pooler(포트 6543이거나 주소에 pgbouncer 표시)는 접속마다 서버가 바뀌어 prepared statement를 못 쓴다 → psycopg의 prepare_threshold를 끈다.
+    pgbouncer=true는 psycopg(libpq)가 모르는 매개변수라 None으로 덮어 접속 인자에서 뺀다. sslmode 같은 나머지 매개변수는 Ibis가 psycopg로 그대로 넘긴다."""
+    parts = urlsplit(url)
+    flagged = any(piece.partition("=")[0] == "pgbouncer" for piece in parts.query.split("&"))
+    try:
+        pooled = parts.port == POOLER_PORT
+    except ValueError:
+        pooled = False
+    return ({"prepare_threshold": None} | ({"pgbouncer": None} if flagged else {})) if pooled or flagged else {}
+
+
 def prepare(url, password=""):
     """접속 전에 드라이버를 확인하고, ibis.connect에 더할 인자를 돌려준다.
     없으면 설치 방법이나 다운로드 주소를 담은 DriverError(ValueError)를 낸다. 그 driver에 화면용 안내가 들어 있다."""
@@ -273,6 +292,8 @@ def prepare(url, password=""):
         if driver is None:
             raise DriverError(str(missing(db, program)), {**entry(scheme), "status": "program_needed"})
         return {"driver": driver}
+    if scheme == "postgres":  # Windows에서 libpq는 거부된 접속을 알아채지 못하고 시간이 다 될 때까지 기다린다 → 주소에 없으면 PG_WAIT초로
+        return ({} if "connect_timeout=" in urlsplit(url).query else {"connect_timeout": PG_WAIT}) | pooler_args(url)
     if scheme == "trino" and password:
         # Ibis는 host가 https:// 로 시작할 때만 비밀번호 인증을 쓴다.
         return {"host": f"https://{urlsplit(url).hostname}"}

@@ -355,7 +355,10 @@ def switch(new):
 def connect():
     body = request.json
     keys = ("path", "file", "files") if body["kind"] == "folder" else ("url", "user", "password")
-    return jsonify(schemas=switch({"kind": body["kind"], **{k: body[k] for k in keys if k in body}}))
+    info = {"kind": body["kind"], **{k: body[k] for k in keys if k in body}}
+    if "url" in info:
+        info["url"] = source.without_placeholder(info["url"])  # 붙여넣은 [YOUR-PASSWORD]
+    return jsonify(schemas=switch(info))
 
 
 @app.get("/api/drivers")
