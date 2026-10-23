@@ -197,11 +197,11 @@ def test_open_dash_latest_response_wins_and_refresh_saves_only_when_dirty(tmp_pa
     refresh = next(line for line in html.splitlines() if line.startswith('document.addEventListener("dash-refreshed"'))
     prelude = """
 const els = {}; globalThis.$ = id => els[id] ??= mk("x", { value: "" });
-let dashId = "", dashName = "", dashMeta = {}, lastSaved = "", quiet = false, current = "s0", panel = null, saves = 0;
+let dashId = "", dashName = "", dashMeta = {}, lastSaved = "", quiet = false, current = "s0", panel = null, saves = 0, valuesDirty = false;
 const metaOf = () => ({}), needsValues = c => c, boardChanged = () => {}, snapshot = () => current;
 const ctl = { set: async () => {} };
 const board = { cards: [], set(c) { this.cards = c; }, star: {} };
-globalThis.say = () => {}; async function save() { saves++; lastSaved = current; }
+globalThis.say = () => {}; async function save() { saves++; lastSaved = current; return true; }
 const waits = {}; globalThis.api = url => url.includes("/get") ? new Promise(r => { waits[decodeURIComponent(url.split("id=")[1])] = r; }) : Promise.resolve({});
 let handler; document.addEventListener = (n, f) => { handler = f; };
 """

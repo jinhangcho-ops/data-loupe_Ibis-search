@@ -98,6 +98,21 @@ def allowed(group, key):
     return None if limit is None else max(1, math.floor(limit * (1 - group.get("margin", 0) / 100)))
 
 
+def clear_stale(path):
+    """오래된 잠금 파일을 지운다. 오래됐다고 본 뒤 지우기 전에 다른 프로세스가 새로 잡았을 수 있으므로, 먼저 다른 이름으로 옮기고 옮긴 것이 정말 오래된 것인지 다시 본다(아니면 되돌린다. core.filelock과 같은 방식)."""
+    moved = path.with_name(f"{path.name}.{os.getpid()}.old")
+    try:
+        os.replace(path, moved)
+        if time.time() - moved.stat().st_mtime <= STALE_LOCK:
+            try:
+                os.link(moved, path)  # 남의 살아 있는 잠금을 옮겼다: 그 자리가 비어 있으면 돌려놓는다
+            except OSError:
+                pass
+        moved.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 class Locked:
     """설정 폴더의 잠금 파일을 배타적으로 만들어 잡는다. 오래된 잠금 파일은 지우고 다시 잡는다."""
 
@@ -112,7 +127,7 @@ class Locked:
             except FileExistsError:
                 try:
                     if time.time() - path.stat().st_mtime > STALE_LOCK:
-                        path.unlink()
+                        clear_stale(path)
                 except OSError:
                     pass
                 time.sleep(0.01)

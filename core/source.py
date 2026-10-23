@@ -146,12 +146,16 @@ def table_names(paths):
     """파일별 테이블 이름. 보통은 파일 이름이고, 이름이 겹치는 파일만 '폴더_이름_확장자'로 한다
     (예: sub_orders_csv). 그래도 겹치면 _2, _3을 붙인다. 대소문자는 가리지 않는다."""
     stems = [p.stem.lower() for p in paths]
-    root = os.path.commonpath([p.parent for p in paths]) if paths else ""
+    try:
+        root = os.path.commonpath([p.parent for p in paths]) if paths else ""
+    except ValueError:  # 드라이브가 다르면 공통 폴더가 없다: 드라이브 이름부터 이름에 넣는다
+        root = None
     names, used = [], set()
     for p in paths:
         name = p.stem
         if stems.count(name.lower()) > 1:
-            name = "_".join(p.relative_to(root).with_suffix("").parts) + "_" + p.suffix[1:].lower()
+            parts = p.relative_to(root).with_suffix("").parts if root is not None else (re.sub(r"\W", "", p.drive), *p.with_suffix("").parts[1:])
+            name = "_".join(parts) + "_" + p.suffix[1:].lower()
         base, n = name, 1
         while name.lower() in used:
             n += 1
@@ -169,19 +173,75 @@ def geojson_file(path):
     return geojson.is_geojson(path)
 
 
+polars_fixed = False
+
+
+def fix_polars_text():
+    """Ibis의 Polars 변환은 length·find를 바이트 단위로 세고(한글 3배) 빈 값의 find를 -1로 준다. DuckDB와 같게 글자 단위·빈 값은 빈 값으로 바꿔 한 번만 등록한다."""
+    global polars_fixed
+    if polars_fixed:
+        return
+    import polars as pl
+    from ibis.backends.polars.compiler import _literal_value, translate
+    from ibis.expr import operations as ops
+
+    @translate.register(ops.StringLength)
+    def length(op, **kw):
+        return translate(op.arg, **kw).str.len_chars()
+
+    @translate.register(ops.StringFind)
+    def find(op, **kw):
+        start = translate(op.start, **kw) if op.start is not None else 0
+        end = translate(op.end, **kw) if op.end is not None else None
+        arg, sub = translate(op.arg, **kw), _literal_value(op.substr)
+        part = arg.str.slice(start, end)
+        before = part.str.splitn(sub, 2).struct.field("field_0").str.len_chars().cast(pl.Int64)  # 찾은 글자 앞의 글자 수
+        return pl.when(arg.is_null()).then(None).when(part.str.contains(sub, literal=True)).then(before + start).otherwise(-1)
+
+    @translate.register(ops.ArrayIndex)
+    def index(op, **kw):
+        return translate(op.arg, **kw).list.get(translate(op.index, **kw), null_on_oob=True)  # 범위 밖 조각(split_part 5번째 …)은 오류 대신 빈 값(DuckDB와 같게)
+    polars_fixed = True
+
+
+def utf8_csv(path, con):
+    """CSV가 UTF-8이면 그 경로를, 아니면(한글 엑셀이 저장한 CP949) UTF-8로 바꿔 임시 폴더(con.scratch: close가 지운다)에 쓴 파일의 경로를 돌려준다.
+    Polars는 UTF-8만 읽어서, 바꾸지 않으면 한글이 깨지거나 열리지 않는다. 파일 전체를 묶음씩 훑으므로 메모리는 한 묶음만 쓴다."""
+    import codecs
+    try:
+        decoder = codecs.getincrementaldecoder("utf-8")()
+        with open(path, "rb") as f:
+            while chunk := f.read(1 << 20):
+                decoder.decode(chunk)
+        decoder.decode(b"", final=True)
+        return path
+    except UnicodeDecodeError:
+        pass
+    if not hasattr(con, "scratch"):
+        con.scratch = scratch.make()
+    out = Path(con.scratch, f"{len(list(Path(con.scratch).iterdir()))}.csv")
+    decoder = codecs.getincrementaldecoder("cp949")(errors="replace")
+    with open(path, "rb") as f, open(out, "w", encoding="utf-8", newline="") as w:
+        while chunk := f.read(1 << 20):
+            w.write(decoder.decode(chunk))
+        w.write(decoder.decode(b"", final=True))
+    return out
+
+
 @on_worker
 def open_flat_files(paths):
     """Parquet·CSV·JSON·Excel·GeoJSON 파일을 Polars 백엔드에 table_names의 이름으로 등록한다.
     Parquet·CSV·줄마다 객체인 JSON은 필요할 때 읽고(LazyFrame), 배열 JSON과 Excel(첫 시트)은 열 때 읽어 메모리에 둔다.
     GeoJSON(.geojson, 그리고 FeatureCollection인 .json)은 열 때 geo.geojson이 읽어 Feature마다 한 행인 표로 둔다(이때 geo 패키지가 올라온다)."""
     import polars as pl
+    fix_polars_text()
     con = ibis.polars.connect()
     for p, name in zip(paths, table_names(paths)):
         kind = kind_of(p)
         if kind == "parquet":
             con.read_parquet(p, table_name=name)
         elif kind == "csv":
-            con.read_csv(p, table_name=name)
+            con.read_csv(utf8_csv(p, con), table_name=name)
         elif kind == "excel":
             con.create_table(name, pl.read_excel(p))
         elif kind == "geojson" or (kind == "json" and geojson_file(p)):
@@ -304,6 +364,8 @@ def compiles(expr):
         ibis.get_backend(expr).compile(expr)
     except errors:
         return False
+    except TypeError:  # Polars는 월·분기·연 간격을 변환하지 못하고 TypeError로 알린다: 이 PC(DuckDB)에서 계산하게 한다
+        return ibis.get_backend(expr).name != "polars"
     except Exception:
         pass
     return True
@@ -347,9 +409,9 @@ def get_table(con, name, schema=None):
 
 
 def secret_param(piece):
-    """주소 query의 한 조각(이름=값)이 비밀 값을 담았는지: 이름에 pass·pwd·secret·token·key가 들어 있으면 비밀."""
+    """주소 query의 한 조각(이름=값)이 비밀 값을 담았는지: 이름에 pass·pwd·secret·token·key·auth·credential·sig(서명)가 들어 있으면 비밀."""
     key = unquote(piece.partition("=")[0]).lower()
-    return any(w in key for w in ("pass", "pwd", "secret", "token", "key"))
+    return any(w in key for w in ("pass", "pwd", "secret", "token", "key", "auth", "credential", "sig"))
 
 
 def passwords(info):

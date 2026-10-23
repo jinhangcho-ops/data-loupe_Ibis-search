@@ -247,10 +247,11 @@ def cached(key, size):
 
 def remember(key, size, **parts):
     """추론 결과(profile·patterns·sampled)를 테이블 열쇠로 둔다. 같은 크기로 구한 것이면 나머지 부분은 지킨다."""
-    found = {k: v for k, v in (settings.read(CACHE) or {}).items() if isinstance(v, dict)}
-    old = found.get(key) if isinstance(found.get(key), dict) and found[key].get("size") == size else {}
-    found[key] = {**old, **parts, "size": size, "saved": dt.datetime.now().isoformat(timespec="seconds")}
-    for stale in sorted(found, key=lambda k: str(found[k].get("saved", "")))[:-MAX_CACHE]:
-        found.pop(stale)
-    settings.write(CACHE, found)
-    return found[key]
+    with settings.updating(CACHE):
+        found = {k: v for k, v in (settings.read(CACHE) or {}).items() if isinstance(v, dict)}
+        old = found.get(key) if isinstance(found.get(key), dict) and found[key].get("size") == size else {}
+        found[key] = {**old, **parts, "size": size, "saved": dt.datetime.now().isoformat(timespec="seconds")}
+        for stale in sorted(found, key=lambda k: str(found[k].get("saved", "")))[:-MAX_CACHE]:
+            found.pop(stale)
+        settings.write(CACHE, found)
+        return found[key]

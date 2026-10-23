@@ -1,6 +1,7 @@
 """수집 예약(4단계): 예약 검사·저장(schedules.json), 다음 시각 계산, 구성 잠금(locks\\), 실행 기록(runs.json)·알림,
 예약처럼 한 번 실행(execute), 프로그램 안 예약 스레드(watch), 창 없이 실행(run_alone, desktop.py --run).
 비밀번호는 저장하지 않으므로 비밀번호가 필요한 구성은 예약하지 않는다(password_reason 하나로 판단)."""
+import copy
 import datetime as dt
 import math
 import re
@@ -164,12 +165,13 @@ def save(name, item):
 
 
 def tasks(found):
-    """Windows 작업으로 등록하기로 한 예약의 작업 상태 {이름: {registered, path_ok, next, last}}."""
+    """Windows 작업으로 등록하기로 한 예약의 작업 상태 {이름: {registered, path_ok, next, last}}. 작업 스케줄러 폴더를 한 번만 조회한다."""
+    wanted = {name: item["task"] for name, item in found.items() if item.get("windows") and item.get("task")}
+    known = wintask.query_all() if wanted else {}
     view = {}
-    for name, item in found.items():
-        if item.get("windows") and item.get("task"):
-            task = wintask.query(item["task"])
-            view[name] = {"registered": task["registered"], "path_ok": task["registered"] and wintask.points_here(task), "next": task["next"], "last": task["last"]}
+    for name, task in wanted.items():
+        state = known.get(task.lower()) or wintask.MISSING
+        view[name] = {"registered": state["registered"], "path_ok": state["registered"] and wintask.points_here(state), "next": state["next"], "last": state["last"]}
     return view
 
 
@@ -208,8 +210,10 @@ def change_runs(change):
     """실행 기록을 읽어 change(목록)로 고치고 최근 MAX_RUNS개만 저장한다. 다른 프로세스(Windows 작업)와 번갈아 쓴다."""
     with writing, filelock.guarded("runs.lock"):
         runs = read_runs()
+        before = copy.deepcopy(runs)
         result = change(runs)
-        settings.write(RUNS, {"runs": runs[:MAX_RUNS]})
+        if runs[:MAX_RUNS] != before:  # 바뀐 게 없으면 쓰지 않는다(화면이 목록을 새로 불러올 때마다 파일을 다시 쓰지 않게)
+            settings.write(RUNS, {"runs": runs[:MAX_RUNS]})
         return result
 
 
@@ -258,14 +262,27 @@ VALUE_ERRORS = re.compile(r"Constraint|Conversion|Could not convert|Invalid Inpu
 SEE_LOG = "(자세한 내용은 프로그램의 실행 기록)"
 
 
+KNOWN_NOTICES = ((re.compile(r"연결이? 거부|connection refused|ECONNREFUSED|WinError 10061", re.I), "연결이 거부되었습니다"),
+                 (re.compile(r"시간 ?초과|timed? ?out", re.I), "시간이 초과되었습니다"),
+                 (re.compile(r"디스크|저장 공간|no space left|disk full|WinError 112", re.I), "디스크 공간이 부족합니다"),
+                 (re.compile(r"권한|permission denied|access (is )?denied|WinError 5", re.I), "권한이 없습니다"),
+                 (re.compile(r"찾을 수 없|not found|no such file|does not exist|FileNotFound", re.I), "찾을 수 없습니다"))  # 정해진 어휘(오류 글에서 이것을 알아보면 이 문구만 보낸다)
+
+
 def notice_text(message):
-    """Slack·웹훅 같은 밖으로 나가는 알림에 넣을 오류 글. 값이 든 오류 유형은 일반 문구로, 나머지는 앞 80자만 보낸다(전체는 실행 기록에 있다)."""
+    """Slack·웹훅 같은 밖으로 나가는 알림에 넣을 오류 글. 이 프로그램의 정해진 문구나 위 어휘(연결 거부·시간 초과·디스크 부족·권한·없음)로 알아본 것만 보내고(글 그대로가 아니라 정해진 문구),
+    값이 든 오류 유형과 그 밖의 오류는 일반 문구로 보낸다(오류 글에는 DB가 데이터 값을 넣기도 한다. 전체는 실행 기록에 있다)."""
     message = (message or "").strip()
     if not message:
         return ""
+    if message in (SKIP_RUNNING, SKIP_LOCKED, GONE):
+        return message
     if VALUE_ERRORS.search(message):
         return f"데이터 값 문제로 실패했습니다 {SEE_LOG}"
-    return message if len(message) <= 80 else f"{message[:80]}… {SEE_LOG}"
+    for known, text in KNOWN_NOTICES:
+        if known.search(message):
+            return f"{text} {SEE_LOG}"
+    return f"실패했습니다 {SEE_LOG}"
 
 
 def tell(name, result, rows, seconds, message):

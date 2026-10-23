@@ -203,8 +203,16 @@ def bare(name):
     return str(name).split(".")[0]
 
 
-def cond_columns(cond):
-    """조건(글자·{line}·{any})이 가리키는 컬럼 이름들."""
+def head_name(text, columns):
+    """글이 공백 있는 알려진 컬럼 이름으로 시작하면 그 이름(가장 긴 것), 아니면 None. 이름 뒤는 끝·공백·비교 기호여야 한다(parse.spaced와 같은 규칙)."""
+    text = text.lstrip()
+    for name in sorted((c for c in columns or () if " " in c), key=len, reverse=True):
+        if text.startswith(name) and text[len(name):len(name) + 1] in ("", " ", "=", "!", "<", ">"):
+            return name
+
+
+def cond_columns(cond, columns=None):
+    """조건(글자·{line}·{any})이 가리키는 컬럼 이름들. columns(알려진 컬럼 이름들)를 주면 공백 있는 이름도 한 낱말로 읽는다."""
     if isinstance(cond, str):
         try:
             pieces = parse.split(parse.OR_RE, cond.strip())  # 한 줄 안의 or(따옴표 안은 값)마다 컬럼을 모은다
@@ -215,13 +223,15 @@ def cond_columns(cond):
             geo = parse.GEO_RE.match(piece.strip())
             if geo and len(geo.group(2).replace(",", " ").split()) == parse.GEO_COUNTS[geo.group(1).lower()]:  # 좌표 조건 near·box는 앞의 두 낱말이 위도·경도 컬럼
                 found |= {bare(w) for w in geo.group(2).replace(",", " ").split()[:2]}
+            elif name := head_name(piece, columns):
+                found.add(name)
             elif m := COND_HEAD.match(piece):
                 found.add(bare(m.group(1)))
         return found
     if isinstance(cond, dict):
         if "any" in cond:
-            return {c for item in cond["any"] for c in cond_columns(item)}
-        return cond_columns(cond.get("line", ""))
+            return {c for item in cond["any"] for c in cond_columns(item, columns)}
+        return cond_columns(cond.get("line", ""), columns)
     return set()
 
 

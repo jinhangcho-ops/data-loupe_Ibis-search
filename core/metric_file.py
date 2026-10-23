@@ -13,6 +13,7 @@
   opts는 그 집계의 나머지 인자(분위수 p, 구분자 sep, 둘째 컬럼 y …, 선택). 식(코드)은 쓰지 않으므로 파일이 무엇을 실행할 수는 없다.
 - 분모가 있으면 분자 / 분모이고, 분모가 0이면 nullif(0)로 빈 값이 된다(0으로 나누기 오류 없음).
 - 계산은 식.group_by(나눌 컬럼).aggregate(지표들) 한 번(나누지 않으면 aggregate만)이다."""
+import copy
 import re
 from pathlib import Path
 
@@ -137,10 +138,22 @@ def save_file_path(path):
     return found
 
 
+CACHE = {}  # registry가 읽은 지표 파일: {"stamp": (경로, 바뀐 시각, 크기), "found": 지표들}
+
+
 def registry():
-    """지금 고른 파일의 지표 {이름: 지표}. 파일이 없으면 {}, 읽을 수 없으면 ValueError."""
+    """지금 고른 파일의 지표 {이름: 지표}. 파일이 없으면 {}, 읽을 수 없으면 ValueError. 파일이 그대로면(경로·바뀐 시각·크기가 같으면) 다시 읽지 않는다(YAML 읽기가 느리다). 돌려주는 값은 복사본이다."""
     path = file_path()
-    return read_file(path) if path else {}
+    if not path:
+        return {}
+    try:
+        stat = Path(path).stat()
+    except OSError:
+        return read_file(path)  # 읽을 수 없는 이유를 ValueError로 알린다
+    stamp = (path, stat.st_mtime_ns, stat.st_size)
+    if CACHE.get("stamp") != stamp:
+        CACHE.update(stamp=stamp, found=read_file(path))
+    return copy.deepcopy(CACHE["found"])
 
 
 # ---------- 계산 ----------

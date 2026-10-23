@@ -8,6 +8,7 @@ from lazy import ibis
 
 from core import parse
 from core import source
+from core import sql_funcs
 
 TYPE_TO = {"int": "int64", "float": "float64", "string": "string", "date": "date"}
 FLOAT_SHAPE = r"^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$"  # 12, -1.5, .5, 1e5. inf·nan은 숫자로 보지 않는다.
@@ -125,15 +126,6 @@ def strip(col):
     return col.translate(SPACES, " " * len(SPACES)).strip() if col.get_backend().name == "duckdb" else col.strip()
 
 
-def half_up(col, digits):
-    """반올림: 0.5는 0에서 먼 쪽으로(백엔드마다 달라 직접 정한다. Polars는 짝수 쪽). 정수·소수(Decimal) 컬럼은 그대로 round."""
-    if not col.type().is_floating():
-        return col.round(digits)
-    scale = 10.0**digits
-    done = (col.abs() * scale + 0.5).floor() / scale
-    return (col.abs() >= 2.0**52).ifelse(col, (col < 0).ifelse(-done, done))  # 2^52 이상은 이미 정수라 그대로(곱하면 넘칠 수 있다)
-
-
 def regex_replace(t, name, pair):
     """정규식으로 바꾸기. 바꿀 글자의 \\1은 묶음 번호(DuckDB 방식). Polars는 ${1} 방식이라 거기서는 \\1을 ${1}로 바꿔 넘겨 같은 값이 나오게 한다."""
     pattern, text = pair
@@ -166,7 +158,8 @@ def fill_around(t, name, by, ahead):
     return t.drop("__group")
 
 
-def fill(t, name, arg):
+def fill(t, name, arg, base=None):
+    """base를 주면 mean·median·mode 통계를 t 대신 base(단계 시작 표)로 구한다."""
     how, col = arg["how"], t[name]
     if how == "drop":
         return t.filter(col.notnull())
@@ -177,16 +170,19 @@ def fill(t, name, arg):
     else:
         if how != "mode" and parse.kind(col.type()) not in NUMBER:
             raise ValueError(f"'{how}'은 정수·실수 컬럼에만 쓸 수 있습니다. '{name}' 컬럼은 {parse.type_info(col.type())[0]}입니다.")
-        value = getattr(col, how)().to_pyarrow().as_py()
+        value = getattr((base if base is not None else t)[name], how)().to_pyarrow().as_py()
     return t.mutate(**{name: col.fill_null(value)})
 
 
-def outlier(t, name, arg):
+def outlier(t, name, arg, base=None):
+    """base를 주면 iqr·std 통계를 t 대신 base(단계 시작 표)로 구한다(앞 컬럼이 행을 줄인 뒤의 표가 아니라)."""
     col, by, k = t[name], arg["by"], arg.get("k")
+    src = t if base is None else base
     if by == "range":
         low, high = arg.get("low"), arg.get("high")
     else:
-        s = stats(t, a=col.quantile(0.25), b=col.quantile(0.75)) if by == "iqr" else stats(t, a=col.mean(), b=col.std())
+        sc = src[name]
+        s = stats(src, a=sc.quantile(0.25), b=sc.quantile(0.75)) if by == "iqr" else stats(src, a=sc.mean(), b=sc.std())
         if None in s.values():
             raise ValueError(f"'{name}' 컬럼에 값이 부족해 범위를 구할 수 없습니다.")
         s = {key: float(value) for key, value in s.items()}  # 소수(Decimal) 컬럼은 실수로 계산한다.
@@ -358,7 +354,7 @@ OPS = [
      '{"how": "drop" | "value" | "mean" | "median" | "mode" | "prev" | "next", "value": 채울 값, "by": 순서를 정할 컬럼(prev·next)}', fill),
     ("outlier", NUMBER, is_outlier, '{"how": "drop" | "clip", "by": "range" | "iqr" | "std", "low": 수, "high": 수, "k": 수}', outlier),
     ("scale", NUMBER, lambda v: v in ("standard", "minmax", "log"), '"standard", "minmax" 또는 "log"', scale),
-    ("round", NUMBER, lambda v: type(v) is int and v >= 0, "0 이상의 정수", column(half_up)),
+    ("round", NUMBER, lambda v: type(v) is int and v >= 0, "0 이상의 정수", column(sql_funcs.half_up)),
     ("bins", NUMBER, lambda v: isinstance(v, list) and len(v) >= 2 and all(is_num(e) for e in v) and all(a < b for a, b in zip(v, v[1:])),
      "오름차순 경계값 2개 이상. 예: [0, 10, 100]", column(bins)),
     ("rare", STRING, lambda v: isinstance(v, dict) and set(v) <= {"min", "label"} and type(v.get("min")) is int and v["min"] >= 2
@@ -388,10 +384,15 @@ def drops_rows(key, value):
     return key in ("fill", "outlier") and isinstance(value, dict) and value.get("how") == "drop"
 
 
-def apply_ops(t, name, ops, part="all"):
+STATS_FROM_BASE = ("fill", "outlier")  # 통계를 단계 시작 표(base)로 구할 수 있는 일
+
+
+def apply_ops(t, name, ops, part="all", base=None):
     """컬럼 하나의 ops를 OPS의 순서대로 적용한다. 컬럼 타입은 앞 단계를 적용한 뒤의 것을 따른다.
     part가 rows면 마지막 행 줄이기(fill·outlier의 drop)까지만, rest면 그 뒤 것만(행 줄이기가 없으면 모두) 적용한다.
-    컬럼마다 차례로 통계(평균 등)를 내면 앞 컬럼의 통계가 뒤 컬럼이 줄이는 행을 포함하므로, 호출하는 쪽이 rows를 모든 컬럼에 먼저 하고 rest를 한다."""
+    컬럼마다 차례로 통계(평균 등)를 내면 앞 컬럼의 통계가 뒤 컬럼이 줄이는 행을 포함하므로, 호출하는 쪽이 rows를 모든 컬럼에 먼저 하고 rest를 한다.
+    rows일 때 base(그 단계를 시작하는 표)를 주면 fill·outlier의 통계를 앞 컬럼이 행을 줄인 뒤의 t가 아니라 base로 구한다(필터는 차례로 걸어도 같다 = 컬럼 순서와 무관).
+    이 컬럼의 앞선 일(타입 바꾸기 등)은 base에도 같이 적용해 통계가 같은 값에서 나오게 한다."""
     for key in ops:
         parse.check_name(key, OPS_NAMES, "전처리 항목")
     last = max((i for i, op in enumerate(OPS) if op[0] in ops and drops_rows(op[0], ops[op[0]])), default=-1)
@@ -405,5 +406,11 @@ def apply_ops(t, name, ops, part="all"):
             raise ValueError(f"'{name}' 컬럼의 '{key}' 값은 {form} 형식으로 쓰세요.")
         if key in NAN_OPS:
             t = t.mutate(**{name: nan_to_null(t[name])})
-        t = fn(t, name, ops[key])
+            base = None if base is None else base.mutate(**{name: nan_to_null(base[name])})
+        if base is None:
+            t = fn(t, name, ops[key])
+        elif key in STATS_FROM_BASE:
+            t, base = fn(t, name, ops[key], base), base if drops_rows(key, ops[key]) else fn(base, name, ops[key], base)
+        else:
+            t, base = fn(t, name, ops[key]), fn(base, name, ops[key])
     return t

@@ -9,6 +9,7 @@ from core import held
 from core import result
 from core import server
 from core import settings
+from core import use_counts
 from core.server import app, get_con, run
 
 
@@ -218,7 +219,7 @@ def with_scope(defn):
     scope = dict(defn.get("scope") or {})
     now = dash_store.current_source()
     if now:
-        scope.setdefault("key", now["key"])
+        scope["key"] = use_counts.renewed(scope.get("key"), now["key"])
         scope.setdefault("label", now["label"])
     return {**defn, "scope": scope}
 

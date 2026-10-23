@@ -3,21 +3,25 @@
 카드 하나씩 화면 요청과 같은 차례(querying.using)를 잡고 dash_calc.compute로 구해 dash_store.set_cards_data로 대시보드마다 한 번에 쓴다. 실패한 카드는 이전 값을 두고 이유만 남긴다."""
 import datetime as dt
 import threading
+import time
 
 from core import querying
 from dashboard import dash_calc
 from core import dash_store
+from prep import prep_app
 from core import held
 from dashboard import period
 from core import scan_size
 from core import server
 from core import settings
 from core import source
+from core import use_counts
 from core.server import run
 
 MIN_REFRESH = dash_store.MIN_REFRESH  # 최신화 주기의 최소(초)
 LIVE_FILE = "live_min.json"  # {source_key: 실시간 간격 최소(초)}
 MAX_LIVE_MIN = 86400
+FLUSH_SECONDS = 30  # 한 대시보드를 구하는 동안 이만큼 지나면 그때까지 구한 카드를 먼저 저장한다(중간에 꺼져도 다 잃지 않게)
 REFRESHABLE = ("chart", "analysis", "funnel", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation", "geomap")  # 지금 다시 구할 수 있는 카드 종류
 JOB = {"running": False, "total": 0, "done": 0, "current": "", "results": []}  # 마지막 최신화 작업의 상태(status가 복사해 준다)
 LOCK = threading.Lock()
@@ -59,12 +63,13 @@ def set_live_min(key, seconds):
         raise ValueError("먼저 데이터에 연결하세요.")
     if type(seconds) is not int or not 0 <= seconds <= MAX_LIVE_MIN:
         raise ValueError(f"실시간 간격 최소는 0~{MAX_LIVE_MIN}초의 정수입니다(0이면 제한 없음).")
-    found, key = live_mins(), dash_store.canon_key(key)
-    if seconds:
-        found[key] = seconds
-    else:
-        found.pop(key, None)
-    settings.write(LIVE_FILE, found)
+    with settings.updating(LIVE_FILE):
+        found, key = live_mins(), dash_store.canon_key(key)
+        if seconds:
+            found[key] = seconds
+        else:
+            found.pop(key, None)
+        settings.write(LIVE_FILE, found)
     return found
 
 
@@ -89,10 +94,23 @@ def context(d, today=None):
     if span["error"]:
         return None
     end = min(e for e in (span["end"] and span["end"][:10], day) if e)
+    if span["start"] and day < span["start"][:10]:
+        return {"range": {"start": span["start"][:10], "end": end}, "prev": None}  # 기준일이 기간이 시작되기 전: 보는 기간은 비었고 견줄 직전 기간도 없다
     cut = span["start"] and span["end"] and span["start"][:10] <= day < span["end"][:10]  # 기준일이 기간 안이라 잘렸으면 직전 기간도 잘라 맞춘다
-    if cut:  # 한 달 안의 기간(2026-10)은 "이번 달"과 같게 지난달의 같은 위치까지, 그 밖에는 같은 일수만큼 바로 앞
-        span = {**span, "end": day, "to_date": "month" if span["start"][:7] == day[:7] and span["start"][8:10] == "01" else None}
-    before = period.previous(span)
+    if cut:
+        first, last, today = (dt.date.fromisoformat(x[:10]) for x in (span["start"], span["end"], day))
+        aligned = first.day == 1 and last == period.month_end(last.year, last.month)
+        if aligned or (first.day == 1 and (first.year, first.month) == (today.year, today.month)):  # 달 단위로 꼭 맞는 기간(월·분기·연…), 또는 1일에 시작해 기준일이 그 달 안: 직전 같은 개월 수의 같은 위치까지
+            months = (last.year - first.year) * 12 + last.month - first.month + 1 if aligned else 1
+            start = period.add_months(first, -months)
+            name = {1: "지난달", 3: "직전 분기", 12: "작년"}.get(months, f"직전 {months}개월")
+            before = {"start": start.isoformat(), "end": period.add_months(today, -months).isoformat(), "label": f"{name} 같은 기간", "error": None}
+            span = {**span, "to_date": True}
+        else:  # 그 밖의 기간은 같은 일수만큼 바로 앞
+            span = {**span, "end": day, "to_date": None}
+            before = period.previous(span)
+    else:
+        before = period.previous(span)
     prev = None if before["error"] else {"start": before["start"][:10], "end": before["end"][:10], "text": before["label"] if span.get("to_date") else f"직전 {before['days']}일"}
     return {"range": {"start": span["start"] and span["start"][:10], "end": end}, "prev": prev}
 
@@ -106,7 +124,16 @@ def geo_sqls(card, con):
     if card["kind"] not in ("analysis", "funnel") or not recipe.get("geo") or not held.remote(con):
         return []
     from geo import prep_geo  # 좌표 단계가 있을 때만 올린다
-    return [server.expr_sql(con, expr) for key, expr in run(lambda: prep_geo.reference_exprs(prep_geo.check(recipe["geo"]), con)) if key not in held.store["items"]]
+    return [server.expr_sql(con, expr)[0] for key, expr in run(lambda: prep_geo.reference_exprs(prep_geo.check(recipe["geo"]), con)) if key not in held.store["items"]]
+
+
+def copy_sqls(card, con):
+    """원격 연결에서 full 분석·흐름 카드가 아직 없는 작업 사본(prep_app.working_copy)을 새로 받아야 하면, 그 사본이 읽을 표의 SQL(prep_app.copy_gate와 같은 대상)."""
+    source = card["source"]
+    recipe = source.get("recipe") or {}
+    if card["kind"] not in ("analysis", "funnel") or source.get("full") is not True or not recipe or not held.remote(con) or not prep_app.local_mode(recipe) or prep_app.copy_key(recipe) in held.store["items"]:
+        return []
+    return [run(lambda: prep_app.scan_sql(recipe))[0]]
 
 
 def scan_decision(card, ctx):
@@ -120,7 +147,7 @@ def scan_decision(card, ctx):
     try:
         sql = dash_calc.read_sql(card, ctx)
         con = server.state["con"]
-        sqls = [sql] if sql is not None else geo_sqls(card, con)  # 분석 카드는 식이 없어도 좌표 단계의 지점·영역 표를 통째로 받는다
+        sqls = [sql] if sql is not None else copy_sqls(card, con) + geo_sqls(card, con)  # 분석 카드는 식이 없어도 좌표 단계의 지점·영역 표를 통째로 받는다
         if not sqls:
             return ""
         if sql is not None and held.remote(con) and not dash_calc.copies_to_pc(card, ctx):
@@ -134,7 +161,8 @@ def scan_decision(card, ctx):
     except Exception as e:
         found = {"over": False, "blocked": settings.load().get("scan_unknown") in SCAN_BLOCK, "text": f"처리 용량을 알 수 없어요 ({e})"}
     if found.get("over") or found.get("blocked"):
-        return found.get("text") or "처리 용량이 기준을 넘거나 알 수 없어 건너뛰었어요"
+        note = " 고유 개수는 기간별로 따로 읽어요." if held.remote(server.state["con"]) and dash_calc.unique_per_period(card, ctx) else ""  # 읽는 양이 이번 기간 + 직전 기간 몫이다
+        return (found.get("text") or "처리 용량이 기준을 넘거나 알 수 없어 건너뛰었어요") + note
     return ""
 
 
@@ -150,7 +178,7 @@ def skip_reason(d, card, key, now):
     every = every_seconds((d.get("refresh") or {}).get("every"), 0, "최신화")
     if card["kind"] not in REFRESHABLE:
         return "아직 다시 구할 수 없는 종류예요"
-    if (card.get("source") or {}).get("key") != key:
+    if not use_counts.same_source((card.get("source") or {}).get("key"), key):
         return "다른 연결에서 구한 카드예요"
     done = parse_time((card.get("data") or {}).get("computed_at"))
     if done is not None and (now - done).total_seconds() < every:
@@ -217,7 +245,10 @@ def work(plan, now):
     try:
         contexts, plans, mine, pending = {}, {}, {}, {}  # pending: 대시보드 id → [(slot, 카드 id, 값, 같은지 확인)]. 한 대시보드를 다 구한 뒤 저장소를 한 번만 쓴다
 
+        last = [time.monotonic()]  # 마지막으로 저장한 때
+
         def flush(dash_id):
+            last[0] = time.monotonic()
             items = pending.pop(dash_id, [])
             if items:
                 try:
@@ -232,6 +263,7 @@ def work(plan, now):
                         slot.update(state=outcome[0], message=outcome[1])
         for d, card in plan:
             mine.setdefault(d["id"], []).append(card)
+        renewed = False  # 최신화를 시작하고 첫 카드에서 한 번만 PC 사본을 새로 받게 한다
         for d, card in plan:
             for other in [k for k in pending if k != d["id"]]:
                 flush(other)
@@ -243,7 +275,8 @@ def work(plan, now):
             with LOCK:
                 JOB["current"] = card["title"]
             try:
-                with querying.using():
+                with querying.using(fresh=not renewed):
+                    renewed = True
                     if d["id"] not in plans:
                         contexts[d["id"]] = context(d)
                         plans[d["id"]] = dash_calc.shared_context(mine[d["id"]], contexts[d["id"]])  # 같은 테이블·조건의 카드들을 묶는다
@@ -263,6 +296,8 @@ def work(plan, now):
                 if outcome:
                     slot.update(state=outcome[0], message=outcome[1])
                 JOB["done"] += 1
+            if time.monotonic() - last[0] >= FLUSH_SECONDS:
+                flush(d["id"])
     finally:
         for k in list(pending):
             flush(k)

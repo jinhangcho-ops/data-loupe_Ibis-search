@@ -25,7 +25,9 @@ ROOTS = ("목표", "targets")
 FIELDS = {"name": ("이름", "name", "지표", "지표명", "항목"), "value": ("값", "value", "목표", "목표값", "target"),
           "period": ("기간", "period"), "column": ("컬럼", "column", "열"), "scope": ("대상", "scope")}
 UNIT = {"억": 10**8, "만": 10**4}
-VALUE_BODY = re.compile(r"(?:(?:\d+(?:\.\d+)?|\.\d+)[억만]?)+")
+VALUE_BODY = re.compile(r"(?:(?:\d+(?:\.\d+)?|\.\d+)[억만])*(?:\d+(?:\.\d+)?|\.\d+)[억만]?")  # 숫자 사이에는 단위가 있어야 한다("1.500.000"·"2026.10.05"는 못 읽음)
+NUMBER_RUN = re.compile(r"\d(?:[\d.,]| (?=\d))*")  # 숫자와 그 사이 쉼표·점·한 칸 공백
+GROUPED = re.compile(r"\d{1,3}([, ])\d{3}(?:\1\d{3})*(?:\.\d+)?")  # 쉼표나 공백은 세 자리마다만(한 가지로)
 VALUE_PART = re.compile(r"(\d+(?:\.\d+)?|\.\d+)([억만]?)")
 TABLE_SEPARATOR = re.compile(r"\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*")
 BULLET = re.compile(r"\s*[-*+]\s+(.+?)\s*[:：]\s*(.*?)\s*")
@@ -56,13 +58,14 @@ def parse_value(text):
     raw = "" if text is None else str(text).strip()
     if not raw:
         raise ValueError("값이 비어 있어요.")
+    loose = any(("," in m[0] or " " in m[0]) and not GROUPED.fullmatch(m[0]) for m in NUMBER_RUN.finditer(raw))
     body = re.sub(r"[₩,\s]", "", raw)
     body = body[:-1] if body.endswith("원") else body
     percent = body.endswith("%")
     body = body[:-1] if percent else body
     sign = -1 if body.startswith("-") else 1
     body = body.lstrip("+-")
-    total = sum(float(number) * UNIT.get(unit, 1) for number, unit in VALUE_PART.findall(body)) if VALUE_BODY.fullmatch(body) else math.nan
+    total = sum(float(number) * UNIT.get(unit, 1) for number, unit in VALUE_PART.findall(body)) if VALUE_BODY.fullmatch(body) and not loose else math.nan
     if not math.isfinite(total):  # 읽을 수 없는 글자, 그리고 너무 커서 무한이 된 값
         shown = raw if len(raw) <= 30 else raw[:30] + "…"
         raise ValueError(f"‘{shown}’{ending(shown, '은', '는')} 숫자로 읽을 수 없어요. 예: 5000000, ₩5,000,000, 5,000만, 1.2억, 85%")

@@ -313,11 +313,12 @@ def remembered():
 def remember(source_key, a_name, b_name, fp, keys):
     """고른 키를 기억한다(계정·비밀번호 없는 연결 열쇠로). MAX_ITEMS를 넘으면 오래된 것부터 뺀다."""
     import datetime as dt
-    items = remembered()
-    items[memory_key(source_key, a_name, b_name, fp)] = {"keys": [list(k) for k in keys], "saved": dt.datetime.now().isoformat(timespec="seconds")}
-    for stale in sorted(items, key=lambda k: str(items[k].get("saved", "")))[:-MAX_ITEMS]:
-        items.pop(stale)
-    settings.write(FILE, {"items": items})
+    with settings.updating(FILE):
+        items = remembered()
+        items[memory_key(source_key, a_name, b_name, fp)] = {"keys": [list(k) for k in keys], "saved": dt.datetime.now().isoformat(timespec="seconds")}
+        for stale in sorted(items, key=lambda k: str(items[k].get("saved", "")))[:-MAX_ITEMS]:
+            items.pop(stale)
+        settings.write(FILE, {"items": items})
 
 
 def recall(source_key, a_name, b_name, fp):
@@ -329,9 +330,10 @@ def recall(source_key, a_name, b_name, fp):
 
 def forget(source_key, a_name, b_name, fp):
     """기억한 키를 지운다."""
-    items = remembered()
-    if items.pop(memory_key(source_key, a_name, b_name, fp), None) is not None:
-        settings.write(FILE, {"items": items})
+    with settings.updating(FILE):
+        items = remembered()
+        if items.pop(memory_key(source_key, a_name, b_name, fp), None) is not None:
+            settings.write(FILE, {"items": items})
 
 
 # ---------- 이은 뒤 부풂 ----------

@@ -150,7 +150,7 @@ async function liveCards(board, connected) {
 async function recomputeRange(board, cards, connected) {
   const ctx = board.ctx();
   const todo = cards.filter(c => {
-    c.rangeNote = !connected ? "연결하면 이 기간으로 구합니다" : c.source.key && board.connKey && c.source.key !== board.connKey ? "다른 연결의 카드라 이 기간으로 구하지 못했어요" : "";
+    c.rangeNote = !connected ? "연결하면 이 기간으로 구합니다" : c.source.key && board.connKey && !sameSource(c.source.key, board.connKey) ? "다른 연결의 카드라 이 기간으로 구하지 못했어요" : "";
     return !c.rangeNote && c.id;
   });
   if (todo.length) {

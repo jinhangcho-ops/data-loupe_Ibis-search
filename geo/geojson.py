@@ -5,6 +5,8 @@ import json
 import re
 from pathlib import Path
 
+from core import monitor
+
 GEO_COLUMNS = ("geom_type", "center_lon", "center_lat", "min_lon", "min_lat", "max_lon", "max_lat", "geometry")
 NUMBER_COLUMNS = GEO_COLUMNS[1:7]
 GEOMETRY_TYPES = ("Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon", "GeometryCollection")
@@ -87,9 +89,32 @@ def ring_centroid(ring):
     return (area, cx / (6 * area), cy / (6 * area)) if area else (0.0, 0.0, 0.0)
 
 
+def crosses_dateline(xs):
+    """경도들이 날짜 변경선을 사이에 두고 모여 있는지: 범위가 180도를 넘고, 음수에 360을 더하면 범위가 더 좁아질 때. (-170~170처럼 정말 넓은 것은 아니다)"""
+    xs = list(xs)
+    if not xs or max(xs) - min(xs) <= 180:
+        return False
+    moved = [x + 360 if x < 0 else x for x in xs]
+    return max(moved) - min(moved) < max(xs) - min(xs)
+
+
+def unwrapped(pieces):
+    """parts의 (종류, 좌표 묶음)들을 날짜 변경선에 걸쳐 있으면 음수 경도에 360을 더한 사본으로(아니면 그대로)."""
+    if not crosses_dateline(p[0] for kind, coords in pieces for p in leaves(coords)):
+        return pieces
+
+    def move(coords):
+        if coords and isinstance(coords[0], (int, float)):
+            return [coords[0] + 360 if coords[0] < 0 else coords[0], *coords[1:]]
+        return [move(c) for c in coords or []]
+
+    return [(kind, move(coords)) for kind, coords in pieces]
+
+
 def center(geom):
-    """도형의 중심 (경도, 위도). 폴리곤이 있으면 면적 무게중심(구멍은 뺌), 아니면 꼭짓점 평균. 비었으면 (None, None)."""
-    pieces = parts(geom)
+    """도형의 중심 (경도, 위도). 폴리곤이 있으면 면적 무게중심(구멍은 뺌), 아니면 꼭짓점 평균. 비었으면 (None, None).
+    날짜 변경선에 걸쳐 있으면 음수 경도에 360을 더해 구한 뒤 180을 넘으면 360을 되돌린다."""
+    pieces = unwrapped(parts(geom))
     total = sx = sy = 0.0
     for kind, coords in pieces:
         polys = [coords] if kind == "Polygon" else coords if kind == "MultiPolygon" else []
@@ -99,16 +124,20 @@ def center(geom):
                 weight = abs(area) * (1 if i == 0 else -1)
                 total, sx, sy = total + weight, sx + weight * x, sy + weight * y
     if total > 0:
-        return sx / total, sy / total
+        return back(sx / total), sy / total
     points = [p for kind, coords in pieces for p in leaves(coords)]
     if not points:
         return None, None
-    return sum(p[0] for p in points) / len(points), sum(p[1] for p in points) / len(points)
+    return back(sum(p[0] for p in points) / len(points)), sum(p[1] for p in points) / len(points)
+
+
+def back(lon):
+    return lon - 360 if lon > 180 else lon
 
 
 def bounds(geom):
-    """도형의 범위 (min_lon, min_lat, max_lon, max_lat). 비었으면 모두 None."""
-    points = [p for kind, coords in parts(geom) for p in leaves(coords)]
+    """도형의 범위 (min_lon, min_lat, max_lon, max_lat). 비었으면 모두 None. 날짜 변경선에 걸쳐 있으면 경도는 170~190처럼 180을 넘는 값으로 낸다(서쪽 점에 360을 더함)."""
+    points = [p for kind, coords in unwrapped(parts(geom)) for p in leaves(coords)]
     if not points:
         return None, None, None, None
     xs, ys = [p[0] for p in points], [p[1] for p in points]
@@ -191,8 +220,9 @@ def read(path):
 
 
 def read_file(p):
-    if p.stat().st_size > MAX_BYTES:
-        raise ValueError(f"{p.name}이 {MAX_BYTES // 1024 // 1024}MB보다 커서 읽지 않았어요. 영역을 나누어 쓰세요.")
+    limit = min(MAX_BYTES, monitor.bound_bytes())  # 작업 메모리 상한(없으면 지금 쓸 수 있는 메모리)이 더 작으면 그것
+    if p.stat().st_size > limit:
+        raise ValueError(f"{p.name}이 {limit // 1024 // 1024}MB보다 커서 읽지 않았어요. 영역을 나누어 쓰세요.")
     try:
         doc = json.loads(p.read_text(encoding="utf-8-sig"))
     except ValueError as e:

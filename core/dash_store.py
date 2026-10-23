@@ -392,6 +392,9 @@ def check_source(source):
     no_secrets(source, "source")
     out = {name: text(source.get(name), f"source.{name}", 500) for name in ("key", "label", "schema", "table", "metric_id", "flow_id", "date")}
     out["key"] = canon_key(out["key"])  # 예전 모양의 열쇠도 지금 모양으로
+    now = current_source()
+    if now and out["key"]:
+        out["key"] = use_counts.renewed(out["key"], now["key"])  # 같은 연결의 예전 열쇠(폴더만)는 저장할 때 지금 열쇠로 덮는다
     for name in ("body", "recipe", "analysis"):
         if source.get(name) is not None:
             if not isinstance(source[name], dict):
@@ -413,7 +416,7 @@ def check_data(data, kind):
         if kind == "recent_rows":
             raise ValueError("recent_rows 카드에는 행 값을 저장할 수 없습니다. 보일 때마다 연결에서 읽습니다.")
         raise ValueError(f"data에 쓸 수 없는 항목이 있습니다: {', '.join(sorted(unknown))}")
-    no_secrets(data, "data")
+    # 값 안(그룹 이름 "user" 등)은 사용자 데이터라 검사하지 않는다. 최상위 키는 위 허용 목록이 이미 막는다
     for name in ("computed_at", "def_hash", "note", "x"):
         if name in data and not isinstance(data[name], str):
             raise ValueError(f"data.{name}은 글자여야 합니다.")
@@ -500,17 +503,19 @@ def load_templates():
 def save_template(t):
     """내 템플릿을 저장한다(같은 이름이면 바꾼다). 저장한 목록을 돌려준다."""
     new = check_template(t)
-    found = [x for x in load_templates() if x["name"] != new["name"]]
-    if len(found) >= MAX_TEMPLATES:
-        raise ValueError(f"내 템플릿은 {MAX_TEMPLATES}개까지 저장할 수 있습니다. 쓰지 않는 것을 지우세요.")
-    found.append(new)
-    settings.write(TEMPLATES, {"templates": found})
+    with settings.updating(TEMPLATES):
+        found = [x for x in load_templates() if x["name"] != new["name"]]
+        if len(found) >= MAX_TEMPLATES:
+            raise ValueError(f"내 템플릿은 {MAX_TEMPLATES}개까지 저장할 수 있습니다. 쓰지 않는 것을 지우세요.")
+        found.append(new)
+        settings.write(TEMPLATES, {"templates": found})
     return found
 
 
 def delete_template(template_id):
-    found = [x for x in load_templates() if x["id"] != template_id]
-    settings.write(TEMPLATES, {"templates": found})
+    with settings.updating(TEMPLATES):
+        found = [x for x in load_templates() if x["id"] != template_id]
+        settings.write(TEMPLATES, {"templates": found})
     return found
 
 
@@ -563,14 +568,17 @@ def now_text():
 CACHE = {"stamp": None, "text": None, "dashboards": None}  # 마지막으로 푼 파일의 (경로, mtime_ns, 크기), 푼 JSON 글자, 읽기 전용으로 쓰는 푼 결과
 
 
+def unpack(text):
+    """저장된 JSON 글자를 푼다. NaN·무한(Infinity)은 풀면서 None으로(JSON에 NaN이 있으면 브라우저가 읽지 못한다. 값마다 되짚지 않는다)."""
+    return json.loads(text, parse_constant=lambda _: None)
+
+
 def tidy(dashboards):
-    """푼 모음을 고쳐 쓴다: 예전 모양의 연결 열쇠를 지금 모양으로(다음에 쓸 때 저장된다), 저장된 NaN·무한은 None으로."""
+    """푼 모음을 고쳐 쓴다: 예전 모양의 연결 열쇠를 지금 모양으로(다음에 쓸 때 저장된다). NaN·무한은 unpack이 이미 None으로 풀었다."""
     for d in dashboards.values():
         for c in d.get("cards", []) if isinstance(d, dict) else []:
             if isinstance(c, dict) and isinstance(c.get("source"), dict) and c["source"].get("key"):
                 c["source"]["key"] = canon_key(c["source"]["key"])
-            if isinstance(c, dict) and isinstance(c.get("data"), dict):
-                c["data"] = finite(c["data"])
     return dashboards
 
 
@@ -590,13 +598,13 @@ def load(fresh=False):
             blob = found.get("blob") if found.get("v") == VERSION else None
             opened = credentials.reveal(blob) if isinstance(blob, str) else None
             try:
-                dashboards = json.loads(opened)["dashboards"] if opened else None
+                dashboards = unpack(opened)["dashboards"] if opened else None
             except (ValueError, KeyError, TypeError):
                 dashboards = None
             if not isinstance(dashboards, dict):
                 return {"dashboards": {}, "locked": True}
             CACHE.update(stamp=stamp, text=opened, dashboards=tidy(dashboards))
-        return {"dashboards": tidy(json.loads(CACHE["text"])["dashboards"]) if fresh else CACHE["dashboards"], "locked": False}
+        return {"dashboards": tidy(unpack(CACHE["text"])["dashboards"]) if fresh else CACHE["dashboards"], "locked": False}
 
 
 def write(dashboards):
@@ -635,6 +643,15 @@ def get_dashboard(dash_id):
     return copy.deepcopy(found)
 
 
+def keep_newer(d, old):
+    """자동 저장이 최신화가 쓴 값을 옛 값으로 덮지 않게: 저장된 카드의 data가 들어온 것보다 늦게 구했고(computed_at) 정의 지문(def_hash)이 같으면 저장된 data를 둔다."""
+    saved = {c["id"]: c.get("data") or {} for c in (old or {}).get("cards", []) if isinstance(c, dict)}
+    for card in d["cards"]:
+        was, now = saved.get(card["id"]) or {}, card["data"]
+        if was.get("def_hash") and was.get("def_hash") == now.get("def_hash") and str(was.get("computed_at") or "") > str(now.get("computed_at") or ""):
+            card["data"] = was
+
+
 def save_dashboard(d):
     """대시보드 하나를 검사해 저장하고(id가 같으면 덮어쓴다) 저장한 모양을 돌려준다. 이름이 겹치거나 100개를 넘으면 오류."""
     with LOCK:
@@ -645,6 +662,7 @@ def save_dashboard(d):
             raise ValueError(f"'{d['name']}' 이름의 대시보드가 이미 있습니다.")
         if old is None and len(dashboards) >= MAX_DASHBOARDS:
             raise ValueError(f"대시보드는 {MAX_DASHBOARDS}개까지 저장할 수 있습니다. 쓰지 않는 것을 지우세요.")
+        keep_newer(d, old)
         d["created"], d["updated"] = (old or {}).get("created") or now_text(), now_text()
         write({**dashboards, d["id"]: d})
         return d
@@ -669,14 +687,9 @@ def add_card(dash_id, name, card):
         return save_dashboard({**d, "cards": [*d["cards"], {**card, "layout": {"x": 0, "y": min(bottom, 999), "w": 6, "h": 6}}]})
 
 
-def set_card_data(dash_id, card_id, data, same=None):
-    """카드 하나의 값만 바꾼다. set_cards_data의 한 건짜리."""
-    return set_cards_data(dash_id, [(card_id, data, same)])[0]
-
-
 def set_cards_data(dash_id, items):
     """저장한 대시보드의 카드들의 값(data)만 한 번에 바꾼다(최신화 결과). items: [(카드 id, data, same)]. 저장소는 한 번만 풀고 한 번만 쓴다(카드마다 하면 큰 저장소는 장당 몇 초).
-    카드 크기 상한을 다시 검사한다. 카드마다 결과: 카드가 없으면(그사이 지워졌으면) False, same(지금 저장된 카드 → 참거짓)이 거짓(그사이 정의를 고쳤다)이면 쓰지 않고 None, 썼으면 True."""
+    카드 크기 상한을 다시 검사한다. 카드마다 결과: 카드가 없으면(그사이 지워졌으면) False, same(지금 저장된 카드 → 참거짓)이 거짓(그사이 정의를 고쳤다)이면 쓰지 않고 None, 썼으면 True, 이 카드의 값이 검사에 걸리면 그 오류(다른 카드는 쓴다)."""
     with LOCK:
         dashboards = editable()
         d, found = dashboards.get(dash_id), []
@@ -687,8 +700,11 @@ def set_cards_data(dash_id, items):
             elif same is not None and not same(card):
                 found.append(None)
             else:
-                card["data"] = check_card({**card, "data": data})["data"]
-                found.append(True)
+                try:
+                    card["data"] = check_card({**card, "data": data})["data"]
+                    found.append(True)
+                except Exception as e:  # 이 카드만 실패(예: 크기 상한). 나머지 카드는 쓴다
+                    found.append(e)
         if True in found:
             write(dashboards)
         return found

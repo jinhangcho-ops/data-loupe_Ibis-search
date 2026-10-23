@@ -97,14 +97,18 @@ const edit = () => editing ??= need(...EDIT_JS).then(buildEdit).catch(e => { edi
 // 쿼리 화면에서 오는 연결·화면 이동: 연결에 성공하면 연결 열쇠를 다시 받는다(최신화는 연결 경로가 시작한다).
 function afterConnect() { showConn(); }
 
-let dashId = "", dashName = "", dashMeta = {}, dashboards = [], lastSaved = "", quiet = false, saveTimer = null;
+let dashId = "", dashName = "", dashMeta = {}, dashboards = [], lastSaved = "", quiet = false, saveTimer = null, valuesDirty = false;  // valuesDirty: 카드 값(data)만 바뀐 것(값 다시 구하기). snapshot은 값을 빼므로 따로 표시한다
 const metaOf = d => Object.fromEntries(Object.entries(d).filter(([k]) => !["id", "name", "palette", "cards"].includes(k)));
 const randomId = () => [...crypto.getRandomValues(new Uint8Array(8))].map(b => b.toString(16).padStart(2, "0")).join("");
 const board = new EditBoard($("d-grid"), { onEdit: card => card ? edit().then(() => panel.open(card)).catch(e => say("err-dash", e.message)) : panel?.open(card), empty: "이 대시보드에는 카드가 없어요. [카드 추가]나 쿼리 화면의 [대시보드에 추가]로 만드세요.", changed: boardChanged, recompute: cards => recomputeRange(board, cards, !!connected) });
 // 설정 칸(기준일·기간·주기): 바꾸면 저장한 대시보드의 그 항목만 서버에 쓴다(카드는 그대로). 거부되면(예: 주기가 너무 짧음) 이유를 보이고 저장된 값으로 되돌린다.
 const ctl = new DashCtl($("d-ctl"), {
   board, visible: () => !document.hidden && !$("dash").classList.contains("hidden"),
-  liveRun: async () => { quiet = true; try { await liveCards(board, !!connected); } finally { quiet = false; } },  // 실시간 값은 저장하지 않는다
+  liveRun: async () => {  // 실시간 값은 저장하지 않는다
+    if (typing()) return;  // 카드의 입력 칸에 커서가 있으면 이번 회는 미룬다(다시 그리면 쓰던 글이 지워진다)
+    quiet = true;
+    try { await liveCards(board, !!connected); } finally { quiet = false; scheduleSave(); }  // 갱신 중에 한 편집(저장이 미뤄진 것)을 이제 예약한다
+  },
   changed: async fields => {
     if (!dashId) return;
     try { await api("/api/dash/settings", { id: dashId, ...fields }); Object.assign(dashMeta, fields); say("err-settings", ""); }
@@ -112,18 +116,21 @@ const ctl = new DashCtl($("d-ctl"), {
   } });
 
 // ---------- 저장: 카드·팔레트가 바뀌면 열어 둔 대시보드에 자동으로 쓴다(값(data)만 바뀐 것은 다시 구할 때 저장) ----------
+const typing = () => $("d-grid").contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
 const snapshot = () => JSON.stringify([board.palette, board.star, board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; })]);
-async function save() {
+async function save() {  // 저장했으면(저장할 대시보드가 없어도) true, 실패하면 false
   clearTimeout(saveTimer);
-  if (!dashId) return;
+  if (!dashId) return true;
   try {
     const d = (await api("/api/dash", { ...dashMeta, id: dashId, name: dashName, palette: board.palette, cards: board.cards.map(DashBoard.plain), north_star: liveStar(board.star, board.cards) })).dashboard;
     dashMeta = metaOf(d);
     board.star = { card: "", counters: [], limits: {}, ...d.north_star };
     lastSaved = snapshot();
+    valuesDirty = false;
     dashDraft.clear();
     $("d-state").textContent = "저장했어요";
-  } catch (e) { $("d-state").textContent = ""; say("err-dash", e.message); }
+    return true;
+  } catch (e) { $("d-state").textContent = ""; say("err-dash", e.message); return false; }
 }
 // 임시 저장(초안): 저장하지 않은 편집(카드·배치·팔레트·북극성)이 2초 넘게 남으면 서버에 쓴다(draft.js). 카드 값(data)은 담지 않는다. [저장]이 되면 지운다.
 // 이어서 하면 그 대시보드를 열고 초안으로 바꾼 뒤 일반 자동 저장이 이어서 쓴다.
@@ -150,6 +157,9 @@ function boardChanged() {
   $("d-picked").textContent = picked ? `고른 카드 ${picked}개` : "다운로드할 카드를 고르세요";
   showAlerts();
   if (panel?.card && !board.cards.includes(panel.card)) panel.close(); else if (panel?.card && !quiet) panel.show();  // 실시간·최신화 갱신 중에는 열린 설정 패널을 다시 그리지 않는다(입력 중인 값이 사라지지 않게)
+  scheduleSave();
+}
+function scheduleSave() {
   if (quiet || !dashId || snapshot() === lastSaved) return;
   $("d-state").textContent = "저장 중…";
   clearTimeout(saveTimer);
@@ -186,6 +196,7 @@ async function openDash(id) {
     $("d-palette").value = d.palette.join(", ");
     board.set(d.cards.map(needsValues));
     lastSaved = snapshot();
+    valuesDirty = false;
   } finally { quiet = false; }
   $("d-modal-name").textContent = d.name;
   $("d-state").textContent = "";
@@ -194,7 +205,8 @@ async function openDash(id) {
   api("/api/dash/last", { id }).catch(() => {});
 }
 // 화면의 카드가 마지막 저장과 같으면 저장하지 않는다(낡은 카드 값으로 서버의 새 값을 덮지 않게)
-const saveIfDirty = () => snapshot() !== lastSaved ? save() : Promise.resolve();
+// 저장하지 못했으면 던져서, 부른 쪽이 다른 대시보드로 옮기며 편집을 버리지 않게 한다
+const saveIfDirty = async () => { if ((valuesDirty || snapshot() !== lastSaved) && !await save()) throw new Error("저장하지 못해 그대로 둡니다. " + $("err-dash").textContent); };
 $("d-pick").onchange = () => saveIfDirty().then(() => openDash($("d-pick").value)).catch(e => { $("d-pick").value = dashId; say("err-dash", e.message); });
 $("d-new").onclick = () => { $("d-new-box").classList.toggle("hidden"); $("d-new-name").focus(); edit().catch(e => say("err-dash", e.message)); };  // 템플릿 목록은 편집 도구가 채운다
 $("d-new-go").onclick = () => busy($("d-new-go"), async () => {
@@ -305,6 +317,7 @@ const panelHost = { board, menu: null, menuRoot, popRoot, menuTarget: null, chan
   recompute: async card => {
     const d = await api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: card.data?.since ? { since: card.data.since } : {} }, ctx: board.ctx() });
     card.data = d.data;
+    valuesDirty = true;  // 다음 저장(다른 대시보드로 옮길 때·최신화 뒤)에 값도 함께 쓴다
     needsValues(card);
     board.draw();
   },

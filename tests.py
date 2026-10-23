@@ -1955,11 +1955,14 @@ class FakeTasks:
             return 0, "성공: 예약 작업을 만들었습니다.", ""
         if verb == "/Delete":
             return (0, "성공", "") if self.tasks.pop(name, None) else (1, "", "오류: 지정된 파일을 찾을 수 없습니다.")
+        head = ",".join(f'"h{i}"' for i in range(28))
+        row = lambda task: ",".join(f'"{v}"' for v in ["PC", task, "2026-10-16 오전 9:00:00", "준비", "대화형만", "2026-10-15 오후 1:05:00", "0", "me", self.tasks[task][0].replace('"', '""')] + ["N/A"] * 19)
+        if name.endswith("\\"):  # 폴더 조회: 폴더 안의 작업 전부(폴더가 비었거나 없으면 오류)
+            mine = [t for t in self.tasks if t.lower().startswith(name.lower())]
+            return (0, head + "\n" + "\n".join(row(t) for t in mine) + "\n", "") if mine else (1, "", "오류: 지정된 파일을 찾을 수 없습니다.")
         if name not in self.tasks:
             return 1, "", "오류: 지정된 파일을 찾을 수 없습니다."
-        head = ",".join(f'"h{i}"' for i in range(28))
-        row = ["PC", name, "2026-10-16 오전 9:00:00", "준비", "대화형만", "2026-10-15 오후 1:05:00", "0", "me", self.tasks[name][0].replace('"', '""')] + ["N/A"] * 19
-        return 0, head + "\n" + ",".join(f'"{v}"' for v in row) + "\n", ""
+        return 0, head + "\n" + row(name) + "\n", ""
 
 
 def schedule_section(c, got):

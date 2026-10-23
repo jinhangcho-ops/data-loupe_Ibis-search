@@ -15,6 +15,7 @@ from query import sentence_run
 from core import dash_store
 from core import server
 from core import sql_funcs
+from core import use_counts
 from core.server import run
 
 QUERY_ROWS = 1000  # 행을 보는 요청에서 돌려줄 행 수
@@ -37,7 +38,7 @@ def execute_run(r, depth=0):
         spec = r["body"]["pivot"]
         expr = querying.runnable(r["body"], select=False)
         table = run(lambda: calc.pivot(expr, spec, lambda e: e.to_pyarrow()["v"].to_pylist()).to_polars())
-        return one(list(spec.get("rows") or []), r["result"], server.to_json(table.head(calc.MAX_ROWS))["rows"], table.height > calc.MAX_ROWS)
+        return one(list(spec.get("rows") or []), r["result"], server.to_json(table.head(calc.MAX_ROWS), text_big=False)["rows"], table.height > calc.MAX_ROWS)
     if route == "metric":
         return metric_run(r, depth)
     if route == "nested":
@@ -52,7 +53,7 @@ def check_scope(mine, body):
     if scope.get("flow_id") and not scope.get("table"):
         return
     now = dash_store.current_source()
-    if scope.get("table") != body.get("base") or (scope.get("schema") or "") != (body.get("schema") or "") or (now and scope.get("key") != now["key"]):
+    if scope.get("table") != body.get("base") or (scope.get("schema") or "") != (body.get("schema") or "") or (now and not use_counts.same_source(scope.get("key"), now["key"])):
         raise ValueError(f"‘{my_metrics.scope_text(mine)}’은(는) 다른 테이블(흐름)의 지표라 지금 검색에서 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]해서 쓰세요.")
 
 

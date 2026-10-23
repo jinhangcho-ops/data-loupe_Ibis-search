@@ -51,16 +51,15 @@ def finite(c):
     return ibis.ifelse(x.isnan() | x.isinf(), ibis.null().cast("float64"), x) if c.type().is_floating() else x
 
 
-def values(t, c):
-    """값 빈도: 행이 많은 TOP_VALUES개 값과 그 수, 빈 값 수, 그 밖의 값 수."""
+def values(t, c, more=None):
+    """값 빈도: 행이 많은 TOP_VALUES개 값과 그 수, 빈 값 수, 그 밖의 값 수. more(집계 식 dict)를 주면 같은 집계에 실어 구하고 (값 빈도, more의 값들)을 돌려준다."""
     top = rows(t.group_by(c.name("value")).aggregate(n=t.count()).order_by([ibis.desc("n"), "value"]).limit(TOP_VALUES + 1))
     top = [r for r in top if r["value"] is not None][:TOP_VALUES]
-    counted = one(t.aggregate(total=t.count(), nulls=c.isnull().sum()))
-    kept = t.filter(c.notnull())
-    counted["unique"] = one(kept.aggregate(u=kept[c.get_name()].nunique()))["u"]  # 빈 값은 세지 않는다(백엔드마다 달라서 걸러 낸 뒤 센다)
+    counted = one(t.aggregate(total=t.count(), nulls=c.isnull().sum(), unique=c.nunique(where=c.notnull()), **{f"more_{k}": v for k, v in (more or {}).items()}))  # 질의 한 번
     shown = sum(r["n"] for r in top)
-    return {"labels": [str(r["value"]) for r in top], "counts": [r["n"] for r in top], "nulls": counted["nulls"] or 0,
-            "other": counted["total"] - (counted["nulls"] or 0) - shown, "unique": counted["unique"]}
+    found = {"labels": [str(r["value"]) for r in top], "counts": [r["n"] for r in top], "nulls": counted["nulls"] or 0,
+             "other": counted["total"] - (counted["nulls"] or 0) - shown, "unique": counted["unique"]}
+    return found if more is None else (found, {k: counted[f"more_{k}"] for k in more})
 
 
 def distribution(t, column):
@@ -69,12 +68,13 @@ def distribution(t, column):
     if c.type().is_floating():  # NaN·무한은 빈 값으로 본다
         t = t.mutate(**{column: finite(c)})
         c = t[column]
-    out = {"column": column, "type": kind(c.type()), "values": values(t, c)}
+    out = {"column": column, "type": kind(c.type())}
     if out["type"] != "num":
+        out["values"] = values(t, c)
         return out
     x = c.cast("float64")
-    s = one(t.aggregate(n=x.count(), min=x.min(), max=x.max(), mean=x.mean(), std=x.std(),
-                        q1=x.quantile(0.25), median=x.quantile(0.5), q3=x.quantile(0.75)))
+    out["values"], s = values(t, c, dict(n=x.count(), min=x.min(), max=x.max(), mean=x.mean(), std=x.std(),
+                                         q1=x.quantile(0.25), median=x.quantile(0.5), q3=x.quantile(0.75)))  # 값 빈도의 집계에 요약 통계를 같이 실어 질의를 아낀다
     out["stats"] = s
     if not s["n"]:
         return out

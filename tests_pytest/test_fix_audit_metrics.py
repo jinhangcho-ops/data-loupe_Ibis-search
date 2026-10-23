@@ -40,9 +40,10 @@ def test_cac_trims_spend_to_user_period():
     got = run("cac", s, users, other=ads, align={"kind": "period", "unit": "day"})
     assert got["value"] == 10.0 and [r["key"] for r in got["rows"]] == ["2026-03-02"]
     assert any("앞의 활동" in n for n in got["notes"])
-    # 공통 키 맞춤: 사용자가 있는 채널 A의 광고비 100만 센다(B 100은 이 사용자 표에 사용자가 없다)
+    # 공통 키 맞춤(광고 날짜 없음): 광고비에 기간이 안 걸린다는 안내를 하고, 신규가 0명인 키(B)의 광고비도 기간 맞춤처럼 남긴다
     by_key = run("cac", {k: v for k, v in s.items() if k != "광고 날짜"}, users, other=ads, align={"kind": "key", "keys": [["ch", "ch"]]})
-    assert by_key["value"] == 10.0 and [r["key"] for r in by_key["rows"]] == ["A"]
+    assert by_key["value"] == 20.0 and [r["key"] for r in by_key["rows"]] == ["A", "B"]
+    assert any("광고비에는 기간이 걸리지 않아요" in n for n in by_key["notes"])
 
 
 def test_roas_notes_unfinished_cohorts():
@@ -100,7 +101,7 @@ def test_apply_skips_fanout_warnings_and_remote_note_tells_query_count(tmp_path,
     real = flow_opt.fanout_warnings
     monkeypatch.setattr(flow_opt, "fanout_warnings", lambda g, c: calls.append(1) or real(g, c))
     found = flow_opt.propose(graph, get, con, remote=True, source_key="k")
-    assert len(calls) == 1 and found["note"].startswith("원격 DB라") and "최대 7번 조회해요" in found["note"]  # 원래 결과 1 + 규칙 4개 + 조인 1개의 양쪽 키 확인 2
+    assert len(calls) == 1 and found["note"].startswith("원격 DB라") and "최대 9번 조회해요" in found["note"]  # 원래 결과 1 + 규칙 4개 + 조인 1개의 양쪽 키 확인 4(키 하나에 행 수·고유 행 수 2번씩)
     flow_opt.apply(graph, [1], get, con, remote=True, scan_ok=True, source_key="k")
     assert len(calls) == 1  # apply는 경고를 다시 계산하지 않는다
     con.disconnect()

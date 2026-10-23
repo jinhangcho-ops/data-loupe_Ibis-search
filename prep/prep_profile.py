@@ -5,7 +5,7 @@ from lazy import ibis
 from core import parse
 from core import result
 from prep.prep_expr import type_text
-from core.prep_ops import date_pattern, is_number, stats
+from core.prep_ops import date_pattern, is_number, nan_to_null, stats
 
 # 빈 값을 뜻하는 글자로 흔한 것. ""는 blank로 센다.
 MARKERS = ["", "-", "N/A", "n/a", "NA", "null", "NULL", "None", "없음", "?"]
@@ -77,7 +77,7 @@ def profile(t):
     texts = {i: name for i, (name, kind) in enumerate(kinds.items()) if kind == "string"}
     metrics = {"rows": t.count()}
     for i, (name, kind) in enumerate(kinds.items()):
-        col = t[name]
+        col = nan_to_null(t[name])  # 실수의 NaN은 빈 값으로(빈 값 수에 들고 min·max가 NaN이 되지 않게)
         metrics.update({f"nulls{i}": count(col.isnull()), f"unique{i}": col.nunique(where=col.notnull())})
         if kind in ("int", "float", "date", "time"):
             metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})
@@ -166,6 +166,7 @@ def prune(arrow):
     import numpy as np
     import polars as pl
     df = pl.from_arrow(arrow)
+    df = df.with_columns(pl.col(n).fill_nan(None) for n, d in df.schema.items() if d.is_float())  # NaN은 빈 값으로(빈 값 수·상관에 같이 쓴다)
     rows, found, picked = df.height, [], set()
     if not rows:
         return found
@@ -190,7 +191,7 @@ def prune(arrow):
         return found
     values = df.select(pl.col(n).cast(pl.Float64) for n in numeric).to_numpy()
     nulls = {n: df[n].null_count() for n in numeric}
-    full = [k for k, n in enumerate(numeric) if not nulls[n] and rows >= PRUNE_MIN_PAIRS]  # 빈 값 없는 컬럼끼리는 상관 행렬을 한 번에 구한다
+    full = [k for k, n in enumerate(numeric) if not nulls[n] and rows >= PRUNE_MIN_PAIRS and np.isfinite(values[:, k]).all()]  # 빈 값 없는 컬럼끼리는 상관 행렬을 한 번에 구한다
     with np.errstate(all="ignore"):
         matrix = np.corrcoef(values[:, full].T) if len(full) > 1 else None
     at = {k: m for m, k in enumerate(full)}
@@ -202,7 +203,7 @@ def prune(arrow):
             if matrix is not None and i in at and j in at:
                 r = float(matrix[at[i], at[j]])
             else:
-                both = ~np.isnan(values[:, i]) & ~np.isnan(values[:, j])
+                both = np.isfinite(values[:, i]) & np.isfinite(values[:, j])
                 if both.sum() < PRUNE_MIN_PAIRS:
                     continue
                 x, y = values[both, i], values[both, j]

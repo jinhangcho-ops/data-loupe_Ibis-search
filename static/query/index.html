@@ -460,6 +460,7 @@ $("base").onchange = async () => {
   $("bpick").classList.add("hidden");
   clearLists();
   await refreshColumns();
+  draftBase = { base: S.base, key: bodyKey() };  // 테이블을 연 직후(첫 응답)의 조건이 초안의 기준이다. 첫 초안 확인까지 늦추면 그 사이의 편집을 놓친다
   showSummaries();
   if (view === "sentence") sentView.show();  // 문장 보기의 컬럼 목록을 새 테이블로
 };
@@ -702,7 +703,7 @@ function table(data, origins = {}) {
   const head = data.columns.map(c => {
     const from = origins[c] && origins[c] !== S.base ? `<small>${esc(origins[c])}</small>` : "";
     const arrow = c === sorted[0] ? (sorted[1]?.toLowerCase() === "desc" ? " ↓" : " ↑") : "";
-    const number = data.rows.some(r => typeof r[c] === "number");  // 숫자 컬럼은 머리글도 오른쪽에(값과 같이)
+    const number = numCol(data.rows, c);  // 숫자 컬럼은 머리글도 오른쪽에(값과 같이)
     return `<th class="${[c === sorted[0] && "sorted", number && "num"].filter(Boolean).join(" ")}">${esc(c)}${arrow}${from}</th>`;
   }).join("");
   const source = c => c === "출처" && origins[c] === "이어붙인 테이블";
@@ -788,6 +789,7 @@ function applyFind() {
     const hit = !want || tr.textContent.toLowerCase().includes(want);
     tr.classList.toggle("miss", !hit);
     shown += hit;
+    if (!hit && !tr.querySelector("mark")) return;  // 안 맞고 강조도 없던 행은 칸을 다시 쓸 것이 없다
     tr.querySelectorAll("td").forEach(td => {
       td.dataset.plain ??= td.textContent;
       const plain = td.dataset.plain, at = want ? plain.toLowerCase().indexOf(want) : -1;

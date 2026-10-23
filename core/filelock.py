@@ -11,6 +11,7 @@ from core import scratch
 from core import settings
 
 WAIT = 5  # guarded가 잠금이 풀리기를 기다리는 시간(초)
+BROKEN_AFTER = 10  # 비었거나 깨진 잠금 파일이 이 시간(초)보다 오래됐으면 만든 프로세스가 쓰다 멈춘 것으로 본다(만든 직후 쓰기 전의 빈 파일은 지우지 않는다)
 
 
 def locks():
@@ -22,14 +23,17 @@ def lock_path(name):
 
 
 def left_behind(path):
-    """잠금 파일이 끝난 프로세스의 것인지. 읽을 수 없거나 깨졌으면 모르는 것이라 거짓(지우지 않는다)."""
+    """잠금 파일이 끝난 프로세스의 것인지. 읽을 수 없거나 깨졌으면(만든 프로세스가 쓰기 전에 멈춘 빈 파일 등) 고친 지 BROKEN_AFTER초가 넘었을 때만 남은 것으로 본다."""
     try:
         if path.is_symlink() or not path.is_file():
             return False
         pid, started = path.read_text(encoding="ascii").split()
         return scratch.ended(pid, started)
     except (OSError, ValueError, psutil.Error):
-        return False
+        try:
+            return time.time() - path.stat().st_mtime > BROKEN_AFTER
+        except OSError:
+            return False
 
 
 def clear_stale(path):

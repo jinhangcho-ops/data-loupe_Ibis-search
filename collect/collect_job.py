@@ -576,7 +576,7 @@ def run_file(config, env, path, found, record, halt):
         balancer.call(whole)
     if info["ranges"]:
         size = info["size"]
-        same = (info["etag"] or info["modified"]) and record.get("size") == size and record.get("etag") == info["etag"] and record.get("modified") == info["modified"] and raw.is_file()  # 바뀜을 알아볼 값이 하나도 없으면 이어 받지 않는다 and raw.stat().st_size == size
+        same = (info["etag"] or info["modified"]) and record.get("size") == size and record.get("etag") == info["etag"] and record.get("modified") == info["modified"] and raw.is_file() and raw.stat().st_size == size  # 바뀜을 알아볼 값이 하나도 없으면, 받아 둔 파일이 잘렸으면 이어 받지 않는다
         if not same:  # 처음이거나 파일이 바뀜: 처음부터
             with guard:
                 record.update(done=[], bytes=0, size=size, etag=info["etag"], modified=info["modified"])

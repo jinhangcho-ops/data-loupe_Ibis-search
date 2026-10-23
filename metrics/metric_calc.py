@@ -104,7 +104,8 @@ def add_sessions(table, user, time, gap_minutes=None, key=None):
     t = table.mutate(_sec=epoch(table[time]))
     ordered = ibis.window(group_by=user, order_by=time)
     t = t.mutate(_new=((t._sec - t._sec.lag().over(ordered)) > gap_minutes * 60).fill_null(True).cast("int64"))
-    t = t.mutate(_n=t._new.sum().over(ibis.cumulative_window(group_by=user, order_by=time)))
+    # 같은 시각의 행은 같은 세션 번호를 받는다(ROWS 누적이면 행마다 번호가 달라져 세션이 쪼개진다)
+    t = t.mutate(_n=t._new.sum().over(ibis.range_window(preceding=None, following=0, group_by=user, order_by=time)))
     return t.mutate(session=t[user].cast("string") + ibis.literal("#") + t._n.cast("string")).drop("_sec", "_new", "_n")
 
 
@@ -200,6 +201,15 @@ def active_buckets(table, user, time, unit):
     return t.filter(t.u.notnull(), t.p.notnull()).distinct()
 
 
+SPARSE = 10  # 기간 칸 수가 활동 있는 칸의 이 배수를 넘으면 날짜 이상값을 의심해 알린다
+
+
+def sparse_note(cells, used):
+    """첫~마지막 기간 사이 칸(cells)이 활동 있는 칸(used)의 SPARSE배를 넘으면 안내 글, 아니면 None."""
+    if cells > SPARSE * used and cells > 60:
+        return f"활동이 있는 기간은 {used:,}개인데 첫 기간부터 마지막 기간까지 {cells:,}칸이에요. 날짜 컬럼에 아주 이른/먼 날짜(이상값)가 있는지 확인해 보세요."
+
+
 def state_counts(act):
     """기간 버킷별 활동자 수, 새로 나타난 수, 앞 기간에도 활동한 수를 {번호: 수} 셋으로."""
     first = act.group_by("u").aggregate(p=act.p.min())
@@ -230,19 +240,22 @@ def gap_counts(table, user, time, unit):
     return returns, last, rests
 
 
-def user_states(table, user, time, unit="month", inactive_days=None):
+def user_states(table, user, time, unit="month", inactive_days=None, notes=None):
     """기간 버킷마다 사용자 상태 [{period(첫 날), active, new, retained, resurrected, churned, quick_ratio, churn_rate, resurrection_rate}].
     기본(inactive_days 없음)은 버킷만 본다: new = 첫 활동이 그 기간, retained = 앞 기간에도 활동, resurrected = 앞 기간에는 없고 그 전에는 활동한 적 있음, churned = 앞 기간에 활동했고 이번엔 없음.
     inactive_days = N(미접속 기준 일수)을 주면: churned = 앞 기간에 활동했고 이번엔 없으며 마지막 활동이 이 기간 끝보다 N일 이상 앞인 사람,
     resurrected = 이번에 활동했고 앞 기간엔 없으며(그 전 활동이 있고) 직전 활동과 N일 이상 벌어진 사람. 쉬었지만 N일이 안 된 사람이 돌아오면 retained로 센다.
     quick_ratio = (new + resurrected) / churned, churn_rate = churned / 앞 기간 활동자, resurrection_rate = resurrected / 기간 시작 때 휴면자(앞 기간까지 처음 나타난 사람 − 앞 기간 활동자. N을 주면 기간 시작보다 마지막 활동이 N일 이상 앞선 사람).
-    unit에 일수 N을 주면 N일 묶음마다 본다. 첫 기간은 앞 기간이 없어 churned 등이 None이다."""
+    unit에 일수 N을 주면 N일 묶음마다 본다. 첫 기간은 앞 기간이 없어 churned 등이 None이다. notes(목록)를 주면 기간 칸이 활동 칸보다 훨씬 많을 때 안내를 더한다."""
     check_unit(unit)
     if inactive_days is not None and (isinstance(inactive_days, bool) or not isinstance(inactive_days, int) or inactive_days < 1):
         raise ValueError("미접속 기준은 1 이상의 일수여야 합니다.")
     active, new, kept = state_counts(active_buckets(table, user, time, unit))
     if not active:
         return []
+    msg = sparse_note(max(active) - min(active) + 1, len(active))
+    if msg and notes is not None:
+        notes.append(msg)
     returns, last, rests = gap_counts(table, user, time, unit) if inactive_days else ({}, {}, [])
     out, seen = [], 0  # seen = 앞 기간까지 처음 나타난 사람 수
     for p in range(min(active), max(active) + 1):
@@ -671,8 +684,9 @@ def power_two_proportions(p1, p2, n1, n2=None, alpha=0.05):
 
 
 def mde_two_proportions(p1, n1, n2=None, alpha=0.05, power=0.8):
-    """대조군 비율 p1에서 검출할 수 있는 최소 차이(MDE, 정규 근사). 두 집단의 분산을 p1으로 본다."""
-    return mde_normal(prop_se(p1, p1, n1, n2 or n1), alpha, power)
+    """대조군 비율 p1에서 검출할 수 있는 최소 차이(MDE, 정규 근사). 두 집단의 분산을 p1으로 본다. p1이 0 또는 1이면 분산이 0이라 구할 수 없어 None."""
+    se = prop_se(p1, p1, n1, n2 or n1)
+    return mde_normal(se, alpha, power) if se else None
 
 
 def power_two_means(delta, sd, n1, n2=None, alpha=0.05):

@@ -13,6 +13,7 @@ from lazy import Later
 from core import held
 from core import server
 from core import settings
+from core import use_counts
 from core.server import app, get_con, run
 
 
@@ -176,7 +177,7 @@ def catalog_save():
     scope = dict(body_of(data.get("scope")))
     now = dash_store.current_source()
     if now:
-        scope.setdefault("key", now["key"])
+        scope["key"] = use_counts.renewed(scope.get("key"), now["key"])
         scope.setdefault("label", now["label"])
     columns = data.get("columns") if isinstance(data.get("columns"), dict) else None
     defn = {"name": data.get("name") or e["name"], "scope": scope, "template": metric_catalog.PREFIX + e["id"], "slots": body_of(data.get("slots")),

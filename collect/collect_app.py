@@ -186,11 +186,11 @@ def save_collection():
         item = collect_config.normalize(item)
         collect_job.check_literals(item)
     name = request.json.get("name")
-    saved = settings.save_named(collect_config.COLLECTIONS, "구성", MAX_COLLECTION_SIZE, name, item)
-    if item is None:  # 구성을 지우면 그 예약과 Windows 작업도 지운다(남으면 없는 구성을 계속 실행하려다 실패한다)
+    if item is None:  # 구성을 지우면 그 예약과 Windows 작업도 지운다(남으면 없는 구성을 계속 실행하려다 실패한다). 예약을 먼저 지워, 지우지 못하면 구성이 남아 다시 지울 수 있다
         from integrations import schedule
         if name in schedule.schedules():
             schedule.save(name, None)
+    saved = settings.save_named(collect_config.COLLECTIONS, "구성", MAX_COLLECTION_SIZE, name, item)
     return jsonify(collections=saved)
 
 

@@ -24,6 +24,16 @@ def connection_key(info):
     return f"url:{info.get('url', '')}|{info.get('user', '')}"
 
 
+def same_source(saved, now):
+    """저장해 둔 연결 열쇠(saved)가 지금 연결의 열쇠(now)와 같은 연결인지. 같은 폴더의 파일을 따로 가르기 전에 저장한 예전 열쇠(폴더만, '#' 없음)는 지금 열쇠의 폴더 부분이 같으면 같다고 본다."""
+    return saved == now or (isinstance(saved, str) and "#" not in saved and now.split("#")[0] == saved)
+
+
+def renewed(saved, now):
+    """저장할 때 쓸 열쇠: 없거나 같은 연결의 예전 열쇠면 지금 열쇠로 덮고(그다음부터 정확히 비교), 다른 연결의 것이면 그대로 둔다."""
+    return now if not saved or same_source(saved, now) else saved
+
+
 def load():
     """사용 기록 전체. 예전 recent.json만 있으면 그것을 1번 쓴 연결로 옮겨 담은 모양으로 돌려준다."""
     found = settings.read(FILE) or {}

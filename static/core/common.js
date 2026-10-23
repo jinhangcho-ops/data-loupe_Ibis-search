@@ -68,6 +68,8 @@ const inline = v => Array.isArray(v) ? "[" + v.map(inline).join(", ") + "]"
 // 중첩 값의 전체 글자는 들여쓴 JSON이다.
 // 큰 정수는 서버가 글자("12345678901234567890")로 보내므로 숫자처럼 오른쪽에 맞춘다. 자릿수 쉼표로 소수나 큰 지수가 잘려 보이면 전체 값을 title로.
 const bigInt = v => typeof v === "string" && /^-?\d{16,}$/.test(v);
+const sameSource = (saved, now) => saved === now || (typeof saved === "string" && typeof now === "string" && !saved.includes("#") && now.split("#")[0] === saved);  // 연결 열쇠 비교(서버 use_counts.same_source와 같은 규칙: 폴더만 있는 예전 열쇠는 그 폴더의 어느 파일 연결과도 같다)
+const numCol = (rows, c) => rows.some(r => typeof r[c] === "number" || bigInt(r[c]));  // 숫자(큰 정수 포함) 컬럼이면 머리글도 오른쪽에
 function shown(v) {
   if (typeof v === "number") { const t = v.toLocaleString(); return [t, t.replace(/,/g, "") === String(v) ? "" : String(v)]; }
   const s = isNested(v) ? inline(v) : String(v ?? ""), max = +($("maxlen")?.value ?? 40);
@@ -82,7 +84,7 @@ function cell(v) {
 }
 // 결과 표 {columns, rows}: 숫자 컬럼은 머리글도 오른쪽에. SQL 실행과 문장 보기의 결과가 함께 쓴다.
 const resultTable = ({ columns, rows }) => !rows.length ? '<span class="empty">결과가 없습니다.</span>'
-  : `<table><thead><tr>${columns.map(c => `<th class="${rows.some(r => typeof r[c] === "number") ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
+  : `<table><thead><tr>${columns.map(c => `<th class="${numCol(rows, c) ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
     rows.map(r => "<tr>" + columns.map(c => cell(r[c])).join("") + "</tr>").join("") + "</tbody></table>";
 document.addEventListener("click", e => {
   const td = e.target.closest("td.nest");
@@ -106,6 +108,7 @@ async function busy(button, fn) {
 
 // 위쪽 줄의 점유율: PC 메모리·CPU와 이 프로그램의 메모리를 2초마다 읽는다(프로그램의 CPU·메모리 비율은 마우스를 올리면).
 async function showUsage() {
+  if (document.hidden) return;  // 숨은 창에서는 묻지 않는다(2초마다 서버를 깨우지 않게)
   try {
     const d = await api("/api/usage");
     $("usage").innerHTML = `<span>PC 메모리<b>${d.pc_memory}%</b></span><span>PC CPU<b>${d.pc_cpu}%</b></span><span>프로그램<b>${d.memory_mb.toLocaleString()} MB</b></span>`;

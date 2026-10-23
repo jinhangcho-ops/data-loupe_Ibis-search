@@ -22,7 +22,7 @@ const INLINE_PROPS = ("display position top right bottom left float box-sizing w
   "border-top-left-radius border-top-right-radius border-bottom-right-radius border-bottom-left-radius border-collapse border-spacing table-layout " +
   "background-color background-image background-size background-position background-repeat color font-family font-size font-weight font-style line-height letter-spacing text-align text-decoration-line text-transform text-indent vertical-align white-space word-break overflow-wrap " +
   "flex-direction flex-wrap flex-grow flex-shrink flex-basis align-items align-self align-content justify-content justify-items order row-gap column-gap grid-template-columns grid-template-rows grid-column-start grid-column-end grid-row-start grid-row-end grid-auto-flow " +
-  "fill fill-opacity stroke stroke-width stroke-opacity stroke-dasharray stroke-linecap stroke-linejoin text-anchor dominant-baseline").split(" ");
+  "color-scheme font-variant-numeric fill fill-opacity stroke stroke-width stroke-opacity stroke-dasharray stroke-linecap stroke-linejoin text-anchor dominant-baseline").split(" ");
 function inlineStyles(source, copy) {
   const css = getComputedStyle(source);
   copy.setAttribute("style", INLINE_PROPS.map(name => { const v = css.getPropertyValue(name); return v === "" || (name !== "display" && (v === "none" || v === "normal")) ? "" : `${name}:${v};`; }).join(""));  // 빈 값·기본값(none·normal)은 복사본에서도 기본이라 뺀다

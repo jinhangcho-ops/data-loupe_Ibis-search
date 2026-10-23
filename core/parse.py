@@ -1,4 +1,5 @@
 """한 줄 입력(조인·기간·조건·정렬·표시 컬럼)과 이어붙이기를 해석해 Ibis 식으로 바꾼다. 입력·출력은 하지 않는다."""
+import bisect
 import datetime as dt
 import difflib
 import functools
@@ -109,12 +110,15 @@ def split(pattern, text, quotes=True):
     """pattern으로 나눈다. 따옴표로 감싼 부분은 나누지 않는다. quotes가 False면 따옴표도 글자로 본다."""
     if not quotes:
         return pattern.split(text)
-    quoted = [m.span() for m in QUOTE_RE.finditer(text)]
-    if any(end - start == 1 for start, end in quoted):
-        raise ValueError("따옴표가 닫히지 않았습니다. 값에 따옴표가 있으면 다른 따옴표로 감싸세요.")
-    parts, pos = [], 0
+    quoted = []
+    for m in QUOTE_RE.finditer(text):
+        if m.end() - m.start() == 1:  # 닫히지 않은 따옴표: 처음 하나에서 바로 알린다
+            raise ValueError("따옴표가 닫히지 않았습니다. 값에 따옴표가 있으면 다른 따옴표로 감싸세요.")
+        quoted.append(m.span())
+    starts, parts, pos = [s for s, _ in quoted], [], 0
     for m in pattern.finditer(text):
-        if not any(start <= m.start() < end for start, end in quoted):
+        i = bisect.bisect_right(starts, m.start()) - 1  # 따옴표 구간은 겹치지 않고 앞에서부터 차례라 이진 탐색으로 안에 있는지 본다(쉼표가 많아도 느려지지 않게)
+        if not (i >= 0 and m.start() < quoted[i][1]):
             parts.append(text[pos:m.start()])
             pos = m.end()
     return parts + [text[pos:]]
@@ -123,11 +127,16 @@ def split(pattern, text, quotes=True):
 SPACED = "\x00col"  # 공백 있는 컬럼 이름 자리에 잠깐 넣는 한 낱말
 
 
-def spaced(line, expr):
-    """줄이 공백 있는 컬럼 이름으로 시작하면 (그 이름, 이름 자리를 SPACED로 바꾼 줄), 아니면 (None, line). 알려진 이름 중 가장 긴 것을 먼저 찾는다."""
+AFTER_NAME = re.compile(r"\s*(?:!=|>=|<=|=|>|<|(?:is|in|except|like|starts|ends|between)(?!\S))", re.I)  # 조건에서 컬럼 이름 바로 뒤에 오는 연산자
+
+
+def spaced(line, expr, condition=False):
+    """줄이 공백 있는 컬럼 이름으로 시작하면 (그 이름, 이름 자리를 SPACED로 바꾼 줄), 아니면 (None, line). 알려진 이름 중 가장 긴 것을 먼저 찾는다.
+    condition이면 이름 뒤에 연산자가 와야 그 이름으로 읽는다('total in'과 'total' 두 컬럼이 있을 때 'total in 1, 2'의 in을 이름으로 먹지 않게)."""
     for name in sorted((c for c in expr.columns if " " in c), key=len, reverse=True):
-        if line.startswith(name) and line[len(name):len(name) + 1] in ("", " ", "=", "!", "<", ">"):
-            return name, SPACED + line[len(name):]
+        rest = line[len(name):]
+        if line.startswith(name) and rest[:1] in ("", " ", "=", "!", "<", ">") and (not condition or AFTER_NAME.match(rest)):
+            return name, SPACED + rest
     return None, line
 
 
@@ -305,7 +314,7 @@ def geo_condition(word, rest, expr):
 
 def parse_one(line, expr, quotes=True):
     """조건 한 줄. 컬럼 자리에는 구조 안의 필드(user.name)도 쓸 수 있다(column). near·box는 좌표 조건."""
-    name, line = spaced(line, expr)  # 공백 있는 컬럼 이름은 자리표시로 바꿔 아래 정규식이 한 낱말로 읽게 한다
+    name, line = spaced(line, expr, True)  # 공백 있는 컬럼 이름은 자리표시로 바꿔 아래 정규식이 한 낱말로 읽게 한다
     get = lambda col: column(expr, name if name and col == SPACED else col)
     if (m := GEO_RE.match(line)) and len(m.group(2).replace(",", " ").split()) == GEO_COUNTS[m.group(1).lower()] and m.group(2).split()[0].lower() not in NOT_GEO:
         return geo_condition(m.group(1).lower(), m.group(2), expr)
@@ -344,6 +353,9 @@ def parse_one(line, expr, quotes=True):
         if c.type().is_nested():
             raise ValueError(f"'{name or col}'은 {type_name(c.type())} 컬럼이라 비교할 수 없습니다. 안의 필드(예: {name or col}.이름)나 is null을 쓰세요.")
         value = convert(c.type(), unquote(raw, quotes))
+        after = c.type().is_timestamp() and op in ("=", "!=", "<=", ">") and next_day(unquote(raw, quotes))  # 날짜시간 컬럼에 날짜만 쓴 값은 그날 하루(기간·between과 같은 규칙)
+        if after:
+            return {"=": (c >= value) & (c < after), "!=": (c < value) | (c >= after), "<=": c < after, ">": c >= after}[op]
         return OPS[op](c, value)
     raise ValueError(f"형식: {CONDITION_GUIDE}")
 

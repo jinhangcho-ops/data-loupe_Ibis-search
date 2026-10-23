@@ -104,7 +104,7 @@ def each(kind, main, expr):
     value, rest = main[0], main[1:]
     if kind == "반올림":
         digits = int(number(value, "자리 수"))
-        return expr.mutate(s.across(targets(rest, expr) & s.numeric(), lambda c: c.round(digits)))
+        return expr.mutate(s.across(targets(rest, expr) & s.numeric(), lambda c: sql_funcs.half_up(c, digits)))
     if kind == "곱하기":
         times = number(value, "곱할 수")
         return expr.mutate(s.across(targets(rest, expr) & s.numeric(), lambda c: c * times))

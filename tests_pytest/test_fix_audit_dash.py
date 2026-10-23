@@ -230,7 +230,7 @@ def test_summary_new_group_counts_as_zero_for_sum():
     pairs = dash_calc.group_pairs({"새 지점": 20, "A": 110}, {"A": 100}, "sum")
     assert pairs == {"새 지점": (20, 0), "A": (110, 100)}
     assert summary_text.share_sentence(130, 100, pairs, "number") == "늘어난 몫의 67%가 새 지점이에요."
-    assert dash_calc.group_pairs({"새 지점": 20}, {}, "avg") == {"새 지점": (20, None)}
+    assert dash_calc.group_pairs({"새 지점": 20}, {}, "avg") is None  # 평균 등은 기여 분해를 하지 않는다
 
 
 def test_filelock_does_not_steal_live_lock_judged_stale_too_early(folder, monkeypatch):
@@ -264,6 +264,7 @@ def test_set_cards_data_writes_store_once(folder, monkeypatch):
 
 def test_analysis_card_geo_reference_tables_are_scan_checked(monkeypatch):
     import types
+    from lazy import ibis
     from core import held, scan_size, server
     from geo import prep_geo
     monkeypatch.setattr(refresh, "run", lambda work: work())
@@ -271,11 +272,10 @@ def test_analysis_card_geo_reference_tables_are_scan_checked(monkeypatch):
     monkeypatch.setitem(server.state, "opened", {})
     monkeypatch.setattr(held, "remote", lambda con: True)
     monkeypatch.setattr(prep_geo, "check", lambda geo: geo)
-    monkeypatch.setattr(prep_geo, "reference_exprs", lambda geo, con: [("k1", "e1")])
-    monkeypatch.setattr(server, "expr_sql", lambda con, expr: f"SELECT * FROM {expr}")
+    monkeypatch.setattr(prep_geo, "reference_exprs", lambda geo, con: [("k1", ibis.memtable({"a": [1]}))])  # expr_sql은 진짜(가짜는 (SQL, 방언) 튜플 결함을 가렸다)
     asked = []
     monkeypatch.setattr(scan_size, "limit_check", lambda con, sql, opened=None, dialect=None: asked.append(sql) or {"over": True, "text": "지점 표가 너무 커요"}, raising=False)
     card = {"kind": "analysis", "title": "t", "source": {"recipe": {"base": "t", "geo": {"x": 1}}}, "view": {}}
-    assert refresh.scan_decision(card, {}) == "지점 표가 너무 커요" and asked == ["SELECT * FROM e1"]
+    assert refresh.scan_decision(card, {}) == "지점 표가 너무 커요" and len(asked) == 1 and isinstance(asked[0], str)
     card["source"]["recipe"] = {"base": "t"}  # 좌표 단계가 없으면 묻지 않는다
     assert refresh.scan_decision(card, {}) == ""

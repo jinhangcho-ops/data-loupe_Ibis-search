@@ -158,7 +158,7 @@ def test_text_functions(words):
                           ("trim", {}, ["y", "p-q", None]), ("ltrim", {}, ["y ", "p-q", None]), ("rtrim", {}, [" y", "p-q", None]),
                           ("substr", {"start": 1, "length": 2}, [" y", "p-", None]), ("left", {"n": 1}, [" ", "p", None]), ("right", {"n": 1}, [" ", "q", None]),
                           ("replace", {"find": "-", "to": "+"}, [" y ", "p+q", None]), ("regex_contains", {"pattern": "^p"}, [False, True, None]),
-                          ("regex_extract", {"pattern": "(\\w)-(\\w)", "group_no": 2}, ["", "q", None]), ("regex_replace", {"pattern": "[-]", "to": "_"}, [" y ", "p_q", None]),
+                          ("regex_extract", {"pattern": "(\\w)-(\\w)", "group_no": 2}, [None, "q", None]), ("regex_replace", {"pattern": "[-]", "to": "_"}, [" y ", "p_q", None]),
                           ("split_part", {"sep": "-", "n": 2}, [None, "q", None]), ("lpad", {"width": 5, "fill": "0"}, ["00 y ", "00p-q", None]), ("rpad", {"width": 4, "fill": "*"}, [" y *", "p-q*", None]),
                           ("contains", {"find": "-"}, [False, True, None]), ("startswith", {"find": "p"}, [False, True, None]), ("endswith", {"find": "q"}, [False, True, None]),
                           ("find", {"find": "q"}, [0, 3, None]), ("reverse", {}, [" y ", "q-p", None]), ("repeat", {"n": 2}, [" y  y ", "p-qp-q", None])]:

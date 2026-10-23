@@ -232,7 +232,7 @@ def get_summary(expr, columns=()):
     metrics = {}
     for i, (name, (ordered, numeric)) in enumerate(kinds.items()):
         col = expr[name]
-        metrics.update({f"count{i}": col.count(), f"nulls{i}": col.isnull().sum(), f"unique{i}": col.nunique()})
+        metrics.update({f"count{i}": col.count(), f"nulls{i}": col.isnull().sum(), f"unique{i}": sql_funcs.distinct(col)})
         if ordered:
             metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})
         if numeric:
@@ -287,8 +287,10 @@ def get_chart(expr, x, series, split=None, order="x"):
     sizes = filled.group_by(split).aggregate(n=filled.count())
     parts = sizes.order_by([sizes.n.desc(), sizes[split]]).limit(MAX_SPLITS + 1).to_polars()[split].to_list()
     more, parts = len(parts) > MAX_SPLITS, parts[:MAX_SPLITS]
+    if not parts:  # 나눌 값이 없다(행이 없거나 나누는 컬럼이 모두 빈 값): 계열은 두고 값만 비운다
+        return labels, [{"series": i, "split": None, "values": [None] * len(labels)} for i in range(len(series))], False
     known = [v for v in labels if v is not None]
-    inside = expr.filter(expr[x].isin(known), expr[split].isin(parts))
+    inside = expr.filter(expr[x].isin(known) | expr[x].isnull() if None in labels else expr[x].isin(known), expr[split].isin(parts))  # X가 빈 값인 묶음도 나눈다
     cells = inside.group_by([x, split]).aggregate(**metrics(inside)).to_polars()
     found = {(row[x], row[split]): row for row in cells.iter_rows(named=True)}
     return labels, [{"series": i, "split": str(part), "values": [number(found.get((label, part), {}).get(f"v{i}")) for label in labels]}

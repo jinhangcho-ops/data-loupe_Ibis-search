@@ -63,9 +63,10 @@ def number_range(kind, low, high):
     return {"int": kind is int, "min": low, "max": high}
 
 
-def to_json(df):
-    """Polars DataFrame → {columns, rows}. 날짜는 ISO 문자열이 된다. ±2^53을 넘는 정수가 든 컬럼은 글자로 보낸다(화면 JSON.parse가 정밀도를 잃는다)."""
-    wide = [c for c in df.columns if df[c].dtype.is_integer() and max(abs(df[c].max() or 0), abs(df[c].min() or 0)) > 2**53]
+def to_json(df, text_big=True):
+    """Polars DataFrame → {columns, rows}. 날짜는 ISO 문자열이 된다. ±2^53을 넘는 정수가 든 컬럼은 글자로 보낸다(화면 JSON.parse가 정밀도를 잃는다).
+    text_big이 거짓이면 숫자로 둔다(서버가 이어서 산술에 쓰는 결과)."""
+    wide = [c for c in df.columns if text_big and df[c].dtype.is_integer() and max(abs(df[c].max() or 0), abs(df[c].min() or 0)) > 2**53]
     df = df.with_columns(*[df[c].cast(str) for c in wide])
     return {"columns": df.columns, "rows": json.loads(df.write_json())}
 

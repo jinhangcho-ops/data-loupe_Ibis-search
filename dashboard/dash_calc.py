@@ -221,6 +221,13 @@ def copies_to_pc(card, ctx=None):
     return querying.search_key(shaped, card_columns(card, ctx)) not in held.store["items"]
 
 
+def unique_per_period(card, ctx=None):
+    """고유 개수류 계열이 있는 날짜 컬럼 카드가 보는 기간이 있어, 그 값을 일 값에서 못 묶고 기간(이번·직전)마다 따로 읽는지."""
+    body = (card["source"] or {}).get("body")
+    window = (ctx or {}).get("range")
+    return card["kind"] in VALUE_KINDS and isinstance(body, dict) and bool(card["source"].get("date")) and bool(window and (window.get("start") or window.get("end")))         and any(not merges(s.get("agg")) for s in body.get("series") or [] if isinstance(s, dict))
+
+
 def read_sql(card, ctx=None):
     """카드가 읽는 식(필요한 컬럼·기간만)의 SQL 글. 실행하지 않는다. 처리 용량 추정에 쓴다. 식을 만들 수 없는 종류는 None."""
     body = (card["source"] or {}).get("body")
@@ -499,9 +506,11 @@ def group_values(expr, column, s):
 
 
 def group_pairs(now, old, agg):
-    """그룹별 (이번, 직전). 합계·개수는 한쪽 기간에 없는 그룹을 0으로 본다(새로 생긴 그룹의 기여를 뺴지 않게). 평균·최소·최대는 없으면 None(건너뜀)."""
-    zero = 0 if agg in ("sum", "count") else None
-    return {g: (now.get(g, zero) if now.get(g) is not None else zero, old.get(g, zero) if old.get(g) is not None else zero) for g in {*now, *old}}
+    """그룹별 (이번, 직전). 합계·개수만 구한다: 전체의 변화를 그룹들의 변화로 나눌 수 있는 집계라서다(평균·최소·최대·고유 개수는 그룹 변화를 더해도 전체 변화가 안 돼 None).
+    한쪽 기간에 없는 그룹은 0으로 본다(새로 생긴 그룹의 기여를 빼지 않게)."""
+    if agg not in ("sum", "count"):
+        return None
+    return {g: (now.get(g, 0) if now.get(g) is not None else 0, old.get(g, 0) if old.get(g) is not None else 0) for g in {*now, *old}}
 
 
 def summary_data(card, ctx):
@@ -512,13 +521,13 @@ def summary_data(card, ctx):
     cur = run(lambda: scalars(at(window), series[:1]))[0]
     prev = run(lambda: scalars(at(before), series[:1]))[0] if before else None
     groups, note = None, ""
-    if view.get("group"):
+    if view.get("group") and before and series[0]["agg"] in ("sum", "count"):  # 기여를 나누는 건 합계·개수와 직전 기간이 있을 때만(아니면 그룹 값을 읽지 않는다)
         now = run(lambda: group_values(at(window), view["group"], series[0]))
-        old = run(lambda: group_values(at(before), view["group"], series[0])) if before else {}
+        old = run(lambda: group_values(at(before), view["group"], series[0]))
         if now is None or old is None:
             note = f"그룹이 {MAX_GROUPS}개를 넘어 어느 그룹 덕분인지는 말하지 않았어요."
         else:
-            groups = group_pairs(now, old, series[0]["agg"] if before else None)
+            groups = group_pairs(now, old, series[0]["agg"])
     target = resolve_target(view.get("target"))
     found = summary_text.summarize(series_name(series[0]), cur, prev, view.get("format", "number"), view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"], False,
                                    groups, (target or {}).get("value"))
@@ -553,8 +562,8 @@ def value_data(card, ctx):
             def distinct(w):  # 그 기간의 고유 개수류 값 {계열 번호: 값}: 집계 한 번
                 at = card_expr(card, ctx, w)
                 return {"start": w.get("start"), "end": w.get("end"), "values": {str(i): v for i, v in zip(unique, run(lambda: scalars(at, [series[i] for i in unique])))}}
-            before = (ctx or {}).get("prev")  # 직전 기간(기준일 규칙은 dash_refresh.context가 이미 적용)도 같은 집계로: 화면 compareItem의 비교용
-            found["values"] = {"window_nunique": {**distinct(window), **({"prev": distinct(before)} if before and before.get("start") and before.get("end") else {})}}
+            before = (ctx or {}).get("prev")  # 직전 기간(기준일 규칙은 dash_refresh.context가 이미 적용)도 같은 집계로: 화면 compareItem의 비교용(기간 비교일 때만. 지점 비교는 일 값으로 한다)
+            found["values"] = {"window_nunique": {**distinct(window), **({"prev": distinct(before)} if before and before.get("start") and before.get("end") and view["compare"]["mode"] == "span" else {})}}
     else:
         series, expr = clean_series(body.get("series")), card_expr(card, ctx, window)
         found = {"values": {"scalar": run(lambda: scalars(expr, series)), "names": [series_name(s) for s in series]}}

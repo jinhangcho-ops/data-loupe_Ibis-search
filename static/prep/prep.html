@@ -423,9 +423,9 @@ const OPS = {
 // 정리 방법마다 한 줄 예시(고르는 목록에서 마우스를 올리거나, 고른 뒤 그 줄 아래에 보인다)
 const DESC = {
   trim: "' 서울 ' → '서울'", squeeze: "'서울   시' → '서울 시'", nulls: "'-', 'N/A' 같은 값을 빈칸으로", remove: "'1,000원'에서 '원'만 지우기",
-  case: "'abc' → 'ABC'", replace: "'Y' → '완료'처럼 값을 바꾸기", regex: "규칙(정규식)에 맞는 글자를 바꾸기", type: "글자 '123'을 숫자로, '20250131'을 날짜로",
+  case: "'abc' → 'ABC'", replace: "'Y' → '완료'처럼 값을 바꾸기", regex: "규칙(정규식)에 맞는 글자를 바꾸기", type: "글자 '123'을 숫자로, '20250131'을 날짜로(실수→정수는 소수점 버림, 2.9→2)",
   flag: "빈칸이었던 행에 true를 적은 새 컬럼", fill: "빈칸을 채우거나 그 행을 빼기", outlier: "너무 크거나 작은 값을 빼거나 끝값으로 자르기",
-  scale: "값의 크기를 비슷하게 맞추기(모델에 넣을 때)", round: "3.14159 → 3.14", bins: "나이 23 → '20~30'처럼 구간으로", rare: "몇 번 안 나오는 값을 '기타'로 묶기",
+  scale: "값의 크기를 비슷하게 맞추기(모델에 넣을 때)", round: "3.14159 → 3.14(자릿수 0이면 3.0처럼 실수로 남음)", bins: "나이 23 → '20~30'처럼 구간으로", rare: "몇 번 안 나오는 값을 '기타'로 묶기",
   parts: "날짜에서 연·월·요일을 새 컬럼으로", label: "'서울'→0, '부산'→1처럼 번호로", onehot: "값마다 0/1 컬럼으로 펼치기(원래 컬럼은 빠짐)",
   extract: "'A-123'에서 '123'만 뽑기", has: "'서울'이 들어 있으면 1인 새 컬럼", counts: "단어가 몇 번 나오는지 세기",
 };
@@ -1300,8 +1300,6 @@ function anaTable(d, view) {
   const name = view === "groups" ? d.by : UNIT_NAMES[d.unit], value = d.agg === "count" ? "개수" : `${d.value} ${aggName(d.agg)}`;
   return { columns: [name, value, ...(d.counts ? ["행 수"] : [])], rows: d.labels.map((l, i) => ({ [name]: l, [value]: d.values[i], ...(d.counts ? { "행 수": d.counts[i] } : {}) })) };
 }
-const tableHtml = ({ columns, rows }) => `<table><thead><tr>${columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
-  rows.map(r => `<tr>${columns.map(c => cell(r[c])).join("")}</tr>`).join("") + "</tbody></table>";
 // 마지막 분석 결과를 보고 있는 그래프로 그린다(화면 모드가 바뀌어도).
 function drawAna() {
   if (A.chart) A.chart.destroy();
@@ -1322,7 +1320,7 @@ function drawAna() {
   $("a-sub").textContent = "";
   $("a-data").textContent = anaNote(d);
   $("a-box").style.setProperty("--ratio", VIEW_RATIOS[A.view] ?? 16 / 9);
-  $("a-table").innerHTML = tableHtml(anaTable(d, A.view));
+  $("a-table").innerHTML = resultTable(anaTable(d, A.view));
   if (flow) {
     $("a-funnel").append(sankeySvg(d.steps, { text: getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "currentColor" }));
     $("a-funnel-text").textContent = funnelSentence(d.steps);

@@ -232,7 +232,7 @@ ENTRIES = [
     entry("resurrection", R, "복귀율", "Resurrection Rate", "한동안 안 오던 사람이 돌아온 비율이에요. 복귀 캠페인의 성과를 볼 때 써요.", "복귀 ÷ 기간 시작 때 휴면자",
           "{시각}의 {단위}마다 휴면 {사용자} 중 돌아온 비율(미접속 {미접속 기준(일)}일)", ["user", "time", ("unit", {"default": "month"}), "inactive_days"], "states", {"pick": "resurrection"}, pair=["resurrected"], fmt="percent", better="up", window=True),
     entry("survival", R, "생존 곡선", "Survival S(t)", "머문 기간 t까지 살아남은(떠나지 않은) 사용자 비율이에요. 아직 남은 사람(중도절단)도 반영해서 중앙 생존 시간을 구해요.", "Kaplan-Meier: S ×= (1 − 떠난 수 ÷ 남은 수)",
-          "{시각} 기준 {사용자}가 {미접속 기준(일)}일 넘게 안 오면 떠난 것일 때의 생존 곡선", ["user", "time", "churn_days"], "survival", pair=["users"], unit="일"),
+          "{시각} 기준 {사용자}가 {미접속 기준(일)}일 이상 안 오면 떠난 것일 때의 생존 곡선", ["user", "time", "churn_days"], "survival", pair=["users"], unit="일"),
     # ---------- 4 수익화·LTV ----------
     entry("gross_revenue", M, "총매출", "Gross Revenue", "수수료·환불을 빼기 전 매출 합계예요.", "금액의 합", "{금액}의 합", ["amount"], "revenue", {"pick": "gross"}, unit="원", better="up", hint="north_star"),
     entry("net_revenue", M, "순매출", "Net Revenue", "환불·부가세·수수료를 빼고 실제로 남는 매출이에요. 수수료·부가세율은 직접 적어요.", "(총매출 − 환불) ÷ (1 + 부가세) × (1 − 수수료)",

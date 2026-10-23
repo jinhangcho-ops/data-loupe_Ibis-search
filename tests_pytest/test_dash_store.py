@@ -101,11 +101,12 @@ def test_recent_rows_values_rejected():
 
 
 def test_secrets_never_stored():
-    for where in ("source", "data"):
-        for key in ("password", "User", "username"):
-            body = {"source": {"body": {key: "x"}}} if where == "source" else {"data": {"values": {"a": [{key: "x"}]}}}
-            with pytest.raises(ValueError, match="저장하지 않습니다"):
-                store.check_card({**CARD, **body})
+    for key in ("password", "User", "username"):
+        with pytest.raises(ValueError, match="저장하지 않습니다"):
+            store.check_card({**CARD, "source": {"body": {key: "x"}}})
+        with pytest.raises(ValueError, match="쓸 수 없는 항목"):  # data의 최상위 키는 허용 목록이 막는다
+            store.check_card({**CARD, "data": {key: "x"}})
+        assert store.check_card({**CARD, "data": {"values": {"a": [{key: "x"}]}}})["data"]["values"]  # 그룹 값 안은 사용자 데이터라 허용
 
 
 def test_source_key_has_no_account_or_password():

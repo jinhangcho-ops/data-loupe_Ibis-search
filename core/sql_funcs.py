@@ -294,7 +294,11 @@ def win(c, whole=False, rows=None):
     kw = {"group_by": c.group or None, "order_by": c.order or None}
     if whole:
         return ibis.window(**kw, preceding=None, following=None)
-    return ibis.window(**kw, preceding=None if rows is None else rows, following=0) if c.order else ibis.window(**kw)
+    if not c.order:
+        return ibis.window(**kw)
+    if rows is None:  # 처음부터 지금까지: 정렬 값이 같은 행끼리는 같은 값(RANGE). 행 번호(ROWS)로 하면 같은 값인 행마다 달라진다
+        return ibis.range_window(**kw, preceding=None, following=0)
+    return ibis.window(**kw, preceding=rows, following=0)
 
 
 def need_order(c, f):
@@ -310,15 +314,20 @@ def ordered(c):
 
 # ---------- 집계 ----------
 
+def distinct(x, where=None):
+    """서로 다른 값 수(빈 값 제외). Polars는 nunique가 빈 값도 세므로 백엔드와 상관없이 빈 값을 걸러 낸 뒤 센다."""
+    return x.nunique(where=both(where, x.notnull()))
+
+
 NUM, TXT, DAT, BOOL = "num", "text", "date", "bool"
 ORD = (NUM, TXT, DAT)  # 크기를 비교할 수 있는 종류
 
 add("count", "aggregate", "개수", "행 수를 세요(컬럼을 고르면 빈 값이 아닌 것만).", [col(optional=True)],
     lambda c: c.t.count(where=c.where) if c.x is None else c.x.count(where=c.where), "count(), count(금액)", kout=NUM, aggregate=True)
 add("count_distinct", "aggregate", "고유 개수", "서로 다른 값이 몇 개인지 정확하게 세요.", [col()],
-    lambda c: c.x.nunique(where=c.where), "count_distinct(고객)", kout=NUM, aggregate=True)
+    lambda c: distinct(c.x, c.where), "count_distinct(고객)", kout=NUM, aggregate=True)
 add("approx_count_distinct", "aggregate", "고유 개수(근사)", "서로 다른 값 수를 빠르게 어림해서 세요(큰 표에서 빠름, 약간의 오차).", [col()],
-    lambda c: c.x.approx_nunique(where=c.where), "approx_count_distinct(고객)", kout=NUM, aggregate=True)
+    lambda c: c.x.approx_nunique(where=both(c.where, c.x.notnull())), "approx_count_distinct(고객)", kout=NUM, aggregate=True)
 add("sum", "aggregate", "합계", "더한 값.", [col(kinds=NUM)], lambda c: c.x.sum(where=c.where), "sum(금액)", NUM, NUM, aggregate=True)
 add("mean", "aggregate", "평균", "평균 값.", [col(kinds=NUM)], lambda c: c.x.mean(where=c.where), "mean(금액)", NUM, NUM, aggregate=True)
 add("min", "aggregate", "최소", "가장 작은(이른) 값.", [col(kinds=ORD)], lambda c: c.x.min(where=c.where), "min(금액)", "any", "any", aggregate=True)
@@ -379,7 +388,7 @@ add("any_value", "aggregate", "아무 값", "묶음에서 아무 값이나 하�
 add("range", "aggregate", "범위(최대−최소)", "가장 큰 값에서 가장 작은 값을 뺀 것.", [col(kinds=(NUM,))],
     lambda c: c.x.max(where=c.where) - c.x.min(where=c.where), "range(금액)", NUM, NUM, aggregate=True)
 add("unique_or_null", "aggregate", "하나일 때만 값", "묶음의 값이 하나뿐이면 그 값, 둘 이상이면 빈 값(여러 개면 알리기).", [col(kinds=ORD)],
-    lambda c: ibis.ifelse(c.x.nunique(where=c.where) > 1, ibis.null().cast(c.x.type()), c.x.min(where=c.where)), "unique_or_null(이름)", aggregate=True)
+    lambda c: ibis.ifelse(distinct(c.x, c.where) > 1, ibis.null().cast(c.x.type()), c.x.min(where=c.where)), "unique_or_null(이름)", aggregate=True)
 
 # ---------- 창 함수 ----------
 
@@ -480,15 +489,24 @@ row("right", "text", "뒤 N글자", "뒤에서 N글자.", [T1, num("n", "글자 
 row("replace", "text", "바꾸기", "글자를 다른 글자로 바꿔요.", [T1, text("find", "찾을 글자", "a"), text("to", "바꿀 글자", "", True)],
     lambda c: c.x.replace(c.find, c.to or ""), "replace(이름, 'a', 'b')", TXT, TXT)
 row("regex_contains", "text", "패턴 포함", "정규식 패턴이 들어 있으면 참.", [T1, text("pattern", "패턴", "^a")], lambda c: c.x.re_search(c.pattern), "regex_contains(이름, '^a')", TXT, BOOL)
-row("regex_extract", "text", "패턴에서 꺼내기", "정규식에 맞는 부분(그룹 N, 0이면 전체).", [T1, text("pattern", "패턴", "(\\d+)"), num("group_no", "그룹 번호", 1, kind="int")],
-    lambda c: c.x.re_extract(c.pattern, c.group_no), "regex_extract(이름, '(\\d+)', 1)", TXT, TXT)
-row("regex_replace", "text", "패턴 바꾸기", "정규식에 맞는 부분을 바꿔요.", [T1, text("pattern", "패턴", "\\s+"), text("to", "바꿀 글자", " ")],
+row("regex_extract", "text", "패턴에서 꺼내기", "정규식에 맞는 부분(그룹 N, 0이면 전체). 맞는 것이 없으면 빈 값. \\w는 DuckDB·DB에서는 영문·숫자·_만, 파일(Polars)에서는 한글 같은 글자도 포함해 달라요(한글은 [가-힣]로 쓰세요).", [T1, text("pattern", "패턴", "(\\d+)"), num("group_no", "그룹 번호", 1, kind="int")],
+    lambda c: c.x.re_extract(c.pattern, c.group_no).nullif(""), "regex_extract(이름, '(\\d+)', 1)", TXT, TXT)
+row("regex_replace", "text", "패턴 바꾸기", "정규식에 맞는 부분을 바꿔요. \\w는 DuckDB·DB에서는 영문·숫자·_만, 파일(Polars)에서는 한글 같은 글자도 포함해 달라요(한글은 [가-힣]로 쓰세요).", [T1, text("pattern", "패턴", "\\s+"), text("to", "바꿀 글자", " ")],
     lambda c: c.x.re_replace(c.pattern, c.to or ""), "regex_replace(이름, '\\s+', ' ')", TXT, TXT)
 row("split", "text", "나누기(목록)", "구분자로 나눠 목록으로.", [T1, text("sep", "구분자", ",")], lambda c: c.x.split(c.sep), "split(태그, ',')", TXT, "array")
 row("split_part", "text", "나눈 N번째", "구분자로 나눈 N번째 조각(1부터).", [T1, text("sep", "구분자", ","), num("n", "N번째", 1, kind="int")],
     lambda c: c.x.split(c.sep)[not_zero(c.n, "N번째") - 1], "split_part(태그, ',', 1)", TXT, TXT)
-row("concat", "text", "이어 쓰기", "여러 컬럼·글자를 한 글자로(사이에 구분자).", [many(), text("sep", "구분자", "", True)],
-    lambda c: ibis.literal(c.sep or "").join([v.cast("string") for v in c.columns]), "concat(성, 이름)", "any", TXT)
+def concat_parts(values, sep):
+    """빈 값은 건너뛰고(구분자도 붙이지 않는다) 이어 쓴다. 모두 빈 값이면 빈 값. DuckDB·Polars가 같은 결과를 낸다(Polars의 join은 빈 값이 하나라도 있으면 빈 값이다)."""
+    parts = [v.cast("string") for v in values]
+    found = parts[0]
+    for p in parts[1:]:
+        found = ibis.ifelse(found.isnull(), p, ibis.ifelse(p.isnull(), found, found + sep + p))
+    return found
+
+
+row("concat", "text", "이어 쓰기", "여러 컬럼·글자를 한 글자로(사이에 구분자). 빈 값은 건너뛰어요.", [many(), text("sep", "구분자", "", True)],
+    lambda c: concat_parts(c.columns, c.sep or ""), "concat(성, 이름)", "any", TXT)
 row("lpad", "text", "왼쪽 채우기", "길이가 N이 되도록 왼쪽을 채워요.", [T1, num("width", "길이", 5, kind="int"), text("fill", "채울 글자", "0")],
     lambda c: c.x.lpad(c.width, c.fill), "lpad(번호, 5, '0')", TXT, TXT)
 row("rpad", "text", "오른쪽 채우기", "길이가 N이 되도록 오른쪽을 채워요.", [T1, num("width", "길이", 5, kind="int"), text("fill", "채울 글자", " ")],
@@ -513,11 +531,29 @@ def safe_math(name, x, *args):
     return getattr((x >= 0 if name == "sqrt" else x > 0).ifelse(x, ibis.null()), name)(*args)
 
 
-row("round", "number", "반올림", "소수 자릿수에서 반올림.", [N_, num("digits", "자릿수", 0, kind="int")], lambda c: c.x.round(c.digits), "round(금액, 1)", NUM, NUM)
+def half_up(col, digits):
+    """반올림: 0.5는 0에서 먼 쪽으로(백엔드마다 달라 직접 정한다. Polars는 짝수 쪽). 정수·소수(Decimal) 컬럼은 그대로 round. 사전 round·계산 줄 반올림·계산 컬럼 round·전처리 반올림이 함께 쓴다.
+    2^52 이상(이미 정수)과 nan·inf는 그대로 둔다. floor를 정수로 바꾸는 곳이 넘치지 않게 그런 값은 floor에 넣지 않는다."""
+    if not col.type().is_floating():
+        return col.round(digits)
+    scale = 10.0**digits
+    scaled = col.abs() * scale
+    big = ~(scaled < 2.0**52)
+    done = big.ifelse(0.0, scaled + 0.5).floor() / scale
+    return big.ifelse(col, (col < 0).ifelse(-done, done))
+
+
+def remainder(x, by):
+    """나머지: 부호는 나눠지는 수를 따른다(DuckDB·대부분의 DB와 같게. Polars는 나누는 수를 따라 달라서 직접 정한다). 0으로 나누면 빈 값."""
+    m = x.abs() % by.nullif(0).abs()
+    return (x < 0).ifelse(-m, m)
+
+
+row("round", "number", "반올림", "소수 자릿수에서 반올림.", [N_, num("digits", "자릿수", 0, kind="int")], lambda c: half_up(c.x, c.digits), "round(금액, 1)", NUM, NUM)
 row("ceil", "number", "올림", "정수로 올림.", [N_], lambda c: c.x.ceil(), "ceil(금액)", NUM, NUM)
 row("floor", "number", "내림", "정수로 내림.", [N_], lambda c: c.x.floor(), "floor(금액)", NUM, NUM)
 row("abs", "number", "절댓값", "부호를 뗀 값.", [N_], lambda c: c.x.abs(), "abs(금액)", NUM, NUM)
-row("mod", "number", "나머지", "나눈 나머지(0으로 나누면 빈 값).", [N_, num("by", "나누는 수", 2)], lambda c: c.x % ibis.literal(c.by).nullif(0), "mod(번호, 2)", NUM, NUM)
+row("mod", "number", "나머지", "나눈 나머지(0으로 나누면 빈 값).", [N_, num("by", "나누는 수", 2)], lambda c: remainder(c.x, ibis.literal(c.by)), "mod(번호, 2)", NUM, NUM)
 row("power", "number", "거듭제곱", "x의 N제곱.", [N_, num("n", "N", 2)], lambda c: c.x.pow(c.n), "power(금액, 2)", NUM, NUM)
 row("sqrt", "number", "제곱근", "제곱근(음수는 빈 값).", [N_], lambda c: safe_math("sqrt", c.x), "sqrt(금액)", NUM, NUM)
 row("exp", "number", "지수", "e의 x제곱.", [N_], lambda c: c.x.exp(), "exp(금액)", NUM, NUM)
@@ -555,7 +591,14 @@ def date_part(name):
     return lambda c: getattr(c.x, name)()
 
 
-row("truncate", "date", "단위로 자르기", "날짜를 연·분기·월·주·일·시·분·초의 시작으로.", [D_, UNIT], lambda c: c.x.truncate(UNITS[c.unit]), "truncate(주문일, 'month')", DAT, DAT)
+def with_time(c):
+    """시·분·초 단위는 시각이 있는 컬럼에만 쓴다(날짜 컬럼에 쓰면 Ibis가 영어 오류를 낸다)."""
+    if c.unit in ("hour", "minute", "second") and c.x.type().is_date():
+        raise ValueError(f"'{UNIT_NAMES[c.unit]}' 단위는 시각이 있는 컬럼(날짜시간)에만 쓸 수 있어요. 날짜 컬럼에는 연·분기·월·주·일을 고르세요.")
+    return c
+
+
+row("truncate", "date", "단위로 자르기", "날짜를 연·분기·월·주·일·시·분·초의 시작으로.", [D_, UNIT], lambda c: with_time(c).x.truncate(UNITS[c.unit]), "truncate(주문일, 'month')", DAT, DAT)
 for pid, plabel, method in (("year", "연", "year"), ("quarter", "분기", "quarter"), ("month", "월", "month"), ("week", "주(연중 몇 째 주)", "week_of_year"),
                             ("day", "일", "day"), ("hour", "시", "hour"), ("minute", "분", "minute"), ("second", "초", "second")):
     row(pid, "date", f"{plabel} 뽑기", f"날짜에서 {plabel}만 숫자로.", [D_], date_part(method), f"{pid}(주문일)", DAT, NUM)
@@ -564,20 +607,21 @@ row("epoch", "date", "epoch(초)", "1970-01-01부터 지난 초.", [D_], lambda 
 
 
 def interval(c, sign):
-    unit = c.unit + "s"
+    unit = with_time(c).unit + "s"
     return c.x + ibis.interval(**{unit: sign * c.n})
 
 
 row("date_add", "date", "더하기", "날짜에 N 단위를 더해요.", [D_, num("n", "N", 1, kind="int"), choice("unit", "단위", list(UNITS), "day")], lambda c: interval(c, 1), "date_add(주문일, 7, 'day')", DAT, DAT)
 row("date_sub", "date", "빼기", "날짜에서 N 단위를 빼요.", [D_, num("n", "N", 1, kind="int"), choice("unit", "단위", list(UNITS), "day")], lambda c: interval(c, -1), "date_sub(주문일, 7, 'day')", DAT, DAT)
 def passed(start, end, unit):
-    """start부터 end까지 지난 단위 수. 연·월은 경계를 센 수가 아니라 가득 찬 단위 수(만 나이: 1990-12-31 → 2026-10-23은 35). 나머지 단위는 delta 그대로."""
+    """start부터 end까지 지난 단위 수. 연·월은 경계를 센 수가 아니라 가득 찬 단위 수(만 나이: 1990-12-31 → 2026-10-23은 35; 1-31 → 2-28은 0개월). 나머지 단위는 delta 그대로.
+    달 수에 months 간격을 더해 보지 않는다(BigQuery의 TIMESTAMP_ADD는 MONTH를 못 하고, 식이 길어진다)."""
     start, end = start.cast("timestamp"), end.cast("timestamp")
     if unit not in ("year", "month"):
         return end.delta(start, unit=unit)
-    months = end.delta(start, unit="month")
-    moved = start + months.as_interval("M")
-    months = months - ((months > 0) & (moved > end)).cast("int64") + ((months < 0) & (moved < end)).cast("int64")  # 더해 보니 끝을 넘었으면 한 달 모자란 것
+    months = ((end.year() - start.year()) * 12 + (end.month() - start.month())).cast("int64")  # 달력의 달 수 차이
+    rest = lambda x: x.epoch_seconds() - x.truncate("M").epoch_seconds()  # 그 달 1일 0시부터 지난 초
+    months = months - ((months > 0) & (rest(end) < rest(start))).cast("int64") + ((months < 0) & (rest(end) > rest(start))).cast("int64")  # 달 안의 위치가 모자라면 한 달 모자란 것
     return months if unit == "month" else months.sign() * (months.abs() // 12)
 
 
@@ -797,7 +841,7 @@ def pick(how, t, column, order=None, sep=",", where=None):
 def conflicts(t, by, columns):
     """by가 같은 묶음 중 columns의 값이 둘 이상인 묶음 수(여러 개면 알리기에서 보여 줄 숫자). 묶음마다 서로 다른 값 수(빈 값 제외)가 2 이상인 컬럼이 하나라도 있으면 센다."""
     keys = [t[b] for b in by]
-    sizes = t.group_by(keys).aggregate(**{f"n{i}": t[c].nunique() for i, c in enumerate(columns)})
+    sizes = t.group_by(keys).aggregate(**{f"n{i}": distinct(t[c]) for i, c in enumerate(columns)})
     many_ = ibis.or_(*[sizes[f"n{i}"] > 1 for i in range(len(columns))])
     return sizes.filter(many_).count()
 
@@ -900,7 +944,7 @@ sub("cov", "곱의 평균 − 평균의 곱에 n/(n-1)을 곱해 구해요.", la
 sub("corr", "공분산 ÷ (표준편차 × 표준편차)로 구해요.",
     lambda c: cov_pop(c) / ((moments(c)[4] - moments(c)[1] ** 2) * (moments(c)[5] - moments(c)[2] ** 2)).sqrt().nullif(0))
 sub("any_value", "아무 값 대신 최솟값을 써요.", lambda c: c.x.min(where=c.where))
-sub("approx_count_distinct", "근사 대신 정확한 고유 개수를 세요(큰 표에서는 느릴 수 있어요).", lambda c: c.x.nunique(where=c.where))
+sub("approx_count_distinct", "근사 대신 정확한 고유 개수를 세요(큰 표에서는 느릴 수 있어요).", lambda c: distinct(c.x, c.where))
 sub("median", "분위수 0.5로 구해요.", lambda c: c.x.quantile(0.5, where=c.where))
 sub("p50", "분위수 0.5로 구해요.", lambda c: c.x.quantile(0.5, where=c.where))
 sub("string_agg", "값을 목록으로 모아 이어 붙여요.", lambda c: c.x.cast("string").collect(where=c.where, distinct=c.distinct == "yes").join(c.sep))

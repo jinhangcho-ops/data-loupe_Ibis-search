@@ -22,6 +22,7 @@ SERVERS = re.compile(r"[A-Za-z0-9._\-\[\]:]+:\d{1,5}(,[A-Za-z0-9._\-\[\]:]+:\d{1
 TOPIC = re.compile(r"[A-Za-z0-9._-]{1,249}")  # Kafka가 받는 토픽 이름
 CHECK_TIMEOUT = 10  # 접속 확인(list_topics)을 기다리는 시간(초)
 SEND_TIMEOUT = 60  # 메시지 하나가 전달되기를 기다리는 시간(초). 넘으면 실패로 센다.
+PERMANENT = ("MSG_SIZE_TOO_LARGE", "INVALID_MSG", "CORRUPT_MESSAGE", "INVALID_RECORD", "RECORD_LIST_TOO_LARGE")  # 그 행 자체가 안 되는 오류(다시 보내도 같다). 그 밖의 오류(시간 초과·연결 끊김…)는 일시 오류로 보고 다시 시도한다
 FLUSH_MARGIN = 10  # 묶음을 다 보낸 뒤 기다리는 시간 = SEND_TIMEOUT + 이것(초). 그 안에 실패 보고까지 온다.
 
 QUIET = logging.getLogger("ibis_search.kafka")  # librdkafka의 로그를 받아 버리는 곳
@@ -165,7 +166,7 @@ class Sink:
         from confluent_kafka import KafkaException
         if data is not self.unit:  # 새 묶음
             self.unit, self.rows, self.todo, self.ok, self.failed, self.partitions, self.size = data, data.to_pylist(), range(data.num_rows), set(), 0, {}, 0
-        sent, reports = set(), {}
+        sent, rejected, skipped, reports = set(), set(), set(), {}
 
         def report(i, error, msg):  # 전달 보고: 전달된 메시지의 파티션·offset으로 범위를 넓힌다
             reports[i] = error
@@ -174,7 +175,7 @@ class Sink:
                 lo, hi = self.partitions.get(p, (o, o))
                 self.partitions[p] = (min(lo, o), max(hi, o))
                 self.size += len(msg.value() or b"") + len(msg.key() or b"")
-        for i in self.todo:
+        for n, i in enumerate(self.todo):
             row = self.rows[i]
             try:
                 body = message(row)
@@ -187,20 +188,34 @@ class Sink:
                         self.producer.poll(1)
                 sent.add(i)
             except (KafkaException, ValueError, TypeError) as e:
+                rejected.add(i)
                 self.failed += 1
                 self.note(e)
+            if self.key:  # 키가 있으면 같은 키의 순서가 중요하다: 전달 실패가 보고되면 뒤 행은 보내지 않고 다시 시도 때 차례대로 보낸다
+                self.producer.poll(0)
+                if any(e is not None for e in reports.values()):
+                    skipped = set(self.todo[n + 1:])
+                    break
         self.producer.flush(SEND_TIMEOUT + FLUSH_MARGIN)
         for e in [e for e in reports.values() if e is not None][-1:]:
             self.note(e)
         delivered = {i for i in sent if i in reports and reports[i] is None}
+        forever = {i for i in sent if reports.get(i) is not None and any(name in str(reports[i]) for name in PERMANENT)}  # 이 행만 안 되는 오류: 실패로 세고 계속한다
+        self.failed += len(forever)
         self.ok |= delivered
-        self.todo = sorted(sent - delivered)  # 전달 보고가 실패이거나 끝내 오지 않은 행: 다음에 이것만 다시 보낸다
+        self.todo = sorted(skipped | (sent - delivered - forever))  # 일시 오류이거나 보고가 끝내 오지 않은 행(+ 보내지 않고 둔 행): 다음에 이것만 차례대로 다시 보낸다
         self.placed = {"size": self.size, "partitions": self.partitions}
-        if sent and not delivered:
+        if sent and not delivered and not forever:
             raise ValueError(f"Kafka에 전달하지 못했습니다: {self.last or '응답 없음'}")
-        if self.todo:  # 일부만 전달됐다: 오류로 알려 다시 시도하게 한다(끝내 안 되면 부른 쪽이 멈춘다)
+        if self.todo:  # 일부만 전달됐다: 오류로 알려 다시 시도하게 한다(끝내 안 되면 부른 쪽이 멈추고 partial로 넣은 데까지 남긴다)
             raise ValueError(f"Kafka에 {len(self.todo)}행을 전달하지 못했습니다: {self.last or '응답 없음'}")
         return len(self.ok), 0, self.failed
+
+    def partial(self):
+        """지금 묶음에서 끝내 못 넣고 멈출 때 남길 것: (앞에서부터 이어서 처리된 행 수, 전달된 행 수). 이어 넣기가 그 뒤부터 하게 한다(앞 구멍 뒤에 전달된 행은 다시 보내져 겹칠 수 있다)."""
+        if self.unit is None:
+            return 0, 0
+        return (min(self.todo) if self.todo else self.unit.num_rows), len(self.ok)
 
     def note(self, error):
         self.last = source.mask(str(error), [self.password], HIDE)

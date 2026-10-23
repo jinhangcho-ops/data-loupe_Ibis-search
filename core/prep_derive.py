@@ -123,7 +123,9 @@ class Formula:
         if isinstance(n.op, ast.Div):
             return (right == 0).ifelse(ibis.null(), left / right)  # 0으로 나누면 빈 값(DB마다 오류·무한대로 다르다)
         if isinstance(n.op, ast.Mod):
-            return (right == 0).ifelse(ibis.null(), left % right)
+            if getattr(right.op(), "value", None) == 0:  # 0을 직접 쓰면 Ibis가 식을 만들다 영어 오류를 낸다
+                self.fail("% 0: 0으로 나눈 나머지는 구할 수 없어요")
+            return sql_funcs.remainder(left, right)
         if type(n.op) not in ARITH:
             self.fail("**·// 같은 연산")
         return ARITH[type(n.op)](left, right)
@@ -145,7 +147,7 @@ class Formula:
         if name == "round":
             if len(values) not in (1, 2) or not is_number(values[0]) or (len(args) == 2 and not (isinstance(args[1], ast.Constant) and type(args[1].value) is int)):
                 self.fail("round(숫자, 자리 수)")
-            return values[0].round(args[1].value if len(args) == 2 else 0)
+            return sql_funcs.half_up(values[0], args[1].value if len(args) == 2 else 0)
         if name in NUMERIC_FUNCS or name in STRING_FUNCS:
             numeric = name in NUMERIC_FUNCS
             if len(values) != 1 or not (is_number(values[0]) if numeric else is_text(values[0])):

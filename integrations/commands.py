@@ -81,7 +81,7 @@ def metric_answer(plain, named):
     if not named.get("검색"):
         raise ValueError('어느 저장한 검색 위에서 구할지 검색=<이름>으로 쓰세요. 예: 지표 CTR 검색="이번 달"')
     body = querying.saved_search(named["검색"])
-    with querying.using():
+    with querying.using(fresh=True):
         check_size(body)
         found, labels, values, more = querying.metric_values(body, [name], named.get("나누기"))
     fmt = found[name]["format"]
@@ -102,7 +102,7 @@ def search_answer(plain, named):
     name = " ".join(plain)
     limit = number(named.get("행", str(DEFAULT_ROWS)), 1, MAX_ROWS, "행")
     body = querying.saved_search(name)
-    with querying.using():
+    with querying.using(fresh=True):
         check_size(body)
         table, count = querying.search_rows(body, limit)
     use_counts.use("searches", name)

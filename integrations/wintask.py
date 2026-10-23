@@ -148,13 +148,8 @@ def when(text):
     return f"{year}-{int(month):02d}-{int(day):02d} {hour:02d}:{minute}"
 
 
-def query(task):
-    """작업 하나의 {registered, command, next, last}. schtasks의 /FO CSV /V 열 차례(언어와 상관없음): 1 작업 이름, 2 다음 실행 시간, 5 마지막 실행 시간, 6 마지막 결과, 8 실행할 작업."""
-    code, out, _ = execute(["schtasks", "/Query", "/TN", full(task), "/FO", "CSV", "/V"])
-    rows = [r for r in csv.reader(out.splitlines()) if len(r) > 8]
-    if code or len(rows) < 2 or rows[1][1].lower() != full(task).lower():
-        return {"registered": False, "command": "", "next": None, "last": None}
-    row = rows[1]
+def task_info(row):
+    """schtasks /V CSV의 작업 행 하나 → {registered, command, next, last}."""
     last, result = when(row[5]), row[6].strip()
     if last is not None and result.lstrip("-").isdigit() and int(result) != NEVER:
         code = int(result)
@@ -162,6 +157,28 @@ def query(task):
     elif result.lstrip("-").isdigit() and int(result) == NEVER:
         last = None
     return {"registered": True, "command": row[8], "next": when(row[2]), "last": last}
+
+
+MISSING = {"registered": False, "command": "", "next": None, "last": None}
+
+
+def query(task):
+    """작업 하나의 {registered, command, next, last}. schtasks의 /FO CSV /V 열 차례(언어와 상관없음): 1 작업 이름, 2 다음 실행 시간, 5 마지막 실행 시간, 6 마지막 결과, 8 실행할 작업."""
+    code, out, _ = execute(["schtasks", "/Query", "/TN", full(task), "/FO", "CSV", "/V"])
+    rows = [r for r in csv.reader(out.splitlines()) if len(r) > 8]
+    if code or len(rows) < 2 or rows[1][1].lower() != full(task).lower():
+        return dict(MISSING)
+    return task_info(rows[1])
+
+
+def query_all():
+    """FOLDER 안의 작업 전부 {작업 이름(소문자): {registered, command, next, last}}를 schtasks 한 번으로(작업마다 부르면 작업 수만큼 프로세스를 띄운다). 폴더가 없으면 빈 모음."""
+    code, out, _ = execute(["schtasks", "/Query", "/TN", FOLDER, "/FO", "CSV", "/V"])
+    found = {}
+    for row in csv.reader(out.splitlines()):
+        if not code and len(row) > 8 and row[1].lower().startswith(FOLDER.lower()):  # 머리글 줄은 폴더 경로로 시작하지 않는다
+            found.setdefault(row[1][len(FOLDER):].lower(), task_info(row))
+    return found
 
 
 def points_here(found):

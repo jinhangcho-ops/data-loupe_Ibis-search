@@ -133,7 +133,7 @@ def test_stored_nan_is_cleaned_when_read(folder):
 @pytest.fixture
 def fake(folder, monkeypatch):
     monkeypatch.setitem(server.state, "opened", FOLDER)
-    monkeypatch.setattr(querying, "using", lambda: contextlib.nullcontext())
+    monkeypatch.setattr(querying, "using", lambda **k: contextlib.nullcontext())
     refresh.JOB.update(running=False, total=0, done=0, current="", results=[])
     yield
     refresh.wait(10)
@@ -160,13 +160,13 @@ def test_edit_during_refresh_keeps_the_edit_and_skips_the_stale_value(fake, monk
     assert now_card["data"]["values"]["labels"] == ["old"] and now_card["source"]["body"]["x"] == "b"  # 옛 정의로 구한 값을 새 정의에 붙이지 않는다
 
 
-def test_set_card_data_same_check(folder):
+def test_set_cards_data_same_check(folder):
     d = store.save_dashboard({"name": "확인", "cards": [card("가")]})
     cid = d["cards"][0]["id"]
-    assert store.set_card_data(d["id"], cid, {"note": "a"}, same=lambda c: False) is None  # 달라졌으면 쓰지 않는다
+    assert store.set_cards_data(d["id"], [(cid, {"note": "a"}, lambda c: False)]) == [None]  # 달라졌으면 쓰지 않는다
     assert store.get_dashboard(d["id"])["cards"][0]["data"].get("note") is None
-    assert store.set_card_data(d["id"], cid, {"note": "b"}, same=lambda c: True) is True
-    assert store.set_card_data(d["id"], "없음", {"note": "c"}) is False
+    assert store.set_cards_data(d["id"], [(cid, {"note": "b"}, lambda c: True)]) == [True]
+    assert store.set_cards_data(d["id"], [("없음", {"note": "c"}, None)]) == [False]
 
 
 def test_start_twice_launches_one_job(fake, monkeypatch):
@@ -380,7 +380,7 @@ def test_store_load_is_cached_until_file_changes(folder, monkeypatch):
     store.get_dashboard(saved["id"])
     store.listing()
     assert len(calls) == 1  # 파일이 그대로면 다시 풀지 않는다
-    store.set_card_data(saved["id"], saved["cards"][0]["id"], {"note": "새 값"})
+    store.set_cards_data(saved["id"], [(saved["cards"][0]["id"], {"note": "새 값"}, None)])
     assert store.get_dashboard(saved["id"])["cards"][0]["data"]["note"] == "새 값" and len(calls) >= 2  # 쓰면 바뀐 파일을 읽는다
 
 

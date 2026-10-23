@@ -12,6 +12,7 @@ from core import result
 from core import server
 from core import settings
 from core import sql_funcs
+from core import use_counts
 from core.server import app
 
 
@@ -96,7 +97,7 @@ def card_compute():
     """카드 하나의 source로 data를 구해 돌려준다(저장하지 않는다). source.key가 있는데 지금 연결과 다르면 거부한다. 지금 연결의 key·label도 함께 준다."""
     card = dash_store.check_card((request.json or {}).get("card") or {})
     now = dash_store.current_source()
-    if now and card["source"].get("key") and card["source"]["key"] != now["key"]:
+    if now and card["source"].get("key") and not use_counts.same_source(card["source"]["key"], now["key"]):
         raise ValueError(f"이 카드는 다른 연결({card['source'].get('label') or card['source']['key']})에서 구한 것입니다. 그 연결로 바꾼 뒤 다시 구하세요.")
     return jsonify(data=dash_calc.compute(card, dt.datetime.now().isoformat(timespec="seconds"), request.json.get("ctx")), source=now)
 
@@ -107,7 +108,7 @@ def chart_points():
     source_key가 있는데 지금 연결과 다르면 거부한다."""
     body = request.json
     now = dash_store.current_source()
-    if now and body.get("source_key") and body["source_key"] != now["key"]:
+    if now and body.get("source_key") and not use_counts.same_source(body["source_key"], now["key"]):
         raise ValueError("이 카드는 다른 연결에서 구한 것입니다. 그 연결로 바꾼 뒤 다시 구하세요.")
     return jsonify(points=dash_calc.points_of(body, body.get("size")))
 
@@ -123,7 +124,7 @@ def cards_compute():
     for one in given:
         try:
             card = dash_store.check_card(one)
-            if now and card["source"].get("key") and card["source"]["key"] != now["key"]:
+            if now and card["source"].get("key") and not use_counts.same_source(card["source"]["key"], now["key"]):
                 raise ValueError("다른 연결에서 구한 카드예요")
             out.append({"id": card["id"], "data": dash_calc.compute(card, stamp, ctx)})
         except ValueError as e:

@@ -55,6 +55,13 @@ def forget(key):
         drop(item[0])
 
 
+def forget_all():
+    """받아 둔 결과를 모두 지운다(연결은 그대로). 최신화·Slack 질의가 시작할 때 한 번 불러, 그 안에서는 원본이 바뀐 것을 새로 받은 사본으로 본다."""
+    for key in list(store["items"]):
+        forget(key)
+    store["jobs"].clear()
+
+
 def keep(key, item):
     """결과를 두고, KEEP개를 넘으면 오래 쓰지 않은 것부터 지운다."""
     items = store["items"]
@@ -147,7 +154,8 @@ def server_page(key, con, expr, limit, offset, fresh=False):
         jobs.pop(key, None)
     if key not in jobs:
         job = client.query(str(ibis.to_sql(expr)), project=getattr(con, "billing_project", None))
-        jobs[key] = (job.destination, job.result().total_rows)
+        done = job.result()  # 끝난 뒤에야 결과 테이블(destination)이 정해진다
+        jobs[key] = (job.destination, done.total_rows)
         while len(jobs) > KEEP:
             jobs.pop(next(iter(jobs)))
     destination, total = jobs[key]

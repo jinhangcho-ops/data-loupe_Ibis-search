@@ -21,12 +21,12 @@ FORBIDDEN = ("Drop", "Delete", "Insert", "Update", "Create", "Alter", "TruncateT
              "Pragma", "Set", "Copy", "Attach", "Detach", "Use", "Transaction", "Commit", "Rollback", "LoadData", "Kill", "Refresh",  # 데이터·권한·설정을 바꾸거나
              "Cache", "Uncache", "Analyze")  # 파일·DB를 붙이는 문장
 PARQUET_BACKENDS = ("duckdb", "polars")
-FILE_FUNCS = {"glob", "sniff_csv", "st_read", "query", "query_table",  # 파일·폴더를 읽거나 문자열을 SQL로 돌리는 함수 이름
+FILE_FUNCS = {"glob", "sniff_csv", "st_read", "query", "query_table", "postgres_query", "postgres_execute", "mysql_query", "sqlite_query",  # 파일·폴더를 읽거나 문자열을 SQL로 돌리는 함수 이름
               "pg_read_file", "pg_read_binary_file", "pg_ls_dir", "lo_import", "lo_export", "load_file", "openrowset", "opendatasource", "openquery"}  # Postgres·MySQL·MSSQL 서버의 파일·원격 읽기
 FILE_PREFIXES = ("read_", "parquet_", "iceberg_", "delta_", "dblink", "xp_")  # 이름이 이렇게 시작하는 함수
-FILE_SUFFIXES = ("_scan", "_query")  # 이름이 이렇게 끝나는 함수(delta_scan, iceberg_scan, excel_scan, DuckDB의 postgres_query·mysql_query …)
+FILE_SUFFIXES = ("_scan",)  # 이름이 이렇게 끝나는 함수(delta_scan, iceberg_scan, excel_scan …). DuckDB의 postgres_query 같은 원격 조회는 FILE_FUNCS에 이름으로(json_query처럼 정상인 *_query 함수는 막지 않는다)
 ENV_FUNCS = {"getenv", "current_setting", "current_settings", "duckdb_settings", "duckdb_secrets", "which_secret",
-             "setval", "nextval", "set_config", "pg_terminate_backend", "pg_cancel_backend", "sleep"}  # 환경·설정·비밀을 읽거나 서버 상태를 바꾸는 함수
+             "setval", "nextval", "set_config", "pg_terminate_backend", "pg_cancel_backend", "sleep", "pg_sleep"}  # 환경·설정·비밀을 읽거나 서버 상태를 바꾸는 함수
 FILE_CLASSES = ("ReadCSV", "ReadParquet")  # sqlglot이 함수 이름 대신 따로 만드는 클래스(없는 버전이면 건너뜀)
 READ_MESSAGE = "SQL 안에서 파일을 직접 읽을 수 없어요. 파일은 [연결]로 열거나 가상 테이블(Parquet)로 등록하세요."
 ENV_MESSAGE = "SQL 안에서 환경·설정 값을 읽거나 서버 상태를 바꿀 수 없어요."
@@ -145,8 +145,9 @@ def all_virtual():
 
 
 def virtual(key):
-    """그 연결의 가상 테이블 {이름: 정의}."""
-    return all_virtual().get(key, {})
+    """그 연결의 가상 테이블 {이름: 정의}. 연결 열쇠가 파일까지 가르기 전(폴더만, '#' 없음)에 저장한 것도 같은 연결의 것으로 읽는다(use_counts.same_source)."""
+    found = all_virtual()
+    return found.get(key) or found.get(key.partition("#")[0], {})
 
 
 def save_virtual(key, name, definition, real_tables, verify):
@@ -156,22 +157,26 @@ def save_virtual(key, name, definition, real_tables, verify):
     name = name.strip() if isinstance(name, str) else ""
     if not NAME.fullmatch(name):
         raise ValueError("가상 테이블 이름은 영문·한글·밑줄로 시작하고 영문·숫자·밑줄·한글만 50자까지 쓸 수 있습니다.")
-    data = all_virtual()
-    vts = data.setdefault(key, {})
-    if definition is None:
-        vts.pop(name, None)
-    else:
-        if name.lower() in {t.lower() for t in real_tables}:
-            raise ValueError(f"'{name}'은 이 연결에 있는 테이블 이름입니다. 다른 이름을 쓰세요.")
-        if not isinstance(definition, dict) or not (isinstance(definition.get("sql"), str) or isinstance(definition.get("parquet"), str)):
-            raise ValueError("가상 테이블은 SQL이나 Parquet 파일 경로로 정의합니다.")
-        item = {"sql": definition["sql"]} if isinstance(definition.get("sql"), str) else {"parquet": definition["parquet"].strip()}
-        if name not in vts and len(vts) >= MAX_VIRTUAL:
-            raise ValueError(f"가상 테이블은 연결마다 {MAX_VIRTUAL}개까지입니다. 쓰지 않는 것을 지우세요.")
-        verify({**vts, name: item})  # 검사, 이름 고리, 지금 연결에서 읽히는지
-        vts[name] = {**item, "saved": dt.datetime.now().isoformat(timespec="seconds")}
-    settings.write(VT_FILE, data)
-    return vts
+    with settings.updating(VT_FILE):  # 읽고-고치고-쓰는 동안 다른 저장이 끼어들지 못하게
+        data = all_virtual()
+        old = key.partition("#")[0]
+        if key not in data and old != key and old in data:  # 예전 열쇠로 저장한 것은 저장할 때 지금 열쇠로 옮긴다
+            data[key] = data.pop(old)
+        vts = data.setdefault(key, {})
+        if definition is None:
+            vts.pop(name, None)
+        else:
+            if name.lower() in {t.lower() for t in real_tables}:
+                raise ValueError(f"'{name}'은 이 연결에 있는 테이블 이름입니다. 다른 이름을 쓰세요.")
+            if not isinstance(definition, dict) or not (isinstance(definition.get("sql"), str) or isinstance(definition.get("parquet"), str)):
+                raise ValueError("가상 테이블은 SQL이나 Parquet 파일 경로로 정의합니다.")
+            item = {"sql": definition["sql"]} if isinstance(definition.get("sql"), str) else {"parquet": definition["parquet"].strip()}
+            if name not in vts and len(vts) >= MAX_VIRTUAL:
+                raise ValueError(f"가상 테이블은 연결마다 {MAX_VIRTUAL}개까지입니다. 쓰지 않는 것을 지우세요.")
+            verify({**vts, name: item})  # 검사, 이름 고리, 지금 연결에서 읽히는지
+            vts[name] = {**item, "saved": dt.datetime.now().isoformat(timespec="seconds")}
+        settings.write(VT_FILE, data)
+        return vts
 
 
 def quote(name):

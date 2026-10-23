@@ -9,6 +9,7 @@ from lazy import Later, ibis, preload
 
 from core import held
 from core import result
+from core import scan_size
 from core import server
 from core import settings
 from core import source
@@ -97,11 +98,12 @@ def save_table_prep():
     key, config = table_key(request.json), request.json.get("config")
     if not isinstance(config, dict) or len(json.dumps(config, ensure_ascii=False)) > settings.MAX_RECIPE_SIZE:
         raise ValueError("저장할 전처리가 올바르지 않거나 너무 큽니다.")
-    found = {k: v for k, v in (settings.read(TABLE_PREPS) or {}).items() if isinstance(v, dict) and k != key}
-    found[key] = {"config": config, "saved": dt.datetime.now().isoformat(timespec="microseconds")}
-    for old in sorted(found, key=lambda k: str(found[k].get("saved", "")))[:-MAX_TABLE_PREPS]:
-        found.pop(old)
-    settings.write(TABLE_PREPS, found)
+    with settings.updating(TABLE_PREPS):
+        found = {k: v for k, v in (settings.read(TABLE_PREPS) or {}).items() if isinstance(v, dict) and k != key}
+        found[key] = {"config": config, "saved": dt.datetime.now().isoformat(timespec="microseconds")}
+        for old in sorted(found, key=lambda k: str(found[k].get("saved", "")))[:-MAX_TABLE_PREPS]:
+            found.pop(old)
+        settings.write(TABLE_PREPS, found)
     return jsonify(ok=True)
 
 
@@ -113,19 +115,52 @@ def local_mode(recipe):
     return settings.load().get("prep_where", "all") == "all" or bool(recipe.get("formulas") or recipe.get("pca") or recipe.get("geo"))
 
 
+def named_texts(recipe):
+    """계산식·복사·중복 기준·정렬·좌표·PCA·fill 기준에 적힌 글자들(값만, 키 이름은 아님). 컬럼 이름이 이 안에 나오는지 본다."""
+    out = []
+
+    def walk(value):
+        if isinstance(value, str):
+            out.append(value)
+        elif isinstance(value, dict):
+            for v in value.values():
+                walk(v)
+        elif isinstance(value, list):
+            for v in value:
+                walk(v)
+
+    for key in ("formulas", "copies", "dedupe", "dedupe_keep", "sorts", "geo", "pca"):
+        walk(recipe.get(key))
+    for spec in (recipe.get("columns") or {}).values():
+        if isinstance(spec, dict) and isinstance(spec.get("ops"), dict) and isinstance(spec["ops"].get("fill"), dict):
+            walk(spec["ops"]["fill"].get("by"))
+    return out
+
+
 def unused_columns(recipe):
-    """작업 사본에 받지 않을 컬럼: 남기지 않고(keep false) 전처리도 없으며 계산식·복사·중복 기준·정렬·좌표·PCA·fill 기준 어디에도 이름이 안 나오는 컬럼."""
+    """작업 사본에 받지 않을 컬럼: 남기지 않고(keep false) 전처리도 없으며 계산식·복사·중복 기준·정렬·좌표·PCA·fill 기준 어디에도 이름이 안 나오는 컬럼.
+    이름은 적힌 글자 전체이거나 식 안에서 낱말로 나올 때만 쓴 것으로 본다(id가 valid 안에 있다고 쓴 것으로 보지 않는다. 대소문자는 가리지 않는다)."""
     specs = recipe.get("columns") or {}
     if not isinstance(specs, dict):
         return []
-    named = json.dumps({k: recipe.get(k) for k in ("formulas", "copies", "dedupe", "dedupe_keep", "sorts", "geo", "pca")}, ensure_ascii=False)
-    named += json.dumps([s.get("ops", {}).get("fill", {}).get("by") for s in specs.values() if isinstance(s, dict) and isinstance(s.get("ops"), dict) and isinstance(s["ops"].get("fill"), dict)], ensure_ascii=False)
-    return sorted(c for c, s in specs.items() if isinstance(s, dict) and s.get("keep", True) is False and not s.get("ops") and c not in named and json.dumps(c, ensure_ascii=False)[1:-1] not in named)
+    texts = named_texts(recipe)
+    used = lambda c: any(re.search(r"(?<!\w)" + re.escape(c) + r"(?!\w)", text, re.I) for text in texts)
+    return sorted(c for c, s in specs.items() if isinstance(s, dict) and s.get("keep", True) is False and not s.get("ops") and not used(c))
 
 
 def copy_key(recipe):
     """작업 사본(working_copy)을 가리키는 held 열쇠(받지 않는 컬럼이 다르면 다른 사본)."""
     return ("prep", table_key(recipe), json.dumps(recipe.get("filters") or [], ensure_ascii=False), tuple(unused_columns(recipe)))
+
+
+def cached_key(recipe):
+    """recipe가 쓸 사본의 열쇠: 같은 사본이 있으면 그것, 없으면 같은 테이블·거르기이고 받지 않은 컬럼이 더 적은(= 컬럼이 더 많은) 사본이 있으면 그것, 아니면 새로 받을 열쇠."""
+    key = copy_key(recipe)
+    items = held.store["items"]
+    if key in items:
+        return key
+    mine = set(key[3])
+    return next((k for k, item in items.items() if item[0] and isinstance(k, tuple) and len(k) == 4 and k[:3] == key[:3] and set(k[3]) <= mine), key)
 
 
 def local_recipe(recipe):
@@ -149,21 +184,52 @@ def source_table(recipe):
 def working_copy(recipe):
     """원격 DB의 기준 테이블에 행 거르기(filters)만 걸어 이 PC의 DuckDB로 한 번 받아 둔 표(held, 상한 없음, 묶음씩 받음).
     같은 테이블·거르기면 다시 쓴다. DB에는 이 단순한 조회 하나만 가고, 평균 같은 통계와 전처리 계산은 이 표에서 한다."""
-    t, key = source_table(recipe), copy_key(recipe)
+    t, key = source_table(recipe), cached_key(recipe)
     name = run(lambda: held.ensure(key, t, state["cancel"], cap=False))[0]
-    local = held.table(name)
-    return local.select(*[c for c in local.columns if c != held.ROW])
+    local, skipped = held.table(name), unused_columns(recipe)  # 더 큰 사본을 쓰면 이 recipe가 안 쓰는 컬럼은 뺀다
+    return local.select(*[c for c in local.columns if c != held.ROW and c not in skipped])
 
 
-def copy_gate(recipe):
-    """이 PC 사본을 새로 받아야 하면(local_mode이고 같은 사본이 아직 없으면) 처리 용량 확인(server.scan_gate). 확인이 필요하면 돌려줄 응답, 아니면 None.
-    미리보기·중복 세기·분석(전체)·실행이 같이 쓴다. 이미 받은 사본을 다시 쓰는 때는 DB를 읽지 않으므로 묻지 않는다."""
+def computes_stats(recipe):
+    """recipe에 통계를 내는 일이 있는지: fill mean·median·mode, outlier iqr·std, scale, 중복 제거(dedupe)."""
+    if recipe.get("dedupe"):
+        return True
+    for spec in (recipe.get("columns") or {}).values():
+        ops = spec.get("ops") if isinstance(spec, dict) else None
+        if not isinstance(ops, dict):
+            continue
+        fill, outlier = ops.get("fill"), ops.get("outlier")
+        if "scale" in ops or (isinstance(fill, dict) and fill.get("how") in ("mean", "median", "mode")) or (isinstance(outlier, dict) and outlier.get("by") in ("iqr", "std")):
+            return True
+    return False
+
+
+def db_reads(ask):
+    """prep_where=new에서 DB가 직접 테이블을 읽는 때의 확인 응답: 'PC로 받아요' 대신 'DB가 이 테이블을 읽어요'로 안내한다."""
+    found = ask.get_json()
+    size = found.get("bytes")
+    rest = (found.get("text") or "").split(" · ", 1)[1:]
+    found["text"] = "DB가 이 테이블을 읽어요" + (f"(약 {scan_size.size_text(size)})" if size else "") + "".join(" · " + r for r in rest)
+    ask.set_data(json.dumps(found, ensure_ascii=False))
+    return ask
+
+
+def copy_gate(recipe, reads=False, fresh=False):
+    """이 PC 사본을 새로 받아야 하면(local_mode이고 같은 사본이 아직 없으면, fresh면 있어도) 처리 용량 확인(server.scan_gate). 확인이 필요하면 돌려줄 응답, 아니면 None.
+    미리보기·중복 세기·분석(전체)·실행이 같이 쓴다. 이미 받은 사본을 다시 쓰는 때는 DB를 읽지 않으므로 묻지 않는다.
+    prep_where=new로 DB가 계산하는 때는 통계를 내는 일이 있거나 reads(중복 세기·전체 분석처럼 어차피 읽는 일)일 때만 묻는다."""
     if local_mode(recipe):
-        if copy_key(recipe) not in held.store["items"] and (ask := server.scan_gate(request.json, lambda: scan_sql(recipe))):
+        if (fresh or cached_key(recipe) not in held.store["items"]) and (ask := server.scan_gate(request.json, lambda: scan_sql(recipe))):
             return ask
-    elif held.remote(get_con()) and (ask := server.scan_gate(request.json, lambda: scan_sql(recipe))):  # prep_where=new여도 DB가 평균·distinct·COUNT로 테이블을 읽으니 확인한다
-        return ask
+    elif held.remote(get_con()) and (reads or computes_stats(recipe)) and (ask := server.scan_gate(request.json, lambda: scan_sql(recipe))):
+        return db_reads(ask)
     return geo_gate(recipe)
+
+
+def fresh_copy(recipe):
+    """산출물(실행·저장·전체 분석)을 만들기 직전에 이 recipe의 작업 사본을 버린다. 그 사이 DB가 바뀌었을 수 있어 미리보기에서 받은 낡은 사본을 쓰지 않고 새로 받는다."""
+    if local_mode(recipe):
+        held.forget(cached_key(recipe))
 
 
 def geo_gate(recipe):
@@ -216,7 +282,7 @@ def known_rows(body):
     """기준 테이블의 행 수. count가 false면 세지 않고 None. 같은 테이블의 사본(행 거르기 없음)이 이미 있으면 그 행 수라 DB에 COUNT를 보내지 않는다."""
     if body.get("count", True) is False:
         return None
-    item = held.store["items"].get(copy_key(body)) if not body.get("filters") and held.remote(get_con()) else None
+    item = held.store["items"].get(cached_key(body)) if not body.get("filters") and held.remote(get_con()) else None
     return item[1] if item and item[0] else server.row_count(body.get("schema"), body["base"])
 
 
@@ -362,9 +428,12 @@ def analyzed(body):
 @app.post("/api/analyze")
 def analyze():
     body = request.json
-    recipe = body.get("recipe", {})
-    if ask := (copy_gate(recipe) if body.get("full") is True else geo_gate(recipe)):  # 표본 분석도 원격 지점·영역 테이블은 통째로 받으므로 확인한다
+    recipe = {**body.get("recipe", {}), "sorts": []}  # 분석은 정렬을 쓰지 않으니 사본 열쇠·확인도 정렬 없이(analyzed와 같다)
+    full = body.get("full") is True
+    if ask := (copy_gate(recipe, reads=True) if full else geo_gate(recipe)):  # 표본 분석도 원격 지점·영역 테이블은 통째로 받으므로 확인한다
         return ask
+    if full:
+        fresh_copy(recipe)
     return jsonify(analyzed(body))
 
 
@@ -372,7 +441,7 @@ def analyze():
 def dupes():
     """dedupe 기준으로 중복 묶음 수와 빠질 행 수. local_mode면 작업 사본에서 센다."""
     recipe, con = request.json, get_con()
-    if ask := copy_gate(recipe):
+    if ask := copy_gate(recipe, reads=True):
         return ask
     if local_mode(recipe):
         table = working_copy(recipe)
@@ -476,8 +545,9 @@ def run_recipe():
     if not held.remote(con):
         if ask := server.scan_gate(request.json, lambda: scan_sql(recipe)):
             return ask
-    elif ask := copy_gate(recipe):
+    elif ask := copy_gate(recipe, fresh=True):  # 산출물은 새로 받은 사본으로(미리보기 때 받은 것은 낡았을 수 있다)
         return ask
+    fresh_copy(recipe)
     if target.get("kind") == "table":
         return jsonify(ok=True, rows=make_table(recipe, target.get("name", "")))
     if target.get("kind") != "file" or target.get("format") not in FILE_FORMATS:

@@ -88,6 +88,13 @@ def build(regions, points, geo):
         notes.append(f"꼭짓점이 많아 {MAX_VERTICES:,}개 안팎으로 줄여 그렸어요.")
     out_regions = [{"name": name, "value": value, "rings": [flat(thinned(r, total, MAX_VERTICES)) for poly in polys for r in poly]} for polys, name, value in zip(shapes, names, values)]
     ok = np.isfinite(lat) & np.isfinite(lon)
+    ring_x = [float(r[:, 0].max()) for r in all_rings] + [float(r[:, 0].min()) for r in all_rings]
+    if ring_x and max(ring_x) > 180:  # 영역이 날짜 변경선을 넘어 이어진 좌표(spatial.assign과 같은 규칙)면 서쪽 점도 같은 쪽으로
+        lon = np.where(lon < 0, lon + 360, lon)
+    elif ring_x and min(ring_x) < -180:
+        lon = np.where(lon > 0, lon - 360, lon)
+    elif not ring_x and geojson.crosses_dateline(lon[ok].tolist()):  # 점만 있으면 점이 변경선에 걸친 때
+        lon = np.where(lon < 0, lon + 360, lon)
     drawn = np.flatnonzero(ok)
     if len(drawn) > MAX_DRAW:
         drawn = drawn[np.unique(np.linspace(0, len(drawn) - 1, MAX_DRAW).round().astype(int))]

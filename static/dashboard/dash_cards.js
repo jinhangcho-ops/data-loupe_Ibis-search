@@ -237,7 +237,7 @@ function paintDual(card, colors, board) {
 // recent_rows: 연결돼 있을 때만 /api/query로 앞 N행을 읽어 보인다. 행 값은 저장하지 않는다(카드에는 컬럼 이름만).
 function paintRecent(card, colors, board) {
   const holder = box("recent"), key = card.source?.key;
-  if (!board?.connKey || (key && key !== board.connKey)) { holder.append(el("div", { className: "hint", textContent: board?.connKey ? "이 카드는 다른 연결의 것이라 지금은 보이지 않아요" : "연결하면 보입니다" })); return holder; }
+  if (!board?.connKey || (key && !sameSource(key, board.connKey))) { holder.append(el("div", { className: "hint", textContent: board?.connKey ? "이 카드는 다른 연결의 것이라 지금은 보이지 않아요" : "연결하면 보입니다" })); return holder; }
   holder.append(el("div", { className: "hint", textContent: "읽는 중…" }));
   api("/api/query", { ...card.source.body, limit: card.view?.rows || 10, count: false }).then(d => {
     const { columns, rows } = d.rows;
@@ -254,7 +254,7 @@ const levelColor = level => level === "bad" ? cssVar("--err") : level === "warn"
 // 행 값 읽기: 연결돼 있을 때만 /api/query로 앞 N행(저장하지 않는다). show(컬럼 이름들, 행들[[…]])를 부른다.
 function loadRows(card, board, holder, show, limit) {
   const key = card.source?.key;
-  if (!board?.connKey || (key && key !== board.connKey)) return void holder.append(el("div", { className: "hint", textContent: board?.connKey ? "이 카드는 다른 연결의 것이라 지금은 보이지 않아요" : "연결하면 보입니다" }));
+  if (!board?.connKey || (key && !sameSource(key, board.connKey))) return void holder.append(el("div", { className: "hint", textContent: board?.connKey ? "이 카드는 다른 연결의 것이라 지금은 보이지 않아요" : "연결하면 보입니다" }));
   holder.append(el("div", { className: "hint", textContent: "읽는 중…" }));
   api("/api/query", { ...card.source.body, limit, count: false }).then(d => show(d.rows.columns, d.rows.rows.map(r => d.rows.columns.map(c => r[c]))))
     .catch(e => holder.replaceChildren(el("div", { className: "err", textContent: e.message })));

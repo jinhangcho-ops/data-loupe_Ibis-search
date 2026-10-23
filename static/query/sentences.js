@@ -178,7 +178,7 @@ function SentenceView(host, ctx) {
   }
   async function loadMetrics() {
     try {
-      const d = await api("/api/my_metrics"), mine = m => m.scope?.key === d.source?.key && (m.scope.table ?? "") === (S.base ?? "");
+      const d = await api("/api/my_metrics"), mine = m => sameSource(m.scope?.key, d.source?.key) && (m.scope.table ?? "") === (S.base ?? "");
       source = d.source;
       metricList = [...d.metrics.map(m => ({ id: m.id, text: m.text, usable: mine(m) })), ...d.legacy.map(m => ({ id: m.name, text: `${m.name} · 지표 파일`, usable: true }))];
       return d;
@@ -362,7 +362,7 @@ function SentenceView(host, ctx) {
     body.replaceChildren(el("div", { className: "sgrid" }, el("div", { className: "sleft" }, el("h2", { textContent: "지표 틀" }), ...metricTpl.map(t => el("button", { className: "tpl", title: t.text, onclick: () => editMetric(null, t.id) }, el("b", { textContent: t.no }), " " + t.name))),
       el("div", { className: "sright" }, el("h2", { textContent: "내 지표" }), mine, form, msg, el("h2", { textContent: "지표 사전" }), catalog)));
     await sentHook(catalog, { ctx, kinds, slotEl, periodInputs, refresh: showMetric });
-    const here = m => m.scope?.key === source?.key && (m.scope.table ?? "") === (S.base ?? "");
+    const here = m => sameSource(m.scope?.key, source?.key) && (m.scope.table ?? "") === (S.base ?? "");
     let status = {};
     try { status = (await api("/api/my_metrics/status", { scope: { ...scopeNow() }, columns: kinds() })).status; } catch { /* 구조 확인은 없어도 목록은 보인다 */ }
     const ids = new Set(d.metrics.map(m => m.id)), names = Object.fromEntries(d.metrics.map(m => [m.id, m.name]));

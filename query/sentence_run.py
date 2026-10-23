@@ -91,7 +91,7 @@ def check(tid, slots, columns=None):
         kind = s["type"]
         if kind in ("column", "columns", "order"):
             for c in raw if isinstance(raw, list) else [raw]:
-                col = name_of(c).split()[0] if kind == "order" and isinstance(name_of(c), str) else name_of(c)
+                col = (flow.head_name(name_of(c), columns) or name_of(c).split()[0]) if kind == "order" and isinstance(name_of(c), str) else name_of(c)
                 if columns is not None and col not in columns:
                     out.append(issue(name, "bad", f"‘{col}’ 컬럼이 이 테이블에 없어요."))
                 elif columns is not None and kind == "column" and not fits(s["kinds"], columns[col]):
@@ -117,7 +117,7 @@ def check(tid, slots, columns=None):
                 out += agg_vs_value(t, slots, f, columns, name)
         elif kind == "cond":
             for line in raw if isinstance(raw, list) else [raw]:
-                for col in flow.cond_columns(line):
+                for col in flow.cond_columns(line, columns):
                     if columns is not None and col not in columns:
                         out.append(issue(name, "bad", f"조건의 ‘{col}’ 컬럼이 이 테이블에 없어요."))
         elif kind in ("value", "values", "text_match") and columns is not None and (kind == "text_match" or tid in COMPARED):
@@ -214,6 +214,8 @@ class Plan:
         """앞에 붙는 {기간}을 body.periods에."""
         p = self.get("기간")
         if p and (isinstance(p, str) or p.get("start") or p.get("end")):
+            if not isinstance(p, str) and not p.get("column"):
+                raise Bad("기간에는 날짜 컬럼을 골라 주세요.")
             self.body["periods"].append(p if isinstance(p, str) else f"{p['column']} {p.get('start', '')} ~ {p.get('end', '')}")
 
     def run(self, label, route, body, **extra):
@@ -280,7 +282,7 @@ def formula_one(text):
         return f"between(col({m.group(1)!r}), {num(m.group(2))}, {num(m.group(3))})"
     m = parse.IN_RE.match(text)
     if m:
-        items = [num(x.strip().strip("'\"")) for x in m.group(3).split(",") if x.strip()]
+        items = [num(parse.unquote(x)) for x in parse.split(parse.COMMA_RE, m.group(3)) if x.strip()]  # 따옴표 안의 쉼표는 값의 일부
         inner = f"isin(col({m.group(1)!r}), [{', '.join(items)}])"
         return inner if m.group(2).lower() == "in" else f"not {inner}"
     m = parse.LIKE_RE.match(text)
@@ -296,7 +298,7 @@ def formula_one(text):
 
 def num(text):
     """식에 넣을 값: 평범한 십진수(-1.5)면 그대로, 아니면 글자 상수('007'·nan·1e3은 글자)."""
-    return str(text) if re.fullmatch(r"[+-]?(0|[1-9]\d*)(\.\d+)?", str(text)) else repr(str(text))
+    return str(text) if re.fullmatch(r"[+-]?((0|[1-9]\d*)(\.\d+)?|\.\d+)", str(text)) else repr(str(text))
 
 
 def func_call(spec, column):
@@ -727,7 +729,9 @@ def period_parts(p):
         col, _, rng = v.partition(" ")
         start, _, end = (x.strip() for x in rng.partition("~"))
     else:
-        col, start, end = v["column"], v.get("start", ""), v.get("end", "")
+        col, start, end = v.get("column"), v.get("start", ""), v.get("end", "")
+        if not col:
+            raise Bad("기간에는 날짜 컬럼을 골라 주세요.")
     try:
         return col, dt.date.fromisoformat(start), dt.date.fromisoformat(end)
     except ValueError:
@@ -800,7 +804,8 @@ def metric_def(p):
         p.combine = {"op": "change", "a": a, "b": b}
         p.notes.append(f"직전 같은 기간은 {start - dt.timedelta(days=days)} ~ {start - dt.timedelta(days=1)}({days}일)이에요.")
     elif no == 15:
-        order = str(p.need("정렬 기준")).split()[0]
+        order = str(p.need("정렬 기준"))
+        order = flow.head_name(order, p.columns) or order.split()[0]
         i = metric_run(p, "정렬 기준마다 지표", metric_ref(p, "지표"), by=order)
         p.combine = {"op": "cumsum", "a": i}
     else:

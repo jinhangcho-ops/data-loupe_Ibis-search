@@ -86,11 +86,21 @@ def last_rows(rows, ctx, what="기간"):
     return rows
 
 
-def users_by_unit(t, s, unit):
-    """기간 버킷마다 고유 사용자 수 [{period, users}](오래된 것부터, 첫~마지막 기간 사이 활동이 없는 기간은 0명으로 채운다)."""
+def users_by_unit(t, s, unit, ctx):
+    """기간 버킷마다 고유 사용자 수 → (표에 실을 [{period, users}], 첫~마지막 기간 칸 수, {기간 번호: 사용자 수}).
+    표는 오래된 것부터 최근 MAX_ROWS칸만 만든다(활동 없는 기간은 0명). 칸이 아주 많아도(날짜 이상값) 칸마다 dict를 만들지 않으니, 평균 등은 칸 수·found로 계산한다."""
     act = mc.active_buckets(t, s["user"], s["time"], unit)
-    found = {int(r["p"]): int(r["n"]) for r in mc.rows(act.group_by("p").aggregate(n=act.u.count()))}
-    return [{"period": label_of(p, unit), "users": found.get(p, 0)} for p in range(min(found), max(found) + 1)] if found else []
+    found = {int(r["p"]): int(r["n"]) for r in mc.fetch_rows(act.group_by("p").aggregate(n=act.u.count()), "기간 수")}
+    if not found:
+        return [], 0, found
+    lo, hi = min(found), max(found)
+    cells = hi - lo + 1
+    if cells > MAX_ROWS:
+        ctx.notes.append(f"기간이 많아 최근 {MAX_ROWS}개만 표에 실었어요(대표 값은 전체 기준).")
+    msg = mc.sparse_note(cells, len(found))
+    if msg:
+        ctx.notes.append(msg)
+    return [{"period": label_of(p, unit), "users": found.get(p, 0)} for p in range(max(lo, hi - MAX_ROWS + 1), hi + 1)], cells, found
 
 
 # ---------- 1 트래픽·활성도 ----------
@@ -104,7 +114,7 @@ def uv(t, s, p, ctx):
     n = int(one(x.aggregate(n=x[s["user"]].nunique()))["n"])
     if not s.get("unit"):
         return result(n, parts={"uv": n}, label="고유 사용자 수")
-    rows = last_rows(users_by_unit(t, s, s["unit"]), ctx)
+    rows = users_by_unit(t, s, s["unit"], ctx)[0]
     return result(n, rows, {"period": "기간", "users": "고유 사용자 수"}, {"uv": n})
 
 
@@ -130,9 +140,11 @@ def pv_per_uv(t, s, p, ctx):
 @kernel("active")
 def active(t, s, p, ctx):
     """DAU·WAU·MAU: 기간 버킷마다 고유 사용자 수의 평균(활동 없는 기간은 0명). 분포는 기간별 값."""
-    rows = users_by_unit(t, s, p["unit"])
-    values = [r["users"] for r in rows]
-    return result(mc.mean_defined(values), last_rows(rows, ctx), {"period": "기간", "users": "활성 사용자 수"}, dist=np.array(values, float), label=f"{p['unit_name']} 평균")
+    rows, cells, found = users_by_unit(t, s, p["unit"], ctx)
+    if not cells:
+        return result(None, [], {"period": "기간", "users": "활성 사용자 수"}, dist=np.array([], float), label=f"{p['unit_name']} 평균")
+    values = np.concatenate([np.fromiter(found.values(), float, len(found)), np.zeros(cells - len(found))])  # 활동 없는 기간은 0명
+    return result(sum(found.values()) / cells, rows, {"period": "기간", "users": "활성 사용자 수"}, dist=values, label=f"{p['unit_name']} 평균")
 
 
 @kernel("stickiness")
@@ -294,7 +306,7 @@ def flattening(t, s, p, ctx):
 def states(t, s, p, ctx):
     """사용자 상태 지표(DAU 분해·Churn·Resurrection·Quick Ratio)."""
     unit = s.get("unit") or p.get("unit") or "month"
-    found = mc.user_states(t, s["user"], s["time"], unit, s.get("inactive_days"))
+    found = mc.user_states(t, s["user"], s["time"], unit, s.get("inactive_days"), ctx.notes)
     pick = p["pick"]
     shown = {"dau_split": ("active", "new", "retained", "resurrected"), "churn": ("active", "churned", "churn_rate"), "resurrection": ("active", "resurrected", "resurrection_rate"),
              "quick": ("new", "resurrected", "churned", "quick_ratio")}[pick]
@@ -342,7 +354,7 @@ def survival(t, s, p, ctx):
         step = math.ceil(len(points) / MAX_POINTS)
         points = points[::step]
         ctx.notes.append(f"점이 많아 {MAX_POINTS}개 안팎으로 줄여 실었어요.")
-    ctx.notes.append(f"마지막 활동이 자료의 끝보다 {s['churn_days']}일 넘게 앞서면 떠난 것(사건), 아니면 아직 남은 것(중도절단)으로 봤어요.")
+    ctx.notes.append(f"마지막 활동이 자료의 끝보다 {s['churn_days']}일 이상 앞서면 떠난 것(사건), 아니면 아직 남은 것(중도절단)으로 봤어요.")
     return result(km["median"], [{"t": a, "survival": b, "at_risk": c, "events": d} for a, b, c, d in points], {"t": "머문 일수 t", "survival": "S(t)", "at_risk": "남은 수", "events": "떠난 수"},
                   {"users": int(got.num_rows)}, label="생존율이 50% 이하가 되는 첫 일수(중앙 생존 시간)")
 
@@ -437,7 +449,7 @@ def ltv(t, s, p, ctx):
     """LTV: 코호트 N일 누적 매출 ÷ 코호트 크기 또는 월 ARPU ÷ 월 이탈률."""
     n_days, unit = s["n_days"], s.get("unit") or "day"
     if s["method"] == "ARPU÷이탈률":
-        found = mc.user_states(t, s["user"], s["time"], "month")
+        found = mc.user_states(t, s["user"], s["time"], "month", notes=ctx.notes)
         churn = mc.mean_defined([r["churn_rate"] for r in found])
         x = with_user(t, s)
         per = x.select(u=x[s["user"]], m=mc.bucket_index(x[s["time"]], "month"), a=x[s["amount"]].fill_null(0))
@@ -590,19 +602,22 @@ def ad_table(s, ctx, align):
     if align["kind"] == "period" and not s.get("ad_time"):
         raise ValueError("기간 단위로 맞출 때는 광고 날짜 컬럼을 골라 주세요.")
     ad = ctx.other(s["ad_table"])
-    names = [s["spend"], *([s["ad_time"]] if align["kind"] == "period" else [k[1] for k in align["keys"]])]
+    names = [s["spend"], *([s["ad_time"]] if align["kind"] == "period" else [*(k[1] for k in align["keys"]), *([s["ad_time"]] if s.get("ad_time") else [])])]
     mc.need(ad, *names)
     return ad
 
 
-def spend_groups(ad, s, align):
-    """광고비 합계 {맞춤 키: 광고비}."""
+def spend_groups(ad, s, align, days=None):
+    """광고비 합계 {맞춤 키: 광고비}. 공통 키 맞춤에서 days=(첫 날 번호, 끝 날 번호)를 주면 광고 날짜가 그 사이인 광고비만."""
     if align["kind"] == "period":
         x = ad.select(p=mc.bucket_index(ad[s["ad_time"]], align["unit"]), v=ad[s["spend"]])
-        return {int(r["p"]): num(r["v"]) or 0.0 for r in mc.rows(x.group_by("p").aggregate(v=x.v.sum())) if r["p"] is not None}
+        return {int(r["p"]): num(r["v"]) or 0.0 for r in mc.fetch_rows(x.group_by("p").aggregate(v=x.v.sum()), "광고비 기간 수") if r["p"] is not None}
     cols = [k[1] for k in align["keys"]]
+    if days:
+        d = mc.day_index(ad[s["ad_time"]])
+        ad = ad.filter(d >= days[0], d <= days[1])
     x = ad.select(*[ad[c].cast("string").name(f"k{i}") for i, c in enumerate(cols)], v=ad[s["spend"]])
-    return {tuple(r[f"k{i}"] for i in range(len(cols))): num(r["v"]) or 0.0 for r in mc.rows(x.group_by([f"k{i}" for i in range(len(cols))]).aggregate(v=x.v.sum()))}
+    return {tuple(r[f"k{i}"] for i in range(len(cols))): num(r["v"]) or 0.0 for r in mc.fetch_rows(x.group_by([f"k{i}" for i in range(len(cols))]).aggregate(v=x.v.sum()), "광고비 키 수")}
 
 
 def cohort_frame(t, s, align, with_amount=False):
@@ -627,12 +642,14 @@ def key_names(align):
 
 
 def new_users(x, align):
-    """맞춤 키마다 신규 사용자 수. 기간 맞춤은 첫 활동 기간, 공통 키 맞춤은 키마다 고유 사용자."""
+    """맞춤 키마다 신규 사용자 수. 기간 맞춤은 첫 활동 기간, 공통 키 맞춤은 사용자의 첫 활동(같은 날이면 키 순) 키 하나에만(한 사용자를 여러 키로 세지 않는다)."""
     if align["kind"] == "period":
         first = x.group_by("u").aggregate(p0=x.p.min())
-        return {int(r["p0"]): int(r["n"]) for r in mc.rows(first.group_by("p0").aggregate(n=first.u.count()))}
+        return {int(r["p0"]): int(r["n"]) for r in mc.fetch_rows(first.group_by("p0").aggregate(n=first.u.count()), "기간 수")}
     names = key_names(align)
-    return {tuple(r[k] for k in names): int(r["n"]) for r in mc.rows(x.group_by(names).aggregate(n=x.u.nunique()))}
+    ranked = x.mutate(_r=ibis.row_number().over(ibis.window(group_by="u", order_by=["day", *names])))
+    first = ranked.filter(ranked._r == 0)
+    return {tuple(r[k] for k in names): int(r["n"]) for r in mc.fetch_rows(first.group_by(names).aggregate(n=first.u.count()), "키 수")}
 
 
 def revenue_by_offset(x, align, max_days):
@@ -642,7 +659,7 @@ def revenue_by_offset(x, align, max_days):
     j = j.mutate(off=j.day - j.d0)
     j = j.filter(j.off <= max_days)
     names = key_names(align)
-    got = mc.rows(j.group_by([*names, "off"]).aggregate(r=j.amt.sum()))
+    got = mc.fetch_rows(j.group_by([*names, "off"]).aggregate(r=j.amt.sum()), "키·일수 조합")
     return {((int(r["p0"]) if align["kind"] == "period" else tuple(r[k] for k in names)), int(r["off"])): num(r["r"]) or 0.0 for r in got}
 
 
@@ -655,14 +672,20 @@ def cross_context(t, s, ctx, align, paid_only=False, max_days=0):
     """두 테이블 계산의 바탕: (키마다 광고비, 키마다 신규 사용자 수, x(사용자 쪽 표), align)."""
     align = check_align(align)
     ad = ad_table(s, ctx, align)
-    spend = spend_groups(ad, s, align)
     x = cohort_frame(t, {**s, "paid_only": paid_only}, align, with_amount=max_days > 0 or "amount" in s)
     users = new_users(x, align)
-    if align["kind"] == "period":  # 광고비 테이블에는 기간이 안 걸려 있으니 사용자 쪽 활동 범위로 자른다
-        r = one(x.aggregate(lo=x.p.min(), hi=x.p.max()))
-        spend = {k: v for k, v in spend.items() if r["lo"] is not None and r["lo"] <= k <= r["hi"]}
-    else:  # 공통 키는 사용자가 있는 키만
-        spend = {k: v for k, v in spend.items() if k in users}
+    if align["kind"] == "period" or s.get("ad_time"):  # 광고비 테이블에는 기간이 안 걸려 있으니 사용자 쪽 활동 범위로 자른다(기간 맞춤은 기간 번호, 공통 키 맞춤은 날짜 번호)
+        col = x.p if align["kind"] == "period" else x.day
+        r = one(x.aggregate(lo=col.min(), hi=col.max()))
+        days = (r["lo"], r["hi"]) if r["lo"] is not None else (1, 0)  # 사용자 쪽이 비면 빈 범위
+        spend = spend_groups(ad, s, align, days)
+        if align["kind"] == "period":
+            spend = {k: v for k, v in spend.items() if days[0] <= k <= days[1]}
+    else:
+        spend = spend_groups(ad, s, align)
+        ctx.notes.append("광고비에는 기간이 걸리지 않아요(광고 날짜 컬럼을 고르면 사용자 쪽 날짜 범위로 거를 수 있어요).")
+    if align["kind"] == "key" and spend and users and not spend.keys() & users.keys():
+        ctx.notes.append("사용자 쪽과 광고 쪽에서 맞는 키 값이 하나도 없어요. 두 컬럼의 키 타입을 확인하세요(예: 정수 1과 실수 1.0은 글자가 달라 맞지 않아요).")
     ctx.notes.append("고른 기간 앞의 활동은 보이지 않아, 기간 안에서 처음 나타난 사용자를 신규로 세요(기존 사용자가 섞일 수 있어요).")
     return spend, users, x, align
 
@@ -747,7 +770,7 @@ def money_supply(t, s, ctx):
     x = with_user(t, s)
     x = x.select(u=x[s["user"]], d=mc.day_index(x[s["time"]]), b=x[s["balance"]], tm=x[s["time"]])
     x = x.filter(x.d.notnull())
-    per = x.group_by("u").aggregate(bal=x.b.argmax(x.tm), last=x.d.max())
+    per = x.group_by("u").aggregate(bal=x.b.argmax(x.tm, where=x.b.notnull()), last=x.d.max())  # 마지막 행의 잔액이 비면 마지막으로 알려진 잔액
     end = one(per.aggregate(m=per.last.max()))["m"]
     if end is None:
         return 0.0, 0
@@ -795,10 +818,13 @@ def gini(t, s, p, ctx):
 @kernel("stage_clear")
 def stage_clear(t, s, p, ctx):
     """스테이지 클리어율·도전 횟수."""
+    t = t.filter(t[s["result"]].notnull(), t[s["stage"]].notnull())  # 결과·스테이지가 빈 행은 도전으로 세지 않는다
+    if s.get("user"):
+        t = with_user(t, s)
     win = t[s["result"]] == funnel.step_value(t[s["result"]].type(), s["win_value"])
     x = t.select(g=t[s["stage"]], u=t[s["user"]] if s.get("user") else ibis.literal(0), w=win.cast("int64"))
     per = x.group_by("g").aggregate(tries=x.count(), clears=x.w.sum(), users=x.u.nunique())
-    found = sorted(mc.rows(per), key=lambda r: str(r["g"]))
+    found = sorted(mc.fetch_rows(per, "스테이지 수"), key=lambda r: r["g"])  # 스테이지 값의 원래 타입 순(숫자는 숫자 순)
     rows = [{"stage": str(r["g"]), "tries": int(r["tries"]), "clears": int(r["clears"] or 0), "users": int(r["users"]), "clear_rate": mc.ratio(int(r["clears"] or 0), int(r["tries"])),
              "try_per_user": mc.ratio(int(r["tries"]), int(r["users"]))} for r in found]
     tries, clears = sum(r["tries"] for r in rows), sum(r["clears"] for r in rows)
@@ -813,11 +839,12 @@ def stage_clear(t, s, p, ctx):
 @kernel("meta")
 def meta(t, s, p, ctx):
     """항목별 Pick Rate·Win Rate."""
+    t = t.filter(t[s["result"]].notnull(), t[s["item"]].notnull())  # 결과·항목이 빈 행은 선택으로 세지 않는다
     win = t[s["result"]] == funnel.step_value(t[s["result"]].type(), s["win_value"])
     x = t.select(g=t[s["item"]], w=win.cast("int64"))
-    found = mc.rows(x.group_by("g").aggregate(picks=x.count(), wins=x.w.sum()))
+    found = mc.fetch_rows(x.group_by("g").aggregate(picks=x.count(), wins=x.w.sum()), "항목 수")
     total = sum(int(r["picks"]) for r in found)
-    found.sort(key=lambda r: (-int(r["picks"]), str(r["g"])))
+    found.sort(key=lambda r: (-int(r["picks"]), r["g"]))
     rows = [{"item": str(r["g"]), "picks": int(r["picks"]), "pick_rate": mc.ratio(int(r["picks"]), total), "wins": int(r["wins"] or 0), "win_rate": mc.ratio(int(r["wins"] or 0), int(r["picks"]))} for r in found]
     cols = {"item": "항목", "picks": "선택 수", "pick_rate": "Pick Rate", "wins": "승리 수", "win_rate": "Win Rate"}
     if not rows:
@@ -1041,10 +1068,12 @@ def mde(t, s, p, ctx):
     c, e, binary = two_groups(t, s)
     if binary:
         value = mc.mde_two_proportions(c["mean"], c["n"], e["n"], s["alpha"], s["power"])
+        if value is None:
+            ctx.notes.append("대조군 비율이 0 또는 1이라 분산이 0이어서 최소 검출 효과를 구할 수 없어요.")
     else:
         sd = math.sqrt(((c["sd"] or 0.0) ** 2 + (e["sd"] or 0.0) ** 2) / 2)
         value = mc.mde_two_means(sd, c["n"], e["n"], s["alpha"], s["power"])
-    return result(value, [{"name": "MDE(절대)", "value": value}, {"name": "대조군 평균", "value": c["mean"]}, {"name": "MDE(대조군 대비)", "value": mc.ratio(value, c["mean"])}],
+    return result(value, [{"name": "MDE(절대)", "value": value}, {"name": "대조군 평균", "value": c["mean"]}, {"name": "MDE(대조군 대비)", "value": None if value is None else mc.ratio(value, c["mean"])}],
                   {"name": "항목", "value": "값"}, {"control_n": c["n"], "treat_n": e["n"]}, label=f"검정력 {s['power']:g}, 유의수준 {s['alpha']:g}에서 잡아낼 수 있는 최소 차이(정규 근사)")
 
 

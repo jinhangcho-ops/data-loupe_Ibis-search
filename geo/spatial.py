@@ -98,7 +98,8 @@ def y_chunks(py, ring):
     step = max(1, BLOCK // max(len(lo), 1))
     for s in range(0, len(order), step):
         at = order[s:s + step]
-        yield at, np.flatnonzero((lo <= py[at[-1]] + margin) & (hi >= py[at[0]] - margin))
+        known = py[at][np.isfinite(py[at])]  # y가 NaN인 점(정렬 맨 뒤)이 묶음의 끝이면 변 후보가 모두 빠져 묶음 전체가 밖이 되므로 NaN은 범위에서 뺀다
+        yield at, np.flatnonzero((lo <= known.max() + margin) & (hi >= known.min() - margin)) if len(known) else np.empty(0, dtype=np.int64)
 
 
 def inside(px, py, ring):

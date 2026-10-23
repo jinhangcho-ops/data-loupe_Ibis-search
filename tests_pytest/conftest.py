@@ -13,6 +13,17 @@ sys.path.insert(0, str(ROOT))
 APPDATA = tempfile.mkdtemp(prefix="ibis_pytest_")
 os.environ["APPDATA"] = APPDATA  # settings.PATH는 import할 때 정해지므로 프로젝트 모듈보다 먼저 바꾼다.
 
+# 라우트 모듈은 Flask 앱이 첫 요청을 받기 전에 모두 올려 둔다(앞선 시험이 요청을 보낸 뒤에 올리면 '라우트를 더할 수 없다'는 오류가 나므로, 일부만 돌리거나 순서를 섞어도 같게).
+from integrations import bot_app  # noqa: E402,F401  Slack 봇 라우트
+from collect import collect_app  # noqa: E402,F401  수집 라우트
+from dashboard import dash_app  # noqa: E402,F401  대시보드 라우트
+from core import draft_app  # noqa: E402,F401  화면 임시 저장(초안) 라우트
+from query import flow_app  # noqa: E402,F401  흐름·문장·내 지표 라우트
+from metrics import catalog_app  # noqa: E402,F401  지표 사전 라우트
+from integrations import integrations_app  # noqa: E402,F401  연동 라우트
+from prep import prep_app  # noqa: E402,F401  전처리 라우트
+from integrations import schedule_app  # noqa: E402,F401  예약 라우트
+
 
 @pytest.fixture
 def folder():
@@ -26,15 +37,6 @@ def folder():
 @pytest.fixture
 def client(folder, monkeypatch):
     """프로그램 창처럼 열쇠를 가진 Flask 시험 클라이언트. 연결은 가짜로 바꿔 끼워 DB에 붙지 않는다(연결 요청 값만 확인한다)."""
-    from integrations import bot_app  # noqa: F401  Slack 봇 라우트
-    from collect import collect_app  # noqa: F401  수집 라우트
-    from dashboard import dash_app  # noqa: F401  대시보드 라우트
-    from core import draft_app  # noqa: F401  화면 임시 저장(초안) 라우트
-    from query import flow_app  # noqa: F401  흐름·문장·내 지표 라우트
-    from metrics import catalog_app  # noqa: F401  지표 사전 라우트
-    from integrations import integrations_app  # noqa: F401  연동 라우트
-    from prep import prep_app  # noqa: F401  전처리 라우트
-    from integrations import schedule_app  # noqa: F401  예약 라우트
     from core import server
     from core import source
     from query.search_app import app

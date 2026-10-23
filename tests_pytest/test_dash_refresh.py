@@ -27,7 +27,7 @@ def card(title, key=KEY, computed=None, kind="chart", data=None):
 def fake(folder, monkeypatch):
     """연결을 흉내 낸다(열린 연결 요청 값만). 카드를 구하는 일은 시험이 바꿔 끼운다."""
     monkeypatch.setitem(server.state, "opened", FOLDER)
-    monkeypatch.setattr(querying, "using", lambda: contextlib.nullcontext())
+    monkeypatch.setattr(querying, "using", lambda **k: contextlib.nullcontext())
     refresh.JOB.update(running=False, total=0, done=0, current="", results=[])
     yield
     refresh.wait(10)

@@ -288,13 +288,13 @@ class DashBoard extends Board {
   async setRange(range, prev) {
     this.range = range;
     this.prev = prev;
-    await this.recompare();
     const unique = c => SVG_KINDS.includes(c.kind) && c.data?.by_unit?.day?.series.some(s => !merges(s.agg));  // 고유 개수·중앙값 같은 집계는 기간으로 다시 구해야 한다
     const was = this.hadRange;  // 기간이 비었으면(카드의 원래 조건대로) 방금 전까지 기간이 걸려 있던 때만 다시 구한다
     this.hadRange = !!range;
     const dated = c => (range || was) && c.source?.date && !c.data?.by_unit && c.kind !== "recent_rows";
     const stale = this.cards.filter(c => dated(c) || unique(c) || outsideWindow(c, this.range));  // 날짜 X축이 아닌데 기간 기준 날짜 컬럼이 있는 카드는 그 기간으로 다시 구한다
-    if (stale.length) await this.recompute?.(stale);
+    if (stale.length && this.recompute) await this.recompute(stale);  // 다시 구한 뒤 끝에 비교도 새로 받아 그린다
+    else await this.recompare();
   }
   // 새 카드·다시 구할 때 서버에 알려 줄 보는 기간(없으면 undefined)
   ctx() {
@@ -394,12 +394,12 @@ class DashBoard extends Board {
     const applies = card.source?.date && !d.by_unit ? `기간 기준 날짜: ${card.source.date}` : noDate ? "기간·기준일은 날짜 X축 카드나 기간 기준 날짜 컬럼을 고른 카드에만 적용돼요" : "";
     const early = range?.start && first && range.start < first ? `저장된 일 값은 ${first}부터예요` : "";  // 보려는 기간이 저장된 값보다 앞서면
     const lostUnique = range && SVG_KINDS.includes(card.kind) && d.by_unit?.day?.series.some((s, i) => !merges(s.agg) && cardValue(card, i) == null) ? "이 집계(고유 개수·중앙값 …)는 기간을 바꾸면 연결해서 다시 구해야 해요" : "";
-    const stale = this.connKey && card.source?.key && card.source.key !== this.connKey ? "이전 값(다른 연결)" : "";  // 지금 연결이 아닌 곳에서 구한 값
+    const stale = this.connKey && card.source?.key && !sameSource(card.source.key, this.connKey) ? "이전 값(다른 연결)" : "";  // 지금 연결이 아닌 곳에서 구한 값
     const when = [stale, d.computed_at && "구한 시각 " + d.computed_at.replace("T", " "), d.note, early, applies, card.rangeNote, lostUnique].filter(Boolean).join(" · ");  // 값이 언제 것인지, 줄인 것
-    const said = this.compares.get(card), timed = !!d.by_unit?.day && merges(d.by_unit.day.series[0]?.agg) && card.kind !== "dual_trend";
+    const said = this.compares.get(card), timed = !!d.by_unit?.day && card.kind !== "dual_trend", mergeable = timed && merges(d.by_unit.day.series[0]?.agg);  // 고유 개수 같은 집계는 기간 비교만 되므로 방식 선택은 묶을 수 있는 집계에만, 좋은 방향은 둘 다
     const pick = (value, options, set) => el("select", { className: "bunit", style: "flex-basis:auto", onchange: e => { set(e.target.value); this.changed?.(); this.recompare(); } },
       ...options.map(([v, name]) => el("option", { value: v, textContent: name, selected: v === value })));
-    const how = timed ? el("div", { className: "btools" }, pick(card.view.compare?.mode ?? "span", [["span", "기간 비교"], ["point", "시점 비교"]], v => { card.view.compare = { mode: v }; }),
+    const how = timed ? el("div", { className: "btools" }, ...(mergeable ? [pick(card.view.compare?.mode ?? "span", [["span", "기간 비교"], ["point", "시점 비교"]], v => { card.view.compare = { mode: v }; })] : []),
       pick(card.view.better ?? "up", [["up", "늘수록 좋음"], ["down", "줄수록 좋음"]], v => { card.view.better = v; })) : "";
     return el("div", { className: "bextra" }, tools, card.openRules ? ruleEditor(card, again) : "", msg, el("div", { className: "hint bwhen", textContent: when }),
       said && card.kind !== "kpi" ? el("div", { className: "bcmp " + said.tone, textContent: said.text, title: said.delta_text }) : "", how, card.openColors ? this.colorEditor(card) : "");

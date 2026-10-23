@@ -10,7 +10,6 @@ from flask import jsonify, request
 from core import server
 from core import settings
 from core import source
-from core import use_counts
 from core.server import app
 
 SCREENS = ("search", "prep", "dashboard")  # 허용하는 화면. 이 밖의 값은 파일 이름이 될 수 없다
@@ -37,7 +36,7 @@ def connection():
         name = (parts.hostname or "") + parts.path.rstrip("/") or info["url"]
     else:
         name = f"파일 {len(opened['files'])}개" if opened.get("files") else (opened.get("file") or info["path"]).replace("\\", "/").rsplit("/", 1)[-1]
-    return {"key": use_counts.connection_key(info), "name": name}
+    return {"key": server.connection_key(), "name": name}
 
 
 def masked(value):

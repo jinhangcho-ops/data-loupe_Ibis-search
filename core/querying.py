@@ -114,15 +114,16 @@ def agg_unsupported(body, expr, extra=()):
     return False
 
 
-def runnable(body, select=True, keep=None, extra=()):
+def runnable(body, select=True, keep=None, extra=(), fresh=False):
     """build의 식을 연결이 할 수 있으면 그대로, 못 하는 계산이면(파일 연결의 창 함수, 일부 DB의 펼치기 등) 기간·조건까지의 결과를
     이 PC(held의 DuckDB)에 받아 그 위에서 만든 식(요청의 계열·피벗이 고른 집계를 연결이 못 해도 같다: 중앙값 등). 받을 수 없을 만큼 크면 PC_TOO_BIG.
-    keep(쓸 컬럼들)을 주면 식을 그 컬럼으로 줄이고, PC에 받는 사본도 조건을 건 뒤 그 컬럼만 받는다(테이블 전체를 받지 않는다). 계산 줄(calcs)이 있으면 줄이지 않는다."""
+    keep(쓸 컬럼들)을 주면 식을 그 컬럼으로 줄이고, PC에 받는 사본도 조건을 건 뒤 그 컬럼만 받는다(테이블 전체를 받지 않는다). 계산 줄(calcs)이 있으면 줄이지 않는다.
+    fresh면 이미 받아 둔 사본을 쓰지 않고 새로 받는다(원본 파일·테이블이 바뀐 뒤에도 옛 사본으로 계산하지 않게)."""
     keep = None if body.get("calcs") else keep
     expr = slim(build(body, select), keep) if keep else build(body, select)
     if source.compiles(expr) and not agg_unsupported(body, expr, extra):
         return expr
-    name = run(lambda: held.ensure(search_key(body, keep), slim(filtered(body), keep) if keep else filtered(body), server.state["cancel"]))[0]
+    name = run(lambda: held.ensure(search_key(body, keep), slim(filtered(body), keep) if keep else filtered(body), server.state["cancel"], fresh=fresh))[0]
     if name is None:
         raise ValueError(PC_TOO_BIG)
     return arrange(body, held.table(name), held.ROW, select)
@@ -187,13 +188,16 @@ def saved_search(name):
 
 
 @contextlib.contextmanager
-def using():
-    """화면 밖에서 데이터를 쓸 때: 화면 요청과 같은 차례(turn)를 TURN_WAIT초까지 기다려 잡는다. 연결이 없으면 ValueError."""
+def using(fresh=False):
+    """화면 밖에서 데이터를 쓸 때: 화면 요청과 같은 차례(turn)를 TURN_WAIT초까지 기다려 잡는다. 연결이 없으면 ValueError.
+    fresh면 잡은 뒤 PC에 받아 둔 사본을 모두 지운다(최신화·Slack 질의가 시작할 때 한 번: 그 안의 카드·질의는 사본을 새로 받아 나눠 쓴다)."""
     if not server.turn.acquire(timeout=TURN_WAIT):
         raise ValueError("프로그램이 다른 작업 중입니다. 잠시 뒤 다시 하세요.")
     try:
         if server.state["con"] is None:
             raise ValueError("프로그램에서 먼저 데이터에 연결하세요.")
+        if fresh:
+            run(held.forget_all)
         yield
     finally:
         server.turn.release()

@@ -382,7 +382,7 @@ def test_cross_table_values_by_period(events, ads):
 
 
 def test_cross_table_values_by_common_key(ads):
-    users = mem(uid=[1, 2, 3, 1], ts=[D(2026, 3, 1)] * 4, ch=["A", "B", "A", "A"], amt=[10.0, 5.0, 20.0, 5.0])
+    users = mem(uid=[1, 2, 3, 1], ts=[D(2026, 3, 1), D(2026, 3, 2), D(2026, 3, 1), D(2026, 3, 1)], ch=["A", "B", "A", "A"], amt=[10.0, 5.0, 20.0, 5.0])  # 광고 날짜가 있으니 광고비는 사용자 쪽 날짜 범위(3/1~3/2)로 거른다
     key = {"kind": "key", "keys": [["ch", "channel"]]}
     s = {**U, **CROSS}
     cac = run("cac", s, users, other=ads, align=key)  # 채널 A: 광고비 120 ÷ 사용자 {1, 3} = 60, 채널 B: 30 ÷ {2} = 30

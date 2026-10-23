@@ -312,7 +312,7 @@ def test_prep_where_new_without_copy_still_asks_scan_gate(remote, monkeypatch):
         return server.jsonify(needs_confirm=True, text="큼")
 
     monkeypatch.setattr(server, "scan_gate", gate)
-    got = remote.post("/api/preview", json={"base": "pts"}).get_json()
+    got = remote.post("/api/preview", json={"base": "pts", "columns": {"lat": {"ops": {"fill": {"how": "mean"}}}}}).get_json()  # 통계를 내는 일이 있을 때만 DB가 읽는다(2C5)
     assert got.get("needs_confirm") is True and asked
 
 
