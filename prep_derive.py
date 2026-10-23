@@ -1,6 +1,6 @@
 """전처리의 새 컬럼: 계산 컬럼(formulas)과 PCA(차원 축소). recipe의 컬럼별 일 뒤에 붙는다(prep.shape).
 계산 식은 실행하지 않고 Python ast로 읽어 정해 둔 연산·함수만 Ibis 식으로 바꾼다(SQL 글자를 받지 않는다).
-PCA는 고른 숫자 컬럼의 평균·곱의 평균(집계 한 번)으로 상관 행렬을 만들어 numpy로 성분을 구하고, 성분 = Σ 계수 × 표준화한 컬럼 식으로 붙인다."""
+PCA는 고른 숫자 컬럼의 평균, 평균을 뺀 곱의 평균(집계 두 번)으로 상관 행렬을 만들어 numpy로 성분을 구하고, 성분 = Σ 계수 × 표준화한 컬럼 식으로 붙인다."""
 import ast
 import operator
 import re
@@ -19,14 +19,15 @@ PCA_MAX = 30  # PCA에 넣을 컬럼 수(상관 행렬을 구하는 집계가 �
 NAME = re.compile(r"[A-Za-z_가-힣][A-Za-z0-9_가-힣]{0,62}")  # 새 컬럼 이름
 FORMULA_GUIDE = ("사칙연산(+ - * / %)과 괄호, 비교(== != > >= < <=)와 and·or·not, '글자', 숫자. 함수: iif(조건, 참일 때, 거짓일 때), "
                  "round(x, 자리), abs, sqrt, ln, log10, upper, lower, length, concat(a, b, …), coalesce(a, b, …), col(\"공백 있는 이름\"). "
-                 "나누는 값이 0이면 빈 값. 그 밖의 함수는 함수 사전(sql_funcs)의 id를 그대로 쓴다: 글자(substr·split_part·regex_extract …), 숫자(mod·power·clip·bucket …), "
+                 "나누는 값이 0이면, 로그가 0 이하이면, 제곱근이 음수이면 빈 값. 그 밖의 함수는 함수 사전(sql_funcs)의 id를 그대로 쓴다: 글자(substr·split_part·regex_extract …), 숫자(mod·power·clip·bucket …), "
                  "날짜(year·month·date_add·date_diff·strftime …), 조건(case·nullif·greatest·isin …), 형 변환(cast·try_cast), 구조(json_get·struct_field …), "
                  "집계(median·sum·string_agg …: 묶음 기준 안의 값)과 창 함수(rank·lag·cum_sum·moving_mean …: 정렬 기준·묶음 기준 필요). "
                  "예: 금액 * 수량, iif(금액 >= 10000, '고액', '일반'), substr(이름, 1, 2), case(금액 >= 100, '고액', 금액 >= 10, '중간', '소액')")
 
 ARITH = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Mod: operator.mod}
 COMPARE = {ast.Eq: operator.eq, ast.NotEq: operator.ne, ast.Gt: operator.gt, ast.GtE: operator.ge, ast.Lt: operator.lt, ast.LtE: operator.le}
-NUMERIC_FUNCS = {"abs": lambda x: x.abs(), "sqrt": lambda x: x.sqrt(), "ln": lambda x: x.ln(), "log10": lambda x: x.log10()}
+NUMERIC_FUNCS = {"abs": lambda x: x.abs(), "sqrt": lambda x: sql_funcs.safe_math("sqrt", x), "ln": lambda x: sql_funcs.safe_math("ln", x),
+                 "log10": lambda x: sql_funcs.safe_math("log10", x)}  # 정의역 밖(로그 0 이하·제곱근 음수)은 빈 값
 STRING_FUNCS = {"upper": lambda x: x.upper(), "lower": lambda x: x.lower(), "length": lambda x: x.length().cast("int64")}
 
 
@@ -257,7 +258,7 @@ def apply_formulas(t, formulas):
 
 
 def pca(t, spec, info):
-    """spec = {columns, n, prefix}. 고른 숫자 컬럼이 모두 있는 행으로 평균·표준편차·상관 행렬을 구하고(집계 한 번),
+    """spec = {columns, n, prefix}. 고른 숫자 컬럼이 모두 있는 행으로 평균·표준편차·상관 행렬을 구하고(집계 두 번),
     상관 행렬의 고유벡터로 prefix_1…prefix_n 컬럼을 붙인다. 고른 컬럼 중 빈 값이 있는 행은 성분도 빈 값.
     info["pca"]에 성분마다 설명된 분산 비율·누적 비율·계수와 계산에 쓴 행 수를 남긴다. (식, 만든 컬럼 이름들)"""
     import numpy as np
@@ -279,17 +280,17 @@ def pca(t, spec, info):
     whole = t.filter(*[v.notnull() for v in x])
     xs = [whole[c].cast("float64") for c in columns]
     k = len(columns)
-    metrics = {"rows": whole.count(), **{f"m{i}": xs[i].mean() for i in range(k)}}
-    metrics.update({f"p{i}_{j}": (xs[i] * xs[j]).mean() for i in range(k) for j in range(i, k)})  # 곱의 평균: 모든 연결에서 되는 집계만 쓴다
-    found = stats(whole, **metrics)
+    found = stats(whole, rows=whole.count(), **{f"m{i}": xs[i].mean() for i in range(k)})  # 집계 두 번: 평균을 먼저 구한다
     rows = found["rows"] or 0
     if rows < 2:
         raise ValueError("고른 컬럼이 모두 들어 있는 행이 2개보다 적어 PCA를 구할 수 없습니다. 빈 값을 먼저 채우세요.")
     mean = np.array([found[f"m{i}"] for i in range(k)], dtype=float)
+    gap = [xs[i] - float(mean[i]) for i in range(k)]  # 평균을 뺀 곱의 평균 = 공분산(값이 평균에 비해 작게 흩어져도 자릿수를 잃지 않는다). 모든 연결에서 되는 집계만 쓴다
+    found = stats(whole, **{f"p{i}_{j}": (gap[i] * gap[j]).mean() for i in range(k) for j in range(i, k)})
     cov = np.empty((k, k))
     for i in range(k):
         for j in range(i, k):
-            cov[i, j] = cov[j, i] = found[f"p{i}_{j}"] - mean[i] * mean[j]
+            cov[i, j] = cov[j, i] = found[f"p{i}_{j}"]
     std = np.sqrt(np.clip(np.diag(cov), 0, None))
     flat = [columns[i] for i in range(k) if not std[i] > 1e-12 * max(1.0, abs(mean[i]))]
     if flat:

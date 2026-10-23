@@ -179,8 +179,8 @@ def prune(arrow):
         elif col.n_unique() - (1 if col.null_count() else 0) == 1:
             found.append({"column": name, "reason": f"값이 하나뿐입니다({col.drop_nulls()[0]})" + (" (나머지는 빈 값)" if col.null_count() else "")})
         else:
-            counts = col.value_counts(sort=True)
-            top = counts["count"][0] / rows
+            counts = col.value_counts(sort=True, name="__n")  # 컬럼 이름이 count여도 겹치지 않게
+            top = counts["__n"][0] / rows
             if top < PRUNE_TOP:
                 continue
             found.append({"column": name, "reason": f"빈 값이 {top:.1%}입니다" if counts[name][0] is None else f"한 값이 {top:.1%}입니다({counts[name][0]})"})

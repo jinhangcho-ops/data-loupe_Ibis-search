@@ -1,6 +1,7 @@
 """Ibis 분석 화면(전처리·분석·그래프)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
 import datetime as dt
 import json
+import re
 from pathlib import Path
 
 from flask import jsonify, request
@@ -19,16 +20,29 @@ import settings
 import source
 import sql_exec
 import use_counts
-from server import app, get_con, run, state, to_json
+from server import app, get_con, state, to_json
 
 PREVIEW_ROWS = 20
 DEFAULT_SAMPLE = 5_000  # 통계를 낼 표본 행 수의 기본값
 FILE_FORMATS = ["parquet", "csv"]
 server.CONSTANTS.update(sample=DEFAULT_SAMPLE, sample_methods=profiler.METHODS, analysis=analysis.LIMITS,  # 화면(prep.html)의 표본 행 수 기본값, 표본 방법 이름, 분석의 상한들
                         formula_guide=prep_derive.FORMULA_GUIDE, pca_max=prep_derive.PCA_MAX)  # 계산 식 안내, PCA에 넣을 컬럼 수 상한
+DATE_FAILED = re.compile(r"out of range|conversion error|invalid (date|timestamp)|could not (be )?(parse|convert).*(date|time)|strptime", re.I)
 TABLE_PREPS = "table_preps.json"  # 테이블별로 마지막에 쓴 전처리 {테이블 열쇠: {"config", "saved"}}
 MAX_TABLE_PREPS = 200
 SAMPLES = {}  # 마지막으로 읽은 표본 하나 {테이블 열쇠: (크기, pyarrow 표, 표본 정보)}. 통계에 이어 타입 추천이 같은 표본을 쓴다.
+
+
+def run(work, drop=lambda value: None):
+    """server.run과 같다. 단, 없는 날짜(2월 30일 등)를 날짜로 바꾸다 난 DB의 변환 오류는 알아보기 쉬운 문장으로 바꾼다."""
+    try:
+        return server.run(work, drop)
+    except ValueError:
+        raise
+    except Exception as e:
+        if DATE_FAILED.search(str(e)):
+            raise ValueError(f"날짜로 바꿀 수 없는 값이 있어요(없는 날짜일 수 있어요). 형식을 확인하거나 그 값을 먼저 빈 값으로 바꾸세요. ({e})") from None
+        raise
 
 
 @app.get("/api/recipes")
@@ -105,6 +119,14 @@ def working_copy(recipe):
     name = run(lambda: held.ensure(key, t, state["cancel"], cap=False))[0]
     local = held.table(name)
     return local.select(*[c for c in local.columns if c != held.ROW])
+
+
+def copy_gate(recipe):
+    """이 PC 사본을 새로 받아야 하면(local_mode이고 같은 사본이 아직 없으면) 처리 용량 확인(server.scan_gate). 확인이 필요하면 돌려줄 응답, 아니면 None.
+    미리보기·중복 세기·분석(전체)·실행이 같이 쓴다. 이미 받은 사본을 다시 쓰는 때는 DB를 읽지 않으므로 묻지 않는다."""
+    if local_mode(recipe) and copy_key(recipe) not in held.store["items"]:
+        return server.scan_gate(request.json, lambda: scan_sql(recipe))
+    return None
 
 
 def built(recipe, info=None):
@@ -244,6 +266,8 @@ def preview():
     """앞 20행, 결과 컬럼의 타입, 컬럼마다 어느 recipe 컬럼에서 나왔는지(sources)와 파생 컬럼인지(derived), 전처리 전후의 행 수.
     행 수를 바꿀 수 있는 일이 없으면 후는 전과 같다."""
     recipe, info = request.json, {}
+    if ask := copy_gate(recipe):
+        return ask
     expr, origin = built(recipe, info)
     rows = run(lambda: result.get_rows(expr, PREVIEW_ROWS))
     before = server.row_count(recipe.get("schema"), recipe["base"])
@@ -279,13 +303,18 @@ def analyzed(body):
 
 @app.post("/api/analyze")
 def analyze():
-    return jsonify(analyzed(request.json))
+    body = request.json
+    if body.get("full") is True and (ask := copy_gate(body.get("recipe", {}))):
+        return ask
+    return jsonify(analyzed(body))
 
 
 @app.post("/api/dupes")
 def dupes():
     """dedupe 기준으로 중복 묶음 수와 빠질 행 수. local_mode면 작업 사본에서 센다."""
     recipe, con = request.json, get_con()
+    if ask := copy_gate(recipe):
+        return ask
     if local_mode(recipe):
         table = working_copy(recipe)
         return jsonify(run(lambda: prep.dupes(held.local(), {**recipe, "filters": []}, table)))
@@ -390,9 +419,11 @@ def run_recipe():
     """target이 {"kind": "file", "format": "parquet" | "csv"}면 파일로 내려보내고, {"kind": "table", "name": 이름}이면 DB에 새 테이블로 만든다."""
     recipe, target = request.json["recipe"], request.json["target"]
     con = get_con()  # 실행 전 처리 용량 확인: 원격 DB는 작업 사본으로 받을 때(아직 없으면)만, 나머지는 읽는 양
-    if not held.remote(con) or (local_mode(recipe) and copy_key(recipe) not in held.store["items"]):
+    if not held.remote(con):
         if ask := server.scan_gate(request.json, lambda: scan_sql(recipe)):
             return ask
+    elif ask := copy_gate(recipe):
+        return ask
     if target.get("kind") == "table":
         return jsonify(ok=True, rows=make_table(recipe, target.get("name", "")))
     if target.get("kind") != "file" or target.get("format") not in FILE_FORMATS:

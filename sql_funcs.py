@@ -494,17 +494,27 @@ row("repeat", "text", "반복", "글자를 N번 이어 붙여요.", [T1, num("n"
 # ---------- 숫자 ----------
 
 N_ = col(kinds=NUM)
+
+
+def safe_math(name, x, *args):
+    """ln·log10·log·sqrt를 정의역 밖에서 빈 값으로 만든다(DB마다 오류·NaN·무한대로 달라서). 로그는 x가 0 이하, 제곱근은 x가 음수일 때.
+    log의 밑(args[0])이 0 이하거나 1이면 모든 행이 빈 값이다. 계산 컬럼(prep_derive)도 같은 함수를 쓴다."""
+    if args and (args[0] <= 0 or args[0] == 1):
+        return ibis.null().cast("float64")
+    return getattr((x >= 0 if name == "sqrt" else x > 0).ifelse(x, ibis.null()), name)(*args)
+
+
 row("round", "number", "반올림", "소수 자릿수에서 반올림.", [N_, num("digits", "자릿수", 0, kind="int")], lambda c: c.x.round(c.digits), "round(금액, 1)", NUM, NUM)
 row("ceil", "number", "올림", "정수로 올림.", [N_], lambda c: c.x.ceil(), "ceil(금액)", NUM, NUM)
 row("floor", "number", "내림", "정수로 내림.", [N_], lambda c: c.x.floor(), "floor(금액)", NUM, NUM)
 row("abs", "number", "절댓값", "부호를 뗀 값.", [N_], lambda c: c.x.abs(), "abs(금액)", NUM, NUM)
 row("mod", "number", "나머지", "나눈 나머지(0으로 나누면 빈 값).", [N_, num("by", "나누는 수", 2)], lambda c: c.x % ibis.literal(c.by).nullif(0), "mod(번호, 2)", NUM, NUM)
 row("power", "number", "거듭제곱", "x의 N제곱.", [N_, num("n", "N", 2)], lambda c: c.x.pow(c.n), "power(금액, 2)", NUM, NUM)
-row("sqrt", "number", "제곱근", "제곱근.", [N_], lambda c: c.x.sqrt(), "sqrt(금액)", NUM, NUM)
+row("sqrt", "number", "제곱근", "제곱근(음수는 빈 값).", [N_], lambda c: safe_math("sqrt", c.x), "sqrt(금액)", NUM, NUM)
 row("exp", "number", "지수", "e의 x제곱.", [N_], lambda c: c.x.exp(), "exp(금액)", NUM, NUM)
-row("ln", "number", "자연로그", "밑이 e인 로그.", [N_], lambda c: c.x.ln(), "ln(금액)", NUM, NUM)
-row("log10", "number", "상용로그", "밑이 10인 로그.", [N_], lambda c: c.x.log10(), "log10(금액)", NUM, NUM)
-row("log", "number", "로그(밑 지정)", "밑을 정한 로그.", [N_, num("base", "밑", 2)], lambda c: c.x.log(c.base), "log(금액, 2)", NUM, NUM)
+row("ln", "number", "자연로그", "밑이 e인 로그(0 이하는 빈 값).", [N_], lambda c: safe_math("ln", c.x), "ln(금액)", NUM, NUM)
+row("log10", "number", "상용로그", "밑이 10인 로그(0 이하는 빈 값).", [N_], lambda c: safe_math("log10", c.x), "log10(금액)", NUM, NUM)
+row("log", "number", "로그(밑 지정)", "밑을 정한 로그(0 이하는 빈 값).", [N_, num("base", "밑", 2)], lambda c: safe_math("log", c.x, c.base), "log(금액, 2)", NUM, NUM)
 row("sign", "number", "부호", "음수 -1, 0, 양수 1.", [N_], lambda c: c.x.sign(), "sign(금액)", NUM, NUM)
 row("clip", "number", "범위 안으로", "하한보다 작으면 하한, 상한보다 크면 상한으로.", [N_, num("lower", "하한", 0, True), num("upper", "상한", 100, True)],
     lambda c: c.x.clip(lower=c.lower, upper=c.upper), "clip(금액, 0, 100)", NUM, NUM)

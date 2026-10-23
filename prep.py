@@ -53,8 +53,8 @@ def downcast(t):
     for i, n in enumerate(ints):
         lo, hi = found[f"lo{i}"], found[f"hi{i}"]
         if lo is not None:
-            small = next(name for name, low, high in INT_TYPES if low <= lo and hi <= high)
-            if ibis.dtype(small).nbytes < t[n].type().nbytes:
+            small = next((name for name, low, high in INT_TYPES if low <= lo and hi <= high), None)  # uint64의 int64 밖 값은 건너뛴다.
+            if small and ibis.dtype(small).nbytes < t[n].type().nbytes:
                 casts[n] = t[n].cast(small)
     casts.update({n: t[n].cast("float32") for i, n in enumerate(floats) if found[f"diff{i}"] == 0})  # 전부 빈 값이면 합이 비어 그대로 둔다.
     return t.mutate(**casts) if casts else t

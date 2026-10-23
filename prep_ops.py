@@ -116,7 +116,9 @@ def to_number(col, to):
 
 def retype(col, arg):
     to = arg["to"]
-    if to != "string" and col.type().is_string():  # 앞뒤 공백은 무시한다(백엔드마다 다르게 다루는 것을 맞춘다).
+    if to == "string":  # 글자로는 값을 바꾸지 않고 타입만 바꾼다(숫자 모양 검사·공백 지우기를 거치지 않는다).
+        return col.cast("string")
+    if col.type().is_string():  # 앞뒤 공백은 무시한다(백엔드마다 다르게 다루는 것을 맞춘다).
         col = col.strip()
     if arg.get("clean") and to in ("int", "float"):  # 숫자·부호·소수점이 아닌 글자를 먼저 지운다.
         col = col.cast("string").re_replace(r"[^0-9.+\-]", "")
@@ -126,10 +128,10 @@ def retype(col, arg):
 
 
 def fill_around(t, name, by, ahead):
-    """by 컬럼 순으로 앞(ahead면 뒤)의 빈 값 아닌 값으로 채운다. 창 함수라 지원하지 않는 연결에서는 그 오류가 난다.
+    """by 컬럼 순(같은 값끼리는 parse.orderable의 컬럼 순)으로 앞(ahead면 뒤)의 빈 값 아닌 값으로 채운다. 창 함수라 지원하지 않는 연결에서는 그 오류가 난다.
     빈 값이 아닌 값을 셀 때마다 번호가 바뀌는 점을 이용한다: 같은 번호의 행들은 빈 값 아닌 값 하나와 그 뒤(앞)의 빈 값들이다."""
     parse.check_name(by, t.columns)
-    run_window = ibis.window(order_by=t[by], rows=(0, None) if ahead else (None, 0))
+    run_window = ibis.window(order_by=[t[by], *parse.orderable(t)], rows=(0, None) if ahead else (None, 0))
     t = t.mutate(__group=t[name].notnull().cast("int64").sum().over(run_window))
     t = t.mutate(**{name: t[name].max().over(ibis.window(group_by=t.__group))})
     return t.drop("__group")
@@ -158,6 +160,7 @@ def outlier(t, name, arg):
         s = stats(t, a=col.quantile(0.25), b=col.quantile(0.75)) if by == "iqr" else stats(t, a=col.mean(), b=col.std())
         if None in s.values():
             raise ValueError(f"'{name}' 컬럼에 값이 부족해 범위를 구할 수 없습니다.")
+        s = {key: float(value) for key, value in s.items()}  # 소수(Decimal) 컬럼은 실수로 계산한다.
         if by == "iqr":
             gap = (k or 1.5) * (s["b"] - s["a"])
             low, high = s["a"] - gap, s["b"] + gap
