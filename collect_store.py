@@ -31,7 +31,10 @@ current = {"thread": None, "halt": threading.Event(), "balancer": None, "hide": 
 
 
 def write_record(path, record):
-    path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+    """진행 기록을 임시 파일에 쓴 뒤 바꿔치기한다(쓰는 중에 꺼져도 기록이 반쯤 깨지지 않게)."""
+    temp = path.with_name(path.name + ".new")
+    temp.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+    os.replace(temp, path)
 
 
 def keep_record(found, record, now=False):

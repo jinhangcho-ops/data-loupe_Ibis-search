@@ -58,6 +58,15 @@ def test_funnel_analysis_window_and_range(t):
     assert users(analysis.analyze(t, {**HOW, "steps": ["view"]})) == [6]  # 단계 하나
 
 
+def test_funnel_range_counts_later_steps_after_the_end():
+    """대시보드 기간은 첫 단계에만 건다: 기간 마지막 날 밤에 보고 다음 날 결제한 사람도 결제까지 센다."""
+    night = dt.datetime(2026, 1, 31, 23, 50)
+    df = pl.DataFrame({"uid": ["a", "a", "a", "b"], "ev": ["view", "cart", "pay", "view"],
+                       "ts": [night, night + dt.timedelta(minutes=5), night + dt.timedelta(minutes=20), dt.datetime(2026, 2, 1, 9)]}, schema_overrides={"ts": pl.Datetime("us")})
+    found = analysis.analyze(ibis.memtable(df.to_arrow()), {**HOW, "range": {"start": "2026-01-01", "end": "2026-01-31"}})
+    assert users(found) == [1, 1, 1]  # a의 결제(2월 1일 0시 10분)도 센다, b는 첫 단계가 기간 밖이라 빠진다
+
+
 def test_funnel_analysis_errors(t):
     for how, error in [({**HOW, "window": {"n": 0, "unit": "minute"}}, "0보다"), ({**HOW, "window": {"n": 5, "unit": "year"}}, "단위"), ({**HOW, "window": 30}, "단위"),
                        ({**HOW, "steps": []}, "단계는"), ({**HOW, "steps": ["view", "view"]}, "두 번"), ({**HOW, "time": "memo"}, "날짜"), ({**HOW, "who": "nope"}, "nope")]:

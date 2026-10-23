@@ -47,9 +47,14 @@ def step_value(dtype, value):
     return str(value)
 
 
-def reached(base, steps, window_seconds):
-    """단계마다 도달한 사용자 표(사용자 u, 이번 단계 시각 tp, 첫 단계 시각 t1)의 목록."""
-    first = base.filter(base.s == steps[0]).group_by("u").aggregate(tp=base.t.min())
+def reached(base, steps, window_seconds, entry=None):
+    """단계마다 도달한 사용자 표(사용자 u, 이번 단계 시각 tp, 첫 단계 시각 t1)의 목록.
+    entry = (시작 날짜, 끝 날짜): 첫 단계 행만 그 날짜 안의 것으로 거른다. 뒤 단계는 기간 밖이어도 센다(기간 끝 무렵에 시작한 사람의 전환이 빠지지 않게)."""
+    starts = base.filter(base.s == steps[0])
+    if entry:
+        day = starts.t.cast("date")
+        starts = starts.filter(*([day >= entry[0]] if entry[0] else []), *([day <= entry[1]] if entry[1] else []))
+    first = starts.group_by("u").aggregate(tp=starts.t.min())
     levels = [first.mutate(t1=first.tp)]
     for value in steps[1:]:
         prev = levels[-1]
@@ -72,14 +77,15 @@ def counts(levels):
     return [int(found.get(i, 0)) for i in range(len(levels))]
 
 
-def compute(table_expr, user, step, time, steps, window_seconds=None):
+def compute(table_expr, user, step, time, steps, window_seconds=None, entry=None):
     """퍼널을 구한다. 결과 {steps: [{name, users, conv, from_first, drop}], window}.
-    conv = 이전 단계 대비, from_first = 첫 단계 대비(나누는 수가 0이면 None), drop = 이전 단계에서 빠진 사람 수(첫 단계는 0)."""
+    conv = 이전 단계 대비, from_first = 첫 단계 대비(나누는 수가 0이면 None), drop = 이전 단계에서 빠진 사람 수(첫 단계는 0).
+    entry = (시작 date 또는 None, 끝 date 또는 None): 첫 단계를 이 날짜 안에 한 사람만 센다(reached)."""
     steps, window_seconds = check(table_expr, user, step, time, steps, window_seconds)
     values = [step_value(table_expr[step].type(), s) for s in steps]
     base = table_expr.select(u=table_expr[user], s=table_expr[step], t=table_expr[time].cast("timestamp"))
     base = base.filter(base.u.notnull(), base.t.notnull())
-    users = counts(reached(base, values, window_seconds))
+    users = counts(reached(base, values, window_seconds, entry))
     out = []
     for i, (name, n) in enumerate(zip(steps, users)):
         prev = users[i - 1] if i else None

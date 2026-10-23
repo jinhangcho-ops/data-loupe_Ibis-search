@@ -654,7 +654,7 @@ def metric_data(body):
 
 def analysis_data(source, ctx=None):
     """analysis·funnel 카드의 값: 분석 결과(prep_app.analyzed)와 어느 쪽(표본·전체)으로 구했는지.
-    funnel 카드는 기간 기준 날짜 컬럼(source.date, 보통 시각 컬럼)이 있고 대시보드 기간(ctx.range)이 있으면 그 날짜 안의 행만 센다. 읽는 컬럼은 사용자·단계·시각 셋뿐이다(analysis.funnel_flow)."""
+    funnel 카드는 기간 기준 날짜 컬럼(source.date, 보통 시각 컬럼)이 있고 대시보드 기간(ctx.range)이 있으면 첫 단계를 그 날짜 안에 한 사람만 센다(뒤 단계는 기간 밖이어도 센다). 읽는 컬럼은 사용자·단계·시각 셋뿐이다(analysis.funnel_flow)."""
     how = source.get("analysis")
     window = (ctx or {}).get("range")
     if how and how.get("kind") == "funnel" and source.get("date") == how.get("time") and window and (window.get("start") or window.get("end")):

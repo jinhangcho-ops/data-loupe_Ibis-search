@@ -54,3 +54,24 @@ def test_resume_after_abrupt_end_has_no_missing_or_duplicate_pages(job):
     got = pl.read_parquet(path)
     assert got.height == 30 and got.unique().height == 30 and sorted(set(got["page"].to_list())) == list(range(10))
     assert not found["record"].exists() and not found["part"].exists()  # 끝나면 작업 파일을 지운다
+
+
+def test_record_write_never_leaves_a_half_file(tmp_path, monkeypatch):
+    """적재·수집 진행 기록은 임시 파일에 쓴 뒤 바꿔치기한다: 바꾸기 전에 꺼져도 이전 기록이 그대로 읽힌다(깨진 기록이면 처음부터 다시 넣어 행이 두 번 들어간다)."""
+    import os
+
+    import collect_store
+    import load_job
+    out = tmp_path / "out.parquet"
+    load_job.write_record(out, {"rows": 100, "sign": "s"})
+    collect_store.write_record(tmp_path / "rec.json", {"done": [1]})
+
+    def crash(*a):
+        raise OSError("꺼짐")
+    monkeypatch.setattr(os, "replace", crash)
+    with pytest.raises(OSError):
+        load_job.write_record(out, {"rows": 200, "sign": "s"})
+    with pytest.raises(OSError):
+        collect_store.write_record(tmp_path / "rec.json", {"done": [1, 2]})
+    assert load_job.read_record(out)["rows"] == 100
+    assert json.loads((tmp_path / "rec.json").read_text(encoding="utf-8")) == {"done": [1]}

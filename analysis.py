@@ -157,17 +157,16 @@ def window_seconds(window):
 
 def funnel_flow(t, user, step, time, steps, window=None, span=None):
     """흐름(퍼널): 사용자(user)가 단계 컬럼(step)의 값 steps를 순서대로 거쳐 간 사람 수(funnel.compute). 중간에 한 다른 행동과 되돌아간 행동은 무시한다.
-    window = {n, unit} 첫 단계부터 이 시간 안에 도달한 것만, span = {start, end} 시각 컬럼의 날짜가 이 안인 행만(대시보드 기간). 필요한 컬럼은 사용자·단계·시각 셋뿐이다."""
+    window = {n, unit} 첫 단계부터 이 시간 안에 도달한 것만, span = {start, end} 첫 단계를 이 날짜 안에 한 사람만(대시보드 기간, 뒤 단계는 기간 밖이어도 센다). 필요한 컬럼은 사용자·단계·시각 셋뿐이다."""
     seconds = window_seconds(window)
     funnel.check(t, user, step, time, steps, seconds)
+    entry = None
     if span and (span.get("start") or span.get("end")):
-        day = t[time].cast("date")
         try:
-            start, end = (dt.date.fromisoformat(span[k]) if span.get(k) else None for k in ("start", "end"))
+            entry = tuple(dt.date.fromisoformat(span[k]) if span.get(k) else None for k in ("start", "end"))
         except (TypeError, ValueError):
             raise ValueError("기간(range)의 시작과 끝은 YYYY-MM-DD 모양이어야 합니다.") from None
-        t = t.filter(*([day >= start] if start else []), *([day <= end] if end else []))
-    found = funnel.compute(t, user, step, time, steps, seconds)
+    found = funnel.compute(t, user, step, time, steps, seconds, entry)
     return {"who": user, "step": step, "time": time, "steps": found["steps"], "window": window or None, "window_seconds": seconds, "range": span or None}
 
 

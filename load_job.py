@@ -4,6 +4,7 @@
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -64,7 +65,11 @@ def read_record(path):
 
 
 def write_record(path, record):
-    record_path(path).write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+    """진행 기록을 임시 파일에 쓴 뒤 바꿔치기한다. 쓰는 중에 꺼져 기록이 깨지면 처음부터 다시 넣어 행이 두 번 들어가기 때문이다."""
+    target = record_path(path)
+    temp = target.with_name(target.name + ".new")
+    temp.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+    os.replace(temp, target)
 
 
 # ---------- 결과 파일 읽기 ----------
