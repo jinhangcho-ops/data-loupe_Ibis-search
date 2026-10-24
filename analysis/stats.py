@@ -2,6 +2,7 @@
 상관관계도 DB마다 다른 corr 함수 대신 합계 집계로 구해 어느 연결에서나 같다. 결과는 화면이 그릴 값과 표로 보일 값이다."""
 import datetime as dt
 import math
+import re
 
 from lazy import ibis
 
@@ -83,7 +84,7 @@ def distribution(t, column):
     try:
         out["values"], s = values(t, c, {**more, "std": x.std()}, top)  # 값 빈도의 집계에 요약 통계를 같이 실어 질의를 아낀다
     except Exception as e:  # ±1.7e308 같은 값이면 표준편차가 범위를 넘어 질의가 실패한다: 그때만 표준편차를 빼고 집계를 다시. 취소·시간 초과 등 다른 오류는 그대로 올린다
-        if "out of range" not in str(e).lower():
+        if not re.search(r"out of range|overflow", str(e), re.I):  # DuckDB "out of range", SQL Server "Arithmetic overflow", Oracle "numeric overflow"
             raise
         out["values"], s = values(t, c, more, top)
         s["std"] = None
@@ -147,9 +148,12 @@ def finite_value(t, value, into=None):
 def groups(t, by, value, agg, opts=None):
     """그룹 비교: by의 값마다 value의 agg(count·sum·mean). 행이 많은 MAX_GROUPS개 그룹을 값이 큰 순으로."""
     g = column_of(t, by, what="그룹 컬럼")
-    t = finite_value(t, value, "__finite" if by == value else None)  # 같은 컬럼으로 묶으면 그룹은 원래 값으로 두고 집계에만 바꾼 값을 쓴다
+    if g.type().is_floating():  # NaN과 빈 값이 "(빈 값)" 그룹 둘로 갈라지지 않게 NaN을 빈 값으로
+        t = t.mutate(**{by: ibis.ifelse(t[by].isnan(), ibis.null().cast(t[by].type()), t[by])})
+    src = "__finite" if by == value and t[value].type().is_floating() else value  # 같은 컬럼으로 묶으면 그룹은 원래 값으로 두고 집계에만 바꾼 값을 쓴다
+    t = finite_value(t, value, "__finite" if src != value else None)
     g = t[by]
-    metric = chart_metric(t, "__finite" if "__finite" in t.columns else value, agg, opts)
+    metric = chart_metric(t, src, agg, opts)
     found = rows(t.group_by(g.name("group")).aggregate(v=metric, n=t.count()).order_by([ibis.desc("n"), "group"]).limit(MAX_GROUPS + 1))
     more = len(found) > MAX_GROUPS
     found = found[:MAX_GROUPS]

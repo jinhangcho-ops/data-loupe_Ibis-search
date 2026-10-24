@@ -208,10 +208,10 @@ def write_output(con, table, fmt, out, folder):
 
 
 def csv_rows(path):
-    """방금 쓴 CSV의 행 수(머리 줄 뺀 것). 받은 쪽을 다시 읽고 중복 제거를 다시 하지 않고 쓴 파일을 센다. 따옴표 안의 줄바꿈·쉼표는 DuckDB가 같은 규칙으로 읽는다."""
+    """방금 쓴 CSV의 행 수(머리 줄 뺀 것). 받은 쪽을 다시 읽고 중복 제거를 다시 하지 않고 쓴 파일을 센다. 따옴표 안의 줄바꿈·쉼표는 DuckDB가 쓴 모양(쉼표·큰따옴표)으로 고정해 읽는다(추측하게 두면 앞쪽 행만 보고 틀린다)."""
     import duckdb
     with duckdb.connect() as con:
-        return con.execute("select count(*) from read_csv(?, header=true, all_varchar=true)", [str(path)]).fetchone()[0]
+        return con.execute("select count(*) from read_csv(?, header=true, all_varchar=true, delim=',', quote='\"', escape='\"')", [str(path)]).fetchone()[0]
 
 
 def with_bom(given, out, decode=None):

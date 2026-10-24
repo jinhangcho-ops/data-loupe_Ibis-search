@@ -204,6 +204,14 @@ def fix_polars_text():
     @translate.register(ops.ArrayIndex)
     def index(op, **kw):
         return translate(op.arg, **kw).list.get(translate(op.index, **kw), null_on_oob=True)  # 범위 밖 조각(split_part 5번째 …)은 오류 대신 빈 값(DuckDB와 같게)
+    @translate.register(ops.Sort)
+    def sort(op, **kw):  # 동률의 순서를 원래 행 순서로 고정한다(아니면 LIMIT·OFFSET마다 동률을 달리 갈라 쪽을 넘길 때 행이 겹치고 빠진다)
+        lf = translate(op.parent, **kw)
+        if not op.keys:
+            return lf
+        names = {f"_sort_key_{i}": translate(key.arg, **kw) for i, key in enumerate(op.keys)}
+        lf = lf.with_columns(**names).sort(list(names), descending=[k.descending for k in op.keys], nulls_last=[not k.nulls_first for k in op.keys], maintain_order=True)
+        return lf.drop(*names)
     polars_fixed = True
 
 
@@ -295,6 +303,7 @@ def refresh_csv(con):
         try:
             if kind_of(path) == "parquet":
                 con.read_parquet(path, table_name=name)
+                con.csv_sources[name] = (path, now, path)  # 새 스탬프를 기록한다(아니면 다음 확인마다 다시 등록한다)
             else:
                 read_csv_table(con, path, name)
         except Exception as e:

@@ -9,6 +9,7 @@
 SQL 직접 실행처럼 저장해 두지 않은 조회는 받지 않는다. 데이터는 querying.using()으로 화면과 같은 차례를 잡고 읽는다."""
 import re
 import shlex
+import threading
 
 from core import querying
 from core import metric_file
@@ -135,6 +136,14 @@ def error_text(e):
     return f"할 수 없습니다: {source.mask(notice_text(message) or '실패했습니다', server.state['passwords'])}"
 
 
+failure = threading.local()  # answer가 방금 삼킨 오류의 전체 글(이 스레드). Slack에는 안 나가고, 봇 기록(메모리)에만 남기려고 어댑터가 읽는다
+
+
+def detail(e):
+    """로그에 남길 오류 글(비밀번호는 가림). 예약 실행 기록이 오류 글을 그대로 남기는 것과 같다. 밖으로 보내지 않는다."""
+    return source.mask(f"{type(e).__name__}: {e}", server.state["passwords"])[:500]
+
+
 def answer(text):
     """글 한 줄에 답할 글. 잘못 쓴 명령·오류는 안내 글로 돌려준다(예외를 내지 않는다)."""
     try:
@@ -150,4 +159,5 @@ def answer(text):
             return search_answer(plain, named) if plain else search_list()
         return f"모르는 명령입니다: {command}\n{HELP}"
     except Exception as e:  # 연결 오류 등의 문구에 비밀번호가 있으면 가린다
+        failure.error = detail(e)
         return error_text(e)

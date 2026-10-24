@@ -72,21 +72,32 @@ def text_wide(df, text_big):
     wide = [c for c in df.columns if text_big and df[c].dtype.is_integer() and max(abs(df[c].max() or 0), abs(df[c].min() or 0)) > 2**53]
     import polars as pl
     blobs = [c for c in df.columns if df[c].dtype == pl.Binary]  # write_json이 이진 값에서 패닉한다 → 16진수 글자로
-    return df.with_columns(*[df[c].cast(str) for c in wide], *[df[c].bin.encode("hex") for c in blobs])
+    def has_binary(dtype):
+        return dtype == pl.Binary or any(has_binary(t) for t in ([dtype.inner] if isinstance(dtype, pl.List | pl.Array) else [f.dtype for f in dtype.fields] if isinstance(dtype, pl.Struct) else []))
+    nested = [c for c in df.columns if c not in blobs and has_binary(df[c].dtype)]  # 목록·구조 안의 이진도 패닉한다 → 값 전체를 글자로
+    return df.with_columns(*[df[c].cast(str) for c in wide], *[df[c].bin.encode("hex") for c in blobs], *[pl.Series(c, [None if v is None else str(v) for v in df[c].to_list()]) for c in nested])
+
+
+def dump(df):
+    """df.write_json(). Polars의 패닉(BaseException이라 Flask 오류 처리가 놓친다)은 오류 글이 있는 RuntimeError로."""
+    try:
+        return df.write_json()
+    except BaseException as e:
+        raise RuntimeError(f"데이터 엔진 내부 오류로 결과를 JSON으로 만들지 못했습니다: {e}") from None
 
 
 def to_json(df, text_big=True):
     """Polars DataFrame → {columns, rows}. 날짜는 ISO 문자열이 된다. ±2^53을 넘는 정수가 든 컬럼은 글자로 보낸다(화면 JSON.parse가 정밀도를 잃는다).
     text_big이 거짓이면 숫자로 둔다(서버가 이어서 산술에 쓰는 결과)."""
     df = text_wide(df, text_big)
-    return {"columns": df.columns, "rows": json.loads(df.write_json())}
+    return {"columns": df.columns, "rows": json.loads(dump(df))}
 
 
 def json_reply(df, text_big=True, **fields):
     """jsonify(rows=to_json(df, text_big), **fields)와 같은 응답을, 표를 Python 값으로 풀었다 다시 쓰지 않고 Polars가 쓴 JSON을 그대로 이어 붙여 만든다(큰 표에서 훨씬 빠르다).
     fields의 이름은 rows면 안 된다(표가 rows로 들어간다). 값은 jsonify와 같은 규칙(app.json)으로 JSON이 된다."""
     df = text_wide(df, text_big)
-    head = '{"rows":{"columns":' + app.json.dumps(df.columns) + ',"rows":' + df.write_json() + "}"
+    head = '{"rows":{"columns":' + app.json.dumps(df.columns) + ',"rows":' + dump(df) + "}"
     tail = app.json.dumps(fields)
     return app.response_class(head + ("," + tail[1:] if fields else "}") + "\n", mimetype="application/json")
 

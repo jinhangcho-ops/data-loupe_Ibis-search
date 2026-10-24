@@ -88,20 +88,26 @@ class SlackBot:
         p = req.payload
         user, channel, text = p.get("user_id", ""), p.get("channel_id", ""), p.get("text", "")
         ok = self.allowed(user, channel)
-        self.log.append({"at": dt.datetime.now().isoformat(timespec="seconds"), "user": user, "channel": channel, "text": text[:200], "allowed": ok})
+        entry = {"at": dt.datetime.now().isoformat(timespec="seconds"), "user": user, "channel": channel, "text": text[:200], "allowed": ok}
+        self.log.append(entry)
         if not ok:
             client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id, payload={
                 "text": "이 사용자·채널에서는 쓸 수 없습니다. 프로그램의 봇 설정에서 허용한 사용자(와 채널)만 씁니다."}))
             return
         client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id, payload={"text": f"처리 중: {text or '도움'}"}))
-        threading.Thread(target=self.respond, args=(p.get("response_url", ""), text), daemon=True).start()
+        threading.Thread(target=self.respond, args=(p.get("response_url", ""), text, entry), daemon=True).start()
 
-    def respond(self, response_url, text):
+    def respond(self, response_url, text, entry=None):
+        """명령을 돌려 response_url로 답한다. Slack에는 마스킹된 안내 글만 가고, 실패한 까닭(전체 글)은 이 PC의 봇 기록(entry["error"], 메모리)에만 남긴다."""
+        from integrations import commands
+        commands.failure.error = ""
         try:
             out = self.answer(text)
         except Exception as e:  # 코어가 예상하지 못한 오류도 Slack에 알린다
-            from integrations.commands import error_text
-            out = error_text(e)
+            out = commands.error_text(e)
+            commands.failure.error = commands.detail(e)
+        if entry is not None and commands.failure.error:
+            entry["error"] = commands.failure.error
         try:
             self.send(response_url, out)
         except Exception:

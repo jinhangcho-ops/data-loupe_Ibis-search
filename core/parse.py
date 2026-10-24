@@ -252,6 +252,17 @@ def asof(left, right, on, keys):
     return ranked.filter(ranked[ASOF_RANK] == 0).select(*[c for c in joined.columns if c != ASOF_ID])  # drop은 SELECT를 한 겹 더 만든다
 
 
+def rname_for(left, right, name):
+    """조인에서 왼쪽과 이름이 겹치는 오른쪽 컬럼의 새 이름 꼴. 첫 겹침은 _right, 그 이름도 이미 있으면(두 번째 조인) 테이블 이름을 붙인다."""
+    taken = set(left)
+    rname = "{name}_right"
+    if any(c in taken and c + "_right" in taken for c in right):
+        rname = "{name}_" + re.sub(r"\W", "_", name)
+        while any(c in taken and rname.format(name=c) in taken for c in right):
+            rname += "_"
+    return rname
+
+
 def apply_joins(base, joins, get_table):
     """joins: [(테이블, 종류, [(왼쪽, 오른쪽)], asof 시각 쌍)]. 컬럼이 없으면 ValueError."""
     expr = base
@@ -263,7 +274,7 @@ def apply_joins(base, joins, get_table):
         if how == "asof":
             expr = asof(expr, right, on, pairs)
         else:
-            expr = expr.join(right, [expr[left] == right[r] for left, r in pairs], how=how)
+            expr = expr.join(right, [expr[left] == right[r] for left, r in pairs], how=how, rname=rname_for(expr.columns, right.columns, name))
     return expr
 
 

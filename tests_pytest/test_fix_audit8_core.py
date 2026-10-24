@@ -35,15 +35,9 @@ def test_within_turns_base_exception_into_runtime_error():
     assert source.within(5, lambda: 42, "late") == 42  # 작업 스레드가 살아 다음 일이 돈다
 
 
-def test_within_real_polars_panic(tmp_path):
-    from core import result
-    pq, con, t = rewrite_panic_table(tmp_path)
-    try:
-        source.within(10, lambda: result.get_rows(t, 3), "late")
-    except RuntimeError as e:
-        assert "데이터 엔진 내부 오류" in str(e) or True
-    except Exception:
-        pass  # 패닉이 아니라 일반 오류로 나는 버전이어도 호출자는 막히지 않는다
+def test_within_real_polars_panic():
+    with pytest.raises(RuntimeError, match="데이터 엔진 내부 오류"):
+        source.within(5, lambda: pl.DataFrame({"a": [[b"x"]]}).write_json(), "late")  # 항상 패닉하는 호출
     assert source.worker.is_alive()
     assert source.within(5, lambda: 7, "late") == 7
 

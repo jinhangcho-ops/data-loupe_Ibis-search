@@ -9,6 +9,19 @@ from conftest import ROOT
 STATIC = ROOT / "static"
 
 
+def pattern_names(text):
+    """풀어 쓴 선언 `[a, b = 1, ...c]`·`{a, b: c, d: [e]}`의 새 이름들(키 `b:`와 기본값 `= …`은 이름이 아니다). 맨 앞 괄호가 닫힐 때까지만 본다."""
+    depth, end = 0, len(text)
+    for i, ch in enumerate(text):
+        depth += ch in "[{(" or -(ch in "]})")
+        if depth == 0:
+            end = i + 1
+            break
+    body = re.sub(r"=\s*[^,\]}]*", "", text[:end])  # 기본값
+    body = re.sub(r"[\w$]+\s*:", "", body)  # 객체 키(별명은 ':' 뒤에 남는다)
+    return re.findall(r"[A-Za-z_$][\w$]*", body)
+
+
 def declared(text):
     """줄 맨 앞의 const·let·var·class 이름(쉼표로 여럿 선언한 것은 여러 줄에 걸쳐도)과 function 이름."""
     lexical, functions = [], re.findall(r"^(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)", text, re.M)
@@ -45,7 +58,11 @@ def declared(text):
                 continue
             cur += ch
         parts.append(cur)
-        lexical += [n for n in (p.split("=")[0].strip() for p in parts) if re.fullmatch(r"[A-Za-z_$][\w$]*", n)]
+        for part in parts:
+            if part.lstrip()[:1] in ("[", "{"):  # const [A, B] = …, const {a, b: c = 1} = …: 풀어 쓴 이름들
+                lexical += pattern_names(part.lstrip())
+            elif re.fullmatch(r"[A-Za-z_$][\w$]*", part.split("=")[0].strip()):
+                lexical.append(part.split("=")[0].strip())
     return lexical, functions
 
 
@@ -85,3 +102,9 @@ def test_scripts_on_one_page_do_not_redeclare_a_top_level_name(name):
 
 def test_declared_reads_every_name_of_a_comma_list():
     assert declared("const A = f(1, 2), B = 'x,y', C = 3;\nlet d;\nclass E {}\nfunction g() {}\n  const inner = 1;") == (["A", "B", "C", "d", "E"], ["g"])
+
+
+def test_declared_reads_destructured_names():
+    """9J4: 풀어 쓴 선언의 이름도 겹침 검사에 든다(별명은 ':' 뒤, 키·기본값은 이름이 아니다)."""
+    got = declared("const [AFTER_LOW, AFTER_HIGH] = f(), z = 1;\nconst {a, b: c = 2, d: [e, ...rest]} = obj;\nlet {x} = y;")[0]
+    assert got == ["AFTER_LOW", "AFTER_HIGH", "z", "a", "c", "e", "rest", "x"]

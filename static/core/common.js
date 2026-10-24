@@ -87,7 +87,7 @@ const lit = (text, want) => {
 // 표 칸. 중첩 값 칸(.nest)은 누르면 들여쓴 전체를 칸 안에 펼치고, 다시 누르면 접는다. want가 있으면 맞는 글자를 강조한다.
 function cell(v, want = "", max) {
   const [text, full] = shown(v, max), title = full ? ` title="${esc(full)}"` : "", t = lit(text, want);
-  if (isNested(v)) return `<td class="nest"${title} data-full="${esc(full || text)}">${t}</td>`;
+  if (isNested(v)) return `<td class="nest" tabindex="0"${title} data-full="${esc(full || text)}">${t}</td>`;
   return typeof v === "number" ? `<td class="num"${title}>${t}</td>` : bigInt(v) ? `<td class="num">${t}</td>` : `<td${title}>${t}</td>`;
 }
 // 큰 표(TABLE_MIN행 넘음)는 보이는 행과 위아래 TABLE_OVER행만 tr로 만들고, 나머지는 높이만 같은 빈 줄(.vpad)로 채워
@@ -112,7 +112,7 @@ function gridSizer(g, max) {
   for (const c of g.columns) {
     let at = 0, most = -1;
     for (let i = 0; i < g.rows.length && most < cap; i++) {
-      const v = g.rows[i][c], n = typeof v === "string" ? textWidth(max > 0 ? v.slice(0, max + 1) : v) : typeof v === "number" ? String(v).length * 1.3 : isNested(v) ? cap : 0;
+      const v = g.rows[i][c], n = typeof v === "string" ? textWidth(max > 0 ? v.slice(0, max + 1) : v) : typeof v === "number" ? String(v).length * 1.3 : isNested(v) ? textWidth(shown(v, max)[0]) : 0;
       if (n > most) { most = n; at = i; }
     }
     best.add(at);
@@ -139,7 +139,7 @@ function gridDraw(g, force) {
     a = Math.max(0, lo - TABLE_OVER); b = Math.min(N, hi + TABLE_OVER);
   }
   g.a = a; g.b = b;
-  body.innerHTML = g.virtual ? (g.sizer ??= gridSizer(g, max)) + gridPad(g, gridTop(g, a)) + gridTrs(g, a, b, max) + gridPad(g, gridTop(g, N) - gridTop(g, b)) : gridTrs(g, 0, N, max);
+  body.innerHTML = g.virtual ? (g.sizerMax === max ? g.sizer : g.sizer = gridSizer(g, g.sizerMax = max)) + gridPad(g, gridTop(g, a)) + gridTrs(g, a, b, max) + gridPad(g, gridTop(g, N) - gridTop(g, b)) : gridTrs(g, 0, N, max);
   const trs = g.virtual || g.open.size ? [...body.querySelectorAll(g.virtual ? "tr[data-p]" : "tr")] : [];
   if (g.virtual && !g.measured && trs.length > 1) {  // 줄 간격은 처음 그린 줄들의 위치 차이로 잰다
     const H = (trs.at(-1).offsetTop - trs[0].offsetTop) / (trs.length - 1);
@@ -188,7 +188,7 @@ globalThis.addEventListener?.("resize", gridSchedule);
 const resultTable = (host, { columns, rows }) => mountTable(host, { columns, rows,
   head: columns.map(c => `<th class="${numCol(rows, c) ? "num" : ""}">${esc(c)}</th>`).join(""),
   row: (r, want, max) => columns.map(c => cell(r[c], want, max)).join("") });
-document.addEventListener("click", e => {
+const toggleNest = e => {
   const td = e.target.closest("td.nest");
   if (!td) return;
   const open = td.dataset.short === undefined;
@@ -199,7 +199,9 @@ document.addEventListener("click", e => {
   open ? s.add(td.cellIndex) : s.delete(td.cellIndex);
   s.size ? g.open.set(i, s) : g.open.delete(i);
   if (g.virtual) s.size ? g.extra.set(p, tr.offsetHeight - g.H) : g.extra.delete(p);
-});
+};
+document.addEventListener("click", toggleNest);
+document.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.("td.nest")) { e.preventDefault(); toggleNest(e); } });  // 키보드로도 펼치고 접는다
 // 메시지 칸에 글자를 쓴다. ok가 true면 성공 색, 글자면 그 클래스(예: "hint"는 안내 색), 아니면 오류 색.
 const say = (id, text, ok) => { $(id).textContent = text; $(id).className = ok === true ? "ok" : ok || "err"; };
 const connMsg = (text, ok) => say("err-connect", text, ok);  // 연결 메시지(설정 저장·알림 오류도 여기에)
@@ -386,7 +388,7 @@ function showBot(d, keep = d.keep) {
   $("bot-users").value = d.users.join(", ");
   $("bot-channels").value = d.channels.join(", ");
   $("bot-state").textContent = d.running ? `켜짐${d.team ? " · " + d.team : ""}` : "꺼짐";
-  $("bot-log").textContent = d.log.length ? ["최근 요청:", ...d.log.map(r => `${r.at.slice(11)} ${r.user} ${r.allowed ? "" : "(거부) "}/ibis ${r.text}`)].join("\n") : "";
+  $("bot-log").textContent = d.log.length ? ["최근 요청:", ...d.log.map(r => `${r.at.slice(11)} ${r.user} ${r.allowed ? "" : "(거부) "}/ibis ${r.text}${r.error ? ` → 실패: ${r.error}` : ""}`)].join("\n") : "";
 }
 $("bot-keep").onchange = () => api("/api/bot").then(d => showBot(d, $("bot-keep").value)).catch(e => botMsg(e.message));
 $("bot-save").onclick = () => busy($("bot-save"), async () => {

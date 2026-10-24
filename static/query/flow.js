@@ -166,7 +166,12 @@ function flowColumns(g, id, schemas, depth = 0) {
   if (n.kind === "table") return { ...(schemas?.[p.table]?.columns ?? {}) };
   if (n.kind === "join") {
     const left = ins[0] ? from(ins[0]) : {}, right = ins[1] ? from(ins[1]) : {};
-    return ["semi", "anti"].includes(p.how) ? left : { ...left, ...Object.fromEntries(Object.entries(right).map(([c, k]) => [c in left ? c + "_right" : c, k])) };
+    if (["semi", "anti"].includes(p.how)) return left;
+    // 겹치는 이름은 _right, 그 이름도 이미 있으면 오른쪽 테이블 이름(서버 parse.rname_for와 같다)
+    const clash = sfx => Object.keys(right).some(c => c in left && c + sfx in left);
+    let sfx = "_right";
+    if (clash(sfx)) for (sfx = "_" + (flowRoot(g, ins[1])?.params?.table ?? "").replace(/[^\p{L}\p{N}_]/gu, "_"); clash(sfx); sfx += "_");
+    return { ...left, ...Object.fromEntries(Object.entries(right).map(([c, k]) => [c in left ? c + sfx : c, k])) };
   }
   const base = ins[0] ? from(ins[0]) : {};
   if (n.kind === "calc") return { ...base, ...(p.adds ?? {}) };

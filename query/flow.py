@@ -152,11 +152,12 @@ def table_columns(node, schemas):
     return {c: k for c, k in cols.items() if c in keep} if keep else dict(cols)
 
 
-def right_names(left, right, how):
-    """조인 결과의 컬럼: 왼쪽 컬럼 + 오른쪽 컬럼(왼쪽과 이름이 겹치면 _right를 붙인다). semi·anti는 왼쪽만."""
+def right_names(left, right, how, name=""):
+    """조인 결과의 컬럼: 왼쪽 컬럼 + 오른쪽 컬럼(왼쪽과 이름이 겹치면 parse.rname_for의 이름, 보통 _right). semi·anti는 왼쪽만."""
     if how in ("semi", "anti"):
         return dict(left)
-    return {**left, **{(c + "_right" if c in left else c): k for c, k in right.items()}}
+    rname = parse.rname_for(left, right, name)
+    return {**left, **{(rname.format(name=c) if c in left else c): k for c, k in right.items()}}
 
 
 def out_columns(graph, nid, schemas, depth=0):
@@ -181,7 +182,8 @@ def out_columns(graph, nid, schemas, depth=0):
     if kind == "join":
         if len(subs) < 2:
             return first
-        return None if subs[1] is None else right_names(first, subs[1], p.get("how", "inner"))
+        root = root_table(graph, inputs(graph, nid)[1])
+        return None if subs[1] is None else right_names(first, subs[1], p.get("how", "inner"), params(root).get("table", "") if root else "")
     if kind == "calc":
         return {**first, **(p.get("adds") or {})}
     if kind in AFTER_AGG:

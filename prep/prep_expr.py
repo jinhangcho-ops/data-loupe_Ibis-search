@@ -87,7 +87,7 @@ def shape(con, recipe, table=None, info=None, refs=None):
     by = {fill["by"] for spec in specs.values() if isinstance(fill := (spec.get("ops") or {}).get("fill"), dict) and fill.get("how") in ("prev", "next") and fill.get("by") in names}
     names = [n for n in names if n in by] + [n for n in names if n not in by]  # fill prev·next의 by 컬럼을 먼저 처리해, 타입 변환 등을 받은 뒤의 값으로 순서를 정하게(컬럼 순서로 결과가 달라지지 않게)
     pure = prep_ops.OPS_NAMES.index("flag")  # flag 앞의 일(trim…type)은 값마다 바꾸는 순수 변환
-    pre = [n for n in by if n in specs and "outlier" not in (specs[n].get("ops") or {})]  # outlier가 있는 by 컬럼은 시작 표(base)에도 같은 일을 해야 해서 그대로 둔다
+    pre = [n for n in by if n in specs]  # outlier는 순수 변환 뒤의 일이라 시작 표(start)가 바뀐 값을 보고 경계를 구한다
     for n in pre:
         ops = specs[n].get("ops") or {}
         t = prep_ops.apply_ops(t, n, {k: v for k, v in ops.items() if k in prep_ops.OPS_NAMES and prep_ops.OPS_NAMES.index(k) < pure})

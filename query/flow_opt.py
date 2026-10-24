@@ -260,7 +260,7 @@ def drop_join(graph, ctx):
         lc = flow.out_columns(g, left, ctx["schemas"])
         if rc is None or lc is None:
             continue
-        out_names = {c + "_right" if c in lc else c for c in rc}
+        out_names = set(flow.right_names(lc, rc, "left", flow.table_name(g, right))) - set(lc)
         used = set().union(*[loose(by_id(g)[i]) for i in downstream(g, jid)]) if downstream(g, jid) else set()
         if used & out_names:
             refused.append({"node": jid, "text": f"{flow.label(node)}의 오른쪽 컬럼({', '.join(sorted(used & out_names)[:4])})을 아래에서 써서 빼지 않았어요."})
@@ -364,7 +364,7 @@ def prune_columns(graph, ctx):
         if cols is None or any(by_id(g)[o]["kind"] == "union" for o in outs | set(outputs(g, n["id"]))):
             continue
         used = set().union(*[loose(by_id(g)[o]) for o in outs]) if outs else set()
-        need = [c for c in cols if c in used or (c + "_right") in used]
+        need = [c for c in cols if c in used or any(u.startswith(c + "_") for u in used)]  # 조인에서 이름이 바뀐 c_right·c_테이블도
         need = need or list(cols)[:1]
         if len(need) < len(cols):
             n["params"] = {**params(n), "columns": need}
