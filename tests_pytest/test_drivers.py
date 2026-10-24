@@ -128,8 +128,14 @@ def test_has_python_looks_at_launcher_then_path(monkeypatch):
     assert drivers.has_python() is True
 
 
-def test_connect_error_carries_driver_info(monkeypatch):
+def gone(monkeypatch, scheme):
+    """그 대상의 Ibis 모듈이 없는 것처럼: prepare는 importlib로 직접 불러 보므로, 드라이버가 깔린 PC(CI 빌드)에서도 sys.modules에 None을 넣어 불러오기를 막는다."""
     monkeypatch.setattr(drivers, "module_found", lambda m: False)
+    monkeypatch.setitem(sys.modules, drivers.DRIVERS[scheme][1], None)
+
+
+def test_connect_error_carries_driver_info(monkeypatch):
+    gone(monkeypatch, "snowflake")
     with pytest.raises(drivers.DriverError) as raised:
         drivers.prepare("snowflake://acct/db/schema")
     info = raised.value.driver
@@ -139,7 +145,7 @@ def test_connect_error_carries_driver_info(monkeypatch):
 
 def test_connect_route_returns_driver_object(client, monkeypatch):
     def fail(url, user="", password=""):
-        monkeypatch.setattr(drivers, "module_found", lambda m: False)
+        gone(monkeypatch, "bigquery")
         drivers.prepare(url, password)
     monkeypatch.setattr(server, "open_con", lambda info, read_only=True: fail(info["url"]))
     res = client.post("/api/connect", json={"kind": "url", "url": "bigquery://p/d"})
