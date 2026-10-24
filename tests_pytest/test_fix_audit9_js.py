@@ -65,6 +65,42 @@ const panelHost = {
     assert got["wrote"][-1] == "{}", got  # 비운 값이 서버에 쓰였다(옛 값이 새 설정 옆에 남지 않는다)
 
 
+def test_9j2_period_applied_while_computing_still_empties_stored(tmp_path):
+    ctl, dash = page("dashboard/dash_ctl.js"), page("dashboard/dashboard.html")
+    a = dash.index("  recompute: async card =>")
+    recompute = dash[a:dash.index("\n  star:", a)]
+    got = run(tmp_path, r"""
+globalThis.DashBoard = { plain: c => ({ id: c.id, by: c.by, data: c.data }) };
+""" + fn(ctl, "function showLive") + "\n" + next(x for x in ctl.splitlines() if x.startswith("const storedCard")) + r"""
+let dashId = "d1", valuesDirty = false, valuesSeq = 0, lastSaved, wrote = [];
+""" + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + r"""
+const needsValues = c => c;
+const card = { id: 1, by: "region", data: { labels: ["서울", "부산"] } };
+let period = null;
+const board = { cards: [card], ctx: () => period, draw() {} };
+const snap = () => JSON.stringify([[], {}, [cardSettings(card)]]);
+const scheduleSave = () => { if (snap() === lastSaved && !valuesDirty) return; wrote.push(JSON.stringify(storedCard(card).data)); lastSaved = snap(); valuesDirty = false; };
+lastSaved = snap();                                         // 방금 저장한 대시보드
+const api = async () => {
+  await null;
+  period = { from: "2026-01-01" }; showLive(card, card.data);  // 계산 중에 기간을 걸었다: 기간 갱신이 옛 설정의 값을 stored에 둔다
+  scheduleSave();
+  return { data: { labels: ["사과"] } };
+};
+const panelHost = {
+""" + recompute + r"""
+};
+(async () => {
+  showLive(card, { labels: ["서울 기간"] });                // 기간을 건 화면 값, 저장 값은 stored
+  card.by = "product";                                      // 설정을 바꾸고
+  await panelHost.recompute(card);
+  console.log(JSON.stringify({ stored: storedCard(card).data, wrote, dirty: valuesDirty, shown: card.data.labels }));
+})();
+""", fake=False)
+    assert got["stored"] == {} and got["shown"] == ["사과"]
+    assert got["wrote"][-1] == "{}", got  # 비운 값이 서버에 쓰였다(옛 값이 새 설정 옆에 남지 않는다)
+
+
 # ---------- 9J3 크기 재기 줄은 가장 긴 중첩 값의 행을 고른다 ----------
 
 @needs_node
@@ -86,8 +122,8 @@ def test_9j5_nested_cell_is_focusable_and_toggles_with_keys(tmp_path):
 const html = cell({ a: 1 });
 const td = { dataset: { full: "{\n  a: 1\n}" }, textContent: "{a: 1}", closest(sel) { return sel === "td.nest" ? this : null; }, matches(sel) { return sel === "td.nest"; }, replaceChildren(x) { this.expanded = !!x; } };
 let prevented = 0;
-const key = k => handlers.keydown.forEach(f => f({ key: k, target: td, preventDefault() { prevented++; } }));
-key("a"); const none = td.dataset.short === undefined;
+const key = (k, mods = {}) => handlers.keydown.forEach(f => f({ key: k, ...mods, target: td, preventDefault() { prevented++; } }));
+key("a"); key("Enter", { ctrlKey: true }); const none = td.dataset.short === undefined;  // Ctrl+Enter는 다시 실행 단축키에 넘긴다
 key("Enter"); const opened = td.dataset.short !== undefined;
 key(" "); const closed = td.dataset.short === undefined;
 console.log(JSON.stringify({ tab: html.includes('class="nest" tabindex="0"'), none, opened, closed, prevented }));

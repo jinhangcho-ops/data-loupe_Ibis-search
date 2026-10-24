@@ -184,6 +184,7 @@ def fix_polars_text():
         return
     import polars as pl
     from ibis.backends.polars.compiler import _literal_value, translate
+    from ibis.util import gen_name
     from ibis.expr import operations as ops
 
     @translate.register(ops.StringLength)
@@ -204,14 +205,25 @@ def fix_polars_text():
     @translate.register(ops.ArrayIndex)
     def index(op, **kw):
         return translate(op.arg, **kw).list.get(translate(op.index, **kw), null_on_oob=True)  # 범위 밖 조각(split_part 5번째 …)은 오류 대신 빈 값(DuckDB와 같게)
+    # 정렬·묶기·중복 빼기는 순서를 고정한다: 아니면 LIMIT·OFFSET마다 동률(묶은 결과의 차례)을 달리 갈라 쪽을 넘길 때 행이 겹치고 빠진다
     @translate.register(ops.Sort)
-    def sort(op, **kw):  # 동률의 순서를 원래 행 순서로 고정한다(아니면 LIMIT·OFFSET마다 동률을 달리 갈라 쪽을 넘길 때 행이 겹치고 빠진다)
+    def sort(op, **kw):
         lf = translate(op.parent, **kw)
         if not op.keys:
             return lf
-        names = {f"_sort_key_{i}": translate(key.arg, **kw) for i, key in enumerate(op.keys)}
+        names = {gen_name("sort_key"): translate(key.arg, **kw) for key in op.keys}
         lf = lf.with_columns(**names).sort(list(names), descending=[k.descending for k in op.keys], nulls_last=[not k.nulls_first for k in op.keys], maintain_order=True)
         return lf.drop(*names)
+
+    @translate.register(ops.Aggregate)
+    def aggregate(op, **kw):  # ibis polars compiler의 aggregation에 maintain_order만 더했다
+        lf = translate(op.parent, **kw)
+        func = lf.with_columns([translate(a, **kw).alias(n) for n, a in op.groups.items()]).group_by(list(op.groups), maintain_order=True).agg if op.groups else lf.select
+        return func([translate(a, in_group_by=bool(op.groups), **kw).alias(n) for n, a in op.metrics.items()]) if op.metrics else func()
+
+    @translate.register(ops.Distinct)
+    def distinct(op, **kw):
+        return translate(op.parent, **kw).unique(maintain_order=True)
     polars_fixed = True
 
 

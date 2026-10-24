@@ -112,7 +112,7 @@ function gridSizer(g, max) {
   for (const c of g.columns) {
     let at = 0, most = -1;
     for (let i = 0; i < g.rows.length && most < cap; i++) {
-      const v = g.rows[i][c], n = typeof v === "string" ? textWidth(max > 0 ? v.slice(0, max + 1) : v) : typeof v === "number" ? String(v).length * 1.3 : isNested(v) ? textWidth(shown(v, max)[0]) : 0;
+      const v = g.rows[i][c], n = typeof v === "string" ? textWidth(max > 0 ? v.slice(0, max + 1) : v) : typeof v === "number" ? String(v).length * 1.3 : isNested(v) ? textWidth(max > 0 ? inline(v).slice(0, max + 1) : inline(v)) : 0;
       if (n > most) { most = n; at = i; }
     }
     best.add(at);
@@ -201,7 +201,7 @@ const toggleNest = e => {
   if (g.virtual) s.size ? g.extra.set(p, tr.offsetHeight - g.H) : g.extra.delete(p);
 };
 document.addEventListener("click", toggleNest);
-document.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && e.target.matches?.("td.nest")) { e.preventDefault(); toggleNest(e); } });  // 키보드로도 펼치고 접는다
+document.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && !e.ctrlKey && !e.metaKey && !e.altKey && e.target.matches?.("td.nest")) { e.preventDefault(); toggleNest(e); } });  // 키보드로도 펼치고 접는다
 // 메시지 칸에 글자를 쓴다. ok가 true면 성공 색, 글자면 그 클래스(예: "hint"는 안내 색), 아니면 오류 색.
 const say = (id, text, ok) => { $(id).textContent = text; $(id).className = ok === true ? "ok" : ok || "err"; };
 const connMsg = (text, ok) => say("err-connect", text, ok);  // 연결 메시지(설정 저장·알림 오류도 여기에)

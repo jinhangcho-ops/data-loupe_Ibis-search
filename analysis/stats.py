@@ -8,6 +8,7 @@ from lazy import ibis
 
 from core import funnel
 from core import result
+from core import source
 from core.parse import check_name
 from core.result import chart_metric, plain
 
@@ -148,8 +149,9 @@ def finite_value(t, value, into=None):
 def groups(t, by, value, agg, opts=None):
     """그룹 비교: by의 값마다 value의 agg(count·sum·mean). 행이 많은 MAX_GROUPS개 그룹을 값이 큰 순으로."""
     g = column_of(t, by, what="그룹 컬럼")
-    if g.type().is_floating():  # NaN과 빈 값이 "(빈 값)" 그룹 둘로 갈라지지 않게 NaN을 빈 값으로
-        t = t.mutate(**{by: ibis.ifelse(t[by].isnan(), ibis.null().cast(t[by].type()), t[by])})
+    if g.type().is_floating():  # NaN과 빈 값이 "(빈 값)" 그룹 둘로 갈라지지 않게 NaN을 빈 값으로(SQLite·SQL Server는 isnan을 못 하고 NaN도 담지 않는다)
+        merged = t.mutate(**{by: ibis.ifelse(t[by].isnan(), ibis.null().cast(t[by].type()), t[by])})
+        t = merged if source.compiles(merged) else t
     src = "__finite" if by == value and t[value].type().is_floating() else value  # 같은 컬럼으로 묶으면 그룹은 원래 값으로 두고 집계에만 바꾼 값을 쓴다
     t = finite_value(t, value, "__finite" if src != value else None)
     g = t[by]

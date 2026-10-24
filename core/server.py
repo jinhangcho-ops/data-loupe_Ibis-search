@@ -82,6 +82,8 @@ def dump(df):
     """df.write_json(). Polars의 패닉(BaseException이라 Flask 오류 처리가 놓친다)은 오류 글이 있는 RuntimeError로."""
     try:
         return df.write_json()
+    except (KeyboardInterrupt, SystemExit):
+        raise
     except BaseException as e:
         raise RuntimeError(f"데이터 엔진 내부 오류로 결과를 JSON으로 만들지 못했습니다: {e}") from None
 

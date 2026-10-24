@@ -237,28 +237,29 @@ def orderable(expr):
     return [expr[c] for c, t in expr.schema().items() if not (t.is_nested() or t.is_json())]
 
 
-def asof(left, right, on, keys):
+def asof(left, right, on, keys, rname="{name}_right"):
     """asof 조인: 왼쪽 행마다 키가 같고 시각이 같거나 앞선 오른쪽 행 중 가장 가까운 하나를 붙인다(없으면 빈 값).
     연결이 ASOF JOIN을 하지 못하면(SQLite·Databricks 등) 왼쪽 조인 + 시각 순 행 번호로 같은 결과를 만든다."""
     from core import source
-    found = left.asof_join(right, on=left[on[0]] >= right[on[1]], predicates=[left[a] == right[b] for a, b in keys])
+    found = left.asof_join(right, on=left[on[0]] >= right[on[1]], predicates=[left[a] == right[b] for a, b in keys], rname=rname)
     if source.compiles(found):
         return found
     numbered = left.mutate(**{ASOF_ID: ibis.row_number().over(ibis.window(order_by=orderable(left)))})
-    joined = numbered.left_join(right, [numbered[on[0]] >= right[on[1]], *[numbered[a] == right[b] for a, b in keys]])
-    when = joined[on[1] if on[1] not in left.columns else on[1] + "_right"]  # 오른쪽 시각(이름이 겹치면 _right가 붙는다)
+    joined = numbered.left_join(right, [numbered[on[0]] >= right[on[1]], *[numbered[a] == right[b] for a, b in keys]], rname=rname)
+    when = joined[on[1] if on[1] not in left.columns else rname.format(name=on[1])]  # 오른쪽 시각(이름이 겹치면 rname 꼴)
     near = ibis.row_number().over(ibis.window(group_by=joined[ASOF_ID], order_by=ibis.desc(when)))
     ranked = joined.mutate(**{ASOF_RANK: near})
     return ranked.filter(ranked[ASOF_RANK] == 0).select(*[c for c in joined.columns if c != ASOF_ID])  # drop은 SELECT를 한 겹 더 만든다
 
 
 def rname_for(left, right, name):
-    """조인에서 왼쪽과 이름이 겹치는 오른쪽 컬럼의 새 이름 꼴. 첫 겹침은 _right, 그 이름도 이미 있으면(두 번째 조인) 테이블 이름을 붙인다."""
-    taken = set(left)
+    """조인에서 왼쪽과 이름이 겹치는 오른쪽 컬럼의 새 이름 꼴. 첫 겹침은 _right, 그 이름이 양쪽에 이미 있으면(두 번째 조인 등) 테이블 이름을 붙인다."""
+    taken = {*left, *right}
+    clash = lambda rname: any(c in left and rname.format(name=c) in taken for c in right)
     rname = "{name}_right"
-    if any(c in taken and c + "_right" in taken for c in right):
+    if clash(rname):
         rname = "{name}_" + re.sub(r"\W", "_", name)
-        while any(c in taken and rname.format(name=c) in taken for c in right):
+        while clash(rname):
             rname += "_"
     return rname
 
@@ -271,10 +272,11 @@ def apply_joins(base, joins, get_table):
         for left, r in [*pairs, *([on] if on else [])]:
             check_name(left, expr.columns)
             check_name(r, right.columns)
+        rname = rname_for(expr.columns, right.columns, name)
         if how == "asof":
-            expr = asof(expr, right, on, pairs)
+            expr = asof(expr, right, on, pairs, rname)
         else:
-            expr = expr.join(right, [expr[left] == right[r] for left, r in pairs], how=how, rname=rname_for(expr.columns, right.columns, name))
+            expr = expr.join(right, [expr[left] == right[r] for left, r in pairs], how=how, rname=rname)
     return expr
 
 

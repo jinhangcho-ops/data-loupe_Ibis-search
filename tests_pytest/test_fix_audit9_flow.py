@@ -50,3 +50,11 @@ def test_optimizer_keeps_the_column_renamed_by_the_second_join():
         cols = flow.by_id(pruned)["p"]["params"].get("columns")
         assert cols is None or "name" in cols
         flow.to_expr(pruned, "k", lambda name, schema=None: con.table(name)).execute()
+
+
+def test_screen_does_not_rename_columns_named_like_object_methods(tmp_path):
+    schemas = {"a": {"columns": {"id": "num"}}, "b": {"columns": {"id": "num", "constructor": "text", "toString": "text"}}}
+    graph = {"nodes": [{"id": "a", "kind": "table", "params": {"table": "a"}}, {"id": "b", "kind": "table", "params": {"table": "b"}},
+                       {"id": "j", "kind": "join", "params": {"how": "left", "keys": [["id", "id"]]}}], "edges": [["a", "j"], ["b", "j"]]}
+    got = run_node(tmp_path, "console.log(JSON.stringify(Object.keys(flowColumns(%s, 'j', %s))));" % (json.dumps(graph), json.dumps(schemas)))
+    assert got == list(flow.out_columns(graph, "j", schemas)) == ["id", "id_right", "constructor", "toString"]

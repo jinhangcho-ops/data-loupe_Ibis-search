@@ -123,6 +123,7 @@ def sql_gate(body, streams=False):
 
 
 TOO_BIG = f"결과가 커서({held.MAX_ROWS:,}행·{held.MAX_BYTES // 1024 // 1024}MB 넘음) 이 PC에 받아 두지 않고 DB에서 쪽마다 가져옵니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요."
+FILE_SQL_PAGES = "파일 연결의 SQL 결과는 쪽마다 다시 계산합니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼의 ORDER BY를 넣으세요."
 SERVER_PAGES = ("결과가 커서 이 PC에 받아 두지 않고, 쿼리를 한 번만 돌려 DB의 결과 임시 테이블(BigQuery는 24시간)에서 쪽마다 읽습니다. "
                 "쪽을 넘겨도 다시 조회하지 않아 요금이 다시 나지 않고, 정렬·조건을 바꾸거나 [검색 실행]을 누르면 다시 조회합니다.")
 
@@ -414,6 +415,8 @@ def sql_run():
         if offset and not result.can_offset(expr):
             raise ValueError("이 DB는 SQL 결과에서 앞 행을 건너뛰지 못하고, 결과가 커서 이 PC에 받아 두지도 못했습니다. 조건을 좁히거나 [결과 저장]으로 받으세요.")
         rows = run(lambda: result.get_rows(expr, n + 1, offset))
+        if con.name == "polars" and (offset or rows.height > n):  # 파일 연결의 SQL은 Polars SQL이 정렬해 동률 순서를 고정하지 못한다
+            note = FILE_SQL_PAGES
     if offset == 0:
         count_virtual(used)
     shown = rows.head(n).with_columns(pl.col(pl.Decimal).cast(pl.Float64))  # SUM 등이 돌려주는 큰 소수 타입은 화면에서 숫자로(파일 저장은 원래 타입)
