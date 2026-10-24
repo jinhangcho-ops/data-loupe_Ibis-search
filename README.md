@@ -96,4 +96,4 @@ pip install 'ibis-framework[mssql]'      # [] 안은 DB 이름: oracle, clickhou
 
 ## 라이선스
 
-MIT 라이선스로 배포합니다. 전문은 [LICENSE](LICENSE)에 있습니다. 함께 들어 있는 Chart.js(`static/core/chart.umd.min.js`)도 MIT 라이선스입니다.
+Apache License 2.0으로 배포합니다. 전문은 [LICENSE](LICENSE), 저작권 표시는 [NOTICE](NOTICE)에 있습니다. 함께 들어 있는 Chart.js(`static/core/chart.umd.min.js`)는 MIT 라이선스이고 그 저작권 표시는 파일 머리에 그대로 둡니다.
