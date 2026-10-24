@@ -93,7 +93,7 @@ def explore_gate(body, streams=False):
     if not body.get("fresh") and querying.search_key(body) in held.store["items"]:
         return None
     plain = not (body.get("conditions") or body.get("periods") or body.get("joins") or body.get("union"))
-    known = server.state["rows"].get((body.get("schema") or None, body.get("base"))) if plain else None
+    known = (server.state["rows"].get((body.get("schema") or None, body.get("base"))) or (None,))[0] if plain else None  # 세어 둔 값은 (행 수, csv_gen)
     return server.scan_gate(body, lambda: server.expr_sql(con, querying.filtered(body)), known)
 
 
