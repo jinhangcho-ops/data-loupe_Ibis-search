@@ -137,7 +137,7 @@ def copy_sqls(card, con):
 def scan_decision(card, ctx):
     """이 카드를 읽기 전 처리 용량 판정(8-3). 건너뛸 이유 글(괜찮으면 빈 글자).
     scan_size.limit_check(con, sql, opened, dialect)가 돌려주는 {over, unknown, blocked, bytes, limit, text}를 본다(그 함수가 없으면 막지 않는다).
-    기준을 넘으면(over), 추정할 수 없는데 설정 scan_unknown이 차단이면(blocked) 그 이유로 건너뛴다. 최신화는 묻지 않는다(그 카드만 건너뜀).
+    기준을 넘으면(over), 추정할 수 없는데 설정 scan_unknown이 block이면(blocked) 그 이유로 건너뛴다. 최신화는 묻지 않는다(그 카드만 건너뜀).
     DB를 묻는 판정이라 연결 스레드(server.run)에서 부른다. 식을 만들 수 없거나 판정이 실패하면 추정 불가로 보고 설정을 따른다."""
     check = getattr(scan_size, "limit_check", None)
     if check is None:

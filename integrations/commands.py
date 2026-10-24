@@ -7,6 +7,7 @@
   검색 <저장한 검색> [행=<1~50>]                 행 수와 앞 행들
   질문 <자연어>                                  LLM으로 SQL을 만들어 보여 준다(실행하지 않음, nl2sql)
 SQL 직접 실행처럼 저장해 두지 않은 조회는 받지 않는다. 데이터는 querying.using()으로 화면과 같은 차례를 잡고 읽는다."""
+import re
 import shlex
 
 from core import querying
@@ -17,7 +18,9 @@ from core import settings
 from core import source
 from core import use_counts
 from integrations.notify import table_text
-from integrations.schedule import VALUE_ERRORS
+from integrations.schedule import VALUE_ERRORS, notice_text
+
+PYTHON_VALUE = re.compile(r"invalid literal|could not convert|cannot convert|unconverted data|time data|Out of bounds", re.I)  # 파이썬이 데이터 값을 넣는 ValueError 문구
 
 MAX_ROWS = 50  # 검색 결과로 답할 최대 행 수
 DEFAULT_ROWS = 20
@@ -124,11 +127,12 @@ def question_answer(text):
 
 
 def error_text(e):
-    """Slack으로 나갈 오류 글. DB가 데이터 값을 넣는 오류 유형은 정해진 문구로(예약 알림과 같은 기준), 그 밖에는 비밀번호를 가린 글."""
+    """Slack으로 나갈 오류 글. 이 앱이 직접 만든 안내 오류(정확히 ValueError이고 데이터 값을 넣는 문구가 아닌 것)만 비밀번호를 가려 그대로 보여 준다(무엇을 고칠지 알아야 하므로).
+    그 밖의 오류(DB·라이브러리 오류, ValueError의 하위 오류인 pyarrow ArrowInvalid 등)는 DB가 데이터 값을 문장에 넣을 수 있어 예약 알림과 같은 허용 목록(schedule.notice_text)의 정해진 문구만 보낸다."""
     message = str(e)
-    if VALUE_ERRORS.search(message):
-        return "할 수 없습니다: 데이터 값 문제로 실패했습니다"
-    return f"할 수 없습니다: {source.mask(message, server.state['passwords'])}"
+    if type(e) is ValueError and not VALUE_ERRORS.search(message) and not PYTHON_VALUE.search(message):
+        return f"할 수 없습니다: {source.mask(message, server.state['passwords'])}"
+    return f"할 수 없습니다: {source.mask(notice_text(message) or '실패했습니다', server.state['passwords'])}"
 
 
 def answer(text):

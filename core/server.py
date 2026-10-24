@@ -68,9 +68,11 @@ BAD_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')  # 파일 이름에 쓸 �
 
 
 def text_wide(df, text_big):
-    """±2^53을 넘는 정수가 든 컬럼은 글자로 바꾼 표(화면 JSON.parse가 정밀도를 잃는다). text_big이 거짓이면 그대로."""
+    """이진(BLOB) 컬럼은 16진수 글자로, ±2^53을 넘는 정수가 든 컬럼은 글자로 바꾼 표(화면 JSON.parse가 정밀도를 잃는다). text_big이 거짓이면 그대로."""
     wide = [c for c in df.columns if text_big and df[c].dtype.is_integer() and max(abs(df[c].max() or 0), abs(df[c].min() or 0)) > 2**53]
-    return df.with_columns(*[df[c].cast(str) for c in wide])
+    import polars as pl
+    blobs = [c for c in df.columns if df[c].dtype == pl.Binary]  # write_json이 이진 값에서 패닉한다 → 16진수 글자로
+    return df.with_columns(*[df[c].cast(str) for c in wide], *[df[c].bin.encode("hex") for c in blobs])
 
 
 def to_json(df, text_big=True):

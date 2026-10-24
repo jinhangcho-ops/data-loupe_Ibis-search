@@ -15,7 +15,7 @@ from core import settings
 from collect.collect_http import STOPPED, Halt
 
 GROUPS = "limits.json"  # 묶음 {이름: 묶음}
-USAGE = "limits_usage.json"  # 사용 기록 {이름: {"sent": [보낸 시각…(최근 1시간)], "day": [기간 시작, 횟수]}}
+USAGE = "limits_usage.json"  # 사용 기록 {이름: {"sent": [보낸 시각…(설정된 가장 넓은 창만큼)], "day": [기간 시작, 횟수]}}
 LOCK = "limits_usage.lock"
 STALE_LOCK = 10  # 이보다 오래된 잠금 파일은 끝난 프로세스가 남긴 것으로 보고 지운다(초).
 MAX_GROUPS = 50
@@ -198,7 +198,8 @@ def take(name, stop):
             if data is None:
                 raise Halt(broken_message())
             item = item_of(data, name)
-            item["sent"] = [t for t in item["sent"] if t > now - 3600]
+            keep = max([w for k, w in WINDOWS.items() if allowed(group, k) is not None] + [group["min_interval"], 1])  # 설정된 가장 넓은 창(과 최소 간격)만큼만 보관한다
+            item["sent"] = [t for t in item["sent"] if t > now - keep]
             windows, day = counts(item, group, now)
             if allowed(group, "per_day") is not None and day >= allowed(group, "per_day"):
                 raise Halt(f"오늘 한도를 다 썼습니다. {reset_text(group, now)} 이후 이어 받을 수 있습니다.", failed=False)
@@ -213,7 +214,7 @@ def take(name, stop):
                 item["sent"].append(now)
                 item["day"] = [start, day + 1]
                 data[name] = item
-                write(data)
+                settings.write_atomic(settings.PATH.parent / USAGE, data)  # 요청마다 부르는 곳이라 .bak 복사는 하지 않는다(reset 등은 write로 .bak을 남긴다)
                 return
         if stop.wait(min(wait, 1.0) + 0.001):
             raise Halt(STOPPED, failed=False)

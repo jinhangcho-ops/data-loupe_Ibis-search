@@ -256,7 +256,7 @@ def apply_joins(base, joins, get_table):
     """joins: [(테이블, 종류, [(왼쪽, 오른쪽)], asof 시각 쌍)]. 컬럼이 없으면 ValueError."""
     expr = base
     for name, how, pairs, on in joins:
-        right = get_table(name)
+        right = get_table(name).view()  # 자기 자신과 조인해도 두 쪽이 구분되게
         for left, r in [*pairs, *([on] if on else [])]:
             check_name(left, expr.columns)
             check_name(r, right.columns)

@@ -81,7 +81,7 @@ function shown(v, max = maxLen()) {
 }
 // 글자를 HTML로 바꾸되 want(소문자)와 맞는 첫 부분은 <mark>로 강조한다.
 const lit = (text, want) => {
-  const at = want && typeof want === "string" ? text.toLowerCase().indexOf(want) : -1;
+  const low = text.toLowerCase(), at = want && typeof want === "string" && low.length === text.length ? low.indexOf(want) : -1;  // 소문자로 바꾸면 길이가 달라지는 글자(İ)는 위치가 어긋나므로 강조하지 않는다
   return at < 0 ? esc(text) : esc(text.slice(0, at)) + `<mark>${esc(text.slice(at, at + want.length))}</mark>` + esc(text.slice(at + want.length));
 };
 // 표 칸. 중첩 값 칸(.nest)은 누르면 들여쓴 전체를 칸 안에 펼치고, 다시 누르면 접는다. want가 있으면 맞는 글자를 강조한다.
@@ -105,13 +105,14 @@ function gridTrs(g, a, b, max) {
   for (let k = a; k < b; k++) { const i = gridAt(g, k); s += `<tr${g.virtual ? ` data-p="${k}" aria-rowindex="${i + 2}"` : ""}>${g.row(g.rows[i], g.want, max)}</tr>`; }
   return s;
 }
-// 컬럼마다 가장 긴 글자가 든 행(글자 수 기준)을 모아 크기 재기 줄로 만든다.
+// 컬럼마다 가장 긴 글자가 든 행(글자 폭 기준, ASCII 밖 글자는 2)을 모아 크기 재기 줄로 만든다.
+const textWidth = s => { let n = 0; for (const ch of s) n += ch.codePointAt(0) > 127 ? 2 : 1; return n; };
 function gridSizer(g, max) {
-  const cap = max > 0 ? max + 1 : Infinity, best = new Set();
+  const cap = max > 0 ? 2 * (max + 1) : Infinity, best = new Set();
   for (const c of g.columns) {
     let at = 0, most = -1;
     for (let i = 0; i < g.rows.length && most < cap; i++) {
-      const v = g.rows[i][c], n = typeof v === "string" ? v.length : typeof v === "number" ? String(v).length * 1.3 : isNested(v) ? cap : 0;
+      const v = g.rows[i][c], n = typeof v === "string" ? textWidth(max > 0 ? v.slice(0, max + 1) : v) : typeof v === "number" ? String(v).length * 1.3 : isNested(v) ? cap : 0;
       if (n > most) { most = n; at = i; }
     }
     best.add(at);
@@ -126,10 +127,11 @@ function expandCell(td) { td.dataset.short = td.textContent; td.replaceChildren(
 function collapseCell(td) { td.textContent = td.dataset.short; delete td.dataset.short; }
 // 보이는 줄을 다시 그린다. force가 없으면 지금 그린 범위가 보이는 줄을 덮고 있는 한 그대로 둔다.
 function gridDraw(g, force) {
+  force ||= g.stale; g.stale = false;  // 가려진 채 바뀐 것은 보일 때 강제로 그린다
   const N = gridN(g), max = maxLen(), body = g.body ??= g.host.querySelector("tbody");
   let a = 0, b = N;
   if (g.virtual) {
-    if (g.a >= 0 && g.host.getClientRects?.().length === 0) return;  // 가려진 탭은 보일 때(크기가 바뀔 때) 그린다
+    if (g.a >= 0 && g.host.getClientRects?.().length === 0) { g.stale = true; return; }  // 가려진 탭은 보일 때(크기가 바뀔 때) 그린다
     const sc = gridScroller(g.host), vh = sc ? sc.clientHeight : innerHeight;
     const y0 = (sc ? sc.getBoundingClientRect().top : 0) - body.getBoundingClientRect().top;
     const lo = Math.min(N, gridPos(g, y0)), hi = Math.min(N, gridPos(g, y0 + vh) + 1);
@@ -137,7 +139,7 @@ function gridDraw(g, force) {
     a = Math.max(0, lo - TABLE_OVER); b = Math.min(N, hi + TABLE_OVER);
   }
   g.a = a; g.b = b;
-  body.innerHTML = g.virtual ? gridSizer(g, max) + gridPad(g, gridTop(g, a)) + gridTrs(g, a, b, max) + gridPad(g, gridTop(g, N) - gridTop(g, b)) : gridTrs(g, 0, N, max);
+  body.innerHTML = g.virtual ? (g.sizer ??= gridSizer(g, max)) + gridPad(g, gridTop(g, a)) + gridTrs(g, a, b, max) + gridPad(g, gridTop(g, N) - gridTop(g, b)) : gridTrs(g, 0, N, max);
   const trs = g.virtual || g.open.size ? [...body.querySelectorAll(g.virtual ? "tr[data-p]" : "tr")] : [];
   if (g.virtual && !g.measured && trs.length > 1) {  // 줄 간격은 처음 그린 줄들의 위치 차이로 잰다
     const H = (trs.at(-1).offsetTop - trs[0].offsetTop) / (trs.length - 1);
@@ -155,25 +157,29 @@ function gridFind(g, want) {
   want = want.trim().toLowerCase();
   const max = maxLen();
   g.want = want; g.extra.clear();
-  g.view = want ? g.rows.flatMap((r, i) => g.columns.some(c => shown(r[c], max)[0].toLowerCase().includes(want)) ? [i] : []) : null;  // 칸마다 따로 본다(칸 사이를 건너 일치하지 않게)
+  g.view = want ? g.rows.flatMap((r, i) => g.columns.some(c => (g.text?.(r, c, max) ?? shown(r[c], max)[0]).toLowerCase().includes(want)) ? [i] : []) : null;  // 칸마다 따로 본다(칸 사이를 건너 일치하지 않게)
   gridDraw(g, true);
 }
-// 표 하나를 host에 그린다. spec = { columns, rows, head: <th>들의 HTML, row(r, want, max): <td>들의 HTML }.
+// 표 하나를 host에 그린다. spec = { columns, rows, head: <th>들의 HTML, row(r, want, max): <td>들의 HTML, text?(r, c, max): 찾을 글(없으면 칸에 보이는 글) }.
 // 행이 TABLE_MIN 이하면 예전처럼 전부 그린 HTML 그대로, 넘으면 보이는 행만 그리고 aria-rowcount/rowindex로 전체 행 수를 알린다.
-function mountTable(host, spec, want = "") {
+function mountTable(host, spec) {
   if (!spec.rows.length) { host._grid = null; host.innerHTML = '<span class="empty">결과가 없습니다.</span>'; return; }
   const g = host._grid = { ...spec, host, view: null, want: "", open: new Map(), extra: new Map(), H: 40, a: -1, b: -1, virtual: spec.rows.length > TABLE_MIN };
-  if (!g.virtual) { host.innerHTML = `<table><thead><tr>${spec.head}</tr></thead><tbody>${gridTrs(g, 0, spec.rows.length, maxLen())}</tbody></table>`; if (want) gridFind(g, want); return; }
+  if (!g.virtual) { host.innerHTML = `<table><thead><tr>${spec.head}</tr></thead><tbody>${gridTrs(g, 0, spec.rows.length, maxLen())}</tbody></table>`; return; }
   host.innerHTML = `<table aria-rowcount="${spec.rows.length + 1}"><thead><tr aria-rowindex="1">${spec.head}</tr></thead><tbody></tbody></table>`;
   GRIDS.add(g);
-  gridFind(g, want);
+  gridDraw(g, true);
   gridWatch?.observe(host);
 }
 let gridPending = false;
 const gridSchedule = () => { if (!gridPending) { gridPending = true; (globalThis.requestAnimationFrame ?? (f => setTimeout(f, 16)))(gridRedraw); } };  // 스크롤마다가 아니라 화면 갱신마다 한 번
 function gridRedraw() {
   gridPending = false;
-  for (const g of GRIDS) g.host._grid === g && g.host.isConnected ? gridDraw(g) : GRIDS.delete(g);
+  for (const g of GRIDS) {
+    if (g.host._grid === g && g.host.isConnected && g.body?.isConnected !== false) { gridDraw(g); continue; }  // host를 비웠거나(떨어진 tbody) 화면에서 빠진 표는 버린다
+    GRIDS.delete(g);
+    if (![...GRIDS].some(x => x.host === g.host)) gridWatch?.unobserve(g.host);  // 같은 host에 새로 그린 표가 있으면 계속 지켜본다
+  }
 }
 const gridWatch = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(gridSchedule);  // 가려진 탭이 보이게 되면 다시 그린다
 document.addEventListener("scroll", gridSchedule, { capture: true, passive: true });

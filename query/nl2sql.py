@@ -84,7 +84,7 @@ def system_prompt(ctx):
             "- 아래에 있는 테이블과 컬럼만 쓴다. 모르면 추측하지 말고 SQL 대신 '-- 모름: 이유' 한 줄을 쓴다.",
             "- 답은 ```sql 코드 블록 하나로만 쓴다.",
             "- 지표를 물으면 아래 지표 정의(분자 ÷ 분모, 분모가 0이면 NULL)대로 계산한다."]
-    body = ["", "## 테이블"] + (["(테이블이 더 있으나 생략됨. 위 목록에 없는 테이블은 모른다.)"] if ctx.get("more_tables") else [])
+    body = ["", "## 테이블"] + (["(테이블이 더 있으나 생략됨. 아래 목록에 없는 테이블은 모른다.)"] if ctx.get("more_tables") else [])
     for t in ctx["tables"]:
         body.append(f"### {t['name']}" + (f" — {t['description']}" if t.get("description") else "") + (f" (파티션 컬럼: {t['partition']})" if t.get("partition") else ""))
         for c in t["columns"]:

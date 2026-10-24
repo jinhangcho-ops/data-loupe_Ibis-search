@@ -89,8 +89,9 @@ DASH = page("dashboard/dashboard.html")
 CTL = page("dashboard/dash_ctl.js")
 LIVE = CTL[CTL.index("function showLive"):CTL.index("\n", CTL.index("const storedCard"))]
 PRELUDE = """
-const DashBoard = { plain: c => ({ ...c }) };
-let dashId = "d", valuesDirty = false, valuesSeq = 0, saved = 0, CTX, connected = true;
+const DashBoard = { plain: ({ liveData, stored, ...c }) => c };  // 실제 plain처럼 화면 전용 값(liveData·stored)은 뺀다
+let dashId = "d", valuesDirty = false, valuesSeq = 0, saved = 0, CTX, connected = true, lastSaved = "";
+const cardSettings = c => { const { data, ...rest } = DashBoard.plain(c); return rest; };
 const needsValues = c => c, scheduleSave = () => { saved++; }, isShell = () => false, say = () => {}, timed = (k, f) => f();
 const $ = () => ({ textContent: "" }); const save = async () => true;
 const api = async () => ({ data: { v: "new" } });
@@ -105,7 +106,7 @@ def values_script(call):
   for (const [name, ctx] of [["period", { range: { start: "2026-01-01", end: "2026-01-31" } }], ["plain", undefined]]) {
     CTX = ctx; valuesDirty = false;
     const card = { id: "c", kind: "metric", source: { table: "t", schema: "" }, data: { v: "old" } };
-    board.cards = [card];
+    board.cards = [card]; lastSaved = JSON.stringify([[], {}, [cardSettings(card)]]);  // 방금 저장한 카드
     await (%s);
     out[name] = { shown: card.data.v, stored: storedCard(card).data.v, dirty: valuesDirty };
   }

@@ -2,6 +2,7 @@
 geometry(도형 원본, JSON 글자)를 더한다. 파일의 crs가 WGS84가 아니면 경도·위도로 바꾼 값을 쓴다(geo.tm, pyproj).
 변경선을 넘는 도형은 min_lon > max_lon(예: 178, -179)으로 적는다(in_box와 같은 규칙). 표준 json과 Polars만 쓴다. 중심은 폴리곤이면 겉 고리에서 구멍을 뺀 면적 무게중심, 그 밖(점·선)은 꼭짓점 평균이다."""
 import json
+import math
 import re
 from pathlib import Path
 
@@ -94,7 +95,7 @@ def crosses_dateline(xs):
     """경도들이 날짜 변경선을 사이에 두고 모여 있는지: 경도를 정렬했을 때 안쪽의 가장 큰 빈 구간이 270도를 넘을 때(= 변경선을 건너 모인 범위가 90도 미만).
     -180과 180은 같은 경도로 본다(±180에서 자른 도형은 둘 다 가지며, 세계 상자는 180 하나로 줄어 아니다). 성긴 도형, -100→100 같은 넓은 선도 아니다. NaN·inf는 뺀다."""
     import numpy as np
-    xs = [x for x in xs if x - x == 0]  # NaN·inf는 뺀다
+    xs = [x for x in xs if math.isfinite(x)]  # NaN·inf는 뺀다
     if not xs or (max(xs) - min(xs) <= 360 - DATELINE_SPAN and -180 not in xs):  # 범위가 270도 이하면 빈 구간도 270도를 넘지 못한다(작은 도형 수만 개에 numpy를 부르지 않게)
         return False
     v = np.array(xs, dtype=float)

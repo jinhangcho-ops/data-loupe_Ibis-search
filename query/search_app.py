@@ -1,6 +1,8 @@
 """Data Loupe 쿼리 화면(탐색·SQL·지표·대시보드)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
 import base64
 import binascii
+import contextlib
+import functools
 import os
 from pathlib import Path
 
@@ -57,10 +59,23 @@ def columns():
     return jsonify(columns=result.columns(expr), fields=result.fields(expr), origins=querying.joined(request.json)[1])
 
 
+def confirms(view):
+    """처리 용량 확인이 필요하면(querying.Confirm) 그 확인 응답을 돌려준다(화면의 send()가 X-Needs-Confirm을 처리)."""
+
+    @functools.wraps(view)
+    def wrapper():
+        try:
+            return view()
+        except querying.Confirm as e:
+            return e.response
+    return wrapper
+
+
 @app.post("/api/values")
+@confirms
 def values():
     """조건을 만들 때 고를 수 있게 컬럼의 값 목록을 돌려준다. 화면에서 [목록]을 누를 때만 부른다."""
-    expr, column = querying.runnable(request.json, select=False), request.json.get("column", "")
+    expr, column = querying.runnable(request.json, select=False, ask=request.json), request.json.get("column", "")
     found, more = run(lambda: result.get_values(expr, column))
     return jsonify(values=found, more=more)
 
@@ -234,18 +249,20 @@ def use_search():
 
 
 @app.post("/api/summary")
+@confirms
 def summary():
     """컬럼별 집계. 큰 테이블에서는 오래 걸리므로 검색과 따로, 화면에서 요청할 때만 계산한다."""
     columns = request.json.get("summary_columns") or []  # 화면에서 고른 컬럼. 없으면 표시 컬럼(없으면 전체).
-    expr = querying.runnable(request.json, select=not columns)
+    expr = querying.runnable(request.json, select=not columns, ask=request.json)
     rows = run(lambda: result.get_summary(expr, columns))
     return jsonify(summary={"columns": result.SUMMARY_COLS, "rows": rows})
 
 
 @app.post("/api/pivot")
+@confirms
 def pivot():
     """피벗(조건부 집계): 검색 결과를 행 기준 컬럼별로 묶고, 열로 펼칠 컬럼의 값마다 집계 칸을 만든다(calc.pivot). more는 행이 calc.MAX_ROWS보다 많은지."""
-    expr, spec = querying.runnable(request.json, select=False), request.json.get("pivot")
+    expr, spec = querying.runnable(request.json, select=False, ask=request.json), request.json.get("pivot")
     values = lambda e: e.to_pyarrow()["v"].to_pylist()
     table = run(lambda: calc.pivot(expr, spec, values).to_polars())
     return server.json_reply(table.head(calc.MAX_ROWS), more=table.height > calc.MAX_ROWS)
@@ -333,7 +350,8 @@ def save_images():
 def count_virtual(names):
     """쓴 가상 테이블을 한 번씩 센다(목록을 많이 쓴 순으로)."""
     vts = server.virtual_tables()
-    use_counts.use_many("virtual_tables", [f"{server.connection_key()}|{name}" for name in {n for n in names if n in vts}])
+    with contextlib.suppress(OSError):  # 사용 횟수를 못 써도 응답은 그대로
+        use_counts.use_many("virtual_tables", [f"{server.connection_key()}|{name}" for name in {n for n in names if n in vts}])
 
 
 def sql_expr(body):
@@ -467,10 +485,11 @@ def save_virtual():
 
 
 @app.post("/api/chart")
+@confirms
 def chart():
     """x별 집계. series는 [{"y", "agg"}]이고, split을 주면 그 컬럼의 값마다 계열을 나눈다."""
     body = request.json
-    expr = querying.runnable(body, select=False)
+    expr = querying.runnable(body, select=False, ask=body)
     labels, datasets, more = run(lambda: result.get_chart(
         expr, body["x"], body.get("series") or [], body.get("split") or None, body.get("order", "x")))
     return jsonify(labels=[str(v) for v in labels], datasets=datasets, more_splits=more,
@@ -505,13 +524,14 @@ def save_metrics_file():
 
 
 @app.post("/api/metrics/run")
+@confirms
 def metrics_run():
     """탐색의 식(기준 테이블·조인·기간·조건) 위에서 지표들(names)을 구한다. by를 주면 그 컬럼 값마다. 구한 지표는 한 번씩 센다."""
     body = request.json
     names = body.get("names")
     if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
         raise ValueError("구할 지표를 고르세요.")
-    found, labels, values, more = querying.metric_values(body, names, body.get("by"))
+    found, labels, values, more = querying.metric_values(body, names, body.get("by"), ask=body)
     return jsonify(labels=labels, values=values, formats={n: found[n]["format"] for n in names}, more=more, max_groups=metric_file.MAX_GROUPS)
 
 

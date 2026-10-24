@@ -136,7 +136,7 @@ class EditBoard extends DashBoard {
       const body = this.grid.querySelector(`.bcard[data-id="${card.id}"] .bbody`);
       const width = r ? Math.round(PICTURE_HEIGHT * r) : body?.clientWidth || 640, height = r ? PICTURE_HEIGHT : (body?.clientHeight || 360) + TITLE_BAND;
       if (card.config) out.push({ name: card.title, data: chartPicture(card.config, mode, type, width, height, 2, card.title) });
-      else out.push({ name: card.title, data: titledPicture(await paintedCanvas(card, mode, width, height - TITLE_BAND, 2), card.title, mode, type) });
+      else out.push({ name: card.title, data: titledPicture(await paintedCanvas(card, mode, width, height - (card.title ? TITLE_BAND : 0), 2), card.title, mode, type) });
     }
     return out;
   }

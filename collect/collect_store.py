@@ -204,7 +204,14 @@ def write_output(con, table, fmt, out, folder):
     plain = Path(folder, "result.csv")
     con.to_csv(table, plain)
     with_bom(plain, out)
-    return con.execute(table.count())
+    return csv_rows(plain)
+
+
+def csv_rows(path):
+    """방금 쓴 CSV의 행 수(머리 줄 뺀 것). 받은 쪽을 다시 읽고 중복 제거를 다시 하지 않고 쓴 파일을 센다. 따옴표 안의 줄바꿈·쉼표는 DuckDB가 같은 규칙으로 읽는다."""
+    import duckdb
+    with duckdb.connect() as con:
+        return con.execute("select count(*) from read_csv(?, header=true, all_varchar=true)", [str(path)]).fetchone()[0]
 
 
 def with_bom(given, out, decode=None):

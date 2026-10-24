@@ -10,23 +10,34 @@ STATIC = ROOT / "static"
 
 
 def declared(text):
-    """줄 맨 앞의 const·let·class 이름(한 줄에 쉼표로 여럿 선언한 것도)과 function 이름."""
+    """줄 맨 앞의 const·let·var·class 이름(쉼표로 여럿 선언한 것은 여러 줄에 걸쳐도)과 function 이름."""
     lexical, functions = [], re.findall(r"^(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)", text, re.M)
-    for kind, rest in re.findall(r"^(const|let|class)\s+(.*)$", text, re.M):
+    for kind, at in ((m.group(1), m.end()) for m in re.finditer(r"^(const|let|var|class)\s+", text, re.M)):
         if kind == "class":
-            lexical.append(re.match(r"[\w$]+", rest).group(0))
+            lexical.append(re.match(r"[\w$]+", text[at:]).group(0))
             continue
-        depth, quote, cur, parts = 0, None, "", []
-        for ch in rest:  # 괄호·따옴표 밖의 쉼표로 나눈다(const a = f(1, 2), b = 3;)
+        depth, quote, cur, parts, i = 0, None, "", [], at
+        while i < len(text):  # 괄호·따옴표 밖의 쉼표로 나눈다(const a = f(1, 2), b = 3;). 줄이 쉼표·연산자로 끝나면 다음 줄로 이어진다
+            ch = text[i]
+            i += 1
             if quote:
+                if ch == "\\":
+                    cur += ch + text[i:i + 1]
+                    i += 1
+                    continue
                 quote = None if ch == quote else quote
             elif ch in "\"'`":
                 quote = ch
+            elif ch == "/" and text[i:i + 1] == "/":  # 줄 끝 주석
+                i = text.find(chr(10), i) % (len(text) + 1)  # 줄 끝까지(없으면 글 끝)
+                continue
             elif ch in "([{":
                 depth += 1
             elif ch in ")]}":
                 depth -= 1
             elif ch == ";" and depth == 0:
+                break
+            elif ch == chr(10) and depth == 0 and not re.search(r"[,=+\-*/&|?:(]\s*$", cur) and not re.match(r"\s*[.?:+\-*/&|,]", text[i:]):
                 break
             elif ch == "," and depth == 0:
                 parts.append(cur)
@@ -38,12 +49,22 @@ def declared(text):
     return lexical, functions
 
 
+LAZY = re.compile(r"""["'`](/static/[^"'`\s]+?\.js)["'`]""")
+
+
 def page_scripts(html):
-    """화면이 부르는 스크립트(정적 src, need()로 늦게 부르는 파일 전부, 인라인)를 (이름, 글) 목록으로."""
-    lazy = sorted({s for f in STATIC.rglob("*.js") for s in re.findall(r"""need\(\s*["'`](/static/[^"'`]+\.js)""", f.read_text(encoding="utf-8"))})
-    srcs = re.findall(r'<script src="(/static/[^"]+\.js)"', html)
-    found = [(s, (ROOT / s.lstrip("/")).read_text(encoding="utf-8")) for s in dict.fromkeys(srcs + lazy) if (ROOT / s.lstrip("/")).exists()]
-    return found + [(f"inline{i}", t) for i, t in enumerate(re.findall(r"<script>(.*?)</script>", html, re.S))]
+    """화면이 부르는 스크립트(정적 src, <!--include-->한 조각 안의 것, 화면·스크립트 글 안에 이름이 적힌 /static/….js 전부 = need(상수)로 늦게 부르는 것까지, 인라인)를 (이름, 글) 목록으로."""
+    html = re.sub(r"<!--include ([^>]+?)-->", lambda m: (STATIC / m[1].strip()).read_text(encoding="utf-8"), html)
+    inline = [(f"inline{i}", t) for i, t in enumerate(re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", html, re.S))]
+    found, todo = {}, re.findall(r"<script\b[^>]*\bsrc=\"(/static/[^\"]+\.js)\"", html) + LAZY.findall(html)
+    for _, t in inline:
+        todo += LAZY.findall(t)
+    while todo:  # 불러온 스크립트가 또 늦게 부르는 파일까지
+        s = todo.pop(0)
+        if s not in found and (ROOT / s.lstrip("/")).exists():
+            found[s] = (ROOT / s.lstrip("/")).read_text(encoding="utf-8")
+            todo += LAZY.findall(found[s])
+    return list(found.items()) + inline
 
 
 @pytest.mark.parametrize("name", sorted(str(p.relative_to(STATIC)) for p in STATIC.rglob("*.html")))

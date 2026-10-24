@@ -114,15 +114,28 @@ def agg_unsupported(body, expr, extra=()):
     return False
 
 
-def runnable(body, select=True, keep=None, extra=(), fresh=False):
+class Confirm(Exception):
+    """원격 DB에서 사본을 받기 전에 처리 용량 확인이 필요함. response는 화면에 돌려줄 확인 응답(X-Needs-Confirm)."""
+
+    def __init__(self, response):
+        super().__init__("처리 용량 확인이 필요합니다.")
+        self.response = response
+
+
+def runnable(body, select=True, keep=None, extra=(), fresh=False, ask=None):
     """build의 식을 연결이 할 수 있으면 그대로, 못 하는 계산이면(파일 연결의 창 함수, 일부 DB의 펼치기 등) 기간·조건까지의 결과를
     이 PC(held의 DuckDB)에 받아 그 위에서 만든 식(요청의 계열·피벗이 고른 집계를 연결이 못 해도 같다: 중앙값 등). 받을 수 없을 만큼 크면 PC_TOO_BIG.
     keep(쓸 컬럼들)을 주면 식을 그 컬럼으로 줄이고, PC에 받는 사본도 조건을 건 뒤 그 컬럼만 받는다(테이블 전체를 받지 않는다). 계산 줄(calcs)이 있으면 줄이지 않는다.
-    fresh면 이미 받아 둔 사본을 쓰지 않고 새로 받는다(원본 파일·테이블이 바뀐 뒤에도 옛 사본으로 계산하지 않게)."""
+    fresh면 이미 받아 둔 사본을 쓰지 않고 새로 받는다(원본 파일·테이블이 바뀐 뒤에도 옛 사본으로 계산하지 않게).
+    ask(요청 본문)를 주면 원격 DB에서 사본을 새로 받기 전에 처리 용량 확인(server.scan_gate)을 하고, 확인이 필요하면 Confirm을 낸다."""
     keep = None if body.get("calcs") else keep
     expr = slim(build(body, select), keep) if keep else build(body, select)
     if source.compiles(expr) and not agg_unsupported(body, expr, extra):
         return expr
+    con = get_con() if ask is not None else None
+    if ask is not None and held.remote(con) and (fresh or search_key(body, keep) not in held.store["items"]):
+        if response := server.scan_gate(ask, lambda: server.expr_sql(con, slim(filtered(body), keep) if keep else filtered(body))):
+            raise Confirm(response)
     name = run(lambda: held.ensure(search_key(body, keep), slim(filtered(body), keep) if keep else filtered(body), server.state["cancel"], fresh=fresh))[0]
     if name is None:
         raise ValueError(PC_TOO_BIG)
@@ -141,13 +154,14 @@ def numbered(body, limit, offset):
     return parse.apply(expr, [expr[NUMBER].between(offset, offset + limit - 1)], [expr[NUMBER]], cols or [c for c in expr.columns if c != NUMBER])
 
 
-def metric_values(body, names, by=None):
+def metric_values(body, names, by=None, ask=None):
     """검색 식 위에서 지표들을 구하고 한 번씩 센다. ({이름: 지표}, 나눈 값들 또는 None, {이름: 값들}, 더 있는지)."""
     found = metric_file.registry()
     parts = [p for n in names if n in found for p in (found[n]["numerator"], found[n]["denominator"]) if p]
-    expr = runnable(body, select=False, extra=[(p["agg"], p["column"], p.get("opts")) for p in parts])  # 연결이 못 하는 집계(중앙값 등)면 이 PC 사본에서
+    expr = runnable(body, select=False, extra=[(p["agg"], p["column"], p.get("opts")) for p in parts], ask=ask)  # 연결이 못 하는 집계(중앙값 등)면 이 PC 사본에서
     labels, values, more = run(lambda: metric_file.compute(expr, names, found, by or None))
-    use_counts.use_many("metrics", names)
+    with contextlib.suppress(OSError):  # 사용 횟수를 못 써도 구한 값은 돌려준다
+        use_counts.use_many("metrics", names)
     return found, labels, values, more
 
 

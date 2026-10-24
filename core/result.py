@@ -185,8 +185,10 @@ def fields(expr):
 
 
 def get_rows(expr, limit, offset=0):
-    """offset행을 건너뛰고 limit행."""
-    return expr.limit(limit, offset=offset).to_polars(**streaming(expr))
+    """offset행을 건너뛰고 limit행. streaming은 표 하나를 정렬해 자를 때만 쓴다: 정렬이 없거나 조인·이어붙이기가 있으면 streaming은 행 순서가 실행마다 달라 쪽마다 행이 겹치고 빠진다."""
+    ops = ibis.expr.operations
+    single_sorted = isinstance(expr.op(), ops.Sort) and not expr.op().find((ops.JoinChain, ops.Union))
+    return expr.limit(limit, offset=offset).to_polars(**streaming(expr, single_sorted))
 
 
 def can_offset(expr):

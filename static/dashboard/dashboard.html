@@ -117,7 +117,8 @@ const ctl = new DashCtl($("d-ctl"), {
 
 // ---------- 저장: 카드·팔레트가 바뀌면 열어 둔 대시보드에 자동으로 쓴다(값(data)만 바뀐 것은 다시 구할 때 저장) ----------
 const typing = () => $("d-grid").contains(document.activeElement) && (isTyping(document.activeElement) || document.activeElement.tagName === "SELECT");  // isTyping: draft.js
-const snapshot = () => JSON.stringify([board.palette, board.star, board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; })]);
+const snapshot = () => JSON.stringify([board.palette, board.star, board.cards.map(cardSettings)]);
+const cardSettings = c => { const { data, ...rest } = DashBoard.plain(c); return rest; };  // 카드의 설정(값 data는 뺀다)
 async function save() {  // 저장했으면(저장할 대시보드가 없어도) true, 실패하면 false
   clearTimeout(saveTimer);
   if (!dashId) return true;
@@ -215,6 +216,7 @@ async function openDash(id) {
     panel?.close();
     board.palette = d.palette;
     $("d-palette").value = d.palette.join(", ");
+    board.animated = false;  // 같은 보드로 여는 다른 대시보드도 첫 그리기는 움직인다
     board.set(d.cards.map(needsValues));
     lastSaved = snapshot();
     valuesDirty = false;
@@ -339,7 +341,10 @@ const panelHost = { board, menu: null, menuRoot, popRoot, menuTarget: null, chan
   recompute: async card => {
     const id = dashId, d = await api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: card.data?.since ? { since: card.data.since } : {} }, ctx: board.ctx() });
     if (dashId !== id || !board.cards.includes(card)) return;  // 기다리는 사이 다른 대시보드로 옮겼다
-    if (board.ctx()) showLive(card, d.data);  // 기간을 건 채 구한 값은 화면에만(저장하지 않는다. docs/dashboard.md)
+    if (board.ctx()) {  // 기간을 건 채 구한 값은 화면에만(저장하지 않는다. docs/dashboard.md)
+      showLive(card, d.data);
+      if (JSON.stringify(cardSettings(card)) !== JSON.stringify(JSON.parse(lastSaved || "[0,0,[]]")[2].find(c => c.id === card.id))) card.stored = {};  // 마지막 저장 뒤 설정을 바꿨으면 저장된 값은 옛 설정의 것이니 비운다(다음에 다시 구한다)
+    }
     else {
       card.data = d.data;
       valuesDirty = true;  // 값도 함께 쓴다(snapshot은 값을 빼므로 따로 표시하고 저장을 예약한다)

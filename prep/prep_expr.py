@@ -86,6 +86,12 @@ def shape(con, recipe, table=None, info=None, refs=None):
     names = list(t.columns)  # 앞 단계가 만든 파생 컬럼에는 ops를 적용하지 않는다
     by = {fill["by"] for spec in specs.values() if isinstance(fill := (spec.get("ops") or {}).get("fill"), dict) and fill.get("how") in ("prev", "next") and fill.get("by") in names}
     names = [n for n in names if n in by] + [n for n in names if n not in by]  # fill prev·next의 by 컬럼을 먼저 처리해, 타입 변환 등을 받은 뒤의 값으로 순서를 정하게(컬럼 순서로 결과가 달라지지 않게)
+    pure = prep_ops.OPS_NAMES.index("flag")  # flag 앞의 일(trim…type)은 값마다 바꾸는 순수 변환
+    pre = [n for n in by if n in specs and "outlier" not in (specs[n].get("ops") or {})]  # outlier가 있는 by 컬럼은 시작 표(base)에도 같은 일을 해야 해서 그대로 둔다
+    for n in pre:
+        ops = specs[n].get("ops") or {}
+        t = prep_ops.apply_ops(t, n, {k: v for k, v in ops.items() if k in prep_ops.OPS_NAMES and prep_ops.OPS_NAMES.index(k) < pure})
+        specs = {**specs, n: {**specs[n], "ops": {k: v for k, v in ops.items() if k not in prep_ops.OPS_NAMES[:pure]}}}  # rows·rest에서는 이미 한 일을 건너뛴다. by 컬럼 자체의 통계 채우기(fill mean 등)는 행 줄이기 뒤라 다른 컬럼의 rows 단계 fill은 그 전 값으로 정렬한다
     start = t  # 행을 뺄지 정하는 통계(outlier 경계)는 이 표로 구한다(컬럼 순서와 무관). 채울 값(fill mean 등)은 rest에서 행을 다 뺀 뒤의 표로 구한다
     for part in ("rows", "rest"):  # 행을 줄이는 일(fill·outlier drop)을 모든 컬럼에 먼저 하고 나서 통계를 쓰는 일을 한다(컬럼 순서로 결과가 달라지지 않게)
         for name in names:

@@ -51,10 +51,15 @@ def finite(c):
     return ibis.ifelse(x.isnan() | x.isinf(), ibis.null().cast("float64"), x) if c.type().is_floating() else x
 
 
-def values(t, c, more=None):
-    """값 빈도: 행이 많은 TOP_VALUES개 값과 그 수, 빈 값 수, 그 밖의 값 수. more(집계 식 dict)를 주면 같은 집계에 실어 구하고 (값 빈도, more의 값들)을 돌려준다."""
+def values_top(t, c):
+    """행이 많은 TOP_VALUES개 값과 그 수(빈 값 제외)의 행들."""
     top = rows(t.group_by(c.name("value")).aggregate(n=t.count()).order_by([ibis.desc("n"), "value"]).limit(TOP_VALUES + 1))
-    top = [r for r in top if r["value"] is not None][:TOP_VALUES]
+    return [r for r in top if r["value"] is not None][:TOP_VALUES]
+
+
+def values(t, c, more=None, top=None):
+    """값 빈도: 행이 많은 TOP_VALUES개 값과 그 수, 빈 값 수, 그 밖의 값 수. more(집계 식 dict)를 주면 같은 집계에 실어 구하고 (값 빈도, more의 값들)을 돌려준다. top은 values_top을 미리 구했을 때."""
+    top = values_top(t, c) if top is None else top
     counted = one(t.aggregate(total=t.count(), nulls=c.isnull().sum(), unique=c.nunique(where=c.notnull()), **{f"more_{k}": v for k, v in (more or {}).items()}))  # 질의 한 번
     shown = sum(r["n"] for r in top)
     found = {"labels": [str(r["value"]) for r in top], "counts": [r["n"] for r in top], "nulls": counted["nulls"] or 0,
@@ -74,10 +79,13 @@ def distribution(t, column):
         return out
     x = c.cast("float64")
     more = dict(n=x.count(), min=x.min(), max=x.max(), mean=x.mean(), q1=x.quantile(0.25), median=x.quantile(0.5), q3=x.quantile(0.75))
+    top = values_top(t, c)  # 값 빈도 조회는 한 번만(집계를 다시 해도 다시 읽지 않는다)
     try:
-        out["values"], s = values(t, c, {**more, "std": x.std()})  # 값 빈도의 집계에 요약 통계를 같이 실어 질의를 아낀다
-    except Exception:  # ±1.7e308 같은 값이면 표준편차가 범위를 넘어 질의가 실패한다: 표준편차만 빼고 다시(그것도 실패하면 그대로 오류)
-        out["values"], s = values(t, c, more)
+        out["values"], s = values(t, c, {**more, "std": x.std()}, top)  # 값 빈도의 집계에 요약 통계를 같이 실어 질의를 아낀다
+    except Exception as e:  # ±1.7e308 같은 값이면 표준편차가 범위를 넘어 질의가 실패한다: 그때만 표준편차를 빼고 집계를 다시. 취소·시간 초과 등 다른 오류는 그대로 올린다
+        if "out of range" not in str(e).lower():
+            raise
+        out["values"], s = values(t, c, more, top)
         s["std"] = None
     out["stats"] = s
     if not s["n"]:
@@ -131,17 +139,17 @@ def scatter(t, x, y):
     return {"x": x, "y": y, "points": [[p["x"], p["y"]] for p in found], "n": corr["n"], "r": corr["matrix"][0][1]}
 
 
-def finite_value(t, value):
-    """집계할 값 컬럼이 실수면 NaN·무한을 빈 값으로 바꾼 표(하나가 그룹 값 전체를 빈 값으로 만들지 않게). 아니면 그대로."""
-    return t.mutate(**{value: finite(t[value])}) if value in t.columns and t[value].type().is_floating() else t
+def finite_value(t, value, into=None):
+    """집계할 값 컬럼이 실수면 NaN·무한을 빈 값으로 바꾼 표(하나가 그룹 값 전체를 빈 값으로 만들지 않게). 아니면 그대로. into를 주면 원래 컬럼은 두고 into 컬럼에 바꾼 값을 둔다."""
+    return t.mutate(**{into or value: finite(t[value])}) if value in t.columns and t[value].type().is_floating() else t
 
 
 def groups(t, by, value, agg, opts=None):
     """그룹 비교: by의 값마다 value의 agg(count·sum·mean). 행이 많은 MAX_GROUPS개 그룹을 값이 큰 순으로."""
     g = column_of(t, by, what="그룹 컬럼")
-    t = finite_value(t, value)
+    t = finite_value(t, value, "__finite" if by == value else None)  # 같은 컬럼으로 묶으면 그룹은 원래 값으로 두고 집계에만 바꾼 값을 쓴다
     g = t[by]
-    metric = chart_metric(t, value, agg, opts)
+    metric = chart_metric(t, "__finite" if "__finite" in t.columns else value, agg, opts)
     found = rows(t.group_by(g.name("group")).aggregate(v=metric, n=t.count()).order_by([ibis.desc("n"), "group"]).limit(MAX_GROUPS + 1))
     more = len(found) > MAX_GROUPS
     found = found[:MAX_GROUPS]

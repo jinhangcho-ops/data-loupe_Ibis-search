@@ -49,8 +49,8 @@ def within(seconds, work, late, wake=None, drop=lambda value: None, stop=lambda:
     def run():
         try:
             value = {"value": work()}
-        except Exception as e:
-            value = {"error": e}
+        except BaseException as e:  # Polars 패닉(PanicException)은 BaseException이라 Exception만 잡으면 ended·wake가 안 켜져 호출자가 끝까지 막힌다. 프로그램 종료(KeyboardInterrupt·SystemExit)는 연결 스레드가 아니라 메인 스레드에서 오므로 여기서 삼켜도 종료를 막지 않는다.
+            value = {"error": e if isinstance(e, Exception) else RuntimeError(f"데이터 엔진 내부 오류: {e}")}
         with lock:  # 포기와 끝이 겹쳐도 결과는 돌려주거나 버리거나 둘 중 하나만 한다.
             if not gave_up.is_set():
                 found.update(value)
@@ -249,7 +249,7 @@ def stamp_of(path):
 
 
 def read_csv_table(con, path, name):
-    """CSV를 UTF-8로 맞춰 name 테이블로 등록한다. 모든 CSV의 (경로, mtime, 크기, 쓰는 파일)을 기록한다(쓰는 파일은 CP949라서 바꾼 임시 사본이거나 UTF-8 원본 그대로).
+    """CSV를 UTF-8로 맞춰 name 테이블로 등록한다. 모든 CSV(와 open_flat_files가 Parquet도)의 (경로, mtime, 크기, 쓰는 파일)을 기록한다(쓰는 파일은 CP949라서 바꾼 임시 사본이거나 UTF-8 원본 그대로).
     refresh_csv가 이 기록으로 원본이 바뀌었는지 본다(UTF-8이던 것이 CP949로 다시 저장된 경우도 잡는다). 새 표를 등록한 뒤에는 예전 사본(임시 폴더 안의 것만)을 지운다."""
     stamp = stamp_of(path)
     use = utf8_csv(path, con)
@@ -274,7 +274,7 @@ CHECK_EVERY = 1.0  # refresh_csv가 CSV를 다시 확인하는 최소 간격(초
 
 
 def refresh_csv(con):
-    """CSV 원본의 (mtime, 크기)가 열 때와 달라졌으면 다시 변환해 같은 이름으로 다시 등록한다(CP949 임시본이 옛 값에 머물지 않게).
+    """CSV·Parquet 원본의 (mtime, 크기)가 열 때와 달라졌으면 다시 변환해 같은 이름으로 다시 등록한다(CP949 임시본이 옛 값에 머물지 않게).
     표를 꺼낼 때(server.any_table)와 SQL을 식으로 만들 때(sql_exec.to_expr: SQL 탭·검사·내보내기) 부른다. 파일 연결이 아니거나 CSV가 없으면 아무 일도 하지 않는다.
     파일마다 따로 처리한다: 다시 변환하지 못한 표(UTF-16로 다시 저장 등)는 그 표를 읽을 때만 그 이유로 오류가 나게 하고, 다른 표는 그대로 쓴다.
     다시 등록했거나 실패 표로 바꾼 표의 이름 목록을 돌려준다(호출한 쪽이 그 표에 기억해 둔 옛 식을 버리게).
@@ -293,7 +293,10 @@ def refresh_csv(con):
         gen = con.__dict__.setdefault("csv_gen", {})
         gen[name] = gen.get(name, 0) + 1  # 식을 기억해 둔 쪽(server.any_table)이 어느 쪽이 먼저 불렀든 옛 식을 알아보게
         try:
-            read_csv_table(con, path, name)
+            if kind_of(path) == "parquet":
+                con.read_parquet(path, table_name=name)
+            else:
+                read_csv_table(con, path, name)
         except Exception as e:
             con.csv_sources[name] = (path, now, copy)  # 같은 상태로 되풀이해 실패하지 않게 새 스탬프를 기록한다
             fail_table(con, name, str(e))
@@ -306,7 +309,10 @@ def fail_table(con, name, message):
     def fail(df):
         raise ValueError(message)
     import polars as pl
-    schema = con._tables[name].collect_schema()
+    try:
+        schema = con._tables[name].collect_schema()
+    except BaseException:  # 반쯤 쓴 Parquet을 다시 읽다 나는 오류(패닉 포함)는 빈 스키마로 대신한다
+        schema = {}
     con._add_table(name, pl.LazyFrame(schema=schema).map_batches(fail, schema=schema, streamable=True))  # 바뀐 원본은 읽지 않는다(읽으면 스키마가 달라 안내 대신 SchemaError)
 
 
@@ -321,7 +327,9 @@ def open_flat_files(paths):
     for p, name in zip(paths, table_names(paths)):
         kind = kind_of(p)
         if kind == "parquet":
+            stamp = stamp_of(p)
             con.read_parquet(p, table_name=name)
+            con.__dict__.setdefault("csv_sources", {})[name] = (p, stamp, p)  # 다시 써도 알아보게(refresh_csv). 쓰는 파일은 원본 그대로라 drop_copy가 지우지 않는다
         elif kind == "csv":
             read_csv_table(con, p, name)
         elif kind == "excel":

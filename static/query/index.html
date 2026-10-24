@@ -706,7 +706,7 @@ function gridSpec(data, origins = {}) {
     return `<th class="${[c === sorted[0] && "sorted", number && "num"].filter(Boolean).join(" ")}">${esc(c)}${arrow}${from}</th>`;
   }).join("");
   const source = c => c === "출처" && origins[c] === "이어붙인 테이블";
-  return { columns: data.columns, rows: data.rows, head, row: (r, want, max) => data.columns.map(c => source(c) ? `<td class="src">${lit(String(r[c] ?? ""), want)}</td>` : cell(r[c], want, max)).join("") };
+  return { columns: data.columns, rows: data.rows, head, text: (r, c) => source(c) ? String(r[c] ?? "") : undefined, row: (r, want, max) => data.columns.map(c => source(c) ? `<td class="src">${lit(String(r[c] ?? ""), want)}</td>` : cell(r[c], want, max)).join("") };
 }
 // 검색과 [SQL 보기]가 똑같이 보내는 내용. 행 수는 입력한 그대로 보낸다. 0·음수·빈칸은 서버가 안내한다.
 const query = offset => ({ ...state(), limit: $("limit").value, offset });

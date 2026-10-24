@@ -328,6 +328,8 @@ def edge_problem(graph, a, b, schemas, at=None):
     have = inputs(graph, b)
     if kb == "union" and ka != "table":
         return problem("rank", "이어붙이기에는 테이블끼리만 이을 수 있어요.")
+    if kb == "union" and params(nodes[a]).get("table") in [params(nodes[i]).get("table") for i in have]:
+        return problem("union_same", "이어붙일 테이블은 기준 테이블과 다르고 서로 겹치지 않아야 해요.")
     if kb == "join" and len(have) >= 2:
         return problem("shape", "조인에는 왼쪽·오른쪽 두 곳만 이을 수 있어요.")
     if kb not in ("join", "union") and have:
