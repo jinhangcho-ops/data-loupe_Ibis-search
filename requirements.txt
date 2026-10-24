@@ -1,4 +1,11 @@
 ibis-framework[duckdb,polars]==12.0.0
+# Ibis가 버전을 열어 두는 데이터 라이브러리도 시험한 버전으로 고정한다(새 메이저 버전이 들어오면 exe가 시험하지 않은 조합으로 빌드된다)
+duckdb==1.5.6
+polars==1.44.2
+pyarrow==25.0.1
+pandas==3.0.6
+numpy==2.5.3
+sqlglot==30.21.0
 fastexcel==0.21.0
 flask==3.1.3
 pywebview==6.2.1
