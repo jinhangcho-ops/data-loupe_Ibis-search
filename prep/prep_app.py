@@ -209,7 +209,7 @@ def formula_reads_all(expr):
 def computes_stats(recipe):
     """recipe에 통계를 내는 일이 있는지: fill mean·median·mode·prev·next(전체 정렬), outlier iqr·std, scale standard·minmax·log(최솟값 확인), pca(전체 집계), rare(전체 GROUP BY), label·onehot(서로 다른 값 읽기),
     counts(서로 다른 값 읽기), 중복 제거(dedupe), 정렬(sorts), 집계·창 함수가 든 계산식(표 전체 window)."""
-    if recipe.get("dedupe") or recipe.get("pca") or recipe.get("sorts"):
+    if recipe.get("dedupe") or recipe.get("pca") or recipe.get("sorts") or recipe.get("downcast"):  # downcast는 컬럼마다 최솟값·최댓값을 구한다
         return True
     if any(isinstance(f, dict) and isinstance(f.get("expr"), str) and formula_reads_all(f["expr"]) for f in recipe.get("formulas") or [] if isinstance(f, dict)):
         return True

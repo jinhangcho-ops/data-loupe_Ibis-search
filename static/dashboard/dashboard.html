@@ -140,7 +140,7 @@ async function save() {  // 저장했으면(저장할 대시보드가 없어도)
 // 카드 값(data)은 되돌리기 대상이 아니다: 지운 카드를 되살리면 마지막으로 본 값을 쓴다. 대시보드 id·카드 id → 그 카드의 마지막 값. dashState가 0.5초마다 갱신한다.
 const lastVals = new Map();
 const sigOf = c => JSON.stringify([c.kind, c.source]);  // 값(data)이 어떤 종류·원천에서 나왔는지. 설정을 바꾸면 값도 다시 구해지므로 되돌릴 때 이 짝이 어긋나는지 본다
-const rememberVals = () => board.cards.forEach(c => lastVals.set(`${dashId}/${c.id}`, { data: c.data, liveData: c.liveData, stored: c.stored, sig: sigOf(c) }));
+const rememberVals = () => { lastVals.forEach((_, k) => { if (!k.startsWith(`${dashId}/`)) lastVals.delete(k); }); board.cards.forEach(c => lastVals.set(`${dashId}/${c.id}`, { data: c.data, liveData: c.liveData, stored: c.stored, sig: sigOf(c) })); };  // 다른 대시보드의 값은 버린다(지운 카드 값은 이 대시보드에 있는 동안만 남는다)
 const dashState = () => dashId ? (rememberVals(), { id: dashId, palette: board.palette, north_star: board.star, cards: board.cards.map(c => { const { data, ...rest } = DashBoard.plain(c); return rest; }) }) : null;
 let restoreSeq = 0;
 async function restoreDash(d) {
@@ -339,9 +339,12 @@ const panelHost = { board, menu: null, menuRoot, popRoot, menuTarget: null, chan
   recompute: async card => {
     const id = dashId, d = await api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: card.data?.since ? { since: card.data.since } : {} }, ctx: board.ctx() });
     if (dashId !== id || !board.cards.includes(card)) return;  // 기다리는 사이 다른 대시보드로 옮겼다
-    card.data = d.data;
-    valuesDirty = true;  // 값도 함께 쓴다(snapshot은 값을 빼므로 따로 표시하고 저장을 예약한다)
-    valuesSeq++;
+    if (board.ctx()) showLive(card, d.data);  // 기간을 건 채 구한 값은 화면에만(저장하지 않는다. docs/dashboard.md)
+    else {
+      card.data = d.data;
+      valuesDirty = true;  // 값도 함께 쓴다(snapshot은 값을 빼므로 따로 표시하고 저장을 예약한다)
+      valuesSeq++;
+    }
     needsValues(card);
     board.draw();
     scheduleSave();
@@ -429,7 +432,8 @@ async function refreshDash() {
     if (isShell(card)) continue;  // 데이터를 아직 정하지 않은 빈 카드
     const { schema, table } = card.source;
     try {
-      card.data = (await timed(card.kind === "metric" ? "metric" : "chart", () => api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: card.data?.since ? { since: card.data.since } : {} }, ctx: board.ctx() }), { schema, base: table })).data;
+      const { data } = await timed(card.kind === "metric" ? "metric" : "chart", () => api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: card.data?.since ? { since: card.data.since } : {} }, ctx: board.ctx() }), { schema, base: table });
+      if (board.ctx()) showLive(card, data); else card.data = data;  // 기간을 건 채 구한 값은 화면에만
     } catch (e) { failed.push(`${card.title}: ${e.message}`); }
     needsValues(card);
     board.draw();

@@ -383,13 +383,13 @@ def check_view(view):
 
 
 def check_source(source):
-    """다시 구할 기록: key·label(연결), schema·table, 그리고 body(chart·metric)·recipe+analysis(analysis)·metric_id·flow_id. 계정·비밀번호 항목은 거부한다."""
+    """다시 구할 기록: key·label(연결), schema·table, 그리고 body(chart·metric)·recipe+analysis(analysis)·metric_id·flow_id. 계정·비밀번호 항목은 거부한다(recipe·analysis 안의 컬럼 이름은 키여도 검사하지 않는다)."""
     source = {} if source is None else source
     if not isinstance(source, dict):
         raise ValueError("다시 구할 기록(source)은 객체여야 합니다.")
     if unknown := set(source) - {"key", "label", "schema", "table", "body", "recipe", "analysis", "metric_id", "flow_id", "full", "sample", "date"}:
         raise ValueError(f"source에 쓸 수 없는 항목이 있습니다: {', '.join(sorted(unknown))}")
-    no_secrets(source, "source")
+    no_secrets({k: v for k, v in source.items() if k not in ("recipe", "analysis")}, "source")  # recipe·analysis 안에는 컬럼 이름이 키로 들어간다(user 컬럼이 있는 표도 저장해야)
     out = {name: text(source.get(name), f"source.{name}", 500) for name in ("key", "label", "schema", "table", "metric_id", "flow_id", "date")}
     out["key"] = canon_key(out["key"])  # 예전 모양의 열쇠도 지금 모양으로
     now = current_source()
@@ -598,7 +598,9 @@ def load(fresh=False):
         info = path.stat()
         stamp = (str(path), info.st_mtime_ns, info.st_size)
         if CACHE["stamp"] != stamp:
-            found = settings.read(FILE) or {}
+            found = settings.read_file(path)
+            from_backup = found is None  # 잠깐 못 읽어 한 세대 전 .bak에서 온 결과는 진짜 파일의 표식으로 캐시하지 않는다: 풀린 뒤에도 옛 값이 남는다
+            found = found or settings.read(FILE) or {}
             blob = found.get("blob") if found.get("v") == VERSION else None
             opened = credentials.reveal(blob) if isinstance(blob, str) else None
             try:
@@ -607,6 +609,8 @@ def load(fresh=False):
                 dashboards = None
             if not isinstance(dashboards, dict):
                 return {"dashboards": {}, "locked": True}
+            if from_backup:
+                return {"dashboards": tidy(dashboards), "locked": False}
             CACHE.update(stamp=stamp, text=opened, dashboards=tidy(dashboards))
         return {"dashboards": tidy(unpack(CACHE["text"])["dashboards"]) if fresh else CACHE["dashboards"], "locked": False}
 
@@ -621,8 +625,11 @@ def write(dashboards):
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_name(path.name + ".tmp")
     temp.write_text(json.dumps({"v": VERSION, "blob": credentials.protect(body)}), encoding="utf-8")
-    settings.backup(path)
-    os.replace(temp, path)
+    try:
+        settings.backup(path)
+        settings.retrying(lambda: os.replace(temp, path))
+    finally:
+        temp.unlink(missing_ok=True)
     CACHE["stamp"] = None  # 같은 시각 단위 안에 같은 크기로 다시 쓰면 (경로, mtime, 크기)가 같아 옛 캐시를 쓰게 된다: 다음 load가 다시 읽게
     # shortcut: 다른 프로세스(예약 최신화)가 같은 틱에 같은 크기로 쓰면 여전히 못 알아챈다. 그런 일이 보이면 파일 내용 해시를 stamp에 넣는다
 

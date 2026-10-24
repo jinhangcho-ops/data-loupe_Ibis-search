@@ -85,10 +85,11 @@ function Undo(get, restore, { max = 50, quiet = 600, poll = 500 } = {}) {
     const popped = from !== back || s === base;
     const target = popped ? from.pop() : base;  // 쌓기 전의 편집은 그 편집만 취소
     if (target === undefined) return false;
+    const old = popped ? null : to.splice(0);  // 쌓기 전의 새 편집을 취소하면 옛 다시 하기는 이 편집과 이어지지 않으니 비운다
     push(to, s);
     busy = true;
     try { await restore(JSON.parse(target)); }
-    catch (e) { to.pop(); if (popped) from.push(target); why = e?.message || String(e); return false; }
+    catch (e) { to.pop(); if (popped) from.push(target); else to.push(...old); why = e?.message || String(e); return false; }
     finally { busy = false; }
     base = seen = snap() ?? target;
     return true;

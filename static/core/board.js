@@ -57,6 +57,7 @@ class Board {
     else if (this.grid.offsetParent) {
       const colors = themeColors(document.documentElement.dataset.theme);
       this.grid.replaceChildren(...this.cards.map(card => { try { return this.cardBox(card, colors); } catch (e) { return this.errorBox(card, e); } }));  // 카드 하나가 던져도 나머지는 그린다
+      this.animated = this.charts.length > 0;
       if (typeof Chart === "undefined" && this.cards.some(c => !c.note && !c.paint)) need(CHART_JS).then(() => this.draw());  // 첫 차트: 라이브러리를 불러온 뒤 다시 그린다
     }
     this.changed?.();
@@ -80,7 +81,7 @@ class Board {
       el("div", { className: "bhead" }, el("i", { className: "bcheck" }), title, remove), body);
     box.onclick = () => this.toggle(card, box);
     card.canvas = canvas;
-    if (!card.note && !card.paint && typeof Chart !== "undefined") this.charts.push(new Chart(canvas, card.config(colors)));
+    if (!card.note && !card.paint && typeof Chart !== "undefined") this.charts.push(new Chart(canvas, card.config(colors, this.animated ? { animation: false } : undefined)));  // 첫 그리기 뒤의 다시 그리기는 애니메이션 없이(카드를 고칠 때마다 1초씩 움직이지 않게)
     return box;
   }
   toggle(card, box) {

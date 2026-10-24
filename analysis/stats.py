@@ -73,19 +73,24 @@ def distribution(t, column):
         out["values"] = values(t, c)
         return out
     x = c.cast("float64")
-    out["values"], s = values(t, c, dict(n=x.count(), min=x.min(), max=x.max(), mean=x.mean(), std=x.std(),
-                                         q1=x.quantile(0.25), median=x.quantile(0.5), q3=x.quantile(0.75)))  # 값 빈도의 집계에 요약 통계를 같이 실어 질의를 아낀다
+    more = dict(n=x.count(), min=x.min(), max=x.max(), mean=x.mean(), q1=x.quantile(0.25), median=x.quantile(0.5), q3=x.quantile(0.75))
+    try:
+        out["values"], s = values(t, c, {**more, "std": x.std()})  # 값 빈도의 집계에 요약 통계를 같이 실어 질의를 아낀다
+    except Exception:  # ±1.7e308 같은 값이면 표준편차가 범위를 넘어 질의가 실패한다: 표준편차만 빼고 다시(그것도 실패하면 그대로 오류)
+        out["values"], s = values(t, c, more)
+        s["std"] = None
     out["stats"] = s
     if not s["n"]:
         return out
     low, high = s["min"], s["max"]
-    width = (high - low) / BINS or 1
+    half = 2.0 if math.isinf(high - low) else 1.0  # 최대-최소가 실수 범위를 넘으면 반으로 줄여 구간을 나눈다
+    width = (high / half - low / half) / BINS or 1
     kept = t.filter(x.notnull())
-    bucket = ((kept[column].cast("float64") - low) / width).floor().cast("int64")
+    bucket = ((kept[column].cast("float64") / half - low / half) / width).floor().cast("int64")
     bucket = ibis.ifelse(bucket >= BINS, BINS - 1, bucket)
     found = {r["b"]: r["n"] for r in rows(kept.group_by(bucket.name("b")).aggregate(n=kept.count()))}
     bins = BINS if high > low else 1
-    out["histogram"] = {"edges": [low + width * i for i in range(bins + 1)], "counts": [found.get(i, 0) for i in range(bins)]}
+    out["histogram"] = {"edges": [low + width * i for i in range(bins + 1)] if half == 1 else [low * (1 - i / bins) + high * (i / bins) for i in range(bins + 1)], "counts": [found.get(i, 0) for i in range(bins)]}
     iqr = s["q3"] - s["q1"]
     fence_low, fence_high = s["q1"] - 1.5 * iqr, s["q3"] + 1.5 * iqr
     inside = (x >= fence_low) & (x <= fence_high)
@@ -126,9 +131,16 @@ def scatter(t, x, y):
     return {"x": x, "y": y, "points": [[p["x"], p["y"]] for p in found], "n": corr["n"], "r": corr["matrix"][0][1]}
 
 
+def finite_value(t, value):
+    """집계할 값 컬럼이 실수면 NaN·무한을 빈 값으로 바꾼 표(하나가 그룹 값 전체를 빈 값으로 만들지 않게). 아니면 그대로."""
+    return t.mutate(**{value: finite(t[value])}) if value in t.columns and t[value].type().is_floating() else t
+
+
 def groups(t, by, value, agg, opts=None):
     """그룹 비교: by의 값마다 value의 agg(count·sum·mean). 행이 많은 MAX_GROUPS개 그룹을 값이 큰 순으로."""
     g = column_of(t, by, what="그룹 컬럼")
+    t = finite_value(t, value)
+    g = t[by]
     metric = chart_metric(t, value, agg, opts)
     found = rows(t.group_by(g.name("group")).aggregate(v=metric, n=t.count()).order_by([ibis.desc("n"), "group"]).limit(MAX_GROUPS + 1))
     more = len(found) > MAX_GROUPS
@@ -145,7 +157,7 @@ def trend(t, column, unit, value, agg, opts=None):
         raise ValueError("묶음 단위는 day, week, month 중 하나입니다.")
     d = column_of(t, column, "date")
     chart_metric(t, value, agg, opts)  # 고른 값·집계를 먼저 검사한다
-    s = t.filter(d.notnull())
+    s = finite_value(t, value).filter(d.notnull())
     metric = chart_metric(s, value, agg, opts)
     found = rows(s.group_by(s[column].truncate(UNITS[unit]).name("period")).aggregate(v=metric).order_by("period").limit(MAX_PERIODS + 1))
     return {"column": column, "unit": unit, "value": value, "agg": agg, "labels": [str(r["period"])[:10] for r in found[:MAX_PERIODS]],

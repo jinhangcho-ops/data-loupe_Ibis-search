@@ -544,7 +544,9 @@ def half_up(col, digits):
     small = scaled < 2.0**52
     s = small.ifelse(scaled, 0.0)
     f = s.floor()
-    mag = small.ifelse(((s - f) >= 0.5).ifelse(f + 1, f) / scale, scaled / scale)
+    divisor = scale + s * 0.0  # Polars는 행이 2개 이상이고 나누는 수가 상수면 역수를 곱해 1234.5678 → 1234.6000000000001처럼 찌꺼기가 생긴다: 컬럼처럼 보이게 해 진짜 나눗셈을 하게 한다(값은 같다. round로 다시 맞추는 방법은 큰 값에서 결과를 바꾼다)
+    rounded = ((s - f) >= 0.5).ifelse(f + 1, f) / divisor
+    mag = small.ifelse(rounded, scaled / scale)
     return (col.abs() < 2.0**52).ifelse((col < 0).ifelse(-mag, mag), col)
 
 

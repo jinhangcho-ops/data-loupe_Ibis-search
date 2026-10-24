@@ -305,8 +305,9 @@ def fail_table(con, name, message):
     """name 표를 읽으면 message 오류가 나는 표로 바꾼다(스키마는 그대로). 다른 표는 건드리지 않는다."""
     def fail(df):
         raise ValueError(message)
-    old = con._tables[name]
-    con._add_table(name, old.map_batches(fail, schema=old.collect_schema(), streamable=True))
+    import polars as pl
+    schema = con._tables[name].collect_schema()
+    con._add_table(name, pl.LazyFrame(schema=schema).map_batches(fail, schema=schema, streamable=True))  # 바뀐 원본은 읽지 않는다(읽으면 스키마가 달라 안내 대신 SchemaError)
 
 
 @on_worker

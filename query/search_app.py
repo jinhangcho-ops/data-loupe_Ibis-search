@@ -465,7 +465,7 @@ def save_virtual():
     found = sql_exec.save_virtual(key, name, definition, source.list_tables(con), verify)
     if definition is None:
         use_counts.forget("virtual_tables", f"{key}|{name.strip()}")
-    server.state["rows"].pop((None, name.strip()), None)  # 정의가 바뀌었으면 세어 둔 행 수는 버린다
+    server.state["rows"].clear()  # 정의가 바뀌었으면 세어 둔 행 수는 모두 버린다(가상 테이블이 다른 가상 테이블을 쓸 수 있다)
     return virtual_view(found)
 
 

@@ -71,10 +71,11 @@ def dash_get():
 
 @app.post("/api/dash")
 def dash_save():
-    """대시보드 하나를 저장한다(id가 없으면 새 대시보드). 저장한 모양과 새 목록을 돌려준다."""
+    """대시보드 하나를 저장한다(id가 없으면 새 대시보드). 저장한 모양(카드 값 data는 뺀 것)과 새 목록을 돌려준다."""
     dash_refresh.check_dashboard_every(request.json)
     saved = dash_store.save_dashboard(request.json)
-    return jsonify(dashboard=saved, **dash_store.listing())
+    slim = {**saved, "cards": [{k: v for k, v in c.items() if k != "data"} for c in saved["cards"]]}  # 화면은 보낸 카드를 이미 갖고 있다: 카드 값(data, 수 MB)은 돌려주지 않는다
+    return jsonify(dashboard=slim, **dash_store.listing())
 
 
 @app.post("/api/dash/delete")

@@ -6,7 +6,7 @@ import sys
 
 from core import drivers, settings
 
-moved_failed = settings.migrate()  # 예전 이름(ibis_search)의 설정 폴더를 새 폴더로 옮긴다. 설정을 처음 읽기 전, 단일 실행 잠금 전, 드라이버 폴더(그 안)를 쓰기 전에.
+moved_failed = settings.migrate() or settings.left_behind()  # 한 번 실패한 뒤 옛 폴더가 남아 있으면 안내를 다시 띄운다. 예전 이름(ibis_search)의 설정 폴더를 새 폴더로 옮긴다. 설정을 처음 읽기 전, 단일 실행 잠금 전, 드라이버 폴더(그 안)를 쓰기 전에.
 if moved_failed and sys.argv[1:2] not in (["--run"], ["--browser"], ["--move-tasks"]):  # 옮기지 못한 이유를 알리고 새 폴더로 계속한다(사용자가 빈 앱만 보고 영문을 모르지 않게). 다음 시작 때 다시 옮기려 한다. 예약 실행·수집 창은 창이 멈추므로 새 폴더의 실패 표식 기록만 한다.
     import ctypes
     ctypes.windll.user32.MessageBoxW(None, moved_failed, "Data Loupe", 0x30)

@@ -66,8 +66,10 @@ def pairs(t, a, b):
 def attach(t, keys, frame, new):
     """t에 frame(열: __k0, __k1, 새 컬럼들)을 키로 왼쪽 조인한다(키 열은 뺀다). 키가 비어 있거나 frame에 없는 행은 새 컬럼이 빈 값이다."""
     small = ibis.memtable(frame)
+    keep = t.columns
+    t = t.mutate(__ord=ibis.row_number())  # 조인이 행 순서를 바꾸므로 순번을 붙였다가 조인 뒤 그 순으로 되돌린다
     joined = t.left_join(small, [t[k].cast("float64") == small[f"__k{i}"] for i, k in enumerate(keys)])
-    return joined.select(*[joined[c] for c in t.columns], *[joined[n] for n in new])
+    return joined.select(*[joined[c] for c in keep], *[joined[n] for n in new], joined["__ord"]).order_by("__ord").drop("__ord")
 
 
 def reference(step, refs, columns, what):

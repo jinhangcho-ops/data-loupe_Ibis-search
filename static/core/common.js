@@ -64,33 +64,135 @@ const toggleDrop = (button, pop) => { button.onclick = e => { e.stopPropagation(
 const isNested = v => v !== null && typeof v === "object";
 const inline = v => Array.isArray(v) ? "[" + v.map(inline).join(", ") + "]"
   : isNested(v) ? "{" + Object.entries(v).map(([k, x]) => `${k}: ${inline(x)}`).join(", ") + "}" : v === null ? "null" : String(v);
-// 값이 표에 보이는 글자와 전체 글자(잘렸을 때만, 마우스를 올리면 보인다). 숫자는 자릿수 쉼표를 넣고, 문자열은 최대 글자 수(#maxlen, 없는 화면은 40)에서 자른다.
-// 중첩 값의 전체 글자는 들여쓴 JSON이다.
 // 큰 정수는 서버가 글자("12345678901234567890")로 보내므로 숫자처럼 오른쪽에 맞춘다. 자릿수 쉼표로 소수나 큰 지수가 잘려 보이면 전체 값을 title로.
 const bigInt = v => typeof v === "string" && /^-?\d{16,}$/.test(v);
 const sameSource = (saved, now) => saved === now || (typeof saved === "string" && typeof now === "string" && !saved.includes("#") && now.split("#")[0] === saved);  // 연결 열쇠 비교(서버 use_counts.same_source와 같은 규칙: 폴더만 있는 예전 열쇠는 그 폴더의 어느 파일 연결과도 같다)
 const numCol = (rows, c) => rows.some(r => typeof r[c] === "number" || bigInt(r[c]));  // 숫자(큰 정수 포함) 컬럼이면 머리글도 오른쪽에
-function shown(v) {
-  if (typeof v === "number") { const t = v.toLocaleString(); return [t, t.replace(/,/g, "") === String(v) ? "" : String(v)]; }
-  const s = isNested(v) ? inline(v) : String(v ?? ""), max = +($("maxlen")?.value ?? 40);
+// 값이 표에 보이는 글자와 전체 글자(잘렸을 때만, 마우스를 올리면 보인다). 숫자는 자릿수 쉼표를 넣고, 문자열은 최대 글자 수(#maxlen, 없는 화면은 40)에서 자른다.
+// max를 주면 그 값을 쓴다(표 하나를 그리는 동안 칸마다 #maxlen을 읽지 않게 한 번만 읽어 넘긴다).
+// 중첩 값의 전체 글자는 들여쓴 JSON이다.
+const maxLen = () => +($("maxlen")?.value ?? 40);
+const numFormat = new Intl.NumberFormat();  // v.toLocaleString()과 같은 결과를 내되 한 번 만든 서식을 계속 쓴다(1만 행 찾기에서 칸마다 서식을 만들면 느리다)
+function shown(v, max = maxLen()) {
+  if (typeof v === "number") { const t = numFormat.format(v); return [t, t.replace(/,/g, "") === String(v) ? "" : String(v)]; }
+  const s = isNested(v) ? inline(v) : String(v ?? "");
   const full = isNested(v) ? JSON.stringify(v, null, 2) : s;
   return max > 0 && s.length > max ? [s.slice(0, max) + "…", full] : [s, isNested(v) && full !== s ? full : ""];
 }
-// 표 칸. 중첩 값 칸(.nest)은 누르면 들여쓴 전체를 칸 안에 펼치고, 다시 누르면 접는다.
-function cell(v) {
-  const [text, full] = shown(v), title = full ? ` title="${esc(full)}"` : "";
-  if (isNested(v)) return `<td class="nest"${title} data-full="${esc(full || text)}">${esc(text)}</td>`;
-  return typeof v === "number" ? `<td class="num"${title}>${text}</td>` : bigInt(v) ? `<td class="num">${esc(text)}</td>` : `<td${title}>${esc(text)}</td>`;
+// 글자를 HTML로 바꾸되 want(소문자)와 맞는 첫 부분은 <mark>로 강조한다.
+const lit = (text, want) => {
+  const at = want && typeof want === "string" ? text.toLowerCase().indexOf(want) : -1;
+  return at < 0 ? esc(text) : esc(text.slice(0, at)) + `<mark>${esc(text.slice(at, at + want.length))}</mark>` + esc(text.slice(at + want.length));
+};
+// 표 칸. 중첩 값 칸(.nest)은 누르면 들여쓴 전체를 칸 안에 펼치고, 다시 누르면 접는다. want가 있으면 맞는 글자를 강조한다.
+function cell(v, want = "", max) {
+  const [text, full] = shown(v, max), title = full ? ` title="${esc(full)}"` : "", t = lit(text, want);
+  if (isNested(v)) return `<td class="nest"${title} data-full="${esc(full || text)}">${t}</td>`;
+  return typeof v === "number" ? `<td class="num"${title}>${t}</td>` : bigInt(v) ? `<td class="num">${t}</td>` : `<td${title}>${t}</td>`;
 }
+// 큰 표(TABLE_MIN행 넘음)는 보이는 행과 위아래 TABLE_OVER행만 tr로 만들고, 나머지는 높이만 같은 빈 줄(.vpad)로 채워
+// 스크롤 막대와 위치가 전체 행 기준으로 맞게 한다. 칸은 한 줄(white-space:nowrap, height:40px)이라 줄 높이가 같고,
+// 펼친 중첩 값 줄만 더 크다: 그 늘어난 높이는 g.extra(줄 번호 -> 늘어난 px)에 적어 둔다.
+// 칸 너비는 보이는 줄에 따라 흔들리지 않게, 컬럼마다 가장 긴 글자의 줄을 안 보이는 크기 재기 줄(.vsize)로 늘 함께 그린다.
+const TABLE_MIN = 200, TABLE_OVER = 20, GRIDS = new Set();  // dash_grid.js의 GRID_MIN(카드 칸 수)과 이름이 겹치면 대시보드에서 그 파일 전체가 SyntaxError
+const gridAt = (g, k) => g.view ? g.view[k] : k;                  // 보이는 목록의 k번째 줄이 가리키는 원래 행 번호
+const gridN = g => g.view ? g.view.length : g.rows.length;
+const gridTop = (g, k) => { let y = k * g.H; for (const [p, e] of g.extra) if (p < k) y += e; return y; };  // k번째 줄의 위 끝(px)
+const gridPos = (g, y) => { let k = Math.max(0, Math.floor(y / g.H)); while (k > 0 && gridTop(g, k) > y) k--; return k; };  // y(px)에 놓인 줄
+const gridPad = (g, h) => h > 0 ? `<tr class="vpad" aria-hidden="true" style="height:${h}px"><td colspan="${g.columns.length}" style="height:${h}px;padding:0;border:0"></td></tr>` : "";
+function gridTrs(g, a, b, max) {
+  let s = "";
+  for (let k = a; k < b; k++) { const i = gridAt(g, k); s += `<tr${g.virtual ? ` data-p="${k}" aria-rowindex="${i + 2}"` : ""}>${g.row(g.rows[i], g.want, max)}</tr>`; }
+  return s;
+}
+// 컬럼마다 가장 긴 글자가 든 행(글자 수 기준)을 모아 크기 재기 줄로 만든다.
+function gridSizer(g, max) {
+  const cap = max > 0 ? max + 1 : Infinity, best = new Set();
+  for (const c of g.columns) {
+    let at = 0, most = -1;
+    for (let i = 0; i < g.rows.length && most < cap; i++) {
+      const v = g.rows[i][c], n = typeof v === "string" ? v.length : typeof v === "number" ? String(v).length * 1.3 : isNested(v) ? cap : 0;
+      if (n > most) { most = n; at = i; }
+    }
+    best.add(at);
+  }
+  return [...best].map(i => `<tr class="vsize" aria-hidden="true">${g.row(g.rows[i], "", max)}</tr>`).join("");
+}
+function gridScroller(host) {
+  for (let p = host; p && p !== document.documentElement; p = p.parentElement) if (/auto|scroll/.test(getComputedStyle(p).overflowY)) return p;
+  return null;
+}
+function expandCell(td) { td.dataset.short = td.textContent; td.replaceChildren(el("pre", { className: "nest-full", textContent: td.dataset.full })); }
+function collapseCell(td) { td.textContent = td.dataset.short; delete td.dataset.short; }
+// 보이는 줄을 다시 그린다. force가 없으면 지금 그린 범위가 보이는 줄을 덮고 있는 한 그대로 둔다.
+function gridDraw(g, force) {
+  const N = gridN(g), max = maxLen(), body = g.body ??= g.host.querySelector("tbody");
+  let a = 0, b = N;
+  if (g.virtual) {
+    if (g.a >= 0 && g.host.getClientRects?.().length === 0) return;  // 가려진 탭은 보일 때(크기가 바뀔 때) 그린다
+    const sc = gridScroller(g.host), vh = sc ? sc.clientHeight : innerHeight;
+    const y0 = (sc ? sc.getBoundingClientRect().top : 0) - body.getBoundingClientRect().top;
+    const lo = Math.min(N, gridPos(g, y0)), hi = Math.min(N, gridPos(g, y0 + vh) + 1);
+    if (!force && (g.a === 0 || lo - 5 >= g.a) && (g.b === N || hi + 5 <= g.b)) return;
+    a = Math.max(0, lo - TABLE_OVER); b = Math.min(N, hi + TABLE_OVER);
+  }
+  g.a = a; g.b = b;
+  body.innerHTML = g.virtual ? gridSizer(g, max) + gridPad(g, gridTop(g, a)) + gridTrs(g, a, b, max) + gridPad(g, gridTop(g, N) - gridTop(g, b)) : gridTrs(g, 0, N, max);
+  const trs = g.virtual || g.open.size ? [...body.querySelectorAll(g.virtual ? "tr[data-p]" : "tr")] : [];
+  if (g.virtual && !g.measured && trs.length > 1) {  // 줄 간격은 처음 그린 줄들의 위치 차이로 잰다
+    const H = (trs.at(-1).offsetTop - trs[0].offsetTop) / (trs.length - 1);
+    if (H > 0) { g.measured = true; if (Math.abs(H - g.H) > 0.5) { g.H = H; return gridDraw(g, true); } }
+  }
+  if (g.open.size) trs.forEach((tr, k) => {  // 펼쳐 둔 중첩 값은 다시 그려도 펼친 채로
+    const p = g.virtual ? +tr.dataset.p : k, s = g.open.get(gridAt(g, p));
+    if (!s) return;
+    s.forEach(c => tr.cells[c] && tr.cells[c].dataset.short === undefined && expandCell(tr.cells[c]));
+    if (g.virtual) g.extra.set(p, tr.offsetHeight - g.H);
+  });
+}
+// 결과 안에서 찾기: 칸에 보이는 글자(숫자는 쉼표 포함)에 want가 든 행만 남기고 맞는 글자를 강조한다. 안 보이는 행도 데이터에서 찾는다.
+function gridFind(g, want) {
+  want = want.trim().toLowerCase();
+  const max = maxLen();
+  g.want = want; g.extra.clear();
+  g.view = want ? g.rows.flatMap((r, i) => g.columns.some(c => shown(r[c], max)[0].toLowerCase().includes(want)) ? [i] : []) : null;  // 칸마다 따로 본다(칸 사이를 건너 일치하지 않게)
+  gridDraw(g, true);
+}
+// 표 하나를 host에 그린다. spec = { columns, rows, head: <th>들의 HTML, row(r, want, max): <td>들의 HTML }.
+// 행이 TABLE_MIN 이하면 예전처럼 전부 그린 HTML 그대로, 넘으면 보이는 행만 그리고 aria-rowcount/rowindex로 전체 행 수를 알린다.
+function mountTable(host, spec, want = "") {
+  if (!spec.rows.length) { host._grid = null; host.innerHTML = '<span class="empty">결과가 없습니다.</span>'; return; }
+  const g = host._grid = { ...spec, host, view: null, want: "", open: new Map(), extra: new Map(), H: 40, a: -1, b: -1, virtual: spec.rows.length > TABLE_MIN };
+  if (!g.virtual) { host.innerHTML = `<table><thead><tr>${spec.head}</tr></thead><tbody>${gridTrs(g, 0, spec.rows.length, maxLen())}</tbody></table>`; if (want) gridFind(g, want); return; }
+  host.innerHTML = `<table aria-rowcount="${spec.rows.length + 1}"><thead><tr aria-rowindex="1">${spec.head}</tr></thead><tbody></tbody></table>`;
+  GRIDS.add(g);
+  gridFind(g, want);
+  gridWatch?.observe(host);
+}
+let gridPending = false;
+const gridSchedule = () => { if (!gridPending) { gridPending = true; (globalThis.requestAnimationFrame ?? (f => setTimeout(f, 16)))(gridRedraw); } };  // 스크롤마다가 아니라 화면 갱신마다 한 번
+function gridRedraw() {
+  gridPending = false;
+  for (const g of GRIDS) g.host._grid === g && g.host.isConnected ? gridDraw(g) : GRIDS.delete(g);
+}
+const gridWatch = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(gridSchedule);  // 가려진 탭이 보이게 되면 다시 그린다
+document.addEventListener("scroll", gridSchedule, { capture: true, passive: true });
+globalThis.addEventListener?.("resize", gridSchedule);
 // 결과 표 {columns, rows}: 숫자 컬럼은 머리글도 오른쪽에. SQL 실행과 문장 보기의 결과가 함께 쓴다.
-const resultTable = ({ columns, rows }) => !rows.length ? '<span class="empty">결과가 없습니다.</span>'
-  : `<table><thead><tr>${columns.map(c => `<th class="${numCol(rows, c) ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead><tbody>` +
-    rows.map(r => "<tr>" + columns.map(c => cell(r[c])).join("") + "</tr>").join("") + "</tbody></table>";
+const resultTable = (host, { columns, rows }) => mountTable(host, { columns, rows,
+  head: columns.map(c => `<th class="${numCol(rows, c) ? "num" : ""}">${esc(c)}</th>`).join(""),
+  row: (r, want, max) => columns.map(c => cell(r[c], want, max)).join("") });
 document.addEventListener("click", e => {
   const td = e.target.closest("td.nest");
   if (!td) return;
-  if (td.dataset.short === undefined) { td.dataset.short = td.textContent; td.replaceChildren(el("pre", { className: "nest-full", textContent: td.dataset.full })); }
-  else { td.textContent = td.dataset.short; delete td.dataset.short; }
+  const open = td.dataset.short === undefined;
+  open ? expandCell(td) : collapseCell(td);
+  const g = td.closest("table")?.parentNode?._grid;  // 큰 표는 어느 칸을 펼쳤는지 기억해 다시 그려도 펼친 채로 둔다
+  if (!g) return;
+  const tr = td.parentNode, p = g.virtual ? +tr.dataset.p : tr.sectionRowIndex, i = gridAt(g, p), s = g.open.get(i) ?? new Set();
+  open ? s.add(td.cellIndex) : s.delete(td.cellIndex);
+  s.size ? g.open.set(i, s) : g.open.delete(i);
+  if (g.virtual) s.size ? g.extra.set(p, tr.offsetHeight - g.H) : g.extra.delete(p);
 });
 // 메시지 칸에 글자를 쓴다. ok가 true면 성공 색, 글자면 그 클래스(예: "hint"는 안내 색), 아니면 오류 색.
 const say = (id, text, ok) => { $(id).textContent = text; $(id).className = ok === true ? "ok" : ok || "err"; };
@@ -116,7 +218,7 @@ async function showUsage() {
   } catch (e) {}
 }
 showUsage();
-setInterval(showUsage, 2000);
+setInterval(showUsage, 5000);
 
 // 전체 시간: [검색]을 누르면 0에서 다시 시작하고, 그 뒤의 집계·차트·저장 시간을 더해 간다.
 // 위쪽 줄의 작업 알약에 도는 동안은 "○○ 중 · 예상 · 걸린 시간"과 [취소], 끝나면 "끝 · 걸린 시간"이 나온다.
@@ -615,18 +717,34 @@ const [menuFind, menuList] = menuBox.children;
 const MENU_FIND = 8;  // 항목이 이보다 많을 때만 찾는 칸을 보인다.
 let menuFor = null, menuAt = null;  // 목록을 펼친 select와, 지금 가리키는 항목
 const menuItems = () => [...menuList.children].filter(item => !item.classList.contains("hidden"));
-function closeMenu() { menuBox.classList.add("hidden"); menuFor = null; }
+menuList.setAttribute("role", "listbox");
+menuList.id = "menu-list";
+function closeMenu() {
+  if (menuFor) { menuFor.setAttribute("aria-expanded", "false"); menuFor.removeAttribute("aria-activedescendant"); }
+  menuBox.classList.add("hidden");
+  menuFor = null;
+}
+// 목록을 가진 칸(owner)을 스크린리더에 알린다: 열림·목록 연결, 칸이 입력 칸이면 combobox, 항목은 option(가리킨 항목은 pointMenu가 aria-activedescendant로). 항목을 채운 뒤에 부른다.
+function ownMenu(owner) {
+  if (menuFor && menuFor !== owner) { menuFor.setAttribute("aria-expanded", "false"); menuFor.removeAttribute("aria-activedescendant"); }
+  menuFor = owner;
+  if (owner.tagName === "INPUT") { owner.setAttribute("role", "combobox"); owner.setAttribute("aria-autocomplete", "list"); }
+  owner.setAttribute("aria-expanded", "true");
+  owner.setAttribute("aria-controls", "menu-list");
+  [...menuList.children].forEach((o, i) => { o.setAttribute("role", "option"); o.id = "menu-opt-" + i; });
+}
 function pointMenu(item, scroll) {
   menuAt?.classList.remove("on");
   menuAt = item || null;
   menuAt?.classList.add("on");
   if (scroll) menuAt?.scrollIntoView({ block: "nearest" });
+  if (menuAt) menuFor?.setAttribute("aria-activedescendant", menuAt.id); else menuFor?.removeAttribute("aria-activedescendant");
 }
 function openMenu(sel) {
   if (sel.disabled || !sel.options.length) return;
   const find = sel.options.length > MENU_FIND;
-  menuFor = sel;
   menuList.replaceChildren(...[...sel.options].map((o, i) => Object.assign(document.createElement("div"), { textContent: o.text, className: i === sel.selectedIndex ? "now" : "" })));
+  ownMenu(sel);
   menuFind.value = "";
   menuFind.classList.toggle("hidden", !find);
   menuList.style.maxHeight = "";
@@ -647,8 +765,8 @@ let comboQuiet = false;  // 고른 뒤 칸에 커서를 돌려줄 때 목록이 
 function showCombo(inp) {
   const want = inp.value.trim().toLowerCase(), hits = [...document.getElementById(inp.dataset.list)?.children ?? []].map(o => ({ v: o.value, hint: o.label && o.label !== o.value ? o.label : "" })).filter(({ v }) => v.toLowerCase().includes(want) && v !== inp.value);
   if (inp.disabled || !hits.length) return menuFor === inp ? closeMenu() : undefined;
-  menuFor = inp;
   menuList.replaceChildren(...hits.map(({ v, hint }) => { const d = Object.assign(document.createElement("div"), { textContent: v }); if (hint) d.setAttribute("data-hint", hint); return d; }));  // 라벨(타입 힌트)은 CSS로 덧붙여 textContent가 값 그대로이게
+  ownMenu(inp);
   menuFind.classList.add("hidden");
   menuList.style.maxHeight = "";
   placeMenu(inp);

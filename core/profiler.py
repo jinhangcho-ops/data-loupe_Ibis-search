@@ -134,11 +134,11 @@ def plain(value):
 
 # ---------- 표본 ----------
 
-def fetch(con, expr):
+def fetch(con, expr, **kwargs):
     """식의 결과를 pyarrow 표로. 드라이버가 빈 값이 든 정수 컬럼을 실수로 거쳐 넘겨 큰 정수가 넘치면(SQLite 등) DB-API 커서로 행을 직접 받아 원래 타입으로 만든다."""
     import pyarrow as pa
     try:
-        return expr.to_pyarrow()
+        return expr.to_pyarrow(**kwargs)
     except pa.ArrowInvalid:
         cursor = con.raw_sql(ibis.to_sql(expr))
         try:
@@ -168,7 +168,8 @@ def block(con, t, schema, base, size, rows, part):
     """블록 샘플링(TABLESAMPLE SYSTEM): 저장 블록 일부만 읽는다. 행 수를 모르거나 너무 적게 오면 None."""
     if rows is None:
         return None
-    found = fetch(con, t.sample(min(1.0, size * 1.2 / rows), method="block").limit(size))
+    picked = t.sample(min(1.0, size * 1.2 / rows), method="block").limit(size)
+    found = fetch(con, picked, **result.streaming(picked))  # 파일 연결(Polars)은 streaming으로 읽어 최대 메모리를 줄인다(표본은 그대로 무작위)
     return found if found.num_rows >= min(size, rows) * settings.get("sample_too_few") else None  # 기대한 행의 이만큼도 못 가져오면(작은 테이블·뷰) 다음 방법으로(설정 sample_too_few, 기본 0.2)
 
 

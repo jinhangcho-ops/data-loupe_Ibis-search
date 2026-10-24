@@ -113,7 +113,10 @@ def exit_rates(table, session, time, page):
     """페이지별 이탈률 [{page, views, exits, exit_rate}](조회 많은 순). exit = 세션의 마지막 페이지가 그 페이지인 세션 수, exit_rate = exits / views."""
     need(table, session, time, page)
     t = table.filter(table[page].notnull())
-    last = t.group_by(session).aggregate(pg=t[page].argmax(t[time]))
+    # 세션의 마지막 시각 행들 중 페이지 값이 가장 작은 것(같은 시각이 둘이면 결과가 흔들리지 않게)
+    at = t.group_by(session).aggregate(**{time: t[time].max()})
+    same = t.join(at, [session, time])
+    last = same.group_by(session).aggregate(pg=same[page].min())
     exits = last.group_by("pg").aggregate(exits=last.pg.count())
     views = t.group_by(page).aggregate(views=t.count()).rename(pg=page)
     found = {r["pg"]: r["exits"] for r in fetch_rows(exits, "페이지 종류")}
@@ -300,7 +303,10 @@ def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=
     j = act.join(first, "u")
     j = j.mutate(off=j.p - j.f)
     sizes = {int(r["f"]): int(r["n"]) for r in rows(first.group_by("f").aggregate(n=first.u.count()))}
-    last = int(rows(act.aggregate(m=act.p.max()))[0]["m"])
+    last = rows(act.aggregate(m=act.p.max()))[0]["m"]
+    if last is None:  # 행이 없거나 시각이 전부 비었다
+        return {"unit": unit, "mode": mode, "cohorts": []}
+    last = int(last)
     counts = cohort_counts(j, mode, span)
     width = 1 if mode == "range" else n_max + 1
     cohorts = []
@@ -374,7 +380,10 @@ def ltv(table, user, time, amount, n_days, unit="day"):
     paid = j.filter(j.day - j.d0 <= n_days)
     revenue = {int(r["f"]): r["rev"] for r in rows(paid.group_by("f").aggregate(rev=paid.amt.sum()))}
     sizes = {int(r["f"]): int(r["n"]) for r in rows(first.group_by("f").aggregate(n=first.u.count()))}
-    last_day = int(rows(t.aggregate(m=t.day.max()))[0]["m"])
+    last_day = rows(t.aggregate(m=t.day.max()))[0]["m"]
+    if last_day is None:
+        return []
+    last_day = int(last_day)
     out = []
     for f in sorted(sizes):
         end_day = (bucket_start(f + 1, unit) - EPOCH).days - 1
@@ -398,7 +407,10 @@ def nrr(table, user, time, amount):
     prev = paid.select("u", m=paid.m + 1, rp=paid.r)
     both = per.join(prev, ["u", "m"])
     kept = {int(r["m"]): r["k"] for r in rows(both.group_by("m").aggregate(k=both.r.sum()))}
-    last = int(rows(per.aggregate(m=per.m.max()))[0]["m"])
+    last = rows(per.aggregate(m=per.m.max()))[0]["m"]
+    if last is None:
+        return []
+    last = int(last)
     totals = {int(r["m"]): r["s"] for r in rows(prev.group_by("m").aggregate(s=prev.rp.sum())) if int(r["m"]) <= last}
     return [{"month": bucket_start(m, "month").isoformat(), "prev_revenue": float(s), "kept_revenue": float(kept.get(m, 0)), "nrr": ratio(float(kept.get(m, 0)), float(s))}
             for m, s in sorted(totals.items())]

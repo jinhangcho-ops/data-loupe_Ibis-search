@@ -84,6 +84,8 @@ def shape(con, recipe, table=None, info=None, refs=None):
         check_spec(name, spec)
     made = {}  # 파생 컬럼 → 그것을 만든 컬럼
     names = list(t.columns)  # 앞 단계가 만든 파생 컬럼에는 ops를 적용하지 않는다
+    by = {fill["by"] for spec in specs.values() if isinstance(fill := (spec.get("ops") or {}).get("fill"), dict) and fill.get("how") in ("prev", "next") and fill.get("by") in names}
+    names = [n for n in names if n in by] + [n for n in names if n not in by]  # fill prev·next의 by 컬럼을 먼저 처리해, 타입 변환 등을 받은 뒤의 값으로 순서를 정하게(컬럼 순서로 결과가 달라지지 않게)
     start = t  # 행을 뺄지 정하는 통계(outlier 경계)는 이 표로 구한다(컬럼 순서와 무관). 채울 값(fill mean 등)은 rest에서 행을 다 뺀 뒤의 표로 구한다
     for part in ("rows", "rest"):  # 행을 줄이는 일(fill·outlier drop)을 모든 컬럼에 먼저 하고 나서 통계를 쓰는 일을 한다(컬럼 순서로 결과가 달라지지 않게)
         for name in names:

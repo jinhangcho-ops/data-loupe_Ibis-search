@@ -121,7 +121,8 @@ def flow_optimize_apply():
     """고른 규칙(rules = 번호 목록)만 다시 확인해 적용한 새 흐름. 사용자가 [이 흐름으로 바꾸기]를 눌렀을 때만 부른다."""
     data = body_of(request.json)
     graph = flow.check_shape(data.get("graph"))
-    numbers = [n for n in data.get("rules") or [] if n in flow_opt.RULES]
+    rules = data.get("rules")
+    numbers = [n for n in (rules if isinstance(rules, list) else []) if isinstance(n, int) and n in flow_opt.RULES]  # 리스트·글자가 오면 해시하다 TypeError라 정수만
     if not numbers:
         raise ValueError("적용할 규칙을 고르세요.")
     con = get_con()

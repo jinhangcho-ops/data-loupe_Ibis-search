@@ -134,8 +134,8 @@ def snapshot():
 
 
 def lock_of(config):
-    """이 구성의 결과 파일에 대한 잠금 파일 경로(결과 경로가 열쇠). 같은 결과 파일에 두 곳이 쓰지 않게 start·start_load가 잡는다."""
-    return filelock.lock_path("collect:" + os.path.normcase(os.path.abspath(output_path(config))))
+    """이 구성의 결과 파일에 대한 잠금 파일 경로(작업 파일 .part의 경로가 열쇠 - 결과 형식만 다른 구성도 같은 .part를 쓰므로 한 잠금). 같은 결과 파일에 두 곳이 쓰지 않게 start·start_load가 잡는다."""
+    return filelock.lock_path("collect:" + os.path.normcase(os.path.abspath(parts(output_path(config))["part"])))
 
 
 def running():

@@ -130,14 +130,20 @@ SPACED = "\x00col"  # 공백 있는 컬럼 이름 자리에 잠깐 넣는 한 �
 AFTER_NAME = re.compile(r"\s*(?:!=|>=|<=|=|>|<|(?:is|in|except|like|starts|ends|between)(?!\S))", re.I)  # 조건에서 컬럼 이름 바로 뒤에 오는 연산자
 
 
-def spaced(line, expr, condition=False):
-    """줄이 공백 있는 컬럼 이름으로 시작하면 (그 이름, 이름 자리를 SPACED로 바꾼 줄), 아니면 (None, line). 알려진 이름 중 가장 긴 것을 먼저 찾는다.
+def head_name(text, names, condition=False):
+    """글이 공백 있는 알려진 컬럼 이름(names)으로 시작하면 그 이름(가장 긴 것), 아니면 None. 이름 뒤는 끝·공백·비교 기호여야 한다.
     condition이면 이름 뒤에 연산자가 와야 그 이름으로 읽는다('total in'과 'total' 두 컬럼이 있을 때 'total in 1, 2'의 in을 이름으로 먹지 않게)."""
-    for name in sorted((c for c in expr.columns if " " in c), key=len, reverse=True):
-        rest = line[len(name):]
-        if line.startswith(name) and rest[:1] in ("", " ", "=", "!", "<", ">") and (not condition or AFTER_NAME.match(rest)):
-            return name, SPACED + rest
-    return None, line
+    for name in sorted((c for c in names or () if " " in c), key=len, reverse=True):
+        rest = text[len(name):]
+        if text.startswith(name) and rest[:1] in ("", " ", "=", "!", "<", ">") and (not condition or AFTER_NAME.match(rest)):
+            return name
+    return None
+
+
+def spaced(line, expr, condition=False):
+    """줄이 공백 있는 컬럼 이름으로 시작하면 (그 이름, 이름 자리를 SPACED로 바꾼 줄), 아니면 (None, line)."""
+    name = head_name(line, expr.columns, condition)
+    return (name, SPACED + line[len(name):]) if name else (None, line)
 
 
 def unquote(text, quotes=True):

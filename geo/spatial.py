@@ -67,11 +67,11 @@ def gridded(lat, lon, rlat, rlon):
 
 
 def nearest(lat, lon, rlat, rlon):
-    """점마다 가장 가까운 지점: (지점 번호 int64, 거리 km). 점이나 지점의 좌표가 비었으면 번호 -1, 거리 nan. 지점이 없으면 모두 -1.
+    """점마다 가장 가까운 지점: (지점 번호 int64, 거리 km). 점이나 지점의 좌표가 비었거나 위도가 ±90도 밖이면 번호 -1, 거리 nan. 지점이 없으면 모두 -1.
     같은 거리면 먼저 나온 지점. 날짜 변경선을 가로지르는 넓은 자료는 격자를 쓰지 않는다."""
     lat, lon, rlat, rlon = (np.asarray(a, dtype="float64") for a in (lat, lon, rlat, rlon))
     index, dist = np.full(len(lat), -1, dtype="int64"), np.full(len(lat), np.nan)
-    want, have = np.flatnonzero(np.isfinite(lat) & np.isfinite(lon)), np.flatnonzero(np.isfinite(rlat) & np.isfinite(rlon))
+    want, have = np.flatnonzero(np.isfinite(lat) & np.isfinite(lon) & (np.abs(lat) <= 90)), np.flatnonzero(np.isfinite(rlat) & np.isfinite(rlon) & (np.abs(rlat) <= 90))
     if not len(want) or not len(have):
         return index, dist
     q, r = (lat[want], lon[want]), (rlat[have], rlon[have])
@@ -86,7 +86,7 @@ def nearest(lat, lon, rlat, rlon):
 
 def closed(ring):
     """고리를 float 배열 (N, 2)로, 끝이 시작과 다르면 닫는다."""
-    a = np.asarray([p[:2] for p in ring], dtype="float64").reshape(-1, 2)
+    a = ring if isinstance(ring, np.ndarray) and ring.dtype == np.float64 and ring.ndim == 2 and ring.shape[1] == 2 else np.asarray([p[:2] for p in ring], dtype="float64").reshape(-1, 2)  # 이미 (N, 2) 배열이면 다시 바꾸지 않는다
     return a if len(a) and (a[0] == a[-1]).all() else np.vstack([a, a[:1]]) if len(a) else a
 
 
@@ -153,27 +153,33 @@ def on_edge(px, py, ring):
 
 def assign(lat, lon, regions):
     """점마다 들어 있는 영역 번호. regions = 영역마다 폴리곤 목록 [[[겉 고리, 구멍…], …], …](고리는 [[경도, 위도]…]). 어느 영역에도 없거나 좌표가 비면 -1.
-    여러 영역에 걸치면 먼저 나온 영역. 영역마다 범위 상자로 후보를 먼저 거르고, 정해진 점은 다음 영역에서 뺀다."""
+    여러 영역에 걸치면 먼저 나온 영역. 점을 경도로 한 번 정렬해 두고 폴리곤마다 범위 상자의 경도 구간만 searchsorted로 잘라 후보로 삼고(영역이 많아도 점 전체를 매번 복사하지 않는다), 정해진 점은 다음 영역에서 뺀다."""
     lat, lon = np.asarray(lat, dtype="float64"), np.asarray(lon, dtype="float64")
     out = np.full(len(lat), -1, dtype="int64")
-    todo = np.flatnonzero(np.isfinite(lat) & np.isfinite(lon))
+    ok = np.flatnonzero(np.isfinite(lat) & np.isfinite(lon))
+    order = ok[np.argsort(lon[ok], kind="stable")]
+    sorted_lon = lon[order]
+    left = len(ok)
     for number, polygons in enumerate(regions):
         for polygon in polygons:
-            if not len(todo):
+            if not left:
                 return out
             outer = closed(polygon[0]) if polygon else None
             if outer is None or len(outer) < 4:
                 continue
-            x, y = lon[todo], lat[todo]
-            if outer[:, 0].max() > 180:  # 날짜 변경선을 넘어 이어진 좌표(경도 170~190): 서쪽(음수) 점을 +360으로 옮겨 견준다
-                x = np.where(x < 0, x + 360, x)
-            elif outer[:, 0].min() < -180:
-                x = np.where(x > 0, x - 360, x)
-            near = (x >= outer[:, 0].min()) & (x <= outer[:, 0].max()) & (y >= outer[:, 1].min()) & (y <= outer[:, 1].max())
-            pick = todo[near]
+            if outer[:, 0].max() > 180 or outer[:, 0].min() < -180:  # 날짜 변경선을 넘어 이어진 좌표(경도 170~190): 반대쪽 점을 360 옮겨 견주므로 구간으로 못 자르고 남은 점 전부에서
+                todo = ok[out[ok] < 0]
+                x = lon[todo]
+                x = np.where(x < 0, x + 360, x) if outer[:, 0].max() > 180 else np.where(x > 0, x - 360, x)
+                near = (x >= outer[:, 0].min()) & (x <= outer[:, 0].max()) & (lat[todo] >= outer[:, 1].min()) & (lat[todo] <= outer[:, 1].max())
+                pick, x = todo[near], x[near]
+            else:
+                around = order[np.searchsorted(sorted_lon, outer[:, 0].min(), "left"):np.searchsorted(sorted_lon, outer[:, 0].max(), "right")]
+                pick = around[(out[around] < 0) & (lat[around] >= outer[:, 1].min()) & (lat[around] <= outer[:, 1].max())]
+                x = lon[pick]
             if not len(pick):
                 continue
-            hit = in_polygon(x[near], lat[pick], polygon)
+            hit = in_polygon(x, lat[pick], polygon)
             out[pick[hit]] = number
-            todo = todo[out[todo] < 0]
+            left -= int(hit.sum())
     return out

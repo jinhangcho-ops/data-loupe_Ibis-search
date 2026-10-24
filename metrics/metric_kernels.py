@@ -13,6 +13,7 @@ from metrics import metric_calc as mc
 
 KERNELS = {}
 MAX_ROWS = 60  # 결과 표에 싣는 행 수(코호트·기간·항목). 넘으면 최근(또는 상위) 것만 싣고 알린다
+MAX_RETENTION_COLS = 100  # 리텐션 표의 경과 기간 컬럼 수 상한
 MAX_POINTS = 400  # 생존 곡선에 싣는 점 수
 
 
@@ -290,9 +291,12 @@ def retention(t, s, p, ctx):
     span = (s["from_n"], s["to_n"]) if mode == "range" else None
     m = mc.cohort_matrix(t, s["user"], s["time"], unit, mode, n_max=n, span=span)
     curve = mc.average_curve(m["cohorts"])
-    cols = {"cohort": "코호트", "size": "크기", **{f"d{i}": f"{unit[0].upper() if isinstance(unit, str) else 'D'}{i}" for i in range(len(curve))}}
-    rows = [{"cohort": c["cohort"], "size": c["size"], **{f"d{i}": v for i, v in enumerate(c["values"])}} for c in m["cohorts"]]
-    value = curve[0] if mode == "range" else (curve[n] if n < len(curve) else None)
+    shown = min(len(curve), MAX_RETENTION_COLS)  # N이 크면 표 컬럼이 수천 개가 되어 응답이 커진다(대표 값은 전체 기준)
+    if shown < len(curve):
+        ctx.notes.append(f"경과 기간이 길어 앞의 {shown}칸만 표에 실었어요(대표 값은 전체 기준).")
+    cols = {"cohort": "코호트", "size": "크기", **{f"d{i}": f"{unit[0].upper() if isinstance(unit, str) else 'D'}{i}" for i in range(shown)}}
+    rows = [{"cohort": c["cohort"], "size": c["size"], **{f"d{i}": v for i, v in enumerate(c["values"][:shown])}} for c in m["cohorts"]]
+    value = (curve[0] if curve else None) if mode == "range" else (curve[n] if n < len(curve) else None)
     if mode == "range":
         cols = {"cohort": "코호트", "size": "크기", "d0": f"{span[0]}~{span[1]}"}
     return result(value, last_rows(rows, ctx, "코호트"), cols, {"cohort_size": sum(c["size"] for c in m["cohorts"])}, label="코호트 크기로 가중한 평균")
@@ -499,6 +503,8 @@ def tiers(t, s, p, ctx):
     if len(values) == 0:
         return result(None)
     if s["mode"] == "분위수":
+        if not 0 < s["whale"] <= s["dolphin"] <= 100:  # 0%면 1등 혼자 Whale이 되고, 상위 %는 Whale이 Dolphin보다 작아야 한다
+            raise ValueError("분위수 방식에서는 0 < Whale 기준 ≤ Dolphin 기준 ≤ 100(상위 %)이어야 합니다.")
         whale, dolphin = float(np.quantile(values, 1 - s["whale"] / 100)), float(np.quantile(values, 1 - s["dolphin"] / 100))
     else:
         whale, dolphin = float(s["whale"]), float(s["dolphin"])

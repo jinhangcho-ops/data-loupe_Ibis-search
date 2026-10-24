@@ -100,7 +100,8 @@ class SlackBot:
         try:
             out = self.answer(text)
         except Exception as e:  # 코어가 예상하지 못한 오류도 Slack에 알린다
-            out = f"할 수 없습니다: {e}"
+            from integrations.commands import error_text
+            out = error_text(e)
         try:
             self.send(response_url, out)
         except Exception:

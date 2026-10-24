@@ -20,14 +20,15 @@ const mcSlots = (e, slots) => Object.fromEntries(e.slots.filter(s => slots[s.nam
 // 맞춤 구절: 기간 단위 또는 공통 키(고르지 않았으면 null)
 const mcAlign = a => a.kind === "period" ? { kind: "period", unit: a.unit } : a.kind === "key" && a.keys?.length ? { kind: "key", keys: a.keys } : null;
 
-let mcCat = null;  // 받아 둔 지표 사전
+let mcCat = null, mcStale = true;  // 받아 둔 지표 사전. 내 지표를 저장·지운 뒤에는 mcStale로 다시 받게 한다(mcTemplate은 받아 둔 것을 계속 쓴다)
+const mcCatalog = async () => { if (mcStale || !mcCat) { mcCat = await api("/api/catalog"); mcStale = false; } return mcCat; };  // 열 때마다 212KB를 다시 받지 않게
 // 내 지표의 template("catalog:항목id")을 문장 틀 모양({text})으로(없으면 null): 내 지표 목록이 문장을 보일 때 쓴다
 const mcTemplate = id => { const e = mcCat?.entries.find(x => "catalog:" + x.id === id); return e ? { text: e.sentence } : null; };
 
 async function showMetricCatalog(box, env) {
   const { ctx, kinds, slotEl, periodInputs, refresh } = env;
   let cat, av;
-  try { cat = mcCat = await api("/api/catalog"); av = (await api("/api/catalog/available", { columns: kinds() })).availability; } catch (err) { box.replaceChildren(el("div", { className: "err", textContent: err.message })); return; }
+  try { cat = await mcCatalog(); av = (await api("/api/catalog/available", { columns: kinds() })).availability; } catch (err) { box.replaceChildren(el("div", { className: "err", textContent: err.message })); return; }
   const detail = el("div", { className: "mdetail" }), list = el("div", { className: "mcat" });
   let picked = "";
 
@@ -116,6 +117,7 @@ async function showMetricCatalog(box, env) {
       if (e.cross && !mcAlign(st.align)) { msg.textContent = "다른 테이블과 맞추는 방법을 골라야 저장해요."; return; }
       try {
         await api("/api/catalog/save", { id: e.id, slots: mcSlots(e, st.slots), scope: { table: S.base, schema: S.schema || "" }, columns: kinds(), align: e.cross ? mcAlign(st.align) : undefined });
+        mcStale = true;
         refresh();  // 내 지표 목록을 다시 그린다(사전 화면도 새로 그려진다)
       } catch (err) { msg.textContent = err.message; }
     }

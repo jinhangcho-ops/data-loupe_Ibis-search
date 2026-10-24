@@ -697,8 +697,7 @@ function showTab(name) {
 document.querySelectorAll(".tabs2 button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
 // 검색. 결과 표의 머리글 아래 작은 글씨는 그 컬럼의 원래 테이블(기준 테이블이 아닐 때), 정렬한 컬럼은 강조색.
-function table(data, origins = {}) {
-  if (!data.rows.length) return '<span class="empty">결과가 없습니다.</span>';
+function gridSpec(data, origins = {}) {
   const sorted = S.sorts.length === 1 ? S.sorts[0].split(/\s+/) : [];
   const head = data.columns.map(c => {
     const from = origins[c] && origins[c] !== S.base ? `<small>${esc(origins[c])}</small>` : "";
@@ -707,8 +706,7 @@ function table(data, origins = {}) {
     return `<th class="${[c === sorted[0] && "sorted", number && "num"].filter(Boolean).join(" ")}">${esc(c)}${arrow}${from}</th>`;
   }).join("");
   const source = c => c === "출처" && origins[c] === "이어붙인 테이블";
-  const body = data.rows.map(r => "<tr>" + data.columns.map(c => source(c) ? `<td class="src">${esc(r[c])}</td>` : cell(r[c])).join("") + "</tr>").join("");
-  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  return { columns: data.columns, rows: data.rows, head, row: (r, want, max) => data.columns.map(c => source(c) ? `<td class="src">${lit(String(r[c] ?? ""), want)}</td>` : cell(r[c], want, max)).join("") };
 }
 // 검색과 [SQL 보기]가 똑같이 보내는 내용. 행 수는 입력한 그대로 보낸다. 0·음수·빈칸은 서버가 안내한다.
 const query = offset => ({ ...state(), limit: $("limit").value, offset });
@@ -778,26 +776,11 @@ $("plan-show").onclick = () => busy($("plan-show"), async () => {
   } catch (e) { $("err-search").textContent = e.message; }
 });
 // 결과 안에서 찾기: 지금 보이는 쪽의 행만 거른다(서버에 다시 묻지 않는다). 맞는 글자는 강조한다.
-let finding = false;  // 이전 표에 찾기 강조·거름이 남아 있나(빈 찾기에 1만 행을 다시 쓰지 않으려고)
+// 표가 보이는 행만 그리므로(common.js gridFind) 화면 밖 행도 데이터에서 찾는다.
 function applyFind() {
-  const want = $("row-find").value.trim().toLowerCase();
-  if (!want && !finding) return;
-  finding = !!want;
-  const rows = [...$("rows").querySelectorAll("tbody tr")];
-  let shown = 0;
-  rows.forEach(tr => {
-    const cells = [...tr.querySelectorAll("td")], hit = !want || cells.some(td => td.textContent.toLowerCase().includes(want));  // 칸마다 따로 본다(칸 사이를 건너 일치하지 않게)
-    tr.classList.toggle("miss", !hit);
-    shown += hit;
-    if (!hit && !tr.querySelector("mark")) return;  // 안 맞고 강조도 없던 행은 칸을 다시 쓸 것이 없다
-    cells.forEach(td => {
-      if (td.dataset.short !== undefined) return;  // 펼쳐 둔 중첩 값 칸은 그대로 둔다(다시 쓰면 펼침이 깨진다)
-      const plain = td.textContent, at = want ? plain.toLowerCase().indexOf(want) : -1;
-      if (at < 0 && !td.querySelector("mark")) return;  // 일치도 강조도 없는 칸은 건드리지 않는다
-      td.innerHTML = at < 0 ? esc(plain) : esc(plain.slice(0, at)) + `<mark>${esc(plain.slice(at, at + want.length))}</mark>` + esc(plain.slice(at + want.length));
-    });
-  });
-  $("find-count").textContent = want && rows.length ? `${shown} / ${rows.length}행` : "";
+  const g = $("rows")._grid, want = $("row-find").value;
+  if (g && (want.trim() || g.want)) gridFind(g, want);  // 찾기도 강조도 없던 표는 다시 그리지 않는다
+  $("find-count").textContent = g?.want ? `${g.view.length} / ${g.rows.length}행` : "";
 }
 let findTimer;
 $("row-find").oninput = () => { clearTimeout(findTimer); findTimer = setTimeout(applyFind, 150); };  // 한 글자마다 1만 행을 다시 쓰지 않게
@@ -882,7 +865,8 @@ $("pv-run").onclick = () => {
       const pivot = { rows: $("pv-rows").value ? [$("pv-rows").value] : [], column: $("pv-col").value, value: $("pv-val").value, how: how.agg, ...(how.opts ? { opts: how.opts } : {}), where: $("pv-where").value,
         ...($("pv-sub").value ? { subtotals: $("pv-sub").value } : {}), ...($("pv-having").value.trim() ? { having: $("pv-having").value.trim() } : {}) };
       const d = await timed("summary", () => api("/api/pivot", { ...state(), pivot }));
-      $("pivot").innerHTML = table(d.rows) + (d.more ? '<div class="hint">앞 500줄까지만 보입니다.</div>' : "");
+      mountTable($("pivot"), gridSpec(d.rows));
+      if (d.more) $("pivot").insertAdjacentHTML("beforeend", '<div class="hint">앞 500줄까지만 보입니다.</div>');
       $("err-pivot").textContent = "";
     } catch (e) { $("err-pivot").textContent = e.message; }
   });
@@ -977,12 +961,12 @@ $("calc-example").onchange = () => {
 const ROWS_HINT = '<span class="empty">검색하면 결과가 여기에 표시됩니다.</span>';
 const SUMMARY_HINT = '<span class="empty">[집계 계산]을 누르면 지금 조건의 컬럼별 집계를 계산합니다.</span>';
 function renderTables() {
-  $("rows").innerHTML = last?.rows ? table(last.rows, S.origins) : ROWS_HINT;
+  if (last?.rows) mountTable($("rows"), gridSpec(last.rows, S.origins)); else { $("rows")._grid = null; $("rows").innerHTML = ROWS_HINT; }
   $("rows").querySelectorAll("th").forEach(th => th.title = "누르면 이 컬럼으로 정렬합니다");
-  $("summary").innerHTML = last?.summary ? table(last.summary) : SUMMARY_HINT;
+  if (last?.summary) mountTable($("summary"), gridSpec(last.summary)); else { $("summary")._grid = null; $("summary").innerHTML = SUMMARY_HINT; }
   applyFind();
 }
-$("maxlen").oninput = renderTables;
+let maxTimer; $("maxlen").oninput = () => { clearTimeout(maxTimer); maxTimer = setTimeout(renderTables, 150); };  // 한 글자마다 표 전체를 다시 쓰지 않게(1만 행이면 수 초)
 renderTables();
 
 // 결과 내보내기: 서버가 만든 파일을 내려받는다.
@@ -1093,7 +1077,7 @@ $("draw").onclick = () => busy($("draw"), async () => {
     const d = await timed("chart", () => api("/api/chart", query));
     drawn = toDrawn(query, used, d);
     drawChart();
-    $("ctable").innerHTML = table(chartData());  // 감춰져 있어도 채워 둔다. [표로 보기]는 보이기만 바꾼다.
+    mountTable($("ctable"), gridSpec(chartData()));  // 감춰져 있어도 채워 둔다. [표로 보기]는 보이기만 바꾼다.
     $("err-chart").textContent = [rangeError(), d.labels.length === d.max_groups ? `그룹이 많아 ${d.max_groups}개만 표시합니다.` : "",
       d.more_splits ? `나눌 값이 많아 행이 많은 ${d.max_splits}개만 표시합니다.` : ""].filter(Boolean).join(" ");
   } catch (e) { $("err-chart").textContent = e.message; }
@@ -1362,7 +1346,7 @@ async function runSql(offset = 0, fresh = true) {
     $("sql-page").textContent = d.count === null ? `${Math.floor(offset / d.limit) + 1}쪽` : `${Math.floor(offset / d.limit) + 1} / ${Math.max(1, Math.ceil(d.count / d.limit)).toLocaleString()}쪽`;
     $("sql-prev").disabled = !offset;
     $("sql-next").disabled = !d.more;
-    $("sql-result").innerHTML = resultTable(d.rows);
+    resultTable($("sql-result"), d.rows);
     say("err-sql", d.server ? "" : d.note || "");
     if (!offset) showVirtual();  // 쓴 횟수가 바뀌었다
   } catch (e) { say("err-sql", e.message); }
@@ -1576,7 +1560,7 @@ function drawMetric() {
   $("met-box").style.setProperty("--ratio", 16 / 9);
   if (typeof Chart === "undefined") return void need(CHART_JS).then(drawMetric);  // 첫 차트
   metChart = new Chart($("met-chart"), chartConfig(drawnCard(metDrawn, { y: {}, y1: {} }), themeColors(document.documentElement.dataset.theme)));
-  $("met-table").innerHTML = table({ columns: [metDrawn.x, name], rows: d.labels.map((label, i) => ({ [metDrawn.x]: label ?? "(빈 값)", [name]: metricText(d.values[name][i], format) })) });
+  mountTable($("met-table"), gridSpec({ columns: [metDrawn.x, name], rows: d.labels.map((label, i) => ({ [metDrawn.x]: label ?? "(빈 값)", [name]: metricText(d.values[name][i], format) })) }));
 }
 $("met-read").onclick = () => busy($("met-read"), async () => {
   try { showMetrics(await api("/api/metrics", { path: $("met-path").value.trim() })); }

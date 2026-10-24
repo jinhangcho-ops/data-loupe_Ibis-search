@@ -188,7 +188,7 @@ def squeeze(response):
     """큰 응답(JSON 등)을 gzip으로 줄여 보낸다. 파일 내려주기(direct_passthrough)·스트림(내보내기는 길이를 알아도 스트림이라 통째로 메모리에 올리지 않는다)·이미 압축한 것(이미지·zip·parquet 등)은 그대로."""
     if (response.status_code != 200 or response.direct_passthrough or response.is_streamed or response.content_length is None or response.content_length < GZIP_FROM
             or response.headers.get("Content-Encoding")
-            or response.mimetype.startswith(("image/", "video/", "audio/")) or response.mimetype in PACKED_TYPES or "gzip" not in request.headers.get("Accept-Encoding", "")):
+            or response.mimetype.startswith(("image/", "video/", "audio/")) or response.mimetype in PACKED_TYPES or not request.accept_encodings["gzip"]):
         return response
     response.set_data(gzip.compress(response.get_data(), 5))
     response.headers["Content-Encoding"] = "gzip"

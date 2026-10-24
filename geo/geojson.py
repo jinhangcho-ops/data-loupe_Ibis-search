@@ -94,8 +94,10 @@ def crosses_dateline(xs):
     """경도들이 날짜 변경선을 사이에 두고 모여 있는지: 경도를 정렬했을 때 안쪽의 가장 큰 빈 구간이 270도를 넘을 때(= 변경선을 건너 모인 범위가 90도 미만).
     -180과 180은 같은 경도로 본다(±180에서 자른 도형은 둘 다 가지며, 세계 상자는 180 하나로 줄어 아니다). 성긴 도형, -100→100 같은 넓은 선도 아니다. NaN·inf는 뺀다."""
     import numpy as np
-    v = np.fromiter(xs, dtype=float)
-    v = v[np.isfinite(v)]
+    xs = [x for x in xs if x - x == 0]  # NaN·inf는 뺀다
+    if not xs or (max(xs) - min(xs) <= 360 - DATELINE_SPAN and -180 not in xs):  # 범위가 270도 이하면 빈 구간도 270도를 넘지 못한다(작은 도형 수만 개에 numpy를 부르지 않게)
+        return False
+    v = np.array(xs, dtype=float)
     v = np.unique(np.where(v == -180, 180.0, v))
     if len(v) < 2:
         return False
@@ -238,6 +240,8 @@ def read_file(p):
         return table(doc)
     except ValueError as e:
         raise ValueError(f"{p.name}: {e}") from None
+    except (RecursionError, IndexError, TypeError):  # coordinates가 글자·빈 목록 등 숫자 목록이 아닐 때
+        raise ValueError(f"{p.name}: 좌표가 올바르지 않아요. 도형의 coordinates는 [경도, 위도] 숫자 목록(또는 그 목록의 목록)이어야 합니다.") from None
 
 
 def parse_geometry(text):

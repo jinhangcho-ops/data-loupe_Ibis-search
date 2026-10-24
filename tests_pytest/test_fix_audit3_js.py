@@ -5,7 +5,7 @@ import shutil
 
 import pytest
 
-from test_fix_audit_js import COMMON, STATIC, STUBS, index_slice, run_node
+from test_fix_audit_js import COMMON, GRID_HOST, STATIC, STUBS, index_slice, run_node
 from test_fix_audit2_js import DASH_HTML, dash_slice
 
 # draft.js의 isTyping(대시보드 typing()이 쓴다)
@@ -281,20 +281,21 @@ def test_same_source_js_and_python_agree():
 # ---------- 3E9 ----------
 
 def test_apply_find_matches_per_cell_and_keeps_expanded_cells(tmp_path):
-    code = index_slice("let finding = false", '$("row-find").oninput')
-    prelude = """
-let want = "", writes = [];
-const mktd = (text, extra = {}) => { const td = { dataset: { ...extra }, textContent: text, querySelector: () => null }; Object.defineProperty(td, "innerHTML", { set(v) { writes.push([text, v]); } }); return td; };
-const mkrow = tds => Object.assign(mk("tr"), { querySelectorAll: () => tds, querySelector: () => null, classList: { toggle(n, on) { this.miss = on; } }, get textContent() { return tds.map(t => t.textContent).join(""); } });
-const rows = [mkrow([mktd("서울"), mktd("시")]), mkrow([mktd("a"), mktd('{"k":1}', { short: "{…}" })]), mkrow([mktd("서울시청"), mktd("x")])];
-globalThis.$ = id => id === "row-find" ? { value: want } : id === "rows" ? { querySelectorAll: () => rows } : { textContent: "" };
+    """칸마다 따로 찾고(칸 사이를 건너 "서울"|"시"가 "울시"로 일치하지 않는다), 펼쳐 둔 중첩 값 칸은 찾기 뒤에도 펼친 채(강조 글자로 굳지 않는다)."""
+    code = index_slice("function applyFind() {", "\nlet findTimer")
+    prelude = GRID_HOST + """
+const host = makeHost(), box = { value: "" }, count = { textContent: "" };
+globalThis.$ = id => id === "rows" ? host : id === "row-find" ? box : id === "find-count" ? count : { value: "40" };
 """
     body = """
-want = "울시"; applyFind();
-const split = { miss: rows.map(r => r.classList.miss), writes: writes.map(w => w[0]) };
-writes.length = 0; want = "k"; applyFind();
-console.log(JSON.stringify({ split, expanded: writes.map(w => w[0]) }));
+resultTable(host, { columns: ["a", "b"], rows: [{ a: "서울", b: "시" }, { a: "a", b: { k: 1 } }, { a: "서울시청", b: "x" }] });
+const g = host._grid;
+box.value = "울시"; applyFind();
+const split = { view: g.view, rows: rowsHtml(host) };
+g.open.set(1, new Set([1])); expanded.length = 0;          // 1번 행의 중첩 값 칸을 펼쳐 둔 상태
+box.value = "k"; applyFind();
+console.log(JSON.stringify({ split, kView: g.view, expanded }));
 """
     got = run_node(tmp_path, body, parts=[STUBS, COMMON, prelude, code])
-    assert got["split"] == {"miss": [True, True, False], "writes": ["서울시청"]}  # 고치기 전에는 칸을 건너 "서울"|"시"도 일치로 봤다
-    assert got["expanded"] == []  # 펼친 칸은 다시 쓰지 않는다(전에는 펼친 글을 칸 글자로 굳혔다)
+    assert got["split"]["view"] == [2] and len(got["split"]["rows"]) == 1 and "<mark>울시</mark>청" in got["split"]["rows"][0]  # 고치기 전에는 칸을 건너 "서울"|"시"도 일치로 봤다
+    assert got["kView"] == [1] and got["expanded"] == [[0, 1]]  # 펼친 칸은 찾은 뒤 다시 그려도 펼친다(전에는 펼친 글을 칸 글자로 굳혔다)

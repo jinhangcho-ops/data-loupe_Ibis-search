@@ -64,7 +64,7 @@ def suggestions(info, found, i, rows):
             add("빈 값을 중앙값으로 채우기", why, ops={"fill": {"how": "median"}})
         else:
             add("빈 값을 최빈값으로 채우기", why, ops={"fill": {"how": "mode"}})
-    if info["unique"] <= 1:
+    if info["unique"] <= 1 and rows:  # 행이 없는 표는 빼라고 하지 않는다(모든 컬럼에 추천이 붙는다). 값이 모두 빈 컬럼은 뺀다(원래 설계)
         add("컬럼 빼기", f"서로 다른 값이 {info['unique']}개뿐입니다.", keep=False)
     return out
 

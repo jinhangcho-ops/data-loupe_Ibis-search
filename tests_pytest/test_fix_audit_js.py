@@ -66,6 +66,22 @@ COMMON = between("common.js", "const esc = ", 'document.addEventListener("click"
 COMMON = re.sub(r"const el = [^\n]*\n", "", COMMON)
 STUBS = "globalThis.$ = () => null;\n"
 
+# 표 그리기(common.js mountTable)를 돌려 보는 가짜 host: tbody에 쓴 HTML을 모아 두고, 그 안의 <tr>을 칸(td) 가짜로 돌려준다.
+# 펼친 칸(expandCell)은 expanded에 [줄 번호, 칸 번호]로 남고, tbodyWrites는 tbody를 몇 번 다시 썼는지.
+GRID_HOST = r"""
+let tbodyWrites = 0; const expanded = [];
+function makeHost() {
+  const tbody = { html: "", set innerHTML(v) { tbodyWrites++; this.html = v; }, get innerHTML() { return this.html }, getBoundingClientRect: () => ({ top: 0 }),
+    querySelectorAll() {
+      return [...this.html.matchAll(/<tr>([^]*?)<\/tr>/g)].map((m, p) => ({ dataset: {}, offsetHeight: 40,
+        cells: m[1].split("<td").slice(1).map((_, c) => ({ dataset: {}, textContent: "x", replaceChildren() { expanded.push([p, c]); } })) }));
+    } };
+  return { isConnected: true, html: "", set innerHTML(v) { this.html = v; }, get innerHTML() { return this.html }, querySelector: () => tbody, tbody };
+}
+const rowsHtml = host => [...host.tbody.html.matchAll(/<tr>([^]*?)<\/tr>/g)].map(m => m[1]);
+"""
+
+
 
 # ---------- 3·4 esc·fill·shown·cell ----------
 
@@ -372,20 +388,20 @@ let ok = false; const runSearch = async () => { rendered.push("run:" + JSON.stri
 
 
 def test_apply_find_skips_when_empty_and_nothing_marked(tmp_path):
-    code = index_slice("let finding = false", '$("row-find").oninput')
-    prelude = """
-let queries = 0, want = ""; const esc = s => s;
-const rows = [mk("tr", { textContent: "abc" })]; rows[0].querySelectorAll = () => [{ dataset: {}, textContent: "abc", querySelector: () => null, set innerHTML(v) {} }]; rows[0].querySelector = () => null; rows[0].classList = { toggle() {} };
-globalThis.$ = id => id === "row-find" ? { value: want } : id === "rows" ? { querySelectorAll: () => { queries++; return rows; } } : { textContent: "" };
+    """빈 찾기는 강조·거름이 남지 않은 표를 다시 그리지 않는다(1만 행을 한 글자마다 다시 쓰지 않게). 찾은 뒤 비우면 강조를 지우려 한 번은 다시 그린다."""
+    code = index_slice("function applyFind() {", "\nlet findTimer")
+    prelude = GRID_HOST + """
+const host = makeHost(), box = { value: "" }, count = { textContent: "" };
+globalThis.$ = id => id === "rows" ? host : id === "row-find" ? box : id === "find-count" ? count : { value: "40" };
 """
     body = """
-applyFind(); const empty = queries;
-want = "a"; applyFind(); const typed = queries;
-want = ""; applyFind(); const cleared = queries;   // 강조가 남아 있으니 한 번은 지운다
-applyFind(); const again = queries;
-console.log(JSON.stringify({ empty, typed, cleared, again }));
+resultTable(host, { columns: ["a"], rows: [{ a: "abc" }, { a: "xyz" }] });
+const set = v => { box.value = v; applyFind(); return tbodyWrites; };
+const empty = set(""), typed = set("a"), shownMark = host.tbody.html.includes("<mark>a</mark>bc"), cleared = set(""), again = set("");
+console.log(JSON.stringify({ empty, typed, cleared, again, shownMark, noMarkLeft: !host.tbody.html.includes("<mark>"), count: count.textContent }));
 """
-    assert run_node(tmp_path, body, parts=[prelude, code]) == {"empty": 0, "typed": 1, "cleared": 2, "again": 2}
+    got = run_node(tmp_path, body, parts=[STUBS, COMMON, prelude, code])
+    assert got == {"empty": 0, "typed": 1, "cleared": 2, "again": 2, "shownMark": True, "noMarkLeft": True, "count": ""}
 
 
 def test_search_draft_ignores_table_pick_only(tmp_path):

@@ -25,6 +25,18 @@ def _has_content(folder):
     return False
 
 
+def left_behind(path=None):
+    """옮기기에 한 번 실패한 뒤 새 폴더에 설정 파일이 생겨 migrate가 다시 옮기지 않는 채로 옛 폴더(OLD_NAME)가 그대로면, 그때 적어 둔 이유 글자. 아니면 None. 병합은 하지 않고 안내만 다시 띄우게 한다."""
+    new = (path or PATH).parent
+    reason = new / FAILED
+    if not (new.with_name(OLD_NAME).is_dir() and reason.is_file()):
+        return None
+    try:
+        return reason.read_text(encoding="utf-8") if _has_content(new) else None
+    except OSError:
+        return None
+
+
 def migrate(path=None):
     """앱이 시작할 때 한 번: 예전 설정 폴더(OLD_NAME)가 있고 새 폴더가 없으면 폴더째 옮긴다. 옮기지 못하면(예: 예전 앱이 켜져 있어 파일이 잠김)
     새 폴더로 시작하고 예전 폴더는 그대로 두며, 이유를 새 폴더의 FAILED 파일에 적는다. 옮기지 못한 이유 글자 또는 None을 돌려준다."""
@@ -113,10 +125,15 @@ def read_file(path):
 
 
 def read(name):
-    """설정 폴더의 JSON 파일에 든 객체. 없으면 None. 깨져서 읽을 수 없으면 덮어쓰기 전에 남긴 name.bak을 읽는다(그것도 없으면 None)."""
+    """설정 폴더의 JSON 파일에 든 객체. 없으면 None. JSON이 깨졌으면 덮어쓰기 전에 남긴 name.bak을 읽는다(그것도 없으면 None). 파일을 읽지 못하면(OSError) 오류."""
     path = PATH.parent / name
-    found = read_file(path)
-    return found if found is not None or not path.exists() else read_file(backup_of(path))
+    try:
+        data = retrying(lambda: json.loads(path.read_text(encoding="utf-8")))  # 잠깐 못 읽는 것(백신 등)은 기다려 다시 읽고, 그래도 안 되면 OSError를 그대로 낸다: 한 세대 전 .bak으로 떨어지면 옛 값을 진짜로 착각한다
+    except FileNotFoundError:
+        return None
+    except ValueError:
+        data = None
+    return data if isinstance(data, dict) else read_file(backup_of(path))
 
 
 def backup_of(path):

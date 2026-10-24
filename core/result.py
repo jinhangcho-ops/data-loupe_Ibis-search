@@ -37,6 +37,11 @@ def lazy(expr):
     return backend.compile(expr)
 
 
+def streaming(expr, safe=True):
+    """to_polars에 넘길 인자: 파일 연결(Polars)이면 streaming 엔진으로(정렬·고유값이 메모리를 덜 쓴다). safe가 거짓(합계·평균처럼 계산 순서로 부동소수 결과가 달라지는 집계)이거나 다른 연결이면 없다."""
+    return {"engine": "streaming"} if safe and ibis.get_backend(expr).name == "polars" else {}
+
+
 def whole_fetch(backend):
     """Ibis의 묶음 받기가 결과 전체를 한 번에 받은 뒤 나누는 연결인지(그 연결의 to_pyarrow_batches가 _fetch_from_cursor로 다 읽는다.
     ibis 12에서 SQLite·MySQL·SingleStore). 이런 연결은 cursor_batches로 커서에서 묶음씩 받는다. DB 이름이 아니라 Ibis의 받는 방식으로 고른다."""
@@ -181,7 +186,7 @@ def fields(expr):
 
 def get_rows(expr, limit, offset=0):
     """offset행을 건너뛰고 limit행."""
-    return expr.limit(limit, offset=offset).to_polars()
+    return expr.limit(limit, offset=offset).to_polars(**streaming(expr))
 
 
 def can_offset(expr):
@@ -207,7 +212,11 @@ def get_sql(expr, limit=None, offset=0):
 
 def get_count(expr, backend=None):
     """전체 행 수. backend를 주면 그 연결(같은 DB를 다른 스레드에서 읽는 연결, source.side)에서 센다."""
-    return (backend.to_pyarrow(expr.count()) if backend else expr.count().to_pyarrow()).as_py()
+    backend = backend or ibis.get_backend(expr)
+    if backend.name == "polars":  # 컴파일한 LazyFrame에 pl.len(): ibis의 count()보다 훨씬 빠르다(필터 없는 CSV는 줄 수만 센다)
+        import polars as pl
+        return backend.compile(expr).select(pl.len()).collect().item()
+    return backend.to_pyarrow(expr.count()).as_py()
 
 
 def number(value):
@@ -249,7 +258,7 @@ def get_values(expr, column, limit=MAX_VALUES):
     """컬럼(구조 안의 필드 user.name도)의 서로 다른 값(빈 값 제외)을 정렬해 limit개까지 문자로 돌려준다. 더 있으면 두 번째 값이 True."""
     col = field_of(expr, column)
     values = expr.filter(col.notnull()).select(col.name("v")).distinct().order_by("v").limit(limit + 1)
-    values = [str(v) for v in values.to_polars()["v"].to_list()]
+    values = [str(v) for v in values.to_polars(**streaming(expr))["v"].to_list()]
     return values[:limit], len(values) > limit
 
 
@@ -279,21 +288,22 @@ def get_chart(expr, x, series, split=None, order="x"):
         raise ValueError("계열을 하나 이상 넣으세요.")
     # 집계 식은 집계할 그 테이블 식에서 만들어야 한다(행 수는 다른 식에서 만든 것을 쓸 수 없다).
     metrics = lambda table: {f"v{i}": chart_metric(table, s.get("y"), s.get("agg"), s.get("opts")) for i, s in enumerate(series)}
+    run = streaming(expr, all(sql_funcs.ALIASES.get(s.get("agg"), s.get("agg")) in ("count", "count_distinct") for s in series))  # 개수·고유 개수만 streaming(합계·평균은 부동소수 결과가 달라진다)
     top = expr.group_by(x).aggregate(**metrics(expr))
-    top = top.order_by([top.v0.desc(), top[x]] if order == "value" else [top[x]]).limit(MAX_GROUPS).to_polars()
+    top = top.order_by([top.v0.desc(), top[x]] if order == "value" else [top[x]]).limit(MAX_GROUPS).to_polars(**run)
     labels = top[x].to_list()
     if not split:
         return labels, [{"series": i, "split": None, "values": [number(v) for v in top[f"v{i}"].to_list()]} for i in range(len(series))], False
     check_name(split, expr.columns)
     filled = expr.filter(expr[split].notnull())
     sizes = filled.group_by(split).aggregate(n=filled.count())
-    parts = sizes.order_by([sizes.n.desc(), sizes[split]]).limit(MAX_SPLITS + 1).to_polars()[split].to_list()
+    parts = sizes.order_by([sizes.n.desc(), sizes[split]]).limit(MAX_SPLITS + 1).to_polars(**streaming(expr))[split].to_list()
     more, parts = len(parts) > MAX_SPLITS, parts[:MAX_SPLITS]
     if not parts:  # 나눌 값이 없다(행이 없거나 나누는 컬럼이 모두 빈 값): 계열은 두고 값만 비운다
         return labels, [{"series": i, "split": None, "values": [None] * len(labels)} for i in range(len(series))], False
     known = [v for v in labels if v is not None]
     inside = expr.filter(expr[x].isin(known) | expr[x].isnull() if None in labels else expr[x].isin(known), expr[split].isin(parts))  # X가 빈 값인 묶음도 나눈다
-    cells = inside.group_by([x, split]).aggregate(**metrics(inside)).to_polars()
+    cells = inside.group_by([x, split]).aggregate(**metrics(inside)).to_polars(**run)
     found = {(row[x], row[split]): row for row in cells.iter_rows(named=True)}
     return labels, [{"series": i, "split": str(part), "values": [number(found.get((label, part), {}).get(f"v{i}")) for label in labels]}
                     for i in range(len(series)) for part in parts], more

@@ -34,15 +34,15 @@ def cached_infer(conn_key, schema, table):
 
 
 def context(con, conn_key, schema=None, vts=None):
-    """LLM에 줄 문맥(데이터 값 없음). {"dialect", "tables": [{name, description, partition, columns: [{name, type, description, infer}]}], "metrics": [...], "virtual": [...]}."""
+    """LLM에 줄 문맥(데이터 값 없음). {"dialect", "tables": [{name, description, partition, columns: [{name, type, description, infer}]}], "metrics": [...], "virtual": [...], "more_tables": 테이블이 MAX_TABLES개를 넘어 잘렸는지}."""
     spec_tables = {}
     try:
         path = profiler.spec_path()
         spec_tables = profiler.read_spec(path)["tables"] if path else {}
     except ValueError:
         pass
-    tables = []
-    for name in source.list_tables(con, schema)[:MAX_TABLES]:
+    tables, names = [], source.list_tables(con, schema)
+    for name in names[:MAX_TABLES]:
         spec = (schema and spec_tables.get(f"{schema}.{name}")) or spec_tables.get(name) or {}
         guesses, described = cached_infer(conn_key, schema, name), spec.get("columns", {})
         cols = []
@@ -59,7 +59,8 @@ def context(con, conn_key, schema=None, vts=None):
     listed = [{"name": n, "description": m["description"], "definition": metric_file.describe(m, values=False), "format": m["format"]}
               for n, m in found.items()]
     dialect = sql_exec.dialect_of(con)
-    return {"dialect": getattr(dialect, "__name__", dialect) or "ANSI", "tables": tables, "metrics": listed, "virtual": sorted(vts or {})}
+    return {"dialect": getattr(dialect, "__name__", dialect) or "ANSI", "tables": tables, "metrics": listed, "virtual": sorted(vts or {}),
+            "more_tables": len(names) > MAX_TABLES}
 
 
 def infer_text(guess):
@@ -83,7 +84,7 @@ def system_prompt(ctx):
             "- 아래에 있는 테이블과 컬럼만 쓴다. 모르면 추측하지 말고 SQL 대신 '-- 모름: 이유' 한 줄을 쓴다.",
             "- 답은 ```sql 코드 블록 하나로만 쓴다.",
             "- 지표를 물으면 아래 지표 정의(분자 ÷ 분모, 분모가 0이면 NULL)대로 계산한다."]
-    body = ["", "## 테이블"]
+    body = ["", "## 테이블"] + (["(테이블이 더 있으나 생략됨. 위 목록에 없는 테이블은 모른다.)"] if ctx.get("more_tables") else [])
     for t in ctx["tables"]:
         body.append(f"### {t['name']}" + (f" — {t['description']}" if t.get("description") else "") + (f" (파티션 컬럼: {t['partition']})" if t.get("partition") else ""))
         for c in t["columns"]:

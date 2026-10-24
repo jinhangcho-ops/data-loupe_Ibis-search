@@ -270,9 +270,11 @@ function SentenceView(host, ctx) {
     } catch (e) { out.replaceChildren(el("div", { className: "sissue bad", textContent: e.message })); }
   }
   function showResult(out, d) {
+    out.chartObj?.destroy();  // 이전 결과의 차트
+    out.chartObj = null;
     const colors = [1, 2, 3, 4, 5, 6, 7, 8].map(i => getComputedStyle(document.documentElement).getPropertyValue("--c" + i).trim()), cfg = sentChart(d, colors);
     const table = el("div", { className: "table-wrap" });
-    table.innerHTML = resultTable(d);
+    resultTable(table, d);
     const box = el("div", { className: "schart hidden" }, el("canvas"));
     let chartObj = null;
     const switchTo = view => {
@@ -280,7 +282,7 @@ function SentenceView(host, ctx) {
       table.classList.toggle("hidden", view === "chart"); box.classList.toggle("hidden", view !== "chart");
       if (view === "chart" && !chartObj && cfg) {
         if (typeof Chart === "undefined") need(CHART_JS).then(() => switchTo(view));  // 첫 차트
-        else chartObj = new Chart(box.querySelector("canvas"), cfg);
+        else chartObj = out.chartObj = new Chart(box.querySelector("canvas"), cfg);
       }
     };
     const switcher = cfg ? el("div", { className: "seg" }, ...[["table", "표"], ["chart", "차트"]].map(([k, t]) => { const b = el("button", { className: "seg-b" + (k === "table" ? " on" : ""), textContent: t, onclick: () => switchTo(k) }); b.dataset.view = k; return b; })) : "";
@@ -380,7 +382,7 @@ function SentenceView(host, ctx) {
     const mineOnes = d.metrics.filter(here), others = d.metrics.filter(m => !here(m));
     mine.replaceChildren(...(mineOnes.length ? mineOnes.map(row) : [el("div", { className: "hint", textContent: "이 테이블의 지표가 아직 없어요. 왼쪽 지표 틀을 눌러 만드세요." })]),
       ...(others.length ? [el("h2", { textContent: "다른 테이블의 지표(복사해서 써요)" }), ...others.map(row)] : []));
-    async function removeMetric(m) { try { await api("/api/my_metrics/delete", { id: m.id }); msg.textContent = ""; showMetric(); } catch (e) { msg.textContent = e.message; } }
+    async function removeMetric(m) { try { await api("/api/my_metrics/delete", { id: m.id }); mcStale = true; msg.textContent = ""; showMetric(); } catch (e) { msg.textContent = e.message; } }
     function scopeNow() { return { table: S.base, schema: S.schema || "" }; }
     async function copyMetric(m, mapping = {}) {
       try { await api("/api/my_metrics/copy", { id: m.id, scope: scopeNow(), mapping, columns: kinds() }); msg.textContent = ""; showMetric(); }

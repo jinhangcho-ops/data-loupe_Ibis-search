@@ -149,7 +149,7 @@ def load():
     if not path.exists():
         return {}
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(settings.retrying(lambda: path.read_text(encoding="utf-8")))  # 백신 등이 잠깐 잡은 것은 기다린다
         for item in data.values():
             if not all(isinstance(t, (int, float)) for t in item["sent"]) or len(item["day"]) != 2:
                 raise ValueError

@@ -204,12 +204,8 @@ def bare(name):
 
 
 def head_name(text, columns, condition=False):
-    """글이 공백 있는 알려진 컬럼 이름으로 시작하면 그 이름(가장 긴 것), 아니면 None. 이름 뒤는 끝·공백·비교 기호여야 한다(parse.spaced와 같은 규칙).
-    condition이면(조건에 쓸 때) 이름 뒤에 연산자가 와야 그 이름으로 읽는다(parse.AFTER_NAME)."""
-    text = text.lstrip()
-    for name in sorted((c for c in columns or () if " " in c), key=len, reverse=True):
-        if text.startswith(name) and text[len(name):len(name) + 1] in ("", " ", "=", "!", "<", ">") and (not condition or parse.AFTER_NAME.match(text[len(name):])):
-            return name
+    """글 앞의 공백을 뗀 뒤 parse.head_name으로 공백 있는 컬럼 이름을 읽는다(규칙은 parse.spaced와 한 곳)."""
+    return parse.head_name(text.lstrip(), columns, condition)
 
 
 def cond_columns(cond, columns=None):

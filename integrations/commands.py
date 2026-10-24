@@ -17,6 +17,7 @@ from core import settings
 from core import source
 from core import use_counts
 from integrations.notify import table_text
+from integrations.schedule import VALUE_ERRORS
 
 MAX_ROWS = 50  # 검색 결과로 답할 최대 행 수
 DEFAULT_ROWS = 20
@@ -122,6 +123,14 @@ def question_answer(text):
     return f"만든 SQL(실행하지 않았습니다. 프로그램의 SQL 탭에서 확인하고 실행하세요):\n```\n{sql}\n```"
 
 
+def error_text(e):
+    """Slack으로 나갈 오류 글. DB가 데이터 값을 넣는 오류 유형은 정해진 문구로(예약 알림과 같은 기준), 그 밖에는 비밀번호를 가린 글."""
+    message = str(e)
+    if VALUE_ERRORS.search(message):
+        return "할 수 없습니다: 데이터 값 문제로 실패했습니다"
+    return f"할 수 없습니다: {source.mask(message, server.state['passwords'])}"
+
+
 def answer(text):
     """글 한 줄에 답할 글. 잘못 쓴 명령·오류는 안내 글로 돌려준다(예외를 내지 않는다)."""
     try:
@@ -137,4 +146,4 @@ def answer(text):
             return search_answer(plain, named) if plain else search_list()
         return f"모르는 명령입니다: {command}\n{HELP}"
     except Exception as e:  # 연결 오류 등의 문구에 비밀번호가 있으면 가린다
-        return f"할 수 없습니다: {source.mask(str(e), server.state['passwords'])}"
+        return error_text(e)

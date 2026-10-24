@@ -141,7 +141,9 @@ th.sorted { color:var(--accent); }
 td.num { text-align:right; }
 td.src { color:var(--muted); font-size:12.5px; }
 mark { background:var(--accent-bg); color:var(--accent); border-radius:3px; padding:0 1px; }
-tr.miss { display:none; }
+/* 큰 표(common.js mountTable): 안 보이는 행을 대신하는 빈 줄, 칸 너비를 고정해 주는 높이 0의 안 보이는 줄 */
+.vsize { visibility:hidden; }
+.vsize td { height:0; line-height:0; padding-top:0; padding-bottom:0; border:0; }
 
 /* 카드 제목 줄과 칩 */
 .head { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:10px; }
@@ -320,3 +322,4 @@ tr.miss { display:none; }
 /* title 힌트·되돌림 안내: 창만 공유해도 보이도록 별도 창(네이티브 툴팁) 대신 페이지 안에 그린다 */
 .tip, .toast { position:fixed; z-index:500; max-width:min(320px, calc(100vw - 16px)); padding:5px 9px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); font-size:12px; line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; box-shadow:0 6px 20px rgb(15 25 30 / .18); pointer-events:none; max-height:60vh; overflow:hidden; }
 .toast { left:50%; bottom:24px; transform:translateX(-50%); }
+.toast.hidden { display:block !important; opacity:0; }  /* display:none이면 스크린리더(role=status)가 글이 바뀐 것을 놓친다. 투명으로 숨긴다(pointer-events:none이라 클릭은 막지 않는다) */

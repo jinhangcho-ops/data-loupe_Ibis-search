@@ -1196,7 +1196,7 @@ function addStep() {
   showSteps();
 }
 $("a-fadd").onclick = addStep;
-$("a-fvalue").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) addStep(); };
+$("a-fvalue").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.isComposing && !(menuFor === e.target && menuAt)) addStep(); };  // 한글 조합을 확정하는 Enter와, 목록이 가리킨 항목을 고르는 Enter(common.js)는 단계로 넣지 않는다
 // 단계 컬럼을 고르면 그 컬럼의 값(많이 나온 순, 20개까지)을 목록으로 받는다. 단계 컬럼이 바뀌면 고른 단계는 비운다.
 async function loadStepValues() {
   const column = $("a-fstep").value;
@@ -1332,7 +1332,7 @@ function drawAna() {
   $("a-sub").textContent = "";
   $("a-data").textContent = anaNote(d);
   $("a-box").style.setProperty("--ratio", VIEW_RATIOS[A.view] ?? 16 / 9);
-  $("a-table").innerHTML = resultTable(anaTable(d, A.view));
+  resultTable($("a-table"), anaTable(d, A.view));
   if (flow) {
     $("a-funnel").append(sankeySvg(d.steps, { text: getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "currentColor" }));
     $("a-funnel-text").textContent = funnelSentence(d.steps);
