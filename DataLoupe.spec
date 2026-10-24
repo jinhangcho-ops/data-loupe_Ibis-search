@@ -33,5 +33,5 @@ a = Analysis(
     hiddenimports=hidden,
 )
 pyz = PYZ(a.pure)
-exe = EXE(pyz, a.scripts, exclude_binaries=True, name="DataLoupe", console=False)
+exe = EXE(pyz, a.scripts, exclude_binaries=True, name="DataLoupe", console=False, icon="installer/DataLoupe.ico")  # 창·작업 표시줄·바로가기도 이 아이콘(원본: installer/icon.svg, 32px 이하는 icon_small.svg)
 COLLECT(exe, a.binaries, a.datas, name="DataLoupe")
