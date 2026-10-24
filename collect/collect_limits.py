@@ -167,6 +167,11 @@ def counts(item, group, now):
     return [sum(1 for t in sent if t > now - w) for w in WINDOWS.values()], day
 
 
+def kept(group):
+    """보낸 시각을 보관하는 초: 설정된 가장 넓은 창(과 최소 간격, 1초). 이보다 긴 창의 보낸 수는 알 수 없다."""
+    return max([w for k, w in WINDOWS.items() if allowed(group, k) is not None] + [group["min_interval"], 1])
+
+
 def usage(name, now=None):
     """묶음의 사용량(약속의 모양). 묶음이 없으면 None."""
     group = groups().get(name)
@@ -175,7 +180,8 @@ def usage(name, now=None):
     now = time.time() if now is None else now
     data = load()
     item = item_of(data or {}, name)
-    (second, minute, hour), day = counts(item, group, now)
+    windows, day = counts(item, group, now)
+    second, minute, hour = [n if w <= kept(group) else None for n, w in zip(windows, WINDOWS.values())]  # 보관하지 않는 창의 수는 모른다(None)
     limit = allowed(group, "per_day")
     return {"second": second, "minute": minute, "hour": hour, "day": day, "day_limit": group["per_day"],
             "day_left": None if limit is None else 0 if data is None else max(0, limit - day), "reset_at": reset_text(group, now),
@@ -198,8 +204,7 @@ def take(name, stop):
             if data is None:
                 raise Halt(broken_message())
             item = item_of(data, name)
-            keep = max([w for k, w in WINDOWS.items() if allowed(group, k) is not None] + [group["min_interval"], 1])  # 설정된 가장 넓은 창(과 최소 간격)만큼만 보관한다
-            item["sent"] = [t for t in item["sent"] if t > now - keep]
+            item["sent"] = [t for t in item["sent"] if t > now - kept(group)]  # 설정된 가장 넓은 창만큼만 보관한다(요청마다 큰 기록을 읽고 쓰지 않게)
             windows, day = counts(item, group, now)
             if allowed(group, "per_day") is not None and day >= allowed(group, "per_day"):
                 raise Halt(f"오늘 한도를 다 썼습니다. {reset_text(group, now)} 이후 이어 받을 수 있습니다.", failed=False)

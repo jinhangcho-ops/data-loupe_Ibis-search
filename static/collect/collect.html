@@ -927,7 +927,8 @@ const LIMIT_FIELDS = [["l-sec", "per_second", "초당"], ["l-min", "per_minute",
 const NO_LIMIT = SERVER.limit;  // 사용 한도 묶음의 기본값(collect_limits.DEFAULT)
 function usageText(u) {
   if (!u) return "";
-  const lines = [`사용: 초 ${u.second} · 분 ${u.minute} · 시간 ${u.hour} · 하루 ${u.day.toLocaleString()}${u.day_limit != null ? ` / ${u.day_limit.toLocaleString()} (남은 ${(u.day_left ?? 0).toLocaleString()})` : ""}`, `하루 초기화: ${u.reset_at}`];
+  const windows = [["초", u.second], ["분", u.minute], ["시간", u.hour]].filter(([, n]) => n != null).map(([w, n]) => `${w} ${n} · `).join("");  // 한도를 정하지 않은 긴 창은 기록을 보관하지 않아 빈 값
+  const lines = [`사용: ${windows}하루 ${u.day.toLocaleString()}${u.day_limit != null ? ` / ${u.day_limit.toLocaleString()} (남은 ${(u.day_left ?? 0).toLocaleString()})` : ""}`, `하루 초기화: ${u.reset_at}`];
   if (u.server) lines.push(`서버가 알려 준 남은 수: ${u.server.remaining ?? "—"}${u.server.reset ? ` (초기화 ${u.server.reset})` : ""}`);
   return lines.join("\n");
 }

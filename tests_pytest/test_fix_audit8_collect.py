@@ -65,6 +65,18 @@ def test_take_keeps_only_widest_configured_window(folder):
     assert len(json.loads((folder / L.USAGE).read_text(encoding="utf-8"))["g"]["sent"]) == 5001  # per_hour가 있으면 한 시간치를 보관(기존 5000 + 새 1)
 
 
+# 8차 리뷰: 보관하지 않는 긴 창의 사용량은 0이 아니라 모름(None) — 화면은 그 칸을 빼고 보인다
+def test_usage_does_not_report_windows_it_no_longer_keeps(folder):
+    now = time.time()
+    _limit(folder, per_second=1000)
+    L.write({"g": {"sent": [now - 30, now - 0.5], "day": [0, 0]}})
+    u = L.usage("g", now)
+    assert (u["second"], u["minute"], u["hour"]) == (1, None, None)
+    _limit(folder, per_hour=10000)
+    u = L.usage("g", now)
+    assert (u["second"], u["minute"], u["hour"]) == (1, 2, 2)
+
+
 def test_take_does_not_copy_bak_but_reset_does(folder):
     _limit(folder, per_minute=100)
     L.take("g", threading.Event())
