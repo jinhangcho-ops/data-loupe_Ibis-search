@@ -24,7 +24,6 @@ FILE = "destinations.json"
 # 보낼 곳의 종류는 adapters.SENDERS: label·image·fields[{name, label, secret, options?, default?, multiline?, hint?, check?, error?}]·send·check
 API_KEYS = ("name", "label", "secret", "options", "default", "multiline", "hint")
 FREE.update({"/api/destinations", "/api/destinations/check"})  # 보낼 곳 저장·연동 확인은 연결을 쓰지 않는다
-protect, reveal = credentials.protect, credentials.reveal  # 예전 이름(예약·테스트가 쓴다)
 
 
 def secret_key(name, field):

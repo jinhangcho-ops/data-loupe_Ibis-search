@@ -43,11 +43,11 @@ def read_key(path):
     return {"client_email": found["client_email"], "private_key": found["private_key"], "token_uri": token_uri}
 
 
-def assertion(key, now=None):
+def assertion(key):
     """서비스 계정 JWT(RS256)."""
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding
-    now = int(now or time.time())
+    now = int(time.time())
     head = b64(json.dumps({"alg": "RS256", "typ": "JWT"}).encode())
     claims = b64(json.dumps({"iss": key["client_email"], "scope": SCOPE, "aud": key["token_uri"], "iat": now, "exp": now + 3600}).encode())
     try:

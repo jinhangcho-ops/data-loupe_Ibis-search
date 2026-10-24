@@ -14,7 +14,7 @@ from core import server
 from core import settings
 from core import source
 from core import sql_exec
-from core.server import app, get_con, state, to_json
+from core.server import app, get_con, state
 
 
 parse = Later("core.parse")
@@ -34,6 +34,7 @@ DATE_FAILED = re.compile(r"out of range|conversion error|invalid (date|timestamp
 TABLE_PREPS = "table_preps.json"  # 테이블별로 마지막에 쓴 전처리 {테이블 열쇠: {"config", "saved"}}
 MAX_TABLE_PREPS = 200
 SAMPLES = {}  # 마지막으로 읽은 표본 하나 {테이블 열쇠: (크기, pyarrow 표, 표본 정보)}. 통계에 이어 타입 추천이 같은 표본을 쓴다.
+server.ON_SWITCH.append(SAMPLES.clear)  # 연결을 바꾸거나 끊으면 버린다(열쇠에 연결 열쇠가 들어 있어 다시 쓸 수 없고 최대 100만 행이 메모리에 남는다)
 
 
 @server.late_constants("prep")
@@ -393,7 +394,7 @@ def head():
     import polars as pl
     body = request.json
     arrow = sampled(body, table_key(body), sample_size(body), False)[0]
-    return jsonify(rows=to_json(pl.from_arrow(arrow.slice(0, PREVIEW_ROWS))))
+    return server.json_reply(pl.from_arrow(arrow.slice(0, PREVIEW_ROWS)))
 
 
 @app.post("/api/spec/table")
@@ -416,7 +417,7 @@ def preview():
     rows = run(lambda: result.get_rows(expr, PREVIEW_ROWS))
     before = known_rows(recipe)
     after = None if before is None and recipe.get("count") is False else run(lambda: result.get_count(expr)) if prep_expr.changes_rows(recipe) else before
-    return jsonify(rows=to_json(rows), types=[prep_expr.type_text(t) for t in expr.schema().values()], before=before, after=after,
+    return server.json_reply(rows, types=[prep_expr.type_text(t) for t in expr.schema().values()], before=before, after=after,
                    sources=[origin[name][0] for name in expr.columns], derived=[origin[name][1] for name in expr.columns], info=info,
                    local=local_mode(recipe))
 

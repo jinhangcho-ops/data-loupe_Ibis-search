@@ -11,6 +11,7 @@ from pathlib import Path
 
 from core import filelock
 from core import settings
+from core.sql_exec import quote
 
 FILE = "uploads.json"
 MAX_ENTRIES = 2000  # 넘으면 오래된 것부터 뺀다
@@ -93,10 +94,6 @@ class Run:
 
 
 # ---------- 지울 때 쓸 명령(보여 주기만 한다) ----------
-
-def quote(name):
-    return '"' + str(name).replace('"', '""') + '"'
-
 
 def literal(value):
     if isinstance(value, (int, float)) and not isinstance(value, bool):

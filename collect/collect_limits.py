@@ -99,18 +99,9 @@ def allowed(group, key):
 
 
 def clear_stale(path):
-    """오래된 잠금 파일을 지운다. 오래됐다고 본 뒤 지우기 전에 다른 프로세스가 새로 잡았을 수 있으므로, 먼저 다른 이름으로 옮기고 옮긴 것이 정말 오래된 것인지 다시 본다(아니면 되돌린다. core.filelock과 같은 방식)."""
-    moved = path.with_name(f"{path.name}.{os.getpid()}.old")
-    try:
-        os.replace(path, moved)
-        if time.time() - moved.stat().st_mtime <= STALE_LOCK:
-            try:
-                os.link(moved, path)  # 남의 살아 있는 잠금을 옮겼다: 그 자리가 비어 있으면 돌려놓는다
-            except OSError:
-                pass
-        moved.unlink(missing_ok=True)
-    except OSError:
-        pass
+    """오래된 잠금 파일을 지운다(core.filelock과 같은 방식: 옮기고, 정말 오래된 것인지 다시 보고, 아니면 되돌린다)."""
+    from core import filelock  # psutil을 끌어오므로 오래된 잠금을 만났을 때만 불러온다
+    filelock.clear_stale(path, stale=lambda moved: time.time() - moved.stat().st_mtime > STALE_LOCK)
 
 
 class Locked:
@@ -165,9 +156,7 @@ def item_of(data, name):
 
 def write(data):
     """사용 기록을 임시 파일에 쓴 뒤 바꿔치기한다. 바꾸기 전에 원래 파일을 .bak으로 남긴다(깨진 기록은 .bak으로 되살리지 않고 한도를 다 쓴 것으로 본다)."""
-    path = settings.PATH.parent / USAGE
-    settings.backup(path)
-    settings.write_atomic(path, data)
+    settings.write(USAGE, data)
 
 
 def counts(item, group, now):

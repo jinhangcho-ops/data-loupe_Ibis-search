@@ -43,6 +43,20 @@ def fetch_rows(expr, what):
     return got
 
 
+def fetch_table(expr, what):
+    """fetch_rows와 같되 dict 행 대신 pyarrow 표로(큰 결과를 numpy로 바로 바꿀 때)."""
+    tab = expr.limit(MAX_FETCH_ROWS + 1).to_pyarrow()
+    if tab.num_rows > MAX_FETCH_ROWS:
+        raise ValueError(f"{what}이(가) {MAX_FETCH_ROWS:,}개를 넘어 한 번에 가져올 수 없어요. 기간이나 조건으로 범위를 좁혀 주세요.")
+    return tab
+
+
+def latest(expr, col):
+    """컬럼의 최댓값(정수). 행이 없거나 값이 전부 비면 None."""
+    m = rows(expr.aggregate(m=expr[col].max()))[0]["m"]
+    return None if m is None else int(m)
+
+
 def epoch(col):
     """시각 컬럼의 초(정수)."""
     return col.cast("timestamp").epoch_seconds()
@@ -135,9 +149,9 @@ def concurrency_series(table, start, end):
     opens = s.select(t=s[start].cast("timestamp"), d=ibis.literal(1))
     closes = s.filter(s[end].notnull()).select(t=s[end].cast("timestamp"), d=ibis.literal(-1))
     events = opens.union(closes)
-    steps = fetch_rows(events.group_by("t").aggregate(d=events.d.sum()).order_by("t"), "동시 접속이 바뀌는 시각")
-    times = np.array([r["t"] for r in steps], dtype="datetime64[us]")
-    return times, np.cumsum([r["d"] for r in steps]).astype(np.int64)
+    steps = fetch_table(events.group_by("t").aggregate(d=events.d.sum()).order_by("t"), "동시 접속이 바뀌는 시각")
+    times = steps["t"].to_numpy().astype("datetime64[us]")
+    return times, np.cumsum(steps["d"].to_numpy(zero_copy_only=False)).astype(np.int64)
 
 
 def concurrency_stats(times, counts, start=None, end=None):
@@ -183,7 +197,7 @@ def seconds_between(table, user, time, event, first, second):
     joined = base.filter(base.e == b).select("u", "t").join(starts, "u").filter(lambda j: j.t >= j.ta)
     done = joined.group_by("u").aggregate(ta=joined.ta.min(), tb=joined.t.min())
     gaps = done.select(sec=epoch(done.tb) - epoch(done.ta))
-    values = np.array([r["sec"] for r in fetch_rows(gaps, "사용자")], dtype=float)
+    values = np.asarray(fetch_table(gaps, "사용자")["sec"].to_numpy(zero_copy_only=False), dtype=float)
     return values, int(rows(starts.aggregate(n=starts.u.count()))[0]["n"])
 
 
@@ -303,10 +317,9 @@ def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=
     j = act.join(first, "u")
     j = j.mutate(off=j.p - j.f)
     sizes = {int(r["f"]): int(r["n"]) for r in rows(first.group_by("f").aggregate(n=first.u.count()))}
-    last = rows(act.aggregate(m=act.p.max()))[0]["m"]
+    last = latest(act, "p")
     if last is None:  # 행이 없거나 시각이 전부 비었다
         return {"unit": unit, "mode": mode, "cohorts": []}
-    last = int(last)
     counts = cohort_counts(j, mode, span)
     width = 1 if mode == "range" else n_max + 1
     cohorts = []
@@ -380,10 +393,9 @@ def ltv(table, user, time, amount, n_days, unit="day"):
     paid = j.filter(j.day - j.d0 <= n_days)
     revenue = {int(r["f"]): r["rev"] for r in rows(paid.group_by("f").aggregate(rev=paid.amt.sum()))}
     sizes = {int(r["f"]): int(r["n"]) for r in rows(first.group_by("f").aggregate(n=first.u.count()))}
-    last_day = rows(t.aggregate(m=t.day.max()))[0]["m"]
+    last_day = latest(t, "day")
     if last_day is None:
         return []
-    last_day = int(last_day)
     out = []
     for f in sorted(sizes):
         end_day = (bucket_start(f + 1, unit) - EPOCH).days - 1
@@ -407,10 +419,9 @@ def nrr(table, user, time, amount):
     prev = paid.select("u", m=paid.m + 1, rp=paid.r)
     both = per.join(prev, ["u", "m"])
     kept = {int(r["m"]): r["k"] for r in rows(both.group_by("m").aggregate(k=both.r.sum()))}
-    last = rows(per.aggregate(m=per.m.max()))[0]["m"]
+    last = latest(per, "m")
     if last is None:
         return []
-    last = int(last)
     totals = {int(r["m"]): r["s"] for r in rows(prev.group_by("m").aggregate(s=prev.rp.sum())) if int(r["m"]) <= last}
     return [{"month": bucket_start(m, "month").isoformat(), "prev_revenue": float(s), "kept_revenue": float(kept.get(m, 0)), "nrr": ratio(float(kept.get(m, 0)), float(s))}
             for m, s in sorted(totals.items())]

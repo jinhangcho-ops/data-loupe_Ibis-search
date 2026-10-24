@@ -27,7 +27,7 @@ sentences = Later("query.sentences")
 server.CONSTANTS["question_sets"] = {"max_items": 30, "max_size": 40_000}
 server.FREE.update({"/api/sentences", "/api/question_sets", "/api/flow/check_edge", "/api/flow/check", "/api/flow/to_body", "/api/flow/from_body", "/api/flow/keys/remember", "/api/flow/keys/forget",
                     "/api/my_metrics", "/api/my_metrics/validate", "/api/my_metrics/update", "/api/my_metrics/delete", "/api/my_metrics/copy", "/api/my_metrics/status",
-                    "/api/my_metrics/check_use", "/api/my_metrics/used_by", "/api/my_metrics/stale", "/api/my_metrics/legacy", "/api/my_metrics/bind_legacy",
+                    "/api/my_metrics/check_use", "/api/my_metrics/used_by", "/api/my_metrics/stale", "/api/my_metrics/bind_legacy",
                     "/api/sentence/check", "/api/sentence/compile"})
 
 
@@ -225,6 +225,11 @@ def with_scope(defn):
     return {**defn, "scope": scope}
 
 
+def scope_of(data):
+    """요청 본문의 scope(key·label은 지금 연결로 채움)."""
+    return with_scope({"scope": data.get("scope")})["scope"]
+
+
 def columns_of(data):
     cols = data.get("columns")
     return cols if isinstance(cols, dict) else None
@@ -279,7 +284,7 @@ def my_metrics_delete():
 def my_metrics_copy():
     """[이 테이블에 맞춰 복사]: 지표(와 의존하는 지표)를 다른 테이블로 새 id로. mapping = {원래 컬럼: 새 컬럼}."""
     data = body_of(request.json)
-    scope = with_scope({"scope": data.get("scope")})["scope"]
+    scope = scope_of(data)
     done = my_metrics.copy_to(data.get("id"), scope, data.get("mapping"), columns_of(data), data.get("name"))
     return jsonify(metrics=[view(m) for m in done["metrics"]], id_map=done["id_map"])
 
@@ -291,7 +296,7 @@ def my_metrics_status():
     cols = columns_of(data)
     if cols is None:
         raise ValueError("지금 테이블의 컬럼(columns)을 함께 보내세요.")
-    scope = with_scope({"scope": data.get("scope")})["scope"]
+    scope = scope_of(data)
     items = my_metrics.load()
     return jsonify(status={m["id"]: my_metrics.status(m, cols, items) for m in items if my_metrics.scope_id(m.get("scope")) == my_metrics.scope_id(scope)})
 
@@ -301,7 +306,7 @@ def my_metrics_check_use():
     """지표를 이 scope에서 그대로 쓸 수 있는지: {ok, reason?}. 다른 테이블의 지표는 복사해서 쓴다."""
     data = body_of(request.json)
     metric = my_metrics.get(data.get("id"))
-    reason = my_metrics.check_use(metric, with_scope({"scope": data.get("scope")})["scope"])
+    reason = my_metrics.check_use(metric, scope_of(data))
     return jsonify(ok=reason is None, **({"reason": reason} if reason else {}))
 
 
@@ -321,16 +326,11 @@ def my_metrics_stale():
     return jsonify(stale=my_metrics.is_stale(metric, data.get("def_hash")), def_hash=metric["def_hash"], cache_key=my_metrics.cache_key(metric, data.get("period", "")))
 
 
-@app.get("/api/my_metrics/legacy")
-def my_metrics_legacy():
-    return jsonify(legacy=my_metrics.legacy_list())
-
-
 @app.post("/api/my_metrics/bind_legacy")
 def my_metrics_bind_legacy():
     """공통 정의(예전 지표 파일의 지표)를 이 테이블에 묶어 저장한다(컬럼 검사 포함)."""
     data = body_of(request.json)
-    scope = with_scope({"scope": data.get("scope")})["scope"]
+    scope = scope_of(data)
     return jsonify(metric=view(my_metrics.bind_legacy(data.get("name"), scope, columns_of(data), data.get("new_name"))))
 
 

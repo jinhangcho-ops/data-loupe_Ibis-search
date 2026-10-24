@@ -20,8 +20,6 @@ NAMES = {"table": "테이블", "union": "이어붙이기", "join": "조인", "pe
 ORDER_TEXT = "테이블 → 이어붙이기 → 조인 → 기간 → 조건 → 계산 → 중복 제거 → 집계·지표 → 차트·카드"
 SAME_OK = ("join", "period", "condition", "calc")  # 같은 순위끼리 이어도 되는 단계
 KIND_TEXT = {"num": "숫자", "text": "글자", "date": "날짜", "bool": "참/거짓", "json": "JSON", "array": "목록", "struct": "구조", "other": "기타"}
-JOIN_HOWS = parse.JOINS
-STAGES = ("joins", "periods", "conditions", "calcs")
 MAX_NODES = 200
 AFTER_AGG = ("aggregate", "metric")  # 컬럼이 묶은 컬럼과 결과만 남는 단계
 NUMERIC_AGGS = tuple(i for i in sql_funcs.aggregate_ids() if sql_funcs.get(i)["kind_in"] == "num")  # 숫자 컬럼이 있어야 하는 집계
@@ -670,6 +668,12 @@ def to_expr(graph, nid, get_table, memo=None):
     return expr
 
 
+def grouped(expr, p, made):
+    """made({이름: 집계 식})를 p["by"]별로 묶어 낸다(by가 없으면 전체 한 줄)."""
+    by = [parse.column(expr, c) for c in p.get("by") or [] if c]
+    return expr.group_by(by).aggregate(**made) if by else expr.aggregate(**made)
+
+
 def aggregate_expr(expr, p):
     """집계 단계: by별로 series의 집계들(sql_funcs.aggregate). by가 없으면 전체 한 줄."""
     series = p.get("series") or []
@@ -683,8 +687,7 @@ def aggregate_expr(expr, p):
             continue
         where = parse.predicate(s["where"], expr) if s.get("where") else None
         made[s.get("name") or f"v{i}"] = sql_funcs.aggregate(s.get("agg", "count"), expr, s.get("y") or None, where, s.get("opts"))
-    by = [parse.column(expr, c) for c in p.get("by") or [] if c]
-    return expr.group_by(by).aggregate(**made) if by else expr.aggregate(**made)
+    return grouped(expr, p, made)
 
 
 def metric_expr(expr, p):
@@ -694,8 +697,7 @@ def metric_expr(expr, p):
     made = {n: metric_file.metric_expr(expr, n, found[n]) for n in p.get("names") or []}
     if not made:
         raise ValueError("구할 지표를 고르세요.")
-    by = [parse.column(expr, c) for c in p.get("by") or [] if c]
-    return expr.group_by(by).aggregate(**made) if by else expr.aggregate(**made)
+    return grouped(expr, p, made)
 
 
 def schemas_of(graph, get_table, source_key=None):

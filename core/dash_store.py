@@ -622,14 +622,10 @@ def write(dashboards):
     if size > MAX_STORE_BYTES:
         raise ValueError(f"대시보드 전체가 {size / 1024 / 1024:.1f}MB로 상한 {MAX_STORE_BYTES // 1024 // 1024}MB를 넘습니다. 쓰지 않는 대시보드를 지우세요.")
     path = path_of()
+    data = {"v": VERSION, "blob": credentials.protect(body)}  # 암호화가 실패하면 .bak도 만들지 않는다
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + ".tmp")
-    temp.write_text(json.dumps({"v": VERSION, "blob": credentials.protect(body)}), encoding="utf-8")
-    try:
-        settings.backup(path)
-        settings.retrying(lambda: os.replace(temp, path))
-    finally:
-        temp.unlink(missing_ok=True)
+    settings.backup(path)
+    settings.write_atomic(path, data)
     CACHE["stamp"] = None  # 같은 시각 단위 안에 같은 크기로 다시 쓰면 (경로, mtime, 크기)가 같아 옛 캐시를 쓰게 된다: 다음 load가 다시 읽게
     # shortcut: 다른 프로세스(예약 최신화)가 같은 틱에 같은 크기로 쓰면 여전히 못 알아챈다. 그런 일이 보이면 파일 내용 해시를 stamp에 넣는다
 

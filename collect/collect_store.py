@@ -199,10 +199,11 @@ def write_output(con, table, fmt, out, folder):
     """table을 out(parquet 또는 csv)으로 쓰고 행 수를 돌려준다. CSV는 Excel이 한글을 바로 읽도록 UTF-8 BOM을 붙인다."""
     if fmt == "parquet":
         con.to_parquet(table, out)
-    else:
-        plain = Path(folder, "result.csv")
-        con.to_csv(table, plain)
-        with_bom(plain, out)
+        import pyarrow.parquet as pq  # 쓴 파일의 정보에서 행 수를 읽는다(다시 읽어 세지 않는다)
+        return pq.read_metadata(out).num_rows
+    plain = Path(folder, "result.csv")
+    con.to_csv(table, plain)
+    with_bom(plain, out)
     return con.execute(table.count())
 
 

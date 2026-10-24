@@ -1365,8 +1365,7 @@ $("a-dash-go").onclick = () => busy($("a-dash-go"), async () => {
   try {
     const added = await api("/api/dash/card/add", { dashboard: $("a-dash").value, name: $("a-dash-name").value, card });
     $("a-pop").classList.add("hidden");
-    say("err-ana", `대시보드 '${added.dashboard.name}'에 넣었습니다(카드 ${added.dashboard.cards}개). `, true);
-    $("err-ana").append(el("a", { href: "/dashboard?open=" + encodeURIComponent(added.dashboard.id), textContent: "대시보드에서 보기" }));
+    showAdded("err-ana", added.dashboard);
   } catch (e) { say("err-ana", e.message); }
 });
 $("theme").addEventListener("click", drawAna);  // common.js의 onclick이 화면 모드를 바꾼 뒤에 다시 그린다.

@@ -7,7 +7,6 @@
 - cols는 만들 때 쓴 컬럼의 종류 기록이다. 테이블 구조가 바뀌어(컬럼 없음·타입 바뀜) 맞지 않으면 status가 '쓸 수 없음 + 이유'를 준다.
 - 예전 metrics.py 파일의 지표는 scope 없는 '공통 정의'(legacy_list)이고, 쓸 때 컬럼을 검사해 scope 붙은 지표로 저장한다(bind_legacy).
 - 결과 캐시 열쇠는 (id, def_hash, scope.key, 기간)이다(cache_key). 데이터를 읽지 않는다."""
-import datetime as dt
 import json
 import re
 import secrets
@@ -325,16 +324,12 @@ def template_of(tid):
     return metric_catalog.template(tid) if metric_catalog.is_catalog(tid) else sentences.get(tid)
 
 
-def now_text():
-    return dt.datetime.now().isoformat(timespec="seconds")
-
-
 @locked
 def create(defn, columns=None):
     """내 지표를 만든다. 저장한 지표를 돌려준다."""
     items = load()
     made = build(defn, columns, items)
-    metric = {"id": secrets.token_hex(8), **made, "def_hash": "", "created": now_text(), "updated": now_text()}
+    metric = {"id": secrets.token_hex(8), **made, "def_hash": "", "created": dash_store.now_text(), "updated": dash_store.now_text()}
     items.append(metric)
     refresh_hashes(items)
     save(items)
@@ -354,7 +349,7 @@ def update(metric_id, patch, columns=None):
             raise ValueError(f"‘{old['name']}’을(를) 쓰는 지표({', '.join(m['name'] for m in users[:5])})가 있어 다른 테이블(흐름)로 옮길 수 없어요. 쓰는 지표를 먼저 바꾸세요.")
     before = old.get("def_hash")
     old.pop("align", None)
-    old.update(made, updated=now_text())
+    old.update(made, updated=dash_store.now_text())
     refresh_hashes(items)
     save(items)
     now = get(metric_id, items)
@@ -443,7 +438,7 @@ def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
         if any(x for x in pool if scope_id(x.get("scope")) == scope_id(scope) and x["name"] == title):
             title += " (복사)"
         made = build({"name": title, "scope": scope, "template": tid, "slots": slots, "unit": m.get("unit"), "better": m.get("better")}, columns, pool)
-        new = {"id": secrets.token_hex(8), **made, "def_hash": "", "created": now_text(), "updated": now_text(), "copied_from": m["id"]}
+        new = {"id": secrets.token_hex(8), **made, "def_hash": "", "created": dash_store.now_text(), "updated": dash_store.now_text(), "copied_from": m["id"]}
         id_map[m["id"]] = new["id"]
         out.append(new)
     items += out

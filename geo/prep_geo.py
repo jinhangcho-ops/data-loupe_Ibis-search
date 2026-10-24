@@ -72,6 +72,13 @@ def attach(t, keys, frame, new):
     return joined.select(*[joined[c] for c in keep], *[joined[n] for n in new], joined["__ord"]).order_by("__ord").drop("__ord")
 
 
+def checked_table(step, refs):
+    """단계가 고른 지점·영역 테이블(이름을 확인한 뒤)의 ibis 식."""
+    schema = step.get("schema") or None
+    parse.check_name(step["table"], source.list_tables(refs, schema), "테이블")
+    return source.get_table(refs, step["table"], schema)
+
+
 def reference(step, refs, columns, what):
     """지점·영역 테이블(또는 GeoJSON 파일)에서 columns만 읽은 Polars 표. refs는 지금 연결(원본)."""
     if step.get("path"):
@@ -81,9 +88,7 @@ def reference(step, refs, columns, what):
         return frame.select(columns)
     if not step.get("table"):
         raise ValueError(f"{what} 테이블을 고르세요.")
-    schema = step.get("schema") or None
-    parse.check_name(step["table"], source.list_tables(refs, schema), "테이블")
-    table = source.get_table(refs, step["table"], schema)
+    table = checked_table(step, refs)
     for c in columns:
         parse.check_name(c, table.columns, f"{what} 컬럼")
     if held.remote(refs):  # 원격 DB: 같은 연결·테이블·컬럼이면 한 번 받은 것을 다시 쓴다(미리보기마다 DB를 읽지 않게). 연결을 바꾸면 held.clear가 버린다.
@@ -110,9 +115,7 @@ def reference_exprs(steps, refs):
     for step in steps or []:
         if step.get("op") == "tm" or step.get("path") or not step.get("table"):
             continue
-        schema = step.get("schema") or None
-        parse.check_name(step["table"], source.list_tables(refs, schema), "테이블")
-        table = source.get_table(refs, step["table"], schema)
+        table = checked_table(step, refs)
         want = [step.get("ref_lat"), step.get("ref_lon"), step.get("label")] if step["op"] == "nearest" else [step.get("geometry") or "geometry", *(step.get("take") or [])]
         for c in want:
             if c:
@@ -125,8 +128,7 @@ def reference_exprs(steps, refs):
 def chosen(values, index):
     """지점·영역 컬럼 values에서 index(-1이면 없음)번째 값들의 Polars 시리즈."""
     import polars as pl
-    got = values.to_list()
-    return pl.Series(values.name, [None if i < 0 else got[i] for i in index.tolist()], dtype=values.dtype)
+    return values.extend_constant(None, 1).gather(pl.Series(index))  # 끝에 붙인 빈 값이 -1번(없음)
 
 
 def run_tm(t, step, info):
@@ -196,7 +198,7 @@ def run_region(t, step, refs, info):
     if not take:  # 붙일 컬럼을 안 골랐으면 영역 번호(영역 테이블의 행 순서, 0부터)라도 붙인다
         names = [prefix + "번호"]
         prep_derive.check_name(names[0], t, "영역 컬럼")
-        columns[names[0]] = pl.Series([None if i < 0 else int(i) for i in index.tolist()], dtype=pl.Int64)
+        columns[names[0]] = pl.select(pl.when(pl.lit(pl.Series(index)) >= 0).then(pl.lit(pl.Series(index)))).to_series().rename("").cast(pl.Int64)
     info.append({"op": "region", "pairs": len(found), "matched": int((index >= 0).sum()), "regions": len(regions)})
     return attach(t, [lat, lon], pl.DataFrame(columns), names), names
 

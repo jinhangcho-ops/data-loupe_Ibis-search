@@ -147,8 +147,7 @@ def metric_values(body, names, by=None):
     parts = [p for n in names if n in found for p in (found[n]["numerator"], found[n]["denominator"]) if p]
     expr = runnable(body, select=False, extra=[(p["agg"], p["column"], p.get("opts")) for p in parts])  # 연결이 못 하는 집계(중앙값 등)면 이 PC 사본에서
     labels, values, more = run(lambda: metric_file.compute(expr, names, found, by or None))
-    for name in names:
-        use_counts.use("metrics", name)
+    use_counts.use_many("metrics", names)
     return found, labels, values, more
 
 

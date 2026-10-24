@@ -76,8 +76,7 @@ class EnvLLM:
 
 
 def env_path():
-    found = (settings.read(FILE) or {}).get("env")
-    return found if isinstance(found, str) and found else ""
+    return settings.saved_text(FILE, "env")
 
 
 def save_env_path(path):

@@ -1016,7 +1016,7 @@ const drawnCard = (drawn, ranges) => ({ kind: drawn.kind || "chart", view: { typ
 // 계열: 차트에 겹쳐 그릴 값 하나하나. 넣어 둔 것이 없으면 지금 고른 칸의 내용이 계열 하나가 된다.
 let series = [];
 const seriesNow = () => ({ y: $("cy").value, ...pickers.chart.get(), type: $("ctype").value, dash: $("cdash").value, axis: $("caxis").value });
-const seriesName = s => Funcs.aggName(s.agg) + (s.agg === "count" || !s.y ? "" : ` (${s.y})`) +  // 서버(dash_calc.series_name)와 같은 이름 + 인자(분위수 P 등)
+const seriesName = s => aggName(s.agg) + (s.agg === "count" || !s.y ? "" : ` (${s.y})`) +  // 서버(dash_calc.series_name)와 같은 이름 + 인자(분위수 P 등)
   (s.opts ? " " + Object.entries(s.opts).filter(([k]) => k !== "order").map(([k, v]) => `${k}=${[].concat(v).join(",")}`).join(" ") : "");
 function showSeries() {
   $("series").innerHTML = series.map((s, i) => `<li><span>${esc(seriesName(s))} <span class="hint">· ${s.type === "bar" ? "막대" : s.dash === "dashed" ? "점선" : "선"} · ${s.axis === "right" ? "오른쪽 축" : "왼쪽 축"}</span></span>` +
@@ -1025,7 +1025,7 @@ function showSeries() {
 }
 $("series-add").onclick = () => {
   const s = seriesNow();
-  if (pickers.chart.yMode() === "required" && !s.y) { $("err-chart").textContent = `${Funcs.aggName(s.agg)}은(는) Y 컬럼을 고르세요.`; return; }
+  if (pickers.chart.yMode() === "required" && !s.y) { $("err-chart").textContent = `${aggName(s.agg)}은(는) Y 컬럼을 고르세요.`; return; }
   series.push(s);
   $("err-chart").textContent = "";
   showSeries();
@@ -1097,8 +1097,6 @@ $("ctable-csv").onclick = () => {
   const text = [columns, ...rows.map(r => columns.map(c => r[c]))].map(line => line.map(field).join(",")).join("\n");
   download(URL.createObjectURL(new Blob(["﻿" + text], { type: "text/csv" })), "chart.csv");
 };
-// 그림 종류(png, jpeg)에 맞는 파일 확장자
-const imageExt = type => type === "jpeg" ? "jpg" : "png";
 // 집계 표 내보내기: 표 전체를 고른 저장 모드의 색으로 그려 저장한다. 글자는 화면의 표와 같게 보인다(글자 수 제한 포함).
 function summaryImage(type) {
   const { columns, rows } = last.summary, colors = themeColors($("simage").value);

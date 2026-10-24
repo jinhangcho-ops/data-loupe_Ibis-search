@@ -35,8 +35,3 @@ async function addToDashboard(card, kind, table, picked) {
   card.data = d.data;
   return (await api("/api/dash/card/add", { dashboard: pick.id, name: pick.name, card })).dashboard;
 }
-// 알림 줄(id)에 결과 글과 "대시보드에서 보기" 링크를 보인다.
-function showAdded(id, added) {
-  say(id, `대시보드 '${added.name}'에 넣었습니다(카드 ${added.cards}개). `, true);
-  $(id).append(el("a", { href: "/dashboard?open=" + encodeURIComponent(added.id), textContent: "대시보드에서 보기" }));
-}

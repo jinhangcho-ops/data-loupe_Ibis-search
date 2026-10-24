@@ -9,7 +9,6 @@ import threading
 from pathlib import Path
 
 from flask import Flask, Response, abort, current_app, g, jsonify, request
-from lazy import ibis
 from werkzeug.exceptions import HTTPException
 
 from core import drivers
@@ -64,18 +63,35 @@ def number_range(kind, low, high):
     return {"int": kind is int, "min": low, "max": high}
 
 
+RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}  # Windows가 파일 이름으로 쓰지 못하는 이름
+BAD_NAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')  # 파일 이름에 쓸 수 없는 글자(_로 바꾼다)
+
+
+def text_wide(df, text_big):
+    """±2^53을 넘는 정수가 든 컬럼은 글자로 바꾼 표(화면 JSON.parse가 정밀도를 잃는다). text_big이 거짓이면 그대로."""
+    wide = [c for c in df.columns if text_big and df[c].dtype.is_integer() and max(abs(df[c].max() or 0), abs(df[c].min() or 0)) > 2**53]
+    return df.with_columns(*[df[c].cast(str) for c in wide])
+
+
 def to_json(df, text_big=True):
     """Polars DataFrame → {columns, rows}. 날짜는 ISO 문자열이 된다. ±2^53을 넘는 정수가 든 컬럼은 글자로 보낸다(화면 JSON.parse가 정밀도를 잃는다).
     text_big이 거짓이면 숫자로 둔다(서버가 이어서 산술에 쓰는 결과)."""
-    wide = [c for c in df.columns if text_big and df[c].dtype.is_integer() and max(abs(df[c].max() or 0), abs(df[c].min() or 0)) > 2**53]
-    df = df.with_columns(*[df[c].cast(str) for c in wide])
+    df = text_wide(df, text_big)
     return {"columns": df.columns, "rows": json.loads(df.write_json())}
+
+
+def json_reply(df, text_big=True, **fields):
+    """jsonify(rows=to_json(df, text_big), **fields)와 같은 응답을, 표를 Python 값으로 풀었다 다시 쓰지 않고 Polars가 쓴 JSON을 그대로 이어 붙여 만든다(큰 표에서 훨씬 빠르다).
+    fields의 이름은 rows면 안 된다(표가 rows로 들어간다). 값은 jsonify와 같은 규칙(app.json)으로 JSON이 된다."""
+    df = text_wide(df, text_big)
+    head = '{"rows":{"columns":' + app.json.dumps(df.columns) + ',"rows":' + df.write_json() + "}"
+    tail = app.json.dumps(fields)
+    return app.response_class(head + ("," + tail[1:] if fields else "}") + "\n", mimetype="application/json")
 
 
 def expr_sql(con, expr):
     """(SQL 글, 방언 또는 None): 처리 용량을 셀 때 읽을 Ibis 식의 SQL. 파일 연결(Polars)은 SQL을 쓰지 않으므로 duckdb 방언으로 만든다."""
-    files = con.name == "polars"
-    return str(ibis.to_sql(expr, dialect="duckdb") if files else ibis.to_sql(expr)), ("duckdb" if files else None)
+    return scan_size.sql_of(con, expr)
 
 
 def scan_gate(body, make_sql, rows=None):
@@ -85,7 +101,7 @@ def scan_gate(body, make_sql, rows=None):
     {needs_confirm, blocked, text, bytes, limit, …}(머리 X-Needs-Confirm)을 돌려준다. 그 밖에는 None(그대로 실행)."""
     config = settings.load()
     confirmed = body.get("confirmed") is True
-    if confirmed and config.get("scan_unknown") != "block":
+    if confirmed and not scan_size.blocks_unknown(config):
         return None
     con, opened = get_con(), state["opened"]
 
@@ -93,8 +109,8 @@ def scan_gate(body, make_sql, rows=None):
         try:
             sql, dialect = make_sql()
         except Exception as e:
-            return {"over": False, "unknown": True, "blocked": config.get("scan_unknown") == "block", "bytes": None, "limit": None,
-                    "text": "처리 용량을 미리 알 수 없어요(" + ((str(e).strip().splitlines() or [type(e).__name__])[0][:120]) + ")."}
+            return {"over": False, "unknown": True, "blocked": scan_size.blocks_unknown(config), "bytes": None, "limit": None,
+                    "text": "처리 용량을 미리 알 수 없어요(" + scan_size.reason(e) + ")."}
         return scan_size.limit_check(con, sql, opened, dialect, config, rows)
 
     found = run(work)
@@ -212,7 +228,12 @@ def connection_key():
     """지금 연결을 알아보는 열쇠(비밀번호 없음). 가상 테이블을 연결마다 따로 둘 때 쓴다."""
     if state["opened"] is None:
         raise ValueError("먼저 연결하세요.")
-    return use_counts.connection_key({**source.recent(state["opened"]), **{k: v for k, v in state["opened"].items() if k in ("file", "files")}})
+    return use_counts.connection_key(opened_info())
+
+
+def opened_info():
+    """지금 연결의 알림용 정보(비밀번호 없음): source.recent에 연 파일(file·files)을 더한 것."""
+    return {**source.recent(state["opened"]), **{k: v for k, v in state["opened"].items() if k in ("file", "files")}}
 
 
 def virtual_tables():
@@ -352,16 +373,25 @@ def reading(path):
     return os.path.normcase(os.path.abspath(path)) in [os.path.normcase(os.path.abspath(p)) for p in files]
 
 
+ON_SWITCH = []  # 연결이 바뀌거나 끊길 때 부를 함수들(연결에 매인 캐시를 비우는 곳이 등록한다)
+
+
+def drop_connection():
+    """지금 연결을 닫고 연결에 매인 것(받아 둔 결과, 기억한 테이블, 비밀번호, 연 곳, 행 수)을 비운다. 연결이 없어도 안전하다."""
+    if state["con"] is not None:
+        source.close(state["con"])
+    state.update(con=None, passwords=[], opened=None, rows={})
+    forget_tables()
+    source.on_worker(held.clear)()  # 받아 둔 결과는 이전 연결의 것
+    for hook in ON_SWITCH:
+        hook()
+
+
 def switch(new):
     """연결을 new(연결 요청 값)로 바꾸고 스키마 목록을 돌려준다. 이전 연결을 먼저 닫고, 새 연결이 실패하면 이전 연결을 다시 열어 둔다."""
     old = state["opened"]
     passwords = source.passwords(new)
-    if state["con"] is not None:  # 이전 연결을 닫아야 같은 파일을 다시 열 수 있다.
-        source.close(state["con"])
-        state.update(con=None, passwords=[], opened=None)
-    state.update(rows={})
-    forget_tables()
-    source.on_worker(held.clear)()  # 받아 둔 결과는 이전 연결의 것
+    drop_connection()  # 이전 연결을 닫아야 같은 파일을 다시 열 수 있다.
     try:
         con = open_con(new)
     except Exception as e:
@@ -404,8 +434,7 @@ def current():
     """지금 연결. 화면이 새로 열려도 연결은 서버에 남아 있으므로 칸을 채울 때 쓴다. 비밀번호는 없다."""
     if state["con"] is None:
         return jsonify(connected=False)
-    opened = {**source.recent(state["opened"]), **{k: v for k, v in state["opened"].items() if k in ("file", "files")}}
-    return jsonify(connected=True, opened=opened, schemas=source.list_schemas(state["con"]))
+    return jsonify(connected=True, opened=opened_info(), schemas=source.list_schemas(state["con"]))
 
 
 @app.get("/api/recent")
@@ -423,11 +452,7 @@ def connections():
 @app.post("/api/disconnect")
 def disconnect():
     """연결을 끊고 파일·접속을 놓는다. 연결이 없으면 아무 일도 하지 않는다."""
-    if state["con"] is not None:
-        source.close(state["con"])
-    source.on_worker(held.clear)()
-    forget_tables()
-    state.update(con=None, passwords=[], opened=None, rows={})
+    drop_connection()
     return jsonify(ok=True)
 
 

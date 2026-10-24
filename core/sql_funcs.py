@@ -148,12 +148,16 @@ def condition_value(t, raw, spec, f):
 
 def resolve_one(t, raw, spec, f):
     kind = spec["kind"]
+
+    def at_least_one(raw):
+        if not isinstance(raw, (list, tuple)) or (not raw and not spec.get("optional")):
+            raise ValueError(f"{f['label']}: '{spec['label']}'을 하나 이상 넣으세요.")
+
     if kind == "column":
         return column_value(t, raw, spec, f)
     if kind == "columns":
         raw = [raw] if isinstance(raw, (str, ibis.expr.types.Value)) else raw
-        if not isinstance(raw, (list, tuple)) or (not raw and not spec.get("optional")):
-            raise ValueError(f"{f['label']}: '{spec['label']}'을 하나 이상 넣으세요.")
+        at_least_one(raw)
         return [column_value(t, r, {**spec, "kinds": spec.get("kinds", "any")}, f) for r in raw]
     if kind in ("number", "int"):
         return number_value(raw, spec, f)
@@ -174,8 +178,7 @@ def resolve_one(t, raw, spec, f):
         raw = [raw] if isinstance(raw, (str, ibis.expr.types.Value)) else raw
         return [parse.parse_sort(r, t) if isinstance(r, str) else r for r in raw]
     if kind == "list":
-        if not isinstance(raw, (list, tuple)) or (not raw and not spec.get("optional")):
-            raise ValueError(f"{f['label']}: '{spec['label']}'을 하나 이상 넣으세요.")
+        at_least_one(raw)
         return list(raw)
     if kind == "cases":
         if not isinstance(raw, (list, tuple)) or not raw:
@@ -1057,9 +1060,9 @@ def support(t, ids=None):
     return {i: ok if FUNCS[i]["raw"] else judge(FUNCS[i], t, source.compiles) for i in (ids or FUNCS)}
 
 
-def dialect_status(id, dialect, t=None):
+def dialect_status(id, dialect):
     """방언(sqlglot 이름)으로 SQL을 만들 수 있는지(실행하지 않음) {status, note}. 시험 표는 모든 종류의 컬럼을 가진 빈 표."""
-    t = t if t is not None else probe_table()
+    t = probe_table()
 
     def works(expr):
         try:

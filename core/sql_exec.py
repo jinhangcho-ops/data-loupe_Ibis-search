@@ -180,7 +180,7 @@ def save_virtual(key, name, definition, real_tables, verify):
 
 
 def quote(name):
-    return '"' + name.replace('"', '""') + '"'
+    return '"' + str(name).replace('"', '""') + '"'
 
 
 # ---------- 풀어 넣기와 실행 ----------

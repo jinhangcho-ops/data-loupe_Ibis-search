@@ -56,16 +56,16 @@ def with_user(t, s):
     return t.filter(t[s["user"]].notnull())
 
 
-def event_mask(t, s, event="event", value="event_value"):
+def event_mask(t, s):
     """이벤트 컬럼과 값이 있으면 '그 이벤트인 행' 참거짓 식, 없으면 None."""
-    if s.get(event) and s.get(value) not in (None, ""):
-        return t[s[event]] == funnel.step_value(t[s[event]].type(), s[value])
+    if s.get("event") and s.get("event_value") not in (None, ""):
+        return t[s["event"]] == funnel.step_value(t[s["event"]].type(), s["event_value"])
     return None
 
 
-def only_event(t, s, event="event", value="event_value"):
+def only_event(t, s):
     """이벤트 컬럼과 값이 있으면 그 이벤트의 행만."""
-    mask = event_mask(t, s, event, value)
+    mask = event_mask(t, s)
     return t if mask is None else t.filter(mask)
 
 
@@ -79,10 +79,15 @@ def label_of(index, unit):
     return mc.bucket_start(int(index), unit).isoformat()
 
 
+def cut_note(ctx, what, side="최근"):
+    """표를 MAX_ROWS개로 자른다는 알림."""
+    ctx.notes.append(f"{what}이 많아 {side} {MAX_ROWS}개만 표에 실었어요(대표 값은 전체 기준).")
+
+
 def last_rows(rows, ctx, what="기간"):
     """표가 길면 최근 MAX_ROWS개만 싣는다."""
     if len(rows) > MAX_ROWS:
-        ctx.notes.append(f"{what}이 많아 최근 {MAX_ROWS}개만 표에 실었어요(대표 값은 전체 기준).")
+        cut_note(ctx, what)
         return rows[-MAX_ROWS:]
     return rows
 
@@ -90,9 +95,14 @@ def last_rows(rows, ctx, what="기간"):
 def top_rows(rows, ctx, what):
     """표가 길면 앞의 MAX_ROWS개(이미 많은 순으로 정렬된 것)만 싣고 알린다."""
     if len(rows) > MAX_ROWS:
-        ctx.notes.append(f"{what}이 많아 앞의 {MAX_ROWS}개만 표에 실었어요(대표 값은 전체 기준).")
+        cut_note(ctx, what, "앞의")
         return rows[:MAX_ROWS]
     return rows
+
+
+def unique_users(x, s):
+    """사용자 컬럼의 고유 값 수(정수)."""
+    return int(one(x.aggregate(n=x[s["user"]].nunique()))["n"])
 
 
 def users_by_unit(t, s, unit, ctx):
@@ -105,7 +115,7 @@ def users_by_unit(t, s, unit, ctx):
     lo, hi = min(found), max(found)
     cells = hi - lo + 1
     if cells > MAX_ROWS:
-        ctx.notes.append(f"기간이 많아 최근 {MAX_ROWS}개만 표에 실었어요(대표 값은 전체 기준).")
+        cut_note(ctx, "기간")
     msg = mc.sparse_note(cells, len(found))
     if msg:
         ctx.notes.append(msg)
@@ -120,7 +130,7 @@ def uv(t, s, p, ctx):
     if s.get("unit") and not s.get("time"):
         raise ValueError("단위별로 보려면 시각 컬럼을 골라 주세요.")
     x = with_user(t, s)
-    n = int(one(x.aggregate(n=x[s["user"]].nunique()))["n"])
+    n = unique_users(x, s)
     if not s.get("unit"):
         return result(n, parts={"uv": n}, label="고유 사용자 수")
     rows = users_by_unit(t, s, s["unit"], ctx)[0]
@@ -394,7 +404,7 @@ def revenue(t, s, p, ctx):
 def payers(t, s, p, ctx):
     """PU: 금액이 0보다 큰 고유 사용자 수."""
     x = paid(t, s)
-    n = int(one(x.aggregate(n=x[s["user"]].nunique()))["n"])
+    n = unique_users(x, s)
     return result(n, parts={"pu": n}, label="결제한 사용자 수")
 
 
@@ -549,7 +559,7 @@ def impressions(t, s, p, ctx):
 def reach(t, s, p, ctx):
     """도달: 고유 사용자 수."""
     x = with_user(t, s)
-    n = int(one(x.aggregate(n=x[s["user"]].nunique()))["n"])
+    n = unique_users(x, s)
     return result(n, parts={"reach": n}, label="노출된 고유 사용자 수")
 
 

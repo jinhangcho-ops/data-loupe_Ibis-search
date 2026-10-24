@@ -1,7 +1,6 @@
 """대시보드의 라우트. server.app에 달린다. 저장·목록·지우기·카드 더하기·기간 읽기·비교 문장·최신화 상태는 연결을 쓰지 않으므로 차례(turn)를 기다리지 않는다.
 카드 값을 구하는 /api/dash/card/compute와 /api/dash/cards/compute만 연결에서 구한다(차례를 기다린다). 최신화는 dash_refresh의 작업 스레드가 한다."""
 import datetime as dt
-import re
 import time
 from pathlib import Path
 
@@ -93,12 +92,17 @@ def card_add():
     return jsonify(dashboard={"id": saved["id"], "name": saved["name"], "cards": len(saved["cards"])}, **dash_store.listing())
 
 
+def other_source(key, now):
+    """key가 있는데 지금 연결(now)과 다른 연결의 것인지."""
+    return bool(now and key and not use_counts.same_source(key, now["key"]))
+
+
 @app.post("/api/dash/card/compute")
 def card_compute():
     """카드 하나의 source로 data를 구해 돌려준다(저장하지 않는다). source.key가 있는데 지금 연결과 다르면 거부한다. 지금 연결의 key·label도 함께 준다."""
     card = dash_store.check_card((request.json or {}).get("card") or {})
     now = dash_store.current_source()
-    if now and card["source"].get("key") and not use_counts.same_source(card["source"]["key"], now["key"]):
+    if other_source(card["source"].get("key"), now):
         raise ValueError(f"이 카드는 다른 연결({card['source'].get('label') or card['source']['key']})에서 구한 것입니다. 그 연결로 바꾼 뒤 다시 구하세요.")
     return jsonify(data=dash_calc.compute(card, dt.datetime.now().isoformat(timespec="seconds"), request.json.get("ctx")), source=now)
 
@@ -109,7 +113,7 @@ def chart_points():
     source_key가 있는데 지금 연결과 다르면 거부한다."""
     body = request.json
     now = dash_store.current_source()
-    if now and body.get("source_key") and not use_counts.same_source(body["source_key"], now["key"]):
+    if other_source(body.get("source_key"), now):
         raise ValueError("이 카드는 다른 연결에서 구한 것입니다. 그 연결로 바꾼 뒤 다시 구하세요.")
     return jsonify(points=dash_calc.points_of(body, body.get("size")))
 
@@ -125,7 +129,7 @@ def cards_compute():
     for one in given:
         try:
             card = dash_store.check_card(one)
-            if now and card["source"].get("key") and not use_counts.same_source(card["source"]["key"], now["key"]):
+            if other_source(card["source"].get("key"), now):
                 raise ValueError("다른 연결에서 구한 카드예요")
             out.append({"id": card["id"], "data": dash_calc.compute(card, stamp, ctx)})
         except ValueError as e:
@@ -286,13 +290,10 @@ def templates_delete():
 
 # ---------- 보고서 PDF ----------
 
-RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}  # Windows가 파일 이름으로 쓰지 못하는 이름
-
-
 def pdf_stem(name):
     """PDF 파일 이름(확장자 앞): 파일 이름에 못 쓰는 글자를 바꾸고 비면 '대시보드'."""
-    stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", str(name or "")).strip(" .")[:80]
-    return stem if stem and stem.upper() not in RESERVED else "대시보드"
+    stem = server.BAD_NAME_CHARS.sub("_", str(name or "")).strip(" .")[:80]
+    return stem if stem and stem.upper() not in server.RESERVED else "대시보드"
 
 
 @app.post("/api/dash/pdf")

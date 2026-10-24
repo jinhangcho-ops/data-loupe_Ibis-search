@@ -3,7 +3,6 @@
 PCA는 고른 숫자 컬럼의 평균, 평균을 뺀 곱의 평균(집계 두 번)으로 상관 행렬을 만들어 numpy로 성분을 구하고, 성분 = Σ 계수 × 표준화한 컬럼 식으로 붙인다."""
 import ast
 import operator
-import re
 
 from lazy import ibis
 
@@ -16,7 +15,7 @@ MAX_FORMULAS = 50  # 계산 컬럼 수
 MAX_TEXT = 500  # 식 하나의 글자 수
 MAX_NODES = 200  # 식 하나의 요소 수(너무 복잡한 식을 막는다)
 PCA_MAX = 30  # PCA에 넣을 컬럼 수(상관 행렬을 구하는 집계가 컬럼 수의 제곱만큼 는다)
-NAME = re.compile(r"[A-Za-z_가-힣][A-Za-z0-9_가-힣]{0,62}")  # 새 컬럼 이름
+NAME = sql_funcs.NAME  # 새 컬럼 이름
 FORMULA_GUIDE = ("사칙연산(+ - * / %)과 괄호, 비교(== != > >= < <=)와 and·or·not, '글자', 숫자. 함수: iif(조건, 참일 때, 거짓일 때), "
                  "round(x, 자리), abs, sqrt, ln, log10, upper, lower, length, concat(a, b, …), coalesce(a, b, …), col(\"공백 있는 이름\"). "
                  "나누는 값이 0이면, 로그가 0 이하이면, 제곱근이 음수이면 빈 값. 그 밖의 함수는 함수 사전(sql_funcs)의 id를 그대로 쓴다: 글자(substr·split_part·regex_extract …), 숫자(mod·power·clip·bucket …), "

@@ -2,7 +2,6 @@
 import base64
 import binascii
 import os
-import re
 from pathlib import Path
 
 from flask import jsonify, request
@@ -16,7 +15,7 @@ from core import settings
 from core import source
 from core import sql_exec
 from core import use_counts
-from core.server import app, get_con, run, to_json
+from core.server import app, get_con, run
 
 
 calc = Later("core.calc")
@@ -31,7 +30,6 @@ querying = Later("core.querying")
 server.FREE.add("/api/images")
 IMAGE_TYPES = {"data:image/png;base64,": ".png", "data:image/jpeg;base64,": ".jpg"}  # 화면이 보내는 그림(data URL 머리) → 확장자
 MAX_IMAGE_BYTES = 30 * 1024 * 1024  # 그림 하나의 크기
-RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}  # Windows가 파일 이름으로 쓰지 못하는 이름
 
 
 @server.late_constants("query")
@@ -152,7 +150,7 @@ def query():
         count, rows = db_page(con, body, expr, limit, offset, count)
     if offset == 0:  # 새로 검색할 때만(쪽 넘기기는 세지 않는다)
         count_virtual([body["base"], *(body.get("union") or {}).get("tables", []), *[line.split()[0] for line in body.get("joins", []) if line.split()]])
-    return jsonify(count=count, rows=to_json(rows), held=kept, server=note == SERVER_PAGES, note=note)
+    return server.json_reply(rows, count=count, held=kept, server=note == SERVER_PAGES, note=note)
 
 
 def sent(con, body, expr, limit, offset):
@@ -250,7 +248,7 @@ def pivot():
     expr, spec = querying.runnable(request.json, select=False), request.json.get("pivot")
     values = lambda e: e.to_pyarrow()["v"].to_pylist()
     table = run(lambda: calc.pivot(expr, spec, values).to_polars())
-    return jsonify(rows=to_json(table.head(calc.MAX_ROWS)), more=table.height > calc.MAX_ROWS)
+    return server.json_reply(table.head(calc.MAX_ROWS), more=table.height > calc.MAX_ROWS)
 
 
 @app.post("/api/export")
@@ -285,8 +283,8 @@ def handoff():
 
 def image_stem(name):
     """그래프 이름을 파일 이름으로: 쓸 수 없는 글자는 _로, 앞뒤 공백·점은 빼고 80자까지. 비거나 예약된 이름이면 바꾼다."""
-    stem = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", name if isinstance(name, str) else "").strip(" .")[:80].strip(" .") or "chart"
-    return "_" + stem if stem.split(".")[0].upper() in RESERVED else stem
+    stem = server.BAD_NAME_CHARS.sub("_", name if isinstance(name, str) else "").strip(" .")[:80].strip(" .") or "chart"
+    return "_" + stem if stem.split(".")[0].upper() in server.RESERVED else stem
 
 
 @app.post("/api/images")
@@ -335,8 +333,7 @@ def save_images():
 def count_virtual(names):
     """쓴 가상 테이블을 한 번씩 센다(목록을 많이 쓴 순으로)."""
     vts = server.virtual_tables()
-    for name in {n for n in names if n in vts}:
-        use_counts.use("virtual_tables", f"{server.connection_key()}|{name}")
+    use_counts.use_many("virtual_tables", [f"{server.connection_key()}|{name}" for name in {n for n in names if n in vts}])
 
 
 def sql_expr(body):
@@ -402,7 +399,7 @@ def sql_run():
     if offset == 0:
         count_virtual(used)
     shown = rows.head(n).with_columns(pl.col(pl.Decimal).cast(pl.Float64))  # SUM 등이 돌려주는 큰 소수 타입은 화면에서 숫자로(파일 저장은 원래 타입)
-    return jsonify(rows=to_json(shown), more=rows.height > n, limit=n, offset=offset, count=count, held=kept, server=note == SERVER_PAGES, note=note)
+    return server.json_reply(shown, more=rows.height > n, limit=n, offset=offset, count=count, held=kept, server=note == SERVER_PAGES, note=note)
 
 
 @app.post("/api/sql/export")
@@ -547,8 +544,9 @@ def nl2sql_ask():
     return jsonify(sql=nl2sql.ask(request.json.get("question"), ctx, sql_exec.dialect_of(con), known))
 
 
-def llm_view(error=None):
+def llm_view():
     """LLM env 파일 경로와 지금 어댑터 이름(키는 보이지 않는다). 파일을 읽을 수 없으면 error."""
+    error = None
     try:
         name = nl2sql.llm.client().name
     except ValueError as e:

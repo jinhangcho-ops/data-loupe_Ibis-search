@@ -116,9 +116,6 @@ def context(d, today=None):
     return {"range": {"start": span["start"] and span["start"][:10], "end": end}, "prev": prev}
 
 
-SCAN_BLOCK = ("차단", "block")  # 설정 scan_unknown의 값: 추정할 수 없을 때 막기
-
-
 def geo_sqls(card, con):
     """analysis·funnel 카드의 recipe에 좌표(geo) 단계가 있고 원격 연결이면, 아직 받아 두지 않은 지점·영역 표를 읽는 SQL들(prep_app.geo_gate와 같은 대상)."""
     recipe = card["source"].get("recipe") or {}
@@ -153,14 +150,13 @@ def scan_decision(card, ctx):
             return ""
         if sql is not None and held.remote(con) and not dash_calc.copies_to_pc(card, ctx):
             return ""  # 원격 DB에서 DB 안의 집계로 구하는 카드는 결과만 오므로 작다. 크기를 알아보려고 DB에 묻지 않는다(요금)
-        dialect = "duckdb" if getattr(con, "name", "") == "polars" else None  # 파일 연결은 duckdb 방언으로(scan 라우트와 같다)
         found = {}
         for one in sqls:
-            found = run(lambda one=one: check(con, one, server.state["opened"], dialect))
+            found = run(lambda one=one: check(con, one, server.state["opened"], scan_size.files_dialect(con)))
             if found.get("over") or found.get("blocked"):
                 break
     except Exception as e:
-        found = {"over": False, "blocked": settings.load().get("scan_unknown") in SCAN_BLOCK, "text": f"처리 용량을 알 수 없어요 ({e})"}
+        found = {"over": False, "blocked": scan_size.blocks_unknown(settings.load()), "text": f"처리 용량을 알 수 없어요 ({e})"}
     if found.get("over") or found.get("blocked"):
         note = " 고유 개수는 기간별로 따로 읽어요." if held.remote(server.state["con"]) and dash_calc.unique_per_period(card, ctx) else ""  # 읽는 양이 이번 기간 + 직전 기간 몫이다
         return (found.get("text") or "처리 용량이 기준을 넘거나 알 수 없어 건너뛰었어요") + note

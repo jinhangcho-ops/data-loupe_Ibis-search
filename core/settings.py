@@ -136,6 +136,12 @@ def read(name):
     return data if isinstance(data, dict) else read_file(backup_of(path))
 
 
+def saved_text(name, key="path"):
+    """설정 폴더의 name 파일에 저장된 key 값(글자). 없거나 글자가 아니거나 비었으면 빈 글자."""
+    found = (read(name) or {}).get(key)
+    return found if isinstance(found, str) and found else ""
+
+
 def backup_of(path):
     return path.with_name(path.name + ".bak")
 

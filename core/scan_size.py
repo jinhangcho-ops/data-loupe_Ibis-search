@@ -12,6 +12,8 @@ import os
 import re
 from pathlib import Path
 
+from lazy import ibis
+
 from core import held
 from core import monitor
 from core import settings
@@ -129,12 +131,33 @@ def estimate(con, sql, opened=None, dialect=None):
     return {"bytes": total, "exact": exact and bool(tables), "how": ", ".join(sorted(hows)) or "읽는 테이블 없음"}
 
 
+def reason(e):
+    """오류의 첫 줄(120자까지). 비어 있으면 오류 종류 이름."""
+    return (str(e).strip().splitlines() or [type(e).__name__])[0][:120]
+
+
+def blocks_unknown(config):
+    """처리 용량을 알 수 없으면 실행하지 않도록 설정했는지(scan_unknown이 block)."""
+    return config.get("scan_unknown") == "block"
+
+
+def files_dialect(con):
+    """파일 연결(Polars)은 SQL을 쓰지 않으므로 처리 용량 계산에는 duckdb 방언으로 읽는다. 그 밖에는 None(연결의 방언)."""
+    return "duckdb" if getattr(con, "name", "") == "polars" else None
+
+
+def sql_of(con, expr):
+    """(SQL 글, 방언 또는 None): 처리 용량을 셀 때 읽을 Ibis 식의 SQL."""
+    dialect = files_dialect(con)
+    return str(ibis.to_sql(expr, dialect=dialect) if dialect else ibis.to_sql(expr)), dialect
+
+
 def safe(work):
     """estimate를 돌리되 실패하면 그 이유로 '알 수 없음'(처리 용량은 참고라 검사·실행을 막지 않는다)."""
     try:
         return work()
     except Exception as e:
-        return {"bytes": None, "exact": False, "how": (str(e).strip().splitlines() or [type(e).__name__])[0][:120]}
+        return {"bytes": None, "exact": False, "how": reason(e)}
 
 
 def size_text(n):
@@ -372,7 +395,7 @@ def limit_check(con, sql, opened=None, dialect=None, config=None, rows=None):
         tables, columns = [], None
     unknown = found["bytes"] is None
     over = not unknown and found["bytes"] > bound
-    blocked = unknown and config.get("scan_unknown") == "block"
+    blocked = unknown and blocks_unknown(config)
     what = f"테이블 {', '.join(tables) or '없음'} · 컬럼 {'모두' if columns is None else ', '.join(sorted(columns)[:12]) + (' …' if len(columns) > 12 else '')}"
     if unknown:
         text = f"처리 용량을 미리 알 수 없어요({found['how']}). " + ("설정에서 '알 수 없으면 실행하지 않음'으로 정해 두어 실행하지 않아요." if blocked else "")

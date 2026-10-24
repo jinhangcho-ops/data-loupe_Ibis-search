@@ -46,12 +46,21 @@ def load():
 
 def use(kind, key, info=None):
     """kind의 key를 한 번 썼다고 센다. info를 주면 함께 둔다(바꾼다)."""
+    use_many(kind, [key], info)
+
+
+def use_many(kind, keys, info=None):
+    """use를 keys 차례로 한 것과 같되(같은 키가 여러 번이면 그만큼 센다) 잠금·읽기·백업·쓰기는 한 번만 한다."""
+    if not keys:
+        return
     with settings.updating(FILE):
-        _use(kind, key, info)
+        data = load()
+        for key in keys:
+            _bump(data, kind, key, info)
+        settings.write(FILE, data)
 
 
-def _use(kind, key, info):
-    data = load()
+def _bump(data, kind, key, info):
     entries = data.setdefault(kind, {})
     entry = entries.get(key, {})
     entry = {**entry, "count": count_of(entry) + 1, "last": dt.datetime.now().isoformat(timespec="microseconds")}  # 같은 초에 두 번 써도 차례가 갈리게
@@ -62,7 +71,6 @@ def _use(kind, key, info):
         for old in ranked(entries)[MAX_CONNECTIONS:]:
             if old != key:  # 방금 쓴 연결은 첫 사용이라 순위가 맨 뒤여도 지우지 않는다
                 entries.pop(old)
-    settings.write(FILE, data)
 
 
 def forget(kind, key):

@@ -5,7 +5,6 @@ import datetime as dt
 import re
 import json
 
-from lazy import ibis
 
 from analysis import stats
 from core import compare
@@ -15,6 +14,7 @@ from core import metric_file
 from core import parse
 from prep import prep_app
 from core import result
+from core import scan_size
 from core import settings
 from core import source as connection
 from core import sql_funcs
@@ -116,15 +116,6 @@ def grouped(t, x, unit, split, parts, exprs):
     return t.group_by(keys).aggregate(**exprs(t)).order_by("x").to_polars()
 
 
-def split_parts(t, split):
-    """나눌 값: 행이 많은 순으로 최대 result.MAX_SPLITS개와 더 있는지."""
-    parse.check_name(split, t.columns)
-    filled = t.filter(t[split].notnull())
-    sizes = filled.group_by(split).aggregate(n=filled.count())
-    found = sizes.order_by([sizes.n.desc(), sizes[split]]).limit(result.MAX_SPLITS + 1).to_polars()[split].to_list()
-    return found[:result.MAX_SPLITS], len(found) > result.MAX_SPLITS
-
-
 def outputs(series, parts):
     """출력 계열 [(이름, 계열 번호, 집계, 나눈 값)]. 나누지 않으면 계열마다 하나, 나누면 계열 × 나눈 값(get_chart와 같은 차례, 이름 규칙은 화면의 toDrawn)."""
     if parts is None:
@@ -207,14 +198,21 @@ def card_expr(card, ctx=None, window=None):
     return querying.runnable(with_period(body, card["source"].get("date"), window), select=False, keep=card_columns(card, ctx))
 
 
+def fetched(card, ctx=None):
+    """카드가 읽는 조회(기간을 건 것). 식을 만들 수 없는 종류(조회가 없거나 recent_rows·analysis)는 None."""
+    body = (card["source"] or {}).get("body")
+    if not isinstance(body, dict) or card["kind"] in ("recent_rows", "analysis"):
+        return None
+    return with_period(body, card["source"].get("date") or (body.get("x") if card["kind"] == "chart" else None), fetch_window(ctx))
+
+
 def copies_to_pc(card, ctx=None):
     """이 카드를 구할 때 읽는 행이 이 PC로 옮겨지는지(core.runnable이 연결이 못 하는 계산이라 받아 두는 경우, 아직 받아 둔 것이 없을 때). 그렇지 않으면
     집계는 DB 안에서 하고 결과만 오므로(표 500행, 시간별 값, 점 MAX_POINTS개 이하) 작다."""
     from core import held
-    body = (card["source"] or {}).get("body")
-    if not isinstance(body, dict) or card["kind"] in ("recent_rows", "analysis"):
+    shaped = fetched(card, ctx)
+    if shaped is None:
         return False
-    shaped = with_period(body, card["source"].get("date") or (body.get("x") if card["kind"] == "chart" else None), fetch_window(ctx))
     points = card["kind"] == "geomap" and bool(((card.get("view") or {}).get("geo") or {}).get("lat"))  # 지도의 점은 행을 limit로 잘라 받아 오므로 집계가 아니다
     if not points and connection.compiles(querying.build(shaped, select=False)):
         return False
@@ -226,18 +224,15 @@ def unique_per_period(card, ctx=None):
     """고유 개수류 계열이 있는 날짜 컬럼 카드가 보는 기간이 있어, 그 값을 일 값에서 못 묶고 기간(이번·직전)마다 따로 읽는지."""
     body = (card["source"] or {}).get("body")
     window = (ctx or {}).get("range")
-    return card["kind"] in VALUE_KINDS and isinstance(body, dict) and bool(card["source"].get("date")) and bool(window and (window.get("start") or window.get("end")))         and any(not merges(s.get("agg")) for s in body.get("series") or [] if isinstance(s, dict))
+    return card["kind"] in VALUE_KINDS and isinstance(body, dict) and bool(card["source"].get("date")) and bool(window and (window.get("start") or window.get("end"))) and any(not merges(s.get("agg")) for s in body.get("series") or [] if isinstance(s, dict))
 
 
 def read_sql(card, ctx=None):
     """카드가 읽는 식(필요한 컬럼·기간만)의 SQL 글. 실행하지 않는다. 처리 용량 추정에 쓴다. 식을 만들 수 없는 종류는 None."""
-    body = (card["source"] or {}).get("body")
-    if not isinstance(body, dict) or card["kind"] in ("recent_rows", "analysis"):
+    shaped = fetched(card, ctx)
+    if shaped is None:
         return None
-    window = fetch_window(ctx)
-    expr = querying.slim(querying.build(with_period(body, card["source"].get("date") or (body.get("x") if card["kind"] == "chart" else None), window), select=False), card_columns(card, ctx))
-    dialect = "duckdb" if getattr(source_con(), "name", "") == "polars" else None  # 파일 연결은 duckdb 방언으로(scan 라우트와 같다)
-    return str(ibis.to_sql(expr, dialect=dialect) if dialect else ibis.to_sql(expr))
+    return scan_size.sql_of(source_con(), querying.slim(querying.build(shaped, select=False), card_columns(card, ctx)))[0]
 
 
 def source_con():
@@ -309,7 +304,7 @@ def time_data(expr, x, series, split):
     일 값이 많아 잘랐으면 note에 적는다."""
     parse.check_name(x, expr.columns)
     t = expr.filter(expr[x].notnull())
-    parts, more = split_parts(t, split) if split else (None, False)
+    parts, more = result.split_parts(t, split) if split else (None, False)
     day = grouped(t, x, "day", split, parts, lambda tt: {k: e for i, s in enumerate(series) for k, e in component_exprs(tt, i, s).items()})
     section = day_section(day, series, parts, split)
     keep = fit(section)
@@ -488,11 +483,11 @@ def metric_scalar(body, name):
     found = metric_file.registry()
     parse.check_name(name, list(found), "지표")
     m, expr = found[name], querying.runnable(body, select=False)
-    row = stats.one(expr.aggregate(v=metric_file.metric_expr(expr, name, m)))
-    pair = None
-    if m["denominator"] is not None:
-        both = stats.one(expr.aggregate(num=metric_file.aggregate(expr, m["numerator"]), den=metric_file.aggregate(expr, m["denominator"])))
-        pair = {"num_label": part_text(m["numerator"]), "num": both["num"], "den_label": part_text(m["denominator"]), "den": both["den"]}
+    v = metric_file.metric_expr(expr, name, m)
+    if m["denominator"] is None:
+        return stats.one(expr.aggregate(v=v))["v"], None, m["format"]
+    row = stats.one(expr.aggregate(v=v, num=metric_file.aggregate(expr, m["numerator"]), den=metric_file.aggregate(expr, m["denominator"])))  # 한 번에(원격 DB는 조회마다 요금)
+    pair = {"num_label": part_text(m["numerator"]), "num": row["num"], "den_label": part_text(m["denominator"]), "den": row["den"]}
     return row["v"], pair, m["format"]
 
 

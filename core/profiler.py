@@ -83,8 +83,7 @@ def load_spec(path):
 
 
 def spec_path():
-    found = (settings.read(SPEC) or {}).get("path")
-    return found if isinstance(found, str) and found else ""
+    return settings.saved_text(SPEC)
 
 
 def save_spec_path(path):

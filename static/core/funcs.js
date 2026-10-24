@@ -17,7 +17,6 @@ const Funcs = (() => {
     return loading;
   }
   const get = id => cat?.byId[cat.aliases[id] ?? id];
-  const aggName = id => SERVER.agg_names?.[id] ?? id;  // 받기 전에도 되는 작은 목록
   // 지금 연결의 지원 상태. 테이블이 바뀌면 다시 묻는다(같은 테이블은 한 번만). 못 받으면 비워 두고 안내만 빠진다.
   async function loadSupport(base, schema = "") {
     if (!base) { support = {}; supportKey = ""; return support; }
@@ -164,5 +163,5 @@ const Funcs = (() => {
     while (end > 0 && vals[end - 1] === undefined) end--;
     return [...(x ? [x] : []), ...specs.slice(0, end).map((a, i) => String(vals[i] ?? a.default ?? ""))];
   }
-  return { load, get, aggName, words, loadSupport, statusOf, misfit, kindOf, argFields, picker, panel, get cat() { return cat; } };
+  return { load, get, words, loadSupport, statusOf, misfit, kindOf, argFields, picker, panel, get cat() { return cat; } };
 })();

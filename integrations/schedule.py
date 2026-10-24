@@ -275,8 +275,8 @@ def change_runs(change):
         return result
 
 
-def stamp_time(at=None):
-    return (at or clock()).strftime("%Y-%m-%d %H:%M:%S")
+def stamp_time():
+    return clock().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def add_run(name, how):

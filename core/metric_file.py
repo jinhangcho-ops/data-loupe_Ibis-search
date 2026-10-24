@@ -126,8 +126,7 @@ def describe(m, values=True):
 
 
 def file_path():
-    found = (settings.read(FILE) or {}).get("path")
-    return found if isinstance(found, str) and found else ""
+    return settings.saved_text(FILE)
 
 
 def save_file_path(path):

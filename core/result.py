@@ -254,12 +254,12 @@ def get_summary(expr, columns=()):
             for i, name in enumerate(kinds)]
 
 
-def get_values(expr, column, limit=MAX_VALUES):
-    """컬럼(구조 안의 필드 user.name도)의 서로 다른 값(빈 값 제외)을 정렬해 limit개까지 문자로 돌려준다. 더 있으면 두 번째 값이 True."""
+def get_values(expr, column):
+    """컬럼(구조 안의 필드 user.name도)의 서로 다른 값(빈 값 제외)을 정렬해 MAX_VALUES개까지 문자로 돌려준다. 더 있으면 두 번째 값이 True."""
     col = field_of(expr, column)
-    values = expr.filter(col.notnull()).select(col.name("v")).distinct().order_by("v").limit(limit + 1)
+    values = expr.filter(col.notnull()).select(col.name("v")).distinct().order_by("v").limit(MAX_VALUES + 1)
     values = [str(v) for v in values.to_polars(**streaming(expr))["v"].to_list()]
-    return values[:limit], len(values) > limit
+    return values[:MAX_VALUES], len(values) > MAX_VALUES
 
 
 def chart_aggs():
@@ -279,6 +279,15 @@ def chart_metric(expr, y, agg, opts=None):
     return sql_funcs.aggregate(agg, expr, y, None, opts)
 
 
+def split_parts(expr, split):
+    """나눔 컬럼 split에서 많이 나온 값부터(같으면 값 순) MAX_SPLITS개까지(빈 값 제외)와 더 있는지: (값들, 더 있는지)."""
+    check_name(split, expr.columns)
+    filled = expr.filter(expr[split].notnull())
+    sizes = filled.group_by(split).aggregate(n=filled.count())
+    parts = sizes.order_by([sizes.n.desc(), sizes[split]]).limit(MAX_SPLITS + 1).to_polars(**streaming(expr))[split].to_list()
+    return parts[:MAX_SPLITS], len(parts) > MAX_SPLITS
+
+
 def get_chart(expr, x, series, split=None, order="x"):
     """x별로 계열들을 집계한다. series는 [{"y", "agg"}]. order가 "x"면 x 순, "value"면 첫 계열 값이 큰 순으로 최대 MAX_GROUPS개.
     split을 주면 그 컬럼의 값마다(행이 많은 순으로 최대 MAX_SPLITS개) 계열을 나눈다.
@@ -294,11 +303,7 @@ def get_chart(expr, x, series, split=None, order="x"):
     labels = top[x].to_list()
     if not split:
         return labels, [{"series": i, "split": None, "values": [number(v) for v in top[f"v{i}"].to_list()]} for i in range(len(series))], False
-    check_name(split, expr.columns)
-    filled = expr.filter(expr[split].notnull())
-    sizes = filled.group_by(split).aggregate(n=filled.count())
-    parts = sizes.order_by([sizes.n.desc(), sizes[split]]).limit(MAX_SPLITS + 1).to_polars(**streaming(expr))[split].to_list()
-    more, parts = len(parts) > MAX_SPLITS, parts[:MAX_SPLITS]
+    parts, more = split_parts(expr, split)
     if not parts:  # 나눌 값이 없다(행이 없거나 나누는 컬럼이 모두 빈 값): 계열은 두고 값만 비운다
         return labels, [{"series": i, "split": None, "values": [None] * len(labels)} for i in range(len(series))], False
     known = [v for v in labels if v is not None]

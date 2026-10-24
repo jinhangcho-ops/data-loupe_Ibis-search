@@ -275,6 +275,10 @@ def prepare(url, password=""):
     if scheme not in DRIVERS:
         return {}
     db, module, extra, program = DRIVERS[scheme]
+
+    def program_needed():
+        return DriverError(str(missing(db, program)), {**entry(scheme), "status": "program_needed"})
+
     try:
         importlib.import_module(module)
     except ImportError as e:  # 그 모듈이 없으면 Ibis 설치 안내, 그 밖(모듈이 쓰는 것이 없음)은 따로 설치할 프로그램이나 불러오기 오류
@@ -282,15 +286,15 @@ def prepare(url, password=""):
             info = {**entry(scheme), "status": "missing"}
             raise DriverError(" ".join(filter(None, [f"{db} 지원이 설치되어 있지 않습니다. 설치: {info['command']}", info["after"], info["notice"]])), info)
         if program:
-            raise DriverError(str(missing(db, program)), {**entry(scheme), "status": "program_needed"})
+            raise program_needed()
         raise ValueError(f"{db} 드라이버를 불러오지 못했습니다: {e}")
 
     if program == "java" and not has_java():
-        raise DriverError(str(missing(db, program)), {**entry(scheme), "status": "program_needed"})
+        raise program_needed()
     if program == "odbc" and "driver=" not in urlsplit(url).query:
         driver = mssql_driver()
         if driver is None:
-            raise DriverError(str(missing(db, program)), {**entry(scheme), "status": "program_needed"})
+            raise program_needed()
         return {"driver": driver}
     if scheme == "postgres":  # Windows에서 libpq는 거부된 접속을 알아채지 못하고 시간이 다 될 때까지 기다린다 → 주소에 없으면 PG_WAIT초로
         return ({} if "connect_timeout=" in urlsplit(url).query else {"connect_timeout": PG_WAIT}) | pooler_args(url)

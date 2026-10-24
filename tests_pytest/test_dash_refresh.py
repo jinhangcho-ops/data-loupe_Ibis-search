@@ -182,7 +182,7 @@ def test_scan_decision_adapter(fake, monkeypatch):
     assert refresh.scan_decision(c, {}) == "이 연결은 미리 알 수 없어요"  # 설정이 차단이면(blocked) 건너뜀
     answer.update(over=False, unknown=False, blocked=False)
     assert refresh.scan_decision(c, {}) == ""
-    monkeypatch.setattr(settings, "load", lambda: {"scan_unknown": "차단"})
+    monkeypatch.setattr(settings, "load", lambda: {"scan_unknown": "block"})
     monkeypatch.setattr(scan_size, "limit_check", lambda *a: (_ for _ in ()).throw(RuntimeError("측정 실패")), raising=False)
     assert "측정 실패" in refresh.scan_decision(c, {})  # 추정이 실패하면 추정 불가로 보고 차단 설정이면 건너뜀
     monkeypatch.setattr(settings, "load", lambda: {})

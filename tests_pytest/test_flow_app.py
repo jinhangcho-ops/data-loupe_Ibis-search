@@ -10,7 +10,7 @@ from core import server
 
 FREE = ["/api/flow/check_edge", "/api/flow/check", "/api/flow/to_body", "/api/flow/from_body", "/api/flow/keys/remember", "/api/flow/keys/forget", "/api/my_metrics",
         "/api/my_metrics/validate", "/api/my_metrics/update", "/api/my_metrics/delete", "/api/my_metrics/copy", "/api/my_metrics/status", "/api/my_metrics/check_use",
-        "/api/my_metrics/used_by", "/api/my_metrics/stale", "/api/my_metrics/legacy", "/api/my_metrics/bind_legacy", "/api/sentence/check", "/api/sentence/compile"]
+        "/api/my_metrics/used_by", "/api/my_metrics/stale", "/api/my_metrics/bind_legacy", "/api/sentence/check", "/api/sentence/compile"]
 READS = ["/api/flow/schemas", "/api/flow/rows", "/api/flow/optimize", "/api/flow/optimize/apply", "/api/flow/keys", "/api/flow/fanout"]  # 연결에서 읽는 라우트는 차례를 기다린다
 SCHEMAS = {"sales": {"columns": {"id": "num", "shop_id": "num", "amt": "num"}, "source_key": "k"}, "shops": {"columns": {"shop_id": "num", "country": "text"}, "source_key": "k"}}
 BODY = {"base": "sales", "joins": ["shops inner shop_id=shop_id"], "conditions": ["amt > 50"], "aggregate": {"by": ["country"], "series": [{"agg": "sum", "y": "amt", "name": "total"}]}}

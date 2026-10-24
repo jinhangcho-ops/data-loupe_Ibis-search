@@ -108,21 +108,6 @@ async function cardCanvas(card, mode, width, height, scale) {
   return paintedCanvas(card, mode, width, height, scale);
 }
 
-// canvas 위에 카드 이름 줄을 붙인 그림(data URL)
-function titledPicture(canvas, title, mode, type, scale = 2) {
-  const colors = themeColors(mode), band = TITLE_BAND * scale;
-  const out = Object.assign(document.createElement("canvas"), { width: canvas.width, height: canvas.height + band });
-  const ctx = out.getContext("2d");
-  ctx.fillStyle = colors.card;
-  ctx.fillRect(0, 0, out.width, out.height);
-  ctx.fillStyle = colors.ink;
-  ctx.font = `600 ${15 * scale}px "Segoe UI", "Malgun Gothic", sans-serif`;
-  ctx.textBaseline = "middle";
-  ctx.fillText(title, 14 * scale, band / 2, out.width - 28 * scale);
-  ctx.drawImage(canvas, 0, band);
-  return out.toDataURL("image/" + type);
-}
-
 // 보고서 canvas: 제목 줄 + 카드마다 격자 자리의 상자(이름 줄 + 그림). 아직 그려지지 않은 카드(note)는 그 글만.
 async function reportCanvas(board, title, { mode = "light", scale = 2 } = {}) {
   const colors = themeColors(mode), cards = board.cards, lay = reportLayout(cards);

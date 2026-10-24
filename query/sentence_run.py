@@ -476,11 +476,11 @@ def e21(p):
     p.combine = {"op": "ratio", "a": a, "b": b}
 
 
-def unit_line(p, new="기간"):
+def unit_line(p):
     """날짜 컬럼을 단위로 자르는 계산 줄을 더하고 새 컬럼 이름."""
     d, u = p.col("날짜"), p.get("단위", "day")
-    p.calc(f"식 truncate(col({d!r}), {u!r}) 이름 {new}")
-    return new
+    p.calc(f"식 truncate(col({d!r}), {u!r}) 이름 기간")
+    return "기간"
 
 
 def e22(p):

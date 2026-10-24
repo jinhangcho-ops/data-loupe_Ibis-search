@@ -46,6 +46,7 @@ from integrations import schedule_app  # noqa: F401  예약 라우트가 앱에 
 from integrations import notify
 from integrations.adapters import transport
 from prep import prep_app
+from core import credentials
 from core import prep_ops
 from prep import prep_profile
 from core import profiler
@@ -776,9 +777,9 @@ def notify_section(c, got):
         raw = (settings.PATH.parent / "destinations.json").read_bytes()
         check("destinations.json에 토큰이 평문으로 없음", (token.encode() in raw, b"xoxb" in raw, b"C0123" in raw), (False, False, True))
         stored = settings.named("destinations.json")["slack"]["token"]
-        check("암호화한 것을 풀면 같은 값, 글자(한글 포함)도 같음", (notify.reveal(stored), notify.reveal(notify.protect("가나다 abc")), "가나다" in notify.protect("가나다 abc")), (token, "가나다 abc", False))
+        check("암호화한 것을 풀면 같은 값, 글자(한글 포함)도 같음", (credentials.reveal(stored), credentials.reveal(credentials.protect("가나다 abc")), "가나다" in credentials.protect("가나다 abc")), (token, "가나다 abc", False))
         r = put("slack", kind="slack", done=False, token="", channel="C999")
-        check("고칠 때 비밀 칸을 비우면 저장된 값을 그대로 둠", (r["destinations"]["slack"], notify.reveal(settings.named("destinations.json")["slack"]["token"])),
+        check("고칠 때 비밀 칸을 비우면 저장된 값을 그대로 둠", (r["destinations"]["slack"], credentials.reveal(settings.named("destinations.json")["slack"]["token"])),
               ({"kind": "slack", "done": False, "keep": "saved", "token": True, "channel": "C999"}, token))
         check("새로 만드는데 비밀 칸이 없으면 거부", error("/api/destinations", name="새것", destination={"kind": "slack", "done": False, "channel": "C1"}), "'봇 토큰' 칸을 입력하세요.")
         data = settings.named("destinations.json")

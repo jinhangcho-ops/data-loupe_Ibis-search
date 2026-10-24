@@ -57,9 +57,11 @@ def test_query_screen_dashboard_tab_moved(client):
 def test_add_to_dashboard_chooser_and_link():
     text = (STATIC / "query" / "dash_add.js").read_text(encoding="utf-8")
     assert "어느 대시보드에 넣을까요?" in text and "새 대시보드" in text and "/api/dash/card/add" in text
-    assert '"/dashboard?open=" + encodeURIComponent(added.id)' in text and "대시보드에서 보기" in text
+    assert "showAdded" not in text  # 알림 줄 쓰기는 core/dash.js 한 곳(쿼리·전처리 화면이 함께 씀)
+    shown = (STATIC / "core" / "dash.js").read_text(encoding="utf-8")
+    assert '"/dashboard?open=" + encodeURIComponent(added.id)' in shown and "대시보드에서 보기" in shown
     prep = (STATIC / "prep" / "prep.html").read_text(encoding="utf-8")
-    assert "/dashboard?open=" in prep and "대시보드에서 보기" in prep and "[대시보드] 탭" not in prep  # 분석 화면도 같은 링크
+    assert 'showAdded("err-ana", added.dashboard)' in prep and "[대시보드] 탭" not in prep  # 분석 화면도 같은 링크
 
 
 def test_old_dashboard_tab_leftovers_are_gone():

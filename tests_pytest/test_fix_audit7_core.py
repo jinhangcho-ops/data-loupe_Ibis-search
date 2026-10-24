@@ -87,7 +87,7 @@ def test_dash_write_waits_for_a_busy_file_and_leaves_no_temp(two_dashboards):
     lock_file(dash_store.path_of(), seconds=0.1)
     dash_store.save_dashboard({"name": "세번째", "cards": []})
     assert names(fresh=True) == ["두번째", "세번째", "첫번째"]
-    assert not list(dash_store.path_of().parent.glob("*.tmp"))
+    assert not list(dash_store.path_of().parent.glob("*.tmp")) and not list(dash_store.path_of().parent.glob("*.new"))
 
 
 def test_dash_write_removes_the_temp_file_when_it_cannot_replace(two_dashboards, monkeypatch):
@@ -96,7 +96,7 @@ def test_dash_write_removes_the_temp_file_when_it_cannot_replace(two_dashboards,
     monkeypatch.setattr(os, "replace", busy)
     with pytest.raises(PermissionError):
         dash_store.save_dashboard({"name": "세번째", "cards": []})
-    assert not list(dash_store.path_of().parent.glob("*.tmp"))
+    assert not list(dash_store.path_of().parent.glob("*.tmp")) and not list(dash_store.path_of().parent.glob("*.new"))
 
 
 # ---------- 7A3 컬럼 이름이 user인 표 ----------

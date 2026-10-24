@@ -12,14 +12,11 @@ function themeColors(theme) {
   return colors;
 }
 
-// 그래프 하나를 그림(data URL)으로. config(colors, options)는 그 색으로 그릴 Chart.js 설정이다.
-// width·height는 그릴 크기(화면 픽셀), scale은 배율(그림 크기 = 크기 × 배율). title을 주면 위에 이름 줄을 더한다(그 줄까지 합쳐 height). 배경은 그 모드의 카드 색.
+// canvas 위에 카드 이름 줄(title이 비면 없음)을 붙인 그림(data URL). 배경은 그 모드의 카드 색. scale은 canvas에 이미 곱해진 배율.
 const TITLE_BAND = 36;
-function chartPicture(config, mode, type, width, height, scale, title = "") {
-  const colors = themeColors(mode), band = title ? TITLE_BAND : 0;
-  const copy = Object.assign(document.createElement("canvas"), { width, height: height - band });
-  const redrawn = new Chart(copy, config(colors, { responsive: false, animation: false, devicePixelRatio: scale }));
-  const out = Object.assign(document.createElement("canvas"), { width: copy.width, height: copy.height + band * scale });
+function titledPicture(canvas, title, mode, type, scale = 2) {
+  const colors = themeColors(mode), band = title ? TITLE_BAND * scale : 0;
+  const out = Object.assign(document.createElement("canvas"), { width: canvas.width, height: canvas.height + band });
   const ctx = out.getContext("2d");
   ctx.fillStyle = colors.card;
   ctx.fillRect(0, 0, out.width, out.height);
@@ -27,12 +24,24 @@ function chartPicture(config, mode, type, width, height, scale, title = "") {
     ctx.fillStyle = colors.ink;
     ctx.font = `600 ${15 * scale}px "Segoe UI", "Malgun Gothic", sans-serif`;
     ctx.textBaseline = "middle";
-    ctx.fillText(title, 14 * scale, band * scale / 2, out.width - 28 * scale);
+    ctx.fillText(title, 14 * scale, band / 2, out.width - 28 * scale);
   }
-  ctx.drawImage(copy, 0, band * scale);
-  redrawn.destroy();
+  ctx.drawImage(canvas, 0, band);
   return out.toDataURL("image/" + type);
 }
+
+// 그래프 하나를 그림(data URL)으로. config(colors, options)는 그 색으로 그릴 Chart.js 설정이다.
+// width·height는 그릴 크기(화면 픽셀), scale은 배율(그림 크기 = 크기 × 배율). title을 주면 위에 이름 줄을 더한다(그 줄까지 합쳐 height). 배경은 그 모드의 카드 색.
+function chartPicture(config, mode, type, width, height, scale, title = "") {
+  const copy = Object.assign(document.createElement("canvas"), { width, height: height - (title ? TITLE_BAND : 0) });
+  const redrawn = new Chart(copy, config(themeColors(mode), { responsive: false, animation: false, devicePixelRatio: scale }));
+  const picture = titledPicture(copy, title, mode, type, scale);
+  redrawn.destroy();
+  return picture;
+}
+
+// 그림 종류(png, jpeg)에 맞는 파일 확장자
+const imageExt = type => type === "jpeg" ? "jpg" : "png";
 
 // 그림 비율(가로/세로). screen은 카드에 보이는 모양 그대로. 고른 비율은 세로 PICTURE_HEIGHT에 2배로 그린다(예: 16:9 → 1600×900).
 const BOARD_RATIOS = { square: 1, "4:3": 4 / 3, wide: 16 / 9 };
@@ -113,7 +122,7 @@ async function saveBoard(board, { ratio, mode, type, err }) {
   const more = skipped ? ` 그려지지 않은 ${skipped}개는 뺐습니다.` : "";
   if (d.cancelled) return say(err, "");
   if (d.window === false) {
-    pictures.forEach(p => download(p.data, `${p.name}.${type === "jpeg" ? "jpg" : "png"}`));
+    pictures.forEach(p => download(p.data, `${p.name}.${imageExt(type)}`));
     return say(err, `${pictures.length}개를 내려받았습니다.${more}`, true);
   }
   say(err, `${d.saved.length}개를 저장했습니다: ${d.folder}${more}`, true);
