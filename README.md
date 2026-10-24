@@ -22,6 +22,10 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel)에 연결해 �
 ## 프로그램 받기
 
 1. 저장소의 **Releases**에서 최신 버전의 `DataLoupe-setup.exe`를 내려받아 실행합니다.
+   받은 파일이 Releases에 올린 그 파일인지(내려받는 도중이나 중간에서 바뀌지 않았는지) 확인하려면, 같은 릴리스의 `DataLoupe-setup.exe.sha256`도 같은 폴더에 받고 그 폴더의 PowerShell에서 아래를 실행합니다. `True`가 나오면 같은 파일이고, `False`면 실행하지 말고 다시 내려받습니다. 지문은 릴리스 설명 첫 줄에도 있어 `Get-FileHash .\DataLoupe-setup.exe`의 `Hash`와 눈으로 견줘도 됩니다(대소문자는 상관없음).
+   ```powershell
+   (Get-FileHash .\DataLoupe-setup.exe).Hash -eq (Get-Content .\DataLoupe-setup.exe.sha256).Split(" ")[0]
+   ```
 2. 설치 방식(현재 사용자용 권장, 관리자 권한 없음)과 **설치 위치**를 고르고, **바탕 화면에 바로 가기 만들기**를 체크할지 정합니다. 시작 메뉴에는 `Data Loupe`가 생깁니다.
 3. 바로 가기나 시작 메뉴로 실행합니다. 이미 실행 중일 때 다시 열면 '이미 실행 중입니다' 안내만 뜨고 먼저 연 창이 그대로 남습니다.
 
