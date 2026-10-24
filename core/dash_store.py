@@ -623,6 +623,8 @@ def write(dashboards):
     temp.write_text(json.dumps({"v": VERSION, "blob": credentials.protect(body)}), encoding="utf-8")
     settings.backup(path)
     os.replace(temp, path)
+    CACHE["stamp"] = None  # 같은 시각 단위 안에 같은 크기로 다시 쓰면 (경로, mtime, 크기)가 같아 옛 캐시를 쓰게 된다: 다음 load가 다시 읽게
+    # shortcut: 다른 프로세스(예약 최신화)가 같은 틱에 같은 크기로 쓰면 여전히 못 알아챈다. 그런 일이 보이면 파일 내용 해시를 stamp에 넣는다
 
 
 def editable():
