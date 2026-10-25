@@ -514,16 +514,6 @@ def used_by(metric_id, dashboards=None, goals=None):
     return {"cards": cards, "goals": named}
 
 
-def goal_for(metric, rows, period=None):
-    """지표의 목표 하나: 목표 파일의 rows에서 이름(과 기간·대상=테이블)이 맞는 줄. 여러 개라 어느 것인지 모르면 ambiguous(targets.lookup)."""
-    from core import targets
-    scope = (metric.get("scope") or {}).get("table")
-    found = targets.lookup(rows, metric["name"], period)
-    if found["row"] is None and found["ambiguous"] and scope:
-        found = targets.lookup(rows, metric["name"], period, scope)
-    return found
-
-
 # ---------- 예전 지표 파일의 공통 정의 ----------
 
 def legacy_list():

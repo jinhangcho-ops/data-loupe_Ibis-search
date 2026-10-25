@@ -9,6 +9,7 @@ from lazy import ibis
 
 from core import sql_exec
 from core import sql_funcs as S
+from conftest import dialect_status
 
 # ev: 묶음 a(3행) b(4행) c(1행). val·other는 숫자, txt는 글자(빈 값 하나), flag는 참거짓, d는 하루씩 늘어나는 날짜.
 EV = [(1, "a", 1.0, 2.0, "x", True), (2, "a", 2.0, 4.0, " y ", True), (3, "a", 3.0, 6.0, "x", False), (4, "b", 10.0, 1.0, "p-q", True),
@@ -386,7 +387,7 @@ def test_window_functions_fall_back_to_local_on_files():
 @pytest.mark.parametrize("dialect", ["mysql", "mssql", "sqlite", "oracle"])
 def test_dialect_substitutes_keep_the_meaning(dialect):
     """원래 식을 못 만드는 방언에서도 같은 결과의 대체 식이 있는 것들은 대체로, 없는 것은 PC 사본으로."""
-    statuses = {i: S.dialect_status(i, dialect) for i in ("any_value", "var", "corr", "median", "sum")}
+    statuses = {i: dialect_status(i, dialect) for i in ("any_value", "var", "corr", "median", "sum")}
     assert statuses["sum"]["status"] == "ok"
     for i, s in statuses.items():
         assert s["status"] in ("ok", "substitute", "local")

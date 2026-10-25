@@ -70,7 +70,7 @@ def test_each_new_template_names_its_functions():
 
 
 def test_every_function_is_used_and_catalog_is_json():
-    assert S.unused() == []
+    assert [i for i in sql_funcs.FUNCS if i not in {i for ids in S.uses_map().values() for i in ids}] == []  # 어느 틀에서도 안 쓰는 함수가 없다
     cat = S.catalog()
     json.dumps(cat)
     assert set(cat["uses"]) == {t["id"] for t in S.TEMPLATES} and cat["special"] == S.SPECIAL

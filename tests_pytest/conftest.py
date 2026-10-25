@@ -80,3 +80,19 @@ def pytest_configure(config):
 
 def pytest_sessionfinish():  # pytest가 다 끝나면(받을 인자는 쓰지 않아 뺀다)
     shutil.rmtree(APPDATA, ignore_errors=True)
+
+
+def dialect_status(id, dialect):
+    """함수 사전의 id를 방언(sqlglot 이름)으로 SQL로 만들 수 있는지(실행하지 않음) {status, note}. 시험 표는 모든 종류의 컬럼을 가진 빈 표."""
+    from lazy import ibis
+    from core import sql_funcs
+    t = ibis.table({"n": "float64", "i": "int64", "s": "string", "d": "timestamp", "dd": "date", "b": "boolean", "j": "json", "a": "array<string>",
+                    "st": "struct<k: string>"}, name="probe")
+
+    def works(expr):
+        try:
+            ibis.to_sql(expr, dialect=dialect)
+            return True
+        except Exception:
+            return False
+    return sql_funcs.judge(sql_funcs.get(id), t, works)

@@ -184,9 +184,10 @@ def test_legacy_file_metrics_are_common_definitions_bound_on_use(folder, tmp_pat
 def test_goal_lookup_can_be_ambiguous(folder):
     m = make("매출", "m03", {"값": "amt", "집계": "sum"})
     rows = [{"name": "매출", "value": 100, "period": "2026-01", "column": "", "scope": "", "line": 2}, {"name": "매출", "value": 200, "period": "2026-02", "column": "", "scope": "", "line": 3}]
-    found = mm.goal_for(m, rows)
+    from core import targets
+    found = targets.lookup(rows, m["name"])  # 대시보드 목표 카드가 쓰는 찾기(dash_calc)
     assert found["row"] is None and found["ambiguous"] is True and "어느 기간인지 알 수 없어요 (2026-01, 2026-02)" in found["error"]
-    assert mm.goal_for(m, rows, "2026-02")["row"]["value"] == 200
+    assert targets.lookup(rows, m["name"], "2026-02")["row"]["value"] == 200
     assert mm.used_by(m["id"], dashboards=[], goals=rows)["goals"] == rows  # 정의를 고치면 이름이 같은 목표 줄도 알린다
 
 

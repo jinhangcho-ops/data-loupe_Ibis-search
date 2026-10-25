@@ -211,8 +211,3 @@ def scan_ask(done, request_body):
         if ask := server.scan_gate(request_body, lambda b=r["body"]: server.expr_sql(con, querying.filtered(b))):
             return ask
     return None
-
-
-def run_sentence(tid, slots, body, columns=None):
-    """문장을 검사·만들고 실행해 끝난 표를 돌려준다."""
-    return execute_compiled(prepare(tid, slots, body, columns))

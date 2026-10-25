@@ -17,6 +17,7 @@ from core import result
 from query import sentences
 from core import server
 from core import sql_funcs as S
+from conftest import dialect_status
 
 AGG = ("pivot", "chart", "metrics", "dash", "prep", "sentence")  # 집계를 고르는 화면
 WIN = ("calc", "prep", "sentence")  # 창 함수를 고르는 화면
@@ -266,8 +267,8 @@ def test_prep_dedupe_distinct_and_choices(px):
 # ---------- (3) 문장 틀에서 쓰인다 ----------
 
 def test_every_function_is_used_by_a_sentence_template():
-    assert sentences.unused() == []
     used = {i for ids in sentences.uses_map().values() for i in ids}
+    assert [i for i in S.FUNCS if i not in used] == []
     assert set(FEATURE_IDS) <= used
 
 
@@ -301,7 +302,7 @@ def test_every_function_builds_sql_or_has_a_fallback(dialect):
     for id, f in S.FUNCS.items():
         if f["raw"]:
             continue
-        got = S.dialect_status(id, dialect)
+        got = dialect_status(id, dialect)
         if got["status"] == "ok":
             continue
         if got["status"] == "substitute" and got["note"] and S.SUBS.get(id):
@@ -314,5 +315,5 @@ def test_every_function_builds_sql_or_has_a_fallback(dialect):
 
 def test_some_dialect_really_needs_the_fallbacks():
     """방언 시험이 아무것도 못 잡는 헛시험이 아니도록: 어떤 방언은 대체 식을, 어떤 방언은 PC 사본을 실제로 쓴다."""
-    got = [S.dialect_status(i, d)["status"] for d in DIALECTS for i in ("any_value", "median", "corr", "first")]
+    got = [dialect_status(i, d)["status"] for d in DIALECTS for i in ("any_value", "median", "corr", "first")]
     assert "substitute" in got and "local" in got and "ok" in got

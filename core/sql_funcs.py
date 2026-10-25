@@ -1060,25 +1060,6 @@ def support(t, ids=None):
     return {i: ok if FUNCS[i]["raw"] else judge(FUNCS[i], t, source.compiles) for i in (ids or FUNCS)}
 
 
-def dialect_status(id, dialect):
-    """방언(sqlglot 이름)으로 SQL을 만들 수 있는지(실행하지 않음) {status, note}. 시험 표는 모든 종류의 컬럼을 가진 빈 표."""
-    t = probe_table()
-
-    def works(expr):
-        try:
-            ibis.to_sql(expr, dialect=dialect)
-            return True
-        except Exception:
-            return False
-    return judge(get(id), t, works)
-
-
-def probe_table():
-    """모든 종류의 컬럼을 가진 시험용 빈 표(SQL 만들기 시험에 쓴다)."""
-    return ibis.table({"n": "float64", "i": "int64", "s": "string", "d": "timestamp", "dd": "date", "b": "boolean", "j": "json", "a": "array<string>",
-                       "st": "struct<k: string>"}, name="probe")
-
-
 # ---------- SQL 식 직접 쓰기 ----------
 
 class NeedsLocal(ValueError):

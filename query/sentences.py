@@ -171,12 +171,6 @@ def uses_map():
     return {t["id"]: funcs_for(t) for t in TEMPLATES}
 
 
-def unused():
-    """어느 틀에서도 쓰이지 않는 함수 사전 id들(비어 있어야 한다)."""
-    used = {i for ids in uses_map().values() for i in ids}
-    return [i for i in sql_funcs.FUNCS if i not in used]
-
-
 def catalog():
     """화면에 보내는 문장 틀 {period, slot_types, special, templates, uses}."""
     return {"period": PERIOD, "slot_types": list(SLOT_TYPES), "special": SPECIAL, "templates": TEMPLATES, "uses": uses_map()}

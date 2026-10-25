@@ -137,16 +137,16 @@ from test_slack_adapters import shop  # noqa: E402,F401  (orders 3행 + 저장�
 def test_sentence_rows_more_uses_one_extra_row(c, monkeypatch):
     from query import sentence_exec as ex
     monkeypatch.setattr(ex, "QUERY_ROWS", 5)
-    done = ex.run_sentence("e01", {}, BASE, COLS)
+    done = ex.execute_compiled(ex.prepare("e01", {}, BASE, COLS))
     assert len(done["rows"]) == 5 and done["more"] is True  # 12행 중 앞 5행만
     monkeypatch.setattr(ex, "QUERY_ROWS", 12)
-    done = ex.run_sentence("e01", {}, BASE, COLS)
+    done = ex.execute_compiled(ex.prepare("e01", {}, BASE, COLS))
     assert len(done["rows"]) == 12 and done["more"] is False  # 딱 12행이면 더 없다
 
 
 def test_sentence_empty_rows_keep_their_columns(c):
     from query import sentence_exec as ex
-    done = ex.run_sentence("e03", {"컬럼": "store", "값": "Z", "컬럼들": ["id", "amt"]}, BASE, COLS)
+    done = ex.execute_compiled(ex.prepare("e03", {"컬럼": "store", "값": "Z", "컬럼들": ["id", "amt"]}, BASE, COLS))
     assert done["rows"] == [] and done["columns"] == ["id", "amt"]
 
 
@@ -174,12 +174,12 @@ def test_my_metric_of_another_table_is_refused_at_run_time(c):
     key = current_source()["key"]
     here = mm.create({"name": "건수", "scope": {"key": key, "table": "ev"}, "template": "m01", "slots": {}}, COLS)
     there = mm.create({"name": "건수", "scope": {"key": key, "table": "ev2"}, "template": "m01", "slots": {}}, COLS)
-    assert ex.run_sentence("m08", {"지표 A": here["id"], "지표 B": here["id"]}, BASE, COLS)["rows"][0]["합"] == 24
+    assert ex.execute_compiled(ex.prepare("m08", {"지표 A": here["id"], "지표 B": here["id"]}, BASE, COLS))["rows"][0]["합"] == 24
     with pytest.raises(ValueError, match="다른 테이블"):
-        ex.run_sentence("m08", {"지표 A": here["id"], "지표 B": there["id"]}, BASE, COLS)
+        ex.execute_compiled(ex.prepare("m08", {"지표 A": here["id"], "지표 B": there["id"]}, BASE, COLS))
     other = mm.create({"name": "남의 연결", "scope": {"key": "k-other", "table": "ev"}, "template": "m01", "slots": {}}, COLS)
     with pytest.raises(ValueError, match="다른 테이블"):
-        ex.run_sentence("m08", {"지표 A": here["id"], "지표 B": other["id"]}, BASE, COLS)
+        ex.execute_compiled(ex.prepare("m08", {"지표 A": here["id"], "지표 B": other["id"]}, BASE, COLS))
     assert server.state["con"] is not None
 
 
@@ -197,7 +197,7 @@ def test_slack_commands_do_not_run_big_or_unknown_scans(shop, monkeypatch):
 
 def test_e23_shows_the_target_count_next_to_the_average(c):
     from query import sentence_exec as ex
-    done = ex.run_sentence("e23", {"날짜": "day", "단위": "week", "대상": "uid", "값": "amt"}, BASE, COLS)
+    done = ex.execute_compiled(ex.prepare("e23", {"날짜": "day", "단위": "week", "대상": "uid", "값": "amt"}, BASE, COLS))
     # 월요일 시작 주: 12-29주 id 0~3(합 100, 4명), 01-05주 id 4~10(합 560, 4명), 01-12주 id 11(합 120, 1명)
     assert done["columns"] == ["기간", "전체 합계", "전체 고유 개수", "값"]
     assert sorted((r["기간"], r["전체 합계"], r["전체 고유 개수"], r["값"]) for r in done["rows"]) == [("2025-12-29", 100.0, 4, 25.0), ("2026-01-05", 560.0, 4, 140.0), ("2026-01-12", 120.0, 1, 120.0)]

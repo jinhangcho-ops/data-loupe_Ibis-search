@@ -41,7 +41,7 @@ def c(folder, tmp_path):
 
 
 def go(tid, slots, body=BASE):
-    return ex.run_sentence(tid, slots, body, COLS)
+    return ex.execute_compiled(ex.prepare(tid, slots, body, COLS))
 
 
 def pairs(done, key, value):
@@ -115,7 +115,7 @@ def test_templates_that_need_other_tables(c):
     both = go("e16", {"테이블 A": "ev", "테이블 B": "ev2", "연결 컬럼": "id"})
     assert pairs(both, "id", "전체 개수") == [(0, 2), (1, 1)]  # ev2에 id 0이 두 줄, 1이 한 줄
     json_body = {"base": "jt", "joins": [], "periods": [], "conditions": [], "calcs": [], "columns": ["id, json_k"]}
-    got = ex.run_sentence("e43", {"JSON 컬럼": "js", "경로": "k"}, json_body, {"id": "num", "js": "json"})
+    got = ex.execute_compiled(ex.prepare("e43", {"JSON 컬럼": "js", "경로": "k"}, json_body, {"id": "num", "js": "json"}))
     assert got["rows"] == [{"id": 1, "json_k": "seven"}]
 
 

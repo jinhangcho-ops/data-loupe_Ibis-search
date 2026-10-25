@@ -33,7 +33,7 @@ def c(folder, tmp_path):
 
 
 def go(tid, slots):
-    return ex.run_sentence(tid, slots, BASE, COLS)
+    return ex.execute_compiled(ex.prepare(tid, slots, BASE, COLS))
 
 
 def pairs(done, key, value):
