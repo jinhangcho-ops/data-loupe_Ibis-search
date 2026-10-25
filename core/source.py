@@ -372,6 +372,18 @@ def open_flat_files(paths):
 CONNECT_TIMEOUT = 60  # 주소로 접속할 때 기다리는 시간(초). 틀린 주소에서 드라이버가 몇 분씩 붙잡는 것을 막는다.
 
 
+@functools.cache
+def pc_zone():
+    """이 PC의 시간대 이름(Asia/Seoul). 새 DuckDB 연결이 OS에서 읽어 둔 값을 쓴다(Windows도 IANA 이름을 준다). 못 읽으면 지금의 UTC 오프셋(+09:00)."""
+    try:
+        import duckdb
+        with duckdb.connect() as con:
+            return con.execute("select current_setting('TimeZone')").fetchone()[0]
+    except Exception:
+        z = time.strftime("%z")
+        return f"{z[:3]}:{z[3:]}"
+
+
 def without_placeholder(url):
     """비밀번호 자리 `[YOUR-PASSWORD]`(Supabase 대시보드 문자열)를 뺀다. 대괄호가 있으면 urlsplit이 주소를 IPv6로 보고 실패하므로 주소를 처음 받는 곳에서 부른다."""
     return re.sub(r":\[[A-Z-]+\](?=@)", "", url, count=1)  # 대문자·하이픈만(진짜 [abc] 비밀번호는 둔다)

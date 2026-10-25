@@ -86,13 +86,21 @@ function cardValue(card, i = 0) {
     const w = card.data.values?.window_nunique;  // 고유 개수는 일 값을 묶을 수 없어, 서버가 이 기간으로 따로 구한 값만 쓴다(없으면 —)
     return w && (w.start ?? null) === (card.range.start ?? null) && (w.end ?? null) === (card.range.end ?? null) ? w.values[i] ?? null : null;
   }
-  if (by) return by.series[i] ? windowValue(by.series[i], by.labels, card.range?.start, card.range?.end) : null;
+  if (by) return by.series[i] ? windowValue(by.series[i], by.labels, card.range?.start, card.range?.end, loadedRange(card)) : null;
   return card.data?.values?.scalar?.[i] ?? null;
 }
-// 기간 안의 날마다 값 [{ day, v }]. card.view.window(보는 구간)가 있으면 그 구간만.
+// 기간 안의 날마다 값 [{ day, v }]. card.view.window(보는 구간)가 있으면 그 구간만. 개수·합계는 읽어 온 범위 안의 빈 날을 0으로 채운다(분석의 시계열과 같은 규칙).
 function cardDays(card, i = 0) {
   const by = card.data?.by_unit?.day, s = by?.series[i], win = card.view?.window, from = win?.from ?? card.range?.start, to = win?.to ?? card.range?.end;
-  return s ? by.labels.filter(d => (!from || d >= from) && (!to || d <= to)).map(day => ({ day, v: windowValue(s, by.labels, day, day) })) : [];
+  if (!s) return [];
+  let days = by.labels.filter(d => (!from || d >= from) && (!to || d <= to));
+  const loaded = loadedRange(card);
+  if (zeroWhenEmpty(s.agg) && days.length) {  // 보는 기간(없으면 있는 날)의 처음~끝 중 읽어 온 범위 안의 날 모두
+    const lo = [from ?? days[0], loaded.start].filter(Boolean).sort().pop(), hi = [to ?? days[days.length - 1], loaded.end].filter(Boolean).sort()[0];
+    days = [];
+    for (let d = lo; d <= hi; d = shiftDay(d, 1)) days.push(d);
+  }
+  return days.map(day => ({ day, v: windowValue(s, by.labels, day, day, loaded) }));
 }
 const cardTarget = card => card.data?.target?.value ?? card.view?.target?.value ?? null;
 const cardFormat = card => card.view?.format || card.data?.values?.format || "number";

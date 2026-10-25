@@ -7,6 +7,7 @@ import subprocess
 import pytest
 
 from conftest import ROOT
+from core import server
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
@@ -30,7 +31,6 @@ globalThis.chip = (text) => el("span", {}, text);
 globalThis.busy = async (b, fn) => fn();
 globalThis.sameSource = (a, b) => a === b;
 globalThis.S = { schema: "", base: "", cols: [] };
-globalThis.SERVER = { flow: { my_metrics: { better: ["", "up", "down"] } } };
 globalThis.calls = [];
 const MY = { source: { key: "K1", label: "연결1" }, legacy: [], metrics: [
   { id: "a", name: "주문합", text: "금액 합계", scope: { key: "K1", table: "orders" }, template: "m01", slots: { "컬럼": "금액" }, deps: [] },
@@ -48,9 +48,11 @@ globalThis.api = async (url, body) => {
 """
 
 
-def run_node(tmp_path, body):
+def run_node(tmp_path, body, page="dashboard"):
+    """page 화면이 진짜로 받는 상수(server.constants)를 SERVER로 넣는다(가짜 SERVER는 빠진 값을 가린다)."""
     script = tmp_path / "case.js"
-    parts = [HEAD] + [(ROOT / "static" / f).read_text(encoding="utf-8") for f in ("core/funcs.js", "query/sentences.js", "query/metric_catalog.js")]
+    server_js = f"globalThis.SERVER = {json.dumps(server.constants(page), ensure_ascii=False)};\n"
+    parts = [HEAD, server_js] + [(ROOT / "static" / f).read_text(encoding="utf-8") for f in ("core/funcs.js", "query/sentences.js", "query/metric_catalog.js")]
     parts.append("Funcs.load = async () => {}; Funcs.loadSupport = async () => ({});\n" + body)
     script.write_text("\n".join(parts), encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
@@ -88,7 +90,7 @@ def test_dashboard_without_a_table_asks_to_pick_one(tmp_path):
 def test_query_screen_still_follows_S_and_keeps_its_tabs(tmp_path):
     """쿼리 화면은 scope·only 없이 지금처럼 전역 S를 따르고 탭 줄(탐색·지표)이 있다."""
     got = run_node(tmp_path, "S.base = 'visits'; const CTX = { body: () => ({}), columns: () => [['id', '정수']], tables: () => ['orders', 'visits'] };" + SHOW.replace(
-        "await view.show();", "await view.show(); host.children[0].children[1].onclick(); await new Promise(r => setTimeout(r, 100));").replace("tabs: host.children.length", "tabs: host.children[0].children.length"))
+        "await view.show();", "await view.show(); host.children[0].children[1].onclick(); await new Promise(r => setTimeout(r, 100));").replace("tabs: host.children.length", "tabs: host.children[0].children.length"), page="query")
     assert got["tabs"] == 2 and got["status"] == {"table": "visits", "schema": ""}
 
 

@@ -24,6 +24,7 @@ CHECK_TIMEOUT = 10  # 접속 확인(list_topics)을 기다리는 시간(초)
 SEND_TIMEOUT = 60  # 메시지 하나가 전달되기를 기다리는 시간(초). 넘으면 실패로 센다.
 PERMANENT = ("MSG_SIZE_TOO_LARGE", "INVALID_MSG", "CORRUPT_MESSAGE", "INVALID_RECORD", "RECORD_LIST_TOO_LARGE")  # 그 행 자체가 안 되는 오류(다시 보내도 같다). 그 밖의 오류(시간 초과·연결 끊김…)는 일시 오류로 보고 다시 시도한다
 FLUSH_MARGIN = 10  # 묶음을 다 보낸 뒤 기다리는 시간 = SEND_TIMEOUT + 이것(초). 그 안에 실패 보고까지 온다.
+CHUNK = 10_000  # 묶음을 Python 값으로 바꿀 때 한 번에 바꾸는 행 수
 
 QUIET = logging.getLogger("data_loupe.kafka")  # librdkafka의 로그를 받아 버리는 곳
 QUIET.addHandler(logging.NullHandler())
@@ -174,7 +175,7 @@ class Sink:
         같은 묶음(data)으로 다시 부르면 이미 전달된 행은 빼고 전달하지 못한 행만 다시 보낸다."""
         from confluent_kafka import KafkaException
         if data is not self.unit:  # 새 묶음
-            self.unit, self.rows, self.todo, self.ok, self.failed, self.partitions, self.size = data, data.to_pylist(), range(data.num_rows), set(), 0, {}, 0
+            self.unit, self.chunk, self.todo, self.ok, self.failed, self.partitions, self.size = data, (None, []), range(data.num_rows), set(), 0, {}, 0
             self.dead = set()  # 영구 실패로 센 행 번호(이어 받기는 min(todo) 앞의 것만 센다. 뒤의 것은 다시 보내져 다시 세어진다)
         sent, reports, seen = set(), {}, set()  # seen: 앞 회에서 이미 처리한(영구 오류로 센) 행. 이번 회에 새로 온 오류만 보고 멈춘다
 
@@ -189,7 +190,7 @@ class Sink:
         while True:
             skipped = set()
             for n, i in enumerate(pending):
-                row = self.rows[i]
+                row = self.row(i)
                 try:
                     body = message(row)
                     key = key_of(row[self.key]) if self.key else None
@@ -228,6 +229,13 @@ class Sink:
         if self.todo:  # 일부만 전달됐다: 오류로 알려 다시 시도하게 한다(끝내 안 되면 부른 쪽이 멈추고 partial로 넣은 데까지 남긴다)
             raise ValueError(f"Kafka에 {len(self.todo)}행을 전달하지 못했습니다: {self.last or '응답 없음'}")
         return len(self.ok), 0, self.failed
+
+    def row(self, i):
+        """지금 묶음의 i번째 행(dict). 묶음을 CHUNK행씩 Python 값으로 바꿔 둔다(100만 행 묶음을 통째로 바꾸면 GB 메모리). 행은 앞에서부터 차례로 읽는다."""
+        at = i - i % CHUNK
+        if self.chunk[0] != at:
+            self.chunk = at, self.unit.slice(at, CHUNK).to_pylist()
+        return self.chunk[1][i - at]
 
     def partial(self):
         """지금 묶음에서 끝내 못 넣고 멈출 때 남길 것: (앞에서부터 이어서 처리된 행 수, 전달된 행 수, 영구 실패로 센 행 수). 이어 넣기가 그 뒤부터 하게 한다(앞 구멍 뒤에 전달된 행은 다시 보내져 겹칠 수 있다)."""

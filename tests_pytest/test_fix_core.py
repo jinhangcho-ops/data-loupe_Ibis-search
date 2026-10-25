@@ -75,7 +75,7 @@ def test_plain_maps_non_finite_to_none():
 def test_get_chart_values_are_plain():
     t = ibis.memtable(pa.table({"g": ["a", "a", "b"], "y": [1.0, float("nan"), 3.0]}))
     labels, series, _ = result.get_chart(t, "g", [{"y": "y", "agg": "sum"}])
-    assert labels == ["a", "b"] and series[0]["values"] == [None, 3.0]
+    assert labels == ["a", "b"] and series[0]["values"] == [1.0, 3.0]  # (11차) NaN 한 칸은 빈 값으로 보고 합계에서 뺀다
 
 
 def test_analysis_treats_nan_as_empty():

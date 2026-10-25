@@ -6,7 +6,7 @@ from pathlib import Path
 
 from lazy import ibis
 
-from core import sql_funcs
+from core import prep_ops, source, sql_funcs
 from core.parse import check_name, column as field_of, struct_fields, type_info
 
 PAGING = contextvars.ContextVar("paging", default=False)  # get_rows가 쪽을 받는 중: 파일 연결(Polars)의 묶기·중복 빼기도 차례를 고정한다(source.fix_polars_text)
@@ -70,9 +70,17 @@ def cursor_batches(backend, expr, size):
     schema = expr.as_table().schema()
     arrow = schema.to_pyarrow()
     getattr(backend, "_run_pre_execute_hooks", lambda e: None)(expr)  # memtable 등록 등 Ibis가 실행 전에 하는 일
-    with backend._safe_raw_sql(backend.compile(expr)) as cursor:
-        while rows := cursor.fetchmany(size):
-            yield from pa.Table.from_pandas(backend._fetch_from_cursor(Rows(rows, cursor), schema), schema=arrow, preserve_index=False).to_batches(size)
+    streamed = backend.name == "mysql" and hasattr(backend.con, "cursorclass")  # MySQLdb의 기본 커서는 결과 전체를 받아 둔다 → 서버에서 조금씩 받는 커서로(이 조회만)
+    if streamed:
+        import MySQLdb.cursors
+        plain, backend.con.cursorclass = backend.con.cursorclass, MySQLdb.cursors.SSCursor
+    try:
+        with backend._safe_raw_sql(backend.compile(expr)) as cursor:
+            while rows := cursor.fetchmany(size):
+                yield from pa.Table.from_pandas(backend._fetch_from_cursor(Rows(rows, cursor), schema), schema=arrow, preserve_index=False).to_batches(size)
+    finally:
+        if streamed:
+            backend.con.cursorclass = plain
 
 
 def batches(expr, size=None):
@@ -139,10 +147,12 @@ def write_csv(expr, path):
 
 def write_excel(expr, path):
     """Excel로 저장. 묶음씩 받아 xlsxwriter의 메모리 절약 모드(constant_memory: 행을 바로 파일에 씀)로 쓴다.
-    글자는 수식·숫자·주소로 해석하지 않는다(수식 막기는 export가 따로 한다). 날짜·날짜시간은 그 형식으로."""
+    글자는 수식·숫자·주소로 해석하지 않는다(수식 막기는 export가 따로 한다). 날짜·날짜시간은 그 형식으로. 시간대가 있는 시각은 이 PC 시간대의 시각으로."""
     import polars as pl
+    import polars.selectors as cs
     import xlsxwriter
-    options = {"constant_memory": True, "strings_to_formulas": False, "strings_to_numbers": False, "strings_to_urls": False, "remove_timezone": True}
+    options = {"constant_memory": True, "strings_to_formulas": False, "strings_to_numbers": False, "strings_to_urls": False}
+    zone = source.pc_zone()
     try:
         with xlsxwriter.Workbook(str(path), options) as book:  # 행 수는 따로 세지 않고(원격 DB에 COUNT를 보내지 않는다) 쓰면서 상한을 넘는지 본다
             sheet = book.add_worksheet()
@@ -152,7 +162,7 @@ def write_excel(expr, path):
             sheet.write_row(0, 0, expr.columns, bold)
             row = 1
             for batch in batches(expr):
-                frame = json_text(pl.from_arrow(batch))
+                frame = json_text(pl.from_arrow(batch)).with_columns(cs.datetime(time_zone="*").dt.convert_time_zone(zone).dt.replace_time_zone(None))  # Excel은 시간대를 모른다
                 kinds = [shapes.get(t.base_type()) for t in frame.dtypes]
                 for values in frame.iter_rows():
                     if row > EXCEL_MAX_ROWS:
@@ -252,6 +262,7 @@ def get_summary(expr, columns=()):
     for i, (name, (ordered, numeric)) in enumerate(kinds.items()):
         col = expr[name]
         metrics.update({f"count{i}": col.count(), f"nulls{i}": col.isnull().sum(), f"unique{i}": sql_funcs.distinct(col)})
+        col = prep_ops.nan_to_null(col)  # 실수의 NaN·무한 한 칸이 최소·최대·평균을 빈칸으로 만들지 않게(개수·빈 값·고유값은 원래 값으로)
         if ordered:
             metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})
         if numeric:
@@ -284,6 +295,8 @@ def chart_metric(expr, y, agg, opts=None):
         raise ValueError(f"집계 방식 '{agg}'은 쓸 수 없습니다. count, sum, mean, min, max, median, quantile … 중에서 고르세요(함수 사전의 집계).")
     if agg in ("sum", "mean") and (y not in expr.columns or not expr[y].type().is_numeric()):
         raise ValueError("합계·평균은 숫자 컬럼을 Y로 골라야 합니다.")
+    if y in expr.columns and expr[y].type().is_floating():  # NaN·무한 한 칸이 그룹의 합계·평균·최대를 빈칸으로 만들지 않게(stats.finite_value와 같게)
+        y = prep_ops.nan_to_null(expr[y])
     return sql_funcs.aggregate(agg, expr, y, None, opts)
 
 
@@ -307,7 +320,10 @@ def get_chart(expr, x, series, split=None, order="x"):
     metrics = lambda table: {f"v{i}": chart_metric(table, s.get("y"), s.get("agg"), s.get("opts")) for i, s in enumerate(series)}
     run = streaming(expr, all(sql_funcs.ALIASES.get(s.get("agg"), s.get("agg")) in ("count", "count_distinct") for s in series))  # 개수·고유 개수만 streaming(합계·평균은 부동소수 결과가 달라진다)
     top = expr.group_by(x).aggregate(**metrics(expr))
-    top = top.order_by([top.v0.desc(), top[x]] if order == "value" else [top[x]]).limit(MAX_GROUPS).to_polars(**run)
+    recent = order != "value" and expr[x].type().is_temporal()  # 날짜 X는 최근 MAX_GROUPS개를 남겨 오래된 순으로 보인다
+    top = top.order_by([top.v0.desc(), top[x]] if order == "value" else [top[x].desc()] if recent else [top[x]]).limit(MAX_GROUPS).to_polars(**run)
+    if recent:
+        top = top.sort(x, nulls_last=True, maintain_order=True)
     labels = top[x].to_list()
     if not split:
         return labels, [{"series": i, "split": None, "values": [number(v) for v in top[f"v{i}"].to_list()]} for i in range(len(series))], False
@@ -330,5 +346,5 @@ def export(expr, path, guard=True):
         raise ValueError(f"파일 이름은 {', '.join(EXPORTS)} 중 하나로 끝나야 합니다.")
     if guard and suffix != ".parquet":  # 수식으로 읽힐 글자로 시작하는 문자 값은 앞에 '를 붙여 스프레드시트가 실행하지 않게 한다.
         texts = [name for name, t in expr.schema().items() if t.is_string()]
-        expr = expr.mutate(**{name: expr[name].re_search(r"^[=+\-@\t\r]").ifelse("'" + expr[name], expr[name]) for name in texts})
+        expr = expr.mutate(**{name: expr[name].substr(0, 1).isin(["=", "+", "-", "@", "\t", "\r"]).ifelse("'" + expr[name], expr[name]) for name in texts})  # 정규식은 SQL Server 등이 못 한다
     EXPORTS[suffix](expr, path)

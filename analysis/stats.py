@@ -9,6 +9,7 @@ from lazy import ibis
 from core import funnel
 from core import prep_ops
 from core import result
+from core import source
 from core.parse import check_name
 from core.result import chart_metric, plain
 
@@ -17,7 +18,8 @@ TOP_VALUES = 20  # 값 빈도에 보일 값 수(나머지는 "그 밖")
 MAX_CORR = 12  # 상관관계에 넣을 수 있는 숫자 컬럼 수
 MAX_POINTS = result.MAX_POINTS  # 산점도의 점 수
 MAX_GROUPS = 30  # 그룹 비교에 보일 그룹 수(행이 많은 순)
-MAX_PERIODS = 400  # 시계열 추이에 보일 기간 수
+MAX_PERIODS = 400  # 시계열 추이에 보일 기간 수(최근 것)
+SEED = 20260101  # 점을 고르게 뽑을 때의 고정 씨앗(다시 구해도 같은 점, 대시보드 dash_calc도 쓴다)
 UNITS = {"day": "D", "week": "W", "month": "M"}  # 시계열 묶음 단위 → Ibis truncate 단위
 WINDOW_UNITS = {"minute": 60, "hour": 3600, "day": 86400}  # 퍼널 기간 제한의 단위 → 초
 LIMITS = {"max_steps": funnel.MAX_STEPS, "bins": BINS, "top_values": TOP_VALUES, "max_corr": MAX_CORR, "max_points": MAX_POINTS, "max_groups": MAX_GROUPS, "max_periods": MAX_PERIODS}
@@ -131,13 +133,18 @@ def correlation(t, columns):
 
 
 def scatter(t, x, y):
-    """두 숫자 컬럼의 점(둘 다 비어 있지 않은 행, 앞에서 MAX_POINTS개)과 상관계수."""
+    """두 숫자 컬럼의 점(둘 다 비어 있지 않은 행, MAX_POINTS개)과 상관계수. 점이 많으면 Table.sample(고정 씨앗 SEED)로 고르게 뽑는다
+    (대시보드 points_data와 같은 방법, 연결이 못 하면 앞에서부터)."""
     if x == y:
         raise ValueError("X와 Y는 다른 컬럼으로 고르세요.")
     cx, cy = column_of(t, x, "num"), column_of(t, y, "num")
-    s = t.filter(finite(cx).notnull(), finite(cy).notnull())
-    found = rows(s.select(finite(s[x]).name("x"), finite(s[y]).name("y")).limit(MAX_POINTS))
     corr = correlation(t, [x, y])
+    s = t.filter(finite(cx).notnull(), finite(cy).notnull())
+    picked = s.select(finite(s[x]).name("x"), finite(s[y]).name("y"))
+    if corr["n"] > MAX_POINTS:
+        even = picked.sample(MAX_POINTS / corr["n"], seed=SEED)
+        picked = even if source.compiles(even) else picked
+    found = rows(picked.limit(MAX_POINTS))
     return {"x": x, "y": y, "points": [[p["x"], p["y"]] for p in found], "n": corr["n"], "r": corr["matrix"][0][1]}
 
 
@@ -165,16 +172,25 @@ def groups(t, by, value, agg, opts=None):
 
 
 def trend(t, column, unit, value, agg, opts=None):
-    """시계열 추이: 날짜 컬럼을 unit(day·week·month)으로 묶어 value의 agg. 앞 기간부터 MAX_PERIODS개. 빈 날짜는 뺀다."""
+    """시계열 추이: 날짜 컬럼을 unit(day·week·month)으로 묶어 value의 agg. 최근 기간 MAX_PERIODS개(more면 더 오래된 기간이 있다). 빈 날짜는 뺀다.
+    개수·합계는 사이의 빈 기간을 0으로 채운다(행이 없으면 0개·0이라서). 평균 같은 것은 빈 기간을 두지 않는다."""
     if unit not in UNITS:
         raise ValueError("묶음 단위는 day, week, month 중 하나입니다.")
     d = column_of(t, column, "date")
     chart_metric(t, value, agg, opts)  # 고른 값·집계를 먼저 검사한다
     s = finite_value(t, value).filter(d.notnull())
     metric = chart_metric(s, value, agg, opts)
-    found = rows(s.group_by(s[column].truncate(UNITS[unit]).name("period")).aggregate(v=metric).order_by("period").limit(MAX_PERIODS + 1))
-    return {"column": column, "unit": unit, "value": value, "agg": agg, "labels": [str(r["period"])[:10] for r in found[:MAX_PERIODS]],
-            "values": [r["v"] for r in found[:MAX_PERIODS]], "more": len(found) > MAX_PERIODS}
+    found = rows(s.group_by(s[column].truncate(UNITS[unit]).name("period")).aggregate(v=metric).order_by(ibis.desc("period")).limit(MAX_PERIODS + 1))
+    more, found = len(found) > MAX_PERIODS, found[:MAX_PERIODS][::-1]
+    got = {str(r["period"])[:10]: r["v"] for r in found}
+    labels = list(got)
+    if agg in ("count", "sum") and labels:  # 마지막 기간부터 거꾸로 MAX_PERIODS개 칸을 채운다(첫 기간까지)
+        first, day, labels = labels[0], dt.date.fromisoformat(labels[-1]), []
+        while len(labels) < MAX_PERIODS and day.isoformat() >= first:
+            labels.insert(0, day.isoformat())
+            day = {"day": lambda d: d - dt.timedelta(days=1), "week": lambda d: d - dt.timedelta(days=7), "month": lambda d: (d - dt.timedelta(days=1)).replace(day=1)}[unit](day)
+        more = more or labels[0] > first
+    return {"column": column, "unit": unit, "value": value, "agg": agg, "labels": labels, "values": [got.get(l, 0) for l in labels], "more": more}
 
 
 def window_seconds(window):

@@ -434,9 +434,10 @@ def prune():
 def analyzed(body):
     """분석(stats.analyze). body = {recipe, how, sample, full}. recipe의 정렬은 분석에 쓰지 않아 뺀다. 대시보드 카드(dash_calc)도 쓴다.
     기본은 전처리 탭과 같은 표본(sample행, 같은 테이블이면 읽어 둔 것)에 recipe를 적용해 이 PC에서 구한다.
-    full이면 테이블 전체에 recipe를 적용한 식을 연결(DB, local_mode면 이 PC의 작업 사본)에서 구한다. 결과에 어느 쪽으로 구했는지(data)를 붙인다."""
+    full이면 테이블 전체에 recipe를 적용한 식을 연결(DB, local_mode면 이 PC의 작업 사본)에서 구한다. 결과에 어느 쪽으로 구했는지(data)를 붙인다.
+    퍼널은 늘 전체로 구한다: 행 표본은 한 사람의 단계 행을 일부만 담아 전환율이 깎인다(읽는 컬럼은 사용자·단계·시각 셋, 집계는 DB 안에서)."""
     recipe, how = {**body.get("recipe", {}), "sorts": []}, body.get("how") or {}
-    if body.get("full") is True:
+    if whole(body):
         expr = built(recipe)[0]
         return {**run(lambda: stats.analyze(expr, how)), "data": {"full": True}}
     key, size = table_key(recipe), sample_size(body)
@@ -446,11 +447,16 @@ def analyzed(body):
     return {**found, "data": {"full": False, **info}}
 
 
+def whole(body):
+    """분석을 테이블 전체로 구하는지: full이거나 퍼널."""
+    return body.get("full") is True or (body.get("how") or {}).get("kind") == "funnel"
+
+
 @app.post("/api/analyze")
 def analyze():
     body = request.json
     recipe = {**body.get("recipe", {}), "sorts": []}  # 분석은 정렬을 쓰지 않으니 사본 열쇠·확인도 정렬 없이(analyzed와 같다)
-    full = body.get("full") is True
+    full = whole(body)
     if ask := (copy_gate(recipe, reads=True) if full else geo_gate(recipe)):  # 표본 분석도 원격 지점·영역 테이블은 통째로 받으므로 확인한다
         return ask
     if full:

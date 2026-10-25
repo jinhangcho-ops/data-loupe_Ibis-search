@@ -298,8 +298,8 @@ def parse_period(line, expr):
         preds.append(expr[col] >= convert(dtype, start))
     if end:
         value = convert(dtype, end)
-        # 날짜시간 컬럼에 끝을 날짜로만 쓰면 그날 끝까지 포함한다
-        after = dtype.is_timestamp() and next_day(end)
+        # 날짜시간 컬럼에 끝을 날짜로만 쓰면 그날 끝까지, 초 없이 HH:MM까지 쓰면 그 분 끝까지 포함한다(대시보드 기간 period.py와 같은 규칙)
+        after = dtype.is_timestamp() and (next_day(end) or (value + dt.timedelta(minutes=1) if re.search(r"[ T]\d{1,2}:\d{2}$", end) else None))
         preds.append(expr[col] < after if after else expr[col] <= value)
     return preds
 

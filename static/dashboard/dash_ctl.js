@@ -11,7 +11,7 @@ class DashCtl {
     this.pick = el("input", { type: "date", className: "dc-pick", tabIndex: -1 });
     this.pickBtn = el("button", { className: "btn", textContent: "달력", title: "달력에서 기준일 고르기", onclick: () => this.pick.showPicker ? this.pick.showPicker() : this.pick.click() });
     this.asofNote = el("div", { className: "hint dc-note" });
-    this.per = el("input", { placeholder: "비우면 카드의 원래 기간", title: "비우면 대시보드 기간을 걸지 않고 카드마다 자기 조건(기간 줄)대로 보입니다. 최근 N일·주·달·년, 2026-10, 2026-Q3, 2026, 시작 ~ 끝, 지난주·지난달·작년·이번 달…" });
+    this.per = el("input", { placeholder: "비우면 카드의 원래 기간", title: "비우면 대시보드 기간을 걸지 않고 카드마다 자기 조건(기간 줄)대로 보입니다. 최근 N일·주·달·년(어제까지), 2026-10, 2026-Q3, 2026, 시작 ~ 끝, 지난주·지난달·작년·이번 달…" });
     this.perNote = el("div", { className: "hint dc-note" });
     this.every = el("input", { placeholder: "비우면 안 함 (예: 1일)", title: `연결한 뒤 이 주기가 지난 카드만 다시 구합니다. 최소 ${minimumText(SERVER.dash.min_refresh)}` });
     this.lastNote = el("div", { className: "hint dc-note" });

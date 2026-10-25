@@ -75,7 +75,7 @@ def text_wide(df, text_big):
     import polars as pl
     blobs = [c for c in df.columns if df[c].dtype == pl.Binary]  # write_json이 이진 값에서 패닉한다 → 16진수 글자로
     def hexed(t):  # 이진을 글자로 바꾼 타입
-        return (pl.String if t == pl.Binary else pl.List(hexed(t.inner)) if isinstance(t, pl.List) else pl.Array(hexed(t.inner), t.shape) if isinstance(t, pl.Array)
+        return (pl.String if t == pl.Binary else pl.List(hexed(t.inner)) if isinstance(t, pl.List) else pl.Array(hexed(t.inner), t.size) if isinstance(t, pl.Array)
                 else pl.Struct({f.name: hexed(f.dtype) for f in t.fields}) if isinstance(t, pl.Struct) else t)
     def hex_of(v):
         return v.hex() if isinstance(v, bytes) else [hex_of(x) for x in v] if isinstance(v, list) else {k: hex_of(x) for k, x in v.items()} if isinstance(v, dict) else v

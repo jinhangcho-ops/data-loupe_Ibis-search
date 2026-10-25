@@ -96,6 +96,11 @@ def bucket_start(index, unit):
     return EPOCH + dt.timedelta(days=index * (1 if unit == "day" else unit))
 
 
+def bucket_last_day(index, unit):
+    """버킷 번호의 마지막 날 번호(day_index와 같은 셈). 이 날이 자료의 마지막 날보다 뒤면 그 기간은 아직 진행 중이다."""
+    return (bucket_start(index + 1, unit) - EPOCH).days - 1
+
+
 def ratio(a, b):
     """a / b, b가 0이거나 없으면 None."""
     return a / b if b else None
@@ -305,7 +310,7 @@ def user_states(table, user, time, unit="month", inactive_days=None, notes=None)
 # ---------- 코호트 ----------
 
 def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=None):
-    """코호트(첫 활동 기간) × 경과 기간 N의 유지율 {unit, mode, cohorts: [{cohort, size, values}]}. 아직 관찰할 수 없는 칸은 None.
+    """코호트(첫 활동 기간) × 경과 기간 N의 유지율 {unit, mode, cohorts: [{cohort, size, values}], partial}. 아직 관찰할 수 없는 칸과, 자료가 중간에 끝난 마지막 기간의 칸(N > 0)은 None이고 그런 칸을 뺐으면 partial이 참.
     classic = 정확히 N에 활동한 비율, rolling = N 이후에라도 활동한(마지막 활동 ≥ N) 비율, range = span=(a, b) 안에 활동한 비율(값이 하나)."""
     check_unit(unit)
     if mode not in ("classic", "rolling", "range"):
@@ -322,14 +327,19 @@ def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=
         return {"unit": unit, "mode": mode, "cohorts": []}
     counts = cohort_counts(j, mode, span)
     width = 1 if mode == "range" else n_max + 1
+    d = table.select(d=day_index(table[time]))
+    open_last = unit != "day" and bucket_last_day(last, unit) > latest(d, "d")  # 자료가 마지막 기간 중간에 끝났다
+    partial = False
     cohorts = []
     for f in sorted(sizes):
         values = []
         for n in range(width):
             at = f + (span[0] if mode == "range" else n)
-            values.append(ratio(counts.get((f, n), 0), sizes[f]) if at <= last else None)
+            cut = at == last and at > f and open_last  # 진행 중인 기간의 칸은 확정이 아니다(첫 기간 자체는 늘 100%라 둔다)
+            partial = partial or cut
+            values.append(ratio(counts.get((f, n), 0), sizes[f]) if at <= last and not cut else None)
         cohorts.append({"cohort": bucket_start(f, unit).isoformat(), "size": sizes[f], "values": values})
-    return {"unit": unit, "mode": mode, "cohorts": cohorts}
+    return {"unit": unit, "mode": mode, "cohorts": cohorts, "partial": partial}
 
 
 def cohort_counts(j, mode, span):
@@ -398,9 +408,8 @@ def ltv(table, user, time, amount, n_days, unit="day"):
         return []
     out = []
     for f in sorted(sizes):
-        end_day = (bucket_start(f + 1, unit) - EPOCH).days - 1
         total = float(revenue.get(f, 0))
-        out.append({"cohort": bucket_start(f, unit).isoformat(), "size": sizes[f], "revenue": total, "ltv": total / sizes[f], "complete": end_day + n_days <= last_day})
+        out.append({"cohort": bucket_start(f, unit).isoformat(), "size": sizes[f], "revenue": total, "ltv": total / sizes[f], "complete": bucket_last_day(f, unit) + n_days <= last_day})
     return out
 
 
@@ -619,6 +628,41 @@ def two_proportion_z(x1, n1, x2, n2):
     se = math.sqrt(pool * (1 - pool) * (1 / n1 + 1 / n2))
     z = (p2 - p1) / se if se else None
     return {"p1": p1, "p2": p2, "diff": p2 - p1, "lift": lift(p2, p1), "z": z, "p": math.erfc(abs(z) / math.sqrt(2)) if z is not None else None}
+
+
+SMALL_N = 30  # 군마다 이보다 적으면 정규 근사(z·t 검정)를 믿기 어렵다
+SMALL_CELL = 5  # 비율 지표의 칸별 기대 빈도가 이보다 적어도 그렇다
+SRM_P = 0.001  # 배정 비율 검사에서 이보다 작은 p면 배정이 기대와 다르다고 본다
+
+
+def small_sample(n1, n2, x1=None, x2=None):
+    """표본이 적어 근사 검정을 믿기 어려운지: 어느 군이든 SMALL_N 미만이거나, 비율(성공 수 x를 줄 때)의 칸별 기대 빈도(n·p, n·(1−p), p는 합친 비율)가 SMALL_CELL 미만."""
+    if min(n1, n2) < SMALL_N:
+        return True
+    if x1 is None:
+        return False
+    pool = (x1 + x2) / (n1 + n2)
+    return min(n1, n2) * min(pool, 1 - pool) < SMALL_CELL
+
+
+def diff_lift_ci(m1, v1, m2, v2, level=0.95):
+    """차이(m2 − m1)와 Lift(m2 ÷ m1 − 1)의 신뢰구간(정규 근사) {diff: (아래, 위), lift: (아래, 위) 또는 None}. v는 각 평균의 분산(sd²/n, 비율은 p(1−p)/n).
+    Lift는 log(m2 ÷ m1)의 델타 방법이라 두 평균이 0보다 커야 구한다."""
+    z = norm_ppf(0.5 + level / 2)
+    d, se = m2 - m1, math.sqrt(v1 + v2)
+    lift_ci = None
+    if m1 > 0 and m2 > 0:
+        r, sl = math.log(m2 / m1), math.sqrt(v1 / m1 ** 2 + v2 / m2 ** 2)
+        lift_ci = (math.exp(r - z * sl) - 1, math.exp(r + z * sl) - 1)
+    return {"diff": (d - z * se, d + z * se), "lift": lift_ci}
+
+
+def srm_p(n1, n2, share1=0.5):
+    """배정 비율 검사(SRM): n1:n2가 기대 몫(대조군 share1)과 맞는지 카이제곱(자유도 1) p값. 자유도 1이라 p = erfc(√(χ²/2))."""
+    total = n1 + n2
+    e1, e2 = total * share1, total * (1 - share1)
+    chi2 = (n1 - e1) ** 2 / e1 + (n2 - e2) ** 2 / e2
+    return math.erfc(math.sqrt(chi2 / 2))
 
 
 def lentz(d):

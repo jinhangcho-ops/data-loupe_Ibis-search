@@ -179,7 +179,7 @@ def query():
         note = SERVER_PAGES
     elif not kept:
         count, rows = db_page(con, body, expr, limit, offset, count)
-        if offset and body.get("sorts") and tied(body):  # 이 PC·파일 연결은 쪽마다 다시 정렬한다: 정렬 값이 같은 행이 있을 때만 알린다(둘째 쪽부터, 검색마다 한 번 센다)
+        if offset and not note and body.get("sorts") and tied(body):  # 이 PC·파일 연결은 쪽마다 다시 정렬한다: 정렬 값이 같은 행이 있을 때만 알린다(둘째 쪽부터, 검색마다 한 번 센다). 원격 DB의 큰 결과(TOO_BIG)는 그 안내 그대로, 원격에 세는 조회를 보내지 않는다
             note = LOCAL_PAGES
     if offset == 0:  # 새로 검색할 때만(쪽 넘기기는 세지 않는다)
         count_virtual([body["base"], *(body.get("union") or {}).get("tables", []), *[line.split()[0] for line in body.get("joins", []) if line.split()]])

@@ -17,8 +17,8 @@ ALL = ["query", "prep", "dashboard", "collect", "integrations"]
 
 
 @pytest.fixture
-def installed(tmp_path, monkeypatch):
-    """frozen exe가 tmp_path에 설치된 모양: exe 옆에 features.ini(version, features)를 쓰는 함수를 돌려준다."""
+def installed(tmp_path, monkeypatch, folder):
+    """frozen exe가 tmp_path에 설치된 모양: exe 옆에 features.ini(version, features)를 쓰는 함수를 돌려준다. 설정 폴더(예약)는 비운다."""
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(tmp_path / "DataLoupe.exe"))
 
@@ -87,8 +87,21 @@ class Spy:
             self.urls.append(url)
             out.write(files[url.rsplit("/", 1)[1]])
         monkeypatch.setattr(features, "fetch", fetch)
-        monkeypatch.setattr(features.subprocess, "Popen", lambda cmd, *a, **k: self.run.append(cmd))
-        monkeypatch.setattr(features, "threading", types.SimpleNamespace(Timer=lambda delay, fn: types.SimpleNamespace(start=lambda: self.timers.append(fn))))
+        monkeypatch.setattr(features.subprocess, "Popen", lambda cmd, *a, **k: self.run.append(cmd) or Running(cmd))
+        monkeypatch.setattr(features, "threading", types.SimpleNamespace(Timer=lambda delay, fn, args=(): types.SimpleNamespace(start=lambda: self.timers.append(fn))))
+
+
+class Running:
+    """아직 도는 설치 프로그램."""
+
+    def __init__(self, cmd):
+        self.cmd = cmd
+
+    def poll(self):
+        return None
+
+    def wait(self, timeout=None):
+        raise subprocess.TimeoutExpired(self.cmd, timeout)
 
 
 SETUP = b"setup bytes"
@@ -102,8 +115,8 @@ def test_install_runs_setup_when_hash_matches(installed, monkeypatch, tmp_path):
     assert sorted(spy.urls) == [base, base + ".sha256"]
     (cmd,) = spy.run
     assert Path(cmd[0]).name == "DataLoupe-setup.exe" and Path(cmd[0]).read_bytes() == SETUP
-    assert cmd[1:] == ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", "/COMPONENTS=query,collect", f"/DIR={tmp_path}", "/RELAUNCH"]
-    assert spy.timers == [features.quit_app] and "다시 열려요" in text  # 응답이 나간 뒤 앱을 닫는다
+    assert cmd[1:] == ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOCANCEL", "/COMPONENTS=query,collect", f"/DIR={tmp_path}", "/RELAUNCH"]
+    assert spy.timers == [features.quit_unless_failed] and "다시 열려요" in text  # 응답이 나간 뒤 앱을 닫는다
     scratch.remove(Path(cmd[0]).parent)
 
 
@@ -287,15 +300,3 @@ def test_screens_mark_each_feature():
     for i, path in (("query", "/search"), ("prep", "/prep"), ("dashboard", "/dashboard"), ("collect", "/collect"), ("integrations", "/integrations")):
         assert f'href="{path}" data-feature="{i}"' in status and f'data-go="{path}" data-feature="{i}"' in home
     assert 'id="feat-open"' in status and 'id="feat-apply"' in status and "/api/features/install" in COMMON
-
-
-def test_install_for_all_users_when_app_folder_is_not_writable(installed, monkeypatch, tmp_path):
-    """모두를 위한 설치(쓸 수 없는 폴더)면 /ALLUSERS로 다시 설치한다(아니면 사용자 권한 설치가 Program Files에 쓰지 못한다)."""
-    installed("[app]\nversion=1.2.3\nfeatures=query\n")
-    spy = Spy(monkeypatch, {"DataLoupe-setup.exe": SETUP, "DataLoupe-setup.exe.sha256": hashlib.sha256(SETUP).hexdigest().encode()})
-    assert features.writable(tmp_path) is True
-    monkeypatch.setattr(features, "writable", lambda folder: False)
-    features.install(["query"])
-    (cmd,) = spy.run
-    assert "/ALLUSERS" in cmd and "/CURRENTUSER" not in cmd
-    scratch.remove(Path(cmd[0]).parent)

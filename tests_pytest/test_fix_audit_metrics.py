@@ -116,10 +116,10 @@ def test_dau_counts_empty_days_as_zero():
     assert got["value"] == 0.75 and [r["users"] for r in got["rows"]] == [2, 0, 0, 1] and got["spread"]["n"] == 4
 
 
-def test_stickiness_note_says_inactive_days_are_left_out():
+def test_stickiness_counts_inactive_days_as_zero():
     t = mem(uid=[1, 2, 1], ts=[D(2026, 3, 1, 9), D(2026, 3, 1, 10), D(2026, 3, 4, 9)])
     got = run("stickiness", {"사용자": "uid", "시각": "ts"}, t)
-    assert got["value"] == pytest.approx(1.5 / 2) and any("활동이 없는 날" in n for n in got["notes"])  # 활동 있는 날 3/1(2명)·3/4(1명)의 평균 1.5 ÷ MAU 2
+    assert got["value"] == pytest.approx(0.75 / 2) and any("0명으로" in n for n in got["notes"])  # (11D11) 3/1~3/4 4일: (2+0+0+1)/4 = 0.75 ÷ MAU 2
 
 
 def test_null_time_rows_do_not_break_payment_metrics():

@@ -151,19 +151,31 @@ def drop(con, schema, name):
 
 @source.on_worker
 def insert(con, schema, name, data):
-    """묶음(pyarrow 표) 하나를 넣는다. Ibis insert 한 번 = 문장 하나라 묶음째 들어가거나 들어가지 않는다."""
-    con.insert(name, ibis.memtable(data), database=schema or None)
+    """묶음(pyarrow 표) 하나를 넣는다. Ibis insert 한 번 = 문장 하나라 묶음째 들어가거나 들어가지 않는다.
+    전처리의 테이블 만들기(prep_app.insert_all)처럼 값을 Python 값으로 두고(빈 날짜시각·큰 정수), 올린 임시 테이블은 바로 지운다."""
+    from prep import prep_app
+    part = ibis.memtable(prep_app.plain_rows(data), schema=ibis.Schema.from_pyarrow(data.schema))
+    try:
+        con.insert(name, part, database=schema or None)
+    finally:
+        prep_app.drop_memtable(con, part.op())
+
+
+IN_LIMIT = 1000  # IN 목록 하나에 넣는 값의 수. Oracle은 1000개까지만 받는다(ORA-01795).
+
+
+def lookups(table, keys, data):
+    """묶음의 키 중 table에 이미 있는 것을 찾는 식들. 빈 값이 없는 키 조합을 IN_LIMIT개씩 나눠 컬럼마다 IN으로 거른다."""
+    found = list({row for row in zip(*(data.column(k).to_pylist() for k in keys)) if None not in row})
+    parts = [found[at:at + IN_LIMIT] for at in range(0, len(found), IN_LIMIT)]
+    return [table.filter([table[k].isin(list({row[i] for row in part})) for i, k in enumerate(keys)]).select(keys).distinct() for part in parts]
 
 
 @source.on_worker
 def existing(con, schema, name, keys, data):
     """묶음의 키 중 테이블에 이미 있는 것들(튜플의 집합). 묶음의 키 값만으로 걸러 조회한다."""
-    values = {k: [v for v in set(data.column(k).to_pylist()) if v is not None] for k in keys}
-    if not all(values.values()):
-        return set()
     table = con.table(name, database=schema or None)
-    rows = table.filter([table[k].isin(values[k]) for k in keys]).select(keys).distinct().to_pyarrow().to_pylist()
-    return {tuple(row[k] for k in keys) for row in rows}
+    return {tuple(row[k] for k in keys) for query in lookups(table, keys, data) for row in query.to_pyarrow().to_pylist()}
 
 
 @source.on_worker
@@ -306,10 +318,12 @@ class Sink:
         rows = data.num_rows
         if self.keys:  # 다시 시도할 때도 다시 본다(확정 직후 끊겨 들어간 묶음이 겹치지 않게).
             import pyarrow as pa
-            have = existing(self.con, self.schema, self.name, self.keys, data)
-            if have:
-                keys = list(zip(*(data.column(k).to_pylist() for k in self.keys)))
-                data = data.filter(pa.array([k not in have for k in keys]))
+            have, keep = existing(self.con, self.schema, self.name, self.keys, data), []
+            for k in zip(*(data.column(k).to_pylist() for k in self.keys)):  # 묶음 안에서도 같은 키는 첫 행만(묶음 크기에 따라 결과가 달라지지 않게). 빈 값이 든 키는 늘 넣는다.
+                keep.append(k not in have)
+                if None not in k:
+                    have.add(k)
+            data = data.filter(pa.array(keep, pa.bool_()))
         if data.num_rows:
             if self.load_id:
                 import pyarrow as pa

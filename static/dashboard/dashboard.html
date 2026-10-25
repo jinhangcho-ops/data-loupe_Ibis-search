@@ -28,7 +28,7 @@
     <button id="d-settings" class="btn" title="기준일·기간·최신화 주기·실시간 간격·팔레트·목표 파일">설정</button>
     <div class="drop"><button id="d-add-open" class="btn" title="KPI·도넛 KPI·게이지·요약 문장·표·문장·상태·경고 목록·배치도·편차 표 같은 카드를 만듭니다">카드 추가</button>
       <div class="pop hidden cardmenu" id="d-add-pop"></div></div>
-    <a class="btn" style="white-space:nowrap" href="/search" title="탐색에서 차트·지표를 만들고 [대시보드에 추가]를 누르면 이곳에 모입니다">쿼리에서 카드 만들기</a>
+    <a class="btn" style="white-space:nowrap" href="/search" data-feature="query" title="탐색에서 차트·지표를 만들고 [대시보드에 추가]를 누르면 이곳에 모입니다">쿼리에서 카드 만들기</a>
     <button id="d-metrics" class="btn" title="지표 틀·내 지표·지표 사전. 쿼리 화면의 [지표] 탭과 같은 화면이고 저장도 같은 곳이에요">지표</button>
     <button id="d-refresh" class="btn" title="모든 카드를 지금 연결에서 다시 구해 저장합니다">다시 구하기</button>
     <button id="d-report-png" class="btn" title="모든 카드를 격자 자리대로 한 장의 PNG로 저장합니다(SVG 카드 포함)">보고서 PNG</button>
@@ -467,7 +467,7 @@ async function openMetrics() {
   say("err-met", "");
   const host = $("d-met-host");
   $("d-met-table").classList.toggle("hidden", !connected);
-  if (!connected) return void host.replaceChildren(el("div", { className: "hint", textContent: "먼저 연결하세요. 위쪽 [연결] 단추로 데이터에 연결한 뒤 다시 여세요." }));
+  if (!connected) return void (metView = null, host.replaceChildren(el("div", { className: "hint", textContent: "먼저 연결하세요. 위쪽 [연결] 단추로 데이터에 연결한 뒤 다시 여세요." })));  // 본문이 떨어져 나간 지표 화면은 다시 만든다
   try {
     await need(...METRIC_JS);
     metTables = (await api("/api/tables?schema=")).tables;

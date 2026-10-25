@@ -15,6 +15,7 @@ KERNELS = {}
 MAX_ROWS = 60  # 결과 표에 싣는 행 수(코호트·기간·항목). 넘으면 최근(또는 상위) 것만 싣고 알린다
 MAX_RETENTION_COLS = 100  # 리텐션 표의 경과 기간 컬럼 수 상한
 MAX_POINTS = 400  # 생존 곡선에 싣는 점 수
+PARTIAL_NOTE = "마지막 기간은 진행 중이라 그 기간의 유지율 칸은 비우고 평균에서 뺐어요."
 
 
 def kernel(name):
@@ -158,25 +159,37 @@ def pv_per_uv(t, s, p, ctx):
 
 @kernel("active")
 def active(t, s, p, ctx):
-    """DAU·WAU·MAU: 기간 버킷마다 고유 사용자 수의 평균(활동 없는 기간은 0명). 분포는 기간별 값."""
+    """DAU·WAU·MAU: 기간 버킷마다 고유 사용자 수의 평균(활동 없는 기간은 0명, 자료가 중간에 끝난 마지막 기간은 다른 기간이 있으면 뺀다). 분포는 기간별 값."""
     rows, cells, found = users_by_unit(t, s, p["unit"], ctx)
     if not cells:
         return result(None, [], {"period": "기간", "users": "활성 사용자 수"}, dist=np.array([], float), label=f"{p['unit_name']} 평균")
-    values = np.concatenate([np.fromiter(found.values(), float, len(found)), np.zeros(cells - len(found))])  # 활동 없는 기간은 0명
-    return result(sum(found.values()) / cells, rows, {"period": "기간", "users": "활성 사용자 수"}, dist=values, label=f"{p['unit_name']} 평균")
+    used = dict(found)
+    hi = max(found)
+    if cells > 1 and p["unit"] != "day" and mc.bucket_last_day(hi, p["unit"]) > mc.latest(t.select(d=mc.day_index(t[s["time"]])), "d"):
+        del used[hi]  # 자료가 마지막 기간 중간에 끝나 그 기간 수는 아직 작다
+        cells -= 1
+        ctx.notes.append("마지막 기간은 진행 중이라 평균에서 뺐어요. 표에는 그대로 보여요.")
+    values = np.concatenate([np.fromiter(used.values(), float, len(used)), np.zeros(cells - len(used))])  # 활동 없는 기간은 0명
+    return result(sum(used.values()) / cells, rows, {"period": "기간", "users": "활성 사용자 수"}, dist=values, label=f"{p['unit_name']} 평균")
 
 
 @kernel("stickiness")
 def stickiness(t, s, p, ctx):
-    """고착도: 달마다 (그 달 일별 활동자 평균) ÷ MAU, 달들의 평균."""
+    """고착도: 달마다 (그 달 일별 활동자 합 ÷ 그 달 날수) ÷ MAU, 달들의 평균. 자료가 달 중간에 시작·끝나면 날수는 자료가 있는 날까지."""
     x = t.select(u=t[s["user"]], d=mc.day_index(t[s["time"]]), m=mc.bucket_index(t[s["time"]], "month"))
     x = x.filter(x.u.notnull(), x.d.notnull()).distinct()
-    days = {}
+    days, seen = {}, []
     for r in mc.rows(x.group_by(["m", "d"]).aggregate(n=x.u.count())):
-        days.setdefault(int(r["m"]), []).append(int(r["n"]))
+        days[int(r["m"])] = days.get(int(r["m"]), 0) + int(r["n"])
+        seen.append(int(r["d"]))
     mau = {int(r["m"]): int(r["n"]) for r in mc.rows(x.group_by("m").aggregate(n=x.u.nunique()))}
-    rows = [{"period": label_of(m, "month"), "dau": sum(v) / len(v), "mau": mau[m], "stickiness": mc.ratio(sum(v) / len(v), mau[m])} for m, v in sorted(days.items())]
-    ctx.notes.append("DAU는 그 달에 활동이 있는 날들의 평균이고 활동이 없는 날·달은 평균에서 빠져서, 띄엄띄엄 쓰는 서비스는 고착도가 실제보다 높게 나와요.")
+    lo, hi = min(seen, default=0), max(seen, default=0)
+
+    def span(m):  # 그 달에서 자료가 있는 날수(활동 없는 날도 센다)
+        return min(mc.bucket_last_day(m, "month"), hi) - max((mc.bucket_start(m, "month") - mc.EPOCH).days, lo) + 1
+
+    rows = [{"period": label_of(m, "month"), "dau": v / span(m), "mau": mau[m], "stickiness": mc.ratio(v / span(m), mau[m])} for m, v in sorted(days.items())]
+    ctx.notes.append("DAU는 그 달 날수(자료가 달 중간에 시작·끝나면 자료가 있는 날까지)로 나눈 평균이에요. 활동이 없는 날은 0명으로 세요. 활동이 없는 달은 평균에서 빠져요.")
     return result(mc.mean_defined([r["stickiness"] for r in rows]), last_rows(rows, ctx), {"period": "월", "dau": "DAU(평균)", "mau": "MAU", "stickiness": "DAU/MAU"},
                   {"dau": mc.mean_defined([r["dau"] for r in rows]), "mau": mc.mean_defined([r["mau"] for r in rows])}, label="월별 평균")
 
@@ -300,6 +313,8 @@ def retention(t, s, p, ctx):
     mode, unit, n = p["mode"], s.get("unit") or "day", s.get("n") or 7
     span = (s["from_n"], s["to_n"]) if mode == "range" else None
     m = mc.cohort_matrix(t, s["user"], s["time"], unit, mode, n_max=n, span=span)
+    if m.get("partial"):
+        ctx.notes.append(PARTIAL_NOTE)
     curve = mc.average_curve(m["cohorts"])
     shown = min(len(curve), MAX_RETENTION_COLS)  # N이 크면 표 컬럼이 수천 개가 되어 응답이 커진다(대표 값은 전체 기준)
     if shown < len(curve):
@@ -317,6 +332,8 @@ def flattening(t, s, p, ctx):
     """유지율 곡선이 수평이 되는 첫 N."""
     unit = s.get("unit") or "day"
     m = mc.cohort_matrix(t, s["user"], s["time"], unit, "classic", n_max=s["n"])
+    if m.get("partial"):
+        ctx.notes.append(PARTIAL_NOTE)
     curve = mc.average_curve(m["cohorts"])
     point = mc.flattening_point(curve, eps=s["eps"] / 100, run=s["run"])
     if point is None:
@@ -1065,10 +1082,23 @@ def two_groups(t, s):
     return found["c"], found["e"], binary
 
 
+def ab_checks(c, e, binary, ctx):
+    """A/B 결과 공통 점검: 표본이 적으면(작은 표본) 경고하고 참을 돌려준다. 배정 비율(1:1 기대)이 크게 어긋나면(SRM) 경고한다."""
+    srm = mc.srm_p(c["n"], e["n"])
+    if srm < mc.SRM_P:
+        ctx.notes.append(f"배정 비율 검사(SRM): 대조군 {c['n']:,}명 대 실험군 {e['n']:,}명은 1:1 배정이라고 보기 어려워요(p={srm:.2g}). 배정·기록에 문제가 없는지 먼저 확인해 보세요.")
+    small = mc.small_sample(c["n"], e["n"], *((round(c["sum"]), round(e["sum"])) if binary else ()))
+    if small:
+        why = "한 군이라도 30개 미만이거나 성공·실패 기대 수가 5 미만" if binary else "한 군이라도 30개 미만"
+        ctx.notes.append(f"표본이 적어({why}) 정규 근사 결과를 믿기 어려워요. 표본을 더 모은 뒤에 판단해 주세요.")
+    return small
+
+
 @kernel("lift")
 def lift_kernel(t, s, p, ctx):
     """Lift: (실험군 − 대조군) ÷ 대조군."""
     c, e, binary = two_groups(t, s)
+    ab_checks(c, e, binary, ctx)
     return result(mc.lift(e["mean"], c["mean"]), parts={"control_mean": c["mean"], "treat_mean": e["mean"], "control_n": c["n"], "treat_n": e["n"]}, label="(실험군 − 대조군) ÷ 대조군")
 
 
@@ -1076,14 +1106,24 @@ def lift_kernel(t, s, p, ctx):
 def pvalue(t, s, p, ctx):
     """p-value: 비율이면 두 비율 z 검정, 연속이면 Welch t 검정."""
     c, e, binary = two_groups(t, s)
+    small = ab_checks(c, e, binary, ctx)
     if binary:
         got = mc.two_proportion_z(round(c["sum"]), c["n"], round(e["sum"]), e["n"])
         test, value = "두 비율 z 검정", got["p"]
+        v1, v2 = c["mean"] * (1 - c["mean"]) / c["n"], e["mean"] * (1 - e["mean"]) / e["n"]
     else:
         got = mc.welch_from_stats(c["mean"], c["sd"] or 0.0, c["n"], e["mean"], e["sd"] or 0.0, e["n"])
         test, value = "Welch t 검정", got["p"]
-    verdict = "차이가 우연이라고 보기 어려워요" if value is not None and value < s["alpha"] else "차이가 우연일 수 있어요"
-    rows = [{"name": "대조군 평균", "value": c["mean"]}, {"name": "실험군 평균", "value": e["mean"]}, {"name": "차이", "value": e["mean"] - c["mean"]}, {"name": "p-value", "value": value}]
+        v1, v2 = (c["sd"] or 0.0) ** 2 / c["n"], (e["sd"] or 0.0) ** 2 / e["n"]
+    if small:
+        verdict = "표본이 적어 판단 보류"
+    else:
+        verdict = "차이가 우연이라고 보기 어려워요" if value is not None and value < s["alpha"] else "차이가 우연일 수 있어요"
+    ci = mc.diff_lift_ci(c["mean"], v1, e["mean"], v2)
+    lift_ci = ci["lift"] or (None, None)
+    rows = [{"name": "대조군 평균", "value": c["mean"]}, {"name": "실험군 평균", "value": e["mean"]}, {"name": "차이", "value": e["mean"] - c["mean"]}, {"name": "p-value", "value": value},
+            {"name": "차이 95% 신뢰구간 아래", "value": ci["diff"][0]}, {"name": "차이 95% 신뢰구간 위", "value": ci["diff"][1]},
+            {"name": "Lift 95% 신뢰구간 아래", "value": lift_ci[0]}, {"name": "Lift 95% 신뢰구간 위", "value": lift_ci[1]}]
     ctx.notes.append(f"{test}, 양측, 유의수준 {s['alpha']:g}: {verdict}.")
     return result(value, rows, {"name": "항목", "value": "값"}, {"control_n": c["n"], "treat_n": e["n"]}, label=test)
 
@@ -1092,6 +1132,7 @@ def pvalue(t, s, p, ctx):
 def power(t, s, p, ctx):
     """검정력(정규 근사)."""
     c, e, binary = two_groups(t, s)
+    ab_checks(c, e, binary, ctx)
     if binary:
         pw = mc.power_two_proportions(c["mean"], e["mean"], c["n"], e["n"], s["alpha"])
         delta = e["mean"] - c["mean"]
@@ -1115,6 +1156,7 @@ def power(t, s, p, ctx):
 def mde(t, s, p, ctx):
     """최소 검출 효과 MDE(정규 근사)."""
     c, e, binary = two_groups(t, s)
+    ab_checks(c, e, binary, ctx)
     if binary:
         value = mc.mde_two_proportions(c["mean"], c["n"], e["n"], s["alpha"], s["power"])
         if value is None:

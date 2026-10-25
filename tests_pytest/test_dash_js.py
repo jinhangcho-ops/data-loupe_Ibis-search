@@ -201,8 +201,12 @@ assert.strictEqual(showGap(-0.017, "percent"), "1.7%p"); assert.strictEqual(show
 assert.strictEqual(darken("#ffffff", 0.5), "#808080"); assert.strictEqual(darken("#fff", 0), "#ffffff");
 const kpi = { kind: "kpi", colors: fc(), view: {}, data: { by_unit: by, target: { value: 100 } }, range: { start: "2026-01-12", end: "2026-02-02" } };
 assert.strictEqual(cardValue(kpi), 90); assert.strictEqual(cardValue({ ...kpi, range: null }), 155); assert.strictEqual(cardTarget(kpi), 100); assert.strictEqual(cardTarget({ ...kpi, data: {}, view: { target: { value: 7 } } }), 7);
-assert.deepStrictEqual(cardDays(kpi), [{ day: "2026-01-12", v: 40 }, { day: "2026-02-02", v: 50 }]);
-assert.deepStrictEqual(cardDays({ ...kpi, view: { window: { from: "2026-02-01", to: "2026-02-28" } } }), [{ day: "2026-02-02", v: 50 }]);  // 보는 구간
+// 합계 계열이라 빈 날은 0으로 채운다(data.window가 없으면 일 값의 첫 날~끝 날 안에서만, 11차 리뷰 D9)
+const kd = cardDays(kpi);
+assert.strictEqual(kd.length, 22); assert.deepStrictEqual([kd[0], kd[1], kd[21]], [{ day: "2026-01-12", v: 40 }, { day: "2026-01-13", v: 0 }, { day: "2026-02-02", v: 50 }]);
+const kw = cardDays({ ...kpi, view: { window: { from: "2026-02-01", to: "2026-02-28" } } });  // 보는 구간
+assert.deepStrictEqual(kw, [{ day: "2026-02-01", v: 0 }, { day: "2026-02-02", v: 50 }]);
+assert.deepStrictEqual(cardDays({ ...kpi, data: { ...kpi.data, by_unit: { day: { ...by.day, series: [by.day.series[1]] } } } }).map(d => d.day), ["2026-01-12", "2026-02-02"]);  // 평균은 있는 날만
 assert.strictEqual(cardValue({ kind: "kpi", data: { values: { scalar: [7, 8] } } }, 1), 8); assert.strictEqual(cardFormat({ view: {}, data: { values: { format: "percent" } } }), "percent");
 assert(!noValues({ kind: "kpi", data: { values: { scalar: [1] } } }) && noValues({ kind: "kpi", data: {} }) && !noValues({ kind: "recent_rows", data: { columns: ["a"] } }) && noValues({ kind: "chart", data: {} }));
 // 조건 색 규칙(dash_rules.js): 숫자·단어 식, 맞는 칸만, 위의 규칙 하나, 오류 문장, 화살표

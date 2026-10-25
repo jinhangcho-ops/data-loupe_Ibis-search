@@ -1,4 +1,4 @@
-"""적재(수집 3단계): 결과 파일(output.path)을 묶음으로 읽어(pyarrow, 메모리에 다 올리지 않음) DB 테이블(load_table)이나 Kafka 토픽(load_kafka)에 넣는다.
+"""적재(수집 3단계): 결과 파일(output.path)을 묶음으로 읽어(Parquet은 pyarrow, CSV는 DuckDB. 메모리에 다 올리지 않음) DB 테이블(load_table)이나 Kafka 토픽(load_kafka)에 넣는다.
 결과 파일은 지우거나 고치지 않는다. 넣은 데까지는 결과 파일 옆 '이름.load.json'(대상 서명, 넣은 행·묶음 수)에 적어 같은 설정으로 다시 하면 이어 넣는다.
 비밀번호는 인자로만 받아 작업 동안 메모리에 두고 어디에도 적지 않는다."""
 import hashlib
@@ -17,7 +17,6 @@ from collect.collect_http import HIDE, STOPPED, Halt
 TARGETS = {"table": load_table, "kafka": load_kafka}
 BACKOFF = 1.0  # 실패한 묶음을 다시 넣기 전에 기다리는 시간(초). 시도마다 두 배, MAX_BACKOFF까지.
 MAX_BACKOFF = 60
-CSV_BLOCK = 32 << 20  # CSV를 읽는 덩어리 크기(바이트). 컬럼 타입은 첫 덩어리로 정해진다.
 SINGLE_SECONDS = 0.05  # 한 건씩 넣을 때 한 건에 드는 시간의 어림(초). 예상 시간 안내에만 쓴다.
 
 
@@ -98,16 +97,17 @@ class Batches:
     """결과 파일을 size행씩 읽는다(마지막 묶음만 작을 수 있음). 덩어리로 읽어 메모리에 다 올리지 않는다. with로 열고 닫는다."""
 
     def __init__(self, path, size):
-        import pyarrow.csv as pc
+        import duckdb
         import pyarrow.parquet as pq
-        self.size, self.file = size, open(path, "rb")
+        parquet = Path(path).suffix.lower() == ".parquet"
+        self.size, self.file = size, open(path, "rb") if parquet else duckdb.connect()  # file: 끝날 때 닫을 것
         try:
-            if Path(path).suffix.lower() == ".parquet":
+            if parquet:
                 reader = pq.ParquetFile(self.file)
                 self.schema, self.parts = reader.schema_arrow, reader.iter_batches(batch_size=size)
-            else:
-                reader = pc.open_csv(self.file, read_options=pc.ReadOptions(block_size=CSV_BLOCK))
-                self.schema, self.parts = reader.schema, reader
+            else:  # 수집 결과 확인(collect_job.finish_file)처럼 DuckDB가 구분자를 알아내고, 타입은 파일 전체를 보고 정한다(앞부분만 보면 00001이 정수가 되고 앞이 빈 컬럼이 null 타입이 된다)
+                self.parts = self.file.read_csv(str(path), sample_size=-1).to_arrow_reader(size)
+                self.schema = self.parts.schema
         except Exception:
             self.file.close()
             raise

@@ -1288,7 +1288,7 @@ function anaNote(d) {
   const data = d.data.full ? "테이블 전체" : `표본 ${d.data.rows.toLocaleString()}행 · 읽은 방법: ${SERVER.sample_methods[d.data.method] ?? d.data.method}`;
   const lim = SERVER.analysis, more = [
     d.kind === "groups" && d.more ? `행이 많은 ${lim.max_groups}개 그룹만` : "",
-    d.kind === "trend" && d.more ? `앞 ${lim.max_periods}개 기간만` : "",
+    d.kind === "trend" && d.more ? `최근 ${lim.max_periods}개 기간만` : "",
     d.kind === "scatter" ? `점 ${d.points.length.toLocaleString()}개 · 상관계수 ${d.r == null ? "-" : d.r.toFixed(3)} (${d.n.toLocaleString()}행)` : "",
     d.kind === "correlation" ? `${d.n.toLocaleString()}행으로 구함` : "",
     d.kind === "funnel" ? `${windowText(d.window)} · 같은 시각의 두 단계는 도달한 것으로 봄` : ""];

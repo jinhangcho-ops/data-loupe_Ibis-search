@@ -2,7 +2,7 @@
 기간 글자(앞뒤 공백 무시): `시작 ~ 끝`(한쪽이 비면 열린 범위), `YYYY-MM`, `YYYY-Qn`, `YYYY`, `최근 N(일|주|달|개월|년)`, 지난주·지난달·작년·어제·오늘·이번 주·이번 달·올해,
 날짜 `YYYY-MM-DD`·`YYYY.MM.DD`·`YYYY/MM/DD`·`YYYYMMDD`(뒤에 시각 `HH:MM`을 붙일 수 있고, 시각만 쓰면 기준일의 그 시각이다).
 - 결과 {start, end, days, label, error}: start·end는 "YYYY-MM-DD"(시각이 있으면 "YYYY-MM-DD HH:MM") 글자이고 end는 포함한다. 열린 쪽은 None, 일수도 None. 읽을 수 없으면 error에 한국어 문장이 들어가고 나머지는 비어 있다.
-- 기준일(today): 최근 N일·어제·지난주·이번 달 같은 상대 표현의 기준. 없으면 이 PC의 오늘. 대시보드의 `as_of`가 여기로 온다.
+- 기준일(today): 최근 N일(어제까지 N일, 오늘은 빼고)·어제·지난주·이번 달 같은 상대 표현의 기준. 없으면 이 PC의 오늘. 대시보드의 `as_of`가 여기로 온다.
 - 이번 주·이번 달·올해는 단위 시작(월요일 시작 주)부터 기준일까지다. 결과에 to_date(week·month·year)가 붙고 previous가 직전 단위의 같은 위치 기간(라벨 "지난달 같은 기간" 등)을 돌려준다. 지난주·지난달·작년·2026-10 같은 달력 입력은 단위 전체다."""
 import calendar
 import re
@@ -121,11 +121,12 @@ def relative(text, today):
         if count < 1:
             raise ValueError(f"‘{compact}’{ending(compact, '은', '는')} 1 이상으로 써 주세요. 예: 최근 7일")
         try:
-            first = {"day": lambda: today - timedelta(days=count - 1), "week": lambda: today - timedelta(days=7 * count - 1),
-                     "month": lambda: add_months(today, -count) + timedelta(days=1), "year": lambda: add_months(today, -12 * count) + timedelta(days=1)}[unit]()
+            last = today - timedelta(days=1)  # 최근 N단위는 어제까지(오늘은 아직 덜 찬 날이라 뺀다. 오늘을 보려면 '오늘'·'이번 주')
+            first = {"day": lambda: last - timedelta(days=count - 1), "week": lambda: last - timedelta(days=7 * count - 1),
+                     "month": lambda: add_months(last, -count) + timedelta(days=1), "year": lambda: add_months(last, -12 * count) + timedelta(days=1)}[unit]()
         except (OverflowError, ValueError):  # 달력 범위(1~9999년)를 벗어나는 큰 숫자
             raise ValueError(f"‘{compact}’{ending(compact, '은', '는')} 너무 먼 과거예요. 더 작은 숫자로 써 주세요. 예: 최근 3개월") from None
-        return whole(first, today, f"최근 {count}{named.group(2)}", "recent")
+        return whole(first, last, f"최근 {count}{named.group(2)}", "recent")
     if compact == "오늘":
         return whole(today, today, "오늘", "day")
     if compact == "어제":
@@ -213,8 +214,8 @@ def previous(span):
         begin, finish = moment(first, first_clock, False), moment(last, last_clock, True)
         before_end = begin - timedelta(minutes=1)
         before_start = before_end - (finish - begin)
-        start = day_text(before_start.date(), (before_start.hour, before_start.minute) if first_clock else None)
-        end = day_text(before_end.date(), (before_end.hour, before_end.minute) if last_clock else None)
+        start = day_text(before_start.date(), (before_start.hour, before_start.minute))  # 한쪽만 시각이어도 양쪽에 시각을 붙인다(날짜만 쓰면 그날 전체가 되어 겹치거나 빈다)
+        end = day_text(before_end.date(), (before_end.hour, before_end.minute))
         return {"start": start, "end": end, "days": (before_end.date() - before_start.date()).days + 1, "label": f"{start} ~ {end}", "error": None}
     months = (last.year - first.year) * 12 + last.month - first.month + 1
     if first.day == 1 and last == month_end(last.year, last.month):

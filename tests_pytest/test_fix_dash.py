@@ -114,9 +114,9 @@ def nandb(folder, tmp_path):
 def test_compute_turns_nan_into_null(nandb):
     sums = [{"y": "v", "agg": "sum"}]
     scalar = nandb.post("/api/dash/card/compute", json={"card": {"kind": "kpi", "title": "t", "source": {"body": {"base": "nn", "series": sums}}}})
-    assert strict(scalar)["data"]["values"]["scalar"] == [None]  # NaN이 든 합계는 값이 없는 것으로
+    assert strict(scalar)["data"]["values"]["scalar"] == [3.0]  # (11차) NaN 한 칸은 빈 값으로 보고 합계에서 뺀다
     timed = nandb.post("/api/dash/card/compute", json={"card": {"kind": "kpi", "title": "t", "source": {"body": {"base": "nn", "series": sums}, "date": "day"}}})
-    assert strict(timed)["data"]["by_unit"]["day"]["series"][0]["sum"] == [None, 2.0]
+    assert strict(timed)["data"]["by_unit"]["day"]["series"][0]["sum"] == [1.0, 2.0]
 
 
 def test_stored_nan_is_cleaned_when_read(folder):
@@ -286,7 +286,7 @@ def test_huge_period_numbers_are_a_message(text):
 def test_period_parse_returns_context(client):
     post = lambda **b: client.post("/api/period/parse", json=b).get_json()
     got = post(text="최근 7일", as_of="2026-10-22")
-    assert got["context"] == {"range": {"start": "2026-10-16", "end": "2026-10-22"}, "prev": {"start": "2026-10-09", "end": "2026-10-15", "text": "직전 7일"}}
+    assert got["context"] == {"range": {"start": "2026-10-15", "end": "2026-10-21"}, "prev": {"start": "2026-10-08", "end": "2026-10-14", "text": "직전 7일"}}  # 최근 N일은 어제까지
     month = post(text="2026-10", as_of="2026-10-20")["context"]  # 기준일로 자른다
     assert month["range"] == {"start": "2026-10-01", "end": "2026-10-20"} and month["prev"] == {"start": "2026-09-01", "end": "2026-09-20", "text": "지난달 같은 기간"}
     assert post(text="", as_of="")["context"] is None and post(text="엉터리", as_of="")["context"] is None

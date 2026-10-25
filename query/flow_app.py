@@ -37,7 +37,7 @@ def flow_constants(found):  # 흐름 화면(flow.js)이 서버와 같은 순위�
         "joins": list(parse.JOINS), "unions": list(parse.UNIONS),
         "opt_rules": {n: t for n, (_, t) in flow_opt.RULES.items()}, "keys": {"min": join_keys.DECIDE_MIN, "gap": join_keys.DECIDE_GAP,
                                     "weights": join_keys.WEIGHTS, "sample_values": join_keys.SAMPLE_VALUES},
-        "my_metrics": {"max": my_metrics.MAX_METRICS, "align_units": list(my_metrics.ALIGN_UNITS), "better": list(my_metrics.BETTER)}}
+        "my_metrics": {"max": my_metrics.MAX_METRICS, "align_units": list(my_metrics.ALIGN_UNITS)}}
 
 
 def table_getter():
@@ -241,9 +241,9 @@ def view(metric):
 
 @app.get("/api/my_metrics")
 def my_metrics_list():
-    """내 지표 목록과 지표 틀(scope 없음), 예전 지표 파일의 공통 정의."""
+    """내 지표 목록과 지표 틀(scope 없음), 예전 지표 파일의 공통 정의, 좋고 나쁨 값(better: 쿼리·대시보드 지표 화면이 같이 쓴다. 대시보드가 화면 상수로 받으면 지표 모듈이 미리 올라온다)."""
     items = my_metrics.load()
-    return jsonify(metrics=[view(m) for m in items], templates=sentences.METRICS, legacy=my_metrics.legacy_list(), source=dash_store.current_source())
+    return jsonify(metrics=[view(m) for m in items], templates=sentences.METRICS, legacy=my_metrics.legacy_list(), source=dash_store.current_source(), better=list(my_metrics.BETTER))
 
 
 @app.post("/api/my_metrics")

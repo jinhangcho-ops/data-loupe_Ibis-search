@@ -105,7 +105,7 @@ function rollup(s, days, unit) {
     if (s.max?.[i] != null) g.max = g.max == null ? s.max[i] : Math.max(g.max, s.max[i]);
     groups.set(key, g);
   });
-  const value = { count: g => g.count, sum: g => g.sum, mean: g => g.count ? g.sum / g.count : null, min: g => g.min, max: g => g.max }[s.agg];
+  const value = { count: g => g.count, sum: g => g.sum, mean: g => g.count && g.sum != null ? g.sum / g.count : null, min: g => g.min, max: g => g.max }[s.agg];
   return new Map([...groups].map(([key, g]) => [key, value(g)]));
 }
 // 시간별 값(data.by_unit)을 unit으로. 서버가 그 단위로 따로 구한 계열(고유 개수, 일 값을 자른 월·연)은 그 값을 쓰고, 나머지는 일 값을 다시 묶는다.
@@ -123,12 +123,23 @@ const dayNumber = day => Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.s
 const shiftDay = (day, n) => new Date((dayNumber(day) + n) * 86400000).toISOString().slice(0, 10);
 const daysBetween = (start, end) => dayNumber(end) - dayNumber(start) + 1;
 // 일 값 계열 s의 from~to(포함, 일 글자) 구간 값: 계열의 집계(sum·count·mean·min·max)대로 한 값으로 묶는다. 구간에 일 값이 없으면 null.
-function windowValue(s, days, from, to) {
+// loaded(loadedRange: 읽어 온 범위)를 주고 구간이 그 안이면, 일 값이 없는 개수·합계는 0이다(행이 없던 것이라서).
+function windowValue(s, days, from, to, loaded) {
   const keep = days.map((_, i) => i).filter(i => (!from || days[i] >= from) && (!to || days[i] <= to));
-  if (!keep.length) return null;
+  if (!keep.length) return loaded && zeroWhenEmpty(s.agg) && (!loaded.start || (from && from >= loaded.start)) && (!loaded.end || (to && to <= loaded.end)) ? 0 : null;
   if (!merges(s.agg)) return keep.length === 1 ? s.values[keep[0]] ?? null : null;  // 고유 개수·중앙값 같은 집계는 여러 날을 다시 묶을 수 없다(하루 값만)
   const pick = a => a && keep.map(i => a[i]);
   return rollup({ agg: s.agg, sum: pick(s.sum), count: pick(s.count), min: pick(s.min), max: pick(s.max) }, keep.map(() => "2000-01-01"), "day").get("2000-01-01") ?? null;
+}
+const zeroWhenEmpty = agg => agg === "count" || agg === "sum";  // 행이 없는 구간을 0으로 말할 수 있는 집계
+// 일 값이 빈 날을 0으로 말할 수 있는 범위: 최신화가 읽은 범위(data.window). 그 기록이 없으면 일 값의 첫 날~끝 날(그 밖은 읽었는지 모른다).
+// 일 값을 앞에서 잘랐으면(월 값을 서버가 따로 구했으면) 남은 첫 날부터.
+function loadedRange(card) {
+  const by = card.data?.by_unit, days = by?.day?.labels ?? [];
+  if (!by?.day) return null;
+  const w = card.data.window ?? { start: days[0], end: days[days.length - 1] };
+  const cut = (by.month?.series ?? []).some(m => by.day.series.some(s => s.name === m.name && merges(s.agg)));
+  return cut ? { ...w, start: days[0] ?? w.start } : w;
 }
 // date의 값(그날 값이 없으면 그 전 마지막 값)
 function pointValue(s, days, date) {
@@ -161,7 +172,8 @@ function compareItem(card, range, prev) {
     return { cur: pointValue(s, days, range.end), prev: pointValue(s, days, before), mode, label: `${n}일 전`, better, partial: before < days[0] };
   }
   if (!prev?.start) return null;
-  return { cur: windowValue(s, days, range.start, range.end), prev: windowValue(s, days, prev.start, prev.end), mode, label: prev.text, better, partial: prev.start < days[0] };
+  const loaded = loadedRange(card);
+  return { cur: windowValue(s, days, range.start, range.end, loaded), prev: windowValue(s, days, prev.start, prev.end, loaded), mode, label: prev.text, better, partial: prev.start < days[0] };
 }
 // 분석 카드가 어떤 그림인지(없으면 분석 종류에서)
 const anaView = card => card.view.analysis_view || { distribution: "hist", correlation: "heat", scatter: "scatter", groups: "groups", trend: "trend" }[card.data?.values?.kind];

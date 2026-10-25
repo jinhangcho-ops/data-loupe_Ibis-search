@@ -90,6 +90,7 @@ function SentenceView(host, ctx) {
   let cat = null, explore = [], metricTpl = [];  // 문장 틀: 처음 열 때 /api/sentences로 한 번 받는다
   let tab = ctx.only ?? "explore", items = [], seq = 0, sets = {}, current = "", shared = { on: false, column: "", text: "", span: null }, source = null;  // source: 지금 연결 {key, label}
   const scope = () => ctx.scope?.() ?? S;  // 기준 테이블·스키마: 쿼리 화면은 S, 대시보드는 고른 테이블
+  const inScope = m => sameSource(m.scope?.key, source?.key) && (m.scope.schema ?? "") === (scope().schema ?? "") && (m.scope.table ?? "") === (scope().base ?? "");  // 이 연결·스키마·테이블의 지표인가(서버 my_metrics.scope_id와 같은 기준)
   const kinds = () => sentKinds(ctx.columns(), Funcs.kindOf);
   const colList = () => ctx.columns().map(c => [c[0], Funcs.kindOf(c[1])]);
   const tabs = el("div", { className: "stabs" }, ...[["explore", "탐색"], ["metric", "지표"]].map(([k, t]) => { const b = el("button", { className: "tab", textContent: t, onclick: () => { tab = k; show(); } }); b.dataset.tab = k; return b; }));
@@ -179,9 +180,9 @@ function SentenceView(host, ctx) {
   }
   async function loadMetrics() {
     try {
-      const d = await api("/api/my_metrics"), mine = m => sameSource(m.scope?.key, d.source?.key) && (m.scope.table ?? "") === (scope().base ?? "");
+      const d = await api("/api/my_metrics");
       source = d.source;
-      metricList = [...d.metrics.map(m => ({ id: m.id, text: m.text, usable: mine(m) })), ...d.legacy.map(m => ({ id: m.name, text: `${m.name} · 지표 파일`, usable: true }))];
+      metricList = [...d.metrics.map(m => ({ id: m.id, text: m.text, usable: inScope(m) })), ...d.legacy.map(m => ({ id: m.name, text: `${m.name} · 지표 파일`, usable: true }))];
       return d;
     } catch { metricList = []; return null; }
   }
@@ -365,12 +366,11 @@ function SentenceView(host, ctx) {
     body.replaceChildren(el("div", { className: "sgrid" }, el("div", { className: "sleft" }, el("h2", { textContent: "지표 틀" }), ...metricTpl.map(t => el("button", { className: "tpl", title: t.text, onclick: () => editMetric(null, t.id) }, el("b", { textContent: t.no }), " " + t.name))),
       el("div", { className: "sright" }, el("h2", { textContent: "내 지표" }), mine, form, msg, el("h2", { textContent: "지표 사전" }), catalog)));
     await sentHook(catalog, { ctx, kinds, slotEl, periodInputs, scope, refresh: showMetric });
-    const here = m => sameSource(m.scope?.key, source?.key) && (m.scope.table ?? "") === (scope().base ?? "");
     let status = {};
     try { status = (await api("/api/my_metrics/status", { scope: { ...scopeNow() }, columns: kinds() })).status; } catch { /* 구조 확인은 없어도 목록은 보인다 */ }
     const ids = new Set(d.metrics.map(m => m.id)), names = Object.fromEntries(d.metrics.map(m => [m.id, m.name]));
     const row = m => {
-      const st = status[m.id], tpl = cat.templates.find(t => t.id === m.template) ?? (typeof mcTemplate === "function" ? mcTemplate(m.template) : null), usable = here(m);
+      const st = status[m.id], tpl = cat.templates.find(t => t.id === m.template) ?? (typeof mcTemplate === "function" ? mcTemplate(m.template) : null), usable = inScope(m);
       return el("div", { className: "mrow" + (usable ? "" : " other") },
         el("div", { className: "row" }, el("b", { textContent: m.text }), st && !st.usable ? el("span", { className: "fbadge warn", textContent: "쓸 수 없음", title: st.reason }) : "", el("span", { className: "grow" }),
           usable ? (tpl?.slots ? el("button", { className: "btn", textContent: "고치기", onclick: () => editMetric(m) }) : "")  /* 지표 사전 항목은 사전에서 새로 저장한다 */ : el("button", { className: "btn", textContent: "이 테이블에 맞춰 복사", onclick: () => copyMetric(m) }),
@@ -380,7 +380,7 @@ function SentenceView(host, ctx) {
         (m.deps ?? []).length ? el("div", { className: "chips open" }, el("span", { className: "hint", textContent: "쓰는 지표" }), ...m.deps.map(id => ids.has(id) ? el("span", { className: "dep ok", textContent: d.metrics.find(x => x.id === id).name })
           : el("span", { className: "dep miss", textContent: "없는 지표", title: "눌러서 새로 만들기", onclick: () => editMetric(null, "m02") }))) : "");
     };
-    const mineOnes = d.metrics.filter(here), others = d.metrics.filter(m => !here(m));
+    const mineOnes = d.metrics.filter(inScope), others = d.metrics.filter(m => !inScope(m));
     mine.replaceChildren(...(mineOnes.length ? mineOnes.map(row) : [el("div", { className: "hint", textContent: "이 테이블의 지표가 아직 없어요. 왼쪽 지표 틀을 눌러 만드세요." })]),
       ...(others.length ? [el("h2", { textContent: "다른 테이블의 지표(복사해서 써요)" }), ...others.map(row)] : []));
     async function removeMetric(m) { try { await api("/api/my_metrics/delete", { id: m.id }); mcStale = true; msg.textContent = ""; showMetric(); } catch (e) { msg.textContent = e.message; } }
@@ -399,7 +399,7 @@ function SentenceView(host, ctx) {
     function editMetric(m, tid) {
       const tpl = cat.templates.find(t => t.id === (m?.template ?? tid)), item = { id: 0, template: tpl.id, slots: m ? JSON.parse(JSON.stringify(m.slots)) : sentDefaults(tpl) };
       const name = el("input", { value: m?.name ?? "", placeholder: "지표 이름" }), unit = el("input", { value: m?.unit ?? "", placeholder: "단위(예: 원, %)" });
-      const better = el("select", {}, ...SERVER.flow.my_metrics.better.map(b => el("option", { value: b, textContent: ({ "": "좋고 나쁨 없음", up: "클수록 좋음", down: "작을수록 좋음" })[b] ?? b })));
+      const better = el("select", {}, ...d.better.map(b => el("option", { value: b, textContent: ({ "": "좋고 나쁨 없음", up: "클수록 좋음", down: "작을수록 좋음" })[b] ?? b })));
       better.value = m?.better ?? "";
       const issues = el("div", { className: "sissues" }), line = el("div", { className: "sline" });
       let timer = 0;

@@ -89,7 +89,7 @@ def shop(client, tmp_path):
 def test_route_sample_full_and_card(shop):
     recipe = {"base": "funnel_events"}
     got = shop.post("/api/analyze", json={"recipe": recipe, "how": HOW}).get_json()
-    assert users(got) == [6, 4, 3] and got["data"]["full"] is False
+    assert users(got) == [6, 4, 3] and got["data"] == {"full": True}  # 퍼널은 행 표본이 아니라 늘 전체로(11차 리뷰 D1)
     full = shop.post("/api/analyze", json={"recipe": recipe, "how": {**HOW, "window": {"n": 30, "unit": "minute"}}, "full": True}).get_json()
     assert users(full) == [6, 3, 3] and full["data"] == {"full": True}
     values = shop.post("/api/analyze", json={"recipe": recipe, "how": {"kind": "distribution", "column": "ev"}}).get_json()["values"]

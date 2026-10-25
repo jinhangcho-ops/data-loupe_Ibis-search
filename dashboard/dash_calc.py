@@ -38,7 +38,7 @@ TRUNC = {"day": "D", "week": "W", "month": "M", "year": "Y"}  # 단위 → Ibis 
 ROOM = 0.8  # 일 값이 카드 크기 상한의 이만큼까지만 차지하게 한다(나머지는 source 같은 다른 항목)
 PERCENT = "percent"
 MAX_POINTS = result.MAX_POINTS  # 산점도·버블의 점 수(분석의 산점도와 같다)
-SEED = 20260101  # 고르게 뽑을 때의 고정 씨앗(다시 구해도 같은 점)
+SEED = stats.SEED  # 고르게 뽑을 때의 고정 씨앗(다시 구해도 같은 점, 분석의 산점도와 같다)
 POINT_TYPES = ("scatter", "bubble")
 VALUE_KINDS = ("kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend")  # 값 하나(또는 일 값)로 그리는 카드 종류
 MAX_GROUPS = 100  # 요약의 기여 분해에 쓰는 그룹 수
@@ -90,7 +90,7 @@ def component_exprs(t, i, s):
     parse.check_name(s["y"], t.columns, "Y 컬럼")
     if not t[s["y"]].type().is_numeric():
         raise ValueError("합계·평균·최소·최대는 숫자 컬럼을 Y로 골라야 합니다.")
-    col = t[s["y"]].cast("float64")
+    col = stats.finite(t[s["y"]])  # 실수의 NaN·무한은 빈 값으로(한 칸이 그날 합 전체를 비우지 않게)
     return {f"s{i}_sum": col.sum(), f"s{i}_count": col.count(), f"s{i}_min": col.min(), f"s{i}_max": col.max()}
 
 
@@ -105,7 +105,7 @@ def final_expr(t, s):
     parse.check_name(s["y"], t.columns, "Y 컬럼")
     if not t[s["y"]].type().is_numeric():
         raise ValueError("합계·평균·최소·최대는 숫자 컬럼을 Y로 골라야 합니다.")
-    return getattr(t[s["y"]].cast("float64"), s["agg"])()
+    return getattr(stats.finite(t[s["y"]]), s["agg"])()
 
 
 def grouped(t, x, unit, split, parts, exprs):
@@ -515,7 +515,11 @@ def summary_data(card, ctx):
     series = clean_series(body.get("series"))
     window, before, at = comparison(card, ctx)
     cur = run(lambda: scalars(at(window), series[:1]))[0]
-    prev = run(lambda: scalars(at(before), series[:1]))[0] if before else None
+    prev, partial = None, False
+    if before:  # 직전 값과 그 기간의 첫 날을 한 번에: 직전 기간 시작이 자료 첫 날보다 앞이면 일부(KPI 카드의 compareItem과 같은 덧말)
+        b, col = at(before), card["source"].get("date") if (ctx or {}).get("range") else own_range(card)["column"]
+        row = run(lambda: stats.one(b.aggregate(v=final_expr(b, series[0]), first=b[col].min())))
+        prev, partial = row["v"], bool(before.get("start")) and (row["first"] is None or label(row["first"]) > before["start"])
     groups, note = None, ""
     if view.get("group") and before and series[0]["agg"] in ("sum", "count"):  # 기여를 나누는 건 합계·개수와 직전 기간이 있을 때만(아니면 그룹 값을 읽지 않는다)
         now = run(lambda: group_values(at(window), view["group"], series[0]))
@@ -525,7 +529,7 @@ def summary_data(card, ctx):
         else:
             groups = group_pairs(now, old, series[0]["agg"])
     target = resolve_target(view.get("target"))
-    found = summary_text.summarize(series_name(series[0]), cur, prev, view.get("format", "number"), view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"], False,
+    found = summary_text.summarize(series_name(series[0]), cur, prev, view.get("format", "number"), view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"], partial,
                                    groups, (target or {}).get("value"))
     return {"values": {"scalar": [cur], "prev": [prev]}, "text": found["text"], "sentences": found["sentences"], "target": target, **({"note": note} if note else {})}
 
@@ -643,7 +647,7 @@ def watch_data(card, now, previous):
 
 def deviation_data(card, ctx):
     """deviation 카드: 엔티티(view.entity) × 시간대(날짜 컬럼 source.date를 view.bucket으로 자름)의 첫 계열 값. 기준(baseline)은 화면이 정한다(직접 숫자 또는 엔티티 평균).
-    엔티티는 MAX_ENTITIES개, 시간대는 최근 MAX_BUCKETS개까지."""
+    엔티티는 엔티티 순(DB 정렬, 빈 엔티티는 뒤)으로 앞 MAX_ENTITIES개를 먼저 고르고 그것만 집계한다. 시간대는 최근 MAX_BUCKETS개까지."""
     src, view, body = card["source"], card["view"], card["source"]["body"]
     date, entity, unit = src.get("date"), view.get("entity"), view.get("bucket") or "hour"
     if not entity or not date:
@@ -662,13 +666,20 @@ def deviation_data(card, ctx):
     latest = run(recent)
     if latest:
         t = t.filter(t[date] >= min(latest))
+    def first_entities():
+        """엔티티 순으로 앞 MAX_ENTITIES+1개(빈 엔티티는 뒤): 집계를 이 엔티티로만 해 결과가 엔티티 수만큼 커지지 않게."""
+        found = t.select(e=t[entity]).distinct()
+        return found.order_by(found.e.asc(nulls_first=False)).limit(MAX_ENTITIES + 1).to_polars()["e"].to_list()
+    picked = run(first_entities)
+    more, picked = len(picked) > MAX_ENTITIES, picked[:MAX_ENTITIES]
+    known = [e for e in picked if e is not None]
+    t = t.filter(t[entity].isin(known) | t[entity].isnull() if None in picked else t[entity].isin(known))
     frame = run(lambda: t.group_by([t[entity].name("e"), t[date].truncate(BUCKET_UNITS[unit]).name("b")]).aggregate(v=final_expr(t, series[0])).to_polars())
     buckets = sorted({str(b) for b in frame["b"].to_list()})[-MAX_BUCKETS:]
     cells = {}
     for e, b, v in frame.rows():
         cells.setdefault(str(e), {})[str(b)] = result.plain(v)
-    names = sorted(cells)[:MAX_ENTITIES]
-    return {"values": {"buckets": buckets, "entities": [{"name": n, "values": [cells[n].get(b) for b in buckets]} for n in names], "more": len(cells) > MAX_ENTITIES}}
+    return {"values": {"buckets": buckets, "entities": [{"name": n, "values": [cells[n].get(b) for b in buckets]} for n in sorted(cells)], "more": more}}
 
 
 def geomap_data(card, ctx):

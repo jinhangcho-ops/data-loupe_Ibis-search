@@ -38,8 +38,19 @@ def ended(pid, started):
 
 
 def remove(folder):
-    """make로 만든 폴더를 지운다. ROOT가 비면 ROOT도 지워 흔적을 남기지 않는다."""
+    """make로 만든 폴더를 지운다. ROOT가 비면 ROOT도 지워 흔적을 남기지 않는다.
+    잠긴 파일 때문에 폴더가 남으면 표식을 다시 써 둔다(표식이 없으면 sweep이 영원히 지우지 않는다)."""
+    mark = Path(folder, MARK)
+    try:
+        text = mark.read_text(encoding="ascii")
+    except OSError:
+        text = None
     shutil.rmtree(folder, ignore_errors=True)
+    if text and Path(folder).is_dir() and not mark.exists():
+        try:
+            mark.write_text(text, encoding="ascii")
+        except OSError:
+            pass
     try:
         ROOT.rmdir()
     except OSError:  # 다른 폴더가 남아 있다.

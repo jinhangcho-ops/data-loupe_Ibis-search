@@ -149,7 +149,7 @@ def test_traffic_values(events):
     assert parts("pv_per_uv", {"사용자": "uid"}, events) == {"pv": 7, "uv": 3}
     dau = run("dau", U, events)
     assert dau["value"] == pytest.approx(5 / 3) and dau["spread"]["median"] == 2.0 and dau["spread"]["n"] == 3  # 일별 2·2·1
-    assert value("wau", U, events) == pytest.approx(2.5)  # 3/1(일요일)은 앞 주 → 주 1: {1,2}=2, 주 2: {1,2,3}=3
+    assert value("wau", U, events) == pytest.approx(2.0)  # 3/1(일요일)은 앞 주 → 주 1: {1,2}=2, 주 2: {1,2,3}=3은 자료가 3/3(화)에 끝나 진행 중이라 평균에서 뺀다(11G3)
     assert value("mau", U, events) == 3
     st = run("stickiness", U, events)
     assert st["value"] == pytest.approx((5 / 3) / 3) and {p["id"]: p["value"] for p in st["pair"]} == {"dau": pytest.approx(5 / 3), "mau": 3.0}

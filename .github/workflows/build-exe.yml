@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2025  # 이미지 버전을 고정한다(windows-latest는 바뀌면 빌드 환경이 몰래 달라진다)
     permissions:
       contents: read  # 만들기만 한다. Releases에 올리는 쓰기 권한은 아래 release 작업에만 있다.
     steps:
@@ -20,9 +20,9 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"  # core/drivers.py FROZEN_PYTHON과 같게
       - run: >
-          pip install -r requirements.txt -r requirements-dev.txt pyinstaller==6.22.3 "psycopg[binary]"
+          pip install -c constraints.txt -r requirements.txt -r requirements-dev.txt pyinstaller==6.22.3 "psycopg[binary]"
           "ibis-framework[athena,bigquery,clickhouse,databricks,druid,exasol,impala,materialize,mssql,mysql,oracle,postgres,risingwave,singlestoredb,snowflake,sqlite,trino]==12.0.0"
       - run: python tests.py
       - run: python -m pytest tests_pytest -q
@@ -31,7 +31,7 @@ jobs:
         shell: pwsh
         run: |
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
+          if (-not (Test-Path $iscc)) { choco install innosetup --version=6.5.4 --no-progress -y }
           $version = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME.TrimStart("v") } else { "0.0.0" }
           & $iscc "/DAppVersion=$version" installer\DataLoupe.iss
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
