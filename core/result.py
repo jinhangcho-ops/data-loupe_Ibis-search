@@ -1,4 +1,5 @@
 """결과 계산과 파일 저장. 이 단계에서 처음으로 연산이 실행된다."""
+import contextvars
 import math
 from decimal import Decimal
 from pathlib import Path
@@ -8,6 +9,7 @@ from lazy import ibis
 from core import sql_funcs
 from core.parse import check_name, column as field_of, struct_fields, type_info
 
+PAGING = contextvars.ContextVar("paging", default=False)  # get_rows가 쪽을 받는 중: 파일 연결(Polars)의 묶기·중복 빼기도 차례를 고정한다(source.fix_polars_text)
 SUMMARY_COLS = ["name", "type", "count", "nulls", "unique", "min", "max", "mean"]
 MAX_GROUPS = 50  # 차트에 표시할 최대 그룹 수
 MAX_SPLITS = 8  # 차트에서 한 컬럼의 값별로 나눌 때 최대 값 개수
@@ -188,7 +190,11 @@ def get_rows(expr, limit, offset=0):
     """offset행을 건너뛰고 limit행. streaming은 표 하나를 정렬해 자를 때만 쓴다: 정렬이 없거나 조인·이어붙이기가 있으면 streaming은 행 순서가 실행마다 달라 쪽마다 행이 겹치고 빠진다."""
     ops = ibis.expr.operations
     single_sorted = isinstance(expr.op(), ops.Sort) and not expr.op().find((ops.JoinChain, ops.Union))
-    return expr.limit(limit, offset=offset).to_polars(**streaming(expr, single_sorted))
+    token = PAGING.set(True)
+    try:
+        return expr.limit(limit, offset=offset).to_polars(**streaming(expr, single_sorted))
+    finally:
+        PAGING.reset(token)
 
 
 def can_offset(expr):

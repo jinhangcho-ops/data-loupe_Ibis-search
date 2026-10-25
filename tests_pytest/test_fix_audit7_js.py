@@ -96,7 +96,7 @@ const needsValues = c => c, scheduleSave = () => { saved++; }, isShell = () => f
 const $ = () => ({ textContent: "" }); const save = async () => true;
 const api = async () => ({ data: { v: "new" } });
 const board = { cards: [], ctx: () => CTX, draw() {}, recompare: async () => {} };
-""" + LIVE + "\n"
+""" + next(x for x in DASH.splitlines() if x.startswith("const sigOf")) + "\n" + LIVE + "\n"
 
 
 def values_script(call):
@@ -117,7 +117,7 @@ def values_script(call):
 
 @needs_node
 def test_7e3_recompute_with_period_stays_on_screen(tmp_path):
-    host = DASH[DASH.index("  recompute: async card => {"):DASH.index("\n  star:")]
+    host = DASH[DASH.index("  recompute: async"):DASH.index("\n  star:")]
     body = "const panelHost = {\n" + host + "\n};\n" + values_script("panelHost.recompute(card)")
     got = run(tmp_path, body, fake=False)
     assert got["period"] == {"shown": "new", "stored": "old", "dirty": False}

@@ -184,6 +184,7 @@ def fix_polars_text():
         return
     import polars as pl
     from ibis.backends.polars.compiler import _literal_value, translate
+    from core import result
     from ibis.util import gen_name
     from ibis.expr import operations as ops
 
@@ -205,7 +206,8 @@ def fix_polars_text():
     @translate.register(ops.ArrayIndex)
     def index(op, **kw):
         return translate(op.arg, **kw).list.get(translate(op.index, **kw), null_on_oob=True)  # 범위 밖 조각(split_part 5번째 …)은 오류 대신 빈 값(DuckDB와 같게)
-    # 정렬·묶기·중복 빼기는 순서를 고정한다: 아니면 LIMIT·OFFSET마다 동률(묶은 결과의 차례)을 달리 갈라 쪽을 넘길 때 행이 겹치고 빠진다
+    # 정렬·묶기·중복 빼기는 순서를 고정한다: 아니면 LIMIT·OFFSET마다 동률(묶은 결과의 차례)을 달리 갈라 쪽을 넘길 때 행이 겹치고 빠진다.
+    # 정렬은 늘(비용이 없다), 묶기·중복 빼기는 쪽을 받을 때만(result.PAGING, 큰 파일의 중복 빼기가 2~4배 느려진다)
     @translate.register(ops.Sort)
     def sort(op, **kw):
         lf = translate(op.parent, **kw)
@@ -218,12 +220,12 @@ def fix_polars_text():
     @translate.register(ops.Aggregate)
     def aggregate(op, **kw):  # ibis polars compiler의 aggregation에 maintain_order만 더했다
         lf = translate(op.parent, **kw)
-        func = lf.with_columns([translate(a, **kw).alias(n) for n, a in op.groups.items()]).group_by(list(op.groups), maintain_order=True).agg if op.groups else lf.select
+        func = lf.with_columns([translate(a, **kw).alias(n) for n, a in op.groups.items()]).group_by(list(op.groups), maintain_order=result.PAGING.get()).agg if op.groups else lf.select
         return func([translate(a, in_group_by=bool(op.groups), **kw).alias(n) for n, a in op.metrics.items()]) if op.metrics else func()
 
     @translate.register(ops.Distinct)
     def distinct(op, **kw):
-        return translate(op.parent, **kw).unique(maintain_order=True)
+        return translate(op.parent, **kw).unique(maintain_order=result.PAGING.get())
     polars_fixed = True
 
 

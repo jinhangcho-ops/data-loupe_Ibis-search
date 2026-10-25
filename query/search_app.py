@@ -123,9 +123,24 @@ def sql_gate(body, streams=False):
 
 
 TOO_BIG = f"결과가 커서({held.MAX_ROWS:,}행·{held.MAX_BYTES // 1024 // 1024}MB 넘음) 이 PC에 받아 두지 않고 DB에서 쪽마다 가져옵니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요."
+LOCAL_PAGES = "정렬 값이 같은 행이 있어, 쪽을 넘길 때 그 행들이 겹치거나 빠질 수 있습니다. 고유한 컬럼(번호 등)을 정렬 끝에 더하세요."
 FILE_SQL_PAGES = "파일 연결의 SQL 결과는 쪽마다 다시 계산합니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼의 ORDER BY를 넣으세요."
 SERVER_PAGES = ("결과가 커서 이 PC에 받아 두지 않고, 쿼리를 한 번만 돌려 DB의 결과 임시 테이블(BigQuery는 24시간)에서 쪽마다 읽습니다. "
                 "쪽을 넘겨도 다시 조회하지 않아 요금이 다시 나지 않고, 정렬·조건을 바꾸거나 [검색 실행]을 누르면 다시 조회합니다.")
+
+
+TIES = {}  # 검색(조건·계산·정렬)마다 정렬 값이 겹치는지. 쪽을 넘길 때마다 다시 세지 않게
+
+
+def tied(body):
+    """정렬 값이 같은 행이 있는지(querying.sort_keys의 행 수 ≠ 서로 다른 값 수)를 검색마다 한 번만 센다."""
+    key = (querying.search_key(body), repr(body.get("calcs")), repr(body.get("sorts")))
+    if key not in TIES:
+        if len(TIES) > 64:
+            TIES.clear()
+        keys = querying.sort_keys(body)
+        TIES[key] = run(lambda: keys.count().to_pyarrow().as_py() != keys.distinct().count().to_pyarrow().as_py())
+    return TIES[key]
 
 
 def db_page(con, body, expr, limit, offset, count=None):
@@ -164,6 +179,8 @@ def query():
         note = SERVER_PAGES
     elif not kept:
         count, rows = db_page(con, body, expr, limit, offset, count)
+        if offset and body.get("sorts") and tied(body):  # 이 PC·파일 연결은 쪽마다 다시 정렬한다: 정렬 값이 같은 행이 있을 때만 알린다(둘째 쪽부터, 검색마다 한 번 센다)
+            note = LOCAL_PAGES
     if offset == 0:  # 새로 검색할 때만(쪽 넘기기는 세지 않는다)
         count_virtual([body["base"], *(body.get("union") or {}).get("tables", []), *[line.split()[0] for line in body.get("joins", []) if line.split()]])
     return server.json_reply(rows, count=count, held=kept, server=note == SERVER_PAGES, note=note)

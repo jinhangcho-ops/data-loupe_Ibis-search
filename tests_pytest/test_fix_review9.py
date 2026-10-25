@@ -38,7 +38,8 @@ def test_pages_of_a_grouped_then_sorted_file_table_do_not_overlap(tmp_path):
     n = 600_000
     t = polars_table(tmp_path, pl.DataFrame({"g": pl.int_range(n, eager=True) % 50_000, "v": pl.int_range(n, eager=True)}))
     e = t.group_by("g").aggregate(n=t.count()).order_by("n")  # 그룹마다 12행이라 모두 동률
-    seen = pl.concat([e.limit(10_000, offset=o).to_polars() for o in range(0, 50_000, 10_000)])
+    from core import result
+    seen = pl.concat([result.get_rows(e, 10_000, o) for o in range(0, 50_000, 10_000)])  # 화면이 쪽을 받는 길(묶기 차례 고정은 쪽을 받을 때만)
     assert seen["g"].n_unique() == 50_000
 
 

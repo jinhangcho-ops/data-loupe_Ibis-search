@@ -338,13 +338,14 @@ const panelHost = { board, menu: null, menuRoot, popRoot, menuTarget: null, chan
     try { columnCache.set(table, (await api("/api/columns", { schema: card.source.schema || "", base: table })).columns); } catch (e) { /* 선반을 못 보일 뿐 */ }
   },
   columns: card => columnCache.get(card.source?.table) ?? [],
-  recompute: async card => {
-    const id = dashId, was = lastSaved,  // 마지막 저장은 기다리기 전의 것과 비교한다(그 사이 저장이 끼어들면 lastSaved가 새 설정이 된다)
-      d = await api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: card.data?.since ? { since: card.data.since } : {} }, ctx: board.ctx() });
+  recompute: async (card, was = lastSaved) => {  // 마지막 저장(was)은 기다리기 전의 것과 비교한다(그 사이 저장이 끼어들면 lastSaved가 새 설정이 된다)
+    const id = dashId, ctx = board.ctx(),
+      d = await api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: card.data?.since ? { since: card.data.since } : {} }, ctx });
     if (dashId !== id || !board.cards.includes(card)) return;  // 기다리는 사이 다른 대시보드로 옮겼다
-    if (board.ctx()) {  // 기간을 건 채 구한 값은 화면에만(저장하지 않는다. docs/dashboard.md)
+    if (JSON.stringify(board.ctx()) !== JSON.stringify(ctx)) return panelHost.recompute(card, was);  // 기다리는 사이 기간을 걸거나 풀었다: 기간 값을 저장하거나 전체 값을 기간 화면에 두지 않게 지금 기간으로 다시
+    if (ctx) {  // 기간을 건 채 구한 값은 화면에만(저장하지 않는다. docs/dashboard.md)
       showLive(card, d.data);
-      if (JSON.stringify(cardSettings(card)) !== JSON.stringify(JSON.parse(was || "[0,0,[]]")[2].find(c => c.id === card.id))) { card.stored = {}; valuesDirty = true; valuesSeq++; }  // 바꾼 설정으로는 저장된 값이 옛 설정의 것이니 비우고, 비운 값을 쓰도록 저장을 예약한다(다음에 다시 구한다)
+      if (sigOf(cardSettings(card)) !== sigOf(JSON.parse(was || "[0,0,[]]")[2].find(c => c.id === card.id) ?? {})) { card.stored = {}; valuesDirty = true; valuesSeq++; }  // 종류·원천을 바꾸면 저장된 값이 옛 설정의 것이니 비우고, 비운 값을 쓰도록 저장을 예약한다(다음에 다시 구한다)
     }
     else {
       card.data = d.data;

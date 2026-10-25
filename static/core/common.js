@@ -139,7 +139,9 @@ function gridDraw(g, force) {
     a = Math.max(0, lo - TABLE_OVER); b = Math.min(N, hi + TABLE_OVER);
   }
   g.a = a; g.b = b;
+  const f = document.activeElement, at = f?.matches?.("td.nest") && body.contains(f) && f.closest("tr[data-p]"), ci = at && f.cellIndex;  // 다시 그려도 키보드 초점(펼칠 칸)을 잃지 않게
   body.innerHTML = g.virtual ? (g.sizerMax === max ? g.sizer : g.sizer = gridSizer(g, g.sizerMax = max)) + gridPad(g, gridTop(g, a)) + gridTrs(g, a, b, max) + gridPad(g, gridTop(g, N) - gridTop(g, b)) : gridTrs(g, 0, N, max);
+  if (at) body.querySelector(`tr[data-p="${at.dataset.p}"]`)?.cells[ci]?.focus({ preventScroll: true });
   const trs = g.virtual || g.open.size ? [...body.querySelectorAll(g.virtual ? "tr[data-p]" : "tr")] : [];
   if (g.virtual && !g.measured && trs.length > 1) {  // 줄 간격은 처음 그린 줄들의 위치 차이로 잰다
     const H = (trs.at(-1).offsetTop - trs[0].offsetTop) / (trs.length - 1);

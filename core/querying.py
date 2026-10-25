@@ -58,6 +58,12 @@ def shown(body, expr):
     return keys, [c for line in body.get("columns", []) for c in parse.parse_columns(line, expr)]
 
 
+def sort_keys(body):
+    """정렬 키 값만 고른 표(k0, k1 …). 같은 값의 행이 있으면 쪽마다 다시 정렬할 때 그 행들의 차례가 바뀌어 쪽이 겹치거나 빠질 수 있다."""
+    expr = staged(body, filtered(body))
+    return expr.select(*[k.op().arg.to_expr().name(f"k{i}") for i, k in enumerate(shown(body, expr)[0])])
+
+
 def build(body, select=True):
     """요청의 테이블·이어붙이기·조인·기간·조건·정렬·표시 컬럼을 Ibis 식 하나로 만든다.
     select=False면 줄은 모두 검사하되 표시 컬럼은 적용하지 않는다(컬럼 목록, 차트)."""

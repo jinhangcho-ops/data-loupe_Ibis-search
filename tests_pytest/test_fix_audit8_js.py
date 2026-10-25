@@ -167,17 +167,17 @@ console.log(JSON.stringify({ union: host._grid.view, plain: plain._grid.view }))
 @needs_node
 def test_8e3_recompute_with_period_does_not_keep_old_stored_values(tmp_path):
     ctl, dash = page("dashboard/dash_ctl.js"), page("dashboard/dashboard.html")
-    a = dash.index("  recompute: async card =>")
+    a = dash.index("  recompute: async")
     recompute = dash[a:dash.index("\n  star:", a)]
     got = run(tmp_path, r"""
-globalThis.DashBoard = { plain: c => ({ id: c.id, by: c.by }) };
+globalThis.DashBoard = { plain: c => ({ id: c.id, source: c.source }) };
 """ + fn(ctl, "function showLive") + "\n" + next(x for x in ctl.splitlines() if x.startswith("const storedCard")) + r"""
 let dashId = "d1", valuesDirty = false, valuesSeq = 0, period = { from: "2026-01-01" }, lastSaved;
-""" + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + r"""
+""" + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + "\n" + next(x for x in dash.splitlines() if x.startswith("const sigOf")) + r"""
 const needsValues = c => c, scheduleSave = () => {};
 let reply;
 const api = async () => ({ data: reply });
-const card = { id: 1, by: "region", data: { labels: ["서울", "부산"] } };
+const card = { id: 1, source: { table: "region" }, data: { labels: ["서울", "부산"] } };
 const board = { cards: [card], ctx: () => period, draw() {} };
 lastSaved = JSON.stringify([[], {}, [cardSettings(card)]]);   // 방금 저장한 대시보드
 const panelHost = {
@@ -187,15 +187,15 @@ const panelHost = {
   reply = { labels: ["서울"] };
   await panelHost.recompute(card);                 // 기간을 건 채 구함(설정은 그대로 = 저장된 값을 둔다)
   const kept = JSON.stringify(storedCard(card).data);
-  card.by = "product"; reply = { labels: ["사과", "배"] };
-  await panelHost.recompute(card);                 // 묶음을 바꿈
+  card.source = { table: "product" }; reply = { labels: ["사과", "배"] };
+  await panelHost.recompute(card);                 // 원천을 바꿈
   const saved = JSON.stringify(storedCard(card));
   period = null; reply = { labels: ["사과"] };
   await panelHost.recompute(card);                 // 기간을 풀면 새 값이 저장 대상
   console.log(JSON.stringify({ kept, saved, after: storedCard(card).data, shown: card.data.labels }));
 })();
 """, fake=False)
-    assert got == {"kept": '{"labels":["서울","부산"]}', "saved": '{"id":1,"by":"product","data":{}}', "after": {"labels": ["사과"]}, "shown": ["사과"]}
+    assert got == {"kept": '{"labels":["서울","부산"]}', "saved": '{"id":1,"source":{"table":"product"},"data":{}}', "after": {"labels": ["사과"]}, "shown": ["사과"]}
 
 
 # ---------- 8E9 다른 대시보드를 열면 첫 그리기에는 다시 애니메이션 ----------

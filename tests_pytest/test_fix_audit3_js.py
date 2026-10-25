@@ -36,7 +36,7 @@ SNAPSHOT = dash_slice("const snapshot =", "async function save()")
 SAVE = dash_slice("async function save()", "// 임시 저장(초안)")
 SCHEDULE = dash_slice("function scheduleSave()", "\n\n// ---------- 대시보드 고르기")
 SAVE_IF_DIRTY = dash_slice("const saveIfDirty", '$("d-pick").onchange')
-RECOMPUTE = "const host = {" + dash_slice("  recompute: async card", "  star: () =>") + "};\n"
+RECOMPUTE = "const host = {" + dash_slice("  recompute: async", "  star: () =>") + "};\n"
 CORE = [PRELUDE, SNAPSHOT, SAVE, SCHEDULE, SAVE_IF_DIRTY, RECOMPUTE]
 
 

@@ -241,6 +241,8 @@ def asof(left, right, on, keys, rname="{name}_right"):
     """asof 조인: 왼쪽 행마다 키가 같고 시각이 같거나 앞선 오른쪽 행 중 가장 가까운 하나를 붙인다(없으면 빈 값).
     연결이 ASOF JOIN을 하지 못하면(SQLite·Databricks 등) 왼쪽 조인 + 시각 순 행 번호로 같은 결과를 만든다."""
     from core import source
+    if left.get_backend().name == "polars":  # Polars join_asof는 양쪽이 시각 순이라고 믿고 오류 없이 틀린 짝을 낸다
+        left, right = left.order_by(left[on[0]]), right.order_by(right[on[1]])
     found = left.asof_join(right, on=left[on[0]] >= right[on[1]], predicates=[left[a] == right[b] for a, b in keys], rname=rname)
     if source.compiles(found):
         return found
@@ -272,7 +274,8 @@ def apply_joins(base, joins, get_table):
         for left, r in [*pairs, *([on] if on else [])]:
             check_name(left, expr.columns)
             check_name(r, right.columns)
-        rname = rname_for(expr.columns, right.columns, name)
+        merged = {r for left, r in pairs if left == r} if how == "inner" else set()  # inner 조인의 같은 이름 키는 Ibis가 하나로 합친다(query/flow.join_names와 같다)
+        rname = rname_for(expr.columns, [c for c in right.columns if c not in merged], name)
         if how == "asof":
             expr = asof(expr, right, on, pairs, rname)
         else:

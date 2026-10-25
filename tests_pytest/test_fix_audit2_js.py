@@ -79,7 +79,7 @@ def test_refresh_does_not_reopen_when_save_fails(tmp_path):
 
 def test_recompute_values_are_saved_then_cleared(tmp_path):
     """값 다시 구하기는 snapshot(값 제외)에 나타나지 않아도 저장 대상이다. 저장하면 표시를 지운다."""
-    recompute = dash_slice("  recompute: async card", "  star: () =>")
+    recompute = dash_slice("  recompute: async", "  star: () =>")
     prelude = SAVE_PRELUDE + "const scheduleSave = () => {};\nconst host = {" + recompute + "};\n"
     body = """
 (async () => {

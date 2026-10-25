@@ -165,9 +165,11 @@ function flowColumns(g, id, schemas, depth = 0) {
   const ins = flowIns(g, id), from = i => flowColumns(g, i, schemas, depth + 1);
   if (n.kind === "table") return { ...(schemas?.[p.table]?.columns ?? {}) };
   if (n.kind === "join") {
-    const left = ins[0] ? from(ins[0]) : {}, right = ins[1] ? from(ins[1]) : {};
+    const left = ins[0] ? from(ins[0]) : {}, all = ins[1] ? from(ins[1]) : {};
     if (["semi", "anti"].includes(p.how)) return left;
-    // 겹치는 이름은 _right, 그 이름도 이미 있으면 오른쪽 테이블 이름(서버 parse.rname_for와 같다)
+    // inner 조인의 같은 이름 키는 하나로 합쳐 빠지고, 겹치는 이름은 _right, 그 이름도 이미 있으면 오른쪽 테이블 이름(서버 flow.join_names·parse.rname_for와 같다)
+    const merged = (p.how ?? "inner") === "inner" ? new Set((p.keys ?? []).filter(([l, r]) => l === r).map(([, r]) => r)) : new Set();
+    const right = Object.fromEntries(Object.entries(all).filter(([c]) => !merged.has(c)));
     const clash = sfx => Object.keys(right).some(c => Object.hasOwn(left, c) && (Object.hasOwn(left, c + sfx) || Object.hasOwn(right, c + sfx)));
     let sfx = "_right";
     if (clash(sfx)) for (sfx = "_" + (flowRoot(g, ins[1])?.params?.table ?? "").replace(/[^\p{L}\p{N}_]/gu, "_"); clash(sfx); sfx += "_");
@@ -175,7 +177,7 @@ function flowColumns(g, id, schemas, depth = 0) {
   }
   const base = ins[0] ? from(ins[0]) : {};
   if (n.kind === "calc") return { ...base, ...(p.adds ?? {}) };
-  if (n.kind === "aggregate") return { ...Object.fromEntries((p.by ?? []).map(c => [c, base[c] ?? "other"])), ...Object.fromEntries((p.series ?? []).map(s => [s.name ?? s.agg, "num"])) };
+  if (n.kind === "aggregate") return { ...Object.fromEntries((p.by ?? []).map(c => [c, base[c] ?? "other"])), ...Object.fromEntries((p.series ?? []).map((s, i) => [s.name || "v" + i, "num"])) };  // 이름 없는 계열은 서버와 같이 v0, v1 …
   if (n.kind === "metric") return { ...Object.fromEntries((p.by ? [p.by].flat() : []).map(c => [c, base[c] ?? "other"])), ...Object.fromEntries((p.names ?? []).map(m => [m, "num"])) };
   return base;
 }

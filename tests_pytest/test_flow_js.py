@@ -98,7 +98,7 @@ def test_diff_and_upstream(tmp_path):
                    "console.log(JSON.stringify({ marks: flowDiff(g, o), up: flowUpstream(g, 'c').sort(), cols: flowColumns(g, 'a', { orders: { columns: { shop_id: 'num', amt: 'num' } }, shops: { columns: { shop_id: 'num', country: 'text' } } }), jc: flowColumns(g, 'j', { orders: { columns: { shop_id: 'num', amt: 'num' } }, shops: { columns: { shop_id: 'num', country: 'text' } } }), root: flowRoot(g, 'c').id }));" % json.dumps(GRAPH))
     assert got["marks"] == {"c": "chg", "n9": "add", "p": "del"} and got["up"] == ["c", "j", "p", "t1", "t2"]
     assert got["cols"] == {"country": "other", "합": "num"} or got["cols"]["합"] == "num"
-    assert got["jc"] == {"shop_id": "num", "amt": "num", "shop_id_right": "num", "country": "text"} and got["root"] == "t1"  # 같은 이름은 오른쪽에 _right(서버 right_names와 같다)
+    assert got["jc"] == {"shop_id": "num", "amt": "num", "country": "text"} and got["root"] == "t1"  # inner 조인의 같은 이름 키는 하나로 합친다(서버 right_names와 같다)
 
 
 def test_join_columns_match_server():

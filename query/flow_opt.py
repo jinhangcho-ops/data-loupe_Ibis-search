@@ -172,7 +172,7 @@ def side_of(graph, jid, refs, schemas):
     for r in refs:
         if r in lc:
             sides.add("left")
-        elif any(r == c + "_right" and c in lc for c in rc):
+        elif r in {new for c, new in flow.join_names(lc, rc, *flow.join_info(graph, jid, schemas)[2:]).items() if new != c}:
             return None, "이름이 겹쳐 바뀐 오른쪽 컬럼이라"
         elif r in rc:
             sides.add("right")
@@ -260,7 +260,7 @@ def drop_join(graph, ctx):
         lc = flow.out_columns(g, left, ctx["schemas"])
         if rc is None or lc is None:
             continue
-        out_names = set(flow.right_names(lc, rc, "left", flow.table_name(g, right))) - set(lc)
+        out_names = set(flow.join_names(lc, rc, "left", flow.table_name(g, right)).values())
         used = set().union(*[loose(by_id(g)[i]) for i in downstream(g, jid)]) if downstream(g, jid) else set()
         if used & out_names:
             refused.append({"node": jid, "text": f"{flow.label(node)}의 오른쪽 컬럼({', '.join(sorted(used & out_names)[:4])})을 아래에서 써서 빼지 않았어요."})
@@ -320,7 +320,7 @@ def pre_aggregate(graph, target, ctx):
     if any(y not in lc for y in ys):
         return refused("집계하는 값 컬럼이 왼쪽 테이블에 없어서 먼저 집계하지 않았어요.")
     by = [c for c in p.get("by") or [] if c]
-    if any(c not in lc and c not in {x if x not in lc else x + "_right" for x in rc} for c in by):
+    if any(c not in flow.right_names(lc, rc, *flow.join_info(graph, jid, ctx["schemas"])[2:]) for c in by):
         return refused("묶는 컬럼을 앞 단계에서 찾지 못해 먼저 집계하지 않았어요.")
     lkeys = [l for l, _ in jp.get("keys") or []]
     unique, why = key_unique(graph, right, [r for _, r in jp.get("keys") or []], ctx)
@@ -349,6 +349,12 @@ def pre_aggregate(graph, target, ctx):
 
 # ---------- 규칙 4: 쓰는 컬럼만 ----------
 
+def renamed_apart(graph, jid, schemas):
+    """조인이 겹친 오른쪽 이름에 _right가 아닌 꼴(_테이블)을 쓰는지. 그러면 앞 테이블의 컬럼을 빼는 것만으로 이름이 바뀔 수 있다."""
+    lc, rc, how, name, keys = flow.join_info(graph, jid, schemas)
+    return lc is not None and rc is not None and any(new not in (c, c + "_right") for c, new in flow.join_names(lc, rc, how, name, keys).items())
+
+
 def prune_columns(graph, ctx):
     """규칙 4. 테이블 단계마다 아래에서 쓰는 컬럼만 읽게 params.columns를 정한다. 쓰는 컬럼을 확신할 수 없으면(타입·패턴 대상 계산, 이어붙이기) 건너뛴다."""
     from core import calc
@@ -363,6 +369,8 @@ def prune_columns(graph, ctx):
         outs = downstream(g, n["id"])
         if cols is None or any(by_id(g)[o]["kind"] == "union" for o in outs | set(outputs(g, n["id"]))):
             continue
+        if any(by_id(g)[o]["kind"] == "join" and renamed_apart(g, o, ctx["schemas"]) for o in outs):
+            continue  # 컬럼을 빼면 조인의 겹친 이름(_테이블 ↔ _right)이 바뀔 수 있다
         used = set().union(*[loose(by_id(g)[o]) for o in outs]) if outs else set()
         need = [c for c in cols if c in used or any(u.startswith(c + "_") for u in used)]  # 조인에서 이름이 바뀐 c_right·c_테이블도
         need = need or list(cols)[:1]

@@ -152,12 +152,27 @@ def table_columns(node, schemas):
     return {c: k for c, k in cols.items() if c in keep} if keep else dict(cols)
 
 
-def right_names(left, right, how, name=""):
-    """조인 결과의 컬럼: 왼쪽 컬럼 + 오른쪽 컬럼(왼쪽과 이름이 겹치면 parse.rname_for의 이름, 보통 _right). semi·anti는 왼쪽만."""
+def join_names(left, right, how, name="", keys=()):
+    """조인 결과에 남는 오른쪽 컬럼 {원래 이름: 결과 이름}. inner 조인의 같은 이름 키(a = a)는 Ibis가 하나로 합쳐 빠지고, 왼쪽과 겹치면 parse.rname_for의 꼴(보통 _right)."""
+    merged = {r for l, r in keys if l == r} if how == "inner" else set()
+    rest = [c for c in right if c not in merged]
+    rname = parse.rname_for(left, rest, name)
+    return {c: rname.format(name=c) if c in left else c for c in rest}
+
+
+def right_names(left, right, how, name="", keys=()):
+    """조인 결과의 컬럼: 왼쪽 컬럼 + 오른쪽 컬럼(join_names). semi·anti는 왼쪽만."""
     if how in ("semi", "anti"):
         return dict(left)
-    rname = parse.rname_for(left, right, name)
-    return {**left, **{(rname.format(name=c) if c in left else c): k for c, k in right.items()}}
+    return {**left, **{new: right[c] for c, new in join_names(left, right, how, name, keys).items()}}
+
+
+def join_info(graph, jid, schemas):
+    """조인 단계의 (왼쪽 컬럼, 오른쪽 컬럼, 종류, 오른쪽 뿌리 테이블 이름, 키 쌍). 컬럼을 모르면 그 자리가 None."""
+    left, right = join_sides(graph, jid)
+    p, root = params(by_id(graph)[jid]), root_table(graph, right) if right else None
+    return (out_columns(graph, left, schemas) if left else None, out_columns(graph, right, schemas) if right else None,
+            p.get("how", "inner"), params(root).get("table", "") if root else "", [tuple(k) for k in p.get("keys") or []])
 
 
 def out_columns(graph, nid, schemas, depth=0):
@@ -183,7 +198,7 @@ def out_columns(graph, nid, schemas, depth=0):
         if len(subs) < 2:
             return first
         root = root_table(graph, inputs(graph, nid)[1])
-        return None if subs[1] is None else right_names(first, subs[1], p.get("how", "inner"), params(root).get("table", "") if root else "")
+        return None if subs[1] is None else right_names(first, subs[1], p.get("how", "inner"), params(root).get("table", "") if root else "", [tuple(k) for k in p.get("keys") or []])
     if kind == "calc":
         return {**first, **(p.get("adds") or {})}
     if kind in AFTER_AGG:

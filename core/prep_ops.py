@@ -372,8 +372,12 @@ OPS_NAMES = [op[0] for op in OPS]
 
 
 def nan_to_null(col):
-    """실수 컬럼의 진짜 NaN과 ±inf를 빈 값으로(prep_profile과 같게. NaN·inf가 평균·표준편차·IQR을 NaN으로 만들거나 DuckDB 오류를 내고 빈 값 표시에서 빠지는 것을 막는다). 실수가 아니면 그대로."""
-    return (col.isnan() | col.isinf()).ifelse(ibis.null(), col) if col.type().is_floating() else col
+    """실수 컬럼의 진짜 NaN과 ±inf를 빈 값으로(prep_profile과 같게. NaN·inf가 평균·표준편차·IQR을 NaN으로 만들거나 DuckDB 오류를 내고 빈 값 표시에서 빠지는 것을 막는다). 실수가 아니면 그대로.
+    연결이 isnan·isinf를 하지 못하면(SQLite·SQL Server) 그대로 둔다."""
+    if not col.type().is_floating():
+        return col
+    out = (col.isnan() | col.isinf()).ifelse(ibis.null(), col)
+    return out if source.compiles(out) else col
 
 
 NAN_OPS = ("flag", "fill", "outlier", "scale")  # 빈 값을 따지거나 통계를 내는 일: 먼저 NaN을 빈 값으로

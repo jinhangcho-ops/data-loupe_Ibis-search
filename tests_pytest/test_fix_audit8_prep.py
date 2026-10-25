@@ -85,7 +85,8 @@ def test_distribution_other_error_is_not_retried(monkeypatch):
 def test_groups_by_value_column_keeps_nan_inf_groups():
     t = ibis.memtable(pl.DataFrame({"v": [1.0, NAN, INF]}))
     g = stats.analyze(t, {"kind": "groups", "by": "v", "value": "v", "agg": "count"})
-    assert g["counts"] == [1, 1, 1] and len(g["labels"]) == 3  # 전에는 NaN·inf가 한 그룹(2)으로 합쳐졌다
+    # 10차: NaN·무한은 화면에 둘 다 "(빈 값)"으로 보여 그룹 둘이 같은 이름이 되므로 빈 값 그룹 하나로(앱 전체에서 무한은 빈 값, docs/analysis.md)
+    assert sorted(zip(g["labels"], g["counts"])) == [("(빈 값)", 2), ("1.0", 1)]
 
 
 # 8C5

@@ -33,15 +33,15 @@ console.log(JSON.stringify({ before, after, back: sizerLen() }));
 @needs_node
 def test_9j2_recompute_with_period_empties_stored_even_if_a_save_lands_midway(tmp_path):
     ctl, dash = page("dashboard/dash_ctl.js"), page("dashboard/dashboard.html")
-    a = dash.index("  recompute: async card =>")
+    a = dash.index("  recompute: async")
     recompute = dash[a:dash.index("\n  star:", a)]
     got = run(tmp_path, r"""
-globalThis.DashBoard = { plain: c => ({ id: c.id, by: c.by, data: c.data }) };
+globalThis.DashBoard = { plain: c => ({ id: c.id, kind: c.kind, source: c.source, layout: c.layout, data: c.data }) };
 """ + fn(ctl, "function showLive") + "\n" + next(x for x in ctl.splitlines() if x.startswith("const storedCard")) + r"""
 let dashId = "d1", valuesDirty = false, valuesSeq = 0, lastSaved, wrote = [];
-""" + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + r"""
+""" + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + chr(10) + next(x for x in dash.splitlines() if x.startswith("const sigOf")) + r"""
 const needsValues = c => c;
-const card = { id: 1, by: "region", data: { labels: ["서울", "부산"] } };
+const card = { id: 1, kind: "chart", source: { table: "region" }, layout: { x: 0 }, data: { labels: ["서울", "부산"] } };
 const board = { cards: [card], ctx: () => ({ from: "2026-01-01" }), draw() {} };
 const snap = () => JSON.stringify([[], {}, [cardSettings(card)]]);
 const scheduleSave = () => { if (snap() === lastSaved && !valuesDirty) return; wrote.push(JSON.stringify(storedCard(card).data)); lastSaved = snap(); valuesDirty = false; };
@@ -56,7 +56,7 @@ const panelHost = {
 };
 (async () => {
   showLive(card, { labels: ["서울 기간"] });                // 기간을 건 화면 값, 저장 값은 stored
-  card.by = "product";                                      // 설정을 바꾸고
+  card.source = { table: "product" };                       // 원천을 바꾸고
   await panelHost.recompute(card);
   console.log(JSON.stringify({ stored: storedCard(card).data, wrote, dirty: valuesDirty, shown: card.data.labels }));
 })();
@@ -65,17 +65,18 @@ const panelHost = {
     assert got["wrote"][-1] == "{}", got  # 비운 값이 서버에 쓰였다(옛 값이 새 설정 옆에 남지 않는다)
 
 
+@needs_node
 def test_9j2_period_applied_while_computing_still_empties_stored(tmp_path):
     ctl, dash = page("dashboard/dash_ctl.js"), page("dashboard/dashboard.html")
-    a = dash.index("  recompute: async card =>")
+    a = dash.index("  recompute: async")
     recompute = dash[a:dash.index("\n  star:", a)]
     got = run(tmp_path, r"""
-globalThis.DashBoard = { plain: c => ({ id: c.id, by: c.by, data: c.data }) };
+globalThis.DashBoard = { plain: c => ({ id: c.id, kind: c.kind, source: c.source, layout: c.layout, data: c.data }) };
 """ + fn(ctl, "function showLive") + "\n" + next(x for x in ctl.splitlines() if x.startswith("const storedCard")) + r"""
 let dashId = "d1", valuesDirty = false, valuesSeq = 0, lastSaved, wrote = [];
-""" + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + r"""
+""" + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + chr(10) + next(x for x in dash.splitlines() if x.startswith("const sigOf")) + r"""
 const needsValues = c => c;
-const card = { id: 1, by: "region", data: { labels: ["서울", "부산"] } };
+const card = { id: 1, kind: "chart", source: { table: "region" }, layout: { x: 0 }, data: { labels: ["서울", "부산"] } };
 let period = null;
 const board = { cards: [card], ctx: () => period, draw() {} };
 const snap = () => JSON.stringify([[], {}, [cardSettings(card)]]);
@@ -92,13 +93,84 @@ const panelHost = {
 };
 (async () => {
   showLive(card, { labels: ["서울 기간"] });                // 기간을 건 화면 값, 저장 값은 stored
-  card.by = "product";                                      // 설정을 바꾸고
+  card.source = { table: "product" };                       // 원천을 바꾸고
   await panelHost.recompute(card);
   console.log(JSON.stringify({ stored: storedCard(card).data, wrote, dirty: valuesDirty, shown: card.data.labels }));
 })();
 """, fake=False)
     assert got["stored"] == {} and got["shown"] == ["사과"]
     assert got["wrote"][-1] == "{}", got  # 비운 값이 서버에 쓰였다(옛 값이 새 설정 옆에 남지 않는다)
+
+
+# ---------- 10차: 기다리는 사이 기간을 풀면 지금 기간으로 다시, 옮기기만 한 카드는 저장 값을 둔다 ----------
+
+@needs_node
+def test_10_period_cleared_while_computing_does_not_save_the_period_value(tmp_path):
+    ctl, dash = page("dashboard/dash_ctl.js"), page("dashboard/dashboard.html")
+    a = dash.index("  recompute: async")
+    recompute = dash[a:dash.index("\n  star:", a)]
+    got = run(tmp_path, r"""
+globalThis.DashBoard = { plain: c => ({ id: c.id, kind: c.kind, source: c.source, layout: c.layout, data: c.data }) };
+""" + fn(ctl, "function showLive") + "\n" + next(x for x in ctl.splitlines() if x.startswith("const storedCard")) + r"""
+let dashId = "d1", valuesDirty = false, valuesSeq = 0, lastSaved, wrote = [];
+""" + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + chr(10) + next(x for x in dash.splitlines() if x.startswith("const sigOf")) + r"""
+const needsValues = c => c;
+const card = { id: 1, kind: "chart", source: { table: "region" }, layout: { x: 0 }, data: { labels: ["서울", "부산"] } };
+let period = { from: "2026-01-01" };
+const board = { cards: [card], ctx: () => period, draw() {} };
+const snap = () => JSON.stringify([[], {}, [cardSettings(card)]]);
+const scheduleSave = () => { if (snap() === lastSaved && !valuesDirty) return; wrote.push(JSON.stringify(storedCard(card).data)); lastSaved = snap(); valuesDirty = false; };
+lastSaved = snap();                                         // 방금 저장한 대시보드
+const api = async () => {
+  await null;
+  const asked = period; period = null; card.data = card.stored ?? card.data; delete card.stored;  // 계산 중에 기간을 풀었다(setRange가 전체 값으로 되돌림)
+  return { data: { labels: [asked ? "기간 값" : "전체 값"] } };
+};
+const panelHost = {
+""" + recompute + r"""
+};
+(async () => {
+  showLive(card, { labels: ["서울 기간"] });                // 기간을 건 화면 값, 저장 값은 stored
+  await panelHost.recompute(card);
+  console.log(JSON.stringify({ stored: storedCard(card).data, wrote, dirty: valuesDirty, shown: card.data.labels }));
+})();
+""", fake=False)
+    assert got["shown"] == ["전체 값"], got  # 기간 값이 아니라 지금(기간 없음) 값
+    assert all("기간 값" not in w for w in got["wrote"]), got
+
+
+@needs_node
+def test_10_moving_a_card_then_recomputing_with_period_keeps_stored(tmp_path):
+    ctl, dash = page("dashboard/dash_ctl.js"), page("dashboard/dashboard.html")
+    a = dash.index("  recompute: async")
+    recompute = dash[a:dash.index("\n  star:", a)]
+    got = run(tmp_path, r"""
+globalThis.DashBoard = { plain: c => ({ id: c.id, kind: c.kind, source: c.source, layout: c.layout, data: c.data }) };
+""" + fn(ctl, "function showLive") + "\n" + next(x for x in ctl.splitlines() if x.startswith("const storedCard")) + r"""
+let dashId = "d1", valuesDirty = false, valuesSeq = 0, lastSaved, wrote = [];
+""" + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + chr(10) + next(x for x in dash.splitlines() if x.startswith("const sigOf")) + r"""
+const needsValues = c => c;
+const card = { id: 1, kind: "chart", source: { table: "region" }, layout: { x: 0 }, data: { labels: ["서울", "부산"] } };
+let period = { from: "2026-01-01" };
+const board = { cards: [card], ctx: () => period, draw() {} };
+const snap = () => JSON.stringify([[], {}, [cardSettings(card)]]);
+const scheduleSave = () => { if (snap() === lastSaved && !valuesDirty) return; wrote.push(JSON.stringify(storedCard(card).data)); lastSaved = snap(); valuesDirty = false; };
+lastSaved = snap();                                         // 방금 저장한 대시보드
+const api = async () => {
+  await null;
+  return { data: { labels: ["사과"] } };
+};
+const panelHost = {
+""" + recompute + r"""
+};
+(async () => {
+  showLive(card, { labels: ["서울 기간"] });                // 기간을 건 화면 값, 저장 값은 stored
+  card.layout = { x: 3 };                                    // 옮기기만 했다
+  await panelHost.recompute(card);
+  console.log(JSON.stringify({ stored: storedCard(card).data, wrote, dirty: valuesDirty, shown: card.data.labels }));
+})();
+""", fake=False)
+    assert got["stored"] == {"labels": ["서울", "부산"]} and got["shown"] == ["사과"], got
 
 
 # ---------- 9J3 크기 재기 줄은 가장 긴 중첩 값의 행을 고른다 ----------

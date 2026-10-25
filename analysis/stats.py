@@ -7,8 +7,8 @@ import re
 from lazy import ibis
 
 from core import funnel
+from core import prep_ops
 from core import result
-from core import source
 from core.parse import check_name
 from core.result import chart_metric, plain
 
@@ -50,7 +50,7 @@ def column_of(t, name, want=None, what="컬럼"):
 def finite(c):
     """숫자 컬럼을 실수로. NaN·무한은 빈 값으로 본다(계산이 NaN으로 번지지 않게)."""
     x = c.cast("float64")
-    return ibis.ifelse(x.isnan() | x.isinf(), ibis.null().cast("float64"), x) if c.type().is_floating() else x
+    return prep_ops.nan_to_null(x) if c.type().is_floating() else x
 
 
 def values_top(t, c):
@@ -149,9 +149,8 @@ def finite_value(t, value, into=None):
 def groups(t, by, value, agg, opts=None):
     """그룹 비교: by의 값마다 value의 agg(count·sum·mean). 행이 많은 MAX_GROUPS개 그룹을 값이 큰 순으로."""
     g = column_of(t, by, what="그룹 컬럼")
-    if g.type().is_floating():  # NaN과 빈 값이 "(빈 값)" 그룹 둘로 갈라지지 않게 NaN을 빈 값으로(SQLite·SQL Server는 isnan을 못 하고 NaN도 담지 않는다)
-        merged = t.mutate(**{by: ibis.ifelse(t[by].isnan(), ibis.null().cast(t[by].type()), t[by])})
-        t = merged if source.compiles(merged) else t
+    if g.type().is_floating():  # NaN·무한과 빈 값이 "(빈 값)" 그룹 여럿으로 갈라지지 않게 빈 값으로
+        t = t.mutate(**{by: prep_ops.nan_to_null(t[by])})
     src = "__finite" if by == value and t[value].type().is_floating() else value  # 같은 컬럼으로 묶으면 그룹은 원래 값으로 두고 집계에만 바꾼 값을 쓴다
     t = finite_value(t, value, "__finite" if src != value else None)
     g = t[by]
