@@ -85,15 +85,16 @@ function sentAsk(title, text, ok = "확인") {
 }
 const sentHook = (box, env) => typeof showMetricCatalog === "function" && showMetricCatalog(box, env);  // 지표 사전(7단계, metric_catalog.js) 화면이 이 이름의 함수를 정의하면 #metric-catalog에 붙는다. env = 화면이 쓰는 함수들
 
-// SentenceView(host, ctx): ctx = { body(): 지금 검색 body, columns(): [[이름, 화면 타입]], tables(): 테이블 이름들 }
+// SentenceView(host, ctx): ctx = { body(): 지금 검색 body, columns(): [[이름, 화면 타입]], tables(): 테이블 이름들, scope?(): {base, schema}(없으면 쿼리 화면의 S), only?: "metric"(탭 없이 지표 화면만: 대시보드) }
 function SentenceView(host, ctx) {
   let cat = null, explore = [], metricTpl = [];  // 문장 틀: 처음 열 때 /api/sentences로 한 번 받는다
-  let tab = "explore", items = [], seq = 0, sets = {}, current = "", shared = { on: false, column: "", text: "", span: null }, source = null;  // source: 지금 연결 {key, label}
+  let tab = ctx.only ?? "explore", items = [], seq = 0, sets = {}, current = "", shared = { on: false, column: "", text: "", span: null }, source = null;  // source: 지금 연결 {key, label}
+  const scope = () => ctx.scope?.() ?? S;  // 기준 테이블·스키마: 쿼리 화면은 S, 대시보드는 고른 테이블
   const kinds = () => sentKinds(ctx.columns(), Funcs.kindOf);
   const colList = () => ctx.columns().map(c => [c[0], Funcs.kindOf(c[1])]);
   const tabs = el("div", { className: "stabs" }, ...[["explore", "탐색"], ["metric", "지표"]].map(([k, t]) => { const b = el("button", { className: "tab", textContent: t, onclick: () => { tab = k; show(); } }); b.dataset.tab = k; return b; }));
   const body = el("div", { className: "sbody" });
-  host.replaceChildren(tabs, body);
+  host.replaceChildren(...(ctx.only ? [] : [tabs]), body);
 
   // ----- 빈칸 하나 -----
   // 컬럼 고르기 칸: 눌러서 고르거나(select) 위쪽 컬럼 칩을 끌어다 놓는다
@@ -178,7 +179,7 @@ function SentenceView(host, ctx) {
   }
   async function loadMetrics() {
     try {
-      const d = await api("/api/my_metrics"), mine = m => sameSource(m.scope?.key, d.source?.key) && (m.scope.table ?? "") === (S.base ?? "");
+      const d = await api("/api/my_metrics"), mine = m => sameSource(m.scope?.key, d.source?.key) && (m.scope.table ?? "") === (scope().base ?? "");
       source = d.source;
       metricList = [...d.metrics.map(m => ({ id: m.id, text: m.text, usable: mine(m) })), ...d.legacy.map(m => ({ id: m.name, text: `${m.name} · 지표 파일`, usable: true }))];
       return d;
@@ -339,7 +340,7 @@ function SentenceView(host, ctx) {
   }
   async function addAll(note) {
     const done = [], skipped = [];
-    let pick = null, table = { schema: S.schema, base: S.base };
+    let pick = null, table = { schema: scope().schema, base: scope().base };
     for (const item of items) {
       const compiled = await api("/api/sentence/compile", await compileRun(item)).catch(e => ({ ok: false, reason: e.message })), tpl = cat.templates.find(t => t.id === item.template);
       const card = sentCard(compiled, `${tpl.name}: ${compiled.text ?? tpl.text}`.slice(0, 100));
@@ -363,8 +364,8 @@ function SentenceView(host, ctx) {
     const mine = el("div", { className: "mlist" }), form = el("div", { className: "mform" }), msg = el("div", { className: "err" });
     body.replaceChildren(el("div", { className: "sgrid" }, el("div", { className: "sleft" }, el("h2", { textContent: "지표 틀" }), ...metricTpl.map(t => el("button", { className: "tpl", title: t.text, onclick: () => editMetric(null, t.id) }, el("b", { textContent: t.no }), " " + t.name))),
       el("div", { className: "sright" }, el("h2", { textContent: "내 지표" }), mine, form, msg, el("h2", { textContent: "지표 사전" }), catalog)));
-    await sentHook(catalog, { ctx, kinds, slotEl, periodInputs, refresh: showMetric });
-    const here = m => sameSource(m.scope?.key, source?.key) && (m.scope.table ?? "") === (S.base ?? "");
+    await sentHook(catalog, { ctx, kinds, slotEl, periodInputs, scope, refresh: showMetric });
+    const here = m => sameSource(m.scope?.key, source?.key) && (m.scope.table ?? "") === (scope().base ?? "");
     let status = {};
     try { status = (await api("/api/my_metrics/status", { scope: { ...scopeNow() }, columns: kinds() })).status; } catch { /* 구조 확인은 없어도 목록은 보인다 */ }
     const ids = new Set(d.metrics.map(m => m.id)), names = Object.fromEntries(d.metrics.map(m => [m.id, m.name]));
@@ -383,7 +384,7 @@ function SentenceView(host, ctx) {
     mine.replaceChildren(...(mineOnes.length ? mineOnes.map(row) : [el("div", { className: "hint", textContent: "이 테이블의 지표가 아직 없어요. 왼쪽 지표 틀을 눌러 만드세요." })]),
       ...(others.length ? [el("h2", { textContent: "다른 테이블의 지표(복사해서 써요)" }), ...others.map(row)] : []));
     async function removeMetric(m) { try { await api("/api/my_metrics/delete", { id: m.id }); mcStale = true; msg.textContent = ""; showMetric(); } catch (e) { msg.textContent = e.message; } }
-    function scopeNow() { return { table: S.base, schema: S.schema || "" }; }
+    function scopeNow() { return { table: scope().base, schema: scope().schema || "" }; }
     async function copyMetric(m, mapping = {}) {
       try { await api("/api/my_metrics/copy", { id: m.id, scope: scopeNow(), mapping, columns: kinds() }); msg.textContent = ""; showMetric(); }
       catch (e) {
@@ -433,12 +434,12 @@ function SentenceView(host, ctx) {
 
   async function show() {
     tabs.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
-    if (!S.base) { body.replaceChildren(el("div", { className: "hint", textContent: "먼저 연결하고 기준 테이블을 고르세요." })); return; }
+    if (!scope().base) { body.replaceChildren(el("div", { className: "hint", textContent: "먼저 연결하고 기준 테이블을 고르세요." })); return; }
     if (!cat) {
       try { cat = await api("/api/sentences"); } catch (e) { body.replaceChildren(el("div", { className: "err", textContent: e.message })); return; }
       explore = cat.templates.filter(t => t.kind === "explore"); metricTpl = cat.templates.filter(t => t.kind === "metric");
     }
-    try { await Funcs.load(); await Funcs.loadSupport(S.base, S.schema); } catch { /* 함수 사전을 못 받아도 문장은 쓴다 */ }
+    try { await Funcs.load(); await Funcs.loadSupport(scope().base, scope().schema); } catch { /* 함수 사전을 못 받아도 문장은 쓴다 */ }
     await loadSets(); await loadMetrics();
     if (tab === "explore") showExplore(); else showMetric();
   }

@@ -53,6 +53,7 @@ button.ghost { background:none; border-color:transparent; color:var(--muted); pa
 .jobx em { font-style:normal; font-weight:400; color:var(--muted); }
 .jobx button { background:var(--card); border:0; color:var(--err); height:26px; padding:0 12px; }
 .top-tools { display:flex; gap:8px; align-items:center; }
+.nofeature { flex:none; padding:9px 18px; background:var(--accent-bg); color:var(--accent); font-weight:600; }  /* 설치하지 않은 기능의 화면에 직접 들어왔을 때의 안내 줄 */
 
 /* 중첩 값 칸(구조·목록): 누르면 들여쓴 전체를 펼친다(common.js cell) */
 td.nest { cursor:pointer; color:var(--accent); }

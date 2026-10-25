@@ -1,6 +1,6 @@
 <header class="topbar">
   <div class="crumb" id="crumb" title="지금 연결과 고른 테이블"><i></i><span id="crumb-text">연결 안 됨</span></div>
-  <nav class="pages"><a href="/search" title="탐색과 대시보드">쿼리</a><a href="/prep" title="전처리, 분석, 그래프">분석</a><a href="/dashboard" title="저장한 대시보드를 저장된 값으로 보고 고치기">대시보드</a><a href="/collect">수집</a><a href="/integrations" title="Slack·Notion·GA4·LLM 등 다른 앱·서비스와 잇기">연동</a></nav>
+  <nav class="pages"><a href="/search" data-feature="query" title="탐색과 대시보드">쿼리</a><a href="/prep" data-feature="prep" title="전처리, 분석, 그래프">분석</a><a href="/dashboard" data-feature="dashboard" title="저장한 대시보드를 저장된 값으로 보고 고치기">대시보드</a><a href="/collect" data-feature="collect">수집</a><a href="/integrations" data-feature="integrations" title="Slack·Notion·GA4·LLM 등 다른 앱·서비스와 잇기">연동</a></nav>
   <div class="sx" id="usage" title="PC 전체와 이 프로그램(화면 포함)의 점유율. DB 주소로 연결하면 연산은 DB 서버가 합니다"></div>
   <span class="jobx idle hidden" id="job" title="검색한 뒤로 돌린 검색·집계·차트·저장 시간. 예상: 테이블 행 수 × 직전 실행의 행당 시간"><i></i><span id="job-name"></span><em id="timing"></em><button id="cancel" title="지금 도는 작업을 멈춥니다">취소</button></span>
   <span class="jobx hidden" id="rf-pill" role="button" style="cursor:pointer" title="대시보드 최신화 진행 중. 누르면 진행 창을 엽니다"><i></i><span id="rf-pill-text"></span></span>
@@ -8,5 +8,16 @@
     <button id="resize" class="ib" title="켜면 패널·표·차트의 경계를 끌어 크기를 바꿀 수 있습니다"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
     <button id="theme" class="ib"></button>
     <button id="dest-open" class="btn" title="알림이나 집계·차트를 다른 앱으로 보낼 곳을 정합니다">보낼 곳</button>
+    <button id="feat-open" class="btn" title="쓸 기능을 고르고 설치를 바꿉니다">설정</button>
   </div>
 </header>
+<!-- 설정 창: 기능 체크 상자는 common.js가 서버가 알려 준 목록(SERVER.features)으로 그린다. -->
+<div id="feat-panel" class="modal hidden">
+  <div class="modal-box">
+    <div class="head"><h3>설정</h3><button id="feat-close" class="ghost" style="margin-left:auto">닫기</button></div>
+    <div class="hint">쓸 기능을 고르고 [적용]을 누르면 같은 버전의 설치 프로그램을 받아 다시 설치하고, 앱이 닫혔다가 다시 열립니다. 설정과 대시보드는 그대로 남습니다.</div>
+    <div id="feat-list"></div>
+    <div class="row" style="margin-top:10px"><button id="feat-apply">적용</button></div>
+    <div id="feat-msg" class="err"></div>
+  </div>
+</div>

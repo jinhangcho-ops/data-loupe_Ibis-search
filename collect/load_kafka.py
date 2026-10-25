@@ -96,9 +96,16 @@ def sign(config):
 
 # ---------- 보내기 ----------
 
+class NotInstalled(ValueError):
+    """수집 기능을 설치하지 않아 confluent_kafka가 없다."""
+
+
 def producer(item, password, on_error=None):
     """등록과 비밀번호로 Producer를 만든다. 모든 전달은 acks=all·멱등(같은 메시지가 두 번 쓰이지 않게)으로."""
-    from confluent_kafka import Producer
+    try:
+        from confluent_kafka import Producer
+    except ImportError:  # confluent_kafka는 설치할 때 [수집] 기능에만 들어 있다
+        raise NotInstalled("Kafka 적재는 수집 기능에 들어 있어요. [설정]에서 수집 기능을 추가하세요.") from None
     conf = {"bootstrap.servers": item["servers"], "security.protocol": item["security"], "acks": "all", "enable.idempotence": True,
             "message.timeout.ms": SEND_TIMEOUT * 1000, "logger": QUIET}
     if on_error is not None:  # 연결이 끊기는 것 같은 전체 오류(메시지별 실패는 전달 보고로 온다)
@@ -115,6 +122,8 @@ def check(name, password):
     item = destination(name)
     try:
         found = producer(item, password).list_topics(timeout=CHECK_TIMEOUT)
+    except NotInstalled:
+        raise
     except Exception as e:
         raise ValueError(f"Kafka에 접속하지 못했습니다: {source.mask(str(e), [password], HIDE)}") from None
     return {"ok": True, "topic": item["topic"] in found.topics, "brokers": len(found.brokers)}

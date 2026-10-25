@@ -26,7 +26,7 @@ const mcCatalog = async () => { if (mcStale || !mcCat) { mcCat = await api("/api
 const mcTemplate = id => { const e = mcCat?.entries.find(x => "catalog:" + x.id === id); return e ? { text: e.sentence } : null; };
 
 async function showMetricCatalog(box, env) {
-  const { ctx, kinds, slotEl, periodInputs, refresh } = env;
+  const { ctx, kinds, slotEl, periodInputs, refresh } = env, scope = env.scope ?? (() => S);  // scope: 기준 테이블·스키마(대시보드는 고른 테이블)
   let cat, av;
   try { cat = await mcCatalog(); av = (await api("/api/catalog/available", { columns: kinds() })).availability; } catch (err) { box.replaceChildren(el("div", { className: "err", textContent: err.message })); return; }
   const detail = el("div", { className: "mdetail" }), list = el("div", { className: "mcat" });
@@ -75,7 +75,7 @@ async function showMetricCatalog(box, env) {
       const t = tableSlot && st.slots[tableSlot.name];
       if (t && st.ad.name !== t) {
         st.ad = { name: t, cols: {} };
-        try { st.ad.cols = (await api("/api/flow/schemas", { graph: { nodes: [{ id: "t", kind: "table", params: { table: t, ...(S.schema ? { schema: S.schema } : {}) } }], edges: [] } })).schemas[t]?.columns ?? {}; } catch { /* 컬럼을 못 받으면 직접 적는다 */ }
+        try { st.ad.cols = (await api("/api/flow/schemas", { graph: { nodes: [{ id: "t", kind: "table", params: { table: t, ...(scope().schema ? { schema: scope().schema } : {}) } }], edges: [] } })).schemas[t]?.columns ?? {}; } catch { /* 컬럼을 못 받으면 직접 적는다 */ }
       }
       drawLine();
     }
@@ -94,7 +94,7 @@ async function showMetricCatalog(box, env) {
       if (!t) { msg.textContent = "먼저 문장에서 광고 테이블을 고르세요."; return; }
       msg.textContent = "";
       try {
-        const d = await api("/api/flow/keys", { a: { table: S.base, ...(S.schema ? { schema: S.schema } : {}) }, b: { table: t, ...(S.schema ? { schema: S.schema } : {}) } });
+        const d = await api("/api/flow/keys", { a: { table: scope().base, ...(scope().schema ? { schema: scope().schema } : {}) }, b: { table: t, ...(scope().schema ? { schema: scope().schema } : {}) } });
         if (!d.candidates.length) { msg.textContent = "공통 키 후보가 없어요. 기간 단위로 맞추세요."; return; }
         const choose = c => { st.align.keys = c.keys; drawAlign(); keys.replaceChildren(); };
         keys.replaceChildren(...d.candidates.map(c => el("button", { className: "tpl", title: (c.reasons ?? []).join("\n"), onclick: () => choose(c) }, el("b", { textContent: c.keys.map(k => `${k[0]} = ${k[1]}`).join(", ") }), ` 점수 ${c.score} · ${c.basis}`)));
@@ -116,7 +116,7 @@ async function showMetricCatalog(box, env) {
       msg.textContent = "";
       if (e.cross && !mcAlign(st.align)) { msg.textContent = "다른 테이블과 맞추는 방법을 골라야 저장해요."; return; }
       try {
-        await api("/api/catalog/save", { id: e.id, slots: mcSlots(e, st.slots), scope: { table: S.base, schema: S.schema || "" }, columns: kinds(), align: e.cross ? mcAlign(st.align) : undefined });
+        await api("/api/catalog/save", { id: e.id, slots: mcSlots(e, st.slots), scope: { table: scope().base, schema: scope().schema || "" }, columns: kinds(), align: e.cross ? mcAlign(st.align) : undefined });
         mcStale = true;
         refresh();  // 내 지표 목록을 다시 그린다(사전 화면도 새로 그려진다)
       } catch (err) { msg.textContent = err.message; }

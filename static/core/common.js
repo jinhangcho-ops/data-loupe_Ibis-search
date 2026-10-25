@@ -350,6 +350,25 @@ $("dest-preset").onchange = () => {
   for (const [k, v] of Object.entries(preset ?? {})) if (k !== "label") $("dest-fields").querySelector(`[data-field="${k}"]`).value = v;
   $("dest-preset").value = "";
 };
+// 설치한 기능만 보인다: 켜지지 않은 기능의 메뉴·선택지(data-feature)는 숨기고, 그 기능의 화면에 직접 들어오면 위에 안내 줄을 띄운다.
+function applyFeatures() {
+  const on = SERVER.features.on;
+  document.querySelectorAll("[data-feature]").forEach(e => e.classList.toggle("hidden", !on.includes(e.dataset.feature)));
+  const here = SERVER.features.all.find(f => f.path === location.pathname);
+  if (here && !on.includes(here.id)) document.querySelector(".topbar").after(el("div", { className: "nofeature", role: "alert", textContent: "이 기능은 설치하지 않았어요. [설정]에서 추가할 수 있어요." }));
+}
+applyFeatures();
+// 설정 창: 기능을 고르고 [적용]하면 서버가 설치 프로그램을 받아 실행하고, 앱은 닫혔다가 설치가 끝나면 다시 열린다(개발 실행에서는 서버가 안내만 한다).
+$("feat-list").replaceChildren(...SERVER.features.all.map(f => el("label", { style: "display:block; margin:6px 0" },
+  el("input", { type: "checkbox", value: f.id, checked: SERVER.features.on.includes(f.id), style: "width:auto" }), ` ${f.name}`)));
+$("feat-open").onclick = () => $("feat-panel").classList.remove("hidden");
+$("feat-close").onclick = () => $("feat-panel").classList.add("hidden");
+$("feat-panel").onclick = e => { if (e.target === $("feat-panel")) $("feat-panel").classList.add("hidden"); };
+$("feat-apply").onclick = () => busy($("feat-apply"), async () => {
+  say("feat-msg", "설치 프로그램을 받는 중이에요. 잠시 걸려요…", "hint");
+  try { say("feat-msg", (await api("/api/features/install", { features: [...$("feat-list").querySelectorAll("input:checked")].map(i => i.value) })).text, true); }
+  catch (e) { say("feat-msg", e.message); }
+});
 $("dest-open").onclick = () => $("dest-panel").classList.remove("hidden");
 $("dest-close").onclick = () => $("dest-panel").classList.add("hidden");
 $("dest-panel").onclick = e => { if (e.target === $("dest-panel")) $("dest-panel").classList.add("hidden"); };
