@@ -179,5 +179,5 @@ def test_refresh_marks_kept_card_not_ok():
 def test_ci_runs_pytest_and_docs_match_behavior():
     flow = (ROOT / ".github" / "workflows" / "build-exe.yml").read_text(encoding="utf-8")
     assert "python -m pytest tests_pytest -q" in flow and "requirements-dev.txt" in flow
-    doc = (ROOT / "docs" / "dashboard.md").read_text(encoding="utf-8")
+    doc = (ROOT / "docs" / "functions" / "dashboard_basics.md").read_text(encoding="utf-8")
     assert "남은 카드는 \"멈췄어요\"" in doc

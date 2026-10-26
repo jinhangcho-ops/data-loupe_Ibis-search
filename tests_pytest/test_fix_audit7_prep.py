@@ -173,4 +173,4 @@ def test_empty_table_profile_has_no_drop_suggestion():
 
 # 7C12
 def test_geo_doc_mentions_0_360_longitude():
-    assert "0~360으로 적힌 경도 파일은 그대로 둔다" in (ROOT / "docs" / "geo.md").read_text(encoding="utf-8")
+    assert "0~360으로 적힌 경도 파일은 그대로 둔다" in (ROOT / "docs" / "functions" / "geo.md").read_text(encoding="utf-8")

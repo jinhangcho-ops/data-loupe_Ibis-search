@@ -1,7 +1,9 @@
 /* 대시보드 편집 화면(dashboard.html): 12칸 격자, 카드 모음(왼쪽), 카드 설정(오른쪽), 차트 선반, 카운터 경고 */
 .d-main { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:start; gap:12px; padding:0 18px 18px; }
 .d-main > aside { position:sticky; top:0; width:min(280px, 28vw); max-height:calc(100vh - 160px); overflow:auto; border:1px solid var(--line); border-radius:14px; background:var(--card); padding:10px 12px; }
-.d-main > div { min-width:0; }
+.d-main > div { min-width:0; grid-column:2; }  /* 칸을 정해 둔다: 카드 모음(1칸)을 닫아도 보드가 가운데, 설정 패널이 오른쪽에 남는다 */
+.d-main > #d-gallery-box { grid-column:1; }
+.d-main > #d-panel { grid-column:3; }
 .d-main > aside h5 { margin:12px 0 6px; font-size:13px; }
 .d-main > aside.hidden { display:none; }
 .d-alerts { margin:0 28px 8px; padding:8px 12px; border:1px solid var(--err); border-radius:10px; color:var(--err); font-size:13px; }

@@ -133,7 +133,7 @@ def test_7e3_refresh_all_with_period_stays_on_screen(tmp_path):
 
 
 def test_7e3_doc_says_period_values_are_not_saved():
-    doc = (ROOT / "docs" / "dashboard.md").read_text(encoding="utf-8")
+    doc = (ROOT / "docs" / "functions" / "dashboard_basics.md").read_text(encoding="utf-8")
     assert "기간을 걸어 둔 채 구한 값은 화면에만" in doc
 
 

@@ -75,3 +75,13 @@ def test_pivot_spread_on_big_decimal():
     out = calc.pivot(t, {"rows": ["g"], "column": "id", "how": "count"}, lambda e: e.to_pyarrow().column("v").to_pylist())
     got = out.order_by("g").to_pyarrow().to_pylist()
     assert [(r["g"], r["12345678901234567890"], r["12345678901234567891"]) for r in got] == [("a", 1, 1), ("b", 1, 0)]
+
+
+def test_sentence_text_uses_agg_label_and_particles():
+    """문장 글은 집계 id(sum) 대신 이름(합계)을 쓰고, 빈칸 뒤 조사를 값의 받침에 맞춘다."""
+    from query import sentence_run
+    assert sentence_run.render("e13", {"무엇": "매장", "값": "금액", "집계": {"agg": "sum"}, "N": 5}) == "매장별 금액의 합계 상위 5개를 봐요"
+    assert sentence_run.render("e14", {"무엇": "매장", "대상": "고객ID", "정확도": "정확"}) == "매장별 고유 고객ID 수를 정확으로 구해요"
+    assert sentence_run.render("e03", {"컬럼": "상태", "값": "취소", "컬럼들": "주문번호"}) == "상태가 취소인 행의 주문번호를 봐요"
+    assert sentence_run.render("e45", {"값 A": "금액", "값 B": "수량", "종류": "피어슨"}).startswith("금액과 수량이 ")
+    assert sentence_run.render("e13", {}) == "{무엇}별 {값}의 {집계} 상위 {N}개를 봐요"

@@ -43,7 +43,7 @@
     <select id="d-ratio" title="그림 비율"><option value="screen">화면대로</option><option value="square">1:1</option><option value="4:3">4:3</option><option value="wide">16:9</option></select>
     <select id="d-mode" title="그림의 모드 (쿼리 화면의 차트·집계 표 저장과 같이 바뀝니다)"><option value="light">라이트</option><option value="dark">다크</option></select>
     <select id="d-format" title="그림 형식"><option value="png">PNG</option><option value="jpeg">JPG</option></select>
-    <button id="d-down" class="btn p" title="고른 차트 카드를 각각 그림 파일로 저장합니다. 프로그램 창에서는 저장할 폴더를 한 번 묻습니다">다운로드</button>
+    <button id="d-down" class="btn p" title="고른 카드를 각각 그림 파일로 저장합니다. 프로그램 창에서는 저장할 폴더를 한 번 묻습니다">다운로드</button>
   </div>
   <div class="err" id="err-dash"></div>
   <div class="d-alerts hidden" id="d-alerts"></div>
@@ -379,7 +379,7 @@ const panelHost = { board, menu: null, menuRoot, popRoot, menuTarget: null, chan
       d = await api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: card.data?.since ? { since: card.data.since } : {} }, ctx });
     if (dashId !== id || !board.cards.includes(card)) return;  // 기다리는 사이 다른 대시보드로 옮겼다
     if (JSON.stringify(board.ctx()) !== JSON.stringify(ctx)) return panelHost.recompute(card, was);  // 기다리는 사이 기간을 걸거나 풀었다: 기간 값을 저장하거나 전체 값을 기간 화면에 두지 않게 지금 기간으로 다시
-    if (ctx) {  // 기간을 건 채 구한 값은 화면에만(저장하지 않는다. docs/dashboard.md)
+    if (ctx) {  // 기간을 건 채 구한 값은 화면에만(저장하지 않는다. docs/functions/dashboard_basics.md)
       showLive(card, d.data);
       if (sigOf(cardSettings(card)) !== sigOf(JSON.parse(was || "[0,0,[]]")[2].find(c => c.id === card.id) ?? {})) { card.stored = {}; valuesDirty = true; valuesSeq++; }  // 종류·원천을 바꾸면 저장된 값이 옛 설정의 것이니 비우고, 비운 값을 쓰도록 저장을 예약한다(다음에 다시 구한다)
     }

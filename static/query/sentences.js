@@ -58,7 +58,7 @@ function sentChart(result, colors = []) {
   const values = nums.filter(c => c !== label);
   if (!values.length) return null;
   const shown = rows.slice(0, 50), dateLike = shown.every(r => /^\d{4}-\d{2}/.test(String(r[label] ?? "")));
-  return { type: dateLike ? "line" : "bar", data: { labels: shown.map(r => (label ? String(r[label] ?? "") : "")), datasets: values.map((c, i) => ({ label: c, data: shown.map(r => r[c]), backgroundColor: colors[i % (colors.length || 1)] ?? "#11706f", borderColor: colors[i % (colors.length || 1)] ?? "#11706f" })) },
+  return { type: dateLike ? "line" : "bar", data: { labels: shown.map(r => (label ? String(r[label] ?? "") : "")), datasets: values.map((c, i) => ({ label: c, data: shown.map(r => r[c]), backgroundColor: colors[i % (colors.length || 1)] ?? "#00968f", borderColor: colors[i % (colors.length || 1)] ?? "#00968f", tension: 0.3 })) },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: values.length > 1 } } }, truncated: rows.length > shown.length };
 }
 // 컴파일된 문장(/api/sentence/compile의 runs) → 대시보드 카드의 본문. 묶어 집계하는 요청 하나만 차트 카드로 만든다. 못 만들면 { reason }.
@@ -430,7 +430,7 @@ function SentenceView(host, ctx) {
       draw(); check();
     }
   }
-  const sentRender = (tpl, slots, names = {}) => tpl.text.replace(/\{([^{}]+)\}/g, (_, n) => { const v = slots?.[n]; return v == null ? `{${n}}` : names[v] ? names[v] : typeof v === "object" ? (v.column ?? v.agg ?? v.func ?? v.text ?? JSON.stringify(v)) : Array.isArray(v) ? v.join(", ") : String(v); });
+  const sentRender = (tpl, slots, names = {}) => tpl.text.replace(/\{([^{}]+)\}/g, (_, n) => { const v = slots?.[n]; return v == null ? `{${n}}` : names[v] ? names[v] : typeof v === "object" ? (v.column ?? (v.agg && (SERVER.agg_names?.[v.agg] ?? v.agg)) ?? v.func ?? v.text ?? JSON.stringify(v)) : Array.isArray(v) ? v.join(", ") : String(v); });
 
   async function show() {
     tabs.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));

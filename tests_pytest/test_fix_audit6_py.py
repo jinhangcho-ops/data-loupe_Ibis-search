@@ -230,4 +230,4 @@ def test_desktop_docstring_mentions_move_tasks():
 
 
 def test_analysis_doc_mentions_infinite_values_in_outliers():
-    assert "무한대" in (ROOT / "docs" / "analysis.md").read_text(encoding="utf-8")
+    assert any("무한대" in (ROOT / "docs" / "functions" / f).read_text(encoding="utf-8") for f in ("prep.md", "analysis_tab.md"))

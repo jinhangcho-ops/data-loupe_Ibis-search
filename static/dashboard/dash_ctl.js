@@ -144,7 +144,7 @@ class DashCtl {
 }
 // 서버에 다시 구해 달라고 보낼 카드: 값은 빼고, 상태·경고·배치도가 "N분째"를 이어 가도록 나빠진 시각(data.since)만 남긴다.
 const cardRequest = c => ({ ...DashBoard.plain(c), data: c.data?.since ? { since: c.data.since } : {} });
-// 실시간·기간으로 받은 값은 화면에만 보이고 저장하지 않는다(docs/dashboard.md). showLive가 처음 덮을 때의 값을 c.stored에 두고, 저장할 때(storedCard)는 그 값을 쓴다.
+// 실시간·기간으로 받은 값은 화면에만 보이고 저장하지 않는다(docs/functions/dashboard_basics.md). showLive가 처음 덮을 때의 값을 c.stored에 두고, 저장할 때(storedCard)는 그 값을 쓴다.
 // 다시 구하기처럼 c.data를 새로 넣으면 c.data !== c.liveData가 되어 그 값이 저장 대상이 된다.
 function showLive(c, data) {
   if (!(c.liveData && c.data === c.liveData)) c.stored = c.data ?? {};

@@ -5,13 +5,35 @@ const SCRIPT_NONCE = document.currentScript?.nonce ?? "";
 const needed = new Map();
 const need = (...urls) => Promise.all(urls.map(url => {
   if (!needed.has(url)) needed.set(url, new Promise((done, fail) => {
-    const tag = Object.assign(document.createElement("script"), { src: url, nonce: SCRIPT_NONCE, async: false, onload: done });
+    const tag = Object.assign(document.createElement("script"), { src: url, nonce: SCRIPT_NONCE, async: false, onload: () => { if (url === CHART_JS) chartLook(); done(); } });
     tag.onerror = () => { needed.delete(url); fail(new Error(`${url}을 불러오지 못했어요.`)); };
     document.head.append(tag);
   }));
   return needed.get(url);
 }));
 const CHART_JS = "/static/core/chart.umd.min.js";  // 차트 라이브러리는 첫 차트를 그릴 때 불러온다: typeof Chart === "undefined"이면 need(CHART_JS) 뒤에 다시 그린다.
+// 모든 차트의 공통 모양(불러올 때 한 번): 옅은 가로 격자만, 테두리 없는 축, 끝이 둥근 막대, 가는 선, 원 범례, 카드 색 말풍선. 색은 차트마다 설정이 준다.
+const compact = new Intl.NumberFormat("ko", { notation: "compact", maximumFractionDigits: 1 });
+function chartLook() {
+  const d = Chart.defaults, css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  d.font.family = '"Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
+  d.font.size = 12;
+  Object.assign(d.elements.bar, { borderRadius: 4, borderSkipped: "start" });  // 기준선 쪽은 각지게
+  Object.assign(d.datasets.bar, { maxBarThickness: 44, categoryPercentage: 0.72, barPercentage: 0.9 });
+  Object.assign(d.elements.line, { borderWidth: 2, borderCapStyle: "round", borderJoinStyle: "round" });
+  Object.assign(d.elements.point, { radius: 0, hoverRadius: 5, hitRadius: 10, hoverBorderWidth: 2 });
+  d.interaction = { mode: "index", intersect: false };  // 막대·선은 같은 칸의 값을 한 말풍선에(점 그림은 Chart.js가 점 하나로 바꾼다)
+  d.layout.padding = { top: 4, right: 8 };
+  Object.assign(d.plugins.legend, { align: "start" });
+  Object.assign(d.plugins.legend.labels, { usePointStyle: true, pointStyle: "circle", boxWidth: 8, boxHeight: 8, padding: 14 });
+  Object.assign(d.plugins.tooltip, { backgroundColor: () => css("--card"), titleColor: () => css("--text"), bodyColor: () => css("--text"), borderColor: () => css("--line"), borderWidth: 1,
+    padding: 10, cornerRadius: 8, boxPadding: 4, usePointStyle: true, titleFont: { weight: "600" } });
+  d.scale.border.display = false;
+  Object.assign(d.scale.ticks, { padding: 8, maxRotation: 0, autoSkipPadding: 16 });
+  d.scale.grid.drawTicks = false;
+  d.set("scales.category", { grid: { display: false } });  // 항목 축의 세로 격자는 없앤다(값 축의 가로 격자만)
+  d.scales.linear.ticks.callback = function (v) { return this.axis === "r" || Math.abs(v) < 10000 ? this.getLabelForValue(v) : compact.format(v); };  // 1,200만처럼 짧게
+}
 document.querySelectorAll(".pages a").forEach(a => a.classList.toggle("on", a.pathname === location.pathname));  // 지금 화면의 전환 버튼을 누른 모양으로
 const S = { schema: "", base: "", cols: [] };
 async function send(url, body) {

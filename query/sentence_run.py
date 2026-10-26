@@ -47,10 +47,31 @@ def shown(v):
     return "" if v is None else str(v)
 
 
+PARTICLE = re.compile(r"\{([^{}]+)\}(이\(가\)|으로|로|을|를|은|는|과|와|이(?=\s)|가(?=\s))?")  # 빈칸과 바로 뒤의 조사(값의 받침에 맞춰 고른다)
+PAIRS = {"으로": ("으로", "로"), "로": ("으로", "로"), "을": ("을", "를"), "를": ("을", "를"), "은": ("은", "는"), "는": ("은", "는"), "과": ("과", "와"), "와": ("과", "와"), "이(가)": ("이", "가"), "이": ("이", "가"), "가": ("이", "가")}
+
+
+def josa(word, particle):
+    """word 뒤에 붙일 조사(받침 있으면 앞 것, 없으면 뒤 것. ㄹ 받침 뒤 '로'). 한글로 끝나지 않으면 틀에 적힌 그대로."""
+    last = word[-1:]
+    if not "가" <= last <= "힣":
+        return particle
+    final = (ord(last) - 0xAC00) % 28
+    has, plain = PAIRS[particle]
+    return plain if final == 0 or (has == "으로" and final == 8) else has
+
+
 def render(tid, slots):
-    """틀 문장의 빈칸을 값으로 채운 글(없는 칸은 {이름} 그대로)."""
+    """틀 문장의 빈칸을 값으로 채운 글(없는 칸은 {이름} 그대로). 집계는 이름(합계)으로, 바로 뒤 조사는 값에 맞춘다."""
     t = sentences.get(tid)
-    return WORD.sub(lambda m: shown(slots.get(m.group(1))) or m.group(0), t["text"])
+    kinds = {s["name"]: s["type"] for s in t["slots"]}
+
+    def one(m):
+        v = slots.get(m.group(1))
+        agg = (v.get("agg") if isinstance(v, dict) else v) if kinds.get(m.group(1)) == "agg" else None
+        text = sql_funcs.label_of(agg) if agg in sql_funcs.FUNCS else shown(v)
+        return text + josa(text, m.group(2)) if text and m.group(2) else text or m.group(0)
+    return PARTICLE.sub(one, t["text"])
 
 
 # ---------- 검사 ----------

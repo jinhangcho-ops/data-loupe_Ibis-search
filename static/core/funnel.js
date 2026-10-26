@@ -1,7 +1,7 @@
 // 흐름(퍼널)의 그림과 표: 분석 화면(prep.html)과 대시보드의 funnel 카드가 함께 쓴다. 계산은 서버(funnel.py)가 하고 여기서는 받은 단계별 사람 수만 그린다.
 // 생키: 단계마다 세로 막대(높이 ∝ 사람 수), 다음 단계로 간 사람은 초록 띠, 빠진 사람은 주황 띠가 막대 오른쪽에서 아래로 갈라져 내려간다.
 // 띠는 3차 베지어 두 개(위쪽 가장자리, 아래쪽 가장자리)와 직선 둘로 닫은 경로다. sankeyLayout은 화면 없이 좌표만 구한다(node 테스트가 본다).
-const FUNNEL_COLORS = { bar: "#11706f", next: "#2b8a3e", drop: "#e8590c" };
+const FUNNEL_COLORS = { bar: "#00968f", next: "#008300", drop: "#eb6834" };
 
 // steps: [{name, users, conv, from_first, drop}]. 돌려주는 값: {width, height, bars[{x, y, w, h, name, users}], nexts[{path, from, to, users}], drops[{path, step, users}]}
 function sankeyLayout(steps, { width = 720, height = 340, pad = 12, barW = 22, top = 30, bottom = 40, lane = 14 } = {}) {

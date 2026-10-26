@@ -107,9 +107,9 @@ const stacked = make({ type: "stacked" });
 assert.strictEqual(stacked.type, "bar"); assert(stacked.options.scales.x.stacked && stacked.options.scales.y.stacked);
 const line = make({ type: "line" }), poly = make({ type: "polyline" }), area = make({ type: "area" });
 assert.deepStrictEqual([line.type, poly.type, area.type], ["line", "line", "line"]);
-assert.deepStrictEqual([line.data.datasets[0].tension, poly.data.datasets[0].tension], [0.4, 0]);
+assert.deepStrictEqual([line.data.datasets[0].tension, poly.data.datasets[0].tension], [0.3, 0]);
 assert.deepStrictEqual([line.data.datasets[0].fill, area.data.datasets[0].fill], [false, true]);
-assert.strictEqual(area.data.datasets[0].backgroundColor, alpha("#111111", 0x55 / 255));  // 영역형 라인은 색 알파 0x55
+assert.strictEqual(area.data.datasets[0].backgroundColor, alpha("#111111", 0.14));  // 영역형 라인은 옅은 색(알파 0.14)
 assert.strictEqual(area.data.datasets[0].borderColor, "#111111");
 for (const t of ["doughnut", "pie"]) {
   const c = make({ type: t });

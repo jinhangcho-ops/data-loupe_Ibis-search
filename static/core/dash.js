@@ -31,7 +31,7 @@ function anaConfig(d, view, colors, options = {}) {
   if (view === "hist") {
     const e = d.histogram.edges;
     return chart("bar", d.histogram.counts.map((_, i) => `${shownum(e[i])}–${shownum(e[i + 1])}`),
-      [{ label: "행 수", data: d.histogram.counts, backgroundColor: main, barPercentage: 1, categoryPercentage: 0.96 }],
+      [{ label: "행 수", data: d.histogram.counts, backgroundColor: main, barPercentage: 1, categoryPercentage: 0.96, borderRadius: 2, maxBarThickness: 120 }],
       { x: { ...axis, title: title(d.column) }, y: { ...axis, title: title("행 수") } });
   }
   if (view === "box") {
@@ -77,7 +77,7 @@ function anaConfig(d, view, colors, options = {}) {
     { x: { ...axis, title: title(d.x) }, y: { ...axis, title: title(d.y) } });
   if (view === "groups") return chart("bar", d.labels, [{ label: aggName(d.agg), data: d.values, backgroundColor: main }],
     { x: { ...axis, title: title(d.by) }, y: { ...axis, title: title(d.agg === "count" ? "개수" : `${d.value} ${aggName(d.agg)}`) } });
-  return chart("line", d.labels, [{ label: aggName(d.agg), data: d.values, borderColor: main, backgroundColor: main, borderWidth: 2, pointRadius: d.labels.length > 60 ? 0 : 2, spanGaps: true }],
+  return chart("line", d.labels, [{ label: aggName(d.agg), data: d.values, borderColor: main, backgroundColor: main, borderWidth: 2, tension: 0.3, pointRadius: d.labels.length > 24 ? 0 : 3, spanGaps: true }],
     { x: { ...axis, title: title(UNIT_NAMES[d.unit]) }, y: { ...axis, title: title(d.agg === "count" ? "개수" : `${d.value} ${aggName(d.agg)}`) } });
 }
 
@@ -259,14 +259,14 @@ function chartConfig(card, colors, options = {}) {
   const datasets = (pie ? s.datasets.slice(0, 1) : s.datasets).map((d, i) => {
     if (pie) {
       const parts = s.labels.map((l, j) => pickColor(card, "parts", l, colors, j));
-      return { label: d.label, data: d.values, backgroundColor: parts, borderColor: colors.card, borderWidth: 2 };
+      return { label: d.label, data: d.values, backgroundColor: parts, borderColor: colors.card, borderWidth: 2, borderRadius: type === "doughnut" ? 4 : 0, ...(type === "doughnut" ? { cutout: "62%" } : {}) };
     }
     const c = color(d, i), asLine = line || (!type && d.type === "line");
     if (!type) return { type: d.type || "bar", label: d.label, data: d.values, yAxisID: d.axis === "right" ? "y1" : "y", backgroundColor: c, borderColor: c,
-                        borderDash: d.dash === "dashed" ? [6, 4] : [], borderWidth: asLine ? 2 : 0, pointRadius: 2, spanGaps: true, order: asLine ? 0 : 1 };
-    if (!line) return { label: d.label, data: d.values, backgroundColor: c };
-    return { label: d.label, data: d.values, borderColor: c, backgroundColor: type === "area" || type === "radar" ? alpha(c, 0x55 / 255) : c, fill: type === "area" || type === "radar",
-             tension: type === "line" ? 0.4 : 0, borderWidth: 2, pointRadius: s.labels.length > 60 ? 0 : 2, spanGaps: true };
+                        borderDash: d.dash === "dashed" ? [6, 4] : [], borderWidth: asLine ? 2 : 0, tension: 0.3, pointRadius: s.labels.length > 24 ? 0 : 3, spanGaps: true, order: asLine ? 0 : 1 };
+    if (!line) return { label: d.label, data: d.values, backgroundColor: c, ...(stacked && i < s.datasets.length - 1 ? { borderRadius: 0 } : {}) };  // 누적 막대는 맨 위 조각만 둥글게
+    return { label: d.label, data: d.values, borderColor: c, backgroundColor: type === "area" || type === "radar" ? alpha(c, 0.14) : c, fill: type === "area" || type === "radar",
+             tension: type === "line" || type === "area" ? 0.3 : 0, borderWidth: 2, pointRadius: s.labels.length > 24 ? 0 : 3, spanGaps: true };
   });
   const legend = { display: pie || datasets.length > 1, labels: { color: colors.text } };
   const scales = pie ? {} : type === "radar" ? { r: { ticks: { color: colors.text, backdropColor: "transparent" }, grid: { color: colors.line }, pointLabels: { color: colors.text } } }
