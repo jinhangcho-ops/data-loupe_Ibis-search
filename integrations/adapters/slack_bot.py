@@ -19,6 +19,8 @@ def clients(bot_token, app_token):
 def reply(response_url, text):
     """명령에 답한다(요청한 사람에게만 보임). response_url은 Slack이 명령마다 주는 답장 주소."""
     from slack_sdk.webhook import WebhookClient
+    from integrations.adapters import transport
+    transport.log("POST", response_url)  # 답에 데이터 행이 실릴 수 있어 보낸 요청 기록에 남긴다(slack_sdk는 transport를 거치지 않는다)
     WebhookClient(response_url).send(text=text, response_type="ephemeral")
 
 

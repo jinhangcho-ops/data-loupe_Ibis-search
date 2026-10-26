@@ -1,4 +1,5 @@
 """데이터 연결. 폴더의 파일을 열거나, 연결 주소로 DB에 접속한다."""
+import contextlib
 import functools
 import gc
 import os
@@ -298,6 +299,25 @@ def drop_copy(con, copy):
             Path(copy).unlink()
     except (OSError, AttributeError):
         pass
+
+
+def drop_table(con, name, schema=None, kind="TABLE", exists=False):
+    """테이블(kind="VIEW"면 뷰)을 지운다. Ibis 12의 drop_table은 sqlglot 30에서 빈 문장을 만들어(DuckDB 'Parser Error', SQLite 'incomplete input')
+    같은 문장을 연결의 SQL 방언으로 직접 만든다."""
+    import sqlglot
+    statement = sqlglot.exp.Drop(kind=kind, exists=exists, tables=[sqlglot.table(name, db=schema or None, quoted=con.compiler.quoted)])
+    cursor = con.raw_sql(statement.sql(con.dialect))
+    if cursor is not getattr(con, "con", None):  # DuckDB의 raw_sql은 연결 자체를 돌려준다
+        getattr(cursor, "close", lambda: None)()
+
+
+def drop_memtable(con, expr):
+    """Ibis가 memtable(expr)을 con에 올린 임시 테이블을 지운다(DuckDB는 Arrow 표를 등록한 뷰라 연결이 끝날 때까지 메모리에 남는다).
+    지우지 못해도 결과에는 영향이 없어 오류는 내지 않는다."""
+    op = expr.op()
+    with contextlib.suppress(Exception):
+        drop_table(con, op.name, kind="VIEW" if con.name == "duckdb" else "TABLE", exists=True)
+    getattr(con, "_memtables", set()).discard(op)  # Ibis가 다시 올리지 않았다고 여기지 않게
 
 
 CHECK_EVERY = 1.0  # refresh_csv가 CSV를 다시 확인하는 최소 간격(초)

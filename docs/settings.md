@@ -76,6 +76,6 @@
 
 그 밖에 Druid, Exasol, Materialize, RisingWave, SingleStore도 됩니다. DW(Redshift는 `postgres://`, Synapse는 `mssql://`로 접속)와 DL(Trino, Spark·Flink는 Java가 필요하고 소스로 실행할 때만, DuckDB 확장 httpfs·delta·iceberg)도 같은 방식입니다.
 
-**드라이버 확인**: 연결 카드의 [DB 주소] 탭에서 [드라이버 확인]을 누르면 DB·DW·DL별로 설치됨·없음·프로그램 필요와 설명, 설치 명령([복사])이 나옵니다. 연결이 드라이버 때문에 실패해도 같은 설명과 명령이 그 자리에 뜹니다. 프로그램은 아무것도 자동으로 받거나 설치하지 않으니 명령을 직접 실행하세요. 소스 실행은 `pip install "ibis-framework[x]==버전"`, exe는 `py -3.14 -m pip install --target "%APPDATA%\DataLoupe\drivers" "ibis-framework[x]==버전"`을 실행한 뒤 프로그램을 다시 켭니다(Python 3.14 필요, [python.org](https://www.python.org/downloads/)).
+**드라이버 확인**: 연결 카드의 [DB 주소] 탭에서 [드라이버 확인]을 누르면 DB·DW·DL별로 설치됨·없음·프로그램 필요와 설명, 설치 명령([복사])이 나옵니다. 연결이 드라이버 때문에 실패해도 같은 설명과 명령이 그 자리에 뜹니다. 프로그램은 아무것도 자동으로 받거나 설치하지 않으니 명령을 직접 실행하세요. 소스 실행은 `pip install -c constraints.txt "ibis-framework[x]==버전"`, exe는 `py -3.14 -m pip install --target "%APPDATA%\DataLoupe\drivers" -c "<설치 폴더>\_internal\constraints.txt" "ibis-framework[x]==버전"`을 실행한 뒤 프로그램을 다시 켭니다. `-c`는 드라이버가 끌어오는 라이브러리를 앱과 같은 버전으로 고정합니다. 앱의 [복사]가 실제 경로를 넣어 줍니다(Python 3.14 필요, [python.org](https://www.python.org/downloads/)).
 
 **예**: 회사 Postgres 서버 `db.company.local`의 `sales` DB → 주소 `postgres://db.company.local:5432/sales`, 아이디·비밀번호는 칸에 따로(주소에 비밀번호를 쓰지 마세요).

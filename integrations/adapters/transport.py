@@ -19,7 +19,7 @@ SAFE_PART = re.compile(r"(?=.{1,23}\Z)[a-z]+(?:[._-]?[A-Za-z][a-z]+)*|v\d+[a-z]{
 
 
 class Keep(urllib.request.HTTPRedirectHandler):
-    """넘겨주기를 따라가지 않는다(3xx는 HTTPError가 된다). collect/collect_http.Keep과 같은 것."""
+    """넘겨주기를 따라가지 않는다(3xx는 HTTPError가 된다). collect/collect_http.Keep과 같은 것(연동 화면이 수집 모듈을 올리지 않게 따로 둔다: test_lazy_loading_memory)."""
 
     def redirect_request(self, *args, **kwargs):
         return None

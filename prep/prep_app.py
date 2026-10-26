@@ -1,4 +1,5 @@
 """Data Loupe 분석 화면(전처리·분석·그래프)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
+import contextlib
 import datetime as dt
 import json
 import re
@@ -13,7 +14,6 @@ from core import scan_size
 from core import server
 from core import settings
 from core import source
-from core import sql_exec
 from core.server import app, get_con, state
 
 
@@ -307,6 +307,19 @@ def known_rows(body):
     return item[1] if item and item[0] else server.row_count(body.get("schema"), body["base"])
 
 
+def sample_run(arrow, work, con=None):
+    """표본(arrow)을 memtable로 work에 주고 그 결과를 돌려준다(연결 스레드에서). 끝나면 그 memtable을 올린 연결(기본 DuckDB·con)에서 지운다."""
+    def go():
+        part = ibis.memtable(arrow)
+        try:
+            return work(part)
+        finally:
+            for db in {ibis.get_backend(), con} - {None}:
+                if part.op() in getattr(db, "_memtables", ()):
+                    source.drop_memtable(db, part)
+    return run(go)
+
+
 def sampled(body, key, size, fresh):
     """이 테이블의 표본 (pyarrow 표, 표본 정보 {rows, method, passed}). 방금 같은 크기로 읽은 것이 있으면 그것(fresh면 새로 읽는다).
     표본은 profiler가 싼 방법부터 차례로 읽는다. 행 수는 /api/shape가 세어 둔 것을 쓴다."""
@@ -350,7 +363,7 @@ def profile():
     found = None if fresh else profiler.cached(key, size)
     if found is None or "profile" not in found:
         arrow, info = sampled(body, key, size, fresh)
-        stats = run(lambda: prep_profile.profile(ibis.memtable(arrow)))  # 표본은 이 PC에서 센다
+        stats = sample_run(arrow, prep_profile.profile)  # 표본은 이 PC에서 센다
         guesses, facts = profiler.infer(arrow), file_facts(body["base"])
         for column in stats["columns"]:
             column["infer"] = {**guesses.get(column["name"], {}), **({"exact": facts["columns"][column["name"]]} if facts and column["name"] in facts["columns"] else {})}
@@ -366,7 +379,7 @@ def patterns():
     found = None if fresh else profiler.cached(key, size)
     if found is None or "patterns" not in found:
         arrow, info = sampled(body, key, size, False)  # profile이 방금 읽은(refresh면 새로 읽은) 표본
-        found = profiler.remember(key, size, patterns=run(lambda: prep_profile.patterns(ibis.memtable(arrow), size)), sampled=info)
+        found = profiler.remember(key, size, patterns=sample_run(arrow, lambda t: prep_profile.patterns(t, size)), sampled=info)
     return jsonify(columns=found["patterns"])
 
 
@@ -443,7 +456,7 @@ def analyzed(body):
     key, size = table_key(recipe), sample_size(body)
     arrow, info = sampled(recipe, key, size, False)
     con = get_con()
-    found = run(lambda: stats.analyze(prep_expr.build(con, recipe, ibis.memtable(arrow))[0], how))  # 표본은 이 PC에서 센다
+    found = sample_run(arrow, lambda t: stats.analyze(prep_expr.build(con, recipe, t)[0], how), con)  # 표본은 이 PC에서 센다
     return {**found, "data": {"full": False, **info}}
 
 
@@ -521,21 +534,6 @@ def plain_rows(arrow):
     return frame.astype(object).where(frame.notna(), None)
 
 
-def drop_memtable(db, op):
-    """insert가 DB에 올린 임시 테이블(memtable)을 지운다. Ibis의 drop_table이 안 되는 연결(SQLite: 'incomplete input')은
-    그 방언으로 따옴표를 친 DROP TABLE IF EXISTS를 직접 보낸다. 지우지 못해도 넣은 결과에는 영향이 없어 오류는 내지 않는다."""
-    import contextlib
-    try:
-        db.drop_table(op.name, force=True)
-    except Exception:
-        exp = sql_exec.glot()[1]
-        with contextlib.suppress(Exception):
-            cursor = db.raw_sql(f"DROP TABLE IF EXISTS {exp.to_identifier(op.name, quoted=True).sql(sql_exec.dialect_of(db))}")
-            if cursor is not getattr(db, "con", None):
-                getattr(cursor, "close", lambda: None)()
-    getattr(db, "_memtables", set()).discard(op)  # Ibis가 다시 올리지 않았다고 여기지 않게
-
-
 def insert_all(db, name, schema, expr):
     """db에 name 테이블을 expr의 스키마로 만들고 expr(이 PC의 식)의 결과를 묶음씩 넣는다. 행 수를 돌려준다. 실패하면 만든 테이블을 지운다.
     Ibis는 묶음을 DB의 임시 테이블(memtable)로 올린 뒤 INSERT … SELECT로 넣는데, 그 임시 테이블을 프로그램이 끝날 때까지 두고
@@ -549,10 +547,11 @@ def insert_all(db, name, schema, expr):
             try:
                 db.insert(name, part, database=schema)
             finally:
-                drop_memtable(db, part.op())
+                source.drop_memtable(db, part)
             rows += batch.num_rows
     except BaseException:
-        db.drop_table(name, database=schema, force=True)
+        with contextlib.suppress(Exception):  # 지우지 못해도 원래 오류를 낸다
+            source.drop_table(db, name, schema)
         raise
     finally:
         server.forget_tables()  # 새 테이블이 생겼다

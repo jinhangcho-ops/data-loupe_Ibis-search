@@ -95,7 +95,8 @@ def source_key(recent):
         return file_key(scheme, *re.match(r"([^/\?#]*)([^?#]*)", rest).groups())
     try:
         parts = urlsplit(url)
-        return f"url:{parts.scheme}://{parts.hostname or ''}:{parts.port or ''}/{parts.path.strip('/')}"
+        query = "" if parts.hostname else "?" + "&".join(sorted(p for p in parts.query.split("&") if p and not source.secret_param(p)))  # Databricks·Athena: 어디에 붙는지가 query에만 있다
+        return f"url:{parts.scheme}://{parts.hostname or ''}:{parts.port or ''}/{parts.path.strip('/')}" + (query if query != "?" else "")
     except ValueError:  # host·port를 읽을 수 없는 주소(예: 포트가 숫자가 아님)는 경로로 본다
         netloc, path = re.match(r"([^/\?#]*)([^?#]*)", rest).groups()
         return f"url:{scheme}://{netloc.split('@')[-1].lower()}/{path.replace(chr(92), '/').strip('/')}"  # 계정 부분만 빼고 그대로

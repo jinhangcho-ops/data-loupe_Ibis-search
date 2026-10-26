@@ -14,6 +14,7 @@ from core import monitor
 from core import result
 from core import scratch
 from core import settings
+from core import source
 
 MAX_ROWS = 1_000_000  # 받아 둘 결과의 최대 행 수
 MAX_BYTES = 500 * 1024 * 1024  # 받아 둘 결과의 최대 크기(받은 Arrow 묶음의 바이트)
@@ -44,7 +45,7 @@ def local():
 
 def drop(name):
     try:
-        local().drop_table(name, force=True)
+        source.drop_table(local(), name, exists=True)
     except Exception:  # 지우지 못해도 연결을 바꾸면 폴더째 지운다.
         pass
 
@@ -121,10 +122,14 @@ def fetch(key, expr, stop, known=None, cap=True):
                 drop(name)
                 return keep(key, (None, None))
             part = pa.Table.from_batches([batch]).append_column(ROW, pa.array(range(rows, rows + batch.num_rows), pa.int64()))
-            if rows or name in con.list_tables():
-                con.insert(name, part)
-            else:
-                con.create_table(name, ibis.memtable(part))  # Arrow 표를 바로 주면 이 조합(ibis 12 + duckdb 1.5)에서 오류가 난다
+            part = ibis.memtable(part)  # Arrow 표를 바로 주면 이 조합(ibis 12 + duckdb 1.5)에서 오류가 난다
+            try:
+                if rows or name in con.list_tables():
+                    con.insert(name, part)
+                else:
+                    con.create_table(name, part)
+            finally:
+                source.drop_memtable(con, part)
             rows += batch.num_rows
         if name not in con.list_tables():  # 결과가 없으면 컬럼만 있는 빈 테이블
             con.create_table(name, schema=ibis.schema({**expr.schema(), ROW: "int64"}))

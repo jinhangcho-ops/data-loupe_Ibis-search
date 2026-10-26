@@ -92,7 +92,7 @@ python -m pytest tests_pytest -q
 DuckDB, Parquet, CSV 외의 DB에 접속하려면 해당 백엔드를 추가로 설치합니다. 설치되지 않은 DB에 접속하면 프로그램이 이 명령을 안내합니다.
 
 ```bash
-pip install 'ibis-framework[mssql]'      # [] 안은 DB 이름: oracle, clickhouse, snowflake 등
+pip install -c constraints.txt "ibis-framework[mssql]==12.0.0"      # [] 안은 DB 이름: oracle, clickhouse, snowflake 등. 버전은 requirements.txt와 같게
 ```
 
 ## 라이선스

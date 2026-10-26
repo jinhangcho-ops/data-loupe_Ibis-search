@@ -144,10 +144,8 @@ def create(con, schema, name, arrow_schema):
 
 @source.on_worker
 def drop(con, schema, name):
-    """테이블을 지운다. Ibis 12의 drop_table은 지금 쓰는 sqlglot(30)에서 빈 문장(DROP TABLE)을 만들어, 같은 문장을 연결의 SQL 방언으로 직접 만든다."""
-    import sqlglot
-    statement = sqlglot.exp.Drop(kind="TABLE", tables=[sqlglot.table(name, db=schema or None, quoted=con.compiler.quoted)])
-    con.raw_sql(statement.sql(con.dialect))
+    """테이블을 지운다(source.drop_table: DROP TABLE 문장을 연결의 SQL 방언으로 직접 만든다)."""
+    source.drop_table(con, name, schema)
 
 
 @source.on_worker
@@ -160,7 +158,7 @@ def insert(con, schema, name, data):
     try:
         con.insert(name, part, database=schema or None)
     finally:
-        prep_app.drop_memtable(con, part.op())
+        source.drop_memtable(con, part)
 
 
 IN_LIMIT = 1000  # IN 목록 하나에 넣는 값의 수. Oracle은 1000개까지만 받는다(ORA-01795).
