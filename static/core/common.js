@@ -379,6 +379,7 @@ api("/api/update").then(u => {
   $("upd-notes").textContent = (u.notes || "릴리스 노트를 받지 못했어요. GitHub Releases에서 볼 수 있어요.").replace(/^#{2,3} /gm, "■ ");  // 글자로만 넣는다(노트의 HTML은 실행하지 않는다)
   $("upd-open").onclick = () => $("upd-panel").classList.remove("hidden");
   $("upd-close").onclick = () => $("upd-panel").classList.add("hidden");
+  $("upd-panel").onclick = e => { if (e.target === $("upd-panel")) $("upd-panel").classList.add("hidden"); };
   $("upd-go").onclick = () => busy($("upd-go"), async () => {
     say("upd-msg", `v${u.latest} 설치 프로그램을 받는 중이에요. 잠시 걸려요…`, "hint");
     try { say("upd-msg", (await api("/api/features/install", { features: SERVER.features.on, version: u.latest })).text, true); }

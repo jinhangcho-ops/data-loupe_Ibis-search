@@ -60,7 +60,7 @@ NOTES_LIMIT = 50_000  # 화면에 보일 릴리스 노트의 최대 바이트
 
 def update():
     """새 버전 {current, latest, newer, notes(새 버전의 RELEASE_NOTES.md 글, 못 받으면 None), check(확인을 켰는지)}. 개발 실행·시험 빌드·확인을 끈 경우·인터넷이 안 되면 newer=False.
-    GitHub에 보내는 것은 최신 릴리스 주소를 여는 요청 하나뿐이다(데이터 값은 보내지 않는다)."""
+    GitHub에는 최신 릴리스 주소를 여는 요청과, 새 버전이 있으면 그 릴리스 노트를 받는 요청만 보낸다(데이터 값은 보내지 않는다)."""
     from core import settings
     current, on = state()["version"], settings.get("update_check") != "off"
     if ini_path() is None or not current or current == "0.0.0" or not on:
@@ -73,7 +73,7 @@ def update():
         except OSError:  # 인터넷(프록시)이 안 되면 조용히 넘어간다
             UPDATE["latest"] = None
     latest = UPDATE["latest"]
-    now, new = numbers(current) if current else None, numbers(latest) if latest else None
+    now, new = numbers(current), numbers(latest) if latest else None
     newer = bool(now and new and new > now)
     if newer and "notes" not in UPDATE:  # 새 버전이 있을 때만 그 릴리스 노트(추가·개선·삭제)를 받는다
         try:

@@ -18,6 +18,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: 릴리스 노트 확인(태그일 때, 빌드 전에)
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          # release 작업이 올릴 CHANGELOG.md의 '## 태그' 절이 있는지 빌드 전에 본다(Windows checkout은 줄 끝이 CRLF라 \r을 뗀다).
+          if ! awk -v head="## $TAG" '{sub(/\r$/, "")} $0 == head {on = 1; next} /^## v/ {on = 0} on && /[^[:space:]]/ {found = 1} END {exit !found}' CHANGELOG.md; then
+            echo "CHANGELOG.md에 '## $TAG' 절(추가·개선·삭제)을 먼저 쓰고 태그를 올리세요"; exit 1
+          fi
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"  # core/drivers.py FROZEN_PYTHON과 같게
@@ -67,9 +77,8 @@ jobs:
           hash=$(sha256sum DataLoupe-setup.exe | cut -d' ' -f1)
           echo "$hash  DataLoupe-setup.exe" > DataLoupe-setup.exe.sha256
           line="DataLoupe-setup.exe SHA-256: \`$hash\`"
-          # 릴리스 노트: CHANGELOG.md의 '## v버전' 절(추가·개선·삭제). 없으면 올리지 않는다(앱이 새 버전을 알릴 때 이 파일을 보여 준다).
+          # 릴리스 노트: CHANGELOG.md의 '## v버전' 절(추가·개선·삭제). 있는지는 build 작업이 빌드 전에 확인했다(앱이 새 버전을 알릴 때 이 파일을 보여 준다).
           awk -v head="## $TAG" '$0 == head {on = 1; next} /^## v/ {on = 0} on' CHANGELOG.md | sed '/./,$!d' > RELEASE_NOTES.md
-          if ! grep -q '[^[:space:]]' RELEASE_NOTES.md; then echo "CHANGELOG.md에 '## $TAG' 절이 없습니다"; exit 1; fi
           notes="$line"$'\n\n'"$(cat RELEASE_NOTES.md)"
           # 같은 태그로 다시 돌려도 실패하지 않게: 릴리스가 있으면 파일을 덮어 올리고 설명(지문 줄 + 노트)을 바꾸며, 없으면 만든다. 태그를 옮기면 GitHub이 기존 릴리스를 초안으로 돌려서 --draft=false로 다시 공개한다.
           if gh release view "$TAG" > /dev/null 2>&1; then

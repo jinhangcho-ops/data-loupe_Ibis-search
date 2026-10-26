@@ -394,3 +394,8 @@ def test_changelog_sections_and_release_uses_them():
         assert [h for h in re.findall(r"^### (.+)$", body, flags=re.M)] == ["추가", "개선", "삭제"], version
     flow = (ROOT / ".github" / "workflows" / "build-exe.yml").read_text(encoding="utf-8")
     assert "CHANGELOG.md" in flow and flow.count("RELEASE_NOTES.md") >= 4 and "--generate-notes" not in flow
+    import yaml
+    steps = yaml.safe_load(flow)["jobs"]["build"]["steps"]
+    check = next(i for i, x in enumerate(steps) if "CHANGELOG.md" in x.get("run", ""))
+    assert check < next(i for i, x in enumerate(steps) if "pip install" in x.get("run", ""))  # 절이 없으면 빌드 전에 바로 실패
+    assert steps[check]["if"] == "github.ref_type == 'tag'" and "sub(/\\r$/" in steps[check]["run"]  # Windows checkout의 CRLF
