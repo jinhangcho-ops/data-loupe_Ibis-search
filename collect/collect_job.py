@@ -111,11 +111,17 @@ def read_record(path):
         return None
 
 
-def stale(path):
-    """진행 기록(path)을 마지막으로 쓴 지 MAX_AGE보다 오래됐는지(그러면 이어 받지 않고 처음부터)."""
+def stale(path, record):
+    """진행 기록이 오래돼 이어 받지 않고 처음부터 받을지. 마지막으로 쓴 지 MAX_AGE가 넘었거나,
+    하루 한도로 멈춘 것(limited)이 아닌데 시작한 지 MAX_AGE가 넘었으면({today}가 시작한 날로 고정돼 어제 날짜로 받게 된다) 오래된 것."""
     try:
-        return time.time() - path.stat().st_mtime > MAX_AGE.total_seconds()
+        if time.time() - path.stat().st_mtime > MAX_AGE.total_seconds():
+            return True
     except OSError:
+        return False
+    try:
+        return not record.get("limited") and dt.datetime.now() - dt.datetime.fromisoformat(record["began"]) > MAX_AGE
+    except (KeyError, TypeError, ValueError):
         return False
 
 
@@ -125,7 +131,7 @@ def resumable(config):
         return None
     path = parts(output_path(config))["record"]
     record = read_record(path)
-    return record if record and record.get("hash") == digest(config) and not stale(path) else None
+    return record if record and record.get("hash") == digest(config) and not stale(path, record) else None
 
 
 # ---------- 상태 ----------
@@ -188,13 +194,14 @@ def start(config, password=""):
         raise Busy(BUSY)
     try:
         record = read_record(found["record"])
-        old = bool(record and record.get("hash") == digest(config) and stale(found["record"]))
+        old = bool(record and record.get("hash") == digest(config) and stale(found["record"], record))
         resumed = bool(record and record.get("hash") == digest(config)) and not old
         if not resumed:
             if record is not None or found["part"].exists() or found["out"].exists():
                 clean(found)
             record = {"hash": digest(config), "mode": config["mode"], "done": [], "rows": 0, "bytes": 0}
             write_record(found["record"], record)
+        record.pop("limited", None)  # 이번에 다시 하루 한도로 멈추면 다시 붙는다
         launch(config, env, path, found, record, password, lock=lock, pages=len(record["done"]) if config["mode"] != "file" else 0, rows=record.get("rows", 0),
                bytes=record.get("bytes", 0), total_bytes=record.get("size"), group=group,
                message="이어 받습니다." if resumed else "지난번 받다 만 것이 하루보다 오래돼 처음부터 받습니다." if old else "")
@@ -253,6 +260,8 @@ def work(config, env, path, found, record, halt, password, lock=None):
                 update(message=f"적재에서 실패 {loaded['failures']:,}행이 있습니다. 넣은 행은 그대로입니다.")
         update(phase="끝", output=str(path) if made else "", wait="")
     except Halt as e:
+        if e.limited and record is not None:  # 하루 한도로 멈춘 것: 다음 날 이어 받아도 된다(stale)
+            record["limited"] = True
         update(phase="실패" if e.failed else "멈춤", **({"error": str(e)} if e.failed else {"message": str(e)}), wait="")
     except Exception as e:
         update(phase="실패", error=str(e) or type(e).__name__, wait="")

@@ -174,7 +174,7 @@ def test_swap_sql_by_dialect():
     assert pg == ("BEGIN; SET LOCAL lock_timeout = '5s'; ALTER TABLE \"s\".\"t\" RENAME TO \"t_ibis_old\"; "
                   "ALTER TABLE \"s\".\"t_ibis_load\" RENAME TO \"t\"; COMMIT")
     assert load_table.swap_sql(fake("mysql", "mysql"), "s", "t", "t_ibis_load") == "RENAME TABLE `s`.`t` TO `s`.`t_ibis_old`, `s`.`t_ibis_load` TO `s`.`t`"
-    assert load_table.swap_sql(fake("clickhouse", "clickhouse"), "s", "t", "t_ibis_load") == 'RENAME TABLE "s"."t" TO "s"."t_ibis_old", "s"."t_ibis_load" TO "s"."t"'  # ALTER … RENAME을 받지 않는다
+    assert load_table.swap_sql(fake("clickhouse", "clickhouse"), "s", "t", "t_ibis_load") == 'EXCHANGE TABLES "s"."t" AND "s"."t_ibis_load"'  # 여러 테이블 RENAME은 원자적이지 않다
     assert load_table.swap_sql(fake("snowflake", "snowflake"), "s", "t", "t_ibis_load") is None
     assert load_table.rename_sql(fake("snowflake", "snowflake"), "s", "t", "t_ibis_old") == 'ALTER TABLE "s"."t" RENAME TO "s"."t_ibis_old"'
     assert load_table.rename_sql(fake("duckdb", "duckdb"), "s", "t", "t_ibis_old") == 'ALTER TABLE "s"."t" RENAME TO "t_ibis_old"'
@@ -203,6 +203,9 @@ def test_check_route_agrees_with_load_on_empty_column(tmp_path, folder):
     c.set_cookie("key", server.KEY)
     got = c.post("/api/load/table/check", json={"config": config(path, db)}).get_json()
     assert got["ok"] and got["message"] == "컬럼이 같아 덧붙일 수 있습니다."
+    pq.write_table(pa.table({"id": [1], "memo": pa.array([None], pa.string()), "extra": ["a"]}), path)
+    got = c.post("/api/load/table/check", json={"config": config(path, db)}).get_json()
+    assert not got["ok"] and got["message"].endswith("다른 점: 결과 파일에만 있는 컬럼 extra")  # 빈 memo는 다른 점이 아니다
 
 
 def test_append_still_rejects_other_type_and_new_column(tmp_path, folder):
@@ -240,14 +243,31 @@ def test_old_record_is_not_resumed(tmp_path, monkeypatch, folder):
     cfg = config(tmp_path / "o.parquet")
     found = collect_job.parts(collect_job.output_path(cfg))
     began = (dt.datetime.now() - dt.timedelta(days=2)).isoformat(timespec="seconds")
-    found["record"].write_text(json.dumps({"hash": collect_job.digest(cfg), "mode": "api", "done": [0], "rows": 1, "bytes": 1, "began": began}), encoding="utf-8")
-    assert collect_job.resumable(cfg) is not None  # 시작은 이틀 전이어도 방금 받았으면(하루 한도로 매일 이어 받기) 이어 받는다
+    write = lambda **more: found["record"].write_text(json.dumps({"hash": collect_job.digest(cfg), "mode": "api", "done": [0], "rows": 1, "bytes": 1, "began": began, **more}), encoding="utf-8")
+    write()
+    assert collect_job.resumable(cfg) is None  # 어제 실패·멈춘 것을 오늘 이어 받으면 {today}가 어제 날짜로 나간다
+    write(limited=True)
+    assert collect_job.resumable(cfg) is not None  # 하루 한도로 멈춘 것은 시작이 이틀 전이어도 방금 받았으면 이어 받는다
     old = time.time() - 2 * 86400
     os.utime(found["record"], (old, old))  # 마지막으로 받은 지 이틀
     assert collect_job.resumable(cfg) is None
     assert collect_job.start(cfg) is False
     collect_job.current["thread"].join()
     assert collect_job.snapshot()["rows"] == 2
+
+
+def test_daily_limit_stop_marks_record_limited(tmp_path, monkeypatch, folder):
+    """하루 한도로 멈추면 진행 기록에 limited가 남고(다음 날 이어 받기), 다른 멈춤은 남지 않는다."""
+    def answer(p):
+        if p == 2:
+            raise Halt("오늘 한도를 다 썼습니다.", failed=False, limited=True)
+        return [{"id": p}]
+    serve(monkeypatch, answer)
+    cfg = config(tmp_path / "o.parquet")
+    collect_job.start(cfg)
+    collect_job.current["thread"].join()
+    found = collect_job.parts(collect_job.output_path(cfg))
+    assert json.loads(found["record"].read_text(encoding="utf-8")).get("limited") is True
 
 
 # ---------- E8 간격 예약의 건너뜀은 '실패할 때만' 알림에서 뺀다 ----------
@@ -277,3 +297,16 @@ def test_key_hint_mentions_index(tmp_path):
     assert load_job.note_for(cfg, None) is None
     cfg["load"]["table"]["key"] = ["id"]
     assert "키(id)로 거를 때 키 컬럼에 인덱스가 없으면" in load_job.note_for(cfg, None)
+
+
+def test_clickhouse_swap_drops_staging_with_old_content(monkeypatch):
+    """ClickHouse는 맞바꾸므로 옛 내용이 staging에 있다: 지우는 것은 staging(원래 이름의 새 내용이 아니다)."""
+    done = []
+    monkeypatch.setattr(load_table, "swap_all", lambda con, statement: done.append(statement))
+    monkeypatch.setattr(load_table, "drop", lambda con, schema, name: done.append(("drop", name)))
+    con = SimpleNamespace(name="clickhouse", dialect="clickhouse", compiler=SimpleNamespace(quoted=True), list_tables=lambda database=None: ["t", "t_ibis_load"])
+    load_table.swap(con, "s", "t", "t_ibis_load")
+    assert done == ['EXCHANGE TABLES "s"."t" AND "s"."t_ibis_load"', ("drop", "t_ibis_load")]
+    done.clear()
+    load_table.swap(SimpleNamespace(**{**vars(con), "name": "mysql", "dialect": "mysql"}), "s", "t", "t_ibis_load")
+    assert done[-1] == ("drop", "t_ibis_old")  # 이름을 옮긴 연결은 옮겨 둔 옛 테이블을 지운다

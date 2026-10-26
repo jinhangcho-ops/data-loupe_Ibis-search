@@ -207,7 +207,7 @@ def take(name, stop):
             item["sent"] = [t for t in item["sent"] if t > now - kept(group)]  # 설정된 가장 넓은 창만큼만 보관한다(요청마다 큰 기록을 읽고 쓰지 않게)
             windows, day = counts(item, group, now)
             if allowed(group, "per_day") is not None and day >= allowed(group, "per_day"):
-                raise Halt(f"오늘 한도를 다 썼습니다. {reset_text(group, now)} 이후 이어 받을 수 있습니다.", failed=False)
+                raise Halt(f"오늘 한도를 다 썼습니다. {reset_text(group, now)} 이후 이어 받을 수 있습니다.", failed=False, limited=True)
             wait = max(0.0, (max(item["sent"]) + group["min_interval"] - now) if item["sent"] else 0.0)
             for (key, width), used in zip(WINDOWS.items(), windows):
                 limit = allowed(group, key)

@@ -1047,7 +1047,7 @@ $("ld-check").onclick = () => busy($("ld-check"), async () => {
     $("ld-check-msg").className = d.ok ? "ok" : "warn";
     const mine = new Map(d.columns ?? []), theirs = new Map(d.table_columns ?? []), table = d.exists ? "테이블" : "테이블 (없음)";
     $("ld-cols").innerHTML = d.columns || d.table_columns ? sampleTable([{ name: "컬럼" }, { name: "결과 파일" }, { name: table }],
-      [...new Set([...mine.keys(), ...theirs.keys()])].map(n => ({ "컬럼": n, "결과 파일": mine.get(n) ?? "—", [table]: theirs.get(n) ?? "—" })), "") : "";
+      [...new Set([...mine.keys(), ...theirs.keys()])].map(n => ({ "컬럼": n, "결과 파일": mine.get(n) === "null" ? "빈 값(테이블 타입으로)" : mine.get(n) ?? "—", [table]: theirs.get(n) ?? "—" })), "") : "";
   } catch (e) { $("ld-check-msg").textContent = e.message; $("ld-check-msg").className = "err"; $("ld-cols").replaceChildren(); }
 });
 

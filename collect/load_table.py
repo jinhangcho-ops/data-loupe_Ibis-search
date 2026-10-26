@@ -115,14 +115,14 @@ def arrow_columns(arrow_schema):
 
 def differences(file, table, append=False):
     """결과 파일과 테이블의 컬럼([[이름, 타입]])이 다른 점. 같으면 빈 글자. 순서는 보지 않는다(이름으로 넣는다).
-    append(덧붙이기)면 테이블에만 있는 컬럼(빈 값으로 넣음)과 값이 하나도 없는 컬럼(null 타입, 테이블 타입으로 넣음)은 다른 점으로 보지 않는다."""
+    값이 하나도 없는 컬럼(null 타입, 테이블 타입으로 넣음)은 타입이 다르다고 보지 않는다. append(덧붙이기)면 테이블에만 있는 컬럼(빈 값으로 넣음)도 다른 점으로 보지 않는다."""
     a, b = dict(map(tuple, file)), dict(map(tuple, table))
     found = []
     if only := [n for n in a if n not in b]:
         found.append(f"결과 파일에만 있는 컬럼 {', '.join(only)}")
     if not append and (only := [n for n in b if n not in a]):
         found.append(f"테이블에만 있는 컬럼 {', '.join(only)}")
-    if other := [f"{n}({a[n]} ↔ {b[n]})" for n in a if n in b and a[n] != b[n] and not (append and a[n] == "null")]:
+    if other := [f"{n}({a[n]} ↔ {b[n]})" for n in a if n in b and a[n] != b[n] and a[n] != "null"]:  # null: 값이 하나도 없어 테이블 타입으로 넣는 컬럼(append_schema)
         found.append(f"타입이 다른 컬럼 {', '.join(other)}")
     return " / ".join(found)
 
@@ -191,14 +191,16 @@ def rename_sql(con, schema, name, new):
 
 def swap_sql(con, schema, name, staging):
     """원래 것을 옆으로, 새 것을 원래 이름으로 한꺼번에 바꾸는 문장. 둘 사이에 테이블이 없는 순간이 없게:
-    PostgreSQL은 한 트랜잭션에서(잠금은 5초까지만 기다림), MySQL·ClickHouse는 RENAME TABLE 한 문장으로. 그 밖의 연결은 None(차례로 바꾼다)."""
+    PostgreSQL은 한 트랜잭션에서(잠금은 5초까지만 기다림), MySQL은 RENAME TABLE 한 문장으로, ClickHouse는 EXCHANGE TABLES로 맞바꾼다. 그 밖의 연결은 None(차례로 바꾼다)."""
     import sqlglot
     old = name + OLD
     if con.name == "postgres":
         return f"BEGIN; SET LOCAL lock_timeout = '5s'; {rename_sql(con, schema, name, old)}; {rename_sql(con, schema, staging, name)}; COMMIT"
-    if con.name in ("mysql", "clickhouse"):  # ClickHouse는 ALTER TABLE … RENAME을 받지 않는다
-        t = lambda n: sqlglot.table(n, db=schema or None, quoted=con.compiler.quoted).sql(con.dialect)
+    t = lambda n: sqlglot.table(n, db=schema or None, quoted=con.compiler.quoted).sql(con.dialect)
+    if con.name == "mysql":
         return f"RENAME TABLE {t(name)} TO {t(old)}, {t(staging)} TO {t(name)}"
+    if con.name == "clickhouse":  # 여러 테이블 RENAME은 원자적이지 않아 맞바꾼다(옛 내용은 staging으로 가고 swap이 그것을 지운다)
+        return f"EXCHANGE TABLES {t(name)} AND {t(staging)}"
     return None
 
 
@@ -231,7 +233,7 @@ def swap(con, schema, name, staging):
                 raise
     except Exception as e:
         raise ValueError(f"테이블 이름을 바꾸지 못해 바꾸지 않았습니다. 원래 테이블은 그대로이고 새 내용은 '{staging}'에 남아 있습니다. ({str(e)[:300]})") from None
-    drop(con, schema, old)
+    drop(con, schema, staging if con.name == "clickhouse" else old)  # ClickHouse는 맞바꿔 옛 내용이 staging에 있다
 
 
 # ---------- 미리 확인 ----------

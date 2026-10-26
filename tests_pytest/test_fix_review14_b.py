@@ -131,3 +131,16 @@ def test_cancel_reopen_fails_asks_reconnect(monkeypatch):
     with pytest.raises(ValueError, match="먼저 연결하세요"):
         server.get_con()
     time.sleep(2)
+
+
+def test_clickhouse_connect_turns_on_exact_aggregates(monkeypatch):
+    """ClickHouse에 접속하면 고유 개수·분위수가 정확한 함수로 바뀐다(이 한 곳에서만 켠다: sql_funcs.exact_clickhouse)."""
+    from ibis.backends.sql.compilers.clickhouse import ClickHouseCompiler
+    for name in ("visit_CountDistinct", "visit_Quantile", "visit_MultiQuantile"):
+        monkeypatch.setattr(ClickHouseCompiler, name, getattr(ClickHouseCompiler, name))  # 시험이 끝나면 되돌린다
+    monkeypatch.setattr(ClickHouseCompiler, "exact", False, raising=False)
+    monkeypatch.setitem(sys.modules, "clickhouse_connect", types.ModuleType("clickhouse_connect"))
+    monkeypatch.setattr(source.ibis, "connect", lambda url, **kw: types.SimpleNamespace(name="clickhouse", raw_sql=lambda sql: None))
+    monkeypatch.setattr(source, "within", lambda seconds, work, *a, **k: work())
+    source.open_url("clickhouse://u@h:8123/db", "", "pw")
+    assert ClickHouseCompiler.exact is True
