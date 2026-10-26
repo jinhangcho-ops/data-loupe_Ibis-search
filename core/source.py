@@ -110,7 +110,7 @@ def find_files(folder, kinds=KINDS, deep=True):
 
 @on_worker
 def open_duckdb(path, read_only=True, memory=None, threads=None):
-    """DuckDB 파일을 연다. memory(MB, 정수)를 주면 작업 메모리 상한을 걸고 넘치는 것은 임시 폴더에 쓴다
+    """DuckDB 파일을 연다. 파일에 뷰·매크로가 있으면 locked=True로 파일·네트워크 읽기를 막는다(결과 저장은 result가 Arrow로 쓴다). memory(MB, 정수)를 주면 작업 메모리 상한을 걸고 넘치는 것은 임시 폴더에 쓴다
     (그 폴더는 close가 지운다). None이면 제한 없이(DuckDB 기본) 연다. threads(정수)를 주면 계산에 쓰는 코어 수, None이면 전부(DuckDB 기본)."""
     cores = {"threads": threads} if threads else {}
     if not memory:
@@ -123,6 +123,12 @@ def open_duckdb(path, read_only=True, memory=None, threads=None):
             scratch.remove(folder)
             raise
         con.scratch = folder
+    # 파일에 든 뷰·매크로는 SQL 검사(sql_exec.check)를 거치지 않고 펼쳐진다(남이 만든 파일이 PC 파일·UNC·URL을 읽게 할 수 있다). 있으면 이 연결의 파일·네트워크 읽기를 막는다
+    code = "select (select count(*) from duckdb_views() where not internal) + (select count(*) from duckdb_functions() where function_type in ('macro', 'table_macro') and not internal)"
+    con.locked = bool(con.con.execute(code).fetchone()[0])
+    if con.locked:
+        for setting in ("autoinstall_known_extensions", "autoload_known_extensions", "enable_external_access"):
+            con.con.execute(f"set {setting}=false")
     # 이 PC에서 계산하는 연결. release가 캐시를 비운 뒤 상한을 되돌리는 문장. 기본 상한은 연 때의 값을 읽어 둔다(reset은 환경에 따라 되돌리지 못했다).
     limit = f"{memory}MB" if memory else con.con.execute("select current_setting('memory_limit')").fetchone()[0]
     con.local = f"set memory_limit='{limit}'"

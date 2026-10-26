@@ -110,12 +110,17 @@ def batches(expr, size=None):
         yield from reader
 
 
+def own_write(backend):
+    """DB가 파일을 직접 쓰지 않고 묶음으로 받아 여기서 쓸 연결: 결과 전체를 받아 버리는 연결과, 파일 접근을 막은 DuckDB 파일(source.open_duckdb의 locked)."""
+    return whole_fetch(backend) or getattr(backend, "locked", False)
+
+
 def write_parquet(expr, path):
     """Parquet으로 저장. 파일 연결은 LazyFrame에서 흘려 쓰고, 결과 전체를 받아 버리는 연결은 묶음씩 받아 이어 쓴다."""
     frame = lazy(expr)
     if frame is not None:
         return frame.sink_parquet(path)
-    if not whole_fetch(ibis.get_backend(expr)):
+    if not own_write(ibis.get_backend(expr)):
         return expr.to_parquet(path)
     import pyarrow.parquet as pq
     with pq.ParquetWriter(path, expr.schema().to_pyarrow()) as writer:
@@ -128,7 +133,7 @@ def write_csv(expr, path):
     frame = lazy(expr)
     if frame is not None:
         return json_text(frame).sink_csv(path)
-    if not has_nested(expr) and not whole_fetch(ibis.get_backend(expr)):
+    if not has_nested(expr) and not own_write(ibis.get_backend(expr)):
         return expr.to_csv(path)
     if not has_nested(expr):  # 결과 전체를 받아 버리는 연결: Ibis의 to_csv와 같은 쓰기(pyarrow)를 묶음마다
         import pyarrow.csv as pcsv

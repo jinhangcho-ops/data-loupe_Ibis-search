@@ -191,6 +191,8 @@ def definition_tree(con, name, item):
         return check(item["sql"], dialect_of(con))
     if con.name not in PARQUET_BACKENDS:
         raise ValueError(f"Parquet 가상 테이블 '{name}'은 DuckDB 파일이나 파일 연결에서만 쓸 수 있습니다.")
+    if getattr(con, "locked", False):
+        raise ValueError(f"Parquet 가상 테이블 '{name}'은 이 DuckDB 파일에서 쓸 수 없습니다. 파일에 뷰·매크로가 있어 다른 파일 읽기를 막았습니다(설정의 안전하게 쓰기).")
     path = item["parquet"].replace("\\", "/").replace("'", "''")
     return glot()[0].parse_one(f"SELECT * FROM read_parquet('{path}')", read="duckdb")
 
