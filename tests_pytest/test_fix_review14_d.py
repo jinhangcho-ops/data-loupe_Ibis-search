@@ -3,7 +3,9 @@
 네트워크·창 없이, 응답은 가짜로 바꾸고 적재는 진짜 DuckDB 파일에 한다. PG·MySQL·Snowflake는 접속 없이 만들어지는 SQL만 본다."""
 import datetime as dt
 import json
+import os
 import threading
+import time
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
@@ -172,6 +174,7 @@ def test_swap_sql_by_dialect():
     assert pg == ("BEGIN; SET LOCAL lock_timeout = '5s'; ALTER TABLE \"s\".\"t\" RENAME TO \"t_ibis_old\"; "
                   "ALTER TABLE \"s\".\"t_ibis_load\" RENAME TO \"t\"; COMMIT")
     assert load_table.swap_sql(fake("mysql", "mysql"), "s", "t", "t_ibis_load") == "RENAME TABLE `s`.`t` TO `s`.`t_ibis_old`, `s`.`t_ibis_load` TO `s`.`t`"
+    assert load_table.swap_sql(fake("clickhouse", "clickhouse"), "s", "t", "t_ibis_load") == 'RENAME TABLE "s"."t" TO "s"."t_ibis_old", "s"."t_ibis_load" TO "s"."t"'  # ALTER … RENAME을 받지 않는다
     assert load_table.swap_sql(fake("snowflake", "snowflake"), "s", "t", "t_ibis_load") is None
     assert load_table.rename_sql(fake("snowflake", "snowflake"), "s", "t", "t_ibis_old") == 'ALTER TABLE "s"."t" RENAME TO "s"."t_ibis_old"'
     assert load_table.rename_sql(fake("duckdb", "duckdb"), "s", "t", "t_ibis_old") == 'ALTER TABLE "s"."t" RENAME TO "t_ibis_old"'
@@ -187,6 +190,19 @@ def test_append_fills_empty_and_missing_columns(tmp_path, folder):
     con = duckdb.connect(str(db), read_only=True)
     assert con.execute("select * from t order by id").fetchall() == [(1, None, None), (2, None, None)]
     con.close()
+
+
+def test_check_route_agrees_with_load_on_empty_column(tmp_path, folder):
+    """[확인]도 적재처럼 값이 하나도 없는 글자 컬럼을 테이블 타입으로 본다(확인은 막고 적재는 넣는 엇갈림이 없게)."""
+    from collect import collect_app  # noqa: F401  적재 라우트가 앱에 달린다
+    from core import server
+    path, db = tmp_path / "out.parquet", tmp_path / "t.duckdb"
+    make_table(db, "create table t (id BIGINT, memo BIGINT)")
+    pq.write_table(pa.table({"id": [1], "memo": pa.array([None], pa.string())}), path)
+    c = server.app.test_client()
+    c.set_cookie("key", server.KEY)
+    got = c.post("/api/load/table/check", json={"config": config(path, db)}).get_json()
+    assert got["ok"] and got["message"] == "컬럼이 같아 덧붙일 수 있습니다."
 
 
 def test_append_still_rejects_other_type_and_new_column(tmp_path, folder):
@@ -225,6 +241,9 @@ def test_old_record_is_not_resumed(tmp_path, monkeypatch, folder):
     found = collect_job.parts(collect_job.output_path(cfg))
     began = (dt.datetime.now() - dt.timedelta(days=2)).isoformat(timespec="seconds")
     found["record"].write_text(json.dumps({"hash": collect_job.digest(cfg), "mode": "api", "done": [0], "rows": 1, "bytes": 1, "began": began}), encoding="utf-8")
+    assert collect_job.resumable(cfg) is not None  # 시작은 이틀 전이어도 방금 받았으면(하루 한도로 매일 이어 받기) 이어 받는다
+    old = time.time() - 2 * 86400
+    os.utime(found["record"], (old, old))  # 마지막으로 받은 지 이틀
     assert collect_job.resumable(cfg) is None
     assert collect_job.start(cfg) is False
     collect_job.current["thread"].join()

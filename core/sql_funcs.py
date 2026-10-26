@@ -319,7 +319,7 @@ def ordered(c):
 
 def exact_clickhouse():
     """ClickHouse에서 고유 개수·분위수가 근사 함수(uniq·quantile)로 바뀌지 않고 정확한 함수(uniqExact·quantileExactInclusive)로 계산되게 한다.
-    quantileExactInclusive는 DuckDB의 percentile_cont와 같은 보간이다. 처음 부를 때 한 번 바꾼다(Ibis를 미리 올리지 않으려고 식을 만들 때 부른다)."""
+    quantileExactInclusive는 DuckDB의 percentile_cont와 같은 보간이다. 처음 부를 때 한 번 바꾼다. ClickHouse 연결은 모두 source.open_url에서 열리므로 거기서 부른다."""
     from ibis.backends.sql.compilers.clickhouse import ClickHouseCompiler as C
     if getattr(C, "exact", False):
         return
@@ -335,7 +335,6 @@ def exact_clickhouse():
 
 def distinct(x, where=None):
     """서로 다른 값 수(빈 값 제외). Polars는 nunique가 빈 값도 세므로 백엔드와 상관없이 빈 값을 걸러 낸 뒤 센다."""
-    exact_clickhouse()
     return x.nunique(where=both(where, x.notnull()))
 
 
@@ -356,14 +355,10 @@ add("median", "aggregate", "중앙값", "순서대로 세웠을 때 가운데 �
 
 
 def quantile_of(p):
-    def build(c):
-        exact_clickhouse()
-        return c.x.quantile(p, where=c.where)
-    return build
+    return lambda c: c.x.quantile(p, where=c.where)
 
 
 def check_p(c):
-    exact_clickhouse()
     if not 0 <= c.p <= 1:
         raise ValueError("분위수는 0~1 사이로 넣으세요(0.9 = 상위 10% 경계).")
     return c

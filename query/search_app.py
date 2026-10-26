@@ -304,7 +304,8 @@ def summary():
     columns = request.json.get("summary_columns") or []  # 화면에서 고른 컬럼. 없으면 표시 컬럼(없으면 전체).
     expr, con = querying.runnable(request.json, select=not columns, ask=request.json), get_con()
     on_db = ibis.get_backend(expr) is con  # 받아 둔 사본에서 하는 요약은 runnable이 이미 물었다
-    if con.name == "bigquery" and on_db and (ask := server.scan_gate(request.json, lambda: server.expr_sql(con, expr))):
+    counted = lambda: expr.aggregate([expr[c].count().name(f"c{i}") for i, c in enumerate(c for c in (columns or expr.columns) if c in expr.columns)])  # 요약이 읽는 컬럼을 집계로: 받는 양이 아니라 읽는 양(요금)을 묻는다
+    if con.name == "bigquery" and on_db and (ask := server.scan_gate(request.json, lambda: server.expr_sql(con, counted()))):
         return ask
     rows = run(lambda: result.get_summary(expr, columns, unique=bool(columns) or not (on_db and held.remote(con))))
     return jsonify(summary={"columns": result.SUMMARY_COLS, "rows": rows})

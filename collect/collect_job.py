@@ -31,7 +31,7 @@ from collect.collect_store import (IDLE, began, SAVE_EVERY, balancer_for, clean,
                            update, with_bom, write_output, write_record)
 
 MIN_FREE = 200 * 1024 * 1024  # 시작할 때 결과 폴더의 디스크에 적어도 남아 있어야 하는 공간
-MAX_AGE = dt.timedelta(days=1)  # 이어 받기는 시작한 지 이만큼 안에서만(오래 전에 받다 만 것에 지금 받은 것을 섞지 않게)
+MAX_AGE = dt.timedelta(days=1)  # 이어 받기는 마지막으로 받은 지 이만큼 안에서만(오래 내버려 둔 것에 지금 받은 것을 섞지 않게, 하루 한도로 매일 이어 받는 것은 이어짐)
 CAPPED = "최대 쪽 수 {:,}에서 멈췄습니다(더 있을 수 있음). 다 받으려면 최대 쪽 수를 늘리세요."  # 예약(schedule.follow)은 이 문구로 시작하면 실패로 알린다
 RUNNING = "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요."
 BUSY = "같은 결과 파일에 다른 곳(다른 창, 프로그램 안 예약, Windows 예약 작업)이 수집하고 있습니다. 끝난 뒤에 시작하세요."
@@ -111,11 +111,11 @@ def read_record(path):
         return None
 
 
-def stale(record):
-    """진행 기록이 시작한 지 MAX_AGE보다 오래됐는지(그러면 이어 받지 않고 처음부터)."""
+def stale(path):
+    """진행 기록(path)을 마지막으로 쓴 지 MAX_AGE보다 오래됐는지(그러면 이어 받지 않고 처음부터)."""
     try:
-        return dt.datetime.now() - dt.datetime.fromisoformat(record["began"]) > MAX_AGE
-    except (KeyError, TypeError, ValueError):
+        return time.time() - path.stat().st_mtime > MAX_AGE.total_seconds()
+    except OSError:
         return False
 
 
@@ -123,8 +123,9 @@ def resumable(config):
     """같은 설정으로 이어 받을 수 있는 진행 기록. 없으면 None."""
     if not config["output"]["path"].strip():
         return None
-    record = read_record(parts(output_path(config))["record"])
-    return record if record and record.get("hash") == digest(config) and not stale(record) else None
+    path = parts(output_path(config))["record"]
+    record = read_record(path)
+    return record if record and record.get("hash") == digest(config) and not stale(path) else None
 
 
 # ---------- 상태 ----------
@@ -187,7 +188,7 @@ def start(config, password=""):
         raise Busy(BUSY)
     try:
         record = read_record(found["record"])
-        old = bool(record and record.get("hash") == digest(config) and stale(record))
+        old = bool(record and record.get("hash") == digest(config) and stale(found["record"]))
         resumed = bool(record and record.get("hash") == digest(config)) and not old
         if not resumed:
             if record is not None or found["part"].exists() or found["out"].exists():

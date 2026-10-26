@@ -112,7 +112,9 @@ class DashCtl {
     if (this.liveOn) return this.stopLive("멈췄어요");
     if (!this.state.live) return this.note(this.liveNote, "실시간 간격을 먼저 적어 주세요. 예: 30초", true);
     if (this.state.as_of) return this.note(this.liveNote, "과거 시점을 보는 중이라 실시간 갱신은 멈춰 있어요", true);
-    this.seconds = (await api("/api/period/every", { text: this.state.live, kind: "live" })).seconds;
+    const every = await api("/api/period/every", { text: this.state.live, kind: "live" });
+    if (every.error || !(every.seconds > 0)) return this.note(this.liveNote, every.error || "실시간 간격을 읽지 못했어요", true);  // 간격 없이 시작하면 쉬지 않고 조회한다
+    this.seconds = every.seconds;
     this.liveOn = true;
     this.times = [];
     this.liveBtn.textContent = "멈추기";

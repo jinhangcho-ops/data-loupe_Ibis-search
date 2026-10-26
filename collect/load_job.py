@@ -94,6 +94,16 @@ def file_schema(path):
         return batches.schema
 
 
+def append_schema(config, path, schema):
+    """테이블 덧붙이기면 값이 하나도 없는 글자 컬럼을 null 타입으로 바꾼 스키마(덧붙일 테이블의 타입으로 넣는다). [확인]과 적재가 같이 쓴다."""
+    load = config["load"]
+    if load["target"] != "table" or load["table"]["how"] != "append":
+        return schema
+    import pyarrow as pa
+    empty = empty_columns(path, schema)
+    return pa.schema([f.with_type(pa.null()) if f.name in empty else f for f in schema])
+
+
 def empty_columns(path, schema):
     """결과 파일에서 값이 하나도 없는 글자 컬럼 이름들. 수집은 이번에 값이 없던 컬럼을 글자 타입으로 만들어, 덧붙일 때 테이블 타입과 달라 보인다."""
     import duckdb
@@ -192,12 +202,7 @@ def run(config, path, password, halt, note):
         with Batches(path, size) as batches:
             if not (found := read_record(path)) or found.get("file", stamp) != stamp:  # 넣을 곳을 열기 전에 실패해도(접속·컬럼 차이) 기록이 있어 다음 수집이 이 결과 파일을 덮어쓰지 않는다
                 write_record(path, record)  # 이 파일의 다른 대상 기록(덜 넣은 것)은 그대로 둔다
-            schema = batches.schema
-            if load["target"] == "table" and load["table"]["how"] == "append":  # 값이 하나도 없는 글자 컬럼은 null 타입으로: 덧붙일 테이블의 타입으로 넣는다
-                import pyarrow as pa
-                empty = empty_columns(path, schema)
-                schema = pa.schema([f.with_type(pa.null()) if f.name in empty else f for f in schema])
-            sink = module.Sink(config, password, schema, resumed, load_id)
+            sink = module.Sink(config, password, append_schema(config, path, batches.schema), resumed, load_id)
             try:
                 if sink.fresh and resumed:  # 이어 넣을 곳이 없어져 새로 만들었으면 처음부터
                     record, resumed = {**new_record(), **({"load_id": load_id} if load_id else {})}, False

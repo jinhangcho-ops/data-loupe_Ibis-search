@@ -59,3 +59,19 @@ def test_period_every_route_uses_remote_default(client, monkeypatch):
     assert got["seconds"] is None and "1분" in got["error"]
     assert client.post("/api/period/every", json={"text": "1분", "kind": "live"}).get_json()["seconds"] == 60
     assert client.get("/api/dash/live_min").get_json()["seconds"] == 60
+
+
+@pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
+def test_live_does_not_start_when_interval_is_refused(tmp_path):
+    """예전에 저장한 원격 대시보드의 '10초'처럼 서버가 간격을 거절하면 시작하지 않는다(간격 없이 시작하면 쉬지 않고 조회한다)."""
+    from test_fix_audit_js import run_node
+    body = """
+(async () => {
+  const c = Object.create(DashCtl.prototype), notes = [];
+  globalThis.api = async () => ({ seconds: null, error: "실시간 갱신 주기는 1분 이상이어야 해요." });
+  Object.assign(c, { liveOn: false, gen: 0, state: { live: "10초" }, note(el, text) { notes.push(text); }, liveBtn: {}, liveNote: {}, tick() { notes.push("tick"); } });
+  await c.toggleLive();
+  console.log(JSON.stringify([c.liveOn, notes]));
+})();
+"""
+    assert run_node(tmp_path, body, files=["dash_ctl.js"]) == [False, ["실시간 갱신 주기는 1분 이상이어야 해요."]]

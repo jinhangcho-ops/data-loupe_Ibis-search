@@ -69,7 +69,7 @@ def table_check():
         path = collect_job.output_path(config) if config["output"]["path"].strip() else None
         columns = None
         if path is not None and path.is_file():
-            columns = load_table.arrow_columns(load_job.file_schema(path))
+            columns = load_table.arrow_columns(load_job.append_schema(config, path, load_job.file_schema(path)))
         return load_table.check(config, password, columns)
 
     return jsonify(hidden(check, password))

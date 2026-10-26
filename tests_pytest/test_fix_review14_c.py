@@ -101,6 +101,8 @@ def test_bigquery_export_and_summary_ask_first(bigquery, remote, monkeypatch):
     for api, extra in [("/api/export", {"format": "csv"}), ("/api/summary", {}), ("/api/sql/export", {"sql": "select * from orders", "format": "csv"})]:
         r = remote.post(api, json={**body, **extra})
         assert r.headers.get("X-Needs-Confirm") == "1", api  # 저장·요약도 읽는 양(요금)을 먼저 묻는다
+        if api == "/api/summary":
+            assert "읽어요" in r.get_json()["text"]  # 요약은 집계라 받는 양이 아니라 읽는 양(dry run)
     assert remote.post("/api/summary", json={**body, "confirmed": True}).status_code == 200
     assert bigquery.runs == []  # 묻는 동안 실제 조회는 보내지 않았다(요약은 이 SQLite 연결로 돌았다)
 

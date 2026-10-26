@@ -151,6 +151,7 @@ def test_today_is_open_day(monkeypatch):
 # ---------- A9 ClickHouse는 정확한 함수로 ----------
 
 def test_clickhouse_exact_distinct_and_quantile():
+    sql_funcs.exact_clickhouse()  # 앱에서는 ClickHouse에 접속할 때(source.open_url) 부른다
     t = ibis.table({"x": "int64", "y": "float64"}, name="t")
     expr = t.aggregate(a=sql_funcs.aggregate("count_distinct", t, "x"), b=sql_funcs.aggregate("p90", t, "y"), c=sql_funcs.aggregate("quantile", t, "y", None, {"p": 0.3}))
     sql = ibis.to_sql(expr, dialect="clickhouse")

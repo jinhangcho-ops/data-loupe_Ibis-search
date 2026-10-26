@@ -191,12 +191,12 @@ def rename_sql(con, schema, name, new):
 
 def swap_sql(con, schema, name, staging):
     """원래 것을 옆으로, 새 것을 원래 이름으로 한꺼번에 바꾸는 문장. 둘 사이에 테이블이 없는 순간이 없게:
-    PostgreSQL은 한 트랜잭션에서(잠금은 5초까지만 기다림), MySQL은 RENAME TABLE 한 문장으로. 그 밖의 연결은 None(차례로 바꾼다)."""
+    PostgreSQL은 한 트랜잭션에서(잠금은 5초까지만 기다림), MySQL·ClickHouse는 RENAME TABLE 한 문장으로. 그 밖의 연결은 None(차례로 바꾼다)."""
     import sqlglot
     old = name + OLD
     if con.name == "postgres":
         return f"BEGIN; SET LOCAL lock_timeout = '5s'; {rename_sql(con, schema, name, old)}; {rename_sql(con, schema, staging, name)}; COMMIT"
-    if con.name == "mysql":
+    if con.name in ("mysql", "clickhouse"):  # ClickHouse는 ALTER TABLE … RENAME을 받지 않는다
         t = lambda n: sqlglot.table(n, db=schema or None, quoted=con.compiler.quoted).sql(con.dialect)
         return f"RENAME TABLE {t(name)} TO {t(old)}, {t(staging)} TO {t(name)}"
     return None
@@ -273,7 +273,7 @@ def plan(table, real, columns, file_columns, resume=False):
     if how == "append":
         if file_columns is None:
             return "테이블이 있습니다. 컬럼은 수집한 뒤 결과 파일과 맞춰 봅니다."
-        if differences(file_columns, columns, append=True):
+        if differences(file_columns, columns, append=True):  # 막을지는 덧붙이기 기준, 글은 전체 다른 점(테이블에만 있는 컬럼도 알림: tests.py 원래 설계)
             raise ValueError(f"컬럼이 달라 덧붙일 수 없습니다. 다른 점: {differences(file_columns, columns)}")
         return "컬럼이 같아 덧붙일 수 있습니다."
     if record is None:

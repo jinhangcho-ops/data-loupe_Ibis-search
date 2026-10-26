@@ -555,7 +555,6 @@ def compute(entry_, slots, body, ctx, align=None, limit=None):
     from core.prep_ops import nan_to_null
     from metrics import metric_kernels as mk
     e = get(entry_) if isinstance(entry_, str) else entry_
-    sql_funcs.exact_clickhouse()  # 지표의 고유 사용자 수가 ClickHouse에서 근사(uniq)가 되지 않게
     if e["cross"]:
         mk.check_align(align)
     ctx.align = align
