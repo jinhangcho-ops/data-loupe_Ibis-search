@@ -196,15 +196,16 @@ def deduped(table, columns, rename=None):
     return table.mutate(_first=first).filter(lambda t: t._first == 0).drop("_first")
 
 
-def write_output(con, table, fmt, out, folder, texts=None):
+def write_output(con, table, fmt, out, folder):
     """table을 out(parquet 또는 csv)으로 쓰고 행 수를 돌려준다. CSV는 Excel이 한글을 바로 읽도록 UTF-8 BOM을 붙인다.
-    CSV는 수식 막기를 한다(core/result.export와 같은 규칙): 수식으로 읽힐 글자로 시작하는 글자 값(texts, 없으면 글자 컬럼)과 컬럼 이름 앞에 '를 붙인다."""
+    CSV는 수식 막기를 한다(core/result.export와 같은 규칙에 숫자로 읽히는 값(-1500)만 그대로): 수식으로 읽힐 글자로 시작하는 글자 값과 컬럼 이름 앞에 '를 붙인다."""
     if fmt == "parquet":
         con.to_parquet(table, out)
         import pyarrow.parquet as pq  # 쓴 파일의 정보에서 행 수를 읽는다(다시 읽어 세지 않는다)
         return pq.read_metadata(out).num_rows
-    texts = [name for name, t in table.schema().items() if t.is_string()] if texts is None else texts
-    table = table.mutate(**{name: (table[name].substr(0, 1).isin(FORMULA_START) & table[name].try_cast("float64").isnull()).ifelse("'" + table[name], table[name]) for name in texts})  # -1500 같은 숫자는 수식이 아니므로 그대로(적재 타입 유지)
+    texts = [name for name, t in table.schema().items() if t.is_string()]
+    number = {name: table[name].try_cast("float64") for name in texts}  # -1500 같은 숫자는 수식이 아니므로 그대로(적재 타입 유지), -inf·nan은 막는다
+    table = table.mutate(**{name: (table[name].substr(0, 1).isin(FORMULA_START) & (number[name].isnull() | number[name].isnan() | number[name].isinf())).ifelse("'" + table[name], table[name]) for name in texts})
     table = table.rename({"'" + name: name for name in table.columns if name[:1] in FORMULA_START})
     plain = Path(folder, "result.csv")
     con.to_csv(table, plain)

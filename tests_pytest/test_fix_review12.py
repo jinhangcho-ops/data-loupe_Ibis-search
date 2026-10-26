@@ -23,10 +23,10 @@ def test_numbers_as_text_stay_numbers(tmp_path):
     con, folder = duck()
     try:
         out = tmp_path / "api.csv"
-        write_output(con, ibis.memtable({"amount": ["-1500", "+2", "=1+1", "-x"]}), "csv", out, folder)
+        write_output(con, ibis.memtable({"amount": ["-1500", "+2", "=1+1", "-x", "-inf", "+nan"]}), "csv", out, folder)
     finally:
         con.disconnect()
-    assert out.read_text(encoding="utf-8-sig").splitlines() == ["amount", "-1500", "+2", "'=1+1", "'-x"]
+    assert out.read_text(encoding="utf-8-sig").splitlines() == ["amount", "-1500", "+2", "'=1+1", "'-x", "'-inf", "'+nan"]
 
 
 def test_alias_bomb_in_keys_is_refused_fast(tmp_path):

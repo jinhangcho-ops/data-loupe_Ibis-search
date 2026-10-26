@@ -687,15 +687,12 @@ def finish_file(config, path, found, info):
             with_bom(raw, readable, "cp949")
         read = {"csv": con.read_csv, "parquet": con.read_parquet, "json": con.read_json}[kind]
         try:
-            table = read(str(readable), **({"sample_size": -1} if kind == "csv" else {}))  # 타입은 파일 전체를 보고 정한다(뒤쪽 수식 값도 글자 컬럼으로)
+            table = read(str(readable), **({"all_varchar": True} if kind == fmt == "csv" else {}))  # CSV→CSV는 글자로 읽어 값 모양(007, 1.10)을 두고 모든 컬럼을 막는다
             rows = con.execute(table.count())
         except Exception as e:
             raise Halt(f"받은 파일을 {kind}로 열 수 없습니다: {str(e)[:300]}") from None
         if kind == fmt == "parquet":
             os.replace(raw, found["out"])
-        elif kind == fmt == "csv":  # 수식 막기를 하려고 다시 쓴다. 글자로 읽어 값의 모양(007, 1.10)은 그대로 두고, 글자로 읽힌 컬럼만 막는다
-            texts = [name for name, t in table.schema().items() if t.is_string()]
-            rows = write_output(con, con.read_csv(str(readable), all_varchar=True), fmt, found["out"], folder, texts)
         else:
             rows = write_output(con, table, fmt, found["out"], folder)
     finally:
