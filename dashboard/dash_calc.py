@@ -682,7 +682,8 @@ def watch_data(card, now, previous):
     time = view.get("time_col")
     kind = expr[time].type() if time else None
     if kind is not None and kind.is_string():  # 글자 시각(수집 결과의 ISO 글자)은 글자 순 max라 시간대 표기(Z·+09:00)가 모두 같을 때만(섞이면 예전처럼 앞 행을 읽고 watch가 시각을 푼다)
-        kind = kind if run(lambda: stats.one(expr.aggregate(n=expr[time].re_extract(ZONE_SUFFIX, 0).nunique())))["n"] <= 1 else None
+        timed = expr.filter(expr[time].notnull())  # 빈 시각은 세지 않는다(Polars는 nunique에 null을 센다)
+        kind = kind if run(lambda: stats.one(timed.aggregate(n=timed[time].re_extract(ZONE_SUFFIX, 0).nunique())))["n"] <= 1 else None
     if kind is not None and (kind.is_temporal() or kind.is_string()):  # 엔티티마다 가장 늦은 시각의 행만 DB에서(앞 행만 읽으면 최근 행을 못 본다). 시각이 모두 빈 엔티티는 그 행들을 그대로
         last = expr.group_by(view["entity"]).aggregate(__last=expr[time].max())  # 창 함수 대신 묶어 붙이기(Polars 연결은 창 함수를 못 한다)
         joined = expr.join(last, view["entity"])

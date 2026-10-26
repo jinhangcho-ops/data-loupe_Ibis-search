@@ -102,6 +102,14 @@ def test_watch_reads_latest_row_for_text_time(monkeypatch, backend):
     assert len(got) == 10 and all(e["last"] == "2026-01-01T04:59:00" for e in got.values())
 
 
+def test_watch_z_text_time_with_empty_time_reads_latest(monkeypatch, backend):
+    """Z 글자 시각에 시각이 빈 행이 섞여도(수집한 JSON에 시각 필드가 빠진 기록) 가장 늦은 행을 본다(Polars는 빈 값을 nunique에 센다)."""
+    df = servers().with_columns(pl.col("seen").dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    df = pl.concat([df, pl.DataFrame({"name": ["s0"], "seen": [None], "cpu": [10.0]}, schema=df.schema)])
+    got = {e["name"]: e for e in watch(monkeypatch, backend, df)["values"]["entities"]}
+    assert len(got) == 10 and all(e["level"] == "bad" for e in got.values())  # 04:10부터 cpu 99: 앞 2000행(03:19까지)만 보면 ok
+
+
 def test_watch_mixed_zone_text_time_picks_real_latest(monkeypatch, backend):
     """시간대 표기가 섞인 글자 시각(써머타임이 바뀌는 날)은 글자 순 max로 고르지 않는다: 실제로 늦은 행(cpu 99)을 본다."""
     df = pl.DataFrame({"name": ["a", "a"], "seen": ["2026-10-25T02:30:00+02:00", "2026-10-25T02:15:00+01:00"], "cpu": [10.0, 99.0]})

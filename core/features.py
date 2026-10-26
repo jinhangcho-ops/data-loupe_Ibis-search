@@ -55,6 +55,13 @@ def numbers(version):
 
 UPDATE = {}  # 이번 실행에서 한 번 물은 결과(앱을 열 때마다 한 번)
 NOTES_LIMIT = 50_000  # 화면에 보일 릴리스 노트의 최대 바이트
+SETUP = {"run": None}  # 이번 실행에서 띄운 설치 프로그램(설치가 앱을 닫기 전까지 앱은 그대로 쓸 수 있다)
+INSTALLING = "설치 프로그램이 진행 중이에요. 설치가 끝나거나 관리자 확인을 거절한 뒤 다시 시도하세요."
+
+
+def installing():
+    run = SETUP["run"]
+    return run is not None and run.poll() is None
 
 
 def update():
@@ -121,8 +128,10 @@ def size(folder):
 
 
 def install(ids, target=None):
-    """ids 기능만 남도록 설치 프로그램(target이 있으면 그 버전, 없으면 지금 버전)을 받아 실행한다. 실행하면 앱은 곧 닫힌다. 안내 글을 돌려준다.
+    """ids 기능만 남도록 설치 프로그램(target이 있으면 그 버전, 없으면 지금 버전)을 받아 실행한다. 설치 프로그램이 파일을 바꾸기 직전에 앱을 닫는다. 안내 글을 돌려준다.
     수집 중이거나, 수집을 빼는데 예약이 남았거나, 설치 드라이브 공간이 모자라면 받기 전에 거절한다."""
+    if installing():  # 두 번 누르면 설치 프로그램 둘이 같은 폴더에 설치한다
+        raise ValueError(INSTALLING)
     ids = check(ids)
     if target is not None and not (isinstance(target, str) and VERSION.fullmatch(target)):
         raise ValueError("업데이트할 버전이 올바르지 않아요.")
@@ -136,7 +145,7 @@ def install(ids, target=None):
         raise ValueError("시험 빌드라 기능을 바꿀 수 없어요. 릴리스 설치 파일로 설치하세요.")
     collect_job = lazy.loaded("collect.collect_job")  # 올라와 있지 않으면 수집이 돈 적이 없다(desktop.py closing과 같게)
     running = getattr(collect_job, "running", None)
-    if running is not None and running():  # 앱이 닫히면 10초 뒤 강제로 끝나 수집 정리가 끊긴다
+    if running is not None and running():  # 설치 프로그램이 앱을 닫으면 수집 정리가 끊긴다
         raise ValueError(collect_job.RUNNING)
     from integrations import schedule
     if any(r["result"] == "도는 중" for r in schedule.runs_view()["runs"]):  # Windows 예약(DataLoupe.exe --run)은 다른 프로세스라 running()이 모른다
@@ -178,4 +187,5 @@ def install(ids, target=None):
     if code:
         scratch.remove(folder)
         raise ValueError(f"설치 프로그램이 바로 끝났어요(코드 {code}). 관리자 확인을 거절했거나 시작하지 못했어요. 앱은 그대로예요.")
+    SETUP["run"] = run  # 앱이 닫히기 전까지 새 수집·두 번째 설치를 막는다(collect_job.start)
     return "설치 프로그램을 실행했어요. 설치가 파일을 바꾸기 직전에 앱이 닫히고, 끝나면 다시 열려요(관리자 확인을 거절하면 앱은 그대로예요)."

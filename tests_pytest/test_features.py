@@ -379,6 +379,7 @@ def test_install_target_version_downloads_that_release(installed, monkeypatch, t
     features.install(["query"], "1.3.0")
     assert all("/v1.3.0/" in u for u in spy.urls)
     scratch.remove(Path(spy.run[0][0]).parent)
+    features.SETUP["run"] = None  # 띄운 척한 설치 프로그램은 끝나지 않는다
     with pytest.raises(ValueError, match="버전"):
         features.install(["query"], "../x")
 

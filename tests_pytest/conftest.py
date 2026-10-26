@@ -33,6 +33,13 @@ def csv_checked_every_call(monkeypatch):
     monkeypatch.setattr(source, "CHECK_EVERY", 0)
 
 
+@pytest.fixture(autouse=True)
+def no_setup_running(monkeypatch):
+    """시험마다 띄운 설치 프로그램이 없는 상태에서 시작한다(가짜 설치 프로그램은 끝나지 않는다)."""
+    from core import features
+    monkeypatch.setitem(features.SETUP, "run", None)
+
+
 @pytest.fixture
 def folder():
     """테스트마다 빈 설정 폴더."""

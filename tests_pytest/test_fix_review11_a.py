@@ -98,6 +98,20 @@ def test_app_does_not_close_itself_while_setup_runs(installed, monkeypatch):
     spy.clean()
 
 
+def test_setup_pending_blocks_second_install_and_new_collect(installed, monkeypatch):
+    """설치 프로그램이 앱을 닫기 전(관리자 확인을 기다리는 동안)에는 두 번째 설치와 새 수집을 막는다(설치가 수집을 끊지 않게)."""
+    from collect import collect_job
+    spy = Spy(monkeypatch)
+    features.install(["query", "collect"])
+    with pytest.raises(ValueError, match="설치 프로그램이 진행 중"):
+        features.install(["query", "collect"])
+    for start in (collect_job.start, collect_job.start_load):
+        with pytest.raises(ValueError, match="설치 프로그램이 진행 중"):
+            start({})
+    assert len(spy.run) == 1
+    spy.clean()
+
+
 # ---------- 11A4 설치 드라이브 공간 ----------
 
 def test_install_refused_when_disk_is_short(installed, monkeypatch):

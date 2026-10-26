@@ -19,6 +19,7 @@ from collect import collect_http
 from collect import collect_limits
 from collect import collect_request as req
 from collect import collect_web
+from core import features
 from core import filelock
 from collect import load_job
 from core import scratch
@@ -168,6 +169,8 @@ def start(config, password=""):
     """작업을 뒤에서 시작한다. (이어 받는지). password는 적재할 곳의 비밀번호로, 작업 동안 메모리에만 둔다."""
     if running():
         raise ValueError(RUNNING)
+    if features.installing():  # 설치 프로그램이 곧 앱을 닫는다
+        raise ValueError(features.INSTALLING)
     config, env = ready(config)
     path = output_path(config)
     if not path.parent.is_dir():
@@ -217,6 +220,8 @@ def start_load(config, password=""):
     """이미 받은 결과 파일(output.path)을 다시 받지 않고 적재만 한다(적재가 실패한 뒤 다시 넣을 때)."""
     if running():
         raise ValueError(RUNNING)
+    if features.installing():
+        raise ValueError(features.INSTALLING)
     config = normalize(config)
     if config["load"]["target"] == "file":
         raise ValueError("적재할 곳(DB 테이블 또는 Kafka)을 고르세요.")
