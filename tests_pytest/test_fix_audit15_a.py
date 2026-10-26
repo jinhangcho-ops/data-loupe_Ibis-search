@@ -60,3 +60,7 @@ def test_prep_sample_run_drops_its_memtable(folder):
     before = set(default.list_tables())  # 다른 시험이 남긴 것은 보지 않는다
     assert prep_app.sample_run(pa.table({"a": [1, 2, 3]}), lambda t: t.a.sum().execute()) == 6
     assert set(default.list_tables()) - before == set()
+    flat = ibis.polars.connect()  # 폴더(파일) 연결: 좌표 단계처럼 표본을 이 연결의 표와 잇는 경우
+    flat.create_table("area", pa.table({"a": [1, 2]}))
+    assert prep_app.sample_run(pa.table({"a": [1, 2, 3]}), lambda t: t.join(flat.table("area"), "a").count().execute(), flat) == 2
+    assert flat.list_tables() == ["area"]

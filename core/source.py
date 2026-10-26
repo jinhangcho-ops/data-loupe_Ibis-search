@@ -316,7 +316,10 @@ def drop_memtable(con, expr):
     지우지 못해도 결과에는 영향이 없어 오류는 내지 않는다."""
     op = expr.op()
     with contextlib.suppress(Exception):
-        drop_table(con, op.name, kind="VIEW" if con.name == "duckdb" else "TABLE", exists=True)
+        if con.name == "polars":  # SQL을 받지 않는다. Polars의 drop_table은 sqlglot을 거치지 않아 된다
+            con.drop_table(op.name, force=True)
+        else:
+            drop_table(con, op.name, kind="VIEW" if con.name == "duckdb" else "TABLE", exists=True)
     getattr(con, "_memtables", set()).discard(op)  # Ibis가 다시 올리지 않았다고 여기지 않게
 
 
