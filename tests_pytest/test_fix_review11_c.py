@@ -55,7 +55,7 @@ def test_formula_guard_compiles_for_mssql(monkeypatch, tmp_path):
 
 
 def test_excel_shows_pc_wall_clock(tmp_path):
-    at = datetime(2024, 3, 2, 0, 0, tzinfo=timezone.utc)
+    at = datetime(2024, 3, 2, 3, 4, tzinfo=timezone.utc)  # 자정이 아니게(UTC PC에서 자정이면 Excel을 읽을 때 날짜로만 돌아온다)
     t = ibis.memtable(pl.DataFrame({"at": [at]}).with_columns(pl.col("at").dt.replace_time_zone("UTC")))
     result.export(t, tmp_path / "x.xlsx")
     zone = source.pc_zone()
