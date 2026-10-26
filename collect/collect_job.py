@@ -687,7 +687,7 @@ def finish_file(config, path, found, info):
             with_bom(raw, readable, "cp949")
         read = {"csv": con.read_csv, "parquet": con.read_parquet, "json": con.read_json}[kind]
         try:
-            table = read(str(readable))
+            table = read(str(readable), **({"sample_size": -1} if kind == "csv" else {}))  # 타입은 파일 전체를 보고 정한다(뒤쪽 수식 값도 글자 컬럼으로)
             rows = con.execute(table.count())
         except Exception as e:
             raise Halt(f"받은 파일을 {kind}로 열 수 없습니다: {str(e)[:300]}") from None

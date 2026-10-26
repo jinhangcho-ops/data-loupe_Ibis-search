@@ -253,8 +253,10 @@ def yaml_tree(node, loader, count):
     """YAML 노드를 Pairs·Items·값으로(줄 번호 포함). count = [지금까지 만든 노드 수]: 별칭을 펼친 뒤 MAX_NODES를 넘으면 ValueError."""
     count[0] += 1
     if count[0] > MAX_NODES:
-        raise ValueError(f"YAML이 너무 커요(별칭 *를 펼치면 {MAX_NODES:,}개가 넘어요). 별칭을 줄여 주세요.")
+        raise ValueError(f"YAML이 너무 커요(별칭 *를 펼친 항목·값이 {MAX_NODES:,}개가 넘어요). 목표를 나누거나 별칭을 줄여 주세요.")
     if isinstance(node, yaml.MappingNode):
+        if any(not isinstance(k, yaml.ScalarNode) for k, _ in node.value):  # 키에 둔 별칭은 세지 않고 펼쳐지므로 막는다
+            raise ValueError("YAML의 키(이름)는 글자여야 해요.")
         return Pairs((loader.construct_object(k, deep=True), yaml_tree(v, loader, count), k.start_mark.line + 1) for k, v in node.value)
     if isinstance(node, yaml.SequenceNode):
         return Items((yaml_tree(n, loader, count), n.start_mark.line + 1) for n in node.value)

@@ -204,7 +204,7 @@ def write_output(con, table, fmt, out, folder, texts=None):
         import pyarrow.parquet as pq  # 쓴 파일의 정보에서 행 수를 읽는다(다시 읽어 세지 않는다)
         return pq.read_metadata(out).num_rows
     texts = [name for name, t in table.schema().items() if t.is_string()] if texts is None else texts
-    table = table.mutate(**{name: table[name].substr(0, 1).isin(FORMULA_START).ifelse("'" + table[name], table[name]) for name in texts})
+    table = table.mutate(**{name: (table[name].substr(0, 1).isin(FORMULA_START) & table[name].try_cast("float64").isnull()).ifelse("'" + table[name], table[name]) for name in texts})  # -1500 같은 숫자는 수식이 아니므로 그대로(적재 타입 유지)
     table = table.rename({"'" + name: name for name in table.columns if name[:1] in FORMULA_START})
     plain = Path(folder, "result.csv")
     con.to_csv(table, plain)
