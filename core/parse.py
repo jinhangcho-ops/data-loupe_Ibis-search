@@ -1,6 +1,7 @@
 """한 줄 입력(조인·기간·조건·정렬·표시 컬럼)과 이어붙이기를 해석해 Ibis 식으로 바꾼다. 입력·출력은 하지 않는다."""
 import bisect
 import datetime as dt
+import decimal
 import difflib
 import functools
 import operator
@@ -101,8 +102,13 @@ def kind(dtype):
 def convert(dtype, text):
     name, cast = type_info(dtype)
     try:
+        if dtype.is_decimal():  # 실수로 바꾸면 큰 소수(decimal(38,0))가 반올림돼 이웃 값과 같아진다. 타입 없는 Decimal은 DECIMAL(18,3)이 되어 넘치므로 자릿수를 정한다
+            value = decimal.Decimal(text.strip())
+            if not value.is_finite():
+                raise ValueError(text)
+            return ibis.literal(value, type=f"decimal(38, {max(dtype.scale or 0, -value.as_tuple().exponent)})")
         return cast(text)
-    except (ValueError, KeyError):
+    except (ValueError, KeyError, decimal.InvalidOperation):
         raise ValueError(f"'{text}'은 {name} 값이 아닙니다.")
 
 

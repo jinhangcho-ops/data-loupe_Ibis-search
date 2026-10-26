@@ -74,19 +74,32 @@ DATE_PARTS = {
 TIME_PARTS = ["%H", "%M", "%S", "%I", "%p"]  # 형식에 이 중 하나라도 있으면 결과는 날짜시간이다.
 
 
-def date_pattern(fmt):
-    """날짜 형식(DATE_PARTS의 글자와 그 사이의 글자)에 맞는 글자만 찾는 정규식. 영문 이름과 AM/PM은 대소문자를 가리지 않는다."""
+def date_pattern(fmt, variants=(DATE_PARTS,)):
+    """날짜 형식(DATE_PARTS의 글자와 그 사이의 글자)에 맞는 글자만 찾는 정규식. 영문 이름과 AM/PM은 대소문자를 가리지 않는다.
+    variants: 글자 모양 사전 여럿을 주면 그중 하나에 맞는 글자를 찾는다(real_dates)."""
     pieces = re.split(r"(%.)", fmt)
     if any(p.startswith("%") and p not in DATE_PARTS for p in pieces):
         raise ValueError(f"날짜 형식에는 {' '.join(DATE_PARTS)}만 쓸 수 있습니다. 예: %Y%m%d, %Y-%m-%d %H:%M:%S")
-    return "(?i)^" + "".join(DATE_PARTS.get(p) or literal(p) for p in pieces) + "$"
+    return "(?i)^(" + "|".join("".join(v.get(p) or DATE_PARTS.get(p) or literal(p) for p in pieces) for v in variants) + ")$"
+
+
+def real_dates(fmt):
+    """date_pattern에 더해 없는 날짜(4월 31일, 2월 30일, 평년 2월 29일)는 빼는 정규식. 달마다 될 수 있는 날만 받는 모양을 |로 잇는다."""
+    if "%d" not in fmt or not any(p in fmt for p in ("%m", "%b", "%B")):
+        return date_pattern(fmt)
+    month = lambda nums: {"%m": "(" + "|".join(f"{n:02}" for n in nums) + ")", "%b": "(" + "|".join(MONTHS[n - 1][:3] for n in nums) + ")", "%B": "(" + "|".join(MONTHS[n - 1] for n in nums) + ")"}
+    leap = "(0[48]|[2468][048]|[13579][26])"  # 4의 배수인 두 자리. %y의 00은 2000년이라 윤년
+    variants = [month([1, 3, 5, 7, 8, 10, 12]), {**month([4, 6, 9, 11]), "%d": "(0[1-9]|[12][0-9]|30)"}, {**month([2]), "%d": "(0[1-9]|1[0-9]|2[0-8])"}]
+    if "%Y" in fmt or "%y" in fmt:  # 연도가 없으면 2월 29일은 받지 않는다
+        variants.append({**month([2]), "%d": "29", "%Y": f"([0-9]{{2}}{leap}|{leap}00)", "%y": f"(00|{leap})"})
+    return date_pattern(fmt, variants)
 
 
 def to_date(col, fmt):
     """글자를 날짜(형식에 시각이 있으면 날짜시간)로. Polars 백엔드는 try_cast("date")가 없고 as_date·as_timestamp는 안 맞는 값에 오류를 내므로,
-    형식에 맞는 모양이 아닌 값은 먼저 빈 값으로 만든다(2026-02-30처럼 모양만 맞는 값은 DB의 오류가 난다)."""
+    형식에 맞는 모양이 아닌 값과 없는 날짜(2026-02-30, 2025-02-29)는 먼저 빈 값으로 만든다(숫자로 못 바꾸는 값이 빈 값이 되는 것과 같게)."""
     col = col.cast("string")
-    col = col.re_search(date_pattern(fmt)).ifelse(col, ibis.null())
+    col = col.re_search(real_dates(fmt)).ifelse(col, ibis.null())
     return col.as_timestamp(fmt).cast("timestamp") if any(p in fmt for p in TIME_PARTS) else col.as_date(fmt)  # cast: 시간대 없는 날짜시간으로
 
 

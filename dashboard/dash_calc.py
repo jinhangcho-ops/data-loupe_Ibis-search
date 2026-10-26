@@ -36,7 +36,7 @@ MERGE = sql_funcs.MERGE  # 일 값을 주·월·연으로 다시 묶을 수 있�
 def merges(agg):
     """일 값을 다시 묶을 수 있는 집계인지(아니면 일 값은 하루 몫의 값 v 하나이고, 주·월·연은 서버가 따로 구한다)."""
     return agg in MERGE
-TRUNC = {"day": "D", "week": "W", "month": "M", "year": "Y"}  # 단위 → Ibis truncate 단위(주는 월요일 시작, analysis.trend와 같다)
+TRUNC = {"day": "D", "week": "W", "month": "M", "year": "Y"}  # 단위 → stats.period_start 단위(주는 어느 DB에서나 월요일 시작, analysis.trend와 같다)
 ROOM = 0.8  # 일 값이 카드 크기 상한의 이만큼까지만 차지하게 한다(나머지는 source 같은 다른 항목)
 PERCENT = "percent"
 MAX_POINTS = result.MAX_POINTS  # 산점도·버블의 점 수(분석의 산점도와 같다)
@@ -114,7 +114,7 @@ def grouped(t, x, unit, split, parts, exprs):
     """x를 unit으로 자르고(나누기가 있으면 그 값과 함께) 묶어 exprs(t)의 집계를 구한 Polars 표(열 x, s, 집계들). 날짜 순."""
     if split:
         t = t.filter(t[split].isin(parts))
-    keys = [t[x].truncate(TRUNC[unit]).name("x")] + ([t[split].name("s")] if split else [])
+    keys = [stats.period_start(t[x], TRUNC[unit]).name("x")] + ([t[split].name("s")] if split else [])
     return t.group_by(keys).aggregate(**exprs(t)).order_by("x").to_polars()
 
 
@@ -714,7 +714,7 @@ def deviation_data(card, ctx):
     t = expr.filter(expr[date].notnull())  # 시각이 빈 행은 시간대를 만들지 않는다
     def recent():
         """가장 최근 MAX_BUCKETS개 시간대 중 가장 이른 것: 그보다 오래된 행은 읽지 않는다."""
-        found = t.select(b=t[date].truncate(BUCKET_UNITS[unit])).distinct()
+        found = t.select(b=stats.period_start(t[date], BUCKET_UNITS[unit])).distinct()
         return found.order_by(found.b.desc()).limit(MAX_BUCKETS).to_polars()["b"].to_list()
     latest = run(recent)
     if latest:
@@ -727,7 +727,7 @@ def deviation_data(card, ctx):
     more, picked = len(picked) > MAX_ENTITIES, picked[:MAX_ENTITIES]
     known = [e for e in picked if e is not None]
     t = t.filter(t[entity].isin(known) | t[entity].isnull() if None in picked else t[entity].isin(known))
-    frame = run(lambda: t.group_by([t[entity].name("e"), t[date].truncate(BUCKET_UNITS[unit]).name("b")]).aggregate(v=final_expr(t, series[0])).to_polars())
+    frame = run(lambda: t.group_by([t[entity].name("e"), stats.period_start(t[date], BUCKET_UNITS[unit]).name("b")]).aggregate(v=final_expr(t, series[0])).to_polars())
     buckets = sorted({str(b) for b in frame["b"].to_list()})[-MAX_BUCKETS:]
     cells = {}
     for e, b, v in frame.rows():

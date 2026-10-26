@@ -314,10 +314,16 @@ def pivot(expr, spec, values_of):
         found = values_of(expr.filter(expr[column].notnull()).select(v=expr[column]).distinct().order_by("v").limit(MAX_PIVOT + 1))
         if len(found) > MAX_PIVOT:
             raise ValueError(f"'{column}'의 값이 {MAX_PIVOT}개보다 많아 열로 펼칠 수 없습니다. 조건으로 줄이거나 다른 컬럼을 고르세요.")
+        taken = {n.casefold() for n in [*aggs, *rows]}  # DuckDB는 컬럼 이름의 대소문자를 가리지 않아 Y와 y가 부딪친다
+        used = set(taken)
         for v in found:
             name = str(v)
-            if name in aggs or name in rows:
+            if name.casefold() in taken:
                 name = f"{column}={v}"
+            base, i = name, 2
+            while name.casefold() in used:
+                name, i = f"{base}_{i}", i + 1
+            used.add(name.casefold())
             is_v = expr[column] == v
             aggs[name] = metric(expr, how, value, is_v if cond is None else is_v & cond, opts)
     subtotals = spec.get("subtotals")

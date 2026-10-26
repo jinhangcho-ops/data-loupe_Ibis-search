@@ -34,6 +34,14 @@ def one(expr):
     return rows(expr)[0]
 
 
+def period_start(col, unit):
+    """col을 unit(Ibis truncate 단위)의 시작으로 자른다. 주는 어느 DB에서나 월요일 시작(지표·화면과 같다)."""
+    if unit != "W":
+        return col.truncate(unit)
+    d = col.cast("date")  # SQL Server DATETRUNC(WEEK)는 DATEFIRST(기본 일요일)를 따르고 MySQL은 WEEK를 못 자른다: 월요일인 1000-01-06부터 센 날 수로 자른다
+    return (d - (d.delta(ibis.date(1000, 1, 6), unit="day") % 7).as_interval("D")).cast(col.type())
+
+
 def kind(dtype):
     """컬럼 종류: num(숫자, 참거짓 제외), date(날짜·시간), text(그 밖)."""
     if dtype.is_numeric() and not dtype.is_boolean():
@@ -180,7 +188,7 @@ def trend(t, column, unit, value, agg, opts=None):
     chart_metric(t, value, agg, opts)  # 고른 값·집계를 먼저 검사한다
     s = finite_value(t, value).filter(d.notnull())
     metric = chart_metric(s, value, agg, opts)
-    found = rows(s.group_by(s[column].truncate(UNITS[unit]).name("period")).aggregate(v=metric).order_by(ibis.desc("period")).limit(MAX_PERIODS + 1))
+    found = rows(s.group_by(period_start(s[column], UNITS[unit]).name("period")).aggregate(v=metric).order_by(ibis.desc("period")).limit(MAX_PERIODS + 1))
     more, found = len(found) > MAX_PERIODS, found[:MAX_PERIODS][::-1]
     got = {str(r["period"])[:10]: r["v"] for r in found}
     labels = list(got)

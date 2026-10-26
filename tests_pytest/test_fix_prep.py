@@ -140,7 +140,8 @@ def test_new_local_copy_goes_through_scan_gate(remote, monkeypatch):
     held.store["items"].clear()
 
 
-def test_missing_date_gets_friendly_message(remote):
+def test_missing_date_becomes_empty(remote):
+    """없는 날짜(2026-02-30)는 표 전체를 실패시키지 않고 빈 값이 된다(숫자로 못 바꾸는 값과 같게, 19차 감사5)."""
     r = remote.post("/api/preview", json={"base": "t", "columns": {"d": {"ops": {"type": {"to": "date"}}}}})
-    assert r.status_code == 400
-    assert "날짜로 바꿀 수 없는 값이 있어요" in r.get_json()["error"]
+    assert r.status_code == 200
+    assert [row["d"] for row in r.get_json()["rows"]["rows"]] == [None, "2026-01-05", "2026-01-06"]
