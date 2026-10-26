@@ -8,7 +8,7 @@ from pathlib import Path
 
 from flask import jsonify, request
 
-from lazy import Later, preload
+from lazy import Later, ibis, preload
 from core import held
 from core import result
 from core import scan_size
@@ -97,12 +97,12 @@ def scan():
 def explore_gate(body, streams=False):
     """탐색 식의 실행 전 처리 용량 확인(server.scan_gate). 확인이 필요하면 돌려줄 응답, 아니면 None.
     로컬(DuckDB·파일)은 읽는 양을 센다. 원격 DB는 이 PC로 받는 양만 센다: 검색은 기간·조건까지의 결과를 받아 두므로(이미 받아 둔 것이 있으면 안 셈) 그 식을,
-    저장·내보내기(streams)는 파일로 흘려 쓰므로 안 셈(연결이 못 하는 계산이라 받아 둔 사본으로 만들 때만 그 식을 센다)."""
+    저장·내보내기(streams)는 파일로 흘려 쓰므로 exporting이 본다(연결이 못 하는 계산이라 받아 둔 사본으로 만들 때만 그 식을 센다)."""
     con = get_con()
     if not held.remote(con):
         return server.scan_gate(body, lambda: server.expr_sql(con, querying.build(body)))
     if streams and source.compiles(querying.build(body)):
-        return None
+        return exporting(con, body, lambda: server.expr_sql(con, querying.build(body)))
     if not body.get("fresh") and querying.search_key(body) in held.store["items"]:
         return None
     plain = not (body.get("conditions") or body.get("periods") or body.get("joins") or body.get("union"))
@@ -112,14 +112,38 @@ def explore_gate(body, streams=False):
 
 def sql_gate(body, streams=False):
     """SQL 탭 실행·저장의 실행 전 처리 용량 확인. 검사를 통과한 SQL에 가상 테이블을 풀어 넣은 글로 센다.
-    원격 DB는 실행(받아 둠)에서만, 이미 받아 둔 결과가 있으면 안 센다. 저장(streams)은 파일로 흘려 쓰므로 안 센다."""
+    원격 DB는 실행(받아 둠)에서만, 이미 받아 둔 결과가 있으면 안 센다. 저장(streams)은 파일로 흘려 쓰므로 exporting이 본다."""
     con = get_con()
-    if held.remote(con) and (streams or (not body.get("fresh") and querying.held_key("sql", {"sql": body.get("sql")}) in held.store["items"])):
-        return None
 
     def make():
         return sql_exec.expand(con, sql_exec.check(body.get("sql"), sql_exec.dialect_of(con)), server.virtual_tables()).sql(dialect=sql_exec.dialect_of(con)), None
+    if held.remote(con) and streams:
+        return exporting(con, body, make)
+    if held.remote(con) and not body.get("fresh") and querying.held_key("sql", {"sql": body.get("sql")}) in held.store["items"]:
+        return None
     return server.scan_gate(body, make)
+
+
+EXPORT_BIG = "큰 저장은 DB의 조회(스냅숏)를 오래 붙잡아 다른 작업에 부담이 됩니다. 되도록 복제본(읽기 전용 DB)에 연결해 저장하세요. 그래도 저장할까요?"
+
+
+def exporting(con, body, make_sql):
+    """원격 DB 저장(파일로 흘려 씀)의 실행 전 확인. BigQuery는 읽는 양에 요금이 나므로 처리 용량 확인(scan_gate, dry run)을 한다.
+    그 밖에는 PC 메모리와 상관없어 막지 않지만, 받는 양 추정(scan_size.fetched, 메타데이터만)이 받아 두기 상한을 넘으면 복제본에서 하라고 한 번 묻는다."""
+    if con.name == "bigquery":
+        return server.scan_gate(body, make_sql)
+    if body.get("confirmed") is True:
+        return None
+
+    def work():
+        sql, dialect = make_sql()
+        return scan_size.fetched(con, sql, None, dialect)
+    found = scan_size.safe(lambda: run(work))
+    if (found.get("rows") or 0) <= held.MAX_ROWS and (found["bytes"] or 0) <= held.MAX_BYTES:
+        return None
+    response = jsonify(needs_confirm=True, blocked=False, bytes=found["bytes"], text=f"PC로 약 {scan_size.size_text(found['bytes'])}를 받아 저장합니다(추정 · {found['how']}). {EXPORT_BIG}")
+    response.headers["X-Needs-Confirm"] = "1"
+    return response
 
 
 TOO_BIG = f"결과가 커서({held.MAX_ROWS:,}행·{held.MAX_BYTES // 1024 // 1024}MB 넘음) 이 PC에 받아 두지 않고 DB에서 쪽마다 가져옵니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요."
@@ -127,6 +151,11 @@ LOCAL_PAGES = "정렬 값이 같은 행이 있어, 쪽을 넘길 때 그 행들�
 FILE_SQL_PAGES = "파일 연결의 SQL 결과는 쪽마다 다시 계산합니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼의 ORDER BY를 넣으세요."
 SERVER_PAGES = ("결과가 커서 이 PC에 받아 두지 않고, 쿼리를 한 번만 돌려 DB의 결과 임시 테이블(BigQuery는 24시간)에서 쪽마다 읽습니다. "
                 "쪽을 넘겨도 다시 조회하지 않아 요금이 다시 나지 않고, 정렬·조건을 바꾸거나 [검색 실행]을 누르면 다시 조회합니다.")
+
+
+def reruns(key, body):
+    """서버에 결과를 두는 DB(BigQuery)에서 이 요청이 쿼리를 다시 돌리는지(새로 받기, 또는 결과 테이블을 잊음). 쪽 넘기기라도 그때는 처리 용량을 묻는다."""
+    return body.get("fresh") or key not in held.store["jobs"]
 
 
 TIES = {}  # 검색(조건·계산·정렬)마다 정렬 값이 겹치는지. 쪽을 넘길 때마다 다시 세지 않게
@@ -158,23 +187,24 @@ def query():
     (fresh면 새로 받는다). 받아 두면 행 수는 세지 않아도 안다. held: 받아 둔 결과에서 왔는지, note: 받아 두지 못한 까닭."""
     body = request.json
     expr, limit, offset = paged(body)  # 받기 전에 줄을 모두 검사한다
-    if not offset and (ask := explore_gate(body)):  # 새로 검색할 때만(쪽 넘기기는 묻지 않는다)
-        return ask
     con, count, rows, note = get_con(), None, None, ""
     able = source.compiles(expr)
     pages = able and held.remote(con) and held.pager(con) is not None  # 서버에 결과를 두는 DB(BigQuery): 받아 두거나 세지 않고 처음부터 server_page 한 번
+    key = querying.held_key("server", {k: v for k, v in body.items() if k not in ("limit", "offset", "count", "fresh", "confirmed")})
+    if (not offset or (pages and reruns(key, body))) and (ask := explore_gate(body)):  # 새로 검색할 때만(쪽 넘기기는 묻지 않는다, 서버의 결과 테이블을 잊어 다시 돌릴 때는 묻는다)
+        return ask
+    counts = body.get("count", True)
     if (held.remote(con) or not able) and not pages:
         source_expr = querying.filtered(body)
-        counter = (lambda: result.get_count(source_expr)) if body.get("count", True) else None
+        counter = (lambda: result.get_count(source_expr if counts else source_expr.limit(held.MAX_ROWS + 1)))  # 세지 않을 때도 받아 둘 수 있는지는 상한+1행까지만 센다(큰 결과를 받다 버리지 않게)
         count, rows = run(lambda: held.page(querying.search_key(body), source_expr, lambda t: querying.arrange(body, t, held.ROW), limit, offset,
                                             server.state["cancel"], counter, body.get("fresh")))
         if rows is None and not able:
             raise ValueError(querying.PC_TOO_BIG)
         note = TOO_BIG if rows is None else ""
-        count = count if rows is not None or not body.get("calcs") else None  # 받기 전에 센 수는 계산 전의 행 수
+        count = count if rows is not None or (counts and not body.get("calcs")) else None  # 받기 전에 센 수는 계산 전의 행 수(세지 않을 때는 상한까지만 센 수)
     kept = rows is not None
     if pages:
-        key = querying.held_key("server", {k: v for k, v in body.items() if k not in ("limit", "offset", "count", "fresh", "confirmed")})
         count, rows = run(lambda: held.server_page(key, con, expr, limit, offset, body.get("fresh")))
         note = SERVER_PAGES
     elif not kept:
@@ -269,10 +299,14 @@ def use_search():
 @app.post("/api/summary")
 @confirms
 def summary():
-    """컬럼별 집계. 큰 테이블에서는 오래 걸리므로 검색과 따로, 화면에서 요청할 때만 계산한다."""
+    """컬럼별 집계. 큰 테이블에서는 오래 걸리므로 검색과 따로, 화면에서 요청할 때만 계산한다.
+    원격 DB는 컬럼을 고르지 않으면 고유값을 세지 않는다(컬럼마다 COUNT(DISTINCT)가 무겁다). BigQuery는 읽는 양(요금)을 먼저 묻는다."""
     columns = request.json.get("summary_columns") or []  # 화면에서 고른 컬럼. 없으면 표시 컬럼(없으면 전체).
-    expr = querying.runnable(request.json, select=not columns, ask=request.json)
-    rows = run(lambda: result.get_summary(expr, columns))
+    expr, con = querying.runnable(request.json, select=not columns, ask=request.json), get_con()
+    on_db = ibis.get_backend(expr) is con  # 받아 둔 사본에서 하는 요약은 runnable이 이미 물었다
+    if con.name == "bigquery" and on_db and (ask := server.scan_gate(request.json, lambda: server.expr_sql(con, expr))):
+        return ask
+    rows = run(lambda: result.get_summary(expr, columns, unique=bool(columns) or not (on_db and held.remote(con))))
     return jsonify(summary={"columns": result.SUMMARY_COLS, "rows": rows})
 
 
@@ -416,10 +450,10 @@ def sql_run():
     body = request.json
     n, offset = sql_exec.rows_limit(body.get("rows")), parse.parse_offset(body.get("offset", 0))
     expr, used = sql_expr(body)
-    if not offset and (ask := sql_gate(body)):  # 쪽 넘기기는 묻지 않는다
-        return ask
     con, count, rows, note = get_con(), None, None, ""
     pages = held.remote(con) and held.pager(con) is not None  # 서버에 결과를 두는 DB(BigQuery): 받아 두지 않고 server_page 한 번
+    if (not offset or (pages and reruns(querying.held_key("server", {"sql": body["sql"]}), body))) and (ask := sql_gate(body)):  # 쪽 넘기기는 묻지 않는다(다시 돌릴 때는 묻는다)
+        return ask
     if held.remote(con) and not pages:
         key = querying.held_key("sql", {"sql": body["sql"]})
         count, rows = run(lambda: held.page(key, expr, lambda t: t.order_by(held.ROW).select(*[c for c in t.columns if c != held.ROW]), n + 1, offset, server.state["cancel"], fresh=body.get("fresh")))

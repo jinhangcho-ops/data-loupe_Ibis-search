@@ -7,7 +7,7 @@ from pathlib import Path
 from lazy import ibis
 
 from core import prep_ops, source, sql_funcs
-from core.parse import check_name, column as field_of, struct_fields, type_info
+from core.parse import check_name, column as field_of, native_key, struct_fields, type_info
 
 PAGING = contextvars.ContextVar("paging", default=False)  # get_rows가 쪽을 받는 중: 파일 연결(Polars)의 묶기·중복 빼기도 차례를 고정한다(source.fix_polars_text)
 SUMMARY_COLS = ["name", "type", "count", "nulls", "unique", "min", "max", "mean"]
@@ -177,6 +177,7 @@ def write_excel(expr, path):
             for batch in batches(expr):
                 frame = json_text(pl.from_arrow(batch)).with_columns(cs.datetime(time_zone="*").dt.convert_time_zone(zone).dt.replace_time_zone(None))  # Excel은 시간대를 모른다
                 kinds = [shapes.get(t.base_type()) for t in frame.dtypes]
+                ints = [t.is_integer() for t in frame.dtypes]
                 for values in frame.iter_rows():
                     if row > EXCEL_MAX_ROWS:
                         raise ValueError(f"Excel은 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있습니다. CSV나 Parquet으로 저장하세요.")
@@ -184,6 +185,8 @@ def write_excel(expr, path):
                         value = number(value)  # NaN·무한은 빈 칸(xlsxwriter가 쓰지 못한다), Decimal은 실수로
                         if value is None:
                             continue
+                        if ints[col] and abs(value) >= 10 ** 15:  # Excel 숫자는 15자리까지라 큰 정수(ID 등)는 끝자리가 바뀐다: 글자로
+                            value = str(value)
                         sheet.write(row, col, value, kinds[col]) if kinds[col] else sheet.write(row, col, value)
                     row += 1
     except BaseException:
@@ -263,9 +266,9 @@ def plain(value):
     return value if value is None or isinstance(value, (int, float)) else str(value)
 
 
-def get_summary(expr, columns=()):
+def get_summary(expr, columns=(), unique=True):
     """컬럼별 집계를 조회 한 번으로 계산해 SUMMARY_COLS 모양의 줄들로 돌려준다. columns를 주면 그 컬럼만 그 순서로.
-    개수(빈 값 제외)·빈 값·고유값은 모든 컬럼, 최소·최대는 숫자와 날짜, 평균은 숫자만 계산한다."""
+    개수(빈 값 제외)·빈 값·고유값은 모든 컬럼, 최소·최대는 숫자와 날짜, 평균은 숫자만 계산한다. unique가 거짓이면 고유값은 세지 않는다(None)."""
     for column in columns:
         check_name(column, expr.columns)
     if columns:
@@ -274,7 +277,7 @@ def get_summary(expr, columns=()):
     metrics = {}
     for i, (name, (ordered, numeric)) in enumerate(kinds.items()):
         col = expr[name]
-        metrics.update({f"count{i}": col.count(), f"nulls{i}": col.isnull().sum(), f"unique{i}": sql_funcs.distinct(col)})
+        metrics.update({f"count{i}": col.count(), f"nulls{i}": col.isnull().sum(), **({f"unique{i}": sql_funcs.distinct(col)} if unique else {})})
         col = prep_ops.nan_to_null(col)  # 실수의 NaN·무한 한 칸이 최소·최대·평균을 빈칸으로 만들지 않게(개수·빈 값·고유값은 원래 값으로)
         if ordered:
             metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})
@@ -282,14 +285,15 @@ def get_summary(expr, columns=()):
             metrics[f"mean{i}"] = col.mean()
     found = expr.aggregate(**metrics).to_polars().row(0, named=True)
     return [{"name": name, "type": str(expr.schema()[name]).lstrip("!"), "count": found[f"count{i}"], "nulls": found[f"nulls{i}"] or 0,
-             "unique": found[f"unique{i}"], **{k: plain(found.get(f"{k}{i}")) for k in ("min", "max", "mean")}}
+             "unique": found.get(f"unique{i}"), **{k: plain(found.get(f"{k}{i}")) for k in ("min", "max", "mean")}}
             for i, name in enumerate(kinds)]
 
 
 def get_values(expr, column):
     """컬럼(구조 안의 필드 user.name도)의 서로 다른 값(빈 값 제외)을 정렬해 MAX_VALUES개까지 문자로 돌려준다. 더 있으면 두 번째 값이 True."""
     col = field_of(expr, column)
-    values = expr.filter(col.notnull()).select(col.name("v")).distinct().order_by("v").limit(MAX_VALUES + 1)
+    values = expr.filter(col.notnull()).select(col.name("v")).distinct()
+    values = values.order_by(native_key(values, values.v, False)).limit(MAX_VALUES + 1)  # 빈 값은 걸렀으니 그 연결의 기본 정렬로(MySQL·SQL Server에 CASE WHEN이 붙지 않아 인덱스를 탈 수 있다)
     values = [str(v) for v in values.to_polars(**streaming(expr))["v"].to_list()]
     return values[:MAX_VALUES], len(values) > MAX_VALUES
 

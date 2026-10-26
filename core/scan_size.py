@@ -380,14 +380,15 @@ def limit_check(con, sql, opened=None, dialect=None, config=None, rows=None):
     """실행 전 처리 용량 확인(데이터는 읽지 않는다). 대시보드 최신화와 서버 라우트가 같이 쓴다. 안쪽에서 DB를 묻는 것은 호출하는 쪽이 연결 스레드에서 부른다.
     돌려주는 값: over(센 용량이 기준을 넘음), unknown(용량을 알 수 없음), blocked(알 수 없는데 설정 scan_unknown이 block),
     bytes(셀 수 없으면 None), exact, how, limit(기준 바이트), tables, columns(None이면 모든 컬럼), text(팝업·건너뛴 까닭에 보일 글).
-    원격 DB 연결이면 sql의 결과를 이 PC로 받는 양(fetched, 메타데이터로만)을 견준다. 맨 바깥이 집계면 세지 않는다(how="집계 결과라 작음").
+    원격 DB 연결이면 sql의 결과를 이 PC로 받는 양(fetched, 메타데이터로만)을 견준다. 맨 바깥이 집계면 세지 않는다(how="집계 결과라 작음", BigQuery는 dry run으로 읽는 양).
     받는 식이 아닌 일(파일로 흘려 쓰기, DB 안의 계산)은 부르는 쪽이 부르지 않는다. rows는 원격에서 이미 아는 행 수. 돌려주는 값에 remote(원격 기준인지)를 더했다.
     over이거나 blocked일 때만 실행을 멈추고 묻는다(blocked는 확인해도 실행하지 않는다)."""
     config = settings.load() if config is None else config
     remote = held.remote(con)
     small = remote and is_aggregate(sql, dialect or sql_exec.dialect_of(con))  # 집계 결과는 작아서 원격 DB에서는 세지 않는다
-    found = ({"bytes": 0, "exact": False, "how": "집계 결과라 작음"} if small
-             else safe(lambda: fetched(con, sql, rows, dialect) if remote else estimate(con, sql, opened, dialect)))
+    billed = small and getattr(con, "name", "") == "bigquery"  # BigQuery는 결과가 작아도 읽는 양에 요금이 나므로 집계도 dry run 바이트(정확)로 견준다
+    found = ({"bytes": 0, "exact": False, "how": "집계 결과라 작음"} if small and not billed
+             else safe(lambda: fetched(con, sql, rows, dialect) if remote and not billed else estimate(con, sql, opened, dialect)))
     bound, bound_text = limit(config)
     try:
         tables, columns = referenced(sql, dialect or sql_exec.dialect_of(con))
@@ -400,6 +401,6 @@ def limit_check(con, sql, opened=None, dialect=None, config=None, rows=None):
     if unknown:
         text = f"처리 용량을 미리 알 수 없어요({found['how']}). " + ("설정에서 '알 수 없으면 실행하지 않음'으로 정해 두어 실행하지 않아요." if blocked else "")
     else:
-        text = f"PC로 약 {size_text(found['bytes'])}를 받아요(추정 · {found['how']}) · {bound_text} · {what}" if remote else f"{'' if found['exact'] else '약 '}{size_text(found['bytes'])}를 읽어요({'정확' if found['exact'] else '추정'} · {found['how']}) · {bound_text} · {what}"
+        text = f"PC로 약 {size_text(found['bytes'])}를 받아요(추정 · {found['how']}) · {bound_text} · {what}" if remote and not billed else f"{'' if found['exact'] else '약 '}{size_text(found['bytes'])}를 읽어요({'정확' if found['exact'] else '추정'} · {found['how']}) · {bound_text} · {what}"
     return {"over": over, "unknown": unknown, "blocked": blocked, "bytes": found["bytes"], "exact": found["exact"], "how": found["how"],
             "limit": bound, "remote": remote, "tables": tables, "columns": None if columns is None else sorted(columns), "text": text.strip()}

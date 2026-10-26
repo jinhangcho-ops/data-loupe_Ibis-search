@@ -101,12 +101,20 @@ def bucket_last_day(index, unit):
     return (bucket_start(index + 1, unit) - EPOCH).days - 1
 
 
+def today():
+    """PC의 오늘(시험이 바꿔 끼울 수 있게 함수로 둔다)."""
+    return dt.date.today()
+
+
 def open_bucket(table, time, unit):
-    """자료가 마지막 기간 중간에 끝났으면 그 기간(진행 중이라 값이 아직 작다)의 번호, 아니면 None. day 단위는 늘 None."""
-    if unit == "day":
-        return None
+    """자료가 마지막 기간 중간에 끝났으면 그 기간(진행 중이라 값이 아직 작다)의 번호, 아니면 None. 자료의 마지막 날이 PC의 오늘이면 그날은 아직 안 끝났다고 본다(day 단위의 오늘도 진행 중)."""
     r = rows(table.aggregate(p=bucket_index(table[time], unit).max(), d=day_index(table[time]).max()))[0]
-    return None if r["p"] is None or bucket_last_day(int(r["p"]), unit) <= int(r["d"]) else int(r["p"])
+    if r["p"] is None:
+        return None
+    now = {(today() - EPOCH).days, (dt.datetime.now(dt.timezone.utc).date() - EPOCH).days}  # 경계는 UTC라 PC 오늘과 UTC 오늘 둘 다 진행 중
+    last = int(r["d"]) - (int(r["d"]) in now)
+    end = int(r["p"]) if unit == "day" else bucket_last_day(int(r["p"]), unit)  # day는 버킷 번호가 곧 날 번호(아주 먼 날짜도 날짜로 바꾸지 않는다)
+    return None if end <= last else int(r["p"])
 
 
 def ratio(a, b):
@@ -652,10 +660,10 @@ def small_sample(n1, n2, x1=None, x2=None):
     return min(n1, n2) * min(pool, 1 - pool) < SMALL_CELL
 
 
-def diff_lift_ci(m1, v1, m2, v2, level=0.95):
-    """차이(m2 − m1)와 Lift(m2 ÷ m1 − 1)의 신뢰구간(정규 근사) {diff: (아래, 위), lift: (아래, 위) 또는 None}. v는 각 평균의 분산(sd²/n, 비율은 p(1−p)/n).
-    Lift는 log(m2 ÷ m1)의 델타 방법이라 두 평균이 0보다 커야 구한다."""
-    z = norm_ppf(0.5 + level / 2)
+def diff_lift_ci(m1, v1, m2, v2, level=0.95, df=None):
+    """차이(m2 − m1)와 Lift(m2 ÷ m1 − 1)의 신뢰구간 {diff: (아래, 위), lift: (아래, 위) 또는 None}. v는 각 평균의 분산(sd²/n, 비율은 p(1−p)/n).
+    df(Welch 자유도)를 주면 t 분포 분위수로(p-value와 결론이 엇갈리지 않게), 아니면 정규 근사. Lift는 log(m2 ÷ m1)의 델타 방법이라 두 평균이 0보다 커야 구한다."""
+    z = t_crit(1 - level, df) if df else norm_ppf(0.5 + level / 2)
     d, se = m2 - m1, math.sqrt(v1 + v2)
     lift_ci = None
     if m1 > 0 and m2 > 0:
@@ -710,6 +718,17 @@ def betai(a, b, x):
 def t_two_sided_p(t, df):
     """t분포의 양측 p값 = I_{df/(df+t²)}(df/2, 1/2)."""
     return betai(df / 2, 0.5, df / (df + t * t))
+
+
+def t_crit(alpha, df):
+    """양측 p값이 alpha가 되는 t(자유도 df) 값. p는 t가 커질수록 줄어드니 반씩 좁혀 찾는다."""
+    lo, hi = 0.0, norm_ppf(1 - alpha / 2)
+    while t_two_sided_p(hi, df) > alpha:
+        lo, hi = hi, hi * 2
+    for _ in range(100):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if t_two_sided_p(mid, df) > alpha else (lo, mid)
+    return (lo + hi) / 2
 
 
 def welch_from_stats(mean1, sd1, n1, mean2, sd2, n2):

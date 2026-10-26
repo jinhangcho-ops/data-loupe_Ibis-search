@@ -140,7 +140,8 @@ def has_python():
 
 def pip_command(extra):
     """Ibis 드라이버(extra)를 설치하는 명령. 소스 실행은 평범한 pip, exe는 따로 설치 폴더로 받는다."""
-    spec = f'"ibis-framework[{extra}]=={ibis_version()}"'
+    # 간접 의존까지 빌드 때 버전으로 고정한다. constraints.txt는 소스 실행이면 저장소의 것, exe면 spec이 넣은 것(같은 자리)
+    spec = f'-c "{Path(__file__).resolve().parent.parent / "constraints.txt"}" "ibis-framework[{extra}]=={ibis_version()}"'
     if frozen():
         return f'py -{FROZEN_PYTHON} -m pip install --target "%APPDATA%\\DataLoupe\\drivers" {spec}'
     return f"pip install {spec}"
@@ -252,6 +253,14 @@ def missing(db, program):
     return ValueError(f"{db} 접속에 필요한 {name}가 이 PC에 없습니다. 다운로드: {url}")
 
 
+QUERY_TIMEOUT = 1800  # 데이터 작업 하나를 기다리는 시간(초). server가 기다리는 시간이자 settle이 DB에 거는 쿼리 시간 제한.
+APP_NAME = "DataLoupe"  # DB에 알리는 접속 이름(PG application_name, SQL Server APP)
+# 접속 직후 보낼 시간 제한 문장. MySQL은 max_execution_time(ms), MariaDB는 max_statement_time(초): 모르는 쪽은 오류가 나고 넘어간다.
+SESSION_LIMIT = {
+    "mysql": ("SET SESSION max_execution_time = {ms}", "SET SESSION max_statement_time = {s}"),
+    "singlestoredb": ("SET SESSION max_execution_time = {ms}",),
+    "snowflake": ("ALTER SESSION SET STATEMENT_TIMEOUT_IN_SECONDS = {s}",),
+}
 POOLER_PORT = 6543  # Supabase Transaction pooler(PgBouncer) 포트
 PG_WAIT = 10  # PostgreSQL 접속을 기다리는 초(주소의 connect_timeout이 있으면 그것)
 
@@ -266,6 +275,34 @@ def pooler_args(url):
     except ValueError:
         pooled = False
     return ({"prepare_threshold": None} | ({"pgbouncer": None} if flagged else {})) if pooled or flagged else {}
+
+
+def query_keys(url):
+    """주소 query의 매개변수 이름들(소문자). 사용자가 주소에 넣은 값을 덮지 않으려고 본다."""
+    return {piece.partition("=")[0].lower() for piece in urlsplit(url).query.split("&")}
+
+
+def settle(con, url):
+    """접속 직후 연결 설정. DB 쪽 쿼리 시간 제한을 QUERY_TIMEOUT과 같게 걸어, 앱이 기다림을 그만둔 쿼리(취소를 알리지 못한 드라이버)도 DB가 멈추게 한다.
+    PostgreSQL은 접속 이름(application_name)도 단다. 주소에 넣은 값은 그대로 두고, 풀러(Transaction pooler)는 서버 연결을 남과 나눠 써서 건드리지 않는다.
+    PostgreSQL은 접속 옵션(options=-c) 대신 SET을 쓴다: PgBouncer·Redshift가 모르는 시작 옵션이면 접속부터 거절할 수 있다. 안 되는 DB·권한이면 그냥 넘어간다."""
+    scheme = urlsplit(url).scheme.replace("postgresql", "postgres")
+    ms, asked = QUERY_TIMEOUT * 1000, query_keys(url)
+    if scheme == "bigquery":  # Ibis가 쿼리마다 이 기본 설정을 합친다
+        try:
+            con.client.default_query_job_config.job_timeout_ms = ms
+        except Exception:
+            pass
+        return
+    if scheme == "postgres":
+        statements = [] if pooler_args(url) else [f"SET statement_timeout = {ms}"] * ("statement_timeout" not in url.lower()) + [f"SET application_name = '{APP_NAME}'"] * ("application_name" not in asked)
+    else:
+        statements = [sql.format(ms=ms, s=QUERY_TIMEOUT) for sql in SESSION_LIMIT.get(scheme, ())]
+    for sql in statements:
+        try:
+            con.raw_sql(sql).close()
+        except Exception:
+            pass
 
 
 def prepare(url, password=""):
@@ -291,11 +328,14 @@ def prepare(url, password=""):
 
     if program == "java" and not has_java():
         raise program_needed()
-    if program == "odbc" and "driver=" not in urlsplit(url).query:
-        driver = mssql_driver()
-        if driver is None:
-            raise program_needed()
-        return {"driver": driver}
+    if program == "odbc":  # autocommit: 조회 뒤 열린 트랜잭션(잠금)이 남지 않게. APP: DB 관리자가 이 앱의 접속을 알아보게(주소에 넣었으면 그것)
+        extra = {"autocommit": True} | ({} if "app" in query_keys(url) else {"APP": APP_NAME})
+        if "driver" not in query_keys(url):
+            driver = mssql_driver()
+            if driver is None:
+                raise program_needed()
+            extra["driver"] = driver
+        return extra
     if scheme == "postgres":  # Windows에서 libpq는 거부된 접속을 알아채지 못하고 시간이 다 될 때까지 기다린다 → 주소에 없으면 PG_WAIT초로
         return ({} if "connect_timeout=" in urlsplit(url).query else {"connect_timeout": PG_WAIT}) | pooler_args(url)
     if scheme == "trino" and password:

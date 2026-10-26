@@ -18,6 +18,7 @@ MAX_RETENTION_COLS = 100  # 리텐션 표의 경과 기간 컬럼 수 상한
 MAX_POINTS = 400  # 생존 곡선에 싣는 점 수
 PARTIAL_NOTE = "마지막 기간은 진행 중이라 그 기간의 유지율 칸은 비우고 평균에서 뺐어요."
 OPEN_NOTE = "마지막 기간은 진행 중이라 평균에서 뺐어요. 표에는 그대로 보여요."
+NEW_NOTE = "고른 기간 앞의 활동은 보이지 않아, 기간 안에서 처음 나타난 사용자를 신규로 세요(기존 사용자가 섞일 수 있어요)."  # 첫 활동으로 코호트·신규를 정하는 지표마다
 
 
 def kernel(name):
@@ -339,6 +340,7 @@ def retention(t, s, p, ctx):
     mode, unit, n = p["mode"], s.get("unit") or "day", s.get("n") or 7
     span = (s["from_n"], s["to_n"]) if mode == "range" else None
     m = mc.cohort_matrix(t, s["user"], s["time"], unit, mode, n_max=n, span=span)
+    ctx.notes.append(NEW_NOTE)
     if m.get("partial"):
         ctx.notes.append(PARTIAL_NOTE)
     curve = mc.average_curve(m["cohorts"])
@@ -358,6 +360,7 @@ def flattening(t, s, p, ctx):
     """유지율 곡선이 수평이 되는 첫 N."""
     unit = s.get("unit") or "day"
     m = mc.cohort_matrix(t, s["user"], s["time"], unit, "classic", n_max=s["n"])
+    ctx.notes.append(NEW_NOTE)
     if m.get("partial"):
         ctx.notes.append(PARTIAL_NOTE)
     curve = mc.average_curve(m["cohorts"])
@@ -372,6 +375,7 @@ def states(t, s, p, ctx):
     """사용자 상태 지표(DAU 분해·Churn·Resurrection·Quick Ratio)."""
     unit = s.get("unit") or p.get("unit") or "month"
     found = mc.user_states(t, s["user"], s["time"], unit, s.get("inactive_days"), ctx.notes)
+    ctx.notes.append(NEW_NOTE)
     pick = p["pick"]
     shown = {"dau_split": ("active", "new", "retained", "resurrected"), "churn": ("active", "churned", "churn_rate"), "resurrection": ("active", "resurrected", "resurrection_rate"),
              "quick": ("new", "resurrected", "churned", "quick_ratio")}[pick]
@@ -514,6 +518,7 @@ def arpdau(t, s, p, ctx):
 def ltv(t, s, p, ctx):
     """LTV: 코호트 N일 누적 매출 ÷ 코호트 크기 또는 월 ARPU ÷ 월 이탈률."""
     n_days, unit = s["n_days"], s.get("unit") or "day"
+    ctx.notes.append(NEW_NOTE)
     if s["method"] == "ARPU÷이탈률":
         found = mc.user_states(t, s["user"], s["time"], "month", notes=ctx.notes)
         churn = mc.mean_defined([r["churn_rate"] for r in done_rows(found, t, s, "month", ctx)])
@@ -763,7 +768,7 @@ def cross_context(t, s, ctx, align, paid_only=False, max_days=0):
         ctx.notes.append("광고비에는 기간이 걸리지 않아요(광고 날짜 컬럼을 고르면 사용자 쪽 날짜 범위로 거를 수 있어요).")
     if align["kind"] == "key" and spend and users and not spend.keys() & users.keys():
         ctx.notes.append("사용자 쪽과 광고 쪽에서 맞는 키 값이 하나도 없어요. 두 컬럼의 키 타입을 확인하세요(예: 정수 1과 실수 1.0은 글자가 달라 맞지 않아요).")
-    ctx.notes.append("고른 기간 앞의 활동은 보이지 않아, 기간 안에서 처음 나타난 사용자를 신규로 세요(기존 사용자가 섞일 수 있어요).")
+    ctx.notes.append(NEW_NOTE)
     return spend, users, x, align
 
 
@@ -1091,23 +1096,46 @@ def ranking(t, s, p, ctx):
     return result(mc.mean_defined(scores), parts={"queries": len(groups)}, label=f"질의별 {'NDCG' if p['pick'] == 'ndcg' else 'AP'}@{k}의 평균")
 
 
-def two_groups(t, s):
-    """실험군·대조군의 요약 {대조: {n, mean, sd, sum}, 실험: …}와 비율 지표인지."""
+def two_groups(t, s, ctx):
+    """실험군·대조군의 요약 {대조: {n, mean, sd, sum}, 실험: …}와 비율 지표인지. 사용자 칸이 있으면 사용자별로 모은 뒤(0/1은 최댓값, 그 밖은 합계) 사용자 수로 센다."""
     kind = t[s["group"]].type()
     c, e = funnel.step_value(kind, s["control"]), funnel.step_value(kind, s["treat"])
     m = prep_ops.nan_to_null(t[s["metric"]])  # NaN 하나로 표준편차가 오류(STDDEV_SAMP is out of range)가 나지 않게 빈 값으로
     x = t.filter(t[s["group"]].isin([c, e]), m.notnull())
     isbool = m.type().is_boolean()
     mm = m.cast("int64") if isbool else m
-    r = mc.rows(x.group_by(s["group"]).aggregate(n=mm.count(), mean=mm.mean(), sd=mm.std(how="sample"), total=mm.sum(), lo=mm.min(), hi=mm.max()))
-    found = {}
-    for row in r:
-        key = "c" if row[s["group"]] == c else "e"
-        found[key] = {"n": int(row["n"]), "mean": num(row["mean"]), "sd": num(row["sd"]), "sum": num(row["total"]), "lo": num(row["lo"]), "hi": num(row["hi"])}
-    if set(found) != {"c", "e"}:
-        raise ValueError("대조군과 실험군 값이 모두 든 행이 있어야 해요. 두 군 이름을 확인해 주세요.")
+
+    def summary(x, v):
+        found = {}
+        for row in mc.rows(x.group_by(s["group"]).aggregate(n=v.count(), mean=v.mean(), sd=v.std(how="sample"), total=v.sum(), lo=v.min(), hi=v.max())):
+            key = "c" if row[s["group"]] == c else "e"
+            found[key] = {"n": int(row["n"]), "mean": num(row["mean"]), "sd": num(row["sd"]), "sum": num(row["total"]), "lo": num(row["lo"]), "hi": num(row["hi"])}
+        if set(found) != {"c", "e"}:
+            raise ValueError("대조군과 실험군 값이 모두 든 행이 있어야 해요. 두 군 이름을 확인해 주세요.")
+        return found
+
+    found = summary(x, mm)
     binary = (isbool or m.type().is_integer()) and all(f["lo"] >= 0 and f["hi"] <= 1 for f in found.values())
+    if s.get("user"):
+        x = x.filter(x[s["user"]].notnull())
+        per = x.group_by([s["group"], s["user"]]).aggregate(v=mm.max() if binary else mm.sum())
+        found = summary(per, per.v)
+    else:
+        ctx.notes.append("사용자 칸을 비워 한 행을 한 사용자로 봤어요. 한 사람이 여러 행이면 표본 수·검정이 부풀 수 있으니 사용자 칸을 골라 주세요.")
     return found["c"], found["e"], binary
+
+
+def ab_ci(c, e, binary):
+    """차이·Lift의 95% 신뢰구간 (차이, Lift). 비율은 p(1−p)/n 분산의 정규 근사, 연속은 sd²/n 분산에 Welch 자유도의 t 분포(p-value와 결론이 같게)."""
+    df = None
+    if binary:
+        v1, v2 = c["mean"] * (1 - c["mean"]) / c["n"], e["mean"] * (1 - e["mean"]) / e["n"]
+    else:
+        v1, v2 = (c["sd"] or 0.0) ** 2 / c["n"], (e["sd"] or 0.0) ** 2 / e["n"]
+        if min(c["n"], e["n"]) >= 2 and v1 + v2 > 0:
+            df = mc.welch_from_stats(c["mean"], c["sd"] or 0.0, c["n"], e["mean"], e["sd"] or 0.0, e["n"])["df"]
+    ci = mc.diff_lift_ci(c["mean"], v1, e["mean"], v2, df=df)
+    return ci["diff"], ci["lift"] or (None, None)
 
 
 def ab_checks(c, e, binary, ctx):
@@ -1125,7 +1153,7 @@ def ab_checks(c, e, binary, ctx):
 @kernel("lift")
 def lift_kernel(t, s, p, ctx):
     """Lift: (실험군 − 대조군) ÷ 대조군."""
-    c, e, binary = two_groups(t, s)
+    c, e, binary = two_groups(t, s, ctx)
     ab_checks(c, e, binary, ctx)
     return result(mc.lift(e["mean"], c["mean"]), parts={"control_mean": c["mean"], "treat_mean": e["mean"], "control_n": c["n"], "treat_n": e["n"]}, label="(실험군 − 대조군) ÷ 대조군")
 
@@ -1133,24 +1161,21 @@ def lift_kernel(t, s, p, ctx):
 @kernel("pvalue")
 def pvalue(t, s, p, ctx):
     """p-value: 비율이면 두 비율 z 검정, 연속이면 Welch t 검정."""
-    c, e, binary = two_groups(t, s)
+    c, e, binary = two_groups(t, s, ctx)
     small = ab_checks(c, e, binary, ctx)
     if binary:
         got = mc.two_proportion_z(round(c["sum"]), c["n"], round(e["sum"]), e["n"])
         test, value = "두 비율 z 검정", got["p"]
-        v1, v2 = c["mean"] * (1 - c["mean"]) / c["n"], e["mean"] * (1 - e["mean"]) / e["n"]
     else:
         got = mc.welch_from_stats(c["mean"], c["sd"] or 0.0, c["n"], e["mean"], e["sd"] or 0.0, e["n"])
         test, value = "Welch t 검정", got["p"]
-        v1, v2 = (c["sd"] or 0.0) ** 2 / c["n"], (e["sd"] or 0.0) ** 2 / e["n"]
     if small:
         verdict = "표본이 적어 판단 보류"
     else:
         verdict = "차이가 우연이라고 보기 어려워요" if value is not None and value < s["alpha"] else "차이가 우연일 수 있어요"
-    ci = mc.diff_lift_ci(c["mean"], v1, e["mean"], v2)
-    lift_ci = ci["lift"] or (None, None)
+    diff_ci, lift_ci = ab_ci(c, e, binary)
     rows = [{"name": "대조군 평균", "value": c["mean"]}, {"name": "실험군 평균", "value": e["mean"]}, {"name": "차이", "value": e["mean"] - c["mean"]}, {"name": "p-value", "value": value},
-            {"name": "차이 95% 신뢰구간 아래", "value": ci["diff"][0]}, {"name": "차이 95% 신뢰구간 위", "value": ci["diff"][1]},
+            {"name": "차이 95% 신뢰구간 아래", "value": diff_ci[0]}, {"name": "차이 95% 신뢰구간 위", "value": diff_ci[1]},
             {"name": "Lift 95% 신뢰구간 아래", "value": lift_ci[0]}, {"name": "Lift 95% 신뢰구간 위", "value": lift_ci[1]}]
     ctx.notes.append(f"{test}, 양측, 유의수준 {s['alpha']:g}: {verdict}.")
     return result(value, rows, {"name": "항목", "value": "값"}, {"control_n": c["n"], "treat_n": e["n"]}, label=test)
@@ -1158,16 +1183,26 @@ def pvalue(t, s, p, ctx):
 
 @kernel("power")
 def power(t, s, p, ctx):
-    """검정력(정규 근사)."""
-    c, e, binary = two_groups(t, s)
+    """검정력(정규 근사). 기대 효과(절대 또는 대조군 대비 %)를 주면 MDE와 같은 식으로 그 효과를 잡아낼 확률, 비우면 지금 보인 차이 기준(판단용이 아니라고 알린다)."""
+    c, e, binary = two_groups(t, s, ctx)
     ab_checks(c, e, binary, ctx)
-    if binary:
-        pw = mc.power_two_proportions(c["mean"], e["mean"], c["n"], e["n"], s["alpha"])
-        delta = e["mean"] - c["mean"]
+    effect, what = s.get("effect"), "기대 효과"
+    if effect is None:
+        delta, what = e["mean"] - c["mean"], "지금 보인 차이"
+        ctx.notes.append("기대 효과 칸이 비어 지금 보인 차이로 구했어요. 관측 효과 기준 검정력은 p-value를 바꿔 쓴 것과 같아 판단에 쓰지 마세요. 실험 전에 기대한 효과를 적어 주세요.")
+    elif s.get("effect_kind") == "%":
+        delta = c["mean"] * effect / 100 if c["mean"] else None
+    else:
+        delta = effect
+    if delta is None:
+        pw = None
+        ctx.notes.append("대조군 평균이 0이라 % 기대 효과를 차이로 바꿀 수 없어요. 절대 값으로 적어 주세요.")
+    elif binary:
+        pw = mc.power_two_proportions(c["mean"], e["mean"], c["n"], e["n"], s["alpha"]) if effect is None else mc.power_normal(delta, mc.prop_se(c["mean"], c["mean"], c["n"], e["n"]), s["alpha"])
         if pw is None:
             ctx.notes.append("두 군의 비율이 모두 0 또는 1이라 표준오차가 0이어서 검정력을 구할 수 없어요.")
     elif c["sd"] is None or e["sd"] is None:
-        pw, delta = None, e["mean"] - c["mean"]
+        pw = None
         ctx.notes.append("한 군에 값이 1개뿐이라 표준편차를 구할 수 없어 검정력을 구할 수 없어요.")
     else:
         sd = math.sqrt((c["sd"] ** 2 + e["sd"] ** 2) / 2)
@@ -1175,15 +1210,15 @@ def power(t, s, p, ctx):
             pw = None
             ctx.notes.append("각 군 안의 값이 모두 같아 표준편차가 0이라 검정력을 구할 수 없어요.")
         else:
-            pw = mc.power_two_means(e["mean"] - c["mean"], sd, c["n"], e["n"], s["alpha"])
-        delta = e["mean"] - c["mean"]
-    return result(pw, parts={"control_n": c["n"], "treat_n": e["n"]}, label=f"지금 보인 차이({delta:.4g})를 유의수준 {s['alpha']:g}에서 잡아낼 확률(정규 근사)")
+            pw = mc.power_two_means(delta, sd, c["n"], e["n"], s["alpha"])
+    shown = "" if delta is None else f"({delta:.4g})"
+    return result(pw, parts={"control_n": c["n"], "treat_n": e["n"]}, label=f"{what}{shown}를 유의수준 {s['alpha']:g}에서 잡아낼 확률(정규 근사)")
 
 
 @kernel("mde")
 def mde(t, s, p, ctx):
     """최소 검출 효과 MDE(정규 근사)."""
-    c, e, binary = two_groups(t, s)
+    c, e, binary = two_groups(t, s, ctx)
     ab_checks(c, e, binary, ctx)
     if binary:
         value = mc.mde_two_proportions(c["mean"], c["n"], e["n"], s["alpha"], s["power"])
@@ -1204,12 +1239,23 @@ def mde(t, s, p, ctx):
 
 @kernel("guardrail")
 def guardrail(t, s, p, ctx):
-    """가드레일: 실험군의 Lift가 한계를 지키는지."""
-    c, e, binary = two_groups(t, s)
+    """가드레일: 실험군의 Lift가 한계를 지키는지. 점추정이 지켜도 Lift 95% 신뢰구간의 나쁜 쪽 끝이 한계를 넘으면 경고, 표본이 적으면 판단 보류."""
+    c, e, binary = two_groups(t, s, ctx)
+    small = ab_checks(c, e, binary, ctx)
     value = mc.lift(e["mean"], c["mean"])
     if value is None:
         return result(None, label="대조군 값이 0이라 비교할 수 없어요")
-    bad = value < s["limit"] / 100 if s["op"] == ">=" else value > s["limit"] / 100
-    text = f"실험군이 대조군보다 {value * 100:+.2f}%예요. 한계({s['limit']:g}% {'이상' if s['op'] == '>=' else '이하'})를 {'벗어났어요' if bad else '지키고 있어요'}."
-    return result(value, [{"name": "Lift", "value": value}, {"name": "한계(%)", "value": s["limit"]}, {"name": "상태", "value": "경고" if bad else "정상"}], {"name": "항목", "value": "값"},
-                  {"control_mean": c["mean"], "treat_mean": e["mean"]}, label=text, notes=[text] if bad else [])
+    limit, low = s["limit"] / 100, s["op"] == ">="
+    lift_ci = ab_ci(c, e, binary)[1]
+    end = lift_ci[0] if low else lift_ci[1]
+    end = value if end is None else end  # 두 평균이 0보다 크지 않으면 Lift 신뢰구간이 없어 점추정으로
+    past = value < limit if low else value > limit
+    bad = past or (end < limit if low else end > limit)
+    head = f"실험군이 대조군보다 {value * 100:+.2f}%예요(95% 신뢰구간 {'아래' if low else '위'} 끝 {end * 100:+.2f}%). 한계({s['limit']:g}% {'이상' if low else '이하'})를 "
+    if small:
+        text, state = f"실험군이 대조군보다 {value * 100:+.2f}%예요. 표본이 적어 한계를 지키는지 판단을 보류해요.", "판단 보류"
+    else:
+        text, state = head + ("벗어났어요." if past else "벗어났을 수 있어요(신뢰구간 끝이 한계를 넘어요)." if bad else "지키고 있어요."), "경고" if bad else "정상"
+    return result(value, [{"name": "Lift", "value": value}, {"name": "한계(%)", "value": s["limit"]}, {"name": "상태", "value": state},
+                          {"name": "Lift 95% 신뢰구간 아래", "value": lift_ci[0]}, {"name": "Lift 95% 신뢰구간 위", "value": lift_ci[1]}], {"name": "항목", "value": "값"},
+                  {"control_mean": c["mean"], "treat_mean": e["mean"]}, label=text, notes=[text] if bad and not small else [])

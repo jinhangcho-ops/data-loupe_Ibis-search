@@ -1,6 +1,7 @@
 """SQL 직접 쓰기(SafeIbisSQLExecutor)와 가상 테이블.
 - 검사: sqlglot으로 읽어 문장이 하나이고 맨 위가 SELECT·UNION·INTERSECT·EXCEPT인지, 어디에도 바꾸는 문장(DROP·DELETE·INSERT 등)이 없는지 본다.
-  파일·폴더를 읽는 함수(read_*·glob·*_scan 등)와 FROM '경로', 환경·설정 읽기(getenv 등)도 막는다. 어기면 SecurityViolationError. WITH, 여러 테이블 JOIN, LIKE, * 는 된다.
+  파일·폴더를 읽는 함수(read_*·glob·*_scan 등)와 FROM '경로', 환경·설정 읽기(getenv 등), 잠금(FOR UPDATE·TABLOCK 등)도 막는다.
+  이 목록은 실수를 막는 것이고 원격 DB에서 지키는 선은 읽기 전용 계정이다(모르는 함수 이름은 통과한다). 어기면 SecurityViolationError. WITH, 여러 테이블 JOIN, LIKE, * 는 된다.
 - 실행: 검사한 SQL을 연결의 con.sql()로 Ibis 식으로 만들고, 화면에 보일 때는 max_rows행까지만(limit) 받는다.
 - 가상 테이블: 이름 붙인 SQL(또는 Parquet 파일 경로). 쓰는 SQL 앞에 WITH 이름 AS (…)로 풀어 넣어 DB에는 아무것도 만들지 않는다.
   연결마다 따로 둔다(virtual_tables.json {연결 열쇠: {이름: 정의}}, 연결 정보·비밀번호 없음). Parquet은 DuckDB·파일(Polars) 연결에서만 쓴다."""
@@ -22,15 +23,22 @@ FORBIDDEN = ("Drop", "Delete", "Insert", "Update", "Create", "Alter", "TruncateT
              "Cache", "Uncache", "Analyze")  # 파일·DB를 붙이는 문장
 PARQUET_BACKENDS = ("duckdb", "polars")
 FILE_FUNCS = {"glob", "sniff_csv", "st_read", "query", "query_table", "postgres_query", "postgres_execute", "mysql_query", "sqlite_query",  # 파일·폴더를 읽거나 문자열을 SQL로 돌리는 함수 이름
-              "pg_read_file", "pg_read_binary_file", "pg_ls_dir", "lo_import", "lo_export", "load_file", "openrowset", "opendatasource", "openquery"}  # Postgres·MySQL·MSSQL 서버의 파일·원격 읽기
-FILE_PREFIXES = ("read_", "parquet_", "iceberg_", "delta_", "dblink", "xp_")  # 이름이 이렇게 시작하는 함수
+              "pg_read_file", "pg_read_binary_file", "pg_ls_dir", "load_file", "openrowset", "opendatasource", "openquery",  # Postgres·MySQL·MSSQL 서버의 파일·원격 읽기
+              "json_execute_serialized_sql", "query_to_xml", "query_to_xml_and_xmlschema", "query_to_xmlschema", "cursor_to_xml",  # 글자로 준 SQL을 돌리는 함수(DuckDB·Postgres)
+              "url", "urlcluster", "file", "remote", "remotesecure", "cluster", "clusterallreplicas", "s3", "s3cluster", "gcs", "hdfs", "hdfscluster",  # ClickHouse의 파일·네트워크·다른 서버 읽기
+              "azureblobstorage", "azureblobstoragecluster", "mysql", "postgresql", "mongodb", "redis", "sqlite", "jdbc", "odbc", "executable", "input"}
+FILE_PREFIXES = ("read_", "parquet_", "iceberg_", "delta_", "dblink", "xp_", "lo_")  # 이름이 이렇게 시작하는 함수(lo_*: Postgres 큰 객체 읽기·쓰기·지우기)
 FILE_SUFFIXES = ("_scan",)  # 이름이 이렇게 끝나는 함수(delta_scan, iceberg_scan, excel_scan …). DuckDB의 postgres_query 같은 원격 조회는 FILE_FUNCS에 이름으로(json_query처럼 정상인 *_query 함수는 막지 않는다)
 ENV_FUNCS = {"getenv", "current_setting", "current_settings", "duckdb_settings", "duckdb_secrets", "which_secret",
-             "setval", "nextval", "set_config", "pg_terminate_backend", "pg_cancel_backend", "sleep", "pg_sleep"}  # 환경·설정·비밀을 읽거나 서버 상태를 바꾸는 함수
+             "setval", "nextval", "set_config", "pg_terminate_backend", "pg_cancel_backend", "sleep", "pg_sleep",  # 환경·설정·비밀을 읽거나 서버 상태를 바꾸는 함수
+             "get_lock", "pg_reload_conf", "pg_switch_wal", "pg_rotate_logfile", "pg_promote", "benchmark"}  # 잠금을 잡거나 서버 설정·로그·부하를 바꾸는 함수
+ENV_PREFIXES = ("pg_advisory_", "pg_try_advisory_", "pg_stat_reset", "pg_drop_", "pg_create_", "system$")  # 이름이 이렇게 시작하는 함수(잠금·통계 지우기·복제 슬롯, Snowflake SYSTEM$…)
+LOCK_HINT = re.compile(r"(TAB|UPD|X|HOLD|PAG|ROW)LOCK|SERIALIZABLE|REPEATABLEREAD", re.I)  # SQL Server 테이블 힌트 중 잠금을 잡는 것(NOLOCK·INDEX 같은 힌트는 된다)
 FILE_TABLE = re.compile(r"\.(csv|tsv|parquet|jsonl?|ndjson|geojson|duckdb|gz|zst|xlsx|tbl|txt)$", re.I)  # DuckDB가 파일로 읽는 테이블 이름(스키마.테이블로 나뉜 t.csv 포함)
 FILE_CLASSES = ("ReadCSV", "ReadParquet")  # sqlglot이 함수 이름 대신 따로 만드는 클래스(없는 버전이면 건너뜀)
 READ_MESSAGE = "SQL 안에서 파일을 직접 읽을 수 없어요. 파일은 [연결]로 열거나 가상 테이블(Parquet)로 등록하세요."
 ENV_MESSAGE = "SQL 안에서 환경·설정 값을 읽거나 서버 상태를 바꿀 수 없어요."
+LOCK_MESSAGE = "SQL 안에서 테이블을 잠글 수 없어요(FOR UPDATE·TABLOCK 같은 잠금)."
 
 
 @functools.cache
@@ -113,9 +121,11 @@ def file_read_problem(tree, sql):
     for node in tree.walk():
         if isinstance(node, classes):
             return READ_MESSAGE
+        if isinstance(node, exp.Lock) or isinstance(node, exp.WithTableHint) and LOCK_HINT.search(node.sql()):
+            return LOCK_MESSAGE
         if isinstance(node, exp.Func):
             name = (node.name if isinstance(node, exp.Anonymous) else node.sql_name()).lower()
-            if name in ENV_FUNCS:
+            if name in ENV_FUNCS or name.startswith(ENV_PREFIXES):
                 return ENV_MESSAGE
             if name in FILE_FUNCS or name.startswith(FILE_PREFIXES) or name.endswith(FILE_SUFFIXES):
                 return READ_MESSAGE

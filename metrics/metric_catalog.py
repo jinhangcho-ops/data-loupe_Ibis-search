@@ -117,11 +117,13 @@ EXTRA = {  # 컬럼이 아닌 빈칸: 역할 → (이름, 타입, 안내, 기본
     "power": slot("검정력", "number", "원하는 검정력", default=0.8),
     "op": slot("방향", "choice", "Lift가 한계를 어느 쪽으로 지켜야 하는지", options=[">=", "<="], default=">="),
     "limit": slot("한계(%)", "number", "Lift 한계(%)", default=-5),
+    "effect": slot("기대 효과", "number", "잡아내고 싶은 차이(비우면 지금 보인 차이로 구하지만 판단용이 아니에요)", optional=True),
+    "effect_kind": slot("기대 효과 단위", "choice", "기대 효과가 절대 차이인지 대조군 대비 %인지", options=["절대", "%"], default="절대"),
 }
 CONSTANTS = {"gap", "eps", "run", "inactive_days", "churn_days", "span", "fee", "vat", "n_days", "n", "from_n", "to_n", "method", "mode", "whale", "dolphin", "max_days", "active_days", "pity",
-             "top", "threshold", "k", "alpha", "power", "op", "limit", "basis", "limit_sec"}  # 사용자가 적는 상수 빈칸(컬럼을 고르는 칸이 아니다)
+             "top", "threshold", "k", "alpha", "power", "op", "limit", "basis", "limit_sec", "effect", "effect_kind"}  # 사용자가 적는 상수 빈칸(컬럼을 고르는 칸이 아니다)
 RANGES = {"gap": (0, None), "eps": (0, 100), "fee": (0, 100), "vat": (0, 100), "whale": (0, None), "dolphin": (0, None), "top": (0, 100), "alpha": (0, 1), "power": (0, 1),
-          "threshold": (None, None), "limit": (None, None), "limit_sec": (0, None), "from_n": (0, None), "to_n": (0, None)}  # 숫자 칸의 범위(열린 쪽은 None)
+          "threshold": (None, None), "limit": (None, None), "effect": (None, None), "limit_sec": (0, None), "from_n": (0, None), "to_n": (0, None)}  # 숫자 칸의 범위(열린 쪽은 None)
 
 
 def col_slot(role, **over):
@@ -161,6 +163,7 @@ def entry(id, area, name, abbr, help, formula, sentence, roles, calc, params=Non
 OPT = {"optional": True}
 SES = ["user", "time", "gap", "sess_cols"]  # 세션을 쓰는 항목의 공통 빈칸
 AD_OTHER = [("ad_table", {}), ("spend", other(label="광고비 컬럼(광고 테이블)")), ("ad_time", {})]  # 광고비가 다른 테이블에 있는 항목의 빈칸
+AB_USER = ("user", {"optional": True, "label": "사용자 컬럼(고르면 사용자별로 모아 사용자 수로 검정)"})  # A/B 지표: 비우면 한 행 = 한 사용자
 P = lambda unit, name: {"unit": unit, "unit_name": name}  # 활성 사용자 수의 단위
 
 T, F, R, M, K, E, C = "traffic", "funnel", "retention", "revenue", "marketing", "economy", "commerce"
@@ -340,15 +343,15 @@ ENTRIES = [
     entry("mape", "model", "평균 절대 비율 오차", "MAPE", "오차를 정답의 몇 %인지로 평균한 값이에요. 정답이 0인 행은 뺍니다.", "평균 |오차 ÷ 정답|", "{정답}과 {예측}의 MAPE(정답이 0인 행 제외)",
           [("y_true", {"kinds": "num"}), ("y_pred", {"kinds": "num", "optional": False})], "regression", {"pick": "mape"}, fmt="percent", better="down"),
     entry("lift", "model", "리프트", "Lift", "실험군이 대조군보다 몇 % 높은지예요. 크기만 볼 뿐 우연인지는 p-value로 따로 봐요.", "(T − C) ÷ C", "{실험군}이 {대조군 값}인 군 대비 {실험군 값}인 군의 {지표 값} 변화율",
-          ["group", "metric", "control", "treat"], "lift", pair=["control_mean", "treat_mean"], fmt="percent", better="up", hint="north_star"),
+          ["group", "metric", "control", "treat", AB_USER], "lift", pair=["control_mean", "treat_mean"], fmt="percent", better="up", hint="north_star"),
     entry("pvalue", "model", "유의확률", "p-value", "차이가 우연으로 생겼을 확률이에요. 유의수준보다 작으면 우연이라고 보기 어려워요. 숫자(0/1)면 비율 z, 연속이면 Welch t 검정이에요.", "두 비율 z 검정 또는 Welch t 검정(양측)",
-          "{실험군}의 {대조군 값} 대 {실험군 값} 사이 {지표 값} 차이의 p-value(유의수준 {유의수준})", ["group", "metric", "control", "treat", "alpha"], "pvalue", pair=["control_n", "treat_n"]),
+          "{실험군}의 {대조군 값} 대 {실험군 값} 사이 {지표 값} 차이의 p-value(유의수준 {유의수준})", ["group", "metric", "control", "treat", "alpha", AB_USER], "pvalue", pair=["control_n", "treat_n"]),
     entry("power", "model", "검정력", "Power", "실제로 차이가 있을 때 그걸 잡아낼 확률이에요. 낮으면 차이가 있어도 못 찾으니 표본을 늘려야 해요.", "정규 근사 검정력", "{실험군}의 {대조군 값} 대 {실험군 값} 사이 {지표 값} 차이의 검정력(유의수준 {유의수준})",
-          ["group", "metric", "control", "treat", "alpha"], "power", pair=["control_n", "treat_n"], fmt="percent"),
+          ["group", "metric", "control", "treat", "alpha", "effect", "effect_kind", AB_USER], "power", pair=["control_n", "treat_n"], fmt="percent"),
     entry("mde", "model", "최소 검출 효과", "MDE", "지금 표본으로 잡아낼 수 있는 가장 작은 차이예요. 기대 효과가 이보다 작으면 실험을 더 오래 돌려야 해요.", "(z_(1−α/2) + z_power) × 표준오차",
-          "{실험군}의 {대조군 값} 대 {실험군 값} 사이 {지표 값}의 MDE(유의수준 {유의수준}, 검정력 {검정력})", ["group", "metric", "control", "treat", "alpha", "power"], "mde", pair=["control_n", "treat_n"]),
+          "{실험군}의 {대조군 값} 대 {실험군 값} 사이 {지표 값}의 MDE(유의수준 {유의수준}, 검정력 {검정력})", ["group", "metric", "control", "treat", "alpha", "power", AB_USER], "mde", pair=["control_n", "treat_n"]),
     entry("guardrail", "model", "가드레일", "Guardrail", "실험이 지켜야 할 지표예요. 실험군이 대조군보다 한계 넘게 나빠지면 경고해요. 대시보드의 카운터 한계(limits)와 같은 방식이에요.", "Lift ≥ 한계 (또는 ≤)",
-          "{실험군}의 {대조군 값} 대 {실험군 값} 사이 {지표 값} 변화율이 {한계(%)}% {방향}을 지키는지", ["group", "metric", "control", "treat", "op", "limit"], "guardrail", pair=["control_mean", "treat_mean"], hint="guardrail"),
+          "{실험군}의 {대조군 값} 대 {실험군 값} 사이 {지표 값} 변화율이 {한계(%)}% {방향}을 지키는지", ["group", "metric", "control", "treat", "op", "limit", AB_USER], "guardrail", pair=["control_mean", "treat_mean"], hint="guardrail"),
 ]
 BY_ID = {e["id"]: e for e in ENTRIES}
 
@@ -552,6 +555,7 @@ def compute(entry_, slots, body, ctx, align=None, limit=None):
     from core.prep_ops import nan_to_null
     from metrics import metric_kernels as mk
     e = get(entry_) if isinstance(entry_, str) else entry_
+    sql_funcs.exact_clickhouse()  # 지표의 고유 사용자 수가 ClickHouse에서 근사(uniq)가 되지 않게
     if e["cross"]:
         mk.check_align(align)
     ctx.align = align

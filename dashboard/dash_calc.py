@@ -19,6 +19,7 @@ from core import scan_size
 from core import settings
 from core import source as connection
 from core import sql_funcs
+from dashboard import period
 from dashboard import summary_text
 from core import targets
 from core import watch
@@ -457,8 +458,29 @@ def scalars(expr, series):
     return [row[f"v{i}"] for i in range(len(series))]
 
 
-def resolve_target(spec):
-    """카드의 목표(view.target)를 {value, label, error}로. {value}는 그대로, {name, period, scope}는 설정의 목표 파일(targets.py)에서 찾는다. 없으면 None."""
+def target_period(ctx):
+    """대시보드의 보는 기간(ctx)이 달·분기·연 하나면 목표 파일의 기간 글자('2026-10'·'2026-Q4'·'2026'), 아니면 None.
+    기준일로 잘린 기간은 직전 기간 글(지난달·직전 분기·작년 같은 기간)로, 다 지난 기간은 1일~그 달 끝으로 알아본다(dash_refresh.context가 만든 모양)."""
+    rng = (ctx or {}).get("range") or {}
+    start, end = rng.get("start"), rng.get("end")
+    if not start or not end or start[8:10] != "01":
+        return None
+    first, last = dt.date.fromisoformat(start[:10]), dt.date.fromisoformat(end[:10])
+    months = {"지난달 같은 기간": 1, "직전 분기 같은 기간": 3, "작년 같은 기간": 12}.get(((ctx or {}).get("prev") or {}).get("text"))
+    if months is None and last == period.month_end(last.year, last.month):
+        months = (last.year - first.year) * 12 + last.month - first.month + 1
+    if months == 1:
+        return start[:7]
+    if months == 3 and first.month % 3 == 1:
+        return f"{first.year}-Q{first.month // 3 + 1}"
+    if months == 12 and first.month == 1:
+        return str(first.year)
+    return None
+
+
+def resolve_target(spec, ctx=None):
+    """카드의 목표(view.target)를 {value, label, error}로. {value}는 그대로, {name, period, scope}는 설정의 목표 파일(targets.py)에서 찾는다. 없으면 None.
+    기간을 정하지 않은 목표는 대시보드 기간(ctx)이 달·분기·연이면 그 기간의 목표를 고른다(target_period)."""
     if not spec:
         return None
     if "value" in spec:
@@ -470,7 +492,7 @@ def resolve_target(spec):
         rows = targets.read(path)["rows"]
     except ValueError as e:
         return {"value": None, "label": spec["name"], "error": str(e)}
-    found = targets.lookup(rows, spec["name"], spec.get("period"), spec.get("scope"))
+    found = targets.lookup(rows, spec["name"], spec.get("period") or target_period(ctx), spec.get("scope"))
     return {"value": found["row"]["value"], "label": found["row"]["name"], "error": ""} if found["row"] else {"value": None, "label": spec["name"], "error": found["error"]}
 
 
@@ -529,7 +551,7 @@ def summary_data(card, ctx):
             note = f"그룹이 {MAX_GROUPS}개를 넘어 어느 그룹 덕분인지는 말하지 않았어요."
         else:
             groups = group_pairs(now, old, series[0]["agg"])
-    target = resolve_target(view.get("target"))
+    target = resolve_target(view.get("target"), ctx)
     found = summary_text.summarize(series_name(series[0]), cur, prev, view.get("format", "number"), view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"], partial,
                                    groups, (target or {}).get("value"))
     return {"values": {"scalar": [cur], "prev": [prev]}, "text": found["text"], "sentences": found["sentences"], "target": target, **({"note": note} if note else {})}
@@ -568,7 +590,7 @@ def value_data(card, ctx):
     else:
         series, expr = clean_series(body.get("series")), card_expr(card, ctx, window)
         found = {"values": {"scalar": run(lambda: scalars(expr, series)), "names": [series_name(s) for s in series]}}
-    return {**found, **({"target": resolve_target(view.get("target"))} if card["kind"] != "summary" else {}),
+    return {**found, **({"target": resolve_target(view.get("target"), ctx)} if card["kind"] != "summary" else {}),
             "date_cols": date_columns(querying.build(body, select=False))}
 
 

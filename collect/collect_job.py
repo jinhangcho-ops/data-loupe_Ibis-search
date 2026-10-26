@@ -31,6 +31,8 @@ from collect.collect_store import (IDLE, began, SAVE_EVERY, balancer_for, clean,
                            update, with_bom, write_output, write_record)
 
 MIN_FREE = 200 * 1024 * 1024  # 시작할 때 결과 폴더의 디스크에 적어도 남아 있어야 하는 공간
+MAX_AGE = dt.timedelta(days=1)  # 이어 받기는 시작한 지 이만큼 안에서만(오래 전에 받다 만 것에 지금 받은 것을 섞지 않게)
+CAPPED = "최대 쪽 수 {:,}에서 멈췄습니다(더 있을 수 있음). 다 받으려면 최대 쪽 수를 늘리세요."  # 예약(schedule.follow)은 이 문구로 시작하면 실패로 알린다
 RUNNING = "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요."
 BUSY = "같은 결과 파일에 다른 곳(다른 창, 프로그램 안 예약, Windows 예약 작업)이 수집하고 있습니다. 끝난 뒤에 시작하세요."
 
@@ -109,12 +111,20 @@ def read_record(path):
         return None
 
 
+def stale(record):
+    """진행 기록이 시작한 지 MAX_AGE보다 오래됐는지(그러면 이어 받지 않고 처음부터)."""
+    try:
+        return dt.datetime.now() - dt.datetime.fromisoformat(record["began"]) > MAX_AGE
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
 def resumable(config):
     """같은 설정으로 이어 받을 수 있는 진행 기록. 없으면 None."""
     if not config["output"]["path"].strip():
         return None
     record = read_record(parts(output_path(config))["record"])
-    return record if record and record.get("hash") == digest(config) else None
+    return record if record and record.get("hash") == digest(config) and not stale(record) else None
 
 
 # ---------- 상태 ----------
@@ -177,14 +187,16 @@ def start(config, password=""):
         raise Busy(BUSY)
     try:
         record = read_record(found["record"])
-        resumed = bool(record and record.get("hash") == digest(config))
+        old = bool(record and record.get("hash") == digest(config) and stale(record))
+        resumed = bool(record and record.get("hash") == digest(config)) and not old
         if not resumed:
             if record is not None or found["part"].exists() or found["out"].exists():
                 clean(found)
             record = {"hash": digest(config), "mode": config["mode"], "done": [], "rows": 0, "bytes": 0}
             write_record(found["record"], record)
         launch(config, env, path, found, record, password, lock=lock, pages=len(record["done"]) if config["mode"] != "file" else 0, rows=record.get("rows", 0),
-               bytes=record.get("bytes", 0), total_bytes=record.get("size"), message="이어 받습니다." if resumed else "", group=group)
+               bytes=record.get("bytes", 0), total_bytes=record.get("size"), group=group,
+               message="이어 받습니다." if resumed else "지난번 받다 만 것이 하루보다 오래돼 처음부터 받습니다." if old else "")
     except BaseException:
         filelock.let_go(lock)
         raise
@@ -366,6 +378,7 @@ def run_api(config, env, path, found, record, halt):
             record["first"] = len(rows)
             record["total"] = as_count(req.extract(data, paging["total_path"]))
 
+    capped = False  # 최대 쪽 수에 닿아 멈췄음(더 있을 수 있음)
     if paging["kind"] in ("none", "page", "offset"):
         if paging["kind"] == "none":
             config = {**config, "paging": {**paging, "max_pages": 1}}
@@ -430,6 +443,7 @@ def run_api(config, env, path, found, record, halt):
             t.join()
         if errors:
             raise min(errors, key=lambda e: not getattr(e, "failed", True))  # 실패가 있으면 그것을, 아니면 멈춤
+        capped = paging["kind"] != "none" and page_cap({**config, "paging": {**paging, "max_pages": math.inf}}, record) > paging["max_pages"]  # 빈 쪽·전체 수로 끝나지 않았다
     elif not record.get("finished"):  # cursor·next_url: 하나씩, 받은 커서·주소를 따라간다.
         order = record.setdefault("seen", [])  # 지나온 커서·주소(받은 순서). 쪽마다 정렬하지 않고 덧붙인다
         seen = set(order)
@@ -471,7 +485,11 @@ def run_api(config, env, path, found, record, halt):
             if end:
                 break
             cursor, url, i = more.get("cursor") or "", more.get("next"), i + 1
-    return finish_api(config, path, found, record)
+        capped = i >= paging["max_pages"] and not record.get("finished")
+    made = finish_api(config, path, found, record)
+    if made and capped:
+        update(message=CAPPED.format(paging["max_pages"]))
+    return made
 
 
 # ---------- 파일 ----------

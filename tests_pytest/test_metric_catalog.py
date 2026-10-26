@@ -527,9 +527,10 @@ def test_guardrail_and_limits():
     s = {"실험군": "g", "지표 값": "conv", "대조군 값": "c", "실험군 값": "t", "한계(%)": -20}
     bad = run("guardrail", s, t)
     assert bad["value"] == pytest.approx(-0.5) and bad["notes"] and "벗어났어요" in bad["label"] and bad["rows"][2]["value"] == "경고"
-    ok = run("guardrail", {**s, "한계(%)": -60}, t)
-    assert not ok["notes"] and "지키고 있어요" in ok["label"] and ok["rows"][2]["value"] == "정상"
-    below = run("guardrail", {**s, "한계(%)": -60, "방향": "<="}, t)
+    ok = run("guardrail", {**s, "한계(%)": -90}, t)  # Lift 95% 신뢰구간 아래 끝(약 −82%)까지 한계 안
+    assert "지키고 있어요" in ok["label"] and ok["rows"][2]["value"] == "정상"
+    assert run("guardrail", {**s, "한계(%)": -60}, t)["rows"][2]["value"] == "경고"  # 점추정 −50%는 안이어도 구간 끝이 넘으면 경고
+    below = run("guardrail", {**s, "한계(%)": -90, "방향": "<="}, t)
     assert "벗어났어요" in below["label"]
     # 대시보드 카운터 한계와 같은 뜻: >=이면 값이 한계보다 작아질 때, <=이면 커질 때 경고
     assert cat.check_limit(0.5, {"op": ">=", "value": 0.8}).startswith("지금 값 0.5") and cat.check_limit(0.9, {"op": ">=", "value": 0.8}) is None

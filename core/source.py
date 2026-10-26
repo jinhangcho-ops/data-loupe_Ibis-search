@@ -41,7 +41,7 @@ def within(seconds, work, late, wake=None, drop=lambda value: None, stop=lambda:
     """work()를 연결 스레드에서 돌려 seconds초까지만 기다린다(None이면 끝까지). DB 종류와 상관없이 쓸 수 있게 드라이버 설정 대신 이렇게 한다.
     넘기면 late 문구로 TimeoutError, 기다리는 중에 밖에서 wake를 켜면 InterruptedError를 낸다.
     그만둘 때 stop()을 부르고, 멈추라고 알렸으면(True) 일이 끝나기를 STOP_WAIT초까지 기다린다. 그래도 안 끝나거나 알릴 수 없으면
-    그 스레드는 하던 일에 두고 새 스레드로 넘어가 다음 일이 막히지 않게 한다. 포기한 뒤에 늦게 나온 결과는 drop에 넘긴다(연결이면 닫는다)."""
+    그 스레드는 하던 일에 두고 새 스레드로 넘어가 다음 일이 막히지 않게 한다(그때 낸 오류의 abandoned가 True). 포기한 뒤에 늦게 나온 결과는 drop에 넘긴다(연결이면 닫는다)."""
     if threading.current_thread() is worker:  # 연결 스레드 안에서 부른 일은 그 자리에서 돌린다.
         return work()
     found, gave_up, ended, lock, wake = {}, threading.Event(), threading.Event(), threading.Lock(), wake or threading.Event()
@@ -68,10 +68,12 @@ def within(seconds, work, late, wake=None, drop=lambda value: None, stop=lambda:
         if not found:
             gave_up.set()
     if gave_up.is_set():
+        error = TimeoutError(late) if timed_out else InterruptedError()
         if not (stop() and ended.wait(STOP_WAIT)):
             jobs.put(None)
             start_worker()
-        raise TimeoutError(late) if timed_out else InterruptedError()
+            error.abandoned = True  # 버린 스레드가 아직 연결을 쓴다(server.run이 연결을 새로 연다)
+        raise error
     if "error" in found:
         raise found["error"]
     return found["value"]
@@ -427,11 +429,16 @@ def open_url(url, user="", password=""):
 
     def connect():
         try:
-            return ibis.connect(url, **extra)
+            con = ibis.connect(url, **extra)
         except Exception as e:
             if type(e).__name__ == "ConnectionTimeout":  # psycopg: connect_timeout(drivers.PG_WAIT)을 넘김
                 raise TimeoutError("접속 대기 시간 안에 연결되지 않았습니다. 주소·포트와 네트워크를 확인하세요. 느린 DB는 주소 끝에 ?connect_timeout=30 을 붙여 보세요.") from e
             raise
+        drivers.settle(con, url)  # DB 쪽 쿼리 시간 제한·접속 이름
+        if getattr(con, "name", None) == "clickhouse":  # 분석 화면의 nunique·분위수도 근사 함수 대신 정확한 함수로
+            from core import sql_funcs
+            sql_funcs.exact_clickhouse()
+        return con
     return within(CONNECT_TIMEOUT, connect, late, drop=close)
 
 

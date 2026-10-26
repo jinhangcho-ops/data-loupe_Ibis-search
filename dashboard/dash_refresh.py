@@ -1,5 +1,5 @@
 """대시보드 최신화(2단계): 연결에 성공한 뒤 주기가 지난 카드를 작업 스레드 하나가 차례로 다시 구해 저장한다. 최신화 주기·실시간 간격 검사와 연결별 실시간 간격 최소도 여기 있다.
-주기 글자는 period.parse_every가 읽는다(숫자 + 초·분·시간·일·주·달·개월·년). 최신화 주기는 MIN_REFRESH(1시간) 이상, 실시간 간격의 최소는 연결(source_key)마다 사용자가 정한다(설정 live_min.json, 없으면 제한 없음).
+주기 글자는 period.parse_every가 읽는다(숫자 + 초·분·시간·일·주·달·개월·년). 최신화 주기는 MIN_REFRESH(1시간) 이상, 실시간 간격의 최소는 연결(source_key)마다 사용자가 정한다(설정 live_min.json, 없으면 원격 연결은 REMOTE_LIVE_MIN(1분), 이 PC 파일 연결은 제한 없음).
 카드 하나씩 화면 요청과 같은 차례(querying.using)를 잡고 dash_calc.compute로 구해 dash_store.set_cards_data로 대시보드마다 한 번에 쓴다. 실패한 카드는 이전 값을 두고 이유만 남긴다."""
 import datetime as dt
 import threading
@@ -21,6 +21,7 @@ from core.server import run
 MIN_REFRESH = dash_store.MIN_REFRESH  # 최신화 주기의 최소(초)
 LIVE_FILE = "live_min.json"  # {source_key: 실시간 간격 최소(초)}
 MAX_LIVE_MIN = 86400
+REMOTE_LIVE_MIN = 60  # 최소를 정하지 않은 원격 연결(DB 서버)의 실시간 간격 최소(초): 짧은 간격으로 서버를 두드리지 않게
 GROW = 4 * 1024 * 1024  # 저장소가 이 크기를 넘을 때마다 중간 저장 간격을 FLUSH_SECONDS만큼 늘린다
 FLUSH_SECONDS = 30  # 한 대시보드를 구하는 동안 이만큼 지나면 그때까지 구한 카드를 먼저 저장한다(중간에 꺼져도 다 잃지 않게)
 REFRESHABLE = ("chart", "analysis", "funnel", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation", "geomap")  # 지금 다시 구할 수 있는 카드 종류
@@ -55,15 +56,18 @@ def live_mins():
 
 
 def live_min(key):
-    return live_mins().get(dash_store.canon_key(key), 0)
+    """이 연결의 실시간 간격 최소(초). 정해 두었으면 그 값, 아니면 원격 연결은 REMOTE_LIVE_MIN, 이 PC 파일(폴더·sqlite·duckdb)은 0(제한 없음)."""
+    key = dash_store.canon_key(key)
+    local = not isinstance(key, str) or not key.startswith("url:") or key.startswith(tuple(f"url:{s}://" for s in dash_store.FILE_SCHEMES))
+    return live_mins().get(key) or (0 if local else REMOTE_LIVE_MIN)
 
 
 def set_live_min(key, seconds):
-    """이 연결(key)의 실시간 간격 최소를 정한다. 0이면 지운다(제한 없음)."""
+    """이 연결(key)의 실시간 간격 최소를 정한다. 0이면 지운다(기본값: 원격 연결 1분, 이 PC 파일은 제한 없음)."""
     if not isinstance(key, str) or not key:
         raise ValueError("먼저 데이터에 연결하세요.")
     if type(seconds) is not int or not 0 <= seconds <= MAX_LIVE_MIN:
-        raise ValueError(f"실시간 간격 최소는 0~{MAX_LIVE_MIN}초의 정수입니다(0이면 제한 없음).")
+        raise ValueError(f"실시간 간격 최소는 0~{MAX_LIVE_MIN}초의 정수입니다(0이면 기본값: 원격 연결 1분, 이 PC 파일은 제한 없음).")
     with settings.updating(LIVE_FILE):
         found, key = live_mins(), dash_store.canon_key(key)
         if seconds:
@@ -83,7 +87,7 @@ def check_dashboard_every(d):
         least = live_min(key)
         if live and live < least:
             label = next((c["source"].get("label") for c in d["cards"] if c["source"].get("key") == key and c["source"].get("label")), key)
-            raise ValueError(f"‘{label}’ 연결의 실시간 간격은 {minimum_text(least)} 이상으로 정해 두었어요. 더 짧게 쓰려면 그 연결의 최소를 먼저 바꾸세요.")
+            raise ValueError(f"‘{label}’ 연결의 실시간 간격은 {minimum_text(least)} 이상이어야 해요. 더 짧게 쓰려면 그 연결의 최소를 먼저 바꾸세요.")
 
 
 def context(d, today=None):

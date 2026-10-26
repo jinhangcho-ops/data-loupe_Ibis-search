@@ -8,16 +8,17 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel)에 연결해 �
 
 | 화면 | 하는 일 | 자세히 |
 |---|---|---|
-| 쿼리 | 조건을 골라 탐색, SQL 직접 쓰기·질문으로 SQL 만들기, 지표, 차트. 실행 전에 처리 용량 안내 | [docs/query.md](docs/query.md) |
-| 분석 | 컬럼마다 전처리해 새 파일·테이블로, 분포·상관관계·그룹 비교·추이 그래프 | [docs/analysis.md](docs/analysis.md) |
+| 쿼리 | 조건을 골라 탐색(같은 조건을 단계 카드·흐름 그림·문장 빈칸 채우기 중 편한 모양으로), SQL 직접 쓰기·질문으로 SQL 만들기, 차트. 실행 전에 처리 용량 안내 | [docs/query.md](docs/query.md), [흐름·문장](docs/flow_sentences.md) |
+| 지표 | 쿼리 화면의 [지표] 탭: 내 지표 만들기, 지표 사전 95개(DAU·리텐션·코호트·LTV·ARPU·전환·A/B 실험 등)를 빈칸만 채워 구하기 | [지표 사전](docs/metrics_catalog.md) |
+| 분석 | 컬럼마다 전처리해 새 파일·테이블로, 분포·상관관계·그룹 비교·추이 그래프, 흐름(퍼널) | [docs/analysis.md](docs/analysis.md), [퍼널](docs/funnel.md) |
 | 수집 | 웹 API·파일 주소·웹페이지에서 받아 저장, DB 테이블·Kafka에 적재, 업로드 기록, 예약 실행 | [docs/collect.md](docs/collect.md) |
 | 연동 | Slack·Notion·웹훅으로 보내기, Slack `/ibis` 명령, GA4 가져오기, LLM 설정 | [docs/integrations.md](docs/integrations.md) |
 
-대시보드 화면(저장된 값으로 보기, 기준일·기간·최신화·실시간)은 [docs/dashboard.md](docs/dashboard.md)(카드 종류는 [docs/dashboard_cards.md](docs/dashboard_cards.md))에 있습니다. 집계·계산에 고를 수 있는 함수는 [docs/functions.md](docs/functions.md)에 있습니다.
+대시보드 화면(저장된 값으로 보기, 기준일·기간·최신화·실시간, 목표와 비교)은 [docs/dashboard.md](docs/dashboard.md)(카드 종류는 [docs/dashboard_cards.md](docs/dashboard_cards.md), 카드 끌어 옮기기·템플릿·보고서 그림 저장은 [docs/dashboard_edit.md](docs/dashboard_edit.md))에 있습니다. 집계·계산에 고를 수 있는 함수는 [docs/functions.md](docs/functions.md)에 있습니다.
 
 좌표(GeoJSON 연결, 거리·반경·격자, 가까운 지점·점-영역, TM 변환, 지도 카드와 지도 배경)는 [docs/geo.md](docs/geo.md)에 있습니다.
 
-화면 설정, 진행 상황과 취소, 기억되는 것, DB별 드라이버는 [docs/settings.md](docs/settings.md)에 있습니다.
+화면 설정, 진행 상황과 취소, 기억되는 것, DB별 드라이버는 [docs/settings.md](docs/settings.md)에 있습니다. 앱이 갑자기 꺼져도 만들던 화면을 이어서 하는 임시 저장은 [docs/drafts.md](docs/drafts.md)에 있습니다.
 
 ## 프로그램 받기
 

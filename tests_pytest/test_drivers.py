@@ -9,6 +9,7 @@ from core import drivers
 from core import server
 
 ROOT = Path(__file__).resolve().parent.parent
+PINS = ROOT / "constraints.txt"  # 드라이버 설치 명령의 -c(간접 의존 고정)
 
 
 def pinned():
@@ -68,7 +69,7 @@ def test_extension_states_reads_duckdb(monkeypatch):
 
 def test_version_matches_requirements(monkeypatch):
     assert drivers.ibis_version() == pinned()
-    assert drivers.pip_command("bigquery") == f'pip install "ibis-framework[bigquery]=={pinned()}"'
+    assert PINS.is_file() and drivers.pip_command("bigquery") == f'pip install -c "{PINS}" "ibis-framework[bigquery]=={pinned()}"'
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     assert pinned() in drivers.pip_command("bigquery")
 
@@ -99,7 +100,7 @@ def test_frozen_command_and_restart_note(monkeypatch):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(drivers, "module_found", lambda m: False)
     d = drivers.entry("snowflake")
-    assert d["command"] == f'py -3.14 -m pip install --target "%APPDATA%\\DataLoupe\\drivers" "ibis-framework[snowflake]=={pinned()}"'
+    assert d["command"] == f'py -3.14 -m pip install --target "%APPDATA%\\DataLoupe\\drivers" -c "{PINS}" "ibis-framework[snowflake]=={pinned()}"'
     assert d["after"] == "설치 뒤 프로그램을 다시 켜세요." and d["notice"] == ""
 
 

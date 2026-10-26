@@ -226,6 +226,7 @@
           <label id="kf-mech-box"><div class="hint">SASL 방식</div><select id="kf-mech"><option>PLAIN</option><option>SCRAM-SHA-256</option><option>SCRAM-SHA-512</option></select></label>
           <label id="kf-user-box"><div class="hint">아이디</div><input id="kf-user" autocomplete="off"></label>
         </div>
+        <div class="warn hidden" id="kf-plain-warn">SASL_PLAINTEXT에 PLAIN이면 아이디·비밀번호가 암호화 없이 그대로 네트워크로 갑니다. SASL_SSL이나 SCRAM을 쓰세요.</div>
         <div id="kf-ca-box"><div class="hint">CA 인증서 파일 경로 (선택)</div><input id="kf-ca" class="code" placeholder="예: C:\certs\ca.pem" style="margin-bottom:6px"></div>
         <div class="err" id="kf-msg"></div>
         <div class="fields">
@@ -995,9 +996,10 @@ function showLoad() {
   show("kf-user-box", sasl());
   show("kf-pass-box", sasl());
   show("kf-ca-box", $("kf-security").value.endsWith("SSL"));
+  show("kf-plain-warn", $("kf-security").value === "SASL_PLAINTEXT" && $("kf-mech").value === "PLAIN");
 }
 document.querySelectorAll("input[name=ltarget], input[name=ldkind]").forEach(r => r.onchange = showLoad);
-["ld-how", "ld-unit", "kf-security"].forEach(id => $(id).addEventListener("change", showLoad));
+["ld-how", "ld-unit", "kf-security", "kf-mech"].forEach(id => $(id).addEventListener("change", showLoad));
 // 시작·확인에 따로 실어 보낼 비밀번호: 지금 적재할 곳의 칸 것만
 const loadPassword = () => loadTarget() === "table" ? (loadKind() === "url" ? $("ld-pass").value : "") : loadTarget() === "kafka" && sasl() ? $("kf-pass").value : "";
 const forgetPasswords = () => { $("ld-pass").value = ""; $("kf-pass").value = ""; };

@@ -13,7 +13,9 @@ from core import source
 MAX_BYTES = 200 * 1024 * 1024  # 응답 하나의 최대 크기(파일 모드는 제외)
 MAX_REDIRECTS = 5
 MAX_WAIT = 15 * 60  # Retry-After·한도 초기화를 기다리는 최대 시간(초). 넘으면 멈춘다.
-MAX_FAILURES = 20  # 작업 전체의 실패 수가 이것을 넘으면 멈춘다.
+MAX_FAILURES = 20  # 작업 전체에서 다시 시도까지 끝내 실패한 요청 수가 이것을 넘으면 멈춘다(429·일시 5xx 뒤에 받은 것은 세지 않는다).
+SLOW_MAX = 8  # 429로 늘린 간격의 상한: 처음 간격(0이면 0.05초)의 이 배수
+STEADY = 20  # 이만큼 잇따라 받으면 줄였던 동시 수·간격을 처음대로 돌린다
 BACKOFF = 1.0  # 다시 시도의 기다림 기준(초). 시도마다 두 배, 60초까지, 무작위로 0.5~1.5배.
 REDIRECTS = (301, 302, 303, 307, 308)
 SECRET_HEADERS = {"authorization", "cookie", "proxy-authorization"}  # 이름과 상관없이 비밀인 헤더. 다른 호스트로 넘어가면 빼고, 구성에 값을 그대로 두지 못한다(collect_request).
@@ -143,6 +145,7 @@ class Balancer:
         self.limit, self.interval, self.retries, self.stop = concurrency, interval, retries, stop
         self.note, self.take, self.heard, self.secrets = note, take, heard, secrets
         self.busy, self.last, self.until, self.failures, self.sent = 0, 0.0, 0.0, 0, 0
+        self.first, self.streak, self.lost = (concurrency, interval), 0, 0  # 처음 동시 수·간격, 잇따라 받은 수, 끝내 실패한 요청 수
         self.slow_on = (429,)  # 동시 수를 줄이는 응답 상태(파일 모드는 503도)
         self.cond = threading.Condition()
 
@@ -170,10 +173,17 @@ class Balancer:
             self.cond.notify_all()
 
     def slow(self):
-        """동시 수를 반으로, 간격을 두 배로."""
+        """동시 수를 반으로, 간격을 두 배로(처음 간격의 SLOW_MAX배까지)."""
         with self.cond:
-            self.limit = max(1, self.limit // 2)
-            self.interval = max(self.interval * 2, 0.05)
+            self.limit, self.streak = max(1, self.limit // 2), 0
+            self.interval = min(max(self.interval * 2, 0.05), max(self.first[1], 0.05) * SLOW_MAX)
+
+    def fine(self):
+        """잘 받았다: STEADY번 잇따르면 동시 수·간격을 처음대로."""
+        with self.cond:
+            self.streak += 1
+            if self.streak >= STEADY:
+                (self.limit, self.interval), self.streak = self.first, 0
 
     def pause(self, seconds, why):
         """모든 요청을 seconds초 쉬게 한다. MAX_WAIT를 넘으면 멈춘다."""
@@ -186,10 +196,11 @@ class Balancer:
     def backoff(self, attempt):
         return min(BACKOFF * 2 ** attempt, 60) * random.uniform(0.5, 1.5)
 
-    def failed(self, what):
+    def failed(self, what, lost=False):
+        """실패를 센다(상태에 보임). lost(다시 시도까지 끝내 실패)만 MAX_FAILURES로 견준다."""
         with self.cond:
-            self.failures += 1
-        if self.failures > MAX_FAILURES:
+            self.failures, self.lost, self.streak = self.failures + 1, self.lost + lost, 0
+        if self.lost > MAX_FAILURES:
             raise Halt(f"실패가 {MAX_FAILURES}번을 넘어 멈췄습니다. 마지막: {what}")
 
     def call(self, attempt):
@@ -209,6 +220,7 @@ class Balancer:
             if rest:
                 self.pause(rest, "서버가 알려 준 남은 횟수가 0")
             if reply is not None and 200 <= reply.status < 300:
+                self.fine()
                 return reply
             if reply is not None:
                 last = source.mask(f"상태 {reply.status}", self.secrets, HIDE)
@@ -216,7 +228,7 @@ class Balancer:
                     raise Halt(f"인증을 확인하세요(상태 {reply.status}). env 파일의 키와 헤더를 확인하세요.")
                 if reply.status != 429 and reply.status < 500:
                     raise Halt(source.mask(f"요청이 거부됐습니다(상태 {reply.status}): {reply.text()[:200]}", self.secrets, HIDE), status=reply.status)
-            self.failed(last)
+            self.failed(last, lost=n == self.retries)
             if n == self.retries:
                 break
             after = retry_after(reply.header("Retry-After")) if reply is not None else None

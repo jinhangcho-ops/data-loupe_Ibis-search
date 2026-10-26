@@ -46,11 +46,11 @@ def test_every_checks_and_live_min_per_connection(folder):
     assert refresh.live_mins() == {} and refresh.live_min(KEY) == 0  # 비면 제한 없음
     refresh.check_dashboard_every({"cards": [card("a")], "live": {"every": "1초"}})
     refresh.set_live_min(KEY, 30)
-    assert refresh.live_min(KEY) == 30 and refresh.live_min(OTHER) == 0
+    assert refresh.live_min(KEY) == 30 and refresh.live_min(OTHER) == refresh.REMOTE_LIVE_MIN  # 정하지 않은 원격 연결은 기본 1분
     with pytest.raises(ValueError, match="30초 이상"):
         refresh.check_dashboard_every({"cards": [card("a")], "live": {"every": "10초"}})
     refresh.check_dashboard_every({"cards": [card("a")], "live": {"every": "30초"}})
-    refresh.check_dashboard_every({"cards": [card("a", key=OTHER)], "live": {"every": "1초"}})  # 다른 연결은 그 연결의 최소만
+    refresh.check_dashboard_every({"cards": [card("a", key=store.source_key({"kind": "folder", "path": "C:/data/other"}))], "live": {"every": "1초"}})  # 다른 연결은 그 연결의 최소만
     with pytest.raises(ValueError, match="최신화 주기는 1시간 이상"):
         refresh.check_dashboard_every({"cards": [], "refresh": {"every": "10분"}})
     refresh.set_live_min(KEY, 0)

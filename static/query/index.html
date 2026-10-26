@@ -156,7 +156,7 @@
       <button id="prev" class="btn" disabled>이전</button><button id="next" class="btn" disabled>다음</button><span id="page-info"></span>
       <label title="한 쪽에 보일 행 수">쪽당 <input id="limit" type="number" value="20" min="1"> 행</label>
       <label title="이보다 긴 글자는 줄여 보이고 마우스를 올리면 전체가 보입니다 (0 = 전체)">글자 <input id="maxlen" type="number" value="40" min="0"> 까지</label>
-      <label title="끄면 검색할 때 조회가 한 번으로 줄고, 예상 시간도 구하지 않습니다 (과금되는 DB에서 유용)"><input type="checkbox" id="count" checked> 전체 행 수 세기</label>
+      <label title="끄면 전체 행 수를 세지 않고, 예상 시간도 구하지 않습니다 (과금되는 DB에서 유용). 주소로 접속한 DB는 결과를 이 PC에 받아 둘 수 있는지만 100만 행까지 셉니다"><input type="checkbox" id="count" checked> 전체 행 수 세기</label>
       <span style="margin-left:auto"></span>
       <button id="handoff" class="btn k" title="조건에 맞는 전체 행을 Parquet 파일로 저장하고, 그 파일을 분석 화면의 전처리 탭에서 엽니다. 연결이 그 파일로 바뀝니다.">전처리로 보내기</button>
     </div>

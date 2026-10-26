@@ -113,15 +113,16 @@ def arrow_columns(arrow_schema):
     return columns_of(ibis.Schema.from_pyarrow(arrow_schema))
 
 
-def differences(file, table):
-    """결과 파일과 테이블의 컬럼([[이름, 타입]])이 다른 점. 같으면 빈 글자. 순서는 보지 않는다(이름으로 넣는다)."""
+def differences(file, table, append=False):
+    """결과 파일과 테이블의 컬럼([[이름, 타입]])이 다른 점. 같으면 빈 글자. 순서는 보지 않는다(이름으로 넣는다).
+    append(덧붙이기)면 테이블에만 있는 컬럼(빈 값으로 넣음)과 값이 하나도 없는 컬럼(null 타입, 테이블 타입으로 넣음)은 다른 점으로 보지 않는다."""
     a, b = dict(map(tuple, file)), dict(map(tuple, table))
     found = []
     if only := [n for n in a if n not in b]:
         found.append(f"결과 파일에만 있는 컬럼 {', '.join(only)}")
-    if only := [n for n in b if n not in a]:
+    if not append and (only := [n for n in b if n not in a]):
         found.append(f"테이블에만 있는 컬럼 {', '.join(only)}")
-    if other := [f"{n}({a[n]} ↔ {b[n]})" for n in a if n in b and a[n] != b[n]]:
+    if other := [f"{n}({a[n]} ↔ {b[n]})" for n in a if n in b and a[n] != b[n] and not (append and a[n] == "null")]:
         found.append(f"타입이 다른 컬럼 {', '.join(other)}")
     return " / ".join(found)
 
@@ -154,7 +155,8 @@ def insert(con, schema, name, data):
     """묶음(pyarrow 표) 하나를 넣는다. Ibis insert 한 번 = 문장 하나라 묶음째 들어가거나 들어가지 않는다.
     전처리의 테이블 만들기(prep_app.insert_all)처럼 값을 Python 값으로 두고(빈 날짜시각·큰 정수), 올린 임시 테이블은 바로 지운다."""
     from prep import prep_app
-    part = ibis.memtable(prep_app.plain_rows(data), schema=ibis.Schema.from_pyarrow(data.schema))
+    # DuckDB는 Arrow 표를 그대로 올린다(pandas로 바꾸면 수십 배 느리다). 빈 날짜시각·큰 정수 문제는 pandas로 바꿀 때만 생긴다
+    part = ibis.memtable(data) if con.name == "duckdb" else ibis.memtable(prep_app.plain_rows(data), schema=ibis.Schema.from_pyarrow(data.schema))
     try:
         con.insert(name, part, database=schema or None)
     finally:
@@ -178,34 +180,57 @@ def existing(con, schema, name, keys, data):
     return {tuple(row[k] for k in keys) for query in lookups(table, keys, data) for row in query.to_pyarrow().to_pylist()}
 
 
-@source.on_worker
-def rename(con, schema, name, new):
-    """테이블 이름을 바꾼다. Ibis 12의 rename_table은 DuckDB·SQLite에서 지원되지 않고 스키마도 받지 않아, ALTER TABLE … RENAME TO 문장을 연결의 SQL 방언으로 만든다."""
+def rename_sql(con, schema, name, new):
+    """ALTER TABLE … RENAME TO 문장(연결의 SQL 방언). Ibis 12의 rename_table은 DuckDB·SQLite에서 지원되지 않고 스키마도 받지 않아 직접 만든다.
+    MySQL·Snowflake는 새 이름에 스키마가 없으면 지금 DB로 옮겨 버려 새 이름에도 스키마를 붙인다(PostgreSQL·DuckDB는 새 이름에 스키마를 받지 않는다)."""
     import sqlglot
     quoted = con.compiler.quoted
-    statement = sqlglot.exp.Alter(this=sqlglot.table(name, db=schema or None, quoted=quoted), kind="TABLE",
-                                  actions=[sqlglot.exp.AlterRename(this=sqlglot.table(new, quoted=quoted))])
-    con.raw_sql(statement.sql(con.dialect))
+    target = sqlglot.table(new, db=(schema or None) if con.name in ("mysql", "snowflake") else None, quoted=quoted)
+    return sqlglot.exp.Alter(this=sqlglot.table(name, db=schema or None, quoted=quoted), kind="TABLE", actions=[sqlglot.exp.AlterRename(this=target)]).sql(con.dialect)
+
+
+def swap_sql(con, schema, name, staging):
+    """원래 것을 옆으로, 새 것을 원래 이름으로 한꺼번에 바꾸는 문장. 둘 사이에 테이블이 없는 순간이 없게:
+    PostgreSQL은 한 트랜잭션에서(잠금은 5초까지만 기다림), MySQL은 RENAME TABLE 한 문장으로. 그 밖의 연결은 None(차례로 바꾼다)."""
+    import sqlglot
+    old = name + OLD
+    if con.name == "postgres":
+        return f"BEGIN; SET LOCAL lock_timeout = '5s'; {rename_sql(con, schema, name, old)}; {rename_sql(con, schema, staging, name)}; COMMIT"
+    if con.name == "mysql":
+        t = lambda n: sqlglot.table(n, db=schema or None, quoted=con.compiler.quoted).sql(con.dialect)
+        return f"RENAME TABLE {t(name)} TO {t(old)}, {t(staging)} TO {t(name)}"
+    return None
+
+
+@source.on_worker
+def rename(con, schema, name, new):
+    """테이블 이름을 바꾼다."""
+    con.raw_sql(rename_sql(con, schema, name, new))
+
+
+@source.on_worker
+def swap_all(con, statement):
+    con.raw_sql(statement)  # PostgreSQL은 실패하면 Ibis가 되돌린다(ROLLBACK)
 
 
 def swap(con, schema, name, staging):
     """바꾸기의 마지막: 새 내용(staging)을 원래 이름으로. 원래 것을 옆으로 옮기고 → 새 것을 그 이름으로 → 옮긴 것을 지운다(중간에 실패하면 원래 것을 되돌린다).
-    이름 바꾸기 문장이 듣지 않는 연결이면 원래 것을 지우고 새 내용으로 다시 만든다."""
+    이름을 바꾸지 못하면(인덱스·뷰가 걸린 DuckDB 테이블 등) 원래 테이블은 지우지 않고 그대로 둔 채 오류로 멈춘다. 새 내용은 staging에 남는다."""
     db, old = schema or None, name + OLD
     if old.lower() in [t.lower() for t in con.list_tables(database=db)]:
         raise ValueError(f"바꾸는 동안 원래 테이블을 옮겨 둘 이름 '{old}'이 이미 있어 바꾸지 않았습니다. 새 내용은 '{staging}'에 남아 있습니다.")
     try:
-        rename(con, schema, name, old)
-    except Exception:
-        drop(con, schema, name)
-        con.create_table(name, con.table(staging, database=db), database=db)
-        drop(con, schema, staging)
-        return
-    try:
-        rename(con, schema, staging, name)
-    except Exception:
-        rename(con, schema, old, name)
-        raise
+        if statement := swap_sql(con, schema, name, staging):
+            swap_all(con, statement)
+        else:
+            rename(con, schema, name, old)
+            try:
+                rename(con, schema, staging, name)
+            except Exception:
+                rename(con, schema, old, name)
+                raise
+    except Exception as e:
+        raise ValueError(f"테이블 이름을 바꾸지 못해 바꾸지 않았습니다. 원래 테이블은 그대로이고 새 내용은 '{staging}'에 남아 있습니다. ({str(e)[:300]})") from None
     drop(con, schema, old)
 
 
@@ -248,9 +273,8 @@ def plan(table, real, columns, file_columns, resume=False):
     if how == "append":
         if file_columns is None:
             return "테이블이 있습니다. 컬럼은 수집한 뒤 결과 파일과 맞춰 봅니다."
-        gap = differences(file_columns, columns)
-        if gap:
-            raise ValueError(f"컬럼이 달라 덧붙일 수 없습니다. 다른 점: {gap}")
+        if differences(file_columns, columns, append=True):
+            raise ValueError(f"컬럼이 달라 덧붙일 수 없습니다. 다른 점: {differences(file_columns, columns)}")
         return "컬럼이 같아 덧붙일 수 있습니다."
     if record is None:
         raise ValueError("이 프로그램이 만든 테이블이 아니라 바꿀 수 없습니다.")
@@ -279,11 +303,11 @@ class Sink:
     """한 번의 적재 동안 쓰는 연결과 넣을 곳. put으로 묶음을 넣고, 다 넣으면 done, 끝나면 늘 close."""
 
     def __init__(self, config, password, arrow_schema, resume, load_id=None):
+        import pyarrow as pa
         self.table = table = config["load"]["table"]
         self.schema, self.keys, self.last = table["schema"], table["key"], ""
         self.load_id, self.placed = load_id, {}  # placed: 마지막 put이 넣은 키의 범위(업로드 기록) {"keys": {컬럼: [최소, 최대]}}
         if load_id:  # 적재 ID 컬럼: 새 테이블이면 만들 때 넣고, 있는 테이블이면 그 컬럼이 있어야 한다(plan이 컬럼 차이로 알려 준다)
-            import pyarrow as pa
             arrow_schema = arrow_schema.append(pa.field(uploads.LOAD_ID, pa.string()))
         self.link = link = table["connection"]
         self.con = connect(link, password)
@@ -292,6 +316,10 @@ class Sink:
             real, columns = look(self.con, self.schema, table["name"])
             plan(table, real, columns, file_columns, resume)
             self.name, self.staging, self.fresh = real or table["name"], None, False  # fresh: 넣을 곳을 새로 만들었음(이어 넣을 것이 없음)
+            self.fill = {}  # 덧붙이기: 값이 하나도 없는(null 타입) 컬럼 → 넣기 전에 바꿀 테이블의 타입
+            if real is not None and table["how"] == "append" and any(f.type.equals(pa.null()) for f in arrow_schema):
+                have = source.within(None, lambda: self.con.table(real, database=self.schema or None).schema().to_pyarrow(), "")
+                self.fill = {f.name: have.field(f.name).type for f in arrow_schema if f.type.equals(pa.null()) and f.name in have.names}
             if real is None:  # 새 테이블(바꾸기여도 없던 테이블이면 바로 만든다)
                 create(self.con, self.schema, self.name, arrow_schema)
                 remember(link, self.schema, self.name, file_columns)
@@ -324,6 +352,8 @@ class Sink:
                 if None not in k:
                     have.add(k)
             data = data.filter(pa.array(keep, pa.bool_()))
+        for name, kind in self.fill.items():
+            data = data.set_column(data.schema.get_field_index(name), name, data.column(name).cast(kind))
         if data.num_rows:
             if self.load_id:
                 import pyarrow as pa

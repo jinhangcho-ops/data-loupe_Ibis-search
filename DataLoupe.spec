@@ -29,7 +29,7 @@ hidden += collect_submodules("pyproj")
 
 a = Analysis(
     ["desktop.py"],
-    datas=[("static", "static")] + copy_metadata("ibis-framework") + collect_data_files("pyproj"),  # Ibis는 설치 정보로 백엔드를 찾는다.
+    datas=[("static", "static"), ("constraints.txt", ".")] + copy_metadata("ibis-framework") + collect_data_files("pyproj"),  # Ibis는 설치 정보로 백엔드를 찾는다. constraints.txt: 드라이버 설치 명령의 -c(drivers.pip_command)
     hiddenimports=hidden,
 )
 pyz = PYZ(a.pure)

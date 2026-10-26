@@ -35,7 +35,7 @@ FREE = {"/api/usage", "/api/cancel", "/api/send", "/api/drivers", "/api/funcs", 
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
 ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 목록 예: ("Parquet (*.parquet)",) → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
 ask_folder = None  # 저장할 폴더를 묻는 함수(→ 고른 폴더 또는 None). ask_save처럼 desktop.py가 채운다.
-QUERY_TIMEOUT = 1800  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다.
+QUERY_TIMEOUT = drivers.QUERY_TIMEOUT  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다. DB 쪽 시간 제한(drivers.settle)도 같은 값.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
 CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS,
              "funcs_ver": sql_funcs.version(), "agg_names": sql_funcs.agg_names(), "merge": list(sql_funcs.MERGE)}  # 함수 사전은 GET /api/funcs로 받는다(버전이 같으면 화면이 가진 것을 쓴다). 여기에는 작은 목록만
@@ -168,7 +168,23 @@ def run(work, drop=lambda value: None):
         return source.within(QUERY_TIMEOUT, then_release, f"{QUERY_TIMEOUT // 60}분 안에 끝나지 않아 멈췄습니다.", state["cancel"], drop,
                              lambda: source.interrupt(state["con"]))
     except (TimeoutError, InterruptedError) as e:
-        raise ValueError(str(e) or "취소했습니다.") from None
+        message = str(e) or "취소했습니다."
+        if getattr(e, "abandoned", False) and (state["opened"] or {}).get("kind") == "url":  # 파일 연결(DuckDB·Polars)은 겹쳐 읽어도 된다
+            message += renew()
+        raise ValueError(message) from None
+
+
+def renew():
+    """버린 스레드가 아직 쓰는 연결(드라이버에 멈추라고 알리지 못함)을 다음 작업이 같이 쓰지 않게, 메모리에 있는 접속 정보(opened)로 새로 연다.
+    도는 연결은 닫지 않는다(다른 스레드가 쓰는 중에 닫으면 드라이버가 죽을 수 있다. 일이 끝나면 버려진다). 못 열면 끊는다. 덧붙일 안내를 돌려준다."""
+    info, passwords = state["opened"], state["passwords"]
+    state["con"] = None  # drop_connection이 아직 도는 연결을 닫지 않게
+    drop_connection()
+    try:
+        state.update(con=open_con(info), passwords=passwords, opened=info)
+    except Exception:
+        return " 멈추지 않은 작업이 연결을 쓰고 있고 새로 열지도 못해 연결을 끊었습니다. 연결을 다시 하세요."
+    return " 멈추지 않은 작업이 이전 연결을 쓰고 있어 연결을 새로 열었습니다."
 
 
 def run_writing(write, clean, runner=None):

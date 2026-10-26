@@ -333,7 +333,7 @@ def notice_text(message):
     message = (message or "").strip()
     if not message:
         return ""
-    if message in (SKIP_RUNNING, SKIP_LOCKED, GONE):
+    if message in (SKIP_RUNNING, SKIP_LOCKED, GONE) or message.startswith(collect_job.CAPPED.split("{")[0]):
         return message
     if VALUE_ERRORS.search(message):
         return f"데이터 값 문제로 실패했습니다 {SEE_LOG}"
@@ -346,7 +346,8 @@ def notice_text(message):
 def tell(name, result, rows, seconds, message):
     """예약의 보낼 곳으로 알린다(notify_on이 fail이면 끝난 것은 알리지 않는다). 보내지 못하면 그 문구를 돌려준다."""
     item = schedules().get(name) or {}
-    if not item.get("notify") or (result == "끝" and item.get("notify_on") != "always"):
+    quiet = result == "끝" or (result == "건너뜀" and item.get("every") == "interval")  # 간격 예약이 앞 실행보다 짧으면 매번 건너뛰므로 실패 알림에서 뺀다
+    if not item.get("notify") or (quiet and item.get("notify_on") != "always"):
         return ""
     lines = [f"구성: {name}", f"행 수: {rows:,}" if rows is not None else "", f"걸린 시간: {notify.duration_text(seconds)}", f"오류: {notice_text(message)}" if message and result != "끝" else ""]
     try:
@@ -398,7 +399,8 @@ def execute(name, how):
         job.join()
         state = collect_job.snapshot()
         bad = (state.get("load") or {}).get("failures")  # 적재에서 넣지 못한 행이 있으면 끝났어도 실패로 알린다
-        done = state["phase"] == "끝" and not bad
+        capped = state["message"].startswith(collect_job.CAPPED.split("{")[0])  # 최대 쪽 수에서 멈춰 다 받지 못했을 수 있다
+        done = state["phase"] == "끝" and not bad and not capped
         message = state["message"] if done else (state["error"] or state["message"] or f"수집이 {state['phase']} 상태로 끝났습니다.")
         finish(run_id, name, "끝" if done else "실패", state["rows"], state["elapsed"], message)
 

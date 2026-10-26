@@ -424,5 +424,5 @@ def lookup(rows, name, period=None, scope=None):
         kinds = sorted({r[field] for r in found})
         if len(kinds) > 1:
             shown = ", ".join(k or "전체" for k in kinds)
-            return miss(f"‘{name}’ 목표가 여러 개라 어느 {word}인지 알 수 없어요 ({shown}). {word}를 정해 주세요.", True)
+            return miss(f"‘{name}’ 목표가 여러 개라 어느 {word}인지 알 수 없어요 ({shown}). {word}{ending(word, '을', '를')} 정해 주세요.", True)
     return {"row": found[0], "error": None, "ambiguous": False}

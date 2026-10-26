@@ -94,6 +94,19 @@ def file_schema(path):
         return batches.schema
 
 
+def empty_columns(path, schema):
+    """결과 파일에서 값이 하나도 없는 글자 컬럼 이름들. 수집은 이번에 값이 없던 컬럼을 글자 타입으로 만들어, 덧붙일 때 테이블 타입과 달라 보인다."""
+    import duckdb
+    import pyarrow as pa
+    names = [f.name for f in schema if pa.types.is_string(f.type) or pa.types.is_large_string(f.type) or pa.types.is_null(f.type)]
+    if not names:
+        return set()
+    with duckdb.connect() as con:
+        found = con.read_parquet(str(path)) if Path(path).suffix.lower() == ".parquet" else con.read_csv(str(path), sample_size=-1)
+        counts = found.aggregate(", ".join('count("' + n.replace('"', '""') + '")' for n in names)).fetchone()
+    return {n for n, count in zip(names, counts) if count == 0}
+
+
 class Batches:
     """결과 파일을 size행씩 읽는다(마지막 묶음만 작을 수 있음). 덩어리로 읽어 메모리에 다 올리지 않는다. with로 열고 닫는다."""
 
@@ -177,7 +190,14 @@ def run(config, path, password, halt, note):
     ledger = None
     try:
         with Batches(path, size) as batches:
-            sink = module.Sink(config, password, batches.schema, resumed, load_id)
+            if not (found := read_record(path)) or found.get("file", stamp) != stamp:  # 넣을 곳을 열기 전에 실패해도(접속·컬럼 차이) 기록이 있어 다음 수집이 이 결과 파일을 덮어쓰지 않는다
+                write_record(path, record)  # 이 파일의 다른 대상 기록(덜 넣은 것)은 그대로 둔다
+            schema = batches.schema
+            if load["target"] == "table" and load["table"]["how"] == "append":  # 값이 하나도 없는 글자 컬럼은 null 타입으로: 덧붙일 테이블의 타입으로 넣는다
+                import pyarrow as pa
+                empty = empty_columns(path, schema)
+                schema = pa.schema([f.with_type(pa.null()) if f.name in empty else f for f in schema])
+            sink = module.Sink(config, password, schema, resumed, load_id)
             try:
                 if sink.fresh and resumed:  # 이어 넣을 곳이 없어져 새로 만들었으면 처음부터
                     record, resumed = {**new_record(), **({"load_id": load_id} if load_id else {})}, False
@@ -239,12 +259,16 @@ def run(config, path, password, halt, note):
 
 
 def note_for(config, path):
-    """한 건씩 넣을 때 시작 전에 보여 줄 안내(estimate의 load_note). 결과 파일이 있으면 행 수로 예상 시간을 더한다."""
+    """시작 전에 보여 줄 적재 안내(estimate의 load_note): 한 건씩이면 걸릴 시간(결과 파일이 있으면 행 수로 어림)과 원격 DB 부담, 키로 거르면 인덱스. 없으면 None."""
     load = config["load"]
-    if load["target"] == "file" or load["unit"] != "single":
+    if load["target"] == "file":
         return None
+    keys = load["table"]["key"] if load["target"] == "table" else []
+    index = f"키({', '.join(keys)})로 거를 때 키 컬럼에 인덱스가 없으면 묶음마다 테이블 전체를 읽습니다. 큰 테이블이면 인덱스를 만들어 두세요." if keys else ""
+    if load["unit"] != "single":
+        return index or None
     rows = total_rows(path) if path is not None else None
-    if not rows:
-        return "한 건씩 넣으면 오래 걸릴 수 있습니다."
-    minutes = math.ceil(rows * (SINGLE_SECONDS + load["interval"]) / 60)
-    return f"한 건씩 넣으면 오래 걸릴 수 있습니다(예상 약 {minutes:,}분)."
+    far = load["target"] == "table" and load["table"]["connection"]["kind"] != "folder"
+    remote = " 원격 DB에는 한 건마다 임시 테이블 만들기·넣기·지우기 문장이 오가 DB에 부담이 큽니다. 되도록 묶음으로 넣으세요." if far else ""
+    minutes = f"(예상 약 {math.ceil(rows * (SINGLE_SECONDS + load['interval']) / 60):,}분)" if rows else ""
+    return f"한 건씩 넣으면 오래 걸릴 수 있습니다{minutes}.{remote}" + (" " + index if index else "")
