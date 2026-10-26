@@ -19,7 +19,6 @@ uploads = Later("collect.uploads")
 
 GA4_FILE = "ga4.json"  # {key_path, property, start, end, dimensions, metrics, output}. 서비스 계정 JSON은 경로만(키는 그 파일에만)
 GA4_DEFAULT = {"key_path": "", "property": "", "start": "28daysAgo", "end": "yesterday", "dimensions": "date", "metrics": "activeUsers, sessions", "output": ""}
-ABILITIES = {"send": "보내기", "receive": "받기", "fetch": "가져오기", "ask": "묻기"}
 FREE.update({"/api/integrations", "/api/ga4", "/api/ga4/check", "/api/ga4/fetch"})
 
 
@@ -60,7 +59,7 @@ def integrations_page():
 
 @app.get("/api/integrations")
 def integrations():
-    return jsonify(services=services(), abilities=ABILITIES)
+    return jsonify(services=services())
 
 
 @app.get("/api/ga4")

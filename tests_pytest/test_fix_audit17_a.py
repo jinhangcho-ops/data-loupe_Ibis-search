@@ -81,6 +81,7 @@ def test_scroll_restarts_instead_of_resuming(client, monkeypatch, tmp_path):
     holder["site"] = Site(items, 3, 3)
     _, s = run(client, cfg)  # 하루 한도로 두 쪽(6행)에서 멈춤
     assert (s["phase"], s["rows"]) == ("멈춤", 6)
+    assert collect_job.resumable(collect_config.normalize(cfg)) is None  # 예상 확인 화면도 "이어 받기"라고 하지 않는다
     client.post("/api/limits", json={"name": "웹", "group": {"per_day": 100, "concurrency": 1}})
     holder["site"] = Site(items, 5, 3)  # 다시 열면 첫 화면 항목 수가 다르다
     reply, s = run(client, cfg)
@@ -107,6 +108,9 @@ def test_web_max_pages_is_reported(client, monkeypatch, tmp_path):
     holder["site"] = Site(pages=pages)
     _, s = run(client, web_config(tmp_path / "d.parquet", url, "none", 1))  # 넘기지 않는 방식은 한 쪽이 끝
     assert (s["rows"], s["message"]) == (3, "")
+    holder["site"] = Site(pages=pages)
+    _, s = run(client, web_config(tmp_path / "e.parquet", url, "url", 1))  # 쪽 번호 방식의 최대 쪽 수 1도 한도
+    assert (s["rows"], s["message"]) == (3, collect_job.CAPPED.format(1))
 
 
 # ---------- K4 덜 넣은 적재로 막히면 [적재만 다시]가 보일 상태를 남긴다 ----------
@@ -130,6 +134,25 @@ def test_blocked_start_leaves_load_failure_state(client, tmp_path):
     s = client.get("/api/collect/status").get_json()
     assert s["phase"] == "실패" and not s["running"] and s["load"] and "지난 적재가 끝나지 않았습니다" in s["error"]  # 화면의 표시 조건(s.load && 실패)
     assert {"where", "rows", "batches", "skipped", "failures"} <= set(s["load"])
+
+
+def test_start_while_other_process_loads_says_busy(client, tmp_path):
+    """다른 프로세스(예약)가 이 결과 파일을 적재하는 중이면 '덜 넣은 적재·기록 지우기'가 아니라 바쁘다고 알린다."""
+    from core import filelock
+    path = tmp_path / "out.parquet"
+    pq.write_table(pa.table({"id": [1]}), path)
+    cfg = collect_config.normalize({"mode": "api", "request": {"url": "https://x.example/i?page={page}"}, "response": {"records": "items"},
+                                    "paging": {"kind": "page", "start": 1, "max_pages": 5}, "output": {"format": "parquet", "path": str(path)},
+                                    "load": {"target": "table", "table": {"connection": {"kind": "folder", "file": str(tmp_path / "t.duckdb")}, "name": "t", "how": "append"}, "retries": 0}})
+    load_job.write_record(path, {"sign": load_job.signature(cfg), "file": load_job.file_stamp(path), "rows": 0, "batches": 0, "inserted": 0, "skipped": 0, "failures": 0})  # 적재가 시작할 때 쓰는 기록
+    lock = collect_job.lock_of(cfg)
+    assert filelock.hold(lock)
+    try:
+        before = client.get("/api/collect/status").get_json()["phase"]
+        reply = client.post("/api/collect/start", json={"config": cfg}).get_json()
+        assert "지난 적재" not in str(reply) and client.get("/api/collect/status").get_json()["phase"] == before
+    finally:
+        filelock.let_go(lock)
 
 
 # ---------- M8·M9·K4 화면 ----------

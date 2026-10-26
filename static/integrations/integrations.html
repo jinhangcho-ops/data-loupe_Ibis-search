@@ -87,11 +87,9 @@
 <script src="/static/core/common.js"></script>
 <script src="/static/core/dash_refresh.js"></script>
 <script>
-const ABIL = {};
 async function loadHub() {
   try {
     const d = await api("/api/integrations");
-    Object.assign(ABIL, d.abilities);
     const by = Object.fromEntries(d.services.map(s => [s.key, s]));
     const senders = d.services.filter(s => s.abilities.includes("send"));
     $("send-kinds").textContent = senders.map(s => s.label).join(", ");

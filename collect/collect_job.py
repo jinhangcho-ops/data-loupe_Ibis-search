@@ -27,12 +27,11 @@ from core import settings
 from collect import uploads
 from collect.collect_config import normalize
 from collect.collect_http import Halt, Reply
-from collect.collect_store import (IDLE, began, SAVE_EVERY, balancer_for, clean, current, duck, finish_api, guard, keep_record, replace, req_mask, save_page, status,
+from collect.collect_store import (CAPPED, IDLE, began, SAVE_EVERY, balancer_for, clean, current, duck, finish_api, guard, keep_record, replace, req_mask, save_page, status,
                            update, with_bom, write_output, write_record)
 
 MIN_FREE = 200 * 1024 * 1024  # 시작할 때 결과 폴더의 디스크에 적어도 남아 있어야 하는 공간
 MAX_AGE = dt.timedelta(days=1)  # 이어 받기는 마지막으로 받은 지 이만큼 안에서만(오래 내버려 둔 것에 지금 받은 것을 섞지 않게, 하루 한도로 매일 이어 받는 것은 이어짐)
-CAPPED = "최대 쪽 수 {:,}에서 멈췄습니다(더 있을 수 있음). 다 받으려면 최대 쪽 수를 늘리세요."  # 예약(schedule.follow)은 이 문구로 시작하면 실패로 알린다
 RUNNING = "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요."
 BUSY = "같은 결과 파일에 다른 곳(다른 창, 프로그램 안 예약, Windows 예약 작업)이 수집하고 있습니다. 끝난 뒤에 시작하세요."
 
@@ -125,7 +124,8 @@ def resumable(config):
         return None
     path = parts(output_path(config))["record"]
     record = read_record(path)
-    return record if record and record.get("hash") == digest(config) and not stale(path) else None
+    scroll = config["mode"] == "web" and config["web"]["paging"]["kind"] == "scroll"  # 무한 스크롤은 이어 받지 않는다(start)
+    return record if record and record.get("hash") == digest(config) and not stale(path) and not scroll else None
 
 
 # ---------- 상태 ----------
@@ -180,19 +180,19 @@ def start(config, password=""):
     if shutil.disk_usage(path.parent).free < MIN_FREE:
         raise ValueError(f"디스크 공간이 모자랍니다(적어도 {MIN_FREE // 1024 // 1024}MB가 필요합니다).")
     load_job.ready(config)
-    left = load_job.read_record(path) if config["load"]["target"] != "file" and path.exists() else None  # 다 넣으면 기록을 지운다
-    if left and left.get("file") in (None, load_job.file_stamp(path)):  # 이 결과 파일을 덜 넣었다: 덮어쓰면 남은 행을 넣을 길이 없다
-        text = ("지난 적재가 끝나지 않았습니다. [적재만 다시]로 마저 넣은 뒤 수집하세요. "
-                f"컬럼이 달라 넣을 수 없으면 테이블을 맞추거나, 남은 행을 버려도 되면 결과 파일 옆 '{load_job.record_path(path).name}'을 지운 뒤 다시 수집하세요.")
-        # 앱을 다시 켰거나 예약 프로세스가 실패했으면 상태에 적재가 없어 화면이 [적재만 다시]를 숨기므로 실패한 적재로 남긴다
-        update(**{**IDLE, "phase": "실패", "error": text, "mode": config["mode"], "load": {
-            "target": config["load"]["target"], "where": load_job.TARGETS[config["load"]["target"]].where(config), "total": load_job.total_rows(path),
-            **{k: left.get(k, 0) for k in ("rows", "batches", "skipped", "failures")}}})
-        raise ValueError(text)
     found, lock = parts(path), lock_of(config)
     if not filelock.hold(lock):
         raise Busy(BUSY)
     try:
+        left = load_job.read_record(path) if config["load"]["target"] != "file" and path.exists() else None  # 다 넣으면 기록을 지운다
+        if left and left.get("file") in (None, load_job.file_stamp(path)):  # 이 결과 파일을 덜 넣었다: 덮어쓰면 남은 행을 넣을 길이 없다
+            text = ("지난 적재가 끝나지 않았습니다. [적재만 다시]로 마저 넣은 뒤 수집하세요. "
+                    f"컬럼이 달라 넣을 수 없으면 테이블을 맞추거나, 남은 행을 버려도 되면 결과 파일 옆 '{load_job.record_path(path).name}'을 지운 뒤 다시 수집하세요.")
+            # 앱을 다시 켰거나 예약 프로세스가 실패했으면 상태에 적재가 없어 화면이 [적재만 다시]를 숨기므로 실패한 적재로 남긴다
+            update(**{**IDLE, "phase": "실패", "error": text, "mode": config["mode"], "load": {
+                "target": config["load"]["target"], "where": load_job.TARGETS[config["load"]["target"]].where(config), "total": load_job.total_rows(path),
+                **{k: left.get(k, 0) for k in ("rows", "batches", "skipped", "failures")}}})
+            raise ValueError(text)
         record = read_record(found["record"])
         old = bool(record and record.get("hash") == digest(config) and stale(found["record"]))
         resumed = bool(record and record.get("hash") == digest(config)) and not old

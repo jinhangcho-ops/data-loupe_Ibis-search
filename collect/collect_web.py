@@ -274,7 +274,7 @@ class Walk:
                 return True
             self.keep(i, rows)
             previous = signature(rows)
-        return limit == 1
+        return self.web["paging"]["kind"] == "none"  # 'none'은 한 쪽이 끝. 쪽 번호 방식은 최대 쪽 수에 닿은 것(1이어도)
 
     def next(self, limit):
         """다음 버튼을 눌러 넘긴다. 버튼이 없거나, 눌러도 바뀌지 않거나, 0건이거나, 바로 전 쪽과 같으면 끝."""
@@ -343,6 +343,5 @@ def run_web(config, env, path, found, record, halt):
             raise Halt(CLOSED) from None
     made = collect_store.finish_api(config, path, found, record)
     if made and capped:  # API 방식(run_api)처럼 알리고, 예약은 이 문구로 실패로 본다
-        from collect import collect_job  # collect_job이 이 모듈을 맨 위에서 불러 여기서 부른다
-        collect_store.update(message=collect_job.CAPPED.format(web["paging"]["max_pages"]))
+        collect_store.update(message=collect_store.CAPPED.format(web["paging"]["max_pages"]))
     return made

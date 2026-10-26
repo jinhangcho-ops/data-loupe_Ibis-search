@@ -100,3 +100,20 @@ def test_watch_reads_latest_row_for_text_time(monkeypatch, backend):
     df = servers().with_columns(pl.col("seen").dt.strftime("%Y-%m-%dT%H:%M:%S"))
     got = {e["name"]: e for e in watch(monkeypatch, backend, df)["values"]["entities"]}
     assert len(got) == 10 and all(e["last"] == "2026-01-01T04:59:00" for e in got.values())
+
+
+def test_watch_mixed_zone_text_time_picks_real_latest(monkeypatch, backend):
+    """시간대 표기가 섞인 글자 시각(써머타임이 바뀌는 날)은 글자 순 max로 고르지 않는다: 실제로 늦은 행(cpu 99)을 본다."""
+    df = pl.DataFrame({"name": ["a", "a"], "seen": ["2026-10-25T02:30:00+02:00", "2026-10-25T02:15:00+01:00"], "cpu": [10.0, 99.0]})
+    got = watch(monkeypatch, backend, df)["values"]["entities"]
+    assert [e["level"] for e in got] == ["bad"]
+
+
+def test_ambiguous_month_target_is_not_replaced_by_year(folder, tmp_path):
+    """그 달 목표가 대상별로 여러 개라 어느 것인지 모르면, 연간 목표로 바꾸지 않고 그대로 알린다."""
+    from core import settings
+    path = tmp_path / "목표.csv"
+    path.write_text("이름,기간,대상,값\n매출,2026-10,서울,1\n매출,2026-10,부산,2\n매출,2026,,30\n", encoding="utf-8")
+    settings.write(dash_calc.TARGETS_FILE, {"path": str(path)})
+    found = dash_calc.resolve_target({"name": "매출"}, {"range": {"start": "2026-10-01", "end": "2026-10-31"}})
+    assert found["value"] is None and "대상" in found["error"]

@@ -1286,7 +1286,7 @@ $("load-again").onclick = () => busy($("load-again"), async () => {
   } catch (e) { say("run-msg", e.message); }
 });
 $("stop").onclick = () => busy($("stop"), async () => {
-  try { await api("/api/collect/stop", {}); $("run-ok").textContent = "멈췄습니다. 다시 [시작]하면 받은 데서 이어 받습니다"; } catch (e) { say("run-msg", e.message); }
+  try { await api("/api/collect/stop", {}); $("run-ok").textContent = mode() === "web" && val("w-pkind") === "scroll" ? "멈췄습니다. 스크롤 방식은 다시 [시작]하면 처음부터 받습니다" : "멈췄습니다. 다시 [시작]하면 받은 데서 이어 받습니다"; } catch (e) { say("run-msg", e.message); }
 });
 // 결과 파일로 연결을 바꾸고 쿼리·분석 화면으로 간다.
 const openWith = (button, prep) => twice(button, "연결이 이 파일로 바뀝니다. 한 번 더 누르면 열기", async () => {

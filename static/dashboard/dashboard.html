@@ -244,6 +244,7 @@ $("d-pick").onchange = () => saveIfDirty().then(() => openDash($("d-pick").value
 $("d-new").onclick = () => { $("d-new-box").classList.toggle("hidden"); $("d-new-name").focus(); edit().catch(e => say("err-dash", e.message)); };  // 템플릿 목록은 편집 도구가 채운다
 $("d-new-go").onclick = () => busy($("d-new-go"), async () => {
   try {
+    await saveIfDirty();  // 새 대시보드로 옮기기 전에 지금 편집을 저장한다(못 하면 옮기지 않는다, d-pick과 같음)
     await edit();
     const tpl = allTemplates().find(t => t.id === $("d-template").value) ?? DASH_TEMPLATES.at(-1);
     const made = await api("/api/dash", { name: $("d-new-name").value, cards: templateCards(tpl, randomId), template: tpl.id === "blank" ? "" : tpl.name });

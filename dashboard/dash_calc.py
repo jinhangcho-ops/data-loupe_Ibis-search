@@ -494,7 +494,7 @@ def resolve_target(spec, ctx=None):
         return {"value": None, "label": spec["name"], "error": str(e)}
     seen = target_period(ctx)
     found = targets.lookup(rows, spec["name"], spec.get("period") or seen, spec.get("scope"))
-    if not found["row"] and not spec.get("period") and seen:  # 그 기간의 줄이 없으면 그 기간을 품는 분기·연의 목표(연간 목표만 있는 파일). 다른 달·다른 해의 목표는 쓰지 않는다
+    if not found["row"] and not found["ambiguous"] and not spec.get("period") and seen:  # 어느 대상인지 모르는 것은 그대로 알린다. 그 기간의 줄이 없으면 그 기간을 품는 분기·연의 목표(연간 목표만 있는 파일). 다른 달·다른 해의 목표는 쓰지 않는다
         wider = [f"{seen[:4]}-Q{(int(seen[5:7]) + 2) // 3}", seen[:4]] if len(seen) == 7 else [seen[:4]] if "-Q" in seen else []
         found = next((f for f in (targets.lookup(rows, spec["name"], w, spec.get("scope")) for w in wider) if f["row"]), found)
     return {"value": found["row"]["value"], "label": found["row"]["name"], "error": ""} if found["row"] else {"value": None, "label": spec["name"], "error": found["error"]}
@@ -666,6 +666,9 @@ def sentence_data(card, ctx):
     return {"values": {"blanks": out}}
 
 
+ZONE_SUFFIX = r"(Z|[+-]\d\d:?\d\d)$"  # ISO 시각 글자 끝의 시간대 표기
+
+
 def watch_data(card, now, previous):
     """status·alerts·map 카드: 엔티티(view.entity 컬럼)별 최근 행을 상태 규칙(view.rules)·끊김 규칙(view.stale)으로 판정한다(watch.evaluate).
     연결선은 view.links와 각 행의 연결 대상 컬럼(view.link_col). 나빠진 시각(since)은 이전 값(previous)을 이어 data.since에 둔다."""
@@ -677,7 +680,10 @@ def watch_data(card, now, previous):
         if c:
             parse.check_name(c, expr.columns, "컬럼")
     time = view.get("time_col")
-    if time and (expr[time].type().is_temporal() or expr[time].type().is_string()):  # 엔티티마다 가장 늦은 시각의 행만 DB에서(앞 행만 읽으면 최근 행을 못 본다). 글자 시각(수집 결과의 ISO 글자)도 max가 가장 늦은 시각. 시각이 모두 빈 엔티티는 그 행들을 그대로
+    kind = expr[time].type() if time else None
+    if kind is not None and kind.is_string():  # 글자 시각(수집 결과의 ISO 글자)은 글자 순 max라 시간대 표기(Z·+09:00)가 모두 같을 때만(섞이면 예전처럼 앞 행을 읽고 watch가 시각을 푼다)
+        kind = kind if run(lambda: stats.one(expr.aggregate(n=expr[time].re_extract(ZONE_SUFFIX, 0).nunique())))["n"] <= 1 else None
+    if kind is not None and (kind.is_temporal() or kind.is_string()):  # 엔티티마다 가장 늦은 시각의 행만 DB에서(앞 행만 읽으면 최근 행을 못 본다). 시각이 모두 빈 엔티티는 그 행들을 그대로
         last = expr.group_by(view["entity"]).aggregate(__last=expr[time].max())  # 창 함수 대신 묶어 붙이기(Polars 연결은 창 함수를 못 한다)
         joined = expr.join(last, view["entity"])
         expr = joined.filter((joined[time] == joined["__last"]) | joined["__last"].isnull()).drop("__last")

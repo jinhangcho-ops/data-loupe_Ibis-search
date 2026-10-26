@@ -344,6 +344,13 @@ let chart = null;
 let drawn = null;  // 마지막으로 그린 차트의 내용(toDrawn). 화면 모드를 바꾸거나 저장할 때 다시 그린다.
 let skip = 0;  // 지금 보이는 결과가 건너뛴 행 수(쪽의 시작). [이전]·[다음]이 바꾼다.
 const state = () => ({ schema: S.schema, base: S.base, ...(S.union.tables.length ? { union: S.union } : {}), ...Object.fromEntries(LISTS.map(k => [k, S[k]])), conditions: grouped() });
+// 목록에서 i번째를 지운다. or 묶음(or는 "다음 조건과 or")의 끝을 지우면 바로 앞 조건이 묶음의 끝이 되어야 다음 조건이 or로 붙지 않는다.
+// 마지막이 된 조건에 or 표시가 남아도 지운다(새로 넣는 조건은 늘 and로 시작한다).
+function dropItem(list, i) {
+  const [gone] = list.splice(i, 1);
+  if (i > 0 && !gone?.or && list[i - 1]?.or) list[i - 1] = { ...list[i - 1], or: false };
+  if (list.at(-1)?.or) list[list.length - 1] = { ...list.at(-1), or: false };
+}
 // 조건 목록을 서버로 보낼 모양으로: or로 이어진 이웃 조건들은 한 묶음 { any: [...] }이 된다. 묶음 안은 or, 그 밖은 모두 and.
 function grouped() {
   const out = [];
@@ -619,9 +626,7 @@ function renderList(key) {
     input.focus();
   });
   box.querySelectorAll("button[data-i]").forEach(b => b.onclick = async () => {
-    S[key].splice(+b.dataset.i, 1);
-    const tail = S[key].at(-1);  // 마지막이 된 조건에 or 표시가 남으면 지운다. 새로 넣는 조건은 늘 and로 시작한다.
-    if (tail?.or) S[key][S[key].length - 1] = { ...tail, or: false };
+    dropItem(S[key], +b.dataset.i);
     renderList(key); await refreshColumns();
   });
   box.querySelectorAll("button[data-or]").forEach(b => b.onclick = () => {
@@ -1041,7 +1046,7 @@ const shelf = shelfPanel({
     series = next.series.map((s, i) => { const old = series.find(o => (o.y || null) === s.y && o.agg === s.agg) ?? null; return old ?? { y: s.y ?? "", agg: s.agg, type: $("ctype").value, dash: $("cdash").value, axis: "left" }; });
     showSeries();
     if (next.conditions.length > S.conditions.length) await addItem("conditions", next.conditions.at(-1), $("err-chart"));
-    else if (next.conditions.length < S.conditions.length) { S.conditions = S.conditions.filter(c => next.conditions.includes(text(c))); renderList("conditions"); }
+    else if (next.conditions.length < S.conditions.length) { for (let i = S.conditions.length - 1; i >= 0; i--) if (!next.conditions.includes(text(S.conditions[i]))) dropItem(S.conditions, i); renderList("conditions"); }
     shelf.refresh();
     if ($("cx").value && (series.length || now.series.length)) $("draw").click();
     $("err-chart").textContent = $("err-chart").textContent || `${why} 반영했어요.`;

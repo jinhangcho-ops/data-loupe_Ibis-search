@@ -21,6 +21,7 @@ from core import source
 from collect.collect_http import Balancer, Halt
 from core.result import FORMULA_START
 
+CAPPED = "최대 쪽 수 {:,}에서 멈췄습니다(더 있을 수 있음). 다 받으려면 최대 쪽 수를 늘리세요."  # 예약(schedule.follow)은 이 문구로 시작하면 실패로 알린다(API·웹페이지 방식이 함께 쓴다)
 SAVE_EVERY = 0.5  # 진행 기록을 적는 간격(초). 쪽·조각마다 쓰면 기록이 커질수록 느려진다(쪽 수의 제곱)
 SKEW = 300  # 응답의 Date와 PC 시계가 이보다 많이 다르면(초) 알린다.
 ORDER = "__ibis_n"  # JSON 줄에 같이 적는 받은 순서(결과에서는 뺀다)
