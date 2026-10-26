@@ -37,9 +37,12 @@ def as_date(value):
 
 
 def add_months(day, n):
-    """day에서 n달 뒤(앞은 음수). 그 달에 없는 날이면 그 달의 마지막 날로 맞춘다(3-31의 한 달 전은 2-28 또는 2-29)."""
+    """day에서 n달 뒤(앞은 음수). 그 달에 없는 날이면 그 달의 마지막 날로 맞춘다(3-31의 한 달 전은 2-28 또는 2-29).
+    달력 범위(1~9999년)를 벗어나면 한국어 ValueError."""
     index = day.year * 12 + day.month - 1 + n
     year, month = divmod(index, 12)
+    if not 1 <= year <= 9999:
+        raise ValueError("달력 범위(1~9999년)를 벗어나요. 기간을 1년 2월 이후로 잡아 주세요.")
     return date(year, month + 1, min(day.day, calendar.monthrange(year, month + 1)[1]))
 
 

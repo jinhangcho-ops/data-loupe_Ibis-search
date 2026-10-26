@@ -101,3 +101,13 @@ def test_13d7_previous_before_year_one():
 def test_13d7_every_too_long():
     with pytest.raises(ValueError, match="너무 길어요"):
         period.parse_every("9" * 400 + "초")
+
+
+def test_first_year_dashboard_has_no_prev_instead_of_english_error():
+    import datetime as dt
+    import pytest
+    from dashboard import dash_refresh, period
+    for text, day in (("0001-01", "0001-01-15"), ("0001", "0001-06-01"), ("0001-Q1", "0001-02-01")):
+        assert dash_refresh.context({"period": text, "as_of": day}) == {"range": {"start": "0001-01-01", "end": day}, "prev": None}
+    with pytest.raises(ValueError, match="달력 범위"):
+        period.add_months(dt.date(1, 1, 5), -1)
