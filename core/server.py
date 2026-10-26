@@ -31,7 +31,7 @@ app.json.sort_keys = False  # 구조 컬럼의 필드·행의 컬럼을 원래 �
 state = {"con": None, "passwords": [], "opened": None, "rows": {}, "names": {}, "tables": {}, "cancel": threading.Event()}
 # names: 스키마 → 테이블 목록, tables: (스키마, 이름) → 테이블 식. 검색 칸을 바꿀 때마다 DB에 목록·스키마를 다시 묻지 않게 연결마다 기억한다(forget_tables로 비운다).
 turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 연결을 쓰지 않는 FREE의 경로만 기다리지 않는다.
-FREE = {"/api/usage", "/api/cancel", "/api/send", "/api/drivers", "/api/funcs", "/api/features/install"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
+FREE = {"/api/usage", "/api/cancel", "/api/send", "/api/drivers", "/api/funcs", "/api/features/install", "/api/update"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
 ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 목록 예: ("Parquet (*.parquet)",) → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
 ask_folder = None  # 저장할 폴더를 묻는 함수(→ 고른 폴더 또는 None). ask_save처럼 desktop.py가 채운다.
@@ -528,7 +528,14 @@ def funcs_support():
 @app.post("/api/features/install")
 def features_install():
     """설정 창의 [적용]: 고른 기능으로 설치 프로그램을 받아 실행한다(연결을 쓰지 않아 FREE). 앱은 곧 닫힌다."""
-    return jsonify(text=features.install((request.json or {}).get("features")))
+    body = request.json or {}
+    return jsonify(text=features.install(body.get("features"), body.get("version")))
+
+
+@app.get("/api/update")
+def update_check():
+    """새 버전이 있는지(앱을 열 때 화면이 한 번 묻는다. 실행마다 GitHub에 한 번만 묻는다)."""
+    return jsonify(features.update())
 
 
 @app.get("/")

@@ -300,3 +300,97 @@ def test_screens_mark_each_feature():
     for i, path in (("query", "/search"), ("prep", "/prep"), ("dashboard", "/dashboard"), ("collect", "/collect"), ("integrations", "/integrations")):
         assert f'href="{path}" data-feature="{i}"' in status and f'data-go="{path}" data-feature="{i}"' in home
     assert 'id="feat-open"' in status and 'id="feat-apply"' in status and "/api/features/install" in COMMON
+
+
+# ---------- 새 버전 알림 ----------
+
+class Latest:
+    """releases/latest가 넘겨준 주소(geturl)만 흉내 낸다."""
+
+    def __init__(self, tag):
+        self.url = f"https://github.com/jinhangcho-ops/data-loupe_Ibis-search/releases/tag/{tag}"
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def geturl(self):
+        return self.url
+
+
+NOTES = "### 추가\n- 새 버전 알림\n\n### 삭제\n- 없음\n"
+
+
+def ask(monkeypatch, tag, notes=NOTES):
+    """releases/latest는 tag로, 릴리스 노트 받기는 notes로(None이면 없는 파일) 흉내 낸다. 물은 주소를 모은다."""
+    asked = []
+    monkeypatch.setattr(features, "UPDATE", {})
+    monkeypatch.setattr(features.urllib.request, "urlopen", lambda url, timeout=None: asked.append(url) or Latest(tag))
+
+    def fetch(url, out):
+        asked.append(url)
+        if notes is None:
+            raise OSError("404")
+        out.write(notes.encode("utf-8"))
+    monkeypatch.setattr(features, "fetch", fetch)
+    return asked
+
+
+def test_update_finds_newer_release_once(installed, monkeypatch):
+    installed("[app]\nversion=1.9.0\nfeatures=query\n")
+    asked = ask(monkeypatch, "v1.10.0")
+    assert features.update() == {"current": "1.9.0", "latest": "1.10.0", "newer": True, "notes": NOTES, "check": True}  # 1.10은 1.9보다 새것(글자 비교가 아님)
+    features.update()
+    assert asked == [features.LATEST, f"{features.RELEASES}/v1.10.0/RELEASE_NOTES.md"]  # 실행마다 한 번만 묻는다
+
+
+def test_update_without_notes_still_tells(installed, monkeypatch):
+    installed("[app]\nversion=1.0.0\nfeatures=query\n")
+    ask(monkeypatch, "v1.1.0", notes=None)
+    got = features.update()
+    assert got["newer"] and got["notes"] is None
+
+
+@pytest.mark.parametrize("tag", ["v1.9.0", "v1.8.5", "vbad/../x", "nightly"])
+def test_update_not_newer(installed, monkeypatch, tag):
+    installed("[app]\nversion=1.9.0\nfeatures=query\n")
+    asked = ask(monkeypatch, tag)
+    got = features.update()
+    assert got["newer"] is False and got["notes"] is None and asked == [features.LATEST]  # 새것이 아니면 노트를 받지 않는다
+
+
+def test_update_off_or_offline_asks_nothing_or_stays_quiet(installed, monkeypatch):
+    from core import settings
+    installed("[app]\nversion=1.0.0\nfeatures=query\n")
+    asked = ask(monkeypatch, "v2.0.0")
+    settings.save({"update_check": "off"})
+    assert features.update() == {"current": "1.0.0", "latest": None, "newer": False, "notes": None, "check": False} and asked == []
+    settings.save({"update_check": "on"})
+
+    def offline(url, timeout=None):
+        raise OSError("no network")
+    monkeypatch.setattr(features.urllib.request, "urlopen", offline)
+    assert features.update()["newer"] is False
+
+
+def test_install_target_version_downloads_that_release(installed, monkeypatch, tmp_path):
+    installed("[app]\nversion=1.2.3\nfeatures=query\n")
+    spy = Spy(monkeypatch, {"DataLoupe-setup.exe": SETUP, "DataLoupe-setup.exe.sha256": hashlib.sha256(SETUP).hexdigest().encode() + b"  DataLoupe-setup.exe\n"})
+    features.install(["query"], "1.3.0")
+    assert all("/v1.3.0/" in u for u in spy.urls)
+    scratch.remove(Path(spy.run[0][0]).parent)
+    with pytest.raises(ValueError, match="버전"):
+        features.install(["query"], "../x")
+
+
+def test_changelog_sections_and_release_uses_them():
+    import re
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    parts = re.split(r"^## (v[0-9.]+)\s*$", text, flags=re.M)[1:]
+    assert parts, "CHANGELOG.md에 '## v버전' 절이 없어요"
+    for version, body in zip(parts[::2], parts[1::2]):
+        assert [h for h in re.findall(r"^### (.+)$", body, flags=re.M)] == ["추가", "개선", "삭제"], version
+    flow = (ROOT / ".github" / "workflows" / "build-exe.yml").read_text(encoding="utf-8")
+    assert "CHANGELOG.md" in flow and flow.count("RELEASE_NOTES.md") >= 4 and "--generate-notes" not in flow

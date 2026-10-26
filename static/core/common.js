@@ -369,6 +369,23 @@ $("feat-apply").onclick = () => busy($("feat-apply"), async () => {
   try { say("feat-msg", (await api("/api/features/install", { features: [...$("feat-list").querySelectorAll("input:checked")].map(i => i.value) })).text, true); }
   catch (e) { say("feat-msg", e.message); }
 });
+// 새 버전 알림: 앱을 열 때 한 번 묻고(서버가 실행마다 한 번만 GitHub에 묻는다), 있으면 위쪽 줄에 [업데이트]. 누르면 지금 고른 기능 그대로 새 버전을 설치한다.
+api("/api/update").then(u => {
+  $("upd-check").checked = u.check;
+  if (!u.newer) return;
+  $("upd-text").textContent = `새 버전 v${u.latest}이(가) 있어요`;
+  $("upd").classList.remove("hidden");
+  $("upd-title").textContent = `v${u.current} → v${u.latest}에서 바뀐 것`;
+  $("upd-notes").textContent = (u.notes || "릴리스 노트를 받지 못했어요. GitHub Releases에서 볼 수 있어요.").replace(/^#{2,3} /gm, "■ ");  // 글자로만 넣는다(노트의 HTML은 실행하지 않는다)
+  $("upd-open").onclick = () => $("upd-panel").classList.remove("hidden");
+  $("upd-close").onclick = () => $("upd-panel").classList.add("hidden");
+  $("upd-go").onclick = () => busy($("upd-go"), async () => {
+    say("upd-msg", `v${u.latest} 설치 프로그램을 받는 중이에요. 잠시 걸려요…`, "hint");
+    try { say("upd-msg", (await api("/api/features/install", { features: SERVER.features.on, version: u.latest })).text, true); }
+    catch (e) { say("upd-msg", e.message); }
+  });
+}).catch(() => {});
+$("upd-check").onchange = () => saveSetting({ update_check: $("upd-check").checked ? "on" : "off" });
 $("dest-open").onclick = () => $("dest-panel").classList.remove("hidden");
 $("dest-close").onclick = () => $("dest-panel").classList.add("hidden");
 $("dest-panel").onclick = e => { if (e.target === $("dest-panel")) $("dest-panel").classList.add("hidden"); };

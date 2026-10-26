@@ -20,6 +20,7 @@ from core import scratch
 ALL = {"query": ("쿼리", "/search"), "prep": ("분석", "/prep"), "dashboard": ("대시보드", "/dashboard"),
        "collect": ("수집", "/collect"), "integrations": ("연동", "/integrations")}  # id: (이름, 화면 주소). 설치 파일 [Components]의 이름과 같다.
 RELEASES = "https://github.com/jinhangcho-ops/data-loupe_Ibis-search/releases/download"
+LATEST = "https://github.com/jinhangcho-ops/data-loupe_Ibis-search/releases/latest"  # 최신 릴리스 쪽으로 넘겨준다(…/releases/tag/v1.2.3)
 LIMIT = 400 * 1024 * 1024  # 받는 크기 상한(바이트)
 WAIT = 30  # 서버가 답하기를 기다리는 시간(초)
 VERSION = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+-]*")
@@ -45,6 +46,43 @@ def state():
         except (configparser.Error, OSError, UnicodeError):  # 깨진 파일이면 없는 것으로 본다
             on, version = list(ALL), None
     return {"on": on, "version": version, "all": [{"id": i, "name": n, "path": p} for i, (n, p) in ALL.items()]}
+
+
+def numbers(version):
+    """"1.10.2" → (1, 10, 2). 숫자가 아닌 조각이 있으면 None(견주지 않는다)."""
+    parts = version.split(".")
+    return tuple(int(p) for p in parts) if all(p.isdigit() for p in parts) else None
+
+
+UPDATE = {}  # 이번 실행에서 한 번 물은 결과(앱을 열 때마다 한 번)
+NOTES_LIMIT = 50_000  # 화면에 보일 릴리스 노트의 최대 바이트
+
+
+def update():
+    """새 버전 {current, latest, newer, notes(새 버전의 RELEASE_NOTES.md 글, 못 받으면 None), check(확인을 켰는지)}. 개발 실행·시험 빌드·확인을 끈 경우·인터넷이 안 되면 newer=False.
+    GitHub에 보내는 것은 최신 릴리스 주소를 여는 요청 하나뿐이다(데이터 값은 보내지 않는다)."""
+    from core import settings
+    current, on = state()["version"], settings.get("update_check") != "off"
+    if ini_path() is None or not current or current == "0.0.0" or not on:
+        return {"current": current, "latest": None, "newer": False, "notes": None, "check": on}
+    if "latest" not in UPDATE:
+        try:
+            with urllib.request.urlopen(LATEST, timeout=WAIT) as res:
+                tag = res.geturl().rstrip("/").rsplit("/", 1)[-1]
+            UPDATE["latest"] = tag[1:] if tag.startswith("v") and VERSION.fullmatch(tag[1:]) else None
+        except OSError:  # 인터넷(프록시)이 안 되면 조용히 넘어간다
+            UPDATE["latest"] = None
+    latest = UPDATE["latest"]
+    now, new = numbers(current) if current else None, numbers(latest) if latest else None
+    newer = bool(now and new and new > now)
+    if newer and "notes" not in UPDATE:  # 새 버전이 있을 때만 그 릴리스 노트(추가·개선·삭제)를 받는다
+        try:
+            text = io.BytesIO()
+            fetch(f"{RELEASES}/v{latest}/RELEASE_NOTES.md", text)
+            UPDATE["notes"] = text.getvalue()[:NOTES_LIMIT].decode("utf-8", "replace") or None
+        except (OSError, ValueError):  # 노트가 없는 옛 릴리스·인터넷 오류면 노트 없이 알린다
+            UPDATE["notes"] = None
+    return {"current": current, "latest": latest, "newer": newer, "notes": UPDATE.get("notes") if newer else None, "check": on}
 
 
 def check(ids):
@@ -100,10 +138,12 @@ def size(folder):
     return sum(f.stat().st_size for f in Path(folder).rglob("*") if f.is_file())
 
 
-def install(ids):
-    """ids 기능만 남도록 설치 프로그램을 받아 실행한다. 실행하면 앱은 곧 닫힌다. 안내 글을 돌려준다.
+def install(ids, target=None):
+    """ids 기능만 남도록 설치 프로그램(target이 있으면 그 버전, 없으면 지금 버전)을 받아 실행한다. 실행하면 앱은 곧 닫힌다. 안내 글을 돌려준다.
     수집 중이거나, 수집을 빼는데 예약이 남았거나, 설치 드라이브 공간이 모자라면 받기 전에 거절한다."""
     ids = check(ids)
+    if target is not None and not (isinstance(target, str) and VERSION.fullmatch(target)):
+        raise ValueError("업데이트할 버전이 올바르지 않아요.")
     path = ini_path()
     if path is None:
         raise ValueError("개발 실행에서는 기능을 바꿀 수 없어요.")
@@ -125,7 +165,7 @@ def install(ids):
             raise ValueError(f"수집을 빼려면 수집 화면에서 예약 {count}개를 먼저 지우세요.")
     if shutil.disk_usage(path.parent).free < size(path.parent / "_internal") * 1.5:
         raise ValueError("설치할 드라이브의 빈 공간이 모자라요. 공간을 비운 뒤 다시 시도하세요.")
-    base = f"{RELEASES}/v{version}/DataLoupe-setup.exe"
+    base = f"{RELEASES}/v{target or version}/DataLoupe-setup.exe"
     folder = scratch.make()
     setup = os.path.join(folder, "DataLoupe-setup.exe")
     try:

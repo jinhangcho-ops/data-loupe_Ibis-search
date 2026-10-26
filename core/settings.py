@@ -79,6 +79,7 @@ CHOICES = {
     "board_ratio": ["screen", "square", "4:3", "wide"],  # 대시보드·그래프 그림의 비율: 화면대로 / 1:1 / 4:3 / 16:9
     "board_format": ["png", "jpeg"],  # 대시보드·그래프 그림의 형식
     "stats": ["on", "off"],
+    "update_check": ["on", "off"],  # 앱을 열 때 GitHub Releases에 새 버전이 있는지 묻기(기본 on)
     "scan_unknown": ["run", "block"],  # 처리 용량을 미리 알 수 없을 때(그 연결이 추정을 못 함): 그대로 실행한다 / 실행하지 않는다(기본은 실행)
     "prep_where": ["all", "new"],  # 원격 DB(주소로 접속)의 전처리를 이 PC의 작업 사본에서 계산하는 범위: 전처리 전체 / 계산 컬럼·PCA가 있을 때만(나머지는 DB에서)  # 전처리 화면에서 테이블을 고를 때 표본을 읽어 컬럼 통계·추천을 구할지(끄면 이름·타입만, 데이터를 읽지 않는다)
 }
