@@ -161,6 +161,8 @@ def combine(spec, results):
         x, y = scalar(a), scalar(b)
         return {"columns": [name], "rows": [{name: None if x is None or not y else (x - y) / y}]}
     if op == "mean_of":
+        if a["more"]:  # 앞 기간만 받았으니 평균을 내면 조용히 틀린 값이 된다
+            raise ValueError(f"기간이 {metric_file.MAX_GROUPS}개를 넘어 평균을 낼 수 없어요. 기간을 좁혀 주세요.")
         values = [r[a["col"]] for r in a["rows"] if r[a["col"]] is not None]
         return {"columns": [name], "rows": [{name: sum(values) / len(values) if values else None}]}
     if op == "cumsum":

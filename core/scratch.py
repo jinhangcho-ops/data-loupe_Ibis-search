@@ -38,7 +38,7 @@ def ended(pid, started):
 
 
 def remove(folder):
-    """make로 만든 폴더를 지운다. ROOT가 비면 ROOT도 지워 흔적을 남기지 않는다.
+    """make로 만든 폴더를 지운다. 빈 ROOT는 남긴다(지우면 다른 창·스레드의 make가 ROOT를 만든 뒤 그 안에 만들기 전에 사라질 수 있다).
     잠긴 파일 때문에 폴더가 남으면 표식을 다시 써 둔다(표식이 없으면 sweep이 영원히 지우지 않는다)."""
     mark = Path(folder, MARK)
     try:
@@ -51,10 +51,6 @@ def remove(folder):
             mark.write_text(text, encoding="ascii")
         except OSError:
             pass
-    try:
-        ROOT.rmdir()
-    except OSError:  # 다른 폴더가 남아 있다.
-        pass
 
 
 def left_behind(folder):

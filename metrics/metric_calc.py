@@ -101,6 +101,14 @@ def bucket_last_day(index, unit):
     return (bucket_start(index + 1, unit) - EPOCH).days - 1
 
 
+def open_bucket(table, time, unit):
+    """자료가 마지막 기간 중간에 끝났으면 그 기간(진행 중이라 값이 아직 작다)의 번호, 아니면 None. day 단위는 늘 None."""
+    if unit == "day":
+        return None
+    r = rows(table.aggregate(p=bucket_index(table[time], unit).max(), d=day_index(table[time]).max()))[0]
+    return None if r["p"] is None or bucket_last_day(int(r["p"]), unit) <= int(r["d"]) else int(r["p"])
+
+
 def ratio(a, b):
     """a / b, b가 0이거나 없으면 None."""
     return a / b if b else None
@@ -327,15 +335,14 @@ def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=
         return {"unit": unit, "mode": mode, "cohorts": []}
     counts = cohort_counts(j, mode, span)
     width = 1 if mode == "range" else n_max + 1
-    d = table.select(d=day_index(table[time]))
-    open_last = unit != "day" and bucket_last_day(last, unit) > latest(d, "d")  # 자료가 마지막 기간 중간에 끝났다
+    still = open_bucket(table, time, unit)  # 자료가 마지막 기간 중간에 끝났다
     partial = False
     cohorts = []
     for f in sorted(sizes):
         values = []
         for n in range(width):
             at = f + (span[0] if mode == "range" else n)
-            cut = at == last and at > f and open_last  # 진행 중인 기간의 칸은 확정이 아니다(첫 기간 자체는 늘 100%라 둔다)
+            cut = at == still and at > f  #진행 중인 기간의 칸은 확정이 아니다(첫 기간 자체는 늘 100%라 둔다)
             partial = partial or cut
             values.append(ratio(counts.get((f, n), 0), sizes[f]) if at <= last and not cut else None)
         cohorts.append({"cohort": bucket_start(f, unit).isoformat(), "size": sizes[f], "values": values})

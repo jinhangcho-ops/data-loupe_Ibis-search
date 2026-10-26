@@ -70,19 +70,19 @@ def side(text, today):
         return {"first": found, "last": found, "first_clock": None, "last_clock": None, "label": found.isoformat(), "unit": "day"}
     named = MONTH.fullmatch(text)
     if named:
-        year, month = int(named.group(1)), int(named.group(2))
+        year, month = calendar_year(named.group(1), text), int(named.group(2))
         if not 1 <= month <= 12:
             raise ValueError(f"{particle(text, '은', '는')} 없는 달이에요. 월은 1~12만 쓸 수 있어요.")
         return whole(date(year, month, 1), month_end(year, month), f"{year}년 {month}월", "month")
     named = QUARTER.fullmatch(text)
     if named:
-        year, quarter = int(named.group(1)), int(named.group(2))
+        year, quarter = calendar_year(named.group(1), text), int(named.group(2))
         if not 1 <= quarter <= 4:
             raise ValueError(f"{particle(text, '은', '는')} 없는 분기예요. 1~4분기만 있어요.")
         first = 3 * quarter - 2
         return whole(date(year, first, 1), month_end(year, first + 2), f"{year}년 {quarter}분기", "quarter")
     if YEAR.fullmatch(text):
-        year = int(text)
+        year = calendar_year(text, text)
         return whole(date(year, 1, 1), date(year, 12, 31), f"{year}년", "year")
     return relative(text, today)
 
@@ -94,6 +94,13 @@ def clocked(first, last, found, label, shown):
         raise ValueError(f"{particle(found.group(0), '은', '는')} 없는 시각이에요. 00:00~23:59로 써 주세요.")
     clock = (hour, minute)
     return {"first": first, "last": last, "first_clock": clock, "last_clock": clock, "label": shown, "unit": "time"}
+
+
+def calendar_year(digits, text):
+    """네 자리 연도 글자를 숫자로. 0년은 달력에 없어 ValueError(date가 영어 오류를 내기 전에)."""
+    if int(digits) < 1:
+        raise ValueError(f"{particle(text, '은', '는')} 없는 해예요. 연도는 1년부터 쓸 수 있어요.")
+    return int(digits)
 
 
 def whole(first, last, label, unit):
@@ -204,7 +211,14 @@ def split_text(value):
 
 def previous(span):
     """span({start, end, ...})의 직전 같은 길이 기간. 달 단위로 꼭 맞는 기간(월·분기·연 포함)은 직전 같은 개월 수 전체, 그 밖의 날짜 기간은 바로 앞 같은 일수, 시각이 든 기간은 바로 앞 같은 시간이다.
-    열린 범위·읽지 못한 기간은 error가 든 결과를 돌려준다."""
+    열린 범위·읽지 못한 기간, 직전 기간이 달력(1년~) 앞으로 넘어가는 기간(0001-01)은 error가 든 결과를 돌려준다."""
+    try:
+        return previous_span(span)
+    except (ValueError, OverflowError):
+        return failed("직전 기간이 1년 1월 1일보다 앞이라 구할 수 없어요.")
+
+
+def previous_span(span):
     if not span or span.get("error") or not span.get("start") or not span.get("end"):
         return failed("끝이 열린 기간이나 읽지 못한 기간은 직전 기간을 구할 수 없어요.")
     (first, first_clock), (last, last_clock) = split_text(span["start"]), split_text(span["end"])
@@ -277,7 +291,10 @@ def parse_every(text):
     found = EVERY.fullmatch(compact)
     if not found:
         raise ValueError(f"‘{compact}’{ending(compact, '은', '는')} 읽을 수 없는 주기예요. 숫자와 단위(초·분·시간·일·주·달·개월·년)로 써 주세요. 예: 30분, 2시간, 1주" if compact else "주기를 입력해 주세요. 예: 30분, 2시간, 1주")
-    seconds = round(float(found.group(1)) * EVERY_SECONDS[found.group(2)])
+    try:
+        seconds = round(float(found.group(1)) * EVERY_SECONDS[found.group(2)])
+    except OverflowError:  # 수백 자리 숫자는 float에서 무한대가 된다
+        raise ValueError(f"‘{compact}’{ending(compact, '은', '는')} 너무 길어요. 더 작은 숫자로 써 주세요. 예: 30분, 2시간, 1주") from None
     if seconds < 1:
         raise ValueError(f"‘{compact}’{ending(compact, '은', '는')} 너무 짧아요. 1초 이상으로 써 주세요.")
     return seconds

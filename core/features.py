@@ -116,8 +116,10 @@ def install(ids):
     running = getattr(collect_job, "running", None)
     if running is not None and running():  # 앱이 닫히면 10초 뒤 강제로 끝나 수집 정리가 끊긴다
         raise ValueError(collect_job.RUNNING)
+    from integrations import schedule
+    if any(r["result"] == "도는 중" for r in schedule.runs_view()["runs"]):  # Windows 예약(DataLoupe.exe --run)은 다른 프로세스라 running()이 모른다
+        raise ValueError("예약 수집이 도는 중이에요. 끝난 뒤 다시 시도하세요.")
     if "collect" not in ids:
-        from integrations import schedule
         count = len(schedule.schedules())  # 프로그램 안 예약과 Windows 예약이 모두 여기에 있다
         if count:
             raise ValueError(f"수집을 빼려면 수집 화면에서 예약 {count}개를 먼저 지우세요.")

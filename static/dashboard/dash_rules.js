@@ -3,9 +3,9 @@
 //   숫자 식: `= 0`, `> 100`, `>= 1,000`, `< -5%`, `a ~ b`(사이), 목록 `1, 3, 7`(이 숫자들만).  단어 식: 정확히 `취소`, 목록 `취소, 환불`, 포함 `*지연*`, 시작 `ERR*`, 끝 `*실패`(대소문자 무시).
 // 틀린 규칙(숫자 칸에 단어 식, 읽을 수 없는 식, 틀린 HEX)은 이유 문장을 돌려주고 적용하지 않는다.
 
-// "₩1,000"·"-5%"·"1,234.5" → 숫자(%는 ÷100). 숫자가 아니면 null.
+// "₩1,000"·"-5%"·"1,234.5" → 숫자(%는 ÷100). 숫자가 아니면 null. 안쪽에 공백이 있으면("100, 200") 숫자가 아니다(목록으로 읽힌다).
 function ruleNumber(text) {
-  const t = String(text).trim().replace(/[₩\s]/g, "");
+  const t = String(text).trim().replace(/₩\s*/g, "");
   if (!/^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?%?$/.test(t)) return null;
   const n = parseFloat(t.replace(/,/g, "").replace("%", ""));
   return t.endsWith("%") ? n / 100 : n;
@@ -30,7 +30,7 @@ function parseMatch(text) {
   if (single != null) return { kind: "num", test: v => v === single };
   const parts = t.split(",").map(p => p.trim()).filter(Boolean);
   if (parts.length > 1 || t.includes(",")) {
-    const nums = parts.map(ruleNumber);
+    const nums = (/,\s/.test(t) ? t.split(/\s*,\s+/) : parts).map(ruleNumber);  // ", "로 나눈 목록이면 1,000 같은 천 단위 쉼표는 숫자 안에 둔다
     return nums.every(n => n != null) ? { kind: "num", test: v => nums.includes(v) } : { kind: "word", test: s => parts.some(p => p.toLowerCase() === s) };
   }
   if (t.includes("*")) {

@@ -64,11 +64,18 @@ function sparkPoints(values, w, h, pad = 2) {
   const real = values.filter(v => v != null), lo = Math.min(...real), hi = Math.max(...real), n = values.length;
   return values.map((v, i) => v == null ? null : `${(pad + (n < 2 ? (w - 2 * pad) / 2 : (w - 2 * pad) * i / (n - 1))).toFixed(1)},${(hi === lo ? h / 2 : h - pad - (h - 2 * pad) * (v - lo) / (hi - lo)).toFixed(1)}`).filter(Boolean).join(" ");
 }
-// 값 글자: number는 쉼표·소수 둘째 자리, percent는 ×100 %, currency는 ₩ + 쉼표. unit은 뒤에 붙인다.
+// 값 글자(서버 core/compare.format_value와 같은 모양): number는 쉼표·소수 둘째 자리, percent는 ×100 소수 둘째 자리 %, currency는 ₩ + 쉼표(음수는 -₩). unit은 뒤에 붙인다.
+// 숫자가 아닌 값(string_agg·first·any_value 등)은 글자 그대로.
 function showValue(v, format = "number", unit = "") {
   if (v == null) return "—";
-  const text = format === "percent" ? `${+(v * 100).toFixed(1)}%` : format === "currency" ? "₩" + Math.round(v).toLocaleString() : (+v.toFixed(2)).toLocaleString();
+  if (typeof v !== "number") return String(v) + unit;
+  const text = format === "percent" ? roundText(v * 100, 2) + "%" : format === "currency" ? roundText(v, 0, "₩") : roundText(v, 2);
   return text + unit;
+}
+// compare.trimmed와 같은 규칙: 절댓값을 d자리에서 5를 올려 반올림(2.5 → 3), 쉼표, 끝의 0을 떼고, -0은 0. prefix(₩)는 부호 뒤에.
+function roundText(x, d, prefix = "") {
+  const a = Math.abs(x), s = String(a), r = s.includes("e") ? +a.toFixed(d) : Math.round(+`${s}e${d}`) / 10 ** d;  // 10진 글자 그대로 반올림(1.005 → 1.01, toFixed는 1.00)
+  return (x < 0 && r ? "-" : "") + prefix + r.toLocaleString(undefined, { maximumFractionDigits: d });
 }
 // 목표와의 차이 글자: percent는 %p, 그 밖은 값 모양대로
 const showGap = (v, format) => format === "percent" ? `${+(Math.abs(v) * 100).toFixed(1)}%p` : showValue(Math.abs(v), format);

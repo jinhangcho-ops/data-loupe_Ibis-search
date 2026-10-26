@@ -27,6 +27,7 @@ FILE_PREFIXES = ("read_", "parquet_", "iceberg_", "delta_", "dblink", "xp_")  # 
 FILE_SUFFIXES = ("_scan",)  # 이름이 이렇게 끝나는 함수(delta_scan, iceberg_scan, excel_scan …). DuckDB의 postgres_query 같은 원격 조회는 FILE_FUNCS에 이름으로(json_query처럼 정상인 *_query 함수는 막지 않는다)
 ENV_FUNCS = {"getenv", "current_setting", "current_settings", "duckdb_settings", "duckdb_secrets", "which_secret",
              "setval", "nextval", "set_config", "pg_terminate_backend", "pg_cancel_backend", "sleep", "pg_sleep"}  # 환경·설정·비밀을 읽거나 서버 상태를 바꾸는 함수
+FILE_TABLE = re.compile(r"\.(csv|tsv|parquet|jsonl?|ndjson|geojson|duckdb|gz|zst|xlsx|tbl|txt)$", re.I)  # DuckDB가 파일로 읽는 테이블 이름(스키마.테이블로 나뉜 t.csv 포함)
 FILE_CLASSES = ("ReadCSV", "ReadParquet")  # sqlglot이 함수 이름 대신 따로 만드는 클래스(없는 버전이면 건너뜀)
 READ_MESSAGE = "SQL 안에서 파일을 직접 읽을 수 없어요. 파일은 [연결]로 열거나 가상 테이블(Parquet)로 등록하세요."
 ENV_MESSAGE = "SQL 안에서 환경·설정 값을 읽거나 서버 상태를 바꿀 수 없어요."
@@ -123,7 +124,8 @@ def file_read_problem(tree, sql):
             start = ident.meta.get("start")
             if start is not None and sql[start:start + 1] == "'":  # 작은따옴표 글자가 테이블 자리에 온 것
                 return READ_MESSAGE
-            if re.search(r"[/\\]", ident.name) or source.kind_of(ident.name):  # 따옴표 종류와 관계없이 경로 모양이거나 파일 확장자로 끝나는 이름
+            full = ".".join(p.name for p in node.parts)  # 카탈로그.스키마.테이블 전체(t.csv는 스키마 t, 테이블 csv로 나뉜다)
+            if re.search(r"[/\\]", full) or FILE_TABLE.search(full):  # 따옴표 종류와 관계없이 경로 모양이거나 파일 확장자로 끝나는 이름
                 return READ_MESSAGE
     return None
 

@@ -288,7 +288,7 @@ def test_ltv_repeat_tiers_recurring(events):
     assert [(r["cohort"], r["size"], r["revenue"]) for r in ltv["rows"]] == [("2026-03-01", 2, 600.0), ("2026-03-02", 1, 0.0)]
     late = run("ltv", {**s, "N일": 30}, events)
     assert late["value"] == pytest.approx(300) and any("지금까지의 값" in n for n in late["notes"])
-    simple = mem(uid=[1, 1, 2, 2], ts=[D(2026, 1, 5), D(2026, 2, 5), D(2026, 1, 6), D(2026, 1, 7)], amt=[10.0, 10.0, 10.0, 10.0])
+    simple = mem(uid=[1, 1, 2, 2], ts=[D(2026, 1, 5), D(2026, 2, 28), D(2026, 1, 6), D(2026, 1, 7)], amt=[10.0, 10.0, 10.0, 10.0])
     ratio = run("ltv", {**s, "N일": 30, "계산 방식": "ARPU÷이탈률"}, simple)
     # 월 ARPU = 40 ÷ 사용자·월 3개, 월 이탈률(1월 활동 {1,2}, 2월 활동 {1}) = 1/2
     assert ratio["value"] == pytest.approx((40 / 3) / 0.5) and ratio["parts"]["churn_rate"] == 0.5

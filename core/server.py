@@ -74,13 +74,18 @@ def text_wide(df, text_big):
     wide = [c for c in df.columns if text_big and df[c].dtype.is_integer() and max(abs(df[c].max() or 0), abs(df[c].min() or 0)) > 2**53]
     import polars as pl
     blobs = [c for c in df.columns if df[c].dtype == pl.Binary]  # write_json이 이진 값에서 패닉한다 → 16진수 글자로
-    def hexed(t):  # 이진을 글자로 바꾼 타입
-        return (pl.String if t == pl.Binary else pl.List(hexed(t.inner)) if isinstance(t, pl.List) else pl.Array(hexed(t.inner), t.size) if isinstance(t, pl.Array)
-                else pl.Struct({f.name: hexed(f.dtype) for f in t.fields}) if isinstance(t, pl.Struct) else t)
-    def hex_of(v):
-        return v.hex() if isinstance(v, bytes) else [hex_of(x) for x in v] if isinstance(v, list) else {k: hex_of(x) for k, x in v.items()} if isinstance(v, dict) else v
-    nested = [c for c in df.columns if c not in blobs and hexed(df[c].dtype) != df[c].dtype]  # 목록·구조 안의 이진도 패닉한다 → 그 안의 이진만 16진수 글자로(펼쳐 보기는 그대로)
-    return df.with_columns(*[df[c].cast(str) for c in wide], *[df[c].bin.encode("hex") for c in blobs], *[pl.Series(c, [hex_of(v) for v in df[c].to_list()], dtype=hexed(df[c].dtype)) for c in nested])
+    def hexed(t, big=False):  # 이진(big이면 정수도)을 글자로 바꾼 타입
+        return (pl.String if t == pl.Binary or big and t.is_integer() else pl.List(hexed(t.inner, big)) if isinstance(t, pl.List) else pl.Array(hexed(t.inner, big), t.size) if isinstance(t, pl.Array)
+                else pl.Struct({f.name: hexed(f.dtype, big) for f in t.fields}) if isinstance(t, pl.Struct) else t)
+    def hex_of(v, big=False):
+        return (v.hex() if isinstance(v, bytes) else str(v) if big and type(v) is int else [hex_of(x, big) for x in v] if isinstance(v, list)
+                else {k: hex_of(x, big) for k, x in v.items()} if isinstance(v, dict) else v)
+    def big_in(v):  # 목록·구조 안 어디든 ±2^53을 넘는 정수가 있는지
+        return abs(v) > 2**53 if type(v) is int else any(map(big_in, v)) if isinstance(v, list) else any(map(big_in, v.values())) if isinstance(v, dict) else False
+    big = {c for c in df.columns if text_big and not df[c].dtype.is_integer() and hexed(df[c].dtype, True) != hexed(df[c].dtype) and big_in(df[c].to_list())}  # 목록·구조 안의 큰 정수도 → 그 컬럼 안의 정수를 글자로
+    nested = [c for c in df.columns if c not in blobs and hexed(df[c].dtype, c in big) != df[c].dtype]  # 목록·구조 안의 이진도 패닉한다 → 그 안의 이진만 16진수 글자로(펼쳐 보기는 그대로)
+    return df.with_columns(*[df[c].cast(str) for c in wide], *[df[c].bin.encode("hex") for c in blobs],
+                           *[pl.Series(c, [hex_of(v, c in big) for v in df[c].to_list()], dtype=hexed(df[c].dtype, c in big)) for c in nested])
 
 
 def dump(df):
@@ -360,7 +365,9 @@ def files():
     kinds = body.get("kinds", list(source.KINDS))
     if not isinstance(kinds, list) or not kinds or not set(kinds) <= set(source.KINDS):
         raise ValueError(f"찾을 파일 종류를 하나 이상 고르세요({', '.join(source.KINDS)}).")
-    path = Path(body.get("path") or "")
+    if not body.get("path"):  # 빈 경로는 Path("")가 작업 폴더(.)가 되어 그 아래를 다 훑는다
+        raise ValueError("폴더나 파일 경로를 입력하세요.")
+    path = Path(body["path"])
     if not path.exists():
         raise ValueError("그런 폴더나 파일이 없습니다.")
     duckdb_files, flat_files = source.find_files(path, kinds, body.get("deep", True) is not False)

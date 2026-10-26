@@ -4,6 +4,7 @@
 import datetime as dt
 import re
 import json
+from decimal import Decimal
 
 
 from analysis import stats
@@ -583,6 +584,20 @@ def table_rows(expr, group_cols, series):
     return [[result.plain(v) if not hasattr(v, "isoformat") else str(v) for v in row] for row in frame.rows()]
 
 
+def js_text(v):
+    """JSON으로 받은 값을 JS String(v)처럼 글자로(None → null, True → true, 1.0 → 1, 1e-05 → 0.00001)."""
+    if v is None:
+        return "null"
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, float):
+        if v.is_integer() and abs(v) < 1e21:
+            return str(int(v))
+        text = repr(v)  # 가장 짧은 10진 글자는 JS와 같고, 지수로 쓰는 범위만 다르다(JS는 1e-7 미만·1e21 이상)
+        return format(Decimal(text), "f") if "e" in text and 1e-6 <= abs(v) < 1e21 else re.sub(r"e([+-]?)0*(\d)", lambda m: "e" + (m[1] or "+") + m[2], text)
+    return str(v)
+
+
 def table_data(card, ctx):
     """table 카드: 쿼리의 집계(묶음 컬럼 + 계열)를 표로(최대 MAX_TABLE_ROWS행). 날짜 컬럼과 직전 기간이 있으면 직전 기간 값도 줘 ▲▼ 칸을 그린다.
     계열이 없으면 원래 행 표라 값은 저장하지 않고 컬럼 이름만 준다(보일 때마다 연결에서 읽는다)."""
@@ -596,7 +611,7 @@ def table_data(card, ctx):
     old = run(lambda: table_rows(at(before), groups, series)) if before and groups else None
     more = len(now) > MAX_TABLE_ROWS
     columns = [{"name": c, "kind": "group"} for c in groups] + [{"name": series_name(s), "kind": "value", "agg": s["agg"]} for s in series]
-    key = lambda row: "\x01".join(str(v) for v in row[:len(groups)])
+    key = lambda row: "\x01".join(js_text(v) for v in row[:len(groups)])  # 화면(renderTable)이 행에서 JS String으로 만드는 열쇠와 같게
     return {"values": {"columns": columns, "rows": now[:MAX_TABLE_ROWS], "more": more, "prev": {key(r): r[len(groups):] for r in old} if old else None},
             "note": f"행이 많아 앞 {MAX_TABLE_ROWS}개만 저장했어요." if more else ""}
 
@@ -678,8 +693,8 @@ def deviation_data(card, ctx):
     buckets = sorted({str(b) for b in frame["b"].to_list()})[-MAX_BUCKETS:]
     cells = {}
     for e, b, v in frame.rows():
-        cells.setdefault(str(e), {})[str(b)] = result.plain(v)
-    return {"values": {"buckets": buckets, "entities": [{"name": n, "values": [cells[n].get(b) for b in buckets]} for n in sorted(cells)], "more": more}}
+        cells.setdefault("(빈 값)" if e is None else str(e), {})[str(b)] = result.plain(v)
+    return {"values": {"buckets": buckets, "entities": [{"name": n, "values": [cells[n].get(b) for b in buckets]} for n in sorted(cells, key=lambda n: (n == "(빈 값)", n))], "more": more}}  # 빈 엔티티는 뒤
 
 
 def geomap_data(card, ctx):

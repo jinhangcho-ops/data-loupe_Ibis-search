@@ -1795,8 +1795,8 @@ def load_section(c, got):
         st = wait()
         record = json.loads((out / "items.load.json").read_text(encoding="utf-8"))
         check("멈추기는 묶음 사이에서 멈추고 기록을 남김", (st["phase"], 0 < record["rows"] < 25, record["rows"] % 10, len(table_rows("paused")) == record["rows"]), ("멈춤", True, 0, True))
-        _, st = load(lcfg("items.parquet", table={"name": "paused"}, batch=5))
-        check("묶음 크기 등 서명이 다르면 처음부터(new는 이미 있어 거부)", (st["phase"], st["error"][:23]), ("실패", "'paused'은 이미 있는 테이블입니다."))
+        _, st = load(lcfg("items.parquet", table={"name": "paused", "schema": "main"}))
+        check("스키마 등 서명이 다르면 처음부터(new는 이미 있어 거부, 묶음 크기는 서명에 없음)", (st["phase"], st["error"][:23]), ("실패", "'paused'은 이미 있는 테이블입니다."))
         _, st = load(lcfg("items.parquet", table={"name": "paused"}))
         check("같은 서명이면(간격은 서명에 없음) 이어서 끝냄", (st["phase"], [r[0] for r in table_rows("paused")]), ("끝", list(range(1, 26))))
 

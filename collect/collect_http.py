@@ -24,9 +24,9 @@ STOPPED = "멈췄습니다. 같은 설정으로 다시 시작하면 이어 받�
 class Halt(Exception):
     """수집을 멈추게 하는 일. failed가 False면 사용자의 멈춤이나 한도처럼 실패가 아닌 멈춤이다."""
 
-    def __init__(self, message, failed=True):
+    def __init__(self, message, failed=True, status=None):
         super().__init__(message)
-        self.failed = failed
+        self.failed, self.status = failed, status  # status: 거부한 응답의 상태(4xx로 멈췄을 때)
 
 
 class Keep(urllib.request.HTTPRedirectHandler):
@@ -215,7 +215,7 @@ class Balancer:
                 if reply.status in (401, 403):
                     raise Halt(f"인증을 확인하세요(상태 {reply.status}). env 파일의 키와 헤더를 확인하세요.")
                 if reply.status != 429 and reply.status < 500:
-                    raise Halt(source.mask(f"요청이 거부됐습니다(상태 {reply.status}): {reply.text()[:200]}", self.secrets, HIDE))
+                    raise Halt(source.mask(f"요청이 거부됐습니다(상태 {reply.status}): {reply.text()[:200]}", self.secrets, HIDE), status=reply.status)
             self.failed(last)
             if n == self.retries:
                 break

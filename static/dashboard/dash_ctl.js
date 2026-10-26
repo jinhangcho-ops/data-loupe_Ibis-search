@@ -153,7 +153,7 @@ const storedCard = c => ({ ...DashBoard.plain(c), data: c.liveData && c.data ===
 async function liveCards(board, connected) {
   if (!connected) throw new Error("먼저 데이터에 연결하세요.");
   const cards = board.cards.filter(c => c.source?.key && c.id).map(cardRequest);
-  (await api("/api/dash/cards/compute", { cards, ctx: board.ctx() })).results.forEach(r => { const c = board.cards.find(x => x.id === r.id); if (c && r.data) showLive(c, r.data); });
+  (await api("/api/dash/cards/compute", { cards, ctx: board.ctx() })).results.forEach(r => { const c = board.cards.find(x => x.id === r.id); if (c) { if (r.data) { showLive(c, r.data); c.rangeNote = ""; } else c.rangeNote = r.error; } });
   await board.recompare();
 }
 // 기간 기준 날짜 컬럼이 있는 날짜 X축이 아닌 카드(cards)를 보는 기간(board.ctx())으로 다시 구한다. 연결이 없거나 다른 연결의 카드는 이유를 카드에 적고 이전 값을 둔다.

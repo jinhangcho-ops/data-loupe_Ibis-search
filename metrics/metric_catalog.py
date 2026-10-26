@@ -32,8 +32,8 @@ PARTS = {"users_first": "첫 단계(A)를 한 사용자 수", "users_reached": "
          "prev_revenue": "지난달 매출", "kept_revenue": "그 고객의 이번 달 매출", "users": "사용자 수", "mrr": "MRR"}
 
 # 계산(calc)마다 표를 읽는 조회 수의 어림(없으면 1). 사본 없이 원격에서 바로 구할 때 확인창에 "표를 약 N번 읽어요"로 알린다.
-PASSES = {"uv": 2, "active": 2, "pv_per_uv": 2, "stickiness": 2, "time_between": 2, "conversion": 2, "ftue": 3, "retention": 5, "flattening": 5, "states": 4, "power_curve": 3, "survival": 2, "new_payers": 2,
-          "pur": 4, "arpu": 2, "arppu": 2, "arpdau": 2, "ltv": 4, "nrr": 3, "cac": 4, "roas": 5, "payback": 5, "frequency": 2, "tiers": 2, "gini": 2, "aov": 2, "purchase_frequency": 2,
+PASSES = {"uv": 2, "active": 2, "pv_per_uv": 2, "stickiness": 3, "time_between": 2, "conversion": 2, "ftue": 3, "retention": 5, "flattening": 5, "states": 5, "power_curve": 3, "survival": 2, "new_payers": 3,
+          "pur": 5, "recurring": 2, "arpu": 2, "arppu": 2, "arpdau": 2, "ltv": 5, "nrr": 4, "cac": 4, "roas": 5, "payback": 5, "frequency": 2, "tiers": 2, "gini": 2, "aov": 2, "purchase_frequency": 2,
           "pareto": 2, "pity": 2, "stage_clear": 3, "organic_uplift": 2, "velocity": 5, "money_supply": 4}
 
 # ---------- 빈칸 도서관: 역할마다 한 번만 적고 항목은 역할 이름으로 고른다 ----------
@@ -548,12 +548,15 @@ def compute(entry_, slots, body, ctx, align=None, limit=None):
     ctx.table이 없으면 ctx.fetch(body, 컬럼들)로 받는다(원격·파일 연결은 이 PC 사본). 다른 테이블이 필요한 지표는 align이 없으면 이유와 함께 거부한다."""
     import numpy as np  # 계산할 때만 올린다(프로그램이 시작할 때는 올리지 않는다)
 
+    from core.dash_store import finite
+    from core.prep_ops import nan_to_null
     from metrics import metric_kernels as mk
     e = get(entry_) if isinstance(entry_, str) else entry_
     if e["cross"]:
         mk.check_align(align)
     ctx.align = align
     table = ctx.table if ctx.table is not None else ctx.fetch(body, used_columns(e, slots or {}))
+    table = table.mutate(**{name: nan_to_null(table[name]) for name, t in table.schema().items() if t.is_floating()})  # NaN·inf는 빈 값(분석 화면과 같게: 합계는 나머지로)
     s = resolve(e, slots, table)
     got = mk.KERNELS[e["calc"]](table, s, e["params"], ctx)
     dist = got.get("dist")
@@ -561,9 +564,9 @@ def compute(entry_, slots, body, ctx, align=None, limit=None):
     if e["spread"] and dist is not None and len(dist):
         spread = {**{name: float(np.quantile(dist, q)) for name, q in SPREAD}, "n": int(len(dist))}
     parts = got["parts"]
-    out = {"id": e["id"], "name": e["name"], "abbr": e["abbr"], "area": e["area"], "value": got["value"], "label": got["label"], "unit": e["unit"], "format": e["format"], "better": e["better"],
+    out = finite({"id": e["id"], "name": e["name"], "abbr": e["abbr"], "area": e["area"], "value": got["value"], "label": got["label"], "unit": e["unit"], "format": e["format"], "better": e["better"],
            "columns": [{"key": k, "label": v} for k, v in got["cols"].items()], "rows": got["rows"], "parts": parts,
-           "pair": [{"id": p, "name": part_name(p), "value": parts.get(p)} for p in e["pair"]], "spread": spread, "notes": [*got["notes"], *ctx.notes], "text": shown_sentence(e, slots)}
+           "pair": [{"id": p, "name": part_name(p), "value": parts.get(p)} for p in e["pair"]], "spread": spread, "notes": [*got["notes"], *ctx.notes], "text": shown_sentence(e, slots)})  # 실수 컬럼의 NaN이 JSON에 NaN으로 가면 브라우저가 읽지 못한다
     if limit:
         out["alert"] = check_limit(out["value"], limit)
     return out

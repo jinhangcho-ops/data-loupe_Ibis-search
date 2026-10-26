@@ -169,6 +169,9 @@ def start(config, password=""):
     if shutil.disk_usage(path.parent).free < MIN_FREE:
         raise ValueError(f"디스크 공간이 모자랍니다(적어도 {MIN_FREE // 1024 // 1024}MB가 필요합니다).")
     load_job.ready(config)
+    left = load_job.read_record(path) if config["load"]["target"] != "file" and path.exists() else None  # 다 넣으면 기록을 지운다
+    if left and left.get("file") in (None, load_job.file_stamp(path)):  # 이 결과 파일을 덜 넣었다: 덮어쓰면 남은 행을 넣을 길이 없다
+        raise ValueError("지난 적재가 끝나지 않았습니다. [적재만 다시]로 마저 넣은 뒤 수집하세요.")
     found, lock = parts(path), lock_of(config)
     if not filelock.hold(lock):
         raise Busy(BUSY)
@@ -376,14 +379,24 @@ def run_api(config, env, path, found, record, halt):
                         return i
                 return None
 
+        def later(i):
+            """둘째 쪽부터의 (행, 응답 크기). 404는 빈 쪽으로 본다(끝을 지나면 404를 주는 서버, 동시에 받다 끝 뒤 쪽을 요청한 때)."""
+            try:
+                _, rows, reply = get(i)
+            except Halt as e:
+                if e.status != 404:
+                    raise
+                return [], 0
+            return rows, len(reply.body)
+
         def worker():
             try:
                 while (i := claim()) is not None:
-                    _, rows, reply = get(i)
+                    rows, size = later(i)
                     if not rows:  # 빈 쪽: 이 번호부터는 요청하지 않는다.
                         with guard:
                             record["end"] = i if record.get("end") is None else min(record["end"], i)
-                    save_page(found, record, i, rows, len(reply.body))
+                    save_page(found, record, i, rows, size)
             except Exception as e:
                 errors.append(e)
                 quit.set()
@@ -402,11 +415,11 @@ def run_api(config, env, path, found, record, halt):
                 if total is None:  # 전체 수를 모르면 다음 쪽이 비지 않은지로 본다
                     i = claim()
                     if i is not None:
-                        _, rows, reply = get(i)
+                        rows, size = later(i)
                         with guard:
                             if not rows:
                                 record["end"] = i
-                        save_page(found, record, i, rows, len(reply.body))
+                        save_page(found, record, i, rows, size)
                         total = short + 1 if rows else None
                 if total is not None and total > short:
                     raise Halt(f"서버가 한 번에 {short}행만 줍니다. 한 번에 받는 수를 {short}으로 줄이세요.")

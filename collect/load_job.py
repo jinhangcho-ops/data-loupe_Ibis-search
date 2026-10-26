@@ -51,9 +51,10 @@ def record_path(path):
 
 
 def signature(config):
-    """이어 넣기를 정하는 대상 서명: 적재할 곳(연결·스키마·이름·방식·키 또는 Kafka 서버·토픽·키), 한 건씩인지, 묶음 크기. 비밀번호는 넣지 않는다."""
+    """이어 넣기를 정하는 대상 서명: 적재할 곳(연결·스키마·이름·방식·키 또는 Kafka 서버·토픽·키). 비밀번호는 넣지 않는다.
+    한 건씩인지·묶음 크기는 넣지 않는다(이어 넣을 위치는 넣은 행 수로 정해 묶음 크기만 바꿔 다시 해도 겹치지 않는다)."""
     load = config["load"]
-    key = {"target": load["target"], "to": TARGETS[load["target"]].sign(config), "unit": load["unit"], "batch": load["batch"]}
+    key = {"target": load["target"], "to": TARGETS[load["target"]].sign(config)}
     return hashlib.sha256(json.dumps(key, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 

@@ -138,7 +138,7 @@ def test_stage_clear_sorts_stages_with_nan_last():
     nan = float("nan")
     stage = mem(st=[3.0, nan, 1.0, 2.0, nan, 1.0], res=["win"] * 6)
     got = run("stage_clear", {"스테이지": "st", "결과": "res", "성공 값": "win"}, stage)
-    assert [r["stage"] for r in got["rows"]] == ["1.0", "2.0", "3.0", "nan"]
+    assert [r["stage"] for r in got["rows"]] == ["1.0", "2.0", "3.0"]  # NaN은 빈 값으로 보아 빈 스테이지처럼 뺀다(13A2, 정렬이 깨지지 않음)
 
 
 # ---------- 3B11 활성 통화량 같은 시각 ----------

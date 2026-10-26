@@ -9,6 +9,7 @@ import numpy as np
 from lazy import ibis
 
 from core import funnel
+from core import prep_ops
 from metrics import metric_calc as mc
 
 KERNELS = {}
@@ -16,6 +17,7 @@ MAX_ROWS = 60  # 결과 표에 싣는 행 수(코호트·기간·항목). 넘으
 MAX_RETENTION_COLS = 100  # 리텐션 표의 경과 기간 컬럼 수 상한
 MAX_POINTS = 400  # 생존 곡선에 싣는 점 수
 PARTIAL_NOTE = "마지막 기간은 진행 중이라 그 기간의 유지율 칸은 비우고 평균에서 뺐어요."
+OPEN_NOTE = "마지막 기간은 진행 중이라 평균에서 뺐어요. 표에는 그대로 보여요."
 
 
 def kernel(name):
@@ -78,6 +80,29 @@ def with_time(t, s):
 def label_of(index, unit):
     """버킷 번호의 첫 날 글자."""
     return mc.bucket_start(int(index), unit).isoformat()
+
+
+def is_open(rows, t, s, unit):
+    """표의 마지막 행({period})이 진행 중인 기간이고 다른 행이 있으면 참(자료가 그 기간 중간에 끝났다)."""
+    still = mc.open_bucket(t, s["time"], unit)
+    return len(rows) > 1 and still is not None and rows[-1]["period"] == label_of(still, unit)
+
+
+def done_rows(rows, t, s, unit, ctx):
+    """평균에 쓸 행: 마지막 행이 진행 중인 기간이면 빼고 알린다(표에는 그대로)."""
+    if is_open(rows, t, s, unit):
+        ctx.notes.append(OPEN_NOTE)
+        return rows[:-1]
+    return rows
+
+
+def last_done(rows, t, s, unit, ctx, empty=None):
+    """'가장 최근 기간' 행: 마지막 행이 진행 중인 기간이면 끝난 직전 기간의 행(없으면 empty)을 쓰고 알린다."""
+    if not is_open(rows, t, s, unit):
+        return rows[-1] if rows else empty
+    ctx.notes.append("마지막 기간은 진행 중이라 대표 값은 끝난 직전 기간 것이에요. 표에는 그대로 보여요.")
+    before = label_of(mc.open_bucket(t, s["time"], unit) - 1, unit)
+    return next((r for r in rows if r["period"] == before), empty)
 
 
 def cut_note(ctx, what, side="최근"):
@@ -165,10 +190,10 @@ def active(t, s, p, ctx):
         return result(None, [], {"period": "기간", "users": "활성 사용자 수"}, dist=np.array([], float), label=f"{p['unit_name']} 평균")
     used = dict(found)
     hi = max(found)
-    if cells > 1 and p["unit"] != "day" and mc.bucket_last_day(hi, p["unit"]) > mc.latest(t.select(d=mc.day_index(t[s["time"]])), "d"):
+    if cells > 1 and hi == mc.open_bucket(t, s["time"], p["unit"]):
         del used[hi]  # 자료가 마지막 기간 중간에 끝나 그 기간 수는 아직 작다
         cells -= 1
-        ctx.notes.append("마지막 기간은 진행 중이라 평균에서 뺐어요. 표에는 그대로 보여요.")
+        ctx.notes.append(OPEN_NOTE)
     values = np.concatenate([np.fromiter(used.values(), float, len(used)), np.zeros(cells - len(used))])  # 활동 없는 기간은 0명
     return result(sum(used.values()) / cells, rows, {"period": "기간", "users": "활성 사용자 수"}, dist=values, label=f"{p['unit_name']} 평균")
 
@@ -190,8 +215,9 @@ def stickiness(t, s, p, ctx):
 
     rows = [{"period": label_of(m, "month"), "dau": v / span(m), "mau": mau[m], "stickiness": mc.ratio(v / span(m), mau[m])} for m, v in sorted(days.items())]
     ctx.notes.append("DAU는 그 달 날수(자료가 달 중간에 시작·끝나면 자료가 있는 날까지)로 나눈 평균이에요. 활동이 없는 날은 0명으로 세요. 활동이 없는 달은 평균에서 빠져요.")
-    return result(mc.mean_defined([r["stickiness"] for r in rows]), last_rows(rows, ctx), {"period": "월", "dau": "DAU(평균)", "mau": "MAU", "stickiness": "DAU/MAU"},
-                  {"dau": mc.mean_defined([r["dau"] for r in rows]), "mau": mc.mean_defined([r["mau"] for r in rows])}, label="월별 평균")
+    used = done_rows(rows, t, s, "month", ctx)  # 진행 중인 달은 MAU가 아직 작아 고착도가 부풀려진다
+    return result(mc.mean_defined([r["stickiness"] for r in used]), last_rows(rows, ctx), {"period": "월", "dau": "DAU(평균)", "mau": "MAU", "stickiness": "DAU/MAU"},
+                  {"dau": mc.mean_defined([r["dau"] for r in used]), "mau": mc.mean_defined([r["mau"] for r in used])}, label="월별 평균")
 
 
 @kernel("concurrency")
@@ -351,9 +377,10 @@ def states(t, s, p, ctx):
              "quick": ("new", "resurrected", "churned", "quick_ratio")}[pick]
     names = {"active": "활동자", "new": "신규", "retained": "기존", "resurrected": "복귀", "churned": "이탈", "churn_rate": "이탈률", "resurrection_rate": "복귀율", "quick_ratio": "Quick Ratio"}
     key = {"dau_split": "active", "churn": "churn_rate", "resurrection": "resurrection_rate", "quick": "quick_ratio"}[pick]
-    parts = {"churned": sum(r["churned"] or 0 for r in found), "new": sum(r["new"] for r in found), "resurrected": sum(r["resurrected"] for r in found)}
+    used = done_rows(found, t, s, unit, ctx)
+    parts = {"churned": sum(r["churned"] or 0 for r in used), "new": sum(r["new"] for r in used), "resurrected": sum(r["resurrected"] for r in used)}
     rows = [{"period": r["period"], **{k: r[k] for k in shown}} for r in found]
-    return result(mc.mean_defined([r[key] for r in found]), last_rows(rows, ctx), {"period": "기간", **{k: names[k] for k in shown}}, parts, label="기간 평균")
+    return result(mc.mean_defined([r[key] for r in used]), last_rows(rows, ctx), {"period": "기간", **{k: names[k] for k in shown}}, parts, label="기간 평균")
 
 
 @kernel("power_curve")
@@ -434,7 +461,7 @@ def new_payers(t, s, p, ctx):
     first = x.group_by("u").aggregate(p=x.p.min())
     rows = [{"period": label_of(r["p"], unit), "npa": int(r["n"])} for r in mc.rows(first.group_by("p").aggregate(n=first.u.count()).order_by("p"))]
     ctx.notes.append("고른 기간 앞의 결제 기록은 보이지 않아, 기간 안에서 처음 결제한 사용자를 신규로 세요.")
-    return result(rows[-1]["npa"] if rows else 0, last_rows(rows, ctx), {"period": "기간", "npa": "신규 결제자 수"}, {"pu": sum(r["npa"] for r in rows)}, label="가장 최근 기간")
+    return result(last_done(rows, t, s, unit, ctx, {"npa": 0})["npa"], last_rows(rows, ctx), {"period": "기간", "npa": "신규 결제자 수"}, {"pu": sum(r["npa"] for r in rows)}, label="가장 최근 기간")
 
 
 @kernel("pur")
@@ -449,7 +476,7 @@ def pur(t, s, p, ctx):
     rows = [{"period": label_of(k, unit), "payers": paid_n.get(k, 0), "users": v, "pur": mc.ratio(paid_n.get(k, 0), v)} for k, v in sorted(active_n.items())]
     total_users = int(one(x.aggregate(n=x.u.nunique()))["n"])
     total_payers = int(one(y.aggregate(n=y.u.nunique()))["n"])
-    return result(mc.mean_defined([r["pur"] for r in rows]), last_rows(rows, ctx), {"period": "기간", "payers": "결제자", "users": "활동자", "pur": "결제 비율"},
+    return result(mc.mean_defined([r["pur"] for r in done_rows(rows, t, s, unit, ctx)]), last_rows(rows, ctx), {"period": "기간", "payers": "결제자", "users": "활동자", "pur": "결제 비율"},
                   {"pu": total_payers, "uv": total_users}, label="기간별 결제 비율의 평균")
 
 
@@ -489,7 +516,7 @@ def ltv(t, s, p, ctx):
     n_days, unit = s["n_days"], s.get("unit") or "day"
     if s["method"] == "ARPU÷이탈률":
         found = mc.user_states(t, s["user"], s["time"], "month", notes=ctx.notes)
-        churn = mc.mean_defined([r["churn_rate"] for r in found])
+        churn = mc.mean_defined([r["churn_rate"] for r in done_rows(found, t, s, "month", ctx)])
         x = with_user(t, s)
         per = x.select(u=x[s["user"]], m=mc.bucket_index(x[s["time"]], "month"), a=x[s["amount"]].fill_null(0))
         r = one(per.aggregate(rev=per.a.sum()))
@@ -548,7 +575,7 @@ def recurring(t, s, p, ctx):
     """MRR(월별 금액 합, 마지막 달)·ARR(×12)."""
     x = t.select(m=mc.bucket_index(t[s["time"]], "month"), a=t[s["amount"]])
     rows = [{"period": label_of(r["m"], "month"), "mrr": num(r["v"])} for r in mc.rows(x.group_by("m").aggregate(v=x.a.sum()).order_by("m")) if r["m"] is not None]
-    last = rows[-1]["mrr"] if rows else None
+    last = last_done(rows, t, s, "month", ctx, {"mrr": 0.0})["mrr"] if rows else None
     value = last if p["pick"] == "mrr" else (None if last is None else last * 12)
     return result(value, last_rows(rows, ctx, "달"), {"period": "월", "mrr": "월 반복 매출"}, {"mrr": last}, label="가장 최근 달" if p["pick"] == "mrr" else "가장 최근 달 × 12")
 
@@ -558,7 +585,7 @@ def nrr(t, s, p, ctx):
     """NRR: 지난달 매출이 있던 고객의 이번 달 매출 ÷ 지난달 매출."""
     found = mc.nrr(t, s["user"], s["time"], s["amount"])
     rows = [{"period": r["month"], "prev_revenue": r["prev_revenue"], "kept_revenue": r["kept_revenue"], "nrr": r["nrr"]} for r in found]
-    last = found[-1] if found else None
+    last = last_done(rows, t, s, "month", ctx)
     return result(last["nrr"] if last else None, last_rows(rows, ctx, "달"), {"period": "월", "prev_revenue": "지난달 매출", "kept_revenue": "그 고객의 이번 달 매출", "nrr": "NRR"},
                   {"prev_revenue": last["prev_revenue"] if last else None, "kept_revenue": last["kept_revenue"] if last else None}, label="가장 최근 달")
 
@@ -799,6 +826,7 @@ def payback(t, s, p, ctx):
     rows = [{"day": n, "cum_arpu": v, "cac": cac_all} for n, v in enumerate(cum)]
     if day is None:
         ctx.notes.append(f"{top}일 안에는 CAC를 회수하지 못했어요.")
+    ctx.notes.append(f"자료의 끝에서 {top}일이 덜 지난 코호트는 매출이 덜 잡혀 회수가 늦게 나올 수 있어요.")
     step = max(1, len(rows) // MAX_POINTS)
     if step > 1:
         ctx.notes.append(f"점이 많아 {step}일마다 하나씩만 표에 실었어요(대표 값은 전체 기준).")
@@ -1067,7 +1095,7 @@ def two_groups(t, s):
     """실험군·대조군의 요약 {대조: {n, mean, sd, sum}, 실험: …}와 비율 지표인지."""
     kind = t[s["group"]].type()
     c, e = funnel.step_value(kind, s["control"]), funnel.step_value(kind, s["treat"])
-    m = t[s["metric"]]
+    m = prep_ops.nan_to_null(t[s["metric"]])  # NaN 하나로 표준편차가 오류(STDDEV_SAMP is out of range)가 나지 않게 빈 값으로
     x = t.filter(t[s["group"]].isin([c, e]), m.notnull())
     isbool = m.type().is_boolean()
     mm = m.cast("int64") if isbool else m
