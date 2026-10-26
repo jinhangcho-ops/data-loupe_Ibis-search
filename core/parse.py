@@ -106,7 +106,10 @@ def convert(dtype, text):
             value = decimal.Decimal(text.strip())
             if not value.is_finite():
                 raise ValueError(text)
-            return ibis.literal(value, type=f"decimal(38, {max(dtype.scale or 0, -value.as_tuple().exponent)})")
+            scale, width = max(dtype.scale or 0, -value.as_tuple().exponent), max(38, dtype.precision or 0)  # 1E+3은 지수가 양수라 scale 0
+            if value.adjusted() + 1 > width - scale:  # 자릿수를 넘는 값(1e40)은 DB가 영어 오류를 낸다
+                raise ValueError(text)
+            return ibis.literal(format(value, "f")).cast(f"decimal({width}, {scale})")  # 글자를 바꾼다: Ibis는 SQL Server에 1000을 '1E+3'으로 써서 못 읽는다. BIGNUMERIC(76,38)은 38자리보다 넓다
         return cast(text)
     except (ValueError, KeyError, decimal.InvalidOperation):
         raise ValueError(f"'{text}'은 {name} 값이 아닙니다.")

@@ -54,7 +54,7 @@ const Funcs = (() => {
         const select = el("select", { title }, el("option", { value: "", textContent: a.label }), ...columns().map(c => el("option", { value: c[0], textContent: c[0] })));
         const dir = el("select", { title: "방향" }, el("option", { value: "asc", textContent: "작은 것부터" }), el("option", { value: "desc", textContent: "큰 것부터" }));
         inputs[a.name] = { node: select, read: () => select.value ? [`${select.value} ${dir.value}`] : undefined,
-          write: v => { const [col, d] = String(v?.[0] ?? "").split(" "); select.value = col ?? ""; dir.value = d ?? "asc"; } };
+          write: v => { const [, col, d] = /^(.*?)(?:\s+(asc|desc))?$/i.exec(String(v?.[0] ?? "").trim()); select.value = col; dir.value = d?.toLowerCase() ?? "asc"; } };  // 방향은 끝에서만 뗀다(컬럼 이름에 공백이 있을 수 있다)
         box = el("span", { className: "fp-pair" }, select, dir);
         dir.onchange = onchange;
       } else if (a.kind === "choice") {

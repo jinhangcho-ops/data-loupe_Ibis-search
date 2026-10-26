@@ -135,7 +135,13 @@ function flowTail(g) {
   const tail = new Set(g.nodes.filter(n => FLOW.TAIL.includes(n.kind)).map(n => n.id));
   return { nodes: g.nodes.filter(n => tail.has(n.id)), edges: g.edges.filter(e => tail.has(e[0]) && tail.has(e[1])), feed: g.edges.filter(e => !tail.has(e[0]) && tail.has(e[1])).map(e => e[0]) };
 }
-const flowBodyTarget = g => flowTail(g).feed[0];
+// 끝 단계에서 첫 입력을 거슬러 처음 만나는 꼬리 아닌 단계(본 흐름 가운데 집계가 있어도 그 뒤 조인까지 넘긴다). 끝이 여럿이면 꼬리로 들어가는 첫 단계.
+function flowBodyTarget(g) {
+  const ends = g.nodes.filter(n => !flowOuts(g, n.id).length);
+  let id = ends.length === 1 ? ends[0].id : undefined;
+  for (let i = 0; id && FLOW.TAIL.includes(flowNode(g, id)?.kind) && i <= g.nodes.length; i++) id = flowIns(g, id)[0];
+  return id ?? flowTail(g).feed[0];
+}
 // 새 body로 만든 흐름의 끝에 꼬리를 다시 붙인다(단계 카드를 고치고 돌아왔을 때 집계·카드가 남도록)
 function flowAttach(g, tail) {
   if (!tail.nodes.length) return g;

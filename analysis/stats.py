@@ -12,6 +12,7 @@ from core import result
 from core import source
 from core.parse import check_name
 from core.result import chart_metric, plain
+from core.sql_funcs import period_start  # 주 시작 자르기는 식 truncate와 같은 것을 쓴다(dash_calc도 stats.period_start로 부른다)
 
 BINS = 20  # 히스토그램 구간 수
 TOP_VALUES = 20  # 값 빈도에 보일 값 수(나머지는 "그 밖")
@@ -32,14 +33,6 @@ def rows(expr):
 
 def one(expr):
     return rows(expr)[0]
-
-
-def period_start(col, unit):
-    """col을 unit(Ibis truncate 단위)의 시작으로 자른다. 주는 어느 DB에서나 월요일 시작(지표·화면과 같다)."""
-    if unit != "W":
-        return col.truncate(unit)
-    d = col.cast("date")  # SQL Server DATETRUNC(WEEK)는 DATEFIRST(기본 일요일)를 따르고 MySQL은 WEEK를 못 자른다: 월요일인 1000-01-06부터 센 날 수로 자른다
-    return (d - (d.delta(ibis.date(1000, 1, 6), unit="day") % 7).as_interval("D")).cast(col.type())
 
 
 def kind(dtype):

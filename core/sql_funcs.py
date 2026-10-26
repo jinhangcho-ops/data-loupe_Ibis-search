@@ -624,7 +624,17 @@ def with_time(c):
     return c
 
 
-row("truncate", "date", "단위로 자르기", "날짜를 연·분기·월·주·일·시·분·초의 시작으로.", [D_, UNIT], lambda c: with_time(c).x.truncate(UNITS[c.unit]), "truncate(주문일, 'month')", DAT, DAT)
+def period_start(col, unit):
+    """col을 unit(Ibis truncate 단위)의 시작으로 자른다. 주는 어느 DB에서나 월요일 시작(지표·화면과 같다)."""
+    if unit != "W":
+        return col.truncate(unit)
+    # SQL Server DATETRUNC(WEEK)는 DATEFIRST(기본 일요일)를 따르고 MySQL은 WEEK를 못 자른다: 월요일인 1000-01-06부터 센 날 수로 자른다
+    # 날짜 컬럼은 날짜시간을 거친다: SQLite는 날짜를 '2026-10-18 00:00:00' 글자로도 두는데 cast('date')만으로는 그대로라 날 수 계산(UDF)이 실패한다
+    d = col.cast("timestamp").cast("date") if col.type().is_date() else col.cast("date")
+    return (d - (d.delta(ibis.date(1000, 1, 6), unit="day") % 7).as_interval("D")).cast(col.type())
+
+
+row("truncate", "date", "단위로 자르기", "날짜를 연·분기·월·주·일·시·분·초의 시작으로.", [D_, UNIT], lambda c: period_start(with_time(c).x, UNITS[c.unit]), "truncate(주문일, 'month')", DAT, DAT)
 for pid, plabel, method in (("year", "연", "year"), ("quarter", "분기", "quarter"), ("month", "월", "month"), ("week", "주(연중 몇 째 주)", "week_of_year"),
                             ("day", "일", "day"), ("hour", "시", "hour"), ("minute", "분", "minute"), ("second", "초", "second")):
     row(pid, "date", f"{plabel} 뽑기", f"날짜에서 {plabel}만 숫자로.", [D_], date_part(method), f"{pid}(주문일)", DAT, NUM)

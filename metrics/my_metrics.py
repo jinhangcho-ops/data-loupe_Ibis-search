@@ -105,15 +105,15 @@ def check_align(align):
 
 # ---------- 빈칸 ----------
 
-def order_column(text):
-    """정렬 글('컬럼 [asc|desc]')의 컬럼 이름. 컬럼이 없는 글이면 None."""
+def order_column(text, columns=None):
+    """정렬 글('컬럼 [asc|desc]')의 컬럼 이름(columns를 주면 공백 있는 이름도). 컬럼이 없는 글이면 None."""
     found = ORDER_WORDS.match(text) if isinstance(text, str) else None
-    return found.group(1) if found else None
+    return (flow.head_name(text, columns) or found.group(1)) if found else None
 
 
-def columns_in_text(text):
-    """조건·정렬 글이 가리키는 컬럼 이름들(첫 낱말)."""
-    return flow.cond_columns(text) if isinstance(text, str) else set()
+def columns_in_text(text, columns=None):
+    """조건 글이 가리키는 컬럼 이름들(columns를 주면 공백 있는 이름도)."""
+    return flow.cond_columns(text, columns) if isinstance(text, str) else set()
 
 
 def check_slot(slot, raw, columns, items):
@@ -146,7 +146,7 @@ def check_slot(slot, raw, columns, items):
         if not isinstance(raw, str) or not raw.strip():
             raise ValueError(f"{where}에는 글을 넣어 주세요.")
         if columns is not None and kind in ("cond", "order"):
-            found = columns_in_text(raw) if kind == "cond" else {order_column(raw)}
+            found = columns_in_text(raw, columns) if kind == "cond" else {order_column(raw, columns)}
             if None in found:
                 raise ValueError(f"{where}에는 ‘컬럼 [asc|desc]’ 모양으로 넣어 주세요.")
             missing = sorted(c for c in found if c not in columns)
@@ -179,7 +179,7 @@ def check_slot(slot, raw, columns, items):
     return raw
 
 
-def used_columns(template, slots):
+def used_columns(template, slots, columns=None):
     """빈칸 값에서 컬럼 이름들(컬럼 칸 + 조건·정렬 글의 첫 낱말)."""
     found = set()
     for s in template["slots"]:
@@ -189,9 +189,9 @@ def used_columns(template, slots):
         elif s["type"] == "columns" and isinstance(v, list):
             found |= {sentence_run.name_of(x) for x in v if isinstance(sentence_run.name_of(x), str)}
         elif s["type"] == "cond":
-            found |= columns_in_text(v)
+            found |= columns_in_text(v, columns)
         elif s["type"] == "order" and order_column(v):
-            found.add(order_column(v))
+            found.add(order_column(v, columns))
     return found
 
 
@@ -200,12 +200,12 @@ def deps_of(template, slots):
     return [slots[s["name"]] for s in template["slots"] if s["type"] == "metric" and slots.get(s["name"])]
 
 
-def legacy_columns(definition):
+def legacy_columns(definition, columns=None):
     """metrics.py 모양 정의가 쓰는 컬럼 이름들."""
     found = set()
     for part in (definition.get("numerator"), definition.get("denominator")):
         if part:
-            found |= ({part["column"]} if part.get("column") else set()) | {c for w in part.get("where") or [] for c in columns_in_text(w)}
+            found |= ({part["column"]} if part.get("column") else set()) | {c for w in part.get("where") or [] for c in columns_in_text(w, columns)}
     return found
 
 
@@ -276,7 +276,7 @@ def build(defn, columns, items, metric_id=None):
     if tid == LEGACY:
         slots = {"def": metric_file.metric(name, (defn.get("slots") or {}).get("def"))}
         template = {"slots": [], "id": LEGACY}
-        used = legacy_columns(slots["def"])
+        used = legacy_columns(slots["def"], columns)
     else:
         try:
             template = template_of(tid) if isinstance(tid, str) else None
@@ -293,7 +293,7 @@ def build(defn, columns, items, metric_id=None):
             value = check_slot(s, given.get(s["name"]), columns, items)
             if value is not None:
                 slots[s["name"]] = value
-        used = used_columns(template, slots)
+        used = used_columns(template, slots, columns)
     agg, value = slots.get("집계"), sentence_run.name_of(slots.get("값"))
     agg = sentence_run.agg_of(agg)[0] if agg else None
     if columns and agg and value in columns and sql_funcs.get(agg)["kind_in"] == "num" and columns[value] != "num":
@@ -540,7 +540,7 @@ def bind_legacy(name, scope, columns, new_name=None):
     metrics_def = found.get(name)
     if metrics_def is None:
         raise ValueError(f"공통 정의 ‘{name}’을(를) 지표 파일에서 찾지 못했어요.")
-    missing = sorted(c for c in legacy_columns(metrics_def) if columns is not None and c not in columns)
+    missing = sorted(c for c in legacy_columns(metrics_def, columns) if columns is not None and c not in columns)
     if missing:
         raise ValueError(f"공통 정의 ‘{name}’이(가) 쓰는 컬럼 {', '.join('‘' + c + '’' for c in missing)}이(가) 이 테이블에 없어요.")
     return create({"name": new_name or name, "scope": scope, "template": LEGACY, "slots": {"def": metrics_def}, "unit": "%" if metrics_def["format"] == "percent" else ""}, columns)

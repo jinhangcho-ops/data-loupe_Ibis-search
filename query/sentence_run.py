@@ -33,6 +33,11 @@ def name_of(v):
     return v.get("column") if isinstance(v, dict) else v
 
 
+def word(text):
+    """새 컬럼 이름: 공백·기호는 _로(계산 줄에서 한 낱말이어야 한다)."""
+    return re.sub(r"[\W_]+", "_", text).strip("_")
+
+
 def shown(v):
     """빈칸 값을 문장에 넣을 글로."""
     if isinstance(v, dict):
@@ -188,7 +193,7 @@ class Plan:
                 "date_only": f"to_date(col({c!r}))", "lower": f"lower(col({c!r}))"}.get(prep)
         if text is None:
             raise Bad(f"컬럼 가공은 {', '.join(PREPS.values())} 중 하나예요.")
-        new = re.sub(r"[\W_]+", "_", f"{c}_{prep}").strip("_")  # 공백·기호는 _로(새 컬럼 이름이 계산 줄에서 한 낱말이어야 한다)
+        new = word(f"{c}_{prep}")
         self.calc(f"식 {text} 이름 {new}")
         return new
 
@@ -334,6 +339,12 @@ def func_call(spec, column):
 def window_line(func, value, order=None, group=None, args=()):
     """함수 사전 창 함수 줄 '<id> 컬럼 인자… 기준 … 그룹 …'."""
     return " ".join([func, *([value] if value else []), *map(str, args), *(["기준", order] if order else []), *(["그룹", group] if group else [])])
+
+
+def order_name(p, slot):
+    """'컬럼 [asc|desc]' 글 빈칸의 컬럼 이름(공백 있는 이름도 한 낱말로)."""
+    text = str(p.need(slot))
+    return flow.head_name(text, p.columns) or text.split()[0]
 
 
 def compile(tid, slots, body=None, columns=None):
@@ -497,7 +508,7 @@ def e23(p):
 
 def e24(p):
     t, c, order = p.col("대상"), p.col("컬럼"), p.need("정렬 기준")
-    new = f"처음_{c}"
+    new = word(f"처음_{c}")
     p.calc(window_line("first_value", c, order, t) + f" 이름 {new}")
     how, opts = agg_of(p.need("집계"))
     p.group("처음 값 기준 집계", [new], how, None if not sql_funcs.needs_column(how) else c, opts)
@@ -560,7 +571,7 @@ def e32(p):
 
 def e33(p):
     desc = p.need("방향") == "가장 늦은"
-    p.calc(f"창거르기 row_number <= 1 기준 {str(p.need('정렬 기준')).split()[0]} {'desc' if desc else 'asc'} 그룹 {p.col('무엇')}")  # 방향은 ‘가장 이른/늦은’이 정한다
+    p.calc(f"창거르기 row_number <= 1 기준 {order_name(p, '정렬 기준')} {'desc' if desc else 'asc'} 그룹 {p.col('무엇')}")  # 방향은 ‘가장 이른/늦은’이 정한다
     p.rows("행")
 
 
@@ -635,7 +646,7 @@ def e43(p):
 def e44(p):
     to = {"숫자": "float", "날짜": "date", "글자": "string"}[p.need("바꿀 형")]
     c = p.col("컬럼")
-    p.calc(f"식 try_cast(col({c!r}), {to!r}) 이름 {c}_{to}")
+    p.calc(f"식 try_cast(col({c!r}), {to!r}) 이름 {word(f'{c}_{to}')}")
     p.rows("바꾼 값")
 
 
@@ -766,7 +777,7 @@ def metric_def(p):
         definition = {"numerator": part(how, value, None, opts)}
     elif no == 4:
         t, c, order = p.col("대상"), p.col("컬럼"), p.need("정렬 기준")
-        new = f"처음_{c}"
+        new = word(f"처음_{c}")
         p.calc(window_line("first_value", c, order, t) + f" 이름 {new}")
         p.group("처음 값 기준 대상 수", [], "count_distinct", t, where=f"{new} = {quote(p.need('값'))}")
     elif no == 9:
@@ -814,8 +825,7 @@ def metric_def(p):
         p.combine = {"op": "change", "a": a, "b": b}
         p.notes.append(f"직전 같은 기간은 {start - dt.timedelta(days=days)} ~ {start - dt.timedelta(days=1)}({days}일)이에요.")
     elif no == 15:
-        order = str(p.need("정렬 기준"))
-        order = flow.head_name(order, p.columns) or order.split()[0]
+        order = order_name(p, "정렬 기준")
         i = metric_run(p, "정렬 기준마다 지표", metric_ref(p, "지표"), by=order)
         p.combine = {"op": "cumsum", "a": i}
     else:
@@ -829,7 +839,7 @@ def metric_def(p):
 def period_column(p):
     """{기간} 빈칸의 날짜 컬럼 이름(시작·끝이 없어도 된다). 없으면 Bad."""
     v = p.get("기간")
-    col = v.get("column") if isinstance(v, dict) else str(v).split()[0] if v else None
+    col = v.get("column") if isinstance(v, dict) else order_name(p, "기간") if v else None
     if not col:
         raise Bad("단위마다 나누려면 날짜 컬럼이 필요해요. 앞의 {기간}에 날짜 컬럼을 넣어 주세요.")
     return col

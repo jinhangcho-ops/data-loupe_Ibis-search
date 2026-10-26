@@ -67,6 +67,7 @@ function sentCard(compiled, title) {
   if (compiled.combine || compiled.runs.length !== 1) return { reason: "여러 계산을 합쳐 구하는 문장이라 카드 하나로 바로 넣을 수 없어요." };
   const run = compiled.runs[0], spec = run.body.pivot;
   if (run.route !== "/api/pivot" || !spec?.rows?.length) return { reason: "묶어 집계하는 문장만 차트 카드로 넣을 수 있어요(행을 보는 문장은 제외)." };
+  if (spec.having || spec.top || spec.subtotals || spec.where) return { reason: "묶음을 거르거나(조건·상위 N) 소계를 붙이는 문장이라 차트 카드로 그대로 넣을 수 없어요." };  // 차트 카드에는 이 설정을 담을 칸이 없다
   const { pivot, ...body } = run.body;
   return { kind: "chart", title, body: { ...body, x: spec.rows[0], split: spec.rows[1] ?? "", order: "", series: [{ y: spec.value ?? null, agg: spec.how, ...(spec.opts ? { opts: spec.opts } : {}) }] } };
 }

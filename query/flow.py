@@ -484,9 +484,12 @@ def body_problem(graph, target=None):
         chain = main_chain(graph, target)
     except ValueError as e:
         return str(e)
-    nodes, used, stage = by_id(graph), set(chain), 0
+    nodes, used, stage, tail = by_id(graph), set(chain), 0, False
     for nid in chain:
         n, p = nodes[nid], params(nodes[nid])
+        if tail and n["kind"] not in ("aggregate", "metric", "chart", "card"):  # body는 집계·지표를 맨 끝에만 두므로 그 뒤 단계를 빠뜨리지 않게 거절
+            return "집계·지표 뒤에 다른 단계가 이어져 단계 카드(검색 body)로 바꿀 수 없어요. 흐름 보기에서만 쓰는 모양이에요."
+        tail = tail or n["kind"] in ("aggregate", "metric", "chart", "card")
         if n["kind"] in ("period", "condition", "calc", "dedupe"):
             order = 1 if n["kind"] in ("period", "condition") else 2  # body는 조인 → 기간·조건 → 계산 순으로만 적용한다
             if order < stage:
@@ -663,6 +666,8 @@ def to_expr(graph, nid, get_table, memo=None):
         expr = parse.apply_union(parts[names[0]], names[0], (names[1:], p.get("how", "left")), lambda name: parts[name])
     elif kind == "join":
         left, right = join_sides(graph, nid)
+        if right is None:
+            raise ValueError(f"{label(node)}의 오른쪽에 테이블이 이어지지 않았어요.")
         rexpr = sub(right)
         expr = parse.apply_joins(sub(left), [(table_name(graph, right), p.get("how", "inner"), [tuple(k) for k in p.get("keys") or []], tuple(p["on"]) if p.get("on") else None)],
                                  lambda name: rexpr)

@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import urllib.request
 from pathlib import Path
 
@@ -57,11 +58,12 @@ UPDATE = {}  # 이번 실행에서 한 번 물은 결과(앱을 열 때마다 �
 NOTES_LIMIT = 50_000  # 화면에 보일 릴리스 노트의 최대 바이트
 SETUP = {"run": None}  # 이번 실행에서 띄운 설치 프로그램(설치가 앱을 닫기 전까지 앱은 그대로 쓸 수 있다)
 INSTALLING = "설치 프로그램이 진행 중이에요. 설치가 끝나거나 관리자 확인을 거절한 뒤 다시 시도하세요."
+BUSY = threading.Lock()  # 설치 파일을 받는 동안(설치 프로그램을 띄우기 전)에도 설치 중이다
 
 
 def installing():
     run = SETUP["run"]
-    return run is not None and run.poll() is None
+    return BUSY.locked() or (run is not None and run.poll() is None)
 
 
 def update():
@@ -130,8 +132,16 @@ def size(folder):
 def install(ids, target=None):
     """ids 기능만 남도록 설치 프로그램(target이 있으면 그 버전, 없으면 지금 버전)을 받아 실행한다. 설치 프로그램이 파일을 바꾸기 직전에 앱을 닫는다. 안내 글을 돌려준다.
     수집 중이거나, 수집을 빼는데 예약이 남았거나, 설치 드라이브 공간이 모자라면 받기 전에 거절한다."""
-    if installing():  # 두 번 누르면 설치 프로그램 둘이 같은 폴더에 설치한다
+    if installing() or not BUSY.acquire(blocking=False):  # [지금 업데이트]와 [적용]을 같이 누르면 설치 프로그램 둘이 같은 폴더에 설치한다
         raise ValueError(INSTALLING)
+    try:
+        return start_setup(ids, target)
+    finally:
+        BUSY.release()
+
+
+def start_setup(ids, target):
+    """install의 본체: 확인 → 받기 → 설치 프로그램 실행(BUSY를 잡은 채로 부른다)."""
     ids = check(ids)
     if target is not None and not (isinstance(target, str) and VERSION.fullmatch(target)):
         raise ValueError("업데이트할 버전이 올바르지 않아요.")

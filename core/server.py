@@ -543,7 +543,7 @@ def funcs_support():
 
 @app.post("/api/features/install")
 def features_install():
-    """설정 창의 [적용]: 고른 기능으로 설치 프로그램을 받아 실행한다(연결을 쓰지 않아 FREE). 앱은 곧 닫힌다."""
+    """설정 창의 [적용]: 고른 기능으로 설치 프로그램을 받아 실행한다(연결을 쓰지 않아 FREE). 설치 프로그램이 파일을 바꾸기 직전에 앱을 닫는다."""
     body = request.json or {}
     return jsonify(text=features.install(body.get("features"), body.get("version")))
 

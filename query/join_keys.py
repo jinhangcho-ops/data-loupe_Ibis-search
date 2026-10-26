@@ -349,9 +349,11 @@ def fanout(left, right, pairs, how="inner", name="", remote=False, scan_ok=False
     right_unique, left_unique = is_unique(right, rkeys), is_unique(left, lkeys)
     joined = parse.apply_joins(left, [(name or "right", how, [tuple(p) for p in pairs], None)], lambda _: right)
     joined_rows = count(joined)
-    inflated = joined_rows > left_rows and how in ("inner", "left")
+    # inner는 짝 없는 왼쪽 행이 빠지며 겹쳐 늘어난 행을 가리므로 짝이 있는 왼쪽 행 수와 견준다
+    base = count(parse.apply_joins(left, [(name or "right", "semi", [tuple(p) for p in pairs], None)], lambda _: right)) if how == "inner" else left_rows
+    inflated = joined_rows > base and how in ("inner", "left")
     level = "bad" if inflated else "warn" if not right_unique and how in ("inner", "left") else None
-    text = (f"오른쪽 키가 겹쳐서 이으면 행이 {left_rows:,}행에서 {joined_rows:,}행으로 늘어요. 이대로 합계를 내면 값이 부풀어요." if inflated
+    text = (f"오른쪽 키가 겹쳐서 이으면 {'짝이 있는 ' if base != left_rows else ''}행이 {base:,}행에서 {joined_rows:,}행으로 늘어요. 이대로 합계를 내면 값이 부풀어요." if inflated
             else "오른쪽 키에 같은 값이 여러 번 있어요. 지금은 행이 늘지 않았지만 조건이 바뀌면 부풀 수 있어요." if level == "warn" else "")
     return {"checked": True, "left_rows": left_rows, "right_rows": right_rows, "joined_rows": joined_rows, "right_unique": right_unique, "left_unique": left_unique,
             "inflated": inflated, "level": level, "text": text, "note": ""}

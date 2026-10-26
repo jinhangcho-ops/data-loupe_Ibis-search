@@ -198,6 +198,12 @@ def word_value(spec, word):
     return word
 
 
+def spaced_first(main, expr):
+    """본문 낱말이 공백 있는 컬럼 이름으로 시작하면 그 낱말들을 이름 하나로 합친다(줄은 공백으로 나뉜다)."""
+    name = parse.head_name(" ".join(main), expr.columns)
+    return [name, *main[len(name.split()):]] if name else main
+
+
 def window_args(f, main, opts, expr):
     """함수 사전의 창 함수 줄 '<id> [컬럼] [인자…] 기준 … 그룹 …'을 함수의 인자로. 본문 낱말은 칸 차례(정렬·묶음·조건 칸 제외), 기준·그룹은 옵션에서."""
     specs = [a for a in f["args"] if a["name"] not in sql_funcs.HAS_ARGS]
@@ -214,7 +220,7 @@ def window_args(f, main, opts, expr):
 
 def catalog_window(kind, main, opts, expr, taken):
     """함수 사전의 창 함수 줄의 (이름, 식)."""
-    f = sql_funcs.FUNCS[kind]
+    f, main = sql_funcs.FUNCS[kind], spaced_first(main, expr)
     raw = window_args(f, main, opts, expr)
     first = next((w for w in main if w in expr.columns), "")
     return new_name(expr, opts, f"{first}_{kind}".lstrip("_"), taken), f["build"](sql_funcs.resolve(f, expr, raw))
@@ -226,7 +232,7 @@ def formula_line(kind, main, opts, expr):
         if len(main) < 3 or main[0] not in NEW_WINDOWS and not (main[0] in sql_funcs.FUNCS and sql_funcs.FUNCS[main[0]]["window"]):
             raise ValueError("창거르기 <창 함수 id> [인자…] <비교(<= 등)> <값> 기준 컬럼 [그룹 컬럼]. 예: 창거르기 rank <= 3 기준 금액 desc 그룹 매장")
         f = sql_funcs.FUNCS[main[0]]
-        raw = window_args(f, main[1:-2], opts, expr)
+        raw = window_args(f, spaced_first(main[1:-2], expr), opts, expr)
         return sql_funcs.apply("qualify", expr, {"func": main[0], "func_args": raw, "op": main[-2], "value": number(main[-1], "비교 값")})
     name = " ".join(opts.get("이름") or [])
     if not name:
@@ -324,7 +330,7 @@ def pivot(expr, spec, values_of):
             while name.casefold() in used:
                 name, i = f"{base}_{i}", i + 1
             used.add(name.casefold())
-            is_v = expr[column] == v
+            is_v = expr[column] == ibis.literal(v, type=expr[column].type())  # 타입 없는 Decimal은 DECIMAL(18,3)이 되어 큰 ID가 넘친다
             aggs[name] = metric(expr, how, value, is_v if cond is None else is_v & cond, opts)
     subtotals = spec.get("subtotals")
     if subtotals and (subtotals not in SUBTOTALS or not rows):

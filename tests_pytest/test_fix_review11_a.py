@@ -94,7 +94,7 @@ def test_app_does_not_close_itself_while_setup_runs(installed, monkeypatch):
     text = features.install(["query", "collect"])
     (cmd,) = spy.run
     assert "/CLOSEAPPLICATIONS" in cmd and "/NORESTARTAPPLICATIONS" in cmd and cmd[-1] == "/RELAUNCH"  # 다시 열기는 /RELAUNCH 하나
-    assert not hasattr(features, "quit_unless_failed") and not hasattr(features, "threading") and "거절하면 앱은 그대로" in text
+    assert not hasattr(features, "quit_unless_failed") and not hasattr(features, "quit_app") and "거절하면 앱은 그대로" in text
     spy.clean()
 
 
