@@ -284,7 +284,7 @@ def test_summary_sentences_with_groups_and_target(db):
 def test_targets_file_routes_and_named_target(db, tmp_path):
     path = tmp_path / "목표.csv"
     path.write_text("이름,값,기간\n매출,1억,\n건수,5,2026-10\n건수,7,2026-11\n", encoding="utf-8")
-    assert db.get("/api/targets").get_json() == {"path": "", "rows": [], "errors": [], "error": ""}
+    assert db.get("/api/targets").get_json() == {"path": "", "rows": [], "errors": [], "error_total": 0, "offset": 0, "limit": 100, "error": ""}
     got = db.post("/api/targets", json={"path": str(path)}).get_json()
     assert got["path"] == str(path) and [r["value"] for r in got["rows"]] == [1e8, 5, 7] and got["error"] == ""
     assert "찾을 수 없어요" in db.post("/api/targets", json={"path": str(tmp_path / "없음.csv")}).get_json()["error"]

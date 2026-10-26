@@ -44,6 +44,13 @@ def host_of(url):
     return (parts.hostname or "", parts.port or {"http": 80, "https": 443}.get(parts.scheme.lower()))
 
 
+def headers_for(target, url, headers, secrets=()):
+    """url에 보내려던 headers를 target으로 보낼 때: 다른 호스트면 인증 헤더와 비밀 값이 든 헤더를 뺀다."""
+    if host_of(target) == host_of(url):
+        return headers
+    return [[k, v] for k, v in headers if k.lower() not in SECRET_HEADERS and not any(s and s in v for s in secrets)]
+
+
 def open_url(method, url, headers, body, timeout, secrets=()):
     """요청을 보내 (응답, 마지막 주소)를 돌려준다. 응답은 상태와 상관없이 돌려준다(오류 상태도 응답).
     넘겨주기는 MAX_REDIRECTS번까지 직접 따라간다. 다른 호스트로 가면 인증 헤더와 비밀 값이 든 헤더를 빼고, https에서 http로는 가지 않는다."""
@@ -63,8 +70,7 @@ def open_url(method, url, headers, body, timeout, secrets=()):
         target = urljoin(url, location)
         if urlsplit(url).scheme.lower() == "https" and urlsplit(target).scheme.lower() == "http":
             raise ValueError("https 주소에서 http 주소로 넘겨주는 것은 따라가지 않습니다.")
-        if host_of(target) != host_of(url):
-            headers = [[k, v] for k, v in headers if k.lower() not in SECRET_HEADERS and not any(s and s in v for s in secrets)]
+        headers = headers_for(target, url, headers, secrets)
         if reply.status == 303 or (reply.status in (301, 302) and method not in ("GET", "HEAD")):
             method, body = "GET", None
             headers = [[k, v] for k, v in headers if k.lower() != "content-type"]

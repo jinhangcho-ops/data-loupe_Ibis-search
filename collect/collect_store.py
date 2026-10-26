@@ -19,6 +19,7 @@ from core import scratch
 from core import settings
 from core import source
 from collect.collect_http import Balancer, Halt
+from core.result import FORMULA_START
 
 SAVE_EVERY = 0.5  # 진행 기록을 적는 간격(초). 쪽·조각마다 쓰면 기록이 커질수록 느려진다(쪽 수의 제곱)
 SKEW = 300  # 응답의 Date와 PC 시계가 이보다 많이 다르면(초) 알린다.
@@ -195,12 +196,16 @@ def deduped(table, columns, rename=None):
     return table.mutate(_first=first).filter(lambda t: t._first == 0).drop("_first")
 
 
-def write_output(con, table, fmt, out, folder):
-    """table을 out(parquet 또는 csv)으로 쓰고 행 수를 돌려준다. CSV는 Excel이 한글을 바로 읽도록 UTF-8 BOM을 붙인다."""
+def write_output(con, table, fmt, out, folder, texts=None):
+    """table을 out(parquet 또는 csv)으로 쓰고 행 수를 돌려준다. CSV는 Excel이 한글을 바로 읽도록 UTF-8 BOM을 붙인다.
+    CSV는 수식 막기를 한다(core/result.export와 같은 규칙): 수식으로 읽힐 글자로 시작하는 글자 값(texts, 없으면 글자 컬럼)과 컬럼 이름 앞에 '를 붙인다."""
     if fmt == "parquet":
         con.to_parquet(table, out)
         import pyarrow.parquet as pq  # 쓴 파일의 정보에서 행 수를 읽는다(다시 읽어 세지 않는다)
         return pq.read_metadata(out).num_rows
+    texts = [name for name, t in table.schema().items() if t.is_string()] if texts is None else texts
+    table = table.mutate(**{name: table[name].substr(0, 1).isin(FORMULA_START).ifelse("'" + table[name], table[name]) for name in texts})
+    table = table.rename({"'" + name: name for name in table.columns if name[:1] in FORMULA_START})
     plain = Path(folder, "result.csv")
     con.to_csv(table, plain)
     with_bom(plain, out)

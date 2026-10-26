@@ -26,6 +26,7 @@ targets = Later("core.targets")
 
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml"}  # 배치도 바탕 그림으로 내려줄 수 있는 것
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
+TARGET_PAGE = 100  # 목표 파일의 문제 줄을 한 번에 돌려줄 수(화면은 [이전]/[다음]으로 넘겨 본다)
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/get", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min", "/api/dash/refresh/start",
                     "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete"})
@@ -231,15 +232,18 @@ def compare_sentences():
 
 @app.get("/api/targets")
 def targets_get():
-    """목표 파일 경로(설정 targets_file.json)와 그 파일에서 읽은 목표 줄·문제 줄. 경로가 없으면 빈 값, 읽을 수 없으면 error."""
+    """목표 파일 경로(설정 targets_file.json)와 그 파일에서 읽은 목표 줄, 문제 줄 한 쪽(쿼리 offset부터 limit개, limit은 TARGET_PAGE까지)과 전체 문제 줄 수 error_total.
+    경로가 없으면 빈 값, 읽을 수 없으면 error."""
+    offset = max(0, request.args.get("offset", 0, type=int))
+    limit = min(max(0, request.args.get("limit", TARGET_PAGE, type=int)), TARGET_PAGE)
     path = (settings.read(dash_calc.TARGETS_FILE) or {}).get("path", "")
     if not path:
-        return jsonify(path="", rows=[], errors=[], error="")
+        return jsonify(path="", rows=[], errors=[], error_total=0, offset=offset, limit=limit, error="")
     try:
-        found = targets.read(path)
+        found = targets.read(path, offset, limit)
     except ValueError as e:
-        return jsonify(path=path, rows=[], errors=[], error=str(e))
-    return jsonify(path=path, rows=found["rows"], errors=found["errors"], error="")
+        return jsonify(path=path, rows=[], errors=[], error_total=0, offset=offset, limit=limit, error=str(e))
+    return jsonify(path=path, rows=found["rows"], errors=found["errors"], error_total=found["error_total"], offset=offset, limit=limit, error="")
 
 
 @app.post("/api/targets")
@@ -247,7 +251,7 @@ def targets_set():
     """목표 파일 경로를 저장한다(경로만. 읽어 보고 읽을 수 있을 때만 저장, 비우면 지움). 읽은 결과를 돌려준다."""
     path = ((request.json or {}).get("path") or "").strip()
     if path:
-        targets.read(path)
+        targets.read(path, 0, 0)
     settings.write(dash_calc.TARGETS_FILE, {"path": path})
     return targets_get()
 

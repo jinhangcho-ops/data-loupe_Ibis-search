@@ -17,6 +17,7 @@ MAX_VALUES = 200  # 조건을 만들 때 보여 줄 컬럼 값 목록의 최대 
 MAX_POINTS = 5_000  # 산점도·버블의 점 수 상한(분석의 산점도와 대시보드가 같이 쓴다)
 EXCEL_MAX_ROWS = 1_048_575  # Excel 시트 한 장의 행 수(제목 줄 제외)
 CHUNK = 100_000  # 큰 결과를 한 번에 받는 행 수(저장·결과 받아 두기)
+FORMULA_START = ("=", "+", "-", "@", "\t", "\r")  # 스프레드시트가 수식으로 읽는 첫 글자(저장할 때 앞에 '를 붙인다)
 
 
 def json_text(df):
@@ -344,7 +345,8 @@ def export(expr, path, guard=True):
     suffix = Path(path).suffix.lower()
     if suffix not in EXPORTS:
         raise ValueError(f"파일 이름은 {', '.join(EXPORTS)} 중 하나로 끝나야 합니다.")
-    if guard and suffix != ".parquet":  # 수식으로 읽힐 글자로 시작하는 문자 값은 앞에 '를 붙여 스프레드시트가 실행하지 않게 한다.
+    if guard and suffix != ".parquet":  # 수식으로 읽힐 글자로 시작하는 문자 값·컬럼 이름은 앞에 '를 붙여 스프레드시트가 실행하지 않게 한다.
         texts = [name for name, t in expr.schema().items() if t.is_string()]
-        expr = expr.mutate(**{name: expr[name].substr(0, 1).isin(["=", "+", "-", "@", "\t", "\r"]).ifelse("'" + expr[name], expr[name]) for name in texts})  # 정규식은 SQL Server 등이 못 한다
+        expr = expr.mutate(**{name: expr[name].substr(0, 1).isin(FORMULA_START).ifelse("'" + expr[name], expr[name]) for name in texts})  # 정규식은 SQL Server 등이 못 한다
+        expr = expr.rename({"'" + name: name for name in expr.columns if name[:1] in FORMULA_START})
     EXPORTS[suffix](expr, path)

@@ -426,7 +426,8 @@ def run_api(config, env, path, found, record, halt):
                 seen.add(value)
                 order.append(value)
         cursor, url = record.get("cursor", ""), record.get("next")
-        home = collect_http.host_of(req.build(config["request"], context(config, env, 0, "", began(record)))["url"])  # 처음 요청의 호스트
+        origin = lambda u: (urlsplit(u).scheme.lower(), collect_http.host_of(u))  # 방식(http·https)과 호스트
+        home = origin(req.build(config["request"], context(config, env, 0, "", began(record)))["url"])  # 처음 요청의 방식·호스트
         i = len(record["done"])
         while i < paging["max_pages"]:
             if paging["kind"] == "next_url" and i > 0 and not url:
@@ -445,8 +446,8 @@ def run_api(config, env, path, found, record, halt):
             else:
                 nxt = req.extract(data, paging["next_path"]) if paging["next_path"] else link_next(reply)
                 nxt = None if nxt is None else urljoin(reply.url, str(nxt))
-                if nxt is not None and collect_http.host_of(nxt) != home:  # 인증 헤더를 다른 서버로 보내지 않는다
-                    raise Halt(f"다음 주소가 처음 요청과 다른 호스트({urlsplit(nxt).hostname})를 가리켜 멈췄습니다. 믿을 수 있는 주소인지 확인하세요.")
+                if nxt is not None and origin(nxt) != home:  # 인증 헤더를 다른 서버나 암호화하지 않는 http로 보내지 않는다
+                    raise Halt(f"다음 주소가 처음 요청과 다른 호스트·방식({urlsplit(nxt).scheme}://{urlsplit(nxt).hostname})을 가리켜 멈췄습니다. 믿을 수 있는 주소인지 확인하세요.")
                 end = not rows or nxt is None or nxt in seen
                 more["next"] = nxt
             total = record.get("total")
@@ -599,7 +600,7 @@ def run_file(config, env, path, found, record, halt):
                 position = next((max(s, start) for s, e in left if e > start and s < end), end)
                 if position >= end:
                     return Reply(206, [], b"", info["url"])
-                headers = sent["headers"] + [["Range", f"bytes={position}-{end - 1}"]] + ([["If-Range", validator]] if validator else [])
+                headers = collect_http.headers_for(info["url"], sent["url"], sent["headers"], hide) + [["Range", f"bytes={position}-{end - 1}"]] + ([["If-Range", validator]] if validator else [])
                 reply, url = collect_http.open_url("GET", info["url"], headers, None, timeout, hide)
                 with reply:
                     if reply.status == 200:  # 파일이 바뀌었거나 범위를 더는 받지 않음: 다음에는 처음부터
@@ -681,12 +682,9 @@ def finish_file(config, path, found, info):
     con, folder = duck()
     try:
         readable = raw
-        if cp949 and kind != fmt:  # DuckDB는 UTF-8만 읽으므로 먼저 바꾼다.
+        if cp949:  # DuckDB는 UTF-8만 읽으므로 먼저 바꾼다.
             readable = Path(folder, "utf8")
             with_bom(raw, readable, "cp949")
-        if kind == fmt == "csv":
-            with_bom(raw, found["out"], "cp949" if cp949 else None)
-            readable = found["out"]
         read = {"csv": con.read_csv, "parquet": con.read_parquet, "json": con.read_json}[kind]
         try:
             table = read(str(readable))
@@ -695,7 +693,10 @@ def finish_file(config, path, found, info):
             raise Halt(f"받은 파일을 {kind}로 열 수 없습니다: {str(e)[:300]}") from None
         if kind == fmt == "parquet":
             os.replace(raw, found["out"])
-        elif kind != fmt:
+        elif kind == fmt == "csv":  # 수식 막기를 하려고 다시 쓴다. 글자로 읽어 값의 모양(007, 1.10)은 그대로 두고, 글자로 읽힌 컬럼만 막는다
+            texts = [name for name, t in table.schema().items() if t.is_string()]
+            rows = write_output(con, con.read_csv(str(readable), all_varchar=True), fmt, found["out"], folder, texts)
+        else:
             rows = write_output(con, table, fmt, found["out"], folder)
     finally:
         con.disconnect()

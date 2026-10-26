@@ -319,8 +319,6 @@ def test_saved_text_reads_string_or_empty(folder):
 
 def test_shared_definitions():
     from core import prep_derive, sql_exec, sql_funcs
-    from collect import uploads
-    assert prep_derive.NAME is sql_funcs.NAME
-    assert uploads.quote is sql_exec.quote
+    assert prep_derive.NAME is sql_funcs.NAME  # uploads는 지울 명령을 적재한 DB 방언(sqlglot)으로 만들어 sql_exec.quote를 쓰지 않는다(12A3)
     assert sql_exec.quote('a"b') == '"a""b"' and sql_exec.quote(5) == '"5"'
     assert server.BAD_NAME_CHARS.sub("_", 'a/b:c*"d') == "a_b_c__d" and "CON" in server.RESERVED and "LPT9" in server.RESERVED

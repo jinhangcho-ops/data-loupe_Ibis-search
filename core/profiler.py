@@ -16,6 +16,7 @@ CACHE = "profile_cache.json"  # {테이블 열쇠: {"saved", "size", "sampled", 
 MAX_CACHE = 200  # 기억할 테이블 수. 넘으면 오래전에 구한 것부터 뺀다.
 SPEC = "data_spec.json"  # 고른 데이터 명세서의 경로 {"path"}
 MAX_SPEC_BYTES = 5 * 1024 * 1024
+MAX_SPEC_ENTRIES = 200_000  # 명세서의 테이블+컬럼 항목 수(YAML 별칭으로 작은 파일이 큰 명세서가 되는 것을 막는다)
 FLAG_MAX = 20  # 표본에서 서로 다른 값이 이 수 이하인 컬럼은 플래그로 보고 값 목록을 남긴다.
 FLAG_TEXT = 100  # 플래그 값 하나의 최대 글자 수(이보다 길면 플래그로 보지 않는다)
 METHODS = {"preview": "무과금 미리보기", "whole": "전체(행 수가 표본보다 적음)", "block": "블록 샘플링", "partition": "최신 파티션", "head": "앞 행"}
@@ -66,10 +67,14 @@ def load_spec(path):
     tables = spec.get("tables") if isinstance(spec, dict) else None
     if not isinstance(tables, dict):
         raise ValueError('데이터 명세서에는 "tables" 객체가 있어야 합니다.')
+    count = 0
     for name, table in tables.items():
         where = f"명세서의 {name}"
         if not isinstance(table, dict) or not isinstance(table.get("description", ""), str) or not isinstance(table.get("columns", {}), dict):
             raise ValueError(f"{where}: description은 글자, columns는 객체여야 합니다.")
+        count += 1 + len(table.get("columns", {}))
+        if count > MAX_SPEC_ENTRIES:
+            raise ValueError(f"데이터 명세서의 테이블·컬럼은 모두 합쳐 {MAX_SPEC_ENTRIES:,}개까지 읽습니다.")
         part = table.get("partition")
         if part is not None and (not isinstance(part, dict) or not isinstance(part.get("column"), str) or ("latest" in part) == ("recent_days" in part)
                                  or ("recent_days" in part and (type(part["recent_days"]) is not int or part["recent_days"] < 1))):

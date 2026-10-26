@@ -11,7 +11,6 @@ from pathlib import Path
 
 from core import filelock
 from core import settings
-from core.sql_exec import quote
 
 FILE = "uploads.json"
 MAX_ENTRIES = 2000  # 넘으면 오래된 것부터 뺀다
@@ -95,10 +94,31 @@ class Run:
 
 # ---------- 지울 때 쓸 명령(보여 주기만 한다) ----------
 
-def literal(value):
+DIALECTS = {"mssql": "tsql", "pyspark": "spark", "impala": "hive", "postgresql": "postgres", "singlestoredb": "singlestore"}  # 주소 앞부분 → sqlglot 방언(같은 이름은 그대로)
+
+
+def dialect_of(target):
+    """적재한 곳의 sqlglot 방언 이름: 폴더 연결(.duckdb 파일)은 duckdb, 주소는 앞부분으로. 모르면 None."""
+    from sqlglot.dialects.dialect import Dialect  # sqlglot은 무거워 명령을 만들 때 올린다
+    link = str(target.get("connection") or "")
+    if "://" not in link:
+        return "duckdb" if link else None
+    name = DIALECTS.get(link.split("://", 1)[0].lower(), link.split("://", 1)[0].lower())
+    try:
+        Dialect.get_or_raise(name)
+    except ValueError:
+        return None
+    return name
+
+
+def literal(value, dialect):
+    """값 하나를 그 방언의 리터럴 식으로(따옴표·백슬래시를 방언에 맞게). 방언을 모르는데 \\가 있으면 ValueError(\\를 이스케이프로 읽는 DB가 있다)."""
+    from sqlglot import exp
     if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return str(value)
-    return "'" + str(value).replace("'", "''") + "'"
+        return exp.Literal.number(value)
+    if dialect is None and "\\" in str(value):
+        raise ValueError(str(value))
+    return exp.Literal.string(str(value))
 
 
 def removal(entry):
@@ -114,15 +134,22 @@ def removal(entry):
                 "note": "Kafka는 범위만 골라 지울 수 없습니다. 이 명령은 각 파티션에서 이 적재의 끝 offset까지(그 앞의 다른 메시지도 함께) 지웁니다. "
                         "이 적재의 메시지만 가려야 하면 소비하는 쪽에서 아래 offset 범위를 걸러 주세요: "
                         + ", ".join(f"파티션 {p}: {lo}~{hi}" for p, (lo, hi) in sorted(parts.items(), key=lambda x: int(x[0]))) if parts else "기록된 offset이 없습니다."}
-    name = ".".join(quote(x) for x in (t.get("schema"), t.get("name")) if x)
-    if r.get("load_id"):
-        return {"how": "SQL", "text": f"DELETE FROM {name} WHERE {quote(r.get('column', LOAD_ID))} = {literal(r['load_id'])};",
-                "note": "적재 ID로 이 적재의 행만 정확히 고릅니다(이어 넣은 행도 같은 ID)."}
-    if t.get("how") == "new" and not entry.get("resumed"):
-        return {"how": "SQL", "text": f"DROP TABLE {name};", "note": "이 적재로 새로 만든 테이블입니다. 다른 적재로 더 넣지 않았는지 확인하세요."}
-    keys = r.get("keys", {})
-    if keys:
-        where = " AND ".join(f"{quote(c)} BETWEEN {literal(lo)} AND {literal(hi)}" for c, (lo, hi) in keys.items())
-        return {"how": "SQL", "text": f"DELETE FROM {name} WHERE {where};",
-                "note": "적재 ID 없이 키의 최소~최대로 고른 것이라, 그 범위의 다른 행도 함께 지워질 수 있습니다. 먼저 SELECT로 확인하세요."}
+    from sqlglot import exp
+    dialect = dialect_of(t)
+    name = exp.Table(this=exp.to_identifier(t.get("name"), quoted=True), db=exp.to_identifier(t["schema"], quoted=True) if t.get("schema") else None)
+    column = lambda c: exp.column(c, quoted=True)
+    delete = lambda where: exp.delete(name, where=where).sql(dialect=dialect) + ";"
+    try:
+        if r.get("load_id"):
+            return {"how": "SQL", "text": delete(column(r.get("column", LOAD_ID)).eq(literal(r["load_id"], dialect))),
+                    "note": "적재 ID로 이 적재의 행만 정확히 고릅니다(이어 넣은 행도 같은 ID)."}
+        if t.get("how") == "new" and not entry.get("resumed"):
+            return {"how": "SQL", "text": f"DROP TABLE {name.sql(dialect=dialect)};", "note": "이 적재로 새로 만든 테이블입니다. 다른 적재로 더 넣지 않았는지 확인하세요."}
+        keys = r.get("keys", {})
+        if keys:
+            where = exp.and_(*(exp.Between(this=column(c), low=literal(lo, dialect), high=literal(hi, dialect)) for c, (lo, hi) in keys.items()))
+            return {"how": "SQL", "text": delete(where),
+                    "note": "적재 ID 없이 키의 최소~최대로 고른 것이라, 그 범위의 다른 행도 함께 지워질 수 있습니다. 먼저 SELECT로 확인하세요."}
+    except ValueError:
+        return {"how": "", "text": "", "note": "적재한 DB의 종류를 몰라, 백슬래시(\\)가 든 값으로는 안전한 명령을 만들지 않았습니다. 적재한 DB에서 직접 골라 지우세요."}
     return {"how": "", "text": "", "note": "적재 ID도 키도 없어 이 적재의 행만 가려낼 방법이 없습니다. 다음부터 [적재 ID 컬럼 넣기]를 켜세요."}

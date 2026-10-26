@@ -5,7 +5,6 @@
 - 값 글자: ₩·쉼표·공백·원은 떼고, 억은 ×1e8, 만은 ×1e4(1억2000만도 됨), %는 ÷100, 0~1 소수는 비율 그대로다.
 - 읽다가 문제가 있는 줄은 줄 번호와 함께 errors에 모으고 나머지는 계속 읽는다. 같은 이름·기간·대상이 두 번 나오면 겹친 줄을 모두 뺀다. 파일 자체를 읽을 수 없으면 ValueError.
 - 파일 경로별로 (mtime_ns, size)가 같으면 읽은 결과를 다시 쓴다. 경로는 settings(`targets_file.json`)에 저장하는 쪽(라우트)이 정한다."""
-import copy
 import csv
 import io
 import json
@@ -20,6 +19,8 @@ from core.compare import ending
 
 EXTENSIONS = (".xlsx", ".xls", ".csv", ".yaml", ".yml", ".json", ".md", ".txt")
 MAX_FILE_BYTES = 5 * 1024 * 1024
+MAX_NODES = 100_000  # YAML 별칭을 펼친 뒤 노드 수 상한(작은 파일이 별칭으로 수백만 개로 불어나는 것을 막는다)
+MAX_LINE = 4096  # md·txt 한 줄 글자 수 상한(긴 줄에서 정규식이 오래 되돌아가는 것을 막는다)
 SHEET = "목표"
 ROOTS = ("목표", "targets")
 FIELDS = {"name": ("이름", "name", "지표", "지표명", "항목"), "value": ("값", "value", "목표", "목표값", "target"),
@@ -33,6 +34,7 @@ TABLE_SEPARATOR = re.compile(r"\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*")
 BULLET = re.compile(r"\s*[-*+]\s+(.+?)\s*[:：]\s*(.*?)\s*")
 PERIOD_WORD = re.compile(r"\d{4}(?:[-./]\d{1,2}(?:[-./]\d{1,2})?|[-./]?[Qq][1-4])?")
 TRAILING_PERIOD = re.compile(r"(.*?)\s*[(\[]([^()\[\]]*)[)\]]\s*")
+JSON_STRING = re.compile(r'("(?:[^"\\]|\\.)*")(\s*:)?')  # JSON 글자 한 개와, 키면 뒤의 콜론
 CACHE = {}  # 경로 → (mtime_ns, size, rows, errors)
 
 
@@ -175,9 +177,18 @@ def split_row(line):
     return [c.strip() for c in text.split("|")]
 
 
+def text_lines(path):
+    """파일 글자를 줄 목록으로. MAX_LINE자보다 긴 줄이 있으면 ValueError."""
+    lines = read_text(path).splitlines()
+    for n, line in enumerate(lines, 1):
+        if len(line) > MAX_LINE:
+            raise ValueError(f"{n}번째 줄이 너무 길어요. 한 줄은 {MAX_LINE}자까지 읽어요.")
+    return lines
+
+
 def read_md(path):
     """md: 첫 번째 표를 읽는다. 표가 없으면 `- 이름: 값 (기간)` 목록 줄을 읽는다(콜론이 없는 목록 줄과 그 밖의 글은 건너뛴다)."""
-    lines = read_text(path).splitlines()
+    lines = text_lines(path)
     for i in range(len(lines) - 1):
         if "|" in lines[i] and TABLE_SEPARATOR.fullmatch(lines[i + 1]) and "|" in lines[i + 1]:
             body = []
@@ -223,7 +234,7 @@ def split_value_period(rest):
 def read_txt(path):
     """txt: `이름 = 값 [기간]` 줄. 빈 줄과 #으로 시작하는 줄은 건너뛴다."""
     rows, errors = [], []
-    for n, line in enumerate(read_text(path).splitlines(), 1):
+    for n, line in enumerate(text_lines(path), 1):
         text = line.strip()
         if not text or text.startswith("#"):
             continue
@@ -238,28 +249,41 @@ def read_txt(path):
 
 # ---------- 트리 모양(YAML·JSON) ----------
 
-def yaml_tree(node, loader):
-    """YAML 노드를 Pairs·Items·값으로(줄 번호 포함)."""
+def yaml_tree(node, loader, count):
+    """YAML 노드를 Pairs·Items·값으로(줄 번호 포함). count = [지금까지 만든 노드 수]: 별칭을 펼친 뒤 MAX_NODES를 넘으면 ValueError."""
+    count[0] += 1
+    if count[0] > MAX_NODES:
+        raise ValueError(f"YAML이 너무 커요(별칭 *를 펼치면 {MAX_NODES:,}개가 넘어요). 별칭을 줄여 주세요.")
     if isinstance(node, yaml.MappingNode):
-        return Pairs((loader.construct_object(k, deep=True), yaml_tree(v, loader), k.start_mark.line + 1) for k, v in node.value)
+        return Pairs((loader.construct_object(k, deep=True), yaml_tree(v, loader, count), k.start_mark.line + 1) for k, v in node.value)
     if isinstance(node, yaml.SequenceNode):
-        return Items((yaml_tree(n, loader), n.start_mark.line + 1) for n in node.value)
+        return Items((yaml_tree(n, loader, count), n.start_mark.line + 1) for n in node.value)
     return loader.construct_object(node, deep=True)
 
 
-def json_tree(value, lines, used):
-    """json.loads(object_pairs_hook=Pairs)의 결과를 줄 번호를 어림해 붙인 트리로. 줄은 키 글자가 처음 나오는 줄부터 차례로 찾는다."""
+def key_lines(text):
+    """JSON 글자에서 {키 글자(따옴표 포함): [그 키가 나오는 줄 번호…]}. 한 번 훑어 만들고, 같은 줄은 한 번만 센다."""
+    found = {}
+    for n, line in enumerate(text.splitlines(), 1):
+        for m in JSON_STRING.finditer(line):
+            hits = found.setdefault(m.group(1), []) if m.group(2) else None
+            if hits is not None and (not hits or hits[-1] != n):
+                hits.append(n)
+    return found
+
+
+def json_tree(value, index, used):
+    """json.loads(object_pairs_hook=Pairs)의 결과를 줄 번호를 어림해 붙인 트리로. index = key_lines(글자). 같은 키는 나오는 줄을 차례로 쓴다."""
     if isinstance(value, Pairs):
         out = Pairs()
         for key, inner in value:
-            needle = re.compile(re.escape(json.dumps(key, ensure_ascii=False)) + r"\s*:")
-            hits = [i + 1 for i, text in enumerate(lines) if needle.search(text)]
+            hits = index.get(json.dumps(key, ensure_ascii=False), [])
             seen = used.get(key, 0)
             used[key] = seen + 1
-            out.append((key, json_tree(inner, lines, used), hits[seen] if seen < len(hits) else (hits[-1] if hits else None)))
+            out.append((key, json_tree(inner, index, used), hits[seen] if seen < len(hits) else (hits[-1] if hits else None)))
         return out
     if isinstance(value, list):
-        return Items((json_tree(item, lines, used), None) for item in value)
+        return Items((json_tree(item, index, used), None) for item in value)
     return value
 
 
@@ -305,7 +329,7 @@ def read_yaml(path):
     try:
         loader = yaml.SafeLoader("")
         node = yaml.compose(read_text(path), Loader=yaml.SafeLoader)
-        tree = yaml_tree(node, loader) if node is not None else None
+        tree = yaml_tree(node, loader, [0]) if node is not None else None
     except yaml.YAMLError as e:
         mark = getattr(e, "problem_mark", None)
         raise ValueError(f"YAML 형식이 올바르지 않아요{f' ({mark.line + 1}번째 줄)' if mark else ''}.") from None
@@ -315,7 +339,7 @@ def read_yaml(path):
 def read_json(path):
     text = read_text(path)
     try:
-        tree = json_tree(json.loads(text, object_pairs_hook=Pairs), text.splitlines(), {})
+        tree = json_tree(json.loads(text, object_pairs_hook=Pairs), key_lines(text), {})
     except ValueError as e:
         raise ValueError(f"JSON 형식이 올바르지 않아요: {str(e)[:150]}") from None
     return read_tree(tree)
@@ -335,15 +359,16 @@ def drop_overlaps(rows, errors):
     for same in groups.values():
         if len(same) > 1:
             for row in same:
-                others = "·".join(str(r["line"]) for r in same if r is not row and r["line"])
+                others = [str(r["line"]) for r in same[:6] if r is not row and r["line"]][:5]  # 앞 몇 줄만(다 적으면 겹친 줄 수의 제곱만큼 길어진다)
+                others = "·".join(others) + ("…" if len(same) > 6 else "")
                 shown = row["name"] + (f" {row['period']}" if row["period"] else "") + (f" {row['scope']}" if row["scope"] else "")
                 errors.append(error(row["line"], f"‘{shown}’ 목표가 겹침" + (f" ({others}번째 줄과 같은 이름·기간·대상)" if others else "") + ". 겹친 줄은 모두 뺐어요."))
     errors.sort(key=lambda e: e["line"] or 0)
     return [r for r in rows if id(r) not in drop], errors
 
 
-def read(path):
-    """목표 파일을 읽어 {rows, errors}. rows는 {name, value, period, column, scope, line}, errors는 {line, message}.
+def read(path, offset=0, limit=None):
+    """목표 파일을 읽어 {rows, errors, error_total}. rows는 {name, value, period, column, scope, line}, errors는 {line, message}(줄 순서)의 offset부터 limit개(None이면 끝까지), error_total은 전체 문제 줄 수.
     파일이 없거나 지원하지 않는 형식·너무 큰 파일·읽을 수 없는 파일이면 ValueError. 같은 경로의 수정 시각·크기가 그대로면 이전 결과를 다시 쓴다."""
     path = Path(path)
     if path.suffix.lower() not in EXTENSIONS:
@@ -361,9 +386,12 @@ def read(path):
             rows, errors = drop_overlaps(*PARSERS[path.suffix.lower()](path))
         except OSError as e:
             raise ValueError(f"목표 파일을 읽을 수 없어요: {e.strerror or e}") from None
+        except RecursionError:
+            raise ValueError("목표 파일의 괄호가 너무 깊게 겹쳐 있어요. 목표는 몇 단계 안으로 적어 주세요.") from None
         rows.sort(key=lambda r: r["line"] or 0)
         hit = CACHE[key] = (stat.st_mtime_ns, stat.st_size, rows, errors)
-    return {"rows": copy.deepcopy(hit[2]), "errors": copy.deepcopy(hit[3])}
+    errors = hit[3][offset:None if limit is None else offset + limit]
+    return {"rows": [dict(r) for r in hit[2]], "errors": [dict(e) for e in errors], "error_total": len(hit[3])}  # 줄은 글자·숫자뿐이라 dict 복사로 캐시가 지켜진다
 
 
 def clear():

@@ -117,7 +117,7 @@ function initCardMenu(root, host) {
     try {
       const t = await api("/api/targets");
       path.value = t.path;
-      pathNote.textContent = t.error || (t.path ? `목표 ${t.rows.length}개${t.errors.length ? `, 읽지 못한 줄 ${t.errors.length}개(${t.errors[0].message})` : ""}` : "목표 파일을 정하면 이름으로 목표를 찾을 수 있어요");
+      targetsNote(pathNote, t, "목표 파일을 정하면 이름으로 목표를 찾을 수 있어요");  // dashboard.html
       options(targetName, [...new Set(t.rows.map(r => r.name))], "(이름으로 찾지 않음)");
     } catch (e) { pathNote.textContent = e.message; }
     show();

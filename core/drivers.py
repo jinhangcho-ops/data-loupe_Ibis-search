@@ -301,4 +301,6 @@ def prepare(url, password=""):
     if scheme == "trino" and password:
         # Ibis는 host가 https:// 로 시작할 때만 비밀번호 인증을 쓴다.
         return {"host": f"https://{urlsplit(url).hostname}"}
+    if scheme in ("mysql", "singlestoredb"):  # 서버가 PC의 파일을 읽어 가는 LOAD DATA LOCAL INFILE을 끈다(SingleStore는 Ibis 기본값이 켜짐)
+        return {"local_infile": False}
     return {}

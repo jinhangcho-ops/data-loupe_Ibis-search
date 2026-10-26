@@ -300,8 +300,34 @@ $("d-palette-apply").onclick = () => applyPalette($("d-palette").value.split(/[\
 $("d-palette-default").onclick = () => applyPalette(SERVER.dash.palette);
 $("d-palette-clear").onclick = () => applyPalette([]);
 // 목표 파일(경로만 저장, 읽어 볼 수 있을 때만)
+// 안내 칸(note)에 목표 수와 읽지 못한 줄 수(첫 이유)를 보이고, 읽지 못한 줄이 있으면 [보기]로 줄 번호·이유를 쪽마다 넘겨 본다(카드 추가 메뉴 dash_menu.js도 같이 쓴다)
+function targetsNote(note, t, empty) {
+  if (t.error || !t.path) return note.replaceChildren(t.error || empty);
+  note.replaceChildren(`목표 ${t.rows.length}개` + (t.error_total ? `, 읽지 못한 줄 ${t.error_total}개(${t.errors[0]?.message ?? ""}) ` : ""),
+    ...(t.error_total ? [el("button", { className: "ghost link", textContent: "보기", onclick: () => targetErrors() })] : []));
+}
+function targetErrors() {
+  const list = el("div", { style: "white-space:pre-wrap; margin:10px 0 14px" }), info = el("span", { className: "hint", style: "margin:0" });
+  const prev = el("button", { className: "btn", textContent: "이전" }), next = el("button", { className: "btn", textContent: "다음" });
+  const box = el("div", { className: "modal", onclick: e => { if (e.target === box) box.remove(); } },
+    el("div", { className: "modal-box" }, el("h3", { textContent: "읽지 못한 줄" }), list,
+      el("div", { className: "row" }, prev, next, info, el("button", { className: "btn", textContent: "닫기", style: "margin-left:auto", onclick: () => box.remove() }))));
+  const show = async offset => {
+    try {
+      const t = await api(`/api/targets?offset=${offset}`);
+      list.replaceChildren(...t.errors.map(e => el("div", { textContent: e.message })));
+      info.textContent = t.errors.length ? `${offset + 1}~${offset + t.errors.length} / ${t.error_total}` : `0 / ${t.error_total}`;
+      prev.disabled = offset <= 0;
+      next.disabled = offset + t.limit >= t.error_total;
+      prev.onclick = () => show(Math.max(0, offset - t.limit));
+      next.onclick = () => show(offset + t.limit);
+    } catch (e) { list.textContent = e.message; }
+  };
+  document.body.append(box);
+  return show(0);
+}
 async function loadTargets() {
-  try { const t = await api("/api/targets"); $("d-targets").value = t.path; $("d-targets-note").textContent = t.error || (t.path ? `목표 ${t.rows.length}개${t.errors.length ? `, 읽지 못한 줄 ${t.errors.length}개(${t.errors[0].message})` : ""}` : "목표 파일을 정하면 카드가 이름으로 목표를 찾을 수 있어요"); }
+  try { const t = await api("/api/targets"); $("d-targets").value = t.path; targetsNote($("d-targets-note"), t, "목표 파일을 정하면 카드가 이름으로 목표를 찾을 수 있어요"); }
   catch (e) { $("d-targets-note").textContent = e.message; }
 }
 $("d-targets-save").onclick = () => busy($("d-targets-save"), async () => {
