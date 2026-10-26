@@ -44,7 +44,6 @@ class Spy:
             return POPEN([PYTHON, "-c", f"raise SystemExit({code})"])
         monkeypatch.setattr(features, "fetch", fetch)
         monkeypatch.setattr(features.subprocess, "Popen", popen)
-        monkeypatch.setattr(features, "threading", types.SimpleNamespace(Timer=lambda delay, fn, args=(): types.SimpleNamespace(start=lambda: self.timers.append((fn, args)))))
 
     def clean(self):
         for cmd in self.run:
@@ -75,7 +74,7 @@ def test_command_has_no_privilege_switch_and_no_cancel(installed, monkeypatch):
     spy = Spy(monkeypatch)
     features.install(["query", "collect"])
     (cmd,) = spy.run
-    assert cmd[1:] == ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOCANCEL", "/COMPONENTS=query,collect", f"/DIR={installed}", "/RELAUNCH"]
+    assert cmd[1:] == ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOCANCEL", "/CLOSEAPPLICATIONS", "/NORESTARTAPPLICATIONS", "/COMPONENTS=query,collect", f"/DIR={installed}", "/RELAUNCH"]
     assert not hasattr(features, "writable")
     spy.clean()
 
@@ -86,26 +85,16 @@ def test_install_fails_fast_keeps_app_open(installed, monkeypatch):
     spy = Spy(monkeypatch, code=2)
     with pytest.raises(ValueError, match="코드 2"):
         features.install(["query", "collect"])
-    assert spy.timers == []
     spy.clean()
 
 
-def test_quit_skipped_when_setup_failed_later(monkeypatch):
-    quits = []
-    monkeypatch.setattr(features, "quit_app", lambda: quits.append(1))
-    failed = subprocess.Popen([sys.executable, "-c", "raise SystemExit(1)"])
-    failed.wait()
-    features.quit_unless_failed(failed)
-    assert quits == []
-    features.quit_unless_failed(types.SimpleNamespace(poll=lambda: None))  # 아직 도는 중이면 닫는다
-    assert quits == [1]
-
-
-def test_install_closes_app_when_setup_keeps_running(installed, monkeypatch):
+def test_app_does_not_close_itself_while_setup_runs(installed, monkeypatch):
+    """관리자 확인을 늦게 거절해도 앱이 닫힌 채 남지 않게, 앱은 스스로 닫지 않고 설치 프로그램이 파일을 바꾸기 직전에 닫는다(Restart Manager)."""
     spy = Spy(monkeypatch)
-    features.install(["query", "collect"])
-    ((fn, args),) = spy.timers
-    assert fn is features.quit_unless_failed and len(args) == 1
+    text = features.install(["query", "collect"])
+    (cmd,) = spy.run
+    assert "/CLOSEAPPLICATIONS" in cmd and "/NORESTARTAPPLICATIONS" in cmd and cmd[-1] == "/RELAUNCH"  # 다시 열기는 /RELAUNCH 하나
+    assert not hasattr(features, "quit_unless_failed") and not hasattr(features, "threading") and "거절하면 앱은 그대로" in text
     spy.clean()
 
 

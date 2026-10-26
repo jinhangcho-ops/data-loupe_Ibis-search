@@ -5,7 +5,6 @@ import json
 import shutil
 import subprocess
 import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -88,7 +87,6 @@ class Spy:
             out.write(files[url.rsplit("/", 1)[1]])
         monkeypatch.setattr(features, "fetch", fetch)
         monkeypatch.setattr(features.subprocess, "Popen", lambda cmd, *a, **k: self.run.append(cmd) or Running(cmd))
-        monkeypatch.setattr(features, "threading", types.SimpleNamespace(Timer=lambda delay, fn, args=(): types.SimpleNamespace(start=lambda: self.timers.append(fn))))
 
 
 class Running:
@@ -115,8 +113,8 @@ def test_install_runs_setup_when_hash_matches(installed, monkeypatch, tmp_path):
     assert sorted(spy.urls) == [base, base + ".sha256"]
     (cmd,) = spy.run
     assert Path(cmd[0]).name == "DataLoupe-setup.exe" and Path(cmd[0]).read_bytes() == SETUP
-    assert cmd[1:] == ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOCANCEL", "/COMPONENTS=query,collect", f"/DIR={tmp_path}", "/RELAUNCH"]
-    assert spy.timers == [features.quit_unless_failed] and "다시 열려요" in text  # 응답이 나간 뒤 앱을 닫는다
+    assert cmd[1:] == ["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOCANCEL", "/CLOSEAPPLICATIONS", "/NORESTARTAPPLICATIONS", "/COMPONENTS=query,collect", f"/DIR={tmp_path}", "/RELAUNCH"]
+    assert "다시 열려요" in text and not hasattr(features, "quit_app")  # 앱은 스스로 닫지 않고 설치 프로그램이 닫는다
     scratch.remove(Path(cmd[0]).parent)
 
 
@@ -128,7 +126,7 @@ def test_install_refuses_when_hash_differs(installed, monkeypatch):
     monkeypatch.setattr(features.scratch, "make", lambda: seen.append(real_make()) or seen[-1])
     with pytest.raises(ValueError, match="지문"):
         features.install(["query"])
-    assert spy.run == [] and spy.timers == []
+    assert spy.run == []
     assert not Path(seen[0]).exists()  # 받은 파일은 지운다
 
 

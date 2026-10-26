@@ -10,7 +10,6 @@ import re
 import shutil
 import subprocess
 import sys
-import threading
 import urllib.request
 from pathlib import Path
 
@@ -116,23 +115,6 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def quit_app():
-    """창을 닫아 desktop.py가 정리하며 끝나게 한다. 닫히지 않으면 10초 뒤 강제로 끝낸다."""
-    threading.Timer(10, os._exit, (0,)).start()
-    try:
-        import webview
-        for window in list(webview.windows):
-            window.destroy()
-    except Exception:
-        os._exit(0)
-
-
-def quit_unless_failed(setup):
-    """설치 프로그램이 벌써 실패로 끝났으면(관리자 확인 거절 등) 앱을 그대로 두고, 아니면 닫는다."""
-    if setup.poll() in (None, 0):
-        quit_app()
-
-
 def size(folder):
     """folder 안 파일 크기의 합(바이트). 없으면 0."""
     return sum(f.stat().st_size for f in Path(folder).rglob("*") if f.is_file())
@@ -185,7 +167,10 @@ def install(ids, target=None):
         scratch.remove(folder)
         raise
     # 권한 스위치는 달지 않는다: 설치 프로그램이 이전 설치 방식(나만·모두)을 따른다(UsePreviousPrivileges). 모두를 위한 설치면 관리자 확인 창이 뜬다.
-    run = subprocess.Popen([setup, "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOCANCEL", f"/COMPONENTS={','.join(ids)}", f"/DIR={path.parent}", "/RELAUNCH"])
+    # 앱은 스스로 닫지 않는다: 설치 프로그램이 파일을 바꾸기 직전에 닫는다(/CLOSEAPPLICATIONS, Restart Manager). 그래서 관리자 확인을 늦게 거절해도 앱은 그대로다.
+    # 다시 여는 것은 /RELAUNCH 하나만(Restart Manager의 다시 열기는 끈다: 두 번 열리지 않게).
+    run = subprocess.Popen([setup, "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/NOCANCEL", "/CLOSEAPPLICATIONS", "/NORESTARTAPPLICATIONS",
+                            f"/COMPONENTS={','.join(ids)}", f"/DIR={path.parent}", "/RELAUNCH"])
     try:
         code = run.wait(timeout=2)  # 바로 실패하면(시작 못 함) 앱을 닫지 않고 알린다
     except subprocess.TimeoutExpired:
@@ -193,5 +178,4 @@ def install(ids, target=None):
     if code:
         scratch.remove(folder)
         raise ValueError(f"설치 프로그램이 바로 끝났어요(코드 {code}). 관리자 확인을 거절했거나 시작하지 못했어요. 앱은 그대로예요.")
-    threading.Timer(1, quit_unless_failed, (run,)).start()  # 응답이 화면에 닿은 뒤 닫는다
-    return "설치 프로그램을 실행했어요. 앱이 닫혔다가 설치가 끝나면 다시 열려요."
+    return "설치 프로그램을 실행했어요. 설치가 파일을 바꾸기 직전에 앱이 닫히고, 끝나면 다시 열려요(관리자 확인을 거절하면 앱은 그대로예요)."
