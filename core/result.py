@@ -115,17 +115,27 @@ def own_write(backend):
     return whole_fetch(backend) or getattr(backend, "locked", False)
 
 
+def write_batches(open_writer, expr, path):
+    """묶음을 받아 open_writer(path, 스키마)로 이어 쓴다(own_write 연결). 스키마는 실제 첫 묶음의 것(잠근 DuckDB는 TIME·ENUM을 Ibis 스키마와 다른 Arrow 타입으로 준다).
+    INTERVAL은 pyarrow가 CSV·Parquet으로 쓰지 못하므로 글자로 바꿔 쓴다."""
+    import itertools
+    expr = expr.mutate(**{name: expr[name].cast("string") for name, t in expr.schema().items() if t.is_interval()})
+    found = batches(expr)
+    first = next(found, None)
+    with open_writer(path, expr.schema().to_pyarrow() if first is None else first.schema) as writer:
+        for batch in itertools.chain([] if first is None else [first], found):
+            writer.write_batch(batch)
+
+
 def write_parquet(expr, path):
-    """Parquet으로 저장. 파일 연결은 LazyFrame에서 흘려 쓰고, 결과 전체를 받아 버리는 연결은 묶음씩 받아 이어 쓴다."""
+    """Parquet으로 저장. 파일 연결은 LazyFrame에서 흘려 쓰고, own_write 연결(결과 전체를 받아 버리는 연결, 잠근 DuckDB 파일)은 묶음씩 받아 이어 쓴다."""
     frame = lazy(expr)
     if frame is not None:
         return frame.sink_parquet(path)
     if not own_write(ibis.get_backend(expr)):
         return expr.to_parquet(path)
     import pyarrow.parquet as pq
-    with pq.ParquetWriter(path, expr.schema().to_pyarrow()) as writer:
-        for batch in batches(expr):
-            writer.write_batch(batch)
+    write_batches(pq.ParquetWriter, expr, path)
 
 
 def write_csv(expr, path):
@@ -135,12 +145,9 @@ def write_csv(expr, path):
         return json_text(frame).sink_csv(path)
     if not has_nested(expr) and not own_write(ibis.get_backend(expr)):
         return expr.to_csv(path)
-    if not has_nested(expr):  # 결과 전체를 받아 버리는 연결: Ibis의 to_csv와 같은 쓰기(pyarrow)를 묶음마다
+    if not has_nested(expr):  # own_write 연결: Ibis의 to_csv와 같은 쓰기(pyarrow)를 묶음마다
         import pyarrow.csv as pcsv
-        with pcsv.CSVWriter(path, expr.schema().to_pyarrow()) as writer:
-            for batch in batches(expr):
-                writer.write_batch(batch)
-        return
+        return write_batches(pcsv.CSVWriter, expr, path)
     import polars as pl
     with open(path, "wb") as f:
         wrote = False

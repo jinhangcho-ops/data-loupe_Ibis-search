@@ -41,3 +41,17 @@ def test_plain_file_is_not_locked(tmp_path):
         sql_exec.definition_tree(con, "p", {"parquet": str(tmp_path / "x.parquet")})
     finally:
         source.close(con)
+
+def test_locked_export_keeps_time_enum_interval(tmp_path):
+    con = source.open_duckdb(make(tmp_path, "t.duckdb", "create type mood as enum ('ok', 'bad')",
+                                  "create table t as select time '01:02:03' as tm, 'ok'::mood as e, interval 3 day as iv, null::time as tn",
+                                  "create view vv as select 1"))
+    try:
+        assert con.locked
+        for suffix in (".csv", ".parquet"):
+            result.export(con.table("t"), str(tmp_path / f"t{suffix}"))
+        import pyarrow.parquet as pq
+        assert pq.read_table(tmp_path / "t.parquet").to_pylist()[0]["e"] == "ok"
+        assert "01:02:03" in (tmp_path / "t.csv").read_text(encoding="utf-8-sig")
+    finally:
+        source.close(con)
