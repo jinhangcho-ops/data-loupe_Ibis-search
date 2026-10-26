@@ -144,6 +144,6 @@ console.log(JSON.stringify({ delays }));"""
 
 
 def test_6e4_docs_match_reality():
-    doc = (ROOT / "docs" / "drafts.md").read_text(encoding="utf-8")
+    doc = (ROOT / "docs" / "functions" / "drafts.md").read_text(encoding="utf-8")
     assert "쿼리는 표를 바꿔도 되돌리기 기록이 남고" in doc
     assert "연결이나 테이블을 바꾸면 되돌리기 기록이 비워집니다" not in doc

@@ -74,7 +74,7 @@ def test_old_dashboard_tab_leftovers_are_gone():
     assert "/api/columns" in menu and "/api/tables" in menu
 
 
-@pytest.mark.parametrize("doc", ["README.md", "docs/query.md", "docs/dashboard.md", "docs/dashboard_cards.md"])
+@pytest.mark.parametrize("doc", ["README.md", *sorted(p.relative_to(STATIC.parent).as_posix() for p in (STATIC.parent / "docs").rglob("*.md"))])
 def test_docs_do_not_point_to_old_tab(doc):
     text = (STATIC.parent / doc).read_text(encoding="utf-8")
     assert "[대시보드] 탭" not in text and "대시보드 탭" not in text, doc
