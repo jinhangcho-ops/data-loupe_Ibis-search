@@ -298,7 +298,7 @@ def my_metrics_status():
         raise ValueError("지금 테이블의 컬럼(columns)을 함께 보내세요.")
     scope = scope_of(data)
     items = my_metrics.load()
-    return jsonify(status={m["id"]: my_metrics.status(m, cols, items) for m in items if my_metrics.scope_id(m.get("scope")) == my_metrics.scope_id(scope)})
+    return jsonify(status={m["id"]: my_metrics.status(m, cols, items) for m in items if my_metrics.same_scope(m.get("scope"), scope)})
 
 
 @app.post("/api/my_metrics/check_use")

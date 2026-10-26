@@ -1266,7 +1266,7 @@ async function runAna(full) {
   if (full && !A.result) return say("err-ana", "먼저 [구하기]로 표본에서 분석하세요.");
   try {
     const how = full ? A.result.how : anaHow(), prepped = full ? A.result.prepped : $("a-prep").checked;
-    const base = S.base, r = prepped ? recipe() : { schema: S.schema, base };  // 기다리는 동안 테이블이 바뀔 수 있어 시작 때 값을 잡아 둔다
+    const base = full ? A.result.base : S.base, r = full ? A.result.recipe : prepped ? recipe() : { schema: S.schema, base };  // 기다리는 동안 테이블이 바뀔 수 있어 시작 때 값을 잡아 둔다. 전체로는 마지막 분석의 테이블·전처리 그대로
     const d = await timed("analyze", () => api("/api/analyze", { recipe: r, how, sample, full }));
     const views = d.kind === "distribution" ? (d.histogram ? ["hist", "box", "values"] : ["values"])
       : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"], funnel: ["funnel"] }[d.kind];

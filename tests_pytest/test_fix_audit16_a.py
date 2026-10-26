@@ -81,3 +81,22 @@ def test_yearly_only_target_still_found_for_month_dashboard(folder, tmp_path):
     assert dash_calc.resolve_target({"name": "월별"}, october)["value"] == 2  # 달마다 목표가 있으면 그 달
     november = {"range": {"start": "2026-11-01", "end": "2026-11-30"}}
     assert "2026-11 목표를 찾지 못했어요" in dash_calc.resolve_target({"name": "월별"}, november)["error"]
+
+
+def test_target_fallback_only_to_containing_quarter_or_year(folder, tmp_path):
+    """대체 찾기는 그 기간을 품는 분기·연의 목표만: 다른 달·다른 해 목표 한 줄을 이번 기간 목표로 쓰지 않는다."""
+    from core import settings
+    path = tmp_path / "목표.csv"
+    path.write_text("이름,기간,값\n한달,2026-10,1\n작년,2025,10\n분기,2026-Q4,3\n지난분기,2026-Q3,4\n", encoding="utf-8")
+    settings.write(dash_calc.TARGETS_FILE, {"path": str(path)})
+    november = {"range": {"start": "2026-11-01", "end": "2026-11-30"}}
+    assert dash_calc.resolve_target({"name": "분기"}, november)["value"] == 3  # 11월을 품는 4분기
+    for name in ("한달", "작년", "지난분기"):
+        assert dash_calc.resolve_target({"name": name}, november)["error"], name
+
+
+def test_watch_reads_latest_row_for_text_time(monkeypatch, backend):
+    """수집 결과처럼 시각이 ISO 글자여도 엔티티마다 가장 늦은 행을 본다."""
+    df = servers().with_columns(pl.col("seen").dt.strftime("%Y-%m-%dT%H:%M:%S"))
+    got = {e["name"]: e for e in watch(monkeypatch, backend, df)["values"]["entities"]}
+    assert len(got) == 10 and all(e["last"] == "2026-01-01T04:59:00" for e in got.values())

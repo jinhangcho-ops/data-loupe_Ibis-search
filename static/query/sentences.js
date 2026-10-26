@@ -26,6 +26,8 @@ function sentDefaults(tpl) {
 }
 // 컬럼 빈칸 값에서 컬럼 이름
 const sentColName = v => (v && typeof v === "object" ? v.column : v);
+// 정렬 칸 값("컬럼 asc|desc")의 컬럼: names에서 가장 길게 맞는 이름(공백 있는 컬럼, 서버 flow.head_name과 같은 기준), 없으면 첫 낱말
+const sentOrderCol = (v, names) => names.filter(c => v === c || v.startsWith(c + " ")).sort((a, b) => b.length - a.length)[0] ?? v.split(/\s+/)[0];
 // 다른 테이블에서 열 때: 같은 이름 컬럼만 채우고 없는 컬럼의 칸은 비운다(질문 묶음 불러오기). columns = {컬럼: 종류}
 function sentFitColumns(tpl, slots, columns) {
   const out = { ...slots }, gone = [];
@@ -35,7 +37,7 @@ function sentFitColumns(tpl, slots, columns) {
     if (v == null) return;
     if (s.type === "column" && !has(sentColName(v))) { delete out[s.name]; gone.push(s.name); }
     else if (s.type === "columns") { const keep = v.filter(has); if (keep.length !== v.length) { gone.push(s.name); if (keep.length) out[s.name] = keep; else delete out[s.name]; } }
-    else if (s.type === "order" && !has(String(v).split(/\s+/)[0])) { delete out[s.name]; gone.push(s.name); }
+    else if (s.type === "order" && !has(sentOrderCol(String(v), Object.keys(columns)))) { delete out[s.name]; gone.push(s.name); }
   });
   return { slots: out, gone };
 }
@@ -70,9 +72,6 @@ function sentCard(compiled, title) {
 }
 
 // ---------- 화면 ----------
-const sentApi = {
-  check: (item, columns) => api("/api/sentence/check", { template: item.template, slots: item.slots, columns }),
-};
 // 작은 확인 창(제목, 글, 확인 단추 이름) → true/false
 function sentAsk(title, text, ok = "확인") {
   return new Promise(done => {
@@ -138,7 +137,7 @@ function SentenceView(host, ctx) {
       const list = v ?? [], add = colSelect({ ...s, label: "+ 컬럼" }, "", c => c && !list.includes(c) && set([...list, c]));
       node = el("span", { className: "slot-group" }, ...list.map(c => chip(c, () => set(list.filter(x => x !== c)))), add);
     } else if (type === "order") {
-      const [col, dir = "asc"] = String(v ?? "").split(/\s+/);
+      const text = String(v ?? ""), col = sentOrderCol(text, ctx.columns().map(c => c[0])), dir = text.slice(col.length).trim() || "asc";
       node = el("span", { className: "slot-group" }, colSelect({ ...s, kinds: "any" }, col, c => set(c ? `${c} ${dir}` : "")), toggle(["asc", "desc"], dir, d => col && set(`${col} ${d}`)));
     } else if (type === "agg") {
       const picker = Funcs.picker({ ids: Funcs.cat.screens.sentence?.length ? Funcs.cat.screens.sentence.filter(i => Funcs.cat.byId[i].aggregate) : Funcs.cat.screens.chart.filter(i => Funcs.cat.byId[i].aggregate), columns: colList, onchange: p => { slots[s.name] = p.get(); redo(); } });
@@ -202,7 +201,7 @@ function SentenceView(host, ctx) {
       clearTimeout(timer);
       timer = setTimeout(async () => {
         try {
-          const d = await sentApi.check({ template: item.template, slots: withPeriod(item) }, kinds());
+          const d = await api("/api/sentence/check", { template: item.template, slots: withPeriod(item), columns: kinds() });
           bad = !d.ok;
           preview.textContent = d.text;
           issues.replaceChildren(...d.issues.map(i => el("div", { className: "sissue " + i.level, textContent: (i.slot ? `[${i.slot}] ` : "") + i.text })));

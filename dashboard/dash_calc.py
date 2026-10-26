@@ -56,7 +56,7 @@ MAX_NUM_COLS = 200  # 카드에 알려 줄 숫자 컬럼 이름 수(버블의 [�
 
 
 def series_name(s):
-    """계열 이름. 화면의 seriesTitle(dash_menu.js)·seriesName(index.html)과 같다: 개수, 합계 (컬럼), 옵션이 있으면 분위수 (컬럼) p=0.9처럼 뒤에 붙인다(옵션만 다른 두 계열이 이름이 같아지지 않게)."""
+    """계열 이름. 화면의 seriesTitle(static/core/dash.js, 쿼리 차트와 카드 메뉴가 함께 씀)과 같다: 개수, 합계 (컬럼), 옵션이 있으면 분위수 (컬럼) p=0.9처럼 뒤에 붙인다(옵션만 다른 두 계열이 이름이 같아지지 않게)."""
     name = metric_file.AGG_NAMES[s["agg"]] + ("" if s["agg"] == "count" or not s["y"] else f" ({s['y']})")
     opts = " ".join(f"{k}={','.join(str(x) for x in (v if isinstance(v, list) else [v]))}" for k, v in (s.get("opts") or {}).items() if k != "order")
     return f"{name} {opts}" if opts else name
@@ -492,10 +492,11 @@ def resolve_target(spec, ctx=None):
         rows = targets.read(path)["rows"]
     except ValueError as e:
         return {"value": None, "label": spec["name"], "error": str(e)}
-    found = targets.lookup(rows, spec["name"], spec.get("period") or target_period(ctx), spec.get("scope"))
-    if not found["row"] and not spec.get("period") and target_period(ctx):  # 대시보드 기간의 줄이 없으면 기간 없이 한 번 더(예전처럼: 연간 목표 한 줄만 있는 파일)
-        plain = targets.lookup(rows, spec["name"], None, spec.get("scope"))
-        found = plain if plain["row"] else found  # 기간 없이도 못 찾으면(달마다 목표가 있는 파일) 그 기간을 못 찾았다는 이유 그대로
+    seen = target_period(ctx)
+    found = targets.lookup(rows, spec["name"], spec.get("period") or seen, spec.get("scope"))
+    if not found["row"] and not spec.get("period") and seen:  # 그 기간의 줄이 없으면 그 기간을 품는 분기·연의 목표(연간 목표만 있는 파일). 다른 달·다른 해의 목표는 쓰지 않는다
+        wider = [f"{seen[:4]}-Q{(int(seen[5:7]) + 2) // 3}", seen[:4]] if len(seen) == 7 else [seen[:4]] if "-Q" in seen else []
+        found = next((f for f in (targets.lookup(rows, spec["name"], w, spec.get("scope")) for w in wider) if f["row"]), found)
     return {"value": found["row"]["value"], "label": found["row"]["name"], "error": ""} if found["row"] else {"value": None, "label": spec["name"], "error": found["error"]}
 
 
@@ -676,7 +677,7 @@ def watch_data(card, now, previous):
         if c:
             parse.check_name(c, expr.columns, "컬럼")
     time = view.get("time_col")
-    if time and expr[time].type().is_temporal():  # 엔티티마다 가장 늦은 시각의 행만 DB에서(앞 행만 읽으면 최근 행을 못 본다). 시각이 모두 빈 엔티티는 그 행들을 그대로
+    if time and (expr[time].type().is_temporal() or expr[time].type().is_string()):  # 엔티티마다 가장 늦은 시각의 행만 DB에서(앞 행만 읽으면 최근 행을 못 본다). 글자 시각(수집 결과의 ISO 글자)도 max가 가장 늦은 시각. 시각이 모두 빈 엔티티는 그 행들을 그대로
         last = expr.group_by(view["entity"]).aggregate(__last=expr[time].max())  # 창 함수 대신 묶어 붙이기(Polars 연결은 창 함수를 못 한다)
         joined = expr.join(last, view["entity"])
         expr = joined.filter((joined[time] == joined["__last"]) | joined["__last"].isnull()).drop("__last")

@@ -19,7 +19,7 @@ const KIND_NAMES = { chart: "차트", analysis: "분석", metric: "지표", kpi:
 
 // 빈 틀 카드(source 없음): 카드 모음·템플릿이 만든다. 데이터는 설정 패널의 [데이터]에서 정한다.
 function shellOf(spec, layout, newId) {
-  return { id: newId(), kind: spec.kind, title: spec.kind === "chart" ? spec.name : spec.name, layout, colors: { series: {}, parts: {}, order: [], parts_order: [] }, view: { type: spec.type ?? "" }, source: {}, data: {} };
+  return { id: newId(), kind: spec.kind, title: spec.name, layout, colors: { series: {}, parts: {}, order: [], parts_order: [] }, view: { type: spec.type ?? "" }, source: {}, data: {} };
 }
 
 // 카드 모음: 칸을 끌어 격자에 놓거나(놓은 칸 자리에) 더블클릭하면(맨 아래) 빈 틀 카드가 생긴다. host.add(spec, cell|null)

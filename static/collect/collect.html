@@ -896,7 +896,7 @@ async function followBrowser() {
 $("w-open").onclick = () => busy($("w-open"), async () => {
   try {
     if (!val("w-url")) throw new Error("주소를 넣으세요.");
-    await api("/api/collect/browser/open", { url: val("w-url"), start: Number(val("w-start")) || 1 });
+    await api("/api/collect/browser/open", { url: val("w-url"), start: val("w-start") === "" ? 1 : Number(val("w-start")) });
     say("w-msg", "");
     followBrowser();
   } catch (e) { say("w-msg", e.message); }
@@ -1273,7 +1273,7 @@ $("start").onclick = () => busy($("start"), async () => {
     running = true;  // 첫 상태를 읽기 전에도 수집용 창 상태를 따라가게
     watch(true);
     followBrowser();
-  } catch (e) { say("run-msg", e.message); }
+  } catch (e) { say("run-msg", e.message); poll(); }  // 덜 넣은 적재로 막혔으면 서버가 남긴 상태로 [적재만 다시]를 보인다
 });
 // [적재만 다시]: 결과 파일을 다시 받지 않고 적재만 한다(넣은 묶음 다음부터).
 $("load-again").onclick = () => busy($("load-again"), async () => {
@@ -1541,14 +1541,13 @@ document.querySelectorAll(".side .step .sp").forEach(sp => sp.onclick = () => {
 function showCollectSummaries() {
   const put = (key, value) => $("sum-c-" + key).textContent = value;
   const picked = id => $(id).selectedOptions[0]?.textContent ?? "";
-  const file = path => path.split(/[\\/]/).pop();
   put("config", $("rsaved").value || "새 구성");
   put("mode", document.querySelector("input[name=mode]:checked")?.parentElement.textContent.trim() ?? "");
-  put("env", $("env-path").value.trim() ? file($("env-path").value.trim()) : "없음");
+  put("env", $("env-path").value.trim() ? fileName($("env-path").value.trim()) : "없음");
   put("paging", picked("p-kind"));
   put("speed", [$("b-conc").closest("label").classList.contains("hidden") || mode() === "web" ? "" : `동시 ${$("b-conc").value || 1}`, `간격 ${$("b-gap").value || 0}초`].filter(Boolean).join(" · "));
   put("limits", $("lgroup").value || "제한 없음");
-  put("output", $("o-path").value.trim() ? `${file($("o-path").value.trim())}` : `${picked("o-format")} · 경로를 정하세요`);
+  put("output", $("o-path").value.trim() ? `${fileName($("o-path").value.trim())}` : `${picked("o-format")} · 경로를 정하세요`);
   let n = 0;
   document.querySelectorAll(".side .cstep").forEach(c => { if (!c.classList.contains("hidden")) c.querySelector(".sp i").textContent = ++n; });
   document.querySelectorAll(".side .step").forEach(s => s.querySelector(".c").textContent = s.classList.contains("open") ? "편집 중" : "⌄");

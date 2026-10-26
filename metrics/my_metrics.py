@@ -20,6 +20,7 @@ from query import sentence_run
 from query import sentences
 from core import settings
 from core import sql_funcs
+from core import use_counts
 
 FILE = "my_metrics.json"
 MAX_METRICS = 500
@@ -60,6 +61,13 @@ def scope_id(scope):
     """scope를 알아보는 글: 연결 열쇠 + 스키마 + 테이블(또는 흐름 id)."""
     s = scope or {}
     return json.dumps([s.get("key", ""), s.get("schema") or "", s.get("table") or "", s.get("flow_id") or ""], ensure_ascii=False)
+
+
+def same_scope(a, b):
+    """두 scope가 같은 테이블(흐름)인지. 연결 열쇠는 예전 열쇠(폴더만·query 없던 Databricks·Athena)도 같은 연결이면 같다고 본다(use_counts.same_source, 화면 inScope와 같은 기준)."""
+    ka, kb = (a or {}).get("key", ""), (b or {}).get("key", "")
+    keys = ka == kb or (isinstance(ka, str) and isinstance(kb, str) and ka and kb and (use_counts.same_source(ka, kb) or use_counts.same_source(kb, ka)))
+    return bool(keys) and scope_id({**(a or {}), "key": ""}) == scope_id({**(b or {}), "key": ""})
 
 
 def check_scope(scope):
@@ -261,7 +269,7 @@ def build(defn, columns, items, metric_id=None):
     if not 1 <= len(name) <= MAX_NAME:
         raise ValueError(f"지표 이름은 1~{MAX_NAME}자로 정해 주세요.")
     scope = check_scope(defn.get("scope"))
-    same = [m for m in items if m["id"] != metric_id and scope_id(m.get("scope")) == scope_id(scope) and m["name"] == name]
+    same = [m for m in items if m["id"] != metric_id and same_scope(m.get("scope"), scope) and m["name"] == name]
     if same:
         raise ValueError(f"이 테이블(흐름)에 ‘{name}’ 지표가 이미 있어요. 같은 곳에서는 이름이 겹칠 수 없어요.")
     tid = defn.get("template")
@@ -296,7 +304,7 @@ def build(defn, columns, items, metric_id=None):
         by = {m["id"]: m["name"] for m in items}
         raise ValueError("지표가 서로를 계산에 써서 순환해요: " + " → ".join(by.get(i, name) for i in cycle) + ".")
     align = check_align(defn.get("align"))
-    foreign = [m for m in items if m["id"] in deps and scope_id(m.get("scope")) != scope_id(scope)]
+    foreign = [m for m in items if m["id"] in deps and not same_scope(m.get("scope"), scope)]
     if foreign and not align:
         raise ValueError(f"‘{foreign[0]['name']}’은(는) 다른 테이블(흐름)의 지표라 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]하거나 "
                          f"‘기간 단위로 맞춰’ 또는 ‘공통 키로 맞춰’ 구절을 넣어 주세요.")
@@ -344,7 +352,7 @@ def update(metric_id, patch, columns=None):
     base = {k: old.get(k) for k in ("name", "scope", "template", "slots", "unit", "better", "align")}
     made = build({**base, **(patch or {})}, columns, items, metric_id)
     if scope_id(made["scope"]) != scope_id(old.get("scope")):  # 테이블(흐름)을 옮기면 이 지표를 쓰던 지표가 남의 테이블 지표를 쓰게 되니 거부한다
-        users = [m for m in items if metric_id in (m.get("deps") or []) and not m.get("align") and scope_id(m.get("scope")) != scope_id(made["scope"])]
+        users = [m for m in items if metric_id in (m.get("deps") or []) and not m.get("align") and not same_scope(m.get("scope"), made["scope"])]
         if users:
             raise ValueError(f"‘{old['name']}’을(를) 쓰는 지표({', '.join(m['name'] for m in users[:5])})가 있어 다른 테이블(흐름)로 옮길 수 없어요. 쓰는 지표를 먼저 바꾸세요.")
     before = old.get("def_hash")
@@ -435,7 +443,7 @@ def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
                     slots[s["name"]] = id_map[v]
         pool = [*items, *out]
         title = (name if m["id"] == metric_id and name else m["name"])
-        if any(x for x in pool if scope_id(x.get("scope")) == scope_id(scope) and x["name"] == title):
+        if any(x for x in pool if same_scope(x.get("scope"), scope) and x["name"] == title):
             title += " (복사)"
         made = build({"name": title, "scope": scope, "template": tid, "slots": slots, "unit": m.get("unit"), "better": m.get("better")}, columns, pool)
         new = {"id": secrets.token_hex(8), **made, "def_hash": "", "created": dash_store.now_text(), "updated": dash_store.now_text(), "copied_from": m["id"]}
@@ -453,7 +461,7 @@ def check_use(metric, scope):
     """지표를 scope에서 그대로 쓸 수 있는지: 쓸 수 없는 이유 또는 None. 다른 scope의 지표는 복사해서 써야 한다."""
     if not (metric.get("scope")):
         return f"‘{metric['name']}’은(는) 공통 정의예요. 이 테이블에 묶어 저장한 뒤 쓰세요."
-    if scope_id(metric["scope"]) != scope_id(check_scope(scope)):
+    if not same_scope(metric["scope"], check_scope(scope)):
         return f"‘{scope_text(metric)}’은(는) 다른 테이블(흐름)의 지표라 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]를 쓰세요."
     return None
 
@@ -473,7 +481,7 @@ def status(metric, columns, items=None, seen=()):
         dep = by.get(d)
         if dep is None:
             return {"usable": False, "reason": "의존하는 지표가 지워졌어요."}
-        if scope_id(dep.get("scope")) == scope_id(metric.get("scope")):
+        if same_scope(dep.get("scope"), metric.get("scope")):
             inner = status(dep, columns, items, (*seen, metric["id"]))
             if not inner["usable"]:
                 return {"usable": False, "reason": f"의존하는 지표 ‘{dep['name']}’을(를) 쓸 수 없어요({inner['reason'].rstrip('.')})."}

@@ -362,6 +362,8 @@ def prune_columns(graph, ctx):
     for n in g["nodes"]:
         if n["kind"] == "calc" and (str(params(n).get("line", "")).split() or [""])[0] in (*calc.EACH, "세로로"):
             return None, {"items": [], "refused": [{"node": n["id"], "text": "타입·이름 패턴으로 컬럼을 고르는 계산이 있어 쓰는 컬럼만 읽지 않았어요."}]}
+        if n["kind"] == "metric" and not params(n).get("defs"):  # 지표 파일의 이름만 담은 지표 단계: 쓰는 컬럼이 흐름 밖(지표 파일)에 있다
+            return None, {"items": [], "refused": [{"node": n["id"], "text": "지표 파일의 지표를 쓰는 단계가 있어 쓰는 컬럼만 읽지 않았어요."}]}
     for n in g["nodes"]:
         if n["kind"] != "table" or params(n).get("columns"):
             continue

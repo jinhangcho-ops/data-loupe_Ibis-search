@@ -177,16 +177,16 @@ def write_excel(expr, path):
             for batch in batches(expr):
                 frame = json_text(pl.from_arrow(batch)).with_columns(cs.datetime(time_zone="*").dt.convert_time_zone(zone).dt.replace_time_zone(None))  # Excel은 시간대를 모른다
                 kinds = [shapes.get(t.base_type()) for t in frame.dtypes]
-                ints = [t.is_integer() for t in frame.dtypes]
+                ints = [t.is_integer() or (t.base_type() == pl.Decimal and t.scale == 0) for t in frame.dtypes]  # 소수 0자리 Decimal(Oracle NUMBER·DECIMAL(19,0) ID)도 정수
                 for values in frame.iter_rows():
                     if row > EXCEL_MAX_ROWS:
                         raise ValueError(f"Excel은 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있습니다. CSV나 Parquet으로 저장하세요.")
-                    for col, value in enumerate(values):
-                        value = number(value)  # NaN·무한은 빈 칸(xlsxwriter가 쓰지 못한다), Decimal은 실수로
+                    for col, raw in enumerate(values):
+                        value = number(raw)  # NaN·무한은 빈 칸(xlsxwriter가 쓰지 못한다), Decimal은 실수로
                         if value is None:
                             continue
-                        if ints[col] and abs(value) >= 10 ** 15:  # Excel 숫자는 15자리까지라 큰 정수(ID 등)는 끝자리가 바뀐다: 글자로
-                            value = str(value)
+                        if ints[col] and abs(value) >= 10 ** 15:  # Excel 숫자는 15자리까지라 큰 정수(ID 등)는 끝자리가 바뀐다: 글자로(Decimal은 실수로 바꾸기 전 값으로)
+                            value = str(int(raw))
                         sheet.write(row, col, value, kinds[col]) if kinds[col] else sheet.write(row, col, value)
                     row += 1
     except BaseException:

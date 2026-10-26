@@ -182,8 +182,13 @@ def start(config, password=""):
     load_job.ready(config)
     left = load_job.read_record(path) if config["load"]["target"] != "file" and path.exists() else None  # 다 넣으면 기록을 지운다
     if left and left.get("file") in (None, load_job.file_stamp(path)):  # 이 결과 파일을 덜 넣었다: 덮어쓰면 남은 행을 넣을 길이 없다
-        raise ValueError("지난 적재가 끝나지 않았습니다. [적재만 다시]로 마저 넣은 뒤 수집하세요. "
-                         f"컬럼이 달라 넣을 수 없으면 테이블을 맞추거나, 남은 행을 버려도 되면 결과 파일 옆 '{load_job.record_path(path).name}'을 지운 뒤 다시 수집하세요.")
+        text = ("지난 적재가 끝나지 않았습니다. [적재만 다시]로 마저 넣은 뒤 수집하세요. "
+                f"컬럼이 달라 넣을 수 없으면 테이블을 맞추거나, 남은 행을 버려도 되면 결과 파일 옆 '{load_job.record_path(path).name}'을 지운 뒤 다시 수집하세요.")
+        # 앱을 다시 켰거나 예약 프로세스가 실패했으면 상태에 적재가 없어 화면이 [적재만 다시]를 숨기므로 실패한 적재로 남긴다
+        update(**{**IDLE, "phase": "실패", "error": text, "mode": config["mode"], "load": {
+            "target": config["load"]["target"], "where": load_job.TARGETS[config["load"]["target"]].where(config), "total": load_job.total_rows(path),
+            **{k: left.get(k, 0) for k in ("rows", "batches", "skipped", "failures")}}})
+        raise ValueError(text)
     found, lock = parts(path), lock_of(config)
     if not filelock.hold(lock):
         raise Busy(BUSY)
@@ -191,6 +196,9 @@ def start(config, password=""):
         record = read_record(found["record"])
         old = bool(record and record.get("hash") == digest(config) and stale(found["record"]))
         resumed = bool(record and record.get("hash") == digest(config)) and not old
+        # 무한 스크롤은 다시 열 때 첫 화면 항목 수가 달라지면 쪽 경계가 어긋나 행이 빠지므로 이어 받지 않는다
+        scroll = resumed and config["mode"] == "web" and config["web"]["paging"]["kind"] == "scroll" and bool(record["done"])
+        resumed = resumed and not scroll
         if not resumed:
             if record is not None or found["part"].exists() or found["out"].exists():
                 clean(found)
@@ -198,7 +206,7 @@ def start(config, password=""):
             write_record(found["record"], record)
         launch(config, env, path, found, record, password, lock=lock, pages=len(record["done"]) if config["mode"] != "file" else 0, rows=record.get("rows", 0),
                bytes=record.get("bytes", 0), total_bytes=record.get("size"), group=group,
-               message="이어 받습니다." if resumed else "지난번 받다 만 것이 하루보다 오래돼 처음부터 받습니다." if old else "")
+               message="이어 받습니다." if resumed else "지난번 받다 만 것이 하루보다 오래돼 처음부터 받습니다." if old else "스크롤 방식은 이어 받지 않고 처음부터 받습니다." if scroll else "")
     except BaseException:
         filelock.let_go(lock)
         raise

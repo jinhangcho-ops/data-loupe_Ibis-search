@@ -244,7 +244,8 @@ class Walk:
         return rows
 
     def run(self):
-        """쪽을 넘기며 받는다. 자연스럽게 끝나면(더 없음) 진행 기록에 finished를 남긴다. 최대 쪽 수에서 멈춘 것은 남기지 않는다(늘리면 이어 받는다)."""
+        """쪽을 넘기며 받는다. 자연스럽게 끝나면(더 없음) 진행 기록에 finished를 남긴다. 최대 쪽 수에서 멈춘 것은 남기지 않는다(늘리면 이어 받는다).
+        최대 쪽 수에서 멈췄으면 True."""
         paging = self.web["paging"]
         kind, limit = paging["kind"], 1 if paging["kind"] == "none" else paging["max_pages"]
         ended = getattr(self, kind if kind in ("next", "scroll") else "by_url")(limit)
@@ -252,6 +253,7 @@ class Walk:
             with collect_store.guard:
                 self.record["finished"] = True
                 collect_store.write_record(self.found["record"], self.record)
+        return not ended and kind != "none"
 
     def by_url(self, limit):
         """주소의 {page}로 넘긴다. 받은 쪽은 건너뛴다. 0건이거나 바로 전 쪽과 같으면 끝."""
@@ -327,15 +329,20 @@ def run_web(config, env, path, found, record, halt):
     found["part"].mkdir(exist_ok=True)
     for key, empty in (("columns", []), ("kinds", {}), ("rename", {}), ("sigs", {})):
         record.setdefault(key, empty)
+    capped = False
     if not record.get("finished"):
-        if record["done"] and web["paging"]["kind"] in ("next", "scroll"):
+        if record["done"] and web["paging"]["kind"] == "next":  # 스크롤은 이어 받지 않는다(collect_job.start)
             collect_store.update(message="이어 받습니다. 처음 쪽부터 다시 넘기며 받은 쪽은 저장하지 않습니다.")
         balancer = collect_store.balancer_for(config, halt, 1)
         done = set(record["done"])
         first = 0 if web["paging"]["kind"] in ("next", "scroll") else min(set(range(len(done) + 1)) - done)  # 처음 열 쪽(창을 띄울 주소)
         try:
             with collect_browser.session(web["show"], page_url(web, first, collect_store.began(record))) as page:
-                Walk(config, page, found, record, halt, balancer).run()
+                capped = Walk(config, page, found, record, halt, balancer).run()
         except collect_browser.Gone:
             raise Halt(CLOSED) from None
-    return collect_store.finish_api(config, path, found, record)
+    made = collect_store.finish_api(config, path, found, record)
+    if made and capped:  # API 방식(run_api)처럼 알리고, 예약은 이 문구로 실패로 본다
+        from collect import collect_job  # collect_job이 이 모듈을 맨 위에서 불러 여기서 부른다
+        collect_store.update(message=collect_job.CAPPED.format(web["paging"]["max_pages"]))
+    return made
