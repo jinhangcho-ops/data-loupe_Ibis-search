@@ -349,10 +349,10 @@ def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=
     for f in sorted(sizes):
         values = []
         for n in range(width):
-            at = f + (span[0] if mode == "range" else n)
-            cut = at == still and at > f  #진행 중인 기간의 칸은 확정이 아니다(첫 기간 자체는 늘 100%라 둔다)
+            lo, hi = (f + span[0], f + span[1]) if mode == "range" else (f + n, f + n)  # range는 창 [a, b]가 다 지나야 볼 수 있다
+            cut = still is not None and lo <= still <= hi and still > f  #진행 중인 기간의 칸은 확정이 아니다(첫 기간 자체는 늘 100%라 둔다)
             partial = partial or cut
-            values.append(ratio(counts.get((f, n), 0), sizes[f]) if at <= last and not cut else None)
+            values.append(ratio(counts.get((f, n), 0), sizes[f]) if hi <= last and not cut else None)
         cohorts.append({"cohort": bucket_start(f, unit).isoformat(), "size": sizes[f], "values": values})
     return {"unit": unit, "mode": mode, "cohorts": cohorts, "partial": partial}
 

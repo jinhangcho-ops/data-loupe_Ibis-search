@@ -441,9 +441,10 @@ def fill_json(body, ctx):
 
 def build(request, ctx, url=None):
     """request와 자리 값으로 보낼 요청 {method, url, headers, body}를 만든다. url을 주면(next_url 방식) 주소·쿼리는 그것을 그대로 쓴다.
-    주소의 user:pass@는 Basic 인증 헤더로 옮긴다."""
+    설정 주소(request["url"])의 user:pass@는 Basic 인증 헤더로 옮긴다(next_url의 둘째 쪽도). 넘겨받은 url의 user:pass@는 버린다."""
+    own = fill_url(request["url"], ctx)
     if url is None:
-        url = fill_url(request["url"], ctx)
+        url = own
         query = [(fill(k, ctx), fill(v, ctx)) for k, v in request.get("query", [])]
         if query:
             url += ("&" if urlsplit(url).query else "?") + urlencode(query)
@@ -453,12 +454,13 @@ def build(request, ctx, url=None):
     headers = [[fill(k, ctx), fill(v, ctx)] for k, v in request.get("headers", [])]
     if any(re.search(r"[\r\n]", k + v) for k, v in headers):
         raise ValueError("헤더 이름·값에 줄바꿈을 넣을 수 없습니다.")
-    login, at, host = parts.netloc.rpartition("@")
+    login, at, _ = urlsplit(own).netloc.rpartition("@")  # 다른 호스트로 넘어가지 않는 것은 run_api의 origin 검사가 지킨다
     if at:
         user, _, password = login.partition(":")
         token = base64.b64encode(f"{unquote(user)}:{unquote(password)}".encode()).decode()
         headers = [h for h in headers if h[0].lower() != "authorization"] + [["Authorization", f"Basic {token}"]]
-        url = urlunsplit(parts._replace(netloc=host))
+    if "@" in parts.netloc:
+        url = urlunsplit(parts._replace(netloc=parts.netloc.rpartition("@")[2]))
     kind, body = request.get("body_kind", "none"), None
     if kind != "none":
         text = fill_json(request.get("body", ""), ctx) if kind == "json" else fill(request.get("body", ""), ctx, BODIES[kind][1])

@@ -230,7 +230,7 @@ def test_retention_values(daily):
     assert value("retention_classic", {**U, "N": 1}, daily) == pytest.approx((1 + 1) / 4)  # 3/2 활동: 사용자1 / 3/3 활동: 사용자4
     assert value("retention_classic", {**U, "N": 2}, daily) == pytest.approx(1.0)  # 3/1 코호트만 볼 수 있다(둘 다 3/3 활동)
     assert value("retention_rolling", {**U, "N": 1}, daily) == pytest.approx((2 + 1) / 4)
-    assert value("retention_range", {**U, "범위 시작 N": 1, "범위 끝 N": 2}, daily) == pytest.approx(3 / 4)
+    assert value("retention_range", {**U, "범위 시작 N": 1, "범위 끝 N": 2}, daily) == pytest.approx(1.0)  # 창 3/2~3/3을 다 본 3/1 코호트만(3/2 코호트의 창 3/3~3/4는 덜 끝남): classic과 같은 규칙
     assert parts("retention_classic", {**U, "N": 1}, daily) == {"cohort_size": 4}
     rows = run("retention_classic", {**U, "N": 1}, daily)["rows"]
     assert [(r["cohort"], r["size"], r["d0"], r["d1"]) for r in rows] == [("2026-03-01", 2, 1.0, 0.5), ("2026-03-02", 2, 1.0, 0.5)]

@@ -465,7 +465,9 @@ def new_payers(t, s, p, ctx):
     first = x.group_by("u").aggregate(p=x.p.min())
     rows = [{"period": label_of(r["p"], unit), "npa": int(r["n"])} for r in mc.rows(first.group_by("p").aggregate(n=first.u.count()).order_by("p"))]
     ctx.notes.append("고른 기간 앞의 결제 기록은 보이지 않아, 기간 안에서 처음 결제한 사용자를 신규로 세요.")
-    return result(last_done(rows, t, s, unit, ctx, {"npa": 0})["npa"], last_rows(rows, ctx), {"period": "기간", "npa": "신규 결제자 수"}, {"pu": sum(r["npa"] for r in rows)}, label="가장 최근 기간")
+    end = mc.latest(t.select(p=mc.bucket_index(t[s["time"]], unit)), "p")  # 대표 기간은 자료의 마지막 기간(신규 0명이라 행이 없어도)
+    pick = rows if end is None or (rows and rows[-1]["period"] == label_of(end, unit)) else rows + [{"period": label_of(end, unit), "npa": 0}]
+    return result(last_done(pick, t, s, unit, ctx, {"npa": 0})["npa"], last_rows(rows, ctx), {"period": "기간", "npa": "신규 결제자 수"}, {"pu": sum(r["npa"] for r in rows)}, label="가장 최근 기간")
 
 
 @kernel("pur")

@@ -101,7 +101,7 @@ def test_take_limits_unchanged(folder):
     L.take("g", stop)
     with pytest.raises(L.Halt) as info:
         L.take("g", stop)
-    assert "오늘 한도" in str(info.value) and info.value.limited  # 진행 기록에 limited로 남아 다음 날 이어 받는다
+    assert "오늘 한도" in str(info.value)
     L.write({"g": {"sent": [], "day": [L.period(L.groups()["g"], time.time())[0] - 86400, 1]}})  # 어제 기간의 기록이면 다음 날 이어 받는다
     L.take("g", stop)
 

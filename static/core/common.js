@@ -66,7 +66,7 @@ const inline = v => Array.isArray(v) ? "[" + v.map(inline).join(", ") + "]"
   : isNested(v) ? "{" + Object.entries(v).map(([k, x]) => `${k}: ${inline(x)}`).join(", ") + "}" : v === null ? "null" : String(v);
 // 큰 정수는 서버가 글자("12345678901234567890")로 보내므로 숫자처럼 오른쪽에 맞춘다. 자릿수 쉼표로 소수나 큰 지수가 잘려 보이면 전체 값을 title로.
 const bigInt = v => typeof v === "string" && /^-?\d{16,}$/.test(v);
-const sameSource = (saved, now) => saved === now || (typeof saved === "string" && typeof now === "string" && !saved.includes("#") && now.split("#")[0] === saved);  // 연결 열쇠 비교(서버 use_counts.same_source와 같은 규칙: 폴더만 있는 예전 열쇠는 그 폴더의 어느 파일 연결과도 같다)
+const sameSource = (saved, now) => saved === now || (typeof saved === "string" && typeof now === "string" && ((!saved.includes("#") && now.split("#")[0] === saved) || (saved.endsWith("://:/") && now.startsWith(saved + "?"))));  // 연결 열쇠 비교(서버 use_counts.same_source와 같은 규칙: 폴더만 있는 예전 열쇠는 그 폴더의 어느 파일 연결과도, query 없던 Databricks·Athena 예전 열쇠는 같은 종류의 지금 열쇠와 같다)
 const numCol = (rows, c) => rows.some(r => typeof r[c] === "number" || bigInt(r[c]));  // 숫자(큰 정수 포함) 컬럼이면 머리글도 오른쪽에
 // 값이 표에 보이는 글자와 전체 글자(잘렸을 때만, 마우스를 올리면 보인다). 숫자는 자릿수 쉼표를 넣고, 문자열은 최대 글자 수(#maxlen, 없는 화면은 40)에서 자른다.
 // max를 주면 그 값을 쓴다(표 하나를 그리는 동안 칸마다 #maxlen을 읽지 않게 한 번만 읽어 넘긴다).

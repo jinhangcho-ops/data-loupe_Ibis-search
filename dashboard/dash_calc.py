@@ -350,8 +350,8 @@ def number_column(t, name, what):
 def fit_line(t, x, y):
     """전체 행(x·y가 비어 있지 않은)의 개수 n, 상관계수 r, 추세선 y = a + b·x. analysis.correlation과 같이 평균을 먼저 구하고 평균을 뺀 곱의 합으로 구한다.
     b = Σ(x−x̄)(y−ȳ)/Σ(x−x̄)², a = ȳ − b·x̄. 행이 2개 미만이거나 x가 모두 같으면 a·b는 None, y가 모두 같으면 r은 None."""
-    s = t.filter(t[x].notnull(), t[y].notnull())
-    xs, ys = s[x].cast("float64"), s[y].cast("float64")
+    s = t.filter(stats.finite(t[x]).notnull(), stats.finite(t[y]).notnull())  # NaN·무한은 빈 값(분석 화면 stats.scatter와 같이)
+    xs, ys = stats.finite(s[x]), stats.finite(s[y])
     m = stats.one(s.aggregate(n=s.count(), mx=xs.mean(), my=ys.mean()))
     if m["n"] < 2:
         return {"n": m["n"], "r": None, "a": None, "b": None}
@@ -374,9 +374,9 @@ def points_data(expr, x, y, size=None, split=None):
         parse.check_name(split, expr.columns)
         if expr[split].type().is_nested():
             raise ValueError(f"'{split}'은 중첩 컬럼이라 나눌 수 없습니다.")
-    t = expr.filter(*[expr[c].notnull() for c in (x, y, *([size] if size else []))])
+    t = expr.filter(*[stats.finite(expr[c]).notnull() for c in (x, y, *([size] if size else []))])
     total = stats.one(t.aggregate(n=t.count()))["n"]
-    cols = {"x": t[x].cast("float64"), "y": t[y].cast("float64"), **({"s": t[size].cast("float64")} if size else {}), **({"g": t[split].cast("string")} if split else {})}
+    cols = {"x": stats.finite(t[x]), "y": stats.finite(t[y]), **({"s": stats.finite(t[size])} if size else {}), **({"g": t[split].cast("string")} if split else {})}
     picked, sampled = t.select(**cols), ""
     if total > MAX_POINTS:
         even = picked.sample(MAX_POINTS / total, seed=SEED)
@@ -493,6 +493,9 @@ def resolve_target(spec, ctx=None):
     except ValueError as e:
         return {"value": None, "label": spec["name"], "error": str(e)}
     found = targets.lookup(rows, spec["name"], spec.get("period") or target_period(ctx), spec.get("scope"))
+    if not found["row"] and not spec.get("period") and target_period(ctx):  # 대시보드 기간의 줄이 없으면 기간 없이 한 번 더(예전처럼: 연간 목표 한 줄만 있는 파일)
+        plain = targets.lookup(rows, spec["name"], None, spec.get("scope"))
+        found = plain if plain["row"] else found  # 기간 없이도 못 찾으면(달마다 목표가 있는 파일) 그 기간을 못 찾았다는 이유 그대로
     return {"value": found["row"]["value"], "label": found["row"]["name"], "error": ""} if found["row"] else {"value": None, "label": spec["name"], "error": found["error"]}
 
 
@@ -672,6 +675,11 @@ def watch_data(card, now, previous):
     for c in (view["entity"], view.get("time_col"), view.get("kind_col"), view.get("link_col")):
         if c:
             parse.check_name(c, expr.columns, "컬럼")
+    time = view.get("time_col")
+    if time and expr[time].type().is_temporal():  # 엔티티마다 가장 늦은 시각의 행만 DB에서(앞 행만 읽으면 최근 행을 못 본다). 시각이 모두 빈 엔티티는 그 행들을 그대로
+        last = expr.group_by(view["entity"]).aggregate(__last=expr[time].max())  # 창 함수 대신 묶어 붙이기(Polars 연결은 창 함수를 못 한다)
+        joined = expr.join(last, view["entity"])
+        expr = joined.filter((joined[time] == joined["__last"]) | joined["__last"].isnull()).drop("__last")
     frame = run(lambda: result.get_rows(expr, MAX_ENTITY_ROWS))
     rows = frame.to_dicts()
     links = [tuple(l) for l in view.get("links") or []]
@@ -679,7 +687,7 @@ def watch_data(card, now, previous):
         links += [(str(r[view["entity"]]), str(r[view["link_col"]])) for r in rows if r.get(view["entity"]) is not None and r.get(view["link_col"]) is not None]
     found = watch.evaluate(rows, view.get("rules"), view["entity"], dt.datetime.fromisoformat(now), view.get("time_col"), view.get("stale"), previous, links, view.get("kind_col"))
     return {"values": {"entities": found["entities"], "counts": found["counts"], "fresh": found["fresh"], "more": len(rows) >= MAX_ENTITY_ROWS}, "since": found["since"],
-            "note": f"행이 많아 앞 {MAX_ENTITY_ROWS}행만 읽었어요." if len(rows) >= MAX_ENTITY_ROWS else ""}
+            "note": f"행이 많아 {MAX_ENTITY_ROWS}행만 읽었어요(엔티티가 많거나 같은 시각에 쓴 행이 많음)." if len(rows) >= MAX_ENTITY_ROWS else ""}
 
 
 def deviation_data(card, ctx):

@@ -25,8 +25,9 @@ def connection_key(info):
 
 
 def same_source(saved, now):
-    """저장해 둔 연결 열쇠(saved)가 지금 연결의 열쇠(now)와 같은 연결인지. 같은 폴더의 파일을 따로 가르기 전에 저장한 예전 열쇠(폴더만, '#' 없음)는 지금 열쇠의 폴더 부분이 같으면 같다고 본다."""
-    return saved == now or (isinstance(saved, str) and "#" not in saved and now.split("#")[0] == saved)
+    """저장해 둔 연결 열쇠(saved)가 지금 연결의 열쇠(now)와 같은 연결인지. 같은 폴더의 파일을 따로 가르기 전에 저장한 예전 열쇠(폴더만, '#' 없음)는 지금 열쇠의 폴더 부분이 같으면 같다고 본다.
+    host가 없는 주소(Databricks·Athena)의 query를 넣기 전 예전 열쇠(url:databricks://:/)도 같은 종류의 지금 열쇠와 같다고 본다(다시 저장하면 지금 열쇠로 바뀐다)."""
+    return saved == now or (isinstance(saved, str) and (("#" not in saved and now.split("#")[0] == saved) or (saved.endswith("://:/") and now.startswith(saved + "?"))))
 
 
 def renewed(saved, now):

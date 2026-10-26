@@ -62,7 +62,7 @@ def test_failure_before_sink_keeps_result_file(tmp_path, folder):
     with pytest.raises(ValueError, match="컬럼이 달라"):
         load(cfg, path)
     assert load_job.read_record(path) is not None
-    with pytest.raises(ValueError, match="지난 적재가 끝나지 않았습니다"):
+    with pytest.raises(ValueError, match="지난 적재가 끝나지 않았습니다.*out.load.json"):  # 막힌 이유와 빠져나갈 길(기록 파일 이름)
         collect_job.start(cfg)
 
 
@@ -243,11 +243,8 @@ def test_old_record_is_not_resumed(tmp_path, monkeypatch, folder):
     cfg = config(tmp_path / "o.parquet")
     found = collect_job.parts(collect_job.output_path(cfg))
     began = (dt.datetime.now() - dt.timedelta(days=2)).isoformat(timespec="seconds")
-    write = lambda **more: found["record"].write_text(json.dumps({"hash": collect_job.digest(cfg), "mode": "api", "done": [0], "rows": 1, "bytes": 1, "began": began, **more}), encoding="utf-8")
-    write()
-    assert collect_job.resumable(cfg) is None  # 어제 실패·멈춘 것을 오늘 이어 받으면 {today}가 어제 날짜로 나간다
-    write(limited=True)
-    assert collect_job.resumable(cfg) is not None  # 하루 한도로 멈춘 것은 시작이 이틀 전이어도 방금 받았으면 이어 받는다
+    found["record"].write_text(json.dumps({"hash": collect_job.digest(cfg), "mode": "api", "done": [0], "rows": 1, "bytes": 1, "began": began}), encoding="utf-8")
+    assert collect_job.resumable(cfg) is not None  # 시작은 이틀 전이어도 방금 받았으면(하루 한도로 매일 이어 받기) 이어 받는다
     old = time.time() - 2 * 86400
     os.utime(found["record"], (old, old))  # 마지막으로 받은 지 이틀
     assert collect_job.resumable(cfg) is None
@@ -256,18 +253,14 @@ def test_old_record_is_not_resumed(tmp_path, monkeypatch, folder):
     assert collect_job.snapshot()["rows"] == 2
 
 
-def test_daily_limit_stop_marks_record_limited(tmp_path, monkeypatch, folder):
-    """하루 한도로 멈추면 진행 기록에 limited가 남고(다음 날 이어 받기), 다른 멈춤은 남지 않는다."""
-    def answer(p):
-        if p == 2:
-            raise Halt("오늘 한도를 다 썼습니다.", failed=False, limited=True)
-        return [{"id": p}]
-    serve(monkeypatch, answer)
-    cfg = config(tmp_path / "o.parquet")
-    collect_job.start(cfg)
-    collect_job.current["thread"].join()
+def test_today_config_from_yesterday_is_not_resumed(tmp_path, monkeypatch, folder):
+    """{today}가 있는 구성은 해시에 오늘 날짜가 들어가, 어제 받다 만 기록은 방금 썼어도 이어 받지 않는다(어제 날짜로 받지 않게)."""
+    cfg = collect_config.normalize({**config(tmp_path / "o.parquet"), "request": {"url": "https://x.example/i?d={today:%Y%m%d}&page={page}"}})
     found = collect_job.parts(collect_job.output_path(cfg))
-    assert json.loads(found["record"].read_text(encoding="utf-8")).get("limited") is True
+    with monkeypatch.context() as m:
+        m.setattr(collect_job, "today", lambda: "2000-01-01")  # 어제 쓴 기록의 해시
+        found["record"].write_text(json.dumps({"hash": collect_job.digest(cfg), "mode": "api", "done": [0], "rows": 1, "bytes": 1}), encoding="utf-8")
+    assert collect_job.resumable(cfg) is None
 
 
 # ---------- E8 간격 예약의 건너뜀은 '실패할 때만' 알림에서 뺀다 ----------

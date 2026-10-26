@@ -30,3 +30,11 @@ def test_slack_reply_is_logged(folder, monkeypatch):
     slack_bot.reply(url, "행 50개")
     line = json.loads((settings.PATH.parent / "egress_log.jsonl").read_text(encoding="utf-8").splitlines()[-1])
     assert sent == [url] and line["host"] == "hooks.slack.com" and line["kind"] == "POST" and "AbCdEf" not in line["path"]
+
+
+def test_old_query_less_key_still_matches_and_is_renewed():
+    """예전 열쇠(url:databricks://:/)로 저장한 카드·지표는 같은 종류의 지금 연결과 같다고 보고, 다시 저장하면 지금 열쇠로 바뀐다."""
+    from core import use_counts
+    now = key("databricks://?server_hostname=dev.cloud.example&http_path=/sql/1")
+    assert use_counts.same_source("url:databricks://:/", now) and use_counts.renewed("url:databricks://:/", now) == now
+    assert not use_counts.same_source("url:athena://:/", now) and not use_counts.same_source("url:postgres://h:5432/db", now + "x")

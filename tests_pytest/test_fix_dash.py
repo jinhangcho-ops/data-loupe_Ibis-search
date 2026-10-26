@@ -252,7 +252,7 @@ console.log(JSON.stringify([cardRequest(watched).data, cardRequest(plain).data])
 
 @pytest_node
 def test_series_title_matches_server(tmp_path):
-    cases = [{"y": "amt", "agg": "quantile", "opts": {"p": 0.9}}, {"y": "amt", "agg": "sum"}, {"y": None, "agg": "count"}, {"y": "amt", "agg": "quantile", "opts": {"p": [0.1, 0.9], "order": "x"}}]
+    cases = [{"y": "amt", "agg": "quantile", "opts": {"p": 0.9}}, {"y": "amt", "agg": "sum"}, {"y": None, "agg": "count"}, {"y": "amt", "agg": "quantile", "opts": {"p": [0.1, 0.9], "order": "x"}}, {"y": "amt", "agg": "first", "opts": {"order": "t"}}]  # order만 있으면 뒤에 공백이 붙지 않는다
     want = [dash_calc.series_name(s) for s in cases]
     body = "console.log(JSON.stringify(%s.map(seriesTitle)));\n" % json.dumps(cases)
     assert json.loads(run_node(tmp_path, ["board.js", "dash.js", "dash_cards.js", "dash_rules.js", "dash_menu.js"], body)) == want

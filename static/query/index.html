@@ -1016,10 +1016,8 @@ const drawnCard = (drawn, ranges) => ({ kind: drawn.kind || "chart", view: { typ
 // 계열: 차트에 겹쳐 그릴 값 하나하나. 넣어 둔 것이 없으면 지금 고른 칸의 내용이 계열 하나가 된다.
 let series = [];
 const seriesNow = () => ({ y: $("cy").value, ...pickers.chart.get(), type: $("ctype").value, dash: $("cdash").value, axis: $("caxis").value });
-const seriesName = s => aggName(s.agg) + (s.agg === "count" || !s.y ? "" : ` (${s.y})`) +  // 서버(dash_calc.series_name)와 같은 이름 + 인자(분위수 P 등)
-  (s.opts ? " " + Object.entries(s.opts).filter(([k]) => k !== "order").map(([k, v]) => `${k}=${[].concat(v).join(",")}`).join(" ") : "");
 function showSeries() {
-  $("series").innerHTML = series.map((s, i) => `<li><span>${esc(seriesName(s))} <span class="hint">· ${s.type === "bar" ? "막대" : s.dash === "dashed" ? "점선" : "선"} · ${s.axis === "right" ? "오른쪽 축" : "왼쪽 축"}</span></span>` +
+  $("series").innerHTML = series.map((s, i) => `<li><span>${esc(seriesTitle(s))} <span class="hint">· ${s.type === "bar" ? "막대" : s.dash === "dashed" ? "점선" : "선"} · ${s.axis === "right" ? "오른쪽 축" : "왼쪽 축"}</span></span>` +
     `<button class="ghost" data-series="${i}">×</button></li>`).join("");
   $("series").querySelectorAll("button").forEach(b => b.onclick = () => { series.splice(+b.dataset.series, 1); showSeries(); });
 }
@@ -1067,7 +1065,7 @@ function drawChart() {
 // /api/chart의 결과를 그릴 내용으로. query는 보낸 요청(대시보드가 다시 구할 때 그대로 보낸다), used는 계열들(종류·선 모양·축 포함).
 // 계열 이름: 나누지 않으면 계열 이름, 나누면 나눈 값(계열이 여럿이면 "계열 · 값").
 function toDrawn(query, used, d) {
-  const label = k => !query.split ? seriesName(used[k.series]) : used.length > 1 ? `${seriesName(used[k.series])} · ${k.split}` : k.split;
+  const label = k => !query.split ? seriesTitle(used[k.series]) : used.length > 1 ? `${seriesTitle(used[k.series])} · ${k.split}` : k.split;
   return { query, used, x: query.x, labels: d.labels, datasets: d.datasets.map(k => ({ ...used[k.series], label: label(k), values: k.values })) };
 }
 $("draw").onclick = () => busy($("draw"), async () => {
@@ -1318,7 +1316,7 @@ $("search").addEventListener("click", async e => {
 // [대시보드에 추가]: 지금 그린 차트를 카드로(다시 구할 조회와 값) 고른 대시보드에 넣는다. 대시보드를 보고 고치는 곳은 대시보드 화면(/dashboard)이다.
 $("dash-add").onclick = () => busy($("dash-add"), async () => {
   if (!drawn) return say("err-chart", "먼저 차트를 그리세요.");
-  const { query, used } = drawn, title = `${query.base} · ${used.map(seriesName).join(", ")} / ${drawn.x}`;
+  const { query, used } = drawn, title = `${query.base} · ${used.map(seriesTitle).join(", ")} / ${drawn.x}`;
   try {
     const added = await addToDashboard({ kind: "chart", title, colors: { series: {}, parts: {}, order: [], parts_order: [] }, source: { schema: query.schema || "", table: query.base, body: query }, data: {},
       view: { type: "", ratio: +$("chart").parentElement.style.getPropertyValue("--ratio") || 16 / 9, ranges: axisRanges(), styles: used.map(({ type, dash, axis }) => ({ type, dash, axis })) } }, "chart", { schema: query.schema, base: query.base });

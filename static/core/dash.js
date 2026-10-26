@@ -5,6 +5,9 @@
 // ---------- 분석 그림 (분석 화면과 대시보드의 분석 카드가 함께 쓴다) ----------
 // 집계 이름과 일 값을 다시 묶을 수 있는 집계는 서버(함수 사전)가 주는 목록이다: SERVER.agg_names, SERVER.merge
 const aggName = id => SERVER.agg_names?.[id] ?? id;
+// 서버(dash_calc.series_name)와 같은 계열 이름: 개수 / 합계 (컬럼) / 옵션이 있으면 분위수 (컬럼) p=0.9 (order는 뺀다). 쿼리 차트와 카드 메뉴가 함께 쓴다
+const seriesTitle = s => aggName(s.agg) + (s.agg === "count" || !s.y ? "" : ` (${s.y})`) +
+  Object.entries(s.opts ?? {}).filter(([k]) => k !== "order").map(([k, v]) => ` ${k}=${[].concat(v).join(",")}`).join("");
 const merges = agg => SERVER.merge.includes(agg);  // 아니면 일 값을 주·월·연으로 다시 묶을 수 없다(고유 개수·중앙값·분위수 …). 서버가 단위마다 따로 구한다
 const UNIT_NAMES = { day: "일", week: "주", month: "월" };
 // 숫자는 자릿수 쉼표와 소수 넷째 자리까지

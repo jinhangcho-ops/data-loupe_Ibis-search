@@ -26,9 +26,9 @@ STOPPED = "멈췄습니다. 같은 설정으로 다시 시작하면 이어 받�
 class Halt(Exception):
     """수집을 멈추게 하는 일. failed가 False면 사용자의 멈춤이나 한도처럼 실패가 아닌 멈춤이다."""
 
-    def __init__(self, message, failed=True, status=None, limited=False):
+    def __init__(self, message, failed=True, status=None):
         super().__init__(message)
-        self.failed, self.status, self.limited = failed, status, limited  # status: 거부한 응답의 상태(4xx로 멈췄을 때), limited: 하루 한도로 멈춤
+        self.failed, self.status = failed, status  # status: 거부한 응답의 상태(4xx로 멈췄을 때)
 
 
 class Keep(urllib.request.HTTPRedirectHandler):
