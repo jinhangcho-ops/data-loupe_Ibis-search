@@ -231,6 +231,6 @@ function initCardMenu(root, host) {
   };
   root.replaceChildren(el("div", { className: "row" }, table), el("div", { className: "row" }, kind), title, rows, add, ...fields, gCols, el("div", { className: "row" }, path, save), pathNote, err, go);
   // 종류(와 차트 종류)를 미리 골라 둔다(카드 모음에서 끌어 놓거나 빈 틀 카드의 데이터를 정할 때)
-  const preset = (k, type = "", name = "") => { kind.value = k; if (type) cType.value = type; if (name) title.value = name; show(); };
+  const preset = (k, type = "", name = "") => { kind.value = k; cType.value = type; if (name) title.value = name; show(); };  // 종류가 자동("")인 카드도 앞 카드의 종류를 남기지 않는다
   return { refill, preset, chartType: type => { cType.value = type; } };
 }

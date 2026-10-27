@@ -28,13 +28,13 @@ FILE_FUNCS = {"glob", "sniff_csv", "st_read", "query", "query_table", "postgres_
               "url", "urlcluster", "file", "remote", "remotesecure", "cluster", "clusterallreplicas", "s3", "s3cluster", "gcs", "hdfs", "hdfscluster",  # ClickHouse의 파일·네트워크·다른 서버 읽기
               "azureblobstorage", "azureblobstoragecluster", "mysql", "postgresql", "mongodb", "redis", "sqlite", "jdbc", "odbc", "executable", "input"}
 FILE_PREFIXES = ("read_", "parquet_", "iceberg_", "delta_", "dblink", "xp_", "lo_")  # 이름이 이렇게 시작하는 함수(lo_*: Postgres 큰 객체 읽기·쓰기·지우기)
-FILE_SUFFIXES = ("_scan",)  # 이름이 이렇게 끝나는 함수(delta_scan, iceberg_scan, excel_scan …). DuckDB의 postgres_query 같은 원격 조회는 FILE_FUNCS에 이름으로(json_query처럼 정상인 *_query 함수는 막지 않는다)
+FILE_SUFFIXES = ("_scan", "_attach")  # 이름이 이렇게 끝나는 함수(delta_scan, iceberg_scan, excel_scan …, sqlite_attach는 연결한 DB에 뷰를 만든다). DuckDB의 postgres_query 같은 원격 조회는 FILE_FUNCS에 이름으로(json_query처럼 정상인 *_query 함수는 막지 않는다)
 ENV_FUNCS = {"getenv", "current_setting", "current_settings", "duckdb_settings", "duckdb_secrets", "which_secret",
              "setval", "nextval", "set_config", "pg_terminate_backend", "pg_cancel_backend", "sleep", "pg_sleep",  # 환경·설정·비밀을 읽거나 서버 상태를 바꾸는 함수
              "get_lock", "pg_reload_conf", "pg_switch_wal", "pg_rotate_logfile", "pg_promote", "benchmark"}  # 잠금을 잡거나 서버 설정·로그·부하를 바꾸는 함수
 ENV_PREFIXES = ("pg_advisory_", "pg_try_advisory_", "pg_stat_reset", "pg_drop_", "pg_create_", "system$")  # 이름이 이렇게 시작하는 함수(잠금·통계 지우기·복제 슬롯, Snowflake SYSTEM$…)
 LOCK_HINT = re.compile(r"(TAB|UPD|X|HOLD|PAG|ROW)LOCK|SERIALIZABLE|REPEATABLEREAD", re.I)  # SQL Server 테이블 힌트 중 잠금을 잡는 것(NOLOCK·INDEX 같은 힌트는 된다)
-FILE_TABLE = re.compile(r"\.(csv|tsv|parquet|jsonl?|ndjson|geojson|duckdb|gz|zst|xlsx|tbl|txt)$", re.I)  # DuckDB가 파일로 읽는 테이블 이름(스키마.테이블로 나뉜 t.csv 포함)
+FILE_TABLE = re.compile(r"\.(csv|tsv|parquet|jsonl?|ndjson|geojson|duckdb|db|ddb|gz|zst|xlsx|tbl|txt)$", re.I)  # DuckDB가 파일로 읽는 테이블 이름(스키마.테이블로 나뉜 t.csv 포함)
 FILE_CLASSES = ("ReadCSV", "ReadParquet")  # sqlglot이 함수 이름 대신 따로 만드는 클래스(없는 버전이면 건너뜀)
 READ_MESSAGE = "SQL 안에서 파일을 직접 읽을 수 없어요. 파일은 [연결]로 열거나 가상 테이블(Parquet)로 등록하세요."
 ENV_MESSAGE = "SQL 안에서 환경·설정 값을 읽거나 서버 상태를 바꿀 수 없어요."

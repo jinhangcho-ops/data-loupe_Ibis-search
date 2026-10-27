@@ -397,7 +397,7 @@ class DashBoard extends Board {
       try { await this.loadPoints(card); } catch (err) { return void (msg.textContent = err.message); }
       again();
     } }, el("option", { value: "", textContent: "크기 없음" }), ...(card.data?.num_cols ?? []).map(c => el("option", { value: c, textContent: c, selected: card.view.points?.size === c }))) : "";
-    const flags = pointy ? [["trend", "추세선"], ["show_r", "r"]].map(([k, name]) => el("button", { className: "btype" + (card.view[k] ? " on" : ""), textContent: name, title: k === "r" ? "상관계수 r 보이기" : "최소제곱 추세선 보이기",
+    const flags = pointy ? [["trend", "추세선"], ["show_r", "r"]].map(([k, name]) => el("button", { className: "btype" + (card.view[k] ? " on" : ""), textContent: name, title: k === "show_r" ? "상관계수 r 보이기" : "최소제곱 추세선 보이기",
       onclick: () => { card.view[k] = !card.view[k]; again(); } })) : [];
     const unit = card.data?.by_unit ? el("select", { className: "bunit", title: "시간 단위. 일 값을 다시 묶어 그립니다", onchange: e => { card.view.unit = e.target.value; again(); } },
       ...Object.entries(SERVER.dash.units).map(([id, name]) => el("option", { value: id, textContent: name, selected: (card.view.unit || "day") === id }))) : "";

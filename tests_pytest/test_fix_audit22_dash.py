@@ -118,3 +118,20 @@ console.log(JSON.stringify({opened, after:type()}));
 """
     got = run_js(tmp_path, NO_FUNCS, body)
     assert got == {"opened": "bar", "after": "line"}
+
+
+def test_switching_cards_resets_chart_type(tmp_path):
+    """메뉴는 하나뿐이다: 종류가 '선'인 카드 다음에 자동('')인 카드를 열면 차트 종류도 자동이 된다(적용할 때 선으로 바뀌지 않게)."""
+    body = """
+SERVER.dash.types.line="선";
+const menuRoot=new E('div'), popRoot=new E('div'), m=initCardMenu(menuRoot,{metricNames:()=>[],layout:()=>({})});
+const all=()=>{const out=[];const w=e=>{if(e&&e.children){out.push(e);e.children.forEach(w);}};w(menuRoot);return out;};
+const type=()=>all().find(e=>e.tag==='select'&&String(e.title).startsWith('차트 종류')).value;
+const host={menu:m,menuRoot,popRoot,menuTarget:null}, p=new CardPanel(new E('div'),host);
+const a={kind:"chart",view:{type:"line"},source:{}}, b={kind:"chart",view:{type:""},source:{}};
+p.card=a; p.builderOpen=true; p.dataSection(a,new E('div')); await tick();
+const onA=type();
+p.card=b; p.dataSection(b,new E('div')); await tick();
+console.log(JSON.stringify({onA, onB:type()}));
+"""
+    assert run_js(tmp_path, NO_FUNCS, body) == {"onA": "line", "onB": ""}
