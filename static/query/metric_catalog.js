@@ -74,8 +74,8 @@ async function showMetricCatalog(box, env) {
       out.replaceChildren();
       const t = tableSlot && st.slots[tableSlot.name];
       if (t && st.ad.name !== t) {
-        st.ad = { name: t, cols: {} };
-        try { st.ad.cols = (await api("/api/flow/schemas", { graph: { nodes: [{ id: "t", kind: "table", params: { table: t, ...(scope().schema ? { schema: scope().schema } : {}) } }], edges: [] } })).schemas[t]?.columns ?? {}; } catch { /* 컬럼을 못 받으면 직접 적는다 */ }
+        const ad = st.ad = { name: t, cols: {} };
+        try { ad.cols = (await api("/api/flow/schemas", { graph: { nodes: [{ id: "t", kind: "table", params: { table: t, ...(scope().schema ? { schema: scope().schema } : {}) } }], edges: [] } })).schemas[t]?.columns ?? {}; } catch { /* 컬럼을 못 받으면 직접 적는다 */ }
       }
       drawLine();
     }
@@ -105,6 +105,7 @@ async function showMetricCatalog(box, env) {
     const period = () => { const p = st.period; return p.text && p.span?.error ? null : (sentPeriod(p.column, p.span)); };
     async function compute() {
       msg.textContent = ""; out.replaceChildren();
+      if (st.period.pending) { msg.textContent = "기간을 읽는 중이에요. 잠시 뒤 다시 누르세요."; return; }
       if (st.period.text && st.period.span?.error) { msg.textContent = st.period.span.error; return; }
       if (e.cross && !mcAlign(st.align)) { msg.textContent = "다른 테이블과 맞추는 방법(기간 단위 또는 공통 키)을 골라 주세요."; return; }
       try {

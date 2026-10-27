@@ -60,14 +60,16 @@ function matchRule(compiled, column, value) {
   }
   return null;
 }
-// 화살표: up ▲ / down ▼ 고정, auto는 직전 값(prev)이 있을 때만 오르면 ▲ 내리면 ▼ 같으면 –. 색은 규칙 색, 없으면 비교 tone(better가 down이면 반대).
-function ruleArrow(rule, value, prev, better = "up") {
+// 화살표: up ▲ / down ▼ 고정, auto는 직전 값(prev)이 있을 때만 오르면 ▲ 내리면 ▼. 화면에 같은 값으로 보이면(shown으로 바꾼 글이 같으면) 강조 없이 =.
+// 색은 규칙 색, 없으면 비교 tone(better가 down이면 반대).
+function ruleArrow(rule, value, prev, better = "up", shown = String) {
   let text = "";
   if (rule.arrow === "up") text = "▲"; else if (rule.arrow === "down") text = "▼";
-  else if (rule.arrow === "auto" && prev != null && typeof value === "number") text = value > prev ? "▲" : value < prev ? "▼" : "–";
+  else if (rule.arrow === "auto" && prev != null && typeof value === "number") text = value === prev || shown(value) === shown(prev) ? "=" : value > prev ? "▲" : "▼";
   if (!text) return null;
-  const good = text === "▲" ? better === "up" : text === "▼" ? better === "down" : null;
-  return { text, color: rule.color || null, tone: text === "–" ? "neutral" : good ? "good" : "bad" };
+  if (text === "=") return { text, color: null, tone: "neutral" };
+  const good = text === "▲" ? better === "up" : better === "down";
+  return { text, color: rule.color || null, tone: good ? "good" : "bad" };
 }
 // 칸 값의 종류(숫자 칸·글자 칸): 비어 있지 않은 첫 값으로
 function kindOfValues(values) {

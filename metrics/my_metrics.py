@@ -384,7 +384,7 @@ def rename_in(text, mapping):
     names = sorted((k for k in mapping if k), key=len, reverse=True)
     if not names:
         return text
-    found = re.compile(r"""(?<![^\s,=<>])('[^']*'|"[^"]*")|(?<![\w.])(""" + "|".join(map(re.escape, names)) + r")(?![\w.])")
+    found = re.compile(r"""(?<![^\s,=<>])('.*?'(?![^\s,])|".*?"(?![^\s,]))|(?<![\w.])(""" + "|".join(map(re.escape, names)) + r")(?![\w.])")
     return found.sub(lambda m: m.group(1) or mapping[m.group(2)], text)
 
 

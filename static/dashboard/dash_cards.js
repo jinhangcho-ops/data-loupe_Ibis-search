@@ -293,7 +293,8 @@ function renderTable(holder, card, columns, rows, prev) {
     const key = row.slice(0, groups).map(String).join("\x01"), old = prev?.[key];
     const tr = el("tr", {}, ...row.map((v, i) => {
       const fmt = view.formats?.[names[i]] ?? "number", before = columns[i].kind === "value" ? old?.[i - groups] : null, num = typeof v === "number";
-      const arrow = hits[i] && ruleArrow(hits[i], v, before, view.better) || (num && before != null && !hits[i]?.arrow ? ruleArrow({ arrow: "auto", color: "" }, v, before, view.better) : null);
+      const shown = x => showValue(x, fmt);  // 화면 글이 같으면 =
+      const arrow = hits[i] && ruleArrow(hits[i], v, before, view.better, shown) || (num && before != null && !hits[i]?.arrow ? ruleArrow({ arrow: "auto", color: "" }, v, before, view.better, shown) : null);
       return styledCell(num ? showValue(v, fmt) : v == null ? "" : String(v), hits[i]?.scope === "cell" ? hits[i] : null, arrow, num ? "num" : "");
     }));
     if (whole) tr.style.background = alpha(whole.color, 0.22);
@@ -400,7 +401,7 @@ function paintSentence(card, colors) {
     if (!b) return el("span", { className: "blank err", textContent: "—", title: `‘${p.blank}’ 빈칸이 정의돼 있지 않아요` });
     if (b.error) return el("span", { className: "blank err", textContent: "—", title: b.error });
     const value = b.kind === "value" ? b.cur : b.kind === "prev" ? b.prev : b.text, rule = matchRule(compiled, p.blank, value);
-    const arrow = rule && ruleArrow(rule, b.cur, b.prev, view.better), span = el("span", { className: "blank", textContent: typeof value === "number" || value == null ? showValue(value, b.format) : String(value) });
+    const arrow = rule && ruleArrow(rule, b.cur, b.prev, view.better, x => showValue(x, b.format)), span = el("span", { className: "blank", textContent: typeof value === "number" || value == null ? showValue(value, b.format) : String(value) });
     if (rule) span.style.cssText = `background:${alpha(rule.color, 0.28)};border-radius:4px;padding:0 4px`;
     if (arrow) span.append(el("span", { className: "carrow " + arrow.tone, textContent: " " + arrow.text, style: arrow.color ? `color:${arrow.color}` : "" }));
     return span;

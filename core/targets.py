@@ -90,6 +90,8 @@ def make_row(name, value, period, column, scope, line):
     elif isinstance(period, float):  # YAML의 2026.10은 숫자 2026.1이 되어 달을 알 수 없다
         raise ValueError(f"기간 {period}이(가) 숫자로 읽혔어요. 2026-10처럼 쓰거나 따옴표로 감싸 주세요.")
     clean = lambda v: "" if v is None else str(v).strip()
+    if re.fullmatch(r"\d{4}\.1", clean(period)):  # 엑셀·CSV가 2026.10을 숫자 2026.1로 둔 것인지 1월인지 알 수 없다
+        raise ValueError(f"기간 {clean(period)}이 1월인지 10월인지 알 수 없어요. 2026-01·2026-10처럼 써 주세요.")
     return {"name": name, "value": parse_value(value), "period": period_text(clean(period)), "column": clean(column), "scope": clean(scope), "line": line}
 
 

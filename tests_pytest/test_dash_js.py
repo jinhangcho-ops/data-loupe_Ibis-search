@@ -230,7 +230,7 @@ assert.strictEqual(matchRule(compiled, "금액", 50), rules[2]); assert.strictEq
 assert.strictEqual(matchRule(compiled, "상태", "배송 지연"), rules[0]); assert.strictEqual(matchRule(compiled, "상태", 7), null);  // 숫자 값에는 단어 식이 맞지 않는다
 assert.strictEqual(matchRule(compiled, "건수", 0), null); assert.strictEqual(matchRule(compiled, "금액", null), null); assert.strictEqual(matchRule(compiled, "없는 컬럼", 1), null);
 assert.deepStrictEqual(ruleArrow(rules[1], 150, 100), { text: "▲", color: "#2b8a3e", tone: "good" }); assert.strictEqual(ruleArrow(rules[1], 150, 100, "down").tone, "bad");
-assert.deepStrictEqual(ruleArrow(rules[1], 80, 100), { text: "▼", color: "#2b8a3e", tone: "bad" }); assert.deepStrictEqual(ruleArrow(rules[1], 100, 100), { text: "–", color: "#2b8a3e", tone: "neutral" });
+assert.deepStrictEqual(ruleArrow(rules[1], 80, 100), { text: "▼", color: "#2b8a3e", tone: "bad" }); assert.deepStrictEqual(ruleArrow(rules[1], 100, 100), { text: "=", color: null, tone: "neutral" }); assert.deepStrictEqual(ruleArrow(rules[1], 0.1201, 0.12, "up", x => x.toFixed(2)), { text: "=", color: null, tone: "neutral" });
 assert.strictEqual(ruleArrow(rules[1], 150, null), null); assert.strictEqual(ruleArrow(rules[0], 1, 0), null); assert.strictEqual(ruleArrow(rules[2], 1, 5).text, "▲"); assert.strictEqual(ruleArrow({ ...rules[2], arrow: "down", color: "" }, 1, 5).color, null);
 assert.deepStrictEqual([kindOfValues([null, "", 3]), kindOfValues(["a"]), kindOfValues([null])], ["num", "word", null]);
 assert.deepStrictEqual(parseRuleLine("상태 | *지연* | #e03131 | 자동 | 줄").rule, { column: "상태", match: "*지연*", color: "#e03131", arrow: "auto", scope: "row" });

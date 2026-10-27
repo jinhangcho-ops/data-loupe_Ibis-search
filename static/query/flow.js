@@ -254,7 +254,7 @@ function flowSvg(g, o = {}) {
 // FlowView(host, ctx): 흐름 보기. ctx = { tables(): 고를 수 있는 테이블 이름들, schema(): 지금 스키마 이름, edit: 단계를 고치는 칸을 놓을 요소, onChange(graph): 흐름이 바뀔 때 }
 // 돌려주는 값: { set(graph), get(), body 쪽 변환은 부른 쪽이 한다 }
 function FlowView(host, ctx) {
-  let g = { nodes: [], edges: [] }, sel = null, hi = null, rows = {}, schemas = {}, schemaKey = "";
+  let g = { nodes: [], edges: [] }, sel = null, hi = null, rows = {}, schemas = {}, schemaKey = "", schemaSeq = 0;
   const msg = el("div", { className: "fmsg" }), stage = el("div", { className: "fstage", tabIndex: 0 }), opt = el("div", { className: "fopt hidden" }), menu = el("div", { className: "fmenu hidden" });
   const say = (text, level = "") => { msg.textContent = text; msg.className = "fmsg " + level; };
   const palette = el("div", { className: "fpal" }, el("span", { className: "hint", textContent: "단계 놓기" }),
@@ -270,8 +270,9 @@ function FlowView(host, ctx) {
   async function loadSchemas(force = false) {  // 테이블 단계의 스키마(컬럼 종류). 테이블 이름들이 같으면 다시 받지 않는다.
     const key = JSON.stringify(g.nodes.filter(n => n.kind === "table").map(n => n.params?.table));
     if (!force && key === schemaKey) return schemas;
-    if (!g.nodes.some(n => n.kind === "table" && n.params?.table)) { schemas = {}; schemaKey = key; return schemas; }
-    try { schemas = (await api("/api/flow/schemas", { graph: g })).schemas; schemaKey = key; } catch (e) { say(e.message, "err"); }
+    if (!g.nodes.some(n => n.kind === "table" && n.params?.table)) { schemaSeq++; schemas = {}; schemaKey = key; return schemas; }
+    const seq = ++schemaSeq;  // 테이블을 빨리 바꾸면 늦게 온 옛 응답이 새 스키마를 덮지 않게
+    try { const got = (await api("/api/flow/schemas", { graph: g })).schemas; if (seq === schemaSeq) { schemas = got; schemaKey = key; } } catch (e) { if (seq === schemaSeq) say(e.message, "err"); }
     return schemas;
   }
   const colsOf = id => Object.entries(flowColumns(g, id, schemas));
@@ -373,7 +374,10 @@ function FlowView(host, ctx) {
     const pick = x => ({ table: x.params.table, ...(x.params.schema ? { schema: x.params.schema } : {}) });
     let d;
     try { d = await api("/api/flow/keys", { a: pick(l), b: pick(r) }); } catch (e) { return say("공통 키를 찾지 못했어요: " + e.message, "err"); }
+    const same = () => flowNode(g, joinId) && flowIns(g, joinId).map(i => flowRoot(g, i)).every((x, k) => x === [l, r][k]);  // 기다리는 사이 조인을 지우거나 이음을 바꿨으면 옛 테이블 쌍의 키를 넣지 않는다
+    if (!same()) return;
     const use = async cand => {
+      if (!same()) return;
       flowNode(g, joinId).params.keys = cand.keys;
       try { await api("/api/flow/keys/remember", { source_key: d.source_key ?? "", a: l.params.table, b: r.params.table, fingerprint: d.fingerprint, keys: cand.keys }); } catch { /* 기억하지 못해도 흐름은 쓸 수 있다 */ }
       opt.classList.add("hidden"); change();

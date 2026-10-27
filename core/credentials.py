@@ -111,7 +111,3 @@ def missing(keep, label, env_name=""):
     return f"'{label}'을 읽을 수 없습니다(다른 PC·계정에서 온 파일). 다시 입력해 저장하세요."
 
 
-def forget(prefix):
-    """prefix로 시작하는 세션 값을 지운다(보낼 곳을 지우거나 이름을 바꿀 때)."""
-    for key in [k for k in SESSION if k.startswith(prefix)]:
-        SESSION.pop(key, None)

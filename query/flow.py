@@ -262,7 +262,7 @@ def refs(node, columns=None):
         if p.get("reads"):
             return set(p["reads"])
         try:
-            k, main, opts = calc.split_words(p.get("line", ""))
+            k, main, opts = calc.split_words(p.get("line", ""), columns or ())
             return {bare(c) for c in calc.mentions(main, opts)}
         except ValueError:
             return set()

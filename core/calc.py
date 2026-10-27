@@ -33,14 +33,27 @@ HOWS = {i: sql_funcs.label_of(i) for i in (*OLD_HOWS, *[i for i in sql_funcs.ids
 SUBTOTALS = ("rollup", "cube", "sets")  # 피벗의 소계·총계 방식(ROLLUP·CUBE·GROUPING SETS)
 
 
-def split_words(line):
-    """(종류, 본문 낱말들, {기준·그룹·이름: 낱말들})."""
+def takes_main(kind):
+    """줄의 본문에 컬럼(이나 값)을 받는 종류인지. 순위·dense_rank처럼 기준·그룹만 받는 종류는 아니다."""
+    if kind == "순위":
+        return False
+    if kind in NEW_WINDOWS:
+        return any(a["name"] not in sql_funcs.HAS_ARGS for a in sql_funcs.FUNCS[kind]["args"])
+    return True
+
+
+def split_words(line, columns=()):
+    """(종류, 본문 낱말들, {기준·그룹·이름: 낱말들}). columns(이 표의 컬럼 이름들)를 주면, 본문을 받는 종류의 첫 낱말이 '이름'·'그룹'·'기준'이고
+    그 이름의 컬럼이 있을 때 칸 낱말이 아니라 컬럼으로 읽는다('lag 이름 기준 일자', '식 이름 || '님' 이름 호칭')."""
     words = line.split()
     if not words or words[0] not in KINDS:
         raise ValueError(f"계산 종류는 {', '.join(KINDS[:len(WINDOWS) + len(EACH) + 2 + len(FORMULAS)])} 중 하나로 시작합니다(함수 사전의 창 함수 id도 됩니다: {', '.join(NEW_WINDOWS[:4])} …). 형식: {GUIDE}")
     main, opts, at = [], {}, None
-    for w in words[1:]:
-        if w in OPTIONS:
+    first = takes_main(words[0]) and words[1] in columns if len(words) > 1 else False
+    for k, w in enumerate(words[1:]):
+        if k == 0 and first:
+            main.append(w)
+        elif w in OPTIONS and not (at is not None and not at):  # 칸 낱말 바로 뒤의 '그룹'·'기준'·'이름'은 그 칸의 값(컬럼 이름이 그 낱말)
             at = opts.setdefault(w, [])
         else:
             (main if at is None else at).append(w)
@@ -132,7 +145,7 @@ def longer(expr, cols):
 
 def apply_line(line, expr):
     """계산 한 줄을 식에 건다."""
-    kind, main, opts = split_words(line)
+    kind, main, opts = split_words(line, expr.columns)
     if kind in EACH:
         return each(kind, main, expr)
     if kind == "펼치기":
@@ -165,6 +178,7 @@ def column(kind, main, opts, expr, taken=()):
     order = (opts.get("기준") or [""])[0]
     if kind == "순위":
         return new_name(expr, opts, f"{order}_순위", taken), ibis.rank().over(ibis.window(group_by=groups, order_by=keys)) + 1
+    main = spaced_first(main, expr)  # 공백 있는 컬럼 이름('판매 금액')
     col = names(main[:1], expr)[0] if main else None
     if col is None or not expr[col].type().is_numeric() and kind != "이전값":
         raise ValueError(f"{kind}할 숫자 컬럼을 넣으세요.")
@@ -260,8 +274,8 @@ def apply(lines, expr):
     (줄마다 mutate하면 SELECT가 한 겹씩 늘어난다)."""
     batch = {}
     for line in lines or []:
-        kind, main, opts = split_words(line)
-        if kind in COLUMNS and not mentions(main, opts) & set(batch):
+        kind, main, opts = split_words(line, expr.columns)
+        if kind in COLUMNS and not any(n in line for n in batch):  # 앞 줄이 만든 컬럼(공백 있는 이름 포함)을 글 어디에서든 쓰면 나눈다
             name, value = column(kind, main, opts, expr, batch)
             batch[name] = value
             continue

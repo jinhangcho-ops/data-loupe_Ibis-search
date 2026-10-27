@@ -67,9 +67,10 @@ function sentCard(compiled, title) {
   if (compiled.combine || compiled.runs.length !== 1) return { reason: "여러 계산을 합쳐 구하는 문장이라 카드 하나로 바로 넣을 수 없어요." };
   const run = compiled.runs[0], spec = run.body.pivot;
   if (run.route !== "/api/pivot" || !spec?.rows?.length) return { reason: "묶어 집계하는 문장만 차트 카드로 넣을 수 있어요(행을 보는 문장은 제외)." };
+  if (spec.rows.length > 2) return { reason: "세 컬럼 이상으로 묶는 문장이라 차트 카드(X·나누기 두 칸)로 그대로 넣을 수 없어요." };
   if (spec.having || spec.top || spec.subtotals || spec.where) return { reason: "묶음을 거르거나(조건·상위 N) 소계를 붙이는 문장이라 차트 카드로 그대로 넣을 수 없어요." };  // 차트 카드에는 이 설정을 담을 칸이 없다
   const { pivot, ...body } = run.body;
-  return { kind: "chart", title, body: { ...body, x: spec.rows[0], split: spec.rows[1] ?? "", order: "", series: [{ y: spec.value ?? null, agg: spec.how, ...(spec.opts ? { opts: spec.opts } : {}) }] } };
+  return { kind: "chart", title, body: { ...body, x: spec.rows[0], split: spec.rows[1] ?? "", order: spec.order?.endsWith(" desc") ? "value" : "", series: [{ y: spec.value ?? null, agg: spec.how, ...(spec.opts ? { opts: spec.opts } : {}) }] } };
 }
 
 // ---------- 화면 ----------
@@ -244,11 +245,12 @@ function SentenceView(host, ctx) {
     const col = pickCol("date", p.column, v => { p.column = v; again(); }), fb = el("span", { className: "hint pfb" }), input = el("input", { value: p.text, placeholder: "기간 (선택) 예: 최근 7일, 이번 달, 2026-01 ~ 2026-03" });
     const live = async () => {
       p.text = input.value.trim();
-      if (!p.text) { p.span = null; fb.textContent = ""; fb.classList.remove("err"); again(); return; }
-      try { const d = await api("/api/period/parse", { text: p.text }); p.span = d.span; fb.textContent = d.span.error || `${d.span.label}${d.span.days ? ` (${d.span.days}일)` : ""}`; fb.classList.toggle("err", !!d.span.error); } catch (e) { fb.textContent = e.message; fb.classList.add("err"); }
+      if (!p.text) { p.span = null; p.pending = false; fb.textContent = ""; fb.classList.remove("err"); again(); return; }
+      const text = p.text;
+      try { const d = await api("/api/period/parse", { text }); if (text !== p.text) return; p.span = d.span; p.pending = false; fb.textContent = d.span.error || `${d.span.label}${d.span.days ? ` (${d.span.days}일)` : ""}`; fb.classList.toggle("err", !!d.span.error); } catch (e) { if (text !== p.text) return; p.pending = false; fb.textContent = e.message; fb.classList.add("err"); }
       again();
     };
-    input.oninput = (() => { let t = 0; return () => { clearTimeout(t); t = setTimeout(live, 250); }; })();
+    input.oninput = (() => { let t = 0; return () => { p.pending = true; clearTimeout(t); t = setTimeout(live, 250); }; })();  // pending: 읽는 동안 [실행]·[계산]이 예전 기간으로 구하지 않게
     if (p.text) live();
     return el("span", { className: "slot-group" }, el("span", { className: "stext", textContent: "기간" }), col, input, fb);
   }
@@ -264,6 +266,7 @@ function SentenceView(host, ctx) {
     return { template: item.template, slots: withPeriod(item), body: ctx.body(), columns: kinds() };
   }
   async function runOne(item, out) {
+    if ((shared.on ? shared : item.period)?.pending) { out.replaceChildren(el("div", { className: "sissue bad", textContent: "기간을 읽는 중이에요. 잠시 뒤 다시 누르세요." })); return; }
     out.replaceChildren(el("span", { className: "hint", textContent: "구하는 중…" }));
     try {
       const d = await api("/api/sentence/run", await compileRun(item));

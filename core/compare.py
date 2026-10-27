@@ -84,9 +84,10 @@ def percent_change(cur, prev):
     return None if prev == 0 else (cur - prev) / abs(prev) * 100
 
 
-def percent_text(pct):
-    """변화율 글자. 1% 미만은 소수 둘째 자리까지."""
-    return trimmed(abs(pct), 2 if abs(pct) < 1 else 1) + "%"
+def percent_text(pct, tiny=True):
+    """변화율 글자. 1% 미만은 소수 둘째 자리까지. tiny면 0이 아닌데 0%가 되는 것을 '0.01% 미만'으로(큰 값의 작은 변화)."""
+    text = trimmed(abs(pct), 2 if abs(pct) < 1 else 1) + "%"
+    return "0.01% 미만" if tiny and pct and text == "0%" else text  # 큰 값의 작은 변화: 변화량은 보이는데 0%라 쓰지 않게
 
 
 def tone_of(direction, better):
@@ -113,7 +114,7 @@ def compare(cur, prev, fmt="number", mode="span", label="직전 기간", better=
     delta = cur - base
     shown_zero = lambda text: not re.search(r"[1-9]", text)  # 보이는 숫자가 반올림해 0이면 같은 것으로(0% 늘었어요·초록 화살표를 내지 않게)
     flat = math.isclose(cur, base, rel_tol=1e-12, abs_tol=1e-12) or (
-        prev not in (None, 0) and shown_zero(format_delta(delta, fmt)) and (ratio or shown_zero(percent_text(percent_change(cur, prev)))))
+        prev is not None and (ratio or prev != 0) and shown_zero(format_delta(delta, fmt)) and (ratio or shown_zero(percent_text(percent_change(cur, prev), tiny=False))))
     direction = "flat" if flat else "up" if delta > 0 else "down"
     delta_text = format_delta(0 if flat else delta, fmt)
     tone = tone_of(direction, better)
