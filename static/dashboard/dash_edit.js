@@ -131,12 +131,17 @@ class EditBoard extends DashBoard {
   // 고른 카드의 그림: 차트는 Chart.js, SVG·HTML 카드(KPI·표·생키 …)는 직렬화해서(dash_report.js). 순서는 카드 순서.
   get paints() { return true; }
   async pictures(ratio, mode, type) {
-    const out = [], r = BOARD_RATIOS[ratio];
-    for (const card of this.cards.filter(c => this.picked.has(c) && !c.note)) {
-      const body = this.grid.querySelector(`.bcard[data-id="${card.id}"] .bbody`);
-      const width = r ? Math.round(PICTURE_HEIGHT * r) : body?.clientWidth || 640, height = r ? PICTURE_HEIGHT : (body?.clientHeight || 360) + TITLE_BAND;
-      if (card.config) out.push({ name: card.title, data: chartPicture(card.config, mode, type, width, height, 2, card.title) });
-      else out.push({ name: card.title, data: titledPicture(await paintedCanvas(card, mode, width, height - (card.title ? TITLE_BAND : 0), 2), card.title, mode, type) });
+    const out = [], r = BOARD_RATIOS[ratio], root = document.documentElement, was = root.dataset.theme;
+    root.dataset.theme = mode;  // 카드마다 바꿨다 되돌리면 화면이 카드 수만큼 깜빡인다: 한 번만 바꾼다(paintedCanvas는 같은 모드라 그대로 둔다)
+    try {
+      for (const card of this.cards.filter(c => this.picked.has(c) && !c.note)) {
+        const body = this.grid.querySelector(`.bcard[data-id="${card.id}"] .bbody`);
+        const width = r ? Math.round(PICTURE_HEIGHT * r) : body?.clientWidth || 640, height = r ? PICTURE_HEIGHT : (body?.clientHeight || 360) + TITLE_BAND;
+        if (card.config) out.push({ name: card.title, data: chartPicture(card.config, mode, type, width, height, 2, card.title) });
+        else out.push({ name: card.title, data: titledPicture(await paintedCanvas(card, mode, width, height - (card.title ? TITLE_BAND : 0), 2), card.title, mode, type) });
+      }
+    } finally {
+      if (was === undefined) delete root.dataset.theme; else root.dataset.theme = was;
     }
     return out;
   }

@@ -843,7 +843,7 @@ function clearScreen() {
   showTarget();
   resetTiming();
 }
-$("schema").addEventListener("change", () => { S.base = ""; resetTable(); });  // common.js가 테이블 목록을 다시 채운다.
+$("schema").addEventListener("change", () => { S.base = ""; $("rsaved").value = ""; resetTable(); });  // common.js가 테이블 목록을 다시 채운다.
 // 테이블을 고른 것과 같게 한다(목록에서 고를 때, ?base=). ①모양(이름·타입)을 바로 보이고 ②통계 ③타입 추천을 차례로 채운다.
 // 모든 단계가 끝나면 status가 ""이고 이 함수의 Promise가 끝난다.
 // config가 있으면(저장한 구성 불러오기) 모양이 온 시점에 선택을 채운다. 없으면 이 테이블에 지난번 쓴 전처리(있으면)로 채운다.
@@ -916,7 +916,7 @@ async function computeStats(mine, fresh = false) {
     renderGrid();
   }
 }
-$("base").onchange = () => openTable($("base").value);
+$("base").onchange = () => { $("rsaved").value = ""; openTable($("base").value); };  // 다른 테이블로 바꾸면 불러온 구성 이름을 놓는다([저장]이 그 구성을 다른 테이블로 덮어쓰지 않게)
 $("conn-open").onclick = () => openConnect();
 new MutationObserver(() => $("conn-now").textContent = connected ? `연결: ${connName}` : "연결 안 됨").observe($("crumb-text"), { childList: true });  // 연결 이름이 바뀌면 따라 바꾼다
 

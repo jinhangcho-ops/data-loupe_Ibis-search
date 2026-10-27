@@ -89,7 +89,7 @@ async function paintedCanvas(card, mode, width, height, scale) {
     ctx.drawImage(img, 0, 0, out.width, out.height);
     return out;
   } finally {
-    root.dataset.theme = now;
+    if (now === undefined) delete root.dataset.theme; else root.dataset.theme = now;  // 없던 속성을 "undefined" 글로 남기지 않는다
     stage.remove();
   }
 }

@@ -41,7 +41,8 @@ function cellAt(px, py, { left, top, col, row }, grabX = 0, grabY = 0) {
 function moveCard(items, id, cell) {
   const item = items.find(i => i.id === id);
   if (!item) return compactLayout(items);
-  return compactLayout(items.map(i => (i === item ? { id, layout: { ...i.layout, x: cell.x, y: cell.y } } : i)), id);
+  const once = compactLayout(items.map(i => (i === item ? { id, layout: { ...i.layout, x: cell.x, y: cell.y } } : i)), id);
+  return compactLayout(items.map(i => ({ id: i.id, layout: once[i.id] })));  // 놓은 카드도 위로 붙인다(빈 아래쪽에 뜨지 않게, docs: 빈 곳은 위로 메워진다)
 }
 
 // 카드 크기를 w·h(2~12)로 바꾼 뒤의 모든 카드 자리. 오른쪽 끝을 넘으면 x를 당긴다.

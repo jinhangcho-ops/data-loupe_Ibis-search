@@ -49,9 +49,11 @@ def split_words(line, columns=()):
     if not words or words[0] not in KINDS:
         raise ValueError(f"계산 종류는 {', '.join(KINDS[:len(WINDOWS) + len(EACH) + 2 + len(FORMULAS)])} 중 하나로 시작합니다(함수 사전의 창 함수 id도 됩니다: {', '.join(NEW_WINDOWS[:4])} …). 형식: {GUIDE}")
     main, opts, at = [], {}, None
-    first = takes_main(words[0]) and words[1] in columns if len(words) > 1 else False
+    lead = words[0] in ("곱하기", "빈값채우기") or words[0] == "반올림" and len(words) > 1 and words[1].lstrip("-").isdigit()  # 값이 앞에 오는 줄(반올림의 자리 수는 생략할 수 있다)
+    spot = 1 if lead else 0  # 반올림 0 이름·곱하기 2 그룹: 대상 컬럼은 둘째 낱말
+    first = takes_main(words[0]) and len(words) > spot + 1 and words[spot + 1] in columns
     for k, w in enumerate(words[1:]):
-        if k == 0 and first:
+        if k == spot and first:
             main.append(w)
         elif w in OPTIONS and not (at is not None and not at):  # 칸 낱말 바로 뒤의 '그룹'·'기준'·'이름'은 그 칸의 값(컬럼 이름이 그 낱말)
             at = opts.setdefault(w, [])

@@ -251,7 +251,7 @@ function SentenceView(host, ctx) {
       again();
     };
     input.oninput = (() => { let t = 0; return () => { p.pending = true; clearTimeout(t); t = setTimeout(live, 250); }; })();  // pending: 읽는 동안 [실행]·[계산]이 예전 기간으로 구하지 않게
-    if (p.text) live();
+    if (p.text) { p.pending = true; live(); }  // 저장한 묶음을 불러온 때도 읽기 전에는 실행하지 않는다
     return el("span", { className: "slot-group" }, el("span", { className: "stext", textContent: "기간" }), col, input, fb);
   }
   const pickCol = (kind, value, on, label = "날짜 컬럼") => {
@@ -343,6 +343,7 @@ function SentenceView(host, ctx) {
     body.replaceChildren(el("div", { className: "sgrid" }, el("div", { className: "sleft" }, filter, list), el("div", { className: "sright" }, setBar(), chipsBar(), cards, el("div", { className: "row" }, all, dash), note)));
   }
   async function addAll(note) {
+    if (shared.pending || items.some(i => i.period?.pending)) { note.textContent = "기간을 읽는 중이에요. 잠시 뒤 다시 누르세요."; return; }
     const done = [], skipped = [];
     let pick = null, table = { schema: scope().schema, base: scope().base };
     for (const item of items) {

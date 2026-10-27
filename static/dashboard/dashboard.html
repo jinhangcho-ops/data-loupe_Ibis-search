@@ -274,13 +274,15 @@ $("d-delete").onclick = () => {
   sure = false;
   $("d-delete").textContent = "이 대시보드 지우기";
   return busy($("d-delete"), async () => {
+    const id = dashId;
+    clearTimeout(saveTimer);  // 고친 직후의 자동 저장이 지운 뒤에 도착해 대시보드를 되살리지 않게(save는 dashId가 없으면 쓰지 않는다)
+    dashId = "";
     try {
-      const left = await api("/api/dash/delete", { id: dashId });
-      dashId = "";
+      const left = await api("/api/dash/delete", { id });
       showList(left);
       $("d-modal").classList.add("hidden");
       await openDash($("d-pick").value);
-    } catch (e) { say("err-settings", e.message); }
+    } catch (e) { dashId ||= id; say("err-settings", e.message); }
   });
 };
 
@@ -352,12 +354,14 @@ async function computeCard(card) {
 }
 // 빈 틀 카드의 데이터를 정한다: 카드 모음·템플릿에서 놓은 카드에 종류·조회를 채우고(자리·id는 그대로) 값을 구한다
 async function fillCard(target, built) {
+  const id = dashId;
   target.kind = built.kind;
   target.source = built.source;
   target.view = { ...target.view, ...built.view };
   target.data = {};
   delete target.note;
   await computeCard(target);
+  if (dashId !== id || !board.cards.includes(target)) return say("err-dash", "그 사이 다른 대시보드를 열어 카드에 넣지 않았어요.");  // 값을 구하는 사이 대시보드를 바꿨다
   needsValues(target);
   await panelHost.prepare(target);  // 차트 선반이 쓸 컬럼
   panel.builderOpen = false;
@@ -418,7 +422,9 @@ function buildEdit() {
       if (panelHost.menuTarget) return fillCard(panelHost.menuTarget, card);
       if (board.cards.length >= SERVER.dash.max_cards) throw new Error(`대시보드에는 카드를 ${SERVER.dash.max_cards}개까지 넣을 수 있습니다.`);
       card.id ??= randomId();
+      const id = dashId;
       await computeCard(card);
+      if (dashId !== id) return say("err-dash", "그 사이 다른 대시보드를 열어 카드를 넣지 않았어요.");  // 값을 구하는 사이 대시보드를 바꿨으면 그 대시보드에 붙이지 않는다
       board.set([...board.cards, card]);
       if (!await save()) return;
       say("err-dash", `카드를 넣었습니다(${board.cards.length}개).`, true);

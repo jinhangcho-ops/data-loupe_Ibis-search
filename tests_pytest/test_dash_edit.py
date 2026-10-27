@@ -163,6 +163,7 @@ assert.deepStrictEqual(compactLayout([item("A", 0, 0, 6, 4), item("B", 6, 0, 6, 
 assert.deepStrictEqual(moveCard(base, "C", { x: 0, y: 0 }), { C: L(0, 0, 12, 4), A: L(0, 4, 6, 4), B: L(6, 4, 6, 4) });
 // 범위 밖으로 끌면 맞춘다(x 100 → 12-w, y -5 → 0)
 assert.deepStrictEqual(moveCard(base, "B", { x: 100, y: -5 }).B, L(6, 0, 6, 4));
+assert.deepStrictEqual(moveCard([{ id: "A", layout: L(0, 0, 6, 8) }, { id: "B", layout: L(6, 0, 6, 8) }], "B", { x: 6, y: 30 }).B, L(6, 0, 6, 8));  // 빈 아래쪽에 놓아도 위로 붙는다(34차 감사)
 // 서로 다른 높이에서 틈 채우기: 왼쪽 세로로 긴 카드 옆에 두 카드가 쌓인다
 const tall = [item("T", 0, 0, 4, 10), item("U", 4, 0, 4, 4), item("V", 4, 6, 4, 3), item("W", 8, 9, 4, 2)];
 assert.deepStrictEqual(compactLayout(tall), { T: L(0, 0, 4, 10), U: L(4, 0, 4, 4), V: L(4, 4, 4, 3), W: L(8, 0, 4, 2) });

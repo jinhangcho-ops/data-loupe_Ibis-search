@@ -575,6 +575,9 @@ def page(name):
         f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'self' 'unsafe-inline'; connect-src 'self'; "
         f"img-src data: blob: {OSM_TILES}; base-uri 'none'; form-action 'none'")
     response.set_cookie("key", KEY, httponly=True, samesite="Strict")
-    for key, value in settings.load().items():  # 저장된 설정을 쿠키로 알려 준다. 화면이 그리기 전에 읽는다.
+    saved = settings.load()
+    for key, value in saved.items():  # 저장된 설정을 쿠키로 알려 준다. 화면이 그리기 전에 읽는다.
         response.set_cookie(key, str(value), samesite="Strict")
+    for key in {*settings.CHOICES, *settings.SIZES, *settings.FLOATS} - set(saved):  # 기본값으로 되돌려 파일에서 빠진 설정의 예전 쿠키를 지운다
+        response.delete_cookie(key, samesite="Strict")
     return response

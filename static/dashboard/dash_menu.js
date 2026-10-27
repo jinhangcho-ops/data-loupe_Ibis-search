@@ -209,25 +209,32 @@ function initCardMenu(root, host) {
     try { const t = await api("/api/targets", { path: path.value.trim() }); pathNote.textContent = t.error || `목표 ${t.rows.length}개를 읽었어요`; refill(); } catch (e) { pathNote.textContent = e.message; }
   } });
   kind.onchange = show;
+  let colSeq = 0, geoSeq = 0;  // 테이블을 빨리 바꾸면 늦게 온 앞 테이블의 컬럼을 버린다
   table.onchange = async () => {  // 테이블을 고르면 그 컬럼을 받아 선택지를 다시 채운다
+    const mine = ++colSeq;
     menuBase = table.value;
     menuCols = [];
-    if (menuBase) { try { menuCols = (await api("/api/columns", { schema: "", base: menuBase })).columns; err.textContent = ""; } catch (e) { err.textContent = e.message; } }
+    if (menuBase) {
+      try { const cols = (await api("/api/columns", { schema: "", base: menuBase })).columns; if (mine !== colSeq) return; menuCols = cols; err.textContent = ""; }
+      catch (e) { if (mine !== colSeq) return; err.textContent = e.message; }
+    }
     [...rows.children].forEach(r => r.remove());
     refill();
     Funcs.loadSupport(menuBase).then(() => [...rows.children].forEach(r => r.picker.refresh()));  // 이 연결이 못 하는 집계는 안내를 붙이거나 막는다
   };
   Funcs.load().then(show);  // 함수 사전을 받으면 값 줄을 채운다
   gTable.onchange = async () => {  // 영역 테이블을 고르면 그 컬럼을 이름·도형·값 칸의 후보로 보인다
+    const mine = ++geoSeq;
     gCols.replaceChildren();
     if (!gTable.value) return;
     try {
       const cols = (await api("/api/columns", { schema: "", base: gTable.value })).columns;
+      if (mine !== geoSeq) return;
       gCols.replaceChildren(...cols.map(c => el("option", { value: c[0], textContent: c[1] })));
       const text = cols.filter(c => c[1] === "문자").map(c => c[0]);
       if (!gName.value) gName.value = text.find(n => /name|nm|명|이름/i.test(n)) ?? text.find(n => n !== "geometry" && n !== "geom_type") ?? "";
       if (cols.some(c => c[0] === "geometry")) gGeom.value = "geometry";
-    } catch (e) { err.textContent = e.message; }
+    } catch (e) { if (mine === geoSeq) err.textContent = e.message; }
   };
   root.replaceChildren(el("div", { className: "row" }, table), el("div", { className: "row" }, kind), title, rows, add, ...fields, gCols, el("div", { className: "row" }, path, save), pathNote, err, go);
   // 종류(와 차트 종류)를 미리 골라 둔다(카드 모음에서 끌어 놓거나 빈 틀 카드의 데이터를 정할 때)

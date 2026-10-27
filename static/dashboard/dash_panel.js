@@ -88,7 +88,7 @@ class CardPanel {
       board.setLayout(card, { [key]: v }, key === "w" || key === "h" ? "resize" : "move");
       this.show();
     } });
-    const place = el("div", { className: "prow" }, this.field("가로 칸", num("w", 2, 12)), this.field("세로 칸", num("h", 2, 12)), this.field("x", num("x", 0, 11)), this.field("y", num("y", 0, 999)));
+    const place = el("div", { className: "prow" }, this.field("가로 칸", num("w", 2, 12)), this.field("세로 칸", num("h", 2, 12)), this.field("x", num("x", 0, 12 - card.layout.w)), this.field("y", num("y", 0, 999)));
     const head = el("div", { className: "phead" }, el("b", { textContent: KIND_NAMES[card.kind] ?? card.kind }), el("button", { className: "ib", textContent: "×", title: "닫기", onclick: () => this.close() }));
     const again = el("button", { className: "btn", textContent: "값 다시 구하기", title: "이 카드만 지금 연결에서 다시 구합니다", onclick: () => busy(again, async () => { try { await this.host.recompute(card); err.textContent = ""; this.show(); } catch (e) { err.textContent = e.message; } }) });
     const fills = [this.dataSection(card, err)];
