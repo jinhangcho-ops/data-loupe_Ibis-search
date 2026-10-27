@@ -5,7 +5,7 @@
 const SVG_KINDS = ["kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation", "funnel", "geomap"];
 const TAU = Math.PI * 2, RING_GAP = 0.06;  // 게이지 조각 사이 간격(라디안)
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-const overTarget = (v, t) => v > t + Math.abs(t) * 1e-9, underTarget = (v, t) => v < t - Math.abs(t) * 1e-9;  // 합계의 부동소수 꼬리(1.1 + 2.2)는 목표와 같은 값으로(서버 summary_text와 같은 기준)
+const slack = t => Math.max(Math.abs(t) * 1e-9, 1e-12), overTarget = (v, t) => v > t + slack(t), underTarget = (v, t) => v < t - slack(t);  // 합계의 부동소수 꼬리(1.1 + 2.2)는 목표와 같은 값으로(서버 summary_text와 같은 기준)
 // 12시 방향이 0, 시계 방향으로 커지는 각도의 점
 const polar = (cx, cy, r, a) => [cx + r * Math.sin(a), cy - r * Math.cos(a)];
 // 각도 a0에서 a1까지(시계 방향) 호의 SVG 경로. 한 바퀴 가까우면 둘로 나눈다.

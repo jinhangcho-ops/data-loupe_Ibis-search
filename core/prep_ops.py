@@ -274,8 +274,8 @@ def date_parts(t, name, parts):
 def onehot(t, name, _):
     values = distinct_values(t, name, ONEHOT_MAX, "onehot")
     seen = {}
-    for v in values:
-        if (other := seen.setdefault(str(v).casefold(), v)) != v:  # 새 컬럼 이름은 대소문자를 가리지 않아 겹친다
+    for v in map(str, values):
+        if (other := seen.setdefault(v.lower(), v)) != v:  # 새 컬럼 이름은 대소문자를 가리지 않아 겹친다(check_new와 같은 lower)
             raise ValueError(f"'{name}'의 값 '{other}'와 '{v}'는 대소문자만 달라요. 먼저 '대문자·소문자로'를 적용하세요.")
     return add_columns(t, {f"{name}_{v}": ibis.coalesce(t[name] == v, False).cast("int8") for v in values})
 

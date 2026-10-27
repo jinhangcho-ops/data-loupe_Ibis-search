@@ -468,7 +468,7 @@ function control(f, st) {
 function opLine(c, e, key) {
   const op = OPS[key], st = e.ops[key];
   const li = el("div", { className: "op" }, el("div", { className: "op-head" }, op.label,
-    el("button", { className: "ghost", textContent: "×", title: "이 정리 방법 빼기", ariaLabel: "이 정리 방법 빼기", onclick: () => { delete e.ops[key]; if (OPS[key]?.unkeep) e.keep = true; renderClean(); renderGrid(); showPrepSummaries(); } })),  // 더할 때 뺀 원래 컬럼을 되돌린다
+    el("button", { className: "ghost", textContent: "×", title: "이 정리 방법 빼기", ariaLabel: "이 정리 방법 빼기", onclick: () => { delete e.ops[key]; if (OPS[key]?.unkeep && !Object.keys(e.ops).some(k => OPS[k]?.unkeep)) { e.keep = e.keepBefore ?? true; delete e.keepBefore; preview = null; showAll(); return; } renderClean(); renderGrid(); showPrepSummaries(); } })),  // 더하기 전의 유지 여부로 되돌린다
     el("div", { className: "hint", textContent: DESC[key] ?? "" }));
   lines.set(st, li);
   for (const f of op.fields?.(st, c, e.ops) ?? []) {
@@ -514,7 +514,7 @@ function renderClean() {
     const op = OPS[add.value];
     if (!op) return;
     e.ops[add.value] = { ...op.init };
-    if (op.unkeep) { e.keep = false; preview = null; showAll(); } else { renderClean(); renderGrid(); showPrepSummaries(); }
+    if (op.unkeep) { e.keepBefore ??= e.keep; e.keep = false; preview = null; showAll(); } else { renderClean(); renderGrid(); showPrepSummaries(); }
   };
   $("cl-body").replaceChildren(
     el("div", { className: "facts", innerHTML: statsHtml(c) }), ...(c.from ? [] : suggests(c)),

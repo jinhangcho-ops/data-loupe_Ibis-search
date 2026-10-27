@@ -5,6 +5,8 @@
 - 3원칙은 자료로만 준다: 비율 지표는 pair로 짝 절대량, 평균형은 spread로 중앙값·P90·P99, 북극성·카운터·가드레일은 hint(대시보드의 north_star·counters·limits를 그대로 쓰고 여기서 따로 저장하지 않는다. 한계 확인은 check_limit).
 - compute는 sentence_exec와 같은 규칙으로 현재 연결에서 구한다: 내 지표로 저장한 항목은 부르는 쪽이 scope를 먼저 검사하고(sentence_exec.check_scope), 원격 DB는 값을 읽는 조회만 보낸다(처리 용량 확인 scan_gate와
   이 PC 사본 만들기는 라우트 catalog_app이 한다). 다른 테이블이 필요한 지표는 맞춤 구절(기간 단위 또는 공통 키)이 없으면 이유와 함께 거부한다(6-5)."""
+import math
+
 from query import flow
 from core import parse
 from query import sentence_run
@@ -542,7 +544,7 @@ def check_limit(value, limit):
     """한계 {op: >=|<=, value}를 벗어났으면 경고 글, 아니면 None. 대시보드 카운터 한계(dash_store.check_limits)와 같은 뜻이다: >=면 값이 한계보다 작아지면, <=면 커지면 경고."""
     if value is None or not isinstance(limit, dict):
         return None
-    bad = value < limit["value"] if limit["op"] == ">=" else value > limit["value"]
+    bad = not math.isclose(value, limit["value"], rel_tol=1e-9, abs_tol=1e-12) and (value < limit["value"] if limit["op"] == ">=" else value > limit["value"])  # 합계의 꼬리는 한계와 같은 값(대시보드와 같은 기준)
     return f"지금 값 {value:,.4g}이(가) 한계({limit['value']:,.4g} {'이상' if limit['op'] == '>=' else '이하'})를 벗어났어요." if bad else None
 
 

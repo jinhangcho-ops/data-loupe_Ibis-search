@@ -232,7 +232,7 @@ def test_tiny_targets_keep_their_value():
 @pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
 def test_cards_judge_target_like_the_server(tmp_path):
     from test_fix_audit_js import between, run_node
-    helper = between("dash_cards.js", "const overTarget", "\n") + "\n"
+    helper = between("dash_cards.js", "const slack", "\n") + "\n"
     out = run_node(tmp_path, "console.log(JSON.stringify([overTarget(1.1 + 2.2, 3.3), underTarget(0.7 + 0.1, 0.8), overTarget(3.31, 3.3), underTarget(3.29, 3.3)]));", parts=[helper])
     assert out == [False, False, True, True]  # 꼬리는 같은 값, 진짜 차이는 넘음·모자람
 
@@ -281,6 +281,7 @@ const assert = require("assert");
 const kpi = (id, v) => ({ id, kind: "gauge", title: "환불률", view: { format: "number" }, data: { values: { scalar: [v] } }, source: {} });
 const alerts = counterAlerts([kpi("r", 1.1 + 2.2)], { card: "", counters: ["r"], limits: { r: { op: "<=", value: 3.3 } } });
 assert.deepStrictEqual(alerts, []);  // 합계의 꼬리는 한계와 같은 값
+assert.deepStrictEqual(counterAlerts([kpi("r", 0.1 + 0.2 - 0.3)], { card: "", counters: ["r"], limits: { r: { op: "<=", value: 0 } } }), []);  // 한계 0도
 assert.strictEqual(counterAlerts([kpi("r", 3.4)], { card: "", counters: ["r"], limits: { r: { op: "<=", value: 3.3 } } }).length, 1);
 console.log("ok");
 """
@@ -314,5 +315,22 @@ def test_metric_delete_asks_when_used_and_onehot_removal_keeps_column():
     static = Path(__file__).resolve().parent.parent / "static"
     js = (static / "query" / "sentences.js").read_text(encoding="utf-8")
     remove = js[js.index("async function removeMetric(m)"):js.index("function scopeNow()")]
-    assert remove.index("/api/my_metrics/used_by") < remove.index("sentAsk(") < remove.index("/api/my_metrics/delete")
-    assert "if (OPS[key]?.unkeep) e.keep = true;" in (static / "prep" / "prep.html").read_text(encoding="utf-8")
+    assert remove.index("sentUsedBy(") < remove.index("used.metrics.length") < remove.index("sentAsk(") < remove.index("/api/my_metrics/delete")  # 쓰는 지표가 있으면 묻지 않고 거부 이유
+    prep = (static / "prep" / "prep.html").read_text(encoding="utf-8")
+    assert "e.keepBefore ??= e.keep;" in prep and "e.keep = e.keepBefore ?? true;" in prep  # 원-핫을 빼면 더하기 전의 유지 여부로
+
+
+def test_onehot_with_nan_and_casefold_only_values():
+    import polars as pl
+    from lazy import ibis
+    from core import prep_ops
+    out = prep_ops.onehot(ibis.memtable(pl.DataFrame({"x": [1.0, float("nan"), 2.0]})), "x", True)
+    assert "x_nan" in out.columns  # NaN != NaN에 걸려 '대소문자만 달라요'가 되지 않는다
+    assert {"x_Straße", "x_STRASSE"} <= set(prep_ops.onehot(ibis.memtable({"x": ["Straße", "STRASSE"]}), "x", True).columns)  # lower로는 다른 이름
+
+
+def test_limits_at_zero_and_float_tails_agree():
+    from metrics import metric_catalog
+    assert metric_catalog.check_limit(1.1 + 2.2, {"op": "<=", "value": 3.3}) is None
+    assert metric_catalog.check_limit(3.4, {"op": "<=", "value": 3.3})
+    assert metric_catalog.check_limit(0.1 + 0.2 - 0.3, {"op": "<=", "value": 0}) is None

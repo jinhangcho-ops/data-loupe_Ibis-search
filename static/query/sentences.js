@@ -75,6 +75,11 @@ function sentCard(compiled, title) {
 
 // ---------- 화면 ----------
 // 작은 확인 창(제목, 글, 확인 단추 이름) → true/false
+// 지표를 쓰는 곳: 대시보드 카드("제목 (대시보드)")와 그 지표를 쓰는 지표 이름. 고치기·지우기가 함께 쓴다
+async function sentUsedBy(id) {
+  const used = await api("/api/my_metrics/used_by", { id });
+  return { cards: used.cards.map(c => `${c.title} (${c.dashboard_name})`), metrics: used.dependents.map(x => x.name) };
+}
 function sentAsk(title, text, ok = "확인") {
   return new Promise(done => {
     const close = v => () => { box.remove(); done(v); };
@@ -390,8 +395,9 @@ function SentenceView(host, ctx) {
       ...(others.length ? [el("h2", { textContent: "다른 테이블의 지표 (복사해서 써요)" }), ...others.map(row)] : []));
     async function removeMetric(m) {
       try {
-        const used = await api("/api/my_metrics/used_by", { id: m.id }), names = [...used.cards.map(c => `${c.title} (${c.dashboard_name})`), ...used.goals.map(g => `목표 ${g.name}`), ...used.dependents.map(x => x.name)];
-        if (names.length && !await sentAsk("지우면 쓰는 곳에서 구할 수 없어요", `이 지표를 쓰는 곳: ${names.join(", ")}\n지운 지표는 되돌릴 수 없어요.`, "지우기")) return;
+        const used = await sentUsedBy(m.id);
+        if (used.metrics.length) { msg.textContent = `‘${m.name}’을(를) 쓰는 지표가 있어 지울 수 없어요: ${used.metrics.join(", ")}`; return; }  // 서버도 거부한다
+        if (used.cards.length && !await sentAsk("지우면 쓰는 곳에서 구할 수 없어요", `이 지표를 쓰는 카드: ${used.cards.join(", ")}\n지운 지표는 되돌릴 수 없어요.`, "지우기")) return;
         await api("/api/my_metrics/delete", { id: m.id }); mcStale = true; msg.textContent = ""; showMetric();
       } catch (e) { msg.textContent = e.message; }
     }
@@ -427,7 +433,7 @@ function SentenceView(host, ctx) {
       const save = el("button", { className: "btn p", textContent: m ? "저장" : "만들기", disabled: true, onclick: e => busy(e.currentTarget, async () => {
         try {
           if (m) {
-            const used = await api("/api/my_metrics/used_by", { id: m.id }), names = [...used.cards.map(c => `${c.title} (${c.dashboard_name})`), ...used.goals.map(g => `목표 ${g.name}`), ...used.dependents.map(x => x.name)];
+            const used = await sentUsedBy(m.id), names = [...used.cards, ...used.metrics];
             if (names.length && !await sentAsk("정의를 고치면 영향이 있어요", `이 지표를 쓰는 곳: ${names.join(", ")}\n고친 뒤 카드는 ‘정의가 바뀌었어요’로 표시돼요.`, "저장")) return;
             await api("/api/my_metrics/update", { id: m.id, patch: def(), columns: kinds() });
           } else await api("/api/my_metrics", { definition: def(), columns: kinds() });
