@@ -405,3 +405,12 @@ def test_postgres_table_creation_checks_column_bytes_before_creating():
     assert db.made == []  # 테이블을 만들기 전에 거부한다
     html = (__import__("pathlib").Path(__file__).resolve().parent.parent / "static" / "query" / "index.html").read_text(encoding="utf-8")
     assert "j.how = v; j.pairs.forEach(p => p[2] = false);" in html  # asof에서 종류를 바꾸면 >=를 버린다
+
+
+def test_sql_color_classes_only_style_inside_the_sql_views():
+    import re
+    from pathlib import Path
+    html = (Path(__file__).resolve().parent.parent / "static" / "query" / "index.html").read_text(encoding="utf-8")
+    style = html[html.index("<style>"):html.index("</style>")]
+    assert not re.search(r"(^|[;}\n])[ \t]*\.sc\s*\{", style)  # 패널 스크롤 영역(.side .sc)이 흐린 기울임꼴이 되지 않게
+    assert ":is(#sql-paint, #sql) .sc {" in style

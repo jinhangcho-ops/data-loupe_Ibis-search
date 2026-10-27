@@ -37,7 +37,7 @@
   .sql-hl #sql-text::placeholder { color:var(--faint); }
   #sql-paint { position:absolute; inset:0; margin:0; padding:6px 10px; border:1px solid transparent; border-radius:9px; background:var(--card); color:var(--text);
     font:13px/1.5 Consolas, ui-monospace, monospace; white-space:pre-wrap; overflow-wrap:break-word; overflow:hidden; scrollbar-gutter:stable; pointer-events:none; }
-  .sk { color:var(--sql-kw); font-weight:600; } .ss { color:var(--sql-str); } .sc { color:var(--faint); font-style:italic; }
+  :is(#sql-paint, #sql) .sk { color:var(--sql-kw); font-weight:600; } :is(#sql-paint, #sql) .ss { color:var(--sql-str); } :is(#sql-paint, #sql) .sc { color:var(--faint); font-style:italic; }  /* SQL 색칠 안에서만(패널 스크롤 영역도 .sc를 쓴다) */
   .sql-edit { padding:0 28px; display:flex; flex-direction:column; gap:8px; }
   .sql-edit .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .sql-edit .row label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; white-space:nowrap; }
