@@ -21,11 +21,34 @@ PRESETS = [  # 서비스가 받는 모양의 본문 틀. 실제 서비스에 보
 ]
 
 
+def content_size(body):
+    """Discord가 재는 값: JSON 본문의 content 글자 수(JSON이 아니면 0)."""
+    try:
+        value = json.loads(body)
+    except ValueError:
+        return 0
+    return len(str(value.get("content") or "")) if isinstance(value, dict) else 0
+
+
+# 주소 호스트(그 하위 호스트 포함) → (한도, 본문에서 재는 값). 넘으면 {표}를 잘라 '… 잘림'을 붙인다. 그 밖의 주소는 한도를 모른다.
+LIMITS = [
+    (("discord.com", "discordapp.com"), 2_000, content_size),  # Discord Execute Webhook 문서: content 2000자
+    (("webhook.office.com", "logic.azure.com", "powerplatform.com"), 28_000, lambda body: len(body.encode("utf-8"))),  # Teams 웹훅·워크플로 문서: 메시지 28KB
+]
+
+
 def send(fields, m):
-    """본문 틀의 {제목} {내용} {행수} {걸린시간} {표} {그림} 자리를 본문 종류에 맞게 이스케이프해 채워 보낸다. 모르는 {…}는 그대로 둔다."""
+    """본문 틀의 {제목} {내용} {행수} {걸린시간} {표} {그림} 자리를 본문 종류에 맞게 이스케이프해 채워 보낸다. 모르는 {…}는 그대로 둔다.
+    아는 서비스(LIMITS)는 한도를 넘으면 {표}를 넘친 만큼 줄여 다시 채운다."""
     content_type, escape = BODIES[fields["content"]]
     values = {"제목": m["title"], "내용": m["text"], "행수": m["rows"], "걸린시간": m["duration"], "표": m["table"], "그림": base64.b64encode(m["image"]).decode() if m["image"] else ""}
-    body = re.sub(r"\{(" + "|".join(SLOTS) + r")\}", lambda found: escape(values[found[1]]), fields["template"])
+    fill = lambda: re.sub(r"\{(" + "|".join(SLOTS) + r")\}", lambda found: escape(values[found[1]]), fields["template"])
+    body, host = fill(), urllib.parse.urlsplit(fields["url"]).hostname or ""
+    for hosts, most, size in LIMITS:
+        if any(host == h or host.endswith("." + h) for h in hosts):
+            while values["표"] and (over := size(body) - most) > 0 and (shorter := transport.cut(values["표"], len(values["표"]) - over)) != values["표"]:
+                values["표"] = shorter
+                body = fill()
     if fields["content"] == "json":
         try:
             json.loads(body)

@@ -5,10 +5,10 @@ import datetime as dt
 import hashlib
 import http.client
 import json
+import re
 import secrets
 import time
-import urllib.robotparser
-from urllib.parse import urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 from collect import collect_browser
 from collect import collect_config
@@ -24,6 +24,7 @@ MAX_ROWS = 100_000  # 한 쪽에서 읽는 최대 항목 수
 MAX_VALUE = 100_000  # 값 하나의 최대 글자 수
 ROBOTS_TIMEOUT = 10
 ROBOTS_MAX = 512 * 1024  # robots.txt를 이만큼(바이트)까지만 읽는다.
+AGENT = "dataloupe"  # robots.txt에서 이 앱의 User-agent 이름(소문자). 이 이름의 묶음이 있으면 * 묶음 대신 따른다.
 EMPTY = "항목을 찾지 못했습니다(0건). 페이지 구조가 바뀌었거나 로그인이 필요할 수 있습니다."
 BLOCKED = "robots.txt가 이 주소를 막고 있습니다."
 CLOSED = "수집용 창이 닫혀 멈췄습니다."
@@ -85,8 +86,45 @@ def sample(config):
 
 # ---------- robots.txt ----------
 
+def robots_path(text):
+    """경로를 같은 퍼센트 인코딩으로 맞춘다(robots.txt의 /한글 과 주소의 /%ED%95%9C… 를 같게)."""
+    return quote(unquote(text), safe="/?&=:;@!$'()*+,~")
+
+
+def robots_parse(text):
+    """robots.txt 글자 → {User-agent 이름(소문자): [(허용인지, 경로 패턴)]}. 이어진 User-agent 줄은 한 묶음, 같은 이름의 묶음은 합친다(RFC 9309)."""
+    groups, agents, rules_seen = {}, [], True
+    for line in text.splitlines():
+        key, _, value = line.split("#", 1)[0].partition(":")
+        key, value = key.strip().lower(), value.strip()
+        if key == "user-agent":
+            if rules_seen:
+                agents, rules_seen = [], False
+            agents.append(value.lower())
+            groups.setdefault(value.lower(), [])
+        elif key in ("allow", "disallow"):
+            rules_seen = True
+            if value:  # 빈 Disallow(·Allow)는 아무것도 정하지 않는다
+                for agent in agents:
+                    groups[agent].append((key == "allow", robots_path(value)))
+    return groups
+
+
+def robots_allows(groups, url):
+    """이 앱(AGENT) 묶음, 없으면 * 묶음에서 경로+쿼리에 맞는 가장 긴 패턴을 따른다(같은 길이면 Allow). *는 아무 글자, 끝의 $는 끝 고정."""
+    parts = urlsplit(url)
+    path = robots_path((parts.path or "/") + (f"?{parts.query}" if parts.query else ""))
+    best = (-1, True)
+    for allow, pattern in groups.get(AGENT, groups.get("*", [])):
+        regex = re.escape(pattern).replace(r"\*", ".*")
+        regex = regex[:-2] + r"\Z" if regex.endswith(r"\$") else regex
+        if re.match(regex, path) and (len(pattern), allow) > best:
+            best = (len(pattern), allow)
+    return best[1]
+
+
 def robots_rules(base):
-    """base(방식://호스트)의 robots.txt. 읽은 규칙(RobotFileParser) 또는 확인하지 못한 이유(글자).
+    """base(방식://호스트)의 robots.txt. 읽은 규칙(robots_parse) 또는 확인하지 못한 이유(글자).
     4xx는 모두 허용, 5xx·연결 실패는 확인 못 함. 사용 한도에는 세지 않는다."""
     try:
         reply, _ = collect_http.open_url("GET", base + "/robots.txt", [], None, ROBOTS_TIMEOUT)
@@ -94,18 +132,15 @@ def robots_rules(base):
             status, body = reply.status, reply.read(ROBOTS_MAX)
     except (OSError, ValueError, http.client.HTTPException) as e:
         return f"robots.txt를 받지 못했습니다({getattr(e, 'reason', e)})"
-    rules = urllib.robotparser.RobotFileParser()
     if 400 <= status < 500:
-        rules.allow_all = True
-    elif 200 <= status < 300:
-        rules.parse(body.decode("utf-8", "replace").splitlines())
-    else:
-        return f"robots.txt 응답 상태가 {status}입니다"
-    return rules
+        return {}
+    if 200 <= status < 300:
+        return robots_parse(body.decode("utf-8", "replace"))
+    return f"robots.txt 응답 상태가 {status}입니다"
 
 
 def robots(url, cache):
-    """url을 robots.txt(User-agent *)가 허용하는지: ("허용"|"금지"|"확인 못 함", 이유). 호스트마다 한 번만 받는다(cache)."""
+    """url을 robots.txt(이 앱 또는 User-agent *)가 허용하는지: ("허용"|"금지"|"확인 못 함", 이유). 호스트마다 한 번만 받는다(cache)."""
     parts = urlsplit(url)
     base = f"{parts.scheme}://{parts.netloc}"
     if base not in cache:
@@ -113,7 +148,7 @@ def robots(url, cache):
     rules = cache[base]
     if isinstance(rules, str):
         return "확인 못 함", rules
-    return ("허용", "") if rules.can_fetch("*", url) else ("금지", parts.path or "/")
+    return ("허용", "") if robots_allows(rules, url) else ("금지", parts.path or "/")
 
 
 def robots_text(web):
@@ -212,7 +247,8 @@ class Walk:
         self.settle()
 
     def read(self, start=0):
-        """지금 페이지의 행(start번째 항목부터). 처음 연 주소와 호스트가 달라졌으면 로그인이 풀린 것으로 보고 멈춘다."""
+        """지금 페이지의 행(start번째 항목부터). 처음 연 주소와 호스트가 달라졌으면 로그인이 풀린 것으로 보고 멈춘다.
+        실제로 열린 주소도 robots.txt로 검사한다(href 없는 다음 버튼·넘겨주기로 간 쪽은 미리 검사할 수 없다)."""
         try:
             found = self.page.run("read", self.web["items"], fields_of(self.web), start, None, timeout=max(30, self.timeout))
         except TimeoutError:
@@ -223,6 +259,8 @@ class Walk:
             self.host = host
         elif host != self.host:
             raise Halt(f"다시 로그인이 필요할 수 있습니다: 페이지가 다른 주소({host})로 넘어갔습니다. 수집용 창에서 로그인한 뒤 다시 시작하세요.")
+        if urlsplit(url).scheme.lower() in ("http", "https"):
+            self.allowed(url)
         return rows
 
     def keep(self, i, rows):

@@ -154,7 +154,7 @@ function pointValue(s, days, date) {
 // 대시보드 기간이 비면 카드 자신의 기간 줄(날짜컬럼 시작 ~ 끝, 양쪽 날짜)을 보는 기간으로 삼고, 직전은 바로 앞 같은 일수로 본다. 기간 줄이 없으면 null.
 function ownRange(card) {
   for (const line of card.source?.body?.periods ?? []) {
-    const m = /^\S+\s+(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})$/.exec(line.trim());
+    const m = /^.+?\s+(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})$/.exec(line.trim());  // 날짜를 끝에서 읽어 공백 있는 컬럼 이름도 된다(dash_calc.OWN_PERIOD와 같은 규칙)
     const real = d => !isNaN(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d;  // 2026-02-30 같은 없는 날은 건너뛴다
     if (m && real(m[1]) && real(m[2]) && m[1] <= m[2]) { const n = daysBetween(m[1], m[2]); return { range: { start: m[1], end: m[2] }, prev: { start: shiftDay(m[1], -n), end: shiftDay(m[1], -1), text: `직전 ${n}일` } }; }
   }

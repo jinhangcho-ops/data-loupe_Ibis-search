@@ -26,6 +26,12 @@ class Keep(urllib.request.HTTPRedirectHandler):
 
 
 OPENER = urllib.request.build_opener(Keep())
+CUT = "\n… 잘림"
+
+
+def cut(text, limit):
+    """text가 limit자를 넘으면 limit자 안에 들어가게 자르고 '… 잘림'을 붙인다(서비스 한도에서 거절당하지 않게)."""
+    return text if len(text) <= limit else text[:max(limit - len(CUT), 0)] + CUT
 
 
 def log(method, url):

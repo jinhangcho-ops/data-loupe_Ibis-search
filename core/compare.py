@@ -11,6 +11,7 @@ FORMATS = ("number", "percent", "currency")
 MODES = ("span", "point")
 PARTIAL_NOTES = {"span": "직전 기간 일부만 있음", "point": "비교 시점 값이 일부만 있음"}
 DIGIT_READING = "영일이삼사오육칠팔구"
+LETTER_READING = {"l": "엘", "m": "엠", "n": "엔", "r": "알"}  # 받침 있는 소리로 끝나는 영문(나머지는 받침 없음)
 
 
 def reading(word):
@@ -18,8 +19,8 @@ def reading(word):
     last = word[-1:]
     if last.isdigit() and last in "0123456789":
         return word[:-1] + DIGIT_READING[int(last)]
-    if last in "LMNRlmnr":
-        return word[:-1] + "알"
+    if last.lower() in LETTER_READING:
+        return word[:-1] + LETTER_READING[last.lower()]
     return word[:-1] + "퍼센트" if last == "%" else word
 
 

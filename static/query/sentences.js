@@ -432,7 +432,7 @@ function SentenceView(host, ctx) {
   }
   // 서버 sentence_run.render와 같은 규칙: 집계 칸은 이름(합계)으로, 빈칸 바로 뒤 조사는 값의 받침에 맞춘다(한글로 끝나지 않으면 틀 그대로)
   const PAIRS = { "으로": ["으로", "로"], "로": ["으로", "로"], "을": ["을", "를"], "를": ["을", "를"], "은": ["은", "는"], "는": ["은", "는"], "과": ["과", "와"], "와": ["과", "와"], "이(가)": ["이", "가"], "이": ["이", "가"], "가": ["이", "가"] };
-  const spoken = c => /[0-9]/.test(c) ? "영일이삼사오육칠팔구"[c] : /[LMNR]/i.test(c) ? "알" : c === "%" ? "트" : c;  // 서버 compare.reading
+  const spoken = c => /[0-9]/.test(c) ? "영일이삼사오육칠팔구"[c] : /[LMNR]/i.test(c) ? { l: "엘", m: "엠", n: "엔", r: "알" }[c.toLowerCase()] : c === "%" ? "트" : c;  // 서버 compare.reading
   const josa = (word, p) => { const c = spoken(word.slice(-1)), f = c >= "가" && c <= "힣" ? (c.charCodeAt(0) - 0xAC00) % 28 : 0; const [has, plain] = PAIRS[p]; return f === 0 || (has === "으로" && f === 8) ? plain : has; };
   const sentRender = (tpl, slots, names = {}) => tpl.text.replace(/\{([^{}]+)\}(이\(가\)|으로|로|을|를|은|는|과|와|이(?=\s)|가(?=\s))?/g, (all, n, p) => {
     const v = slots?.[n], type = tpl.slots?.find(s => s.name === n)?.type, agg = type === "agg" ? (typeof v === "object" ? v?.agg : v) : null;

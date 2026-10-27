@@ -8,6 +8,7 @@ from integrations.adapters import transport
 API = "https://api.notion.com/v1"
 VERSION = "2022-06-28"
 TEXT_LIMIT = 2000  # rich_text 한 조각의 글자 수 상한
+RICH_LIMIT = 100  # rich_text 배열 하나의 조각 수 상한(Notion API 문서 Request limits: arrays 100 elements)
 PAGE_ID = re.compile(r"[0-9a-fA-F]{32}$")  # 주소 끝(빼기를 지운 뒤)의 ID
 
 
@@ -28,7 +29,8 @@ def call(token, method, path, body=None):
 
 
 def rich(text):
-    """긴 글은 TEXT_LIMIT자씩 나눈 rich_text 조각들."""
+    """긴 글은 TEXT_LIMIT자씩 나눈 rich_text 조각들. 조각은 RICH_LIMIT개까지(넘는 글은 잘라 '… 잘림')."""
+    text = transport.cut(text, TEXT_LIMIT * RICH_LIMIT)
     return [{"type": "text", "text": {"content": text[i:i + TEXT_LIMIT]}} for i in range(0, len(text), TEXT_LIMIT)] or [{"type": "text", "text": {"content": ""}}]
 
 

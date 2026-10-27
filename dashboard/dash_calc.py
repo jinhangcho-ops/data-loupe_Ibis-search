@@ -419,12 +419,12 @@ def with_period(body, date, window):
     return {**body, "periods": [*(body.get("periods") or []), f"{date} {window.get('start') or ''} ~ {window.get('end') or ''}"]}
 
 
-OWN_PERIOD = re.compile(r"(\S+)\s+(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})")  # 카드의 기간 줄 '날짜컬럼 시작 ~ 끝'(양쪽이 날짜인 것만)
+OWN_PERIOD = re.compile(r"(.+?)\s+(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})")  # 카드의 기간 줄 '날짜컬럼 시작 ~ 끝'(양쪽이 날짜인 것만). 날짜를 끝에서 읽어 공백 있는 컬럼 이름도 된다
 
 
 def own_range(card):
     """대시보드 기간이 비었을 때 카드 자신의 기간 줄(source.body.periods 중 양쪽 날짜가 다 있고 시작이 끝보다 늦지 않은 첫 줄)을 보는 기간으로,
-    바로 앞 같은 일수를 직전 기간으로 삼은 {range, prev: {start, end, text}, column, line}. 열린 쪽이 있는 줄은 건너뛰고, 없으면 None. static/dash.js의 ownRange와 같은 규칙이다."""
+    바로 앞 같은 일수를 직전 기간으로 삼은 {range, prev: {start, end, text}, column, line}. 열린 쪽이 있는 줄은 건너뛰고, 없으면 None. static/core/dash.js의 ownRange와 같은 규칙이다."""
     for i, line in enumerate(((card.get("source") or {}).get("body") or {}).get("periods") or []):
         m = OWN_PERIOD.fullmatch(str(line).strip())
         if not m or m[2] > m[3]:

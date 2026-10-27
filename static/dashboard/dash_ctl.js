@@ -19,7 +19,7 @@ class DashCtl {
     this.liveBtn = el("button", { className: "btn", textContent: "시작", onclick: () => this.toggleLive() });
     this.liveNote = el("div", { className: "hint dc-note" });
     this.past = el("span", { className: "dc-past hidden", textContent: "과거 시점을 보는 중" });
-    this.min = el("input", { type: "number", min: 0, placeholder: "제한 없음", title: "이 연결의 실시간 간격 최소(초). 비우거나 0이면 제한 없음" });
+    this.min = el("input", { type: "number", min: 0, placeholder: "기본값", title: "이 연결의 실시간 간격 최소(초). 비우거나 0이면 기본값(원격 연결 60초, 이 PC 파일은 제한 없음)" });
     this.minBtn = el("button", { className: "btn", textContent: "적용", onclick: () => this.saveMin() });
     this.minNote = el("div", { className: "hint dc-note" });
     root.className = "dctl";

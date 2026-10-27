@@ -363,7 +363,7 @@ def parse_one(line, expr, quotes=True):
         col, lo, hi = m.groups()
         c = get(col)
         lo, hi = unquote(lo, quotes), unquote(hi, quotes)
-        after = c.type().is_timestamp() and next_day(hi)  # 끝을 날짜로만 쓰면 그날 끝까지(기간과 같은 규칙)
+        after = end_after(c.type(), hi, convert(c.type(), hi))  # 끝을 날짜로만 쓰면 그날 끝까지, HH:MM이면 그 분 끝까지(기간과 같은 규칙)
         if after:
             return (c >= convert(c.type(), lo)) & (c < after)
         return c.between(convert(c.type(), lo), convert(c.type(), hi))

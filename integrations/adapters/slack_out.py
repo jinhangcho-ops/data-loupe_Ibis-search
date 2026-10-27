@@ -5,6 +5,7 @@ import urllib.parse
 from integrations.adapters import transport
 
 SLACK_API = "https://slack.com/api"
+TEXT_LIMIT = 40_000  # 메시지 글의 글자 수 상한(Slack chat.postMessage 문서: text는 40,000자에서 잘림)
 
 
 def call(token, method, body, form=False):
@@ -20,7 +21,8 @@ def call(token, method, body, form=False):
 def send(fields, m):
     """글은 chat.postMessage로. 그림이 있으면 파일 올리기(getUploadURLExternal → 받은 주소에 바이트 → completeUploadExternal)로 글과 함께."""
     token, channel = fields["token"], fields["channel"]
-    text = f"*{m['title']}*\n{m['text']}" + (f"\n```\n{m['table']}\n```" if m["table"] else "")
+    head = f"*{m['title']}*\n{m['text']}"
+    text = head + (f"\n```\n{transport.cut(m['table'], TEXT_LIMIT - len(head) - 9)}\n```" if m["table"] else "")  # 9: 코드 블록 표시
     if not m["image"]:
         call(token, "chat.postMessage", {"channel": channel, "text": text})
         return

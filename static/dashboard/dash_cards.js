@@ -30,7 +30,7 @@ function gaugeSegments(values, gap = RING_GAP) {
 function stripeCells(ratio, n, targetRatio) {
   return { filled: Math.round(clamp(ratio, 0, 1) * n), target: targetRatio == null ? null : clamp(Math.round(targetRatio * n), 1, n) };
 }
-// 블록: 한 칸 = size. 실제 칸, 목표까지 모자란 칸, 목표를 넘은 칸. 칸이 cap을 넘으면 같은 비율로 줄인다(scale = 줄인 배수).
+// 블록: 한 칸 = size. 실제 칸, 목표까지 모자란 칸, 목표를 넘은 칸(실제 칸 안의 마지막 over 칸). 칸이 cap을 넘으면 같은 비율로 줄인다(scale = 줄인 배수).
 function blockCells(value, target, size, cap = 200) {
   const actual = Math.floor(value / size), goal = target == null ? actual : Math.floor(target / size), scale = Math.max(1, Math.ceil(Math.max(actual, goal) / cap));
   return { actual: Math.floor(actual / scale), toTarget: Math.max(0, Math.floor(goal / scale) - Math.floor(actual / scale)), over: Math.max(0, Math.floor((actual - goal) / scale)), scale };
@@ -193,9 +193,9 @@ function paintStripes(card, colors) {
 // blocks: 칸 하나 = view.size. 실제(채움) · 목표까지(빗금 윤곽) · 목표를 넘은 칸(진한 색)
 function paintBlocks(card, colors) {
   const v = cardValue(card) ?? 0, target = cardTarget(card), fmt = cardFormat(card), size = card.view?.size || Math.max(+(Math.max(v, target ?? 0) / 20).toPrecision(1), 1e-9);
-  const b = blockCells(v, target, size), per = 20, W = 260, cell = W / per - 3, color = pickColor(card, "series", card.title, colors, 0), total = b.actual + b.toTarget + b.over;
+  const b = blockCells(v, target, size), per = 20, W = 260, cell = W / per - 3, color = pickColor(card, "series", card.title, colors, 0), total = b.actual + b.toTarget;
   const rects = Array.from({ length: total }, (_, i) => svg("rect", { x: (i % per) * (cell + 3), y: Math.floor(i / per) * (cell + 3), width: cell, height: cell, rx: 2,
-    fill: i < b.actual ? color : i < b.actual + b.toTarget ? "none" : darken(color), stroke: i < b.actual ? "none" : i < b.actual + b.toTarget ? color : "none", "stroke-dasharray": i < b.actual ? null : "3 2" }));
+    fill: i < b.actual - b.over ? color : i < b.actual ? darken(color) : "none", stroke: i < b.actual ? "none" : color, "stroke-dasharray": i < b.actual ? null : "3 2" }));
   const H = Math.ceil(total / per) * (cell + 3) + 28;
   return frame(W, H, ...rects, stext(0, H - 8, `칸 하나 ${showValue(size * b.scale, fmt)} · ${showValue(v, fmt)}${target != null ? ` / 목표 ${showValue(target, fmt)}` : ""}`, { "font-size": 11, fill: colors.text }));
 }

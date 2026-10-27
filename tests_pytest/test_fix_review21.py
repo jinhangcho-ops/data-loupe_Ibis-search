@@ -70,14 +70,15 @@ def test_metric_list_sentence_particles():
     start = src.index("  const PAIRS = {")
     body = src[start:src.index("\n", src.index("return !text ? all", start)) + 1]
     m06, m10 = sentences.get("m06"), sentences.get("m10")
-    js = ("globalThis.SERVER = { agg_names: { sum: '합계' } };\n" + body + "\nconsole.log(JSON.stringify([sentRender(%s, {'지표 A': 'm1'}, {m1: '매출'}), sentRender(%s, %s), sentRender(%s, {'지표 A': 'm2'}, {m2: 'GMV'})]));"
-          % (json.dumps(m06), json.dumps(m10), json.dumps({s["name"]: ({"agg": "sum"} if s["type"] == "agg" else s["name"]) for s in m10["slots"]}), json.dumps(m06)))
+    js = ("globalThis.SERVER = { agg_names: { sum: '합계' } };\n" + body + "\nconsole.log(JSON.stringify([sentRender(%s, {'지표 A': 'm1'}, {m1: '매출'}), sentRender(%s, %s), sentRender(%s, {'지표 A': 'm2'}, {m2: 'GMV'}), sentRender(%s, {'테이블 A': 'a', '테이블 B': 'b', '연결 컬럼': 'store_num'})]));"
+          % (json.dumps(m06), json.dumps(m10), json.dumps({s["name"]: ({"agg": "sum"} if s["type"] == "agg" else s["name"]) for s in m10["slots"]}), json.dumps(m06), json.dumps(sentences.get("e16"))))
     out = subprocess.run(["node", "-e", js], capture_output=True, text=True, encoding="utf-8")
     assert out.returncode == 0, out.stderr
     got = json.loads(out.stdout)
     assert got[0] == sentence_run.render("m06", {"지표 A": "매출"})
     assert "합계" in got[1] and "sum" not in got[1]
     assert got[2] == sentence_run.render("m06", {"지표 A": "GMV"})  # 영문 끝(V)은 받침 없는 소리로(가)
+    assert got[3] == sentence_run.render("e16", {"테이블 A": "a", "테이블 B": "b", "연결 컬럼": "store_num"})  # 화면도 store_num으로
 
 
 @pytest.mark.parametrize("line, rows", [("ts <= 2026-01-02 23:59", 1), ("ts = 2026-01-02 23:59", 1), ("ts > 2026-01-02 23:59", 0), ("ts != 2026-01-02 23:59", 0), ("ts <= 2026-01-02 23:58", 0)])
@@ -107,3 +108,23 @@ def test_examples_in_hints_work():
     assert "like 김%" not in (ROOT / "static/prep/prep.html").read_text(encoding="utf-8")
     assert "지난 7일" not in (ROOT / "static/query/sentences.js").read_text(encoding="utf-8")
     assert period.parse("최근 7일", "2026-10-27")["error"] is None
+
+
+def test_latin_m_n_end_takes_euro():
+    """영문 M·N 끝은 ㅁ·ㄴ 받침(으로), L은 ㄹ(로). 단위 칸에 글자가 아닌 값이 와도 render가 터지지 않는다."""
+    from query import sentence_run
+    assert "store_num으로 이어진" in sentence_run.render("e16", {"테이블 A": "a", "테이블 B": "b", "연결 컬럼": "store_num"})
+    assert "store_url로 이어진" in sentence_run.render("e16", {"테이블 A": "a", "테이블 B": "b", "연결 컬럼": "store_url"})
+    assert sentence_run.render("e42", {"날짜 A": "a", "날짜 B": "b", "단위": {"x": 1}})
+    assert sentence_run.render("e42", {"날짜 A": "a", "날짜 B": "b", "단위": 5})
+
+
+def test_between_hhmm_end_includes_that_minute():
+    import duckdb
+    import ibis
+    from core import parse
+    raw = duckdb.connect()
+    raw.execute("create table t as select timestamp '2026-01-02 23:59:30' ts")
+    t = ibis.duckdb.from_connection(raw).table("t")
+    assert t.filter(parse.parse_condition("ts between 2026-01-01 2026-01-02T23:59", t)).count().execute() == 1
+    assert t.filter(parse.parse_condition("ts between 2026-01-01 2026-01-02", t)).count().execute() == 1

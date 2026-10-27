@@ -18,6 +18,7 @@ credentials = Later("core.credentials")
 MAX_DESTINATIONS = 30
 MAX_DESTINATION_SIZE = 20_000  # 보낼 곳 하나의 크기(JSON 글자 수)
 MAX_TABLE_ROWS = 50  # 글자로 만들어 보내는 표의 최대 행 수
+MAX_CELL = 200  # 표 칸 하나의 최대 글자 수(넘으면 잘라 …). 전체 길이는 어댑터가 서비스 한도에서 자른다
 MAX_IMAGE = 5 * 1024 * 1024  # 그림(PNG)의 최대 바이트 수
 PNG_PREFIX = "data:image/png;base64,"
 FILE = "destinations.json"
@@ -88,11 +89,11 @@ def duration_text(seconds):
 
 
 def table_text(table):
-    """표 {columns, rows}를 머리글과 행을 ' | '로 구분한 여러 줄 글자로. 행은 MAX_TABLE_ROWS까지."""
+    """표 {columns, rows}를 머리글과 행을 ' | '로 구분한 여러 줄 글자로. 행은 MAX_TABLE_ROWS까지, 칸은 MAX_CELL자까지."""
     if not isinstance(table, dict) or not isinstance(table.get("columns"), list) or not isinstance(table.get("rows"), list):
         raise ValueError('표는 {"columns": [...], "rows": [...]} 모양이어야 합니다.')
     columns, rows = table["columns"], table["rows"]
-    cell = lambda value: "" if value is None else str(value)
+    cell = lambda value: "" if value is None else (text if len(text := str(value)) <= MAX_CELL else text[:MAX_CELL - 1] + "…")
     lines = [" | ".join(map(cell, columns))]
     for row in rows[:MAX_TABLE_ROWS]:
         lines.append(" | ".join(map(cell, [row.get(c) for c in columns] if isinstance(row, dict) else row)))

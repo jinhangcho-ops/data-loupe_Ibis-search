@@ -90,9 +90,9 @@ function parseRuleLine(line) {
   return found.error ? { error: found.error } : { rule };
 }
 const LEVEL_WORDS = { 주의: "warn", warn: "warn", 이상: "bad", bad: "bad" };
-// `컬럼 연산자 값 단계(주의·이상)` → { rule: {column, op, value, level} } 또는 { error }. 예: cpu >= 90 이상
+// `컬럼 연산자 값 단계(주의·이상)` → { rule: {column, op, value, level} } 또는 { error }. 예: cpu >= 90 이상. 첫 연산자 왼쪽 전체가 컬럼(공백 있는 이름도)
 function parseStateLine(line) {
-  const m = line.trim().match(/^(\S+)\s*(>=|<=|!=|>|<|=)\s*(.+?)\s+(\S+)$/);
+  const m = line.trim().match(/^(.+?)\s*(>=|<=|!=|>|<|=)\s*(.+?)\s+(\S+)$/);
   if (!m) return { error: "‘컬럼 연산자 값 단계’ 모양으로 적어 주세요. 예: cpu >= 90 이상" };
   if (!(m[4] in LEVEL_WORDS)) return { error: `단계는 주의나 이상이에요(‘${m[4]}’)` };
   const n = ruleNumber(m[3]);

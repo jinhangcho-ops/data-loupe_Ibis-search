@@ -68,7 +68,7 @@ def render(tid, slots):
     def one(m):
         v = slots.get(m.group(1))
         agg = (v.get("agg") if isinstance(v, dict) else v) if kinds.get(m.group(1)) == "agg" else None
-        text = sql_funcs.label_of(agg) if agg in sql_funcs.FUNCS else sql_funcs.UNIT_NAMES.get(v, v) if kinds.get(m.group(1)) == "unit" else shown(v)
+        text = sql_funcs.label_of(agg) if agg in sql_funcs.FUNCS else sql_funcs.UNIT_NAMES.get(shown(v), shown(v)) if kinds.get(m.group(1)) == "unit" else shown(v)
         return text + josa(text, m.group(2)) if text and m.group(2) else text or m.group(0)
     return PARTICLE.sub(one, t["text"])
 
