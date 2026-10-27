@@ -13,7 +13,7 @@ from tests_pytest.test_dash_calc import card, compute, db  # noqa: F401  db는 f
 
 
 def test_dashboard_period_with_time_is_refused(db):
-    span = db.post("/api/period/parse", json={"text": "2026-10-05 09:00 ~ 2026-10-05 17:00", "as_of": ""}).get_json()
+    span = db.post("/api/period/parse", json={"text": "2026-10-05 09:00 ~ 2026-10-05 17:00", "as_of": "", "dashboard": True}).get_json()
     assert "날짜로" in span["span"]["error"] and span["context"] is None
 
 

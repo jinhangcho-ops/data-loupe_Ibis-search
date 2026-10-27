@@ -157,7 +157,7 @@ def test_live_min_routes(client, monkeypatch):
 
 def test_context_for_refresh_uses_period_and_as_of():
     got = refresh.context({"period": "2026-03", "as_of": "2026-03-15"})
-    assert got == {"range": {"start": "2026-03-01", "end": "2026-03-15"}, "prev": {"start": "2026-02-01", "end": "2026-02-15", "text": "지난달 같은 기간"}}
+    assert got == {"range": {"start": "2026-03-01", "end": "2026-03-15"}, "prev": {"start": "2026-02-01", "end": "2026-02-15", "text": "지난달 같은 기간"}, "months": 1}
     assert refresh.context({"period": "최근 7일", "as_of": ""}, dt.date(2026, 10, 22))["range"] == {"start": "2026-10-15", "end": "2026-10-21"}  # 최근 N일은 어제까지
     assert refresh.context({"period": "~ 2026-03-31", "as_of": ""}, dt.date(2026, 10, 22))["range"] == {"start": None, "end": "2026-03-31"} and refresh.context({"period": "엉터리"}) is None
     assert {"kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend"} <= set(refresh.REFRESHABLE) and "recent_rows" not in refresh.REFRESHABLE

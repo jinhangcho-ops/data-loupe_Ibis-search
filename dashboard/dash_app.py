@@ -197,7 +197,7 @@ def period_parse():
     body = request.json or {}
     day = (body.get("as_of") or "").strip() or None
     span = period.parse(body.get("text"), day)
-    if not span["error"] and dash_refresh.timed(span):
+    if not span["error"] and body.get("dashboard") and dash_refresh.timed(span):  # 문장·지표 사전의 기간 칸은 시각도 쓴다
         span = {**span, "error": "대시보드 기간은 날짜로 써 주세요(시각은 쓰지 않습니다)."}
     return jsonify(span=span, previous=None if span["error"] else period.previous(span), context=dash_refresh.context({"period": body.get("text"), "as_of": day}))
 

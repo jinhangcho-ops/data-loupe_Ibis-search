@@ -838,8 +838,10 @@ def metric_def(p):
         p.combine = {"op": "mean_of", "a": i}
     elif no == 14:
         col, start, end = period_parts(p)
-        from dashboard import period  # 대시보드 기간 칸과 같은 직전 기간(달 단위로 꼭 맞으면 직전 같은 개월 수)
-        span = period.previous({"start": start.isoformat(), "end": end.isoformat()})
+        from dashboard import period  # 대시보드 기간 칸과 같은 직전 기간(달 단위로 꼭 맞으면 직전 같은 개월 수, 이번 달·올해는 직전 단위의 같은 위치)
+        v = p.get("기간")
+        to_date = v.get("to_date") if isinstance(v, dict) else None
+        span = period.previous({"start": start.isoformat(), "end": end.isoformat(), "to_date": to_date})
         if span.get("error"):
             raise ValueError(span["error"])
         before = f"{col} {span['start']} ~ {span['end']}"
@@ -848,7 +850,7 @@ def metric_def(p):
         ref = metric_ref(p, "지표")
         a, b = metric_run(p, "이번 기간", ref), metric_run(p, "직전 같은 기간", ref, body=prev)
         p.combine = {"op": "change", "a": a, "b": b}
-        p.notes.append(f"직전 같은 기간은 {span['start']} ~ {span['end']}({period.previous_text(start, end)})이에요.")
+        p.notes.append(f"직전 같은 기간은 {span['start']} ~ {span['end']}({span['label'] if to_date in period.TO_DATE_BEFORE else period.previous_text(start, end)})이에요.")
     elif no == 15:
         order = order_name(p, "정렬 기준")
         i = metric_run(p, "정렬 기준마다 지표", metric_ref(p, "지표"), by=order)

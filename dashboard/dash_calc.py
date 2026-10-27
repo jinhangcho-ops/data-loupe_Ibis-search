@@ -464,14 +464,17 @@ def scalars(expr, series):
 
 def target_period(ctx):
     """대시보드의 보는 기간(ctx)이 달·분기·연 하나면 목표 파일의 기간 글자('2026-10'·'2026-Q4'·'2026'), 아니면 None.
-    기준일로 잘린 기간은 직전 기간 글(지난달·직전 분기·작년 같은 기간)로, 다 지난 기간은 1일~그 달 끝으로 알아본다(dash_refresh.context가 만든 모양)."""
+    기준일로 잘린 기간은 원래 개월 수(months)로, 이번 달·올해는 직전 기간 글로, 다 지난 기간은 1일~그 달 끝으로 알아본다(dash_refresh.context가 만든 모양)."""
     rng = (ctx or {}).get("range") or {}
     start, end = rng.get("start"), rng.get("end")
     if not start or not end or start[8:10] != "01":
         return None
     first, last = dt.date.fromisoformat(start[:10]), dt.date.fromisoformat(end[:10])
-    months = {"지난달 같은 기간": 1, "직전 분기 같은 기간": 3, "작년 같은 기간": 12}.get(((ctx or {}).get("prev") or {}).get("text"))
-    if months is None and last == period.month_end(last.year, last.month):
+    if "months" in ctx:  # 기준일로 잘린 기간: 3-01~3-20을 3-10에 보면 3월 목표가 아니다
+        months = ctx["months"]
+    else:
+        months = {"지난달 같은 기간": 1, "작년 같은 기간": 12}.get((ctx.get("prev") or {}).get("text"))
+    if months is None and "months" not in ctx and last == period.month_end(last.year, last.month):
         months = (last.year - first.year) * 12 + last.month - first.month + 1
     if months == 1:
         return start[:7]

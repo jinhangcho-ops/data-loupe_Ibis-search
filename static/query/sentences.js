@@ -41,8 +41,8 @@ function sentFitColumns(tpl, slots, columns) {
   });
   return { slots: out, gone };
 }
-// 기간 칸 값: 날짜 컬럼 + 읽은 기간({start, end}). 읽지 못했거나 컬럼이 없으면 null
-const sentPeriod = (column, span) => (column && span && !span.error && (span.start || span.end) ? { column, start: span.start ?? "", end: span.end ?? "" } : null);
+// 기간 칸 값: 날짜 컬럼 + 읽은 기간({start, end}, 이번 주·달·올해면 to_date도). 읽지 못했거나 컬럼이 없으면 null
+const sentPeriod = (column, span) => (column && span && !span.error && (span.start || span.end) ? { column, start: span.start ?? "", end: span.end ?? "", ...(span.to_date ? { to_date: span.to_date } : {}) } : null);
 // 틀 목록 걸러내기: 번호·이름·문장에 들어 있는 글자
 const sentFilter = (templates, query) => { const q = String(query ?? "").trim().toLowerCase(); return templates.filter(t => !q || `${t.no} ${t.name} ${t.text}`.toLowerCase().includes(q)); };
 // {컬럼: 종류} ← [[이름, 화면 타입]] (Funcs.kindOf가 서버 타입 이름을 종류로 바꾼다)

@@ -739,7 +739,7 @@ def struct_field(c):
 
 row("struct_field", "struct", "구조 필드", "구조 컬럼 안의 필드 하나.", [col(kinds="struct"), text("field", "필드 이름", "name")], struct_field, "struct_field(주소, 'city')", "struct", "any")
 row("array_length", "struct", "목록 길이", "목록에 값이 몇 개인지.", [col(kinds="array")], lambda c: c.x.length(), "array_length(태그)", "array", NUM)
-row("array_get", "struct", "목록 N번째", "목록의 N번째 값(1부터).", [col(kinds="array"), num("n", "N번째", 1, kind="int")], lambda c: c.x[c.n - 1], "array_get(태그, 1)", "array", "any")
+row("array_get", "struct", "목록 N번째", "목록의 N번째 값(1부터).", [col(kinds="array"), num("n", "N번째", 1, kind="int")], lambda c: c.x[not_zero(c.n, "N번째") - 1], "array_get(태그, 1)", "array", "any")
 add("unnest", "struct", "목록 펼치기", "목록 컬럼의 값마다 행을 하나씩 만들어요.", [col(kinds="array")], lambda c: c.t.unnest(c.x.get_name()), "unnest(태그)", "array", table=True)
 
 # ---------- 좌표 ----------

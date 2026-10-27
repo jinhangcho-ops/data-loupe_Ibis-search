@@ -110,6 +110,7 @@ def context(d, today=None):
     if span["start"] and day < span["start"][:10]:
         return {"range": {"start": span["start"][:10], "end": end}, "prev": None}  # 기준일이 기간이 시작되기 전: 보는 기간은 비었고 견줄 직전 기간도 없다
     cut = span["start"] and span["end"] and span["start"][:10] <= day < span["end"][:10]  # 기준일이 기간 안이라 잘렸으면 직전 기간도 잘라 맞춘다
+    aligned = None
     if cut:
         first, last, today = (dt.date.fromisoformat(x[:10]) for x in (span["start"], span["end"], day))
         aligned = period.month_count(first, last)
@@ -130,7 +131,7 @@ def context(d, today=None):
     months = None if before["error"] or span.get("to_date") else period.month_count(first, dt.date.fromisoformat(before["end"][:10]))
     prev = None if before["error"] else {"start": before["start"][:10], "end": before["end"][:10],
                                          "text": before["label"] if span.get("to_date") else period.month_name(months, first) if months else f"직전 {before['days']}일"}
-    return {"range": {"start": span["start"] and span["start"][:10], "end": end}, "prev": prev}
+    return {"range": {"start": span["start"] and span["start"][:10], "end": end}, "prev": prev, **({"months": aligned} if cut else {})}  # months: 잘린 기간의 원래 개월 수(달에 맞지 않으면 None) → 목표 달
 
 
 def geo_sqls(card, con):

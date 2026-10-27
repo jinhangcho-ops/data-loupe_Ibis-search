@@ -73,11 +73,11 @@ def test_fit_columns_other_table(tmp_path):
 
 
 def test_period_slot_filter_kinds(tmp_path):
-    got = run_node(tmp_path, "console.log(JSON.stringify({ ok: sentPeriod('day', { start: '2026-03-01', end: '2026-03-31' }), open: sentPeriod('day', { start: '2026-03-01' }), err: sentPeriod('day', { error: 'x' }), none: sentPeriod('', { start: 'a' }),"
+    got = run_node(tmp_path, "console.log(JSON.stringify({ ok: sentPeriod('day', { start: '2026-03-01', end: '2026-03-31' }), open: sentPeriod('day', { start: '2026-03-01' }), err: sentPeriod('day', { error: 'x' }), none: sentPeriod('', { start: 'a' }), td: sentPeriod('day', { start: '2026-10-01', end: '2026-10-28', to_date: 'month' }),"
                    " f: sentFilter(%s, '중앙값').map(t => t.id), all: sentFilter(%s, '').length, kinds: sentKinds([['a', '정수'], ['b', '문자']], t => t === '정수' ? 'num' : 'text'), chip: ['num', 'date', 'text', 'json'].map(sentChip), fit: [sentFits('any', 'num'), sentFits(['num', 'date'], 'text'), sentFits('text', 'text')] }));"
                    % (json.dumps(sentences.EXPLORE, ensure_ascii=False), json.dumps(sentences.EXPLORE, ensure_ascii=False)))
     assert got["ok"] == {"column": "day", "start": "2026-03-01", "end": "2026-03-31"} and got["open"] == {"column": "day", "start": "2026-03-01", "end": ""}
-    assert got["err"] is None and got["none"] is None and got["f"] == ["e26"] and got["all"] == 50
+    assert got["td"]["to_date"] == "month" and got["err"] is None and got["none"] is None and got["f"] == ["e26"] and got["all"] == 50
     assert got["kinds"] == {"a": "num", "b": "text"} and got["chip"] == ["num", "date", "text", "other"] and got["fit"] == [True, False, True]
 
 
