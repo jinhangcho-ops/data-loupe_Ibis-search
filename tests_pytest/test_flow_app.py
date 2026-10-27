@@ -71,12 +71,9 @@ def test_keys_route_on_remote_sends_no_value_queries(c, monkeypatch):
     monkeypatch.setattr(held, "remote", lambda con: True)
     sent = spy_queries(monkeypatch)
     code, body = post(c, "/api/join_keys", a={"table": "sales"}, b={"table": "shops"})
-    assert code == 200 and body["basis"] == "표본 없음" and "원격 DB라 값을 읽는 조회를 새로 보내지 않았어요" in body["note"]
+    assert code == 200 and body["basis"] == "표본 없음" and body["candidates"][0]["basis"] == "표본 없음"
     assert body["candidates"][0]["keys"] == [["shop_id", "shop_id"]]  # 이름·타입만으로도 같은 이름 키가 1등
     assert sent == [], sent
-    code, body = post(c, "/api/join_keys", a={"table": "sales"}, b={"table": "shops"}, full=True)
-    assert code == 400 and body["error"].startswith("원격 DB에서는 전체 값 확인을 하지 않아요")
-    assert sent == []
 
 
 def test_my_metric_routes(c):

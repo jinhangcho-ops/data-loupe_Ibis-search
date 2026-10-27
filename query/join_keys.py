@@ -18,7 +18,6 @@ MIN_SCORE = 0.3  # 후보로 보이는 점수
 COMPOSITE_BELOW = 0.5  # 단일 키 겹침이 이보다 작으면 두 컬럼 묶음도 본다
 COMPOSITE_B_MAX = 2_000_000  # 묶음 겹침을 볼 때 B에서 받는 서로 다른 값 쌍의 상한
 WEIGHTS = {"name": 0.35, "contain": 0.45, "type": 0.10, "unique": 0.10}
-DATE_UNITS = ("day", "week", "month")
 CAST_TYPE = 0.3  # 글자↔숫자·날짜처럼 바꿔야 비교되는 짝의 타입 점수
 NO_SAMPLE = "표본 없음"
 CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
@@ -95,16 +94,6 @@ def db_containment(b, cb, a_vals, cast):
     return min(1.0, found / len(a_vals))
 
 
-def full_containment(a, ca, b, cb, cast):
-    """A의 서로 다른 값 전체가 B에 있는 비율(semi join). 큰 테이블에서는 오래 걸린다."""
-    av = a.filter(a[ca].notnull()).select(v=a[ca].cast("string") if cast else a[ca]).distinct()
-    bv = b.filter(b[cb].notnull()).select(w=b[cb].cast("string") if cast else b[cb]).distinct()
-    total = av.count().to_pyarrow().as_py()
-    if not total:
-        return None
-    return av.semi_join(bv, av.v == bv.w).count().to_pyarrow().as_py() / total
-
-
 def unique_in(frame, col):
     """표본 표에서 컬럼 값이 모두 다른지(빈 값은 뺀다)."""
     values = frame[col].drop_nulls()
@@ -172,16 +161,6 @@ def decide(cands):
     return "ask", cands[:3]
 
 
-def date_alignment(a, b, a_name, b_name):
-    """키 후보가 없을 때: 양쪽 날짜 컬럼을 일·주·월로 맞추는 제안 {a, b, units, default}. 날짜 컬럼이 없으면 None."""
-    dates = lambda t: [c for c, ty in t.schema().items() if parse.kind(ty) == "date"]
-    pairs = [(ca, cb) for ca in dates(a) for cb in dates(b)]
-    if not pairs:
-        return None
-    ca, cb = max(pairs, key=lambda p: name_score(p[0], p[1], a_name, b_name))
-    return {"a": ca, "b": cb, "units": list(DATE_UNITS), "default": "day", "text": f"‘{ca}’과 ‘{cb}’을 일·주·월 단위로 맞춰 이을 수 있어요."}
-
-
 def sample_frames(a, b, samples, remote):
     """(A 표본, B 표본) Polars 표 또는 (None, None). 주어진 표본이 있으면 그것, 로컬 연결이면 앞 SAMPLE_ROWS행, 원격이면 없음(새 조회를 보내지 않는다)."""
     if samples:
@@ -191,9 +170,9 @@ def sample_frames(a, b, samples, remote):
     return a.limit(SAMPLE_ROWS).to_polars(), b.limit(SAMPLE_ROWS).to_polars()
 
 
-def suggest(a, b, a_name="", b_name="", remote=False, samples=None, full=False):
-    """A·B(Ibis 표)의 공통 키 제안 {decision, candidates, date, basis, note}.
-    remote: 원격 DB면 값을 읽는 새 조회를 보내지 않는다. samples = {a, b}(Polars 표): 이미 있는 표본(없으면 로컬은 앞 SAMPLE_ROWS행). full: 전체로 확인(로컬만). decision: auto·ask·none."""
+def suggest(a, b, a_name="", b_name="", remote=False, samples=None):
+    """A·B(Ibis 표)의 공통 키 제안 {decision, candidates, basis}.
+    remote: 원격 DB면 값을 읽는 새 조회를 보내지 않는다. samples = {a, b}(Polars 표): 이미 있는 표본(없으면 로컬은 앞 SAMPLE_ROWS행). decision: auto·ask·none."""
     pairs = pre_pairs(a, b, a_name, b_name)
     fa, fb = sample_frames(a, b, samples, remote)
     sampled = fa is not None and fb is not None
@@ -211,11 +190,7 @@ def suggest(a, b, a_name="", b_name="", remote=False, samples=None, full=False):
         if sampled and (remote or not fa.height):
             contain, basis = cheap[ca, cb], "표본 기준"
         elif sampled:
-            values = column_values(fa, ca)
-            if full:
-                contain, basis = full_containment(a, ca, b, cb, cast), "전체"
-            else:
-                contain, basis = db_containment(b, cb, values, cast), "표본 기준"
+            contain, basis = db_containment(b, cb, column_values(fa, ca), cast), "표본 기준"
         else:
             contain, basis = None, NO_SAMPLE
         if sampled:
@@ -231,10 +206,7 @@ def suggest(a, b, a_name="", b_name="", remote=False, samples=None, full=False):
         singles += composites(a, b, singles[:4], fa, a_name, b_name)
         singles.sort(key=lambda c: (-c["score"], c["a"], c["b"]))
     decision, top = decide(singles)
-    basis = NO_SAMPLE if not sampled else ("전체" if full else "표본 기준")
-    note = ("원격 DB라 값을 읽는 조회를 새로 보내지 않았어요. 이미 받아 둔 표본이 없어서 이름·타입으로만 점수를 냈어요." if remote and not sampled
-            else "표본 기준이에요. [전체로 확인]을 누르면 전체 값으로 다시 재요." if basis == "표본 기준" else "")
-    return {"decision": decision, "candidates": top, "date": date_alignment(a, b, a_name, b_name) if decision == "none" else None, "basis": basis, "note": note}
+    return {"decision": decision, "candidates": top, "basis": "표본 기준" if sampled else NO_SAMPLE}
 
 
 def wider(left, right):

@@ -77,13 +77,6 @@ def test_text_to_number_pairs_are_marked_as_needing_a_cast(db):
     assert best["score"] == pytest.approx(0.35 * 0.9 + 0.45 + 0.10 * 0.3 + 0.10)
 
 
-def test_no_candidate_offers_date_alignment(db):
-    found = pair(db, "t1", "t2")
-    assert found["decision"] == "none" and found["candidates"] == []
-    assert found["date"] == {"a": "d", "b": "e", "units": ["day", "week", "month"], "default": "day", "text": "‘d’과 ‘e’을 일·주·월 단위로 맞춰 이을 수 있어요."}
-    assert pair(db, "orders", "users_txt", "orders", "users")["date"] is None  # 후보가 있으면 날짜 맞춤은 내놓지 않는다
-
-
 def test_composite_key_candidate_when_single_keys_overlap_little(db):
     found = pair(db, "grid", "one")
     assert found["decision"] == "ask"
@@ -93,14 +86,6 @@ def test_composite_key_candidate_when_single_keys_overlap_little(db):
     single = next(c for c in found["candidates"] if c["keys"] == [["x", "x"]])
     assert single["contain"] == 0.25 and single["name"] == 1.0
     assert composite[0]["contain"] == 0.0625  # 값 쌍 16개 중 (0, 0) 하나
-
-
-def test_full_check_uses_all_values(db):
-    found = pair(db, "orders", "users_slim", "orders", "users", full=True)
-    assert found["basis"] == "전체" and found["candidates"][0]["basis"] == "전체" and found["candidates"][0]["contain"] == 1.0
-    assert found["note"] == ""
-    sample = pair(db, "orders", "users_slim", "orders", "users")
-    assert sample["note"] == "표본 기준이에요. [전체로 확인]을 누르면 전체 값으로 다시 재요."
 
 
 # ---------- 원격 DB ----------
@@ -113,7 +98,7 @@ def test_remote_without_samples_sends_nothing_and_relies_on_name_and_type(db, mo
     sent = spy(monkeypatch)
     found = pair(db, "orders", "users", remote=True)
     assert sent == []  # COUNT도 isin 조회도 표본 조회도 보내지 않았다
-    assert found["basis"] == "표본 없음" and "원격 DB라 값을 읽는 조회를 새로 보내지 않았어요" in found["note"]
+    assert found["basis"] == "표본 없음"
     assert all(c["contain"] is None and c["basis"] == "표본 없음" for c in found["candidates"])
     assert "값 겹침은 표본이 없어 보지 못했어요(이름·타입으로만 봤어요)" in found["candidates"][0]["reasons"]
     # 이름·타입으로만: region/region은 이름 1·타입 1 → (0.35 + 0.10) / 0.45 = 1.0, user_id/id는 이름 0.9 → (0.315 + 0.10) / 0.45

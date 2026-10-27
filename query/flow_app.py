@@ -19,7 +19,7 @@ sentence_run = Later("query.sentence_run")
 sentences = Later("query.sentences")
 sql_funcs = Later("core.sql_funcs")
 
-server.CONSTANTS["question_sets"] = {"max_items": 30, "max_size": 40_000}
+MAX_SET_ITEMS, MAX_SET_SIZE = 30, 40_000  # 질문 묶음 하나의 문장 수·저장 크기
 server.FREE.update({"/api/sentences", "/api/question_sets",
                     "/api/my_metrics", "/api/my_metrics/validate", "/api/my_metrics/update", "/api/my_metrics/delete", "/api/my_metrics/copy", "/api/my_metrics/status",
                     "/api/my_metrics/used_by",
@@ -73,18 +73,16 @@ def preview_samples(con, a, b, a_name, b_name):
 
 @app.post("/api/join_keys")
 def find_join_keys():
-    """공통 키 찾기: 후보 점수(이름·겹침·타입·고유), 결정(auto·ask·none), 상위 3개와 근거, 날짜 맞춤 제안.
-    표본 기준이다. full을 주면 전체 값으로 확인한다(로컬 연결만). 원격 DB는 값을 읽는 새 조회를 보내지 않는다(표본이 없으면 이름·타입으로만)."""
+    """공통 키 찾기: 후보 점수(이름·겹침·타입·고유), 결정(auto·ask·none), 상위 3개와 근거.
+    표본 기준이다. 원격 DB는 값을 읽는 새 조회를 보내지 않는다(표본이 없으면 이름·타입으로만)."""
     data = body_of(request.json)
     con = get_con()
     remote = held.remote(con)
-    if remote and data.get("full") is True:
-        raise ValueError("원격 DB에서는 전체 값 확인을 하지 않아요(조회 요금). 표본 기준 결과를 쓰세요.")
 
     def work():
         a, b, an, bn = table_pair(data)
         samples = preview_samples(con, a, b, an, bn) if remote else None
-        return join_keys.suggest(a, b, an, bn, remote=remote, samples=samples, full=data.get("full") is True)
+        return join_keys.suggest(a, b, an, bn, remote=remote, samples=samples)
     return jsonify(**run(work))
 
 
@@ -201,8 +199,8 @@ def check_set(item):
     if item is None:
         return None
     items = item.get("items") if isinstance(item, dict) else None
-    if not isinstance(items, list) or not items or len(items) > server.CONSTANTS["question_sets"]["max_items"]:
-        raise ValueError(f"질문 묶음에는 문장이 1개 이상 {server.CONSTANTS['question_sets']['max_items']}개 이하로 있어야 해요.")
+    if not isinstance(items, list) or not items or len(items) > MAX_SET_ITEMS:
+        raise ValueError(f"질문 묶음에는 문장이 1개 이상 {MAX_SET_ITEMS}개 이하로 있어야 해요.")
     for one in items:
         if not isinstance(one, dict):
             raise ValueError("질문 묶음의 문장이 올바르지 않아요.")
@@ -220,7 +218,7 @@ def question_sets_list():
 def question_sets_save():
     """질문 묶음을 이름으로 저장한다(같은 이름은 덮어씀). set이 null이면 그 이름을 지운다. 바뀐 전체를 돌려준다."""
     data = body_of(request.json)
-    return jsonify(sets=settings.save_named(QUESTION_SETS, "질문 묶음", server.CONSTANTS["question_sets"]["max_size"], data.get("name"), check_set(data.get("set"))))
+    return jsonify(sets=settings.save_named(QUESTION_SETS, "질문 묶음", MAX_SET_SIZE, data.get("name"), check_set(data.get("set"))))
 
 
 @app.post("/api/sentence/check")
