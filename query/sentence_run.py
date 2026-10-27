@@ -11,6 +11,7 @@ import copy
 import re
 
 from query import flow
+from core import compare
 from core import metric_file
 from core import parse
 from query import sentences
@@ -52,11 +53,9 @@ PAIRS = {"으로": ("으로", "로"), "로": ("으로", "로"), "을": ("을", "
 
 
 def josa(word, particle):
-    """word 뒤에 붙일 조사(받침 있으면 앞 것, 없으면 뒤 것. ㄹ 받침 뒤 '로'). 한글로 끝나지 않으면 틀에 적힌 그대로."""
-    last = word[-1:]
-    if not "가" <= last <= "힣":
-        return particle
-    final = (ord(last) - 0xAC00) % 28
+    """word 뒤에 붙일 조사(받침 있으면 앞 것, 없으면 뒤 것. ㄹ 받침 뒤 '로'). 끝이 숫자·영문·%면 읽는 소리로(compare.reading: price를, 금액2를)."""
+    last = compare.reading(word)[-1:]
+    final = (ord(last) - 0xAC00) % 28 if "가" <= last <= "힣" else 0
     has, plain = PAIRS[particle]
     return plain if final == 0 or (has == "으로" and final == 8) else has
 
@@ -69,7 +68,7 @@ def render(tid, slots):
     def one(m):
         v = slots.get(m.group(1))
         agg = (v.get("agg") if isinstance(v, dict) else v) if kinds.get(m.group(1)) == "agg" else None
-        text = sql_funcs.label_of(agg) if agg in sql_funcs.FUNCS else shown(v)
+        text = sql_funcs.label_of(agg) if agg in sql_funcs.FUNCS else sql_funcs.UNIT_NAMES.get(v, v) if kinds.get(m.group(1)) == "unit" else shown(v)
         return text + josa(text, m.group(2)) if text and m.group(2) else text or m.group(0)
     return PARTICLE.sub(one, t["text"])
 

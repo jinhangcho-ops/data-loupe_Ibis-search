@@ -22,7 +22,7 @@ function chartLook() {
   Object.assign(d.datasets.bar, { maxBarThickness: 44, categoryPercentage: 0.72, barPercentage: 0.9 });
   Object.assign(d.elements.line, { borderWidth: 2, borderCapStyle: "round", borderJoinStyle: "round" });
   Object.assign(d.elements.point, { radius: 0, hoverRadius: 5, hitRadius: 10, hoverBorderWidth: 2 });
-  d.interaction = { mode: "index", intersect: false };  // 막대·선은 같은 칸의 값을 한 말풍선에(점 그림은 Chart.js가 점 하나로 바꾼다)
+  d.interaction = { mode: "index", intersect: false };  // 막대·선은 같은 칸의 값을 한 말풍선에(점 그림은 pointsConfig가 점 하나로 바꾼다)
   d.layout.padding = { top: 4, right: 8 };
   Object.assign(d.plugins.legend, { align: "start" });
   Object.assign(d.plugins.legend.labels, { usePointStyle: true, pointStyle: "circle", boxWidth: 8, boxHeight: 8, padding: 14 });
@@ -32,7 +32,8 @@ function chartLook() {
   Object.assign(d.scale.ticks, { padding: 8, maxRotation: 0, autoSkipPadding: 16 });
   d.scale.grid.drawTicks = false;
   d.set("scales.category", { grid: { display: false } });  // 항목 축의 세로 격자는 없앤다(값 축의 가로 격자만)
-  d.scales.linear.ticks.callback = function (v) { return this.axis === "r" || Math.abs(v) < 10000 ? this.getLabelForValue(v) : compact.format(v); };  // 1,200만처럼 짧게
+  const numeric = d.scales.linear.ticks.callback;  // 작은 값은 Chart.js가 간격에 맞춘 자릿수로(0.00015)
+  d.scales.linear.ticks.callback = function (v, i, ticks) { return Math.abs(v) < 10000 ? numeric.call(this, v, i, ticks) : compact.format(v); };  // 1,200만처럼 짧게
 }
 document.querySelectorAll(".pages a").forEach(a => a.classList.toggle("on", a.pathname === location.pathname));  // 지금 화면의 전환 버튼을 누른 모양으로
 const S = { schema: "", base: "", cols: [] };

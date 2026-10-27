@@ -141,12 +141,11 @@ def read_text(path):
     raise ValueError("글자 모양을 알 수 없어요. UTF-8 또는 CP949(한글 엑셀의 CSV)로 저장해 주세요.")
 
 
-def excel_date(cell):
-    """fastexcel이 날짜 칸을 읽은 글자('2026-10-01 00:00:00')를 기간 글자로: 1일이면 '2026-10', 다른 날이면 '2026-10-05'. 다른 칸은 그대로."""
-    found = EXCEL_DATE.fullmatch(cell or "")
-    if not found:
-        return cell
-    return found[1] if found[2] == "-01" else found[1] + found[2]  # 칸에 2026-10을 치면 엑셀은 그 달 1일 0시 날짜로 저장한다
+def excel_dates(table):
+    """fastexcel이 날짜 칸을 읽은 글자('2026-10-01 00:00:00')를 기간 글자로. 열의 날짜가 모두 1일이면 그 열은 달('2026-10'), 아니면 날('2026-10-05'). 다른 칸은 그대로."""
+    found = [[EXCEL_DATE.fullmatch(c or "") for c in cells] for cells in table]
+    days = {i for row in found for i, f in enumerate(row) if f and f[2] != "-01"}  # 칸에 2026-10을 치면 엑셀은 1일 날짜로 저장하지만, 날마다 적은 열의 1일은 그날이다(서식은 읽을 수 없다)
+    return [[(f[1] + f[2] if i in days else f[1]) if f else c for i, (c, f) in enumerate(zip(cells, row))] for cells, row in zip(table, found)]
 
 
 def read_excel(path):
@@ -158,7 +157,7 @@ def read_excel(path):
         table = book.load_sheet_by_name(SHEET if SHEET in names else names[0], header_row=None, dtypes="string").to_polars().rows()
     except Exception as e:
         raise ValueError(f"엑셀 파일을 읽을 수 없어요: {str(e)[:150]}") from None
-    table = [[excel_date(c) for c in cells] for cells in table]
+    table = excel_dates(table)
     for index, cells in enumerate(table):
         if any(c is not None and str(c).strip() for c in cells):
             return table_rows(list(cells), [(n + 1, list(row)) for n, row in enumerate(table) if n > index])

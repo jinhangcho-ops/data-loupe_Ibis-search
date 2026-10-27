@@ -241,7 +241,7 @@ function SentenceView(host, ctx) {
     return row;
   }
   function periodInputs(p, again) {
-    const col = pickCol("date", p.column, v => { p.column = v; again(); }), fb = el("span", { className: "hint pfb" }), input = el("input", { value: p.text, placeholder: "기간 (선택) 예: 지난 7일, 이번 달, 2026-01 ~ 2026-03" });
+    const col = pickCol("date", p.column, v => { p.column = v; again(); }), fb = el("span", { className: "hint pfb" }), input = el("input", { value: p.text, placeholder: "기간 (선택) 예: 최근 7일, 이번 달, 2026-01 ~ 2026-03" });
     const live = async () => {
       p.text = input.value.trim();
       if (!p.text) { p.span = null; fb.textContent = ""; fb.classList.remove("err"); again(); return; }
@@ -430,7 +430,14 @@ function SentenceView(host, ctx) {
       draw(); check();
     }
   }
-  const sentRender = (tpl, slots, names = {}) => tpl.text.replace(/\{([^{}]+)\}/g, (_, n) => { const v = slots?.[n]; return v == null ? `{${n}}` : names[v] ? names[v] : typeof v === "object" ? (v.column ?? (v.agg && (SERVER.agg_names?.[v.agg] ?? v.agg)) ?? v.func ?? v.text ?? JSON.stringify(v)) : Array.isArray(v) ? v.join(", ") : String(v); });
+  // 서버 sentence_run.render와 같은 규칙: 집계 칸은 이름(합계)으로, 빈칸 바로 뒤 조사는 값의 받침에 맞춘다(한글로 끝나지 않으면 틀 그대로)
+  const PAIRS = { "으로": ["으로", "로"], "로": ["으로", "로"], "을": ["을", "를"], "를": ["을", "를"], "은": ["은", "는"], "는": ["은", "는"], "과": ["과", "와"], "와": ["과", "와"], "이(가)": ["이", "가"], "이": ["이", "가"], "가": ["이", "가"] };
+  const spoken = c => /[0-9]/.test(c) ? "영일이삼사오육칠팔구"[c] : /[LMNR]/i.test(c) ? "알" : c === "%" ? "트" : c;  // 서버 compare.reading
+  const josa = (word, p) => { const c = spoken(word.slice(-1)), f = c >= "가" && c <= "힣" ? (c.charCodeAt(0) - 0xAC00) % 28 : 0; const [has, plain] = PAIRS[p]; return f === 0 || (has === "으로" && f === 8) ? plain : has; };
+  const sentRender = (tpl, slots, names = {}) => tpl.text.replace(/\{([^{}]+)\}(이\(가\)|으로|로|을|를|은|는|과|와|이(?=\s)|가(?=\s))?/g, (all, n, p) => {
+    const v = slots?.[n], type = tpl.slots?.find(s => s.name === n)?.type, agg = type === "agg" ? (typeof v === "object" ? v?.agg : v) : null;
+    const text = v == null ? "" : agg && SERVER.agg_names?.[agg] ? SERVER.agg_names[agg] : type === "unit" && cat?.units?.[v] ? cat.units[v] : names[v] ? names[v] : typeof v === "object" ? (v.column ?? v.func ?? v.text ?? JSON.stringify(v)) : Array.isArray(v) ? v.join(", ") : String(v);
+    return !text ? all : p ? text + josa(text, p) : text; });
 
   async function show() {
     tabs.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));

@@ -238,7 +238,7 @@ function pointsConfig(card, colors, options) {
   }
   const title = view.show_r && p.r != null ? { display: true, text: `r = ${p.r.toFixed(3)} (${p.n.toLocaleString()}개)`, color: colors.text } : { display: false };
   return { type: bubble ? "bubble" : "scatter", data: { datasets },
-           options: { maintainAspectRatio: false, plugins: { legend: { display: datasets.length > 1, labels: { color: colors.text } }, title },
+           options: { maintainAspectRatio: false, interaction: { mode: "point" }, plugins: { legend: { display: datasets.length > 1, labels: { color: colors.text } }, title },
                       scales: { x: { type: "linear", ...axis, title: { display: true, text: p.x, color: colors.text } },
                                 y: { type: "linear", ...axis, ...(view.ranges?.y ?? {}), title: { display: true, text: p.y, color: colors.text } } }, ...options } };
 }

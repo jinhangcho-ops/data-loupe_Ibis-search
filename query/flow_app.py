@@ -23,6 +23,7 @@ querying = Later("core.querying")
 sentence_exec = Later("query.sentence_exec")
 sentence_run = Later("query.sentence_run")
 sentences = Later("query.sentences")
+sql_funcs = Later("core.sql_funcs")
 
 server.CONSTANTS["question_sets"] = {"max_items": 30, "max_size": 40_000}
 server.FREE.update({"/api/sentences", "/api/question_sets", "/api/flow/check_edge", "/api/flow/check", "/api/flow/to_body", "/api/flow/from_body", "/api/flow/keys/remember", "/api/flow/keys/forget",
@@ -342,7 +343,7 @@ QUESTION_SETS = "question_sets.json"
 @app.get("/api/sentences")
 def sentences_catalog():
     """문장 틀(탐색·지표)과 빈칸 타입·컬럼 가공 옵션. 문장 화면이 처음 열릴 때 한 번 받는다(모든 화면에 싣지 않으려고 CONSTANTS에 두지 않는다)."""
-    return jsonify(**sentences.catalog(), preps=sentence_run.PREPS, max_top=sentence_run.MAX_TOP)
+    return jsonify(**sentences.catalog(), preps=sentence_run.PREPS, max_top=sentence_run.MAX_TOP, units=sql_funcs.UNIT_NAMES)
 
 
 def check_set(item):

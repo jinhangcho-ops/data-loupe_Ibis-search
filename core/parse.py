@@ -307,10 +307,16 @@ def parse_period(line, expr):
         preds.append(expr[col] >= convert(dtype, start))
     if end:
         value = convert(dtype, end)
-        # 날짜시간 컬럼에 끝을 날짜로만 쓰면 그날 끝까지, 초 없이 HH:MM까지 쓰면 그 분 끝까지 포함한다(대시보드 기간 period.py와 같은 규칙)
-        after = dtype.is_timestamp() and (next_day(end) or (value + dt.timedelta(minutes=1) if re.search(r"[ T]\d{1,2}:\d{2}$", end) else None))
+        after = end_after(dtype, end, value)
         preds.append(expr[col] < after if after else expr[col] <= value)
     return preds
+
+
+def end_after(dtype, text, value):
+    """날짜시간 컬럼에 끝을 날짜로만 쓰면 다음 날 0시, 초 없이 HH:MM까지 쓰면 다음 분(그 분 끝까지 포함. 대시보드 기간 period.py와 같은 규칙). 아니면 None."""
+    if not dtype.is_timestamp():
+        return None
+    return next_day(text) or (value + dt.timedelta(minutes=1) if re.search(r"[ T]\d{1,2}:\d{2}$", text) else None)
 
 
 def next_day(text):
@@ -384,7 +390,7 @@ def parse_one(line, expr, quotes=True):
         if c.type().is_nested():
             raise ValueError(f"'{name or col}'은 {type_name(c.type())} 컬럼이라 비교할 수 없습니다. 안의 필드(예: {name or col}.이름)나 is null을 쓰세요.")
         value = convert(c.type(), unquote(raw, quotes))
-        after = c.type().is_timestamp() and op in ("=", "!=", "<=", ">") and next_day(unquote(raw, quotes))  # 날짜시간 컬럼에 날짜만 쓴 값은 그날 하루(기간·between과 같은 규칙)
+        after = op in ("=", "!=", "<=", ">") and end_after(c.type(), unquote(raw, quotes), value)  # 날짜만 쓴 값은 그날 하루, HH:MM은 그 1분(기간·between과 같은 규칙)
         if after:
             return {"=": (c >= value) & (c < after), "!=": (c < value) | (c >= after), "<=": c < after, ">": c >= after}[op]
         return OPS[op](c, value)

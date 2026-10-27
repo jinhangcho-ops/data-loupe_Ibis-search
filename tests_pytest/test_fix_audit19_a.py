@@ -12,15 +12,15 @@ def test_excel_date_cell_period(tmp_path):
     ws = wb.add_worksheet("목표")
     ws.write_row(0, 0, ["이름", "값", "기간"])
     ws.write(1, 0, "매출"); ws.write(1, 1, 1000); ws.write_datetime(1, 2, dt.datetime(2026, 10, 1), wb.add_format({"num_format": "yyyy-mm"}))
-    ws.write(2, 0, "방문"); ws.write(2, 1, 7); ws.write_datetime(2, 2, dt.datetime(2026, 10, 5), wb.add_format({"num_format": "yyyy-mm-dd"}))
+    ws.write(2, 0, "방문"); ws.write(2, 1, 7); ws.write_datetime(2, 2, dt.datetime(2026, 11, 1), wb.add_format({"num_format": "yyyy-mm"}))
     ws.write(3, 0, "가입"); ws.write(3, 1, 50); ws.write_number(3, 2, 2026)
     ws.write(4, 0, "주문"); ws.write(4, 1, 9); ws.write(4, 2, "2026-Q4")
     wb.close()
     targets.clear()
     rows = targets.read(p)["rows"]
-    assert [r["period"] for r in rows] == ["2026-10", "2026-10-05", "2026", "2026-Q4"]
+    assert [r["period"] for r in rows] == ["2026-10", "2026-11", "2026", "2026-Q4"]
     assert targets.lookup(rows, "매출", "2026-10")["row"]["value"] == 1000
-    assert targets.lookup(rows, "방문", "2026-10-05")["row"]["value"] == 7
+    assert targets.lookup(rows, "방문", "2026-11")["row"]["value"] == 7
     assert targets.lookup(rows, "가입", "2026")["row"]["value"] == 50
 
 
