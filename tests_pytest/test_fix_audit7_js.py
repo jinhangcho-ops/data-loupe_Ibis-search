@@ -301,7 +301,7 @@ def test_7p7_catalog_reused_until_metric_changes(tmp_path):
 """
     assert run(tmp_path, body, fake=False) == {"same": True, "calls": 1, "afterReset": 2}
     assert "mcStale = true" in fn(src, "    async function save() {", "\n    }\n")
-    assert "mcStale = true" in line(page("query/sentences.js"), "    async function removeMetric")
+    assert "mcStale = true" in fn(page("query/sentences.js"), "    async function removeMetric(m) {", "\n    }\n")
 
 
 # ---------- 7P8 사용량은 5초마다 ----------
