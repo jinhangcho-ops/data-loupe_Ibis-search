@@ -497,6 +497,7 @@ def make_table(recipe, name):
     if "files" in opened:
         raise ValueError("Parquet·CSV·JSON·Excel 파일 연결에는 테이블을 만들 DB가 없습니다. 파일로 저장하세요.")
     parse.check_table_name(name)
+    parse.check_new_length(name)
     if name.lower() in [t.lower() for t in source.list_tables(con, schema)]:
         raise ValueError(f"'{name}'은 이미 있는 테이블입니다.")
     if local_mode(recipe):

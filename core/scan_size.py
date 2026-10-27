@@ -282,6 +282,8 @@ def plan_rows(con, sql, dialect):
         for c in (line.split("\t") for line in lines[1:]):
             if at < len(c) and c[at].strip().isdigit():
                 found.setdefault(c[key] if key is not None and key < len(c) else "", []).append(int(c[at]))
+        if found and re.search(r"\tDEPENDENT|\tUNCACHEABLE", text, re.I):  # 바깥 행마다 다시 도는 서브쿼리: 모두 곱한다
+            return math.prod(n for rows in found.values() for n in rows)
         if found:
             return sum(map(math.prod, found.values()))  # 같은 id(한 SELECT의 조인)는 곱하고, UNION·서브쿼리(다른 id)는 더해 크게 센다
     for pattern in ROW_PATTERNS:
@@ -315,10 +317,12 @@ def date_bounds(sql, dialect, column):
             day = dt.date(*[int(x) for x in (m.groups()[:3] if m[1] else m.groups()[3:])])
         except ValueError:
             continue
+        zoned = re.search(r"[+-]\d{2}:?\d{2}'|Z'|,\s*'", right.sql(dialect))  # 시간대가 붙은 시각(+09:00, 'Asia/Seoul'): UTC 파티션 날짜가 하루 어긋날 수 있어 넓힌다
+        shift = dt.timedelta(days=1 if zoned else 0)
         if kind in ("GT", "GTE", "EQ"):
-            low = day if low is None else max(low, day)
+            low = day - shift if low is None else max(low, day - shift)
         if kind in ("LT", "LTE", "EQ"):
-            high = day if high is None else min(high, day)
+            high = day + shift if high is None else min(high, day + shift)
     return low, high
 
 

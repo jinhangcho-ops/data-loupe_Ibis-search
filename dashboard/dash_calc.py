@@ -651,7 +651,7 @@ def sentence_data(card, ctx):
     for blank in view.get("blanks") or []:
         name, kind, fmt = blank["name"], blank["kind"], blank["format"]
         if kind == "asof":
-            out[name] = {"kind": kind, "text": (window or {}).get("end") or dt.date.today().isoformat(), "format": fmt}
+            out[name] = {"kind": kind, "text": (window or {}).get("end") or (ctx or {}).get("as_of") or dt.date.today().isoformat(), "format": fmt}  # 기간의 끝, 기간이 없으면 대시보드 기준일(비면 오늘)
             continue
         try:
             s = clean_series([{"y": blank.get("y") or None, "agg": blank.get("agg") or ("sum" if blank.get("y") else "count")}])
@@ -856,7 +856,7 @@ def compute(card, now, ctx=None):
         if card["kind"] in ("table", "sentence", "deviation"):  # 기간 기준 날짜 컬럼 후보(하나뿐이면 화면이 자동으로 채운다)
             found.setdefault("date_cols", date_columns(querying.build(source["body"], select=False)))
         if card["kind"] == "chart" and card["view"]["type"] in POINT_TYPES:  # 점 종류를 고른 카드는 점도 다시 구한다
-            found["points"] = points_of(source["body"], (card["view"].get("points") or {}).get("size"))
+            found["points"] = points_of(body, (card["view"].get("points") or {}).get("size"))  # 차트 값과 같은 기간
     elif card["kind"] in ("analysis", "funnel"):
         if not isinstance(source.get("recipe"), dict) or not isinstance(source.get("analysis"), dict):
             raise ValueError("이 카드에는 다시 구할 분석(source.recipe, source.analysis)이 없습니다.")

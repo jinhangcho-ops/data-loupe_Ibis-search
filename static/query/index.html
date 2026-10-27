@@ -479,9 +479,11 @@ $("base").onchange = async () => {
   showSummaries();
   if (view === "sentence") sentView.show();  // 문장 보기의 컬럼 목록을 새 테이블로
 };
+let colSeq = 0;  // 테이블을 빨리 바꾸면 늦게 온 앞 테이블의 컬럼이 새 테이블 화면에 남지 않게
 async function refreshColumns() {
   if (!S.base) return;
-  const d = await api("/api/columns", state());
+  const seq = ++colSeq, d = await api("/api/columns", state());
+  if (seq !== colSeq) return;
   S.cols = d.columns;
   S.fields = d.fields ?? [];  // 구조 컬럼 안의 필드(user.name). 조건·정렬·표시 컬럼에 컬럼처럼 쓴다(차트·집계는 컬럼만).
   S.origins = d.origins;

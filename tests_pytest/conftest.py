@@ -58,11 +58,13 @@ def client(folder, monkeypatch):
     monkeypatch.setattr(server, "open_con", lambda info, read_only=True: object())
     monkeypatch.setattr(source, "list_schemas", lambda con: [])
     monkeypatch.setattr(source, "close", lambda con: None)
-    server.state.update(con=None, passwords=[], opened=None, rows={}, tables={})  # tables: 테이블 이름으로 기억한 스키마(시험은 연결을 바로 바꿔 끼운다)
+    server.state.update(con=None, passwords=[], opened=None, rows={})
+    server.forget_tables()  # 테이블 이름으로 기억한 목록·스키마(시험은 연결을 바로 바꿔 끼운다)
     c = app.test_client()
     c.get("/?key=" + server.KEY)
     yield c
-    server.state.update(con=None, passwords=[], opened=None, rows={}, tables={})
+    server.state.update(con=None, passwords=[], opened=None, rows={})
+    server.forget_tables()
 
 
 def spy_queries(monkeypatch):

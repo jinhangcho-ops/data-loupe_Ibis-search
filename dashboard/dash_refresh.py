@@ -92,13 +92,29 @@ def check_dashboard_every(d):
             raise ValueError(f"‘{label}’ 연결의 실시간 간격은 {minimum_text(least)} 이상이어야 해요. 더 짧게 쓰려면 그 연결의 최소를 먼저 바꾸세요.")
 
 
+def timed(span):
+    """시각(HH:MM)이 든 기간: 대시보드는 날짜 단위로만 구한다(시각을 자르면 직전 기간이 같은 날이 된다)."""
+    return any(len(x or "") > 10 for x in (span["start"], span["end"]))
+
+
+def month_count(first, last):
+    """first(1일)~last(그 달 끝)처럼 달 단위로 꼭 맞으면 개월 수, 아니면 None."""
+    if first.day == 1 and last == period.month_end(last.year, last.month):
+        return (last.year - first.year) * 12 + last.month - first.month + 1
+
+
+def month_name(months):
+    return {1: "지난달", 3: "직전 분기", 12: "작년"}.get(months, f"직전 {months}개월")
+
+
 def context(d, today=None):
-    """대시보드의 보는 기간·직전 기간 {range: {start, end}, prev: {start, end, text}}(기준일 as_of로 자름). 읽을 수 없으면 None."""
+    """대시보드의 보는 기간·직전 기간 {range: {start, end}, prev: {start, end, text}}(기준일 as_of로 자름). 읽을 수 없으면 None.
+    기간이 비었어도 기준일을 정했으면 {as_of}만(문장 카드의 기준일 빈칸)."""
     if not (d.get("period") or "").strip():
-        return None  # 기간이 비면 대시보드의 기간을 걸지 않는다(카드의 원래 조건대로)
+        return {"as_of": d["as_of"]} if d.get("as_of") else None  # 기간이 비면 대시보드의 기간을 걸지 않는다(카드의 원래 조건대로)
     day = (d.get("as_of") or "") or (today or dt.date.today()).isoformat()  # 기준일(비면 오늘)
     span = period.parse(d.get("period"), day)
-    if span["error"]:
+    if span["error"] or timed(span):
         return None
     end = min(e for e in (span["end"] and span["end"][:10], day) if e)
     if span["start"] and day < span["start"][:10]:
@@ -106,10 +122,10 @@ def context(d, today=None):
     cut = span["start"] and span["end"] and span["start"][:10] <= day < span["end"][:10]  # 기준일이 기간 안이라 잘렸으면 직전 기간도 잘라 맞춘다
     if cut:
         first, last, today = (dt.date.fromisoformat(x[:10]) for x in (span["start"], span["end"], day))
-        aligned = first.day == 1 and last == period.month_end(last.year, last.month)
+        aligned = month_count(first, last)
         if aligned or (first.day == 1 and (first.year, first.month) == (today.year, today.month)):  # 달 단위로 꼭 맞는 기간(월·분기·연…), 또는 1일에 시작해 기준일이 그 달 안: 직전 같은 개월 수의 같은 위치까지
-            months = (last.year - first.year) * 12 + last.month - first.month + 1 if aligned else 1
-            name = {1: "지난달", 3: "직전 분기", 12: "작년"}.get(months, f"직전 {months}개월")
+            months = aligned or 1
+            name = month_name(months)
             try:
                 before = {"start": period.add_months(first, -months).isoformat(), "end": period.add_months(today, -months).isoformat(), "label": f"{name} 같은 기간", "error": None}
             except ValueError as e:  # 1년 1월처럼 직전 기간이 달력 앞이면 견줄 기간 없이 본다
@@ -120,7 +136,9 @@ def context(d, today=None):
             before = period.previous(span)
     else:
         before = period.previous(span)
-    prev = None if before["error"] else {"start": before["start"][:10], "end": before["end"][:10], "text": before["label"] if span.get("to_date") else f"직전 {before['days']}일"}
+    months = None if before["error"] or span.get("to_date") else month_count(*(dt.date.fromisoformat(before[k][:10]) for k in ("start", "end")))
+    prev = None if before["error"] else {"start": before["start"][:10], "end": before["end"][:10],
+                                         "text": before["label"] if span.get("to_date") else month_name(months) if months else f"직전 {before['days']}일"}
     return {"range": {"start": span["start"] and span["start"][:10], "end": end}, "prev": prev}
 
 

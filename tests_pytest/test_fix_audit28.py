@@ -50,10 +50,13 @@ def test_new_column_differing_only_in_case_is_refused():
         prep_ops.check_new(t, ["x_Seoul", "x_seoul"])
 
 
-def test_long_table_name_refused():
-    parse.check_table_name("가" * 16)
+def test_long_table_name_refused_only_when_created():
+    parse.check_table_name("가" * 30)  # 이미 있는 긴 이름 테이블에 덧붙이기는 된다(28차 리뷰1)
+    parse.check_new_length("가" * 17, "_ibis_load")
     with pytest.raises(ValueError, match="너무 깁니다"):
-        parse.check_table_name("가" * 17)
+        parse.check_new_length("가" * 18, "_ibis_load")
+    with pytest.raises(ValueError, match="너무 깁니다"):
+        parse.check_new_length("가" * 22)
 
 
 def test_refresh_stop_does_not_cancel_user_query_while_waiting(monkeypatch):

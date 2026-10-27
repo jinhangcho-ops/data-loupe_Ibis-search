@@ -313,7 +313,7 @@ class DashBoard extends Board {
   }
   // 새 카드·다시 구할 때 서버에 알려 줄 보는 기간(없으면 undefined)
   ctx() {
-    return this.range ? { range: this.range, prev: this.prev } : undefined;
+    return this.range || this.asOf ? { range: this.range, prev: this.prev, as_of: this.asOf || undefined } : undefined;  // as_of: 문장 카드의 기준일 빈칸
   }
   async recompare() {
     this.cards.forEach(c => { c.range = this.range; });

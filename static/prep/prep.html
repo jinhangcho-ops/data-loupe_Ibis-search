@@ -1090,7 +1090,9 @@ function act(button, fn) {
   });
 }
 $("preview").onclick = () => act($("preview"), async r => {
-  preview = await timed("preview", () => api("/api/preview", r));
+  const base = S.base, got = await timed("preview", () => api("/api/preview", r));
+  if (S.base !== base) return;  // 기다리는 사이 테이블을 바꿨으면 앞 테이블의 미리보기를 새 화면에 넣지 않는다
+  preview = got;
   shot = snap();
   rememberTable();
   const now = preview.rows.columns.map((name, k) => ({ name, source: preview.sources[k], type: preview.types[k] })).filter((_, k) => preview.derived[k]);

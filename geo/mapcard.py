@@ -47,6 +47,14 @@ def reduce_values(values, agg):
     return {"sum": sum, "mean": lambda v: sum(v) / len(v), "min": min, "max": max}[agg](real)
 
 
+def in_boxes(x, y, rings):
+    """점(x, y)이 고리들 중 하나의 범위 상자 안인지(점마다 참·거짓)."""
+    hit = np.zeros(len(x), dtype=bool)
+    for r in rings:
+        hit |= (x >= r[:, 0].min()) & (x <= r[:, 0].max()) & (y >= r[:, 1].min()) & (y <= r[:, 1].max())
+    return hit
+
+
 def build(regions, points, geo):
     """regions: 영역 Polars 표(또는 None), points: 점 Polars 표(열 lat, lon[, value], 또는 None), geo: 카드의 view.geo. 카드에 저장할 값 dict를 돌려준다."""
     notes = []
@@ -90,9 +98,9 @@ def build(regions, points, geo):
     ok = np.isfinite(lat) & np.isfinite(lon)
     ring_x = [float(r[:, 0].max()) for r in all_rings] + [float(r[:, 0].min()) for r in all_rings]
     if ring_x and max(ring_x) > 180:  # 영역이 날짜 변경선을 넘어 이어진 좌표(spatial.assign과 같은 규칙)면 서쪽 점도 같은 쪽으로
-        lon = np.where((lon < 0) & (lon + 360 <= max(ring_x)), lon + 360, lon)  # 옮긴 영역 범위 안에 드는 점만(미국 같은 서경 영역의 점은 그대로)
+        lon = np.where((lon < 0) & in_boxes(lon + 360, lat, [r for r in all_rings if r[:, 0].max() > 180]), lon + 360, lon)  # 옮긴 영역의 범위 상자에 드는 점만(하와이·미국 본토 점은 그대로)
     elif ring_x and min(ring_x) < -180:
-        lon = np.where((lon > 0) & (lon - 360 >= min(ring_x)), lon - 360, lon)
+        lon = np.where((lon > 0) & in_boxes(lon - 360, lat, [r for r in all_rings if r[:, 0].min() < -180]), lon - 360, lon)
     elif not ring_x and geojson.crosses_dateline(lon[ok].tolist()):  # 점만 있으면 점이 변경선에 걸친 때
         lon = np.where(lon < 0, lon + 360, lon)
     drawn = np.flatnonzero(ok)

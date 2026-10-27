@@ -117,9 +117,9 @@ def shape(con, recipe, table=None, info=None, refs=None):
     if not layout:
         raise ValueError("남길 컬럼이 없습니다.")
     results = [item[1] for item in layout]
-    lowered = [new.lower() for new in results]
+    lowered, named = [new.lower() for new in results], {item[1] for item in layout if item[3] or item[0] != item[1]}  # named: 사용자가 지은 이름(파생·이름 바꾸기)
     for new in results:
-        if lowered.count(new.lower()) > 1:  # 대소문자만 달라도 저장할 때 같은 컬럼
+        if results.count(new) > 1 or lowered.count(new.lower()) > 1 and new in named:  # 지은 이름은 대소문자만 달라도 저장할 때 같은 컬럼(원래 테이블의 Name·name은 그대로 둔다)
             raise ValueError(f"결과에 '{new}' 컬럼이 둘 이상입니다. 이름을 바꾸세요.")
     t = t.select(*[t[old].name(new) for old, new, *_ in layout])
     return t, {new: (src, derived) for _, new, src, derived in layout}

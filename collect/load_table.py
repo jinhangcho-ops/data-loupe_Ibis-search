@@ -27,6 +27,8 @@ def ready(config):
     """시작 전 검사(연결 없이): 이름, 연결 칸, 쿼리·분석 화면이 같은 파일을 열고 있는지."""
     table = config["load"]["table"]
     parse.check_table_name(table["name"])
+    if table["how"] != "append":  # 새로 만들거나 바꾸기(임시 꼬리를 붙인 이름도 만든다)
+        parse.check_new_length(table["name"], STAGING if table["how"] == "replace" else "")
     if table["schema"]:
         parse.check_table_name(table["schema"], "스키마")
     if table["key"] and table["how"] != "append":

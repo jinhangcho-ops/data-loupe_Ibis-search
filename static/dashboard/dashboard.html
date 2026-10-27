@@ -366,14 +366,16 @@ async function fillCard(target, built) {
   say("err-dash", "데이터를 정했어요.", true);
 }
 // ---------- 카드 모음(왼쪽)·카드 설정(오른쪽) ----------
-const columnCache = new Map();  // 테이블 → [[컬럼, 한글 타입]] (차트 선반이 쓴다)
+const columnCache = new Map();  // "스키마|테이블" → [[컬럼, 한글 타입]] (차트 선반이 쓴다). 연결을 바꾸면 비운다
+const cacheKey = card => `${card.source?.schema || ""}|${card.source?.table}`;
+document.addEventListener("dash-connected", () => columnCache.clear());
 const panelHost = { board, menu: null, menuRoot, popRoot, menuTarget: null, changed: () => boardChanged(),
   prepare: async card => {
     const table = card.source?.table;
-    if (!table || !connected || columnCache.has(table)) return;
-    try { columnCache.set(table, (await api("/api/columns", { schema: card.source.schema || "", base: table })).columns); } catch (e) { /* 선반을 못 보일 뿐 */ }
+    if (!table || !connected || columnCache.has(cacheKey(card))) return;
+    try { columnCache.set(cacheKey(card), (await api("/api/columns", { schema: card.source.schema || "", base: table })).columns); } catch (e) { /* 선반을 못 보일 뿐 */ }
   },
-  columns: card => columnCache.get(card.source?.table) ?? [],
+  columns: card => columnCache.get(cacheKey(card)) ?? [],
   recompute: async (card, was = lastSaved) => {  // 마지막 저장(was)은 기다리기 전의 것과 비교한다(그 사이 저장이 끼어들면 lastSaved가 새 설정이 된다)
     const id = dashId, ctx = board.ctx(),
       d = await api("/api/dash/card/compute", { card: { ...DashBoard.plain(card), data: card.data?.since ? { since: card.data.since } : {} }, ctx });
