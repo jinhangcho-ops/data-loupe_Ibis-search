@@ -244,6 +244,8 @@ def parse_join(line, tables):
         if how == "asof" and ">=" in k and on is None:
             on = tuple(s.strip() for s in k.split(">=", 1))
             continue
+        if ">=" in k:
+            raise ValueError(f"'{k.strip()}'의 >=는 asof 조인의 시각 쌍 하나에만 써요. 키는 '왼쪽=오른쪽'으로 쓰거나, 시각으로 붙이려면 종류를 asof로 하세요.")
         left, _, right = (s.strip() for s in k.partition("="))
         if left:
             pairs.append((left, right or left))

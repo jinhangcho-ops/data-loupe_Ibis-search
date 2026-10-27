@@ -587,9 +587,9 @@ async function renderJoins() {
   };
   const blocks = await Promise.all(joinsUI.map(async (j, i) => {
     const right = await colsOf(j.table).catch(() => []);
-    const pairRow = ([l, r], k) => el("div", { className: "r2" },
+    const pairRow = ([l, r, ge], k) => el("div", { className: "r2" },
       select(leftCols, l, j.how === "asof" && !k ? "왼쪽 시각" : "왼쪽 키", v => { j.pairs[k][0] = v; applyJoins(); }),
-      el("span", { textContent: j.how === "asof" && !k ? "≥" : "=", title: j.how === "asof" && !k ? "왼쪽 시각과 같거나 그보다 앞선 가장 가까운 오른쪽 행 하나를 붙여요" : "" }),
+      el("span", { textContent: (j.how === "asof" && !k) || ge ? "≥" : "=", title: j.how === "asof" && !k ? "왼쪽 시각과 같거나 그보다 앞선 가장 가까운 오른쪽 행 하나를 붙여요" : ge ? "≥는 asof 조인의 시각 쌍에만 써요. 종류를 바꾸면 =가 돼요" : "" }),
       select(right, r, "오른쪽 키", v => { j.pairs[k][1] = v; applyJoins(); }),
       el("button", { className: "ghost", textContent: "×", title: "키 빼기", onclick: () => { j.pairs.splice(k, 1); renderJoins(); applyJoins(); } }));
     return el("div", { className: "jb" },

@@ -403,8 +403,16 @@ def test_postgres_table_creation_checks_column_bytes_before_creating():
     with pytest.raises(ValueError, match="63바이트"):
         prep_app.insert_all(db, "t", None, ibis.memtable({"가" * 22: [1]}))
     assert db.made == []  # 테이블을 만들기 전에 거부한다
+
+
+def test_ge_outside_asof_explains_and_shows():
+    from core import parse
+    with pytest.raises(ValueError, match=">=는 asof 조인의 시각 쌍 하나에만"):
+        parse.parse_join("t left a>=b, c=c", ["t"])
+    assert parse.parse_join("p asof ot>=pt, id=id", ["p"])[3] == ("ot", "pt")
     html = (__import__("pathlib").Path(__file__).resolve().parent.parent / "static" / "query" / "index.html").read_text(encoding="utf-8")
-    assert "j.how = v; j.pairs.forEach(p => p[2] = false);" in html  # asof에서 종류를 바꾸면 >=를 버린다
+    assert "j.how = v; j.pairs.forEach(p => p[2] = false);" in html  # 종류를 바꾸면 >=를 버린다
+    assert '(j.how === "asof" && !k) || ge ? "≥" : "="' in html  # 보낼 >=는 화면에도 ≥로
 
 
 def test_sql_color_classes_only_style_inside_the_sql_views():
