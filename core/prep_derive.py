@@ -155,7 +155,7 @@ class Formula:
         if name == "concat":
             if len(values) < 2:
                 self.fail("concat(글자, 글자, …)")
-            return ibis.literal("").concat(*[v.cast("string") for v in values])
+            return sql_funcs.concat_parts(values, "")  # 함수 사전의 concat과 같게 빈 값은 건너뛴다
         if name == "coalesce":
             if len(values) < 2:
                 self.fail("coalesce(값, 값, …)")

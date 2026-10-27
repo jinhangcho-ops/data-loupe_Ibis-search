@@ -1215,7 +1215,8 @@ def power(t, s, p, ctx):
     elif binary:
         pw = mc.power_two_proportions(c["mean"], e["mean"], c["n"], e["n"], s["alpha"]) if effect is None else mc.power_normal(delta, mc.prop_se(c["mean"], c["mean"], c["n"], e["n"]), s["alpha"])
         if pw is None:
-            ctx.notes.append("두 군의 비율이 모두 0 또는 1이라 표준오차가 0이어서 검정력을 구할 수 없어요.")
+            ctx.notes.append("두 군의 비율이 모두 0 또는 1이라 표준오차가 0이어서 검정력을 구할 수 없어요." if effect is None
+                             else "대조군 비율이 0 또는 1이라 표준오차가 0이어서 검정력을 구할 수 없어요.")
     elif c["sd"] is None or e["sd"] is None:
         pw = None
         ctx.notes.append("한 군에 값이 1개뿐이라 표준편차를 구할 수 없어 검정력을 구할 수 없어요.")

@@ -342,7 +342,7 @@ ENTRIES = [
           [("y_true", {"kinds": "num"}), ("y_pred", {"kinds": "num", "optional": False})], "regression", {"pick": "mae"}, better="down"),
     entry("mape", "model", "평균 절대 비율 오차", "MAPE", "오차를 정답의 몇 %인지로 평균한 값이에요. 정답이 0인 행은 뺍니다.", "평균 |오차 ÷ 정답|", "{정답}과 {예측}의 MAPE(정답이 0인 행 제외)",
           [("y_true", {"kinds": "num"}), ("y_pred", {"kinds": "num", "optional": False})], "regression", {"pick": "mape"}, fmt="percent", better="down"),
-    entry("lift", "model", "리프트", "Lift", "실험군이 대조군보다 몇 % 높은지예요. 크기만 볼 뿐 우연인지는 p-value로 따로 봐요.", "(T − C) ÷ C", "{실험군}이 {대조군 값}인 군 대비 {실험군 값}인 군의 {지표 값} 변화율",
+    entry("lift", "model", "리프트", "Lift", "실험군이 대조군보다 몇 % 높은지예요. 크기만 볼 뿐 우연인지는 p-value로 따로 봐요.", "(T − C) ÷ |C|", "{실험군}이 {대조군 값}인 군 대비 {실험군 값}인 군의 {지표 값} 변화율",
           ["group", "metric", "control", "treat", AB_USER], "lift", pair=["control_mean", "treat_mean"], fmt="percent", better="up", hint="north_star"),
     entry("pvalue", "model", "유의확률", "p-value", "차이가 우연으로 생겼을 확률이에요. 유의수준보다 작으면 우연이라고 보기 어려워요. 숫자(0/1)면 비율 z, 연속이면 Welch t 검정이에요.", "두 비율 z 검정 또는 Welch t 검정(양측)",
           "{실험군}의 {대조군 값} 대 {실험군 값} 사이 {지표 값} 차이의 p-value(유의수준 {유의수준})", ["group", "metric", "control", "treat", "alpha", AB_USER], "pvalue", pair=["control_n", "treat_n"]),

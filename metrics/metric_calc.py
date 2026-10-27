@@ -636,8 +636,8 @@ def norm_ppf(p):
 
 
 def lift(treatment, control):
-    """Lift = (T − C) / C. C가 0이면 None."""
-    return ratio(treatment - control, control)
+    """Lift = (T − C) / |C|. C가 0이면 None. 음수 지표(순이익 등)에서도 T가 크면 +다."""
+    return ratio(treatment - control, abs(control))
 
 
 def two_proportion_z(x1, n1, x2, n2):

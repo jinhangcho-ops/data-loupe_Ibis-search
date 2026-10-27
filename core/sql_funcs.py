@@ -492,9 +492,9 @@ row("upper", "text", "대문자로", "영문을 대문자로.", [T1], lambda c: 
 row("lower", "text", "소문자로", "영문을 소문자로.", [T1], lambda c: c.x.lower(), "lower(이름)", TXT, TXT)
 row("capitalize", "text", "첫 글자 대문자", "첫 글자만 대문자로.", [T1], lambda c: c.x.capitalize(), "capitalize(이름)", TXT, TXT)
 def not_zero(n, label):
-    """1부터 세는 위치 칸의 값: 0은 DB마다 뜻이 달라 거부한다."""
-    if n == 0:
-        raise ValueError(f"'{label}'은 1부터 셉니다. 0은 쓸 수 없습니다.")
+    """1부터 세는 위치 칸의 값: 0은 DB마다 뜻이 다르고 음수(끝에서 세기)는 한 칸 어긋나므로 거부한다."""
+    if n < 1:
+        raise ValueError(f"'{label}'은 1부터 셉니다. 0이나 음수는 쓸 수 없습니다.")
     return n
 
 

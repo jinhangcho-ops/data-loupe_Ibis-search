@@ -10,7 +10,8 @@ function ruleNumber(text) {
   const n = parseFloat(t.replace(/,/g, "").replace("%", ""));
   return t.endsWith("%") ? n / 100 : n;
 }
-const OPERATORS = { ">=": (a, b) => a >= b, "<=": (a, b) => a <= b, ">": (a, b) => a > b, "<": (a, b) => a < b, "=": (a, b) => a === b, "==": (a, b) => a === b, "!=": (a, b) => a !== b };
+const sameNum = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));  // DB 합계의 꼬리(0.1 + 0.2)는 같은 값으로
+const OPERATORS = { ">=": (a, b) => a >= b || sameNum(a, b), "<=": (a, b) => a <= b || sameNum(a, b), ">": (a, b) => a > b && !sameNum(a, b), "<": (a, b) => a < b && !sameNum(a, b), "=": sameNum, "==": sameNum, "!=": (a, b) => !sameNum(a, b) };
 // 식 글자 → { kind: "num"·"word", test(값) } 또는 { error }
 function parseMatch(text) {
   const t = String(text ?? "").trim();
@@ -27,11 +28,11 @@ function parseMatch(text) {
     return n == null ? { error: `‘${op[2] || ""}’은 숫자가 아니에요. 예: ${op[1]} 100` } : { kind: "num", test: v => OPERATORS[op[1]](v, n) };
   }
   const single = ruleNumber(t);
-  if (single != null) return { kind: "num", test: v => v === single };
+  if (single != null) return { kind: "num", test: v => sameNum(v, single) };
   const parts = t.split(",").map(p => p.trim()).filter(Boolean);
   if (parts.length > 1 || t.includes(",")) {
     const nums = (/,\s/.test(t) ? t.split(/\s*,\s+/) : parts).map(ruleNumber);  // ", "로 나눈 목록이면 1,000 같은 천 단위 쉼표는 숫자 안에 둔다
-    return nums.every(n => n != null) ? { kind: "num", test: v => nums.includes(v) } : { kind: "word", test: s => parts.some(p => p.toLowerCase() === s) };
+    return nums.every(n => n != null) ? { kind: "num", test: v => nums.some(n => sameNum(v, n)) } : { kind: "word", test: s => parts.some(p => p.toLowerCase() === s) };
   }
   if (t.includes("*")) {
     const core = t.replace(/^\*|\*$/g, "").toLowerCase();

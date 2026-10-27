@@ -235,3 +235,32 @@ def test_cards_judge_target_like_the_server(tmp_path):
     helper = between("dash_cards.js", "const overTarget", "\n") + "\n"
     out = run_node(tmp_path, "console.log(JSON.stringify([overTarget(1.1 + 2.2, 3.3), underTarget(0.7 + 0.1, 0.8), overTarget(3.31, 3.3), underTarget(3.29, 3.3)]));", parts=[helper])
     assert out == [False, False, True, True]  # 꼬리는 같은 값, 진짜 차이는 넘음·모자람
+
+
+# ---------- 22차 감사 ----------
+
+def test_formula_concat_skips_empty_values_like_the_function_dictionary():
+    from lazy import ibis
+    from core import prep_derive
+    t = ibis.memtable({"a": [None, "김"], "b": ["철수", "영희"]})
+    assert t.select(r=prep_derive.Formula(t, "concat(a, b)").build()).to_polars()["r"].to_list() == ["철수", "김영희"]
+
+
+def test_lift_with_negative_control_points_the_right_way():
+    from metrics import metric_calc as mc
+    assert mc.lift(-5, -10) == 0.5 and mc.lift(12, 10) == pytest.approx(0.2)  # 순이익 -10 → -5는 좋아진 것
+
+
+def test_position_slots_reject_negative():
+    from core import sql_funcs
+    with pytest.raises(ValueError, match="0이나 음수는 쓸 수 없습니다"):
+        sql_funcs.not_zero(-1, "N번째")
+    assert sql_funcs.not_zero(2, "N번째") == 2
+
+
+@pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
+def test_color_rules_treat_float_tails_as_equal(tmp_path):
+    from test_fix_audit_js import run_node
+    body = "const m = (t, v) => parseMatch(t).test(v); console.log(JSON.stringify([m('= 0.3', 0.1 + 0.2), m('<= 0.3', 0.1 + 0.2), m('< 0.3', 0.1 + 0.2), m('0.3, 0.5', 0.1 + 0.2), m('!= 0.3', 0.1 + 0.2), m('> 0.3', 0.31)]));"
+    out = run_node(tmp_path, body, files=["dash_rules.js"])
+    assert out == [True, True, False, True, False, True]
