@@ -33,8 +33,8 @@ def new_names(step, defaults):
     out = {}
     for key, default in defaults.items():
         name = step.get(key) or default
-        if not isinstance(name, str) or not prep_derive.NAME.fullmatch(name):
-            raise ValueError(f"새 컬럼 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 합니다(63자까지): {name!r}")
+        if not isinstance(name, str) or not prep_derive.NAME.fullmatch(name) or len(name.encode("utf-8")) > 63:
+            raise ValueError(f"새 컬럼 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 합니다(영문 63자, 한글 21자까지): {name!r}")
         out[key] = name
     if len(set(out.values())) != len(out):
         raise ValueError("새 컬럼 이름이 서로 겹칩니다.")

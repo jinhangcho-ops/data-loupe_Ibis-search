@@ -425,7 +425,8 @@ OWN_PERIOD = re.compile(r"(.+?)\s+(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})"
 
 def own_range(card):
     """대시보드 기간이 비었을 때 카드 자신의 기간 줄(source.body.periods 중 양쪽 날짜가 다 있고 시작이 끝보다 늦지 않은 첫 줄)을 보는 기간으로,
-    바로 앞 같은 일수를 직전 기간으로 삼은 {range, prev: {start, end, text}, column, line}. 열린 쪽이 있는 줄은 건너뛰고, 없으면 None. static/core/dash.js의 ownRange와 같은 규칙이다."""
+    대시보드 기간 칸과 같은 직전 기간(period.previous: 달 단위로 꼭 맞으면 직전 같은 개월 수, 아니면 바로 앞 같은 일수)을 삼은 {range, prev: {start, end, text}, column, line}.
+    열린 쪽이 있는 줄은 건너뛰고, 없으면 None. static/core/dash.js의 ownRange와 같은 규칙이다."""
     for i, line in enumerate(((card.get("source") or {}).get("body") or {}).get("periods") or []):
         m = OWN_PERIOD.fullmatch(str(line).strip())
         if not m or m[2] > m[3]:
@@ -434,8 +435,10 @@ def own_range(card):
             start, end = dt.date.fromisoformat(m[2]), dt.date.fromisoformat(m[3])
         except ValueError:  # 2026-02-30 같은 없는 날
             continue
-        n = (end - start).days + 1
-        prev = {"start": (start - dt.timedelta(days=n)).isoformat(), "end": (start - dt.timedelta(days=1)).isoformat(), "text": f"직전 {n}일"}
+        before = period.previous({"start": m[2], "end": m[3]})
+        if before.get("error"):
+            continue
+        prev = {"start": before["start"], "end": before["end"], "text": period.previous_text(start, end)}
         return {"range": {"start": m[2], "end": m[3]}, "prev": prev, "column": m[1], "line": i}
     return None
 

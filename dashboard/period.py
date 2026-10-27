@@ -212,6 +212,13 @@ def split_text(value):
     return day, clock
 
 
+def previous_text(start, end):
+    """날짜 기간 start~end(date)의 직전 기간을 부르는 말: 달 단위로 꼭 맞으면 '직전 N개월', 아니면 '직전 N일'(previous와 같은 판정)."""
+    if start.day == 1 and end == month_end(end.year, end.month):
+        return f"직전 {(end.year - start.year) * 12 + end.month - start.month + 1}개월"
+    return f"직전 {(end - start).days + 1}일"
+
+
 def previous(span):
     """span({start, end, ...})의 직전 같은 길이 기간. 달 단위로 꼭 맞는 기간(월·분기·연 포함)은 직전 같은 개월 수 전체, 그 밖의 날짜 기간은 바로 앞 같은 일수, 시각이 든 기간은 바로 앞 같은 시간이다.
     열린 범위·읽지 못한 기간, 직전 기간이 달력(1년~) 앞으로 넘어가는 기간(0001-01)은 error가 든 결과를 돌려준다."""

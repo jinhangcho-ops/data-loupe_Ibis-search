@@ -559,10 +559,11 @@ const tableCols = {};  // 테이블 → 컬럼 이름들(오른쪽 키를 고를
 function joinParts(line) {
   const [table, ...rest] = line.trim().split(/\s+/);
   const how = JOIN_HOWS.includes(rest[0]?.toLowerCase()) ? rest.shift().toLowerCase() : "inner";
-  const pairs = rest.join(" ").split(",").map(k => k.split(/>?=/).map(s => s.trim())).filter(p => p[0]).map(([l, r]) => [l, r || l]);
+  const pairs = rest.join(" ").split(",").map(k => [...k.split(/>?=/).map(s => s.trim()), k.includes(">=")]).filter(p => p[0]).map(([l, r, ge]) => [l, r || l, ge]);
+  if (how === "asof") pairs.sort((a, b) => b[2] - a[2]);  // 서버처럼 >= 쌍이 어디 있든 시각 쌍(맨 앞)
   return { table, how, pairs };
 }
-const joinLine = j => `${j.table} ${j.how} ${j.pairs.filter(([l, r]) => l && r).map(([l, r], k) => `${l}${j.how === "asof" && !k ? ">=" : "="}${r}`).join(", ")}`;
+const joinLine = j => `${j.table} ${j.how} ${j.pairs.filter(([l, r]) => l && r).map(([l, r, ge], k) => `${l}${(j.how === "asof" && !k) || ge ? ">=" : "="}${r}`).join(", ")}`;
 const joinDone = j => j.table && j.pairs.some(([l, r]) => l && r);
 async function colsOf(table) {
   if (!table) return [];
@@ -1123,7 +1124,7 @@ $("ctable-show").onclick = () => {
 $("ctable-csv").onclick = () => {
   if (!drawn) { $("err-chart").textContent = "먼저 차트를 그리세요."; return; }
   const { columns, rows } = chartData();
-  const field = v => { const s = typeof v === "string" && /^[=+\-@]/.test(v) ? "'" + v : String(v ?? ""); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const field = v => { const s = typeof v === "string" && /^[=+\-@\t\r]/.test(v) ? "'" + v : String(v ?? ""); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   const text = [columns, ...rows.map(r => columns.map(c => r[c]))].map(line => line.map(field).join(",")).join("\n");
   download(URL.createObjectURL(new Blob(["﻿" + text], { type: "text/csv" })), "chart.csv");
 };

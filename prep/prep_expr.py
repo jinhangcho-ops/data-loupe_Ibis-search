@@ -119,6 +119,8 @@ def shape(con, recipe, table=None, info=None, refs=None):
     results = [item[1] for item in layout]
     lowered, named = [new.lower() for new in results], {item[1] for item in layout if item[3] or item[0] != item[1]}  # named: 사용자가 지은 이름(파생·이름 바꾸기)
     for new in results:
+        if new in named and len(new.encode("utf-8")) > 63:
+            raise ValueError(f"결과 컬럼 이름 '{new}'이 너무 깁니다(영문 63자, 한글 21자까지). PostgreSQL 같은 DB는 넘는 이름을 잘라 다음에 찾지 못합니다.")
         if results.count(new) > 1 or lowered.count(new.lower()) > 1 and new in named:  # 지은 이름은 대소문자만 달라도 저장할 때 같은 컬럼(원래 테이블의 Name·name은 그대로 둔다)
             raise ValueError(f"결과에 '{new}' 컬럼이 둘 이상입니다. 이름을 바꾸세요.")
     t = t.select(*[t[old].name(new) for old, new, *_ in layout])
@@ -162,23 +164,18 @@ def keep_choice(recipe):
     return how, order, sep
 
 
-def flipped(line):
-    """정렬 줄 '컬럼 [asc|desc]'의 방향을 뒤집는다(마지막 행을 고를 때)."""
-    col, _, how = line.partition(" ")
-    return f"{col} {'asc' if how.strip().lower() == 'desc' else 'desc'}"
-
-
 def nth_row(t, columns, order, last):
     """columns가 같은 행 중 정렬 기준(order)으로 첫(last면 마지막) 행 하나만 남긴다(행 번호 0)."""
-    keys = [parse.parse_sort(flipped(line) if last else line, t).op().copy(nulls_first=False).to_expr() for line in order]  # 빈 값은 DB 기본 위치에 맡기지 않고 늘 뒤로
+    keys = []
+    for line in order:  # 쿼리·함수 사전과 같은 parse_sort(공백 있는 컬럼 이름도 된다). 마지막 행이면 방향만 뒤집는다
+        key = parse.parse_sort(line, t).op()
+        keys.append(key.copy(ascending=key.ascending != last, nulls_first=False).to_expr())  # 빈 값은 DB 기본 위치에 맡기지 않고 늘 뒤로
     numbered = t.mutate(**{FIRST: ibis.row_number().over(ibis.window(group_by=[t[c] for c in columns], order_by=keys))})
     return numbered.filter(numbered[FIRST] == 0).select(*t.columns)
 
 
 def merged(t, columns, how, order, sep):
     """columns가 같은 행들을 한 줄로 합친다: 나머지 컬럼마다 대표 값 고르기(sql_funcs.pick)를 건다. 컬럼 순서는 그대로."""
-    for line in order:
-        parse.check_name(line.partition(" ")[0], t.columns)
     aggs = {}
     for name in [c for c in t.columns if c not in columns]:
         try:

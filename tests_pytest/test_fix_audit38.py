@@ -334,3 +334,55 @@ def test_limits_at_zero_and_float_tails_agree():
     assert metric_catalog.check_limit(1.1 + 2.2, {"op": "<=", "value": 3.3}) is None
     assert metric_catalog.check_limit(3.4, {"op": "<=", "value": 3.3})
     assert metric_catalog.check_limit(0.1 + 0.2 - 0.3, {"op": "<=", "value": 0}) is None
+
+
+# ---------- 24차 감사 ----------
+
+def test_dedupe_last_row_reads_spaced_sort_column():
+    from lazy import ibis
+    from prep import prep_expr
+    t = ibis.memtable({"k": [1, 1, 1], "주문 일자": [1, 3, 2], "주문": [9, 8, 7], "tag": ["x", "z", "y"]})
+    assert prep_expr.nth_row(t, ["k"], ["주문 일자 asc"], True).to_polars()["tag"].to_list() == ["z"]
+    assert prep_expr.nth_row(t, ["k"], ["주문 일자 desc"], True).to_polars()["tag"].to_list() == ["x"]
+
+
+@pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
+def test_asof_join_line_keeps_the_time_pair(tmp_path):
+    from test_fix_audit_js import between, run_node
+    part = between("index.html", "const JOIN_HOWS", "const joinDone")
+    body = "console.log(JSON.stringify([joinLine(joinParts('prices asof pid=pid, ot>=pt')), joinLine(joinParts('prices asof ot>=pt, pid=pid')), joinLine(joinParts('t left a>=b, c=c'))]));"
+    assert run_node(tmp_path, body, parts=[part]) == ["prices asof ot>=pt, pid=pid", "prices asof ot>=pt, pid=pid", "t left a>=b, c=c"]  # asof가 아닌 >=는 서버가 알린다
+
+
+def test_own_period_previous_matches_dashboard_rule():
+    from dashboard import dash_calc
+    card = {"source": {"body": {"periods": ["주문일 2026-03-01 ~ 2026-03-31"]}}}
+    assert dash_calc.own_range(card)["prev"] == {"start": "2026-02-01", "end": "2026-02-28", "text": "직전 1개월"}
+    card["source"]["body"]["periods"] = ["주문일 2026-03-01 ~ 2026-03-22"]
+    assert dash_calc.own_range(card)["prev"] == {"start": "2026-02-07", "end": "2026-02-28", "text": "직전 22일"}
+
+
+@pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
+def test_own_period_previous_matches_in_js(tmp_path):
+    from test_fix_audit_js import run_node
+    js = (__import__("pathlib").Path(__file__).resolve().parent.parent / "static" / "core" / "dash.js").read_text(encoding="utf-8")
+    helpers = "\n".join(line for line in js.splitlines() if line.startswith(("const dayNumber", "const shiftDay", "const daysBetween")))
+    span = js[js.index("function previousSpan("):js.index("function ownRange(")]
+    out = run_node(tmp_path, "console.log(JSON.stringify([previousSpan('2026-03-01', '2026-03-31'), previousSpan('2026-01-01', '2026-03-31'), previousSpan('2026-03-01', '2026-03-22')]));", parts=[helpers + "\n" + span])
+    assert out == [{"start": "2026-02-01", "end": "2026-02-28", "text": "직전 1개월"}, {"start": "2025-10-01", "end": "2025-12-31", "text": "직전 3개월"},
+                   {"start": "2026-02-07", "end": "2026-02-28", "text": "직전 22일"}]
+
+
+def test_long_korean_column_names_rejected_by_bytes():
+    from lazy import ibis
+    from core import prep_derive
+    t = ibis.memtable({"a": [1]})
+    with pytest.raises(ValueError, match="한글 21자까지"):
+        prep_derive.check_name("가" * 22, t, "계산 컬럼")
+    prep_derive.check_name("가" * 21, t, "계산 컬럼")
+
+
+def test_chart_csv_guards_tab_and_cr_like_the_server():
+    from pathlib import Path
+    html = (Path(__file__).resolve().parent.parent / "static" / "query" / "index.html").read_text(encoding="utf-8")
+    assert r'/^[=+\-@\t\r]/.test(v)' in html
