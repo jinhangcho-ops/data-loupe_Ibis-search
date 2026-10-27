@@ -33,7 +33,7 @@ ENV_FUNCS = {"getenv", "current_setting", "current_settings", "duckdb_settings",
              "setval", "nextval", "set_config", "pg_terminate_backend", "pg_cancel_backend", "sleep", "sleep_ms", "pg_sleep",  # 환경·설정·비밀을 읽거나 서버 상태를 바꾸는 함수
              "get_lock", "pg_reload_conf", "pg_switch_wal", "pg_rotate_logfile", "pg_promote", "benchmark",  # 잠금을 잡거나 서버 설정·로그·부하를 바꾸는 함수
              "enable_logging", "disable_logging", "enable_profiling", "disable_profiling", "write_log", "truncate_duckdb_logs",  # DuckDB 로그·프로파일: 아무 파일에나 쓰고 연결을 망가뜨린다
-             "checkpoint", "force_checkpoint"}
+             "checkpoint", "force_checkpoint", "load_aws_credentials"}  # load_aws_credentials: AWS 키를 읽어 보이고 연결의 S3 설정을 바꾼다
 ENV_PREFIXES = ("pg_advisory_", "pg_try_advisory_", "pg_stat_reset", "pg_drop_", "pg_create_", "system$")  # 이름이 이렇게 시작하는 함수(잠금·통계 지우기·복제 슬롯, Snowflake SYSTEM$…)
 LOCK_HINT = re.compile(r"(TAB|UPD|X|HOLD|PAG|ROW)LOCK|SERIALIZABLE|REPEATABLEREAD", re.I)  # SQL Server 테이블 힌트 중 잠금을 잡는 것(NOLOCK·INDEX 같은 힌트는 된다)
 FILE_TABLE = re.compile(r"\.(csv|tsv|parquet|jsonl?|ndjson|geojson|duckdb|gz|zst|xlsx|tbl|txt)$", re.I)  # DuckDB가 파일로 읽는 테이블 이름(스키마.테이블로 나뉜 t.csv 포함)

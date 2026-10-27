@@ -17,6 +17,7 @@ OPS = ("tm", "nearest", "region")
 MAX_STEPS = 10
 MAX_PAIRS = 5_000_000  # 고유 (위도, 경도) 쌍의 최대 수
 MAX_REFERENCE = 2_000_000  # 지점·영역 행의 최대 수
+LAST = {}  # (연결 id, 키 컬럼, 새 컬럼) → 지난번에 만든 작은 표(memtable). 같은 단계를 다시 만들면 지운다(미리보기마다 연결에 쌓이지 않게)
 KEYS = {"tm": {"op", "x", "y", "epsg", "lon", "lat"}, "nearest": {"op", "lat", "lon", "table", "schema", "ref_lat", "ref_lon", "label", "out", "dist"},
         "region": {"op", "lat", "lon", "table", "schema", "path", "geometry", "take", "prefix"}}
 
@@ -65,7 +66,12 @@ def pairs(t, a, b):
 
 def attach(t, keys, frame, new):
     """t에 frame(열: __k0, __k1, 새 컬럼들)을 키로 왼쪽 조인한다(키 열은 뺀다). 키가 비어 있거나 frame에 없는 행은 새 컬럼이 빈 값이다."""
+    con, step = ibis.get_backend(t), (id(ibis.get_backend(t)), tuple(keys), tuple(new))
     small = ibis.memtable(frame)
+    # shortcut: 같은 단계를 다시 만들면 지난번 표를 지운다(단계마다 하나). 같은 단계로 만든 식 둘을 동시에 들고 돌리면 먼저 것이 다시 올려 하나가 남는다(한 번에 한 요청이라 드묾)
+    if (old := LAST.get(step)) is not None:
+        source.drop_memtable(con, old)
+    LAST[step] = small
     keep = t.columns
     ordered = ibis.get_backend(t).name != "polars"  # Polars 조인은 왼쪽 순서를 지킨다(순번 창 함수 번역도 없다)
     # shortcut: DuckDB는 조인이 순서를 바꿔 순번으로 되돌린다(300만 행 미리보기 0.09→0.65초), 느리면 미리보기에서만 순서를 놓는다

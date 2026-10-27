@@ -195,7 +195,7 @@ FILE_READS = [
     "select * from orders o, lateral read_csv(o.id)", "from 'x.csv'",
 ]
 ENV_READS = ["select getenv('PATH')", "select GETENV('PATH') from orders", "select current_setting('home_directory')",
-             "select * from duckdb_settings()", "select main.getenv('X')"]
+             "select * from duckdb_settings()", "select main.getenv('X')", "select * from load_aws_credentials()"]
 
 
 @pytest.mark.parametrize("sql", FILE_READS)
