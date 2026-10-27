@@ -49,7 +49,7 @@ def test_slot_checks_give_reasons(folder):
 
 def test_names_are_unique_per_scope_only(folder):
     make("건수", "m01")
-    with pytest.raises(ValueError, match="이 테이블\\(흐름\\)에 ‘건수’ 지표가 이미 있어요"):
+    with pytest.raises(ValueError, match="이 테이블에 ‘건수’ 지표가 이미 있어요"):
         make("건수", "m02", {"대상": "user"})
     other = make("건수", "m01", scope=S2, columns=C2)  # 다른 scope는 같은 이름이 된다
     assert other["scope"]["table"] == "orders" and len(mm.load()) == 2
@@ -59,10 +59,8 @@ def test_other_scope_metric_needs_a_copy_or_an_align_clause(folder):
     base = make("사용자 수", "m02", {"대상": "user"})
     mine = make("주문 수", "m01", scope=S2, columns=C2)
     attempt = {"name": "주문당 사용자", "scope": S2, "template": "m05", "slots": {"지표 A": mine["id"], "지표 B": base["id"]}}
-    with pytest.raises(ValueError, match="‘사용자 수’은\\(는\\) 다른 테이블\\(흐름\\)의 지표라 그대로 쓸 수 없어요"):
+    with pytest.raises(ValueError, match="‘사용자 수’은\\(는\\) 다른 테이블의 지표라 그대로 쓸 수 없어요"):
         mm.create(attempt, C2)
-    assert mm.check_use(base, S2) == "‘사용자 수 · sales (데이터)’은(는) 다른 테이블(흐름)의 지표라 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]를 쓰세요."
-    assert mm.check_use(base, S1) is None
     # 예외: ‘{기간 단위}로 맞춰’ 또는 ‘{공통 키}로 맞춰’ 구절을 넣은 조합
     ok = mm.create({**attempt, "align": {"kind": "period", "unit": "month"}}, C2)
     assert ok["align"] == {"kind": "period", "unit": "month"} and ok["deps"] == [mine["id"], base["id"]]
@@ -153,32 +151,14 @@ def test_validate_catches_cycles_without_saving(folder):
     assert made["deps"] == [a["id"]] and len(mm.load()) == 1
 
 
-def test_cache_key_uses_id_hash_scope_and_period(folder):
-    m = make("건수", "m01")
-    assert json.loads(mm.cache_key(m, "2026-01")) == [m["id"], m["def_hash"], S1["key"], "2026-01"]
-    changed = mm.update(m["id"], {"template": "m02", "slots": {"대상": "user"}}, C1)["metric"]
-    assert mm.cache_key(changed, "2026-01") != mm.cache_key(m, "2026-01")  # 정의가 바뀌면 열쇠도 바뀐다
-    assert json.loads(mm.cache_key(changed))[3] == ""
-
-
-def test_legacy_file_metrics_are_common_definitions_bound_on_use(folder, tmp_path):
+def test_legacy_file_metrics_are_common_definitions(folder, tmp_path):
     path = tmp_path / "metrics.json"
     path.write_text(json.dumps({"metrics": {"CTR": {"numerator": {"agg": "count", "where": "status = click"}, "denominator": {"agg": "count", "where": "status = view"}, "format": "percent"},
                                             "매출": {"numerator": {"agg": "sum", "column": "amt"}}}}), encoding="utf-8")
     metric_file.save_file_path(str(path))
     listed = mm.legacy_list()
     assert [(m["id"], m["name"], m["scope"], m["legacy"]) for m in listed] == [("legacy:CTR", "CTR", None, True), ("legacy:매출", "매출", None, True)]
-    assert mm.check_use({"name": "CTR", "scope": None}, S1) == "‘CTR’은(는) 공통 정의예요. 이 테이블에 묶어 저장한 뒤 쓰세요."
-    with pytest.raises(ValueError, match="공통 정의 ‘매출’이\\(가\\) 쓰는 컬럼 ‘amt’이\\(가\\) 이 테이블에 없어요."):
-        mm.bind_legacy("매출", S2, C2)
-    bound = mm.bind_legacy("매출", S1, C1)
-    assert bound["template"] == mm.LEGACY and bound["scope"]["table"] == "sales" and bound["cols"] == {"amt": "num"} and bound["slots"]["def"]["numerator"]["agg"] == "sum"
-    ctr = mm.bind_legacy("CTR", S1, C1, new_name="클릭률")
-    assert ctr["name"] == "클릭률" and ctr["unit"] == "%"
-    with pytest.raises(ValueError, match="‘매출’ 지표가 이미 있어요"):
-        mm.bind_legacy("매출", S1, C1)
-    copied = mm.copy_to(bound["id"], S2, {"amt": "price"}, C2)
-    assert copied["metrics"][0]["slots"]["def"]["numerator"]["column"] == "price"
+
 
 
 def test_goal_lookup_can_be_ambiguous(folder):

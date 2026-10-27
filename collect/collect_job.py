@@ -640,6 +640,8 @@ def run_file(config, env, path, found, record, halt):
 
         def chunk(start, end):
             def attempt():
+                if quit.is_set():  # 다른 조각이 실패했으면 차례를 기다리던 조각·다시 시도는 보내지 않는다(받는 중인 조각은 이미 이 확인을 지났다)
+                    raise Halt(collect_http.STOPPED, failed=False)
                 with guard:
                     left = gaps([r for r in record["done"]], size)
                 position = next((max(s, start) for s, e in left if e > start and s < end), end)

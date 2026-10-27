@@ -22,7 +22,7 @@ sql_funcs = Later("core.sql_funcs")
 server.CONSTANTS["question_sets"] = {"max_items": 30, "max_size": 40_000}
 server.FREE.update({"/api/sentences", "/api/question_sets",
                     "/api/my_metrics", "/api/my_metrics/validate", "/api/my_metrics/update", "/api/my_metrics/delete", "/api/my_metrics/copy", "/api/my_metrics/status",
-                    "/api/my_metrics/check_use", "/api/my_metrics/used_by", "/api/my_metrics/stale", "/api/my_metrics/bind_legacy",
+                    "/api/my_metrics/used_by",
                     "/api/sentence/check", "/api/sentence/compile"})
 
 
@@ -73,21 +73,18 @@ def preview_samples(con, a, b, a_name, b_name):
 
 @app.post("/api/join_keys")
 def find_join_keys():
-    """공통 키 찾기: 후보 점수(이름·겹침·타입·고유), 결정(auto·ask·none), 상위 3개와 근거, 날짜 맞춤 제안, 기억한 키.
+    """공통 키 찾기: 후보 점수(이름·겹침·타입·고유), 결정(auto·ask·none), 상위 3개와 근거, 날짜 맞춤 제안.
     표본 기준이다. full을 주면 전체 값으로 확인한다(로컬 연결만). 원격 DB는 값을 읽는 새 조회를 보내지 않는다(표본이 없으면 이름·타입으로만)."""
     data = body_of(request.json)
-    con, key = get_con(), (dash_store.current_source() or {}).get("key")
+    con = get_con()
     remote = held.remote(con)
     if remote and data.get("full") is True:
         raise ValueError("원격 DB에서는 전체 값 확인을 하지 않아요(조회 요금). 표본 기준 결과를 쓰세요.")
 
     def work():
         a, b, an, bn = table_pair(data)
-        fp = join_keys.fingerprint(a, b)
-        recalled = join_keys.recall(key, an, bn, fp) if key else None
         samples = preview_samples(con, a, b, an, bn) if remote else None
-        found = join_keys.suggest(a, b, an, bn, remote=remote, samples=samples, full=data.get("full") is True, recalled=recalled)
-        return {**found, "fingerprint": fp, "source_key": key, "remembered": bool(recalled)}
+        return join_keys.suggest(a, b, an, bn, remote=remote, samples=samples, full=data.get("full") is True)
     return jsonify(**run(work))
 
 
@@ -180,37 +177,12 @@ def my_metrics_status():
     return jsonify(status={m["id"]: my_metrics.status(m, cols, items) for m in items if my_metrics.same_scope(m.get("scope"), scope)})
 
 
-@app.post("/api/my_metrics/check_use")
-def my_metrics_check_use():
-    """지표를 이 scope에서 그대로 쓸 수 있는지: {ok, reason?}. 다른 테이블의 지표는 복사해서 쓴다."""
-    data = body_of(request.json)
-    metric = my_metrics.get(data.get("id"))
-    reason = my_metrics.check_use(metric, scope_of(data))
-    return jsonify(ok=reason is None, **({"reason": reason} if reason else {}))
-
-
 @app.post("/api/my_metrics/used_by")
 def my_metrics_used_by():
     """정의를 고치기 전에 보일 쓰는 곳: 카드(stale 표시)와 목표 줄, 쓰는 지표."""
     data = body_of(request.json)
     metric = my_metrics.get(data.get("id"))
     return jsonify(**my_metrics.used_by(metric["id"], goals=data.get("goals")), dependents=[{"id": m["id"], "name": my_metrics.scope_text(m)} for m in my_metrics.dependents(metric["id"])])
-
-
-@app.post("/api/my_metrics/stale")
-def my_metrics_stale():
-    """카드가 저장해 둔 def_hash가 지금 정의와 다른지: {stale, def_hash, cache_key}."""
-    data = body_of(request.json)
-    metric = my_metrics.get(data.get("id"))
-    return jsonify(stale=my_metrics.is_stale(metric, data.get("def_hash")), def_hash=metric["def_hash"], cache_key=my_metrics.cache_key(metric, data.get("period", "")))
-
-
-@app.post("/api/my_metrics/bind_legacy")
-def my_metrics_bind_legacy():
-    """공통 정의(예전 지표 파일의 지표)를 이 테이블에 묶어 저장한다(컬럼 검사 포함)."""
-    data = body_of(request.json)
-    scope = scope_of(data)
-    return jsonify(metric=view(my_metrics.bind_legacy(data.get("name"), scope, columns_of(data), data.get("new_name"))))
 
 
 # ---------- 문장 ----------

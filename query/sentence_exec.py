@@ -54,7 +54,7 @@ def check_scope(mine, body):
         raise ValueError(my_metrics.FLOW_GONE)
     now = dash_store.current_source()
     if scope.get("table") != body.get("base") or (scope.get("schema") or "") != (body.get("schema") or "") or (now and not use_counts.same_source(scope.get("key"), now["key"])):
-        raise ValueError(f"‘{my_metrics.scope_text(mine)}’은(는) 다른 테이블(흐름)의 지표라 지금 검색에서 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]해서 쓰세요.")
+        raise ValueError(f"‘{my_metrics.scope_text(mine)}’은(는) 다른 테이블의 지표라 지금 검색에서 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]해서 쓰세요.")
 
 
 def definition_of(ref, body):

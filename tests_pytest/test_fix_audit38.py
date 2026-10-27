@@ -108,3 +108,43 @@ def test_failed_piece_lets_running_pieces_finish(tmp_path, monkeypatch, folder):
     with pytest.raises(Exception):
         collect_job.run_file(config, {}, path, found, record, threading.Event())
     assert record["done"] == [[0, 10]]
+
+
+def test_failed_piece_stops_waiting_pieces(tmp_path, monkeypatch, folder):
+    """파일 받기: 한 조각이 실패하면 차례를 기다리던 조각은 요청을 보내지 않고, 실패 이유가 그대로 보인다."""
+    import threading
+    from collect import collect_config, collect_http, collect_job
+    config = collect_config.normalize({"mode": "file", "file": {"url": "https://files.example.com/a.bin", "chunks": 8}, "balance": {"interval": 0.2, "retries": 0},
+                                       "output": {"format": "csv", "path": str(tmp_path / "a.bin")}})
+    path = collect_job.output_path(config)
+    found = collect_job.parts(path)
+    found["part"].parent.mkdir(parents=True, exist_ok=True)
+    record = {"hash": collect_job.digest(config), "mode": "file", "done": [], "rows": 0, "bytes": 0}
+    H = type("H", (dict,), {"get": dict.get, "items": dict.items})
+    sent = []
+
+    class Body:
+        def __init__(self, status, headers, data):
+            self.status, self.headers, self.data = status, H(headers), data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n=None):
+            out, self.data = (self.data[:n], self.data[n:]) if n else (self.data, b"")
+            return out
+
+    def open_url(method, url, headers, body, timeout, hide=()):
+        start, end = (int(v) for v in dict(headers)["Range"].removeprefix("bytes=").split("-"))
+        sent.append(start)
+        if start == 0 and end > 0:
+            return Body(404, {}, b"gone"), url
+        return Body(206, {"Content-Range": f"bytes {start}-{end}/80", "ETag": '"e1"'}, b"y" * (end - start + 1)), url
+    monkeypatch.setattr(collect_http, "open_url", open_url)
+    with pytest.raises(Exception) as caught:
+        collect_job.run_file(config, {}, path, found, record, threading.Event())
+    assert sent.count(0) == 2 and sent[-1] == 0  # 실패한 조각(0-9) 뒤로는 요청이 없다(조각이 시작하는 차례는 그때그때 다르다)
+    assert getattr(caught.value, "failed", True)  # 멈춤이 아니라 실패로 끝난다

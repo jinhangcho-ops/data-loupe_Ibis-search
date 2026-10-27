@@ -16,7 +16,6 @@ OLD = {"id": "m1", "name": "옛 지표", "scope": {"key": "k", "label": "L", "sc
 
 def test_old_flow_metric_says_flow_is_gone_and_stays_saved(folder):
     my_metrics.save([OLD])
-    assert my_metrics.check_use(OLD, {"key": "k", "table": "sales"}) == my_metrics.FLOW_GONE
     with pytest.raises(ValueError, match="흐름 보기가 없어져 이 지표는 다시 구할 수 없어요"):
         sentence_exec.check_scope(OLD, {"base": "sales"})
     assert my_metrics.scope_text(OLD) == "옛 지표 · f1 (L)"  # 목록에는 그대로 보인다

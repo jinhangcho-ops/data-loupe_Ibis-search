@@ -1,19 +1,14 @@
 """공통 키 찾기(6-3): 두 테이블 A·B의 컬럼 짝 중 이을 키 후보를 점수로 매긴다.
 점수 = 0.35·이름 + 0.45·겹침 + 0.10·타입 + 0.10·고유. 겹침은 A 표본의 서로 다른 값(최대 1,000개)이 B에 있는 비율(표본 기준, [전체로 확인]은 full).
 1등 ≥ 0.7이고 2등과 0.15 이상 차이면 자동 선택(auto), 아니면 상위 3개를 근거와 함께 고르게 한다(ask). 후보가 없으면 날짜 맞춤(일·주·월)을 제안한다(none).
-단일 키 겹침이 0.5 미만이면 후보 짝의 두 컬럼 묶음도 본다. 고른 키는 (연결, A, B, 스키마 지문)으로 설정 join_keys.json에 기억하고 스키마가 바뀌면 다시 찾는다.
+단일 키 겹침이 0.5 미만이면 후보 짝의 두 컬럼 묶음도 본다.
 원격 DB(held.remote)는 값을 읽는 조회를 새로 보내지 않는다: 부르는 쪽이 이미 있는 표본(samples)을 주면 그것으로, 없으면 겹침을 '표본 없음'으로 두고 이름·타입으로만 점수를 낸다.
 데이터를 읽는 함수는 server.run으로 연결 스레드에서 부른다."""
-import hashlib
 import itertools
-import json
 import re
 
 from core import parse
-from core import settings
 
-FILE = "join_keys.json"  # 기억한 키 {"items": {열쇠: {keys, saved}}}
-MAX_ITEMS = 500
 SAMPLE_VALUES = 1000  # 겹침을 볼 A의 서로 다른 값 수
 SAMPLE_ROWS = 5000  # 후보를 줄일 때 읽는 표본 행 수
 MAX_EVAL = 60  # 값으로 겹침을 재 보는 짝 수
@@ -196,10 +191,9 @@ def sample_frames(a, b, samples, remote):
     return a.limit(SAMPLE_ROWS).to_polars(), b.limit(SAMPLE_ROWS).to_polars()
 
 
-def suggest(a, b, a_name="", b_name="", remote=False, samples=None, full=False, recalled=None):
+def suggest(a, b, a_name="", b_name="", remote=False, samples=None, full=False):
     """A·B(Ibis 표)의 공통 키 제안 {decision, candidates, date, basis, note}.
-    remote: 원격 DB면 값을 읽는 새 조회를 보내지 않는다. samples = {a, b}(Polars 표): 이미 있는 표본(없으면 로컬은 앞 SAMPLE_ROWS행). full: 전체로 확인(로컬만).
-    recalled: 기억해 둔 키 [[a, b], …]가 있으면 첫 후보로 올린다. decision: auto·ask·none."""
+    remote: 원격 DB면 값을 읽는 새 조회를 보내지 않는다. samples = {a, b}(Polars 표): 이미 있는 표본(없으면 로컬은 앞 SAMPLE_ROWS행). full: 전체로 확인(로컬만). decision: auto·ask·none."""
     pairs = pre_pairs(a, b, a_name, b_name)
     fa, fb = sample_frames(a, b, samples, remote)
     sampled = fa is not None and fb is not None
@@ -236,11 +230,6 @@ def suggest(a, b, a_name="", b_name="", remote=False, samples=None, full=False, 
     if sampled and not remote and (best is None or best < COMPOSITE_BELOW) and len(singles) >= 2:
         singles += composites(a, b, singles[:4], fa, a_name, b_name)
         singles.sort(key=lambda c: (-c["score"], c["a"], c["b"]))
-    if recalled:
-        mine = [list(k) for k in recalled]
-        singles = [c for c in singles if c["keys"] != mine]
-        singles.insert(0, {"keys": mine, "a": mine[0][0], "b": mine[0][1], "name": None, "contain": None, "type": None, "unique": False, "cast": False, "basis": "기억",
-                           "score": 1.0, "reasons": ["전에 고른 키를 기억하고 있어요(같은 연결·테이블·스키마)"], "remembered": True})
     decision, top = decide(singles)
     basis = NO_SAMPLE if not sampled else ("전체" if full else "표본 기준")
     note = ("원격 DB라 값을 읽는 조회를 새로 보내지 않았어요. 이미 받아 둔 표본이 없어서 이름·타입으로만 점수를 냈어요." if remote and not sampled
@@ -284,47 +273,3 @@ def composites(a, b, top, fa, a_name, b_name):
         uniq = mine.height > 0 and mine.n_unique() == mine.height
         out.append(candidate(list(zip(ca, cb)), (x["name"] + y["name"]) / 2, contain, (x["type"] + y["type"]) / 2, uniq, cast, "표본 기준"))
     return [c for c in out if c["score"] >= MIN_SCORE]
-
-
-# ---------- 기억 ----------
-
-def fingerprint(a, b):
-    """두 테이블의 스키마 지문(컬럼 이름·타입). 스키마가 바뀌면 달라진다."""
-    shape = [sorted((c, str(t)) for c, t in x.schema().items()) for x in (a, b)]
-    return hashlib.sha256(json.dumps(shape, ensure_ascii=False).encode("utf-8")).hexdigest()[:16]
-
-
-def memory_key(source_key, a_name, b_name, fp):
-    return json.dumps([source_key, a_name, b_name, fp], ensure_ascii=False)
-
-
-def remembered():
-    items = (settings.read(FILE) or {}).get("items")
-    return items if isinstance(items, dict) else {}
-
-
-def remember(source_key, a_name, b_name, fp, keys):
-    """고른 키를 기억한다(계정·비밀번호 없는 연결 열쇠로). MAX_ITEMS를 넘으면 오래된 것부터 뺀다."""
-    import datetime as dt
-    with settings.updating(FILE):
-        items = remembered()
-        items[memory_key(source_key, a_name, b_name, fp)] = {"keys": [list(k) for k in keys], "saved": dt.datetime.now().isoformat(timespec="seconds")}
-        for stale in sorted(items, key=lambda k: str(items[k].get("saved", "")))[:-MAX_ITEMS]:
-            items.pop(stale)
-        settings.write(FILE, {"items": items})
-
-
-def recall(source_key, a_name, b_name, fp):
-    """기억한 키 [[a, b], …] 또는 None(없음, 스키마가 바뀌어 지문이 다르면 없음)."""
-    found = remembered().get(memory_key(source_key, a_name, b_name, fp))
-    keys = found.get("keys") if isinstance(found, dict) else None
-    return keys if isinstance(keys, list) and keys else None
-
-
-def forget(source_key, a_name, b_name, fp):
-    """기억한 키를 지운다."""
-    with settings.updating(FILE):
-        items = remembered()
-        if items.pop(memory_key(source_key, a_name, b_name, fp), None) is not None:
-            settings.write(FILE, {"items": items})
-

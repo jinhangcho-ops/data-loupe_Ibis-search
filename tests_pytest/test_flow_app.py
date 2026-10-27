@@ -6,10 +6,11 @@ from conftest import spy_queries
 
 from core import held
 from core import server
+from metrics import my_metrics
 
 FREE = ["/api/my_metrics",
-        "/api/my_metrics/validate", "/api/my_metrics/update", "/api/my_metrics/delete", "/api/my_metrics/copy", "/api/my_metrics/status", "/api/my_metrics/check_use",
-        "/api/my_metrics/used_by", "/api/my_metrics/stale", "/api/my_metrics/bind_legacy", "/api/sentence/check", "/api/sentence/compile"]
+        "/api/my_metrics/validate", "/api/my_metrics/update", "/api/my_metrics/delete", "/api/my_metrics/copy", "/api/my_metrics/status",
+        "/api/my_metrics/used_by", "/api/sentence/check", "/api/sentence/compile"]
 READS = ["/api/table_columns", "/api/join_keys"]  # 연결에서 읽는 라우트는 차례를 기다린다
 
 
@@ -61,8 +62,7 @@ def test_table_columns_route(c):
 
 def test_keys_route(c):
     code, body = post(c, "/api/join_keys", a={"table": "sales"}, b={"table": "shops"})
-    assert code == 200 and body["decision"] == "auto" and body["candidates"][0]["keys"] == [["shop_id", "shop_id"]] and body["basis"] == "표본 기준" and not body["remembered"]
-    assert body["source_key"] and body["fingerprint"]
+    assert code == 200 and body["decision"] == "auto" and body["candidates"][0]["keys"] == [["shop_id", "shop_id"]] and body["basis"] == "표본 기준"
     assert body["candidates"][0]["score"] == pytest.approx(0.35 * 1 + 0.45 * 1 + 0.10 * 1 + 0.10 * 1)  # 이름 같음·겹침 1·타입·shops.shop_id 고유
     assert post(c, "/api/join_keys", a={"table": "sales"})[1]["error"] == "이을 두 테이블(a, b)을 고르세요."
 
@@ -80,7 +80,7 @@ def test_keys_route_on_remote_sends_no_value_queries(c, monkeypatch):
 
 
 def test_my_metric_routes(c):
-    code, listed = (200, c.get("/api/my_metrics").get_json())
+    listed = c.get("/api/my_metrics").get_json()
     assert listed["metrics"] == [] and any(t["id"] == "m09" for t in listed["templates"]) and listed["legacy"] == [] and listed["source"]["key"]
     cols = {"amt": "num", "user": "text"}
     made = post(c, "/api/my_metrics", definition={"name": "ARPU", "scope": {"table": "sales"}, "template": "m09", "slots": {"값": "amt", "대상": "user"}, "unit": "원"}, columns=cols)
@@ -91,18 +91,13 @@ def test_my_metric_routes(c):
         "ok": False, "problem": "‘값’ 칸: ‘user’은 글자 컬럼이라 쓸 수 없어요(숫자 컬럼이 필요해요)."}
     assert post(c, "/api/my_metrics/validate", definition={"name": "OK", "scope": {"table": "sales"}, "template": "m02", "slots": {"대상": "user"}}, columns=cols)[1]["ok"] is True
     other = {"table": "orders"}
-    code, body = post(c, "/api/my_metrics/check_use", id=metric["id"], scope=other)
-    assert body["ok"] is False and "다른 테이블(흐름)의 지표라 그대로 쓸 수 없어요" in body["reason"]
-    assert post(c, "/api/my_metrics/check_use", id=metric["id"], scope={"table": "sales"})[1] == {"ok": True}
     copied = post(c, "/api/my_metrics/copy", id=metric["id"], scope=other, mapping={"amt": "price"}, columns={"price": "num", "user": "text"})[1]
     assert copied["metrics"][0]["slots"] == {"값": "price", "대상": "user"} and copied["metrics"][0]["scope"]["table"] == "orders" and metric["id"] in copied["id_map"]
     status = post(c, "/api/my_metrics/status", scope={"table": "sales"}, columns={"user": "text"})[1]["status"]
     assert status == {metric["id"]: {"usable": False, "reason": "‘amt’ 컬럼이 테이블에서 없어졌어요."}}  # 같은 scope의 지표만
     updated = post(c, "/api/my_metrics/update", id=metric["id"], patch={"slots": {"값": "amt", "대상": "amt"}}, columns={"amt": "num", "user": "text"})[1]
     assert updated["changed"] is True and updated["metric"]["slots"]["대상"] == "amt"
-    stale = post(c, "/api/my_metrics/stale", id=metric["id"], def_hash=metric["def_hash"], period="2026-01")[1]
-    assert stale["stale"] is True and stale["def_hash"] == updated["metric"]["def_hash"] and stale["cache_key"].endswith('"2026-01"]')
-    assert post(c, "/api/my_metrics/stale", id=metric["id"], def_hash=stale["def_hash"])[1]["stale"] is False
+    assert my_metrics.is_stale(updated["metric"], metric["def_hash"]) and not my_metrics.is_stale(updated["metric"], updated["metric"]["def_hash"])
     users = post(c, "/api/my_metrics/used_by", id=metric["id"])[1]
     assert users["cards"] == [] and users["dependents"] == []
     assert post(c, "/api/my_metrics/delete", id=metric["id"])[1]["removed"] == metric["id"]

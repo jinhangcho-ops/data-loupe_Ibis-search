@@ -279,7 +279,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
       <div class="row nl-row"><input id="nl-q" placeholder="질문으로 SQL 만들기 (예: 지난달 매장별 매출 합계)" title="만든 SQL은 바로 실행하지 않고 편집기에 넣어요. 검사 결과를 보고 [실행]을 누르세요">
         <button id="nl-ask" class="btn" title="LLM에 물어 SQL을 만들어요">SQL 만들기</button>
         <button id="nl-prompt" class="btn" title="LLM에 보낼 내용을 보여 줘요. 테이블과 컬럼 이름, 타입, 명세서 설명, 지표 정의, 컬럼별 표본 통계만 들어가고 데이터 값은 넣지 않아요">프롬프트 보기</button></div>
-      <div class="row nl-row"><span class="hint" style="margin:0" id="llm-name">LLM: 없음</span><input id="llm-env" class="code" placeholder="LLM 설정 파일 경로 (LLM_PROVIDER, LLM_API_KEY, LLM_MODEL)" title="키는 저장하지 않고 물을 때마다 이 파일에서 읽어요. 비우고 [읽기]를 누르면 LLM을 쓰지 않아요"><button id="llm-read" class="btn">읽기</button></div>
+      <div class="row nl-row"><span class="hint" style="margin:0" id="llm-name">LLM: 없음</span><input id="llm-env" class="code" placeholder="LLM 설정 파일 경로 (LLM_PROVIDER, LLM_API_KEY, LLM_MODEL)" title="키는 저장하지 않고 물을 때마다 이 파일에서 읽어요. 비우고 [불러오기]를 누르면 LLM을 쓰지 않아요"><button id="llm-read" class="btn">불러오기</button></div>
       <pre class="nl-prompt hidden" id="nl-view"></pre>
       <div class="sql-hl"><pre id="sql-paint" aria-hidden="true"></pre><textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea></div>
       <div class="sql-check" id="sql-check"></div>
@@ -1287,6 +1287,7 @@ Shortcuts({
   undo: scoped(searchUndo, inExplore),
   save: () => {
     if (!inExplore()) return pressBtn($("sql-save"));
+    if ($("work").classList.contains("closed")) foldSide(false);  // 접힌 패널 안의 저장 상자는 보이지 않는다
     if (!$("sname").value.trim() && !$("saved").value) { if ($("saved-pop").classList.contains("hidden")) $("saved-open").click(); return $("sname").focus(); }  // 이름이 없으면 저장 상자를 열어 이름부터
     $("ssave").click();
   },

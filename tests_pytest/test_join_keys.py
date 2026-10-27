@@ -103,23 +103,6 @@ def test_full_check_uses_all_values(db):
     assert sample["note"] == "표본 기준이에요. [전체로 확인]을 누르면 전체 값으로 다시 재요."
 
 
-def test_remembered_keys_follow_the_schema_fingerprint(db, folder):
-    a, b = db.table("orders"), db.table("users")
-    fp = jk.fingerprint(a, b)
-    assert jk.recall("file:x", "orders", "users", fp) is None
-    jk.remember("file:x", "orders", "users", fp, [("user_id", "id")])
-    assert jk.recall("file:x", "orders", "users", fp) == [["user_id", "id"]]
-    assert jk.recall("file:y", "orders", "users", fp) is None  # 다른 연결
-    assert jk.fingerprint(a, db.table("users_slim")) != fp  # 스키마(컬럼)가 다르면 지문이 다르다
-    assert jk.recall("file:x", "orders", "users", jk.fingerprint(a, db.table("users_slim"))) is None
-    found = jk.suggest(a, b, "orders", "users", recalled=jk.recall("file:x", "orders", "users", fp))
-    assert found["candidates"][0]["remembered"] and found["candidates"][0]["keys"] == [["user_id", "id"]] and found["candidates"][0]["basis"] == "기억"
-    jk.forget("file:x", "orders", "users", fp)
-    assert jk.recall("file:x", "orders", "users", fp) is None
-    settings_text = (folder / jk.FILE).read_text(encoding="utf-8")
-    assert "password" not in settings_text and "file:x" not in settings_text.replace('"file:x"', "")  # 열쇠는 연결 열쇠뿐(계정·비밀번호 없음)
-
-
 # ---------- 원격 DB ----------
 
 def spy(monkeypatch):

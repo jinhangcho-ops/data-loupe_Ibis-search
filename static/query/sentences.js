@@ -318,7 +318,7 @@ function SentenceView(host, ctx) {
       if (!s) return;
       current = sel.value; name.value = current;
       const cols = kinds(), notes = [];
-      items = s.items.map(i => { const r = sentFitColumns(cat.templates.find(t => t.id === i.template), i.slots ?? {}, cols); if (r.gone.length) notes.push(`${cat.templates.find(t => t.id === i.template).name}: 이 테이블에 없는 컬럼이라 ${r.gone.join(", ")} 칸을 비웠어요.`); return { id: ++seq, template: i.template, slots: r.slots, period: i.period ? { ...i.period, span: null } : null }; });
+      items = s.items.map(i => { const r = sentFitColumns(cat.templates.find(t => t.id === i.template), i.slots ?? {}, cols); if (r.gone.length) notes.push(`${cat.templates.find(t => t.id === i.template).name}: 이 테이블에 없는 컬럼이라 ${r.gone.join(", ")} 칸을 비웠어요.`); return { id: ++seq, template: i.template, slots: r.slots, period: i.period ? { ...i.period, span: null } : null, touched: true }; });
       shared = { on: !!s.shared, column: s.period?.column ?? "", text: s.period?.text ?? "", span: null };
       showExplore(); if (notes.length) body.querySelector(".sset-note").textContent = notes.join(" / ");
     };
@@ -457,6 +457,6 @@ function SentenceView(host, ctx) {
   }
   // 임시 저장(초안)에 담는 작성 중인 문장(고른 틀·빈칸·기간). 구한 결과는 담지 않는다.
   const draft = () => ({ items: items.map(i => ({ template: i.template, slots: i.slots, period: i.period && { column: i.period.column, text: i.period.text } })), shared: { on: shared.on, column: shared.column, text: shared.text } });
-  const setDraft = d => { items = d.items.map(i => ({ id: ++seq, ...i })); shared = { ...d.shared, span: null }; };
+  const setDraft = d => { items = d.items.map(i => ({ id: ++seq, ...i, touched: true })); shared = { ...d.shared, span: null }; };
   return { show, items: () => items, draft, setDraft };
 }

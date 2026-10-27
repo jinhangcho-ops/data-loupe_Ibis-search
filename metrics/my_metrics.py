@@ -5,8 +5,8 @@
 - 의존(deps)은 순환할 수 없다(DFS). def_hash는 자기 정의 + 의존하는 지표의 def_hash를 합쳐 만들어, 의존 지표의 정의가 바뀌면 쓰는 쪽도 바뀐다.
   정의를 고치면 쓰는 지표·카드·목표를 알리고(update), 카드가 저장해 둔 def_hash와 다르면 '정의가 바뀌었어요'(stale).
 - cols는 만들 때 쓴 컬럼의 종류 기록이다. 테이블 구조가 바뀌어(컬럼 없음·타입 바뀜) 맞지 않으면 status가 '쓸 수 없음 + 이유'를 준다.
-- 예전 metrics.py 파일의 지표는 scope 없는 '공통 정의'(legacy_list)이고, 쓸 때 컬럼을 검사해 scope 붙은 지표로 저장한다(bind_legacy).
-- 결과 캐시 열쇠는 (id, def_hash, scope.key, 기간)이다(cache_key). 데이터를 읽지 않는다."""
+- 예전 metrics.py 파일의 지표는 scope 없는 '공통 정의'(legacy_list)이고, 지표 목록에 '(지표 파일)'로 보이고 이름으로 쓴다.
+- 데이터를 읽지 않는다."""
 import json
 import re
 import secrets
@@ -65,7 +65,7 @@ def scope_id(scope):
 
 
 def same_scope(a, b):
-    """두 scope가 같은 테이블(흐름)인지. 연결 열쇠는 예전 열쇠(폴더만·query 없던 Databricks·Athena)도 같은 연결이면 같다고 본다(use_counts.same_source, 화면 inScope와 같은 기준)."""
+    """두 scope가 같은 테이블인지. 연결 열쇠는 예전 열쇠(폴더만·query 없던 Databricks·Athena)도 같은 연결이면 같다고 본다(use_counts.same_source, 화면 inScope와 같은 기준)."""
     ka, kb = (a or {}).get("key", ""), (b or {}).get("key", "")
     keys = ka == kb or (isinstance(ka, str) and isinstance(kb, str) and ka and kb and (use_counts.same_source(ka, kb) or use_counts.same_source(kb, ka)))
     return bool(keys) and scope_id({**(a or {}), "key": ""}) == scope_id({**(b or {}), "key": ""})
@@ -278,7 +278,7 @@ def build(defn, columns, items, metric_id=None):
     scope = check_scope(defn.get("scope"))
     same = [m for m in items if m["id"] != metric_id and same_scope(m.get("scope"), scope) and m["name"] == name]
     if same:
-        raise ValueError(f"이 테이블(흐름)에 ‘{name}’ 지표가 이미 있어요. 같은 곳에서는 이름이 겹칠 수 없어요.")
+        raise ValueError(f"이 테이블에 ‘{name}’ 지표가 이미 있어요. 같은 곳에서는 이름이 겹칠 수 없어요.")
     tid = defn.get("template")
     if tid == LEGACY:
         slots = {"def": metric_file.metric(name, (defn.get("slots") or {}).get("def"))}
@@ -313,7 +313,7 @@ def build(defn, columns, items, metric_id=None):
     align = check_align(defn.get("align"))
     foreign = [m for m in items if m["id"] in deps and not same_scope(m.get("scope"), scope)]
     if foreign and not align:
-        raise ValueError(f"‘{foreign[0]['name']}’은(는) 다른 테이블(흐름)의 지표라 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]하거나 "
+        raise ValueError(f"‘{foreign[0]['name']}’은(는) 다른 테이블의 지표라 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]하거나 "
                          f"‘기간 단위로 맞춰’ 또는 ‘공통 키로 맞춰’ 구절을 넣어 주세요.")
     if not 0 <= len(str(defn.get("unit") or "")) <= 20:
         raise ValueError("단위는 20자까지예요.")
@@ -358,10 +358,10 @@ def update(metric_id, patch, columns=None):
     old = get(metric_id, items)
     base = {k: old.get(k) for k in ("name", "scope", "template", "slots", "unit", "better", "align")}
     made = build({**base, **(patch or {})}, columns, items, metric_id)
-    if scope_id(made["scope"]) != scope_id(old.get("scope")):  # 테이블(흐름)을 옮기면 이 지표를 쓰던 지표가 남의 테이블 지표를 쓰게 되니 거부한다
+    if scope_id(made["scope"]) != scope_id(old.get("scope")):  # 테이블을 옮기면 이 지표를 쓰던 지표가 남의 테이블 지표를 쓰게 되니 거부한다
         users = [m for m in items if metric_id in (m.get("deps") or []) and not m.get("align") and not same_scope(m.get("scope"), made["scope"])]
         if users:
-            raise ValueError(f"‘{old['name']}’을(를) 쓰는 지표({', '.join(m['name'] for m in users[:5])})가 있어 다른 테이블(흐름)로 옮길 수 없어요. 쓰는 지표를 먼저 바꾸세요.")
+            raise ValueError(f"‘{old['name']}’을(를) 쓰는 지표({', '.join(m['name'] for m in users[:5])})가 있어 다른 테이블로 옮길 수 없어요. 쓰는 지표를 먼저 바꾸세요.")
     before = old.get("def_hash")
     old.pop("align", None)
     old.update(made, updated=dash_store.now_text())
@@ -469,17 +469,6 @@ def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
 
 # ---------- 쓸 수 있는지 ----------
 
-def check_use(metric, scope):
-    """지표를 scope에서 그대로 쓸 수 있는지: 쓸 수 없는 이유 또는 None. 다른 scope의 지표는 복사해서 써야 한다."""
-    if not (metric.get("scope")):
-        return f"‘{metric['name']}’은(는) 공통 정의예요. 이 테이블에 묶어 저장한 뒤 쓰세요."
-    if is_flow_only(metric):
-        return FLOW_GONE
-    if not same_scope(metric["scope"], check_scope(scope)):
-        return f"‘{scope_text(metric)}’은(는) 다른 테이블(흐름)의 지표라 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]를 쓰세요."
-    return None
-
-
 def status(metric, columns, items=None, seen=()):
     """테이블 구조가 바뀌었는지 본 지표의 상태 {usable, reason}. columns = 지금 테이블의 {컬럼: 종류}. 컬럼이 없어졌거나 종류가 바뀌었거나 의존하는 지표를 쓸 수 없으면 쓸 수 없음 + 이유."""
     items = load() if items is None else items
@@ -505,11 +494,6 @@ def status(metric, columns, items=None, seen=()):
 def is_stale(metric, saved_hash):
     """카드·목표가 저장해 둔 def_hash가 지금과 다르면 True('정의가 바뀌었어요')."""
     return bool(saved_hash) and saved_hash != metric.get("def_hash")
-
-
-def cache_key(metric, period=""):
-    """결과 캐시 열쇠 (id, def_hash, scope.key, 기간)."""
-    return json.dumps([metric["id"], metric.get("def_hash", ""), (metric.get("scope") or {}).get("key", ""), period or ""], ensure_ascii=False)
 
 
 def used_by(metric_id, dashboards=None, goals=None):
@@ -546,15 +530,3 @@ def legacy_list():
         return []
     return [{"id": f"{LEGACY}:{name}", "name": name, "scope": None, "legacy": True, "text": metric_file.describe(m), "description": m["description"], "format": m["format"]}
             for name, m in found.items()]
-
-
-def bind_legacy(name, scope, columns, new_name=None):
-    """공통 정의 하나를 쓸 때: 쓰는 컬럼을 이 테이블에서 검사하고 scope 붙은 지표로 저장한다. 컬럼이 없으면 어느 컬럼인지 알린다."""
-    found = metric_file.registry()
-    metrics_def = found.get(name)
-    if metrics_def is None:
-        raise ValueError(f"공통 정의 ‘{name}’을(를) 지표 파일에서 찾지 못했어요.")
-    missing = sorted(c for c in legacy_columns(metrics_def, columns) if columns is not None and c not in columns)
-    if missing:
-        raise ValueError(f"공통 정의 ‘{name}’이(가) 쓰는 컬럼 {', '.join('‘' + c + '’' for c in missing)}이(가) 이 테이블에 없어요.")
-    return create({"name": new_name or name, "scope": scope, "template": LEGACY, "slots": {"def": metrics_def}, "unit": "%" if metrics_def["format"] == "percent" else ""}, columns)
