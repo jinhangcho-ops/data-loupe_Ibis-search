@@ -212,6 +212,8 @@ class Balancer:
             self.enter()
             try:
                 self.take()  # 자리를 잡은 뒤에 세어, 센 시각이 실제로 보내는 시각과 가깝게 한다.
+                if self.quit.is_set():  # 한도를 기다리는 사이 다른 줄기가 실패했으면 보내지 않는다
+                    raise Halt(STOPPED, failed=False)
                 reply = attempt()
             except (OSError, http.client.HTTPException) as e:  # 시간 초과, 연결 오류(URLError도 OSError)
                 reply, last = None, source.mask(f"연결 오류: {getattr(e, 'reason', e)}", self.secrets, HIDE)

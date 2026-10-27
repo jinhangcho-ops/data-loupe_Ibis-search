@@ -663,8 +663,7 @@ def run_file(config, env, path, found, record, halt):
 
         def worker(start, end):
             try:
-                if not quit.is_set():
-                    balancer.call(chunk(start, end))
+                balancer.call(chunk(start, end))
             except Exception as e:  # 새 조각만 막는다. 받는 중인 조각은 끝까지 받아 기록해야 다음에 이어 받는다(halt로 함께 끊으면 받은 범위가 남지 않는다)
                 errors.append(e)
                 quit.set()

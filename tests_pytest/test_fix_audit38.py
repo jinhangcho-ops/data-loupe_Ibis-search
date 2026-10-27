@@ -156,3 +156,59 @@ def test_failed_piece_stops_waiting_pieces(tmp_path, monkeypatch, folder):
     assert sent.count(0) == 2 and sent[-1] == 0  # 실패한 조각(0-9) 뒤로는 요청이 없다(조각이 시작하는 차례는 그때그때 다르다)
     assert getattr(caught.value, "failed", True)  # 멈춤이 아니라 실패로 끝난다
     assert len(takes) == len(sent)  # 확인 요청을 포함해 보낸 요청 수만큼만 한도에 셌다
+
+
+def test_piece_waiting_on_usage_limit_sends_nothing_after_failure(tmp_path, monkeypatch, folder):
+    """사용 한도를 기다리던 조각은, 그사이 다른 조각이 실패하면 요청을 보내지 않는다."""
+    import threading
+    from collect import collect_config, collect_http, collect_job
+    config = collect_config.normalize({"mode": "file", "file": {"url": "https://files.example.com/a.bin", "chunks": 2}, "balance": {"interval": 0, "retries": 0},
+                                       "output": {"format": "csv", "path": str(tmp_path / "a.bin")}})
+    path = collect_job.output_path(config)
+    found = collect_job.parts(path)
+    found["part"].parent.mkdir(parents=True, exist_ok=True)
+    record = {"hash": collect_job.digest(config), "mode": "file", "done": [], "rows": 0, "bytes": 0}
+    H = type("H", (dict,), {"get": dict.get, "items": dict.items})
+    sent, failed, both = [], threading.Event(), threading.Barrier(2, timeout=5)
+
+    class Body:
+        def __init__(self, status, headers, data):
+            self.status, self.headers, self.data = status, H(headers), data
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n=None):
+            out, self.data = (self.data[:n], self.data[n:]) if n else (self.data, b"")
+            return out
+
+    def open_url(method, url, headers, body, timeout, hide=()):
+        start, end = (int(v) for v in dict(headers)["Range"].removeprefix("bytes=").split("-"))
+        sent.append(start)
+        if start == 0 and end > 0:
+            failed.set()
+            return Body(404, {}, b"gone"), url
+        return Body(206, {"Content-Range": f"bytes {start}-{end}/20", "ETag": '"e1"'}, b"y" * (end - start + 1)), url
+
+    def take():  # 두 조각이 다 자리를 잡은 뒤, 뒤에 만든 조각(10-19)은 앞 조각이 실패할 때까지 한도를 기다린다
+        me = threading.current_thread()
+        if "worker" not in me.name:
+            return
+        both.wait()
+        workers = sorted((t for t in threading.enumerate() if "worker" in t.name), key=lambda t: int(t.name.split("-")[1].split()[0]))
+        if me is not workers[0]:
+            failed.wait(5)
+    made = collect_job.balancer_for
+
+    def limited(*a):
+        balancer = made(*a)
+        balancer.take = take
+        return balancer
+    monkeypatch.setattr(collect_http, "open_url", open_url)
+    monkeypatch.setattr(collect_job, "balancer_for", limited)
+    with pytest.raises(Exception):
+        collect_job.run_file(config, {}, path, found, record, threading.Event())
+    assert sent == [0, 0]  # 확인 요청과 실패한 앞 조각뿐
