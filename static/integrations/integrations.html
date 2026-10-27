@@ -8,14 +8,11 @@
 <style>
   .hub { flex:1; min-height:0; overflow:auto; padding:22px 28px 40px; }
   .hub h1 { margin:0 0 4px; font-size:24px; letter-spacing:-.01em; }
-  .hub > p { margin:0 0 18px; color:var(--muted); }
+  .hub > p { margin:0 0 18px; color:var(--muted); max-width:720px; line-height:1.6; }
   .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap:16px; align-items:start; }
-  .svc .head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .svc .head h3 { margin:0; }
-  .hub > p { max-width:720px; line-height:1.6; }
+  .svc .head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
+  .svc .head h3 { margin:0; font-size:15px; font-weight:600; }
   .svc { display:flex; flex-direction:column; gap:4px; }
-  .svc .head { margin-bottom:4px; }
-  .svc .head h3 { font-size:15px; font-weight:600; }
   .state { margin-left:auto; font-size:12px; color:var(--muted); background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:1px 10px; }
   .state:empty { display:none; }
   .state.on { color:var(--ok); border-color:currentColor; font-weight:600; }

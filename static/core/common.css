@@ -151,7 +151,7 @@ th, td { border-bottom:1px solid var(--line); padding:0 14px 0 0; height:40px; t
 th { position:sticky; top:0; z-index:1; background:var(--head); color:var(--muted); font-size:12.5px; font-weight:600; border-bottom:2px solid var(--text); }
 th small { display:block; font-weight:500; font-size:11px; color:var(--faint); margin-top:-3px; }
 th.sorted { color:var(--accent); }
-td.num { text-align:right; }
+td.num, th.num { text-align:right; }  /* 숫자 컬럼은 머리글도 오른쪽(common.js resultTable) */
 td.src { color:var(--muted); font-size:12.5px; }
 mark { background:var(--accent-bg); color:var(--accent); border-radius:3px; padding:0 1px; }
 /* 큰 표(common.js mountTable): 안 보이는 행을 대신하는 빈 줄, 칸 너비를 고정해 주는 높이 0의 안 보이는 줄 */
@@ -214,7 +214,7 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:3px; padd
 .dc-pick { position:absolute; width:0; height:0; padding:0; border:0; opacity:0; pointer-events:none; }
 .dc-past { align-self:center; background:var(--accent-bg); color:var(--accent); border-radius:999px; padding:3px 12px; font-weight:600; font-size:12.5px; }
 .rf-list { list-style:none; margin:10px 0; padding:0; display:grid; gap:4px; max-height:50vh; overflow:auto; }
-.rf-list li { display:flex; gap:8px; font-size:13px; }
+.rf-list li { display:flex; gap:8px; font-size:13px; color:var(--text); min-height:0; }  /* 상태 class(ok·failed)가 전역 .ok 메시지 색을 줄 전체에 물리지 않게 */
 .rf-list li b { flex:none; min-width:56px; }
 .rf-list li.failed b { color:var(--err); }
 .rf-list li.ok b { color:var(--ok); }

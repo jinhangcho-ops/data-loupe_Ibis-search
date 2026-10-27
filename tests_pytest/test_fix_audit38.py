@@ -422,3 +422,12 @@ def test_sql_color_classes_only_style_inside_the_sql_views():
     style = html[html.index("<style>"):html.index("</style>")]
     assert not re.search(r"(^|[;}\n])[ \t]*\.sc\s*\{", style)  # 패널 스크롤 영역(.side .sc)이 흐린 기울임꼴이 되지 않게
     assert ":is(#sql-paint, #sql) .sc {" in style
+
+
+def test_shared_css_for_refresh_rows_numeric_headers_and_collect_badge():
+    from pathlib import Path
+    static = Path(__file__).resolve().parent.parent / "static"
+    css = (static / "core" / "common.css").read_text(encoding="utf-8")
+    assert ".rf-list li { display:flex; gap:8px; font-size:13px; color:var(--text);" in css  # 전역 .ok가 완료 줄 전체를 초록으로 칠하지 않게
+    assert "td.num, th.num { text-align:right; }" in css  # 분석·문장 표의 숫자 머리글도 오른쪽
+    assert "border:0; border-radius:6px; background:var(--accent)" in (static / "collect" / "collect.html").read_text(encoding="utf-8")
