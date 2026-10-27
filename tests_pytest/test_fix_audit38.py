@@ -221,3 +221,17 @@ def test_target_met_exactly_despite_float_tail():
     assert summary_text.target_sentence(110_000_000, targets.parse_value("1.1억"), "currency").endswith("목표를 채웠어요.")
     assert summary_text.target_sentence(1.1 + 2.2, 3.3, "number").endswith("목표를 채웠어요.")  # 합계의 꼬리 3.3000000000000003
     assert summary_text.target_sentence(3.31, 3.3, "number").endswith("목표를 넘었어요.")
+
+
+def test_tiny_targets_keep_their_value():
+    from core import targets
+    assert targets.parse_value("0.0000025") == 2.5e-06 and targets.parse_value("0.0000001") == 1e-07
+    assert targets.parse_value("1.23456789%") == targets.parse_value("0.0123456789") == 0.0123456789
+
+
+@pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
+def test_cards_judge_target_like_the_server(tmp_path):
+    from test_fix_audit_js import between, run_node
+    helper = between("dash_cards.js", "const overTarget", "\n") + "\n"
+    out = run_node(tmp_path, "console.log(JSON.stringify([overTarget(1.1 + 2.2, 3.3), underTarget(0.7 + 0.1, 0.8), overTarget(3.31, 3.3), underTarget(3.29, 3.3)]));", parts=[helper])
+    assert out == [False, False, True, True]  # 꼬리는 같은 값, 진짜 차이는 넘음·모자람

@@ -5,6 +5,7 @@
 const SVG_KINDS = ["kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation", "funnel", "geomap"];
 const TAU = Math.PI * 2, RING_GAP = 0.06;  // 게이지 조각 사이 간격(라디안)
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+const overTarget = (v, t) => v > t + Math.abs(t) * 1e-9, underTarget = (v, t) => v < t - Math.abs(t) * 1e-9;  // 합계의 부동소수 꼬리(1.1 + 2.2)는 목표와 같은 값으로(서버 summary_text와 같은 기준)
 // 12시 방향이 0, 시계 방향으로 커지는 각도의 점
 const polar = (cx, cy, r, a) => [cx + r * Math.sin(a), cy - r * Math.cos(a)];
 // 각도 a0에서 a1까지(시계 방향) 호의 SVG 경로. 한 바퀴 가까우면 둘로 나눈다.
@@ -140,20 +141,20 @@ function paintDonut(card, colors) {
   if (ring === "half") {  // 반원 게이지 + 목표 점
     const ratio = target ? clamp(main / target, 0, 1) : clamp(main, 0, 1), a = -Math.PI / 2 + Math.PI * ratio;
     kids.push(svg("path", { d: arcPath(cx, cy + 20, r, -Math.PI / 2, Math.PI / 2), fill: "none", stroke: track, "stroke-width": sw, "stroke-linecap": "round" }),
-      svg("path", { d: arcPath(cx, cy + 20, r, -Math.PI / 2, Math.max(a, -Math.PI / 2 + 0.001)), fill: "none", stroke: target && main > target ? over : c0, "stroke-width": sw, "stroke-linecap": "round" }));
+      svg("path", { d: arcPath(cx, cy + 20, r, -Math.PI / 2, Math.max(a, -Math.PI / 2 + 0.001)), fill: "none", stroke: target && overTarget(main, target) ? over : c0, "stroke-width": sw, "stroke-linecap": "round" }));
     if (target) { const [x, y] = polar(cx, cy + 20, r, Math.PI / 2); kids.push(svg("circle", { cx: x, cy: y, r: 5, fill: colors.ink })); }
   } else if (ring === "double") {  // 겹친 두 고리: 바깥 = 칸0, 안 = 칸1 (목표 대비)
     const full = target || Math.max(main, vals[1] ?? 0, 1);
-    kids.push(base(r), circle(r, main / full, main > full ? over : c0), base(r - sw - 4, sw - 4), circle(r - sw - 4, (vals[1] ?? 0) / full, color(1), sw - 4));
+    kids.push(base(r), circle(r, main / full, overTarget(main, full) ? over : c0), base(r - sw - 4, sw - 4), circle(r - sw - 4, (vals[1] ?? 0) / full, color(1), sw - 4));
   } else {  // stack(실제·모자람·넘은 부분), ticks(고리 + 목표 눈금)
     const full = ring === "ticks" ? Math.max(target ?? 0, main) || 1 : target || Math.max(main, 1);
     kids.push(base(r));
     if (ring === "stack") {
       kids.push(circle(r, Math.min(main, full) / full, c0));
-      if (target && main < target) kids.push(circle(r, (target - main) / full, colors.text, sw, main / full));  // 모자람
-      if (target && main > target) kids.push(circle(r, (main - target) / full, over, sw, 1 - (main - target) / full));  // 넘은 부분
+      if (target && underTarget(main, target)) kids.push(circle(r, (target - main) / full, colors.text, sw, main / full));  // 모자람
+      if (target && overTarget(main, target)) kids.push(circle(r, (main - target) / full, over, sw, 1 - (main - target) / full));  // 넘은 부분
     } else {
-      kids.push(circle(r, main / full, target && main > target ? over : c0));
+      kids.push(circle(r, main / full, target && overTarget(main, target) ? over : c0));
       if (target) { const a = TAU * clamp(target / full, 0, 1), [x0, y0] = polar(cx, cy, r - sw / 2 - 3, a), [x1, y1] = polar(cx, cy, r + sw / 2 + 3, a); kids.push(svg("line", { x1: x0, y1: y0, x2: x1, y2: y1, stroke: colors.ink, "stroke-width": 2.5 })); }
     }
   }
@@ -178,7 +179,7 @@ function paintGauge(card, colors) {
 function paintSummary(card, colors) {
   const d = card.data ?? {}, v = cardValue(card), target = cardTarget(card), fmt = cardFormat(card), ratio = target && v != null ? v / target : null;  // 값이 없으면 막대·"목표 대비 0%"를 그리지 않는다
   return box("summary", el("div", { className: "sum-text", textContent: d.text || "—" }), d.target?.error ? el("div", { className: "err", textContent: d.target.error }) : "",
-    ratio != null ? el("div", { className: "sum-bar", title: `${showValue(v, fmt)} / ${showValue(target, fmt)}` }, el("i", { style: `width:${clamp(ratio, 0, 1) * 100}%;background:${ratio > 1 + 1e-9 ? darken(colors.series[0]) : colors.series[0]}` }),
+    ratio != null ? el("div", { className: "sum-bar", title: `${showValue(v, fmt)} / ${showValue(target, fmt)}` }, el("i", { style: `width:${clamp(ratio, 0, 1) * 100}%;background:${overTarget(v, target) ? darken(colors.series[0]) : colors.series[0]}` }),
       el("span", { className: "hint", textContent: `목표 대비 ${+(ratio * 100).toFixed(1)}%` })) : target && v == null ? el("span", { className: "hint", textContent: "목표 대비 —" }) : "");
 }
 
@@ -211,7 +212,7 @@ function paintTargetTrend(card, colors) {
   if (target != null) belowPolygons(xs, vs, target, yOf).forEach(p => kids.push(svg("polygon", { points: p.map(q => q.map(n => n.toFixed(1)).join(",")).join(" "), fill: colors.series[1], opacity: 0.3 })));
   kids.push(svg("polyline", { points: vs.map((v, i) => v == null ? null : `${xs[i].toFixed(1)},${yOf(v).toFixed(1)}`).filter(Boolean).join(" "), fill: "none", stroke: color, "stroke-width": 2 }));
   if (target != null) kids.push(svg("line", { x1: pad, x2: W - pad, y1: yOf(target), y2: yOf(target), stroke: colors.ink, "stroke-dasharray": "6 4" }));
-  const now = cardValue(card), says = target == null ? (card.data?.target?.error || "목표를 아직 정하지 않았어요") : now == null ? "—" : `목표보다 ${showGap(now - target, fmt)} ${now < target ? "낮아요" : now > target ? "높아요" : "같아요"}. 목표 아래로 ${crossDown(vs, target)}번 내려갔어요`;
+  const now = cardValue(card), says = target == null ? (card.data?.target?.error || "목표를 아직 정하지 않았어요") : now == null ? "—" : `목표보다 ${showGap(now - target, fmt)} ${underTarget(now, target) ? "낮아요" : overTarget(now, target) ? "높아요" : "같아요"}. 목표 아래로 ${crossDown(vs, target)}번 내려갔어요`;
   return frame(W, H, ...kids, stext(pad, H - 6, says, { "font-size": 11, fill: colors.text }));
 }
 

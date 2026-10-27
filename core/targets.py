@@ -11,6 +11,7 @@ import json
 import math
 import os
 import re
+from decimal import Decimal
 from pathlib import Path
 
 import yaml
@@ -68,11 +69,11 @@ def parse_value(text):
     body = body[:-1] if percent else body
     sign = -1 if body.startswith("-") else 1
     body = body.lstrip("+-")
-    total = sum(float(number) * UNIT.get(unit, 1) for number, unit in VALUE_PART.findall(body)) if VALUE_BODY.fullmatch(body) and not loose else math.nan
+    total = float(sum((Decimal(number) * UNIT.get(unit, 1) for number, unit in VALUE_PART.findall(body)), Decimal(0)) / (100 if percent else 1)) if VALUE_BODY.fullmatch(body) and not loose else math.nan  # Decimal: 1.1억이 110000000.00000001이 되지 않게
     if not math.isfinite(total):  # 읽을 수 없는 글자, 그리고 너무 커서 무한이 된 값
         shown = raw if len(raw) <= 30 else raw[:30] + "…"
         raise ValueError(f"‘{shown}’{ending(shown, '은', '는')} 숫자로 읽을 수 없어요. 예: 5000000, ₩5,000,000, 5,000만, 1.2억, 85%")
-    return tidy(round(sign * total / 100, 12) if percent else round(sign * total, 6))  # 1.1억 × 1e8의 부동소수 꼬리(110000000.00000001)를 떼어 목표와 딱 맞게
+    return tidy(sign * total)
 
 
 def tidy(number):
