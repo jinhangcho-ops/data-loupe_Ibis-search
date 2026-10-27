@@ -202,7 +202,7 @@ function paintBlocks(card, colors) {
   return frame(W, H, ...rects, stext(0, H - 8, `${showValue(v, fmt)}${target != null ? ` / 목표 ${showValue(target, fmt)}` : ""} (한 칸 ${showValue(size * b.scale, fmt)})`, { "font-size": 11, fill: colors.text }));
 }
 
-// target_trend: 일 값 선 + 목표 가로 점선 + 목표 아래 구간 채움 + "목표보다 1.7%p 낮아요 · 기간 중 N번 내려감"
+// target_trend: 일 값 선 + 목표 가로 점선 + 목표 아래 구간 채움 + "목표보다 1.7%p 낮아요. 목표 아래로 N번 내려갔어요"
 function paintTargetTrend(card, colors) {
   const days = cardDays(card), vs = days.map(d => d.v), target = cardTarget(card), fmt = cardFormat(card), W = 300, H = 160, pad = 12, color = pickColor(card, "series", card.title, colors, 0);
   const real = vs.filter(x => x != null);

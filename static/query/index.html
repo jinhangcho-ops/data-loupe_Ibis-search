@@ -563,7 +563,7 @@ function joinParts(line) {
   if (how === "asof") pairs.sort((a, b) => b[2] - a[2]);  // 서버처럼 >= 쌍이 어디 있든 시각 쌍(맨 앞)
   return { table, how, pairs };
 }
-const joinLine = j => `${j.table} ${j.how} ${j.pairs.filter(([l, r]) => l && r).map(([l, r, ge], k) => `${l}${j.how === "asof" && (!k || ge) ? ">=" : "="}${r}`).join(", ")}`;
+const joinLine = j => `${j.table} ${j.how} ${j.pairs.filter(([l, r]) => l && r).map(([l, r, ge], k) => `${l}${(j.how === "asof" && !k) || ge ? ">=" : "="}${r}`).join(", ")}`;
 const joinDone = j => j.table && j.pairs.some(([l, r]) => l && r);
 async function colsOf(table) {
   if (!table) return [];
@@ -594,7 +594,7 @@ async function renderJoins() {
       el("button", { className: "ghost", textContent: "×", title: "키 빼기", onclick: () => { j.pairs.splice(k, 1); renderJoins(); applyJoins(); } }));
     return el("div", { className: "jb" },
       el("div", { className: "r1" },
-        select(JOIN_HOWS, j.how, null, v => { j.how = v; renderJoins(); applyJoins(); }),
+        select(JOIN_HOWS, j.how, null, v => { j.how = v; j.pairs.forEach(p => p[2] = false); renderJoins(); applyJoins(); }),  // 종류를 바꾸면 줄에 쓴 >=는 버린다(화면은 asof 시각 쌍만 ≥로 보인다)
         select(tableNames(), j.table, "테이블", v => { j.table = v; j.pairs = [["", ""]]; renderJoins(); applyJoins(); }),  // 키가 빈 덩어리는 S.joins에서 빠진다
         el("button", { className: "ghost", textContent: "×", title: "조인 빼기", onclick: () => { joinsUI.splice(i, 1); renderJoins(); applyJoins(); } })),
       ...j.pairs.map(pairRow),

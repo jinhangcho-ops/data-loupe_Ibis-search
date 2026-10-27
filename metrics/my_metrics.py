@@ -475,8 +475,8 @@ def is_stale(metric, saved_hash):
 
 
 def used_by(metric_id, dashboards=None):
-    """정의를 고칠 때 보일 쓰는 곳: 저장한 대시보드의 카드(JSON에 metric_id가 든 카드; stale = 카드가 저장한 def_hash가 지금과 다름)와 목표 줄(이름이 같은 줄).
-    dashboards = [대시보드](없으면 dash_store에서 읽는다, 풀 수 없으면 빈 목록), goals = 목표 파일의 rows."""
+    """정의를 고칠 때 보일 쓰는 곳: 저장한 대시보드의 카드(JSON에 metric_id가 든 카드; stale = 카드가 저장한 def_hash가 지금과 다름).
+    dashboards = [대시보드](없으면 dash_store에서 읽는다, 풀 수 없으면 빈 목록)."""
     items = load()
     try:
         metric = get(metric_id, items)

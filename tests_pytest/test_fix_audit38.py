@@ -351,7 +351,7 @@ def test_asof_join_line_keeps_the_time_pair(tmp_path):
     from test_fix_audit_js import between, run_node
     part = between("index.html", "const JOIN_HOWS", "const joinDone")
     body = "console.log(JSON.stringify([joinLine(joinParts('prices asof pid=pid, ot>=pt')), joinLine(joinParts('prices asof ot>=pt, pid=pid')), joinLine(joinParts('t left a>=b, c=c'))]));"
-    assert run_node(tmp_path, body, parts=[part]) == ["prices asof ot>=pt, pid=pid", "prices asof ot>=pt, pid=pid", "t left a=b, c=c"]  # asof가 아니면 화면처럼 = (asof에서 left로 바꿔도 >=가 남지 않는다)
+    assert run_node(tmp_path, body, parts=[part]) == ["prices asof ot>=pt, pid=pid", "prices asof ot>=pt, pid=pid", "t left a>=b, c=c"]  # 한 줄로 쓴 >=는 그대로(asof가 아니면 서버가 알린다)
 
 
 def test_own_period_previous_matches_dashboard_rule():
@@ -388,3 +388,20 @@ def test_chart_csv_guards_tab_and_cr_like_the_server():
     from pathlib import Path
     html = (Path(__file__).resolve().parent.parent / "static" / "query" / "index.html").read_text(encoding="utf-8")
     assert r'/^[=+\-@\t\r]/.test(v)' in html
+
+
+def test_postgres_table_creation_checks_column_bytes_before_creating():
+    from lazy import ibis
+    from prep import prep_app
+
+    class DB:
+        name, made = "postgres", []
+
+        def create_table(self, *a, **k):
+            self.made.append(a)
+    db = DB()
+    with pytest.raises(ValueError, match="63바이트"):
+        prep_app.insert_all(db, "t", None, ibis.memtable({"가" * 22: [1]}))
+    assert db.made == []  # 테이블을 만들기 전에 거부한다
+    html = (__import__("pathlib").Path(__file__).resolve().parent.parent / "static" / "query" / "index.html").read_text(encoding="utf-8")
+    assert "j.how = v; j.pairs.forEach(p => p[2] = false);" in html  # asof에서 종류를 바꾸면 >=를 버린다
