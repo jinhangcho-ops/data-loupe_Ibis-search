@@ -264,3 +264,55 @@ def test_color_rules_treat_float_tails_as_equal(tmp_path):
     body = "const m = (t, v) => parseMatch(t).test(v); console.log(JSON.stringify([m('= 0.3', 0.1 + 0.2), m('<= 0.3', 0.1 + 0.2), m('< 0.3', 0.1 + 0.2), m('0.3, 0.5', 0.1 + 0.2), m('!= 0.3', 0.1 + 0.2), m('> 0.3', 0.31)]));"
     out = run_node(tmp_path, body, files=["dash_rules.js"])
     assert out == [True, True, False, True, False, True]
+
+
+# ---------- 23차 감사 ----------
+
+@pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
+def test_counter_alert_and_cut_table_total(tmp_path):
+    import json, subprocess
+    from pathlib import Path
+    from core import dash_store
+    static = Path(__file__).resolve().parent.parent / "static"
+    dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE}, ensure_ascii=False)
+    parts = ["board.js", "dash.js", "dash_cards.js", "dash_rules.js", "dash_grid.js", "dash_edit.js"]
+    body = """
+const assert = require("assert");
+const kpi = (id, v) => ({ id, kind: "gauge", title: "환불률", view: { format: "number" }, data: { values: { scalar: [v] } }, source: {} });
+const alerts = counterAlerts([kpi("r", 1.1 + 2.2)], { card: "", counters: ["r"], limits: { r: { op: "<=", value: 3.3 } } });
+assert.deepStrictEqual(alerts, []);  // 합계의 꼬리는 한계와 같은 값
+assert.strictEqual(counterAlerts([kpi("r", 3.4)], { card: "", counters: ["r"], limits: { r: { op: "<=", value: 3.3 } } }).length, 1);
+console.log("ok");
+"""
+    script = tmp_path / "t.js"
+    script.write_text(f"globalThis.SERVER = {{ dash: JSON.parse({json.dumps(dash)}) }};\n" + "".join(next(static.rglob(n)).read_text(encoding="utf-8") for n in parts) + body, encoding="utf-8")
+    done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
+    assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr[-2000:]
+    cards = (static / "dashboard" / "dash_cards.js").read_text(encoding="utf-8")
+    assert '!card.data?.values?.more && !rows.some(' in cards  # 앞 500행만 받은 표는 합계를 내지 않는다
+
+
+def test_map_with_nothing_to_draw_explains():
+    import json
+    import polars as pl
+    from geo import mapcard
+    regions = pl.DataFrame({"name": ["a"], "geometry": [json.dumps({"type": "Point", "coordinates": [127, 37]})]})
+    with pytest.raises(ValueError, match="그릴 영역도 점도 없어요"):
+        mapcard.build(regions, pl.DataFrame({"lat": [None], "lon": [None]}, schema={"lat": pl.Float64, "lon": pl.Float64}), {"name": "name"})
+
+
+def test_onehot_values_differing_only_in_case_explain():
+    from lazy import ibis
+    from core import prep_ops
+    t = ibis.memtable({"city": ["Seoul", "seoul", "Busan"]})
+    with pytest.raises(ValueError, match="대소문자만 달라요"):
+        prep_ops.onehot(t, "city", True)
+
+
+def test_metric_delete_asks_when_used_and_onehot_removal_keeps_column():
+    from pathlib import Path
+    static = Path(__file__).resolve().parent.parent / "static"
+    js = (static / "query" / "sentences.js").read_text(encoding="utf-8")
+    remove = js[js.index("async function removeMetric(m)"):js.index("function scopeNow()")]
+    assert remove.index("/api/my_metrics/used_by") < remove.index("sentAsk(") < remove.index("/api/my_metrics/delete")
+    assert "if (OPS[key]?.unkeep) e.keep = true;" in (static / "prep" / "prep.html").read_text(encoding="utf-8")

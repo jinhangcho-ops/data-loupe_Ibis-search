@@ -14,7 +14,7 @@ function counterAlerts(cards, star) {
     if (!card || !lim) continue;
     const v = cardValue(card, 0);
     if (v == null || !Number.isFinite(v)) continue;
-    const bad = lim.op === ">=" ? v < lim.value : v > lim.value, fmt = cardFormat(card);
+    const bad = lim.op === ">=" ? underTarget(v, lim.value) : overTarget(v, lim.value), fmt = cardFormat(card);  // 합계의 꼬리(1.1 + 2.2)로 거짓 경보를 내지 않게(dash_cards.js)
     if (bad) out.push({ id, title: card.title, value: v, op: lim.op, limit: lim.value,
       text: `${card.title} 값이 한계를 벗어났어요. 지금 ${showValue(v, fmt)}, 한계 ${showValue(lim.value, fmt)} ${lim.op === ">=" ? "이상" : "이하"}` });
   }

@@ -39,7 +39,7 @@ function blockCells(value, target, size, cap = 200) {
 // 값이 목표선을 위에서 아래로 지나간 횟수(앞 값 ≥ 목표 > 지금 값). 빈 값은 건너뛴다.
 function crossDown(values, target) {
   let n = 0, before = null;
-  for (const v of values) { if (v == null) continue; if (before != null && before >= target && v < target) n++; before = v; }
+  for (const v of values) { if (v == null) continue; if (before != null && !underTarget(before, target) && underTarget(v, target)) n++; before = v; }
   return n;
 }
 // 선(xs, vs)이 목표(target) 아래에 있는 구간과 목표선 사이의 다각형들 [[x, y], …]. 목표선을 지나는 곳은 선분 위에서 보간한다. yOf는 값 → 화면 y.
@@ -51,11 +51,11 @@ function belowPolygons(xs, vs, target, yOf) {
     const v = vs[i];
     if (v == null) { close(xs[i - 1]); continue; }
     const prev = i > 0 ? vs[i - 1] : null;
-    if (prev != null && (prev < target) !== (v < target)) {  // 목표선을 지나는 선분: 지나는 x
+    if (prev != null && underTarget(prev, target) !== underTarget(v, target)) {  // 목표선을 지나는 선분: 지나는 x
       const x = xs[i - 1] + (xs[i] - xs[i - 1]) * (target - prev) / (v - prev);
-      if (v < target) run = [[x, ty]]; else close(x);
+      if (underTarget(v, target)) run = [[x, ty]]; else close(x);
     }
-    if (v < target) { if (!run) run = [[xs[i], ty]]; run.push([xs[i], yOf(v)]); }
+    if (underTarget(v, target)) { if (!run) run = [[xs[i], ty]]; run.push([xs[i], yOf(v)]); }
   }
   close(xs[xs.length - 1]);
   return polys;
@@ -304,7 +304,7 @@ function renderTable(holder, card, columns, rows, prev) {
     if (whole) tr.style.background = alpha(whole.color, 0.22);
     return tr;
   });
-  const total = view.total ? el("tr", { className: "ctotal" }, ...columns.map((c, i) => el("td", { className: "num", textContent: i < groups ? (i === 0 ? "합계" : "") : ["sum", "count"].includes(c.agg) && !rows.some(r => typeof r[i] === "string") ? showValue(rows.reduce((a, r) => a + (r[i] ?? 0), 0), view.formats?.[names[i]] ?? "number") : "—" }))) : "";
+  const total = view.total ? el("tr", { className: "ctotal" }, ...columns.map((c, i) => el("td", { className: "num", textContent: i < groups ? (i === 0 ? "합계" : "") : ["sum", "count"].includes(c.agg) && !card.data?.values?.more && !rows.some(r => typeof r[i] === "string") ? showValue(rows.reduce((a, r) => a + (r[i] ?? 0), 0), view.formats?.[names[i]] ?? "number") : "—" }))) : "";
   holder.replaceChildren(el("table", {}, el("thead", {}, head), el("tbody", {}, ...body, total)));
 }
 function paintTable(card, colors, board) {

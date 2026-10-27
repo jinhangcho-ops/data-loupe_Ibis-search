@@ -468,7 +468,7 @@ function control(f, st) {
 function opLine(c, e, key) {
   const op = OPS[key], st = e.ops[key];
   const li = el("div", { className: "op" }, el("div", { className: "op-head" }, op.label,
-    el("button", { className: "ghost", textContent: "×", title: "이 정리 방법 빼기", ariaLabel: "이 정리 방법 빼기", onclick: () => { delete e.ops[key]; renderClean(); renderGrid(); showPrepSummaries(); } })),
+    el("button", { className: "ghost", textContent: "×", title: "이 정리 방법 빼기", ariaLabel: "이 정리 방법 빼기", onclick: () => { delete e.ops[key]; if (OPS[key]?.unkeep) e.keep = true; renderClean(); renderGrid(); showPrepSummaries(); } })),  // 더할 때 뺀 원래 컬럼을 되돌린다
     el("div", { className: "hint", textContent: DESC[key] ?? "" }));
   lines.set(st, li);
   for (const f of op.fields?.(st, c, e.ops) ?? []) {

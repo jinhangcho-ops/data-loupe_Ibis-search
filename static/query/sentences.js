@@ -388,7 +388,13 @@ function SentenceView(host, ctx) {
     const mineOnes = d.metrics.filter(inScope), others = d.metrics.filter(m => !inScope(m));
     mine.replaceChildren(...(mineOnes.length ? mineOnes.map(row) : [el("div", { className: "hint", textContent: "이 테이블의 지표가 아직 없어요. 왼쪽에서 골라 만들어 보세요." })]),
       ...(others.length ? [el("h2", { textContent: "다른 테이블의 지표 (복사해서 써요)" }), ...others.map(row)] : []));
-    async function removeMetric(m) { try { await api("/api/my_metrics/delete", { id: m.id }); mcStale = true; msg.textContent = ""; showMetric(); } catch (e) { msg.textContent = e.message; } }
+    async function removeMetric(m) {
+      try {
+        const used = await api("/api/my_metrics/used_by", { id: m.id }), names = [...used.cards.map(c => `${c.title} (${c.dashboard_name})`), ...used.goals.map(g => `목표 ${g.name}`), ...used.dependents.map(x => x.name)];
+        if (names.length && !await sentAsk("지우면 쓰는 곳에서 구할 수 없어요", `이 지표를 쓰는 곳: ${names.join(", ")}\n지운 지표는 되돌릴 수 없어요.`, "지우기")) return;
+        await api("/api/my_metrics/delete", { id: m.id }); mcStale = true; msg.textContent = ""; showMetric();
+      } catch (e) { msg.textContent = e.message; }
+    }
     function scopeNow() { return { table: scope().base, schema: scope().schema || "" }; }
     async function copyMetric(m, mapping = {}) {
       try { await api("/api/my_metrics/copy", { id: m.id, scope: scopeNow(), mapping, columns: kinds() }); msg.textContent = ""; showMetric(); }

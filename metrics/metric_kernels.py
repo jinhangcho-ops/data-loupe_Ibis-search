@@ -1167,10 +1167,10 @@ def ab_checks(c, e, binary, ctx):
 
 @kernel("lift")
 def lift_kernel(t, s, p, ctx):
-    """Lift: (실험군 − 대조군) ÷ 대조군."""
+    """Lift: (실험군 − 대조군) ÷ |대조군|."""
     c, e, binary = two_groups(t, s, ctx)
     ab_checks(c, e, binary, ctx)
-    return result(mc.lift(e["mean"], c["mean"]), parts={"control_mean": c["mean"], "treat_mean": e["mean"], "control_n": c["n"], "treat_n": e["n"]}, label="(실험군 − 대조군) ÷ 대조군")
+    return result(mc.lift(e["mean"], c["mean"]), parts={"control_mean": c["mean"], "treat_mean": e["mean"], "control_n": c["n"], "treat_n": e["n"]}, label="(실험군 − 대조군) ÷ |대조군|")
 
 
 @kernel("pvalue")

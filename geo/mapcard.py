@@ -110,6 +110,8 @@ def build(regions, points, geo):
     dots = [[round(float(lon[i]), DIGITS), round(float(lat[i]), DIGITS)] for i in drawn] if geo.get("points", True) else []
     xs = [v for r in all_rings for v in r[:, 0]] or [float(v) for v in lon[ok]]
     ys = [v for r in all_rings for v in r[:, 1]] or [float(v) for v in lat[ok]]
+    if not xs:  # 도형이 모두 빈 값·점이거나, 점의 위도·경도가 모두 빈 값
+        raise ValueError("그릴 영역도 점도 없어요. 영역 테이블의 도형(geometry)에 다각형이 있는지, 점의 위도·경도가 비어 있지 않은지 확인하세요.")
     bounds = [round(float(min(xs)), DIGITS), round(float(min(ys)), DIGITS), round(float(max(xs)), DIGITS), round(float(max(ys)), DIGITS)]
     label = "영역 값" if geo.get("region_value") else {"count": "점 수", "sum": f"{geo.get('value', '')} 합계", "mean": f"{geo.get('value', '')} 평균", "min": f"{geo.get('value', '')} 최소", "max": f"{geo.get('value', '')} 최대"}[agg]
     return {"values": {"regions": out_regions, "points": dots, "bounds": bounds, "label": label.strip(), "total_points": int(ok.sum()), "assigned": assigned}, "note": " ".join(notes)}

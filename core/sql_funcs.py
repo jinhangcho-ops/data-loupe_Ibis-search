@@ -518,10 +518,10 @@ row("split_part", "text", "나눈 N번째", "구분자로 나눈 N번째 조각(
 def concat_parts(values, sep):
     """빈 값은 건너뛰고(구분자도 붙이지 않는다) 이어 쓴다. 모두 빈 값이면 빈 값. DuckDB·Polars가 같은 결과를 낸다(Polars의 join은 빈 값이 하나라도 있으면 빈 값이다)."""
     parts = [v.cast("string") for v in values]
-    found = parts[0]
-    for p in parts[1:]:
-        found = ibis.ifelse(found.isnull(), p, ibis.ifelse(p.isnull(), found, found + sep + p))
-    return found
+    body = ibis.literal("").concat(*[(ibis.literal(sep) + p).fill_null("") for p in parts])  # 조각마다 '구분자+조각'(빈 값이면 ''), 각 조각은 한 번만 쓴다(SQL이 조각 수에 비례)
+    if sep:
+        body = body.substr(len(sep))  # 맨 앞 구분자를 뗀다
+    return ibis.ifelse(ibis.coalesce(*parts).isnull(), ibis.literal(None, type="string"), body)
 
 
 row("concat", "text", "이어 쓰기", "여러 컬럼·글자를 한 글자로(사이에 구분자). 빈 값은 건너뛰어요.", [many(), text("sep", "구분자", "", True)],

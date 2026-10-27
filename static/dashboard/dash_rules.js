@@ -10,7 +10,7 @@ function ruleNumber(text) {
   const n = parseFloat(t.replace(/,/g, "").replace("%", ""));
   return t.endsWith("%") ? n / 100 : n;
 }
-const sameNum = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));  // DB 합계의 꼬리(0.1 + 0.2)는 같은 값으로
+const sameNum = (a, b) => Math.abs(a - b) <= Math.max(1e-9 * Math.abs(b), 1e-12);  // DB 합계의 꼬리(0.1 + 0.2)는 같은 값으로
 const OPERATORS = { ">=": (a, b) => a >= b || sameNum(a, b), "<=": (a, b) => a <= b || sameNum(a, b), ">": (a, b) => a > b && !sameNum(a, b), "<": (a, b) => a < b && !sameNum(a, b), "=": sameNum, "==": sameNum, "!=": (a, b) => !sameNum(a, b) };
 // 식 글자 → { kind: "num"·"word", test(값) } 또는 { error }
 function parseMatch(text) {
@@ -20,7 +20,7 @@ function parseMatch(text) {
   if (between) {
     const [a, b] = [ruleNumber(between[1]), ruleNumber(between[2])];
     if (a == null || b == null) return { error: "~ 양쪽은 숫자여야 해요. 예: 10 ~ 20" };
-    return { kind: "num", test: v => v >= Math.min(a, b) && v <= Math.max(a, b) };
+    return { kind: "num", test: v => OPERATORS[">="](v, Math.min(a, b)) && OPERATORS["<="](v, Math.max(a, b)) };
   }
   const op = t.match(/^(>=|<=|!=|==|=|>|<)\s*(.*)$/);
   if (op) {
