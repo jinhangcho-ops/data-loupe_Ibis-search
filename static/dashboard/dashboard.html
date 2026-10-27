@@ -277,12 +277,17 @@ $("d-delete").onclick = () => {
     const id = dashId;
     clearTimeout(saveTimer);  // 고친 직후의 자동 저장이 지운 뒤에 도착해 대시보드를 되살리지 않게(save는 dashId가 없으면 쓰지 않는다)
     dashId = "";
+    let gone = false;
     try {
       const left = await api("/api/dash/delete", { id });
+      gone = true;  // 지운 뒤 다음 대시보드 열기가 실패해도 지운 id로 되돌리지 않는다(자동 저장이 되살리지 않게)
       showList(left);
       $("d-modal").classList.add("hidden");
       await openDash($("d-pick").value);
-    } catch (e) { dashId ||= id; say("err-settings", e.message); }
+    } catch (e) {
+      if (!gone && !dashId) { dashId = id; scheduleSave(); }  // 지우기가 실패했으면 그대로 두고, 취소했던 자동 저장을 다시 건다
+      say("err-settings", e.message);
+    }
   });
 };
 

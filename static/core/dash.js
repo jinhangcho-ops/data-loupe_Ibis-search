@@ -424,7 +424,7 @@ class DashBoard extends Board {
     const type = card.view.type;
     if (!["scatter", "bubble"].includes(type)) { delete card.data.points; return; }
     const body = card.source.body, size = type === "bubble" ? card.view.points?.size ?? "" : "";
-    card.data.points = (await api("/api/chart/points", { ...body, y: body.series?.[0]?.y, size, source_key: card.source.key })).points;
+    card.data.points = (await api("/api/chart/points", { ...body, y: body.series?.[0]?.y, size, source_key: card.source.key, date: card.source.date, ctx: this.ctx() })).points;  // 다시 구하기와 같은 기간
   }
   // 이름마다 HEX 칸. 틀린 값은 칸 옆에 이유를 보이고 이전 색을 그대로 둔다.
   colorEditor(card) {

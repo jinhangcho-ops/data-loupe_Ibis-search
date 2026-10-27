@@ -374,7 +374,8 @@ function FlowView(host, ctx) {
     const pick = x => ({ table: x.params.table, ...(x.params.schema ? { schema: x.params.schema } : {}) });
     let d;
     try { d = await api("/api/flow/keys", { a: pick(l), b: pick(r) }); } catch (e) { return say("공통 키를 찾지 못했어요: " + e.message, "err"); }
-    const same = () => flowNode(g, joinId) && flowIns(g, joinId).map(i => flowRoot(g, i)?.id).join() === [l.id, r.id].join();  // 기다리는 사이 조인을 지우거나 이음을 바꿨으면 옛 테이블 쌍의 키를 넣지 않는다(단계를 고치면 그래프를 통째 복사하니 id로 견준다)
+    const key = x => x && JSON.stringify(pick(x));  // 테이블 단계의 테이블(·스키마): 같은 단계에서 테이블만 바꿔도 다르다
+    const same = () => flowNode(g, joinId) && flowIns(g, joinId).map(i => key(flowRoot(g, i))).join() === [key(l), key(r)].join();  // 기다리는 사이 조인을 지우거나 이음·테이블을 바꿨으면 옛 테이블 쌍의 키를 넣지 않는다
     if (!same()) return;
     const use = async cand => {
       if (!same()) { opt.classList.add("hidden"); return say("그 사이 조인이 바뀌어 키를 넣지 않았어요. 공통 키를 다시 찾아 주세요.", "err"); }

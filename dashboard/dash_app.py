@@ -116,6 +116,7 @@ def chart_points():
     now = dash_store.current_source()
     if other_source(body.get("source_key"), now):
         raise ValueError("이 카드는 다른 연결에서 구한 것입니다. 그 연결로 바꾼 뒤 다시 구하세요.")
+    body = dash_calc.with_period(body, body.get("date"), (body.get("ctx") or {}).get("range"))  # 대시보드 기간(카드 compute와 같게)
     return jsonify(points=dash_calc.points_of(body, body.get("size")))
 
 

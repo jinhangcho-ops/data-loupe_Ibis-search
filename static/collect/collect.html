@@ -1032,7 +1032,9 @@ function fillLoad(l) {
   forgetPasswords();
   clearCheck();
 }
+let checkCall = 0;  // 칸을 고치면 올려, 고치기 전 [확인]의 늦은 응답을 버린다
 function clearCheck() {
+  checkCall++;
   $("ld-check-msg").textContent = "";
   $("ld-cols").replaceChildren();
 }
@@ -1042,14 +1044,16 @@ $("ld-table").addEventListener("input", clearCheck);
 $("ld-kafka").addEventListener("change", () => $("kf-check-msg").textContent = "");
 // [확인]: 테이블이 있는지와 결과 파일과의 컬럼 비교. ok가 아니면 경고 색
 $("ld-check").onclick = () => busy($("ld-check"), async () => {
+  const mine = ++checkCall;
   try {
     const d = await api("/api/load/table/check", { config: checked(), password: loadPassword() });
+    if (mine !== checkCall) return;
     $("ld-check-msg").textContent = d.message + (d.columns ? "" : " (결과 파일이 아직 없어 컬럼은 받은 뒤에 비교합니다.)");
     $("ld-check-msg").className = d.ok ? "ok" : "warn";
     const mine = new Map(d.columns ?? []), theirs = new Map(d.table_columns ?? []), table = d.exists ? "테이블" : "테이블 (없음)";
     $("ld-cols").innerHTML = d.columns || d.table_columns ? sampleTable([{ name: "컬럼" }, { name: "결과 파일" }, { name: table }],
       [...new Set([...mine.keys(), ...theirs.keys()])].map(n => ({ "컬럼": n, "결과 파일": mine.get(n) === "null" ? "빈 값(테이블 타입으로)" : mine.get(n) ?? "—", [table]: theirs.get(n) ?? "—" })), "") : "";
-  } catch (e) { $("ld-check-msg").textContent = e.message; $("ld-check-msg").className = "err"; $("ld-cols").replaceChildren(); }
+  } catch (e) { if (mine !== checkCall) return; $("ld-check-msg").textContent = e.message; $("ld-check-msg").className = "err"; $("ld-cols").replaceChildren(); }
 });
 
 // Kafka 적재할 곳 등록: 고르면 칸을 채우고, 저장·삭제한다. 비밀번호는 등록에 없다.

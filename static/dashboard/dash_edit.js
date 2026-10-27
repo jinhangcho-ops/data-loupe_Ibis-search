@@ -142,6 +142,7 @@ class EditBoard extends DashBoard {
       }
     } finally {
       if (was === undefined) delete root.dataset.theme; else root.dataset.theme = was;
+      this.draw?.();  // 그사이 실시간 갱신이 그림 모드의 색으로 다시 그렸을 수 있다
     }
     return out;
   }

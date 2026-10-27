@@ -309,7 +309,7 @@ const isDate = (c, ops) => c.kind === "date" || ops.type?.to === "date";
 const PARTS = [["year", "연"], ["month", "월"], ["day", "일"], ["weekday", "요일"], ["ym", "월 단위"], ["hour", "시"]];
 // "시"는 날짜시간 컬럼(원래 타입이 timestamp, 또는 타입 바꾸기의 형식에 %H)에서만 고를 수 있다.
 const hasTime = (c, ops) => c.type.startsWith("timestamp") || (ops.type?.format ?? "").includes("%H");
-const toNum = v => v === "" ? null : Number(v);  // 빈 칸은 null, 숫자가 아니면 NaN
+const toNum = v => String(v).trim() === "" ? null : /^\s*[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?\s*$/i.test(v) ? Number(v) : NaN;  // 빈 칸(공백만 포함)은 null, 숫자 모양이 아니면(0x10 포함) NaN
 const OPS = {
   trim: { label: "앞뒤 공백 지우기", group: "글자", need: isStr, init: {}, value: () => true },
   squeeze: { label: "연속 공백을 하나로", group: "글자", need: isStr, init: {}, value: () => true },
@@ -356,8 +356,8 @@ const OPS = {
     value: (st, c, ops) => {
       const num = isNum(c, ops);
       if (st.how === "value") {
-        const v = num ? Number(st.value) : st.value;
-        return st.value === "" || Number.isNaN(v) ? null : { how: "value", value: v };
+        const v = num ? toNum(st.value) : st.value;
+        return v === null || v === "" || Number.isNaN(v) ? null : { how: "value", value: v };
       }
       if (["prev", "next"].includes(st.how)) return st.by ? { how: st.how, by: st.by } : null;
       return ["mean", "median"].includes(st.how) && !num ? null : { how: st.how };
@@ -839,6 +839,8 @@ function resetTable() {
 }
 function clearScreen() {
   S.base = $("base").value = $("tname").value = $("f-in").value = "";
+  A.result = null;  // 연결을 바꾸면 앞 연결의 분석 결과를 지운다([대시보드에 추가]가 새 연결 이름으로 넣지 않게)
+  drawAna();
   resetTable();
   showTarget();
   resetTiming();
@@ -1277,7 +1279,7 @@ async function runAna(full) {
     const d = await timed("analyze", () => api("/api/analyze", { recipe: r, how, sample, full }));
     const views = d.kind === "distribution" ? (d.histogram ? ["hist", "box", "values"] : ["values"])
       : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"], funnel: ["funnel"] }[d.kind];
-    A.result = { ...d, how, prepped, base, recipe: r, views };
+    A.result = { ...d, how, prepped, base, recipe: r, views, sample: full ? A.result.sample : sample };  // 구할 때의 표본 수(카드가 최신화 때 같은 표본으로 다시 구한다)
     A.view = views.includes(A.view) ? A.view : views[0];
     say("err-ana", "");
     drawAna();
@@ -1365,9 +1367,9 @@ $("a-dash").onchange = () => $("a-dash-name").classList.toggle("hidden", $("a-da
 $("a-dash-go").onclick = () => busy($("a-dash-go"), async () => {
   const d = A.result;
   if (!d) return;
-  const { how, prepped, base, recipe, views, ...values } = d;  // 구한 값만 data에 둔다
+  const { how, prepped, base, recipe, views, sample: used, ...values } = d;  // 구한 값만 data에 둔다
   const flow = d.kind === "funnel", card = { kind: flow ? "funnel" : "analysis", title: `${base} · ${anaTitle(d, A.view)}`, colors: { series: {}, parts: {}, order: [], parts_order: [] },
-    view: { type: "", ratio: VIEW_RATIOS[A.view] ?? 16 / 9, analysis_view: A.view }, source: { schema: recipe.schema || "", table: base, recipe, analysis: how, full: !!values.data?.full, sample, ...(flow ? { date: how.time } : {}) },
+    view: { type: "", ratio: VIEW_RATIOS[A.view] ?? 16 / 9, analysis_view: A.view }, source: { schema: recipe.schema || "", table: base, recipe, analysis: how, full: !!values.data?.full, sample: used, ...(flow ? { date: how.time } : {}) },
     data: { values, computed_at: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19), note: anaNote(d) } };
   try {
     const added = await api("/api/dash/card/add", { dashboard: $("a-dash").value, name: $("a-dash-name").value, card });

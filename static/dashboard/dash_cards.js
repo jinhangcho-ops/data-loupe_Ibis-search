@@ -192,6 +192,7 @@ function paintStripes(card, colors) {
 
 // blocks: 칸 하나 = view.size. 실제(채움) · 목표까지(빗금 윤곽) · 목표를 넘은 칸(진한 색)
 function paintBlocks(card, colors) {
+  if ((cardValue(card) ?? 0) < 0) return box("summary", el("div", { className: "sum-text", textContent: "음수는 블록으로 그리지 않아요" }));
   const v = cardValue(card) ?? 0, target = cardTarget(card), fmt = cardFormat(card), size = card.view?.size || Math.max(+(Math.max(v, target ?? 0) / 20).toPrecision(1), 1e-9);
   const b = blockCells(v, target, size), per = 20, W = 260, cell = W / per - 3, color = pickColor(card, "series", card.title, colors, 0), total = b.actual + b.toTarget;
   const rects = Array.from({ length: total }, (_, i) => svg("rect", { x: (i % per) * (cell + 3), y: Math.floor(i / per) * (cell + 3), width: cell, height: cell, rx: 2,
@@ -218,8 +219,9 @@ function paintTargetTrend(card, colors) {
 function paintDual(card, colors, board) {
   const a = cardDays({ ...card, view: { ...card.view, window: null } }, 0), whole = a.map(d => d.day), win = card.view?.window, W = 320, H = 190, pad = 14, top = 10, plot = 118, brushY = 150;
   if (!whole.length) return box("summary", el("div", { className: "sum-text", textContent: "이 기간의 값이 없어요" }));
-  const shown = cardDays(card, 0).map(d => d.day), from = shown[0], to = shown[shown.length - 1];
-  const rows = [cardDays(card, 0), cardDays(card, 1)], all = rows.flat().map(d => d.v).filter(v => v != null), lo = Math.min(...all), hi = Math.max(...all);
+  const view = cardDays(card, 0).length ? card : { ...card, view: { ...card.view, window: null } };  // 저장한 구간이 지금 기간 밖이면 구간 없이 그린다(빈 그림·NaN이 되지 않게)
+  const shown = cardDays(view, 0).map(d => d.day), from = shown[0], to = shown[shown.length - 1];
+  const rows = [cardDays(view, 0), cardDays(view, 1)], all = rows.flat().map(d => d.v).filter(v => v != null), lo = Math.min(...all), hi = Math.max(...all);
   const xOf = i => pad + (W - 2 * pad) * (shown.length < 2 ? 0.5 : i / (shown.length - 1)), yOf = v => top + plot - plot * (hi === lo ? 0.5 : (v - lo) / (hi - lo));
   const names = [0, 1].map(i => card.data?.by_unit?.day?.series[i]?.name ?? `계열 ${i + 1}`), cols = names.map((n, i) => pickColor(card, "series", n, colors, i)), today = new Date().toLocaleDateString("sv");
   const kids = [svg("defs", {}, svg("pattern", { id: "hatch" + card.id, width: 6, height: 6, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, svg("line", { x1: 0, y1: 0, x2: 0, y2: 6, stroke: colors.text, "stroke-width": 1.5 })))];
@@ -300,7 +302,7 @@ function renderTable(holder, card, columns, rows, prev) {
     if (whole) tr.style.background = alpha(whole.color, 0.22);
     return tr;
   });
-  const total = view.total ? el("tr", { className: "ctotal" }, ...columns.map((c, i) => el("td", { className: "num", textContent: i < groups ? (i === 0 ? "합계" : "") : ["sum", "count"].includes(c.agg) ? showValue(rows.reduce((a, r) => a + (r[i] ?? 0), 0), view.formats?.[names[i]] ?? "number") : "—" }))) : "";
+  const total = view.total ? el("tr", { className: "ctotal" }, ...columns.map((c, i) => el("td", { className: "num", textContent: i < groups ? (i === 0 ? "합계" : "") : ["sum", "count"].includes(c.agg) && !rows.some(r => typeof r[i] === "string") ? showValue(rows.reduce((a, r) => a + (r[i] ?? 0), 0), view.formats?.[names[i]] ?? "number") : "—" }))) : "";
   holder.replaceChildren(el("table", {}, el("thead", {}, head), el("tbody", {}, ...body, total)));
 }
 function paintTable(card, colors, board) {
