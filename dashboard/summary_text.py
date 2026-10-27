@@ -1,6 +1,8 @@
 """요약 문장: 지표의 현재·직전 값, 그룹별 현재·직전 값, 목표를 받아 규칙으로 짧은 문장을 만든다(LLM·외부 호출 없음, 받은 숫자만 쓰고 지어내지 않는다).
 문장 순서: ① 변화(compare.py의 문장) ② 기여 분해: 전체 변화와 부호가 같은 그룹 중 변화가 가장 큰 그룹의 몫(0 < 몫 ≤ 1일 때만) ③ 목표 대비.
 숫자가 없어 만들 수 없는 문장은 빼고, 비율 값(percent)은 그룹 비율을 더할 수 없으므로 기여 분해를 하지 않는다."""
+import math
+
 from core import compare
 
 SHARE_MIN = 0.005  # 몫이 이보다 작으면(반올림하면 0%) 말하지 않는다
@@ -52,9 +54,9 @@ def target_sentence(cur, target, fmt):
         return None
     pct = cur / target * 100
     base = f"목표 {compare.format_value(target, fmt)} 대비 {compare.trimmed(pct, 1)}%"
-    if pct > 100:
-        return base + "로 목표를 넘었어요."
-    return base + ("로 목표를 채웠어요." if pct == 100 else "예요.")
+    if math.isclose(pct, 100, rel_tol=1e-9):  # 합계의 부동소수 꼬리(1.1 + 2.2 = 3.3000000000000003)로 '넘었어요'가 되지 않게
+        return base + "로 목표를 채웠어요."
+    return base + ("로 목표를 넘었어요." if pct > 100 else "예요.")
 
 
 def summarize(name, cur, prev=None, fmt="number", mode="span", label="직전 기간", better="up", partial=False, groups=None, target=None):

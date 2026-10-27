@@ -212,3 +212,12 @@ def test_piece_waiting_on_usage_limit_sends_nothing_after_failure(tmp_path, monk
     with pytest.raises(Exception):
         collect_job.run_file(config, {}, path, found, record, threading.Event())
     assert sent == [0, 0]  # 확인 요청과 실패한 앞 조각뿐
+
+
+def test_target_met_exactly_despite_float_tail():
+    from core import targets
+    from dashboard import summary_text
+    assert targets.parse_value("1.1억") == 110_000_000 and targets.parse_value("1.15억") == 115_000_000
+    assert summary_text.target_sentence(110_000_000, targets.parse_value("1.1억"), "currency").endswith("목표를 채웠어요.")
+    assert summary_text.target_sentence(1.1 + 2.2, 3.3, "number").endswith("목표를 채웠어요.")  # 합계의 꼬리 3.3000000000000003
+    assert summary_text.target_sentence(3.31, 3.3, "number").endswith("목표를 넘었어요.")

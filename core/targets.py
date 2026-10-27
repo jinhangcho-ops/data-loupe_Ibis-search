@@ -72,7 +72,7 @@ def parse_value(text):
     if not math.isfinite(total):  # 읽을 수 없는 글자, 그리고 너무 커서 무한이 된 값
         shown = raw if len(raw) <= 30 else raw[:30] + "…"
         raise ValueError(f"‘{shown}’{ending(shown, '은', '는')} 숫자로 읽을 수 없어요. 예: 5000000, ₩5,000,000, 5,000만, 1.2억, 85%")
-    return tidy(round(sign * total / 100, 12) if percent else sign * total)
+    return tidy(round(sign * total / 100, 12) if percent else round(sign * total, 6))  # 1.1억 × 1e8의 부동소수 꼬리(110000000.00000001)를 떼어 목표와 딱 맞게
 
 
 def tidy(number):

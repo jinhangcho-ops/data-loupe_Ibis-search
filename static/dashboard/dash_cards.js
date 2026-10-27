@@ -178,7 +178,7 @@ function paintGauge(card, colors) {
 function paintSummary(card, colors) {
   const d = card.data ?? {}, v = cardValue(card), target = cardTarget(card), fmt = cardFormat(card), ratio = target && v != null ? v / target : null;  // 값이 없으면 막대·"목표 대비 0%"를 그리지 않는다
   return box("summary", el("div", { className: "sum-text", textContent: d.text || "—" }), d.target?.error ? el("div", { className: "err", textContent: d.target.error }) : "",
-    ratio != null ? el("div", { className: "sum-bar", title: `${showValue(v, fmt)} / ${showValue(target, fmt)}` }, el("i", { style: `width:${clamp(ratio, 0, 1) * 100}%;background:${ratio > 1 ? darken(colors.series[0]) : colors.series[0]}` }),
+    ratio != null ? el("div", { className: "sum-bar", title: `${showValue(v, fmt)} / ${showValue(target, fmt)}` }, el("i", { style: `width:${clamp(ratio, 0, 1) * 100}%;background:${ratio > 1 + 1e-9 ? darken(colors.series[0]) : colors.series[0]}` }),
       el("span", { className: "hint", textContent: `목표 대비 ${+(ratio * 100).toFixed(1)}%` })) : target && v == null ? el("span", { className: "hint", textContent: "목표 대비 —" }) : "");
 }
 
