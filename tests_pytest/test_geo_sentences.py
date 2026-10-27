@@ -41,7 +41,7 @@ def pairs(done, key, value):
 
 
 def test_templates_exist_with_the_expected_slots():
-    assert [t["name"] for t in sentences.EXPLORE[-3:]] == ["영역별 값", "기준점 반경 안", "격자별 값"]
+    assert [t["name"] for t in sentences.EXPLORE[-3:]] == ["영역별 집계", "기준점 반경 안 집계", "격자 칸별 집계"]
     assert sentences.get("e48")["text"].startswith("{영역}별 {값}")
     assert {s["name"] for s in sentences.get("e49")["slots"]} == {"위도", "경도", "기준 위도", "기준 경도", "반경", "값", "집계"}
     assert sentences.get("e50")["uses"] == ["grid_id", "grid_lat", "grid_lon"] and sentences.get("e49")["uses"] == ["within_km"]

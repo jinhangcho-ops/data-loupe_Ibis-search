@@ -706,7 +706,7 @@ async function loadTables() {
   const withVirtual = document.body.dataset.virtual === "1";
   const { tables, virtual = [] } = await api("/api/tables?schema=" + encodeURIComponent(S.schema) + (withVirtual ? "&virtual=1" : ""));
   const now = $("base").value;
-  fill($("base"), tables, "기준 테이블 선택");
+  fill($("base"), tables, "테이블 고르기");
   if (virtual.length) $("base").append(el("optgroup", { label: "가상 테이블" }, ...virtual.map(v => new Option(v, v))));
   if ([...$("base").options].some(o => o.value === now && now)) $("base").value = now;
   showCrumb();

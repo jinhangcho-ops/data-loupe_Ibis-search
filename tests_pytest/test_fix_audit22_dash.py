@@ -90,12 +90,12 @@ const host={menu:m,menuRoot,popRoot,menuTarget:null}, p=new CardPanel(new E('div
 p.card=card; p.builderOpen=true;
 p.dataSection(card,new E('div')); await tick();
 const table=pick('카드가 읽을'); table.value="srv"; await table.onchange(); await tick();
-pick('서버·장비').value="host"; pick('마지막 데이터').value="t2"; pick('배치도에서').value="kind";
+pick('서버, 장비').value="host"; pick('데이터가 마지막').value="t2"; pick('배치도에서').value="kind";
 popRoot.append(menuRoot);  // show()가 먼저 메뉴 칸을 [카드 추가] 자리로 돌려놓는다
 const again=p.dataSection(card,new E('div')); await tick();
-const kept={entity:pick('서버·장비').value,time:pick('마지막 데이터').value,kind:pick('배치도에서').value}, attached=menuRoot.parent===again.children[3];
+const kept={entity:pick('서버, 장비').value,time:pick('데이터가 마지막').value,kind:pick('배치도에서').value}, attached=menuRoot.parent===again.children[3];
 host.menuTarget=null; p.dataSection(card,new E('div')); await tick();  // close() 뒤 다시 열기
-console.log(JSON.stringify({kept, attached, reopened:pick('서버·장비').value}));
+console.log(JSON.stringify({kept, attached, reopened:pick('서버, 장비').value}));
 """
     got = run_js(tmp_path, NO_FUNCS, body)
     assert got["kept"] == {"entity": "host", "time": "t2", "kind": "kind"}  # 예전엔 모두 ""

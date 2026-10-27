@@ -97,7 +97,7 @@ async function showMetricCatalog(box, env) {
         const d = await api("/api/join_keys", { a: { table: scope().base, ...(scope().schema ? { schema: scope().schema } : {}) }, b: { table: t, ...(scope().schema ? { schema: scope().schema } : {}) } });
         if (!d.candidates.length) { msg.textContent = "공통 키 후보가 없어요. 기간 단위로 맞추세요."; return; }
         const choose = c => { st.align.keys = c.keys; drawAlign(); keys.replaceChildren(); };
-        keys.replaceChildren(...d.candidates.map(c => el("button", { className: "tpl", title: (c.reasons ?? []).join("\n"), onclick: () => choose(c) }, el("b", { textContent: c.keys.map(k => `${k[0]} = ${k[1]}`).join(", ") }), ` 점수 ${c.score} · ${c.basis}`)));
+        keys.replaceChildren(...d.candidates.map(c => el("button", { className: "tpl", title: (c.reasons ?? []).join("\n"), onclick: () => choose(c) }, el("b", { textContent: c.keys.map(k => `${k[0]} = ${k[1]}`).join(", ") }), ` 점수 ${c.score}, ${c.basis}`)));
       } catch (err) { msg.textContent = err.message; }
     }
     const keys = el("div", { className: "scols" });
@@ -115,7 +115,7 @@ async function showMetricCatalog(box, env) {
     }
     async function save() {
       msg.textContent = "";
-      if (e.cross && !mcAlign(st.align)) { msg.textContent = "다른 테이블과 맞추는 방법을 골라야 저장해요."; return; }
+      if (e.cross && !mcAlign(st.align)) { msg.textContent = "저장하려면 다른 테이블과 맞추는 방법을 골라 주세요."; return; }
       try {
         await api("/api/catalog/save", { id: e.id, slots: mcSlots(e, st.slots), scope: { table: scope().base, schema: scope().schema || "" }, columns: kinds(), align: e.cross ? mcAlign(st.align) : undefined });
         mcStale = true;
@@ -141,7 +141,7 @@ async function showMetricCatalog(box, env) {
     if (e.cross) drawAlign();
     detail.replaceChildren(el("h3", { textContent: e.name + (e.abbr ? ` (${e.abbr})` : "") }), el("div", { className: "hint", textContent: e.help }), el("div", { className: "hint", textContent: "식: " + e.formula }), hintLine(e),
       line, extra, el("div", { className: "speriod" }, periodInputs(st.period, () => { out.replaceChildren(); })), e.cross ? alignRow : "", keys,
-      el("div", { className: "row" }, el("button", { className: "btn p", textContent: "계산", onclick: ev => busy(ev.currentTarget, compute) }), el("button", { className: "btn", textContent: "내 지표로 저장", onclick: ev => busy(ev.currentTarget, save) })),
+      el("div", { className: "row" }, el("button", { className: "btn p", textContent: "계산하기", onclick: ev => busy(ev.currentTarget, compute) }), el("button", { className: "btn", textContent: "내 지표로 저장", onclick: ev => busy(ev.currentTarget, save) })),
       msg, out);
     redo();
     detail.scrollIntoView?.({ block: "nearest" });

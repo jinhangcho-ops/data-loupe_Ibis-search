@@ -113,7 +113,7 @@ def test_my_metric_routes(c):
 def test_sentence_routes(c):
     code, body = post(c, "/api/sentence/check", template="e09", slots={"무엇": "store", "N": 0}, columns={"store": "text"})
     assert code == 200 and body["ok"] is False and body["issues"] == [{"slot": "N", "level": "bad", "text": "‘N 이상’에는 1 이상의 정수를 넣어 주세요."}]
-    assert body["text"] == "store별 건수가 0 이상인 것을 많은 순으로 봐요"
+    assert body["text"] == "store별 행 수가 0 이상인 것만 많은 순으로 보기"
     code, body = post(c, "/api/sentence/compile", template="e09", slots={"무엇": "store", "N": 4}, body={"base": "sales"}, columns={"store": "text"})
     assert code == 200 and body["ok"] and body["runs"][0]["route"] == "/api/pivot"
     assert body["runs"][0]["body"]["pivot"] == {"rows": ["store"], "how": "count", "having": "전체 개수 >= 4", "order": "전체 개수 desc"}

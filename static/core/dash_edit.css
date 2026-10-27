@@ -1,12 +1,12 @@
 /* 대시보드 편집 화면(dashboard.html): 12칸 격자, 카드 모음(왼쪽), 카드 설정(오른쪽), 차트 선반, 카운터 경고 */
 .d-main { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:start; gap:12px; padding:0 18px 18px; }
-.d-main > aside { position:sticky; top:0; width:min(280px, 28vw); max-height:calc(100vh - 160px); overflow:auto; border:1px solid var(--line); border-radius:14px; background:var(--card); padding:10px 12px; }
+.d-main > aside { position:sticky; top:0; width:min(280px, 28vw); max-height:calc(100vh - 160px); overflow:auto; border:1px solid var(--line); border-radius:10px; background:var(--card); padding:12px 14px; }
 .d-main > div { min-width:0; grid-column:2; }  /* 칸을 정해 둔다: 카드 모음(1칸)을 닫아도 보드가 가운데, 설정 패널이 오른쪽에 남는다 */
 .d-main > #d-gallery-box { grid-column:1; }
 .d-main > #d-panel { grid-column:3; }
 .d-main > aside h5 { margin:12px 0 6px; font-size:13px; }
 .d-main > aside.hidden { display:none; }
-.d-alerts { margin:0 28px 8px; padding:8px 12px; border:1px solid var(--err); border-radius:10px; color:var(--err); font-size:13px; }
+.d-alerts { margin:0 28px 8px; padding:8px 12px; border:1px solid var(--err); border-radius:8px; color:var(--err); font-size:13px; }
 .d-alerts.hidden { display:none; }
 .board.grid { grid-template-columns:repeat(12, minmax(0, 1fr)); grid-auto-rows:40px; gap:10px; align-items:stretch; padding-left:10px; padding-right:10px; }
 .board.grid.drop-ready { outline:2px dashed var(--accent); outline-offset:-4px; }
@@ -20,10 +20,11 @@
 .bbadge { color:var(--accent); font-weight:700; flex:none; }
 .bresize { position:absolute; right:0; bottom:0; width:18px; height:18px; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg, transparent 52%, var(--faint) 52%, var(--faint) 60%, transparent 60%, transparent 72%, var(--faint) 72%, var(--faint) 80%, transparent 80%); }
 .gal { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
-.gal-tile { display:flex; flex-direction:column; gap:2px; border:1px solid var(--line); border-radius:10px; padding:6px 8px; cursor:grab; background:var(--bg); font-size:12px; }
+.gal-tile { display:flex; flex-direction:column; gap:2px; border:1px solid var(--line); border-radius:8px; padding:6px 8px; cursor:grab; background:var(--bg); font-size:12px; }
 .gal-tile:hover { border-color:var(--accent); }
 .gal-tile .hint { margin:0; font-size:11px; }
-.phead { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.phead { display:flex; align-items:center; justify-content:space-between; margin:-4px -6px 8px 0; }
+.phead b { font-size:15px; }
 .prow { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; margin:6px 0; }
 .pfield { display:flex; flex-direction:column; gap:2px; margin:6px 0; }
 .pfield input, .pfield select { width:100%; }
@@ -35,7 +36,7 @@
 .shelf-chip.n { border-color:var(--c1); } .shelf-chip.d { border-color:var(--c2); } .shelf-chip.t { border-color:var(--c3); }
 .shelf-chip.held { outline:2px solid var(--accent); }
 .shelf-slots { display:grid; gap:6px; }
-.shelf-slot { border:1px dashed var(--line); border-radius:10px; padding:6px 8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-height:34px; }
+.shelf-slot { border:1px dashed var(--line); border-radius:8px; padding:6px 8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-height:34px; }
 .shelf-slot.over { border-color:var(--accent); background:var(--bg); }
 .shelf-slot b { font-size:12px; min-width:70px; }
 .shelf-on { cursor:pointer; background:var(--card); }
@@ -43,3 +44,13 @@
 .shelf-wrap .ghost { padding:0 6px; }
 .shelf-form { display:inline-flex; gap:4px; align-items:center; flex-wrap:wrap; }
 .shelf-msg { margin:0; }
+/* 위쪽 도구 줄: 대시보드 고르기 | 카드 만들기(주 동작 [카드 추가]) | 오른쪽 끝에 연결·다시 구하기·설정. 그림 줄: 선택 | 그림 형식과 저장 | 보고서 */
+.d-tool { flex-wrap:wrap; gap:8px; }
+.d-sep { flex:none; width:1px; height:22px; background:var(--line); margin:0 4px; }
+.board-view .board-ctl .ghost { height:28px; }
+/* 카드 설정 패널을 접으면 ‹와 이름만 있는 세로 띠(UI_PLAN C: ×로 닫지 않는다) */
+.d-main > #d-panel.folded { width:40px; padding:0; overflow:hidden; }
+#d-panel.folded > :not(.side-strip) { display:none !important; }
+#d-panel > .side-strip { display:flex; flex-direction:column; align-items:center; gap:10px; width:100%; padding:14px 0; background:var(--card); border:0; border-radius:0; color:var(--muted); font-weight:600; }
+#d-panel > .side-strip:hover { color:var(--text); background:var(--bg); }
+.prow .btn.on { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }

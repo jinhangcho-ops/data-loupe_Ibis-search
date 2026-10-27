@@ -64,3 +64,47 @@ def test_virtual_table_case_runs_on_duckdb(pv):
     con, _ = pv
     vts = {"Sales": {"sql": "SELECT 1 AS a"}}
     assert con.raw_sql(sql_exec.expand(con, sql_exec.check("SELECT Sales.a FROM sales", "duckdb"), vts).sql(dialect="duckdb")).fetchall() == [(1,)]
+
+
+def test_failed_piece_lets_running_pieces_finish(tmp_path, monkeypatch, folder):
+    """파일 받기: 한 조각이 실패해도 받던 조각은 끝까지 받아 기록한다(다음에 그 범위는 다시 받지 않는다)."""
+    import threading
+    import time
+    from collect import collect_config, collect_http, collect_job
+    config = collect_config.normalize({"mode": "file", "file": {"url": "https://files.example.com/a.bin", "chunks": 2}, "balance": {"interval": 0, "retries": 0},
+                                       "output": {"format": "csv", "path": str(tmp_path / "a.bin")}})
+    path = collect_job.output_path(config)
+    found = collect_job.parts(path)
+    found["part"].parent.mkdir(parents=True, exist_ok=True)
+    record = {"hash": collect_job.digest(config), "mode": "file", "done": [], "rows": 0, "bytes": 0}
+    failed = threading.Event()
+    H = type("H", (dict,), {"get": dict.get, "items": dict.items})
+
+    class Body:
+        def __init__(self, status, headers, data, slow=False):
+            self.status, self.headers, self.data, self.slow = status, H(headers), data, slow
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self, n=None):
+            if self.slow:  # 다른 조각이 실패한 뒤에야 몸통이 온다
+                failed.wait(5)
+                time.sleep(0.1)
+                self.slow = False
+            out, self.data = (self.data[:n], self.data[n:]) if n else (self.data, b"")
+            return out
+
+    def open_url(method, url, headers, body, timeout, hide=()):
+        start, end = (int(v) for v in dict(headers)["Range"].removeprefix("bytes=").split("-"))
+        if start >= 10:
+            failed.set()
+            return Body(500, {}, b"down"), url
+        return Body(206, {"Content-Range": f"bytes {start}-{end}/20", "ETag": '"e1"'}, b"y" * (end - start + 1), slow=end > 0), url
+    monkeypatch.setattr(collect_http, "open_url", open_url)
+    with pytest.raises(Exception):
+        collect_job.run_file(config, {}, path, found, record, threading.Event())
+    assert record["done"] == [[0, 10]]

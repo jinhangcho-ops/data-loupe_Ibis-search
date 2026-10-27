@@ -74,6 +74,16 @@
   /* SQL 탭의 질문 줄과 프롬프트 미리보기 */
   .sql-edit .nl-row input { flex:1 1 240px; width:auto; }
   .nl-prompt { margin:0; padding:8px 10px; background:var(--bg); border:1px solid var(--line); border-radius:10px; font:12px/1.45 Consolas, monospace; white-space:pre-wrap; max-height:260px; overflow:auto; }
+  /* 단계 카드 사이는 화살표 대신 가는 세로선 하나 */
+  .flow .cn { height:12px; }
+  .flow .cn::before { content:""; width:1px; height:100%; background:var(--line); }
+  .step .sp .t { width:72px; }
+  /* 결과 머리: 행 수가 주인공, 아래 한 줄은 보고 있는 범위와 조건 */
+  .big { flex-direction:column; align-items:flex-start; gap:2px; padding-bottom:12px; }
+  .big span { max-width:100%; font-size:13px; }
+  .side > header { padding-right:14px; }
+  .fold, .side-strip b { font-size:18px; line-height:1; }
+  .side > footer #search { flex:1.4; }
 </style>
 </head>
 <body class="app" data-virtual="1">
@@ -83,14 +93,13 @@
   <main class="results">
     <div class="vwide hidden" id="vwide"><div id="sent-host" class="hidden"></div></div>
     <div class="tool">
-      <label class="q" title="지금 보이는 쪽의 행에서만 찾습니다"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="row-find" placeholder="결과 안에서 찾기"><span class="hint" id="find-count" style="margin:0; white-space:nowrap"></span></label>
+      <label class="q" title="지금 보이는 쪽에서만 찾아요"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="row-find" placeholder="결과 안에서 찾기"><span class="hint" id="find-count" style="margin:0; white-space:nowrap"></span></label>
       <button id="sql-show" class="btn">SQL 보기</button>
-      <button id="plan-show" class="btn" title="DB가 이 조회를 어떻게 읽을지(인덱스를 타는지, 테이블 전체를 읽는지) 봅니다. 조회는 돌리지 않습니다(EXPLAIN)">실행 계획</button>
-      <div class="drop"><button id="save-open" class="btn" title="조건에 맞는 전체 행을 파일로 저장합니다">저장<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button>
+      <button id="plan-show" class="btn" title="DB가 이 검색을 어떻게 읽는지 보여 줘요. 인덱스를 쓰는지, 테이블을 통째로 읽는지 알 수 있어요. 검색은 하지 않아요 (EXPLAIN)">실행 계획</button>
+      <div class="drop"><button id="save-open" class="btn" title="조건에 맞는 모든 행을 파일로 내보내요">내보내기<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button>
         <div class="pop hidden" id="save-pop"><button data-export="csv">CSV</button><button data-export="xlsx">Excel</button><button data-export="parquet">Parquet</button></div></div>
-      <button id="side-open" class="btn hidden">검색 조건</button>
     </div>
-    <div class="big"><b id="big-count">검색 전</b><span id="big-sub">오른쪽에서 데이터와 조건을 고르고 [검색 실행]을 누르세요.</span></div>
+    <div class="big"><b id="big-count">검색 전</b><span id="big-sub">오른쪽에서 테이블과 조건을 고른 뒤 [검색]을 누르세요.</span></div>
     <div class="err" id="err-search"></div>
     <div class="tabs2"><button data-tab="rows" class="on">결과</button><button data-tab="summary">집계</button><button data-tab="chart">차트</button></div>
     <section class="pane" id="pane-rows">
@@ -99,204 +108,207 @@
     </section>
     <section class="pane hidden" id="pane-summary">
       <div class="ctl">
-        <button id="summarize">집계 계산</button>
-        <select id="scol-add" title="집계할 컬럼을 고릅니다. 하나도 고르지 않으면 전체를 집계합니다" style="flex:0 1 200px"></select>
+        <button id="summarize">집계하기</button>
+        <select id="scol-add" title="집계할 컬럼을 골라요. 고르지 않으면 모든 컬럼을 집계해요" style="flex:0 1 200px"></select>
         <div class="chips" id="scols"></div>
       </div>
       <div class="err" id="err-summary"></div>
       <div class="table-wrap" id="summary"></div>
-      <div class="ctl" style="margin-top:10px"><span class="hint grow">집계 표 저장</span>
-        <select id="simage" title="저장할 그림의 모드 (차트 저장과 같이 바뀝니다)" style="flex:0 0 100px"><option value="light">라이트</option><option value="dark">다크</option></select>
+      <div class="ctl" style="margin-top:10px"><span class="hint grow">집계 표 내보내기</span>
+        <select id="simage" title="그림의 색 모드예요. 차트 그림과 함께 바뀌어요" style="flex:0 0 100px"><option value="light">밝게</option><option value="dark">어둡게</option></select>
         <button data-table="png" class="btn">PNG</button><button data-table="jpeg" class="btn">JPG</button>
-        <select id="ssend" title="집계 표를 보낼 곳" style="flex:0 1 160px"></select><button id="ssend-go">보내기</button></div>
-      <div class="ctl" style="margin-top:14px" title="행 기준 컬럼별로 묶고, 열로 펼칠 컬럼의 값마다 칸을 만듭니다(최대 30개). 조건을 넣으면 그 행만 셉니다(조건부 집계)">
+        <select id="ssend" title="집계 표를 받을 곳" style="flex:0 1 160px"></select><button id="ssend-go" class="btn">보내기</button></div>
+      <div class="ctl" style="margin-top:14px" title="행 컬럼으로 묶고, 열 컬럼의 값마다 칸을 만들어요(최대 30개). 조건을 넣으면 그 행만 세요">
         <span class="hint" style="margin:0; flex:none">피벗</span>
-        <select id="pv-rows" title="행 기준: 이 컬럼의 값마다 한 줄" style="flex:0 1 150px"></select>
-        <select id="pv-col" title="열로 펼칠 컬럼: 이 컬럼의 값마다 한 칸" style="flex:0 1 150px"></select>
-        <span id="pv-how" title="집계(함수 사전의 집계 전부)"></span>
-        <select id="pv-val" title="값 컬럼(개수는 비워도 됩니다)" style="flex:0 1 150px"></select>
-        <input id="pv-where" placeholder="조건 (예: 상태 = 완료, 비우면 전체)" style="flex:1 1 160px">
-        <select id="pv-sub" title="행 기준이 있을 때 소계·총계 줄을 더합니다" style="flex:0 0 150px"><option value="">소계·총계 없음</option><option value="rollup">소계·총계 (ROLLUP)</option><option value="cube">모든 조합 (CUBE)</option></select>
-        <input id="pv-having" placeholder="집계 뒤 거르기 (예: 전체 합계 > 100)" style="flex:1 1 160px" title="집계한 결과 컬럼으로 거릅니다(HAVING)">
-        <button id="pv-run">피벗</button></div>
+        <select id="pv-rows" title="행으로 묶을 컬럼이에요. 값마다 한 줄이 돼요" style="flex:0 1 150px"></select>
+        <select id="pv-col" title="열로 펼칠 컬럼이에요. 값마다 한 칸이 돼요" style="flex:0 1 150px"></select>
+        <span id="pv-how" title="집계 방법"></span>
+        <select id="pv-val" title="집계할 값 컬럼이에요. 개수만 셀 때는 비워 두세요" style="flex:0 1 150px"></select>
+        <input id="pv-where" placeholder="셀 행의 조건 (예: 상태 = 완료)" style="flex:1 1 160px" title="비우면 모든 행을 세요">
+        <select id="pv-sub" title="행 컬럼이 있으면 소계와 총계 줄을 더해요" style="flex:0 0 150px"><option value="">소계 없이</option><option value="rollup">소계와 총계 (ROLLUP)</option><option value="cube">모든 조합 (CUBE)</option></select>
+        <input id="pv-having" placeholder="집계 결과로 거르기 (예: 전체 합계 > 100)" style="flex:1 1 160px" title="집계한 결과로 걸러요 (HAVING)">
+        <button id="pv-run" class="btn">피벗 만들기</button></div>
       <div class="err" id="err-pivot"></div>
       <div class="table-wrap" id="pivot"></div>
-      <div class="grip-y" data-size="summary" title="끌어서 집계 표 높이 조절 (더블클릭: 기본)"></div>
+      <div class="grip-y" data-size="summary" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div>
     </section>
     <section class="pane hidden" id="pane-chart">
-      <details class="shelf-box" id="shelf-box"><summary class="hint" title="컬럼 칩을 끌어 [X축]·[값]·[색(나누기)]·[필터] 칸에 놓으면 차트가 바로 바뀝니다(칩을 누르고 칸을 눌러도 됩니다)">끌어 놓기로 차트 만들기</summary><div id="shelf-host"></div></details>
+      <details class="shelf-box" id="shelf-box"><summary class="hint" title="컬럼 칩을 X축, 값, 색, 필터 칸에 끌어다 놓으면 차트가 바로 바뀌어요. 칩을 누른 뒤 칸을 눌러도 돼요">컬럼을 끌어다 놓아 차트 만들기</summary><div id="shelf-host"></div></details>
       <div class="ctl">
-        <select id="cx" title="X 컬럼"></select>
-        <select id="csplit" title="이 컬럼의 값마다 계열을 나눕니다 (최대 8개)"></select>
-        <select id="corder" title="그룹 순서"><option value="x">X 순</option><option value="value">값 큰 순</option></select>
+        <select id="cx" title="X축 컬럼"></select>
+        <select id="csplit" title="이 컬럼의 값마다 막대나 선을 나눠요 (최대 8개)"></select>
+        <select id="corder" title="막대 순서"><option value="x">X축 순</option><option value="value">값 큰 순</option></select>
         <select id="cratio" title="차트 비율"><option value="auto">비율 자동</option><option value="square">1:1</option><option value="wide">16:9</option></select>
-        <button id="draw">그리기</button>
-        <button id="dash-add" class="btn" title="지금 그린 차트를 값과 함께 대시보드에 넣습니다">대시보드에 추가</button>
+        <button id="draw">차트 그리기</button>
+        <button id="dash-add" class="btn" title="지금 그린 차트를 대시보드에 넣어요">대시보드에 추가</button>
       </div>
       <div class="ctl">
-        <select id="cy" title="Y 컬럼 (개수일 때는 비워 둡니다)"></select>
-        <span id="cagg" title="집계 방식(함수 사전의 집계 전부. 인자 칸은 고른 집계에 따라 나타남)"></span>
-        <select id="ctype" title="계열 종류"><option value="bar">막대</option><option value="line">선</option></select>
+        <select id="cy" title="Y축 컬럼이에요. 개수만 셀 때는 비워 두세요"></select>
+        <span id="cagg" title="집계 방법이에요. 고른 집계에 따라 칸이 더 나와요"></span>
+        <select id="ctype" title="그래프 모양"><option value="bar">막대</option><option value="line">선</option></select>
         <select id="cdash" title="선 모양" disabled><option value="solid">실선</option><option value="dashed">점선</option></select>
-        <select id="caxis" title="이 계열이 쓸 세로축"><option value="left">왼쪽 축</option><option value="right">오른쪽 축</option></select>
-        <button id="series-add" class="btn" title="지금 고른 Y·집계·종류·선 모양·축을 계열로 넣습니다. 넣은 계열들이 한 차트에 겹쳐 그려집니다.">계열 추가</button>
+        <select id="caxis" title="이 값을 그릴 세로축"><option value="left">왼쪽 축</option><option value="right">오른쪽 축</option></select>
+        <button id="series-add" class="btn" title="지금 고른 Y축, 집계, 모양, 축을 계열 하나로 넣어요. 넣은 계열은 한 차트에 겹쳐 그려요">계열 추가</button>
       </div>
       <ul class="items" id="series"></ul>
       <div class="ctl">
         <span class="hint">왼쪽 축</span>
-        <input id="ymin" type="number" step="any" placeholder="최소 (자동)" title="왼쪽 세로축의 가장 작은 값. 비우면 자동">
-        <input id="ymax" type="number" step="any" placeholder="최대 (자동)" title="왼쪽 세로축의 가장 큰 값. 비우면 자동">
+        <input id="ymin" type="number" step="any" placeholder="최소 (자동)" title="왼쪽 세로축의 최솟값이에요. 비우면 알아서 정해요">
+        <input id="ymax" type="number" step="any" placeholder="최대 (자동)" title="왼쪽 세로축의 최댓값이에요. 비우면 알아서 정해요">
         <span class="hint">오른쪽 축</span>
-        <input id="y1min" type="number" step="any" placeholder="최소 (자동)" title="오른쪽 세로축의 가장 작은 값. 비우면 자동">
-        <input id="y1max" type="number" step="any" placeholder="최대 (자동)" title="오른쪽 세로축의 가장 큰 값. 비우면 자동">
+        <input id="y1min" type="number" step="any" placeholder="최소 (자동)" title="오른쪽 세로축의 최솟값이에요. 비우면 알아서 정해요">
+        <input id="y1max" type="number" step="any" placeholder="최대 (자동)" title="오른쪽 세로축의 최댓값이에요. 비우면 알아서 정해요">
       </div>
       <div class="err" id="err-chart"></div>
-      <div class="chart-box"><canvas id="chart"></canvas><div class="grip-y" data-size="chart" title="끌어서 차트 높이 조절 (더블클릭: 기본)"></div></div>
+      <div class="chart-box"><canvas id="chart"></canvas><div class="grip-y" data-size="chart" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div></div>
       <div class="table-wrap hidden" id="ctable"></div>
-      <div class="ctl" style="margin-top:18px"><button id="ctable-show" class="btn">표로 보기</button><button id="ctable-csv" class="btn">CSV</button><span class="hint grow">차트 저장</span>
-        <select id="cimage" title="저장할 그림의 모드 (집계 표 저장과 같이 바뀝니다)" style="flex:0 0 100px"><option value="light">라이트</option><option value="dark">다크</option></select>
+      <div class="ctl" style="margin-top:18px"><button id="ctable-show" class="btn">표로 보기</button><button id="ctable-csv" class="btn">CSV</button><span class="hint grow">차트 내보내기</span>
+        <select id="cimage" title="그림의 색 모드예요. 집계 표 그림과 함께 바뀌어요" style="flex:0 0 100px"><option value="light">밝게</option><option value="dark">어둡게</option></select>
         <button data-image="png" class="btn">PNG</button><button data-image="jpeg" class="btn">JPG</button>
-        <select id="csend" title="차트를 보낼 곳" style="flex:0 1 160px"></select><button id="csend-go">보내기</button></div>
+        <select id="csend" title="차트를 받을 곳" style="flex:0 1 160px"></select><button id="csend-go" class="btn">보내기</button></div>
     </section>
     <div class="err" id="err-export"></div>
     <div class="pager">
       <button id="prev" class="btn" disabled>이전</button><button id="next" class="btn" disabled>다음</button><span id="page-info"></span>
-      <label title="한 쪽에 보일 행 수">쪽당 <input id="limit" type="number" value="20" min="1"> 행</label>
-      <label title="이보다 긴 글자는 줄여 보이고 마우스를 올리면 전체가 보입니다 (0 = 전체)">글자 <input id="maxlen" type="number" value="40" min="0"> 까지</label>
-      <label title="끄면 전체 행 수를 세지 않고, 예상 시간도 구하지 않습니다 (과금되는 DB에서 유용). 주소로 접속한 DB는 결과를 이 PC에 받아 둘 수 있는지만 100만 행까지 셉니다"><input type="checkbox" id="count" checked> 전체 행 수 세기</label>
+      <label title="한 쪽에 보일 행 수예요">한 쪽에 <input id="limit" type="number" value="20" min="1">행</label>
+      <label title="이보다 긴 글은 줄여서 보여요. 마우스를 올리면 다 보여요. 0이면 줄이지 않아요">칸마다 <input id="maxlen" type="number" value="40" min="0">자까지</label>
+      <label title="끄면 총 행 수와 예상 시간을 구하지 않아요. 쓴 만큼 요금이 나오는 DB에서 아낄 수 있어요. 주소로 접속한 DB는 결과를 이 PC에 받아 둘 수 있는지만 100만 행까지 세요"><input type="checkbox" id="count" checked> 총 행 수 세기</label>
       <span style="margin-left:auto"></span>
-      <button id="handoff" class="btn k" title="조건에 맞는 전체 행을 Parquet 파일로 저장하고, 그 파일을 분석 화면의 전처리 탭에서 엽니다. 연결이 그 파일로 바뀝니다.">전처리로 보내기</button>
+      <button id="handoff" class="btn" title="조건에 맞는 모든 행을 Parquet 파일로 저장하고, 분석 화면의 전처리 탭에서 열어요. 연결도 그 파일로 바뀌어요">전처리로 보내기</button>
     </div>
   </main>
-  <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
+  <div class="grip-x" data-size="panel" title="끌어서 패널 너비를 바꿔요. 두 번 누르면 기본 너비로 돌아가요"></div>
   <aside class="side" id="side">
-    <header><h3>검색 조건</h3><button id="side-close" class="ib" title="패널 닫기"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></header>
-    <div class="vswitch" id="vswitch" title="두 보기는 같은 검색 조건을 보여 줍니다. 하나에서 고치면 다른 보기에도 그대로 나옵니다."><button data-v="cards" class="on">단계 카드</button><button data-v="sentence">문장</button></div>
+    <header><h3>검색 조건</h3><button type="button" id="side-close" class="fold" aria-label="검색 조건 접기" title="검색 조건 접기">›</button></header>
+    <div class="vswitch" id="vswitch" title="두 보기는 같은 조건을 보여 줘요. 한쪽에서 고치면 다른 쪽에도 그대로 반영돼요"><button data-v="cards" class="on">단계별</button><button data-v="sentence">문장으로</button></div>
     <div class="sc"><div class="flow" id="flow">
       <div class="step open" id="step-data" data-step="data"><div class="sp"><i>1</i><span class="t">데이터</span><b id="sum-data"></b><span class="c"></span></div>
         <div class="edx">
           <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></span><button id="conn-open" class="btn">연결 바꾸기</button></div>
           <div id="table-box" class="hidden">
-            <div class="hint" style="margin-top:8px">기준 테이블</div>
+            <div class="hint" style="margin-top:8px" title="조인할 때 왼쪽이 되는 테이블이에요">기준 테이블</div>
             <select id="schema" class="hidden" style="margin-bottom:6px"></select>
             <select id="base"></select>
             <div class="cols" id="cols" style="margin-top:6px"></div>
           </div>
         </div></div>
       <div id="after-connect" class="hidden">
-        <div class="cn">↓</div>
-        <div class="step" data-step="union"><div class="sp"><i>2</i><span class="t">이어붙이기</span><b id="sum-union"></b><span class="c"></span></div>
+        <div class="cn"></div>
+        <div class="step" data-step="union"><div class="sp"><i>2</i><span class="t">행 합치기</span><b id="sum-union"></b><span class="c"></span></div>
           <div class="edx">
-            <div class="hint">같은 모양의 테이블을 기준 테이블 아래로 잇습니다. 어느 테이블의 행인지는 "출처" 컬럼에 나옵니다. 교집합·차집합은 행을 고르기만 합니다(출처 없음).</div>
-            <select id="u-how" style="margin-bottom:6px"><option value="left">left: 기준 테이블의 컬럼을 모두 (없는 컬럼은 빈 값)</option><option value="inner">inner: 모든 테이블에 있는 컬럼만</option><option value="intersect">intersect: 모든 테이블에 같이 있는 행만 (교집합)</option><option value="except">except: 기준 테이블에만 있는 행 (차집합)</option></select>
+            <div class="hint" title="교집합과 차집합은 행을 고르기만 해서 출처 컬럼이 없어요">컬럼이 같은 테이블의 행을 기준 테이블 아래에 붙여요. 어느 테이블의 행인지는 '출처' 컬럼에 나와요.</div>
+            <select id="u-how" style="margin-bottom:6px"><option value="left">기준 테이블의 컬럼을 모두 (없으면 빈 값)</option><option value="inner">모든 테이블에 있는 컬럼만</option><option value="intersect">모든 테이블에 같이 있는 행만 (교집합)</option><option value="except">기준 테이블에만 있는 행만 (차집합)</option></select>
             <div class="chips open" id="u-chips" style="margin-bottom:6px"></div>
             <select id="u-add"></select>
             <div class="err" id="err-union"></div>
           </div></div>
-        <div class="cn">↓</div>
+        <div class="cn"></div>
         <div class="step" data-step="joins"><div class="sp"><i>3</i><span class="t">조인</span><b id="sum-joins"></b><span class="c"></span></div>
           <div class="edx">
             <div id="join-blocks"></div>
             <button class="linkish" id="join-add">+ 조인 추가</button>
-            <div class="row" style="margin-top:6px"><input id="join-line" placeholder="한 줄로: 테이블 [inner|left|right|outer|semi|anti] 왼쪽=오른쪽 / 테이블 asof 왼쪽시각>=오른쪽시각, 왼쪽=오른쪽" title="semi: 짝이 있는 행만, anti: 짝이 없는 행만(둘은 오른쪽 컬럼을 붙이지 않음), asof: 시각이 같거나 앞선 가장 가까운 행 하나"><button id="join-line-add">추가</button></div>
+            <div class="row" style="margin-top:6px"><input id="join-line" placeholder="한 줄로 쓰기 (예: customers left 고객ID=ID)" title="형식: 테이블 [inner|left|right|outer|semi|anti] 왼쪽=오른쪽
+시각으로 붙일 때: 테이블 asof 왼쪽시각>=오른쪽시각, 왼쪽=오른쪽
+semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 컬럼은 붙이지 않아요). asof는 시각이 같거나 앞선 가장 가까운 행 하나를 붙여요."><button id="join-line-add" class="btn">추가</button></div>
             <div class="err" id="err-join"></div>
           </div></div>
-        <div class="cn">↓</div>
+        <div class="cn"></div>
         <div class="step" data-step="periods"><div class="sp"><i>4</i><span class="t">기간</span><b id="sum-periods"></b><span class="c"></span></div>
-          <div class="edx"><div class="hint">날짜컬럼 2025-07-01 ~ 2025-09-30 (한쪽 비워도 됨)</div><div id="periods"></div></div></div>
-        <div class="cn">↓</div>
+          <div class="edx"><div class="hint">예: 주문일 2025-07-01 ~ 2025-09-30. 시작이나 끝 한쪽은 비워도 돼요.</div><div id="periods"></div></div></div>
+        <div class="cn"></div>
         <div class="step" data-step="conditions"><div class="sp"><i>5</i><span class="t">조건</span><b id="sum-conditions"></b><span class="c"></span></div>
           <div class="edx">
             <div id="cond" class="fields">
               <div class="tabs" style="margin-bottom:6px">
-                <label><input type="radio" name="cmode" value="fields" checked style="width:auto"> 칸으로 선택</label>
-                <label><input type="radio" name="cmode" value="line" style="width:auto"> 한 줄 입력</label>
+                <label><input type="radio" name="cmode" value="fields" checked style="width:auto"> 골라서 넣기</label>
+                <label><input type="radio" name="cmode" value="line" style="width:auto"> 직접 쓰기</label>
               </div>
-              <div class="hint format">컬럼 &gt;= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'</div>
+              <div class="hint format">쓰는 법: 컬럼 &gt;= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / 조건 or 조건. 값에 or나 쉼표가 있으면 '값'처럼 따옴표로 감싸요.</div>
               <div id="conditions"></div>
               <div id="builder">
-                <div class="row"><select id="bcol" title="컬럼"></select><select id="bop" title="연산자"></select></div>
-                <div class="row"><input id="bval" placeholder="값"><input id="bval2" placeholder="값2" class="hidden"><button id="blist" class="btn hidden" title="이 컬럼에 있는 값을 불러와 고를 수 있게 합니다(최대 200개)">목록</button></div>
-                <select id="bpick" class="hidden" title="고르면 값 칸에 들어갑니다"></select>
-                <div class="row"><button id="badd">추가</button></div>
+                <div class="row"><select id="bcol" title="컬럼"></select><select id="bop" title="비교 방법"></select></div>
+                <div class="row"><input id="bval" placeholder="값"><input id="bval2" placeholder="값2" class="hidden"><button id="blist" class="btn hidden" title="이 컬럼에 있는 값을 불러와 골라요 (최대 200개)">값 목록</button></div>
+                <select id="bpick" class="hidden" title="고르면 값 칸에 들어가요"></select>
+                <div class="row"><button id="badd" class="btn">조건 추가</button></div>
                 <div class="err" id="err-builder"></div>
               </div>
-              <label class="hint" title="끄면 따옴표를 글자 그대로 찾습니다. 추가할 때의 상태가 그 줄에 적용됩니다."><input type="checkbox" id="quotes" checked style="width:auto"> 따옴표로 값 감싸기 ('값')</label>
+              <label class="hint" title="끄면 따옴표도 글자로 찾아요. 조건을 추가할 때의 설정이 그 조건에 적용돼요"><input type="checkbox" id="quotes" checked style="width:auto"> 따옴표 안은 값 하나로 읽기</label>
             </div>
           </div></div>
-        <div class="cn">↓</div>
-        <div class="step" data-step="calcs"><div class="sp"><i>6</i><span class="t">계산</span><b id="sum-calcs"></b><span class="c"></span></div>
-          <div class="edx"><div class="hint" id="calc-guide">순위·이동 평균·누적 합계·이전 값·그룹별 상위 N, 여러 컬럼 한꺼번에, 목록 펼치기, 세로로 세우기. 한 줄에 하나, 위에서부터 차례로 합니다.</div>
+        <div class="cn"></div>
+        <div class="step" data-step="calcs"><div class="sp"><i>6</i><span class="t">새 컬럼</span><b id="sum-calcs"></b><span class="c"></span></div>
+          <div class="edx"><div class="hint" id="calc-guide">순위, 누적 합계, 이전 값 같은 컬럼을 새로 만들어요. 위에서부터 차례로 계산해요.</div>
             <div class="calc-form" id="calc-form">
-              <select id="cf-kind" title="어떤 계산을 줄로 만들지"><option value="window">창 함수 (순위·이전 값·누적·이동 …)</option><option value="expr">식 (새 컬럼 = 함수 식)</option><option value="sql">SQL식 (DB 고유 함수)</option><option value="top">창 결과로 거르기 (QUALIFY)</option></select>
+              <select id="cf-kind" title="만드는 방법"><option value="window">순위, 누적, 이전 값</option><option value="expr">식으로 계산</option><option value="sql">SQL 식 직접 쓰기</option><option value="top">순위로 거르기 (상위 N)</option></select>
               <span id="cf-window" class="fp-line"><span id="cf-pick"></span><select id="cf-x" title="계산할 컬럼"></select></span>
               <span id="cf-text" class="fp-line hidden"><input id="cf-expr" class="code" placeholder="식 (예: 금액 * 수량, case(금액 >= 100, '고액', '소액'))"></span>
               <span id="cf-top" class="fp-line hidden"><select id="cf-op" title="비교"><option>&lt;=</option><option>&lt;</option><option>==</option><option>&gt;=</option><option>&gt;</option></select><input id="cf-val" type="number" value="3" title="비교할 값"></span>
-              <span class="fp-line"><span id="cf-expr-opts" class="hidden"><input id="cf-group" placeholder="묶음 기준 (컬럼, 쉼표로 여러 개)" title="식 안의 집계·창 함수가 쓸 묶음 기준(선택)"><input id="cf-order" placeholder="정렬 기준 (예: 날짜 asc)" title="식 안의 창 함수가 쓸 정렬 기준(선택)"></span><input id="cf-name" placeholder="새 컬럼 이름 (선택)" style="flex:0 1 140px"></span>
-              <div class="row"><button id="cf-add">줄 만들어 넣기</button><button id="cf-find" class="ghost" title="함수를 찾아 예시를 넣습니다">함수 찾기</button><span class="hint" id="cf-line" style="align-self:center"></span></div>
+              <span class="fp-line"><span id="cf-expr-opts" class="hidden"><input id="cf-group" placeholder="묶을 컬럼 (쉼표로 여러 개)" title="식 안의 집계를 이 컬럼별로 따로 구해요 (선택)"><input id="cf-order" placeholder="순서 (예: 날짜 asc)" title="순위나 누적을 셀 순서예요 (선택)"></span><input id="cf-name" placeholder="새 컬럼 이름 (선택)" style="flex:0 1 140px"></span>
+              <div class="row"><button id="cf-add" class="btn">새 컬럼 추가</button><button id="cf-find" class="ghost" title="함수를 찾아 예시를 넣어요">함수 찾기</button><span class="hint" id="cf-line" style="align-self:center"></span></div>
               <div class="err" id="err-cf"></div><div id="cf-panel"></div>
             </div>
-            <select id="calc-example" title="고르면 아래 입력칸에 예시를 넣습니다. 컬럼 이름을 바꿔 쓰세요"></select><div id="calcs"></div></div></div>
-        <div class="cn">↓</div>
+            <select id="calc-example" title="고르면 아래 칸에 예시가 들어가요. 컬럼 이름만 바꿔 쓰세요"></select><div id="calcs"></div></div></div>
+        <div class="cn"></div>
         <div class="step" data-step="sorts"><div class="sp"><i>7</i><span class="t">정렬</span><b id="sum-sorts"></b><span class="c"></span></div>
-          <div class="edx"><div class="hint">컬럼 [asc|desc]. 결과 표의 머리글을 눌러도 됩니다.</div><div id="sorts"></div></div></div>
-        <div class="cn">↓</div>
-        <div class="step" data-step="columns"><div class="sp"><i>8</i><span class="t">표시 컬럼</span><b id="sum-columns"></b><span class="c"></span></div>
-          <div class="edx"><div class="hint">컬럼1, 컬럼2 (비우면 전체)</div><div id="columns"></div></div></div>
+          <div class="edx"><div class="hint">예: 금액 desc (큰 것부터). 결과 표의 머리글을 눌러도 돼요.</div><div id="sorts"></div></div></div>
+        <div class="cn"></div>
+        <div class="step" data-step="columns"><div class="sp"><i>8</i><span class="t">보일 컬럼</span><b id="sum-columns"></b><span class="c"></span></div>
+          <div class="edx"><div class="hint">예: 이름, 금액. 비우면 모든 컬럼이 보여요.</div><div id="columns"></div></div></div>
       </div>
     </div></div>
-    <div class="hint scan-hint" id="scan-hint" title="실행하지 않고 센 값입니다. BigQuery는 dry run(요금 없음)의 정확한 값, 그 밖에는 파일 정보·통계로 추정합니다"></div>
+    <div class="hint scan-hint" id="scan-hint" title="검색하지 않고 미리 센 값이에요. BigQuery는 요금 없는 dry run으로 정확히 세고, 나머지는 파일 정보와 통계로 어림해요"></div>
     <footer>
       <div class="drop up" style="flex:1; display:flex"><button id="saved-open" class="btn" style="flex:1; justify-content:center">저장한 검색</button>
         <div class="pop hidden" id="saved-pop">
-          <select id="saved" title="고르면 저장해 둔 조건을 불러옵니다 (검색은 하지 않습니다). 많이 불러온 순"></select>
-          <div class="row"><input id="sname" placeholder="이름 (비우면 고른 검색에 덮어씀)"><button id="ssave">저장</button><button id="sdel" class="btn">삭제</button></div>
+          <select id="saved" title="고르면 저장한 조건을 불러와요. 검색은 하지 않아요. 많이 불러온 순이에요"></select>
+          <div class="row"><input id="sname" placeholder="이름 (비우면 고른 검색을 덮어써요)"><button id="ssave">저장</button><button id="sdel" class="btn">삭제</button></div>
         </div></div>
-      <button id="search" class="btn p">검색 실행</button>
+      <button id="search" class="btn p">검색</button>
     </footer>
   </aside>
+  <button type="button" class="side-strip" id="side-open" aria-label="검색 조건 펴기" title="검색 조건 펴기"><b>‹</b><span>검색 조건</span></button>
 </div>
 <!-- SQL: 읽기만 하는 SELECT 문을 직접 써서 실행한다(WITH·JOIN·LIKE 등). 가상 테이블 이름은 테이블처럼 쓰고 실행할 때 WITH로 풀린다. -->
 <div class="work hidden" id="sqlv">
   <main class="results">
     <div class="tool"><span class="hint" id="sql-conn" style="margin:0; flex:1"></span>
-      <div class="drop"><button id="sql-save-open" class="btn" title="SQL 결과 전체를 파일로 저장합니다">결과 저장<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button>
+      <div class="drop"><button id="sql-save-open" class="btn" title="SQL 결과 전체를 파일로 내보내요">결과 내보내기<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button>
         <div class="pop hidden" id="sql-save-pop"><button data-sqlexport="csv">CSV</button><button data-sqlexport="xlsx">Excel</button><button data-sqlexport="parquet">Parquet</button></div></div>
     </div>
     <div class="sql-edit">
-      <div class="row nl-row"><input id="nl-q" placeholder="질문으로 SQL 만들기 (예: 지난달 매장별 매출 합계)" title="LLM이 만든 SQL은 실행하지 않고 편집기에 넣습니다. 검사를 보고 [실행]하세요">
-        <button id="nl-ask" class="btn" title="LLM에 물어 SQL을 만듭니다(지금은 LLM이 연결되어 있지 않은 뼈대)">SQL 만들기</button>
-        <button id="nl-prompt" class="btn" title="LLM에 보낼 내용을 봅니다. 테이블·컬럼 이름과 타입, 명세서 설명, 지표 정의, 컬럼별 표본 통계(빈 값 비율 등)만 들어가고 데이터 값은 넣지 않습니다">프롬프트 보기</button></div>
-      <div class="row nl-row"><span class="hint" style="margin:0" id="llm-name">LLM: 없음</span><input id="llm-env" class="code" placeholder="LLM env 파일 경로 (LLM_PROVIDER·LLM_API_KEY·LLM_MODEL)" title="키는 저장하지 않고 이 파일에서 물을 때마다 읽습니다. 비우고 [읽기]를 누르면 LLM을 쓰지 않습니다"><button id="llm-read" class="btn">읽기</button></div>
+      <div class="row nl-row"><input id="nl-q" placeholder="질문으로 SQL 만들기 (예: 지난달 매장별 매출 합계)" title="만든 SQL은 바로 실행하지 않고 편집기에 넣어요. 검사 결과를 보고 [실행]을 누르세요">
+        <button id="nl-ask" class="btn" title="LLM에 물어 SQL을 만들어요">SQL 만들기</button>
+        <button id="nl-prompt" class="btn" title="LLM에 보낼 내용을 보여 줘요. 테이블과 컬럼 이름, 타입, 명세서 설명, 지표 정의, 컬럼별 표본 통계만 들어가고 데이터 값은 넣지 않아요">프롬프트 보기</button></div>
+      <div class="row nl-row"><span class="hint" style="margin:0" id="llm-name">LLM: 없음</span><input id="llm-env" class="code" placeholder="LLM 설정 파일 경로 (LLM_PROVIDER, LLM_API_KEY, LLM_MODEL)" title="키는 저장하지 않고 물을 때마다 이 파일에서 읽어요. 비우고 [읽기]를 누르면 LLM을 쓰지 않아요"><button id="llm-read" class="btn">읽기</button></div>
       <pre class="nl-prompt hidden" id="nl-view"></pre>
       <div class="sql-hl"><pre id="sql-paint" aria-hidden="true"></pre><textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea></div>
       <div class="sql-check" id="sql-check"></div>
       <pre class="nl-prompt hidden" id="sql-plan"></pre>
-      <div class="row"><button id="sql-deep" class="btn" title="연결에서 짜 보기만 해서 테이블·컬럼 이름까지 확인합니다(데이터는 읽지 않습니다)">검사</button>
-        <button id="sql-plan-show" class="btn" title="DB가 이 SQL을 어떻게 읽을지(인덱스를 타는지, 테이블 전체를 읽는지) 봅니다. 조회는 돌리지 않습니다(EXPLAIN)">실행 계획</button>
-        <label title="한 쪽에 보일 행 수. 전체는 [결과 저장]으로 받습니다">쪽당 행 <input id="sql-rows" type="number" min="1"></label>
-        <span class="hint" style="margin:0">읽기만 하는 SELECT 문 하나만 실행합니다(WITH·JOIN·LIKE·* 가능, DROP·DELETE·INSERT·여러 문장 불가).</span></div>
+      <div class="row"><button id="sql-deep" class="btn" title="데이터는 읽지 않고, 테이블과 컬럼 이름이 맞는지까지 확인해요">검사</button>
+        <button id="sql-plan-show" class="btn" title="DB가 이 SQL을 어떻게 읽는지 보여 줘요. 인덱스를 쓰는지, 테이블을 통째로 읽는지 알 수 있어요. 실행은 하지 않아요 (EXPLAIN)">실행 계획</button>
+        <label title="한 쪽에 보일 행 수예요. 전체는 [결과 내보내기]로 받으세요">한 쪽에 <input id="sql-rows" type="number" min="1">행</label>
+        <span class="hint" style="margin:0" title="WITH, JOIN, LIKE, *는 쓸 수 있고 DROP, DELETE, INSERT나 여러 문장은 실행하지 않아요">데이터를 읽기만 하는 SELECT 문 하나를 실행해요.</span></div>
     </div>
     <div class="big"><b id="sql-count">실행 전</b><span id="sql-sub"></span></div>
     <div class="err" id="err-sql"></div>
     <section class="pane"><div class="table-wrap" id="sql-result"></div></section>
     <div class="pager"><button id="sql-prev" class="btn" disabled>이전</button><button id="sql-next" class="btn" disabled>다음</button><span id="sql-page"></span></div>
   </main>
-  <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
+  <div class="grip-x" data-size="panel" title="끌어서 패널 너비를 바꿔요. 두 번 누르면 기본 너비로 돌아가요"></div>
   <aside class="side">
     <header><h3>SQL</h3></header>
     <div class="sc">
       <h2>저장한 SQL</h2>
-      <select id="sql-saved" title="고르면 편집기에 불러옵니다(실행은 하지 않습니다). 많이 불러온 순"></select>
-      <div class="row" style="margin-top:6px"><input id="sql-name" placeholder="이름 (비우면 고른 SQL에 덮어씀)"><button id="sql-save">저장</button><button id="sql-del" class="btn">삭제</button></div>
+      <select id="sql-saved" title="고르면 편집기에 불러와요. 실행은 하지 않아요. 많이 불러온 순이에요"></select>
+      <div class="row" style="margin-top:6px"><input id="sql-name" placeholder="이름 (비우면 고른 SQL을 덮어써요)"><button id="sql-save" class="btn">저장</button><button id="sql-del" class="btn">삭제</button></div>
       <h2>가상 테이블</h2>
-      <div class="hint">이 연결에서만 쓰는 이름 붙인 SQL(또는 Parquet 파일)입니다. SQL과 탐색의 기준 테이블에서 테이블처럼 씁니다. DB에는 아무것도 만들지 않습니다. 많이 쓴 순.</div>
+      <div class="hint" title="SQL 탭과 탐색 탭의 테이블 목록에서 테이블처럼 쓸 수 있어요. 많이 쓴 순이에요">SQL이나 Parquet 파일에 이름을 붙여 테이블처럼 써요. 이 연결에서만 쓰고 DB에는 아무것도 만들지 않아요.</div>
       <div id="vt-list"></div>
-      <div class="row" style="margin-top:6px"><input id="vt-name" placeholder="가상 테이블 이름"><button id="vt-save-sql" title="편집기의 SQL을 이 이름의 가상 테이블로 저장합니다">지금 SQL로</button></div>
-      <div class="row"><input id="vt-path" placeholder="Parquet 파일 경로 (DuckDB·파일 연결)"><button id="vt-save-pq" class="btn">Parquet으로</button></div>
+      <div class="row" style="margin-top:6px"><input id="vt-name" placeholder="가상 테이블 이름"><button id="vt-save-sql" class="btn" title="편집기의 SQL을 이 이름의 가상 테이블로 저장해요">편집기 SQL로 저장</button></div>
+      <div class="row"><input id="vt-path" placeholder="Parquet 파일 경로 (DuckDB, 파일 연결)"><button id="vt-save-pq" class="btn">파일로 저장</button></div>
       <div class="err" id="err-vt"></div>
       <h2>테이블</h2>
-      <div class="hint">누르면 편집기에 이름을 넣습니다.</div>
+      <div class="hint">누르면 편집기에 이름이 들어가요.</div>
       <div class="chips open" id="sql-tables"></div>
     </div>
     <footer><button id="sql-run" class="btn p">실행</button></footer>
@@ -306,25 +318,25 @@
 <div class="work hidden" id="metv">
   <main class="results">
     <div class="tool"><span class="hint" id="met-on" style="margin:0; flex:1"></span>
-      <button id="met-dash" class="btn" title="지금 구한 지표를 그래프로 대시보드에 넣습니다">대시보드에 추가</button></div>
-    <div class="big"><b id="met-big">지표를 고르세요</b><span id="met-sub">오른쪽 목록에서 지표를 누르면 바로 구합니다.</span></div>
+      <button id="met-dash" class="btn" title="지금 구한 지표를 그래프로 대시보드에 넣어요">대시보드에 추가</button></div>
+    <div class="big"><b id="met-big">지표를 고르세요</b><span id="met-sub">오른쪽 목록에서 지표를 누르면 바로 구해요.</span></div>
     <div class="err" id="err-met"></div>
     <section class="pane">
       <div class="chart-box hidden" id="met-box"><canvas id="met-chart"></canvas></div>
       <div class="table-wrap" id="met-table"></div>
     </section>
   </main>
-  <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
+  <div class="grip-x" data-size="panel" title="끌어서 패널 너비를 바꿔요. 두 번 누르면 기본 너비로 돌아가요"></div>
   <aside class="side">
     <header><h3>지표</h3></header>
     <div class="sc">
       <h2>지표 파일</h2>
-      <div class="row"><input id="met-path" class="code" placeholder="지표 파일 경로 (YAML·JSON)" title="지표를 적은 파일. 고친 뒤에는 [읽기]를 다시 누르세요. 비우고 [읽기]를 누르면 쓰지 않습니다"><button id="met-read">읽기</button></div>
+      <div class="row"><input id="met-path" class="code" placeholder="지표 파일 경로 (YAML, JSON)" title="지표를 적어 둔 파일이에요. 파일을 고친 뒤에는 [읽기]를 다시 누르세요. 비우고 [읽기]를 누르면 쓰지 않아요"><button id="met-read">읽기</button></div>
       <div class="hint" id="met-info"></div>
-      <h2>나누기</h2>
-      <select id="met-by" title="고르면 그 컬럼의 값마다 구합니다(값 순으로 앞 50개)"></select>
+      <h2>나눠 보기</h2>
+      <select id="met-by" title="고르면 이 컬럼의 값마다 따로 구해요 (값 순으로 앞 50개)"></select>
       <h2>지표</h2>
-      <div class="hint">누르면 바로 구합니다. 많이 쓴 순.</div>
+      <div class="hint">누르면 바로 구해요. 많이 쓴 지표가 위에 있어요.</div>
       <div id="met-list"></div>
     </div>
   </aside>
@@ -371,14 +383,15 @@ function grouped() {
   return out;
 }
 
-// 검색 조건 패널: 단계 카드를 누르면 그 단계만 펼친다. 접힌 단계는 한 줄 요약을 보인다. 패널은 닫았다가 [검색 조건]으로 다시 연다.
+// 검색 조건 패널: 단계 카드를 누르면 그 단계만 펼친다. 접힌 단계는 한 줄 요약을 보인다. 패널은 머리글의 ›로 접고 오른쪽 띠(‹ 검색 조건)로 다시 편다.
 document.querySelectorAll(".step .sp").forEach(sp => sp.onclick = () => {
   const step = sp.parentElement, open = !step.classList.contains("open");
   document.querySelectorAll(".step").forEach(s => s.classList.toggle("open", s === step && open));
   showSummaries();
 });
-$("side-close").onclick = () => { $("work").classList.add("closed"); $("side-open").classList.remove("hidden"); };
-$("side-open").onclick = () => { $("work").classList.remove("closed"); $("side-open").classList.add("hidden"); };
+const foldSide = closed => { $("work").classList.toggle("closed", closed); $(closed ? "side-open" : "side-close").focus(); };  // 누른 단추가 사라지므로 초점을 반대 단추로
+$("side-close").onclick = () => foldSide(true);
+$("side-open").onclick = () => foldSide(false);
 const text = item => item.line ?? item;
 // 정렬 줄은 끝 낱말만 방향(asc|desc)으로 본다. 컬럼 이름에 공백이 있을 수 있다.
 const sortText = line => { const [, col, how = "asc"] = line.match(/^(.*?)(?:\s+(asc|desc))?$/i); return `${col} ${how?.toLowerCase() === "desc" ? "큰 것부터" : "작은 것부터"}`; };
@@ -387,18 +400,19 @@ const conditionTexts = () => [...S.periods.map(p => p.replace(/\s+/, " ")), ...S
 // 접힌 단계의 요약과 펼침 표시. 결과 위의 조건 요약도 같은 글을 쓴다.
 function showSummaries() {
   const put = (id, value) => $(id).textContent = value;
-  put("sum-data", S.base || (connected ? "테이블을 고르세요" : "연결하세요"));
-  put("sum-union", S.union.tables.length ? `${S.union.tables.join(", ")} · ${S.union.how}` : "없음");
+  put("sum-data", S.base || (connected ? "테이블을 고르세요" : "먼저 연결하세요"));
+  put("sum-union", S.union.tables.length ? `${S.union.tables.join(", ")} (${UNION_HOW[S.union.how] ?? S.union.how})` : "없음");
   put("sum-joins", S.joins.length ? `테이블 ${S.joins.length}개` : "없음");
   put("sum-periods", S.periods.length ? S.periods.join(", ") : "없음");
   put("sum-conditions", S.conditions.length ? text(S.conditions[0]) + (S.conditions.length > 1 ? ` 외 ${S.conditions.length - 1}개` : "") : "없음");
   put("sum-calcs", S.calcs.length ? S.calcs[0].split(/\s+/)[0] + (S.calcs.length > 1 ? ` 외 ${S.calcs.length - 1}개` : "") : "없음");
   put("sum-sorts", S.sorts.length ? S.sorts.map(sortText).join(", ") : "없음");
   put("sum-columns", S.columns.length ? `${columnCount()}개` : "전체");
-  document.querySelectorAll(".step").forEach(s => s.querySelector(".c").textContent = s.classList.contains("open") ? "편집 중" : "⌄");
+  document.querySelectorAll(".step").forEach(s => s.querySelector(".c").textContent = s.classList.contains("open") ? "⌃" : "⌄");
   $("table-box").classList.toggle("hidden", !connected);
-  $("conn-now").textContent = connected ? `연결: ${connName}` : "연결 안 됨";
+  $("conn-now").textContent = connected ? `연결: ${connName}` : "아직 연결하지 않았어요";
 }
+const UNION_HOW = { left: "컬럼 모두", inner: "공통 컬럼만", intersect: "교집합", except: "차집합" };  // 접힌 요약에 쓰는 짧은 이름
 $("conn-open").onclick = () => openConnect();
 
 // 집계할 컬럼: 고르지 않으면 전체(표시 컬럼을 정했으면 그 컬럼들), 고르면 그 컬럼만 집계한다. 컬럼 목록이 바뀌어도 고른 것은 남긴다.
@@ -416,7 +430,7 @@ function showSummaryCols() {
   box.classList.toggle("open", scolsOpen);
   if (!scols.length) { box.innerHTML = '<span class="hint">전체 컬럼</span>'; return; }
   box.replaceChildren(...scols.map(scolChip));
-  if (scolsOpen) { box.append(toggle("접기", "한 줄로 줄입니다")); return; }
+  if (scolsOpen) { box.append(toggle("접기", "한 줄로 줄여요")); return; }
   for (let shown = scols.length; shown > 0 && box.scrollWidth > box.clientWidth; ) {
     shown--;
     box.replaceChildren(...scols.slice(0, shown).map(scolChip), toggle(`… 외 ${scols.length - shown}개`, scols.slice(shown).join(", ")));
@@ -488,7 +502,7 @@ async function refreshColumns() {
   $("cols").innerHTML = S.cols.map(([n, t]) => `${esc(n)} (${esc(t)})`).join("<br>") +
     S.fields.map(([n, t]) => `<br><span class="hint" style="margin:0">　${esc(n)} (${esc(t)})</span>`).join("");
   fill($("cx"), S.cols.map(c => c[0]));
-  for (const [id, blank] of [["pv-rows", "행 기준 없음"], ["pv-col", "열로 펼치지 않음"], ["pv-val", "값 없음 (개수)"]]) {  // 고른 것은 남아 있으면 그대로
+  for (const [id, blank] of [["pv-rows", "행으로 묶지 않음"], ["pv-col", "열로 펼치지 않음"], ["pv-val", "값 없이 개수만"]]) {  // 고른 것은 남아 있으면 그대로
     const was = $(id).value;
     fill($(id), S.cols.map(c => c[0]), blank);
     if (S.cols.some(c => c[0] === was)) $(id).value = was;
@@ -525,7 +539,7 @@ const tableNames = () => [...$("base").options].map(o => o.value).filter(Boolean
 function showUnion() {
   $("u-how").value = S.union.how;
   $("u-chips").replaceChildren(...S.union.tables.map(name => chip(name, () => setUnion({ ...S.union, tables: S.union.tables.filter(t => t !== name) }))));
-  fill($("u-add"), tableNames().filter(t => t !== S.base && !S.union.tables.includes(t)), "이어붙일 테이블 추가");
+  fill($("u-add"), tableNames().filter(t => t !== S.base && !S.union.tables.includes(t)), "붙일 테이블 고르기");
 }
 async function setUnion(next) {
   const before = S.union;
@@ -574,7 +588,7 @@ async function renderJoins() {
     const right = await colsOf(j.table).catch(() => []);
     const pairRow = ([l, r], k) => el("div", { className: "r2" },
       select(leftCols, l, j.how === "asof" && !k ? "왼쪽 시각" : "왼쪽 키", v => { j.pairs[k][0] = v; applyJoins(); }),
-      el("span", { textContent: j.how === "asof" && !k ? "≥" : "=", title: j.how === "asof" && !k ? "왼쪽 시각과 같거나 앞선 가장 가까운 오른쪽 행 하나를 붙입니다" : "" }),
+      el("span", { textContent: j.how === "asof" && !k ? "≥" : "=", title: j.how === "asof" && !k ? "왼쪽 시각과 같거나 그보다 앞선 가장 가까운 오른쪽 행 하나를 붙여요" : "" }),
       select(right, r, "오른쪽 키", v => { j.pairs[k][1] = v; applyJoins(); }),
       el("button", { className: "ghost", textContent: "×", title: "키 빼기", onclick: () => { j.pairs.splice(k, 1); renderJoins(); applyJoins(); } }));
     return el("div", { className: "jb" },
@@ -583,7 +597,7 @@ async function renderJoins() {
         select(tableNames(), j.table, "테이블", v => { j.table = v; j.pairs = [["", ""]]; renderJoins(); applyJoins(); }),  // 키가 빈 덩어리는 S.joins에서 빠진다
         el("button", { className: "ghost", textContent: "×", title: "조인 빼기", onclick: () => { joinsUI.splice(i, 1); renderJoins(); applyJoins(); } })),
       ...j.pairs.map(pairRow),
-      el("button", { className: "linkish", textContent: "+ 키", onclick: () => { j.pairs.push(["", ""]); renderJoins(); } }));
+      el("button", { className: "linkish", textContent: "+ 키 추가", onclick: () => { j.pairs.push(["", ""]); renderJoins(); } }));
   }));
   $("join-blocks").replaceChildren(...blocks);
 }
@@ -615,10 +629,10 @@ function renderList(key) {
   const last = S[key].length - 1, ored = i => i >= 0 && i < last && S[key][i].or;  // i번째와 그다음이 or로 이어졌는가
   // 조건 사이의 연결 버튼. 누르면 and ↔ or. or로 이어진 조건들은 한 묶음(.any)으로 표시한다.
   const link = i => key !== "conditions" || i === last ? "" :
-    `<button class="ghost link" data-or="${i}" title="다음 조건과의 연결입니다. 누르면 and와 or가 바뀝니다. or로 이어진 조건끼리 먼저 묶입니다.">${ored(i) ? "or" : "and"}</button>`;
+    `<button class="ghost link" data-or="${i}" title="다음 조건과 잇는 방법이에요. 누르면 and와 or가 바뀌어요. or로 이은 조건끼리 먼저 묶여요.">${ored(i) ? "or" : "and"}</button>`;
   box.innerHTML = `<ul class="items">${S[key].map((item, i) =>  // 조건은 문자열이거나 { line, quotes: false(따옴표 해석 끔), or: true(다음 조건과 or) }
-      `<li class="${ored(i) || ored(i - 1) ? "any" : ""}"><span>${esc(text(item))}${item.quotes === false ? ' <span class="hint">따옴표 그대로</span>' : ""}</span><span class="tools">${link(i)}<button class="ghost" data-edit="${i}" title="고치기">✎</button><button class="ghost" data-i="${i}">×</button></span></li>`).join("")}</ul>
-    <div class="row"><input placeholder="입력 후 Enter"><button>추가</button></div><div class="err"></div>`;
+      `<li class="${ored(i) || ored(i - 1) ? "any" : ""}"><span>${esc(text(item))}${item.quotes === false ? ' <span class="hint">따옴표 그대로</span>' : ""}</span><span class="tools">${link(i)}<button class="ghost" data-edit="${i}" title="고치기">✎</button><button class="ghost" data-i="${i}" title="빼기">×</button></span></li>`).join("")}</ul>
+    <div class="row"><input placeholder="입력하고 Enter"><button class="btn">추가</button></div><div class="err"></div>`;
   const input = box.querySelector("input"), err = box.querySelector(".err"), button = box.querySelector(".row button");
   let at;  // [✎]로 고치는 항목의 위치. 있으면 다음 추가가 그 항목을 바꾼다. 목록을 다시 그리면 없어진다.
   const add = () => busy(button, async () => {  // 요청 중에는 Enter를 다시 눌러도 보내지 않는다.
@@ -673,7 +687,7 @@ $("bcol").onchange = () => { $("bpick").classList.add("hidden"); $("bval").value
 $("bop").onchange = showBuilder;
 const addBuilt = () => busy($("badd"), async () => {
   const part = builderPart();
-  $("err-builder").textContent = part ? "" : "값을 입력하세요.";
+  $("err-builder").textContent = part ? "" : "값을 넣어 주세요.";
   if (part && await addItem("conditions", part, $("err-builder"))) $("bval").value = $("bval2").value = "";
 });
 $("badd").onclick = addBuilt;
@@ -725,11 +739,12 @@ function gridSpec(data, origins = {}) {
 const query = offset => ({ ...state(), limit: $("limit").value, offset });
 // 결과 위의 큰 행 수와 조건 요약. d가 없으면 검색 전.
 function showBig(d, offset = 0) {
-  if (!d) { $("big-count").textContent = "검색 전"; $("big-sub").textContent = "오른쪽에서 데이터와 조건을 고르고 [검색 실행]을 누르세요."; $("page-info").textContent = ""; return; }
+  if (!d) { $("big-count").textContent = "검색 전"; $("big-sub").textContent = "오른쪽에서 테이블과 조건을 고른 뒤 [검색]을 누르세요."; $("page-info").textContent = ""; return; }
   const n = d.rows.rows.length, range = n ? `${(offset + 1).toLocaleString()}–${(offset + n).toLocaleString()}행` : "0행", limit = +(searched?.limit ?? $("limit").value);  // 쪽 번호는 실제로 요청한 행 수로
   $("big-count").textContent = d.count === null ? range : `${d.count.toLocaleString()}행`;
-  $("big-sub").textContent = [d.count === null ? "" : `중 ${range}`, ...(searchedTexts ?? conditionTexts()), d.held ? "PC에 받아 둔 결과" : d.server ? "DB의 결과 임시 테이블" : ""].filter(Boolean).join(" · ");
-  $("big-sub").title = d.held ? "결과를 한 번 받아 이 PC에 두었습니다. 쪽 넘기기·머리글 정렬은 DB에 다시 묻지 않고, [검색 실행]을 누르면 새로 받습니다." : d.server ? d.note : "";
+  const texts = searchedTexts ?? conditionTexts();  // 한 줄 요약: 보는 범위, 조건, 결과를 둔 곳을 문장으로
+  $("big-sub").textContent = [d.count === null ? `총 행 수는 세지 않았어요` : `${range}을 보고 있어요`, texts.length ? `조건: ${texts.join(", ")}` : "", d.held ? "이 PC에 받아 둔 결과예요" : d.server ? "DB에 임시로 만든 결과예요" : ""].filter(Boolean).join(". ") + ".";
+  $("big-sub").title = d.held ? "결과를 한 번 받아 이 PC에 두었어요. 쪽을 넘기거나 머리글로 정렬할 때는 DB에 다시 묻지 않고, [검색]을 누르면 새로 받아요." : d.server ? d.note : "";
   $("err-search").textContent = d.server ? "" : d.note || "";  // 받아 두지 못한 경고만(결과 임시 테이블에서 읽는 것은 안내라 요약 줄에)
   $("page-info").textContent = d.count === null ? `${Math.floor(offset / limit) + 1}쪽` : `${Math.floor(offset / limit) + 1} / ${Math.max(1, Math.ceil(d.count / limit)).toLocaleString()}쪽`;
 }
@@ -737,7 +752,7 @@ function showBig(d, offset = 0) {
 // fresh: DB에서 새로 받는다([검색 실행]). 주소로 접속한 DB는 결과를 이 PC에 받아 두므로 쪽 넘기기·머리글 정렬은 DB에 다시 묻지 않는다.
 let searched = null, searchedTexts = null;  // searchedTexts: 그 검색의 조건 글(결과 위 요약은 패널이 아니라 이것을). 마지막으로 처음 쪽부터 검색한 요청: [이전]·[다음]은 이 조건으로 쪽만 옮긴다(패널을 고친 뒤 넘겨도 처리 용량 확인 없이 새 조회가 되지 않게)
 function runSearch(offset, fresh = false, page = false) {
-  if (!S.base) { $("err-search").textContent = "기준 테이블을 고르세요."; return; }
+  if (!S.base) { $("err-search").textContent = "먼저 테이블을 고르세요."; return; }
   if (page && !searched) return;
   return busy($("search"), async () => {
     try {
@@ -778,13 +793,13 @@ $("sql-show").onclick = () => busy($("sql-show"), async () => {
 });
 // 실행 계획: 판정(전체 읽기한 테이블), 읽는 법, DB가 보여 준 계획. full_scans가 null이면 그 DB는 자동으로 판정하지 않는다.
 function planText(d) {
-  const verdict = d.full_scans === null ? "전체 읽기 여부는 이 DB에서 자동으로 판단하지 않습니다. 아래 계획을 보세요."
-    : d.full_scans.length ? `⚠ 테이블 전체를 읽습니다: ${d.full_scans.join(", ")} — 조건·정렬 컬럼에 인덱스가 있는지 DB 담당자와 확인하세요(작은 테이블은 전체 읽기가 더 빠를 수 있음).`
-    : "✓ 테이블 전체를 읽지 않습니다(인덱스로 찾거나 필요한 부분만 읽음).";
+  const verdict = d.full_scans === null ? "이 DB는 테이블을 통째로 읽는지 알려 주지 않아요. 아래 계획을 보세요."
+    : d.full_scans.length ? `⚠ 테이블을 통째로 읽어요: ${d.full_scans.join(", ")}. 조건이나 정렬 컬럼에 인덱스가 있는지 DB 담당자에게 확인해 보세요. 작은 테이블은 통째로 읽는 편이 더 빠를 수도 있어요.`
+    : "✓ 테이블을 통째로 읽지 않아요. 인덱스로 찾거나 필요한 부분만 읽어요.";
   return [verdict, d.note, "", d.text, "", "-- 계획을 본 SQL", d.sql].filter(v => v !== undefined).join("\n");
 }
 $("plan-show").onclick = () => busy($("plan-show"), async () => {
-  if (!S.base) { $("err-search").textContent = "기준 테이블을 고르세요."; return; }
+  if (!S.base) { $("err-search").textContent = "먼저 테이블을 고르세요."; return; }
   try {
     $("sql").textContent = planText(await api("/api/plan", query(skip)));
     $("sql").classList.remove("hidden");
@@ -806,7 +821,7 @@ $("row-find").oninput = () => { clearTimeout(findTimer); findTimer = setTimeout(
 let searches = {};
 function showSearches(d, name = "") {
   searches = d.searches;
-  fill($("saved"), d.order, "불러오기");
+  fill($("saved"), d.order, "저장한 검색 고르기");
   $("saved").value = name;
 }
 api("/api/searches").then(d => showSearches(d)).catch(() => {});
@@ -816,7 +831,7 @@ document.addEventListener("click", e => {  // 밖을 누르면 떠 있는 상자
   if (!e.target.closest(".pop, .menu")) ["saved-pop", "save-pop", "sql-save-pop"].forEach(id => $(id).classList.add("hidden"));
 });
 $("ssave").onclick = () => busy($("ssave"), async () => {
-  if (!S.base) { $("err-search").textContent = "기준 테이블을 고르세요."; return; }
+  if (!S.base) { $("err-search").textContent = "먼저 테이블을 고르세요."; return; }
   const name = $("sname").value.trim() || $("saved").value;  // 이름을 비우면 지금 고른 검색에 덮어쓴다.
   try {
     showSearches(await api("/api/searches", { name, search: { schema: S.schema, base: S.base, union: S.union, ...Object.fromEntries(LISTS.map(k => [k, S[k]])), limit: $("limit").value } }), name);
@@ -860,7 +875,7 @@ $("saved").onchange = async () => {
 };
 // 집계: 큰 테이블에서는 오래 걸려 검색과 따로, 버튼을 누를 때만 계산한다.
 $("summarize").onclick = () => {
-  if (!S.base) { $("err-summary").textContent = "기준 테이블을 고르세요."; return; }
+  if (!S.base) { $("err-summary").textContent = "먼저 테이블을 고르세요."; return; }
   return busy($("summarize"), async () => {
     const before = last;
     try {
@@ -875,7 +890,7 @@ $("summarize").onclick = () => {
 
 // 피벗·조건부 집계: 행 기준 컬럼별로 묶고 열로 펼칠 컬럼의 값마다 칸을 만든다. 조건을 넣으면 그 행만 센다. 지금 검색 조건(계산 포함) 위에서 구한다.
 $("pv-run").onclick = () => {
-  if (!S.base) { $("err-pivot").textContent = "기준 테이블을 고르세요."; return; }
+  if (!S.base) { $("err-pivot").textContent = "먼저 테이블을 고르세요."; return; }
   return busy($("pv-run"), async () => {
     try {
       const how = pickers.pivot.get();
@@ -883,7 +898,7 @@ $("pv-run").onclick = () => {
         ...($("pv-sub").value ? { subtotals: $("pv-sub").value } : {}), ...($("pv-having").value.trim() ? { having: $("pv-having").value.trim() } : {}) };
       const d = await timed("summary", () => api("/api/pivot", { ...state(), pivot }));
       mountTable($("pivot"), gridSpec(d.rows));
-      if (d.more) $("pivot").insertAdjacentHTML("beforeend", '<div class="hint">앞 500줄까지만 보입니다.</div>');
+      if (d.more) $("pivot").insertAdjacentHTML("beforeend", '<div class="hint">앞 500줄까지만 보여요.</div>');
       $("err-pivot").textContent = "";
     } catch (e) { $("err-pivot").textContent = e.message; }
   });
@@ -891,7 +906,7 @@ $("pv-run").onclick = () => {
 // 함수 사전(sql_funcs)에서 고르는 칸들: 차트 계열·피벗의 집계, 계산 줄 만들기. 인자 칸(구분자·정렬 기준·분위수 P …)은 사전의 args로 그린다.
 // 값 컬럼 칸은 고른 집계의 첫 컬럼 칸이 받는 종류만 보이고, 컬럼이 필요 없는 집계(조건 개수 …)이면 숨긴다.
 function fillValueColumns() {
-  for (const [id, key, blank] of [["cy", "chart", "Y 없음"], ["pv-val", "pivot", "값 없음 (개수)"]]) {
+  for (const [id, key, blank] of [["cy", "chart", "Y축 없음"], ["pv-val", "pivot", "값 없이 개수만"]]) {
     const p = pickers[key], was = $(id).value, cols = p ? p.xColumns(S.cols) : S.cols;
     fill($(id), cols.map(c => c[0]), blank);
     if (cols.some(c => c[0] === was)) $(id).value = was;
@@ -935,13 +950,13 @@ function calcLine() {
       : ["창거르기", agg, ...body, $("cf-op").value, $("cf-val").value, ...after].join(" ");
   }
   const expr = $("cf-expr").value.trim();
-  if (!expr) throw new Error("식을 입력하세요.");
-  if (!name) throw new Error("새 컬럼 이름을 입력하세요.");
+  if (!expr) throw new Error("식을 넣어 주세요.");
+  if (!name) throw new Error("새 컬럼 이름을 넣어 주세요.");
   return kind === "sql" ? `SQL식 ${expr} 이름 ${name}` : ["식", expr, ...tail($("cf-order").value.trim(), $("cf-group").value.trim()), "이름", name].join(" ");
 }
 $("cf-kind").onchange = showCalcForm;
 $("cf-add").onclick = () => busy($("cf-add"), async () => {
-  if (!S.base) return say("err-cf", "기준 테이블을 고르세요.");
+  if (!S.base) return say("err-cf", "먼저 테이블을 고르세요.");
   try {
     const line = calcLine();
     $("cf-line").textContent = line;
@@ -975,11 +990,11 @@ $("calc-example").onchange = () => {
   $("calc-example").value = "";
 };
 
-const ROWS_HINT = '<span class="empty">검색하면 결과가 여기에 표시됩니다.</span>';
-const SUMMARY_HINT = '<span class="empty">[집계 계산]을 누르면 지금 조건의 컬럼별 집계를 계산합니다.</span>';
+const ROWS_HINT = '<span class="empty">검색하면 여기에 결과가 나와요.</span>';
+const SUMMARY_HINT = '<span class="empty">[집계하기]를 누르면 지금 조건으로 컬럼별 집계를 구해요.</span>';
 function renderTables() {
   if (last?.rows) mountTable($("rows"), gridSpec(last.rows, S.origins)); else { $("rows")._grid = null; $("rows").innerHTML = ROWS_HINT; }
-  $("rows").querySelectorAll("th").forEach(th => th.title = "누르면 이 컬럼으로 정렬합니다");
+  $("rows").querySelectorAll("th").forEach(th => th.title = "누르면 이 컬럼으로 정렬해요");
   if (last?.summary) mountTable($("summary"), gridSpec(last.summary)); else { $("summary")._grid = null; $("summary").innerHTML = SUMMARY_HINT; }
   applyFind();
 }
@@ -989,7 +1004,7 @@ renderTables();
 // 결과 내보내기: 서버가 만든 파일을 내려받는다.
 document.querySelectorAll("[data-export]").forEach(b => b.onclick = () => {
   $("save-pop").classList.add("hidden");
-  if (!S.base) { $("err-export").textContent = "기준 테이블을 고르세요."; return; }
+  if (!S.base) { $("err-export").textContent = "먼저 테이블을 고르세요."; return; }
   const format = b.dataset.export;
   return busy($("save-open"), async () => {
     try {
@@ -1003,7 +1018,7 @@ document.querySelectorAll("[data-export]").forEach(b => b.onclick = () => {
 
 // 전처리로 보내기: 프로그램이 저장 대화상자를 띄워 Parquet으로 저장하고 그 파일에 연결한 뒤, 분석 화면(전처리 탭)으로 간다. 취소하면 그대로 둔다.
 $("handoff").onclick = () => {
-  if (!S.base) { $("err-export").textContent = "기준 테이블을 고르세요."; return; }
+  if (!S.base) { $("err-export").textContent = "먼저 테이블을 고르세요."; return; }
   return busy($("handoff"), async () => {
     try {
       const d = await timed("export", () => api("/api/handoff", state()));
@@ -1025,7 +1040,7 @@ function axisRange(lo, hi) {
 }
 const rangeError = () => [["ymin", "ymax", "왼쪽"], ["y1min", "y1max", "오른쪽"]]
   .filter(([lo, hi]) => badRange($(lo).value, $(hi).value))
-  .map(([, , side]) => `${side} 축의 최소는 최대보다 작아야 합니다.`).join(" ");
+  .map(([, , side]) => `${side} 축의 최솟값을 최댓값보다 작게 넣어 주세요.`).join(" ");
 const axisRanges = () => ({ y: axisRange("ymin", "ymax"), y1: axisRange("y1min", "y1max") });  // 지금 넣은 왼쪽·오른쪽 축 범위
 ["ymin", "ymax", "y1min", "y1max"].forEach(id => $(id).oninput = () => { $("err-chart").textContent = rangeError(); drawChart(); });  // 다시 조회하지 않고 바로 반영
 // 탐색 탭의 지금 차트(toDrawn·metricDrawn)와 세로축 범위(axisRanges)를 dash.js의 chartConfig가 그릴 임시 카드로. 계열 색은 순서대로(카드의 지정 색 없음).
@@ -1034,13 +1049,13 @@ const drawnCard = (drawn, ranges) => ({ kind: drawn.kind || "chart", view: { typ
 let series = [];
 const seriesNow = () => ({ y: $("cy").value, ...pickers.chart.get(), type: $("ctype").value, dash: $("cdash").value, axis: $("caxis").value });
 function showSeries() {
-  $("series").innerHTML = series.map((s, i) => `<li><span>${esc(seriesTitle(s))} <span class="hint">· ${s.type === "bar" ? "막대" : s.dash === "dashed" ? "점선" : "선"} · ${s.axis === "right" ? "오른쪽 축" : "왼쪽 축"}</span></span>` +
-    `<button class="ghost" data-series="${i}">×</button></li>`).join("");
+  $("series").innerHTML = series.map((s, i) => `<li><span>${esc(seriesTitle(s))} <span class="hint">${s.type === "bar" ? "막대" : s.dash === "dashed" ? "점선" : "선"}, ${s.axis === "right" ? "오른쪽 축" : "왼쪽 축"}</span></span>` +
+    `<button class="ghost" data-series="${i}" title="빼기">×</button></li>`).join("");
   $("series").querySelectorAll("button").forEach(b => b.onclick = () => { series.splice(+b.dataset.series, 1); showSeries(); });
 }
 $("series-add").onclick = () => {
   const s = seriesNow();
-  if (pickers.chart.yMode() === "required" && !s.y) { $("err-chart").textContent = `${aggName(s.agg)}은(는) Y 컬럼을 고르세요.`; return; }
+  if (pickers.chart.yMode() === "required" && !s.y) { $("err-chart").textContent = `${aggName(s.agg)}에 쓸 Y축 컬럼을 고르세요.`; return; }
   series.push(s);
   $("err-chart").textContent = "";
   showSeries();
@@ -1093,8 +1108,8 @@ $("draw").onclick = () => busy($("draw"), async () => {
     drawn = toDrawn(query, used, d);
     drawChart();
     mountTable($("ctable"), gridSpec(chartData()));  // 감춰져 있어도 채워 둔다. [표로 보기]는 보이기만 바꾼다.
-    $("err-chart").textContent = [rangeError(), d.truncated ? `그룹이 많아 ${d.max_groups}개만 표시합니다.` : "",
-      d.more_splits ? `나눌 값이 많아 행이 많은 ${d.max_splits}개만 표시합니다.` : ""].filter(Boolean).join(" ");
+    $("err-chart").textContent = [rangeError(), d.truncated ? `그룹이 많아 ${d.max_groups}개만 그려요.` : "",
+      d.more_splits ? `나눌 값이 많아 행이 많은 ${d.max_splits}개만 그려요.` : ""].filter(Boolean).join(" ");
   } catch (e) { $("err-chart").textContent = e.message; }
 });
 // 차트에 그린 값을 표 모양으로: 첫 컬럼은 X, 그 뒤로 계열마다 한 컬럼, 그룹마다 한 행.
@@ -1144,7 +1159,7 @@ function summaryImage(type) {
   return out.toDataURL("image/" + type);
 }
 document.querySelectorAll("[data-table]").forEach(b => b.onclick = () => {
-  if (!last?.summary) { $("err-summary").textContent = "먼저 집계를 계산하세요."; return; }
+  if (!last?.summary) { $("err-summary").textContent = "먼저 [집계하기]를 누르세요."; return; }
   download(summaryImage(b.dataset.table), "summary." + imageExt(b.dataset.table));
   $("err-summary").textContent = "";
 });
@@ -1173,16 +1188,16 @@ function sender(select, button, what, err, build) {
   button.onclick = () => {
     const name = select.value, body = build(name);
     if (!body) return;
-    if (!asked) { asked = true; button.textContent = `보낼 곳: ${name} · 보낼 것: ${what}. 한 번 더 누르면 보냅니다`; return; }
+    if (!asked) { asked = true; button.textContent = `한 번 더 누르면 ${what} 보내기 (받는 곳: ${name})`; return; }
     asked = false;
     button.textContent = "보내기";
     return busy(button, async () => {
-      try { await sendTo(name, body); msg("보냈습니다", true); } catch (e) { msg(e.message); }
+      try { await sendTo(name, body); msg("보냈어요", true); } catch (e) { msg(e.message); }
     });
   };
 }
 sender($("ssend"), $("ssend-go"), "집계 표", "err-summary", name => {
-  if (!last?.summary) { $("err-summary").textContent = "먼저 집계를 계산하세요."; return null; }
+  if (!last?.summary) { $("err-summary").textContent = "먼저 [집계하기]를 누르세요."; return null; }
   return { title: "집계", text: S.base, table: last.summary, ...(takesImage(name) ? { image: summaryImage("png") } : {}) };
 });
 sender($("csend"), $("csend-go"), "차트", "err-chart", name => {
@@ -1217,7 +1232,7 @@ document.querySelectorAll("#views button").forEach(b => b.onclick = () => showVi
 // 두 보기는 같은 검색 body를 본다. 문장 보기·지표 사전(sentences.js, metric_catalog.js)은 그 보기를 처음 열 때(또는 검색 조건을 불러올 때) 불러온다.
 // 흐름(다이어그램) 보기는 없앴다: 그때 남은 초안(view "flow"·graph)은 body로 단계 카드에 열고 그래프(집계·차트·카드 단계 포함)는 버린다.
 const SENTENCE_JS = ["/static/query/sentences.js", "/static/query/metric_catalog.js"];
-const FLOW_GONE = "흐름 보기가 없어져 저장된 흐름 그림은 버리고 단계 카드로 열었어요.";
+const FLOW_GONE = "흐름 보기가 없어져서 저장된 흐름 그림은 빼고 단계별 보기로 열었어요.";
 let view = "cards", sentView = null;
 const sentenceView = () => sentView ??= SentenceView($("sent-host"), { body: state, columns: () => S.cols, tables: tableNames, saved: () => searchDraft.clear() });
 const bodyNow = () => ({ ...state(), ...($("limit").value ? { limit: $("limit").value } : {}) });  // 보기들이 주고받는 검색 body
@@ -1335,7 +1350,7 @@ async function runSql(offset = 0, fresh = true) {
     const n = d.rows.rows.length, range = n ? `${(offset + 1).toLocaleString()}–${(offset + n).toLocaleString()}행` : "0행";
     sqlSkip = offset; sqlRan = sql;
     $("sql-count").textContent = d.count === null ? range : `${d.count.toLocaleString()}행`;
-    $("sql-sub").textContent = [d.count === null ? "" : `중 ${range}`, d.held ? "PC에 받아 둔 결과" : d.server ? "DB의 결과 임시 테이블" : "", d.more || offset ? "전체는 [결과 저장]으로 받습니다" : ""].filter(Boolean).join(" · ");
+    $("sql-sub").textContent = [d.count === null ? "" : `${range}을 보고 있어요`, d.held ? "이 PC에 받아 둔 결과예요" : d.server ? "DB에 임시로 만든 결과예요" : "", d.more || offset ? "전체는 [결과 내보내기]로 받으세요" : ""].filter(Boolean).map(t => t + ".").join(" ");
     $("sql-sub").title = d.server ? d.note : "";
     $("sql-page").textContent = d.count === null ? `${Math.floor(offset / d.limit) + 1}쪽` : `${Math.floor(offset / d.limit) + 1} / ${Math.max(1, Math.ceil(d.count / d.limit)).toLocaleString()}쪽`;
     $("sql-prev").disabled = !offset;
@@ -1362,7 +1377,7 @@ let checkTimer = null, checkSeq = 0;
 async function checkSql(deep) {
   const sql = $("sql-text").value, seq = ++checkSeq, box = $("sql-check");
   if (!sql.trim()) { box.textContent = ""; box.className = "sql-check"; $("sql-text").classList.remove("bad"); return; }
-  if (!connected) { box.textContent = "연결하면 검사합니다."; box.className = "sql-check"; return; }
+  if (!connected) { box.textContent = "연결하면 검사해요."; box.className = "sql-check"; return; }
   try {
     const d = await api("/api/sql/check", { sql, deep });
     if (seq !== checkSeq) return;  // 그사이 다시 고쳤으면 늦게 온 결과는 버린다
@@ -1416,7 +1431,7 @@ $("nl-prompt").onclick = () => busy($("nl-prompt"), async () => {
   if (!connected) return say("err-sql", "먼저 데이터에 연결하세요.");
   try {
     const d = await api("/api/nl2sql/prompt", { question: $("nl-q").value });
-    $("nl-view").textContent = `LLM: ${d.llm} · 테이블 ${d.tables}개 · 지표 ${d.metrics}개 (데이터 값은 넣지 않음)\n\n[시스템]\n${d.system}\n\n[질문]\n${d.question || "(질문 칸이 비어 있음)"}`;
+    $("nl-view").textContent = `LLM ${d.llm}, 테이블 ${d.tables}개, 지표 ${d.metrics}개. 데이터 값은 넣지 않아요.\n\n[시스템]\n${d.system}\n\n[질문]\n${d.question || "(질문 칸이 비어 있어요)"}`;
     $("nl-view").classList.remove("hidden");
   } catch (e) { say("err-sql", e.message); }
 });
@@ -1427,7 +1442,7 @@ function showLlm(d) {
   if (d.error) say("err-sql", d.error);
 }
 $("llm-read").onclick = () => busy($("llm-read"), async () => {
-  try { showLlm(await api("/api/llm", { env: $("llm-env").value.trim() })); say("err-sql", "LLM 설정을 읽었습니다.", true); } catch (e) { say("err-sql", e.message); }
+  try { showLlm(await api("/api/llm", { env: $("llm-env").value.trim() })); say("err-sql", "LLM 설정을 읽었어요.", true); } catch (e) { say("err-sql", e.message); }
 });
 api("/api/llm").then(showLlm).catch(() => {});
 $("sql-deep").onclick = () => busy($("sql-deep"), () => checkSql(true));
@@ -1467,7 +1482,7 @@ $("sql-saved").onchange = async () => {
 };
 $("sql-save").onclick = () => busy($("sql-save"), async () => {
   const name = $("sql-name").value.trim() || $("sql-saved").value;
-  try { showSqls(await api("/api/sqls", { name, sql: $("sql-text").value }), name); $("sql-name").value = ""; say("err-sql", `저장했습니다: ${name}`, true); }
+  try { showSqls(await api("/api/sqls", { name, sql: $("sql-text").value }), name); $("sql-name").value = ""; say("err-sql", `저장했어요: ${name}`, true); }
   catch (e) { say("err-sql", e.message); }
 });
 $("sql-del").onclick = () => busy($("sql-del"), async () => {
@@ -1478,7 +1493,7 @@ $("sql-del").onclick = () => busy($("sql-del"), async () => {
 api("/api/sqls").then(d => showSqls(d)).catch(() => {});
 // 가상 테이블: 지금 연결의 것을 많이 쓴 순으로. 이름을 누르면 편집기에 넣고, [정의]는 편집기에 정의를 불러오며, ×로 지운다.
 async function showVirtual() {
-  if (!connected) { $("vt-list").replaceChildren(el("div", { className: "hint", textContent: "연결하면 보입니다." })); return; }
+  if (!connected) { $("vt-list").replaceChildren(el("div", { className: "hint", textContent: "연결하면 보여요." })); return; }
   try {
     const d = await api("/api/virtual");
     $("vt-list").replaceChildren(...(d.order.length ? d.order.map(name => {
@@ -1486,19 +1501,19 @@ async function showVirtual() {
       return el("div", { className: "vt" },
         el("b", { textContent: name, title: "편집기에 이름 넣기", onclick: () => insertSql(name) }),
         el("span", { className: "hint", textContent: def.sql ? "SQL" : "Parquet" }),
-        el("button", { className: "ghost", textContent: "정의", title: "편집기에 정의를 불러오고 이름 칸을 채웁니다(고쳐서 같은 이름으로 다시 저장)", onclick: () => {
+        el("button", { className: "ghost", textContent: "정의", title: "편집기에 정의를 불러오고 이름 칸을 채워요. 고친 뒤 같은 이름으로 다시 저장하세요", onclick: () => {
           $("vt-name").value = name;
           if (def.sql) $("sql-text").value = def.sql; else $("vt-path").value = def.parquet;
         } }),
         el("button", { className: "ghost", textContent: "×", title: "가상 테이블 지우기", onclick: () => saveVirtual({ name, sql: null, parquet: null }) }));
-    }) : [el("div", { className: "hint", textContent: "아직 없습니다." })]));
+    }) : [el("div", { className: "hint", textContent: "아직 없어요." })]));
   } catch (e) { say("err-vt", e.message); }
 }
 async function saveVirtual(body) {
   try {
     await api("/api/virtual", body);
     if (body.sql !== null || body.parquet !== null) searchDraft.clear();
-    say("err-vt", body.sql === null && body.parquet === null ? `지웠습니다: ${body.name}` : `저장했습니다: ${body.name}`, true);
+    say("err-vt", body.sql === null && body.parquet === null ? `지웠어요: ${body.name}` : `저장했어요: ${body.name}`, true);
     await showVirtual();
     await loadTables();  // 탐색의 기준 테이블 목록에도 들어간다
   } catch (e) { say("err-vt", e.message); }
@@ -1515,7 +1530,7 @@ document.addEventListener("tables", () => {  // 연결이 바뀌면 SQL 탭의 �
   if (!$("metv").classList.contains("hidden")) showMetricSide();
 });
 function showSqlSide() {
-  $("sql-conn").textContent = connected ? `연결: ${connName}` : "연결 안 됨";
+  $("sql-conn").textContent = connected ? `연결: ${connName}` : "아직 연결하지 않았어요";
   showVirtual();
   showSqlTables();
 }
@@ -1528,7 +1543,7 @@ const metricText = (v, format) => v == null ? "—" : format === "percent" ? `${
 function showMetrics(d) {
   metrics = d;
   $("met-path").value = d.path;
-  $("met-info").textContent = d.error ?? (d.path ? `지표 ${d.metrics.length}개` : "지표 파일 경로를 넣고 [읽기]를 누르면 그 안의 지표가 아래에 나옵니다.");
+  $("met-info").textContent = d.error ?? (d.path ? `지표 ${d.metrics.length}개` : "지표 파일 경로를 넣고 [읽기]를 누르면 그 안의 지표가 아래에 나와요.");
   $("met-info").className = d.error ? "err" : "hint";
   const found = Object.fromEntries(d.metrics.map(m => [m.name, m])), on = metDrawn?.used[0];
   $("met-list").replaceChildren(...d.order.map(name => el("button", { className: "met" + (name === on ? " on" : ""), title: found[name].text, onclick: e => busy(e.currentTarget, () => runMetric(name)) },
@@ -1536,7 +1551,7 @@ function showMetrics(d) {
 }
 // 위의 기준 글과 나눌 컬럼 목록(중첩 컬럼은 뺀다). 탐색에서 테이블·조건을 바꾸면 이 탭을 열 때 맞춘다.
 function showMetricSide() {
-  $("met-on").textContent = !connected ? "연결 안 됨" : S.base ? ["기준: " + S.base, ...conditionTexts()].join(" · ") : "탐색에서 기준 테이블을 고르면 그 테이블(조인·기간·조건 포함) 위에서 구합니다.";
+  $("met-on").textContent = !connected ? "아직 연결하지 않았어요" : S.base ? `${S.base} 테이블` + (conditionTexts().length ? `, 조건: ${conditionTexts().join(", ")}` : "") : "탐색 탭에서 테이블을 고르면 그 조건으로 지표를 구해요.";
   const by = $("met-by").value, cols = [...S.cols, ...(S.fields ?? [])].filter(([, t]) => !/^(구조|목록|맵)/.test(t)).map(c => c[0]);
   fill($("met-by"), cols, "나누지 않음");
   if (cols.includes(by)) $("met-by").value = by;
@@ -1550,7 +1565,7 @@ function metricDrawn(query, used, d) {
 }
 async function runMetric(name) {
   if (!connected) return say("err-met", "먼저 데이터에 연결하세요.");
-  if (!S.base) return say("err-met", "탐색에서 기준 테이블을 고르세요.");
+  if (!S.base) return say("err-met", "탐색 탭에서 먼저 테이블을 고르세요.");
   say("err-met", "");
   try {
     const query = { ...state(), names: [name], by: $("met-by").value };
@@ -1566,12 +1581,12 @@ function drawMetric() {
   const name = metDrawn.used[0], m = metrics.metrics.find(x => x.name === name), d = metDrawn.raw, format = d.formats[name];
   if (!d.labels) {  // 나누지 않으면 큰 값 하나
     $("met-big").textContent = metricText(d.values[name][0], format);
-    $("met-sub").textContent = [name, m?.description].filter(Boolean).join(" · ");
+    $("met-sub").textContent = [name, m?.description].filter(Boolean).join(": ");
     $("met-table").innerHTML = "";
     return;
   }
   $("met-big").textContent = name;
-  $("met-sub").textContent = [`${metDrawn.x}별 ${d.labels.length}개`, d.more ? `값이 많아 앞 ${d.max_groups}개만` : "", m?.description].filter(Boolean).join(" · ");
+  $("met-sub").textContent = [`${metDrawn.x}별 ${d.labels.length}개`, d.more ? `값이 많아 앞 ${d.max_groups}개만 보여요` : "", m?.description].filter(Boolean).join(". ");
   $("met-box").classList.remove("hidden");
   $("met-box").style.setProperty("--ratio", 16 / 9);
   if (typeof Chart === "undefined") return void need(CHART_JS).then(drawMetric);  // 첫 차트

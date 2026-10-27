@@ -129,7 +129,7 @@ function SentenceView(host, ctx) {
       const main = colSelect(s, name, c => set(c ? (prep ? { column: c, prep, ...(v?.n ? { n: v.n } : {}) } : c) : ""));
       node = el("span", { className: "slot-group" }, main);
       if (name && ["any", "text"].includes(s.kinds)) {
-        const p = el("select", { className: "prep", title: "컬럼 가공(계산 줄로 바뀝니다)" }, el("option", { value: "", textContent: "가공 없음" }), ...Object.entries(cat.preps).map(([k, t]) => el("option", { value: k, textContent: t })));
+        const p = el("select", { className: "prep", title: "컬럼을 다듬어서 써요 (새 컬럼으로 계산해요)" }, el("option", { value: "", textContent: "그대로" }), ...Object.entries(cat.preps).map(([k, t]) => el("option", { value: k, textContent: t })));
         p.value = prep ?? "";
         p.onchange = () => set(p.value ? { column: name, prep: p.value, ...(p.value === "first_n" ? { n: 3 } : {}) } : name);
         node.append(p);
@@ -147,7 +147,7 @@ function SentenceView(host, ctx) {
       node = picker.el;
     } else if (type === "transform") {
       const ids = Funcs.cat.funcs.filter(f => !(f.aggregate || f.window || f.table || f.raw)).map(f => f.id);
-      const func = el("select", {}, el("option", { value: "", textContent: "가공 함수" }), ...ids.map(i => el("option", { value: i, textContent: Funcs.cat.byId[i].label })));
+      const func = el("select", {}, el("option", { value: "", textContent: "다듬을 함수" }), ...ids.map(i => el("option", { value: i, textContent: Funcs.cat.byId[i].label })));
       func.value = v?.func ?? "";
       node = el("span", { className: "slot-group" }, func);
       const draw = () => {
@@ -183,7 +183,7 @@ function SentenceView(host, ctx) {
     try {
       const d = await api("/api/my_metrics");
       source = d.source;
-      metricList = [...d.metrics.map(m => ({ id: m.id, text: m.text, usable: inScope(m) })), ...d.legacy.map(m => ({ id: m.name, text: `${m.name} · 지표 파일`, usable: true }))];
+      metricList = [...d.metrics.map(m => ({ id: m.id, text: m.text, usable: inScope(m) })), ...d.legacy.map(m => ({ id: m.name, text: `${m.name} (지표 파일)`, usable: true }))];
       return d;
     } catch { metricList = []; return null; }
   }
@@ -206,8 +206,9 @@ function SentenceView(host, ctx) {
           const d = await api("/api/sentence/check", { template: item.template, slots: withPeriod(item), columns: kinds() });
           bad = !d.ok;
           preview.textContent = d.text;
-          issues.replaceChildren(...d.issues.map(i => el("div", { className: "sissue " + i.level, textContent: (i.slot ? `[${i.slot}] ` : "") + i.text })));
-          line.querySelectorAll("[data-slot]").forEach(n => n.classList.toggle("bad", d.issues.some(i => i.level === "bad" && i.slot === n.dataset.slot)));
+          const shown = item.touched ? d.issues : [];  // 막 고른 문장에는 "칸을 채워 주세요"를 늘어놓지 않는다. 칸을 하나라도 고치면 보인다([실행]은 그동안 꺼져 있다)
+          issues.replaceChildren(...shown.map(i => el("div", { className: "sissue " + i.level, textContent: i.text })));
+          line.querySelectorAll("[data-slot]").forEach(n => n.classList.toggle("bad", shown.some(i => i.level === "bad" && i.slot === n.dataset.slot)));
         } catch (e) { bad = true; issues.replaceChildren(el("div", { className: "sissue bad", textContent: e.message })); }
         const periodBad = (shared.on ? shared.text && shared.span?.error : item.period?.text && item.period?.span?.error);
         if (periodBad) bad = true;
@@ -219,8 +220,8 @@ function SentenceView(host, ctx) {
         ...tpl.slots.filter(s => !new RegExp(`\\{${s.name}\\}`).test(tpl.text) && sentVisible(s, item.slots)).map(s => slotEl(s, item, redo)));
       line.querySelectorAll("[data-slot]").forEach(n => { const s = tpl.slots.find(x => x.name === n.dataset.slot); if (s && !sentVisible(s, item.slots)) n.classList.add("hidden"); });
     };
-    function redo(rebuild) { if (rebuild || tpl.slots.some(s => Object.keys(s.when ?? {}).length)) draw(); recheck(); }
-    const run = el("button", { className: "btn p srun", textContent: "실행", disabled: true, onclick: e => busy(e.currentTarget, () => runOne(item, out)) });
+    function redo(rebuild) { item.touched = true; if (rebuild || tpl.slots.some(s => Object.keys(s.when ?? {}).length)) draw(); recheck(); }
+    const run = el("button", { className: "btn srun", textContent: "실행", disabled: true, onclick: e => busy(e.currentTarget, () => runOne(item, out)) });
     card.append(el("div", { className: "shead" }, el("b", { textContent: `${tpl.no}. ${tpl.name}` }), el("span", { className: "grow" }), run,
       el("button", { className: "ghost", textContent: "×", title: "이 문장 빼기", onclick: () => { items = items.filter(i => i !== item); showExplore(); } })),
     line, sentPeriodRow(item, () => recheck()), preview, issues, out);
@@ -234,7 +235,7 @@ function SentenceView(host, ctx) {
     item.period ??= { column: colList().find(c => c[1] === "date")?.[0] ?? "", text: "", span: null };
     const row = el("div", { className: "speriod" }), p = item.period;
     const draw = () => {
-      if (shared.on) { row.replaceChildren(el("span", { className: "hint", textContent: "기간: 묶음의 공유 기간을 써요." })); return; }
+      if (shared.on) { row.replaceChildren(el("span", { className: "hint", textContent: "기간은 묶음에서 정한 기간을 함께 써요." })); return; }
       row.replaceChildren(periodInputs(p, again));
     };
     item.drawPeriod = draw;
@@ -242,7 +243,7 @@ function SentenceView(host, ctx) {
     return row;
   }
   function periodInputs(p, again) {
-    const col = pickCol("date", p.column, v => { p.column = v; again(); }), fb = el("span", { className: "hint pfb" }), input = el("input", { value: p.text, placeholder: "기간 (선택) 예: 최근 7일, 이번 달, 2026-01 ~ 2026-03" });
+    const col = pickCol("date", p.column, v => { p.column = v; again(); }), fb = el("span", { className: "hint pfb" }), input = el("input", { value: p.text, placeholder: "기간 (예: 최근 7일, 이번 달, 2026-01 ~ 2026-03)", title: "비우면 기간 없이 구해요" });
     const live = async () => {
       p.text = input.value.trim();
       if (!p.text) { p.span = null; p.pending = false; fb.textContent = ""; fb.classList.remove("err"); again(); return; }
@@ -293,7 +294,7 @@ function SentenceView(host, ctx) {
     const switcher = cfg ? el("div", { className: "seg" }, ...[["table", "표"], ["chart", "차트"]].map(([k, t]) => { const b = el("button", { className: "seg-b" + (k === "table" ? " on" : ""), textContent: t, onclick: () => switchTo(k) }); b.dataset.view = k; return b; })) : "";
     out.replaceChildren(d.text ? el("div", { className: "stext-result", textContent: d.text }) : "", switcher,
       table, box, ...d.notes.map(n => el("div", { className: "hint", textContent: n })),
-      d.more ? el("div", { className: "hint warn", textContent: `결과가 더 있어요. 처음 ${d.rows.length.toLocaleString()}행만 보여 드려요. 더 줄이려면 기간·조건을 좁혀 보세요.` } ) : "",
+      d.more ? el("div", { className: "hint warn", textContent: `결과가 더 있어요. 처음 ${d.rows.length.toLocaleString()}행만 보여요. 기간이나 조건을 좁혀 보세요.` } ) : "",
       cfg?.truncated ? el("div", { className: "hint", textContent: "차트는 앞 50개만 그려요." }) : "");
   }
 
@@ -304,11 +305,11 @@ function SentenceView(host, ctx) {
   }
   async function loadSets() { try { sets = (await api("/api/question_sets")).sets; } catch { sets = {}; } }
   function chipsBar() {
-    return el("div", { className: "scols" }, el("span", { className: "hint", textContent: "컬럼(빈칸으로 끌어다 놓거나, 빈칸을 눌러 고르세요)" }),
+    return el("div", { className: "scols" }, el("span", { className: "hint", textContent: "컬럼을 문장의 빈칸에 끌어다 놓아도 돼요" }),
       ...ctx.columns().map(([c, t]) => { const k = sentChip(Funcs.kindOf(t)); const n = el("span", { className: `ccol ${k}`, textContent: c, draggable: true, title: t }); n.addEventListener("dragstart", e => e.dataTransfer.setData("text/column", c)); return n; }));
   }
   function setBar() {
-    const sel = el("select", {}, el("option", { value: "", textContent: "저장한 질문 묶음" }), ...Object.keys(sets).map(n => el("option", { value: n, textContent: n })));
+    const sel = el("select", {}, el("option", { value: "", textContent: "저장한 질문 묶음 고르기" }), ...Object.keys(sets).map(n => el("option", { value: n, textContent: n })));
     sel.value = current in sets ? current : "";
     const name = el("input", { placeholder: "묶음 이름", value: current });
     const err = el("span", { className: "err" });
@@ -317,7 +318,7 @@ function SentenceView(host, ctx) {
       if (!s) return;
       current = sel.value; name.value = current;
       const cols = kinds(), notes = [];
-      items = s.items.map(i => { const r = sentFitColumns(cat.templates.find(t => t.id === i.template), i.slots ?? {}, cols); if (r.gone.length) notes.push(`${cat.templates.find(t => t.id === i.template).name}: ${r.gone.join(", ")} 칸을 비웠어요(이 테이블에 없는 컬럼)`); return { id: ++seq, template: i.template, slots: r.slots, period: i.period ? { ...i.period, span: null } : null }; });
+      items = s.items.map(i => { const r = sentFitColumns(cat.templates.find(t => t.id === i.template), i.slots ?? {}, cols); if (r.gone.length) notes.push(`${cat.templates.find(t => t.id === i.template).name}: 이 테이블에 없는 컬럼이라 ${r.gone.join(", ")} 칸을 비웠어요.`); return { id: ++seq, template: i.template, slots: r.slots, period: i.period ? { ...i.period, span: null } : null }; });
       shared = { on: !!s.shared, column: s.period?.column ?? "", text: s.period?.text ?? "", span: null };
       showExplore(); if (notes.length) body.querySelector(".sset-note").textContent = notes.join(" / ");
     };
@@ -329,13 +330,13 @@ function SentenceView(host, ctx) {
     share.onchange = () => { shared.on = share.checked; showExplore(); };
     const sharedRow = shared.on ? periodInputs(shared, () => items.forEach(i => i.recheck?.())) : "";
     return el("div", { className: "sset" }, el("div", { className: "row" }, sel, name, save, del, err), el("div", { className: "hint sset-note" }),
-      el("label", { className: "hint" }, share, " 묶음의 모든 문장이 같은 기간을 써요(끄면 문장마다 따로)"), sharedRow);
+      el("label", { className: "hint", title: "끄면 문장마다 기간을 따로 정해요" }, share, " 모든 문장에 같은 기간 쓰기"), sharedRow);
   }
   function showExplore() {
-    const list = el("div", { className: "stpl" }), filter = el("input", { placeholder: "문장 틀 찾기 (번호·이름·글자)" });
+    const list = el("div", { className: "stpl" }), filter = el("input", { placeholder: "문장 찾기 (번호나 낱말)" });
     const draw = () => list.replaceChildren(...sentFilter(explore, filter.value).map(t => el("button", { className: "tpl", title: t.text, onclick: () => { items.push(newItem(t.id)); showExplore(); } }, el("b", { textContent: t.no }), " " + t.name)));
     filter.oninput = draw; draw();
-    const cards = el("div", { className: "scards" }, ...(items.length ? items.map(sentenceCard) : [el("div", { className: "hint", textContent: "왼쪽 목록에서 문장 틀을 눌러 질문을 더하세요. 여러 문장을 모아 한꺼번에 실행할 수 있어요." })]));
+    const cards = el("div", { className: "scards" }, ...(items.length ? items.map(sentenceCard) : [el("div", { className: "hint", textContent: "왼쪽에서 문장을 고르면 여기에 질문이 생겨요. 여러 질문을 모아 한꺼번에 실행할 수 있어요." })]));
     const all = el("button", { className: "btn p", textContent: "모두 실행", disabled: !items.length, onclick: e => busy(e.currentTarget, async () => { for (const c of cards.querySelectorAll(".srun")) if (!c.disabled) c.click(); }) });
     const dash = el("button", { className: "btn", textContent: "대시보드에 모두 추가", disabled: !items.length, onclick: e => busy(e.currentTarget, () => addAll(note)) });
     const note = el("div", { className: "sadd-note" });
@@ -349,15 +350,15 @@ function SentenceView(host, ctx) {
     for (const item of items) {
       const compiled = await api("/api/sentence/compile", await compileRun(item)).catch(e => ({ ok: false, reason: e.message })), tpl = cat.templates.find(t => t.id === item.template);
       const card = sentCard(compiled, `${tpl.name}: ${compiled.text ?? tpl.text}`.slice(0, 100));
-      if (card.reason) { skipped.push(`${tpl.name} — ${card.reason}`); continue; }
+      if (card.reason) { skipped.push(`${tpl.name}: ${card.reason}`); continue; }
       try {
         pick ??= await chooseDashboard();
-        if (!pick) { note.textContent = "취소했습니다."; return; }
+        if (!pick) { note.textContent = "취소했어요."; return; }
         const query = card.body, added = await addToDashboard({ kind: "chart", title: card.title, colors: { series: {}, parts: {}, order: [], parts_order: [] }, source: { schema: query.schema || "", table: query.base, body: query }, data: {}, view: { type: "", ratio: 16 / 9 } }, "chart", table, pick);
         if (added) { done.push(tpl.name); pick = { id: added.id, name: added.name }; note.dataset.added = added.id; }
-      } catch (e) { skipped.push(`${tpl.name} — ${e.message}`); }
+      } catch (e) { skipped.push(`${tpl.name}: ${e.message}`); }
     }
-    note.replaceChildren(el("div", { className: done.length ? "ok" : "err", textContent: done.length ? `대시보드에 ${done.length}개를 넣었어요.` : "넣은 문장이 없어요." }), ...skipped.map(t => el("div", { className: "hint", textContent: "빼놓음: " + t })),
+    note.replaceChildren(el("div", { className: done.length ? "ok" : "err", textContent: done.length ? `대시보드에 ${done.length}개를 넣었어요.` : "넣은 문장이 없어요." }), ...skipped.map(t => el("div", { className: "hint", textContent: "넣지 못함, " + t })),
       done.length ? el("a", { href: "/dashboard?open=" + encodeURIComponent(note.dataset.added), textContent: "대시보드에서 보기" }) : "");
   }
 
@@ -367,7 +368,7 @@ function SentenceView(host, ctx) {
     if (!d) { body.replaceChildren(el("div", { className: "err", textContent: "내 지표를 불러오지 못했어요." })); return; }
     const catalog = el("div", { id: "metric-catalog", className: "mcatalog" });  // 지표 사전(7단계) 화면이 여기에 붙는다
     const mine = el("div", { className: "mlist" }), form = el("div", { className: "mform" }), msg = el("div", { className: "err" });
-    body.replaceChildren(el("div", { className: "sgrid" }, el("div", { className: "sleft" }, el("h2", { textContent: "지표 틀" }), ...metricTpl.map(t => el("button", { className: "tpl", title: t.text, onclick: () => editMetric(null, t.id) }, el("b", { textContent: t.no }), " " + t.name))),
+    body.replaceChildren(el("div", { className: "sgrid" }, el("div", { className: "sleft" }, el("h2", { textContent: "지표 만들기" }), ...metricTpl.map(t => el("button", { className: "tpl", title: t.text, onclick: () => editMetric(null, t.id) }, el("b", { textContent: t.no }), " " + t.name))),
       el("div", { className: "sright" }, el("h2", { textContent: "내 지표" }), mine, form, msg, el("h2", { textContent: "지표 사전" }), catalog)));
     await sentHook(catalog, { ctx, kinds, slotEl, periodInputs, scope, refresh: showMetric });
     let status = {};
@@ -385,8 +386,8 @@ function SentenceView(host, ctx) {
           : el("span", { className: "dep miss", textContent: "없는 지표", title: "눌러서 새로 만들기", onclick: () => editMetric(null, "m02") }))) : "");
     };
     const mineOnes = d.metrics.filter(inScope), others = d.metrics.filter(m => !inScope(m));
-    mine.replaceChildren(...(mineOnes.length ? mineOnes.map(row) : [el("div", { className: "hint", textContent: "이 테이블의 지표가 아직 없어요. 왼쪽 지표 틀을 눌러 만드세요." })]),
-      ...(others.length ? [el("h2", { textContent: "다른 테이블의 지표(복사해서 써요)" }), ...others.map(row)] : []));
+    mine.replaceChildren(...(mineOnes.length ? mineOnes.map(row) : [el("div", { className: "hint", textContent: "이 테이블의 지표가 아직 없어요. 왼쪽에서 골라 만들어 보세요." })]),
+      ...(others.length ? [el("h2", { textContent: "다른 테이블의 지표 (복사해서 써요)" }), ...others.map(row)] : []));
     async function removeMetric(m) { try { await api("/api/my_metrics/delete", { id: m.id }); mcStale = true; msg.textContent = ""; showMetric(); } catch (e) { msg.textContent = e.message; } }
     function scopeNow() { return { table: scope().base, schema: scope().schema || "" }; }
     async function copyMetric(m, mapping = {}) {
@@ -402,7 +403,7 @@ function SentenceView(host, ctx) {
     }
     function editMetric(m, tid) {
       const tpl = cat.templates.find(t => t.id === (m?.template ?? tid)), item = { id: 0, template: tpl.id, slots: m ? JSON.parse(JSON.stringify(m.slots)) : sentDefaults(tpl) };
-      const name = el("input", { value: m?.name ?? "", placeholder: "지표 이름" }), unit = el("input", { value: m?.unit ?? "", placeholder: "단위(예: 원, %)" });
+      const name = el("input", { value: m?.name ?? "", placeholder: "지표 이름" }), unit = el("input", { value: m?.unit ?? "", placeholder: "단위 (예: 원, %)" });
       const better = el("select", {}, ...d.better.map(b => el("option", { value: b, textContent: ({ "": "좋고 나쁨 없음", up: "클수록 좋음", down: "작을수록 좋음" })[b] ?? b })));
       better.value = m?.better ?? "";
       const issues = el("div", { className: "sissues" }), line = el("div", { className: "sline" });
@@ -411,24 +412,24 @@ function SentenceView(host, ctx) {
       const check = () => { clearTimeout(timer); timer = setTimeout(async () => {
         try {
           const v = await api("/api/my_metrics/validate", { definition: def(), columns: kinds(), id: m?.id });
-          issues.replaceChildren(v.ok ? el("div", { className: "sissue info", textContent: v.deps.length ? `쓰는 지표 ${v.deps.length}개` : "문제 없어요." }) : el("div", { className: "sissue bad", textContent: v.problem }));
+          issues.replaceChildren(v.ok ? el("div", { className: "sissue info", textContent: v.deps.length ? `다른 지표 ${v.deps.length}개를 함께 써요.` : "문제 없어요." }) : el("div", { className: "sissue bad", textContent: v.problem }));
           save.disabled = !v.ok;
         } catch (e) { issues.replaceChildren(el("div", { className: "sissue bad", textContent: e.message })); save.disabled = true; }
       }, 200); };
       const redo = () => { draw(); check(); };
       const draw = () => line.replaceChildren(...sentTokens(tpl.text).map(t => t.text ? el("span", { className: "stext", textContent: t.text }) : (() => { const s = tpl.slots.find(x => x.name === t.slot); return s ? slotEl(s, item, redo) : el("span", { textContent: `{${t.slot}}` }); })()));
-      const save = el("button", { className: "btn p", textContent: m ? "고쳐 저장" : "만들기", disabled: true, onclick: e => busy(e.currentTarget, async () => {
+      const save = el("button", { className: "btn p", textContent: m ? "저장" : "만들기", disabled: true, onclick: e => busy(e.currentTarget, async () => {
         try {
           if (m) {
             const used = await api("/api/my_metrics/used_by", { id: m.id }), names = [...used.cards.map(c => `${c.title} (${c.dashboard_name})`), ...used.goals.map(g => `목표 ${g.name}`), ...used.dependents.map(x => x.name)];
-            if (names.length && !await sentAsk("정의를 고치면 영향이 있어요", `이 지표를 쓰는 곳: ${names.join(", ")}\n고친 뒤 카드는 ‘정의가 바뀌었어요’로 표시돼요.`, "고쳐 저장")) return;
+            if (names.length && !await sentAsk("정의를 고치면 영향이 있어요", `이 지표를 쓰는 곳: ${names.join(", ")}\n고친 뒤 카드는 ‘정의가 바뀌었어요’로 표시돼요.`, "저장")) return;
             await api("/api/my_metrics/update", { id: m.id, patch: def(), columns: kinds() });
           } else await api("/api/my_metrics", { definition: def(), columns: kinds() });
           form.replaceChildren(); msg.textContent = ""; showMetric();
         } catch (er) { issues.replaceChildren(el("div", { className: "sissue bad", textContent: er.message })); }
       }) });
       form.replaceChildren(el("h3", { textContent: (m ? "지표 고치기: " : "새 지표: ") + tpl.name }), el("div", { className: "row" }, name, unit, better), line, issues,
-        el("div", { className: "hint", textContent: `${scopeNow().table || "(테이블 없음)"} 테이블에 묶여요(${source?.label ?? "연결 없음"}).` }),
+        el("div", { className: "hint", textContent: `이 지표는 ${scopeNow().table || "(테이블 없음)"} 테이블에서만 써요 (${source?.label ?? "연결 없음"}).` }),
         el("div", { className: "row" }, save, el("button", { className: "ghost", textContent: "닫기", onclick: () => form.replaceChildren() })));
       name.oninput = unit.oninput = better.onchange = check;
       draw(); check();
@@ -445,7 +446,7 @@ function SentenceView(host, ctx) {
 
   async function show() {
     tabs.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
-    if (!scope().base) { body.replaceChildren(el("div", { className: "hint", textContent: "먼저 연결하고 기준 테이블을 고르세요." })); return; }
+    if (!scope().base) { body.replaceChildren(el("div", { className: "hint", textContent: "먼저 연결하고 테이블을 고르세요." })); return; }
     if (!cat) {
       try { cat = await api("/api/sentences"); } catch (e) { body.replaceChildren(el("div", { className: "err", textContent: e.message })); return; }
       explore = cat.templates.filter(t => t.kind === "explore"); metricTpl = cat.templates.filter(t => t.kind === "metric");

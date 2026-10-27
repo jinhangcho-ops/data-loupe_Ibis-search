@@ -2,7 +2,7 @@
 // 북극성·카운터 지표 표시(★·⚑)와 카운터가 한계를 벗어났는지 보는 counterAlerts도 여기 있다. board.js, dash.js, dash_cards.js, dash_grid.js가 먼저 불려 있어야 한다.
 
 // 카드가 다시 구할 기록(source)이 비어 있는 빈 틀인지(템플릿·카드 모음에서 막 놓은 카드)
-const SHELL_NOTE = "데이터를 정하세요. 카드의 ⚙를 눌러 [데이터]에서 테이블과 컬럼을 고르세요.";
+const SHELL_NOTE = "아직 데이터가 없어요. 제목 옆 ⚙를 눌러 테이블과 컬럼을 고르세요.";
 const isShell = card => !(card.source && (card.source.body || card.source.recipe || card.source.metric_id || card.source.flow_id));
 
 // 카운터 지표(북극성을 올리다 나빠지면 안 되는 지표)가 한계를 벗어났는지. star = {card, counters: [카드 id], limits: {카드 id: {op: ">="|"<=", value}}}.
@@ -16,7 +16,7 @@ function counterAlerts(cards, star) {
     if (v == null || !Number.isFinite(v)) continue;
     const bad = lim.op === ">=" ? v < lim.value : v > lim.value, fmt = cardFormat(card);
     if (bad) out.push({ id, title: card.title, value: v, op: lim.op, limit: lim.value,
-      text: `${card.title}: 지금 값 ${showValue(v, fmt)}이(가) 한계(${showValue(lim.value, fmt)} ${lim.op === ">=" ? "이상" : "이하"})를 벗어났어요` });
+      text: `${card.title} 값이 한계를 벗어났어요. 지금 ${showValue(v, fmt)}, 한계 ${showValue(lim.value, fmt)} ${lim.op === ">=" ? "이상" : "이하"}` });
   }
   return out;
 }
@@ -77,10 +77,10 @@ class EditBoard extends DashBoard {
     const head = box.querySelector(".bhead"), name = head.querySelector(".btitle");
     if (this.star.card === card.id) head.insertBefore(el("span", { className: "bbadge", textContent: "★", title: "북극성 지표" }), name);
     if (this.star.counters.includes(card.id)) head.insertBefore(el("span", { className: "bbadge", textContent: "⚑", title: "카운터 지표" }), name);
-    head.insertBefore(el("button", { className: "ib", textContent: "⚙", title: "이 카드 설정", onclick: e => { e.stopPropagation(); this.edit(card); } }), head.lastChild);
+    head.insertBefore(el("button", { className: "ib", textContent: "⚙", title: "카드 설정", onclick: e => { e.stopPropagation(); this.edit(card); } }), head.lastChild);
     head.classList.add("movable");
     head.onpointerdown = e => this.startMove(e, card, box, head);
-    const handle = el("i", { className: "bresize", title: "끌어서 크기를 바꿉니다(가로·세로 2~12칸)" });
+    const handle = el("i", { className: "bresize", title: "끌어서 크기를 바꿔요" });
     handle.onpointerdown = e => this.startResize(e, card, box, handle);
     box.append(handle);
     return box;

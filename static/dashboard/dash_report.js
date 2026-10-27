@@ -159,14 +159,14 @@ async function saveReportPng(board, title, { mode, err }) {
   const data = (await reportCanvas(board, title, { mode })).toDataURL("image/png");
   const d = await api("/api/images", { images: [{ name: title, data }] });
   if (d.cancelled) return say(err, "");
-  if (d.window === false) { download(data, `${title}.png`); return say(err, "보고서를 PNG로 내려받았습니다.", true); }
-  say(err, `보고서를 저장했습니다: ${d.folder}/${d.saved[0]}`, true);
+  if (d.window === false) { download(data, `${title}.png`); return say(err, "보고서를 PNG로 내려받았어요.", true); }
+  say(err, `보고서를 저장했어요. 위치: ${d.folder}/${d.saved[0]}`, true);
 }
 // 보고서를 PDF로 저장: JPEG 한 장을 서버(dash_pdf.py)가 1쪽 PDF로 만든다
 async function saveReportPdf(board, title, { mode, err }) {
   const data = (await reportCanvas(board, title, { mode, scale: 1.5 })).toDataURL("image/jpeg", 0.92);
   const d = await api("/api/dash/pdf", { image: data, name: title });
   if (d.cancelled) return say(err, "");
-  if (d.window === false) { download(d.pdf, d.name); return say(err, "보고서를 PDF로 내려받았습니다.", true); }
-  say(err, `보고서를 저장했습니다: ${d.path}`, true);
+  if (d.window === false) { download(d.pdf, d.name); return say(err, "보고서를 PDF로 내려받았어요.", true); }
+  say(err, `보고서를 저장했어요. 위치: ${d.path}`, true);
 }

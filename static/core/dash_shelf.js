@@ -67,9 +67,9 @@ function shelfPanel(host) {
     host.change(applyDrop(shelf, name, type, state), `${SHELVES[shelf]}에 ${name === SHELF_ROWS ? "행 개수" : name}`);
   };
   const chip = (name, type) => {
-    const c = el("span", { className: "shelf-chip " + (name === SHELF_ROWS ? "n" : KIND_CLASS[shelfKind(type)]), textContent: name, draggable: true, title: name === SHELF_ROWS ? "개수를 셉니다" : type });
+    const c = el("span", { className: "shelf-chip " + (name === SHELF_ROWS ? "n" : KIND_CLASS[shelfKind(type)]), textContent: name, draggable: true, title: name === SHELF_ROWS ? "행 개수를 세요" : type });
     c.ondragstart = e => { e.dataTransfer.setData("text/plain", JSON.stringify({ name, type })); e.dataTransfer.effectAllowed = "copy"; };
-    c.onclick = () => { held = held?.name === name ? null : { name, type }; refresh(); host.say(held ? `‘${name}’을(를) 놓을 칸을 누르세요.` : ""); };
+    c.onclick = () => { held = held?.name === name ? null : { name, type }; refresh(); host.say(held ? `‘${name}’ 컬럼을 놓을 칸을 누르세요.` : ""); };
     if (held?.name === name) c.classList.add("held");
     return c;
   };
@@ -95,7 +95,7 @@ function shelfPanel(host) {
       const slot = el("div", { className: "shelf-slot" }, el("b", { textContent: name }), ...chips[key].map((text, i) => {
         const row = key === "y" ? host.state().series[i] : null, c = el("span", { className: "shelf-on", textContent: row?.y ? ` (${row.y})` : text });
         if (row?.y) {  // 값 칩: 집계를 고르는 칸 + 컬럼 이름
-          const pick = el("select", { title: "집계(함수 사전의 집계 전부)" }, ...(SERVER.dash.aggs ?? []).map(a => el("option", { value: a, textContent: SERVER.dash.agg_names?.[a] ?? a, selected: a === row.agg })));
+          const pick = el("select", { title: "집계 방법" }, ...(SERVER.dash.aggs ?? []).map(a => el("option", { value: a, textContent: SERVER.dash.agg_names?.[a] ?? a, selected: a === row.agg })));
           pick.onclick = e => e.stopPropagation();
           pick.onchange = e => { const s = host.state(); host.change({ ...s, series: setAgg(s.series, i, e.target.value) }, "값 집계 바꾸기"); };
           c.prepend(pick);
@@ -107,7 +107,7 @@ function shelfPanel(host) {
           host.change(next, `${name}에서 빼기`);
         } });
         return el("span", { className: "shelf-wrap" }, c, x);
-      }), key === "filter" && pending ? filterForm() : "", chips[key].length || (key === "filter" && pending) ? "" : el("span", { className: "hint", textContent: "여기에 놓기" }));
+      }), key === "filter" && pending ? filterForm() : "", chips[key].length || (key === "filter" && pending) ? "" : el("span", { className: "hint", textContent: "여기에 끌어 놓기" }));
       slot.ondragover = e => { e.preventDefault(); slot.classList.add("over"); };
       slot.ondragleave = () => slot.classList.remove("over");
       slot.ondrop = e => {

@@ -96,10 +96,8 @@ def test_condition_hhmm_end_includes_that_minute(line, rows):
 
 def test_sentence_particles_for_latin_digit_and_unit():
     from query import sentence_run
-    assert sentence_run.render("e44", {"컬럼": "price"}).startswith("price를 ")
-    assert sentence_run.render("e44", {"컬럼": "금액2"}).startswith("금액2를 ")
-    assert sentence_run.render("e44", {"컬럼": "item"}).startswith("item을 ")
-    assert "사이가 일로 얼마인지" in sentence_run.render("e42", {"날짜 A": "a", "날짜 B": "b", "단위": "day"})
+    assert sentence_run.josa("price", "을") == "를" and sentence_run.josa("금액2", "을") == "를" and sentence_run.josa("item", "을") == "을"  # 틀 글에서 빈칸 뒤 조사를 없애 josa를 바로 본다
+    assert "걸린 시간을 일 단위로" in sentence_run.render("e42", {"날짜 A": "a", "날짜 B": "b", "단위": "day"})
 
 
 def test_examples_in_hints_work():
@@ -113,8 +111,7 @@ def test_examples_in_hints_work():
 def test_latin_m_n_end_takes_euro():
     """영문 M·N 끝은 ㅁ·ㄴ 받침(으로), L은 ㄹ(로). 단위 칸에 글자가 아닌 값이 와도 render가 터지지 않는다."""
     from query import sentence_run
-    assert "store_num으로 이어진" in sentence_run.render("e16", {"테이블 A": "a", "테이블 B": "b", "연결 컬럼": "store_num"})
-    assert "store_url로 이어진" in sentence_run.render("e16", {"테이블 A": "a", "테이블 B": "b", "연결 컬럼": "store_url"})
+    assert sentence_run.josa("store_num", "으로") == "으로" and sentence_run.josa("store_url", "으로") == "로"
     assert sentence_run.render("e42", {"날짜 A": "a", "날짜 B": "b", "단위": {"x": 1}})
     assert sentence_run.render("e42", {"날짜 A": "a", "날짜 B": "b", "단위": 5})
 

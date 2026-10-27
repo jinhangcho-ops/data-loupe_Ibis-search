@@ -11,12 +11,12 @@ function chooseDashboard() {
     const close = value => { modal.remove(); resolve(value); };
     pick.onchange = () => name.classList.toggle("hidden", pick.value !== "");
     const ok = el("button", { className: "btn p", textContent: "넣기", onclick: () => {
-      if (!pick.value && !name.value.trim()) return void (err.textContent = "새 대시보드의 이름을 쓰세요.");
+      if (!pick.value && !name.value.trim()) return void (err.textContent = "새 대시보드 이름을 넣어 주세요.");
       close({ id: pick.value, name: name.value.trim() });
     } });
     const modal = el("div", { className: "modal" }, el("div", { className: "modal-box" }, el("div", { className: "head" }, el("h3", { textContent: "어느 대시보드에 넣을까요?" })), pick, name, err,
       el("div", { className: "row" }, ok, el("button", { className: "btn", textContent: "취소", onclick: () => close(null) })),
-      el("div", { className: "hint", textContent: "카드에는 구한 값이 들어가 이 PC·이 계정에서만 풀 수 있게 암호화해 저장합니다." })));
+      el("div", { className: "hint", textContent: "카드에 담긴 값은 암호화해서 저장해요. 이 PC의 이 계정에서만 열 수 있어요." })));
     document.body.append(modal);
     (found.length ? pick : name).focus();
   });

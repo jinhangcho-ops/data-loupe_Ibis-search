@@ -87,7 +87,7 @@ globalThis.api = async url => {
 })();
 """
     got = run_node(tmp_path, body, parts=[code])
-    assert got["note"].startswith("목표 0개, 읽지 못한 줄 250개(1번째 줄: <b>틀림</b>)")
+    assert got["note"].startswith("목표 0개를 읽었어요. 읽지 못한 줄이 250개 있어요(1번째 줄: <b>틀림</b>)")
     assert got["asked"] == ["/api/targets", "/api/targets?offset=0", "/api/targets?offset=100", "/api/targets?offset=200"]
     assert got["first"] == {"prev": True, "next": False, "n": 100, "text": "1번째 줄: <b>틀림</b>"}  # 글자 그대로(textContent)
     assert got["last"] == {"prev": False, "next": True, "n": 50} and got["empty"] == "비었음"

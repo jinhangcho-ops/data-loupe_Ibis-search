@@ -7,25 +7,25 @@ class DashCtl {
   constructor(root, { board, changed, liveRun, visible = () => true }) {
     Object.assign(this, { board, changed, liveRun, visible, today: "", state: { as_of: "", period: "", refresh: "", live: "" }, liveOn: false, gen: 0, timer: null, seconds: 0, times: [] });
     const field = (label, input, note) => el("div", { className: "dc-field" }, el("label", { className: "hint", textContent: label }), input, note);
-    this.asof = el("input", { placeholder: "오늘", title: "기준일: 2026-10-01, 2026.10.01, 20261001, 어제, 지난달 말. 비우면 오늘" });
+    this.asof = el("input", { placeholder: "오늘", title: "이 날짜를 기준으로 값을 봐요. 예: 2026-10-01, 어제, 지난달 말. 비우면 오늘이에요" });
     this.pick = el("input", { type: "date", className: "dc-pick", tabIndex: -1 });
-    this.pickBtn = el("button", { className: "btn", textContent: "달력", title: "달력에서 기준일 고르기", onclick: () => this.pick.showPicker ? this.pick.showPicker() : this.pick.click() });
+    this.pickBtn = el("button", { className: "btn", textContent: "달력", title: "달력에서 기준일을 골라요", onclick: () => this.pick.showPicker ? this.pick.showPicker() : this.pick.click() });
     this.asofNote = el("div", { className: "hint dc-note" });
-    this.per = el("input", { placeholder: "비우면 카드의 원래 기간", title: "비우면 대시보드 기간을 걸지 않고 카드마다 자기 조건(기간 줄)대로 보입니다. 최근 N일·주·달·년(어제까지), 2026-10, 2026-Q3, 2026, 시작 ~ 끝, 지난주·지난달·작년·이번 달…" });
+    this.per = el("input", { placeholder: "비우면 카드의 원래 기간", title: "모든 카드에 같은 기간을 걸어요. 예: 최근 7일, 지난달, 이번 달, 2026-10, 2026-Q3, 2026-10-01 ~ 2026-10-31. 비우면 카드마다 원래 조건대로 보여요" });
     this.perNote = el("div", { className: "hint dc-note" });
-    this.every = el("input", { placeholder: "비우면 안 함 (예: 1일)", title: `연결한 뒤 이 주기가 지난 카드만 다시 구합니다. 최소 ${minimumText(SERVER.dash.min_refresh)}` });
+    this.every = el("input", { placeholder: "예: 1일 (비우면 안 함)", title: `연결할 때 이 주기가 지난 카드만 다시 구해요. ${minimumText(SERVER.dash.min_refresh)} 이상으로 적어 주세요` });
     this.lastNote = el("div", { className: "hint dc-note" });
-    this.live = el("input", { placeholder: "예: 30초", title: "화면을 보는 동안 이 간격으로 카드를 다시 구합니다(앞 조회가 끝난 뒤 센다). 저장하지 않습니다" });
+    this.live = el("input", { placeholder: "예: 30초", title: "화면을 보는 동안 이 간격으로 카드를 다시 구해요. 앞 조회가 끝난 뒤부터 세고, 이 값은 저장하지 않아요" });
     this.liveBtn = el("button", { className: "btn", textContent: "시작", onclick: () => this.toggleLive() });
     this.liveNote = el("div", { className: "hint dc-note" });
-    this.past = el("span", { className: "dc-past hidden", textContent: "과거 시점을 보는 중" });
-    this.min = el("input", { type: "number", min: 0, placeholder: "기본값", title: "이 연결의 실시간 간격 최소(초). 비우거나 0이면 기본값(원격 연결 60초, 이 PC 파일은 제한 없음)" });
+    this.past = el("span", { className: "dc-past hidden", textContent: "지난 날짜 기준으로 보는 중" });
+    this.min = el("input", { type: "number", min: 0, placeholder: "기본값", title: "지금 연결에서 쓸 수 있는 가장 짧은 실시간 간격(초)이에요. 비우면 기본값을 써요(원격 연결 60초, 이 PC 파일은 제한 없음)" });
     this.minBtn = el("button", { className: "btn", textContent: "적용", onclick: () => this.saveMin() });
     this.minNote = el("div", { className: "hint dc-note" });
     root.className = "dctl";
     root.replaceChildren(field("기준일", el("div", { className: "row" }, this.asof, this.pickBtn, this.pick), this.asofNote), field("기간", this.per, this.perNote),
       field("최신화 주기", this.every, this.lastNote), field("실시간 간격", el("div", { className: "row" }, this.live, this.liveBtn), this.liveNote),
-      field("이 연결의 실시간 최소(초)", el("div", { className: "row" }, this.min, this.minBtn), this.minNote), this.past);
+      field("실시간 최소 간격(초)", el("div", { className: "row" }, this.min, this.minBtn), this.minNote), this.past);
     this.asof.onchange = () => this.apply(true);
     this.per.onchange = () => this.apply(true);
     this.pick.onchange = () => { if (this.pick.value) { this.asof.value = this.pick.value; this.apply(true); } };
@@ -61,7 +61,7 @@ class DashCtl {
     if (seq !== this.applySeq) return;
     if (day.error) { this.asof.value = this.state.as_of; return this.note(this.asofNote, day.error, true); }
     const past = day.date !== this.today, blank = !this.per.value.trim();
-    const parsed = blank ? { span: { start: null, end: null, label: "기간을 걸지 않아요. 카드의 원래 조건대로 보입니다" }, previous: null } : await api("/api/period/parse", { text: this.per.value, as_of: day.date }), span = parsed.span;
+    const parsed = blank ? { span: { start: null, end: null, label: "기간을 걸지 않아요. 카드마다 원래 조건대로 보여요" }, previous: null } : await api("/api/period/parse", { text: this.per.value, as_of: day.date }), span = parsed.span;
     if (seq !== this.applySeq) return;
     if (span.error) {
       if (!commit) {  // 저장본을 여는 중(예전 시각 기간 등): 앞 대시보드의 기간·과거 표시가 남지 않게 기간 없이 본다(서버 최신화와 같게)
@@ -79,7 +79,7 @@ class DashCtl {
     this.note(this.asofNote, day.label);
     this.note(this.perNote, span.label + (span.days ? ` (${span.days}일)` : ""));
     this.past.classList.toggle("hidden", !past);
-    if (past) this.stopLive("과거 시점을 보는 중이라 실시간 갱신은 멈춰 있어요");
+    if (past) this.stopLive("지난 날짜 기준으로 보는 중이라 실시간 갱신을 멈췄어요");
     this.board.asOf = this.state.as_of;
     const ctx = parsed.context;  // 보는 기간(기준일로 자른 것)과 직전 기간은 서버(dash_refresh.context)가 구한 대로 쓴다
     await this.board.setRange(blank ? null : ctx?.range ?? null, blank ? null : ctx?.prev ?? null);
@@ -99,7 +99,7 @@ class DashCtl {
   }
   showLast(cards) {
     const times = cards.map(c => c.data?.computed_at).filter(Boolean).sort();
-    this.note(this.lastNote, times.length ? `마지막 시각 ${times[times.length - 1].replace("T", " ")}` : "아직 구한 값이 없어요");
+    this.note(this.lastNote, times.length ? `마지막으로 구한 시각 ${times[times.length - 1].replace("T", " ")}` : "아직 구한 값이 없어요");
   }
   async loadMin() {
     try {
@@ -121,7 +121,7 @@ class DashCtl {
   async toggleLive() {
     if (this.liveOn) return this.stopLive("멈췄어요");
     if (!this.state.live) return this.note(this.liveNote, "실시간 간격을 먼저 적어 주세요. 예: 30초", true);
-    if (this.state.as_of) return this.note(this.liveNote, "과거 시점을 보는 중이라 실시간 갱신은 멈춰 있어요", true);
+    if (this.state.as_of) return this.note(this.liveNote, "지난 날짜 기준으로 보는 중이라 실시간 갱신을 시작할 수 없어요", true);
     const every = await api("/api/period/every", { text: this.state.live, kind: "live" });
     if (every.error || !(every.seconds > 0)) return this.note(this.liveNote, every.error || "실시간 간격을 읽지 못했어요", true);  // 간격 없이 시작하면 쉬지 않고 조회한다
     this.seconds = every.seconds;
@@ -137,10 +137,10 @@ class DashCtl {
     let took = 0;
     if (this.visible()) {
       const start = performance.now();
-      try { const ran = await this.liveRun(); this.note(this.liveNote, ran === false ? "입력 중이라 미뤘어요" : `갱신함 ${new Date().toLocaleTimeString()}`); } catch (e) { this.note(this.liveNote, e.message, true); }
+      try { const ran = await this.liveRun(); this.note(this.liveNote, ran === false ? "입력 중이라 이번 갱신은 건너뛰었어요" : `${new Date().toLocaleTimeString()}에 갱신했어요`); } catch (e) { this.note(this.liveNote, e.message, true); }
       took = performance.now() - start;
       this.times.push(took);
-      if (took > interval) this.note(this.liveNote, `조회가 간격보다 오래 걸려요(평균 ${(this.times.reduce((a, b) => a + b, 0) / this.times.length / 1000).toFixed(1)}초)`, true);
+      if (took > interval) this.note(this.liveNote, `조회가 간격보다 오래 걸려요. 평균 ${(this.times.reduce((a, b) => a + b, 0) / this.times.length / 1000).toFixed(1)}초 걸렸어요`, true);
     }
     if (this.liveOn && gen === this.gen) this.timer = setTimeout(() => this.tick(gen), Math.max(interval, took));
   }
@@ -174,7 +174,7 @@ async function recomputeRange(board, cards, connected) {
   const ctx = board.ctx(), call = ++rangeCall;
   const todo = cards.filter(c => {
     c.rangeCall = call;
-    c.rangeNote = !connected ? "연결하면 이 기간으로 구합니다" : c.source.key && board.connKey && !sameSource(c.source.key, board.connKey) ? "다른 연결의 카드라 이 기간으로 구하지 못했어요" : "";
+    c.rangeNote = !connected ? "연결하면 이 기간으로 다시 구해요" : c.source.key && board.connKey && !sameSource(c.source.key, board.connKey) ? "다른 연결의 카드라 이 기간으로 구하지 못했어요" : "";
     return !c.rangeNote && c.id;
   });
   if (todo.length) {

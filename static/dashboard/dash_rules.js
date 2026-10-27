@@ -85,7 +85,7 @@ function parseRuleLine(line) {
   const p = line.split("|").map(x => x.trim());
   if (p.length < 3) return { error: "‘컬럼 | 식 | #색 | 화살표 | 칸·줄’ 모양으로 적어 주세요. 예: 상태 | *지연* | #e03131 | 없음 | 줄" };
   const [column, match, color, arrow = "", scope = ""] = p;
-  if (!column) return { error: "컬럼 이름이 없어요" };
+  if (!column) return { error: "컬럼 이름을 적어 주세요" };
   if (!(arrow in ARROW_WORDS)) return { error: `화살표는 없음·위·아래·자동 중 하나예요(‘${arrow}’)` };
   if (!(scope in SCOPE_WORDS)) return { error: `적용 범위는 칸·줄 중 하나예요(‘${scope}’)` };
   const rule = { column, match, color, arrow: ARROW_WORDS[arrow], scope: SCOPE_WORDS[scope] }, found = compileRule(rule);
@@ -146,5 +146,6 @@ function ruleEditor(card, onChange) {
   });
   editor.area.onchange = () => { editor.read(); card.ruleText = editor.area.value; onChange(); };
   if (card.ruleText) editor.read();
-  return el("div", { className: "bextra" }, el("div", { className: "hint", textContent: "맞는 칸만 색을 칠하고, 여러 규칙이 맞으면 위의 규칙 하나예요. 숫자 식: = 0, > 100, < -5%, 10 ~ 20, 1, 3, 7 · 단어 식: 취소, 취소, 환불, *지연*, ERR*, *실패" }), editor.root);
+  return el("div", { className: "bextra" }, el("div", { className: "hint", textContent: "조건에 맞는 칸에 색을 칠해요. 여러 규칙이 맞으면 위에 있는 규칙을 써요.",
+    title: "숫자 식 예: = 0, > 100, < -5%, 10 ~ 20, 1, 3, 7\n글자 식 예: 취소, 취소, 환불, *지연*, ERR*, *실패" }), editor.root);
 }

@@ -48,7 +48,7 @@ def test_sentence_tokens_visible_defaults(tmp_path):
     got = run_node(tmp_path, "const t = %s, t13 = %s; const P = t.slots.find(s => s.name === 'P');\n"
                    "console.log(JSON.stringify({ tokens: sentTokens(t13.text), v1: sentVisible(P, { 종류: '중앙값' }), v2: sentVisible(P, { 종류: '분위수 N' }), d: sentDefaults(t), d13: sentDefaults(t13), tm: sentDefaults(%s) }));"
                    % (json.dumps(t26, ensure_ascii=False), json.dumps(t13, ensure_ascii=False), json.dumps(sentences.get("e05"), ensure_ascii=False)))
-    assert got["tokens"] == [{"slot": "무엇"}, {"text": "별 "}, {"slot": "값"}, {"text": "의 "}, {"slot": "집계"}, {"text": " 상위 "}, {"slot": "N"}, {"text": "개를 봐요"}]
+    assert got["tokens"] == [{"slot": "무엇"}, {"text": "별 "}, {"slot": "값"}, {"text": "의 "}, {"slot": "집계"}, {"text": " 상위 "}, {"slot": "N"}, {"text": "개 보기"}]
     assert got["v1"] is False and got["v2"] is True
     assert got["d"] == {"종류": "중앙값", "P": 0.5} and got["d13"] == {"N": 10} and got["tm"] == {"글자": {"match": "포함", "text": ""}}
 

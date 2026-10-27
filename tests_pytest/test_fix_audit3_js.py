@@ -137,7 +137,7 @@ def test_live_tick_reports_skipped_turn(tmp_path):
   Object.assign(c, { liveOn: true, gen: 1, state: { live: "x" }, times: [], seconds: 3600, note(el, text) { notes.push(text); }, visible: () => true, liveBtn: {}, liveNote: {}, liveRun: async () => false });
   await c.tick(1);
   c.liveRun = async () => {}; await c.tick(1);
-  console.log(JSON.stringify(notes.map(t => t.split(" ")[0])));
+  console.log(JSON.stringify(notes.map(t => t.endsWith("갱신했어요") ? "갱신함" : t.split(" ")[0])));
 })();
 """
     assert run_node(tmp_path, body, files=["dash_ctl.js"]) == ["입력", "갱신함"]  # 고치기 전에는 건너뛴 회도 갱신함

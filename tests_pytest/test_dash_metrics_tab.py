@@ -84,7 +84,7 @@ def test_dashboard_mounts_metric_view_for_the_chosen_table(tmp_path):
 
 def test_dashboard_without_a_table_asks_to_pick_one(tmp_path):
     got = run_node(tmp_path, "const CTX = { only: 'metric', scope: () => ({ base: '', schema: '' }), body: () => ({}), columns: () => [], tables: () => ['orders'] };" + SHOW)
-    assert "기준 테이블을 고르세요" in got["text"] and got["status"] is None
+    assert "테이블을 고르세요" in got["text"] and got["status"] is None
 
 
 def test_query_screen_still_follows_S_and_keeps_its_tabs(tmp_path):

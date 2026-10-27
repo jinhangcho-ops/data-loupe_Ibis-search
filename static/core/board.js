@@ -73,7 +73,7 @@ class Board {
   }
   // 그리다 던진 카드: 이름과 오류 글만 보이고 [×]로 뺄 수 있다.
   errorBox(card, e) {
-    const remove = el("button", { className: "ib", textContent: "×", title: "이 그래프를 뺍니다", onclick: ev => { ev.stopPropagation(); this.set(this.cards.filter(c => c !== card)); } });
+    const remove = el("button", { className: "ib", textContent: "×", title: "이 카드 빼기", onclick: ev => { ev.stopPropagation(); this.set(this.cards.filter(c => c !== card)); } });
     return el("div", { className: "bcard" }, el("div", { className: "bhead" }, el("b", { textContent: card.title }), remove),
       el("div", { className: "bbody" }, el("div", { className: "hint bnote err", textContent: `이 카드를 그리지 못했어요: ${e.message}` })));
   }
@@ -81,12 +81,12 @@ class Board {
     const canvas = el("canvas");
     const body = el("div", { className: "bbody" + (card.paint ? " paint" : "") }, card.note ? el("div", { className: "hint bnote", textContent: card.note }) : card.paint ? card.paint(colors) : canvas);  // paint: SVG·HTML로 직접 그리는 카드(dash_cards.js)
     body.style.setProperty("--ratio", card.ratio || 16 / 9);
-    const title = el("input", { className: "btitle", value: card.title, title: "그래프 이름. 그림 파일 이름이 됩니다" });
+    const title = el("input", { className: "btitle", value: card.title, title: "카드 이름. 그림으로 저장할 때 파일 이름이 돼요" });
     title.onclick = e => e.stopPropagation();
     title.onchange = () => { card.title = title.value.trim() || card.title; title.value = card.title; this.changed?.(); };
-    const remove = el("button", { className: "ib", textContent: "×", title: "이 그래프를 뺍니다" });
+    const remove = el("button", { className: "ib", textContent: "×", title: "이 카드 빼기" });
     remove.onclick = e => { e.stopPropagation(); this.set(this.cards.filter(c => c !== card)); };
-    const box = el("div", { className: "bcard" + (this.picked.has(card) ? " sel" : ""), title: "누르면 고릅니다(여럿 고를 수 있습니다)" },
+    const box = el("div", { className: "bcard" + (this.picked.has(card) ? " sel" : ""), title: "눌러서 선택해요. 여러 개 고를 수 있어요" },
       el("div", { className: "bhead" }, el("i", { className: "bcheck" }), title, remove), body);
     box.onclick = () => this.toggle(card, box);
     card.canvas = canvas;
@@ -117,13 +117,13 @@ class Board {
 // 창 없이 열었으면(브라우저) 하나씩 내려받는다. err: 결과를 쓸 칸의 id.
 async function saveBoard(board, { ratio, mode, type, err }) {
   const pictures = await board.pictures(ratio, mode, type), skipped = [...board.picked].filter(c => c.note || (!c.config && !board.paints)).length;  // paints: SVG·HTML 카드도 그림으로 저장하는 카드 모음(EditBoard)
-  if (!pictures.length) return say(err, skipped ? "고른 그래프가 아직 그려지지 않았습니다." : "다운로드할 그래프를 고르세요. 카드를 누르면 고릅니다.");
+  if (!pictures.length) return say(err, skipped ? "고른 카드가 아직 그려지지 않았어요." : "저장할 카드를 먼저 고르세요. 카드를 누르면 선택돼요.");
   const d = await api("/api/images", { images: pictures });
-  const more = skipped ? ` 그려지지 않은 ${skipped}개는 뺐습니다.` : "";
+  const more = skipped ? ` 아직 그려지지 않은 ${skipped}개는 뺐어요.` : "";
   if (d.cancelled) return say(err, "");
   if (d.window === false) {
     pictures.forEach(p => download(p.data, `${p.name}.${imageExt(type)}`));
-    return say(err, `${pictures.length}개를 내려받았습니다.${more}`, true);
+    return say(err, `${pictures.length}개를 내려받았어요.${more}`, true);
   }
-  say(err, `${d.saved.length}개를 저장했습니다: ${d.folder}${more}`, true);
+  say(err, `${d.saved.length}개를 저장했어요. 위치: ${d.folder}${more}`, true);
 }

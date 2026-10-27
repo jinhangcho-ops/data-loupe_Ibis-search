@@ -72,7 +72,7 @@ global.el = (tag, props) => ({ tag, ...props });
 global.SERVER = {};
 """ + text("core/board.js") + text("core/dash.js") + r"""
 showAdded("err-ana", { id: "a b", name: "내 대시보드", cards: 3 });
-assert.deepStrictEqual(said, [["err-ana", "대시보드 '내 대시보드'에 넣었습니다(카드 3개). ", true]]);
+assert.deepStrictEqual(said, [["err-ana", "‘내 대시보드’ 대시보드에 넣었어요. 지금 카드는 3개예요. ", true]]);
 assert.deepStrictEqual(box.kids, [{ tag: "a", href: "/dashboard?open=a%20b", textContent: "대시보드에서 보기" }]);
 console.log("ok");
 """

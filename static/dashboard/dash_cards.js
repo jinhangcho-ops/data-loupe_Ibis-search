@@ -124,8 +124,8 @@ function paintKpi(card, colors, board) {
   const v = cardValue(card), fmt = cardFormat(card), said = board?.compares.get(card), days = cardDays(card).map(d => d.v), pair = card.data?.pair;
   const color = pickColor(card, "series", card.data?.by_unit?.day?.series[0]?.name ?? card.data?.values?.names?.[0] ?? card.title, colors, 0);
   const spark = days.filter(x => x != null).length > 1 ? svg("svg", { viewBox: "0 0 120 30", class: "kpi-spark", preserveAspectRatio: "none" }, svg("polyline", { points: sparkPoints(days, 120, 30), fill: "none", stroke: color, "stroke-width": 1.8 })) : "";
-  return box("kpi", el("div", { className: "kpi-top" }, el("span", { className: "kpi-icon", style: `color:${color}` }, iconSvg(card.view?.icon)), el("span", { className: "hint", textContent: card.title })),
-    el("div", { className: "kpi-val", textContent: showValue(v, fmt, card.view?.unit_text) }), said ? el("div", { className: "bcmp " + said.tone, textContent: said.text }) : "", spark,
+  return box("kpi", el("div", { className: "kpi-top" }, el("span", { className: "kpi-icon", style: `color:${color}` }, iconSvg(card.view?.icon)),  // 카드 이름은 제목 줄에 있어 값만 크게
+    el("div", { className: "kpi-val", textContent: showValue(v, fmt, card.view?.unit_text) })), said ? el("div", { className: "bcmp " + said.tone, textContent: said.text }) : "", spark,
     pair ? el("div", { className: "hint kpi-pair", textContent: `${pair.num_label} ${showValue(pair.num)} · ${pair.den_label} ${showValue(pair.den)}` }) : "");
 }
 
@@ -192,13 +192,13 @@ function paintStripes(card, colors) {
 
 // blocks: 칸 하나 = view.size. 실제(채움) · 목표까지(빗금 윤곽) · 목표를 넘은 칸(진한 색)
 function paintBlocks(card, colors) {
-  if ((cardValue(card) ?? 0) < 0) return box("summary", el("div", { className: "sum-text", textContent: "음수는 블록으로 그리지 않아요" }));
+  if ((cardValue(card) ?? 0) < 0) return box("summary", el("div", { className: "sum-text", textContent: "값이 음수라 블록으로 그릴 수 없어요" }));
   const v = cardValue(card) ?? 0, target = cardTarget(card), fmt = cardFormat(card), size = card.view?.size || Math.max(+(Math.max(v, target ?? 0) / 20).toPrecision(1), 1e-9);
   const b = blockCells(v, target, size), per = 20, W = 260, cell = W / per - 3, color = pickColor(card, "series", card.title, colors, 0), total = b.actual + b.toTarget;
   const rects = Array.from({ length: total }, (_, i) => svg("rect", { x: (i % per) * (cell + 3), y: Math.floor(i / per) * (cell + 3), width: cell, height: cell, rx: 2,
     fill: i < b.actual - b.over ? color : i < b.actual ? darken(color) : "none", stroke: i < b.actual ? "none" : color, "stroke-dasharray": i < b.actual ? null : "3 2" }));
   const H = Math.ceil(total / per) * (cell + 3) + 28;
-  return frame(W, H, ...rects, stext(0, H - 8, `칸 하나 ${showValue(size * b.scale, fmt)} · ${showValue(v, fmt)}${target != null ? ` / 목표 ${showValue(target, fmt)}` : ""}`, { "font-size": 11, fill: colors.text }));
+  return frame(W, H, ...rects, stext(0, H - 8, `${showValue(v, fmt)}${target != null ? ` / 목표 ${showValue(target, fmt)}` : ""} (한 칸 ${showValue(size * b.scale, fmt)})`, { "font-size": 11, fill: colors.text }));
 }
 
 // target_trend: 일 값 선 + 목표 가로 점선 + 목표 아래 구간 채움 + "목표보다 1.7%p 낮아요 · 기간 중 N번 내려감"
@@ -211,7 +211,7 @@ function paintTargetTrend(card, colors) {
   if (target != null) belowPolygons(xs, vs, target, yOf).forEach(p => kids.push(svg("polygon", { points: p.map(q => q.map(n => n.toFixed(1)).join(",")).join(" "), fill: colors.series[1], opacity: 0.3 })));
   kids.push(svg("polyline", { points: vs.map((v, i) => v == null ? null : `${xs[i].toFixed(1)},${yOf(v).toFixed(1)}`).filter(Boolean).join(" "), fill: "none", stroke: color, "stroke-width": 2 }));
   if (target != null) kids.push(svg("line", { x1: pad, x2: W - pad, y1: yOf(target), y2: yOf(target), stroke: colors.ink, "stroke-dasharray": "6 4" }));
-  const now = cardValue(card), says = target == null ? (card.data?.target?.error || "목표가 없어요") : now == null ? "—" : `목표보다 ${showGap(now - target, fmt)} ${now < target ? "낮아요" : now > target ? "높아요" : "같아요"} · 기간 중 ${crossDown(vs, target)}번 내려감`;
+  const now = cardValue(card), says = target == null ? (card.data?.target?.error || "목표를 아직 정하지 않았어요") : now == null ? "—" : `목표보다 ${showGap(now - target, fmt)} ${now < target ? "낮아요" : now > target ? "높아요" : "같아요"}. 목표 아래로 ${crossDown(vs, target)}번 내려갔어요`;
   return frame(W, H, ...kids, stext(pad, H - 6, says, { "font-size": 11, fill: colors.text }));
 }
 
@@ -248,15 +248,15 @@ function paintDual(card, colors, board) {
       card.view.window = start === k ? null : { from: whole[Math.min(start, k)], to: whole[Math.max(start, k)] }; if (!card.view.window) delete card.view.window; board?.changed?.(); board?.draw(); };
     strip.addEventListener("pointermove", move); strip.addEventListener("pointerup", up);
   };
-  kids.push(over, tip, ...bars, sel, strip, stext(pad, H - 2, names.join(" · ") + (win && keep ? "  (구간 선택됨, 한 번 눌러 해제)" : ""), { "font-size": 10, fill: colors.text }));
+  kids.push(over, tip, ...bars, sel, strip, stext(pad, H - 2, names.join(" · ") + (win && keep ? "  (구간을 골랐어요. 한 번 누르면 풀려요)" : ""), { "font-size": 10, fill: colors.text }));
   return frame(W, H, ...kids);
 }
 
 // recent_rows: 연결돼 있을 때만 /api/query로 앞 N행을 읽어 보인다. 행 값은 저장하지 않는다(카드에는 컬럼 이름만).
 function paintRecent(card, colors, board) {
   const holder = box("recent"), key = card.source?.key;
-  if (!board?.connKey || (key && !sameSource(key, board.connKey))) { holder.append(el("div", { className: "hint", textContent: board?.connKey ? "이 카드는 다른 연결의 것이라 지금은 보이지 않아요" : "연결하면 보입니다" })); return holder; }
-  holder.append(el("div", { className: "hint", textContent: "읽는 중…" }));
+  if (!board?.connKey || (key && !sameSource(key, board.connKey))) { holder.append(el("div", { className: "hint", textContent: board?.connKey ? "다른 연결에서 만든 카드라 지금은 볼 수 없어요" : "데이터에 연결하면 보여요" })); return holder; }
+  holder.append(el("div", { className: "hint", textContent: "불러오는 중…" }));
   api("/api/query", { ...card.source.body, limit: card.view?.rows || 10, count: false }).then(d => {
     const { columns, rows } = d.rows;
     holder.replaceChildren(el("table", {}, el("thead", {}, el("tr", {}, ...columns.map(c => el("th", { textContent: c })))),
@@ -272,8 +272,8 @@ const levelColor = level => level === "bad" ? cssVar("--err") : level === "warn"
 // 행 값 읽기: 연결돼 있을 때만 /api/query로 앞 N행(저장하지 않는다). show(컬럼 이름들, 행들[[…]])를 부른다.
 function loadRows(card, board, holder, show, limit) {
   const key = card.source?.key;
-  if (!board?.connKey || (key && !sameSource(key, board.connKey))) return void holder.append(el("div", { className: "hint", textContent: board?.connKey ? "이 카드는 다른 연결의 것이라 지금은 보이지 않아요" : "연결하면 보입니다" }));
-  holder.append(el("div", { className: "hint", textContent: "읽는 중…" }));
+  if (!board?.connKey || (key && !sameSource(key, board.connKey))) return void holder.append(el("div", { className: "hint", textContent: board?.connKey ? "다른 연결에서 만든 카드라 지금은 볼 수 없어요" : "데이터에 연결하면 보여요" }));
+  holder.append(el("div", { className: "hint", textContent: "불러오는 중…" }));
   api("/api/query", { ...card.source.body, limit, count: false }).then(d => show(d.rows.columns, d.rows.rows.map(r => d.rows.columns.map(c => r[c]))))
     .catch(e => holder.replaceChildren(el("div", { className: "err", textContent: e.message })));
 }
@@ -290,7 +290,7 @@ function renderTable(holder, card, columns, rows, prev) {
   const compiled = compileRules(view.cond_rules, kinds), groups = columns.filter(c => c.kind === "group").length, sort = card.sortBy;
   const order = rows.map((_, i) => i);
   if (sort) order.sort((a, b) => { const [x, y] = [rows[a][sort.i], rows[b][sort.i]]; return (x == null) - (y == null) || (x > y ? 1 : x < y ? -1 : 0) * sort.dir; });
-  const head = el("tr", {}, ...names.map((n, i) => el("th", { textContent: n + (sort?.i === i ? (sort.dir > 0 ? " ▲" : " ▼") : ""), style: "cursor:pointer", title: "눌러 정렬", onclick: () => { card.sortBy = { i, dir: sort?.i === i ? -sort.dir : 1 }; renderTable(holder, card, columns, rows, prev); } })));
+  const head = el("tr", {}, ...names.map((n, i) => el("th", { textContent: n + (sort?.i === i ? (sort.dir > 0 ? " ▲" : " ▼") : ""), style: "cursor:pointer", title: "눌러서 정렬해요", onclick: () => { card.sortBy = { i, dir: sort?.i === i ? -sort.dir : 1 }; renderTable(holder, card, columns, rows, prev); } })));
   const body = order.map(r => {
     const row = rows[r], hits = names.map((n, i) => matchRule(compiled, n, row[i])), whole = hits.find(h => h?.scope === "row");
     const key = row.slice(0, groups).map(String).join("\x01"), old = prev?.[key];
@@ -321,7 +321,7 @@ function paintStatus(card) {
 // alerts: 나쁜 엔티티 목록(이상 먼저, 오래된 순) "이름 · 이상 · 12분째 · 이유 · 영향: …"
 function paintAlerts(card) {
   const bad = (card.data?.values?.entities ?? []).filter(e => e.level !== "ok").sort((a, b) => (b.level === "bad") - (a.level === "bad") || String(a.since).localeCompare(String(b.since)));
-  if (!bad.length) return box("alerts", el("div", { className: "hint", textContent: "경고가 없어요" }));
+  if (!bad.length) return box("alerts", el("div", { className: "hint", textContent: "지금은 경고가 없어요" }));
   return box("alerts", ...bad.map(e => el("div", { className: "alert lv-" + e.level }, el("b", { textContent: e.name }), el("span", { className: "badge", style: `border-color:${levelColor(e.level)};color:${levelColor(e.level)}`, textContent: LEVEL_NAMES[e.level] }),
     el("span", { textContent: e.since_text }), el("span", { className: "hint", textContent: e.reasons.join(", ") }), e.impact.length ? el("span", { className: "hint", textContent: "영향: " + e.impact.join(", ") }) : "")));
 }
@@ -345,7 +345,7 @@ function paintMap(card, colors, board) {
   if (bg === "rack") for (let i = 0; i < 6; i++) back.append(svg("rect", { x: 20 + i * 62, y: 14, width: 52, height: H - 28, rx: 4, fill: "none", stroke: colors.line, "stroke-width": 1.5 }));
   else if (bg === "network") for (let i = 1; i < 10; i++) back.append(svg("line", { x1: i * 40, y1: 0, x2: i * 40, y2: H, stroke: colors.line, "stroke-dasharray": "2 6" }), svg("line", { x1: 0, y1: i * 26, x2: W, y2: i * 26, stroke: colors.line, "stroke-dasharray": "2 6" }));
   else if (card.imageUrl) back.append(svg("image", { href: card.imageUrl, x: 0, y: 0, width: W, height: H, preserveAspectRatio: "xMidYMid meet" }));
-  else back.append(stext(W / 2, H / 2, board?.dashId ? "그림을 읽는 중…" : "카드를 저장하면 그림이 보여요", { "text-anchor": "middle", "font-size": 12, fill: colors.text }));
+  else back.append(stext(W / 2, H / 2, board?.dashId ? "그림을 불러오는 중…" : "카드를 저장하면 그림이 보여요", { "text-anchor": "middle", "font-size": 12, fill: colors.text }));
   if (bg === "image" && !card.imageUrl && board?.dashId && !card.imageTried) {  // 그림은 저장된 카드의 경로로 서버에서 받아 blob 주소로 쓴다
     card.imageTried = true;
     fetch(`/api/dash/image?dash=${encodeURIComponent(board.dashId)}&card=${encodeURIComponent(card.id)}`).then(async r => {
@@ -357,7 +357,7 @@ function paintMap(card, colors, board) {
   const links = [...(view.links ?? []), ...entities.flatMap(e => (e.impact ?? []).map(t => [e.name, t]))];
   // 점 요소는 한 번만 만들고 끄는 동안에는 위치만 옮긴다(다시 만들면 포인터 캡처가 풀려 끌기가 끊긴다)
   const spots = entities.map(e => {
-    const circle = svg("circle", { r: e.level === "ok" ? 8 : 10, fill: levelColor(e.level), stroke: colors.card, "stroke-width": 2 }, svg("title", {}, `${e.name} · ${LEVEL_NAMES[e.level]}${e.since_text ? " · " + e.since_text : ""}${e.reasons.length ? " · " + e.reasons.join(", ") : ""}`));
+    const circle = svg("circle", { r: e.level === "ok" ? 8 : 10, fill: levelColor(e.level), stroke: colors.card, "stroke-width": 2 }, svg("title", {}, `${e.name}: ${LEVEL_NAMES[e.level]}${e.since_text ? ", " + e.since_text : ""}${e.reasons.length ? ", " + e.reasons.join(", ") : ""}`));
     const name = stext(0, 0, e.name, { "text-anchor": "middle", "font-size": 10, fill: colors.ink }), g = svg("g", { style: "cursor:grab" }, circle, name);
     g.onpointerdown = ev => {
       try { g.setPointerCapture(ev.pointerId); } catch (err) { /* 포인터를 못 잡아도 끌기는 된다 */ }
@@ -377,7 +377,7 @@ function paintMap(card, colors, board) {
   };
   draw();
   root.append(back, lines, dots);
-  return entities.length ? root : box("alerts", el("div", { className: "hint", textContent: "엔티티가 없어요" }));
+  return entities.length ? root : box("alerts", el("div", { className: "hint", textContent: "보여 줄 대상이 없어요" }));
 }
 // deviation: 엔티티 × 시간대 표. 칸 = 값, 기준(view.baseline, 없으면 그 엔티티 평균) 대비 ±. 기준 넘는 칸(허용 폭 view.threshold, 없으면 기준의 20%)을 강조
 function deviationCells(values, baseline, threshold) {
@@ -401,7 +401,7 @@ function paintSentence(card, colors) {
   const spans = templateParts(view.template).map(p => {
     if (p.text != null) return document.createTextNode(p.text);
     const b = blanks[p.blank];
-    if (!b) return el("span", { className: "blank err", textContent: "—", title: `‘${p.blank}’ 빈칸이 정의돼 있지 않아요` });
+    if (!b) return el("span", { className: "blank err", textContent: "—", title: `‘${p.blank}’ 빈칸을 아직 정하지 않았어요` });
     if (b.error) return el("span", { className: "blank err", textContent: "—", title: b.error });
     const value = b.kind === "value" ? b.cur : b.kind === "prev" ? b.prev : b.text, rule = matchRule(compiled, p.blank, value);
     const arrow = rule && ruleArrow(rule, b.cur, b.prev, view.better, x => showValue(x, b.format)), span = el("span", { className: "blank", textContent: typeof value === "number" || value == null ? showValue(value, b.format) : String(value) });
@@ -426,7 +426,7 @@ const GEO_JS = "/static/geo/geomap.js";
 function paintGeo(card, colors, board) {
   if (typeof paintGeoMap === "undefined") {
     need(GEO_JS).then(() => board?.draw()).catch(() => { card.geoFailed = true; });
-    return box("summary", el("div", { className: "sum-text", textContent: card.geoFailed ? "지도 그리기 코드를 불러오지 못했어요" : "지도를 불러오는 중…" }));
+    return box("summary", el("div", { className: "sum-text", textContent: card.geoFailed ? "지도를 불러오지 못했어요. 화면을 새로 고쳐 보세요" : "지도를 불러오는 중…" }));
   }
   return paintGeoMap(card, colors, board);
 }

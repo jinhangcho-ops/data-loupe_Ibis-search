@@ -50,5 +50,5 @@ const sentenceView = () => ({ setDraft: d => calls.push(["sentence", d]) });
 })();
 """
     got = run_node(tmp_path, body, parts=[prelude, code])
-    assert got["flow"] == [["load", {"base": "t", "conditions": ["a = 1"]}], ["flash", "흐름 보기가 없어져 저장된 흐름 그림은 버리고 단계 카드로 열었어요.", 4000]]  # 단계 카드에 body만, 안내 한 번
+    assert got["flow"] == [["load", {"base": "t", "conditions": ["a = 1"]}], ["flash", "흐름 보기가 없어져서 저장된 흐름 그림은 빼고 단계별 보기로 열었어요.", 4000]]  # 단계 카드에 body만, 안내 한 번
     assert got["sentence"] == [["load", {"base": "t"}], ["sentence", {"items": []}], ["set", "sentence"]] and got["view"] == "sentence"

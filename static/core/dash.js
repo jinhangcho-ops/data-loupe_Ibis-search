@@ -352,7 +352,7 @@ class DashBoard extends Board {
   dateSelect(card) {
     const cols = card.data?.date_cols ?? [];
     if (!cols.length) return "";
-    return el("select", { className: "bunit", style: "flex-basis:auto", title: "기간 기준 날짜 컬럼: 대시보드의 기간·기준일을 이 컬럼으로 걸어 다시 구합니다", onchange: async e => {
+    return el("select", { className: "bunit", style: "flex-basis:auto", title: "대시보드 기간과 기준일을 이 날짜 컬럼에 걸어 다시 구해요", onchange: async e => {
       if (e.target.value) card.source.date = e.target.value; else delete card.source.date;
       this.changed?.();
       if (card.source.date) await this.recompute?.([card]);
@@ -367,14 +367,14 @@ class DashBoard extends Board {
     const named = view.target?.name;
     const target = named ? el("span", { className: "hint", textContent: `목표: ${named}${card.data?.target?.error ? " (" + card.data.target.error + ")" : ""}` })
       : field("목표", el("input", { type: "number", value: view.target?.value ?? "", style: "width:90px", onchange: e => { if (e.target.value === "") { delete view.target; card.data.target = null; } else { view.target = { value: +e.target.value }; card.data.target = { value: +e.target.value, label: "", error: "" }; } again(); } }));
-    const tiles = field("지도 배경(OpenStreetMap)", el("input", { type: "checkbox", checked: !!view.geo?.tiles, title: "켜면 지금 보는 지도 범위가 타일 서버(tile.openstreetmap.org)로 요청돼요. 끄면 경계만 그려요(서버 요청 없음).",
+    const tiles = field("지도 배경(OpenStreetMap)", el("input", { type: "checkbox", checked: !!view.geo?.tiles, title: "켜면 지금 보는 지도 범위가 OpenStreetMap 서버(tile.openstreetmap.org)로 전송돼요. 끄면 경계만 그리고 아무것도 보내지 않아요.",
       onchange: e => { view.geo = { ...view.geo, tiles: e.target.checked }; again(); } }));
-    const kinds = { geomap: [choice("format", "값", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), tiles, el("span", { className: "hint", textContent: view.geo?.tiles ? "지도 배경을 켜면 보는 범위가 tile.openstreetmap.org로 요청돼요." : "" })],
-                    donut_kpi: [choice("ring", "고리", [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리+목표 눈금"]])], stripes: [number("cells", "칸 수", 50, { min: 1, max: 100, step: 1 }), number("full", "가득 찬 값", 80)],
+    const kinds = { geomap: [choice("format", "형식", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), tiles, el("span", { className: "hint", textContent: view.geo?.tiles ? "보는 범위가 tile.openstreetmap.org로 전송돼요." : "" })],
+                    donut_kpi: [choice("ring", "고리", [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리와 목표 눈금"]])], stripes: [number("cells", "칸 수", 50, { min: 1, max: 100, step: 1 }), number("full", "가득 찬 값", 80)],
                     blocks: [number("size", "한 칸 크기", 80)], recent_rows: [number("rows", "행 수", 50, { min: 1, max: 100, step: 1 })] }[card.kind] ?? [];
     const plain = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap"].includes(card.kind);  // 목표·값 모양이 없는 종류
-    const settings = plain ? [...kinds] : [target, choice("format", "값", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), ...kinds];
-    const rules = ["table", "sentence"].includes(card.kind) ? [el("button", { className: "btype" + (card.openRules ? " on" : ""), textContent: "색 규칙", title: "조건에 맞는 칸만 색·화살표를 입힙니다", onclick: () => { card.openRules = !card.openRules; this.draw(); } })] : [];
+    const settings = plain ? [...kinds] : [target, choice("format", "형식", [["number", "숫자"], ["percent", "%"], ["currency", "₩"]]), ...kinds];
+    const rules = ["table", "sentence"].includes(card.kind) ? [el("button", { className: "btype" + (card.openRules ? " on" : ""), textContent: "색 규칙", title: "조건에 맞는 칸에 색과 화살표를 넣어요", onclick: () => { card.openRules = !card.openRules; this.draw(); } })] : [];
     const row = el("div", { className: "btools" }, this.dateSelect(card), ...settings, ...rules, el("button", { className: "btype" + (card.openColors ? " on" : ""), textContent: "색", onclick: () => { card.openColors = !card.openColors; this.draw(); } }));
     row.onclick = e => e.stopPropagation();
     return row;
@@ -392,14 +392,14 @@ class DashBoard extends Board {
         again();
       } }));
     const pointy = ["scatter", "bubble"].includes(card.view.type);
-    const size = pointy || card.data?.x_kind === "num" ? el("select", { className: "bunit", title: "버블의 [크기] 컬럼(숫자)", onchange: async e => {
+    const size = pointy || card.data?.x_kind === "num" ? el("select", { className: "bunit", title: "버블 크기로 쓸 숫자 컬럼", onchange: async e => {
       card.view.points = { size: e.target.value };
       try { await this.loadPoints(card); } catch (err) { return void (msg.textContent = err.message); }
       again();
     } }, el("option", { value: "", textContent: "크기 없음" }), ...(card.data?.num_cols ?? []).map(c => el("option", { value: c, textContent: c, selected: card.view.points?.size === c }))) : "";
-    const flags = pointy ? [["trend", "추세선"], ["show_r", "r"]].map(([k, name]) => el("button", { className: "btype" + (card.view[k] ? " on" : ""), textContent: name, title: k === "show_r" ? "상관계수 r 보이기" : "최소제곱 추세선 보이기",
+    const flags = pointy ? [["trend", "추세선"], ["show_r", "r"]].map(([k, name]) => el("button", { className: "btype" + (card.view[k] ? " on" : ""), textContent: name, title: k === "show_r" ? "상관계수 r 보이기" : "추세선 보이기",
       onclick: () => { card.view[k] = !card.view[k]; again(); } })) : [];
-    const unit = card.data?.by_unit ? el("select", { className: "bunit", title: "시간 단위. 일 값을 다시 묶어 그립니다", onchange: e => { card.view.unit = e.target.value; again(); } },
+    const unit = card.data?.by_unit ? el("select", { className: "bunit", title: "시간 단위. 일 값을 묶어서 다시 그려요", onchange: e => { card.view.unit = e.target.value; again(); } },
       ...Object.entries(SERVER.dash.units).map(([id, name]) => el("option", { value: id, textContent: name, selected: (card.view.unit || "day") === id }))) : "";
     const paint = el("button", { className: "btype" + (card.openColors ? " on" : ""), textContent: "색", onclick: () => { card.openColors = !card.openColors; this.draw(); } });
     const tools = SVG_KINDS.includes(card.kind) ? this.svgTools(card, msg, again) : el("div", { className: "btools" }, ...buttons, size, ...flags, unit, !card.data?.by_unit ? this.dateSelect(card) : "", paint);
@@ -409,8 +409,8 @@ class DashBoard extends Board {
     const applies = card.source?.date && !d.by_unit ? `기간 기준 날짜: ${card.source.date}` : noDate ? "기간·기준일은 날짜 X축 카드나 기간 기준 날짜 컬럼을 고른 카드에만 적용돼요" : "";
     const early = range?.start && first && range.start < first ? `저장된 일 값은 ${first}부터예요` : "";  // 보려는 기간이 저장된 값보다 앞서면
     const lostUnique = range && SVG_KINDS.includes(card.kind) && d.by_unit?.day?.series.some((s, i) => !merges(s.agg) && cardValue(card, i) == null) ? "이 집계(고유 개수·중앙값 …)는 기간을 바꾸면 연결해서 다시 구해야 해요" : "";
-    const stale = this.connKey && card.source?.key && !sameSource(card.source.key, this.connKey) ? "이전 값(다른 연결)" : "";  // 지금 연결이 아닌 곳에서 구한 값
-    const when = [stale, d.computed_at && "구한 시각 " + d.computed_at.replace("T", " "), d.note, early, applies, card.rangeNote, lostUnique].filter(Boolean).join(" · ");  // 값이 언제 것인지, 줄인 것
+    const stale = this.connKey && card.source?.key && !sameSource(card.source.key, this.connKey) ? "다른 연결에서 구한 이전 값이에요" : "";  // 지금 연결이 아닌 곳에서 구한 값
+    const when = [stale, d.computed_at && "값을 구한 시각 " + d.computed_at.replace("T", " "), d.note, early, applies, card.rangeNote, lostUnique].filter(Boolean).join("\n");  // 한 줄에 하나(.bwhen은 줄바꿈을 지킨다)  // 값이 언제 것인지, 줄인 것
     const said = this.compares.get(card), timed = !!d.by_unit?.day && card.kind !== "dual_trend", mergeable = timed && merges(d.by_unit.day.series[0]?.agg);  // 고유 개수 같은 집계는 기간 비교만 되므로 방식 선택은 묶을 수 있는 집계에만, 좋은 방향은 둘 다
     const pick = (value, options, set) => el("select", { className: "bunit", style: "flex-basis:auto", onchange: e => { set(e.target.value); this.changed?.(); this.recompare(); } },
       ...options.map(([v, name]) => el("option", { value: v, textContent: name, selected: v === value })));
@@ -433,17 +433,17 @@ class DashBoard extends Board {
       // 지도 카드: 정하지 않은 영역은 모두 바탕 색(값에 따라 진하기만 다름)
       const now = card.kind === "geomap" && !card.colors[group]?.[name] ? card.view.geo?.color ?? colors.palette?.[0] ?? colors.series[0] : pickColor(card, group, name, colors, i), err = el("span", { className: "err" }), swatch = el("i", { className: "swatch" });
       swatch.style.background = now;
-      const input = el("input", { value: now, title: "HEX 색(예: #11706f)" });
+      const input = el("input", { value: now, title: "색 코드. 예: #11706f" });
       input.onchange = () => {
         const v = input.value.trim();
-        if (!HEX.test(v)) { input.value = now; err.textContent = `'${v}'은 HEX 색이 아니에요(예: #11706f). 이전 색을 그대로 둬요.`; return; }
+        if (!HEX.test(v)) { input.value = now; err.textContent = `‘${v}’은 색 코드가 아니에요. #11706f처럼 적어 주세요.`; return; }
         card.colors[group][name] = v;
         this.changed?.();
         this.draw();
       };
       return el("div", { className: "brow" }, swatch, el("span", { textContent: name, className: "bname" }), input, err);
     });
-    const box = el("div", { className: "bcolors" }, ...rows, el("button", { className: "ghost", textContent: "지정 색 지우기", title: "이 카드의 지정 색을 지우고 팔레트·기본 색으로 돌아갑니다",
+    const box = el("div", { className: "bcolors" }, ...rows, el("button", { className: "ghost", textContent: "지정 색 지우기", title: "이 카드에서 따로 정한 색을 지우고 대시보드 색으로 돌아가요",
       onclick: () => { card.colors.series = {}; card.colors.parts = {}; this.changed?.(); this.draw(); } }));
     box.onclick = e => e.stopPropagation();
     return box;
@@ -452,6 +452,6 @@ class DashBoard extends Board {
 
 // 알림 줄(id)에 대시보드에 넣은 결과 글과 "대시보드에서 보기" 링크를 보인다(쿼리·전처리 화면). added: { id, name, cards }
 function showAdded(id, added) {
-  say(id, `대시보드 '${added.name}'에 넣었습니다(카드 ${added.cards}개). `, true);
+  say(id, `‘${added.name}’ 대시보드에 넣었어요. 지금 카드는 ${added.cards}개예요. `, true);
   $(id).append(el("a", { href: "/dashboard?open=" + encodeURIComponent(added.id), textContent: "대시보드에서 보기" }));
 }

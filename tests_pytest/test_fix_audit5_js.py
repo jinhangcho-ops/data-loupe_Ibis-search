@@ -124,7 +124,7 @@ def test_5e4_dash_restore_recomputes_when_source_differs(tmp_path):
 
 def test_5e4_dash_restore_notes_when_not_connected(tmp_path):
     got = run(tmp_path, DASH_BODY % ("false", _dash_funcs()), fake=False)
-    assert got["recomputed"] == [] and "설정과 달라요" in got["note"] and got["data"] == {}
+    assert got["recomputed"] == [] and "다시 구해야" in got["note"] and got["data"] == {}
 
 
 def test_5e5_shortcuts_commit_keeps_combo_quiet_and_reports_undo_failure(tmp_path):
