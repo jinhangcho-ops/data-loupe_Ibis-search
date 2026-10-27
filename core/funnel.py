@@ -61,13 +61,13 @@ def reached(base, steps, window_seconds, entry=None):
         first = starts.select("u", tp=starts.t).distinct()
     levels = [first.mutate(t1=first.tp)]
     try:
-        polars = ibis.get_backend(base).name == "polars"  # Polars(파일 연결)는 같지 않음(>=, <=) 조인을 못 한다
+        no_range_join = ibis.get_backend(base).name in ("polars", "druid")  # Polars(파일 연결)·Druid는 같지 않음(>=, <=) 조인을 못 한다
     except Exception:
-        polars = False
+        no_range_join = False
     for value in steps[1:]:
         prev = levels[-1]
         rows = base.filter(base.s == value).select("u", "t")
-        if window_seconds is not None and not polars:  # 시각 조건을 조인 안에 둔다: 사용자로만 잇고 거르면 행이 많은 한 사람 때문에 (시도 × 다음 단계 행)만큼 커진다
+        if window_seconds is not None and not no_range_join:  # 시각 조건을 조인 안에 둔다: 사용자로만 잇고 거르면 행이 많은 한 사람 때문에 (시도 × 다음 단계 행)만큼 커진다
             span = ibis.interval(milliseconds=round(window_seconds * 1000))
             joined = rows.join(prev, [rows.u == prev.u, rows.t >= prev.tp, rows.t <= prev.t1 + span]).select("u", "t", "tp", "t1")
         else:

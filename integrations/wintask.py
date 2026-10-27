@@ -132,11 +132,13 @@ def register(task, name, trigger, start):
 
 
 def delete(task, folder=FOLDER, known=False):
-    """작업을 지운다. 이미 없으면 그대로 둔다. known=True: 방금 조회해 있는 것을 아는 호출이라 다시 조회하지 않는다."""
-    if not known and not query(task, folder)["registered"]:
+    """작업을 지운다. 이미 없으면 그대로 둔다. known=True: 방금 조회해 있는 것을 아는 호출이라 다시 조회하지 않는다.
+    readable이 아닌 이름(예전 Café)은 조회로 있는지 알 수 없어 바로 지우고, 실패하면(이미 없음) 넘어간다."""
+    seen = readable(task)
+    if not known and seen and not query(task, folder)["registered"]:
         return
     code, out, err = execute(["schtasks", "/Delete", "/TN", full(task, folder), "/F"])
-    if code:
+    if code and (known or seen):
         raise failed("지우지", err, out)
 
 

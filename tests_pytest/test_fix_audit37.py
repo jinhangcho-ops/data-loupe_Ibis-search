@@ -16,3 +16,11 @@ def test_old_unreadable_task_is_replaced(monkeypatch):
     assert schedule.register("Café", item, []) == "Caf_"
     assert calls[0] == ["schtasks", "/Delete", "/TN", wintask.FOLDER + "Café"]  # 지우지 못해도(이미 없음) 새 이름으로 등록한다
     assert calls[1] == ["schtasks", "/Create", "/TN", wintask.FOLDER + "Caf_"]
+
+
+def test_delete_unreadable_skips_query(monkeypatch):
+    monkeypatch.setattr(wintask, "codepage", lambda: "cp949")
+    calls = []
+    monkeypatch.setattr(wintask, "execute", lambda args: calls.append(args[1]) or (0, "", ""))
+    wintask.delete("Café")  # 조회 출력에는 Cafe로 보여 늘 '없음'이 되므로 조회하지 않고 지운다
+    assert calls == ["/Delete"]
