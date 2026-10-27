@@ -526,6 +526,9 @@ def ltv(t, s, p, ctx):
         churn = mc.mean_defined([r["churn_rate"] for r in done_rows(found, t, s, "month", ctx)])
         x = with_time(t, s)
         per = x.select(u=x[s["user"]], m=mc.bucket_index(x[s["time"]], "month"), a=x[s["amount"]].fill_null(0))
+        if (open_month := mc.open_bucket(x, s["time"], "month")) is not None:  # 진행 중인 달은 며칠 치 매출에 활동자는 다 세져 ARPU를 낮춘다: 이탈률(done_rows)처럼 뺀다
+            done = per.filter(per.m != open_month)
+            per = done if int(one(done.aggregate(n=done.count()))["n"]) else per  # 다른 달이 없으면 그대로
         r = one(per.aggregate(rev=per.a.sum()))
         both = per.select("u", "m").distinct()
         user_months = int(one(both.aggregate(n=both.count()))["n"])

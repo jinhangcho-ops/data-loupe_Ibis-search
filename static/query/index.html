@@ -728,27 +728,27 @@ const query = offset => ({ ...state(), limit: $("limit").value, offset });
 // 결과 위의 큰 행 수와 조건 요약. d가 없으면 검색 전.
 function showBig(d, offset = 0) {
   if (!d) { $("big-count").textContent = "검색 전"; $("big-sub").textContent = "오른쪽에서 데이터와 조건을 고르고 [검색 실행]을 누르세요."; $("page-info").textContent = ""; return; }
-  const n = d.rows.rows.length, range = n ? `${(offset + 1).toLocaleString()}–${(offset + n).toLocaleString()}행` : "0행", limit = +$("limit").value;
+  const n = d.rows.rows.length, range = n ? `${(offset + 1).toLocaleString()}–${(offset + n).toLocaleString()}행` : "0행", limit = +(searched?.limit ?? $("limit").value);  // 쪽 번호는 실제로 요청한 행 수로
   $("big-count").textContent = d.count === null ? range : `${d.count.toLocaleString()}행`;
-  $("big-sub").textContent = [d.count === null ? "" : `중 ${range}`, ...conditionTexts(), d.held ? "PC에 받아 둔 결과" : d.server ? "DB의 결과 임시 테이블" : ""].filter(Boolean).join(" · ");
+  $("big-sub").textContent = [d.count === null ? "" : `중 ${range}`, ...(searchedTexts ?? conditionTexts()), d.held ? "PC에 받아 둔 결과" : d.server ? "DB의 결과 임시 테이블" : ""].filter(Boolean).join(" · ");
   $("big-sub").title = d.held ? "결과를 한 번 받아 이 PC에 두었습니다. 쪽 넘기기·머리글 정렬은 DB에 다시 묻지 않고, [검색 실행]을 누르면 새로 받습니다." : d.server ? d.note : "";
   $("err-search").textContent = d.server ? "" : d.note || "";  // 받아 두지 못한 경고만(결과 임시 테이블에서 읽는 것은 안내라 요약 줄에)
   $("page-info").textContent = d.count === null ? `${Math.floor(offset / limit) + 1}쪽` : `${Math.floor(offset / limit) + 1} / ${Math.max(1, Math.ceil(d.count / limit)).toLocaleString()}쪽`;
 }
 // offset행을 건너뛰고 검색한다. [검색 실행]과 머리글 정렬은 0에서, [이전]·[다음]은 행 수만큼 옮겨서 부른다.
 // fresh: DB에서 새로 받는다([검색 실행]). 주소로 접속한 DB는 결과를 이 PC에 받아 두므로 쪽 넘기기·머리글 정렬은 DB에 다시 묻지 않는다.
-let searched = null;  // 마지막으로 처음 쪽부터 검색한 요청: [이전]·[다음]은 이 조건으로 쪽만 옮긴다(패널을 고친 뒤 넘겨도 처리 용량 확인 없이 새 조회가 되지 않게)
+let searched = null, searchedTexts = null;  // searchedTexts: 그 검색의 조건 글(결과 위 요약은 패널이 아니라 이것을). 마지막으로 처음 쪽부터 검색한 요청: [이전]·[다음]은 이 조건으로 쪽만 옮긴다(패널을 고친 뒤 넘겨도 처리 용량 확인 없이 새 조회가 되지 않게)
 function runSearch(offset, fresh = false, page = false) {
   if (!S.base) { $("err-search").textContent = "기준 테이블을 고르세요."; return; }
   if (page && !searched) return;
   return busy($("search"), async () => {
     try {
-      const body = page ? { ...searched, offset } : { ...query(offset), count: $("count").checked, fresh };
+      const body = page ? { ...searched, offset } : { ...query(offset), count: $("count").checked, fresh }, texts = page ? searchedTexts : conditionTexts();
       const d = await timed("search", () => api("/api/query", body));
-      if (!page) searched = { ...body, fresh: false };
+      if (!page) { searched = { ...body, fresh: false }; searchedTexts = texts; }
       skip = offset;
       $("prev").disabled = !offset;
-      $("next").disabled = d.count === null ? d.rows.rows.length < $("limit").value : offset + d.rows.rows.length >= d.count;  // 행 수를 알면 마지막 쪽에서 끈다
+      $("next").disabled = d.count === null ? d.rows.rows.length < +body.limit : offset + d.rows.rows.length >= d.count;  // 행 수를 알면 마지막 쪽에서 끈다
       last = { rows: d.rows, summary: null, count: d.count };  // 이전 조건의 집계는 지운다.
       $("err-summary").textContent = "";
       showBig(d, offset);  // 받아 두지 못한 까닭(note)은 err-search에

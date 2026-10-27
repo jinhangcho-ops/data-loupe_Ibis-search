@@ -62,21 +62,22 @@ def test_ga4_notes_data_loss_and_sampling(monkeypatch):
 @pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
 def test_next_page_reuses_last_search_conditions(tmp_path):
     from test_fix_audit_js import between, run_node
-    code = between("index.html", "let searched = null;", "// 결과 표의 머리글을")
+    code = between("index.html", "let searched = null", "// 결과 표의 머리글을")
     stub = r"""
 const els = {}; const $ = id => (els[id] ??= { value: id === "limit" ? "2" : "", checked: false, disabled: false, textContent: "", onclick: null });
 const S = { base: "t" }; let panel = ["amt > 0"], skip = 0, last = null; const sent = [];
 const state = () => ({ base: "t", conditions: [...panel] }); const query = offset => ({ ...state(), limit: $("limit").value, offset });
 const busy = (b, f) => f(); const timed = (k, f) => f();
-const api = async (url, body) => { sent.push(body); return { rows: { rows: [1, 2] }, count: 10 }; };
-const showBig = () => {}; const renderTables = () => {};
+const api = async (url, body) => { sent.push(body); return { rows: { rows: [1, 2] }, count: null }; };
+const showBig = () => {}; const renderTables = () => {}; const conditionTexts = () => [...panel];
 """
     body = r"""
 (async () => {
   await $("search").onclick();
   panel = ["amt > 100"];        // 패널을 고친 뒤
+  $("limit").value = "5";       // 쪽당 행 수도 바꾸고
   await $("next").onclick();    // 쪽만 넘긴다
-  console.log(JSON.stringify(sent.map(b => [b.conditions, b.offset])));
+  console.log(JSON.stringify([...sent.map(b => [b.conditions, b.offset]), $("next").disabled]));
 })();
 """
-    assert run_node(tmp_path, body, parts=[stub, code]) == [[["amt > 0"], 0], [["amt > 0"], 2]]
+    assert run_node(tmp_path, body, parts=[stub, code]) == [[["amt > 0"], 0], [["amt > 0"], 2], False]  # 2행이 꽉 찬 쪽이라 [다음]이 켜져 있다

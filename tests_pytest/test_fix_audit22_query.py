@@ -35,7 +35,8 @@ eval(cut("const sortText", "const columnCount").replace(/^const /gm, "var "));
 eval(cut("const JOIN_HOWS", '$("join-add").onclick').replace(/^(const|let) /gm, "var "));
 eval(cut("function gridSpec", "// 검색과"));
 eval(cut("const query = offset", "// 결과 위의").replace(/^const /, "var "));
-eval(cut("function runSearch", '$("search").onclick'));
+const conditionTexts = () => [];
+eval(cut("let searched = null", '$("search").onclick').replace(/^let /, "var "));
 (async () => {
   // (6) 끝 낱말만 방향으로, 대소문자 무관, 방향이 없으면 작은 것부터
   assert.deepStrictEqual(["my col desc", "order date asc", "amt DESC", "my col"].map(sortText),

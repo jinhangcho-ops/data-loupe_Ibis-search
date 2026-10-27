@@ -1274,10 +1274,11 @@ function anaHow() {
 async function runAna(full) {
   if (!prof) return say("err-ana", "전처리 탭에서 테이블을 고르세요.");
   if (full && !A.result) return say("err-ana", "먼저 [구하기]로 표본에서 분석하세요.");
+  const call = ++anaRun;
   try {
     const how = full ? A.result.how : anaHow(), prepped = full ? A.result.prepped : $("a-prep").checked;
     const base = full ? A.result.base : S.base, r = full ? A.result.recipe : prepped ? recipe() : { schema: S.schema, base };  // 기다리는 동안 테이블이 바뀔 수 있어 시작 때 값을 잡아 둔다. 전체로는 마지막 분석의 테이블·전처리 그대로
-    const call = ++anaRun, used = full ? A.result.sample : sample;
+    const used = full ? A.result.sample : sample;
     const d = await timed("analyze", () => api("/api/analyze", { recipe: r, how, sample, full }));
     if (call !== anaRun) return;  // 기다리는 사이 연결을 바꿨다
     const views = d.kind === "distribution" ? (d.histogram ? ["hist", "box", "values"] : ["values"])
@@ -1286,7 +1287,7 @@ async function runAna(full) {
     A.view = views.includes(A.view) ? A.view : views[0];
     say("err-ana", "");
     drawAna();
-  } catch (e) { say("err-ana", e.message); }
+  } catch (e) { if (call === anaRun) say("err-ana", e.message); }  // 연결을 바꾼 뒤 옛 분석의 늦은 오류는 보이지 않는다
 }
 $("a-run").onclick = () => busy($("a-run"), () => runAna(false));
 $("a-full").onclick = () => busy($("a-full"), () => runAna(true));

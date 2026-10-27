@@ -1,5 +1,7 @@
 """수집 구성(config)의 기본값·고를 수 있는 값·숫자 범위와 검사(normalize). 수집 작업(API·파일·웹)과 수집 화면·예약이 같이 쓴다.
 입력·출력은 하지 않는다."""
+import datetime as dt
+import json
 import re
 
 from collect import collect_request as req
@@ -83,7 +85,18 @@ def normalize(config):
         raise ValueError("구성의 output.dedupe는 컬럼 이름 목록이어야 합니다.")
     check_web(found["web"])
     load_job.check(found["load"])
+    check_dates(found)
     return found
+
+
+def check_dates(config):
+    """{today:형식}·{now:형식}의 날짜 형식을 저장할 때 한 번 써 본다(이 PC에서 못 쓰는 %-d 같은 형식은 실행할 때 영어 오류로 실패한다)."""
+    for m in req.PLACE.finditer(json.dumps(config, ensure_ascii=False)):
+        if m[4]:
+            try:
+                dt.datetime(2000, 1, 1).strftime(m[4])
+            except ValueError:
+                raise ValueError(f"날짜 형식 '{m[4]}'을 쓸 수 없습니다. %Y·%m·%d·%H·%M·%S 같은 형식을 쓰세요(예: {{today:%Y%m%d}}).") from None
 
 
 def merged(default, given, where, unknown):

@@ -722,7 +722,7 @@ def finish_file(config, path, found, info):
     with open(raw, "rb") as f:
         head = f.read(4)
     kind = output_kind(config, info.get("url", ""), info.get("type"), head)
-    if kind != "parquet" and head[:2] in (codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE):  # UTF-16·32는 CP949로 바꾸면 깨진 글자로 '성공'한다(source.utf8_csv와 같은 규칙)
+    if kind != "parquet" and (head[:2] in (codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE) or head == codecs.BOM_UTF32_BE):  # UTF-16·32는 CP949로 바꾸면 깨진 글자로 '성공'한다(source.utf8_csv와 같은 규칙)
         raise Halt("받은 파일이 UTF-16/UTF-32로 저장돼 있어 읽을 수 없습니다. UTF-8 또는 CP949로 받을 수 있는 주소를 쓰세요.")
     encoding = config["file"]["encoding"]
     cp949 = kind != "parquet" and (encoding == "cp949" or (encoding == "auto" and not is_utf8(raw)))

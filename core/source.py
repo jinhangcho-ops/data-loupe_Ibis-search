@@ -254,7 +254,7 @@ def utf8_csv(path, con):
             return path  # 파일 끝의 마지막 글자만 잘렸다: 다른 프로그램이 UTF-8 CSV를 쓰는 중이다. CP949로 바꾸면 한글이 깨지므로 원본 그대로 두고, 파일이 다시 바뀌면(refresh_csv) 그때 다시 본다
     with open(path, "rb") as f:
         head = f.read(4)
-    if head[:2] in (b"\xff\xfe", b"\xfe\xff"):  # UTF-16·32는 CP949로 읽으면 깨진 글자가 나오므로 읽지 않는다
+    if head[:2] in (b"\xff\xfe", b"\xfe\xff") or head == b"\x00\x00\xfe\xff":  # UTF-16·32(BE는 00 00 FE FF)는 CP949로 읽으면 깨진 글자가 나오므로 읽지 않는다
         raise ValueError(f"{Path(path).name}: UTF-16/UTF-32로 저장된 CSV는 읽을 수 없어요. UTF-8 또는 CP949(한글 엑셀의 'CSV')로 다시 저장해 주세요.")
     if not hasattr(con, "scratch"):
         con.scratch = scratch.make()

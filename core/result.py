@@ -172,6 +172,8 @@ def write_excel(expr, path):
             bold = book.add_format({"bold": True})
             shapes = {pl.Date: book.add_format({"num_format": "yyyy-mm-dd"}), pl.Datetime: book.add_format({"num_format": "yyyy-mm-dd hh:mm:ss"}),
                       pl.Time: book.add_format({"num_format": "hh:mm:ss"})}  # 날짜·시각 타입의 칸 형식
+            if len(expr.columns) > 16_384:  # xlsxwriter는 넘는 컬럼을 말없이 빼고 쓴다
+                raise ValueError(f"Excel은 16,384개 컬럼까지 저장할 수 있습니다({len(expr.columns):,}개). CSV나 Parquet으로 저장하세요.")
             sheet.write_row(0, 0, expr.columns, bold)
             row = 1
             for batch in batches(expr):
