@@ -119,8 +119,6 @@ def shape(con, recipe, table=None, info=None, refs=None):
     results = [item[1] for item in layout]
     lowered, named = [new.lower() for new in results], {item[1] for item in layout if item[3] or item[0] != item[1]}  # named: 사용자가 지은 이름(파생·이름 바꾸기)
     for new in results:
-        if new in named and len(new.encode("utf-8")) > 63:
-            raise ValueError(f"결과 컬럼 이름 '{new}'이 너무 깁니다(영문 63자, 한글 21자까지). PostgreSQL 같은 DB는 넘는 이름을 잘라 다음에 찾지 못합니다.")
         if results.count(new) > 1 or lowered.count(new.lower()) > 1 and new in named:  # 지은 이름은 대소문자만 달라도 저장할 때 같은 컬럼(원래 테이블의 Name·name은 그대로 둔다)
             raise ValueError(f"결과에 '{new}' 컬럼이 둘 이상입니다. 이름을 바꾸세요.")
     t = t.select(*[t[old].name(new) for old, new, *_ in layout])
@@ -176,6 +174,8 @@ def nth_row(t, columns, order, last):
 
 def merged(t, columns, how, order, sep):
     """columns가 같은 행들을 한 줄로 합친다: 나머지 컬럼마다 대표 값 고르기(sql_funcs.pick)를 건다. 컬럼 순서는 그대로."""
+    for line in order:  # 없는 정렬 컬럼은 다른 컬럼 탓처럼 보이기 전에 알린다(공백 있는 이름도 parse_sort로)
+        parse.parse_sort(line, t)
     aggs = {}
     for name in [c for c in t.columns if c not in columns]:
         try:

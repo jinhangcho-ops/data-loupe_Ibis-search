@@ -170,6 +170,15 @@ def check_table_name(name, what="테이블"):
         raise ValueError(f"{what} 이름은 영문·숫자·밑줄·한글만 쓸 수 있습니다(공백·따옴표·점 없이).")
 
 
+def check_new_columns(con, columns):
+    """PostgreSQL에 새 테이블을 만들 때 63바이트를 넘는 컬럼 이름을 거부한다(PostgreSQL은 말없이 잘라 다음 단계에서 그 컬럼을 찾지 못한다). 다른 DB는 보지 않는다."""
+    if getattr(con, "name", "") != "postgres":
+        return
+    long = [c for c in columns if len(c.encode("utf-8")) > 63]
+    if long:
+        raise ValueError(f"PostgreSQL에는 63바이트(영문 63자, 한글 21자)를 넘는 컬럼 이름을 만들 수 없어요: {', '.join(long[:5])}. 이름을 줄여 주세요.")
+
+
 def check_new_length(name, tail=""):
     """새로 만들 테이블 이름(꼬리 tail을 붙인 이름까지)이 63바이트를 넘으면 거부한다: PostgreSQL은 넘는 이름을 말없이 잘라 다음에 찾지 못한다. 이미 있는 테이블에 넣을 때는 부르지 않는다."""
     room = 63 - len(tail)

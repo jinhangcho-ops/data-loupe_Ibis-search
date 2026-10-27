@@ -141,6 +141,7 @@ def look(con, schema, name):
 
 @source.on_worker
 def create(con, schema, name, arrow_schema):
+    parse.check_new_columns(con, arrow_schema.names)
     con.create_table(name, schema=ibis.Schema.from_pyarrow(arrow_schema), database=schema or None)
 
 

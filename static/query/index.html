@@ -563,7 +563,7 @@ function joinParts(line) {
   if (how === "asof") pairs.sort((a, b) => b[2] - a[2]);  // 서버처럼 >= 쌍이 어디 있든 시각 쌍(맨 앞)
   return { table, how, pairs };
 }
-const joinLine = j => `${j.table} ${j.how} ${j.pairs.filter(([l, r]) => l && r).map(([l, r, ge], k) => `${l}${(j.how === "asof" && !k) || ge ? ">=" : "="}${r}`).join(", ")}`;
+const joinLine = j => `${j.table} ${j.how} ${j.pairs.filter(([l, r]) => l && r).map(([l, r, ge], k) => `${l}${j.how === "asof" && (!k || ge) ? ">=" : "="}${r}`).join(", ")}`;
 const joinDone = j => j.table && j.pairs.some(([l, r]) => l && r);
 async function colsOf(table) {
   if (!table) return [];

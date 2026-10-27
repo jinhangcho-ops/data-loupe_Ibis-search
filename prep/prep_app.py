@@ -516,7 +516,9 @@ def make_table(recipe, name):
         db = get_con()
 
         def create():
-            db.create_table(name, prep_expr.build(db, recipe)[0], database=schema)
+            expr = prep_expr.build(db, recipe)[0]
+            parse.check_new_columns(db, expr.columns)
+            db.create_table(name, expr, database=schema)
             return result.get_count(source.get_table(db, name, schema))
 
         return run(create)
@@ -540,6 +542,7 @@ def insert_all(db, name, schema, expr):
     Ibis는 묶음을 DB의 임시 테이블(memtable)로 올린 뒤 INSERT … SELECT로 넣는데, 그 임시 테이블을 프로그램이 끝날 때까지 두고
     SQLite에서는 지우는 코드가 돌지 않는다. 묶음마다 바로 지운다(이름이 ibis_pyarrow_memtable_무작위라 사용자 테이블과 겹치지 않는다)."""
     import pyarrow as pa
+    parse.check_new_columns(db, expr.columns)
     db.create_table(name, schema=expr.schema(), database=schema)
     try:
         rows = 0

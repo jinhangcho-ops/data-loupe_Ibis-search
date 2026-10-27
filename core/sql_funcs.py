@@ -1109,8 +1109,8 @@ def raw_sql(expr, name, text):
         raise ValueError("SQL 식을 입력하세요.")
     if len(text) > MAX_RAW:
         raise ValueError(f"SQL 식은 {MAX_RAW}자까지입니다.")
-    if not isinstance(name, str) or not NAME.fullmatch(name) or len(name.encode("utf-8")) > 63:  # PostgreSQL은 63바이트를 넘는 이름을 말없이 자른다
-        raise ValueError("새 컬럼 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 합니다(영문 63자, 한글 21자까지).")
+    if not isinstance(name, str) or not NAME.fullmatch(name):
+        raise ValueError("새 컬럼 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 합니다(63자까지).")
     if name in expr.columns:
         raise ValueError(f"'{name}' 컬럼이 이미 있습니다. 다른 이름을 쓰세요.")
     local = backend.name == "polars"  # 파일 연결은 SQL을 못 받는다: DuckDB 방언으로 식만 검사하고 PC 사본(DuckDB)에서 붙인다

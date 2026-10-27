@@ -351,7 +351,7 @@ def test_asof_join_line_keeps_the_time_pair(tmp_path):
     from test_fix_audit_js import between, run_node
     part = between("index.html", "const JOIN_HOWS", "const joinDone")
     body = "console.log(JSON.stringify([joinLine(joinParts('prices asof pid=pid, ot>=pt')), joinLine(joinParts('prices asof ot>=pt, pid=pid')), joinLine(joinParts('t left a>=b, c=c'))]));"
-    assert run_node(tmp_path, body, parts=[part]) == ["prices asof ot>=pt, pid=pid", "prices asof ot>=pt, pid=pid", "t left a>=b, c=c"]  # asof가 아닌 >=는 서버가 알린다
+    assert run_node(tmp_path, body, parts=[part]) == ["prices asof ot>=pt, pid=pid", "prices asof ot>=pt, pid=pid", "t left a=b, c=c"]  # asof가 아니면 화면처럼 = (asof에서 left로 바꿔도 >=가 남지 않는다)
 
 
 def test_own_period_previous_matches_dashboard_rule():
@@ -373,13 +373,15 @@ def test_own_period_previous_matches_in_js(tmp_path):
                    {"start": "2026-02-07", "end": "2026-02-28", "text": "직전 22일"}]
 
 
-def test_long_korean_column_names_rejected_by_bytes():
+def test_long_column_names_rejected_only_when_creating_on_postgres():
+    import types
     from lazy import ibis
-    from core import prep_derive
-    t = ibis.memtable({"a": [1]})
-    with pytest.raises(ValueError, match="한글 21자까지"):
-        prep_derive.check_name("가" * 22, t, "계산 컬럼")
-    prep_derive.check_name("가" * 21, t, "계산 컬럼")
+    from core import parse, prep_derive
+    prep_derive.check_name("가" * 22, ibis.memtable({"a": [1]}), "계산 컬럼")  # 예전 레시피·검색은 그대로 열린다(DuckDB·파일 연결)
+    parse.check_new_columns(types.SimpleNamespace(name="duckdb"), ["가" * 22])
+    with pytest.raises(ValueError, match="63바이트"):
+        parse.check_new_columns(types.SimpleNamespace(name="postgres"), ["a", "가" * 22])
+    parse.check_new_columns(types.SimpleNamespace(name="postgres"), ["가" * 21])
 
 
 def test_chart_csv_guards_tab_and_cr_like_the_server():

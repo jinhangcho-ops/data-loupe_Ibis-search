@@ -229,8 +229,8 @@ class Formula:
 
 
 def check_name(name, t, what):
-    if not isinstance(name, str) or not NAME.fullmatch(name) or len(name.encode("utf-8")) > 63:  # PostgreSQL은 63바이트를 넘는 이름을 말없이 자른다
-        raise ValueError(f"{what} 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 합니다(영문 63자, 한글 21자까지).")
+    if not isinstance(name, str) or not NAME.fullmatch(name):
+        raise ValueError(f"{what} 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 합니다(63자까지).")
     if name.lower() in {c.lower() for c in t.columns}:  # 대소문자만 달라도 같은 컬럼(DuckDB·SQLite·SQL Server)
         raise ValueError(f"'{name}' 컬럼이 이미 있어 {what}을 만들 수 없습니다.")
 
