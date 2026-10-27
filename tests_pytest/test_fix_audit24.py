@@ -28,10 +28,9 @@ def test_plain_skips_only_that_place():
 
 
 def test_quoted_db_only_and_schema_db_table_allowed():
-    """막는 것은 따옴표로 감싼 파일 이름("x.db")뿐: 스키마 아래 이름이 db인 테이블은 정상."""
-    for dialect in ("postgres", "duckdb"):
-        sql_exec.check("SELECT * FROM sales.db", dialect)
-        sql_exec.check("SELECT * FROM analytics.ddb", dialect)
+    """다른 DB에서 스키마 아래 이름이 db인 테이블은 정상(DuckDB는 x.db를 파일로 열어 막는다, test_fix_review26)."""
+    sql_exec.check("SELECT * FROM sales.db", "postgres")
+    sql_exec.check("SELECT * FROM analytics.ddb", "postgres")
 
 
 def test_file_mode_query_secret_marked_plain_passes():

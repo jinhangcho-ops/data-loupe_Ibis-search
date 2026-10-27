@@ -1198,16 +1198,18 @@ function addStep() {
 $("a-fadd").onclick = addStep;
 $("a-fvalue").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.isComposing && !(menuFor === e.target && menuAt)) addStep(); };  // 한글 조합을 확정하는 Enter와, 목록이 가리킨 항목을 고르는 Enter(common.js)는 단계로 넣지 않는다
 // 단계 컬럼을 고르면 그 컬럼의 값(많이 나온 순, 20개까지)을 목록으로 받는다. 단계 컬럼이 바뀌면 고른 단계는 비운다.
+let anaCall = 0, stepCall = 0;  // 늦게 온 옛 응답이 새 선택을 덮지 않게
 async function loadStepValues() {
-  const column = $("a-fstep").value;
+  const column = $("a-fstep").value, mine = ++stepCall;
   FLOW.values = [];
   $("a-fvalues").replaceChildren();
   if (!column || !prof) return;
   try {
     const d = await api("/api/analyze", { recipe: anaRecipe(), how: { kind: "distribution", column }, sample });
+    if (mine !== stepCall) return;
     FLOW.values = d.values.labels;
     $("a-fvalues").replaceChildren(...FLOW.values.map(v => el("option", { value: v })));
-  } catch (e) { say("err-ana", e.message); }
+  } catch (e) { if (mine === stepCall) say("err-ana", e.message); }
 }
 $("a-fstep").onchange = () => { FLOW.steps = []; showSteps(); loadStepValues(); };
 const akind = () => document.querySelector("input[name=akind]:checked").value;
@@ -1223,12 +1225,15 @@ $("a-cmode").onchange = showAnaForm;
 $("a-prep").onchange = loadAnaColumns;
 // 분석할 표의 컬럼(전처리 결과의 이름·타입)을 표본으로 받아 고르는 칸들을 채운다.
 async function loadAnaColumns() {
-  A.cols = [];
-  if (!prof) say("err-ana", "전처리 탭에서 테이블을 고르세요.");
-  else {
-    try { A.cols = (await api("/api/analyze", { recipe: anaRecipe(), how: { kind: "columns" }, sample })).columns; say("err-ana", ""); }
-    catch (e) { say("err-ana", e.message); }
+  const mine = ++anaCall;
+  let cols = [], err = "전처리 탭에서 테이블을 고르세요.";
+  if (prof) {
+    try { cols = (await api("/api/analyze", { recipe: anaRecipe(), how: { kind: "columns" }, sample })).columns; err = ""; }
+    catch (e) { err = e.message; }
   }
+  if (mine !== anaCall) return;
+  A.cols = cols;
+  say("err-ana", err);
   const names = k => A.cols.filter(c => !k || c[1] === k).map(c => c[0]), nums = names("num");
   const keep = (id, list, blank) => { const now = $(id).value; fill($(id), list, blank); if (list.includes(now)) $(id).value = now; };
   keep("a-col", names());

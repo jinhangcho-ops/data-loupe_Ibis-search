@@ -448,6 +448,8 @@ def tick(due):
         if name not in due or due[name][0] != item:
             due[name] = (item, next_time(item, now))
         elif now >= due[name][1]:
+            if item["every"] != "interval" and collect_job.running():
+                continue  # 매일·매주는 다른 수집이 끝나길 기다린다(건너뛰면 같은 시각의 예약이 날마다 또 겹친다)
             due[name] = (item, next_time(item, now))
             execute(name, "inapp")
     planned.clear()

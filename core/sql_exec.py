@@ -30,7 +30,7 @@ FILE_FUNCS = {"glob", "sniff_csv", "st_read", "query", "query_table", "postgres_
 FILE_PREFIXES = ("read_", "parquet_", "iceberg_", "delta_", "dblink", "xp_", "lo_")  # 이름이 이렇게 시작하는 함수(lo_*: Postgres 큰 객체 읽기·쓰기·지우기)
 FILE_SUFFIXES = ("_scan", "_attach")  # 이름이 이렇게 끝나는 함수(delta_scan, iceberg_scan, excel_scan …, sqlite_attach는 연결한 DB에 뷰를 만든다). DuckDB의 postgres_query 같은 원격 조회는 FILE_FUNCS에 이름으로(json_query처럼 정상인 *_query 함수는 막지 않는다)
 ENV_FUNCS = {"getenv", "current_setting", "current_settings", "duckdb_settings", "duckdb_secrets", "which_secret",
-             "setval", "nextval", "set_config", "pg_terminate_backend", "pg_cancel_backend", "sleep", "pg_sleep",  # 환경·설정·비밀을 읽거나 서버 상태를 바꾸는 함수
+             "setval", "nextval", "set_config", "pg_terminate_backend", "pg_cancel_backend", "sleep", "sleep_ms", "pg_sleep",  # 환경·설정·비밀을 읽거나 서버 상태를 바꾸는 함수
              "get_lock", "pg_reload_conf", "pg_switch_wal", "pg_rotate_logfile", "pg_promote", "benchmark",  # 잠금을 잡거나 서버 설정·로그·부하를 바꾸는 함수
              "enable_logging", "disable_logging", "enable_profiling", "disable_profiling", "write_log", "truncate_duckdb_logs",  # DuckDB 로그·프로파일: 아무 파일에나 쓰고 연결을 망가뜨린다
              "checkpoint", "force_checkpoint"}
@@ -110,12 +110,12 @@ def check(sql, dialect=None):
     bad = next((node for node in tree.walk() if isinstance(node, forbidden)), None)
     if bad is not None:
         raise SecurityViolationError(f"데이터나 설정을 바꾸는 부분({type(bad).__name__.upper()})이 있어 실행하지 않습니다.")
-    if problem := file_read_problem(tree, sql):
+    if problem := file_read_problem(tree, sql, dialect):
         raise SecurityViolationError(problem)
     return tree
 
 
-def file_read_problem(tree, sql):
+def file_read_problem(tree, sql, dialect=None):
     """식 어디에든(하위 쿼리·CTE·조인·값 자리) 파일을 읽거나 환경·설정을 읽는 부분이 있으면 그 오류 글, 없으면 None.
     함수는 sqlglot 전용 클래스(ReadCSV 등)와 Anonymous 이름 둘 다 보고(스키마·대소문자·따옴표 무관), 글자로 쓴 테이블(FROM '경로')도 본다."""
     exp = glot()[1]
@@ -139,7 +139,7 @@ def file_read_problem(tree, sql):
             full = ".".join(p.name for p in node.parts)  # 카탈로그.스키마.테이블 전체(t.csv는 스키마 t, 테이블 csv로 나뉜다)
             if re.search(r"[/\\]", full) or FILE_TABLE.search(full):  # 따옴표 종류와 관계없이 경로 모양이거나 파일 확장자로 끝나는 이름
                 return READ_MESSAGE
-            if ident.quoted and re.search(r"\.d?db$", ident.name, re.I):  # 따옴표로 감싼 "x.db"·"x.ddb"는 DuckDB가 DuckDB 파일로 읽는다(따옴표 없는 스키마.db 테이블은 정상)
+            if (ident.quoted or dialect in (None, "duckdb")) and re.search(r"\.d?db$", full, re.I):  # DuckDB는 x.db·"x.db"를 DuckDB 파일로 연다(스키마 x가 없으면). 다른 DB의 스키마.db 테이블은 정상
                 return READ_MESSAGE
     return None
 

@@ -385,11 +385,10 @@ def literal_places(config):
     always = lambda where, name: name == "password" and where == "url" or name.lower() in SECRET_HEADERS
     found = [(s["where"], s["name"], ("주소의 비밀번호" if s["name"] == "password" else f"주소의 {s['name']}") if s["where"] == "url"
               else f"{label[s['where']]} {s['path'] or s['name']}") for s in secrets(request)]
-    found += [("url", n, f"파일 주소의 {'비밀번호' if n == 'password' else n}") for _, n in url_secrets(file.get("url", ""))]
+    found += [("url" if n == "password" else "query", n, f"파일 주소의 {'비밀번호' if n == 'password' else n}") for _, n in url_secrets(file.get("url", ""))]  # 파일 모드는 [읽기]가 쿼리로 본 자리를 주소에 합친다
     found += [("url", n, f"웹페이지 주소의 {'비밀번호' if n == 'password' else n}") for _, n in url_secrets(web.get("url", ""))]
     found += [("header", k, f"파일 헤더 {k}") for k, v in file.get("headers", []) if secret_header(k, v)]
-    keys = lambda where, name: {name.lower(), f"{where}:{name}".lower(), *([f"query:{name}".lower()] if where == "url" else [])}  # 파일 모드는 [읽기]가 쿼리로 본 자리를 주소에 합친다
-    return [text for where, name, text in found if always(where, name) or not keys(where, name) & plain]
+    return [text for where, name, text in found if always(where, name) or not {name.lower(), f"{where}:{name}".lower()} & plain]
 
 
 def env_names(config):

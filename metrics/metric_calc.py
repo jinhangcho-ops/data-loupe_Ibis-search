@@ -201,8 +201,13 @@ def monthly_peak(times, counts):
     times = np.asarray(times, dtype="datetime64[us]")
     if len(times) == 0:
         return {}
+    counts = np.asarray(counts)
     months = np.arange(times[0].astype("datetime64[M]"), times[-1].astype("datetime64[M]") + MONTH)
-    return {str(m): concurrency_stats(times, counts, m.astype("datetime64[us]"), (m + MONTH).astype("datetime64[us]"))["pcu"] for m in months}
+    starts = months.astype("datetime64[us]")
+    ends = (months + MONTH).astype("datetime64[us]")
+    lo = np.maximum(np.searchsorted(times, starts, side="right") - 1, 0)  # 달 시작에 이미 적용된 마지막 변화부터
+    hi = np.searchsorted(times, ends, side="left")  # 달 끝 전의 변화까지(달마다 전체 배열을 다시 훑지 않는다)
+    return {str(m): concurrency_stats(times[a:b], counts[a:b], s, e)["pcu"] for m, s, e, a, b in zip(months, starts, ends, lo, hi)}
 
 
 # ---------- 사건 사이 시간 ----------

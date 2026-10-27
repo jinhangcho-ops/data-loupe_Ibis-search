@@ -177,7 +177,7 @@ def pv_per_uv(t, s, p, ctx):
     """PV/UV: 사용자 1명당 조회 수. 분포는 사용자별 조회 수."""
     t = with_user(t, s)
     mask = event_mask(t, s)
-    per = t.group_by(s["user"]).aggregate(n=t.count() if mask is None else mask.cast("int64").sum())  # 조회가 0번인 사용자도 분포에 든다
+    per = t.group_by(s["user"]).aggregate(n=t.count() if mask is None else mask.cast("int64").fill_null(0).sum())  # 조회가 0번인 사용자도 분포에 든다
     r = one(per.aggregate(views=per.n.sum(), users=per.count()))
     views, users = int(r["views"] or 0), int(r["users"])
     return result(mc.ratio(views, users), parts={"pv": views, "uv": users}, dist=column_array(per, "n", ctx), label="사용자 1명당 조회 수")
@@ -367,7 +367,7 @@ def flattening(t, s, p, ctx):
     point = mc.flattening_point(curve, eps=s["eps"] / 100, run=s["run"])
     if point is None:
         ctx.notes.append("관찰한 기간 안에서는 유지율이 수평이 되는 곳을 찾지 못했어요. N을 늘리거나 허용 오차를 키워 보세요.")
-    return result(point, [{"n": i, "retention": v} for i, v in enumerate(curve)], {"n": "경과 기간 N", "retention": "평균 유지율"}, {"cohort_size": sum(c["size"] for c in m["cohorts"])}, label="유지율이 수평이 되기 시작하는 N")
+    return result(point, top_rows([{"n": i, "retention": v} for i, v in enumerate(curve)], ctx, "N"), {"n": "경과 기간 N", "retention": "평균 유지율"}, {"cohort_size": sum(c["size"] for c in m["cohorts"])}, label="유지율이 수평이 되기 시작하는 N")
 
 
 @kernel("states")
@@ -402,7 +402,7 @@ def power_curve(t, s, p, ctx):
     total = sum(found.values())
     rows = [{"days": d, "users": found.get(d, 0), "share": mc.ratio(found.get(d, 0), total)} for d in range(1, window + 1)]
     mean = mc.ratio(sum(d * c for d, c in found.items()), total)
-    return result(mean, rows, {"days": f"최근 {window}일 중 접속 일수", "users": "사용자 수", "share": "비중"}, {"active_users": total}, label=f"최근 {window}일 사용자 1명당 평균 접속 일수")
+    return result(mean, top_rows(rows, ctx, "접속 일수 칸"), {"days": f"최근 {window}일 중 접속 일수", "users": "사용자 수", "share": "비중"}, {"active_users": total}, label=f"최근 {window}일 사용자 1명당 평균 접속 일수")
 
 
 @kernel("survival")
@@ -647,9 +647,8 @@ def kfactor(t, s, p, ctx):
 def organic_uplift(t, s, p, ctx):
     """Organic Uplift: 오가닉 신규 ÷ 유료 신규(사용자의 처음 행의 유입 경로 기준)."""
     x = with_user(t, s)
-    first = x.group_by(s["user"]).aggregate(src=x[s["source"]].argmin(x[s["time"]]))
-    is_paid = first.src == funnel.step_value(x[s["source"]].type(), s["paid_value"])
-    r = one(first.aggregate(paid=is_paid.cast("int64").sum(), total=first.count()))
+    first = paid_first(x, s)
+    r = one(first.aggregate(paid=first.paid.cast("int64").sum(), total=first.count()))
     paid_n, total = int(r["paid"] or 0), int(r["total"])
     organic = total - paid_n
     return result(mc.ratio(organic, paid_n), parts={"paid_installs": paid_n, "organic_installs": organic}, label="유료로 온 신규 1명당 오가닉으로 온 신규 수")
@@ -695,12 +694,19 @@ def spend_groups(ad, s, align, days=None):
     return {tuple(r[f"k{i}"] for i in range(len(cols))): num(r["v"]) or 0.0 for r in mc.fetch_rows(x.group_by([f"k{i}" for i in range(len(cols))]).aggregate(v=x.v.sum()), "광고비 키 수")}
 
 
+def paid_first(x, s):
+    """사용자마다 paid: 가장 이른 시각에 유료 행이 있는지(같은 시각에 유료·오가닉이 함께 있어도 행 순서와 관계없이 유료)."""
+    time, src = x[s["time"]], x[s["source"]]
+    first = x.group_by(s["user"]).aggregate(t0=time.min(), tp=time.min(where=src == funnel.step_value(src.type(), s["paid_value"])))
+    return first.mutate(paid=(first.tp == first.t0).fill_null(False))
+
+
 def cohort_frame(t, s, align, with_amount=False):
     """사용자 쪽 작업 표: 행마다 (u, day, 맞춤 키 컬럼들, amt). 유료 사용자만 보려면 첫 행의 유입 컬럼 == 유료 값인 사용자만 남긴다(paid_only, organic_uplift와 같은 기준)."""
     x = t
     if s.get("paid_only"):  # 행부터 거르면 오가닉으로 먼저 온 사용자가 나중 유료 행의 날에 신규로 세진다
-        first = x.group_by(s["user"]).aggregate(src=x[s["source"]].argmin(x[s["time"]]))
-        x = x.semi_join(first.filter(first.src == funnel.step_value(x[s["source"]].type(), s["paid_value"])), s["user"])
+        first = paid_first(x, s)
+        x = x.semi_join(first.filter(first.paid), s["user"])
     cols = {"u": x[s["user"]], "day": mc.day_index(x[s["time"]])}
     if align["kind"] == "period":
         cols["p"] = mc.bucket_index(x[s["time"]], align["unit"])

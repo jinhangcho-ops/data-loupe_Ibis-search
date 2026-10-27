@@ -359,9 +359,8 @@ def page_cap(config, record):
 
 def link_next(reply):
     """Link 헤더의 rel=next 주소."""
-    for part in (reply.header("Link") or "").split(","):
-        m = re.match(r'\s*<([^>]*)>\s*;(.*)', part)
-        if m and re.search(r'rel\s*=\s*"?([^";]*\s)?next(\s[^";]*)?"?', m[2]):
+    for m in re.finditer(r'<([^>]*)>([^<]*)', reply.header("Link") or ""):  # 주소 안의 쉼표(?fields=a,b)로 자르지 않는다
+        if re.search(r'rel\s*=\s*"?([^";]*\s)?next(\s[^";]*)?"?', m[2]):
             return m[1]
     return None
 
