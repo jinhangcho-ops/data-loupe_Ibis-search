@@ -524,7 +524,7 @@ def ltv(t, s, p, ctx):
     if s["method"] == "ARPU÷이탈률":
         found = mc.user_states(t, s["user"], s["time"], "month", notes=ctx.notes)
         churn = mc.mean_defined([r["churn_rate"] for r in done_rows(found, t, s, "month", ctx)])
-        x = with_user(t, s)
+        x = with_time(t, s)
         per = x.select(u=x[s["user"]], m=mc.bucket_index(x[s["time"]], "month"), a=x[s["amount"]].fill_null(0))
         r = one(per.aggregate(rev=per.a.sum()))
         both = per.select("u", "m").distinct()
@@ -696,10 +696,11 @@ def spend_groups(ad, s, align, days=None):
 
 
 def cohort_frame(t, s, align, with_amount=False):
-    """사용자 쪽 작업 표: 행마다 (u, day, 맞춤 키 컬럼들, amt). 유료 사용자만 보려면 유입 컬럼 == 유료 값인 행만 남긴다(paid_only)."""
+    """사용자 쪽 작업 표: 행마다 (u, day, 맞춤 키 컬럼들, amt). 유료 사용자만 보려면 첫 행의 유입 컬럼 == 유료 값인 사용자만 남긴다(paid_only, organic_uplift와 같은 기준)."""
     x = t
-    if s.get("paid_only"):
-        x = x.filter(x[s["source"]] == funnel.step_value(x[s["source"]].type(), s["paid_value"]))
+    if s.get("paid_only"):  # 행부터 거르면 오가닉으로 먼저 온 사용자가 나중 유료 행의 날에 신규로 세진다
+        first = x.group_by(s["user"]).aggregate(src=x[s["source"]].argmin(x[s["time"]]))
+        x = x.semi_join(first.filter(first.src == funnel.step_value(x[s["source"]].type(), s["paid_value"])), s["user"])
     cols = {"u": x[s["user"]], "day": mc.day_index(x[s["time"]])}
     if align["kind"] == "period":
         cols["p"] = mc.bucket_index(x[s["time"]], align["unit"])
@@ -901,6 +902,7 @@ def gini(t, s, p, ctx):
         if not s.get("time"):
             raise ValueError("‘사용자별 마지막 값’에는 시각 컬럼이 필요해요.")
         x = with_user(t, s)
+        x = x.filter(x[col].notnull())  # 마지막 행의 값이 비면 마지막으로 알려진 값(money_supply와 같은 기준)
         values = column_array(x.group_by(s["user"]).aggregate(v=x[col].argmax(x[s["time"]])), "v", ctx)
     else:
         x = with_user(t, s)
@@ -998,6 +1000,8 @@ def aov(t, s, p, ctx):
 def purchase_frequency(t, s, p, ctx):
     """구매 빈도: 구매자 1명당 주문 수."""
     x = with_user(t, s)
+    if s.get("orders"):
+        x = x.filter(x[s["orders"]].notnull())  # 주문이 빈 행만 있는 사용자는 구매자로 세지 않는다(aov와 같은 기준)
     per = x.group_by(s["user"]).aggregate(n=x[s["orders"]].nunique() if s.get("orders") else x.count())
     r = one(per.aggregate(orders=per.n.sum(), buyers=per.count()))
     orders, buyers = int(r["orders"] or 0), int(r["buyers"])

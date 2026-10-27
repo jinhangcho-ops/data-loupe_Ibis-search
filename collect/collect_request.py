@@ -388,7 +388,8 @@ def literal_places(config):
     found += [("url", n, f"파일 주소의 {'비밀번호' if n == 'password' else n}") for _, n in url_secrets(file.get("url", ""))]
     found += [("url", n, f"웹페이지 주소의 {'비밀번호' if n == 'password' else n}") for _, n in url_secrets(web.get("url", ""))]
     found += [("header", k, f"파일 헤더 {k}") for k, v in file.get("headers", []) if secret_header(k, v)]
-    return [text for where, name, text in found if always(where, name) or not {name.lower(), f"{where}:{name}".lower()} & plain]
+    keys = lambda where, name: {name.lower(), f"{where}:{name}".lower(), *([f"query:{name}".lower()] if where == "url" else [])}  # 파일 모드는 [읽기]가 쿼리로 본 자리를 주소에 합친다
+    return [text for where, name, text in found if always(where, name) or not keys(where, name) & plain]
 
 
 def env_names(config):
