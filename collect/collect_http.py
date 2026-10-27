@@ -147,6 +147,7 @@ class Balancer:
         self.busy, self.last, self.until, self.failures, self.sent = 0, 0.0, 0.0, 0, 0
         self.first, self.streak, self.lost = (concurrency, interval), 0, 0  # 처음 동시 수·간격, 잇따라 받은 수, 끝내 실패한 요청 수
         self.slow_on = (429,)  # 동시 수를 줄이는 응답 상태(파일 모드는 503도)
+        self.quit = threading.Event()  # 같은 작업의 다른 줄기가 실패했다: 남은 차례는 자리를 잡거나 한도에 세기 전에 끝낸다(사용자 멈춤 stop과 따로)
         self.cond = threading.Condition()
 
     def sleep(self, seconds):
@@ -157,7 +158,7 @@ class Balancer:
     def enter(self):
         with self.cond:
             while True:
-                if self.stop.is_set():
+                if self.stop.is_set() or self.quit.is_set():
                     raise Halt(STOPPED, failed=False)
                 now = time.monotonic()
                 wait = max(self.until - now, self.last + self.interval - now)

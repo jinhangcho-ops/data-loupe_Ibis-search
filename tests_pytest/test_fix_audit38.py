@@ -144,7 +144,15 @@ def test_failed_piece_stops_waiting_pieces(tmp_path, monkeypatch, folder):
             return Body(404, {}, b"gone"), url
         return Body(206, {"Content-Range": f"bytes {start}-{end}/80", "ETag": '"e1"'}, b"y" * (end - start + 1)), url
     monkeypatch.setattr(collect_http, "open_url", open_url)
+    takes, made = [], collect_job.balancer_for
+
+    def counted(*a):  # 사용 한도에 세는 곳(take)도 실제로 보낸 요청만 센다
+        balancer = made(*a)
+        balancer.take = lambda: takes.append(1)
+        return balancer
+    monkeypatch.setattr(collect_job, "balancer_for", counted)
     with pytest.raises(Exception) as caught:
         collect_job.run_file(config, {}, path, found, record, threading.Event())
     assert sent.count(0) == 2 and sent[-1] == 0  # 실패한 조각(0-9) 뒤로는 요청이 없다(조각이 시작하는 차례는 그때그때 다르다)
     assert getattr(caught.value, "failed", True)  # 멈춤이 아니라 실패로 끝난다
+    assert len(takes) == len(sent)  # 확인 요청을 포함해 보낸 요청 수만큼만 한도에 셌다

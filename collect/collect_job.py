@@ -635,13 +635,11 @@ def run_file(config, env, path, found, record, halt):
         update(total_bytes=size, bytes=record["bytes"])
         piece = max(1, math.ceil(size / spec["chunks"]))
         todo = [[s + piece * k, min(e, s + piece * (k + 1))] for s, e in gaps(record["done"], size) for k in range(math.ceil((e - s) / piece))]
-        errors, quit = [], threading.Event()
+        errors, quit = [], balancer.quit  # 한 조각이 실패하면 차례를 기다리던 조각·다시 시도는 보내지 않는다(받는 중인 조각은 끝까지 받는다)
         validator = if_range(info["etag"], info["modified"])
 
         def chunk(start, end):
             def attempt():
-                if quit.is_set():  # 다른 조각이 실패했으면 차례를 기다리던 조각·다시 시도는 보내지 않는다(받는 중인 조각은 이미 이 확인을 지났다)
-                    raise Halt(collect_http.STOPPED, failed=False)
                 with guard:
                     left = gaps([r for r in record["done"]], size)
                 position = next((max(s, start) for s, e in left if e > start and s < end), end)
