@@ -23,6 +23,7 @@ SLACK_ID = re.compile(r"[A-Z0-9]{2,20}")
 MAX_IDS = 50
 BOT = {"bot": None}  # 켜 둔 봇(slack_bot.SlackBot)
 lock = threading.Lock()
+switch = threading.RLock()  # 켜기·끄기를 하나씩: 붙는 동안 온 [멈춤]·[저장]은 켜기가 끝난 뒤 그 봇을 끈다
 FREE.update({"/api/bot", "/api/bot/check", "/api/bot/start", "/api/bot/stop"})
 
 
@@ -74,10 +75,11 @@ def tokens():
 
 def stop():
     """켜 둔 봇을 끈다(없으면 아무 일도 하지 않는다). 프로그램을 닫을 때도 부른다."""
-    with lock:
-        bot, BOT["bot"] = BOT["bot"], None
-    if bot:
-        bot.stop()
+    with switch:
+        with lock:
+            bot, BOT["bot"] = BOT["bot"], None
+        if bot:
+            bot.stop()
 
 
 @app.get("/api/bot")
@@ -120,15 +122,16 @@ def start_bot():
     c, found = tokens()
     if not c.get("users"):
         raise ValueError("허용할 사용자 ID를 하나 이상 넣고 저장하세요. 그 사람들의 명령만 받습니다.")
-    stop()
-    bot = slack_bot.SlackBot(found["bot_token"], found["app_token"], c["users"], c.get("channels", []), commands.answer)
-    try:
-        bot.start()
-    except ValueError as e:
-        bot.stop()
-        raise ValueError(source.mask(str(e), list(found.values()))) from None
-    with lock:
-        BOT["bot"] = bot
+    with switch:
+        stop()
+        bot = slack_bot.SlackBot(found["bot_token"], found["app_token"], c["users"], c.get("channels", []), commands.answer)
+        try:
+            bot.start()
+        except ValueError as e:
+            bot.stop()
+            raise ValueError(source.mask(str(e), list(found.values()))) from None
+        with lock:
+            BOT["bot"] = bot
     return view()
 
 

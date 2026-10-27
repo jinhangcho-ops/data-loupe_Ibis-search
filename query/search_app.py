@@ -500,7 +500,8 @@ def save_sql():
     """이름을 붙여 SQL을 저장한다(연결 정보 없음). sql이 null이면 지운다. 저장할 때 검사한다."""
     name, sql = request.json.get("name"), request.json.get("sql")
     if sql is not None:
-        sql_exec.check(sql)
+        con = server.state["con"]
+        sql_exec.check(sql, None if con is None else sql_exec.dialect_of(con))  # 연결의 방언으로(연결이 없으면 DuckDB처럼 엄하게). 실행할 때 다시 검사한다
     found = settings.save_named("sqls.json", "SQL 문", sql_exec.MAX_SQL_SIZE + 100, name, None if sql is None else {"sql": sql})
     if sql is None:
         use_counts.forget("sqls", name.strip())

@@ -19,9 +19,11 @@ def clients(bot_token, app_token):
 def reply(response_url, text):
     """명령에 답한다(요청한 사람에게만 보임). response_url은 Slack이 명령마다 주는 답장 주소."""
     from slack_sdk.webhook import WebhookClient
-    from integrations.adapters import transport
+    from integrations.adapters import slack_out, transport
     transport.log("POST", response_url)  # 답에 데이터 행이 실릴 수 있어 보낸 요청 기록에 남긴다(slack_sdk는 transport를 거치지 않는다)
-    WebhookClient(response_url).send(text=text, response_type="ephemeral")
+    resp = WebhookClient(response_url).send(text=transport.cut(text, slack_out.TEXT_LIMIT), response_type="ephemeral")
+    if resp.status_code != 200:  # WebhookClient는 4xx·5xx에도 예외를 내지 않는다
+        raise ValueError(f"답장 실패: {resp.status_code} {str(resp.body)[:100]}")
 
 
 def slack_error(e):
@@ -112,5 +114,6 @@ class SlackBot:
             entry["error"] = commands.failure.error
         try:
             self.send(response_url, out)
-        except Exception:
-            pass  # 답장 주소가 만료되면(30분) 보낼 곳이 없다
+        except Exception as e:  # 답장 주소가 만료되면(30분) 보낼 곳이 없어 이 PC의 봇 기록에만 남긴다
+            if entry is not None:
+                entry["error"] = str(e) or type(e).__name__

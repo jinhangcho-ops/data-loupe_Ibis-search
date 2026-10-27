@@ -26,6 +26,7 @@ def test_link_next_keeps_commas_inside_url():
     link = '<https://api.example.com/items?fields=id,name&page=2>; rel="next", <https://api.example.com/items?page=9>; rel="last"'
     assert collect_job.link_next(Reply(link)) == "https://api.example.com/items?fields=id,name&page=2"
     assert collect_job.link_next(Reply('<https://a.example/x?page=9>; rel="last"')) is None
+    assert collect_job.link_next(Reply('<https://a.example/1>; title="go <here>"; rel="next"')) == "https://a.example/1"
 
 
 def test_daily_schedule_waits_for_running_collect_instead_of_skipping(monkeypatch):

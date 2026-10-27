@@ -35,3 +35,12 @@ def test_paid_first_same_time_does_not_depend_on_row_order(order):
     roles = {"user": "u", "time": "t", "source": "src", "paid_value": "paid"}
     r = cat.compute("organic_uplift", {names[k]: v for k, v in roles.items()}, {}, cat.Ctx(table=t), None)
     assert r["parts"]["paid_installs"] == 1
+
+
+def test_save_sql_checks_with_connection_dialect(client):
+    """[SQL 저장]도 연결의 방언으로 검사한다: Postgres의 sales.db 테이블은 저장되고, 연결이 없으면 DuckDB처럼 막는다(27차 리뷰1)."""
+    from core import server
+    post = lambda: client.post("/api/sqls", json={"name": "s", "sql": "SELECT * FROM sales.db"}).get_json()
+    assert "파일" in post()["error"]
+    server.state["con"] = type("Pg", (), {"dialect": "postgres"})()
+    assert post()["order"] == ["s"]

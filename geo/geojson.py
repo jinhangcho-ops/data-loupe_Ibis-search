@@ -261,7 +261,7 @@ def polygons(geom):
     if not geom:
         return []
     out = []
-    for kind, coords in parts(geom):
+    for kind, coords in unwrapped(parts(geom)):  # 변경선을 건너 적은 도형은 표(center·min_lon)와 같은 규칙으로 옮겨, 영역 판정·지도 그림이 지구를 가로지르지 않게
         if kind == "Polygon" and coords:
             out.append(coords)
         elif kind == "MultiPolygon":

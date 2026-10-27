@@ -24,7 +24,7 @@ def test_query_only_urls_get_different_keys_without_secrets():
 def test_slack_reply_is_logged(folder, monkeypatch):
     sent = []
     hook = types.ModuleType("slack_sdk.webhook")
-    hook.WebhookClient = lambda url: types.SimpleNamespace(send=lambda **k: sent.append(url))
+    hook.WebhookClient = lambda url: types.SimpleNamespace(send=lambda **k: sent.append(url) or types.SimpleNamespace(status_code=200, body="ok"))  # slack_sdk처럼 응답을 돌려준다
     monkeypatch.setitem(sys.modules, "slack_sdk.webhook", hook)
     url = "https://hooks.slack.com/commands/T0001/12345/AbCdEfGhIjKlMnOpQrStUvWx"
     slack_bot.reply(url, "행 50개")

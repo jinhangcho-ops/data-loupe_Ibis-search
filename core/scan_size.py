@@ -8,6 +8,7 @@
 실행 전 확인(limit_check): 센 용량이 작업 메모리 상한(설정 memory, 제한 없으면 지금 PC의 사용 가능 메모리)을 넘으면 알린다.
 읽는 테이블·컬럼은 SQL을 sqlglot으로 읽어 고른다(SELECT *·테이블.*는 그 테이블의 모든 컬럼). 같은 이름의 컬럼은 그 이름을 가진 모든 테이블에서 읽는다고 본다."""
 import datetime as dt
+import math
 import os
 import re
 from pathlib import Path
@@ -275,10 +276,10 @@ def plan_rows(con, sql, dialect):
         return None
     lines = text.splitlines()
     if len(lines) > 1 and "rows" in lines[0].split("\t"):  # 표 모양: 머리글의 rows 칸
-        cell = lines[1].split("\t")
         at = lines[0].split("\t").index("rows")
-        if at < len(cell) and cell[at].strip().isdigit():
-            return int(cell[at])
+        found = [int(c[at]) for c in (line.split("\t") for line in lines[1:]) if at < len(c) and c[at].strip().isdigit()]
+        if found:
+            return math.prod(found)  # 조인은 테이블마다 한 줄(뒤 테이블은 앞 행마다 읽는 수): 곱해 크게 센다
     for pattern in ROW_PATTERNS:
         if found := re.search(pattern, text):
             return int(found[1].replace(",", ""))
@@ -301,7 +302,9 @@ def date_bounds(sql, dialect, column):
             left, right, kind = right, left, FLIP[kind]
         if not isinstance(left, exp.Column) or left.name.lower() != column.lower():
             continue
-        m = DATE.search(right.sql())
+        literal = all(isinstance(n, (exp.Literal, exp.Cast, exp.DataType, exp.Date, exp.DateFromParts)) or isinstance(n, exp.Anonymous) and n.name.lower() == "make_date"
+                      for n in right.walk())  # DATE_SUB(DATE '…', …) 같은 계산식 안의 날짜는 범위가 아니다
+        m = literal and DATE.search(right.sql())
         if not m:
             continue
         try:
@@ -333,8 +336,13 @@ def partition_rows(con, sql, dialect, tables):
         total = 0
         for row in rows:
             pid = str(row["partition_id"])
-            if not re.fullmatch(r"\d{8}", pid):
+            if pid == "__NULL__":  # 파티션 날짜가 빈 행(원래 설계대로 뺀다)
                 continue
+            if pid == "__UNPARTITIONED__":  # 막 넣은(스트리밍) 행: 날짜를 모르니 센다
+                total += int(row["total_rows"] or 0)
+                continue
+            if not re.fullmatch(r"\d{8}", pid):
+                return None  # 달·시간 단위 파티션은 다루지 않는다(0으로 세면 확인 없이 받는다)
             day = dt.date(int(pid[:4]), int(pid[4:6]), int(pid[6:]))
             if (low is None or day >= low) and (high is None or day <= high):
                 total += int(row["total_rows"] or 0)
