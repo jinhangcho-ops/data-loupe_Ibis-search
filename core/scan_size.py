@@ -36,6 +36,12 @@ def referenced(sql, dialect):
     return list(dict.fromkeys(tables)), columns
 
 
+def qualified(tree):
+    """스키마가 붙은 테이블들 [(catalog 또는 None, 스키마, 이름)](중복 없이). referenced의 table_names는 가상 테이블 풀기용이라 이것을 뺀다."""
+    exp = sql_exec.glot()[1]
+    return list(dict.fromkeys((t.args["catalog"].name if t.args.get("catalog") else None, t.args["db"].name, t.name) for t in tree.find_all(exp.Table) if t.args.get("db") and t.name))
+
+
 def parquet_bytes(path, columns):
     """Parquet 파일에서 그 컬럼들(None이면 모두)의 압축 전 크기 합."""
     import pyarrow.parquet as pq
@@ -66,25 +72,28 @@ def type_bytes(dtype):
     return TYPE_BYTES.get(name, 8)
 
 
-def duckdb_bytes(con, table, columns, schema=None):
-    """DuckDB 테이블(schema를 주면 그 스키마의 것): 추정 행 수 × 읽는 컬럼의 타입 크기."""
+def duckdb_bytes(con, table, columns, schema=None, catalog=None):
+    """DuckDB 테이블(schema·catalog를 주면 그 스키마·DB의 것): 추정 행 수 × 읽는 컬럼의 타입 크기."""
     q = lambda s: s.replace("'", "''")
-    rows = con.raw_sql(f"select estimated_size from duckdb_tables() where lower(table_name) = lower('{q(table)}')" + (f" and lower(schema_name) = lower('{q(schema)}')" if schema else "")).fetchone()
+    where = "".join(f" and lower({k}) = lower('{q(v)}')" for k, v in (("schema_name", schema), ("database_name", catalog)) if v)
+    rows = con.raw_sql(f"select estimated_size from duckdb_tables() where lower(table_name) = lower('{q(table)}'){where}").fetchone()
     if not rows:
         return None
-    schema = con.table(table, database=schema).schema() if schema else con.table(table).schema()
+    schema = con.table(table, database=(catalog, schema) if catalog else schema).schema() if schema else con.table(table).schema()
     width = sum(type_bytes(t) for n, t in schema.items() if columns is None or n.lower() in columns)
     return int(rows[0] or 0) * width
 
 
-def postgres_bytes(con, table, columns):
-    """Postgres: 통계의 행 수 × 읽는 컬럼의 평균 크기. 통계가 없으면 None."""
+def postgres_bytes(con, table, columns, schema=None):
+    """Postgres: 통계의 행 수 × 읽는 컬럼의 평균 크기(schema를 주면 그 스키마의 것). 통계가 없으면 None."""
+    within = (" and lower(relnamespace::regnamespace::text) = lower(%s)", " and lower(schemaname) = lower(%s)") if schema else ("", "")
+    extra = (schema,) if schema else ()
     with con.con.cursor() as cur:  # Ibis Postgres 백엔드의 psycopg 연결(값은 매개변수로 넘긴다)
-        cur.execute("select reltuples from pg_class where lower(relname) = lower(%s) order by relkind limit 1", (table,))
+        cur.execute(f"select reltuples from pg_class where lower(relname) = lower(%s){within[0]} order by relkind limit 1", (table, *extra))
         found = cur.fetchone()
         if not found or found[0] is None or found[0] < 0:
             return None
-        cur.execute("select attname, avg_width from pg_stats where lower(tablename) = lower(%s)", (table,))
+        cur.execute(f"select attname, avg_width from pg_stats where lower(tablename) = lower(%s){within[1]}", (table, *extra))
         widths = {n.lower(): w for n, w in cur.fetchall()}
     if not widths:
         return None
@@ -110,11 +119,11 @@ def estimate(con, sql, opened=None, dialect=None):
     exp = sql_exec.glot()[1]
     tree = sql_exec.glot()[0].parse_one(sql, read=dialect)
     paths = [n.expressions[0].name for n in tree.find_all(exp.ReadParquet) if n.expressions and n.expressions[0].is_string]  # Parquet 가상 테이블이 풀린 read_parquet('경로')
-    schemed = [(t.args["db"].name, t.name) for t in tree.find_all(exp.Table) if t.args.get("db") and t.name]  # 스키마가 붙은 테이블(referenced에는 없다)
+    schemed = qualified(tree)
     for path in paths:
         total += parquet_bytes(path, columns)
         hows.add("Parquet 파일 정보")
-    for schema, table in [(None, t) for t in tables] + schemed:
+    for catalog, schema, table in [(None, None, t) for t in tables] + schemed:
         path = None if schema else files.get(table.lower())
         if path is not None:
             if path.suffix.lower() == ".parquet":
@@ -126,10 +135,10 @@ def estimate(con, sql, opened=None, dialect=None):
                 hows.add("파일 크기(최대)")
             continue
         if name == "duckdb":
-            size = duckdb_bytes(con, table, columns, schema)
+            size = duckdb_bytes(con, table, columns, schema, catalog)
             hows.add("DuckDB 행 수 × 컬럼 크기")
         elif name == "postgres":
-            size = postgres_bytes(con, table, columns)
+            size = postgres_bytes(con, table, columns, schema)
             hows.add("Postgres 통계")
         else:
             size = None
@@ -418,12 +427,13 @@ def limit_check(con, sql, opened=None, dialect=None, config=None, rows=None):
     bound, bound_text = limit(config)
     try:
         tables, columns = referenced(sql, dialect or sql_exec.dialect_of(con))
+        named = tables + [".".join(p for p in q if p) for q in qualified(sql_exec.glot()[0].parse_one(sql, read=dialect or sql_exec.dialect_of(con)))]  # 팝업 글에는 스키마 붙은 테이블도
     except Exception:
-        tables, columns = [], None
+        tables, columns, named = [], None, []
     unknown = found["bytes"] is None
     over = not unknown and found["bytes"] > bound
     blocked = unknown and blocks_unknown(config)
-    what = f"테이블 {', '.join(tables) or '없음'} · 컬럼 {'모두' if columns is None else ', '.join(sorted(columns)[:12]) + (' …' if len(columns) > 12 else '')}"
+    what = f"테이블 {', '.join(named) or '없음'} · 컬럼 {'모두' if columns is None else ', '.join(sorted(columns)[:12]) + (' …' if len(columns) > 12 else '')}"
     if unknown:
         text = f"처리 용량을 미리 알 수 없어요({found['how']}). " + ("설정에서 '알 수 없으면 실행하지 않음'으로 정해 두어 실행하지 않아요." if blocked else "")
     else:

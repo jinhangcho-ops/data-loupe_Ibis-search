@@ -30,3 +30,22 @@ def test_panel_fold_moves_focus_to_the_other_button():
     js = between("dash_panel.js", "    const head = ", "  // 데이터:")
     assert 'this.fold(true); this.root.querySelector(":scope > .side-strip")?.focus();' in js
     assert 'this.fold(false); this.root.querySelector(".fold")?.focus();' in js
+
+
+def test_copy_asks_for_missing_align_key_column(folder):
+    import pytest
+    cols = {"uid": "text", "ts": "date", "user_id": "text"}
+    made = mm.create({"name": "CAC3", "scope": S1, "template": "catalog:cac", "slots": SLOTS, "align": {"kind": "key", "keys": [["user_id", "uid"]]}}, cols)
+    with pytest.raises(ValueError, match="user_id"):  # 예전엔 복사가 끝나고 구할 때마다 없는 컬럼 오류
+        mm.copy_to(made["id"], {**S1, "table": "events4"}, {}, {"uid": "text", "ts": "date"})
+
+
+def test_schema_tables_named_once_and_attached_db(tmp_path):
+    con = ibis.duckdb.connect()
+    con.raw_sql("create schema s; create table s.big as select range a from range(10)")
+    one = scan_size.estimate(con, "select a from s.big")["bytes"]
+    assert scan_size.estimate(con, "select * from s.big x join s.big y using (a)")["bytes"] == one  # 두 번 세지 않는다
+    assert "s.big" in scan_size.limit_check(con, "select a from s.big", config={"memory": 1000})["text"]
+    other = str(tmp_path / "o.duckdb")
+    con.raw_sql(f"attach '{other}' as o; create schema o.s; create table o.s.big as select range a from range(20)")
+    assert scan_size.estimate(con, "select a from o.s.big")["bytes"] == 2 * one  # 붙인 DB의 같은 이름 스키마·테이블

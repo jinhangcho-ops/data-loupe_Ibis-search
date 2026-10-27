@@ -412,7 +412,8 @@ def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
     scope = check_scope(scope)
     mapping = dict(mapping or {})
     chain = copy_chain(metric_id, items)
-    unmapped = sorted({c for m in chain for c in (m.get("cols") or {}) if mapping.get(c, c) not in (columns or {}) and columns is not None})
+    used = {c for m in chain for c in [*(m.get("cols") or {}), *(a for a, _ in (m.get("align") or {}).get("keys", []))]}  # 공통 키의 이 테이블 쪽도
+    unmapped = sorted(c for c in used if mapping.get(c, c) not in (columns or {}) and columns is not None)
     if unmapped:
         raise ValueError("새 테이블에서 컬럼 짝을 골라 주세요: " + ", ".join(unmapped))
     whole = {**{c: c for m in chain for c in (m.get("cols") or {})}, **mapping}  # 글 바꾸기용: 그대로 둘 긴 이름('order date')이 먼저 맞아 짧은 짝('date')이 그 조각을 바꾸지 않게
