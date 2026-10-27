@@ -471,7 +471,9 @@ def sql_run():
             note = FILE_SQL_PAGES
     if offset == 0:
         count_virtual(used)
-    shown = rows.head(n).with_columns(pl.col(pl.Decimal).cast(pl.Float64))  # SUM 등이 돌려주는 큰 소수 타입은 화면에서 숫자로(파일 저장은 원래 타입)
+    shown = rows.head(n)
+    exact = lambda c, t: not t.scale and (shown[c].abs().max() or 0) > 2 ** 53  # 소수 0자리인데 실수로 바꾸면 끝자리가 바뀌는 값(큰 ID)
+    shown = shown.with_columns(shown.select(c for c, t in shown.schema.items() if t == pl.Decimal and not exact(c, t)).cast(pl.Float64))  # SUM 등이 돌려주는 큰 소수 타입은 화면에서 숫자로. 큰 ID는 탐색 탭처럼 정확한 값 그대로(파일 저장은 원래 타입)
     return server.json_reply(shown, more=rows.height > n, limit=n, offset=offset, count=count, held=kept, server=note == SERVER_PAGES, note=note)
 
 

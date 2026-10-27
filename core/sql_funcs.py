@@ -614,7 +614,11 @@ UNIT = choice("unit", "단위", list(UNITS), "day")
 
 
 def date_part(name):
-    return lambda c: getattr(c.x, name)()
+    def part(c):
+        if name in ("hour", "minute", "second") and c.x.type().is_date():  # 날짜 컬럼에는 시각이 없다(Ibis가 영어 오류를 낸다)
+            raise ValueError(f"'{UNIT_NAMES[name]}' 뽑기는 시각이 있는 컬럼(날짜시간)에만 쓸 수 있어요.")
+        return getattr(c.x, name)()
+    return part
 
 
 def with_time(c):

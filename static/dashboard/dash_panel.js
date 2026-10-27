@@ -106,8 +106,9 @@ class CardPanel {
       if (this.host.menuTarget !== card) {  // 처음 열 때만 채운다(패널을 다시 그릴 때마다 채우면 고른 칸이 비워진다)
         this.host.menu.preset(card.kind === "analysis" || card.kind === "metric" ? "kpi" : card.kind, card.view?.type ?? "");
         this.host.menu.refill();
-      }
+      } else if ((card.view?.type ?? "") !== this.host.menuType) this.host.menu.chartType(card.view?.type ?? "");  // 연 채로 설정 줄에서 차트 종류를 바꾸면 메뉴도 따라간다(적용할 때 예전 종류로 덮지 않게)
       this.host.menuTarget = card;
+      this.host.menuType = card.view?.type ?? "";
     } else this.host.menuTarget = null;
     return el("div", {}, el("h5", { textContent: "데이터" }), el("div", { className: "hint", textContent: what }), toggle, holder);
   }

@@ -100,3 +100,21 @@ console.log(JSON.stringify({kept, attached, reopened:pick('서버·장비').valu
     got = run_js(tmp_path, NO_FUNCS, body)
     assert got["kept"] == {"entity": "host", "time": "t2", "kind": "kind"}  # 예전엔 모두 ""
     assert got["attached"] and got["reopened"] == ""
+
+
+def test_redraw_follows_chart_type_from_settings(tmp_path):
+    """[데이터 다시 정하기]를 연 채 설정 줄에서 차트 종류를 바꾸면 메뉴의 차트 종류도 따라간다(적용할 때 예전 종류로 덮지 않게)."""
+    body = """
+SERVER.dash.types.line="선";
+const menuRoot=new E('div'), popRoot=new E('div'), m=initCardMenu(menuRoot,{metricNames:()=>[],layout:()=>({})});
+const all=()=>{const out=[];const w=e=>{if(e&&e.children){out.push(e);e.children.forEach(w);}};w(menuRoot);return out;};
+const type=()=>all().find(e=>e.tag==='select'&&String(e.title).startsWith('차트 종류')).value;
+const host={menu:m,menuRoot,popRoot,menuTarget:null}, p=new CardPanel(new E('div'),host), card={kind:"chart",view:{type:"bar"},source:{}};
+p.card=card; p.builderOpen=true;
+p.dataSection(card,new E('div')); await tick();
+const opened=type();
+card.view.type="line"; popRoot.append(menuRoot); p.dataSection(card,new E('div')); await tick();
+console.log(JSON.stringify({opened, after:type()}));
+"""
+    got = run_js(tmp_path, NO_FUNCS, body)
+    assert got == {"opened": "bar", "after": "line"}

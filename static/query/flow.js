@@ -121,12 +121,13 @@ function flowInsert(g, a, b, kind, params) {
   graph.edges.splice(at, 1, [a, id], [id, b]);
   return { graph, id };
 }
-// 단계를 지운 새 흐름. 앞 하나·뒤 하나의 중간 단계면 앞과 뒤를 이어 둔다.
+// 단계를 지운 새 흐름. 앞 하나·뒤 하나의 중간 단계면 앞과 뒤를 이어 둔다. 다시 잇는 이음은 뒤 단계로 가던 이음 자리에 놓아 뒤 단계의 입력 차례(조인의 왼쪽·오른쪽)를 지킨다.
 function flowRemove(g, id) {
-  const next = flowCopy(g), ins = flowIns(g, id), outs = flowOuts(g, id), at = next.edges.findIndex(e => e[1] === id || e[0] === id);
+  const next = flowCopy(g), ins = flowIns(g, id), outs = flowOuts(g, id), touch = e => e[0] === id || e[1] === id;
+  const k = g.edges.findIndex(e => e[0] === id && e[1] === outs[0]), at = k - g.edges.slice(0, k).filter(touch).length;  // 그 앞에서 빠지는 이음 수만큼 당긴다
   next.nodes = next.nodes.filter(n => n.id !== id);
-  next.edges = next.edges.filter(e => e[0] !== id && e[1] !== id);
-  if (ins.length === 1 && outs.length === 1) next.edges.splice(Math.max(0, at), 0, [ins[0], outs[0]]);
+  next.edges = next.edges.filter(e => !touch(e));
+  if (ins.length === 1 && outs.length === 1) next.edges.splice(at, 0, [ins[0], outs[0]]);
   return next;
 }
 const flowCut = (g, a, b) => ({ ...flowCopy(g), edges: g.edges.filter(e => !(e[0] === a && e[1] === b)).map(e => [...e]) });
@@ -182,8 +183,15 @@ function flowColumns(g, id, schemas, depth = 0) {
     return { ...left, ...Object.fromEntries(Object.entries(right).map(([c, k]) => [Object.hasOwn(left, c) ? c + sfx : c, k])) };
   }
   const base = ins[0] ? from(ins[0]) : {};
+  if (n.kind === "union") {  // 서버 flow.out_columns와 같다: left는 첫 입력 컬럼 모두, 나머지는 모든 입력에 있는 컬럼만, left·inner(parse.STACKS)는 '출처'(parse.SOURCE)를 붙인다
+    const subs = ins.slice(1).map(from), how = p.how ?? "left";
+    const cols = how === "left" ? base : Object.fromEntries(Object.entries(base).filter(([c]) => subs.every(s => Object.hasOwn(s, c))));
+    return { ...cols, ...(["left", "inner"].includes(how) ? { 출처: "text" } : {}) };
+  }
   if (n.kind === "calc") return { ...base, ...(p.adds ?? {}) };
-  if (n.kind === "aggregate") return { ...Object.fromEntries((p.by ?? []).map(c => [c, base[c] ?? "other"])), ...Object.fromEntries((p.series ?? []).map((s, i) => [s.name || "v" + i, "num"])) };  // 이름 없는 계열은 서버와 같이 v0, v1 …
+  // 집계 계열의 종류는 함수 사전의 kind_out(any면 값 컬럼의 종류, 비율이면 num). 사전을 아직 못 받았으면 num으로 어림한다
+  const out = s => { const k = s.ratio || typeof Funcs === "undefined" ? "num" : Funcs.get(s.agg ?? "count")?.kind_out ?? "num"; return k === "any" ? base[s.y] ?? "other" : k; };
+  if (n.kind === "aggregate") return { ...Object.fromEntries((p.by ?? []).filter(Boolean).map(c => [c, base[c] ?? "other"])), ...Object.fromEntries((p.series ?? []).map((s, i) => [s.name || "v" + i, out(s)])) };  // 이름 없는 계열은 서버와 같이 v0, v1 …
   if (n.kind === "metric") return { ...Object.fromEntries((p.by ? [p.by].flat() : []).map(c => [c, base[c] ?? "other"])), ...Object.fromEntries((p.names ?? []).map(m => [m, "num"])) };
   return base;
 }
