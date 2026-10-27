@@ -135,7 +135,14 @@ def next_time(item, after):
 
 def register(name, item, taken):
     """Windows 작업을 등록하고 작업 이름을 돌려준다. 이미 이름이 있으면 그 이름으로 바꾼다."""
-    task = item.get("task") or wintask.task_name(name, taken)
+    task = item.get("task")
+    if task and not wintask.readable(task):  # 예전에 콘솔 코드 페이지로 못 쓰는 글자로 만든 작업은 조회가 어긋나 늘 '등록 안 됨'으로 보인다: 지우고 새 이름으로
+        try:
+            wintask.delete(task, known=True)  # 조회로는 있는지 알 수 없어 바로 지운다
+        except ValueError:  # 이미 없으면(직접 지운 경우) 그대로 새 이름으로
+            pass
+        task = None
+    task = task or wintask.task_name(name, taken)
     wintask.register(task, name, item, next_time(item, clock()))
     return task
 

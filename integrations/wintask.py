@@ -26,8 +26,16 @@ RUNNING = 267009  # 0x41301: 지금 도는 중
 def execute(args):
     """명령을 창 없이 실행한다. (종료 코드, 표준 출력, 표준 오류). 출력은 콘솔 코드 페이지(한국어 Windows는 cp949)로 읽는다."""
     done = subprocess.run(args, capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW, timeout=60)
-    codepage = f"cp{ctypes.windll.kernel32.GetOEMCP()}"
-    return done.returncode, done.stdout.decode(codepage, "replace"), done.stderr.decode(codepage, "replace")
+    return done.returncode, done.stdout.decode(codepage(), "replace"), done.stderr.decode(codepage(), "replace")
+
+
+def codepage():
+    return f"cp{ctypes.windll.kernel32.GetOEMCP()}"
+
+
+def readable(task):
+    """schtasks 출력에 그대로 보이는 이름인지. 콘솔 코드 페이지로 못 쓰는 글자는 비슷한 글자로 바뀌어 보여(예: Café → Cafe) 조회가 어긋난다."""
+    return task.encode(codepage(), "replace").decode(codepage()) == task
 
 
 def program():
@@ -47,8 +55,8 @@ def command(name):
 
 
 def task_name(name, taken):
-    """구성 이름을 작업 이름으로: 쓰지 않는 글자는 밑줄로, 50자까지. taken(이미 쓰는 작업 이름들)과 겹치면(대소문자 무시) _2, _3을 붙인다."""
-    base = UNSAFE.sub("_", name).strip(" .")[:50] or "수집"
+    """구성 이름을 작업 이름으로: 쓰지 않는 글자와 콘솔 코드 페이지로 못 쓰는 글자는 밑줄로, 50자까지. taken(이미 쓰는 작업 이름들)과 겹치면(대소문자 무시) _2, _3을 붙인다."""
+    base = "".join(c if readable(c) else "_" for c in UNSAFE.sub("_", name)).strip(" .")[:50] or "수집"
     used = {t.lower() for t in taken}
     found, n = base, 1
     while found.lower() in used:
