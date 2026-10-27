@@ -102,7 +102,8 @@ def fetch_ga4():
         raise exists()
     if not out.parent.is_dir():
         raise ValueError("저장할 폴더가 없습니다.")
-    frame, total = ga4.fetch(g["key_path"], g)
+    notes = []
+    frame, total = ga4.fetch(g["key_path"], g, notes)
     part = out.with_name(out.name + ".part")  # 쓰다 끊겨도 반쯤 쓴 파일이 결과 이름으로 남지 않게
     try:
         frame.write_parquet(part)
@@ -112,4 +113,4 @@ def fetch_ga4():
     finally:
         part.unlink(missing_ok=True)
     uploads.log_file(out, frame.height)
-    return jsonify(path=str(out), rows=frame.height, columns=frame.columns, total=total)
+    return jsonify(path=str(out), rows=frame.height, columns=frame.columns, total=total, notes=notes)

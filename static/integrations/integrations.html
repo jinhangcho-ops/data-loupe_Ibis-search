@@ -125,7 +125,7 @@ $("ga4-fetch").onclick = () => busy($("ga4-fetch"), async () => {
     const d = await api("/api/ga4/fetch", {});
     ga4Output = d.path;
     $("ga4-open").classList.remove("hidden");
-    say("ga4-msg", `${d.rows.toLocaleString()}행을 저장했습니다: ${d.path} (컬럼: ${d.columns.join(", ")})`, true);
+    say("ga4-msg", `${d.rows.toLocaleString()}행을 저장했습니다: ${d.path} (컬럼: ${d.columns.join(", ")})` + (d.notes?.length ? " · " + d.notes.join(" ") : ""), !d.notes?.length);
   } catch (e) { say("ga4-msg", e.message); }
 });
 $("ga4-open").onclick = () => busy($("ga4-open"), async () => {

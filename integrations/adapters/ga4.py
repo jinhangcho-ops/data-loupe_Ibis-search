@@ -110,8 +110,9 @@ def run_report(token, spec, offset, limit):
         raise ValueError(f"GA4 보고서를 받지 못했습니다: {e}") from None
 
 
-def fetch(key_path, spec):
-    """보고서 전체를 받아 Polars 표로. 측정기준은 글자, 측정항목은 타입대로 정수·실수. (표, 전체 행 수). 쪽마다 표로 만들어 모은다(파이썬 목록에 행을 쌓지 않는다)."""
+def fetch(key_path, spec, notes=None):
+    """보고서 전체를 받아 Polars 표로. 측정기준은 글자, 측정항목은 타입대로 정수·실수. (표, 전체 행 수). 쪽마다 표로 만들어 모은다(파이썬 목록에 행을 쌓지 않는다).
+    notes(목록)를 주면 GA4가 알린 데이터 손실·표본 추출 안내를 넣는다."""
     import polars as pl
     spec = check_report(spec)
     token = access_token(read_key(key_path))
@@ -123,6 +124,12 @@ def fetch(key_path, spec):
         if total > MAX_ROWS:
             raise ValueError(f"보고서가 {total:,}행으로 너무 큽니다({MAX_ROWS:,}행까지). 기간이나 측정기준을 줄이세요.")
         types = {h["name"]: h.get("type", "") for h in page.get("metricHeaders", [])} or types
+        meta = page.get("metadata") or {}
+        if notes is not None and offset == 0:
+            if meta.get("dataLossFromOtherRow"):
+                notes.append("GA4가 행이 많아 나머지를 '(other)' 한 줄로 합쳤어요. 측정기준을 줄이거나 기간을 나눠 받으세요.")
+            if meta.get("samplingMetadatas"):
+                notes.append("GA4가 표본 추출한 값이에요(전체 데이터가 아님). 기간을 줄이면 표본 없이 받을 수 있어요.")
         got = page.get("rows", [])
         if not got:
             break

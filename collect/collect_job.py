@@ -722,17 +722,27 @@ def finish_file(config, path, found, info):
     with open(raw, "rb") as f:
         head = f.read(4)
     kind = output_kind(config, info.get("url", ""), info.get("type"), head)
+    if kind != "parquet" and head[:2] in (codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE):  # UTF-16·32는 CP949로 바꾸면 깨진 글자로 '성공'한다(source.utf8_csv와 같은 규칙)
+        raise Halt("받은 파일이 UTF-16/UTF-32로 저장돼 있어 읽을 수 없습니다. UTF-8 또는 CP949로 받을 수 있는 주소를 쓰세요.")
     encoding = config["file"]["encoding"]
     cp949 = kind != "parquet" and (encoding == "cp949" or (encoding == "auto" and not is_utf8(raw)))
     con, folder = duck()
     try:
         readable = raw
-        if cp949:  # DuckDB는 UTF-8만 읽으므로 먼저 바꾼다.
+        if kind == "json" and (cp949 or head[:3] == codecs.BOM_UTF8):  # DuckDB는 BOM 붙은 JSON 배열을 값 하나로 읽는다: BOM 없는 UTF-8로
+            readable = Path(folder, "utf8.json")
+            decoder = codecs.getincrementaldecoder("cp949" if cp949 else "utf-8-sig")("replace")
+            with open(raw, "rb") as f, open(readable, "wb") as w:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    w.write(decoder.decode(chunk).encode("utf-8"))
+                w.write(decoder.decode(b"", final=True).encode("utf-8"))
+        elif cp949:  # DuckDB는 UTF-8만 읽으므로 먼저 바꾼다.
             readable = Path(folder, "utf8")
             with_bom(raw, readable, "cp949")
         read = {"csv": con.read_csv, "parquet": con.read_parquet, "json": con.read_json}[kind]
+        options = ({"all_varchar": True} if fmt == "csv" else {"sample_size": -1}) if kind == "csv" else {}  # CSV→CSV는 글자로 읽어 값 모양(007, 1.10)을 둔다. 그 밖은 앞부분만 보고 타입을 정하지 않게 전체를 본다
         try:
-            table = read(str(readable), **({"all_varchar": True} if kind == fmt == "csv" else {}))  # CSV→CSV는 글자로 읽어 값 모양(007, 1.10)을 두고 모든 컬럼을 막는다
+            table = read(str(readable), **options)
             rows = con.execute(table.count())
         except Exception as e:
             raise Halt(f"받은 파일을 {kind}로 열 수 없습니다: {str(e)[:300]}") from None

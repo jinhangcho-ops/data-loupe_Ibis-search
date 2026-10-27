@@ -309,7 +309,7 @@ const isDate = (c, ops) => c.kind === "date" || ops.type?.to === "date";
 const PARTS = [["year", "연"], ["month", "월"], ["day", "일"], ["weekday", "요일"], ["ym", "월 단위"], ["hour", "시"]];
 // "시"는 날짜시간 컬럼(원래 타입이 timestamp, 또는 타입 바꾸기의 형식에 %H)에서만 고를 수 있다.
 const hasTime = (c, ops) => c.type.startsWith("timestamp") || (ops.type?.format ?? "").includes("%H");
-const toNum = v => String(v).trim() === "" ? null : /^\s*[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?\s*$/i.test(v) ? Number(v) : NaN;  // 빈 칸(공백만 포함)은 null, 숫자 모양이 아니면(0x10 포함) NaN
+const toNum = v => String(v).trim() === "" ? null : /^\s*[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?\s*$/i.test(v) && Number.isFinite(+v) ? +v : NaN;  // 빈 칸(공백만 포함)은 null, 숫자 모양이 아니면(0x10 포함) NaN
 const OPS = {
   trim: { label: "앞뒤 공백 지우기", group: "글자", need: isStr, init: {}, value: () => true },
   squeeze: { label: "연속 공백을 하나로", group: "글자", need: isStr, init: {}, value: () => true },
@@ -840,6 +840,7 @@ function resetTable() {
 function clearScreen() {
   S.base = $("base").value = $("tname").value = $("f-in").value = "";
   A.result = null;  // 연결을 바꾸면 앞 연결의 분석 결과를 지운다([대시보드에 추가]가 새 연결 이름으로 넣지 않게)
+  anaRun++;  // 도는 분석의 늦은 응답도 버린다
   drawAna();
   resetTable();
   showTarget();
@@ -1202,7 +1203,7 @@ function addStep() {
 $("a-fadd").onclick = addStep;
 $("a-fvalue").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.isComposing && !(menuFor === e.target && menuAt)) addStep(); };  // 한글 조합을 확정하는 Enter와, 목록이 가리킨 항목을 고르는 Enter(common.js)는 단계로 넣지 않는다
 // 단계 컬럼을 고르면 그 컬럼의 값(많이 나온 순, 20개까지)을 목록으로 받는다. 단계 컬럼이 바뀌면 고른 단계는 비운다.
-let anaCall = 0, stepCall = 0;  // 늦게 온 옛 응답이 새 선택을 덮지 않게
+let anaCall = 0, stepCall = 0, anaRun = 0;  // 늦게 온 옛 응답이 새 선택을 덮지 않게(anaRun: [구하기], 연결을 바꾸면 올린다)
 async function loadStepValues() {
   const column = $("a-fstep").value, mine = ++stepCall;
   FLOW.values = [];
@@ -1276,10 +1277,12 @@ async function runAna(full) {
   try {
     const how = full ? A.result.how : anaHow(), prepped = full ? A.result.prepped : $("a-prep").checked;
     const base = full ? A.result.base : S.base, r = full ? A.result.recipe : prepped ? recipe() : { schema: S.schema, base };  // 기다리는 동안 테이블이 바뀔 수 있어 시작 때 값을 잡아 둔다. 전체로는 마지막 분석의 테이블·전처리 그대로
+    const call = ++anaRun, used = full ? A.result.sample : sample;
     const d = await timed("analyze", () => api("/api/analyze", { recipe: r, how, sample, full }));
+    if (call !== anaRun) return;  // 기다리는 사이 연결을 바꿨다
     const views = d.kind === "distribution" ? (d.histogram ? ["hist", "box", "values"] : ["values"])
       : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"], funnel: ["funnel"] }[d.kind];
-    A.result = { ...d, how, prepped, base, recipe: r, views, sample: full ? A.result.sample : sample };  // 구할 때의 표본 수(카드가 최신화 때 같은 표본으로 다시 구한다)
+    A.result = { ...d, how, prepped, base, recipe: r, views, sample: used };  // 구할 때의 표본 수(카드가 최신화 때 같은 표본으로 다시 구한다)
     A.view = views.includes(A.view) ? A.view : views[0];
     say("err-ana", "");
     drawAna();

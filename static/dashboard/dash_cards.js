@@ -219,7 +219,8 @@ function paintTargetTrend(card, colors) {
 function paintDual(card, colors, board) {
   const a = cardDays({ ...card, view: { ...card.view, window: null } }, 0), whole = a.map(d => d.day), win = card.view?.window, W = 320, H = 190, pad = 14, top = 10, plot = 118, brushY = 150;
   if (!whole.length) return box("summary", el("div", { className: "sum-text", textContent: "이 기간의 값이 없어요" }));
-  const view = cardDays(card, 0).length ? card : { ...card, view: { ...card.view, window: null } };  // 저장한 구간이 지금 기간 밖이면 구간 없이 그린다(빈 그림·NaN이 되지 않게)
+  const picked = cardDays(card, 0), keep = picked.length && whole.includes(picked[0].day) && whole.includes(picked[picked.length - 1].day);  // 구간의 처음·끝이 지금 기간 안일 때만(직전 기간으로 읽어 온 날은 기간 밖)
+  const view = keep ? card : { ...card, view: { ...card.view, window: null } };  // 저장한 구간이 지금 기간 밖이면 구간 없이 그린다(빈 그림·NaN·엉뚱한 날이 되지 않게)
   const shown = cardDays(view, 0).map(d => d.day), from = shown[0], to = shown[shown.length - 1];
   const rows = [cardDays(view, 0), cardDays(view, 1)], all = rows.flat().map(d => d.v).filter(v => v != null), lo = Math.min(...all), hi = Math.max(...all);
   const xOf = i => pad + (W - 2 * pad) * (shown.length < 2 ? 0.5 : i / (shown.length - 1)), yOf = v => top + plot - plot * (hi === lo ? 0.5 : (v - lo) / (hi - lo));
@@ -247,7 +248,7 @@ function paintDual(card, colors, board) {
       card.view.window = start === k ? null : { from: whole[Math.min(start, k)], to: whole[Math.max(start, k)] }; if (!card.view.window) delete card.view.window; board?.changed?.(); board?.draw(); };
     strip.addEventListener("pointermove", move); strip.addEventListener("pointerup", up);
   };
-  kids.push(over, tip, ...bars, sel, strip, stext(pad, H - 2, names.join(" · ") + (win ? "  (구간 선택됨, 한 번 눌러 해제)" : ""), { "font-size": 10, fill: colors.text }));
+  kids.push(over, tip, ...bars, sel, strip, stext(pad, H - 2, names.join(" · ") + (win && keep ? "  (구간 선택됨, 한 번 눌러 해제)" : ""), { "font-size": 10, fill: colors.text }));
   return frame(W, H, ...kids);
 }
 

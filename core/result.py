@@ -185,12 +185,18 @@ def write_excel(expr, path):
                         value = number(raw)  # NaN·무한은 빈 칸(xlsxwriter가 쓰지 못한다), Decimal은 실수로
                         if value is None:
                             continue
-                        if ints[col] and abs(value) >= 10 ** 15:  # Excel 숫자는 15자리까지라 큰 정수(ID 등)는 끝자리가 바뀐다: 글자로(Decimal은 실수로 바꾸기 전 값으로)
+                        if isinstance(value, (bytes, bytearray, memoryview)):  # 이진 값은 xlsxwriter가 쓰지 못한다: 16진 글자로
+                            value = bytes(value).hex()
+                        elif ints[col] and abs(value) >= 10 ** 15:  # Excel 숫자는 15자리까지라 큰 정수(ID 등)는 끝자리가 바뀐다: 글자로(Decimal은 실수로 바꾸기 전 값으로)
                             value = str(int(raw))
-                        sheet.write(row, col, value, kinds[col]) if kinds[col] else sheet.write(row, col, value)
+                        if (sheet.write(row, col, value, kinds[col]) if kinds[col] else sheet.write(row, col, value)) == -2:  # 32,767자 넘는 글자는 잘라서 쓰고 -2만 돌려준다
+                            raise ValueError(f"Excel 한 칸에는 32,767자까지 쓸 수 있습니다(‘{expr.columns[col]}’ 컬럼). CSV나 Parquet으로 저장하세요.")
                     row += 1
     except BaseException:
-        Path(path).unlink(missing_ok=True)  # 쓰다 만 파일은 남기지 않는다
+        try:
+            Path(path).unlink(missing_ok=True)  # 쓰다 만 파일은 남기지 않는다
+        except OSError:
+            pass  # 지우지 못해도 원래 오류를 보인다
         raise
 
 

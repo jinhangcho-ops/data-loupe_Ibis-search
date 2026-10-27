@@ -371,7 +371,7 @@ def test_ga4_fetch_does_not_overwrite_file_created_while_fetching(client, tmp_pa
     from integrations import integrations_app
     out = tmp_path / "ga.parquet"
 
-    def fetch(key_path, spec):
+    def fetch(key_path, spec, notes=None):
         out.write_bytes(b"someone else's file")  # 보고서를 받는 사이 같은 이름의 파일이 생겼다
         return pl.DataFrame({"a": [1]}), 1
     monkeypatch.setattr(integrations_app, "ga4", types.SimpleNamespace(fetch=fetch))

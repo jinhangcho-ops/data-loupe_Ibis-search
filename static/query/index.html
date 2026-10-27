@@ -737,11 +737,15 @@ function showBig(d, offset = 0) {
 }
 // offset행을 건너뛰고 검색한다. [검색 실행]과 머리글 정렬은 0에서, [이전]·[다음]은 행 수만큼 옮겨서 부른다.
 // fresh: DB에서 새로 받는다([검색 실행]). 주소로 접속한 DB는 결과를 이 PC에 받아 두므로 쪽 넘기기·머리글 정렬은 DB에 다시 묻지 않는다.
-function runSearch(offset, fresh = false) {
+let searched = null;  // 마지막으로 처음 쪽부터 검색한 요청: [이전]·[다음]은 이 조건으로 쪽만 옮긴다(패널을 고친 뒤 넘겨도 처리 용량 확인 없이 새 조회가 되지 않게)
+function runSearch(offset, fresh = false, page = false) {
   if (!S.base) { $("err-search").textContent = "기준 테이블을 고르세요."; return; }
+  if (page && !searched) return;
   return busy($("search"), async () => {
     try {
-      const d = await timed("search", () => api("/api/query", { ...query(offset), count: $("count").checked, fresh }));
+      const body = page ? { ...searched, offset } : { ...query(offset), count: $("count").checked, fresh };
+      const d = await timed("search", () => api("/api/query", body));
+      if (!page) searched = { ...body, fresh: false };
       skip = offset;
       $("prev").disabled = !offset;
       $("next").disabled = d.count === null ? d.rows.rows.length < $("limit").value : offset + d.rows.rows.length >= d.count;  // 행 수를 알면 마지막 쪽에서 끈다
@@ -754,8 +758,8 @@ function runSearch(offset, fresh = false) {
   });
 }
 $("search").onclick = () => runSearch(0, true);
-$("prev").onclick = () => runSearch(Math.max(0, skip - $("limit").value));
-$("next").onclick = () => runSearch(skip + +$("limit").value);
+$("prev").onclick = () => runSearch(Math.max(0, skip - (searched?.limit ?? $("limit").value)), false, true);
+$("next").onclick = () => runSearch(skip + +(searched?.limit ?? $("limit").value), false, true);
 // 결과 표의 머리글을 누르면 그 컬럼 하나로 정렬해 다시 검색한다. 이미 그 컬럼의 오름차순이면 내림차순으로 바꾼다.
 $("rows").onclick = async e => {
   const th = e.target.closest("th");
