@@ -21,7 +21,7 @@ def mem(**cols):
 
 def run(entry_id, slots, table, align=None, other=None):
     ctx = cat.Ctx(table=table, other=(lambda name: other[name]) if other else None)
-    return cat.compute(entry_id, slots, {}, ctx, align, None)
+    return cat.compute(entry_id, slots, {}, ctx, align)
 
 
 # ---------- 2B1 세션 번호: 같은 시각의 행은 같은 세션 ----------

@@ -91,7 +91,7 @@ def mem(**cols):
 
 def run(entry_id, slots, table, align=None, other=None, notes=None):
     ctx = cat.Ctx(table=table, other=(lambda name: other[name]) if other else None)
-    return cat.compute(entry_id, slots, {}, ctx, align, None)
+    return cat.compute(entry_id, slots, {}, ctx, align)
 
 
 # ---------- 3B5 공통 키 ROAS: 매출도 사용자의 첫 키로 ----------

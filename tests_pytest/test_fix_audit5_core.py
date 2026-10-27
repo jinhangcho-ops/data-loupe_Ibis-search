@@ -161,7 +161,7 @@ S = {"실험군": "grp", "대조군 값": "c", "실험군 값": "e", "지표 값
 
 
 def compute(eid, t, slots=S):
-    return cat.compute(eid, {**slots}, {}, cat.Ctx(table=t), None, None)
+    return cat.compute(eid, {**slots}, {}, cat.Ctx(table=t), None)
 
 
 def test_mde_with_zero_pooled_sd_is_none_with_a_note():
@@ -205,7 +205,7 @@ def test_squeeze_only_compresses_status_200():
 
 def test_money_supply_end_and_passes():
     t = ibis.memtable(pl.DataFrame({"u": [1, 1, 2], "ts": [D(2026, 3, 1), D(2026, 3, 5), D(2026, 3, 2)], "b": [10.0, 20.0, 5.0]}).to_arrow())
-    r = cat.compute("money_supply", {"사용자": "u", "시각": "ts", "잔액": "b", "활성 기준(일)": 3}, {}, cat.Ctx(table=t), None, None)
+    r = cat.compute("money_supply", {"사용자": "u", "시각": "ts", "잔액": "b", "활성 기준(일)": 3}, {}, cat.Ctx(table=t), None)
     assert r["value"] == 20.0  # 마지막 날(3/5)에서 3일 안: 사용자 1만
     assert cat.PASSES["money_supply"] == 4 and cat.PASSES["velocity"] == 5
 
@@ -215,7 +215,7 @@ def test_roas_notes_the_common_key_rule_and_payback_keeps_the_last_day():
     ads = {"ads": ibis.memtable(pl.DataFrame({"cost": [5.0], "ch": ["A"]}).to_arrow())}
     align = {"kind": "key", "keys": [["ch", "ch"]]}
     base = {"사용자": "uid", "시각": "ts", "금액": "amt", "광고 테이블": "ads", "광고비": "cost"}
-    r = cat.compute("roas", {**base, "N일": 7}, {}, cat.Ctx(table=users, other=lambda n: ads[n]), align, None)
+    r = cat.compute("roas", {**base, "N일": 7}, {}, cat.Ctx(table=users, other=lambda n: ads[n]), align)
     assert any("광고비가 있는" in n for n in r["notes"])
-    p = cat.compute("payback", {**base, "최대 일수": 1001}, {}, cat.Ctx(table=users, other=lambda n: ads[n]), align, None)
+    p = cat.compute("payback", {**base, "최대 일수": 1001}, {}, cat.Ctx(table=users, other=lambda n: ads[n]), align)
     assert p["rows"][-1]["day"] == 1001

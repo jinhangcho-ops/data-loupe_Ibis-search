@@ -435,7 +435,10 @@ def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
         title = (name if m["id"] == metric_id and name else m["name"])
         if any(x for x in pool if same_scope(x.get("scope"), scope) and x["name"] == title):
             title += " (복사)"
-        made = build({"name": title, "scope": scope, "template": tid, "slots": slots, "unit": m.get("unit"), "better": m.get("better")}, columns, pool)
+        align = m.get("align")
+        if align and align.get("kind") == "key":
+            align = {**align, "keys": [[mapping.get(a, a), b] for a, b in align["keys"]]}  # [이 테이블 컬럼, 다른 테이블 컬럼]
+        made = build({"name": title, "scope": scope, "template": tid, "slots": slots, "unit": m.get("unit"), "better": m.get("better"), "align": align}, columns, pool)
         new = {"id": secrets.token_hex(8), **made, "def_hash": "", "created": dash_store.now_text(), "updated": dash_store.now_text(), "copied_from": m["id"]}
         id_map[m["id"]] = new["id"]
         out.append(new)

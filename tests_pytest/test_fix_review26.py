@@ -33,7 +33,7 @@ def test_paid_first_same_time_does_not_depend_on_row_order(order):
     t = ibis.memtable(pl.DataFrame({"u": ["b", "b"], "t": [D(2025, 1, 1)] * 2, "src": order}).to_arrow())
     names = {s["role"]: s["name"] for s in cat.get("organic_uplift")["slots"]}
     roles = {"user": "u", "time": "t", "source": "src", "paid_value": "paid"}
-    r = cat.compute("organic_uplift", {names[k]: v for k, v in roles.items()}, {}, cat.Ctx(table=t), None)
+    r = cat.compute("organic_uplift", {names[k]: v for k, v in roles.items()}, {}, cat.Ctx(table=t))
     assert r["parts"]["paid_installs"] == 1
 
 

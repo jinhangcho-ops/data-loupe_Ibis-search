@@ -179,7 +179,7 @@ def test_mde_and_power_explain_zero_spread(eid):
     slots = {"실험군": "grp", "대조군 값": "c", "실험군 값": "e", "지표 값": "m", "유의수준": 0.05, "검정력": 0.8}
     if eid == "power":
         slots.pop("검정력")
-    r = cat.compute(eid, slots, {}, cat.Ctx(table=two_groups_table([1, 1], [2, 2])), None, None)
+    r = cat.compute(eid, slots, {}, cat.Ctx(table=two_groups_table([1, 1], [2, 2])), None)
     assert r["value"] is None
     assert any("각 군 안의 값이 모두 같아 표준편차가 0이라" in n for n in r["notes"])
 

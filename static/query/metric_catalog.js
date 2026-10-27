@@ -128,7 +128,6 @@ async function showMetricCatalog(box, env) {
       return el("div", { className: "mresult" },
         el("div", { className: "mval" }, mcValue(d.value, d.format, d.unit), d.label ? el("span", { className: "hint", textContent: " " + d.label }) : ""),
         d.text ? el("div", { className: "hint", textContent: d.text }) : "",
-        d.alert ? el("div", { className: "err", textContent: d.alert }) : "",
         d.pair?.length ? el("div", { className: "mpair" }, el("span", { className: "hint", textContent: "함께 보는 절대량" }), ...d.pair.map(p => el("span", { className: "chip" }, `${p.name} ${p.value == null ? "—" : mcNum(p.value)}`))) : "",
         d.spread ? el("div", { className: "mpair" }, el("span", { className: "hint", textContent: `분포(${mcNum(d.spread.n)}개)` }), ...[["median", "중앙값"], ["p90", "P90"], ["p99", "P99"]].map(([k, t]) => el("span", { className: "chip" }, `${t} ${mcValue(d.spread[k], d.format, d.unit)}`))) : "",
         ...(d.notes ?? []).map(t => el("div", { className: "hint", textContent: t })),

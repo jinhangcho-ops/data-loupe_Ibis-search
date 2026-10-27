@@ -27,7 +27,7 @@ def run(eid, t, **extra):
     entry = [e for e in cat.ENTRIES if e["id"] == eid][0]
     pick = {"date": "ts", "num": "n1"}
     slots = {s["name"]: ("u" if s["role"] == "user" else pick.get(s["kinds"], "n1")) for s in entry["slots"] if s["type"] == "column"}
-    return cat.compute(eid, {**slots, **extra}, {}, cat.Ctx(table=t), None, None)
+    return cat.compute(eid, {**slots, **extra}, {}, cat.Ctx(table=t), None)
 
 
 # ---------- 7B1 빈 결과·시각 전부 NULL ----------
@@ -48,7 +48,7 @@ def test_cohort_metrics_on_no_rows_or_all_null_times_have_no_value(kind):
 def test_tiers_quantile_mode_rejects_zero_and_reversed_percentages():
     t = ibis.memtable(pl.DataFrame({"u": [1, 2, 3, 4], "amt": [10.0, 20.0, 30.0, 40.0]}).to_arrow())
     base = {"사용자": "u", "금액": "amt"}
-    go = lambda **extra: cat.compute("tiers", {**base, **extra}, {}, cat.Ctx(table=t), None, None)
+    go = lambda **extra: cat.compute("tiers", {**base, **extra}, {}, cat.Ctx(table=t), None)
     with pytest.raises(ValueError, match="0 < Whale"):
         go(**{"Whale 기준": 0})
     with pytest.raises(ValueError, match="상위 %"):  # 상위 50%가 상위 10%보다 넓어 Whale이 Dolphin보다 많다

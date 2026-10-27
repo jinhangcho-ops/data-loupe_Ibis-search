@@ -90,7 +90,7 @@ class CardPanel {
       this.show();
     } });
     const place = el("div", { className: "prow" }, this.field("너비(칸)", num("w", 2, 12)), this.field("높이(칸)", num("h", 2, 12)), this.field("가로 위치", num("x", 0, 12 - card.layout.w)), this.field("세로 위치", num("y", 0, 999)));
-    const head = el("div", { className: "phead" }, el("b", { textContent: `${KIND_NAMES[card.kind] ?? card.kind} 카드 설정` }), el("button", { className: "fold", textContent: "›", ariaLabel: "패널 접기", title: "패널 접기", onclick: () => this.fold(true) }));
+    const head = el("div", { className: "phead" }, el("b", { textContent: `${KIND_NAMES[card.kind] ?? card.kind} 카드 설정` }), el("button", { className: "fold", textContent: "›", ariaLabel: "패널 접기", title: "패널 접기", onclick: () => { this.fold(true); this.root.querySelector(":scope > .side-strip")?.focus(); } }));
     const again = el("button", { className: "btn", textContent: "이 카드 다시 구하기", title: "이 카드 값만 지금 연결에서 다시 구해요", onclick: () => busy(again, async () => { try { await this.host.recompute(card); err.textContent = ""; this.show(); } catch (e) { err.textContent = e.message; } }) });
     const fills = [this.dataSection(card, err)];
     const settings = isShell(card) ? "" : board.tools(card);  // 종류·단위·색·목표·값 모양 같은 그 카드의 설정 줄(dash.js)
@@ -102,7 +102,7 @@ class CardPanel {
     this.folded = on;
     this.root.classList.toggle("folded", on);
     this.root.querySelector(":scope > .side-strip")?.remove();
-    if (on) this.root.append(el("button", { className: "side-strip", title: "카드 설정 펴기", onclick: () => this.fold(false) }, el("b", { textContent: "‹" }), el("span", { textContent: "카드 설정" })));
+    if (on) this.root.append(el("button", { className: "side-strip", title: "카드 설정 펴기", onclick: () => { this.fold(false); this.root.querySelector(".fold")?.focus(); } }, el("b", { textContent: "‹" }), el("span", { textContent: "카드 설정" })));
   }
   // 데이터: 비어 있거나 [다시 정하기]를 누르면 dash_menu의 입력 칸(테이블·컬럼·집계)을 보인다. 정하면 이 카드에 채운다(자리·id는 그대로).
   dataSection(card, err) {

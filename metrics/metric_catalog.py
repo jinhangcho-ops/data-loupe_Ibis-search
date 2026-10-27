@@ -2,10 +2,9 @@
 - 항목 = {id, area, name, abbr, help(실무 해석 한 줄), formula(식), sentence(빈칸이 든 문장), slots(빈칸, 문장 틀 빈칸과 같은 모양 + role), calc(metric_kernels의 계산 이름), params(그 계산의 고정 값),
   pair(짝 절대량 id들 — 비율 지표는 분자·분모를 함께 보인다), spread(평균형이면 중앙값·P90·P99를 함께), needs(필요한 컬럼), constants(사용자가 적는 상수 빈칸), format(number·percent), unit, better, hint(north_star·counter·guardrail 후보),
   window(창 함수 일이라 원격·파일 연결은 이 PC 사본에서), cross(광고비 같은 다른 테이블 값을 써서 맞춤 구절이 있어야 하는 지표)}.
-- 3원칙은 자료로만 준다: 비율 지표는 pair로 짝 절대량, 평균형은 spread로 중앙값·P90·P99, 북극성·카운터·가드레일은 hint(대시보드의 north_star·counters·limits를 그대로 쓰고 여기서 따로 저장하지 않는다. 한계 확인은 check_limit).
+- 3원칙은 자료로만 준다: 비율 지표는 pair로 짝 절대량, 평균형은 spread로 중앙값·P90·P99, 북극성·카운터·가드레일은 hint(대시보드의 north_star·counters·limits를 그대로 쓰고 여기서 따로 저장하지 않는다).
 - compute는 sentence_exec와 같은 규칙으로 현재 연결에서 구한다: 내 지표로 저장한 항목은 부르는 쪽이 scope를 먼저 검사하고(sentence_exec.check_scope), 원격 DB는 값을 읽는 조회만 보낸다(처리 용량 확인 scan_gate와
   이 PC 사본 만들기는 라우트 catalog_app이 한다). 다른 테이블이 필요한 지표는 맞춤 구절(기간 단위 또는 공통 키)이 없으면 이유와 함께 거부한다(6-5)."""
-import math
 
 from query import flow
 from core import parse
@@ -540,16 +539,8 @@ def shown_sentence(e, given):
     return text
 
 
-def check_limit(value, limit):
-    """한계 {op: >=|<=, value}를 벗어났으면 경고 글, 아니면 None. 대시보드 카운터 한계(dash_store.check_limits)와 같은 뜻이다: >=면 값이 한계보다 작아지면, <=면 커지면 경고."""
-    if value is None or not isinstance(limit, dict):
-        return None
-    bad = not math.isclose(value, limit["value"], rel_tol=1e-9, abs_tol=1e-12) and (value < limit["value"] if limit["op"] == ">=" else value > limit["value"])  # 합계의 꼬리는 한계와 같은 값(대시보드와 같은 기준)
-    return f"지금 값 {value:,.4g}이(가) 한계({limit['value']:,.4g} {'이상' if limit['op'] == '>=' else '이하'})를 벗어났어요." if bad else None
-
-
-def compute(entry_, slots, body, ctx, align=None, limit=None):
-    """항목을 현재 연결에서 구한다. {id, name, value, label, unit, format, better, columns, rows, parts, pair, spread, notes, text, alert?}.
+def compute(entry_, slots, body, ctx, align=None):
+    """항목을 현재 연결에서 구한다. {id, name, value, label, unit, format, better, columns, rows, parts, pair, spread, notes, text}.
     ctx.table이 없으면 ctx.fetch(body, 컬럼들)로 받는다(원격·파일 연결은 이 PC 사본). 다른 테이블이 필요한 지표는 align이 없으면 이유와 함께 거부한다."""
     import numpy as np  # 계산할 때만 올린다(프로그램이 시작할 때는 올리지 않는다)
 
@@ -572,6 +563,4 @@ def compute(entry_, slots, body, ctx, align=None, limit=None):
     out = finite({"id": e["id"], "name": e["name"], "abbr": e["abbr"], "area": e["area"], "value": got["value"], "label": got["label"], "unit": e["unit"], "format": e["format"], "better": e["better"],
            "columns": [{"key": k, "label": v} for k, v in got["cols"].items()], "rows": got["rows"], "parts": parts,
            "pair": [{"id": p, "name": part_name(p), "value": parts.get(p)} for p in e["pair"]], "spread": spread, "notes": [*got["notes"], *ctx.notes], "text": shown_sentence(e, slots)})  # 실수 컬럼의 NaN이 JSON에 NaN으로 가면 브라우저가 읽지 못한다
-    if limit:
-        out["alert"] = check_limit(out["value"], limit)
     return out

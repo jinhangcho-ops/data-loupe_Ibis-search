@@ -140,13 +140,13 @@ def with_passes(ask, e, copy):
     return out
 
 
-def compute_entry(e, slots, body, align=None, limit=None):
+def compute_entry(e, slots, body, align=None):
     """항목을 현재 연결에서 구한다(연결 스레드에서). metric_catalog.compute의 결과."""
     if not isinstance(body, dict) or not body.get("base"):
         raise ValueError("기준 테이블이 있는 검색 body가 필요해요.")
     slots = slots if isinstance(slots, dict) else {}
     ctx = metric_catalog.Ctx(fetch=lambda b, keep: table_for(e, b, keep, align), other=other_for(e, body, slots, align) if e["cross"] else None)
-    return run(lambda: metric_catalog.compute(e, slots, body, ctx, align, limit))
+    return run(lambda: metric_catalog.compute(e, slots, body, ctx, align))
 
 
 def compute_saved(mine, body):
@@ -156,7 +156,7 @@ def compute_saved(mine, body):
 
 @app.post("/api/catalog/compute")
 def catalog_compute():
-    """항목 하나를 구한다. {id, slots, body(검색 body), align?(다른 테이블이 필요한 지표), limit?({op, value}: 벗어나면 alert)}. 처리 용량이 기준을 넘으면 실행 전에 묻는다(confirmed로 다시 보내면 실행)."""
+    """항목 하나를 구한다. {id, slots, body(검색 body), align?(다른 테이블이 필요한 지표)}. 처리 용량이 기준을 넘으면 실행 전에 묻는다(confirmed로 다시 보내면 실행)."""
     data = body_of(request.json)
     e = metric_catalog.get(data.get("id"))
     body, slots = body_of(data.get("body")), body_of(data.get("slots"))
@@ -164,7 +164,7 @@ def catalog_compute():
         raise ValueError("기준 테이블이 있는 검색 body가 필요해요.")
     if ask := scan_ask(e, slots, body, data, data.get("align")):
         return ask
-    return jsonify(**compute_entry(e, slots, body, data.get("align"), data.get("limit")))
+    return jsonify(**compute_entry(e, slots, body, data.get("align")))
 
 
 # ---------- 내 지표로 저장 ----------

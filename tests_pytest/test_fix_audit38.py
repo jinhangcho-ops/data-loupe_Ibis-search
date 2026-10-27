@@ -329,11 +329,6 @@ def test_onehot_with_nan_and_casefold_only_values():
     assert {"x_Straße", "x_STRASSE"} <= set(prep_ops.onehot(ibis.memtable({"x": ["Straße", "STRASSE"]}), "x", True).columns)  # lower로는 다른 이름
 
 
-def test_limits_at_zero_and_float_tails_agree():
-    from metrics import metric_catalog
-    assert metric_catalog.check_limit(1.1 + 2.2, {"op": "<=", "value": 3.3}) is None
-    assert metric_catalog.check_limit(3.4, {"op": "<=", "value": 3.3})
-    assert metric_catalog.check_limit(0.1 + 0.2 - 0.3, {"op": "<=", "value": 0}) is None
 
 
 # ---------- 24차 감사 ----------

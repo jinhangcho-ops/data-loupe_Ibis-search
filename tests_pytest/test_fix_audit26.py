@@ -49,7 +49,7 @@ def test_daily_schedule_waits_for_running_collect_instead_of_skipping(monkeypatc
 
 def run(entry_id, roles, table):
     names = {s["role"]: s["name"] for s in cat.get(entry_id)["slots"]}
-    return cat.compute(entry_id, {names[r]: v for r, v in roles.items()}, {}, cat.Ctx(table=table), None)
+    return cat.compute(entry_id, {names[r]: v for r, v in roles.items()}, {}, cat.Ctx(table=table))
 
 
 def mem(**cols):

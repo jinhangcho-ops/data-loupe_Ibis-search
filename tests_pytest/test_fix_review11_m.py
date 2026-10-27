@@ -19,7 +19,7 @@ def mem(**cols):
 
 
 def run(entry_id, slots, table):
-    return cat.compute(entry_id, slots, {}, cat.Ctx(table=table), None, None)
+    return cat.compute(entry_id, slots, {}, cat.Ctx(table=table), None)
 
 
 def row(got, name):

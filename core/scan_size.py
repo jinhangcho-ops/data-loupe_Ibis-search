@@ -66,12 +66,13 @@ def type_bytes(dtype):
     return TYPE_BYTES.get(name, 8)
 
 
-def duckdb_bytes(con, table, columns):
-    """DuckDB 테이블: 추정 행 수 × 읽는 컬럼의 타입 크기."""
-    rows = con.raw_sql(f"select estimated_size from duckdb_tables() where lower(table_name) = lower('{table.replace(chr(39), chr(39) * 2)}')").fetchone()
+def duckdb_bytes(con, table, columns, schema=None):
+    """DuckDB 테이블(schema를 주면 그 스키마의 것): 추정 행 수 × 읽는 컬럼의 타입 크기."""
+    q = lambda s: s.replace("'", "''")
+    rows = con.raw_sql(f"select estimated_size from duckdb_tables() where lower(table_name) = lower('{q(table)}')" + (f" and lower(schema_name) = lower('{q(schema)}')" if schema else "")).fetchone()
     if not rows:
         return None
-    schema = con.table(table).schema()
+    schema = con.table(table, database=schema).schema() if schema else con.table(table).schema()
     width = sum(type_bytes(t) for n, t in schema.items() if columns is None or n.lower() in columns)
     return int(rows[0] or 0) * width
 
@@ -107,13 +108,14 @@ def estimate(con, sql, opened=None, dialect=None):
     files = file_tables(opened)
     total, exact, hows = 0, True, set()
     exp = sql_exec.glot()[1]
-    paths = [n.expressions[0].name for n in sql_exec.glot()[0].parse_one(sql, read=dialect).find_all(exp.ReadParquet)
-             if n.expressions and n.expressions[0].is_string]  # Parquet 가상 테이블이 풀린 read_parquet('경로')
+    tree = sql_exec.glot()[0].parse_one(sql, read=dialect)
+    paths = [n.expressions[0].name for n in tree.find_all(exp.ReadParquet) if n.expressions and n.expressions[0].is_string]  # Parquet 가상 테이블이 풀린 read_parquet('경로')
+    schemed = [(t.args["db"].name, t.name) for t in tree.find_all(exp.Table) if t.args.get("db") and t.name]  # 스키마가 붙은 테이블(referenced에는 없다)
     for path in paths:
         total += parquet_bytes(path, columns)
         hows.add("Parquet 파일 정보")
-    for table in tables:
-        path = files.get(table.lower())
+    for schema, table in [(None, t) for t in tables] + schemed:
+        path = None if schema else files.get(table.lower())
         if path is not None:
             if path.suffix.lower() == ".parquet":
                 total += parquet_bytes(path, columns)
@@ -124,7 +126,7 @@ def estimate(con, sql, opened=None, dialect=None):
                 hows.add("파일 크기(최대)")
             continue
         if name == "duckdb":
-            size = duckdb_bytes(con, table, columns)
+            size = duckdb_bytes(con, table, columns, schema)
             hows.add("DuckDB 행 수 × 컬럼 크기")
         elif name == "postgres":
             size = postgres_bytes(con, table, columns)
@@ -135,7 +137,7 @@ def estimate(con, sql, opened=None, dialect=None):
             return {"bytes": None, "exact": False, "how": "이 연결은 미리 알 수 없음"}
         total += size
         exact = False
-    return {"bytes": total, "exact": exact and bool(tables or paths), "how": ", ".join(sorted(hows)) or "읽는 테이블 없음"}
+    return {"bytes": total, "exact": exact and bool(tables or paths or schemed), "how": ", ".join(sorted(hows)) or "읽는 테이블 없음"}
 
 
 def reason(e):

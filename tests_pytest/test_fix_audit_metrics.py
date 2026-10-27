@@ -16,7 +16,7 @@ def mem(**cols):
 
 def run(entry_id, slots, table, align=None, other=None):
     ctx = cat.Ctx(table=table, other=(lambda name: other[name]) if other else None)
-    return cat.compute(entry_id, slots, {}, ctx, align, None)
+    return cat.compute(entry_id, slots, {}, ctx, align)
 
 
 # ---------- 1 세션: 사용자·시각이 NULL인 행은 세션에서 뺀다 ----------

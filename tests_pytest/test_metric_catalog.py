@@ -24,10 +24,10 @@ def mem(**cols):
     return ibis.memtable(pl.DataFrame(cols).to_arrow())
 
 
-def run(entry_id, slots, table, align=None, other=None, limit=None):
+def run(entry_id, slots, table, align=None, other=None):
     """표 하나에서 항목을 구한다(other = 이름 → 표)."""
     ctx = cat.Ctx(table=table, other=(lambda name: other[name]) if other else None)
-    return cat.compute(entry_id, slots, {}, ctx, align, limit)
+    return cat.compute(entry_id, slots, {}, ctx, align)
 
 
 def value(entry_id, slots, table, **kw):
@@ -532,12 +532,6 @@ def test_guardrail_and_limits():
     assert run("guardrail", {**s, "한계(%)": -60}, t)["rows"][2]["value"] == "경고"  # 점추정 −50%는 안이어도 구간 끝이 넘으면 경고
     below = run("guardrail", {**s, "한계(%)": -90, "방향": "<="}, t)
     assert "벗어났어요" in below["label"]
-    # 대시보드 카운터 한계와 같은 뜻: >=이면 값이 한계보다 작아질 때, <=이면 커질 때 경고
-    assert cat.check_limit(0.5, {"op": ">=", "value": 0.8}).startswith("지금 값 0.5") and cat.check_limit(0.9, {"op": ">=", "value": 0.8}) is None
-    assert cat.check_limit(0.9, {"op": "<=", "value": 0.8}) and cat.check_limit(None, {"op": "<=", "value": 0.8}) is None
-    daily = mem(uid=[1, 2, 3], ts=[D(2026, 3, 1)] * 3)
-    got = run("uv", {"사용자": "uid"}, daily, limit={"op": ">=", "value": 5})
-    assert got["alert"] and run("uv", {"사용자": "uid"}, daily, limit={"op": ">=", "value": 2})["alert"] is None
     from core import dash_store
     assert set(dash_store.LIMIT_OPS) == {">=", "<="}
 
@@ -635,8 +629,6 @@ def test_compute_route_on_duckdb_file(c):
     assert post(c, "/api/catalog/compute", id="nothing", slots={}, body=BODY)[0] == 400
     code, got = post(c, "/api/catalog/compute", id="uv", slots={"사용자": "nope"}, body=BODY)
     assert code == 400 and "nope" in got["error"]
-    code, got = post(c, "/api/catalog/compute", id="uv", slots={"사용자": "uid"}, body=BODY, limit={"op": ">=", "value": 9})
-    assert code == 200 and got["alert"]
 
 
 def test_compute_on_remote_copies_needed_columns_without_counting(c, monkeypatch):

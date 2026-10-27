@@ -181,7 +181,7 @@ def test_payback_thinning_is_noted():
     ads = {"ads": mem(cost=[5.0], ch=["A"])}
     s = {"사용자": "uid", "시각": "ts", "금액": "amt", "최대 일수": 1000, "광고 테이블": "ads", "광고비": "cost"}
     ctx = cat.Ctx(table=users, other=lambda n: ads[n])
-    got = cat.compute("payback", s, {}, ctx, {"kind": "key", "keys": [["ch", "ch"]]}, None)
+    got = cat.compute("payback", s, {}, ctx, {"kind": "key", "keys": [["ch", "ch"]]})
     assert len(got["rows"]) < 1001 and any("하나씩만" in n for n in got["notes"])
 
 
