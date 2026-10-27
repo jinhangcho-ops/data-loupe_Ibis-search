@@ -44,7 +44,7 @@ SPACED = ["주문 일자 2026-10-01 ~ 2026-10-31"]
 
 def test_own_range_spaced_column():
     got = dash_calc.own_range({"source": {"body": {"periods": SPACED}}})
-    assert got and got["column"] == "주문 일자" and got["range"] == {"start": "2026-10-01", "end": "2026-10-31"} and got["prev"]["text"] == "직전 1개월"  # 달에 꼭 맞는 기간은 대시보드 기간 칸처럼 직전 달(24차 감사)
+    assert got and got["column"] == "주문 일자" and got["range"] == {"start": "2026-10-01", "end": "2026-10-31"} and got["prev"]["text"] == "지난달"  # 달에 꼭 맞는 기간은 대시보드 기간 칸처럼 지난달(24·25차 감사)
     assert dash_calc.own_range({"source": {"body": {"periods": ["day 2026-01-01 00:00 ~ 2026-01-02"]}}}) is None  # 시각이 붙은 줄은 여전히 아님
 
 

@@ -207,15 +207,6 @@ def deps_of(template, slots):
     return [slots[s["name"]] for s in template["slots"] if s["type"] == "metric" and slots.get(s["name"])]
 
 
-def legacy_columns(definition, columns=None):
-    """metrics.py 모양 정의가 쓰는 컬럼 이름들."""
-    found = set()
-    for part in (definition.get("numerator"), definition.get("denominator")):
-        if part:
-            found |= ({part["column"]} if part.get("column") else set()) | {c for w in part.get("where") or [] for c in columns_in_text(w, columns)}
-    return found
-
-
 # ---------- 의존·지문 ----------
 
 def find_cycle(items, start, deps):
@@ -280,27 +271,22 @@ def build(defn, columns, items, metric_id=None):
     if same:
         raise ValueError(f"이 테이블에 ‘{name}’ 지표가 이미 있어요. 같은 곳에서는 이름이 겹칠 수 없어요.")
     tid = defn.get("template")
-    if tid == LEGACY:
-        slots = {"def": metric_file.metric(name, (defn.get("slots") or {}).get("def"))}
-        template = {"slots": [], "id": LEGACY}
-        used = legacy_columns(slots["def"], columns)
-    else:
-        try:
-            template = template_of(tid) if isinstance(tid, str) else None
-        except ValueError:
-            template = None
-        if template is None or template["kind"] != "metric":
-            raise ValueError(f"지표 틀을 골라 주세요{f'(‘{tid}’ 틀은 지표 틀이 아니에요)' if tid else ''}.")
-        given = defn.get("slots") if isinstance(defn.get("slots"), dict) else {}
-        unknown = set(given) - {s["name"] for s in template["slots"]}
-        if unknown:
-            raise ValueError(f"틀에 없는 칸이에요: {', '.join(sorted(unknown))}")
-        slots = {}
-        for s in template["slots"]:
-            value = check_slot(s, given.get(s["name"]), columns, items)
-            if value is not None:
-                slots[s["name"]] = value
-        used = used_columns(template, slots, columns)
+    try:
+        template = template_of(tid) if isinstance(tid, str) else None
+    except ValueError:
+        template = None
+    if template is None or template["kind"] != "metric":
+        raise ValueError(f"지표 틀을 골라 주세요{f'(‘{tid}’ 틀은 지표 틀이 아니에요)' if tid else ''}.")
+    given = defn.get("slots") if isinstance(defn.get("slots"), dict) else {}
+    unknown = set(given) - {s["name"] for s in template["slots"]}
+    if unknown:
+        raise ValueError(f"틀에 없는 칸이에요: {', '.join(sorted(unknown))}")
+    slots = {}
+    for s in template["slots"]:
+        value = check_slot(s, given.get(s["name"]), columns, items)
+        if value is not None:
+            slots[s["name"]] = value
+    used = used_columns(template, slots, columns)
     agg, value = slots.get("집계"), sentence_run.name_of(slots.get("값"))
     agg = sentence_run.agg_of(agg)[0] if agg else None
     if columns and agg and value in columns and sql_funcs.get(agg)["kind_in"] == "num" and columns[value] != "num":
@@ -434,25 +420,17 @@ def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
     for m in chain:
         tid = m["template"]
         slots = json.loads(json.dumps(m["slots"]))
-        if tid == LEGACY:
-            definition = json.loads(json.dumps(slots["def"]))
-            for part in (definition.get("numerator"), definition.get("denominator")):
-                if part:
-                    part["column"] = mapping.get(part["column"], part["column"]) if part.get("column") else None
-                    part["where"] = [rename_in(w, whole) for w in part.get("where") or []]
-            slots = {"def": definition}
-        else:
-            template = template_of(tid)
-            for s in template["slots"]:
-                v = slots.get(s["name"])
-                if s["type"] == "column" and v:
-                    slots[s["name"]] = rename_column(v, mapping)
-                elif s["type"] == "columns" and isinstance(v, list):
-                    slots[s["name"]] = [rename_column(x, mapping) for x in v]
-                elif s["type"] in ("cond", "order") and isinstance(v, str):
-                    slots[s["name"]] = rename_in(v, whole)
-                elif s["type"] == "metric" and v in id_map:
-                    slots[s["name"]] = id_map[v]
+        template = template_of(tid)
+        for s in template["slots"]:
+            v = slots.get(s["name"])
+            if s["type"] == "column" and v:
+                slots[s["name"]] = rename_column(v, mapping)
+            elif s["type"] == "columns" and isinstance(v, list):
+                slots[s["name"]] = [rename_column(x, mapping) for x in v]
+            elif s["type"] in ("cond", "order") and isinstance(v, str):
+                slots[s["name"]] = rename_in(v, whole)
+            elif s["type"] == "metric" and v in id_map:
+                slots[s["name"]] = id_map[v]
         pool = [*items, *out]
         title = (name if m["id"] == metric_id and name else m["name"])
         if any(x for x in pool if same_scope(x.get("scope"), scope) and x["name"] == title):
@@ -496,7 +474,7 @@ def is_stale(metric, saved_hash):
     return bool(saved_hash) and saved_hash != metric.get("def_hash")
 
 
-def used_by(metric_id, dashboards=None, goals=None):
+def used_by(metric_id, dashboards=None):
     """정의를 고칠 때 보일 쓰는 곳: 저장한 대시보드의 카드(JSON에 metric_id가 든 카드; stale = 카드가 저장한 def_hash가 지금과 다름)와 목표 줄(이름이 같은 줄).
     dashboards = [대시보드](없으면 dash_store에서 읽는다, 풀 수 없으면 빈 목록), goals = 목표 파일의 rows."""
     items = load()
@@ -516,8 +494,7 @@ def used_by(metric_id, dashboards=None, goals=None):
                 saved = (c.get("data") or {}).get("def_hash") or (c.get("source") or {}).get("def_hash")
                 cards.append({"dashboard": d.get("id"), "dashboard_name": d.get("name"), "card": c.get("id"), "title": c.get("title", ""),
                               "stale": bool(metric and is_stale(metric, saved))})
-    named = [g for g in goals or [] if metric and g.get("name", "").casefold() == metric["name"].casefold()]
-    return {"cards": cards, "goals": named}
+    return {"cards": cards}
 
 
 # ---------- 예전 지표 파일의 공통 정의 ----------

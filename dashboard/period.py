@@ -212,11 +212,23 @@ def split_text(value):
     return day, clock
 
 
+def month_count(first, last):
+    """first(1일)~last(그 달 끝)처럼 달 단위로 꼭 맞으면 개월 수, 아니면 None."""
+    if first.day == 1 and last == month_end(last.year, last.month):
+        return (last.year - first.year) * 12 + last.month - first.month + 1
+
+
+def month_name(months, first):
+    """직전 기간 이름: 달력 분기·연과 맞을 때만 '직전 분기'·'작년'(dash_calc.target_period와 같은 규칙), 아니면 '직전 N개월'."""
+    if months == 1 or months == 3 and first.month % 3 == 1 or months == 12 and first.month == 1:
+        return {1: "지난달", 3: "직전 분기", 12: "작년"}[months]
+    return f"직전 {months}개월"
+
+
 def previous_text(start, end):
-    """날짜 기간 start~end(date)의 직전 기간을 부르는 말: 달 단위로 꼭 맞으면 '직전 N개월', 아니면 '직전 N일'(previous와 같은 판정)."""
-    if start.day == 1 and end == month_end(end.year, end.month):
-        return f"직전 {(end.year - start.year) * 12 + end.month - start.month + 1}개월"
-    return f"직전 {(end - start).days + 1}일"
+    """날짜 기간 start~end(date)의 직전 기간을 부르는 말: 대시보드 기간 칸(dash_refresh.context)과 같은 이름(지난달·직전 분기·작년·직전 N개월), 달에 맞지 않으면 '직전 N일'."""
+    months = month_count(start, end)
+    return month_name(months, start) if months else f"직전 {(end - start).days + 1}일"
 
 
 def previous(span):

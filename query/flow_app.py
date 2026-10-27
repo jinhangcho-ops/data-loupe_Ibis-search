@@ -180,7 +180,7 @@ def my_metrics_used_by():
     """정의를 고치기 전에 보일 쓰는 곳: 카드(stale 표시)와 목표 줄, 쓰는 지표."""
     data = body_of(request.json)
     metric = my_metrics.get(data.get("id"))
-    return jsonify(**my_metrics.used_by(metric["id"], goals=data.get("goals")), dependents=[{"id": m["id"], "name": my_metrics.scope_text(m)} for m in my_metrics.dependents(metric["id"])])
+    return jsonify(**my_metrics.used_by(metric["id"]), dependents=[{"id": m["id"], "name": my_metrics.scope_text(m)} for m in my_metrics.dependents(metric["id"])])
 
 
 # ---------- 문장 ----------

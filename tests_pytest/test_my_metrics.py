@@ -168,7 +168,6 @@ def test_goal_lookup_can_be_ambiguous(folder):
     found = targets.lookup(rows, m["name"])  # 대시보드 목표 카드가 쓰는 찾기(dash_calc)
     assert found["row"] is None and found["ambiguous"] is True and "어느 기간인지 알 수 없어요 (2026-01, 2026-02)" in found["error"]
     assert targets.lookup(rows, m["name"], "2026-02")["row"]["value"] == 200
-    assert mm.used_by(m["id"], dashboards=[], goals=rows)["goals"] == rows  # 정의를 고치면 이름이 같은 목표 줄도 알린다
 
 
 def test_scope_must_name_connection_and_table(folder):

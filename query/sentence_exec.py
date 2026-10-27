@@ -69,8 +69,6 @@ def definition_of(ref, body):
     check_scope(mine, body)
     if metric_catalog.is_catalog(mine["template"]):  # 지표 사전 항목: catalog_app이 구한다(metric_run이 이 표시를 보고 처리)
         return mine["name"], None, {"catalog": mine}
-    if mine["template"] == my_metrics.LEGACY:
-        return mine["name"], metric_file.metric(mine["name"], mine["slots"]["def"]), mine
     made = sentence_run.compile(mine["template"], mine["slots"], body, None)
     if not made["ok"]:
         raise ValueError(f"내 지표 ‘{mine['name']}’을(를) 구할 수 없어요: {made['reason']}")
