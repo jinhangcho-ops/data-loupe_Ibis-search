@@ -305,15 +305,17 @@ class DashBoard extends Board {
     this.palette = [];
     this.range = null;  // 보는 기간 {start, end}(기준일로 자른 것, 열린 쪽은 없음). 시간별 카드는 이 기간의 일 값만 그린다.
     this.prev = null;  // 직전 기간 {start, end, text}(비교 문장용)
+    this.months = undefined;  // 기준일로 자른 기간의 원래 개월 수(서버 context의 months, 목표 달을 고른다)
     this.compares = new Map();  // 카드 → 비교 문장 {text, tone, ...}
     this.dashId = "";  // 지금 열어 둔 저장본의 id(배치도의 그림 파일을 서버에서 받을 때 쓴다). 화면이 정한다.
     this.recompute = options.recompute;  // (카드들) → 그 카드들을 보는 기간으로 다시 구한다(연결이 있어야 한다). 화면이 정한다.
     this.connKey = "";  // 지금 연결의 열쇠(비밀번호·계정 없음). 있으면 다른 연결의 카드를 "이전 값"으로 보인다.
   }
   // 보는 기간과 직전 기간을 바꾸고 비교 문장을 다시 받아 그린다(서버 /api/compare).
-  async setRange(range, prev) {
+  async setRange(range, prev, months) {
     this.range = range;
     this.prev = prev;
+    this.months = months;
     const unique = c => SVG_KINDS.includes(c.kind) && c.data?.by_unit?.day?.series.some(s => !merges(s.agg));  // 고유 개수·중앙값 같은 집계는 기간으로 다시 구해야 한다
     const was = this.hadRange;  // 기간이 비었으면(카드의 원래 조건대로) 방금 전까지 기간이 걸려 있던 때만 다시 구한다
     this.hadRange = !!range;
@@ -324,7 +326,7 @@ class DashBoard extends Board {
   }
   // 새 카드·다시 구할 때 서버에 알려 줄 보는 기간(없으면 undefined)
   ctx() {
-    return this.range || this.asOf ? { range: this.range, prev: this.prev, as_of: this.asOf || undefined } : undefined;  // as_of: 문장 카드의 기준일 빈칸
+    return this.range || this.asOf ? { range: this.range, prev: this.prev, months: this.months, as_of: this.asOf || undefined } : undefined;  // as_of: 문장 카드의 기준일 빈칸
   }
   async recompare() {
     this.cards.forEach(c => { c.range = this.range; });

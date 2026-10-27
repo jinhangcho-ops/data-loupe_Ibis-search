@@ -82,7 +82,7 @@ class DashCtl {
     if (past) this.stopLive("지난 날짜 기준으로 보는 중이라 실시간 갱신을 멈췄어요");
     this.board.asOf = this.state.as_of;
     const ctx = parsed.context;  // 보는 기간(기준일로 자른 것)과 직전 기간은 서버(dash_refresh.context)가 구한 대로 쓴다
-    await this.board.setRange(blank ? null : ctx?.range ?? null, blank ? null : ctx?.prev ?? null);
+    await this.board.setRange(blank ? null : ctx?.range ?? null, blank ? null : ctx?.prev ?? null, blank ? undefined : ctx?.months);  // months: 서버가 잘린 기간에만 준다(없으면 JSON에서 빠진다)
     if (commit) this.changed(this.fields());
   }
   // 최신화 주기·실시간 간격 칸을 서버로 검사한다(최신화는 1시간 이상, 실시간은 이 연결의 최소 이상).

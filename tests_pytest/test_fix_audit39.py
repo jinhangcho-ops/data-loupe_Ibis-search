@@ -5,6 +5,7 @@ from lazy import ibis
 from core import sql_funcs
 from dashboard import dash_calc, dash_refresh
 from query import sentence_run
+from test_fix_audit_js import run_node
 
 
 def test_sentence_14_this_month_compares_same_days_of_last_month(monkeypatch):
@@ -36,3 +37,21 @@ def test_target_month_only_when_cut_period_is_whole_months():
     assert dash_calc.target_period(dash_refresh.context({"period": "2026-03", "as_of": "2026-03-10"})) == "2026-03"
     assert dash_calc.target_period(dash_refresh.context({"period": "2026-Q1", "as_of": "2026-02-10"})) == "2026-Q1"
     assert dash_calc.target_period(dash_refresh.context({"period": "이번 달", "as_of": "2026-03-10"})) == "2026-03"
+
+
+def test_board_ctx_carries_months_to_compute(tmp_path):
+    body = """
+(async () => {
+  const b = Object.create(DashBoard.prototype);
+  Object.assign(b, { cards: [], hadRange: false, async recompare() {} });
+  await b.setRange({ start: "2026-01-01", end: "2026-02-10" }, null, 3);
+  const cut = b.ctx();
+  await b.setRange({ start: "2026-01-01", end: "2026-01-31" }, null, undefined);
+  console.log(JSON.stringify({ cut, whole: JSON.parse(JSON.stringify(b.ctx())) }));
+})();
+"""
+    got = run_node(tmp_path, body, files=["board.js", "dash.js"], parts=["const SVG_KINDS = ['kpi'];\n"])
+    assert got["cut"]["months"] == 3 and "months" not in got["whole"]
+    ctx = {k: v for k, v in got["cut"].items() if v is not None}
+    ctx["prev"] = None
+    assert dash_calc.target_period({**ctx, "range": {"start": "2026-01-01", "end": "2026-02-10"}}) == "2026-Q1"  # 화면이 보낸 모양으로도 분기 목표
