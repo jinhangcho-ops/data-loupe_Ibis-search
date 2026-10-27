@@ -85,8 +85,21 @@ def make_row(name, value, period, column, scope, line):
     name = "" if name is None else str(name).strip()
     if not name:
         raise ValueError("이름이 비어 있어요.")
+    if isinstance(period, float) and period.is_integer():
+        period = int(period)  # 숫자 칸의 연도 2026.0
+    elif isinstance(period, float):  # YAML의 2026.10은 숫자 2026.1이 되어 달을 알 수 없다
+        raise ValueError(f"기간 {period}이(가) 숫자로 읽혔어요. 2026-10처럼 쓰거나 따옴표로 감싸 주세요.")
     clean = lambda v: "" if v is None else str(v).strip()
-    return {"name": name, "value": parse_value(value), "period": clean(period), "column": clean(column), "scope": clean(scope), "line": line}
+    return {"name": name, "value": parse_value(value), "period": period_text(clean(period)), "column": clean(column), "scope": clean(scope), "line": line}
+
+
+def period_text(text):
+    """기간 글을 대시보드가 찾는 한 모양으로: 2026-q4·2026Q4 → 2026-Q4, 2026.10·2026/10·2026-1 → 2026-10·2026-01. 모르는 모양은 그대로."""
+    m = re.fullmatch(r"(\d{4})(?:[-./]?[Qq]([1-4])|[-./](\d{1,2})(?:[-./](\d{1,2}))?)?", text)
+    if not m:
+        return text
+    year, quarter, month, day = m.groups()
+    return f"{year}-Q{quarter}" if quarter else f"{year}-{int(month):02d}" + (f"-{int(day):02d}" if day else "") if month else year
 
 
 def error(line, message, entry=None):

@@ -52,7 +52,8 @@ def save(name, destination):
     keep(없으면 saved): saved는 암호문, session은 메모리에만(파일에는 빈 글자), env는 환경변수 이름을 파일에 쓴다."""
     name = name.strip() if isinstance(name, str) else ""
     if destination is None:
-        credentials.forget(f"dest:{name}:")
+        for field in {f["name"] for kind in adapters.SENDERS.values() for f in kind["fields"] if f["secret"]}:  # 이 이름의 열쇠만(앞부분 일치면 'a'를 지울 때 'a:b'의 값까지 지워진다)
+            credentials.SESSION.pop(secret_key(name, field), None)
         return settings.save_named(FILE, "보낼 곳", MAX_DESTINATION_SIZE, name, None, MAX_DESTINATIONS)
     if not isinstance(destination, dict) or destination.get("kind") not in adapters.SENDERS:
         raise ValueError(f"보낼 곳의 종류는 {', '.join(adapters.SENDERS)} 중 하나입니다.")

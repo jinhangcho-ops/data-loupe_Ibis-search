@@ -1090,10 +1090,10 @@ function act(button, fn) {
   });
 }
 $("preview").onclick = () => act($("preview"), async r => {
-  const mine = token, got = await timed("preview", () => api("/api/preview", r));
-  if (mine !== token) return;  // 기다리는 사이 테이블·스키마·구성을 바꿨으면 앞의 미리보기를 새 화면에 넣지 않는다
+  const mine = token, sent = snap(), got = await timed("preview", () => api("/api/preview", r));
+  if (mine !== token) return;  // 기다리는 사이 테이블·연결을 바꿨으면 앞의 미리보기를 새 화면에 넣지 않는다
   preview = got;
-  shot = snap();
+  shot = sent;  // 보낸 때의 설정: 기다리는 사이 설정을 바꿨으면 "다시 누르세요" 안내가 뜬다
   rememberTable();
   const now = preview.rows.columns.map((name, k) => ({ name, source: preview.sources[k], type: preview.types[k] })).filter((_, k) => preview.derived[k]);
   deriv = [...now, ...deriv.filter(d => drops.includes(d.name) && !now.some(n => n.name === d.name))];  // 끈 파생 컬럼은 응답에 없어도 목록에 남긴다.

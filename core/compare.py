@@ -3,6 +3,7 @@
 - 비율 값(format percent)은 0~1 비율이고 화면에 ×100 %로 보인다. 변화는 %p로 쓴다.
 - 직전 값이 없거나 0이면 비율은 구하지 않는다(비율 값은 0도 값이라 %p로 쓴다). 숫자가 없으면 지어내지 않는다."""
 import math
+import re
 from decimal import ROUND_HALF_UP, Context, Decimal
 
 from core import settings
@@ -110,7 +111,9 @@ def compare(cur, prev, fmt="number", mode="span", label="직전 기간", better=
     ratio = fmt == "percent"
     base = 0.0 if prev is None else prev  # 없는 직전은 0에서 늘어난 것으로 센다
     delta = cur - base
-    flat = math.isclose(cur, base, rel_tol=1e-12, abs_tol=1e-12)
+    shown_zero = lambda text: not re.search(r"[1-9]", text)  # 보이는 숫자가 반올림해 0이면 같은 것으로(0% 늘었어요·초록 화살표를 내지 않게)
+    flat = math.isclose(cur, base, rel_tol=1e-12, abs_tol=1e-12) or (
+        prev not in (None, 0) and shown_zero(format_delta(delta, fmt)) and (ratio or shown_zero(percent_text(percent_change(cur, prev)))))
     direction = "flat" if flat else "up" if delta > 0 else "down"
     delta_text = format_delta(0 if flat else delta, fmt)
     tone = tone_of(direction, better)

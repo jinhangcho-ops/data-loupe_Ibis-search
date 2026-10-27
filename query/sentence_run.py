@@ -115,6 +115,8 @@ def check(tid, slots, columns=None):
             continue
         kind = s["type"]
         known = None if tid == "e16" and name == "연결 컬럼" else columns  # 16번의 연결 컬럼은 지금 테이블이 아니라 A·B의 컬럼
+        if known is None and columns is not None and isinstance(raw, dict) and raw.get("prep"):
+            out.append(issue(name, "bad", "16번 문장의 연결 컬럼에는 컬럼 가공을 쓸 수 없어요."))
         if kind in ("column", "columns", "order"):
             for c in raw if isinstance(raw, list) else [raw]:
                 col = (flow.head_name(name_of(c), columns) or name_of(c).split()[0]) if kind == "order" and isinstance(name_of(c), str) else name_of(c)

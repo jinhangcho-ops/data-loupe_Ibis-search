@@ -384,7 +384,7 @@ def rename_in(text, mapping):
     names = sorted((k for k in mapping if k), key=len, reverse=True)
     if not names:
         return text
-    found = re.compile(r"""('[^']*'|"[^"]*")|(?<![\w.])(""" + "|".join(map(re.escape, names)) + r")(?![\w.])")
+    found = re.compile(r"""(?<![^\s,=<>])('[^']*'|"[^"]*")|(?<![\w.])(""" + "|".join(map(re.escape, names)) + r")(?![\w.])")
     return found.sub(lambda m: m.group(1) or mapping[m.group(2)], text)
 
 
@@ -422,6 +422,7 @@ def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
     unmapped = sorted({c for m in chain for c in (m.get("cols") or {}) if mapping.get(c, c) not in (columns or {}) and columns is not None})
     if unmapped:
         raise ValueError("새 테이블에서 컬럼 짝을 골라 주세요: " + ", ".join(unmapped))
+    whole = {**{c: c for m in chain for c in (m.get("cols") or {})}, **mapping}  # 글 바꾸기용: 그대로 둘 긴 이름('order date')이 먼저 맞아 짧은 짝('date')이 그 조각을 바꾸지 않게
     id_map, out = {}, []
     for m in chain:
         tid = m["template"]
@@ -431,7 +432,7 @@ def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
             for part in (definition.get("numerator"), definition.get("denominator")):
                 if part:
                     part["column"] = mapping.get(part["column"], part["column"]) if part.get("column") else None
-                    part["where"] = [rename_in(w, mapping) for w in part.get("where") or []]
+                    part["where"] = [rename_in(w, whole) for w in part.get("where") or []]
             slots = {"def": definition}
         else:
             template = template_of(tid)
@@ -442,7 +443,7 @@ def copy_to(metric_id, scope, mapping=None, columns=None, name=None):
                 elif s["type"] == "columns" and isinstance(v, list):
                     slots[s["name"]] = [rename_column(x, mapping) for x in v]
                 elif s["type"] in ("cond", "order") and isinstance(v, str):
-                    slots[s["name"]] = rename_in(v, mapping)
+                    slots[s["name"]] = rename_in(v, whole)
                 elif s["type"] == "metric" and v in id_map:
                     slots[s["name"]] = id_map[v]
         pool = [*items, *out]

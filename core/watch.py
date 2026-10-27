@@ -114,7 +114,7 @@ def freshness(last, stale_minutes, now):
         return ""
     minutes = int((now - last).total_seconds() // 60)
     ago = "방금" if minutes < 1 else f"{minutes}분 전" if minutes < 60 else f"{minutes // 60}시간 전"
-    if stale_minutes and minutes > stale_minutes:
+    if stale_minutes and (now - last).total_seconds() > stale_minutes * 60:  # 엔티티 상태(evaluate)와 같게 초로 견준다
         return f"{minutes}분째 새 데이터가 없어요 (마지막 {last:%H:%M})"
     return f"마지막 데이터 {last:%H:%M} · {ago}"
 

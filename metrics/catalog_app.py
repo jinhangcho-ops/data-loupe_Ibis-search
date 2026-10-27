@@ -113,7 +113,7 @@ def other_for(e, body, slots, align):
 
 def scan_ask(e, slots, body, request_body, align=None):
     """실행 전 처리 용량 확인(server.scan_gate): 읽을 표마다(이미 사본이 있으면 DB를 읽지 않으므로 묻지 않는다) 묻고, 확인이 필요하면 돌려줄 응답, 아니면 None."""
-    con, keep = get_con(), metric_catalog.used_columns(e, slots)
+    con, keep = get_con(), metric_catalog.used_columns(e, slots, align)
     copy = needs_copy(con, e, align)
     if not (copy and querying.search_key(body, keep or stage(body, keep).columns) in held.store["items"]):
         if ask := server.scan_gate(request_body, lambda: server.expr_sql(con, stage(body, keep))):

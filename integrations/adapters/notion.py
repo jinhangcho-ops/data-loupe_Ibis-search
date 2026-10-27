@@ -9,6 +9,7 @@ API = "https://api.notion.com/v1"
 VERSION = "2022-06-28"
 TEXT_LIMIT = 2000  # rich_text 한 조각의 글자 수 상한
 RICH_LIMIT = 100  # rich_text 배열 하나의 조각 수 상한(Notion API 문서 Request limits: arrays 100 elements)
+TABLE_BYTES = 400_000  # 표 글의 UTF-8 바이트 상한(Notion 요청 전체 500KB 한도 안에 다른 블록·JSON 자리를 남긴다)
 PAGE_ID = re.compile(r"[0-9a-fA-F]{32}$")  # 주소 끝(빼기를 지운 뒤)의 ID
 
 
@@ -43,7 +44,10 @@ def blocks(m):
     if facts:
         out.append({"object": "block", "type": "paragraph", "paragraph": {"rich_text": rich(facts)}})
     if m["table"]:
-        out.append({"object": "block", "type": "code", "code": {"language": "plain text", "rich_text": rich(m["table"])}})
+        table = m["table"]
+        if len(table.encode()) > TABLE_BYTES:  # 한글은 한 글자 3바이트: 글자 수 한도만으로는 요청 크기를 넘는다
+            table = transport.cut(table, len(table.encode()[:TABLE_BYTES - 100].decode(errors="ignore")))
+        out.append({"object": "block", "type": "code", "code": {"language": "plain text", "rich_text": rich(table)}})
     return out
 
 

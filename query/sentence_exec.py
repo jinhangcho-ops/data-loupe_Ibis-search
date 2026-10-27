@@ -167,6 +167,8 @@ def combine(spec, results):
         values = [r[a["col"]] for r in a["rows"] if r[a["col"]] is not None]
         return {"columns": [name], "rows": [{name: sum(values) / len(values) if values else None}]}
     if op == "cumsum":
+        if spec.get("reverse") and a["more"]:  # 작은 쪽부터 앞부분만 받았으니 거꾸로 더하면 모든 값이 틀린다
+            raise ValueError(f"값이 {metric_file.MAX_GROUPS}개를 넘어 거꾸로 누적할 수 없어요. 기간을 좁혀 주세요.")
         total, rows = 0, []
         for r in reversed(a["rows"]) if spec.get("reverse") else a["rows"]:
             total += r[a["col"]] or 0

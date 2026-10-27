@@ -40,6 +40,8 @@ LIMITS = [
 def send(fields, m):
     """본문 틀의 {제목} {내용} {행수} {걸린시간} {표} {그림} 자리를 본문 종류에 맞게 이스케이프해 채워 보낸다. 모르는 {…}는 그대로 둔다.
     아는 서비스(LIMITS)는 한도를 넘으면 {표}를 넘친 만큼 줄여 다시 채운다."""
+    if not str(fields.get("url", "")).startswith("https://"):  # 환경변수로 둔 주소는 저장할 때 검사하지 않는다: 데이터 값을 평문으로 보내지 않게 보낼 때 다시 본다
+        raise ValueError("주소는 https://로 시작해야 합니다.")
     content_type, escape = BODIES[fields["content"]]
     values = {"제목": m["title"], "내용": m["text"], "행수": m["rows"], "걸린시간": m["duration"], "표": m["table"], "그림": base64.b64encode(m["image"]).decode() if m["image"] else ""}
     fill = lambda: re.sub(r"\{(" + "|".join(SLOTS) + r")\}", lambda found: escape(values[found[1]]), fields["template"])

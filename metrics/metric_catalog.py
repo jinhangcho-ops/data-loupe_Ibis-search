@@ -441,9 +441,9 @@ class Ctx:
         self.table, self.other, self.fetch, self.align, self.notes = table, other, fetch, align, []
 
 
-def used_columns(entry_, slots):
-    """빈칸 값에서 이 테이블의 컬럼 이름들(다른 테이블 컬럼은 뺀다). 표를 PC로 받을 때 이 컬럼만 받는다."""
-    found = []
+def used_columns(entry_, slots, align=None):
+    """빈칸 값(과 공통 키 맞춤의 이 테이블 쪽 키)에서 이 테이블의 컬럼 이름들(다른 테이블 컬럼은 뺀다). 표를 PC로 받을 때 이 컬럼만 받는다."""
+    found = [k[0] for k in (align or {}).get("keys") or [] if k and isinstance(k[0], str)]
     for s in entry_["slots"]:
         if s["type"] in ("column", "columns") and not s.get("other"):
             for v in ([slots.get(s["name"])] if s["type"] == "column" else slots.get(s["name"]) or []):
@@ -558,7 +558,7 @@ def compute(entry_, slots, body, ctx, align=None, limit=None):
     if e["cross"]:
         mk.check_align(align)
     ctx.align = align
-    table = ctx.table if ctx.table is not None else ctx.fetch(body, used_columns(e, slots or {}))
+    table = ctx.table if ctx.table is not None else ctx.fetch(body, used_columns(e, slots or {}, align))
     table = table.mutate(**{name: nan_to_null(table[name]) for name, t in table.schema().items() if t.is_floating()})  # NaN·inf는 빈 값(분석 화면과 같게: 합계는 나머지로)
     s = resolve(e, slots, table)
     got = mk.KERNELS[e["calc"]](table, s, e["params"], ctx)
