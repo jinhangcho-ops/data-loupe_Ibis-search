@@ -162,12 +162,13 @@ def bytes_text(before, after):
 
 # ---------- 규칙 1: 조건 앞으로 ----------
 
-def side_of(graph, jid, refs, schemas):
-    """조인 jid 뒤에서 refs(컬럼 이름들)를 쓰는 조건이 한쪽 입력의 컬럼만 쓰면 (쪽 'left'·'right', 그 쪽 입력 id), 아니면 (None, 이유)."""
+def side_of(graph, jid, node, schemas):
+    """조인 jid 뒤의 조건 단계 node가 한쪽 입력의 컬럼만 쓰면 (쪽 'left'·'right', 그 쪽 입력 id), 아니면 (None, 이유)."""
     left, right = flow.join_sides(graph, jid)
     lc, rc = flow.out_columns(graph, left, schemas), flow.out_columns(graph, right, schemas) if right else None
     if lc is None or rc is None:
         return None, "컬럼을 알 수 없어요"
+    refs = flow.refs(node, {*lc, *rc})  # 공백 있는 컬럼 이름도 한 이름으로
     sides = set()
     for r in refs:
         if r in lc:
@@ -211,7 +212,7 @@ def push_filters(graph, ctx):
             if jid is None:
                 continue
             how = params(by_id(g)[jid]).get("how", "inner")
-            side, where = side_of(g, jid, flow.refs(node), ctx["schemas"])
+            side, where = side_of(g, jid, node, ctx["schemas"])
             text = flow_text(node)
             if side is None or side not in PUSH.get(how, ()):
                 if nid not in [r["node"] for r in refused]:
@@ -374,7 +375,9 @@ def prune_columns(graph, ctx):
         if any(by_id(g)[o]["kind"] == "join" and renamed_apart(g, o, ctx["schemas"]) for o in outs):
             continue  # 컬럼을 빼면 조인의 겹친 이름(_테이블 ↔ _right)이 바뀔 수 있다
         used = set().union(*[loose(by_id(g)[o]) for o in outs]) if outs else set()
-        need = [c for c in cols if c in used or any(u.startswith(c + "_") for u in used)]  # 조인에서 이름이 바뀐 c_right·c_테이블도
+        texts = [t for o in outs for t in leaves(params(by_id(g)[o]))]
+        need = [c for c in cols if c in used or any(u.startswith(c + "_") for u in used)  # 조인에서 이름이 바뀐 c_right·c_테이블도
+                or " " in c and any(c in t for t in texts)]  # 공백 있는 이름('store name')은 낱말 조각으로 나뉘니 글 원문에서 찾는다(넉넉하게)
         need = need or list(cols)[:1]
         if len(need) < len(cols):
             n["params"] = {**params(n), "columns": need}

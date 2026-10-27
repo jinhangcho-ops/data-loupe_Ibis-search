@@ -63,7 +63,11 @@ class DashCtl {
     const past = day.date !== this.today, blank = !this.per.value.trim();
     const parsed = blank ? { span: { start: null, end: null, label: "기간을 걸지 않아요. 카드의 원래 조건대로 보입니다" }, previous: null } : await api("/api/period/parse", { text: this.per.value, as_of: day.date }), span = parsed.span;
     if (seq !== this.applySeq) return;
-    if (span.error) { this.per.value = this.state.period; return this.note(this.perNote, span.error, true); }
+    if (span.error) {
+      if (!commit) { this.board.asOf = past ? day.date : ""; await this.board.setRange(null, null); }  // 저장본을 여는 중(예전 시각 기간 등): 앞 대시보드의 기간이 남지 않게 기간 없이 본다(서버 최신화와 같게)
+      this.per.value = this.state.period;
+      return this.note(this.perNote, span.error, true);
+    }
     this.state.as_of = past ? day.date : "";
     this.state.period = this.per.value.trim();
     this.asof.value = this.state.as_of;

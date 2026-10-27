@@ -94,7 +94,8 @@ def metric_run(r, depth):
         done = execute_compiled(made, depth + 1)
         return one([], name, [{name: done["rows"][0][done["columns"][-1]] if done["rows"] else None}])
     parts = [p for p in (definition["numerator"], definition["denominator"]) if p]
-    expr = querying.runnable(r["body"], select=False, extra=[(p["agg"], p["column"], p.get("opts")) for p in parts])
+    body = made["body"] if isinstance(made, dict) and "body" in made else r["body"]  # 컬럼 가공(소문자 등)의 계산 줄은 compile한 body에만 있다
+    expr = querying.runnable(body, select=False, extra=[(p["agg"], p["column"], p.get("opts")) for p in parts])
     labels, values, more = run(lambda: metric_file.compute(expr, [name], {name: definition}, by))
     if not by:
         return one([], name, [{name: values[name][0]}])
@@ -167,7 +168,7 @@ def combine(spec, results):
         return {"columns": [name], "rows": [{name: sum(values) / len(values) if values else None}]}
     if op == "cumsum":
         total, rows = 0, []
-        for r in a["rows"]:
+        for r in reversed(a["rows"]) if spec.get("reverse") else a["rows"]:
             total += r[a["col"]] or 0
             rows.append({**r, name: total})
         return {"columns": [*a["keys"], a["col"], name], "rows": rows}

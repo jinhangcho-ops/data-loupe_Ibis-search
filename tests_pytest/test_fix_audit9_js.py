@@ -42,7 +42,7 @@ let dashId = "d1", valuesDirty = false, valuesSeq = 0, lastSaved, wrote = [];
 """ + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + chr(10) + next(x for x in dash.splitlines() if x.startswith("const sigOf")) + r"""
 const needsValues = c => c;
 const card = { id: 1, kind: "chart", source: { table: "region" }, layout: { x: 0 }, data: { labels: ["서울", "부산"] } };
-const board = { cards: [card], ctx: () => ({ from: "2026-01-01" }), draw() {} };
+const board = { cards: [card], ctx: () => ({ range: { start: "2026-01-01" } }), draw() {} };
 const snap = () => JSON.stringify([[], {}, [cardSettings(card)]]);
 const scheduleSave = () => { if (snap() === lastSaved && !valuesDirty) return; wrote.push(JSON.stringify(storedCard(card).data)); lastSaved = snap(); valuesDirty = false; };
 lastSaved = snap();                                         // 방금 저장한 대시보드
@@ -84,7 +84,7 @@ const scheduleSave = () => { if (snap() === lastSaved && !valuesDirty) return; w
 lastSaved = snap();                                         // 방금 저장한 대시보드
 const api = async () => {
   await null;
-  period = { from: "2026-01-01" }; showLive(card, card.data);  // 계산 중에 기간을 걸었다: 기간 갱신이 옛 설정의 값을 stored에 둔다
+  period = { range: { start: "2026-01-01" } }; showLive(card, card.data);  // 계산 중에 기간을 걸었다: 기간 갱신이 옛 설정의 값을 stored에 둔다
   scheduleSave();
   return { data: { labels: ["사과"] } };
 };
@@ -116,7 +116,7 @@ let dashId = "d1", valuesDirty = false, valuesSeq = 0, lastSaved, wrote = [];
 """ + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + chr(10) + next(x for x in dash.splitlines() if x.startswith("const sigOf")) + r"""
 const needsValues = c => c;
 const card = { id: 1, kind: "chart", source: { table: "region" }, layout: { x: 0 }, data: { labels: ["서울", "부산"] } };
-let period = { from: "2026-01-01" };
+let period = { range: { start: "2026-01-01" } };
 const board = { cards: [card], ctx: () => period, draw() {} };
 const snap = () => JSON.stringify([[], {}, [cardSettings(card)]]);
 const scheduleSave = () => { if (snap() === lastSaved && !valuesDirty) return; wrote.push(JSON.stringify(storedCard(card).data)); lastSaved = snap(); valuesDirty = false; };
@@ -151,7 +151,7 @@ let dashId = "d1", valuesDirty = false, valuesSeq = 0, lastSaved, wrote = [];
 """ + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + chr(10) + next(x for x in dash.splitlines() if x.startswith("const sigOf")) + r"""
 const needsValues = c => c;
 const card = { id: 1, kind: "chart", source: { table: "region" }, layout: { x: 0 }, data: { labels: ["서울", "부산"] } };
-let period = { from: "2026-01-01" };
+let period = { range: { start: "2026-01-01" } };
 const board = { cards: [card], ctx: () => period, draw() {} };
 const snap = () => JSON.stringify([[], {}, [cardSettings(card)]]);
 const scheduleSave = () => { if (snap() === lastSaved && !valuesDirty) return; wrote.push(JSON.stringify(storedCard(card).data)); lastSaved = snap(); valuesDirty = false; };

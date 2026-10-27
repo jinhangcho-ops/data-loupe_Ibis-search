@@ -247,13 +247,17 @@ def cond_columns(cond, columns=None):
     return set()
 
 
-def refs(node):
-    """단계가 앞 단계에서 읽는 컬럼 이름들(알 수 있는 만큼). 조인은 왼쪽 키만(오른쪽 키는 오른쪽 입력의 컬럼이라 join_problem이 본다)."""
+def refs(node, columns=None):
+    """단계가 앞 단계에서 읽는 컬럼 이름들(알 수 있는 만큼). 조인은 왼쪽 키만(오른쪽 키는 오른쪽 입력의 컬럼이라 join_problem이 본다).
+    columns(앞 단계의 컬럼 이름들)를 주면 조건·기간 글의 공백 있는 이름('order date')도 한 이름으로 읽는다."""
     p, kind = params(node), node["kind"]
     if kind == "period":
-        return {bare(p["column"])} if p.get("column") else cond_columns(p.get("line", ""))
+        if p.get("column"):
+            return {bare(p["column"])}
+        name = head_name(p.get("line", ""), columns)  # 기간 줄은 '컬럼 범위'(연산자 없음)
+        return {name} if name else cond_columns(p.get("line", ""), columns)
     if kind == "condition":
-        return set(p.get("columns") or ()) or cond_columns(p.get("cond"))
+        return set(p.get("columns") or ()) or cond_columns(p.get("cond"), columns)
     if kind == "calc":
         if p.get("reads"):
             return set(p["reads"])
@@ -269,11 +273,11 @@ def refs(node):
     if kind in AFTER_AGG:
         found = {c for c in (p.get("by") or []) if c}
         for s in p.get("series") or []:
-            found |= ({s["y"]} if s.get("y") else set()) | cond_columns(s.get("where")) | {x["y"] for x in s.get("ratio") or [] if x.get("y")}
+            found |= ({s["y"]} if s.get("y") else set()) | cond_columns(s.get("where"), columns) | {x["y"] for x in s.get("ratio") or [] if x.get("y")}
         for m in (p.get("defs") or {}).values():
             for part in (m.get("numerator"), m.get("denominator")):
                 if part:
-                    found |= ({part["column"]} if part.get("column") else set()) | {c for w in part.get("where") or [] for c in cond_columns(w)}
+                    found |= ({part["column"]} if part.get("column") else set()) | {c for w in part.get("where") or [] for c in cond_columns(w, columns)}
         return {bare(c) for c in found}
     if kind in ("chart", "card"):
         found = {p.get("x"), p.get("split")} | {s.get("y") for s in p.get("series") or [] if isinstance(s, dict)}
@@ -380,13 +384,13 @@ def column_problem(g, a, b, schemas):
         return None
     if kb == "period":
         dates = [c for c, k in cols.items() if k == "date"]
-        want = refs(nodes[b])
+        want = refs(nodes[b], cols)
         if not dates:
             return problem("no_date", "앞 단계에 날짜 컬럼이 없어서 기간을 걸 수 없어요. 날짜 컬럼이 있는 단계 뒤에 놓으세요.")
         for c in want:
             if c in cols and cols[c] != "date":
                 return problem("no_date", f"‘{c}’은 {kind_text(cols[c])} 컬럼이라 기간을 걸 수 없어요. 날짜 컬럼({', '.join(dates[:3])})을 고르세요.")
-    missing = sorted(c for c in refs(nodes[b]) if c not in cols)
+    missing = sorted(c for c in refs(nodes[b], cols) if c not in cols)
     if missing:
         names = ", ".join(f"‘{c}’" for c in missing)
         if any(nodes[i]["kind"] in AFTER_AGG for i in upstream(g, b) | {a}):

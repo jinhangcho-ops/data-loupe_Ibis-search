@@ -114,12 +114,13 @@ def check(tid, slots, columns=None):
                 out.append(issue(name, "bad", f"‘{s['label']}’ 칸을 채워 주세요."))
             continue
         kind = s["type"]
+        known = None if tid == "e16" and name == "연결 컬럼" else columns  # 16번의 연결 컬럼은 지금 테이블이 아니라 A·B의 컬럼
         if kind in ("column", "columns", "order"):
             for c in raw if isinstance(raw, list) else [raw]:
                 col = (flow.head_name(name_of(c), columns) or name_of(c).split()[0]) if kind == "order" and isinstance(name_of(c), str) else name_of(c)
-                if columns is not None and col not in columns:
+                if known is not None and col not in known:
                     out.append(issue(name, "bad", f"‘{col}’ 컬럼이 이 테이블에 없어요."))
-                elif columns is not None and kind == "column" and not fits(s["kinds"], columns[col]):
+                elif known is not None and kind == "column" and not fits(s["kinds"], known[col]):
                     out.append(issue(name, "bad", f"‘{col}’은 {flow.kind_text(columns[col])} 컬럼이라 쓸 수 없어요({sql_funcs.kinds_text(s['kinds'])} 컬럼이 필요해요)."))
                 if isinstance(c, dict) and c.get("prep") not in (None, *PREPS):
                     out.append(issue(name, "bad", f"컬럼 가공은 {', '.join(PREPS.values())} 중 하나예요."))
@@ -468,7 +469,7 @@ def e15(p):
 
 def e16(p):
     a, b, key = p.need("테이블 A"), p.need("테이블 B"), p.col("연결 컬럼")
-    p.body.update(base=a, joins=[f"{b} inner {key}={key}"])
+    p.body.update(base=a, joins=[f"{b} inner {key}={key}"], conditions=[], periods=[], calcs=[], sorts=[], columns=[])  # 다른 테이블이라 지금 검색의 조건·기간·계산은 걸지 않는다
     p.body.pop("union", None)
     p.group("이어진 행이 많은 순", [key], "count", order="전체 개수 desc", top=10)
     p.notes.append("두 테이블에 같은 이름의 연결 컬럼으로 이어요. 많은 순 앞 10개를 보여 줘요.")
@@ -847,7 +848,7 @@ def metric_def(p):
     elif no == 15:
         order = order_name(p, "정렬 기준")
         i = metric_run(p, "정렬 기준마다 지표", metric_ref(p, "지표"), by=order)
-        p.combine = {"op": "cumsum", "a": i}
+        p.combine = {"op": "cumsum", "a": i, "reverse": str(p.need("정렬 기준")).lower().endswith(" desc")}  # 지표 값은 오름차순으로 오니 desc면 뒤집어 누적
     else:
         raise Bad(f"‘{p.t['name']}’ 지표를 아직 요청으로 만들 수 없어요.")
     out = p.result()

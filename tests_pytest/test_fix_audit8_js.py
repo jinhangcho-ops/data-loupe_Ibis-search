@@ -172,7 +172,7 @@ def test_8e3_recompute_with_period_does_not_keep_old_stored_values(tmp_path):
     got = run(tmp_path, r"""
 globalThis.DashBoard = { plain: c => ({ id: c.id, source: c.source }) };
 """ + fn(ctl, "function showLive") + "\n" + next(x for x in ctl.splitlines() if x.startswith("const storedCard")) + r"""
-let dashId = "d1", valuesDirty = false, valuesSeq = 0, period = { from: "2026-01-01" }, lastSaved;
+let dashId = "d1", valuesDirty = false, valuesSeq = 0, period = { range: { start: "2026-01-01" } }, lastSaved;
 """ + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + "\n" + next(x for x in dash.splitlines() if x.startswith("const sigOf")) + r"""
 const needsValues = c => c, scheduleSave = () => {};
 let reply;

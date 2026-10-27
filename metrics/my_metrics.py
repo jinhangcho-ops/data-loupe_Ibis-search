@@ -380,8 +380,12 @@ def remove(metric_id):
 # ---------- 복사 ----------
 
 def rename_in(text, mapping):
-    """조건·정렬 글 안의 컬럼 이름을 짝(mapping)대로 바꾼다(낱말 단위)."""
-    return re.sub(r"[\w가-힣.]+", lambda m: mapping.get(m.group(0), m.group(0)), text)
+    """조건·정렬 글 안의 컬럼 이름을 짝(mapping)대로 바꾼다. 긴 이름부터(공백 있는 'order date'도), 낱말 경계에서만, 따옴표 안의 값은 그대로."""
+    names = sorted((k for k in mapping if k), key=len, reverse=True)
+    if not names:
+        return text
+    found = re.compile(r"""('[^']*'|"[^"]*")|(?<![\w.])(""" + "|".join(map(re.escape, names)) + r")(?![\w.])")
+    return found.sub(lambda m: m.group(1) or mapping[m.group(2)], text)
 
 
 def rename_column(value, mapping):

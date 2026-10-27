@@ -103,8 +103,11 @@ def month_count(first, last):
         return (last.year - first.year) * 12 + last.month - first.month + 1
 
 
-def month_name(months):
-    return {1: "지난달", 3: "직전 분기", 12: "작년"}.get(months, f"직전 {months}개월")
+def month_name(months, first):
+    """직전 기간 이름: 달력 분기·연과 맞을 때만 '직전 분기'·'작년'(dash_calc.target_period와 같은 규칙), 아니면 '직전 N개월'."""
+    if months == 1 or months == 3 and first.month % 3 == 1 or months == 12 and first.month == 1:
+        return {1: "지난달", 3: "직전 분기", 12: "작년"}[months]
+    return f"직전 {months}개월"
 
 
 def context(d, today=None):
@@ -125,7 +128,7 @@ def context(d, today=None):
         aligned = month_count(first, last)
         if aligned or (first.day == 1 and (first.year, first.month) == (today.year, today.month)):  # 달 단위로 꼭 맞는 기간(월·분기·연…), 또는 1일에 시작해 기준일이 그 달 안: 직전 같은 개월 수의 같은 위치까지
             months = aligned or 1
-            name = month_name(months)
+            name = month_name(months, first)
             try:
                 before = {"start": period.add_months(first, -months).isoformat(), "end": period.add_months(today, -months).isoformat(), "label": f"{name} 같은 기간", "error": None}
             except ValueError as e:  # 1년 1월처럼 직전 기간이 달력 앞이면 견줄 기간 없이 본다
@@ -136,9 +139,10 @@ def context(d, today=None):
             before = period.previous(span)
     else:
         before = period.previous(span)
-    months = None if before["error"] or span.get("to_date") else month_count(*(dt.date.fromisoformat(before[k][:10]) for k in ("start", "end")))
+    first = None if before["error"] else dt.date.fromisoformat(before["start"][:10])
+    months = None if before["error"] or span.get("to_date") else month_count(first, dt.date.fromisoformat(before["end"][:10]))
     prev = None if before["error"] else {"start": before["start"][:10], "end": before["end"][:10],
-                                         "text": before["label"] if span.get("to_date") else month_name(months) if months else f"직전 {before['days']}일"}
+                                         "text": before["label"] if span.get("to_date") else month_name(months, first) if months else f"직전 {before['days']}일"}
     return {"range": {"start": span["start"] and span["start"][:10], "end": end}, "prev": prev}
 
 

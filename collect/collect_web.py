@@ -198,12 +198,7 @@ class Walk:
             raise Halt(collect_http.STOPPED, failed=False)
 
     def allowed(self, url):
-        if self.web["robots"]:
-            verdict, why = robots(url, self.cache)
-            if verdict == "금지":
-                raise Halt(BLOCKED)
-            if verdict == "확인 못 함":
-                raise Halt(f"robots.txt를 확인하지 못해 멈췄습니다: {why}")
+        allowed(self.web, url, self.cache)
 
     def turn(self):
         """쪽 하나를 열기 전에: 간격(balance.interval)을 지키고 사용 한도에 하나를 센다."""
@@ -376,6 +371,16 @@ class Walk:
         return False
 
 
+def allowed(web, url, cache):
+    """robots.txt를 지키기로 했으면 url이 막혔거나 확인하지 못했을 때 Halt."""
+    if web["robots"]:
+        verdict, why = robots(url, cache)
+        if verdict == "금지":
+            raise Halt(BLOCKED)
+        if verdict == "확인 못 함":
+            raise Halt(f"robots.txt를 확인하지 못해 멈췄습니다: {why}")
+
+
 def run_web(config, env, path, found, record, halt):
     """웹페이지 작업. 받은 쪽은 API 모드와 같은 모양으로 .part 폴더에 두고, 끝나면 같은 방법으로 결과 파일을 만든다(만들었으면 True)."""
     web = config["web"]
@@ -389,9 +394,13 @@ def run_web(config, env, path, found, record, halt):
         balancer = collect_store.balancer_for(config, halt, 1)
         done = set(record["done"])
         first = 0 if web["paging"]["kind"] in ("next", "scroll") else min(set(range(len(done) + 1)) - done)  # 처음 열 쪽(창을 띄울 주소)
+        start, cache = page_url(web, first, collect_store.began(record)), {}
+        allowed(web, start, cache)  # 창이 첫 쪽을 열기 전에(막아 둔 주소는 한 번도 열지 않는다)
         try:
-            with collect_browser.session(web["show"], page_url(web, first, collect_store.began(record))) as page:
-                capped = Walk(config, page, found, record, halt, balancer).run()
+            with collect_browser.session(web["show"], start) as page:
+                walk = Walk(config, page, found, record, halt, balancer)
+                walk.cache = cache
+                capped = walk.run()
         except collect_browser.Gone:
             raise Halt(CLOSED) from None
     made = collect_store.finish_api(config, path, found, record)
