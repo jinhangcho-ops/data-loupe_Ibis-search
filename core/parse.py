@@ -168,6 +168,8 @@ def check_table_name(name, what="테이블"):
     """새로 만들거나 넣을 테이블(스키마) 이름 검사. 전처리(prep_app)와 적재(load_table)가 쓴다."""
     if not isinstance(name, str) or not TABLE_NAME.fullmatch(name):
         raise ValueError(f"{what} 이름은 영문·숫자·밑줄·한글만 쓸 수 있습니다(공백·따옴표·점 없이).")
+    if len(name.encode("utf-8")) > 50:  # PostgreSQL은 63바이트에서 말없이 자른다: 적재 임시 꼬리(_ibis_load)를 붙여도 넘지 않게
+        raise ValueError(f"{what} 이름이 너무 깁니다(영문 50자, 한글 16자까지).")
 
 
 def check_name(name, names, what="컬럼"):

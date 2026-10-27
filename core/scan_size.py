@@ -276,10 +276,14 @@ def plan_rows(con, sql, dialect):
         return None
     lines = text.splitlines()
     if len(lines) > 1 and "rows" in lines[0].split("\t"):  # 표 모양: 머리글의 rows 칸
-        at = lines[0].split("\t").index("rows")
-        found = [int(c[at]) for c in (line.split("\t") for line in lines[1:]) if at < len(c) and c[at].strip().isdigit()]
+        head = lines[0].split("\t")
+        at, key = head.index("rows"), head.index("id") if "id" in head else None
+        found = {}
+        for c in (line.split("\t") for line in lines[1:]):
+            if at < len(c) and c[at].strip().isdigit():
+                found.setdefault(c[key] if key is not None and key < len(c) else "", []).append(int(c[at]))
         if found:
-            return math.prod(found)  # 조인은 테이블마다 한 줄(뒤 테이블은 앞 행마다 읽는 수): 곱해 크게 센다
+            return sum(map(math.prod, found.values()))  # 같은 id(한 SELECT의 조인)는 곱하고, UNION·서브쿼리(다른 id)는 더해 크게 센다
     for pattern in ROW_PATTERNS:
         if found := re.search(pattern, text):
             return int(found[1].replace(",", ""))
@@ -302,9 +306,9 @@ def date_bounds(sql, dialect, column):
             left, right, kind = right, left, FLIP[kind]
         if not isinstance(left, exp.Column) or left.name.lower() != column.lower():
             continue
-        literal = all(isinstance(n, (exp.Literal, exp.Cast, exp.DataType, exp.Date, exp.DateFromParts)) or isinstance(n, exp.Anonymous) and n.name.lower() == "make_date"
-                      for n in right.walk())  # DATE_SUB(DATE '…', …) 같은 계산식 안의 날짜는 범위가 아니다
-        m = literal and DATE.search(right.sql())
+        literal = all(isinstance(n, (exp.Literal, exp.Cast, exp.DataType, exp.Date, exp.DateFromParts, exp.Timestamp, exp.TsOrDsToDate, exp.TsOrDsToDatetime))
+                      or isinstance(n, exp.Anonymous) and n.name.lower() == "make_date" for n in right.walk())  # DATE_SUB(DATE '…', …) 같은 계산식 안의 날짜는 범위가 아니다
+        m = literal and DATE.search(right.sql(dialect))  # 방언 그대로 써야 BigQuery DATE(2025, 1, 1)이 DATE_FROM_PARTS로 바뀌지 않는다
         if not m:
             continue
         try:

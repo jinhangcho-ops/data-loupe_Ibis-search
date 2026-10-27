@@ -34,7 +34,7 @@ def copy_columns(t, copies):
         if not isinstance(copy, dict) or set(copy) != {"from", "name"} or not isinstance(copy["name"], str):
             raise ValueError('copies의 각 항목은 {"from": "원래 컬럼", "name": "새 이름"} 형식이어야 합니다.')
         parse.check_name(copy["from"], base)
-        if not copy["name"] or copy["name"] in order:
+        if not copy["name"] or copy["name"].lower() in {c.lower() for c in order}:
             raise ValueError(f"복사한 컬럼의 이름 '{copy['name']}'이 비었거나 이미 있습니다.")
         order.insert(order.index(copy["from"]) + 1 + sum(c["from"] == copy["from"] for c in copies[:i]), copy["name"])
         t = t.mutate(**{copy["name"]: t[copy["from"]]})
@@ -117,8 +117,9 @@ def shape(con, recipe, table=None, info=None, refs=None):
     if not layout:
         raise ValueError("남길 컬럼이 없습니다.")
     results = [item[1] for item in layout]
+    lowered = [new.lower() for new in results]
     for new in results:
-        if results.count(new) > 1:
+        if lowered.count(new.lower()) > 1:  # 대소문자만 달라도 저장할 때 같은 컬럼
             raise ValueError(f"결과에 '{new}' 컬럼이 둘 이상입니다. 이름을 바꾸세요.")
     t = t.select(*[t[old].name(new) for old, new, *_ in layout])
     return t, {new: (src, derived) for _, new, src, derived in layout}

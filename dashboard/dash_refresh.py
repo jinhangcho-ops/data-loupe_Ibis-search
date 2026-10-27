@@ -1,6 +1,7 @@
 """대시보드 최신화(2단계): 연결에 성공한 뒤 주기가 지난 카드를 작업 스레드 하나가 차례로 다시 구해 저장한다. 최신화 주기·실시간 간격 검사와 연결별 실시간 간격 최소도 여기 있다.
 주기 글자는 period.parse_every가 읽는다(숫자 + 초·분·시간·일·주·달·개월·년). 최신화 주기는 MIN_REFRESH(1시간) 이상, 실시간 간격의 최소는 연결(source_key)마다 사용자가 정한다(설정 live_min.json, 없으면 원격 연결은 REMOTE_LIVE_MIN(1분), 이 PC 파일 연결은 제한 없음).
 카드 하나씩 화면 요청과 같은 차례(querying.using)를 잡고 dash_calc.compute로 구해 dash_store.set_cards_data로 대시보드마다 한 번에 쓴다. 실패한 카드는 이전 값을 두고 이유만 남긴다."""
+import contextlib
 import datetime as dt
 import threading
 import time
@@ -28,6 +29,7 @@ REFRESHABLE = ("chart", "analysis", "funnel", "metric", "kpi", "donut_kpi", "gau
 JOB = {"running": False, "total": 0, "done": 0, "current": "", "results": []}  # 마지막 최신화 작업의 상태(status가 복사해 준다)
 LOCK = threading.Lock()
 STOP = threading.Event()
+INSIDE = threading.Event()  # 최신화가 차례(turn)를 잡고 카드를 구하는 중: 이때만 [멈추기]가 지금 조회를 취소한다(차례를 기다리는 동안 도는 것은 사용자 조회)
 THREAD = [None]
 
 
@@ -202,9 +204,20 @@ def status():
 def stop():
     """돌고 있는 최신화를 멈춘다: 지금 카드는 취소를 요청하고 남은 카드는 건너뛴다."""
     STOP.set()
-    if JOB["running"]:
-        server.state["cancel"].set()
+    with LOCK:
+        if INSIDE.is_set():
+            server.state["cancel"].set()
     return status()
+
+
+@contextlib.contextmanager
+def inside():
+    INSIDE.set()
+    try:
+        yield
+    finally:
+        with LOCK:
+            INSIDE.clear()
 
 
 def wait(timeout=30):
@@ -291,7 +304,7 @@ def work(plan, given):
             with LOCK:
                 JOB["current"] = card["title"]
             try:
-                with querying.using(renewed=renewed):
+                with querying.using(renewed=renewed), inside():
                     here = (dash_store.current_source() or {}).get("key")
                     if not here or not use_counts.same_source((card.get("source") or {}).get("key"), here):  # 카드 사이에 사용자가 다른 연결로 바꿨다
                         STOP.set()

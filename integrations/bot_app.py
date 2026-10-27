@@ -73,13 +73,17 @@ def tokens():
     return c, found
 
 
-def stop():
-    """켜 둔 봇을 끈다(없으면 아무 일도 하지 않는다). 프로그램을 닫을 때도 부른다."""
-    with switch:
+def stop(wait=True):
+    """켜 둔 봇을 끈다(없으면 아무 일도 하지 않는다). 프로그램을 닫을 때는 wait=False: 켜는 중이면 2초만 기다린다(데몬 스레드라 프로세스와 함께 끝난다)."""
+    if not switch.acquire(timeout=-1 if wait else 2):
+        return
+    try:
         with lock:
             bot, BOT["bot"] = BOT["bot"], None
         if bot:
             bot.stop()
+    finally:
+        switch.release()
 
 
 @app.get("/api/bot")
@@ -101,8 +105,9 @@ def save_bot():
         if kept is None:
             raise ValueError(f"'{label}' 칸을 입력하세요." + (" (환경변수 이름)" if keep == "env" else ""))
         item[field] = kept
-    stop()
-    settings.write(FILE, item)
+    with switch:  # 켜는 중인 [시작]이 예전 설정으로 봇을 켜지 않게
+        stop()
+        settings.write(FILE, item)
     return view()
 
 
@@ -119,10 +124,10 @@ def check_bot():
 @app.post("/api/bot/start")
 def start_bot():
     """봇을 켠다. 허용한 사용자가 없으면 켜지 않는다(아무도 쓸 수 없는 봇)."""
-    c, found = tokens()
-    if not c.get("users"):
-        raise ValueError("허용할 사용자 ID를 하나 이상 넣고 저장하세요. 그 사람들의 명령만 받습니다.")
     with switch:
+        c, found = tokens()  # [저장]과 겹쳐도 저장이 끝난 설정을 읽는다
+        if not c.get("users"):
+            raise ValueError("허용할 사용자 ID를 하나 이상 넣고 저장하세요. 그 사람들의 명령만 받습니다.")
         stop()
         bot = slack_bot.SlackBot(found["bot_token"], found["app_token"], c["users"], c.get("channels", []), commands.answer)
         try:

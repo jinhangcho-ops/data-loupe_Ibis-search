@@ -90,9 +90,9 @@ def build(regions, points, geo):
     ok = np.isfinite(lat) & np.isfinite(lon)
     ring_x = [float(r[:, 0].max()) for r in all_rings] + [float(r[:, 0].min()) for r in all_rings]
     if ring_x and max(ring_x) > 180:  # 영역이 날짜 변경선을 넘어 이어진 좌표(spatial.assign과 같은 규칙)면 서쪽 점도 같은 쪽으로
-        lon = np.where(lon < 0, lon + 360, lon)
+        lon = np.where((lon < 0) & (lon + 360 <= max(ring_x)), lon + 360, lon)  # 옮긴 영역 범위 안에 드는 점만(미국 같은 서경 영역의 점은 그대로)
     elif ring_x and min(ring_x) < -180:
-        lon = np.where(lon > 0, lon - 360, lon)
+        lon = np.where((lon > 0) & (lon - 360 >= min(ring_x)), lon - 360, lon)
     elif not ring_x and geojson.crosses_dateline(lon[ok].tolist()):  # 점만 있으면 점이 변경선에 걸친 때
         lon = np.where(lon < 0, lon + 360, lon)
     drawn = np.flatnonzero(ok)

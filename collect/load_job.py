@@ -206,7 +206,7 @@ def run(config, path, password, halt, note):
             try:
                 if sink.fresh and resumed:  # 이어 넣을 곳이 없어져 새로 만들었으면 처음부터
                     record, resumed = {**new_record(), **({"load_id": load_id} if load_id else {})}, False
-                target = {**module.sign(config), **({"name": load["table"]["name"]} if load["target"] == "table" else {"destination": load["kafka"]["destination"]})}
+                target = {**module.sign(config), **({"name": sink.name} if load["target"] == "table" else {"destination": load["kafka"]["destination"]})}
                 ledger = uploads.Run(load["target"], path, target, load_id, resumed)
                 write_record(path, record)
                 if resumed:

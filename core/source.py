@@ -443,6 +443,9 @@ def open_url(url, user="", password=""):
     """duckdb://, mssql://, postgres:// 등 Ibis가 지원하는 주소로 접속한다.
     드라이버를 먼저 확인하고, 아이디·비밀번호는 입력한 것만 주소에 넣는다(비밀번호 특수문자는 인코딩)."""
     url, user, password = clean_url(url, user, password)
+    parts = urlsplit(url)
+    if parts.password is not None:  # 주소에만 쓴 비밀번호: Ibis가 unquote_plus로 읽어 +가 공백이 되므로 빼서 아래에서 인코딩해 다시 넣는다
+        user, password, url = parts.username or "", unquote(parts.password), parts._replace(netloc=parts.netloc.rpartition("@")[2]).geturl()
     extra = drivers.prepare(url, password)
     if user or password:
         parts = urlsplit(url)

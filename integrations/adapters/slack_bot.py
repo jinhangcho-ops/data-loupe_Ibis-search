@@ -115,5 +115,5 @@ class SlackBot:
         try:
             self.send(response_url, out)
         except Exception as e:  # 답장 주소가 만료되면(30분) 보낼 곳이 없어 이 PC의 봇 기록에만 남긴다
-            if entry is not None:
-                entry["error"] = str(e) or type(e).__name__
+            if entry is not None:  # 명령이 실패한 까닭은 남기고 이어 붙인다
+                entry["error"] = "; ".join(filter(None, [entry.get("error"), str(e) or type(e).__name__]))

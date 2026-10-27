@@ -44,10 +44,12 @@ def column(fn):
 
 
 def check_new(t, names):
-    """파생 컬럼 이름이 이미 있으면 거부한다(mutate는 말없이 덮어쓴다)."""
+    """파생 컬럼 이름이 이미 있으면 거부한다(mutate는 말없이 덮어쓴다). 대소문자만 달라도 같다(DuckDB·SQLite·SQL Server는 가리지 않아 저장할 때 막힌다)."""
+    have = {c.lower() for c in t.columns}
     for name in names:
-        if name in t.columns:
+        if name.lower() in have:
             raise ValueError(f"'{name}' 컬럼이 이미 있어 파생 컬럼을 만들 수 없습니다.")
+        have.add(name.lower())
 
 
 def add_columns(t, new):
@@ -393,7 +395,7 @@ def nan_to_null(col):
     return out if source.compiles(out) else col
 
 
-NAN_OPS = ("flag", "fill", "outlier", "scale")  # 빈 값을 따지거나 통계를 내는 일: 먼저 NaN을 빈 값으로
+NAN_OPS = ("flag", "fill", "outlier", "scale", "label", "onehot")  # 빈 값을 따지거나 통계를 내는 일: 먼저 NaN을 빈 값으로
 
 
 def drops_rows(key, value):

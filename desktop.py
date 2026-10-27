@@ -117,7 +117,7 @@ threading.Thread(target=schedule.move_old_tasks, daemon=True).start()  # 예전 
 schedule.start_watch()  # 프로그램 안 예약: 켜져 있는 동안 때가 된 예약을 돌린다.
 webview.start()  # 창을 닫으면 여기서 끝나고, 서버 스레드도 함께 종료된다.
 schedule.stop_watch()
-bot_app.stop()  # 켜 둔 Slack 봇의 연결을 끊는다.
+bot_app.stop(wait=False)  # 켜 둔 Slack 봇의 연결을 끊는다(켜는 중이면 오래 기다리지 않는다).
 if hasattr(lazy.loaded("collect.collect_job"), "stop"):  # 반쯤 올라온 모듈이면 건너뛴다
     lazy.loaded("collect.collect_job").stop(wait=10)  # 수집 작업이 받은 데까지 기록하고 끝나기를 기다린다.
 if hasattr(lazy.loaded("collect.collect_browser"), "stop_child"):

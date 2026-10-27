@@ -175,7 +175,8 @@ def lookups(table, keys, data):
 def existing(con, schema, name, keys, data):
     """묶음의 키 중 테이블에 이미 있는 것들(튜플의 집합). 묶음의 키 값만으로 걸러 조회한다."""
     table = con.table(name, database=schema or None)
-    return {tuple(row[k] for k in keys) for query in lookups(table, keys, data) for row in query.to_pyarrow().to_pylist()}
+    shape = data.select(keys).schema  # 테이블 칸(시간대 없는 시각)을 묶음 타입(시간대 있는 시각)으로 맞춰야 같은 키로 견준다
+    return {tuple(row[k] for k in keys) for query in lookups(table, keys, data) for row in query.to_pyarrow().cast(shape).to_pylist()}
 
 
 def rename_sql(con, schema, name, new):
