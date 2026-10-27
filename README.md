@@ -12,7 +12,7 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel, GeoJSON)에 �
 
 | 기능 | 하는 일 | 설명 |
 |---|---|---|
-| 쿼리 | 테이블을 조건으로 찾아보기(단계 카드·흐름 그림·문장 빈칸 채우기), SQL 직접 쓰기·질문으로 SQL 만들기, 집계·피벗·차트, 지표 | [docs/query.md](docs/query.md) |
+| 쿼리 | 테이블을 조건으로 찾아보기(단계 카드·문장 빈칸 채우기), SQL 직접 쓰기·질문으로 SQL 만들기, 집계·피벗·차트, 지표 | [docs/query.md](docs/query.md) |
 | 분석 | 컬럼마다 전처리해 새 파일·테이블로, 분포·상관관계·그룹 비교·추이 그래프, 흐름(퍼널) | [docs/analysis.md](docs/analysis.md) |
 | 수집 | 웹 API·파일 주소·웹페이지에서 받아 저장, DB 테이블·Kafka에 적재, 업로드 기록, 예약 실행 | [docs/collect.md](docs/collect.md) |
 | 연동 | Slack·Notion·웹훅으로 보내기, Slack 명령 받기, GA4 가져오기, LLM 설정 | [docs/integrations.md](docs/integrations.md) |

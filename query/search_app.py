@@ -42,8 +42,8 @@ def search_constants(found):  # 계산 줄·차트·지표 파일 화면이 서�
     found["metrics"] = {"aggs": list(metric_file.AGGS)}  # 지표 파일의 분자·분모에 쓸 수 있는 집계
 
 
-PRELOAD = ("query.flow", "query.flow_opt", "query.join_keys", "query.sentences", "query.sentence_run", "query.sentence_exec", "query.nl2sql",
-           "metrics.my_metrics", "metrics.metric_catalog", "metrics.metric_kernels")  # 쿼리 화면을 열면 뒤에서 미리 올리는 기능 모듈(흐름·문장·지표 사전·내 지표)
+PRELOAD = ("query.join_keys", "query.sentences", "query.sentence_run", "query.sentence_exec", "query.nl2sql",
+           "metrics.my_metrics", "metrics.metric_catalog", "metrics.metric_kernels")  # 쿼리 화면을 열면 뒤에서 미리 올리는 기능 모듈(공통 키·문장·지표 사전·내 지표)
 
 
 @app.get("/search")

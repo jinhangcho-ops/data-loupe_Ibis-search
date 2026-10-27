@@ -48,10 +48,10 @@ def execute_run(r, depth=0):
 
 def check_scope(mine, body):
     """내 지표가 지금 검색 body의 테이블(연결·스키마·테이블이 같은 scope)의 것인지. 다른 테이블의 지표를 ‘맞춰서’ 쓰는 구절(align)은 아직 실행하지 않으므로 거부한다.
-    흐름(flow_id)에 묶은 지표는 body만으로 같은 흐름인지 알 수 없어 검사하지 않는다."""
+    예전 흐름(flow_id)에 묶은 지표는 흐름 보기가 없어져 구할 수 없다고 알린다."""
     scope = mine.get("scope") or {}
-    if scope.get("flow_id") and not scope.get("table"):
-        return
+    if my_metrics.is_flow_only(mine):
+        raise ValueError(my_metrics.FLOW_GONE)
     now = dash_store.current_source()
     if scope.get("table") != body.get("base") or (scope.get("schema") or "") != (body.get("schema") or "") or (now and not use_counts.same_source(scope.get("key"), now["key"])):
         raise ValueError(f"‘{my_metrics.scope_text(mine)}’은(는) 다른 테이블(흐름)의 지표라 지금 검색에서 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]해서 쓰세요.")

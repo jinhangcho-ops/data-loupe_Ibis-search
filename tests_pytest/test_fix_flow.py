@@ -1,75 +1,16 @@
-"""리뷰 반영 묶음 5(흐름·문장·연동): 지적마다 그 지적을 재현하는 테스트. 값은 테스트 안에서 지어낸 작은 표를 손으로 센 것과 맞춘다.
+"""리뷰 반영 묶음 5(문장·공통 키·연동, 흐름 보기 테스트는 흐름 보기와 함께 지웠다): 지적마다 그 지적을 재현하는 테스트. 값은 테스트 안에서 지어낸 작은 표를 손으로 센 것과 맞춘다.
 sales: id 0~5, shop_id = id % 3, amt = (id+1)*10 → 가게 0: 10+40=50, 가게 1: 20+50=70, 가게 2: 30+60=90. shops: 가게 0~2(이름 A~C), 모두 country KR."""
-import itertools
-
-import duckdb
 import pytest
 from lazy import ibis
 
 from integrations import bot_app  # noqa: F401  라우트 모듈은 첫 요청 전에 모두 불러 둔다
 from collect import collect_app  # noqa: F401
 from dashboard import dash_app  # noqa: F401
-from query import flow
 from query import flow_app  # noqa: F401
-from query import flow_opt
 from integrations import integrations_app  # noqa: F401
 from integrations import notify  # noqa: F401
 from prep import prep_app  # noqa: F401
 from integrations import schedule_app  # noqa: F401
-
-
-@pytest.fixture
-def db(tmp_path):
-    path = tmp_path / "f.duckdb"
-    raw = duckdb.connect(str(path))
-    raw.execute("create table sales as select i as id, (i % 3)::int as shop_id, ((i + 1) * 10)::double as amt from range(6) t(i)")
-    raw.execute("create table shops as select i::int as shop_id, chr(65 + i::int) as name, 'KR' as country from range(3) t(i)")
-    raw.close()
-    con = ibis.duckdb.connect(str(path))
-    yield con
-    con.disconnect()
-
-
-def getter(con):
-    return lambda name, schema=None: con.table(name)
-
-
-def deep_right_flow():
-    """sales left join (shops → 조건 → 조건) 뒤 집계. 오른쪽 가지가 3단계."""
-    g = flow.from_body({"base": "sales", "joins": ["shops left shop_id=shop_id"], "aggregate": {"by": ["shop_id"], "series": [{"agg": "sum", "y": "amt", "name": "total"}]}})
-    for i, cond in enumerate(["country = KR", "name != Z"]):
-        node = {"id": f"c{i}", "kind": "condition", "params": {"cond": cond}, "pos": {"x": 0, "y": 0}}
-        g = flow_opt.splice_in(g, node, "n3" if i == 0 else "c0", "n2")
-    return g
-
-
-def test_m11_drop_join_removes_the_whole_right_branch_and_its_edges(db):
-    found = flow_opt.propose(deep_right_flow(), getter(db), db, source_key="k", only=[2])
-    assert found["rules"][0]["status"] == "kept"
-    assert [n["id"] for n in found["graph"]["nodes"]] == ["n1", "n4"]
-    assert found["graph"]["edges"] == [["n1", "n4"]]
-    assert {r["shop_id"]: r["total"] for r in flow_opt.result_of(found["graph"], found["target"], getter(db)).to_dicts()} == {0: 50.0, 1: 70.0, 2: 90.0}
-
-
-@pytest.mark.parametrize("order", list(itertools.permutations(["n3", "c0", "c1"])))
-def test_m11_exclusive_upstream_does_not_depend_on_set_order(monkeypatch, order):
-    graph = deep_right_flow()
-    real = flow.upstream
-    monkeypatch.setattr(flow, "upstream", lambda g, nid: type("S", (set,), {"__iter__": lambda self: iter([x for x in order if x in set.__iter__(self)] + [x for x in set.__iter__(self) if x not in order])})(real(g, nid)))
-    assert flow_opt.exclusive_upstream(graph, "c1", "n2") == {"n3", "c0"}
-
-
-def test_m11_shared_root_with_the_left_side_is_kept():
-    """오른쪽 가지가 왼쪽과 같은 테이블에서 갈라지면 그 테이블은 지우지 않는다."""
-    g = {"nodes": [{"id": "t", "kind": "table", "params": {"table": "a"}}, {"id": "c", "kind": "condition", "params": {"cond": "x = 1"}},
-                   {"id": "j", "kind": "join", "params": {"how": "left"}}], "edges": [["t", "j"], ["t", "c"], ["c", "j"]]}
-    assert flow_opt.exclusive_upstream(g, "c", "j", ["t"]) == set()
-
-
-def test_loose_keeps_names_with_parentheses():
-    node = {"id": "c", "kind": "condition", "params": {"cond": "금액(원) > 5"}}
-    assert "금액(원)" in flow_opt.loose(node)
-    assert "금액(원)" in flow.refs(node)
 
 
 def comp_top(*pairs):

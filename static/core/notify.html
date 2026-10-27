@@ -2,27 +2,34 @@
 <div id="dest-panel" class="modal hidden">
   <div class="modal-box">
     <div class="head"><h3>보낼 곳</h3><button id="dest-close" class="ghost" style="margin-left:auto">닫기</button></div>
-    <select id="dest-list" style="margin-bottom:6px"></select>
-    <input id="dest-name" placeholder="이름" style="margin-bottom:6px">
+    <div class="hint">알림과 결과를 받을 Slack, Notion, 웹훅을 등록해요.</div>
+    <select id="dest-list" style="margin-bottom:6px" title="고치려면 저장한 보낼 곳을 고르고, 새로 등록하려면 [새로 만들기]를 고르세요"></select>
+    <div class="field-label">이름</div>
+    <input id="dest-name" placeholder="예: 팀 채널" style="margin-bottom:6px">
+    <div class="field-label">종류</div>
     <select id="dest-kind" style="margin-bottom:6px"></select>
-    <select id="dest-keep" style="margin-bottom:6px" title="토큰·주소 같은 비밀 값을 어디에 둘지"></select>
-    <select id="dest-preset" class="hidden" style="margin-bottom:6px"></select>
+    <div class="field-label">토큰과 주소 보관 방법</div>
+    <select id="dest-keep" style="margin-bottom:6px" title="토큰이나 주소 같은 비밀 값을 어디에 둘지 정해요"></select>
+    <select id="dest-preset" class="hidden" style="margin-bottom:6px" title="자주 쓰는 형식의 칸을 한 번에 채워요"></select>
     <div id="dest-fields"></div>
-    <label style="display:block; margin-top:6px"><input type="checkbox" id="dest-done" style="width:auto"> 오래 걸린 작업이 끝나면 여기로 알림</label>
-    <div class="row" style="align-items:center; margin-top:4px"><input id="notify-after" type="number" style="width:90px; flex:none"><span class="hint" style="margin:0">초 이상 (모든 보낼 곳에 같이 적용)</span></div>
-    <div class="row" style="margin-top:10px; flex-wrap:wrap"><button id="dest-save">저장</button><button id="dest-del" class="ghost">삭제</button>
-      <button id="dest-check" class="ghost" title="메시지는 보내지 않고 토큰·채널이 맞는지 확인합니다">연동 확인</button><button id="dest-test" class="ghost" title="저장한 보낼 곳으로 시험 메시지를 보냅니다">시험 보내기</button></div>
+    <label style="display:block; margin-top:8px"><input type="checkbox" id="dest-done" style="width:auto"> 오래 걸린 작업이 끝나면 여기로 알려 주기</label>
+    <div class="row" style="align-items:center; margin-top:4px" title="모든 보낼 곳에 같이 적용돼요"><input id="notify-after" type="number" style="width:90px; flex:none"><span class="hint" style="margin:0">초 넘게 걸린 작업만 알려요</span></div>
+    <div class="row" style="margin-top:12px; flex-wrap:wrap; align-items:center"><button id="dest-save">저장</button>
+      <button id="dest-check" class="btn" title="메시지를 보내지 않고 토큰과 채널이 맞는지만 확인해요">연결 확인</button><button id="dest-test" class="btn" title="저장한 보낼 곳으로 시험 메시지를 보내요">시험 보내기</button><button id="dest-del" class="ghost" style="margin-left:auto">삭제</button></div>
     <div id="msg-dest" class="err"></div>
 
-    <div class="head" style="margin-top:18px"><h3>Slack 봇 (받기)</h3><span id="bot-state" class="hint" style="margin:0 0 0 auto"></span></div>
-    <div class="hint">Slack에서 <b>/ibis</b> 명령으로 저장한 검색·지표를 물으면 답합니다. 이 프로그램이 켜져 있고 데이터에 연결돼 있을 때만 답하며, 답은 물은 사람에게만 보입니다.</div>
-    <select id="bot-keep" style="margin:6px 0" title="두 토큰을 어디에 둘지"></select>
-    <div class="hint">봇 토큰 (xoxb-)</div><input id="bot-token" type="password" autocomplete="off">
-    <div class="hint">앱 토큰 (xapp-, Socket Mode의 connections:write)</div><input id="bot-app" type="password" autocomplete="off">
-    <div class="hint">허용할 사용자 ID (쉼표로 나눔, 비우면 봇을 켤 수 없음)</div><input id="bot-users" placeholder="U0123ABCD, U0456EFGH">
-    <div class="hint">허용할 채널 ID (비우면 허용한 사용자라면 어느 채널에서든)</div><input id="bot-channels" placeholder="C0123ABCD">
-    <div class="row" style="margin-top:10px; flex-wrap:wrap"><button id="bot-save">저장</button><button id="bot-check" class="ghost" title="봇을 켜지 않고 두 토큰을 확인합니다">연동 확인</button>
-      <button id="bot-start" class="ghost">봇 시작</button><button id="bot-stop" class="ghost">봇 멈춤</button></div>
+    <div class="head" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--line)"><h3>Slack 봇</h3><span id="bot-state" class="hint" style="margin:0 0 0 auto"></span></div>
+    <div class="hint">Slack에서 <b>/ibis</b> 명령으로 저장한 검색과 지표를 물어볼 수 있어요. 이 앱이 켜져 있고 데이터에 연결돼 있을 때만 답하며, 답은 물어본 사람에게만 보여요.</div>
+    <div class="field-label">토큰 보관 방법</div>
+    <select id="bot-keep" style="margin-bottom:6px" title="두 토큰을 어디에 둘지 정해요"></select>
+    <div class="field-label">봇 토큰 (xoxb-로 시작)</div><input id="bot-token" type="password" autocomplete="off">
+    <div class="field-label" title="Socket Mode를 켜고 connections:write 권한으로 만든 토큰이에요">앱 토큰 (xapp-로 시작)</div><input id="bot-app" type="password" autocomplete="off">
+    <div class="field-label">허용할 사용자 ID</div><input id="bot-users" placeholder="U0123ABCD, U0456EFGH">
+    <div class="hint">쉼표로 구분해요. 비워 두면 봇을 켤 수 없어요.</div>
+    <div class="field-label">허용할 채널 ID</div><input id="bot-channels" placeholder="C0123ABCD">
+    <div class="hint">비워 두면 허용한 사용자가 어느 채널에서든 물어볼 수 있어요.</div>
+    <div class="row" style="margin-top:10px; flex-wrap:wrap"><button id="bot-save">저장</button><button id="bot-check" class="btn" title="봇을 켜지 않고 두 토큰이 맞는지 확인해요">연결 확인</button>
+      <button id="bot-start" class="btn">봇 켜기</button><button id="bot-stop" class="ghost">봇 끄기</button></div>
     <div id="msg-bot" class="err"></div>
     <div id="bot-log" class="hint" style="white-space:pre-wrap"></div>
   </div>

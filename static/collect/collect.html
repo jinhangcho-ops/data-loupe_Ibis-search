@@ -18,7 +18,11 @@
   .fields .hint { margin:0 0 2px; }
   .split { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
   .split > div { min-width:0; }
-  button.mini { font-size:12px; padding:2px 8px; }
+  button.mini { font-size:12px; padding:0 10px; height:26px; }
+  /* 카드 머리: 제목은 왼쪽, 버튼은 오른쪽 끝에 모은다 */
+  .collect-pane .head > :is(h3, b:first-child) { margin-right:auto; }
+  .collect-pane .card h2 { margin-top:18px; }
+  .collect-pane .actions { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0 6px; }
   .usage { white-space:pre-line; font-variant-numeric:tabular-nums; }
   .path { font-family:Consolas, ui-monospace, monospace; font-size:12px; color:var(--accent); word-break:break-all; }
   #sent { white-space:pre-wrap; word-break:break-all; background:var(--bg); padding:6px 8px; border-radius:6px; margin:6px 0; max-height:200px; overflow:auto; }
@@ -62,107 +66,107 @@
   <main class="results">
     <section class="pane collect-pane"><div class="main">
     <section class="card hidden" id="unseen-box">
-      <div class="head" style="margin:0"><b class="warn" id="unseen-text" style="font-size:14px"></b><button id="unseen-open" class="ghost">기록 보기</button><button id="unseen-ok" title="실패를 본 것으로 표시합니다">확인함</button></div>
+      <div class="head" style="margin:0"><b class="warn" id="unseen-text" style="font-size:14px"></b><button id="unseen-open" class="ghost">실행 기록 보기</button><button id="unseen-ok" class="btn" title="실패를 확인한 것으로 표시해요. 이 알림이 사라져요">확인</button></div>
     </section>
 
     <section class="card not-web">
-      <div class="head"><h3>요청 예시 붙여 넣기</h3><button id="parse">읽기</button></div>
+      <div class="head"><h3>요청 예시로 채우기</h3><button id="parse" class="btn">채우기</button></div>
       <textarea id="paste" class="code" rows="5" placeholder="curl 'https://api.example.com/v1/items?page=1' -H 'Accept: application/json'&#10;&#10;GET /v1/items?page=1 HTTP/1.1&#10;Host: api.example.com&#10;&#10;{&quot;method&quot;: &quot;GET&quot;, &quot;url&quot;: &quot;https://api.example.com/v1/items&quot;}"></textarea>
-      <div class="hint">curl 명령, HTTP 요청, JSON 중 하나를 붙여 넣고 [읽기]를 누르면 아래 칸을 채웁니다. 붙여 넣은 글은 저장하지 않습니다.</div>
+      <div class="hint">curl 명령, HTTP 요청, JSON 중 하나를 붙여 넣고 [채우기]를 누르면 아래 칸이 채워져요. 붙여 넣은 글은 저장하지 않아요.</div>
       <div class="warn" id="unread"></div>
       <div id="secret-box" class="hidden">
         <h2>비밀처럼 보이는 값</h2>
-        <div class="hint">env 이름을 고르고 [env 이름으로 바꾸기]를 누르면 값 대신 {env:이름}이 들어갑니다. 비밀이 아니면 ×로 뺍니다.</div>
+        <div class="hint">값마다 쓸 env 이름을 고르고 [env 이름으로 바꾸기]를 누르세요. 값 대신 {env:이름}이 들어가요. 비밀이 아니면 ×를 눌러 목록에서 빼세요.</div>
         <div id="secret-list"></div>
-        <div class="row"><button id="secretize">env 이름으로 바꾸기</button></div>
+        <div class="actions"><button id="secretize" class="btn">env 이름으로 바꾸기</button></div>
       </div>
       <div class="err" id="parse-msg"></div>
     </section>
 
     <section class="card for-api">
       <h3>요청</h3>
-      <div class="row"><select id="method" style="width:auto; flex:none"></select><input id="method-other" class="hidden" placeholder="방식" style="width:90px; flex:none"><input id="req-url" class="code" placeholder="https://api.example.com/v1/items (쿼리 없이)"></div>
+      <div class="row"><select id="method" style="width:auto; flex:none" title="HTTP 메서드"></select><input id="method-other" class="hidden" placeholder="메서드" style="width:90px; flex:none"><input id="req-url" class="code" placeholder="https://api.example.com/v1/items" title="쿼리는 주소에 붙이지 말고 아래 쿼리 칸에 넣으세요"></div>
       <div class="split">
         <div>
-          <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">쿼리</h2><button class="ghost" data-add="query">+ 행 추가</button></div>
+          <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">쿼리</h2><button class="ghost" data-add="query">행 추가</button></div>
           <div id="query"></div>
         </div>
         <div>
-          <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">헤더</h2><button class="ghost" data-add="headers">+ 행 추가</button></div>
+          <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">헤더</h2><button class="ghost" data-add="headers">행 추가</button></div>
           <div id="headers"></div>
         </div>
       </div>
-      <div class="row" style="align-items:center; margin-top:6px"><span class="hint" style="margin:0">본문</span><select id="body-kind" style="width:auto"><option value="none">없음</option><option value="json">JSON</option><option value="form">폼(form)</option><option value="text">글자</option></select></div>
-      <textarea id="body" class="code hidden" rows="4" placeholder="본문"></textarea>
-      <div class="hint">자리 표시: {env:이름} {page} {offset} {cursor} {today:%Y%m%d} {now}</div>
+      <div class="row" style="align-items:center; margin-top:6px"><span class="hint" style="margin:0">본문</span><select id="body-kind" style="width:auto"><option value="none">없음</option><option value="json">JSON</option><option value="form">폼</option><option value="text">텍스트</option></select></div>
+      <textarea id="body" class="code hidden" rows="4" placeholder="보낼 본문"></textarea>
+      <div class="hint" title="{env:이름}은 env 파일의 값, {page}·{offset}·{cursor}는 쪽 넘기기 값, {today:%Y%m%d}는 오늘 날짜, {now}는 지금 시각으로 바뀌어요">쓸 수 있는 자리 표시: {env:이름} {page} {offset} {cursor} {today:%Y%m%d} {now}</div>
     </section>
 
     <section class="card for-file hidden">
       <h3>파일 주소</h3>
       <input id="f-url" class="code" placeholder="https://example.com/data.csv" style="margin-bottom:6px">
-      <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">헤더</h2><button class="ghost" data-add="f-headers">+ 행 추가</button></div>
+      <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">헤더</h2><button class="ghost" data-add="f-headers">행 추가</button></div>
       <div id="f-headers"></div>
       <div class="fields" style="margin-top:6px">
-        <label><div class="hint">조각 수 (<span data-range="file.chunks"></span>)</div><input id="f-chunks" type="number"></label>
+        <label title="파일을 몇 조각으로 나눠 동시에 받을지 정해요"><div class="hint">나눠 받을 조각 수 (<span data-range="file.chunks"></span>)</div><input id="f-chunks" type="number"></label>
         <label><div class="hint">파일 종류</div><select id="f-kind"><option value="auto">자동</option><option value="csv">CSV</option><option value="parquet">Parquet</option><option value="json">JSON</option></select></label>
         <label><div class="hint">인코딩</div><select id="f-enc"><option value="auto">자동</option><option value="utf-8">UTF-8</option><option value="cp949">CP949</option></select></label>
       </div>
-      <div class="hint">서버가 나눠 받기를 지원하지 않으면 한 줄기로 받습니다. 인코딩은 CSV·JSON에만 씁니다. 자리 표시: {env:이름} {today:%Y%m%d} {now}</div>
+      <div class="hint">서버가 나눠 받기를 지원하지 않으면 한 번에 받아요. 인코딩은 CSV와 JSON에만 적용돼요.</div>
+      <div class="hint" title="{env:이름}은 env 파일의 값, {today:%Y%m%d}는 오늘 날짜, {now}는 지금 시각으로 바뀌어요">쓸 수 있는 자리 표시: {env:이름} {today:%Y%m%d} {now}</div>
     </section>
 
     <section class="card for-web hidden">
       <h3>웹페이지</h3>
-      <div class="row"><input id="w-url" class="code" placeholder="https://shop.example.com/list?page={page}"><button id="w-open">브라우저 열기</button><button id="w-close" class="ghost">닫기</button></div>
-      <div class="hint">자리 표시: {page} {today:%Y%m%d} {now}</div>
-      <div class="hint">수집용 창은 따로 뜹니다. 로그인이 필요한 사이트는 그 창에서 직접 로그인하세요. 비밀번호는 프로그램이 다루지 않습니다.</div>
-      <div class="hint usage" id="w-state">수집용 창: 닫힘</div>
-      <div class="row"><button id="w-forget" class="ghost" title="수집용 창에 남은 로그인 정보(쿠키 등)를 지웁니다. 창을 닫은 뒤에만 됩니다">로그인 정보 지우기</button></div>
+      <div class="row"><input id="w-url" class="code" placeholder="https://shop.example.com/list?page={page}"><button id="w-open">수집용 창 열기</button><button id="w-close" class="ghost">창 닫기</button></div>
+      <div class="hint" title="{page}는 쪽 번호, {today:%Y%m%d}는 오늘 날짜, {now}는 지금 시각으로 바뀌어요">쓸 수 있는 자리 표시: {page} {today:%Y%m%d} {now}</div>
+      <div class="hint">수집용 창은 따로 열려요. 로그인이 필요한 사이트는 그 창에서 직접 로그인하세요. 비밀번호는 프로그램이 다루지 않아요.</div>
+      <div class="hint usage" id="w-state">수집용 창이 닫혀 있어요</div>
+      <div class="row"><button id="w-forget" class="ghost" title="수집용 창에 남은 로그인 정보(쿠키 등)를 지워요. 창을 닫은 뒤에만 지울 수 있어요">로그인 정보 지우기</button></div>
       <div class="err" id="w-msg"></div>
 
-      <h2>고르기</h2>
-      <div class="row" style="flex-wrap:wrap"><button id="pick-field">값 고르기</button><button id="pick-next">다음 버튼 고르기</button><button id="pick-off" class="ghost">고르기 끄기</button></div>
-      <div class="hint" id="pick-hint">[값 고르기]를 누르고 수집용 창에서 받을 값을 누르면 컬럼이 생깁니다.</div>
-      <div class="hint">항목(한 행) 선택자</div>
+      <h2>받을 값 고르기</h2>
+      <div class="actions"><button id="pick-field" class="btn">값 고르기</button><button id="pick-next" class="btn">다음 버튼 고르기</button><button id="pick-off" class="ghost">그만 고르기</button></div>
+      <div class="hint" id="pick-hint">[값 고르기]를 누른 뒤 수집용 창에서 받을 값을 클릭하면 컬럼이 추가돼요.</div>
+      <div class="hint">한 행이 되는 항목의 선택자</div>
       <div class="row" style="align-items:center"><input id="w-items" class="code" placeholder="예: main > ul.goods > li"><span class="hint" id="w-count" style="margin:0; white-space:nowrap"></span></div>
-      <div class="hint">컬럼 (선택자는 항목 안에서 찾습니다. 비우면 항목 자체)</div>
+      <div class="hint" title="선택자를 비워 두면 항목 전체의 값을 받아요">컬럼 (선택자는 항목 안에서 찾아요)</div>
       <div id="w-fields"></div>
 
       <h2>쪽 넘기기</h2>
       <select id="w-pkind" style="margin-bottom:6px">
-        <option value="none">없음</option><option value="next">다음 버튼</option><option value="url">주소의 {page}</option><option value="scroll">스크롤</option>
+        <option value="none">넘기지 않음</option><option value="next">다음 버튼 누르기</option><option value="url">주소의 {page} 바꾸기</option><option value="scroll">스크롤 내리기</option>
       </select>
-      <label id="w-next-box"><div class="hint">다음 버튼 선택자</div><input id="w-next" class="code" placeholder="[다음 버튼 고르기]로 지정" style="margin-bottom:6px"></label>
+      <label id="w-next-box"><div class="hint">다음 버튼 선택자</div><input id="w-next" class="code" placeholder="[다음 버튼 고르기]로 채울 수 있어요" style="margin-bottom:6px"></label>
       <div class="fields">
         <label id="w-start-box"><div class="hint">첫 쪽 번호</div><input id="w-start" type="number"></label>
         <label id="w-max-box"><div class="hint">최대 쪽 수</div><input id="w-max" type="number"></label>
-        <label><div class="hint">기다리기(초, <span data-range="web.wait"></span>)</div><input id="w-wait" type="number" step="any"></label>
+        <label title="항목이 나타나고 개수가 더 늘지 않을 때까지 기다리는 최대 시간이에요"><div class="hint">최대 대기(초, <span data-range="web.wait"></span>)</div><input id="w-wait" type="number" step="any"></label>
       </div>
-      <div class="hint">기다리기: 항목이 나타나고 개수가 더 늘지 않을 때까지 기다리는 최대 시간</div>
       <div class="warn" id="w-pwarn"></div>
-      <label class="check"><input type="checkbox" id="w-robots"> robots.txt 지키기</label>
+      <label class="check"><input type="checkbox" id="w-robots"> robots.txt 규칙 따르기</label>
       <div class="warn" id="w-robots-warn"></div>
-      <label class="check"><input type="checkbox" id="w-show"> 실행 중 수집용 창 보이기</label>
+      <label class="check"><input type="checkbox" id="w-show"> 수집하는 동안 수집용 창 보이기</label>
 
-      <div class="head" style="margin:10px 0 4px"><h2 style="margin:0">미리보기</h2><button id="w-sample-btn" class="ghost" title="수집용 창의 지금 페이지에서 읽기만 합니다 (사용 한도에 세지 않습니다)">미리보기</button></div>
+      <div class="head" style="margin:18px 0 4px"><h2 style="margin:0">미리보기</h2><button id="w-sample-btn" class="btn" title="수집용 창에 열린 페이지에서 읽기만 해요. 사용 한도에 세지 않아요">지금 페이지 읽기</button></div>
       <div class="hint" id="w-sample-info"></div>
       <div class="table-wrap" id="w-sample"></div>
       <div class="err" id="w-sample-msg"></div>
     </section>
 
     <section class="card for-api">
-      <div class="head"><h3>응답</h3><button id="try" title="첫 쪽을 한 번 보내 봅니다">시험 보내기</button><button id="sample-btn" class="ghost">미리보기</button></div>
-      <div class="hint">[시험 보내기]도 사용 한도에 셉니다. 받은 응답은 아래 칸에 채워집니다.</div>
+      <div class="head"><h3>응답</h3><button id="sample-btn" class="btn" title="붙여 넣은 응답에서 지금 지정대로 값을 뽑아 봐요">미리보기</button><button id="try" title="첫 쪽 요청을 한 번 보내 봐요">시험 보내기</button></div>
+      <div class="hint">[시험 보내기]도 사용 한도에 포함돼요. 받은 응답은 아래 칸에 채워져요.</div>
       <div id="sent-box" class="hidden"><pre id="sent"></pre></div>
-      <textarea id="resp-text" class="code" rows="4" placeholder="응답 예시 붙여 넣기 (JSON이면 아래에 트리로 보입니다)"></textarea>
+      <textarea id="resp-text" class="code" rows="4" placeholder="응답 예시를 붙여 넣으세요. JSON이면 아래에 트리로 보여요."></textarea>
       <div class="split" style="margin-top:6px">
         <div>
           <div class="tree" id="tree"></div>
           <div id="pick"></div>
         </div>
         <div>
-          <div class="hint">기록 위치 (점으로 구분, 배열 번호는 숫자. 비우면 응답 전체가 배열)</div>
+          <div class="hint" title="점(.)으로 구분하고 배열 번호는 숫자로 써요. 비워 두면 응답 전체를 기록 배열로 봐요">기록 위치 (행이 될 배열)</div>
           <input id="records" class="code" placeholder="예: response.body.items" style="margin-bottom:6px">
-          <div class="hint">컬럼 (이름을 바꿀 수 있습니다)</div>
+          <div class="hint">컬럼 (이름을 바꿀 수 있어요)</div>
           <div id="columns"></div>
         </div>
       </div>
@@ -174,17 +178,17 @@
     <section class="card">
       <h3>적재</h3>
       <div class="tabs">
-        <label><input type="radio" name="ltarget" value="file" checked style="width:auto"> 파일만</label>
+        <label><input type="radio" name="ltarget" value="file" checked style="width:auto"> 파일로만 저장</label>
         <label><input type="radio" name="ltarget" value="table" style="width:auto"> DB 테이블</label>
         <label><input type="radio" name="ltarget" value="kafka" style="width:auto"> Kafka 토픽</label>
       </div>
-      <div class="hint">결과 파일(오른쪽 "저장" 단계)은 늘 만듭니다. 적재는 저장한 결과 파일을 읽어 넣습니다.</div>
-      <div class="hint load-on hidden">비밀번호는 저장하지 않습니다. 적재할 때마다 입력하세요.</div>
+      <div class="hint">결과 파일은 언제나 만들어요(오른쪽 저장 단계). DB 테이블이나 Kafka를 고르면 그 파일을 읽어 한 번 더 넣어요.</div>
+      <div class="hint load-on hidden">비밀번호는 저장하지 않아요. 적재할 때마다 입력하세요.</div>
 
       <div id="ld-table" class="hidden">
-        <h2>연결</h2>
+        <h2>연결할 DB</h2>
         <div class="tabs" style="margin-bottom:6px">
-          <label><input type="radio" name="ldkind" value="folder" checked style="width:auto"> 내 폴더의 DB 파일</label>
+          <label><input type="radio" name="ldkind" value="folder" checked style="width:auto"> 내 PC의 DB 파일</label>
           <label><input type="radio" name="ldkind" value="url" style="width:auto"> DB 주소</label>
         </div>
         <input id="ld-file" class="code" placeholder="예: C:\work\warehouse.duckdb" style="margin-bottom:6px">
@@ -197,27 +201,27 @@
         </div>
         <h2>테이블</h2>
         <div class="fields">
-          <label><div class="hint">스키마 (선택)</div><input id="ld-schema" placeholder="기본"></label>
+          <label><div class="hint">스키마 (선택)</div><input id="ld-schema" placeholder="비우면 기본"></label>
           <label><div class="hint">테이블 이름</div><input id="ld-name" placeholder="예: items"></label>
-          <label><div class="hint">넣는 방식</div><select id="ld-how"><option value="new">새 테이블</option><option value="append">덧붙이기</option><option value="replace">바꾸기</option></select></label>
+          <label><div class="hint">넣는 방식</div><select id="ld-how"><option value="new">새 테이블 만들기</option><option value="append">기존 테이블에 추가</option><option value="replace">기존 테이블 덮어쓰기</option></select></label>
         </div>
         <div class="hint" id="ld-how-hint"></div>
         <div id="ld-key-box">
-          <div class="hint">이미 있는 키는 건너뛰기 (선택, 키 컬럼을 쉼표로 구분)</div>
+          <div class="hint">이미 있는 키 건너뛰기 (선택, 키 컬럼은 쉼표로 구분)</div>
           <input id="ld-key" placeholder="예: id" style="margin-bottom:4px">
-          <div class="hint">키를 확인하는 조회가 DB에 나갑니다. DW는 요금이 생길 수 있습니다.</div>
+          <div class="hint">키를 확인하려고 DB에 조회를 보내요. 데이터 웨어하우스는 요금이 나올 수 있어요.</div>
         </div>
         <label style="display:block; margin:6px 0"><input type="checkbox" id="ld-loadid" style="width:auto"> 적재 ID 컬럼 넣기 (_ibis_load_id)</label>
-        <div class="hint">켜면 행마다 이 적재의 ID를 넣어, 나중에 [업로드 기록]에서 이 적재의 행만 정확히 골라 지울 수 있습니다. 덧붙이기·바꾸기라면 테이블에도 이 컬럼이 있어야 합니다.</div>
-        <div class="row"><button id="ld-check" title="테이블이 있는지, 결과 파일과 컬럼이 맞는지 봅니다 (데이터는 넣지 않습니다)">확인</button></div>
+        <div class="hint">켜면 행마다 이번 적재의 ID가 들어가서, 나중에 [업로드 기록]에서 이번에 넣은 행만 골라 지울 수 있어요. 기존 테이블에 추가하거나 덮어쓸 때는 테이블에도 이 컬럼이 있어야 해요.</div>
+        <div class="actions"><button id="ld-check" class="btn" title="테이블이 있는지, 결과 파일과 컬럼이 맞는지 확인해요. 데이터는 넣지 않아요">테이블 확인</button></div>
         <div class="hint" id="ld-check-msg"></div>
         <div class="table-wrap" id="ld-cols"></div>
       </div>
 
       <div id="ld-kafka" class="hidden">
         <h2>보낼 토픽</h2>
-        <div class="row"><select id="kf-saved" style="flex:1; min-width:0" title="적재할 Kafka 등록"></select><input id="kf-name" placeholder="새 이름"><button id="kf-save">저장</button><button id="kf-del" class="ghost">삭제</button></div>
-        <div class="hint">이름을 비우고 저장하면 고른 등록에 덮어씁니다. 비밀번호는 등록에 넣지 않습니다.</div>
+        <div class="row"><select id="kf-saved" style="flex:1; min-width:0" title="저장해 둔 Kafka 설정"></select><input id="kf-name" placeholder="새 이름"><button id="kf-save" class="btn">저장</button><button id="kf-del" class="ghost">삭제</button></div>
+        <div class="hint">이름을 비우고 저장하면 고른 설정을 덮어써요. 비밀번호는 설정에 저장하지 않아요.</div>
         <div class="hint">서버 주소 (쉼표로 구분)</div>
         <input id="kf-servers" class="code" placeholder="예: host1:9092,host2:9092" style="margin-bottom:6px">
         <div class="fields">
@@ -226,31 +230,31 @@
           <label id="kf-mech-box"><div class="hint">SASL 방식</div><select id="kf-mech"><option>PLAIN</option><option>SCRAM-SHA-256</option><option>SCRAM-SHA-512</option></select></label>
           <label id="kf-user-box"><div class="hint">아이디</div><input id="kf-user" autocomplete="off"></label>
         </div>
-        <div class="warn hidden" id="kf-plain-warn">SASL_PLAINTEXT에 PLAIN이면 아이디·비밀번호가 암호화 없이 그대로 네트워크로 갑니다. SASL_SSL이나 SCRAM을 쓰세요.</div>
+        <div class="warn hidden" id="kf-plain-warn">SASL_PLAINTEXT와 PLAIN을 함께 쓰면 아이디와 비밀번호가 암호화되지 않은 채 그대로 네트워크로 전송돼요. SASL_SSL이나 SCRAM을 쓰세요.</div>
         <div id="kf-ca-box"><div class="hint">CA 인증서 파일 경로 (선택)</div><input id="kf-ca" class="code" placeholder="예: C:\certs\ca.pem" style="margin-bottom:6px"></div>
         <div class="err" id="kf-msg"></div>
         <div class="fields">
           <label id="kf-pass-box"><div class="hint">비밀번호 (저장 안 함)</div><input id="kf-pass" type="password" autocomplete="off"></label>
           <label><div class="hint">메시지 키 컬럼 (선택)</div><input id="kf-key" placeholder="예: id"></label>
         </div>
-        <div class="row"><button id="kf-check" title="저장한 등록으로 접속만 해 봅니다 (메시지는 보내지 않습니다)">접속 확인</button></div>
+        <div class="actions"><button id="kf-check" class="btn" title="저장한 설정으로 접속만 해 봐요. 메시지는 보내지 않아요">접속 확인</button></div>
         <div class="hint" id="kf-check-msg"></div>
       </div>
 
       <div class="load-on hidden">
         <h2>넣는 단위와 속도</h2>
         <div class="fields">
-          <label><div class="hint">넣는 단위</div><select id="ld-unit"><option value="batch">묶음</option><option value="single">한 건씩</option></select></label>
-          <label id="ld-batch-box"><div class="hint">묶음 행 수</div><input id="ld-batch" type="number"></label>
+          <label><div class="hint">넣는 단위</div><select id="ld-unit"><option value="batch">묶음으로</option><option value="single">한 건씩</option></select></label>
+          <label id="ld-batch-box"><div class="hint">묶음당 행 수</div><input id="ld-batch" type="number"></label>
           <label><div class="hint">간격(초)</div><input id="ld-gap" type="number" step="any"></label>
-          <label><div class="hint">다시 시도</div><input id="ld-retry" type="number"></label>
+          <label><div class="hint">다시 시도 횟수</div><input id="ld-retry" type="number"></label>
         </div>
-        <div class="hint">확정 직후 연결이 끊기면 그 묶음이 들어갔는지 알 수 없어, 다시 넣을 때 중복될 수 있습니다(키 건너뛰기를 쓰면 막을 수 있습니다).</div>
+        <div class="hint">묶음을 넣은 직후 연결이 끊기면 들어갔는지 알 수 없어서, 다시 넣을 때 중복될 수 있어요. 이미 있는 키 건너뛰기를 쓰면 막을 수 있어요.</div>
       </div>
     </section>
 
     <section class="card">
-      <div class="head"><h3>실행</h3><button id="estimate" class="ghost">예상 확인</button><button id="start">시작</button><button id="stop" class="ghost" disabled>멈추기</button></div>
+      <div class="head"><h3>실행</h3><button id="estimate" class="btn" title="보낼 요청 수와 오늘 남은 횟수를 미리 계산해요">예상 확인</button><button id="stop" class="btn" disabled>멈추기</button><button id="start">수집 시작</button></div>
       <div class="hint" id="est"></div>
       <div class="warn" id="est-warn"></div>
       <div class="hint" id="est-robots"></div>
@@ -265,13 +269,13 @@
         <div class="hint usage" id="run-usage"></div>
         <div class="err" id="run-err"></div>
         <div id="load-again-box" class="hidden">
-          <div class="row" style="margin-top:6px"><button id="load-again" title="받아 둔 결과 파일을 다시 받지 않고 적재만 합니다. 넣은 묶음 다음부터 이어 넣습니다">적재만 다시</button></div>
-          <div class="hint">비밀번호가 필요한 곳이면 적재 칸에 다시 입력한 뒤 누르세요.</div>
+          <div class="actions"><button id="load-again" class="btn" title="결과 파일은 다시 받지 않고 적재만 해요. 이미 넣은 묶음 다음부터 이어서 넣어요">적재만 다시 하기</button></div>
+          <div class="hint">비밀번호가 필요하면 적재 카드에 다시 입력한 뒤 누르세요.</div>
         </div>
       </div>
       <div id="result" class="hidden">
         <div class="path" id="result-path"></div>
-        <div class="row" style="margin-top:6px"><button id="open-search">쿼리로 열기</button><button id="open-prep">분석으로 열기</button></div>
+        <div class="actions"><button id="open-search" class="btn" title="연결을 이 결과 파일로 바꾸고 쿼리 화면으로 가요">쿼리에서 열기</button><button id="open-prep" class="btn" title="연결을 이 결과 파일로 바꾸고 분석 화면으로 가요">분석에서 열기</button></div>
       </div>
       <div class="ok" id="run-ok"></div>
       <div class="err" id="run-msg"></div>
@@ -279,29 +283,29 @@
 
     <section class="card">
       <h3>예약</h3>
-      <div class="hint">예약은 저장한 구성으로 돕니다. 구성을 고치면 다시 저장하세요.</div>
+      <div class="hint">예약은 저장한 구성으로 실행돼요. 구성을 고쳤다면 먼저 다시 저장하세요.</div>
       <div class="fields">
-        <label><div class="hint">대상 구성</div><select id="sc-name" title="예약할 저장한 구성"></select></label>
+        <label><div class="hint">예약할 구성</div><select id="sc-name" title="저장한 구성 중에서 골라요"></select></label>
         <label><div class="hint">주기</div><select id="sc-every"><option value="daily">매일</option><option value="weekly">매주</option><option value="interval">N분마다</option></select></label>
-        <label id="sc-time-box"><div class="hint">시각 (이 PC)</div><input id="sc-time" placeholder="09:00"></label>
+        <label id="sc-time-box"><div class="hint">시각 (이 PC 기준)</div><input id="sc-time" placeholder="09:00"></label>
         <label id="sc-min-box"><div class="hint">간격(분, <span data-range="schedule.minutes"></span>)</div><input id="sc-minutes" type="number"></label>
       </div>
       <div id="sc-days-box">
         <div class="hint">요일</div>
         <div class="days"><label><input type="checkbox" id="sc-d0"> 월</label><label><input type="checkbox" id="sc-d1"> 화</label><label><input type="checkbox" id="sc-d2"> 수</label><label><input type="checkbox" id="sc-d3"> 목</label><label><input type="checkbox" id="sc-d4"> 금</label><label><input type="checkbox" id="sc-d5"> 토</label><label><input type="checkbox" id="sc-d6"> 일</label></div>
       </div>
-      <label class="check"><input type="checkbox" id="sc-inapp"> 프로그램이 켜져 있는 동안 실행</label>
-      <label class="check"><input type="checkbox" id="sc-windows"> Windows 예약 작업으로 등록 (프로그램을 꺼도 실행)</label>
-      <div class="hint">작업 스케줄러의 \DataLoupe\ 폴더에 등록합니다. 로그온해 있을 때만 돌고, 놓친 시각은 켜진 뒤 한 번 돕니다.</div>
+      <label class="check"><input type="checkbox" id="sc-inapp"> 프로그램이 켜져 있을 때 실행</label>
+      <label class="check"><input type="checkbox" id="sc-windows"> Windows 작업 스케줄러에 등록 (프로그램을 꺼도 실행)</label>
+      <div class="hint" title="작업 스케줄러의 \DataLoupe\ 폴더에 등록돼요">Windows에 로그인해 있을 때만 실행돼요. 놓친 시각은 PC가 켜진 뒤 한 번 실행해요.</div>
       <div class="fields">
-        <label><div class="hint">알림</div><select id="sc-notify" title="실행이 끝나면 알릴 보낼 곳 (상단 [보낼 곳]에서 등록)"></select></label>
-        <label id="sc-on-box"><div class="hint">알릴 때</div><select id="sc-notify-on"><option value="fail">실패할 때만</option><option value="always">늘</option></select></label>
+        <label><div class="hint">알림</div><select id="sc-notify" title="실행이 끝나면 알림을 보낼 곳이에요. 위쪽 [보낼 곳]에서 추가할 수 있어요"></select></label>
+        <label id="sc-on-box"><div class="hint">알릴 때</div><select id="sc-notify-on"><option value="fail">실패할 때만</option><option value="always">항상</option></select></label>
       </div>
-      <div class="hint">비밀번호가 필요한 적재(DB 주소의 계정, Kafka SASL)는 예약할 수 없습니다. 비밀번호를 저장하지 않기 때문입니다.</div>
-      <div class="row"><button id="sc-save">예약 저장</button><button id="sc-run" class="ghost" title="저장한 구성을 지금 한 번 예약처럼 실행합니다 (기록·알림 포함)">지금 실행</button><button id="sc-del" class="ghost">예약 지우기</button></div>
+      <div class="hint">비밀번호가 필요한 적재(DB 주소 계정, Kafka SASL)는 예약할 수 없어요. 비밀번호를 저장하지 않기 때문이에요.</div>
+      <div class="actions"><button id="sc-run" class="btn" title="저장한 구성을 예약과 똑같이 지금 한 번 실행해요. 실행 기록과 알림도 남아요">지금 실행</button><button id="sc-save">예약 저장</button><button id="sc-del" class="ghost">예약 삭제</button></div>
       <div class="err" id="sc-msg"></div>
       <div class="warn" id="sc-stale"></div>
-      <div class="row"><button id="sc-rereg" class="hidden" title="경로가 맞지 않는 Windows 예약 작업을 지금 프로그램 경로로 다시 등록합니다">다시 등록</button></div>
+      <div class="row"><button id="sc-rereg" class="btn hidden" title="경로가 맞지 않는 Windows 예약 작업을 지금 프로그램 경로로 다시 등록해요">다시 등록</button></div>
       <div class="table-wrap" id="sc-list"></div>
     </section>
 
@@ -310,8 +314,8 @@
       <div class="head"><h3>업로드 기록</h3><button id="up-toggle" class="ghost">펼치기</button></div>
       <div class="hint" id="up-sum"></div>
       <div id="up-body" class="hidden">
-        <div class="row" style="flex-wrap:wrap"><select id="up-kind" style="width:auto"><option value="">모두</option><option value="file">파일</option><option value="table">DB 테이블</option><option value="kafka">Kafka</option></select>
-          <input id="up-find" placeholder="찾기 (파일·테이블·토픽·적재 ID)" style="flex:1 1 200px"></div>
+        <div class="row" style="flex-wrap:wrap"><select id="up-kind" style="width:auto"><option value="">모든 종류</option><option value="file">파일</option><option value="table">DB 테이블</option><option value="kafka">Kafka</option></select>
+          <input id="up-find" placeholder="파일, 테이블, 토픽, 적재 ID로 찾기" style="flex:1 1 200px"></div>
         <div class="table-wrap" id="up-list"></div>
         <pre class="code hidden" id="up-cmd" style="white-space:pre-wrap; margin-top:8px"></pre>
         <div class="hint" id="up-note"></div>
@@ -327,7 +331,7 @@
     </section>
     </div></section>
   </main>
-  <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
+  <div class="grip-x" data-size="panel" title="끌어서 패널 너비를 바꿔요. 두 번 클릭하면 원래 너비로 돌아가요"></div>
   <aside class="side">
     <header><h3>수집 설정</h3></header>
     <div class="sc">
@@ -336,13 +340,13 @@
       <div class="cstep">
       <div class="step open" data-step="config"><div class="sp"><i>1</i><span class="t">구성</span><b id="sum-c-config"></b><span class="c"></span></div>
         <div class="edx">
-      <div class="row"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 구성을 불러옵니다 (보내지는 않습니다)"></select><input id="rname" placeholder="이름"><button id="rsave">저장</button><button id="rdel" class="ghost">삭제</button></div>
-      <div class="hint">이름을 비우고 저장하면 지금 고른 구성에 덮어씁니다.</div>
+      <div class="row"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 구성을 불러와요. 요청은 보내지 않아요"></select><input id="rname" placeholder="새 이름"><button id="rsave" class="btn">저장</button><button id="rdel" class="ghost">삭제</button></div>
+      <div class="hint">이름을 비우고 저장하면 지금 고른 구성을 덮어써요.</div>
       <div class="err" id="cfg-msg"></div>
 
 
         </div></div></div>
-      <div class="cstep"><div class="cn">↓</div>
+      <div class="cstep"><div class="cn"></div>
       <div class="step" data-step="mode"><div class="sp"><i>2</i><span class="t">받는 방식</span><b id="sum-c-mode"></b><span class="c"></span></div>
         <div class="edx">
       <div class="tabs">
@@ -353,80 +357,80 @@
 
 
         </div></div></div>
-      <div class="cstep not-web"><div class="cn">↓</div>
+      <div class="cstep not-web"><div class="cn"></div>
       <div class="step" data-step="env"><div class="sp"><i>3</i><span class="t">env 파일</span><b id="sum-c-env"></b><span class="c"></span></div>
         <div class="edx">
-      <div class="row"><input id="env-path" placeholder="예: C:\work\.env"><button id="env-read">읽기</button></div>
-      <div class="hint">값은 저장하지 않고 경로만 저장합니다. 요청에는 {env:이름}으로 씁니다.</div>
+      <div class="row"><input id="env-path" placeholder="예: C:\work\.env"><button id="env-read" class="btn">불러오기</button></div>
+      <div class="hint">값은 저장하지 않고 파일 경로만 저장해요. 요청에서는 {env:이름}으로 써요.</div>
       <div class="hint" id="env-names"></div>
       <div class="err" id="env-msg"></div>
         </div></div></div>
-      <div class="cstep for-api"><div class="cn">↓</div>
+      <div class="cstep for-api"><div class="cn"></div>
       <div class="step" data-step="paging"><div class="sp"><i>4</i><span class="t">쪽 넘기기</span><b id="sum-c-paging"></b><span class="c"></span></div>
         <div class="edx">
       <select id="p-kind" style="margin-bottom:6px">
-      <option value="none">없음 (한 번만 받기)</option><option value="page">쪽 번호 {page}</option><option value="offset">offset {offset}</option><option value="cursor">커서 {cursor}</option><option value="next_url">다음 주소</option>
+      <option value="none">한 번만 받기</option><option value="page">쪽 번호 {page}</option><option value="offset">offset {offset}</option><option value="cursor">커서 {cursor}</option><option value="next_url">응답의 다음 주소</option>
       </select>
       <div class="fields">
       <label id="p-start-box"><div class="hint" id="p-start-name">첫 쪽 번호</div><input id="p-start" type="number"></label>
       <label id="p-step-box"><div class="hint">한 번에 늘릴 값</div><input id="p-step" type="number"></label>
       <label id="p-max-box"><div class="hint">최대 쪽 수</div><input id="p-max" type="number"></label>
       </div>
-      <label id="p-cursor-box"><div class="hint">다음 커서 위치</div><input id="p-cursor" class="code" placeholder="응답 트리에서 지정" style="margin-bottom:6px"></label>
-      <label id="p-next-box"><div class="hint">다음 주소 위치 (비우면 Link 헤더의 rel=next)</div><input id="p-next" class="code" placeholder="응답 트리에서 지정" style="margin-bottom:6px"></label>
-      <label id="p-total-box"><div class="hint">전체 수 위치 (선택: 예상 요청 수 계산·멈춤 조건)</div><input id="p-total" class="code" placeholder="응답 트리에서 지정"></label>
+      <label id="p-cursor-box"><div class="hint">다음 커서 위치</div><input id="p-cursor" class="code" placeholder="응답 트리에서 고를 수 있어요" style="margin-bottom:6px"></label>
+      <label id="p-next-box" title="비워 두면 응답 Link 헤더의 rel=next 주소를 따라가요"><div class="hint">다음 주소 위치 (비우면 Link 헤더 사용)</div><input id="p-next" class="code" placeholder="응답 트리에서 고를 수 있어요" style="margin-bottom:6px"></label>
+      <label id="p-total-box" title="정해 두면 예상 요청 수를 계산하고, 전체를 다 받으면 멈춰요"><div class="hint">전체 수 위치 (선택)</div><input id="p-total" class="code" placeholder="응답 트리에서 고를 수 있어요"></label>
       <div class="warn" id="p-warn"></div>
         </div></div></div>
-      <div class="cstep"><div class="cn">↓</div>
+      <div class="cstep"><div class="cn"></div>
       <div class="step" data-step="speed"><div class="sp"><i>5</i><span class="t">받는 속도</span><b id="sum-c-speed"></b><span class="c"></span></div>
         <div class="edx">
       <div class="fields">
-      <label class="not-web"><div class="hint">동시 수</div><input id="b-conc" type="number"></label>
-      <label><div class="hint">간격(초)</div><input id="b-gap" type="number" step="any"></label>
+      <label class="not-web"><div class="hint">동시 요청 수</div><input id="b-conc" type="number"></label>
+      <label><div class="hint">요청 간격(초)</div><input id="b-gap" type="number" step="any"></label>
       <label class="not-web"><div class="hint">다시 시도 횟수</div><input id="b-retry" type="number"></label>
-      <label><div class="hint">시간 초과(초)</div><input id="b-timeout" type="number" step="any"></label>
+      <label><div class="hint">응답 제한 시간(초)</div><input id="b-timeout" type="number" step="any"></label>
       </div>
-      <div class="hint not-web">쪽 번호·offset 방식만 동시에 받습니다.</div>
-      <div class="hint for-web hidden">웹페이지는 수집용 창 하나로 받습니다. 간격은 쪽 사이, 시간 초과는 쪽 하나를 여는 시간입니다.</div>
+      <div class="hint not-web">동시에 받기는 쪽 번호와 offset 방식에서만 돼요.</div>
+      <div class="hint for-web hidden">웹페이지는 수집용 창 하나로 받아요. 간격은 쪽과 쪽 사이, 제한 시간은 쪽 하나를 여는 시간이에요.</div>
 
 
         </div></div></div>
-      <div class="cstep"><div class="cn">↓</div>
+      <div class="cstep"><div class="cn"></div>
       <div class="step" data-step="limits"><div class="sp"><i>6</i><span class="t">사용 한도</span><b id="sum-c-limits"></b><span class="c"></span></div>
         <div class="edx">
-      <div class="row"><select id="lgroup" style="flex:1; min-width:0" title="이 구성이 쓰는 사용 한도 묶음. 같은 키를 쓰는 구성끼리 같은 묶음을 고르면 사용량을 함께 셉니다"></select><input id="lname" placeholder="새 이름"><button id="lsave">저장</button><button id="ldel" class="ghost">삭제</button></div>
-      <div class="hint">비우면 제한 없음. 이름을 비우고 저장하면 고른 묶음에 덮어씁니다.</div>
+      <div class="row"><select id="lgroup" style="flex:1; min-width:0" title="이 구성에 적용할 사용 한도예요. 같은 API 키를 쓰는 구성끼리 같은 한도를 고르면 사용량을 함께 세요"></select><input id="lname" placeholder="새 이름"><button id="lsave" class="btn">저장</button><button id="ldel" class="ghost">삭제</button></div>
+      <div class="hint">칸을 비우면 제한하지 않아요. 이름을 비우고 저장하면 고른 한도를 덮어써요.</div>
       <div class="fields">
-      <label><div class="hint">초당</div><input id="l-sec" type="number" min="1"></label>
-      <label><div class="hint">분당</div><input id="l-min" type="number" min="1"></label>
-      <label><div class="hint">시간당</div><input id="l-hour" type="number" min="1"></label>
-      <label><div class="hint">하루</div><input id="l-day" type="number" min="1"></label>
-      <label><div class="hint">동시 수</div><input id="l-conc" type="number"></label>
+      <label><div class="hint">초당 요청</div><input id="l-sec" type="number" min="1"></label>
+      <label><div class="hint">분당 요청</div><input id="l-min" type="number" min="1"></label>
+      <label><div class="hint">시간당 요청</div><input id="l-hour" type="number" min="1"></label>
+      <label><div class="hint">하루 요청</div><input id="l-day" type="number" min="1"></label>
+      <label><div class="hint">동시 요청 수</div><input id="l-conc" type="number"></label>
       <label><div class="hint">최소 간격(초)</div><input id="l-gap" type="number" step="any"></label>
       <label><div class="hint">하루 초기화 시각</div><input id="l-reset" placeholder="00:00"></label>
       <label><div class="hint">시간대</div><select id="l-tz"><option value="Asia/Seoul">한국 시간</option><option value="UTC">UTC</option><option value="local">이 PC</option></select></label>
-      <label><div class="hint">여유분(%)</div><input id="l-margin" type="number" step="any"></label>
+      <label title="한도의 이 비율만큼은 남겨 두고 멈춰요"><div class="hint">여유분(%)</div><input id="l-margin" type="number" step="any"></label>
       </div>
       <div class="hint usage" id="lusage"></div>
       <div class="warn" id="lbroken"></div>
-      <div class="row"><button id="lreset" class="ghost" title="고른 묶음의 사용 기록을 지웁니다">사용량 초기화</button></div>
+      <div class="row"><button id="lreset" class="ghost" title="고른 한도의 사용 기록을 지워요">사용량 초기화</button></div>
       <div class="err" id="limit-msg"></div>
 
 
         </div></div></div>
-      <div class="cstep"><div class="cn">↓</div>
+      <div class="cstep"><div class="cn"></div>
       <div class="step" data-step="output"><div class="sp"><i>7</i><span class="t">저장</span><b id="sum-c-output"></b><span class="c"></span></div>
         <div class="edx">
       <select id="o-format" style="margin-bottom:6px"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
-      <div class="row"><input id="o-path" placeholder="저장할 파일 경로"><button id="o-ask">저장 위치 고르기</button></div>
-      <div class="hint">중복 기준 컬럼 (선택, 쉼표로 구분). 값이 모두 같은 행은 하나만 남깁니다.</div>
+      <div class="row"><input id="o-path" placeholder="저장할 파일 경로"><button id="o-ask" class="btn">위치 고르기</button></div>
+      <div class="hint" title="고른 컬럼의 값이 모두 같은 행은 하나만 남겨요">중복 기준 컬럼 (선택, 쉼표로 구분)</div>
       <input id="dd-text" placeholder="예: id" style="margin-bottom:4px">
       <div class="cols" id="dd-list"></div>
       <div class="err" id="out-msg"></div>
         </div></div></div>
       </div>
     </div>
-    <footer><button id="c-estimate" class="btn" title="실행 카드의 [예상 확인]">예상 확인</button><button id="c-start" class="btn p" title="실행 카드의 [시작]">시작</button></footer>
+    <footer><button id="c-estimate" class="btn" title="보낼 요청 수와 오늘 남은 횟수를 미리 계산해요">예상 확인</button><button id="c-start" class="btn p" title="지금 설정으로 수집을 시작해요">수집 시작</button></footer>
   </aside>
 </div>
 
@@ -476,12 +480,12 @@ document.addEventListener("click", e => { if (armed && !armed.contains(e.target)
 
 // 숫자 칸: id → [안내 이름, 범위 이름]. 범위는 서버가 검사하는 것(SERVER.numbers)을 그대로 쓰고, 칸의 min·max도 여기서 채운다.
 const NUMBER_FIELDS = {
-  "b-conc": ["동시 수", "balance.concurrency"], "b-gap": ["간격", "balance.interval"], "b-retry": ["다시 시도 횟수", "balance.retries"], "b-timeout": ["시간 초과", "balance.timeout"],
+  "b-conc": ["동시 요청 수", "balance.concurrency"], "b-gap": ["요청 간격", "balance.interval"], "b-retry": ["다시 시도 횟수", "balance.retries"], "b-timeout": ["응답 제한 시간", "balance.timeout"],
   "p-start": ["첫 쪽 번호", "paging.start"], "p-step": ["한 번에 늘릴 값", "paging.step"], "p-max": ["최대 쪽 수", "paging.max_pages"],
-  "f-chunks": ["조각 수", "file.chunks"], "w-start": ["첫 쪽 번호", "web.paging.start"], "w-max": ["최대 쪽 수", "web.paging.max_pages"], "w-wait": ["기다리기", "web.wait"],
-  "ld-batch": ["묶음 행 수", "load.batch"], "ld-gap": ["적재 간격", "load.interval"], "ld-retry": ["적재 다시 시도", "load.retries"],
-  "l-conc": ["동시 수", "limit.concurrency"], "l-gap": ["최소 간격", "limit.min_interval"], "l-margin": ["여유분", "limit.margin"],
-  "sc-minutes": ["간격(분)", "schedule.minutes"],
+  "f-chunks": ["조각 수", "file.chunks"], "w-start": ["첫 쪽 번호", "web.paging.start"], "w-max": ["최대 쪽 수", "web.paging.max_pages"], "w-wait": ["최대 대기", "web.wait"],
+  "ld-batch": ["묶음당 행 수", "load.batch"], "ld-gap": ["적재 간격", "load.interval"], "ld-retry": ["적재 다시 시도 횟수", "load.retries"],
+  "l-conc": ["동시 요청 수", "limit.concurrency"], "l-gap": ["최소 간격", "limit.min_interval"], "l-margin": ["여유분", "limit.margin"],
+  "sc-minutes": ["예약 간격(분)", "schedule.minutes"],
 };
 const HUGE = 1e9;  // 이보다 큰 범위 끝(쪽 번호의 ±10^12 등)은 사실상 제한이 없어 칸과 안내에 적지 않는다.
 const rule = (id, name = NUMBER_FIELDS[id][0]) => { const r = SERVER.numbers[NUMBER_FIELDS[id][1]]; return [id, name, r.min, r.max, r.int]; };
@@ -498,8 +502,8 @@ function badNumber(rules) {
     if (blank && v === "") continue;
     if (v === "" || !Number.isFinite(n) || (int && !Number.isInteger(n)) || n < min || (max !== null && n > max)) {
       const low = Math.abs(min) < HUGE, high = max !== null && max < HUGE;
-      const span = low && high ? `${min.toLocaleString()}–${max.toLocaleString()}의 ` : low ? `${min.toLocaleString()} 이상의 ` : high ? `${max.toLocaleString()} 이하의 ` : "";
-      return `${name}: ${span}${int ? "정수" : "수"}를 넣으세요.`;
+      const span = low && high ? `${min.toLocaleString()}~${max.toLocaleString()} 사이의 ` : low ? `${min.toLocaleString()} 이상의 ` : high ? `${max.toLocaleString()} 이하의 ` : "";
+      return `${name}에는 ${span}${int ? "정수" : "숫자"}를 넣으세요.`;
     }
   }
   return "";
@@ -536,7 +540,7 @@ function checked() {
 // 이름·값 표(쿼리·헤더): 한 줄에 이름, 값, ×. 이름이 빈 줄은 보내지 않는다.
 function pairRow(box, [k, v] = ["", ""]) {
   const row = el("div", { className: "pair" }, el("input", { placeholder: "이름", value: k }), el("input", { placeholder: "값", value: v }),
-    el("button", { className: "ghost", textContent: "×", title: "빼기", onclick: () => { row.remove(); checkPaging(); } }));
+    el("button", { className: "ghost", textContent: "×", title: "이 행 빼기", ariaLabel: "이 행 빼기", onclick: () => { row.remove(); checkPaging(); } }));
   box.append(row);
 }
 const setPairs = (box, rows) => { box.replaceChildren(); rows.forEach(r => pairRow(box, r)); };
@@ -600,7 +604,7 @@ $("p-kind").onchange = showPaging;
 function checkPaging() {
   const need = NEED[$("p-kind").value], r = readRequest();
   const text = [r.url, ...r.query.flat(), ...r.headers.map(h => h[1]), r.body].join("\n");
-  $("p-warn").textContent = mode() === "api" && need && !text.includes(need) ? `요청에 ${need} 자리 표시가 없습니다. 쿼리 값이나 본문의 그 자리에 넣으세요.` : "";
+  $("p-warn").textContent = mode() === "api" && need && !text.includes(need) ? `요청에 ${need}가 없어요. 쪽마다 바뀌어야 할 쿼리 값이나 본문 자리에 ${need}를 넣으세요.` : "";
 }
 document.addEventListener("input", e => { if (e.target.closest(".for-api")) checkPaging(); });
 
@@ -608,7 +612,7 @@ document.addEventListener("input", e => { if (e.target.closest(".for-api")) chec
 async function readEnv() {
   try {
     envNames = (await api("/api/collect/env", { path: val("env-path") })).names;
-    $("env-names").textContent = envNames.length ? `이름 ${envNames.length}개: ${envNames.join(", ")}` : "이름이 없습니다.";
+    $("env-names").textContent = envNames.length ? `이름 ${envNames.length}개를 찾았어요: ${envNames.join(", ")}` : "이 파일에는 이름이 없어요.";
     say("env-msg", "");
   } catch (e) { envNames = []; $("env-names").textContent = ""; say("env-msg", e.message); }
   showSecrets();
@@ -624,7 +628,7 @@ function showSecrets() {
     pick.oninput = pick.onchange = () => s.env = pick.value.trim();
     const where = `${WHERE[s.where] ?? s.where} ${s.name}${s.path ? ` (${s.path})` : ""}`;
     return el("div", { className: "pair" }, el("span", { className: "hint", textContent: where, title: where }), pick,
-      el("button", { className: "ghost", textContent: "×", title: "비밀이 아니면 빼기", onclick: () => { const key = `${s.where}:${s.name}`; if (!plain.includes(key)) plain.push(key); secrets.splice(i, 1); showSecrets(); } }));  // 그 자리만 뺀다(같은 이름의 다른 자리는 여전히 비밀)
+      el("button", { className: "ghost", textContent: "×", title: "비밀이 아니면 목록에서 빼요", ariaLabel: "비밀 목록에서 빼기", onclick: () => { const key = `${s.where}:${s.name}`; if (!plain.includes(key)) plain.push(key); secrets.splice(i, 1); showSecrets(); } }));  // 그 자리만 뺀다(같은 이름의 다른 자리는 여전히 비밀)
   }));
 }
 $("parse").onclick = () => busy($("parse"), async () => {
@@ -635,21 +639,21 @@ $("parse").onclick = () => busy($("parse"), async () => {
     secrets = d.secrets.map(s => ({ ...s, env: "" }));
     plain = [];  // 새로 읽은 요청: 전에 뺀 자리는 이 요청의 것이 아니다
     showSecrets();
-    $("unread").textContent = d.unread.length ? `읽지 못한 부분: ${d.unread.join(" / ")}` : "";
-    say("parse-msg", `${FORMATS[d.format] ?? d.format}으로 읽었습니다.`, true);
+    $("unread").textContent = d.unread.length ? `읽지 못한 부분이 있어요: ${d.unread.join(" / ")}` : "";
+    say("parse-msg", `${FORMATS[d.format] ?? d.format}으로 읽어서 칸을 채웠어요.`, true);
     checkPaging();
   } catch (e) { say("parse-msg", e.message); }
 });
 $("secretize").onclick = () => busy($("secretize"), async () => {
   const replace = secrets.filter(s => s.env).map(({ where, name, path, env }) => ({ where, name, path, env }));
-  if (!replace.length) return say("parse-msg", "바꿀 env 이름을 고르세요.");
+  if (!replace.length) return say("parse-msg", "바꿀 값의 env 이름을 먼저 고르세요.");
   try {
     const file = mode() === "file";
     const { request } = await api("/api/collect/secretize", { request: file ? parsed ?? { method: "GET", url: val("f-url"), query: [], headers: getPairs($("f-headers")), body_kind: "none", body: "" } : readRequest(), replace });
     if (file) { parsed = request; fillFile(request); } else fillRequest(request);
     secrets = secrets.filter(s => !s.env);
     showSecrets();
-    say("parse-msg", "env 이름으로 바꿨습니다.", true);
+    say("parse-msg", "env 이름으로 바꿨어요.", true);
     checkPaging();
   } catch (e) { say("parse-msg", e.message); }
 });
@@ -698,27 +702,27 @@ function node(key, value, path, depth) {
   if (open) {
     const items = firstEntries(value), more = n - items.length;
     box.append(el("div", { className: "kids" }, ...items.map(([k, v]) => node(String(k), v, join(path, k), depth + 1)),
-      ...(more > 0 ? [el("div", { className: "tv", textContent: `…외 ${more.toLocaleString()}개` })] : [])));
+      ...(more > 0 ? [el("div", { className: "tv", textContent: `외 ${more.toLocaleString()}개 더` })] : [])));
   }
   return box;
 }
 function renderTree() {
   const top = $("tree").scrollTop;
-  if (json === undefined) $("tree").replaceChildren(el("span", { className: "empty", textContent: $("resp-text").value.trim() ? "JSON이 아니어서 트리로 보여 줄 수 없습니다." : "[시험 보내기]를 누르거나 응답 예시를 붙여 넣으면 여기에 트리로 보입니다." }));
+  if (json === undefined) $("tree").replaceChildren(el("span", { className: "empty", textContent: $("resp-text").value.trim() ? "JSON이 아니라서 트리로 보여 줄 수 없어요." : "[시험 보내기]를 누르거나 응답 예시를 붙여 넣으면 여기에 트리로 보여요." }));
   else $("tree").replaceChildren(node("(응답 전체)", json, "", 0));
   $("tree").scrollTop = top;
   showPick();
 }
 // 고른 노드로 할 수 있는 지정: 배열 → 기록 위치, 기록 안의 값 → 컬럼 넣기·빼기, 아무 값 → 커서·다음 주소·전체 수 위치
 function showPick() {
-  if (picked === null || json === undefined) return $("pick").replaceChildren(el("span", { className: "hint", textContent: "트리에서 값을 누르면 여기서 쓰임을 정합니다." }));
+  if (picked === null || json === undefined) return $("pick").replaceChildren(el("span", { className: "hint", textContent: "트리에서 값을 누르면 여기서 어디에 쓸지 정할 수 있어요." }));
   const v = at(json, picked), rel = inRecord(picked);
-  const btn = (text, fn) => el("button", { className: "mini", textContent: text, onclick: () => { fn(); designated(); } });
+  const btn = (text, fn) => el("button", { className: "btn mini", textContent: text, onclick: () => { fn(); designated(); } });
   const setPath = (id, kind) => () => { $(id).value = picked; if ($("p-kind").value === "none") { $("p-kind").value = kind; showPaging(); } };
   const items = [el("span", { className: "path", textContent: picked === "" ? "(응답 전체)" : picked })];
-  if (Array.isArray(v)) items.push(btn("기록 위치로", () => $("records").value = picked));
-  if (rel) items.push(columns.some(c => c.path === rel) ? btn("컬럼에서 빼기", () => columns = columns.filter(c => c.path !== rel)) : btn("컬럼으로 넣기", () => columns.push({ name: rel, path: rel })));
-  if (picked !== "") items.push(btn("다음 커서 위치", setPath("p-cursor", "cursor")), btn("다음 주소 위치", setPath("p-next", "next_url")), btn("전체 수 위치", () => $("p-total").value = picked));
+  if (Array.isArray(v)) items.push(btn("기록 위치로 지정", () => $("records").value = picked));
+  if (rel) items.push(columns.some(c => c.path === rel) ? btn("컬럼에서 빼기", () => columns = columns.filter(c => c.path !== rel)) : btn("컬럼에 넣기", () => columns.push({ name: rel, path: rel })));
+  if (picked !== "") items.push(btn("다음 커서로 지정", setPath("p-cursor", "cursor")), btn("다음 주소로 지정", setPath("p-next", "next_url")), btn("전체 수로 지정", () => $("p-total").value = picked));
   $("pick").replaceChildren(...items);
 }
 // 지정이 바뀌면 트리 표시와 컬럼 목록을 고치고 미리보기를 다시 받는다.
@@ -732,8 +736,8 @@ function renderColumns() {
   $("columns").replaceChildren(...(columns.length ? columns.map((c, i) => el("div", { className: "pair" },
     el("input", { value: c.name, placeholder: c.path, oninput: e => c.name = e.target.value, onchange: () => { showDedupe(); sample(); } }),
     el("span", { className: "path", textContent: c.path, title: c.path }),
-    el("button", { className: "ghost", textContent: "×", title: "빼기", onclick: () => { columns.splice(i, 1); designated(); } })))
-    : [el("div", { className: "hint", textContent: "비우면 전부 넣습니다 (묶인 값은 a.b 컬럼으로 풀기)." })]));
+    el("button", { className: "ghost", textContent: "×", title: "이 컬럼 빼기", ariaLabel: "이 컬럼 빼기", onclick: () => { columns.splice(i, 1); designated(); } })))
+    : [el("div", { className: "hint", textContent: "컬럼을 고르지 않으면 모든 값을 넣어요. 묶인 값은 a.b 같은 컬럼으로 풀어요." })]));
   showDedupe();
 }
 ["records", "p-cursor", "p-next", "p-total"].forEach(id => $(id).addEventListener("change", () => { renderTree(); sample(); }));  // 직접 고친 위치도 트리 표시와 미리보기에 반영
@@ -760,8 +764,8 @@ async function sample() {
     const d = await api("/api/collect/sample", { config: config(), text });
     if (mine !== sampleToken) return;
     sampleCols = d.columns.map(c => c.name);
-    $("sample-info").textContent = [`기록 ${d.count.toLocaleString()}개`, d.cursor != null && `다음 커서: ${d.cursor}`, d.next != null && `다음 주소: ${d.next}`, d.total != null && `전체 수: ${d.total}`].filter(Boolean).join(" · ");
-    $("sample").innerHTML = sampleTable(d.columns.map(c => ({ name: c.name, title: `${c.path} (${c.type})` })), d.rows, "기록이 없습니다.");
+    $("sample-info").textContent = [`기록 ${d.count.toLocaleString()}개`, d.cursor != null && `다음 커서 ${d.cursor}`, d.next != null && `다음 주소 ${d.next}`, d.total != null && `전체 수 ${d.total}`].filter(Boolean).join(", ");
+    $("sample").innerHTML = sampleTable(d.columns.map(c => ({ name: c.name, title: `${c.path} (${c.type})` })), d.rows, "뽑힌 기록이 없어요. 기록 위치를 확인하세요.");
     say("resp-msg", "");
     showDedupe();
   } catch (e) { if (mine === sampleToken) say("resp-msg", e.message); }
@@ -774,7 +778,7 @@ $("try").onclick = () => busy($("try"), async () => {
   try {
     const d = await api("/api/collect/try", { config: checked() });
     const headers = Array.isArray(d.sent.headers) ? d.sent.headers : Object.entries(d.sent.headers ?? {});
-    $("sent").textContent = [`${d.sent.method} ${d.sent.url}`, ...headers.map(([k, v]) => `${k}: ${v}`), "", `→ 상태 ${d.status}`, ...(d.headers ?? []).map(([k, v]) => `${k}: ${v}`)].join("\n");
+    $("sent").textContent = [`${d.sent.method} ${d.sent.url}`, ...headers.map(([k, v]) => `${k}: ${v}`), "", `응답 상태 ${d.status}`, ...(d.headers ?? []).map(([k, v]) => `${k}: ${v}`)].join("\n");
     $("sent-box").classList.remove("hidden");
     $("resp-text").value = d.text;
     readResponse();
@@ -820,20 +824,20 @@ function renderFields() {
   $("w-fields").replaceChildren(...(fields.length ? fields.map((f, i) => {
     const kinds = ["text", ...Object.keys(f.attrs)];
     if (!kinds.includes(f.attr)) kinds.push(f.attr);
-    const what = el("select", { title: "받을 것: 글자 또는 속성" }, ...kinds.map(k => new Option(k === "text" ? "글자" : k, k)));
+    const what = el("select", { title: "받을 값: 화면의 글자나 요소의 속성" }, ...kinds.map(k => new Option(k === "text" ? "글자" : k, k)));
     what.value = f.attr;
     const peek = el("div", { className: "hint peek" });
-    const showPeek = () => { const v = f.attr === "text" ? f.text : f.attrs[f.attr]; peek.textContent = v == null ? "" : `값: ${v}`; peek.title = v ?? ""; };
+    const showPeek = () => { const v = f.attr === "text" ? f.text : f.attrs[f.attr]; peek.textContent = v == null ? "" : `고를 때 본 값: ${v}`; peek.title = v ?? ""; };
     what.onchange = () => { f.attr = what.value; showPeek(); };
     showPeek();
     return el("div", { className: "wfield" },
       el("input", { value: f.name, placeholder: `컬럼${i + 1}`, oninput: e => f.name = e.target.value, onchange: showDedupe }),
-      el("input", { className: "code", value: f.selector, placeholder: "(항목 자체)", title: "항목 안에서 찾는 선택자",
+      el("input", { className: "code", value: f.selector, placeholder: "비우면 항목 전체", title: "항목 안에서 찾을 선택자",
         oninput: e => { f.selector = e.target.value; f.text = null; for (const k in f.attrs) f.attrs[k] = null; showPeek(); } }),  // 고친 선택자의 값은 모르므로 본 값을 지운다
       what,
-      el("button", { className: "ghost", textContent: "×", title: "빼기", onclick: () => { fields.splice(i, 1); renderFields(); } }),
+      el("button", { className: "ghost", textContent: "×", title: "이 컬럼 빼기", ariaLabel: "이 컬럼 빼기", onclick: () => { fields.splice(i, 1); renderFields(); } }),
       peek);
-  }) : [el("div", { className: "hint", textContent: "아직 컬럼이 없습니다." })]));
+  }) : [el("div", { className: "hint", textContent: "아직 컬럼이 없어요. [값 고르기]로 추가하세요." })]));
   showDedupe();
 }
 // 쪽 넘기기(웹): 종류에 맞는 칸만 보인다.
@@ -845,7 +849,7 @@ function showWebPaging() {
   checkWebPaging();
 }
 $("w-pkind").onchange = showWebPaging;
-const checkWebPaging = () => $("w-pwarn").textContent = $("w-pkind").value === "url" && !val("w-url").includes("{page}") ? "주소에 {page} 자리 표시가 없습니다. 쪽 번호가 들어갈 자리에 넣으세요." : "";
+const checkWebPaging = () => $("w-pwarn").textContent = $("w-pkind").value === "url" && !val("w-url").includes("{page}") ? "주소에 {page}가 없어요. 쪽 번호가 들어갈 자리에 {page}를 넣으세요." : "";
 $("w-url").addEventListener("input", checkWebPaging);
 const showRobots = () => $("w-robots-warn").textContent = $("w-robots").checked ? "" : "사이트 이용 약관과 robots.txt를 직접 확인하세요.";
 $("w-robots").onchange = showRobots;
@@ -854,15 +858,15 @@ $("w-items").addEventListener("input", () => $("w-count").textContent = "");
 // 수집용 창 상태: 창이 열려 있거나 수집 작업이 도는 동안, 화면이 웹페이지 방식일 때만 1초마다 읽는다.
 let lastSeq;  // 마지막으로 반영한 고르기 번호. 처음 읽은 상태의 고르기는 이전 것이라 반영하지 않는다.
 let follow = 0;  // 도는 읽기가 하나만 남게 하는 번호
-const PICKING = { field: "값", next: "다음 버튼" };
+const PICKING = { field: "받을 값을", next: "다음 버튼을" };
 function showBrowser(s) {
-  const lines = [`수집용 창: ${s.open ? "열림" : "닫힘"}${s.busy ? " · 수집 작업이 쓰는 중" : ""}`];
+  const lines = [`수집용 창이 ${s.open ? "열려" : "닫혀"} 있어요${s.busy ? ". 지금 수집에 쓰는 중이에요" : ""}`];
   if (s.open && s.title) lines.push(`제목: ${s.title}`);
   if (s.open && s.url) lines.push(`주소: ${s.url}`);
   $("w-state").textContent = lines.join("\n");
   $("w-open").disabled = s.busy;  // 수집 작업이 창을 쓰는 동안은 열기·고르기를 잠근다.
   $("pick-field").disabled = $("pick-next").disabled = s.busy || !s.open;
-  $("pick-hint").textContent = s.picking ? `${PICKING[s.picking] ?? s.picking} 고르기 켜짐: 수집용 창에서 누르세요.` : "[값 고르기]를 누르고 수집용 창에서 받을 값을 누르면 컬럼이 생깁니다.";
+  $("pick-hint").textContent = s.picking ? `${PICKING[s.picking] ?? s.picking} 고르는 중이에요. 수집용 창에서 클릭하세요.` : "[값 고르기]를 누른 뒤 수집용 창에서 받을 값을 클릭하면 컬럼이 추가돼요.";
   $("pick-hint").className = s.picking ? "ok" : "hint";
   const p = s.pick;
   if (p && lastSeq !== undefined && p.seq !== lastSeq) applyPick(p);
@@ -871,7 +875,7 @@ function showBrowser(s) {
 function applyPick(p) {
   if (p.target === "field") {
     if (p.items && p.items !== val("w-items")) $("w-items").value = p.items;
-    $("w-count").textContent = p.count != null ? `항목 ${p.count.toLocaleString()}개` : "";
+    $("w-count").textContent = p.count != null ? `항목 ${p.count.toLocaleString()}개를 찾았어요` : "";
     let n = fields.length + 1;
     while (fields.some(f => f.name.trim() === `컬럼${n}`)) n++;
     fields.push({ name: `컬럼${n}`, selector: p.selector ?? "", attr: "text", text: p.text ?? "", attrs: { ...p.attrs } });
@@ -905,8 +909,8 @@ $("w-open").onclick = () => busy($("w-open"), async () => {
 $("w-close").onclick = () => busy($("w-close"), async () => {
   try { await api("/api/collect/browser/close", {}); say("w-msg", ""); await browserState(); } catch (e) { say("w-msg", e.message); }
 });
-$("w-forget").onclick = () => twice($("w-forget"), "로그인 정보를 지웁니다. 한 번 더 누르면 지우기", async () => {
-  try { await api("/api/collect/browser/forget", {}); say("w-msg", "로그인 정보를 지웠습니다", true); } catch (e) { say("w-msg", e.message); }
+$("w-forget").onclick = () => twice($("w-forget"), "한 번 더 누르면 로그인 정보를 지워요", async () => {
+  try { await api("/api/collect/browser/forget", {}); say("w-msg", "로그인 정보를 지웠어요", true); } catch (e) { say("w-msg", e.message); }
 });
 const pickWith = (button, target) => busy(button, async () => {
   try { await api("/api/collect/browser/pick", { target, items: val("w-items") }); say("w-msg", ""); await browserState(); } catch (e) { say("w-msg", e.message); }
@@ -918,23 +922,23 @@ $("pick-off").onclick = () => pickWith($("pick-off"), "off");
 $("w-sample-btn").onclick = () => busy($("w-sample-btn"), async () => {
   try {
     const d = await api("/api/collect/web/sample", { config: checked() });
-    $("w-sample-info").textContent = `지금 페이지의 항목 ${d.count.toLocaleString()}개`;
-    $("w-sample").innerHTML = sampleTable(d.columns.map(name => ({ name })), d.rows, "항목이 없습니다.");
+    $("w-sample-info").textContent = `지금 페이지에서 항목 ${d.count.toLocaleString()}개를 읽었어요`;
+    $("w-sample").innerHTML = sampleTable(d.columns.map(name => ({ name })), d.rows, "찾은 항목이 없어요. 항목 선택자를 확인하세요.");
     say("w-sample-msg", "");
   } catch (e) { say("w-sample-msg", e.message); }
 });
 
 // 사용 한도 묶음과 사용량
-const LIMIT_FIELDS = [["l-sec", "per_second", "초당"], ["l-min", "per_minute", "분당"], ["l-hour", "per_hour", "시간당"], ["l-day", "per_day", "하루"]];
+const LIMIT_FIELDS = [["l-sec", "per_second", "초당 요청"], ["l-min", "per_minute", "분당 요청"], ["l-hour", "per_hour", "시간당 요청"], ["l-day", "per_day", "하루 요청"]];
 const NO_LIMIT = SERVER.limit;  // 사용 한도 묶음의 기본값(collect_limits.DEFAULT)
 function usageText(u) {
   if (!u) return "";
-  const windows = [["초", u.second], ["분", u.minute], ["시간", u.hour]].filter(([, n]) => n != null).map(([w, n]) => `${w} ${n} · `).join("");  // 한도를 정하지 않은 긴 창은 기록을 보관하지 않아 빈 값
-  const lines = [`사용: ${windows}하루 ${u.day.toLocaleString()}${u.day_limit != null ? ` / ${u.day_limit.toLocaleString()} (남은 ${(u.day_left ?? 0).toLocaleString()})` : ""}`, `하루 초기화: ${u.reset_at}`];
-  if (u.server) lines.push(`서버가 알려 준 남은 수: ${u.server.remaining ?? "—"}${u.server.reset ? ` (초기화 ${u.server.reset})` : ""}`);
+  const windows = [["초당", u.second], ["분당", u.minute], ["시간당", u.hour]].filter(([, n]) => n != null).map(([w, n]) => `${w} ${n}, `).join("");  // 한도를 정하지 않은 긴 창은 기록을 보관하지 않아 빈 값
+  const lines = [`지금까지 쓴 요청: ${windows}하루 ${u.day.toLocaleString()}${u.day_limit != null ? ` / ${u.day_limit.toLocaleString()} (${(u.day_left ?? 0).toLocaleString()}번 남음)` : ""}`, `하루 사용량 초기화: ${u.reset_at}`];
+  if (u.server) lines.push(`API가 알려 준 남은 횟수: ${u.server.remaining ?? "—"}${u.server.reset ? ` (초기화 ${u.server.reset})` : ""}`);
   return lines.join("\n");
 }
-const BROKEN = "사용 기록을 읽지 못해 한도를 다 쓴 것으로 봅니다. [사용량 초기화]를 누르기 전에는 시작할 수 없습니다.";
+const BROKEN = "사용 기록을 읽지 못해서 한도를 다 쓴 것으로 처리했어요. [사용량 초기화]를 눌러야 다시 시작할 수 있어요.";
 function showLimits(d, name = $("lgroup").value) {
   limits = d;
   fill($("lgroup"), Object.keys(d.groups), "사용 한도 없음");
@@ -958,23 +962,23 @@ const loadLimits = () => api("/api/limits").then(d => showLimits(d)).catch(e => 
 $("lsave").onclick = () => busy($("lsave"), async () => {
   const name = val("lname") || $("lgroup").value;
   try {
-    if (!name) throw new Error("묶음 이름을 넣으세요.");
+    if (!name) throw new Error("한도 이름을 넣으세요.");
     const bad = badNumber([...LIMIT_FIELDS.map(([id, , label]) => [id, label, 1, null, true, true]), rule("l-conc"), rule("l-gap"), rule("l-margin")]);
     if (bad) throw new Error(bad);
-    if (!HHMM.test(val("l-reset"))) throw new Error("하루 초기화 시각은 00:00 모양(HH:MM)으로 넣으세요.");
+    if (!HHMM.test(val("l-reset"))) throw new Error("하루 초기화 시각은 00:00처럼 시:분으로 넣으세요.");
     const group = { ...Object.fromEntries(LIMIT_FIELDS.map(([id, key]) => [key, val(id) === "" ? null : Number(val(id))])),
       concurrency: Number(val("l-conc")), min_interval: Number(val("l-gap")), reset: val("l-reset"), tz: $("l-tz").value, margin: Number(val("l-margin")) };
     showLimits(await api("/api/limits", { name, group }), name);
     $("lname").value = "";
-    say("limit-msg", "저장했습니다", true);
+    say("limit-msg", "저장했어요", true);
   } catch (e) { say("limit-msg", e.message); }
 });
 $("ldel").onclick = () => busy($("ldel"), async () => {
   if (!$("lgroup").value) return;
-  try { showLimits(await api("/api/limits", { name: $("lgroup").value, group: null }), ""); say("limit-msg", "삭제했습니다", true); } catch (e) { say("limit-msg", e.message); }
+  try { showLimits(await api("/api/limits", { name: $("lgroup").value, group: null }), ""); say("limit-msg", "삭제했어요", true); } catch (e) { say("limit-msg", e.message); }
 });
-$("lreset").onclick = () => twice($("lreset"), "사용 기록을 지웁니다. 한 번 더 누르면 초기화", async () => {
-  try { showLimits(await api("/api/limits/reset", { name: $("lgroup").value })); say("limit-msg", "사용량을 초기화했습니다", true); } catch (e) { say("limit-msg", e.message); }
+$("lreset").onclick = () => twice($("lreset"), "한 번 더 누르면 사용량을 초기화해요", async () => {
+  try { showLimits(await api("/api/limits/reset", { name: $("lgroup").value })); say("limit-msg", "사용량을 초기화했어요", true); } catch (e) { say("limit-msg", e.message); }
 });
 
 // 적재: 저장한 결과 파일을 DB 테이블이나 Kafka 토픽에 넣는다. 비밀번호는 칸에만 두고 config()·구성·등록 어디에도 넣지 않는다.
@@ -982,7 +986,7 @@ $("lreset").onclick = () => twice($("lreset"), "사용 기록을 지웁니다. �
 const loadTarget = () => document.querySelector("input[name=ltarget]:checked").value;
 const loadKind = () => document.querySelector("input[name=ldkind]:checked").value;
 const sasl = () => $("kf-security").value.startsWith("SASL");
-const HOW_HINT = { new: "", append: "", replace: "이 프로그램이 만든 테이블만 바꿀 수 있습니다." };
+const HOW_HINT = { new: "", append: "", replace: "이 프로그램이 만든 테이블만 덮어쓸 수 있어요." };
 function showLoad() {
   const t = loadTarget(), url = loadKind() === "url", show = (id, on) => $(id).classList.toggle("hidden", !on);
   document.querySelectorAll(".load-on").forEach(e => e.classList.toggle("hidden", t === "file"));
@@ -1028,7 +1032,7 @@ function fillLoad(l) {
   [["ld-batch", l.batch], ["ld-gap", l.interval], ["ld-retry", l.retries]].forEach(([id, v]) => $(id).value = v);
   $("kf-saved").value = l.kafka.destination in kafka ? l.kafka.destination : "";
   pickKafka();
-  say("kf-msg", l.kafka.destination && !(l.kafka.destination in kafka) ? `‘${l.kafka.destination}’ Kafka 등록이 없습니다. 다시 고르세요.` : "");
+  say("kf-msg", l.kafka.destination && !(l.kafka.destination in kafka) ? `‘${l.kafka.destination}’ Kafka 설정을 찾을 수 없어요. 다시 고르세요.` : "");
   forgetPasswords();
   clearCheck();
 }
@@ -1048,11 +1052,11 @@ $("ld-check").onclick = () => busy($("ld-check"), async () => {
   try {
     const d = await api("/api/load/table/check", { config: checked(), password: loadPassword() });
     if (call !== checkCall) return;
-    $("ld-check-msg").textContent = d.message + (d.columns ? "" : " (결과 파일이 아직 없어 컬럼은 받은 뒤에 비교합니다.)");
+    $("ld-check-msg").textContent = d.message + (d.columns ? "" : " 결과 파일이 아직 없어서 컬럼은 수집한 뒤에 비교해요.");
     $("ld-check-msg").className = d.ok ? "ok" : "warn";
-    const mine = new Map(d.columns ?? []), theirs = new Map(d.table_columns ?? []), table = d.exists ? "테이블" : "테이블 (없음)";
+    const mine = new Map(d.columns ?? []), theirs = new Map(d.table_columns ?? []), table = d.exists ? "테이블" : "테이블(아직 없음)";
     $("ld-cols").innerHTML = d.columns || d.table_columns ? sampleTable([{ name: "컬럼" }, { name: "결과 파일" }, { name: table }],
-      [...new Set([...mine.keys(), ...theirs.keys()])].map(n => ({ "컬럼": n, "결과 파일": mine.get(n) === "null" ? "빈 값(테이블 타입으로)" : mine.get(n) ?? "—", [table]: theirs.get(n) ?? "—" })), "") : "";
+      [...new Set([...mine.keys(), ...theirs.keys()])].map(n => ({ "컬럼": n, "결과 파일": mine.get(n) === "null" ? "빈 값(테이블 타입을 따라요)" : mine.get(n) ?? "—", [table]: theirs.get(n) ?? "—" })), "") : "";
   } catch (e) { if (call !== checkCall) return; $("ld-check-msg").textContent = e.message; $("ld-check-msg").className = "err"; $("ld-cols").replaceChildren(); }
 });
 
@@ -1060,7 +1064,7 @@ $("ld-check").onclick = () => busy($("ld-check"), async () => {
 const KAFKA_DEFAULT = SERVER.kafka;  // Kafka 등록의 기본값(load_kafka.DEFAULT)
 function showKafka(d, name = $("kf-saved").value) {
   kafka = d.kafka;
-  fill($("kf-saved"), Object.keys(kafka), "등록 고르기");
+  fill($("kf-saved"), Object.keys(kafka), "설정 고르기");
   $("kf-saved").value = name in kafka ? name : "";
   pickKafka();
 }
@@ -1075,24 +1079,24 @@ const loadKafka = () => api("/api/load/kafka").then(d => showKafka(d)).catch(() 
 $("kf-save").onclick = () => busy($("kf-save"), async () => {
   const name = val("kf-name") || $("kf-saved").value;  // 이름을 비우면 고른 등록에 덮어쓴다.
   try {
-    if (!name) throw new Error("등록 이름을 넣으세요.");
+    if (!name) throw new Error("설정 이름을 넣으세요.");
     if (!val("kf-servers") || !val("kf-topic")) throw new Error("서버 주소와 토픽을 넣으세요.");
     const item = { servers: val("kf-servers"), topic: val("kf-topic"), security: $("kf-security").value, mechanism: $("kf-mech").value, user: val("kf-user"), ca: val("kf-ca") };
     showKafka(await api("/api/load/kafka", { name, item }), name);
     $("kf-name").value = "";
-    say("kf-msg", "저장했습니다", true);
+    say("kf-msg", "저장했어요", true);
   } catch (e) { say("kf-msg", e.message); }
 });
 $("kf-del").onclick = () => busy($("kf-del"), async () => {
   if (!$("kf-saved").value) return;
-  try { showKafka(await api("/api/load/kafka", { name: $("kf-saved").value, item: null }), ""); say("kf-msg", "삭제했습니다", true); } catch (e) { say("kf-msg", e.message); }
+  try { showKafka(await api("/api/load/kafka", { name: $("kf-saved").value, item: null }), ""); say("kf-msg", "삭제했어요", true); } catch (e) { say("kf-msg", e.message); }
 });
 // [접속 확인]: 저장한 등록으로 접속만 해 본다(메시지는 보내지 않는다).
 $("kf-check").onclick = () => busy($("kf-check"), async () => {
   try {
-    if (!$("kf-saved").value) throw new Error("저장한 등록을 고른 뒤 확인하세요.");
+    if (!$("kf-saved").value) throw new Error("저장한 Kafka 설정을 먼저 고르세요.");
     const d = await api("/api/load/kafka/check", { name: $("kf-saved").value, password: loadPassword() });
-    $("kf-check-msg").textContent = `접속했습니다. 브로커 ${d.brokers}개 · ${d.topic ? "토픽이 있습니다" : "토픽이 없습니다"}`;
+    $("kf-check-msg").textContent = `접속했어요. 브로커 ${d.brokers}개를 찾았고, ${d.topic ? "토픽도 있어요." : "토픽은 아직 없어요."}`;
     $("kf-check-msg").className = d.ok && d.topic ? "ok" : "warn";
   } catch (e) { $("kf-check-msg").textContent = e.message; $("kf-check-msg").className = "err"; }
 });
@@ -1151,7 +1155,7 @@ function restore(c) {
   fillLoad(d.load);
   $("lgroup").value = d.limit_group in limits.groups ? d.limit_group : "";
   pickGroup();
-  say("limit-msg", d.limit_group && !(d.limit_group in limits.groups) ? `‘${d.limit_group}’ 사용 한도 묶음이 없습니다. 다시 고르세요.` : "");
+  say("limit-msg", d.limit_group && !(d.limit_group in limits.groups) ? `‘${d.limit_group}’ 사용 한도를 찾을 수 없어요. 다시 고르세요.` : "");
   secrets = [];
   plain = [...(d.plain ?? [])];
   parsed = null;
@@ -1183,15 +1187,15 @@ function showCollections(d, name = "") {
 $("rsave").onclick = () => busy($("rsave"), async () => {
   const name = val("rname") || $("rsaved").value;  // 이름을 비우면 지금 고른 구성에 덮어쓴다.
   try {
-    if (secrets.length) throw new Error("비밀처럼 보이는 값이 남아 있습니다. env 이름으로 바꾸거나, 비밀이 아니면 목록에서 뺀 뒤 저장하세요.");
+    if (secrets.length) throw new Error("비밀처럼 보이는 값이 남아 있어요. env 이름으로 바꾸거나, 비밀이 아니면 목록에서 뺀 뒤 저장하세요.");
     showCollections(await api("/api/collections", { name, collection: checked() }), name);
     $("rname").value = "";
-    say("cfg-msg", "저장했습니다", true);
+    say("cfg-msg", "저장했어요", true);
   } catch (e) { say("cfg-msg", e.message); }
 });
 $("rdel").onclick = () => busy($("rdel"), async () => {
   if (!$("rsaved").value) return;
-  try { showCollections(await api("/api/collections", { name: $("rsaved").value, collection: null })); say("cfg-msg", "삭제했습니다", true); } catch (e) { say("cfg-msg", e.message); }
+  try { showCollections(await api("/api/collections", { name: $("rsaved").value, collection: null })); say("cfg-msg", "삭제했어요", true); } catch (e) { say("cfg-msg", e.message); }
 });
 $("rsaved").onchange = () => {
   const c = collections[$("rsaved").value];
@@ -1200,14 +1204,14 @@ $("rsaved").onchange = () => {
 
 // 실행: 예상 → 시작 → 1초마다 상태. 화면을 다시 열어도 도는 작업이 있으면 이어서 보여 준다.
 function showEstimate(d) {
-  const parts = [d.requests == null ? "예상 요청 수: 알 수 없음 (전체 수 위치를 정하면 셉니다)" : `예상 요청 ${d.requests.toLocaleString()}번`];
-  if (d.day_left != null) parts.push(`오늘 남은 횟수 ${d.day_left.toLocaleString()}번`);
-  $("est").textContent = parts.join(" · ");
-  $("est-warn").textContent = d.requests != null && d.day_left != null && d.requests > d.day_left ? `오늘 남은 횟수가 모자랍니다. 오늘은 약 ${d.day_left.toLocaleString()}쪽까지 받습니다.` : "";
+  const parts = [d.requests == null ? "보낼 요청 수는 아직 알 수 없어요. 전체 수 위치를 정하면 계산해요." : `요청을 약 ${d.requests.toLocaleString()}번 보낼 거예요.`];
+  if (d.day_left != null) parts.push(`오늘 남은 횟수는 ${d.day_left.toLocaleString()}번이에요.`);
+  $("est").textContent = parts.join(" ");
+  $("est-warn").textContent = d.requests != null && d.day_left != null && d.requests > d.day_left ? `오늘 남은 횟수가 모자라요. 오늘은 약 ${d.day_left.toLocaleString()}쪽까지만 받아요.` : "";
   $("est-robots").textContent = d.robots ? `robots.txt: ${d.robots}` : "";  // 웹페이지에서 robots.txt 지키기를 켰을 때만 온다. 허용이 아니면 경고 색
   $("est-robots").className = d.robots && !d.robots.startsWith("허용") ? "warn" : "hint";
   $("est-load").textContent = d.load_note ?? "";  // 한 건씩 적재일 때 걸릴 시간 안내
-  $("est-resume").textContent = d.resume ? `이어 받기: 받아 둔 ${d.resume.pages.toLocaleString()}쪽(${bytesText(d.resume.bytes)}) 다음부터 받습니다.` : "";
+  $("est-resume").textContent = d.resume ? `이미 받은 ${d.resume.pages.toLocaleString()}쪽(${bytesText(d.resume.bytes)}) 다음부터 이어서 받아요.` : "";
 }
 $("estimate").onclick = () => busy($("estimate"), async () => {
   try {
@@ -1222,17 +1226,17 @@ function showStatus(s) {
   $("start").disabled = s.running;
   $("stop").disabled = !s.running;
   $("run-box").classList.toggle("hidden", !s.running && s.phase === "대기");
-  $("phase").textContent = s.phase + (s.wait ? ` — ${s.wait}` : "");
+  $("phase").textContent = s.phase + (s.wait ? ` (${s.wait})` : "");
   const counts = s.mode === "file" ? [`받은 ${bytesText(s.bytes)}${s.total_bytes ? ` / ${bytesText(s.total_bytes)}` : ""}`]
     : [`쪽 ${s.pages.toLocaleString()}`, `요청 ${s.requests.toLocaleString()}`, `행 ${s.rows.toLocaleString()}`, bytesText(s.bytes)];
-  counts.push(`실패 ${s.failures}`, `동시 ${s.concurrency}`, `걸린 시간 ${secs(s.elapsed * 1000)}`);
-  $("run-counts").textContent = counts.join(" · ");
+  counts.push(`실패 ${s.failures}`, `동시 요청 ${s.concurrency}`, `걸린 시간 ${secs(s.elapsed * 1000)}`);
+  $("run-counts").textContent = counts.join(", ");
   const l = s.load, loading = !!l && s.phase === "적재 중";  // 적재 중이면 막대는 넣은 행 / 전체 행
   const part = loading ? (l.total ? l.rows / l.total : null) : s.total_bytes ? s.bytes / s.total_bytes : s.mode !== "file" && est ? s.requests / est : null;
   $("bar").classList.toggle("unknown", s.running && part === null);
   $("bar").firstElementChild.style.width = part === null ? "" : Math.min(100, part * 100).toFixed(1) + "%";
   $("bar").title = part === null ? "" : (part * 100).toFixed(1) + "%";
-  $("run-load").textContent = l ? `적재: ${l.where} · 행 ${l.rows.toLocaleString()}${l.total != null ? ` / ${l.total.toLocaleString()}` : ""} · 묶음 ${l.batches.toLocaleString()} · 건너뜀 ${l.skipped.toLocaleString()} · 실패 ${l.failures}` : "";
+  $("run-load").textContent = l ? `${l.where}에 적재: 행 ${l.rows.toLocaleString()}${l.total != null ? ` / ${l.total.toLocaleString()}` : ""}, 묶음 ${l.batches.toLocaleString()}, 건너뜀 ${l.skipped.toLocaleString()}, 실패 ${l.failures}` : "";
   $("load-again-box").classList.toggle("hidden", !(l && !s.running && s.phase === "실패"));  // 적재가 실패해도 결과 파일은 남으니 적재만 다시 한다
   $("run-note").textContent = s.message;
   $("run-usage").textContent = usageText(s.usage) + (s.usage?.broken ? "\n" + BROKEN : "");
@@ -1258,7 +1262,7 @@ async function watch(fresh, quiet) {
       if (!s && fails < 5) { await new Promise(r => setTimeout(r, 1000)); continue; }  // 상태를 한 번 못 읽었다고 감시를 끝내지 않는다(연달아 5번 못 읽으면 끝)
       if (s && !s.running && s.phase === "대기" && tries > 0) { await new Promise(r => setTimeout(r, 1000)); continue; }
       if (!s?.running) {
-        if (s?.phase === "끝") { if (!quiet) notifyDone("collect", s.elapsed, s.rows, fileName(s.output)); $("run-ok").textContent = s.load ? "다 받아 적재까지 마쳤습니다" : "다 받았습니다"; }
+        if (s?.phase === "끝") { if (!quiet) notifyDone("collect", s.elapsed, s.rows, fileName(s.output)); $("run-ok").textContent = s.load ? "수집과 적재를 모두 마쳤어요" : "수집을 마쳤어요"; }
         loadLimits();
         loadRuns();  // 끝난 실행이 기록에 들어갔다
         break;
@@ -1270,10 +1274,10 @@ async function watch(fresh, quiet) {
 $("start").onclick = () => busy($("start"), async () => {
   try {
     const cfg = checked();
-    if (!cfg.output.path) throw new Error("저장 경로를 정하세요.");
+    if (!cfg.output.path) throw new Error("저장할 파일 경로를 정하세요. 오른쪽 저장 단계에서 고를 수 있어요.");
     const d = await api("/api/collect/start", { config: cfg, secrets: { password: loadPassword() } });
     forgetPasswords();
-    $("run-ok").textContent = d.resumed ? "받아 둔 데서 이어 받습니다" : "";
+    $("run-ok").textContent = d.resumed ? "이미 받은 데서부터 이어서 받아요" : "";
     say("run-msg", "");
     running = true;  // 첫 상태를 읽기 전에도 수집용 창 상태를 따라가게
     watch(true);
@@ -1285,16 +1289,16 @@ $("load-again").onclick = () => busy($("load-again"), async () => {
   try {
     await api("/api/load/start", { config: checked(), secrets: { password: loadPassword() } });
     forgetPasswords();
-    $("run-ok").textContent = "적재만 다시 합니다";
+    $("run-ok").textContent = "적재만 다시 시작했어요";
     say("run-msg", "");
     watch(true);
   } catch (e) { say("run-msg", e.message); }
 });
 $("stop").onclick = () => busy($("stop"), async () => {
-  try { await api("/api/collect/stop", {}); $("run-ok").textContent = mode() === "web" && val("w-pkind") === "scroll" ? "멈췄습니다. 스크롤 방식은 다시 [시작]하면 처음부터 받습니다" : "멈췄습니다. 다시 [시작]하면 받은 데서 이어 받습니다"; } catch (e) { say("run-msg", e.message); }
+  try { await api("/api/collect/stop", {}); $("run-ok").textContent = mode() === "web" && val("w-pkind") === "scroll" ? "멈췄어요. 스크롤 방식은 다시 시작하면 처음부터 받아요" : "멈췄어요. 다시 시작하면 받은 데서부터 이어서 받아요"; } catch (e) { say("run-msg", e.message); }
 });
 // 결과 파일로 연결을 바꾸고 쿼리·분석 화면으로 간다.
-const openWith = (button, prep) => twice(button, "연결이 이 파일로 바뀝니다. 한 번 더 누르면 열기", async () => {
+const openWith = (button, prep) => twice(button, "한 번 더 누르면 연결이 이 파일로 바뀌어요", async () => {
   try {
     const { table } = await api("/api/collect/open", { path: output });
     location.href = prep ? "/prep?base=" + encodeURIComponent(table) : "/search";
@@ -1306,13 +1310,13 @@ $("open-prep").onclick = () => openWith($("open-prep"), true);
 // 예약: 저장한 구성을 주기마다 돌린다. 예약 칸은 config()에 넣지 않고 /api/schedules에 구성 이름별로 따로 저장한다.
 // Windows 예약 작업이 새로 등록되거나 지워지는 저장·지우기·다시 등록은 한 번 더 눌러야 요청한다.
 const DAYS = "월화수목금토일";  // 예약의 days: 0=월 … 6=일
-const HOW = { inapp: "프로그램 안", windows: "Windows", now: "지금" };
+const HOW = { inapp: "프로그램 예약", windows: "Windows 예약", now: "직접 실행" };
 const SCHEDULE_DEFAULT = SERVER.schedule;  // 예약의 기본값(schedule.DEFAULT)
 let sched = { schedules: {}, tasks: {}, next_inapp: {}, stale: [] };
 let wantNotify = "";  // 불러온 예약의 보낼 곳. 보낼 곳 목록이 늦게 와도 고르게 둔다
 const dayBoxes = () => [...DAYS].map((_, i) => $("sc-d" + i));
 const cycleText = s => s.every === "interval" ? `${s.minutes}분마다`
-  : s.every === "weekly" ? `매주 ${(s.days ?? []).map(d => DAYS[d]).join("·")} ${s.time}` : `매일 ${s.time}`;
+  : s.every === "weekly" ? `매주 ${(s.days ?? []).map(d => DAYS[d]).join(", ")} ${s.time}` : `매일 ${s.time}`;
 // 주기 종류에 맞는 칸만, 보낼 곳을 골랐을 때만 [알릴 때]
 function showEvery() {
   const every = $("sc-every").value, show = (id, on) => $(id).classList.toggle("hidden", !on);
@@ -1332,7 +1336,7 @@ document.addEventListener("destinations", () => fillNotify($("sc-notify").value 
 // 대상 구성: 저장한 구성과, 구성은 지웠지만 남은 예약(지울 수 있게)
 function fillScheduleNames() {
   const now = $("sc-name").value, names = [...new Set([...Object.keys(collections), ...Object.keys(sched.schedules)])];
-  fill($("sc-name"), names, "구성 고르기");
+  fill($("sc-name"), names, "구성을 고르세요");
   $("sc-name").value = names.includes(now) ? now : "";
 }
 // 고른 구성의 예약을 칸에 채운다(없으면 기본값).
@@ -1358,7 +1362,7 @@ function readSchedule() {
   const every = $("sc-every").value;
   const s = { every, inapp: $("sc-inapp").checked, windows: $("sc-windows").checked, notify: $("sc-notify").value, notify_on: $("sc-notify-on").value };
   if (every !== "interval") {
-    if (!HHMM.test(val("sc-time"))) throw new Error("시각은 09:00 모양(HH:MM)으로 넣으세요.");
+    if (!HHMM.test(val("sc-time"))) throw new Error("시각은 09:00처럼 시:분으로 넣으세요.");
     s.time = val("sc-time");
   }
   if (every === "weekly") {
@@ -1370,7 +1374,7 @@ function readSchedule() {
     if (bad) throw new Error(bad);
     s.minutes = Number(val("sc-minutes"));
   }
-  if (!s.inapp && !s.windows) throw new Error("실행 방식을 하나 이상 고르세요.");
+  if (!s.inapp && !s.windows) throw new Error("실행 방식을 하나 고르세요. 프로그램에서 실행하거나 Windows 작업 스케줄러에 등록할 수 있어요.");
   return s;
 }
 // 지금 Windows 예약 작업이 있는가: 서버가 작업 상태를 알려 줬으면 그것, 아니면 저장한 예약의 windows
@@ -1385,20 +1389,20 @@ const loadSchedules = () => api("/api/schedules").then(showSchedules).catch(e =>
 function renderSchedules() {
   const names = Object.keys(sched.schedules), now = $("sc-name").value;
   $("sc-del").classList.toggle("hidden", !(now in sched.schedules));
-  $("sc-stale").textContent = sched.stale.length ? `Windows 예약 작업의 프로그램 경로가 지금과 다릅니다(프로그램을 옮겼거나 새로 받았을 때): ${sched.stale.join(", ")}. [다시 등록]을 누르세요.` : "";
+  $("sc-stale").textContent = sched.stale.length ? `Windows 예약 작업에 저장된 프로그램 경로가 지금과 달라요: ${sched.stale.join(", ")}. 프로그램을 옮겼거나 새로 설치했다면 [다시 등록]을 누르세요.` : "";
   $("sc-rereg").classList.toggle("hidden", !sched.stale.length);
-  const cols = ["구성", "주기", "프로그램 안 다음", "Windows", "Windows 다음", "Windows 마지막", "알림"].map(name => ({ name }));
+  const cols = ["구성", "주기", "다음 실행(프로그램)", "Windows 작업", "다음 실행(Windows)", "마지막 실행(Windows)", "알림"].map(name => ({ name }));
   const rows = names.map(name => {
     const s = sched.schedules[name], t = sched.tasks[name] ?? {}, stale = sched.stale.includes(name);
     return { name, bad: stale || (s.windows && !t.registered),
-      "구성": name in collections ? name : `${name} (구성 없음)`, "주기": cycleText(s),
-      "프로그램 안 다음": s.inapp ? sched.next_inapp[name] ?? "—" : "끔",
-      "Windows": stale ? "등록됨 · 경로 다름" : t.registered ? "등록됨" : s.windows ? "안 됨" : "—",
-      "Windows 다음": t.next ?? "—", "Windows 마지막": t.last ?? "—",
-      "알림": s.notify ? `${s.notify} · ${s.notify_on === "always" ? "늘" : "실패할 때만"}` : "없음" };
+      "구성": name in collections ? name : `${name} (구성이 삭제됨)`, "주기": cycleText(s),
+      "다음 실행(프로그램)": s.inapp ? sched.next_inapp[name] ?? "—" : "끔",
+      "Windows 작업": stale ? "등록됨, 경로 다름" : t.registered ? "등록됨" : s.windows ? "등록 안 됨" : "—",
+      "다음 실행(Windows)": t.next ?? "—", "마지막 실행(Windows)": t.last ?? "—",
+      "알림": s.notify ? `${s.notify} (${s.notify_on === "always" ? "항상" : "실패할 때만"})` : "없음" };
   });
-  $("sc-list").innerHTML = sampleTable(names.length ? cols : [], rows, "저장한 예약이 없습니다.",
-    r => ` class="pick${r.bad ? " fail" : ""}${r.name === now ? " on" : ""}" data-name="${esc(r.name)}" title="누르면 위 칸에 불러옵니다"`);
+  $("sc-list").innerHTML = sampleTable(names.length ? cols : [], rows, "아직 저장한 예약이 없어요. 위에서 구성을 고르고 [예약 저장]을 누르세요.",
+    r => ` class="pick${r.bad ? " fail" : ""}${r.name === now ? " on" : ""}" data-name="${esc(r.name)}" title="누르면 위 칸에 불러와요"`);
 }
 $("sc-list").onclick = e => {
   const tr = e.target.closest("tr[data-name]");
@@ -1416,31 +1420,31 @@ $("sc-save").onclick = () => {
   const save = async () => {
     try {
       showSchedules(await api("/api/schedules", { name, schedule: readSchedule() }));
-      say("sc-msg", on && !was ? "저장하고 Windows 예약 작업을 등록했습니다" : !on && was ? "저장하고 Windows 예약 작업을 지웠습니다" : "저장했습니다", true);
+      say("sc-msg", on && !was ? "저장하고 Windows 작업 스케줄러에 등록했어요" : !on && was ? "저장하고 Windows 예약 작업을 지웠어요" : "저장했어요", true);
       loadRuns();
     } catch (e) { say("sc-msg", e.message); }
   };
-  if (on !== was) return twice($("sc-save"), on ? "Windows 예약 작업을 등록합니다. 한 번 더 누르면 등록" : "Windows 예약 작업을 지웁니다. 한 번 더 누르면 지우기", save);
+  if (on !== was) return twice($("sc-save"), on ? "한 번 더 누르면 Windows 작업 스케줄러에 등록해요" : "한 번 더 누르면 Windows 예약 작업을 지워요", save);
   return busy($("sc-save"), save);
 };
 $("sc-del").onclick = () => {
   const name = $("sc-name").value;
   if (!(name in sched.schedules)) return;
-  return twice($("sc-del"), registered(name) ? "예약과 Windows 예약 작업을 지웁니다. 한 번 더 누르면 지우기" : "예약을 지웁니다. 한 번 더 누르면 지우기", async () => {
-    try { showSchedules(await api("/api/schedules", { name, schedule: null })); say("sc-msg", "예약을 지웠습니다", true); } catch (e) { say("sc-msg", e.message); }
+  return twice($("sc-del"), registered(name) ? "한 번 더 누르면 예약과 Windows 예약 작업을 지워요" : "한 번 더 누르면 예약을 삭제해요", async () => {
+    try { showSchedules(await api("/api/schedules", { name, schedule: null })); say("sc-msg", "예약을 삭제했어요", true); } catch (e) { say("sc-msg", e.message); }
   });
 };
 $("sc-run").onclick = () => busy($("sc-run"), async () => {
   try {
     if (!$("sc-name").value) throw new Error("실행할 구성을 고르세요.");
     await api("/api/schedules/run", { name: $("sc-name").value });
-    say("sc-msg", "저장한 구성으로 지금 한 번 실행합니다. 결과는 실행 기록에 남습니다.", true);
+    say("sc-msg", "저장한 구성으로 지금 한 번 실행해요. 결과는 실행 기록에서 볼 수 있어요.", true);
     loadRuns();
     watch(true, true);
   } catch (e) { say("sc-msg", e.message); }
 });
-$("sc-rereg").onclick = () => twice($("sc-rereg"), "지금 프로그램 경로로 다시 등록합니다. 한 번 더 누르면 등록", async () => {
-  try { showSchedules(await api("/api/schedules/reregister", {})); say("sc-msg", "다시 등록했습니다", true); } catch (e) { say("sc-msg", e.message); }
+$("sc-rereg").onclick = () => twice($("sc-rereg"), "한 번 더 누르면 지금 프로그램 경로로 다시 등록해요", async () => {
+  try { showSchedules(await api("/api/schedules/reregister", {})); say("sc-msg", "다시 등록했어요", true); } catch (e) { say("sc-msg", e.message); }
 });
 
 // 실행 기록: 접어 두고 펼치면 표를 그린다. 확인하지 않은 실패가 있으면 화면 맨 위에 알리고, 기록을 펼치거나 [확인함]을 누르면 본 것으로 표시한다.
@@ -1458,16 +1462,16 @@ async function loadRuns() {
 function renderRuns() {
   const list = runs.runs, n = runs.unseen, r0 = list[0];
   $("unseen-box").classList.toggle("hidden", !n);
-  $("unseen-text").textContent = `확인하지 않은 실패 ${n.toLocaleString()}건`;
-  $("runs-sum").textContent = r0 ? `최근: ${r0.name} · ${HOW[r0.how] ?? r0.how} · ${r0.start} · ${r0.result}` : "아직 실행 기록이 없습니다.";
+  $("unseen-text").textContent = `아직 확인하지 않은 실패가 ${n.toLocaleString()}건 있어요`;
+  $("runs-sum").textContent = r0 ? `최근 실행: ${r0.name}, ${HOW[r0.how] ?? r0.how}, ${r0.start}, ${r0.result}` : "아직 실행 기록이 없어요. 수집하거나 예약이 실행되면 여기에 남아요.";
   $("runs-sum").className = r0?.result === "실패" ? "warn" : "hint";
-  $("runs-toggle").textContent = runsOpen ? "접기" : `펼치기 (${list.length.toLocaleString()}건)`;
+  $("runs-toggle").textContent = runsOpen ? "접기" : `펼치기(${list.length.toLocaleString()}건)`;
   $("runs").classList.toggle("hidden", !runsOpen);
   if (!runsOpen) return;
-  const cols = ["구성", "어떻게", "시작", "끝", "결과", "행 수", "문구"].map(name => ({ name }));
+  const cols = ["구성", "실행 방식", "시작", "끝", "결과", "행 수", "메시지"].map(name => ({ name }));
   $("runs").innerHTML = sampleTable(list.length ? cols : [], list.map(r => ({ fail: r.result === "실패",
-    "구성": r.name, "어떻게": HOW[r.how] ?? r.how, "시작": r.start, "끝": r.end ?? "—", "결과": r.result, "행 수": r.rows ?? "—", "문구": r.message ?? "" })),
-    "아직 실행 기록이 없습니다.", r => r.fail ? ' class="fail"' : "");
+    "구성": r.name, "실행 방식": HOW[r.how] ?? r.how, "시작": r.start, "끝": r.end ?? "—", "결과": r.result, "행 수": r.rows ?? "—", "메시지": r.message ?? "" })),
+    "아직 실행 기록이 없어요.", r => r.fail ? ' class="fail"' : "");
 }
 async function markSeen() {
   try { await api("/api/runs/seen", {}); runs.unseen = 0; renderRuns(); } catch (e) { say("runs-msg", e.message); }
@@ -1490,7 +1494,7 @@ let uploadsData = { entries: [], statuses: {} }, upOpen = false, upPicked = "";
 const UP_KINDS = { file: "파일", table: "DB 테이블", kafka: "Kafka" };
 function upTarget(e) {
   const t = e.target ?? {};
-  return e.kind === "file" ? fileName(t.path) : e.kind === "kafka" ? `${t.destination ?? ""} · ${t.topic ?? ""}` : `${fileName(t.connection)} · ${[t.schema, t.name].filter(Boolean).join(".")}`;
+  return e.kind === "file" ? fileName(t.path) : e.kind === "kafka" ? `${t.destination ?? ""} / ${t.topic ?? ""}` : `${fileName(t.connection)} / ${[t.schema, t.name].filter(Boolean).join(".")}`;
 }
 function upRange(e) {
   const r = e.range ?? {};
@@ -1504,7 +1508,7 @@ async function loadUploads() {
 }
 function renderUploads() {
   const all = uploadsData.entries, find = $("up-find").value.trim().toLowerCase(), kind = $("up-kind").value;
-  $("up-sum").textContent = all.length ? `${all.length.toLocaleString()}건 · 최근: ${UP_KINDS[all[0].kind]} ${upTarget(all[0])} · ${all[0].started}` : "아직 기록이 없습니다.";
+  $("up-sum").textContent = all.length ? `모두 ${all.length.toLocaleString()}건이에요. 최근 기록은 ${UP_KINDS[all[0].kind]} ${upTarget(all[0])} (${all[0].started})` : "아직 업로드 기록이 없어요. 수집하거나 적재하면 여기에 쌓여요.";
   $("up-toggle").textContent = upOpen ? "접기" : "펼치기";
   $("up-body").classList.toggle("hidden", !upOpen);
   if (!upOpen) return;
@@ -1513,18 +1517,18 @@ function renderUploads() {
   const when = s => s ? s.slice(5, 16).replace("T", " ") : "—";  // 월-일 시:분
   $("up-list").innerHTML = sampleTable(list.length ? cols : [], list.map(e => ({ id: e.id, "시작": when(e.started), "종류": UP_KINDS[e.kind] ?? e.kind, "대상": upTarget(e),
     "결과 파일": e.kind === "file" ? "—" : fileName(e.source), "행": e.rows ?? "—", "크기": bytesText(e.bytes), "범위": upRange(e),
-    "결과": (uploadsData.statuses[e.status] ?? e.status) + (e.resumed ? " (이어 넣음)" : "") + (e.error ? ` · ${e.error}` : "") })),
-    "맞는 기록이 없습니다.", r => ` data-up="${esc(r.id)}" style="cursor:pointer"${r.id === upPicked ? ' class="on"' : ""}`);
+    "결과": (uploadsData.statuses[e.status] ?? e.status) + (e.resumed ? " (이어 넣음)" : "") + (e.error ? `: ${e.error}` : "") })),
+    "조건에 맞는 기록이 없어요.", r => ` data-up="${esc(r.id)}" style="cursor:pointer"${r.id === upPicked ? ' class="on"' : ""}`);
   $("up-list").querySelectorAll("tr[data-up]").forEach(tr => tr.onclick = () => { upPicked = tr.dataset.up; renderUploads(); });
   const picked = all.find(e => e.id === upPicked);
   $("up-cmd").classList.toggle("hidden", !picked?.removal.text);
-  $("up-cmd").textContent = picked ? `[${picked.removal.how}]\n${picked.removal.text}\n\n시작 ${picked.started} · 끝 ${picked.finished ?? "—"}\n결과 파일: ${picked.source}\n대상: ${JSON.stringify(picked.target)}\n범위: ${JSON.stringify(picked.range)}` : "";
-  const forget = el("button", { className: "ghost", textContent: "목록에서 빼기", title: "이 기록만 목록에서 뺍니다. 데이터는 그대로입니다" });
+  $("up-cmd").textContent = picked ? `[${picked.removal.how}]\n${picked.removal.text}\n\n시작 ${picked.started}, 끝 ${picked.finished ?? "—"}\n결과 파일: ${picked.source}\n대상: ${JSON.stringify(picked.target)}\n범위: ${JSON.stringify(picked.range)}` : "";
+  const forget = el("button", { className: "ghost", textContent: "목록에서 빼기", title: "이 기록을 목록에서만 빼요. 실제 데이터는 그대로 남아요" });
   forget.onclick = () => busy(forget, async () => {
     try { uploadsData = await api("/api/uploads/forget", { id: picked.id }); upPicked = ""; renderUploads(); } catch (e) { say("up-msg", e.message); }
   });
-  $("up-note").replaceChildren(...(picked ? [document.createTextNode(picked.removal.note + " (프로그램은 지우지 않습니다) "), forget]
-    : [document.createTextNode("행을 누르면 지울 때 쓸 명령을 보여 줍니다.")]));
+  $("up-note").replaceChildren(...(picked ? [document.createTextNode(picked.removal.note + " 프로그램이 직접 지우지는 않아요. "), forget]
+    : [document.createTextNode("행을 누르면 그 데이터를 지울 때 쓸 명령을 보여 줘요.")]));
 }
 $("up-toggle").onclick = () => { upOpen = !upOpen; renderUploads(); if (upOpen) loadUploads(); };
 $("up-kind").onchange = $("up-find").oninput = renderUploads;
@@ -1550,9 +1554,9 @@ function showCollectSummaries() {
   put("mode", document.querySelector("input[name=mode]:checked")?.parentElement.textContent.trim() ?? "");
   put("env", $("env-path").value.trim() ? fileName($("env-path").value.trim()) : "없음");
   put("paging", picked("p-kind"));
-  put("speed", [$("b-conc").closest("label").classList.contains("hidden") || mode() === "web" ? "" : `동시 ${$("b-conc").value || 1}`, `간격 ${$("b-gap").value || 0}초`].filter(Boolean).join(" · "));
+  put("speed", [$("b-conc").closest("label").classList.contains("hidden") || mode() === "web" ? "" : `동시 ${$("b-conc").value || 1}`, `간격 ${$("b-gap").value || 0}초`].filter(Boolean).join(", "));
   put("limits", $("lgroup").value || "제한 없음");
-  put("output", $("o-path").value.trim() ? `${fileName($("o-path").value.trim())}` : `${picked("o-format")} · 경로를 정하세요`);
+  put("output", $("o-path").value.trim() ? `${fileName($("o-path").value.trim())}` : "경로를 정하세요");
   let n = 0;
   document.querySelectorAll(".side .cstep").forEach(c => { if (!c.classList.contains("hidden")) c.querySelector(".sp i").textContent = ++n; });
   document.querySelectorAll(".side .step").forEach(s => s.querySelector(".c").textContent = s.classList.contains("open") ? "편집 중" : "⌄");

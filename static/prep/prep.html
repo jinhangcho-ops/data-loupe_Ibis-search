@@ -27,7 +27,7 @@
   .op input, .op select { margin-top:3px; }
   .op input[type=checkbox] { width:auto; margin:0; }
   .op.bad { border-color:var(--err); }
-  .op.bad::after { content:"입력을 확인하세요"; color:var(--err); }
+  .op.bad::after { content:"값을 확인해 주세요"; color:var(--err); font-size:12px; }
   .colhead { display:flex; gap:6px; align-items:center; justify-content:space-between; }
   .colhead span { overflow:hidden; text-overflow:ellipsis; min-width:0; }
   .colhead button { font-size:11px; }
@@ -75,6 +75,12 @@
   #a-corr-cols input { width:auto; margin:0; }
   #err-ana { padding:0 28px; }
   #err-ana:empty { display:none; }
+  /* 단계 안의 작은 제목(계산 컬럼·PCA·좌표, 저장할 곳·설정 저장): 안내 글보다 한 단계 위 */
+  .sec { font-size:13px; font-weight:600; color:var(--text); margin:16px 0 4px; }
+  .sec:first-child { margin-top:4px; }
+  .sec + .hint { margin-top:0; }
+  .edx > label:not(.check) { display:flex; align-items:center; gap:6px; margin:6px 0 4px; }
+  .cn:empty { height:10px; }
 </style>
 </head>
 <body class="app">
@@ -82,104 +88,109 @@
 <nav class="subnav" id="views"><button data-view="prep" class="on">전처리</button><button data-view="ana">분석</button></nav>
 <div class="work" id="prep-view">
   <main class="results">
-    <div class="big"><b id="p-big">테이블을 고르세요</b><span id="p-sub">오른쪽 ① 데이터에서 연결과 테이블을 고르세요.</span></div>
+    <div class="big"><b id="p-big">테이블을 고르세요</b><span id="p-sub">오른쪽 데이터 단계에서 연결과 테이블을 고르면 여기에 데이터가 나와요.</span></div>
     <div class="ok" id="ok-run" style="padding:0 28px"></div>
     <div class="err" id="err-prep" style="padding:0 28px"></div>
-    <div class="tabs2" id="p-tabs"><button data-ptab="info" class="on">정보</button><button data-ptab="spec">명세서</button></div>
+    <div class="tabs2" id="p-tabs"><button data-ptab="info" class="on">데이터</button><button data-ptab="spec" title="컬럼마다 표본 요약, 명세서 설명, 추천을 봐요">컬럼 요약</button></div>
     <section class="pane" id="p-info">
       <div class="hint" id="info-note"></div>
       <div class="table-wrap" id="grid"></div>
       <div class="hint"><span id="counts"></span> <span id="stale" class="warn"></span></div>
     </section>
     <section class="pane hidden" id="p-spec">
-      <div class="head"><span class="hint" id="sampled"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계·추천을 다시 구합니다">다시 구하기</button><button id="sug-all" class="hidden" title="추천을 모두 선택에 넣습니다">추천 모두 적용</button><button id="prune" class="hidden" title="표본(이 PC)으로 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾습니다. DB에는 묻지 않습니다">뺄 만한 컬럼</button></div>
+      <div class="head"><span class="hint" id="sampled" style="margin:0"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계와 추천을 다시 구해요">다시 구하기</button><span style="flex:1"></span><button id="prune" class="btn hidden" title="표본에서 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾아요. 이미 읽은 표본만 쓰고 DB에는 다시 묻지 않아요">뺄 만한 컬럼 찾기</button><button id="sug-all" class="hidden" title="모든 컬럼의 추천을 정리 방법에 한 번에 넣어요">추천 모두 적용</button></div>
       <div class="hint" id="prune-box"></div>
       <div id="spec-view"></div>
-      <div class="row" style="margin-top:12px; max-width:720px; align-items:center" title="테이블·컬럼 설명과 파티션 키를 적은 파일(JSON·YAML). 설명은 [질문으로 SQL 만들기]도 씁니다. 비우고 [읽기]를 누르면 쓰지 않습니다"><span class="hint" style="margin:0; flex:none">명세서 파일</span><input id="spec-path" class="code" placeholder="JSON·YAML 경로 (선택)"><button id="spec-read">읽기</button></div>
+      <div class="row" style="margin-top:16px; max-width:720px; align-items:center" title="테이블과 컬럼 설명, 파티션 키를 적은 파일(JSON·YAML)이에요. 이 설명은 [질문으로 SQL 만들기]에서도 써요. 칸을 비우고 [불러오기]를 누르면 명세서를 쓰지 않아요"><span class="hint" style="margin:0; flex:none">명세서 파일</span><input id="spec-path" class="code" placeholder="JSON 또는 YAML 파일 경로(없어도 돼요)"><button id="spec-read" class="btn">불러오기</button></div>
       <div class="hint" id="spec-info"></div>
     </section>
   </main>
-  <div class="grip-x" data-size="panel" title="끌어서 패널 너비 조절 (더블클릭: 기본)"></div>
+  <div class="grip-x" data-size="panel" title="끌어서 패널 너비를 바꿔요. 두 번 누르면 기본 너비로 돌아가요"></div>
   <aside class="side">
     <header><h3>전처리 조건</h3></header>
     <div class="sc"><div class="flow">
       <div class="step open" data-step="data"><div class="sp"><i>1</i><span class="t">데이터</span><b id="sum-p-data"></b><span class="c"></span></div>
         <div class="edx">
-          <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">연결 안 됨</span><button id="conn-open" class="btn">연결 바꾸기</button></div>
+          <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">연결되지 않았어요</span><button id="conn-open" class="btn">연결 바꾸기</button></div>
           <div id="table-box">
-            <div class="hint" style="margin-top:8px">테이블</div>
+            <div class="sec">테이블</div>
             <select id="schema" class="hidden" style="margin-bottom:6px"></select>
             <select id="base"></select>
-            <div class="row" style="margin-top:6px; align-items:center"><span class="hint" style="margin:0; flex:none">표본 행 수</span><input id="sample" type="number" style="width:120px; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
-            <div class="hint">테이블 전체가 아니라 이만큼만(싼 방법부터) 읽어 통계·추천·분석을 구하고, 테이블별로 저장해 둡니다.</div>
-            <label class="check" title="끄면 테이블을 골라도 데이터를 읽지 않고 컬럼 이름·타입만 보입니다(행 수도 세지 않음). 추천은 나오지 않고, 분석 탭은 그대로 표본을 읽습니다"><input type="checkbox" id="stats-on"> 컬럼 통계·추천 구하기</label>
-            <div class="row" style="margin-top:6px; align-items:center" title="주소로 연결한 DB에서만 씁니다. 이 PC에서 계산하면 DB에는 행 거르기까지의 조회 한 번만 가고(그 결과를 이 PC로 받아 둠), 통계·전처리·저장 계산은 이 PC가 합니다. 테이블이 크면 받는 데 오래 걸리고 디스크를 씁니다"><span class="hint" style="margin:0; flex:none">원격 DB 계산</span><select id="prep-where" style="flex:1; min-width:0"><option value="all">이 PC에서 (전처리 전체)</option><option value="new">이 PC에서 (계산 컬럼·PCA만)</option></select></div>
+            <div class="row" style="margin-top:8px; align-items:center" title="가장 가벼운 방법부터 시도해 읽고, 구한 통계는 테이블마다 저장해 둬요"><span class="hint" style="margin:0; flex:none">표본 행 수</span><input id="sample" type="number" style="width:120px; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
+            <div class="hint">테이블 전체 대신 이만큼만 읽어서 통계, 추천, 분석에 써요.</div>
+            <label class="check" title="끄면 테이블을 골라도 데이터를 읽지 않고 컬럼 이름과 타입만 보여요. 행 수도 세지 않고 추천도 나오지 않아요. 분석 탭은 그대로 표본을 읽어요"><input type="checkbox" id="stats-on"> 컬럼 통계와 추천 보기</label>
+            <div class="row" style="margin-top:8px; align-items:center" title="주소로 연결한 DB에서만 써요. 이 PC에서 계산하면 DB에는 행 거르기까지 한 번만 묻고, 받은 결과로 통계와 전처리, 저장을 이 PC가 계산해요. 테이블이 크면 받는 데 오래 걸리고 디스크 공간을 써요"><span class="hint" style="margin:0; flex:none">원격 DB 계산</span><select id="prep-where" style="flex:1; min-width:0"><option value="all">전처리 전체를 이 PC에서</option><option value="new">계산 컬럼과 PCA만 이 PC에서</option></select></div>
+            <div class="sec">컬럼</div>
             <div class="cols" id="pcols"></div>
           </div>
         </div></div>
       <div id="after-connect" class="hidden">
-        <div class="cn">↓</div>
+        <div class="cn"></div>
         <div class="step" data-step="filters"><div class="sp"><i>2</i><span class="t">행 거르기</span><b id="sum-p-filters"></b><span class="c"></span></div>
           <div class="edx">
-            <div class="hint">price &gt;= 100 / city = 서울 / name starts 김 / 컬럼 in 값1, 값2 / 컬럼 is null</div>
-            <div class="row"><input id="f-in" placeholder="조건 입력 후 Enter"><button id="f-add">추가</button></div>
+            <div class="hint">조건에 맞는 행만 남겨요. 예: price &gt;= 100 / city = 서울 / name starts 김 / 컬럼 in 값1, 값2 / 컬럼 is null</div>
+            <div class="row"><input id="f-in" placeholder="조건을 적고 Enter"><button id="f-add" class="btn">추가</button></div>
             <div id="filters"></div>
           </div></div>
-        <div class="cn">↓</div>
+        <div class="cn"></div>
         <div class="step" data-step="clean"><div class="sp"><i>3</i><span class="t">컬럼 정리</span><b id="sum-p-clean"></b><span class="c"></span></div>
           <div class="edx">
-            <div class="hint">가운데 표에서 컬럼을 누르거나 여기서 고르세요. 컬럼마다 정리 방법을 여러 개 넣을 수 있고, 위에서 아래 순서로 적용합니다.</div>
+            <div class="hint">가운데 표에서 컬럼을 누르거나 여기서 고르세요. 정리 방법은 여러 개 넣을 수 있고, 위에서부터 차례로 적용돼요.</div>
             <select id="cl-col"></select>
             <div id="cl-body"></div>
           </div></div>
-        <div class="cn">↓</div>
+        <div class="cn"></div>
         <div class="step" data-step="derive"><div class="sp"><i>4</i><span class="t">새 컬럼</span><b id="sum-p-derive"></b><span class="c"></span></div>
           <div class="edx">
-            <div class="hint">계산 컬럼 (컬럼은 이름을 바꾸기 전의 이름으로)</div>
-            <div class="row"><input id="fx-name" placeholder="새 컬럼 이름" style="width:110px; flex:none"><input id="fx-expr" class="code" placeholder="예: 금액 * 수량, median(금액), lag(금액, 1)"><button id="fx-add">추가</button></div>
-            <div class="row"><input id="fx-order" placeholder="정렬 기준 (창 함수·누적: 예 날짜 asc)" title="식 안의 순위·이전 값·누적 같은 창 함수가 쓸 정렬 기준(선택)"><input id="fx-group" placeholder="묶음 기준 (집계·창 함수: 컬럼, 쉼표로 여러 개)" title="식 안의 집계(중앙값·합계 …)와 창 함수가 묶어서 계산할 기준(선택). 없으면 표 전체"><button id="fx-find" class="ghost" title="함수를 찾아 예시를 식에 넣습니다">함수 찾기</button></div>
+            <div class="sec">계산 컬럼</div>
+            <div class="hint">식에는 이름을 바꾸기 전의 컬럼 이름을 써요.</div>
+            <div class="row"><input id="fx-name" placeholder="새 컬럼 이름" style="width:110px; flex:none"><input id="fx-expr" class="code" placeholder="예: 금액 * 수량, median(금액), lag(금액, 1)"><button id="fx-add" class="btn">추가</button></div>
+            <div class="row"><input id="fx-order" placeholder="정렬 기준(선택), 예: 날짜 asc" title="순위, 이전 값, 누적처럼 순서가 필요한 함수가 쓸 정렬 기준이에요. 없어도 돼요"><input id="fx-group" placeholder="묶을 컬럼(선택), 쉼표로 여러 개" title="합계, 중앙값 같은 집계와 순위 같은 함수를 이 컬럼의 값별로 따로 계산해요. 비우면 표 전체로 계산해요"><button id="fx-find" class="ghost" title="함수를 찾아 예시를 식에 넣어요">함수 찾기</button></div>
             <div id="fx-panel"></div>
             <div class="hint" id="fx-guide"></div>
             <div id="formulas"></div>
-            <div class="hint" style="margin-top:12px">PCA (차원 축소): 고른 숫자 컬럼을 성분 컬럼 pca_1, pca_2 …로 줄입니다</div>
+            <div class="sec">PCA(차원 줄이기)</div>
+            <div class="hint">고른 숫자 컬럼을 pca_1, pca_2 같은 성분 컬럼 몇 개로 줄여요.</div>
             <div class="cols" id="pca-cols"></div>
-            <div class="row" style="align-items:center"><span class="hint" style="margin:0; flex:none">성분 수</span><input id="pca-n" type="number" min="1" value="2" style="width:70px; flex:none"><button id="pca-clear" class="ghost">고른 것 비우기</button></div>
+            <div class="row" style="align-items:center"><span class="hint" style="margin:0; flex:none">성분 수</span><input id="pca-n" type="number" min="1" value="2" style="width:70px; flex:none"><button id="pca-clear" class="ghost">선택 해제</button></div>
             <div class="hint" id="pca-info"></div>
-            <div class="hint" style="margin-top:12px">좌표 (이 PC에서 계산): TM 좌표를 경도·위도로 바꾸고, 가까운 지점이나 들어 있는 영역을 새 컬럼으로 붙입니다</div>
+            <div class="sec">좌표</div>
+            <div class="hint">TM 좌표를 경도·위도로 바꾸거나, 가장 가까운 지점이나 속한 영역을 새 컬럼으로 붙여요. 계산은 이 PC에서 해요.</div>
             <div class="hint" id="geo-hints"></div>
             <div id="geo-list"></div>
-            <div class="row"><select id="geo-op" style="flex:none"><option value="tm">TM 좌표 → 경도·위도</option><option value="nearest">가장 가까운 지점 찾기</option><option value="region">들어 있는 영역 붙이기</option></select></div>
+            <div class="row"><select id="geo-op" style="flex:none"><option value="tm">TM 좌표를 경도·위도로</option><option value="nearest">가장 가까운 지점 찾기</option><option value="region">속한 영역 붙이기</option></select></div>
             <div class="row" id="geo-form" style="flex-wrap:wrap"></div>
-            <div class="row"><button id="geo-add">좌표 단계 더하기</button></div>
+            <div class="row"><button id="geo-add" class="btn">좌표 추가</button></div>
             <div class="hint" id="geo-info"></div>
           </div></div>
-        <div class="cn">↓</div>
-        <div class="step" data-step="dedupe"><div class="sp"><i>5</i><span class="t">중복 기준</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
+        <div class="cn"></div>
+        <div class="step" data-step="dedupe"><div class="sp"><i>5</i><span class="t">중복 제거</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
           <div class="edx">
-            <div class="hint">고른 컬럼의 값이 모두 같은 행은 하나만 남깁니다. 고르지 않은 컬럼은 어느 행의 값이 남을지 정해지지 않습니다.</div>
-            <div class="row"><select id="dd-col" style="flex:1; min-width:0"></select><button id="dd-all">전체 컬럼</button></div>
+            <div class="hint" title="고르지 않은 컬럼은 어느 행의 값이 남을지 정해지지 않아요">고른 컬럼의 값이 모두 같은 행은 하나만 남겨요.</div>
+            <div class="row"><select id="dd-col" style="flex:1; min-width:0"></select><button id="dd-all" class="btn">모든 컬럼</button></div>
             <div class="chips open" id="dd-chips"></div>
-            <div class="row" style="align-items:center"><select id="dd-keep" title="겹치는 행에서 무엇을 남길지"><option value="">남길 것: 아무 행 하나 (기본)</option><option value="pick">대표 값 고르기 (정렬 기준의 첫·마지막 행, 최소·최대·최빈, 이어 붙이기, 여러 개면 알리기)</option></select><span id="dd-pick"></span></div>
-            <div class="row"><button id="dupes" disabled>중복 세기</button><span class="hint" id="dd-result" style="align-self:center"></span></div>
+            <div class="row" style="align-items:center"><select id="dd-keep" title="겹치는 행 중 무엇을 남길지 골라요. 직접 고르면 정렬 기준의 첫 행이나 마지막 행, 최소·최대·최빈값, 이어 붙이기를 쓸 수 있고, 값이 여러 개일 때 알려 주게 할 수도 있어요"><option value="">아무 행이나 하나 남기기</option><option value="pick">남길 값 직접 고르기</option></select><span id="dd-pick"></span></div>
+            <div class="row"><button id="dupes" class="btn" disabled>중복 세기</button><span class="hint" id="dd-result" style="align-self:center"></span></div>
           </div></div>
-        <div class="cn">↓</div>
+        <div class="cn"></div>
         <div class="step" data-step="sorts"><div class="sp"><i>6</i><span class="t">정렬</span><b id="sum-p-sorts"></b><span class="c"></span></div>
           <div class="edx">
-            <div class="row"><select id="sort-col" style="flex:1; min-width:0" title="결과의 컬럼 이름"></select><select id="sort-dir" style="width:auto"><option value="asc">오름차순</option><option value="desc">내림차순</option></select><button id="sort-add">추가</button></div>
+            <div class="row"><select id="sort-col" style="flex:1; min-width:0" title="전처리한 결과의 컬럼 이름이에요"></select><select id="sort-dir" style="width:auto"><option value="asc">오름차순</option><option value="desc">내림차순</option></select><button id="sort-add" class="btn">추가</button></div>
             <div class="chips open" id="sorts"></div>
           </div></div>
-        <div class="cn">↓</div>
+        <div class="cn"></div>
         <div class="step" data-step="save"><div class="sp"><i>7</i><span class="t">저장</span><b id="sum-p-save"></b><span class="c"></span></div>
           <div class="edx">
+            <div class="sec">저장할 곳</div>
             <label><input type="radio" name="target" id="t-file" checked style="width:auto"> 파일</label>
             <select id="fmt" style="margin-bottom:6px"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
             <label><input type="radio" name="target" id="t-table" style="width:auto"> 같은 DB의 새 테이블</label>
             <input id="tname" placeholder="새 테이블 이름">
-            <label style="display:block; margin-top:8px"><input type="checkbox" id="downcast" checked style="width:auto"> 수 컬럼을 가장 작은 타입으로 (downcast)</label>
-            <div class="hint">값이 바뀌지 않는 경우에만 줄입니다(예: int64 → int16)</div>
-            <div class="hint" style="margin-top:12px">구성 저장·불러오기</div>
-            <div class="row"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 구성을 불러옵니다 (미리보기·실행은 하지 않습니다)"></select></div>
-            <div class="row"><input id="rname" placeholder="이름"><button id="rsave">저장</button><button id="rdel" class="ghost">삭제</button></div>
+            <label style="margin-top:12px" title="값이 그대로일 때만 줄여요. 예: int64를 int16으로"><input type="checkbox" id="downcast" checked style="width:auto"> 숫자 컬럼을 더 작은 타입으로 줄이기</label>
+            <div class="sec">설정 저장</div>
+            <div class="hint">지금 고른 전처리를 이름을 붙여 저장해 두고 나중에 불러와요.</div>
+            <div class="row"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 설정을 불러와요. 미리보기나 실행은 하지 않아요"></select></div>
+            <div class="row"><input id="rname" placeholder="설정 이름"><button id="rsave" class="btn">저장</button><button id="rdel" class="ghost">삭제</button></div>
           </div></div>
       </div>
     </div></div>
@@ -190,16 +201,16 @@
 <div class="work hidden" id="ana">
   <main class="results">
     <div class="tool"><span class="hint" id="a-data" style="margin:0; flex:1"></span>
-      <button id="a-full" class="btn" title="표본이 아니라 테이블 전체로 다시 구합니다. 큰 테이블에서는 오래 걸리고, 과금되는 DB에서는 비용이 듭니다">전체로 다시 구하기</button>
-      <div class="drop"><button id="a-add" class="btn p" title="지금 보이는 그래프를 구한 값과 함께 대시보드 카드로 넣습니다">대시보드에 추가</button>
+      <button id="a-full" class="btn" title="표본 대신 테이블 전체로 다시 구해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요">전체로 다시 구하기</button>
+      <div class="drop"><button id="a-add" class="btn p" title="지금 보이는 그래프를 구한 값과 함께 대시보드 카드로 넣어요">대시보드에 추가</button>
         <div class="pop hidden" id="a-pop">
           <div class="hint" style="margin:0">어느 대시보드에 넣을까요?</div>
-          <div class="row"><select id="a-dash" title="저장한 대시보드 또는 새 대시보드"></select></div>
+          <div class="row"><select id="a-dash" title="저장한 대시보드나 새 대시보드를 골라요"></select></div>
           <div class="row"><input id="a-dash-name" placeholder="새 대시보드 이름"></div>
-          <div class="row"><button id="a-dash-go" class="btn p">넣기</button></div>
-          <div class="hint" style="margin:0">구한 값이 카드에 들어 있어 이 PC·이 계정에서만 풀 수 있게 암호화해 저장합니다. 대시보드 화면에서 봅니다.</div>
+          <div class="row"><button id="a-dash-go" class="btn p">추가</button></div>
+          <div class="hint" style="margin:0">카드에는 구한 값이 들어가요. 이 PC의 이 계정에서만 열 수 있게 암호화해 저장하고, 대시보드 화면에서 볼 수 있어요.</div>
         </div></div></div>
-    <div class="big"><b id="a-title">분석</b><span id="a-sub">오른쪽에서 분석을 고르고 [구하기]를 누르세요.</span></div>
+    <div class="big"><b id="a-title">분석</b><span id="a-sub">오른쪽에서 분석 종류를 고르고 [구하기]를 누르면 여기에 그래프가 나와요.</span></div>
     <div class="err" id="err-ana"></div>
     <div class="tabs2 hidden" id="a-tabs"></div>
     <section class="pane" id="a-pane">
@@ -213,49 +224,49 @@
   <aside class="side">
     <header><h3>분석</h3></header>
     <div class="sc">
-      <label class="check" title="끄면 전처리 없이 원래 테이블을 분석합니다"><input type="checkbox" id="a-prep" checked> 지금 전처리를 적용한 결과로</label>
+      <label class="check" title="끄면 전처리 없이 원래 테이블을 분석해요"><input type="checkbox" id="a-prep" checked> 전처리한 결과로 분석</label>
       <div class="seg2 seg4" style="margin-top:10px">
         <label><input type="radio" name="akind" value="distribution" checked> 분포</label>
         <label><input type="radio" name="akind" value="correlation"> 상관관계</label>
         <label><input type="radio" name="akind" value="groups"> 그룹 비교</label>
-        <label><input type="radio" name="akind" value="trend"> 시계열 추이</label>
-        <label><input type="radio" name="akind" value="funnel"> 흐름(퍼널)</label>
+        <label><input type="radio" name="akind" value="trend"> 기간별 추이</label>
+        <label><input type="radio" name="akind" value="funnel"> 퍼널</label>
       </div>
       <div class="a-form" data-kind="distribution">
         <div class="hint">컬럼</div><select id="a-col"></select>
-        <div class="hint">숫자 컬럼은 히스토그램·상자 그림·값 빈도를, 그 밖의 컬럼은 값 빈도를 봅니다.</div>
+        <div class="hint">숫자 컬럼은 히스토그램, 상자 그림, 값 빈도로 보여 주고, 다른 컬럼은 값 빈도로 보여 줘요.</div>
       </div>
       <div class="a-form hidden" data-kind="correlation">
-        <select id="a-cmode"><option value="heatmap">히트맵 (여러 숫자 컬럼)</option><option value="scatter">산점도 (두 숫자 컬럼)</option></select>
-        <div id="a-heat"><div class="hint">숫자 컬럼 (2~<span id="a-max-corr"></span>개)</div><div class="cols" id="a-corr-cols"></div>
-          <div class="hint">고른 컬럼이 모두 비어 있지 않은 행으로 피어슨 상관계수를 구합니다.</div></div>
-        <div id="a-scat" class="hidden"><div class="hint">X</div><select id="a-sx"></select><div class="hint">Y</div><select id="a-sy"></select>
-          <div class="hint">점은 앞에서 <span id="a-max-points"></span>개까지 그립니다.</div></div>
+        <select id="a-cmode"><option value="heatmap">여러 컬럼 한꺼번에(히트맵)</option><option value="scatter">두 컬럼 자세히(산점도)</option></select>
+        <div id="a-heat"><div class="hint">숫자 컬럼(2~<span id="a-max-corr"></span>개)</div><div class="cols" id="a-corr-cols"></div>
+          <div class="hint">고른 컬럼이 모두 채워진 행만으로 피어슨 상관계수를 구해요.</div></div>
+        <div id="a-scat" class="hidden"><div class="hint">가로축(X)</div><select id="a-sx"></select><div class="hint">세로축(Y)</div><select id="a-sy"></select>
+          <div class="hint">점은 앞에서부터 <span id="a-max-points"></span>개까지 그려요.</div></div>
       </div>
       <div class="a-form hidden" data-kind="groups">
-        <div class="hint">그룹 컬럼</div><select id="a-gby"></select>
-        <div class="hint">집계 (함수 사전의 집계 전부)</div><div id="a-gagg"></div>
-        <div class="hint">값 컬럼</div><select id="a-gval"></select>
+        <div class="hint">묶을 컬럼</div><select id="a-gby"></select>
+        <div class="hint">집계</div><div id="a-gagg"></div>
+        <div class="hint">계산할 컬럼</div><select id="a-gval"></select>
       </div>
       <div class="a-form hidden" data-kind="trend">
         <div class="hint">날짜 컬럼</div><select id="a-tcol"></select>
-        <div class="hint">묶음 단위</div><select id="a-tunit"><option value="day">일</option><option value="week">주 (월요일 시작)</option><option value="month">월</option></select>
-        <div class="hint">집계 (함수 사전의 집계 전부)</div><div id="a-tagg"></div>
-        <div class="hint">값 컬럼</div><select id="a-tval"></select>
+        <div class="hint">기간 단위</div><select id="a-tunit"><option value="day">일</option><option value="week">주(월요일부터)</option><option value="month">월</option></select>
+        <div class="hint">집계</div><div id="a-tagg"></div>
+        <div class="hint">계산할 컬럼</div><select id="a-tval"></select>
       </div>
       <div class="a-form hidden" data-kind="funnel">
-        <div class="hint">사용자 컬럼 (사람을 구분)</div><select id="a-fuser"></select>
-        <div class="hint">단계 컬럼 (행동 이름)</div><select id="a-fstep"></select>
-        <div class="hint">시각 컬럼 (날짜·날짜시간)</div><select id="a-ftime"></select>
-        <div class="hint">단계 순서 (최대 <span id="a-max-steps"></span>개, 끌어서 순서를 바꿉니다)</div>
+        <div class="hint">사용자를 구분하는 컬럼</div><select id="a-fuser"></select>
+        <div class="hint">행동 이름이 든 컬럼</div><select id="a-fstep"></select>
+        <div class="hint">행동한 시각 컬럼</div><select id="a-ftime"></select>
+        <div class="hint">단계 순서(<span id="a-max-steps"></span>개까지, 끌어서 순서를 바꿔요)</div>
         <div class="f-steps" id="a-fsteps"></div>
-        <div class="f-add"><input id="a-fvalue" data-list="a-fvalues" placeholder="단계 컬럼의 값 고르기·쓰기"><datalist id="a-fvalues"></datalist><button class="btn" id="a-fadd">추가</button></div>
-        <div class="hint">기간 제한 (첫 단계부터 이 시간 안에 도달한 사람만. 비우면 제한 없음)</div>
-        <div class="f-win"><input id="a-fwin" type="number" min="0" step="any" placeholder="비움"><select id="a-funit"><option value="minute">분</option><option value="hour">시간</option><option value="day">일</option></select></div>
-        <div class="hint">사용자가 단계를 순서대로 거친 사람 수를 셉니다. 중간에 한 다른 행동과 되돌아간 행동은 무시하고, 같은 시각의 두 단계는 도달한 것으로 봅니다.</div>
+        <div class="f-add"><input id="a-fvalue" data-list="a-fvalues" placeholder="행동 이름을 고르거나 적기"><datalist id="a-fvalues"></datalist><button class="btn" id="a-fadd">추가</button></div>
+        <div class="hint">제한 시간</div>
+        <div class="f-win" title="첫 단계부터 이 시간 안에 도달한 사람만 세요. 비우면 제한이 없어요"><input id="a-fwin" type="number" min="0" step="any" placeholder="제한 없음"><select id="a-funit"><option value="minute">분</option><option value="hour">시간</option><option value="day">일</option></select></div>
+        <div class="hint" title="중간에 한 다른 행동과 되돌아간 행동은 무시하고, 같은 시각의 두 단계는 도달한 것으로 봐요">단계를 순서대로 거친 사람 수를 세요.</div>
       </div>
     </div>
-    <footer><button id="a-run" class="btn p" title="표본으로 구합니다(전처리 탭의 표본 행 수)">구하기</button></footer>
+    <footer><button id="a-run" class="btn p" title="전처리 탭에서 정한 표본 행 수만큼 읽어 구해요">구하기</button></footer>
   </aside>
 </div>
 <!--include core/connect.html-->
@@ -314,7 +325,7 @@ const OPS = {
   trim: { label: "앞뒤 공백 지우기", group: "글자", need: isStr, init: {}, value: () => true },
   squeeze: { label: "연속 공백을 하나로", group: "글자", need: isStr, init: {}, value: () => true },
   nulls: { label: "이 값들을 빈 값으로", group: "글자", need: isStr, init: { text: "", blank: false },
-    fields: () => [{ name: "text", placeholder: "예: -, N/A (쉼표로 구분)" }, { name: "blank", check: "빈 문자열도" }],
+    fields: () => [{ name: "text", placeholder: "예: -, N/A(쉼표로 구분)" }, { name: "blank", check: "빈 문자열도" }],
     value: st => {
       const values = st.text.split(",").map(v => v.trim()).filter(Boolean);
       if (st.blank) values.push("");
@@ -333,7 +344,7 @@ const OPS = {
     fields: () => [{ name: "from", placeholder: "찾을 값" }, { name: "to", placeholder: "바꿀 값" }],
     value: st => st.from ? [[st.from, st.to]] : null,
     load: v => ({ from: v[0][0], to: v[0][1] }) },
-  regex: { label: "패턴으로 바꾸기 (정규식)", group: "글자", need: isStr, init: { pattern: "", to: "" },
+  regex: { label: "정규식으로 바꾸기", group: "글자", need: isStr, init: { pattern: "", to: "" },
     fields: () => [{ name: "pattern", placeholder: "패턴" }, { name: "to", placeholder: "바꿀 글자" }],
     value: st => st.pattern ? [st.pattern, st.to] : null,
     load: v => ({ pattern: v[0], to: v[1] }) },
@@ -341,11 +352,11 @@ const OPS = {
     fields: (st, c) => [
       { name: "to", redraw: true, options: [["int", "정수"], ["float", "실수"], ["string", "글자"], ["date", "날짜"]] },
       ...(isStr(c) && NUM.includes(st.to) ? [{ name: "clean", check: "쉼표·단위 떼기" }] : []),
-      ...(st.to === "date" ? [{ name: "format", placeholder: "%Y-%m-%d" }, { hint: "예: %Y%m%d, %Y-%m-%d %H:%M:%S (시각이 있으면 날짜시간이 됩니다)" }] : []),
+      ...(st.to === "date" ? [{ name: "format", placeholder: "%Y-%m-%d" }, { hint: "예: %Y%m%d, %Y-%m-%d %H:%M:%S. 시각까지 있으면 날짜시간이 돼요." }] : []),
     ],
     value: (st, c) => ({ to: st.to, ...(isStr(c) && NUM.includes(st.to) ? { clean: st.clean } : {}), ...(st.to === "date" && st.format ? { format: st.format } : {}) }),
     load: v => ({ to: v.to, clean: v.clean ?? false, format: v.format ?? "" }) },
-  flag: { label: "빈 값이었는지 표시 컬럼 만들기", group: "새 컬럼", init: {}, value: () => true },
+  flag: { label: "빈 값 표시 컬럼 만들기", group: "새 컬럼", init: {}, value: () => true },
   fill: { label: "빈 값 처리", group: "빈 값", init: { how: "drop", value: "", by: "" },
     fields: (st, c, ops) => [
       { name: "how", redraw: true, options: [["drop", "그 행 빼기"], ["value", "정한 값으로"], ...(isNum(c, ops) ? [["mean", "평균으로"], ["median", "중앙값으로"]] : []), ["mode", "최빈값으로"],
@@ -378,45 +389,45 @@ const OPS = {
       return Number.isNaN(k) ? null : { how: st.how, by: st.by, ...(k === null ? {} : { k }) };
     },
     load: v => ({ how: v.how, by: v.by, low: String(v.low ?? ""), high: String(v.high ?? ""), k: String(v.k ?? "") }) },
-  scale: { label: "값 맞추기", group: "숫자", need: isNum, init: { how: "standard" },
-    fields: () => [{ name: "how", options: [["standard", "표준화"], ["minmax", "0–1로"], ["log", "로그 ln(1+x)"]] }],
+  scale: { label: "크기 맞추기(스케일링)", group: "숫자", need: isNum, init: { how: "standard" },
+    fields: () => [{ name: "how", options: [["standard", "표준화"], ["minmax", "0~1 사이로"], ["log", "로그 ln(1+x)"]] }],
     value: st => st.how,
     load: v => ({ how: v }) },
   round: { label: "반올림", group: "숫자", need: isNum, init: { digits: "" },
-    fields: () => [{ name: "digits", placeholder: "자릿수 (0 이상 정수)" }],
+    fields: () => [{ name: "digits", placeholder: "소수점 아래 자릿수(0 이상)" }],
     value: st => /^\d+$/.test(st.digits) ? Number(st.digits) : null,
     load: v => ({ digits: String(v) }) },
   bins: { label: "구간 나누기", group: "숫자", need: isNum, init: { text: "" },
-    fields: () => [{ name: "text", placeholder: "경계값 (오름차순, 쉼표로 구분)" }],
+    fields: () => [{ name: "text", placeholder: "경계값을 작은 것부터 쉼표로" }],
     value: st => {
       const edges = st.text.split(",").map(v => v.trim()).filter(Boolean).map(Number);
       return edges.length >= 2 && edges.every((v, i) => Number.isFinite(v) && (!i || v > edges[i - 1])) ? edges : null;
     },
     load: v => ({ text: v.join(", ") }) },
   rare: { label: "드문 값 묶기", group: "범주", need: isStr, init: { min: "", label: "기타" },
-    fields: () => [{ name: "min", placeholder: "몇 번 미만 (2 이상)" }, { name: "label", placeholder: "묶어 부를 이름 (기본 기타)" }],
+    fields: () => [{ name: "min", placeholder: "이보다 적게 나오면 묶기(2 이상)" }, { name: "label", placeholder: "묶은 값의 이름(기본: 기타)" }],
     value: st => /^\d+$/.test(st.min) && +st.min >= 2 ? { min: +st.min, label: st.label || "기타" } : null,
     load: v => ({ min: String(v.min), label: v.label ?? "기타" }) },
   parts: { label: "날짜에서 뽑기", group: "새 컬럼", need: isDate, init: Object.fromEntries(PARTS.map(([k]) => [k, false])),
     fields: (st, c, ops) => PARTS.filter(([k]) => k !== "hour" || hasTime(c, ops)).map(([name, check]) => ({ name, check })),
     value: (st, c, ops) => { const v = PARTS.filter(([k]) => st[k]).map(([k]) => k); return v.length && (!st.hour || hasTime(c, ops)) ? v : null; },
     load: v => Object.fromEntries(PARTS.map(([k]) => [k, v.includes(k)])) },
-  label: { label: "값을 번호로 (라벨 인코딩)", group: "새 컬럼", init: {}, value: () => true },
-  onehot: { label: "값마다 컬럼으로 (원-핫 인코딩)", group: "새 컬럼", unkeep: true, init: {}, value: () => true },
+  label: { label: "값을 번호로(라벨 인코딩)", group: "새 컬럼", init: {}, value: () => true },
+  onehot: { label: "값마다 컬럼으로(원-핫 인코딩)", group: "새 컬럼", unkeep: true, init: {}, value: () => true },
   extract: { label: "패턴에 맞는 부분 뽑기", group: "새 컬럼", need: isStr, init: { pattern: "", group: "" },
-    fields: () => [{ name: "pattern", placeholder: "패턴 (정규식) 예: [A-Z]-[0-9]+" }, { name: "group", placeholder: "묶음 번호 (비우면 전체)" }],
+    fields: () => [{ name: "pattern", placeholder: "정규식, 예: [A-Z]-[0-9]+" }, { name: "group", placeholder: "괄호 묶음 번호(비우면 전체)" }],
     value: st => {
       if (!st.pattern || (st.group !== "" && !/^\d+$/.test(st.group))) return null;
       return { pattern: st.pattern, ...(st.group === "" ? {} : { group: Number(st.group) }) };
     } },
-  has: { label: "들어 있는지 표시", group: "새 컬럼", need: isStr, init: { words: "", regex: false },
+  has: { label: "글자가 들어 있는지 표시", group: "새 컬럼", need: isStr, init: { words: "", regex: false },
     fields: () => [{ name: "words", placeholder: "찾을 글자 예: 서울, 부산" }, { name: "regex", check: "정규식으로" }],
     value: st => {
       const words = st.words.split(",").map(v => v.trim()).filter(Boolean);
       return !words.length || words.length > 50 || new Set(words).size < words.length ? null : { words, ...(st.regex ? { regex: true } : {}) };
     } },
   counts: { label: "단어별 개수 세기", group: "새 컬럼", need: isStr, init: { sep: "" },
-    fields: () => [{ name: "sep", placeholder: "구분자 (비우면 공백)" }, { hint: '값을 나눠 단어별 개수를 {"서울": 2, "배송": 1} 모양의 글자로 새 컬럼에 넣습니다.' }],
+    fields: () => [{ name: "sep", placeholder: "구분자(비우면 공백)" }, { hint: '값을 나눠 단어별 개수를 {"서울": 2, "배송": 1} 모양의 글자로 새 컬럼에 넣어요.' }],
     value: st => st.sep === "" ? {} : { sep: st.sep } },
 };
 
@@ -430,7 +441,7 @@ const DESC = {
   extract: "'A-123'에서 '123'만 뽑기", has: "'서울'이 들어 있으면 1인 새 컬럼", counts: "단어가 몇 번 나오는지 세기",
 };
 // 컬럼 종류의 쉬운 이름. 원래 타입(int64 등)은 마우스를 올리면 보인다.
-const KIND_TEXT = { int: "숫자 (정수)", float: "숫자 (소수)", string: "글자", date: "날짜", ts: "날짜·시각", bool: "참·거짓", time: "시각", other: "기타" };
+const KIND_TEXT = { int: "정수", float: "소수", string: "글자", date: "날짜", ts: "날짜·시각", bool: "참·거짓", time: "시각", other: "기타" };
 const kindOf = type => /^u?int/.test(type) ? "int" : /^(float|decimal)/.test(type) ? "float" : type.startsWith("string") ? "string"
   : type.startsWith("timestamp") ? "ts" : type === "date" ? "date" : type === "boolean" ? "bool" : type.startsWith("time") ? "time" : "other";
 const isWorked = c => { const e = edits[c.name]; return !e.keep || !!e.rename.trim() || Object.keys(e.ops).length > 0; };
@@ -457,7 +468,7 @@ function control(f, st) {
 function opLine(c, e, key) {
   const op = OPS[key], st = e.ops[key];
   const li = el("div", { className: "op" }, el("div", { className: "op-head" }, op.label,
-    el("button", { className: "ghost", textContent: "×", title: "빼기", onclick: () => { delete e.ops[key]; renderClean(); renderGrid(); showPrepSummaries(); } })),
+    el("button", { className: "ghost", textContent: "×", title: "이 정리 방법 빼기", "aria-label": "이 정리 방법 빼기", onclick: () => { delete e.ops[key]; renderClean(); renderGrid(); showPrepSummaries(); } })),
     el("div", { className: "hint", textContent: DESC[key] ?? "" }));
   lines.set(st, li);
   for (const f of op.fields?.(st, c, e.ops) ?? []) {
@@ -485,20 +496,20 @@ function renderClean() {
   lines.clear();
   const all = prof ? cols() : [];
   if (!all.some(c => c.name === picked)) picked = all[0]?.name ?? "";
-  $("cl-col").replaceChildren(...all.map(c => new Option(c.name + (c.from ? " (복사)" : "") + (isWorked(c) ? " · 정리함" : ""), c.name)));
+  $("cl-col").replaceChildren(...all.map(c => { const tags = [c.from && "복사", isWorked(c) && "정리함"].filter(Boolean); return new Option(c.name + (tags.length ? ` (${tags.join(", ")})` : ""), c.name); }));
   $("cl-col").value = picked;
   const c = all.find(x => x.name === picked);
-  if (!c) { $("cl-body").replaceChildren(el("div", { className: "empty", textContent: "테이블을 고르면 컬럼을 정리할 수 있습니다." })); return; }
+  if (!c) { $("cl-body").replaceChildren(el("div", { className: "empty", textContent: "테이블을 고르면 여기서 컬럼을 정리할 수 있어요." })); return; }
   const e = edits[c.name];
   const keep = el("input", { type: "checkbox", checked: e.keep, onchange: () => { e.keep = keep.checked; preview = null; showAll(); } });
-  const rename = el("input", { placeholder: "새 이름 (비우면 그대로)", value: e.rename });
+  const rename = el("input", { placeholder: "새 이름(비우면 그대로 둬요)", value: e.rename });
   rename.onchange = () => { e.rename = rename.value; syncNames(); renderClean(); showPrepSummaries(); };
   const open = Object.entries(OPS).filter(([key, op]) => !(key in e.ops) && (op.need?.(c, e.ops) ?? true));
   const items = GROUPS.flatMap(g => {
     const group = open.filter(([, op]) => op.group === g);
     return group.length ? [Object.assign(new Option(`— ${g} —`, ""), { disabled: true }), ...group.map(([key, op]) => Object.assign(new Option(op.label, key), { title: DESC[key] ?? "" }))] : [];
   });
-  const add = el("select", {}, new Option("+ 정리 방법 추가", ""), ...items);
+  const add = el("select", {}, new Option("정리 방법 추가", ""), ...items);
   add.onchange = () => {
     const op = OPS[add.value];
     if (!op) return;
@@ -509,7 +520,7 @@ function renderClean() {
     el("div", { className: "facts", innerHTML: statsHtml(c) }), ...(c.from ? [] : suggests(c)),
     el("label", { className: "check" }, keep, " 결과에 남기기"), rename,
     ...Object.keys(OPS).filter(key => key in e.ops).map(key => opLine(c, e, key)), add,
-    el("button", { className: "ghost", textContent: c.from ? "이 복사 컬럼 지우기" : "이 컬럼을 복사해 따로 정리",
+    el("button", { className: "ghost", textContent: c.from ? "이 복사 컬럼 지우기" : "복사해서 따로 정리하기",
       onclick: () => {
         if (c.from) { copies = copies.filter(x => x.name !== c.name); delete edits[c.name]; picked = c.from; }
         else { const name = copyName(c.name); copies.push({ from: c.name, name }); edits[name] = newEdit(); picked = name; }
@@ -536,26 +547,26 @@ $("sug-all").onclick = () => { prof.columns.forEach(c => allSuggest(c).forEach(s
 function statsHtml(c, now) {
   const tag = `<span class="kind" title="원래 타입: ${esc(c.type)}">${c.type.startsWith("timestamp") ? KIND_TEXT.ts : KIND_TEXT[c.kind] ?? KIND_TEXT.other}</span>`;
   const change = !now || now === c.type ? "" : kindOf(now) === kindOf(c.type)
-    ? `<div title="${esc(c.type)} → ${esc(now)}">저장할 때 작은 크기로 줄여요</div>` : `<div>→ ${KIND_TEXT[kindOf(now)] ?? esc(now)}(으)로 바뀜</div>`;
-  if (!("unique" in c)) return `<div>${tag}</div>${change}<div class="empty">${status === "stopped" ? "통계를 구하지 않았습니다" : status === "off" ? "통계 꺼짐 (①에서 켜면 표본으로 구합니다)" : "통계 계산 중…"}</div>`;
+    ? `<div title="${esc(c.type)} → ${esc(now)}">저장할 때 작은 크기로 줄여요</div>` : `<div>바꾼 뒤: ${KIND_TEXT[kindOf(now)] ?? esc(now)}</div>`;
+  if (!("unique" in c)) return `<div>${tag}</div>${change}<div class="empty">${status === "stopped" ? "통계를 구하지 못했어요" : status === "off" ? "통계를 껐어요. 데이터 단계에서 켜면 표본으로 구해요" : "통계 계산 중…"}</div>`;
   const guess = c.infer ?? {}, exact = guess.exact, n = prof.sampled?.rows ?? prof.rows ?? 0;
   const count = v => v.toLocaleString(), pct = v => n ? ` (${(v / n * 100).toFixed(v / n < 0.01 ? 1 : 0)}%)` : "";
   const range = (lo, hi) => lo == null ? "" : c.kind === "date" ? `${esc(shown(lo)[0])}부터 ${esc(shown(hi)[0])}까지` : `${esc(shown(lo)[0])} ~ ${esc(shown(hi)[0])} 사이`;
   const filled = n - c.nulls;
   const variety = guess.constant ? "값이 하나뿐이에요"
-    : guess.flags ? `${count(c.unique)}가지 값뿐: ${esc(guess.flags.map(v => shown(v)[0]).join(", "))}`
-    : filled > 1 && c.unique === filled ? "모두 다른 값이에요 (번호·ID 같아요)" : `${count(c.unique)}가지 값`;
+    : guess.flags ? `값은 ${count(c.unique)}가지뿐이에요: ${esc(guess.flags.map(v => shown(v)[0]).join(", "))}`
+    : filled > 1 && c.unique === filled ? "값이 모두 달라요. 번호나 ID로 보여요" : `값 ${count(c.unique)}가지`;
   const rows = [
     tag, change,
-    c.nulls ? `<b class="warn">⚠ 빈칸 ${count(c.nulls)}${pct(c.nulls)}</b>` : `<span class="good">✓ 빈칸 없음</span>`,
+    c.nulls ? `<b class="warn">빈칸 ${count(c.nulls)}개${pct(c.nulls)}</b>` : `<span class="good">빈칸 없음</span>`,
     range(c.min, c.max),
     c.min_len != null && (c.min_len === c.max_len ? `모두 ${c.min_len}글자` : `${c.min_len}~${c.max_len}글자`),
     variety,
-    c.blank && `<span class="warn">⚠ 아무 글자도 없는 칸 ${count(c.blank)}</span>`,
-    c.spaces && `<span class="warn">⚠ 앞뒤에 공백이 있는 칸 ${count(c.spaces)}</span>`,
-    c.numeric && `숫자처럼 생긴 칸 ${count(c.numeric)} / ${count(n)}`,
-    guess.date_format && c.kind === "string" && `날짜처럼 생겼어요 (${esc(guess.date_format)})`,
-    exact && `<span title="Parquet 파일 정보로 구한 전체 기준 값(데이터는 읽지 않음)">파일 전체: ${exact.nulls ? `빈칸 ${count(exact.nulls)}` : "빈칸 없음"}${exact.min != null ? ` · ${range(exact.min, exact.max)}` : ""}${exact.constant ? " · 값이 하나뿐" : ""}</span>`,
+    c.blank && `<span class="warn">글자가 하나도 없는 칸 ${count(c.blank)}개</span>`,
+    c.spaces && `<span class="warn">앞뒤에 공백이 있는 칸 ${count(c.spaces)}개</span>`,
+    c.numeric && `숫자로 보이는 칸 ${count(c.numeric)}개(전체 ${count(n)}개 중)`,
+    guess.date_format && c.kind === "string" && `날짜로 보여요(형식 ${esc(guess.date_format)})`,
+    exact && `<span title="Parquet 파일 정보로 구한 전체 기준 값이에요. 데이터는 읽지 않아요">파일 전체 기준: ${exact.nulls ? `빈칸 ${count(exact.nulls)}개` : "빈칸 없음"}${exact.min != null ? `, ${range(exact.min, exact.max)}` : ""}${exact.constant ? ", 값이 하나뿐" : ""}</span>`,
   ];
   return rows.filter(Boolean).map(r => `<div>${r}</div>`).join("");
 }
@@ -572,35 +583,35 @@ function gridColumns() {
   return preview.rows.columns.map((name, k) => ({ name, k, derived: preview.derived[k], c: all.find(x => x.name === preview.sources[k]) })).filter(x => !drops.includes(x.name));
 }
 function showCounts() {
-  $("counts").textContent = !prof ? "" : preview ? `행 수: 전 ${preview.before.toLocaleString()} → 후 ${preview.after.toLocaleString()}${preview.local ? " · 이 PC에서 계산" : ""}` : "[미리보기]를 누르면 전처리한 결과 20행이 여기에 표시됩니다.";
-  $("stale").textContent = preview && snap() !== shot ? "설정이 바뀌었습니다. 미리보기를 다시 누르세요" : "";
+  $("counts").textContent = !prof ? "" : preview ? `행 수: 전처리 전 ${preview.before.toLocaleString()}행, 후 ${preview.after.toLocaleString()}행${preview.local ? "(이 PC에서 계산)" : ""}` : "[미리보기]를 누르면 전처리한 결과 20행을 여기서 볼 수 있어요.";
+  $("stale").textContent = preview && snap() !== shot ? "설정이 바뀌었어요. [미리보기]를 다시 눌러 주세요" : "";
 }
 // 머리 줄(큰 행 수)과 정보 탭의 데이터 표: 미리보기 뒤에는 전처리한 결과 20행, 전에는 표본의 앞 20행(원래 값). 컬럼 이름을 누르면 ③ 컬럼 정리.
 // 명세서 탭(renderSpec)도 함께 다시 그린다.
 function renderGrid() {
   heads.clear();
   $("p-big").textContent = !prof ? "테이블을 고르세요" : prof.rows === null ? "행 수 세지 않음" : `${prof.rows.toLocaleString()}행`;
-  $("p-sub").textContent = prof ? `${S.base} · 컬럼 ${prof.columns.length}개` : "오른쪽 ① 데이터에서 연결과 테이블을 고르세요.";
+  $("p-sub").textContent = prof ? `${S.base}의 컬럼 ${prof.columns.length}개` : "오른쪽 데이터 단계에서 연결과 테이블을 고르면 여기에 데이터가 나와요.";
   showSampled();
   $("sug-all").classList.toggle("hidden", !prof?.columns.some(c => allSuggest(c).length));
   $("prune").classList.toggle("hidden", !prof);
-  $("sug-all").textContent = "추천 모두 적용" + (status === "patterns" ? " (타입 추천 확인 중)" : "");
+  $("sug-all").textContent = "추천 모두 적용" + (status === "patterns" ? " (타입 추천 확인 중…)" : "");
   showCounts();
   showPrepSummaries();
   renderSpec();
-  if (!prof) { $("info-note").textContent = ""; $("grid").innerHTML = '<span class="empty">테이블을 고르면 데이터가 여기에 표시됩니다.</span>'; return; }
-  $("info-note").textContent = preview ? "전처리한 결과의 앞 20행입니다." : first ? "원래 데이터(표본)의 앞 20행입니다. [미리보기]를 누르면 전처리한 결과로 바뀝니다." : statsOn ? "데이터를 읽는 중…" : "통계를 꺼서 데이터를 읽지 않았습니다. [미리보기]를 누르면 전처리한 결과 20행이 보입니다.";
+  if (!prof) { $("info-note").textContent = ""; $("grid").innerHTML = '<span class="empty">테이블을 고르면 여기에 데이터가 나와요.</span>'; return; }
+  $("info-note").textContent = preview ? "전처리한 결과의 앞 20행이에요." : first ? "원래 데이터 표본의 앞 20행이에요. [미리보기]를 누르면 전처리한 결과로 바뀌어요." : statsOn ? "데이터를 읽는 중…" : "통계를 꺼 두어 데이터를 읽지 않았어요. [미리보기]를 누르면 전처리한 결과 20행이 보여요.";
   const head = el("tr"), body = el("tbody"), items = gridColumns();
   for (const x of items) {
     if (x.derived) {
-      const th = el("th", { title: `${x.name}: ${preview.sources[x.k] ? preview.sources[x.k] + "에서 만든" : "④에서 만든"} 새 컬럼 (${KIND_TEXT[kindOf(preview.types[x.k])]})` },
+      const th = el("th", { title: `${x.name}: ${preview.sources[x.k] ? preview.sources[x.k] + " 컬럼에서" : "새 컬럼 단계에서"} 만든 새 컬럼이에요(종류: ${KIND_TEXT[kindOf(preview.types[x.k])]})` },
         el("div", { className: "colhead" }, el("span", { textContent: x.name }), el("span", { className: "worked", textContent: "새 컬럼" })));
       heads.set(x.name, th);
       head.append(th);
       continue;
     }
     const rename = edits[x.c.name].rename.trim();
-    const th = el("th", { title: `${x.c.name} (누르면 오른쪽 ③ 컬럼 정리에서 고칩니다)`, className: "pick" + (x.c.name === picked ? " on" : ""), onclick: () => pickColumn(x.c.name) },
+    const th = el("th", { title: `${x.c.name}: 누르면 오른쪽 컬럼 정리에서 고칠 수 있어요`, className: "pick" + (x.c.name === picked ? " on" : ""), onclick: () => pickColumn(x.c.name) },
       el("div", { className: "colhead" }, el("span", { textContent: x.c.name + (x.c.from ? " (복사)" : "") + (rename ? ` → ${rename}` : "") }), ...(isWorked(x.c) ? [el("span", { className: "worked", textContent: "정리함" })] : [])));
     heads.set(x.c.name, th);
     head.append(th);
@@ -677,7 +688,7 @@ function setKeep(keep) {  // 저장한 구성(글자 또는 객체)에서 칸을
 const fillAnaValues = () => {  // 값 컬럼: 고른 집계의 첫 컬럼 칸이 받는 종류만
   for (const [id, key] of [["a-gval", "groups"], ["a-tval", "trend"]]) {
     const p = pickers[key], was = $(id).value, cols = p ? p.xColumns(A.cols) : A.cols.filter(c => c[1] === "num");
-    fill($(id), cols.map(c => c[0]), "값 없음 (개수)");
+    fill($(id), cols.map(c => c[0]), "없음(행 개수만 세기)");
     if (cols.some(c => c[0] === was)) $(id).value = was;
     $(id).classList.toggle("hidden", !!p && p.yMode() === "none");
   }
@@ -705,11 +716,11 @@ $("fx-find").onclick = async () => {
 initFuncs();
 // ④ 새 컬럼: 계산 컬럼 목록과 PCA에 넣을 숫자 컬럼(남긴 원래·복사 컬럼 중 숫자인 것). 계산 식은 서버가 검사한다.
 function renderDerive() {
-  $("formulas").replaceChildren(...formulas.map((f, i) => el("div", {}, chip(`${f.name} = ${f.expr}${f.order ? ` · 정렬 ${f.order.join(", ")}` : ""}${f.group ? ` · 묶음 ${f.group.join(", ")}` : ""}`, () => { formulas.splice(i, 1); preview = null; showAll(); }))));
+  $("formulas").replaceChildren(...formulas.map((f, i) => el("div", {}, chip(`${f.name} = ${f.expr}${f.order || f.group ? ` (${[f.order && "정렬: " + f.order.join(", "), f.group && "묶음: " + f.group.join(", ")].filter(Boolean).join(", ")})` : ""}`, () => { formulas.splice(i, 1); preview = null; showAll(); }))));
   const nums = prof ? kept().filter(c => isNum(c, edits[c.name].ops)).map(c => c.name) : [];
   pca.columns = pca.columns.filter(n => nums.includes(n));
   $("pca-cols").replaceChildren(...nums.map(n => el("label", {}, el("input", { type: "checkbox", checked: pca.columns.includes(n), onchange: e => {
-    if (e.target.checked && pca.columns.length >= SERVER.pca_max) { e.target.checked = false; return fail(`PCA에는 ${SERVER.pca_max}개까지 넣을 수 있습니다.`); }
+    if (e.target.checked && pca.columns.length >= SERVER.pca_max) { e.target.checked = false; return fail(`PCA에는 컬럼을 ${SERVER.pca_max}개까지 넣을 수 있어요.`); }
     pca.columns = e.target.checked ? [...pca.columns, n] : pca.columns.filter(x => x !== n);
     preview = null; renderGrid(); showPrepSummaries();
   } }), " " + n)));
@@ -719,8 +730,8 @@ $("fx-guide").textContent = SERVER.formula_guide;
 $("fx-add").onclick = () => {
   const name = $("fx-name").value.trim(), expr = $("fx-expr").value.trim();
   const order = $("fx-order").value.split(";").map(x => x.trim()).filter(Boolean), group = $("fx-group").value.split(",").map(x => x.trim()).filter(Boolean);
-  if (!name || !expr) return fail("계산 컬럼의 이름과 식을 입력하세요.");
-  if (formulas.some(f => f.name === name)) return fail(`'${name}' 계산 컬럼이 이미 있습니다.`);
+  if (!name || !expr) return fail("계산 컬럼의 이름과 식을 모두 적어 주세요.");
+  if (formulas.some(f => f.name === name)) return fail(`'${name}' 계산 컬럼이 이미 있어요. 다른 이름을 적어 주세요.`);
   formulas.push({ name, expr, ...(order.length ? { order } : {}), ...(group.length ? { group } : {}) });
   $("fx-name").value = $("fx-expr").value = $("fx-order").value = $("fx-group").value = "";
   fail(""); preview = null; showAll();
@@ -741,7 +752,7 @@ function renderGeo() {
   const table = title => el("select", { id: "geo-table", style: "flex:none", title, onchange: geoLoadCols }, ...names(["", ...geoTables]));
   const typed = Object.fromEntries([...$("geo-form").querySelectorAll("select, input")].map(e => [e.id, e.value]));  // 다시 그려도 고른·적은 값은 남긴다
   $("geo-form").replaceChildren(...{
-    tm: [pick("geo-x", nums, "x(동서) 컬럼"), pick("geo-y", nums, "y(남북) 컬럼"), el("select", { id: "geo-epsg", style: "flex:none", title: "좌표계: 값의 범위로 서버가 맞는 것을 추천해요(위 안내)" }, ...EPSG_LIST.map(([n, t]) => el("option", { value: n, textContent: t }))), text("geo-lon-name", "경도 이름(경도)", 100), text("geo-lat-name", "위도 이름(위도)", 100)],
+    tm: [pick("geo-x", nums, "x(동서) 컬럼"), pick("geo-y", nums, "y(남북) 컬럼"), el("select", { id: "geo-epsg", style: "flex:none", title: "좌표계예요. 값 범위로 맞을 만한 것을 위에 안내해요" }, ...EPSG_LIST.map(([n, t]) => el("option", { value: n, textContent: t }))), text("geo-lon-name", "경도 컬럼 이름", 100), text("geo-lat-name", "위도 컬럼 이름", 100)],
     nearest: [pick("geo-lat", nums, "점의 위도 컬럼"), pick("geo-lon", nums, "점의 경도 컬럼"), table("지점 목록 테이블"), ...refs, pick("geo-label", geoRefCols, "지점 이름 컬럼", "(이름 없이 거리만)")],
     region: [pick("geo-lat", nums, "점의 위도 컬럼"), pick("geo-lon", nums, "점의 경도 컬럼"), table("GeoJSON을 연결한 영역 테이블"), text("geo-path", "또는 GeoJSON 파일 경로", 180), text("geo-take", "붙일 영역 컬럼(쉼표)", 150), text("geo-prefix", "앞 글자(영역_)", 90)] }[op]);
   for (const e of $("geo-form").querySelectorAll("select, input")) if (typed[e.id] !== undefined && (e.tagName === "INPUT" || [...e.options].some(o => o.value === typed[e.id]))) e.value = typed[e.id];
@@ -766,15 +777,15 @@ $("geo-op").onchange = async () => {
 $("geo-add").onclick = () => {
   const op = $("geo-op").value, v = id => $(id)?.value.trim() ?? "";
   if (op === "tm") {
-    if (!v("geo-x") || !v("geo-y")) return fail("x·y 컬럼을 고르세요(숫자 컬럼).");
+    if (!v("geo-x") || !v("geo-y")) return fail("x와 y 숫자 컬럼을 골라 주세요.");
     geoSteps.push({ op, x: v("geo-x"), y: v("geo-y"), epsg: +v("geo-epsg"), ...(v("geo-lon-name") ? { lon: v("geo-lon-name") } : {}), ...(v("geo-lat-name") ? { lat: v("geo-lat-name") } : {}) });
   } else {
-    if (!v("geo-lat") || !v("geo-lon")) return fail("점의 위도·경도 컬럼을 고르세요.");
+    if (!v("geo-lat") || !v("geo-lon")) return fail("위도와 경도 컬럼을 골라 주세요.");
     if (op === "nearest") {
-      if (!v("geo-table") || !v("geo-ref-lat") || !v("geo-ref-lon")) return fail("지점 테이블과 그 위도·경도 컬럼을 고르세요.");
+      if (!v("geo-table") || !v("geo-ref-lat") || !v("geo-ref-lon")) return fail("지점 테이블과 그 테이블의 위도·경도 컬럼을 골라 주세요.");
       geoSteps.push({ op, lat: v("geo-lat"), lon: v("geo-lon"), table: v("geo-table"), ...(S.schema ? { schema: S.schema } : {}), ref_lat: v("geo-ref-lat"), ref_lon: v("geo-ref-lon"), ...(v("geo-label") ? { label: v("geo-label") } : {}) });
     } else {
-      if (!v("geo-table") && !v("geo-path")) return fail("영역 테이블(GeoJSON을 연결한 것)이나 GeoJSON 파일 경로를 적으세요.");
+      if (!v("geo-table") && !v("geo-path")) return fail("영역 테이블을 고르거나 GeoJSON 파일 경로를 적어 주세요.");
       geoSteps.push({ op, lat: v("geo-lat"), lon: v("geo-lon"), ...(v("geo-path") ? { path: v("geo-path") } : { table: v("geo-table"), ...(S.schema ? { schema: S.schema } : {}) }),
         take: v("geo-take").split(",").map(x => x.trim()).filter(Boolean), ...(v("geo-prefix") ? { prefix: v("geo-prefix") } : {}) });
     }
@@ -786,11 +797,11 @@ $("prune").onclick = () => busy($("prune"), async () => {
   try { showPrune((await api("/api/prune", { schema: S.schema, base: S.base, sample })).columns); fail(""); } catch (e) { fail(e.message); }
 });
 function showPrune(found) {
-  if (!found.length) { $("prune-box").textContent = "뺄 만한 컬럼이 없습니다(표본 기준)."; return; }
+  if (!found.length) { $("prune-box").textContent = "표본으로 보면 뺄 만한 컬럼이 없어요."; return; }
   const left = found.filter(x => edits[x.column]?.keep);
   const drop = names => { names.forEach(n => { if (edits[n]) edits[n].keep = false; }); preview = null; showAll(); showPrune(found); };
-  $("prune-box").replaceChildren(el("div", {}, "뺄 만한 컬럼(표본 기준) ", ...(left.length ? [el("button", { className: "ghost", textContent: "모두 빼기", onclick: () => drop(left.map(x => x.column)) })] : [])),
-    ...found.map(x => el("div", {}, `${x.column}: ${x.reason} `, edits[x.column]?.keep ? el("button", { className: "ghost", textContent: "빼기", onclick: () => drop([x.column]) }) : el("span", { className: "hint", textContent: "(뺌)" }))));
+  $("prune-box").replaceChildren(el("div", {}, "표본으로 찾은 뺄 만한 컬럼 ", ...(left.length ? [el("button", { className: "ghost", textContent: "모두 빼기", onclick: () => drop(left.map(x => x.column)) })] : [])),
+    ...found.map(x => el("div", {}, `${x.column}: ${x.reason} `, edits[x.column]?.keep ? el("button", { className: "ghost", textContent: "빼기", onclick: () => drop([x.column]) }) : el("span", { className: "hint", textContent: "(뺐어요)" }))));
 }
 // 원격 DB의 전처리를 어디서 계산할지(설정 prep_where). 서버가 미리보기·실행 때 읽는다.
 $("prep-where").value = saved("prep_where") || "all";
@@ -867,7 +878,7 @@ async function openTable(base, config, strict) {  // strict: 표를 못 열면 �
     showAll();
     if (pickers.keep) Funcs.loadSupport(S.base, S.schema).then(() => Object.values(pickers).forEach(p => p.refresh()));  // 이 연결이 못 하는 함수는 안내를 붙이거나 막는다
     loadSpecView();
-    if (remembered && !$("err-prep").textContent) $("ok-run").textContent = "지난번에 이 테이블에 쓴 전처리를 채웠습니다. [미리보기]로 확인하세요.";
+    if (remembered && !$("err-prep").textContent) $("ok-run").textContent = "지난번에 이 테이블에 쓴 전처리를 불러왔어요. [미리보기]로 확인해 보세요.";
   } catch (e) { if (mine === token) { if (strict) throw e; fail(e.message); } return; }
   if (statsOn) await computeStats(mine);
   else { status = "off"; renderGrid(); }
@@ -886,8 +897,8 @@ $("stats-on").onchange = () => {
 // 통계가 어느 표본에서 나왔는지: 표본 행 수, 읽은 방법(넘어간 방법은 마우스를 올리면), 구한 때. [다시 구하기]는 통계가 있을 때만.
 function showSampled() {
   const s = prof?.sampled;
-  $("sampled").textContent = s ? `표본 ${s.rows.toLocaleString()}행 · ${SERVER.sample_methods[s.method] ?? s.method} · ${s.saved.replace("T", " ")} 구함` : "";
-  $("sampled").title = s?.passed.length ? "넘어간 방법: " + s.passed.map(([m, why]) => `${SERVER.sample_methods[m] ?? m}(${why})`).join(" / ") : "";
+  $("sampled").textContent = s ? `${s.saved.replace("T", " ")}에 표본 ${s.rows.toLocaleString()}행으로 구한 통계예요.` : "";
+  $("sampled").title = s ? `읽은 방법: ${SERVER.sample_methods[s.method] ?? s.method}` + (s.passed.length ? "\n건너뛴 방법: " + s.passed.map(([m, why]) => `${SERVER.sample_methods[m] ?? m}(${why})`).join(", ") : "") : "";
   $("resample").classList.toggle("hidden", !s || !!status);
 }
 $("resample").onclick = async () => { await computeStats(token, true); await loadFirst(); };
@@ -921,12 +932,12 @@ async function computeStats(mine, fresh = false) {
 }
 $("base").onchange = () => { $("rsaved").value = ""; openTable($("base").value); };  // 다른 테이블로 바꾸면 불러온 구성 이름을 놓는다([저장]이 그 구성을 다른 테이블로 덮어쓰지 않게)
 $("conn-open").onclick = () => openConnect();
-new MutationObserver(() => $("conn-now").textContent = connected ? `연결: ${connName}` : "연결 안 됨").observe($("crumb-text"), { childList: true });  // 연결 이름이 바뀌면 따라 바꾼다
+new MutationObserver(() => $("conn-now").textContent = connected ? `연결: ${connName}` : "연결되지 않았어요").observe($("crumb-text"), { childList: true });  // 연결 이름이 바뀌면 따라 바꾼다
 
 // 데이터 명세서: 테이블·컬럼 설명과 파티션 키(표본을 최신 파티션에서 읽을 때). 경로만 저장한다.
 const showSpec = d => {
   $("spec-path").value = d.path;
-  $("spec-info").textContent = d.error ?? (d.path ? `명세서의 테이블 ${d.tables.length}개${d.tables.length ? ": " + d.tables.slice(0, 10).join(", ") + (d.tables.length > 10 ? " …" : "") : ""}` : "");
+  $("spec-info").textContent = d.error ?? (d.path ? `명세서에 테이블 ${d.tables.length}개가 있어요${d.tables.length ? ": " + d.tables.slice(0, 10).join(", ") + (d.tables.length > 10 ? " …" : "") : ""}` : "");
   $("spec-info").className = d.error ? "err" : "hint";
 };
 api("/api/spec").then(showSpec).catch(() => {});
@@ -945,8 +956,8 @@ async function loadSpecView() {
 // 명세서 탭: 테이블 설명·파티션(명세서 파일)과 컬럼마다 한 줄 — 이름, 쉬운 요약(표본 통계), 명세서의 설명, 추천. 줄을 누르면 ③ 컬럼 정리.
 function renderSpec() {
   const box = $("spec-view"), v = specView ?? { columns: {} };
-  if (!prof) return box.replaceChildren(el("div", { className: "empty", textContent: "테이블을 고르면 컬럼마다의 요약이 여기에 보입니다." }));
-  const part = v.partition && `파티션: ${v.partition.column} (${"recent_days" in v.partition ? `최근 ${v.partition.recent_days}일만 표본으로` : `${v.partition.latest}만 표본으로`})`;
+  if (!prof) return box.replaceChildren(el("div", { className: "empty", textContent: "테이블을 고르면 여기에 컬럼별 요약이 나와요." }));
+  const part = v.partition && `파티션 ${v.partition.column}: ${"recent_days" in v.partition ? `최근 ${v.partition.recent_days}일만` : `${v.partition.latest}만`} 표본으로 읽어요`;
   const rows = cols().map(c => {
     const rename = edits[c.name].rename.trim(), name = el("td", { className: "cname" }, c.name + (c.from ? " (복사)" : "") + (rename ? ` → ${rename}` : ""));
     if (isWorked(c)) name.append(el("div", { className: "worked", textContent: "정리함" }));
@@ -959,10 +970,10 @@ function renderSpec() {
       el("td", {}, v.columns[c.from || c.name] || el("span", { className: "empty", textContent: v.path ? "설명 없음" : "—" })), el("td", { className: "sugs" }, ...sugs));
   });
   const have = prof.columns.map(c => c.name), gone = Object.keys(v.columns).filter(n => !have.includes(n));
-  rows.push(...gone.map(n => el("tr", {}, el("td", { className: "cname" }, n), el("td", {}, el("span", { className: "warn", textContent: "명세서에만 있고 테이블에는 없음" })), el("td", {}, v.columns[n]), el("td"))));
+  rows.push(...gone.map(n => el("tr", {}, el("td", { className: "cname" }, n), el("td", {}, el("span", { className: "warn", textContent: "명세서에만 있고 테이블에는 없어요" })), el("td", {}, v.columns[n]), el("td"))));
   box.replaceChildren(
     ...(v.description ? [el("p", {}, el("b", { textContent: S.base }), " — " + v.description)] : []), ...(part ? [el("p", { className: "hint", textContent: part })] : []),
-    el("div", { className: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ...["컬럼", "요약 (표본 기준)", "설명 (명세서)", "추천"].map(t => el("th", { textContent: t })))), el("tbody", {}, ...rows))));
+    el("div", { className: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ...["컬럼", "표본 요약", "명세서 설명", "추천"].map(t => el("th", { textContent: t })))), el("tbody", {}, ...rows))));
 }
 $("spec-read").onclick = () => busy($("spec-read"), async () => {
   try {
@@ -979,7 +990,7 @@ function restore(c) {
   const copyNames = c.copies.map(x => x.name), names = prof.columns.map(x => x.name);
   const used = [...Object.keys(c.edits).filter(n => !copyNames.includes(n)), ...c.copies.map(x => x.from)];
   const gone = [...new Set(used)].filter(n => !names.includes(n));
-  if (gone.length) { $("rsaved").value = ""; fail(`구성의 컬럼이 이 테이블에 없습니다: ${gone.join(", ")}`); return; }
+  if (gone.length) { $("rsaved").value = ""; fail(`저장한 설정의 컬럼 중 이 테이블에 없는 것이 있어요: ${gone.join(", ")}`); return; }
   const d = structuredClone(c);
   for (const k of Object.keys(edits)) if (!names.includes(k)) delete edits[k];  // 지금 없는 복사 컬럼의 입력이 남지 않게(테이블 컬럼의 기본 입력은 둔다)
   Object.assign(edits, d.edits);
@@ -1000,15 +1011,15 @@ const rememberTable = () => api("/api/prep/table", { schema: S.schema, base: S.b
 let recipes = {};
 function showRecipes(d, name = "") {
   recipes = d.recipes;
-  fill($("rsaved"), Object.keys(recipes), "불러오기");
+  fill($("rsaved"), Object.keys(recipes), "저장한 설정 불러오기");
   $("rsaved").value = name;
 }
 api("/api/recipes").then(showRecipes).catch(() => {});
 $("rsave").onclick = () => {
-  if (!prof) return fail("테이블을 고르세요.");
+  if (!prof) return fail("먼저 테이블을 골라 주세요.");
   return busy($("rsave"), async () => {
     const name = $("rname").value.trim() || $("rsaved").value;  // 이름을 비우면 지금 고른 구성에 덮어쓴다.
-    try { showRecipes(await api("/api/recipes", { name, recipe: config() }), name); $("rname").value = ""; fail(""); flash("구성을 저장했어요"); } catch (e) { fail(e.message); }
+    try { showRecipes(await api("/api/recipes", { name, recipe: config() }), name); $("rname").value = ""; fail(""); flash("설정을 저장했어요"); } catch (e) { fail(e.message); }
   });
 };
 $("rdel").onclick = () => busy($("rdel"), async () => {
@@ -1019,14 +1030,14 @@ $("rdel").onclick = () => busy($("rdel"), async () => {
 async function openConfig(c) {
   const was = S.schema, moved = c.schema !== was;
   if (moved) {
-    if (![...$("schema").options].some(o => o.value === c.schema)) throw new Error(`‘${c.schema}’ 스키마가 지금 연결에 없습니다`);
+    if (![...$("schema").options].some(o => o.value === c.schema)) throw new Error(`지금 연결에는 ‘${c.schema}’ 스키마가 없어요`);
     $("schema").value = c.schema;
     await loadTables();
   }
   if (![...$("base").options].some(o => o.value === c.base)) {
     if (moved) { $("schema").value = was; await loadTables(); }
     $("base").value = S.base;
-    throw new Error(`‘${c.base}’ 테이블이 지금 연결에 없습니다`);
+    throw new Error(`지금 연결에는 ‘${c.base}’ 테이블이 없어요`);
   }
   $("base").value = c.base;
   await openTable(c.base, c, true);  // 되돌리기·초안·저장한 구성 모두 실패를 받아 안내한다
@@ -1056,7 +1067,7 @@ Object.assign($("sample"), { value: sample, min: SAMPLE_LOW, max: SAMPLE_HIGH })
 $("sample").onchange = () => {
   const n = Number($("sample").value);
   const ok = Number.isInteger(n) && n >= SAMPLE_LOW && n <= SAMPLE_HIGH;
-  $("err-sample").textContent = ok ? "" : `${SAMPLE_LOW.toLocaleString()}–${SAMPLE_HIGH.toLocaleString()} 사이의 정수를 넣으세요.`;
+  $("err-sample").textContent = ok ? "" : `${SAMPLE_LOW.toLocaleString()}~${SAMPLE_HIGH.toLocaleString()} 사이의 정수를 넣어 주세요.`;
   if (ok) { sample = n; saveSetting({ sample }); }
 };
 
@@ -1077,16 +1088,16 @@ function recipe() {
   if (bad.length) {
     pickColumn(bad[0][0]);
     bad.forEach(([, st]) => lines.get(st)?.classList.add("bad"));
-    throw new Error(`입력이 비어 있거나 쓸 수 없는 전처리가 있습니다: ${[...new Set(bad.map(([name]) => name))].join(", ")}`);
+    throw new Error(`비어 있거나 잘못 적은 정리 방법이 있어요. 빨갛게 표시한 칸을 고쳐 주세요: ${[...new Set(bad.map(([name]) => name))].join(", ")}`);
   }
-  if (pca.columns.length === 1) throw new Error("PCA에는 숫자 컬럼을 2개 이상 고르세요.");
+  if (pca.columns.length === 1) throw new Error("PCA에는 숫자 컬럼을 2개 이상 골라 주세요.");
   return { schema: S.schema, base: S.base, columns, filters, copies, drop: drops, sorts,
     ...(formulas.length ? { formulas } : {}), ...(pca.columns.length ? { pca: { columns: pca.columns, n: pca.n } } : {}), ...(geoSteps.length ? { geo: geoSteps } : {}),
     ...(dedupe.length ? { dedupe, ...(keepNow() ? { dedupe_keep: keepNow() } : {}) } : {}), ...($("downcast").checked ? { downcast: true } : {}), ...(statsOn ? {} : { count: false }) };  // 통계를 끄면 원격 COUNT도 안 한다
 }
 // [미리보기]·[실행]·[중복 세기]가 함께 쓴다: 테이블을 골랐는지 보고, 레시피를 만들어 fn에 넘기고, 오류는 카드에 보인다.
 function act(button, fn) {
-  if (!prof) return fail("테이블을 고르세요.");
+  if (!prof) return fail("먼저 테이블을 골라 주세요.");
   return busy(button, async () => {
     $("ok-run").textContent = "";
     try { await fn(recipe()); fail(""); } catch (e) { fail(e.message); }
@@ -1101,27 +1112,27 @@ $("preview").onclick = () => act($("preview"), async r => {
   const now = preview.rows.columns.map((name, k) => ({ name, source: preview.sources[k], type: preview.types[k] })).filter((_, k) => preview.derived[k]);
   deriv = [...now, ...deriv.filter(d => drops.includes(d.name) && !now.some(n => n.name === d.name))];  // 끈 파생 컬럼은 응답에 없어도 목록에 남긴다.
   const p = preview.info?.pca;
-  $("pca-info").textContent = p ? `설명된 분산: ${p.names.map((n, i) => `${n} ${(p.ratio[i] * 100).toFixed(1)}%`).join(", ")} (누적 ${(p.cumulative.at(-1) * 100).toFixed(1)}%) · 계산에 쓴 행 ${p.rows.toLocaleString()}` : "";
+  $("pca-info").textContent = p ? `성분별 설명력: ${p.names.map((n, i) => `${n} ${(p.ratio[i] * 100).toFixed(1)}%`).join(", ")}, 누적 ${(p.cumulative.at(-1) * 100).toFixed(1)}%. 계산에 쓴 행은 ${p.rows.toLocaleString()}개예요.` : "";
   showAll();
 });
 $("dupes").onclick = () => act($("dupes"), async r => {
   const d = await timed("preview", () => api("/api/dupes", r));
-  $("dd-result").textContent = `중복 묶음 ${d.groups.toLocaleString()}개, 빠질 행 ${d.rows.toLocaleString()}개` + (d.conflicts != null ? `, 값이 여럿이라 빈 값이 되는 묶음 ${d.conflicts.toLocaleString()}개` : "");
+  $("dd-result").textContent = `중복 묶음 ${d.groups.toLocaleString()}개, 빠질 행 ${d.rows.toLocaleString()}개` + (d.conflicts != null ? `, 값이 여러 개라 빈 값이 되는 묶음 ${d.conflicts.toLocaleString()}개` : "");
 });
 // 새 테이블을 만들 때는 한 번 더 눌러야 실행한다. 다른 것을 건드리면 원래대로 돌아간다.
 $("run").onclick = () => {
   const name = $("tname").value.trim();
   if (prof && $("t-table").checked && confirming !== name) {
-    if (!name) return fail("새 테이블 이름을 입력하세요.");
+    if (!name) return fail("새 테이블 이름을 적어 주세요.");
     confirming = name;
-    $("run").textContent = `‘${name}’ 테이블을 만듭니다. 한 번 더 누르면 실행`;
+    $("run").textContent = `한 번 더 누르면 ‘${name}’ 테이블을 만들어요`;
     return;
   }
   resetRun();
   return act($("run"), async r => {
     if ($("t-table").checked) {
       const d = await timed("run", () => api("/api/run", { recipe: r, target: { kind: "table", name } }));
-      $("ok-run").textContent = `‘${name}’ 테이블을 만들었습니다 (${d.rows.toLocaleString()}행)`;
+      $("ok-run").textContent = `‘${name}’ 테이블을 만들었어요(${d.rows.toLocaleString()}행)`;
       await loadTables();  // 새 테이블이 목록에 들어온다. 지금 고른 테이블과 전처리는 그대로 둔다.
       $("base").value = S.base;
     } else {
@@ -1147,7 +1158,7 @@ function showPrepSummaries() {
   put("sum-p-filters", filters.length ? `${filters.length}개` : "없음");
   const worked = prof ? cols().filter(c => isWorked(c)).length : 0;
   put("sum-p-clean", worked ? `${worked}개 컬럼` : "없음");
-  put("sum-p-derive", [formulas.length ? `계산 ${formulas.length}개` : "", pca.columns.length ? `PCA ${pca.columns.length}→${pca.n}` : "", geoSteps.length ? `좌표 ${geoSteps.length}개` : ""].filter(Boolean).join(", ") || "없음");
+  put("sum-p-derive", [formulas.length ? `계산 ${formulas.length}개` : "", pca.columns.length ? `PCA ${pca.columns.length}개를 ${pca.n}개로` : "", geoSteps.length ? `좌표 ${geoSteps.length}개` : ""].filter(Boolean).join(", ") || "없음");
   put("sum-p-dedupe", dedupe.length ? dedupe.join(", ") : "없음");
   put("sum-p-sorts", sorts.length ? sorts.join(", ") : "없음");
   put("sum-p-save", $("t-table").checked ? `새 테이블 ${$("tname").value.trim()}` : $("fmt").value === "csv" ? "CSV 파일" : "Parquet 파일");
@@ -1167,7 +1178,7 @@ document.querySelectorAll("#views button").forEach(b => b.onclick = () => showVi
 // ---------- 분석 ----------
 // A.cols: 분석할 표의 [컬럼, 종류(num·date·text)]. A.result: 마지막 /api/analyze 결과(how·조건 글 포함). A.view: 보고 있는 그래프.
 const A = { cols: [], result: null, view: null, chart: null };
-const VIEW_NAMES = { hist: "히스토그램", box: "상자 그림", values: "값 빈도", heat: "히트맵", scatter: "산점도", groups: "그룹 비교", trend: "추이", funnel: "흐름" };
+const VIEW_NAMES = { hist: "히스토그램", box: "상자 그림", values: "값 빈도", heat: "히트맵", scatter: "산점도", groups: "그룹 비교", trend: "추이", funnel: "퍼널" };
 const VIEW_RATIOS = { box: 2.4, heat: 1, scatter: 4 / 3 };  // 나머지는 16:9
 $("a-max-corr").textContent = SERVER.analysis.max_corr;
 $("a-max-points").textContent = SERVER.analysis.max_points.toLocaleString();
@@ -1176,7 +1187,7 @@ $("a-max-steps").textContent = SERVER.analysis.max_steps;
 const FLOW = { steps: [], values: [] };
 function showSteps() {
   $("a-fsteps").replaceChildren(...FLOW.steps.map((name, i) => {
-    const chip = el("span", { className: "f-step", draggable: true, title: "끌어서 순서를 바꿉니다" }, `${i + 1}. ${name}`,
+    const chip = el("span", { className: "f-step", draggable: true, title: "끌어서 순서를 바꿀 수 있어요" }, `${i + 1}. ${name}`,
       el("button", { className: "ghost", textContent: "×", title: "이 단계 빼기", onclick: () => { FLOW.steps.splice(i, 1); showSteps(); } }));
     chip.ondragstart = e => { e.dataTransfer.setData("text/plain", String(i)); e.dataTransfer.effectAllowed = "move"; };
     chip.ondragover = e => { e.preventDefault(); chip.classList.add("over"); };
@@ -1231,7 +1242,7 @@ $("a-prep").onchange = loadAnaColumns;
 // 분석할 표의 컬럼(전처리 결과의 이름·타입)을 표본으로 받아 고르는 칸들을 채운다.
 async function loadAnaColumns() {
   const mine = ++anaCall;
-  let cols = [], err = "전처리 탭에서 테이블을 고르세요.";
+  let cols = [], err = "전처리 탭에서 먼저 테이블을 골라 주세요.";
   if (prof) {
     try { cols = (await api("/api/analyze", { recipe: anaRecipe(), how: { kind: "columns" }, sample })).columns; err = ""; }
     catch (e) { err = e.message; }
@@ -1255,7 +1266,7 @@ async function loadAnaColumns() {
   if ($("a-fstep").value !== before || !FLOW.values.length) loadStepValues();
   const picked = new Set([...$("a-corr-cols").querySelectorAll("input:checked")].map(b => b.value));
   $("a-corr-cols").replaceChildren(...nums.map((n, i) => el("label", {}, el("input", { type: "checkbox", value: n, checked: picked.size ? picked.has(n) : i < 8 }), " " + n)));
-  $("a-tcol").title = names("date").length ? "" : "날짜 컬럼이 없습니다. 전처리에서 타입을 날짜로 바꾸면 고를 수 있습니다";
+  $("a-tcol").title = names("date").length ? "" : "날짜 컬럼이 없어요. 전처리에서 타입을 날짜로 바꾸면 고를 수 있어요";
 }
 // 오른쪽 패널에서 고른 분석(서버의 how)
 function anaHow() {
@@ -1272,8 +1283,8 @@ function anaHow() {
 }
 // 구하기(표본) 또는 전체로 다시 구하기(마지막 분석을 테이블 전체로)
 async function runAna(full) {
-  if (!prof) return say("err-ana", "전처리 탭에서 테이블을 고르세요.");
-  if (full && !A.result) return say("err-ana", "먼저 [구하기]로 표본에서 분석하세요.");
+  if (!prof) return say("err-ana", "전처리 탭에서 먼저 테이블을 골라 주세요.");
+  if (full && !A.result) return say("err-ana", "먼저 [구하기]로 표본을 분석해 주세요.");
   const call = ++anaRun;
   try {
     const how = full ? A.result.how : anaHow(), prepped = full ? A.result.prepped : $("a-prep").checked;
@@ -1295,30 +1306,30 @@ $("a-full").onclick = () => busy($("a-full"), () => runAna(true));
 function anaTitle(d, view) {
   const value = x => x.agg === "count" ? "개수" : `${x.value} ${aggName(x.agg)}`;
   return { hist: `${d.column} 분포`, box: `${d.column} 상자 그림`, values: `${d.column} 값 빈도`, heat: "상관관계",
-           scatter: `${d.x} × ${d.y}`, groups: `${d.by}별 ${value(d)}`, trend: `${d.column} ${UNIT_NAMES[d.unit]}별 ${value(d)}`, funnel: `${d.step} 흐름 (${d.steps?.length}단계)` }[view];
+           scatter: `${d.x} × ${d.y}`, groups: `${d.by}별 ${value(d)}`, trend: `${d.column} ${UNIT_NAMES[d.unit]}별 ${value(d)}`, funnel: `${d.step} 퍼널(${d.steps?.length}단계)` }[view];
 }
 function anaNote(d) {
-  const data = d.data.full ? "테이블 전체" : `표본 ${d.data.rows.toLocaleString()}행 · 읽은 방법: ${SERVER.sample_methods[d.data.method] ?? d.data.method}`;
+  const data = d.data.full ? "테이블 전체로 구함" : `표본 ${d.data.rows.toLocaleString()}행으로 구함, 읽은 방법은 ${SERVER.sample_methods[d.data.method] ?? d.data.method}`;
   const lim = SERVER.analysis, more = [
-    d.kind === "groups" && d.more ? `행이 많은 ${lim.max_groups}개 그룹만` : "",
-    d.kind === "trend" && d.more ? `최근 ${lim.max_periods}개 기간만` : "",
-    d.kind === "scatter" ? `점 ${d.points.length.toLocaleString()}개 · 상관계수 ${d.r == null ? "-" : d.r.toFixed(3)} (${d.n.toLocaleString()}행)` : "",
-    d.kind === "correlation" ? `${d.n.toLocaleString()}행으로 구함` : "",
-    d.kind === "funnel" ? `${windowText(d.window)} · 같은 시각의 두 단계는 도달한 것으로 봄` : ""];
-  return [`${d.base} · ${d.prepped ? "전처리 적용" : "원래 테이블"} · ${data}`, ...more].filter(Boolean).join(" · ");
+    d.kind === "groups" && d.more ? `행이 많은 ${lim.max_groups}개 그룹만 보임` : "",
+    d.kind === "trend" && d.more ? `최근 ${lim.max_periods}개 기간만 보임` : "",
+    d.kind === "scatter" ? `점 ${d.points.length.toLocaleString()}개, 상관계수 ${d.r == null ? "-" : d.r.toFixed(3)}(${d.n.toLocaleString()}행)` : "",
+    d.kind === "correlation" ? `${d.n.toLocaleString()}행으로 계산` : "",
+    d.kind === "funnel" ? `${windowText(d.window)}, 같은 시각의 두 단계는 도달로 봄` : ""];
+  return [`${d.base}의 ${d.prepped ? "전처리한 결과" : "원래 데이터"}`, data, ...more].filter(Boolean).join(", ");
 }
 // 그래프 아래의 표
 function anaTable(d, view) {
   const pct = n => d.values ? `${(n * 100 / Math.max(1, d.values.counts.reduce((a, b) => a + b, 0) + d.values.nulls + d.values.other)).toFixed(1)}%` : "";
   if (view === "hist" || view === "box") {
     const s = d.stats, b = d.box;
-    return { columns: ["통계", "값"], rows: [["행 수 (빈 값 제외)", s.n], ["최소", s.min], ["Q1", s.q1], ["중앙값", s.median], ["Q3", s.q3], ["최대", s.max], ["평균", s.mean], ["표준편차", s.std],
-      ["1.5×IQR 밖의 값", b.outliers], ["빈 값", d.values.nulls]].map(([k, v]) => ({ 통계: k, 값: v })) };
+    return { columns: ["통계", "값"], rows: [["행 수(빈 값 빼고)", s.n], ["최소", s.min], ["Q1", s.q1], ["중앙값", s.median], ["Q3", s.q3], ["최대", s.max], ["평균", s.mean], ["표준편차", s.std],
+      ["이상값(1.5×IQR 밖)", b.outliers], ["빈 값", d.values.nulls]].map(([k, v]) => ({ 통계: k, 값: v })) };
   }
   if (view === "values") return { columns: ["값", "행 수", "비율"], rows: [
     ...d.values.labels.map((l, i) => ({ 값: l, "행 수": d.values.counts[i], 비율: pct(d.values.counts[i]) })),
     ...(d.values.nulls ? [{ 값: "(빈 값)", "행 수": d.values.nulls, 비율: pct(d.values.nulls) }] : []),
-    ...(d.values.other ? [{ 값: `그 밖 (값 ${(d.values.unique - d.values.labels.length).toLocaleString()}종류)`, "행 수": d.values.other, 비율: pct(d.values.other) }] : [])] };
+    ...(d.values.other ? [{ 값: `그 밖의 값 ${(d.values.unique - d.values.labels.length).toLocaleString()}종류`, "행 수": d.values.other, 비율: pct(d.values.other) }] : [])] };
   if (view === "heat") return { columns: ["", ...d.columns], rows: d.matrix.map((row, i) => ({ "": d.columns[i], ...Object.fromEntries(row.map((r, j) => [d.columns[j], r == null ? "-" : +r.toFixed(3)])) })) };
   if (view === "scatter") return { columns: ["", "값"], rows: [["상관계수 r", d.r == null ? "-" : +d.r.toFixed(4)], ["쓴 행 수", d.n], ["그린 점 수", d.points.length]].map(([k, v]) => ({ "": k, 값: v })) };
   if (view === "funnel") return { columns: FUNNEL_COLUMNS, rows: funnelRows(d.steps) };

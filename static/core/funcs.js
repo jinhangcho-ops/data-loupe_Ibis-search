@@ -6,7 +6,7 @@
 // 서버 타입 이름(정수·실수·문자·날짜 …)과 사전의 종류(num·text·date …)는 KIND_OF로 잇는다. common.js의 el·api가 먼저 불려 있어야 한다.
 const Funcs = (() => {
   const KIND_OF = { 정수: "num", 실수: "num", 문자: "text", 날짜: "date", 날짜시간: "date", "참/거짓": "bool", json: "json" };
-  const REP_GROUP = "겹치는 값 중 하나 고르기", STATUS_MARK = { substitute: " · 대체 식", local: " · 이 PC에서 계산" };
+  const REP_GROUP = "겹치는 값 중 하나 고르기", STATUS_MARK = { substitute: " (대체 식)", local: " (이 PC에서 계산)" };
   const kindOf = type => KIND_OF[type] ?? (["num", "text", "date", "bool", "json", "array", "struct"].includes(type) ? type : null) ?? (String(type).startsWith("목록") ? "array" : String(type).startsWith("구조") ? "struct" : "other");
   const fits = (kinds, kind) => kinds === "any" || [].concat(kinds).includes(kind);
   let cat = null, loading = null, support = {}, supportKey = "";
@@ -32,11 +32,11 @@ const Funcs = (() => {
     const kinds = new Set(cols.map(c => kindOf(c[1])));
     for (const a of f.args) {
       if (a.kind !== "column" || a.optional || a.kinds === "any") continue;
-      if (![].concat(a.kinds).some(k => kinds.has(k))) return `${[].concat(a.kinds).map(k => KIND_NAMES[k] ?? k).join("·")} 컬럼이 없어요`;
+      if (![].concat(a.kinds).some(k => kinds.has(k))) return `${[].concat(a.kinds).map(k => KIND_NAMES[k] ?? k).join(", ")} 컬럼이 없어요`;
     }
     return "";
   }
-  const KIND_NAMES = { num: "숫자", text: "글자", date: "날짜", bool: "참거짓", json: "JSON", array: "목록", struct: "구조" };
+  const KIND_NAMES = { num: "숫자", text: "글자", date: "날짜", bool: "참/거짓", json: "JSON", array: "목록", struct: "구조" };
 
   // ---- 인자 칸 ----
   // 사전의 args 가운데 skip에 든 것(보통 x·where)을 뺀 칸들. 읽기 read(): {이름: 값}(비운 칸 제외), 쓰기 write(값들).
@@ -137,7 +137,7 @@ const Funcs = (() => {
   // ---- 찾기 패널 ----
   // 분류·이름·설명으로 찾고, 예시를 누르면 onpick(f)을 부른다. 지금 컬럼에 맞는 종류가 없는 함수나 이 연결에서 못 쓰는 함수는 흐리게 + 이유(마우스를 올리면).
   function panel({ ids = null, columns = () => [], onpick }) {
-    const search = el("input", { placeholder: "함수 찾기 (이름·설명·예: 중앙값, 날짜, split)", className: "fp-in" });
+    const search = el("input", { placeholder: "함수 찾기 (예: 중앙값, 날짜, split)", title: "이름이나 설명으로 찾아요", className: "fp-in" });
     const kind = el("select", { title: "분류" }, el("option", { value: "", textContent: "모든 분류" }), ...cat.categories.map(c => el("option", { value: c.id, textContent: c.label })));
     const list = el("div", { className: "fpanel-list" });
     const draw = () => {
@@ -147,9 +147,9 @@ const Funcs = (() => {
       list.replaceChildren(...items.map(f => {
         const why = misfit(f, columns()) || (statusOf(f.id).status === "unavailable" ? statusOf(f.id).note : ""), st = statusOf(f.id);
         return el("button", { className: "fpanel-item" + (why ? " dim" : ""), title: why || st.note || f.help, onclick: () => onpick(f) },
-          el("b", { textContent: f.label }), el("code", { textContent: f.example }), el("span", { className: "hint", textContent: why || (st.note ? `${f.help} · ${st.note}` : f.help) }));
+          el("b", { textContent: f.label }), el("code", { textContent: f.example }), el("span", { className: "hint", textContent: why || (st.note ? `${f.help} (${st.note})` : f.help) }));
       }));
-      if (!items.length) list.append(el("span", { className: "hint", textContent: "맞는 함수가 없어요." }));
+      if (!items.length) list.append(el("span", { className: "hint", textContent: "찾는 함수가 없어요. 다른 낱말로 찾아보세요." }));
     };
     search.oninput = kind.onchange = draw;
     draw();

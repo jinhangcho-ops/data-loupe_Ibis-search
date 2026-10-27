@@ -96,5 +96,5 @@ def test_query_screen_still_follows_S_and_keeps_its_tabs(tmp_path):
 
 def test_dashboard_page_loads_the_shared_scripts_and_button():
     html = (ROOT / "static/dashboard/dashboard.html").read_text(encoding="utf-8")
-    for needle in ('"/static/query/sentences.js"', '"/static/query/metric_catalog.js"', 'id="d-metrics"', 'id="d-met-host"', "/static/query/flow.css", "only: \"metric\""):
+    for needle in ('"/static/query/sentences.js"', '"/static/query/metric_catalog.js"', 'id="d-metrics"', 'id="d-met-host"', "/static/query/sentences.css", "only: \"metric\""):
         assert needle in html

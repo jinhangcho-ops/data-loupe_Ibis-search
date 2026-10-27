@@ -35,7 +35,7 @@ LIMIT_MB = 80  # 명세의 시작 메모리 목표(50~80MB 이하). 화면을 �
 ROUTES = {"collect.collect_app", "collect.load_app", "dashboard.dash_app", "integrations.bot_app", "integrations.integrations_app", "integrations.notify",
           "integrations.schedule", "integrations.schedule_app", "metrics.catalog_app", "prep.prep_app", "query.flow_app", "query.search_app"}
 FEATURE = ("collect", "dashboard", "integrations", "metrics", "prep", "query", "analysis", "geo")  # geo(좌표)는 어느 화면의 묶음에도 넣지 않는다: 좌표 기능을 쓸 때만 올라온다
-BUNDLES = {"/search": {"query.flow", "query.flow_opt", "query.join_keys", "query.sentences", "query.sentence_run", "query.sentence_exec", "query.nl2sql",
+BUNDLES = {"/search": {"query.join_keys", "query.sentences", "query.sentence_run", "query.sentence_exec", "query.nl2sql",
                        "metrics.my_metrics", "metrics.metric_catalog", "metrics.metric_kernels"},
            "/prep": {"prep.prep_profile", "prep.prep_expr", "analysis.stats"},
            "/dashboard": {"dashboard.dash_calc", "dashboard.dash_refresh", "dashboard.period", "dashboard.dash_pdf", "dashboard.summary_text"},

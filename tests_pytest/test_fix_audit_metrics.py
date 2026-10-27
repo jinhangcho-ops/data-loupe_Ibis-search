@@ -65,48 +65,6 @@ def test_or_condition_reads_every_piece_column():
     assert my_metrics.columns_in_text("channel = web or country = US") == {"channel", "country"}
 
 
-def test_or_condition_across_join_is_not_pushed_down_and_propose_survives(tmp_path):
-    import duckdb
-    from query import flow, flow_opt
-    path = tmp_path / "o.duckdb"
-    raw = duckdb.connect(str(path))
-    raw.execute("create table sales as select i as id, (i % 3)::int as shop_id, ((i + 1) * 10)::double as amt from range(12) t(i)")
-    raw.execute("create table shops as select i::int as shop_id, case when i < 2 then 'KR' else 'US' end as country from range(3) t(i)")
-    raw.close()
-    con = ibis.duckdb.connect(str(path))
-    graph = flow.from_body({"base": "sales", "joins": ["shops inner shop_id=shop_id"], "conditions": ["amt > 100 or country = KR"],
-                            "aggregate": {"by": ["country"], "series": [{"agg": "sum", "y": "amt", "name": "total"}]}})
-    found = flow_opt.propose(graph, lambda name, schema=None: con.table(name), con, only=[1])
-    rule1 = found["rules"][0]
-    assert rule1["items"] == [] and rule1["refused"], rule1  # 두 쪽 컬럼을 함께 읽는 or 조건은 한쪽으로 내릴 수 없다
-    con.disconnect()
-
-
-# ---------- 4 흐름 최적화: apply는 경고용 조회를 다시 하지 않고, 확인 문구에 조회 횟수를 적는다 ----------
-
-def test_apply_skips_fanout_warnings_and_remote_note_tells_query_count(tmp_path, monkeypatch):
-    import duckdb
-    from core import held
-    from query import flow, flow_opt
-    path = tmp_path / "o.duckdb"
-    raw = duckdb.connect(str(path))
-    raw.execute("create table sales as select i as id, (i % 3)::int as shop_id, ((i + 1) * 10)::double as amt from range(12) t(i)")
-    raw.execute("create table shops as select i::int as shop_id, 'x' as name from range(3) t(i)")
-    raw.close()
-    con = ibis.duckdb.connect(str(path))
-    monkeypatch.setattr(held, "remote", lambda con: True)
-    get = lambda name, schema=None: con.table(name)
-    graph = flow.from_body({"base": "sales", "joins": ["shops left shop_id=shop_id"], "conditions": ["amt > 50"], "aggregate": {"by": ["shop_id"], "series": [{"agg": "sum", "y": "amt", "name": "total"}]}})
-    calls = []
-    real = flow_opt.fanout_warnings
-    monkeypatch.setattr(flow_opt, "fanout_warnings", lambda g, c: calls.append(1) or real(g, c))
-    found = flow_opt.propose(graph, get, con, remote=True, source_key="k")
-    assert len(calls) == 1 and found["note"].startswith("원격 DB라") and "최대 11번 조회해요" in found["note"]  # 원래 결과 1 + 규칙 4개 + 조인 1개의 양쪽 키 확인 4(키 하나에 행 수·고유 행 수 2번씩) + 밀린 오른쪽 확인 2
-    flow_opt.apply(graph, [1], get, con, remote=True, scan_ok=True, source_key="k")
-    assert len(calls) == 1  # apply는 경고를 다시 계산하지 않는다
-    con.disconnect()
-
-
 # ---------- 5 지표 세부 ----------
 
 def test_dau_counts_empty_days_as_zero():

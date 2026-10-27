@@ -42,6 +42,7 @@ PERCENT = "percent"
 MAX_POINTS = result.MAX_POINTS  # 산점도·버블의 점 수(분석의 산점도와 같다)
 SEED = stats.SEED  # 고르게 뽑을 때의 고정 씨앗(다시 구해도 같은 점, 분석의 산점도와 같다)
 POINT_TYPES = ("scatter", "bubble")
+FLOW_GONE = "흐름 보기가 없어져 이 카드는 다시 구할 수 없어요. 탐색에서 다시 만들어 주세요."  # 예전 흐름(source.flow_id)만 가진 카드
 VALUE_KINDS = ("kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend")  # 값 하나(또는 일 값)로 그리는 카드 종류
 MAX_GROUPS = 100  # 요약의 기여 분해에 쓰는 그룹 수
 TARGETS_FILE = "targets_file.json"  # 목표 파일 경로만 둔다 {path}
@@ -833,6 +834,8 @@ def compute(card, now, ctx=None):
     """검사한 카드(dash_store.check_card)의 source로 data를 구해 돌려준다(저장하지 않는다). now는 구한 시각 글자.
     ctx = {range: {start, end}, prev: {start, end, text}}(대시보드의 보는 기간과 직전 기간)는 source.date(기간 기준 날짜 컬럼)가 있는 날짜 X축이 아닌 카드에 기간 줄로 걸리고, 요약 문장이 쓴다."""
     source = card["source"]
+    if source.get("flow_id") and not isinstance(source.get("body"), dict) and not isinstance(source.get("recipe"), dict):
+        raise ValueError(FLOW_GONE)
     if card["kind"] in ("chart", "metric", "recent_rows", "geomap", *VALUE_KINDS, *TABLE_KINDS):
         if not isinstance(source.get("body"), dict):
             raise ValueError("이 카드에는 다시 구할 조회(source.body)가 없습니다.")

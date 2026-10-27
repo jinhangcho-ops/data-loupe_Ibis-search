@@ -3,7 +3,7 @@
 1등 ≥ 0.7이고 2등과 0.15 이상 차이면 자동 선택(auto), 아니면 상위 3개를 근거와 함께 고르게 한다(ask). 후보가 없으면 날짜 맞춤(일·주·월)을 제안한다(none).
 단일 키 겹침이 0.5 미만이면 후보 짝의 두 컬럼 묶음도 본다. 고른 키는 (연결, A, B, 스키마 지문)으로 설정 join_keys.json에 기억하고 스키마가 바뀌면 다시 찾는다.
 원격 DB(held.remote)는 값을 읽는 조회를 새로 보내지 않는다: 부르는 쪽이 이미 있는 표본(samples)을 주면 그것으로, 없으면 겹침을 '표본 없음'으로 두고 이름·타입으로만 점수를 낸다.
-이은 뒤 행 수가 늘어나는지(부풂)는 fanout이 이을 때 알려 준다. 데이터를 읽는 함수는 server.run으로 연결 스레드에서 부른다."""
+데이터를 읽는 함수는 server.run으로 연결 스레드에서 부른다."""
 import hashlib
 import itertools
 import json
@@ -114,13 +114,6 @@ def unique_in(frame, col):
     """표본 표에서 컬럼 값이 모두 다른지(빈 값은 뺀다)."""
     values = frame[col].drop_nulls()
     return len(values) > 0 and values.n_unique() == len(values)
-
-
-def is_unique(expr, cols):
-    """표 전체에서 cols(묶음)가 고유한지: 빈 값 행을 뺀 행 수 = 서로 다른 값 수. 전체를 읽으므로 원격에서는 확인을 받고 부른다."""
-    rows = expr.filter(*[expr[c].notnull() for c in cols]).select(*cols)
-    n = rows.count().to_pyarrow().as_py()
-    return n == rows.distinct().count().to_pyarrow().as_py()
 
 
 # ---------- 후보 ----------
@@ -335,25 +328,3 @@ def forget(source_key, a_name, b_name, fp):
         if items.pop(memory_key(source_key, a_name, b_name, fp), None) is not None:
             settings.write(FILE, {"items": items})
 
-
-# ---------- 이은 뒤 부풂 ----------
-
-def fanout(left, right, pairs, how="inner", name="", remote=False, scan_ok=False):
-    """이은 뒤 행이 늘어나는지(부풂) 결과를 보기 전에 알린다. {checked, left_rows, right_rows, joined_rows, right_unique, left_unique, inflated, level(bad·warn·None), text}.
-    전체를 읽어 세므로 원격 DB는 scan_ok(사용자 확인)가 아니면 세지 않고 {checked: False, note}만 돌려준다."""
-    if remote and not scan_ok:
-        return {"checked": False, "level": None, "note": "원격 DB라 이은 뒤 행 수를 미리 세지 않았어요(조회 요금). 확인하고 세려면 [확인하고 세기]를 누르세요."}
-    rkeys, lkeys = [r for _, r in pairs], [l for l, _ in pairs]
-    count = lambda e: e.count().to_pyarrow().as_py()
-    left_rows, right_rows = count(left), count(right)
-    right_unique, left_unique = is_unique(right, rkeys), is_unique(left, lkeys)
-    joined = parse.apply_joins(left, [(name or "right", how, [tuple(p) for p in pairs], None)], lambda _: right)
-    joined_rows = count(joined)
-    # inner는 짝 없는 왼쪽 행이 빠지며 겹쳐 늘어난 행을 가리므로 짝이 있는 왼쪽 행 수와 견준다
-    base = count(parse.apply_joins(left, [(name or "right", "semi", [tuple(p) for p in pairs], None)], lambda _: right)) if how == "inner" else left_rows
-    inflated = joined_rows > base and how in ("inner", "left")
-    level = "bad" if inflated else "warn" if not right_unique and how in ("inner", "left") else None
-    text = (f"오른쪽 키가 겹쳐서 이으면 {'짝이 있는 ' if base != left_rows else ''}행이 {base:,}행에서 {joined_rows:,}행으로 늘어요. 이대로 합계를 내면 값이 부풀어요." if inflated
-            else "오른쪽 키에 같은 값이 여러 번 있어요. 지금은 행이 늘지 않았지만 조건이 바뀌면 부풀 수 있어요." if level == "warn" else "")
-    return {"checked": True, "left_rows": left_rows, "right_rows": right_rows, "joined_rows": joined_rows, "right_unique": right_unique, "left_unique": left_unique,
-            "inflated": inflated, "level": level, "text": text, "note": ""}

@@ -256,16 +256,6 @@ def test_scope_of_fills_key_and_label_like_with_scope(folder):
     for data in ({}, {"scope": None}, {"scope": {"table": "t"}}, {"scope": {"key": "k", "label": "x"}}):
         assert flow_app.scope_of(data) == flow_app.with_scope({"scope": data.get("scope")})["scope"]
 
-
-def test_grouped_matches_group_by_or_whole_aggregate():
-    from query import flow
-    t = table_of(g=["a", "b", "a"], v=[1, 2, 3])
-    made = {"s": t.v.sum()}
-    assert flow.grouped(t, {"by": ["g"]}, made).order_by("g").to_pyarrow().to_pylist() == [{"g": "a", "s": 4}, {"g": "b", "s": 2}]
-    assert flow.grouped(t, {"by": []}, made).to_pyarrow().to_pylist() == [{"s": 6}]
-    assert flow.grouped(t, {}, made).to_pyarrow().to_pylist() == [{"s": 6}]
-
-
 def test_my_metrics_now_text_is_dash_stores():
     from core import dash_store
     from metrics import my_metrics

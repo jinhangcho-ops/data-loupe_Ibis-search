@@ -3,7 +3,7 @@
 // 끝나면 document에 "dash-refreshed" 이벤트를 보낸다(새 값을 보이는 화면이 다시 그린다). 화면을 새로 열었을 때 이미 돌고 있으면 알약으로 이어서 보인다.
 // connect.html과 status.html이 있는 화면에서 common.js 다음에 불러 온다.
 let refreshTimer = null;
-const REFRESH_STATE = { ok: "끝", failed: "실패", skipped: "건너뜀", waiting: "기다림" };
+const REFRESH_STATE = { ok: "완료", failed: "실패", skipped: "건너뜀", waiting: "대기" };
 async function startRefresh() {
   document.dispatchEvent(new Event("dash-connected"));
   try {
@@ -22,13 +22,13 @@ async function pollRefresh() {
 }
 function renderRefresh(st) {
   const count = state => st.results.filter(r => r.state === state).length;
-  const text = st.running ? `대시보드 최신화 진행 중… (${st.done}/${st.total})` : `대시보드 최신화 끝 (${count("ok")}개 끝 · ${count("failed")}개 실패 · ${count("skipped")}개 건너뜀)`;
+  const text = st.running ? `대시보드를 최신 값으로 바꾸고 있어요 (${st.done}/${st.total})` : `대시보드를 최신 값으로 바꿨어요. 완료 ${count("ok")}개, 실패 ${count("failed")}개, 건너뜀 ${count("skipped")}개`;
   $("rf-title").textContent = text;
   $("rf-pill").classList.toggle("hidden", !st.running);
-  $("rf-pill-text").textContent = `최신화 ${st.done}/${st.total}`;
+  $("rf-pill-text").textContent = `대시보드 최신화 ${st.done}/${st.total}`;
   $("rf-list").replaceChildren(...st.results.map(r => el("li", { className: r.state + (st.running && r.title === st.current && r.state === "waiting" ? " now" : "") },
-    el("b", { textContent: REFRESH_STATE[r.state] ?? r.state }), el("span", { textContent: r.title + (r.message ? ` — ${r.message}` : "") }))));
-  $("rf-bg").textContent = st.running ? "뒤에서 계속" : "닫기";
+    el("b", { textContent: REFRESH_STATE[r.state] ?? r.state }), el("span", { textContent: r.title + (r.message ? `: ${r.message}` : "") }))));
+  $("rf-bg").textContent = st.running ? "닫고 계속하기" : "닫기";
   $("rf-stop").disabled = !st.running;
 }
 function finishRefresh(st) {

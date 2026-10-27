@@ -40,8 +40,8 @@ function Draft(screen, get, restore) {
   function popup(d) {
     return new Promise(done => {
       const note = el("p", { style: "white-space:pre-wrap; margin:10px 0 14px" }), conn = d.draft.connection?.name;
-      note.textContent = `이전에 편집하던 내용이 남아 있어요 (${draftTime(d.draft.saved)}${conn ? `, 연결: ${conn}` : ""})`
-        + (d.same ? "" : `\n\n지금과 다른 연결의 내용이에요. 그 연결로 바꾼 뒤 이어서 할 수 있어요.`);
+      note.textContent = `${draftTime(d.draft.saved)}에 하던 작업이 남아 있어요.${conn ? `\n연결: ${conn}` : ""}`
+        + (d.same ? "" : `\n\n지금과 다른 연결에서 하던 작업이에요. 그 연결로 바꾸면 이어서 할 수 있어요.`);
       const end = () => { box.remove(); done(); };
       const shut = el("button", { className: "btn", textContent: "닫기", onclick: end });
       const row = el("div", { className: "row", style: "justify-content:flex-end" });
@@ -51,7 +51,7 @@ function Draft(screen, get, restore) {
       } });
       const drop = el("button", { className: "ghost", textContent: "버리기", onclick: async () => { has = true; await clear(); end(); } });
       row.append(drop, d.same ? go : shut);
-      const box = el("div", { className: "modal" }, el("div", { className: "modal-box" }, el("h3", { textContent: "작업하던 내용이 있어요" }), note, row));
+      const box = el("div", { className: "modal" }, el("div", { className: "modal-box" }, el("h3", { textContent: "하던 작업을 이어서 할까요?" }), note, row));
       document.body.append(box);
       (d.same ? go : shut).focus();
     });

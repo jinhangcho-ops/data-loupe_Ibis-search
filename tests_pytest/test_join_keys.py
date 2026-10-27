@@ -1,5 +1,5 @@
 """공통 키 찾기(join_keys.py): 점수(이름 0.35·겹침 0.45·타입 0.10·고유 0.10)를 손으로 계산한 값과 맞추고, 자동 선택(1등 ≥ 0.7이고 2등과 0.15 이상 차이)·모호하면 상위 3개·후보 없으면 날짜 맞춤,
-글자↔숫자(바꾸면), 두 컬럼 묶음, 기억(스키마 지문), 이은 뒤 부풂 경고, 원격 DB는 값을 읽는 조회를 새로 보내지 않음. 데이터는 테스트 안에서 지어낸다."""
+글자↔숫자(바꾸면), 두 컬럼 묶음, 기억(스키마 지문), 원격 DB는 값을 읽는 조회를 새로 보내지 않음. 데이터는 테스트 안에서 지어낸다."""
 import duckdb
 import polars as pl
 import pytest
@@ -118,26 +118,6 @@ def test_remembered_keys_follow_the_schema_fingerprint(db, folder):
     assert jk.recall("file:x", "orders", "users", fp) is None
     settings_text = (folder / jk.FILE).read_text(encoding="utf-8")
     assert "password" not in settings_text and "file:x" not in settings_text.replace('"file:x"', "")  # 열쇠는 연결 열쇠뿐(계정·비밀번호 없음)
-
-
-# ---------- 이은 뒤 부풂 ----------
-
-def test_fanout_is_reported_before_the_result(db):
-    inflated = jk.fanout(db.table("lk"), db.table("rk"), [("k", "k")], "inner", "rk")
-    # lk 3행(k=1이 둘, k=2가 하나)과 rk(k=1이 둘, k=2가 둘): 2×2 + 1×2 = 6행
-    assert inflated["checked"] and (inflated["left_rows"], inflated["right_rows"], inflated["joined_rows"]) == (3, 4, 6)
-    assert inflated["inflated"] and inflated["level"] == "bad" and inflated["right_unique"] is False and inflated["left_unique"] is False
-    assert inflated["text"] == "오른쪽 키가 겹쳐서 이으면 행이 3행에서 6행으로 늘어요. 이대로 합계를 내면 값이 부풀어요."
-    clean = jk.fanout(db.table("lk"), db.table("rk1"), [("k", "k")], "left", "rk1")
-    assert clean["right_unique"] and not clean["inflated"] and clean["level"] is None and clean["joined_rows"] == 3 and clean["text"] == ""
-
-
-def test_fanout_on_remote_needs_confirmation_and_sends_nothing(db, monkeypatch):
-    sent = spy(monkeypatch)
-    skipped = jk.fanout(db.table("lk"), db.table("rk"), [("k", "k")], "inner", "rk", remote=True)
-    assert skipped["checked"] is False and skipped["note"].startswith("원격 DB라 이은 뒤 행 수를 미리 세지 않았어요") and sent == []
-    sure = jk.fanout(db.table("lk"), db.table("rk"), [("k", "k")], "inner", "rk", remote=True, scan_ok=True)
-    assert sure["checked"] and sure["joined_rows"] == 6 and sent  # 확인했을 때만 센다
 
 
 # ---------- 원격 DB ----------

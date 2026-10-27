@@ -1,71 +1,16 @@
-/* 검색 조건의 흐름 보기·문장 보기(flow.js, sentences.js). 색은 common.css의 변수(--c1~8, --accent, --err, --ok …)만 쓴다. */
+/* 검색 조건의 문장 보기·지표 사전(sentences.js, metric_catalog.js). 색은 common.css의 변수(--c1~8, --accent, --err, --ok …)만 쓴다. */
 .vswitch { display:flex; gap:4px; padding:4px 22px 8px; }
 .vswitch button { flex:1; justify-content:center; background:var(--card); color:var(--muted); border:1px solid var(--line); font-weight:600; padding:5px 10px; }
 .vswitch button.on { background:var(--accent-bg); color:var(--accent); border-color:var(--accent); }
-/* 흐름·문장 보기에서는 결과 영역 자리를 보기가 쓰고, 단계 카드 목록은 감춘다(고른 테이블 단계만 문장 보기에 남긴다) */
+/* 문장 보기에서는 결과 영역 자리를 보기가 쓴다(고른 테이블 단계만 문장 보기에 남긴다) */
 .results > .vwide { flex:1; min-height:0; overflow:auto; padding:14px 28px; }
-.work.v-flow > .results > :not(.vwide), .work.v-sentence > .results > :not(.vwide) { display:none; }
-.work.v-flow #flow { display:none; }
+.work.v-sentence > .results > :not(.vwide) { display:none; }
 .work.v-sentence #after-connect { display:none; }
-.node-edit { padding:4px 0 10px; }
-.node-edit .fld { display:block; margin-bottom:8px; }
-.node-edit .fld select, .node-edit .fld input { margin-top:2px; }
-.node-edit .row { display:flex; gap:6px; align-items:center; margin-bottom:6px; }
-.node-edit .fser { display:flex; flex-wrap:wrap; gap:4px; align-items:center; margin-bottom:6px; padding:6px; border:1px solid var(--line); border-radius:9px; }
-.node-edit .fser > * { flex:1 1 90px; width:auto; min-width:0; }
-.node-edit .fser button { flex:none; }
 .err.ghost, .ghost.err { color:var(--err); }
 
-/* 흐름 그림 */
-.fpal { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-bottom:8px; }
-.fpal .btn { height:30px; padding:0 12px; font-size:12.5px; border-left-width:4px; }
-.ftools { margin-bottom:6px; flex-wrap:wrap; }
-.fmsg { min-height:20px; font-size:12.5px; color:var(--muted); margin:2px 0 6px; }
-.fmsg.err { color:var(--err); } .fmsg.ok { color:var(--ok); } .fmsg.warn { color:var(--warn); }
-.fstage { position:relative; overflow:auto; border:1px solid var(--line); border-radius:12px; background:var(--bg); min-height:220px; max-height:60vh; outline:none; }
-.fstage .fempty { position:absolute; left:20px; top:20px; }
-.fsvg { display:block; user-select:none; touch-action:none; }
-.fedge { fill:none; stroke:var(--faint); stroke-width:2; }
-.fedge.hi { stroke:var(--accent); stroke-width:3; }
-.fedge.dim { opacity:.25; }
-.fedge.temp { stroke:var(--accent); stroke-dasharray:5 4; pointer-events:none; }
-.fside { fill:var(--muted); font-size:10.5px; }
-.fnode rect { fill:var(--card); stroke:var(--line); stroke-width:1.5; }
-.fnode { cursor:grab; --k:var(--c8); }
-.fnode .ft { fill:var(--text); font-size:13px; font-weight:700; }
-.fnode .fs { fill:var(--muted); font-size:11.5px; }
-.fnode .frows { fill:var(--accent); font-size:11.5px; font-weight:700; }
-.fnode rect { stroke:var(--k); }
-.fnode.sel rect { stroke-width:3; fill:var(--accent-bg); }
-.fnode.dim { opacity:.3; }
-.fnode.ok rect { stroke:var(--ok); stroke-width:3; }
-.fnode.no rect { stroke:var(--err); stroke-width:3; }
-.fnode.mk-add rect { fill:color-mix(in srgb, var(--ok) 14%, var(--card)); }
-.fnode.mk-chg rect { fill:color-mix(in srgb, var(--c7) 16%, var(--card)); }
-.fnode.mk-del rect { fill:color-mix(in srgb, var(--err) 12%, var(--card)); stroke-dasharray:5 3; }
-.fk-table { --k:var(--c1); } .fk-union { --k:var(--c8); } .fk-join { --k:var(--c5); } .fk-period { --k:var(--c7); } .fk-condition { --k:var(--c2); }
-.fk-calc { --k:var(--c6); } .fk-dedupe { --k:var(--c8); } .fk-aggregate, .fk-metric { --k:var(--c3); } .fk-chart, .fk-card { --k:var(--c4); }
-.fpal .btn { border-left-color:var(--k); }
-.fport { fill:var(--card); stroke:var(--k); stroke-width:2; }
-.fport.out { cursor:crosshair; }
-.fbtn { cursor:pointer; }
-.fbtn circle { fill:var(--card); stroke:var(--accent); stroke-width:1.5; }
-.fbtn text { fill:var(--accent); font-size:13px; font-weight:700; }
-.fmenu { position:absolute; z-index:20; display:flex; flex-wrap:wrap; gap:6px; max-width:320px; padding:8px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:0 10px 30px rgb(15 25 30 / .2); }
-.fmenu .btn { height:30px; border-left:4px solid var(--k); }
-#flow-host { position:relative; }
-.fopt { margin-top:10px; padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--card); }
-.fcompare { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:8px 0; }
-.fmini { overflow:auto; max-height:240px; border:1px solid var(--line); border-radius:10px; background:var(--bg); }
-.frule { padding:6px 0; border-top:1px solid var(--line); }
-.frule.dropped, .frule.skipped { opacity:.7; }
 .fbadge { font-size:12px; font-weight:700; padding:2px 10px; border-radius:999px; }
 .fbadge.ok { background:color-mix(in srgb, var(--ok) 16%, var(--card)); color:var(--ok); }
 .fbadge.warn { background:color-mix(in srgb, var(--err) 12%, var(--card)); color:var(--err); }
-.fwarn { color:var(--err); font-size:13px; margin:4px 0; }
-.fkey { padding:8px 0; border-top:1px solid var(--line); }
-.fkey ul { margin:4px 0 6px 18px; padding:0; font-size:12.5px; color:var(--muted); }
-
 /* 문장 보기 */
 .stabs { display:flex; gap:4px; margin-bottom:10px; border-bottom:1px solid var(--line); }
 .stabs .tab { background:none; border:0; border-bottom:2px solid transparent; border-radius:0; color:var(--muted); padding:8px 14px; }
@@ -133,4 +78,4 @@
 .mtable { border-collapse:collapse; margin-top:6px; font-size:12.5px; }
 .mtable th, .mtable td { border:1px solid var(--line); padding:2px 8px; text-align:right; }
 .mcatalog:empty::before { content:"지표 사전은 준비 중이에요."; color:var(--muted); font-size:12.5px; }
-@media (max-width: 900px) { .sgrid { grid-template-columns:1fr; } .fcompare { grid-template-columns:1fr; } }
+@media (max-width: 900px) { .sgrid { grid-template-columns:1fr; } }

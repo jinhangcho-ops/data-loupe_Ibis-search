@@ -1,8 +1,7 @@
-"""검색 조건의 세 보기(단계 카드·흐름·문장)가 같은 검색 body를 본다: 단계 카드 body → 흐름 → body, 흐름을 고쳐도 단계 카드가 쓰는 body, 문장이 만든 요청이 같은 테이블·조인·기간·조건을 쓰는지.
+"""검색 조건의 두 보기(단계 카드·문장)가 같은 검색 body를 본다: 문장이 만든 요청이 같은 테이블·조인·기간·조건을 쓰는지(흐름 보기는 없앴다).
 문장 틀 목록 라우트(/api/sentences)와 질문 묶음 저장 라우트(/api/question_sets)의 모양·한도·차례를 기다리지 않는지. 데이터는 테스트 안에서 지어낸다."""
 import pytest
 
-from query import flow
 from query import flow_app  # noqa: F401
 from query import sentence_run
 from query import sentences
@@ -16,41 +15,6 @@ COLUMNS = {"id": "num", "shop_id": "num", "amt": "num", "day": "date", "status":
 def post(client, path, **body):
     resp = client.post(path, json=body)
     return resp.status_code, resp.get_json()
-
-
-def test_cards_flow_cards_round_trip_same_body(client):
-    """단계 카드의 body → 흐름(from_body) → body(to_body)가 처음 body와 같고(정렬·표시 컬럼·행 수 포함), 흐름 단계 종류와 차례가 body의 단계 차례와 같다."""
-    code, found = post(client, "/api/flow/from_body", body=BODY)
-    assert code == 200
-    kinds = [n["kind"] for n in found["graph"]["nodes"]]
-    assert kinds == ["table", "join", "table", "period", "condition", "condition", "calc"]  # 조건 두 줄(둘째는 or로 묶인 한 단계)
-    assert found["graph"]["extra"] == {"sorts": ["amt desc"], "columns": ["id, amt"], "limit": "20"}
-    code, back = post(client, "/api/flow/to_body", graph=found["graph"])
-    assert code == 200 and back["body"] == BODY
-
-
-def test_flow_edits_come_back_to_the_cards(client):
-    """흐름에서 조건 단계의 글을 고치고 단계를 지우면, 단계 카드로 돌아올 때 그 고친 body가 된다. 집계(꼬리)를 붙여도 target으로 끊으면 같은 body다."""
-    graph = flow.from_body(BODY)
-    node = next(n for n in graph["nodes"] if n["kind"] == "condition")
-    node["params"]["cond"] = "amt >= 99"
-    code, back = post(client, "/api/flow/to_body", graph=graph)
-    assert code == 200 and back["body"]["conditions"][0] == "amt >= 99"
-    tail = {"id": "agg", "kind": "aggregate", "params": {"by": ["country"], "series": [{"agg": "sum", "y": "amt", "name": "합"}]}}
-    last = [n for n in graph["nodes"] if not flow.outputs(graph, n["id"])][-1]["id"]
-    with_tail = {**graph, "nodes": [*graph["nodes"], tail], "edges": [*graph["edges"], [last, "agg"]]}  # extra(정렬·표시 컬럼·행 수)는 그대로
-    code, cut = post(client, "/api/flow/to_body", graph=with_tail, target=last)
-    assert code == 200 and "aggregate" not in cut["body"] and cut["body"] == back["body"]
-    code, whole = post(client, "/api/flow/to_body", graph=with_tail)
-    assert code == 200 and whole["body"]["aggregate"]["by"] == ["country"]
-
-
-def test_flow_that_cannot_be_cards_gives_server_reason(client):
-    """단계 카드가 나타낼 수 없는 흐름(조인 앞 가지에 조건)은 서버가 이유를 주고(화면이 그대로 보인다) 400이다."""
-    graph = {"nodes": [{"id": "t1", "kind": "table", "params": {"table": "a"}}, {"id": "t2", "kind": "table", "params": {"table": "b"}}, {"id": "c", "kind": "condition", "params": {"cond": "x = 1"}},
-                       {"id": "j", "kind": "join", "params": {"how": "inner", "keys": [["id", "id"]]}}], "edges": [["t1", "j"], ["t2", "c"], ["c", "j"]]}
-    code, body = post(client, "/api/flow/to_body", graph=graph)
-    assert code == 400 and body["error"] == flow.body_problem(graph)
 
 
 def test_sentence_runs_use_the_same_body(client):

@@ -1,36 +1,39 @@
 <!-- 연결 카드: 화면 가운데에 뜨는 로그인 창 모양. 첫 화면에서 [쿼리]·[분석]을 누르거나, 위쪽 줄의 연결 이름·[연결 바꾸기]를 누르면 연다. 연결이 없으면 닫을 수 없다. -->
 <div id="conn-panel" class="modal hidden">
   <div class="modal-box conn-card">
-    <div class="head"><h3>데이터 연결</h3><span class="hint" id="conn-for" style="margin:0"></span><button id="conn-close" class="ib" title="닫기" style="margin-left:auto"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
-    <select id="recent-conn" class="hidden" title="연결에 성공했던 폴더·주소를 많이 쓴 순으로 보입니다. 고르면 칸을 채웁니다(비밀번호는 다시 입력)"></select>
+    <div class="head"><h3>데이터 연결</h3><button id="conn-close" class="ib" title="닫기" style="margin-left:auto"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
+    <span class="hint conn-for" id="conn-for"></span>
+    <select id="recent-conn" class="hidden" title="전에 연결했던 폴더와 주소예요. 자주 쓴 것부터 보여요. 고르면 칸이 채워지고, 비밀번호는 다시 넣어야 해요."></select>
     <div class="seg2">
-      <label><input type="radio" name="kind" value="folder" checked> 내 폴더 파일</label>
-      <label><input type="radio" name="kind" value="url"> DB 주소</label>
+      <label><input type="radio" name="kind" value="folder" checked> 내 PC의 파일</label>
+      <label><input type="radio" name="kind" value="url"> 데이터베이스</label>
     </div>
     <div id="folder-box">
-      <div class="hint">폴더나 파일 경로</div>
+      <div class="field-label">폴더나 파일 위치</div>
       <div class="row"><input id="path" placeholder="예: C:\data 또는 C:\data\sales.parquet" value="."><button id="find" class="btn">찾기</button></div>
-      <div class="kinds" id="kinds" title="이 종류의 파일만 찾습니다"></div>
-      <label class="check"><input type="checkbox" id="deep" checked> 하위 폴더까지 찾기</label>
+      <div class="field-label">찾을 파일 종류</div>
+      <div class="kinds" id="kinds" title="고른 종류의 파일만 찾아요"></div>
+      <label class="check"><input type="checkbox" id="deep" checked> 안쪽 폴더까지 찾기</label>
       <select id="file" class="hidden"></select>
       <div id="flat" class="hidden">
         <div class="row" style="align-items:center"><button class="ghost" id="flat-all">모두 선택</button><button class="ghost" id="flat-none">모두 해제</button><span class="hint" id="flat-count" style="margin:0"></span></div>
         <div class="cols" id="flat-list"></div>
       </div>
-      <div class="row" style="align-items:center; margin-top:6px" title="DuckDB 파일을 조회할 때 쓰는 메모리의 최대치. 너무 낮으면 큰 집계가 느려지거나 메모리 부족으로 실패할 수 있습니다. 다음 [연결]부터 적용됩니다."><span class="hint" style="margin:0; flex:none">작업 메모리 상한</span><select id="memory"><option value="0">제한 없음 (기본)</option><option value="1000">1GB</option><option value="2000">2GB</option><option value="4000">4GB</option><option value="8000">8GB</option><option value="custom">직접 입력</option></select><input id="memory-gb" type="number" step="any" placeholder="GB" class="hidden" style="width:80px; flex:none"></div>
     </div>
     <div id="url-box" class="hidden">
-      <div class="hint">연결 주소</div>
-      <input id="url" placeholder="예: postgres://host:5432/db (Supabase는 Session pooler 주소를 붙여넣고 비밀번호는 아래 칸에)" style="margin-bottom:8px">
-      <div class="hint">아이디·비밀번호 (비밀번호는 저장하지 않습니다)</div>
-      <input id="user" placeholder="아이디 (없으면 비움)" style="margin-bottom:8px" autocomplete="off">
-      <input id="password" type="password" placeholder="비밀번호 (없으면 비움)" autocomplete="off">
-      <div class="row" style="align-items:center; margin-top:8px"><button class="ghost" id="drv-open" title="DB·DW·DL별로 필요한 드라이버가 이 PC에 있는지 확인하고 설치 명령을 보여 줍니다(아무것도 받지 않습니다)">드라이버 확인</button></div>
+      <div class="field-label">데이터베이스 주소</div>
+      <input id="url" placeholder="예: postgres://host:5432/db" title="Supabase는 Session pooler 주소를 붙여 넣고, 비밀번호는 아래 칸에 따로 넣으세요." style="margin-bottom:10px">
+      <div class="field-label">아이디와 비밀번호</div>
+      <input id="user" placeholder="아이디 (없으면 비워 두세요)" style="margin-bottom:6px" autocomplete="off">
+      <input id="password" type="password" placeholder="비밀번호 (없으면 비워 두세요)" autocomplete="off">
+      <div class="hint">비밀번호는 저장하지 않아요.</div>
+      <div class="row" style="align-items:center"><button class="ghost" id="drv-open" title="데이터베이스마다 필요한 드라이버가 이 PC에 있는지 보고 설치 명령을 알려 줘요. 아무것도 내려받지 않아요.">드라이버 확인</button></div>
     </div>
-    <div class="row" style="align-items:center; margin-top:8px" title="DuckDB 파일과 PC에 받아 둔 결과를 계산할 때 쓰는 CPU 코어 수. 줄이면 계산 중에도 PC가 덜 무겁지만 큰 계산은 느려집니다. Parquet·CSV 등 파일은 해당 없음. 다음 [연결]부터 적용됩니다."><span class="hint" style="margin:0; flex:none">계산 코어 수</span><select id="threads"></select></div>
-    <details style="margin-top:8px"><summary class="hint" style="cursor:pointer">자세히</summary>
-      <div class="row" style="align-items:center; margin-top:6px" title="실행 전 처리 용량을 미리 셀 수 없는 연결(Postgres·BigQuery·파일·DuckDB 밖의 DB 등)에서 어떻게 할지. 용량이 작업 메모리 상한(제한 없음이면 지금 PC의 사용 가능 메모리)을 넘으면 어느 쪽이든 실행 전에 묻습니다."><span class="hint" style="margin:0; flex:none">용량을 알 수 없을 때</span><select id="scan-unknown"><option value="run">그대로 실행 (기본)</option><option value="block">실행하지 않음</option></select></div>
-      <div class="row" style="align-items:center; margin-top:6px" title="컬럼 추론에서 블록 샘플링이 기대한 행의 이만큼도 못 가져오면 다음 방법(최신 파티션·앞 행)으로 넘어갑니다. 비우면 20%. 5~90%."><span class="hint" style="margin:0; flex:none">표본 최소 비율(%)</span><input id="too-few" type="number" min="5" max="90" step="1" placeholder="20" style="width:80px; flex:none"></div>
+    <details class="conn-more"><summary>고급 설정</summary>
+      <div class="opt" id="memory-box" title="DuckDB 파일을 계산할 때 쓸 메모리의 최대치예요. 너무 낮으면 큰 집계가 느려지거나 메모리가 모자라 실패할 수 있어요. 다음 연결부터 적용돼요."><span>메모리 한도</span><select id="memory"><option value="0">제한 없음</option><option value="1000">1GB</option><option value="2000">2GB</option><option value="4000">4GB</option><option value="8000">8GB</option><option value="custom">직접 입력</option></select><input id="memory-gb" type="number" step="any" placeholder="GB" class="hidden" style="width:80px; flex:none"></div>
+      <div class="opt" title="DuckDB 파일과 PC에 받아 둔 결과를 계산할 때 쓸 CPU 코어 수예요. 줄이면 계산하는 동안에도 PC가 덜 느려지지만 큰 계산은 오래 걸려요. Parquet, CSV 같은 파일에는 적용되지 않아요. 다음 연결부터 적용돼요."><span>계산에 쓸 CPU 코어</span><select id="threads"></select></div>
+      <div class="opt" title="실행 전에 읽을 양을 미리 셀 수 없는 연결(Postgres, BigQuery, 파일 등)에서 어떻게 할지 정해요. 읽을 양이 메모리 한도를 넘으면(제한 없음이면 지금 PC의 남은 메모리) 어느 쪽이든 실행 전에 물어봐요."><span>읽을 양을 미리 모를 때</span><select id="scan-unknown"><option value="run">그대로 실행</option><option value="block">실행하지 않기</option></select></div>
+      <div class="opt" title="컬럼 종류를 짐작하려고 표본을 뽑을 때, 기대한 행 수의 이 비율보다 적게 오면 다른 방법(최신 파티션, 앞쪽 행)으로 다시 가져와요. 비우면 20%이고, 5에서 90 사이로 넣을 수 있어요."><span>최소 표본 비율(%)</span><input id="too-few" type="number" min="5" max="90" step="1" placeholder="20" style="width:80px; flex:none"></div>
     </details>
     <button id="connect" class="btn p conn-go">연결</button>
     <div class="err" id="err-connect"></div>
@@ -41,8 +44,8 @@
 <div id="drivers-panel" class="modal hidden">
   <div class="modal-box drv-box">
     <div class="head"><h3>드라이버 확인</h3><button id="drv-close" class="ib" title="닫기" style="margin-left:auto"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
-    <div class="hint">이 PC에 있는 드라이버만 확인합니다. 아무것도 자동으로 받거나 설치하지 않으니, 필요한 명령을 복사해 직접 실행하세요.</div>
-    <div class="table-wrap"><table class="drv-table"><thead><tr><th>묶음</th><th>이름</th><th>상태</th><th>설명</th><th>설치 명령</th></tr></thead><tbody id="drv-rows"></tbody></table></div>
+    <div class="hint">이 PC에 설치된 드라이버만 확인해요. 자동으로 내려받거나 설치하지 않으니, 필요한 명령을 복사해 직접 실행하세요.</div>
+    <div class="table-wrap"><table class="drv-table"><thead><tr><th>분류</th><th>이름</th><th>상태</th><th>설명</th><th>설치 명령</th></tr></thead><tbody id="drv-rows"></tbody></table></div>
     <div class="err" id="err-drivers"></div>
   </div>
 </div>

@@ -290,7 +290,7 @@ def apply_joins(base, joins, get_table):
         for left, r in [*pairs, *([on] if on else [])]:
             check_name(left, expr.columns)
             check_name(r, right.columns)
-        merged = {r for left, r in pairs if left == r} if how == "inner" else set()  # inner 조인의 같은 이름 키는 Ibis가 하나로 합친다(query/flow.join_names와 같다)
+        merged = {r for left, r in pairs if left == r} if how == "inner" else set()  # inner 조인의 같은 이름 키는 Ibis가 하나로 합친다
         rname = rname_for(expr.columns, [c for c in right.columns if c not in merged], name)
         if how == "asof":
             expr = asof(expr, right, on, pairs, rname)

@@ -261,7 +261,7 @@ const cols = [["amt", "실수"], ["qty", "정수"], ["name", "문자"], ["day", 
   await Funcs.loadSupport("orders");
   p.refresh();
   const byValue = Object.fromEntries(p.select.options().map(o => [o.value, o]));
-  assert.strictEqual(byValue.median.textContent, "중앙값 · 이 PC에서 계산"); assert.strictEqual(byValue.corr.textContent, "상관계수 · 대체 식");
+  assert.strictEqual(byValue.median.textContent, "중앙값 (이 PC에서 계산)"); assert.strictEqual(byValue.corr.textContent, "상관계수 (대체 식)");
   assert.strictEqual(byValue.mode.disabled, true); assert.strictEqual(byValue.sum.disabled, false);
   p.set({ agg: "corr" }); assert.strictEqual(p.el.children[2].textContent, "공분산 ÷ (표준편차 × 표준편차)로 구해요.");
   // 계산 줄의 낱말: 컬럼, 칸 차례의 인자(값이 없는 뒤쪽 칸은 뺌)

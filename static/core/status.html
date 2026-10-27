@@ -1,15 +1,15 @@
 <header class="topbar">
-  <div class="crumb" id="crumb" title="지금 연결과 고른 테이블"><i></i><span id="crumb-text">연결 안 됨</span></div>
-  <nav class="pages"><a href="/search" data-feature="query" title="탐색과 대시보드">쿼리</a><a href="/prep" data-feature="prep" title="전처리, 분석, 그래프">분석</a><a href="/dashboard" data-feature="dashboard" title="저장한 대시보드를 저장된 값으로 보고 고치기">대시보드</a><a href="/collect" data-feature="collect">수집</a><a href="/integrations" data-feature="integrations" title="Slack·Notion·GA4·LLM 등 다른 앱·서비스와 잇기">연동</a></nav>
-  <div class="sx" id="usage" title="PC 전체와 이 프로그램(화면 포함)의 점유율. DB 주소로 연결하면 연산은 DB 서버가 합니다"></div>
-  <span class="jobx idle hidden" id="job" title="검색한 뒤로 돌린 검색·집계·차트·저장 시간. 예상: 테이블 행 수 × 직전 실행의 행당 시간"><i></i><span id="job-name"></span><em id="timing"></em><button id="cancel" title="지금 도는 작업을 멈춥니다">취소</button></span>
-  <span class="jobx hidden" id="rf-pill" role="button" style="cursor:pointer" title="대시보드 최신화 진행 중. 누르면 진행 창을 엽니다"><i></i><span id="rf-pill-text"></span></span>
+  <div class="crumb" id="crumb" title="지금 연결된 데이터와 고른 테이블"><i></i><span id="crumb-text">연결 안 됨</span></div>
+  <nav class="pages"><a href="/search" data-feature="query" title="테이블을 찾아보고 SQL, 지표, 차트를 만들어요">쿼리</a><a href="/prep" data-feature="prep" title="데이터를 다듬고 그래프로 살펴봐요">분석</a><a href="/dashboard" data-feature="dashboard" title="모아 둔 차트와 지표를 보고 고쳐요">대시보드</a><a href="/collect" data-feature="collect" title="웹 API나 웹페이지에서 데이터를 받아 저장해요">수집</a><a href="/integrations" data-feature="integrations" title="Slack, Notion, GA4, LLM 같은 서비스와 연결해요">연동</a></nav>
+  <div class="sx" id="usage" title="PC의 메모리와 CPU 사용률, 이 앱이 쓰는 메모리예요."></div>
+  <span class="jobx idle hidden" id="job" title="마지막으로 검색한 뒤 실행한 작업에 걸린 시간이에요. 예상 시간은 테이블 행 수와 지난번 실행 속도로 계산해요."><i></i><span id="job-name"></span><em id="timing"></em><button id="cancel" title="실행 중인 작업을 멈춰요">취소</button></span>
+  <span class="jobx hidden" id="rf-pill" role="button" style="cursor:pointer" title="대시보드를 최신 값으로 바꾸는 중이에요. 누르면 진행 상황을 볼 수 있어요."><i></i><span id="rf-pill-text"></span></span>
   <div class="top-tools">
-    <button id="resize" class="ib" title="켜면 패널·표·차트의 경계를 끌어 크기를 바꿀 수 있습니다"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+    <button id="resize" class="ib" title="켜면 패널, 표, 차트의 가장자리를 끌어 크기를 바꿀 수 있어요"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
     <button id="theme" class="ib"></button>
-    <button id="dest-open" class="btn" title="알림이나 집계·차트를 다른 앱으로 보낼 곳을 정합니다">보낼 곳</button>
-    <span id="upd" class="hidden"><span id="upd-text"></span> <button id="upd-open" class="btn" title="무엇이 바뀌었는지 보고 업데이트합니다">업데이트</button></span>
-    <button id="feat-open" class="btn" title="쓸 기능을 고르고 설치를 바꿉니다">설정</button>
+    <span id="upd" class="hidden"><span id="upd-text" class="upd-note"></span> <button id="upd-open" class="btn" title="바뀐 내용을 보고 업데이트해요">업데이트</button></span>
+    <button id="dest-open" class="btn" title="알림과 결과를 받을 Slack, Notion, 웹훅을 정해요">보낼 곳</button>
+    <button id="feat-open" class="btn" title="쓸 기능을 고르고 업데이트 확인을 설정해요">설정</button>
   </div>
 </header>
 <!-- 업데이트 창: 새 버전의 릴리스 노트(추가·개선·삭제)를 보여 주고 [지금 업데이트]로 설치한다. -->
@@ -17,8 +17,8 @@
   <div class="modal-box">
     <div class="head"><h3 id="upd-title">새 버전</h3><button id="upd-close" class="ghost" style="margin-left:auto">나중에</button></div>
     <div id="upd-notes" style="white-space:pre-wrap; max-height:50vh; overflow:auto"></div>
-    <div class="hint">고른 기능·설정·대시보드는 그대로예요. 설치 파일을 받아 지문을 확인한 뒤 조용히 설치하고, 앱이 닫혔다가 다시 열려요.</div>
-    <div class="row" style="margin-top:10px"><button id="upd-go">지금 업데이트</button></div>
+    <div class="hint" style="margin-top:12px">고른 기능, 설정, 대시보드는 그대로 남아요. 설치 파일을 받아 지문을 확인한 뒤 따로 묻지 않고 설치하며, 앱이 잠시 닫혔다가 다시 열려요.</div>
+    <div class="row" style="margin-top:10px; justify-content:flex-end"><button id="upd-go">지금 업데이트</button></div>
     <div id="upd-msg" class="err"></div>
   </div>
 </div>
@@ -26,10 +26,13 @@
 <div id="feat-panel" class="modal hidden">
   <div class="modal-box">
     <div class="head"><h3>설정</h3><button id="feat-close" class="ghost" style="margin-left:auto">닫기</button></div>
-    <div class="hint">쓸 기능을 고르고 [적용]을 누르면 같은 버전의 설치 프로그램을 받아 다시 설치하고, 앱이 닫혔다가 다시 열립니다. 설정과 대시보드는 그대로 남습니다.</div>
+    <div class="field-label">쓸 기능</div>
+    <div class="hint">고른 뒤 [적용]을 누르면 같은 버전을 다시 설치해요. 앱이 잠시 닫혔다가 다시 열리고, 설정과 대시보드는 그대로 남아요.</div>
     <div id="feat-list"></div>
-    <div class="row" style="margin-top:10px"><button id="feat-apply">적용</button></div>
-    <label style="display:block; margin-top:10px"><input type="checkbox" id="upd-check" style="width:auto"> 앱을 열 때 새 버전이 있는지 확인(GitHub Releases에 묻기만, 데이터는 보내지 않음)</label>
+    <div class="row" style="margin-top:10px; justify-content:flex-end"><button id="feat-apply">적용</button></div>
     <div id="feat-msg" class="err"></div>
+    <div class="field-label" style="margin-top:14px; padding-top:12px; border-top:1px solid var(--line)">업데이트</div>
+    <label style="display:block"><input type="checkbox" id="upd-check" style="width:auto"> 앱을 열 때 새 버전이 있는지 확인하기</label>
+    <div class="hint">GitHub Releases에 새 버전이 있는지만 물어요. 데이터는 보내지 않아요.</div>
   </div>
 </div>

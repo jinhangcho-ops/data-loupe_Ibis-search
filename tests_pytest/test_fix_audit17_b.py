@@ -1,15 +1,13 @@
-"""17차 B: 예전 연결 열쇠의 내 지표 고치기·상태(K2), 지표 단계가 있는 흐름의 '쓰는 컬럼만'(M4), 문장 보기 정렬 칸의 공백 있는 컬럼(M5). 값은 시험 안에서 지어낸다."""
+"""17차 B: 예전 연결 열쇠의 내 지표 고치기·상태(K2), 문장 보기 정렬 칸의 공백 있는 컬럼(M5). 값은 시험 안에서 지어낸다."""
 import json
 import shutil
 import subprocess
 
 import pytest
-from lazy import ibis
 
 from conftest import ROOT
-from core import dash_store, metric_file
+from core import dash_store
 from metrics import my_metrics as mm
-from query import flow, flow_opt
 
 OLD = "url:databricks://:/"  # v1.2.1의 source_key가 host 없는 주소에 남기던 열쇠(with_scope가 지표 scope.key로 저장)
 NOW = dash_store.source_key({"kind": "url", "url": "databricks://?server_hostname=dev.cloud.example&http_path=/sql/1"})
@@ -29,22 +27,6 @@ def test_old_key_metrics_can_be_edited_and_get_status(client, monkeypatch):
         got = client.post("/api/my_metrics/update", json={"id": m["id"], "patch": {"name": m["name"], "scope": scope, "template": m["template"], "slots": slots, "unit": "", "better": ""}, "columns": C})
         assert got.status_code == 200, got.get_json()
         assert got.get_json()["metric"]["scope"]["key"] == NOW
-
-
-def test_prune_skips_metric_step_without_defs(folder, tmp_path):
-    """M4: 지표 파일 이름만 담은 지표 단계(flow.js의 {names})가 쓰는 컬럼은 흐름에서 알 수 없으니 원격에서도 '쓰는 컬럼만'을 적용하지 않는다."""
-    path = tmp_path / "m.yaml"
-    path.write_text('metrics:\n  CTR:\n    format: percent\n    numerator: {agg: count, where: "event = click"}\n    denominator: {agg: count, where: "event = view"}\n', encoding="utf-8")
-    metric_file.save_file_path(str(path))
-    con = ibis.duckdb.connect()
-    con.create_table("ev", ibis.memtable({"uid": [1, 2, 3, 4], "event": ["click", "view", "view", "view"], "amount": [1, 2, 3, 4]}))
-    get = lambda name, schema=None: con.table(name)
-    g = {"nodes": [{"id": "t1", "kind": "table", "params": {"table": "ev"}, "pos": {"x": 0, "y": 0}},
-                   {"id": "m1", "kind": "metric", "params": {"names": ["CTR"]}, "pos": {"x": 0, "y": 0}}], "edges": [["t1", "m1"]]}
-    applied = flow_opt.apply(g, [4], get, con, remote=True, scan_ok=False)
-    assert 4 not in applied["applied"]
-    assert flow.to_expr(applied["graph"], "m1", get).to_polars().to_dicts() == [{"CTR": pytest.approx(1 / 3)}]
-
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 def test_order_slot_keeps_spaced_column(tmp_path):

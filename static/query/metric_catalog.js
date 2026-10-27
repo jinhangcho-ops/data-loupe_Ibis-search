@@ -75,7 +75,7 @@ async function showMetricCatalog(box, env) {
       const t = tableSlot && st.slots[tableSlot.name];
       if (t && st.ad.name !== t) {
         const ad = st.ad = { name: t, cols: {} };
-        try { ad.cols = (await api("/api/flow/schemas", { graph: { nodes: [{ id: "t", kind: "table", params: { table: t, ...(scope().schema ? { schema: scope().schema } : {}) } }], edges: [] } })).schemas[t]?.columns ?? {}; } catch { /* 컬럼을 못 받으면 직접 적는다 */ }
+        try { ad.cols = (await api("/api/table_columns", { table: t, ...(scope().schema ? { schema: scope().schema } : {}) })).columns ?? {}; } catch { /* 컬럼을 못 받으면 직접 적는다 */ }
       }
       drawLine();
     }
@@ -94,7 +94,7 @@ async function showMetricCatalog(box, env) {
       if (!t) { msg.textContent = "먼저 문장에서 광고 테이블을 고르세요."; return; }
       msg.textContent = "";
       try {
-        const d = await api("/api/flow/keys", { a: { table: scope().base, ...(scope().schema ? { schema: scope().schema } : {}) }, b: { table: t, ...(scope().schema ? { schema: scope().schema } : {}) } });
+        const d = await api("/api/join_keys", { a: { table: scope().base, ...(scope().schema ? { schema: scope().schema } : {}) }, b: { table: t, ...(scope().schema ? { schema: scope().schema } : {}) } });
         if (!d.candidates.length) { msg.textContent = "공통 키 후보가 없어요. 기간 단위로 맞추세요."; return; }
         const choose = c => { st.align.keys = c.keys; drawAlign(); keys.replaceChildren(); };
         keys.replaceChildren(...d.candidates.map(c => el("button", { className: "tpl", title: (c.reasons ?? []).join("\n"), onclick: () => choose(c) }, el("b", { textContent: c.keys.map(k => `${k[0]} = ${k[1]}`).join(", ") }), ` 점수 ${c.score} · ${c.basis}`)));

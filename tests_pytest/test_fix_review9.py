@@ -7,7 +7,6 @@ import polars as pl
 from analysis import stats
 from core import parse
 from core import source
-from query import flow
 
 
 def test_group_compare_on_sqlite_float_column(tmp_path):
@@ -47,11 +46,9 @@ def test_asof_after_a_join_with_shared_names(tmp_path):
     con = ibis.duckdb.connect()
     o = con.create_table("o", ibis.memtable({"id": [1], "cid": [1], "t": [5], "name": ["o"]}))
     con.create_table("c", ibis.memtable({"cid": [1], "name": ["c"], "t": [1]}))
-    p = con.create_table("p", ibis.memtable({"id": [1], "t": [3], "name": ["p"]}))
-    first = parse.apply_joins(o, [("c", "left", [("cid", "cid")], None)], con.table)
+    con.create_table("p", ibis.memtable({"id": [1], "t": [3], "name": ["p"]}))
     e = parse.apply_joins(o, [("c", "left", [("cid", "cid")], None), ("p", "asof", [("id", "id")], ("t", "t"))], con.table)
     assert e.execute().to_dict("records")[0]["name_p"] == "p"
-    assert list(flow.right_names(dict.fromkeys(first.columns), dict.fromkeys(p.columns), "asof", "p")) == list(e.columns)
 
 
 def test_right_table_that_already_has_the_renamed_name():

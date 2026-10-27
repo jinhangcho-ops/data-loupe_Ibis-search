@@ -29,7 +29,7 @@ TYPE_BYTES = {"bool": 1, "int8": 1, "int16": 2, "int32": 4, "int64": 8, "uint8":
 def referenced(sql, dialect):
     """SQL이 읽는 (테이블 이름들, 컬럼 이름들 또는 None(모든 컬럼)). 가상 테이블은 이미 WITH로 풀린 SQL을 받는다."""
     exp = sql_exec.glot()[1]
-    tree = sql_exec.check(sql, dialect)
+    tree = sql_exec.glot()[0].parse_one(sql, read=dialect)  # 읽기만 하고 실행하지 않는다(앱이 만든 read_parquet도 막지 않게 check 대신)
     tables = sql_exec.table_names(tree)
     star = any(not isinstance(s.parent, exp.Count) for s in tree.find_all(exp.Star))  # COUNT(*)의 *는 컬럼을 읽지 않는다
     columns = None if star else {c.name.lower() for c in tree.find_all(exp.Column) if c.name}
@@ -106,6 +106,12 @@ def estimate(con, sql, opened=None, dialect=None):
     tables, columns = referenced(sql, dialect)
     files = file_tables(opened)
     total, exact, hows = 0, True, set()
+    exp = sql_exec.glot()[1]
+    paths = [n.expressions[0].name for n in sql_exec.glot()[0].parse_one(sql, read=dialect).find_all(exp.ReadParquet)
+             if n.expressions and n.expressions[0].is_string]  # Parquet 가상 테이블이 풀린 read_parquet('경로')
+    for path in paths:
+        total += parquet_bytes(path, columns)
+        hows.add("Parquet 파일 정보")
     for table in tables:
         path = files.get(table.lower())
         if path is not None:
@@ -129,7 +135,7 @@ def estimate(con, sql, opened=None, dialect=None):
             return {"bytes": None, "exact": False, "how": "이 연결은 미리 알 수 없음"}
         total += size
         exact = False
-    return {"bytes": total, "exact": exact and bool(tables), "how": ", ".join(sorted(hows)) or "읽는 테이블 없음"}
+    return {"bytes": total, "exact": exact and bool(tables or paths), "how": ", ".join(sorted(hows)) or "읽는 테이블 없음"}
 
 
 def reason(e):

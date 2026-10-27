@@ -11,31 +11,13 @@ def con_with(**tables):
         con.create_table(name, ibis.memtable(data))
     return con
 
-
-def table_node(i, name):
-    return {"id": i, "kind": "table", "params": {"table": name}}
-
-
-def test_union_of_same_table_is_refused_in_flow():
-    """8B1: 같은 뿌리 테이블 둘을 이어붙이면 거부(안내 문구), 다른 테이블 둘은 된다."""
-    from query import flow
-    g = {"nodes": [table_node("a", "orders"), table_node("b", "orders"), table_node("c", "items"), {"id": "u", "kind": "union", "params": {"how": "left"}}], "edges": [["a", "u"]]}
-    schemas = {"orders": {"columns": {"id": "num"}}, "items": {"columns": {"id": "num"}}}
-    bad = flow.check_edge(g, "b", "u", schemas)
-    assert bad and "다르고 서로 겹치지 않아야" in bad
-    assert flow.check_edge(g, "c", "u", schemas) is None
-
-
-def test_self_join_works_in_search_and_flow():
-    """8B2: 자기 조인이 검색과 흐름 모두 3행, 오른쪽 컬럼은 _right."""
+def test_self_join_works_in_search():
+    """8B2: 자기 조인이 검색에서 3행, 오른쪽 컬럼은 _right."""
     from core import parse
-    from query import flow
     con = con_with(emp={"id": [1, 2, 3], "boss": [None, 1, 1], "name": ["a", "b", "c"]})
     get = lambda name, schema=None: con.table(name)
     out = parse.apply_joins(con.table("emp"), [("emp", "left", [("boss", "id")], None)], get)
     assert out.count().execute() == 3 and "id_right" in out.columns and "name_right" in out.columns
-    g = {"nodes": [table_node("a", "emp"), table_node("b", "emp"), {"id": "j", "kind": "join", "params": {"how": "left", "keys": [["boss", "id"]]}}], "edges": [["a", "j"], ["b", "j"]]}
-    assert flow.to_expr(g, "j", get).count().execute() == 3
     # 다른 테이블과의 조인 컬럼 이름 규칙은 그대로
     con2 = con_with(emp={"id": [1, 2], "x": [1, 2]}, other={"id": [1, 2], "y": [5, 6]})
     j = parse.apply_joins(con2.table("emp"), [("other", "inner", [("id", "id")], None)], lambda n: con2.table(n))

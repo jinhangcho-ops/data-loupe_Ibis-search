@@ -237,8 +237,18 @@ def expand(con, tree, vts):
     if not order:
         return tree
     exp = glot()[1]
-    ctes = [exp.CTE(this=definition_tree(con, n, vts[n]), alias=exp.TableAlias(this=exp.to_identifier(n, quoted=True))) for n in order]
-    tree = tree.copy()
+
+    def pin(t):  # 따옴표 없는 가상 테이블 참조를 저장한 그대로의 이름(따옴표)으로: WITH "Sales"를 Postgres가 sales로, Snowflake가 SALES로 접어 못 찾지 않게
+        own = {cte.alias_or_name.lower() for cte in t.find_all(exp.CTE)}
+        for ref in list(t.find_all(exp.Table)):
+            if not ref.args.get("db") and isinstance(ref.this, exp.Identifier) and ref.name.lower() in lower and ref.name.lower() not in own:
+                if not ref.alias:  # 테이블 이름으로 쓴 컬럼 앞자리(Sales.a)도 그대로 맞게 원래 글을 별칭으로 둔다
+                    ref.set("alias", exp.TableAlias(this=ref.this.copy()))
+                ref.set("this", exp.to_identifier(lower[ref.name.lower()], quoted=True))
+        return t
+
+    ctes = [exp.CTE(this=pin(definition_tree(con, n, vts[n])), alias=exp.TableAlias(this=exp.to_identifier(n, quoted=True))) for n in order]
+    tree = pin(tree.copy())
     if isinstance(tree, exp.Subquery):
         tree = tree.unnest()
     own = tree.args.get("with_")  # sqlglot은 WITH를 with_ 인자에 둔다

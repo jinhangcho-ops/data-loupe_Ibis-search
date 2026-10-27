@@ -7,9 +7,7 @@ import pytest
 from collect import collect_browser, collect_config, collect_store, collect_web
 from collect.collect_http import Halt
 from metrics import my_metrics
-from query import flow, flow_opt, sentence_exec, sentence_run
-
-SPACED = {"orders": {"columns": {"order date": "date", "store name": "text", "amount": "num", "memo": "text"}, "source_key": "k"}}
+from query import sentence_exec, sentence_run
 
 
 def test_sentence_16_uses_only_its_own_tables():
@@ -32,18 +30,6 @@ def test_prepped_my_metric_works_inside_combined_sentence(client, tmp_path):
     m = my_metrics.create({"name": "uniq", "scope": {"key": current_source()["key"], "table": "ev"}, "template": "m02", "slots": {"대상": {"column": "email", "prep": "lower"}}}, cols)
     rows = sentence_exec.execute_compiled(sentence_exec.prepare("e21", {"지표 A": m["id"], "지표 B": m["id"]}, base, cols))["rows"]
     assert list(rows[0].values()) == [1.0]
-
-
-def test_flow_check_reads_spaced_columns():
-    g = flow.from_body({"base": "orders", "periods": ["order date 2026-01-01 ~ 2026-01-31"], "conditions": ["store name = 강남"], "calcs": []})
-    assert flow.check_graph(g, SPACED) == []
-
-
-def test_rule4_keeps_spaced_column_used_in_condition():
-    g = flow.from_body({"base": "orders", "conditions": ["store name = 강남"], "aggregate": {"by": [], "series": [{"agg": "sum", "y": "amount", "name": "s"}]}})
-    new, _ = flow_opt.prune_columns(g, {"schemas": SPACED})
-    assert [n["params"]["columns"] for n in new["nodes"] if n["kind"] == "table"] == [["store name", "amount"]]
-
 
 def test_robots_checked_before_window_opens(monkeypatch, tmp_path):
     events = []

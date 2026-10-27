@@ -50,8 +50,7 @@ def test_6e1_scoped_why_is_empty_outside_tab(tmp_path):
 
 
 def test_6e2_setview_keeps_limit_and_restore_clears_it():
-    html = page("query/index.html")
-    assert 'loadBody({ ...found.body, limit: found.body.limit ?? ($("limit").value || undefined) })' in html
+    html = page("query/index.html")  # 흐름 → 단계 카드로 옮길 때 쪽 크기를 지키던 줄은 흐름 보기와 함께 없앴다
     # 되돌리기·초안 복원 쪽은 limit이 없던 상태로 돌아간다(loadBody 자체는 그대로)
     assert '$("limit").value = b.limit ?? "";' in html
 

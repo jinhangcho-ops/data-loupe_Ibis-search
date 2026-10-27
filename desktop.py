@@ -53,7 +53,7 @@ from integrations import schedule  # 프로그램 안 예약 스레드를 띄워
 from integrations import schedule_app  # noqa: F401  예약 라우트가 앱에 달린다.
 from metrics import catalog_app  # noqa: F401  지표 사전 라우트가 앱에 달린다.
 from prep import prep_app  # noqa: F401  전처리 라우트가 앱에 달린다.
-from query import flow_app  # noqa: F401  흐름·문장·내 지표 라우트가 앱에 달린다.
+from query import flow_app  # noqa: F401  문장·내 지표·공통 키 라우트가 앱에 달린다.
 from query.search_app import app
 
 from core import filelock

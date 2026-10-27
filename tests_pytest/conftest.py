@@ -18,7 +18,7 @@ from integrations import bot_app  # noqa: E402,F401  Slack 봇 라우트
 from collect import collect_app  # noqa: E402,F401  수집 라우트
 from dashboard import dash_app  # noqa: E402,F401  대시보드 라우트
 from core import draft_app  # noqa: E402,F401  화면 임시 저장(초안) 라우트
-from query import flow_app  # noqa: E402,F401  흐름·문장·내 지표 라우트
+from query import flow_app  # noqa: E402,F401  문장·내 지표·공통 키 라우트
 from metrics import catalog_app  # noqa: E402,F401  지표 사전 라우트
 from integrations import integrations_app  # noqa: E402,F401  연동 라우트
 from prep import prep_app  # noqa: E402,F401  전처리 라우트

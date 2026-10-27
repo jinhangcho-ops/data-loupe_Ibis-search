@@ -1,6 +1,6 @@
-"""static/query/flow.js(흐름 보기)와 static/query/sentences.js(문장 보기)의 화면 없는 계산을 node로 돌려 본다. node가 없으면 건너뛴다.
-배치(깊이·겹침), 이음 규칙(서버 flow.edge_problem의 모양·순서·순환과 같은 판단), 끼우기·지우기·꼬리 붙이기, 조건 묶음 되돌리기(index.html의 grouped와 서로 반대),
-문장 조각·빈칸 보임·기본값·컬럼 맞춤·기간 칸·결과 차트·카드 만들기. SERVER.flow는 서버 값을 그대로 쓴다. 값은 손으로 센 작은 예제다."""
+"""static/query/sentences.js(문장 보기)와 index.html의 조건 묶음 풀기(ungroup)의 화면 없는 계산을 node로 돌려 본다. node가 없으면 건너뛴다.
+조건 묶음 되돌리기(index.html의 grouped와 서로 반대), 문장 조각·빈칸 보임·기본값·컬럼 맞춤·기간 칸·결과 차트·카드 만들기. 값은 손으로 센 작은 예제다.
+(흐름 보기 flow.js는 없앴다. 파일 이름은 그대로 둔다.)"""
 import json
 import re
 import shutil
@@ -8,115 +8,33 @@ import subprocess
 
 import pytest
 
-from query import flow
-from query import flow_app  # noqa: F401  server.constants("query")["flow"]
 from query import sentences
-from core import server
 from conftest import ROOT
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
 
 def run_node(tmp_path, body, name="case"):
-    """flow.js·sentences.js를 이어 붙이고 body를 실행한 마지막 줄(JSON)을 돌려준다."""
-    head = "const assert = require('assert'); globalThis.SERVER = {flow: %s};\n" % json.dumps(server.constants("query")["flow"], ensure_ascii=False)
+    """sentences.js에 body를 붙여 실행한 마지막 줄(JSON)을 돌려준다."""
+    head = "const assert = require('assert'); globalThis.SERVER = {};\n"
     script = tmp_path / f"{name}.js"
-    script.write_text(head + (ROOT / "static" / "query" / "flow.js").read_text(encoding="utf-8") + (ROOT / "static" / "query" / "sentences.js").read_text(encoding="utf-8") + body, encoding="utf-8")
+    script.write_text(head + (ROOT / "static" / "query" / "sentences.js").read_text(encoding="utf-8") + body, encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0, done.stderr[-3000:]
     return json.loads(done.stdout.strip().splitlines()[-1])
 
 
-# 흐름: 테이블 둘 → 조인 → 기간 → 조건 → 집계 → 차트
-GRAPH = {"nodes": [{"id": "t1", "kind": "table", "params": {"table": "orders"}}, {"id": "t2", "kind": "table", "params": {"table": "shops"}},
-                   {"id": "j", "kind": "join", "params": {"how": "inner", "keys": [["shop_id", "shop_id"]]}}, {"id": "p", "kind": "period", "params": {"line": "day 2026-01-01 ~"}},
-                   {"id": "c", "kind": "condition", "params": {"cond": "amt >= 10"}}, {"id": "a", "kind": "aggregate", "params": {"by": ["country"], "series": [{"agg": "sum", "y": "amt", "name": "합"}]}},
-                   {"id": "ch", "kind": "chart", "params": {"x": "country"}}],
-         "edges": [["t1", "j"], ["t2", "j"], ["j", "p"], ["p", "c"], ["c", "a"], ["a", "ch"]]}
-
-
-def test_layout_depth_and_no_overlap(tmp_path):
-    """배치: 이음의 끝은 시작보다 오른쪽 칸에 놓이고, 어떤 두 단계도 겹치지 않는다. 순환이 있어도 끝난다."""
-    got = run_node(tmp_path, "const g = %s; const at = flowLayout(g);\n"
-                   "const cyc = { nodes: [{ id: 'a', kind: 'calc' }, { id: 'b', kind: 'calc' }], edges: [['a', 'b'], ['b', 'a']] };\n"
-                   "console.log(JSON.stringify({ at, cyc: Object.keys(flowLayout(cyc)) }));" % json.dumps(GRAPH))
-    at = got["at"]
-    assert all(at[b]["x"] > at[a]["x"] for a, b in GRAPH["edges"])
-    assert at["t1"]["x"] == at["t2"]["x"] and at["t1"]["y"] != at["t2"]["y"]  # 같은 칸의 두 테이블은 위아래로
-    boxes = [(p["x"], p["y"]) for p in at.values()]
-    assert len(set(boxes)) == len(boxes)
-    assert sorted(got["cyc"]) == ["a", "b"]
-
-
-EDGE_CASES = [("c", "p"), ("c", "t1"), ("ch", "c"), ("t1", "p"), ("p", "c"), ("t1", "a"), ("a", "ch"), ("c", "c"), ("j", "t2"), ("t1", "j"), ("a", "p"), ("zz", "p"), ("t1", "c"), ("p", "a")]
-
-
-def test_local_edge_rules_match_server(tmp_path):
-    """화면이 끌 때 미리 보는 이음 규칙(모양·순서·순환·한 곳에 하나)이 서버 flow.edge_problem과 같은 판단을 한다(막는지 아닌지, 이유 문장까지)."""
-    got = run_node(tmp_path, "const g = %s; console.log(JSON.stringify(%s.map(([a, b]) => flowEdgeLocal(g, a, b))));" % (json.dumps(GRAPH), json.dumps(EDGE_CASES)))
-    for (a, b), local in zip(EDGE_CASES, got):
-        found = flow.edge_problem(GRAPH, a, b, None)
-        assert bool(local) == bool(found), (a, b, local, found)
-        if found:
-            assert local == found["reason"]
-
-
-def test_cycle_refused_locally(tmp_path):
-    """같은 순위끼리 되돌아가는 이음은 순환으로, 이미 앞 단계가 있는 단계에 또 잇는 것은 한 곳에 하나로 막는다."""
-    chain = {"nodes": [{"id": "x", "kind": "calc", "params": {}}, {"id": "y", "kind": "calc", "params": {}}, {"id": "z", "kind": "calc", "params": {}}], "edges": [["x", "y"], ["y", "z"]]}
-    got = run_node(tmp_path, "const g = %s; console.log(JSON.stringify([flowEdgeLocal(g, 'z', 'x'), flowEdgeLocal(g, 'x', 'z')]));" % json.dumps(chain))
-    assert got[0] == "순환이 생겨요: 계산(x) → 계산(y) → 계산(z) → 계산(x)." and "하나만 이을 수 있어요" in got[1]  # 되돌리면 순환, 앞 단계가 있는 단계에 또 이으면 한 곳에 하나
-    assert flow.edge_problem(chain, "z", "x", None)["code"] == "cycle"
-
-
-def test_insert_remove_keep_order(tmp_path):
-    """이음 사이에 끼우면 그 자리(edges 차례)가 그대로라 조인의 왼쪽·오른쪽이 바뀌지 않는다. 가운데 단계를 지우면 앞뒤가 이어진다."""
-    got = run_node(tmp_path, "const g = %s; const ins = flowInsert(g, 't2', 'j', 'condition', { cond: 'x = 1' }); const rm = flowRemove(g, 'p');\n"
-                   "console.log(JSON.stringify({ edges: ins.graph.edges, id: ins.id, kinds: flowInsertKinds(g, 'j', 'p'), kinds2: flowInsertKinds(g, 'p', 'c'), kinds3: flowInsertKinds(g, 'c', 'a'), rm: rm.edges, n: rm.nodes.length, cut: flowCut(g, 'a', 'ch').edges.length }));" % json.dumps(GRAPH))
-    assert got["edges"][:2] == [["t1", "j"], ["t2", got["id"]]] and got["edges"][2] == [got["id"], "j"]
-    assert got["kinds"] == ["period"] and got["kinds2"] == ["period", "condition"] and got["kinds3"] == ["condition", "calc", "dedupe"]  # 순서(기간→조건→계산→중복 제거)가 맞는 종류만
-    assert ["j", "c"] in got["rm"] and got["n"] == 6 and got["cut"] == 5
-
-
-def test_tail_detach_and_attach(tmp_path):
-    """집계·차트(단계 카드에 없는 끝)는 떼어 두었다가 새 body로 만든 흐름의 끝에 다시 붙는다. 꼬리 바로 앞 단계가 body의 끝(target)이다."""
-    got = run_node(tmp_path, "const g = %s; const tail = flowTail(g); const base = { nodes: g.nodes.filter(n => !['a', 'ch'].includes(n.id)).map(n => ({ ...n, id: 'm' + n.id })), edges: [['mt1', 'mj'], ['mt2', 'mj'], ['mj', 'mp'], ['mp', 'mc']] };\n"
-                   "const back = flowAttach(base, tail); console.log(JSON.stringify({ target: flowBodyTarget(g), tail: tail.nodes.map(n => n.id), tailEdges: tail.edges, feed: tail.feed, back: back.edges.slice(-2), ids: back.nodes.map(n => n.id), none: flowAttach(base, { nodes: [], edges: [], feed: [] }) === base }));" % json.dumps(GRAPH))
-    assert got["target"] == "c" and got["tail"] == ["a", "ch"] and got["tailEdges"] == [["a", "ch"]] and got["feed"] == ["c"]
-    assert got["back"] == [["a", "ch"], ["mc", "a"]] or got["back"] == [["mc", "a"], ["a", "ch"]]
-    assert len(set(got["ids"])) == len(got["ids"]) and got["none"]
-
-
-def test_node_text_and_defaults(tmp_path):
-    got = run_node(tmp_path, "const g = %s; console.log(JSON.stringify({ t: g.nodes.map(flowNodeText), d: flowDefault('period', { columns: ['id', 'day'], dates: ['day'] }), d2: flowDefault('condition', { columns: ['id'] }), d3: flowDefault('table', { table: 'x' }), clip: flowClip('가'.repeat(40), 5) }));" % json.dumps(GRAPH))
-    assert got["t"] == ["orders", "shops", "inner shop_id=shop_id", "day 2026-01-01 ~", "amt >= 10", "country · 합", "country"]
-    assert got["d"] == {"line": "day ~ "} and got["d2"] == {"cond": "id is not null"} and got["d3"] == {"table": "x"} and got["clip"] == "가가가가…"
-
-
-def test_diff_and_upstream(tmp_path):
-    got = run_node(tmp_path, "const g = %s; const o = flowCopy(g); o.nodes.find(n => n.id === 'c').params = { cond: 'amt >= 99' }; o.nodes.push({ id: 'n9', kind: 'calc', params: {} }); o.nodes = o.nodes.filter(n => n.id !== 'p');\n"
-                   "console.log(JSON.stringify({ marks: flowDiff(g, o), up: flowUpstream(g, 'c').sort(), cols: flowColumns(g, 'a', { orders: { columns: { shop_id: 'num', amt: 'num' } }, shops: { columns: { shop_id: 'num', country: 'text' } } }), jc: flowColumns(g, 'j', { orders: { columns: { shop_id: 'num', amt: 'num' } }, shops: { columns: { shop_id: 'num', country: 'text' } } }), root: flowRoot(g, 'c').id }));" % json.dumps(GRAPH))
-    assert got["marks"] == {"c": "chg", "n9": "add", "p": "del"} and got["up"] == ["c", "j", "p", "t1", "t2"]
-    assert got["cols"] == {"country": "other", "합": "num"} or got["cols"]["합"] == "num"
-    assert got["jc"] == {"shop_id": "num", "amt": "num", "country": "text"} and got["root"] == "t1"  # inner 조인의 같은 이름 키는 하나로 합친다(서버 right_names와 같다)
-
-
-def test_join_columns_match_server():
-    left, right = {"shop_id": "num", "amt": "num"}, {"shop_id": "num", "country": "text"}
-    assert list(flow.right_names(left, right, "inner")) == ["shop_id", "amt", "shop_id_right", "country"]
-
-
 def server_grouped_from_index():
-    """index.html의 grouped()(단계 카드 → 서버로 보낼 조건 모양)를 그대로 뽑는다."""
+    """index.html의 grouped()(단계 카드 → 서버로 보낼 조건 모양)와 ungroup(그 반대)을 그대로 뽑는다."""
     html = (ROOT / "static" / "query" / "index.html").read_text(encoding="utf-8")
-    start = html.index("function grouped() {")
-    return html[start:html.index("\n}\n", start) + 2]
+    start, un = html.index("function grouped() {"), html.index("const ungroup = ")
+    return html[start:html.index("\n}\n", start) + 2] + html[un:html.index("\n// ", un) + 1]
 
 
 def test_ungroup_is_inverse_of_grouped(tmp_path):
-    """조건의 {any} 묶음을 단계 카드 항목으로 되돌린 것(flowUngroup)을 index.html의 grouped()로 다시 묶으면 처음 모양이 된다(세 보기가 같은 body)."""
+    """조건의 {any} 묶음을 단계 카드 항목으로 되돌린 것(ungroup)을 index.html의 grouped()로 다시 묶으면 처음 모양이 된다(두 보기가 같은 body)."""
     conds = ["a = 1", {"any": ["b = 2", "c = 3", {"line": "d = 4", "quotes": False}]}, {"line": "e = 5", "quotes": False}, "f = 6"]
-    body = "const S = { conditions: [] }; %s\nconst conds = %s; S.conditions = flowUngroup(conds);\nconsole.log(JSON.stringify({ items: S.conditions, back: grouped() }));" % (server_grouped_from_index(), json.dumps(conds))
+    body = "const S = { conditions: [] }; %s\nconst conds = %s; S.conditions = ungroup(conds);\nconsole.log(JSON.stringify({ items: S.conditions, back: grouped() }));" % (server_grouped_from_index(), json.dumps(conds))
     got = run_node(tmp_path, body)
     assert got["back"] == conds
     assert got["items"][1] == {"line": "b = 2", "or": True} and got["items"][2] == {"line": "c = 3", "or": True} and got["items"][3] == {"line": "d = 4", "quotes": False}
@@ -185,10 +103,11 @@ def test_sentence_set_shape(tmp_path):
 
 
 def test_page_has_views_and_ends_operator():
-    """단계 카드 화면에 세 보기 전환과 새 파일들이 달려 있고, 조건 연산자 목록에 ends가 있다(서버 parse가 지원한다)."""
+    """단계 카드 화면에 두 보기(단계 카드·문장) 전환과 파일들이 달려 있고 흐름 보기는 없으며, 조건 연산자 목록에 ends가 있다(서버 parse가 지원한다)."""
     html = (ROOT / "static" / "query" / "index.html").read_text(encoding="utf-8")
-    for needle in ('id="vswitch"', 'data-v="flow"', 'data-v="sentence"', '"/static/query/flow.js"', '"/static/query/sentences.js"', 'href="/static/query/flow.css"'):
+    for needle in ('id="vswitch"', 'data-v="cards"', 'data-v="sentence"', '"/static/query/sentences.js"', 'href="/static/query/sentences.css"'):
         assert needle in html
+    assert 'data-v="flow"' not in html and "flow.js" not in html and "flow.css" not in html and "/api/flow" not in html
     ops = re.search(r"const OPS_TEXT = \[(.*?)\]", html).group(1)
     assert '"ends"' in ops and "컬럼 ends 값" in html
     from core import parse

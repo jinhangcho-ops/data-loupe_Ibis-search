@@ -104,7 +104,7 @@ const over = makeHost(); resultTable(over, { columns, rows: rows.concat([{ a: 0,
 console.log(JSON.stringify({ same: host.html === old, rows: (host.html.match(/<tr>/g) ?? []).length, noAria: !host.html.includes("aria-"), empty: empty.html, overVirtual: over.html.includes("aria-rowcount") }));
 """
     got = js(tmp_path, body)
-    assert got == {"same": True, "rows": 201, "noAria": True, "empty": '<span class="empty">결과가 없습니다.</span>', "overVirtual": True}
+    assert got == {"same": True, "rows": 201, "noAria": True, "empty": '<span class="empty">결과가 없어요.</span>', "overVirtual": True}
 
 
 @needs_node

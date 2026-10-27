@@ -46,8 +46,6 @@ from core import parse
 from core import result
 from core import server
 from core import source
-from query import flow
-from query import flow_opt
 
 
 def polars_table(tmp_path, name, frame):
@@ -72,20 +70,6 @@ def test_pages_of_a_distinct_then_sorted_file_table_do_not_overlap(tmp_path):
     e = t.distinct().order_by("g")
     seen = pl.concat([result.get_rows(e, 100_000, o) for o in range(0, n, 100_000)])
     assert seen["v"].n_unique() == n
-
-
-def test_prune_columns_skips_a_table_whose_join_names_would_change():
-    schemas = {"o": {"columns": {"k": "num", "v": "num"}}, "r": {"columns": {"k": "num", "v": "num", "v_right": "num"}}}
-    graph = {"nodes": [{"id": "o", "kind": "table", "params": {"table": "o"}}, {"id": "r", "kind": "table", "params": {"table": "r"}},
-                       {"id": "j", "kind": "join", "params": {"how": "left", "keys": [["k", "k"]]}}, {"id": "a", "kind": "condition", "params": {"cond": "v_r > 0"}}],
-             "edges": [["o", "j"], ["r", "j"], ["j", "a"]]}
-    con = ibis.duckdb.connect()
-    con.create_table("o", ibis.memtable({"k": [1], "v": [1]}))
-    con.create_table("r", ibis.memtable({"k": [1], "v": [5], "v_right": [7]}))
-    get = lambda name, schema=None: con.table(name)
-    pruned, _ = flow_opt.prune_columns(graph, {"schemas": schemas, "get_table": get, "remote": False, "scan_ok": True, "uniq": {}})
-    assert flow.to_expr(pruned or graph, "a", get).execute()["v_r"].tolist() == [5]
-
 
 def test_inner_join_merged_key_keeps_the_usual_right_names():
     con = ibis.duckdb.connect()

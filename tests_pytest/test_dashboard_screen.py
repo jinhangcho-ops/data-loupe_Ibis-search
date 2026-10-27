@@ -38,7 +38,7 @@ def test_nav_has_dashboard_on_every_screen(client):
 def test_home_has_fifth_card_and_no_dashboard_section(client):
     html = page(client, "/")
     assert html.count('class="choice"') == 5 and 'data-go="/dashboard"' in html
-    assert re.search(r'<b>대시보드</b><span>[^<]+</span><em>연결 없이 시작</em>', html)  # 한 줄 설명, 연결 없이 시작
+    assert re.search(r'<b>대시보드</b><span>[^<]+</span><em>바로 시작</em>', html)  # 한 줄 설명, 연결 없이 바로 시작
     for gone in ("h-dash", "h-grid", "h-ctl", "쿼리에서 편집", "dash_menu.js", "dash_cards.js", "chart.umd"):
         assert gone not in html, gone
     assert '["/collect", "/integrations", "/dashboard"].includes(target)' in html  # 연결 없이 들어간다

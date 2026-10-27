@@ -40,7 +40,7 @@ import psutil
 from collect import collect_app  # noqa: F401  수집 라우트가 앱에 달린다.
 from dashboard import dash_app  # noqa: F401  대시보드 라우트가 앱에 달린다.
 from core import draft_app  # noqa: F401  화면 임시 저장(초안) 라우트가 앱에 달린다.
-from query import flow_app  # noqa: F401  흐름·문장·내 지표 라우트가 앱에 달린다.
+from query import flow_app  # noqa: F401  문장·내 지표·공통 키 라우트가 앱에 달린다.
 from metrics import catalog_app  # noqa: F401  지표 사전 라우트가 앱에 달린다.
 from integrations import schedule_app  # noqa: F401  예약 라우트가 앱에 달린다.
 from integrations import notify

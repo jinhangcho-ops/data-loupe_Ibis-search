@@ -194,9 +194,9 @@ def test_goal_lookup_can_be_ambiguous(folder):
 def test_scope_must_name_connection_and_table(folder):
     with pytest.raises(ValueError, match="지표가 속한 연결\\(scope.key\\)이 필요해요."):
         mm.check_scope({"table": "sales"})
-    with pytest.raises(ValueError, match="지표가 속한 테이블\\(scope.table\\)이나 흐름\\(scope.flow_id\\)이 필요해요."):
+    with pytest.raises(ValueError, match="지표가 속한 테이블\\(scope.table\\)이 필요해요."):
         mm.check_scope({"key": "k"})
     with pytest.raises(ValueError, match="계정"):
         mm.check_scope({"key": "k", "table": "t", "password": "secret"})
-    flow_scope = mm.check_scope({"key": "k", "flow_id": "f1"})
-    assert flow_scope == {"key": "k", "label": "", "schema": "", "flow_id": "f1"}
+    with pytest.raises(ValueError, match="흐름 보기가 없어져"):  # 흐름 보기를 없애 흐름(flow_id)에 새로 묶지 않는다
+        mm.check_scope({"key": "k", "flow_id": "f1"})

@@ -1,5 +1,5 @@
-"""내 지표(6-5): 지표 틀(sentences.METRICS, scope 없음)에 빈칸을 채우고 테이블(또는 흐름)에 묶어 둔 것. 정의만 설정 my_metrics.json에 평문으로 둔다(값·계정·비밀번호 없음).
-지표 = {id, name, scope: {key, label, schema, table | flow_id}, template, slots, deps, def_hash, unit, better, cols, align?, created, updated}. template은 지표 틀 id 또는 지표 사전 항목('catalog:id', metric_catalog).
+"""내 지표(6-5): 지표 틀(sentences.METRICS, scope 없음)에 빈칸을 채우고 테이블에 묶어 둔 것. 정의만 설정 my_metrics.json에 평문으로 둔다(값·계정·비밀번호 없음).
+지표 = {id, name, scope: {key, label, schema, table}(예전 흐름 보기의 지표는 table 없이 flow_id: 남겨 두지만 FLOW_GONE으로 쓸 수 없다), template, slots, deps, def_hash, unit, better, cols, align?, created, updated}. template은 지표 틀 id 또는 지표 사전 항목('catalog:id', metric_catalog).
 - scope 안에서 이름이 겹칠 수 없다(다른 scope는 같은 이름 가능, 화면은 '이름 · 테이블 (연결)').
 - 다른 scope의 지표는 쓸 수 없다. [이 테이블에 맞춰 복사]로 컬럼 짝을 골라 새 id로 복사한다(copy_to). 예외: align(‘{기간 단위}로 맞춰’ 또는 ‘{공통 키}로 맞춰’)을 넣은 조합.
 - 의존(deps)은 순환할 수 없다(DFS). def_hash는 자기 정의 + 의존하는 지표의 def_hash를 합쳐 만들어, 의존 지표의 정의가 바뀌면 쓰는 쪽도 바뀐다.
@@ -29,6 +29,7 @@ BETTER = ("", "up", "down")
 LEGACY = "legacy"  # metrics.py 파일 지표를 묶은 지표의 틀 이름
 ALIGN_UNITS = metric_catalog.UNITS  # 지표 사전 계산이 받는 단위와 같다(year는 계산 때 거부되므로 저장도 막는다)
 SCOPE_TEXT = "{name} · {table} ({label})"
+FLOW_GONE = "흐름 보기가 없어져 이 지표는 다시 구할 수 없어요. 탐색에서 다시 만들어 주세요."  # 예전 흐름(scope.flow_id)에 묶은 지표. 저장한 정의는 지우지 않는다
 ORDER_WORDS = re.compile(r"^\s*([^\s,]+)")
 LOCK = threading.RLock()  # 저장 파일을 읽고 고쳐 쓰는 일(만들기·고치기·지우기·복사)은 한 번에 하나씩
 
@@ -71,14 +72,20 @@ def same_scope(a, b):
 
 
 def check_scope(scope):
-    """scope 모양 검사(정리한 사본). 연결 key와 table 또는 flow_id 중 하나가 있어야 한다. 계정·비밀번호 항목은 거부한다."""
+    """scope 모양 검사(정리한 사본). 연결 key와 table이 있어야 한다(table 없이 flow_id만 있으면 FLOW_GONE). 계정·비밀번호 항목은 거부한다."""
     if not isinstance(scope, dict) or not isinstance(scope.get("key"), str) or not scope["key"]:
         raise ValueError("지표가 속한 연결(scope.key)이 필요해요.")
-    if not (scope.get("table") or scope.get("flow_id")):
-        raise ValueError("지표가 속한 테이블(scope.table)이나 흐름(scope.flow_id)이 필요해요.")
+    if not scope.get("table"):
+        raise ValueError(FLOW_GONE if scope.get("flow_id") else "지표가 속한 테이블(scope.table)이 필요해요.")
     dash_store.no_secrets(scope, "지표의 scope")
     return {"key": scope["key"], "label": str(scope.get("label") or ""), "schema": str(scope.get("schema") or ""),
             **({"table": str(scope["table"])} if scope.get("table") else {}), **({"flow_id": str(scope["flow_id"])} if scope.get("flow_id") else {})}
+
+
+def is_flow_only(metric):
+    """예전 흐름 보기에 묶여 테이블이 없는 지표인지."""
+    s = metric.get("scope") or {}
+    return bool(s.get("flow_id")) and not s.get("table")
 
 
 def scope_text(metric):
@@ -466,6 +473,8 @@ def check_use(metric, scope):
     """지표를 scope에서 그대로 쓸 수 있는지: 쓸 수 없는 이유 또는 None. 다른 scope의 지표는 복사해서 써야 한다."""
     if not (metric.get("scope")):
         return f"‘{metric['name']}’은(는) 공통 정의예요. 이 테이블에 묶어 저장한 뒤 쓰세요."
+    if is_flow_only(metric):
+        return FLOW_GONE
     if not same_scope(metric["scope"], check_scope(scope)):
         return f"‘{scope_text(metric)}’은(는) 다른 테이블(흐름)의 지표라 그대로 쓸 수 없어요. [이 테이블에 맞춰 복사]를 쓰세요."
     return None

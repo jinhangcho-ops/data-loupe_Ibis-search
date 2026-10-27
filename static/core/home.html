@@ -6,27 +6,28 @@
 <title>Data Loupe</title>
 <!--include core/head.html-->
 <style>
-  .hero { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; align-items:center; justify-content:safe center; gap:28px; padding:24px; }
-  .hero h1 { margin:0; font-size:30px; letter-spacing:-.02em; }
+  .hero { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; align-items:center; justify-content:safe center; gap:32px; padding:32px 24px; background:var(--bg); }
+  .hero h1 { margin:0 0 6px; font-size:26px; font-weight:700; letter-spacing:-.02em; }
   .hero p { margin:0; color:var(--muted); }
-  .choices { display:flex; flex-wrap:wrap; gap:16px; justify-content:center; }
-  .choice { width:clamp(240px, 26vw, 400px); padding:clamp(18px, 2vw, 30px); border:1px solid var(--line); border-radius:18px; background:var(--card); color:var(--text); cursor:pointer; text-align:left; font-weight:400; display:flex; flex-direction:column; align-items:flex-start; gap:10px; white-space:normal; height:auto; }
+  .choices { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 300px)); gap:14px; justify-content:center; width:min(100%, 1000px); }
+  .choice { min-height:148px; padding:20px 22px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--text); cursor:pointer; text-align:left; font-weight:400; display:flex; flex-direction:column; align-items:flex-start; gap:8px; white-space:normal; height:auto; }
   .choice:hover { border-color:var(--accent); }
-  .choice b { font-size:22px; }
-  .choice span { color:var(--muted); line-height:1.5; }
-  .choice em { font-style:normal; font-size:12.5px; color:var(--accent); font-weight:600; }
+  .choice b { font-size:17px; font-weight:600; }
+  .choice span { color:var(--muted); line-height:1.55; }
+  .choice em { margin-top:auto; font-style:normal; font-size:12.5px; color:var(--faint); font-weight:500; }
+  .choice em.need { color:var(--accent); }
 </style>
 </head>
 <body class="app">
 <!--include core/status.html-->
 <div class="hero">
-  <div style="text-align:center"><h1>무엇을 할까요?</h1><p>쿼리와 분석은 데이터에 먼저 연결합니다.</p></div>
+  <div style="text-align:center"><h1>무엇을 할까요?</h1><p>쿼리와 분석은 데이터를 연결한 뒤에 시작해요.</p></div>
   <div class="choices">
-    <button class="choice" data-go="/search" data-feature="query"><b>쿼리</b><span>DB나 파일의 테이블을 조건이나 SQL로 탐색하고, 지표를 구하고, 차트를 그려 대시보드에 모읍니다.</span><em>탐색 · SQL · 지표</em></button>
-    <button class="choice" data-go="/prep" data-feature="prep"><b>분석</b><span>테이블을 정리하고, 분포·상관관계·그룹 비교·추이를 그래프로 봅니다.</span><em>전처리 · 분석</em></button>
-    <button class="choice" data-go="/dashboard" data-feature="dashboard"><b>대시보드</b><span>모아 둔 차트·KPI·표·상태를 저장된 값으로 바로 보고, 연결하면 최신으로 바꿉니다.</span><em>연결 없이 시작</em></button>
-    <button class="choice" data-go="/collect" data-feature="collect"><b>수집</b><span>웹 API·파일 주소·웹페이지에서 데이터를 받아 파일로 저장하고, DB 테이블이나 Kafka에 넣습니다.</span><em>연결 없이 시작</em></button>
-    <button class="choice" data-go="/integrations" data-feature="integrations"><b>연동</b><span>Slack·Notion·웹훅으로 보내고, Slack 명령을 받고, GA4 보고서를 가져오고, LLM을 설정합니다.</span><em>연결 없이 시작</em></button>
+    <button class="choice" data-go="/search" data-feature="query"><b>쿼리</b><span>테이블을 조건이나 SQL로 찾아보고 지표와 차트를 만들어요.</span><em class="need">데이터 연결 필요</em></button>
+    <button class="choice" data-go="/prep" data-feature="prep"><b>분석</b><span>데이터를 다듬고 분포, 추이, 그룹 차이를 그래프로 살펴봐요.</span><em class="need">데이터 연결 필요</em></button>
+    <button class="choice" data-go="/dashboard" data-feature="dashboard"><b>대시보드</b><span>모아 둔 차트와 지표를 한 화면에서 봐요.</span><em>바로 시작</em></button>
+    <button class="choice" data-go="/collect" data-feature="collect"><b>수집</b><span>웹 API나 웹페이지에서 데이터를 받아 파일이나 데이터베이스에 저장해요.</span><em>바로 시작</em></button>
+    <button class="choice" data-go="/integrations" data-feature="integrations"><b>연동</b><span>Slack, Notion, GA4 같은 다른 서비스와 연결해요.</span><em>바로 시작</em></button>
   </div>
 </div>
 <!--include core/connect.html-->
@@ -42,7 +43,7 @@ function afterConnect() { if (target) location.href = target; }
 document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => {
   target = b.dataset.go;
   if (["/collect", "/integrations", "/dashboard"].includes(target) || connected) return location.href = target;
-  openConnect(`${b.querySelector("b").textContent}로 들어갑니다`);
+  openConnect(`연결하면 ${b.querySelector("b").textContent} 화면으로 넘어가요`);
 });
 resume();
 </script>

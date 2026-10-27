@@ -43,7 +43,7 @@ async function send(url, body) {
   if (!res.ok) { const d = await res.json(), err = new Error(d.error); err.driver = d.driver; throw err; }  // driver: 드라이버가 없어 못 붙었을 때의 안내
   if (res.headers.get("X-Needs-Confirm")) {  // 서버가 처리 용량이 기준을 넘는다고 물으면 팝업으로 묻고, 확인하면 그 실행만 confirmed를 붙여 다시 보낸다.
     const d = await res.json(), ok = await confirmScan(d);
-    if (d.blocked || !ok) throw new Error(d.blocked ? d.text : "취소했습니다.");
+    if (d.blocked || !ok) throw new Error(d.blocked ? d.text : "취소했어요.");
     return send(url, { ...body, confirmed: true });
   }
   return res;
@@ -53,9 +53,9 @@ function confirmScan(d) {
   return new Promise(done => {
     const pick = ok => () => { box.remove(); done(ok); };
     const buttons = d.blocked ? [el("button", { className: "btn", textContent: "닫기", onclick: pick(false) })]
-      : [el("button", { className: "ghost", textContent: "취소", onclick: pick(false) }), el("button", { className: "btn p", textContent: "확인", onclick: pick(true) })];
+      : [el("button", { className: "ghost", textContent: "취소", onclick: pick(false) }), el("button", { className: "btn p", textContent: "그대로 실행", onclick: pick(true) })];
     const box = el("div", { className: "modal", onclick: e => { if (e.target === box) pick(false)(); } },
-      el("div", { className: "modal-box" }, el("h3", { textContent: d.blocked ? "실행하지 않습니다" : "처리 용량이 큽니다" }),
+      el("div", { className: "modal-box" }, el("h3", { textContent: d.blocked ? "실행하지 않았어요" : "읽을 데이터가 많아요" }),
         el("p", { textContent: d.text, style: "white-space:pre-wrap; margin:10px 0 14px" }), el("div", { className: "row", style: "justify-content:flex-end" }, ...buttons)));
     document.body.append(box);
     box.querySelector("button:last-child").focus();
@@ -188,7 +188,7 @@ function gridFind(g, want) {
 // 표 하나를 host에 그린다. spec = { columns, rows, head: <th>들의 HTML, row(r, want, max): <td>들의 HTML, text?(r, c, max): 찾을 글(없으면 칸에 보이는 글) }.
 // 행이 TABLE_MIN 이하면 예전처럼 전부 그린 HTML 그대로, 넘으면 보이는 행만 그리고 aria-rowcount/rowindex로 전체 행 수를 알린다.
 function mountTable(host, spec) {
-  if (!spec.rows.length) { host._grid = null; host.innerHTML = '<span class="empty">결과가 없습니다.</span>'; return; }
+  if (!spec.rows.length) { host._grid = null; host.innerHTML = '<span class="empty">결과가 없어요.</span>'; return; }
   const g = host._grid = { ...spec, host, view: null, want: "", open: new Map(), extra: new Map(), H: 40, a: -1, b: -1, virtual: spec.rows.length > TABLE_MIN };
   if (!g.virtual) { host.innerHTML = `<table><thead><tr>${spec.head}</tr></thead><tbody>${gridTrs(g, 0, spec.rows.length, maxLen())}</tbody></table>`; return; }
   host.innerHTML = `<table aria-rowcount="${spec.rows.length + 1}"><thead><tr aria-rowindex="1">${spec.head}</tr></thead><tbody></tbody></table>`;
@@ -246,8 +246,8 @@ async function showUsage() {
   if (document.hidden) return;  // 숨은 창에서는 묻지 않는다(2초마다 서버를 깨우지 않게)
   try {
     const d = await api("/api/usage");
-    $("usage").innerHTML = `<span>PC 메모리<b>${d.pc_memory}%</b></span><span>PC CPU<b>${d.pc_cpu}%</b></span><span>프로그램<b>${d.memory_mb.toLocaleString()} MB</b></span>`;
-    $("usage").title = `프로그램: 메모리 ${d.memory}%, CPU ${d.cpu}% (화면 포함). DB 주소로 연결하면 연산은 DB 서버가 합니다`;
+    $("usage").innerHTML = `<span>메모리<b>${d.pc_memory}%</b></span><span>CPU<b>${d.pc_cpu}%</b></span><span>앱<b>${d.memory_mb.toLocaleString()}MB</b></span>`;
+    $("usage").title = `PC 전체의 메모리와 CPU 사용률, 이 앱이 쓰는 메모리예요. 이 앱만 보면 메모리 ${d.memory}%, CPU ${d.cpu}%를 써요. 데이터베이스에 연결하면 계산은 데이터베이스 서버가 해요.`;
   } catch (e) {}
 }
 showUsage();
@@ -270,8 +270,8 @@ function showTiming() {
   $("job").classList.remove("hidden");
   $("job").classList.toggle("idle", !going.size);  // 도는 작업이 없으면 옅게, [취소]는 숨김
   $("cancel").classList.toggle("hidden", !going.size);
-  $("job-name").textContent = going.size ? `${JOBS[last.kind] ?? "작업"} 중` : "끝";
-  $("timing").textContent = [total.guess && `예상 ${secs(total.guess)}`, `걸린 시간 ${secs(ms)}`].filter(Boolean).join(" · ");
+  $("job-name").textContent = going.size ? `${JOBS[last.kind] ?? "작업"} 중` : "완료";
+  $("timing").textContent = [total.guess && `예상 ${secs(total.guess)}`, `걸린 시간 ${secs(ms)}`].filter(Boolean).join(", ");
 }
 function resetTiming() {
   total = { guess: 0, done: 0 };
@@ -316,7 +316,7 @@ const takesImage = name => dest.kinds[dest.destinations[name].kind].image;
 function notifyDone(kind, seconds, rows, text = S.base) {
   if (seconds < notifyAfter) return;
   for (const [name, d] of Object.entries(dest.destinations)) {
-    if (d.done) sendTo(name, { title: `${subject(JOBS[kind])} 끝났습니다`, text, ...(rows ? { rows } : {}), seconds: +seconds.toFixed(1) }).catch(e => connMsg(e.message));
+    if (d.done) sendTo(name, { title: `${subject(JOBS[kind])} 끝났어요`, text, ...(rows ? { rows } : {}), seconds: +seconds.toFixed(1) }).catch(e => connMsg(e.message));
   }
 }
 const destMsg = (text, ok) => say("msg-dest", text, ok);
@@ -336,17 +336,17 @@ function secretInput(input, keep, saved, state) {
     input.type = "text";
     input.value = same ? state?.env ?? "" : "";
     input.placeholder = "환경변수 이름 (예: IBIS_SLACK_TOKEN)";
-    return same ? (state?.set ? "환경변수가 있습니다." : "지금 이 환경변수가 없습니다.") : "";
+    return same ? (state?.set ? "환경변수를 찾았어요." : "이 환경변수가 아직 없어요.") : "";
   }
   input.type = "password";
-  input.placeholder = !same ? (keep === "session" ? "이번 실행 동안만 둡니다" : "") : state ? "저장됨 (바꾸려면 새로 입력)" : keep === "session" ? "다시 입력 필요 (프로그램을 다시 켰음)" : "다시 입력 필요";
+  input.placeholder = !same ? (keep === "session" ? "앱을 끄면 지워져요" : "") : state ? "저장돼 있어요. 바꾸려면 새로 입력하세요" : keep === "session" ? "앱을 다시 켜서 새로 입력해야 해요" : "다시 입력해 주세요";
   return "";
 }
 // 고른 종류의 칸을 서버의 표대로 그린다. 저장된 것이면 비밀이 아닌 칸은 값을, 비밀 칸은 보관 방식에 맞는 안내를 채운다.
 function showFields() {
   const kind = $("dest-kind").value, spec = dest.kinds[kind], now = dest.destinations[$("dest-list").value];
   const saved = now?.kind === kind ? now : null, presets = spec.presets ?? [];
-  $("dest-preset").replaceChildren(new Option("기본 틀", ""), ...presets.map((p, i) => new Option(p.label, i)));
+  $("dest-preset").replaceChildren(new Option("미리 만든 틀로 채우기", ""), ...presets.map((p, i) => new Option(p.label, i)));
   $("dest-preset").classList.toggle("hidden", !presets.length);
   $("dest-fields").replaceChildren(...spec.fields.map(f => {
     const input = f.options ? el("select", {}, ...f.options.map(([v, t]) => new Option(t, v)))
@@ -362,7 +362,7 @@ function showDestinations(d, name = $("dest-list").value) {
   fill($("dest-list"), Object.keys(d.destinations), "새로 만들기");
   $("dest-list").value = name in d.destinations ? name : "";
   $("dest-kind").replaceChildren(...Object.entries(d.kinds).map(([k, v]) => new Option(v.label, k)));
-  $("dest-keep").replaceChildren(...Object.entries(d.keeps).map(([k, v]) => new Option("비밀 값: " + v, k)));
+  $("dest-keep").replaceChildren(...Object.entries(d.keeps).map(([k, v]) => new Option(v, k)));
   pickDest();
   document.dispatchEvent(new Event("destinations"));  // 화면이 보낼 곳 목록을 쓰는 칸을 다시 채운다.
 }
@@ -388,7 +388,7 @@ $("feat-open").onclick = () => $("feat-panel").classList.remove("hidden");
 $("feat-close").onclick = () => $("feat-panel").classList.add("hidden");
 $("feat-panel").onclick = e => { if (e.target === $("feat-panel")) $("feat-panel").classList.add("hidden"); };
 $("feat-apply").onclick = () => busy($("feat-apply"), async () => {
-  say("feat-msg", "설치 프로그램을 받는 중이에요. 잠시 걸려요…", "hint");
+  say("feat-msg", "설치 파일을 내려받고 있어요. 잠시 기다려 주세요.", "hint");
   try { say("feat-msg", (await api("/api/features/install", { features: [...$("feat-list").querySelectorAll("input:checked")].map(i => i.value) })).text, true); }
   catch (e) { say("feat-msg", e.message); }
 });
@@ -396,15 +396,15 @@ $("feat-apply").onclick = () => busy($("feat-apply"), async () => {
 api("/api/update").then(u => {
   $("upd-check").checked = u.check;
   if (!u.newer) return;
-  $("upd-text").textContent = `새 버전 v${u.latest}이(가) 있어요`;
+  $("upd-text").textContent = `v${u.latest} 새 버전이 나왔어요`;
   $("upd").classList.remove("hidden");
-  $("upd-title").textContent = `v${u.current} → v${u.latest}에서 바뀐 것`;
+  $("upd-title").textContent = `v${u.latest}에서 바뀐 점 (지금 v${u.current})`;
   $("upd-notes").textContent = (u.notes || "릴리스 노트를 받지 못했어요. GitHub Releases에서 볼 수 있어요.").replace(/^#{2,3} /gm, "■ ");  // 글자로만 넣는다(노트의 HTML은 실행하지 않는다)
   $("upd-open").onclick = () => $("upd-panel").classList.remove("hidden");
   $("upd-close").onclick = () => $("upd-panel").classList.add("hidden");
   $("upd-panel").onclick = e => { if (e.target === $("upd-panel")) $("upd-panel").classList.add("hidden"); };
   $("upd-go").onclick = () => busy($("upd-go"), async () => {
-    say("upd-msg", `v${u.latest} 설치 프로그램을 받는 중이에요. 잠시 걸려요…`, "hint");
+    say("upd-msg", `v${u.latest} 설치 파일을 내려받고 있어요. 잠시 기다려 주세요.`, "hint");
     try { say("upd-msg", (await api("/api/features/install", { features: SERVER.features.on, version: u.latest })).text, true); }
     catch (e) { say("upd-msg", e.message); }
   });
@@ -417,25 +417,25 @@ const [AFTER_LOW, AFTER_HIGH] = SERVER.sizes.notify_after;
 Object.assign($("notify-after"), { value: notifyAfter, min: AFTER_LOW, max: AFTER_HIGH });
 $("notify-after").onchange = () => {
   const n = Number($("notify-after").value), ok = Number.isInteger(n) && n >= AFTER_LOW && n <= AFTER_HIGH;
-  destMsg(ok ? "" : `${AFTER_LOW}–${AFTER_HIGH} 사이의 정수를 넣으세요.`);
+  destMsg(ok ? "" : `${AFTER_LOW}에서 ${AFTER_HIGH} 사이의 정수로 넣어 주세요.`);
   if (ok) { notifyAfter = n; saveSetting({ notify_after: n }); }
 };
 $("dest-save").onclick = () => busy($("dest-save"), async () => {
   const name = $("dest-name").value.trim();
   const destination = { kind: $("dest-kind").value, done: $("dest-done").checked, keep: $("dest-keep").value,
     ...Object.fromEntries([...$("dest-fields").querySelectorAll("[data-field]")].map(i => [i.dataset.field, i.value])) };  // 비밀 칸을 비우면 서버가 저장된 값을 그대로 둔다.
-  try { showDestinations(await api("/api/destinations", { name, destination }), name); destMsg("저장했습니다", true); } catch (e) { destMsg(e.message); }
+  try { showDestinations(await api("/api/destinations", { name, destination }), name); destMsg("저장했어요.", true); } catch (e) { destMsg(e.message); }
 });
 $("dest-del").onclick = () => busy($("dest-del"), async () => {
   if (!$("dest-list").value) return;
-  try { showDestinations(await api("/api/destinations", { name: $("dest-list").value, destination: null }), ""); destMsg("삭제했습니다", true); } catch (e) { destMsg(e.message); }
+  try { showDestinations(await api("/api/destinations", { name: $("dest-list").value, destination: null }), ""); destMsg("삭제했어요.", true); } catch (e) { destMsg(e.message); }
 });
 $("dest-test").onclick = () => busy($("dest-test"), async () => {
-  if (!$("dest-list").value) return destMsg("저장한 보낼 곳을 고른 뒤 시험하세요.");
-  try { await sendTo($("dest-list").value, { title: "시험 메시지", text: "Data Loupe에서 보낸 시험 메시지입니다." }); destMsg("보냈습니다", true); } catch (e) { destMsg(e.message); }
+  if (!$("dest-list").value) return destMsg("먼저 위 목록에서 저장한 보낼 곳을 고르세요.");
+  try { await sendTo($("dest-list").value, { title: "시험 메시지", text: "Data Loupe에서 보낸 시험 메시지예요." }); destMsg("보냈어요. 받은 곳에서 확인해 보세요.", true); } catch (e) { destMsg(e.message); }
 });
 $("dest-check").onclick = () => busy($("dest-check"), async () => {
-  if (!$("dest-list").value) return destMsg("저장한 보낼 곳을 고른 뒤 확인하세요.");
+  if (!$("dest-list").value) return destMsg("먼저 위 목록에서 저장한 보낼 곳을 고르세요.");
   try { destMsg((await api("/api/destinations/check", { name: $("dest-list").value })).message, true); } catch (e) { destMsg(e.message); }
 });
 api("/api/destinations").then(showDestinations).catch(() => {});
@@ -444,13 +444,13 @@ api("/api/destinations").then(showDestinations).catch(() => {});
 const botMsg = (text, ok) => say("msg-bot", text, ok);
 // keep: 칸에 보일 보관 방식(고르는 칸을 바꾸면 그것, 아니면 저장한 것). 저장한 방식과 같을 때만 저장된 상태를 보인다.
 function showBot(d, keep = d.keep) {
-  $("bot-keep").replaceChildren(...Object.entries(d.keeps).map(([k, v]) => new Option("토큰: " + v, k)));
+  $("bot-keep").replaceChildren(...Object.entries(d.keeps).map(([k, v]) => new Option(v, k)));
   $("bot-keep").value = keep;
   [["bot-token", d.bot_token], ["bot-app", d.app_token]].forEach(([id, state]) => { $(id).title = secretInput($(id), keep, d.saved ? { keep: d.keep } : null, state); });
   $("bot-users").value = d.users.join(", ");
   $("bot-channels").value = d.channels.join(", ");
-  $("bot-state").textContent = d.running ? `켜짐${d.team ? " · " + d.team : ""}` : "꺼짐";
-  $("bot-log").textContent = d.log.length ? ["최근 요청:", ...d.log.map(r => `${r.at.slice(11)} ${r.user} ${r.allowed ? "" : "(거부) "}/ibis ${r.text}${r.error ? ` → 실패: ${r.error}` : ""}`)].join("\n") : "";
+  $("bot-state").textContent = d.running ? `켜짐${d.team ? ` (${d.team})` : ""}` : "꺼짐";
+  $("bot-log").textContent = d.log.length ? ["최근 요청", ...d.log.map(r => `${r.at.slice(11)} ${r.user} ${r.allowed ? "" : "(거부됨) "}/ibis ${r.text}${r.error ? ` (실패: ${r.error})` : ""}`)].join("\n") : "";
 }
 $("bot-keep").onchange = () => api("/api/bot").then(d => showBot(d, $("bot-keep").value)).catch(e => botMsg(e.message));
 $("bot-save").onclick = () => busy($("bot-save"), async () => {
@@ -458,13 +458,13 @@ $("bot-save").onclick = () => busy($("bot-save"), async () => {
     showBot(await api("/api/bot", { keep: $("bot-keep").value, bot_token: $("bot-token").value, app_token: $("bot-app").value, users: $("bot-users").value, channels: $("bot-channels").value }));
     $("bot-token").value = $("bot-keep").value === "env" ? $("bot-token").value : "";
     $("bot-app").value = $("bot-keep").value === "env" ? $("bot-app").value : "";
-    botMsg("저장했습니다", true);
+    botMsg("저장했어요.", true);
   } catch (e) { botMsg(e.message); }
 });
 [["bot-check", "/api/bot/check"], ["bot-start", "/api/bot/start"], ["bot-stop", "/api/bot/stop"]].forEach(([id, url]) => $(id).onclick = () => busy($(id), async () => {
   try {
     const d = await api(url, {});
-    if (d.message) botMsg(d.message, true); else { showBot(d); botMsg(d.running ? "봇을 켰습니다. Slack에서 /ibis 도움 을 보내 보세요." : "봇을 멈췄습니다.", true); }
+    if (d.message) botMsg(d.message, true); else { showBot(d); botMsg(d.running ? "봇을 켰어요. Slack에서 /ibis 도움 을 보내 보세요." : "봇을 껐어요.", true); }
   } catch (e) { botMsg(e.message); }
 }));
 $("dest-open").addEventListener("click", () => api("/api/bot").then(showBot).catch(() => {}));  // 열 때마다 켜짐 상태·최근 요청을 새로
@@ -488,8 +488,8 @@ function fillConnection(info) {
 let recentConnections = [];
 async function showRecentConnections() {
   try { recentConnections = (await api("/api/connections")).connections; } catch (e) { return; }
-  const label = c => (c.info.kind === "url" ? `${c.info.url}${c.info.user ? ` (${c.info.user})` : ""}` : c.info.path) + ` · ${c.count}회`;
-  $("recent-conn").replaceChildren(new Option("최근 연결 (많이 쓴 순)", ""), ...recentConnections.map((c, i) => new Option(label(c), i)));
+  const label = c => (c.info.kind === "url" ? `${c.info.url}${c.info.user ? `, ${c.info.user}` : ""}` : c.info.path) + ` (${c.count}번 사용)`;
+  $("recent-conn").replaceChildren(new Option("최근 연결에서 고르기", ""), ...recentConnections.map((c, i) => new Option(label(c), i)));
   $("recent-conn").classList.toggle("hidden", !recentConnections.length);
 }
 // 연결 카드(connect.html): 화면 가운데에 띄운다. 연결이 없으면 닫을 수 없다(첫 화면은 고르기를 그만둘 수 있어 닫힌다).
@@ -509,7 +509,7 @@ async function resume() {
     if (!state.connected) {
       const { recent } = await api("/api/recent");
       if (recent) fillConnection(recent);
-      if (hasTables) openConnect("먼저 데이터에 연결하세요");
+      if (hasTables) openConnect("이 화면을 쓰려면 먼저 데이터를 연결하세요.");
       return;
     }
     const { opened, schemas } = state;
@@ -537,7 +537,7 @@ const FLAT = "*flat";  // 파일 이름에 쓸 수 없는 글자로 시작해 �
 const flatBoxes = () => [...document.querySelectorAll("#flat-list input")];
 function showFlat() {
   $("flat").classList.toggle("hidden", $("file").value !== FLAT);
-  $("flat-count").textContent = `${flatBoxes().filter(b => b.checked).length} / ${flatBoxes().length}개 선택` + (offList.size ? ` · 고른 파일 중 ${offList.size}개는 목록 밖` : "");
+  $("flat-count").textContent = `${flatBoxes().length}개 중 ${flatBoxes().filter(b => b.checked).length}개 고름` + (offList.size ? `, 목록에 안 보이는 ${offList.size}개도 고름` : "");
 }
 // 고른 파일 중 화면 목록(LIST_MAX개까지)에 안 그린 것. 연결할 때 함께 보낸다.
 const offList = new Set();
@@ -560,7 +560,7 @@ $("path").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) 
 $("conn-close").onclick = closeConnect;
 $("conn-panel").onclick = e => { if (e.target === $("conn-panel") && connClosable()) closeConnect(); };
 $("crumb").classList.add("link");
-$("crumb").title = "누르면 연결을 바꿉니다";
+$("crumb").title = "눌러서 연결을 바꿔요";
 $("crumb").onclick = () => openConnect();
 $("recent-conn").onchange = () => {
   const c = recentConnections[$("recent-conn").value];
@@ -580,11 +580,11 @@ $("memory").onchange = () => {
 $("memory-gb").onchange = () => {
   const mb = Math.round(Number($("memory-gb").value) * 1000), [low, high] = SERVER.sizes.memory;
   if (mb >= low && mb <= high) saveSetting({ memory: mb });
-  else connMsg(`작업 메모리 상한은 ${low / 1000}GB 이상 ${high / 1000}GB 이하로 넣으세요.`);
+  else connMsg(`메모리 한도는 ${low / 1000}GB에서 ${high / 1000}GB 사이로 넣어 주세요.`);
 };
 // 계산 코어 수(0 = 전부): 저장만 하고 다음 [연결]부터 서버가 쓴다. 고를 수 있는 값은 1, 2, 4, 8, …과 이 PC의 코어 수.
 const cores = SERVER.sizes.threads[1], coreSteps = [...new Set([1, 2, 4, 8, 16, 32, 64].filter(n => n < cores).concat(cores))];
-$("threads").innerHTML = `<option value="0">전부 ${cores}개 (기본)</option>` + coreSteps.filter(n => n < cores).map(n => `<option value="${n}">${n}개</option>`).join("");
+$("threads").innerHTML = `<option value="0">모두 (${cores}개)</option>` + coreSteps.filter(n => n < cores).map(n => `<option value="${n}">${n}개</option>`).join("");
 $("threads").value = [...$("threads").options].some(o => o.value === String(saved("threads") || 0)) ? String(saved("threads") || 0) : "0";
 $("threads").onchange = () => saveSetting({ threads: +$("threads").value });
 // 자세히: 처리 용량을 알 수 없을 때(scan_unknown: run·block)와 표본이 너무 적게 오는 기준(sample_too_few, 화면은 %, 비우면 기본 20%).
@@ -596,7 +596,7 @@ $("too-few").onchange = () => {
   const text = $("too-few").value.trim(), n = Number(text) / 100;
   if (!text) { saveSetting({ sample_too_few: 0 }); connMsg(""); }
   else if (n >= FEW_LOW - 1e-9 && n <= FEW_HIGH + 1e-9) { saveSetting({ sample_too_few: n }); connMsg(""); }
-  else connMsg(`표본 기준은 ${Math.round(FEW_LOW * 100)}% 이상 ${Math.round(FEW_HIGH * 100)}% 이하로 넣으세요(비우면 20%).`);
+  else connMsg(`최소 표본 비율은 ${Math.round(FEW_LOW * 100)}에서 ${Math.round(FEW_HIGH * 100)} 사이로 넣어 주세요. 비우면 20%예요.`);
 };
 $("flat-list").onchange = showFlat;
 $("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
@@ -614,8 +614,8 @@ if (hasConnect) $("flat-none").onclick = () => busy($("flat-none"), async () => 
       await api("/api/disconnect", {});
       connected = connName = null;
       $("after-connect")?.classList.add("hidden");
-      connMsg("연결을 해제했습니다. 쓸 파일을 고르고 [연결]을 누르세요.", "hint");
-    } else connMsg("연결은 그대로 두고 화면만 비웠습니다. 테이블을 다시 고르세요.", "hint");
+      connMsg("연결을 끊었어요. 쓸 파일을 고르고 [연결]을 누르세요.", "hint");
+    } else connMsg("연결은 그대로 두고 화면만 비웠어요. 테이블을 다시 고르세요.", "hint");
     if (typeof clearScreen === "function") clearScreen();
   } catch (e) { connMsg(e.message); }
 });
@@ -626,7 +626,7 @@ async function listFiles() {
   const d = await api("/api/files", { path: $("path").value.trim(), kinds, deep: $("deep").checked });
   const files = d.files.slice(0, LIST_MAX), flat = d.flat.slice(0, LIST_MAX);
   fill($("file"), files);
-  if (d.flat.length) $("file").append(new Option(`테이블 파일 고르기: Parquet·CSV·JSON·Excel·GeoJSON (${d.flat.length}개)`, FLAT));
+  if (d.flat.length) $("file").append(new Option(`표 형식 파일에서 여러 개 고르기 (${d.flat.length}개)`, FLAT));
   offList.clear();
   checks($("flat-list"), flat);  // 처음에는 아무것도 고르지 않은 상태. 쓸 파일만 체크한다.
   if (!d.files.length && d.flat.length === 1) { $("file").value = FLAT; flatBoxes()[0].checked = true; }
@@ -643,7 +643,7 @@ if (hasConnect) $("find").onclick = () => busy($("find"), async () => {
 async function showConnected(flat, schemas, info) {
   connected = flat ? "flat" : "other";
   connName = connLabel(info);
-  connMsg("연결됨", true);
+  connMsg("연결했어요.", true);
   closeConnect();
   if (!hasTables) return showCrumb();
   clearScreen();  // 이전 연결에서 고른 테이블과 조건은 새 연결과 맞지 않으므로 비운다.
@@ -668,10 +668,10 @@ if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
   } catch (e) { connMsg(e.message); if (e.driver) showDriverHint(e.driver); }
 });
 // 드라이버 안내(drivers.py의 entry): 설명, 설치 명령과 [복사], 따로 설치할 프로그램, exe 안내. 연결이 드라이버 때문에 실패한 자리와 드라이버 표가 함께 쓴다.
-const DRIVER_STATUS = { installed: "설치됨", missing: "없음", program_needed: "프로그램 필요" };
+const DRIVER_STATUS = { installed: "설치됨", missing: "설치 안 됨", program_needed: "프로그램 필요" };
 function copyCommand(text) {
   const b = el("button", { className: "ghost", textContent: "복사", onclick: async () => {
-    try { await navigator.clipboard.writeText(text); b.textContent = "복사됨"; } catch (e) { b.textContent = "직접 선택해 복사"; }
+    try { await navigator.clipboard.writeText(text); b.textContent = "복사됨"; } catch (e) { b.textContent = "직접 골라 복사하세요"; }
     setTimeout(() => b.textContent = "복사", 1500);
   } });
   return b;

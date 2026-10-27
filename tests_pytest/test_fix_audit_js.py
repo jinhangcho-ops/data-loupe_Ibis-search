@@ -188,7 +188,7 @@ console.log(JSON.stringify({ picked: pickedFiles(), text: els["flat-count"].text
 """
     got = run_node(tmp_path, body, parts=[flat])
     assert got["picked"] == ["a", "b", "z1", "z2"]
-    assert "2개는 목록 밖" in got["text"]
+    assert "목록에 안 보이는 2개도 고름" in got["text"]
 
 
 def test_prep_recipe_sends_count_false_only_when_stats_off(tmp_path):
@@ -413,7 +413,7 @@ const S = { base: "" }; let view = "cards", key = "k0"; const bodyKey = () => ke
 S.base = "t1"; const opened = draftChanged();       // 테이블만 고른 상태
 key = "k1"; const edited = draftChanged();           // 조건을 바꿈
 S.base = "t2"; key = "k2"; const other = draftChanged();   // 다른 테이블을 열면 그 직후가 기준
-view = "flow"; const flow = draftChanged();
-console.log(JSON.stringify({ opened, edited, other, flow }));
+view = "sentence"; const sentence = draftChanged();
+console.log(JSON.stringify({ opened, edited, other, sentence }));
 """
-    assert run_node(tmp_path, body, parts=[prelude, code]) == {"opened": False, "edited": True, "other": False, "flow": True}
+    assert run_node(tmp_path, body, parts=[prelude, code]) == {"opened": False, "edited": True, "other": False, "sentence": True}

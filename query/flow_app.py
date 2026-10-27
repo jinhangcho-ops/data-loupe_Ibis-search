@@ -1,12 +1,10 @@
-"""흐름·문장·내 지표의 라우트(6단계 서버). server.app에 달린다.
-연결을 쓰지 않는 라우트(이음 검사, graph↔body 변환, 문장 검사·만들기, 내 지표 저장·검사·복사, 기억한 키)는 차례(turn)를 기다리지 않는다(FREE). 스키마는 화면이 가진 것을 요청에 담아 보낸다
-(schemas = {테이블: {columns: {컬럼: 종류}, source_key}}, /api/flow/schemas로 받는다).
-연결에서 읽는 라우트(행 수 세기, 최적화 제안·적용, 키 찾기, 이은 뒤 부풂)는 연결 스레드에서 돈다. 원격 DB는 값을 읽는 조회를 확인(confirmed·scan_ok) 없이는 보내지 않는다."""
+"""문장·내 지표·공통 키의 라우트. server.app에 달린다(파일 이름은 예전 흐름 보기 때의 것을 그대로 둔다).
+연결을 쓰지 않는 라우트(문장 검사·만들기, 내 지표 저장·검사·복사)는 차례(turn)를 기다리지 않는다(FREE). 스키마·컬럼은 화면이 요청에 담아 보낸다.
+연결에서 읽는 라우트(테이블 컬럼, 공통 키 찾기)는 연결 스레드에서 돈다. 원격 DB는 값을 읽는 새 조회를 보내지 않는다."""
 from flask import jsonify, request
 
 from lazy import Later
 from core import held
-from core import result
 from core import server
 from core import settings
 from core import use_counts
@@ -14,31 +12,18 @@ from core.server import app, get_con, run
 
 
 dash_store = Later("core.dash_store")
-flow = Later("query.flow")
-flow_opt = Later("query.flow_opt")
 join_keys = Later("query.join_keys")
 my_metrics = Later("metrics.my_metrics")
-parse = Later("core.parse")
-querying = Later("core.querying")
 sentence_exec = Later("query.sentence_exec")
 sentence_run = Later("query.sentence_run")
 sentences = Later("query.sentences")
 sql_funcs = Later("core.sql_funcs")
 
 server.CONSTANTS["question_sets"] = {"max_items": 30, "max_size": 40_000}
-server.FREE.update({"/api/sentences", "/api/question_sets", "/api/flow/check_edge", "/api/flow/check", "/api/flow/to_body", "/api/flow/from_body", "/api/flow/keys/remember", "/api/flow/keys/forget",
+server.FREE.update({"/api/sentences", "/api/question_sets",
                     "/api/my_metrics", "/api/my_metrics/validate", "/api/my_metrics/update", "/api/my_metrics/delete", "/api/my_metrics/copy", "/api/my_metrics/status",
                     "/api/my_metrics/check_use", "/api/my_metrics/used_by", "/api/my_metrics/stale", "/api/my_metrics/bind_legacy",
                     "/api/sentence/check", "/api/sentence/compile"})
-
-
-@server.late_constants("query")
-def flow_constants(found):  # 흐름 화면(flow.js)이 서버와 같은 순위·이름·규칙을 쓴다. 흐름 모듈은 쿼리 화면을 내려줄 때 올라온다.
-    found["flow"] = {"ranks": flow.RANK, "names": flow.NAMES, "order": flow.ORDER_TEXT, "same_rank": list(flow.SAME_OK), "kinds": flow.KIND_TEXT,
-        "joins": list(parse.JOINS), "unions": list(parse.UNIONS),
-        "opt_rules": {n: t for n, (_, t) in flow_opt.RULES.items()}, "keys": {"min": join_keys.DECIDE_MIN, "gap": join_keys.DECIDE_GAP,
-                                    "weights": join_keys.WEIGHTS, "sample_values": join_keys.SAMPLE_VALUES},
-        "my_metrics": {"max": my_metrics.MAX_METRICS, "align_units": list(my_metrics.ALIGN_UNITS)}}
 
 
 def table_getter():
@@ -51,86 +36,15 @@ def body_of(data):
     return data if isinstance(data, dict) else {}
 
 
-# ---------- 흐름: 검사·변환(연결 없음) ----------
-
-@app.post("/api/flow/check_edge")
-def flow_check_edge():
-    """이음 a→b를 해도 되는지. {ok, reason?, code?, suggest?}. schemas가 없으면 순위·순환·모양만 본다."""
+@app.post("/api/table_columns")
+def table_columns():
+    """테이블 하나의 {컬럼: 종류}(스키마만 읽는다). 지표 사전이 두 번째 테이블의 컬럼을 고를 때 쓴다. 요청 {table, schema?}."""
     data = body_of(request.json)
-    graph = flow.check_shape(data.get("graph"))
-    found = flow.edge_problem(graph, data.get("a"), data.get("b"), data.get("schemas"))
-    return jsonify(ok=found is None, **(found or {}))
-
-
-@app.post("/api/flow/check")
-def flow_check():
-    """흐름의 이음을 모두 다시 검사한 [{edge, code, reason}]."""
-    data = body_of(request.json)
-    graph = flow.check_shape(data.get("graph"))
-    return jsonify(problems=flow.check_graph(graph, data.get("schemas")), body_problem=flow.body_problem(graph, data.get("target")) if graph["nodes"] else None)
-
-
-@app.post("/api/flow/to_body")
-def flow_to_body():
-    """흐름 → 검색 body(단계 카드·문장이 같은 body를 본다). target 단계까지."""
-    data = body_of(request.json)
-    return jsonify(body=flow.to_body(data.get("graph"), data.get("target")))
-
-
-@app.post("/api/flow/from_body")
-def flow_from_body():
-    """검색 body → 흐름."""
-    body = body_of(request.json).get("body")
-    if not isinstance(body, dict) or not body.get("base"):
-        raise ValueError("기준 테이블이 있는 검색 body가 필요해요.")
-    return jsonify(graph=flow.from_body(body))
-
-
-# ---------- 흐름: 연결에서 읽는 일 ----------
-
-@app.post("/api/flow/schemas")
-def flow_schemas():
-    """흐름의 테이블 단계마다 {테이블: {columns, source_key}}(스키마만 읽는다). 화면이 받아 두고 check_edge 요청에 담는다."""
-    graph = flow.check_shape(body_of(request.json).get("graph"))
-    key = (dash_store.current_source() or {}).get("key")
-    return jsonify(schemas=run(lambda: flow.schemas_of(graph, table_getter(), key)), source=dash_store.current_source())
-
-
-@app.post("/api/flow/rows")
-def flow_rows():
-    """[단계별 행 수 세기]: target까지의 단계마다 그 단계까지의 행 수. 원격 DB는 확인(confirmed)이 있어야 센다."""
-    data = body_of(request.json)
-    graph = flow.check_shape(data.get("graph"))
-    target = data.get("target") or flow.one_sink(graph)
-    con = get_con()
-    return jsonify(**flow.row_counts(graph, target, lambda expr: run(lambda: result.get_count(expr)), querying.runnable, table_getter(), held.remote(con), data.get("confirmed") is True))
-
-
-@app.post("/api/flow/optimize")
-def flow_optimize():
-    """최적화 제안(적용하지 않는다). 원격 DB는 scan_ok(전체를 읽는 확인)가 없으면 구조상 같은 규칙만 '확인 안 됨'으로."""
-    data = body_of(request.json)
-    graph = flow.check_shape(data.get("graph"))
-    con = get_con()
-    remote, key, get = held.remote(con), (dash_store.current_source() or {}).get("key"), table_getter()
-    found = run(lambda: flow_opt.propose(graph, get, con, target=data.get("target"), remote=remote, scan_ok=data.get("scan_ok") is True, opened=server.state["opened"], source_key=key))
-    return jsonify(**found)
-
-
-@app.post("/api/flow/optimize/apply")
-def flow_optimize_apply():
-    """고른 규칙(rules = 번호 목록)만 다시 확인해 적용한 새 흐름. 사용자가 [이 흐름으로 바꾸기]를 눌렀을 때만 부른다."""
-    data = body_of(request.json)
-    graph = flow.check_shape(data.get("graph"))
-    rules = data.get("rules")
-    numbers = [n for n in (rules if isinstance(rules, list) else []) if isinstance(n, int) and n in flow_opt.RULES]  # 리스트·글자가 오면 해시하다 TypeError라 정수만
-    if not numbers:
-        raise ValueError("적용할 규칙을 고르세요.")
-    con = get_con()
-    remote, key, get = held.remote(con), (dash_store.current_source() or {}).get("key"), table_getter()
-    done = run(lambda: flow_opt.apply(graph, numbers, get, con, target=data.get("target"), remote=remote, scan_ok=data.get("scan_ok") is True,
-                                      opened=server.state["opened"], source_key=key))
-    return jsonify(**done, body_problem=flow.body_problem(done["graph"], data.get("target")))
+    if not isinstance(data.get("table"), str) or not data["table"]:
+        raise ValueError("테이블(table)을 고르세요.")
+    get = table_getter()
+    t = run(lambda: get(data["table"], data.get("schema") or None).schema())
+    return jsonify(columns={c: sql_funcs.kind_of(ty) for c, ty in t.items()})
 
 
 # ---------- 공통 키 ----------
@@ -157,8 +71,8 @@ def preview_samples(con, a, b, a_name, b_name):
     return {"a": found[0], "b": found[1]}
 
 
-@app.post("/api/flow/keys")
-def flow_keys():
+@app.post("/api/join_keys")
+def find_join_keys():
     """공통 키 찾기: 후보 점수(이름·겹침·타입·고유), 결정(auto·ask·none), 상위 3개와 근거, 날짜 맞춤 제안, 기억한 키.
     표본 기준이다. full을 주면 전체 값으로 확인한다(로컬 연결만). 원격 DB는 값을 읽는 새 조회를 보내지 않는다(표본이 없으면 이름·타입으로만)."""
     data = body_of(request.json)
@@ -175,42 +89,6 @@ def flow_keys():
         found = join_keys.suggest(a, b, an, bn, remote=remote, samples=samples, full=data.get("full") is True, recalled=recalled)
         return {**found, "fingerprint": fp, "source_key": key, "remembered": bool(recalled)}
     return jsonify(**run(work))
-
-
-@app.post("/api/flow/keys/remember")
-def flow_keys_remember():
-    """고른 키를 기억한다(연결 열쇠·A·B·스키마 지문 단위)."""
-    data = body_of(request.json)
-    keys = data.get("keys")
-    if not all(isinstance(x, str) and x for x in (data.get("source_key"), data.get("a"), data.get("b"), data.get("fingerprint"))) or not isinstance(keys, list) or not keys:
-        raise ValueError("기억할 연결·테이블·키가 필요해요.")
-    join_keys.remember(data["source_key"], data["a"], data["b"], data["fingerprint"], keys)
-    return jsonify(ok=True)
-
-
-@app.post("/api/flow/keys/forget")
-def flow_keys_forget():
-    data = body_of(request.json)
-    join_keys.forget(data.get("source_key", ""), data.get("a", ""), data.get("b", ""), data.get("fingerprint", ""))
-    return jsonify(ok=True)
-
-
-@app.post("/api/flow/fanout")
-def flow_fanout():
-    """이은 뒤 행이 늘어나는지(부풂) 결과 전에 알린다: 조인 단계 join의 왼쪽·오른쪽 입력으로. 전체를 읽으므로 원격 DB는 scan_ok가 있어야 센다."""
-    data = body_of(request.json)
-    graph = flow.check_shape(data.get("graph"))
-    node = flow.by_id(graph).get(data.get("join"))
-    if node is None or node["kind"] != "join":
-        raise ValueError("조인 단계를 고르세요.")
-    left, right = flow.join_sides(graph, node["id"])
-    if right is None:
-        raise ValueError("조인의 오른쪽에 테이블이 이어지지 않았어요.")
-    con, get = get_con(), table_getter()
-    params = flow.params(node)
-    pairs = [tuple(k) for k in params.get("keys") or []]
-    return jsonify(**run(lambda: join_keys.fanout(flow.to_expr(graph, left, get), flow.to_expr(graph, right, get), pairs, params.get("how", "inner"),
-                                                   flow.table_name(graph, right), held.remote(con), data.get("scan_ok") is True)))
 
 
 # ---------- 내 지표 ----------

@@ -1115,15 +1115,16 @@ def raw_sql(expr, name, text):
         raise ValueError(f"'{name}' 컬럼이 이미 있습니다. 다른 이름을 쓰세요.")
     local = backend.name == "polars"  # 파일 연결은 SQL을 못 받는다: DuckDB 방언으로 식만 검사하고 PC 사본(DuckDB)에서 붙인다
     dialect = "duckdb" if local else sql_exec.dialect_of(backend)
-    full = f"SELECT *, ({text.strip()}) AS {sql_exec.quote(name)} FROM ({'ibis_base' if local else backend.compile(expr)}) AS ibis_raw"
+    full = f"SELECT *, ({text.strip()}) AS {sql_exec.quote(name)} FROM (ibis_base) AS ibis_raw"  # 사용자 식만 검사한다(앱이 만든 앞 단계 SQL의 read_parquet 등은 검사 대상이 아니다)
     tree = sql_exec.check(full, dialect)
-    exp = sql_exec.glot()[1]
+    sqlglot, exp = sql_exec.glot()[:2]
     frm = tree.args.get("from") or tree.args.get("from_")  # 앞 단계를 감싼 FROM이 그대로 ibis_raw 서브쿼리 하나인지(주석 -- 로 FROM이 바뀌지 않았는지)
     if (not isinstance(tree, exp.Select) or len(tree.expressions) != 2 or tree.expressions[1].alias != name
             or not isinstance(frm and frm.this, exp.Subquery) or frm.this.alias != "ibis_raw" or {k for k, v in tree.args.items() if v} - {"expressions", "from", "from_"}):
         raise sql_exec.SecurityViolationError("SQL 식은 값 하나를 계산하는 식이어야 합니다(괄호를 닫거나 컬럼을 더 만들 수 없어요).")
     if local:
         raise NeedsLocal("파일 연결은 SQL 식을 바로 붙일 수 없어요. 이 PC 사본에서 계산해요.")
+    frm.this.set("this", sqlglot.parse_one(backend.compile(expr), read=dialect))  # 검사를 마친 자리 표시를 앞 단계의 SQL로 바꾼다
     return tree.sql(dialect=dialect)  # 검사한 트리를 다시 만든 글을 실행한다(검사한 것과 실행하는 것이 같다)
 
 

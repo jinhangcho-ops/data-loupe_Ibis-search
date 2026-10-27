@@ -126,14 +126,6 @@ def test_nl2sql_prompt_says_when_tables_were_left_out():
     assert few["more_tables"] is False and "생략" not in nl2sql.system_prompt(few)
 
 
-# ---------- 7B8 규칙 번호가 리스트 ----------
-
-def test_optimize_apply_ignores_non_integer_rule_numbers(client):
-    for rules in ([[1]], ["1"], [{"a": 1}], 5, "x"):
-        got = client.post("/api/flow/optimize/apply", json={"graph": flow.from_body({"base": "t"}), "rules": rules}).get_json()
-        assert got["error"] == "적용할 규칙을 고르세요.", rules
-
-
 # ---------- 7P9·리뷰: 검색의 전체 행 수는 늘 다시 센다(세어 둔 값은 DB·Parquet이 바뀌어도 그대로라) ----------
 
 def test_plain_search_counts_again_after_rows_are_added(client, tmp_path):
