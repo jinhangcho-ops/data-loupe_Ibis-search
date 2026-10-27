@@ -329,7 +329,7 @@ def split_parts(expr, split):
 def get_chart(expr, x, series, split=None, order="x"):
     """x별로 계열들을 집계한다. series는 [{"y", "agg"}]. order가 "x"면 x 순, "value"면 첫 계열 값이 큰 순으로 최대 MAX_GROUPS개.
     split을 주면 그 컬럼의 값마다(행이 많은 순으로 최대 MAX_SPLITS개) 계열을 나눈다.
-    (x 값들, [{"series": 계열 번호, "split": 나눈 값 또는 None, "values": x 값 순서의 값들}], 나눈 값이 더 있는지)를 돌려준다."""
+    (x 값들, [{"series": 계열 번호, "split": 나눈 값 또는 None, "values": x 값 순서의 값들, "truncated": X 값이 MAX_GROUPS개보다 많아 잘랐는지}], 나눈 값이 더 있는지)를 돌려준다."""
     check_name(x, expr.columns)
     if not series:
         raise ValueError("계열을 하나 이상 넣으세요.")
@@ -338,20 +338,22 @@ def get_chart(expr, x, series, split=None, order="x"):
     run = streaming(expr, all(sql_funcs.ALIASES.get(s.get("agg"), s.get("agg")) in ("count", "count_distinct") for s in series))  # 개수·고유 개수만 streaming(합계·평균은 부동소수 결과가 달라진다)
     top = expr.group_by(x).aggregate(**metrics(expr))
     recent = order != "value" and expr[x].type().is_temporal()  # 날짜 X는 최근 MAX_GROUPS개를 남겨 오래된 순으로 보인다
-    top = top.order_by([top.v0.desc(), top[x]] if order == "value" else [top[x].desc()] if recent else [top[x]]).limit(MAX_GROUPS).to_polars(**run)
+    top = top.order_by([top.v0.desc(), top[x]] if order == "value" else [top[x].desc()] if recent else [top[x]]).limit(MAX_GROUPS + 1).to_polars(**run)
+    cut = top.height > MAX_GROUPS  # 하나 더 받아 넘쳤는지 안다(딱 MAX_GROUPS개면 자르지 않은 것)
+    top = top.head(MAX_GROUPS)
     if recent:
         top = top.sort(x, nulls_last=True, maintain_order=True)
     labels = top[x].to_list()
     if not split:
-        return labels, [{"series": i, "split": None, "values": [number(v) for v in top[f"v{i}"].to_list()]} for i in range(len(series))], False
+        return labels, [{"series": i, "split": None, "values": [number(v) for v in top[f"v{i}"].to_list()], "truncated": cut} for i in range(len(series))], False
     parts, more = split_parts(expr, split)
     if not parts:  # 나눌 값이 없다(행이 없거나 나누는 컬럼이 모두 빈 값): 계열은 두고 값만 비운다
-        return labels, [{"series": i, "split": None, "values": [None] * len(labels)} for i in range(len(series))], False
+        return labels, [{"series": i, "split": None, "values": [None] * len(labels), "truncated": cut} for i in range(len(series))], False
     known = [v for v in labels if v is not None]
     inside = expr.filter(expr[x].isin(known) | expr[x].isnull() if None in labels else expr[x].isin(known), expr[split].isin(parts))  # X가 빈 값인 묶음도 나눈다
     cells = inside.group_by([x, split]).aggregate(**metrics(inside)).to_polars(**run)
     found = {(row[x], row[split]): row for row in cells.iter_rows(named=True)}
-    return labels, [{"series": i, "split": str(part), "values": [number(found.get((label, part), {}).get(f"v{i}")) for label in labels]}
+    return labels, [{"series": i, "split": str(part), "values": [number(found.get((label, part), {}).get(f"v{i}")) for label in labels], "truncated": cut}
                     for i in range(len(series)) for part in parts], more
 
 

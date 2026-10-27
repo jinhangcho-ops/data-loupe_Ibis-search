@@ -192,8 +192,8 @@ def working_copy(recipe):
     """원격 DB의 기준 테이블에 행 거르기(filters)만 걸어 이 PC의 DuckDB로 한 번 받아 둔 표(held, 상한 없음, 묶음씩 받음).
     같은 테이블·거르기면 다시 쓴다. DB에는 이 단순한 조회 하나만 가고, 평균 같은 통계와 전처리 계산은 이 표에서 한다."""
     t, key = source_table(recipe), cached_key(recipe)
-    name = run(lambda: held.ensure(key, t, state["cancel"], cap=False))[0]
-    local, skipped = held.table(name), unused_columns(recipe)  # 더 큰 사본을 쓰면 이 recipe가 안 쓰는 컬럼은 뺀다
+    local = run(lambda: held.table(held.ensure(key, t, state["cancel"], cap=False)[0]))  # held.table도 DuckDB에 묻으므로 연결 스레드에서
+    skipped = unused_columns(recipe)  # 더 큰 사본을 쓰면 이 recipe가 안 쓰는 컬럼은 뺀다
     return local.select(*[c for c in local.columns if c != held.ROW and c not in skipped])
 
 
@@ -249,8 +249,8 @@ def copy_gate(recipe, reads=False, fresh=False):
 def fresh_copy(recipe):
     """산출물(실행·저장·전체 분석)을 만들기 직전에 이 recipe의 작업 사본을 버린다. 그 사이 DB가 바뀌었을 수 있어 미리보기에서 받은 낡은 사본을 쓰지 않고 새로 받는다."""
     if local_mode(recipe):
-        for k in {cached_key(recipe), *usable_keys(copy_key(recipe))}:  # 쓸 수 있는 사본이 여럿이면 모두(하나만 지우면 working_copy가 남은 낡은 사본을 고른다)
-            held.forget(k)
+        keys = {cached_key(recipe), *usable_keys(copy_key(recipe))}  # 쓸 수 있는 사본이 여럿이면 모두(하나만 지우면 working_copy가 남은 낡은 사본을 고른다)
+        run(lambda: [held.forget(k) for k in keys])  # 사본 DuckDB의 DROP은 연결 스레드에서(다른 요청이 사본을 받는 중일 수 있다)
 
 
 def geo_gate(recipe):

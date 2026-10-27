@@ -45,7 +45,7 @@ const shelfChips = state => ({
   x: state.x ? [state.x] : [],
   y: (state.series ?? []).map(s => (s.y ? `${s.agg} (${s.y})` : "행 개수")),
   split: state.split ? [state.split] : [],
-  filter: [...(state.conditions ?? [])],
+  filter: (state.conditions ?? []).map(c => c.line ?? (c.any ? c.any.map(x => x.line ?? x).join(" or ") : c)),  // 서버 모양 조건({line, quotes}·{any})도 글자로
 });
 
 // 선반 화면. host = { columns(): [[이름, 한글 타입]], state(): 지금 상태, change(next, why): 새 상태를 받는다(why는 어느 칸·어떤 컬럼인지 설명), say(text): 이유·결과 글 }.

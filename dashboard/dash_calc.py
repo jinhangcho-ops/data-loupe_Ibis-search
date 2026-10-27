@@ -328,7 +328,7 @@ def category_data(expr, body, series):
     """항목별 차트: result.get_chart의 결과를 {labels, series: [{name, values}]}로."""
     labels, datasets, more = run(lambda: result.get_chart(expr, body["x"], series, body.get("split") or None, body.get("order", "x")))
     name = lambda k: series_name(series[k["series"]]) if not body.get("split") else f"{series_name(series[k['series']])} · {k['split']}" if len(series) > 1 else k["split"]
-    notes = [f"그룹이 많아 {result.MAX_GROUPS}개만 표시합니다." if len(labels) == result.MAX_GROUPS else "",
+    notes = [f"그룹이 많아 {result.MAX_GROUPS}개만 표시합니다." if datasets[0]["truncated"] else "",  # 딱 MAX_GROUPS개면 자르지 않은 것
              f"나눌 값이 많아 행이 많은 {result.MAX_SPLITS}개만 표시합니다." if more else ""]
     return {"x": body["x"], "values": {"labels": [str(v) for v in labels], "series": [{"name": name(k), "values": k["values"]} for k in datasets]}, "note": " ".join(filter(None, notes))}
 

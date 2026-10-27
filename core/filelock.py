@@ -64,6 +64,8 @@ def hold(path):
                 return False
             clear_stale(path)
             continue
+        except PermissionError:  # Windows: 다른 쪽이 방금 푼 잠금 파일이 아직 지워지는 중이면 만들 수 없다. 못 잡은 것으로 보고 잠시 뒤 다시
+            return False
         with os.fdopen(fd, "w", encoding="ascii") as f:
             f.write(scratch.stamp())
         return True

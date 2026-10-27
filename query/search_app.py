@@ -547,7 +547,8 @@ def chart():
     expr = querying.runnable(body, select=False, ask=body)
     labels, datasets, more = run(lambda: result.get_chart(
         expr, body["x"], body.get("series") or [], body.get("split") or None, body.get("order", "x")))
-    return jsonify(labels=[str(v) for v in labels], datasets=datasets, more_splits=more,
+    truncated = any([d.pop("truncated") for d in datasets])  # 계열마다 붙은 표시는 응답 맨 위에 한 번만(계열 모양은 그대로)
+    return jsonify(labels=[str(v) for v in labels], datasets=datasets, more_splits=more, truncated=truncated,
                    max_groups=result.MAX_GROUPS, max_splits=result.MAX_SPLITS)
 
 

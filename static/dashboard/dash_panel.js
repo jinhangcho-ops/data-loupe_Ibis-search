@@ -103,8 +103,10 @@ class CardPanel {
       onclick: () => { this.builderOpen = !this.builderOpen; this.show(); } });
     if (this.builderOpen) {
       holder.append(this.host.menuRoot);
-      this.host.menu.preset(card.kind === "analysis" || card.kind === "metric" ? "kpi" : card.kind, card.view?.type ?? "");
-      this.host.menu.refill();
+      if (this.host.menuTarget !== card) {  // 처음 열 때만 채운다(패널을 다시 그릴 때마다 채우면 고른 칸이 비워진다)
+        this.host.menu.preset(card.kind === "analysis" || card.kind === "metric" ? "kpi" : card.kind, card.view?.type ?? "");
+        this.host.menu.refill();
+      }
       this.host.menuTarget = card;
     } else this.host.menuTarget = null;
     return el("div", {}, el("h5", { textContent: "데이터" }), el("div", { className: "hint", textContent: what }), toggle, holder);
@@ -136,7 +138,7 @@ class CardPanel {
     if (card.kind !== "chart" || !body || !this.host.columns) return [];
     const cols = this.host.columns(card);
     if (!cols.length) return [el("h5", { textContent: "차트 칸" }), el("div", { className: "hint", textContent: "연결하면 컬럼 칩을 끌어 X축·값·색·필터를 바꿀 수 있어요." })];
-    const state = () => ({ x: body.x ?? "", series: shelfSeries(body.series ?? []), split: body.split ?? "", conditions: (body.conditions ?? []).map(c => c.line ?? c) });
+    const state = () => ({ x: body.x ?? "", series: shelfSeries(body.series ?? []), split: body.split ?? "", conditions: [...(body.conditions ?? [])] });  // or 묶음·따옴표 끈 조건은 서버 모양 그대로(칩 글자만 dash_shelf가 만든다)
     const say = text => { this.note = text; err.textContent = text; };
     const panel = shelfPanel({ columns: () => cols, state, say, change: async (next, why) => {
       const before = JSON.stringify(body);

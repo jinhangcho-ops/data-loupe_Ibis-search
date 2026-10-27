@@ -142,10 +142,11 @@ def runnable(body, select=True, keep=None, extra=(), fresh=False, ask=None):
     if ask is not None and held.remote(con) and (fresh or search_key(body, keep) not in held.store["items"]):
         if response := server.scan_gate(ask, lambda: server.expr_sql(con, slim(filtered(body), keep) if keep else filtered(body))):
             raise Confirm(response)
-    name = run(lambda: held.ensure(search_key(body, keep), slim(filtered(body), keep) if keep else filtered(body), server.state["cancel"], fresh=fresh))[0]
-    if name is None:
+    # held.table도 DuckDB에 묻으므로(DESCRIBE) 연결 스레드에서: 요청 스레드에서 부르면 다른 사본 받기와 같은 연결을 겹쳐 써 오류·멈춤
+    table = run(lambda: (name := held.ensure(search_key(body, keep), slim(filtered(body), keep) if keep else filtered(body), server.state["cancel"], fresh=fresh)[0]) and held.table(name))
+    if table is None:
         raise ValueError(PC_TOO_BIG)
-    return arrange(body, held.table(name), held.ROW, select)
+    return arrange(body, table, held.ROW, select)
 
 
 NUMBER = "__ibis_n"  # numbered가 붙이는 행 번호(0부터)

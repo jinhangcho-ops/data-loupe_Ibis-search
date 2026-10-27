@@ -380,7 +380,8 @@ document.querySelectorAll(".step .sp").forEach(sp => sp.onclick = () => {
 $("side-close").onclick = () => { $("work").classList.add("closed"); $("side-open").classList.remove("hidden"); };
 $("side-open").onclick = () => { $("work").classList.remove("closed"); $("side-open").classList.add("hidden"); };
 const text = item => item.line ?? item;
-const sortText = line => { const [col, how] = line.split(/\s+/); return `${col} ${how?.toLowerCase() === "desc" ? "큰 것부터" : "작은 것부터"}`; };
+// 정렬 줄은 끝 낱말만 방향(asc|desc)으로 본다. 컬럼 이름에 공백이 있을 수 있다.
+const sortText = line => { const [, col, how = "asc"] = line.match(/^(.*?)(?:\s+(asc|desc))?$/i); return `${col} ${how?.toLowerCase() === "desc" ? "큰 것부터" : "작은 것부터"}`; };
 const columnCount = () => S.columns.flatMap(line => line.split(",").map(s => s.trim()).filter(Boolean)).length;
 const conditionTexts = () => [...S.periods.map(p => p.replace(/\s+/, " ")), ...S.conditions.map(text), ...S.sorts.map(sortText)];
 // 접힌 단계의 요약과 펼침 표시. 결과 위의 조건 요약도 같은 글을 쓴다.
@@ -579,7 +580,7 @@ async function renderJoins() {
     return el("div", { className: "jb" },
       el("div", { className: "r1" },
         select(JOIN_HOWS, j.how, null, v => { j.how = v; renderJoins(); applyJoins(); }),
-        select(tableNames(), j.table, "테이블", v => { j.table = v; j.pairs = [["", ""]]; renderJoins(); }),
+        select(tableNames(), j.table, "테이블", v => { j.table = v; j.pairs = [["", ""]]; renderJoins(); applyJoins(); }),  // 키가 빈 덩어리는 S.joins에서 빠진다
         el("button", { className: "ghost", textContent: "×", title: "조인 빼기", onclick: () => { joinsUI.splice(i, 1); renderJoins(); applyJoins(); } })),
       ...j.pairs.map(pairRow),
       el("button", { className: "linkish", textContent: "+ 키", onclick: () => { j.pairs.push(["", ""]); renderJoins(); } }));
@@ -710,7 +711,7 @@ document.querySelectorAll(".tabs2 button").forEach(b => b.onclick = () => showTa
 
 // 검색. 결과 표의 머리글 아래 작은 글씨는 그 컬럼의 원래 테이블(기준 테이블이 아닐 때), 정렬한 컬럼은 강조색.
 function gridSpec(data, origins = {}) {
-  const sorted = S.sorts.length === 1 ? S.sorts[0].split(/\s+/) : [];
+  const sorted = S.sorts.length === 1 ? S.sorts[0].match(/^(.*?)(?:\s+(asc|desc))?$/i).slice(1) : [];  // [컬럼, 방향]. 끝 낱말만 방향(sortText와 같이)
   const head = data.columns.map(c => {
     const from = origins[c] && origins[c] !== S.base ? `<small>${esc(origins[c])}</small>` : "";
     const arrow = c === sorted[0] ? (sorted[1]?.toLowerCase() === "desc" ? " ↓" : " ↑") : "";
@@ -741,7 +742,7 @@ function runSearch(offset, fresh = false) {
       const d = await timed("search", () => api("/api/query", { ...query(offset), count: $("count").checked, fresh }));
       skip = offset;
       $("prev").disabled = !offset;
-      $("next").disabled = d.rows.rows.length < $("limit").value;
+      $("next").disabled = d.count === null ? d.rows.rows.length < $("limit").value : offset + d.rows.rows.length >= d.count;  // 행 수를 알면 마지막 쪽에서 끈다
       last = { rows: d.rows, summary: null, count: d.count };  // 이전 조건의 집계는 지운다.
       $("err-summary").textContent = "";
       showBig(d, offset);  // 받아 두지 못한 까닭(note)은 err-search에
@@ -1088,7 +1089,7 @@ $("draw").onclick = () => busy($("draw"), async () => {
     drawn = toDrawn(query, used, d);
     drawChart();
     mountTable($("ctable"), gridSpec(chartData()));  // 감춰져 있어도 채워 둔다. [표로 보기]는 보이기만 바꾼다.
-    $("err-chart").textContent = [rangeError(), d.labels.length === d.max_groups ? `그룹이 많아 ${d.max_groups}개만 표시합니다.` : "",
+    $("err-chart").textContent = [rangeError(), d.truncated ? `그룹이 많아 ${d.max_groups}개만 표시합니다.` : "",
       d.more_splits ? `나눌 값이 많아 행이 많은 ${d.max_splits}개만 표시합니다.` : ""].filter(Boolean).join(" ");
   } catch (e) { $("err-chart").textContent = e.message; }
 });

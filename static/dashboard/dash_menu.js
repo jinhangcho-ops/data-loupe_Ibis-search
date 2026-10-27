@@ -77,7 +77,7 @@ function initCardMenu(root, host) {
   };
   const show = () => {  // 종류에 맞게 칸을 보이고, 값 줄 수를 최소~최대에 맞춘다
     const [, low, high] = CARD_KINDS[kind.value];
-    while (rows.children.length < low) makeRow();
+    while (Funcs.cat && rows.children.length < low) makeRow();  // 사전 전이면 makeRow가 줄을 못 만든다(받으면 Funcs.load().then(show)가 채운다)
     while (rows.children.length > high) rows.lastChild.remove();
     fields.forEach(f => f.classList.toggle("hidden", !f.dataset.kinds.split(" ").includes(kind.value)));
     add.classList.toggle("hidden", rows.children.length >= high);
