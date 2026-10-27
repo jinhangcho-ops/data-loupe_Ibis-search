@@ -133,7 +133,7 @@ def relative(text, today):
         try:
             last = today - timedelta(days=1)  # 최근 N단위는 어제까지(오늘은 아직 덜 찬 날이라 뺀다. 오늘을 보려면 '오늘'·'이번 주')
             first = {"day": lambda: last - timedelta(days=count - 1), "week": lambda: last - timedelta(days=7 * count - 1),
-                     "month": lambda: add_months(last, -count) + timedelta(days=1), "year": lambda: add_months(last, -12 * count) + timedelta(days=1)}[unit]()
+                     "month": lambda: add_months(today, -count), "year": lambda: add_months(today, -12 * count)}[unit]()  # 기준일에서 센다(어제에서 세면 3-01의 '최근 1개월'이 1-29부터가 된다: 2-28의 한 달 전이 1-28)
         except (OverflowError, ValueError):  # 달력 범위(1~9999년)를 벗어나는 큰 숫자
             raise ValueError(f"‘{compact}’{ending(compact, '은', '는')} 너무 먼 과거예요. 더 작은 숫자로 써 주세요. 예: 최근 3개월") from None
         return whole(first, last, f"최근 {count}{named.group(2)}", "recent")

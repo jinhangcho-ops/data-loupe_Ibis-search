@@ -244,7 +244,7 @@ def parse_join(line, tables):
         if how == "asof" and ">=" in k and on is None:
             on = tuple(s.strip() for s in k.split(">=", 1))
             continue
-        if ">=" in k:
+        if ">=" in k:  # shortcut: 왼쪽 키 이름이 '>'로 끝나면(score>) 조인할 수 없다. 그런 컬럼이 실제로 나오면 이름 인용을 지원한다
             raise ValueError(f"'{k.strip()}'의 >=는 asof 조인의 시각 쌍 하나에만 써요. 키는 '왼쪽=오른쪽'으로 쓰거나, 시각으로 붙이려면 종류를 asof로 하세요.")
         left, _, right = (s.strip() for s in k.partition("="))
         if left:
