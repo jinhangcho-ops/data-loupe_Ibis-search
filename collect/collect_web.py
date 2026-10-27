@@ -5,7 +5,6 @@ import datetime as dt
 import hashlib
 import http.client
 import json
-import re
 import secrets
 import time
 from urllib.parse import quote, unquote, urlsplit
@@ -116,11 +115,27 @@ def robots_allows(groups, url):
     path = robots_path((parts.path or "/") + (f"?{parts.query}" if parts.query else ""))
     best = (-1, True)
     for allow, pattern in groups.get(AGENT, groups.get("*", [])):
-        regex = re.escape(pattern).replace(r"\*", ".*")
-        regex = regex[:-2] + r"\Z" if regex.endswith(r"\$") else regex
-        if re.match(regex, path) and (len(pattern), allow) > best:
+        if robots_match(pattern, path) and (len(pattern), allow) > best:
             best = (len(pattern), allow)
     return best[1]
+
+
+def robots_match(pattern, path):
+    """robots.txt 패턴이 path 앞부분에 맞는지(*는 아무 글자, 끝 $는 끝 고정). 정규식 대신 조각을 앞에서부터 찾아, *가 많은 패턴도 주소 길이에 비례한 시간만 든다."""
+    end = pattern.endswith("$")
+    pieces = (pattern[:-1] if end else pattern).split("*")
+    if not path.startswith(pieces[0]):
+        return False
+    if len(pieces) == 1:
+        return not end or path == pieces[0]
+    at = len(pieces[0])
+    for piece in pieces[1:-1]:  # 가운데 조각은 가장 앞에 맞는 곳(뒤 조각에 자리를 가장 많이 남긴다)
+        found = path.find(piece, at)
+        if found < 0:
+            return False
+        at = found + len(piece)
+    last = pieces[-1]
+    return path.endswith(last) and len(path) - len(last) >= at if end else path.find(last, at) >= 0
 
 
 def robots_rules(base):
@@ -135,7 +150,7 @@ def robots_rules(base):
     if 400 <= status < 500:
         return {}
     if 200 <= status < 300:
-        return robots_parse(body.decode("utf-8", "replace"))
+        return robots_parse(body.decode("utf-8-sig", "replace"))  # 앞에 BOM이 붙은 파일도 첫 User-agent 줄을 읽는다
     return f"robots.txt 응답 상태가 {status}입니다"
 
 

@@ -61,6 +61,19 @@ def test_own_agent_group_wins_over_star(robots_site):
     assert verdicts(robots_site, "User-agent: *\nDisallow: /%ED%95%9C\n", ["/한/1"]) == ["금지"]  # 퍼센트 인코딩을 맞춰 비교
 
 
+def test_bom_and_many_stars(robots_site):
+    """앞에 BOM이 붙은 robots.txt도 읽고, *가 많은 규칙도 금방 판정한다(정규식 되짚기 없음)."""
+    assert verdicts(robots_site, "﻿User-agent: *\nDisallow: /private\n", ["/private", "/open"]) == ["금지", "허용"]
+    started = time.monotonic()
+    assert verdicts(robots_site, "User-agent: *\nDisallow: /" + "*a" * 12 + "*b\n", ["/" + "a" * 200]) == ["허용"]
+    assert time.monotonic() - started < 2
+    match = collect_web.robots_match
+    assert [match("/a*c$", p) for p in ("/abc", "/abcd", "/ac")] == [True, False, True]
+    assert [match("/*.pdf$", p) for p in ("/x.pdf", "/x.pdf.pdf", "/x.pdfx")] == [True, True, False]
+    assert [match("/a*b*c", p) for p in ("/aXbYc", "/aXcYb", "/abcd")] == [True, False, True]
+    assert match("/x$", "/x") and not match("/x$", "/xy") and match("/*$", "/anything")
+
+
 class Site:
     """가짜 수집용 창: 다음 버튼은 href가 없는 JS 버튼이고, 누르면 2쪽(/private?p=2)으로 넘어간다."""
     def __init__(self, base):

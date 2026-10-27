@@ -31,6 +31,13 @@
   #err-search:empty, #err-export:empty, #err-summary:empty { display:none; }
   /* SQL 탭: 편집기는 결과 위에서 높이를 조금만 쓰고(끌어서 늘림), 결과 표가 남은 높이를 쓴다. */
   #sql-text { font:13px/1.5 Consolas, ui-monospace, monospace; min-height:120px; height:clamp(120px, 24vh, 320px); resize:vertical; }
+  /* SQL 색: 글 상자는 글자를 투명하게 두고, 같은 자리 뒤의 pre에 같은 글을 색칠해 보인다(글꼴·여백·줄바꿈·스크롤 막대 자리를 같게). */
+  .sql-hl { position:relative; display:flex; }
+  .sql-hl #sql-text { position:relative; background:transparent; color:transparent; caret-color:var(--text); scrollbar-gutter:stable; }
+  .sql-hl #sql-text::placeholder { color:var(--faint); }
+  #sql-paint { position:absolute; inset:0; margin:0; padding:6px 10px; border:1px solid transparent; border-radius:9px; background:var(--card); color:var(--text);
+    font:13px/1.5 Consolas, ui-monospace, monospace; white-space:pre-wrap; overflow-wrap:break-word; overflow:hidden; scrollbar-gutter:stable; pointer-events:none; }
+  .sk { color:var(--sql-kw); font-weight:600; } .ss { color:var(--sql-str); } .sc { color:var(--faint); font-style:italic; }
   .sql-edit { padding:0 28px; display:flex; flex-direction:column; gap:8px; }
   .sql-edit .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .sql-edit .row label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; white-space:nowrap; }
@@ -262,7 +269,7 @@
         <button id="nl-prompt" class="btn" title="LLM에 보낼 내용을 봅니다. 테이블·컬럼 이름과 타입, 명세서 설명, 지표 정의만 들어가고 데이터 값은 넣지 않습니다">프롬프트 보기</button></div>
       <div class="row nl-row"><span class="hint" style="margin:0" id="llm-name">LLM: 없음</span><input id="llm-env" class="code" placeholder="LLM env 파일 경로 (LLM_PROVIDER·LLM_API_KEY·LLM_MODEL)" title="키는 저장하지 않고 이 파일에서 물을 때마다 읽습니다. 비우고 [읽기]를 누르면 LLM을 쓰지 않습니다"><button id="llm-read" class="btn">읽기</button></div>
       <pre class="nl-prompt hidden" id="nl-view"></pre>
-      <textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea>
+      <div class="sql-hl"><pre id="sql-paint" aria-hidden="true"></pre><textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea></div>
       <div class="sql-check" id="sql-check"></div>
       <pre class="nl-prompt hidden" id="sql-plan"></pre>
       <div class="row"><button id="sql-deep" class="btn" title="연결에서 짜 보기만 해서 테이블·컬럼 이름까지 확인합니다(데이터는 읽지 않습니다)">검사</button>
@@ -758,7 +765,7 @@ $("rows").onclick = async e => {
 $("sql-show").onclick = () => busy($("sql-show"), async () => {
   if (!$("sql").classList.contains("hidden")) { $("sql").classList.add("hidden"); return; }
   try {
-    $("sql").textContent = (await api("/api/sql", query(skip))).sql;
+    $("sql").innerHTML = sqlColor((await api("/api/sql", query(skip))).sql);
     $("sql").classList.remove("hidden");
     showTab("rows");
     $("err-search").textContent = "";
@@ -1385,6 +1392,28 @@ function selectAt(box, line, col) {
   const start = lines.slice(0, line - 1).reduce((n, l) => n + l.length + 1, 0), word = upto.match(/\S*$/)[0].length;
   box.focus();
   box.setSelectionRange(start + upto.length - Math.max(word, 1), start + upto.length);
+}
+// SQL 글을 색칠한 HTML로: 키워드는 파랑, 따옴표 글자는 갈색, 주석은 흐리게. 따옴표·주석 안의 SELECT는 키워드로 보지 않는다.
+const SQL_WORDS = new Set(("select from where and or not in is null like ilike between as on join left right inner outer full cross natural using group by order having limit offset fetch top " +
+  "distinct all union except intersect with recursive case when then else end asc desc nulls first last insert into values update set delete create replace table view " +
+  "drop alter cast try_cast over partition rows range window filter qualify exists true false interval lateral pivot unpivot asof semi anti explain").split(" "));
+const SQL_TOKEN = /(--[^\n]*|\/\*[\s\S]*?(?:\*\/|$))|('(?:[^']|'')*'?)|("(?:[^"]|"")*"?|`[^`]*`?)|([\p{L}_][\p{L}\p{N}_$]*)/gu;
+function sqlColor(text) {
+  let out = "", at = 0;
+  for (const m of text.matchAll(SQL_TOKEN)) {
+    const [all, comment, str, , word] = m, cls = comment ? "sc" : str ? "ss" : word && SQL_WORDS.has(word.toLowerCase()) ? "sk" : "";
+    out += esc(text.slice(at, m.index)) + (cls ? `<span class="${cls}">${esc(all)}</span>` : esc(all));
+    at = m.index + all.length;
+  }
+  return out + esc(text.slice(at));
+}
+{
+  const box = $("sql-text"), paint = $("sql-paint"), own = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value");
+  const draw = () => { paint.innerHTML = sqlColor(own.get.call(box)) + "\n"; paint.scrollTop = box.scrollTop; paint.scrollLeft = box.scrollLeft; };  // 끝 줄바꿈도 높이를 갖게
+  Object.defineProperty(box, "value", { get() { return own.get.call(this); }, set(v) { own.set.call(this, v); draw(); } });  // 코드가 SQL을 넣어도(저장한 SQL·질문으로 만들기) 다시 칠한다
+  box.addEventListener("input", draw);
+  box.addEventListener("scroll", () => { paint.scrollTop = box.scrollTop; paint.scrollLeft = box.scrollLeft; });
+  new ResizeObserver(draw).observe(box);
 }
 $("sql-text").addEventListener("input", () => { clearTimeout(checkTimer); checkTimer = setTimeout(() => checkSql(false), 600); });
 // 질문으로 SQL 만들기(NL2SQL 뼈대): 만든 SQL은 실행하지 않고 편집기에 넣어 검사만 한다. [프롬프트 보기]는 LLM에 보낼 내용을 보여 준다(묻지 않음).
