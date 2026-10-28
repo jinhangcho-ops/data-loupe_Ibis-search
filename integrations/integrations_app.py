@@ -97,11 +97,11 @@ def fetch_ga4():
     out = Path(g["output"]) if g["output"] else None
     if out is None or out.suffix.lower() != ".parquet":
         raise ValueError("저장할 파일 경로(.parquet)를 넣고 저장하세요.")
-    exists = lambda: ValueError(f"'{out.name}' 파일이 이미 있습니다. 다른 이름을 쓰세요(덮어쓰지 않습니다).")
+    exists = lambda: ValueError(f"'{out.name}' 파일이 이미 있어요. 다른 이름을 쓰세요(덮어쓰지 않아요).")
     if out.exists():
         raise exists()
     if not out.parent.is_dir():
-        raise ValueError("저장할 폴더가 없습니다.")
+        raise ValueError("저장할 폴더가 없어요.")
     notes = []
     frame, total = ga4.fetch(g["key_path"], g, notes)
     part = out.with_name(out.name + ".part")  # 쓰다 끊겨도 반쯤 쓴 파일이 결과 이름으로 남지 않게

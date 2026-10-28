@@ -137,7 +137,7 @@ def test_dedupe_keep_choices(t):
 
 
 @pytest.mark.parametrize("keep, message", [({"how": "median"}, "how는"), ({"how": "last"}, "order"), ({"zzz": 1}, "모양"), ({"how": "first", "order": "val"}, "order는"),
-                                           ({"how": "string_agg", "order": ["nope"]}, "컬럼|없습니다")])
+                                           ({"how": "string_agg", "order": ["nope"]}, "컬럼|없어요")])
 def test_dedupe_keep_errors(t, keep, message):
     with pytest.raises(ValueError, match=message):
         build(t, dedupe=["grp"], dedupe_keep=keep)

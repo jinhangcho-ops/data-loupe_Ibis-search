@@ -38,11 +38,11 @@ def check(fields):
     try:
         info = call(fields["token"], "conversations.info", {"channel": fields["channel"]}, form=True)["channel"]
         member = info.get("is_member")
-        return text + f" 채널 #{info.get('name', fields['channel'])}" + ("" if member in (None, True) else " (봇이 아직 채널에 없어 보낼 수 없습니다. 채널에 봇을 초대하세요.)")
+        return text + f" 채널 #{info.get('name', fields['channel'])}" + ("" if member in (None, True) else " (봇이 아직 채널에 없어 보낼 수 없어요. 채널에 봇을 초대하세요.)")
     except ValueError as e:
         if "missing_scope" in str(e):
-            return text + " 채널은 권한(channels:read)이 없어 확인하지 못했습니다."
-        raise ValueError(f"{text} 채널을 확인하지 못했습니다: {e}") from None
+            return text + " 채널은 권한(channels:read)이 없어 확인하지 못했어요."
+        raise ValueError(f"{text} 채널을 확인하지 못했어요: {e}") from None
 
 
 KIND = {"label": "Slack", "image": True, "send": send, "check": check, "fields": [

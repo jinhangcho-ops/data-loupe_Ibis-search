@@ -40,7 +40,7 @@ def test_union_rejects_bad_requests(searching):
     error = lambda **union: searching("/api/columns", base="orders", union=union).get("error", "")
     assert "중 하나" in error(tables=["old_orders"], how="outer")
     assert "기준 테이블과 다르고" in error(tables=["orders"], how="left")
-    assert "없습니다" in error(tables=["nothing"], how="left")
+    assert "없어요" in error(tables=["nothing"], how="left")
     assert "'출처' 컬럼이 이미 있어" in searching("/api/columns", base="odd", union={"tables": ["orders"], "how": "left"})["error"]
     assert searching("/api/columns", base="orders", union={"tables": [], "how": "left"})["columns"][0] == ["id", "정수"]  # 고른 테이블이 없으면 이어붙이지 않는다
 

@@ -41,7 +41,7 @@ def new_request(method, url, headers, data):
     """주소의 쿼리는 query 목록으로 나누고, 버릴 헤더는 빼고, 본문 종류를 정해 request 모양으로 만든다."""
     parts = urlsplit(url.strip())
     if parts.scheme.lower() not in ("http", "https"):
-        raise ValueError("주소는 http:// 또는 https://로 시작해야 합니다.")
+        raise ValueError("주소는 http:// 또는 https://로 시작해야 해요.")
     query = [[k, v] for k, v in parse_qsl(parts.query, keep_blank_values=True)]
     kept = [[k.strip(), v.strip()] for k, v in headers if k.strip().lower() not in DROP_HEADERS]
     content_type = next((v.lower() for k, v in kept if k.lower() == "content-type"), "")
@@ -94,7 +94,7 @@ def curl_tokens(text):
     try:
         return shlex.split(text, posix=True)
     except ValueError as e:
-        raise ValueError(f"curl 명령을 낱말로 나눌 수 없습니다(따옴표 확인): {e}") from None
+        raise ValueError(f"curl 명령을 낱말로 나눌 수 없어요(따옴표 확인): {e}") from None
 
 
 def parse_curl(text):
@@ -141,27 +141,27 @@ def parse_curl(text):
             if "=" in value:
                 headers.append(["Cookie", value])
             else:
-                unread.append(f"{name} {value} (쿠키 파일은 읽지 않습니다)")
+                unread.append(f"{name} {value} (쿠키 파일은 읽지 않아요)")
         elif kind == "user":
             user = value
         elif kind == "json":
             if value.startswith("@"):
-                unread.append(f"{name} {value} (파일 첨부는 읽지 않습니다)")
+                unread.append(f"{name} {value} (파일 첨부는 읽지 않아요)")
                 continue
             data.append(value)
             headers += [h for h in (["Content-Type", "application/json"], ["Accept", "application/json"]) if h[0].lower() not in {k.lower() for k, _ in headers}]
         elif kind == "urlencode":
             key, eq, val = value.partition("=")
             if not eq and "@" in value:  # name@파일, @파일
-                unread.append(f"{name} {value} (파일 첨부는 읽지 않습니다)")
+                unread.append(f"{name} {value} (파일 첨부는 읽지 않아요)")
             else:
                 data.append(f"{key}={quote_plus(val)}" if eq and key else quote_plus(val if eq else value))
         elif kind == "data" and value.startswith("@"):
-            unread.append(f"{name} {value} (파일 첨부는 읽지 않습니다)")
+            unread.append(f"{name} {value} (파일 첨부는 읽지 않아요)")
         else:  # data, raw
             data.append(value)
     if not url:
-        raise ValueError("curl 명령에서 주소를 찾지 못했습니다.")
+        raise ValueError("curl 명령에서 주소를 찾지 못했어요.")
     if not re.match(r"https?://", url, re.I):
         url = "http://" + url if "://" not in url else url  # curl은 주소에 방식이 없으면 http로 본다
     if user is not None:  # -u는 주소의 user:pass@ 자리로 옮긴다(보낼 때 Basic 인증 헤더가 된다).
@@ -193,7 +193,7 @@ def parse_http(text):
     elif host:
         url = ("http://" if host.endswith(":80") else "https://") + host + target
     else:
-        raise ValueError("HTTP 요청 글자에 Host 헤더가 없습니다.")
+        raise ValueError("HTTP 요청 글자에 Host 헤더가 없어요.")
     return new_request(method, url, headers, body if body.strip() else None), unread
 
 
@@ -204,7 +204,7 @@ def pairs(value, what):
     if isinstance(value, dict):
         value = list(value.items())
     if not isinstance(value, list) or not all(isinstance(p, (list, tuple)) and len(p) == 2 for p in value):
-        raise ValueError(f"{what}는 객체나 [[이름, 값], …] 모양이어야 합니다.")
+        raise ValueError(f"{what}는 객체나 [[이름, 값], …] 모양이어야 해요.")
     return [[str(k), v if isinstance(v, str) else json.dumps(v, ensure_ascii=False)] for k, v in value]
 
 
@@ -212,9 +212,9 @@ def parse_json(text):
     try:
         given = json.loads(text)
     except ValueError as e:
-        raise ValueError(f"JSON으로 읽을 수 없습니다: {e}") from None
+        raise ValueError(f"JSON으로 읽을 수 없어요: {e}") from None
     if not isinstance(given, dict) or not isinstance(given.get("url"), str):
-        raise ValueError('JSON 예시에는 "url"이 있어야 합니다.')
+        raise ValueError('JSON 예시에는 "url"이 있어야 해요.')
     unread = [f"{k}" for k in given if k not in ("method", "url", "headers", "query", "body")]
     body = given.get("body")
     if body is not None and not isinstance(body, str):
@@ -348,7 +348,7 @@ def secretize(request, replace):
         elif where == "body" and request.get("body_kind") == "json":
             request["body"] = json_secretize(request["body"], item.get("path", ""), name, env)
         else:
-            raise ValueError(f"바꿀 수 없는 자리입니다: {where} {name}")
+            raise ValueError(f"바꿀 수 없는 자리예요: {where} {name}")
     return request
 
 
@@ -367,13 +367,13 @@ def json_secretize(body, path, name, env):
     for key in path.split(".") if path else []:
         value = value[int(key)] if isinstance(value, list) else value.get(key) if isinstance(value, dict) else None
     if value is None:
-        raise ValueError(f"본문에서 '{path}'를 찾지 못했습니다.")
+        raise ValueError(f"본문에서 '{path}'를 찾지 못했어요.")
     for ascii_only in (False, True):
         pattern = "(" + re.escape(json.dumps(name, ensure_ascii=ascii_only)) + r"\s*:\s*)" + re.escape(json.dumps(value, ensure_ascii=ascii_only))
         changed, n = re.subn(pattern, lambda m: m[1] + f'"{{env:{env}}}"', body)
         if n:
             return changed
-    raise ValueError(f"본문에서 '{path}'의 값을 찾지 못했습니다.")
+    raise ValueError(f"본문에서 '{path}'의 값을 찾지 못했어요.")
 
 
 def literal_places(config):
@@ -415,7 +415,7 @@ def fill(text, ctx, escape=lambda value: value):
 def place_value(m, ctx):
     if m[1]:
         if m[1] not in ctx["env"]:
-            raise ValueError(f"env 파일에 없는 이름입니다: {m[1]}")
+            raise ValueError(f"env 파일에 없는 이름이에요: {m[1]}")
         return ctx["env"][m[1]]
     if m[2]:
         value = ctx.get(m[2])
@@ -435,7 +435,7 @@ def fill_json(body, ctx):
     try:
         json.loads(filled)
     except ValueError:
-        raise ValueError("자리를 채운 본문이 JSON이 아닙니다. 본문과 자리 표시를 확인하세요.") from None
+        raise ValueError("자리를 채운 본문이 JSON이 아니에요. 본문과 자리 표시를 확인하세요.") from None
     return filled
 
 
@@ -450,10 +450,10 @@ def build(request, ctx, url=None):
             url += ("&" if urlsplit(url).query else "?") + urlencode(query)
     parts = urlsplit(url)
     if parts.scheme.lower() not in ("http", "https") or not parts.hostname:
-        raise ValueError("주소는 http:// 또는 https://로 시작해야 합니다.")
+        raise ValueError("주소는 http:// 또는 https://로 시작해야 해요.")
     headers = [[fill(k, ctx), fill(v, ctx)] for k, v in request.get("headers", [])]
     if any(re.search(r"[\r\n]", k + v) for k, v in headers):
-        raise ValueError("헤더 이름·값에 줄바꿈을 넣을 수 없습니다.")
+        raise ValueError("헤더 이름·값에 줄바꿈을 넣을 수 없어요.")
     login, at, _ = urlsplit(own).netloc.rpartition("@")  # 다른 호스트로 넘어가지 않는 것은 run_api의 origin 검사가 지킨다
     if at:
         user, _, password = login.partition(":")

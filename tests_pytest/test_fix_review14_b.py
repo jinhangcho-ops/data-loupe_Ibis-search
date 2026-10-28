@@ -113,7 +113,7 @@ def test_cancel_without_interrupt_reopens(monkeypatch):
     seen = []
     old = url_state(monkeypatch, lambda info: seen.append(info) or types.SimpleNamespace(name="mysql", con=NoCancel()))
     cancel_soon()
-    with pytest.raises(ValueError, match="새로 열었습니다"):
+    with pytest.raises(ValueError, match="새로 열었어요"):
         server.run(lambda: old.con.run(2))
     assert server.state["con"] is not old and seen[0]["password"] == "pw" and server.state["passwords"] == ["pw"]
     assert server.run(lambda: server.state["con"].con.run(0.1)) == 1  # 버린 작업과 겹치지 않는다

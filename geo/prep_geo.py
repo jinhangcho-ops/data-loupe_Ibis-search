@@ -37,22 +37,22 @@ def new_names(step, defaults):
     for key, default in defaults.items():
         name = step.get(key) or default
         if not isinstance(name, str) or not prep_derive.NAME.fullmatch(name):
-            raise ValueError(f"새 컬럼 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 합니다(63자까지): {name!r}")
+            raise ValueError(f"새 컬럼 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 해요(63자까지): {name!r}")
         out[key] = name
     if len(set(out.values())) != len(out):
-        raise ValueError("새 컬럼 이름이 서로 겹칩니다.")
+        raise ValueError("새 컬럼 이름이 서로 겹쳐요.")
     return out
 
 
 def check(steps):
     """단계 목록의 모양 검사(데이터를 읽지 않는다)."""
     if not isinstance(steps, list) or len(steps) > MAX_STEPS:
-        raise ValueError(f"좌표 단계는 {MAX_STEPS}개까지의 목록이어야 합니다.")
+        raise ValueError(f"좌표 단계는 {MAX_STEPS}개까지의 목록이어야 해요.")
     for step in steps:
         if not isinstance(step, dict) or step.get("op") not in OPS:
-            raise ValueError(f"좌표 단계는 op가 {', '.join(OPS)} 중 하나인 객체여야 합니다.")
+            raise ValueError(f"좌표 단계는 op가 {', '.join(OPS)} 중 하나인 객체여야 해요.")
         if extra := set(step) - KEYS[step["op"]]:
-            raise ValueError(f"{step['op']} 단계에 쓸 수 없는 항목이 있습니다: {', '.join(sorted(extra))}")
+            raise ValueError(f"{step['op']} 단계에 쓸 수 없는 항목이 있어요: {', '.join(sorted(extra))}")
     return steps
 
 
@@ -147,7 +147,7 @@ def run_tm(t, step, info):
     x, y = number_column(t, step.get("x"), "x"), number_column(t, step.get("y"), "y")
     epsg = step.get("epsg", 5179)
     if type(epsg) is not int or not 1000 <= epsg <= 99999:
-        raise ValueError("좌표계 EPSG 번호는 4자리~5자리 정수입니다(예: 5179).")
+        raise ValueError("좌표계 EPSG 번호는 4자리~5자리 정수예요(예: 5179).")
     names = new_names(step, {"lon": "경도", "lat": "위도"})
     prep_derive.check_name(names["lon"], t, "경도 컬럼")
     prep_derive.check_name(names["lat"], t, "위도 컬럼")
@@ -188,16 +188,16 @@ def run_region(t, step, refs, info):
     lat, lon = number_column(t, step.get("lat"), "위도"), number_column(t, step.get("lon"), "경도")
     take = step.get("take") or []
     if not isinstance(take, list) or not all(isinstance(c, str) for c in take):
-        raise ValueError("붙일 영역 컬럼(take)은 컬럼 이름 목록이어야 합니다.")
+        raise ValueError("붙일 영역 컬럼(take)은 컬럼 이름 목록이어야 해요.")
     prefix = step.get("prefix", "영역_")
     if not isinstance(prefix, str) or len(prefix) > 30:
-        raise ValueError("영역 컬럼 앞에 붙일 글자(prefix)는 30자까지입니다.")
+        raise ValueError("영역 컬럼 앞에 붙일 글자(prefix)는 30자까지예요.")
     geometry = step.get("geometry") or "geometry"
     names = [prefix + c for c in take]
     for n in names:
         prep_derive.check_name(n, t, "영역 컬럼")
     if len(set(names)) != len(names):
-        raise ValueError("붙일 영역 컬럼이 겹칩니다.")
+        raise ValueError("붙일 영역 컬럼이 겹쳐요.")
     ref = reference(step, refs, list(dict.fromkeys([geometry, *take])), "영역")
     regions = [[[spatial.closed(r) for r in poly] for poly in geojson.polygons(geojson.parse_geometry(text))] for text in ref[geometry].to_list()]
     if not any(regions):

@@ -399,7 +399,7 @@ def read(path, offset=0, limit=None):
     파일이 없거나 지원하지 않는 형식·너무 큰 파일·읽을 수 없는 파일이면 ValueError. 같은 경로의 수정 시각·크기가 그대로면 이전 결과를 다시 쓴다."""
     path = Path(path)
     if path.suffix.lower() not in EXTENSIONS:
-        raise ValueError("목표 파일은 " + ", ".join(EXTENSIONS) + " 파일이어야 합니다.")
+        raise ValueError("목표 파일은 " + ", ".join(EXTENSIONS) + " 파일이어야 해요.")
     try:
         stat = os.stat(path)
     except OSError:

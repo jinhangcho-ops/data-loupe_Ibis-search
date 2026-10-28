@@ -20,7 +20,7 @@ BACKOFF = 1.0  # 다시 시도의 기다림 기준(초). 시도마다 두 배, 6
 REDIRECTS = (301, 302, 303, 307, 308)
 SECRET_HEADERS = {"authorization", "cookie", "proxy-authorization"}  # 이름과 상관없이 비밀인 헤더. 다른 호스트로 넘어가면 빼고, 구성에 값을 그대로 두지 못한다(collect_request).
 HIDE = "●●●"  # 오류·상태·표시에서 env 값을 바꿔 넣는 글자
-STOPPED = "멈췄습니다. 같은 설정으로 다시 시작하면 이어 받습니다."
+STOPPED = "멈췄어요. 같은 설정으로 다시 시작하면 이어 받아요."
 
 
 class Halt(Exception):
@@ -59,7 +59,7 @@ def open_url(method, url, headers, body, timeout, secrets=()):
     headers = [[k, v] for k, v in headers if k.lower() != "accept-encoding"] + [["Accept-Encoding", "identity"]]  # 압축하지 않은 응답만 받는다.
     for _ in range(MAX_REDIRECTS + 1):
         if urlsplit(url).scheme.lower() not in ("http", "https"):
-            raise ValueError("http·https 주소만 받을 수 있습니다.")
+            raise ValueError("http·https 주소만 받을 수 있어요.")
         request = urllib.request.Request(url, data=body, headers=dict(headers), method=method)
         try:
             reply = OPENER.open(request, timeout=timeout)
@@ -71,13 +71,13 @@ def open_url(method, url, headers, body, timeout, secrets=()):
         reply.close()
         target = urljoin(url, location)
         if urlsplit(url).scheme.lower() == "https" and urlsplit(target).scheme.lower() == "http":
-            raise ValueError("https 주소에서 http 주소로 넘겨주는 것은 따라가지 않습니다.")
+            raise ValueError("https 주소에서 http 주소로 넘겨주는 것은 따라가지 않아요.")
         headers = headers_for(target, url, headers, secrets)
         if reply.status == 303 or (reply.status in (301, 302) and method not in ("GET", "HEAD")):
             method, body = "GET", None
             headers = [[k, v] for k, v in headers if k.lower() != "content-type"]
         url = target
-    raise ValueError(f"넘겨주기(redirect)가 {MAX_REDIRECTS}번을 넘었습니다.")
+    raise ValueError(f"넘겨주기(redirect)가 {MAX_REDIRECTS}번을 넘었어요.")
 
 
 class Reply:
@@ -107,7 +107,7 @@ def fetch(sent, timeout, secrets=()):
     reply, url = open_url(sent["method"], sent["url"], sent["headers"], sent["body"], timeout, secrets)
     with reply:
         size = reply.headers.get("Content-Length")
-        too_big = ValueError(f"응답이 {MAX_BYTES // 1024 // 1024}MB를 넘습니다. 큰 파일은 파일 주소로 받으세요(파일 모드).")
+        too_big = ValueError(f"응답이 {MAX_BYTES // 1024 // 1024}MB를 넘어요. 큰 파일은 파일 주소로 받으세요(파일 모드).")
         if size and size.isdigit() and int(size) > MAX_BYTES:
             raise too_big
         parts, total = [], 0
@@ -189,7 +189,7 @@ class Balancer:
     def pause(self, seconds, why):
         """모든 요청을 seconds초 쉬게 한다. MAX_WAIT를 넘으면 멈춘다."""
         if seconds > MAX_WAIT:
-            raise Halt(f"{why}: 서버가 {wait_text(seconds)} 뒤에 다시 하라고 합니다({MAX_WAIT // 60}분 넘게 기다리지 않습니다). 나중에 다시 시작하면 이어 받습니다.", failed=False)
+            raise Halt(f"{why}: 서버가 {wait_text(seconds)} 뒤에 다시 하라고 해요({MAX_WAIT // 60}분 넘게 기다리지 않아요). 나중에 다시 시작하면 이어 받아요.", failed=False)
         with self.cond:
             self.until = max(self.until, time.monotonic() + seconds)
         self.note(f"{why}: {wait_text(seconds)} 쉼")
@@ -202,7 +202,7 @@ class Balancer:
         with self.cond:
             self.failures, self.lost, self.streak = self.failures + 1, self.lost + lost, 0
         if self.lost > MAX_FAILURES:
-            raise Halt(f"실패가 {MAX_FAILURES}번을 넘어 멈췄습니다. 마지막: {what}")
+            raise Halt(f"실패가 {MAX_FAILURES}번을 넘어 멈췄어요. 마지막: {what}")
 
     def call(self, attempt):
         """attempt()(한 번 보내고 Reply 같은 것을 돌려줌)를 차례·간격·한도를 지켜 부르고, 실패하면 정해진 것만 다시 시도한다.
@@ -230,7 +230,7 @@ class Balancer:
                 if reply.status in (401, 403):
                     raise Halt(f"인증을 확인하세요(상태 {reply.status}). env 파일의 키와 헤더를 확인하세요.")
                 if reply.status != 429 and reply.status < 500:
-                    raise Halt(source.mask(f"요청이 거부됐습니다(상태 {reply.status}): {reply.text()[:200]}", self.secrets, HIDE), status=reply.status)
+                    raise Halt(source.mask(f"요청이 거부됐어요(상태 {reply.status}): {reply.text()[:200]}", self.secrets, HIDE), status=reply.status)
             self.failed(last, lost=n == self.retries)
             if n == self.retries:
                 break
@@ -244,4 +244,4 @@ class Balancer:
                 wait = self.backoff(n)
                 self.note(f"{last}: {wait_text(wait)} 뒤 다시 시도")
                 self.sleep(wait)
-        raise Halt(f"{self.retries}번 다시 시도해도 실패했습니다: {last}")
+        raise Halt(f"{self.retries}번 다시 시도해도 실패했어요: {last}")

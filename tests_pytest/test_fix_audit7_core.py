@@ -206,10 +206,10 @@ def test_left_behind_repeats_the_notice_while_the_old_folder_is_left(tmp_path):
     old.mkdir()
     (old / "settings.json").write_text('{"connections": "important"}')
     new.mkdir()
-    (new / settings.FAILED).write_text("예전 폴더를 옮기지 못했습니다", encoding="utf-8")
+    (new / settings.FAILED).write_text("예전 폴더를 옮기지 못했어요", encoding="utf-8")
     (new / "settings.json").write_text("{}")  # 실패한 뒤 새 폴더에 설정이 생겼다
     assert settings.migrate(new / "settings.json") is None  # 병합은 하지 않는다
-    assert settings.left_behind(new / "settings.json") == "예전 폴더를 옮기지 못했습니다"
+    assert settings.left_behind(new / "settings.json") == "예전 폴더를 옮기지 못했어요"
     assert (old / "settings.json").read_text() == '{"connections": "important"}' and (new / "settings.json").read_text() == "{}"
 
 

@@ -99,7 +99,7 @@ def save_table_prep():
     """[미리보기]·[실행]에 쓴 전처리를 그 테이블의 것으로 저장한다. 테이블은 MAX_TABLE_PREPS개까지(넘으면 오래전에 쓴 것부터 뺀다)."""
     key, config = table_key(request.json), request.json.get("config")
     if not isinstance(config, dict) or len(json.dumps(config, ensure_ascii=False)) > settings.MAX_RECIPE_SIZE:
-        raise ValueError("저장할 전처리가 올바르지 않거나 너무 큽니다.")
+        raise ValueError("저장할 전처리가 올바르지 않거나 너무 커요.")
     with settings.updating(TABLE_PREPS):
         found = {k: v for k, v in (settings.read(TABLE_PREPS) or {}).items() if isinstance(v, dict) and k != key}
         found[key] = {"config": config, "saved": dt.datetime.now().isoformat(timespec="microseconds")}
@@ -495,11 +495,11 @@ def make_table(recipe, name):
     local_mode면 이 PC의 작업 사본에서 계산한 결과를 묶음씩 넣기만 한다(DB는 계산하지 않는다). 넣다가 실패하면 만들던 테이블을 지운다."""
     con, opened, schema = get_con(), state["opened"], recipe.get("schema") or None
     if "files" in opened:
-        raise ValueError("Parquet·CSV·JSON·Excel 파일 연결에는 테이블을 만들 DB가 없습니다. 파일로 저장하세요.")
+        raise ValueError("Parquet·CSV·JSON·Excel 파일 연결에는 테이블을 만들 DB가 없어요. 파일로 저장하세요.")
     parse.check_table_name(name)
     parse.check_new_length(name)
     if name.lower() in [t.lower() for t in source.list_tables(con, schema)]:
-        raise ValueError(f"'{name}'은 이미 있는 테이블입니다.")
+        raise ValueError(f"'{name}'은 이미 있는 테이블이에요.")
     if local_mode(recipe):
         expr, db = built(recipe)[0], con
         return run(lambda: insert_all(db, name, schema, expr))
@@ -512,7 +512,7 @@ def make_table(recipe, name):
             try:
                 state["con"] = server.open_con(opened, read_only=False)
             except Exception as e:
-                raise ValueError(f"쓰기로 열 수 없습니다. 다른 프로그램이 이 파일을 열고 있는지 확인하세요. ({e})") from None
+                raise ValueError(f"쓰기로 열 수 없어요. 다른 프로그램이 이 파일을 열고 있는지 확인하세요. ({e})") from None
         db = get_con()
 
         def create():
@@ -581,5 +581,5 @@ def run_recipe():
     if target.get("kind") == "table":
         return jsonify(ok=True, rows=make_table(recipe, target.get("name", "")))
     if target.get("kind") != "file" or target.get("format") not in FILE_FORMATS:
-        raise ValueError("저장 방식은 file(parquet, csv) 또는 table이어야 합니다.")
+        raise ValueError("저장 방식은 file(parquet, csv) 또는 table이어야 해요.")
     return server.download(built(recipe)[0], target["format"], guard=False)  # 다시 데이터로 읽을 파일이라 값을 바꾸지 않는다.

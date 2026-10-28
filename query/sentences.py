@@ -144,7 +144,7 @@ def get(id):
     for t in TEMPLATES:
         if t["id"] == id:
             return t
-    raise ValueError(f"'{id}' 문장 틀이 없습니다.")
+    raise ValueError(f"'{id}' 문장 틀이 없어요.")
 
 
 def row_ids():

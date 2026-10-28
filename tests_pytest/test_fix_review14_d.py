@@ -62,7 +62,7 @@ def test_failure_before_sink_keeps_result_file(tmp_path, folder):
     with pytest.raises(ValueError, match="컬럼이 달라"):
         load(cfg, path)
     assert load_job.read_record(path) is not None
-    with pytest.raises(ValueError, match="지난 적재가 끝나지 않았습니다.*out.load.json"):  # 막힌 이유와 빠져나갈 길(기록 파일 이름)
+    with pytest.raises(ValueError, match="지난 적재가 끝나지 않았어요.*out.load.json"):  # 막힌 이유와 빠져나갈 길(기록 파일 이름)
         collect_job.start(cfg)
 
 
@@ -71,7 +71,7 @@ def test_failure_before_sink_keeps_other_target_progress(tmp_path, folder):
     pq.write_table(pa.table({"id": [1, 2]}), path)
     stamp = load_job.file_stamp(path)
     load_job.write_record(path, {"sign": "다른 대상", "file": stamp, "rows": 1, "batches": 1, "inserted": 1, "skipped": 0, "failures": 0})
-    with pytest.raises(ValueError, match="없습니다"):  # 덧붙일 테이블이 없다
+    with pytest.raises(ValueError, match="없어요"):  # 덧붙일 테이블이 없다
         load(config(path, db), path)
     assert load_job.read_record(path)["sign"] == "다른 대상"  # 덜 넣은 다른 대상의 기록을 지우지 않는다
 
@@ -81,7 +81,7 @@ def test_failure_before_sink_keeps_other_target_progress(tmp_path, folder):
 def test_max_pages_is_reported(tmp_path, monkeypatch, folder):
     serve(monkeypatch, lambda p: [{"id": p}] if p <= 8 else [])
     s = collect(config(tmp_path / "a.parquet", max_pages=5))
-    assert (s["phase"], s["rows"]) == ("끝", 5) and s["message"].startswith("최대 쪽 수 5에서 멈췄습니다")
+    assert (s["phase"], s["rows"]) == ("끝", 5) and s["message"].startswith("최대 쪽 수 5에서 멈췄어요")
     s = collect(config(tmp_path / "b.parquet", max_pages=20))  # 빈 쪽으로 끝났다
     assert (s["phase"], s["rows"], s["message"]) == ("끝", 8, "")
 
@@ -202,7 +202,7 @@ def test_check_route_agrees_with_load_on_empty_column(tmp_path, folder):
     c = server.app.test_client()
     c.set_cookie("key", server.KEY)
     got = c.post("/api/load/table/check", json={"config": config(path, db)}).get_json()
-    assert got["ok"] and got["message"] == "컬럼이 같아 덧붙일 수 있습니다."
+    assert got["ok"] and got["message"] == "컬럼이 같아 덧붙일 수 있어요."
     pq.write_table(pa.table({"id": [1], "memo": pa.array([None], pa.string()), "extra": ["a"]}), path)
     got = c.post("/api/load/table/check", json={"config": config(path, db)}).get_json()
     assert not got["ok"] and got["message"].endswith("다른 점: 결과 파일에만 있는 컬럼 extra")  # 빈 memo는 다른 점이 아니다
@@ -273,7 +273,7 @@ def test_interval_skip_is_not_notified(monkeypatch):
     monkeypatch.setattr(schedule, "schedules", lambda: items)
     for name in ("i", "d", "a"):
         schedule.tell(name, "건너뜀", None, 0.0, schedule.SKIP_RUNNING)
-    assert sent == ["수집을 건너뛰었습니다"] * 2  # 매일 예약과 '늘' 알림만
+    assert sent == ["수집을 건너뛰었어요"] * 2  # 매일 예약과 '늘' 알림만
 
 
 # ---------- D9 한 건씩·키 인덱스 안내 ----------

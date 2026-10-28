@@ -19,7 +19,7 @@ def posted(monkeypatch):
         if "anthropic" in url:
             return json.dumps({"content": [{"type": "text", "text": "select 1"}]}).encode()
         if "fail" in url:
-            raise ValueError(f"보내지 못했습니다(상태 401): bad key {KEY}")
+            raise ValueError(f"보내지 못했어요(상태 401): bad key {KEY}")
         return json.dumps({"choices": [{"message": {"content": "select 2"}}]}).encode()
     monkeypatch.setattr(transport, "post", fake)
     return out

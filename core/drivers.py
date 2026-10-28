@@ -43,45 +43,45 @@ PROGRAMS = {
 
 # 주소 앞부분별 (묶음, 주소 예, 한국어 설명). 묶음: DB(운영 DB)·DW(데이터 웨어하우스)·DL(데이터 레이크·엔진)
 DETAILS = {
-    "clickhouse": ("DB", "clickhouse://host:8123/db", "분석용 열 기반 DB입니다. HTTP로 접속하는 파이썬 패키지가 필요합니다."),
-    "druid": ("DB", "druid://host:8082/druid/v2/sql", "실시간 집계용 DB입니다. SQL로 접속하는 pydruid 패키지가 필요합니다."),
-    "duckdb": ("DB", "duckdb://data.duckdb", "이 프로그램이 파일을 읽는 기본 엔진입니다. 보통 이미 들어 있습니다."),
-    "exasol": ("DB", "exasol://host:8563", "인메모리 분석 DB입니다. pyexasol 패키지가 필요합니다."),
-    "materialize": ("DB", "materialize://host:6875/db", "스트리밍 SQL DB입니다. PostgreSQL 방식으로 접속하므로 psycopg 패키지가 필요합니다."),
-    "mssql": ("DB", "mssql://host:1433/db", "SQL Server입니다. pyodbc 패키지와 ODBC Driver 17/18 프로그램이 둘 다 필요합니다."),
-    "mysql": ("DB", "mysql://host:3306/db", "MySQL·MariaDB입니다. mysqlclient 패키지가 필요합니다."),
-    "oracle": ("DB", "oracle://host:1521/db", "Oracle DB입니다. oracledb 패키지가 필요합니다."),
-    "postgres": ("DB", "postgres://host:5432/db", "PostgreSQL입니다. psycopg 패키지가 필요합니다."),
-    "risingwave": ("DB", "risingwave://host:4566/db", "스트리밍 SQL DB입니다. psycopg2 패키지가 필요합니다."),
-    "singlestoredb": ("DB", "singlestoredb://host:3306/db", "SingleStore입니다. singlestoredb 패키지가 필요합니다."),
-    "sqlite": ("DB", "sqlite://data.db", "파일 하나짜리 작은 DB입니다. 파이썬에 기본으로 들어 있습니다."),
-    "bigquery": ("DW", "bigquery://프로젝트/데이터셋", "Google의 웨어하우스입니다. google-cloud-bigquery 패키지가 필요하고, 처음 접속할 때 Google 로그인을 합니다."),
-    "databricks": ("DW", "databricks://?server_hostname=…&http_path=…", "Databricks SQL 웨어하우스입니다. databricks-sql-connector 패키지가 필요합니다."),
-    "impala": ("DW", "impala://host:21050/db", "하둡 계열 SQL 엔진입니다. impyla 패키지가 필요합니다."),
-    "snowflake": ("DW", "snowflake://계정/데이터베이스/스키마?warehouse=WH", "Snowflake입니다. snowflake-connector-python 패키지가 필요합니다."),
-    "athena": ("DL", "athena://?s3_staging_dir=s3://…&region_name=…", "S3의 파일을 SQL로 조회하는 AWS 서비스입니다. PyAthena 패키지가 필요합니다."),
-    "flink": ("DL", "flink://", "스트림 처리 엔진입니다. PyFlink 패키지와 Java가 필요하고, 소스로 실행할 때만 씁니다."),
-    "pyspark": ("DL", "pyspark://", "Spark입니다. PySpark 패키지와 Java가 필요하고, 소스로 실행할 때만 씁니다."),
-    "trino": ("DL", "trino://host:8080/catalog/schema", "여러 저장소를 한 번에 조회하는 SQL 엔진입니다. trino 패키지가 필요합니다."),
+    "clickhouse": ("DB", "clickhouse://host:8123/db", "분석용 열 기반 DB예요. HTTP로 접속하는 파이썬 패키지가 필요해요."),
+    "druid": ("DB", "druid://host:8082/druid/v2/sql", "실시간 집계용 DB예요. SQL로 접속하는 pydruid 패키지가 필요해요."),
+    "duckdb": ("DB", "duckdb://data.duckdb", "이 프로그램이 파일을 읽는 기본 엔진이에요. 보통 이미 들어 있어요."),
+    "exasol": ("DB", "exasol://host:8563", "인메모리 분석 DB예요. pyexasol 패키지가 필요해요."),
+    "materialize": ("DB", "materialize://host:6875/db", "스트리밍 SQL DB예요. PostgreSQL 방식으로 접속하므로 psycopg 패키지가 필요해요."),
+    "mssql": ("DB", "mssql://host:1433/db", "SQL Server예요. pyodbc 패키지와 ODBC Driver 17/18 프로그램이 둘 다 필요해요."),
+    "mysql": ("DB", "mysql://host:3306/db", "MySQL·MariaDB예요. mysqlclient 패키지가 필요해요."),
+    "oracle": ("DB", "oracle://host:1521/db", "Oracle DB예요. oracledb 패키지가 필요해요."),
+    "postgres": ("DB", "postgres://host:5432/db", "PostgreSQL이에요. psycopg 패키지가 필요해요."),
+    "risingwave": ("DB", "risingwave://host:4566/db", "스트리밍 SQL DB예요. psycopg2 패키지가 필요해요."),
+    "singlestoredb": ("DB", "singlestoredb://host:3306/db", "SingleStore예요. singlestoredb 패키지가 필요해요."),
+    "sqlite": ("DB", "sqlite://data.db", "파일 하나짜리 작은 DB예요. 파이썬에 기본으로 들어 있어요."),
+    "bigquery": ("DW", "bigquery://프로젝트/데이터셋", "Google의 웨어하우스예요. google-cloud-bigquery 패키지가 필요하고, 처음 접속할 때 Google 로그인을 해요."),
+    "databricks": ("DW", "databricks://?server_hostname=…&http_path=…", "Databricks SQL 웨어하우스예요. databricks-sql-connector 패키지가 필요해요."),
+    "impala": ("DW", "impala://host:21050/db", "하둡 계열 SQL 엔진이에요. impyla 패키지가 필요해요."),
+    "snowflake": ("DW", "snowflake://계정/데이터베이스/스키마?warehouse=WH", "Snowflake예요. snowflake-connector-python 패키지가 필요해요."),
+    "athena": ("DL", "athena://?s3_staging_dir=s3://…&region_name=…", "S3의 파일을 SQL로 조회하는 AWS 서비스예요. PyAthena 패키지가 필요해요."),
+    "flink": ("DL", "flink://", "스트림 처리 엔진이에요. PyFlink 패키지와 Java가 필요하고, 소스로 실행할 때만 써요."),
+    "pyspark": ("DL", "pyspark://", "Spark예요. PySpark 패키지와 Java가 필요하고, 소스로 실행할 때만 써요."),
+    "trino": ("DL", "trino://host:8080/catalog/schema", "여러 저장소를 한 번에 조회하는 SQL 엔진이에요. trino 패키지가 필요해요."),
 }
 # DRIVERS에 없는 대상은 다른 드라이버를 빌려 쓴다: 열쇠 → (이름, 묶음, 빌려 쓰는 주소 앞부분, 주소 예, 설명)
 BORROWED = {
     "redshift": ("Amazon Redshift", "DW", "postgres", "postgres://host:5439/db",
-                 "AWS의 웨어하우스입니다. PostgreSQL 방식으로 접속하므로 postgres 드라이버를 씁니다(주소도 postgres://)."),
+                 "AWS의 웨어하우스예요. PostgreSQL 방식으로 접속하므로 postgres 드라이버를 써요(주소도 postgres://)."),
     "supabase": ("Supabase", "DB", "postgres", "postgres://postgres.프로젝트ref@aws-0-리전.pooler.supabase.com:5432/postgres",
-                 "Supabase(PostgreSQL)입니다. postgres 드라이버(psycopg)를 씁니다. 대시보드 Connect에서 Session pooler 주소(5432)를 복사해 붙여넣고 비밀번호는 칸에 따로 쓰세요. "
-                 "Direct(db.<ref>.supabase.co:5432)는 무료 플랜에서 IPv6 전용이라 네트워크에 따라 안 붙을 수 있고, Transaction pooler(포트 6543)는 prepared statement를 끄고 접속합니다. 읽기 전용 계정을 권장합니다."),
+                 "Supabase(PostgreSQL)예요. postgres 드라이버(psycopg)를 써요. 대시보드 Connect에서 Session pooler 주소(5432)를 복사해 붙여넣고 비밀번호는 칸에 따로 쓰세요. "
+                 "Direct(db.<ref>.supabase.co:5432)는 무료 플랜에서 IPv6 전용이라 네트워크에 따라 안 붙을 수 있고, Transaction pooler(포트 6543)는 prepared statement를 끄고 접속해요. 읽기 전용 계정을 권장해요."),
     "synapse": ("Azure Synapse", "DW", "mssql", "mssql://host:1433/db",
-                "Azure의 웨어하우스입니다. SQL Server 방식으로 접속하므로 mssql 드라이버와 ODBC 프로그램을 씁니다."),
+                "Azure의 웨어하우스예요. SQL Server 방식으로 접속하므로 mssql 드라이버와 ODBC 프로그램을 써요."),
 }
 # DuckDB 확장: 열쇠(= 확장 이름) → (이름, 주소 예, 설명). 파이썬 패키지가 아니라 DuckDB 안에 설치하는 확장이다.
 EXTENSIONS = {
     "httpfs": ("DuckDB 확장 httpfs (S3)", "s3://버킷/경로/*.parquet",
-               "DuckDB가 S3·HTTP의 파일을 바로 읽게 해 줍니다. 파이썬 패키지가 아니라 DuckDB 확장입니다."),
+               "DuckDB가 S3·HTTP의 파일을 바로 읽게 해 줘요. 파이썬 패키지가 아니라 DuckDB 확장이에요."),
     "delta": ("DuckDB 확장 delta", "delta_scan('경로')",
-              "Delta Lake 테이블을 읽게 해 줍니다. 파이썬 패키지가 아니라 DuckDB 확장입니다."),
+              "Delta Lake 테이블을 읽게 해 줘요. 파이썬 패키지가 아니라 DuckDB 확장이에요."),
     "iceberg": ("DuckDB 확장 iceberg", "iceberg_scan('경로')",
-                "Iceberg 테이블을 읽게 해 줍니다. 파이썬 패키지가 아니라 DuckDB 확장입니다."),
+                "Iceberg 테이블을 읽게 해 줘요. 파이썬 패키지가 아니라 DuckDB 확장이에요."),
 }
 GROUPS = ("DB", "DW", "DL")
 PYTHON_URL = "https://www.python.org/downloads/"
@@ -250,7 +250,7 @@ def overview():
 
 def missing(db, program):
     name, url = PROGRAMS[program]
-    return ValueError(f"{db} 접속에 필요한 {name}가 이 PC에 없습니다. 다운로드: {url}")
+    return ValueError(f"{db} 접속에 필요한 {name}가 이 PC에 없어요. 다운로드: {url}")
 
 
 QUERY_TIMEOUT = 1800  # 데이터 작업 하나를 기다리는 시간(초). server가 기다리는 시간이자 settle이 DB에 거는 쿼리 시간 제한.
@@ -321,10 +321,10 @@ def prepare(url, password=""):
     except ImportError as e:  # 그 모듈이 없으면 Ibis 설치 안내, 그 밖(모듈이 쓰는 것이 없음)은 따로 설치할 프로그램이나 불러오기 오류
         if isinstance(e, ModuleNotFoundError) and e.name and module.startswith(e.name):
             info = {**entry(scheme), "status": "missing"}
-            raise DriverError(" ".join(filter(None, [f"{db} 지원이 설치되어 있지 않습니다. 설치: {info['command']}", info["after"], info["notice"]])), info)
+            raise DriverError(" ".join(filter(None, [f"{db} 지원이 설치되어 있지 않아요. 설치: {info['command']}", info["after"], info["notice"]])), info)
         if program:
             raise program_needed()
-        raise ValueError(f"{db} 드라이버를 불러오지 못했습니다: {e}")
+        raise ValueError(f"{db} 드라이버를 불러오지 못했어요: {e}")
 
     if program == "java" and not has_java():
         raise program_needed()

@@ -239,7 +239,7 @@ def test_structure_functions(con):
     get = lambda id, **raw: m.select(v=S.make(id, m, raw)).to_polars()["v"][0]
     assert get("json_get", x="j", path="a.b", to="int") == 5 and get("json_get", x="j", path="l[1]", to="int") == 8
     assert get("struct_field", x="st", field="k") == "v" and get("array_length", x="a") == 2 and get("array_get", x="a", n=2) == "q"
-    with pytest.raises(ValueError, match="필드가 없습니다"):
+    with pytest.raises(ValueError, match="필드가 없어요"):
         S.make("struct_field", m, {"x": "st", "field": "zz"})
     assert S.apply("unnest", m, {"x": "a"}).count().execute() == 2
 
@@ -312,7 +312,7 @@ def test_raw_sql_expression(ev):
                       ("getenv('PATH')", sql_exec.SecurityViolationError), ("val); DROP TABLE ev; --", ValueError)]:
         with pytest.raises(exc):
             S.raw_expr(ev, "bad", text)
-    with pytest.raises(ValueError, match="이미 있습니다"):
+    with pytest.raises(ValueError, match="이미 있어요"):
         S.raw_expr(ev, "val", "1")
     with pytest.raises(ValueError, match="새 컬럼 이름"):
         S.raw_expr(ev, "a b", "1")
@@ -343,7 +343,7 @@ def test_argument_errors(ev):
         S.get("medain")
     with pytest.raises(ValueError, match="표를 바꾸는"):
         S.make("having", ev, {"cond": "val > 1"})
-    with pytest.raises(ValueError, match="집계 함수가 아닙니다"):
+    with pytest.raises(ValueError, match="집계 함수가 아니에요"):
         S.aggregate("rank", ev, "val")
 
 

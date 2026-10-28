@@ -95,7 +95,7 @@ def test_routes(client, tmp_path, folder):
 
     assert client.get("/api/metrics").get_json()["metrics"] == []
     r = client.post("/api/metrics", json={"path": str(tmp_path / "nope.yaml")})
-    assert r.status_code == 400 and "읽을 수 없습니다" in r.get_json()["error"]
+    assert r.status_code == 400 and "읽을 수 없어요" in r.get_json()["error"]
     d = client.post("/api/metrics", json={"path": str(tmp_path / "metrics.yaml")}).get_json()
     assert [m["name"] for m in d["metrics"]] == ["CTR", "ARPPU", "매출"] and d["metrics"][0]["format"] == "percent"
 

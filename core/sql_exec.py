@@ -64,12 +64,12 @@ class SqlSyntaxError(ValueError):
 
 
 SYNTAX_WORDS = [  # sqlglot의 영어 오류 설명 → 한국어(앞에서부터 처음 맞는 것)
-    (re.compile(r"Expected table name but got <Token[^>]*text: ([^,>]*)"), lambda m: f"테이블 이름이 와야 하는데 '{m[1]}'가 있습니다"),
-    (re.compile(r"Expecting \)"), lambda m: "닫는 괄호 ')'가 필요합니다"),
-    (re.compile(r"Expecting \("), lambda m: "여는 괄호 '('가 필요합니다"),
-    (re.compile(r"Invalid expression / Unexpected token"), lambda m: "알 수 없는 표현이나 예상하지 못한 낱말이 있습니다"),
-    (re.compile(r"Required keyword: '(\w+)' missing"), lambda m: "빠진 부분이 있습니다"),
-    (re.compile(r"Expected (\w+)"), lambda m: f"{m[1]}가 와야 합니다"),
+    (re.compile(r"Expected table name but got <Token[^>]*text: ([^,>]*)"), lambda m: f"테이블 이름이 와야 하는데 '{m[1]}'가 있어요"),
+    (re.compile(r"Expecting \)"), lambda m: "닫는 괄호 ')'가 필요해요"),
+    (re.compile(r"Expecting \("), lambda m: "여는 괄호 '('가 필요해요"),
+    (re.compile(r"Invalid expression / Unexpected token"), lambda m: "알 수 없는 표현이나 예상하지 못한 낱말이 있어요"),
+    (re.compile(r"Required keyword: '(\w+)' missing"), lambda m: "빠진 부분이 있어요"),
+    (re.compile(r"Expected (\w+)"), lambda m: f"{m[1]}가 와야 해요"),
 ]
 
 
@@ -91,7 +91,7 @@ def check(sql, dialect=None):
     if not isinstance(sql, str) or not sql.strip():
         raise ValueError("SQL을 입력하세요.")
     if len(sql) > MAX_SQL_SIZE:
-        raise ValueError(f"SQL은 {MAX_SQL_SIZE:,}자까지입니다.")
+        raise ValueError(f"SQL은 {MAX_SQL_SIZE:,}자까지예요.")
     sqlglot, _, roots, forbidden = glot()
     try:
         parsed = [p for p in sqlglot.parse(sql, read=dialect) if p is not None]
@@ -99,17 +99,17 @@ def check(sql, dialect=None):
         first = (e.errors or [{}])[0]
         line, col = first.get("line"), first.get("col")
         where = f"{line}줄 {col}칸: " if line else ""
-        raise SqlSyntaxError(f"SQL을 읽을 수 없습니다. {where}{syntax_message(first.get('description') or str(e))}", line, col) from None
+        raise SqlSyntaxError(f"SQL을 읽을 수 없어요. {where}{syntax_message(first.get('description') or str(e))}", line, col) from None
     except sqlglot.errors.TokenError:
-        raise SqlSyntaxError("SQL을 읽을 수 없습니다. 따옴표나 괄호가 닫히지 않았습니다.") from None
+        raise SqlSyntaxError("SQL을 읽을 수 없어요. 따옴표나 괄호가 닫히지 않았어요.") from None
     if len(parsed) != 1:
-        raise SecurityViolationError("SQL 문장은 하나만 실행할 수 있습니다(; 로 여러 문장을 이을 수 없음).")
+        raise SecurityViolationError("SQL 문장은 하나만 실행할 수 있어요(; 로 여러 문장을 이을 수 없음).")
     tree = parsed[0]
     if not isinstance(tree, roots):
-        raise SecurityViolationError(f"읽기만 하는 SELECT 문만 실행할 수 있습니다({type(tree).__name__.upper()} 문은 실행하지 않습니다).")
+        raise SecurityViolationError(f"읽기만 하는 SELECT 문만 실행할 수 있어요({type(tree).__name__.upper()} 문은 실행하지 않아요).")
     bad = next((node for node in tree.walk() if isinstance(node, forbidden)), None)
     if bad is not None:
-        raise SecurityViolationError(f"데이터나 설정을 바꾸는 부분({type(bad).__name__.upper()})이 있어 실행하지 않습니다.")
+        raise SecurityViolationError(f"데이터나 설정을 바꾸는 부분({type(bad).__name__.upper()})이 있어 실행하지 않아요.")
     if problem := file_read_problem(tree, sql, dialect):
         raise SecurityViolationError(problem)
     return tree
@@ -172,7 +172,7 @@ def save_virtual(key, name, definition, real_tables, verify):
     진짜 테이블과 같은 이름은 쓸 수 없다."""
     name = name.strip() if isinstance(name, str) else ""
     if not NAME.fullmatch(name):
-        raise ValueError("가상 테이블 이름은 영문·한글·밑줄로 시작하고 영문·숫자·밑줄·한글만 50자까지 쓸 수 있습니다.")
+        raise ValueError("가상 테이블 이름은 영문·한글·밑줄로 시작하고 영문·숫자·밑줄·한글만 50자까지 쓸 수 있어요.")
     with settings.updating(VT_FILE):  # 읽고-고치고-쓰는 동안 다른 저장이 끼어들지 못하게
         data = all_virtual()
         old = key.partition("#")[0]
@@ -183,12 +183,12 @@ def save_virtual(key, name, definition, real_tables, verify):
             vts.pop(name, None)
         else:
             if name.lower() in {t.lower() for t in real_tables}:
-                raise ValueError(f"'{name}'은 이 연결에 있는 테이블 이름입니다. 다른 이름을 쓰세요.")
+                raise ValueError(f"'{name}'은 이 연결에 있는 테이블 이름이에요. 다른 이름을 쓰세요.")
             if not isinstance(definition, dict) or not (isinstance(definition.get("sql"), str) or isinstance(definition.get("parquet"), str)):
-                raise ValueError("가상 테이블은 SQL이나 Parquet 파일 경로로 정의합니다.")
+                raise ValueError("가상 테이블은 SQL이나 Parquet 파일 경로로 정의해요.")
             item = {"sql": definition["sql"]} if isinstance(definition.get("sql"), str) else {"parquet": definition["parquet"].strip()}
             if name not in vts and len(vts) >= MAX_VIRTUAL:
-                raise ValueError(f"가상 테이블은 연결마다 {MAX_VIRTUAL}개까지입니다. 쓰지 않는 것을 지우세요.")
+                raise ValueError(f"가상 테이블은 연결마다 {MAX_VIRTUAL}개까지예요. 쓰지 않는 것을 지우세요.")
             verify({**vts, name: item})  # 검사, 이름 고리, 지금 연결에서 읽히는지
             vts[name] = {**item, "saved": dt.datetime.now().isoformat(timespec="seconds")}
         settings.write(VT_FILE, data)
@@ -206,9 +206,9 @@ def definition_tree(con, name, item):
     if "sql" in item:
         return check(item["sql"], dialect_of(con))
     if con.name not in PARQUET_BACKENDS:
-        raise ValueError(f"Parquet 가상 테이블 '{name}'은 DuckDB 파일이나 파일 연결에서만 쓸 수 있습니다.")
+        raise ValueError(f"Parquet 가상 테이블 '{name}'은 DuckDB 파일이나 파일 연결에서만 쓸 수 있어요.")
     if getattr(con, "locked", False):
-        raise ValueError(f"Parquet 가상 테이블 '{name}'은 이 DuckDB 파일에서 쓸 수 없습니다. 파일에 뷰·매크로가 있어 다른 파일 읽기를 막았습니다(설정의 안전하게 쓰기).")
+        raise ValueError(f"Parquet 가상 테이블 '{name}'은 이 DuckDB 파일에서 쓸 수 없어요. 파일에 뷰·매크로가 있어 다른 파일 읽기를 막았어요(설정의 안전하게 쓰기).")
     path = item["parquet"].replace("\\", "/").replace("'", "''")
     return glot()[0].parse_one(f"SELECT * FROM read_parquet('{path}')", read="duckdb")
 
@@ -222,7 +222,7 @@ def expand(con, tree, vts):
         if name in order:
             return
         if name in visiting:
-            raise ValueError("가상 테이블이 서로를 고리처럼 부릅니다: " + " → ".join(visiting + [name]))
+            raise ValueError("가상 테이블이 서로를 고리처럼 불러요: " + " → ".join(visiting + [name]))
         visiting.append(name)
         sub = definition_tree(con, name, vts[name])
         for used in table_names(sub):

@@ -87,7 +87,7 @@ def test_each_unnest_and_longer(db):
 def test_calc_errors(db):
     assert "중 하나로 시작" in db(calcs=["합치기 amt"])["error"]
     assert "순서가 필요" in db(calcs=["누적합 amt"])["error"]
-    assert "이미 있습니다" in db(calcs=["누적합 amt 기준 id 이름 amt"])["error"]
+    assert "이미 있어요" in db(calcs=["누적합 amt 기준 id 이름 amt"])["error"]
     assert "'3행'이나 '7일'" in db(calcs=["이동평균 amt 기준 id"])["error"]
     assert "날짜" in db(calcs=["이동평균 amt 3일 기준 id"])["error"]
     assert "목록(배열)" in db(calcs=["펼치기 amt"])["error"]
@@ -155,7 +155,7 @@ def test_file_connection_calcs_on_pc(files):
 def test_file_connection_too_big_for_pc(files, monkeypatch):
     from core import held
     monkeypatch.setattr(held, "MAX_ROWS", 5)
-    assert "받지 않았습니다" in files(calcs=["누적합 amt 기준 id"], fresh=True)["error"]
+    assert "받지 않았어요" in files(calcs=["누적합 amt 기준 id"], fresh=True)["error"]
 
 
 def test_sqlite_asof_falls_back(folder, tmp_path):
@@ -205,7 +205,7 @@ def test_new_calc_lines_through_the_route(db):
         assert twice[o["id"]] == (None if amt(o) is None else amt(o) * 2) and up[o["id"]] == o["memo"].upper()
     assert not db(calcs=["창거르기 row_number <= 2 기준 id 그룹 store"]).get("error")
     assert db(calcs=["창거르기 row_number <= 2 기준 id 그룹 store"])["count"] == 6
-    assert "쓰지 않습니다" in db(calcs=["share_of_group amt 기준 id"])["error"]
+    assert "쓰지 않아요" in db(calcs=["share_of_group amt 기준 id"])["error"]
     assert "끝에 '이름 새이름'" in db(calcs=["식 amt * 2"])["error"]
 
 
@@ -213,7 +213,7 @@ def test_sql_expression_line_on_duckdb(db):
     found = db(calcs=["SQL식 upper(memo) || '!' 이름 shout"])
     assert not found.get("error"), found
     assert {r["id"]: r["shout"] for r in found["rows"]["rows"]}[1] == " M1 !"
-    assert "읽을 수 없습니다" in db(calcs=["SQL식 (1 이름 x"])["error"] or "SQL" in db(calcs=["SQL식 (1 이름 x"])["error"]
+    assert "읽을 수 없어요" in db(calcs=["SQL식 (1 이름 x"])["error"] or "SQL" in db(calcs=["SQL식 (1 이름 x"])["error"]
     assert "파일" in db(calcs=["SQL식 (select count(*) from read_csv('x.csv')) 이름 x"])["error"]
 
 

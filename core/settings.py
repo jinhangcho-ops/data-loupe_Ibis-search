@@ -62,7 +62,7 @@ def migrate(path=None):
     except OSError as e:
         if not old.exists():
             return None  # 다른 프로세스가 동시에 옮겼다
-        reason = f"예전 설정 폴더({old})를 새 폴더({new})로 옮기지 못했습니다: {e}\n예전 앱을 모두 끈 뒤 새 폴더의 내용을 지우고 예전 폴더 이름을 {new.name}로 바꾸면 이어 쓸 수 있습니다. 앱을 다시 켜면 새 폴더에 설정 파일이 아직 없을 때는 다시 옮기려 합니다."
+        reason = f"예전 설정 폴더({old})를 새 폴더({new})로 옮기지 못했어요: {e}\n예전 앱을 모두 끈 뒤 새 폴더의 내용을 지우고 예전 폴더 이름을 {new.name}로 바꾸면 이어 쓸 수 있어요. 앱을 다시 켜면 새 폴더에 설정 파일이 아직 없을 때는 다시 옮기려 해요."
         with contextlib.suppress(OSError):
             new.mkdir(parents=True, exist_ok=True)
             (new / FAILED).write_text(reason, encoding="utf-8")
@@ -84,7 +84,7 @@ CHOICES = {
     "prep_where": ["all", "new"],  # 원격 DB(주소로 접속)의 전처리를 이 PC의 작업 사본에서 계산하는 범위: 전처리 전체 / 계산 컬럼·PCA가 있을 때만(나머지는 DB에서)
 }
 
-# 끌어서 조절한 크기(px)와 전처리가 미리 볼 행 수(sample), 오래 걸린 작업이 끝났을 때 알림을 보내는 기준 시간(notify_after, 초, 기본 30), DuckDB 파일 조회의 작업 메모리 상한(memory, MB, 기본은 제한 없음), DuckDB 계산에 쓰는 코어 수(threads, 기본은 전부): (최소, 최대). 화면은 이 범위를 server.CONSTANTS로 받는다. 0을 저장하면 기본값으로 돌아간다.
+# 끌어서 조절한 크기(px)와 전처리가 미리 볼 행 수(sample), 오래 걸린 작업이 끝났을 때 알림을 보내는 기준 시간(notify_after, 초, 기본 30), DuckDB 파일 조회의 메모리 한도(memory, MB, 기본은 제한 없음), DuckDB 계산에 쓰는 코어 수(threads, 기본은 전부): (최소, 최대). 화면은 이 범위를 server.CONSTANTS로 받는다. 0을 저장하면 기본값으로 돌아간다.
 SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "chart": (200, 1000), "sample": (1000, 1_000_000), "notify_after": (5, 3600), "memory": (256, 1_000_000), "threads": (1, os.cpu_count() or 1)}
 
 # 비율 설정: (최소, 최대). 비우거나 0을 저장하면 기본값(DEFAULTS)으로 돌아간다.
@@ -204,10 +204,10 @@ def load():
 def save(changes):
     """바뀐 설정만 받아 기존 설정에 더해 저장한다."""
     if not isinstance(changes, dict) or not changes:
-        raise ValueError("저장할 설정이 없습니다.")
+        raise ValueError("저장할 설정이 없어요.")
     for name, value in changes.items():
         if not valid(name, value) and not ((name in SIZES or name in FLOATS) and value == 0 and type(value) in (int, float)):
-            raise ValueError(f"'{name}' 설정에 쓸 수 없는 값입니다: {value}")
+            raise ValueError(f"'{name}' 설정에 쓸 수 없는 값이에요: {value}")
     with updating(PATH.name):
         write(PATH.name, {name: value for name, value in {**load(), **changes}.items() if value != 0})
 
@@ -240,11 +240,11 @@ def save_named(file, what, limit, name, item, count=MAX_SAVED):
         if item is None:
             found.pop(name, None)
         elif not isinstance(item, dict):
-            raise ValueError(f"저장할 {josa(what, '이', '가')} 올바르지 않습니다.")
+            raise ValueError(f"저장할 {josa(what, '이', '가')} 올바르지 않아요.")
         elif len(json.dumps(item, ensure_ascii=False)) > limit:
-            raise ValueError(f"저장할 {josa(what, '이', '가')} 너무 큽니다.")
+            raise ValueError(f"저장할 {josa(what, '이', '가')} 너무 커요.")
         elif name not in found and len(found) >= count:
-            raise ValueError(f"저장한 {josa(what, '은', '는')} {count}개까지입니다. 쓰지 않는 것을 지우세요.")
+            raise ValueError(f"저장한 {josa(what, '은', '는')} {count}개까지예요. 쓰지 않는 것을 지우세요.")
         else:
             found[name] = item
         write(file, found)
@@ -274,9 +274,9 @@ def read_env(path):
     try:
         text = open(path, encoding="utf-8-sig").read()
     except OSError as e:
-        raise ValueError(f"env 파일을 읽을 수 없습니다: {e.strerror or e}") from None
+        raise ValueError(f"env 파일을 읽을 수 없어요: {e.strerror or e}") from None
     except UnicodeDecodeError:
-        raise ValueError("env 파일은 UTF-8이어야 합니다.") from None
+        raise ValueError("env 파일은 UTF-8이어야 해요.") from None
     found = {}
     for number, line in enumerate(text.splitlines(), 1):
         line = line.strip()
@@ -285,13 +285,13 @@ def read_env(path):
         name, eq, value = re.sub(r"^export\s+", "", line).partition("=")
         name, value = name.strip(), value.strip()
         if not eq or not ENV_NAME.fullmatch(name):
-            raise ValueError(f"env 파일 {number}번째 줄을 읽을 수 없습니다(이름=값 모양이어야 합니다).")
+            raise ValueError(f"env 파일 {number}번째 줄을 읽을 수 없어요(이름=값 모양이어야 해요).")
         if value[:1] in ("'", '"'):
             end = 1
             while end < len(value) and value[end] != value[0]:
                 end += 2 if value[0] == '"' and value[end] == "\\" else 1  # 큰따옴표 안의 \" 와 \ 는 두 글자가 한 글자
             if end >= len(value):
-                raise ValueError(f"env 파일 {number}번째 줄의 따옴표가 닫히지 않았습니다.")
+                raise ValueError(f"env 파일 {number}번째 줄의 따옴표가 닫히지 않았어요.")
             inner = value[1:end]
             value = re.sub(r"\\([nt\"\\])", lambda m: {"n": "\n", "t": "\t"}.get(m[1], m[1]), inner) if value[0] == '"' else inner
         else:

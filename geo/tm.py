@@ -26,7 +26,7 @@ def convert(xs, ys, epsg=5179, target=WGS84):
         a, b = transformer(epsg, target).transform(xs, ys)
     except Exception as e:
         if type(e).__name__ == "CRSError":
-            raise ValueError(f"EPSG:{epsg}는 알 수 없는 좌표계입니다. 국내는 {', '.join(map(str, SYSTEMS))}를 씁니다.") from None
+            raise ValueError(f"EPSG:{epsg}는 알 수 없는 좌표계예요. 국내는 {', '.join(map(str, SYSTEMS))}를 써요.") from None
         raise
     a, b = np.asarray(a, dtype="float64"), np.asarray(b, dtype="float64")
     bad = ~(np.isfinite(a) & np.isfinite(b))

@@ -113,7 +113,7 @@ def find_files(folder, kinds=KINDS, deep=True):
 
 @on_worker
 def open_duckdb(path, read_only=True, memory=None, threads=None):
-    """DuckDB 파일을 연다. 파일에 뷰·매크로가 있으면 locked=True로 파일·네트워크 읽기를 막는다(결과 저장은 result가 Arrow로 쓴다). memory(MB, 정수)를 주면 작업 메모리 상한을 걸고 넘치는 것은 임시 폴더에 쓴다
+    """DuckDB 파일을 연다. 파일에 뷰·매크로가 있으면 locked=True로 파일·네트워크 읽기를 막는다(결과 저장은 result가 Arrow로 쓴다). memory(MB, 정수)를 주면 메모리 한도를 걸고 넘치는 것은 임시 폴더에 쓴다
     (그 폴더는 close가 지운다). None이면 제한 없이(DuckDB 기본) 연다. threads(정수)를 주면 계산에 쓰는 코어 수, None이면 전부(DuckDB 기본)."""
     cores = {"threads": threads} if threads else {}
     if not memory:
@@ -140,7 +140,7 @@ def open_duckdb(path, read_only=True, memory=None, threads=None):
 
 def release(con):
     """쿼리가 끝난 뒤 DB가 캐시로 쥔 데이터를 비운다. 결과는 이미 받아 갔고, 다음 쿼리는 필요한 만큼 다시 읽는다.
-    작업 메모리 상한을 잠깐 FLOOR로 낮췄다가 원래 값으로 되돌리는 방식이다. 연결 스레드에서 부른다.
+    메모리 한도를 잠깐 FLOOR로 낮췄다가 원래 값으로 되돌리는 방식이다. 연결 스레드에서 부른다.
     이 PC에서 계산하는 파일 연결만 한다. 주소로 접속한 DB·DW는 서버가 계산하므로 하지 않는다(쿼리를 더 보내지 않는다)."""
     restore = getattr(con, "local", None)
     if not restore:
@@ -451,14 +451,14 @@ def open_url(url, user="", password=""):
         parts = urlsplit(url)
         login = user + (":" + quote_plus(password, safe="") if password else "")
         url = parts._replace(netloc=f"{login}@{parts.netloc}").geturl()
-    late = f"{CONNECT_TIMEOUT}초 안에 연결되지 않았습니다. 주소와 네트워크를 확인하세요."
+    late = f"{CONNECT_TIMEOUT}초 안에 연결되지 않았어요. 주소와 네트워크를 확인하세요."
 
     def connect():
         try:
             con = ibis.connect(url, **extra)
         except Exception as e:
             if type(e).__name__ == "ConnectionTimeout":  # psycopg: connect_timeout(drivers.PG_WAIT)을 넘김
-                raise TimeoutError("접속 대기 시간 안에 연결되지 않았습니다. 주소·포트와 네트워크를 확인하세요. 느린 DB는 주소 끝에 ?connect_timeout=30 을 붙여 보세요.") from e
+                raise TimeoutError("접속 대기 시간 안에 연결되지 않았어요. 주소·포트와 네트워크를 확인하세요. 느린 DB는 주소 끝에 ?connect_timeout=30 을 붙여 보세요.") from e
             raise
         drivers.settle(con, url)  # DB 쪽 쿼리 시간 제한·접속 이름
         if getattr(con, "name", None) == "clickhouse":  # 분석 화면의 nunique·분위수도 근사 함수 대신 정확한 함수로

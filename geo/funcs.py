@@ -43,14 +43,14 @@ def haversine(lat1, lon1, lat2, lon2):
 def check_lat(lat, what="기준 위도"):
     lat = plain(lat, what)
     if not -90 <= lat <= 90:
-        raise ValueError(f"{what}는 -90~90 사이여야 합니다({lat}).")
+        raise ValueError(f"{what}는 -90~90 사이여야 해요({lat}).")
     return lat
 
 
 def check_lon(lon, what="기준 경도"):
     lon = plain(lon, what)
     if not -180 <= lon <= 180:
-        raise ValueError(f"{what}는 -180~180 사이여야 합니다({lon}).")
+        raise ValueError(f"{what}는 -180~180 사이여야 해요({lon}).")
     return lon
 
 
@@ -58,7 +58,7 @@ def within_km(lat, lon, center_lat, center_lon, km):
     """기준점에서 km 이내(경계 포함)인 행. 위도 차이로 먼저 걸러 DB가 위도 인덱스를 쓸 수 있게 한다(위도 1도 = 약 111.2km, 큰 원 거리는 위도 차이보다 짧을 수 없다)."""
     clat, clon, km = check_lat(center_lat), check_lon(center_lon), plain(km, "반경(km)")
     if km < 0:
-        raise ValueError("반경(km)은 0 이상이어야 합니다.")
+        raise ValueError("반경(km)은 0 이상이어야 해요.")
     lat, lon = number(lat, "위도"), number(lon, "경도")
     reach = km / KM_PER_DEGREE * 1.0001 + 1e-9
     return lat.between(clat - reach, clat + reach) & (haversine(lat, lon, clat, clon) <= km)
@@ -68,7 +68,7 @@ def in_box(lat, lon, min_lat, min_lon, max_lat, max_lon):
     """범위 상자(최소·최대 위경도, 경계 포함) 안인 행. 최소 경도가 최대 경도보다 크면 날짜 변경선(±180)을 가로지르는 상자로 본다."""
     lo_lat, lo_lon, hi_lat, hi_lon = check_lat(min_lat, "최소 위도"), check_lon(min_lon, "최소 경도"), check_lat(max_lat, "최대 위도"), check_lon(max_lon, "최대 경도")
     if lo_lat > hi_lat:
-        raise ValueError("최소 위도가 최대 위도보다 클 수 없습니다.")
+        raise ValueError("최소 위도가 최대 위도보다 클 수 없어요.")
     lat, lon = number(lat, "위도"), number(lon, "경도")
     across = (lon >= lo_lon) | (lon <= hi_lon) if lo_lon > hi_lon else lon.between(lo_lon, hi_lon)
     return lat.between(lo_lat, hi_lat) & across

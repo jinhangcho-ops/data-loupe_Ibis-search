@@ -50,7 +50,7 @@ def test_keep_modes(client, sent, monkeypatch, folder):
     monkeypatch.delenv("IBIS_TEST_TOKEN", raising=False)
     r = put("e", keep="env", token="IBIS_TEST_TOKEN")
     assert r["destinations"]["e"]["token"] == {"env": "IBIS_TEST_TOKEN", "set": False}
-    assert "환경변수 IBIS_TEST_TOKEN이 없습니다" in client.post("/api/send", json={"name": "e", "title": "t"}).get_json()["error"]
+    assert "환경변수 IBIS_TEST_TOKEN이 없어요" in client.post("/api/send", json={"name": "e", "title": "t"}).get_json()["error"]
     monkeypatch.setenv("IBIS_TEST_TOKEN", TOKEN)
     assert client.get("/api/destinations").get_json()["destinations"]["e"]["token"]["set"] is True
     sent.clear()
@@ -115,8 +115,8 @@ def test_commands(shop):
     assert out.startswith("전체 주문: 2행 (앞 1행)") and "300" in out
     assert "검색=<이름>" in commands.answer("지표 취소율")
     assert "비슷한" in commands.answer('지표 취소율 검색="전체주문"') or "없" in commands.answer('지표 취소율 검색="전체주문"')
-    assert commands.answer('검색 "열린').startswith("할 수 없습니다: 따옴표")
-    assert commands.answer("삭제 orders").startswith("모르는 명령입니다")
+    assert commands.answer('검색 "열린').startswith("할 수 없어요: 따옴표")
+    assert commands.answer("삭제 orders").startswith("모르는 명령이에요")
     shop.state["con"] = None
     assert "먼저 데이터에 연결" in commands.answer('검색 "전체 주문"')
 
@@ -178,10 +178,10 @@ def test_bot_routes(client, monkeypatch, folder):
     monkeypatch.setattr(slack_bot, "clients", fake_clients)
     from integrations import bot_app
     save = lambda **d: client.post("/api/bot", json={"keep": "session", "bot_token": TOKEN, "app_token": APP, "users": "", "channels": "", **d}).get_json()
-    assert save(bot_token="abc")["error"] == "봇 토큰은 xoxb-로 시작합니다."
+    assert save(bot_token="abc")["error"] == "봇 토큰은 xoxb-로 시작해요."
     assert "Slack ID가 아닌" in save(users="u1; drop")["error"]
     assert client.post("/api/bot", json={"keep": "session", "bot_token": TOKEN, "app_token": APP, "users": "U1"}).get_json()["channels"] == []  # 채널을 안 보내면 빈 목록
-    assert save(channels=5)["error"] == "허용할 채널은 쉼표로 나눈 ID여야 합니다."
+    assert save(channels=5)["error"] == "허용할 채널은 쉼표로 나눈 ID여야 해요."
     r = save()
     assert r["saved"] and r["bot_token"] is True and r["users"] == []
     assert TOKEN not in (folder / "slack_bot.json").read_text(encoding="utf-8")

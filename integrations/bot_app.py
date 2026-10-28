@@ -40,13 +40,13 @@ def ids(value, label):
     """"U1, U2" 같은 글이나 목록을 Slack ID 목록으로. 없으면(None) 빈 목록."""
     items = [] if value is None else value if isinstance(value, list) else re.split(r"[\s,]+", value) if isinstance(value, str) else None
     if items is None:
-        raise ValueError(f"{settings.josa(label, '은', '는')} 쉼표로 나눈 ID여야 합니다.")
+        raise ValueError(f"{settings.josa(label, '은', '는')} 쉼표로 나눈 ID여야 해요.")
     items = [str(i).strip().upper() for i in items if str(i).strip()]
     bad = [i for i in items if not SLACK_ID.fullmatch(i)]
     if bad:
-        raise ValueError(f"{label}에 Slack ID가 아닌 값이 있습니다: {', '.join(bad[:5])} (예: U0123ABCD, C0123ABCD)")
+        raise ValueError(f"{label}에 Slack ID가 아닌 값이 있어요: {', '.join(bad[:5])} (예: U0123ABCD, C0123ABCD)")
     if len(items) > MAX_IDS:
-        raise ValueError(f"{settings.josa(label, '은', '는')} {MAX_IDS}개까지입니다.")
+        raise ValueError(f"{settings.josa(label, '은', '는')} {MAX_IDS}개까지예요.")
     return list(dict.fromkeys(items))
 
 
@@ -100,7 +100,7 @@ def save_bot():
     for field, (label, prefix) in SECRETS.items():
         value = body.get(field)
         if isinstance(value, str) and value.strip() and keep != "env" and not value.strip().startswith(prefix):
-            raise ValueError(f"{label}은 {prefix}로 시작합니다.")
+            raise ValueError(f"{label}은 {prefix}로 시작해요.")
         kept = credentials.store(secret_key(field), keep, value, credentials.keep_of(old) if old else None, old.get(field))
         if kept is None:
             raise ValueError(f"'{label}' 칸을 입력하세요." + (" (환경변수 이름)" if keep == "env" else ""))
@@ -127,7 +127,7 @@ def start_bot():
     with switch:
         c, found = tokens()  # [저장]과 겹쳐도 저장이 끝난 설정을 읽는다
         if not c.get("users"):
-            raise ValueError("허용할 사용자 ID를 하나 이상 넣고 저장하세요. 그 사람들의 명령만 받습니다.")
+            raise ValueError("허용할 사용자 ID를 하나 이상 넣고 저장하세요. 그 사람들의 명령만 받아요.")
         stop()
         bot = slack_bot.SlackBot(found["bot_token"], found["app_token"], c["users"], c.get("channels", []), commands.answer)
         try:

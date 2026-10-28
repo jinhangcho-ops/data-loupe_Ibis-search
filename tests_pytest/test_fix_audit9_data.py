@@ -67,7 +67,7 @@ def test_bot_log_keeps_error_but_slack_gets_masked_text():
 def test_real_answer_records_failure():
     commands.failure.error = ""
     out = commands.answer("검색 없는검색이름")
-    assert out.startswith("할 수 없습니다") and commands.failure.error
+    assert out.startswith("할 수 없어요") and commands.failure.error
 
 
 # ---------- 9D4~9D6: 통계 ----------

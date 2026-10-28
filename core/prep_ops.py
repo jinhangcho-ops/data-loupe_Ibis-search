@@ -48,7 +48,7 @@ def check_new(t, names):
     have = {c.lower() for c in t.columns}
     for name in names:
         if name.lower() in have:
-            raise ValueError(f"'{name}' 컬럼이 이미 있어 파생 컬럼을 만들 수 없습니다.")
+            raise ValueError(f"'{name}' 컬럼이 이미 있어 파생 컬럼을 만들 수 없어요.")
         have.add(name.lower())
 
 
@@ -81,7 +81,7 @@ def date_pattern(fmt, variants=(DATE_PARTS,)):
     variants: 글자 모양 사전 여럿을 주면 그중 하나에 맞는 글자를 찾는다(real_dates)."""
     pieces = re.split(r"(%.)", fmt)
     if any(p.startswith("%") and p not in DATE_PARTS for p in pieces):
-        raise ValueError(f"날짜 형식에는 {' '.join(DATE_PARTS)}만 쓸 수 있습니다. 예: %Y%m%d, %Y-%m-%d %H:%M:%S")
+        raise ValueError(f"날짜 형식에는 {' '.join(DATE_PARTS)}만 쓸 수 있어요. 예: %Y%m%d, %Y-%m-%d %H:%M:%S")
     return "(?i)^(" + "|".join("".join(v.get(p) or DATE_PARTS.get(p) or literal(p) for p in pieces) for v in variants) + ")$"
 
 
@@ -183,7 +183,7 @@ def fill(t, name, arg):
         value = parse.convert(col.type(), str(arg["value"]))
     else:
         if how != "mode" and parse.kind(col.type()) not in NUMBER:
-            raise ValueError(f"'{how}'은 정수·실수 컬럼에만 쓸 수 있습니다. '{name}' 컬럼은 {parse.type_info(col.type())[0]}입니다.")
+            raise ValueError(f"'{how}'은 정수·실수 컬럼에만 쓸 수 있어요. '{name}' 컬럼은 {parse.type_info(col.type())[0]} 컬럼이에요.")
         value = getattr(t[name], how)().to_pyarrow().as_py()
     return t.mutate(**{name: col.fill_null(value)})
 
@@ -198,7 +198,7 @@ def outlier(t, name, arg, base=None):
         sc = src[name]
         s = stats(src, a=sc.quantile(0.25), b=sc.quantile(0.75)) if by == "iqr" else stats(src, a=sc.mean(), b=sc.std())
         if None in s.values():
-            raise ValueError(f"'{name}' 컬럼에 값이 부족해 범위를 구할 수 없습니다.")
+            raise ValueError(f"'{name}' 컬럼에 값이 부족해 범위를 구할 수 없어요.")
         s = {key: float(value) for key, value in s.items()}  # 소수(Decimal) 컬럼은 실수로 계산한다.
         if by == "iqr":
             gap = (k or 1.5) * (s["b"] - s["a"])
@@ -219,16 +219,16 @@ def scale(t, name, how):
     if how == "log":
         low = stats(t, a=col.min())["a"]
         if low is not None and low <= -1:
-            raise ValueError(f"'{name}' 컬럼의 최솟값이 {low}로 -1 이하라 log로 바꿀 수 없습니다.")
+            raise ValueError(f"'{name}' 컬럼의 최솟값이 {low}로 -1 이하라 log로 바꿀 수 없어요.")
         return t.mutate(**{name: (1 + col).ln()})
     if how == "minmax":
         s = stats(t, a=col.min(), b=col.max())
         if s["a"] == s["b"]:
-            raise ValueError(f"'{name}' 컬럼은 값이 모두 같거나 비어 있어(범위가 0) minmax로 바꿀 수 없습니다.")
+            raise ValueError(f"'{name}' 컬럼은 값이 모두 같거나 비어 있어(범위가 0) minmax로 바꿀 수 없어요.")
         return t.mutate(**{name: (col - s["a"]) / (s["b"] - s["a"])})
     s = stats(t, a=col.mean(), b=col.std())
     if not s["b"]:
-        raise ValueError(f"'{name}' 컬럼은 표준편차가 0이거나 구할 수 없어 standard로 바꿀 수 없습니다.")
+        raise ValueError(f"'{name}' 컬럼은 표준편차가 0이거나 구할 수 없어 standard로 바꿀 수 없어요.")
     return t.mutate(**{name: (col - s["a"]) / s["b"]})
 
 
@@ -244,7 +244,7 @@ def distinct_values(t, name, limit, what):
     """컬럼의 서로 다른 값(빈 값 제외)을 정렬해서. limit개를 넘으면 거부한다."""
     found = t.filter(t[name].notnull()).select(name).distinct().limit(limit + 1).to_pyarrow()[name].to_pylist()
     if len(found) > limit:
-        raise ValueError(f"'{name}' 컬럼은 서로 다른 값이 {limit:,}개를 넘어 {what}을 만들 수 없습니다.")
+        raise ValueError(f"'{name}' 컬럼은 서로 다른 값이 {limit:,}개를 넘어 {what}을 만들 수 없어요.")
     return sorted(found)
 
 
@@ -252,7 +252,7 @@ def rare(t, name, arg):
     counts = t.group_by(name).aggregate(n=t.count())
     found = counts.filter(counts.n < arg["min"], counts[name].notnull()).select(name).limit(RARE_MAX + 1).to_pyarrow()[name].to_pylist()
     if len(found) > RARE_MAX:
-        raise ValueError(f"'{name}' 컬럼은 {arg['min']}번 미만 나온 값이 {RARE_MAX:,}개를 넘어 rare를 쓸 수 없습니다.")
+        raise ValueError(f"'{name}' 컬럼은 {arg['min']}번 미만 나온 값이 {RARE_MAX:,}개를 넘어 rare를 쓸 수 없어요.")
     return t.mutate(**{name: t[name].isin(found).ifelse(arg.get("label", "기타"), t[name])})
 
 
@@ -267,7 +267,7 @@ def label(t, name, _):
 
 def date_parts(t, name, parts):
     if "hour" in parts and not t[name].type().is_timestamp():
-        raise ValueError(f"'hour'는 날짜시간 컬럼에만 쓸 수 있습니다. '{name}' 컬럼은 {parse.type_info(t[name].type())[0]}입니다.")
+        raise ValueError(f"'hour'는 날짜시간 컬럼에만 쓸 수 있어요. '{name}' 컬럼은 {parse.type_info(t[name].type())[0]} 컬럼이에요.")
     return add_columns(t, {f"{name}_{p}": PARTS[p](t[name]) for p in parts})
 
 
@@ -436,7 +436,7 @@ def apply_ops(t, name, ops, part="all", base=None):
         if mine or (base is not None and i <= OUTLIER_AT):
             dtype = src[name].type()
             if kinds and parse.kind(dtype) not in kinds:
-                raise ValueError(f"'{key}'은 {'·'.join(KIND_NAMES[k] for k in kinds)} 컬럼에만 쓸 수 있습니다. '{name}' 컬럼은 {parse.type_info(dtype)[0]}입니다.")
+                raise ValueError(f"'{key}'은 {'·'.join(KIND_NAMES[k] for k in kinds)} 컬럼에만 쓸 수 있어요. '{name}' 컬럼은 {parse.type_info(dtype)[0]} 컬럼이에요.")
         if not valid(ops[key]):  # 값 형식은 이 part의 일이 아니어도 먼저 본다(base에 하다 엉뚱한 오류가 나지 않게)
             raise ValueError(f"'{name}' 컬럼의 '{key}' 값은 {form} 형식으로 쓰세요.")
         if key in NAN_OPS:

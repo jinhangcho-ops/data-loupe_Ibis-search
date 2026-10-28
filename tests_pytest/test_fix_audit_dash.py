@@ -56,7 +56,7 @@ def test_notice_text_cuts_values_out_of_error():
     from integrations import schedule
     short = schedule.notice_text('Constraint Error: Duplicate key "id: 5" violates primary key constraint')
     assert "5" not in short and "실행 기록" in short
-    long = schedule.notice_text("연결이 끊겼습니다 " * 30)
+    long = schedule.notice_text("연결이 끊겼어요 " * 30)
     assert len(long) < 140 and long.endswith("(자세한 내용은 프로그램의 실행 기록)")
     assert schedule.notice_text("") == ""
 
@@ -91,7 +91,7 @@ def test_offset_short_page_halts(tmp_path, monkeypatch, folder, total):
     config, path, found, record, halt = api(tmp_path, "https://api.example.com/items?offset={offset}", kind="offset", step=100, start=0, **({"total_path": "total"} if total else {}))
     # 서버는 step이 100이어도 50행만 준다(0~49, 100~149 …)
     serve(monkeypatch, lambda url: {"items": [{"a": n} for n in range(50)], **({"total": total} if total else {})}, [])
-    with pytest.raises(Halt, match="50행만 줍니다"):
+    with pytest.raises(Halt, match="50행만 줘요"):
         collect_job.run_api(config, {}, path, found, record, halt)
 
 
@@ -177,7 +177,7 @@ def test_kafka_partial_delivery_failure_raises():
             return 0
     sink = load_kafka.Sink.__new__(load_kafka.Sink)
     sink.item, sink.key, sink.password, sink.last, sink.producer = {"topic": "t"}, "", "", "", Producer()
-    with pytest.raises(ValueError, match="1행을 전달하지 못했습니다"):
+    with pytest.raises(ValueError, match="1행을 전달하지 못했어요"):
         sink.put(pa.table({"n": [0, 1, 2]}))
 
 

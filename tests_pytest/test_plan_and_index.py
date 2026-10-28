@@ -71,7 +71,7 @@ def test_file_connection_has_no_plan(folder, tmp_path):
     pl.DataFrame({"a": [1, 2]}).write_parquet(tmp_path / "t.parquet")
     c = client({"kind": "folder", "path": str(tmp_path), "files": [str(tmp_path / "t.parquet")]})
     try:
-        assert "실행 계획이 없습니다" in c.post("/api/plan", json={"base": "t", "limit": 5}).get_json()["error"]
+        assert "실행 계획이 없어요" in c.post("/api/plan", json={"base": "t", "limit": 5}).get_json()["error"]
     finally:
         c.post("/api/disconnect", json={})
 

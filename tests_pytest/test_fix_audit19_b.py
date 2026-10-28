@@ -36,7 +36,7 @@ def test_decimal_conditions_exact(backend):
     assert ids("id > 12345678901234567890") == ["12345678901234567891"]
     assert ids("amt = 0.1") == ["12345678901234567890"]
     assert ids("amt < 0.155") == ["12345678901234567890"]
-    with pytest.raises(ValueError, match="실수 값이 아닙니다"):
+    with pytest.raises(ValueError, match="실수 값이 아니에요"):
         parse.parse_condition("id = abc", t)
 
 

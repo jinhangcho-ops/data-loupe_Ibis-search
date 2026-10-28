@@ -124,7 +124,7 @@ def sql_gate(body, streams=False):
     return server.scan_gate(body, make)
 
 
-EXPORT_BIG = "큰 저장은 DB의 조회(스냅숏)를 오래 붙잡아 다른 작업에 부담이 됩니다. 되도록 복제본(읽기 전용 DB)에 연결해 저장하세요. 그래도 저장할까요?"
+EXPORT_BIG = "큰 저장은 DB의 조회(스냅숏)를 오래 붙잡아 다른 작업에 부담이 돼요. 되도록 복제본(읽기 전용 DB)에 연결해 저장하세요. 그래도 저장할까요?"
 
 
 def exporting(con, body, make_sql):
@@ -141,16 +141,16 @@ def exporting(con, body, make_sql):
     found = scan_size.safe(lambda: run(work))
     if (found.get("rows") or 0) <= held.MAX_ROWS and (found["bytes"] or 0) <= held.MAX_BYTES:
         return None
-    response = jsonify(needs_confirm=True, blocked=False, bytes=found["bytes"], text=f"PC로 약 {scan_size.size_text(found['bytes'])}를 받아 저장합니다(추정 · {found['how']}). {EXPORT_BIG}")
+    response = jsonify(needs_confirm=True, blocked=False, bytes=found["bytes"], text=f"PC로 약 {scan_size.size_text(found['bytes'])}를 받아 저장해요(추정 · {found['how']}). {EXPORT_BIG}")
     response.headers["X-Needs-Confirm"] = "1"
     return response
 
 
-TOO_BIG = f"결과가 커서({held.MAX_ROWS:,}행·{held.MAX_BYTES // 1024 // 1024}MB 넘음) 이 PC에 받아 두지 않고 DB에서 쪽마다 가져옵니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요."
-LOCAL_PAGES = "정렬 값이 같은 행이 있어, 쪽을 넘길 때 그 행들이 겹치거나 빠질 수 있습니다. 고유한 컬럼(번호 등)을 정렬 끝에 더하세요."
-FILE_SQL_PAGES = "파일 연결의 SQL 결과는 쪽마다 다시 계산합니다. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼의 ORDER BY를 넣으세요."
-SERVER_PAGES = ("결과가 커서 이 PC에 받아 두지 않고, 쿼리를 한 번만 돌려 DB의 결과 임시 테이블(BigQuery는 24시간)에서 쪽마다 읽습니다. "
-                "쪽을 넘겨도 다시 조회하지 않아 요금이 다시 나지 않고, 정렬·조건을 바꾸거나 [검색 실행]을 누르면 다시 조회합니다.")
+TOO_BIG = f"결과가 커서({held.MAX_ROWS:,}행·{held.MAX_BYTES // 1024 // 1024}MB 넘음) 이 PC에 받아 두지 않고 DB에서 쪽마다 가져와요. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요."
+LOCAL_PAGES = "정렬 값이 같은 행이 있어, 쪽을 넘길 때 그 행들이 겹치거나 빠질 수 있어요. 고유한 컬럼(번호 등)을 정렬 끝에 더하세요."
+FILE_SQL_PAGES = "파일 연결의 SQL 결과는 쪽마다 다시 계산해요. 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼의 ORDER BY를 넣으세요."
+SERVER_PAGES = ("결과가 커서 이 PC에 받아 두지 않고, 쿼리를 한 번만 돌려 DB의 결과 임시 테이블(BigQuery는 24시간)에서 쪽마다 읽어요. "
+                "쪽을 넘겨도 다시 조회하지 않아 요금이 다시 나지 않고, 정렬·조건을 바꾸거나 [검색 실행]을 누르면 다시 조회해요.")
 
 
 def reruns(key, body):
@@ -232,13 +232,13 @@ def sql():
     body = request.json
     expr, limit, offset = paged(body)
     text, kept = sent(get_con(), body, expr, limit, offset)
-    return jsonify(sql=("-- 이 조회로 결과를 한 번 받아 두고, 계산·정렬·쪽 넘기기는 이 PC에서 합니다.\n" if kept else "") + text)
+    return jsonify(sql=("-- 이 조회로 결과를 한 번 받아 두고, 계산·정렬·쪽 넘기기는 이 PC에서 해요.\n" if kept else "") + text)
 
 
 def plannable(con):
     """실행 계획을 볼 수 있는 연결인지 본다. 파일 연결은 SQL로 묻지 않아 계획이 없다(ValueError)."""
     if con.name == "polars":
-        raise ValueError("파일 연결(Parquet·CSV 등)은 SQL로 묻지 않아 실행 계획이 없습니다. DuckDB 파일이나 DB에서 보세요.")
+        raise ValueError("파일 연결(Parquet·CSV 등)은 SQL로 묻지 않아 실행 계획이 없어요. DuckDB 파일이나 DB에서 보세요.")
     return con
 
 
@@ -291,7 +291,7 @@ def use_search():
     """저장한 검색을 불러왔다고 센다(목록을 많이 쓴 순으로 보인다)."""
     name = request.json.get("name")
     if name not in settings.searches():
-        raise ValueError(f"저장한 검색 '{name}'이 없습니다.")
+        raise ValueError(f"저장한 검색 '{name}'이 없어요.")
     use_counts.use("searches", name)
     return searches_view(settings.searches())
 
@@ -334,7 +334,7 @@ def handoff():
     """조건에 맞는 전체 행을 창의 저장 대화상자로 고른 Parquet 파일에 저장하고, 그 파일 하나에 연결한다(전처리로 넘길 때 쓴다).
     확장자가 .parquet이 아니면 붙인다. 지금 읽고 있는 파일에는 덮어쓰지 않는다. 임시 이름으로 쓰고 끝나면 바꿔치기해 실패해도 원래 파일이 남는다."""
     if server.ask_save is None:
-        raise ValueError("저장 위치를 물을 수 없습니다. 프로그램 창에서만 쓸 수 있습니다.")
+        raise ValueError("저장 위치를 물을 수 없어요. 프로그램 창에서만 쓸 수 있어요.")
     if ask := explore_gate(request.json, streams=True):
         return ask
     expr = querying.runnable(request.json)
@@ -343,7 +343,7 @@ def handoff():
         return jsonify(cancelled=True)
     path = Path(chosen if chosen.lower().endswith(".parquet") else chosen + ".parquet")
     if server.reading(path):
-        raise ValueError("지금 읽고 있는 파일에는 저장할 수 없습니다. 다른 이름을 고르세요.")
+        raise ValueError("지금 읽고 있는 파일에는 저장할 수 없어요. 다른 이름을 고르세요.")
     part = path.with_name(path.stem + ".part.parquet")
     server.run_writing(lambda: result.export(expr, part), lambda: part.unlink(missing_ok=True))
     os.replace(part, path)
@@ -363,19 +363,19 @@ def save_images():
     창 없이 돌 때(ask_folder가 None)는 window=false를 돌려주고, 화면이 하나씩 내려받는다."""
     images = request.json.get("images")
     if not isinstance(images, list) or not 1 <= len(images) <= dash_store.MAX_CARDS:
-        raise ValueError(f"저장할 그림은 1개 이상 {dash_store.MAX_CARDS}개 이하입니다.")
+        raise ValueError(f"저장할 그림은 1개 이상 {dash_store.MAX_CARDS}개 이하예요.")
     decoded = []
     for item in images:
         data = item.get("data") if isinstance(item, dict) else None
         head = next((h for h in IMAGE_TYPES if isinstance(data, str) and data.startswith(h)), None)
         if head is None:
-            raise ValueError("PNG·JPG 그림만 저장할 수 있습니다.")
+            raise ValueError("PNG·JPG 그림만 저장할 수 있어요.")
         try:
             raw = base64.b64decode(data[len(head):], validate=True)
         except binascii.Error:
-            raise ValueError("그림 데이터가 올바르지 않습니다.") from None
+            raise ValueError("그림 데이터가 올바르지 않아요.") from None
         if len(raw) > MAX_IMAGE_BYTES:
-            raise ValueError(f"그림 하나는 {MAX_IMAGE_BYTES // 1024 // 1024}MB까지입니다.")
+            raise ValueError(f"그림 하나는 {MAX_IMAGE_BYTES // 1024 // 1024}MB까지예요.")
         decoded.append((image_stem(item.get("name")), IMAGE_TYPES[head], raw))
     if server.ask_folder is None:
         return jsonify(window=False)
@@ -393,7 +393,7 @@ def save_images():
             except FileExistsError:
                 continue
         else:
-            raise ValueError(f"같은 이름의 파일이 너무 많습니다: {stem}{ext}")
+            raise ValueError(f"같은 이름의 파일이 너무 많아요: {stem}{ext}")
         saved.append(path.name)
     return jsonify(folder=str(folder), saved=saved)
 
@@ -430,7 +430,7 @@ def sql_check():
     known = {t.lower() for t in server.table_names(con)} | {n.lower() for n in vts}
     missing = [n for n in dict.fromkeys(sql_exec.table_names(tree)) if n.lower() not in known]
     if missing:
-        return jsonify(ok=False, message=f"이 연결에 없는 테이블입니다: {', '.join(missing)}")
+        return jsonify(ok=False, message=f"이 연결에 없는 테이블이에요: {', '.join(missing)}")
     expanded = sql_exec.expand(con, tree, vts).sql(dialect=sql_exec.dialect_of(con))  # 가상 테이블을 풀어 넣은 SQL
     scan = scan_size.message(scan_size.safe(lambda: run(lambda: scan_size.estimate(con, expanded, server.state["opened"]))))
     if body.get("deep") is True:
@@ -438,7 +438,7 @@ def sql_check():
             columns = run(lambda: sql_exec.to_expr(con, body["sql"], vts).columns)
         except Exception as e:
             text = source.mask(str(e), server.state["passwords"]).strip().splitlines()
-            return jsonify(ok=False, message="연결에서 짜 보지 못했습니다: " + (text[0] if text else type(e).__name__))
+            return jsonify(ok=False, message="연결에서 짜 보지 못했어요: " + (text[0] if text else type(e).__name__))
         return jsonify(ok=True, message=f"이상 없음 · 결과 컬럼 {len(columns)}개: {', '.join(columns[:12])}{' …' if len(columns) > 12 else ''}", scan=scan)
     return jsonify(ok=True, message="문법 이상 없음", scan=scan)
 
@@ -458,14 +458,14 @@ def sql_run():
     if held.remote(con) and not pages:
         key = querying.held_key("sql", {"sql": body["sql"]})
         count, rows = run(lambda: held.page(key, expr, lambda t: t.order_by(held.ROW).select(*[c for c in t.columns if c != held.ROW]), n + 1, offset, server.state["cancel"], fresh=body.get("fresh")))
-        note = TOO_BIG.replace(" 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요.", " SQL에 고유한 컬럼의 ORDER BY를 넣어야 쪽이 섞이지 않습니다.") if rows is None else ""
+        note = TOO_BIG.replace(" 정렬이 없거나 정렬 값이 같은 행은 쪽마다 겹치거나 빠질 수 있으니 고유한 컬럼으로 정렬하세요.", " SQL에 고유한 컬럼의 ORDER BY를 넣어야 쪽이 섞이지 않아요.") if rows is None else ""
     kept = rows is not None
     if pages:
         count, rows = run(lambda: held.server_page(querying.held_key("server", {"sql": body["sql"]}), con, expr, n + 1, offset, body.get("fresh")))
         note = SERVER_PAGES
     elif not kept:
         if offset and not result.can_offset(expr):
-            raise ValueError("이 DB는 SQL 결과에서 앞 행을 건너뛰지 못하고, 결과가 커서 이 PC에 받아 두지도 못했습니다. 조건을 좁히거나 [결과 저장]으로 받으세요.")
+            raise ValueError("이 DB는 SQL 결과에서 앞 행을 건너뛰지 못하고, 결과가 커서 이 PC에 받아 두지도 못했어요. 조건을 좁히거나 [결과 저장]으로 받으세요.")
         rows = run(lambda: result.get_rows(expr, n + 1, offset))
         if con.name == "polars" and (offset or rows.height > n):  # 파일 연결의 SQL은 Polars SQL이 정렬해 동률 순서를 고정하지 못한다
             note = FILE_SQL_PAGES
@@ -512,7 +512,7 @@ def save_sql():
 def use_sql():
     name = request.json.get("name")
     if name not in settings.named("sqls.json"):
-        raise ValueError(f"저장한 SQL '{name}'이 없습니다.")
+        raise ValueError(f"저장한 SQL '{name}'이 없어요.")
     use_counts.use("sqls", name)
     return sqls_view(settings.named("sqls.json"))
 

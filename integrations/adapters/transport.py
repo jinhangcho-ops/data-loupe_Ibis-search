@@ -60,10 +60,10 @@ def request(method, url, data=None, headers=None, timeout=TIMEOUT):
             return reply.read()
     except urllib.error.HTTPError as e:
         if 300 <= e.code < 400:
-            raise ValueError(f"보내지 못했습니다(상태 {e.code}): 다른 주소로 넘겨주는 응답은 따라가지 않습니다(키가 다른 곳으로 가지 않게). 최종 주소를 직접 넣으세요.") from None
-        raise ValueError(f"보내지 못했습니다(상태 {e.code}): {e.read().decode('utf-8', 'replace')[:200]}") from None
+            raise ValueError(f"보내지 못했어요(상태 {e.code}): 다른 주소로 넘겨주는 응답은 따라가지 않아요(키가 다른 곳으로 가지 않게). 최종 주소를 직접 넣으세요.") from None
+        raise ValueError(f"보내지 못했어요(상태 {e.code}): {e.read().decode('utf-8', 'replace')[:200]}") from None
     except (urllib.error.URLError, OSError) as e:
-        raise ValueError(f"보내지 못했습니다: {getattr(e, 'reason', e)}") from None
+        raise ValueError(f"보내지 못했어요: {getattr(e, 'reason', e)}") from None
 
 
 def post(url, data, headers, timeout=TIMEOUT):

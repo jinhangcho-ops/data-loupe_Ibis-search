@@ -95,7 +95,7 @@ def dump(df):
     except (KeyboardInterrupt, SystemExit):
         raise
     except BaseException as e:
-        raise RuntimeError(f"데이터 엔진 내부 오류로 결과를 JSON으로 만들지 못했습니다: {e}") from None
+        raise RuntimeError(f"데이터 엔진 내부 오류로 결과를 JSON으로 만들지 못했어요: {e}") from None
 
 
 def to_json(df, text_big=True):
@@ -165,10 +165,10 @@ def run(work, drop=lambda value: None):
             source.release(con)
 
     try:
-        return source.within(QUERY_TIMEOUT, then_release, f"{QUERY_TIMEOUT // 60}분 안에 끝나지 않아 멈췄습니다.", state["cancel"], drop,
+        return source.within(QUERY_TIMEOUT, then_release, f"{QUERY_TIMEOUT // 60}분 안에 끝나지 않아 멈췄어요.", state["cancel"], drop,
                              lambda: source.interrupt(state["con"]))
     except (TimeoutError, InterruptedError) as e:
-        message = str(e) or "취소했습니다."
+        message = str(e) or "취소했어요."
         if getattr(e, "abandoned", False) and (state["opened"] or {}).get("kind") == "url":  # 파일 연결(DuckDB·Polars)은 겹쳐 읽어도 된다
             message += renew()
         raise ValueError(message) from None
@@ -183,8 +183,8 @@ def renew():
     try:
         state.update(con=open_con(info), passwords=passwords, opened=info)
     except Exception:
-        return " 멈추지 않은 작업이 연결을 쓰고 있고 새로 열지도 못해 연결을 끊었습니다. 연결을 다시 하세요."
-    return " 멈추지 않은 작업이 이전 연결을 쓰고 있어 연결을 새로 열었습니다."
+        return " 멈추지 않은 작업이 연결을 쓰고 있고 새로 열지도 못해 연결을 끊었어요. 연결을 다시 하세요."
+    return " 멈추지 않은 작업이 이전 연결을 쓰고 있어 연결을 새로 열었어요."
 
 
 def run_writing(write, clean, runner=None):
@@ -204,12 +204,12 @@ def on_error(e):
     if isinstance(e, HTTPException):  # 404, 405, 잘못된 JSON 등은 원래 상태 코드로
         return jsonify(error=e.description), e.code
     if isinstance(e, source.unsupported_errors()):  # 연결(백엔드)이 하지 못하는 계산
-        return jsonify(error=f"이 연결에서는 지원하지 않는 계산입니다. ({e})"), 400
+        return jsonify(error=f"이 연결에서는 지원하지 않는 계산이에요. ({e})"), 400
     message = source.mask(str(e), state["passwords"])
     if isinstance(e, drivers.DriverError):  # 드라이버가 없어서 못 붙음: 화면이 설명·명령을 그 자리에 그리도록 안내를 함께 보낸다.
         return jsonify(error=message, driver=e.driver), 400
     if "out of memory" in message.lower():
-        message = "메모리가 모자랍니다. 작업 메모리 상한을 올리거나 조건을 좁히세요. " + message
+        message = "메모리가 모자라요. 메모리 한도를 올리거나 조건을 좁히세요. " + message
     return jsonify(error=message), 400
 
 
@@ -218,7 +218,7 @@ def only_window():
     """프로그램 창의 요청만 받는다. 창은 첫 주소의 key로 들어와 쿠키를 받고, 그 뒤로는 쿠키로 확인한다."""
     given = request.args.get("key") or request.cookies.get("key", "")
     if not secrets.compare_digest(given.encode(), KEY.encode()):
-        abort(403, "프로그램 창에서만 열 수 있습니다.")
+        abort(403, "프로그램 창에서만 열 수 있어요.")
 
 
 @app.before_request
@@ -349,7 +349,7 @@ def download(expr, fmt, guard=True):
     """expr의 전체 행을 fmt(parquet, csv, xlsx) 파일로 임시 폴더에 만들어 조금씩 내려보내고, 다 보내면 지운다.
     guard가 False면 CSV·Excel의 수식 막기를 하지 않는다."""
     if "." + fmt not in result.EXPORTS:  # 파일 이름에 들어가므로 '../'가 든 값이 임시 폴더 밖에 쓰지 않게(문구는 result.export와 같게)
-        raise ValueError(f"파일 이름은 {', '.join(result.EXPORTS)} 중 하나로 끝나야 합니다.")
+        raise ValueError(f"파일 이름은 {', '.join(result.EXPORTS)} 중 하나로 끝나야 해요.")
     folder = scratch.make()
     path = Path(folder, "result." + fmt)
     from prep import prep_app  # 없는 날짜를 날짜로 바꾸다 난 DB 오류의 안내 문장은 전처리와 같은 것을 쓴다
@@ -387,10 +387,10 @@ def files():
         raise ValueError("폴더나 파일 경로를 입력하세요.")
     path = Path(body["path"])
     if not path.exists():
-        raise ValueError("그런 폴더나 파일이 없습니다.")
+        raise ValueError("그런 폴더나 파일이 없어요.")
     duckdb_files, flat_files = source.find_files(path, kinds, body.get("deep", True) is not False)
     if not duckdb_files and not flat_files:
-        raise ValueError("고른 종류의 파일이 없습니다." if path.is_dir() else "열 수 있는 파일이 아니거나 고른 종류가 아닙니다.")
+        raise ValueError("고른 종류의 파일이 없어요." if path.is_dir() else "열 수 있는 파일이 아니거나 고른 종류가 아니에요.")
     return jsonify(files=[*map(str, duckdb_files)], flat=[*map(str, flat_files)])
 
 
@@ -445,7 +445,7 @@ def switch(new):
             try:
                 state.update(con=open_con(old), passwords=source.passwords(old), opened=old)
             except Exception:
-                message += " 이전 연결도 다시 열 수 없어 연결이 끊겼습니다."
+                message += " 이전 연결도 다시 열 수 없어 연결이 끊겼어요."
         if isinstance(e, drivers.DriverError):
             raise drivers.DriverError(message, e.driver) from None
         raise ValueError(message) from None

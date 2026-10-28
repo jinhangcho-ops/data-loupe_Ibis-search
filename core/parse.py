@@ -91,7 +91,7 @@ def column(expr, name):
         else:
             return value
     check_name(name, list(expr.columns) + nested_names(expr))
-    raise ValueError(f"'{name}' 컬럼이 없습니다.")
+    raise ValueError(f"'{name}' 컬럼이 없어요.")
 
 
 def kind(dtype):
@@ -112,7 +112,7 @@ def convert(dtype, text):
             return ibis.literal(format(value, "f")).cast(f"decimal({width}, {scale})")  # 글자를 바꾼다: Ibis는 SQL Server에 1000을 '1E+3'으로 써서 못 읽는다. BIGNUMERIC(76,38)은 38자리보다 넓다
         return cast(text)
     except (ValueError, KeyError, decimal.InvalidOperation):
-        raise ValueError(f"'{text}'은 {name} 값이 아닙니다.")
+        raise ValueError(f"'{text}'은 {name} 값이 아니에요.")
 
 
 def split(pattern, text, quotes=True):
@@ -122,7 +122,7 @@ def split(pattern, text, quotes=True):
     quoted = []
     for m in QUOTE_RE.finditer(text):
         if m.end() - m.start() == 1:  # 닫히지 않은 따옴표: 처음 하나에서 바로 알린다
-            raise ValueError("따옴표가 닫히지 않았습니다. 값에 따옴표가 있으면 다른 따옴표로 감싸세요.")
+            raise ValueError("따옴표가 닫히지 않았어요. 값에 따옴표가 있으면 다른 따옴표로 감싸세요.")
         quoted.append(m.span())
     starts, parts, pos = [s for s, _ in quoted], [], 0
     for m in pattern.finditer(text):
@@ -167,7 +167,7 @@ def unquote(text, quotes=True):
 def check_table_name(name, what="테이블"):
     """새로 만들거나 넣을 테이블(스키마) 이름 검사. 전처리(prep_app)와 적재(load_table)가 쓴다."""
     if not isinstance(name, str) or not TABLE_NAME.fullmatch(name):
-        raise ValueError(f"{what} 이름은 영문·숫자·밑줄·한글만 쓸 수 있습니다(공백·따옴표·점 없이).")
+        raise ValueError(f"{what} 이름은 영문·숫자·밑줄·한글만 쓸 수 있어요(공백·따옴표·점 없이).")
 
 
 def check_new_columns(con, columns):
@@ -183,13 +183,13 @@ def check_new_length(name, tail=""):
     """새로 만들 테이블 이름(꼬리 tail을 붙인 이름까지)이 63바이트를 넘으면 거부한다: PostgreSQL은 넘는 이름을 말없이 잘라 다음에 찾지 못한다. 이미 있는 테이블에 넣을 때는 부르지 않는다."""
     room = 63 - len(tail)
     if len(name.encode("utf-8")) > room:
-        raise ValueError(f"테이블 이름이 너무 깁니다(영문 {room}자, 한글 {room // 3}자까지).")
+        raise ValueError(f"테이블 이름이 너무 길어요(영문 {room}자, 한글 {room // 3}자까지).")
 
 
 def check_name(name, names, what="컬럼"):
     if name not in names:
         close = difflib.get_close_matches(name, list(names), n=1)
-        raise ValueError(f"'{name}' {what}이 없습니다." + (f" 비슷한 이름: {close[0]}" if close else ""))
+        raise ValueError(f"'{name}' {what}이 없어요." + (f" 비슷한 이름: {close[0]}" if close else ""))
 
 
 # 이어붙이기: {"tables": [테이블…], "how": "left" | "inner"}. 테이블을 기준 테이블 아래로 잇는다(행이 늘어난다).
@@ -199,15 +199,15 @@ def parse_union(union, tables, base):
         return None
     names, how = (union.get("tables") or [], union.get("how", "left")) if isinstance(union, dict) else (None, None)
     if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
-        raise ValueError('이어붙이기는 {"tables": [테이블…], "how": "left"·"inner"·"intersect"·"except"} 모양이어야 합니다.')
+        raise ValueError('이어붙이기는 {"tables": [테이블…], "how": "left"·"inner"·"intersect"·"except"} 모양이어야 해요.')
     if not names:
         return None
     if how not in UNIONS:
-        raise ValueError(f"이어붙이기 방식은 {', '.join(UNIONS)} 중 하나입니다.")
+        raise ValueError(f"이어붙이기 방식은 {', '.join(UNIONS)} 중 하나예요.")
     for name in names:
         check_name(name, tables, "테이블")
     if base in names or len(set(names)) != len(names):
-        raise ValueError("이어붙일 테이블은 기준 테이블과 다르고 서로 겹치지 않아야 합니다.")
+        raise ValueError("이어붙일 테이블은 기준 테이블과 다르고 서로 겹치지 않아야 해요.")
     return names, how
 
 
@@ -219,11 +219,11 @@ def apply_union(base, base_name, union, get_table):
         return base
     names, how = union
     if how in STACKS and SOURCE in base.columns:
-        raise ValueError(f"기준 테이블에 '{SOURCE}' 컬럼이 이미 있어 이어붙일 수 없습니다.")
+        raise ValueError(f"기준 테이블에 '{SOURCE}' 컬럼이 이미 있어 이어붙일 수 없어요.")
     others = [(name, get_table(name)) for name in names]
     columns = [c for c in base.columns if how == "left" or all(c in t.columns for _, t in others)]
     if not columns:
-        raise ValueError(f"모든 테이블에 같이 있는 컬럼이 없어 {how}로 이어붙일 수 없습니다.")
+        raise ValueError(f"모든 테이블에 같이 있는 컬럼이 없어 {how}로 이어붙일 수 없어요.")
     schema = base.schema()
     if how not in STACKS:
         same = lambda t: t.select(*[t[c].cast(schema[c]).name(c) for c in columns])
@@ -362,7 +362,7 @@ def geo_condition(word, rest, expr):
     lat, lon = column(expr, parts[0]), column(expr, parts[1])
     for name, c in ((parts[0], lat), (parts[1], lon)):
         if not c.type().is_numeric():
-            raise ValueError(f"'{name}'은 숫자 컬럼이 아니라 위도·경도로 쓸 수 없습니다.")
+            raise ValueError(f"'{name}'은 숫자 컬럼이 아니라 위도·경도로 쓸 수 없어요.")
     values = [convert(ibis.dtype("float64"), v) for v in parts[2:]]
     return funcs.within_km(lat, lon, *values) if word == "near" else funcs.in_box(lat, lon, *values)
 
@@ -394,7 +394,7 @@ def parse_one(line, expr, quotes=True):
         col, word, raw = m.groups()
         c = get(col)
         if not c.type().is_string():
-            raise ValueError(f"{word.lower()}는 문자 컬럼에만 쓸 수 있습니다.")
+            raise ValueError(f"{word.lower()}는 문자 컬럼에만 쓸 수 있어요.")
         raw = unquote(raw, quotes)
         word = word.lower()
         found = starts(c, raw) if word == "starts" else ends(c, raw) if word == "ends" else contains(c, raw)
@@ -406,7 +406,7 @@ def parse_one(line, expr, quotes=True):
         col, op, raw = m.groups()
         c = get(col)
         if c.type().is_nested():
-            raise ValueError(f"'{name or col}'은 {type_name(c.type())} 컬럼이라 비교할 수 없습니다. 안의 필드(예: {name or col}.이름)나 is null을 쓰세요.")
+            raise ValueError(f"'{name or col}'은 {type_name(c.type())} 컬럼이라 비교할 수 없어요. 안의 필드(예: {name or col}.이름)나 is null을 쓰세요.")
         value = convert(c.type(), unquote(raw, quotes))
         after = op in ("=", "!=", "<=", ">") and end_after(c.type(), unquote(raw, quotes), value)  # 날짜만 쓴 값은 그날 하루, HH:MM은 그 1분(기간·between과 같은 규칙)
         if after:
@@ -442,13 +442,13 @@ def predicate(cond, expr):
     화면에서 or로 이은 묶음 {"any": [조건, ...]}, 조건 목록(모두 and) 중 하나다. 묶음 안은 or, 조건끼리는 and."""
     if isinstance(cond, list):
         if not cond:
-            raise ValueError("and로 묶을 조건이 없습니다.")
+            raise ValueError("and로 묶을 조건이 없어요.")
         return functools.reduce(operator.and_, [predicate(c, expr) for c in cond])
     if isinstance(cond, str):
         return parse_condition(cond, expr)
     if "any" in cond:
         if not cond["any"]:
-            raise ValueError("or로 묶을 조건이 없습니다.")
+            raise ValueError("or로 묶을 조건이 없어요.")
         return functools.reduce(operator.or_, [predicate(c, expr) for c in cond["any"]])
     return parse_condition(cond["line"], expr, cond.get("quotes", True))
 
@@ -517,4 +517,4 @@ def parse_limit(value):
 
 # 시작 위치: 건너뛸 행 수. 0 이상의 정수
 def parse_offset(value):
-    return whole_number(value, 0, None, "시작 위치는 0 이상의 정수여야 합니다.")
+    return whole_number(value, 0, None, "시작 위치는 0 이상의 정수여야 해요.")

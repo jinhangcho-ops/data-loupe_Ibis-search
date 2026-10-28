@@ -105,18 +105,18 @@ def check_question(question):
     if not isinstance(question, str) or not question.strip():
         raise ValueError("질문을 입력하세요.")
     if len(question) > MAX_QUESTION:
-        raise ValueError(f"질문은 {MAX_QUESTION:,}자까지입니다.")
+        raise ValueError(f"질문은 {MAX_QUESTION:,}자까지예요.")
     return question.strip()
 
 
 def extract_sql(reply):
     """LLM 답에서 SQL을 꺼낸다(```sql 블록이 있으면 그 안, 없으면 전체). '-- 모름' 답이면 그 이유로 ValueError."""
     if not isinstance(reply, str) or not reply.strip():
-        raise ValueError("LLM이 빈 답을 주었습니다.")
+        raise ValueError("LLM이 빈 답을 줬어요.")
     m = SQL_BLOCK.search(reply)
     sql = (m[1] if m else reply).strip()
     if sql.startswith("-- 모름"):
-        raise ValueError("LLM이 SQL을 만들지 못했습니다: " + sql.removeprefix("-- 모름").lstrip(": ").strip())
+        raise ValueError("LLM이 SQL을 만들지 못했어요: " + sql.removeprefix("-- 모름").lstrip(": ").strip())
     return sql
 
 
@@ -130,5 +130,5 @@ def ask(question, ctx, dialect, known, client=None):
     lower = {k.lower() for k in known}
     missing = [n for n in dict.fromkeys(sql_exec.table_names(tree)) if n.lower() not in lower]
     if missing:
-        raise ValueError(f"LLM이 이 연결에 없는 테이블을 썼습니다: {', '.join(missing)}")
+        raise ValueError(f"LLM이 이 연결에 없는 테이블을 썼어요: {', '.join(missing)}")
     return sql

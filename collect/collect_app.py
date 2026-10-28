@@ -95,9 +95,9 @@ def ask_path():
     """창의 저장 대화상자로 결과 파일 경로를 묻는다. 형식의 확장자로 끝나지 않으면 붙인다."""
     fmt = request.json.get("format")
     if fmt not in FILE_TYPES:
-        raise ValueError("형식은 parquet, csv 중 하나입니다.")
+        raise ValueError("형식은 parquet, csv 중 하나예요.")
     if server.ask_save is None:
-        raise ValueError("저장 위치를 물을 수 없습니다. 프로그램 창에서만 쓸 수 있습니다.")
+        raise ValueError("저장 위치를 물을 수 없어요. 프로그램 창에서만 쓸 수 있어요.")
     name = request.json.get("name") or f"collected.{fmt}"
     chosen = server.ask_save(name if name.lower().endswith("." + fmt) else f"{name}.{fmt}", FILE_TYPES[fmt])
     if not chosen:
@@ -127,10 +127,10 @@ def browser_open():
     """수집용 창을 띄우거나 그 주소로 옮긴다. 주소의 {page}는 start(없으면 1)로 채운다."""
     start = request.json.get("start", 1)
     if type(start) is not int:
-        raise ValueError("start는 정수여야 합니다.")
+        raise ValueError("start는 정수여야 해요.")
     url = request.json.get("url")
     if not isinstance(url, str) or collect_request.env_names({"url": url}):
-        raise ValueError("http:// 또는 https:// 주소만 열 수 있습니다({env:…}는 쓸 수 없습니다).")
+        raise ValueError("http:// 또는 https:// 주소만 열 수 있어요({env:…}는 쓸 수 없어요).")
     collect_browser.open_page(collect_browser.web_url(collect_web.page_url({"url": url, "paging": {"start": start}}, 0)))
     return jsonify(ok=True)
 
@@ -168,7 +168,7 @@ def open_result():
     """결과 파일 하나에 연결한다(차례를 기다린다). 화면은 이어서 /search나 /prep?base=테이블로 간다."""
     path = Path(request.json.get("path") or "")
     if path.suffix.lower() not in (".parquet", ".csv") or not path.is_file():
-        raise ValueError("열 결과 파일(Parquet·CSV)이 없습니다.")
+        raise ValueError("열 결과 파일(Parquet·CSV)이 없어요.")
     server.switch({"kind": "folder", "path": str(path.parent), "files": [str(path)]})
     return jsonify(table=source.list_tables(get_con())[0])
 

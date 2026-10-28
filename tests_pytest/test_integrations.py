@@ -31,7 +31,7 @@ def test_notion_send_and_check(client, calls, folder):
     assert put["destinations"]["노션"]["token"] is True
     assert "주간 보고" in client.post("/api/destinations/check", json={"name": "노션"}).get_json()["message"]
     long = "가" * 4500
-    assert client.post("/api/send", json={"name": "노션", "title": "끝났습니다", "text": long, "rows": 12, "seconds": 75,
+    assert client.post("/api/send", json={"name": "노션", "title": "끝났어요", "text": long, "rows": 12, "seconds": 75,
                                           "table": {"columns": ["a"], "rows": [{"a": 1}]}}).status_code == 200
     method, url, body, headers = calls[-1]
     assert (method, url) == ("PATCH", f"https://api.notion.com/v1/blocks/{PAGE}/children") and headers["Authorization"] == f"Bearer {TOKEN}"
@@ -117,7 +117,7 @@ def test_ga4_routes(client, key_file, google, tmp_path, folder):
     assert "측정기준 3개" in client.post("/api/ga4/check", json={}).get_json()["message"]
     d = client.post("/api/ga4/fetch", json={}).get_json()
     assert d["rows"] == 3 and out.exists() and uploads.entries()[0]["source"] == str(out)
-    assert "이미 있습니다" in client.post("/api/ga4/fetch", json={}).get_json()["error"]  # 덮어쓰지 않는다
+    assert "이미 있어요" in client.post("/api/ga4/fetch", json={}).get_json()["error"]  # 덮어쓰지 않는다
     services = {s["key"]: s for s in client.get("/api/integrations").get_json()["services"]}
     assert set(services) == {"slack", "notion", "webhook", "slack_bot", "ga4", "llm"} and services["ga4"]["ready"] is True
     assert services["notion"]["abilities"] == ["send"] and services["slack_bot"]["status"] == "설정 안 됨"
@@ -147,9 +147,9 @@ def test_slack_question(client, tmp_path, folder, monkeypatch):
     fake = Fake()
     monkeypatch.setattr(llm, "client", lambda: fake)
     out = commands.answer("질문 orders의 'amount' 합계는?")  # 따옴표가 섞여도 된다
-    assert "select sum(amount) from orders" in out and "실행하지 않았습니다" in out and fake.q == "orders의 'amount' 합계는?"
+    assert "select sum(amount) from orders" in out and "실행하지 않았어요" in out and fake.q == "orders의 'amount' 합계는?"
     monkeypatch.setattr(llm, "client", lambda: type("F", (), {"name": "f", "complete": lambda self, s, q: "delete from orders"})())
-    assert commands.answer("질문 다 지워").startswith("할 수 없습니다")
+    assert commands.answer("질문 다 지워").startswith("할 수 없어요")
     assert commands.answer("질문").startswith("질문을 쓰세요")
 
 

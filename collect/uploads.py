@@ -125,15 +125,15 @@ def removal(entry):
     """기록 하나를 지울 때 쓸 명령과 주의 {how, text, note}. 바로 실행하지 않는다."""
     t, r = entry.get("target", {}), entry.get("range", {})
     if entry["kind"] == "file":
-        return {"how": "파일 지우기", "text": t.get("path", ""), "note": "이 파일을 지우면 됩니다(적재한 곳은 따로 지워야 합니다)."}
+        return {"how": "파일 지우기", "text": t.get("path", ""), "note": "이 파일을 지우면 돼요(적재한 곳은 따로 지워야 해요)."}
     if entry["kind"] == "kafka":
         parts = r.get("partitions", {})
         body = {"partitions": [{"topic": t.get("topic"), "partition": int(p), "offset": hi + 1} for p, (lo, hi) in sorted(parts.items(), key=lambda x: int(x[0]))],
                 "version": 1}
         return {"how": "kafka-delete-records --offset-json-file", "text": json.dumps(body, ensure_ascii=False, indent=2),
-                "note": "Kafka는 범위만 골라 지울 수 없습니다. 이 명령은 각 파티션에서 이 적재의 끝 offset까지(그 앞의 다른 메시지도 함께) 지웁니다. "
+                "note": "Kafka는 범위만 골라 지울 수 없어요. 이 명령은 각 파티션에서 이 적재의 끝 offset까지(그 앞의 다른 메시지도 함께) 지워요. "
                         "이 적재의 메시지만 가려야 하면 소비하는 쪽에서 아래 offset 범위를 걸러 주세요: "
-                        + ", ".join(f"파티션 {p}: {lo}~{hi}" for p, (lo, hi) in sorted(parts.items(), key=lambda x: int(x[0]))) if parts else "기록된 offset이 없습니다."}
+                        + ", ".join(f"파티션 {p}: {lo}~{hi}" for p, (lo, hi) in sorted(parts.items(), key=lambda x: int(x[0]))) if parts else "기록된 offset이 없어요."}
     from sqlglot import exp
     dialect = dialect_of(t)
     name = exp.Table(this=exp.to_identifier(t.get("name"), quoted=True), db=exp.to_identifier(t["schema"], quoted=True) if t.get("schema") else None)
@@ -142,14 +142,14 @@ def removal(entry):
     try:
         if r.get("load_id"):
             return {"how": "SQL", "text": delete(column(r.get("column", LOAD_ID)).eq(literal(r["load_id"], dialect))),
-                    "note": "적재 ID로 이 적재의 행만 정확히 고릅니다(이어 넣은 행도 같은 ID)."}
+                    "note": "적재 ID로 이 적재의 행만 정확히 골라요(이어 넣은 행도 같은 ID)."}
         if t.get("how") == "new" and not entry.get("resumed"):
-            return {"how": "SQL", "text": f"DROP TABLE {name.sql(dialect=dialect)};", "note": "이 적재로 새로 만든 테이블입니다. 다른 적재로 더 넣지 않았는지 확인하세요."}
+            return {"how": "SQL", "text": f"DROP TABLE {name.sql(dialect=dialect)};", "note": "이 적재로 새로 만든 테이블이에요. 다른 적재로 더 넣지 않았는지 확인하세요."}
         keys = r.get("keys", {})
         if keys:
             where = exp.and_(*(exp.Between(this=column(c), low=literal(lo, dialect), high=literal(hi, dialect)) for c, (lo, hi) in keys.items()))
             return {"how": "SQL", "text": delete(where),
-                    "note": "적재 ID 없이 키의 최소~최대로 고른 것이라, 그 범위의 다른 행도 함께 지워질 수 있습니다. 먼저 SELECT로 확인하세요."}
+                    "note": "적재 ID 없이 키의 최소~최대로 고른 것이라, 그 범위의 다른 행도 함께 지워질 수 있어요. 먼저 SELECT로 확인하세요."}
     except ValueError:
-        return {"how": "", "text": "", "note": "적재한 DB의 종류를 몰라, 백슬래시(\\)가 든 값으로는 안전한 명령을 만들지 않았습니다. 적재한 DB에서 직접 골라 지우세요."}
-    return {"how": "", "text": "", "note": "적재 ID도 키도 없어 이 적재의 행만 가려낼 방법이 없습니다. 다음부터 [적재 ID 컬럼 넣기]를 켜세요."}
+        return {"how": "", "text": "", "note": "적재한 DB의 종류를 몰라, 백슬래시(\\)가 든 값으로는 안전한 명령을 만들지 않았어요. 적재한 DB에서 직접 골라 지우세요."}
+    return {"how": "", "text": "", "note": "적재 ID도 키도 없어 이 적재의 행만 가려낼 방법이 없어요. 다음부터 [적재 ID 컬럼 넣기]를 켜세요."}

@@ -61,7 +61,7 @@ def test_prompt_has_context_without_values(client, shop):
 
 def test_stub_and_ask(client, shop):
     r = client.post("/api/nl2sql/ask", json={"question": "매출 합계"})
-    assert r.status_code == 400 and "LLM이 설정되어 있지 않습니다" in r.get_json()["error"]
+    assert r.status_code == 400 and "LLM이 설정되어 있지 않아요" in r.get_json()["error"]
     ctx, known = nl2sql.context(shop.state["con"], shop.connection_key()), ["orders"]
     fake = Fake("설명입니다.\n```sql\nselect sum(amount) as 매출 from orders\n```")
     assert nl2sql.ask(" 매출 합계 ", ctx, "duckdb", known, fake) == "select sum(amount) as 매출 from orders"
@@ -70,8 +70,8 @@ def test_stub_and_ask(client, shop):
                          ("select * from orders where (", SqlSyntaxError), ("select * from customers", ValueError), ("", ValueError)]:
         with pytest.raises(error):
             nl2sql.ask("q", ctx, "duckdb", known, Fake(reply))
-    with pytest.raises(ValueError, match="만들지 못했습니다: 기간 컬럼이 없습니다"):
-        nl2sql.ask("q", ctx, "duckdb", known, Fake("```sql\n-- 모름: 기간 컬럼이 없습니다\n```"))
+    with pytest.raises(ValueError, match="만들지 못했어요: 기간 컬럼이 없어요"):
+        nl2sql.ask("q", ctx, "duckdb", known, Fake("```sql\n-- 모름: 기간 컬럼이 없어요\n```"))
     with pytest.raises(ValueError, match="질문을 입력"):
         nl2sql.ask("  ", ctx, "duckdb", known, fake)
 

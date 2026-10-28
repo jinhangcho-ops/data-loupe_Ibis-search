@@ -60,7 +60,7 @@ def check(fields):
     """메시지를 보내지 않고 페이지를 읽어 본다(토큰이 맞고 페이지가 통합에 연결돼 있는지)."""
     page = call(fields["token"], "GET", f"/pages/{page_id(fields['page'])}")
     title = next(("".join(t.get("plain_text", "") for t in p.get("title", [])) for p in page.get("properties", {}).values() if p.get("type") == "title"), "")
-    return f"페이지를 읽었습니다: {title or page.get('id', '')}. 이 페이지 끝에 덧붙입니다."
+    return f"페이지를 읽었어요: {title or page.get('id', '')}. 이 페이지 끝에 덧붙여요."
 
 
 KIND = {"label": "Notion(페이지에 덧붙이기)", "image": False, "send": send, "check": check, "fields": [

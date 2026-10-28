@@ -47,15 +47,15 @@ def load_spec(path):
                                              "columns": {컬럼: {"description": 글자, "bytes": 양의 정수(선택: 이 컬럼 한 칸의 평균 크기, 원격 DB에서 PC로 받는 양을 어림할 때 씀)}}}}}"""
     path = Path(path)
     if path.suffix.lower() not in (".json", ".yaml", ".yml"):
-        raise ValueError("데이터 명세서는 .json, .yaml, .yml 파일이어야 합니다.")
+        raise ValueError("데이터 명세서는 .json, .yaml, .yml 파일이어야 해요.")
     try:
         if path.stat().st_size > MAX_SPEC_BYTES:
-            raise ValueError(f"데이터 명세서는 {MAX_SPEC_BYTES // 1024 // 1024}MB까지 읽습니다.")
+            raise ValueError(f"데이터 명세서는 {MAX_SPEC_BYTES // 1024 // 1024}MB까지 읽어요.")
         text = path.read_text(encoding="utf-8-sig")
     except OSError as e:
-        raise ValueError(f"데이터 명세서를 읽을 수 없습니다: {e.strerror or e}") from None
+        raise ValueError(f"데이터 명세서를 읽을 수 없어요: {e.strerror or e}") from None
     except UnicodeDecodeError:
-        raise ValueError("데이터 명세서는 UTF-8이어야 합니다.") from None
+        raise ValueError("데이터 명세서는 UTF-8이어야 해요.") from None
     try:
         if path.suffix.lower() == ".json":
             spec = json.loads(text)
@@ -63,27 +63,27 @@ def load_spec(path):
             import yaml
             spec = yaml.safe_load(text)
     except Exception as e:
-        raise ValueError(f"데이터 명세서의 형식이 올바르지 않습니다: {str(e)[:200]}") from None
+        raise ValueError(f"데이터 명세서의 형식이 올바르지 않아요: {str(e)[:200]}") from None
     tables = spec.get("tables") if isinstance(spec, dict) else None
     if not isinstance(tables, dict):
-        raise ValueError('데이터 명세서에는 "tables" 객체가 있어야 합니다.')
+        raise ValueError('데이터 명세서에는 "tables" 객체가 있어야 해요.')
     count = 0
     for name, table in tables.items():
         where = f"명세서의 {name}"
         if not isinstance(table, dict) or not isinstance(table.get("description", ""), str) or not isinstance(table.get("columns", {}), dict):
-            raise ValueError(f"{where}: description은 글자, columns는 객체여야 합니다.")
+            raise ValueError(f"{where}: description은 글자, columns는 객체여야 해요.")
         count += 1 + len(table.get("columns", {}))
         if count > MAX_SPEC_ENTRIES:
-            raise ValueError(f"데이터 명세서의 테이블·컬럼은 모두 합쳐 {MAX_SPEC_ENTRIES:,}개까지 읽습니다.")
+            raise ValueError(f"데이터 명세서의 테이블·컬럼은 모두 합쳐 {MAX_SPEC_ENTRIES:,}개까지 읽어요.")
         part = table.get("partition")
         if part is not None and (not isinstance(part, dict) or not isinstance(part.get("column"), str) or ("latest" in part) == ("recent_days" in part)
                                  or ("recent_days" in part and (type(part["recent_days"]) is not int or part["recent_days"] < 1))):
-            raise ValueError(f'{where}: partition은 {{"column", "latest"}} 또는 {{"column", "recent_days": 1 이상 정수}}여야 합니다.')
+            raise ValueError(f'{where}: partition은 {{"column", "latest"}} 또는 {{"column", "recent_days": 1 이상 정수}}여야 해요.')
         for column, info in table.get("columns", {}).items():
             if not isinstance(info, dict) or not isinstance(info.get("description", ""), str):
-                raise ValueError(f"{where}의 {column}: description은 글자여야 합니다.")
+                raise ValueError(f"{where}의 {column}: description은 글자여야 해요.")
             if isinstance(info.get("bytes"), bool) or ("bytes" in info and (type(info["bytes"]) is not int or info["bytes"] < 1)):
-                raise ValueError(f"{where}의 {column}: bytes는 1 이상 정수여야 합니다.")
+                raise ValueError(f"{where}의 {column}: bytes는 1 이상 정수여야 해요.")
     return spec
 
 
@@ -183,7 +183,7 @@ def partition(con, t, schema, base, size, rows, part):
         return None
     column = part["column"]
     if column not in t.columns:
-        raise ValueError(f"명세서의 파티션 컬럼 '{column}'이 테이블에 없습니다.")
+        raise ValueError(f"명세서의 파티션 컬럼 '{column}'이 테이블에 없어요.")
     if "latest" in part:
         pick = t[column] == part["latest"]
     else:
@@ -210,7 +210,7 @@ def sample(con, t, schema, base, size, rows, part):
             continue
         if found is not None:
             return found, name, passed
-    raise ValueError("표본을 읽지 못했습니다: " + " / ".join(f"{METHODS[n]}: {why}" for n, why in passed))
+    raise ValueError("표본을 읽지 못했어요: " + " / ".join(f"{METHODS[n]}: {why}" for n, why in passed))
 
 
 # ---------- 추론 ----------

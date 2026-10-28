@@ -131,7 +131,7 @@ def test_slack_commands_do_not_run_big_or_unknown_scans(shop, monkeypatch):
         monkeypatch.setattr(scan_size, "limit_check", lambda *a, _r=answer, **k: _r)
         for text in ('검색 "전체 주문"', '지표 취소율 검색="전체 주문"'):
             out = commands.answer(text)
-            assert out.startswith("할 수 없습니다") and "프로그램에서 실행하세요" in out, (answer, text, out)
+            assert out.startswith("할 수 없어요") and "프로그램에서 실행하세요" in out, (answer, text, out)
 
 
 # ---------- 문장 틀: e23 대상 수 컬럼, e33 정렬 방향, e41 컬럼 칸 ----------

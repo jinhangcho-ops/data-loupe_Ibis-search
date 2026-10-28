@@ -112,4 +112,4 @@ def test_sentence_routes(c):
     code, body = post(c, "/api/sentence/compile", template="e05", slots={"컬럼": "store", "글자": {"match": "으로 끝", "text": "x"}}, body={"base": "sales"})
     assert body["ok"] is True and body["runs"][0]["body"]["conditions"] == ["store ends x"]
     assert post(c, "/api/sentence/compile", template="e05", slots={"컬럼": "store", "글자": {"match": "엉뚱", "text": "x"}}, body={"base": "sales"})[1]["ok"] is False
-    assert post(c, "/api/sentence/compile", template="zz")[1]["error"] == "'zz' 문장 틀이 없습니다."
+    assert post(c, "/api/sentence/compile", template="zz")[1]["error"] == "'zz' 문장 틀이 없어요."

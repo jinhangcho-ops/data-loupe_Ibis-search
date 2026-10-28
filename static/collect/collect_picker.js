@@ -191,9 +191,9 @@
   // 항목(items)마다 fields [{selector, attr}]의 값. start번째 항목부터 limit개(null이면 끝까지)
   read: function (items, fields, start, limit) {
     var self = this, nodes;
-    try { nodes = document.querySelectorAll(items); } catch (e) { return {error: "항목 선택자가 올바르지 않습니다: " + items}; }
+    try { nodes = document.querySelectorAll(items); } catch (e) { return {error: "항목 선택자가 올바르지 않아요: " + items}; }
     for (var f = 0; f < fields.length; f++) {
-      if (fields[f].selector) { try { document.querySelector(fields[f].selector); } catch (e) { return {error: "컬럼 선택자가 올바르지 않습니다: " + fields[f].selector}; } }
+      if (fields[f].selector) { try { document.querySelector(fields[f].selector); } catch (e) { return {error: "컬럼 선택자가 올바르지 않아요: " + fields[f].selector}; } }
     }
     var rows = [], end = limit === null ? nodes.length : Math.min(nodes.length, start + limit);
     for (var i = start; i < end; i++) {
@@ -222,7 +222,7 @@
   // 다음 버튼 찾기(press면 누르기). {found, href(링크면 절대 주소)}. 꺼진 버튼(disabled, aria-disabled, disabled 클래스)은 없는 것으로 본다.
   next: function (sel, press) {
     var el;
-    try { el = document.querySelector(sel); } catch (e) { return {error: "다음 버튼 선택자가 올바르지 않습니다: " + sel}; }
+    try { el = document.querySelector(sel); } catch (e) { return {error: "다음 버튼 선택자가 올바르지 않아요: " + sel}; }
     var off = el && (el.disabled || el.getAttribute("aria-disabled") === "true" || /(^|[\s_-])disabled($|[\s_-])/i.test(el.getAttribute("class") || ""));
     if (!el || off) return {found: false, href: ""};  // 마지막 쪽에서 버튼이 꺼져 있으면 없는 것으로 본다.
     var link = el.closest("a[href]");

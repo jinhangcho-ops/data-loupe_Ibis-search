@@ -30,7 +30,7 @@ def slack_error(e):
     """slack_sdk 오류를 한국어 글로(토큰은 들어 있지 않다)."""
     response = getattr(e, "response", None)
     code = response.get("error") if response is not None and hasattr(response, "get") else None
-    return f"Slack 오류: {code}" if code else f"Slack에 연결하지 못했습니다: {e}"
+    return f"Slack 오류: {code}" if code else f"Slack에 연결하지 못했어요: {e}"
 
 
 def check(bot_token, app_token):
@@ -44,8 +44,8 @@ def check(bot_token, app_token):
         from slack_sdk.web import WebClient
         WebClient(token=app_token).apps_connections_open(app_token=app_token)
     except Exception as e:
-        raise ValueError(f"봇 토큰은 맞습니다(워크스페이스 {who.get('team')}). 앱 토큰: " + slack_error(e)) from None
-    return f"두 토큰 모두 맞습니다. 워크스페이스 {who.get('team')}, 봇 {who.get('user')}."
+        raise ValueError(f"봇 토큰은 맞아요(워크스페이스 {who.get('team')}). 앱 토큰: " + slack_error(e)) from None
+    return f"두 토큰 모두 맞아요. 워크스페이스 {who.get('team')}, 봇 {who.get('user')}."
 
 
 class SlackBot:
@@ -96,7 +96,7 @@ class SlackBot:
         self.log.append(entry)
         if not ok:
             client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id, payload={
-                "text": "이 사용자·채널에서는 쓸 수 없습니다. 프로그램의 봇 설정에서 허용한 사용자(와 채널)만 씁니다."}))
+                "text": "이 사용자·채널에서는 쓸 수 없어요. 프로그램의 봇 설정에서 허용한 사용자(와 채널)만 써요."}))
             return
         client.send_socket_mode_response(SocketModeResponse(envelope_id=req.envelope_id, payload={"text": f"처리 중: {text or '도움'}"}))
         threading.Thread(target=self.respond, args=(p.get("response_url", ""), text, entry), daemon=True).start()

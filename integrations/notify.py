@@ -56,12 +56,12 @@ def save(name, destination):
             credentials.SESSION.pop(secret_key(name, field), None)
         return settings.save_named(FILE, "보낼 곳", MAX_DESTINATION_SIZE, name, None, MAX_DESTINATIONS)
     if not isinstance(destination, dict) or destination.get("kind") not in adapters.SENDERS:
-        raise ValueError(f"보낼 곳의 종류는 {', '.join(adapters.SENDERS)} 중 하나입니다.")
+        raise ValueError(f"보낼 곳의 종류는 {', '.join(adapters.SENDERS)} 중 하나예요.")
     kind, old = adapters.SENDERS[destination["kind"]], settings.named(FILE).get(name, {})
     keep = credentials.check_keep(destination.get("keep", credentials.DEFAULT_KEEP))
     unknown = set(destination) - {"kind", "done", "keep", *(f["name"] for f in kind["fields"])}
     if unknown or not isinstance(destination.get("done", False), bool):
-        raise ValueError(f"보낼 곳에 쓸 수 없는 값이 있습니다: {', '.join(sorted(unknown)) or 'done'}")
+        raise ValueError(f"보낼 곳에 쓸 수 없는 값이 있어요: {', '.join(sorted(unknown)) or 'done'}")
     item = {"kind": destination["kind"], "done": destination.get("done", False), "keep": keep}
     same = old.get("kind") == destination["kind"]
     for f in kind["fields"]:
@@ -77,7 +77,7 @@ def save(name, destination):
         if not isinstance(value, str) or not value.strip():
             raise ValueError(f"'{f['label']}' 칸을 입력하세요.")
         if "options" in f and value not in [v for v, _ in f["options"]]:
-            raise ValueError(f"'{f['label']}'은 {', '.join(v for v, _ in f['options'])} 중 하나입니다.")
+            raise ValueError(f"'{f['label']}'은 {', '.join(v for v, _ in f['options'])} 중 하나예요.")
         if "check" in f and not f["check"](value):
             raise ValueError(f["error"])
         item[f["name"]] = value
@@ -92,7 +92,7 @@ def duration_text(seconds):
 def table_text(table):
     """표 {columns, rows}를 머리글과 행을 ' | '로 구분한 여러 줄 글자로. 행은 MAX_TABLE_ROWS까지, 칸은 MAX_CELL자까지."""
     if not isinstance(table, dict) or not isinstance(table.get("columns"), list) or not isinstance(table.get("rows"), list):
-        raise ValueError('표는 {"columns": [...], "rows": [...]} 모양이어야 합니다.')
+        raise ValueError('표는 {"columns": [...], "rows": [...]} 모양이어야 해요.')
     columns, rows = table["columns"], table["rows"]
     cell = lambda value: "" if value is None else (text if len(text := str(value)) <= MAX_CELL else text[:MAX_CELL - 1] + "…")
     lines = [" | ".join(map(cell, columns))]
@@ -105,19 +105,19 @@ def message(body):
     """/api/send의 body를 보내는 함수들이 받는 메시지로. 빠진 값은 빈 글자(그림은 None)."""
     title, text, rows, seconds, image = body.get("title", ""), body.get("text", ""), body.get("rows"), body.get("seconds"), body.get("image")
     if not isinstance(title, str) or not isinstance(text, str):
-        raise ValueError("제목과 내용은 글자여야 합니다.")
+        raise ValueError("제목과 내용은 글자여야 해요.")
     if (rows is not None and type(rows) is not int) or (seconds is not None and type(seconds) not in (int, float)):
-        raise ValueError("행수는 정수, 걸린 시간은 수(초)여야 합니다.")
+        raise ValueError("행수는 정수, 걸린 시간은 수(초)여야 해요.")
     png = None
     if image is not None:
         if not isinstance(image, str) or not image.startswith(PNG_PREFIX):
-            raise ValueError("그림은 PNG data URL(data:image/png;base64,…)이어야 합니다.")
+            raise ValueError("그림은 PNG data URL(data:image/png;base64,…)이어야 해요.")
         if len(image) > MAX_IMAGE * 4 // 3 + len(PNG_PREFIX) + 4:
-            raise ValueError(f"그림은 {MAX_IMAGE // 1024 // 1024}MB까지 보낼 수 있습니다.")
+            raise ValueError(f"그림은 {MAX_IMAGE // 1024 // 1024}MB까지 보낼 수 있어요.")
         try:
             png = base64.b64decode(image[len(PNG_PREFIX):], validate=True)
         except (binascii.Error, ValueError):
-            raise ValueError("그림을 읽을 수 없습니다.") from None
+            raise ValueError("그림을 읽을 수 없어요.") from None
     return {"title": title, "text": text, "rows": "" if rows is None else f"{rows:,}", "duration": "" if seconds is None else duration_text(seconds),
             "table": table_text(body["table"]) if body.get("table") is not None else "", "image": png}
 
@@ -126,7 +126,7 @@ def fields_of(name):
     """저장한 보낼 곳 name의 (종류, 칸 값(비밀 값은 풀어서), 비밀 값들). 비밀 값이 없으면(세션 끝남, 환경변수 없음, 풀 수 없음) 그 이유로 ValueError."""
     saved = settings.named(FILE).get(name)
     if saved is None:
-        raise ValueError(f"'{name}' 보낼 곳이 없습니다.")
+        raise ValueError(f"'{name}' 보낼 곳이 없어요.")
     kind, keep = adapters.SENDERS[saved["kind"]], credentials.keep_of(saved)
     fields, secrets = {}, []
     for f in kind["fields"]:

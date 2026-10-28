@@ -29,8 +29,8 @@ MAX_TEXT = 200
 MAX_URL = 2000  # 상태에 싣는 주소의 길이. 페이지가 주소(#뒤)를 아주 길게 만들어도 상태 확인마다 그만큼 오가지 않게 한다.
 MAX_REPLY = 64 * 1024 * 1024  # 자식이 한 번에 돌려주는 답의 크기(바이트). 넘으면 오류로 바꾼다(메인의 메모리를 지킨다).
 ATTR = re.compile(r"href|src|title|alt|value|data-[a-z0-9_.:-]{1,50}")  # 고른 요소에서 보여 줄 속성
-BUSY = "수집이 수집용 창을 쓰는 중입니다. 끝나거나 멈춘 뒤에 하세요."
-CLOSED = "수집용 창이 열려 있지 않습니다. 먼저 [브라우저 열기]를 누르세요."
+BUSY = "수집이 수집용 창을 쓰는 중이에요. 끝나거나 멈춘 뒤에 하세요."
+CLOSED = "수집용 창이 열려 있지 않아요. 먼저 [브라우저 열기]를 누르세요."
 
 
 class Gone(Exception):
@@ -40,7 +40,7 @@ class Gone(Exception):
 def web_url(url):
     """http·https 주소만 받는다."""
     if not isinstance(url, str) or urlsplit(url).scheme.lower() not in ("http", "https") or not urlsplit(url).hostname:
-        raise ValueError("http:// 또는 https:// 주소만 열 수 있습니다.")
+        raise ValueError("http:// 또는 https:// 주소만 열 수 있어요.")
     return url
 
 
@@ -66,7 +66,7 @@ def launch(url, show=True):
             return start_child(url, show)
         except ConnectionError:
             if attempt:
-                raise ValueError("수집용 창을 띄우지 못했습니다.") from None
+                raise ValueError("수집용 창을 띄우지 못했어요.") from None
 
 
 def start_child(url, show):
@@ -141,7 +141,7 @@ def call(do, timeout=CALL_TIMEOUT, **args):
                     raise Gone()
                 left = end - time.monotonic()
                 if left <= 0:
-                    raise TimeoutError("수집용 창이 답하지 않습니다.")
+                    raise TimeoutError("수집용 창이 답하지 않아요.")
                 answered.wait(min(left, 0.5))
                 if child["proc"] is not None and child["proc"].poll() is not None:
                     child["gone"] = True
@@ -309,9 +309,9 @@ def state():
 def pick(target, items=""):
     """고르기를 켜거나(field·next) 끈다(off)."""
     if target not in ("field", "next", "off"):
-        raise ValueError("target은 field, next, off 중 하나입니다.")
+        raise ValueError("target은 field, next, off 중 하나예요.")
     if not isinstance(items, str) or len(items) > MAX_SELECTOR:
-        raise ValueError("항목 선택자가 올바르지 않습니다.")
+        raise ValueError("항목 선택자가 올바르지 않아요.")
     with lock:
         page()
         try:
@@ -328,15 +328,15 @@ def forget():
             raise ValueError("수집용 창을 닫은 뒤에 지우세요.")
         for folder in (FOLDER.parent, FOLDER):
             if folder.is_symlink() or os.path.isjunction(folder):
-                raise ValueError(f"{folder}가 링크라서 지우지 않습니다.")
+                raise ValueError(f"{folder}가 링크라서 지우지 않아요.")
         if not FOLDER.exists():
             return
         if not FOLDER.is_dir():
-            raise ValueError(f"{FOLDER}가 폴더가 아닙니다.")
+            raise ValueError(f"{FOLDER}가 폴더가 아니에요.")
         failed = []
         shutil.rmtree(FOLDER, onexc=lambda function, path, error: failed.append(path))  # 안의 링크·정션은 따라가지 않고 링크만 지운다.
         if failed:
-            raise ValueError("일부 파일을 지우지 못했습니다. 창을 닫은 직후라면 잠시 뒤에 다시 하세요.")
+            raise ValueError("일부 파일을 지우지 못했어요. 창을 닫은 직후라면 잠시 뒤에 다시 하세요.")
 
 
 # ---------- 자식 쪽 ----------
@@ -388,7 +388,7 @@ def encode(message):
     """답을 JSON 바이트로. MAX_REPLY를 넘으면 오류 답으로 바꾼다."""
     data = json.dumps(message).encode()
     if len(data) > MAX_REPLY:
-        data = json.dumps({"id": message.get("id"), "error": "페이지가 돌려준 값이 너무 큽니다. 항목 선택자를 좁히세요."}).encode()
+        data = json.dumps({"id": message.get("id"), "error": "페이지가 돌려준 값이 너무 커요. 항목 선택자를 좁히세요."}).encode()
     return data
 
 
@@ -405,7 +405,7 @@ def command(window, message):
     elif do == "close":
         window.destroy()
     else:
-        raise ValueError(f"모르는 명령입니다: {do}")
+        raise ValueError(f"모르는 명령이에요: {do}")
     return True
 
 

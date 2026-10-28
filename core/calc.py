@@ -47,7 +47,7 @@ def split_words(line, columns=()):
     그 이름의 컬럼이 있을 때 칸 낱말이 아니라 컬럼으로 읽는다('lag 이름 기준 일자', '식 이름 || '님' 이름 호칭')."""
     words = line.split()
     if not words or words[0] not in KINDS:
-        raise ValueError(f"계산 종류는 {', '.join(KINDS[:len(WINDOWS) + len(EACH) + 2 + len(FORMULAS)])} 중 하나로 시작합니다(함수 사전의 창 함수 id도 됩니다: {', '.join(NEW_WINDOWS[:4])} …). 형식: {GUIDE}")
+        raise ValueError(f"계산 종류는 {', '.join(KINDS[:len(WINDOWS) + len(EACH) + 2 + len(FORMULAS)])} 중 하나로 시작해요(함수 사전의 창 함수 id도 돼요: {', '.join(NEW_WINDOWS[:4])} …). 형식: {GUIDE}")
     main, opts, at = [], {}, None
     lead = words[0] in ("곱하기", "빈값채우기") or words[0] == "반올림" and len(words) > 1 and words[1].lstrip("-").isdigit()  # 값이 앞에 오는 줄(반올림의 자리 수는 생략할 수 있다)
     spot = 1 if lead else 0  # 반올림 0 이름·곱하기 2 그룹: 대상 컬럼은 둘째 낱말
@@ -74,7 +74,7 @@ def window(expr, opts, need_order=True):
     """기준(정렬)·그룹으로 창을 만든다. 기준이 필요한 계산에 없으면 ValueError."""
     order = opts.get("기준") or []
     if need_order and not order:
-        raise ValueError("이 계산은 순서가 필요합니다. '기준 컬럼 [asc|desc]'를 넣으세요.")
+        raise ValueError("이 계산은 순서가 필요해요. '기준 컬럼 [asc|desc]'를 넣으세요.")
     keys = [parse.parse_sort(" ".join(order), expr)] if order else []
     groups = [expr[n] for n in names(opts.get("그룹") or [], expr)]
     return keys, groups or None
@@ -84,7 +84,7 @@ def new_name(expr, opts, default, taken=()):
     """새 컬럼 이름(이름 옵션 또는 default). 이미 있거나 같은 묶음에서 만든 이름이면 ValueError."""
     name = " ".join(opts.get("이름") or []) or default
     if name in expr.columns or name in taken:
-        raise ValueError(f"'{name}' 컬럼이 이미 있습니다. 끝에 '이름 다른이름'을 붙이세요.")
+        raise ValueError(f"'{name}' 컬럼이 이미 있어요. 끝에 '이름 다른이름'을 붙이세요.")
     return name
 
 
@@ -134,7 +134,7 @@ def longer(expr, cols):
     kind = "float64" if numeric else "string"
     for n in LONG_NAMES:
         if n in expr.columns:
-            raise ValueError(f"세로로 세우면 '{n}' 컬럼을 만드는데 이미 있습니다. 그 컬럼 이름을 먼저 바꾸세요.")
+            raise ValueError(f"세로로 세우면 '{n}' 컬럼을 만드는데 이미 있어요. 그 컬럼 이름을 먼저 바꾸세요.")
     typed = expr.mutate(**{c: expr[c].cast(kind) for c in cols})
     found = typed.pivot_longer(s.cols(*cols), names_to=LONG_NAMES[0], values_to=LONG_NAMES[1])
     from core import source
@@ -153,7 +153,7 @@ def apply_line(line, expr):
     if kind == "펼치기":
         col = names(main, expr)
         if len(col) != 1 or not expr[col[0]].type().is_array():
-            raise ValueError("펼치기는 목록(배열) 컬럼 하나를 넣습니다.")
+            raise ValueError("펼치기는 목록(배열) 컬럼 하나를 넣어요.")
         return expr.unnest(col[0])
     if kind == "세로로":
         cols = names(main, expr)
@@ -166,7 +166,7 @@ def apply_line(line, expr):
         keys, groups = window(expr, opts)
         n = int(number(main[0] if main else None, "상위 몇 개"))
         if n < 1:
-            raise ValueError("상위 몇 개는 1 이상입니다.")
+            raise ValueError("상위 몇 개는 1 이상이에요.")
         ranked = expr.mutate(**{TOP: ibis.row_number().over(ibis.window(group_by=groups, order_by=keys))})
         return ranked.filter(ranked[TOP] < n).select(*expr.columns)  # drop은 SELECT를 한 겹 더 만든다
     return expr.mutate(**dict([column(kind, main, opts, expr)]))
@@ -198,7 +198,7 @@ def column(kind, main, opts, expr, taken=()):
     if unit == "일":
         order_type = expr[order].type() if order in expr.columns else None
         if not (order_type and (order_type.is_date() or order_type.is_timestamp())):
-            raise ValueError("'일' 단위는 기준이 날짜·날짜시간 컬럼이어야 합니다.")
+            raise ValueError("'일' 단위는 기준이 날짜·날짜시간 컬럼이어야 해요.")
         win = ibis.window(group_by=groups, order_by=keys, preceding=ibis.interval(days=n - 1), following=0)
     else:
         win = ibis.window(group_by=groups, order_by=keys, preceding=n - 1, following=0)
@@ -224,13 +224,13 @@ def window_args(f, main, opts, expr):
     """함수 사전의 창 함수 줄 '<id> [컬럼] [인자…] 기준 … 그룹 …'을 함수의 인자로. 본문 낱말은 칸 차례(정렬·묶음·조건 칸 제외), 기준·그룹은 옵션에서."""
     specs = [a for a in f["args"] if a["name"] not in sql_funcs.HAS_ARGS]
     if len(main) > len(specs):
-        raise ValueError(f"{f['id']}의 인자는 {', '.join(s['label'] for s in specs) or '없음'}입니다. 형식: {f['example']} 기준 컬럼 [그룹 컬럼]")
+        raise ValueError(f"{f['id']}의 인자: {', '.join(s['label'] for s in specs) or '없음'}. 형식: {f['example']} 기준 컬럼 [그룹 컬럼]")
     raw = {s["name"]: word_value(s, w) for s, w in zip(specs, main)}
     keys, groups = window(expr, opts, need_order=False)
     have = {a["name"] for a in f["args"]}
     for key, word, found in (("order", "기준", keys), ("group", "그룹", groups)):
         if found and key not in have:
-            raise ValueError(f"{f['id']}는 '{word}'을 쓰지 않습니다. 형식: {f['example']}")
+            raise ValueError(f"{f['id']}는 '{word}'을 쓰지 않아요. 형식: {f['example']}")
     return {**raw, **({"order": keys} if keys else {}), **({"group": groups} if groups else {})}
 
 
@@ -312,22 +312,22 @@ def pivot(expr, spec, values_of):
     order: 결과 컬럼 순서 한 줄('전체 개수 desc', 없으면 행 기준 순), top: 정렬한 뒤 앞 N행만}.
     values_of(식)은 열로 펼칠 값 목록을 구하는 조회(MAX_PIVOT+1개까지)를 돌린다. 값마다 조건부 집계 하나와 '전체'를 만든다."""
     if not isinstance(spec, dict):
-        raise ValueError("피벗 설정이 없습니다.")
+        raise ValueError("피벗 설정이 없어요.")
     rows = [r for r in spec.get("rows") or [] if r]
     for r in rows:
         parse.check_name(r, expr.columns, "행 기준 컬럼")
     how, value, column = spec.get("how", "count"), spec.get("value") or None, spec.get("column") or None
     if how not in HOWS and how not in sql_funcs.ALIASES:
-        raise ValueError(f"집계는 {', '.join(list(HOWS)[:8])} … 중 하나입니다(함수 사전의 집계 {len(HOWS)}가지).")
+        raise ValueError(f"집계는 {', '.join(list(HOWS)[:8])} … 중 하나예요(함수 사전의 집계 {len(HOWS)}가지).")
     opts = spec.get("opts")
     if opts is not None and not isinstance(opts, dict):
-        raise ValueError("집계의 옵션(opts)은 객체여야 합니다.")
+        raise ValueError("집계의 옵션(opts)은 객체여야 해요.")
     if value is not None:
         parse.check_name(value, expr.columns, "값 컬럼")
         if how in ("sum", "mean") and not expr[value].type().is_numeric():
-            raise ValueError("합계·평균은 숫자 컬럼에만 됩니다.")
+            raise ValueError("합계·평균은 숫자 컬럼에만 돼요.")
     elif sql_funcs.needs_column(how):
-        raise ValueError("값 컬럼을 고르세요(개수는 비워도 됩니다).")
+        raise ValueError("값 컬럼을 고르세요(개수는 비워도 돼요).")
     cond = parse.predicate(spec["where"], expr) if spec.get("where") and (not isinstance(spec["where"], str) or spec["where"].strip()) else None
     total = f"전체 {sql_funcs.label_of(how)}"
     aggs = {total: metric(expr, how, value, cond, opts)}
@@ -335,7 +335,7 @@ def pivot(expr, spec, values_of):
         parse.check_name(column, expr.columns, "열로 펼칠 컬럼")
         found = values_of(expr.filter(expr[column].notnull()).select(v=expr[column]).distinct().order_by("v").limit(MAX_PIVOT + 1))
         if len(found) > MAX_PIVOT:
-            raise ValueError(f"'{column}'의 값이 {MAX_PIVOT}개보다 많아 열로 펼칠 수 없습니다. 조건으로 줄이거나 다른 컬럼을 고르세요.")
+            raise ValueError(f"'{column}'의 값이 {MAX_PIVOT}개보다 많아 열로 펼칠 수 없어요. 조건으로 줄이거나 다른 컬럼을 고르세요.")
         taken = {n.casefold() for n in [*aggs, *rows]}  # DuckDB는 컬럼 이름의 대소문자를 가리지 않아 Y와 y가 부딪친다
         used = set(taken)
         for v in found:
@@ -350,7 +350,7 @@ def pivot(expr, spec, values_of):
             aggs[name] = metric(expr, how, value, is_v if cond is None else is_v & cond, opts)
     subtotals = spec.get("subtotals")
     if subtotals and (subtotals not in SUBTOTALS or not rows):
-        raise ValueError(f"소계는 행 기준 컬럼이 있어야 하고 {', '.join(SUBTOTALS)} 중 하나입니다.")
+        raise ValueError(f"소계는 행 기준 컬럼이 있어야 하고 {', '.join(SUBTOTALS)} 중 하나예요.")
     if subtotals:  # 소계·총계 줄: 기준 조합마다 집계해 잇는다(기준 칸은 글자, 빠진 칸은 '(소계)'·'(전체)')
         table = sql_funcs.grouping(expr, rows, aggs, sql_funcs.group_sets("rollup" if subtotals == "rollup" else "cube" if subtotals == "cube" else "grouping_sets", rows, spec.get("sets")))
         table = table.order_by(sql_funcs.grouped_order(table, rows))

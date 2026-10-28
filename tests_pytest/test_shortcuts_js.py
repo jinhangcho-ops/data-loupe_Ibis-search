@@ -191,7 +191,7 @@ def test_shortcuts_keys(tmp_path):
 
 def test_title_tooltip_delegation(tmp_path):
     body = """
-const host = new E("button"); host.setAttribute("title", "저장합니다"); host.rect = { left: 790, right: 800, top: 100, bottom: 120, width: 10, height: 20 };
+const host = new E("button"); host.setAttribute("title", "저장해요"); host.rect = { left: 790, right: 800, top: 100, bottom: 120, width: 10, height: 20 };
 const inner = new E("span"); inner.parentElement = host; host.kids.push(inner);
 const text = new E("button"); text.setAttribute("title", "글자 있는 단추"); text._text = "저장";
 const out = {};
@@ -215,13 +215,13 @@ flash("되돌렸어요"); out.toast = [toastBox.textContent, toastBox.classList.
 console.log(JSON.stringify(out));
 """
     got = run(tmp_path, body, TIP)
-    assert got["moved"] == [None, "저장합니다", "저장합니다"] and got["beforeDelay"] is True
+    assert got["moved"] == [None, "저장해요", "저장해요"] and got["beforeDelay"] is True
     left, top = float(got["shown"][2][:-2]), float(got["shown"][3][:-2])
-    assert got["shown"][:2] == ["저장합니다", False] and left <= 800 - 100 - 4 and top == 126  # 화면 가장자리 안으로(오른쪽 끝 단추)
+    assert got["shown"][:2] == ["저장해요", False] and left <= 800 - 100 - 4 and top == 126  # 화면 가장자리 안으로(오른쪽 끝 단추)
     assert got["stay"] is False
-    assert got["restored"] == ["저장합니다", None, False, True]
+    assert got["restored"] == ["저장해요", None, False, True]
     assert got["focus"] == ["글자 있는 단추", False, None, None] and got["fresh"] == ["바뀐 힌트", False]
-    assert got["none"] is True and got["keyHide"] == ["저장합니다", True] and got["toast"] == ["되돌렸어요", False]
+    assert got["none"] is True and got["keyHide"] == ["저장해요", True] and got["toast"] == ["되돌렸어요", False]
 
 
 # ---------- S3 datalist 대신 목록 ----------

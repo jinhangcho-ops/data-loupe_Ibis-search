@@ -85,7 +85,7 @@ def test_scroll_restarts_instead_of_resuming(client, monkeypatch, tmp_path):
     client.post("/api/limits", json={"name": "웹", "group": {"per_day": 100, "concurrency": 1}})
     holder["site"] = Site(items, 5, 3)  # 다시 열면 첫 화면 항목 수가 다르다
     reply, s = run(client, cfg)
-    assert reply["resumed"] is False and s["message"] == "스크롤 방식은 이어 받지 않고 처음부터 받습니다."
+    assert reply["resumed"] is False and s["message"] == "스크롤 방식은 이어 받지 않고 처음부터 받아요."
     assert s["phase"] == "끝" and pl.read_parquet(out)["t"].to_list() == items
 
 
@@ -132,7 +132,7 @@ def test_blocked_start_leaves_load_failure_state(client, tmp_path):
     reply = client.post("/api/collect/start", json={"config": cfg})
     assert reply.status_code >= 400
     s = client.get("/api/collect/status").get_json()
-    assert s["phase"] == "실패" and not s["running"] and s["load"] and "지난 적재가 끝나지 않았습니다" in s["error"]  # 화면의 표시 조건(s.load && 실패)
+    assert s["phase"] == "실패" and not s["running"] and s["load"] and "지난 적재가 끝나지 않았어요" in s["error"]  # 화면의 표시 조건(s.load && 실패)
     assert {"where", "rows", "batches", "skipped", "failures"} <= set(s["load"])
 
 

@@ -21,7 +21,7 @@ def draft_path():
     """요청의 screen에 맞는 초안 파일 경로. 허용 목록 밖이면 ValueError."""
     screen = request.args.get("screen")
     if screen not in SCREENS:
-        raise ValueError("알 수 없는 화면입니다.")
+        raise ValueError("알 수 없는 화면이에요.")
     return settings.PATH.parent / "drafts" / f"{screen}.json"
 
 
@@ -70,7 +70,7 @@ def save_draft():
     """body {state}를 저장한다. 너무 크면 저장하지 않고 saved=false."""
     path, state = draft_path(), (request.json or {}).get("state")
     if not isinstance(state, dict):
-        raise ValueError("저장할 상태가 없습니다.")
+        raise ValueError("저장할 상태가 없어요.")
     data = {"saved": datetime.now().isoformat(timespec="seconds"), "connection": connection(), "state": masked(state)}
     if len(json.dumps(data, ensure_ascii=False).encode()) > MAX_BYTES:
         return jsonify(saved=False)

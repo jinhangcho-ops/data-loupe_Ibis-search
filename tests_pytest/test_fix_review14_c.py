@@ -96,7 +96,7 @@ def test_bigquery_aggregate_checks_dry_run(bigquery, monkeypatch):
 
 def test_bigquery_export_and_summary_ask_first(bigquery, remote, monkeypatch):
     from core import scan_size
-    monkeypatch.setattr(scan_size, "limit", lambda config=None: (10 ** 9, "작업 메모리 상한 테스트"))
+    monkeypatch.setattr(scan_size, "limit", lambda config=None: (10 ** 9, "메모리 한도 테스트"))
     body = {"base": "orders", "fresh": True}
     for api, extra in [("/api/export", {"format": "csv"}), ("/api/summary", {}), ("/api/sql/export", {"sql": "select * from orders", "format": "csv"})]:
         r = remote.post(api, json={**body, **extra})
@@ -110,7 +110,7 @@ def test_bigquery_export_and_summary_ask_first(bigquery, remote, monkeypatch):
 def test_bigquery_rerun_while_paging_asks(bigquery, remote, monkeypatch):
     from core import held
     from core import scan_size
-    monkeypatch.setattr(scan_size, "limit", lambda config=None: (10 ** 9, "작업 메모리 상한 테스트"))
+    monkeypatch.setattr(scan_size, "limit", lambda config=None: (10 ** 9, "메모리 한도 테스트"))
     held.store["jobs"].clear()
     first = remote.post("/api/query", json={"base": "orders", "limit": 5, "fresh": True, "confirmed": True}).get_json()
     assert first["server"] and len(bigquery.runs) == 1

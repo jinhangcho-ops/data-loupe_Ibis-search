@@ -54,14 +54,14 @@ def send(fields, m):
         try:
             json.loads(body)
         except ValueError:
-            raise ValueError("본문 틀이 JSON이 아닙니다. 값을 채운 결과가 JSON으로 읽히지 않아 보내지 않았습니다.") from None
+            raise ValueError("본문 틀이 JSON이 아니에요. 값을 채운 결과가 JSON으로 읽히지 않아 보내지 않았어요.") from None
     transport.post(fields["url"], body.encode("utf-8"), {"Content-Type": content_type})
 
 
 def secure(fields):
     """환경변수로 둔 주소는 저장할 때 검사하지 않는다: 데이터 값을 평문으로 보내지 않게 보낼 때·확인할 때 다시 본다."""
     if not str(fields.get("url", "")).startswith("https://"):
-        raise ValueError("주소는 https://로 시작해야 합니다.")
+        raise ValueError("주소는 https://로 시작해야 해요.")
 
 
 def check(fields):
@@ -72,12 +72,12 @@ def check(fields):
         try:
             json.loads(re.sub(r"\{(" + "|".join(SLOTS) + r")\}", lambda found: values[found[1]], fields["template"]))
         except ValueError:
-            raise ValueError("본문 틀이 JSON이 아닙니다.") from None
-    return "주소와 본문 틀의 모양은 맞습니다. 웹훅은 보내 봐야 받는지 알 수 있으니 [시험 보내기]를 쓰세요."
+            raise ValueError("본문 틀이 JSON이 아니에요.") from None
+    return "주소와 본문 틀의 모양은 맞아요. 웹훅은 보내 봐야 받는지 알 수 있으니 [시험 보내기]를 쓰세요."
 
 
 KIND = {"label": "웹훅(주소로 보내기)", "image": True, "send": send, "check": check, "presets": PRESETS, "fields": [
-    {"name": "url", "label": "주소", "secret": True, "check": lambda v: v.startswith("https://"), "error": "주소는 https://로 시작해야 합니다."},
+    {"name": "url", "label": "주소", "secret": True, "check": lambda v: v.startswith("https://"), "error": "주소는 https://로 시작해야 해요."},
     {"name": "content", "label": "본문 종류", "secret": False, "options": [["json", "JSON"], ["text", "글자"], ["form", "폼(URL 인코딩)"]], "default": "json"},
     {"name": "template", "label": "본문 틀", "secret": False, "multiline": True, "default": PRESETS[0]["template"],
      "hint": "쓸 수 있는 자리: {제목} {내용} {행수} {걸린시간} {표} {그림}"}]}

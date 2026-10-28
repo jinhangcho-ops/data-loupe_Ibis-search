@@ -42,15 +42,15 @@ def read_file(path):
     """지표 파일을 읽어 검사한 {이름: 지표}. 지표는 {"description", "format", "numerator", "denominator"(없으면 None)}."""
     path = Path(path)
     if path.suffix.lower() not in (".json", ".yaml", ".yml"):
-        raise ValueError("지표 파일은 .yaml, .yml, .json 파일이어야 합니다.")
+        raise ValueError("지표 파일은 .yaml, .yml, .json 파일이어야 해요.")
     try:
         if path.stat().st_size > MAX_FILE_BYTES:
-            raise ValueError(f"지표 파일은 {MAX_FILE_BYTES // 1024 // 1024}MB까지 읽습니다.")
+            raise ValueError(f"지표 파일은 {MAX_FILE_BYTES // 1024 // 1024}MB까지 읽어요.")
         text = path.read_text(encoding="utf-8-sig")
     except OSError as e:
-        raise ValueError(f"지표 파일을 읽을 수 없습니다: {e.strerror or e}") from None
+        raise ValueError(f"지표 파일을 읽을 수 없어요: {e.strerror or e}") from None
     except UnicodeDecodeError:
-        raise ValueError("지표 파일은 UTF-8이어야 합니다.") from None
+        raise ValueError("지표 파일은 UTF-8이어야 해요.") from None
     try:
         if path.suffix.lower() == ".json":
             import json
@@ -59,12 +59,12 @@ def read_file(path):
             import yaml
             data = yaml.safe_load(text)
     except Exception as e:
-        raise ValueError(f"지표 파일의 형식이 올바르지 않습니다: {str(e)[:200]}") from None
+        raise ValueError(f"지표 파일의 형식이 올바르지 않아요: {str(e)[:200]}") from None
     found = data.get("metrics") if isinstance(data, dict) else None
     if not isinstance(found, dict) or not found:
-        raise ValueError('지표 파일에는 지표를 하나 이상 담은 "metrics" 객체가 있어야 합니다.')
+        raise ValueError('지표 파일에는 지표를 하나 이상 담은 "metrics" 객체가 있어야 해요.')
     if len(found) > MAX_METRICS:
-        raise ValueError(f"지표는 파일 하나에 {MAX_METRICS}개까지입니다.")
+        raise ValueError(f"지표는 파일 하나에 {MAX_METRICS}개까지예요.")
     return {str(name): metric(str(name), m) for name, m in found.items()}
 
 
@@ -72,18 +72,18 @@ def metric(name, m):
     """지표 하나를 검사해 정리한다."""
     where = f"지표 '{name}'"
     if not name.strip() or len(name) > 100:
-        raise ValueError("지표 이름은 1~100자여야 합니다.")
+        raise ValueError("지표 이름은 1~100자여야 해요.")
     if not isinstance(m, dict):
-        raise ValueError(f"{where}: numerator(분자)를 담은 객체여야 합니다.")
+        raise ValueError(f"{where}: numerator(분자)를 담은 객체여야 해요.")
     unknown = set(m) - {"description", "format", "numerator", "denominator"}
     if unknown:
-        raise ValueError(f"{where}: 모르는 항목 {', '.join(sorted(map(str, unknown)))}. description·format·numerator·denominator만 씁니다.")
+        raise ValueError(f"{where}: 모르는 항목 {', '.join(sorted(map(str, unknown)))}. description·format·numerator·denominator만 써요.")
     if not isinstance(m.get("description", ""), str):
-        raise ValueError(f"{where}: description은 글자여야 합니다.")
+        raise ValueError(f"{where}: description은 글자여야 해요.")
     if m.get("format", "number") not in FORMATS:
-        raise ValueError(f"{where}: format은 {' 또는 '.join(FORMATS)}입니다.")
+        raise ValueError(f"{where}: format은 {' 또는 '.join(FORMATS)} 중 하나예요.")
     if "numerator" not in m:
-        raise ValueError(f"{where}: numerator(분자)가 있어야 합니다.")
+        raise ValueError(f"{where}: numerator(분자)가 있어야 해요.")
     return {"description": m.get("description", ""), "format": m.get("format", "number"),
             "numerator": part(f"{where}의 numerator", m["numerator"]),
             "denominator": part(f"{where}의 denominator", m["denominator"]) if m.get("denominator") is not None else None}
@@ -92,23 +92,23 @@ def metric(name, m):
 def part(where, p):
     """분자·분모 하나 {"agg", "column"(없으면 None), "where": [조건 줄]}."""
     if not isinstance(p, dict) or p.get("agg") not in AGGS:
-        raise ValueError(f"{where}: agg는 {', '.join(AGGS)} 중 하나여야 합니다.")
+        raise ValueError(f"{where}: agg는 {', '.join(AGGS)} 중 하나여야 해요.")
     unknown = set(p) - {"agg", "column", "where", "opts"}
     if unknown:
-        raise ValueError(f"{where}: 모르는 항목 {', '.join(sorted(map(str, unknown)))}. agg·column·where·opts만 씁니다.")
+        raise ValueError(f"{where}: 모르는 항목 {', '.join(sorted(map(str, unknown)))}. agg·column·where·opts만 써요.")
     column = p.get("column")
     if column is not None and (not isinstance(column, str) or not column.strip()):
-        raise ValueError(f"{where}: column은 컬럼 이름(글자)이어야 합니다.")
+        raise ValueError(f"{where}: column은 컬럼 이름(글자)이어야 해요.")
     if column is None and sql_funcs.needs_column(p["agg"]):  # 컬럼 칸이 필수인 집계(count와 조건만 받는 count_if·all·any는 아님)
 
-        raise ValueError(f"{where}: {p['agg']}에는 column이 있어야 합니다.")
+        raise ValueError(f"{where}: {p['agg']}에는 column이 있어야 해요.")
     opts = p.get("opts")
     if opts is not None and not isinstance(opts, dict):
-        raise ValueError(f"{where}: opts는 집계의 나머지 인자를 담은 객체여야 합니다.")
+        raise ValueError(f"{where}: opts는 집계의 나머지 인자를 담은 객체여야 해요.")
     conds = p.get("where", [])
     conds = [conds] if isinstance(conds, str) else conds
     if not isinstance(conds, list) or not all(isinstance(c, str) and c.strip() for c in conds):
-        raise ValueError(f"{where}: where는 조건 줄(글자)이나 그 목록이어야 합니다.")
+        raise ValueError(f"{where}: where는 조건 줄(글자)이나 그 목록이어야 해요.")
     return {"agg": p["agg"], "column": column.strip() if column else None, "where": [c.strip() for c in conds], **({"opts": opts} if opts else {})}
 
 
@@ -164,7 +164,7 @@ def aggregate(expr, p):
     if p["column"] is None and p["agg"] == "count":
         return expr.count(where=where)
     if p["column"] is not None and p["agg"] in NUMERIC_AGGS and not parse.column(expr, p["column"]).type().is_numeric():
-        raise ValueError(f"'{p['column']}'은 숫자 컬럼이 아니라 {AGG_NAMES[p['agg']]}를 구할 수 없습니다.")
+        raise ValueError(f"'{p['column']}'은 숫자 컬럼이 아니라 {AGG_NAMES[p['agg']]}를 구할 수 없어요.")
     return sql_funcs.aggregate(p["agg"], expr, p["column"], where, p.get("opts"))
 
 
@@ -185,7 +185,7 @@ def compute(expr, names, found, by=None):
     if not names:
         raise ValueError("구할 지표를 고르세요.")
     if len(names) > MAX_RUN:
-        raise ValueError(f"지표는 한 번에 {MAX_RUN}개까지 구할 수 있습니다.")
+        raise ValueError(f"지표는 한 번에 {MAX_RUN}개까지 구할 수 있어요.")
     for name in names:
         parse.check_name(name, list(found), "지표")
     metrics = {f"m{i}": metric_expr(expr, name, found[name]) for i, name in enumerate(names)}
@@ -194,7 +194,7 @@ def compute(expr, names, found, by=None):
         return None, {name: [plain(row[f"m{i}"])] for i, name in enumerate(names)}, False
     key = parse.column(expr, by)
     if key.type().is_nested():
-        raise ValueError(f"'{by}'은 중첩 컬럼이라 나눌 수 없습니다.")
+        raise ValueError(f"'{by}'은 중첩 컬럼이라 나눌 수 없어요.")
     table = expr.group_by(key.name("x")).aggregate(**metrics).order_by("x").limit(MAX_GROUPS + 1).to_polars()
     more = table.height > MAX_GROUPS
     table = table.head(MAX_GROUPS)

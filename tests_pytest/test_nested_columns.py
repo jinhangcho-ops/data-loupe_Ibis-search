@@ -30,7 +30,7 @@ def test_conditions_sort_columns(t):
                        [parse.parse_sort("user.name desc", t)], parse.parse_columns("id, user.name", t))
     assert expr.to_pyarrow().to_pylist() == [{"id": 3, "user.name": "다솜"}, {"id": 1, "user.name": "가람"}]
     assert parse.apply(t, [parse.predicate("user.age is null", t)], [], ["id"]).to_pyarrow().to_pylist() == [{"id": 2}]
-    with pytest.raises(ValueError, match="비교할 수 없습니다"):
+    with pytest.raises(ValueError, match="비교할 수 없어요"):
         parse.predicate("user = x", t)
     with pytest.raises(ValueError, match="user.name"):  # 비슷한 이름을 알려 준다
         parse.predicate("user.nmae = 가람", t)

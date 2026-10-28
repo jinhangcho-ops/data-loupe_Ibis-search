@@ -19,14 +19,14 @@ def check(table, user, step, time, steps, window_seconds):
             raise ValueError(f"{what} 컬럼을 골라 주세요.")
         check_name(name, table.columns)
     if not table[time].type().is_temporal():
-        raise ValueError(f"시각 컬럼 '{time}'은 날짜나 날짜시간 컬럼이어야 합니다.")
+        raise ValueError(f"시각 컬럼 '{time}'은 날짜나 날짜시간 컬럼이어야 해요.")
     if not isinstance(steps, (list, tuple)) or not MIN_STEPS <= len(steps) <= MAX_STEPS:
         raise ValueError(f"단계는 {MIN_STEPS}~{MAX_STEPS}개를 골라 주세요.")
     if len({str(s) for s in steps}) != len(steps):
-        raise ValueError("같은 단계를 두 번 넣을 수 없습니다.")
+        raise ValueError("같은 단계를 두 번 넣을 수 없어요.")
     if window_seconds is not None:
         if isinstance(window_seconds, bool) or not isinstance(window_seconds, (int, float)) or not window_seconds > 0:
-            raise ValueError("기간 제한은 0보다 큰 숫자(초)여야 합니다.")
+            raise ValueError("기간 제한은 0보다 큰 숫자(초)여야 해요.")
     return list(steps), window_seconds
 
 
@@ -38,12 +38,12 @@ def step_value(dtype, value):
         try:
             number = float(value)
         except (TypeError, ValueError):
-            raise ValueError(f"단계 값 '{value}'을 숫자로 읽을 수 없습니다.") from None
+            raise ValueError(f"단계 값 '{value}'을 숫자로 읽을 수 없어요.") from None
         return int(number) if dtype.is_integer() and number == int(number) else number
     if dtype.is_boolean():
         text = str(value).strip().lower()
         if text not in ("true", "false"):
-            raise ValueError(f"단계 값 '{value}'은 true나 false여야 합니다.")
+            raise ValueError(f"단계 값 '{value}'은 true나 false여야 해요.")
         return text == "true"
     return str(value)
 

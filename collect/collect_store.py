@@ -21,7 +21,7 @@ from core import source
 from collect.collect_http import Balancer, Halt
 from core.result import FORMULA_START
 
-CAPPED = "최대 쪽 수 {:,}에서 멈췄습니다(더 있을 수 있음). 다 받으려면 최대 쪽 수를 늘리세요."  # 예약(schedule.follow)은 이 문구로 시작하면 실패로 알린다(API·웹페이지 방식이 함께 쓴다)
+CAPPED = "최대 쪽 수 {:,}에서 멈췄어요(더 있을 수 있음). 다 받으려면 최대 쪽 수를 늘리세요."  # 예약(schedule.follow)은 이 문구로 시작하면 실패로 알린다(API·웹페이지 방식이 함께 쓴다)
 SAVE_EVERY = 0.5  # 진행 기록을 적는 간격(초). 쪽·조각마다 쓰면 기록이 커질수록 느려진다(쪽 수의 제곱)
 SKEW = 300  # 응답의 Date와 PC 시계가 이보다 많이 다르면(초) 알린다.
 ORDER = "__ibis_n"  # JSON 줄에 같이 적는 받은 순서(결과에서는 뺀다)
@@ -96,7 +96,7 @@ def balancer_for(config, halt, concurrency):
             try:
                 gap = email.utils.parsedate_to_datetime(reply.header("Date")).timestamp() - time.time()
                 if abs(gap) > SKEW:
-                    update(message=f"서버 시계와 PC 시계가 {round(abs(gap) / 60)}분 다릅니다. PC 시계를 확인하세요(하루 한도의 기준 시각이 어긋날 수 있습니다).")
+                    update(message=f"서버 시계와 PC 시계가 {round(abs(gap) / 60)}분 달라요. PC 시계를 확인하세요(하루 한도의 기준 시각이 어긋날 수 있어요).")
             except (TypeError, ValueError):
                 pass
         return collect_limits.server_says(name, reply.headers)
@@ -150,7 +150,7 @@ def save_page(found, record, i, rows, size, **more):
 
 
 def duck():
-    """결과를 만들 DuckDB(메모리). 설정의 작업 메모리 상한과 넘칠 때 쓸 임시 폴더를 준다. (연결, 임시 폴더)"""
+    """결과를 만들 DuckDB(메모리). 설정의 메모리 한도과 넘칠 때 쓸 임시 폴더를 준다. (연결, 임시 폴더)"""
     folder = scratch.make()
     memory = settings.load().get("memory")
     try:
@@ -169,7 +169,7 @@ def finish_api(config, path, found, record):
     files = [str(f) for f in files if f.exists()]
     if not files:
         clean(found)
-        update(message="받은 기록이 없어 결과 파일을 만들지 않았습니다.")
+        update(message="받은 기록이 없어 결과 파일을 만들지 않았어요.")
         return False
     types = {name: req.column_type(record["kinds"].get(name, [])) for name in record["columns"]}
     con, folder = duck()
@@ -192,7 +192,7 @@ def deduped(table, columns, rename=None):
     columns = [(rename or {}).get(c, c) for c in columns]
     missing = [c for c in columns if c not in table.columns]
     if missing:
-        raise Halt(f"중복 기준 컬럼이 결과에 없습니다: {', '.join(missing)}")
+        raise Halt(f"중복 기준 컬럼이 결과에 없어요: {', '.join(missing)}")
     first = ibis.row_number().over(group_by=columns, order_by=table[ORDER])
     return table.mutate(_first=first).filter(lambda t: t._first == 0).drop("_first")
 
@@ -244,5 +244,5 @@ def replace(found, path):
         os.replace(found["out"], path)
     except PermissionError:
         found["out"].unlink(missing_ok=True)
-        raise Halt("다른 프로그램이 파일을 쓰고 있습니다. 그 프로그램에서 결과 파일을 닫고 다시 시작하세요(받은 것은 남아 있어 이어서 바꿉니다).") from None
+        raise Halt("다른 프로그램이 파일을 쓰고 있어요. 그 프로그램에서 결과 파일을 닫고 다시 시작하세요(받은 것은 남아 있어 이어서 바꿔요).") from None
     clean(found)

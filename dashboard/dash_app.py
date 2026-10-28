@@ -104,7 +104,7 @@ def card_compute():
     card = dash_store.check_card((request.json or {}).get("card") or {})
     now = dash_store.current_source()
     if other_source(card["source"].get("key"), now):
-        raise ValueError(f"이 카드는 다른 연결({card['source'].get('label') or card['source']['key']})에서 구한 것입니다. 그 연결로 바꾼 뒤 다시 구하세요.")
+        raise ValueError(f"이 카드는 다른 연결({card['source'].get('label') or card['source']['key']})에서 구한 거예요. 그 연결로 바꾼 뒤 다시 구하세요.")
     return jsonify(data=dash_calc.compute(card, dt.datetime.now().isoformat(timespec="seconds"), request.json.get("ctx")), source=now)
 
 
@@ -115,7 +115,7 @@ def chart_points():
     body = request.json
     now = dash_store.current_source()
     if other_source(body.get("source_key"), now):
-        raise ValueError("이 카드는 다른 연결에서 구한 것입니다. 그 연결로 바꾼 뒤 다시 구하세요.")
+        raise ValueError("이 카드는 다른 연결에서 구한 거예요. 그 연결로 바꾼 뒤 다시 구하세요.")
     body = dash_calc.with_period(body, body.get("date"), (body.get("ctx") or {}).get("range"))  # 대시보드 기간(카드 compute와 같게)
     return jsonify(points=dash_calc.points_of(body, body.get("size")))
 
@@ -198,7 +198,7 @@ def period_parse():
     day = (body.get("as_of") or "").strip() or None
     span = period.parse(body.get("text"), day)
     if not span["error"] and body.get("dashboard") and dash_refresh.timed(span):  # 문장·지표 사전의 기간 칸은 시각도 쓴다
-        span = {**span, "error": "대시보드 기간은 날짜로 써 주세요(시각은 쓰지 않습니다)."}
+        span = {**span, "error": "대시보드 기간은 날짜로 써 주세요(시각은 쓰지 않아요)."}
     return jsonify(span=span, previous=None if span["error"] else period.previous(span), context=dash_refresh.context({"period": body.get("text"), "as_of": day}))
 
 
@@ -228,7 +228,7 @@ def compare_sentences():
     """비교 문장 여러 개({items: [{cur, prev, fmt, mode, label, better, partial}]})를 compare.compare로 만든다."""
     items = (request.json or {}).get("items")
     if not isinstance(items, list) or len(items) > dash_store.MAX_CARDS:
-        raise ValueError(f"비교할 값은 {dash_store.MAX_CARDS}개까지 보낼 수 있습니다.")
+        raise ValueError(f"비교할 값은 {dash_store.MAX_CARDS}개까지 보낼 수 있어요.")
     keys = ("cur", "prev", "fmt", "mode", "label", "better", "partial")
     return jsonify(results=[compare.compare(**{k: i[k] for k in keys if k in i}) for i in items])
 
@@ -266,7 +266,7 @@ def dash_image():
     d = dash_store.get_dashboard(request.args.get("dash"))
     card = next((c for c in d["cards"] if c["id"] == request.args.get("card")), None)
     if card is None or card["kind"] != "map" or card["view"].get("bg") != "image" or not card["view"].get("image_path"):
-        raise ValueError("그림 바탕이 정해진 배치도 카드가 아닙니다. 카드를 저장한 뒤 다시 여세요.")
+        raise ValueError("그림 바탕이 정해진 배치도 카드가 아니에요. 카드를 저장한 뒤 다시 여세요.")
     path = Path(card["view"]["image_path"])
     if path.suffix.lower() not in IMAGE_TYPES:
         raise ValueError("그림은 png·jpg·svg 파일만 쓸 수 있어요.")

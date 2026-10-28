@@ -111,9 +111,9 @@ def test_success_notice_has_no_error_line(monkeypatch):
     sent = []
     monkeypatch.setattr(notify, "send", lambda n, p: sent.append(p))
     monkeypatch.setattr(s, "schedules", lambda: {"c": {"notify": "x", "notify_on": "always"}})
-    assert s.tell("c", "끝", 10, 3.0, "이어 받습니다.") == ""
+    assert s.tell("c", "끝", 10, 3.0, "이어 받아요.") == ""
     assert "오류" not in sent[-1]["text"]
-    s.tell("c", "실패", None, 3.0, "연결이 거부되었습니다")
+    s.tell("c", "실패", None, 3.0, "연결이 거부됐어요")
     assert "오류:" in sent[-1]["text"]
 
 
@@ -130,7 +130,7 @@ def test_notify_failure_of_any_kind_still_ends_run(folder, monkeypatch):
     rid = s.add_run("c", "windows")
     s.finish(rid, "c", "실패", None, 1.0, "x")
     run = next(r for r in s.read_runs() if r["id"] == rid)
-    assert run["result"] == "실패" and "알림을 보내지 못했습니다" in run["message"]
+    assert run["result"] == "실패" and "알림을 보내지 못했어요" in run["message"]
 
 
 def test_end_run_happens_even_if_tell_raises_unexpectedly(folder, monkeypatch):

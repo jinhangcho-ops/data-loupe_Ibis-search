@@ -83,7 +83,7 @@ def arrange(body, table, last, select=True):
 
 STAGE = ("schema", "base", "union", "joins", "periods", "conditions")  # 받아 둘 결과(기간·조건까지)를 정하는 요청 값. 계산·정렬·표시 컬럼은 받아 둔 것 위에서 한다
 PC_TOO_BIG = (f"이 연결은 이 계산(창 함수·펼치기 등)을 하지 못해 이 PC에서 하려 했지만, 기간·조건까지의 결과가 {held.MAX_ROWS:,}행"
-              f"(또는 {held.MAX_BYTES // 1024 // 1024}MB)을 넘어 받지 않았습니다. 기간·조건을 좁히거나 DuckDB 파일로 옮겨 쓰세요.")
+              f"(또는 {held.MAX_BYTES // 1024 // 1024}MB)을 넘어 받지 않았어요. 기간·조건을 좁히거나 DuckDB 파일로 옮겨 쓰세요.")
 
 
 def held_key(kind, what):
@@ -124,7 +124,7 @@ class Confirm(Exception):
     """원격 DB에서 사본을 받기 전에 처리 용량 확인이 필요함. response는 화면에 돌려줄 확인 응답(X-Needs-Confirm)."""
 
     def __init__(self, response):
-        super().__init__("처리 용량 확인이 필요합니다.")
+        super().__init__("처리 용량 확인이 필요해요.")
         self.response = response
 
 
@@ -213,7 +213,7 @@ def using(fresh=False, renewed=None):
     fresh면 이 안에서 쓰는 PC 사본을 처음 쓸 때 새로 받는다(Slack 질의: 안의 질의는 새로 받은 사본을 나눠 쓴다). renewed(열쇠 집합)를 주면
     여러 번의 using이 그 집합을 나눠 써 사본을 작업 하나에 한 번만 새로 받는다(새로고침: 카드마다 차례를 다시 잡는다). 쓰지 않는 사본은 건드리지 않는다."""
     if not server.turn.acquire(timeout=TURN_WAIT):
-        raise ValueError("프로그램이 다른 작업 중입니다. 잠시 뒤 다시 하세요.")
+        raise ValueError("프로그램이 다른 작업 중이에요. 잠시 뒤 다시 하세요.")
     try:
         if server.state["con"] is None:
             raise ValueError("프로그램에서 먼저 데이터에 연결하세요.")

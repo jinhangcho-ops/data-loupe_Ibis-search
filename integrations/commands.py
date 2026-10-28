@@ -40,7 +40,7 @@ def split(text):
     try:
         words = shlex.split(text.strip())
     except ValueError:
-        raise ValueError("따옴표가 닫히지 않았습니다.") from None
+        raise ValueError("따옴표가 닫히지 않았어요.") from None
     if not words:
         return "도움", [], {}
     plain, named = [], {}
@@ -70,13 +70,13 @@ def check_size(body):
     sql, dialect = server.expr_sql(con, querying.filtered(body))
     found = server.run(lambda: scan_size.limit_check(con, sql, server.state["opened"], dialect))
     if found["over"] or found["unknown"]:
-        raise ValueError(f"처리할 데이터가 커서(또는 크기를 알 수 없어서) Slack에서는 실행하지 않습니다. {found['text']} 프로그램에서 실행하세요.")
+        raise ValueError(f"처리할 데이터가 커서(또는 크기를 알 수 없어서) Slack에서는 실행하지 않아요. {found['text']} 프로그램에서 실행하세요.")
 
 
 def metric_list():
     found = metric_file.registry()
     if not found:
-        return "지표 파일을 고르지 않았습니다. 프로그램의 [지표] 탭에서 지표 파일을 읽으세요."
+        return "지표 파일을 고르지 않았어요. 프로그램의 [지표] 탭에서 지표 파일을 읽으세요."
     order = use_counts.order("metrics", list(found))
     return "지표:\n" + listed([f"{n}" + (f" — {found[n]['description']}" if found[n]["description"] else "") for n in order], "")
 
@@ -100,7 +100,7 @@ def metric_answer(plain, named):
 
 def search_list():
     found = settings.searches()
-    return "저장한 검색:\n" + listed(use_counts.order("searches", list(found)), "") if found else "저장한 검색이 없습니다. 프로그램의 [탐색]에서 검색을 저장하세요."
+    return "저장한 검색:\n" + listed(use_counts.order("searches", list(found)), "") if found else "저장한 검색이 없어요. 프로그램의 [탐색]에서 검색을 저장하세요."
 
 
 def search_answer(plain, named):
@@ -124,7 +124,7 @@ def question_answer(text):
         ctx = server.run(lambda: nl2sql.context(con, server.connection_key(), None, vts))
         known = source.list_tables(con) + list(vts)
     sql = nl2sql.ask(text, ctx, sql_exec.dialect_of(con), known)  # LLM에 묻는 동안은 차례를 잡지 않는다
-    return f"만든 SQL(실행하지 않았습니다. 프로그램의 SQL 탭에서 확인하고 실행하세요):\n```\n{sql}\n```"
+    return f"만든 SQL(실행하지 않았어요. 프로그램의 SQL 탭에서 확인하고 실행하세요):\n```\n{sql}\n```"
 
 
 def error_text(e):
@@ -132,8 +132,8 @@ def error_text(e):
     그 밖의 오류(DB·라이브러리 오류, ValueError의 하위 오류인 pyarrow ArrowInvalid 등)는 DB가 데이터 값을 문장에 넣을 수 있어 예약 알림과 같은 허용 목록(schedule.notice_text)의 정해진 문구만 보낸다."""
     message = str(e)
     if type(e) is ValueError and not VALUE_ERRORS.search(message) and not PYTHON_VALUE.search(message):
-        return f"할 수 없습니다: {source.mask(message, server.state['passwords'])}"
-    return f"할 수 없습니다: {source.mask(notice_text(message) or '실패했습니다', server.state['passwords'])}"
+        return f"할 수 없어요: {source.mask(message, server.state['passwords'])}"
+    return f"할 수 없어요: {source.mask(notice_text(message) or '실패했어요', server.state['passwords'])}"
 
 
 failure = threading.local()  # answer가 방금 삼킨 오류의 전체 글(이 스레드). Slack에는 안 나가고, 봇 기록(메모리)에만 남기려고 어댑터가 읽는다
@@ -157,7 +157,7 @@ def answer(text):
             return metric_answer(plain, named) if plain else metric_list()
         if command == "검색":
             return search_answer(plain, named) if plain else search_list()
-        return f"모르는 명령입니다: {command}\n{HELP}"
+        return f"모르는 명령이에요: {command}\n{HELP}"
     except Exception as e:  # 연결 오류 등의 문구에 비밀번호가 있으면 가린다
         failure.error = detail(e)
         return error_text(e)

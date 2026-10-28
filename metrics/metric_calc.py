@@ -71,7 +71,7 @@ def check_unit(unit):
     """묶음 단위: day·week·month 또는 N일(1 이상 정수)."""
     if unit in UNITS or (isinstance(unit, int) and not isinstance(unit, bool) and unit >= 1):
         return unit
-    raise ValueError("기간 묶음은 day·week·month 중 하나이거나 1 이상의 일수여야 합니다.")
+    raise ValueError("기간 묶음은 day·week·month 중 하나이거나 1 이상의 일수여야 해요.")
 
 
 def bucket_index(col, unit):
@@ -135,7 +135,7 @@ def add_sessions(table, user, time, gap_minutes=None, key=None):
             session = session + ibis.literal("|") + part
         return table.mutate(session=session)
     if isinstance(gap_minutes, bool) or not isinstance(gap_minutes, (int, float)) or not gap_minutes > 0:
-        raise ValueError("세션을 나눌 간격(분)은 0보다 큰 숫자여야 합니다.")
+        raise ValueError("세션을 나눌 간격(분)은 0보다 큰 숫자여야 해요.")
     t = table.mutate(_sec=epoch(table[time]))
     ordered = ibis.window(group_by=user, order_by=time)
     t = t.mutate(_new=((t._sec - t._sec.lag().over(ordered)) > gap_minutes * 60).fill_null(True).cast("int64"))
@@ -184,7 +184,7 @@ def concurrency_stats(times, counts, start=None, end=None):
     lo = times[0] if start is None else np.datetime64(start, "us")
     hi = times[-1] if end is None else np.datetime64(end, "us")
     if hi < lo:
-        raise ValueError("기간의 끝이 시작보다 앞입니다.")
+        raise ValueError("기간의 끝이 시작보다 앞이에요.")
     secs = (times - lo) / np.timedelta64(1, "s")  # 변화 시각(기간 시작 기준 초)
     total = float((hi - lo) / np.timedelta64(1, "s"))
     levels = np.concatenate(([0.0], np.asarray(counts, dtype=float)))
@@ -292,7 +292,7 @@ def user_states(table, user, time, unit="month", inactive_days=None, notes=None)
     unit에 일수 N을 주면 N일 묶음마다 본다. 첫 기간은 앞 기간이 없어 churned 등이 None이다. notes(목록)를 주면 기간 칸이 활동 칸보다 훨씬 많을 때 안내를 더한다."""
     check_unit(unit)
     if inactive_days is not None and (isinstance(inactive_days, bool) or not isinstance(inactive_days, int) or inactive_days < 1):
-        raise ValueError("미접속 기준은 1 이상의 일수여야 합니다.")
+        raise ValueError("미접속 기준은 1 이상의 일수여야 해요.")
     active, new, kept = state_counts(active_buckets(table, user, time, unit))
     if not active:
         return []
@@ -335,9 +335,9 @@ def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=
     classic = 정확히 N에 활동한 비율, rolling = N 이후에라도 활동한(마지막 활동 ≥ N) 비율, range = span=(a, b) 안에 활동한 비율(값이 하나)."""
     check_unit(unit)
     if mode not in ("classic", "rolling", "range"):
-        raise ValueError("코호트 방식은 classic·rolling·range 중 하나입니다.")
+        raise ValueError("코호트 방식은 classic·rolling·range 중 하나예요.")
     if mode == "range" and not (isinstance(span, (tuple, list)) and len(span) == 2 and 0 <= span[0] <= span[1]):
-        raise ValueError("range 방식에는 span=(시작 N, 끝 N)이 있어야 합니다(0 ≤ 시작 ≤ 끝).")
+        raise ValueError("range 방식에는 span=(시작 N, 끝 N)이 있어야 해요(0 ≤ 시작 ≤ 끝).")
     act = active_buckets(table, user, time, unit)
     first = act.group_by("u").aggregate(f=act.p.min())
     j = act.join(first, "u")
@@ -414,7 +414,7 @@ def ltv(table, user, time, amount, n_days, unit="day"):
     complete = 코호트의 마지막 날 + N일이 자료의 마지막 날 안이면 참(아니면 아직 N일이 다 안 지난 사람이 있다)."""
     need(table, user, time, amount)
     if isinstance(n_days, bool) or not isinstance(n_days, int) or n_days < 0:
-        raise ValueError("N일은 0 이상의 정수여야 합니다.")
+        raise ValueError("N일은 0 이상의 정수여야 해요.")
     check_unit(unit)
     t = table.select(u=table[user], day=day_index(table[time]), p=bucket_index(table[time], unit), amt=table[amount].fill_null(0))
     t = t.filter(t.u.notnull(), t.day.notnull())
@@ -479,7 +479,7 @@ def pareto_share(values, top=0.2):
 def tier_shares(values, whale_min, dolphin_min):
     """Whale(≥ whale_min)·Dolphin(≥ dolphin_min)·Minnow(그 아래)별 사람 수·합계와 몫 {이름: {users, user_share, total, total_share}}. 기준 금액은 분위수나 직접 적은 값이다."""
     if whale_min < dolphin_min:
-        raise ValueError("Whale 기준은 Dolphin 기준 이상이어야 합니다.")
+        raise ValueError("Whale 기준은 Dolphin 기준 이상이어야 해요.")
     x = np.asarray(values, dtype=float)
     masks = {"whale": x >= whale_min, "dolphin": (x >= dolphin_min) & (x < whale_min), "minnow": x < dolphin_min}
     total = float(x.sum())
@@ -495,9 +495,9 @@ def kaplan_meier(durations, observed):
     d = np.asarray(durations, dtype=float)
     e = np.asarray(observed, dtype=bool)
     if len(d) == 0 or len(d) != len(e):
-        raise ValueError("기간과 사건 여부는 같은 길이의 비어 있지 않은 목록이어야 합니다.")
+        raise ValueError("기간과 사건 여부는 같은 길이의 비어 있지 않은 목록이어야 해요.")
     if (d < 0).any():
-        raise ValueError("기간은 0 이상이어야 합니다.")
+        raise ValueError("기간은 0 이상이어야 해요.")
     times, events = np.unique(d[e], return_counts=True)  # 정렬 한 번 + 이진 탐색으로 O(N log N)
     at_risk = len(d) - np.searchsorted(np.sort(d), times, side="left")  # 그 시각 이상 남은 수
     survival = np.cumprod(1 - events / at_risk) if len(times) else np.array([])
@@ -512,7 +512,7 @@ def binary(y, name):
     """0/1(참거짓) 배열로."""
     a = np.asarray(y)
     if a.ndim != 1 or len(a) == 0 or not np.isin(a, (0, 1)).all():
-        raise ValueError(f"{name}은 0과 1(또는 참거짓)만 든 비어 있지 않은 목록이어야 합니다.")
+        raise ValueError(f"{name}은 0과 1(또는 참거짓)만 든 비어 있지 않은 목록이어야 해요.")
     return a.astype(bool)
 
 
@@ -520,7 +520,7 @@ def confusion(y_true, y_pred):
     """혼동 행렬 {tp, fp, fn, tn}."""
     t, p = binary(y_true, "정답"), binary(y_pred, "예측")
     if len(t) != len(p):
-        raise ValueError("정답과 예측의 길이가 다릅니다.")
+        raise ValueError("정답과 예측의 길이가 달라요.")
     return {"tp": int((t & p).sum()), "fp": int((~t & p).sum()), "fn": int((t & ~p).sum()), "tn": int((~t & ~p).sum())}
 
 
@@ -529,7 +529,7 @@ def average_precision(y_true, score):
     t = binary(y_true, "정답")
     s = np.asarray(score, dtype=float)
     if len(t) != len(s):
-        raise ValueError("정답과 점수의 길이가 다릅니다.")
+        raise ValueError("정답과 점수의 길이가 달라요.")
     if not t.any():
         return None
     order = np.argsort(-s, kind="stable")
@@ -545,7 +545,7 @@ def classification_metrics(y_true, y_pred=None, score=None, threshold=0.5):
     """분류 지표 {tp, fp, fn, tn, precision, recall, f1, accuracy, pr_auc}. y_pred가 없으면 score ≥ threshold로 예측한다. score가 없으면 pr_auc는 None."""
     if y_pred is None:
         if score is None:
-            raise ValueError("예측(y_pred)이나 점수(score)가 있어야 합니다.")
+            raise ValueError("예측(y_pred)이나 점수(score)가 있어야 해요.")
         y_pred = np.asarray(score, dtype=float) >= threshold
     c = confusion(y_true, y_pred)
     precision, recall = ratio(c["tp"], c["tp"] + c["fp"]), ratio(c["tp"], c["tp"] + c["fn"])
@@ -557,7 +557,7 @@ def classification_metrics(y_true, y_pred=None, score=None, threshold=0.5):
 def check_k(k):
     """K가 1 이상의 정수인지 본다."""
     if isinstance(k, bool) or not isinstance(k, int) or k < 1:
-        raise ValueError("K는 1 이상의 정수여야 합니다.")
+        raise ValueError("K는 1 이상의 정수여야 해요.")
 
 
 def dcg(relevances, k):
@@ -592,7 +592,7 @@ def regression_metrics(y_true, y_pred):
     """RMSE·MAE·MAPE {n, rmse, mae, mape, excluded}. MAPE는 정답 0인 행을 빼고(excluded = 뺀 수) 비율(0.1 = 10%)로 낸다."""
     t, p = np.asarray(y_true, dtype=float), np.asarray(y_pred, dtype=float)
     if len(t) == 0 or len(t) != len(p):
-        raise ValueError("정답과 예측은 같은 길이의 비어 있지 않은 목록이어야 합니다.")
+        raise ValueError("정답과 예측은 같은 길이의 비어 있지 않은 목록이어야 해요.")
     err = p - t
     keep = t != 0
     return {"n": int(len(t)), "rmse": float(np.sqrt((err ** 2).mean())), "mae": float(np.abs(err).mean()),
@@ -625,7 +625,7 @@ def poly(coefs, x):
 def norm_ppf(p):
     """표준정규분포의 역누적(Acklam 근사). 0 < p < 1."""
     if not 0 < p < 1:
-        raise ValueError("확률은 0과 1 사이여야 합니다.")
+        raise ValueError("확률은 0과 1 사이여야 해요.")
     if p < ACK_LOW or p > 1 - ACK_LOW:
         q = math.sqrt(-2 * math.log(min(p, 1 - p)))
         x = poly(ACK_C, q) / (poly(ACK_D, q) * q + 1)
@@ -643,7 +643,7 @@ def lift(treatment, control):
 def two_proportion_z(x1, n1, x2, n2):
     """두 비율 z 검정(합친 비율, 양측) {p1, p2, diff, lift, z, p}. p = erfc(|z| / √2). 1이 대조군, 2가 실험군."""
     if min(n1, n2) <= 0 or not (0 <= x1 <= n1 and 0 <= x2 <= n2):
-        raise ValueError("표본 수는 0보다 크고 성공 수는 0 이상 표본 수 이하여야 합니다.")
+        raise ValueError("표본 수는 0보다 크고 성공 수는 0 이상 표본 수 이하여야 해요.")
     p1, p2, pool = x1 / n1, x2 / n2, (x1 + x2) / (n1 + n2)
     se = math.sqrt(pool * (1 - pool) * (1 / n1 + 1 / n2))
     z = (p2 - p1) / se if se else None
@@ -739,10 +739,10 @@ def t_crit(alpha, df):
 def welch_from_stats(mean1, sd1, n1, mean2, sd2, n2):
     """Welch t 검정(요약값에서, 양측) {diff, t, df, p}. 1이 대조군, 2가 실험군, sd는 표본 표준편차(n−1)."""
     if min(n1, n2) < 2:
-        raise ValueError("각 집단의 표본은 2개 이상이어야 합니다.")
+        raise ValueError("각 집단의 표본은 2개 이상이어야 해요.")
     v1, v2 = sd1 ** 2 / n1, sd2 ** 2 / n2
     if v1 + v2 == 0:
-        raise ValueError("두 집단의 값이 모두 같아 검정할 수 없습니다.")
+        raise ValueError("두 집단의 값이 모두 같아 검정할 수 없어요.")
     t = (mean2 - mean1) / math.sqrt(v1 + v2)
     df = (v1 + v2) ** 2 / (v1 ** 2 / (n1 - 1) + v2 ** 2 / (n2 - 1))
     return {"diff": mean2 - mean1, "t": t, "df": df, "p": t_two_sided_p(t, df)}
@@ -751,7 +751,7 @@ def welch_from_stats(mean1, sd1, n1, mean2, sd2, n2):
 def check_alpha(alpha, power=0.8):
     """유의수준·검정력이 0과 1 사이인지 본다."""
     if not (0 < alpha < 1 and 0 < power < 1):
-        raise ValueError("유의수준과 검정력은 0과 1 사이여야 합니다.")
+        raise ValueError("유의수준과 검정력은 0과 1 사이여야 해요.")
 
 
 def power_normal(effect, se, alpha=0.05):
@@ -772,7 +772,7 @@ def mde_normal(se, alpha=0.05, power=0.8):
 def prop_se(p1, p2, n1, n2):
     """두 비율 차이의 표준오차(합치지 않은 분산)."""
     if min(n1, n2) <= 0:
-        raise ValueError("표본 수는 0보다 커야 합니다.")
+        raise ValueError("표본 수는 0보다 커야 해요.")
     return math.sqrt(p1 * (1 - p1) / n1 + p2 * (1 - p2) / n2)
 
 

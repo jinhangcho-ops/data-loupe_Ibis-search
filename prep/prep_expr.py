@@ -15,15 +15,15 @@ INT_TYPES = [("int8", -(2**7), 2**7 - 1), ("int16", -(2**15), 2**15 - 1), ("int3
 
 def check_spec(name, spec):
     if not isinstance(spec, dict) or not set(spec) <= {"keep", "rename", "ops"}:
-        raise ValueError(f"'{name}' 컬럼의 설정은 keep, rename, ops만 쓸 수 있습니다.")
+        raise ValueError(f"'{name}' 컬럼의 설정은 keep, rename, ops만 쓸 수 있어요.")
     if not isinstance(spec.get("keep", True), bool) or not isinstance(spec.get("rename", ""), str) or not isinstance(spec.get("ops", {}), dict):
-        raise ValueError(f"'{name}' 컬럼의 keep은 true/false, rename은 글자, ops는 객체여야 합니다.")
+        raise ValueError(f"'{name}' 컬럼의 keep은 true/false, rename은 글자, ops는 객체여야 해요.")
 
 
 def names_of(recipe, key):
     names = recipe.get(key) or []
     if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
-        raise ValueError(f"'{key}'은 컬럼 이름 목록이어야 합니다.")
+        raise ValueError(f"'{key}'은 컬럼 이름 목록이어야 해요.")
     return names
 
 
@@ -32,10 +32,10 @@ def copy_columns(t, copies):
     order, base = list(t.columns), t.columns
     for i, copy in enumerate(copies):
         if not isinstance(copy, dict) or set(copy) != {"from", "name"} or not isinstance(copy["name"], str):
-            raise ValueError('copies의 각 항목은 {"from": "원래 컬럼", "name": "새 이름"} 형식이어야 합니다.')
+            raise ValueError('copies의 각 항목은 {"from": "원래 컬럼", "name": "새 이름"} 형식이어야 해요.')
         parse.check_name(copy["from"], base)
         if not copy["name"] or copy["name"].lower() in {c.lower() for c in order}:
-            raise ValueError(f"복사한 컬럼의 이름 '{copy['name']}'이 비었거나 이미 있습니다.")
+            raise ValueError(f"복사한 컬럼의 이름 '{copy['name']}'이 비었거나 이미 있어요.")
         order.insert(order.index(copy["from"]) + 1 + sum(c["from"] == copy["from"] for c in copies[:i]), copy["name"])
         t = t.mutate(**{copy["name"]: t[copy["from"]]})
     return t.select(order)
@@ -115,12 +115,12 @@ def shape(con, recipe, table=None, info=None, refs=None):
     dropped = names_of(recipe, "drop")
     layout = [item for item in layout if not (item[3] and item[1] in dropped)]  # 파생 컬럼만 뺀다. 없는 이름은 무시한다.
     if not layout:
-        raise ValueError("남길 컬럼이 없습니다.")
+        raise ValueError("남길 컬럼이 없어요.")
     results = [item[1] for item in layout]
     lowered, named = [new.lower() for new in results], {item[1] for item in layout if item[3] or item[0] != item[1]}  # named: 사용자가 지은 이름(파생·이름 바꾸기)
     for new in results:
         if results.count(new) > 1 or lowered.count(new.lower()) > 1 and new in named:  # 지은 이름은 대소문자만 달라도 저장할 때 같은 컬럼(원래 테이블의 Name·name은 그대로 둔다)
-            raise ValueError(f"결과에 '{new}' 컬럼이 둘 이상입니다. 이름을 바꾸세요.")
+            raise ValueError(f"결과에 '{new}' 컬럼이 둘 이상이에요. 이름을 바꾸세요.")
     t = t.select(*[t[old].name(new) for old, new, *_ in layout])
     return t, {new: (src, derived) for _, new, src, derived in layout}
 
@@ -153,12 +153,12 @@ def keep_choice(recipe):
     keep = recipe.get("dedupe_keep")
     keep = {"how": keep} if isinstance(keep, str) and keep else keep or {}
     if not isinstance(keep, dict) or not set(keep) <= {"how", "order", "sep"}:
-        raise ValueError('dedupe_keep은 글자나 {"how": …, "order": ["컬럼 [desc]"], "sep": ","} 모양이어야 합니다.')
+        raise ValueError('dedupe_keep은 글자나 {"how": …, "order": ["컬럼 [desc]"], "sep": ","} 모양이어야 해요.')
     how, order, sep = keep.get("how") or "any", keep.get("order") or [], keep.get("sep", ",")
     if how not in (*KEEP_ROWS, *sql_funcs.REPRESENTATIVE):
-        raise ValueError(f"dedupe_keep의 how는 {', '.join(dict.fromkeys((*KEEP_ROWS, *sql_funcs.REPRESENTATIVE)))} 중 하나입니다.")
+        raise ValueError(f"dedupe_keep의 how는 {', '.join(dict.fromkeys((*KEEP_ROWS, *sql_funcs.REPRESENTATIVE)))} 중 하나예요.")
     if not isinstance(order, list) or not all(isinstance(o, str) for o in order) or not isinstance(sep, str):
-        raise ValueError("dedupe_keep의 order는 '컬럼 [asc|desc]' 글자의 목록, sep는 글자여야 합니다.")
+        raise ValueError("dedupe_keep의 order는 '컬럼 [asc|desc]' 글자의 목록, sep는 글자여야 해요.")
     return how, order, sep
 
 
@@ -181,7 +181,7 @@ def merged(t, columns, how, order, sep):
         try:
             aggs[name] = sql_funcs.pick(how, t, name, order, sep)
         except ValueError as e:
-            raise ValueError(f"'{name}' 컬럼에 '{sql_funcs.REPRESENTATIVE[how][0]}'을(를) 쓸 수 없습니다: {e}") from None
+            raise ValueError(f"'{name}' 컬럼에 '{sql_funcs.REPRESENTATIVE[how][0]}'을(를) 쓸 수 없어요: {e}") from None
     found = t.group_by([t[c] for c in columns]).aggregate(**aggs)
     return found.select(*t.columns)
 
@@ -195,7 +195,7 @@ def dedupe_rows(t, columns, recipe):
         return first_rows(t, columns)
     if how in ("first", "last"):
         if not order:
-            raise ValueError("마지막 행을 남기려면 dedupe_keep의 order(정렬 기준)가 필요합니다.")
+            raise ValueError("마지막 행을 남기려면 dedupe_keep의 order(정렬 기준)가 필요해요.")
         return nth_row(t, columns, order, how == "last")
     return merged(t, columns, how, order, sep)
 

@@ -23,7 +23,7 @@ def test_duckdb_columns(db):
     one = scan_size.estimate(db, "select name from orders where id > 5")  # name(글자 16) + id(8)
     assert one == {"bytes": 1000 * (scan_size.STRING_BYTES + 8), "exact": False, "how": "DuckDB 행 수 × 컬럼 크기"}
     assert scan_size.estimate(db, "select * from orders")["bytes"] == 1000 * (scan_size.STRING_BYTES + 8 + 16)  # amt는 decimal(16)
-    assert scan_size.message(one) == "실행하면 약 23.4 KB를 처리합니다(추정 · DuckDB 행 수 × 컬럼 크기)"
+    assert scan_size.message(one) == "실행하면 약 23.4 KB를 처리해요(추정 · DuckDB 행 수 × 컬럼 크기)"
 
 
 def test_files(tmp_path):
@@ -58,7 +58,7 @@ def test_unknown_and_bigquery(db, monkeypatch):
     bq = types.SimpleNamespace(name="bigquery", dialect="bigquery", client=Client())
     found = scan_size.estimate(bq, "select a from ds.t")
     assert found == {"bytes": 5 * 1024 ** 3, "exact": True, "how": "BigQuery dry run"} and seen == [("select a from ds.t", True)]
-    assert scan_size.message(found) == "실행하면 5.0 GB를 처리합니다(정확 · BigQuery dry run)"
+    assert scan_size.message(found) == "실행하면 5.0 GB를 처리해요(정확 · BigQuery dry run)"
 
 
 def test_safe_never_raises():
@@ -82,7 +82,7 @@ def test_limit_check(db, monkeypatch):
     sql = "select name from orders"  # 1000행 × 16B = 16,000B
     small = scan_size.limit_check(db, sql, config={"memory": 256})
     assert small["bytes"] == 16_000 and not small["over"] and not small["unknown"] and small["limit"] == 256_000_000
-    assert small["tables"] == ["orders"] and small["columns"] == ["name"] and "작업 메모리 상한 0.256 GB" in small["text"]
+    assert small["tables"] == ["orders"] and small["columns"] == ["name"] and "메모리 한도 0.256 GB" in small["text"]
     from core import monitor
     monkeypatch.setattr(monitor, "available", lambda: 10_000)  # 제한 없음 → 지금 PC의 사용 가능 메모리
     big = scan_size.limit_check(db, "select * from orders", config={})
@@ -143,7 +143,7 @@ def test_server_gate(client, tmp_path, folder):
     from core import monitor
     mp = pytest.MonkeyPatch()
     try:
-        mp.setattr(scan_size, "limit", lambda config=None: (1000, "작업 메모리 상한 테스트"))
+        mp.setattr(scan_size, "limit", lambda config=None: (1000, "메모리 한도 테스트"))
         ask = post_json(client, "/api/sql/run", sql="select * from orders", rows=5)
         d = ask.get_json()
         assert ask.headers["X-Needs-Confirm"] == "1" and d["needs_confirm"] and d["over"] and not d["blocked"] and "읽어요" in d["text"] and "rows" not in d
@@ -173,7 +173,7 @@ def test_gate_on_explore_and_prep(client, tmp_path, folder, monkeypatch):
     with duckdb.connect(str(path)) as c:
         c.execute("create table orders as select i as id, 'x' || i as name from range(1000) t(i)")
     server.state.update(con=ibis.duckdb.connect(str(path), read_only=True), opened={"kind": "folder", "path": str(tmp_path), "file": str(path)})
-    monkeypatch.setattr(scan_size, "limit", lambda config=None: (1000, "작업 메모리 상한 테스트"))
+    monkeypatch.setattr(scan_size, "limit", lambda config=None: (1000, "메모리 한도 테스트"))
     query = dict(base="orders", joins=[], conditions=[], periods=[], sorts=[], columns=[], limit=5)
     asked = client.post("/api/query", json=query)
     assert asked.headers.get("X-Needs-Confirm") == "1" and "orders" in asked.get_json()["tables"]
@@ -226,7 +226,7 @@ def test_remote_rows_from_plan_times_schema_width(pretend_remote, sent):
     found = scan_size.limit_check(pretend_remote, "select id, name, note from orders", config={"memory": 256})
     assert found["remote"] and found["bytes"] == 1000 * (8 + scan_size.WIDE_STRING * 2) and not found["over"]  # 실행 계획의 ~1,000 rows × 타입 어림 한 행 72바이트
     assert "실행 계획 추정" in found["how"] and "스키마" in found["how"] and "약 1,000행 × 행당 약 72바이트" in found["how"]
-    assert "PC로 약 " in found["text"] and "받아요(추정" in found["text"] and "작업 메모리 상한 0.256 GB" in found["text"]
+    assert "PC로 약 " in found["text"] and "받아요(추정" in found["text"] and "메모리 한도 0.256 GB" in found["text"]
     assert scanning(sent) == []  # COUNT도, 표본(LIMIT)도, 어떤 조회도 보내지 않았다
 
 
@@ -347,8 +347,8 @@ def test_bigquery_partitions_and_dry_run(folder, tmp_path, monkeypatch):
 
 def test_server_gate_remote(client, pretend_remote, monkeypatch, sent):
     """원격 DB: 검색·SQL 실행은 PC로 받는 양을 메타데이터로만 어림해 묻고, 저장·집계는 묻지 않으며, COUNT·표본을 보내지 않는다."""
-    small = lambda config=None: (10_000, "작업 메모리 상한 테스트")
-    big = lambda config=None: (10**9, "작업 메모리 상한 테스트")
+    small = lambda config=None: (10_000, "메모리 한도 테스트")
+    big = lambda config=None: (10**9, "메모리 한도 테스트")
     monkeypatch.setattr(scan_size, "limit", small)
     query = dict(base="orders", joins=[], conditions=[], periods=[], sorts=[], columns=[], limit=5, fresh=True)
     asked = client.post("/api/query", json=query)
@@ -373,7 +373,7 @@ def test_server_gate_remote(client, pretend_remote, monkeypatch, sent):
 
 
 def test_prep_run_remote_copy_checks_without_counting(client, pretend_remote, monkeypatch, sent):
-    monkeypatch.setattr(scan_size, "limit", lambda config=None: (10_000, "작업 메모리 상한 테스트"))
+    monkeypatch.setattr(scan_size, "limit", lambda config=None: (10_000, "메모리 한도 테스트"))
     recipe = {"base": "orders", "columns": {}}
     ask = client.post("/api/run", json={"recipe": recipe, "target": {"kind": "file", "format": "csv"}})
     d = ask.get_json()
@@ -382,7 +382,7 @@ def test_prep_run_remote_copy_checks_without_counting(client, pretend_remote, mo
 
 
 def test_fetch_stops_at_byte_limit(pretend_remote, monkeypatch):
-    """받는 중 받은 크기가 작업 메모리 상한을 넘으면 곧 멈추고, 받던 것을 지운다."""
+    """받는 중 받은 크기가 메모리 한도를 넘으면 곧 멈추고, 받던 것을 지운다."""
     import threading
 
     from core import held
@@ -391,7 +391,7 @@ def test_fetch_stops_at_byte_limit(pretend_remote, monkeypatch):
     monkeypatch.setattr(monitor, "bound_bytes", lambda config=None: 1000)
     before = set(held.local().list_tables())
     assert held.fetch(("k", 1), table, threading.Event()) == (None, None)  # 행 상한이 있는 쪽: 받지 않았다고 알린다
-    with pytest.raises(ValueError, match="작업 메모리 상한"):
+    with pytest.raises(ValueError, match="메모리 한도"):
         held.fetch(("k", 2), table, threading.Event(), cap=False)  # 작업 사본: 이유와 함께 멈춘다
     assert set(held.local().list_tables()) == before  # 받던 테이블은 지웠다
     monkeypatch.setattr(monitor, "bound_bytes", lambda config=None: 10**9)
@@ -409,6 +409,6 @@ def test_dashboard_refresh_remote_aggregate_sends_nothing(pretend_remote, sent, 
     assert dash_refresh.scan_decision(card, {}) == ""
     assert scanning(sent) == []
     monkeypatch.setattr(dash_calc, "copies_to_pc", lambda c, ctx=None: True)  # PC로 옮기는 카드는 판정하되 COUNT·표본은 없다
-    monkeypatch.setattr(scan_size, "limit", lambda config=None: (10, "작업 메모리 상한 테스트"))
+    monkeypatch.setattr(scan_size, "limit", lambda config=None: (10, "메모리 한도 테스트"))
     assert "PC로 약" in dash_refresh.scan_decision(card, {})
     assert scanning(sent) == []

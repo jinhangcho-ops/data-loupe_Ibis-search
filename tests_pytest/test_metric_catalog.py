@@ -92,7 +92,7 @@ def test_units_match_the_calculation_module_and_startup_stays_light():
 def test_template_makes_catalog_entries_usable_as_metric_templates():
     t = cat.template("catalog:arpu")
     assert t["kind"] == "metric" and t["id"] == "catalog:arpu" and [s["name"] for s in t["slots"]] == ["사용자", "금액"] and cat.is_catalog(t["id"]) and not cat.is_catalog("m03")
-    with pytest.raises(ValueError, match="지표 사전 항목이 없습니다"):
+    with pytest.raises(ValueError, match="지표 사전 항목이 없어요"):
         cat.get("catalog:nothing")
 
 
@@ -118,7 +118,7 @@ def test_availability_reasons():
 def test_wrong_slots_are_refused_with_reasons(events):
     with pytest.raises(ValueError, match="‘사용자’ 칸을 채워 주세요"):
         run("uv", {}, events)
-    with pytest.raises(ValueError, match="'ghost' 컬럼이 없습니다"):
+    with pytest.raises(ValueError, match="'ghost' 컬럼이 없어요"):
         run("uv", {"사용자": "ghost"}, events)
     with pytest.raises(ValueError, match="글자 컬럼이라 쓸 수 없어요"):
         run("gross_revenue", {"금액": "ev"}, events)

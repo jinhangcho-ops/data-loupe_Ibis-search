@@ -86,7 +86,7 @@ WHERE = cond("where", "조건(선택): 이 조건인 행만", True)
 def add(id, category, label, help, args, build, example, kin="any", kout="any", aggregate=False, window=False, table=False, raw=False):
     """사전에 함수 하나를 올린다. 집계는 조건(where) 칸이 저절로 붙는다. raw는 SQL 식 직접 쓰기(식을 만들지 않고 raw_expr로 붙인다)."""
     if id in FUNCS:
-        raise ValueError(f"함수 id가 겹칩니다: {id}")
+        raise ValueError(f"함수 id가 겹쳐요: {id}")
     FUNCS[id] = {"id": id, "category": category, "label": label, "help": help, "args": [*args, WHERE] if aggregate else list(args), "example": example,
                  "kind_in": kin, "kind_out": kout, "aggregate": aggregate, "window": window, "table": table, "raw": raw, "build": build}
 
@@ -126,7 +126,7 @@ def column_value(t, raw, spec, f):
         value = parse.column(t, raw)
     if not kind_fits(spec.get("kinds", "any"), value.type()):
         name = raw if isinstance(raw, str) else value.get_name()
-        raise ValueError(f"'{name}'은(는) {kinds_text(spec['kinds'])} 컬럼이 아니라 {f['label']}에 쓸 수 없습니다.")
+        raise ValueError(f"'{name}'은(는) {kinds_text(spec['kinds'])} 컬럼이 아니라 {f['label']}에 쓸 수 없어요.")
     return value
 
 
@@ -164,7 +164,7 @@ def resolve_one(t, raw, spec, f):
     if kind in ("text", "choice"):
         raw = str(raw)
         if kind == "choice" and raw not in spec["options"]:
-            raise ValueError(f"{f['label']}: '{spec['label']}'은 {', '.join(spec['options'])} 중 하나입니다.")
+            raise ValueError(f"{f['label']}: '{spec['label']}'은 {', '.join(spec['options'])} 중 하나예요.")
         return raw
     if kind == "cond":
         return condition_value(t, raw, spec, f)
@@ -172,7 +172,7 @@ def resolve_one(t, raw, spec, f):
         return column_value(t, raw["col"], {"kinds": "any"}, f) if isinstance(raw, dict) and "col" in raw else raw
     if kind == "dict":
         if not isinstance(raw, dict):
-            raise ValueError(f"{f['label']}: '{spec['label']}'은 객체여야 합니다.")
+            raise ValueError(f"{f['label']}: '{spec['label']}'은 객체여야 해요.")
         return raw
     if kind == "order":
         raw = [raw] if isinstance(raw, (str, ibis.expr.types.Value)) else raw
@@ -186,7 +186,7 @@ def resolve_one(t, raw, spec, f):
         out = []
         for item in raw:
             if not isinstance(item, dict) or "when" not in item or "then" not in item:
-                raise ValueError(f"{f['label']}: 각 줄은 {{when: 조건, then: 값}} 모양이어야 합니다.")
+                raise ValueError(f"{f['label']}: 각 줄은 {{when: 조건, then: 값}} 모양이어야 해요.")
             then = item["then"]
             then = column_value(t, then["col"], {"kinds": "any"}, f) if isinstance(then, dict) and "col" in then else then
             out.append((condition_value(t, item["when"], spec, f), then))
@@ -204,7 +204,7 @@ def resolve(f, t, raw):
     raw = raw or {}
     unknown = set(raw) - {a["name"] for a in f["args"]}
     if unknown:
-        raise ValueError(f"{f['label']}: 모르는 항목 {', '.join(sorted(map(str, unknown)))}. {', '.join(a['name'] for a in f['args'])}만 씁니다.")
+        raise ValueError(f"{f['label']}: 모르는 항목 {', '.join(sorted(map(str, unknown)))}. {', '.join(a['name'] for a in f['args'])}만 써요.")
     out = Args(t=t)
     for spec in f["args"]:
         name = spec["name"]
@@ -230,7 +230,7 @@ def get(id):
     id = ALIASES.get(id, id)
     if id not in FUNCS:
         parse.check_name(str(id), list(FUNCS), "함수")
-        raise ValueError(f"'{id}' 함수가 없습니다.")
+        raise ValueError(f"'{id}' 함수가 없어요.")
     return FUNCS[id]
 
 
@@ -238,7 +238,7 @@ def make(id, t, raw=None):
     """함수 id를 인자 raw로 표 t 위의 Ibis 식으로. 집계는 값 하나(Scalar), 창·행 함수는 컬럼 하나. 묶음(table) 함수는 apply로."""
     f = get(id)
     if f["table"] or f["raw"]:
-        raise ValueError(f"'{f['label']}'은 {'raw_expr로 붙이는' if f['raw'] else '표를 바꾸는'} 함수입니다.")
+        raise ValueError(f"'{f['label']}'은 {'raw_expr로 붙이는' if f['raw'] else '표를 바꾸는'} 함수예요.")
     return f["build"](resolve(f, t, raw))
 
 
@@ -246,7 +246,7 @@ def apply(id, t, raw=None):
     """묶음(table) 함수를 표 t에 건다(새 표)."""
     f = get(id)
     if not f["table"]:
-        raise ValueError(f"'{f['label']}'은 표를 바꾸는 함수가 아닙니다.")
+        raise ValueError(f"'{f['label']}'은 표를 바꾸는 함수가 아니에요.")
     return f["build"](resolve(f, t, raw))
 
 
@@ -254,7 +254,7 @@ def aggregate(id, t, column=None, where=None, opts=None):
     """화면의 집계 칸 {agg: id, y: 컬럼, 옵션}을 집계 식으로. column이 칸의 첫 컬럼(x), where는 조건 줄이나 Ibis 값, opts는 나머지 인자."""
     f = get(id)
     if not f["aggregate"]:
-        raise ValueError(f"'{f['label']}'은 집계 함수가 아닙니다.")
+        raise ValueError(f"'{f['label']}'은 집계 함수가 아니에요.")
     raw = dict(opts or {})
     if column is not None:
         raw["x"] = column
@@ -306,7 +306,7 @@ def win(c, whole=False, rows=None):
 
 def need_order(c, f):
     if not c.order:
-        raise ValueError(f"{FUNCS[f]['label']}에는 정렬 기준이 필요합니다.")
+        raise ValueError(f"{FUNCS[f]['label']}에는 정렬 기준이 필요해요.")
     return c.order
 
 
@@ -454,12 +454,12 @@ add("cum_max", "window", "누적 최대", "처음부터 지금 행까지의 최�
 def moving(how):
     def build(c):
         if c.n < 1:
-            raise ValueError("이동 크기는 1 이상입니다.")
+            raise ValueError("이동 크기는 1 이상이에요.")
         if c.unit == "days":
             need_order(c, f"moving_{how}")
             dtype = c.order[0].op().arg.dtype
             if not (dtype.is_date() or dtype.is_timestamp()):
-                raise ValueError("'일' 단위는 정렬 기준이 날짜·날짜시간 컬럼이어야 합니다.")
+                raise ValueError("'일' 단위는 정렬 기준이 날짜·날짜시간 컬럼이어야 해요.")
             w = ibis.window(group_by=c.group or None, order_by=c.order, preceding=ibis.interval(days=c.n - 1), following=0)
         else:
             w = win(c, rows=c.n - 1)
@@ -494,7 +494,7 @@ row("capitalize", "text", "첫 글자 대문자", "첫 글자만 대문자로.",
 def not_zero(n, label):
     """1부터 세는 위치 칸의 값: 0은 DB마다 뜻이 다르고 음수(끝에서 세기)는 한 칸 어긋나므로 거부한다."""
     if n < 1:
-        raise ValueError(f"'{label}'은 1부터 셉니다. 0이나 음수는 쓸 수 없습니다.")
+        raise ValueError(f"'{label}'은 1부터 세어요. 0이나 음수는 쓸 수 없어요.")
     return n
 
 
@@ -555,7 +555,7 @@ def half_up(col, digits):
     컬럼 값 자체가 2^52 이상(이미 정수)이거나 nan·inf면 그대로 둔다. 값에 자릿수를 곱한 수가 2^52 이상이면 그 수는 이미 정수라 올림 없이 나눈다.
     floor를 정수로 바꾸는 곳이 넘치지 않게 그런 값은 floor에 넣지 않고, 0.5는 +0.5 대신 소수 부분 비교로 본다(0.49999999999999994가 1이 되지 않게)."""
     if abs(digits) > 15:
-        raise ValueError("반올림 자릿수는 -15 이상 15 이하여야 합니다.")
+        raise ValueError("반올림 자릿수는 -15 이상 15 이하여야 해요.")
     if not col.type().is_floating():
         return col.round(digits)
     scale = 10.0**digits
@@ -599,7 +599,7 @@ def bucket(c):
         raise ValueError("구간 경계는 작은 수부터 겹치지 않게 넣으세요.")
     labels = c.labels or [f"~{bounds[0]}", *[f"{a}~{b}" for a, b in zip(bounds, bounds[1:])], f"{bounds[-1]}~"]
     if len(labels) != len(bounds) + 1:
-        raise ValueError(f"라벨은 경계보다 하나 많아야 합니다(경계 {len(bounds)}개 → 라벨 {len(bounds) + 1}개).")
+        raise ValueError(f"라벨은 경계보다 하나 많아야 해요(경계 {len(bounds)}개 → 라벨 {len(bounds) + 1}개).")
     branches = [(c.x < b, str(label)) for b, label in zip(bounds, labels)]
     return ibis.cases((c.x.isnull(), ibis.null().cast("string")), *branches, else_=str(labels[-1]))
 
@@ -733,7 +733,7 @@ row("json_get", "struct", "JSON 경로 값", "JSON 컬럼에서 경로(user.name
 def struct_field(c):
     names = c.x.type().names
     if c.field not in names:
-        raise ValueError(f"구조에 '{c.field}' 필드가 없습니다. 있는 필드: {', '.join(names)}")
+        raise ValueError(f"구조에 '{c.field}' 필드가 없어요. 있는 필드: {', '.join(names)}")
     return c.x[c.field]
 
 
@@ -844,7 +844,7 @@ RAW = "sql_expr"  # SQL 식 직접 쓰기의 id
 
 
 def raw_only(c):
-    raise ValueError("SQL 식 직접 쓰기는 raw_expr로 붙입니다.")
+    raise ValueError("SQL 식 직접 쓰기는 raw_expr로 붙여요.")
 
 
 add(RAW, "cond", "SQL 식 직접 쓰기", "DB 고유 함수가 필요할 때: SQL 식 한 줄을 새 컬럼으로 붙여요(읽기만 하는 식, 파일 읽기는 막아요).",
@@ -869,9 +869,9 @@ def pick(how, t, column, order=None, sep=",", where=None):
     """겹치는 값 중 하나를 고르는 집계 식 하나(어느 집계 칸·중복 제거·조인 대표 행에서나 같다). how는 REPRESENTATIVE의 선택지.
     first·last는 정렬 기준(order: "컬럼 [asc|desc]" 목록)이 있어야 하고, string_agg는 구분자(sep)로 잇는다."""
     if how not in REPRESENTATIVE:
-        raise ValueError(f"대표 값 고르기는 {', '.join(REPRESENTATIVE)} 중 하나입니다.")
+        raise ValueError(f"대표 값 고르기는 {', '.join(REPRESENTATIVE)} 중 하나예요.")
     if REPRESENTATIVE[how][2] and not order:
-        raise ValueError(f"'{REPRESENTATIVE[how][0]}'에는 정렬 기준이 필요합니다.")
+        raise ValueError(f"'{REPRESENTATIVE[how][0]}'에는 정렬 기준이 필요해요.")
     opts = {"order": order} if how in ("first", "last", "string_agg") and order else {}
     if how == "string_agg":
         opts["sep"] = sep
@@ -899,7 +899,7 @@ def ids_for(screen):
     """화면(SCREENS)에서 고를 수 있는 함수 id들. 집계 칸(pivot·chart·metrics·dash)은 집계 전부(피벗은 소계·HAVING도), 계산 줄(calc)은 창 함수·행 함수·QUALIFY·펼치기,
     전처리(prep)는 행·창·집계(묶음 안 값으로)·DISTINCT, 문장(sentence)은 전부."""
     if screen not in SCREENS:
-        raise ValueError(f"화면은 {', '.join(SCREENS)} 중 하나입니다.")
+        raise ValueError(f"화면은 {', '.join(SCREENS)} 중 하나예요.")
     plain = lambda f: not (f["aggregate"] or f["window"] or f["table"] or f["raw"])
     pick_ = {"pivot": lambda f: f["aggregate"] or f["id"] in GROUP_PIVOT, "chart": lambda f: f["aggregate"], "metrics": lambda f: f["aggregate"], "dash": lambda f: f["aggregate"],
              "calc": lambda f: f["window"] or plain(f) or f["id"] in GROUP_CALC or f["raw"], "prep": lambda f: not (f["table"] or f["raw"]) or f["id"] == "distinct",
@@ -1108,11 +1108,11 @@ def raw_sql(expr, name, text):
     if not isinstance(text, str) or not text.strip():
         raise ValueError("SQL 식을 입력하세요.")
     if len(text) > MAX_RAW:
-        raise ValueError(f"SQL 식은 {MAX_RAW}자까지입니다.")
+        raise ValueError(f"SQL 식은 {MAX_RAW}자까지예요.")
     if not isinstance(name, str) or not NAME.fullmatch(name):
-        raise ValueError("새 컬럼 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 합니다(63자까지).")
+        raise ValueError("새 컬럼 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 해요(63자까지).")
     if name in expr.columns:
-        raise ValueError(f"'{name}' 컬럼이 이미 있습니다. 다른 이름을 쓰세요.")
+        raise ValueError(f"'{name}' 컬럼이 이미 있어요. 다른 이름을 쓰세요.")
     local = backend.name == "polars"  # 파일 연결은 SQL을 못 받는다: DuckDB 방언으로 식만 검사하고 PC 사본(DuckDB)에서 붙인다
     dialect = "duckdb" if local else sql_exec.dialect_of(backend)
     full = f"SELECT *, ({text.strip()}) AS {sql_exec.quote(name)} FROM (ibis_base) AS ibis_raw"  # 사용자 식만 검사한다(앱이 만든 앞 단계 SQL의 read_parquet 등은 검사 대상이 아니다)
@@ -1121,7 +1121,7 @@ def raw_sql(expr, name, text):
     frm = tree.args.get("from") or tree.args.get("from_")  # 앞 단계를 감싼 FROM이 그대로 ibis_raw 서브쿼리 하나인지(주석 -- 로 FROM이 바뀌지 않았는지)
     if (not isinstance(tree, exp.Select) or len(tree.expressions) != 2 or tree.expressions[1].alias != name
             or not isinstance(frm and frm.this, exp.Subquery) or frm.this.alias != "ibis_raw" or {k for k, v in tree.args.items() if v} - {"expressions", "from", "from_"}):
-        raise sql_exec.SecurityViolationError("SQL 식은 값 하나를 계산하는 식이어야 합니다(괄호를 닫거나 컬럼을 더 만들 수 없어요).")
+        raise sql_exec.SecurityViolationError("SQL 식은 값 하나를 계산하는 식이어야 해요(괄호를 닫거나 컬럼을 더 만들 수 없어요).")
     if local:
         raise NeedsLocal("파일 연결은 SQL 식을 바로 붙일 수 없어요. 이 PC 사본에서 계산해요.")
     frm.this.set("this", sqlglot.parse_one(backend.compile(expr), read=dialect))  # 검사를 마친 자리 표시를 앞 단계의 SQL로 바꾼다

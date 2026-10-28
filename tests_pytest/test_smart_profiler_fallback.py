@@ -46,7 +46,7 @@ def test_falls_through_errors_and_none(monkeypatch):
     found, method, passed = profiler.sample(None, None, "", "t", 5000, 10**9, None)
     assert (calls, method, found, passed) == (["preview", "whole", "block", "partition"], "partition", table, [["block", "과금 거부"]])
     monkeypatch.setattr(profiler, "FALLBACK", [step("preview", ValueError("a")), step("head", ValueError("b"))])
-    with pytest.raises(ValueError, match="표본을 읽지 못했습니다"):
+    with pytest.raises(ValueError, match="표본을 읽지 못했어요"):
         profiler.sample(None, None, "", "t", 5000, None, None)
 
 

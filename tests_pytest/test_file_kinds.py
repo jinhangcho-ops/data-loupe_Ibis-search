@@ -59,5 +59,5 @@ def test_api_files_checks_input(client, files):
     assert [len(x) for x in (post(path=str(files), kinds=["excel"], deep=False)[k] for k in ("files", "flat"))] == [0, 1]
     assert "종류" in post(path=str(files), kinds=[])["error"]
     assert "종류" in post(path=str(files), kinds=["exe"])["error"]
-    assert post(path=str(files / "없음"))["error"] == "그런 폴더나 파일이 없습니다."
-    assert post(path=str(files / "note.txt"))["error"] == "열 수 있는 파일이 아니거나 고른 종류가 아닙니다."
+    assert post(path=str(files / "없음"))["error"] == "그런 폴더나 파일이 없어요."
+    assert post(path=str(files / "note.txt"))["error"] == "열 수 있는 파일이 아니거나 고른 종류가 아니에요."

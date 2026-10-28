@@ -59,7 +59,7 @@ def test_check_input():
     for bad in ("", "   ", None):
         with pytest.raises(ValueError, match="입력"):
             sql_exec.check(bad)
-    with pytest.raises(ValueError, match="읽을 수 없습니다"):
+    with pytest.raises(ValueError, match="읽을 수 없어요"):
         sql_exec.check("select from where")
     with pytest.raises(ValueError, match="자까지"):
         sql_exec.check("select " + "1, " * sql_exec.MAX_SQL_SIZE + "1")
@@ -170,7 +170,7 @@ def test_check_route(client, tmp_path):
     assert (got["ok"], got["message"]) == (True, "문법 이상 없음") and got["scan"].startswith("실행하면 약 ")
     bad = check("select id\nfrom orders where (id = 1")
     assert (bad["ok"], bad["line"], bad["col"]) == (False, 2, 25)
-    assert check("select * from orderz")["message"] == "이 연결에 없는 테이블입니다: orderz"
+    assert check("select * from orderz")["message"] == "이 연결에 없는 테이블이에요: orderz"
     assert "DELETE" in check("delete from orders")["message"]
     assert check("select nope from orders")["ok"] is True  # 컬럼은 [검사](deep)에서만 본다
     deep = check("select nope from orders", deep=True)

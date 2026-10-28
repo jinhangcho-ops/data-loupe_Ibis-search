@@ -223,7 +223,7 @@ def test_json_duplicate_keys_are_overlaps(tmp_path):
     assert [r["name"] for r in found["rows"]] == ["이익"] and len(found["errors"]) == 2
 
 
-MD_TABLE = ("# 올해 목표\n\n설명 글은 건너뜁니다.\n\n"
+MD_TABLE = ("# 올해 목표\n\n설명 글은 건너뛰어요.\n\n"
             "| 이름 | 값 | 기간 | 컬럼 | 대상 |\n"
             "|---|:---:|---|---|---|\n"
             "| 매출 | ₩5,000만 | 2026-10 | amount | 강남점 |\n"

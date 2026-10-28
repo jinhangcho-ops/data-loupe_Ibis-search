@@ -102,9 +102,9 @@ def compare(cur, prev, fmt="number", mode="span", label="직전 기간", better=
     label은 비교 대상 이름("직전 7일", "7일 전"), better는 오르는 쪽이 좋으면 "up", 내리는 쪽이 좋으면 "down"(그 밖은 좋고 나쁨 없음).
     pct는 변화율(%) 숫자이고 직전 값이 없거나 0이면 None. direction은 up·down·flat."""
     if fmt not in FORMATS:
-        raise ValueError(f"값 모양은 {', '.join(FORMATS)} 중 하나여야 합니다.")
+        raise ValueError(f"값 모양은 {', '.join(FORMATS)} 중 하나여야 해요.")
     if mode not in MODES:
-        raise ValueError(f"비교 방식은 {', '.join(MODES)} 중 하나여야 합니다.")
+        raise ValueError(f"비교 방식은 {', '.join(MODES)} 중 하나여야 해요.")
     cur, prev = finite(cur), finite(prev)
     note = f" ({PARTIAL_NOTES[mode]})" if partial else ""
     if cur is None:

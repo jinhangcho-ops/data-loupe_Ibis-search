@@ -103,7 +103,7 @@ console.log(JSON.stringify(out));"""
 
 def test_4e6_tip_hides_when_host_gone_and_skips_mouse_focus(tmp_path):
     body = """
-const host = new E("button"); host.setAttribute("title", "저장합니다");
+const host = new E("button"); host.setAttribute("title", "저장해요");
 fire("mouseover", host); flush();
 const out = { shown: !tipBox.classList.contains("hidden") };
 Object.defineProperty(host, "isConnected", { value: false });

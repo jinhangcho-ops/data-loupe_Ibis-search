@@ -40,28 +40,28 @@ def destinations():
 def checked(item):
     """등록 하나를 검사하고 빠진 칸을 채운다. 비밀번호 칸은 받지 않는다."""
     if not isinstance(item, dict):
-        raise ValueError("적재할 곳이 올바르지 않습니다.")
+        raise ValueError("적재할 곳이 올바르지 않아요.")
     unknown = [k for k in item if k not in DEFAULT]
     if unknown:
         if any("pass" in k.lower() or "secret" in k.lower() for k in unknown):
-            raise ValueError("비밀번호는 저장하지 않습니다. 확인·시작할 때 따로 입력하세요.")
-        raise ValueError(f"적재할 곳에 쓸 수 없는 값이 있습니다: {', '.join(unknown)}")
+            raise ValueError("비밀번호는 저장하지 않아요. 확인·시작할 때 따로 입력하세요.")
+        raise ValueError(f"적재할 곳에 쓸 수 없는 값이 있어요: {', '.join(unknown)}")
     found = {**DEFAULT, **item}
     if not all(isinstance(v, str) for v in found.values()):
-        raise ValueError("적재할 곳의 칸은 모두 글자여야 합니다.")
+        raise ValueError("적재할 곳의 칸은 모두 글자여야 해요.")
     found = {k: v.strip() for k, v in found.items()}
     if not SERVERS.fullmatch(found["servers"]):
         raise ValueError("서버는 host:port 모양으로, 여럿이면 쉼표로 이어 쓰세요(예: host1:9092,host2:9092).")
     if not TOPIC.fullmatch(found["topic"]):
-        raise ValueError("토픽 이름은 영문·숫자·점·밑줄·빼기로 1~249자입니다.")
+        raise ValueError("토픽 이름은 영문·숫자·점·밑줄·빼기로 1~249자예요.")
     if found["security"] not in SECURITY:
-        raise ValueError(f"보안 방식은 {', '.join(SECURITY)} 중 하나입니다.")
+        raise ValueError(f"보안 방식은 {', '.join(SECURITY)} 중 하나예요.")
     if found["mechanism"] not in MECHANISMS:
-        raise ValueError(f"SASL 방식은 {', '.join(MECHANISMS)} 중 하나입니다.")
+        raise ValueError(f"SASL 방식은 {', '.join(MECHANISMS)} 중 하나예요.")
     if found["security"].startswith("SASL") and not found["user"]:
         raise ValueError("SASL을 쓰면 아이디를 입력하세요.")
     if max(len(found["user"]), len(found["ca"])) > 1000:
-        raise ValueError("아이디·CA 인증서 경로는 1,000자까지입니다.")
+        raise ValueError("아이디·CA 인증서 경로는 1,000자까지예요.")
     return found
 
 
@@ -73,7 +73,7 @@ def save(name, item):
 def destination(name):
     found = destinations().get(name)
     if not isinstance(found, dict):
-        raise ValueError(f"적재할 곳 '{name}'이 등록되어 있지 않습니다." if name else "적재할 Kafka 곳을 고르세요.")
+        raise ValueError(f"적재할 곳 '{name}'이 등록되어 있지 않아요." if name else "적재할 Kafka 곳을 고르세요.")
     return checked(found)
 
 
@@ -126,7 +126,7 @@ def check(name, password):
     except NotInstalled:
         raise
     except Exception as e:
-        raise ValueError(f"Kafka에 접속하지 못했습니다: {source.mask(str(e), [password], HIDE)}") from None
+        raise ValueError(f"Kafka에 접속하지 못했어요: {source.mask(str(e), [password], HIDE)}") from None
     return {"ok": True, "topic": item["topic"] in found.topics, "brokers": len(found.brokers)}
 
 
@@ -165,7 +165,7 @@ class Sink:
         kafka = config["load"]["kafka"]
         self.item, self.key, self.password = destination(kafka["destination"]), kafka["key"], password
         if self.key and self.key not in arrow_schema.names:
-            raise ValueError(f"메시지 키 컬럼 '{self.key}'이 결과 파일에 없습니다.")
+            raise ValueError(f"메시지 키 컬럼 '{self.key}'이 결과 파일에 없어요.")
         self.last, self.fresh = "", False
         self.placed = {}  # 마지막 put이 전달한 것(업로드 기록): {"size": 바이트, "partitions": {파티션: [첫 offset, 끝 offset]}}
         self.producer = producer(self.item, password, self.note)
@@ -225,9 +225,9 @@ class Sink:
         self.todo = sorted(skipped | (sent - delivered - forever))  # 일시 오류이거나 보고가 끝내 오지 않은 행(+ 보내지 않고 둔 행): 다음에 이것만 차례대로 다시 보낸다
         self.placed = {"size": self.size, "partitions": self.partitions}
         if sent and not delivered and not forever:
-            raise ValueError(f"Kafka에 전달하지 못했습니다: {self.last or '응답 없음'}")
+            raise ValueError(f"Kafka에 전달하지 못했어요: {self.last or '응답 없음'}")
         if self.todo:  # 일부만 전달됐다: 오류로 알려 다시 시도하게 한다(끝내 안 되면 부른 쪽이 멈추고 partial로 넣은 데까지 남긴다)
-            raise ValueError(f"Kafka에 {len(self.todo)}행을 전달하지 못했습니다: {self.last or '응답 없음'}")
+            raise ValueError(f"Kafka에 {len(self.todo)}행을 전달하지 못했어요: {self.last or '응답 없음'}")
         return len(self.ok), 0, self.failed
 
     def row(self, i):

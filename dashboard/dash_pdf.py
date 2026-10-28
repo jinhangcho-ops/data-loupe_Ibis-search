@@ -14,7 +14,7 @@ DATA_URL = "data:image/jpeg;base64,"
 def jpeg_info(raw):
     """JPEG 바이트의 (가로, 세로, 성분 수). JPEG가 아니거나 크기를 읽을 수 없으면 ValueError."""
     if not isinstance(raw, (bytes, bytearray)) or len(raw) < 4 or raw[:2] != b"\xff\xd8":
-        raise ValueError("JPEG 그림만 PDF로 만들 수 있습니다.")
+        raise ValueError("JPEG 그림만 PDF로 만들 수 있어요.")
     i = 2
     while i + 4 <= len(raw):
         if raw[i] != 0xFF:
@@ -35,10 +35,10 @@ def jpeg_info(raw):
             if not width or not height:
                 break
             if parts not in (1, 3):
-                raise ValueError("회색이나 RGB 색의 JPEG만 PDF로 만들 수 있습니다.")
+                raise ValueError("회색이나 RGB 색의 JPEG만 PDF로 만들 수 있어요.")
             return width, height, parts
         i += 2 + size
-    raise ValueError("JPEG 그림의 크기를 읽을 수 없습니다.")
+    raise ValueError("JPEG 그림의 크기를 읽을 수 없어요.")
 
 
 def number(value):
@@ -52,7 +52,7 @@ def make_pdf(jpeg):
     width, height, parts = jpeg_info(jpeg)
     w_pt, h_pt = width * PX_TO_PT, height * PX_TO_PT
     if max(w_pt, h_pt) > MAX_PAGE_PT:
-        raise ValueError("그림이 너무 커서 PDF 한 쪽에 담을 수 없습니다. 카드를 줄이거나 배율을 낮추세요.")
+        raise ValueError("그림이 너무 커서 PDF 한 쪽에 담을 수 없어요. 카드를 줄이거나 배율을 낮추세요.")
     content = f"q {number(w_pt)} 0 0 {number(h_pt)} 0 0 cm /Im0 Do Q".encode("ascii")
     color = "/DeviceRGB" if parts == 3 else "/DeviceGray"
     bodies = [
@@ -79,11 +79,11 @@ def make_pdf(jpeg):
 def decode_image(data):
     """화면이 보낸 JPEG data URL을 바이트로. 아니면 ValueError."""
     if not isinstance(data, str) or not data.startswith(DATA_URL):
-        raise ValueError("JPEG 그림만 PDF로 만들 수 있습니다.")
+        raise ValueError("JPEG 그림만 PDF로 만들 수 있어요.")
     try:
         raw = base64.b64decode(data[len(DATA_URL):], validate=True)
     except binascii.Error:
-        raise ValueError("그림 데이터가 올바르지 않습니다.") from None
+        raise ValueError("그림 데이터가 올바르지 않아요.") from None
     if len(raw) > MAX_JPEG_BYTES:
-        raise ValueError(f"그림은 {MAX_JPEG_BYTES // 1024 // 1024}MB까지입니다.")
+        raise ValueError(f"그림은 {MAX_JPEG_BYTES // 1024 // 1024}MB까지예요.")
     return raw

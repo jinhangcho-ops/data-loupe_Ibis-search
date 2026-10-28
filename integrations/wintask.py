@@ -68,7 +68,7 @@ def task_name(name, taken):
 def full(task, folder=FOLDER):
     """폴더를 붙인 작업 경로. 이 폴더 밖이나 아래 폴더를 가리킬 수 없게 작업 이름을 다시 검사한다."""
     if not isinstance(task, str) or not task or UNSAFE.search(task) or task.strip(" .") != task or len(task) > 60:
-        raise ValueError("작업 이름이 올바르지 않습니다.")
+        raise ValueError("작업 이름이 올바르지 않아요.")
     return folder + task
 
 
@@ -115,7 +115,7 @@ def xml(task, name, trigger, start):
 
 def failed(doing, err, out=""):
     detail = (err or out).strip().removeprefix("오류:").removeprefix("ERROR:").strip()
-    return ValueError(f"Windows 예약 작업을 {doing} 못했습니다. {detail or '알 수 없는 오류'}")
+    return ValueError(f"Windows 예약 작업을 {doing} 못했어요. {detail or '알 수 없는 오류'}")
 
 
 def register(task, name, trigger, start):

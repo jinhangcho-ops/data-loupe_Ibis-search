@@ -34,11 +34,11 @@ MINUTES = (5, 1440)  # interval 예약의 간격(분) 범위
 TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 ANCHOR = dt.datetime(2000, 1, 1)  # interval 예약의 기준 시각: 이때부터 minutes분마다(프로그램 안 예약과 Windows 작업이 같은 시각에 돈다)
 TICK = 20  # 프로그램 안 예약이 확인하는 간격(초)
-SKIP_RUNNING = "다른 수집이 돌고 있어 건너뛰었습니다."
-SKIP_LOCKED = "같은 구성이 다른 곳(프로그램 안 예약, Windows 예약 작업)에서 돌고 있어 건너뛰었습니다."
-LOCKED = "같은 구성이 다른 곳(프로그램 안 예약, Windows 예약 작업)에서 돌고 있습니다. 끝난 뒤에 실행하세요."
-GONE = "프로그램이 중간에 끝나 결과를 모릅니다."
-TITLES = {"끝": "수집이 끝났습니다", "실패": "수집이 실패했습니다", "건너뜀": "수집을 건너뛰었습니다"}
+SKIP_RUNNING = "다른 수집이 돌고 있어 건너뛰었어요."
+SKIP_LOCKED = "같은 구성이 다른 곳(프로그램 안 예약, Windows 예약 작업)에서 돌고 있어 건너뛰었어요."
+LOCKED = "같은 구성이 다른 곳(프로그램 안 예약, Windows 예약 작업)에서 돌고 있어요. 끝난 뒤에 실행하세요."
+GONE = "프로그램이 중간에 끝나 결과를 몰라요."
+TITLES = {"끝": "수집이 끝났어요", "실패": "수집이 실패했어요", "건너뜀": "수집을 건너뛰었어요"}
 
 clock = dt.datetime.now  # 지금 시각. 테스트는 바꿔 끼운다.
 starting = threading.Lock()  # 이 프로세스 안에서 "도는 작업 확인 → 잠금 → 시작"을 한 번에 하나씩
@@ -64,11 +64,11 @@ def collection(name):
     """저장한 구성(검사를 마친 것). 없거나 올바르지 않거나 비밀번호가 필요하면 이유를 담은 ValueError."""
     found = settings.named(collect_config.COLLECTIONS).get(name)
     if found is None:
-        raise ValueError(f"구성 '{name}'이 없습니다. 구성을 먼저 저장하세요.")
+        raise ValueError(f"구성 '{name}'이 없어요. 구성을 먼저 저장하세요.")
     try:
         config = collect_config.normalize(found)
     except ValueError as e:
-        raise ValueError(f"구성 '{name}'이 올바르지 않습니다: {e}") from None
+        raise ValueError(f"구성 '{name}'이 올바르지 않아요: {e}") from None
     reason = password_reason(config)
     if reason:
         raise ValueError(reason)
@@ -79,42 +79,42 @@ def password_reason(config):
     """비밀번호가 필요해 예약할 수 없는 구성이면 그 이유, 아니면 None. 비밀번호는 저장하지 않으므로 예약 실행에는 넣을 수 없다."""
     load = config["load"]
     if load["target"] == "table" and load["table"]["connection"]["kind"] == "url" and load["table"]["connection"]["user"].strip():
-        return "DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다."
+        return "DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없어요. 비밀번호는 저장하지 않기 때문이에요."
     if load["target"] == "kafka":
         found = load_kafka.destinations().get(load["kafka"]["destination"])
         if isinstance(found, dict) and str(found.get("security", "")).startswith("SASL"):
-            return "Kafka에 적재할 때 비밀번호가 필요한 곳(SASL)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다."
+            return "Kafka에 적재할 때 비밀번호가 필요한 곳(SASL)이라 예약할 수 없어요. 비밀번호는 저장하지 않기 때문이에요."
     return None
 
 
 def checked(item):
     """예약 하나를 검사하고 빠진 칸을 기본값으로 채운다."""
     if not isinstance(item, dict):
-        raise ValueError("예약이 올바르지 않습니다.")
+        raise ValueError("예약이 올바르지 않아요.")
     unknown = [k for k in item if k not in DEFAULT]
     if unknown:
-        raise ValueError(f"예약에 쓸 수 없는 값이 있습니다: {', '.join(unknown)}")
+        raise ValueError(f"예약에 쓸 수 없는 값이 있어요: {', '.join(unknown)}")
     found = {**DEFAULT, **item}
     if found["every"] not in EVERY:
-        raise ValueError(f"예약의 every는 {', '.join(EVERY)} 중 하나입니다.")
+        raise ValueError(f"예약의 every는 {', '.join(EVERY)} 중 하나예요.")
     if not isinstance(found["time"], str) or not TIME.fullmatch(found["time"]):
         raise ValueError("시각은 HH:MM(00:00~23:59)으로 쓰세요.")
     days = found["days"]
     if not isinstance(days, list) or not all(type(d) is int and 0 <= d <= 6 for d in days) or len(set(days)) != len(days):
-        raise ValueError("요일(days)은 0(월)~6(일)의 겹치지 않는 목록이어야 합니다.")
+        raise ValueError("요일(days)은 0(월)~6(일)의 겹치지 않는 목록이어야 해요.")
     if found["every"] == "weekly" and not days:
         raise ValueError("매주 예약은 요일을 하나 이상 고르세요.")
     if type(found["minutes"]) is not int or not MINUTES[0] <= found["minutes"] <= MINUTES[1]:
-        raise ValueError(f"간격(minutes)은 {MINUTES[0]}~{MINUTES[1]}분의 정수여야 합니다.")
+        raise ValueError(f"간격(minutes)은 {MINUTES[0]}~{MINUTES[1]}분의 정수여야 해요.")
     for key in ("inapp", "windows"):
         if type(found[key]) is not bool:
-            raise ValueError(f"예약의 {key}는 true·false여야 합니다.")
+            raise ValueError(f"예약의 {key}는 true·false여야 해요.")
     if found["inapp"] and found["windows"]:
-        raise ValueError("프로그램 안 예약(inapp)과 Windows 작업(windows)은 같이 고를 수 없습니다. 하나만 고르세요.")
+        raise ValueError("프로그램 안 예약(inapp)과 Windows 작업(windows)은 같이 고를 수 없어요. 하나만 고르세요.")
     if not isinstance(found["notify"], str) or (found["notify"] and found["notify"] not in settings.named(notify.FILE)):
-        raise ValueError(f"보낼 곳 '{found['notify']}'이 없습니다." if isinstance(found["notify"], str) else "보낼 곳 이름은 글자여야 합니다.")
+        raise ValueError(f"보낼 곳 '{found['notify']}'이 없어요." if isinstance(found["notify"], str) else "보낼 곳 이름은 글자여야 해요.")
     if found["notify_on"] not in NOTIFY_ON:
-        raise ValueError(f"예약의 notify_on은 {', '.join(NOTIFY_ON)} 중 하나입니다.")
+        raise ValueError(f"예약의 notify_on은 {', '.join(NOTIFY_ON)} 중 하나예요.")
     found["days"] = sorted(days)
     return found
 
@@ -130,7 +130,7 @@ def next_time(item, after):
         at = dt.datetime.combine(day, dt.time(hour, minute))
         if at > after and (item["every"] == "daily" or day.weekday() in item["days"]):
             return at
-    raise ValueError("다음 시각을 찾지 못했습니다.")
+    raise ValueError("다음 시각을 찾지 못했어요.")
 
 
 def register(name, item, taken):
@@ -157,7 +157,7 @@ def save(name, item):
                 item = checked(item)
                 collection(name)
                 if name not in found and len(found) >= MAX_SCHEDULES:
-                    raise ValueError(f"예약은 {MAX_SCHEDULES}개까지입니다. 쓰지 않는 것을 지우세요.")
+                    raise ValueError(f"예약은 {MAX_SCHEDULES}개까지예요. 쓰지 않는 것을 지우세요.")
             taken = [s["task"] for n, s in found.items() if n != name and s.get("task")]
         if item is None:
             if old.get("task"):
@@ -186,7 +186,7 @@ def save(name, item):
                     wintask.delete(old["task"])
             except Exception:  # 되돌리지 못해도 거부 이유는 그대로 알린다
                 pass
-        raise ValueError("저장하는 동안 같은 예약이 다른 곳에서 바뀌었습니다. 화면을 새로 고치고 다시 저장하세요.")
+        raise ValueError("저장하는 동안 같은 예약이 다른 곳에서 바뀌었어요. 화면을 새로 고치고 다시 저장하세요.")
 
 
 def tasks(found):
@@ -324,11 +324,11 @@ VALUE_ERRORS = re.compile(r"Constraint|Conversion|Could not convert|Invalid Inpu
 SEE_LOG = "(자세한 내용은 프로그램의 실행 기록)"
 
 
-KNOWN_NOTICES = ((re.compile(r"연결이? 거부|connection refused|ECONNREFUSED|WinError 10061", re.I), "연결이 거부되었습니다"),
-                 (re.compile(r"시간 ?초과|timed? ?out", re.I), "시간이 초과되었습니다"),
-                 (re.compile(r"디스크|저장 공간|no space left|disk full|WinError 112", re.I), "디스크 공간이 부족합니다"),
-                 (re.compile(r"권한|permission denied|access (is )?denied|WinError 5\b", re.I), "권한이 없습니다"),
-                 (re.compile(r"찾을 수 없|not found|no such file|does not exist|FileNotFound", re.I), "찾을 수 없습니다"))  # 정해진 어휘(오류 글에서 이것을 알아보면 이 문구만 보낸다)
+KNOWN_NOTICES = ((re.compile(r"연결이? 거부|connection refused|ECONNREFUSED|WinError 10061", re.I), "연결이 거부됐어요"),
+                 (re.compile(r"시간 ?초과|timed? ?out", re.I), "시간이 초과됐어요"),
+                 (re.compile(r"디스크|저장 공간|no space left|disk full|WinError 112", re.I), "디스크 공간이 부족해요"),
+                 (re.compile(r"권한|permission denied|access (is )?denied|WinError 5\b", re.I), "권한이 없어요"),
+                 (re.compile(r"찾을 수 없|not found|no such file|does not exist|FileNotFound", re.I), "찾을 수 없어요"))  # 정해진 어휘(오류 글에서 이것을 알아보면 이 문구만 보낸다)
 
 
 def notice_text(message):
@@ -340,11 +340,11 @@ def notice_text(message):
     if message in (SKIP_RUNNING, SKIP_LOCKED, GONE) or message.startswith(collect_job.CAPPED.split("{")[0]):
         return message
     if VALUE_ERRORS.search(message):
-        return f"데이터 값 문제로 실패했습니다 {SEE_LOG}"
+        return f"데이터 값 문제로 실패했어요 {SEE_LOG}"
     for known, text in KNOWN_NOTICES:
         if known.search(message):
             return f"{text} {SEE_LOG}"
-    return f"실패했습니다 {SEE_LOG}"
+    return f"실패했어요 {SEE_LOG}"
 
 
 def tell(name, result, rows, seconds, message):
@@ -357,9 +357,9 @@ def tell(name, result, rows, seconds, message):
     try:
         notify.send(item["notify"], {"title": TITLES[result], "text": "\n".join(x for x in lines if x), "rows": rows, "seconds": seconds})
     except ValueError as e:
-        return f"알림을 보내지 못했습니다: {e}"
+        return f"알림을 보내지 못했어요: {e}"
     except Exception as e:  # 연결 도중 끊김(IncompleteRead) 같은 것: 글에 주소가 들 수 있어 종류만 적는다. 실행 기록은 끝내야 한다
-        return f"알림을 보내지 못했습니다: {type(e).__name__}"
+        return f"알림을 보내지 못했어요: {type(e).__name__}"
     return ""
 
 
@@ -405,7 +405,7 @@ def execute(name, how):
         bad = (state.get("load") or {}).get("failures")  # 적재에서 넣지 못한 행이 있으면 끝났어도 실패로 알린다
         capped = state["message"].startswith(collect_job.CAPPED.split("{")[0])  # 최대 쪽 수에서 멈춰 다 받지 못했을 수 있다
         done = state["phase"] == "끝" and not bad and not capped
-        message = state["message"] if done else (state["error"] or state["message"] or f"수집이 {state['phase']} 상태로 끝났습니다.")
+        message = state["message"] if done else (state["error"] or state["message"] or f"수집이 {state['phase']} 상태로 끝났어요.")
         finish(run_id, name, "끝" if done else "실패", state["rows"], state["elapsed"], message)
 
     thread = threading.Thread(target=follow, daemon=True)

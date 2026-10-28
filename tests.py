@@ -261,9 +261,9 @@ def prep_text(tag, pc, error, only, preview, values):
     pattern_form = '{"pattern": "정규식", "group": 0}'
     has_form = '{"words": ["서울", "부산"], "regex": false} (words는 비어 있지 않은 서로 다른 글자 1~50개)'
     for name, found, want in [
-        ("정수 컬럼에 extract", bad(only("id", id={"ops": {"extract": {"pattern": "1"}}})), "'extract'은 문자 컬럼에만 쓸 수 있습니다. 'id' 컬럼은 정수입니다."),
-        ("정수 컬럼에 has", bad(only("id", id={"ops": {"has": {"words": ["1"]}}})), "'has'은 문자 컬럼에만 쓸 수 있습니다. 'id' 컬럼은 정수입니다."),
-        ("정수 컬럼에 counts", bad(only("id", id={"ops": {"counts": {}}})), "'counts'은 문자 컬럼에만 쓸 수 있습니다. 'id' 컬럼은 정수입니다."),
+        ("정수 컬럼에 extract", bad(only("id", id={"ops": {"extract": {"pattern": "1"}}})), "'extract'은 문자 컬럼에만 쓸 수 있어요. 'id' 컬럼은 정수 컬럼이에요."),
+        ("정수 컬럼에 has", bad(only("id", id={"ops": {"has": {"words": ["1"]}}})), "'has'은 문자 컬럼에만 쓸 수 있어요. 'id' 컬럼은 정수 컬럼이에요."),
+        ("정수 컬럼에 counts", bad(only("id", id={"ops": {"counts": {}}})), "'counts'은 문자 컬럼에만 쓸 수 있어요. 'id' 컬럼은 정수 컬럼이에요."),
         ("빈 pattern", bad(spec(extract={"pattern": ""})), form("extract", pattern_form)),
         ("음수 group", bad(spec(extract={"pattern": "a", "group": -1})), form("extract", pattern_form)),
         ("group이 정수가 아님", bad(spec(extract={"pattern": "a", "group": 1.5})), form("extract", pattern_form)),
@@ -273,9 +273,9 @@ def prep_text(tag, pc, error, only, preview, values):
         ("has words 빈 항목", bad(spec(has={"words": ["a", ""]})), form("has", has_form)),
         ("has regex가 true/false가 아님", bad(spec(has={"words": ["a"], "regex": "yes"})), form("has", has_form)),
         ("counts sep이 글자가 아님", bad(spec(counts={"sep": 1})), form("counts", '{"sep": ","}')),
-        ("extract 이름이 겹침", bad(spec(extract={"pattern": "a"}), copies=[{"from": "id", "name": "txt_match"}]), "'txt_match' 컬럼이 이미 있어 파생 컬럼을 만들 수 없습니다."),
-        ("has 이름이 겹침", bad(spec(has={"words": ["서울"]}), copies=[{"from": "id", "name": "txt_has_서울"}]), "'txt_has_서울' 컬럼이 이미 있어 파생 컬럼을 만들 수 없습니다."),
-        ("counts 이름이 겹침", bad(spec(counts={}), copies=[{"from": "id", "name": "txt_counts"}]), "'txt_counts' 컬럼이 이미 있어 파생 컬럼을 만들 수 없습니다."),
+        ("extract 이름이 겹침", bad(spec(extract={"pattern": "a"}), copies=[{"from": "id", "name": "txt_match"}]), "'txt_match' 컬럼이 이미 있어 파생 컬럼을 만들 수 없어요."),
+        ("has 이름이 겹침", bad(spec(has={"words": ["서울"]}), copies=[{"from": "id", "name": "txt_has_서울"}]), "'txt_has_서울' 컬럼이 이미 있어 파생 컬럼을 만들 수 없어요."),
+        ("counts 이름이 겹침", bad(spec(counts={}), copies=[{"from": "id", "name": "txt_counts"}]), "'txt_counts' 컬럼이 이미 있어 파생 컬럼을 만들 수 없어요."),
     ]:
         check(f"{tag} 거부: {name}", found, want)
 
@@ -315,7 +315,7 @@ def prep_new(tag, got, error, only, preview, values):
     r = preview(only("score", score={"ops": {"flag": True}}), drop=["score_isnull", "nothing", "score"])
     check(tag + " drop: 파생 컬럼만 빼고 없는 이름은 무시", r["rows"]["columns"], ["score"])
     check(tag + " 파생 컬럼 이름이 겹치면 거부", error("/api/preview", base="messy", columns=spec("score", flag=True), copies=[{"from": "id", "name": "score_isnull"}]),
-          "'score_isnull' 컬럼이 이미 있어 파생 컬럼을 만들 수 없습니다.")
+          "'score_isnull' 컬럼이 이미 있어 파생 컬럼을 만들 수 없어요.")
     day = MESSY["day"]
     r = preview(spec("day", parts=["year", "month", "day", "weekday", "ym"]))
     pick = lambda f: [None if d is None else f(d) for d in day]
@@ -325,8 +325,8 @@ def prep_new(tag, got, error, only, preview, values):
            pick(lambda d: d.weekday()), pick(lambda d: str(d.replace(day=1))), ["int64"] * 4 + ["date"], [False] + [True] * 5))
     r = preview(spec("iso_dt", type={"to": "date", "format": "%Y-%m-%d %H:%M:%S"}, parts=["hour", "year"]))
     check(tag + " parts(날짜시간): hour", (values(r, "iso_dt_hour"), values(r, "iso_dt_year")), ([14, 23, 0, 12, None] * 4, [2026, 2026, 2025, 2024, None] * 4))
-    check(tag + " 거부: date에 hour", error("/api/preview", base="messy", columns=spec("day", parts=["hour"])), "'hour'는 날짜시간 컬럼에만 쓸 수 있습니다. 'day' 컬럼은 날짜입니다.")
-    check(tag + " 거부: 문자에 parts", error("/api/preview", base="messy", columns=spec("name", parts=["year"])), "'parts'은 날짜 컬럼에만 쓸 수 있습니다. 'name' 컬럼은 문자입니다.")
+    check(tag + " 거부: date에 hour", error("/api/preview", base="messy", columns=spec("day", parts=["hour"])), "'hour'는 날짜시간 컬럼에만 쓸 수 있어요. 'day' 컬럼은 날짜 컬럼이에요.")
+    check(tag + " 거부: 문자에 parts", error("/api/preview", base="messy", columns=spec("name", parts=["year"])), "'parts'은 날짜 컬럼에만 쓸 수 있어요. 'name' 컬럼은 문자 컬럼이에요.")
     seoul = ["Seoul", "Busan", "Seoul", "Daegu", "Seoul", "Busan", "Jeju", "Seoul", "Busan", None] * 2
     code = {"Busan": 0, "Daegu": 1, "Jeju": 2, "Seoul": 3}
     r = preview(only("id", "city", city={"ops": {"label": True}}), sorts=["id"])
@@ -339,13 +339,13 @@ def prep_new(tag, got, error, only, preview, values):
           (r["rows"]["columns"], values(r, "city_Seoul"), values(r, "city_Busan")[-2:], r["types"][1:], r["derived"]),
           (["city", "city_Busan", "city_Daegu", "city_Jeju", "city_Seoul"], [int(c == "Seoul") for c in seoul], [1 if seoul[-2] == "Busan" else 0, 0], ["int8"] * 4, [False] + [True] * 4))
     check(tag + " 거부: onehot 상한", (setattr(prep_ops, "ONEHOT_MAX", 3), error("/api/preview", base="messy", columns=spec("city", onehot=True)))[1],
-          "'city' 컬럼은 서로 다른 값이 3개를 넘어 onehot을 만들 수 없습니다.")
+          "'city' 컬럼은 서로 다른 값이 3개를 넘어 onehot을 만들 수 없어요.")
     prep_ops.ONEHOT_MAX = 50
     check(tag + " 거부: label 상한", (setattr(prep_ops, "LABEL_MAX", 3), error("/api/preview", base="messy", columns=spec("city", label=True)))[1],
-          "'city' 컬럼은 서로 다른 값이 3개를 넘어 label을 만들 수 없습니다.")
+          "'city' 컬럼은 서로 다른 값이 3개를 넘어 label을 만들 수 없어요.")
     prep_ops.LABEL_MAX = 10_000
     check(tag + " 거부: label 이름이 겹침", error("/api/preview", base="messy", columns=spec("city", label=True), copies=[{"from": "id", "name": "city_label"}]),
-          "'city_label' 컬럼이 이미 있어 파생 컬럼을 만들 수 없습니다.")
+          "'city_label' 컬럼이 이미 있어 파생 컬럼을 만들 수 없어요.")
 
     print("== 새 전처리:", tag)
     cases = [  # (이름, 컬럼, ops, 기대 값)
@@ -386,7 +386,7 @@ def prep_new(tag, got, error, only, preview, values):
         if tag == "DuckDB":
             check(f"{tag} {name}", values(r, col), want)
         else:
-            check(f"{tag} {name}: 창 함수가 없는 연결은 지원하지 않는 계산이라고 알림", r.get("error", "").startswith("이 연결에서는 지원하지 않는 계산입니다."), True)
+            check(f"{tag} {name}: 창 함수가 없는 연결은 지원하지 않는 계산이라고 알림", r.get("error", "").startswith("이 연결에서는 지원하지 않는 계산이에요."), True)
     for name, col, o, count in [("outlier iqr drop", "amt", {"how": "drop", "by": "iqr"}, 19), ("outlier range drop", "amt", {"how": "drop", "by": "range", "low": 2, "high": 17}, 17)]:
         r = preview(spec(col, outlier=o))
         check(f"{tag} {name}: after", (r["before"], r["after"]), (20, count))
@@ -395,17 +395,17 @@ def prep_new(tag, got, error, only, preview, values):
           (["timestamp"], ["date"]))
     bad = lambda col, **o: error("/api/preview", base="messy", columns=spec(col, **o))
     for name, message, found in [
-        ("날짜 형식 글자", "날짜 형식에는 %Y %y %m %d %H %M %S %I %p %b %B만 쓸 수 있습니다. 예: %Y%m%d, %Y-%m-%d %H:%M:%S", bad("stamp", type={"to": "date", "format": "%Y %f"})),
-        ("문자에 outlier", "'outlier'은 정수·실수 컬럼에만 쓸 수 있습니다. 'name' 컬럼은 문자입니다.", bad("name", outlier={"how": "drop", "by": "iqr"})),
-        ("log 최솟값", "'neg' 컬럼의 최솟값이 -9로 -1 이하라 log로 바꿀 수 없습니다.", bad("neg", scale="log")),
-        ("표준편차 0", "'flat' 컬럼은 표준편차가 0이거나 구할 수 없어 standard로 바꿀 수 없습니다.", bad("flat", scale="standard")),
-        ("범위 0", "'flat' 컬럼은 값이 모두 같거나 비어 있어(범위가 0) minmax로 바꿀 수 없습니다.", bad("flat", scale="minmax")),
+        ("날짜 형식 글자", "날짜 형식에는 %Y %y %m %d %H %M %S %I %p %b %B만 쓸 수 있어요. 예: %Y%m%d, %Y-%m-%d %H:%M:%S", bad("stamp", type={"to": "date", "format": "%Y %f"})),
+        ("문자에 outlier", "'outlier'은 정수·실수 컬럼에만 쓸 수 있어요. 'name' 컬럼은 문자 컬럼이에요.", bad("name", outlier={"how": "drop", "by": "iqr"})),
+        ("log 최솟값", "'neg' 컬럼의 최솟값이 -9로 -1 이하라 log로 바꿀 수 없어요.", bad("neg", scale="log")),
+        ("표준편차 0", "'flat' 컬럼은 표준편차가 0이거나 구할 수 없어 standard로 바꿀 수 없어요.", bad("flat", scale="standard")),
+        ("범위 0", "'flat' 컬럼은 값이 모두 같거나 비어 있어(범위가 0) minmax로 바꿀 수 없어요.", bad("flat", scale="minmax")),
         ("round 음수", "'amt' 컬럼의 'round' 값은 0 이상 15 이하의 정수 형식으로 쓰세요.", bad("amt", round=-1)),
         ("bins 순서", "'amt' 컬럼의 'bins' 값은 오름차순 경계값 2개 이상. 예: [0, 10, 100] 형식으로 쓰세요.", bad("amt", bins=[10, 5])),
         ("rare min", "'city' 컬럼의 'rare' 값은 {\"min\": 2 이상의 정수, \"label\": \"기타\"} 형식으로 쓰세요.", bad("city", rare={"min": 1})),
         ("outlier range에 한계 없음", "'amt' 컬럼의 'outlier' 값은 ", bad("amt", outlier={"how": "drop", "by": "range"})),
         ("prev에 by 없음", "'score' 컬럼의 'fill' 값은 ", bad("score", fill={"how": "prev"})),
-        ("prev의 by가 없는 컬럼", "'zzz' 컬럼이 없습니다.", bad("score", fill={"how": "prev", "by": "zzz"})),
+        ("prev의 by가 없는 컬럼", "'zzz' 컬럼이 없어요.", bad("score", fill={"how": "prev", "by": "zzz"})),
     ]:
         check(f"{tag} 거부: {name}", found[:len(message)], message)
 
@@ -426,8 +426,8 @@ def prep_new(tag, got, error, only, preview, values):
         check(f"{tag} /api/dupes: {name}", got("/api/dupes", base="messy", **body), want)
     check(tag + " dedupe 전후 행 수 = dupes의 rows", (preview(only("name"), dedupe=["name"])["after"], 20 - got("/api/dupes", base="messy", columns=only("name"), dedupe=["name"])["rows"]), (5, 5))
     check(tag + " 거부: dedupe 기준 없음", error("/api/dupes", base="messy", dedupe=[]), "중복 기준 컬럼을 고르세요.")
-    check(tag + " 거부: dedupe 모르는 컬럼", error("/api/preview", base="messy", dedupe=["zzz"])[:15], "'zzz' 컬럼이 없습니다.")
-    check(tag + " 거부: drop이 목록이 아님", error("/api/preview", base="messy", drop="x"), "'drop'은 컬럼 이름 목록이어야 합니다.")
+    check(tag + " 거부: dedupe 모르는 컬럼", error("/api/preview", base="messy", dedupe=["zzz"])[:15], "'zzz' 컬럼이 없어요.")
+    check(tag + " 거부: drop이 목록이 아님", error("/api/preview", base="messy", drop="x"), "'drop'은 컬럼 이름 목록이어야 해요.")
     cols = ["d8", "d16", "d32", "d64", "dnull", "b8", "b16", "rate", "ratio"]
     typed = lambda r: dict(zip(r["rows"]["columns"], r["types"]))
     r = preview(only(*cols))
@@ -467,7 +467,7 @@ def prep_new(tag, got, error, only, preview, values):
     for col, ops_list in want.items():
         check(f"{tag} 추천: {col}", what(col), ops_list)
     check(tag + " 추천의 근거 문구에 숫자", (suggest["name"][0]["why"], suggest["amt"][0]["why"], suggest["code"][0]["why"]),
-          ("앞뒤에 공백이 있는 값이 12개 있습니다.", "빈 값이 1개(5.0%)입니다.", '빈 값을 뜻하는 글자가 있습니다: "" 4개, "-" 4개, "N/A" 4개'))
+          ("앞뒤에 공백이 있는 값이 12개 있어요.", "빈 값이 1개(5.0%)예요.", '빈 값을 뜻하는 글자가 있어요: "" 4개, "-" 4개, "N/A" 4개'))
     check(tag + " 추천: 빈 값이 5% 미만이면 fill drop", [s["ops"] for s in prep_profile.suggestions({"kind": "int", "nulls": 1, "unique": 9}, {}, 0, 100)], [{"fill": {"how": "drop"}}])
     broken = [(col, i) for col, found in suggest.items() for i, s in enumerate(found) if "ops" in s
               and "error" in got("/api/preview", base="messy", columns=only(col, **{col: {"ops": s["ops"]}}))]
@@ -500,7 +500,7 @@ def prep_sampling(got, error):
             check(tag + " patterns: 같은 표본에서(다시 읽지 않음). 전체를 읽은 표본이라 뒤의 글자(num_late)도 걸러짐", ({k: [s["ops"] for s in v] for k, v in r.items()}, calls),
                   ({"num_all": [{"type": {"to": "int"}}], "date_late": [{"type": {"to": "date", "format": "%Y%m%d"}}]}, [5000]))
             check(tag + " patterns: why의 개수는 표본 기준", [s["why"] for k in ("num_all", "date_late") for s in r[k]],
-                  ["빈 값과 빈 값 표시를 뺀 3,000개가 모두 숫자로 바뀝니다.", "빈 값과 빈 값 표시를 뺀 1,500개가 모두 YYYYMMDD 모양입니다."])
+                  ["빈 값과 빈 값 표시를 뺀 3,000개가 모두 숫자로 바뀌어요.", "빈 값과 빈 값 표시를 뺀 1,500개가 모두 YYYYMMDD 모양이에요."])
             fresh = got("/api/profile", base="wide", refresh=True)
             check(tag + " [다시 구하기](refresh)는 표본을 새로 읽음", (calls, fresh["rows"]), ([5000, 5000], 3000))
             calls.clear()
@@ -575,7 +575,7 @@ def numbers_section():
         check(f"SQLite가 못 하는 계산도 이 PC에서는 됨: {name}", str(values(**{column: ops})).startswith("이 연결에서는"), False)
     prep_where("new")  # 계산 컬럼·PCA가 없으면 DB에서 계산
     for name, column, ops in unsupported:
-        check(f"DB에서 계산하면 SQLite가 못 하는 계산은 그 문구로: {name}", str(values(**{column: ops})).startswith("이 연결에서는 지원하지 않는 계산입니다."), True)
+        check(f"DB에서 계산하면 SQLite가 못 하는 계산은 그 문구로: {name}", str(values(**{column: ops})).startswith("이 연결에서는 지원하지 않는 계산이에요."), True)
     prep_where("all")
     check("SQLite 연결 해제", got("/api/disconnect"), {"ok": True})
 
@@ -631,28 +631,28 @@ def prep_section():
         ("nulls 다음에 case: 빈 값으로 볼 글자는 원래 보이는 대로(N/A) 적는다", "code", {"case": "lower", "nulls": ["-", "N/A"]}, [None, "", None, "a1", None] * 4),
     ]
     rejected = [  # (이름, 요청, 오류 문구가 시작하는 글)
-        ("모르는 전처리 항목", dict(base="messy", columns={"name": {"ops": {"trimm": True}}}), "'trimm' 전처리 항목이 없습니다. 비슷한 이름: trim"),
-        ("모르는 컬럼", dict(base="messy", columns={"zzz": {}}), "'zzz' 컬럼이 없습니다."),
-        ("모르는 테이블", dict(base="nothing"), "'nothing' 테이블이 없습니다."),
-        ("정수에 trim", dict(base="messy", columns={"id": {"ops": {"trim": True}}}), "'trim'은 문자 컬럼에만 쓸 수 있습니다. 'id' 컬럼은 정수입니다."),
-        ("글자에 mean", dict(base="messy", columns={"grade": {"ops": {"fill": {"how": "mean"}}}}), "'mean'은 정수·실수 컬럼에만 쓸 수 있습니다. 'grade' 컬럼은 문자입니다."),
+        ("모르는 전처리 항목", dict(base="messy", columns={"name": {"ops": {"trimm": True}}}), "'trimm' 전처리 항목이 없어요. 비슷한 이름: trim"),
+        ("모르는 컬럼", dict(base="messy", columns={"zzz": {}}), "'zzz' 컬럼이 없어요."),
+        ("모르는 테이블", dict(base="nothing"), "'nothing' 테이블이 없어요."),
+        ("정수에 trim", dict(base="messy", columns={"id": {"ops": {"trim": True}}}), "'trim'은 문자 컬럼에만 쓸 수 있어요. 'id' 컬럼은 정수 컬럼이에요."),
+        ("글자에 mean", dict(base="messy", columns={"grade": {"ops": {"fill": {"how": "mean"}}}}), "'mean'은 정수·실수 컬럼에만 쓸 수 있어요. 'grade' 컬럼은 문자 컬럼이에요."),
         ("replace 형식", dict(base="messy", columns={"name": {"ops": {"replace": ["a", "b"]}}}), "'name' 컬럼의 'replace' 값은 [[\"찾을 값\""),
         ("trim: false", dict(base="messy", columns={"name": {"ops": {"trim": False}}}), "'name' 컬럼의 'trim' 값은 true 형식으로 쓰세요."),
         ("type의 to", dict(base="messy", columns={"price": {"ops": {"type": {"to": "decimal"}}}}), "'price' 컬럼의 'type' 값은"),
         ("fill에 value가 없음", dict(base="messy", columns={"score": {"ops": {"fill": {"how": "value"}}}}), "'score' 컬럼의 'fill' 값은"),
-        ("fill value가 컬럼 타입에 안 맞음", dict(base="messy", columns={"score": {"ops": {"fill": {"how": "value", "value": "abc"}}}}), "'abc'은 정수 값이 아닙니다."),
+        ("fill value가 컬럼 타입에 안 맞음", dict(base="messy", columns={"score": {"ops": {"fill": {"how": "value", "value": "abc"}}}}), "'abc'은 정수 값이 아니에요."),
         ("keep이 true/false가 아님", dict(base="messy", columns={"name": {"keep": "no"}}), "'name' 컬럼의 keep은 true/false"),
         ("모르는 설정 키", dict(base="messy", columns={"name": {"drop": True}}), "'name' 컬럼의 설정은 keep, rename, ops만"),
-        ("이름이 겹침", dict(base="messy", columns={"id": {"rename": "name"}}), "결과에 'name' 컬럼이 둘 이상입니다. 이름을 바꾸세요."),
-        ("모든 컬럼을 뺌", dict(base="messy", columns={c: {"keep": False} for c in columns}), "남길 컬럼이 없습니다."),
-        ("바꾸기 전 이름으로 정렬", dict(base="messy", columns=only("id", id={"rename": "n"}), sorts=["id"]), "'id' 컬럼이 없습니다."),
+        ("이름이 겹침", dict(base="messy", columns={"id": {"rename": "name"}}), "결과에 'name' 컬럼이 둘 이상이에요. 이름을 바꾸세요."),
+        ("모든 컬럼을 뺌", dict(base="messy", columns={c: {"keep": False} for c in columns}), "남길 컬럼이 없어요."),
+        ("바꾸기 전 이름으로 정렬", dict(base="messy", columns=only("id", id={"rename": "n"}), sorts=["id"]), "'id' 컬럼이 없어요."),
         ("잘못된 정렬 방향", dict(base="messy", sorts=["id up"]), "형식: 컬럼 [asc|desc]"),
     ]
     run_columns = only("id", "price", "note", price={"ops": {"trim": True, "type": {"to": "int", "clean": True}}})
     expected = {"id": list(range(20, 0, -1)), "price": [price_int[(i - 1) % 5] for i in range(20, 0, -1)],
                 "note": [MESSY["note"][i - 1] for i in range(20, 0, -1)]}
     run_file = lambda kind: pc.post("/api/run", json={"recipe": {"base": "messy", "columns": run_columns, "sorts": ["id desc"]}, "target": {"kind": "file", "format": kind}})
-    bad_target = "저장 방식은 file(parquet, csv) 또는 table이어야 합니다."
+    bad_target = "저장 방식은 file(parquet, csv) 또는 table이어야 해요."
 
     for tag, connect in connections:
         print("== 전처리:", tag)
@@ -691,7 +691,7 @@ def prep_section():
               (["n", "who", "score"], [20, 19, 18], ["Eve  Smith", "dave"]))
         for name, body, message in rejected:
             check(f"{tag} 거부: {name}", error("/api/preview", **body)[:len(message)], message)
-        check(tag + " profile: 없는 테이블", error("/api/profile", base="nothing"), "'nothing' 테이블이 없습니다.")
+        check(tag + " profile: 없는 테이블", error("/api/profile", base="nothing"), "'nothing' 테이블이 없어요.")
 
         prep_new(tag, got, error, only, preview, values)
         prep_text(tag, pc, error, only, preview, values)
@@ -710,7 +710,7 @@ def prep_section():
     print("== 전처리: 새 테이블 만들기")
     got("/api/connect", **connections[1][1])
     check("Parquet 연결에서 table은 거부", error("/api/run", recipe={"base": "messy"}, target={"kind": "table", "name": "out"}),
-          "Parquet·CSV·JSON·Excel 파일 연결에는 테이블을 만들 DB가 없습니다. 파일로 저장하세요.")
+          "Parquet·CSV·JSON·Excel 파일 연결에는 테이블을 만들 DB가 없어요. 파일로 저장하세요.")
     got("/api/connect", **connections[0][1])
     make = lambda name, cols=run_columns, **recipe: got("/api/run", recipe={"base": "messy", "columns": cols, **recipe}, target={"kind": "table", "name": name})
     check("DuckDB 파일에 새 테이블", make("clean_out", sorts=["id"]), {"ok": True, "rows": 20})
@@ -720,17 +720,17 @@ def prep_section():
           (["id", "price", "note"], list(range(1, 21)), price_int * 4, ["int64", "int64", "string"]))
     check("fill drop은 만든 테이블의 행 수가 줄어듦", make("dropped", only("score", score={"ops": {"fill": {"how": "drop"}}})), {"ok": True, "rows": 15})
     check("같은 이름은 만들기 전에 거부(대소문자 무시)", [error("/api/run", recipe={"base": "messy"}, target={"kind": "table", "name": n}) for n in ("clean_out", "CLEAN_OUT")],
-          ["'clean_out'은 이미 있는 테이블입니다.", "'CLEAN_OUT'은 이미 있는 테이블입니다."])
+          ["'clean_out'은 이미 있는 테이블이에요.", "'CLEAN_OUT'은 이미 있는 테이블이에요."])
     check("테이블 이름 제한", [error("/api/run", recipe={"base": "messy"}, target={"kind": "table", "name": n})[:7] for n in ("", "a b", "a.b", "a'b", '"x"', "x;y")], ["테이블 이름은"] * 6)
     check("한글·숫자·밑줄 이름", make("결과_2", only("id")), {"ok": True, "rows": 20})
     check("잘못된 recipe는 만들지 않고 연결도 그대로", (error("/api/run", recipe={"base": "messy", "columns": {"zzz": {}}}, target={"kind": "table", "name": "bad"})[:15], tables()),
-          ("'zzz' 컬럼이 없습니다.", ["clean_out", "dropped", "messy", "결과_2"]))
+          ("'zzz' 컬럼이 없어요.", ["clean_out", "dropped", "messy", "결과_2"]))
     check("만든 뒤에도 읽기 전용 연결", (state["opened"]["kind"], raised(lambda: state["con"].create_table("late", schema={"a": "int"})) is not None, got("/api/rowcount", base="clean_out")),
           ("folder", True, {"rows": 20}))
     hold = duckdb.connect(duck_file, read_only=True)  # 다른 프로그램이 읽기 전용으로 열고 있는 경우
     e = error("/api/run", recipe={"base": "messy"}, target={"kind": "table", "name": "blocked"})
     hold.close()
-    check("쓰기로 못 열면 이유를 알려 주고 읽기 전용 연결을 되살림", (e.startswith("쓰기로 열 수 없습니다."), got("/api/rowcount", base="dropped")), (True, {"rows": 15}))
+    check("쓰기로 못 열면 이유를 알려 주고 읽기 전용 연결을 되살림", (e.startswith("쓰기로 열 수 없어요."), got("/api/rowcount", base="dropped")), (True, {"rows": 15}))
     check("그 뒤에는 다시 만들 수 있음", make("blocked", only("id")), {"ok": True, "rows": 20})
     check("label이 든 recipe로 테이블 만들기", make("labeled", only("id", "city", city={"ops": {"label": True}}), sorts=["id"]), {"ok": True, "rows": 20})
     r = got("/api/preview", base="labeled", sorts=["id"])
@@ -787,7 +787,7 @@ def notify_section(c, got):
         settings.write("destinations.json", data)
         check("풀 수 없는 비밀 값은 false(다시 입력 필요)", c.get("/api/destinations").get_json()["destinations"]["slack"]["token"], False)
         check("풀 수 없는데 비밀 칸을 비우면 거부, 보내기도 거부", (error("/api/destinations", name="slack", destination={"kind": "slack", "done": False, "token": "", "channel": "C999"}),
-              error("/api/send", name="slack", title="t")), ("'봇 토큰' 칸을 입력하세요.", "'slack': '봇 토큰'을 읽을 수 없습니다(다른 PC·계정에서 온 파일). 다시 입력해 저장하세요."))
+              error("/api/send", name="slack", title="t")), ("'봇 토큰' 칸을 입력하세요.", "'slack': '봇 토큰'을 읽을 수 없어요(다른 PC·계정에서 온 파일). 다시 입력해 저장하세요."))
         put("slack", kind="slack", done=False, token=token, channel="C999")
         check("다시 입력하면 true", c.get("/api/destinations").get_json()["destinations"]["slack"]["token"], True)
         check("검증 거부: 종류·칸·done·https·본문 종류", [error("/api/destinations", name="x", destination=d) for d in (
@@ -795,22 +795,22 @@ def notify_section(c, got):
               {"kind": "webhook", "url": "http://hooks.example.com/a", "content": "json", "template": "{}"},
               {"kind": "webhook", "url": "https://h.example.com/a", "content": "xml", "template": "{}"},
               {"kind": "webhook", "url": "https://h.example.com/a", "content": "json", "template": " "})],
-              ["보낼 곳의 종류는 slack, notion, webhook 중 하나입니다.", "보낼 곳에 쓸 수 없는 값이 있습니다: extra", "보낼 곳에 쓸 수 없는 값이 있습니다: done", "주소는 https://로 시작해야 합니다.",
-               "'본문 종류'은 json, text, form 중 하나입니다.", "'본문 틀' 칸을 입력하세요."])
+              ["보낼 곳의 종류는 slack, notion, webhook 중 하나예요.", "보낼 곳에 쓸 수 없는 값이 있어요: extra", "보낼 곳에 쓸 수 없는 값이 있어요: done", "주소는 https://로 시작해야 해요.",
+               "'본문 종류'은 json, text, form 중 하나예요.", "'본문 틀' 칸을 입력하세요."])
         check("이름 제한(보낼 곳 이름은 1~50자, 30개까지)", [error("/api/destinations", name=n, destination=None) for n in ("", "x" * 51)], ["보낼 곳 이름은 1자 이상 50자 이하로 입력하세요."] * 2)
         for i in range(29):
             put(f"n{i}", kind="slack", done=False, token="t", channel="C")
         check("30개까지, 있는 이름은 고칠 수 있음", (error("/api/destinations", name="넘침", destination={"kind": "slack", "done": False, "token": "t", "channel": "C"}),
-              len(put("n0", kind="slack", done=True, token="", channel="C2")["destinations"])), ("저장한 보낼 곳은 30개까지입니다. 쓰지 않는 것을 지우세요.", 30))
+              len(put("n0", kind="slack", done=True, token="", channel="C2")["destinations"])), ("저장한 보낼 곳은 30개까지예요. 쓰지 않는 것을 지우세요.", 30))
         for i in range(29):
             got("/api/destinations", name=f"n{i}", destination=None)
 
         print("== Slack으로 보내기")
         table = {"columns": ["a", "b"], "rows": [[1, "x"], [2, None]]}
         sent.clear()
-        check("글만: 주소·인증 헤더·본문", (got("/api/send", name="slack", title="완료", text="끝났습니다", table=table), len(sent), sent[0][0], sent[0][2],
+        check("글만: 주소·인증 헤더·본문", (got("/api/send", name="slack", title="완료", text="끝났어요", table=table), len(sent), sent[0][0], sent[0][2],
               json.loads(sent[0][1])), ({"ok": True}, 1, "https://slack.com/api/chat.postMessage",
-              {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"}, {"channel": "C999", "text": "*완료*\n끝났습니다\n```\na | b\n1 | x\n2 | \n```"}))
+              {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"}, {"channel": "C999", "text": "*완료*\n끝났어요\n```\na | b\n1 | x\n2 | \n```"}))
         png = b"\x89PNG\r\n\x1a\n" + b"image-bytes"
         url = "data:image/png;base64," + base64.b64encode(png).decode()
 
@@ -829,9 +829,9 @@ def notify_section(c, got):
         reply[0] = b'{"ok": false, "error": "channel_not_found"}'
         e = error("/api/send", name="slack", title="t")
         check("ok가 false면 error 값을 넣은 오류", e, "Slack 오류: channel_not_found")
-        reply[0] = ValueError(f"보내지 못했습니다(상태 401): invalid {token}")
+        reply[0] = ValueError(f"보내지 못했어요(상태 401): invalid {token}")
         e = error("/api/send", name="slack", title="t")
-        check("실패 문구에서 토큰을 가림", (token in e, "***" in e, e.startswith("보내지 못했습니다(상태 401)")), (False, True, True))
+        check("실패 문구에서 토큰을 가림", (token in e, "***" in e, e.startswith("보내지 못했어요(상태 401)")), (False, True, True))
 
         print("== 웹훅으로 보내기")
         weird = 'He said "hi"\nüber 한글 & a=b\\c'
@@ -866,12 +866,12 @@ def notify_section(c, got):
                   want if want else f"{weird}\n내용 & x=y\n{text}")
         put("hook", kind="webhook", done=False, url="", content="json", template='{"a": {제목}')
         sent.clear()
-        check("틀이 깨진 JSON이면 보내지 않고 거부", (error("/api/send", name="hook", title="t").startswith("본문 틀이 JSON이 아닙니다."), sent), (True, []))
+        check("틀이 깨진 JSON이면 보내지 않고 거부", (error("/api/send", name="hook", title="t").startswith("본문 틀이 JSON이 아니에요."), sent), (True, []))
         put("hook", kind="webhook", done=False, url="", content="text", template="{표}")
         sent.clear()
         got("/api/send", name="hook", title="t", table={"columns": ["a"], "rows": [[1], [2]]})
         check("표 모양: 머리글과 행을 ' | '로, 줄바꿈으로", sent[0][1], b"a\n1\n2")
-        reply[0] = ValueError(f"보내지 못했습니다: {hook} 연결 거부")
+        reply[0] = ValueError(f"보내지 못했어요: {hook} 연결 거부")
         e = error("/api/send", name="hook", title="t")
         check("실패 문구에서 주소를 가림", (hook in e, "secret-path" in e, "***" in e), (False, False, True))
         reply[0] = b"ok"
@@ -879,9 +879,9 @@ def notify_section(c, got):
         check("보내기 입력 거부: 그림 형식·크기, 표 모양, 숫자", [error("/api/send", name="hook", **b) for b in (
               {"title": "t", "image": "data:image/jpeg;base64,AAAA"}, {"title": "t", "image": "data:image/png;base64,@@@@"},
               {"title": "t", "image": "data:image/png;base64," + "A" * (5 * 1024 * 1024 * 4 // 3 + 100)}, {"title": "t", "table": [1]}, {"title": "t", "rows": "3"}, {"title": 1})],
-              ["그림은 PNG data URL(data:image/png;base64,…)이어야 합니다.", "그림을 읽을 수 없습니다.", "그림은 5MB까지 보낼 수 있습니다.",
-               '표는 {"columns": [...], "rows": [...]} 모양이어야 합니다.', "행수는 정수, 걸린 시간은 수(초)여야 합니다.", "제목과 내용은 글자여야 합니다."])
-        check("거부된 요청은 나가지 않음, 없는 이름은 거부", (sent, error("/api/send", name="없음", title="t")), ([], "'없음' 보낼 곳이 없습니다."))
+              ["그림은 PNG data URL(data:image/png;base64,…)이어야 해요.", "그림을 읽을 수 없어요.", "그림은 5MB까지 보낼 수 있어요.",
+               '표는 {"columns": [...], "rows": [...]} 모양이어야 해요.', "행수는 정수, 걸린 시간은 수(초)여야 해요.", "제목과 내용은 글자여야 해요."])
+        check("거부된 요청은 나가지 않음, 없는 이름은 거부", (sent, error("/api/send", name="없음", title="t")), ([], "'없음' 보낼 곳이 없어요."))
     finally:
         transport.post = real
     done = []
@@ -990,8 +990,8 @@ def collect_section(c, got):
           ("GET", [["x", "1"], ["q", "a b&c"], ["n", "2"]], [["Accept", "text/csv"], ["User-Agent", "agent/1"], ["Cookie", "sid=s1"]], "none"))
     ps = parse("curl.exe --url https://h.example.com/b `\n  --json '{\"a\": 1}' -d @body.json --data-urlencode name@file.txt -b cookies.txt --retry 3")
     check("curl PowerShell(` 이음): --json, @파일 첨부·쿠키 파일·모르는 옵션은 unread", (ps["request"]["method"], ps["request"]["body"], ps["request"]["body_kind"], ps["unread"]),
-          ("POST", '{"a": 1}', "json", ["-d @body.json (파일 첨부는 읽지 않습니다)", "--data-urlencode name@file.txt (파일 첨부는 읽지 않습니다)",
-                                       "-b cookies.txt (쿠키 파일은 읽지 않습니다)", "--retry", "3"]))
+          ("POST", '{"a": 1}', "json", ["-d @body.json (파일 첨부는 읽지 않아요)", "--data-urlencode name@file.txt (파일 첨부는 읽지 않아요)",
+                                       "-b cookies.txt (쿠키 파일은 읽지 않아요)", "--retry", "3"]))
     form = parse("curl https://h.example.com/f -d 'user=a&password=p1&n=2'")
     check("curl -d form: 본문 종류 form, form 필드 password가 비밀", (form["request"]["body_kind"], [(s["where"], s["name"]) for s in form["secrets"]]), ("form", [("body", "password")]))
     h = parse("POST /v2/search?page=1&access_token=a1 HTTP/1.1\nHost: api.example.com\nContent-Type: application/x-www-form-urlencoded\nCookie: s=1\nAccept-Encoding: gzip\n\nq=hello&n=1")
@@ -1005,7 +1005,7 @@ def collect_section(c, got):
           j["request"]["body_kind"], j["unread"], [s["name"] for s in j["secrets"]]),
           ("json", "PUT", [["a", "1"], ["b", "2"]], [["X-Session", "s9"], ["Content-Type", "application/json"]], '{"k": [1, 2]}', "json", ["extra"], ["X-Session"]))
     check("예시 거부: 모르는 모양, ftp 주소, 주소 없는 curl", [error("/api/collect/parse", text=t) for t in ("hello", "curl ftp://x.example.com/a", "curl -H 'A: b'")],
-          ['curl 명령, HTTP 요청 글자, JSON({"method", "url", …}) 중 하나로 붙여 넣으세요.', "주소는 http:// 또는 https://로 시작해야 합니다.", "curl 명령에서 주소를 찾지 못했습니다."])
+          ['curl 명령, HTTP 요청 글자, JSON({"method", "url", …}) 중 하나로 붙여 넣으세요.', "주소는 http:// 또는 https://로 시작해야 해요.", "curl 명령에서 주소를 찾지 못했어요."])
 
     print("== 수집: 비밀을 {env:이름}으로, 저장 거부")
     replace = [{"where": s["where"], "name": s["name"], "path": s["path"], "env": f"E{i}"} for i, s in enumerate(r["secrets"])]
@@ -1018,24 +1018,24 @@ def collect_section(c, got):
     config = {"version": 1, "mode": "api", "request": r["request"], "output": {"format": "parquet", "path": "", "dedupe": []}}
     e = error("/api/collections", name="raw", collection=config)
     check("구성 저장 거부: 위치 이름만 알리고 값은 넣지 않음", (e, any(v in e for v in ("tok-123", "k-456", "abc+1", "t-789", "pw-1"))),
-          ("비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 주소의 비밀번호, 헤더 Authorization, 헤더 X-Api-Key, 쿼리 serviceKey, 본문 auth.token. env 파일에 넣고 {env:이름}으로 바꾸세요.", False))
+          ("비밀처럼 보이는 자리에 값이 그대로 들어 있어요: 주소의 비밀번호, 헤더 Authorization, 헤더 X-Api-Key, 쿼리 serviceKey, 본문 auth.token. env 파일에 넣고 {env:이름}으로 바꾸세요.", False))
     check("비밀 이름은 낱말로 봄: keyword·author·monkey_bars는 아님", [n for n in ("serviceKey", "X-API-KEY", "access_token", "apikey", "sessionId", "keyword", "author", "sort", "monkey_bars")
           if creq.secret_name(n)], ["serviceKey", "X-API-KEY", "access_token", "apikey", "sessionId"])
     sort_key = {**config, "request": {**s, "query": [*s["query"], ["sort_key", "date"]], "headers": [*s["headers"], ["Cookie", "c=1"]]}}
     check("비밀이 아니라고 뺀 이름(plain)은 저장됨, Cookie는 plain이어도 비밀", (error("/api/collections", name="p", collection=sort_key),
           error("/api/collections", name="p", collection={**sort_key, "plain": ["SORT_KEY", "Cookie"]})),
-          ("비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 헤더 Cookie, 쿼리 sort_key. env 파일에 넣고 {env:이름}으로 바꾸세요.",
-           "비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 헤더 Cookie. env 파일에 넣고 {env:이름}으로 바꾸세요."))
+          ("비밀처럼 보이는 자리에 값이 그대로 들어 있어요: 헤더 Cookie, 쿼리 sort_key. env 파일에 넣고 {env:이름}으로 바꾸세요.",
+           "비밀처럼 보이는 자리에 값이 그대로 들어 있어요: 헤더 Cookie. env 파일에 넣고 {env:이름}으로 바꾸세요."))
     saved = got("/api/collections", name="공공", collection={**config, "request": s})
     check("바꾼 구성은 저장됨(빠진 칸은 기본값), 목록", (list(saved["collections"]), saved["collections"]["공공"]["request"]["url"], saved["collections"]["공공"]["paging"]["kind"],
           c.get("/api/collections").get_json()["collections"]["공공"]["request"]["query"][0]), (["공공"], s["url"], "none", ["serviceKey", "{env:E3}"]))
     check("구성 검사: version·모르는 키·잘못된 값", [error("/api/collections", name="x", collection=v) for v in (
           {"version": 2}, {"version": 1, "extra": 1}, {"request": {"nope": 1}}, {"paging": {"kind": "scroll"}}, {"balance": {"concurrency": 0}}, {"request": {"headers": [["a"]]}})],
-          ["구성의 version은 1이어야 합니다.", "구성에 쓸 수 없는 값이 있습니다: extra", "구성에 쓸 수 없는 값이 있습니다: request.nope",
-           "구성의 paging.kind는 none, page, offset, cursor, next_url 중 하나입니다.", "구성의 balance.concurrency는 1~32의 정수여야 합니다.",
-           "구성의 request.headers는 [[이름, 값], …] 모양이어야 합니다."])
+          ["구성의 version은 1이어야 해요.", "구성에 쓸 수 없는 값이 있어요: extra", "구성에 쓸 수 없는 값이 있어요: request.nope",
+           "구성의 paging.kind는 none, page, offset, cursor, next_url 중 하나예요.", "구성의 balance.concurrency는 1~32의 정수여야 해요.",
+           "구성의 request.headers는 [[이름, 값], …] 모양이어야 해요."])
     check("파일 모드의 헤더·주소 쿼리도 검사", error("/api/collections", name="x", collection={"mode": "file", "file": {"url": "https://h.example.com/d.csv?token=zz", "headers": [["Authorization", "Bearer q"]]}}),
-          "비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 파일 주소의 token, 파일 헤더 Authorization. env 파일에 넣고 {env:이름}으로 바꾸세요.")
+          "비밀처럼 보이는 자리에 값이 그대로 들어 있어요: 파일 주소의 token, 파일 헤더 Authorization. env 파일에 넣고 {env:이름}으로 바꾸세요.")
     check("구성 지우기", got("/api/collections", name="공공", collection=None), {"collections": {}})
 
     print("== 수집: env 파일")
@@ -1047,7 +1047,7 @@ def collect_section(c, got):
     bad_env = ROOT / "bad.env"
     bad_env.write_text("OK=1\nthis line secret-value\n", encoding="utf-8")
     e = error("/api/collect/env", path=str(bad_env))
-    check("env: 읽지 못한 줄은 번호만(값 없음)", (e, "secret-value" in e), ("env 파일 2번째 줄을 읽을 수 없습니다(이름=값 모양이어야 합니다).", False))
+    check("env: 읽지 못한 줄은 번호만(값 없음)", (e, "secret-value" in e), ("env 파일 2번째 줄을 읽을 수 없어요(이름=값 모양이어야 해요).", False))
 
     print("== 수집: 자리 채우기")
     ctx = {"env": {"K": 'a b&c=d/한"\n'}, "page": 3, "offset": 200, "cursor": "", "now": dt.datetime(2026, 1, 2, 3, 4, 5)}
@@ -1063,7 +1063,7 @@ def collect_section(c, got):
           ({"k": ['a b&c=d/한"\n'], "p": ["3"]}, [["Content-Type", "application/x-www-form-urlencoded"]]))
     check("채운 JSON이 깨지면 거부, 헤더 줄바꿈 거부", [str(raised_error(lambda: creq.build({"url": "https://h.example.com", "body_kind": "json", "body": '{"a": {page'}, ctx))),
           str(raised_error(lambda: creq.build({"url": "https://h.example.com", "headers": [["X", "{env:K}"]]}, ctx)))],
-          ["자리를 채운 본문이 JSON이 아닙니다. 본문과 자리 표시를 확인하세요.", "헤더 이름·값에 줄바꿈을 넣을 수 없습니다."])
+          ["자리를 채운 본문이 JSON이 아니에요. 본문과 자리 표시를 확인하세요.", "헤더 이름·값에 줄바꿈을 넣을 수 없어요."])
     check("주소의 user:pass@는 Basic 인증 헤더로(주소에서는 뺌)", (lambda b: (b["url"], b["headers"]))(creq.build({"url": "https://me:{env:K}@h.example.com/a"}, {**ctx, "env": {"K": "p@ss"}})),
           ("https://h.example.com/a", [["Authorization", "Basic " + base64.b64encode(b"me:p@ss").decode()]]))
 
@@ -1081,7 +1081,7 @@ def collect_section(c, got):
     r = got("/api/collect/sample", config={"response": {"records": ""}}, text="[1, \"a\", null]")
     check("객체가 아닌 기록은 value 컬럼", (r["rows"], r["columns"]), ([{"value": 1}, {"value": "a"}, {"value": None}], [{"name": "value", "path": "value", "type": "문자"}]))
     check("기록 경로가 없으면·JSON이 아니면 거부", [error("/api/collect/sample", config={"response": {"records": "nope"}}, text=sample_text), error("/api/collect/sample", config={}, text="<x/>")],
-          ["기록 경로 'nope'를 응답에서 찾지 못했습니다.", "응답 예시가 JSON이 아닙니다."])
+          ["기록 경로 'nope'를 응답에서 찾지 못했어요.", "응답 예시가 JSON이 아니에요."])
 
     print("== 수집: 작업(가짜 서버)")
     api = FakeApi()
@@ -1135,7 +1135,7 @@ def collect_section(c, got):
     locked.write_bytes(b"old")
     with open(locked, "rb"):  # 다른 프로그램이 결과 파일을 잡고 있는 것처럼
         _, st = run(config("/items", "locked.parquet", request={"query": [["page", "{page}"]]}))
-    check("결과 파일이 잡혀 있으면 알리고 받은 것은 남김(바꾸던 파일은 지움)", (st["phase"], st["error"].startswith("다른 프로그램이 파일을 쓰고 있습니다."), locked.read_bytes(),
+    check("결과 파일이 잡혀 있으면 알리고 받은 것은 남김(바꾸던 파일은 지움)", (st["phase"], st["error"].startswith("다른 프로그램이 파일을 쓰고 있어요."), locked.read_bytes(),
           sorted(p.name for p in out.iterdir() if p.name.startswith("locked"))), ("실패", True, b"old", ["locked.parquet", "locked.part", "locked.part.json"]))
     count = len(api.hits("/items"))
     started, st = run(config("/items", "locked.parquet", request={"query": [["page", "{page}"]]}))
@@ -1209,7 +1209,7 @@ def collect_section(c, got):
     api.routes["/echo"] = lambda e: (400, {}, f"bad key {e['query'].get('k')} / {e['headers'].get('x-token')}".encode())
     _, st = run(config("/echo", "echo.parquet", request={"query": [["k", "{env:API_KEY}"]], "headers": [["X-Token", "{env:TOKEN}"]]}, paging={"kind": "none"}))
     check("다른 4xx는 멈춤, 오류 문구에서 env 값을 ●●●로 가림", (st["phase"], secret_key in st["error"], secret_tok in st["error"], st["error"]),
-          ("실패", False, False, "요청이 거부됐습니다(상태 400): bad key ●●● / ●●●"))
+          ("실패", False, False, "요청이 거부됐어요(상태 400): bad key ●●● / ●●●"))
 
     print("== 수집: 시험 보내기·넘겨주기")
     api.routes["/try"] = lambda e: (200, {"Content-Type": "application/json; charset=euc-kr", "X-Echo": e["query"].get("k", "")},
@@ -1220,9 +1220,9 @@ def collect_section(c, got):
           (200, api.base + "/try?k=●●●", [["Authorization", "Bearer ●●●"]], {"msg": "한글", "k": "●●●"}, "●●●", False))
     check("시험·시작 전 없는 env 이름은 이름만 알림", [error("/api/collect/try", config=config("/try", "", request={"query": [["k", "{env:NOPE}"], ["j", "{env:NOPE2}"]]})),
           error("/api/collect/start", config=config("/try", "x.parquet", env_path="", request={"query": [["k", "{env:A}"]]}))],
-          ["env 파일에 없는 이름이 있습니다: NOPE, NOPE2", "env 파일을 고르세요. 쓰인 이름: A"])
+          ["env 파일에 없는 이름이 있어요: NOPE, NOPE2", "env 파일을 고르세요. 쓰인 이름: A"])
     check("시험·시작 때도 글자 그대로의 비밀은 거부", [error(api_path, config=config("/try", "x.parquet", request={"headers": [["X-Api-Key", "raw"]]})) for api_path in ("/api/collect/try", "/api/collect/start")],
-          ["비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 헤더 X-Api-Key. env 파일에 넣고 {env:이름}으로 바꾸세요."] * 2)
+          ["비밀처럼 보이는 자리에 값이 그대로 들어 있어요: 헤더 X-Api-Key. env 파일에 넣고 {env:이름}으로 바꾸세요."] * 2)
     port = api.http.server_port
     api.routes["/hop"] = lambda e: (302, {"Location": f"http://localhost:{port}/land"}, b"")
     api.routes["/hop2"] = lambda e: (307, {"Location": "/land"}, b"")
@@ -1234,7 +1234,7 @@ def collect_section(c, got):
     got("/api/collect/try", config=hop("/hop2"))
     check("같은 호스트로 넘겨주면 그대로", api.hits("/land")[-1]["headers"].get("authorization"), f"Bearer {secret_tok}")
     api.routes["/loop"] = lambda e: (302, {"Location": "/loop"}, b"")
-    check("넘겨주기는 5번까지", error("/api/collect/try", config=config("/loop", "")), "넘겨주기(redirect)가 5번을 넘었습니다.")
+    check("넘겨주기는 5번까지", error("/api/collect/try", config=config("/loop", "")), "넘겨주기(redirect)가 5번을 넘었어요.")
 
     class FakeReply:
         status, headers = 302, {"Location": "http://h.example.com/x"}
@@ -1246,7 +1246,7 @@ def collect_section(c, got):
     collect_http.OPENER = type("Opener", (), {"open": lambda self, request, timeout: FakeReply()})()
     try:
         check("https에서 http로 넘겨주면 거부", str(raised_error(lambda: collect_http.open_url("GET", "https://h.example.com/a", [], None, 5))),
-              "https 주소에서 http 주소로 넘겨주는 것은 따라가지 않습니다.")
+              "https 주소에서 http 주소로 넘겨주는 것은 따라가지 않아요.")
     finally:
         collect_http.OPENER = real_opener
     collect_http.MAX_BYTES = 100
@@ -1255,15 +1255,15 @@ def collect_section(c, got):
         check("응답 크기 상한을 넘으면 파일 주소로 받으라고 알림", error("/api/collect/try", config=config("/big", "")).endswith("큰 파일은 파일 주소로 받으세요(파일 모드)."), True)
     finally:
         collect_http.MAX_BYTES = 200 * 1024 * 1024
-    check("http·https가 아닌 주소는 거부", error("/api/collect/try", config=config("/x", "", request={"url": "file:///C:/x.json"})), "주소는 http:// 또는 https://로 시작해야 합니다.")
+    check("http·https가 아닌 주소는 거부", error("/api/collect/try", config=config("/x", "", request={"url": "file:///C:/x.json"})), "주소는 http:// 또는 https://로 시작해야 해요.")
     api.routes["/skew"] = lambda e: (200, {"Date": email_date(time.time() - 3600)}, b"[1]")
     _, st = run(config("/skew", "skew.parquet", response={"records": ""}, paging={"kind": "none"}))
-    check("응답 Date가 PC 시계와 5분 넘게 다르면 알림", (st["phase"], st["message"].startswith("서버 시계와 PC 시계가 60분 다릅니다.")), ("끝", True))
+    check("응답 Date가 PC 시계와 5분 넘게 다르면 알림", (st["phase"], st["message"].startswith("서버 시계와 PC 시계가 60분 달라요.")), ("끝", True))
 
     print("== 수집: 사용 한도")
     check("묶음 검사", [error("/api/limits", name="g", group=v) for v in ({"per_second": 0}, {"reset": "24:00"}, {"tz": "Mars/Base"}, {"margin": 60}, {"x": 1})],
-          ["'per_second'는 비우거나 1 이상의 정수로 쓰세요.", "초기화 시각(reset)은 HH:MM 모양으로 쓰세요.", "알 수 없는 시간대입니다: Mars/Base", "여유(margin)는 0~50%로 쓰세요.",
-           "사용 한도에 쓸 수 없는 값이 있습니다: x"])
+          ["'per_second'는 비우거나 1 이상의 정수로 쓰세요.", "초기화 시각(reset)은 HH:MM 모양으로 쓰세요.", "알 수 없는 시간대예요: Mars/Base", "여유(margin)는 0~50%로 쓰세요.",
+           "사용 한도에 쓸 수 없는 값이 있어요: x"])
     r = got("/api/limits", name="초당", group={"per_second": 2, "concurrency": 4})
     check("묶음 저장과 사용량(기본값 채움)", (r["groups"]["초당"]["tz"], r["usage"]["초당"]["day"], r["usage"]["초당"]["broken"], r["usage"]["초당"]["day_limit"]), ("Asia/Seoul", 0, False, None))
     count = len(api.hits("/items"))
@@ -1278,7 +1278,7 @@ def collect_section(c, got):
     _, st = run(daily)
     reset_at = collect_limits.reset_text(collect_limits.groups()["하루"], time.time())
     check("하루 한도에 닿으면 멈추고 이어 받기를 남김", (st["phase"], st["message"], len(api.hits("/items")) - count, st["usage"]["day_left"], (out / "daily.part.json").exists()),
-          ("멈춤", f"오늘 한도를 다 썼습니다. {reset_at} 이후 이어 받을 수 있습니다.", 3, 0, True))
+          ("멈춤", f"오늘 한도를 다 썼어요. {reset_at} 이후 이어 받을 수 있어요.", 3, 0, True))
     check("estimate: 남은 요청 수·오늘 남은 횟수·이어 받기", got("/api/collect/estimate", config=daily), {"requests": 97, "day_left": 0, "resume": {"pages": 3, "bytes": st["bytes"]}})
     got("/api/limits", name="하루", group={"per_day": 100, "margin": 50, "concurrency": 1})
     started, st = run(daily)
@@ -1373,7 +1373,7 @@ def collect_section(c, got):
     run(fcfg("/d.json", "dj.csv"))
     api.routes["/broken.bin"] = lambda e: ranged(b"\x00\x01PAR1garbage", None, e)
     _, st = run(fcfg("/broken.bin", "broken.parquet", kind="parquet"))
-    check("JSON → CSV, 열 수 없는 파일은 실패로 알림", ((out / "dj.csv").read_bytes().decode("utf-8-sig").splitlines(), st["phase"], st["error"].startswith("받은 파일을 parquet로 열 수 없습니다: ")),
+    check("JSON → CSV, 열 수 없는 파일은 실패로 알림", ((out / "dj.csv").read_bytes().decode("utf-8-sig").splitlines(), st["phase"], st["error"].startswith("받은 파일을 parquet로 열 수 없어요: ")),
           (["k,v", "1,가", "2,나"], "실패", True))
 
     print("== 수집: 멈춤·결과 열기·차례")
@@ -1382,7 +1382,7 @@ def collect_section(c, got):
     api.routes["/slow"] = lambda e: (time.sleep(0.2), items_route(e))[1]
     slow = config("/slow", "slow.parquet", request={"query": [["page", "{page}"]]}, balance={"concurrency": 1})
     check("이미 도는 중이면 시작 거부, 멈춤", (got("/api/collect/start", config=slow)["ok"], error("/api/collect/start", config=cfg), got("/api/collect/stop")),
-          (True, "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요.", {"ok": True}))
+          (True, "이미 수집이 돌고 있어요. 끝나거나 멈춘 뒤에 시작하세요.", {"ok": True}))
     st = wait()
     check("멈추면 '멈춤', 진행 기록은 남김", (st["phase"], st["running"], (out / "slow.part.json").exists()), ("멈춤", False, True))
     asked_path = []
@@ -1391,9 +1391,9 @@ def collect_section(c, got):
     server.ask_save = None
     check("/api/collect/open: 결과 파일에 연결하고 테이블 이름", (got("/api/collect/open", path=str(out / "items.parquet")), c.get("/api/state").get_json()["opened"]["files"],
           got("/api/query", base="items", limit=1)["count"]), ({"table": "items"}, [str(out / "items.parquet")], 15))
-    check("열 결과가 없으면 거부", error("/api/collect/open", path=str(out / "none.parquet")), "열 결과 파일(Parquet·CSV)이 없습니다.")
+    check("열 결과가 없으면 거부", error("/api/collect/open", path=str(out / "none.parquet")), "열 결과 파일(Parquet·CSV)이 없어요.")
     check("읽고 있는 파일에는 수집 결과를 쓰지 않음", error("/api/collect/start", config=config("/items", "items.parquet", request={"query": [["page", "{page}"]]})),
-          "지금 읽고 있는 파일에는 저장할 수 없습니다. 다른 이름을 고르세요.")
+          "지금 읽고 있는 파일에는 저장할 수 없어요. 다른 이름을 고르세요.")
     got("/api/disconnect")
     done = []
     thread = threading.Thread(target=lambda: done.append(c.get("/api/collect/status").status_code))
@@ -1548,7 +1548,7 @@ def web_section(c, got):
         got("/api/limits", name="웹", group={"per_day": 100, "concurrency": 1})
         fake = FakeSite(api.base, pages)
         started, st = run(nxt, fake)
-        check("next 이어 받기: 처음부터 다시 넘기되 받은 쪽은 다시 저장하지 않음", (started["resumed"], st["phase"], st["message"].startswith("이어 받습니다. 처음 쪽부터"),
+        check("next 이어 받기: 처음부터 다시 넘기되 받은 쪽은 다시 저장하지 않음", (started["resumed"], st["phase"], st["message"].startswith("이어 받아요. 처음 쪽부터"),
               [x for x in fake.log if x == ("next", True)], pl.read_parquet(out / "next2.parquet")["이름"].to_list()), (True, "끝", True, [("next", True)] * 2,
               [t for k in (1, 2, 3) for t, _ in pages[k]]))
         got("/api/limits", name="웹", group=None)
@@ -1560,9 +1560,9 @@ def web_section(c, got):
         _, st = run(wcfg("empty.parquet"), FakeSite(api.base, {1: []}))
         check("첫 쪽이 0건이면 실패", (st["phase"], st["error"]), ("실패", collect_web.EMPTY))
         _, st = run(wcfg("moved.parquet"), FakeSite(api.base, pages, moved=2))
-        check("다른 호스트로 넘어가면 다시 로그인이 필요하다고 실패", (st["phase"], st["error"].startswith("다시 로그인이 필요할 수 있습니다: 페이지가 다른 주소(login.example.com)로")), ("실패", True))
+        check("다른 호스트로 넘어가면 다시 로그인이 필요하다고 실패", (st["phase"], st["error"].startswith("다시 로그인이 필요할 수 있어요: 페이지가 다른 주소(login.example.com)로")), ("실패", True))
         _, st = run(wcfg("gone.parquet"), FakeSite(api.base, pages, gone=1))
-        check("실행 중 창이 닫히면 알림, 받은 것은 남김", (st["phase"], st["error"], (out / "gone.part.json").exists()), ("실패", "수집용 창이 닫혀 멈췄습니다.", True))
+        check("실행 중 창이 닫히면 알림, 받은 것은 남김", (st["phase"], st["error"], (out / "gone.part.json").exists()), ("실패", "수집용 창이 닫혀 멈췄어요.", True))
 
         print("== 수집: robots.txt")
         robots = {"status": 200, "text": "User-agent: *\nDisallow: /list\nAllow: /\n"}
@@ -1578,13 +1578,13 @@ def web_section(c, got):
         texts.append(verdict())
         robots.update(status=200, text="User-agent: other\nDisallow: /\n")
         texts.append(verdict())
-        check("estimate의 robots: 금지·4xx는 허용·5xx는 확인 못 함·다른 User-agent 규칙은 상관없음", texts, ["금지: /list", "허용", "확인 못 함: robots.txt 응답 상태가 503입니다", "허용"])
+        check("estimate의 robots: 금지·4xx는 허용·5xx는 확인 못 함·다른 User-agent 규칙은 상관없음", texts, ["금지: /list", "허용", "확인 못 함: robots.txt 응답을 쓸 수 없어요(상태 503)", "허용"])
         check("robots.txt를 받는 것은 사용 한도·요청 수에 세지 않음(호스트마다 한 번)", len(api.hits("/robots.txt")), 5)
         dead = FakeApi()
         dead.http.shutdown()
         dead.http.server_close()
         cfg_dead = wcfg("d.parquet", robots=True, url=dead.base + "/list")
-        check("연결이 안 되면 확인 못 함", got("/api/collect/estimate", config=cfg_dead)["robots"].startswith("확인 못 함: robots.txt를 받지 못했습니다"), True)
+        check("연결이 안 되면 확인 못 함", got("/api/collect/estimate", config=cfg_dead)["robots"].startswith("확인 못 함: robots.txt를 받지 못했어요"), True)
         check("robots를 끄면 estimate에 없음, none은 1쪽", got("/api/collect/estimate", config=wcfg("r.parquet", "none")), {"requests": 1, "day_left": None, "resume": None})
 
         print("== 수집: 웹페이지 구성 검사·라우트")
@@ -1592,16 +1592,16 @@ def web_section(c, got):
               {"mode": "web", "web": {"paging": {"kind": "page"}}}, {"web": {"fields": [{"name": "a", "selector": ""}]}},
               {"web": {"fields": [{"name": "A", "selector": "", "attr": "text"}, {"name": "a", "selector": "", "attr": "href"}]}}, {"web": {"wait": 121}},
               {"web": {"paging": {"step": 1}}}, {"web": {"fields": [{"name": "a", "selector": "", "attr": "on click"}]}})],
-              ["구성의 web.paging.kind는 none, next, url, scroll 중 하나입니다.", *["구성의 web.fields는 [{\"name\", \"selector\", \"attr\"}, …] 모양이어야 합니다(이름은 비우지 않음, attr은 text 또는 속성 이름, 200개까지)."],
-               "컬럼 이름이 겹칩니다(대소문자 무시).", "구성의 web.wait는 1~120의 수여야 합니다.", "구성에 쓸 수 없는 값이 있습니다: web.paging.step",
-               "구성의 web.fields는 [{\"name\", \"selector\", \"attr\"}, …] 모양이어야 합니다(이름은 비우지 않음, attr은 text 또는 속성 이름, 200개까지)."])
+              ["구성의 web.paging.kind는 none, next, url, scroll 중 하나예요.", *["구성의 web.fields는 [{\"name\", \"selector\", \"attr\"}, …] 모양이어야 해요(이름은 비우지 않음, attr은 text 또는 속성 이름, 200개까지)."],
+               "컬럼 이름이 겹쳐요(대소문자 무시).", "구성의 web.wait는 1~120의 수여야 해요.", "구성에 쓸 수 없는 값이 있어요: web.paging.step",
+               "구성의 web.fields는 [{\"name\", \"selector\", \"attr\"}, …] 모양이어야 해요(이름은 비우지 않음, attr은 text 또는 속성 이름, 200개까지)."])
         check("시작 전 검사: {env}·http 아닌 주소·항목·컬럼·다음 버튼", [error("/api/collect/start", config=v) for v in (
               wcfg("x.parquet", url="https://h.example.com/{env:K}"), wcfg("x.parquet", url="file:///C:/a.html"), wcfg("x.parquet", items=" "),
               wcfg("x.parquet", fields=[]), wcfg("x.parquet", "next", paging={"next": ""}))],
-              ["웹페이지 주소에는 {env:…}를 쓸 수 없습니다(로그인은 수집용 창에서 하세요).", "http:// 또는 https:// 주소만 열 수 있습니다.", "항목 선택자를 정하세요.",
+              ["웹페이지 주소에는 {env:…}를 쓸 수 없어요(로그인은 수집용 창에서 하세요).", "http:// 또는 https:// 주소만 열 수 있어요.", "항목 선택자를 정하세요.",
                "컬럼을 하나 이상 정하세요.", "다음 버튼 선택자를 정하세요."])
         check("웹페이지 주소의 비밀 같은 쿼리도 저장 거부", error("/api/collections", name="w", collection=wcfg("x.parquet", url="https://h.example.com/l?token=zz")),
-              "비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: 웹페이지 주소의 token. env 파일에 넣고 {env:이름}으로 바꾸세요.")
+              "비밀처럼 보이는 자리에 값이 그대로 들어 있어요: 웹페이지 주소의 token. env 파일에 넣고 {env:이름}으로 바꾸세요.")
         check("try는 웹페이지 모드에서 쓰지 않음", error("/api/collect/try", config=wcfg("")), "웹페이지 모드는 [브라우저 열기]와 미리보기로 확인하세요.")
         check("창이 없을 때: 상태, 고르기·미리보기 거부, 닫기는 됨", (c.get("/api/collect/browser/state").get_json(), error("/api/collect/browser/pick", target="field"),
               error("/api/collect/web/sample", config=wcfg("")), got("/api/collect/browser/close")),
@@ -1610,14 +1610,14 @@ def web_section(c, got):
         collect_browser.open_page = opened.append
         check("open: {page}는 start(없으면 1)로, http·https·{env} 거부, start는 정수", ([got("/api/collect/browser/open", url=api.base + "/l?p={page}"), got("/api/collect/browser/open", url=api.base + "/l?p={page}", start=3)],
               opened, [error("/api/collect/browser/open", url=u) for u in ("ftp://h.example.com/", "https://h.example.com/{env:A}")], error("/api/collect/browser/open", url=api.base, start="2")),
-              ([{"ok": True}] * 2, [api.base + "/l?p=1", api.base + "/l?p=3"], ["http:// 또는 https:// 주소만 열 수 있습니다.", "http:// 또는 https:// 주소만 열 수 있습니다({env:…}는 쓸 수 없습니다)."],
-               "start는 정수여야 합니다."))
-        check("pick: target 검사", error("/api/collect/browser/pick", target="all"), "target은 field, next, off 중 하나입니다.")
+              ([{"ok": True}] * 2, [api.base + "/l?p=1", api.base + "/l?p=3"], ["http:// 또는 https:// 주소만 열 수 있어요.", "http:// 또는 https:// 주소만 열 수 있어요({env:…}는 쓸 수 없어요)."],
+               "start는 정수여야 해요."))
+        check("pick: target 검사", error("/api/collect/browser/pick", target="all"), "target은 field, next, off 중 하나예요.")
         collect_browser.page = lambda: FakeSite(api.base, {1: [(f"n{j}", f"/x{j}") for j in range(30)]})
         r = got("/api/collect/web/sample", config=wcfg(""))
         check("미리보기: 지금 페이지의 항목 수, 컬럼, 앞 20행", (r["count"], r["columns"], len(r["rows"]), r["rows"][0]), (30, ["이름", "링크"], 20, {"이름": "n0", "링크": "/x0"}))
         collect_browser.page = lambda: type("Bad", (), {"run": lambda self, *a, **k: {"count": 1, "rows": [[1, "x"]], "url": "http://h.example.com/"}})()
-        check("페이지가 준 값의 모양이 틀리면 거부", error("/api/collect/web/sample", config=wcfg("")), "페이지에서 읽은 값의 모양이 올바르지 않습니다.")
+        check("페이지가 준 값의 모양이 틀리면 거부", error("/api/collect/web/sample", config=wcfg("")), "페이지에서 읽은 값의 모양이 올바르지 않아요.")
         collect_browser.page = real["page"]
         collect_browser.child["busy"] = True
         check("작업이 창을 쓰는 중이면 고르기·닫기 거부, 상태의 busy", (error("/api/collect/browser/pick", target="off"), error("/api/collect/browser/close"),
@@ -1648,7 +1648,7 @@ def web_section(c, got):
               (0, {"ok": True}, False, True))
         check("없으면 아무 일도 하지 않음", got("/api/collect/browser/forget"), {"ok": True})
         made = subprocess.run(["cmd", "/c", "mklink", "/J", str(folder), str(outside)], capture_output=True).returncode
-        check("폴더가 정션이면 거부(가리키는 곳은 그대로)", (made, error("/api/collect/browser/forget").endswith("링크라서 지우지 않습니다."), (outside / "keep.txt").exists()), (0, True, True))
+        check("폴더가 정션이면 거부(가리키는 곳은 그대로)", (made, error("/api/collect/browser/forget").endswith("링크라서 지우지 않아요."), (outside / "keep.txt").exists()), (0, True, True))
         os.rmdir(folder)
     finally:
         for name, value in real.items():
@@ -1707,10 +1707,10 @@ def load_section(c, got):
           {"load": {"table": {"connection": {"kind": "url", "url": "postgres://h/db", "password": "x"}}}},
           {"load": {"table": {"connection": {"kind": "url", "url": "postgres://me:pw@h/db"}}}},
           {"load": {"batch": 50}}, {"load": {"target": "s3"}}, {"load": {"table": {"key": "id"}}})],
-          ["비밀번호 같은 비밀 값은 구성에 넣지 않습니다(저장하지 않고 시작할 때 따로 입력합니다).",
-           "DB 주소에 비밀번호를 넣지 마세요. 비밀번호는 저장하지 않고 시작할 때 따로 입력합니다.",
-           "구성의 load.batch는 100~1000000의 정수여야 합니다.", "구성의 load.target는 file, table, kafka 중 하나입니다.",
-           "구성의 load.table.key는 컬럼 이름 목록이어야 합니다."])
+          ["비밀번호 같은 비밀 값은 구성에 넣지 않아요(저장하지 않고 시작할 때 따로 입력해요).",
+           "DB 주소에 비밀번호를 넣지 마세요. 비밀번호는 저장하지 않고 시작할 때 따로 입력해요.",
+           "구성의 load.batch는 100~1000000의 정수여야 해요.", "구성의 load.target는 file, table, kafka 중 하나예요.",
+           "구성의 load.table.key는 컬럼 이름 목록이어야 해요."])
     check("기본 구성은 적재 없음(target file)", collect_config.normalize({})["load"]["target"], "file")
     limits = collect_config.NUMBERS[("load", "batch")]
     collect_config.NUMBERS[("load", "batch")] = (int, 1, limits[2])  # 작은 묶음(10행)으로 시험한다.
@@ -1719,11 +1719,11 @@ def load_section(c, got):
         check("시작 전 거부: 이름, 파일, key는 append에서만", [error("/api/load/start", config=v) for v in (
               lcfg("items.parquet", table={"name": "bad name"}), lcfg("items.parquet", table={"connection": {"kind": "folder", "file": str(out / "x.txt")}}),
               lcfg("items.parquet", table={"key": ["id"]}), lcfg("none.parquet"), {**lcfg("items.parquet"), "load": {"target": "file"}})],
-              ["테이블 이름은 영문·숫자·밑줄·한글만 쓸 수 있습니다(공백·따옴표·점 없이).", "적재할 DB 파일(.duckdb)을 고르세요.",
-               "이미 있는 키를 건너뛰는 것(key)은 덧붙이기(append)에서만 씁니다.", "적재할 결과 파일이 없습니다. 먼저 수집하세요.", "적재할 곳(DB 테이블 또는 Kafka)을 고르세요."])
+              ["테이블 이름은 영문·숫자·밑줄·한글만 쓸 수 있어요(공백·따옴표·점 없이).", "적재할 DB 파일(.duckdb)을 고르세요.",
+               "이미 있는 키를 건너뛰는 것(key)은 덧붙이기(append)에서만 써요.", "적재할 결과 파일이 없어요. 먼저 수집하세요.", "적재할 곳(DB 테이블 또는 Kafka)을 고르세요."])
         r = got("/api/load/table/check", config=lcfg("items.parquet"), password=secret)
         check("확인: 없는 테이블은 새로 만듦, 결과 파일의 컬럼", r, {"exists": False, "columns": [["id", "정수"], ["name", "문자"], ["amount", "실수"], ["day", "날짜"]],
-              "table_columns": None, "ours": False, "ok": True, "message": "새 테이블로 만듭니다."})
+              "table_columns": None, "ours": False, "ok": True, "message": "새 테이블로 만들어요."})
         started, st = load(lcfg("items.parquet"), secrets={"password": secret})
         check("new: 묶음 10행씩 3묶음, 상태의 load 칸, 기록 파일은 다 넣으면 지움", (started, st["phase"], st["load"], (out / "items.load.json").exists()),
               ({"ok": True}, "끝", {"target": "table", "rows": 25, "total": 25, "batches": 3, "skipped": 0, "failures": 0, "where": "warehouse.duckdb · items"}, False))
@@ -1732,9 +1732,9 @@ def load_section(c, got):
         check("만든 테이블 기록(load_tables.json): 연결·스키마·이름·컬럼", [(t["connection"], t["schema"], t["name"], t["columns"]) for t in made],
               [(os.path.normcase(str(db)), "", "items", [["id", "정수"], ["name", "문자"], ["amount", "실수"], ["day", "날짜"]])])
         _, st = load(lcfg("items.parquet"))
-        check("new: 이미 있으면 실패로 알림", (st["phase"], st["error"]), ("실패", "'items'은 이미 있는 테이블입니다. 다른 이름을 쓰거나 덧붙이기·바꾸기를 고르세요."))
+        check("new: 이미 있으면 실패로 알림", (st["phase"], st["error"]), ("실패", "'items'은 이미 있는 테이블이에요. 다른 이름을 쓰거나 덧붙이기·바꾸기를 고르세요."))
         r = got("/api/load/table/check", config=lcfg("items.parquet", table={"how": "append", "key": ["id"]}))
-        check("확인: 같은 컬럼이면 덧붙일 수 있음, 이 프로그램이 만든 것", (r["ok"], r["message"], r["ours"], r["table_columns"] == r["columns"]), (True, "컬럼이 같아 덧붙일 수 있습니다.", True, True))
+        check("확인: 같은 컬럼이면 덧붙일 수 있음, 이 프로그램이 만든 것", (r["ok"], r["message"], r["ours"], r["table_columns"] == r["columns"]), (True, "컬럼이 같아 덧붙일 수 있어요.", True, True))
         _, st = load(lcfg("items.parquet", table={"how": "append", "key": ["id"]}))
         check("append + key: 이미 있는 키는 모두 건너뜀", (st["phase"], st["load"]["skipped"], len(table_rows("items"))), ("끝", 25, 25))
         _, st = load(lcfg("items.parquet", table={"how": "append"}, unit="single", batch=100))
@@ -1745,13 +1745,13 @@ def load_section(c, got):
         con.close()
         r = got("/api/load/table/check", config=lcfg("items.parquet", table={"name": "other", "how": "append"}))
         check("확인: 컬럼이 다르면 다른 점", (r["ok"], r["message"], r["ours"]),
-              (False, "컬럼이 달라 덧붙일 수 없습니다. 다른 점: 결과 파일에만 있는 컬럼 name, amount, day / 테이블에만 있는 컬럼 label", False))
+              (False, "컬럼이 달라 덧붙일 수 없어요. 다른 점: 결과 파일에만 있는 컬럼 name, amount, day / 테이블에만 있는 컬럼 label", False))
         _, st = load(lcfg("items.parquet", table={"name": "other", "how": "append"}))
-        check("append: 컬럼이 다르면 넣지 않음", (st["phase"], st["error"].startswith("컬럼이 달라 덧붙일 수 없습니다."), table_rows("other")), ("실패", True, [(1, "x")]))
+        check("append: 컬럼이 다르면 넣지 않음", (st["phase"], st["error"].startswith("컬럼이 달라 덧붙일 수 없어요."), table_rows("other")), ("실패", True, [(1, "x")]))
         r = got("/api/load/table/check", config=lcfg("fresh.parquet", table={"name": "other", "how": "replace"}))
         _, st = load(lcfg("fresh.parquet", table={"name": "other", "how": "replace"}))
         check("replace: 이 프로그램이 만든 테이블이 아니면 거부(확인·시작 모두), 내용 그대로", (r["ok"], r["message"], st["phase"], st["error"], table_rows("other")),
-              (False, "이 프로그램이 만든 테이블이 아니라 바꿀 수 없습니다.", "실패", "이 프로그램이 만든 테이블이 아니라 바꿀 수 없습니다.", [(1, "x")]))
+              (False, "이 프로그램이 만든 테이블이 아니라 바꿀 수 없어요.", "실패", "이 프로그램이 만든 테이블이 아니라 바꿀 수 없어요.", [(1, "x")]))
         _, st = load(lcfg("fresh.parquet", table={"how": "replace"}))
         con = duckdb.connect(str(db), read_only=True)
         names = sorted(t for (t,) in con.execute("show tables").fetchall())
@@ -1763,7 +1763,7 @@ def load_section(c, got):
         con.execute("alter table items add column extra integer")
         con.close()
         _, st = load(lcfg("fresh.parquet", table={"how": "replace"}))
-        check("replace: 만든 뒤 컬럼이 바뀐 테이블은 바꾸지 않음", (st["phase"], st["error"]), ("실패", "이 프로그램이 만든 뒤 테이블의 컬럼이 바뀌어 바꾸지 않습니다."))
+        check("replace: 만든 뒤 컬럼이 바뀐 테이블은 바꾸지 않음", (st["phase"], st["error"]), ("실패", "이 프로그램이 만든 뒤 테이블의 컬럼이 바뀌어 바꾸지 않아요."))
 
         print("== 적재: 실패한 묶음 다시 시도·이어 넣기·멈춤")
         real_insert, calls = load_table.insert, {"n": 0, "fail": {3}}
@@ -1788,7 +1788,7 @@ def load_section(c, got):
             load_table.insert = real_insert
         started, st = load(lcfg("items.parquet", table={"name": "resumed"}, retries=1))
         check("같은 설정으로 다시 하면 넣은 묶음 다음부터(겹치지 않음)", (st["phase"], st["message"], [r[0] for r in table_rows("resumed")], (out / "items.load.json").exists()),
-              ("끝", "이어 넣습니다.", list(range(1, 26)), False))
+              ("끝", "이어 넣어요.", list(range(1, 26)), False))
         c.post("/api/load/start", json={"config": lcfg("items.parquet", table={"name": "paused"}, interval=0.3)})
         time.sleep(0.4)
         got("/api/collect/stop")
@@ -1796,7 +1796,7 @@ def load_section(c, got):
         record = json.loads((out / "items.load.json").read_text(encoding="utf-8"))
         check("멈추기는 묶음 사이에서 멈추고 기록을 남김", (st["phase"], 0 < record["rows"] < 25, record["rows"] % 10, len(table_rows("paused")) == record["rows"]), ("멈춤", True, 0, True))
         _, st = load(lcfg("items.parquet", table={"name": "paused", "schema": "main"}))
-        check("스키마 등 서명이 다르면 처음부터(new는 이미 있어 거부, 묶음 크기는 서명에 없음)", (st["phase"], st["error"][:23]), ("실패", "'paused'은 이미 있는 테이블입니다."))
+        check("스키마 등 서명이 다르면 처음부터(new는 이미 있어 거부, 묶음 크기는 서명에 없음)", (st["phase"], st["error"][:23]), ("실패", "'paused'은 이미 있는 테이블이에요."))
         _, st = load(lcfg("items.parquet", table={"name": "paused"}))
         check("같은 서명이면(간격은 서명에 없음) 이어서 끝냄", (st["phase"], [r[0] for r in table_rows("paused")]), ("끝", list(range(1, 26))))
 
@@ -1816,7 +1816,7 @@ def load_section(c, got):
         con.commit()
         con.close()
         lite_cfg = lcfg("fresh.parquet", table={"connection": {"kind": "url", "url": f"sqlite://{lite}"}, "how": "append"})
-        check("SQLite 주소: 확인", got("/api/load/table/check", config=lite_cfg)["message"], "컬럼이 같아 덧붙일 수 있습니다.")
+        check("SQLite 주소: 확인", got("/api/load/table/check", config=lite_cfg)["message"], "컬럼이 같아 덧붙일 수 있어요.")
         _, st = load(lite_cfg)
         con = sqlite3.connect(lite)
         check("SQLite 주소: append(연결 스레드에서 열고 넣고 닫음)", (st["phase"], st["load"]["where"].endswith("lite.db · items"), con.execute("select count(*), max(name) from items").fetchone()),
@@ -1843,12 +1843,12 @@ def load_section(c, got):
               ({"ok": True, "resumed": False}, ["적재 중"], "끝", str(out / "got.parquet"), 7, 7))
         got("/api/collect/start", config=cfg)
         st = wait()
-        check("수집 뒤 적재가 실패해도 결과 파일은 남음", (st["phase"], st["error"][:20], (out / "got.parquet").exists()), ("실패", "'got'은 이미 있는 테이블입니다.", True))
+        check("수집 뒤 적재가 실패해도 결과 파일은 남음", (st["phase"], st["error"][:20], (out / "got.parquet").exists()), ("실패", "'got'은 이미 있는 테이블이에요.", True))
         api.http.shutdown()
         single = lcfg("items.parquet", unit="single")
         check("estimate: 한 건씩이면 load_note(결과 파일이 있으면 예상 시간)", (got("/api/collect/estimate", config=single)["load_note"],
               got("/api/collect/estimate", config=lcfg("none.parquet", unit="single"))["load_note"], "load_note" in got("/api/collect/estimate", config=lcfg("items.parquet"))),
-              ("한 건씩 넣으면 오래 걸릴 수 있습니다(예상 약 1분).", "한 건씩 넣으면 오래 걸릴 수 있습니다.", False))
+              ("한 건씩 넣으면 오래 걸릴 수 있어요(예상 약 1분).", "한 건씩 넣으면 오래 걸릴 수 있어요.", False))
 
         print("== 적재: Kafka(시험용 메모리 브로커)")
         logs = []
@@ -1862,13 +1862,13 @@ def load_section(c, got):
         check("Kafka 등록 검사: 비밀번호 칸 거부, 서버 모양, 토픽 이름, SASL 아이디", [error("/api/load/kafka", name="x", item=v) for v in (
               {"servers": broker, "topic": "t", "password": "x"}, {"servers": "nohost", "topic": "t"}, {"servers": broker, "topic": "a b"},
               {"servers": broker, "topic": "t", "security": "SASL_SSL"})],
-              ["비밀번호는 저장하지 않습니다. 확인·시작할 때 따로 입력하세요.", "서버는 host:port 모양으로, 여럿이면 쉼표로 이어 쓰세요(예: host1:9092,host2:9092).",
-               "토픽 이름은 영문·숫자·점·밑줄·빼기로 1~249자입니다.", "SASL을 쓰면 아이디를 입력하세요."])
+              ["비밀번호는 저장하지 않아요. 확인·시작할 때 따로 입력하세요.", "서버는 host:port 모양으로, 여럿이면 쉼표로 이어 쓰세요(예: host1:9092,host2:9092).",
+               "토픽 이름은 영문·숫자·점·밑줄·빼기로 1~249자예요.", "SASL을 쓰면 아이디를 입력하세요."])
         r = got("/api/load/kafka", name="로컬", item={"servers": broker, "topic": "items"})
         check("Kafka 등록 저장(빠진 칸 채움)·목록", (r, c.get("/api/load/kafka").get_json()), ({"kafka": {"로컬": {**load_kafka.DEFAULT, "servers": broker, "topic": "items"}}},) * 2)
         for i in range(load_kafka.MAX_DESTINATIONS - 1):
             got("/api/load/kafka", name=f"k{i}", item={"servers": broker, "topic": "t"})
-        check("Kafka 등록은 30개까지", error("/api/load/kafka", name="넘침", item={"servers": broker, "topic": "t"}), "저장한 적재할 곳은 30개까지입니다. 쓰지 않는 것을 지우세요.")
+        check("Kafka 등록은 30개까지", error("/api/load/kafka", name="넘침", item={"servers": broker, "topic": "t"}), "저장한 적재할 곳은 30개까지예요. 쓰지 않는 것을 지우세요.")
         for i in range(load_kafka.MAX_DESTINATIONS - 1):
             got("/api/load/kafka", name=f"k{i}", item=None)
         check("Kafka 접속 확인: 브로커 수, 토픽은 아직 없음(메시지를 보내지 않음)", got("/api/load/kafka/check", name="로컬", password=""), {"ok": True, "topic": False, "brokers": 1})
@@ -1909,13 +1909,13 @@ def load_section(c, got):
         check("너무 큰 행은 실패로 세고 계속", (st["phase"], st["load"]["failures"], sorted(json.loads(v)["id"] for _, v in consume("big", 2))), ("끝", 1, [1, 3]))
         pl.DataFrame({"id": [1, 2], "text": ["x" * 2_000_000] * 2}).write_parquet(out / "huge.parquet")
         _, st = load(kcfg("huge.parquet", batch=100))
-        check("묶음이 모두 실패하면 멈춤", (st["phase"], st["error"].startswith("1번째 묶음을 하나도 넣지 못해 멈췄습니다."), st["load"]["failures"]), ("실패", True, 2))
+        check("묶음이 모두 실패하면 멈춤", (st["phase"], st["error"].startswith("1번째 묶음을 하나도 넣지 못해 멈췄어요."), st["load"]["failures"]), ("실패", True, 2))
         _, st = load(kcfg("items.parquet", "nope"))
-        check("메시지 키 컬럼이 결과 파일에 없으면 거부", (st["phase"], st["error"]), ("실패", "메시지 키 컬럼 'nope'이 결과 파일에 없습니다."))
+        check("메시지 키 컬럼이 결과 파일에 없으면 거부", (st["phase"], st["error"]), ("실패", "메시지 키 컬럼 'nope'이 결과 파일에 없어요."))
         got("/api/load/kafka", name="sasl", item={"servers": "127.0.0.1:1", "topic": "t", "security": "SASL_PLAINTEXT", "mechanism": "SCRAM-SHA-256", "user": "u"})
         load_kafka.CHECK_TIMEOUT = 2
         e = error("/api/load/kafka/check", name="sasl", password=secret)
-        check("Kafka 접속 실패: 오류 문구에 비밀번호 없음", (e.startswith("Kafka에 접속하지 못했습니다:"), secret in e), (True, False))
+        check("Kafka 접속 실패: 오류 문구에 비밀번호 없음", (e.startswith("Kafka에 접속하지 못했어요:"), secret in e), (True, False))
         timeouts = load_kafka.SEND_TIMEOUT, load_kafka.FLUSH_MARGIN
         load_kafka.SEND_TIMEOUT, load_kafka.FLUSH_MARGIN = 1, 1
         try:
@@ -1924,7 +1924,7 @@ def load_section(c, got):
         finally:
             load_kafka.SEND_TIMEOUT, load_kafka.FLUSH_MARGIN = timeouts
         check("Kafka 전달이 모두 실패하면 다시 시도한 뒤 멈춤, 넣은 것 없음, 오류에 비밀번호 없음",
-              (st["phase"], st["error"].startswith("Kafka에 전달하지 못했습니다:"), secret in json.dumps(st, ensure_ascii=False), st["load"]["rows"]), ("실패", True, False, 0))
+              (st["phase"], st["error"].startswith("Kafka에 전달하지 못했어요:"), secret in json.dumps(st, ensure_ascii=False), st["load"]["rows"]), ("실패", True, False, 0))
         del holder
     finally:
         collect_config.NUMBERS[("load", "batch")] = limits
@@ -1955,14 +1955,14 @@ class FakeTasks:
             self.tasks[name] = (f"{plain(found('Command'))} {plain(found('Arguments'))}", text)
             return 0, "성공: 예약 작업을 만들었습니다.", ""
         if verb == "/Delete":
-            return (0, "성공", "") if self.tasks.pop(name, None) else (1, "", "오류: 지정된 파일을 찾을 수 없습니다.")
+            return (0, "성공", "") if self.tasks.pop(name, None) else (1, "", "오류: 지정된 파일을 찾을 수 없어요.")
         head = ",".join(f'"h{i}"' for i in range(28))
         row = lambda task: ",".join(f'"{v}"' for v in ["PC", task, "2026-10-16 오전 9:00:00", "준비", "대화형만", "2026-10-15 오후 1:05:00", "0", "me", self.tasks[task][0].replace('"', '""')] + ["N/A"] * 19)
         if name.endswith("\\"):  # 폴더 조회: 폴더 안의 작업 전부(폴더가 비었거나 없으면 오류)
             mine = [t for t in self.tasks if t.lower().startswith(name.lower())]
-            return (0, head + "\n" + "\n".join(row(t) for t in mine) + "\n", "") if mine else (1, "", "오류: 지정된 파일을 찾을 수 없습니다.")
+            return (0, head + "\n" + "\n".join(row(t) for t in mine) + "\n", "") if mine else (1, "", "오류: 지정된 파일을 찾을 수 없어요.")
         if name not in self.tasks:
-            return 1, "", "오류: 지정된 파일을 찾을 수 없습니다."
+            return 1, "", "오류: 지정된 파일을 찾을 수 없어요."
         return 0, head + "\n" + row(name) + "\n", ""
 
 
@@ -2015,11 +2015,11 @@ def schedule_section(c, got):
           ("예약 하나", {"every": "hourly"}), ("예약 하나", {"time": "24:00"}), ("예약 하나", {"every": "weekly", "days": []}), ("예약 하나", {"every": "interval", "minutes": 4}),
           ("예약 하나", {"days": [7]}), ("예약 하나", {"inapp": 1}), ("예약 하나", {"notify": "없는 곳"}), ("예약 하나", {"extra": 1}),
           ("없는 구성", daily), ("비번 DB", daily), ("비번 Kafka", daily))],
-          ["예약의 every는 daily, weekly, interval 중 하나입니다.", "시각은 HH:MM(00:00~23:59)으로 쓰세요.", "매주 예약은 요일을 하나 이상 고르세요.",
-           "간격(minutes)은 5~1440분의 정수여야 합니다.", "요일(days)은 0(월)~6(일)의 겹치지 않는 목록이어야 합니다.", "예약의 inapp는 true·false여야 합니다.",
-           "보낼 곳 '없는 곳'이 없습니다.", "예약에 쓸 수 없는 값이 있습니다: extra", "구성 '없는 구성'이 없습니다. 구성을 먼저 저장하세요.",
-           "DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다.",
-           "Kafka에 적재할 때 비밀번호가 필요한 곳(SASL)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다."])
+          ["예약의 every는 daily, weekly, interval 중 하나예요.", "시각은 HH:MM(00:00~23:59)으로 쓰세요.", "매주 예약은 요일을 하나 이상 고르세요.",
+           "간격(minutes)은 5~1440분의 정수여야 해요.", "요일(days)은 0(월)~6(일)의 겹치지 않는 목록이어야 해요.", "예약의 inapp는 true·false여야 해요.",
+           "보낼 곳 '없는 곳'이 없어요.", "예약에 쓸 수 없는 값이 있어요: extra", "구성 '없는 구성'이 없어요. 구성을 먼저 저장하세요.",
+           "DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없어요. 비밀번호는 저장하지 않기 때문이에요.",
+           "Kafka에 적재할 때 비밀번호가 필요한 곳(SASL)이라 예약할 수 없어요. 비밀번호는 저장하지 않기 때문이에요."])
     check("거부한 것은 저장하지 않고 schtasks도 부르지 않음", (c.get("/api/schedules").get_json()["schedules"], fake.calls), ({}, []))
     schedule.clock = lambda: at(2026, 10, 15, 8, 30)
     r = put("예약 하나", {**weekly, "inapp": False, "windows": True})
@@ -2062,9 +2062,9 @@ def schedule_section(c, got):
     check("예전 폴더의 우리 작업을 새 폴더·지금 프로그램으로 옮기고 예전 것은 지움", (schedule.move_old_tasks(), sorted(fake.tasks), fake.tasks["\\DataLoupe\\예약 하나"][0].startswith(subprocess.list2cmdline([sys.executable]))),
           (["예약 하나"], ["\\DataLoupe\\예약 하나", "\\Other\\예약 하나", "\\ibis_search\\남의 작업"], True))
     check("한 번 옮기면 다시 옮길 것이 없음", schedule.move_old_tasks(), [])
-    wintask.execute = lambda args: (1, "", "오류: 액세스가 거부되었습니다.")
+    wintask.execute = lambda args: (1, "", "오류: 액세스가 거부됐어요.")
     check("schtasks가 실패하면 한국어 안내와 그 문구", str(raised_error(lambda: wintask.register("x", "x", daily, at(2026, 1, 1)))),
-          "Windows 예약 작업을 등록하지 못했습니다. 액세스가 거부되었습니다.")
+          "Windows 예약 작업을 등록하지 못했어요. 액세스가 거부됐어요.")
     wintask.execute = fake
     check("시각 읽기: 오전·오후, 없음, 한 번도 안 돈 것, 모르는 형식은 그대로", [wintask.when(t) for t in ("2026-10-16 오후 1:05:00", "2026-10-16 오전 12:30:00", "N/A", "1999-11-30 오전 12:00:00", "10/16/2026 1:05:00 PM")],
           ["2026-10-16 13:05", "2026-10-16 00:30", None, None, "10/16/2026 1:05:00 PM"])
@@ -2107,9 +2107,9 @@ def schedule_section(c, got):
     r = settle()
     check("기록: 지금 실행·끝·행 수, 결과 파일", ([(x["name"], x["how"], x["result"], x["rows"], x["message"], x["end"] is not None) for x in r["runs"]], r["unseen"], (out / "one.parquet").is_file()),
           ([("예약 하나", "now", "끝", 7, "", True)], 0, True))
-    check("알림(always): 끝났다는 제목, 구성 이름·행 수", (len(sent), sent and sent[0]["title"], sent and "구성: 예약 하나" in sent[0]["text"], sent and sent[0]["rows"]), (1, "수집이 끝났습니다", True, "7"))
+    check("알림(always): 끝났다는 제목, 구성 이름·행 수", (len(sent), sent and sent[0]["title"], sent and "구성: 예약 하나" in sent[0]["text"], sent and sent[0]["rows"]), (1, "수집이 끝났어요", True, "7"))
     check("지금 실행 거부: 비밀번호가 필요한 구성, 없는 구성", [error("/api/schedules/run", name=n) for n in ("비번 DB", "없는 구성")],
-          ["DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다.", "구성 '없는 구성'이 없습니다. 구성을 먼저 저장하세요."])
+          ["DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없어요. 비밀번호는 저장하지 않기 때문이에요.", "구성 '없는 구성'이 없어요. 구성을 먼저 저장하세요."])
     lock = collect_job.lock_of(schedule.collection("예약 하나"))  # 수집은 결과 파일마다 잠근다
     lock.write_text(f"{os.getpid()} {psutil.Process().create_time()}", encoding="ascii")
     check("같은 구성이 잠겨 있으면 지금 실행 거부", error("/api/schedules/run", name="예약 하나"), schedule.LOCKED)
@@ -2118,14 +2118,14 @@ def schedule_section(c, got):
     schedule.execute("예약 하나", "inapp")
     r = settle()
     check("잠겨 있으면 건너뜀 기록·알림(실패처럼), 남의 잠금은 그대로", (r["runs"][0]["result"], r["runs"][0]["message"], [s["title"] for s in sent], lock.exists()),
-          ("건너뜀", schedule.SKIP_LOCKED, ["수집을 건너뛰었습니다"], True))
+          ("건너뜀", schedule.SKIP_LOCKED, ["수집을 건너뛰었어요"], True))
     lock.unlink()
     api.routes["/sched"] = lambda e: (500, {}, b"server says no")
     sent.clear()
     schedule.execute("예약 하나", "inapp")
     r = settle()
     check("실패 기록(오류 문구)·unseen·알림(fail)", (r["runs"][0]["result"], bool(r["runs"][0]["message"]), r["unseen"], [s["title"] for s in sent]),
-          ("실패", True, 1, ["수집이 실패했습니다"]))
+          ("실패", True, 1, ["수집이 실패했어요"]))
     check("본 것으로 표시하면 unseen 0", (got("/api/runs/seen"), c.get("/api/runs").get_json()["unseen"]), ({"ok": True}, 0))
     api.routes["/sched"] = items
     sent.clear()
@@ -2180,7 +2180,7 @@ def schedule_section(c, got):
     done = subprocess.run([sys.executable, "-B", "-W", "ignore", "desktop.py", "--run", "비번 DB"], env=env, capture_output=True, timeout=180)
     r = c.get("/api/runs").get_json()
     check("--run: 비밀번호가 필요한 구성은 실행하지 않고 실패로 기록, 종료 코드 1", (done.returncode, r["runs"][0]["result"], r["runs"][0]["message"], (out / "db.parquet").exists()),
-          (1, "실패", "DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없습니다. 비밀번호는 저장하지 않기 때문입니다.", False))
+          (1, "실패", "DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없어요. 비밀번호는 저장하지 않기 때문이에요.", False))
     check("--run이 남긴 잠금 없음", [p.name for p in schedule.locks().glob("*.lock")], [])
 
     wintask.execute, schedule.clock, transport.post = real_execute, real_clock, real_post
@@ -2190,7 +2190,7 @@ def schedule_section(c, got):
 
 
 def memory_section(got, duck):
-    """데이터 라이브러리 지연 로딩과 DuckDB 파일 조회의 작업 메모리 상한."""
+    """데이터 라이브러리 지연 로딩과 DuckDB 파일 조회의 메모리 한도."""
     print("== 지연 로딩·메모리 상한")
     error = lambda api, **body: got(api, **body).get("error", "")
     code = """
@@ -2249,8 +2249,8 @@ print(json.dumps(out))
     got("/api/disconnect")
     with app.test_request_context():
         found = [server.on_error(Exception(text))[0].get_json()["error"] for text in ("Out of Memory Error: failed to allocate", "OUT OF MEMORY", "다른 오류")]
-    check("메모리 부족 오류에는 안내 문구가 붙음", found, ["메모리가 모자랍니다. 작업 메모리 상한을 올리거나 조건을 좁히세요. Out of Memory Error: failed to allocate",
-          "메모리가 모자랍니다. 작업 메모리 상한을 올리거나 조건을 좁히세요. OUT OF MEMORY", "다른 오류"])
+    check("메모리 부족 오류에는 안내 문구가 붙음", found, ["메모리가 모자라요. 메모리 한도를 올리거나 조건을 좁히세요. Out of Memory Error: failed to allocate",
+          "메모리가 모자라요. 메모리 한도를 올리거나 조건을 좁히세요. OUT OF MEMORY", "다른 오류"])
 
     cached = lambda: server.state["con"].con.execute("select coalesce(sum(memory_usage_bytes), 0) from duckdb_memory() where tag = 'BASE_TABLE'").fetchone()[0]
     for memory in (1500, 0):
@@ -2306,7 +2306,7 @@ def sqlite_section(c, got):
     counts = {"name": {"ops": {"counts": {"sep": "r"}}}}
     check("SQLite counts: 이 PC의 작업 사본에서는 됨(기본)", got("/api/preview", base="customers", columns=counts).get("local"), True)
     prep_where("new")  # 계산 컬럼·PCA가 없으면 DB에서 계산
-    check("SQLite counts: DB에서 계산하면 지원하지 않는 계산", got("/api/preview", base="customers", columns=counts).get("error", "")[:22], "이 연결에서는 지원하지 않는 계산입니다.")
+    check("SQLite counts: DB에서 계산하면 지원하지 않는 계산", got("/api/preview", base="customers", columns=counts).get("error", "")[:22], "이 연결에서는 지원하지 않는 계산이에요.")
     check("SQLite 새 테이블 만들기(DB에서 계산)", (got("/api/run", recipe=recipe, target={"kind": "table", "name": "upper_names"}), tables()),
           ({"ok": True, "rows": 40}, ["customers", "orders", "upper_names"]))
     prep_where("all")
@@ -2361,7 +2361,7 @@ def main():
     check("파일마다 테이블 하나", (tables(), got("/api/query", base="sales")["count"]), (["buyers", "sales"], 5))
     check("/api/state: Parquet·CSV 연결은 files를 포함", c.get("/api/state").get_json(),
           {"connected": True, "opened": {"kind": "folder", "path": str(DATA), "files": found["flat"]}, "schemas": []})
-    check("Parquet·CSV 연결은 SQL을 보여 줄 수 없음", error("/api/sql", base="sales"), "이 연결의 조회는 SQL로 보여 줄 수 없습니다.")
+    check("Parquet·CSV 연결은 SQL을 보여 줄 수 없음", error("/api/sql", base="sales"), "이 연결의 조회는 SQL로 보여 줄 수 없어요.")
     got("/api/connect", kind="url", url=f"duckdb://{duck}")
     check("주소로 연결", tables(), ["customers", "orders"])
     r = c.get("/api/state").get_json()
@@ -2472,13 +2472,13 @@ def main():
     check("구성 지우기(없는 이름도 됨)", (got("/api/recipes", name="정리", recipe=None), got("/api/recipes", name="없음", recipe=None)), ({"recipes": {}},) * 2)
     check("구성 제한: 이름, 객체가 아님, 크기", [error("/api/recipes", name=n, recipe=recipe) for n in ("", "x" * 51)] + [error("/api/recipes", name="a", recipe=[1]),
           error("/api/recipes", name="a", recipe={"x": "가" * settings.MAX_RECIPE_SIZE})],
-          ["구성 이름은 1자 이상 50자 이하로 입력하세요."] * 2 + ["저장할 구성이 올바르지 않습니다.", "저장할 구성이 너무 큽니다."])
-    check("검색 크기 상한은 구성보다 작음", error("/api/searches", name="a", search={"x": "가" * settings.MAX_SEARCH_SIZE}), "저장할 검색이 너무 큽니다.")
+          ["구성 이름은 1자 이상 50자 이하로 입력하세요."] * 2 + ["저장할 구성이 올바르지 않아요.", "저장할 구성이 너무 커요."])
+    check("검색 크기 상한은 구성보다 작음", error("/api/searches", name="a", search={"x": "가" * settings.MAX_SEARCH_SIZE}), "저장할 검색이 너무 커요.")
     check("구성은 검색 상한(2만 자)보다 크게 저장됨", len(got("/api/recipes", name="큼", recipe={"x": "가" * (settings.MAX_SEARCH_SIZE + 100)})["recipes"]), 1)
     for i in range(settings.MAX_SAVED - 1):
         got("/api/recipes", name=f"r{i}", recipe={})
     check("구성은 100개까지, 있는 이름은 덮어쓸 수 있음", (error("/api/recipes", name="넘침", recipe={}), len(got("/api/recipes", name="r0", recipe={"a": 1})["recipes"])),
-          ("저장한 구성은 100개까지입니다. 쓰지 않는 것을 지우세요.", 100))
+          ("저장한 구성은 100개까지예요. 쓰지 않는 것을 지우세요.", 100))
     for name in list(c.get("/api/recipes").get_json()["recipes"]):
         got("/api/recipes", name=name, recipe=None)
     got("/api/searches", name="s", search=None)
@@ -2495,7 +2495,7 @@ def main():
     mine = [o for o in orders if o["note"] == "=1+1"]
     got("/api/connect", kind="folder", path=str(DATA), file=duck)
     server.ask_save = None
-    check("저장 위치를 물을 수 없으면 거부", error("/api/handoff", **body), "저장 위치를 물을 수 없습니다. 프로그램 창에서만 쓸 수 있습니다.")
+    check("저장 위치를 물을 수 없으면 거부", error("/api/handoff", **body), "저장 위치를 물을 수 없어요. 프로그램 창에서만 쓸 수 있어요.")
     server.ask_save = choose(str(out / "picked"))
     check("handoff: 확장자 없으면 .parquet을 붙이고 경로·테이블 이름을 돌려줌", (got("/api/handoff", **body), asked),
           ({"path": str(out / "picked.parquet"), "table": "picked"}, [("orders_search.parquet", ("Parquet (*.parquet)",))]))
@@ -2510,7 +2510,7 @@ def main():
     before = (out / "picked.parquet").stat()
     again = dict(base="picked", conditions=["order_id >= 0"])
     check("지금 읽고 있는 파일(대소문자 달라도)에는 저장하지 않음", [(setattr(server, "ask_save", choose(str(out / n))), error("/api/handoff", **again))[1] for n in ("picked.parquet", "PICKED.parquet", "picked")],
-          ["지금 읽고 있는 파일에는 저장할 수 없습니다. 다른 이름을 고르세요."] * 3)
+          ["지금 읽고 있는 파일에는 저장할 수 없어요. 다른 이름을 고르세요."] * 3)
     after = (out / "picked.parquet").stat()
     check("거부해도 파일과 연결은 그대로", ((before.st_size, before.st_mtime_ns) == (after.st_size, after.st_mtime_ns), tables()), (True, ["picked"]))
     server.ask_save = lambda name, types: None
@@ -2526,7 +2526,7 @@ def main():
     check("쓰기에 실패하면 이전 연결을 유지하고 만들다 만 파일을 남기지 않음", (bool(error("/api/handoff", **again)), tables(), sorted(p.name for p in out.iterdir())),
           (True, ["picked"], ["Y.PARQUET", "picked.parquet", "x.txt.parquet"]))
     asked.clear()
-    check("잘못된 검색은 저장 위치를 묻기 전에 거부", (error("/api/handoff", base="nothing")[:20], asked), ("'nothing' 테이블이 없습니다.", []))
+    check("잘못된 검색은 저장 위치를 묻기 전에 거부", (error("/api/handoff", base="nothing")[:20], asked), ("'nothing' 테이블이 없어요.", []))
     server.ask_save = None
 
     print("== 기다리기·연결 해제")

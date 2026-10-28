@@ -39,7 +39,7 @@ def dpapi(function, data):
 def protect(text):
     locked = dpapi("CryptProtectData", text.encode("utf-8"))
     if locked is None:
-        raise ValueError("비밀 값을 암호화하지 못했습니다.")
+        raise ValueError("비밀 값을 암호화하지 못했어요.")
     return base64.b64encode(locked).decode()
 
 
@@ -60,7 +60,7 @@ def keep_of(item):
 
 def check_keep(keep):
     if keep not in KEEPS:
-        raise ValueError(f"비밀 값 보관 방식은 {', '.join(KEEPS)} 중 하나입니다.")
+        raise ValueError(f"비밀 값 보관 방식은 {', '.join(KEEPS)} 중 하나예요.")
     return keep
 
 
@@ -77,7 +77,7 @@ def store(key, keep, value, old_keep=None, old=None):
         SESSION[key] = value
         return ""
     if not ENV_NAME.fullmatch(value):
-        raise ValueError("환경변수 이름은 영문·숫자·밑줄만(숫자로 시작하지 않게) 100자까지 쓸 수 있습니다.")
+        raise ValueError("환경변수 이름은 영문·숫자·밑줄만(숫자로 시작하지 않게) 100자까지 쓸 수 있어요.")
     SESSION.pop(key, None)
     return value
 
@@ -105,9 +105,9 @@ def shown(key, keep, stored):
 def missing(keep, label, env_name=""):
     """비밀 값이 없을 때의 안내."""
     if keep == "session":
-        return f"'{label}'은 이번 실행 동안만 두는 값이라 다시 입력해야 합니다(프로그램을 다시 켰거나 예약 실행)."
+        return f"'{label}'은 이번 실행 동안만 두는 값이라 다시 입력해야 해요(프로그램을 다시 켰거나 예약 실행)."
     if keep == "env":
-        return f"'{label}'의 환경변수 {env_name or '(이름 없음)'}이 없습니다. 프로그램을 띄우는 환경에 넣으세요."
-    return f"'{label}'을 읽을 수 없습니다(다른 PC·계정에서 온 파일). 다시 입력해 저장하세요."
+        return f"'{label}'의 환경변수 {env_name or '(이름 없음)'}이 없어요. 프로그램을 띄우는 환경에 넣으세요."
+    return f"'{label}'을 읽을 수 없어요(다른 PC·계정에서 온 파일). 다시 입력해 저장하세요."
 
 

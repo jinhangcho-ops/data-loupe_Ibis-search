@@ -32,14 +32,14 @@ def read_key(path):
     try:
         found = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     except OSError as e:
-        raise ValueError(f"서비스 계정 JSON을 읽을 수 없습니다: {e.strerror or e}") from None
+        raise ValueError(f"서비스 계정 JSON을 읽을 수 없어요: {e.strerror or e}") from None
     except ValueError:
-        raise ValueError("서비스 계정 JSON의 형식이 올바르지 않습니다.") from None
+        raise ValueError("서비스 계정 JSON의 형식이 올바르지 않아요.") from None
     if not isinstance(found, dict) or found.get("type") != "service_account" or not found.get("client_email") or not found.get("private_key"):
-        raise ValueError('서비스 계정 키 JSON이 아닙니다("type": "service_account", client_email, private_key가 있어야 함).')
+        raise ValueError('서비스 계정 키 JSON이 아니에요("type": "service_account", client_email, private_key가 있어야 함).')
     token_uri = found.get("token_uri") or TOKEN_URI
     if urllib.parse.urlsplit(token_uri).scheme != "https":
-        raise ValueError("token_uri는 https여야 합니다.")
+        raise ValueError("token_uri는 https여야 해요.")
     return {"client_email": found["client_email"], "private_key": found["private_key"], "token_uri": token_uri}
 
 
@@ -53,7 +53,7 @@ def assertion(key):
     try:
         private = serialization.load_pem_private_key(key["private_key"].encode(), password=None)
     except (ValueError, TypeError):
-        raise ValueError("서비스 계정 JSON의 private_key를 읽을 수 없습니다.") from None
+        raise ValueError("서비스 계정 JSON의 private_key를 읽을 수 없어요.") from None
     signature = private.sign(f"{head}.{claims}".encode(), padding.PKCS1v15(), hashes.SHA256())
     return f"{head}.{claims}.{b64(signature)}"
 
@@ -64,16 +64,16 @@ def access_token(key):
     try:
         reply = json.loads(transport.post(key["token_uri"], body, {"Content-Type": "application/x-www-form-urlencoded"}))
     except ValueError as e:
-        raise ValueError(f"Google 인증에 실패했습니다: {e}") from None
+        raise ValueError(f"Google 인증에 실패했어요: {e}") from None
     if not reply.get("access_token"):
-        raise ValueError("Google 인증 답에 접근 토큰이 없습니다.")
+        raise ValueError("Google 인증 답에 접근 토큰이 없어요.")
     return reply["access_token"]
 
 
 def property_id(value):
     value = str(value).strip().removeprefix("properties/")
     if not value.isdigit():
-        raise ValueError("GA4 속성 ID는 숫자입니다(관리 → 속성 설정의 속성 ID).")
+        raise ValueError("GA4 속성 ID는 숫자예요(관리 → 속성 설정의 속성 ID).")
     return value
 
 
@@ -81,16 +81,16 @@ def names(value, label, limit):
     items = [n.strip() for n in (value.split(",") if isinstance(value, str) else value or []) if str(n).strip()]
     bad = [n for n in items if not NAME.fullmatch(n)]
     if bad:
-        raise ValueError(f"{label} 이름이 올바르지 않습니다: {', '.join(bad[:5])} (예: date, country, activeUsers)")
+        raise ValueError(f"{label} 이름이 올바르지 않아요: {', '.join(bad[:5])} (예: date, country, activeUsers)")
     if len(items) > limit:
-        raise ValueError(f"{label}은 {limit}개까지입니다.")
+        raise ValueError(f"{label}은 {limit}개까지예요.")
     return items
 
 
 def check_report(spec):
     """보고서 요청 {property, start, end, dimensions, metrics}를 검사해 정리한다."""
     if not isinstance(spec, dict):
-        raise ValueError("보고서 설정이 올바르지 않습니다.")
+        raise ValueError("보고서 설정이 올바르지 않아요.")
     dims, mets = names(spec.get("dimensions", ""), "측정기준", MAX_FIELDS), names(spec.get("metrics", ""), "측정항목", MAX_FIELDS + 1)
     if not mets:
         raise ValueError("측정항목을 하나 이상 넣으세요(예: activeUsers, sessions).")
@@ -107,7 +107,7 @@ def run_report(token, spec, offset, limit):
         return json.loads(transport.post(f"{API}/properties/{spec['property']}:runReport", json.dumps(body).encode(),
                                          {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, 120))
     except ValueError as e:
-        raise ValueError(f"GA4 보고서를 받지 못했습니다: {e}") from None
+        raise ValueError(f"GA4 보고서를 받지 못했어요: {e}") from None
 
 
 def fetch(key_path, spec, notes=None):
@@ -122,7 +122,7 @@ def fetch(key_path, spec, notes=None):
         page = run_report(token, spec, offset, PAGE_ROWS)
         total = int(page.get("rowCount", 0))
         if total > MAX_ROWS:
-            raise ValueError(f"보고서가 {total:,}행으로 너무 큽니다({MAX_ROWS:,}행까지). 기간이나 측정기준을 줄이세요.")
+            raise ValueError(f"보고서가 {total:,}행으로 너무 커요({MAX_ROWS:,}행까지). 기간이나 측정기준을 줄이세요.")
         types = {h["name"]: h.get("type", "") for h in page.get("metricHeaders", [])} or types
         meta = page.get("metadata") or {}
         if notes is not None and offset == 0:
@@ -148,5 +148,5 @@ def check(key_path, prop):
     try:
         meta = json.loads(transport.request("GET", f"{API}/properties/{property_id(prop)}/metadata", None, {"Authorization": f"Bearer {token}"}))
     except ValueError as e:
-        raise ValueError(f"토큰은 받았지만 속성을 읽지 못했습니다(속성에 {key['client_email']}을 뷰어로 추가했는지 확인): {e}") from None
-    return f"연결됨: {key['client_email']} · 측정기준 {len(meta.get('dimensions', []))}개, 측정항목 {len(meta.get('metrics', []))}개를 쓸 수 있습니다."
+        raise ValueError(f"토큰은 받았지만 속성을 읽지 못했어요(속성에 {key['client_email']}을 뷰어로 추가했는지 확인): {e}") from None
+    return f"연결됨: {key['client_email']} · 측정기준 {len(meta.get('dimensions', []))}개, 측정항목 {len(meta.get('metrics', []))}개를 쓸 수 있어요."

@@ -36,7 +36,7 @@ def groups():
 def check(group):
     """묶음 값 검사. 고친 묶음을 돌려준다."""
     if not isinstance(group, dict) or set(group) - set(DEFAULT):
-        raise ValueError(f"사용 한도에 쓸 수 없는 값이 있습니다: {', '.join(sorted(set(group) - set(DEFAULT))) if isinstance(group, dict) else '모양'}")
+        raise ValueError(f"사용 한도에 쓸 수 없는 값이 있어요: {', '.join(sorted(set(group) - set(DEFAULT))) if isinstance(group, dict) else '모양'}")
     found = {**DEFAULT, **group}
     for key in ("per_second", "per_minute", "per_hour", "per_day"):
         if found[key] is not None and (type(found[key]) is not int or found[key] < 1):
@@ -66,13 +66,13 @@ def zone(tz):
     if tz == "UTC":
         return dt.timezone.utc
     if not isinstance(tz, str):
-        raise ValueError("시간대(tz)가 올바르지 않습니다.")
+        raise ValueError("시간대(tz)가 올바르지 않아요.")
     try:
         return zoneinfo.ZoneInfo(tz)
     except (zoneinfo.ZoneInfoNotFoundError, ValueError):
         if tz == "Asia/Seoul":
             return SEOUL
-        raise ValueError(f"알 수 없는 시간대입니다: {tz}") from None
+        raise ValueError(f"알 수 없는 시간대예요: {tz}") from None
 
 
 def period(group, now):
@@ -189,7 +189,7 @@ def usage(name, now=None):
 
 
 def broken_message():
-    return "사용 기록 파일을 읽지 못해 한도를 다 쓴 것으로 봅니다. 사용 한도에서 [초기화]를 누른 뒤 다시 시작하세요."
+    return "사용 기록 파일을 읽지 못해 한도를 다 쓴 것으로 봐요. 사용 한도에서 [초기화]를 누른 뒤 다시 시작하세요."
 
 
 def take(name, stop):
@@ -198,7 +198,7 @@ def take(name, stop):
     while True:
         group = groups().get(name)
         if group is None:
-            raise Halt(f"사용 한도 묶음 '{name}'이 없습니다.")
+            raise Halt(f"사용 한도 묶음 '{name}'이 없어요.")
         with Locked():
             data, now = load(), time.time()
             if data is None:
@@ -207,7 +207,7 @@ def take(name, stop):
             item["sent"] = [t for t in item["sent"] if t > now - kept(group)]  # 설정된 가장 넓은 창만큼만 보관한다(요청마다 큰 기록을 읽고 쓰지 않게)
             windows, day = counts(item, group, now)
             if allowed(group, "per_day") is not None and day >= allowed(group, "per_day"):
-                raise Halt(f"오늘 한도를 다 썼습니다. {reset_text(group, now)} 이후 이어 받을 수 있습니다.", failed=False)
+                raise Halt(f"오늘 한도를 다 썼어요. {reset_text(group, now)} 이후 이어 받을 수 있어요.", failed=False)
             wait = max(0.0, (max(item["sent"]) + group["min_interval"] - now) if item["sent"] else 0.0)
             for (key, width), used in zip(WINDOWS.items(), windows):
                 limit = allowed(group, key)

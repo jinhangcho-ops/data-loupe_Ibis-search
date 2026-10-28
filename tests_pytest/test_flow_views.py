@@ -70,10 +70,10 @@ def test_question_sets_save_list_overwrite_delete(client, folder):
     ("", {"items": [{"template": "e06"}]}, "이름은 1자 이상 50자 이하"),
     ("묶음", {"items": []}, "1개 이상 30개 이하"),
     ("묶음", {"items": [{"template": "e06"}] * 31}, "1개 이상 30개 이하"),
-    ("묶음", {"items": [{"template": "zz99"}]}, "문장 틀이 없습니다"),
+    ("묶음", {"items": [{"template": "zz99"}]}, "문장 틀이 없어요"),
     ("묶음", {"items": ["e06"]}, "올바르지 않아요"),
     ("묶음", {"no": 1}, "1개 이상 30개 이하"),
-    ("묶음", {"items": [{"template": "e06", "slots": {"x": "가" * 40_000}}]}, "너무 큽니다"),
+    ("묶음", {"items": [{"template": "e06", "slots": {"x": "가" * 40_000}}]}, "너무 커요"),
 ])
 def test_question_sets_reject_bad_input(client, name, item, text):
     code, body = post(client, "/api/question_sets", name=name, set=item)

@@ -48,20 +48,20 @@ class Formula:
         if not isinstance(self.text, str) or not self.text.strip():
             raise ValueError("식을 입력하세요.")
         if len(self.text) > MAX_TEXT:
-            raise ValueError(f"식은 {MAX_TEXT}자까지 쓸 수 있습니다.")
+            raise ValueError(f"식은 {MAX_TEXT}자까지 쓸 수 있어요.")
         try:
             tree = ast.parse(self.text.strip(), mode="eval")
         except SyntaxError as e:
-            raise ValueError(f"식을 읽을 수 없습니다({e.offset}번째 글자 근처). {FORMULA_GUIDE}") from None
+            raise ValueError(f"식을 읽을 수 없어요({e.offset}번째 글자 근처). {FORMULA_GUIDE}") from None
         if sum(1 for _ in ast.walk(tree)) > MAX_NODES:
-            raise ValueError("식이 너무 복잡합니다. 여러 계산 컬럼으로 나누세요.")
+            raise ValueError("식이 너무 복잡해요. 여러 계산 컬럼으로 나누세요.")
         value = self.node(tree.body)
         if not isinstance(value, ibis.expr.types.Value):
             value = ibis.literal(value)
         return value
 
     def fail(self, what):
-        raise ValueError(f"식에 쓸 수 없는 것이 있습니다: {what}. {FORMULA_GUIDE}")
+        raise ValueError(f"식에 쓸 수 없는 것이 있어요: {what}. {FORMULA_GUIDE}")
 
     def column(self, name):
         parse.check_name(name, self.t.columns)
@@ -230,22 +230,22 @@ class Formula:
 
 def check_name(name, t, what):
     if not isinstance(name, str) or not NAME.fullmatch(name):
-        raise ValueError(f"{what} 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 합니다(63자까지).")
+        raise ValueError(f"{what} 이름은 영문·한글·숫자·밑줄로 쓰고 글자로 시작해야 해요(63자까지).")
     if name.lower() in {c.lower() for c in t.columns}:  # 대소문자만 달라도 같은 컬럼(DuckDB·SQLite·SQL Server)
-        raise ValueError(f"'{name}' 컬럼이 이미 있어 {what}을 만들 수 없습니다.")
+        raise ValueError(f"'{name}' 컬럼이 이미 있어 {what}을 만들 수 없어요.")
 
 
 def apply_formulas(t, formulas):
     """formulas([{name, expr}])를 차례로 붙인다. 뒤의 식은 앞에서 만든 계산 컬럼을 쓸 수 있다. (식, 만든 컬럼 이름들)"""
     if not isinstance(formulas, list) or len(formulas) > MAX_FORMULAS:
-        raise ValueError(f"계산 컬럼은 {MAX_FORMULAS}개까지의 목록이어야 합니다.")
+        raise ValueError(f"계산 컬럼은 {MAX_FORMULAS}개까지의 목록이어야 해요.")
     made = []
     for item in formulas:
         if not isinstance(item, dict) or not {"name", "expr"} <= set(item) <= {"name", "expr", "order", "group"}:
-            raise ValueError('계산 컬럼은 {"name": "새 컬럼", "expr": "식", "order": ["정렬 기준 [desc]"], "group": ["묶음 기준"]} 모양이어야 합니다(order·group은 선택).')
+            raise ValueError('계산 컬럼은 {"name": "새 컬럼", "expr": "식", "order": ["정렬 기준 [desc]"], "group": ["묶음 기준"]} 모양이어야 해요(order·group은 선택).')
         for key in ("order", "group"):
             if not isinstance(item.get(key, []), list) or not all(isinstance(v, str) for v in item.get(key, [])):
-                raise ValueError(f"계산 컬럼의 {key}은 컬럼 이름(글자) 목록이어야 합니다.")
+                raise ValueError(f"계산 컬럼의 {key}은 컬럼 이름(글자) 목록이어야 해요.")
         check_name(item["name"], t, "계산 컬럼")
         try:
             for g in item.get("group", []):
@@ -264,14 +264,14 @@ def pca(t, spec, info):
     info["pca"]에 성분마다 설명된 분산 비율·누적 비율·계수와 계산에 쓴 행 수를 남긴다. (식, 만든 컬럼 이름들)"""
     import numpy as np
     if not isinstance(spec, dict) or not set(spec) <= {"columns", "n", "prefix"}:
-        raise ValueError('PCA는 {"columns": [숫자 컬럼들], "n": 성분 수, "prefix": "pca"} 모양이어야 합니다.')
+        raise ValueError('PCA는 {"columns": [숫자 컬럼들], "n": 성분 수, "prefix": "pca"} 모양이어야 해요.')
     columns, n, prefix = spec.get("columns"), spec.get("n"), spec.get("prefix", "pca")
     if not isinstance(columns, list) or not 2 <= len(columns) <= PCA_MAX or len(set(columns)) != len(columns):
         raise ValueError(f"PCA에는 서로 다른 숫자 컬럼을 2~{PCA_MAX}개 고르세요.")
     for name in columns:
         parse.check_name(name, t.columns)
         if not t[name].type().is_numeric() or t[name].type().is_boolean():
-            raise ValueError(f"'{name}' 컬럼은 숫자가 아니라 PCA에 넣을 수 없습니다. 먼저 숫자로 바꾸세요.")
+            raise ValueError(f"'{name}' 컬럼은 숫자가 아니라 PCA에 넣을 수 없어요. 먼저 숫자로 바꾸세요.")
     if type(n) is not int or not 1 <= n <= len(columns):
         raise ValueError(f"성분 수는 1~{len(columns)} 사이의 정수로 입력하세요.")
     names = [f"{prefix}_{k + 1}" for k in range(n)]
@@ -284,7 +284,7 @@ def pca(t, spec, info):
     found = stats(whole, rows=whole.count(), **{f"m{i}": xs[i].mean() for i in range(k)})  # 집계 두 번: 평균을 먼저 구한다
     rows = found["rows"] or 0
     if rows < 2:
-        raise ValueError("고른 컬럼이 모두 들어 있는 행이 2개보다 적어 PCA를 구할 수 없습니다. 빈 값을 먼저 채우세요.")
+        raise ValueError("고른 컬럼이 모두 들어 있는 행이 2개보다 적어 PCA를 구할 수 없어요. 빈 값을 먼저 채우세요.")
     mean = np.array([found[f"m{i}"] for i in range(k)], dtype=float)
     gap = [xs[i] - float(mean[i]) for i in range(k)]  # 평균을 뺀 곱의 평균 = 공분산(값이 평균에 비해 작게 흩어져도 자릿수를 잃지 않는다). 모든 연결에서 되는 집계만 쓴다
     found = stats(whole, **{f"p{i}_{j}": (gap[i] * gap[j]).mean() for i in range(k) for j in range(i, k)})
@@ -295,7 +295,7 @@ def pca(t, spec, info):
     std = np.sqrt(np.clip(np.diag(cov), 0, None))
     flat = [columns[i] for i in range(k) if not std[i] > 1e-12 * max(1.0, abs(mean[i]))]
     if flat:
-        raise ValueError(f"값이 모두 같은 컬럼은 PCA에 넣을 수 없습니다: {', '.join(flat)}")
+        raise ValueError(f"값이 모두 같은 컬럼은 PCA에 넣을 수 없어요: {', '.join(flat)}")
     values, vectors = np.linalg.eigh(cov / np.outer(std, std))  # 상관 행렬(표준화한 컬럼의 공분산)
     order = np.argsort(values)[::-1]
     values, vectors = np.clip(values[order], 0, None), vectors[:, order]

@@ -17,7 +17,7 @@ def make():
     """이 프로세스의 임시 폴더를 ROOT 아래에 하나 만들고 표식을 넣는다. 다 쓰면 만든 쪽이 지운다."""
     ROOT.mkdir(exist_ok=True)
     if ROOT.is_symlink() or os.path.isjunction(ROOT):  # 다른 곳을 가리키는 링크면 그 안에 만들지 않는다.
-        raise OSError(f"임시 폴더({ROOT})가 링크라서 쓸 수 없습니다.")
+        raise OSError(f"임시 폴더({ROOT})가 링크라서 쓸 수 없어요.")
     folder = tempfile.mkdtemp(prefix=f"{os.getpid()}_", dir=ROOT)
     Path(folder, MARK).write_text(stamp(), encoding="ascii")
     return folder

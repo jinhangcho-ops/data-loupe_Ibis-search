@@ -108,7 +108,7 @@ def test_local_copy_takes_only_the_columns_and_rows_needed(wide, monkeypatch):
     monkeypatch.setattr(source, "compiles", lambda expr: False)  # 이 연결이 못 하는 계산: PC 사본이 필요
     body = {"base": "wide", "conditions": ["store = A"]}
     for keep in (["day", "amt"], None):
-        with pytest.raises(ValueError, match="받지 않았습니다"):
+        with pytest.raises(ValueError, match="받지 않았어요"):
             querying.runnable(body, select=False, keep=keep)
     assert kept[0][1] == ["day", "amt"] and kept[1][1] == ["day", "store", "amt", "uid", "memo", "blob", "region"]  # 쓰는 컬럼만 / 줄이지 않으면 전체
     assert kept[0][0] != kept[1][0] and querying.search_key(body, ["amt", "day"]) == querying.search_key(body, ["day", "amt"])  # 컬럼이 다르면 다른 사본, 순서는 상관없음

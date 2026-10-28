@@ -5,7 +5,7 @@
 - DuckDB 테이블: 테이블의 추정 행 수 × 읽는 컬럼의 타입 크기(글자는 STRING_BYTES로 가정). 추정.
 - Postgres: 통계(pg_class.reltuples × pg_stats.avg_width)로 읽는 컬럼만. 통계가 없으면 모름.
 - 그 밖의 DB: 모름(None).
-실행 전 확인(limit_check): 센 용량이 작업 메모리 상한(설정 memory, 제한 없으면 지금 PC의 사용 가능 메모리)을 넘으면 알린다.
+실행 전 확인(limit_check): 센 용량이 메모리 한도(설정 memory, 제한 없으면 지금 PC의 사용 가능 메모리)를 넘으면 알린다.
 읽는 테이블·컬럼은 SQL을 sqlglot으로 읽어 고른다(SELECT *·테이블.*는 그 테이블의 모든 컬럼). 같은 이름의 컬럼은 그 이름을 가진 모든 테이블에서 읽는다고 본다."""
 import datetime as dt
 import math
@@ -192,7 +192,7 @@ def message(found):
     """화면에 보일 글: '실행하면 약 1.2 GB를 처리합니다(추정 · 방법)'."""
     if found["bytes"] is None:
         return f"처리 용량: 알 수 없음({found['how']})"
-    return f"실행하면 {'' if found['exact'] else '약 '}{size_text(found['bytes'])}를 처리합니다({'정확' if found['exact'] else '추정'} · {found['how']})"
+    return f"실행하면 {'' if found['exact'] else '약 '}{size_text(found['bytes'])}를 처리해요({'정확' if found['exact'] else '추정'} · {found['how']})"
 
 
 WIDE_STRING = 32  # 글자 컬럼 한 칸을 이만큼으로 본다(메타데이터도 명세서도 없을 때. 원격 DB는 표본을 읽지 않는다)
@@ -408,9 +408,9 @@ def limit(config=None):
     """(기준 바이트, 기준 글자). 설정 memory(MB, 1GB=1000MB)가 있으면 그 값, 없으면(제한 없음) 지금 PC의 사용 가능 메모리."""
     mb = (config if config is not None else settings.load()).get("memory")
     if mb:
-        return monitor.bound_bytes(config), f"작업 메모리 상한 {mb / 1000:g} GB"
+        return monitor.bound_bytes(config), f"메모리 한도 {mb / 1000:g} GB"
     free = monitor.bound_bytes(config)
-    return free, f"지금 PC의 사용 가능 메모리 {size_text(free)}(작업 메모리 상한 제한 없음)"
+    return free, f"지금 PC의 사용 가능 메모리 {size_text(free)}(메모리 한도 없음)"
 
 
 def limit_check(con, sql, opened=None, dialect=None, config=None, rows=None):

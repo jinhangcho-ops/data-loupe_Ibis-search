@@ -22,7 +22,7 @@ def password_of(value):
     if value is None:
         return ""
     if not isinstance(value, str):
-        raise ValueError("비밀번호는 글자여야 합니다.")
+        raise ValueError("비밀번호는 글자여야 해요.")
     return value
 
 
@@ -62,7 +62,7 @@ def table_check():
     password = password_of(request.json.get("password"))
     config = collect_config.normalize(request.json.get("config"))
     if config["load"]["target"] != "table":
-        raise ValueError("적재할 곳이 DB 테이블이 아닙니다.")
+        raise ValueError("적재할 곳이 DB 테이블이 아니에요.")
     load_table.ready(config)
 
     def check():

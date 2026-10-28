@@ -99,7 +99,7 @@ def test_single_feature_geometry_and_errors(tmp_path):
     assert geojson.table({"type": "Point", "coordinates": [1, 2]})["geom_type"].to_list() == ["Point"]
     collected = geojson.table({"type": "Feature", "properties": {}, "geometry": {"type": "GeometryCollection", "geometries": [{"type": "Point", "coordinates": [1, 2]}, {"type": "Point", "coordinates": [3, 4]}]}})
     assert collected["center_lon"][0] == 2 and collected["max_lat"][0] == 4
-    with pytest.raises(ValueError, match="GeoJSON이 아닙니다"):
+    with pytest.raises(ValueError, match="GeoJSON이 아니에요"):
         geojson.table({"type": "Table"})
     bad = tmp_path / "bad.geojson"
     bad.write_text("{ 깨진", encoding="utf-8")
@@ -162,7 +162,7 @@ def test_radius_edge_cases_and_messages(points):
     around = ibis.memtable(pl.DataFrame({"lat": [0.0, 0.0], "lon": [179.9, -179.9]}))
     assert around.filter(funcs.in_box(around.lat, around.lon, -1, 179, 1, -179)).count().execute() == 2  # 날짜 변경선을 가로지르는 상자
     for line, message in (("near lat lon 95 126 5", "-90~90"), ("near lat lon 37 200 5", "-180~180"), ("near lat lon 37 126 -1", "0 이상"), ("box lat lon 38 126 35 130", "최소 위도"),
-                          ("near id lon 37 126 5 ", None), ("near lat lon x 126 5", "실수 값이 아닙니다")):
+                          ("near id lon 37 126 5 ", None), ("near lat lon x 126 5", "실수 값이 아니에요")):
         if message is None:
             parse.predicate(line.strip(), points)  # 컬럼이 숫자면 어떤 컬럼이든 위도 자리에 쓸 수 있다
             continue

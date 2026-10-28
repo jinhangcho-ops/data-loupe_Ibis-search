@@ -36,7 +36,7 @@ def crs_of(doc):
         return 4326
     found = EPSG.search(name)
     if not found:
-        raise ValueError(f"좌표계(crs) '{name}'를 알 수 없어요. EPSG 번호가 든 이름이어야 합니다(예: urn:ogc:def:crs:EPSG::5179).")
+        raise ValueError(f"좌표계(crs) '{name}'를 알 수 없어요. EPSG 번호가 든 이름이어야 해요(예: urn:ogc:def:crs:EPSG::5179).")
     return int(found.group(1))
 
 
@@ -161,18 +161,18 @@ def scalar(value):
 def features(doc):
     """문서에서 Feature 목록. FeatureCollection, Feature 하나, 도형 하나를 모두 받는다."""
     if not isinstance(doc, dict):
-        raise ValueError("GeoJSON은 객체({ … })여야 합니다.")
+        raise ValueError("GeoJSON은 객체({ … })여야 해요.")
     kind = doc.get("type")
     if kind == "FeatureCollection":
         found = doc.get("features")
         if not isinstance(found, list):
-            raise ValueError("FeatureCollection에 features 목록이 없습니다.")
+            raise ValueError("FeatureCollection에 features 목록이 없어요.")
         return [f for f in found if isinstance(f, dict)]
     if kind == "Feature":
         return [doc]
     if kind in GEOMETRY_TYPES:
         return [{"type": "Feature", "properties": {}, "geometry": doc}]
-    raise ValueError("GeoJSON이 아닙니다(type이 FeatureCollection·Feature·도형이어야 합니다).")
+    raise ValueError("GeoJSON이 아니에요(type이 FeatureCollection·Feature·도형이어야 해요).")
 
 
 def column_values(name, values):
@@ -230,7 +230,7 @@ def read(path):
 
 
 def read_file(p):
-    limit = min(MAX_BYTES, monitor.bound_bytes() // 6)  # 작업 메모리 상한(없으면 지금 쓸 수 있는 메모리)의 6분의 1이 더 작으면 그것(파싱에 파일의 약 6배 메모리가 든다)
+    limit = min(MAX_BYTES, monitor.bound_bytes() // 6)  # 메모리 한도(없으면 지금 쓸 수 있는 메모리)의 6분의 1이 더 작으면 그것(파싱에 파일의 약 6배 메모리가 든다)
     if p.stat().st_size > limit:
         raise ValueError(f"{p.name}이 {limit // 1024 // 1024}MB보다 커서 읽지 않았어요. 영역을 나누어 쓰세요.")
     try:
@@ -242,7 +242,7 @@ def read_file(p):
     except ValueError as e:
         raise ValueError(f"{p.name}: {e}") from None
     except (RecursionError, IndexError, TypeError):  # coordinates가 글자·빈 목록 등 숫자 목록이 아닐 때
-        raise ValueError(f"{p.name}: 좌표가 올바르지 않아요. 도형의 coordinates는 [경도, 위도] 숫자 목록(또는 그 목록의 목록)이어야 합니다.") from None
+        raise ValueError(f"{p.name}: 좌표가 올바르지 않아요. 도형의 coordinates는 [경도, 위도] 숫자 목록(또는 그 목록의 목록)이어야 해요.") from None
 
 
 def parse_geometry(text):

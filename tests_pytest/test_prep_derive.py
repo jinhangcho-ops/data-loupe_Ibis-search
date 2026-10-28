@@ -89,7 +89,7 @@ def test_prune_suggests_from_sample_only(remote):
 
 
 @pytest.mark.parametrize("text, message", [("__import__('os')", "함수"), ("amt.real", "Attribute"), ("amt ** 2", "**"), ("amt + name", "숫자끼리"),
-                                           ("nothing + 1", "'nothing' 컬럼이 없습니다"), ("iif(amt, 1, 2)", "참거짓"), ("", "식을 입력"), ("(" * 300, "")])
+                                           ("nothing + 1", "'nothing' 컬럼이 없어요"), ("iif(amt, 1, 2)", "참거짓"), ("", "식을 입력"), ("(" * 300, "")])
 def test_formula_rejects(text, message):
     from core import prep_derive
     t = ibis.table({"amt": "float64", "name": "string"}, name="t")

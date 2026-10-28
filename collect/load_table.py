@@ -18,7 +18,7 @@ from collect import uploads
 FILE = "load_tables.json"
 STAGING = "_ibis_load"  # 바꾸기: 새 내용을 먼저 넣어 둘 테이블 이름의 꼬리. 다 넣은 뒤 원래 테이블과 바꿔치기한다.
 OLD = "_ibis_old"  # 바꿔치기하는 동안 원래 테이블을 잠깐 옮겨 둘 이름의 꼬리
-OPENED_HERE = "쿼리·분석 화면이 이 DB 파일을 열고 있습니다. 쿼리·분석의 연결을 끊고 적재하세요."
+OPENED_HERE = "쿼리·분석 화면이 이 DB 파일을 열고 있어요. 쿼리·분석의 연결을 끊고 적재하세요."
 
 
 # ---------- 구성 ----------
@@ -32,7 +32,7 @@ def ready(config):
     if table["schema"]:
         parse.check_table_name(table["schema"], "스키마")
     if table["key"] and table["how"] != "append":
-        raise ValueError("이미 있는 키를 건너뛰는 것(key)은 덧붙이기(append)에서만 씁니다.")
+        raise ValueError("이미 있는 키를 건너뛰는 것(key)은 덧붙이기(append)에서만 써요.")
     link = table["connection"]
     if link["kind"] == "folder":
         file = link["file"].strip()
@@ -101,7 +101,7 @@ def connect(link, password):
         try:
             return source.open_duckdb(link["file"].strip(), read_only=False, memory=settings.load().get("memory"), threads=settings.load().get("threads"))
         except Exception as e:
-            raise ValueError(f"DB 파일을 쓰기로 열 수 없습니다. 다른 프로그램이 이 파일을 열고 있는지 확인하세요. ({e})") from None
+            raise ValueError(f"DB 파일을 쓰기로 열 수 없어요. 다른 프로그램이 이 파일을 열고 있는지 확인하세요. ({e})") from None
     return source.open_url(link["url"].strip(), link["user"], password)
 
 
@@ -222,7 +222,7 @@ def swap(con, schema, name, staging):
     이름을 바꾸지 못하면(인덱스·뷰가 걸린 DuckDB 테이블 등) 원래 테이블은 지우지 않고 그대로 둔 채 오류로 멈춘다. 새 내용은 staging에 남는다."""
     db, old = schema or None, name + OLD
     if old.lower() in [t.lower() for t in con.list_tables(database=db)]:
-        raise ValueError(f"바꾸는 동안 원래 테이블을 옮겨 둘 이름 '{old}'이 이미 있어 바꾸지 않았습니다. 새 내용은 '{staging}'에 남아 있습니다.")
+        raise ValueError(f"바꾸는 동안 원래 테이블을 옮겨 둘 이름 '{old}'이 이미 있어 바꾸지 않았어요. 새 내용은 '{staging}'에 남아 있어요.")
     try:
         if statement := swap_sql(con, schema, name, staging):
             swap_all(con, statement)
@@ -234,7 +234,7 @@ def swap(con, schema, name, staging):
                 rename(con, schema, old, name)
                 raise
     except Exception as e:
-        raise ValueError(f"테이블 이름을 바꾸지 못해 바꾸지 않았습니다. 원래 테이블은 그대로이고 새 내용은 '{staging}'에 남아 있습니다. ({str(e)[:300]})") from None
+        raise ValueError(f"테이블 이름을 바꾸지 못해 바꾸지 않았어요. 원래 테이블은 그대로이고 새 내용은 '{staging}'에 남아 있어요. ({str(e)[:300]})") from None
     drop(con, schema, staging if con.name == "clickhouse" else old)  # ClickHouse는 맞바꿔 옛 내용이 staging에 있다
 
 
@@ -264,27 +264,27 @@ def plan(table, real, columns, file_columns, resume=False):
     how, link = table["how"], table["connection"]
     missing = [k for k in table["key"] if file_columns is not None and k not in dict(map(tuple, file_columns))]
     if missing:
-        raise ValueError(f"키 컬럼이 결과 파일에 없습니다: {', '.join(missing)}")
+        raise ValueError(f"키 컬럼이 결과 파일에 없어요: {', '.join(missing)}")
     if real is None:
         if how == "append":
-            raise ValueError(f"덧붙일 테이블 '{table['name']}'이 없습니다.")
-        return "새 테이블로 만듭니다."
+            raise ValueError(f"덧붙일 테이블 '{table['name']}'이 없어요.")
+        return "새 테이블로 만들어요."
     record = mine(link, table["schema"], real)
     if how == "new":
         if resume and record:
-            return "이어 넣습니다."
-        raise ValueError(f"'{real}'은 이미 있는 테이블입니다. 다른 이름을 쓰거나 덧붙이기·바꾸기를 고르세요.")
+            return "이어 넣어요."
+        raise ValueError(f"'{real}'은 이미 있는 테이블이에요. 다른 이름을 쓰거나 덧붙이기·바꾸기를 고르세요.")
     if how == "append":
         if file_columns is None:
-            return "테이블이 있습니다. 컬럼은 수집한 뒤 결과 파일과 맞춰 봅니다."
+            return "테이블이 있어요. 컬럼은 수집한 뒤 결과 파일과 맞춰 봐요."
         if differences(file_columns, columns, append=True):  # 막을지는 덧붙이기 기준, 글은 전체 다른 점(테이블에만 있는 컬럼도 알림: tests.py 원래 설계)
-            raise ValueError(f"컬럼이 달라 덧붙일 수 없습니다. 다른 점: {differences(file_columns, columns)}")
-        return "컬럼이 같아 덧붙일 수 있습니다."
+            raise ValueError(f"컬럼이 달라 덧붙일 수 없어요. 다른 점: {differences(file_columns, columns)}")
+        return "컬럼이 같아 덧붙일 수 있어요."
     if record is None:
-        raise ValueError("이 프로그램이 만든 테이블이 아니라 바꿀 수 없습니다.")
+        raise ValueError("이 프로그램이 만든 테이블이 아니라 바꿀 수 없어요.")
     if differences(record["columns"], columns):
-        raise ValueError("이 프로그램이 만든 뒤 테이블의 컬럼이 바뀌어 바꾸지 않습니다.")
-    return "이 프로그램이 만든 테이블이라 바꿀 수 있습니다(지금 내용은 새 내용으로 바뀝니다)."
+        raise ValueError("이 프로그램이 만든 뒤 테이블의 컬럼이 바뀌어 바꾸지 않아요.")
+    return "이 프로그램이 만든 테이블이라 바꿀 수 있어요(지금 내용은 새 내용으로 바뀌어요)."
 
 
 # ---------- 넣기 ----------
@@ -333,7 +333,7 @@ class Sink:
                 there, _ = look(self.con, self.schema, self.staging)
                 if there is not None and not (resume and mine(link, self.schema, there)):
                     if mine(link, self.schema, there) is None:
-                        raise ValueError(f"바꾸기에 쓸 임시 테이블 이름 '{there}'이 이미 있습니다(이 프로그램이 만든 것이 아님).")
+                        raise ValueError(f"바꾸기에 쓸 임시 테이블 이름 '{there}'이 이미 있어요(이 프로그램이 만든 것이 아님).")
                     drop(self.con, self.schema, there)  # 지난번에 다 넣지 못하고 남은 임시 테이블
                     there = None
                 if there is None:
@@ -373,7 +373,7 @@ class Sink:
         real, columns = look(self.con, self.schema, self.name)
         record = mine(self.link, self.schema, self.name) if real else None
         if real is None or record is None or differences(record["columns"], columns):
-            raise ValueError("넣는 동안 테이블이 바뀌어 바꾸지 않았습니다. 새 내용은 임시 테이블 '" + self.staging + "'에 남아 있습니다.")
+            raise ValueError("넣는 동안 테이블이 바뀌어 바꾸지 않았어요. 새 내용은 임시 테이블 '" + self.staging + "'에 남아 있어요.")
         swap(self.con, self.schema, self.name, self.staging)
         remember(self.link, self.schema, self.name, self.columns)
         remember(self.link, self.schema, self.staging, None)

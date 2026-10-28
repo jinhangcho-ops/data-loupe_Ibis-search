@@ -33,8 +33,8 @@ from collect.collect_store import (CAPPED, IDLE, began, SAVE_EVERY, balancer_for
 
 MIN_FREE = 200 * 1024 * 1024  # 시작할 때 결과 폴더의 디스크에 적어도 남아 있어야 하는 공간
 MAX_AGE = dt.timedelta(days=1)  # 이어 받기는 마지막으로 받은 지 이만큼 안에서만(오래 내버려 둔 것에 지금 받은 것을 섞지 않게, 하루 한도로 매일 이어 받는 것은 이어짐)
-RUNNING = "이미 수집이 돌고 있습니다. 끝나거나 멈춘 뒤에 시작하세요."
-BUSY = "같은 결과 파일에 다른 곳(다른 창, 프로그램 안 예약, Windows 예약 작업)이 수집하고 있습니다. 끝난 뒤에 시작하세요."
+RUNNING = "이미 수집이 돌고 있어요. 끝나거나 멈춘 뒤에 시작하세요."
+BUSY = "같은 결과 파일에 다른 곳(다른 창, 프로그램 안 예약, Windows 예약 작업)이 수집하고 있어요. 끝난 뒤에 시작하세요."
 
 
 class Busy(ValueError):
@@ -58,16 +58,16 @@ def ready(config, output=True):
     env = settings.read_env(config["env_path"]) if config["env_path"].strip() else {}
     missing = [n for n in names if n not in env]
     if missing:
-        raise ValueError(f"env 파일{'을 고르세요. 쓰인 이름' if not config['env_path'].strip() else '에 없는 이름이 있습니다'}: {', '.join(missing)}")
+        raise ValueError(f"env 파일{'을 고르세요. 쓰인 이름' if not config['env_path'].strip() else '에 없는 이름이 있어요'}: {', '.join(missing)}")
     if config["limit_group"] and config["limit_group"] not in collect_limits.groups():
-        raise ValueError(f"사용 한도 묶음 '{config['limit_group']}'이 없습니다.")
+        raise ValueError(f"사용 한도 묶음 '{config['limit_group']}'이 없어요.")
     return config, env
 
 
 def check_literals(config):
     places = req.literal_places(config)
     if places:
-        raise ValueError(f"비밀처럼 보이는 자리에 값이 그대로 들어 있습니다: {', '.join(places)}. env 파일에 넣고 {{env:이름}}으로 바꾸세요.")
+        raise ValueError(f"비밀처럼 보이는 자리에 값이 그대로 들어 있어요: {', '.join(places)}. env 파일에 넣고 {{env:이름}}으로 바꾸세요.")
 
 
 def output_path(config):
@@ -174,14 +174,14 @@ def start(config, password=""):
     config, env = ready(config)
     path = output_path(config)
     if not path.parent.is_dir():
-        raise ValueError("결과 파일의 폴더가 없습니다.")
+        raise ValueError("결과 파일의 폴더가 없어요.")
     if server.reading(path):
-        raise ValueError("지금 읽고 있는 파일에는 저장할 수 없습니다. 다른 이름을 고르세요.")
+        raise ValueError("지금 읽고 있는 파일에는 저장할 수 없어요. 다른 이름을 고르세요.")
     group = config["limit_group"]
     if group and collect_limits.load() is None:
         raise ValueError(collect_limits.broken_message())
     if shutil.disk_usage(path.parent).free < MIN_FREE:
-        raise ValueError(f"디스크 공간이 모자랍니다(적어도 {MIN_FREE // 1024 // 1024}MB가 필요합니다).")
+        raise ValueError(f"디스크 공간이 모자라요(적어도 {MIN_FREE // 1024 // 1024}MB가 필요해요).")
     load_job.ready(config)
     found, lock = parts(path), lock_of(config)
     if not filelock.hold(lock):
@@ -189,7 +189,7 @@ def start(config, password=""):
     try:
         left = load_job.read_record(path) if config["load"]["target"] != "file" and path.exists() else None  # 다 넣으면 기록을 지운다
         if left and left.get("file") in (None, load_job.file_stamp(path)):  # 이 결과 파일을 덜 넣었다: 덮어쓰면 남은 행을 넣을 길이 없다
-            text = ("지난 적재가 끝나지 않았습니다. [적재만 다시]로 마저 넣은 뒤 수집하세요. "
+            text = ("지난 적재가 끝나지 않았어요. [적재만 다시]로 마저 넣은 뒤 수집하세요. "
                     f"컬럼이 달라 넣을 수 없으면 테이블을 맞추거나, 남은 행을 버려도 되면 결과 파일 옆 '{load_job.record_path(path).name}'을 지운 뒤 다시 수집하세요.")
             # 앱을 다시 켰거나 예약 프로세스가 실패했으면 상태에 적재가 없어 화면이 [적재만 다시]를 숨기므로 실패한 적재로 남긴다
             update(**{**IDLE, "phase": "실패", "error": text, "mode": config["mode"], "load": {
@@ -209,7 +209,7 @@ def start(config, password=""):
             write_record(found["record"], record)
         launch(config, env, path, found, record, password, lock=lock, pages=len(record["done"]) if config["mode"] != "file" else 0, rows=record.get("rows", 0),
                bytes=record.get("bytes", 0), total_bytes=record.get("size"), group=group,
-               message="이어 받습니다." if resumed else "지난번 받다 만 것이 하루보다 오래돼 처음부터 받습니다." if old else "스크롤 방식은 이어 받지 않고 처음부터 받습니다." if scroll else "")
+               message="이어 받아요." if resumed else "지난번 받다 만 것이 하루보다 오래돼 처음부터 받아요." if old else "스크롤 방식은 이어 받지 않고 처음부터 받아요." if scroll else "")
     except BaseException:
         filelock.let_go(lock)
         raise
@@ -229,7 +229,7 @@ def start_load(config, password=""):
         raise ValueError("결과 파일 경로를 고르세요.")
     path = output_path(config)
     if not path.is_file():
-        raise ValueError("적재할 결과 파일이 없습니다. 먼저 수집하세요.")
+        raise ValueError("적재할 결과 파일이 없어요. 먼저 수집하세요.")
     load_job.ready(config)
     lock = lock_of(config)
     if not filelock.hold(lock):
@@ -264,7 +264,7 @@ def work(config, env, path, found, record, halt, password, lock=None):
             update(phase="적재 중", output=str(path), wait="")
             loaded = load_job.run(config, path, password, halt, update)
             if loaded["failures"]:  # 넣지 못한 행이 있으면 끝났다고만 하지 않고 문구로 남긴다(예약 실행은 이것을 실패로 알린다)
-                update(message=f"적재에서 실패 {loaded['failures']:,}행이 있습니다. 넣은 행은 그대로입니다.")
+                update(message=f"적재에서 실패 {loaded['failures']:,}행이 있어요. 넣은 행은 그대로예요.")
         update(phase="끝", output=str(path) if made else "", wait="")
     except Halt as e:
         update(phase="실패" if e.failed else "멈춤", **({"error": str(e)} if e.failed else {"message": str(e)}), wait="")
@@ -317,10 +317,10 @@ def sample(config, text):
     try:
         data = json.loads(text)
     except (TypeError, ValueError):
-        raise ValueError("응답 예시가 JSON이 아닙니다.") from None
+        raise ValueError("응답 예시가 JSON이 아니에요.") from None
     found = req.records(data, config["response"]["records"])
     if found is None:
-        raise ValueError(f"기록 경로 '{config['response']['records']}'를 응답에서 찾지 못했습니다.")
+        raise ValueError(f"기록 경로 '{config['response']['records']}'를 응답에서 찾지 못했어요.")
     rows = req.rows(found, config["response"]["columns"])
     kinds = {}
     for row in rows:
@@ -381,10 +381,10 @@ def run_api(config, env, path, found, record, halt):
         try:
             data = json.loads(reply.text())
         except ValueError:
-            raise Halt(f"{i + 1}번째 쪽의 응답이 JSON이 아닙니다.") from None
+            raise Halt(f"{i + 1}번째 쪽의 응답이 JSON이 아니에요.") from None
         rows, there = req.mapped(data, response)
         if not there and not record["done"]:
-            raise Halt(f"기록 경로 '{response['records']}'를 응답에서 찾지 못했습니다.")
+            raise Halt(f"기록 경로 '{response['records']}'를 응답에서 찾지 못했어요.")
         return data, rows, reply
 
     def note_first(data, rows):
@@ -449,7 +449,7 @@ def run_api(config, env, path, found, record, halt):
                         save_page(found, record, i, rows, size)
                         total = short + 1 if rows else None
                 if total is not None and total > short:
-                    raise Halt(f"서버가 한 번에 {short}행만 줍니다. 한 번에 받는 수를 {short}으로 줄이세요.")
+                    raise Halt(f"서버가 한 번에 {short}행만 줘요. 한 번에 받는 수를 {short}으로 줄이세요.")
         threads = [threading.Thread(target=worker, daemon=True) for _ in range(max(1, balancer.limit))]
         for t in threads:
             t.start()
@@ -488,7 +488,7 @@ def run_api(config, env, path, found, record, halt):
                 nxt = req.extract(data, paging["next_path"]) if paging["next_path"] else link_next(reply)
                 nxt = None if nxt is None else urljoin(reply.url, str(nxt))
                 if nxt is not None and origin(nxt) != home:  # 인증 헤더를 다른 서버나 암호화하지 않는 http로 보내지 않는다
-                    raise Halt(f"다음 주소가 처음 요청과 다른 호스트·방식({urlsplit(nxt).scheme}://{urlsplit(nxt).hostname})을 가리켜 멈췄습니다. 믿을 수 있는 주소인지 확인하세요.")
+                    raise Halt(f"다음 주소가 처음 요청과 다른 호스트·방식({urlsplit(nxt).scheme}://{urlsplit(nxt).hostname})을 가리켜 멈췄어요. 믿을 수 있는 주소인지 확인하세요.")
                 end = not rows or nxt is None or nxt in seen
                 more["next"] = nxt
             total = record.get("total")
@@ -540,7 +540,7 @@ def gaps(done, size):
 def need_space(folder, size):
     free = shutil.disk_usage(folder).free
     if size is not None and free < size + MIN_FREE:
-        raise Halt(f"디스크 공간이 모자랍니다(필요 약 {size // 1024 // 1024 + 1}MB, 남음 {free // 1024 // 1024}MB).")
+        raise Halt(f"디스크 공간이 모자라요(필요 약 {size // 1024 // 1024 + 1}MB, 남음 {free // 1024 // 1024}MB).")
 
 
 def run_file(config, env, path, found, record, halt):
@@ -563,7 +563,7 @@ def run_file(config, env, path, found, record, halt):
                 if not chunk:
                     if end is None:
                         break
-                    raise ConnectionError("받는 중에 연결이 끊겼습니다.")
+                    raise ConnectionError("받는 중에 연결이 끊겼어요.")
                 f.write(chunk)
                 if halt.is_set():
                     raise Halt(collect_http.STOPPED, failed=False)
@@ -631,7 +631,7 @@ def run_file(config, env, path, found, record, halt):
             with open(raw, "wb") as f:
                 f.truncate(size)  # 미리 크기만큼 잡아 두고 조각마다 제자리에 쓴다.
         else:
-            update(message="이어 받습니다.")
+            update(message="이어 받아요.")
         update(total_bytes=size, bytes=record["bytes"])
         piece = max(1, math.ceil(size / spec["chunks"]))
         todo = [[s + piece * k, min(e, s + piece * (k + 1))] for s, e in gaps(record["done"], size) for k in range(math.ceil((e - s) / piece))]
@@ -652,11 +652,11 @@ def run_file(config, env, path, found, record, halt):
                         with guard:
                             record.update(done=[], bytes=0, size=None)
                             write_record(found["record"], record)
-                        raise Halt("받는 중에 파일이 바뀌었습니다. 다시 시작하면 처음부터 받습니다.")
+                        raise Halt("받는 중에 파일이 바뀌었어요. 다시 시작하면 처음부터 받아요.")
                     if reply.status != 206:
                         return Reply(reply.status, list(reply.headers.items()), reply.read(4096), url)
                     if content_range(reply.headers.get("Content-Range"))[0] != position:
-                        raise ConnectionError("요청한 범위와 다른 범위가 왔습니다.")
+                        raise ConnectionError("요청한 범위와 다른 범위가 왔어요.")
                     stream(reply, raw, position, end)
                     return Reply(206, list(reply.headers.items()), b"", url)
             return attempt
@@ -676,10 +676,10 @@ def run_file(config, env, path, found, record, halt):
         if errors:
             raise min(errors, key=lambda e: not getattr(e, "failed", True))
         if gaps(record["done"], size):
-            raise Halt("다 받지 못했습니다. 다시 시작하면 이어 받습니다.", failed=False)
+            raise Halt("다 받지 못했어요. 다시 시작하면 이어 받아요.", failed=False)
     got = raw.stat().st_size
     if info.get("size") is not None and got != info["size"]:
-        raise Halt(f"받은 크기({got:,}바이트)가 서버가 알려 준 크기({info['size']:,}바이트)와 다릅니다. 다시 시작하세요.")
+        raise Halt(f"받은 크기({got:,}바이트)가 서버가 알려 준 크기({info['size']:,}바이트)와 달라요. 다시 시작하세요.")
     return finish_file(config, path, found, info)
 
 
@@ -721,7 +721,7 @@ def finish_file(config, path, found, info):
         head = f.read(4)
     kind = output_kind(config, info.get("url", ""), info.get("type"), head)
     if kind != "parquet" and (head[:2] in (codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE) or head == codecs.BOM_UTF32_BE):  # UTF-16·32는 CP949로 바꾸면 깨진 글자로 '성공'한다(source.utf8_csv와 같은 규칙)
-        raise Halt("받은 파일이 UTF-16/UTF-32로 저장돼 있어 읽을 수 없습니다. UTF-8 또는 CP949로 받을 수 있는 주소를 쓰세요.")
+        raise Halt("받은 파일이 UTF-16/UTF-32로 저장돼 있어 읽을 수 없어요. UTF-8 또는 CP949로 받을 수 있는 주소를 쓰세요.")
     encoding = config["file"]["encoding"]
     cp949 = kind != "parquet" and (encoding == "cp949" or (encoding == "auto" and not is_utf8(raw)))
     con, folder = duck()
@@ -743,7 +743,7 @@ def finish_file(config, path, found, info):
             table = read(str(readable), **options)
             rows = con.execute(table.count())
         except Exception as e:
-            raise Halt(f"받은 파일을 {kind}로 열 수 없습니다: {str(e)[:300]}") from None
+            raise Halt(f"받은 파일을 {kind}로 열 수 없어요: {str(e)[:300]}") from None
         if kind == fmt == "parquet":
             os.replace(raw, found["out"])
         else:

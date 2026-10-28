@@ -253,7 +253,7 @@ def test_lift_with_negative_control_points_the_right_way():
 
 def test_position_slots_reject_negative():
     from core import sql_funcs
-    with pytest.raises(ValueError, match="0이나 음수는 쓸 수 없습니다"):
+    with pytest.raises(ValueError, match="0이나 음수는 쓸 수 없어요"):
         sql_funcs.not_zero(-1, "N번째")
     assert sql_funcs.not_zero(2, "N번째") == 2
 

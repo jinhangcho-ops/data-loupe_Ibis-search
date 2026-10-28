@@ -903,7 +903,7 @@ function showSampled() {
 }
 $("resample").onclick = async () => { await computeStats(token, true); await loadFirst(); };
 // ②와 ③. 통계는 테이블 전체가 아니라 표본으로 구하고 서버가 테이블별로 저장해 둔다(fresh면 표본을 새로 읽는다).
-// 오류나 취소로 ②가 멈추면 통계 칸에 "구하지 않았습니다"와 [다시]가 나온다.
+// 오류나 취소로 ②가 멈추면 통계 칸에 "통계를 구하지 못했어요"와 [다시]가 나온다.
 async function computeStats(mine, fresh = false) {
   const body = { schema: S.schema, base: S.base, sample, refresh: fresh };
   status = "stats";

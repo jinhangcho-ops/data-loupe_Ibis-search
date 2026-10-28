@@ -170,17 +170,17 @@ P = lambda unit, name: {"unit": unit, "unit_name": name}  # 활성 사용자 수
 T, F, R, M, K, E, C = "traffic", "funnel", "retention", "revenue", "marketing", "economy", "commerce"
 ENTRIES = [
     # ---------- 1 트래픽·활성도 ----------
-    entry("uv", T, "고유 사용자 수", "UV", "기간 안에 한 번이라도 온 서로 다른 사람 수예요. 규모의 가장 기본 숫자입니다.", "고유 사용자 수", "{시각}의 {단위}마다 고유 {사용자} 수",
+    entry("uv", T, "고유 사용자 수", "UV", "기간 안에 한 번이라도 온 서로 다른 사람 수예요. 규모의 가장 기본 숫자예요.", "고유 사용자 수", "{시각}의 {단위}마다 고유 {사용자} 수",
           [("user", {}), ("time", OPT), ("unit", {"default": None, "optional": True})], "uv", unit="명", hint="north_star"),
     entry("pv", T, "조회 수", "PV", "화면(페이지)이 열린 횟수예요. 사용자 수와 같이 봐야 몇 번씩 보는지 알 수 있어요.", "이벤트(조회) 행 수", "{이벤트}가 {이벤트 값}인 행의 수",
           [("event", OPT), "event_value"], "pv", unit="회"),
     entry("pv_per_uv", T, "사용자 1명당 조회 수", "PV/UV", "한 사람이 평균 몇 번 보는지예요. 오르면 더 깊이 쓰는 것이고, 소수의 헤비 유저가 끌어올린 것일 수도 있어요.", "PV ÷ UV",
           "{사용자} 1명당 {이벤트}가 {이벤트 값}인 행의 수", ["user", ("event", OPT), "event_value"], "pv_per_uv", pair=["pv", "uv"], spread=True, unit="회"),
-    entry("dau", T, "일간 활성 사용자", "DAU", "하루에 한 번이라도 쓴 사람 수의 평균이에요. 서비스가 매일 쓰이는지 보는 대표 숫자입니다.", "일별 고유 사용자 수의 평균", "{시각}의 일마다 고유 {사용자} 수의 평균",
+    entry("dau", T, "일간 활성 사용자", "DAU", "하루에 한 번이라도 쓴 사람 수의 평균이에요. 서비스가 매일 쓰이는지 보는 대표 숫자예요.", "일별 고유 사용자 수의 평균", "{시각}의 일마다 고유 {사용자} 수의 평균",
           ["user", "time"], "active", P("day", "일"), spread=True, unit="명", hint="north_star"),
     entry("wau", T, "주간 활성 사용자", "WAU", "한 주(월요일 시작)에 한 번이라도 쓴 사람 수의 평균이에요. 매일은 아니어도 주마다 오는 사람을 잡아요.", "주별 고유 사용자 수의 평균", "{시각}의 주마다 고유 {사용자} 수의 평균",
           ["user", "time"], "active", P("week", "주"), spread=True, unit="명"),
-    entry("mau", T, "월간 활성 사용자", "MAU", "한 달에 한 번이라도 쓴 사람 수의 평균이에요. 서비스 전체 규모를 보는 기준입니다.", "월별 고유 사용자 수의 평균", "{시각}의 월마다 고유 {사용자} 수의 평균",
+    entry("mau", T, "월간 활성 사용자", "MAU", "한 달에 한 번이라도 쓴 사람 수의 평균이에요. 서비스 전체 규모를 보는 기준이에요.", "월별 고유 사용자 수의 평균", "{시각}의 월마다 고유 {사용자} 수의 평균",
           ["user", "time"], "active", P("month", "월"), spread=True, unit="명"),
     entry("stickiness", T, "고착도", "Stickiness", "MAU 중 매일 오는 비율이에요. 높을수록 습관이 된 서비스예요.", "DAU ÷ MAU (×100은 %로 보일 때)", "{시각}의 월마다 DAU ÷ MAU를 {사용자} 기준으로",
           ["user", "time"], "stickiness", pair=["dau", "mau"], fmt="percent", better="up", hint="north_star"),
@@ -341,7 +341,7 @@ ENTRIES = [
           [("y_true", {"kinds": "num"}), ("y_pred", {"kinds": "num", "optional": False})], "regression", {"pick": "rmse"}, better="down"),
     entry("mae", "model", "평균 절대 오차", "MAE", "예측과 정답 차이의 절댓값 평균이에요. 단위가 정답과 같아 읽기 쉬워요.", "평균 |예측 − 정답|", "{정답}과 {예측}의 MAE",
           [("y_true", {"kinds": "num"}), ("y_pred", {"kinds": "num", "optional": False})], "regression", {"pick": "mae"}, better="down"),
-    entry("mape", "model", "평균 절대 비율 오차", "MAPE", "오차를 정답의 몇 %인지로 평균한 값이에요. 정답이 0인 행은 뺍니다.", "평균 |오차 ÷ 정답|", "{정답}과 {예측}의 MAPE(정답이 0인 행 제외)",
+    entry("mape", "model", "평균 절대 비율 오차", "MAPE", "오차를 정답의 몇 %인지로 평균한 값이에요. 정답이 0인 행은 빼요.", "평균 |오차 ÷ 정답|", "{정답}과 {예측}의 MAPE(정답이 0인 행 제외)",
           [("y_true", {"kinds": "num"}), ("y_pred", {"kinds": "num", "optional": False})], "regression", {"pick": "mape"}, fmt="percent", better="down"),
     entry("lift", "model", "리프트", "Lift", "실험군이 대조군보다 몇 % 높은지예요. 크기만 볼 뿐 우연인지는 p-value로 따로 봐요.", "(T − C) ÷ |C|", "{실험군}이 {대조군 값}인 군 대비 {실험군 값}인 군의 {지표 값} 변화율",
           ["group", "metric", "control", "treat", AB_USER], "lift", pair=["control_mean", "treat_mean"], fmt="percent", better="up", hint="north_star"),
@@ -363,7 +363,7 @@ def get(entry_id):
     """id의 항목. 없으면 ValueError."""
     found = BY_ID.get(entry_id[len(PREFIX):] if isinstance(entry_id, str) and entry_id.startswith(PREFIX) else entry_id)
     if found is None:
-        raise ValueError(f"'{entry_id}' 지표 사전 항목이 없습니다.")
+        raise ValueError(f"'{entry_id}' 지표 사전 항목이 없어요.")
     return found
 
 

@@ -73,7 +73,7 @@ def test_distribution_other_error_is_not_retried(monkeypatch):
 
     def boom(e):
         calls.append(1)
-        raise ValueError("연결이 끊겼습니다")
+        raise ValueError("연결이 끊겼어요")
     monkeypatch.setattr(stats, "one", boom)
     with pytest.raises(ValueError, match="연결"):
         stats.distribution(t, "v")

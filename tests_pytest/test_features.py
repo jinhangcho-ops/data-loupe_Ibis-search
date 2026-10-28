@@ -248,9 +248,9 @@ def test_kafka_missing_message(monkeypatch):
     with pytest.raises(ValueError, match="수집 기능에 들어 있어요. \\[설정\\]에서 수집 기능을 추가하세요"):
         load_kafka.producer(item, "")
     monkeypatch.setattr(load_kafka, "destination", lambda name: item)
-    with pytest.raises(ValueError, match="수집 기능에 들어 있어요") as e:  # 접속 확인에서도 "접속하지 못했습니다"로 덮지 않는다
+    with pytest.raises(ValueError, match="수집 기능에 들어 있어요") as e:  # 접속 확인에서도 "접속하지 못했어요"로 덮지 않는다
         load_kafka.check("x", "")
-    assert "접속하지 못했습니다" not in str(e.value)
+    assert "접속하지 못했어요" not in str(e.value)
 
 
 # ---------- A4 화면 숨김(node) ----------

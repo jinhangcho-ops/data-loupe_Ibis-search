@@ -24,9 +24,9 @@ MAX_VALUE = 100_000  # 값 하나의 최대 글자 수
 ROBOTS_TIMEOUT = 10
 ROBOTS_MAX = 512 * 1024  # robots.txt를 이만큼(바이트)까지만 읽는다.
 AGENT = "dataloupe"  # robots.txt에서 이 앱의 User-agent 이름(소문자). 이 이름의 묶음이 있으면 * 묶음 대신 따른다.
-EMPTY = "항목을 찾지 못했습니다(0건). 페이지 구조가 바뀌었거나 로그인이 필요할 수 있습니다."
-BLOCKED = "robots.txt가 이 주소를 막고 있습니다."
-CLOSED = "수집용 창이 닫혀 멈췄습니다."
+EMPTY = "항목을 찾지 못했어요(0건). 페이지 구조가 바뀌었거나 로그인이 필요할 수 있어요."
+BLOCKED = "robots.txt가 이 주소를 막고 있어요."
+CLOSED = "수집용 창이 닫혀 멈췄어요."
 
 
 # ---------- 설정 ----------
@@ -39,7 +39,7 @@ def page_url(web, i, now=None):
 def ready(web):
     """시작 전 검사: {env:…}는 쓰지 않음, http·https 주소, 항목 선택자와 컬럼, 다음 버튼 선택자."""
     if req.env_names({"url": web["url"]}):
-        raise ValueError("웹페이지 주소에는 {env:…}를 쓸 수 없습니다(로그인은 수집용 창에서 하세요).")
+        raise ValueError("웹페이지 주소에는 {env:…}를 쓸 수 없어요(로그인은 수집용 창에서 하세요).")
     collect_browser.web_url(page_url(web, 0))
     if not web["items"].strip():
         raise ValueError("항목 선택자를 정하세요.")
@@ -60,7 +60,7 @@ def rows_of(found, web):
         raise Halt(found["error"][:300])
     if (not isinstance(found, dict) or type(found.get("count")) is not int or not isinstance(found.get("rows"), list) or not isinstance(found.get("url"), str)
             or not all(isinstance(r, list) and len(r) == len(names) and all(v is None or isinstance(v, str) for v in r) for r in found["rows"])):
-        raise Halt("페이지에서 읽은 값의 모양이 올바르지 않습니다.")
+        raise Halt("페이지에서 읽은 값의 모양이 올바르지 않아요.")
     rows = [{n: v if v is None else v[:MAX_VALUE] for n, v in zip(names, r)} for r in found["rows"][:MAX_ROWS]]
     return found["count"], rows, found["url"]
 
@@ -75,7 +75,7 @@ def sample(config):
     except collect_browser.Gone:
         raise ValueError(collect_browser.CLOSED) from None
     except TimeoutError:
-        raise ValueError("수집용 창이 답하지 않습니다. 페이지가 다 열린 뒤에 다시 하세요.") from None
+        raise ValueError("수집용 창이 답하지 않아요. 페이지가 다 열린 뒤에 다시 하세요.") from None
     try:
         count, rows, _ = rows_of(found, web)
     except Halt as e:
@@ -146,12 +146,12 @@ def robots_rules(base):
         with reply:
             status, body = reply.status, reply.read(ROBOTS_MAX)
     except (OSError, ValueError, http.client.HTTPException) as e:
-        return f"robots.txt를 받지 못했습니다({getattr(e, 'reason', e)})"
+        return f"robots.txt를 받지 못했어요({getattr(e, 'reason', e)})"
     if 400 <= status < 500:
         return {}
     if 200 <= status < 300:
         return robots_parse(body.decode("utf-8-sig", "replace"))  # 앞에 BOM이 붙은 파일도 첫 User-agent 줄을 읽는다
-    return f"robots.txt 응답 상태가 {status}입니다"
+    return f"robots.txt 응답을 쓸 수 없어요(상태 {status})"
 
 
 def robots(url, cache):
@@ -252,7 +252,7 @@ class Walk:
                 if found and not found["same"] and found["ready"] != "loading":
                     break
                 if time.monotonic() > end:
-                    raise Halt(f"{collect_http.wait_text(self.timeout)} 안에 페이지가 열리지 않았습니다: {url}")
+                    raise Halt(f"{collect_http.wait_text(self.timeout)} 안에 페이지가 열리지 않았어요: {url}")
                 self.sleep(POLL)
         self.settle()
 
@@ -262,13 +262,13 @@ class Walk:
         try:
             found = self.page.run("read", self.web["items"], fields_of(self.web), start, None, timeout=max(30, self.timeout))
         except TimeoutError:
-            raise Halt("수집용 창이 답하지 않습니다.") from None
+            raise Halt("수집용 창이 답하지 않아요.") from None
         _, rows, url = rows_of(found, self.web)
         host = urlsplit(url).hostname
         if self.host is None:
             self.host = host
         elif host != self.host:
-            raise Halt(f"다시 로그인이 필요할 수 있습니다: 페이지가 다른 주소({host})로 넘어갔습니다. 수집용 창에서 로그인한 뒤 다시 시작하세요.")
+            raise Halt(f"다시 로그인이 필요할 수 있어요: 페이지가 다른 주소({host})로 넘어갔어요. 수집용 창에서 로그인한 뒤 다시 시작하세요.")
         if urlsplit(url).scheme.lower() in ("http", "https"):
             self.allowed(url)
         return rows
@@ -378,7 +378,7 @@ def allowed(web, url, cache):
         if verdict == "금지":
             raise Halt(BLOCKED)
         if verdict == "확인 못 함":
-            raise Halt(f"robots.txt를 확인하지 못해 멈췄습니다: {why}")
+            raise Halt(f"robots.txt를 확인하지 못해 멈췄어요: {why}")
 
 
 def run_web(config, env, path, found, record, halt):
@@ -390,7 +390,7 @@ def run_web(config, env, path, found, record, halt):
     capped = False
     if not record.get("finished"):
         if record["done"] and web["paging"]["kind"] == "next":  # 스크롤은 이어 받지 않는다(collect_job.start)
-            collect_store.update(message="이어 받습니다. 처음 쪽부터 다시 넘기며 받은 쪽은 저장하지 않습니다.")
+            collect_store.update(message="이어 받아요. 처음 쪽부터 다시 넘기며 받은 쪽은 저장하지 않아요.")
         balancer = collect_store.balancer_for(config, halt, 1)
         done = set(record["done"])
         first = 0 if web["paging"]["kind"] in ("next", "scroll") else min(set(range(len(done) + 1)) - done)  # 처음 열 쪽(창을 띄울 주소)

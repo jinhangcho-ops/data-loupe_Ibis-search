@@ -48,24 +48,24 @@ def suggestions(info, found, i, rows):
     add = lambda text, why, **what: out.append({"text": text, "why": why, **what})
     if info["kind"] == "string":
         if info["spaces"]:
-            add("앞뒤 공백 지우기", f"앞뒤에 공백이 있는 값이 {info['spaces']:,}개 있습니다.", ops={"trim": True})
+            add("앞뒤 공백 지우기", f"앞뒤에 공백이 있는 값이 {info['spaces']:,}개 있어요.", ops={"trim": True})
         marks = {m: (info["blank"] if m == "" else found[f"mark{j}_{i}"]) for j, m in enumerate(MARKERS)}
         marks = {m: n for m, n in marks.items() if n}
         if marks:
-            add("빈 값 표시를 빈 값으로", "빈 값을 뜻하는 글자가 있습니다: " + ", ".join(f'"{m}" {n:,}개' for m, n in marks.items()), ops={"nulls": list(marks)})
+            add("빈 값 표시를 빈 값으로", "빈 값을 뜻하는 글자가 있어요: " + ", ".join(f'"{m}" {n:,}개' for m, n in marks.items()), ops={"nulls": list(marks)})
         if found[f"lower{i}"] < info["unique"]:
-            add("소문자로 통일", f"대소문자만 다른 값이 있어 서로 다른 값이 {info['unique']:,}개에서 {found[f'lower{i}']:,}개로 줄어듭니다.", ops={"case": "lower"})
+            add("소문자로 통일", f"대소문자만 다른 값이 있어 서로 다른 값이 {info['unique']:,}개에서 {found[f'lower{i}']:,}개로 줄어들어요.", ops={"case": "lower"})
     if info["nulls"] and info["unique"]:  # 채울 값이 하나도 없는 컬럼은 채우기를 추천하지 않는다.
         share = info["nulls"] / rows
-        why = f"빈 값이 {info['nulls']:,}개({share:.1%})입니다."
+        why = f"빈 값이 {info['nulls']:,}개({share:.1%})예요."
         if share < FEW_NULLS:
-            add("빈 값인 행 빼기", why + " 5% 미만이라 그 행을 빼도 됩니다.", ops={"fill": {"how": "drop"}})
+            add("빈 값인 행 빼기", why + " 5% 미만이라 그 행을 빼도 돼요.", ops={"fill": {"how": "drop"}})
         elif info["kind"] in ("int", "float"):
             add("빈 값을 중앙값으로 채우기", why, ops={"fill": {"how": "median"}})
         else:
             add("빈 값을 최빈값으로 채우기", why, ops={"fill": {"how": "mode"}})
     if info["unique"] <= 1 and rows:  # 행이 없는 표는 빼라고 하지 않는다(모든 컬럼에 추천이 붙는다). 값이 모두 빈 컬럼은 뺀다(원래 설계)
-        add("컬럼 빼기", f"서로 다른 값이 {info['unique']}개뿐입니다.", keep=False)
+        add("컬럼 빼기", f"서로 다른 값이 {info['unique']}개뿐이에요.", keep=False)
     return out
 
 
@@ -124,11 +124,11 @@ def type_suggestions(counts):
     add = lambda text, why, to, **more: out.append({"text": text, "why": why, "ops": {"type": {"to": to, **more}}})
     date = next(((fmt, name) for j, (fmt, name) in enumerate(DATE_FORMATS) if full(f"date{j}")), None)
     if date:
-        add("날짜로 바꾸기", f"빈 값과 빈 값 표시를 뺀 {rest:,}개가 모두 {date[1]} 모양입니다.", "date", **({"format": date[0]} if date[0] != "%Y-%m-%d" else {}))
+        add("날짜로 바꾸기", f"빈 값과 빈 값 표시를 뺀 {rest:,}개가 모두 {date[1]} 모양이에요.", "date", **({"format": date[0]} if date[0] != "%Y-%m-%d" else {}))
     elif full("num"):
-        add("숫자로 바꾸기", f"빈 값과 빈 값 표시를 뺀 {rest:,}개가 모두 숫자로 바뀝니다.", "int" if full("int") else "float")
+        add("숫자로 바꾸기", f"빈 값과 빈 값 표시를 뺀 {rest:,}개가 모두 숫자로 바뀌어요.", "int" if full("int") else "float")
     elif full("clean_num"):
-        add("글자를 지우고 숫자로 바꾸기", f"숫자·부호·소수점이 아닌 글자를 지우면 {rest:,}개가 모두 숫자가 됩니다.", "int" if full("clean_int") else "float", clean=True)
+        add("글자를 지우고 숫자로 바꾸기", f"숫자·부호·소수점이 아닌 글자를 지우면 {rest:,}개가 모두 숫자가 돼요.", "int" if full("clean_int") else "float", clean=True)
     return out
 
 
@@ -176,15 +176,15 @@ def prune(arrow):
         col = df[name]
         filled = rows - col.null_count()
         if not filled:
-            found.append({"column": name, "reason": "값이 모두 비어 있습니다"})
+            found.append({"column": name, "reason": "값이 모두 비어 있어요"})
         elif col.n_unique() - (1 if col.null_count() else 0) == 1:
-            found.append({"column": name, "reason": f"값이 하나뿐입니다({col.drop_nulls()[0]})" + (" (나머지는 빈 값)" if col.null_count() else "")})
+            found.append({"column": name, "reason": f"값이 하나뿐이에요({col.drop_nulls()[0]})" + (" (나머지는 빈 값)" if col.null_count() else "")})
         else:
             counts = col.value_counts(sort=True, name="__n")  # 컬럼 이름이 count여도 겹치지 않게
             top = counts["__n"][0] / rows
             if top < PRUNE_TOP:
                 continue
-            found.append({"column": name, "reason": f"빈 값이 {top:.1%}입니다" if counts[name][0] is None else f"한 값이 {top:.1%}입니다({counts[name][0]})"})
+            found.append({"column": name, "reason": f"빈 값이 {top:.1%}예요" if counts[name][0] is None else f"한 값이 {top:.1%}예요({counts[name][0]})"})
         picked.add(name)
     numeric = [n for n, d in df.schema.items() if d.is_numeric() and n not in picked][:PRUNE_MAX_NUMERIC]
     if len(numeric) < 2:
@@ -214,6 +214,6 @@ def prune(arrow):
                 continue
             if abs(r) >= PRUNE_CORR:
                 drop, keep = (a, b) if nulls[a] > nulls[b] else (b, a)
-                found.append({"column": drop, "reason": f"'{keep}'와 상관이 {r:.3f}로 거의 같은 정보입니다", "with": keep, "r": round(r, 4)})
+                found.append({"column": drop, "reason": f"'{keep}'와 상관이 {r:.3f}로 거의 같은 정보예요", "with": keep, "r": round(r, 4)})
                 picked.add(drop)
     return found

@@ -47,7 +47,7 @@ def test_batched_lines_still_see_earlier_columns(orders):
     from core import calc
     expr = calc.apply(["누적합 amt 기준 id", "차이 amt_누적합 기준 id", "순위 기준 amt_누적합 desc"], orders)
     assert expr.columns[-3:] == ("amt_누적합", "amt_누적합_차이", "amt_누적합_순위")
-    with pytest.raises(ValueError, match="이미 있습니다"):
+    with pytest.raises(ValueError, match="이미 있어요"):
         calc.apply(["누적합 amt 기준 id", "누적합 amt 기준 id"], orders)  # 같은 묶음 안에서 겹치는 이름도 막는다
 
 

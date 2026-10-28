@@ -33,7 +33,7 @@ def test_error_text_hides_values_in_valueerror_subclasses():
 
 
 def test_error_text_keeps_app_messages_and_masks_password():
-    assert commands.error_text(ValueError('따옴표가 닫히지 않았습니다.')) == "할 수 없습니다: 따옴표가 닫히지 않았습니다."
+    assert commands.error_text(ValueError('따옴표가 닫히지 않았어요.')) == "할 수 없어요: 따옴표가 닫히지 않았어요."
     server.state["passwords"] = ["pw-9z"]
     try:
         assert "pw-9z" not in commands.error_text(ValueError("연결 실패 pw-9z 모르는 지표입니다"))
@@ -43,7 +43,7 @@ def test_error_text_keeps_app_messages_and_masks_password():
 
 
 def test_answer_routes_through_error_text():
-    assert commands.answer('검색 "열린').startswith("할 수 없습니다: 따옴표")
+    assert commands.answer('검색 "열린').startswith("할 수 없어요: 따옴표")
 
 
 # ---------- 8D2: take ----------

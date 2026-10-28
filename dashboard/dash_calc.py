@@ -71,10 +71,10 @@ def clean_series(found):
     for s in found:
         agg = s.get("agg") if isinstance(s, dict) else None
         if agg not in AGGS:
-            raise ValueError(f"집계 방식은 {', '.join(AGGS[:8])} … 중 하나입니다(함수 사전의 집계 {len(AGGS)}가지).")
+            raise ValueError(f"집계 방식은 {', '.join(AGGS[:8])} … 중 하나예요(함수 사전의 집계 {len(AGGS)}가지).")
         opts = s.get("opts")
         if opts is not None and not isinstance(opts, dict):
-            raise ValueError("집계의 옵션(opts)은 객체여야 합니다.")
+            raise ValueError("집계의 옵션(opts)은 객체여야 해요.")
         out.append({"y": s.get("y") or None, "agg": agg, **({"opts": opts} if opts else {})})
     return out
 
@@ -92,7 +92,7 @@ def component_exprs(t, i, s):
         return {f"s{i}_v": final_expr(t, s)}
     parse.check_name(s["y"], t.columns, "Y 컬럼")
     if not t[s["y"]].type().is_numeric():
-        raise ValueError("합계·평균·최소·최대는 숫자 컬럼을 Y로 골라야 합니다.")
+        raise ValueError("합계·평균·최소·최대는 숫자 컬럼을 Y로 골라야 해요.")
     col = stats.finite(t[s["y"]])  # 실수의 NaN·무한은 빈 값으로(한 칸이 그날 합 전체를 비우지 않게)
     return {f"s{i}_sum": col.sum(), f"s{i}_count": col.count(), f"s{i}_min": col.min(), f"s{i}_max": col.max()}
 
@@ -107,7 +107,7 @@ def final_expr(t, s):
         return sql_funcs.aggregate(s["agg"], t, s["y"], None, s.get("opts"))
     parse.check_name(s["y"], t.columns, "Y 컬럼")
     if not t[s["y"]].type().is_numeric():
-        raise ValueError("합계·평균·최소·최대는 숫자 컬럼을 Y로 골라야 합니다.")
+        raise ValueError("합계·평균·최소·최대는 숫자 컬럼을 Y로 골라야 해요.")
     return getattr(stats.finite(t[s["y"]]), s["agg"])()
 
 
@@ -322,15 +322,15 @@ def time_data(expr, x, series, split):
         elif any(not merges(s["agg"]) for s in series):
             by_unit[unit] = values(unit, lambda agg: not merges(agg))  # 고유 개수·중앙값 같은 집계는 일 값을 다시 묶을 수 없다
     note = f"앞 {cut:,}일은 월 단위만 있어요." if cut else ""
-    return {"x": x, "by_unit": by_unit, "note": " ".join(filter(None, [note, f"나눌 값이 많아 행이 많은 {result.MAX_SPLITS}개만 표시합니다." if more else ""]))}
+    return {"x": x, "by_unit": by_unit, "note": " ".join(filter(None, [note, f"나눌 값이 많아 행이 많은 {result.MAX_SPLITS}개만 표시해요." if more else ""]))}
 
 
 def category_data(expr, body, series):
     """항목별 차트: result.get_chart의 결과를 {labels, series: [{name, values}]}로."""
     labels, datasets, more = run(lambda: result.get_chart(expr, body["x"], series, body.get("split") or None, body.get("order", "x")))
     name = lambda k: series_name(series[k["series"]]) if not body.get("split") else f"{series_name(series[k['series']])} · {k['split']}" if len(series) > 1 else k["split"]
-    notes = [f"그룹이 많아 {result.MAX_GROUPS}개만 표시합니다." if datasets[0]["truncated"] else "",  # 딱 MAX_GROUPS개면 자르지 않은 것
-             f"나눌 값이 많아 행이 많은 {result.MAX_SPLITS}개만 표시합니다." if more else ""]
+    notes = [f"그룹이 많아 {result.MAX_GROUPS}개만 표시해요." if datasets[0]["truncated"] else "",  # 딱 MAX_GROUPS개면 자르지 않은 것
+             f"나눌 값이 많아 행이 많은 {result.MAX_SPLITS}개만 표시해요." if more else ""]
     return {"x": body["x"], "values": {"labels": [str(v) for v in labels], "series": [{"name": name(k), "values": k["values"]} for k in datasets]}, "note": " ".join(filter(None, notes))}
 
 
@@ -344,7 +344,7 @@ def number_column(t, name, what):
     """숫자 컬럼 name(없거나 숫자가 아니면 ValueError)."""
     parse.check_name(name, t.columns, what)
     if not is_number(t, name):
-        raise ValueError(f"'{name}'은 숫자 컬럼이 아니라 {what}로 쓸 수 없습니다. 산점도·버블은 숫자 컬럼만 쓸 수 있어요.")
+        raise ValueError(f"'{name}'은 숫자 컬럼이 아니라 {what}로 쓸 수 없어요. 산점도·버블은 숫자 컬럼만 쓸 수 있어요.")
     return name
 
 
@@ -374,7 +374,7 @@ def points_data(expr, x, y, size=None, split=None):
     if split:
         parse.check_name(split, expr.columns)
         if expr[split].type().is_nested():
-            raise ValueError(f"'{split}'은 중첩 컬럼이라 나눌 수 없습니다.")
+            raise ValueError(f"'{split}'은 중첩 컬럼이라 나눌 수 없어요.")
     t = expr.filter(*[stats.finite(expr[c]).notnull() for c in (x, y, *([size] if size else []))])
     total = stats.one(t.aggregate(n=t.count()))["n"]
     cols = {"x": stats.finite(t[x]), "y": stats.finite(t[y]), **({"s": stats.finite(t[size])} if size else {}), **({"g": t[split].cast("string")} if split else {})}
@@ -585,7 +585,7 @@ def value_data(card, ctx):
         shape = querying.build(body, select=False)  # 컬럼 종류만 본다
         parse.check_name(date, shape.columns, "날짜 컬럼")
         if date not in date_columns(shape):
-            raise ValueError(f"'{date}'은 날짜 컬럼이 아닙니다.")
+            raise ValueError(f"'{date}'은 날짜 컬럼이 아니에요.")
         series, fetch = clean_series(body.get("series")), fetch_window(ctx)  # 읽을 범위: 직전 기간 시작 ~ 보는 기간 끝
         expr = card_expr(card, ctx, fetch)
         found = run(lambda: shared_time(expr, body, date, series, None, fetch, ctx))
@@ -810,7 +810,7 @@ def metric_data(body):
     found, labels, values, more = querying.metric_values(body, names, by)
     pct = lambda n: found[n]["format"] == PERCENT
     series = [{"name": f"{n} (%)" if pct(n) else n, "values": [v if v is None or not pct(n) else round(v * 100, 6) for v in values[n]]} for n in names]
-    return {"x": by or "전체", "values": {"labels": labels or ["전체"], "series": series}, "note": f"값이 많아 앞 {metric_file.MAX_GROUPS}개만 표시합니다." if more else ""}
+    return {"x": by or "전체", "values": {"labels": labels or ["전체"], "series": series}, "note": f"값이 많아 앞 {metric_file.MAX_GROUPS}개만 표시해요." if more else ""}
 
 
 def analysis_data(source, ctx=None):
@@ -844,7 +844,7 @@ def compute(card, now, ctx=None):
         raise ValueError(FLOW_GONE)
     if card["kind"] in ("chart", "metric", "recent_rows", "geomap", *VALUE_KINDS, *TABLE_KINDS):
         if not isinstance(source.get("body"), dict):
-            raise ValueError("이 카드에는 다시 구할 조회(source.body)가 없습니다.")
+            raise ValueError("이 카드에는 다시 구할 조회(source.body)가 없어요.")
         body = with_period(source["body"], source.get("date"), (ctx or {}).get("range")) if card["kind"] in ("chart", "metric") else source["body"]
         if card["kind"] == "recent_rows":
             found = {"columns": list(querying.build(body).columns)}  # 행 값은 저장하지 않는다(보일 때마다 연결에서 읽는다)
@@ -868,8 +868,8 @@ def compute(card, now, ctx=None):
             found["points"] = points_of(body, (card["view"].get("points") or {}).get("size"))  # 차트 값과 같은 기간
     elif card["kind"] in ("analysis", "funnel"):
         if not isinstance(source.get("recipe"), dict) or not isinstance(source.get("analysis"), dict):
-            raise ValueError("이 카드에는 다시 구할 분석(source.recipe, source.analysis)이 없습니다.")
+            raise ValueError("이 카드에는 다시 구할 분석(source.recipe, source.analysis)이 없어요.")
         found = analysis_data(source, ctx)
     else:
-        raise ValueError(f"'{card['kind']}' 카드는 아직 다시 구할 수 없습니다.")
+        raise ValueError(f"'{card['kind']}' 카드는 아직 다시 구할 수 없어요.")
     return dash_store.finite({**found, "computed_at": now, "def_hash": dash_store.def_hash(definition(card))})  # NaN·무한은 JSON에 못 쓰므로 빈 값으로

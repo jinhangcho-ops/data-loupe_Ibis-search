@@ -69,7 +69,7 @@ def set_live_min(key, seconds):
     if not isinstance(key, str) or not key:
         raise ValueError("먼저 데이터에 연결하세요.")
     if type(seconds) is not int or not 0 <= seconds <= MAX_LIVE_MIN:
-        raise ValueError(f"실시간 간격 최소는 0~{MAX_LIVE_MIN}초의 정수입니다(0이면 기본값: 원격 연결 1분, 이 PC 파일은 제한 없음).")
+        raise ValueError(f"실시간 간격 최소는 0~{MAX_LIVE_MIN}초의 정수예요(0이면 기본값: 원격 연결 1분, 이 PC 파일은 제한 없음).")
     with settings.updating(LIVE_FILE):
         found, key = live_mins(), dash_store.canon_key(key)
         if seconds:

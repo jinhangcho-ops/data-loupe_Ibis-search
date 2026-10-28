@@ -86,7 +86,7 @@ def test_steps_chain_and_keep_prep_derivation_working(con):
 
 
 def test_geo_step_errors_say_why(con):
-    cases = [([{"op": "bogus"}], "op가"), ([{"op": "tm", "x": "id", "y": "nope"}], "비슷한|없습니다"), ([{"op": "tm", "x": "x", "y": "y", "epsg": 3}], "EPSG"),
+    cases = [([{"op": "bogus"}], "op가"), ([{"op": "tm", "x": "id", "y": "nope"}], "비슷한|없어요"), ([{"op": "tm", "x": "x", "y": "y", "epsg": 3}], "EPSG"),
              ([{"op": "tm", "x": "x", "y": "y", "lon": "id"}], "이미 있어"), ([{"op": "tm", "x": "x", "y": "y", "extra": 1}], "쓸 수 없는"),
              ([{"op": "nearest", "lat": "lat", "lon": "lon", "table": "nope", "ref_lat": "a", "ref_lon": "b"}], "테이블"),
              ([{"op": "nearest", "lat": "lat", "lon": "lon", "table": "st", "ref_lat": "name", "ref_lon": "slon"}], "숫자 컬럼"),

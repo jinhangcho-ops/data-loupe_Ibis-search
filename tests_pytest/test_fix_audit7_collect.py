@@ -76,9 +76,9 @@ def test_slack_command_error_hides_data_values(monkeypatch):
 
 def test_slack_command_plain_error_still_shown(monkeypatch):
     def boom(name):
-        raise ValueError("그런 검색이 없습니다")
+        raise ValueError("그런 검색이 없어요")
     monkeypatch.setattr(querying, "saved_search", boom)
-    assert "그런 검색이 없습니다" in commands.answer("검색 매출")
+    assert "그런 검색이 없어요" in commands.answer("검색 매출")
 
 
 def test_slack_respond_unexpected_error_hides_data_values():

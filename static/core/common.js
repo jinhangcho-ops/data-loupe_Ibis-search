@@ -568,7 +568,7 @@ $("recent-conn").onchange = () => {
   $("recent-conn").value = "";
 };
 $("file").onchange = showFlat;
-// 작업 메모리 상한(MB, 0 = 제한 없음): 목록에 있는 값이거나 GB로 직접 넣은 값. 저장만 하고 다음 [연결]부터 서버가 쓴다.
+// 메모리 한도(MB, 0 = 제한 없음): 목록에 있는 값이거나 GB로 직접 넣은 값. 저장만 하고 다음 [연결]부터 서버가 쓴다.
 const memory = saved("memory") || "0";
 $("memory").value = [...$("memory").options].some(o => o.value === memory) ? memory : "custom";
 if ($("memory").value === "custom") $("memory-gb").value = memory / 1000;

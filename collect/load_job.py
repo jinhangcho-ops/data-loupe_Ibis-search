@@ -29,14 +29,14 @@ def check(load):
                          ("table.connection.url", table["connection"]["url"]), ("table.connection.user", table["connection"]["user"]),
                          ("kafka.destination", load["kafka"]["destination"]), ("kafka.key", load["kafka"]["key"])):
         if not isinstance(value, str):
-            raise ValueError(f"구성의 load.{where}는 글자여야 합니다.")
+            raise ValueError(f"구성의 load.{where}는 글자여야 해요.")
     if not isinstance(table["key"], list) or not all(isinstance(k, str) and k for k in table["key"]):
-        raise ValueError("구성의 load.table.key는 컬럼 이름 목록이어야 합니다.")
+        raise ValueError("구성의 load.table.key는 컬럼 이름 목록이어야 해요.")
     if not isinstance(table["load_id"], bool):
-        raise ValueError("구성의 load.table.load_id는 true 또는 false여야 합니다.")
+        raise ValueError("구성의 load.table.load_id는 true 또는 false여야 해요.")
     link = urlsplit(table["connection"]["url"].strip())
     if link.password is not None or any(source.secret_param(piece) for piece in link.query.split("&")):  # user:pw@ 또는 ?password=·?api_key= 같은 query
-        raise ValueError("DB 주소에 비밀번호를 넣지 마세요. 비밀번호는 저장하지 않고 시작할 때 따로 입력합니다.")
+        raise ValueError("DB 주소에 비밀번호를 넣지 마세요. 비밀번호는 저장하지 않고 시작할 때 따로 입력해요.")
 
 
 def ready(config):
@@ -170,7 +170,7 @@ def attempt(work, retries, halt, note):
         except Exception as e:
             if n == retries:
                 raise
-            note(wait=f"넣지 못해 다시 시도합니다({n + 1}/{retries}): {str(e)[:300]}")
+            note(wait=f"넣지 못해 다시 시도해요({n + 1}/{retries}): {str(e)[:300]}")
             if halt.wait(min(MAX_BACKOFF, BACKOFF * 2 ** n)):
                 raise Halt(STOPPED, failed=False) from None
 
@@ -210,7 +210,7 @@ def run(config, path, password, halt, note):
                 ledger = uploads.Run(load["target"], path, target, load_id, resumed)
                 write_record(path, record)
                 if resumed:
-                    note(message="이어 넣습니다.")
+                    note(message="이어 넣어요.")
                 show()
                 start, first = divmod(record["rows"], size)
                 for n, part in enumerate(batches):
@@ -244,7 +244,7 @@ def run(config, path, password, halt, note):
                     ledger.save()
                     show()
                     if handled and failed == handled:
-                        raise Halt(f"{n + 1}번째 묶음을 하나도 넣지 못해 멈췄습니다. {sink.last}".strip())
+                        raise Halt(f"{n + 1}번째 묶음을 하나도 넣지 못해 멈췄어요. {sink.last}".strip())
                 sink.done()
             finally:
                 sink.close()
@@ -269,11 +269,11 @@ def note_for(config, path):
     if load["target"] == "file":
         return None
     keys = load["table"]["key"] if load["target"] == "table" else []
-    index = f"키({', '.join(keys)})로 거를 때 키 컬럼에 인덱스가 없으면 묶음마다 테이블 전체를 읽습니다. 큰 테이블이면 인덱스를 만들어 두세요." if keys else ""
+    index = f"키({', '.join(keys)})로 거를 때 키 컬럼에 인덱스가 없으면 묶음마다 테이블 전체를 읽어요. 큰 테이블이면 인덱스를 만들어 두세요." if keys else ""
     if load["unit"] != "single":
         return index or None
     rows = total_rows(path) if path is not None else None
     far = load["target"] == "table" and load["table"]["connection"]["kind"] != "folder"
-    remote = " 원격 DB에는 한 건마다 임시 테이블 만들기·넣기·지우기 문장이 오가 DB에 부담이 큽니다. 되도록 묶음으로 넣으세요." if far else ""
+    remote = " 원격 DB에는 한 건마다 임시 테이블 만들기·넣기·지우기 문장이 오가 DB에 부담이 커요. 되도록 묶음으로 넣으세요." if far else ""
     minutes = f"(예상 약 {math.ceil(rows * (SINGLE_SECONDS + load['interval']) / 60):,}분)" if rows else ""
-    return f"한 건씩 넣으면 오래 걸릴 수 있습니다{minutes}.{remote}" + (" " + index if index else "")
+    return f"한 건씩 넣으면 오래 걸릴 수 있어요{minutes}.{remote}" + (" " + index if index else "")

@@ -568,7 +568,7 @@ def tiers(t, s, p, ctx):
         return result(None)
     if s["mode"] == "분위수":
         if not 0 < s["whale"] <= s["dolphin"] <= 100:  # 0%면 1등 혼자 Whale이 되고, 상위 %는 Whale이 Dolphin보다 작아야 한다
-            raise ValueError("분위수 방식에서는 0 < Whale 기준 ≤ Dolphin 기준 ≤ 100(상위 %)이어야 합니다.")
+            raise ValueError("분위수 방식에서는 0 < Whale 기준 ≤ Dolphin 기준 ≤ 100(상위 %)이어야 해요.")
         whale, dolphin = float(np.quantile(values, 1 - s["whale"] / 100)), float(np.quantile(values, 1 - s["dolphin"] / 100))
     else:
         whale, dolphin = float(s["whale"]), float(s["dolphin"])

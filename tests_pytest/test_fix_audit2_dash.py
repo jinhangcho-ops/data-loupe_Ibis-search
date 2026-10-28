@@ -274,14 +274,14 @@ def test_notice_text_sends_only_known_phrases():
     for leaky in ["(1062, \"Duplicate entry 'kim@corp.com' for key\")", 'malformed array literal: "{홍길동,김"', "Numeric value 'Kim Minsu' is not recognized",
                   'Could not cast literal "010-1234-5678" to type INT64', "Cannot parse string 'Hong Gildong' as UInt8", 'invalid byte sequence for encoding "UTF8": 0xed 0x95']:
         got = schedule.notice_text(leaky)
-        assert got == "실패했습니다 (자세한 내용은 프로그램의 실행 기록)" or "데이터 값" in got
+        assert got == "실패했어요 (자세한 내용은 프로그램의 실행 기록)" or "데이터 값" in got
         assert not any(v in got for v in ("kim", "홍길동", "Minsu", "010", "Hong", "0xed"))
-    assert schedule.notice_text("Connection refused").startswith("연결이 거부되었습니다")
+    assert schedule.notice_text("Connection refused").startswith("연결이 거부됐어요")
     assert schedule.notice_text("[Errno 110] Connection timed out").startswith("시간이 초과")
     assert schedule.notice_text("[Errno 28] No space left on device").startswith("디스크 공간")
-    assert schedule.notice_text("Permission denied: kim_salary.csv").startswith("권한이 없습니다") and "kim_salary" not in schedule.notice_text("Permission denied: kim_salary.csv")
-    assert schedule.notice_text("[WinError 5] 액세스가 거부되었습니다").startswith("권한이 없습니다")
-    assert schedule.notice_text("[WinError 53] network path").startswith("실패했습니다")  # 5로 시작하는 다른 번호는 권한이 아니다
+    assert schedule.notice_text("Permission denied: kim_salary.csv").startswith("권한이 없어요") and "kim_salary" not in schedule.notice_text("Permission denied: kim_salary.csv")
+    assert schedule.notice_text("[WinError 5] 액세스가 거부됐어요").startswith("권한이 없어요")
+    assert schedule.notice_text("[WinError 53] network path").startswith("실패했어요")  # 5로 시작하는 다른 번호는 권한이 아니다
     assert schedule.notice_text(schedule.SKIP_RUNNING) == schedule.SKIP_RUNNING
 
 
@@ -377,7 +377,7 @@ def test_ga4_fetch_does_not_overwrite_file_created_while_fetching(client, tmp_pa
     monkeypatch.setattr(integrations_app, "ga4", types.SimpleNamespace(fetch=fetch))
     monkeypatch.setattr(integrations_app, "ga4_settings", lambda: {"key_path": "k.json", "output": str(out)})
     got = client.post("/api/ga4/fetch", json={}).get_json()
-    assert "이미 있습니다" in got["error"] and out.read_bytes() == b"someone else's file" and not list(tmp_path.glob("*.part"))
+    assert "이미 있어요" in got["error"] and out.read_bytes() == b"someone else's file" and not list(tmp_path.glob("*.part"))
 
 
 def test_collect_limits_lock_clear_does_not_remove_fresh_lock(folder):
@@ -403,11 +403,11 @@ def test_deleting_collection_keeps_it_when_schedule_cannot_be_deleted(client, mo
     from integrations import schedule
 
     def broken(task):
-        raise ValueError("Windows 예약 작업을 지우지 못했습니다.")
+        raise ValueError("Windows 예약 작업을 지우지 못했어요.")
     monkeypatch.setattr(schedule.wintask, "delete", broken)
     settings.write("collections.json", {"daily": collect_config.normalize({})})
     settings.write(schedule.FILE, {"daily": {"every": "daily", "task": "ibis_daily"}})
-    assert "지우지 못했습니다" in client.post("/api/collections", json={"name": "daily", "collection": None}).get_json()["error"]
+    assert "지우지 못했어요" in client.post("/api/collections", json={"name": "daily", "collection": None}).get_json()["error"]
     assert "daily" in settings.named("collections.json") and "daily" in schedule.schedules()  # 구성이 남아 다시 지울 수 있다
 
 

@@ -13,16 +13,16 @@ HEADS = {"sqlite": "EXPLAIN QUERY PLAN ", "duckdb": "EXPLAIN ", "postgres": "EXP
          "exasol": None, "druid": None, "flink": None}
 # 보지 않는 방언과 까닭(읽기만 한다는 원칙, 또는 실행 계획이 없는 DB)
 REFUSED = {
-    "oracle": "Oracle은 실행 계획을 보려면 PLAN_TABLE에 써야 해서 이 프로그램은 보지 않습니다(읽기만 한다는 원칙). DB 도구의 '실행 계획'으로 확인하세요.",
-    "mssql": "MSSQL은 실행 계획을 보려면 연결 설정(SET SHOWPLAN)을 바꿔야 해서 이 프로그램은 보지 않습니다. SSMS의 '예상 실행 계획 표시'를 쓰세요.",
-    "tsql": "MSSQL은 실행 계획을 보려면 연결 설정(SET SHOWPLAN)을 바꿔야 해서 이 프로그램은 보지 않습니다. SSMS의 '예상 실행 계획 표시'를 쓰세요.",
-    "bigquery": "BigQuery는 인덱스가 없어 실행 계획 대신 [처리 용량](요금 없는 dry run)으로 읽을 양을 봅니다. 파티션·클러스터 컬럼으로 조건을 걸면 줄어듭니다.",
+    "oracle": "Oracle은 실행 계획을 보려면 PLAN_TABLE에 써야 해서 이 프로그램은 보지 않아요(읽기만 한다는 원칙). DB 도구의 '실행 계획'으로 확인하세요.",
+    "mssql": "MSSQL은 실행 계획을 보려면 연결 설정(SET SHOWPLAN)을 바꿔야 해서 이 프로그램은 보지 않아요. SSMS의 '예상 실행 계획 표시'를 쓰세요.",
+    "tsql": "MSSQL은 실행 계획을 보려면 연결 설정(SET SHOWPLAN)을 바꿔야 해서 이 프로그램은 보지 않아요. SSMS의 '예상 실행 계획 표시'를 쓰세요.",
+    "bigquery": "BigQuery는 인덱스가 없어 실행 계획 대신 [처리 용량](요금 없는 dry run)으로 읽을 양을 봐요. 파티션·클러스터 컬럼으로 조건을 걸면 줄어들어요.",
 }
 NOTES = {
-    "duckdb": "DuckDB는 인덱스 대신 블록마다 적어 둔 최솟값·최댓값으로 읽지 않아도 되는 부분을 건너뜁니다. 계획의 SEQ_SCAN이 곧 전체 읽기라는 뜻은 아닙니다.",
-    "sqlite": "SCAN 테이블은 전체 읽기, SEARCH … USING INDEX는 인덱스로 찾기, SCAN … USING INDEX는 인덱스 순서로 읽기입니다.",
-    "postgres": "Seq Scan은 전체 읽기, Index Scan·Index Only Scan·Bitmap Index Scan은 인덱스로 찾기입니다. 작은 테이블은 Seq Scan이 더 빠를 수 있습니다.",
-    "mysql": "type이 ALL이면 전체 읽기, ref·range·eq_ref·const는 인덱스로 찾기입니다.",
+    "duckdb": "DuckDB는 인덱스 대신 블록마다 적어 둔 최솟값·최댓값으로 읽지 않아도 되는 부분을 건너뛰어요. 계획의 SEQ_SCAN이 곧 전체 읽기라는 뜻은 아니에요.",
+    "sqlite": "SCAN 테이블은 전체 읽기, SEARCH … USING INDEX는 인덱스로 찾기, SCAN … USING INDEX는 인덱스 순서로 읽기예요.",
+    "postgres": "Seq Scan은 전체 읽기, Index Scan·Index Only Scan·Bitmap Index Scan은 인덱스로 찾기예요. 작은 테이블은 Seq Scan이 더 빠를 수 있어요.",
+    "mysql": "type이 ALL이면 전체 읽기, ref·range·eq_ref·const는 인덱스로 찾기예요.",
 }
 
 
@@ -64,7 +64,7 @@ def explain(con, sql, dialect):
         raise ValueError(REFUSED[name])
     head = HEADS.get(name, "EXPLAIN ")
     if head is None:
-        raise ValueError("이 DB의 실행 계획은 이 프로그램에서 볼 수 없습니다. DB 도구에서 확인하세요.")
+        raise ValueError("이 DB의 실행 계획은 이 프로그램에서 볼 수 없어요. DB 도구에서 확인하세요.")
     cursor = con.raw_sql(head + sql)
     try:
         columns = [d[0] for d in getattr(cursor, "description", None) or []]

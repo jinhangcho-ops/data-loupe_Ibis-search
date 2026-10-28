@@ -84,7 +84,7 @@ def test_bad_series(t):
         dash_calc.clean_series([{"y": "amt", "agg": "bogus"}])
     with pytest.raises(ValueError, match="숫자 컬럼"):
         dash_calc.time_data(t, "day", [{"y": "store", "agg": "sum"}], None)
-    with pytest.raises(ValueError, match="없습니다|찾을 수"):
+    with pytest.raises(ValueError, match="없어요|찾을 수"):
         dash_calc.time_data(t, "nope", [{"y": "amt", "agg": "sum"}], None)
 
 

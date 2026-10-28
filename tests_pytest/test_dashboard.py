@@ -34,7 +34,7 @@ def test_board_checks(client):
     big = {**CARD, "title": "가" * 101}
     assert "100자" in post(client, "/api/dash", name="큼", cards=[big])["error"]
     post(client, "/api/dash", name="같은 이름", cards=[])
-    assert "이미 있습니다" in post(client, "/api/dash", name="같은 이름", cards=[])["error"]
+    assert "이미 있어요" in post(client, "/api/dash", name="같은 이름", cards=[])["error"]
 
 
 def test_add_card_to_saved_or_new(client):

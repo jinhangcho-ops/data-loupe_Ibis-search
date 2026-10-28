@@ -173,7 +173,7 @@ def write_excel(expr, path):
             shapes = {pl.Date: book.add_format({"num_format": "yyyy-mm-dd"}), pl.Datetime: book.add_format({"num_format": "yyyy-mm-dd hh:mm:ss"}),
                       pl.Time: book.add_format({"num_format": "hh:mm:ss"})}  # 날짜·시각 타입의 칸 형식
             if len(expr.columns) > 16_384:  # xlsxwriter는 넘는 컬럼을 말없이 빼고 쓴다
-                raise ValueError(f"Excel은 16,384개 컬럼까지 저장할 수 있습니다({len(expr.columns):,}개). CSV나 Parquet으로 저장하세요.")
+                raise ValueError(f"Excel은 16,384개 컬럼까지 저장할 수 있어요({len(expr.columns):,}개). CSV나 Parquet으로 저장하세요.")
             sheet.write_row(0, 0, expr.columns, bold)
             row = 1
             for batch in batches(expr):
@@ -182,7 +182,7 @@ def write_excel(expr, path):
                 ints = [t.is_integer() or (t.base_type() == pl.Decimal and t.scale == 0) for t in frame.dtypes]  # 소수 0자리 Decimal(Oracle NUMBER·DECIMAL(19,0) ID)도 정수
                 for values in frame.iter_rows():
                     if row > EXCEL_MAX_ROWS:
-                        raise ValueError(f"Excel은 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있습니다. CSV나 Parquet으로 저장하세요.")
+                        raise ValueError(f"Excel은 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있어요. CSV나 Parquet으로 저장하세요.")
                     for col, raw in enumerate(values):
                         value = number(raw)  # NaN·무한은 빈 칸(xlsxwriter가 쓰지 못한다), Decimal은 실수로
                         if value is None:
@@ -192,7 +192,7 @@ def write_excel(expr, path):
                         elif ints[col] and abs(value) >= 10 ** 15:  # Excel 숫자는 15자리까지라 큰 정수(ID 등)는 끝자리가 바뀐다: 글자로(Decimal은 실수로 바꾸기 전 값으로)
                             value = str(int(raw))
                         if (sheet.write(row, col, value, kinds[col]) if kinds[col] else sheet.write(row, col, value)) == -2:  # 32,767자 넘는 글자는 잘라서 쓰고 -2만 돌려준다
-                            raise ValueError(f"Excel 한 칸에는 32,767자까지 쓸 수 있습니다(‘{expr.columns[col]}’ 컬럼). CSV나 Parquet으로 저장하세요.")
+                            raise ValueError(f"Excel 한 칸에는 32,767자까지 쓸 수 있어요(‘{expr.columns[col]}’ 컬럼). CSV나 Parquet으로 저장하세요.")
                     row += 1
     except BaseException:
         try:
@@ -249,7 +249,7 @@ def get_sql(expr, limit=None, offset=0):
     try:
         return str(ibis.to_sql(expr if limit is None else expr.limit(limit, offset=offset)))
     except NotImplementedError:
-        raise ValueError("이 연결의 조회는 SQL로 보여 줄 수 없습니다.") from None
+        raise ValueError("이 연결의 조회는 SQL로 보여 줄 수 없어요.") from None
 
 
 def get_count(expr, backend=None):
@@ -317,9 +317,9 @@ def chart_metric(expr, y, agg, opts=None):
     if agg == "count":
         return expr.count()
     if agg not in chart_aggs():
-        raise ValueError(f"집계 방식 '{agg}'은 쓸 수 없습니다. count, sum, mean, min, max, median, quantile … 중에서 고르세요(함수 사전의 집계).")
+        raise ValueError(f"집계 방식 '{agg}'은 쓸 수 없어요. count, sum, mean, min, max, median, quantile … 중에서 고르세요(함수 사전의 집계).")
     if agg in ("sum", "mean") and (y not in expr.columns or not expr[y].type().is_numeric()):
-        raise ValueError("합계·평균은 숫자 컬럼을 Y로 골라야 합니다.")
+        raise ValueError("합계·평균은 숫자 컬럼을 Y로 골라야 해요.")
     if y in expr.columns and expr[y].type().is_floating():  # NaN·무한 한 칸이 그룹의 합계·평균·최대를 빈칸으로 만들지 않게(stats.finite_value와 같게)
         y = prep_ops.nan_to_null(expr[y])
     return sql_funcs.aggregate(agg, expr, y, None, opts)
@@ -370,7 +370,7 @@ def export(expr, path, guard=True):
     guard가 False면 수식 막기를 하지 않는다(다시 데이터로 읽을 파일)."""
     suffix = Path(path).suffix.lower()
     if suffix not in EXPORTS:
-        raise ValueError(f"파일 이름은 {', '.join(EXPORTS)} 중 하나로 끝나야 합니다.")
+        raise ValueError(f"파일 이름은 {', '.join(EXPORTS)} 중 하나로 끝나야 해요.")
     if guard and suffix != ".parquet":  # 수식으로 읽힐 글자로 시작하는 문자 값·컬럼 이름은 앞에 '를 붙여 스프레드시트가 실행하지 않게 한다.
         texts = [name for name, t in expr.schema().items() if t.is_string()]
         expr = expr.mutate(**{name: expr[name].substr(0, 1).isin(FORMULA_START).ifelse("'" + expr[name], expr[name]) for name in texts})  # 정규식은 SQL Server 등이 못 한다

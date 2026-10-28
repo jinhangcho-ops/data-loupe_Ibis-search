@@ -102,7 +102,7 @@ def test_recent_rows_values_rejected():
 
 def test_secrets_never_stored():
     for key in ("password", "User", "username"):
-        with pytest.raises(ValueError, match="저장하지 않습니다"):
+        with pytest.raises(ValueError, match="저장하지 않아요"):
             store.check_card({**CARD, "source": {"body": {key: "x"}}})
         with pytest.raises(ValueError, match="쓸 수 없는 항목"):  # data의 최상위 키는 허용 목록이 막는다
             store.check_card({**CARD, "data": {key: "x"}})
@@ -156,7 +156,7 @@ def test_north_star_must_point_to_cards():
     assert d["north_star"] == {"card": "a1", "counters": ["b2"]}
     with pytest.raises(ValueError, match="북극성"):
         store.check_dashboard(board(cards=[{**CARD, "id": "a1"}], north_star={"card": "zz", "counters": []}))
-    with pytest.raises(ValueError, match="겹칩니다"):
+    with pytest.raises(ValueError, match="겹쳐요"):
         store.check_dashboard(board(cards=[{**CARD, "id": "a1"}, {**CARD, "id": "a1"}]))
 
 
