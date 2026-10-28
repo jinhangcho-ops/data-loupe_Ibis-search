@@ -1987,8 +1987,9 @@ def schedule_section(c, got):
 
     print("== 예약: 검사·저장(가짜 schtasks)")
     fake = FakeTasks()
-    real_execute, real_clock, real_post = wintask.execute, schedule.clock, transport.post
+    real_execute, real_clock, real_post, real_codepage = wintask.execute, schedule.clock, transport.post, wintask.codepage
     wintask.execute = fake
+    wintask.codepage = lambda: "cp949"  # 한국어 콘솔 PC로 본다(CI 같은 영어 코드 페이지에서는 한글 작업 이름이 밑줄로 바뀐다)
     out = ROOT / "schedule_out"
     out.mkdir()
     api = FakeApi()
@@ -2183,7 +2184,7 @@ def schedule_section(c, got):
           (1, "실패", "DB 테이블에 적재할 때 비밀번호가 필요한 연결(아이디가 있는 주소)이라 예약할 수 없어요. 비밀번호는 저장하지 않기 때문이에요.", False))
     check("--run이 남긴 잠금 없음", [p.name for p in schedule.locks().glob("*.lock")], [])
 
-    wintask.execute, schedule.clock, transport.post = real_execute, real_clock, real_post
+    wintask.execute, schedule.clock, transport.post, wintask.codepage = real_execute, real_clock, real_post, real_codepage
     settings.write(schedule.FILE, {})
     got("/api/destinations", name="알림", destination=None)
     api.http.shutdown()
