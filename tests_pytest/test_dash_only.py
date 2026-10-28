@@ -14,7 +14,8 @@ def test_dash_only_button_hides_menus_and_card_controls():
 def test_dash_only_exits_with_escape_and_blocks_card_selection():
     js = between("dashboard.html", "function dashOnly(on) {", "// ---------- 설정 창")
     assert 'e.key === "Escape"' in js and '$("d-only-exit").onclick = () => dashOnly(false)' in js
-    assert 'e.stopPropagation(); }, true);' in js  # 잡기 단계에서 막아 카드 선택 처리까지 가지 않는다
+    assert 'board.toggle = function (...a) { if (!document.body.classList.contains("dash-only")) pickCard.apply(this, a); };' in js  # 카드 선택만 막는다
+    assert "}, true);" not in js  # 잡기 단계에서 클릭을 막으면 범례·목록 값 펼치기도 막힌다
     assert '$("d-none").click()' in js  # 켤 때 선택을 푼다
 
 

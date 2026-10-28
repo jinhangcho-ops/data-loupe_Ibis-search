@@ -315,7 +315,8 @@ function dashOnly(on) {
 $("d-only").onclick = () => dashOnly(true);
 $("d-only-exit").onclick = () => dashOnly(false);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && document.body.classList.contains("dash-only")) dashOnly(false); });
-$("d-grid").addEventListener("click", e => { if (document.body.classList.contains("dash-only") && !e.target.closest("a, button, input, select, th, .tbl-more")) e.stopPropagation(); }, true);  // 보기 중에는 카드 선택을 막는다
+const pickCard = board.toggle;
+board.toggle = function (...a) { if (!document.body.classList.contains("dash-only")) pickCard.apply(this, a); };  // 보기 중에는 카드 선택만 막는다(범례 누르기·목록 값 펼치기 같은 카드 안의 클릭은 그대로)
 
 // ---------- 설정 창 ----------
 $("d-settings").onclick = () => { $("d-modal").classList.remove("hidden"); ctl.loadMin(); loadTargets(); edit().catch(e => say("err-settings", e.message)); };  // 내 템플릿 목록은 편집 도구가 채운다
