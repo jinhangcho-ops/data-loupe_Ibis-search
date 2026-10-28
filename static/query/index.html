@@ -455,6 +455,7 @@ function clearLists() {
 }
 // 화면에 올라온 것(고른 테이블, 조건 등의 목록, 결과·집계·차트)을 비운다. 연결은 건드리지 않는다.
 function clearScreen() {
+  for (const k in tableCols) delete tableCols[k];  // 다른 연결의 같은 이름 테이블
   S.base = $("base").value = ""; searchUndo.reset();  // 다른 연결의 되돌리기 기록은 쓰지 않는다
   S.cols = [];
   S.origins = {};
@@ -566,7 +567,7 @@ const joinLine = j => `${j.table} ${j.how} ${j.pairs.filter(([l, r]) => l && r).
 const joinDone = j => j.table && j.pairs.some(([l, r]) => l && r);
 async function colsOf(table) {
   if (!table) return [];
-  return tableCols[table] ??= (await api("/api/columns", { schema: S.schema, base: table })).columns.map(c => c[0]);
+  return tableCols[`${S.schema}\u0000${table}`] ??= (await api("/api/columns", { schema: S.schema, base: table })).columns.map(c => c[0]);
 }
 // 다 고른 덩어리로 S.joins를 만들어 서버에서 검사한다. 오류면 이유를 보이고 S.joins는 되돌린다(덩어리는 그대로 두어 고칠 수 있게).
 async function applyJoins() {
@@ -1342,7 +1343,7 @@ $("dash-add").onclick = () => busy($("dash-add"), async () => {
 $("sql-rows").value = 1000;
 // offset행을 건너뛰고 쪽당 행만큼 실행 결과를 본다. [실행]은 0에서 새로(fresh), [이전]·[다음]은 쪽당 행만큼 옮겨서 부른다.
 // 주소로 접속한 DB는 결과를 이 PC에 받아 두므로 쪽을 넘겨도 DB에 다시 묻지 않는다(그때는 전체 행 수도 안다).
-let sqlSkip = 0, sqlRan = "";
+let sqlSkip = 0, sqlRan = "", sqlMore = false;
 async function runSql(offset = 0, fresh = true) {
   if (!connected) return say("err-sql", "먼저 데이터에 연결하세요.");
   try {
@@ -1354,8 +1355,8 @@ async function runSql(offset = 0, fresh = true) {
     $("sql-sub").textContent = [d.count === null ? "" : `${range}을 보고 있어요`, d.held ? "이 PC에 받아 둔 결과예요" : d.server ? "DB에 임시로 만든 결과예요" : "", d.more || offset ? "전체는 [결과 내보내기]로 받으세요" : ""].filter(Boolean).map(t => t + ".").join(" ");
     $("sql-sub").title = d.server ? d.note : "";
     $("sql-page").textContent = d.count === null ? `${Math.floor(offset / d.limit) + 1}쪽` : `${Math.floor(offset / d.limit) + 1} / ${Math.max(1, Math.ceil(d.count / d.limit)).toLocaleString()}쪽`;
-    $("sql-prev").disabled = !offset;
-    $("sql-next").disabled = !d.more;
+    sqlMore = d.more;
+    sqlPager();
     resultTable($("sql-result"), d.rows);
     say("err-sql", d.server ? "" : d.note || "");
     if (!offset) showVirtual();  // 쓴 횟수가 바뀌었다
@@ -1371,8 +1372,9 @@ $("sql-plan-show").onclick = () => busy($("sql-plan-show"), async () => {
     say("err-sql", "");
   } catch (e) { say("err-sql", e.message); }
 });
-$("sql-prev").onclick = () => busy($("sql-prev"), () => runSql(Math.max(0, sqlSkip - Number($("sql-rows").value)), false));
-$("sql-next").onclick = () => busy($("sql-next"), () => runSql(sqlSkip + Number($("sql-rows").value), false));
+function sqlPager() { $("sql-prev").disabled = !sqlSkip; $("sql-next").disabled = !sqlMore; }
+$("sql-prev").onclick = () => busy($("sql-prev"), () => runSql(Math.max(0, sqlSkip - Number($("sql-rows").value)), false)).finally(sqlPager);  // busy가 끝나며 켠 단추를 첫·마지막 쪽에 맞게 다시
+$("sql-next").onclick = () => busy($("sql-next"), () => runSql(sqlSkip + Number($("sql-rows").value), false)).finally(sqlPager);
 // 문법 검사: 입력을 0.6초 멈추면 서버에서 실행하지 않고 검사한다(문법·바꾸는 문장·없는 테이블). [검사]는 컬럼까지 보고 오류 자리를 고른다.
 let checkTimer = null, checkSeq = 0;
 async function checkSql(deep) {
@@ -1513,6 +1515,7 @@ async function showVirtual() {
 async function saveVirtual(body) {
   try {
     await api("/api/virtual", body);
+    for (const k in tableCols) delete tableCols[k];  // 다시 정의한 가상 테이블의 컬럼
     if (body.sql !== null || body.parquet !== null) searchDraft.clear();
     say("err-vt", body.sql === null && body.parquet === null ? `지웠어요: ${body.name}` : `저장했어요: ${body.name}`, true);
     await showVirtual();

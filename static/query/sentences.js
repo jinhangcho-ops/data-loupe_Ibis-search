@@ -226,7 +226,7 @@ function SentenceView(host, ctx) {
       line.querySelectorAll("[data-slot]").forEach(n => { const s = tpl.slots.find(x => x.name === n.dataset.slot); if (s && !sentVisible(s, item.slots)) n.classList.add("hidden"); });
     };
     function redo(rebuild) { item.touched = true; if (rebuild || tpl.slots.some(s => Object.keys(s.when ?? {}).length)) draw(); recheck(); }
-    const run = el("button", { className: "btn srun", textContent: "실행", disabled: true, onclick: e => busy(e.currentTarget, () => runOne(item, out)) });
+    const run = el("button", { className: "btn srun", textContent: "실행", disabled: true, onclick: e => busy(e.currentTarget, () => runOne(item, out)).finally(recheck) });  // 실행 중에 칸을 고쳤으면 busy가 켠 단추를 다시 맞춘다
     card.append(el("div", { className: "shead" }, el("b", { textContent: `${tpl.no}. ${tpl.name}` }), el("span", { className: "grow" }), run,
       el("button", { className: "ghost", textContent: "×", title: "이 문장 빼기", onclick: () => { items = items.filter(i => i !== item); showExplore(); } })),
     line, sentPeriodRow(item, () => recheck()), preview, issues, out);

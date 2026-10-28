@@ -859,7 +859,9 @@ $("w-items").addEventListener("input", () => $("w-count").textContent = "");
 let lastSeq;  // 마지막으로 반영한 고르기 번호. 처음 읽은 상태의 고르기는 이전 것이라 반영하지 않는다.
 let follow = 0;  // 도는 읽기가 하나만 남게 하는 번호
 const PICKING = { field: "받을 값을", next: "다음 버튼을" };
+let lastBrowser = null;  // 마지막으로 읽은 수집용 창 상태(busy가 켠 고르기 단추를 다시 맞춘다)
 function showBrowser(s) {
+  lastBrowser = s;
   const lines = [`수집용 창이 ${s.open ? "열려" : "닫혀"} 있어요${s.busy ? ". 지금 수집에 쓰는 중이에요" : ""}`];
   if (s.open && s.title) lines.push(`제목: ${s.title}`);
   if (s.open && s.url) lines.push(`주소: ${s.url}`);
@@ -914,7 +916,7 @@ $("w-forget").onclick = () => twice($("w-forget"), "한 번 더 누르면 로그
 });
 const pickWith = (button, target) => busy(button, async () => {
   try { await api("/api/collect/browser/pick", { target, items: val("w-items") }); say("w-msg", ""); await browserState(); } catch (e) { say("w-msg", e.message); }
-});
+}).finally(() => lastBrowser && showBrowser(lastBrowser));
 $("pick-field").onclick = () => pickWith($("pick-field"), "field");
 $("pick-next").onclick = () => pickWith($("pick-next"), "next");
 $("pick-off").onclick = () => pickWith($("pick-off"), "off");

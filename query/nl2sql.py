@@ -29,7 +29,7 @@ def cached_infer(conn_key, schema, table):
     for column in found[-1]["profile"].get("columns", []):
         guess = column.get("infer") or {}
         out[column.get("name")] = {k: v for k, v in {"null_ratio": guess.get("null_ratio"), "constant": guess.get("constant"),
-                                                     "date_format": guess.get("date_format"), "flag": bool(guess.get("flags"))}.items() if v not in (None, False)}
+                                                     "date_format": guess.get("date_format"), "flag": bool(guess.get("flags"))}.items() if v is not None and v is not False}  # 0.0 == False라 not in으로 거르면 빈 값 0%가 빠진다
     return out
 
 
