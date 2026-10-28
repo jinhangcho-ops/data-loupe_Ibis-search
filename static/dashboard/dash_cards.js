@@ -65,6 +65,13 @@ function sparkPoints(values, w, h, pad = 2) {
   const real = values.filter(v => v != null), lo = Math.min(...real), hi = Math.max(...real), n = values.length;
   return values.map((v, i) => v == null ? null : `${(pad + (n < 2 ? (w - 2 * pad) / 2 : (w - 2 * pad) * i / (n - 1))).toFixed(1)},${(hi === lo ? h / 2 : h - pad - (h - 2 * pad) * (v - lo) / (hi - lo)).toFixed(1)}`).filter(Boolean).join(" ");
 }
+// 점들("x,y x,y …")을 부드러운 곡선 경로로: 점과 점 사이 가운데를 지나는 2차 곡선(꺾인 곳이 뾰족하지 않게, 큰 차트의 곡선과 비슷하게)
+function smoothPath(points) {
+  const p = points.split(" ").map(s => s.split(",").map(Number));
+  let d = `M${p[0][0]},${p[0][1]}`;
+  for (let i = 1; i < p.length - 1; i++) d += ` Q${p[i][0]},${p[i][1]} ${((p[i][0] + p[i + 1][0]) / 2).toFixed(1)},${((p[i][1] + p[i + 1][1]) / 2).toFixed(1)}`;
+  return d + ` L${p.at(-1)[0]},${p.at(-1)[1]}`;
+}
 // 값 글자(서버 core/compare.format_value와 같은 모양): number는 쉼표·소수 둘째 자리, percent는 ×100 소수 둘째 자리 %, currency는 ₩ + 쉼표(음수는 -₩). unit은 뒤에 붙인다.
 // 숫자가 아닌 값(string_agg·first·any_value 등)은 글자 그대로.
 function showValue(v, format = "number", unit = "") {
@@ -124,7 +131,10 @@ const frame = (w, h, ...kids) => svg("svg", { viewBox: `0 0 ${w} ${h}`, preserve
 function paintKpi(card, colors, board) {
   const v = cardValue(card), fmt = cardFormat(card), said = board?.compares.get(card), days = cardDays(card).map(d => d.v), pair = card.data?.pair;
   const color = pickColor(card, "series", card.data?.by_unit?.day?.series[0]?.name ?? card.data?.values?.names?.[0] ?? card.title, colors, 0);
-  const spark = days.filter(x => x != null).length > 1 ? svg("svg", { viewBox: "0 0 120 30", class: "kpi-spark", preserveAspectRatio: "none" }, svg("polyline", { points: sparkPoints(days, 120, 30), fill: "none", stroke: color, "stroke-width": 1.8 })) : "";
+  const pts = days.filter(x => x != null).length > 1 ? sparkPoints(days, 120, 30) : "", curve = pts && smoothPath(pts), xs = pts && pts.split(" ").map(s => s.split(",")[0]);
+  // 카드 높이를 채우는 추이(남는 세로를 쓴다). 부드러운 곡선, 늘려도 선 굵기는 그대로(non-scaling-stroke), 아래는 옅게 채운다
+  const spark = pts ? svg("svg", { viewBox: "0 0 120 30", class: "kpi-spark", preserveAspectRatio: "none" }, svg("path", { d: `${curve} L${xs.at(-1)},30 L${xs[0]},30 Z`, fill: alpha(color, 0.12), stroke: "none" }),
+    svg("path", { d: curve, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round", "vector-effect": "non-scaling-stroke" })) : "";
   return box("kpi", el("div", { className: "kpi-top" }, el("span", { className: "kpi-icon", style: `color:${color}` }, iconSvg(card.view?.icon)),  // 카드 이름은 제목 줄에 있어 값만 크게
     el("div", { className: "kpi-val", textContent: showValue(v, fmt, card.view?.unit_text), style: `--n:${showValue(v, fmt, card.view?.unit_text).length}` })), said ? el("div", { className: "bcmp " + said.tone, textContent: said.text }) : "", spark,
     pair ? el("div", { className: "hint kpi-pair", textContent: `${pair.num_label} ${showValue(pair.num)} · ${pair.den_label} ${showValue(pair.den)}` }) : "");

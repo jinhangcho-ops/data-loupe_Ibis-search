@@ -234,7 +234,7 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:3px; padd
 .kpi-top { display:flex; align-items:center; gap:12px; }  /* 아이콘 옆에 값을 크게: KPI 카드의 주인공은 값 */
 .kpi-icon { flex:none; width:40px; height:40px; border-radius:8px; background:var(--bg); display:grid; place-items:center; }
 .kpi-val { font-size:34px; line-height:1.15; font-weight:700; letter-spacing:-.025em; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.kpi-spark { width:100%; height:34px; }
+.kpi-spark { width:100%; flex:1 1 34px; min-height:34px; max-height:120px; margin-top:auto; }  /* 카드가 크면 남는 높이를 추이가 채우고 아래에 붙는다(값이 위에 몰려 아래가 비지 않게) */
 .kpi-pair { margin:0; }
 .sum-text { font-size:15px; line-height:1.6; }
 .sum-bar { position:relative; height:12px; background:var(--line); border-radius:999px; }
