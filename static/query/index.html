@@ -455,6 +455,7 @@ function clearLists() {
 }
 // 화면에 올라온 것(고른 테이블, 조건 등의 목록, 결과·집계·차트)을 비운다. 연결은 건드리지 않는다.
 function clearScreen() {
+  sqlSkip = 0; sqlMore = false; sqlRan = ""; sqlPager();  // [이전]·[다음]이 이전 연결의 SQL을 새 연결에서 돌리지 않게
   for (const k in tableCols) delete tableCols[k];  // 다른 연결의 같은 이름 테이블
   S.base = $("base").value = ""; searchUndo.reset();  // 다른 연결의 되돌리기 기록은 쓰지 않는다
   S.cols = [];

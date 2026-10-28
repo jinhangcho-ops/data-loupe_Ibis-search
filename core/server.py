@@ -348,6 +348,8 @@ def rowcount():
 def download(expr, fmt, guard=True):
     """expr의 전체 행을 fmt(parquet, csv, xlsx) 파일로 임시 폴더에 만들어 조금씩 내려보내고, 다 보내면 지운다.
     guard가 False면 CSV·Excel의 수식 막기를 하지 않는다."""
+    if "." + fmt not in result.EXPORTS:  # 파일 이름에 들어가므로 '../'가 든 값이 임시 폴더 밖에 쓰지 않게(문구는 result.export와 같게)
+        raise ValueError(f"파일 이름은 {', '.join(result.EXPORTS)} 중 하나로 끝나야 합니다.")
     folder = scratch.make()
     path = Path(folder, "result." + fmt)
     from prep import prep_app  # 없는 날짜를 날짜로 바꾸다 난 DB 오류의 안내 문장은 전처리와 같은 것을 쓴다

@@ -448,7 +448,6 @@ const SHOW_ITEMS = 3, SHOW_KEYS = 100;  // 트리에서 배열은 앞 3개, 객�
 let envNames = [];  // env 파일의 이름들(값은 서버가 주지 않는다)
 let secrets = [];  // [읽기]가 찾은 비밀처럼 보이는 값 [{ where, name, path, env(고른 env 이름) }]
 let plain = [];  // 비밀 같은 이름이지만 비밀이 아니라고 뺀 '자리:이름'들(예전 구성은 이름만). 구성에 저장한다(Authorization·Cookie·주소 비밀번호는 서버가 늘 비밀로 본다)
-let parsed = null;  // 파일 주소 방식에서 [읽기]로 읽은 요청(쿼리가 따로 있는 모양). env 이름으로 바꿀 때 보낸다
 let json;  // 응답 예시를 JSON으로 읽은 값. JSON이 아니면 undefined
 let picked = null;  // 트리에서 고른 노드의 경로
 const opened = new Map();  // 트리 노드 경로 → 펼쳤는가(직접 펼치거나 접은 것만)
@@ -571,6 +570,12 @@ function fillRequest(r) {
 }
 // 파일 주소 방식은 주소 하나라 쿼리를 주소 뒤에 붙인다. 자리 표시({…})는 인코딩하지 않는다.
 const enc = s => s.split(/(\{[^{}]*\})/).map((p, i) => i % 2 ? p : encodeURIComponent(p)).join("");
+// 파일 주소 칸 → 요청(쿼리는 따로: env 이름으로 바꿀 자리를 찾는다). fillFile의 반대
+function fileRequest() {
+  const [url, q = ""] = val("f-url").split(/\?(.*)/s), dec = s => { try { return decodeURIComponent(s); } catch { return s; } };
+  const query = q ? q.split("&").filter(Boolean).map(p => { const [k, v = ""] = p.split(/=(.*)/s); return [dec(k), dec(v)]; }) : [];
+  return { method: "GET", url, query, headers: getPairs($("f-headers")), body_kind: "none", body: "" };
+}
 function fillFile(r) {
   const q = (r.query ?? []).map(([k, v]) => `${enc(k)}=${enc(v)}`).join("&"), url = r.url ?? "";
   $("f-url").value = url + (q ? (url.includes("?") ? "&" : "?") + q : "");
@@ -634,7 +639,6 @@ function showSecrets() {
 $("parse").onclick = () => busy($("parse"), async () => {
   try {
     const d = await api("/api/collect/parse", { text: $("paste").value });
-    parsed = d.request;
     if (mode() === "file") fillFile(d.request); else fillRequest(d.request);
     secrets = d.secrets.map(s => ({ ...s, env: "" }));
     plain = [];  // 새로 읽은 요청: 전에 뺀 자리는 이 요청의 것이 아니다
@@ -649,8 +653,8 @@ $("secretize").onclick = () => busy($("secretize"), async () => {
   if (!replace.length) return say("parse-msg", "바꿀 값의 env 이름을 먼저 고르세요.");
   try {
     const file = mode() === "file";
-    const { request } = await api("/api/collect/secretize", { request: file ? parsed ?? { method: "GET", url: val("f-url"), query: [], headers: getPairs($("f-headers")), body_kind: "none", body: "" } : readRequest(), replace });
-    if (file) { parsed = request; fillFile(request); } else fillRequest(request);
+    const { request } = await api("/api/collect/secretize", { request: file ? fileRequest() : readRequest(), replace });
+    if (file) fillFile(request); else fillRequest(request);
     secrets = secrets.filter(s => !s.env);
     showSecrets();
     say("parse-msg", "env 이름으로 바꿨어요.", true);
@@ -1160,7 +1164,6 @@ function restore(c) {
   say("limit-msg", d.limit_group && !(d.limit_group in limits.groups) ? `‘${d.limit_group}’ 사용 한도를 찾을 수 없어요. 다시 고르세요.` : "");
   secrets = [];
   plain = [...(d.plain ?? [])];
-  parsed = null;
   envNames = [];
   $("env-names").textContent = "";
   showSecrets();
