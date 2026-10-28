@@ -10,6 +10,7 @@ from lazy import ibis
 from core import held
 from core import parse
 from core import prep_derive
+from core import server
 from core import source
 from geo import geojson, spatial, tm
 
@@ -20,6 +21,7 @@ MAX_REFERENCE = 2_000_000  # 지점·영역 행의 최대 수
 LAST = {}  # (연결 id, 키 컬럼, 새 컬럼) → 지난번에 만든 작은 표(memtable). 같은 단계를 다시 만들면 지운다(미리보기마다 연결에 쌓이지 않게)
 KEYS = {"tm": {"op", "x", "y", "epsg", "lon", "lat"}, "nearest": {"op", "lat", "lon", "table", "schema", "ref_lat", "ref_lon", "label", "out", "dist"},
         "region": {"op", "lat", "lon", "table", "schema", "path", "geometry", "take", "prefix"}}
+server.ON_SWITCH.append(LAST.clear)  # 연결을 바꾸거나 끊으면 지난 연결의 표를 놓는다
 
 
 def number_column(t, name, what):
@@ -68,7 +70,7 @@ def attach(t, keys, frame, new):
     """t에 frame(열: __k0, __k1, 새 컬럼들)을 키로 왼쪽 조인한다(키 열은 뺀다). 키가 비어 있거나 frame에 없는 행은 새 컬럼이 빈 값이다."""
     con, step = ibis.get_backend(t), (id(ibis.get_backend(t)), tuple(keys), tuple(new))
     small = ibis.memtable(frame)
-    # shortcut: 같은 단계를 다시 만들면 지난번 표를 지운다(단계마다 하나). 같은 단계로 만든 식 둘을 동시에 들고 돌리면 먼저 것이 다시 올려 하나가 남는다(한 번에 한 요청이라 드묾)
+    # shortcut: 같은 단계(키·새 컬럼 이름)를 다시 만들면 지난번 표를 지운다. 새 컬럼 이름을 바꿔 가며 돌리면 이름마다 하나씩 연결을 바꿀 때까지 남는다(보통 몇 개)
     if (old := LAST.get(step)) is not None:
         source.drop_memtable(con, old)
     LAST[step] = small

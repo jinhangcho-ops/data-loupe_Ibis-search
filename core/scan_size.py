@@ -75,18 +75,20 @@ def type_bytes(dtype):
 def duckdb_bytes(con, table, columns, schema=None, catalog=None):
     """DuckDB 테이블(schema·catalog를 주면 그 스키마·DB의 것): 추정 행 수 × 읽는 컬럼의 타입 크기."""
     q = lambda s: s.replace("'", "''")
-    where = "".join(f" and lower({k}) = lower('{q(v)}')" for k, v in (("schema_name", schema), ("database_name", catalog)) if v)
-    rows = con.raw_sql(f"select estimated_size from duckdb_tables() where lower(table_name) = lower('{q(table)}'){where}").fetchone()
+    where = (f" and lower(database_name) = lower('{q(catalog)}') and lower(schema_name) = lower('{q(schema)}')" if catalog
+             else f" and (lower(schema_name) = lower('{q(schema)}') or (lower(database_name) = lower('{q(schema)}') and schema_name = 'main'))" if schema else "")  # o.big: 붙인 DB o의 main
+    rows = con.raw_sql(f"select estimated_size, database_name, schema_name from duckdb_tables() where lower(table_name) = lower('{q(table)}'){where}"
+                       + (f" order by lower(schema_name) = lower('{q(schema)}') desc" if schema else "")).fetchone()
     if not rows:
         return None
-    schema = con.table(table, database=(catalog, schema) if catalog else schema).schema() if schema else con.table(table).schema()
+    schema = con.table(table, database=(rows[1], rows[2])).schema() if schema else con.table(table).schema()
     width = sum(type_bytes(t) for n, t in schema.items() if columns is None or n.lower() in columns)
     return int(rows[0] or 0) * width
 
 
 def postgres_bytes(con, table, columns, schema=None):
     """Postgres: 통계의 행 수 × 읽는 컬럼의 평균 크기(schema를 주면 그 스키마의 것). 통계가 없으면 None."""
-    within = (" and lower(relnamespace::regnamespace::text) = lower(%s)", " and lower(schemaname) = lower(%s)") if schema else ("", "")
+    within = (" and relnamespace in (select oid from pg_namespace where lower(nspname) = lower(%s))", " and lower(schemaname) = lower(%s)") if schema else ("", "")  # regnamespace::text는 "Sales"처럼 따옴표가 붙는다
     extra = (schema,) if schema else ()
     with con.con.cursor() as cur:  # Ibis Postgres 백엔드의 psycopg 연결(값은 매개변수로 넘긴다)
         cur.execute(f"select reltuples from pg_class where lower(relname) = lower(%s){within[0]} order by relkind limit 1", (table, *extra))
