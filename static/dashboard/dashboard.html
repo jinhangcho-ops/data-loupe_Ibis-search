@@ -13,6 +13,9 @@
   .settings-box .dctl { padding:0; }
   .settings-box .row { display:flex; gap:6px; align-items:center; }
   .settings-box .row input { flex:1; min-width:0; }
+  /* KPI 값: 카드 폭(아이콘 자리를 뺀)을 글자 수(--n, dash_cards.js)로 나눠 글자 크기를 줄인다. 편집 중 좁은 칸에서 "12,2…"로 잘리지 않게 */
+  .cbox.kpi { container-type:inline-size; }
+  .cbox.kpi .kpi-val { font-size:clamp(14px, calc((100cqi - 56px) / (var(--n, 6) * .62)), 34px); }
 </style>
 </head>
 <body class="app">

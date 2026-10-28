@@ -12,7 +12,7 @@
   .pair { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 2fr) auto; gap:6px; margin-bottom:4px; align-items:center; }
   .pair .hint { margin:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   /* 숫자·고르는 칸 묶음: 칸 위에 이름. 좁으면 줄을 바꾼다. */
-  .fields { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:4px 8px; margin-bottom:6px; }
+  .fields { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:4px 8px; margin-bottom:6px; }
   .fields label { display:block; min-width:0; }
   .fields label.hidden { display:none; }
   .fields .hint { margin:0 0 2px; }
@@ -57,6 +57,8 @@
   .collect-pane { background:var(--bg); }
   .collect-pane > .main { max-width:clamp(900px, 78vw, 1600px); margin:0 auto; padding:4px 0 24px; }
   .cstep.hidden { display:none; }
+  .collect-pane .table-wrap { overflow:auto; max-height:420px; }
+  .collect-pane th { z-index:2; background:var(--card); }
   .step .edx .tabs { display:flex; flex-wrap:wrap; gap:4px 12px; margin:4px 0; }
 </style>
 </head>
@@ -212,7 +214,7 @@
           <div class="hint">키를 확인하려고 DB에 조회를 보내요. 데이터 웨어하우스는 요금이 나올 수 있어요.</div>
         </div>
         <label style="display:block; margin:6px 0"><input type="checkbox" id="ld-loadid" style="width:auto"> 적재 ID 컬럼 넣기 (_ibis_load_id)</label>
-        <div class="hint">켜면 행마다 이번 적재의 ID가 들어가서, 나중에 [업로드 기록]에서 이번에 넣은 행만 골라 지울 수 있어요. 기존 테이블에 추가하거나 덮어쓸 때는 테이블에도 이 컬럼이 있어야 해요.</div>
+        <div class="hint">켜면 행마다 이번 적재의 ID가 들어가서, 나중에 [업로드 기록]에서 이번에 넣은 행만 골라 지울 수 있어요. 기존 테이블에 추가할 때는 테이블에도 이 컬럼이 있어야 해요. 덮어쓰기는 테이블을 새 내용으로 바꿔서 없어도 돼요.</div>
         <div class="actions"><button id="ld-check" class="btn" title="테이블이 있는지, 결과 파일과 컬럼이 맞는지 확인해요. 데이터는 넣지 않아요">테이블 확인</button></div>
         <div class="hint" id="ld-check-msg"></div>
         <div class="table-wrap" id="ld-cols"></div>
@@ -916,7 +918,7 @@ $("w-close").onclick = () => busy($("w-close"), async () => {
   try { await api("/api/collect/browser/close", {}); say("w-msg", ""); await browserState(); } catch (e) { say("w-msg", e.message); }
 });
 $("w-forget").onclick = () => twice($("w-forget"), "한 번 더 누르면 로그인 정보를 지워요", async () => {
-  try { await api("/api/collect/browser/forget", {}); say("w-msg", "로그인 정보를 지웠어요", true); } catch (e) { say("w-msg", e.message); }
+  try { await api("/api/collect/browser/forget", {}); say("w-msg", "로그인 정보를 지웠어요.", true); } catch (e) { say("w-msg", e.message); }
 });
 const pickWith = (button, target) => busy(button, async () => {
   try { await api("/api/collect/browser/pick", { target, items: val("w-items") }); say("w-msg", ""); await browserState(); } catch (e) { say("w-msg", e.message); }
@@ -976,15 +978,15 @@ $("lsave").onclick = () => busy($("lsave"), async () => {
       concurrency: Number(val("l-conc")), min_interval: Number(val("l-gap")), reset: val("l-reset"), tz: $("l-tz").value, margin: Number(val("l-margin")) };
     showLimits(await api("/api/limits", { name, group }), name);
     $("lname").value = "";
-    say("limit-msg", "저장했어요", true);
+    say("limit-msg", "저장했어요.", true);
   } catch (e) { say("limit-msg", e.message); }
 });
 $("ldel").onclick = () => busy($("ldel"), async () => {
   if (!$("lgroup").value) return;
-  try { showLimits(await api("/api/limits", { name: $("lgroup").value, group: null }), ""); say("limit-msg", "삭제했어요", true); } catch (e) { say("limit-msg", e.message); }
+  try { showLimits(await api("/api/limits", { name: $("lgroup").value, group: null }), ""); say("limit-msg", "삭제했어요.", true); } catch (e) { say("limit-msg", e.message); }
 });
 $("lreset").onclick = () => twice($("lreset"), "한 번 더 누르면 사용량을 초기화해요", async () => {
-  try { showLimits(await api("/api/limits/reset", { name: $("lgroup").value })); say("limit-msg", "사용량을 초기화했어요", true); } catch (e) { say("limit-msg", e.message); }
+  try { showLimits(await api("/api/limits/reset", { name: $("lgroup").value })); say("limit-msg", "사용량을 초기화했어요.", true); } catch (e) { say("limit-msg", e.message); }
 });
 
 // 적재: 저장한 결과 파일을 DB 테이블이나 Kafka 토픽에 넣는다. 비밀번호는 칸에만 두고 config()·구성·등록 어디에도 넣지 않는다.
@@ -1090,12 +1092,12 @@ $("kf-save").onclick = () => busy($("kf-save"), async () => {
     const item = { servers: val("kf-servers"), topic: val("kf-topic"), security: $("kf-security").value, mechanism: $("kf-mech").value, user: val("kf-user"), ca: val("kf-ca") };
     showKafka(await api("/api/load/kafka", { name, item }), name);
     $("kf-name").value = "";
-    say("kf-msg", "저장했어요", true);
+    say("kf-msg", "저장했어요.", true);
   } catch (e) { say("kf-msg", e.message); }
 });
 $("kf-del").onclick = () => busy($("kf-del"), async () => {
   if (!$("kf-saved").value) return;
-  try { showKafka(await api("/api/load/kafka", { name: $("kf-saved").value, item: null }), ""); say("kf-msg", "삭제했어요", true); } catch (e) { say("kf-msg", e.message); }
+  try { showKafka(await api("/api/load/kafka", { name: $("kf-saved").value, item: null }), ""); say("kf-msg", "삭제했어요.", true); } catch (e) { say("kf-msg", e.message); }
 });
 // [접속 확인]: 저장한 등록으로 접속만 해 본다(메시지는 보내지 않는다).
 $("kf-check").onclick = () => busy($("kf-check"), async () => {
@@ -1195,12 +1197,12 @@ $("rsave").onclick = () => busy($("rsave"), async () => {
     if (secrets.length) throw new Error("비밀처럼 보이는 값이 남아 있어요. env 이름으로 바꾸거나, 비밀이 아니면 목록에서 뺀 뒤 저장하세요.");
     showCollections(await api("/api/collections", { name, collection: checked() }), name);
     $("rname").value = "";
-    say("cfg-msg", "저장했어요", true);
+    say("cfg-msg", "저장했어요.", true);
   } catch (e) { say("cfg-msg", e.message); }
 });
 $("rdel").onclick = () => busy($("rdel"), async () => {
   if (!$("rsaved").value) return;
-  try { showCollections(await api("/api/collections", { name: $("rsaved").value, collection: null })); say("cfg-msg", "삭제했어요", true); } catch (e) { say("cfg-msg", e.message); }
+  try { showCollections(await api("/api/collections", { name: $("rsaved").value, collection: null })); say("cfg-msg", "삭제했어요.", true); } catch (e) { say("cfg-msg", e.message); }
 });
 $("rsaved").onchange = () => {
   const c = collections[$("rsaved").value];
@@ -1237,7 +1239,7 @@ function showStatus(s) {
   counts.push(`실패 ${s.failures}`, `동시 요청 ${s.concurrency}`, `걸린 시간 ${secs(s.elapsed * 1000)}`);
   $("run-counts").textContent = counts.join(", ");
   const l = s.load, loading = !!l && s.phase === "적재 중";  // 적재 중이면 막대는 넣은 행 / 전체 행
-  const part = loading ? (l.total ? l.rows / l.total : null) : s.total_bytes ? s.bytes / s.total_bytes : s.mode !== "file" && est ? s.requests / est : null;
+  const part = s.phase === "끝" ? 1 : loading ? (l.total ? l.rows / l.total : null) : s.total_bytes ? s.bytes / s.total_bytes : s.mode !== "file" && est ? s.requests / est : null;
   $("bar").classList.toggle("unknown", s.running && part === null);
   $("bar").firstElementChild.style.width = part === null ? "" : Math.min(100, part * 100).toFixed(1) + "%";
   $("bar").title = part === null ? "" : (part * 100).toFixed(1) + "%";
@@ -1267,9 +1269,10 @@ async function watch(fresh, quiet) {
       if (!s && fails < 5) { await new Promise(r => setTimeout(r, 1000)); continue; }  // 상태를 한 번 못 읽었다고 감시를 끝내지 않는다(연달아 5번 못 읽으면 끝)
       if (s && !s.running && s.phase === "대기" && tries > 0) { await new Promise(r => setTimeout(r, 1000)); continue; }
       if (!s?.running) {
-        if (s?.phase === "끝") { if (!quiet) notifyDone("collect", s.elapsed, s.rows, fileName(s.output)); $("run-ok").textContent = s.load ? "수집과 적재를 모두 마쳤어요" : "수집을 마쳤어요"; }
+        if (s?.phase === "끝") { if (!quiet) notifyDone("collect", s.elapsed, s.rows, fileName(s.output)); $("run-ok").textContent = s.load ? "수집과 적재를 모두 마쳤어요." : "수집을 마쳤어요."; }
         loadLimits();
         loadRuns();  // 끝난 실행이 기록에 들어갔다
+        loadUploads();  // 저장·적재한 것이 업로드 기록에 들어갔다
         break;
       }
       await new Promise(r => setTimeout(r, 1000));
@@ -1282,7 +1285,7 @@ $("start").onclick = () => busy($("start"), async () => {
     if (!cfg.output.path) throw new Error("저장할 파일 경로를 정하세요. 오른쪽 저장 단계에서 고를 수 있어요.");
     const d = await api("/api/collect/start", { config: cfg, secrets: { password: loadPassword() } });
     forgetPasswords();
-    $("run-ok").textContent = d.resumed ? "이미 받은 데서부터 이어서 받아요" : "";
+    $("run-ok").textContent = d.resumed ? "이미 받은 데서부터 이어서 받아요." : "";
     say("run-msg", "");
     running = true;  // 첫 상태를 읽기 전에도 수집용 창 상태를 따라가게
     watch(true);
@@ -1294,13 +1297,13 @@ $("load-again").onclick = () => busy($("load-again"), async () => {
   try {
     await api("/api/load/start", { config: checked(), secrets: { password: loadPassword() } });
     forgetPasswords();
-    $("run-ok").textContent = "적재만 다시 시작했어요";
+    $("run-ok").textContent = "적재만 다시 시작했어요.";
     say("run-msg", "");
     watch(true);
   } catch (e) { say("run-msg", e.message); }
 });
 $("stop").onclick = () => busy($("stop"), async () => {
-  try { await api("/api/collect/stop", {}); $("run-ok").textContent = mode() === "web" && val("w-pkind") === "scroll" ? "멈췄어요. 스크롤 방식은 다시 시작하면 처음부터 받아요" : "멈췄어요. 다시 시작하면 받은 데서부터 이어서 받아요"; } catch (e) { say("run-msg", e.message); }
+  try { await api("/api/collect/stop", {}); $("run-ok").textContent = mode() === "web" && val("w-pkind") === "scroll" ? "멈췄어요. 스크롤 방식은 다시 시작하면 처음부터 받아요." : "멈췄어요. 다시 시작하면 받은 데서부터 이어서 받아요."; } catch (e) { say("run-msg", e.message); }
 });
 // 결과 파일로 연결을 바꾸고 쿼리·분석 화면으로 간다.
 const openWith = (button, prep) => twice(button, "한 번 더 누르면 연결이 이 파일로 바뀌어요", async () => {
@@ -1425,7 +1428,7 @@ $("sc-save").onclick = () => {
   const save = async () => {
     try {
       showSchedules(await api("/api/schedules", { name, schedule: readSchedule() }));
-      say("sc-msg", on && !was ? "저장하고 Windows 작업 스케줄러에 등록했어요" : !on && was ? "저장하고 Windows 예약 작업을 지웠어요" : "저장했어요", true);
+      say("sc-msg", on && !was ? "저장하고 Windows 작업 스케줄러에 등록했어요." : !on && was ? "저장하고 Windows 예약 작업을 지웠어요." : "저장했어요.", true);
       loadRuns();
     } catch (e) { say("sc-msg", e.message); }
   };
@@ -1436,7 +1439,7 @@ $("sc-del").onclick = () => {
   const name = $("sc-name").value;
   if (!(name in sched.schedules)) return;
   return twice($("sc-del"), registered(name) ? "한 번 더 누르면 예약과 Windows 예약 작업을 지워요" : "한 번 더 누르면 예약을 삭제해요", async () => {
-    try { showSchedules(await api("/api/schedules", { name, schedule: null })); say("sc-msg", "예약을 삭제했어요", true); } catch (e) { say("sc-msg", e.message); }
+    try { showSchedules(await api("/api/schedules", { name, schedule: null })); say("sc-msg", "예약을 삭제했어요.", true); } catch (e) { say("sc-msg", e.message); }
   });
 };
 $("sc-run").onclick = () => busy($("sc-run"), async () => {
@@ -1449,7 +1452,7 @@ $("sc-run").onclick = () => busy($("sc-run"), async () => {
   } catch (e) { say("sc-msg", e.message); }
 });
 $("sc-rereg").onclick = () => twice($("sc-rereg"), "한 번 더 누르면 지금 프로그램 경로로 다시 등록해요", async () => {
-  try { showSchedules(await api("/api/schedules/reregister", {})); say("sc-msg", "다시 등록했어요", true); } catch (e) { say("sc-msg", e.message); }
+  try { showSchedules(await api("/api/schedules/reregister", {})); say("sc-msg", "다시 등록했어요.", true); } catch (e) { say("sc-msg", e.message); }
 });
 
 // 실행 기록: 접어 두고 펼치면 표를 그린다. 확인하지 않은 실패가 있으면 화면 맨 위에 알리고, 기록을 펼치거나 [확인함]을 누르면 본 것으로 표시한다.
@@ -1468,7 +1471,7 @@ function renderRuns() {
   const list = runs.runs, n = runs.unseen, r0 = list[0];
   $("unseen-box").classList.toggle("hidden", !n);
   $("unseen-text").textContent = `아직 확인하지 않은 실패가 ${n.toLocaleString()}건 있어요`;
-  $("runs-sum").textContent = r0 ? `최근 실행: ${r0.name}, ${HOW[r0.how] ?? r0.how}, ${r0.start}, ${r0.result}` : "아직 실행 기록이 없어요. 수집하거나 예약이 실행되면 여기에 남아요.";
+  $("runs-sum").textContent = r0 ? `최근 실행: ${r0.name}, ${HOW[r0.how] ?? r0.how}, ${r0.start}, ${r0.result}` : "아직 실행 기록이 없어요. 예약이 실행되거나 예약 카드의 [지금 실행]을 누르면 여기에 남아요([시작]으로 받은 수집은 남지 않아요).";
   $("runs-sum").className = r0?.result === "실패" ? "warn" : "hint";
   $("runs-toggle").textContent = runsOpen ? "접기" : `펼치기(${list.length.toLocaleString()}건)`;
   $("runs").classList.toggle("hidden", !runsOpen);
@@ -1497,10 +1500,11 @@ pickSchedule();
 // 업로드 기록: 저장한 파일과 적재한 것을 행·크기·범위와 함께 보이고, 고르면 지울 때 쓸 명령을 보인다(실행하지 않음).
 let uploadsData = { entries: [], statuses: {} }, upOpen = false, upPicked = "";
 const UP_KINDS = { file: "파일", table: "DB 테이블", kafka: "Kafka" };
-function upTarget(e) {
-  const t = e.target ?? {};
-  return e.kind === "file" ? fileName(t.path) : e.kind === "kafka" ? `${t.destination ?? ""} / ${t.topic ?? ""}` : `${fileName(t.connection)} / ${[t.schema, t.name].filter(Boolean).join(".")}`;
+function upTarget(e, full) {
+  const t = e.target ?? {}, name = full ? v => v ?? "" : fileName;  // full: 자세히 보기에는 경로·주소 전체
+  return e.kind === "file" ? name(t.path) : e.kind === "kafka" ? `${t.destination ?? ""} / ${t.topic ?? ""}` : `${name(t.connection)} / ${[t.schema, t.name].filter(Boolean).join(".")}`;
 }
+const upStamp = s => s ? s.slice(0, 16).replace("T", " ") : "—";  // 기록 시각(이 PC 시각, 초까지 ISO) → 2026-10-28 10:39
 function upRange(e) {
   const r = e.range ?? {};
   const parts = Object.entries(r.partitions ?? {}).map(([p, [lo, hi]]) => `p${p}: ${lo}~${hi}`);
@@ -1513,7 +1517,7 @@ async function loadUploads() {
 }
 function renderUploads() {
   const all = uploadsData.entries, find = $("up-find").value.trim().toLowerCase(), kind = $("up-kind").value;
-  $("up-sum").textContent = all.length ? `모두 ${all.length.toLocaleString()}건이에요. 최근 기록은 ${UP_KINDS[all[0].kind]} ${upTarget(all[0])} (${all[0].started})` : "아직 업로드 기록이 없어요. 수집하거나 적재하면 여기에 쌓여요.";
+  $("up-sum").textContent = all.length ? `모두 ${all.length.toLocaleString()}건이에요. 최근 기록은 ${UP_KINDS[all[0].kind]} ${upTarget(all[0])} (${upStamp(all[0].started)})` : "아직 업로드 기록이 없어요. 수집하거나 적재하면 여기에 쌓여요.";
   $("up-toggle").textContent = upOpen ? "접기" : "펼치기";
   $("up-body").classList.toggle("hidden", !upOpen);
   if (!upOpen) return;
@@ -1527,7 +1531,7 @@ function renderUploads() {
   $("up-list").querySelectorAll("tr[data-up]").forEach(tr => tr.onclick = () => { upPicked = tr.dataset.up; renderUploads(); });
   const picked = all.find(e => e.id === upPicked);
   $("up-cmd").classList.toggle("hidden", !picked?.removal.text);
-  $("up-cmd").textContent = picked ? `[${picked.removal.how}]\n${picked.removal.text}\n\n시작 ${picked.started}, 끝 ${picked.finished ?? "—"}\n결과 파일: ${picked.source}\n대상: ${JSON.stringify(picked.target)}\n범위: ${JSON.stringify(picked.range)}` : "";
+  $("up-cmd").textContent = picked ? `[${picked.removal.how}]\n${picked.removal.text}\n\n시작 ${upStamp(picked.started)}, 끝 ${upStamp(picked.finished)}\n결과 파일: ${picked.source}\n대상: ${upTarget(picked, true)}\n범위: ${JSON.stringify(picked.range)}` : "";
   const forget = el("button", { className: "ghost", textContent: "목록에서 빼기", title: "이 기록을 목록에서만 빼요. 실제 데이터는 그대로 남아요" });
   forget.onclick = () => busy(forget, async () => {
     try { uploadsData = await api("/api/uploads/forget", { id: picked.id }); upPicked = ""; renderUploads(); } catch (e) { say("up-msg", e.message); }

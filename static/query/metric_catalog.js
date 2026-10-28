@@ -122,7 +122,7 @@ async function showMetricCatalog(box, env) {
         refresh();  // 내 지표 목록을 다시 그린다(사전 화면도 새로 그려진다)
       } catch (err) { msg.textContent = err.message; }
     }
-    // 계산 결과: 값(비율은 %), 짝 절대량, 중앙값·P90·P99, 알림, 가드레일 안내, 표
+    // 계산 결과: 값(비율은 %), 짝 절대량, 중앙값·P90·P99, 알림, 표(북극성·가드레일 안내는 위 설명에 이미 있다)
     function result(d) {
       const rows = d.rows ?? [], cols = d.columns ?? [];
       return el("div", { className: "mresult" },
@@ -131,7 +131,6 @@ async function showMetricCatalog(box, env) {
         d.pair?.length ? el("div", { className: "mpair" }, el("span", { className: "hint", textContent: "함께 보는 절대량" }), ...d.pair.map(p => el("span", { className: "chip" }, `${p.name} ${p.value == null ? "—" : mcNum(p.value)}`))) : "",
         d.spread ? el("div", { className: "mpair" }, el("span", { className: "hint", textContent: `분포(${mcNum(d.spread.n)}개)` }), ...[["median", "중앙값"], ["p90", "P90"], ["p99", "P99"]].map(([k, t]) => el("span", { className: "chip" }, `${t} ${mcValue(d.spread[k], d.format, d.unit)}`))) : "",
         ...(d.notes ?? []).map(t => el("div", { className: "hint", textContent: t })),
-        hintLine(e),
         rows.length ? el("table", { className: "mtable" }, el("thead", {}, el("tr", {}, ...cols.map(c => el("th", { textContent: c.label })))),
           el("tbody", {}, ...rows.slice(0, 12).map(r => el("tr", {}, ...cols.map(c => el("td", { textContent: typeof r[c.key] === "number" ? mcNum(r[c.key]) : String(r[c.key] ?? "") })))))) : "",
         rows.length > 12 ? el("div", { className: "hint", textContent: `앞의 12줄만 보여요(전체 ${rows.length}줄).` }) : "");

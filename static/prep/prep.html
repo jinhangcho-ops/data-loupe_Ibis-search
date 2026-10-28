@@ -203,7 +203,7 @@
     <div class="tool"><span class="hint" id="a-data" style="margin:0; flex:1"></span>
       <button id="a-full" class="btn" title="표본 대신 테이블 전체로 다시 구해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요">전체로 다시 구하기</button>
       <div class="drop"><button id="a-add" class="btn p" title="지금 보이는 그래프를 구한 값과 함께 대시보드 카드로 넣어요">대시보드에 추가</button>
-        <div class="pop hidden" id="a-pop">
+        <div class="pop hidden" id="a-pop" style="width:280px">
           <div class="hint" style="margin:0">어느 대시보드에 넣을까요?</div>
           <div class="row"><select id="a-dash" title="저장한 대시보드나 새 대시보드를 골라요"></select></div>
           <div class="row"><input id="a-dash-name" placeholder="새 대시보드 이름"></div>
@@ -241,7 +241,7 @@
         <div id="a-heat"><div class="hint">숫자 컬럼(2~<span id="a-max-corr"></span>개)</div><div class="cols" id="a-corr-cols"></div>
           <div class="hint">고른 컬럼이 모두 채워진 행만으로 피어슨 상관계수를 구해요.</div></div>
         <div id="a-scat" class="hidden"><div class="hint">가로축(X)</div><select id="a-sx"></select><div class="hint">세로축(Y)</div><select id="a-sy"></select>
-          <div class="hint">점은 앞에서부터 <span id="a-max-points"></span>개까지 그려요.</div></div>
+          <div class="hint">점이 <span id="a-max-points"></span>개보다 많으면 전체에서 고르게 뽑아 그려요(다시 구해도 같은 점).</div></div>
       </div>
       <div class="a-form hidden" data-kind="groups">
         <div class="hint">묶을 컬럼</div><select id="a-gby"></select>
@@ -749,12 +749,12 @@ function renderGeo() {
   const names = list => list.map(n => el("option", { value: n, textContent: n })), pick = (id, list, title, blank) => el("select", { id, title, style: "flex:none" }, ...(blank ? [el("option", { value: "", textContent: blank })] : []), ...names(list));
   const text = (id, ph, w = 110) => el("input", { id, placeholder: ph, style: `width:${w}px; flex:none` });
   const refs = [pick("geo-ref-lat", geoRefCols, "지점 테이블의 위도 컬럼"), pick("geo-ref-lon", geoRefCols, "지점 테이블의 경도 컬럼")];
-  const table = title => el("select", { id: "geo-table", style: "flex:none", title, onchange: geoLoadCols }, ...names(["", ...geoTables]));
+  const table = (title, blank) => el("select", { id: "geo-table", style: "flex:none", title, onchange: geoLoadCols }, el("option", { value: "", textContent: blank }), ...names(geoTables));
   const typed = Object.fromEntries([...$("geo-form").querySelectorAll("select, input")].map(e => [e.id, e.value]));  // 다시 그려도 고른·적은 값은 남긴다
   $("geo-form").replaceChildren(...{
     tm: [pick("geo-x", nums, "x(동서) 컬럼"), pick("geo-y", nums, "y(남북) 컬럼"), el("select", { id: "geo-epsg", style: "flex:none", title: "좌표계예요. 값 범위로 맞을 만한 것을 위에 안내해요" }, ...EPSG_LIST.map(([n, t]) => el("option", { value: n, textContent: t }))), text("geo-lon-name", "경도 컬럼 이름", 100), text("geo-lat-name", "위도 컬럼 이름", 100)],
-    nearest: [pick("geo-lat", nums, "점의 위도 컬럼"), pick("geo-lon", nums, "점의 경도 컬럼"), table("지점 목록 테이블"), ...refs, pick("geo-label", geoRefCols, "지점 이름 컬럼", "(이름 없이 거리만)")],
-    region: [pick("geo-lat", nums, "점의 위도 컬럼"), pick("geo-lon", nums, "점의 경도 컬럼"), table("GeoJSON을 연결한 영역 테이블"), text("geo-path", "또는 GeoJSON 파일 경로", 180), text("geo-take", "붙일 영역 컬럼(쉼표)", 150), text("geo-prefix", "앞 글자(영역_)", 90)] }[op]);
+    nearest: [pick("geo-lat", nums, "점의 위도 컬럼"), pick("geo-lon", nums, "점의 경도 컬럼"), table("지점 목록 테이블", "지점 테이블 고르기"), ...refs, pick("geo-label", geoRefCols, "지점 이름 컬럼", "(이름 없이 거리만)")],
+    region: [pick("geo-lat", nums, "점의 위도 컬럼"), pick("geo-lon", nums, "점의 경도 컬럼"), table("GeoJSON을 연결한 영역 테이블이에요. 테이블 대신 오른쪽에 파일 경로를 적어도 돼요", "영역 테이블 고르기"), text("geo-path", "또는 GeoJSON 파일 경로", 180), text("geo-take", "붙일 영역 컬럼(쉼표)", 150), text("geo-prefix", "앞 글자(영역_)", 90)] }[op]);
   for (const e of $("geo-form").querySelectorAll("select, input")) if (typed[e.id] !== undefined && (e.tagName === "INPUT" || [...e.options].some(o => o.value === typed[e.id]))) e.value = typed[e.id];
   $("geo-list").replaceChildren(...geoSteps.map((st, i) => el("div", {}, chip(geoText(st), () => { geoSteps.splice(i, 1); preview = null; showAll(); }))));
   const hints = prof?.geo, pairs = hints?.pairs ?? [];
@@ -1330,8 +1330,8 @@ function anaTable(d, view) {
     ...d.values.labels.map((l, i) => ({ 값: l, "행 수": d.values.counts[i], 비율: pct(d.values.counts[i]) })),
     ...(d.values.nulls ? [{ 값: "(빈 값)", "행 수": d.values.nulls, 비율: pct(d.values.nulls) }] : []),
     ...(d.values.other ? [{ 값: `그 밖의 값 ${(d.values.unique - d.values.labels.length).toLocaleString()}종류`, "행 수": d.values.other, 비율: pct(d.values.other) }] : [])] };
-  if (view === "heat") return { columns: ["", ...d.columns], rows: d.matrix.map((row, i) => ({ "": d.columns[i], ...Object.fromEntries(row.map((r, j) => [d.columns[j], r == null ? "-" : +r.toFixed(3)])) })) };
-  if (view === "scatter") return { columns: ["", "값"], rows: [["상관계수 r", d.r == null ? "-" : +d.r.toFixed(4)], ["쓴 행 수", d.n], ["그린 점 수", d.points.length]].map(([k, v]) => ({ "": k, 값: v })) };
+  if (view === "heat") return { columns: ["", ...d.columns], rows: d.matrix.map((row, i) => ({ "": d.columns[i], ...Object.fromEntries(row.map((r, j) => [d.columns[j], r == null ? "-" : +r.toFixed(3) || 0])) })) };
+  if (view === "scatter") return { columns: ["", "값"], rows: [["상관계수 r", d.r == null ? "-" : +d.r.toFixed(4) || 0], ["쓴 행 수", d.n], ["그린 점 수", d.points.length]].map(([k, v]) => ({ "": k, 값: v })) };
   if (view === "funnel") return { columns: FUNNEL_COLUMNS, rows: funnelRows(d.steps) };
   const name = view === "groups" ? d.by : UNIT_NAMES[d.unit], value = d.agg === "count" ? "개수" : `${d.value} ${aggName(d.agg)}`;
   return { columns: [name, value, ...(d.counts ? ["행 수"] : [])], rows: d.labels.map((l, i) => ({ [name]: l, [value]: d.values[i], ...(d.counts ? { "행 수": d.counts[i] } : {}) })) };
@@ -1349,6 +1349,7 @@ function drawAna() {
   $("a-funnel").replaceChildren();
   $("a-tabs").classList.toggle("hidden", !d || d.views.length < 2);
   $("a-full").disabled = !d;
+  $("a-full").classList.toggle("hidden", d?.kind === "funnel");  // 퍼널은 늘 테이블 전체로 구한다(prep_app.whole)
   $("a-add").disabled = !d || text;
   if (!d) { $("a-title").textContent = "분석"; $("a-table").innerHTML = ""; $("a-data").textContent = ""; return; }
   $("a-tabs").replaceChildren(...d.views.map(v => el("button", { textContent: VIEW_NAMES[v], className: v === A.view ? "on" : "", onclick: () => { A.view = v; drawAna(); } })));

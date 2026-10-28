@@ -126,17 +126,17 @@ function SentenceView(host, ctx) {
     return box;
   }
   function slotEl(s, item, redo) {
-    const slots = item.slots, set = v => { if (v === "" || v == null || (Array.isArray(v) && !v.length)) delete slots[s.name]; else slots[s.name] = v; redo(); };
+    const slots = item.slots, set = (v, rebuild) => { if (v === "" || v == null || (Array.isArray(v) && !v.length)) delete slots[s.name]; else slots[s.name] = v; redo(rebuild); };
     const v = slots[s.name], type = s.type;
     let node;
     if (type === "column") {
       const name = sentColName(v), prep = v && typeof v === "object" ? v.prep : "";
-      const main = colSelect(s, name, c => set(c ? (prep ? { column: c, prep, ...(v?.n ? { n: v.n } : {}) } : c) : ""));
+      const main = colSelect(s, name, c => set(c ? (prep ? { column: c, prep, ...(v?.n ? { n: v.n } : {}) } : c) : "", true));  // 고르면 다듬기 칸이 생긴다
       node = el("span", { className: "slot-group" }, main);
       if (name && ["any", "text"].includes(s.kinds)) {
         const p = el("select", { className: "prep", title: "컬럼을 다듬어서 써요 (새 컬럼으로 계산해요)" }, el("option", { value: "", textContent: "그대로" }), ...Object.entries(cat.preps).map(([k, t]) => el("option", { value: k, textContent: t })));
         p.value = prep ?? "";
-        p.onchange = () => set(p.value ? { column: name, prep: p.value, ...(p.value === "first_n" ? { n: 3 } : {}) } : name);
+        p.onchange = () => set(p.value ? { column: name, prep: p.value, ...(p.value === "first_n" ? { n: 3 } : {}) } : name, true);
         node.append(p);
         if (prep === "first_n") node.append(el("input", { className: "num", type: "number", min: 1, value: v.n ?? 3, title: "글자 수", onchange: e => set({ ...v, n: +e.target.value }) }));
       }
@@ -235,11 +235,12 @@ function SentenceView(host, ctx) {
     if (item.result) showResult(out, item.result);  // 다시 그릴 때 구한 결과를 남긴다
     return card;
   }
-  // 기간 한 줄: 날짜 컬럼 + 자유로 쓴 기간(읽은 결과를 바로 보인다). 묶음 공유일 때는 보이지 않는다.
+  // 기간 한 줄: 날짜 컬럼 + 자유로 쓴 기간(읽은 결과를 바로 보인다). 묶음 공유일 때와 날짜 컬럼이 없는 테이블에서는 보이지 않는다.
   function sentPeriodRow(item, again) {
     item.period ??= { column: colList().find(c => c[1] === "date")?.[0] ?? "", text: "", span: null };
     const row = el("div", { className: "speriod" }), p = item.period;
     const draw = () => {
+      if (!colList().some(c => c[1] === "date")) { row.replaceChildren(); return; }
       if (shared.on) { row.replaceChildren(el("span", { className: "hint", textContent: "기간은 묶음에서 정한 기간을 함께 써요." })); return; }
       row.replaceChildren(periodInputs(p, again));
     };

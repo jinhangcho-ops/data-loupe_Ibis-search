@@ -338,9 +338,10 @@ def pivot(expr, spec, values_of):
             raise ValueError(f"'{column}'의 값이 {MAX_PIVOT}개보다 많아 열로 펼칠 수 없어요. 조건으로 줄이거나 다른 컬럼을 고르세요.")
         taken = {n.casefold() for n in [*aggs, *rows]}  # DuckDB는 컬럼 이름의 대소문자를 가리지 않아 Y와 y가 부딪친다
         used = set(taken)
+        clash = any(str(v).casefold() in taken for v in found)
         for v in found:
             name = str(v)
-            if name.casefold() in taken:
+            if clash:
                 name = f"{column}={v}"
             base, i = name, 2
             while name.casefold() in used:

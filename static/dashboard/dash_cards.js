@@ -126,7 +126,7 @@ function paintKpi(card, colors, board) {
   const color = pickColor(card, "series", card.data?.by_unit?.day?.series[0]?.name ?? card.data?.values?.names?.[0] ?? card.title, colors, 0);
   const spark = days.filter(x => x != null).length > 1 ? svg("svg", { viewBox: "0 0 120 30", class: "kpi-spark", preserveAspectRatio: "none" }, svg("polyline", { points: sparkPoints(days, 120, 30), fill: "none", stroke: color, "stroke-width": 1.8 })) : "";
   return box("kpi", el("div", { className: "kpi-top" }, el("span", { className: "kpi-icon", style: `color:${color}` }, iconSvg(card.view?.icon)),  // 카드 이름은 제목 줄에 있어 값만 크게
-    el("div", { className: "kpi-val", textContent: showValue(v, fmt, card.view?.unit_text) })), said ? el("div", { className: "bcmp " + said.tone, textContent: said.text }) : "", spark,
+    el("div", { className: "kpi-val", textContent: showValue(v, fmt, card.view?.unit_text), style: `--n:${showValue(v, fmt, card.view?.unit_text).length}` })), said ? el("div", { className: "bcmp " + said.tone, textContent: said.text }) : "", spark,
     pair ? el("div", { className: "hint kpi-pair", textContent: `${pair.num_label} ${showValue(pair.num)} · ${pair.den_label} ${showValue(pair.den)}` }) : "");
 }
 
@@ -212,7 +212,9 @@ function paintTargetTrend(card, colors) {
   if (target != null) belowPolygons(xs, vs, target, yOf).forEach(p => kids.push(svg("polygon", { points: p.map(q => q.map(n => n.toFixed(1)).join(",")).join(" "), fill: colors.series[1], opacity: 0.3 })));
   kids.push(svg("polyline", { points: vs.map((v, i) => v == null ? null : `${xs[i].toFixed(1)},${yOf(v).toFixed(1)}`).filter(Boolean).join(" "), fill: "none", stroke: color, "stroke-width": 2 }));
   if (target != null) kids.push(svg("line", { x1: pad, x2: W - pad, y1: yOf(target), y2: yOf(target), stroke: colors.ink, "stroke-dasharray": "6 4" }));
-  const now = cardValue(card), says = target == null ? (card.data?.target?.error || "목표를 아직 정하지 않았어요") : now == null ? "—" : `목표보다 ${showGap(now - target, fmt)} ${underTarget(now, target) ? "낮아요" : overTarget(now, target) ? "높아요" : "같아요"}. 목표 아래로 ${crossDown(vs, target)}번 내려갔어요`;
+  const daily = zeroWhenEmpty(card.data?.by_unit?.day?.series?.[0]?.agg), total = cardValue(card);  // 합계·개수의 기간 값은 날들의 합이라 하루 목표(점선)와 견줄 수 없다: 선에 그린 날들의 평균과 견준다
+  const now = total != null && daily ? real.reduce((a, b) => a + b, 0) / real.length : total;
+  const says = target == null ? (card.data?.target?.error || "목표를 아직 정하지 않았어요") : now == null ? "—" : `${daily ? "일 평균이 " : ""}목표보다 ${showGap(now - target, fmt)} ${underTarget(now, target) ? "낮아요" : overTarget(now, target) ? "높아요" : "같아요"}. 목표 아래로 ${crossDown(vs, target)}번 내려갔어요`;
   return frame(W, H, ...kids, stext(pad, H - 6, says, { "font-size": 11, fill: colors.text }));
 }
 
@@ -399,12 +401,13 @@ function paintDeviation(card, colors) {
 // sentence: 사용자가 쓴 문장 틀의 {빈칸}에 값·직전·비교·기준일을 넣는다. 계산 못 한 빈칸은 —(이유는 마우스를 올리면). 빈칸에도 조건 색·화살표 규칙(규칙의 컬럼 = 빈칸 이름)
 function paintSentence(card, colors) {
   const blanks = card.data?.values?.blanks ?? {}, view = card.view, compiled = compileRules(view.cond_rules, Object.fromEntries(Object.entries(blanks).map(([n, b]) => [n, b.kind === "value" || b.kind === "prev" ? "num" : "word"])));
-  const spans = templateParts(view.template).map(p => {
+  const spans = templateParts(view.template).map((p, i, parts) => {
     if (p.text != null) return document.createTextNode(p.text);
     const b = blanks[p.blank];
     if (!b) return el("span", { className: "blank err", textContent: "—", title: `‘${p.blank}’ 빈칸을 아직 정하지 않았어요` });
     if (b.error) return el("span", { className: "blank err", textContent: "—", title: b.error });
-    const value = b.kind === "value" ? b.cur : b.kind === "prev" ? b.prev : b.text, rule = matchRule(compiled, p.blank, value);
+    const said = b.kind === "delta" && b.text && /보다\s*$/.test(parts[i - 1]?.text ?? "") ? b.text.replace(/^[^()]*?보다 /, "") : b.text;
+    const value = b.kind === "value" ? b.cur : b.kind === "prev" ? b.prev : said, rule = matchRule(compiled, p.blank, value);
     const arrow = rule && ruleArrow(rule, b.cur, b.prev, view.better, x => showValue(x, b.format)), span = el("span", { className: "blank", textContent: typeof value === "number" || value == null ? showValue(value, b.format) : String(value) });
     if (rule) span.style.cssText = `background:${alpha(rule.color, 0.28)};border-radius:4px;padding:0 4px`;
     if (arrow) span.append(el("span", { className: "carrow " + arrow.tone, textContent: " " + arrow.text, style: arrow.color ? `color:${arrow.color}` : "" }));

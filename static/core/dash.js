@@ -90,7 +90,7 @@ const labelIndex = (order, name) => { const i = order.indexOf(name); return i >=
 // 카드에 colors가 없는 임시 카드(탐색 차트)는 계열 순서(index)로 정한다. 지정 색은 라이트·다크가 같다.
 function pickColor(card, group, name, colors, index = 0) {
   const c = card.colors, order = c && c[group === "parts" ? "parts_order" : "order"], i = order ? labelIndex(order, name) : index;
-  return c?.[group][name] ?? colors.palette?.[i] ?? colors.series[i % colors.series.length];
+  return c?.[group]?.[name] ?? colors.palette?.[i] ?? colors.series[i % colors.series.length];
 }
 
 // ---------- 카드의 값 → 그릴 모양 ----------
@@ -227,6 +227,7 @@ const usesAna = card => card.kind === "analysis" && !!card.data?.values && (!car
 // 색을 고를 수 있는 이름들: 분석 그림은 주 색·보조 색, 도넛·파이는 조각 이름, 나머지는 계열 이름
 function colorNames(card) {
   if (card.kind === "geomap") return { group: "parts", names: (card.data?.values?.regions ?? []).map(r => r.name).slice(0, 30) };  // 지도 카드: 영역마다 색을 따로 정할 수 있다(정하지 않으면 값에 따라 바탕 색의 진하기)
+  if (card.kind === "funnel") return { group: "series", names: ["단계 막대", "다음 단계", "이탈"] };
   const s = cardSeries(card);
   if (usesAna(card)) return { group: "series", names: ["주 색", "보조 색"] };
   if (!s) return { group: "series", names: [] };
@@ -279,7 +280,7 @@ function chartConfig(card, colors, options = {}) {
     return { label: d.label, data: d.values, borderColor: c, backgroundColor: type === "area" || type === "radar" ? alpha(c, 0.14) : c, fill: type === "area" || type === "radar",
              tension: type === "line" || type === "area" ? 0.3 : 0, borderWidth: 2, pointRadius: s.labels.length > 24 ? 0 : 3, spanGaps: true };
   });
-  const legend = { display: pie || datasets.length > 1, labels: { color: colors.text } };
+  const legend = { display: pie || datasets.length > 1, labels: { color: colors.text, sort: (a, b) => a.datasetIndex - b.datasetIndex } };  // 넣은 순서(order는 선을 막대 앞에 그리려고 쓴다)
   const scales = pie ? {} : type === "radar" ? { r: { ticks: { color: colors.text, backdropColor: "transparent" }, grid: { color: colors.line }, pointLabels: { color: colors.text } } }
     : { x: { ...axis, ...(stacked ? { stacked: true } : {}), ...(hbar ? ranges.y : {}) }, y: { ...axis, ...(stacked ? { stacked: true } : {}), ...(hbar ? {} : ranges.y) },
         ...(right ? { y1: { ...axis, position: "right", grid: { drawOnChartArea: false }, ...ranges.y1 } } : {}) };
@@ -450,7 +451,7 @@ class DashBoard extends Board {
       input.onchange = () => {
         const v = input.value.trim();
         if (!HEX.test(v)) { input.value = now; err.textContent = `‘${v}’은 색 코드가 아니에요. #11706f처럼 적어 주세요.`; return; }
-        card.colors[group][name] = v;
+        (card.colors[group] ??= {})[name] = v;
         this.changed?.();
         this.draw();
       };

@@ -226,8 +226,8 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:3px; padd
 .cardmenu .cm-field > select, .cardmenu .cm-field > input { flex:0 1 220px; }
 .cardmenu .cm-note { margin:0; }
 /* 메뉴 안의 버튼은 .drop .pop button(글자만)을 이겨야 한다: 주 동작 [카드 추가]만 채우고, [저장]은 테두리, [값 추가]는 글자 링크 */
-.drop .pop.cardmenu .btn { border:1px solid var(--line); background:var(--card); font-weight:600; justify-content:center; }
-.drop .pop.cardmenu .btn.p { background:var(--accent); border-color:var(--accent); color:var(--on-accent); align-self:flex-start; }
+.drop .pop .btn { border:1px solid var(--line); background:var(--card); font-weight:600; justify-content:center; }
+.drop .pop .btn.p { background:var(--accent); border-color:var(--accent); color:var(--on-accent); align-self:flex-start; }
 .drop .pop.cardmenu .linkish { color:var(--accent); align-self:flex-start; padding:4px 0; }
 .cbox { height:100%; overflow:auto; display:flex; flex-direction:column; gap:6px; }
 .bbody.paint { aspect-ratio:auto; min-height:170px; max-height:none; }

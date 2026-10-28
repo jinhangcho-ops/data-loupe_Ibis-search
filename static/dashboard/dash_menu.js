@@ -39,7 +39,7 @@ function initCardMenu(root, host) {
   const gAgg = el("select", { title: "영역마다 구할 값. 점의 값 컬럼을 골랐을 때 써요" }, ...[["sum", "합계"], ["mean", "평균"], ["min", "최소"], ["max", "최대"], ["count", "점 수"]].map(([v, n]) => el("option", { value: v, textContent: n })));
   const gPoints = el("input", { type: "checkbox", checked: true }), gTiles = el("input", { type: "checkbox" });
   const gNote = el("div", { className: "hint cm-note", textContent: "지도 배경을 켜면 보는 범위가 OpenStreetMap 서버(tile.openstreetmap.org)로 전송돼요. 기본은 꺼져 있어요." });
-  const template = el("textarea", { rows: 2, placeholder: "예: 오늘 매출은 {매출}이고 어제보다 {비교}예요 ({기준일} 기준)", style: "width:100%;font-size:12px" });
+  const template = el("textarea", { rows: 2, placeholder: "예: 오늘 매출은 {매출}이고 {비교} ({기준일} 기준)", style: "width:100%;font-size:12px" });
   const condRules = lineEditor("", parseRuleLine, "색 규칙(한 줄에 하나): 컬럼 | 식 | #색 | 화살표 | 칸·줄\n예: 상태 | *지연* | #e03131 | 없음 | 줄");
   const stateRules = lineEditor("", parseStateLine, "상태 규칙(한 줄에 하나): 컬럼 연산자 값 단계\n예: cpu >= 90 이상 / 상태 = DOWN 주의");
   const linkLines = lineEditor("", parseLinkLine, "연결선(한 줄에 하나): 출발 -> 도착\n예: 라우터1 -> 서버1");

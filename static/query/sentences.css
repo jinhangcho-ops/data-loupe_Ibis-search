@@ -37,7 +37,7 @@
 .slot-wrap, .slot-group { display:inline-flex; flex-wrap:wrap; gap:4px; align-items:center; }
 .slot-wrap.bad select, .slot-wrap.bad input { border-color:var(--err); }
 .slot-wrap select, .slot-wrap input { width:auto; min-width:90px; max-width:260px; padding:3px 8px; border-radius:999px; background:var(--accent-bg); border-color:var(--accent-line); }
-.slot-wrap input.num { min-width:60px; width:80px; }
+.slot-wrap input.num { min-width:60px; width:120px; }
 .slot-wrap input.wide { min-width:220px; }
 .slot.drop.over select { outline:2px dashed var(--accent); }
 .slot-wrap .fp select, .slot-wrap .fp input { border-radius:999px; }
@@ -57,6 +57,7 @@
 .sadd-note .ok, .sadd-note .err { margin-bottom:2px; }
 .mrow { padding:8px 10px; border:1px solid var(--line); border-radius:10px; margin-bottom:6px; background:var(--card); }
 .mrow.other { opacity:.85; border-style:dashed; }
+.mform:empty { display:none; }
 .mform { padding:10px; border:1px solid var(--accent-line); border-radius:12px; background:var(--card); }
 .mform .row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px; }
 .mform .row input, .mform .row select { flex:1 1 120px; width:auto; }
