@@ -254,7 +254,7 @@ showUsage();
 setInterval(showUsage, 5000);
 
 // 전체 시간: [검색]을 누르면 0에서 다시 시작하고, 그 뒤의 집계·차트·저장 시간을 더해 간다.
-// 위쪽 줄의 작업 알약에 도는 동안은 "○○ 중 · 예상 · 걸린 시간"과 [취소], 끝나면 "끝 · 걸린 시간"이 나온다.
+// 위쪽 줄의 작업 알약에 도는 동안은 "○○ 중 · 예상 · 걸린 시간"과 [취소], 끝나면 "완료 · 걸린 시간"이 나온다.
 // 작업 하나의 예상 = 기준 테이블 행 수 × 그 작업 종류·행 수 구간의 직전 행당 시간(나노초/행, 설정으로 기억). 그 구간에서 안 해 봤으면 예상에 더하지 않는다.
 const rates = {};  // 설정 이름 → 행당 시간. 처음 쓸 때 저장된 값을 읽어 둔다.
 // 행당 시간의 설정 이름: 작업 종류와 행 수의 구간(10배 단위, settings.TIME_BANDS 안으로 맞춘다)마다 따로다.
@@ -669,17 +669,19 @@ if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
 });
 // 드라이버 안내(drivers.py의 entry): 설명, 설치 명령과 [복사], 따로 설치할 프로그램, exe 안내. 연결이 드라이버 때문에 실패한 자리와 드라이버 표가 함께 쓴다.
 const DRIVER_STATUS = { installed: "설치됨", missing: "설치 안 됨", program_needed: "프로그램 필요" };
-function copyCommand(text) {
-  const b = el("button", { className: "ghost", textContent: "복사", onclick: async () => {
+function copyCommand(text, label = "복사") {
+  const b = el("button", { className: "ghost", textContent: label, title: text, onclick: async () => {
     try { await navigator.clipboard.writeText(text); b.textContent = "복사됨"; } catch (e) { b.textContent = "직접 골라 복사하세요"; }
-    setTimeout(() => b.textContent = "복사", 1500);
+    setTimeout(() => b.textContent = label, 1500);
   } });
   return b;
 }
+// 받는 곳: 기본 브라우저로 여는 링크(pywebview는 바깥 주소를 브라우저로 연다)와 주소 복사. 앱이 내려받거나 실행하지 않는다
+const driverGet = d => d.url ? [el("a", { href: d.url, target: "_blank", rel: "noopener noreferrer", className: "btn", textContent: "받는 곳 열기", title: d.url }), " ", copyCommand(d.url, "주소 복사")] : [el("span", { className: "hint", textContent: "따로 받을 것이 없어요" })];
 const driverExtra = d => [d.program && `따로 설치할 프로그램: ${d.program.name} (${d.program.url})`, d.after, d.notice].filter(Boolean);
 function showDriverHint(d) {
   $("driver-hint").replaceChildren(el("div", { className: "drv-guide" }, el("div", { textContent: d.explanation }),
-    el("div", { className: "row", style: "align-items:center" }, el("code", { textContent: d.command }), copyCommand(d.command)),
+    el("div", { className: "row", style: "align-items:center" }, ...driverGet(d)),
     ...driverExtra(d).map(t => el("div", { className: "hint", textContent: t, style: "margin:0; user-select:text" }))));
   $("driver-hint").classList.remove("hidden");
 }
@@ -692,7 +694,7 @@ if (hasConnect) {
       $("drv-rows").replaceChildren(...drivers.map(d => el("tr", {}, el("td", { textContent: d.group }), el("td", { textContent: d.name, title: "주소 예: " + d.address }),
         el("td", { className: d.status, textContent: DRIVER_STATUS[d.status] }),
         el("td", {}, d.explanation, ...[`주소 예: ${d.address}`, ...driverExtra(d)].map(t => el("div", { className: "hint", textContent: t, style: "margin:2px 0 0; user-select:text" }))),
-        el("td", {}, el("code", { textContent: d.command }), " ", copyCommand(d.command)))));
+        el("td", {}, ...driverGet(d)))));
       say("err-drivers", "", true);
       $("drivers-panel").classList.remove("hidden");
     } catch (e) { connMsg(e.message); }

@@ -189,7 +189,7 @@ def size_text(n):
 
 
 def message(found):
-    """화면에 보일 글: '실행하면 약 1.2 GB를 처리합니다(추정 · 방법)'."""
+    """화면에 보일 글: '실행하면 약 1.2 GB를 처리해요(추정 · 방법)'."""
     if found["bytes"] is None:
         return f"처리 용량: 알 수 없음({found['how']})"
     return f"실행하면 {'' if found['exact'] else '약 '}{size_text(found['bytes'])}를 처리해요({'정확' if found['exact'] else '추정'} · {found['how']})"

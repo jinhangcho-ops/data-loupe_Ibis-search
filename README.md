@@ -72,7 +72,7 @@ pip install -c constraints.txt -r requirements-dev.txt
 python -m pytest tests_pytest -q
 ```
 
-DuckDB·Parquet·CSV 밖의 DB에 접속하려면 그 DB의 드라이버를 더 설치합니다. 연결 창의 [드라이버 확인]이 설치 명령을 보여 줍니다.
+DuckDB·Parquet·CSV 밖의 DB에 접속하려면 그 DB의 드라이버를 더 설치합니다. 연결 창의 [드라이버 확인]이 DB마다 설치 상태와 받는 곳(PyPI)을 보여 줍니다.
 
 ## 라이선스
 

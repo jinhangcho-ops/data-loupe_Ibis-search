@@ -20,9 +20,11 @@
   #builder .row select { flex:1; min-width:0; }
   #builder #bop { flex:none; width:110px; }
   #bpick { margin-bottom:6px; }
-  .drop.up .pop { top:auto; bottom:46px; left:0; right:auto; min-width:300px; }
+  .drop.up .pop { top:auto; bottom:46px; left:0; right:auto; min-width:340px; }
   #saved-pop { padding:10px; gap:6px; }
-  #saved-pop .row { margin:0; }
+  #saved-pop .row { margin:0; flex-wrap:nowrap; }
+  #saved-pop .row input { flex:1; min-width:0; }
+  #saved-pop .row button { flex:none; border:1px solid var(--line); background:var(--card); font-weight:600; justify-content:center; }
   #sql { margin:0 0 10px; padding:8px 10px; background:var(--bg); border-radius:10px; font:12px/1.4 Consolas, monospace; white-space:pre-wrap; word-break:break-all; max-height:200px; overflow:auto; }
   #rows th { cursor:pointer; }  /* 결과 표의 머리글은 누르면 그 컬럼으로 정렬한다. */
   .pane > .table-wrap > table { min-width:100%; }

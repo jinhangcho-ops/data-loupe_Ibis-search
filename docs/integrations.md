@@ -2,7 +2,7 @@
 
 [← README](../README.md) · [쿼리](query.md) · [분석](analysis.md) · [수집](collect.md) · [연동](integrations.md) · [대시보드](dashboard.md)
 
-이 프로그램을 다른 앱·서비스(Slack, Notion, Teams 같은 웹훅, Google Analytics 4, LLM)와 잇는 화면입니다. 서비스마다 하는 일(결과 보내기·Slack 봇·GA4 가져오기·LLM)이 카드로 나뉘어 있고, 카드 오른쪽 위에 상태(보낼 곳 2개, 켜짐, 설정됨(꺼짐), 설정 안 됨 등)가 보입니다. 설정하지 않은 서비스로는 아무것도 보내지 않습니다.
+이 프로그램을 다른 앱·서비스(Slack, Notion, Teams 같은 웹훅, Google Analytics 4, LLM)와 잇는 화면입니다. 서비스마다 하는 일(결과 보내기·Slack 봇·GA4 가져오기·LLM)이 카드로 나뉘어 있고, 카드 오른쪽 위에 상태(사용 중, 켜짐, 설정됨(꺼짐), 설정 안 됨, GA4는 `속성 123456789`, LLM은 회사·모델 이름 등)가 보입니다. 설정하지 않은 서비스로는 아무것도 보내지 않습니다.
 
 ![연동 화면: 결과 보내기·Slack 봇·GA4·LLM·업로드 기록·새 서비스 추가하기 카드](photo/integrations-hub.png)
 

@@ -101,7 +101,7 @@ def test_frozen_command_and_restart_note(monkeypatch):
     monkeypatch.setattr(drivers, "module_found", lambda m: False)
     d = drivers.entry("snowflake")
     assert d["command"] == f'py -3.14 -m pip install --target "%APPDATA%\\DataLoupe\\drivers" -c "{PINS}" "ibis-framework[snowflake]=={pinned()}"'
-    assert d["after"] == "설치 뒤 프로그램을 다시 켜세요." and d["notice"] == ""
+    assert "DataLoupe" in d["after"] and "drivers" in d["after"] and d["after"].endswith("설치 뒤 프로그램을 다시 켜세요.") and d["notice"] == ""  # Python이 있어도 넣을 폴더를 알린다
 
 
 def test_frozen_without_python_shows_notice(monkeypatch):
@@ -110,7 +110,7 @@ def test_frozen_without_python_shows_notice(monkeypatch):
     monkeypatch.setattr(drivers, "module_found", lambda m: False)
     d = drivers.entry("snowflake")
     assert "이 exe에는 Snowflake 드라이버가 없어요" in d["notice"]
-    assert "Python 3.14를 설치한 뒤 위 명령을 실행하거나 소스로 실행하세요" in d["notice"] and drivers.PYTHON_URL in d["notice"]
+    assert "Python 3.14를 설치하고 받는 곳의 패키지를" in d["notice"] and "DataLoupe" in d["notice"] and drivers.PYTHON_URL in d["notice"]
     monkeypatch.delattr(sys, "frozen")
     assert drivers.entry("snowflake")["notice"] == ""  # 소스 실행에는 안내가 없다.
 
@@ -240,3 +240,11 @@ def test_connect_route_strips_placeholder_before_anything_parses_it(client, monk
     res = client.post("/api/connect", json={"kind": "url", "url": "postgresql://postgres.a:[YOUR-PASSWORD]@127.0.0.1:6543/x", "password": "x"})
     assert res.status_code == 400 and res.get_json()["error"] == "거부"
     assert seen[0]["url"] == "postgresql://postgres.a@127.0.0.1:6543/x"
+
+
+def test_every_driver_points_to_where_to_get_it():
+    by = {d["key"]: d for d in drivers.overview()}
+    assert by["snowflake"]["url"] == "https://pypi.org/project/snowflake-connector-python/"
+    assert by["redshift"]["url"] == "https://pypi.org/project/psycopg/"  # 빌려 쓰는 드라이버의 패키지
+    assert by["delta"]["url"].startswith("https://duckdb.org/") and by["sqlite"]["url"] is None  # 파이썬에 들어 있는 것은 받을 곳이 없다
+    assert all(d["url"] is None or d["url"].startswith("https://") for d in by.values())

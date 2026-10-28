@@ -27,7 +27,7 @@
       <input id="user" placeholder="아이디 (없으면 비워 두세요)" style="margin-bottom:6px" autocomplete="off">
       <input id="password" type="password" placeholder="비밀번호 (없으면 비워 두세요)" autocomplete="off">
       <div class="hint">비밀번호는 저장하지 않아요.</div>
-      <div class="row" style="align-items:center"><button class="ghost" id="drv-open" title="데이터베이스마다 필요한 드라이버가 이 PC에 있는지 보고 설치 명령을 알려 줘요. 아무것도 내려받지 않아요.">드라이버 확인</button></div>
+      <div class="row" style="align-items:center"><button class="ghost" id="drv-open" title="데이터베이스마다 필요한 드라이버가 이 PC에 있는지 보고 받는 곳을 알려 줘요. 아무것도 내려받지 않아요.">드라이버 확인</button></div>
     </div>
     <details class="conn-more"><summary>고급 설정</summary>
       <div class="opt" id="memory-box" title="DuckDB 파일을 계산할 때 쓸 메모리의 최대치예요. 너무 낮으면 큰 집계가 느려지거나 메모리가 모자라 실패할 수 있어요. 다음 연결부터 적용돼요."><span>메모리 한도</span><select id="memory"><option value="0">제한 없음</option><option value="1000">1GB</option><option value="2000">2GB</option><option value="4000">4GB</option><option value="8000">8GB</option><option value="custom">직접 입력</option></select><input id="memory-gb" type="number" step="any" placeholder="GB" class="hidden" style="width:80px; flex:none"></div>
@@ -40,12 +40,12 @@
     <div id="driver-hint" class="hidden"></div>
   </div>
 </div>
-<!-- 드라이버 확인: 묶음(DB·DW·DL)별 이름·상태·설명·설치 명령 -->
+<!-- 드라이버 확인: 묶음(DB·DW·DL)별 이름·상태·설명·받는 곳(링크·주소 복사) -->
 <div id="drivers-panel" class="modal hidden">
   <div class="modal-box drv-box">
     <div class="head"><h3>드라이버 확인</h3><button id="drv-close" class="ib" title="닫기" style="margin-left:auto"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
-    <div class="hint">이 PC에 설치된 드라이버만 확인해요. 자동으로 내려받거나 설치하지 않으니, 필요한 명령을 복사해 직접 실행하세요.</div>
-    <div class="table-wrap"><table class="drv-table"><thead><tr><th>분류</th><th>이름</th><th>상태</th><th>설명</th><th>설치 명령</th></tr></thead><tbody id="drv-rows"></tbody></table></div>
+    <div class="hint">이 PC에 설치된 드라이버만 확인해요. 자동으로 내려받거나 설치하지 않아요. [받는 곳 열기]로 브라우저에서 열거나 주소를 복사해 직접 받으세요.</div>
+    <div class="table-wrap"><table class="drv-table"><thead><tr><th>분류</th><th>이름</th><th>상태</th><th>설명</th><th>받는 곳</th></tr></thead><tbody id="drv-rows"></tbody></table></div>
     <div class="err" id="err-drivers"></div>
   </div>
 </div>

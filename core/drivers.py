@@ -83,6 +83,12 @@ EXTENSIONS = {
     "iceberg": ("DuckDB 확장 iceberg", "iceberg_scan('경로')",
                 "Iceberg 테이블을 읽게 해 줘요. 파이썬 패키지가 아니라 DuckDB 확장이에요."),
 }
+# 받는 곳: 드라이버(주소 앞부분) → PyPI 패키지 이름. 화면은 실행할 명령 대신 이 쪽으로 넘어가는 단추와 주소 복사를 보인다
+PACKAGES = {"athena": "PyAthena", "bigquery": "google-cloud-bigquery", "clickhouse": "clickhouse-connect", "databricks": "databricks-sql-connector",
+            "druid": "pydruid", "duckdb": "duckdb", "exasol": "pyexasol", "flink": "apache-flink", "impala": "impyla", "materialize": "psycopg",
+            "mssql": "pyodbc", "mysql": "mysqlclient", "oracle": "oracledb", "postgres": "psycopg", "pyspark": "pyspark", "risingwave": "psycopg2",
+            "singlestoredb": "singlestoredb", "snowflake": "snowflake-connector-python", "trino": "trino"}
+EXTENSIONS_URL = "https://duckdb.org/docs/stable/extensions/overview"
 GROUPS = ("DB", "DW", "DL")
 PYTHON_URL = "https://www.python.org/downloads/"
 FROZEN_PYTHON = "3.14"  # exe를 만든 파이썬. 따로 설치하는 드라이버도 이 버전용이어야 한다.
@@ -157,12 +163,12 @@ def exe_notice(what):
     """exe에서 Python 3.14를 찾지 못할 때의 안내. 소스 실행이거나 Python이 있으면 빈 글."""
     if not frozen() or has_python():
         return ""
-    return f"이 exe에는 {what} 드라이버가 없어요. Python {FROZEN_PYTHON}를 설치한 뒤 위 명령을 실행하거나 소스로 실행하세요. Python 받는 곳: {PYTHON_URL}"
+    return f"이 exe에는 {what} 드라이버가 없어요. Python {FROZEN_PYTHON}를 설치하고 받는 곳의 패키지를 %APPDATA%\\DataLoupe\\drivers 폴더에 설치하거나(pip install --target) 소스로 실행하세요. Python 받는 곳: {PYTHON_URL}"
 
 
 def after_note():
-    """exe에서 명령을 실행한 뒤 할 일. 소스 실행이면 빈 글."""
-    return "설치 뒤 프로그램을 다시 켜세요." if frozen() else ""
+    """exe에서 할 일: 받은 패키지를 넣을 폴더와 다시 켜기. 소스 실행이면 빈 글."""
+    return "exe는 %APPDATA%\\DataLoupe\\drivers 폴더의 패키지만 찾아요(pip install --target). 설치 뒤 프로그램을 다시 켜세요." if frozen() else ""
 
 
 def module_found(module):
@@ -225,7 +231,7 @@ def entry(key, extensions=None):
         name, address, explanation = EXTENSIONS[key]
         installed = (extension_states() if extensions is None else extensions).get(key)
         status = "installed" if installed else "missing"
-        return {"key": key, "group": "DL", "name": name, "status": status, "explanation": explanation, "command": extension_command(key),
+        return {"key": key, "group": "DL", "name": name, "status": status, "explanation": explanation, "command": extension_command(key), "url": EXTENSIONS_URL,
                 "program": None, "address": address, "notice": exe_notice(name) if status == "missing" else "", "after": after_note()}
     if key in BORROWED:
         name, group, scheme, address, explanation = BORROWED[key]
@@ -238,6 +244,7 @@ def entry(key, extensions=None):
     else:
         status = "installed" if not program or program_ready(program) else "program_needed"
     return {"key": key, "group": group, "name": name, "status": status, "explanation": explanation, "command": pip_command(extra),
+            "url": f"https://pypi.org/project/{PACKAGES[scheme]}/" if scheme in PACKAGES else None,
             "program": dict(zip(("name", "url"), PROGRAMS[program])) if program else None, "address": address,
             "notice": exe_notice(name) if status == "missing" else "", "after": after_note()}
 
