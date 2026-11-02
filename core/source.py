@@ -141,15 +141,18 @@ def open_duckdb(path, read_only=True, memory=None, threads=None):
 def release(con):
     """쿼리가 끝난 뒤 DB가 캐시로 쥔 데이터를 비운다. 결과는 이미 받아 갔고, 다음 쿼리는 필요한 만큼 다시 읽는다.
     메모리 한도를 잠깐 FLOOR로 낮췄다가 원래 값으로 되돌리는 방식이다. 연결 스레드에서 부른다.
-    이 PC에서 계산하는 파일 연결만 한다. 주소로 접속한 DB·DW는 서버가 계산하므로 하지 않는다(쿼리를 더 보내지 않는다)."""
-    restore = getattr(con, "local", None)
-    if not restore:
-        return
-    try:
-        con.con.execute(f"set memory_limit='{FLOOR}'")
-    except Exception:  # 쥔 것이 많아 낮추지 못하면 이번에는 비우지 않는다(쿼리 결과에는 영향이 없게).
-        pass
-    con.con.execute(restore)  # 보이는 값("1.3 GiB")은 반올림돼 있어, 연 때의 값으로 되돌린다.
+    이 PC에서 계산하는 파일 연결과 받아 둔 결과(held)의 DuckDB만 한다. 주소로 접속한 DB·DW는 서버가 계산하므로 하지 않는다(쿼리를 더 보내지 않는다).
+    held는 KEEP개 결과를 캐시에 쥔 채 남아 테이블을 바꿀 때마다 메모리가 쌓였다(F01). 비워도 결과는 held 파일에 있어 다시 받지 않는다."""
+    from core import held  # held가 source를 import하므로 여기서
+    for c in (con, held.store["con"]):
+        restore = getattr(c, "local", None)
+        if not restore:
+            continue
+        try:
+            c.con.execute(f"set memory_limit='{FLOOR}'")
+        except Exception:  # 쥔 것이 많아 낮추지 못하면 이번에는 비우지 않는다(쿼리 결과에는 영향이 없게).
+            pass
+        c.con.execute(restore)  # 보이는 값("1.3 GiB")은 반올림돼 있어, 연 때의 값으로 되돌린다.
 
 
 def table_names(paths):

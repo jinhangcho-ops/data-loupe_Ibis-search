@@ -14,7 +14,7 @@ UNIONS = ["left", "inner", "intersect", "except"]  # 이어붙이기: left는 �
 STACKS = ("left", "inner")  # 아래로 잇는 방식(출처 컬럼을 붙인다). intersect·except는 행을 고르는 방식이라 붙이지 않는다
 SOURCE = "출처"  # 이어붙이면 더하는 컬럼: 그 행이 온 테이블 이름
 OPS = {"=": operator.eq, "!=": operator.ne, ">=": operator.ge, "<=": operator.le, ">": operator.gt, "<": operator.lt}
-CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도 / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
+CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 < 다른컬럼 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도 / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
 SORT_GUIDE = "컬럼 [asc|desc]"
 
 # (판별, 종류, 한글 이름, 입력값 변환). 종류는 전처리가 컬럼을 나눌 때 쓴다.
@@ -407,6 +407,11 @@ def parse_one(line, expr, quotes=True):
         c = get(col)
         if c.type().is_nested():
             raise ValueError(f"'{name or col}'은 {type_name(c.type())} 컬럼이라 비교할 수 없어요. 안의 필드(예: {name or col}.이름)나 is null을 쓰세요.")
+        if quotes and raw.strip() in expr.columns:  # 따옴표 없이 컬럼 이름과 똑같이 쓰면 그 컬럼과 비교. 같은 글자를 값으로 찾으려면 '값'으로 감싼다(따옴표를 끈 줄은 늘 값)
+            other = expr[raw.strip()]
+            if kind(other.type()) != kind(c.type()) and not (other.type().is_numeric() and c.type().is_numeric()):
+                raise ValueError(f"'{raw.strip()}'은 {type_name(other.type())} 컬럼이라 {type_name(c.type())} 컬럼과 비교할 수 없어요.")
+            return OPS[op](c, other)
         value = convert(c.type(), unquote(raw, quotes))
         after = op in ("=", "!=", "<=", ">") and end_after(c.type(), unquote(raw, quotes), value)  # 날짜만 쓴 값은 그날 하루, HH:MM은 그 1분(기간·between과 같은 규칙)
         if after:

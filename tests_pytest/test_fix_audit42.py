@@ -18,7 +18,7 @@ async function runSql() { sqlMore = false; sqlPager(); }
 """ % pager
     assert run_node(tmp_path, "async function " + busy.split("async function ", 1)[1] + body) == [False, True]  # 예전엔 busy가 [다음]을 다시 켰다
     page = between("index.html", "function sqlPager()", "// 테이블 칩")
-    assert page.count(".finally(sqlPager)") == 2
+    assert page.count(".finally(sqlPager)") == 3  # 이전·다음·쪽 번호 칸
 
 
 def test_other_busy_buttons_are_set_again_after_work():

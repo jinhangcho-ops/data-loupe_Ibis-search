@@ -40,9 +40,23 @@
 // 연결에 성공하면 대시보드 최신화가 시작되고(dash_refresh.js) 진행은 팝업과 위쪽 줄 알약에 보인다.
 let target = null;
 function afterConnect() { if (target) location.href = target; }
-document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => {
+// 지난번 연결이 폴더·파일이면 카드를 거치지 않고 그 연결로 잇는다. 서버는 폴더 연결의 파일 이름을 남기지 않으므로 찾은 파일이 하나뿐일 때만 잇는다(아니면 false).
+async function connectLast() {
+  const { recent } = await api("/api/recent");
+  if (recent?.kind !== "folder") return false;
+  const { files, flat } = await api("/api/files", { path: recent.path, kinds: SERVER.file_kinds, deep: true });
+  if (files.length + flat.length !== 1) return false;
+  const body = files.length ? { kind: "folder", path: recent.path, file: files[0] } : { kind: "folder", path: recent.path, files: flat };
+  const { schemas } = await api("/api/connect", body);
+  await showConnected(!!body.files, schemas, body);  // 위쪽 줄에 연결 이름이 뜬다
+  if (typeof startRefresh === "function") startRefresh();
+  return true;
+}
+document.querySelectorAll("[data-go]").forEach(b => b.onclick = async () => {
   target = b.dataset.go;
   if (["/collect", "/integrations", "/dashboard"].includes(target) || connected) return location.href = target;
+  try { if (await connectLast()) return location.href = target; }
+  catch (e) { connMsg(e.message); }  // 폴더가 사라졌거나 연결이 실패하면 카드에 이유를 보인다
   openConnect(`연결하면 ${b.querySelector("b").textContent} 화면으로 넘어가요`);
 });
 resume();

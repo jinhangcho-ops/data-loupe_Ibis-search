@@ -92,6 +92,12 @@ def ask_save(name, file_types):
     return chosen[0] if chosen else None
 
 
+def ask_open():
+    """.env 파일 고르기 대화상자. 고른 경로 또는 취소하면 None."""
+    chosen = window.create_file_dialog(webview.FileDialog.OPEN, file_types=("env 파일 (*.env)", "모든 파일 (*.*)"))
+    return chosen[0] if chosen else None
+
+
 def ask_folder():
     """폴더 고르기 대화상자. 고른 폴더 또는 취소하면 None."""
     chosen = window.create_file_dialog(webview.FileDialog.FOLDER)
@@ -111,6 +117,7 @@ def closing():
 
 
 server.ask_save = ask_save
+server.ask_open = ask_open
 server.ask_folder = ask_folder
 window.events.closing += closing
 threading.Thread(target=schedule.move_old_tasks, daemon=True).start()  # 예전 이름(\ibis_search\ 폴더)으로 등록한 Windows 작업을 새 폴더로 옮긴다(작업 스케줄러가 느려도 창을 막지 않게 뒤에서).

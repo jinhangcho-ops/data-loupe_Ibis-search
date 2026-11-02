@@ -35,7 +35,7 @@ def local():
         folder = scratch.make()
         try:
             threads = settings.load().get("threads")
-            store["con"] = ibis.duckdb.connect(Path(folder, "held.duckdb"), **({"threads": threads} if threads else {}))
+            store["con"] = source.open_duckdb(Path(folder, "held.duckdb"), read_only=False, threads=threads)  # .local이 있어 source.release가 캐시를 비운다
         except Exception:
             scratch.remove(folder)
             raise

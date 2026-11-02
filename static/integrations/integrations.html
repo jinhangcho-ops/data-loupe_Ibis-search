@@ -67,7 +67,7 @@
       <div class="head"><h3>LLM</h3><span class="state" id="llm-state"></span></div>
       <div class="hint">질문으로 SQL을 만들 때 쓸 LLM을 정해요. env 파일의 위치만 저장하고, API 키는 물어볼 때마다 그 파일에서 읽어요. 데이터 값은 보내지 않아요.</div>
       <label title="파일에 LLM_PROVIDER, LLM_API_KEY, LLM_MODEL을 적어 두세요"><div class="hint">LLM env 파일 위치</div><input id="hub-llm-env" class="code" placeholder="C:\keys\llm.env"></label>
-      <div class="row"><button id="hub-llm-read">불러오기</button></div>
+      <div class="row"><button id="hub-llm-pick" class="btn" title="파일 대화상자에서 env 파일을 골라요" aria-label="env 파일 찾아보기">찾아보기</button><button id="hub-llm-read">불러오기</button></div>
       <div class="err" id="llm-msg"></div>
     </section>
 
@@ -138,6 +138,10 @@ api("/api/ga4").then(showGa4).catch(() => {});
 // LLM
 $("hub-llm-read").onclick = () => busy($("hub-llm-read"), async () => {
   try { const d = await api("/api/llm", { env: $("hub-llm-env").value.trim() }); $("hub-llm-env").value = d.env; say("llm-msg", "불러왔어요: " + d.llm, true); loadHub(); }
+  catch (e) { say("llm-msg", e.message); }
+});
+$("hub-llm-pick").onclick = () => busy($("hub-llm-pick"), async () => {
+  try { const d = await api("/api/pick", { kind: "env" }); if (d.path) $("hub-llm-env").value = d.path; }
   catch (e) { say("llm-msg", e.message); }
 });
 api("/api/llm").then(d => $("hub-llm-env").value = d.env).catch(() => {});
