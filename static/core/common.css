@@ -13,7 +13,7 @@ h2:first-child { margin-top:0; }
 h3 { font-size:15px; margin:0 0 10px; }
 input, select, textarea, button { font:inherit; }
 input, select, textarea { padding:6px 10px; border:1px solid var(--line); border-radius:6px; width:100%; background:var(--card); color:var(--text); }
-input:focus, select:focus, textarea:focus { outline:2px solid var(--accent-line); outline-offset:0; border-color:var(--accent); }
+input:focus, select:focus, textarea:focus { outline:2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset:0; border-color:var(--accent); }
 /* 버튼: 기본은 강조색으로 채운 주 동작(한 영역에 하나). .btn은 테두리만(보조 동작), .ghost는 글자만, .btn.k는 검게 채움. 모서리는 각지게(알약은 상태 칩에만). */
 button { background:var(--accent); color:var(--on-accent); border:1px solid var(--accent); border-radius:6px; cursor:pointer; width:auto; padding:6px 14px; flex:none; white-space:nowrap; font-weight:600; }
 button:focus-visible, a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
@@ -21,6 +21,7 @@ button:disabled { opacity:.5; cursor:default; }
 button.ghost { background:none; border-color:transparent; color:var(--muted); padding:0 6px; font-weight:500; }
 .btn { background:var(--card); color:var(--text); border:1px solid var(--line); height:34px; padding:0 14px; display:inline-flex; align-items:center; gap:8px; }
 .btn:hover { border-color:var(--muted); }
+.btn, .ib, .ghost, .bcard, .step, .btype, .pages a, .subnav button, .tabs2 button { transition: border-color .15s, background-color .15s, color .15s; }
 .btn.k { background:var(--text); border-color:var(--text); color:var(--card); }
 .btn.p { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
 .ib { width:34px; height:34px; padding:0; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--muted); display:inline-grid; place-items:center; }
@@ -89,6 +90,7 @@ td.nest .nest-full { margin:0; font:12px/1.4 Consolas, ui-monospace, monospace; 
 .tool { display:flex; align-items:center; gap:10px; padding:18px 28px 12px; }
 .q { flex:1; height:38px; border:1px solid var(--line); border-radius:8px; display:flex; align-items:center; gap:10px; padding:0 16px; color:var(--muted); }
 .q input { border:0; padding:0; height:100%; background:none; outline:0; }
+.q:focus-within { border-color:var(--accent); outline:2px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 .big { padding:2px 28px 10px; display:flex; align-items:baseline; gap:14px; min-width:0; }
 .big b { font-size:28px; font-weight:700; letter-spacing:-.025em; white-space:nowrap; }
 .big span { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -149,7 +151,7 @@ td.nest .nest-full { margin:0; font:12px/1.4 Consolas, ui-monospace, monospace; 
 table { border-collapse:collapse; font-size:13.5px; white-space:nowrap; }
 th, td { border-bottom:1px solid var(--line); padding:0 14px 0 0; height:40px; text-align:left; }
 th { position:sticky; top:0; z-index:1; background:var(--head); color:var(--muted); font-size:12.5px; font-weight:600; border-bottom:2px solid var(--text); }
-th small { display:block; font-weight:500; font-size:11px; color:var(--faint); margin-top:-3px; }
+th small { display:block; font-weight:500; font-size:12px; color:var(--muted); margin-top:-3px; }
 th.sorted { color:var(--accent); }
 td.num, th.num { text-align:right; }  /* 숫자 컬럼은 머리글도 오른쪽(common.js resultTable) */
 td.src { color:var(--muted); font-size:12.5px; }
@@ -165,7 +167,8 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:3px; padd
 .chips { display:flex; flex:1 1 160px; min-width:0; gap:4px; align-items:center; overflow:hidden; }
 .chips.open { flex-wrap:wrap; }
 .chips .hint { margin:0; white-space:nowrap; }
-.chip { flex:none; background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:1px 2px 1px 10px; font-size:12px; white-space:nowrap; }
+.chip { flex:none; background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:0 0 0 10px; font-size:12px; white-space:nowrap; display:inline-flex; align-items:center; }
+.chip .ghost { min-width:24px; min-height:24px; display:inline-grid; place-items:center; padding:0; }
 .chip.more { padding:2px 10px; color:var(--accent); cursor:pointer; }
 
 /* 화면 안의 큰 탭(쿼리: 탐색·SQL·지표·대시보드, 분석: 전처리·분석). 탭 줄 아래 내용은 남은 높이를 쓴다. */
@@ -197,7 +200,7 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:3px; padd
 .bnote { display:grid; place-items:center; height:100%; margin:0; text-align:center; padding:0 12px; }
 .bextra { margin:0 0 6px; cursor:default; }
 .btools { display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
-.btype { background:none; border:1px solid var(--line); border-radius:6px; padding:1px 9px; font-size:12px; color:var(--muted); }
+.btype { background:none; border:1px solid var(--line); border-radius:6px; padding:1px 9px; min-height:24px; font-size:12px; color:var(--muted); }
 .btype.on { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); font-weight:600; }
 .btype.off { opacity:.45; }  /* 이 데이터에는 안 되는 종류. 숨기지 않고 누르면 이유를 보인다 */
 .bunit { flex:0 0 64px; width:auto; height:24px; padding:0 4px; font-size:12px; }
@@ -355,3 +358,7 @@ a.btn { text-decoration:none; color:var(--text); }  /* 받는 곳 열기 같은 
 .tip, .toast { position:fixed; z-index:500; max-width:min(320px, calc(100vw - 16px)); padding:5px 9px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); font-size:12px; line-height:1.4; white-space:pre-wrap; overflow-wrap:anywhere; box-shadow:0 6px 20px rgb(15 25 30 / .18); pointer-events:none; max-height:60vh; overflow:hidden; }
 .toast { left:50%; bottom:24px; transform:translateX(-50%); }
 .toast.hidden { display:block !important; opacity:0; }  /* display:none이면 스크린리더(role=status)가 글이 바뀐 것을 놓친다. 투명으로 숨긴다(pointer-events:none이라 클릭은 막지 않는다) */
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration:0s !important; }
+  .bar.unknown > div { animation:none !important; width:100% !important; opacity:.5; }  /* collect.html의 같은 선택자가 뒤에 와서 !important가 필요 */
+}

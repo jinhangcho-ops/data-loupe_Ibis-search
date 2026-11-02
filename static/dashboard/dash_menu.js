@@ -64,7 +64,7 @@ function initCardMenu(root, host) {
     if (!Funcs.cat) return;  // 함수 사전을 받은 뒤에(받으면 show가 다시 줄을 채운다)
     const col = el("select", {}), cat = Funcs.cat;
     const picker = Funcs.picker({ ids: cat.screens.dash.filter(i => cat.byId[i].aggregate), columns: () => menuCols, onchange: () => syncRow(row) });  // 카드 계열의 집계: 함수 사전의 집계 전부 + 인자 칸
-    const row = el("div", { className: "cm-row" }, el("input", { placeholder: "이름(칸 제목)", className: "cm-label" }), col, picker.el, el("button", { className: "ghost", textContent: "×", onclick: () => { row.remove(); show(); } }));
+    const row = el("div", { className: "cm-row" }, el("input", { placeholder: "이름(칸 제목)", className: "cm-label" }), col, picker.el, el("button", { className: "ghost", textContent: "×", title: "이 줄 빼기", ariaLabel: "이 줄 빼기", onclick: () => { row.remove(); show(); } }));
     row.col = col; row.picker = picker;
     rows.append(row);
     syncRow(row);

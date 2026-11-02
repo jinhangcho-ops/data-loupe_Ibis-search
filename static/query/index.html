@@ -734,7 +734,8 @@ function gridSpec(data, origins = {}) {
     const from = origins[c] && origins[c] !== S.base ? `<small>${esc(origins[c])}</small>` : "";
     const arrow = c === sorted[0] ? (sorted[1]?.toLowerCase() === "desc" ? " ↓" : " ↑") : "";
     const number = numCol(data.rows, c);  // 숫자 컬럼은 머리글도 오른쪽에(값과 같이)
-    return `<th class="${[c === sorted[0] && "sorted", number && "num"].filter(Boolean).join(" ")}">${esc(c)}${arrow}${from}</th>`;
+    const sort = arrow ? ` aria-sort="${arrow === " ↓" ? "descending" : "ascending"}"` : "";
+    return `<th class="${[c === sorted[0] && "sorted", number && "num"].filter(Boolean).join(" ")}"${sort}>${esc(c)}${arrow}${from}</th>`;
   }).join("");
   const source = c => c === "출처" && origins[c] === "이어붙인 테이블";
   return { columns: data.columns, rows: data.rows, head, text: (r, c) => source(c) ? String(r[c] ?? "") : undefined, row: (r, want, max) => data.columns.map(c => source(c) ? `<td class="src">${lit(String(r[c] ?? ""), want)}</td>` : cell(r[c], want, max)).join("") };

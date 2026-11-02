@@ -78,7 +78,7 @@ class Board {
       el("div", { className: "bbody" }, el("div", { className: "hint bnote err", textContent: `이 카드를 그리지 못했어요: ${e.message}` })));
   }
   cardBox(card, colors) {
-    const canvas = el("canvas");
+    const canvas = el("canvas", { role: "img", ariaLabel: card.title || "차트" });  // 화면 읽기 프로그램이 읽을 차트 이름
     const body = el("div", { className: "bbody" + (card.paint ? " paint" : "") }, card.note ? el("div", { className: "hint bnote", textContent: card.note }) : card.paint ? card.paint(colors) : canvas);  // paint: SVG·HTML로 직접 그리는 카드(dash_cards.js)
     body.style.setProperty("--ratio", card.ratio || 16 / 9);
     const title = el("input", { className: "btitle", value: card.title, title: "카드 이름. 그림으로 저장할 때 파일 이름이 돼요" });

@@ -314,7 +314,7 @@ function dashOnly(on) {
 }
 $("d-only").onclick = () => dashOnly(true);
 $("d-only-exit").onclick = () => dashOnly(false);
-document.addEventListener("keydown", e => { if (e.key === "Escape" && document.body.classList.contains("dash-only")) dashOnly(false); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !e.defaultPrevented && document.body.classList.contains("dash-only")) dashOnly(false); });  // defaultPrevented: Esc가 떠 있는 창을 닫았으면 보기는 그대로
 const pickCard = board.toggle;
 board.toggle = function (...a) { if (!document.body.classList.contains("dash-only")) pickCard.apply(this, a); };  // 보기 중에는 카드 선택만 막는다(범례 누르기·목록 값 펼치기 같은 카드 안의 클릭은 그대로)
 
@@ -553,6 +553,7 @@ async function pickMetTable(base) {
 $("d-metrics").onclick = () => openMetrics();
 $("d-met-table").onchange = () => pickMetTable($("d-met-table").value).catch(e => say("err-met", e.message));
 $("d-met-close").onclick = () => $("d-met-modal").classList.add("hidden");
+$("d-met-modal").onclick = e => { if (e.target === $("d-met-modal")) $("d-met-modal").classList.add("hidden"); };
 $("d-all").onclick = () => board.pickAll(true);
 $("d-none").onclick = () => board.pickAll(false);
 $("d-connect").onclick = () => openConnect(connected ? "다른 데이터에 연결해요" : "연결하면 대시보드 값을 최신으로 바꿔요");

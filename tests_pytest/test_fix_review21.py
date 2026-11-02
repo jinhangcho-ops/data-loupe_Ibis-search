@@ -33,6 +33,7 @@ const assert = require("assert"), fs = require("fs"), R = process.argv[2];
 globalThis.Chart = require(R + "chart.umd.min.js");
 globalThis.getComputedStyle = () => ({ getPropertyValue: () => "#fff" });
 globalThis.document = { documentElement: {}, querySelectorAll: () => [] };
+globalThis.matchMedia = () => ({ matches: false });  // 68차: chartLook이 움직임 줄이기 설정을 본다
 const src = fs.readFileSync(R + "common.js", "utf8").replace(/\r/g, "");
 eval(src.match(/const compact[\s\S]*?\n}\n/)[0].replace("const compact", "globalThis.compact").replace("function chartLook", "globalThis.chartLook = function"));
 chartLook();

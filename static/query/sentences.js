@@ -287,7 +287,7 @@ function SentenceView(host, ctx) {
     const colors = [1, 2, 3, 4, 5, 6, 7, 8].map(i => getComputedStyle(document.documentElement).getPropertyValue("--c" + i).trim()), cfg = sentChart(d, colors);
     const table = el("div", { className: "table-wrap" });
     resultTable(table, d);
-    const box = el("div", { className: "schart hidden" }, el("canvas"));
+    const box = el("div", { className: "schart hidden" }, el("canvas", { role: "img", ariaLabel: "문장 결과 차트" }));
     let chartObj = null;
     const switchTo = view => {
       switcher?.querySelectorAll(".seg-b").forEach(b => b.classList.toggle("on", b.dataset.view === view));

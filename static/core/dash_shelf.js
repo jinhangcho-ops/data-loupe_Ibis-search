@@ -86,7 +86,7 @@ function shelfPanel(host) {
     value.onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) go(); };
     value.onclick = op.onclick = e => e.stopPropagation();
     return el("span", { className: "shelf-form" }, el("b", { textContent: pending.name }), op, value, el("button", { className: "btn", textContent: "넣기", onclick: e => { e.stopPropagation(); go(); } }),
-      el("button", { className: "ghost", textContent: "×", onclick: e => { e.stopPropagation(); pending = null; host.say(""); refresh(); } }));
+      el("button", { className: "ghost", textContent: "×", title: "필터 넣기 취소", ariaLabel: "필터 넣기 취소", onclick: e => { e.stopPropagation(); pending = null; host.say(""); refresh(); } }));
   }
   function refresh() {
     palette.replaceChildren(chip(SHELF_ROWS, ""), ...host.columns().map(([n, t]) => chip(n, t)));

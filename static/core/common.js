@@ -18,6 +18,7 @@ function chartLook() {
   const d = Chart.defaults, css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   d.font.family = '"Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
   d.font.size = 12;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) d.animation = false;  // 움직임 줄이기 설정을 따른다
   Object.assign(d.elements.bar, { borderRadius: 4, borderSkipped: "start" });  // 기준선 쪽은 각지게
   Object.assign(d.datasets.bar, { maxBarThickness: 44, categoryPercentage: 0.72, barPercentage: 0.9 });
   Object.assign(d.elements.line, { borderWidth: 2, borderCapStyle: "round", borderJoinStyle: "round" });
@@ -901,6 +902,14 @@ document.addEventListener("keydown", e => {
   else return;
   e.preventDefault();
 }, true);
+// Esc로 마지막에 뜬 창(.modal)을 닫는다: 창 배경을 누른 click을 보내 창마다의 바깥 누르기 닫기를 그대로 쓴다(그런 처리가 없는 질문 창은 남는다).
+// 위 목록이 Esc로 닫혔으면(preventDefault) 창은 두고, 창이 닫혔으면 preventDefault로 다른 Esc 처리(대시보드 보기 끝내기)를 막는다.
+document.addEventListener("keydown", e => {
+  const top = e.key === "Escape" && !e.defaultPrevented && !e.isComposing && [...document.querySelectorAll(".modal:not(.hidden)")].pop();
+  if (!top) return;
+  top.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  if (!top.isConnected || top.classList.contains("hidden")) e.preventDefault();
+});
 // 목록 밖이 스크롤되거나 창 크기가 바뀌면 칸과 어긋나므로 닫는다.
 document.addEventListener("scroll", e => { if (!menuBox.contains(e.target)) closeMenu(); }, true);
 addEventListener("resize", closeMenu);

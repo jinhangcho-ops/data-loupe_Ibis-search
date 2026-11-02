@@ -42,7 +42,7 @@ eval(cut("let searched = null", '$("search").onclick').replace(/^let /, "var "))
   assert.deepStrictEqual(["my col desc", "order date asc", "amt DESC", "my col"].map(sortText),
     ["my col 큰 것부터", "order date 작은 것부터", "amt 큰 것부터", "my col 작은 것부터"]);
   S.sorts = ["my col DESC"];
-  assert.match(gridSpec({ columns: ["my", "my col"], rows: [] }).head, /<th class="">my<\/th><th class="sorted">my col ↓<\/th>/);
+  assert.match(gridSpec({ columns: ["my", "my col"], rows: [] }).head, /<th class="">my<\/th><th class="sorted" aria-sort="descending">my col ↓<\/th>/);  // 68차: 정렬 상태를 aria-sort로도
   S.sorts = [];
   // (5) 조인을 적용한 뒤 덩어리의 테이블을 바꾸면(키는 아직) S.joins에서 빠진다
   joinsUI = [joinParts("customers left cid=cid")];
