@@ -43,7 +43,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 
 def read(name):
-    return next(STATIC.rglob(name)).read_text(encoding="utf-8")
+    # 맨 이름은 core/lib/ 밖에서 찾는다(lib/dash_rules.js와 dashboard/dash_rules.js처럼 같은 이름이 있다). lib 파일은 "lib/dash_calc.js"처럼 부른다
+    return next(p for p in STATIC.rglob(name) if "/" in name or p.parent.name != "lib").read_text(encoding="utf-8")
 
 
 def between(name, start, end):
@@ -136,7 +137,7 @@ const order = []; const idx = [];
 for (let i = 0; i < 300; i++) idx.push(labelIndex(order, "라벨" + i));
 console.log(JSON.stringify({ len: order.length, last: idx[299], again: labelIndex(order, "라벨5") }));
 """
-    got = run_node(tmp_path, body, files=["board.js", "dash.js"])
+    got = run_node(tmp_path, body, files=["board.js", "lib/dash_calc.js", "dash.js"])
     assert got == {"len": 200, "last": 200, "again": 5}  # 서버(dash_store)는 order 200개 넘으면 저장을 거부한다
 
 
@@ -156,7 +157,7 @@ def test_recompare_ignores_late_old_response(tmp_path):
   console.log(JSON.stringify({ got: b.compares.get(card), drawn: b.drawn }));
 })();
 """
-    got = run_node(tmp_path, body, files=["board.js", "dash.js"])
+    got = run_node(tmp_path, body, files=["board.js", "lib/dash_calc.js", "dash.js"])
     assert got == {"got": {"t": "new"}, "drawn": 1}
 
 
@@ -270,7 +271,7 @@ g0.onpointerdown({ pointerId: 1 });
 g0.listeners.pointermove[0]({ clientX: 100, clientY: 50 });
 console.log(JSON.stringify({ same: dots.children[0] === g0 && dots.children.length === 2, moved: circle.attrs.cx !== before, cx: circle.attrs.cx, label: g0.children[1].attrs.x, captured: g0.captured }));
 """
-    got = run_node(tmp_path, body, files=["board.js", "dash.js", "dash_cards.js"], parts=["globalThis.URL = URL;\n"])
+    got = run_node(tmp_path, body, files=["board.js", "lib/dash_calc.js", "dash.js", "lib/dash_svg.js", "dash_cards.js"], parts=["globalThis.URL = URL;\n"])
     assert got["same"] and got["moved"] and got["captured"] == 1  # 점을 다시 만들면 포인터 캡처가 풀린다
     assert got["cx"] == got["label"]
 
@@ -295,7 +296,7 @@ const trend = paintTargetTrend({ title: "t", range: { start: "2026-02-01", end: 
 const texts = []; (function walk(n) { if (typeof n === "string") return; if (n.tag === "text") texts.push(n.textContent); n.children.forEach(walk); })(trend);
 console.log(JSON.stringify({ sum: sum.textContent, texts }));
 """
-    got = run_node(tmp_path, body, files=["board.js", "dash.js", "dash_cards.js"])
+    got = run_node(tmp_path, body, files=["board.js", "lib/dash_calc.js", "dash.js", "lib/dash_svg.js", "dash_cards.js"])
     assert "0%" not in got["sum"] and "목표 대비 —" in got["sum"]
     assert any(t == "—" for t in got["texts"]) and not any("목표보다" in t for t in got["texts"])
 

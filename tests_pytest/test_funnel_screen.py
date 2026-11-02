@@ -131,7 +131,7 @@ def test_screens_have_funnel(client):
     for part in ('value="funnel"', 'id="a-fuser"', 'id="a-fstep"', 'id="a-ftime"', 'id="a-fsteps"', 'id="a-fwin"', 'id="a-funit"', 'id="a-funnel"', "/static/core/funnel.js"):
         assert part in prep, part
     assert 'kind: flow ? "funnel" : "analysis"' in prep
-    dash = client.get("/dashboard").get_data(as_text=True)
+    dash = client.get("/dashboard?legacy=1").get_data(as_text=True)
     assert "/static/core/funnel.js" in dash
     for name in ("dash_cards.js", "dash_menu.js"):
         text = next((ROOT / "static").rglob(name)).read_text(encoding="utf-8")

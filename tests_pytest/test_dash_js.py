@@ -270,10 +270,13 @@ console.log("ok");
 """
 
 
+LIB = "".join((ROOT / "static" / "core" / "lib" / f).read_text(encoding="utf-8") for f in ("dash_calc.js", "dash_svg.js", "dash_rules.js"))  # 옛 화면 파일에서 옮긴 순수 계산
+
+
 def test_dash_js(tmp_path):
     dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE, "aggs": list(dash_calc.AGGS)}, ensure_ascii=False)
     script = tmp_path / "dash_test.js"
-    script.write_text((ROOT / "static" / "core" / "board.js").read_text(encoding="utf-8") + (ROOT / "static" / "core" / "dash.js").read_text(encoding="utf-8")
+    script.write_text((ROOT / "static" / "core" / "board.js").read_text(encoding="utf-8") + LIB + (ROOT / "static" / "core" / "dash.js").read_text(encoding="utf-8")
                       + (ROOT / "static" / "dashboard" / "dash_cards.js").read_text(encoding="utf-8") + (ROOT / "static" / "dashboard" / "dash_rules.js").read_text(encoding="utf-8")
                       + SCRIPT.replace("%(dash)s", json.dumps(dash, ensure_ascii=False)).replace("%(merge)s", json.dumps(json.dumps(list(sql_funcs.MERGE)))), encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
@@ -295,7 +298,7 @@ def test_own_range_same_in_python_and_js(tmp_path):
     dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE}, ensure_ascii=False)
     body = ("const assert = require('assert'); globalThis.SERVER = { dash: JSON.parse(%s), merge: [] };\nconst cases = %s;\n" % (json.dumps(dash, ensure_ascii=False), json.dumps(OWN_CASES, ensure_ascii=False))
             + "const got = cases.map(p => ownRange({ source: { body: { periods: p } } }));\nconsole.log(JSON.stringify(got));\n")
-    script.write_text((ROOT / "static" / "core" / "board.js").read_text(encoding="utf-8") + (ROOT / "static" / "core" / "dash.js").read_text(encoding="utf-8")
+    script.write_text((ROOT / "static" / "core" / "board.js").read_text(encoding="utf-8") + LIB + (ROOT / "static" / "core" / "dash.js").read_text(encoding="utf-8")
                       + (ROOT / "static" / "dashboard" / "dash_cards.js").read_text(encoding="utf-8") + (ROOT / "static" / "dashboard" / "dash_rules.js").read_text(encoding="utf-8") + body, encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0, done.stderr[-3000:]

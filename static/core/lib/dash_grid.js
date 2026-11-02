@@ -1,3 +1,4 @@
+// 순수 계산만. DOM·SERVER·Chart에 기대지 않는다(web/도 가져다 쓴다).
 // 대시보드 격자 배치의 계산(화면 요소 없이): 12칸 × 행 높이 40px의 격자, 카드 이동·크기 바꾸기, 세로 압축. 끌기·손잡이는 dash_edit.js가 이 계산을 부른다(node 테스트가 본다).
 // 카드 자리(layout) = {x, y, w, h}: x는 칸(0~11), y는 행, w·h는 2~12. 서버(dash_store.check_layout)와 같은 범위다.
 const GRID_COLS = 12, GRID_ROW = 40, GRID_GAP = 10, GRID_MIN = 2, GRID_MAX = 12;

@@ -29,7 +29,7 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024
 TARGET_PAGE = 100  # 목표 파일의 문제 줄을 한 번에 돌려줄 수(화면은 [이전]/[다음]으로 넘겨 본다)
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/get", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min", "/api/dash/refresh/start",
-                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete"})
+                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants"})
 
 
 def with_source(card):
@@ -50,11 +50,22 @@ def dash_constants(found):  # 카드 그리기(dash.js)와 차트 선반이 서�
 PRELOAD = ("dashboard.dash_calc", "dashboard.dash_refresh", "dashboard.period", "dashboard.dash_pdf", "dashboard.summary_text")  # 대시보드를 열면 뒤에서 미리 올리는 기능 모듈
 
 
+NEXT_PAGE = server.NEXT_DIR / "dashboard.html"  # web/을 빌드한 결과. 시험은 임시 파일로 바꿔 끼운다
+
+
 @app.get("/dashboard")
 def dashboard_page():
     preload(*PRELOAD)
     """대시보드 화면(dashboard.html). 저장한 대시보드를 보고 고치는 한 곳이다. 연결 없이도 저장된 값으로 보인다."""
+    if NEXT_PAGE.is_file() and request.args.get("legacy") != "1":  # Next 화면을 빌드해 두었으면 그것, 없으면 옛 화면. ?legacy=1은 전환 기간의 비교용(옛 화면)
+        return server.next_page(NEXT_PAGE)
     return server.page("dashboard/dashboard.html")
+
+
+@app.get("/api/dash/constants")
+def dash_constants_api():
+    """대시보드 화면(Next)이 받는 상수(page가 옛 화면의 SERVER에 넣는 것과 같다). 연결을 쓰지 않는다(FREE)."""
+    return jsonify(server.constants("dashboard"))
 
 
 @app.get("/api/dash")

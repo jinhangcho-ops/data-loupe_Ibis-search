@@ -21,7 +21,7 @@ def test_dash_only_exits_with_escape_and_blocks_card_selection():
 
 def test_kpi_spark_is_a_smooth_curve_that_fills_the_card(tmp_path):
     from test_fix_audit_js import run_node
-    fn = between("dash_cards.js", "function smoothPath(points) {", "\n}\n") + "\n}\n"
+    fn = between("lib/dash_svg.js", "function smoothPath(points) {", "\n}\n") + "\n}\n"
     got = run_node(tmp_path, fn + 'console.log(JSON.stringify([smoothPath("0,10 5,0 10,10"), smoothPath("0,1 9,2")]));')
     assert got == ["M0,10 Q5,0 7.5,5.0 L10,10", "M0,1 L9,2"]  # 가운데 점은 곡선의 조절점, 두 점이면 직선
     assert "flex:1 1 34px" in read("common.css") and '"vector-effect": "non-scaling-stroke"' in read("dash_cards.js")

@@ -10,17 +10,7 @@ const seriesTitle = s => aggName(s.agg) + (s.agg === "count" || !s.y ? "" : ` ($
   Object.entries(s.opts ?? {}).filter(([k]) => k !== "order").map(([k, v]) => ` ${k}=${[].concat(v).join(",")}`).join("");
 const merges = agg => SERVER.merge.includes(agg);  // 아니면 일 값을 주·월·연으로 다시 묶을 수 없다(고유 개수·중앙값·분위수 …). 서버가 단위마다 따로 구한다
 const UNIT_NAMES = { day: "일", week: "주", month: "월" };
-// 숫자는 자릿수 쉼표와 소수 넷째 자리까지
-const shownum = v => v == null ? "" : typeof v === "number" ? v.toLocaleString(undefined, { maximumFractionDigits: 4 }) : String(v);
-// HEX 색 검사(#rgb, #rrggbb)와 3자리 → 6자리
-const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
-const hex6 = c => c.length === 4 ? "#" + [...c.slice(1)].map(h => h + h).join("") : c;
-// 색 글자(#rgb, #rrggbb 또는 rgb)에 투명도를 준다(히트맵 칸, 영역형 라인).
-function alpha(color, a) {
-  const hex = hex6(color).match(/^#([0-9a-f]{6})$/i);
-  const [r, g, b] = hex ? [0, 2, 4].map(i => parseInt(hex[1].slice(i, i + 2), 16)) : (color.match(/\d+/g) || [0, 0, 0]).map(Number);
-  return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
+// shownum·HEX·hex6·alpha, labelIndex, monday·rollup, 날짜 계산, previousSpan·ownRange, anaView·isPoints·pointGroups, outsideWindow는 lib/dash_calc.js(먼저 불러 온다)
 // 분석 결과 하나를 그 색으로 그릴 Chart.js 설정.
 function anaConfig(d, view, colors, options = {}) {
   const axis = { ticks: { color: colors.text }, grid: { color: colors.line } };
@@ -82,10 +72,6 @@ function anaConfig(d, view, colors, options = {}) {
 }
 
 // ---------- 색 ----------
-// 라벨의 번호: 카드가 그 라벨을 처음 본 차례(order). 새 라벨은 뒤에 붙여 카드에 남기므로 다시 구한 뒤에도 같은 라벨은 같은 번호(같은 색)다.
-// 서버가 order를 200개까지만 받으므로(core/dash_store.py) 그 이상은 붙이지 않고 같은 번호(200)를 쓴다 — 색은 팔레트·기본 색을 돌려 쓴다.
-const MAX_ORDER = 200;
-const labelIndex = (order, name) => { const i = order.indexOf(name); return i >= 0 ? i : order.length >= MAX_ORDER ? MAX_ORDER : order.push(name) - 1; };
 // 색 정하기: 카드가 지정한 색 → 대시보드 팔레트의 번호째 → 화면 모드의 기본 색. group은 "series"(계열) 또는 "parts"(도넛·파이의 조각).
 // 카드에 colors가 없는 임시 카드(탐색 차트)는 계열 순서(index)로 정한다. 지정 색은 라이트·다크가 같다.
 function pickColor(card, group, name, colors, index = 0) {
@@ -94,23 +80,6 @@ function pickColor(card, group, name, colors, index = 0) {
 }
 
 // ---------- 카드의 값 → 그릴 모양 ----------
-// 일(YYYY-MM-DD)이 속한 주의 월요일, 월의 1일, 연의 1월 1일. 서버(analysis.trend의 주)와 같다.
-const monday = day => { const [y, m, d] = day.split("-").map(Number), t = new Date(Date.UTC(y, m - 1, d)); t.setUTCDate(t.getUTCDate() - (t.getUTCDay() + 6) % 7); return t.toISOString().slice(0, 10); };
-const BUCKET = { day: d => d, week: monday, month: d => d.slice(0, 7) + "-01", year: d => d.slice(0, 4) + "-01-01" };
-// 일 값 계열 하나를 unit으로 다시 묶은 Map(라벨 → 값). sum=Σsum, count=Σcount, mean=Σsum/Σcount, min·max=min·max(빈 값은 건너뜀).
-function rollup(s, days, unit) {
-  const groups = new Map();
-  days.forEach((day, i) => {
-    const key = BUCKET[unit](day), g = groups.get(key) ?? { sum: null, count: 0, min: null, max: null };
-    if (s.sum?.[i] != null) g.sum = (g.sum ?? 0) + s.sum[i];
-    g.count += s.count?.[i] ?? 0;
-    if (s.min?.[i] != null) g.min = g.min == null ? s.min[i] : Math.min(g.min, s.min[i]);
-    if (s.max?.[i] != null) g.max = g.max == null ? s.max[i] : Math.max(g.max, s.max[i]);
-    groups.set(key, g);
-  });
-  const value = { count: g => g.count, sum: g => g.sum, mean: g => g.count && g.sum != null ? g.sum / g.count : null, min: g => g.min, max: g => g.max }[s.agg];
-  return new Map([...groups].map(([key, g]) => [key, value(g)]));
-}
 // 시간별 값(data.by_unit)을 unit으로. 서버가 그 단위로 따로 구한 계열(고유 개수, 일 값을 자른 월·연)은 그 값을 쓰고, 나머지는 일 값을 다시 묶는다.
 // range({start, end}: "YYYY-MM-DD", 없으면 열린 쪽)를 주면 그 기간의 칸만 남긴다(월·연 칸은 그 기간과 겹치는 것).
 function byUnit(by, unit, range) {
@@ -122,9 +91,6 @@ function byUnit(by, unit, range) {
            datasets: day.series.map((s, i) => ({ label: s.name, values: labels.map(l => maps[i].get(l) ?? null) })) };
 }
 // ---------- 기간·비교 (기간 규칙은 서버 period.py, 문장은 compare.py. 여기서는 저장된 일 값으로 두 기간의 값만 구한다) ----------
-const dayNumber = day => Date.UTC(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10)) / 86400000;
-const shiftDay = (day, n) => new Date((dayNumber(day) + n) * 86400000).toISOString().slice(0, 10);
-const daysBetween = (start, end) => dayNumber(end) - dayNumber(start) + 1;
 // 일 값 계열 s의 from~to(포함, 일 글자) 구간 값: 계열의 집계(sum·count·mean·min·max)대로 한 값으로 묶는다. 구간에 일 값이 없으면 null.
 // loaded(loadedRange: 읽어 온 범위)를 주고 구간이 그 안이면, 일 값이 없는 개수·합계는 0이다(행이 없던 것이라서).
 function windowValue(s, days, from, to, loaded) {
@@ -134,7 +100,6 @@ function windowValue(s, days, from, to, loaded) {
   const pick = a => a && keep.map(i => a[i]);
   return rollup({ agg: s.agg, sum: pick(s.sum), count: pick(s.count), min: pick(s.min), max: pick(s.max) }, keep.map(() => "2000-01-01"), "day").get("2000-01-01") ?? null;
 }
-const zeroWhenEmpty = agg => agg === "count" || agg === "sum";  // 행이 없는 구간을 0으로 말할 수 있는 집계
 // 일 값이 빈 날을 0으로 말할 수 있는 범위: 최신화가 읽은 범위(data.window). 그 기록이 없으면 일 값의 첫 날~끝 날(그 밖은 읽었는지 모른다).
 // 일 값을 앞에서 잘랐으면(월 값을 서버가 따로 구했으면) 남은 첫 날부터.
 function loadedRange(card) {
@@ -152,25 +117,7 @@ function pointValue(s, days, date) {
 // 시간별 카드의 첫 계열을 두 기간(또는 두 시점)으로 비교할 값 {cur, prev, mode, label, better, partial}. /api/compare가 문장으로 바꾼다. 안 되는 카드(기간 없음, 고유 개수의 시점 비교·서버가 구한 값 없음)는 null. 고유 개수 계열은 서버의 window_nunique(현재·prev)를 쓴다.
 // span: 기간 값과 직전 기간(prev: {start, end, text}) 값, point: 끝 날의 값과 기간 길이만큼 앞 날의 값. 직전이 저장된 일 값보다 앞서면 partial.
 // 대시보드 기간이 비면 카드 자신의 기간 줄(날짜컬럼 시작 ~ 끝, 양쪽 날짜)을 보는 기간으로 삼고, 직전은 previousSpan(대시보드 기간 칸과 같은 규칙)으로 본다. 기간 줄이 없으면 null.
-// 날짜 기간의 직전 기간 {start, end, text}: 달 단위로 꼭 맞으면(1일 ~ 그달 끝) 직전 같은 개월 수, 아니면 바로 앞 같은 일수(서버 period.previous·previous_text와 같은 규칙)
-function previousSpan(start, end) {
-  const [y1, m1] = start.split("-").map(Number), [y2, m2] = end.split("-").map(Number);
-  if (start.endsWith("-01") && shiftDay(end, 1).endsWith("-01")) {
-    const months = (y2 - y1) * 12 + m2 - m1 + 1, back = new Date(Date.UTC(y1, m1 - 1 - months, 1)).toISOString().slice(0, 10);
-    const named = months === 1 || (months === 3 && m1 % 3 === 1) || (months === 12 && m1 === 1) ? { 1: "지난달", 3: "직전 분기", 12: "작년" }[months] : `직전 ${months}개월`;  // 서버 period.month_name
-    return { start: back, end: shiftDay(start, -1), text: named };
-  }
-  const n = daysBetween(start, end);
-  return { start: shiftDay(start, -n), end: shiftDay(start, -1), text: `직전 ${n}일` };
-}
-function ownRange(card) {
-  for (const line of card.source?.body?.periods ?? []) {
-    const m = /^.+?\s+(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})$/.exec(line.trim());  // 날짜를 끝에서 읽어 공백 있는 컬럼 이름도 된다(dash_calc.OWN_PERIOD와 같은 규칙)
-    const real = d => !isNaN(Date.parse(d)) && new Date(d).toISOString().slice(0, 10) === d;  // 2026-02-30 같은 없는 날은 건너뛴다
-    if (m && real(m[1]) && real(m[2]) && m[1] <= m[2]) return { range: { start: m[1], end: m[2] }, prev: previousSpan(m[1], m[2]) };
-  }
-  return null;
-}
+// (previousSpan·ownRange는 lib/dash_calc.js)
 function compareItem(card, range, prev) {
   if (!range) { const own = ownRange(card); if (!own) return null; ({ range, prev } = own); }
   const by = card.data?.by_unit, s = by?.day?.series[0];
@@ -189,11 +136,6 @@ function compareItem(card, range, prev) {
   const loaded = loadedRange(card);
   return { cur: windowValue(s, days, range.start, range.end, loaded), prev: windowValue(s, days, prev.start, prev.end, loaded), mode, label: prev.text, better, partial: prev.start < days[0] };
 }
-// 분석 카드가 어떤 그림인지(없으면 분석 종류에서)
-const anaView = card => card.view.analysis_view || { distribution: "hist", correlation: "heat", scatter: "scatter", groups: "groups", trend: "trend" }[card.data?.values?.kind];
-// 산점도·버블: 점은 data.points(서버가 구한 점·r·추세선), 버블의 [크기] 컬럼·추세선·r 보이기는 view.points·trend·show_r
-const isPoints = card => ["scatter", "bubble"].includes(card.view?.type) && !!card.data?.points;
-const pointGroups = p => p.groups.length ? p.groups : [p.y];
 // 카드의 값을 그릴 모양 { labels, datasets: [{ label, values, type?, dash?, axis? }], time(날짜 X축), chartable(종류를 바꿀 수 있는지) }. 값이 아직 없으면 null.
 function cardSeries(card) {
   if (card.norm) return { time: false, chartable: true, ...card.norm };  // 탐색 탭의 지금 차트처럼 이미 이 모양인 것
@@ -289,8 +231,6 @@ function chartConfig(card, colors, options = {}) {
            options: { maintainAspectRatio: false, ...(hbar ? { indexAxis: "y" } : {}), plugins: { legend }, scales, ...options } };
 }
 
-// 최신화가 읽은 날짜 범위(data.window: 직전 기간 시작 ~ 보는 기간 끝) 밖으로 보는 기간이 나갔는지. 나갔으면 그 기간으로 다시 읽어야 한다.
-const outsideWindow = (card, range) => !!(range && card.data?.window && ((range.start && card.data.window.start && range.start < card.data.window.start) || (range.end && card.data.window.end && range.end > card.data.window.end)));
 // 새 카드의 빈 색 설정(지정 색과 라벨이 처음 나온 순서)
 const freshColors = () => ({ series: {}, parts: {}, order: [], parts_order: [] });
 // 값이 아직 없는 카드(예전 파일에서 옮긴 것)는 안내만 보인다. SVG 카드는 일 값·값·컬럼 이름 중 하나라도 있으면 그린다.

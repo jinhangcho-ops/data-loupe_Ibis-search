@@ -8,7 +8,7 @@ import secrets
 import threading
 from pathlib import Path
 
-from flask import Flask, Response, abort, current_app, g, jsonify, request
+from flask import Flask, Response, abort, current_app, g, jsonify, request, send_from_directory
 from werkzeug.exceptions import HTTPException
 
 from core import drivers
@@ -25,6 +25,7 @@ from core import sql_funcs
 from core import use_counts
 
 app = Flask(__name__, static_folder=str(Path(__file__).resolve().parent.parent / "static"))  # 화면 파일은 프로젝트 루트의 static/(패키지별 하위 폴더)
+NEXT_DIR = Path(app.static_folder).parent / "web" / "out"  # Next.js 빌드 결과(next build). static/ 밖에 두어 화면 파일을 훑는 시험에 안 걸린다
 app.json.sort_keys = False  # 구조 컬럼의 필드·행의 컬럼을 원래 차례대로 보낸다(Flask 기본은 이름 순)
 
 # 연결은 메모리에만 둔다. passwords는 오류 문구에서 가릴 값, opened는 다시 열 때 쓸 요청 값, rows는 세어 둔 테이블 행 수, cancel은 지금 도는 데이터 작업의 취소 신호.
@@ -571,10 +572,27 @@ def page(name):
     html = Path(folder, name).read_text(encoding="utf-8")
     html = re.sub(r"<!--include ([A-Za-z0-9._/-]+)-->", lambda m: Path(folder, m[1]).read_text(encoding="utf-8"), html)
     html = html.replace("/*SERVER*/{}", json.dumps(constants(name.split("/")[0]), ensure_ascii=False).replace("<", "\\u003c"))
+    return html_response(html)
+
+
+def next_page(path):
+    """Next.js 정적 내보내기 화면(web/out/*.html 파일 경로)을 내려준다. 상수는 화면이 API(/api/dash/constants 등)로 받는다."""
+    return html_response(Path(path).read_text(encoding="utf-8"), " 'strict-dynamic'")
+
+
+@app.get("/next/<path:name>")
+def next_asset(name):
+    """Next 화면의 자산(web/out/_next/...). next.config의 assetPrefix가 /next다."""
+    return send_from_directory(NEXT_DIR, name)
+
+
+def html_response(html, script_extra=""):
+    """화면 응답: 모든 <script에 nonce를 붙이고 CSP·열쇠·설정 쿠키를 둔다. script_extra는 script-src 뒤에 더할 것(Next 화면은 'strict-dynamic': nonce 붙은 스크립트가 넣는 청크를 허용)."""
     nonce = secrets.token_urlsafe(16)  # 응답마다 새로 만들어, 이 값이 붙은 스크립트만 실행되게 한다.
-    response = Response(html.replace("<script", f'<script nonce="{nonce}"'), mimetype="text/html")
+    html = html.replace("<script", f'<script nonce="{nonce}"').replace('<link rel="preload" as="script"', f'<link nonce="{nonce}" rel="preload" as="script"')  # Next의 스크립트 미리 받기 링크도 script-src 검사를 받는다
+    response = Response(html, mimetype="text/html")
     response.headers["Content-Security-Policy"] = (
-        f"default-src 'none'; script-src 'nonce-{nonce}'; style-src 'self' 'unsafe-inline'; connect-src 'self'; "
+        f"default-src 'none'; script-src 'nonce-{nonce}'{script_extra}; style-src 'self' 'unsafe-inline'; connect-src 'self'; "
         f"img-src data: blob: {OSM_TILES}; base-uri 'none'; form-action 'none'")
     response.set_cookie("key", KEY, httponly=True, samesite="Strict")
     saved = settings.load()

@@ -45,7 +45,7 @@ const small = make({ type: "line", data: { labels: ["a", "b", "c"], datasets: [{
 assert.ok(small.scales.y.ticks.every(t => t.label !== "0" || t.value === 0), small.scales.y.ticks.map(t => t.label).join("|"));
 const big = make({ type: "bar", data: { labels: ["a"], datasets: [{ data: [12000000] }] } });
 assert.ok(big.scales.y.ticks.some(t => /만/.test(t.label)));
-eval(fs.readFileSync(R + "board.js", "utf8") + "\n" + fs.readFileSync(R + "dash.js", "utf8"));
+eval(fs.readFileSync(R + "board.js", "utf8") + "\n" + fs.readFileSync(R + "lib/dash_calc.js", "utf8") + "\n" + fs.readFileSync(R + "dash.js", "utf8"));
 const card = { data: { points: { points: [[1, 1, 5, "A"], [10, 10, 5, "A"], [9, 1, 5, "B"], [2, 9, 5, "B"]], groups: ["A", "B"], size_range: [5, 5] } }, view: { type: "bubble" } };
 const bub = make(pointsConfig(card, { text: "#000", line: "#ccc", series: ["#111111", "#222222"] }, {}));
 const at = bub.getDatasetMeta(0).data[0], mode = bub.options.interaction;

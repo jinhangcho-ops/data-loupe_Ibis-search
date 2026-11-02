@@ -1,4 +1,5 @@
 # PyInstaller 빌드 설정: pyinstaller DataLoupe.spec → dist/DataLoupe/ (exe + 라이브러리 폴더)
+import os
 import sys
 
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
@@ -29,7 +30,7 @@ hidden += collect_submodules("pyproj")
 
 a = Analysis(
     ["desktop.py"],
-    datas=[("static", "static"), ("constraints.txt", ".")] + copy_metadata("ibis-framework") + collect_data_files("pyproj"),  # Ibis는 설치 정보로 백엔드를 찾는다. constraints.txt: 드라이버 설치 명령의 -c(drivers.pip_command)
+    datas=[("static", "static"), ("constraints.txt", ".")] + ([("web/out", "web/out")] if os.path.isdir("web/out") else []) + copy_metadata("ibis-framework") + collect_data_files("pyproj"),  # web/out: Next 대시보드(npm run build --prefix web). 없으면 옛 화면으로 돈다  # Ibis는 설치 정보로 백엔드를 찾는다. constraints.txt: 드라이버 설치 명령의 -c(drivers.pip_command)
     hiddenimports=hidden,
 )
 pyz = PYZ(a.pure)

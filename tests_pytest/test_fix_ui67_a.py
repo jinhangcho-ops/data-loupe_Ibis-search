@@ -14,7 +14,7 @@ const day = { labels, series: [{ name: "합계 (금액)", agg: "sum", sum: label
 const card = { title: "t", range: { start: labels[0], end: labels[29] }, view: {}, data: { by_unit: { day }, target: { value: 500 } } };
 console.log(JSON.stringify(texts(paintTargetTrend(card, colors))));
 """
-    got = run_node(tmp_path, body, files=["board.js", "dash.js", "dash_cards.js"])
+    got = run_node(tmp_path, body, files=["board.js", "lib/dash_calc.js", "dash.js", "lib/dash_svg.js", "dash_cards.js"])
     assert any(t.startswith("일 평균이 목표보다 400 낮아요") for t in got), got
 
 
@@ -25,7 +25,7 @@ const card = { view: { template: "직전 기간보다 {비교}", better: "up" },
 const all = { view: { template: "{비교}", better: "up" }, data: card.data };
 console.log(JSON.stringify([paintSentence(card, {}).textContent, paintSentence(all, {}).textContent]));
 """
-    got = run_node(tmp_path, body, files=["board.js", "dash.js", "dash_rules.js", "dash_cards.js"])
+    got = run_node(tmp_path, body, files=["board.js", "lib/dash_calc.js", "dash.js", "lib/dash_rules.js", "dash_rules.js", "lib/dash_svg.js", "dash_cards.js"])
     assert got == ["직전 기간보다 11.4% 줄었어요 (−1)", "직전 30일보다 11.4% 줄었어요 (−1)"]
 
 

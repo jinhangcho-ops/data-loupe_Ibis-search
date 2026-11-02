@@ -10,3 +10,7 @@ dist/
 check.py
 CLAUDE.md
 installer/Output/
+web/node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts

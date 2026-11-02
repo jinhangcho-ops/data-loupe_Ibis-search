@@ -8,7 +8,7 @@ import pytest
 from core import server
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
-PAGES = ["/", "/search", "/prep", "/dashboard", "/collect", "/integrations"]
+PAGES = ["/", "/search", "/prep", "/dashboard?legacy=1", "/collect", "/integrations"]  # 대시보드는 옛 화면(Next 빌드가 있어도)
 
 
 def page(client, path):
@@ -18,7 +18,7 @@ def page(client, path):
 
 
 def test_dashboard_route_and_parts(client):
-    html = page(client, "/dashboard")
+    html = page(client, "/dashboard?legacy=1")
     for part in ('id="d-pick"', 'id="d-settings"', 'id="d-add-pop"', 'href="/search"', "쿼리에서 카드 만들기", 'id="d-modal"', 'id="d-ctl"', 'id="d-palette"', 'id="d-targets"', 'id="refresh-pop"', 'id="rf-pill"'):
         assert part in html, part
     for script in ("dash.js", "dash_cards.js", "dash_rules.js", "dash_ctl.js", "dash_refresh.js", "board.js"):
@@ -84,4 +84,4 @@ def test_empty_period_ui_and_own_range():
     ctl = (STATIC / "dashboard" / "dash_ctl.js").read_text(encoding="utf-8")
     assert "비우면 카드의 원래 기간" in ctl and 'period: "최근 30일"' not in ctl and 'd.period || "최근 30일"' not in ctl
     assert "blank = !this.per.value.trim()" in ctl
-    assert "function ownRange(card)" in (STATIC / "core" / "dash.js").read_text(encoding="utf-8")
+    assert "function ownRange(card)" in (STATIC / "core" / "lib" / "dash_calc.js").read_text(encoding="utf-8")

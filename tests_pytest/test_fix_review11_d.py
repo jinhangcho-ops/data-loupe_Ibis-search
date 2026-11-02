@@ -178,7 +178,7 @@ console.log("ok");
 @pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 def test_dash_js_empty_windows(tmp_path):
     script = tmp_path / "d.js"
-    script.write_text("".join((ROOT / p).read_text(encoding="utf-8") for p in ("static/core/board.js", "static/core/dash.js", "static/dashboard/dash_cards.js"))
+    script.write_text("".join((ROOT / p).read_text(encoding="utf-8") for p in ("static/core/board.js", "static/core/lib/dash_calc.js", "static/core/dash.js", "static/core/lib/dash_svg.js", "static/dashboard/dash_cards.js"))
                       + JS.replace("%(merge)s", json.dumps(list(sql_funcs.MERGE))), encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0 and done.stdout.strip().endswith("ok"), done.stderr[-3000:]

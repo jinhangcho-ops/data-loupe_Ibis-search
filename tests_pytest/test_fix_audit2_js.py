@@ -196,7 +196,7 @@ def test_set_range_recompares_once_when_recomputing(tmp_path):
   console.log(JSON.stringify({ plain, redo: { compares, computed } }));
 })();
 """
-    got = run_node(tmp_path, body, files=["board.js", "dash.js"], parts=["const SVG_KINDS = ['kpi'];\n"])
+    got = run_node(tmp_path, body, files=["board.js", "lib/dash_calc.js", "dash.js"], parts=["const SVG_KINDS = ['kpi'];\n"])
     assert got["plain"] == {"compares": 1, "computed": 0} and got["redo"] == {"compares": 1, "computed": 1}  # 고치기 전에는 구하는 경우 비교가 두 번
 
 

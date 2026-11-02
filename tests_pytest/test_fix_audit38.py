@@ -232,7 +232,7 @@ def test_tiny_targets_keep_their_value():
 @pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
 def test_cards_judge_target_like_the_server(tmp_path):
     from test_fix_audit_js import between, run_node
-    helper = between("dash_cards.js", "const slack", "\n") + "\n"
+    helper = between("lib/dash_svg.js", "const slack", "\n") + "\n"
     out = run_node(tmp_path, "console.log(JSON.stringify([overTarget(1.1 + 2.2, 3.3), underTarget(0.7 + 0.1, 0.8), overTarget(3.31, 3.3), underTarget(3.29, 3.3)]));", parts=[helper])
     assert out == [False, False, True, True]  # 꼬리는 같은 값, 진짜 차이는 넘음·모자람
 
@@ -262,7 +262,7 @@ def test_position_slots_reject_negative():
 def test_color_rules_treat_float_tails_as_equal(tmp_path):
     from test_fix_audit_js import run_node
     body = "const m = (t, v) => parseMatch(t).test(v); console.log(JSON.stringify([m('= 0.3', 0.1 + 0.2), m('<= 0.3', 0.1 + 0.2), m('< 0.3', 0.1 + 0.2), m('0.3, 0.5', 0.1 + 0.2), m('!= 0.3', 0.1 + 0.2), m('> 0.3', 0.31)]));"
-    out = run_node(tmp_path, body, files=["dash_rules.js"])
+    out = run_node(tmp_path, body, files=["lib/dash_rules.js"])
     assert out == [True, True, False, True, False, True]
 
 
@@ -275,7 +275,7 @@ def test_counter_alert_and_cut_table_total(tmp_path):
     from core import dash_store
     static = Path(__file__).resolve().parent.parent / "static"
     dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE}, ensure_ascii=False)
-    parts = ["board.js", "dash.js", "dash_cards.js", "dash_rules.js", "dash_grid.js", "dash_edit.js"]
+    parts = ["board.js", "lib/dash_calc.js", "dash.js", "lib/dash_svg.js", "dash_cards.js", "lib/dash_rules.js", "dashboard/dash_rules.js", "lib/dash_grid.js", "dash_edit.js"]
     body = """
 const assert = require("assert");
 const kpi = (id, v) => ({ id, kind: "gauge", title: "환불률", view: { format: "number" }, data: { values: { scalar: [v] } }, source: {} });
@@ -360,7 +360,7 @@ def test_own_period_previous_matches_dashboard_rule():
 @pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
 def test_own_period_previous_matches_in_js(tmp_path):
     from test_fix_audit_js import run_node
-    js = (__import__("pathlib").Path(__file__).resolve().parent.parent / "static" / "core" / "dash.js").read_text(encoding="utf-8")
+    js = (__import__("pathlib").Path(__file__).resolve().parent.parent / "static" / "core" / "lib" / "dash_calc.js").read_text(encoding="utf-8")
     helpers = "\n".join(line for line in js.splitlines() if line.startswith(("const dayNumber", "const shiftDay", "const daysBetween")))
     span = js[js.index("function previousSpan("):js.index("function ownRange(")]
     out = run_node(tmp_path, "console.log(JSON.stringify([previousSpan('2026-03-01', '2026-03-31'), previousSpan('2026-01-01', '2026-03-31'), previousSpan('2026-03-01', '2026-03-22')]));", parts=[helpers + "\n" + span])

@@ -17,7 +17,7 @@ def run_js(tmp_path, body):
     dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE, "aggs": list(dash_calc.AGGS)}, ensure_ascii=False)
     head = "const assert = require('assert'); globalThis.SERVER = { dash: JSON.parse(%s), merge: [], agg_names: {} };\n" % json.dumps(dash, ensure_ascii=False)
     script = tmp_path / "t.js"
-    script.write_text("".join((ROOT / "static" / p).read_text(encoding="utf-8") for p in ("core/board.js", "core/dash.js", "dashboard/dash_cards.js", "dashboard/dash_rules.js")) + head + body, encoding="utf-8")
+    script.write_text("".join((ROOT / "static" / p).read_text(encoding="utf-8") for p in ("core/board.js", "core/lib/dash_calc.js", "core/dash.js", "core/lib/dash_svg.js", "dashboard/dash_cards.js", "core/lib/dash_rules.js", "dashboard/dash_rules.js")) + head + body, encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0, done.stderr[-3000:]
     return done.stdout.strip().splitlines()[-1]

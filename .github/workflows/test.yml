@@ -15,6 +15,13 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.14"  # exe를 만드는 버전(build-exe.yml)과 같게
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --prefix web
+      - run: npm run build --prefix web
       - run: pip install -c constraints.txt -r requirements.txt -r requirements-dev.txt
       - run: python tests.py
       - run: python -m pytest tests_pytest -q

@@ -128,10 +128,10 @@ def test_north_star_counter_limits(folder):
 
 
 def test_screens_have_edit_parts(client):
-    html = client.get("/dashboard").get_data(as_text=True)
+    html = client.get("/dashboard?legacy=1").get_data(as_text=True)  # 옛 화면(Next 빌드가 있어도)
     for part in ('id="d-gallery"', 'id="d-gallery-box"', 'id="d-panel"', 'id="d-alerts"', 'id="d-template"', 'id="d-tpl-save"', 'id="d-report-png"', 'id="d-report-pdf"', "/static/core/dash_edit.css"):
         assert part in html, part
-    for script in ("dash_grid.js", "dash_edit.js"):
+    for script in ("lib/dash_grid.js", "dash_edit.js"):
         assert f'src="{url_of(script)}"></script>' in html and next(STATIC.rglob(script)).exists()
     for script in ("dash_templates.js", "dash_menu.js", "dash_shelf.js", "dash_panel.js", "dash_report.js"):  # 편집 도구·보고서는 처음 쓸 때 불러온다(need)
         assert f'"{url_of(script)}"' in html and f'src="{url_of(script)}"></script>' not in html and next(STATIC.rglob(script)).exists()
@@ -223,7 +223,7 @@ console.log("ok");
 def test_grid_alerts_shelf_in_node(tmp_path):
     dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE}, ensure_ascii=False)
     script = tmp_path / "edit_test.js"
-    parts = ["board.js", "dash.js", "dash_cards.js", "dash_rules.js", "dash_grid.js", "dash_edit.js", "dash_shelf.js", "dash_templates.js", "dash_report.js"]
+    parts = ["board.js", "lib/dash_calc.js", "dash.js", "lib/dash_svg.js", "dash_cards.js", "lib/dash_rules.js", "dashboard/dash_rules.js", "lib/dash_grid.js", "dash_edit.js", "dash_shelf.js", "dash_templates.js", "dash_report.js"]
     script.write_text("".join(next(STATIC.rglob(name)).read_text(encoding="utf-8") for name in parts) + SCRIPT.replace("%(dash)s", json.dumps(dash, ensure_ascii=False)), encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr[-3000:]

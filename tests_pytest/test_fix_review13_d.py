@@ -61,7 +61,7 @@ def test_13d6_deviation_empty_entity_name(db):
 
 @needs_node
 def test_13d3_13d4_show_value(tmp_path):
-    cards = page("dashboard/dash_cards.js")
+    cards = page("core/lib/dash_svg.js")
     nums = [(0.12345, "percent"), (-1234.5, "currency"), (-0.001, "number"), (2.5, "currency"), (1.005, "number"), (0.256, "percent"), (1234.567, "number"), (-0.4, "currency"), (1e21, "number"), (1e-9, "percent")]
     got = run(tmp_path, f"""
 const out = {json.dumps(nums)}.map(([v, f]) => showValue(v, f));
