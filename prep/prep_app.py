@@ -1,5 +1,6 @@
 """Data Loupe 분석 화면(전처리·분석·그래프)의 라우트. server.app에 달린다. 따로 실행하지 않고 desktop.py가 프로그램 창 안에서 띄운다."""
 import contextlib
+import csv
 import datetime as dt
 import json
 import re
@@ -33,6 +34,10 @@ FILE_FORMATS = ["parquet", "csv"]
 DATE_FAILED = re.compile(r"out of range|conversion error|invalid (date|timestamp)|could not (be )?(parse|convert).*(date|time)|strptime", re.I)
 TABLE_PREPS = "table_preps.json"  # 테이블별로 마지막에 쓴 전처리 {테이블 열쇠: {"config", "saved"}}
 MAX_TABLE_PREPS = 200
+NULL_GAP, UNIQUE_GAP = 0.05, 0.2  # 전체 요약에서 표본과 "크게 다르다"고 표시할 기준: 빈 값 비율 차이, 서로 다른 값 수의 상대 차이
+SUMMARY_FILES = {"xlsx": "Excel (*.xlsx)", "csv": "CSV (*.csv)"}  # 요약 파일의 형식 → 저장 대화상자 이름
+SUMMARY_HEAD = ["컬럼", "타입", "빈 값 비율", "빈 값 수", "고유값 수", "최솟값", "최댓값", "예시 값"]
+EXAMPLES, EXAMPLE_SCAN, EXAMPLE_LEN = 3, 2000, 50  # 예시 값 개수, 예시를 고르려고 훑는 앞 행 수, 예시 한 개의 글자 수 상한
 SAMPLES = {}  # 마지막으로 읽은 표본 하나 {테이블 열쇠: (크기, pyarrow 표, 표본 정보)}. 통계에 이어 타입 추천이 같은 표본을 쓴다.
 server.ON_SWITCH.append(SAMPLES.clear)  # 연결을 바꾸거나 끊으면 버린다(열쇠에 연결 열쇠가 들어 있어 다시 쓸 수 없고 최대 100만 행이 메모리에 남는다)
 
@@ -354,11 +359,8 @@ def described(found, body):
     return {**found, "description": spec.get("description", "")}
 
 
-@app.post("/api/profile")
-def profile():
-    """컬럼별 통계·추천과 추론(infer: 빈 값 비율, 단일값, 날짜 형식, 플래그, Parquet 파일 정보의 전체 기준 값, 명세서 설명).
-    테이블 전체가 아니라 profiler의 표본으로 구하고 테이블별로 캐시한다. refresh가 true면 표본을 새로 읽어 다시 구한다."""
-    body = request.json
+def profiled(body):
+    """한 테이블의 컬럼 통계(캐시된 것 또는 표본에서 새로 구한 것) {profile, sampled, saved}. profile·요약 파일이 같이 쓴다."""
     key, size, fresh = table_key(body), sample_size(body), body.get("refresh") is True
     found = None if fresh else profiler.cached(key, size)
     if found is None or "profile" not in found:
@@ -368,7 +370,148 @@ def profile():
         for column in stats["columns"]:
             column["infer"] = {**guesses.get(column["name"], {}), **({"exact": facts["columns"][column["name"]]} if facts and column["name"] in facts["columns"] else {})}
         found = profiler.remember(key, size, profile={**stats, **({"file_rows": facts["rows"]} if facts else {})}, sampled=info)
+    return found
+
+
+@app.post("/api/profile")
+def profile():
+    """컬럼별 통계·추천과 추론(infer: 빈 값 비율, 단일값, 날짜 형식, 플래그, Parquet 파일 정보의 전체 기준 값, 명세서 설명).
+    테이블 전체가 아니라 profiler의 표본으로 구하고 테이블별로 캐시한다. refresh가 true면 표본을 새로 읽어 다시 구한다."""
+    body = request.json
+    found = profiled(body)
     return jsonify({**described(found["profile"], body), "sampled": {**found["sampled"], "saved": found["saved"]}, "geo": geo_detect.hints(found["profile"]["columns"])})
+
+
+def same_value(a, b):
+    """숫자는 값으로, 나머지는 글자로 같은지."""
+    return float(a) == float(b) if isinstance(a, (int, float)) and isinstance(b, (int, float)) else str(a) == str(b)
+
+
+def differs(sample, full, sample_rows, full_rows):
+    """표본 값과 전체 값이 크게 다른 항목 이름들(nulls: 빈 값 비율이 5%p 이상, unique: 서로 다른 값 수가 20% 넘게, min·max: 다름).
+    표본·전체 모두 모든 행의 값이 서로 다르면(번호·ID) 값 종류 수는 늘 다르므로 비교하지 않는다."""
+    out = []
+    if abs(sample["nulls"] / max(sample_rows, 1) - full["nulls"] / max(full_rows, 1)) >= NULL_GAP:
+        out.append("nulls")
+    ids = sample["unique"] > 0 and sample["unique"] == sample_rows - sample["nulls"] and full["unique"] == full_rows - full["nulls"]
+    if not ids and abs(full["unique"] - sample["unique"]) > UNIQUE_GAP * max(full["unique"], sample["unique"]):
+        out.append("unique")
+    out += [k for k in ("min", "max") if not same_value(sample[k], full[k])]
+    return out
+
+
+@app.post("/api/profile/full")
+def profile_full():
+    """표본으로 구한 컬럼 요약을 테이블 전체로 다시 구한다(빈 값·서로 다른 값 수·최솟값·최댓값). 컬럼마다 표본과 크게 다른 항목(diff)을 붙인다.
+    표본 통계를 먼저 구해 둔 테이블에만 쓴다. 분석의 전체 구하기와 같이 처리 용량 확인·사본·취소를 따른다."""
+    body = request.json
+    found = profiler.cached(table_key(body), sample_size(body))
+    if found is None or "profile" not in found:
+        raise ValueError("먼저 표본으로 컬럼 통계를 구하세요.")
+    recipe = {"schema": body.get("schema") or "", "base": body["base"]}
+    if ask := copy_gate(recipe, reads=True):
+        return ask
+    fresh_copy(recipe)
+    expr = built(recipe)[0]
+    whole = run(lambda: prep_profile.full_facts(expr))
+    mine = {c["name"]: c for c in found["profile"]["columns"]}
+    for c in whole["columns"]:
+        c["diff"] = differs(mine[c["name"]], c, found["profile"]["rows"], whole["rows"]) if c["name"] in mine else []
+    return jsonify(whole)
+
+
+def examples(arrow, name):
+    """표본의 앞 EXAMPLE_SCAN행에서 겹치지 않는 값 EXAMPLES개(글자, 50자까지)를 ' | '로 이은 글자. 요약 파일에 넣는 행 값은 이것뿐이다."""
+    seen = []
+    for v in arrow[name].slice(0, EXAMPLE_SCAN).to_pylist():
+        text = str(v)[:EXAMPLE_LEN]
+        if v is not None and text not in seen:
+            seen.append(text)
+            if len(seen) == EXAMPLES:
+                break
+    return " | ".join(seen)
+
+
+def table_summary(body, table, full):
+    """한 테이블의 (행 수, 기준 글자, [요약 한 줄 = SUMMARY_HEAD 순서의 값들]). 기본은 표본 통계, full이면 전체 기준의 빈 값·고유값·최솟값·최댓값(구조·목록 컬럼은 표본 값)."""
+    mine = {**body, "base": table}
+    found = profiled(mine)["profile"]
+    rows, basis, total = found["rows"], f"표본 {found['rows']:,}행", known_rows({"schema": body.get("schema") or "", "base": table})
+    over = {}
+    if full:
+        recipe = {"schema": body.get("schema") or "", "base": table}
+        fresh_copy(recipe)
+        expr = built(recipe)[0]
+        whole = run(lambda: prep_profile.full_facts(expr))
+        rows, basis, total, over = whole["rows"], "전체", whole["rows"], {c["name"]: c for c in whole["columns"]}
+    arrow = sampled(mine, table_key(mine), sample_size(mine), False)[0]
+    lines = []
+    for c in found["columns"]:
+        c = {**c, **over.get(c["name"], {})}
+        lines.append([c["name"], c["type"], round(c["nulls"] / rows, 4) if rows else 0, c["nulls"], c["unique"], c["min"], c["max"], examples(arrow, c["name"])])
+    return total, basis, lines
+
+
+def write_summary(path, fmt, parts):
+    """parts = [(테이블, 행 수, 기준, 줄들)]를 한 파일로. Excel은 첫 시트에 테이블 목록, 테이블마다 시트 하나. CSV는 테이블·행 수 컬럼을 앞에 붙인 한 표.
+    수식으로 읽힐 글자로 시작하는 글자는 앞에 '를 붙인다."""
+    safe = lambda v: "'" + v if isinstance(v, str) and v.startswith(result.FORMULA_START) else v
+    if fmt == "csv":
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            out = csv.writer(f)
+            out.writerow(["테이블", "행 수", *SUMMARY_HEAD])
+            out.writerows([safe(table), total, *map(safe, line)] for table, total, _, lines in parts for line in lines)
+        return
+    import xlsxwriter
+    used = set()
+
+    def sheet_name(title):  # Excel 시트 이름: 31자까지, [ ] : * ? / 역슬래시 금지, 대소문자 가리지 않고 겹치지 않게
+        base = re.sub(r"[\[\]:*?/\\]", "_", title)[:31] or "_"
+        name, n = base, 1
+        while name.lower() in used:
+            n += 1
+            name = base[:31 - len(str(n)) - 1] + f"_{n}"
+        used.add(name.lower())
+        return name
+
+    with xlsxwriter.Workbook(str(path), {"strings_to_formulas": False, "strings_to_numbers": False, "strings_to_urls": False}) as book:
+        bold = book.add_format({"bold": True})
+        index = book.add_worksheet(sheet_name("테이블 목록"))
+        index.write_row(0, 0, ["테이블", "행 수", "컬럼 수", "기준", "시트"], bold)
+        for i, (table, total, basis, lines) in enumerate(parts, 1):
+            sheet = book.add_worksheet(sheet_name(table))
+            index.write_row(i, 0, [safe(table), total, len(lines), basis, sheet.get_name()])
+            sheet.write_row(0, 0, SUMMARY_HEAD, bold)
+            for r, line in enumerate(lines, 1):
+                sheet.write_row(r, 0, [safe(v) for v in line])
+
+
+@app.post("/api/profile/export")
+def profile_export():
+    """연결의 테이블들(tables를 비우면 전부)의 컬럼 요약(이름·타입·빈 값 비율·고유값 수·최솟값·최댓값·예시 값)을 저장 대화상자로 고른 파일 하나에 쓴다.
+    format은 xlsx(기본, 테이블마다 시트 + 첫 시트에 테이블 목록) 또는 csv. 기본은 표본 통계(표본 크기는 sample), full이면 전체 기준(처리 용량 확인·취소는 전체 구하기와 같다).
+    행 값은 예시 값 몇 개 외에 넣지 않는다."""
+    body = request.json
+    fmt, schema = body.get("format") or "xlsx", body.get("schema") or None
+    if fmt not in SUMMARY_FILES:
+        raise ValueError("형식(format)은 xlsx, csv 중 하나예요.")
+    names = source.list_tables(get_con(), schema)
+    tables = body.get("tables") or names
+    for table in tables:
+        parse.check_name(table, names, "테이블")
+    full = body.get("full") is True
+    for table in tables if full else ():
+        if ask := copy_gate({"schema": schema or "", "base": table}, reads=True):
+            return ask
+    if server.ask_save is None:
+        raise ValueError("저장 위치를 물을 수 없어요. 프로그램 창에서만 쓸 수 있어요.")
+    chosen = server.ask_save(f"data_summary.{fmt}", (SUMMARY_FILES[fmt],))
+    if not chosen:
+        return jsonify(cancelled=True)
+    path = chosen if chosen.lower().endswith("." + fmt) else f"{chosen}.{fmt}"
+    parts = [(table, *table_summary(body, table, full)) for table in tables]  # 테이블마다 run이라 [취소]는 그 자리에서 멈춘다(파일은 아직 쓰기 전)
+    write_summary(path, fmt, parts)
+    return jsonify(path=path, tables=len(parts))
 
 
 @app.post("/api/patterns")
@@ -461,8 +604,8 @@ def analyzed(body):
 
 
 def whole(body):
-    """분석을 테이블 전체로 구하는지: full이거나 퍼널."""
-    return body.get("full") is True or (body.get("how") or {}).get("kind") == "funnel"
+    """분석을 테이블 전체로 구하는지: full이거나 퍼널·가장 많은 기간 찾기(건수를 표본으로 세면 틀린다)."""
+    return body.get("full") is True or (body.get("how") or {}).get("kind") in ("funnel", "busiest")
 
 
 @app.post("/api/analyze")

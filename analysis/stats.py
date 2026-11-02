@@ -21,6 +21,7 @@ MAX_POINTS = result.MAX_POINTS  # 산점도의 점 수
 MAX_GROUPS = 30  # 그룹 비교에 보일 그룹 수(행이 많은 순)
 MAX_PERIODS = 400  # 시계열 추이에 보일 기간 수(최근 것)
 SEED = 20260101  # 점을 고르게 뽑을 때의 고정 씨앗(다시 구해도 같은 점, 대시보드 dash_calc도 쓴다)
+TOP_PERIODS, MAX_TOP_PERIODS = 5, 20  # 가장 많은 기간 찾기에서 보일 기본 개수, 상한
 UNITS = {"day": "D", "week": "W", "month": "M"}  # 시계열 묶음 단위 → Ibis truncate 단위
 WINDOW_UNITS = {"minute": 60, "hour": 3600, "day": 86400}  # 퍼널 기간 제한의 단위 → 초
 LIMITS = {"max_steps": funnel.MAX_STEPS, "bins": BINS, "top_values": TOP_VALUES, "max_corr": MAX_CORR, "max_points": MAX_POINTS, "max_groups": MAX_GROUPS, "max_periods": MAX_PERIODS}
@@ -194,6 +195,18 @@ def trend(t, column, unit, value, agg, opts=None):
     return {"column": column, "unit": unit, "value": value, "agg": agg, "labels": labels, "values": [got.get(l, 0) for l in labels], "more": more}
 
 
+def busiest(t, column, unit, top=None):
+    """데이터가 가장 많은 기간: trend로 날짜 컬럼을 unit(day·week·month)으로 묶어 센 뒤 건수가 많은 상위 top개(기본 TOP_PERIODS)를 [{start, end, count}]로(건수가 같으면 앞선 기간).
+    기간이 MAX_PERIODS개를 넘으면 최근 것만 본다(more)."""
+    top = TOP_PERIODS if top is None else top
+    if type(top) is not int or not 1 <= top <= MAX_TOP_PERIODS:
+        raise ValueError(f"찾을 기간 개수는 1~{MAX_TOP_PERIODS} 사이의 정수로 입력하세요.")
+    found = trend(t, column, unit, "", "count")
+    ends = {"day": lambda d: d, "week": lambda d: d + dt.timedelta(days=6), "month": lambda d: (d.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)}[unit]
+    best = sorted(((n, l) for l, n in zip(found["labels"], found["values"]) if n), key=lambda x: (-x[0], x[1]))[:top]
+    return {"column": column, "unit": unit, "periods": [{"start": l, "end": ends(dt.date.fromisoformat(l)).isoformat(), "count": n} for n, l in best], "more": found["more"]}
+
+
 def window_seconds(window):
     """퍼널 기간 제한 {n, unit}(unit은 minute·hour·day)을 초로. 비면(None) 제한 없음."""
     if window in (None, {}, ""):
@@ -226,7 +239,7 @@ def columns(t):
     return {"columns": [[name, kind(dtype)] for name, dtype in t.schema().items()]}
 
 
-KINDS = {"columns": columns, "distribution": distribution, "correlation": correlation, "scatter": scatter, "groups": groups, "trend": trend, "funnel": funnel_flow}
+KINDS = {"columns": columns, "distribution": distribution, "correlation": correlation, "scatter": scatter, "groups": groups, "trend": trend, "busiest": busiest, "funnel": funnel_flow}
 
 
 def analyze(t, how):
@@ -235,6 +248,6 @@ def analyze(t, how):
     if name not in KINDS:
         raise ValueError(f"분석 종류는 {', '.join(KINDS)} 중 하나입니다.")
     args = {"columns": (), "distribution": ("column",), "correlation": ("columns",), "scatter": ("x", "y"),
-            "groups": ("by", "value", "agg", "opts"), "trend": ("column", "unit", "value", "agg", "opts"),
+            "groups": ("by", "value", "agg", "opts"), "trend": ("column", "unit", "value", "agg", "opts"), "busiest": ("column", "unit", "top"),
             "funnel": ("who", "step", "time", "steps", "window", "range")}[name]
     return {"kind": name, **KINDS[name](t, *[how.get(a) for a in args])}

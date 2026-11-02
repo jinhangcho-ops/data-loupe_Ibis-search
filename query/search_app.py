@@ -323,10 +323,50 @@ def pivot():
 
 @app.post("/api/export")
 def export():
-    """조건에 맞는 전체 행을 임시 파일로 만들어 조금씩 내려보내고, 다 보내면 지운다."""
+    """조건에 맞는 전체 행을 임시 파일로 만들어 조금씩 내려보내고, 다 보내면 지운다. format은 csv·xlsx·parquet·tsv·fixed(고정폭, 파일은 result.txt)."""
     if ask := explore_gate(request.json, streams=True):
         return ask
-    return server.download(querying.runnable(request.json), request.json.get("format", ""))
+    return server.download(querying.runnable(request.json), file_format(request.json))
+
+
+FORMATS = {"fixed": "txt"}  # 화면의 형식 이름 → 확장자(고정폭 텍스트는 .txt). 나머지(csv·xlsx·parquet·tsv)는 이름이 곧 확장자
+
+
+def file_format(body):
+    fmt = body.get("format", "")
+    return FORMATS.get(fmt, fmt) if isinstance(fmt, str) else ""
+
+
+@app.post("/api/export/tables")
+def export_tables():
+    """여러 테이블 전체를 Excel 한 파일의 시트 여러 개로 저장한다(창의 저장 대화상자로 고른 곳). 요청 {tables: [{schema?, name}], format: "xlsx"}.
+    시트 이름은 테이블 이름(result.sheet_names). 테이블마다 Excel 행 상한(result.EXCEL_MAX_ROWS)까지 쓰고 넘친 시트는 cut으로 알린다.
+    임시 이름으로 쓰고 끝나면 바꿔치기한다. 응답 {path, cut: [자른 시트 이름], limit} / {cancelled: true} / 오류 {error}."""
+    body = request.json
+    tables = body.get("tables")
+    if not isinstance(tables, list) or not tables or not all(isinstance(t, dict) and isinstance(t.get("name"), str) and t["name"] for t in tables):
+        raise ValueError("저장할 테이블을 하나 이상 고르세요.")
+    if body.get("format", "xlsx") != "xlsx":
+        raise ValueError("여러 테이블은 Excel(xlsx) 한 파일로만 저장할 수 있어요.")
+    if server.ask_save is None:
+        raise ValueError("저장 위치를 물을 수 없어요. 프로그램 창에서만 쓸 수 있어요.")
+    con = get_con()
+    exprs = run(lambda: [result.formula_guard(server.any_table(con, t["name"], t.get("schema") or None)).limit(result.EXCEL_MAX_ROWS + 1) for t in tables])  # 하나 더 받아 넘쳤는지 안다
+    for expr in exprs:  # 탐색 저장(explore_gate)과 같은 실행 전 확인을 테이블마다
+        make = lambda e=expr: server.expr_sql(con, e)
+        if ask := (exporting(con, body, make) if held.remote(con) else server.scan_gate(body, make)):
+            return ask
+    chosen = server.ask_save("tables.xlsx", ("Excel (*.xlsx)",))
+    if not chosen:
+        return jsonify(cancelled=True)
+    path = Path(chosen if chosen.lower().endswith(".xlsx") else chosen + ".xlsx")
+    if server.reading(path):
+        raise ValueError("지금 읽고 있는 파일에는 저장할 수 없어요. 다른 이름을 고르세요.")
+    part = path.with_name(path.stem + ".part.xlsx")
+    sheets = list(zip(result.sheet_names([t["name"] for t in tables]), exprs))
+    cut = server.run_writing(lambda: result.write_excel(sheets, part, cut=True), lambda: part.unlink(missing_ok=True))
+    os.replace(part, path)
+    return jsonify(path=str(path), cut=cut, limit=result.EXCEL_MAX_ROWS)
 
 
 @app.post("/api/handoff")
@@ -479,11 +519,11 @@ def sql_run():
 
 @app.post("/api/sql/export")
 def sql_export():
-    """SQL 결과 전체를 파일(csv, xlsx, parquet)로 내려보낸다."""
+    """SQL 결과 전체를 파일(csv, xlsx, parquet, tsv, fixed 고정폭 .txt)로 내려보낸다."""
     expr = sql_expr(request.json)[0]
     if ask := sql_gate(request.json, streams=True):
         return ask
-    return server.download(expr, request.json.get("format", ""))
+    return server.download(expr, file_format(request.json))
 
 
 def sqls_view(found):

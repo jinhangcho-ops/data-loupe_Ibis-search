@@ -42,7 +42,7 @@ PASSES = {"uv": 2, "active": 2, "pv_per_uv": 2, "stickiness": 3, "time_between":
 COLS = {
     "user": ("사용자", "사용자(사람) 컬럼", "any", ()),
     "time": ("시각", "시각(날짜) 컬럼", "date", ()),
-    "amount": ("금액", "금액 컬럼", "num", ("amount", "revenue", "price", "pay", "sales", "금액", "매출", "결제", "가격")),
+    "amount": ("금액", "금액 컬럼", "num", ("amount", "amt", "revenue", "price", "pay", "sales", "krw", "금액", "매출", "결제", "가격", "단가")),
     "start": ("시작", "시작 시각 컬럼", "date", ("start", "begin", "login", "시작", "접속")),
     "end": ("끝", "끝 시각 컬럼", "date", ("end", "stop", "logout", "finish", "끝", "종료")),
     "event": ("이벤트", "이벤트 컬럼", "any", ("event", "action", "type", "이벤트", "행동")),
@@ -75,7 +75,8 @@ COLS = {
     "group": ("실험군", "실험군(그룹) 컬럼", "any", ("group", "variant", "arm", "bucket", "experiment", "test", "실험", "그룹")),
     "metric": ("지표 값", "지표 값 컬럼(숫자 또는 참거짓)", ["num", "bool"], ()),
 }
-STRICT = {"spend", "impressions", "clicks", "installs", "conversions", "invites", "joined", "delta", "balance", "fee_col", "results", "y_true", "y_pred", "score", "group", "rank", "rel"}  # 이름 단서가 있어야 쓸 수 있다고 보는 역할
+STRICT = {"amount", "refund", "spend", "impressions", "clicks", "installs", "conversions", "invites", "joined", "delta", "balance", "fee_col", "results", "y_true", "y_pred", "score", "group", "rank", "rel"}  # 이름 단서가 있어야 쓸 수 있다고 보는 역할(금액도: 인원수·횟수 컬럼이 원 단위 매출 지표에 맞춰지지 않게, F22)
+MAX_FREQUENT = 10  # 자주 쓴 지표 묶음에 보일 항목 수
 EXTRA = {  # 컬럼이 아닌 빈칸: 역할 → (이름, 타입, 안내, 기본값/옵션 등)
     "unit": slot("단위", "unit", "시간 단위", options=list(UNITS), default="day"),
     "gap": slot("세션 간격(분)", "number", "이 시간(분)을 넘게 쉬면 새 세션", default=30),
@@ -370,6 +371,18 @@ def get(entry_id):
 def is_catalog(template_id):
     """내 지표의 template 값이 지표 사전 항목인지."""
     return isinstance(template_id, str) and template_id.startswith(PREFIX)
+
+
+def frequent(cards, mine, used):
+    """자주 쓴 항목 id(MAX_FREQUENT개까지): 대시보드 카드에 쓴 것(카드 JSON에 든 내 지표의 사전 항목, 이름·약자가 카드 이름과 같은 항목) 먼저, 그다음 used(많이 쓴 순 id)."""
+    import json
+    names = {k.casefold(): e["id"] for e in ENTRIES for k in (e["name"], e["abbr"]) if k}
+    found = []
+    for c in cards:
+        text = json.dumps(c, ensure_ascii=False)
+        found += [m["template"][len(PREFIX):] for m in mine if is_catalog(m.get("template")) and f'"{m.get("id")}"' in text]
+        found += [names[t] for t in [str(c.get("title") or "").strip().casefold()] if t in names]
+    return [i for i in dict.fromkeys([*found, *used]) if i in BY_ID][:MAX_FREQUENT]
 
 
 def template(entry_id):

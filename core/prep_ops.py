@@ -1,6 +1,7 @@
 """컬럼 하나에 적용하는 전처리(OPS 표)와 그 함수들. 평균·분위수·값 목록처럼 테이블 전체에서 구하는 값은
 작은 조회로 먼저 구해 값으로 식에 넣는다(Polars 백엔드는 창 함수와 스칼라 서브쿼리가 없다)."""
 import functools
+import json
 import operator
 import re
 
@@ -19,6 +20,7 @@ RARE_MAX = 1000  # rare로 바꿀 값 목록의 최대 개수
 LABEL_MAX = 1000  # label로 번호를 붙일 서로 다른 값의 최대 개수
 BIN_START = re.compile(r"^(-?[0-9.]+(?:e[-+]?[0-9]+)?)–", re.I)  # bins가 만든 구간 글자의 시작 숫자
 ONEHOT_MAX = 50  # onehot으로 펼칠 서로 다른 값의 최대 개수
+EXPAND_MAX, EXPAND_SCAN = 50, 1000  # expand로 펼칠 맵·JSON 키의 최대 개수, 그 키를 모으려고 읽는 앞 행 수
 PARTS = {  # 날짜에서 뽑는 값. 정수는 int64로 맞춘다(백엔드마다 int16·int32로 다르다).
     "year": lambda col: col.year().cast("int64"), "month": lambda col: col.month().cast("int64"), "day": lambda col: col.day().cast("int64"),
     "weekday": lambda col: col.day_of_week.index().cast("int64"), "hour": lambda col: col.hour().cast("int64"), "ym": lambda col: col.cast("date").truncate("M"),
@@ -348,6 +350,46 @@ def counts(t, name, arg):
     return t.mutate(**{new: row})
 
 
+def json_keys(text):
+    """JSON 글자가 객체면 그 맨 위 키들, 아니면(깨졌거나 배열·숫자) 빈 목록."""
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return []
+    return list(value) if isinstance(value, dict) else []
+
+
+def expand_keys(t, name, dtype):
+    """맵·JSON 컬럼의 키를 앞 EXPAND_SCAN행에서 모아 정렬해서(맵은 키 값 그대로, JSON은 맨 위 객체의 키 글자). EXPAND_MAX개를 넘으면 거부한다."""
+    head = t.limit(EXPAND_SCAN)
+    if dtype.is_map():
+        found = head.select(k=head[name].keys().unnest()).distinct().to_pyarrow()["k"].to_pylist()
+    else:  # JSON 글자(또는 json 타입): 객체가 아니거나 JSON이 아닌 값은 건너뛴다
+        texts = head.filter(head[name].notnull()).select(v=head[name].cast("string")).to_pyarrow()["v"].to_pylist()
+        found = {k for v in texts for k in json_keys(v)}
+    if len(found) > EXPAND_MAX:
+        raise ValueError(f"'{name}' 컬럼은 키가 {EXPAND_MAX}개를 넘어 컬럼으로 펼칠 수 없어요(앞 {EXPAND_SCAN:,}행 기준).")
+    if not found:
+        raise ValueError(f"'{name}' 컬럼에서 펼칠 키를 찾지 못했어요(앞 {EXPAND_SCAN:,}행 기준).")
+    return sorted(found, key=str)
+
+
+def expand(t, name, _):
+    """구조 컬럼은 필드마다, 맵 컬럼은 앞 행들의 키마다, JSON 글자는 맨 위 키마다 '{컬럼}.{키}' 컬럼을 더한다(원래 컬럼은 그대로).
+    JSON 값은 글자 컬럼으로(글자는 따옴표 없이, 숫자·참거짓·객체는 JSON 글자 그대로, null은 빈 값)."""
+    col, dtype = t[name], t[name].type()
+    if dtype.is_struct():
+        new = {f"{name}.{f}": col[f] for f in dtype.names}
+    elif dtype.is_map():
+        new = {f"{name}.{k}": col.get(k) for k in expand_keys(t, name, dtype)}
+    elif dtype.is_string() or dtype.is_json():
+        js = col if dtype.is_json() else col.cast("json")
+        new = {f"{name}.{k}": ibis.coalesce(js[k].unwrap_as("string"), js[k].cast("string")).nullif("null") for k in expand_keys(t, name, dtype)}
+    else:
+        raise ValueError(f"'expand'(컬럼으로 펼치기)는 구조·맵·JSON 글자 컬럼에만 쓸 수 있어요. '{name}' 컬럼은 {parse.type_info(dtype)[0]} 컬럼이에요. (목록은 unnest로 행으로 펼쳐요)")
+    return add_columns(t, new)
+
+
 def is_has(v):
     return (isinstance(v, dict) and set(v) <= {"words", "regex"} and isinstance(v.get("regex", False), bool) and is_strs(v.get("words"))
             and 1 <= len(v["words"]) <= 50 and all(v["words"]) and len(set(v["words"])) == len(v["words"]))
@@ -385,6 +427,7 @@ OPS = [
      and type(v.get("group", 0)) is int and v.get("group", 0) >= 0, '{"pattern": "정규식", "group": 0}', extract),
     ("has", STRING, is_has, '{"words": ["서울", "부산"], "regex": false} (words는 비어 있지 않은 서로 다른 글자 1~50개)', has),
     ("counts", STRING, lambda v: isinstance(v, dict) and set(v) <= {"sep"} and isinstance(v.get("sep", ""), str), '{"sep": ","}', counts),
+    ("expand", None, lambda v: v is True, "true", expand),
 ]
 
 

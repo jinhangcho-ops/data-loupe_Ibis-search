@@ -6,8 +6,14 @@
 const MC_HINT = { north_star: "북극성 후보: 서비스가 잘 되는지 한눈에 보는 대표 지표예요.", counter: "카운터 지표 후보: 대표 지표가 좋아질 때 같이 봐야 할 짝 지표예요.", guardrail: "가드레일 후보: 나빠지면 다른 개선을 멈추고 살펴야 하는 선이에요." };
 const MC_ANY = ["num", "date", "text", "bool", "json", "array", "struct", "other"];  // 종류가 any인 컬럼 빈칸에 ‘가공’ 고르기가 붙지 않게 풀어 쓴 목록
 const MC_UNITS = { day: "일", week: "주", month: "월" };
-// 영역마다 항목을 묶는다(항목이 없는 영역은 뺀다)
-const mcGroups = cat => cat.areas.map(a => ({ ...a, entries: cat.entries.filter(e => e.area === a.id) })).filter(g => g.entries.length);
+// 영역마다 항목을 묶는다(항목이 없는 영역은 뺀다). freq(자주 쓴 항목 id들)가 있으면 맨 위에 "자주 쓴 지표" 묶음, q(찾을 글)가 있으면 이름·약자·설명에 든 항목만
+const mcGroups = (cat, freq = [], q = "") => {
+  const hit = e => !q || [e.name, e.abbr, e.help].some(t => (t ?? "").toLowerCase().includes(q.toLowerCase()));
+  return [{ id: "frequent", name: "자주 쓴 지표", entries: freq.map(id => cat.entries.find(e => e.id === id)).filter(Boolean) }, ...cat.areas.map(a => ({ ...a, entries: cat.entries.filter(e => e.area === a.id) }))]
+    .map(g => ({ ...g, entries: g.entries.filter(hit) })).filter(g => g.entries.length);
+};
+// 항목의 단위 글(비율은 %, 단위 없는 항목은 ""): 목록 설명에 보인다
+const mcUnit = e => e.format === "percent" ? "%" : e.unit;
 const mcNum = v => Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 });
 // 값 글: 비율은 0~1 분수라 %로, 나머지는 단위를 붙인다. 없으면 "—"
 const mcValue = (v, format, unit) => v == null ? "—" : format === "percent" ? `${mcNum(v * 100)}%` : `${mcNum(v)}${unit ? " " + unit : ""}`;
@@ -29,17 +35,24 @@ async function showMetricCatalog(box, env) {
   const { ctx, kinds, slotEl, periodInputs, refresh } = env, scope = env.scope ?? (() => S);  // scope: 기준 테이블·스키마(대시보드는 고른 테이블)
   let cat, av;
   try { cat = await mcCatalog(); av = (await api("/api/catalog/available", { columns: kinds() })).availability; } catch (err) { box.replaceChildren(el("div", { className: "err", textContent: err.message })); return; }
-  const detail = el("div", { className: "mdetail" }), list = el("div", { className: "mcat" });
+  const freq = await api("/api/catalog/frequent").then(d => d.ids, () => []);  // 못 받으면 묶음 없이
+  const detail = el("div", { className: "mdetail" }), list = el("div", { className: "mcat" }), find = el("input", { placeholder: "지표 찾기 (이름, 약자, 설명)", oninput: () => drawList() });
+  const opened = new Set(["frequent"]);  // 펼친 영역(처음엔 자주 쓴 지표만). 다시 그려도 그대로 둔다
   let picked = "";
 
   const hintLine = e => e.hint ? el("div", { className: "mhint", textContent: MC_HINT[e.hint] }) : "";
   const item = e => {
     const a = av[e.id];
     return el("button", { className: "mitem" + (a.usable ? "" : " off") + (picked === e.id ? " on" : ""), disabled: !a.usable, onclick: () => pick(e) },
-      el("b", { textContent: e.name }), e.abbr ? el("span", { className: "hint", textContent: " " + e.abbr }) : "", el("div", { className: "hint", textContent: e.help }),
+      el("b", { textContent: e.name }), e.abbr ? el("span", { className: "hint", textContent: " " + e.abbr }) : "", mcUnit(e) ? el("span", { className: "hint", textContent: ` · 단위 ${mcUnit(e)}` }) : "", el("div", { className: "hint", textContent: e.help }),
       a.usable ? (a.note ? el("div", { className: "hint", textContent: a.note }) : "") : el("div", { className: "why", textContent: a.reason }));
   };
-  const drawList = () => list.replaceChildren(...mcGroups(cat).flatMap(g => [el("h3", { textContent: g.name }), ...g.entries.map(item)]));
+  // 영역은 접이식(기본 접힘, 찾을 글이 있으면 맞는 영역을 모두 펼침). 손으로 펴고 접은 것은 opened에 남는다
+  const drawList = () => {
+    const q = (find.value ?? "").trim();  // 시험의 가짜 DOM은 value가 없다
+    list.replaceChildren(...mcGroups(cat, freq, q).map(g => el("details", { open: !!q || opened.has(g.id), ontoggle: ev => { if (!q) ev.currentTarget.open ? opened.add(g.id) : opened.delete(g.id); } },
+      el("summary", { textContent: `${g.name} (${g.entries.length})` }), ...g.entries.map(item))));
+  };
 
   // 고른 항목 하나: 문장·빈칸·기간·맞춤·[계산]·[내 지표로 저장]
   function pick(e) {
@@ -145,5 +158,5 @@ async function showMetricCatalog(box, env) {
     detail.scrollIntoView?.({ block: "nearest" });
   }
   drawList();
-  box.replaceChildren(detail, list);
+  box.replaceChildren(detail, find, list);
 }

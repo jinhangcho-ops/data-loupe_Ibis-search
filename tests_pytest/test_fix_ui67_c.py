@@ -174,7 +174,7 @@ console.log(JSON.stringify({ tick: pct.options.scales.y.ticks.callback(9), color
     got = run_node(tmp_path, body, parts=[part])
     assert got == {"tick": "9%", "color": "#000", "plainTick": False, "order": ["합계", "평균"], "pie": []}
     html = read("index.html")
-    assert "tuneChart(chartConfig(drawnCard(drawn, axisRanges())" in html and 'format === "percent")' in between("index.html", "function drawMetric()", "\n}\n")
+    assert "tuneChart(chartConfig(drawnCard(labeled(drawn), axisRanges())" in html and 'format === "percent")' in between("index.html", "function drawMetric()", "\n}\n")
 
 
 @node

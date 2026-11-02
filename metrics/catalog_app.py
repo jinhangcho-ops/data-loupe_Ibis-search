@@ -5,6 +5,7 @@
   원격 DB에는 행 수를 미리 세는 조회를 보내지 않는다.
 - POST /api/catalog/save(FREE): 항목을 지금 테이블(scope)에 묶은 내 지표로 저장한다(my_metrics, 새 id, template = "catalog:항목id").
 저장한 내 지표를 문장·카드에서 구할 때는 compute_saved(sentence_exec.metric_run이 부른다)."""
+import contextlib
 import json
 
 from flask import jsonify, request
@@ -22,7 +23,7 @@ metric_catalog = Later("metrics.metric_catalog")
 my_metrics = Later("metrics.my_metrics")
 querying = Later("core.querying")
 
-server.FREE.update({"/api/catalog", "/api/catalog/available", "/api/catalog/save"})
+server.FREE.update({"/api/catalog", "/api/catalog/available", "/api/catalog/save", "/api/catalog/frequent"})
 
 
 @server.late_constants("query")
@@ -164,7 +165,21 @@ def catalog_compute():
         raise ValueError("기준 테이블이 있는 검색 body가 필요해요.")
     if ask := scan_ask(e, slots, body, data, data.get("align")):
         return ask
-    return jsonify(**compute_entry(e, slots, body, data.get("align")))
+    found = compute_entry(e, slots, body, data.get("align"))
+    with contextlib.suppress(OSError):  # 사용 횟수를 못 써도 구한 값은 돌려준다(자주 쓴 지표 묶음)
+        use_counts.use("catalog", e["id"])
+    return jsonify(**found)
+
+
+@app.get("/api/catalog/frequent")
+def catalog_frequent():
+    """자주 쓴 지표 사전 항목 id {ids}: 저장한 대시보드의 카드에 쓴 것 먼저, 그다음 계산·저장한 횟수 순(metric_catalog.frequent). 대시보드를 못 읽으면 횟수만."""
+    try:
+        cards = [c for d in dash_store.load()["dashboards"].values() for c in d.get("cards") or []]
+        mine = my_metrics.load()
+    except Exception:  # 잠긴(풀 수 없는) 대시보드 파일 등: 목록은 횟수만으로도 보인다(my_metrics.used_by와 같은 처리)
+        cards, mine = [], []
+    return jsonify(ids=metric_catalog.frequent(cards, mine, use_counts.ranked(use_counts.load().get("catalog", {}))))
 
 
 # ---------- 내 지표로 저장 ----------
@@ -185,4 +200,6 @@ def catalog_save():
     defn = {"name": data.get("name") or e["name"], "scope": scope, "template": metric_catalog.PREFIX + e["id"], "slots": body_of(data.get("slots")),
             "unit": "%" if e["format"] == "percent" else e["unit"], "better": e["better"], "align": data.get("align")}
     made = my_metrics.create(defn, columns)
+    with contextlib.suppress(OSError):
+        use_counts.use("catalog", e["id"])
     return jsonify(metric={**made, "text": my_metrics.scope_text(made)})

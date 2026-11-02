@@ -23,6 +23,7 @@ TEXT_MATCH = {"포함": "like", "으로 시작": "starts", "으로 끝": "ends"}
 SUBTOTAL_BY = {"소계·총계": "rollup", "모든 조합(CUBE)": "cube", "고른 조합(GROUPING SETS)": "sets"}
 WORD = re.compile(r"\{([^{}]+)\}")
 COMPARED = ("e03", "e04", "e12")  # 값 빈칸을 같은 문장의 {컬럼}과 견주는 틀(컬럼 종류로 읽히는지 본다)
+STAR_NULL = re.compile(r"(?<![^\s'\"(])\*\s+is\s+(not\s+)?null\b", re.I)  # 모든 컬럼 조건(parse.parse_one의 * is (not) null)
 
 
 class Bad(ValueError):
@@ -114,7 +115,7 @@ def check(tid, slots, columns=None):
                 out.append(issue(name, "bad", f"‘{s['label']}’ 칸을 채워 주세요."))
             continue
         kind = s["type"]
-        known = None if tid == "e16" and name == "연결 컬럼" else columns  # 16번의 연결 컬럼은 지금 테이블이 아니라 A·B의 컬럼
+        known = None if (tid == "e16" and name == "연결 컬럼") or (tid == "e53" and name == "조건" and slots.get("집단 테이블")) else columns  # 16번의 연결 컬럼은 A·B의, 53번의 조건은 집단 테이블의 컬럼
         if known is None and columns is not None and isinstance(raw, dict) and raw.get("prep"):
             out.append(issue(name, "bad", "16번 문장의 연결 컬럼에는 컬럼 가공을 쓸 수 없어요."))
         if kind in ("column", "columns", "order"):
@@ -146,7 +147,7 @@ def check(tid, slots, columns=None):
         elif kind == "cond":
             for line in raw if isinstance(raw, list) else [raw]:
                 for col in flow.cond_columns(line, columns):
-                    if columns is not None and col not in columns:
+                    if known is not None and col not in known and not (col == "*" and STAR_NULL.search(str(line))):  # * is (not) null은 모든 컬럼
                         out.append(issue(name, "bad", f"조건의 ‘{col}’ 컬럼이 이 테이블에 없어요."))
         elif kind in ("value", "values", "text_match") and columns is not None and (kind == "text_match" or tid in COMPARED):
             out += value_issues(t, slots, s, raw, columns)
@@ -156,6 +157,12 @@ def check(tid, slots, columns=None):
         out.append(issue("정확도", "info", "근사 값이에요. 정확한 값과 조금 다를 수 있어요."))
     if tid == "e47":
         out.append(issue("식", "info", "SQL 식은 읽기만 하는 식인지 실행 전에 한 번 더 검사해요."))
+    if tid == "e51" and slots.get("경계") not in (None, "", []):
+        from query import sentence_exec  # 51번 경계 규칙은 sentence_exec에 있다(위에서 올리면 서로 import)
+        try:
+            sentence_exec.count_bounds(slots["경계"])
+        except Bad as e:
+            out.append(issue("경계", "bad", str(e)))
     return out
 
 
@@ -313,6 +320,10 @@ def formula_one(text, columns=None):
         kind = columns.get(name(g)) if isinstance(columns, dict) else None
         return repr(str(v)) if kind == "text" else num(v)
     m = parse.NULL_RE.match(text)
+    if m and m.group(1) == "*" and not (isinstance(columns, dict) and "*" in columns):  # 모든 컬럼: not null은 모두 값이 있음(and), null은 하나라도 빔(or). parse.parse_one과 같은 규칙
+        if not columns:
+            raise Bad(f"조건 ‘{shown}’은 테이블의 컬럼을 알아야 계산 식으로 바꿀 수 있어요.")
+        return (" and " if m.group(2) else " or ").join(f"{'notnull' if m.group(2) else 'isnull'}(col({c!r}))" for c in columns)
     if m:
         return f"{'notnull' if m.group(2) else 'isnull'}(col({name(m.group(1))!r}))"
     m = parse.BETWEEN_RE.match(text)
@@ -389,7 +400,7 @@ def compile(tid, slots, body=None, columns=None):
     return {**out, "issues": found}
 
 
-# ---------- 탐색 틀 1~50 ----------
+# ---------- 탐색 틀 1~50(51~53은 sentence_exec가 COMPILERS에 붙인다) ----------
 
 def e01(p):
     p.rows("모든 데이터")

@@ -99,9 +99,12 @@ TIME_BANDS = (2, 12)
 TIME = re.compile(rf"time_(search|summary|chart|metric|export|profile|preview|run|analyze)_({'|'.join(str(n) for n in range(TIME_BANDS[0], TIME_BANDS[1] + 1))})")
 MAX_TIME = 10**12
 ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")  # env 파일의 이름
+JOIN_KEYS_MAX = 3000  # 쿼리 화면이 테이블 쌍마다 기억한 조인 키(JSON을 퍼센트 인코딩한 글자). 쿠키로 화면에 돌아가서 4KB 안에
 
 
 def valid(name, value):
+    if name == "join_keys":
+        return type(value) is str and len(value) <= JOIN_KEYS_MAX
     if TIME.fullmatch(name):
         return type(value) is int and 1 <= value <= MAX_TIME
     if name in SIZES:

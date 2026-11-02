@@ -18,6 +18,7 @@ MAX_POINTS = 5_000  # 산점도·버블의 점 수 상한(분석의 산점도와
 EXCEL_MAX_ROWS = 1_048_575  # Excel 시트 한 장의 행 수(제목 줄 제외)
 CHUNK = 100_000  # 큰 결과를 한 번에 받는 행 수(저장·결과 받아 두기)
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r")  # 스프레드시트가 수식으로 읽는 첫 글자(저장할 때 앞에 '를 붙인다)
+BOM = b"\xef\xbb\xbf"  # Excel이 UTF-8 글자 파일의 한글을 바로 읽도록 맨 앞에 붙인다
 
 
 def json_text(df):
@@ -138,62 +139,137 @@ def write_parquet(expr, path):
     write_batches(pq.ParquetWriter, expr, path)
 
 
-def write_csv(expr, path):
-    """CSV로 저장. 중첩 컬럼이 있으면 묶음(batch)마다 JSON 글자로 바꿔 이어 쓴다. 파일 연결은 LazyFrame에서 바로 흘려 쓴다."""
+def write_csv(expr, path, sep=","):
+    """CSV로 저장. 중첩 컬럼이 있으면 묶음(batch)마다 JSON 글자로 바꿔 이어 쓴다. 파일 연결은 LazyFrame에서 바로 흘려 쓴다.
+    sep이 쉼표가 아니면(TSV) 어느 연결이든 묶음마다 Polars로 쓰고 맨 앞에 BOM을 붙인다(CSV의 BOM은 server.download가 붙인다)."""
     frame = lazy(expr)
-    if frame is not None:
+    if sep == "," and frame is not None:
         return json_text(frame).sink_csv(path)
-    if not has_nested(expr) and not own_write(ibis.get_backend(expr)):
+    if sep == "," and not has_nested(expr) and not own_write(ibis.get_backend(expr)):
         return expr.to_csv(path)
-    if not has_nested(expr):  # own_write 연결: Ibis의 to_csv와 같은 쓰기(pyarrow)를 묶음마다
+    if sep == "," and not has_nested(expr):  # own_write 연결: Ibis의 to_csv와 같은 쓰기(pyarrow)를 묶음마다
         import pyarrow.csv as pcsv
         return write_batches(pcsv.CSVWriter, expr, path)
     import polars as pl
     with open(path, "wb") as f:
+        f.write(b"" if sep == "," else BOM)
         wrote = False
         for batch in batches(expr):
-            json_text(pl.from_arrow(batch)).write_csv(f, include_header=not wrote)
+            json_text(pl.from_arrow(batch)).write_csv(f, separator=sep, include_header=not wrote)
             wrote = True
         if not wrote:  # 행이 없으면 머리글만
-            f.write((",".join(expr.columns) + "\n").encode("utf-8"))
+            f.write((sep.join(expr.columns) + "\n").encode("utf-8"))
 
 
-def write_excel(expr, path):
+def write_tsv(expr, path):
+    write_csv(expr, path, "\t")
+
+
+def text_width(text):
+    """화면에 보이는 칸 수: 동아시아 넓은 글자(한글·한자 등)는 2칸."""
+    import unicodedata
+    return len(text) if text.isascii() else sum(2 if unicodedata.east_asian_width(c) in "WF" else 1 for c in text)
+
+
+def write_fixed(expr, path):
+    """고정폭 텍스트로 저장(UTF-8, BOM). 컬럼 폭은 머리글과 값의 가장 긴 보이는 칸 수, 컬럼 사이는 빈칸 하나, 숫자는 오른쪽·나머지는 왼쪽 정렬.
+    폭을 알려면 전체를 봐야 해서 묶음을 메모리에 모아 두 번 돈다(쿼리는 한 번): 그래서 Excel과 같은 EXCEL_MAX_ROWS행까지.
+    줄바꿈·탭은 줄이 깨지지 않게 빈칸으로, 빈 값은 빈칸, 이진 값은 16진 글자로."""
+    import polars as pl
+    numeric = [t.is_numeric() for t in expr.schema().values()]
+    frames, count = [], 0
+    for batch in batches(expr):
+        count += batch.num_rows
+        if count > EXCEL_MAX_ROWS:
+            raise ValueError(f"고정폭 텍스트는 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있어요. CSV·TSV나 Parquet으로 저장하세요.")
+        frames.append(json_text(pl.from_arrow(batch)))
+
+    def cell(value):
+        if value is None:
+            return ""
+        text = bytes(value).hex() if isinstance(value, (bytes, bytearray, memoryview)) else str(value)
+        return text.replace("\r\n", " ").replace("\r", " ").replace("\n", " ").replace("\t", " ")
+
+    lines = lambda: (list(map(cell, values)) for frame in frames for values in frame.iter_rows())
+    widths = [text_width(cell(name)) for name in expr.columns]
+    for texts in lines():
+        widths = [max(w, text_width(t)) for w, t in zip(widths, texts)]
+
+    def line(texts):
+        pads = [" " * (w - text_width(t)) for w, t in zip(widths, texts)]
+        return " ".join(p + t if right else t + p for t, p, right in zip(texts, pads, numeric)) + "\n"
+    try:
+        with open(path, "w", encoding="utf-8-sig", newline="") as f:
+            f.write(line([cell(name) for name in expr.columns]))
+            for texts in lines():
+                f.write(line(texts))
+    except BaseException:
+        Path(path).unlink(missing_ok=True)
+        raise
+
+
+def sheet_names(names):
+    """테이블 이름들을 Excel 시트 이름으로: 금지 문자 []:*?/\\는 _로, 앞뒤 '는 빼고, 31자까지, 비면 Sheet. 대소문자 무시로 겹치면(예약어 History도) 뒤에 _2, _3…"""
+    import re
+    used, found = {"history"}, []
+    for name in names:
+        base = re.sub(r"[\[\]:*?/\\]", "_", name).strip("'")[:31].strip("'") or "Sheet"
+        sheet, n = base, 1
+        while sheet.lower() in used:
+            n += 1
+            sheet = base[:31 - len(f"_{n}")] + f"_{n}"
+        used.add(sheet.lower())
+        found.append(sheet)
+    return found
+
+
+def write_excel(expr, path, cut=False):
     """Excel로 저장. 묶음씩 받아 xlsxwriter의 메모리 절약 모드(constant_memory: 행을 바로 파일에 씀)로 쓴다.
-    글자는 수식·숫자·주소로 해석하지 않는다(수식 막기는 export가 따로 한다). 날짜·날짜시간은 그 형식으로. 시간대가 있는 시각은 이 PC 시간대의 시각으로."""
+    글자는 수식·숫자·주소로 해석하지 않는다(수식 막기는 export가 따로 한다). 날짜·날짜시간은 그 형식으로. 시간대가 있는 시각은 이 PC 시간대의 시각으로.
+    expr 대신 [(시트 이름, 식)]을 주면 한 파일에 시트 여러 개로 쓴다. cut이면 EXCEL_MAX_ROWS를 넘는 시트는 오류 대신 거기서 자르고, 자른 시트 이름들을 돌려준다."""
     import polars as pl
     import polars.selectors as cs
     import xlsxwriter
     options = {"constant_memory": True, "strings_to_formulas": False, "strings_to_numbers": False, "strings_to_urls": False}
     zone = source.pc_zone()
+    cuts = []
     try:
         with xlsxwriter.Workbook(str(path), options) as book:  # 행 수는 따로 세지 않고(원격 DB에 COUNT를 보내지 않는다) 쓰면서 상한을 넘는지 본다
-            sheet = book.add_worksheet()
             bold = book.add_format({"bold": True})
             shapes = {pl.Date: book.add_format({"num_format": "yyyy-mm-dd"}), pl.Datetime: book.add_format({"num_format": "yyyy-mm-dd hh:mm:ss"}),
                       pl.Time: book.add_format({"num_format": "hh:mm:ss"})}  # 날짜·시각 타입의 칸 형식
-            if len(expr.columns) > 16_384:  # xlsxwriter는 넘는 컬럼을 말없이 빼고 쓴다
-                raise ValueError(f"Excel은 16,384개 컬럼까지 저장할 수 있어요({len(expr.columns):,}개). CSV나 Parquet으로 저장하세요.")
-            sheet.write_row(0, 0, expr.columns, bold)
-            row = 1
-            for batch in batches(expr):
-                frame = json_text(pl.from_arrow(batch)).with_columns(cs.datetime(time_zone="*").dt.convert_time_zone(zone).dt.replace_time_zone(None))  # Excel은 시간대를 모른다
-                kinds = [shapes.get(t.base_type()) for t in frame.dtypes]
-                ints = [t.is_integer() or (t.base_type() == pl.Decimal and t.scale == 0) for t in frame.dtypes]  # 소수 0자리 Decimal(Oracle NUMBER·DECIMAL(19,0) ID)도 정수
-                for values in frame.iter_rows():
-                    if row > EXCEL_MAX_ROWS:
-                        raise ValueError(f"Excel은 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있어요. CSV나 Parquet으로 저장하세요.")
-                    for col, raw in enumerate(values):
-                        value = number(raw)  # NaN·무한은 빈 칸(xlsxwriter가 쓰지 못한다), Decimal은 실수로
-                        if value is None:
-                            continue
-                        if isinstance(value, (bytes, bytearray, memoryview)):  # 이진 값은 xlsxwriter가 쓰지 못한다: 16진 글자로
-                            value = bytes(value).hex()
-                        elif ints[col] and abs(value) >= 10 ** 15:  # Excel 숫자는 15자리까지라 큰 정수(ID 등)는 끝자리가 바뀐다: 글자로(Decimal은 실수로 바꾸기 전 값으로)
-                            value = str(int(raw))
-                        if (sheet.write(row, col, value, kinds[col]) if kinds[col] else sheet.write(row, col, value)) == -2:  # 32,767자 넘는 글자는 잘라서 쓰고 -2만 돌려준다
-                            raise ValueError(f"Excel 한 칸에는 32,767자까지 쓸 수 있어요(‘{expr.columns[col]}’ 컬럼). CSV나 Parquet으로 저장하세요.")
-                    row += 1
+
+            def fill(sheet, expr):
+                """시트 하나를 쓴다. 상한을 넘으면 cut이면 True(자름), 아니면 오류."""
+                if len(expr.columns) > 16_384:  # xlsxwriter는 넘는 컬럼을 말없이 빼고 쓴다
+                    raise ValueError(f"Excel은 16,384개 컬럼까지 저장할 수 있어요({len(expr.columns):,}개). CSV나 Parquet으로 저장하세요.")
+                sheet.write_row(0, 0, expr.columns, bold)
+                row = 1
+                for batch in batches(expr):
+                    frame = json_text(pl.from_arrow(batch)).with_columns(cs.datetime(time_zone="*").dt.convert_time_zone(zone).dt.replace_time_zone(None))  # Excel은 시간대를 모른다
+                    kinds = [shapes.get(t.base_type()) for t in frame.dtypes]
+                    ints = [t.is_integer() or (t.base_type() == pl.Decimal and t.scale == 0) for t in frame.dtypes]  # 소수 0자리 Decimal(Oracle NUMBER·DECIMAL(19,0) ID)도 정수
+                    for values in frame.iter_rows():
+                        if row > EXCEL_MAX_ROWS:
+                            if cut:
+                                return True
+                            raise ValueError(f"Excel은 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있어요. CSV나 Parquet으로 저장하세요.")
+                        for col, raw in enumerate(values):
+                            value = number(raw)  # NaN·무한은 빈 칸(xlsxwriter가 쓰지 못한다), Decimal은 실수로
+                            if value is None:
+                                continue
+                            if isinstance(value, (bytes, bytearray, memoryview)):  # 이진 값은 xlsxwriter가 쓰지 못한다: 16진 글자로
+                                value = bytes(value).hex()
+                            elif ints[col] and abs(value) >= 10 ** 15:  # Excel 숫자는 15자리까지라 큰 정수(ID 등)는 끝자리가 바뀐다: 글자로(Decimal은 실수로 바꾸기 전 값으로)
+                                value = str(int(raw))
+                            if (sheet.write(row, col, value, kinds[col]) if kinds[col] else sheet.write(row, col, value)) == -2:  # 32,767자 넘는 글자는 잘라서 쓰고 -2만 돌려준다
+                                raise ValueError(f"Excel 한 칸에는 32,767자까지 쓸 수 있어요(‘{expr.columns[col]}’ 컬럼). CSV나 Parquet으로 저장하세요.")
+                        row += 1
+                return False
+            for name, one in (expr if isinstance(expr, list) else [(None, expr)]):
+                if fill(book.add_worksheet(name), one):
+                    cuts.append(name)
+        return cuts
     except BaseException:
         try:
             Path(path).unlink(missing_ok=True)  # 쓰다 만 파일은 남기지 않는다
@@ -207,6 +283,8 @@ EXPORTS = {
     ".csv": write_csv,
     ".xlsx": write_excel,
     ".parquet": write_parquet,
+    ".tsv": write_tsv,  # 탭 구분(비고정장)
+    ".txt": write_fixed,  # 고정폭(고정장). 화면의 형식 이름은 fixed(search_app.FORMATS가 txt로 바꾼다)
 }
 
 
@@ -365,14 +443,19 @@ def get_chart(expr, x, series, split=None, order="x"):
                     for i in range(len(series)) for part in parts], more
 
 
+def formula_guard(expr):
+    """수식으로 읽힐 글자로 시작하는 문자 값·컬럼 이름은 앞에 '를 붙여 스프레드시트가 실행하지 않게 한다."""
+    texts = [name for name, t in expr.schema().items() if t.is_string()]
+    expr = expr.mutate(**{name: expr[name].substr(0, 1).isin(FORMULA_START).ifelse("'" + expr[name], expr[name]) for name in texts})  # 정규식은 SQL Server 등이 못 한다
+    return expr.rename({"'" + name: name for name in expr.columns if name[:1] in FORMULA_START})
+
+
 def export(expr, path, guard=True):
-    """조건에 맞는 전체 행을 파일로 저장한다. 형식은 확장자(.csv, .xlsx, .parquet)로 정한다.
+    """조건에 맞는 전체 행을 파일로 저장한다. 형식은 확장자(.csv, .xlsx, .parquet, .tsv, .txt 고정폭)로 정한다.
     guard가 False면 수식 막기를 하지 않는다(다시 데이터로 읽을 파일)."""
     suffix = Path(path).suffix.lower()
     if suffix not in EXPORTS:
         raise ValueError(f"파일 이름은 {', '.join(EXPORTS)} 중 하나로 끝나야 해요.")
-    if guard and suffix != ".parquet":  # 수식으로 읽힐 글자로 시작하는 문자 값·컬럼 이름은 앞에 '를 붙여 스프레드시트가 실행하지 않게 한다.
-        texts = [name for name, t in expr.schema().items() if t.is_string()]
-        expr = expr.mutate(**{name: expr[name].substr(0, 1).isin(FORMULA_START).ifelse("'" + expr[name], expr[name]) for name in texts})  # 정규식은 SQL Server 등이 못 한다
-        expr = expr.rename({"'" + name: name for name in expr.columns if name[:1] in FORMULA_START})
+    if guard and suffix != ".parquet":
+        expr = formula_guard(expr)
     EXPORTS[suffix](expr, path)

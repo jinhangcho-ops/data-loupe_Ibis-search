@@ -14,7 +14,7 @@ UNIONS = ["left", "inner", "intersect", "except"]  # 이어붙이기: left는 �
 STACKS = ("left", "inner")  # 아래로 잇는 방식(출처 컬럼을 붙인다). intersect·except는 행을 고르는 방식이라 붙이지 않는다
 SOURCE = "출처"  # 이어붙이면 더하는 컬럼: 그 행이 온 테이블 이름
 OPS = {"=": operator.eq, "!=": operator.ne, ">=": operator.ge, "<=": operator.le, ">": operator.gt, "<": operator.lt}
-CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 < 다른컬럼 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도 / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
+CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 < 다른컬럼 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / * is not null(모든 컬럼에 값) / near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도 / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
 SORT_GUIDE = "컬럼 [asc|desc]"
 
 # (판별, 종류, 한글 이름, 입력값 변환). 종류는 전처리가 컬럼을 나눌 때 쓴다.
@@ -375,6 +375,8 @@ def parse_one(line, expr, quotes=True):
         return geo_condition(m.group(1).lower(), m.group(2), expr)
     if m := NULL_RE.match(line):
         col, negate = m.groups()
+        if col == "*" and "*" not in expr.columns:  # 모든 컬럼: is not null은 모두 값이 있는 행, is null은 하나라도 빈 행(구조 컬럼은 컬럼 자체만 본다)
+            return functools.reduce(operator.and_ if negate else operator.or_, [expr[n].notnull() if negate else expr[n].isnull() for n in expr.columns])
         c = get(col)
         return c.notnull() if negate else c.isnull()
     if m := BETWEEN_RE.match(line):

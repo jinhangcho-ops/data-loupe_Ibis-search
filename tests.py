@@ -2454,7 +2454,8 @@ def main():
     book = zipfile.ZipFile(io.BytesIO(export("xlsx")))  # 메모리 절약 모드는 글자를 시트 안에 바로 쓴다(sharedStrings가 아니라)
     check("Excel: 수식 값 앞에 '", any("'=1+1" in book.read(n).decode("utf-8") for n in book.namelist() if n.endswith(".xml")), True)
     check("Parquet: 값을 그대로", pl.read_parquet(io.BytesIO(export("parquet")))["note"].to_list(), [o["note"] for o in orders])
-    check("모르는 형식은 거절", error("/api/export", base="orders", format="txt")[:6], "파일 이름은")
+    check("고정폭 텍스트(txt)는 머리글 줄부터 시작", export("txt").decode("utf-8-sig").splitlines()[0].split()[0], "order_id")  # 2차 F07: txt는 이제 고정폭 내보내기
+    check("모르는 형식은 거절", error("/api/export", base="orders", format="xml")[:6], "파일 이름은")
 
     print("== 설정·저장한 검색·사용량")
     check("/api/usage", sorted(c.get("/api/usage").get_json()), ["cpu", "memory", "memory_mb", "pc_cpu", "pc_memory"])
@@ -2511,7 +2512,7 @@ def main():
           ({"connected": True, "opened": {"kind": "folder", "path": str(out), "files": [str(out / "picked.parquet")]}, "schemas": []}, ["picked"]))
     check("그 테이블로 profile·rowcount·검색이 됨", (got("/api/profile", base="picked")["rows"], got("/api/rowcount", base="picked"), got("/api/query", base="picked")["count"]),
           (len(mine), {"rows": len(mine)}, len(mine)))
-    check("최근 연결에도 남음", c.get("/api/recent").get_json()["recent"], {"kind": "folder", "path": str(out)})
+    check("최근 연결에도 남음(고른 파일까지, 시작 화면이 바로 잇게)", c.get("/api/recent").get_json()["recent"], {"kind": "folder", "path": str(out), "files": [str(out / "picked.parquet")]})
     before = (out / "picked.parquet").stat()
     again = dict(base="picked", conditions=["order_id >= 0"])
     check("지금 읽고 있는 파일(대소문자 달라도)에는 저장하지 않음", [(setattr(server, "ask_save", choose(str(out / n))), error("/api/handoff", **again))[1] for n in ("picked.parquet", "PICKED.parquet", "picked")],

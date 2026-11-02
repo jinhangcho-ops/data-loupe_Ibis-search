@@ -21,6 +21,7 @@ function initCardMenu(root, host) {
   const metric = el("select", { title: "지표 하나를 값으로 써요. 비율 지표는 분자와 분모도 작게 보여요" });
   const targetValue = el("input", { type: "number", placeholder: "목표 숫자", style: "width:110px" }), targetName = el("select", { title: "목표 파일에서 이름으로 찾아요" });
   const format = el("select", {}, el("option", { value: "number", textContent: "숫자" }), el("option", { value: "percent", textContent: "% (0~1 값)" }), el("option", { value: "currency", textContent: "₩ 금액" }));
+  const unitText = el("input", { placeholder: "단위 (예: 명, 회, 원)", maxLength: 10, style: "width:130px", title: "값 뒤에 붙일 글자. 사람 수는 명, 횟수는 회처럼 적어요. 돈이면 표시 형식 ₩ 금액을 고르거나 원을 적어요" });
   const ring = el("select", {}, ...[["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리와 목표 눈금"]].map(([v, n]) => el("option", { value: v, textContent: n })));
   const cells = el("input", { type: "number", value: 10, min: 1, max: 100, style: "width:60px" }), size = el("input", { type: "number", placeholder: "자동", style: "width:90px" }), rowCount = el("input", { type: "number", value: 10, min: 1, max: 100, style: "width:60px" });
   const groupCols = el("input", { placeholder: "예: 매장, 날짜 (쉼표, 3개까지)" }), total = el("input", { type: "checkbox" });
@@ -48,7 +49,7 @@ function initCardMenu(root, host) {
   const only = (label, input, ...kinds) => { const f = el("label", { className: "hint cm-field" }, label, input); f.dataset.kinds = kinds.join(" "); return f; };
   const block = (input, ...kinds) => { const f = el("div", { className: "cm-block" }, input); f.dataset.kinds = kinds.join(" "); return f; };
   const withDate = Object.keys(CARD_KINDS).filter(k => k !== "recent_rows" && k !== "funnel" && k !== "chart" && !WATCH.includes(k));  // 흐름은 시각 컬럼이 기간 기준 날짜 컬럼
-  const fields = [only("표시 형식", format, "kpi", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation"), only("지표", metric, "kpi"), only("나눌 컬럼", group, "gauge", "summary"),
+  const fields = [only("표시 형식", format, "kpi", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation"), only("단위", unitText, "kpi", "donut_kpi", "stripes"), only("지표", metric, "kpi"), only("나눌 컬럼", group, "gauge", "summary"),
     only("날짜 컬럼", date, ...withDate), only("목표", el("span", {}, targetValue, " 또는 ", targetName), "kpi", "donut_kpi", "summary", "stripes", "blocks", "target_trend"),
     only("고리", ring, "donut_kpi"), only("칸 수", cells, "stripes"), only("한 칸 크기", size, "blocks"), only("행 수", rowCount, "recent_rows", "table"),
     only("묶음 컬럼", groupCols, "table"), only("합계 줄", total, "table"), block(condRules.root, "table", "sentence"),
@@ -159,9 +160,11 @@ function initCardMenu(root, host) {
     if (k === "gauge" && !group.value) throw new Error("게이지는 나눌 컬럼을 고르세요.");
     const body = { schema: "", base: baseName, joins: [], periods: [], conditions: [], calcs: [], sorts: [], columns: [], series: byMetric ? [] : series, ...(k === "gauge" ? { x: group.value } : {}), ...(k === "chart" ? { x: cX.value } : {}), ...(byMetric ? { names: [metric.value] } : {}) };
     const view = { type: "", ratio: 4 / 3, format: format.value, icon: "chart", compare: { mode: "span" }, better: "up" };
+    if (byMetric && format.value === "number") delete view.format;  // 형식을 따로 고르지 않은 지표 카드는 지표 파일의 형식(data.values.format)을 쓴다(F22: 지표마다 단위가 다르다)
+    if (unitText.value.trim() && ["kpi", "donut_kpi", "stripes"].includes(k)) view.unit_text = unitText.value.trim();
     if (targetValue.value !== "") view.target = { value: +targetValue.value };
     else if (targetName.value) view.target = { name: targetName.value };
-    if (k === "donut_kpi") { view.ring = ring.value; view.slots = values.map((l, i) => ({ label: l.label || seriesTitle(series[i]), format: format.value })); }
+    if (k === "donut_kpi") { view.ring = ring.value; view.slots = values.map((l, i) => ({ label: l.label || seriesTitle(series[i]), format: format.value, unit_text: view.unit_text ?? "" })); }
     if (k === "chart") {
       view.type = cType.value;
       view.ratio = 16 / 9;

@@ -1,7 +1,8 @@
 """문장 실행(6-4): sentence_run.compile이 만든 요청들(runs)을 연결에서 실행하고 combine대로 합쳐 끝난 표 하나 {columns, rows, more, notes}로 돌려준다. 화면은 나누거나 합치지 않는다.
 요청의 route: /api/query(행), /api/pivot(묶어 집계, 기존 라우트와 같은 querying.runnable·calc.pivot), metric(지표 이름 또는 내 지표 id의 값을 지표 정의로 구함, by가 있으면 그 값마다),
-nested(대상마다 구한 값을 다시 집계: 평균·N번 이상 한 대상 비율·두 단계를 다 한 비율)이다. 합치는 방법 combine: ratio·percent·share(a ÷ b, by 컬럼이 같은 줄끼리)·sub·add·mean_of·change·cumsum.
+nested(대상마다 구한 값을 다시 집계: 평균·N번 이상 한 대상 비율·두 단계를 다 한 비율·횟수 구간별 대상 수·대상별 요약표·집단 대 전체)이다. 탐색 틀 51~53번의 만들기 e51~e53도 여기 두고 sentence_run.COMPILERS에 붙인다. 합치는 방법 combine: ratio·percent·share(a ÷ b, by 컬럼이 같은 줄끼리)·sub·add·mean_of·change·cumsum.
 지표 사전 항목('catalog:id')으로 만든 내 지표는 catalog_app이 구한다(값 하나). 데이터를 읽는 함수는 server.run으로 연결 스레드에서 돈다. 내 지표가 다른 내 지표를 쓰면(조합) 안쪽까지 풀어 구한다(MAX_DEPTH단계)."""
+import copy
 import json
 
 from core import calc
@@ -9,6 +10,7 @@ from core import querying
 from metrics import metric_catalog
 from core import metric_file
 from metrics import my_metrics
+from lazy import ibis  # 맨 위에서 진짜 import하면 미리 올리기 스레드와 연결 스레드의 import 잠금이 맞물린다
 from core import parse
 from core import result
 from query import sentence_run
@@ -107,11 +109,15 @@ def nested_run(r):
     expr = expr.filter(ent.notnull())
     ent = parse.column(expr, r["entity"])
     inner, outer = r["inner"], r["outer"]
+    if outer["op"] in ("summary", "versus"):
+        return (summary if outer["op"] == "summary" else versus)(r, expr, ent)
     if "flags" in inner:
         made = {k: sql_funcs.aggregate("any", expr, None, None, {"cond": c}) for k, c in inner["flags"].items()}
     else:
         made = {"v": sql_funcs.aggregate(inner["how"], expr, inner.get("value"), None, inner.get("opts"))}
     per = expr.group_by(ent.name("e")).aggregate(**made)
+    if outer["op"] == "count_bucket":
+        return count_bucket(r, per)
     flag = lambda c: c.cast("int64")
     if outer["op"] == "mean":
         final = per.aggregate(v=per.v.mean())
@@ -122,6 +128,147 @@ def nested_run(r):
     row = run(lambda: final.to_polars().row(0, named=True))
     value = row["v"] if "v" in row else (None if not row["den"] else row["num"] / row["den"])
     return one([], "값", [{"값": value}])
+
+
+def count_bucket(r, per):
+    """대상마다 센 횟수(per.v)를 구간(outer.bounds·labels, sql_funcs bucket)으로 나눈 구간별 대상 수. 구간 순서대로, 대상이 없는 구간은 0.
+    r["entities"]가 있으면 그 테이블의 대상을 기준으로 이어 행이 없는 대상은 0회로 센다."""
+    if r.get("entities"):
+        t = querying.runnable(r["entities"]["body"], select=False)
+        e = parse.column(t, r["entities"]["column"])
+        ents = t.filter(e.notnull()).select(e.name("e")).distinct()
+        j = ents.left_join(per, "e")
+        per = j.select("e", v=j.v.fill_null(0))
+    labels = r["outer"]["labels"]
+    marked = per.mutate(k=sql_funcs.make("bucket", per, {"x": "v", "bounds": r["outer"]["bounds"], "labels": labels}))
+    got = run(lambda: marked.group_by("k").aggregate(n=marked.count()).to_polars())
+    counts = dict(zip(got["k"].to_list(), got["n"].to_list()))
+    return one(["횟수"], "대상 수", [{"횟수": k, "대상 수": counts.get(k, 0)} for k in labels])
+
+
+def count_bounds(raw):
+    """구간 경계 칸('1, 2, 5' 글 또는 목록) → 0 이상의 정수 목록(작은 수부터 겹치지 않게). 아니면 sentence_run.Bad."""
+    parts = [x.strip() for x in raw.split(",")] if isinstance(raw, str) else list(raw or [])
+    try:
+        nums = [int(str(x)) for x in parts if str(x) != ""]
+    except ValueError:
+        raise sentence_run.Bad("구간 경계에는 1, 2, 5, 10처럼 0 이상의 정수를 쉼표로 넣어 주세요.") from None
+    if not nums or min(nums) < 0 or nums != sorted(set(nums)):
+        raise sentence_run.Bad("구간 경계는 0 이상의 정수를 작은 수부터 겹치지 않게 넣어 주세요.")
+    return nums
+
+
+def count_labels(bounds, unit="회", low=0):
+    """횟수 경계(구간의 시작) → 구간 라벨. [1, 2, 5, 10, 20] → 0회 / 1회 / 2~4회 / 5~9회 / 10~19회 / 20회 이상. low(가장 작은 횟수) 아래 경계는 버린다."""
+    edges = [low, *[b for b in bounds if b > low]]
+    return [f"{a}{unit}" if b - a == 1 else f"{a}~{b - 1}{unit}" for a, b in zip(edges, edges[1:])] + [f"{edges[-1]}{unit} 이상"]
+
+
+def e51(p):
+    """탐색 틀 51(횟수 구간별 대상 수) → 요청(route nested, outer count_bucket). 대상 테이블이 있으면 그 테이블의 대상이 기준이라 행이 없는 대상은 0회."""
+    ent, table = p.col("대상"), p.get("대상 테이블")
+    low = 0 if table else 1  # 같은 테이블만 쓰면 센 대상은 모두 1회 이상
+    bounds = [b for b in count_bounds(p.get("경계", "1, 2, 5, 10, 20")) if b > low]
+    if not bounds:
+        raise sentence_run.Bad(f"구간이 하나뿐이에요. {low}보다 큰 경계를 넣어 주세요.")
+    labels = count_labels(bounds, str(p.get("단위 글자", "회")), low)
+    extra = {}
+    if table:
+        extra["entities"] = {"body": other_table(p, table), "column": str(p.get("대상 테이블 컬럼", ent))}
+        p.notes.append(f"{table} 테이블의 대상을 기준으로 세어 행이 없는 대상은 {labels[0]}에 들어가요.")
+    p.run("횟수 구간별 대상 수", "nested", copy.deepcopy(p.body), entity=ent, inner={"how": "count"}, outer={"op": "count_bucket", "bounds": bounds, "labels": labels}, **extra)
+
+
+def other_table(p, table):
+    """다른 테이블 table을 읽는 body. 사건 테이블의 조건·기간·계산은 걸지 않는다."""
+    body = {**copy.deepcopy(p.body), "base": table, "joins": [], "conditions": [], "periods": [], "calcs": [], "sorts": [], "columns": []}
+    body.pop("union", None)
+    return body
+
+
+SUMMARY_SORT = {"행 수": "n", "고유 상대 수": "np", "활동일": "days", "하루 최대": "mx"}  # 52번 {정렬} → 요약 열
+
+
+def e52(p):
+    """탐색 틀 52(대상별 활동 요약) → 요청(route nested, outer summary). 상대·날짜·대표 값 칸이 비면 그 열은 뺀다."""
+    ent = p.col("대상")
+    peer, day, rep = (p.col(k) if p.get(k) else None for k in ("상대", "날짜", "대표 값"))
+    sort = p.get("정렬", "행 수")
+    if sort not in SUMMARY_SORT:
+        raise sentence_run.Bad(f"정렬은 {', '.join(SUMMARY_SORT)} 중 하나예요.")
+    if (sort == "고유 상대 수" and not peer) or (sort in ("활동일", "하루 최대") and not day):
+        raise sentence_run.Bad(f"‘{sort}’ 순으로 보려면 ‘{'상대' if sort == '고유 상대 수' else '날짜'}’ 칸을 채워 주세요.")
+    p.run("대상별 활동 요약", "nested", copy.deepcopy(p.body), entity=ent, inner={"how": "count"},
+          outer={"op": "summary", "peer": peer, "day": day, "rep": rep, "sort": SUMMARY_SORT[sort], "n": min(int(p.get("N", 20)), sentence_run.MAX_TOP)})
+
+
+def e53(p):
+    """탐색 틀 53(집단 대 전체 비교) → 요청(route nested, outer versus). 집단 = {조건}에 맞는 행이 있는 대상(집단 테이블이 있으면 그 테이블에서 고른 대상)."""
+    ent, cond, table = p.col("대상"), p.need("조건"), p.get("집단 테이블")
+    body = other_table(p, table) if table else copy.deepcopy(p.body)
+    body["conditions"] = [*body["conditions"], *(cond if isinstance(cond, list) else [cond])]
+    p.run("집단 대 전체 비교", "nested", copy.deepcopy(p.body), entity=ent, inner={"how": "count"},
+          outer={"op": "versus", "day": p.col("날짜") if p.get("날짜") else None, "name": str(p.get("집단 이름", "조건에 맞는 대상"))},
+          group={"body": body, "column": str(p.get("집단 테이블 컬럼", ent)) if table else ent})
+    p.notes.append("집단 대상 중 이 테이블에 행이 없는 대상은 세지 않아요.")
+
+
+def most(t, c):
+    """대상(e)마다 가장 많이 나온 c 값과 그 행 수 k(같으면 작은 값). 빈 값은 세지 않는다."""
+    g = t.filter(t[c].notnull()).group_by(["e", c]).aggregate(k=ibis._.count())
+    g = g.mutate(r=ibis.row_number().over(group_by="e", order_by=[ibis.desc("k"), c]))
+    return g.filter(g.r == 0)
+
+
+def summary(r, expr, ent):
+    """대상마다 한 줄: 행 수, 상대 고유 수·최다 상대 행 수·비중·같은 상대 하루 최대, 활동일·하루 평균·하루 최대, 대표 값의 최빈값과 건수. 정렬 열 큰 순으로 앞 n개."""
+    o = r["outer"]
+    peer, day, rep = o["peer"], o["day"], o["rep"]
+    t = expr.select(e=ent, **({"p": parse.column(expr, peer)} if peer else {}), **({"d": parse.column(expr, day).cast("date")} if day else {}),
+                    **({"v": parse.column(expr, rep)} if rep else {}))
+    out = t.group_by("e").aggregate(n=t.count(), **({"np": t.p.nunique()} if peer else {}))
+    names = {"e": r["entity"], "n": "행 수"}
+    parts = []
+    if peer:
+        parts.append(most(t, "p").select("e", tp="k"))
+        names.update(np=f"고유 {peer} 수", tp=f"최다 {peer} 행 수", share="전체 중 비중")
+        if day:
+            pd = t.group_by(["e", "p", "d"]).aggregate(k=t.count())
+            parts.append(pd.group_by("e").aggregate(sp=pd.k.max()))
+            names["sp"] = f"같은 {peer} 하루 최대"
+    if day:
+        dd = t.group_by(["e", "d"]).aggregate(k=t.count())
+        parts.append(dd.group_by("e").aggregate(days=dd.count(), avg=dd.k.mean(), mx=dd.k.max()))
+        names.update(days="활동일", avg="하루 평균", mx="하루 최대")
+    if rep:
+        parts.append(most(t, "v").select("e", rv="v", rk="k"))
+        names.update(rv=f"주요 {rep}", rk=f"주요 {rep} 건수")
+    for x in parts:
+        out = out.left_join(x, "e").drop("e_right")
+    if peer:
+        out = out.mutate(share=out.tp / out.n)
+    out = out.order_by([ibis.desc(o["sort"]), "e"]).select(**{v: k for k, v in names.items()}).limit(o["n"] + 1)
+    table = server.to_json(run(out.to_polars))
+    return one([r["entity"]], None, table["rows"][:o["n"]], len(table["rows"]) > o["n"], table["columns"])
+
+
+def versus(r, expr, ent):
+    """집단(r.group의 body·컬럼에서 고른 대상)과 전체 대상의 같은 요약값: 대상 수, 전체 행 수, (날짜가 있으면 대상·하루마다, 없으면 대상마다) 행 수의 평균·중앙값·최소·최대."""
+    o = r["outer"]
+    day = o.get("day")
+    per = expr.group_by(e=ent, **({"d": parse.column(expr, day).cast("date")} if day else {})).aggregate(k=ibis._.count())
+    g = querying.runnable(r["group"]["body"], select=False)
+    gc = parse.column(g, r["group"]["column"])
+    members = g.filter(gc.notnull()).select(e=gc).distinct()
+    stats = lambda x: x.aggregate(a=x.e.nunique(), b=x.k.sum(), c=x.k.mean(), d=x.k.median(), f=x.k.min(), h=x.k.max())
+    both = run(lambda: [stats(x).to_polars().row(0) for x in (per, per.filter(per.e.isin(members.e)))])
+    unit = "하루" if day else "대상당"
+    labels = [f"{r['entity']} 수", "전체 행 수", f"{unit} 평균", f"{unit} 중앙값", f"{unit} 최소", f"{unit} 최대"]
+    cols = ["지표", f"전체 {r['entity']}", o["name"]]
+    return one([], None, [dict(zip(cols, x)) for x in zip(labels, *both)], columns=cols)
+
+
+sentence_run.COMPILERS.update(e51=e51, e52=e52, e53=e53)  # sentence_run은 다른 묶음 소유라 51~53번 틀의 만들기는 여기서 붙인다(flow_app이 이 모듈을 올린다)
 
 
 def div(x, y):

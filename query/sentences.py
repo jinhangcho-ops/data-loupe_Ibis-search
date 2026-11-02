@@ -1,4 +1,4 @@
-"""문장 틀 데이터(6-4, 10-4): 탐색 틀 1~50번(48~50은 좌표 틀)과 지표 틀 1~15번. 틀은 데이터로만 두고(계산은 하지 않는다) GET /api/sentences(flow_app.py)로 화면에 보낸다(모든 화면에 싣지 않으려고 CONSTANTS에 넣지 않는다).
+"""문장 틀 데이터(6-4, 10-4): 탐색 틀 1~53번(48~50은 좌표 틀, 51은 횟수 구간별 대상 수, 52·53은 대상별 요약표)과 지표 틀 1~15번. 틀은 데이터로만 두고(계산은 하지 않는다) GET /api/sentences(flow_app.py)로 화면에 보낸다(모든 화면에 싣지 않으려고 CONSTANTS에 넣지 않는다).
 - 틀 하나 = {id, kind(explore·metric), no, name, text(빈칸을 {이름}으로 쓴 문장), slots: [빈칸], uses: [함수 사전 id], extends(변형이면 원래 틀 번호), preset(변형이 정해 둔 빈칸 값)}.
   어느 틀이든 앞에 {기간}을 붙일 수 있다(PERIOD, 틀마다 period: True).
 - 빈칸 = {name, type, label, kinds(컬럼 종류 제한), options(고르는 값), default, optional}. 빈칸 타입은 SLOT_TYPES.
@@ -27,7 +27,7 @@ def choice(name, options, default=None, label=None):
 
 
 def temp(no, name, text, slots=(), uses=(), kind="explore", **extra):
-    """틀 하나. no는 종류 안의 번호(탐색 1~50, 지표 1~15)."""
+    """틀 하나. no는 종류 안의 번호(탐색 1~53, 지표 1~15)."""
     return {"id": f"{'e' if kind == 'explore' else 'm'}{no:02d}", "kind": kind, "no": no, "name": name, "text": text, "slots": list(slots), "uses": list(uses),
             "period": True, **extra}
 
@@ -117,6 +117,18 @@ EXPLORE = [
           slot("반경", "number", "반경(km)", default=5), slot("값", "column", "값 컬럼", optional=True), AGG], ["within_km"]),
     temp(50, "격자 칸별 집계", "위도 {위도}, 경도 {경도} 컬럼을 {칸 크기}도 칸으로 나눠 격자별 {값}의 {집계} 보기",
          [column("위도", "위도 컬럼", NUM), column("경도", "경도 컬럼", NUM), slot("칸 크기", "number", "칸 크기(도)", default=0.01), slot("값", "column", "값 컬럼", optional=True), AGG], ["grid_id", "grid_lat", "grid_lon"]),
+    # F33: 대상마다 센 행 수를 구간으로. 대상 테이블(선택)을 고르면 행이 없는 대상도 0회로 센다
+    temp(51, "횟수 구간별 대상 수", "{대상}마다 행 수를 세어 {경계} 경계의 {단위 글자} 구간별 {대상} 수 보기, 0{단위 글자}도 셀 대상 목록은 {대상 테이블}의 {대상 테이블 컬럼} 컬럼",
+         [T_, slot("경계", "text", "구간 경계(예: 1, 2, 5, 10, 20)", default="1, 2, 5, 10, 20"), slot("단위 글자", "text", "단위 글자", default="회", optional=True),
+          slot("대상 테이블", "table", "0회도 셀 대상 테이블(선택)", optional=True), slot("대상 테이블 컬럼", "text", "대상 테이블의 대상 컬럼(비우면 같은 이름)", optional=True)], ["count", "bucket"]),
+    # F34 대상별 요약표: 52는 대상마다 한 줄(상대·날짜·대표 값 칸은 선택, 비우면 그 열을 뺀다), 53은 조건에 맞는 대상(집단)과 전체 대상의 같은 요약값을 두 열로
+    temp(52, "대상별 활동 요약", "{대상}마다 행 수, {상대} 고유 수와 최다 비중, {날짜} 기준 활동일·하루 평균·하루 최대, 가장 많이 나온 {대표 값}을 {정렬}이 큰 순으로 상위 {N}개 보기",
+         [T_, column("상대", "상대 컬럼(선택)", optional=True), column("날짜", "날짜 컬럼(선택)", DAT, optional=True), column("대표 값", "최빈값을 볼 컬럼(선택)", optional=True),
+          choice("정렬", ["행 수", "고유 상대 수", "활동일", "하루 최대"], "행 수"), slot("N", "n", "N", default=20)], ["count", "count_distinct", "mode"]),
+    temp(53, "집단 대 전체 비교", "{조건}에 맞는 {대상}({집단 이름})과 전체 {대상}의 행 수와 {날짜} 기준 하루 평균·중앙값·최소·최대 견주기, 집단을 고를 테이블은 {집단 테이블}의 {집단 테이블 컬럼} 컬럼",
+         [COND, T_, slot("집단 이름", "text", "집단 이름", default="조건에 맞는 대상", optional=True), column("날짜", "날짜 컬럼(선택)", DAT, optional=True),
+          slot("집단 테이블", "table", "집단을 고를 테이블(선택)", optional=True), slot("집단 테이블 컬럼", "text", "집단 테이블의 대상 컬럼(비우면 같은 이름)", optional=True)],
+         ["count", "count_distinct", "mean", "median", "min", "max"]),
 ]
 
 METRICS = [

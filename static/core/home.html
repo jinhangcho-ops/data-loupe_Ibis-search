@@ -40,13 +40,17 @@
 // 연결에 성공하면 대시보드 최신화가 시작되고(dash_refresh.js) 진행은 팝업과 위쪽 줄 알약에 보인다.
 let target = null;
 function afterConnect() { if (target) location.href = target; }
-// 지난번 연결이 폴더·파일이면 카드를 거치지 않고 그 연결로 잇는다. 서버는 폴더 연결의 파일 이름을 남기지 않으므로 찾은 파일이 하나뿐일 때만 잇는다(아니면 false).
+// 지난번 연결이 폴더·파일이면 카드를 거치지 않고 그 연결로 잇는다. 저장된 file·files가 있으면 그대로, 옛 저장값(없음)은 찾은 파일이 하나뿐일 때만 잇는다(아니면 false).
 async function connectLast() {
   const { recent } = await api("/api/recent");
   if (recent?.kind !== "folder") return false;
-  const { files, flat } = await api("/api/files", { path: recent.path, kinds: SERVER.file_kinds, deep: true });
-  if (files.length + flat.length !== 1) return false;
-  const body = files.length ? { kind: "folder", path: recent.path, file: files[0] } : { kind: "folder", path: recent.path, files: flat };
+  let body = { kind: "folder", path: recent.path };
+  if (recent.file || recent.files?.length) Object.assign(body, recent.file ? { file: recent.file } : { files: recent.files });
+  else {
+    const { files, flat } = await api("/api/files", { path: recent.path, kinds: SERVER.file_kinds, deep: true });
+    if (files.length + flat.length !== 1) return false;
+    Object.assign(body, files.length ? { file: files[0] } : { files: flat });
+  }
   const { schemas } = await api("/api/connect", body);
   await showConnected(!!body.files, schemas, body);  // 위쪽 줄에 연결 이름이 뜬다
   if (typeof startRefresh === "function") startRefresh();

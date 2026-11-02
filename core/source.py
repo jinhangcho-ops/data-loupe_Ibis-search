@@ -592,7 +592,7 @@ def passwords(info):
 def recent(info):
     """연결 요청에서 다음 실행 때 칸을 채워 줄 값만. 비밀번호는 칸의 값도, 주소 안에 쓴 값도, 주소 query의 비밀 값도 남기지 않는다."""
     if info["kind"] == "folder":
-        return {"kind": "folder", "path": info.get("path", "")}
+        return {"kind": "folder", "path": info.get("path", ""), **{k: info[k] for k in ("file", "files") if k in info}}  # 고른 파일도 남겨 시작 화면이 바로 잇는다
     parts = urlsplit(info["url"])
     login, at, host = parts.netloc.rpartition("@")
     pieces = parts.query.split("&")

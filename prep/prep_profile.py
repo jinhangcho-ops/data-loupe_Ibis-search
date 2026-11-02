@@ -96,6 +96,21 @@ def profile(t):
     return {"rows": found["rows"], "columns": columns}
 
 
+def full_facts(t):
+    """표 전체(연결에서 그대로)의 행 수와 컬럼별 빈 값 수·서로 다른 값 수·최솟값·최댓값(profile과 같은 뜻, 집계 한 번). 글자 수 세기와 모양 검사는 하지 않는다. 구조·배열 같은 컬럼은 뺀다."""
+    kinds = {name: parse.kind(dtype) for name, dtype in t.schema().items()}
+    kinds = {name: kind for name, kind in kinds.items() if kind != "other"}
+    metrics = {"rows": t.count()}
+    for i, (name, kind) in enumerate(kinds.items()):
+        col = nan_to_null(t[name])
+        metrics.update({f"nulls{i}": count(col.isnull()), f"unique{i}": col.nunique(where=col.notnull())})
+        if kind in ("int", "float", "date", "time"):
+            metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})
+    found = stats(t, **metrics)
+    return {"rows": found["rows"], "columns": [{"name": name, "nulls": found[f"nulls{i}"] or 0, "unique": found[f"unique{i}"],
+                                                "min": result.plain(found.get(f"min{i}")), "max": result.plain(found.get(f"max{i}"))} for i, name in enumerate(kinds)]}
+
+
 def shapes(col):
     """문자 컬럼의 모양 검사. (빈 값도 빈 값 표시도 아닌 값인 조건, {모양 이름: 그 모양인 조건})."""
     stripped = col.strip()

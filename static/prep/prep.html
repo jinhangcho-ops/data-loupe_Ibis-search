@@ -98,7 +98,7 @@
       <div class="hint"><span id="counts"></span> <span id="stale" class="warn"></span></div>
     </section>
     <section class="pane hidden" id="p-spec">
-      <div class="head"><span class="hint" id="sampled" style="margin:0"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계와 추천을 다시 구해요">다시 구하기</button><span style="flex:1"></span><button id="prune" class="btn hidden" title="표본에서 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾아요. 이미 읽은 표본만 쓰고 DB에는 다시 묻지 않아요">뺄 만한 컬럼 찾기</button><button id="sug-all" class="hidden" title="모든 컬럼의 추천을 정리 방법에 한 번에 넣어요">추천 모두 적용</button></div>
+      <div class="head"><span class="hint" id="sampled" style="margin:0"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계와 추천을 다시 구해요">다시 구하기</button><button id="full-stats" class="ghost hidden" title="표본 대신 테이블 전체로 빈칸·값 종류·최솟값·최댓값을 구해 표본과 비교해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="컬럼 요약을 테이블 전체로 구하기">전체로 구하기</button><button id="profile-export" class="ghost" title="연결의 모든 테이블의 컬럼 요약(이름·타입·빈 값 비율·고유값 수·최솟값·최댓값·예시 값 몇 개)을 파일 하나로 저장해요. 테이블이 많으면 오래 걸려요. 표본 크기는 지금 설정을 따르고, 행 데이터는 예시 값 몇 개 외에 넣지 않아요" aria-label="모든 테이블의 컬럼 요약을 파일로 저장">요약 파일로 저장</button><select id="export-format" title="요약 파일 형식. Excel은 테이블마다 시트 하나, CSV는 테이블 이름 컬럼을 넣은 표 하나" aria-label="요약 파일 형식"><option value="xlsx">Excel</option><option value="csv">CSV</option></select><label class="check" title="표본 대신 테이블 전체로 구해요. 큰 테이블은 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요"><input type="checkbox" id="export-full" aria-label="요약 파일을 테이블 전체 기준으로 구하기"> 전체 기준</label><span class="hint" id="export-msg" style="margin:0"></span><span style="flex:1"></span><button id="prune" class="btn hidden" title="표본에서 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾아요. 이미 읽은 표본만 쓰고 DB에는 다시 묻지 않아요">뺄 만한 컬럼 찾기</button><button id="sug-all" class="hidden" title="모든 컬럼의 추천을 정리 방법에 한 번에 넣어요">추천 모두 적용</button></div>
       <div class="hint" id="prune-box"></div>
       <div id="spec-view"></div>
       <div class="row" style="margin-top:16px; max-width:720px; align-items:center" title="테이블과 컬럼 설명, 파티션 키를 적은 파일(JSON·YAML)이에요. 이 설명은 [질문으로 SQL 만들기]에서도 써요. 칸을 비우고 [불러오기]를 누르면 명세서를 쓰지 않아요"><span class="hint" style="margin:0; flex:none">명세서 파일</span><input id="spec-path" class="code" placeholder="JSON 또는 YAML 파일 경로(없어도 돼요)"><button id="spec-read" class="btn">불러오기</button></div>
@@ -131,6 +131,9 @@
             <div class="hint">조건에 맞는 행만 남겨요. 예: price &gt;= 100 / city = 서울 / name starts 김 / 컬럼 in 값1, 값2 / 컬럼 is null</div>
             <div class="row"><input id="f-in" placeholder="조건을 적고 Enter"><button id="f-add" class="btn">추가</button></div>
             <div id="filters"></div>
+            <div class="hint" style="margin-top:8px">데이터가 너무 많을 때: 날짜 컬럼에서 건수가 가장 많은 기간을 테이블 전체로 찾아 조건으로 넣어요(날짜 타입 컬럼만, 위의 조건을 건 뒤의 건수)</div>
+            <div class="row"><select id="pk-col" title="날짜 컬럼" aria-label="기간을 찾을 날짜 컬럼"></select><select id="pk-unit" title="기간 길이" aria-label="기간 길이"><option value="day">1일</option><option value="week">1주(월요일부터)</option><option value="month" selected>1달</option></select><button id="peak-find" class="btn" title="고른 기간 길이로 나눠 건수가 가장 많은 기간 5개를 테이블 전체로 찾아요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="가장 많은 기간 찾기">가장 많은 기간 찾기</button></div>
+            <div id="pk-list"></div>
           </div></div>
         <div class="cn"></div>
         <div class="step" data-step="clean"><div class="sp"><i>3</i><span class="t">컬럼 정리</span><b id="sum-p-clean"></b><span class="c"></span></div>
@@ -427,6 +430,7 @@ const OPS = {
       const words = st.words.split(",").map(v => v.trim()).filter(Boolean);
       return !words.length || words.length > 50 || new Set(words).size < words.length ? null : { words, ...(st.regex ? { regex: true } : {}) };
     } },
+  expand: { label: "컬럼 여러 개로 펼치기(구조·맵·JSON)", group: "새 컬럼", need: c => /^(struct|map|json)/.test(c.type) || isStr(c), init: {}, value: () => true },
   counts: { label: "단어별 개수 세기", group: "새 컬럼", need: isStr, init: { sep: "" },
     fields: () => [{ name: "sep", placeholder: "구분자(비우면 공백)" }, { hint: '값을 나눠 단어별 개수를 {"서울": 2, "배송": 1} 모양의 글자로 새 컬럼에 넣어요.' }],
     value: st => st.sep === "" ? {} : { sep: st.sep } },
@@ -440,6 +444,7 @@ const DESC = {
   scale: "값의 크기를 비슷하게 맞추기(모델에 넣을 때)", round: "3.14159 → 3.14(자릿수 0이면 3.0처럼 실수로 남음)", bins: "나이 23 → '20~30'처럼 구간으로", rare: "몇 번 안 나오는 값을 '기타'로 묶기",
   parts: "날짜에서 연·월·요일을 새 컬럼으로", label: "'서울'→0, '부산'→1처럼 번호로", onehot: "값마다 0/1 컬럼으로 펼치기(원래 컬럼은 빠짐)",
   extract: "'A-123'에서 '123'만 뽑기", has: "'서울'이 들어 있으면 1인 새 컬럼", counts: "단어가 몇 번 나오는지 세기",
+  expand: "구조의 필드·맵의 키·JSON 글자의 키마다 '컬럼.키' 새 컬럼(원래 컬럼은 그대로, 맵·JSON은 앞 1,000행에서 키를 모아 최대 50개)",
 };
 // 컬럼 종류의 쉬운 이름. 원래 타입(int64 등)은 마우스를 올리면 보인다.
 const KIND_TEXT = { int: "정수", float: "소수", string: "글자", date: "날짜", ts: "날짜·시각", bool: "참·거짓", time: "시각", other: "기타" };
@@ -545,11 +550,13 @@ const suggests = c => allSuggest(c).map(s => {
 $("sug-all").onclick = () => { prof.columns.forEach(c => allSuggest(c).forEach(s => applySuggest(c, s))); showAll(); };
 // 머리글 2행의 칸(③ 컬럼 정리의 요약과 같다): 종류(쉬운 이름, 원래 타입은 마우스를 올리면), 미리보기 뒤 바뀐 타입, 빈칸, 범위·글자 수, 값 종류, 고칠 점.
 // 통계는 표본으로 구한 것이다(위의 "표본 N행"). now는 미리보기의 결과 타입
+const DIFF_TEXT = { nulls: "빈칸 비율", unique: "값 종류 수", min: "최솟값", max: "최댓값" };
 function statsHtml(c, now) {
   const tag = `<span class="kind" title="원래 타입: ${esc(c.type)}">${c.type.startsWith("timestamp") ? KIND_TEXT.ts : KIND_TEXT[c.kind] ?? KIND_TEXT.other}</span>`;
   const change = !now || now === c.type ? "" : kindOf(now) === kindOf(c.type)
     ? `<div title="${esc(c.type)} → ${esc(now)}">저장할 때 작은 크기로 줄여요</div>` : `<div>바꾼 뒤: ${KIND_TEXT[kindOf(now)] ?? esc(now)}</div>`;
   if (!("unique" in c)) return `<div>${tag}</div>${change}<div class="empty">${status === "stopped" ? "통계를 구하지 못했어요" : status === "off" ? "통계를 껐어요. 데이터 단계에서 켜면 표본으로 구해요" : "통계 계산 중…"}</div>`;
+  const full = prof.full?.columns.find(x => x.name === (c.from ?? c.name));
   const guess = c.infer ?? {}, exact = guess.exact, n = prof.sampled?.rows ?? prof.rows ?? 0;
   const count = v => v.toLocaleString(), pct = v => n ? ` (${(v / n * 100).toFixed(v / n < 0.01 ? 1 : 0)}%)` : "";
   const range = (lo, hi) => lo == null ? "" : c.kind === "date" ? `${esc(shown(lo)[0])}부터 ${esc(shown(hi)[0])}까지` : `${esc(shown(lo)[0])} ~ ${esc(shown(hi)[0])} 사이`;
@@ -567,6 +574,8 @@ function statsHtml(c, now) {
     c.spaces && `<span class="warn">앞뒤에 공백이 있는 칸 ${count(c.spaces)}개</span>`,
     c.numeric && `숫자로 보이는 칸 ${count(c.numeric)}개(전체 ${count(n)}개 중)`,
     guess.date_format && c.kind === "string" && `날짜로 보여요(형식 ${esc(guess.date_format)})`,
+    full && `<span title="테이블 전체로 구한 값이에요. 표본 값과 비교해요">전체 ${count(prof.full.rows)}행 기준: ${full.nulls ? `빈칸 ${count(full.nulls)}개 (${(full.nulls / prof.full.rows * 100).toFixed(1)}%)` : "빈칸 없음"}, 값 ${count(full.unique)}가지${full.min != null ? `, ${range(full.min, full.max)}` : ""}</span>`,
+    full?.diff.length && `<b class="warn">표본과 달라요: ${full.diff.map(k => DIFF_TEXT[k]).join(", ")}</b>`,
     exact && `<span title="Parquet 파일 정보로 구한 전체 기준 값이에요. 데이터는 읽지 않아요">파일 전체 기준: ${exact.nulls ? `빈칸 ${count(exact.nulls)}개` : "빈칸 없음"}${exact.min != null ? `, ${range(exact.min, exact.max)}` : ""}${exact.constant ? ", 값이 하나뿐" : ""}</span>`,
   ];
   return rows.filter(Boolean).map(r => `<div>${r}</div>`).join("");
@@ -663,7 +672,25 @@ $("sort-add").onclick = () => {
 };
 $("dd-col").onchange = () => { if ($("dd-col").value) { dedupe.push($("dd-col").value); syncNames(); } };
 $("dd-all").onclick = () => { dedupe = resultNames(); syncNames(); };
-const syncFilters = () => $("filters").replaceChildren(...filters.map((f, i) => el("div", {}, chip(f, () => { filters.splice(i, 1); syncFilters(); }))));
+const syncFilters = () => {
+  $("filters").replaceChildren(...filters.map((f, i) => el("div", {}, chip(f, () => { filters.splice(i, 1); syncFilters(); }))));
+  const was = $("pk-col").value;
+  $("pk-col").replaceChildren(...(prof?.columns ?? []).filter(c => c.kind === "date").map(c => new Option(c.name)));
+  if ([...$("pk-col").options].some(o => o.value === was)) $("pk-col").value = was;
+};
+// 가장 많은 기간 찾기: /api/analyze(busiest)가 테이블 전체로 센다. [이 기간 적용]은 `컬럼 between 시작 끝` 조건 줄을 더한다.
+$("peak-find").onclick = () => busy($("peak-find"), async () => {
+  const column = $("pk-col").value, unit = $("pk-unit").value;
+  if (!column) { $("pk-list").textContent = "날짜 타입 컬럼이 없어요. 컬럼 정리에서 타입을 날짜로 바꾼 뒤 [미리보기]를 거치면 고를 수 있어요."; return; }
+  try {
+    const d = await timed("analyze", () => api("/api/analyze", { recipe: { schema: S.schema, base: S.base, filters }, how: { kind: "busiest", column, unit, top: 5 }, sample, full: true }));
+    fail("");
+    $("pk-list").replaceChildren(...(d.periods.length ? d.periods.map(p => el("div", {}, `${p.start} ~ ${p.end} · ${p.count.toLocaleString()}건 `,
+      el("button", { className: "ghost", textContent: "이 기간 적용", title: `${column} between ${p.start} ${p.end} 조건을 행 거르기에 넣어요`, "aria-label": `${p.start}부터 ${p.end}까지 기간을 조건으로 적용`,
+        onclick: () => { filters.push(`${column} between ${p.start} ${p.end}`); syncFilters(); } })))
+      : [el("div", { className: "hint", textContent: "날짜가 있는 행이 없어요." })]), ...(d.more ? [el("div", { className: "hint", textContent: "기간이 많아 최근 400개 기간 안에서만 찾았어요. 더 긴 기간 길이를 고르세요." })] : []));
+  } catch (e) { fail(e.message); }
+});
 const addFilter = () => {
   const line = $("f-in").value.trim();
   if (line) { filters.push(line); $("f-in").value = ""; syncFilters(); }
@@ -901,12 +928,25 @@ function showSampled() {
   $("sampled").textContent = s ? `${s.saved.replace("T", " ")}에 표본 ${s.rows.toLocaleString()}행으로 구한 통계예요.` : "";
   $("sampled").title = s ? `읽은 방법: ${SERVER.sample_methods[s.method] ?? s.method}` + (s.passed.length ? "\n건너뛴 방법: " + s.passed.map(([m, why]) => `${SERVER.sample_methods[m] ?? m}(${why})`).join(", ") : "") : "";
   $("resample").classList.toggle("hidden", !s || !!status);
+  $("full-stats").classList.toggle("hidden", !s || !!status);
 }
+$("full-stats").onclick = () => busy($("full-stats"), async () => {
+  try { prof.full = await timed("profile", () => api("/api/profile/full", { schema: S.schema, base: S.base, sample })); fail(""); } catch (e) { fail(e.message); }
+  showAll();
+});
+$("profile-export").onclick = () => busy($("profile-export"), async () => {
+  say("export-msg", "");
+  try {
+    const d = await timed("profile", () => api("/api/profile/export", { schema: S.schema, sample, format: $("export-format").value, full: $("export-full").checked }), {});  // 테이블이 여럿이라 행 수 예상은 하지 않는다
+    if (!d.cancelled) say("export-msg", `${d.tables}개 테이블의 요약을 저장했어요: ${d.path}`, true);
+  } catch (e) { say("export-msg", e.message); }
+});
 $("resample").onclick = async () => { await computeStats(token, true); await loadFirst(); };
 // ②와 ③. 통계는 테이블 전체가 아니라 표본으로 구하고 서버가 테이블별로 저장해 둔다(fresh면 표본을 새로 읽는다).
 // 오류나 취소로 ②가 멈추면 통계 칸에 "통계를 구하지 못했어요"와 [다시]가 나온다.
 async function computeStats(mine, fresh = false) {
   const body = { schema: S.schema, base: S.base, sample, refresh: fresh };
+  prof.full = null;  // 전체로 구한 요약은 표본을 다시 읽으면 버린다
   status = "stats";
   renderGrid();
   try {
