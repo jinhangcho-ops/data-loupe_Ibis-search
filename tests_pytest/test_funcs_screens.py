@@ -136,10 +136,7 @@ def test_calc_pivot_route_still_rejects_bad_options(real):
 
 AGG_WORDS = "count|sum|mean|min|max|nunique|median"
 SCREEN_FILES = [p for p in sorted(STATIC.rglob('*')) if p.suffix in (".js", ".html") and "chart.umd" not in p.name]
-ALLOWED = {  # (파일, 그 줄에 든 글) → 집계 목록이 아니라 다른 뜻인 곳
-    ("dash_calc.js", "{ sum: null, count: 0, min: null, max: null }"): "일 값을 다시 묶는 계산(MERGE의 구현)",
-    ("dash_calc.js", "mean: g => g.count"):"일 값을 다시 묶는 계산(MERGE의 구현)",
-    ("prep.html", '["mean", "median"]'): "빈 값 채우기 방법(집계 목록이 아님)",
+ALLOWED = {  # (파일, 그 줄에 든 글) → 집계 목록이 아니라 다른 뜻인 곳. 지금은 없다(빈 값 채우기 규칙은 prepmenu.js 한 벌, 쿼리에서 되는 옵션만 적는다)
 }
 FORBIDDEN = [
     (re.compile(rf'<option value="(?:{AGG_WORDS})"'), "집계를 고르는 <option>을 직접 적음"),

@@ -98,7 +98,7 @@ def shape(con, recipe, table=None, info=None, refs=None):
             before = set(t.columns)
             t = prep_ops.apply_ops(t, name, specs.get(name, {}).get("ops", {}), part, start)
             made.update({new: name for new in t.columns if new not in before})
-    t, new = prep_derive.apply_formulas(t, recipe.get("formulas") or [])
+    t, new = prep_derive.apply_formulas(t, recipe.get("formulas") or [], recipe.get("schema"))
     if recipe.get("pca"):
         t, components = prep_derive.pca(t, recipe["pca"], {} if info is None else info)
         new += components

@@ -354,7 +354,7 @@ def row_count(schema, base):
 
 @app.post("/api/rowcount")
 def rowcount():
-    """기준 테이블의 전체 행 수. 예상 시간을 구할 때 쓴다."""
+    """기준 테이블의 전체 행 수. 예상 시간을 구할 때 쓴다(화면은 @탭이면 부르지 않는다)."""
     return jsonify(rows=row_count(request.json.get("schema"), request.json["base"]))
 
 

@@ -6,10 +6,12 @@ export type Layout = { x: number; y: number; w: number; h: number };
 /** 카드 종류(dash_store.KINDS) */
 export type CardKind =
   | "chart" | "analysis" | "metric" | "kpi" | "donut_kpi" | "gauge" | "summary" | "recent_rows" | "dual_trend" | "stripes" | "blocks"
-  | "target_trend" | "map" | "alerts" | "deviation" | "funnel" | "table" | "status" | "sentence" | "geomap";
+  | "target_trend" | "map" | "alerts" | "deviation" | "funnel" | "table" | "status" | "sentence" | "geomap"
+  | "histogram" | "boxplot" | "heatmap" | "calheat" | "treemap" | "sunburst" | "bullet" | "bump" | "sankey" | "cohort" | "candle" | "wordcloud";
 
 /** 차트 종류(dash_store.CHART_TYPES). ""이면 계열마다 정한 대로 */
-export type ChartType = "" | "bar" | "hbar" | "stacked" | "line" | "polyline" | "area" | "doughnut" | "pie" | "radar" | "scatter" | "bubble";
+export type ChartType = "" | "bar" | "hbar" | "stacked" | "line" | "polyline" | "area" | "doughnut" | "pie" | "radar" | "scatter" | "bubble"
+  | "group" | "stack100" | "hstack" | "hstack100" | "sarea" | "sarea100" | "step" | "combo" | "waterfall" | "pareto" | "radial" | "polar" | "range" | "slope" | "trendline" | "butterfly" | "lollipop";
 export type Unit = "day" | "week" | "month" | "year";
 export type ValueFormat = "number" | "percent" | "currency";
 
@@ -60,6 +62,11 @@ export type CardView = {
   baseline?: number;
   threshold?: number;
   geo?: Record<string, unknown>;
+  rings?: boolean;                    // 겹친 도넛: 도넛·파이·방사형·장미에서 계열마다 링
+  bins?: number;                      // 히스토그램 구간 수(1~100)
+  bands?: number[];                   // 불릿 구간 경계
+  fit?: "fill" | "center";            // KPI 큰 값: 칸을 꽉 채우기 | 가운데(기본)
+  layout?: "below" | "right";         // KPI 추이선 자리: 값 아래(기본) | 오른쪽
   [more: string]: unknown;  // stale·entity·time_col·kind_col·link_col·group_cols·formats·total 등(check_more)
 };
 
@@ -81,7 +88,21 @@ export type CardData = {
   values?: Record<string, unknown> & { kind?: string; labels?: string[]; series?: { name: string; values: (number | string | null)[] }[] };
   points?: ChartPoints; x_kind?: string; num_cols?: string[]; date_cols?: string[]; text?: string; sentences?: unknown[];
   target?: unknown; pair?: unknown; since?: string; window?: { start?: string; end?: string };
+  bins?: { edges: number[]; counts: number[] };  // histogram(P14)
 };
+/** 새 카드(P14, 서버 dash_calc)의 data.values 모양: 종류마다 쓰는 칸만 있다(histogram은 data.bins) */
+export type MoreValues = {
+  groups?: { name: string; n?: number; min: number; q1: number; med: number; q3: number; max: number; outliers?: number[]; outlier_count?: number }[];  // boxplot(min·max는 1.5 IQR 수염 끝)
+  rows?: string[]; cols?: string[]; cells?: (number | null)[][];                         // heatmap
+  days?: { d: string; v: number | null }[];                                             // calheat
+  items?: TreeItem[];                                                                   // treemap·sunburst
+  nodes?: { name: string; users?: number }[]; links?: { s: number; t: number; v: number }[];  // sankey("이탈" 노드는 있을 때만 마지막)
+  periods?: (number | string)[]; cohorts?: { start: string; size: number; retained: (number | null)[] }[];  // cohort(비율 0~1)
+  labels?: string[]; candles?: { open: number | null; high: number | null; low: number | null; close: number | null }[];  // candle(labels와 같은 순서)
+  series?: { name: string; values: (number | string | null)[]; ranks?: (number | null)[] }[];  // bump(ranks: 1 = 1등)
+  words?: { w: string; n: number }[];                                                   // wordcloud
+};
+export type TreeItem = { name: string; value: number; children?: TreeItem[] };
 
 export type Card = { id: string; kind: CardKind; title: string; layout: Layout; colors: Colors; view: CardView; source: CardSource; data: CardData };
 
@@ -142,7 +163,7 @@ export type Constants = {
   fiscal_start_month?: number;   // 설정: 회계연도 첫 달 1~12(없으면 1)
   features: { on: string[]; version: string | null; all: { id: string; name: string; path: string }[] };
   dash: {
-    max_cards: number; max_dashboards: number; max_palette: number; types: Record<Exclude<ChartType, "">, string>; time_types: ChartType[];
+    max_cards: number; max_dashboards: number; max_palette: number; types: Partial<Record<Exclude<ChartType, "">, string>>; time_types: ChartType[]; max_bins?: number; max_bands?: number;
     units: Record<Unit, string>; palette: string[]; locked: string; min_refresh: number; max_points: number; aggs: string[]; merge: string[]; agg_names: Record<string, string>;
   };
   [more: string]: unknown;

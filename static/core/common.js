@@ -134,10 +134,13 @@ const gridAt = (g, k) => g.view ? g.view[k] : k;                  // 보이는 �
 const gridN = g => g.view ? g.view.length : g.rows.length;
 const gridTop = (g, k) => { let y = k * g.H; for (const [p, e] of g.extra) if (p < k) y += e; return y; };  // k번째 줄의 위 끝(px)
 const gridPos = (g, y) => { let k = Math.max(0, Math.floor(y / g.H)); while (k > 0 && gridTop(g, k) > y) k--; return k; };  // y(px)에 놓인 줄
-const gridPad = (g, h) => h > 0 ? `<tr class="vpad" aria-hidden="true" style="height:${h}px"><td colspan="${g.columns.length}" style="height:${h}px;padding:0;border:0"></td></tr>` : "";
+const gridPad = (g, h) => h > 0 ? `<tr class="vpad" aria-hidden="true" style="height:${h}px"><td colspan="${g.columns.length + (g.selectable ? 1 : 0)}" style="height:${h}px;padding:0;border:0"></td></tr>` : "";
 function gridTrs(g, a, b, max) {
   let s = "";
-  for (let k = a; k < b; k++) { const i = gridAt(g, k); s += `<tr${g.virtual ? ` data-p="${k}" aria-rowindex="${i + 2}"` : ""}>${g.row(g.rows[i], g.want, max)}</tr>`; }
+  for (let k = a; k < b; k++) {
+    const i = gridAt(g, k), on = g.selected?.has(i);  // 고르기 칸(selectable): 고른 행은 원래 행 번호로 기억해 다시 그려도(가상 스크롤·찾기) 체크가 남는다
+    s += `<tr${g.virtual ? ` data-p="${k}" aria-rowindex="${i + 2}"` : ""}${on ? ' class="picked"' : ""}>${g.selectable ? `<td class="pick"><label class="check"><input type="checkbox" data-i="${i}"${on ? " checked" : ""} aria-label="${i + 1}번째 행 고르기"></label></td>` : ""}${g.row(g.rows[i], g.want, max)}</tr>`;
+  }
   return s;
 }
 // 컬럼마다 가장 긴 글자가 든 행(글자 폭 기준, ASCII 밖 글자는 2)을 모아 크기 재기 줄로 만든다.
@@ -152,7 +155,7 @@ function gridSizer(g, max) {
     }
     best.add(at);
   }
-  return [...best].map(i => `<tr class="vsize" aria-hidden="true">${g.row(g.rows[i], "", max)}</tr>`).join("");
+  return [...best].map(i => `<tr class="vsize" aria-hidden="true">${g.selectable ? '<td class="pick"></td>' : ""}${g.row(g.rows[i], "", max)}</tr>`).join("");
 }
 function gridScroller(host) {
   for (let p = host; p && p !== document.documentElement; p = p.parentElement) if (/auto|scroll/.test(getComputedStyle(p).overflowY)) return p;
@@ -193,17 +196,20 @@ function gridDraw(g, force) {
 function gridFind(g, want) {
   want = want.trim().toLowerCase();
   const max = maxLen();
-  g.want = want; g.extra.clear();
+  g.want = want; g.extra.clear(); g.pickAt = -1;  // Shift 범위의 기준점은 보이는 줄 위치라, 보이는 줄이 바뀌면 버린다
   g.view = want ? g.rows.flatMap((r, i) => g.columns.some(c => (g.text?.(r, c, max) ?? shown(r[c], max)[0]).toLowerCase().includes(want)) ? [i] : []) : null;  // 칸마다 따로 본다(칸 사이를 건너 일치하지 않게)
   gridDraw(g, true);
 }
-// 표 하나를 host에 그린다. spec = { columns, rows, head: <th>들의 HTML, row(r, want, max): <td>들의 HTML, text?(r, c, max): 찾을 글(없으면 칸에 보이는 글) }.
+// 표 하나를 host에 그린다. spec = { columns, rows, head: <th>들의 HTML, row(r, want, max): <td>들의 HTML, text?(r, c, max): 찾을 글(없으면 칸에 보이는 글),
+//   selectable?: 첫 열에 행 고르기 칸(g.selected = 원래 행 번호 Set, 바뀌면 host에서 rowselect 이벤트), addCol?(): 머리글 끝 [+] 칸을 누르면 부른다 }.
 // 행이 TABLE_MIN 이하면 예전처럼 전부 그린 HTML 그대로, 넘으면 보이는 행만 그리고 aria-rowcount/rowindex로 전체 행 수를 알린다.
+// selectable이면 칸 번호(cellIndex)가 하나 밀린다: 칸 → 컬럼은 g.columns[cellIndex - 1].
 function mountTable(host, spec) {
   if (!spec.rows.length) { host._grid = null; host.innerHTML = '<span class="empty">결과가 없어요.</span>'; return; }
-  const g = host._grid = { ...spec, host, view: null, want: "", open: new Map(), extra: new Map(), H: 40, a: -1, b: -1, virtual: spec.rows.length > TABLE_MIN };
-  if (!g.virtual) { host.innerHTML = `<table><thead><tr>${spec.head}</tr></thead><tbody>${gridTrs(g, 0, spec.rows.length, maxLen())}</tbody></table>`; return; }
-  host.innerHTML = `<table aria-rowcount="${spec.rows.length + 1}"><thead><tr aria-rowindex="1">${spec.head}</tr></thead><tbody></tbody></table>`;
+  const g = host._grid = { ...spec, host, view: null, want: "", open: new Map(), extra: new Map(), H: 40, a: -1, b: -1, virtual: spec.rows.length > TABLE_MIN, selected: new Set(), pickAt: -1 };
+  const head = (spec.selectable ? '<th class="pick" aria-label="행 고르기"></th>' : "") + spec.head + (spec.addCol ? '<th class="addcol"><button type="button" class="ghost" title="새 컬럼 만들기" aria-label="새 컬럼 만들기">+</button></th>' : "");
+  if (!g.virtual) { host.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${gridTrs(g, 0, spec.rows.length, maxLen())}</tbody></table>`; return; }
+  host.innerHTML = `<table aria-rowcount="${spec.rows.length + 1}"><thead><tr aria-rowindex="1">${head}</tr></thead><tbody></tbody></table>`;
   GRIDS.add(g);
   gridDraw(g, true);
   gridWatch?.observe(host);
@@ -225,6 +231,14 @@ globalThis.addEventListener?.("resize", gridSchedule);
 const resultTable = (host, { columns, rows }) => mountTable(host, { columns, rows,
   head: columns.map(c => `<th class="${numCol(rows, c) ? "num" : ""}">${esc(c)}</th>`).join(""),
   row: (r, want, max) => columns.map(c => cell(r[c], want, max)).join("") });
+// 고르기 칸: 보이는 k번째 줄을 고르거나(on) 뺀다. shift면 마지막으로 누른 줄부터 k까지 같이. 다시 그리고 rowselect를 낸다.
+function gridPick(g, k, on, shift) {
+  const [a, b] = shift && g.pickAt >= 0 ? [Math.min(g.pickAt, k), Math.max(g.pickAt, k)] : [k, k];
+  for (let p = a; p <= b; p++) on ? g.selected.add(gridAt(g, p)) : g.selected.delete(gridAt(g, p));
+  g.pickAt = k;
+  gridDraw(g, true);
+  g.host.dispatchEvent(new CustomEvent("rowselect", { bubbles: true, detail: g }));
+}
 const toggleNest = e => {
   const td = e.target.closest("td.nest");
   if (!td) return;
@@ -238,6 +252,14 @@ const toggleNest = e => {
   if (g.virtual) s.size ? g.extra.set(p, tr.offsetHeight - g.H) : g.extra.delete(p);
 };
 document.addEventListener("click", toggleNest);
+document.addEventListener("click", e => {  // 표의 고르기 칸(누르면 그 행, Shift면 범위)과 머리글 끝 [+](addCol)
+  const box = e.target.closest?.("td.pick input"), add = e.target.closest?.("th.addcol button"), g = (box ?? add)?.closest("table")?.parentNode?._grid;
+  if (!g) return;
+  if (add) { g.addCol?.(); return; }
+  const tr = box.closest("tr");
+  gridPick(g, g.virtual ? +tr.dataset.p : tr.sectionRowIndex, box.checked, e.shiftKey);
+  g.host.querySelector(`td.pick input[data-i="${box.dataset.i}"]`)?.focus({ preventScroll: true });  // 다시 그려도 키보드 초점을 잃지 않게
+});
 document.addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && !e.ctrlKey && !e.metaKey && !e.altKey && e.target.matches?.("td.nest")) { e.preventDefault(); toggleNest(e); } });  // 키보드로도 펼치고 접는다
 // 메시지 칸에 글자를 쓴다. ok가 true면 성공 색, 글자면 그 클래스(예: "hint"는 안내 색), 아니면 오류 색.
 const say = (id, text, ok) => { $(id).textContent = text; $(id).className = ok === true ? "ok" : ok || "err"; };
@@ -1006,3 +1028,39 @@ function flash(text, ms = 1500) {  // 실패 안내는 읽을 시간이 더 필�
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastBox.classList.add("hidden"), ms);
 }
+
+// 우클릭 메뉴(쿼리 표의 칸·머리글, 전처리 컬럼 줄): ctxMenu(e, items, fallbackRect). items는 [[라벨, 실행|null, 안내], …](실행이 없으면 흐리게, 안내는 말풍선).
+// 열린 목록(.drop .pop) 모양, ↑↓로 흐리지 않은 항목 사이를 옮기고, 화면 밖으로 나가지 않게 둔다. 키보드(메뉴 키·Shift+F10)로 열면 좌표가 0이라 fallbackRect 아래에.
+// items가 없으면 열린 메뉴만 닫고 브라우저 기본 메뉴를 둔다. ctxBox는 열린 메뉴, ctxFrom은 연 요소(닫으면 초점을 돌려준다).
+let ctxBox = null, ctxFrom = null;
+function closeCtx() {  // 메뉴 안에 초점이 있었으면(키보드로 쓰던 중) 연 요소로 초점을 돌려준다. 바깥을 눌러 닫을 때는 누른 곳이 초점을 가져간다
+  const box = ctxBox;
+  if (!box) return;
+  ctxBox = null;  // 지우기 전에 비운다: 초점이 든 상자를 지우면 focusout이 다시 closeCtx를 부른다
+  const back = box.contains(document.activeElement);
+  box.remove();
+  if (back) ctxFrom?.focus?.();
+}
+function ctxMenu(e, items, fallbackRect) {
+  closeCtx();
+  if (!items?.length) return;
+  e.preventDefault();
+  ctxFrom = e.target;
+  const pop = el("div", { className: "pop ctx-pop" }), box = el("div", { className: "drop" }, pop);
+  pop.setAttribute("role", "menu");
+  const live = () => [...pop.children].filter(b => !b.disabled);
+  pop.onkeydown = k => { const b = live(), i = b.indexOf(document.activeElement), step = { ArrowDown: 1, ArrowUp: -1 }[k.key]; if (step && b.length) { k.preventDefault(); b[(i + step + b.length) % b.length].focus(); } };
+  for (const [label, run, why] of items) {
+    const b = el("button", { type: "button", textContent: label, title: run ? label : why || label, disabled: !run, onclick: () => { closeCtx(); run(); } });
+    b.setAttribute("role", "menuitem"); b.setAttribute("aria-label", label);
+    pop.append(b);
+  }
+  pop.addEventListener("focusout", f => { if (!pop.contains(f.relatedTarget)) closeCtx(); });  // Tab 등으로 초점이 메뉴 밖으로 나가면 닫는다
+  box.style.cssText = "position:fixed;z-index:300;left:0;top:0";  // 먼저 띄워서 잰다(블록인 .drop을 그냥 재면 화면 너비라 왼쪽 끝에 붙었다, B1)
+  document.body.append(box); ctxBox = box;
+  const r = box.getBoundingClientRect(), [x, y] = e.clientX || e.clientY || !fallbackRect ? [e.clientX, e.clientY] : [fallbackRect.left, fallbackRect.bottom];
+  box.style.left = `${Math.max(0, Math.min(x, innerWidth - r.width))}px`; box.style.top = `${Math.max(0, Math.min(y, innerHeight - r.height))}px`;  // 화면 밖으로 나가지 않게
+  live()[0]?.focus();
+}
+document.addEventListener("mousedown", e => { if (ctxBox && !ctxBox.contains(e.target)) closeCtx(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && ctxBox) { e.stopPropagation(); closeCtx(); } }, true);

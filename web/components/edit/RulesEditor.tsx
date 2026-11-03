@@ -4,13 +4,11 @@
 // 틀린 줄은 글 칸에 남는다(옛 card.ruleText): 밖에서 규칙이 바뀌었을 때(되돌리기 등)만 글을 다시 만든다. 칸을 떠날 때 읽는다(옛 onchange).
 // 조건 색 규칙(view.cond_rules)은 늘, 상태 규칙(view.rules)·연결선(view.links)은 view에 그 칸이 있을 때(감시 카드) 보인다.
 import { useState } from "react";
-import { parseLinkLine, parseRuleLine, parseStateLine, readLines, ruleLine } from "@/lib/calc";
+import { linkLine, parseLinkLine, parseRuleLine, parseStateLine, readLines, ruleLine, stateLine } from "@/lib/calc";
 import type { CardView, CondRule, StateRule } from "@/lib/types";
 
 export type RulesEditorProps = { view: CardView; columns: string[]; onChange: (patch: Partial<CardView>) => void };
 
-const stateLine = (r: StateRule) => `${r.column} ${r.op} ${r.value} ${r.level === "bad" ? "이상" : "주의"}`;  // parseStateLine의 반대
-const linkLine = (l: [string, string]) => `${l[0]} -> ${l[1]}`;
 
 type LineBoxProps<T> = { items: T[]; line: (item: T) => string; parse: (line: string) => { error?: string }; pick: (found: Record<string, unknown>) => T | undefined;
   placeholder: string; title?: string; onRead: (items: T[]) => void };

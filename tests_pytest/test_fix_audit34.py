@@ -17,6 +17,6 @@ def test_points_route_applies_dashboard_period(db):
 def test_prep_number_box_rejects_blank_and_hex(tmp_path):
     from test_fix_audit_js import run_node
     from conftest import ROOT
-    line = next(l for l in (ROOT / "static" / "prep" / "prep.html").read_text(encoding="utf-8").splitlines() if l.startswith("const toNum"))
-    got = run_node(tmp_path, "console.log(JSON.stringify([' ', '', '0x10', '-3.5', '1e3', ' 7 '].map(v => { const n = toNum(v); return Number.isNaN(n) ? 'NaN' : n; })));", parts=[line])
+    line = next(l.strip() for l in (ROOT / "static" / "core" / "prepmenu.js").read_text(encoding="utf-8").splitlines() if l.strip().startswith("const num = "))  # prep.html의 toNum은 공용 규칙(PrepMenu.value)으로 옮겼다
+    got = run_node(tmp_path, "console.log(JSON.stringify([' ', '', '0x10', '-3.5', '1e3', ' 7 '].map(v => { const n = num(v); return Number.isNaN(n) ? 'NaN' : n; })));", parts=[line])
     assert got == [None, None, "NaN", -3.5, 1000, 7]

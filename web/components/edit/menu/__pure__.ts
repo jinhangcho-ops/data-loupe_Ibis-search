@@ -9,7 +9,7 @@ assert.equal(parseBlankLine("비교 = 비교", aggs).blank?.agg, "count");
 assert.match(parseBlankLine("x = 모름", aggs).error ?? "", /종류는/);
 assert.match(parseBlankLine("x = 값 a bogus", aggs).error ?? "", /집계는/);
 assert.match(parseBlankLine("엉터리", aggs).error ?? "", /모양으로/);
-assert.equal(Object.keys(CARD_KINDS).length, 18);              // 옛 메뉴의 종류 수(퍼널·지도 포함)
+assert.equal(Object.keys(CARD_KINDS).length, 30);              // 옛 메뉴 18종 + P14 새 종류 12개
 assert.ok(!WITH_DATE.includes("funnel") && !WITH_DATE.includes("chart") && WITH_DATE.includes("table"));
 assert.equal(galleryItems({ bar: "막대", line: "라인" }).filter((t: { kind: string }) => t.kind === "chart").length, 2);
 assert.deepEqual(shellOf({ group: "차트", kind: "chart", type: "bar", name: "막대", help: "" }).source, {});

@@ -70,4 +70,4 @@ function funnelSentence(steps) {
 
 // 기간 제한 글: {n, unit} → "30분 안에"
 const WINDOW_UNIT_NAMES = { minute: "분", hour: "시간", day: "일" };
-const windowText = w => (w && w.n ? `첫 단계부터 ${w.n}${WINDOW_UNIT_NAMES[w.unit] ?? ""} 안에 도달한 사람만` : "기간 제한 없음");
+const windowText = w => (w && w.n ? `앞 단계부터 ${w.n}${WINDOW_UNIT_NAMES[w.unit] ?? ""} 안에 도달한 사람만` : "기간 제한 없음");

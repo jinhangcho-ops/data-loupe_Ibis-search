@@ -112,13 +112,14 @@ def test_join_list_offers_other_tabs_and_renamed_tab(tmp_path):
 (async () => {
   S.base = "orders"; await addTab(); S.base = "users"; await addTab(); S.base = "orders";
   tabs[1].name = "고객"; tabs[1].auto = false;
-  const sel = addTabGroup(mk("select"), ["orders"]);
+  const sel = addTabGroup(mk("select"), [tabRef(0)]);  // 값은 탭의 등록 이름(@탭N: 탭 번호, 가공 결과)
   const group = sel.children[0];
-  console.log(JSON.stringify({ label: group.label, items: group.children.map(o => [o.text, o.value]), none: addTabGroup(mk("select"), ["orders", "users"]).children.length }));
+  console.log(JSON.stringify({ label: group.label, items: group.children.map(o => [o.text, o.value]), refs: [tabRef(0), tabRef(1)], none: addTabGroup(mk("select"), [tabRef(0), tabRef(1)]).children.length }));
 })();
 """
     got = run(tmp_path, body)
-    assert got == {"label": "다른 탭", "items": [["탭: 고객", "users"]], "none": 0}
+    assert got["refs"][0] != got["refs"][1] and all(r.startswith("@탭") for r in got["refs"])  # 같은 orders 탭이어도 번호로 다르다
+    assert {k: got[k] for k in ("label", "items", "none")} == {"label": "다른 탭 (가공 결과)", "items": [["탭 고객 (가공 결과)", got["refs"][1]]], "none": 0}  # (R5 P17) 원본 테이블이 아니라 그 탭의 가공 결과
 
 
 @needs_node

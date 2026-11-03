@@ -4,9 +4,17 @@
 .settings-box .dctl { padding:0; }
 .settings-box .row { display:flex; gap:6px; align-items:center; }
 .settings-box .row input { flex:1; min-width:0; }
-/* KPI 값: 카드 폭(아이콘 자리를 뺀)을 글자 수(--n, dash_cards.js)로 나눠 글자 크기를 줄인다. 편집 중 좁은 칸에서 "12,2…"로 잘리지 않게 */
-.cbox.kpi { container-type:inline-size; }
-.cbox.kpi .kpi-val { font-size:clamp(14px, calc((100cqi - 56px) / (var(--n, 6) * .62)), 34px); }
+/* KPI 값(P15): 상자 폭(아이콘 자리를 뺀)을 글자 폭(--n, Kpi가 textUnits로 어림: 숫자 1·한글 1/0.62)으로 나눈 크기와 상자 높이(보조 줄 --kpi-rest를 뺀)로 맞춘 크기 중 작은 것. 편집 중 좁은 칸에서 "12,2…"로 잘리지 않게.
+   가로·세로 가운데, 비교 문장·짝은 아래에 붙는다. fit-center(기본)는 56px까지, fit-fill은 160px까지 키운다. lay-right(P16)는 추이선이 값 오른쪽(값 폭 60%) */
+.cbox.kpi { container-type:size; --kpi-rest:96px; --kpi-max:56px; --kpi-w:1; }
+.cbox.kpi.fit-fill { --kpi-max:160px; }
+.cbox.kpi.lay-right { --kpi-rest:40px; --kpi-w:.6; }
+.cbox.kpi .kpi-main { flex:1 1 auto; min-height:0; display:flex; align-items:center; justify-content:center; gap:12px; }
+.cbox.kpi .kpi-top { justify-content:center; min-width:0; }
+.cbox.kpi .kpi-val { font-size:clamp(14px, min(calc((100cqi * var(--kpi-w) - 56px) / (var(--n, 6) * .62)), calc((100cqh - var(--kpi-rest)) / 1.1)), var(--kpi-max)); line-height:1.1; }
+.cbox.kpi.lay-right .kpi-spark { flex:0 0 38%; height:60%; min-height:24px; margin:0; }
+.cbox.kpi .kpi-foot { margin-top:auto; display:flex; flex-direction:column; align-items:center; gap:2px; text-align:center; }
+.cbox.kpi .kpi-foot:empty { display:none; }
 /* 대시보드만 보기: 메뉴·도구·패널과 카드의 선택·설정·닫기·크기 손잡이를 숨긴다. 차트의 값 상자 같은 보는 기능은 남는다 */
 body.dash-only :is(.topbar, .nofeature, .d-tool, .board-ctl, #d-state, #err-dash, #d-gallery-box, #d-panel, .bresize, .bhead .bcheck, .bhead button, .bbadge) { display:none !important; }
 body.dash-only .bhead { pointer-events:none; }
@@ -22,3 +30,16 @@ body.dash-only .bcard.sel, body.dash-only .bcard.editing { border-color:var(--li
 .drop .pop.cardmenu { position:absolute; }
 .gal-tile { color:var(--text); text-align:left; white-space:normal; min-height:24px; }
 .gal-tile .hint { color:var(--muted); }
+/* P1 기간 달력(shell/Calendar): 기간 칸 아래 왼쪽에 두 달을 나란히. 고른 끝 날은 강조색 칸, 사이 날은 옅은 강조 바탕, 오늘은 밑줄 */
+.drop .pop.dcal { left:0; right:auto; top:calc(100% + 4px); gap:8px; padding:10px; min-width:0; }
+.dcal-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.dcal-months { display:flex; gap:16px; flex-wrap:wrap; }
+.dcal-title { font-weight:600; font-size:13px; text-align:center; margin-bottom:4px; }
+.dcal-grid { display:grid; grid-template-columns:repeat(7, 32px); gap:2px; }
+.dcal-wd { font-size:11px; color:var(--muted); text-align:center; }
+.drop .pop .dcal-day { width:32px; height:28px; padding:0; justify-content:center; text-align:center; border-radius:6px; font-variant-numeric:tabular-nums; }
+.drop .pop .dcal-day.mid { background:var(--accent-bg); }
+.drop .pop .dcal-day.on { background:var(--accent); color:var(--on-accent); }
+.drop .pop .dcal-day.today { text-decoration:underline; text-underline-offset:3px; }
+.drop .pop .dcal-day:disabled { color:var(--faint); background:none; cursor:default; }
+.drop .pop .dcal-day:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }

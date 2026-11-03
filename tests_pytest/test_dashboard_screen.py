@@ -86,4 +86,3 @@ def test_empty_period_ui_and_own_range():
     bar = (WEB / "components" / "shell" / "PeriodBar.tsx").read_text(encoding="utf-8")
     assert "비우면 카드의 원래 기간" in bar and 'period: "최근 30일"' not in bar
     assert "export function ownRange(card" in (WEB / "lib" / "calc.ts").read_text(encoding="utf-8")
-    assert "function ownRange(card)" in (STATIC / "core" / "lib" / "dash_calc.js").read_text(encoding="utf-8")

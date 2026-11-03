@@ -229,7 +229,7 @@ def window_seconds(window):
 
 def funnel_flow(t, user, step, time, steps, window=None, span=None, by=None):
     """흐름(퍼널): 사용자(user)가 단계 컬럼(step)의 값 steps를 순서대로 거쳐 간 사람 수(funnel.compute). 중간에 한 다른 행동과 되돌아간 행동은 무시한다.
-    by = 세그먼트 컬럼(있으면 응답에 segments), 단계마다 median_sec(앞 단계에서 걸린 시간 중앙값)이 steps에 들어 있다. window = {n, unit} 첫 단계부터 이 시간 안에 도달한 것만, span = {start, end} 첫 단계를 이 날짜 안에 한 사람만(대시보드 기간, 뒤 단계는 기간 밖이어도 센다). 필요한 컬럼은 사용자·단계·시각 셋뿐이다."""
+    by = 세그먼트 컬럼(있으면 응답에 segments), 단계마다 median_sec(앞 단계에서 걸린 시간 중앙값)이 steps에 들어 있다. window = {n, unit} 앞 단계부터 이 시간 안에 도달한 것만, span = {start, end} 첫 단계를 이 날짜 안에 한 사람만(대시보드 기간, 뒤 단계는 기간 밖이어도 센다). 필요한 컬럼은 사용자·단계·시각 셋뿐이다."""
     seconds = window_seconds(window)
     funnel.check(t, user, step, time, steps, seconds)
     entry = None

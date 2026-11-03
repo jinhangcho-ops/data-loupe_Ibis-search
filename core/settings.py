@@ -73,6 +73,7 @@ CHOICES = {
     "theme": ["light", "dark"],  # 화면 모드. 고른 적이 없으면 Windows 설정을 따른다.
     "ratio": ["auto", "square", "wide"],  # 차트 비율: 데이터 양에 따라 / 1:1 / 16:9
     "image": ["light", "dark"],  # 차트와 집계 표를 그림으로 저장할 때의 모드
+    "stats_scope": ["sample", "all"],  # 전처리 컬럼 통계를 표본으로 구할지 전체로 구할지(F18)
     "quotes": ["on", "off"],  # 조건을 넣을 때 따옴표 해석: 값을 감싸는 기호로 / 글자 그대로
     "cond": ["fields", "line"],  # 조건 입력 방식: 칸으로 선택 / 한 줄 입력
     "count": ["on", "off"],  # 검색할 때 전체 행 수를 셀지: 센다 / 세지 않는다
@@ -279,6 +280,9 @@ def searches():
 
 
 def save_search(name, search):
+    from core import dash_store  # 탭(@이름)을 쓰는 검색은 앱을 다시 켜면 깨지므로 거절한다(대시보드 카드와 같은 규칙)
+    if dash_store.uses_tab(search):
+        raise ValueError(dash_store.TAB_SAVE)
     return save_named("searches.json", "검색", MAX_SEARCH_SIZE, name, search)
 
 
@@ -288,6 +292,9 @@ def recipes():
 
 
 def save_recipe(name, recipe):
+    from core import dash_store  # 탭(@이름)을 기준·계산 줄에 쓰는 구성은 앱을 다시 켜면 깨지므로 거절한다(검색 저장과 같은 규칙)
+    if dash_store.uses_tab(recipe):
+        raise ValueError(dash_store.TAB_SAVE)
     return save_named("recipes.json", "구성", MAX_RECIPE_SIZE, name, recipe)
 
 

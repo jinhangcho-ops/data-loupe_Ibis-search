@@ -10,6 +10,7 @@ from urllib.parse import quote
 from flask import jsonify, request
 
 from lazy import Later, ibis, preload
+from core import handoff as registry  # 이 모듈의 /api/handoff 라우트 함수 이름과 겹치지 않게
 from core import held
 from core import result
 from core import scan_size
@@ -193,7 +194,7 @@ def query():
     con, count, rows, note = get_con(), None, None, ""
     able = source.compiles(expr)
     pages = able and held.remote(con) and held.pager(con) is not None  # 서버에 결과를 두는 DB(BigQuery): 받아 두거나 세지 않고 처음부터 server_page 한 번
-    key = querying.held_key("server", {k: v for k, v in body.items() if k not in ("limit", "offset", "count", "fresh", "confirmed")})
+    key = querying.held_key("server", {**{k: v for k, v in body.items() if k not in ("limit", "offset", "count", "fresh", "confirmed")}, "tabs": querying.tab_bodies(body)})  # 쓰는 @탭이 바뀌면 다시 조회
     if (not offset or (pages and reruns(key, body))) and (ask := explore_gate(body)):  # 새로 검색할 때만(쪽 넘기기는 묻지 않는다, 서버의 결과 테이블을 잊어 다시 돌릴 때는 묻는다)
         return ask
     counts = body.get("count", True)
@@ -215,7 +216,7 @@ def query():
         if offset and not note and body.get("sorts") and tied(body):  # 이 PC·파일 연결은 쪽마다 다시 정렬한다: 정렬 값이 같은 행이 있을 때만 알린다(둘째 쪽부터, 검색마다 한 번 센다). 원격 DB의 큰 결과(TOO_BIG)는 그 안내 그대로, 원격에 세는 조회를 보내지 않는다
             note = LOCAL_PAGES
     if offset == 0:  # 새로 검색할 때만(쪽 넘기기는 세지 않는다)
-        count_virtual([body["base"], *(body.get("union") or {}).get("tables", []), *[line.split()[0] for line in body.get("joins", []) if line.split()]])
+        count_virtual(querying.used_tables(body))
     known = body.get("known_count")
     if count is None and not counts and type(known) is int and known >= 0:  # 쪽 넘김: 화면이 아는 전체 행 수를 그대로(0 이상의 정수만)
         count = known
@@ -385,8 +386,8 @@ def handoff():
         if ask := explore_gate(request.json):  # 전처리가 읽을 때도 묻지만, 넘기기 전에 한 번(원격 과금)
             return ask
         from prep import prep_app
-        body = {k: v for k, v in request.json.items() if k not in ("mode", "name", "confirmed", "fresh")}
-        base = prep_app.hand_over(body, request.json.get("name"))
+        body = {k: v for k, v in request.json.items() if k not in ("mode", "name", "confirmed", "fresh", "shown")}
+        base = prep_app.hand_over(body, request.json.get("name"), request.json.get("shown"))  # shown: 지금 보이는 쪽(전처리 화면이 먼저 그린다)
         return jsonify(base=base, table=base, url="/prep?base=" + quote(base, safe=""))
     if server.ask_save is None:
         raise ValueError("저장 위치를 물을 수 없어요. 프로그램 창에서만 쓸 수 있어요.")
@@ -698,3 +699,103 @@ def save_llm():
     """LLM env 파일 경로를 읽어 검사한 뒤 저장한다(빈 글자면 LLM을 쓰지 않음). 키는 저장하지 않는다."""
     nl2sql.llm.save_env_path(request.json.get("env"))
     return llm_view()
+
+
+DATE_RANGES = {}  # {(스키마, 테이블, 컬럼): {min, max, rows}}. 연결이 바뀌면 비운다
+server.ON_SWITCH.append(DATE_RANGES.clear)
+
+
+@app.get("/api/date_range")
+def date_range():
+    """기간 달력이 고를 수 있는 범위: 날짜·날짜시간 컬럼의 {min: "YYYY-MM-DD[THH:MM:SS]", max, rows}(집계 한 번, 시간대 있는 시각은 설정 시간대의 벽시계로).
+    테이블(@탭이면 그 가공 결과)·컬럼마다 기억한다. 원격 DB는 처리 용량을 먼저 묻는다(확인 응답이면 화면이 &confirmed=1로 다시 부른다).
+    shortcut: @탭의 범위도 연결을 바꾸기 전까지 처음 것(탭을 고쳐도 달력 범위만 낡는다)."""
+    args = request.args
+    key = (args.get("schema") or None, args.get("base") or "", args.get("column") or "")
+    if key in DATE_RANGES:  # shortcut: 원본 CSV가 바뀌어도 연결을 바꾸기 전까지 처음 범위(달력 범위라 괜찮다)
+        return jsonify(DATE_RANGES[key])
+    con, t = get_con(), querying.table_of(key[1], key[0])  # @탭도 그 가공 결과로
+    parse.check_name(key[2], t.columns)
+    if not (t[key[2]].type().is_date() or t[key[2]].type().is_timestamp()):
+        raise ValueError(f"'{key[2]}'은 날짜·날짜시간 컬럼이 아니에요. 날짜 컬럼을 고르세요.")
+    col = result.local_time(t[key[2]])
+    expr = t.aggregate(lo=col.min(), hi=col.max(), n=t.count())
+    if held.remote(con) and (ask := server.scan_gate({"confirmed": args.get("confirmed") in ("1", "true")}, lambda: server.expr_sql(con, expr))):
+        return ask
+    found = run(lambda: expr.to_pyarrow().to_pylist()[0])
+    text = lambda v: None if v is None else v.isoformat(timespec="seconds") if hasattr(v, "hour") else v.isoformat()  # noqa: E731
+    DATE_RANGES[key] = {"min": text(found["lo"]), "max": text(found["hi"]), "rows": found["n"]}
+    return jsonify(DATE_RANGES[key])
+
+
+@app.post("/api/release")
+def release():
+    """테이블을 바꿀 때 화면이 부른다(F01): 그 테이블({schema, base})의 받아 둔 결과·전처리 사본·표본을 메모리에서 지우고 DuckDB 캐시를 비운다
+    (held.forget_table, 끝나면 run이 source.release). 다른 테이블의 것은 둔다. 등록한 탭(@이름)이 그 테이블을 기준·조인·행 합치기에 쓰면 받아 둔 결과는 둔다
+    (그 탭을 쓰는 다른 탭이 곧 다시 읽는다). 요청의 tab(부르는 탭의 @이름)은 이 검사에서 뺀다. 연결이 없으면 할 일이 없다."""
+    if server.state["opened"] is None:
+        return jsonify(ok=True)
+    from prep import prep_app
+    prefix = "|".join([server.connection_key(), request.json.get("schema") or "", request.json.get("base") or ""])  # prep_app.table_key의 앞부분
+    base, schema = request.json.get("base") or "", request.json.get("schema") or ""
+    me = request.json.get("tab")  # 부르는 탭 자신(@이름): 등록부에는 기준을 바꾸기 전의 옛 검색이 아직 남아 있다
+    if not any(base in querying.used_tables(item["body"]) for name, item in registry.ITEMS.items() if name != me and (item["body"].get("schema") or "") == schema):
+        run(lambda: held.forget_table(prefix))
+    for key in [k for k in prep_app.SAMPLES if held.in_table(k, prefix)]:
+        prep_app.SAMPLES.pop(key)
+    return jsonify(ok=True)
+
+
+@app.post("/api/tabs/register")
+def tabs_register():
+    """쿼리 화면의 탭 상태를 '@탭이름'으로 등록부(core/handoff.py)에 둔다 {name, body: 검색 요청} → {ok, name}. 다른 탭의 기준·조인·행 합치기 자리에 그 가공 결과로 쓰인다.
+    검색은 쓸 때 검사한다(고치는 중인 탭도 등록한다). 조인 줄은 테이블 이름을 한 낱말로 읽으므로 이름에 빈칸을 쓸 수 없다."""
+    name = request.json.get("name")
+    if isinstance(name, str) and any(ch.isspace() for ch in name):
+        raise ValueError("탭 이름에는 빈칸을 쓸 수 없어요(조인 줄에서 이름을 한 낱말로 읽어요).")
+    return jsonify(ok=True, name=registry.register(name, request.json.get("body")))
+
+
+@app.get("/api/tabs")
+def tabs_list():
+    """등록한 @이름들 {names}(쿼리 탭·전처리로 넘긴 검색, 등록 차례). 메모리만 읽어 FREE. 전처리 ① 단계의 기준 목록이 쓴다."""
+    return jsonify(names=registry.names())
+
+
+server.FREE.add("/api/tabs")
+
+
+@app.post("/api/tabs/forget")
+def tabs_forget():
+    """탭을 닫으면 등록을 지운다 {name} → {ok}."""
+    registry.forget(request.json.get("name"))
+    return jsonify(ok=True)
+
+
+@app.post("/api/lookup/preview")
+def lookup_preview():
+    """다른 테이블에서 찾기의 미리보기 {…검색 요청, column, target: {schema, base(@탭도), key}} → {values: 현재 결과의 서로 다른 값 수(빈 값 제외), found: 대상의 key에 있는 값 수, missing}.
+    조회 한 번: 값마다 대상의 서로 다른 키를 left join해 행 수(값 수)와 짝이 있는 수를 함께 센다. 원격 DB는 처리 용량을 먼저 묻는다."""
+    body, target = request.json, request.json.get("target") or {}
+    expr, column, key = querying.build(body, select=False), body.get("column") or "", target.get("key") or ""
+    parse.check_name(column, expr.columns, "기준 컬럼")
+    other = querying.table_of(target.get("base") or "", target.get("schema") or None)
+    parse.check_name(key, other.columns, "대상 키 컬럼")
+    a, b = expr[column].type(), other[key].type()
+    if parse.kind(a) != parse.kind(b) and not (a.is_numeric() and b.is_numeric()):
+        raise ValueError(f"'{column}'({parse.type_name(a)})과 '{key}'({parse.type_name(b)})은 종류가 달라 값을 맞춰 볼 수 없어요.")
+    a, b = a.copy(nullable=True), b.copy(nullable=True)  # NOT NULL 컬럼(기본 키)은 nullable만 달라 같은 타입을 다르다고 보지 않게
+    same = a if a == b else "int64" if a.is_integer() and b.is_integer() else "float64" if a.is_numeric() else "timestamp"  # 정수끼리는 int64(실수로 바꾸면 2^53 넘는 ID가 이웃과 같아진다), 정수↔실수·날짜↔날짜시각은 넓은 타입(Polars 조인은 타입이 같아야 하고, 실수를 정수로 바꾸면 2.5가 2와 맞는다)
+    values = expr.select(v=expr[column].cast(same)).distinct()
+    values = values.filter(values.v.notnull())
+    keys = other.select(k=other[key].cast(same)).distinct()
+    marked = values.left_join(keys, values.v == keys.k)  # 값도 키도 서로 달라 값마다 한 줄
+    counted = marked.aggregate(n=marked.count(), hit=marked.k.count())
+    con = get_con()
+    if held.remote(con) and (ask := server.scan_gate(body, lambda: server.expr_sql(con, counted))):
+        return ask
+    row = run(lambda: counted.to_pyarrow().to_pylist()[0])
+    return jsonify(values=row["n"], found=row["hit"], missing=row["n"] - row["hit"])
+
+
+from query import period_app  # noqa: F401,E402  기간별 표·지표 기간 비교 라우트(R5). 못 올라오면 숨기지 않고 바로 알린다

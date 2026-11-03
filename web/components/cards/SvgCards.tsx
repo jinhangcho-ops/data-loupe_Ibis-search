@@ -21,6 +21,17 @@ import { Alerts, Status } from "./svg/Status";
 import { Stripes } from "./svg/Stripes";
 import { Summary } from "./svg/Summary";
 import { TargetTrend } from "./svg/TargetTrend";
+import { BoxPlot } from "./svg/BoxPlot";
+import { Bullet } from "./svg/Bullet";
+import { Bump } from "./svg/Bump";
+import { CalHeat } from "./svg/CalHeat";
+import { Candle } from "./svg/Candle";
+import { Cohort } from "./svg/Cohort";
+import { Heatmap } from "./svg/Heatmap";
+import { Histogram } from "./svg/Histogram";
+import { Sankey } from "./svg/Sankey";
+import { Sunburst, Treemap } from "./svg/Treemap";
+import { WordCloud } from "./svg/WordCloud";
 
 const GeoMap = lazy(() => import("./svg/GeoMap"));
 
@@ -38,13 +49,14 @@ const Geo = (p: P) => (
 export const PAINTERS: Record<string, ComponentType<P>> = {
   kpi: Kpi, donut_kpi: Donut, gauge: Gauge, summary: Summary, recent_rows: RecentRows, dual_trend: DualTrend, stripes: Stripes, blocks: Blocks, target_trend: TargetTrend,
   table: Table, funnel: Funnel, status: Status, sentence: Sentence, alerts: Alerts, map: MapCard, deviation: Deviation, geomap: Geo,
+  histogram: Histogram, boxplot: BoxPlot, heatmap: Heatmap, calheat: CalHeat, treemap: Treemap, sunburst: Sunburst, bullet: Bullet, bump: Bump,
+  sankey: Sankey, cohort: Cohort, candle: Candle, wordcloud: WordCloud,
 };
-
 export function SvgCard({ card, data, result, palette, ctx }: CardProps) {
   const theme = useTheme(), merge = useConstants()?.merge;
   const colors = useMemo(() => ({ ...theme, palette }), [theme, palette]);
   const Paint = PAINTERS[card.kind];
   if (!Paint) return <RawValue data={data} result={result} />;
-  if (!(data.by_unit || data.values || data.columns)) return <Box cls="summary"><div className="sum-text">아직 구한 값이 없어요</div></Box>;
+  if (!(data.by_unit || data.values || data.columns || data.bins)) return <Box cls="summary"><div className="sum-text">아직 구한 값이 없어요</div></Box>;
   return <Paint card={{ ...card, data }} colors={colors} range={ctx?.range} merge={merge ?? []} />;
 }

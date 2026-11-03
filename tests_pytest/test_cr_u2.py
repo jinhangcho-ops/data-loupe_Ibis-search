@@ -2,7 +2,6 @@
 import json
 import re
 import shutil
-import subprocess
 import tempfile
 import threading
 import time
@@ -11,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, kill_edge, spawn_edge
 from test_fix_audit_js import between, read, run_node
 
 EDGE = next((p for p in (r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe") if Path(p).exists()), None)
@@ -79,8 +78,8 @@ def test_no_small_targets_headless(tmp_path):
     threading.Thread(target=http.serve_forever, daemon=True).start()
     port, cdp = http.server_port, 9341
     profile = tempfile.mkdtemp(prefix="u2edge_")
-    edge = subprocess.Popen([EDGE, "--headless=new", f"--remote-debugging-port={cdp}", "--remote-allow-origins=*", f"--user-data-dir={profile}", "--no-first-run",
-                             "--disable-extensions", "--window-size=1440,900", f"http://127.0.0.1:{port}/?key={server.KEY}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    spawn_edge([EDGE, "--headless=new", f"--remote-debugging-port={cdp}", "--remote-allow-origins=*", f"--user-data-dir={profile}", "--no-first-run",
+                       "--disable-extensions", "--window-size=1440,900", f"http://127.0.0.1:{port}/?key={server.KEY}"])
     ws, n = None, [0]
 
     def call(method, **params):
@@ -120,7 +119,7 @@ def test_no_small_targets_headless(tmp_path):
     finally:
         if ws:
             ws.close()
-        edge.kill()
+        kill_edge(profile)
         for p in Path(profile).parent.glob("u2edge_*"):
             shutil.rmtree(p, ignore_errors=True)
         http.shutdown()

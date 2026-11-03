@@ -1,8 +1,8 @@
 """퍼널(단계별 도달) 계산: 사용자가 단계를 순서대로 거쳐 간 사람 수를 Ibis 식으로 구한다. 중간에 한 다른 행동과 되돌아간 행동은 무시한다.
-- 첫 단계 T1 = 그 단계 행의 사용자별 가장 이른 시각(기간 제한이 있으면 시각마다). 다음 단계 Ti = (그 단계 행)과 T(i-1)을 사용자로 이어 붙여 t ≥ T(i-1)인 행의 사용자별 가장 이른 시각.
+- 첫 단계 T1 = 그 단계 행의 사용자별 가장 이른 시각(기간 제한이 있으면 시각마다). 다음 단계 Ti = (그 단계 행)과 T(i-1)을 사용자로 이어 붙여 t ≥ T(i-1)인 행의 사용자별 가장 이른 시각(기간 제한이 있으면 도달한 시각 전부).
 - 같은 시각에 두 단계가 있으면 ≥ 이므로 도달한 것으로 센다.
-- 기간 제한이 있으면 첫 단계 시각부터 그 시간 안(경계 포함)에 도달한 것만 센다. 이때는 첫 단계를 한 시각마다 각각 한 번의 "시도"로 보고,
-  어느 한 시도에서라도 기간 안에 끝까지 가면 도달로 센다(재방문 서비스). 사람 수는 사람 기준이라 한 사람은 한 번만 센다. 기간 제한이 없으면 사용자별 가장 이른 시각 하나만 쓴다.
+- 기간 제한이 있으면 단계마다 바로 앞 단계 시각부터 그 시간 안(경계 포함)에 도달한 것만 센다(A→B→C를 각각 1시간 안에). 이때는 첫 단계를 한 시각마다 각각 한 번의 "시도"로 보고,
+  어느 한 시도에서라도 단계마다 기간 안에 끝까지 가면 도달로 센다(재방문 서비스). 사람 수는 사람 기준이라 한 사람은 한 번만 센다. 기간 제한이 없으면 사용자별 가장 이른 시각 하나만 쓴다.
 - 단계가 k개면 이어 붙이기 k-1번과 조회 한 번이다. 어느 연결에서나 같은 식이다(창 함수를 쓰지 않는다)."""
 from lazy import ibis
 
@@ -51,7 +51,8 @@ def step_value(dtype, value):
 
 
 def reached(base, steps, window_seconds, entry=None):
-    """단계마다 도달한 표(사용자 u, 이번 단계 시각 tp, 첫 단계 시각 t1)의 목록. 기간 제한이 없으면 사용자마다 한 줄, 있으면 시도(첫 단계 시각)마다 한 줄이다.
+    """단계마다 도달한 표(사용자 u, 이번 단계 시각 tp)의 목록. 기간 제한이 없으면 사용자마다 한 줄(가장 이른 시각), 있으면 도달한 후보 시각 전부다
+    (다음 단계는 앞 단계 시각만 보므로 첫 단계 시각을 들고 다니지 않는다: 들고 다니면 행이 많은 사람의 표가 시각 수의 제곱으로 커진다).
     entry = (시작 날짜, 끝 날짜): 첫 단계 행만 그 날짜 안의 것으로 거른다. 뒤 단계는 기간 밖이어도 센다(기간 끝 무렵에 시작한 사람의 전환이 빠지지 않게)."""
     starts = base.filter(base.s == steps[0])
     if entry:
@@ -61,7 +62,7 @@ def reached(base, steps, window_seconds, entry=None):
         first = starts.group_by("u").aggregate(tp=starts.t.min())
     else:  # 기간 제한이 있으면 첫 단계를 한 시각마다 한 번의 시도로 본다(재방문하는 사람의 전환이 낮게 나오지 않게)
         first = starts.select("u", tp=starts.t).distinct()
-    levels = [first.mutate(t1=first.tp)]
+    levels = [first]
     try:
         no_range_join = ibis.get_backend(base).name in ("polars", "druid")  # Polars(파일 연결)·Druid는 같지 않음(>=, <=) 조인을 못 한다
     except Exception:
@@ -69,15 +70,18 @@ def reached(base, steps, window_seconds, entry=None):
     for value in steps[1:]:
         prev = levels[-1]
         rows = base.filter(base.s == value).select("u", "t")
-        if window_seconds is not None and not no_range_join:  # 시각 조건을 조인 안에 둔다: 사용자로만 잇고 거르면 행이 많은 한 사람 때문에 (시도 × 다음 단계 행)만큼 커진다
+        if window_seconds is not None and not no_range_join:  # 시각 조건을 조인 안에 둔다: 사용자로만 잇고 거르면 행이 많은 한 사람 때문에 (앞 후보 × 다음 단계 행)만큼 커진다
             span = ibis.interval(milliseconds=round(window_seconds * 1000))
-            joined = rows.join(prev, [rows.u == prev.u, rows.t >= prev.tp, rows.t <= prev.t1 + span]).select("u", "t", "tp", "t1")
+            joined = rows.join(prev, [rows.u == prev.u, rows.t >= prev.tp, rows.t <= prev.tp + span]).select("u", "t")  # 앞 단계 시각 기준
         else:
             joined = rows.join(prev, "u").filter(lambda j: j.t >= j.tp)
             if window_seconds is not None:
                 span = ibis.interval(milliseconds=round(window_seconds * 1000))
-                joined = joined.filter(lambda j: j.t <= j.t1 + span)
-        levels.append(joined.group_by(["u", "t1"]).aggregate(tp=joined.t.min()))
+                joined = joined.filter(lambda j: j.t <= j.tp + span)
+        if window_seconds is None:  # 제한이 없으면 가장 이른 시각 하나로 충분하다
+            levels.append(joined.group_by("u").aggregate(tp=joined.t.min()))
+        else:  # 제한이 있으면 후보 시각을 모두 남긴다: 가장 이른 B에서는 C가 멀어도 뒤의 B에서는 기간 안일 수 있다
+            levels.append(joined.select("u", tp="t").distinct())
     return levels
 
 
@@ -96,13 +100,16 @@ def counts(levels, seg=None):
     return {g: [int(found.get((g, i), 0)) for i in range(len(levels))] for g in dict.fromkeys(g for g, _ in found)}
 
 
-def gaps(levels):
-    """단계마다 바로 앞 단계에서 걸린 시간(초)의 중앙값 목록(첫 단계는 None, 조회 한 번). 사람마다 가장 빠른 시도 하나로 센다."""
+def gaps(levels, window_seconds=None):
+    """단계마다 바로 앞 단계에서 걸린 시간(초)의 중앙값 목록(첫 단계는 None, 조회 한 번). 사람마다 가장 짧은 것으로 센다.
+    기간 제한이 있으면 단계마다 후보 시각이 여럿이라 사용자로 잇되 앞 단계 후보 중 이번 시각보다 늦지 않고 기간 안인 것과만 짝짓는다(0 ≤ d ≤ 제한)."""
     if len(levels) < 2:
         return [None]
     parts = []
     for i, (prev, now) in enumerate(zip(levels, levels[1:]), 1):
-        j = now.join(prev, ["u", "t1"]).select("u", d=now.tp.epoch_seconds() - prev.tp.epoch_seconds())
+        prev = prev.select(u2="u", tp2="tp")  # 같은 이름을 피해 사용자로 잇는다
+        j = now.join(prev, now.u == prev.u2).select("u", d=now.tp.epoch_seconds() - prev.tp2.epoch_seconds())
+        j = j.filter(j.d >= 0, *([j.d <= window_seconds] if window_seconds is not None else []))
         per = j.group_by("u").aggregate(d=j.d.min())
         parts.append(per.aggregate(m=per.d.median().cast("float64")).mutate(i=ibis.literal(i)))
     table = parts[0]
@@ -133,7 +140,7 @@ def compute(table_expr, user, step, time, steps, window_seconds=None, entry=None
     base = table_expr.select(u=table_expr[user], s=table_expr[step], t=table_expr[time].cast("timestamp"), **({"g": table_expr[by]} if by is not None else {}))
     base = base.filter(base.u.notnull(), base.t.notnull())
     levels = reached(base, values, window_seconds, entry)
-    found = {"steps": step_rows(steps, counts(levels), gaps(levels)), "window": window_seconds}
+    found = {"steps": step_rows(steps, counts(levels), gaps(levels, window_seconds)), "window": window_seconds}
     if by is not None:
         per = counts(levels, segments(base, values[0]))
         found["segments"] = sorted(({"name": g, "steps": step_rows(steps, n)} for g, n in per.items()), key=lambda x: (x["name"] == OTHER, -x["steps"][0]["users"], x["name"]))

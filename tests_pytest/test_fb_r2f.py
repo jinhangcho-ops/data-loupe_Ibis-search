@@ -52,7 +52,7 @@ def test_count_labels_rule():
 
 def test_with_entity_table_counts_zero(c):
     done = go({"대상": "uid", "경계": "1, 2, 5, 10, 20", "대상 테이블": "users", "대상 테이블 컬럼": "id"})
-    assert done["columns"] == ["횟수", "대상 수"]
+    assert done["columns"] == ["횟수", "대상 수", "비중 %"]
     assert [(r["횟수"], r["대상 수"]) for r in done["rows"]] == list(zip(LABELS, [4, 1, 2, 1, 1, 1]))
     assert "uid마다" in done["text"]
 

@@ -62,18 +62,19 @@ def test_same_timestamp_counts():
 def test_window_boundary_inclusive():
     rows = [(1, "a", 0), (1, "b", 60),     # 정확히 60초: 포함
             (2, "a", 0), (2, "b", 61),     # 61초: 제외
-            (3, "a", 0), (3, "b", 30), (3, "c", 90)]  # c는 첫 단계로부터 90초
+            (3, "a", 0), (3, "b", 30), (3, "c", 90)]  # c는 앞 단계(b)로부터 60초
     assert users(run(rows, ["a", "b"], 60)) == [3, 2]
     r = run(rows, ["a", "b", "c"], 90)
     assert users(r) == [3, 3, 1] and r["window"] == 90
-    assert users(run(rows, ["a", "b", "c"], 89)) == [3, 3, 0]
+    assert users(run(rows, ["a", "b", "c"], 89)) == [3, 3, 1]  # 기간 제한은 앞 단계 기준(F29): c는 b 뒤 60초
     assert users(run(rows, ["a", "b"])) == [3, 3]
 
 
-def test_window_uses_first_step_not_previous():
-    # b가 a 뒤 50초, c가 b 뒤 50초: 단계 사이는 짧아도 첫 단계로부터는 100초
+def test_window_uses_previous_step_not_first():
+    # b가 a 뒤 50초, c가 b 뒤 50초: 기간 제한은 앞 단계 기준이라 60초여도 모두 도달(F29)
     rows = [(1, "a", 0), (1, "b", 50), (1, "c", 100)]
-    assert users(run(rows, ["a", "b", "c"], 60)) == [1, 1, 0]
+    assert users(run(rows, ["a", "b", "c"], 60)) == [1, 1, 1]
+    assert users(run(rows, ["a", "b", "c"], 40)) == [1, 0, 0]
     assert users(run(rows, ["a", "b", "c"], 100)) == [1, 1, 1]
 
 

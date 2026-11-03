@@ -1,10 +1,13 @@
 "use client";
 // N4 — 기간 칸(옛 dash_ctl.js DashCtl의 칸): 기준일(+달력, 오늘 뒤 막기)·기간·비교 기준·최신화 주기·실시간 간격(시작/멈추기)·실시간 최소 간격(초).
+// 기간 칸 옆 [달력](P1): 두 달 달력(Calendar)에서 고른 기간을 "YYYY-MM-DD ~ YYYY-MM-DD"로 칸에 넣고 바로 확정(commitPeriod). 기준일(없으면 오늘) 뒤는 막는다.
 // 규칙과 상태는 ShellProvider(useShell().period)에 있다(창을 닫아도 실시간 갱신이 이어진다). 칸은 옛 change처럼 벗어나거나 Enter일 때 확정한다.
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import type { CompareMode } from "@/lib/types";
+import { Calendar } from "./Calendar";
+import { readSpan } from "./calPick";
 import { useShell, type Note } from "./ShellProvider";
 
 const NoteLine = ({ n }: { n?: Note }) => <div className={"hint dc-note" + (n?.bad ? " bad" : "")} role={n?.bad ? "alert" : undefined}>{n?.text ?? ""}</div>;
@@ -15,8 +18,18 @@ const enter = (go: () => void) => (e: React.KeyboardEvent) => { if (e.key === "E
 export function PeriodBar() {
   const { state } = useDash();
   const { period: p } = useShell();
-  const minRefresh = useConstants()?.dash.min_refresh ?? 3600;
-  const pick = useRef<HTMLInputElement>(null);
+  const consts = useConstants(), minRefresh = consts?.dash.min_refresh ?? 3600;
+  const pick = useRef<HTMLInputElement>(null), calBtn = useRef<HTMLButtonElement>(null), calBox = useRef<HTMLDivElement>(null);
+  const [cal, setCal] = useState(false);
+  const closeCal = () => { setCal(false); calBtn.current?.focus(); };
+  // 달력 밖을 누르면 닫는다
+  useEffect(() => {
+    if (!cal) return;
+    const away = (e: PointerEvent) => { if (!calBox.current?.contains(e.target as Node)) setCal(false); };
+    document.addEventListener("pointerdown", away);
+    return () => document.removeEventListener("pointerdown", away);
+  }, [cal]);
+  const span = readSpan(p.inputs.period), max = /^\d{4}-\d{2}-\d{2}$/.test(p.inputs.as_of.trim()) ? p.inputs.as_of.trim() : p.today;
   const cards = state.dash?.cards ?? [];
   const times = cards.map(c => (state.values[c.id]?.data ?? c.data)?.computed_at).filter(Boolean).sort() as string[];
   const last = times.length ? `마지막으로 구한 시각 ${times[times.length - 1].replace("T", " ")}` : "아직 구한 값이 없어요";
@@ -34,8 +47,13 @@ export function PeriodBar() {
       </div>
       <div className="dc-field">
         <label className="hint" htmlFor="dc-per">기간</label>
-        <input id="dc-per" value={p.inputs.period} placeholder="비우면 카드의 원래 기간" title="모든 카드에 같은 기간을 걸어요. 예: 최근 7일, 지난달, 이번 달, 2026-10, 2026-Q3, 2026-10-01 ~ 2026-10-31. 비우면 카드마다 원래 조건대로 보여요"
-          onChange={e => p.setInput("period", e.target.value)} onBlur={p.commitPeriod} onKeyDown={enter(p.commitPeriod)} />
+        <div className="row drop" ref={calBox}>
+          <input id="dc-per" value={p.inputs.period} placeholder="비우면 카드의 원래 기간" title="모든 카드에 같은 기간을 걸어요. 예: 최근 7일, 지난달, 이번 달, 2026-10, 2026-Q3, 2026-10-01 ~ 2026-10-31. 비우면 카드마다 원래 조건대로 보여요"
+            onChange={e => p.setInput("period", e.target.value)} onBlur={() => p.commitPeriod()} onKeyDown={enter(() => p.commitPeriod())} />
+          <button ref={calBtn} className="btn" id="dc-per-cal" title="달력에서 시작 날과 끝 날을 골라요" aria-expanded={cal} aria-haspopup="dialog" onClick={() => setCal(!cal)}>달력</button>
+          {cal && <Calendar start={span.start} end={span.end} max={max} sunday={consts?.week_start === "sun"} onClose={closeCal}
+            onPick={(a, b) => { closeCal(); p.commitPeriod(`${a} ~ ${b}`); }} />}
+        </div>
         <NoteLine n={p.notes.per} />
       </div>
       <div className="dc-field">

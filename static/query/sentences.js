@@ -298,8 +298,8 @@ function SentenceView(host, ctx) {
   }
   function showResult(out, d) {
     const cfg = sentChart(d);
-    const table = el("div", { className: "table-wrap" });
-    resultTable(table, d);
+    const table = el("div", { className: "table-wrap" }), share = "비중 %";  // 51~53번 결과의 비중 열(0~100, 서버 sentence_exec.SHARE)
+    resultTable(table, !d.columns?.includes(share) ? d : { ...d, rows: d.rows.map(r => r[share] == null ? r : { ...r, [share]: `${(+r[share]).toFixed(1)}%` }) });  // 보이기만 %. 차트·보내기는 d의 숫자 그대로
     const box = el("div", { className: "schart hidden" });
     let send = null;
     const switchTo = view => {

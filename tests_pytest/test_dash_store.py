@@ -161,7 +161,7 @@ def test_north_star_must_point_to_cards():
 
 
 def test_scatter_bubble_view_and_points_data():
-    assert {"scatter", "bubble"} <= set(store.CHART_TYPES) and len(store.CHART_TYPES) == 11 and not {"scatter", "bubble"} & set(store.TIME_TYPES)
+    assert {"scatter", "bubble"} <= set(store.CHART_TYPES) and len(store.CHART_TYPES) == 28 and not {"scatter", "bubble"} & set(store.TIME_TYPES)
     card = store.check_card({**CARD, "view": {"type": "bubble", "points": {"size": "금액"}, "trend": True, "show_r": False}, "data": {"x_kind": "num", "num_cols": ["금액"], "points": {"points": [[1, 2, 3]]}}})
     assert card["view"]["points"] == {"size": "금액"} and card["view"]["trend"] is True and card["data"]["points"]["points"] == [[1, 2, 3]]
     for bad in ({"points": {"size": "a", "x": 1}}, {"trend": "yes"}, {"points": "금액"}):

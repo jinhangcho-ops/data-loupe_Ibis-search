@@ -1,8 +1,8 @@
 // SVG/HTML 카드의 순수 계산(화면 요소 없음): 옛 dash_cards.js의 cardValue·cardDays·cardTarget·cardFormat,
 // funnel.js의 생키 좌표·표·문장, static/geo/geomap.js의 메르카토르·타일 계산을 본문 그대로 옮겼다(SERVER.merge는 인자 merge로 받는다).
-import { overTarget, shiftDay, showValue, underTarget, zeroWhenEmpty } from "@/lib/calc";
+import { TAU, overTarget, polar, shiftDay, showValue, underTarget, zeroWhenEmpty } from "@/lib/calc";
 import { loadedRange, windowValue, type Range } from "@/lib/series";
-import type { Card, NorthStar } from "@/lib/types";
+import type { Card, NorthStar, TreeItem } from "@/lib/types";
 
 /** 그리는 색(옛 board.js themeColors + 대시보드 팔레트). err·ok는 상태 색(옛 cssVar("--err")·("--ok")) */
 export type Theme = { card: string; head: string; ink: string; text: string; line: string; err: string; ok: string; series: string[]; palette?: string[] };
@@ -49,6 +49,11 @@ export function counterAlerts(cards: Card[], star: NorthStar | undefined, range:
 
 // ======================= 흐름(퍼널): static/core/funnel.js =======================
 export const FUNNEL_COLORS = { bar: "#00968f", next: "#008300", drop: "#eb6834" };
+/** 퍼널의 세 색(그림과 [색] 칸 견본이 함께 쓴다): 카드 지정 색 → 단계 막대는 팔레트 첫 색, 다음 단계는 초록, 이탈은 주황 */
+export const funnelColors = (card: Card, palette?: string[]): Record<string, string> => {
+  const pick = (name: string, fallback: string) => card.colors?.series?.[name] ?? fallback;
+  return { "단계 막대": pick("단계 막대", palette?.[0] ?? FUNNEL_COLORS.bar), "다음 단계": pick("다음 단계", FUNNEL_COLORS.next), 이탈: pick("이탈", FUNNEL_COLORS.drop) };
+};
 export type Step = { name: string; users: number; conv?: number | null; from_first?: number | null; drop?: number };
 // 생키 좌표: 단계마다 세로 막대, 다음 단계 띠, 이탈 띠(3차 베지어 둘 + 직선 둘로 닫은 경로)
 export function sankeyLayout(steps: Step[], { width = 720, height = 340, pad = 12, barW = 22, top = 30, bottom = 40, lane = 14 } = {}) {
@@ -92,7 +97,7 @@ export function funnelSentence(steps: Step[]) {
     (worst && (worst.drop ?? 0) > 0 ? ` 가장 많이 빠진 곳은 ${worst.from} → ${worst.name}로, ${worst.drop!.toLocaleString()}명(${fpct(worst.drop! / steps.find(s => s.name === worst.from)!.users)})이 다음 단계로 가지 못했어요.` : " 중간에 빠진 사람은 없어요.");
 }
 const WINDOW_UNIT_NAMES: Record<string, string> = { minute: "분", hour: "시간", day: "일" };
-export const windowText = (w?: { n?: number; unit?: string } | null) => (w && w.n ? `첫 단계부터 ${w.n}${WINDOW_UNIT_NAMES[w.unit ?? ""] ?? ""} 안에 도달한 사람만` : "기간 제한 없음");
+export const windowText = (w?: { n?: number; unit?: string } | null) => (w && w.n ? `앞 단계부터 ${w.n}${WINDOW_UNIT_NAMES[w.unit ?? ""] ?? ""} 안에 도달한 사람만` : "기간 제한 없음");
 
 // ======================= 지도: static/geo/geomap.js =======================
 export const OSM_TILES = "https://tile.openstreetmap.org", OSM_CREDIT = "© OpenStreetMap contributors", MAX_MERC_LAT = 85.0511287798;
@@ -141,4 +146,103 @@ export function ringPath(ring: number[], project: MapFrame["project"]) {
   let d = "";
   for (let i = 0; i + 1 < ring.length; i += 2) { const [x, y] = project(ring[i], ring[i + 1]); d += (i ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1); }
   return d + "Z";
+}
+
+// ======================= 새 카드(P14) =======================
+/** 달력 히트맵 칸: 첫 날~끝 날의 날마다(값이 없는 날은 v null) 열 = 첫 날의 주부터 센 주, 줄 = 요일(월요일 시작, sunday면 일요일 시작). 달이 바뀌는 주에 달 이름 */
+export function calendarCells(given: { day: string; v: number | null }[], sunday = false) {
+  if (!given.length) return { cells: [], weeks: 0, months: [] as { col: number; label: string }[] };
+  const sorted = [...given].sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0)), byDay = new Map(sorted.map(d => [d.day, d.v]));
+  const days: { day: string; v: number | null }[] = [];
+  for (let d = sorted[0].day; d <= sorted[sorted.length - 1].day; d = shiftDay(d, 1)) days.push({ day: d, v: byDay.get(d) ?? null });  // 빠진 날도 칸으로(구멍·달 이름이 어긋나지 않게)
+  const row = (d: string) => (new Date(d + "T00:00:00Z").getUTCDay() + (sunday ? 0 : 6)) % 7, lead = row(days[0].day);
+  const cells = days.map((d, i) => { const n = i + lead; return { ...d, col: Math.floor(n / 7), row: n % 7 }; });
+  const months: { col: number; label: string }[] = [];
+  cells.forEach((c, i) => {
+    if (i && !c.day.endsWith("-01")) return;
+    const label = `${+c.day.slice(5, 7)}월`;
+    if (months.at(-1)?.col === c.col) months[months.length - 1].label = label; else months.push({ col: c.col, label });
+  });
+  return { cells, weeks: cells[cells.length - 1].col + 1, months };
+}
+
+/** 생키 흐름(서버 flow_pairs): 노드는 이름(또는 {name}), 링크의 s·t는 노드 번호나 이름, v는 인원 */
+export type Flow = { nodes: (string | { name: string })[]; links: { s: number | string; t: number | string; v: number }[] };
+/** 생키 좌표: 노드 열 = 들어오는 링크를 따라간 가장 긴 거리, 노드 높이 ∝ max(들어온 합, 나간 합), 열마다 위에서 쌓고 띠는 노드 안에서 차례로 쌓는다 */
+export function flowLayout(flow: Flow, { width = 720, height = 340, pad = 8, nodeW = 14, gap = 10 } = {}) {
+  const names = flow.nodes.map(n => (typeof n === "string" ? n : n.name)), at = (k: number | string) => (typeof k === "number" ? k : names.indexOf(k));
+  const links = flow.links.map(l => ({ s: at(l.s), t: at(l.t), v: Math.max(0, Number(l.v) || 0) }))
+    .filter(l => l.s >= 0 && l.t >= 0 && l.s < names.length && l.t < names.length && l.s !== l.t && l.v > 0);
+  const col = names.map(() => 0);
+  for (let pass = 0; pass < names.length; pass++) for (const l of links) col[l.t] = Math.min(names.length, Math.max(col[l.t], col[l.s] + 1));  // 고리가 있어도 노드 수만큼만
+  const sum = (i: number, key: "s" | "t") => links.filter(l => l[key] === i).reduce((a, l) => a + l.v, 0), value = names.map((_, i) => Math.max(sum(i, "s"), sum(i, "t")));
+  const groups = [...new Set(col)].sort((a, b) => a - b).map(c => names.map((_, i) => i).filter(i => col[i] === c && value[i] > 0)).filter(g => g.length);
+  const per = groups.length ? Math.min(...groups.map(g => (height - 2 * pad - gap * (g.length - 1)) / g.reduce((a, i) => a + value[i], 0))) : 0;
+  const k = groups.length, x = (g: number) => (k > 1 ? pad + (g * (width - 2 * pad - nodeW)) / (k - 1) : (width - nodeW) / 2);
+  const nodes = names.map((name, i) => ({ name, x: 0, y: 0, h: value[i] * per, value: value[i] }));
+  groups.forEach((g, gi) => { let y = pad; g.forEach(i => { Object.assign(nodes[i], { x: x(gi), y }); y += nodes[i].h + gap; }); });
+  const outY = nodes.map(n => n.y), inY = nodes.map(n => n.y);
+  const bands = links.map(l => {
+    const h = l.v * per, y0 = outY[l.s], y1 = inY[l.t], x0 = nodes[l.s].x + nodeW, x1 = nodes[l.t].x, mid = (x0 + x1) / 2;
+    outY[l.s] += h;
+    inY[l.t] += h;
+    return { ...l, y0, y1, h, path: `M${x0},${y0} C${mid},${y0} ${mid},${y1} ${x1},${y1} L${x1},${y1 + h} C${mid},${y1 + h} ${mid},${y0 + h} ${x0},${y0 + h} Z` };
+  });
+  return { width, height, nodeW, nodes, links: bands };
+}
+
+/** 스파크라인(calc.sparkPoints와 같은 눈금)에서 값 t의 y. 그린 값 범위 밖이면 위·아래 끝에 붙인다 */
+export function sparkY(values: (number | null)[], t: number, h: number, pad = 2) {
+  const real = values.filter((v): v is number => v != null), lo = Math.min(...real), hi = Math.max(...real);
+  if (!real.length) return h / 2;
+  if (hi === lo) return t > hi ? 1 : t < lo ? h - 1 : h / 2;  // 값이 한결같으면 선은 가운데: 목표가 위면 위 끝, 아래면 아래 끝
+  return Math.max(1, Math.min(h - 1, h - pad - ((h - 2 * pad) * (t - lo)) / (hi - lo)));
+}
+
+/** 트리 항목(값 > 0만): 아이들 합이 값보다 작으면 나머지를 "기타" 아이로(넓이·각도가 부모와 맞게), 값이 0 이하인 아이는 뺀다.
+ *  아이 합이 부모보다 크면(평균·최대처럼 더해지지 않는 집계) 아이를 버리고 부모만 그린다 */
+export function withRest(items: TreeItem[] | undefined): TreeItem[] {
+  return (items ?? []).filter(it => Number(it.value) > 0).map(it => {
+    const kids = (it.children ?? []).filter(c => Number(c.value) > 0), sum = kids.reduce((a, c) => a + Number(c.value), 0);
+    if (!kids.length || sum > it.value + 1e-9 * Math.abs(it.value)) return { name: it.name, value: Number(it.value) };
+    return { name: it.name, value: Number(it.value), children: sum < it.value - 1e-9 * Math.abs(it.value) ? [...kids, { name: "기타", value: it.value - sum }] : kids };
+  });
+}
+/** 선버스트 뿌리: 값 = 첫 단계 합(각도는 이것으로 나눈다. 없으면 각도가 NaN이 되어 빈 그림) */
+export const treeRoot = (name: string, items: TreeItem[]): TreeItem & { children: TreeItem[] } => ({ name, value: items.reduce((a, it) => a + (Number(it.value) || 0), 0), children: items });
+/** 선버스트 조각: 뿌리 값으로 각도를 나눠 첫 단계(depth 1, 안쪽 고리)와 둘째 단계(depth 2, 바깥 고리)의 [a0, a1](라디안, 12시가 0, 시계 방향). top은 첫 단계 번호(색).
+ *  아이 조각은 부모 각도 안에서 자른다(합이 안 맞는 입력이어도 한 바퀴를 넘지 않게) */
+export function sunburstArcs(root: TreeItem & { children: TreeItem[] }) {
+  const out: { name: string; value: number; depth: 1 | 2; top: number; a0: number; a1: number; parent?: string }[] = [];
+  if (!(root.value > 0)) return out;
+  let a = 0;
+  root.children.forEach((it, i) => {
+    const a1 = a + (TAU * it.value) / root.value;
+    out.push({ name: it.name, value: it.value, depth: 1, top: i, a0: a, a1 });
+    let b = a;
+    for (const ch of it.children ?? []) {
+      const b1 = Math.min(a1, b + (TAU * ch.value) / root.value);
+      if (b1 > b) out.push({ name: ch.name, value: ch.value, depth: 2, top: i, a0: b, a1: b1, parent: it.name });
+      b = b1;
+    }
+    a = a1;
+  });
+  return out;
+}
+/** 고리 조각(반지름 r0~r1, 각도 a0~a1) 경로. 한 바퀴면 반씩 둘로 */
+export function sectorPath(cx: number, cy: number, r0: number, r1: number, a0: number, a1: number): string {
+  if (a1 - a0 >= TAU - 1e-6) return sectorPath(cx, cy, r0, r1, a0, a0 + Math.PI) + sectorPath(cx, cy, r0, r1, a0 + Math.PI, a1);
+  const big = a1 - a0 > Math.PI ? 1 : 0, f = (n: number) => +n.toFixed(2);
+  const [x0, y0] = polar(cx, cy, r1, a0).map(f), [x1, y1] = polar(cx, cy, r1, a1).map(f), [x2, y2] = polar(cx, cy, r0, a1).map(f), [x3, y3] = polar(cx, cy, r0, a0).map(f);
+  return `M${x0},${y0} A${r1},${r1} 0 ${big} 1 ${x1},${y1} L${x2},${y2} A${r0},${r0} 0 ${big} 0 ${x3},${y3} Z`;
+}
+
+/** KPI 글자 폭 어림(글자 수 --n 대신, dashboard.css가 0.62em × n으로 나눈다): 한글·한자·전각은 약 1em이라 1/0.62, 나머지는 1 */
+export const textUnits = (text: string) => [...text].reduce((a, c) => a + (/[\u1100-\u11ff\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/.test(c) ? 1 / 0.62 : 1), 0);
+/** 글자를 px 폭(글자 크기 font)에 맞춰 자른다(넘치면 끝에 …). 폭은 textUnits × 0.62em(한글 약 1em) */
+export function fitText(s: string, px: number, font: number) {
+  const w = (t: string) => textUnits(t) * 0.62 * font, out = [...s];
+  if (w(s) <= px) return s;
+  while (out.length && w(out.join("") + "…") > px) out.pop();
+  return out.join("") + "…";
 }

@@ -7,6 +7,7 @@ import json
 from lazy import ibis
 
 from core import calc
+from core import handoff
 from core import held
 from core import metric_file
 from core import parse
@@ -19,16 +20,64 @@ from core import use_counts
 from core.server import get_con, run
 
 TURN_WAIT = 60  # 화면 밖에서 차례를 기다리는 최대 초
+MAX_TAB_DEPTH = 3  # @탭 안의 @탭을 푸는 깊이
+RESOLVING = []  # 지금 풀고 있는 @이름들(자기 참조·순환·깊이를 본다). 요청은 차례(turn)로 하나씩이다
+
+
+def tab_table(name):
+    """@이름(쿼리 탭·전처리로 넘긴 검색)의 식: 등록부(core/handoff.py)의 검색 요청을 build한 것. 자기 참조·순환이나 MAX_TAB_DEPTH를 넘으면 ValueError."""
+    found = handoff.get(name)
+    if found is None:
+        raise ValueError(f"'{name}' 탭이 없어요. 쿼리 화면에서 그 탭을 다시 여세요.")
+    if name in RESOLVING:
+        raise ValueError(f"탭이 자기 자신을 참조해요({' → '.join([*RESOLVING, name])}).")
+    if len(RESOLVING) >= MAX_TAB_DEPTH:
+        raise ValueError(f"탭 안의 탭은 {MAX_TAB_DEPTH}단계까지예요({' → '.join([*RESOLVING, name])}).")
+    RESOLVING.append(name)
+    try:
+        expr = build(found["body"])
+    finally:
+        RESOLVING.pop()
+    if not source.compiles(expr):  # 받아 둔 사본으로 대신 계산하는 길(runnable)은 다른 식 안에 넣을 수 없다
+        raise ValueError(f"이 연결은 탭 '{name}'의 계산(창 함수 등)을 못 해서 다른 탭에서 쓸 수 없어요. 그 계산 줄을 빼거나 DuckDB 파일로 옮겨 쓰세요.")
+    return expr
+
+
+def table_of(name, schema=None, vts=None):
+    """기준·조인·행 합치기·그룹집계 대상 자리의 이름을 식으로: @이름은 등록한 검색의 식(tab_table), 아니면 연결의 테이블(기본 스키마면 가상 테이블도)."""
+    if isinstance(name, str) and name.startswith(handoff.PREFIX):
+        return tab_table(name)
+    con = get_con()
+    vts = ({} if schema else server.virtual_tables()) if vts is None else vts
+    parse.check_name(name, server.table_names(con, schema) + list(vts), "테이블")
+    return server.any_table(con, name, schema, vts)
+
+
+def used_tables(body):
+    """검색이 테이블 자리에 쓰는 이름들(차례대로): 기준, 이어붙이기 테이블, 조인 줄의 첫 낱말. 탭 사용 검사(dash_store.uses_tab·release)·가상 테이블 세기가 같이 쓴다."""
+    union = body.get("union") if isinstance(body.get("union"), dict) else {}
+    return [body.get("base"), *(union.get("tables") or []), *[line.split()[0] for line in body.get("joins") or [] if isinstance(line, str) and line.split()]]
+
+
+def tab_bodies(body, depth=0):
+    """요청 전체(기준·행 합치기·조인뿐 아니라 계산 줄의 그룹집계 테이블 등)가 쓰는 @이름들의 검색 요청 {이름: body}(그 안에서 쓰는 것까지 MAX_TAB_DEPTH단계).
+    받아 둔 결과·세어 둔 행 수의 열쇠에 넣어 탭이 바뀌면 새로 받는다.
+    shortcut: 글에 이름이 들어 있으면 쓴 것으로 본다(@a와 @ab 둘 다 잡혀 열쇠만 조금 더 넓어진다)."""
+    text = json.dumps(body, ensure_ascii=False, default=str)
+    found = {n: handoff.get(n)["body"] for n in handoff.names() if n in text}
+    for inner in list(found.values()) if depth < MAX_TAB_DEPTH else []:
+        found.update(tab_bodies(inner, depth + 1))
+    return found
 
 
 def joined(body):
-    """기준 테이블에 이어붙이기와 조인을 한 식, 그리고 컬럼마다 원래 테이블 {컬럼: 테이블}.
+    """기준 테이블에 이어붙이기와 조인을 한 식, 그리고 컬럼마다 원래 테이블 {컬럼: 테이블}. 테이블 자리의 @이름은 그 탭의 가공한 결과(tab_table).
     기준·이어붙인 컬럼은 기준 테이블, 출처 컬럼은 "이어붙인 테이블", 조인으로 들어온 컬럼(이름이 겹쳐 바뀐 것 포함)은 그 테이블."""
     con, schema, base = get_con(), body.get("schema") or None, body["base"]
     vts = {} if schema else server.virtual_tables()  # 가상 테이블은 기본 스키마에서만 고른다
-    tables = server.table_names(con, schema) + [n for n in vts]
+    tables = server.table_names(con, schema) + [n for n in vts] + handoff.names()
     parse.check_name(base, tables, "테이블")
-    get_table = lambda name: server.any_table(con, name, schema, vts)
+    get_table = lambda name: table_of(name, schema, vts)
     expr = parse.apply_union(get_table(base), base, parse.parse_union(body.get("union"), tables, base), get_table)
     stacked = (body.get("union") or {}).get("how", "left") in parse.STACKS
     origins = {c: "이어붙인 테이블" if body.get("union") and stacked and c == parse.SOURCE else base for c in expr.columns}
@@ -49,7 +98,7 @@ def filtered(body):
 
 def staged(body, expr):
     """기간·조건까지 건 식(또는 받아 둔 결과)에 계산 줄들(calc)을 건다."""
-    return calc.apply(body.get("calcs"), expr)
+    return calc.apply(body.get("calcs"), expr, body.get("schema"))
 
 
 def shown(body, expr):
@@ -95,7 +144,8 @@ def held_key(kind, what):
 
 def search_key(body, keep=None):
     """검색의 열쇠. keep(받아 둘 컬럼들)이 있으면 열쇠에 넣는다(같은 조건이어도 컬럼이 다르면 다른 사본)."""
-    return held_key("search", {**{k: body.get(k) for k in STAGE}, **({"keep": sorted(keep)} if keep else {})})
+    tabs = tab_bodies(body)
+    return held_key("search", {**{k: body.get(k) for k in STAGE}, **({"keep": sorted(keep)} if keep else {}), **({"tabs": tabs} if tabs else {})})
 
 
 def slim(expr, keep):

@@ -2,9 +2,10 @@
 // SVG/HTML 카드가 함께 쓰는 것: 화면 모드 색(useTheme), 상자·그림 틀·아이콘, 상태 이름·색, 연결돼 있을 때만 앞 N행 읽기(useRows).
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { getLiveMin, query } from "@/lib/api";
-import type { Card, Ctx } from "@/lib/types";
-import { sameSource } from "@/lib/series";
+import type { Card, Ctx, MoreValues } from "@/lib/types";
+import { pickColor, sameSource } from "@/lib/series";
 import type { Theme } from "./__pure__";
+import { THEME_SERIES } from "../ChartCard";
 
 /** 종류별 카드 컴포넌트가 받는 것: card.data는 이미 그릴 값(구한 값 또는 저장된 값), range는 보는 기간(ctx.range), merge는 상수 merge */
 export type P = { card: Card; colors: Theme; range: Ctx["range"]; merge: string[] };
@@ -24,6 +25,13 @@ export function useTheme(): Theme {
   }
   return cache.get(key)!;
 }
+
+/** 새 카드(P14) 색: 카드 지정 색 → 대시보드 팔레트 → 화면 모드 토큰(var(--c1)…) */
+export const tone = (p: P, name: string, i: number) => pickColor(p.card, "series", name, { palette: p.colors.palette, series: THEME_SERIES }, i);
+/** 새 카드(P14)의 data.values(서버 dash_calc 모양) */
+export const more = (p: P) => (p.card.data?.values ?? {}) as MoreValues;
+/** 값 모양은 있는데 비었을 때(새 카드) */
+export const NOTHING = "그릴 값이 없어요. 기간이나 조건을 바꿔 다시 구해 보세요.";
 
 export const LEVEL_NAMES: Record<string, string> = { ok: "정상", warn: "주의", bad: "이상" };
 export const levelColor = (level: string, colors: Theme) => level === "bad" ? colors.err : level === "warn" ? "#f08c00" : colors.ok;

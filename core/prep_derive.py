@@ -201,7 +201,10 @@ class Formula:
             if at >= len(args):
                 break
             kind = spec["kind"]
-            if kind in ("columns", "list"):
+            if kind == "list" and isinstance(args[at], (ast.List, ast.Tuple)):  # [10, 20] 한 덩어리면 그것만(다음 목록 칸을 이어 쓸 수 있게: bucket(x, [10, 20], ['낮음', '중간', '높음']))
+                raw[spec["name"]] = self.constants([args[at]], spec["label"])
+                at += 1
+            elif kind in ("columns", "list"):
                 raw[spec["name"]] = values[at:] if kind == "columns" else self.constants(args[at:], spec["label"])
                 at = len(args)
             elif kind in ("column", "cond"):
@@ -235,14 +238,24 @@ def check_name(name, t, what):
         raise ValueError(f"'{name}' 컬럼이 이미 있어 {what}을 만들 수 없어요.")
 
 
-def apply_formulas(t, formulas):
-    """formulas([{name, expr}])를 차례로 붙인다. 뒤의 식은 앞에서 만든 계산 컬럼을 쓸 수 있다. (식, 만든 컬럼 이름들)"""
+def apply_formulas(t, formulas, schema=None):
+    """formulas([{name, expr}] 또는 계산 줄 {line}: 쿼리 계산 줄 문법(그룹집계·창 함수·전처리·식, calc.apply_line))를 차례로 붙인다.
+    뒤의 식은 앞에서 만든 계산 컬럼을 쓸 수 있다. (식, 만든 컬럼 이름들)"""
     if not isinstance(formulas, list) or len(formulas) > MAX_FORMULAS:
         raise ValueError(f"계산 컬럼은 {MAX_FORMULAS}개까지의 목록이어야 해요.")
     made = []
     for item in formulas:
+        if isinstance(item, dict) and set(item) == {"line"} and isinstance(item["line"], str):
+            from core import calc  # calc가 이 모듈을 부른다
+            before = set(t.columns)
+            try:
+                t = calc.apply_line(item["line"], t, schema)  # 그룹집계 '테이블 대상'은 구성의 스키마에서
+            except ValueError as e:
+                raise ValueError(f"계산 줄 '{item['line'][:60]}': {e}") from None
+            made += [c for c in t.columns if c not in before]
+            continue
         if not isinstance(item, dict) or not {"name", "expr"} <= set(item) <= {"name", "expr", "order", "group"}:
-            raise ValueError('계산 컬럼은 {"name": "새 컬럼", "expr": "식", "order": ["정렬 기준 [desc]"], "group": ["묶음 기준"]} 모양이어야 해요(order·group은 선택).')
+            raise ValueError('계산 컬럼은 {"name": "새 컬럼", "expr": "식", "order": ["정렬 기준 [desc]"], "group": ["묶음 기준"]} 모양이어야 해요(order·group은 선택). 계산 줄은 {"line": "그룹집계 …"}.')
         for key in ("order", "group"):
             if not isinstance(item.get(key, []), list) or not all(isinstance(v, str) for v in item.get(key, [])):
                 raise ValueError(f"계산 컬럼의 {key}은 컬럼 이름(글자) 목록이어야 해요.")

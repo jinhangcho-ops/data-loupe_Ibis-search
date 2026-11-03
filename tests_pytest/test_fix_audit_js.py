@@ -43,7 +43,6 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 
 def read(name):
-    # lib 파일은 "lib/dash_calc.js"처럼 부른다
     return next(STATIC.rglob(name)).read_text(encoding="utf-8")
 
 
@@ -136,7 +135,8 @@ const order = []; const idx = [];
 for (let i = 0; i < 300; i++) idx.push(labelIndex(order, "라벨" + i));
 console.log(JSON.stringify({ len: order.length, last: idx[299], again: labelIndex(order, "라벨5") }));
 """
-    got = run_node(tmp_path, body, files=["lib/dash_calc.js"])
+    from test_dash_js import run_ts  # 대시보드 화면(web/lib/calc.ts). 옛 static/core/lib/dash_calc.js는 지웠다
+    got = json.loads(run_ts(tmp_path, body))
     assert got == {"len": 200, "last": 200, "again": 5}  # 서버(dash_store)는 order 200개 넘으면 저장을 거부한다
 
 

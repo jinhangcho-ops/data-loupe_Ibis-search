@@ -29,6 +29,12 @@ NAMES = {"ratio": "값", "percent": "비율(%)", "share": "비중", "sub": "차�
 MAX_PERIODS = 5000  # 빈 기간을 채울 때 만들 기간 수의 상한(일 단위로 13년 남짓)
 WINDOWS = {"cum_sum": "sum", "cum_mean": "mean", "cum_min": "min", "cum_max": "max", "moving_sum": "sum", "moving_mean": "mean", "moving_min": "min", "moving_max": "max"}  # 36번 → 쌓을 계산
 VERSUS_P = "p-value(집단 vs 나머지)"  # 53번 견주기 표의 검정 열
+SHARE = "비중 %"  # 51·52·53번 결과 표에 더하는 열(전체 중 몫을 0~100으로)
+
+
+def share(part, total):
+    """part가 total에서 차지하는 몫(%). total이 0이거나 없으면 None."""
+    return None if not total or part is None else part / total * 100
 
 
 def one(keys, col, rows, more=False, columns=None):
@@ -230,7 +236,8 @@ def count_bucket(r, per):
     marked = per.mutate(k=sql_funcs.make("bucket", per, {"x": "v", "bounds": r["outer"]["bounds"], "labels": labels}))
     got = run(lambda: marked.group_by("k").aggregate(n=marked.count()).to_polars())
     counts = dict(zip(got["k"].to_list(), got["n"].to_list()))
-    return one(["횟수"], "대상 수", [{"횟수": k, "대상 수": counts.get(k, 0)} for k in labels])
+    total = sum(counts.get(k, 0) for k in labels)
+    return one(["횟수"], "대상 수", [{"횟수": k, "대상 수": counts.get(k, 0), SHARE: share(counts.get(k, 0), total)} for k in labels])
 
 
 def count_bounds(raw):
@@ -314,7 +321,7 @@ def summary(r, expr, ent):
     t = expr.select(e=ent, **({"p": parse.column(expr, peer)} if peer else {}), **({"d": parse.column(expr, day).cast("date")} if day else {}),
                     **({"v": parse.column(expr, rep)} if rep else {}))
     out = t.group_by("e").aggregate(n=t.count(), **({"np": t.p.nunique()} if peer else {}))
-    names = {"e": r["entity"], "n": "행 수"}
+    names = {"e": r["entity"], "n": "행 수", "pct": SHARE}
     parts = []
     if peer:
         parts.append(most(t, "p").select("e", tp="k"))
@@ -334,6 +341,8 @@ def summary(r, expr, ent):
         out = out.left_join(x, "e").drop("e_right")
     if peer:
         out = out.mutate(share=out.tp / out.n)
+    out = out.cross_join(out.aggregate(all_n=out.n.sum()))  # 상위 N개로 자르기 전의 모든 대상 중 몫(창 함수는 파일(Polars) 연결이 못 한다)
+    out = out.mutate(pct=out.n / out.all_n * 100)
     out = out.order_by([ibis.desc(o["sort"]), "e"]).select(**{v: k for k, v in names.items()}).limit(o["n"] + 1)
     table = server.to_json(run(out.to_polars))
     return one([r["entity"]], None, table["rows"][:o["n"]], len(table["rows"]) > o["n"], table["columns"])
@@ -352,9 +361,10 @@ def versus(r, expr, ent):
     *both, rest = run(lambda: [stats(x).to_polars().row(0) for x in (per, per.filter(inside), per.filter(~inside))])
     unit = "하루" if day else "대상당"
     labels = [f"{r['entity']} 수", "전체 행 수", f"{unit} 평균", f"{unit} 중앙값", f"{unit} 최소", f"{unit} 최대"]
-    cols = ["지표", f"전체 {r['entity']}", o["name"], VERSUS_P]
+    cols = ["지표", f"전체 {r['entity']}", o["name"], SHARE, VERSUS_P]
+    shares = [share(both[1][i], both[0][i]) for i in range(2)] + [None] * 4  # 대상 수·전체 행 수만 집단이 전체에서 차지하는 몫이 뜻이 있다(평균·중앙값·최소·최대는 아니다)
     pv = [None, None, welch_p(rest, both[1]), None, None, None]  # 평균만 검정한다: 집단 대 나머지(전체에는 집단이 들어 있어 독립이 아니다)
-    return {**one([], None, [dict(zip(cols, x)) for x in zip(labels, *(b[:6] for b in both), pv)], columns=cols),
+    return {**one([], None, [dict(zip(cols, x)) for x in zip(labels, *(b[:6] for b in both), shares, pv)], columns=cols),
             "notes": [f"{VERSUS_P}는 집단과 나머지 {r['entity']}의 {unit} 평균을 Welch t 검정으로 견준 값이에요(작을수록 우연이 아닐 가능성이 커요)."]}
 
 

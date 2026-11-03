@@ -6,13 +6,13 @@
 // 열기는 이 open 한 곳(저장값을 먼저 보이고, 연결돼 있으면 기간 규칙대로 다시 구한다). 자동 저장(useAutosave)·되돌리기(useUndo)도 여기서 한 번만 부른다.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CHART_KINDS } from "@/components/cards/ChartCard";
-import { isShell } from "@/components/edit/menu/kinds";
+import { datedCard, isShell } from "@/components/edit/menu/kinds";
 import { flush, useAutosave } from "@/components/hooks/useAutosave";
 import { useUndo, type Undo } from "@/components/hooks/useUndo";
 import { cardRequest, compare, computeCard, computeCards, getDashboard, getLiveMin, parseDay, parseEvery, parsePeriod, saveSettings, setLast, setLiveMin } from "@/lib/api";
 import { outsideWindow } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
-import { useActionLog, useDash } from "@/lib/store";
+import { computedUpdate, useActionLog, useDash } from "@/lib/store";
 import { compareItem, newOrder, sameSource } from "@/lib/series";
 import { seriesKit } from "@/components/cards/chart/series";
 import type { Card, CompareMode, ComputeResult, Ctx, DashSettings, Dashboard, PrevSpan, Source } from "@/lib/types";
@@ -27,7 +27,7 @@ export type Period = {
   notes: Partial<Record<NoteKey, Note>>; today: string; past: boolean; liveOn: boolean;
   min: string; setMin: (v: string) => void; minOn: boolean; settingsError: string;
   compareMode: CompareMode; setCompareMode: (m: CompareMode) => void;
-  commitDay: (text?: string) => void; commitPeriod: () => void; commitEvery: (kind: "refresh" | "live") => void;
+  commitDay: (text?: string) => void; commitPeriod: (text?: string) => void; commitEvery: (kind: "refresh" | "live") => void;
   toggleLive: () => void; saveMin: () => void;
 };
 export type Shell = {
@@ -135,8 +135,7 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
     const was = seqs.current.hadRange;
     seqs.current.hadRange = !!range;
     const unique = (x: Card) => !CHART_KINDS.includes(x.kind) && !!x.data?.by_unit?.day?.series.some(s => !merge.includes(s.agg));
-    const dated = (x: Card) => !!(range || was) && !!x.source?.date && !x.data?.by_unit && x.kind !== "recent_rows";
-    const stale = (now.current.dash?.cards ?? []).map(shown).filter(x => dated(x) || unique(x) || outsideWindow(x, range));
+    const stale = (now.current.dash?.cards ?? []).map(shown).filter(x => datedCard(x, range, was) || unique(x) || outsideWindow(x, range));
     if (stale.length) await recomputeRange(stale, ctx);
   }, [dispatch, merge, shown, recomputeRange]);
 
@@ -286,8 +285,9 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
       const ctx = now.current.ctx;
       try {
         const { data } = await computeCard(cardRequest(card), ctx);
-        if (ctx?.range) dispatch({ type: "values", results: [{ id: card.id, data }] });
-        else { dispatch({ type: "card", id: card.id, patch: { data } }); dispatch({ type: "values", results: [{ id: card.id }] }); }  // 저장할 값이 됐으니 화면 값은 비운다
+        const u = computedUpdate(card.id, data, ctx);  // 기간이 걸려 있으면 화면 값에만, 아니면 저장하고 화면 값은 비운다
+        if (Object.keys(u.patch).length) dispatch({ type: "card", id: card.id, patch: u.patch });
+        dispatch({ type: "values", results: [u.result] });
       } catch (e) { failed.push(`${card.title}: ${(e as Error).message}`); }
     }
     let why = "";
@@ -327,7 +327,7 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
   const period: Period = {
     inputs, setInput, notes, today, past, liveOn, min, setMin, minOn: !!conn, settingsError, compareMode, setCompareMode,
     commitDay: (text?: string) => { const t = text ?? inputs.as_of; setInput("as_of", t); if (t !== saved.current.as_of) apply(true, t, inputs.period); },  // 옛 change 이벤트처럼 바뀌었을 때만
-    commitPeriod: () => { if (inputs.period.trim() !== saved.current.period) apply(true, inputs.as_of, inputs.period); },
+    commitPeriod: (text?: string) => { const t = text ?? inputs.period; setInput("period", t); if (t.trim() !== saved.current.period) apply(true, inputs.as_of, t); },  // text: 달력이 고른 기간(칸 값이 아직 안 바뀐 때)
     commitEvery: kind => { commitEvery(kind); }, toggleLive: () => { toggleLive(); }, saveMin: () => { saveMin(); },
   };
   const value: Shell = { conn, loadConn, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo };

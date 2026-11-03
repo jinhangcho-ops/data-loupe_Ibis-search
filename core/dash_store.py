@@ -35,13 +35,24 @@ MAX_DAYS = 3660  # 시간별 카드에 두는 일 값의 최대 일수
 MAX_PALETTE = 12  # 대시보드 팔레트의 색 수
 MAX_COLORS = 100  # 카드 하나의 지정 색 수
 KINDS = ("chart", "analysis", "metric", "kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks",
-         "target_trend", "map", "alerts", "deviation", "funnel", "table", "status", "sentence", "geomap")  # 앞의 셋만 1단계에서 만든다. geomap: 좌표 지도(경계·점·영역별 색)
+         "target_trend", "map", "alerts", "deviation", "funnel", "table", "status", "sentence", "geomap",
+         "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bullet", "bump", "sankey", "cohort", "candle", "wordcloud")  # 앞의 셋만 1단계에서 만든다. geomap: 좌표 지도(경계·점·영역별 색). 뒤 열둘(4단계 P14)은 값 모양이 종류마다 달라 dash_calc가 따로 구한다
 CHART_TYPES = {"bar": "막대", "hbar": "가로 막대", "stacked": "누적 막대", "line": "라인", "polyline": "꺾인 선", "area": "영역형 라인",
-               "doughnut": "도넛", "pie": "파이", "radar": "레이더", "scatter": "산점도", "bubble": "버블"}
-TIME_TYPES = ("bar", "stacked", "line", "polyline", "area")  # 날짜 X축 카드에서 고를 수 있는 종류
+               "doughnut": "도넛", "pie": "파이", "radar": "레이더", "scatter": "산점도", "bubble": "버블",
+               "group": "묶은 막대", "stack100": "100% 누적 막대", "hstack": "가로 누적 막대", "hstack100": "가로 100% 누적 막대", "sarea": "누적 영역", "sarea100": "100% 누적 영역",
+               "step": "계단형 라인", "combo": "막대·라인 혼합", "waterfall": "폭포", "pareto": "파레토", "radial": "방사형 막대", "polar": "극좌표 영역", "range": "범위 막대",
+               "slope": "슬로프(두 시점 비교)", "trendline": "추세선", "butterfly": "나비형 막대", "lollipop": "롤리팝"}  # 뒤 열일곱(4단계 P14)은 계열 데이터 그대로, 화면이 다르게 그린다
+TIME_TYPES = ("bar", "stacked", "line", "polyline", "area", "sarea", "sarea100", "step", "combo", "waterfall", "pareto", "slope")  # 날짜 X축 카드에서 고를 수 있는 종류
 UNITS = {"day": "일", "week": "주", "month": "월", "year": "연"}
 RINGS = ("stack", "double", "half", "ticks")  # 도넛 KPI 고리 4방식: 한 고리 누적, 겹친 두 고리, 반원 게이지, 고리+목표 눈금
 ICONS = ("chart", "up", "user", "cart", "coin", "clock")  # KPI 카드 아이콘
+FITS = ("fill", "center")  # KPI 글자: 칸을 꽉 채움 / 가운데
+LAYOUTS = ("below", "right")  # KPI의 스파크 위치: 값 아래 / 오른쪽
+MAX_BINS = 100  # 히스토그램의 구간 수
+MAX_BANDS = 6  # 불릿 차트의 구간(경계) 수
+ADDITIVE = ("sum", "count")  # 아이 값의 합이 부모 값이 되는 집계(트리맵·선버스트의 아래단계)
+TREE_ADDITIVE = "아랫단계는 합계·개수만 쓸 수 있어요. 평균·최소·최대·중앙값·고유 개수는 아랫단계 값을 더해도 윗단계 값이 되지 않아요."
+FLOW_NEED = {"sankey": ("user", "step", "time"), "cohort": ("user", "time")}  # 다시 구할 분석(source.analysis)에 있어야 하는 컬럼 이름
 FORMATS = ("number", "percent", "currency")  # 값 모양(compare.py와 같다)
 MAX_SLOTS = 5  # 도넛 KPI의 칸(가운데 + 네 꼭지점)
 DEFAULT_PALETTE = ["#00968f", "#eb6834", "#2a78d6", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]  # 화면의 라이트 색 묶음(--c1~--c8)과 같다
@@ -192,7 +203,7 @@ BUCKETS = ("hour", "day", "week", "month")
 MAX_RULES = 20
 EXTRA_VIEW = ("icon", "format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window",
               "cond_rules", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "positions", "bg", "image_path", "group_cols", "formats", "total",
-              "template", "blanks", "bucket", "baseline", "threshold", "geo")  # 3단계 카드 종류의 설정
+              "template", "blanks", "bucket", "baseline", "threshold", "geo", "rings", "fit", "layout", "bins", "bands")  # 3·4단계 카드 종류의 설정
 
 
 def number_of(value, what, low=None, high=None):
@@ -305,7 +316,7 @@ def check_extra(view):
     ring(도넛 고리 4방식), slots(도넛의 칸 {label, y, agg, format, unit_text, color}, 최대 5), target({value} 또는 목표 파일의 {name, period, scope}),
     full(칸 채우기가 가득 찬 값), cells(칸 수), size(블록 한 칸의 값), rows(최근 행 수), group(요약의 기여 분해 컬럼), window(보는 구간 {from, to})."""
     out = {}
-    for name, allowed in (("icon", ICONS), ("format", FORMATS), ("ring", RINGS)):
+    for name, allowed in (("icon", ICONS), ("format", FORMATS), ("ring", RINGS), ("fit", FITS), ("layout", LAYOUTS)):
         if view.get(name):
             if view[name] not in allowed:
                 raise ValueError(f"{name}은 {', '.join(allowed)} 중 하나예요.")
@@ -316,6 +327,19 @@ def check_extra(view):
     for name, low, high in (("full", 0, 1e15), ("size", 0, 1e15), ("cells", 1, 100), ("rows", 1, 100)):
         if view.get(name) is not None:
             out[name] = number_of(view[name], name, low, high)
+    if view.get("rings") is not None:  # 도넛·파이·방사형·극좌표에서 계열을 겹친 고리로
+        if not isinstance(view["rings"], bool):
+            raise ValueError("rings는 켬(true)이나 끔(false)이에요.")
+        out["rings"] = view["rings"]
+    if view.get("bins") is not None:
+        if type(view["bins"]) is not int or not 1 <= view["bins"] <= MAX_BINS:
+            raise ValueError(f"구간 수(bins)는 1~{MAX_BINS} 사이의 정수예요.")
+        out["bins"] = view["bins"]
+    if view.get("bands") is not None:  # 불릿 차트의 구간: 작은 쪽부터 오름차순인 경계 숫자들
+        found = view["bands"]
+        if not isinstance(found, list) or not 1 <= len(found) <= MAX_BANDS or not all(type(b) in (int, float) for b in found) or found != sorted(set(found)):
+            raise ValueError(f"구간(bands)은 작은 수부터 겹치지 않게 쓴 숫자 1~{MAX_BANDS}개예요.")
+        out["bands"] = found
     if view.get("target") is not None:
         target = view["target"]
         if not isinstance(target, dict) or set(target) - {"value", "name", "period", "scope"} or not (("value" in target) != bool(target.get("name"))):
@@ -384,6 +408,21 @@ def check_view(view):
     return out
 
 
+TAB_TABLE = re.compile(r"(?:^|\s)테이블\s+@")  # 계산 줄(그룹집계)의 '테이블 @이름' 자리. 식 줄의 글자 ' @mail'은 탭이 아니다
+TAB_SAVE = "탭(@이름)을 쓰는 검색은 저장할 수 없어요. 먼저 가상 테이블로 저장하세요."
+
+
+def uses_tab(body):
+    """검색 요청·전처리 구성(recipe)이 @이름(쿼리 탭, core/handoff 등록부)을 테이블 자리에 쓰는지: 기준 테이블, 이어붙이기 테이블, 조인 줄의 첫 낱말,
+    계산 줄(calcs·recipe formulas의 {line})의 그룹집계 '테이블 @…'. 등록부는 메모리에만 있어 앱을 다시 켜면 풀 수 없다."""
+    if not isinstance(body, dict):
+        return False
+    from core import querying  # 검색이 테이블 자리에 쓰는 이름의 규칙은 한 곳(querying.used_tables)
+    names = querying.used_tables(body)
+    lines = [*(body.get("calcs") or []), *[f.get("line") for f in body.get("formulas") or [] if isinstance(f, dict)]]
+    return any(isinstance(n, str) and n.startswith("@") for n in names) or any(isinstance(l, str) and TAB_TABLE.search(l) for l in lines)
+
+
 def check_source(source):
     """다시 구할 기록: key·label(연결), schema·table, 그리고 body(chart·metric)·recipe+analysis(analysis)·metric_id·flow_id. 계정·비밀번호 항목은 거부한다(recipe·analysis 안의 컬럼 이름은 키여도 검사하지 않는다)."""
     source = {} if source is None else source
@@ -392,6 +431,8 @@ def check_source(source):
     if unknown := set(source) - {"key", "label", "schema", "table", "body", "recipe", "analysis", "metric_id", "flow_id", "full", "sample", "date"}:
         raise ValueError(f"source에 쓸 수 없는 항목이 있어요: {', '.join(sorted(unknown))}")
     no_secrets({k: v for k, v in source.items() if k not in ("recipe", "analysis")}, "source")  # recipe·analysis 안에는 컬럼 이름이 키로 들어간다(user 컬럼이 있는 표도 저장해야)
+    if uses_tab(source.get("body")) or uses_tab(source.get("recipe")):
+        raise ValueError(TAB_SAVE)
     out = {name: text(source.get(name), f"source.{name}", 500) for name in ("key", "label", "schema", "table", "metric_id", "flow_id", "date")}
     out["key"] = canon_key(out["key"])  # 예전 모양의 열쇠도 지금 모양으로
     now = current_source()
@@ -413,7 +454,7 @@ def check_data(data, kind):
     data = {} if data is None else data
     if not isinstance(data, dict):
         raise ValueError("구한 값(data)은 객체여야 해요.")
-    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair", "since", "window"}
+    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "bins", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair", "since", "window"}
     if unknown := set(data) - allowed:
         if kind == "recent_rows":
             raise ValueError("recent_rows 카드에는 행 값을 저장할 수 없어요. 보일 때마다 연결에서 읽어요.")
@@ -422,6 +463,8 @@ def check_data(data, kind):
     for name in ("computed_at", "def_hash", "note", "x"):
         if name in data and not isinstance(data[name], str):
             raise ValueError(f"data.{name}은 글자여야 해요.")
+    if "bins" in data and not (isinstance(data["bins"], dict) and set(data["bins"]) == {"edges", "counts"} and all(isinstance(v, list) for v in data["bins"].values())):  # 히스토그램
+        raise ValueError("data.bins는 {edges: 목록, counts: 목록} 모양이어야 해요.")
     return finite(data)
 
 
@@ -438,10 +481,19 @@ def check_card(card):
            "layout": check_layout(card["layout"]) if card.get("layout") is not None else {"x": 0, "y": 0, "w": 6, "h": 6},
            "colors": check_colors(card.get("colors")), "view": check_view(card.get("view")),
            "source": check_source(card.get("source")), "data": check_data(card.get("data"), card["kind"])}
-    if out["kind"] == "funnel":  # 흐름(퍼널) 카드: 다시 구할 전처리(recipe)와 흐름 분석(analysis.kind = funnel)이 있어야 한다
+    placed = not any(out["source"].get(k) for k in ("body", "recipe", "analysis"))  # 카드 모음에서 막 놓은 빈 틀: 데이터를 정할 때까지 아래 검사를 미룬다
+    if out["kind"] == "funnel" and not placed:  # 흐름(퍼널) 카드: 다시 구할 전처리(recipe)와 흐름 분석(analysis.kind = funnel)이 있어야 한다
         how = out["source"].get("analysis") or {}
         if not isinstance(out["source"].get("recipe"), dict) or how.get("kind") != "funnel" or not isinstance(how.get("steps"), list) or not 1 <= len(how["steps"]) <= 10:
             raise ValueError("흐름 카드에는 다시 구할 분석(source.recipe, source.analysis의 kind=funnel, 단계 1~10개)이 있어야 해요.")
+    if out["kind"] in ("treemap", "sunburst") and isinstance(out["source"].get("body"), dict) and out["source"]["body"].get("split"):
+        series = out["source"]["body"].get("series")
+        if isinstance(series, list) and series and isinstance(series[0], dict) and series[0].get("agg") not in ADDITIVE:
+            raise ValueError(TREE_ADDITIVE)
+    if (need := FLOW_NEED.get(out["kind"])) and not placed:  # 생키·코호트 카드: 어느 컬럼이 사용자·단계·시각인지(source.analysis)가 있어야 한다
+        how = out["source"].get("analysis") or {}
+        if not all(isinstance(how.get(k), str) and how[k] for k in need) or (out["kind"] == "sankey" and not (isinstance(how.get("steps"), list) and 2 <= len(how["steps"]) <= 10)):
+            raise ValueError(f"{out['kind']} 카드에는 다시 구할 분석(source.analysis의 {', '.join(need)}{', 단계 2~10개 steps' if out['kind'] == 'sankey' else ''})이 있어야 해요.")
     size = len(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
     if size > MAX_CARD_BYTES:
         raise ValueError(f"카드 '{out['title']}'이 {size:,}자로 카드 하나의 상한 {MAX_CARD_BYTES:,}자를 넘어요.")

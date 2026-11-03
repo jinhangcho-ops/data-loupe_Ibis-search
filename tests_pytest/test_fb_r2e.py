@@ -54,8 +54,9 @@ def test_빈칸_비율_차이는_5퍼센트포인트부터(api):
     assert prep_app.differs({"nulls": 1, "unique": 3, "min": "2026-01-01", "max": "2026-01-09"}, {"nulls": 1, "unique": 3, "min": "2025-12-01", "max": "2026-01-09"}, 10, 10) == ["min"]
 
 
-def test_표본_통계가_없으면_안내(api):
-    assert "표본" in api.post("/api/profile/full", json={"base": "t", "sample": 1000}).get_json()["error"]
+def test_표본_통계가_없어도_전체_요약(api):  # F18: 표본 통계 없이 전체부터 구할 수 있다
+    got = api.post("/api/profile/full", json={"base": "t", "sample": 1000})
+    assert got.status_code == 200 and all(c["diff"] == [] for c in got.get_json()["columns"])
 
 
 def test_가장_많은_기간_상위(api):

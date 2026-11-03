@@ -371,3 +371,58 @@ a.btn { text-decoration:none; color:var(--text); }  /* 받는 곳 열기 같은 
   * { transition-duration:0s !important; }
   .bar.unknown > div { animation:none !important; width:100% !important; opacity:.5; }  /* collect.html의 같은 선택자가 뒤에 와서 !important가 필요 */
 }
+
+/* R5 공용 화면(Q2): 기간 달력(calendar.js), 표 고르기 칸·[+](common.js mountTable selectable·addCol), 고른 행 막대(rowpick.js), 전처리 메뉴 상자(prepmenu.js), 새 컬럼 상자(newcol.js) */
+.drop .pop.ctx-pop { position:static; max-height:70vh; overflow:auto; }  /* 우클릭 메뉴(common.js ctxMenu): 머리글 메뉴는 전처리 단계까지 길다 */
+.drop .pop.cal { position:static; min-width:0; padding:10px; gap:6px; }
+.cal-head { display:flex; justify-content:space-between; }
+.cal-months { display:flex; gap:16px; align-items:flex-start; }
+.cal-grid { border-collapse:separate; border-spacing:2px; font-size:13px; }
+.cal-grid caption { font-weight:700; padding-bottom:4px; }
+.cal-grid th, .cal-grid td { position:static; height:auto; padding:0; border:0; text-align:center; background:none; }
+.drop .pop .cal-day { width:32px; height:32px; padding:0; text-align:center; border-radius:6px; font-weight:400; font-variant-numeric:tabular-nums; }
+.drop .pop .cal-day.today { box-shadow:inset 0 0 0 1px var(--accent-line); }
+.drop .pop .cal-day.in { background:var(--accent-bg); border-radius:0; }
+.drop .pop .cal-day.on { background:var(--accent); color:var(--on-accent); }
+.drop .pop .cal-day:disabled { color:var(--faint); background:none; }
+.cal-note { margin:0; }
+th.pick, td.pick { width:32px; padding:0 4px; text-align:center; }
+td.pick label.check { display:inline-flex; align-items:center; justify-content:center; min-width:24px; cursor:pointer; }
+tr.picked td { background:var(--accent-bg); }
+th.addcol { padding:0 4px; }
+th.addcol button { min-width:28px; font-size:16px; color:var(--accent); }
+.rowpick { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+.rowpick .hint { margin:0; }
+.pm-box { display:flex; flex-direction:column; gap:8px; }
+.pm-box.pm-wide { width:min(640px, 94vw); }
+.pm-box h3 { margin:0; }
+.pm-actions { margin:0; }
+.pm-list { display:flex; flex-direction:column; gap:4px; }
+.pm-values { max-height:240px; overflow:auto; display:flex; flex-direction:column; border:1px solid var(--line); border-radius:6px; padding:4px 8px; }
+.pm-hows, .pm-line { display:flex; flex-wrap:wrap; gap:4px 12px; align-items:center; }
+.pm-line > input { flex:1 1 140px; width:auto; }
+.pm-pairs { display:flex; flex-direction:column; }
+.pm-pair { align-items:center; margin-bottom:4px; }
+.pm-arrow { color:var(--muted); }
+.pm-pairs.find-only .pm-pair input:nth-of-type(2), .pm-pairs.find-only .pm-arrow { display:none; }
+.nc-box { width:min(960px, 96vw); display:flex; flex-direction:column; gap:8px; }
+.nc-box h3 { margin:0; }
+.nc-body { display:grid; grid-template-columns:180px minmax(0, 1fr); gap:12px; min-height:280px; }
+.nc-methods { display:flex; flex-direction:column; gap:2px; border-right:1px solid var(--line); padding-right:8px; }
+.nc-method { background:none; border:1px solid transparent; color:var(--text); text-align:left; font-weight:500; padding:5px 8px; }
+.nc-method:hover { background:var(--bg); border-color:var(--line); }
+.nc-method[aria-selected=true] { background:var(--accent-bg); border-color:var(--accent-line); color:var(--accent); }
+.nc-method.dim { opacity:.45; }
+.nc-form { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.nc-form > div { display:flex; flex-direction:column; gap:6px; }
+.nc-field { display:grid; grid-template-columns:110px minmax(0, 1fr); gap:8px; align-items:center; }
+.nc-field > span { color:var(--muted); font-size:12.5px; }
+.nc-field .row { margin:0; }
+.nc-rule { align-items:center; margin:0; }
+.nc-rule > select, .nc-rule > input { flex:1 1 90px; width:auto; min-width:0; }
+.nc-units { display:flex; flex-wrap:wrap; gap:4px 10px; }
+.nc-args { display:flex; flex-wrap:wrap; gap:6px; }
+.nc-foot { align-items:center; margin:0; }
+.nc-foot .nc-field { flex:1; grid-template-columns:auto minmax(0, 1fr); }
+.nc-preview { max-height:240px; overflow:auto; }
+@media (max-width:700px) { .nc-body { grid-template-columns:1fr; } .nc-methods { border-right:0; flex-direction:row; flex-wrap:wrap; } .cal-months { flex-direction:column; } }

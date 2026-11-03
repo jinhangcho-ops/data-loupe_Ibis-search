@@ -334,11 +334,9 @@ def test_own_period_previous_matches_dashboard_rule():
 
 @pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
 def test_own_period_previous_matches_in_js(tmp_path):
-    from test_fix_audit_js import run_node
-    js = (__import__("pathlib").Path(__file__).resolve().parent.parent / "static" / "core" / "lib" / "dash_calc.js").read_text(encoding="utf-8")
-    helpers = "\n".join(line for line in js.splitlines() if line.startswith(("const dayNumber", "const shiftDay", "const daysBetween")))
-    span = js[js.index("function previousSpan("):js.index("function ownRange(")]
-    out = run_node(tmp_path, "console.log(JSON.stringify([previousSpan('2026-03-01', '2026-03-31'), previousSpan('2026-01-01', '2026-03-31'), previousSpan('2026-03-01', '2026-03-22')]));", parts=[helpers + "\n" + span])
+    import json
+    from test_dash_js import run_ts  # 대시보드 화면(web/lib/calc.ts). 옛 static/core/lib/dash_calc.js는 지웠다
+    out = json.loads(run_ts(tmp_path, "console.log(JSON.stringify([previousSpan('2026-03-01', '2026-03-31'), previousSpan('2026-01-01', '2026-03-31'), previousSpan('2026-03-01', '2026-03-22')]));"))
     assert out == [{"start": "2026-02-01", "end": "2026-02-28", "text": "지난달"}, {"start": "2025-10-01", "end": "2025-12-31", "text": "직전 분기"},
                    {"start": "2026-02-07", "end": "2026-02-28", "text": "직전 22일"}]
 

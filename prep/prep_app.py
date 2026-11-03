@@ -10,6 +10,7 @@ from pathlib import Path
 from flask import has_request_context, jsonify, request
 from lazy import Later, ibis, preload
 
+from core import handoff
 from core import held
 from core import result
 from core import scan_size
@@ -24,6 +25,7 @@ querying = Later("core.querying")
 geo_detect = Later("geo.detect")  # 좌표 컬럼 인식(프로파일 응답에 얹는다)
 prep_geo = Later("geo.prep_geo")  # 좌표 단계(recipe.geo)가 있을 때만 올라온다
 prep_derive = Later("core.prep_derive")
+prep_ops = Later("core.prep_ops")
 prep_expr = Later("prep.prep_expr")
 prep_profile = Later("prep.prep_profile")
 profiler = Later("core.profiler")
@@ -42,26 +44,40 @@ SUMMARY_HEAD = ["컬럼", "타입", "빈 값 비율", "빈 값 수", "고유값 
 EXAMPLES, EXAMPLE_SCAN, EXAMPLE_LEN = 3, 2000, 50  # 예시 값 개수, 예시를 고르려고 훑는 앞 행 수, 예시 한 개의 글자 수 상한
 SAMPLES = {}  # 마지막으로 읽은 표본 하나 {테이블 열쇠: (크기, pyarrow 표, 표본 정보)}. 통계에 이어 타입 추천이 같은 표본을 쓴다.
 server.ON_SWITCH.append(SAMPLES.clear)  # 연결을 바꾸거나 끊으면 버린다(열쇠에 연결 열쇠가 들어 있어 다시 쓸 수 없고 최대 100만 행이 메모리에 남는다)
-HANDOFF = "@"  # 전처리로 보낸 검색의 기준 이름 앞글자(@검색 이름). 연결의 테이블 대신 그 검색의 식에서 시작한다
-HANDOFFS = {}  # {기준 이름: {"body": 검색 요청, "rows": 세어 둔 행 수}}. 이 프로그램이 켜져 있는 동안만
-server.ON_SWITCH.append(HANDOFFS.clear)  # 검색은 그 연결의 테이블을 읽는다
+HANDOFF = handoff.PREFIX  # 전처리로 보낸 검색·탭의 기준 이름 앞글자(@이름). 연결의 테이블 대신 그 검색의 식에서 시작한다
+server.FREE.update({"/api/prep/ops", "/api/prep/handed"})  # 연결을 쓰지 않는다(메모리의 목록·넘긴 쪽만 읽는다)
 
 
-def hand_over(body, name):
-    """검색 요청(body)을 전처리의 기준 표로 등록하고 기준 이름(@이름)을 돌려준다. 같은 이름이면 새 검색으로 바꾼다. 데이터는 읽지 않는다."""
+def hand_over(body, name, shown=None):
+    """검색 요청(body)을 전처리의 기준 표로 등록하고 기준 이름(@이름)을 돌려준다. 같은 이름이면 새 검색으로 바꾼다. 데이터는 읽지 않는다.
+    shown({columns, rows, offset, total}: 쿼리 화면에 보이던 쪽)을 두면 전처리 화면이 미리보기 전에 그 표를 바로 그린다(/api/prep/handed)."""
     querying.build(body)  # 잘못된 검색은 지금 거부한다
-    base = HANDOFF + ((name.strip()[:80] if isinstance(name, str) else "") or "검색 결과")
-    HANDOFFS[base] = {"body": body, "rows": None}
-    return base
+    return handoff.register(HANDOFF + ((name.strip()[:80] if isinstance(name, str) else "") or "검색 결과"), body, shown)
+
+
+@app.get("/api/prep/handed")
+def handed_search():
+    """전처리로 보낸 검색 {name, shown, body}(base=@이름). 전처리 화면이 넘겨받은 표를 미리보기 전에 그린다."""
+    base = request.args.get("base", "")
+    found = handed(base)
+    if found is None:
+        raise ValueError("전처리로 보낸 검색의 이름(@이름)을 넣으세요.")
+    return jsonify(name=base[len(HANDOFF):], shown=found.get("shown"), body=found["body"])
+
+
+@app.get("/api/prep/ops")
+def prep_ops_list():
+    """전처리 단계 목록 {ops: [{id, label, group, need, fields}]}(prep_ops.LABELS). 쿼리 화면의 머리글 우클릭 메뉴·새 컬럼 상자가 쓴다."""
+    return jsonify(ops=prep_ops.LABELS)
 
 
 def handed(base):
-    """전처리로 보낸 검색이면 그 항목, 아니면 None. @로 시작하는데 없으면(프로그램을 다시 켰거나 연결을 바꿈) 거부한다."""
+    """전처리로 보낸 검색·쿼리 탭(@이름)이면 등록부의 항목, 아니면 None. @로 시작하는데 없으면(프로그램을 다시 켰거나 연결을 바꿈) 거부한다."""
     if not isinstance(base, str) or not base.startswith(HANDOFF):
         return None
-    if base not in HANDOFFS:
-        raise ValueError(f"전처리로 보낸 검색 '{base[1:]}'이 없어요. 쿼리 화면에서 [전처리로 보내기]를 다시 누르세요.")
-    return HANDOFFS[base]
+    if (found := handoff.get(base)) is None:
+        raise ValueError(f"전처리로 보낸 검색·탭 '{base[1:]}'이 없어요. 쿼리 화면에서 그 탭을 다시 열거나 [전처리로 보내기]를 다시 누르세요.")
+    return found
 
 
 def start_table(recipe):
@@ -71,14 +87,15 @@ def start_table(recipe):
 
 
 def count_rows(body):
-    """기준 표의 전체 행 수: 보낸 검색이면 그 결과 행 수(한 번 세어 둔다), 아니면 server.row_count."""
+    """기준 표의 전체 행 수: 보낸 검색·탭이면 그 결과 행 수(안에서 쓰는 @탭의 검색과 함께 세어 둔다), 아니면 server.row_count."""
     found = handed(body["base"])
     if found is None:
         return server.row_count(body.get("schema"), body["base"])
-    if found["rows"] is None:
+    key = json.dumps(querying.tab_bodies(found["body"]), sort_keys=True, ensure_ascii=False, default=str)  # 안에서 쓰는 @탭이 바뀌면 다시 센다
+    if found["rows"] is None or found["rows"][0] != key:
         expr = start_table(body)
-        found["rows"] = run(lambda: result.get_count(expr))
-    return found["rows"]
+        found["rows"] = (key, run(lambda: result.get_count(expr)))
+    return found["rows"][1]
 
 
 @server.late_constants("prep")
@@ -128,7 +145,7 @@ def table_key(body):
     if not isinstance(base, str) or not base:
         raise ValueError("테이블을 고르세요.")
     found = handed(base)  # 보낸 검색은 같은 이름이어도 검색이 다르면 다른 표
-    return "|".join([server.connection_key(), body.get("schema") or "", base, *([hashlib.sha1(json.dumps(found["body"], sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]] if found else [])])
+    return "|".join([server.connection_key(), body.get("schema") or "", base, *([hashlib.sha1(json.dumps(querying.tab_bodies({"base": base}), sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()[:16]] if found else [])])  # 지문은 안쪽 @탭의 검색까지(안쪽 탭을 고치면 다른 표)
 
 
 @app.get("/api/prep/table")
@@ -259,7 +276,7 @@ def computes_stats(recipe):
     counts(서로 다른 값 읽기), 중복 제거(dedupe), 정렬(sorts), 집계·창 함수가 든 계산식(표 전체 window)."""
     if recipe.get("dedupe") or recipe.get("pca") or recipe.get("sorts") or recipe.get("downcast"):  # downcast는 컬럼마다 최솟값·최댓값을 구한다
         return True
-    if any(isinstance(f, dict) and isinstance(f.get("expr"), str) and formula_reads_all(f["expr"]) for f in recipe.get("formulas") or [] if isinstance(f, dict)):
+    if any(isinstance(f, dict) and (isinstance(f.get("line"), str) or isinstance(f.get("expr"), str) and formula_reads_all(f["expr"])) for f in recipe.get("formulas") or []):  # 계산 줄(그룹집계·창 함수·전처리)은 표 전체를 읽는다
         return True
     for spec in (recipe.get("columns") or {}).values():
         ops = spec.get("ops") if isinstance(spec, dict) else None
@@ -446,19 +463,17 @@ def differs(sample, full, sample_rows, full_rows):
 
 @app.post("/api/profile/full")
 def profile_full():
-    """표본으로 구한 컬럼 요약을 테이블 전체로 다시 구한다(빈 값·서로 다른 값 수·최솟값·최댓값). 컬럼마다 표본과 크게 다른 항목(diff)을 붙인다.
-    표본 통계를 먼저 구해 둔 테이블에만 쓴다. 분석의 전체 구하기와 같이 처리 용량 확인·사본·취소를 따른다."""
+    """컬럼 요약을 테이블 전체로 구한다(빈 값·서로 다른 값 수·최솟값·최댓값). 표본 통계를 구해 두었으면 컬럼마다 표본과 크게 다른 항목(diff)을 붙이고,
+    없으면(통계 범위 '전체'로 표본을 건너뜀) diff는 빈 목록이다. 분석의 전체 구하기와 같이 처리 용량 확인·사본·취소를 따른다."""
     body = request.json
-    found = profiler.cached(table_key(body), sample_size(body))
-    if found is None or "profile" not in found:
-        raise ValueError("먼저 표본으로 컬럼 통계를 구하세요.")
+    found = profiler.cached(table_key(body), sample_size(body)) or {}
     recipe = {"schema": body.get("schema") or "", "base": body["base"]}
     if ask := copy_gate(recipe, reads=True):
         return ask
     fresh_copy(recipe)
     expr = built(recipe)[0]
     whole = run(lambda: prep_profile.full_facts(expr))
-    mine = {c["name"]: c for c in found["profile"]["columns"]}
+    mine = {c["name"]: c for c in found["profile"]["columns"]} if "profile" in found else {}
     for c in whole["columns"]:
         c["diff"] = differs(mine[c["name"]], c, found["profile"]["rows"], whole["rows"]) if c["name"] in mine else []
     return jsonify(whole)

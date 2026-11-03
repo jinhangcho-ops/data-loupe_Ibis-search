@@ -78,6 +78,8 @@ def check_scope(scope):
     if not scope.get("table"):
         raise ValueError(FLOW_GONE if scope.get("flow_id") else "지표가 속한 테이블(scope.table)이 필요해요.")
     dash_store.no_secrets(scope, "지표의 scope")
+    if dash_store.uses_tab({"base": scope.get("table")}):  # @탭은 메모리에만 있는 등록이라 앱을 다시 켜면 풀 수 없다(검색 저장과 같은 규칙)
+        raise ValueError("탭(@이름)에 속한 지표는 저장할 수 없어요. 먼저 가상 테이블로 저장하세요.")
     return {"key": scope["key"], "label": str(scope.get("label") or ""), "schema": str(scope.get("schema") or ""),
             **({"table": str(scope["table"])} if scope.get("table") else {}), **({"flow_id": str(scope["flow_id"])} if scope.get("flow_id") else {})}
 

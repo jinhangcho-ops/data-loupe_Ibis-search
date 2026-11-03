@@ -10,13 +10,15 @@ import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import type { Card, CardKind, Constants, Targets } from "@/lib/types";
 import { Block, Check, LineBox, Sel, Txt } from "./menu/Fields";
-import { buildCard, emptyForm, type Form } from "./menu/build";
-import { CARD_KINDS, WATCH, WITH_DATE, colsOfType, parseBlankLine } from "./menu/kinds";
+import { buildCard, emptyForm, formFromCard, type Form } from "./menu/build";
+import { CARD_KINDS, DATE_X, WATCH, WITH_DATE, colsOfType, parseBlankLine } from "./menu/kinds";
 
 export type AddCardMenuProps = { open: boolean; onClose: () => void; onAdd: (card: Partial<Card>) => void; fill?: Card };
 
 const FORMATS: [string, string][] = [["number", "숫자"], ["percent", "% (0~1 값)"], ["currency", "₩ 금액"]];
 const NUM = ["정수", "실수"], DATE = ["날짜", "날짜시간"];
+/** P14 새 종류의 body.x 칸 이름(boxplot은 비우면 전체 한 상자) */
+const X_LABEL: Partial<Record<CardKind, string>> = { boxplot: "그룹 컬럼", heatmap: "행 컬럼", treemap: "윗단계 컬럼", sunburst: "윗단계 컬럼", wordcloud: "글자 컬럼", bump: "대상 컬럼" };
 
 /** 닫혀 있으면 아무것도 그리지 않는다. 열 때마다 새로 마운트되어 처음 모양으로 시작한다 */
 export function AddCardMenu(props: AddCardMenuProps) {
@@ -35,7 +37,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
   };
   const [f, setF] = useState<Form>(() => {
     const kind: CardKind = fill ? (fill.kind === "analysis" || fill.kind === "metric" ? "kpi" : fill.kind) : "kpi";
-    return { ...emptyForm(kind, fill?.view?.type ?? ""), table: fill?.source?.table ?? "", rows: fit([], kind) };
+    return { ...emptyForm(kind, fill?.view?.type ?? ""), ...(fill ? formFromCard(fill) : {}), table: fill?.source?.table ?? "", rows: fit([], kind) };  // 다시 정할 때는 카드의 모양 설정을 지킨다
   });
   const [names, setNames] = useState<string[]>([]);       // 연결의 테이블 목록
   const [colsFor, setColsFor] = useState<{ table: string; cols: [string, string][] }>({ table: "", cols: [] });  // 고른 테이블의 [컬럼, 한글 타입]
@@ -70,7 +72,8 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       setColsFor({ table: f.table, cols: r.columns });
       setErr("");
       const dates = colsOfType(r.columns, DATE), one = dates.length === 1 ? dates[0] : "";
-      setF(p => ({ ...p, rows: fit([], p.kind), group: "", date: one, fTime: one, timeCol: one }));
+      const has = (c: string, list: string[]) => !!c && list.includes(c), names = r.columns.map(c => c[0]);  // 새 테이블에 있는 컬럼이면 그대로(다시 정할 때 되돌린 값)
+      setF(p => ({ ...p, rows: fit([], p.kind), group: has(p.group, names) ? p.group : "", date: has(p.date, dates) ? p.date : one, fTime: has(p.fTime, dates) ? p.fTime : one, timeCol: has(p.timeCol, names) ? p.timeCol : one }));
     }).catch(e => live && setErr(e.message));
     return () => { live = false; };
   }, [f.table]);  // eslint-disable-line react-hooks/exhaustive-deps
@@ -94,7 +97,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
   const go = async () => {
     setBusy(true);
     try {
-      const card = buildCard({ ...f, title: f.title || (fill?.title ?? "") }, aggs, a => a !== "count", consts.agg_names);
+      const card = buildCard({ ...f, title: f.title || (fill?.title ?? "") }, aggs, a => a !== "count", consts.agg_names, consts.dash.max_bands, consts.dash.max_bins);
       if (fill) { delete card.title; if (f.title.trim() || !fill.title) card.title = f.title.trim() || card.title; }
       else card.layout = nextLayout((state.dash?.cards ?? []).map(c => ({ id: c.id, layout: c.layout })));
       setErr("");
@@ -133,12 +136,18 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       )}
       {high > 0 && f.rows.length < high && <button type="button" className="linkish" style={{ minHeight: 24 }} onClick={() => setF(p => ({ ...p, rows: [...p.rows, { label: "", y: "", agg: firstAgg }] }))}>값 추가</button>}
 
-      {is("kpi", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation") && <Sel label="표시 형식" value={f.format} onChange={v => set("format", v)} options={FORMATS} />}
-      {is("kpi", "donut_kpi", "stripes") && <Txt label="단위" title="값 뒤에 붙일 글자. 사람 수는 명, 횟수는 회처럼 적어요. 돈이면 표시 형식 ₩ 금액을 고르거나 원을 적어요" placeholder="단위 (예: 명, 회, 원)" value={f.unitText} onChange={v => set("unitText", v.slice(0, 10))} width={130} />}
+      {is("kpi", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation", "bullet", "calheat") && <Sel label="표시 형식" value={f.format} onChange={v => set("format", v)} options={FORMATS} />}
+      {is("kpi", "donut_kpi", "stripes", "bullet", "calheat") && <Txt label="단위" title="값 뒤에 붙일 글자. 사람 수는 명, 횟수는 회처럼 적어요. 돈이면 표시 형식 ₩ 금액을 고르거나 원을 적어요" placeholder="단위 (예: 명, 회, 원)" value={f.unitText} onChange={v => set("unitText", v.slice(0, 10))} width={130} />}
       {is("kpi") && <Sel label="지표" title="지표 하나를 값으로 써요. 비율 지표는 분자와 분모도 작게 보여요" value={f.metric} onChange={v => set("metric", v)} options={metrics} blank="(쓰지 않음)" />}
       {is("gauge", "summary") && <Sel label="나눌 컬럼" title="게이지는 이 컬럼의 값마다 한 조각으로 나눠요. 요약 문장은 변화에 가장 크게 기여한 값을 찾을 때 써요" value={f.group} onChange={v => set("group", v)} options={all} blank="(없음)" />}
+      {X_LABEL[f.kind] && <Sel label={X_LABEL[f.kind]!} value={f.group} onChange={v => set("group", v)} options={all} blank={is("boxplot") ? "(없음: 전체)" : "(고르세요)"} />}
+      {is("heatmap", "treemap", "sunburst") && <Sel label={is("heatmap") ? "열 컬럼" : "아랫단계 컬럼"} value={f.split} onChange={v => set("split", v)} options={all} blank={is("heatmap") ? "(고르세요)" : "(없음)"} />}
+      {is("histogram") && <Txt label="구간 수" type="number" min={1} max={consts.dash.max_bins ?? 100} width={60} value={f.bins} onChange={v => set("bins", v)} />}
+      {is("bullet") && <Txt label="구간" title="바탕 띠의 경계 값. 작은 것부터 쉼표로 1~6개" placeholder="예: 50, 80, 100" value={f.bands} onChange={v => set("bands", v)} />}
+      {is("bump", "candle", "cohort") && <Sel label="기간 단위" value={f.cUnit} onChange={v => set("cUnit", v)} options={Object.entries(consts.dash.units)} />}
+      {is(...DATE_X) && <Sel label="날짜 컬럼" title="가로축이 될 날짜(시각) 컬럼. 대시보드 기간도 이 컬럼에 걸려요" value={f.date} onChange={v => set("date", v)} options={dates} blank="(고르세요)" />}
       {is(...WITH_DATE) && <Sel label="날짜 컬럼" title="대시보드 기간과 기준일을 이 날짜 컬럼에 걸어요. 날짜 컬럼이 하나뿐이면 자동으로 골라요" value={f.date} onChange={v => set("date", v)} options={dates} blank="(없음: 기간을 걸지 않음)" />}
-      {is("kpi", "donut_kpi", "summary", "stripes", "blocks", "target_trend") && (
+      {is("kpi", "donut_kpi", "summary", "stripes", "blocks", "target_trend", "bullet") && (
         <div className="hint cm-field">목표
           <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <input type="number" aria-label="목표 숫자" placeholder="목표 숫자" style={{ width: 110 }} value={f.targetValue} onChange={e => set("targetValue", e.target.value)} />또는
@@ -177,12 +186,16 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
           <Sel label="버블 크기" title="버블 크기로 쓸 숫자 컬럼" value={f.cSize} onChange={v => set("cSize", v)} options={nums} blank="(없음)" />
         </>
       )}
-      {is("funnel") && (
+      {is("funnel", "sankey", "cohort") && (
         <>
           <Sel label="사용자 컬럼" title="사용자(사람)를 구분하는 컬럼" value={f.fUser} onChange={v => set("fUser", v)} options={all} blank="(고르세요)" />
-          <Sel label="단계 컬럼" title="단계(행동) 이름이 들어 있는 컬럼" value={f.fStep} onChange={v => set("fStep", v)} options={all} blank="(고르세요)" />
+          {!is("cohort") && <Sel label="단계 컬럼" title="단계(행동) 이름이 들어 있는 컬럼" value={f.fStep} onChange={v => set("fStep", v)} options={all} blank="(고르세요)" />}
           <Sel label="시각 컬럼" title="행동이 일어난 시각 컬럼. 대시보드 기간도 이 컬럼에 걸려요" value={f.fTime} onChange={v => set("fTime", v)} options={dates} blank="(고르세요)" />
-          <Txt label="단계 순서" title="단계 값을 순서대로 쉼표로 나눠 적어요. 1~10개" placeholder="예: 방문, 장바구니, 결제" value={f.fSteps} onChange={v => set("fSteps", v)} />
+        </>
+      )}
+      {is("funnel", "sankey") && (
+        <>
+          <Txt label="단계 순서" title={is("sankey") ? "단계 값을 순서대로 쉼표로 나눠 적어요. 2~10개" : "단계 값을 순서대로 쉼표로 나눠 적어요. 1~10개"} placeholder="예: 방문, 장바구니, 결제" value={f.fSteps} onChange={v => set("fSteps", v)} />
           <div className="hint cm-field">기간 제한
             <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <input type="number" aria-label="기간 제한 숫자" min={0} step="any" placeholder="비움" style={{ width: 80 }} value={f.fWin} onChange={e => set("fWin", e.target.value)} />

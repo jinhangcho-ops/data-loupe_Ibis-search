@@ -1,6 +1,6 @@
 """차트 계산을 node로 돌려 본다. node가 없으면 건너뛴다. 값은 손으로 계산한 작은 예제다.
-분석 화면: lib/dash_calc.js의 순수 계산(주의 월요일, 색 글자, 날짜 계산, 읽은 범위). 옛 Chart.js 설정(dash.js chartConfig·byUnit·pickColor)은 R4-D2b에서 지웠다(차트 섬이 web/의 같은 계산으로 그린다).
-대시보드 화면: web/lib/calc.ts를 node가 타입만 지워 불러 카드 모양 계산·조건 색 규칙을 본다."""
+대시보드 화면(web/lib/calc.ts)을 node가 타입만 지워 불러 주의 월요일·색 글자·날짜 계산·읽은 범위·카드 모양 계산·조건 색 규칙을 본다.
+옛 static/core/lib/dash_calc.js(쿼리·분석 화면이 더는 부르지 않던 원본)는 지웠다."""
 import json
 import shutil
 import subprocess
@@ -13,7 +13,6 @@ from conftest import ROOT
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
 SCRIPT = """
-const assert = require("assert");
 // 주의 월요일
 assert.strictEqual(monday("2026-01-11"), "2026-01-05");  // 일요일 → 그 주 월요일
 assert.strictEqual(monday("2026-01-12"), "2026-01-12");
@@ -102,7 +101,6 @@ console.log("ok");
 """
 
 
-LIB = (ROOT / "static" / "core" / "lib" / "dash_calc.js").read_text(encoding="utf-8")  # 분석 화면이 부르는 순수 계산
 CALC = (ROOT / "web" / "lib" / "calc.ts").as_uri()  # 대시보드 화면(Next)의 순수 계산
 
 
@@ -116,11 +114,8 @@ def run_ts(tmp_path, body):
 
 
 def test_dash_js(tmp_path):
-    """분석 화면의 순수 계산(lib/dash_calc.js): 주의 월요일, 색 글자, 날짜 계산, 읽은 범위."""
-    script = tmp_path / "dash_test.js"
-    script.write_text(LIB + SCRIPT, encoding="utf-8")
-    done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
-    assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr[-3000:]
+    """순수 계산(web/lib/calc.ts): 주의 월요일, 색 글자, 날짜 계산, 읽은 범위."""
+    assert run_ts(tmp_path, SCRIPT) == "ok"
 
 
 def test_calc_ts(tmp_path):
@@ -133,7 +128,7 @@ OWN_CASES = [["day 2026-01-12 ~ 2026-02-02"], ["day 2026-01-01 ~ ", "day ~ 2026-
 
 
 def test_own_range_same_in_python_and_js(tmp_path):
-    """dash_calc.own_range(서버)와 화면의 ownRange(쿼리·분석 화면의 lib/dash_calc.js, 대시보드의 web/lib/calc.ts)가 같은 입력에서 같은 기간·직전 기간을 낸다(열린 줄, 여러 줄, 거꾸로 된 줄, 없는 날, 기간 줄 없음)."""
+    """dash_calc.own_range(서버)와 화면의 ownRange(대시보드의 web/lib/calc.ts)가 같은 입력에서 같은 기간·직전 기간을 낸다(열린 줄, 여러 줄, 거꾸로 된 줄, 없는 날, 기간 줄 없음)."""
     from dashboard import dash_calc
     want = []
     for periods in OWN_CASES:
@@ -141,9 +136,4 @@ def test_own_range_same_in_python_and_js(tmp_path):
         want.append(got and {"range": got["range"], "prev": got["prev"]})
     cases = "const cases = %s;\nconsole.log(JSON.stringify(cases.map(p => ownRange({ source: { body: { periods: p } } }))));\n" % json.dumps(OWN_CASES, ensure_ascii=False)
     assert json.loads(run_ts(tmp_path, cases)) == want
-    script = tmp_path / "own_test.js"
-    script.write_text(LIB + cases, encoding="utf-8")
-    done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
-    assert done.returncode == 0, done.stderr[-3000:]
-    assert json.loads(done.stdout.strip().splitlines()[-1]) == want
     assert want[0]["prev"]["text"] == "직전 22일" and want[1] is None and want[2] is not None and want[4]["range"]["start"] == "2026-03-01" and want[7] is None

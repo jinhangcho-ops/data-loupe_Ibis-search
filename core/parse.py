@@ -14,7 +14,7 @@ UNIONS = ["left", "inner", "intersect", "except"]  # 이어붙이기: left는 �
 STACKS = ("left", "inner")  # 아래로 잇는 방식(출처 컬럼을 붙인다). intersect·except는 행을 고르는 방식이라 붙이지 않는다
 SOURCE = "출처"  # 이어붙이면 더하는 컬럼: 그 행이 온 테이블 이름
 OPS = {"=": operator.eq, "!=": operator.ne, ">=": operator.ge, "<=": operator.le, ">": operator.gt, "<": operator.lt}
-CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값(빈 값 행도 남김) / 컬럼 =~ 값(대소문자 무시 같음) / 컬럼 < 다른컬럼 / 컬럼 [not] between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2(빈 값 행도 남김) / 컬럼 [not] like 값 / 컬럼 matches 정규식 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / * is not null(모든 컬럼에 값) / near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도 / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
+CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값(빈 값 행도 남김) / 컬럼 =~ 값(대소문자 무시 같음) / 컬럼 < 다른컬럼 / 컬럼 [not] between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2(빈 값 행도 남김) / (컬럼1, 컬럼2) in (값1, 값2), (값3, 값4) / (컬럼1, 컬럼2) except (값1, 값2), …(빈 값 행도 남김) /컬럼 [not] like 값 / 컬럼 matches 정규식 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / * is not null(모든 컬럼에 값) / near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도 / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
 SORT_GUIDE = "컬럼 [asc|desc]"
 
 # (판별, 종류, 한글 이름, 입력값 변환). 종류는 전처리가 컬럼을 나눌 때 쓴다.
@@ -30,6 +30,10 @@ TYPES = [
 COND_RE = re.compile(r"^(\S+?)\s*(!=|=~|>=|<=|=|>|<)\s*(.+)$")  # =~: 글자를 대소문자 가리지 않고 같음
 BETWEEN_RE = re.compile(r"^(\S+)\s+(not\s+)?between\s+(\S+)\s+(?:and\s+)?(\S+)$", re.I)
 IN_RE = re.compile(r"^(\S+)\s+(in|except)\s+(.+)$", re.I)
+TUPLE_RE = re.compile(r"^\s*\((.*?)\)\s+(in|except)\s+(\(.*)$", re.I | re.S)  # (c1, c2) in|except (v1, v2), (v3, v4). 컬럼 이름에 괄호가 있어도(금액(원))
+TUPLE_VALUES = re.compile(r"""\s*\(((?:'[^']*'|"[^"]*"|[^()'"])*)\)\s*(?:,|$)""")  # 값 조합 하나(따옴표 안의 괄호·쉼표는 값)
+TUPLE_PLAIN = re.compile(r"\s*\(([^()]*)\)\s*(?:,|$)")  # 따옴표를 해석하지 않는 줄의 값 조합 하나
+MAX_TUPLE_COLUMNS, MAX_TUPLES = 8, 200  # 값 조합 조건의 컬럼 수, 조합 수 상한
 LIKE_RE = re.compile(r"^(\S+)\s+(not\s+like|like|starts|matches|ends)\s+(.+)$", re.I)  # like: 포함(대소문자 무시), not like: 포함하지 않음, starts: 이 글자로 시작, ends: 이 글자로 끝, matches: 정규식이 맞음
 NULL_RE = re.compile(r"^(\S+)\s+is\s+(not\s+)?null$", re.I)
 GEO_RE = re.compile(r"^(near|box)\s+(.+)$", re.I)  # 좌표 조건: near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도
@@ -110,8 +114,11 @@ def convert(dtype, text):
             if value.adjusted() + 1 > width - scale:  # 자릿수를 넘는 값(1e40)은 DB가 영어 오류를 낸다
                 raise ValueError(text)
             return ibis.literal(format(value, "f")).cast(f"decimal({width}, {scale})")  # 글자를 바꾼다: Ibis는 SQL Server에 1000을 '1E+3'으로 써서 못 읽는다. BIGNUMERIC(76,38)은 38자리보다 넓다
-        return cast(text)
-    except (ValueError, KeyError, decimal.InvalidOperation):
+        value = cast(text)
+        if dtype.is_integer() and not -2**63 <= value < 2**63:  # int64 밖(UBIGINT 최댓값 등): 타입 없는 정수는 Ibis가 비교를 FALSE로 접는다
+            return ibis.literal(value, type=dtype)  # 컬럼 타입 범위도 넘으면 Ibis가 ValueError(TypeError)를 낸다
+        return value
+    except (ValueError, TypeError, KeyError, decimal.InvalidOperation):
         raise ValueError(f"'{text}'은 {name} 값이 아니에요.")
 
 
@@ -355,10 +362,38 @@ def next_day(text):
 # 값을 '값'이나 "값"으로 감싸면 그 안의 or와 쉼표는 값의 일부다
 # quotes가 False면 따옴표를 해석하지 않고 글자 그대로 찾는다(줄마다 화면에서 정한다)
 def parse_condition(line, expr, quotes=True):
+    if m := TUPLE_RE.match(line):  # (c1, c2) in (v1, v2), …: 값에 or가 있어도 나누지 않는다
+        return tuple_condition(m, expr, quotes)
     parts = split(OR_RE, line, quotes)
     if len(parts) == 1:
         return parse_one(line, expr, quotes)
     return functools.reduce(operator.or_, [parse_one(p.strip(), expr, quotes) for p in parts])
+
+
+def tuple_condition(m, expr, quotes=True):
+    """여러 컬럼 값 조합 조건(행 고르기): (c1, c2) in (v1, v2), (v3, v4) → (c1 = v1 and c2 = v2) or (c1 = v3 and c2 = v4).
+    except는 그 반대이고, in·except 한 컬럼 조건처럼 한 컬럼이라도 빈 값인 행은 남긴다. 값의 쉼표·따옴표 규칙은 in과 같다."""
+    names = [n.strip() for n in m[1].split(",")]
+    if not 1 <= len(names) <= MAX_TUPLE_COLUMNS or not all(names):
+        raise ValueError(f"(컬럼1, 컬럼2) in (값1, 값2), … 의 컬럼은 1~{MAX_TUPLE_COLUMNS}개예요.")
+    cols = [column(expr, n) for n in names]
+    groups, pos, text = [], 0, m[3].strip()
+    group = TUPLE_VALUES if quotes else TUPLE_PLAIN
+    while pos < len(text):
+        g = group.match(text, pos)
+        if not g:
+            raise ValueError(f"값 조합은 (값1, 값2), (값3, 값4) 모양으로 써요. 형식: {CONDITION_GUIDE}")
+        values = [unquote(v, quotes) for v in split(COMMA_RE, g[1], quotes)]
+        if len(values) != len(cols):
+            raise ValueError(f"값 조합 ({g[1]})의 값이 {len(values)}개예요. 컬럼 수와 같은 {len(cols)}개를 넣으세요.")
+        groups.append(functools.reduce(operator.and_, [c == convert(c.type(), v) for c, v in zip(cols, values)]))
+        if len(groups) > MAX_TUPLES:
+            raise ValueError(f"행이 너무 많아요({MAX_TUPLES}개까지). 키 컬럼을 고르세요.")
+        pos = g.end()
+    if not groups:
+        raise ValueError("값 조합을 하나 이상 넣으세요. 예: (매장, 일자) in (강남, 2026-01-01)")
+    found = functools.reduce(operator.or_, groups)
+    return found if m[2].lower() == "in" else ~found | functools.reduce(operator.or_, [c.isnull() for c in cols])
 
 
 def geo_condition(word, rest, expr):

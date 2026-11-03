@@ -43,7 +43,7 @@ def test_new_templates_are_registered():
 
 def test_activity_summary_full(c):
     done = go("e52", {"대상": "uid", "상대": "target", "날짜": "ts", "대표 값": "kind", "정렬": "행 수", "N": 10})
-    assert done["columns"] == ["uid", "행 수", "고유 target 수", "최다 target 행 수", "전체 중 비중", "같은 target 하루 최대", "활동일", "하루 평균", "하루 최대", "주요 kind", "주요 kind 건수"]
+    assert done["columns"] == ["uid", "행 수", "비중 %", "고유 target 수", "최다 target 행 수", "전체 중 비중", "같은 target 하루 최대", "활동일", "하루 평균", "하루 최대", "주요 kind", "주요 kind 건수"]
     rows = {r["uid"]: r for r in done["rows"]}
     assert [r["uid"] for r in done["rows"]] == ["u1", "u3", "u2"]  # 행 수 큰 순, 빈 대상은 뺀다
     u1 = rows["u1"]
@@ -55,7 +55,7 @@ def test_activity_summary_full(c):
 
 def test_activity_summary_optional_slots_drop_columns(c):
     done = go("e52", {"대상": "uid", "날짜": "ts", "정렬": "활동일", "N": 2})
-    assert done["columns"] == ["uid", "행 수", "활동일", "하루 평균", "하루 최대"]
+    assert done["columns"] == ["uid", "행 수", "비중 %", "활동일", "하루 평균", "하루 최대"]
     assert [(r["uid"], r["활동일"]) for r in done["rows"]] == [("u3", 3), ("u1", 2)]  # 상위 2개
     bad = sr.compile("e52", {"대상": "uid", "정렬": "고유 상대 수"}, BASE, COLS)
     assert bad["ok"] is False and "상대" in bad["reason"]
@@ -63,7 +63,7 @@ def test_activity_summary_optional_slots_drop_columns(c):
 
 def test_group_vs_all_with_group_table(c):
     done = go("e53", {"대상": "uid", "조건": "reason = spam", "날짜": "ts", "집단 이름": "spam 차단", "집단 테이블": "blocks", "집단 테이블 컬럼": "uid"})
-    assert done["columns"] == ["지표", "전체 uid", "spam 차단", "p-value(집단 vs 나머지)"]
+    assert done["columns"] == ["지표", "전체 uid", "spam 차단", "비중 %", "p-value(집단 vs 나머지)"]
     got = {r["지표"]: (r["전체 uid"], r["spam 차단"]) for r in done["rows"]}
     assert got["uid 수"] == (3, 2) and got["전체 행 수"] == (8, 7)  # u9는 투표가 없어 빠진다
     assert got["하루 평균"] == pytest.approx((8 / 6, 7 / 5)) and got["하루 중앙값"] == (1, 1) and got["하루 최소"] == (1, 1) and got["하루 최대"] == (3, 3)

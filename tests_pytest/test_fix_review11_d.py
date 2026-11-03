@@ -2,7 +2,6 @@
 시계열은 최근 기간·빈 기간 0, 산점도 고르게 뽑기, 편차 표 엔티티 먼저 고르기, 최근 N일은 어제까지. 데이터는 시험 안에서 지어낸다."""
 import datetime as dt
 import shutil
-import subprocess
 
 import duckdb
 import polars as pl
@@ -15,7 +14,6 @@ from core import parse
 from core import server
 from dashboard import dash_calc
 from dashboard import period
-from conftest import ROOT
 
 D = dt.date
 
@@ -139,10 +137,9 @@ def test_deviation_picks_entities_first(real, monkeypatch):
     assert [e["name"] for e in v["entities"]] == ["a", "b"] and v["more"] is True and len(v["buckets"]) == 2
 
 
-# ---------- lib/dash_calc.js: 평균의 빈 합 ----------
+# ---------- web/lib/calc.ts: 평균의 빈 합(옛 static/core/lib/dash_calc.js는 지웠다) ----------
 # (빈 구간 0·카드 날마다 값은 옛 화면 함수(windowValue·cardDays)를 보던 것이라 옛 화면과 함께 지웠다)
 JS = """
-const assert = require("assert");
 // 11D2 평균: 합이 빈 날만 있으면 0이 아니라 빈 값
 const mean = { agg: "mean", sum: [null, null], count: [3, 0] };
 assert.strictEqual(rollup(mean, ["2026-01-05", "2026-01-06"], "week").get("2026-01-05"), null);
@@ -152,7 +149,5 @@ console.log("ok");
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 def test_dash_js_empty_windows(tmp_path):
-    script = tmp_path / "d.js"
-    script.write_text((ROOT / "static" / "core" / "lib" / "dash_calc.js").read_text(encoding="utf-8") + JS, encoding="utf-8")
-    done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
-    assert done.returncode == 0 and done.stdout.strip().endswith("ok"), done.stderr[-3000:]
+    from test_dash_js import run_ts
+    assert run_ts(tmp_path, JS) == "ok"

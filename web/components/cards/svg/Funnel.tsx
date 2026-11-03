@@ -1,13 +1,13 @@
 "use client";
 // funnel: 흐름(퍼널) 생키 + 한 줄 설명 + 단계별 표(옛 paintFunnel·funnel.js sankeySvg). 색: 막대는 팔레트 첫 색, 다음 단계 띠는 초록, 이탈 띠는 주황(카드 색 "단계 막대"·"다음 단계"·"이탈"로 바꿈)
-import { FUNNEL_COLORS, FUNNEL_COLUMNS, fpct, funnelRows, funnelSentence, sankeyLayout, windowText, type Step } from "./__pure__";
+import { FUNNEL_COLUMNS, fpct, funnelColors, funnelRows, funnelSentence, sankeyLayout, windowText, type Step } from "./__pure__";
 import { Box, type P } from "./common";
 
 const short = (s: string) => (s.length > 14 ? s.slice(0, 13) + "…" : s);
 
 export function Funnel({ card, colors }: P) {
-  const d = card.data?.values as { steps?: Step[]; window?: { n?: number; unit?: string } } | undefined, steps = d?.steps || [], pick = (name: string, fallback: string) => card.colors?.series?.[name] ?? fallback;
-  const c = { bar: pick("단계 막대", colors.palette?.[0] ?? FUNNEL_COLORS.bar), next: pick("다음 단계", FUNNEL_COLORS.next), drop: pick("이탈", FUNNEL_COLORS.drop), text: colors.text };
+  const d = card.data?.values as { steps?: Step[]; window?: { n?: number; unit?: string } } | undefined, steps = d?.steps || [], f = funnelColors(card, colors.palette);
+  const c = { bar: f["단계 막대"], next: f["다음 단계"], drop: f.이탈, text: colors.text };
   const g = sankeyLayout(steps);
   const label = (x: number, y: number, text: string, anchor: "start" | "middle" | "end", extra: React.SVGProps<SVGTextElement> = {}) => <text x={x} y={y} textAnchor={anchor} fill={c.text} fontSize={11} {...extra}>{text}</text>;
   return (

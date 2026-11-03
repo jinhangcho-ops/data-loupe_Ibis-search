@@ -59,8 +59,76 @@ def add_columns(t, new):
     return t.mutate(**new)
 
 
-def replace_values(col, pairs):
-    return ibis.cases(*[(col == old, new) for old, new in pairs], else_=col)
+REPLACE_HOWS = ("exact", "contains", "prefix", "suffix", "regex", "list", "cond", "null_to", "to_null")
+TEXT_HOWS = ("contains", "prefix", "suffix", "regex")  # 글자 컬럼에만 되는 치환 방식
+
+
+def is_replace(v):
+    """치환 값: 옛 꼴 [[찾을, 바꿀], …] 또는 {how, pairs, ignore_case, trim, rest, to_new}(값의 타입·조건 글은 적용할 때 본다)."""
+    if isinstance(v, list):
+        return bool(v) and all(is_strs(p) and len(p) == 2 for p in v)
+    return (isinstance(v, dict) and set(v) <= {"how", "pairs", "ignore_case", "trim", "rest", "to_new"} and v.get("how") in REPLACE_HOWS
+            and isinstance(v.get("pairs"), list) and bool(v["pairs"]) and all(isinstance(p, list) and len(p) == 2 for p in v["pairs"])
+            and isinstance(v.get("ignore_case", False), bool) and isinstance(v.get("trim", False), bool)
+            and isinstance(v.get("rest", "keep"), (str, int, float)) and isinstance(v.get("to_new", ""), str))
+
+
+def replace(t, name, spec):
+    """값 바꿔 쓰기(how별): exact 같은 값, contains 들어 있는 글자를 차례로, prefix·suffix 앞뒤 글자, regex 정규식(\\1 묶음), list 값 목록 → 한 값,
+    cond 조건 줄이 맞는 행, null_to 빈 값을 채움, to_null 그 값들을 빈 값으로. ignore_case는 대소문자 무시, trim은 앞뒤 공백을 지운 값으로,
+    rest는 맞지 않은 행(keep 그대로·null 빈 값·그 밖은 그 값), to_new가 있으면 원래 컬럼은 두고 그 새 컬럼에 쓴다. 값은 컬럼 타입으로 바꾼다."""
+    if isinstance(spec, list):
+        spec = {"how": "exact", "pairs": spec}
+    how, pairs, col = spec["how"], spec["pairs"], t[name]
+    dtype, text = col.type(), col.type().is_string()
+    if how in TEXT_HOWS and not text:
+        raise ValueError(f"'{how}' 치환은 글자 컬럼에만 쓸 수 있어요. '{name}' 컬럼은 {parse.type_info(dtype)[0]} 컬럼이에요.")
+    value = lambda v: ibis.null(dtype) if v is None else parse.convert(dtype, str(v)) if not text else str(v)  # 바꿀 값은 컬럼 타입으로(못 바꾸면 ValueError)
+    if spec.get("trim") and text:
+        col = strip(col)
+    fold = spec.get("ignore_case") and text
+    key = col.lower() if fold else col
+    match = lambda v: value(v).lower() if fold else value(v)
+    hits, out = [], None
+    if how in ("exact", "list", "to_null"):
+        hits = [key.isin([match(v) for v in (old if isinstance(old, list) else [old])]) for old, _ in pairs]
+        out = ibis.cases(*[(hit, value(None if how == "to_null" else new)) for hit, (_, new) in zip(hits, pairs)], else_=col)
+    elif how == "cond":
+        hits = [parse.predicate(cond, t) for cond, _ in pairs]
+        out = ibis.cases(*[(hit, value(new)) for hit, (_, new) in zip(hits, pairs)], else_=col)
+    elif how in ("prefix", "suffix"):
+        hits = [key.startswith(match(old)) if how == "prefix" else key.endswith(match(old)) for old, _ in pairs]
+        swap = lambda old, new: str(new) + col.substr(len(str(old))) if how == "prefix" else col.re_replace(("(?i)" if fold else "") + literal(str(old)) + "$", plain_text(t, str(new)))  # 끝 글자는 정규식으로(Polars는 길이 식을 substr 인자로 못 받는다)
+        out = ibis.cases(*[(hit, swap(old, new)) for hit, (old, new) in zip(hits, pairs)], else_=col)
+    elif how == "null_to":
+        hits, out = [col.isnull()], col.fill_null(value(pairs[0][1]))
+    else:  # contains·regex: 맞는 곳을 차례로 바꾼다
+        out = col
+        for old, new in pairs:
+            pattern = ("(?i)" if fold else "") + (literal(str(old)) if how == "contains" else str(old))
+            hits.append(col.re_search(pattern))
+            if how == "regex":
+                out = re_replace(t, out, pattern, str(new))
+            elif fold:  # 대소문자 무시: 정규식으로 찾되 바꿀 글자는 그대로(묶음 번호로 읽지 않게)
+                out = out.re_replace(pattern, plain_text(t, str(new)))
+            else:
+                out = replace_all(t, out, str(old), str(new))
+    rest = spec.get("rest", "keep")
+    if rest != "keep":
+        out = functools.reduce(operator.or_, hits).fill_null(False).ifelse(out, value(None if rest == "null" else rest))
+    if spec.get("to_new"):
+        return add_columns(t, {spec["to_new"]: out})
+    return t.mutate(**{name: out})
+
+
+def replace_all(t, col, find, to):
+    """글자 find를 모두 to로 바꾸는 식. Ibis의 replace가 Polars(파일 연결)에서는 첫 것만 바꿔서 Polars는 글자 그대로 찾는 정규식으로 한다(다른 연결은 정규식이 없는 DB도 있어 replace)."""
+    return col.re_replace("(?:" + literal(find) + ")", plain_text(t, to)) if on_polars(t) else col.replace(find, to)  # (?:)로 감싼다: 기호가 없는 패턴이면 Polars가 바꿀 글자를 글자 그대로 써 $$가 남는다
+
+
+def plain_text(t, text):
+    """정규식 바꾸기의 바꿀 글자를 글자 그대로 쓰게 한다(묶음 번호로 읽지 않게: DuckDB는 \\를, Polars는 $를 겹친다)."""
+    return text.replace("$", "$$") if t.get_backend().name == "polars" else text.replace("\\", "\\\\")
 
 
 def literal(text):
@@ -143,12 +211,26 @@ def strip(col):
     return col.translate(SPACES, " " * len(SPACES)).strip() if col.get_backend().name == "duckdb" else col.strip()
 
 
+def on_polars(t):
+    """표가 파일 연결(Polars)의 것인지. 연결이 없는 표(함수 지원 확인용)는 아니다."""
+    try:
+        return t.get_backend().name == "polars"
+    except Exception:
+        return False
+
+
+def re_replace(t, col, pattern, text):
+    """정규식으로 바꾸는 식. 바꿀 글자의 \\1은 묶음 번호, $는 글자 그대로(DuckDB 방식). Polars는 반대($1이 묶음)라 $를 $$로 겹친 뒤 \\1을 ${1}로 바꾸고,
+    패턴은 (?:)로 감싼다(기호가 없는 패턴이면 Polars가 바꿀 글자를 글자 그대로 써 $$가 남는다). 전처리 regex 단계·치환 regex·함수 사전 regex_replace가 같이 쓴다."""
+    if on_polars(t):
+        text = re.sub(r"\\(\\|\d)", lambda m: "\\" if m[1] == "\\" else "${" + m[1] + "}", text.replace("$", "$$"))  # \\(역슬래시 한 글자)와 \1(묶음)을 한 번 훑어 함께
+        pattern = "(?:" + pattern + ")"
+    return col.re_replace(pattern, text)
+
+
 def regex_replace(t, name, pair):
-    """정규식으로 바꾸기. 바꿀 글자의 \\1은 묶음 번호(DuckDB 방식). Polars는 ${1} 방식이라 거기서는 \\1을 ${1}로 바꿔 넘겨 같은 값이 나오게 한다."""
-    pattern, text = pair
-    if t.get_backend().name == "polars":
-        text = re.sub(r"\\(\d)", r"${\1}", text)
-    return t.mutate(**{name: t[name].re_replace(pattern, text)})
+    """정규식으로 바꾸기(regex 단계)."""
+    return t.mutate(**{name: re_replace(t, t[name], *pair)})
 
 
 def retype(col, arg):
@@ -405,8 +487,8 @@ OPS = [
     ("nulls", STRING, is_strs, '["-", "N/A", ""]', column(lambda col, values: col.isin(values).ifelse(ibis.null(), col))),
     ("remove", STRING, lambda v: isinstance(v, str) and v != "", '"지울 글자들"', column(lambda col, text: col.re_replace(literal(text), ""))),
     ("case", STRING, lambda v: v in ("upper", "lower"), '"upper" 또는 "lower"', column(lambda col, how: getattr(col, how)())),
-    ("replace", STRING, lambda v: isinstance(v, list) and bool(v) and all(is_strs(p) and len(p) == 2 for p in v),
-     '[["찾을 값", "바꿀 값"], ...]', column(replace_values)),
+    ("replace", None, is_replace, '[["찾을 값", "바꿀 값"], ...] 또는 {"how": "exact" | "contains" | "prefix" | "suffix" | "regex" | "list" | "cond" | "null_to" | "to_null", '
+     '"pairs": [[찾을, 바꿀], ...], "ignore_case": false, "trim": false, "rest": "keep" | "null" | 값, "to_new": "새 컬럼"}', replace),
     ("regex", STRING, lambda v: is_strs(v) and len(v) == 2 and v[0] != "", '["패턴", "바꿀 글자"]', regex_replace),
     ("type", None, lambda v: isinstance(v, dict) and v.get("to") in TYPE_TO and set(v) <= {"to", "clean", "format"}
      and isinstance(v.get("clean", False), bool) and isinstance(v.get("format", ""), str),
@@ -435,6 +517,42 @@ OPS = [
 
 
 OPS_NAMES = [op[0] for op in OPS]
+
+# 화면(쿼리 우클릭 메뉴·새 컬럼 상자)에 줄 전처리 단계 목록(GET /api/prep/ops). 차례는 OPS와 같고, 라벨·묶음은 static/prep/prep.html의 OPS와 같은 글이다.
+# need: 고를 수 있는 컬럼 종류(str·num·date·any·struct), fields: 입력 칸 {name(prep.html 입력 상태의 키), placeholder | check | options}.
+_F = lambda name, placeholder: {"name": name, "placeholder": placeholder}
+_C = lambda name, check: {"name": name, "check": check}
+_O = lambda name, *options: {"name": name, "options": [list(o) for o in options]}
+LABELS = [
+    {"id": "trim", "label": "앞뒤 공백 지우기", "group": "글자", "need": "str", "fields": []},
+    {"id": "squeeze", "label": "연속 공백을 하나로", "group": "글자", "need": "str", "fields": []},
+    {"id": "nulls", "label": "이 값들을 빈 값으로", "group": "글자", "need": "str", "fields": [_F("text", "예: -, N/A(쉼표로 구분)"), _C("blank", "빈 문자열도")]},
+    {"id": "remove", "label": "글자 찾아 지우기", "group": "글자", "need": "str", "fields": [_F("text", "지울 글자들")]},
+    {"id": "case", "label": "대문자·소문자로", "group": "글자", "need": "str", "fields": [_O("how", ("upper", "대문자로"), ("lower", "소문자로"))]},
+    {"id": "replace", "label": "값 바꿔 쓰기", "group": "글자", "need": "any", "fields": [_F("from", "찾을 값"), _F("to", "바꿀 값")]},
+    {"id": "regex", "label": "정규식으로 바꾸기", "group": "글자", "need": "str", "fields": [_F("pattern", "패턴"), _F("to", "바꿀 글자")]},
+    {"id": "type", "label": "타입 바꾸기", "group": "타입", "need": "any",
+     "fields": [_O("to", ("int", "정수"), ("float", "실수"), ("string", "글자"), ("date", "날짜")), _C("clean", "쉼표·단위 떼기"), _F("format", "%Y-%m-%d")]},
+    {"id": "flag", "label": "빈 값 표시 컬럼 만들기", "group": "새 컬럼", "need": "any", "fields": []},
+    {"id": "fill", "label": "빈 값 처리", "group": "빈 값", "need": "any",
+     "fields": [_O("how", ("drop", "그 행 빼기"), ("value", "정한 값으로"), ("mean", "평균으로"), ("median", "중앙값으로"), ("mode", "최빈값으로"), ("prev", "앞의 값으로"), ("next", "뒤의 값으로")),
+                _F("value", "채울 값"), _F("by", "순서를 정할 컬럼")]},
+    {"id": "outlier", "label": "범위 밖 값 처리", "group": "숫자", "need": "num",
+     "fields": [_O("how", ("drop", "그 행 빼기"), ("clip", "범위로 잘라 내기")), _O("by", ("range", "직접 범위"), ("iqr", "사분위수(IQR)"), ("std", "표준편차")),
+                _F("low", "최소"), _F("high", "최대"), _F("k", "k (비우면 IQR 1.5, 표준편차 3)")]},
+    {"id": "scale", "label": "크기 맞추기(스케일링)", "group": "숫자", "need": "num", "fields": [_O("how", ("standard", "표준화"), ("minmax", "0~1 사이로"), ("log", "로그 ln(1+x)"))]},
+    {"id": "round", "label": "반올림", "group": "숫자", "need": "num", "fields": [_F("digits", "소수점 아래 자릿수(0 이상)")]},
+    {"id": "bins", "label": "구간 나누기", "group": "숫자", "need": "num", "fields": [_F("text", "경계값을 작은 것부터 쉼표로")]},
+    {"id": "rare", "label": "드문 값 묶기", "group": "범주", "need": "str", "fields": [_F("min", "이보다 적게 나오면 묶기(2 이상)"), _F("label", "묶은 값의 이름(기본: 기타)")]},
+    {"id": "parts", "label": "날짜에서 뽑기", "group": "새 컬럼", "need": "date",
+     "fields": [_C("year", "연"), _C("month", "월"), _C("day", "일"), _C("weekday", "요일"), _C("ym", "월 단위"), _C("hour", "시")]},
+    {"id": "label", "label": "값을 번호로(라벨 인코딩)", "group": "새 컬럼", "need": "any", "fields": []},
+    {"id": "onehot", "label": "값마다 컬럼으로(원-핫 인코딩)", "group": "새 컬럼", "need": "any", "fields": []},
+    {"id": "extract", "label": "패턴에 맞는 부분 뽑기", "group": "새 컬럼", "need": "str", "fields": [_F("pattern", "정규식, 예: [A-Z]-[0-9]+"), _F("group", "괄호 묶음 번호(비우면 전체)")]},
+    {"id": "has", "label": "글자가 들어 있는지 표시", "group": "새 컬럼", "need": "str", "fields": [_F("words", "찾을 글자 예: 서울, 부산"), _C("regex", "정규식으로")]},
+    {"id": "counts", "label": "단어별 개수 세기", "group": "새 컬럼", "need": "str", "fields": [_F("sep", "구분자(비우면 공백)")]},
+    {"id": "expand", "label": "컬럼 여러 개로 펼치기(구조·맵·JSON)", "group": "새 컬럼", "need": "struct", "fields": []},
+]
 
 
 def nan_to_null(col):

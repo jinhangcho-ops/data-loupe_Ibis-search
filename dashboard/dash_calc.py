@@ -11,6 +11,7 @@ from analysis import stats
 from core import compare
 from core import querying
 from core import dash_store
+from core import funnel
 from core import metric_file
 from core import parse
 from prep import prep_app
@@ -19,12 +20,13 @@ from core import scan_size
 from core import settings
 from core import source as connection
 from core import sql_funcs
+from dashboard import flow_pairs
 from dashboard import period
 from dashboard import summary_text
 from core import targets
 from core import watch
 from core.server import run
-from lazy import Later
+from lazy import Later, ibis
 
 mapcard = Later("geo.mapcard")  # 지도 카드(geomap)의 값 만들기: 지도 카드를 쓸 때만 geo 패키지가 올라온다
 
@@ -43,7 +45,7 @@ MAX_POINTS = result.MAX_POINTS  # 산점도·버블의 점 수(분석의 산점�
 SEED = stats.SEED  # 고르게 뽑을 때의 고정 씨앗(다시 구해도 같은 점, 분석의 산점도와 같다)
 POINT_TYPES = ("scatter", "bubble")
 FLOW_GONE = "흐름 보기가 없어져 이 카드는 다시 구할 수 없어요. 탐색에서 다시 만들어 주세요."  # 예전 흐름(source.flow_id)만 가진 카드
-VALUE_KINDS = ("kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend")  # 값 하나(또는 일 값)로 그리는 카드 종류
+VALUE_KINDS = ("kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "bullet")  # 값 하나(또는 일 값)로 그리는 카드 종류
 MAX_GROUPS = 100  # 요약의 기여 분해에 쓰는 그룹 수
 TARGETS_FILE = "targets_file.json"  # 목표 파일 경로만 둔다 {path}
 WATCH_KINDS = ("status", "alerts", "map")  # 엔티티별 최근 행을 상태 규칙(watch.py)으로 보는 카드
@@ -54,6 +56,19 @@ MAX_ENTITIES = 50  # 편차 표의 엔티티 수
 MAX_BUCKETS = 48  # 편차 표의 시간대 수(최근 것)
 BUCKET_UNITS = {"hour": "h", "day": "D", "week": "W", "month": "M"}
 MAX_NUM_COLS = 200  # 카드에 알려 줄 숫자 컬럼 이름 수(버블의 [크기] 후보)
+SHAPE_KINDS = ("histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud")  # 값 모양이 종류마다 다른 4단계 카드(bullet은 값 카드)
+DATE_X_KINDS = ("calheat", "bump", "candle")  # X가 날짜(시각) 컬럼이라 대시보드 기간이 X에 걸리는 종류
+MAX_BOXES = 20  # 상자 그림의 상자 수(행이 많은 그룹부터)
+MAX_OUTLIERS = 50  # 상자 하나의 이상치 점 수(중앙값에서 먼 것부터)
+MAX_CELLS = 2000  # 히트맵의 칸 수
+MAX_TREE = 200  # 트리맵·선버스트의 항목 수(넘는 윗단계 항목은 기타로 묶는다)
+MAX_COHORT = 52  # 코호트 수와 경과 기간 수
+MAX_WORDS = 150  # 워드클라우드의 단어 수
+MAX_PERIODS = 400  # 양초·순위 차트의 기간 수
+MAX_RANKED = 12  # 순위 차트의 대상 수(합이 큰 것부터)
+OTHER = funnel.OTHER  # 트리맵의 기타
+ADDITIVE = dash_store.ADDITIVE  # 아이의 합이 부모가 되는 집계
+TREE_ADDITIVE = dash_store.TREE_ADDITIVE
 
 
 def series_name(s):
@@ -181,7 +196,8 @@ def card_columns(card, ctx=None):
         return None  # 원래 행을 보이는 카드는 모든 컬럼
     cols = body_columns(src["body"], src.get("date"), view.get("group"), *(view.get("group_cols") or []), view.get("entity"), view.get("time_col"), view.get("kind_col"), view.get("link_col"),
                         *(b.get("y") for b in view.get("blanks") or []), *(r.get("column") for r in view.get("rules") or []),  # 상태 규칙이 보는 컬럼도 읽는다
-                        *([(view.get("geo") or {}).get(k) for k in ("lat", "lon", "value")] if card["kind"] == "geomap" else []))  # 지도 카드의 점 컬럼
+                        *([(view.get("geo") or {}).get(k) for k in ("lat", "lon", "value")] if card["kind"] == "geomap" else []),  # 지도 카드의 점 컬럼
+                        *([(src.get("analysis") or {}).get(k) for k in dash_store.FLOW_NEED[card["kind"]]] if card["kind"] in dash_store.FLOW_NEED else []))  # 생키·코호트의 사용자·단계·시각 컬럼
     union = ((ctx or {}).get("plan") or {}).get("union", {}).get(group_key(src["body"]))
     return union if cols is not None and union is not None else cols
 
@@ -201,12 +217,26 @@ def card_expr(card, ctx=None, window=None):
     return querying.runnable(with_period(body, card["source"].get("date"), window), select=False, keep=card_columns(card, ctx))
 
 
+def period_column(card):
+    """카드를 구할 때 대시보드 기간을 거는 날짜 컬럼: 고른 기간 기준 날짜(source.date), 없으면 차트·X가 날짜인 새 종류(DATE_X_KINDS)의 X. 생키·코호트는 조회에 기간을 걸지 않는다(None).
+    처리 용량 추정(fetched)과 실제 조회(shape_data)가 같은 컬럼을 쓰게 하나로 둔다."""
+    if card["kind"] in dash_store.FLOW_NEED:
+        return None
+    return card["source"].get("date") or (card["source"]["body"].get("x") if card["kind"] in ("chart", *DATE_X_KINDS) else None)
+
+
 def fetched(card, ctx=None):
     """카드가 읽는 조회(기간을 건 것). 식을 만들 수 없는 종류(조회가 없거나 recent_rows·analysis)는 None."""
     body = (card["source"] or {}).get("body")
     if not isinstance(body, dict) or card["kind"] in ("recent_rows", "analysis"):
         return None
-    return with_period(body, card["source"].get("date") or (body.get("x") if card["kind"] == "chart" else None), fetch_window(ctx))
+    return with_period(body, period_column(card), (ctx or {}).get("range") if card["kind"] in SHAPE_KINDS else fetch_window(ctx))  # 새 종류는 직전 기간 없이 보는 기간만 읽는다(shape_data와 같다)
+
+
+def shape_extra(card):
+    """상자 그림(quantile)·양초(first·last)가 body.series 밖에서 쓰는 집계 [(집계, 컬럼, 옵션)]. 연결이 못 하면 runnable이 읽은 행을 이 PC로 받는다. 다른 종류는 빈 목록."""
+    body = card["source"].get("body") or {}
+    return {"boxplot": [("quantile", value_of(body), {"p": 0.5})], "candle": [(agg, value_of(body), {"order": body.get("x")}) for agg in ("first", "last")]}.get(card["kind"], [])  # last는 대체 식이 없어 SQLite에서는 받아서 구한다
 
 
 def copies_to_pc(card, ctx=None):
@@ -217,7 +247,7 @@ def copies_to_pc(card, ctx=None):
     if shaped is None:
         return False
     points = card["kind"] == "geomap" and bool(((card.get("view") or {}).get("geo") or {}).get("lat"))  # 지도의 점은 행을 limit로 잘라 받아 오므로 집계가 아니다
-    if not points and connection.compiles(querying.build(shaped, select=False)):
+    if not points and connection.compiles(expr := querying.build(shaped, select=False)) and not querying.agg_unsupported(shaped, expr, shape_extra(card)):  # 계열 집계와 상자 그림·양초의 집계도 연결이 하는지
         return False
     key = querying.search_key(shaped, card_columns(card, ctx))
     return not held.has(key)  # 최신화가 새로 받을 사본이면 받아 둔 것이 없는 것과 같다
@@ -426,7 +456,7 @@ OWN_PERIOD = re.compile(r"(.+?)\s+(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})"
 def own_range(card, mode="prev"):
     """대시보드 기간이 비었을 때 카드 자신의 기간 줄(source.body.periods 중 양쪽 날짜가 다 있고 시작이 끝보다 늦지 않은 첫 줄)을 보는 기간으로,
     대시보드 기간 칸과 같은 직전 기간(period.previous: 달 단위로 꼭 맞으면 직전 같은 개월 수, 아니면 바로 앞 같은 일수)을 삼은 {range, prev: {start, end, text}, column, line}.
-    mode(period.MODES)가 prev가 아니면 그 비교 기준의 기간과 이름을 쓴다. 열린 쪽이 있는 줄은 건너뛰고, 없으면 None. static/core/lib/dash_calc.js의 ownRange와 같은 규칙이다(prev일 때)."""
+    mode(period.MODES)가 prev가 아니면 그 비교 기준의 기간과 이름을 쓴다. 열린 쪽이 있는 줄은 건너뛰고, 없으면 None. web/lib/calc.ts의 ownRange와 같은 규칙이다(prev일 때)."""
     for i, line in enumerate(((card.get("source") or {}).get("body") or {}).get("periods") or []):
         m = OWN_PERIOD.fullmatch(str(line).strip())
         if not m or m[2] > m[3]:
@@ -781,6 +811,256 @@ def read_regions(geo):
     frame = table.select(*want).limit(mapcard.MAX_REGIONS + 1).to_polars()
     return frame
 
+def need_number(t, name, what):
+    """숫자 컬럼 name(없거나 숫자가 아니면 ValueError)."""
+    parse.check_name(name, t.columns, what)
+    if not is_number(t, name):
+        raise ValueError(f"{what}에는 숫자 컬럼을 골라야 해요('{name}'은 숫자가 아니에요).")
+    return name
+
+
+def need_date(t, name, what):
+    """날짜·시각 컬럼 name(없거나 날짜가 아니면 ValueError)."""
+    parse.check_name(name, t.columns, what)
+    if not t[name].type().is_temporal():
+        raise ValueError(f"{what}에는 날짜나 시각 컬럼을 골라야 해요('{name}'은 날짜가 아니에요).")
+    return name
+
+
+def value_of(body):
+    """차트 조회의 값 컬럼: body.y, 없으면 첫 계열의 y(points_of와 같은 규칙)."""
+    series = body.get("series") or [{}]
+    return body.get("y") or (series[0].get("y") if isinstance(series[0], dict) else None)
+
+
+def first_series(body):
+    """검사한 첫 계열(집계 방식과 값 컬럼)."""
+    return clean_series(body.get("series"))[0]
+
+
+def histogram_data(expr, column, bins=stats.BINS):
+    """히스토그램: 숫자 컬럼의 최솟값~최댓값을 bins 구간으로 똑같이 나눈 구간 경계(edges, bins+1개)와 구간별 행 수(counts). 최댓값은 마지막 구간에 넣고, 값이 모두 같으면 한 구간이다.
+    NaN·무한·빈 값은 세지 않는다. 구간 번호는 DB에서 ((값 - 최솟값) / 너비) 내림으로 구해 구간별 개수만 가져온다."""
+    need_number(expr, column, "히스토그램의 값")
+    t = expr.filter(stats.finite(expr[column]).notnull())
+    x = stats.finite(t[column])
+    m = stats.one(t.aggregate(n=t.count(), lo=x.min(), hi=x.max()))
+    if not m["n"]:
+        return {"bins": {"edges": [], "counts": []}}
+    lo, hi = m["lo"], m["hi"]
+    n = bins if hi > lo else 1
+    index = ((x - lo) / ((hi - lo) / n or 1)).floor().cast("int64")
+    found = {r["b"]: r["c"] for r in stats.rows(t.group_by(ibis.ifelse(index >= n, n - 1, index).name("b")).aggregate(c=t.count()))}
+    return {"bins": {"edges": [lo + (hi - lo) * i / n for i in range(n + 1)], "counts": [found.get(i, 0) for i in range(n)]}}
+
+
+def boxplot_data(expr, group, value):
+    """상자 그림: 그룹(비면 '전체')마다 {name, n, min, q1, med, q3, max, outliers, outlier_count}. 사분위수는 분위수 집계(quantile)로 구하고,
+    min·max는 1.5 IQR(q1 - 1.5·IQR ~ q3 + 1.5·IQR) 안의 가장 먼 값(수염 끝), 그 밖의 값이 이상치다(중앙값에서 먼 것부터 MAX_OUTLIERS개, 전체 수는 outlier_count). 행이 많은 MAX_BOXES개 그룹만."""
+    need_number(expr, value, "상자 그림의 값")
+    if group:
+        parse.check_name(group, expr.columns, "그룹 컬럼")
+    t = expr.filter(stats.finite(expr[value]).notnull(), *([expr[group].notnull()] if group else []))
+    t = t.select(g=t[group].cast("string") if group else ibis.literal("전체"), y=stats.finite(t[value]))
+    sizes = stats.rows(t.group_by("g").aggregate(n=t.count()).order_by([ibis.desc("n"), "g"]).limit(MAX_BOXES + 1))
+    more, sizes = len(sizes) > MAX_BOXES, sizes[:MAX_BOXES]
+    t = t.filter(t.g.isin([r["g"] for r in sizes]))
+    quarters = t.group_by("g").aggregate(q1=sql_funcs.aggregate("quantile", t, "y", None, {"p": 0.25}), med=sql_funcs.aggregate("quantile", t, "y", None, {"p": 0.5}),
+                                         q3=sql_funcs.aggregate("quantile", t, "y", None, {"p": 0.75}))
+    j = t.join(quarters, "g")
+    low, high = j.q1 - 1.5 * (j.q3 - j.q1), j.q3 + 1.5 * (j.q3 - j.q1)
+    outside = (j.y < low) | (j.y > high)
+    whisker = {r["g"]: r for r in stats.rows(j.group_by("g").aggregate(q1=j.q1.max(), med=j.med.max(), q3=j.q3.max(), lo=j.y.min(where=~outside), hi=j.y.max(where=~outside), out=j.y.count(where=outside)))}
+    far = {}  # 그룹 → 이상치(중앙값에서 먼 순)
+    if any(w["out"] for w in whisker.values()):
+        out = j.filter(outside)
+        out = out.select("g", v=out.y, d=(out.y - out.med).abs())
+        ranked = out.mutate(k=ibis.row_number().over(group_by=out.g, order_by=ibis.desc(out.d)))  # 그룹마다 먼 순번(0부터)
+        ranked = ranked.filter(ranked.k < MAX_OUTLIERS)
+        if connection.compiles(ranked):  # 연결이 창 함수를 하면 한 번에
+            for o in stats.rows(ranked.order_by(["g", ibis.desc("d")])):
+                far.setdefault(o["g"], []).append(o["v"])
+        else:  # 못 하면(파일 연결 등) 이상치가 있는 그룹마다
+            for g in (g for g, w in whisker.items() if w["out"]):
+                one = out.filter(out.g == g).order_by(ibis.desc("d")).limit(MAX_OUTLIERS)
+                far[g] = [o["v"] for o in stats.rows(one)]
+    groups = []
+    for r in sizes:
+        w = whisker[r["g"]]
+        groups.append({"name": r["g"], "n": r["n"], "min": w["lo"], "q1": w["q1"], "med": w["med"], "q3": w["q3"], "max": w["hi"], "outliers": far.get(r["g"], []), "outlier_count": w["out"]})
+    return {"values": {"groups": groups}, "note": f"그룹이 많아 행이 많은 {MAX_BOXES}개만 표시해요." if more else ""}
+
+
+def heatmap_data(expr, row, col, s):
+    """히트맵: 두 그룹 컬럼(행·열)의 값마다 첫 계열 집계 {rows, cols, cells}. cells[행][열]은 값(없으면 빈 값). 행 × 열이 MAX_CELLS칸을 넘으면 ValueError."""
+    if not row or not col:
+        raise ValueError("히트맵에는 행 컬럼(X)과 열 컬럼(나누기)을 모두 고르세요.")
+    for name, what in ((row, "행 컬럼"), (col, "열 컬럼")):
+        parse.check_name(name, expr.columns, what)
+    t = expr.filter(expr[row].notnull(), expr[col].notnull())
+    found = t.group_by([t[row].name("r"), t[col].name("c")]).aggregate(v=final_expr(t, s)).limit(MAX_CELLS + 1).to_polars().rows()
+    rows, cols = sorted({r for r, _, _ in found}), sorted({c for _, c, _ in found})
+    if len(found) > MAX_CELLS or len(rows) * len(cols) > MAX_CELLS:
+        raise ValueError(f"행 × 열이 {MAX_CELLS:,}칸을 넘어요. 그룹을 줄이거나 조건·기간으로 좁히세요.")
+    cell = {(r, c): v for r, c, v in found}
+    return {"values": {"rows": [str(r) for r in rows], "cols": [str(c) for c in cols], "cells": [[cell.get((r, c)) for c in cols] for r in rows]}}
+
+
+def calheat_data(expr, x, s):
+    """달력 히트맵: 날짜 컬럼 x를 하루로 묶은 첫 계열 집계 {days: [{d: 'YYYY-MM-DD', v}]}(날짜 순). 일수가 dash_store.MAX_DAYS를 넘으면 앞을 자른다."""
+    need_date(expr, x, "달력 히트맵의 날짜")
+    t = expr.filter(expr[x].notnull())
+    frame = t.group_by(stats.local_start(t[x], "D").name("d")).aggregate(v=final_expr(t, s))
+    found = frame.order_by(ibis.desc("d")).limit(dash_store.MAX_DAYS + 1).to_polars().rows()[::-1]
+    cut = max(0, len(found) - dash_store.MAX_DAYS)
+    return {"values": {"days": [{"d": label(d), "v": v} for d, v in found[cut:]]}, "note": f"앞쪽 날은 잘랐어요(최근 {dash_store.MAX_DAYS:,}일만)." if cut else ""}
+
+
+def tree_data(expr, x, split, s):
+    """트리맵·선버스트: x의 값마다 첫 계열 집계 {items: [{name, value, children?}]}(값이 큰 순). 윗단계 항목은 기타를 포함해 MAX_TREE개(split이 있으면 그 10분의 1, 2개 이상)까지만 두고
+    나머지는 '기타'(남은 행으로 따로 집계)로 묶는다. split이 있으면 윗단계 항목의 아래단계를 항목 수 합이 MAX_TREE 이하가 되게 값이 큰 것부터 둔다."""
+    parse.check_name(x, expr.columns, "그룹 컬럼")
+    if split:
+        parse.check_name(split, expr.columns, "아래단계 컬럼")
+        if s["agg"] not in ADDITIVE:
+            raise ValueError(TREE_ADDITIVE)
+    t = expr.filter(expr[x].notnull())
+    room = max(2, MAX_TREE // 10) if split else MAX_TREE
+    top = t.group_by(t[x].name("g")).aggregate(v=final_expr(t, s)).order_by([ibis.desc("v"), "g"]).limit(room + 1).to_polars().rows()
+    over = len(top) > room
+    keep = top[:room - 1] if over else top  # 넘으면 한 자리는 기타 몫
+    items, shown = [{"name": str(g), "value": v} for g, v in keep], [g for g, _ in keep]
+    if over:  # 넘은 윗단계 항목은 남은 행으로 따로 집계해 기타 하나로
+        rest = t.filter(~t[x].isin(shown))
+        items.append({"name": OTHER, "value": stats.one(rest.aggregate(v=final_expr(rest, s)))["v"]})
+    note = f"항목이 많아 큰 {len(shown)}개만 두고 나머지는 '{OTHER}'로 묶었어요." if over else ""
+    if split:
+        within = t.filter(t[x].isin(shown))  # 집계 식은 거른 표로 만든다(개수가 원래 표에 묶이지 않게)
+        kids = within.group_by([within[x].name("g"), within[split].name("c")]).aggregate(v=final_expr(within, s))
+        kids = kids.order_by([ibis.desc("v"), "g", "c"]).limit(MAX_TREE - len(items) + 1).to_polars().rows()
+        if len(kids) > MAX_TREE - len(items):
+            note, kids = " ".join(filter(None, [note, "아래단계 항목이 많아 작은 것은 줄였어요."])), kids[:MAX_TREE - len(items)]
+        for item, g in zip(items, shown):
+            if mine := [{"name": "(빈 값)" if c is None else str(c), "value": v} for k, c, v in kids if k == g]:
+                item["children"] = mine
+    return {"values": {"items": items}, "note": note}
+
+
+def ranks(values):
+    """값 목록(빈 값 가능)의 순위: 큰 값이 1위, 같은 값은 같은 순위(그 다음 순위는 건너뜀), 빈 값은 None."""
+    return [None if v is None else 1 + sum(1 for w in values if w is not None and w > v) for v in values]
+
+
+def bump_data(expr, x, split, s, unit):
+    """순위 차트: 대상(split)마다 기간(x를 unit으로 자름)별 첫 계열 집계와 그 기간 안의 순위 {labels, series: [{name, values, ranks}]}.
+    합이 큰 MAX_RANKED개 대상끼리만 순위를 매긴다(그 기간에 값이 없는 대상은 순위가 없음). 기간이 MAX_PERIODS개를 넘으면 ValueError."""
+    need_date(expr, x, "순위 차트의 날짜")
+    if not split:
+        raise ValueError("순위를 매길 대상 컬럼(나누기)을 고르세요.")
+    parse.check_name(split, expr.columns, "대상 컬럼")
+    t = expr.filter(expr[x].notnull(), expr[split].notnull())
+    best = t.group_by(t[split].name("e")).aggregate(v=final_expr(t, s)).order_by([ibis.desc("v"), "e"]).limit(MAX_RANKED + 1).to_polars()["e"].to_list()
+    more, best = len(best) > MAX_RANKED, best[:MAX_RANKED]
+    t = t.filter(t[split].isin(best))
+    found = t.group_by([stats.local_start(t[x], TRUNC[unit]).name("p"), t[split].name("e")]).aggregate(v=final_expr(t, s)).limit(MAX_PERIODS * MAX_RANKED + 1).to_polars().rows()
+    labels = sorted({label(p) for p, _, _ in found})
+    if len(labels) > MAX_PERIODS:
+        raise ValueError(f"기간이 {MAX_PERIODS}개를 넘어요. 시간 단위를 키우거나 기간을 줄이세요.")
+    cell = {(label(p), e): v for p, e, v in found}
+    table = {e: [cell.get((lab, e)) for lab in labels] for e in best}
+    by_period = [ranks([table[e][i] for e in best]) for i in range(len(labels))]
+    return {"values": {"labels": labels, "series": [{"name": str(e), "values": table[e], "ranks": [by_period[i][k] for i in range(len(labels))]} for k, e in enumerate(best)]},
+            "note": f"대상이 많아 합이 큰 {MAX_RANKED}개끼리 순위를 매겼어요." if more else ""}
+
+
+def candle_data(expr, x, y, unit):
+    """양초(캔들) 차트: 시각 컬럼 x를 unit으로 자른 기간마다 값 컬럼 y의 시가(기간 안에서 x가 가장 이른 행)·고가(최대)·저가(최소)·종가(x가 가장 늦은 행)
+    {labels, candles: [{open, high, low, close}]}. 기간이 MAX_PERIODS개를 넘으면 ValueError."""
+    need_date(expr, x, "양초 차트의 시각")
+    need_number(expr, y, "양초 차트의 값")
+    t = expr.filter(expr[x].notnull(), stats.finite(expr[y]).notnull())
+    t = t.select(x=t[x], y=stats.finite(t[y]))
+    frame = t.group_by(stats.local_start(t.x, TRUNC[unit]).name("p")).aggregate(o=sql_funcs.aggregate("first", t, "y", None, {"order": "x"}), h=t.y.max(), l=t.y.min(),
+                                                                                c=sql_funcs.aggregate("last", t, "y", None, {"order": "x"})).order_by("p").limit(MAX_PERIODS + 1).to_polars().rows()
+    if len(frame) > MAX_PERIODS:
+        raise ValueError(f"기간이 {MAX_PERIODS}개를 넘어요. 시간 단위를 키우거나 기간을 줄이세요.")
+    return {"values": {"labels": [label(p) for p, *_ in frame], "candles": [{"open": o, "high": h, "low": l, "close": c} for _, o, h, l, c in frame]}}
+
+
+def slot(day, unit):
+    """날짜의 기간 번호(같은 단위의 기간 시작끼리 빼면 몇 기간 떨어졌는지). 주는 모든 기간 시작의 요일이 같아 7일로 나눈 몫의 차가 주 수다."""
+    return {"day": day.toordinal(), "week": day.toordinal() // 7, "month": day.year * 12 + day.month - 1, "year": day.year}[unit]
+
+
+def cohort_data(expr, user, time, unit, window=None):
+    """코호트(유지율) 표: 대상(user)마다 가장 이른 시각(time)이 속한 기간(unit)이 코호트, 그 코호트 대상 중 코호트 기간 이후 n번째 기간에도 활동한 고유 대상의 비율
+    {periods: [0, 1, …], cohorts: [{start, size, retained: [1.0, …]}]}. 코호트 시작은 이른 순이고 retained는 마지막 기간까지(활동이 없는 기간은 0).
+    window({start, end})는 대상의 첫 시각이 start 이후인 대상만 신규로 넣고(기간 앞부터 활동한 대상이 기간 첫 활동만으로 신규가 되지 않게 첫 시각은 기간 없이 구한다), 끝(end) 뒤의 활동은 세지 않는다. 첫 기간부터 마지막 기간까지가 MAX_COHORT기간을 넘으면 ValueError."""
+    for name, what in ((user, "대상 컬럼"), (time, "시각 컬럼")):
+        parse.check_name(name, expr.columns, what)
+    need_date(expr, time, "코호트의 시각")
+    t = expr.filter(expr[user].notnull(), expr[time].notnull(), *([expr[time].cast("date") <= dt.date.fromisoformat(window["end"])] if (window or {}).get("end") else []))
+    seen = t.select(u=t[user], p=stats.local_start(t[time], TRUNC[unit])).distinct()
+    born = seen.group_by("u").aggregate(c=seen.p.min())
+    if (window or {}).get("start"):  # 기간 안에 처음 온 사람만(첫 시각의 날짜로: 기간이 주·달 중간에 시작해도 코호트 기간 시작일로 비교하지 않는다)
+        first = t.group_by(t[user].name("u")).aggregate(f=result.local_time(t[time]).min())
+        born = born.join(first, "u")
+        born = born.filter(born.f.cast("date") >= dt.date.fromisoformat(window["start"]))
+    j = seen.join(born, "u")
+    edge = stats.one(j.aggregate(lo=j.c.min(), hi=j.p.max()))
+    if edge["lo"] is None:
+        return {"values": {"periods": [], "cohorts": []}}
+    first, last = (dt.date.fromisoformat(str(edge[k])[:10]) for k in ("lo", "hi"))
+    span = slot(last, unit) - slot(first, unit) + 1
+    if span > MAX_COHORT:
+        raise ValueError(f"코호트 기간이 {span}개라 {MAX_COHORT}개를 넘어요. 시간 단위를 키우거나 기간을 줄이세요.")
+    cells = {(label(c), label(p)): n for c, p, n in j.group_by(["c", "p"]).aggregate(n=j.u.nunique()).to_polars().rows()}
+    cohorts = []
+    for start in sorted({c for c, _ in cells}):
+        size, begin = cells[(start, start)], slot(dt.date.fromisoformat(start), unit)  # 코호트 기간에는 모든 대상이 활동한 것이다
+        gone = {slot(dt.date.fromisoformat(p), unit) - begin: n for (c, p), n in cells.items() if c == start}
+        cohorts.append({"start": start, "size": size, "retained": [gone.get(k, 0) / size for k in range(slot(last, unit) - begin + 1)]})
+    return {"values": {"periods": list(range(span)), "cohorts": cohorts}}
+
+
+def wordcloud_data(expr, x):
+    """워드클라우드: 컬럼 x의 값(글자로)별 행 수 {words: [{w, n}]}(많은 순, 빈 값·빈 글자 제외). MAX_WORDS개까지만."""
+    parse.check_name(x, expr.columns, "단어 컬럼")
+    t = expr.select(w=expr[x].cast("string"))
+    t = t.filter(t.w.notnull(), t.w != "")
+    found = stats.rows(t.group_by("w").aggregate(n=t.count()).order_by([ibis.desc("n"), "w"]).limit(MAX_WORDS + 1))
+    return {"values": {"words": found[:MAX_WORDS]}, "note": f"단어가 많아 많이 나온 {MAX_WORDS}개만 표시해요." if len(found) > MAX_WORDS else ""}
+
+
+def entry_of(window):
+    """대시보드 보는 기간 {start, end}를 흐름의 첫 단계 날짜 범위 (시작, 끝) date로(analysis_data의 기간 규칙과 같다). 기간이 없으면 None."""
+    if not window or not (window.get("start") or window.get("end")):
+        return None
+    return tuple(dt.date.fromisoformat(window[k]) if window.get(k) else None for k in ("start", "end"))
+
+
+def shape_data(card, ctx):
+    """histogram·boxplot·heatmap·calheat·treemap·sunburst·bump·sankey·cohort·candle·wordcloud(SHAPE_KINDS) 카드의 값. 조회(source.body)에서 쓰는 컬럼만 읽고,
+    대시보드 기간은 period_column의 컬럼에 건다(기간 기준 날짜 source.date, 달력 히트맵·순위·양초는 없으면 X)(생키는 흐름 카드처럼 첫 단계만 기간 안의 사람, 코호트는 기간 안에 시작한 코호트만). 컬럼 규칙은 종류마다 다르다:
+    histogram x=숫자(또는 첫 계열 y), boxplot x=그룹(선택)·y=첫 계열 y, heatmap x=행·split=열·첫 계열, calheat x=날짜·첫 계열, treemap·sunburst x·split(선택)·첫 계열,
+    bump x=날짜·split=대상·첫 계열, candle x=시각·첫 계열 y, wordcloud x=단어, sankey·cohort는 source.analysis(user·step·time·steps)."""
+    kind, src, view = card["kind"], card["source"], card["view"]
+    body, how, window = src["body"], src.get("analysis") or {}, (ctx or {}).get("range")
+    expr = querying.runnable(with_period(body, period_column(card), window), select=False, keep=card_columns(card, ctx), extra=shape_extra(card))
+    unit = view["unit"]
+    works = {"histogram": lambda: histogram_data(expr, body.get("x") or value_of(body), view.get("bins") or stats.BINS),
+             "boxplot": lambda: boxplot_data(expr, body.get("x") or None, value_of(body)),
+             "heatmap": lambda: heatmap_data(expr, body.get("x"), body.get("split"), first_series(body)),
+             "calheat": lambda: calheat_data(expr, body.get("x"), first_series(body)),
+             "treemap": lambda: tree_data(expr, body.get("x"), body.get("split") or None, first_series(body)),
+             "bump": lambda: bump_data(expr, body.get("x"), body.get("split"), first_series(body), unit),
+             "candle": lambda: candle_data(expr, body.get("x"), value_of(body), unit),
+             "wordcloud": lambda: wordcloud_data(expr, body.get("x")),
+             "cohort": lambda: cohort_data(expr, how["user"], how["time"], unit, window),
+             "sankey": lambda: flow_pairs.build(expr, how["user"], how["step"], how["time"], how["steps"], stats.window_seconds(how.get("window")), entry_of(window) if src.get("date") == how["time"] else None)}
+    found = run(works["treemap" if kind == "sunburst" else kind])
+    return found if kind == "cohort" else {**found, "date_cols": date_columns(querying.build(body, select=False))}  # 설정 패널이 기간 기준 날짜를 고를 수 있게(코호트는 조회에 기간을 걸지 않는다)
+
 
 def chart_data(body, window=None):
     """chart 카드의 값. X가 날짜(날짜·시각 컬럼)면 일 값 중심(time_data, window가 있으면 그 날짜 범위만 읽는다), 아니면 항목별(category_data). 쓰는 컬럼만 읽는다."""
@@ -831,7 +1111,7 @@ def definition(card):
     source = card["source"]
     points = {"points": card["view"].get("points")} if card["view"]["type"] in POINT_TYPES else {}
     view = card["view"]
-    keys = ("target", "group", "format") if card["kind"] in VALUE_KINDS else ("group_cols", "template", "blanks", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "bucket") if card["kind"] in TABLE_KINDS else ("geo",) if card["kind"] == "geomap" else ()
+    keys = ("target", "group", "format") if card["kind"] in VALUE_KINDS else ("group_cols", "template", "blanks", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "bucket") if card["kind"] in TABLE_KINDS else ("geo",) if card["kind"] == "geomap" else ("bins", "unit") if card["kind"] in SHAPE_KINDS else ()
     extra = {"view": {k: view[k] for k in keys if k in view}} if keys else {}  # 값에 영향을 주는 설정
     return {"kind": card["kind"], **{k: source[k] for k in ("schema", "table", "body", "recipe", "analysis", "metric_id", "flow_id", "full", "sample", "date") if k in source}, **points, **extra}
 
@@ -842,7 +1122,7 @@ def compute(card, now, ctx=None):
     source = card["source"]
     if source.get("flow_id") and not isinstance(source.get("body"), dict) and not isinstance(source.get("recipe"), dict):
         raise ValueError(FLOW_GONE)
-    if card["kind"] in ("chart", "metric", "recent_rows", "geomap", *VALUE_KINDS, *TABLE_KINDS):
+    if card["kind"] in ("chart", "metric", "recent_rows", "geomap", *VALUE_KINDS, *TABLE_KINDS, *SHAPE_KINDS):
         if not isinstance(source.get("body"), dict):
             raise ValueError("이 카드에는 다시 구할 조회(source.body)가 없어요.")
         body = with_period(source["body"], source.get("date"), (ctx or {}).get("range")) if card["kind"] in ("chart", "metric") else source["body"]
@@ -860,6 +1140,8 @@ def compute(card, now, ctx=None):
             found = watch_data(card, now, (card.get("data") or {}).get("since"))
         elif card["kind"] == "geomap":
             found = geomap_data(card, ctx)
+        elif card["kind"] in SHAPE_KINDS:
+            found = shape_data(card, ctx)
         else:
             found = chart_data(body, fetch_window(ctx)) if card["kind"] == "chart" else metric_data(body)
         if card["kind"] in ("table", "sentence", "deviation"):  # 기간 기준 날짜 컬럼 후보(하나뿐이면 화면이 자동으로 채운다)

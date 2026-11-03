@@ -89,7 +89,6 @@ export const getLiveMin = () => api<LiveMin>("/api/dash/live_min");
 export const setLiveMin = (seconds: number) => api<LiveMin>("/api/dash/live_min", { seconds });
 
 // ---------- 최신화 ----------
-export const startRefresh = () => api<RefreshStatus>("/api/dash/refresh/start", {});
 export const refreshStatus = () => api<RefreshStatus>("/api/dash/refresh/status");
 export const stopRefresh = () => api<RefreshStatus>("/api/dash/refresh/stop", {});
 

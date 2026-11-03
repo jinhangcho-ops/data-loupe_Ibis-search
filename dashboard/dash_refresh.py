@@ -25,7 +25,7 @@ MAX_LIVE_MIN = 86400
 REMOTE_LIVE_MIN = 60  # 최소를 정하지 않은 원격 연결(DB 서버)의 실시간 간격 최소(초): 짧은 간격으로 서버를 두드리지 않게
 GROW = 4 * 1024 * 1024  # 저장소가 이 크기를 넘을 때마다 중간 저장 간격을 FLUSH_SECONDS만큼 늘린다
 FLUSH_SECONDS = 30  # 한 대시보드를 구하는 동안 이만큼 지나면 그때까지 구한 카드를 먼저 저장한다(중간에 꺼져도 다 잃지 않게)
-REFRESHABLE = ("chart", "analysis", "funnel", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation", "geomap")  # 지금 다시 구할 수 있는 카드 종류
+REFRESHABLE = ("chart", "analysis", "funnel", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation", "geomap", "bullet", "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud")  # 지금 다시 구할 수 있는 카드 종류
 JOB = {"running": False, "total": 0, "done": 0, "current": "", "results": []}  # 마지막 최신화 작업의 상태(status가 복사해 준다)
 LOCK = threading.Lock()
 STOP = threading.Event()
@@ -205,6 +205,8 @@ def skip_reason(d, card, key, now):
     every = every_seconds((d.get("refresh") or {}).get("every"), 0, "최신화")
     if card["kind"] not in REFRESHABLE:
         return "아직 다시 구할 수 없는 종류예요"
+    if not (card.get("source") or {}).get("key"):  # 카드 모음에서 막 놓은 빈 틀은 연결이 없다
+        return "데이터를 아직 정하지 않은 카드예요"
     if not use_counts.same_source((card.get("source") or {}).get("key"), key):
         return "다른 연결에서 구한 카드예요"
     done = parse_time((card.get("data") or {}).get("computed_at"))

@@ -175,7 +175,7 @@ assert.deepStrictEqual(funnelRows(steps)[0], { 단계: "a", "사용자 수": 100
 assert.deepStrictEqual(funnelRows(steps)[3], { 단계: "d", "사용자 수": 30, "다음 단계 전환율": "-", "처음 대비": "30.0%", "이탈 수": "-" });
 assert(funnelSentence(steps).includes("가장 많이 빠진 곳은 a → b") && funnelSentence(steps).includes("40명(40.0%)"));
 assert.strictEqual(funnelSentence([{ name: "a", users: 0 }]), "첫 단계에 도달한 사용자가 없어요.");
-assert.strictEqual(windowText({ n: 30, unit: "minute" }), "첫 단계부터 30분 안에 도달한 사람만"); assert.strictEqual(windowText(null), "기간 제한 없음");
+assert.strictEqual(windowText({ n: 30, unit: "minute" }), "앞 단계부터 30분 안에 도달한 사람만"); assert.strictEqual(windowText(null), "기간 제한 없음");
 console.log("ok");
 """
 

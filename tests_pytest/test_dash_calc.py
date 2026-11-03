@@ -146,7 +146,7 @@ def test_other_connection_rejected(db):
     other["source"].update(key="url:postgres://elsewhere:5432/x", label="elsewhere/x")
     assert "다른 연결(elsewhere/x)" in compute(db, card=other)["error"]
     assert "다시 구할 조회" in compute(db, card=card("chart"))["error"]
-    assert "흐름 카드" in compute(db, card=card("funnel"))["error"]  # 다시 구할 분석이 없는 흐름 카드
+    assert "다시 구할 분석" in compute(db, card=card("funnel"))["error"]  # 빈 틀 흐름 카드는 저장되고(카드 모음), 다시 구할 때 거절
 
 
 def test_compute_analysis_card(db):

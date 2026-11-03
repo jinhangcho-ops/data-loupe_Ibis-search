@@ -6,6 +6,7 @@ PC 안에서 계산하는 연결(DuckDB 파일, Parquet·CSV 등 파일)은 받�
 데이터를 읽는 함수는 server.run으로 연결 스레드에서 부른다."""
 import collections
 import contextlib
+import json
 from pathlib import Path
 
 from lazy import ibis
@@ -60,6 +61,28 @@ def forget(key):
     item = store["items"].pop(key, None)
     if item and item[0]:
         drop(item[0])
+
+
+def in_table(key, prefix):
+    """열쇠가 그 테이블(prefix = '연결|스키마|테이블', 전처리 table_key의 앞부분)의 것인지. 전처리 사본 ("prep", 테이블 열쇠, …),
+    querying.held_key의 JSON [연결, 종류, 가상 테이블, {schema, base|table, …}], 전처리 표본의 테이블 열쇠 글자를 읽는다. 모르는 열쇠는 아니다."""
+    if isinstance(key, tuple):
+        key = key[1] if len(key) > 1 else ""
+    elif isinstance(key, str) and key.startswith("["):
+        try:
+            con, _, _, what = json.loads(key)
+            key = "|".join([con, what.get("schema") or "", what.get("base") or what.get("table") or ""])
+        except (TypeError, ValueError, AttributeError):
+            return False
+    return isinstance(key, str) and (key == prefix or key.startswith(prefix + "|"))
+
+
+def forget_table(prefix):
+    """그 테이블을 읽은 받아 둔 결과·서버 결과 기억을 지운다(화면이 테이블을 바꿀 때, F01). 다른 테이블의 것은 둔다. 연결 스레드에서 부른다."""
+    for key in [k for k in store["items"] if in_table(k, prefix)]:
+        forget(key)
+    for key in [k for k in store["jobs"] if in_table(k, prefix)]:
+        store["jobs"].pop(key)
 
 
 RENEWED = [None]  # 차례를 잡은 새로고침·Slack 명령이 이미 새로 받은 사본의 열쇠들(그 밖이면 None: 새로 받지 않는다)

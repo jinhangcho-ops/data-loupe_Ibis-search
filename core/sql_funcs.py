@@ -18,6 +18,7 @@ from lazy import Later, ibis
 from core import parse
 
 geo_funcs = Later("geo.funcs")  # 좌표 함수의 식은 geo 패키지가 만든다(좌표 함수를 처음 쓸 때 올라온다)
+prep_ops = Later("core.prep_ops")  # 글자 모두 바꾸기(replace_all). prep_ops가 이 모듈을 부르므로 늦게
 
 CATEGORIES = [("aggregate", "집계"), ("window", "창 함수"), ("text", "글자"), ("number", "숫자"), ("date", "날짜"), ("cond", "조건"),
               ("cast", "형 변환"), ("struct", "구조"), ("geo", "좌표"), ("group", "묶음")]
@@ -509,12 +510,12 @@ row("substr", "text", "일부 자르기", "시작 위치(1부터)부터 길이�
 row("left", "text", "앞 N글자", "앞에서 N글자.", [T1, num("n", "글자 수", 3, kind="int")], lambda c: c.x.left(c.n), "left(이름, 3)", TXT, TXT)
 row("right", "text", "뒤 N글자", "뒤에서 N글자.", [T1, num("n", "글자 수", 3, kind="int")], lambda c: c.x.right(c.n), "right(이름, 3)", TXT, TXT)
 row("replace", "text", "바꾸기", "글자를 다른 글자로 바꿔요.", [T1, text("find", "찾을 글자", "a"), text("to", "바꿀 글자", "", True)],
-    lambda c: c.x.replace(c.find, c.to or ""), "replace(이름, 'a', 'b')", TXT, TXT)
+    lambda c: prep_ops.replace_all(c.t, c.x, c.find, c.to or ""), "replace(이름, 'a', 'b')", TXT, TXT)  # 모두 바꾼다(Polars의 replace는 첫 것만)
 row("regex_contains", "text", "패턴 포함", "정규식 패턴이 들어 있으면 참.", [T1, text("pattern", "패턴", "^a")], lambda c: c.x.re_search(c.pattern), "regex_contains(이름, '^a')", TXT, BOOL)
 row("regex_extract", "text", "패턴에서 꺼내기", "정규식에 맞는 부분(그룹 N, 0이면 전체). 맞는 것이 없으면 빈 값. \\w는 DuckDB·DB에서는 영문·숫자·_만, 파일(Polars)에서는 한글 같은 글자도 포함해 달라요(한글은 [가-힣]로 쓰세요).", [T1, text("pattern", "패턴", "(\\d+)"), num("group_no", "그룹 번호", 1, kind="int")],
     lambda c: c.x.re_extract(c.pattern, c.group_no).nullif(""), "regex_extract(이름, '(\\d+)', 1)", TXT, TXT)
 row("regex_replace", "text", "패턴 바꾸기", "정규식에 맞는 부분을 바꿔요. \\w는 DuckDB·DB에서는 영문·숫자·_만, 파일(Polars)에서는 한글 같은 글자도 포함해 달라요(한글은 [가-힣]로 쓰세요).", [T1, text("pattern", "패턴", "\\s+"), text("to", "바꿀 글자", " ")],
-    lambda c: c.x.re_replace(c.pattern, c.to or ""), "regex_replace(이름, '\\s+', ' ')", TXT, TXT)
+    lambda c: prep_ops.re_replace(c.t, c.x, c.pattern, c.to or ""), "regex_replace(이름, '\\s+', ' ')", TXT, TXT)  # \1·$가 Polars에서도 DuckDB와 같게
 row("split", "text", "나누기(목록)", "구분자로 나눠 목록으로.", [T1, text("sep", "구분자", ",")], lambda c: c.x.split(c.sep), "split(태그, ',')", TXT, "array")
 row("split_part", "text", "나눈 N번째", "구분자로 나눈 N번째 조각(1부터).", [T1, text("sep", "구분자", ","), num("n", "N번째", 1, kind="int")],
     lambda c: c.x.split(c.sep)[not_zero(c.n, "N번째") - 1], "split_part(태그, ',', 1)", TXT, TXT)

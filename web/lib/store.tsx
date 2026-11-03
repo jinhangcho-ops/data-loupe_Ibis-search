@@ -3,7 +3,7 @@
 // picked는 그림으로 저장할 카드들(여러 개, 옛 board.picked), selected는 카드 설정 패널을 여는 카드 하나. error는 아래 알림 줄의 글이고 ok면 성공 안내(보통 색, 옛 say(…, true)).
 // 자동 저장·되돌리기(N6)는 useActionLog로 모든 액션을 받아 붙인다. 대시보드 열기는 화면 틀(components/shell/ShellProvider의 open) 한 곳에서 한다. 카드·이름·설정을 바꾸는 액션은 dirty를 켜고 saved가 끈다.
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { Card, ComputeResult, Ctx, DashList, DashSummary, Dashboard } from "./types";
+import type { Card, CardData, ComputeResult, Ctx, DashList, DashSummary, Dashboard } from "./types";
 
 export type DashState = {
   list: DashSummary[];
@@ -34,6 +34,16 @@ export type Action =
   | { type: "saved"; dash?: Dashboard }                        // 저장 끝: dirty 끔(서버가 돌려준 모양이 있으면 data는 화면 것을 유지하고 나머지를 맞춘다)
   | { type: "error"; message: string }
   | { type: "notice"; message: string };                     // 성공 안내(옛 say(…, true))
+
+/** 다시 구한 값을 넣는 방법(화면 틀 [다시 구하기]·카드 패널·도구가 함께 쓴다): 기간이 걸려 있으면 저장 값(card.data, 기간 없이 구한 값)은 두고 화면 값(values)에만,
+ *  아니면 카드에 저장하고 화면 값은 비운다. patch는 함께 바꿀 카드 칸(source·view 등, 기간과 상관없이 저장). 돌려주는 것: 카드 patch와 values 결과 하나.
+ *  plain: 기간이 걸린 채 카드 정의가 바뀌었을 때 기간 없이 따로 구한 값(저장 값도 새 정의로 바꿔 기간을 지웠을 때 정의와 값이 어긋나지 않게) */
+export function computedUpdate(id: string, data: CardData | undefined, ctx: Ctx | null, patch: Partial<Card> = {}, plain?: CardData): { patch: Partial<Card>; result: ComputeResult } {
+  if (!ctx?.range) return { patch: { ...patch, data }, result: { id } };
+  return { patch: plain ? { ...patch, data: plain } : patch, result: { id, data } };
+}
+/** 기간을 뺀 ctx(저장할 값을 구할 때): 보는 기간·직전 기간만 뺀다 */
+export const plainCtx = (ctx: Ctx | null): Ctx | null => (ctx ? { ...ctx, range: undefined, prev: null } : ctx);
 
 export const initialState: DashState = { list: [], locked: false, last: "", dash: null, values: {}, selected: null, picked: [], editing: false, ctx: null, dirty: false, error: "", ok: false };
 

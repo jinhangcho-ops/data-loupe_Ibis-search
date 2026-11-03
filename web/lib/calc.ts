@@ -1,10 +1,12 @@
-// 대시보드의 순수 계산: static/core/lib/{dash_calc,dash_grid,dash_rules,dash_svg}.js를 TS로 옮긴 사본. 함수 본문은 그대로 두고 타입만 붙였다.
-// 옛 화면(static/dashboard)이 사라지면 원본 lib도 지운다(그때까지 원본을 고치면 여기도 같이 고친다 — 두 벌인 동안의 약속).
-import type { Card, CondRule, DaySeries, Layout, PrevSpan } from "./types";
+// 대시보드의 순수 계산: 옛 static/core/lib/{dash_calc,dash_grid,dash_rules,dash_svg}.js에서 옮겨 온 한 벌(원본 JS는 모두 지웠다). 서버 dashboard/dash_calc.py와 규칙을 맞춘다.
+import type { Card, CondRule, DaySeries, Layout, PrevSpan, StateRule } from "./types";
 
 // ======================= lib/dash_calc.js =======================
 // 숫자는 자릿수 쉼표와 소수 넷째 자리까지
-export const shownum = (v: unknown) => v == null ? "" : typeof v === "number" ? v.toLocaleString(undefined, { maximumFractionDigits: 4 }) : String(v);
+/** 소수 d자리까지 쉼표 형식(Intl.NumberFormat은 만들 때 비싸서 자리 수마다 한 번만) */
+const FORMATS = new Map<number, Intl.NumberFormat>();
+export const decimals = (d: number) => FORMATS.get(d) ?? FORMATS.set(d, new Intl.NumberFormat(undefined, { maximumFractionDigits: d })).get(d)!;
+export const shownum = (v: unknown) => v == null ? "" : typeof v === "number" ? decimals(4).format(v) : String(v);
 // HEX 색 검사(#rgb, #rrggbb)와 3자리 → 6자리
 export const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 export const hex6 = (c: string) => c.length === 4 ? "#" + [...c.slice(1)].map(h => h + h).join("") : c;
@@ -18,8 +20,11 @@ export function alpha(color: string, a: number) {
 // ---------- 색 ----------
 // 라벨의 번호: 카드가 그 라벨을 처음 본 차례(order). 새 라벨은 뒤에 붙여 카드에 남기므로 다시 구한 뒤에도 같은 라벨은 같은 번호(같은 색)다.
 // 서버가 order를 200개까지만 받으므로(core/dash_store.py) 그 이상은 붙이지 않고 같은 번호(200)를 쓴다 — 색은 팔레트·기본 색을 돌려 쓴다.
-export const MAX_ORDER = 200;
-export const labelIndex = (order: string[], name: string) => { const i = order.indexOf(name); return i >= 0 ? i : order.length >= MAX_ORDER ? MAX_ORDER : order.push(name) - 1; };
+// 서버 check_colors가 받는 이름(1~100자, 앞뒤 공백 없음)이 아니면 붙이지 않고 같은 번호(200)를 쓴다(이름 하나 때문에 대시보드 저장 전체가 거부되지 않게).
+export const MAX_ORDER = 200, MAX_LABEL = 100;
+/** 색 순서·색 칸에 쓸 수 있는 이름인가(서버 check_colors: 1~100자, 앞뒤 공백 없음) */
+export const okLabel = (name: string) => name.length >= 1 && name.length <= MAX_LABEL && name === name.trim();
+export const labelIndex = (order: string[], name: string) => { const i = order.indexOf(name); return i >= 0 ? i : order.length >= MAX_ORDER || !okLabel(name) ? MAX_ORDER : order.push(name) - 1; };
 
 // ---------- 카드의 값 → 그릴 모양 ----------
 // 일(YYYY-MM-DD)이 속한 주의 월요일, 월의 1일, 연의 1월 1일. 서버(analysis.trend의 주)와 같다.
@@ -273,6 +278,10 @@ export function templateParts(template: unknown): ({ text: string; blank?: undef
 }
 // 규칙 하나 → 편집 칸의 한 줄 글(parseRuleLine의 반대)
 const ARROW_NAMES: Record<string, string> = { none: "없음", up: "위", down: "아래", auto: "자동" };
+/** 상태 규칙 하나 → 한 줄 글(parseStateLine의 반대) */
+export const stateLine = (r: StateRule) => `${r.column} ${r.op} ${r.value} ${r.level === "bad" ? "이상" : "주의"}`;
+/** 연결선 하나 → `출발 -> 도착`(parseLinkLine의 반대) */
+export const linkLine = (l: [string, string]) => `${l[0]} -> ${l[1]}`;
 export const ruleLine = (r: CondRule) => [r.column, r.match, r.color, ARROW_NAMES[r.arrow] ?? "없음", r.scope === "row" ? "줄" : "칸"].join(" | ");
 
 // ======================= lib/dash_svg.js =======================
@@ -358,7 +367,7 @@ export function showValue(v: unknown, format = "number", unit = "") {
 // compare.trimmed와 같은 규칙: 절댓값을 d자리에서 5를 올려 반올림(2.5 → 3), 쉼표, 끝의 0을 떼고, -0은 0. prefix(₩)는 부호 뒤에.
 export function roundText(x: number, d: number, prefix = "") {
   const a = Math.abs(x), s = String(a), r = s.includes("e") ? +a.toFixed(d) : Math.round(+`${s}e${d}`) / 10 ** d;  // 10진 글자 그대로 반올림(1.005 → 1.01, toFixed는 1.00)
-  return (x < 0 && r ? "-" : "") + prefix + r.toLocaleString(undefined, { maximumFractionDigits: d });
+  return (x < 0 && r ? "-" : "") + prefix + decimals(d).format(r);
 }
 // 목표와의 차이 글자: percent는 %p, 그 밖은 값 모양대로
 export const showGap = (v: number, format?: string) => format === "percent" ? `${+(Math.abs(v) * 100).toFixed(1)}%p` : showValue(Math.abs(v), format);

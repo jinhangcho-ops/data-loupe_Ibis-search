@@ -6,19 +6,25 @@ import { useMemo, useState } from "react";
 import { CHART_KINDS } from "@/components/cards/ChartCard";
 import { seriesKit } from "@/components/cards/chart/series";
 import { useTheme } from "@/components/cards/svg/common";
+import { funnelColors } from "@/components/cards/svg/__pure__";
 import { cardRequest, chartPoints, computeCard } from "@/lib/api";
 import { HEX } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { pickColor } from "@/lib/series";
-import { useDash } from "@/lib/store";
+import { computedUpdate, useDash } from "@/lib/store";
 import type { Card, CardData, CardView, ChartType } from "@/lib/types";
 import { RulesEditor } from "../RulesEditor";
-import { WATCH } from "../menu/kinds";
+import { DATE_X, WATCH } from "../menu/kinds";
+import { parseBands } from "../menu/build";
+import { ROUND_TYPES } from "@/components/cards/chart/shapes";
 
 const FORMATS: [string, string][] = [["number", "숫자"], ["percent", "%"], ["currency", "₩"]];
 // 목표·값 모양이 없는 SVG 카드(옛 svgTools plain)
 const RINGS: [string, string][] = [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리와 목표 눈금"]];
-const PLAIN = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap"];
+const PLAIN = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap",
+  "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud"];
+// P16 KPI 아이콘(svg/common Icon)·P15 큰 값 맞춤·추이선 자리, P14 겹친 도넛을 쓸 수 있는 차트 종류
+const ICONS: [string, string][] = [["chart", "막대"], ["up", "오름"], ["user", "사람"], ["cart", "장바구니"], ["coin", "동전"], ["clock", "시계"]];
 
 export function Tools({ card, columns, onChange }: { card: Card; columns: string[]; onChange: (patch: Partial<Card>) => void }) {
   const consts = useConstants();
@@ -46,17 +52,18 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     const { points } = await chartPoints({ ...body, y: body.series?.[0]?.y, size: v.type === "bubble" ? v.points?.size ?? "" : "", source_key: card.source.key, date: card.source.date, ctx: state.ctx });
     putPoints(next, points);
   };
-  const tryPoints = (next: Partial<CardView>) => loadPoints(next).then(() => setMsg(""), e => setMsg((e as Error).message));
+  const tryPoints = (next: Partial<CardView>, ok = "") => loadPoints(next).then(() => setMsg(ok), e => setMsg((e as Error).message));  // ok: 바꾼 뒤 보일 안내(첫 계열만 그림 등)
   const typeBtn = ([id, name]: [string, string]) => {
     const why = kit.typeReason(shown, id as Exclude<ChartType, "">);
     return (
       <button key={id} type="button" className={`btype${view.type === id ? " on" : ""}${why ? " off" : ""}`} aria-pressed={view.type === id} onClick={() => {
         if (why) return setMsg(why);
-        tryPoints({ type: view.type === id ? "" : (id as CardView["type"]) });  // 한 번 더 누르면 계열마다 정한 대로
+        const next = view.type === id ? "" : (id as CardView["type"]);  // 한 번 더 누르면 계열마다 정한 대로
+        tryPoints({ type: next }, next ? kit.typeNote(shown, next) : "");
       }}>{name}</button>
     );
   };
-  const unitText = card.kind === "kpi" || card.kind === "donut_kpi" || card.kind === "stripes";
+  const unitText = ["kpi", "donut_kpi", "stripes", "bullet", "calheat"].includes(card.kind);
   const hasRules = card.kind === "table" || card.kind === "sentence" || WATCH.includes(card.kind);
   const withTarget = !CHART_KINDS.includes(card.kind) && !PLAIN.includes(card.kind);
   const target = view.target as { value?: number; name?: string } | undefined, targetErr = (card.data?.target as { error?: string } | undefined)?.error;
@@ -66,12 +73,12 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     onChange({ view: { ...view, target: { value: +raw } }, data: { ...card.data, target: { value: +raw, label: "", error: "" } } });
   };
   // 종류별 칸(옛 svgTools): 숫자 칸은 비우면 지우고, 칸 수·행 수는 서버 범위(1~100)로 맞춘다
-  const num = (key: "cells" | "full" | "size" | "rows", label: string, width: number, min?: number, max?: number) => (
+  const num = (key: "cells" | "full" | "size" | "rows" | "bins", label: string, width: number, min?: number, max?: number) => (
     <label className="hint bset">{label}
       <input type="number" aria-label={label} min={min} max={max} step={min === 1 ? 1 : undefined} style={{ width }} key={String(view[key] ?? "")} defaultValue={view[key] ?? ""}
         onBlur={e => {
           if (e.target.value === "") { if (view[key] == null) return; const rest = { ...view }; delete rest[key]; return onChange({ view: rest }); }
-          const v = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, +e.target.value));
+          const v = Math.min(max ?? Infinity, Math.max(min ?? -Infinity, min === 1 ? Math.round(+e.target.value) : +e.target.value));  // 칸 수·행 수·구간 수는 정수
           if (v !== view[key]) setView({ [key]: v });
         }} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />
     </label>
@@ -95,22 +102,50 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     stripes: <>{num("cells", "칸 수", 50, 1, 100)}{num("full", "가득 찬 값", 80)}</>,
     blocks: num("size", "한 칸 크기", 80),
     recent_rows: num("rows", "행 수", 50, 1, 100),
+    histogram: <>{num("bins", "구간 수", 50, 1, consts.dash.max_bins ?? 100)}<span className="hint">바꾸면 [다시 구하기]를 누르세요. 새 구간으로 다시 구해요.</span></>,
+    bullet: (
+      <label className="hint bset">구간
+        <input aria-label="구간" placeholder="예: 50, 80, 100" title="바탕 띠의 경계 값. 작은 것부터 쉼표로 1~6개, 비우면 띠 없음" style={{ width: 120 }} key={(view.bands ?? []).join(",")} defaultValue={(view.bands ?? []).join(", ")}
+          onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} onBlur={e => {
+            if (!e.target.value.trim()) { if (!view.bands) return; const rest = { ...view }; delete rest.bands; return onChange({ view: rest }); }
+            try { const bands = parseBands(e.target.value, consts.dash.max_bands); setMsg(""); if (bands.join() !== (view.bands ?? []).join()) setView({ bands }); } catch (err) { setMsg((err as Error).message); }
+          }} />
+      </label>
+    ),
+    kpi: (<>
+      <select className="bunit" style={{ flexBasis: "auto" }} aria-label="아이콘" title="큰 값 옆 아이콘" value={view.icon ?? "chart"} onChange={e => setView({ icon: e.target.value as CardView["icon"] })}>
+        {ICONS.map(([v, n]) => <option key={v} value={v}>아이콘: {n}</option>)}
+      </select>
+      <select className="bunit" style={{ flexBasis: "auto" }} aria-label="큰 값 크기" value={view.fit ?? "center"} onChange={e => setView({ fit: e.target.value as CardView["fit"] })}>
+        <option value="center">가운데</option><option value="fill">꽉 채우기</option>
+      </select>
+      <select className="bunit" style={{ flexBasis: "auto" }} aria-label="추이선 자리" value={view.layout ?? "below"} onChange={e => setView({ layout: e.target.value as CardView["layout"] })}>
+        <option value="below">추이선 아래</option><option value="right">추이선 오른쪽</option>
+      </select>
+    </>),
   }[card.kind as string] ?? null;
+  // 순위·캔들·코호트는 기간 단위를 다시 고를 수 있다(서버가 그 단위로 다시 구한다)
+  const unitSel = ["bump", "candle", "cohort"].includes(card.kind) && (
+    <select className="bunit" style={{ flexBasis: "auto" }} aria-label="기간 단위" title="바꾸면 [다시 구하기]로 그 단위의 값을 구해요" value={view.unit || "month"} onChange={e => setView({ unit: e.target.value as CardView["unit"] })}>
+      {Object.entries(consts.dash.units).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+    </select>
+  );
   // 날짜 X축이 아닌 카드에 대시보드의 기간·기준일을 걸 날짜 컬럼(옛 dateSelect). 고르면 그 기간으로 다시 구한다
   const dateCols = shown.data?.date_cols ?? [];
   const setDate = async (value: string) => {
     const source = { ...card.source }, was = card.source.date;
     if (value) source.date = value; else delete source.date;
-    if (!value) return onChange({ source });
-    try {
+    try {  // 비울 때도 다시 구한다(기간을 걸지 않은 값으로)
       const r = await computeCard(cardRequest({ ...card, source, data: {} }), state.ctx);
       setMsg("");
-      onChange({ source: { ...source, ...r.source }, data: r.data });
-    } catch (e) { setMsg(`${(e as Error).message}${was ? "" : " 기간 기준 날짜는 그대로예요."}`); }
+      const u = computedUpdate(card.id, r.data, state.ctx, { source: { ...source, ...r.source } });  // 기간이 걸려 있으면 화면 값에
+      onChange(u.patch);
+      dispatch({ type: "values", results: [u.result] });
+    } catch (e) { setMsg(`${(e as Error).message} 기간 기준 날짜는 ${was ? `그대로(${was})` : "그대로(없음)"}예요.`); }
   };
-  const dateSel = dateCols.length > 0 && (
+  const dateSel = dateCols.length > 0 && card.kind !== "sankey" && card.kind !== "cohort" && (
     <select className="bunit" style={{ flexBasis: "auto" }} aria-label="기간 기준 날짜" title="대시보드 기간과 기준일을 이 날짜 컬럼에 걸어 다시 구해요" value={card.source.date ?? ""} onChange={e => setDate(e.target.value)}>
-      <option value="">기간 기준: 없음</option>
+      <option value="">{DATE_X.includes(card.kind) ? `기간 기준: 가로축 날짜${card.source.body?.x ? ` (${String(card.source.body.x)})` : ""}` : "기간 기준: 없음"}</option>{/* 날짜가 가로축이면 비워도 서버가 가로축 날짜에 건다 */}
       {dateCols.map(c => <option key={c} value={c}>기간 기준: {c}</option>)}
     </select>
   );
@@ -128,6 +163,9 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
           {pointy && ([["trend", "추세선"], ["show_r", "r"]] as const).map(([k, name]) => (
             <button key={k} type="button" className={`btype${view[k] ? " on" : ""}`} aria-pressed={!!view[k]} title={k === "show_r" ? "상관계수 r 보이기" : "추세선 보이기"} onClick={() => setView({ [k]: !view[k] })}>{name}</button>
           ))}
+          {ROUND_TYPES.includes(view.type) && (
+            <button type="button" className={`btype${view.rings ? " on" : ""}`} aria-pressed={!!view.rings} title="계열마다 고리 하나씩 겹쳐 그려요(안쪽이 첫 계열)" onClick={() => setView({ rings: !view.rings })}>겹친 고리</button>
+          )}
           {!byUnit && dateSel}
           {byUnit && (
             <select className="bunit" aria-label="시간 단위" title="시간 단위. 일 값을 묶어서 다시 그려요" value={view.unit || "day"} onChange={e => setView({ unit: e.target.value as CardView["unit"] })}>
@@ -145,12 +183,13 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
             </label>
           ))}
           {dateSel}
-          {(!PLAIN.includes(card.kind) || card.kind === "geomap") && (
+          {(!PLAIN.includes(card.kind) || card.kind === "geomap" || card.kind === "calheat") && (
             <select className="bunit" aria-label="표시 형식" value={view.format ?? "number"} onChange={e => setView({ format: e.target.value as CardView["format"] })}>
               {FORMATS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
             </select>
           )}
           {kindFields}
+          {unitSel}
           {unitText && <input aria-label="단위" placeholder="단위" maxLength={10} style={{ width: 80, height: 24, fontSize: 12 }} value={view.unit_text ?? ""} onChange={e => setView({ unit_text: e.target.value })} />}
         </div>
       )}
@@ -184,7 +223,8 @@ function ColorEditor({ card, shown, theme, palette, kit, onChange }: { card: Car
     <div className="bcolors">
       {names.map((name, i) => {
         // 지도 카드: 정하지 않은 영역은 모두 바탕 색(값에 따라 진하기만 다름)
-        const now = card.kind === "geomap" && !card.colors?.[group]?.[name] ? (card.view.geo?.color as string | undefined) ?? colors.palette?.[0] ?? colors.series[0] : pickColor(shown, group, name, colors, i);
+        const now = card.kind === "geomap" && !card.colors?.[group]?.[name] ? (card.view.geo?.color as string | undefined) ?? colors.palette?.[0] ?? colors.series[0]
+          : card.kind === "funnel" ? funnelColors(card, colors.palette)[name] : pickColor(shown, group, name, colors, i);  // 퍼널은 그림과 같은 고정 색
         return (
           <div className="brow" key={name + now}>
             <i className="swatch" style={{ background: now }} />
@@ -200,7 +240,7 @@ function ColorEditor({ card, shown, theme, palette, kit, onChange }: { card: Car
           </div>
         );
       })}
-      <button type="button" className="ghost" title="이 카드에서 따로 정한 색을 지우고 대시보드 색으로 돌아가요" onClick={() => onChange({ colors: { ...card.colors, series: {}, parts: {} } })}>지정 색 지우기</button>
+      <button type="button" className="ghost" title="이 카드에서 따로 정한 색을 지우고 대시보드 색으로 돌아가요" onClick={() => onChange({ colors: { ...card.colors, series: {}, parts: {}, order: [], parts_order: [] } })}>지정 색 지우기</button>
     </div>
   );
 }

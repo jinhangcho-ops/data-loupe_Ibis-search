@@ -1,7 +1,8 @@
 // 카드의 값 → 그릴 모양: 옛 static/core/dash.js의 함수들(본문 그대로, 타입만). 색 고르기·기간 비교 값·계열 이름은 lib/series.ts 한 벌을 쓴다.
 // 옛 코드가 전역 SERVER에서 읽던 집계 이름(agg_names)·다시 묶을 수 있는 집계(merge)·차트 종류(dash.types·time_types)는 seriesKit(서버 상수)로 받는다.
-import { anaView, BUCKET, isPoints, pointGroups, rollup } from "@/lib/calc";
-import type { Card, ChartType, Constants, DaySeries, UnitSection } from "@/lib/types";
+import { anaView, BUCKET, isPoints, okLabel, pointGroups, rollup } from "@/lib/calc";
+import type { Card, ChartType, Constants, DaySeries, MoreValues, UnitSection } from "@/lib/types";
+import { FIRST_ONLY, PAIR_ONLY, ROUND_TYPES } from "./shapes";
 
 export type Dataset = { label: string; values: (number | string | null)[]; type?: "bar" | "line"; dash?: string; axis?: string };
 /** 그릴 모양: 라벨, 계열, 날짜 X축인지, 종류를 바꿀 수 있는지 */
@@ -14,6 +15,8 @@ export type ThemeColors = { palette?: string[]; series: string[] };
 type ByUnit = { day: { labels: string[]; series: DaySeries[] } } & Record<string, unknown>;
 type Server = Pick<Constants, "agg_names" | "merge"> & { dash: Pick<Constants["dash"], "types" | "time_types"> };
 
+/** 색 하나(주 색)로 그리는 새 카드 */
+const ONE_COLOR: string[] = ["histogram", "boxplot", "heatmap", "calheat", "cohort", "candle", "bullet"];
 /** 날짜 X축 시간 단위의 이름(축 제목) */
 export const UNIT_NAMES: Record<string, string> = { day: "일", week: "주", month: "월" };
 
@@ -59,19 +62,38 @@ export function seriesKit(server: Server) {
     }
     if (s.time && !server.dash.time_types.includes(type)) return `날짜 X축 그림에는 ${server.dash.time_types.map(t => names[t as keyof typeof names]).join("·")}만 쓸 수 있어요.`;
     if (type === "stacked" && s.datasets.length < 2) return "누적 막대는 계열이 2개 이상일 때만 쓸 수 있어요.";
+    if (["stack100", "hstack", "hstack100", "sarea100", "combo", "range", "butterfly"].includes(type) && s.datasets.length < 2) return `${names[type] ?? type}은(는) 계열이 2개 이상일 때만 쓸 수 있어요.`;
     return "";
+  }
+  // 고를 수는 있지만 계열 일부만 그리는 종류의 안내(빈 글자면 모두 그린다): 첫 계열만(둥근 차트는 [겹친 고리]를 켜면 계열마다 링이라 안내 없음), 나비형·범위 막대는 앞 2계열만
+  function typeNote(card: SCard, type: Exclude<ChartType, "">) {
+    const s = cardSeries(card), round = ROUND_TYPES.includes(type), name = server.dash.types[type] ?? type;
+    if (s && PAIR_ONLY.includes(type) && s.datasets.length > 2) return `${name}은(는) 앞 2계열(${s.datasets[0].label}, ${s.datasets[1].label})만 그려요. 나머지 ${s.datasets.length - 2}개는 빼요.`;
+    if (!s || s.datasets.length < 2 || !(round || FIRST_ONLY.includes(type)) || (round && card.view.rings)) return "";
+    return `${name}은(는) 첫 계열(${s.datasets[0].label})만 그려요. 나머지 ${s.datasets.length - 1}개는 빼요.${round ? " 모두 보려면 [겹친 고리]를 켜세요." : ""}`;
   }
   // 분석의 원래 그림(anaConfig)을 쓰는 카드인지(종류를 정하지 않았거나 바꿀 수 없는 분석 그림)
   const usesAna = (card: SCard) => card.kind === "analysis" && !!card.data?.values && (!card.view.type || !cardSeries(card)!.chartable);
-  // 색을 고를 수 있는 이름들: 분석 그림은 주 색·보조 색, 도넛·파이는 조각 이름, 나머지는 계열 이름
+  // 색을 고를 수 있는 이름들: 분석 그림은 주 색·보조 색, 도넛·파이는 조각 이름, 나머지는 계열 이름.
+  // P14 새 카드: 값 하나짜리는 주 색, 트리맵·선버스트는 첫 단계 이름, 생키는 노드 이름, 워드클라우드는 많이 나온 단어(30개까지)
+  // 색 칸·색 순서에 쓰는 이름은 서버가 받는 것만(calc.okLabel)
   function colorNames(card: SCard): { group: "series" | "parts"; names: string[] } {
+    const r = allNames(card);
+    return { ...r, names: r.names.filter(okLabel) };
+  }
+  function allNames(card: SCard): { group: "series" | "parts"; names: string[] } {
     if (card.kind === "geomap") return { group: "parts", names: ((card.data?.values?.regions ?? []) as { name: string }[]).map(r => r.name).slice(0, 30) };
     if (card.kind === "funnel") return { group: "series", names: ["단계 막대", "다음 단계", "이탈"] };
+    if (ONE_COLOR.includes(card.kind)) return { group: "series", names: ["주 색"] };
+    const more = (card.data?.values ?? {}) as MoreValues;
+    if (card.kind === "treemap" || card.kind === "sunburst") return { group: "series", names: (more.items ?? []).map(i => i.name).slice(0, 30) };
+    if (card.kind === "sankey") return { group: "series", names: (more.nodes ?? []).map(n => n.name).slice(0, 30) };
+    if (card.kind === "wordcloud") return { group: "series", names: [...(more.words ?? [])].sort((a, b) => b.n - a.n).slice(0, 30).map(w => w.w) };
     const s = cardSeries(card);
     if (usesAna(card)) return { group: "series", names: ["주 색", "보조 색"] };
     if (!s) return { group: "series", names: [] };
-    return ["doughnut", "pie"].includes(card.view.type) ? { group: "parts", names: s.labels } : { group: "series", names: s.datasets.map(d => d.label) };
+    return ROUND_TYPES.includes(card.view.type) ? { group: "parts", names: s.labels } : { group: "series", names: s.datasets.map(d => d.label) };
   }
-  return { aggName, byUnit, cardSeries, typeReason, usesAna, colorNames };
+  return { aggName, byUnit, cardSeries, typeReason, typeNote, usesAna, colorNames };
 }
 export type SeriesKit = ReturnType<typeof seriesKit>;
