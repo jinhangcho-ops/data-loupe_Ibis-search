@@ -70,7 +70,7 @@ def test_last_table_is_remembered_and_restored():
 @pytest.mark.skipif(EDGE is None or shutil.which("node") is None, reason="Edge가 없다")
 def test_no_small_targets_headless(tmp_path):
     """홈·쿼리·분석·수집·연동을 헤드리스로 열어 보이는 단추·입력·라벨 중 24px 미만이 없다(체크·라디오 자체는 16px이고 감싼 라벨이 24px 이상이면 통과). JS 오류도 0."""
-    import websocket
+    websocket = pytest.importorskip("websocket")  # websocket-client는 로컬 전용(CI에는 없음)
     from werkzeug.serving import make_server
     from core import server
     from query.search_app import app
