@@ -15,10 +15,12 @@
 .stabs { display:flex; gap:4px; margin-bottom:10px; border-bottom:1px solid var(--line); }
 .stabs .tab { background:none; border:0; border-bottom:2px solid transparent; border-radius:0; color:var(--muted); padding:8px 14px; }
 .stabs .tab.on { color:var(--accent); border-bottom-color:var(--accent); }
-.sgrid { display:grid; grid-template-columns:230px minmax(0, 1fr); gap:16px; align-items:start; }
+.sgrid { display:grid; grid-template-columns:340px minmax(0, 1fr); gap:16px; align-items:start; }
 .sleft { display:flex; flex-direction:column; gap:4px; max-height:72vh; overflow:auto; }
 .stpl { display:flex; flex-direction:column; gap:4px; }
 .tpl { text-align:left; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:9px; padding:5px 10px; font-weight:500; white-space:normal; }
+.sgroup > summary { cursor:pointer; font-weight:600; padding:4px 2px; color:var(--muted); }
+.sgroup > .tpl { display:block; width:100%; margin-top:4px; }
 .tpl:hover { border-color:var(--accent); }
 .tpl b { color:var(--accent); margin-right:4px; }
 .sright { min-width:0; display:flex; flex-direction:column; gap:10px; }
@@ -53,7 +55,8 @@
 .sissue.bad { color:var(--err); } .sissue.warn { color:var(--warn); } .sissue.info { color:var(--muted); }
 .sresult { margin-top:8px; }
 .stext-result { font-weight:600; margin-bottom:6px; }
-.schart { position:relative; height:300px; margin-top:8px; }
+.schart { position:relative; margin-top:8px; }
+.schart iframe { display:block; width:100%; height:0; border:0; }  /* 높이는 섬이 그린 뒤 알린다(size) */
 .sadd-note .ok, .sadd-note .err { margin-bottom:2px; }
 .mrow { padding:8px 10px; border:1px solid var(--line); border-radius:10px; margin-bottom:6px; background:var(--card); }
 .mrow.other { opacity:.85; border-style:dashed; }

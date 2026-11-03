@@ -15,7 +15,7 @@
     <label style="display:block; margin-top:8px"><input type="checkbox" id="dest-done" style="width:auto"> 오래 걸린 작업이 끝나면 여기로 알려 주기</label>
     <div class="row" style="align-items:center; margin-top:4px" title="모든 보낼 곳에 같이 적용돼요"><input id="notify-after" type="number" style="width:90px; flex:none"><span class="hint" style="margin:0">초 넘게 걸린 작업만 알려요</span></div>
     <div class="row" style="margin-top:12px; flex-wrap:wrap; align-items:center"><button id="dest-save">저장</button>
-      <button id="dest-check" class="btn" title="메시지를 보내지 않고 토큰과 채널이 맞는지만 확인해요">연결 확인</button><button id="dest-test" class="btn" title="저장한 보낼 곳으로 시험 메시지를 보내요">시험 보내기</button><button id="dest-del" class="ghost" style="margin-left:auto">삭제</button></div>
+      <button id="dest-check" class="btn" title="메시지를 보내지 않고 토큰과 채널이 맞는지만 확인해요">인증 확인</button><button id="dest-test" class="btn" title="저장한 보낼 곳으로 시험 메시지를 보내요">시험 보내기</button><button id="dest-del" class="ghost" style="margin-left:auto">삭제</button></div>
     <div id="msg-dest" class="err"></div>
 
     <div class="head" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--line)"><h3>Slack 봇</h3><span id="bot-state" class="hint" style="margin:0 0 0 auto"></span></div>
@@ -28,7 +28,7 @@
     <div class="hint">쉼표로 구분해요. 비워 두면 봇을 켤 수 없어요.</div>
     <div class="field-label">허용할 채널 ID</div><input id="bot-channels" placeholder="C0123ABCD">
     <div class="hint">비워 두면 허용한 사용자가 어느 채널에서든 물어볼 수 있어요.</div>
-    <div class="row" style="margin-top:10px; flex-wrap:wrap"><button id="bot-save">저장</button><button id="bot-check" class="btn" title="봇을 켜지 않고 두 토큰이 맞는지 확인해요">연결 확인</button>
+    <div class="row" style="margin-top:10px; flex-wrap:wrap"><button id="bot-save">저장</button><button id="bot-check" class="btn" title="봇을 켜지 않고 두 토큰이 맞는지 확인해요">인증 확인</button>
       <button id="bot-start" class="btn">봇 켜기</button><button id="bot-stop" class="ghost">봇 끄기</button></div>
     <div id="msg-bot" class="err"></div>
     <div id="bot-log" class="hint" style="white-space:pre-wrap"></div>

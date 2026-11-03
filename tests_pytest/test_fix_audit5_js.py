@@ -7,7 +7,7 @@ import subprocess
 import pytest
 
 from conftest import ROOT
-from test_shortcuts_js import DRAFT, FAKE, MENU, TIP
+from test_shortcuts_js import DRAFT, FAKE, MENU
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
@@ -90,41 +90,6 @@ def test_5e2_undo_reset_is_ignored_while_restoring(tmp_path):
 def test_5e3_add_dash_pop_stays_open_on_menu_click():
     html = page("prep/prep.html")
     assert '.closest(".pop, .menu")' in fn(html, 'document.addEventListener("click", e => { if (!e.target.closest', "\n")
-
-
-def _dash_funcs():
-    html = page("dashboard/dashboard.html")
-    return fn(html, "let restoreSeq", "\n") + fn(html, "const lastVals", "\n") + fn(html, "const sigOf", "\n") + fn(html, "const rememberVals", "\n") + fn(html, "async function restoreDash(d) {")
-
-
-DASH_BODY = """
-(async () => {
-  const src = x => ({ key: "k", table: "t", body: { x } });
-  const card = { id: "c1", kind: "chart", source: src("a"), title: "t", data: { values: [1] } };
-  let dashId = "d1", quiet = false; const dashboards = [{ id: "d1" }];
-  const board = { cards: [card], palette: [], star: {}, set(c) { this.cards = c; } };
-  const $ = () => ({ value: "" }); const needsValues = c => (c.note = undefined, c); const boardChanged = () => {};
-  let connected = %s; const recomputed = []; const panelHost = { recompute: async c => { recomputed.push(c.id); } }; const say = () => {};
-  %s
-  const before = { id: "d1", palette: [], north_star: {}, cards: [{ id: "c1", kind: "chart", source: src("a"), title: "t" }] };
-  rememberVals();
-  board.cards[0].source = src("b"); board.cards[0].data = { values: [2] };   // 차트 설정을 바꾸면 값도 다시 구해진다
-  rememberVals();
-  await restoreDash(before);                                                  // Ctrl+Z
-  await new Promise(r => setImmediate(r));
-  const c = board.cards[0];
-  console.log(JSON.stringify({ recomputed, note: c.note ?? null, data: c.data }));
-})();"""
-
-
-def test_5e4_dash_restore_recomputes_when_source_differs(tmp_path):
-    got = run(tmp_path, DASH_BODY % ("true", _dash_funcs()), fake=False)
-    assert got["recomputed"] == ["c1"]
-
-
-def test_5e4_dash_restore_notes_when_not_connected(tmp_path):
-    got = run(tmp_path, DASH_BODY % ("false", _dash_funcs()), fake=False)
-    assert got["recomputed"] == [] and "다시 구해야" in got["note"] and got["data"] == {}
 
 
 def test_5e5_shortcuts_commit_keeps_combo_quiet_and_reports_undo_failure(tmp_path):

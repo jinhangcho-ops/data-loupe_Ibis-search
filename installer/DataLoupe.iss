@@ -56,7 +56,7 @@ Type: files; Name: "{autoprograms}\Ibis Search.lnk"
 Type: files; Name: "{autodesktop}\Ibis Search.lnk"
 
 [Files]
-; 기능 전용 파일(Kafka 적재용 confluent_kafka)은 수집을 고른 때만 설치하고, 나머지는 늘 설치한다.
+; 기능 전용 파일(Kafka 적재용 confluent_kafka는 수집)은 그 기능을 고른 때만 설치하고, 나머지는 늘 설치한다(web\out의 차트 섬은 모든 화면이 쓴다).
 Source: "dist\DataLoupe\*"; DestDir: "{app}"; Excludes: "\_internal\confluent_kafka,\_internal\confluent_kafka.libs"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "dist\DataLoupe\_internal\confluent_kafka\*"; DestDir: "{app}\_internal\confluent_kafka"; Components: collect; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "dist\DataLoupe\_internal\confluent_kafka.libs\*"; DestDir: "{app}\_internal\confluent_kafka.libs"; Components: collect; Flags: ignoreversion recursesubdirs createallsubdirs

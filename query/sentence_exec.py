@@ -1,9 +1,12 @@
 """문장 실행(6-4): sentence_run.compile이 만든 요청들(runs)을 연결에서 실행하고 combine대로 합쳐 끝난 표 하나 {columns, rows, more, notes}로 돌려준다. 화면은 나누거나 합치지 않는다.
 요청의 route: /api/query(행), /api/pivot(묶어 집계, 기존 라우트와 같은 querying.runnable·calc.pivot), metric(지표 이름 또는 내 지표 id의 값을 지표 정의로 구함, by가 있으면 그 값마다),
-nested(대상마다 구한 값을 다시 집계: 평균·N번 이상 한 대상 비율·두 단계를 다 한 비율·횟수 구간별 대상 수·대상별 요약표·집단 대 전체)이다. 탐색 틀 51~53번의 만들기 e51~e53도 여기 두고 sentence_run.COMPILERS에 붙인다. 합치는 방법 combine: ratio·percent·share(a ÷ b, by 컬럼이 같은 줄끼리)·sub·add·mean_of·change·cumsum.
+nested(대상마다 구한 값을 다시 집계: 평균·N번 이상 한 대상 비율·두 단계를 다 한 비율·횟수 구간별 대상 수·대상별 요약표·집단 대 전체), series(날짜 단위 합계, 빈 기간 0, 누적·이동·벗어난 기간)이다.
+탐색 틀 51~53번의 만들기 e51~e53도 여기 두고 sentence_run.COMPILERS에 붙인다. 합치는 방법 combine: ratio·percent·share(a ÷ b, by 컬럼이 같은 줄끼리)·sub·add·mean_of·change·cumsum·rest(상위 N + 기타)·pareto(누적 비중·ABC).
 지표 사전 항목('catalog:id')으로 만든 내 지표는 catalog_app이 구한다(값 하나). 데이터를 읽는 함수는 server.run으로 연결 스레드에서 돈다. 내 지표가 다른 내 지표를 쓰면(조합) 안쪽까지 풀어 구한다(MAX_DEPTH단계)."""
 import copy
+import datetime as dt
 import json
+import statistics
 
 from core import calc
 from core import querying
@@ -22,7 +25,10 @@ from core.server import run
 
 QUERY_ROWS = 1000  # 행을 보는 요청에서 돌려줄 행 수
 MAX_DEPTH = 3  # 내 지표가 내 지표를 쓰는 단계
-NAMES = {"ratio": "값", "percent": "비율(%)", "share": "비중", "sub": "차이", "add": "합", "mean_of": "평균", "change": "변화율", "cumsum": "누적"}
+NAMES = {"ratio": "값", "percent": "비율(%)", "share": "비중", "sub": "차이", "add": "합", "mean_of": "평균", "change": "변화율", "cumsum": "누적", "rest": "기타", "pareto": "누적 비중"}
+MAX_PERIODS = 5000  # 빈 기간을 채울 때 만들 기간 수의 상한(일 단위로 13년 남짓)
+WINDOWS = {"cum_sum": "sum", "cum_mean": "mean", "cum_min": "min", "cum_max": "max", "moving_sum": "sum", "moving_mean": "mean", "moving_min": "min", "moving_max": "max"}  # 36번 → 쌓을 계산
+VERSUS_P = "p-value(집단 vs 나머지)"  # 53번 견주기 표의 검정 열
 
 
 def one(keys, col, rows, more=False, columns=None):
@@ -40,11 +46,16 @@ def execute_run(r, depth=0):
         spec = r["body"]["pivot"]
         expr = querying.runnable(r["body"], select=False)
         table = run(lambda: calc.pivot(expr, spec, lambda e: e.to_pyarrow()["v"].to_pylist()).to_polars())
-        return one(list(spec.get("rows") or []), r["result"], server.to_json(table.head(calc.MAX_ROWS), text_big=False)["rows"], table.height > calc.MAX_ROWS)
+        rows = server.to_json(table.head(calc.MAX_ROWS), text_big=False)["rows"]
+        if r.get("fill"):
+            rows = fill_periods(rows, r["fill"]["key"], r["fill"]["unit"], [r["result"]])
+        return one(list(spec.get("rows") or []), r["result"], rows, table.height > calc.MAX_ROWS)
     if route == "metric":
         return metric_run(r, depth)
     if route == "nested":
         return nested_run(r)
+    if route == "series":
+        return series_run(r)
     raise ValueError(f"알 수 없는 요청 종류: {route}")
 
 
@@ -99,7 +110,83 @@ def metric_run(r, depth):
     labels, values, more = run(lambda: metric_file.compute(expr, [name], {name: definition}, by))
     if not by:
         return one([], name, [{name: values[name][0]}])
-    return one([by], name, [{by: x, name: v} for x, v in zip(labels, values[name])], more)
+    rows = [{by: x, name: v} for x, v in zip(labels, values[name])]
+    if not r.get("fill"):
+        return one([by], name, rows, more)
+    f = r["fill"]  # 13번: 행이 없는 기간은 0, 자료가 마지막 기간 중간에 끝났으면 그 기간은 뺀다(지표 사전 active와 같은 규칙)
+    rows, notes = fill_periods([x for x in rows if x[by] is not None], by, f["unit"], [name]), []
+    if len(rows) > 1 and f["unit"] in mc_units():  # shortcut: year 단위는 진행 중인 해를 가리지 않는다(metric_calc가 day·week·month만 센다), 필요해지면 open_bucket에 year를 더한다
+        from metrics import metric_calc as mc
+        open_no = run(lambda: mc.open_bucket(expr, f["time"], f["unit"]))
+        if open_no is not None and mc.bucket_start(open_no, f["unit"]) == day_of(rows[-1][by]):
+            notes.append(f"자료가 마지막 기간({str(rows[-1][by])[:10]}) 중간에 끝나 그 기간은 평균에서 뺐어요.")
+            rows = rows[:-1]
+    return {**one([by], name, rows, more), "notes": notes}
+
+
+def mc_units():
+    from metrics import metric_calc
+    return metric_calc.UNITS
+
+
+def day_of(key):
+    """기간 칸 값(날짜·날짜시간 또는 'YYYY-MM-DD…' 글)의 날짜."""
+    return key if type(key) is dt.date else key.date() if isinstance(key, dt.datetime) else dt.date.fromisoformat(str(key)[:10])
+
+
+def fill_periods(rows, key, unit, cols):
+    """기간(key) 순 행들 사이의 빈 기간을 cols 0인 행으로 채운다(첫 기간 ~ 마지막 기간). 기간 칸이 빈 행은 맨 뒤에 그대로 둔다. 기간이 MAX_PERIODS개를 넘으면 ValueError."""
+    dated = [x for x in rows if x.get(key) is not None]
+    if not dated:
+        return rows
+    sample, have = dated[0][key], {day_of(x[key]): x for x in dated}
+    shape = (lambda d: d) if type(sample) is dt.date else (lambda d: dt.datetime.combine(d, dt.time())) if isinstance(sample, dt.datetime) else (lambda d: d.isoformat() + str(sample)[10:])
+    day, last, out = min(have), max(have), []
+    while day <= last:
+        if len(out) >= MAX_PERIODS:
+            raise ValueError(f"기간이 {MAX_PERIODS:,}개를 넘어 빈 기간을 채울 수 없어요. 기간을 좁히거나 더 큰 단위를 고르세요.")
+        out.append(have.get(day) or {**{k: None for k in dated[0]}, key: shape(day), **{c: 0 for c in cols}})
+        day = result.next_period(day, unit)  # 차트의 빈 기간 채우기와 같은 다음 기간(회계연도 첫 달도 그대로)
+    return out + [x for x in rows if x.get(key) is None]
+
+
+def series_run(r):
+    """날짜(r.date)를 단위(r.unit)로 묶은 합계(값이 없으면 행 수)를 빈 기간 0으로 채운 뒤 r.op대로: window(누적·이동, 기간 N개) 또는 outlier(z-점수·IQR로 크게 벗어난 기간만)."""
+    expr = querying.runnable(r["body"], select=False)
+    d = parse.column(expr, r["date"])
+    expr = expr.filter(d.notnull())
+    d = parse.column(expr, r["date"])
+    vname = f"{r['value']} 합계" if r.get("value") else "행 수"
+    measure = parse.column(expr, r["value"]).sum() if r.get("value") else expr.count()
+    per = expr.group_by(**{"기간": sql_funcs.period_start(d, sql_funcs.UNITS[r["unit"]])}).aggregate(**{vname: measure}).order_by("기간")
+    got = server.to_json(run(lambda: per.limit(MAX_PERIODS + 1).to_polars()))["rows"]
+    rows = fill_periods(got, "기간", r["unit"], [vname])
+    xs = [x[vname] or 0 for x in rows]
+    op = r["op"]
+    if "window" in op:
+        how, n = WINDOWS[op["window"]], max(1, int(op.get("n") or 1))
+        reduce = {"sum": sum, "mean": lambda v: sum(v) / len(v), "min": min, "max": max}[how]
+        for i, x in enumerate(rows):
+            x[op["name"]] = reduce(xs[max(0, i - n + 1):i + 1] if op["window"].startswith("moving") else xs[:i + 1])
+        return one(["기간"], op["name"], rows, False, ["기간", vname, op["name"]])
+    if len(xs) < 2:
+        raise ValueError("벗어난 기간을 찾으려면 기간이 2개 이상이어야 해요.")
+    k = float(op["k"])
+    if op["outlier"] == "z":
+        mid, sd = statistics.mean(xs), statistics.stdev(xs)
+        score = lambda v: None if not sd else (v - mid) / sd
+        note = f"평균 {mid:,.4g}, 표준편차 {sd:,.4g}에서 {k:g}배 넘게 떨어진 기간이에요."
+        hit = lambda v: sd and abs(score(v)) > k
+        col = "z-점수"
+    else:
+        q1, _, q3 = statistics.quantiles(xs, n=4, method="inclusive")
+        lo, hi = q1 - k * (q3 - q1), q3 + k * (q3 - q1)
+        score = lambda v: v - hi if v > hi else v - lo
+        note = f"사분위 범위 {q1:,.4g}~{q3:,.4g}의 {k:g}배 밖({lo:,.4g} 미만, {hi:,.4g} 초과)인 기간이에요."
+        hit = lambda v: v < lo or v > hi
+        col = "벗어난 크기"
+    out = [{"기간": x["기간"], vname: v, col: score(v)} for x, v in zip(rows, xs) if hit(v)]
+    return {**one(["기간"], col, out, False, ["기간", vname, col]), "notes": [note]}
 
 
 def nested_run(r):
@@ -260,12 +347,24 @@ def versus(r, expr, ent):
     g = querying.runnable(r["group"]["body"], select=False)
     gc = parse.column(g, r["group"]["column"])
     members = g.filter(gc.notnull()).select(e=gc).distinct()
-    stats = lambda x: x.aggregate(a=x.e.nunique(), b=x.k.sum(), c=x.k.mean(), d=x.k.median(), f=x.k.min(), h=x.k.max())
-    both = run(lambda: [stats(x).to_polars().row(0) for x in (per, per.filter(per.e.isin(members.e)))])
+    stats = lambda x: x.aggregate(a=x.e.nunique(), b=x.k.sum(), c=x.k.mean(), d=x.k.median(), f=x.k.min(), h=x.k.max(), n=x.count(), s=x.k.std())
+    inside = per.e.isin(members.e)
+    *both, rest = run(lambda: [stats(x).to_polars().row(0) for x in (per, per.filter(inside), per.filter(~inside))])
     unit = "하루" if day else "대상당"
     labels = [f"{r['entity']} 수", "전체 행 수", f"{unit} 평균", f"{unit} 중앙값", f"{unit} 최소", f"{unit} 최대"]
-    cols = ["지표", f"전체 {r['entity']}", o["name"]]
-    return one([], None, [dict(zip(cols, x)) for x in zip(labels, *both)], columns=cols)
+    cols = ["지표", f"전체 {r['entity']}", o["name"], VERSUS_P]
+    pv = [None, None, welch_p(rest, both[1]), None, None, None]  # 평균만 검정한다: 집단 대 나머지(전체에는 집단이 들어 있어 독립이 아니다)
+    return {**one([], None, [dict(zip(cols, x)) for x in zip(labels, *(b[:6] for b in both), pv)], columns=cols),
+            "notes": [f"{VERSUS_P}는 집단과 나머지 {r['entity']}의 {unit} 평균을 Welch t 검정으로 견준 값이에요(작을수록 우연이 아닐 가능성이 커요)."]}
+
+
+def welch_p(a, b):
+    """요약 행(stats: c 평균, s 표준편차, n 개수)의 Welch t 검정 p-value. 검정할 수 없으면(표본 2개 미만, 값이 모두 같음) None."""
+    from metrics import metric_calc
+    try:
+        return metric_calc.welch_from_stats(a[2], a[7] or 0, a[6], b[2], b[7] or 0, b[6])["p"]
+    except (ValueError, TypeError):
+        return None
 
 
 sentence_run.COMPILERS.update(e51=e51, e52=e52, e53=e53)  # sentence_run은 다른 묶음 소유라 51~53번 틀의 만들기는 여기서 붙인다(flow_app이 이 모듈을 올린다)
@@ -294,18 +393,37 @@ def combine(spec, results):
         total = None if b["keys"] else scalar(b)
         under = {tuple(r[k] for k in by): r[b["col"]] for r in b["rows"]} if b["keys"] else {}
         show = spec.get("show_b") and b["keys"]  # b의 값 컬럼도 함께 보인다
+        bname = spec.get("b_name") or b["col"]  # 분자와 분모의 결과 이름이 같으면(고유 개수 ÷ 고유 개수) 이름을 따로 준다
         rows = []
         for r in a["rows"]:
             y = total if not b["keys"] else under.get(tuple(r[k] for k in by))
+            if spec.get("min_b") and (y is None or y < spec["min_b"]):
+                continue  # 표본(분모)이 작은 항목은 뺀다
             v = div(r[a["col"]], y)
-            rows.append({**r, **({b["col"]: y} if show else {}), name: None if v is None else v * scale})
-        return {"columns": [*a["keys"], a["col"], *([b["col"]] if show else []), name], "rows": rows}
+            rows.append({**r, **({bname: y} if show else {}), name: None if v is None else v * scale})
+        if spec.get("sort") == "desc":  # 값이 큰 순, 값이 없으면 맨 뒤(같은 값은 원래 순서)
+            rows.sort(key=lambda x: (x[name] is None, -(x[name] or 0)))
+        return {"columns": [*a["keys"], a["col"], *([bname] if show else []), name], "rows": rows}
     if op in ("sub", "add"):
         x, y = scalar(a), scalar(b)
         return {"columns": [name], "rows": [{name: None if x is None or y is None else (x - y if op == "sub" else x + y)}]}
-    if op == "change":
+    if op == "change":  # 기준값이 음수여도 늘면 +가 되게 크기(|y|)로 나눈다
         x, y = scalar(a), scalar(b)
-        return {"columns": [name], "rows": [{name: None if x is None or not y else (x - y) / y}]}
+        return {"columns": [name], "rows": [{name: None if x is None or not y else (x - y) / abs(y)}]}
+    if op == "rest":  # 상위 N 뒤에 '기타 = 전체 − 상위 합' 한 줄(남는 것이 없으면 줄을 더하지 않는다)
+        b = results[spec["b"]]
+        total, shown = scalar(b), sum(r[a["col"]] or 0 for r in a["rows"])
+        rows = list(a["rows"])
+        if total is not None and total - shown and a["keys"] and not a["more"]:
+            rows.append({**{k: None for k in a["keys"]}, a["keys"][0]: "기타", a["col"]: total - shown})
+        return {"columns": [*a["keys"], a["col"]], "rows": rows}
+    if op == "pareto":  # 큰 순 합계를 쌓은 누적 비중과 등급(앞 항목들의 누적이 80% 전이면 A, 95% 전이면 B)
+        total, run_sum, rows = scalar(results[spec["b"]]), 0, []
+        for r in a["rows"]:
+            before = div(run_sum, total) or 0
+            run_sum += r[a["col"]] or 0
+            rows.append({**r, name: div(run_sum, total), "등급": "A" if before < 0.8 else "B" if before < 0.95 else "C"})
+        return {"columns": [*a["keys"], a["col"], name, "등급"], "rows": rows}
     if op == "mean_of":
         if a["more"]:  # 앞 기간만 받았으니 평균을 내면 조용히 틀린 값이 된다
             raise ValueError(f"기간이 {metric_file.MAX_GROUPS}개를 넘어 평균을 낼 수 없어요. 기간을 좁혀 주세요.")
@@ -328,12 +446,13 @@ def execute_compiled(done, depth=0):
         raise ValueError(done["reason"])
     results = [execute_run(r, depth) for r in done["runs"]]
     more = any(x["more"] for x in results)
+    notes = [*(done.get("notes") or []), *[n for x in results for n in x.get("notes", [])]]
     if done.get("combine"):
         table = combine(done["combine"], results)
     else:
         first = results[0]
         table = {"columns": first.get("columns") or (list(first["rows"][0]) if first["rows"] else [*first["keys"], first["col"]]), "rows": first["rows"]}
-    return {**table, "more": more, "notes": done.get("notes") or [], "text": done.get("text", "")}
+    return {**table, "more": more, "notes": notes, "text": done.get("text", "")}
 
 
 def columns_of(body):
@@ -347,17 +466,31 @@ def prepare(tid, slots, body, columns=None):
     return sentence_run.compile(tid, slots, body, columns)
 
 
+def whole_bodies(r):
+    """요청이 추가로 읽는 표의 body: 지표 사전의 전환 계열 내 지표는 기간 밖 B를 찾으려 기간을 뺀 표도 읽는다(catalog_app.compute_entry의 whole). 그 밖은 없음."""
+    if r.get("route") != "metric" or not r["body"].get("periods") or r.get("ref") is None:
+        return []
+    try:
+        mine = my_metrics.get(r["ref"])
+    except (KeyError, ValueError):  # 지표 파일의 지표는 내 지표 목록에 없다
+        return []
+    if not metric_catalog.is_catalog(mine["template"]) or metric_catalog.get(mine["template"])["calc"] != "conversion":
+        return []
+    return [{**r["body"], "periods": []}]
+
+
 def scan_ask(done, request_body):
-    """실행 전 처리 용량 확인(server.scan_gate): 요청이 읽을 body마다(같은 body는 한 번) 묻고, 확인이 필요하면 돌려줄 응답, 아니면 None."""
+    """실행 전 처리 용량 확인(server.scan_gate): 요청이 읽을 body마다(같은 body는 한 번, 전환 지표의 기간 뺀 표 포함) 묻고, 확인이 필요하면 돌려줄 응답, 아니면 None."""
     if not done["ok"]:
         return None
     con = server.get_con()
     seen = set()
     for r in done["runs"]:
-        key = json.dumps(r["body"], sort_keys=True, ensure_ascii=False)
-        if key in seen:
-            continue
-        seen.add(key)
-        if ask := server.scan_gate(request_body, lambda b=r["body"]: server.expr_sql(con, querying.filtered(b))):
-            return ask
+        for body in [r["body"], *whole_bodies(r)]:
+            key = json.dumps(body, sort_keys=True, ensure_ascii=False)
+            if key in seen:
+                continue
+            seen.add(key)
+            if ask := server.scan_gate(request_body, lambda b=body: server.expr_sql(con, querying.filtered(b))):
+                return ask
     return None

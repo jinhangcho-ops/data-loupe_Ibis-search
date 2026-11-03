@@ -22,6 +22,7 @@ from core import source
 from core import sql_exec
 
 STRING_BYTES = 16  # 글자 컬럼 한 칸을 이만큼으로 본다(DuckDB 추정)
+POLARS_PEAK = 3  # 파일 연결(Polars)의 실제 최대 메모리는 읽는 양 추정의 2.3~2.7배였다(500만 행 실측): 기준과 견줄 때 곱한다
 TYPE_BYTES = {"bool": 1, "int8": 1, "int16": 2, "int32": 4, "int64": 8, "uint8": 1, "uint16": 2, "uint32": 4, "uint64": 8,
               "float32": 4, "float64": 8, "date": 4, "time": 8, "timestamp": 8, "decimal": 16, "uuid": 16, "interval": 16}
 
@@ -433,12 +434,12 @@ def limit_check(con, sql, opened=None, dialect=None, config=None, rows=None):
     except Exception:
         tables, columns, named = [], None, []
     unknown = found["bytes"] is None
-    over = not unknown and found["bytes"] > bound
+    over = not unknown and found["bytes"] * (POLARS_PEAK if getattr(con, "name", "") == "polars" else 1) > bound
     blocked = unknown and blocks_unknown(config)
     what = f"테이블 {', '.join(named) or '없음'} · 컬럼 {'모두' if columns is None else ', '.join(sorted(columns)[:12]) + (' …' if len(columns) > 12 else '')}"
     if unknown:
         text = f"처리 용량을 미리 알 수 없어요({found['how']}). " + ("설정에서 '알 수 없으면 실행하지 않음'으로 정해 두어 실행하지 않아요." if blocked else "")
     else:
-        text = f"PC로 약 {size_text(found['bytes'])}를 받아요(추정 · {found['how']}) · {bound_text} · {what}" if remote and not billed else f"{'' if found['exact'] else '약 '}{size_text(found['bytes'])}를 읽어요({'정확' if found['exact'] else '추정'} · {found['how']}) · {bound_text} · {what}"
+        text = f"PC로 약 {size_text(found['bytes'])}를 받아요(추정 · {found['how']}) · {bound_text} · {what}" if remote and not billed else f"{'' if found['exact'] else '약 '}{size_text(found['bytes'])}를 읽어요({'정확' if found['exact'] else '추정'} · {found['how']}{f' · 계산에 약 {POLARS_PEAK}배 메모리' if getattr(con, 'name', '') == 'polars' else ''}) · {bound_text} · {what}"
     return {"over": over, "unknown": unknown, "blocked": blocked, "bytes": found["bytes"], "exact": found["exact"], "how": found["how"],
             "limit": bound, "remote": remote, "tables": tables, "columns": None if columns is None else sorted(columns), "text": text.strip()}

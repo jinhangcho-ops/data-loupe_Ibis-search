@@ -68,13 +68,13 @@ TABLE = [
     ("e10", {"조건": "amt >= 60", "무엇": "store"}, lambda d: pairs(d, "store", "전체 개수") == [("B", 4), ("C", 3)]),
     ("e11", {"컬럼": "store"}, lambda d: pairs(d, "store", "전체 개수") == A5),
     ("e12", {"컬럼": "store", "값 목록": ["A", "C"]}, lambda d: pairs(d, "store", "전체 개수") == [("A", 5), ("C", 3)]),
-    ("e13", {"무엇": "store", "값": "amt", "집계": "sum", "N": 2}, lambda d: pairs(d, "store", "전체 합계") == [("C", 330.0), ("B", 300.0)]),
+    ("e13", {"무엇": "store", "값": "amt", "집계": "sum", "N": 2}, lambda d: pairs(d, "store", "전체 합계") == [("C", 330.0), ("B", 300.0), ("기타", 150.0)]),  # 합계·개수는 상위 N 밖을 기타 한 줄로
     ("e14", {"무엇": "store", "대상": "uid", "정확도": "정확"}, lambda d: pairs(d, "store", "전체 고유 개수") == [("A", 4), ("B", 4), ("C", 3)]),
     ("e15", {"단계": "store", "대상": "uid"}, lambda d: pairs(d, "store", "전체 고유 개수") == [("A", 4), ("B", 4), ("C", 3)]),
     ("e17", {"조건": "amt >= 60"}, lambda d: first(d) == pytest.approx(700 / 12)),  # 7 ÷ 12 × 100
     ("e18", {"무엇": "store"}, lambda d: [(r["store"], round(r["비중"], 4)) for r in d["rows"]] == [("A", round(5 / 12, 4)), ("B", round(4 / 12, 4)), ("C", 0.25)]),
-    ("e19", {"무엇": "store", "조건": "amt >= 40", "대상": "uid"}, lambda d: pairs(d, "store", "값") == [("A", 0.5), ("B", 1.0), ("C", 1.0)]),  # A: id 3·4 → u3·u0 2명 ÷ 4명
-    ("e20", {"무엇": "store", "대상": "uid", "값": "amt"}, lambda d: pairs(d, "store", "값") == [("A", 37.5), ("B", 75.0), ("C", 110.0)]),  # 150÷4, 300÷4, 330÷3
+    ("e19", {"무엇": "store", "조건": "amt >= 40", "대상": "uid"}, lambda d: pairs(d, "store", "값") == [("B", 1.0), ("C", 1.0), ("A", 0.5)]),  # A: id 3·4 → u3·u0 2명 ÷ 4명(값이 큰 순)
+    ("e20", {"무엇": "store", "대상": "uid", "값": "amt"}, lambda d: pairs(d, "store", "값") == [("C", 110.0), ("B", 75.0), ("A", 37.5)]),  # 330÷3, 300÷4, 150÷4(값이 큰 순)
     ("e21", {"지표 A": "클릭", "지표 B": "노출"}, lambda d: first(d) == pytest.approx(5 / 12)),
     ("e22", {"날짜": "day", "단위": "week", "대상": "uid"}, lambda d: pairs(d, "기간", "전체 고유 개수") == [("2025-12-29", 4), ("2026-01-05", 4), ("2026-01-12", 1)]),
     ("e23", {"날짜": "day", "단위": "month", "대상": "uid", "값": "amt"}, lambda d: first(d) == 195.0),  # 780 ÷ 4
@@ -120,8 +120,8 @@ def test_templates_that_need_other_tables(c):
 
 
 def test_every_explore_template_has_an_end_to_end_case():
-    covered = {t[0] for t in TABLE} | {"e16", "e43", "e48", "e49", "e50", "e51", "e52", "e53"}  # e48~50(좌표 틀)은 test_geo_sentences.py, e51(횟수 구간)은 test_fb_r2f.py, e52·e53(요약표)은 test_fb_r3e.py에서 돌린다
-    assert covered == {t["id"] for t in sentences.EXPLORE}  # 53개 모두
+    covered = {t[0] for t in TABLE} | {"e16", "e43", "e48", "e49", "e50", "e51", "e52", "e53", "e54", "e55", "e56"}  # e48~50(좌표 틀)은 test_geo_sentences.py, e51(횟수 구간)은 test_fb_r2f.py, e52·e53(요약표)은 test_fb_r3e.py, e54~56은 test_cr_d2.py에서 돌린다
+    assert covered == {t["id"] for t in sentences.EXPLORE}  # 56개 모두
 
 
 def test_condition_lists_and_or_groups(c):
@@ -157,7 +157,7 @@ METRICS = [
     ("m10", {"대상": "uid", "값": "amt", "집계": "sum"}, lambda v: v == 195.0),  # 사용자별 150·180·210·240의 평균
     ("m11", {"조건": "store = A", "N": 2, "대상": "uid"}, lambda v: v == 0.25),  # A 행을 두 번 이상 한 사용자는 u0뿐
     ("m12", {"단계 A": "store = A", "단계 B": "store = C", "대상": "uid"}, lambda v: v == 0.75),  # A를 한 4명 중 C도 한 사람 u1·u2·u3
-    ("m13", {"단위": "week", "지표": "노출", "기간": {"column": "day"}}, lambda v: v == 4.0),  # 주별 4·7·1건의 평균
+    ("m13", {"단위": "week", "지표": "노출", "기간": {"column": "day"}}, lambda v: v == 5.5),  # 주별 4·7건의 평균(1-12 주는 자료가 중간에 끝나 뺀다)
     ("m14", {"지표": "클릭", "기간": PERIOD}, lambda v: v == pytest.approx(-0.75)),  # 01-05~08의 A 1건 ÷ 직전 01-01~04의 A 4건 − 1
     ("m15", {"지표": "노출", "정렬 기준": "day"}, None),  # 날짜마다 1건씩 12일 누적
 ]
@@ -197,7 +197,7 @@ def test_my_metrics_can_be_used_in_sentences_including_combinations(c):
 def test_sentence_run_route(c):
     resp = c.post("/api/sentence/run", json={"template": "e20", "slots": {"무엇": "store", "대상": "uid", "값": "amt"}, "body": BASE})
     assert resp.status_code == 200
-    assert [(r["store"], r["값"]) for r in resp.get_json()["rows"]] == [("A", 37.5), ("B", 75.0), ("C", 110.0)]
+    assert [(r["store"], r["값"]) for r in resp.get_json()["rows"]] == [("C", 110.0), ("B", 75.0), ("A", 37.5)]
     bad = c.post("/api/sentence/run", json={"template": "e08", "slots": {}, "body": BASE})
     assert bad.status_code == 400 and bad.get_json()["error"] == "‘나눌 기준 컬럼’ 칸을 채워 주세요."
     assert c.post("/api/sentence/run", json={"template": "e08", "slots": {}, "body": {}}).get_json()["error"] == "기준 테이블이 있는 검색 body가 필요해요."

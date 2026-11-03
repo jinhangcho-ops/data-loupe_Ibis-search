@@ -19,6 +19,7 @@ const cut = (a, b) => { const i = html.indexOf(a); return html.slice(i, html.ind
 class E { constructor(t) { this.tag = t; this.children = []; } append(...k) { this.children.push(...k); } }
 globalThis.el = (t, p = {}, ...k) => { const e = new E(t); Object.assign(e, p); e.append(...k); return e; };
 globalThis.Option = function (text, value) { return { text, value }; };
+let tabs = [{}], tabAt = 0;  // 작업 탭(가짜 화면에는 탭 하나)
 const S = { schema: "", base: "orders", cols: [["cid", "정수"]], joins: [], sorts: [], union: { tables: [] } };
 const box = { replaceChildren(...k) { this.kids = k; } };
 const nodes = { limit: { value: "10" } };

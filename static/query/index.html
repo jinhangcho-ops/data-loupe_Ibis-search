@@ -61,8 +61,9 @@
   .ctl .grow { margin-left:auto; }
   #summary { height:var(--summary, auto); max-height:var(--summary, none); overflow:auto; }
   #ctable { margin-top:10px; }
-  /* 차트: 높이(끌어서 정한 --chart, 없으면 창 높이의 52%를 260~900px 안으로)를 기준으로 비율(--ratio = 가로/세로)만큼 넓어진다. 결과 영역보다 넓어지면 너비에 맞춰 줄어든다. */
-  .chart-box { width:min(100%, calc(var(--chart, clamp(260px, 52vh, 900px)) * var(--ratio, 16 / 9))); aspect-ratio:var(--ratio, 16 / 9); margin:0 auto; position:relative; }
+  /* 차트: 차트 섬(iframe)이 너비/비율로 그리고 높이를 알린다(size). 너비는 끌어서 정한 높이(--chart, 없으면 창 높이의 52%를 260~900px 안으로)의 16:9, 결과 영역보다 넓으면 그 너비. */
+  .chart-box { width:min(100%, calc(var(--chart, clamp(260px, 52vh, 900px)) * 16 / 9)); margin:0 auto; position:relative; }
+  .chart-box iframe { display:block; width:100%; height:0; border:0; }  /* 높이는 섬이 그린 뒤 알린다(size) */
   .chart-box .grip-y { bottom:-12px; }
   /* 지표 탭: 목록은 누르는 버튼(이름 + 설명), 결과는 큰 값이나 그래프와 표 */
   .met { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; text-align:left; padding:7px 10px; margin-bottom:5px; border:1px solid var(--line); border-radius:9px; background:var(--card); color:var(--text); cursor:pointer; }
@@ -85,27 +86,65 @@
   .side > header { padding-right:14px; }
   .fold, .side-strip b { font-size:18px; line-height:1; }
   .side > footer #search { flex:1.4; }
+  /* 차트 설정 칸: 칸 위에 작은 이름표 */
+  .cf { display:flex; flex-direction:column; gap:2px; flex:1 1 120px; min-width:0; max-width:clamp(160px, 18vw, 280px); }
+  .cf > .cl { font-size:11.5px; color:var(--muted); }
+  .cf > select { width:100%; max-width:none; flex:none; }
+  .ctl.lab { align-items:flex-start; } .ctl.lab > button { margin-top:17px; }  /* 이름표 높이만큼 내려 칸과 줄을 맞춘다 */
+  .cf.wide { flex:2 1 240px; max-width:460px; } #cagg { display:block; } #cagg .fp { width:100%; }
+  .axis-box { margin-bottom:10px; } .axis-box > summary { cursor:pointer; }
+  /* 아직 검색·실행하지 않았을 때는 큰 글자 없이 회색 보조 글씨만 */
+  .big b:empty { display:none; }
+  #rows th:not(.sorted):hover::after { content:" ↕"; color:var(--faint); }
+  #bpick-note { margin:0 0 6px; } #bpick.hidden + #bpick-note, #bpick-note:not(.on) { display:none; }
+  #export-pop .btn { border:0; background:none; font-weight:500; justify-content:flex-start; }
+  .undo { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:500; display:flex; align-items:center; gap:10px; padding:6px 8px 6px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); font-size:13px; box-shadow:0 6px 20px rgb(15 25 30 / .18); }
+  .keys-table { width:100%; border-collapse:collapse; margin:10px 0 14px; }
+  .keys-table td { padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .keys-table td:first-child { white-space:nowrap; font-weight:600; }
+  .none-box { padding:14px 4px; display:flex; flex-direction:column; gap:6px; }
+  .none-box .row { display:flex; gap:6px; flex-wrap:wrap; }
+  /* 좁은 창: 패널이 결과 아래로 내려가도 [검색]은 화면 아래에 붙어 있다(패널 상자를 풀어 푸터를 화면 전체의 막대로) */
+  @media (max-width:900px) {
+    .work:not(.closed) > .side { display:contents; }
+    .work:not(.closed) > .side > footer { position:sticky; bottom:0; z-index:20; background:var(--card); }
+    .work:not(.closed) > .side > :is(header, .vswitch, .sc, .scan-hint) { background:var(--card); }
+  }
+  /* 작업 탭 줄(F10): 탭 하나가 탐색 화면 한 벌 */
+  .wtabs { display:flex; align-items:center; gap:4px; padding:6px 28px 0; border-bottom:1px solid var(--line); }
+  .wtab-list { display:flex; gap:2px; overflow-x:auto; min-width:0; }
+  .wtab { display:inline-flex; align-items:center; border-bottom:2px solid transparent; }
+  .wtab.on { border-bottom-color:var(--text); }
+  .wtab-b { background:none; border:0; border-radius:0; color:var(--muted); padding:6px 2px 6px 10px; font-weight:600; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .wtab.on .wtab-b { color:var(--text); }
+  .wtab-x { padding:2px 6px; }
+  .wtab-in { width:140px; }
 </style>
 </head>
 <body class="app" data-virtual="1">
 <!--include core/status.html-->
-<nav class="subnav" id="views"><button data-view="explore" class="on">탐색</button><button data-view="sql">SQL</button><button data-view="metric">지표</button></nav>
+<nav class="subnav" id="views"><button data-view="explore" class="on">탐색</button><button data-view="sql">SQL</button><button data-view="metric">지표</button><button type="button" id="keys-open" title="쓸 수 있는 단축키를 한 장으로 보여 줘요" style="margin-left:auto">단축키</button></nav>
 <div class="work" id="work">
   <main class="results">
+    <div class="wtabs"><div class="wtab-list" id="wtab-list" role="tablist" aria-label="작업 탭"></div><button type="button" id="wtab-add" class="ghost" title="새 탭 (Ctrl+T)" aria-label="새 탭">+</button>
+      <div class="drop"><button type="button" id="wtab-menu" class="ghost" title="이 탭을 저장해요" aria-label="탭 메뉴">⋯</button>
+        <div class="pop hidden" id="wtab-pop"><button id="wtab-save" title="이 탭의 조건을 탭 이름으로 저장한 검색에 넣어요">저장한 검색으로 저장</button><button id="wtab-vt" title="이 탭의 SQL을 SQL 탭 편집기에 넣고 탭 이름을 가상 테이블 이름 칸에 넣어요">가상 테이블로 저장</button></div></div></div>
     <div class="vwide hidden" id="vwide"><div id="sent-host" class="hidden"></div></div>
     <div class="tool">
       <label class="q" title="지금 보이는 쪽에서만 찾아요"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="row-find" placeholder="결과 안에서 찾기"><span class="hint" id="find-count" style="margin:0; white-space:nowrap"></span></label>
       <button id="sql-show" class="btn">SQL 보기</button>
       <button id="plan-show" class="btn" title="DB가 이 검색을 어떻게 읽는지 보여 줘요. 인덱스를 쓰는지, 테이블을 통째로 읽는지 알 수 있어요. 검색은 하지 않아요 (EXPLAIN)">실행 계획</button>
-      <span class="hint" style="margin:0" title="조건에 맞는 모든 행을 파일로 내보내요">내보내기</span>
-      <button class="btn" data-export="csv" title="조건에 맞는 모든 행을 CSV 파일로 내보내요" aria-label="CSV로 내보내기">CSV</button><button class="btn" data-export="xlsx" title="조건에 맞는 모든 행을 Excel 파일로 내보내요" aria-label="Excel로 내보내기">Excel</button><button class="btn" data-export="parquet" title="조건에 맞는 모든 행을 Parquet 파일로 내보내요" aria-label="Parquet으로 내보내기">Parquet</button><button class="btn" data-export="tsv" title="조건에 맞는 모든 행을 탭으로 나눈 TSV 파일로 내보내요" aria-label="TSV로 내보내기">TSV</button><button class="btn" data-export="fixed" title="조건에 맞는 모든 행을 고정폭 텍스트 파일로 내보내요(칸 너비는 컬럼의 가장 긴 값에 맞춰요)" aria-label="고정폭 텍스트로 내보내기">고정폭</button><button class="btn" id="export-tables" title="기준·이어붙이기·조인에 올린 테이블들을 한 Excel 파일에 테이블마다 시트 하나로 저장해요(조건은 넣지 않아요)" aria-label="테이블마다 시트 하나로 Excel에 내보내기">테이블별 Excel</button>
+      <div class="drop"><button id="export-open" class="btn" disabled title="조건에 맞는 모든 행을 파일로 내보내요. 검색한 뒤에 쓸 수 있어요">내보내기<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button>
+        <div class="pop hidden" id="export-pop"><button class="btn" data-export="csv" title="조건에 맞는 모든 행을 CSV 파일로 내보내요" aria-label="CSV로 내보내기">CSV</button><button class="btn" data-export="xlsx" title="조건에 맞는 모든 행을 Excel 파일로 내보내요" aria-label="Excel로 내보내기">Excel</button><button class="btn" data-export="parquet" title="조건에 맞는 모든 행을 Parquet 파일로 내보내요" aria-label="Parquet으로 내보내기">Parquet</button><button class="btn" data-export="tsv" title="조건에 맞는 모든 행을 탭으로 나눈 TSV 파일로 내보내요" aria-label="TSV로 내보내기">TSV</button><button class="btn" data-export="fixed" title="조건에 맞는 모든 행을 고정폭 텍스트 파일로 내보내요(칸 너비는 컬럼의 가장 긴 값에 맞춰요)" aria-label="고정폭 텍스트로 내보내기">고정폭</button><button class="btn" id="export-tables" title="기준·이어붙이기·조인에 올린 테이블들을 한 Excel 파일에 테이블마다 시트 하나로 저장해요(조건은 넣지 않아요)" aria-label="테이블마다 시트 하나로 Excel에 내보내기">테이블별 Excel</button></div></div>
+      <button id="handoff" class="btn" title="지금 검색을 그대로 분석 화면의 전처리 탭으로 넘겨요. 파일을 만들지 않고 연결도 그대로예요">전처리로 보내기</button>
     </div>
-    <div class="big"><b id="big-count">검색 전</b><span id="big-sub">오른쪽에서 테이블과 조건을 고른 뒤 [검색]을 누르세요.</span></div>
+    <div class="big"><b id="big-count"></b><span id="big-sub">아직 검색하지 않았어요. 오른쪽에서 테이블과 조건을 고른 뒤 [검색]을 누르세요.</span></div>
     <div class="err" id="err-search"></div>
     <div class="tabs2"><button data-tab="rows" class="on">결과</button><button data-tab="summary">집계</button><button data-tab="chart">차트</button></div>
     <section class="pane" id="pane-rows">
       <pre id="sql" class="hidden"></pre>
       <div class="table-wrap" id="rows"></div>
+      <div class="hint hidden" id="ctx-hint">값을 우클릭하면 이 값만 보기·제외·정렬을 할 수 있어요</div>
     </section>
     <section class="pane hidden" id="pane-summary">
       <div class="ctl">
@@ -128,30 +167,35 @@
         <input id="pv-where" placeholder="셀 행의 조건 (예: 상태 = 완료)" style="flex:1 1 160px" title="비우면 모든 행을 세요">
         <select id="pv-sub" title="행 컬럼이 있으면 소계와 총계 줄을 더해요" style="flex:0 0 150px"><option value="">소계 없이</option><option value="rollup">소계와 총계 (ROLLUP)</option><option value="cube">모든 조합 (CUBE)</option></select>
         <input id="pv-having" placeholder="집계 결과로 거르기 (예: 전체 합계 > 100)" style="flex:1 1 160px" title="집계한 결과로 걸러요 (HAVING)">
+        <select id="pv-show" title="칸에 보일 것이에요. 비율은 행 합계나 열 합계에서 차지하는 몫이에요" style="flex:0 0 130px"><option value="value">칸: 값</option><option value="row_pct">칸: 행 비율</option><option value="col_pct">칸: 열 비율</option></select>
+        <button id="pv-add" class="btn" title="값을 하나 더 집계해요">+ 값 추가</button>
         <button id="pv-run" class="btn">피벗 만들기</button></div>
+      <div class="ctl" id="pv-extra"></div>
       <div class="err" id="err-pivot"></div>
       <div class="table-wrap" id="pivot"></div>
       <div class="grip-y" data-size="summary" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div>
     </section>
     <section class="pane hidden" id="pane-chart">
       <details class="shelf-box" id="shelf-box"><summary class="hint" title="컬럼 칩을 X축, 값, 색, 필터 칸에 끌어다 놓으면 차트가 바로 바뀌어요. 칩을 누른 뒤 칸을 눌러도 돼요">컬럼을 끌어다 놓아 차트 만들기</summary><div id="shelf-host"></div></details>
-      <div class="ctl">
-        <select id="cx" title="X축 컬럼"></select><button id="cswap" class="btn" title="X축과 Y축 컬럼을 서로 바꾸고 다시 그려요" aria-label="X축과 Y축 바꾸기">↔</button>
-        <select id="csplit" title="이 컬럼의 값마다 막대나 선을 나눠요 (최대 8개)"></select>
-        <select id="corder" title="막대 순서"><option value="x">X축 순</option><option value="value">값 큰 순</option></select>
-        <select id="cratio" title="차트 비율"><option value="auto">비율 자동</option><option value="square">1:1</option><option value="wide">16:9</option></select>
+      <div class="ctl lab">
+        <div class="cf"><span class="cl">X축</span><select id="cx" title="X축 컬럼"></select></div><button id="cswap" class="btn" title="X축과 Y축 컬럼을 서로 바꾸고 다시 그려요" aria-label="X축과 Y축 바꾸기">↔</button>
+        <div class="cf hidden" id="cunit-box"><span class="cl">묶기</span><select id="cunit" title="X축이 날짜·시각일 때 이 기간으로 묶어 세요. 건수가 없는 기간은 0으로 채워요"><option value="">묶지 않음</option><option value="day">일</option><option value="week">주</option><option value="month">월</option><option value="year">연</option></select></div>
+        <div class="cf"><span class="cl">나누기</span><select id="csplit" title="이 컬럼의 값마다 막대나 선을 나눠요 (최대 8개)"></select></div>
+        <div class="cf"><span class="cl">정렬</span><select id="corder" title="막대 순서"><option value="x">X축 순</option><option value="value">값 큰 순</option></select></div>
+        <div class="cf"><span class="cl">비율</span><select id="cratio" title="차트 비율"><option value="auto">자동</option><option value="square">1:1</option><option value="wide">16:9</option></select></div>
         <button id="draw">차트 그리기</button>
         <button id="dash-add" class="btn" title="지금 그린 차트를 대시보드에 넣어요">대시보드에 추가</button>
       </div>
-      <div class="ctl">
-        <select id="cy" title="Y축 컬럼이에요. 개수만 셀 때는 비워 두세요"></select>
-        <span id="cagg" title="집계 방법이에요. 고른 집계에 따라 칸이 더 나와요"></span>
-        <select id="ctype" title="그래프 모양"><option value="bar">막대</option><option value="line">선</option></select>
-        <select id="cdash" title="선 모양" disabled><option value="solid">실선</option><option value="dashed">점선</option></select>
-        <select id="caxis" title="이 값을 그릴 세로축"><option value="left">왼쪽 축</option><option value="right">오른쪽 축</option></select>
+      <div class="ctl lab">
+        <div class="cf"><span class="cl">Y축</span><select id="cy" title="Y축 컬럼이에요. 개수만 셀 때는 비워 두세요"></select></div>
+        <div class="cf wide"><span class="cl">계산</span><span id="cagg" title="집계 방법이에요. 고른 집계에 따라 칸이 더 나와요"></span></div>
+        <div class="cf"><span class="cl">종류</span><select id="ctype" title="그래프 모양"><option value="bar">막대</option><option value="line">선</option></select></div>
+        <div class="cf"><span class="cl">선</span><select id="cdash" title="선 모양" disabled><option value="solid">실선</option><option value="dashed">점선</option></select></div>
+        <div class="cf"><span class="cl">축</span><select id="caxis" title="이 값을 그릴 세로축"><option value="left">왼쪽 축</option><option value="right">오른쪽 축</option></select></div>
         <button id="series-add" class="btn" title="지금 고른 Y축, 집계, 모양, 축을 계열 하나로 넣어요. 넣은 계열은 한 차트에 겹쳐 그려요">계열 추가</button>
       </div>
       <ul class="items" id="series"></ul>
+      <details class="axis-box"><summary class="hint">세로축 최소·최대</summary>
       <div class="ctl">
         <span class="hint">왼쪽 축</span>
         <input id="ymin" type="number" step="any" placeholder="최소 (자동)" title="왼쪽 세로축의 최솟값이에요. 비우면 알아서 정해요">
@@ -159,10 +203,10 @@
         <span class="hint">오른쪽 축</span>
         <input id="y1min" type="number" step="any" placeholder="최소 (자동)" title="오른쪽 세로축의 최솟값이에요. 비우면 알아서 정해요">
         <input id="y1max" type="number" step="any" placeholder="최대 (자동)" title="오른쪽 세로축의 최댓값이에요. 비우면 알아서 정해요">
-      </div>
+      </div></details>
       <div class="ctl"><textarea id="clabels" rows="2" style="flex:1" placeholder="라벨 바꾸기: 한 줄에 원래값=보일값 (예: 1=남)" title="X·범례·툴팁에 보이는 글자만 바꿔요. 데이터는 그대로예요" aria-label="라벨 바꾸기"></textarea></div>
       <div class="err" id="err-chart"></div>
-      <div class="chart-box"><canvas id="chart"></canvas><div class="grip-y" data-size="chart" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div></div>
+      <div class="chart-box"><iframe id="chart" src="/chart" title="차트" class="hidden"></iframe><div class="grip-y" data-size="chart" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div></div>
       <div class="table-wrap hidden" id="ctable"></div>
       <div class="ctl" style="margin-top:18px"><button id="ctable-show" class="btn">표로 보기</button><button id="ctable-csv" class="btn">CSV</button><span class="hint grow">차트 내보내기</span>
         <select id="cimage" title="그림의 색 모드예요. 집계 표 그림과 함께 바뀌어요" style="flex:0 0 100px"><option value="light">밝게</option><option value="dark">어둡게</option></select>
@@ -170,13 +214,11 @@
         <select id="csend" title="차트를 받을 곳" style="flex:0 1 160px"></select><button id="csend-go" class="btn">보내기</button></div>
     </section>
     <div class="err" id="err-export"></div>
-    <div class="pager">
+    <div class="pager" id="pager">
       <button id="prev" class="btn" disabled>이전</button><button id="next" class="btn" disabled>다음</button><span id="page-info"></span><input id="page-go" type="number" min="1" placeholder="쪽" style="width:4.5em" title="가려는 쪽 번호를 쓰고 Enter를 누르세요. 범위 밖이면 처음이나 마지막 쪽으로 가요" aria-label="쪽 번호로 이동">
       <label title="한 쪽에 보일 행 수예요">한 쪽에 <input id="limit" type="number" value="20" min="1">행</label>
-      <label title="이보다 긴 글은 줄여서 보여요. 마우스를 올리면 다 보여요. 0이면 줄이지 않아요">칸마다 <input id="maxlen" type="number" value="40" min="0">자까지</label>
+      <label title="이보다 긴 글은 줄여서 보여요. 마우스를 올리면 다 보여요. 0이면 줄이지 않아요">긴 글은 <input id="maxlen" type="number" value="40" min="0">자에서 줄임</label>
       <label title="끄면 총 행 수와 예상 시간을 구하지 않아요. 쓴 만큼 요금이 나오는 DB에서 아낄 수 있어요. 주소로 접속한 DB는 결과를 이 PC에 받아 둘 수 있는지만 100만 행까지 세요"><input type="checkbox" id="count" checked> 총 행 수 세기</label>
-      <span style="margin-left:auto"></span>
-      <button id="handoff" class="btn" title="조건에 맞는 모든 행을 Parquet 파일로 저장하고, 분석 화면의 전처리 탭에서 열어요. 연결도 그 파일로 바뀌어요">전처리로 보내기</button>
     </div>
   </main>
   <div class="grip-x" data-size="panel" title="끌어서 패널 너비를 바꿔요. 두 번 누르면 기본 너비로 돌아가요"></div>
@@ -216,7 +258,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
           </div></div>
         <div class="cn"></div>
         <div class="step" data-step="periods"><div class="sp"><i>4</i><span class="t">기간</span><b id="sum-periods"></b><span class="c"></span></div>
-          <div class="edx"><div class="hint">예: 주문일 2025-07-01 ~ 2025-09-30. 시작이나 끝 한쪽은 비워도 돼요.</div><div id="periods"></div>
+          <div class="edx"><div class="hint">예: 주문일 2025-07-01 ~ 2025-09-30. 시작이나 끝 한쪽은 비워도 돼요. <code>날짜컬럼 최근 7일</code> / <code>지난달</code>도 돼요.</div><div id="periods"></div>
             <div class="row" style="margin-top:6px"><select id="pk-col" title="날짜 컬럼(기준 테이블)" aria-label="기간을 찾을 날짜 컬럼"></select><select id="pk-unit" title="기간 길이" aria-label="기간 길이"><option value="day">1일</option><option value="week">1주(월요일부터)</option><option value="month" selected>1달</option></select><button id="peak-find" class="btn" title="고른 기간 길이로 나눠 건수가 가장 많은 기간 5개를 기준 테이블 전체로 찾아요(조인·조건은 넣지 않아요). 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="가장 많은 기간 찾기">가장 많은 기간 찾기</button></div>
             <div id="pk-list"></div><div class="err" id="err-peak"></div></div></div>
         <div class="cn"></div>
@@ -227,12 +269,12 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
                 <label><input type="radio" name="cmode" value="fields" checked style="width:auto"> 골라서 넣기</label>
                 <label><input type="radio" name="cmode" value="line" style="width:auto"> 직접 쓰기</label>
               </div>
-              <div class="hint format">쓰는 법: 컬럼 &gt;= 값 / 컬럼 != 값 / 컬럼 &lt; 다른컬럼 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / * is not null(모든 컬럼이 비어 있지 않은 행만) / 조건 or 조건. 값에 or나 쉼표가 있으면 '값'처럼 따옴표로 감싸요. 값 자리에 컬럼 이름을 그대로 쓰면 두 컬럼을 비교하고, 같은 글자를 값으로 찾으려면 '값'처럼 감싸요.</div>
+              <div class="hint format">쓰는 법: 컬럼 &gt;= 값 / 컬럼 != 값(빈 값 행도 남겨요) / 컬럼 &lt; 다른컬럼 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2(빈 값 행도 남겨요) / 컬럼 like 값 / 컬럼 not like 값 / 컬럼 matches 정규식(예: 이름 matches ^김.*) / 컬럼 =~ 값(대소문자 무시 같음) / 컬럼 not between 값1 값2(빈 값 행도 남겨요) / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / * is not null(모든 컬럼이 비어 있지 않은 행만) / 조건 or 조건. 값에 or나 쉼표가 있으면 '값'처럼 따옴표로 감싸요. 값 자리에 컬럼 이름을 그대로 쓰면 두 컬럼을 비교하고, 같은 글자를 값으로 찾으려면 '값'처럼 감싸요.</div>
               <div id="conditions"></div>
               <div id="builder">
                 <div class="row"><select id="bcol" title="컬럼"></select><select id="bop" title="비교 방법"></select></div>
                 <div class="row"><input id="bval" placeholder="값"><input id="bval2" placeholder="값2" class="hidden"><button id="blist" class="btn hidden" title="이 컬럼에 있는 값을 불러와 골라요 (최대 200개)">값 목록</button></div>
-                <select id="bpick" class="hidden" title="고르면 값 칸에 들어가요"></select>
+                <select id="bpick" class="hidden" title="고르면 값 칸에 들어가요"></select><div class="hint" id="bpick-note">일부 행 기준이에요</div>
                 <div class="row"><button id="badd" class="btn">조건 추가</button></div>
                 <div class="err" id="err-builder"></div>
               </div>
@@ -265,7 +307,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
       <div class="drop up" style="flex:1; display:flex"><button id="saved-open" class="btn" style="flex:1; justify-content:center">저장한 검색</button>
         <div class="pop hidden" id="saved-pop">
           <select id="saved" title="고르면 저장한 조건을 불러와요. 검색은 하지 않아요. 많이 불러온 순이에요"></select>
-          <div class="row"><input id="sname" placeholder="이름 (비우면 고른 검색을 덮어써요)"><button id="ssave">저장</button><button id="sdel" class="btn">삭제</button></div>
+          <div class="row"><input id="sname" placeholder="이름 (비우면 덮어써요)"><button id="ssave">저장</button><button id="sdel" class="btn">삭제</button></div>
         </div></div>
       <button id="search" class="btn p">검색</button>
     </footer>
@@ -288,12 +330,12 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
       <div class="sql-hl"><pre id="sql-paint" aria-hidden="true"></pre><textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea></div>
       <div class="sql-check" id="sql-check"></div>
       <pre class="nl-prompt hidden" id="sql-plan"></pre>
-      <div class="row"><button id="sql-deep" class="btn" title="데이터는 읽지 않고, 테이블과 컬럼 이름이 맞는지까지 확인해요">검사</button>
+      <div class="row"><button id="sql-run2" class="btn p" title="SQL을 실행해요 (Ctrl+Enter)">실행</button><button id="sql-deep" class="btn" title="데이터는 읽지 않고, 테이블과 컬럼 이름이 맞는지까지 확인해요">검사</button>
         <button id="sql-plan-show" class="btn" title="DB가 이 SQL을 어떻게 읽는지 보여 줘요. 인덱스를 쓰는지, 테이블을 통째로 읽는지 알 수 있어요. 실행은 하지 않아요 (EXPLAIN)">실행 계획</button>
         <label title="한 쪽에 보일 행 수예요. 전체는 [결과 내보내기]로 받으세요">한 쪽에 <input id="sql-rows" type="number" min="1">행</label>
         <span class="hint" style="margin:0" title="WITH, JOIN, LIKE, *는 쓸 수 있고 DROP, DELETE, INSERT나 여러 문장은 실행하지 않아요">데이터를 읽기만 하는 SELECT 문 하나를 실행해요.</span></div>
     </div>
-    <div class="big"><b id="sql-count">실행 전</b><span id="sql-sub"></span></div>
+    <div class="big"><b id="sql-count"></b><span id="sql-sub">아직 실행하지 않았어요</span></div>
     <div class="err" id="err-sql"></div>
     <section class="pane"><div class="table-wrap" id="sql-result"></div></section>
     <div class="pager"><button id="sql-prev" class="btn" disabled>이전</button><button id="sql-next" class="btn" disabled>다음</button><span id="sql-page"></span><input id="sql-go" type="number" min="1" placeholder="쪽" style="width:4.5em" title="가려는 쪽 번호를 쓰고 Enter를 누르세요. 범위 밖이면 처음이나 마지막 쪽으로 가요" aria-label="쪽 번호로 이동"></div>
@@ -304,7 +346,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
     <div class="sc">
       <h2>저장한 SQL</h2>
       <select id="sql-saved" title="고르면 편집기에 불러와요. 실행은 하지 않아요. 많이 불러온 순이에요"></select>
-      <div class="row" style="margin-top:6px"><input id="sql-name" placeholder="이름 (비우면 고른 SQL을 덮어써요)"><button id="sql-save" class="btn">저장</button><button id="sql-del" class="btn">삭제</button></div>
+      <div class="row" style="margin-top:6px"><input id="sql-name" placeholder="이름 (비우면 덮어써요)"><button id="sql-save" class="btn">저장</button><button id="sql-del" class="btn">삭제</button></div>
       <h2>가상 테이블</h2>
       <div class="hint" title="SQL 탭과 탐색 탭의 테이블 목록에서 테이블처럼 쓸 수 있어요. 많이 쓴 순이에요">SQL이나 Parquet 파일에 이름을 붙여 테이블처럼 써요. 이 연결에서만 쓰고 DB에는 아무것도 만들지 않아요.</div>
       <div id="vt-list"></div>
@@ -315,7 +357,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
       <div class="hint">누르면 편집기에 이름이 들어가요.</div>
       <div class="chips open" id="sql-tables"></div>
     </div>
-    <footer><button id="sql-run" class="btn p">실행</button></footer>
+    <footer><button id="sql-run" class="btn p" title="SQL을 실행해요 (Ctrl+Enter)">실행</button></footer>
   </aside>
 </div>
 <!-- 지표: 지표 파일(YAML·JSON)에 적은 지표를 탐색의 기준 테이블·조인·기간·조건 위에서 누르는 즉시 구한다. 나눌 컬럼을 고르면 그 값마다. -->
@@ -326,7 +368,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
     <div class="big"><b id="met-big">지표를 고르세요</b><span id="met-sub">오른쪽 목록에서 지표를 누르면 바로 구해요.</span></div>
     <div class="err" id="err-met"></div>
     <section class="pane">
-      <div class="chart-box hidden" id="met-box"><canvas id="met-chart"></canvas></div>
+      <div class="chart-box hidden" id="met-box"><iframe id="met-chart" src="/chart" title="지표 차트"></iframe></div>
       <div class="table-wrap" id="met-table"></div>
     </section>
   </main>
@@ -335,7 +377,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
     <header><h3>지표</h3></header>
     <div class="sc">
       <h2>지표 파일</h2>
-      <div class="row"><input id="met-path" class="code" placeholder="지표 파일 경로 (YAML, JSON)" title="지표를 적어 둔 파일이에요. 파일을 고친 뒤에는 [불러오기]를 다시 누르세요. 비우고 [불러오기]를 누르면 쓰지 않아요"><button id="met-read">불러오기</button></div>
+      <div class="row"><input id="met-path" class="code" placeholder="지표 파일 경로 (YAML, JSON)" title="지표를 적어 둔 파일이에요. 파일을 고친 뒤에는 [불러오기]를 다시 누르세요. 비우고 [불러오기]를 누르면 쓰지 않아요"><button id="met-pick" class="btn" title="파일 선택 창에서 지표 파일을 골라요" aria-label="지표 파일 찾아보기">찾아보기</button><button id="met-read">불러오기</button></div>
       <div class="hint" id="met-info"></div>
       <h2>나눠 보기</h2>
       <select id="met-by" title="고르면 이 컬럼의 값마다 따로 구해요 (값 순으로 앞 50개)"></select>
@@ -346,6 +388,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
   </aside>
 </div>
 
+<div id="undo-bar" class="undo hidden" role="status"><span id="undo-text"></span><button id="undo-go" class="btn">되돌리기</button></div>
 <!--include core/connect.html-->
 <!--include core/dash_refresh.html-->
 <!--include core/notify.html-->
@@ -354,18 +397,48 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
 <script src="/static/core/funcs.js"></script>
 <script src="/static/core/dash_refresh.js"></script>
 <script src="/static/core/board.js"></script>
-<script src="/static/core/lib/dash_calc.js"></script>
-<script src="/static/core/dash.js"></script>
 <script src="/static/query/dash_add.js"></script>
 <script src="/static/core/dash_shelf.js"></script>
 <script>
 if (location.hash === "#dashboard") location.replace("/dashboard");  // 대시보드 탭은 대시보드 화면(/dashboard)으로 옮겼다(예전 주소도 그리로 보낸다)
+// 지우기·덮어쓰기 전에 묻는 창(common.js에는 일반 확인 창이 없고 문장 화면의 sentAsk는 늦게 불러온다). 확인하면 true.
+function confirmBox(title, text, ok) {
+  return new Promise(done => {
+    const close = v => () => { box.remove(); done(v); };
+    const box = el("div", { className: "modal", onclick: e => { if (e.target === box) close(false)(); } }, el("div", { className: "modal-box" }, el("h3", { textContent: title }),
+      el("p", { textContent: text, style: "white-space:pre-wrap; margin:10px 0 14px" }), el("div", { className: "row", style: "justify-content:flex-end" },
+        el("button", { className: "ghost", textContent: "취소", onclick: close(false) }), el("button", { className: "btn p", textContent: ok, onclick: close(true) }))));
+    document.body.append(box);
+    box.querySelector("button:last-child").focus();
+  });
+}
+// 지운 것을 5초 동안 [되돌리기]로 살린다. 새로 지우면 앞 알림은 사라진다(앞의 것은 지운 채로 확정).
+let undoTimer = 0;
+function undoToast(text, undo) {
+  $("undo-text").textContent = text;
+  $("undo-go").onclick = async () => { $("undo-bar").classList.add("hidden"); clearTimeout(undoTimer); await undo(); };
+  $("undo-bar").classList.remove("hidden");
+  clearTimeout(undoTimer);
+  undoTimer = setTimeout(() => $("undo-bar").classList.add("hidden"), 5000);
+}
+// 단축키 한 장
+const KEYS = [["Ctrl+Z", "검색 조건 되돌리기 (탐색 탭)"], ["Ctrl+S", "저장한 검색 저장 (SQL 탭에서는 SQL 저장)"], ["Ctrl+F", "결과 안에서 찾기"], ["Ctrl+Enter", "검색 실행 (SQL 탭에서는 SQL 실행)"],
+  ["Esc", "열린 창이나 메뉴 닫기"], ["[이전]·[다음] 위에서 휠", "쪽 넘기기 (아래로 돌리면 다음, 위로 돌리면 이전)"], ["값 우클릭", "이 값만 보기, 이 값 제외, 정렬"],
+  ["Ctrl+T", "새 작업 탭 (탐색 탭, 입력 칸 밖에서)"], ["Ctrl+W", "지금 작업 탭 닫기 (탐색 탭, 입력 칸 밖에서)"], ["← → (탭 위에서)", "작업 탭 옮기기, 탭 이름을 두 번 누르면 이름 바꾸기"]];
+function showKeys() {
+  const close = () => box.remove();
+  const box = el("div", { className: "modal", onclick: e => { if (e.target === box) close(); } }, el("div", { className: "modal-box" }, el("h3", { textContent: "단축키" }),
+    el("table", { className: "keys-table" }, ...KEYS.map(([k, what]) => el("tr", {}, el("td", { textContent: k }), el("td", { textContent: what })))),
+    el("div", { className: "row", style: "justify-content:flex-end" }, el("button", { className: "btn p", textContent: "닫기", onclick: close }))));
+  document.body.append(box);
+  box.querySelector("button").focus();
+}
+$("keys-open").onclick = showKeys;
 const pickers = {};  // 함수 사전에서 고르는 칸들(chart·pivot·calc). initFuncs가 채운다.
 const LISTS = ["joins", "periods", "conditions", "calcs", "sorts", "columns"];  // 한 줄씩 모으는 입력. 서버로 보내는 이름과 같다.
 Object.assign(S, Object.fromEntries(LISTS.map(k => [k, []])), { union: { tables: [], how: "left" }, origins: {} });
 let last = null;  // 마지막 검색 결과(rows)와 집계(summary). 글자 수를 바꾸면 다시 조회하지 않고 표만 다시 그린다.
-let chart = null;
-let drawn = null;  // 마지막으로 그린 차트의 내용(toDrawn). 화면 모드를 바꾸거나 저장할 때 다시 그린다.
+let drawn = null;  // 마지막으로 그린 차트의 내용(toDrawn). 화면 모드를 바꾸거나 다른 작업 탭에서 돌아오면 차트 섬에 다시 보낸다.
 let skip = 0;  // 지금 보이는 결과가 건너뛴 행 수(쪽의 시작). [이전]·[다음]이 바꾼다.
 const state = () => ({ schema: S.schema, base: S.base, ...(S.union.tables.length ? { union: S.union } : {}), ...Object.fromEntries(LISTS.map(k => [k, S[k]])), conditions: grouped() });
 // 목록에서 i번째를 지운다. or 묶음(or는 "다음 조건과 or")의 끝을 지우면 바로 앞 조건이 묶음의 끝이 되어야 다음 조건이 or로 붙지 않는다.
@@ -463,7 +536,14 @@ function clearLists() {
 function clearScreen() {
   sqlSkip = 0; sqlMore = false; sqlRan = ""; sqlPager();  // [이전]·[다음]이 이전 연결의 SQL을 새 연결에서 돌리지 않게
   for (const k in tableCols) delete tableCols[k];  // 다른 연결의 같은 이름 테이블
+  tabs = [newTab()]; tabAt = 0;  // 다른 연결의 작업 탭(테이블·결과)은 새 연결과 맞지 않는다
+  clearExplore();
+  showTabs();
+}
+// 탐색 화면(고른 테이블, 조건 목록, 결과·집계·차트, 되돌리기 기록)만 비운다. 새 작업 탭도 여기서 시작한다.
+function clearExplore() {
   S.base = $("base").value = ""; searchUndo.reset();  // 다른 연결의 되돌리기 기록은 쓰지 않는다
+  searched = searchedTexts = knownCount = null;
   S.cols = [];
   S.origins = {};
   clearLists();
@@ -475,8 +555,7 @@ function clearScreen() {
   showBuilder();
   fillSummaryCols();
   last = drawn = null;
-  if (chart) chart.destroy();
-  chart = null;
+  $("chart").classList.add("hidden");
   skip = 0;
   $("prev").disabled = $("next").disabled = true;
   ["sql", "ctable"].forEach(id => $(id).classList.add("hidden"));
@@ -508,7 +587,10 @@ async function refreshColumns() {
   S.origins = d.origins;
   $("cols").innerHTML = S.cols.map(([n, t]) => `${esc(n)} (${esc(t)})`).join("<br>") +
     S.fields.map(([n, t]) => `<br><span class="hint" style="margin:0">　${esc(n)} (${esc(t)})</span>`).join("");
+  const x = $("cx").value;  // 고른 X는 남아 있으면 그대로, 없으면 날짜·범주 컬럼부터
   fill($("cx"), S.cols.map(c => c[0]));
+  $("cx").value = S.cols.some(c => c[0] === x) ? x : bestX(S.cols);
+  showUnit();
   for (const [id, blank] of [["pv-rows", "행으로 묶지 않음"], ["pv-col", "열로 펼치지 않음"], ["pv-val", "값 없이 개수만"]]) {  // 고른 것은 남아 있으면 그대로
     const was = $(id).value;
     fill($(id), S.cols.map(c => c[0]), blank);
@@ -533,6 +615,11 @@ async function refreshColumns() {
   showScan();
   if (pickers.chart) Funcs.loadSupport(S.base, S.schema).then(() => Object.values(pickers).forEach(p => p.refresh()));  // 이 연결이 못 하는 함수는 안내를 붙이거나 막는다
 }
+// 테이블만 고르고 다른 단계가 모두 비어 있으며 아직 검색 전이면 바로 처음 쪽을 검색해 빈 화면을 피한다. 그 뒤 조건을 바꿀 때는 [검색]을 눌러야 한다.
+function autoSearch() {
+  if (view === "cards" && S.base && !last && !S.union.tables.length && LISTS.every(k => !S[k].length)) runSearch(0);
+}
+{ const opened = $("base").onchange; $("base").onchange = async () => { await opened(); autoSearch(); }; }  // 위 핸들러(시험이 따로 돌린다)에 덧씌운다
 // 실행하면 처리할 용량(실행하지 않고 셈). 검색이 바뀔 때마다 잠깐 기다렸다가 다시 센다. 늦게 온 답은 버린다.
 let scanTimer, scanSeq = 0;
 function showScan() {
@@ -551,6 +638,7 @@ function showUnion() {
   $("u-how").value = S.union.how;
   $("u-chips").replaceChildren(...S.union.tables.map(name => chip(name, () => setUnion({ ...S.union, tables: S.union.tables.filter(t => t !== name) }))));
   fill($("u-add"), tableNames().filter(t => t !== S.base && !S.union.tables.includes(t)), "붙일 테이블 고르기");
+  addTabGroup($("u-add"), [S.base, ...S.union.tables]);
 }
 async function setUnion(next) {
   const before = S.union;
@@ -753,6 +841,7 @@ $("blist").onclick = () => busy($("blist"), async () => {
     const label = d.more ? `값 고르기 (앞의 ${d.values.length}개만)` : `값 고르기 (${d.values.length}개)`;
     $("bpick").replaceChildren(new Option(label, ""), ...d.values.map(v => new Option(v, v)));
     $("bpick").classList.remove("hidden");
+    $("bpick-note").classList.toggle("on", !!d.partial);  // 서버가 일부 행만 보고 모은 목록
     $("err-builder").textContent = "";
   } catch (e) { $("err-builder").textContent = e.message; }
 });
@@ -773,12 +862,15 @@ showBuilder();
 function showTab(name) {
   document.querySelectorAll(".tabs2 button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
   ["rows", "summary", "chart"].forEach(t => $("pane-" + t).classList.toggle("hidden", t !== name));
+  $("pager").classList.toggle("hidden", name !== "rows");  // 집계·차트에는 쪽이 없다
   if (name === "chart") drawChart();
 }
 document.querySelectorAll(".tabs2 button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
 
 // 검색. 결과 표의 머리글 아래 작은 글씨는 그 컬럼의 원래 테이블(기준 테이블이 아닐 때), 정렬한 컬럼은 강조색.
 function gridSpec(data, origins = {}) {
+  // 시각 문자열은 자정이면 날짜만, 초가 0이면 초 없이 보인다(표시만. 내보내는 값은 그대로)
+  const when = v => { const m = typeof v === "string" && v.match(/^(\d{4}-\d\d-\d\d)[ T](\d\d):(\d\d)(?::(\d\d)(?:\.0+)?)?$/); return !m ? v : m[2] + m[3] + (m[4] ?? "00") === "000000" ? m[1] : (m[4] ?? "00") === "00" ? `${m[1]} ${m[2]}:${m[3]}` : v; };
   const sorted = S.sorts.length === 1 ? S.sorts[0].match(/^(.*?)(?:\s+(asc|desc))?$/i).slice(1) : [];  // [컬럼, 방향]. 끝 낱말만 방향(sortText와 같이)
   const head = data.columns.map(c => {
     const from = origins[c] && origins[c] !== S.base ? `<small>${esc(origins[c])}</small>` : "";
@@ -788,7 +880,7 @@ function gridSpec(data, origins = {}) {
     return `<th class="${[c === sorted[0] && "sorted", number && "num"].filter(Boolean).join(" ")}"${sort}>${esc(c)}${arrow}${from}</th>`;
   }).join("");
   const source = c => c === "출처" && origins[c] === "이어붙인 테이블";
-  return { columns: data.columns, rows: data.rows, head, text: (r, c) => source(c) ? String(r[c] ?? "") : undefined, row: (r, want, max) => data.columns.map(c => source(c) ? `<td class="src">${lit(String(r[c] ?? ""), want)}</td>` : cell(r[c], want, max)).join("") };
+  return { columns: data.columns, rows: data.rows, head, text: (r, c) => source(c) ? String(r[c] ?? "") : undefined, row: (r, want, max) => data.columns.map(c => source(c) ? `<td class="src">${lit(String(r[c] ?? ""), want)}</td>` : cell(when(r[c]), want, max)).join("") };
 }
 // 검색과 [SQL 보기]가 똑같이 보내는 내용. 행 수는 입력한 그대로 보낸다. 0·음수·빈칸은 서버가 안내한다.
 const query = offset => ({ ...state(), limit: $("limit").value, offset });
@@ -797,7 +889,7 @@ function pageOffset(input, pages, limit) { const n = Math.min(Math.max(1, Math.f
 let lastPages = null;  // 지금 검색의 마지막 쪽 번호(행 수를 안 셌으면 null)
 // 결과 위의 큰 행 수와 조건 요약. d가 없으면 검색 전.
 function showBig(d, offset = 0) {
-  if (!d) { $("big-count").textContent = "검색 전"; $("big-sub").textContent = "오른쪽에서 테이블과 조건을 고른 뒤 [검색]을 누르세요."; $("page-info").textContent = ""; return; }
+  if (!d) { $("big-count").textContent = ""; $("big-sub").textContent = "아직 검색하지 않았어요. 오른쪽에서 테이블과 조건을 고른 뒤 [검색]을 누르세요."; $("page-info").textContent = ""; return; }
   const n = d.rows.rows.length, range = n ? `${(offset + 1).toLocaleString()}–${(offset + n).toLocaleString()}행` : "0행", limit = +(searched?.limit ?? $("limit").value);  // 쪽 번호는 실제로 요청한 행 수로
   $("big-count").textContent = d.count === null ? range : `${d.count.toLocaleString()}행`;
   const texts = searchedTexts ?? conditionTexts();  // 한 줄 요약: 보는 범위, 조건, 결과를 둔 곳을 문장으로
@@ -809,19 +901,22 @@ function showBig(d, offset = 0) {
 }
 // offset행을 건너뛰고 검색한다. [검색 실행]과 머리글 정렬은 0에서, [이전]·[다음]은 행 수만큼 옮겨서 부른다.
 // fresh: DB에서 새로 받는다([검색 실행]). 주소로 접속한 DB는 결과를 이 PC에 받아 두므로 쪽 넘기기·머리글 정렬은 DB에 다시 묻지 않는다.
-let searched = null, searchedTexts = null;  // searchedTexts: 그 검색의 조건 글(결과 위 요약은 패널이 아니라 이것을). 마지막으로 처음 쪽부터 검색한 요청: [이전]·[다음]은 이 조건으로 쪽만 옮긴다(패널을 고친 뒤 넘겨도 처리 용량 확인 없이 새 조회가 되지 않게)
+let searched = null, searchedTexts = null, knownCount = null;  // knownCount: 첫 검색(처음 쪽부터)이 센 전체 행 수. 쪽만 넘길 때 서버가 다시 세지 않게 보낸다. searchedTexts: 그 검색의 조건 글(결과 위 요약은 패널이 아니라 이것을). 마지막으로 처음 쪽부터 검색한 요청: [이전]·[다음]은 이 조건으로 쪽만 옮긴다(패널을 고친 뒤 넘겨도 처리 용량 확인 없이 새 조회가 되지 않게)
 function runSearch(offset, fresh = false, page = false) {
   if (!S.base) { $("err-search").textContent = "먼저 테이블을 고르세요."; return; }
   if (page && !searched) return;
   return busy($("search"), async () => {
+    const tab = tabs[tabAt];  // 검색 중 탭이 바뀌면(복원 중 포함) 늦게 온 응답은 버린다
     try {
-      const body = page ? { ...searched, offset } : { ...query(offset), count: $("count").checked, fresh }, texts = page ? searchedTexts : conditionTexts();
+      const body = page ? { ...searched, offset, count: false, ...(knownCount === null ? {} : { known_count: knownCount }) } : { ...query(offset), count: $("count").checked, fresh }, texts = page ? searchedTexts : conditionTexts();
       const d = await timed("search", () => api("/api/query", body));
-      if (!page) { searched = { ...body, fresh: false }; searchedTexts = texts; }
+      if (tabs[tabAt] !== tab) return false;
+      if (page && d.count === null && knownCount !== null) d.count = knownCount;  // 서버가 known_count를 돌려주지 않아도 쪽 표시는 전체 행 수를 안다
+      if (!page) { searched = { ...body, fresh: false }; searchedTexts = texts; knownCount = d.count; }  // 조건·정렬·행 수가 바뀐 검색은 여기서 다시 센 값으로
       skip = offset;
       $("prev").disabled = !offset;
       $("next").disabled = d.count === null ? d.rows.rows.length < +body.limit : offset + d.rows.rows.length >= d.count;  // 행 수를 알면 마지막 쪽에서 끈다
-      last = { rows: d.rows, summary: null, count: d.count };  // 이전 조건의 집계는 지운다.
+      last = { rows: d.rows, summary: null, count: d.count, held: d.held, server: d.server, note: d.note };  // 이전 조건의 집계는 지운다. held·server·note는 작업 탭을 다시 열 때 showBig이 쓴다
       $("err-summary").textContent = "";
       showBig(d, offset);  // 받아 두지 못한 까닭(note)은 err-search에
       renderTables();
@@ -936,11 +1031,12 @@ function showSearches(d, name = "") {
 api("/api/searches").then(d => showSearches(d)).catch(() => {});
 toggleDrop($("saved-open"), $("saved-pop"));
 document.addEventListener("click", e => {  // 밖을 누르면 떠 있는 상자를 닫는다(목록 고르기는 제외)
-  if (!e.target.closest(".pop, .menu")) ["saved-pop", "sql-save-pop"].forEach(id => $(id).classList.add("hidden"));
+  if (!e.target.closest(".pop, .menu")) ["saved-pop", "sql-save-pop", "export-pop", "wtab-pop"].forEach(id => $(id).classList.add("hidden"));
 });
 $("ssave").onclick = () => busy($("ssave"), async () => {
   if (!S.base) { $("err-search").textContent = "먼저 테이블을 고르세요."; return; }
-  const name = $("sname").value.trim() || $("saved").value;  // 이름을 비우면 지금 고른 검색에 덮어쓴다.
+  const typed = $("sname").value.trim(), name = typed || $("saved").value;  // 이름을 비우면 지금 고른 검색에 덮어쓴다.
+  if (!typed && name && !await confirmBox("덮어쓸까요?", `'${name}'에 덮어쓸까요? 예전 내용은 사라져요.`, "덮어쓰기")) return;
   try {
     showSearches(await api("/api/searches", { name, search: { schema: S.schema, base: S.base, union: S.union, ...Object.fromEntries(LISTS.map(k => [k, S[k]])), limit: $("limit").value } }), name);
     flash("검색을 저장했어요");
@@ -948,10 +1044,14 @@ $("ssave").onclick = () => busy($("ssave"), async () => {
   } catch (e) { $("err-search").textContent = e.message; }
 });
 $("sdel").onclick = () => busy($("sdel"), async () => {
-  if (!$("saved").value) return;
+  const name = $("saved").value, was = searches[name];
+  if (!name || !await confirmBox("저장한 검색을 지울까요?", `'${name}'을(를) 지울까요? 지운 뒤 5초 안에는 되돌릴 수 있어요.`, "지우기")) return;
   try {
-    showSearches(await api("/api/searches", { name: $("saved").value, search: null }));
+    showSearches(await api("/api/searches", { name, search: null }));
     $("err-search").textContent = "";
+    undoToast(`'${name}'을(를) 지웠어요`, async () => {
+      try { showSearches(await api("/api/searches", { name, search: was }), name); } catch (e) { $("err-search").textContent = e.message; }
+    });
   } catch (e) { $("err-search").textContent = e.message; }
 });
 // 고르면 불러온다(검색은 하지 않는다). 지금 연결에 없는 테이블·컬럼이 있으면 불러오기 전으로 되돌리고 이유를 알린다.
@@ -1001,8 +1101,10 @@ $("pv-run").onclick = () => {
   if (!S.base) { $("err-pivot").textContent = "먼저 테이블을 고르세요."; return; }
   return busy($("pv-run"), async () => {
     try {
-      const how = pickers.pivot.get();
-      const pivot = { rows: $("pv-rows").value ? [$("pv-rows").value] : [], column: $("pv-col").value, value: $("pv-val").value, how: how.agg, ...(how.opts ? { opts: how.opts } : {}), where: $("pv-where").value,
+      const how = pickers.pivot.get(), one = { value: $("pv-val").value, how: how.agg, ...(how.opts ? { opts: how.opts } : {}) };
+      const more = pvExtra.map(x => { const h = x.picker.get(); return { value: x.sel.value, how: h.agg, ...(h.opts ? { opts: h.opts } : {}) }; });
+      const pivot = { rows: $("pv-rows").value ? [$("pv-rows").value] : [], column: $("pv-col").value, ...(more.length ? { values: [one, ...more] } : one), where: $("pv-where").value,
+        ...($("pv-show").value !== "value" ? { show: $("pv-show").value } : {}),
         ...($("pv-sub").value ? { subtotals: $("pv-sub").value } : {}), ...($("pv-having").value.trim() ? { having: $("pv-having").value.trim() } : {}) };
       const d = await timed("summary", () => api("/api/pivot", { ...state(), pivot }));
       mountTable($("pivot"), gridSpec(d.rows));
@@ -1010,6 +1112,26 @@ $("pv-run").onclick = () => {
       $("err-pivot").textContent = "";
     } catch (e) { $("err-pivot").textContent = e.message; }
   });
+};
+// 피벗 값 추가 줄: 집계와 값 컬럼 한 쌍씩(서버는 values: [{value, how}]로 받는다). 소계와 열 비율은 함께 못 고른다.
+const pvExtra = [];
+let pvIds = [];
+function pvGuard() {
+  const colPct = $("pv-show").value === "col_pct", sub = $("pv-sub").value !== "";
+  $("pv-sub").disabled = colPct;
+  if (colPct) $("pv-sub").value = "";
+  [...$("pv-show").options].forEach(o => o.disabled = o.value === "col_pct" && sub);
+}
+$("pv-show").onchange = $("pv-sub").onchange = pvGuard;
+$("pv-add").onclick = () => {
+  if (!pickers.pivot) return;
+  const row = el("span", { className: "row" }), sel = el("select", { title: "집계할 값 컬럼이에요" });
+  const picker = Funcs.picker({ ids: pvIds, columns: () => S.cols, onchange: fillValueColumns });
+  const item = { picker, sel, row };
+  fill(sel, S.cols.map(c => c[0]), "값 없이 개수만");
+  row.append(picker.el, sel, el("button", { className: "ghost", textContent: "빼기", onclick: () => { pvExtra.splice(pvExtra.indexOf(item), 1); row.remove(); } }));
+  pvExtra.push(item);
+  $("pv-extra").append(row);
 };
 // 함수 사전(sql_funcs)에서 고르는 칸들: 차트 계열·피벗의 집계, 계산 줄 만들기. 인자 칸(구분자·정렬 기준·분위수 P …)은 사전의 args로 그린다.
 // 값 컬럼 칸은 고른 집계의 첫 컬럼 칸이 받는 종류만 보이고, 컬럼이 필요 없는 집계(조건 개수 …)이면 숨긴다.
@@ -1020,11 +1142,17 @@ function fillValueColumns() {
     if (cols.some(c => c[0] === was)) $(id).value = was;
     $(id).classList.toggle("hidden", !!p && p.yMode() === "none");
   }
+  for (const x of pvExtra) {  // 값 추가 줄도 고른 집계가 받는 컬럼만
+    const was = x.sel.value, cols = x.picker.xColumns(S.cols);
+    fill(x.sel, cols.map(c => c[0]), "값 없이 개수만");
+    if (cols.some(c => c[0] === was)) x.sel.value = was;
+    x.sel.classList.toggle("hidden", x.picker.yMode() === "none");
+  }
 }
 async function initFuncs() {
-  const cat = await Funcs.load(), aggs = screen => cat.screens[screen].filter(i => cat.byId[i].aggregate);
+  const cat = await Funcs.load(); pvIds = cat.screens.pivot.filter(i => cat.byId[i].aggregate); const aggs = screen => cat.screens[screen].filter(i => cat.byId[i].aggregate);
   for (const [key, host] of [["chart", "cagg"], ["pivot", "pv-how"]]) {
-    pickers[key] = Funcs.picker({ ids: aggs(key), columns: () => S.cols, onchange: fillValueColumns });
+    pickers[key] = Funcs.picker({ ids: aggs(key), columns: () => S.cols, onchange: () => { fillValueColumns(); redraw(); } });
     $(host).replaceChildren(pickers[key].el);
   }
   pickers.calc = Funcs.picker({ ids: cat.screens.calc.filter(i => cat.byId[i].window), columns: () => S.cols, onchange: showCalcForm });
@@ -1100,7 +1228,11 @@ $("calc-example").onchange = () => {
 
 const ROWS_HINT = '<span class="empty">검색하면 여기에 결과가 나와요.</span>';
 const SUMMARY_HINT = '<span class="empty">[집계하기]를 누르면 지금 조건으로 컬럼별 집계를 구해요.</span>';
+let ctxHintFirst = true;  // 우클릭 안내는 이 PC에서 처음 한 번만(localStorage 없으면 그 쪽만 보임)
+try { ctxHintFirst = !localStorage.getItem("ctxHint"); } catch { /* 저장소 없음 */ }
 function renderTables() {
+  $("export-open").disabled = !last?.rows;  // 결과가 있어야 내보낸다
+  if (last?.rows && ctxHintFirst) { $("ctx-hint").classList.remove("hidden"); try { localStorage.setItem("ctxHint", "1"); } catch { /* 저장소 없음 */ } }
   if (last?.rows) mountTable($("rows"), gridSpec(last.rows, S.origins)); else { $("rows")._grid = null; $("rows").innerHTML = ROWS_HINT; }
   $("rows").querySelectorAll("th").forEach(th => th.title = "누르면 이 컬럼으로 정렬해요");
   if (last?.summary) mountTable($("summary"), gridSpec(last.summary)); else { $("summary")._grid = null; $("summary").innerHTML = SUMMARY_HINT; }
@@ -1110,7 +1242,9 @@ let maxTimer; $("maxlen").oninput = () => { clearTimeout(maxTimer); maxTimer = s
 renderTables();
 
 // 결과 내보내기: 서버가 만든 파일을 내려받는다.
+toggleDrop($("export-open"), $("export-pop"));
 document.querySelectorAll("[data-export]").forEach(b => b.onclick = () => {
+  $("export-pop").classList.add("hidden");
   if (!S.base) { $("err-export").textContent = "먼저 테이블을 고르세요."; return; }
   const format = b.dataset.export;
   return busy(b, async () => {
@@ -1125,6 +1259,7 @@ document.querySelectorAll("[data-export]").forEach(b => b.onclick = () => {
 // 여러 테이블 → 한 Excel(테이블마다 시트 하나): 기준·이어붙이기·조인에 올린 테이블들. 서버가 저장 대화상자를 띄우고 {path}를 돌려준다.
 const exportTables = () => [...new Set([S.base, ...S.union.tables, ...joinsUI.map(j => j.table)].filter(Boolean))].map(name => ({ schema: S.schema, name }));
 $("export-tables").onclick = () => {
+  $("export-pop").classList.add("hidden");
   if (!S.base) { $("err-export").textContent = "먼저 테이블을 고르세요."; return; }
   return busy($("export-tables"), async () => {
     try {
@@ -1135,20 +1270,22 @@ $("export-tables").onclick = () => {
   });
 };
 
-// 전처리로 보내기: 프로그램이 저장 대화상자를 띄워 Parquet으로 저장하고 그 파일에 연결한 뒤, 분석 화면(전처리 탭)으로 간다. 취소하면 그대로 둔다.
+// 전처리로 보내기: 파일을 만들지 않고 지금 검색을 전처리의 기준 표(@이름, 불러온 저장 검색이 있으면 그 이름)로 넘기고 분석 화면(전처리 탭)으로 간다. 연결은 그대로다.
 $("handoff").onclick = () => {
   if (!S.base) { $("err-export").textContent = "먼저 테이블을 고르세요."; return; }
   return busy($("handoff"), async () => {
     try {
-      const d = await timed("export", () => api("/api/handoff", state()));
-      if (d.cancelled) return;
+      const name = $("saved").value, d = await api("/api/handoff", { ...state(), mode: "query", ...(name ? { name } : {}) });
       await searchDraft.clear();
-      location.href = "/prep?base=" + encodeURIComponent(d.table);
+      location.href = d.url;
     } catch (e) { $("err-export").textContent = e.message; }
   });
 };
 
-// 차트 (색은 board.js의 themeColors)
+// 섬이 그릴 계열 값: 계열마다 이름·값과 모양(막대·선, 점선, 오른쪽 축)만
+const islandSets = sets => sets.map(({ label, values, type, dash, axis }) => ({ label, values, type, dash, axis }));
+
+// 차트 (집계 표 그림의 색은 board.js의 themeColors)
 // 최소와 최대를 둘 다 넣었는데 최소가 최대보다 작지 않은가
 const badRange = (min, max) => min !== "" && max !== "" && +min >= +max;
 // 세로축 범위: 넣은 쪽만 고정하고 비운 쪽은 자동. 최소가 최대보다 작지 않으면 그 축은 자동으로 두고 이유를 알린다.
@@ -1162,14 +1299,6 @@ const rangeError = () => [["ymin", "ymax", "왼쪽"], ["y1min", "y1max", "오른
   .map(([, , side]) => `${side} 축의 최솟값을 최댓값보다 작게 넣어 주세요.`).join(" ");
 const axisRanges = () => ({ y: axisRange("ymin", "ymax"), y1: axisRange("y1min", "y1max") });  // 지금 넣은 왼쪽·오른쪽 축 범위
 ["ymin", "ymax", "y1min", "y1max"].forEach(id => $(id).oninput = () => { $("err-chart").textContent = rangeError(); drawChart(); });  // 다시 조회하지 않고 바로 반영
-// dash.js chartConfig 설정을 이 화면에 맞게: 범례는 계열을 넣은 순서로(Chart.js는 order가 작은 선을 막대보다 앞에 둔다), percent면 세로축 눈금에 %
-function tuneChart(cfg, percent) {
-  const y = cfg.options.scales?.y;
-  if (percent && y) y.ticks = { ...y.ticks, callback: v => `${Number(v).toLocaleString()}%` };
-  return cfg;
-}
-// 탐색 탭의 지금 차트(toDrawn·metricDrawn)와 세로축 범위(axisRanges)를 dash.js의 chartConfig가 그릴 임시 카드로. 계열 색은 순서대로(카드의 지정 색 없음).
-const drawnCard = (drawn, ranges) => ({ kind: drawn.kind || "chart", view: { type: "", ranges }, norm: { labels: drawn.labels, datasets: drawn.datasets } });
 // 계열: 차트에 겹쳐 그릴 값 하나하나. 넣어 둔 것이 없으면 지금 고른 칸의 내용이 계열 하나가 된다.
 let series = [];
 const seriesNow = () => ({ y: $("cy").value, ...pickers.chart.get(), type: $("ctype").value, dash: $("cdash").value, axis: $("caxis").value });
@@ -1185,7 +1314,9 @@ $("series-add").onclick = () => {
   $("err-chart").textContent = "";
   showSeries();
 };
-$("ctype").onchange = () => { $("cdash").disabled = $("ctype").value === "bar"; };  // 막대에는 선 모양이 없다.
+$("ctype").onchange = () => { $("cdash").disabled = $("ctype").value === "bar"; redraw(); };  // 막대에는 선 모양이 없다.
+$("cx").onchange = () => { showUnit(); redraw(); };
+["cunit", "csplit", "corder", "cy", "cdash", "caxis"].forEach(id => $(id).onchange = redraw);
 // 끌어 놓기 선반(dash_shelf.js): 컬럼 칩을 X축·값·색(나누기)·필터 칸에 놓으면 위의 칸들이 바뀌고 차트를 다시 그린다. 안 되는 놓기는 이유 문장이 chart 오류 칸에 뜬다.
 const shelf = shelfPanel({
   columns: () => S.cols,
@@ -1214,25 +1345,24 @@ $("cswap").onclick = () => {
   $("draw").click();
 };
 // 차트 비율(가로/세로). 자동이면 그룹이 5개 이하일 때 1:1, 늘수록 넓어져 25개 이상이면 16:9.
-const RATIOS = { square: 1, wide: 16 / 9 };
-function fitChart() {
-  const groups = drawn ? drawn.labels.length : 25;
-  const auto = 1 + (RATIOS.wide - 1) * Math.min(1, Math.max(0, (groups - 5) / 20));
-  $("chart").parentElement.style.setProperty("--ratio", RATIOS[$("cratio").value] ?? auto);
-}
-// 라벨 바꾸기(#clabels)를 X 라벨과 계열 이름("계열 · 값" 꼴은 부분마다)에 적용한 복사본. 값은 그대로.
-function labeled(d) {
-  const map = new Map($("clabels").value.split("\n").map(l => l.split(/=(.*)/s)).filter(p => p.length > 1).map(([k, v]) => [k.trim(), v.trim()]));
-  const m = s => map.get(String(s)) ?? s;
-  return map.size ? { ...d, labels: d.labels.map(m), datasets: d.datasets.map(k => ({ ...k, label: String(k.label).split(" · ").map(m).join(" · ") })) } : d;
-}
+// X축 기본값: 날짜, 문자(범주), 그 밖(숫자·id 등) 순. 같은 순위끼리는 컬럼 순서대로.
+const xRank = ([, type]) => String(type).startsWith("날짜") ? 0 : type === "문자" ? 1 : 2;
+const bestX = cols => [...cols].sort((a, b) => xRank(a) - xRank(b))[0]?.[0] ?? "";
+const dateX = () => String(S.cols.find(c => c[0] === $("cx").value)?.[1] ?? "").startsWith("날짜");  // X가 날짜·시각 컬럼인가
+const showUnit = () => $("cunit-box").classList.toggle("hidden", !dateX());  // [묶기]는 날짜·시각 X에서만
+// 차트가 이미 그려져 있을 때만, 설정이 바뀌면 바로 다시 그린다
+function redraw() { if (drawn && !$("draw").disabled) $("draw").click(); }
+const RATIOS = { square: 1, wide: 16 / 9 };  // 자동이면 섬이 그룹 수로 정한다(autoRatio)
+const autoRatio = groups => 1 + (RATIOS.wide - 1) * Math.min(1, Math.max(0, (groups - 5) / 20));  // 섬(web/lib/island.ts)과 같은 자동 비율: 그룹 5개 이하 1:1 ~ 25개 이상 16:9
 $("clabels").oninput = () => drawChart();
+const chartDraw = island($("chart"), m => { $("err-chart").textContent = m; });
+// 지금 차트(toDrawn)를 차트 섬에 보낸다. 종류는 계열마다(계열이 막대·선·점선·오른쪽 축을 들고 있다), 라벨 바꾸기는 섬이 적용한다. 그린 것이 없으면 섬을 감춘다.
 function drawChart() {
-  fitChart();
+  $("chart").classList.toggle("hidden", !drawn);
   if (!drawn) return;
-  if (typeof Chart === "undefined") return void need(CHART_JS).then(drawChart);  // 첫 차트
-  if (chart) chart.destroy();
-  chart = new Chart($("chart"), tuneChart(chartConfig(drawnCard(labeled(drawn), axisRanges()), themeColors(document.documentElement.dataset.theme))));
+  const ratio = RATIOS[$("cratio").value];
+  chartDraw({ kind: "series", payload: { labels: drawn.labels, datasets: islandSets(drawn.datasets) },
+    opts: { type: "", ranges: axisRanges(), relabel: $("clabels").value, ...(ratio ? { ratio } : {}) } });
 }
 // /api/chart의 결과를 그릴 내용으로. query는 보낸 요청(대시보드가 다시 구할 때 그대로 보낸다), used는 계열들(종류·선 모양·축 포함).
 // 계열 이름: 나누지 않으면 계열 이름, 나누면 나눈 값(계열이 여럿이면 "계열 · 값").
@@ -1243,8 +1373,10 @@ function toDrawn(query, used, d) {
 $("draw").onclick = () => busy($("draw"), async () => {
   try {
     const used = series.length ? series : [seriesNow()];
-    const query = { ...state(), x: $("cx").value, split: $("csplit").value, order: $("corder").value, series: used.map(s => ({ y: s.y, agg: s.agg, ...(s.opts ? { opts: s.opts } : {}) })) };
+    const tab = tabs[tabAt];
+    const query = { ...state(), x: $("cx").value, x_unit: dateX() ? $("cunit").value : "", split: $("csplit").value, order: $("corder").value, series: used.map(s => ({ y: s.y, agg: s.agg, ...(s.opts ? { opts: s.opts } : {}) })) };
     const d = await timed("chart", () => api("/api/chart", query));
+    if (tabs[tabAt] !== tab) return;  // 그리는 사이 탭이 바뀌었으면 버린다
     drawn = toDrawn(query, used, d);
     drawChart();
     mountTable($("ctable"), gridSpec(chartData()));  // 감춰져 있어도 채워 둔다. [표로 보기]는 보이기만 바꾼다.
@@ -1304,14 +1436,11 @@ document.querySelectorAll("[data-table]").forEach(b => b.onclick = () => {
   $("err-summary").textContent = "";
 });
 
-// 차트 내보내기: 고른 저장 모드(화면 모드와 무관)의 색으로 화면과 같은 크기에 다시 그려, 그 모드의 배경 위에 옮겨 저장한다.
-function chartImage(type) {
-  const src = $("chart"), ranges = axisRanges();
-  return chartPicture((colors, options) => chartConfig(drawnCard(labeled(drawn), ranges), colors, options), $("cimage").value, type, src.clientWidth, src.clientHeight, src.width / src.clientWidth);
-}
-document.querySelectorAll("[data-image]").forEach(b => b.onclick = () => {
-  if (!chart) { $("err-chart").textContent = "먼저 차트를 그리세요."; return; }
-  download(chartImage(b.dataset.image), "chart." + imageExt(b.dataset.image));
+// 차트 내보내기: 섬이 고른 저장 모드(화면 모드와 무관)의 색으로 다시 그려 그림 파일(data URL)로 준다.
+const chartImage = type => chartDraw.picture($("cimage").value, type);
+document.querySelectorAll("[data-image]").forEach(b => b.onclick = async () => {
+  if (!drawn) { $("err-chart").textContent = "먼저 차트를 그리세요."; return; }
+  try { download(await chartImage(b.dataset.image), "chart." + imageExt(b.dataset.image)); } catch (e) { $("err-chart").textContent = e.message; }
 });
 
 // 집계 표·차트 보내기: 보낼 곳을 고르고 [보내기]를 두 번 눌러야 보낸다(다른 것을 건드리면 원래대로). 그림은 그 종류가 받을 때만 넣는다.
@@ -1332,7 +1461,7 @@ function sender(select, button, what, err, build) {
     asked = false;
     button.textContent = "보내기";
     return busy(button, async () => {
-      try { await sendTo(name, body); msg("보냈어요", true); } catch (e) { msg(e.message); }
+      try { await sendTo(name, { ...body, ...(body.image ? { image: await body.image } : {}) }); msg("보냈어요", true); } catch (e) { msg(e.message); }  // 차트 그림은 섬이 답할 때까지 기다린다
     });
   };
 }
@@ -1341,7 +1470,7 @@ sender($("ssend"), $("ssend-go"), "집계 표", "err-summary", name => {
   return { title: "집계", text: S.base, table: last.summary, ...(takesImage(name) ? { image: summaryImage("png") } : {}) };
 });
 sender($("csend"), $("csend-go"), "차트", "err-chart", name => {
-  if (!chart) { $("err-chart").textContent = "먼저 차트를 그리세요."; return null; }
+  if (!drawn) { $("err-chart").textContent = "먼저 차트를 그리세요."; return null; }
   return { title: "차트", text: `${S.base}, X: ${drawn.x}`, table: chartData(), ...(takesImage(name) ? { image: chartImage("png") } : {}) };
 });
 // 보낼 곳 목록이 바뀌면(패널에서 저장·삭제) 두 칸을 다시 채운다. 없으면 비활성.
@@ -1360,13 +1489,13 @@ fillSenders();  // 목록이 이 스크립트보다 먼저 와 있었을 수도 
 // 화면 안의 탭: 탐색, SQL, 지표. 고른 탭은 주소의 #sql·#metrics로 남겨 새로 열어도 그 탭이다.
 const VIEWS = { explore: "work", sql: "sqlv", metric: "metv" }, VIEW_HASH = { sql: "#sql", metric: "#metrics" };
 function showView(name) {
-  document.querySelectorAll("#views button").forEach(b => b.classList.toggle("on", b.dataset.view === name));
+  document.querySelectorAll("#views button[data-view]").forEach(b => b.classList.toggle("on", b.dataset.view === name));
   Object.entries(VIEWS).forEach(([v, id]) => $(id).classList.toggle("hidden", v !== name));
   history.replaceState(null, "", VIEW_HASH[name] ?? location.pathname + location.search);
   if (name === "sql") showSqlSide();
   if (name === "metric") { showMetricSide(); drawMetric(); }
 }
-document.querySelectorAll("#views button").forEach(b => b.onclick = () => showView(b.dataset.view));
+document.querySelectorAll("#views button[data-view]").forEach(b => b.onclick = () => showView(b.dataset.view));
 
 // ---------- 검색 조건 보기: 단계 카드 | 문장 ----------
 // 두 보기는 같은 검색 body를 본다. 문장 보기·지표 사전(sentences.js, metric_catalog.js)은 그 보기를 처음 열 때(또는 검색 조건을 불러올 때) 불러온다.
@@ -1419,7 +1548,9 @@ async function restoreSearch(d) {
   if (d.view === "flow" || d.graph) { if (view !== "cards") paintView("cards"); flash(FLOW_GONE, 4000); }  // 예전 흐름 보기의 초안
 }
 // 초안을 복원했을 때만 초안 기준을 바꾼다(되돌리기는 기준을 건드리지 않는다)
-const searchDraft = Draft("search", () => S.base && draftChanged() ? searchState() : null, async d => { await restoreSearch(d); draftBase = { base: S.base, key: bodyKey() }; });
+// 작업 탭이 여럿이면 탭 전체({tabs, at})를 담는다(탭을 바꾸는 중에는 담지 않는다). 탭이 하나면 예전 초안 모양 그대로.
+const searchDraft = Draft("search", () => tabBusy ? null : tabs.length > 1 ? tabsDraft() : S.base && draftChanged() ? searchState() : null,
+  async d => { if (d.tabs) await openTabs(d); else await restoreSearch(d); draftBase = { base: S.base, key: bodyKey() }; });
 const searchUndo = Undo(() => view === "cards" ? searchState() : null, restoreSearch);  // 되돌리기는 카드 보기에서만(문장 보기는 보이는 것을 되돌리지 못한다)
 const inExplore = () => !$("work").classList.contains("hidden");
 // 단축키: 되돌리기는 탐색 탭만(SQL·지표 탭의 글자 칸은 창 엔진 기본). 저장·실행은 보이는 탭의 단추, Ctrl+F는 결과 찾기 칸.
@@ -1435,6 +1566,166 @@ Shortcuts({
   find: () => $("row-find"),
 });
 const afterTables = () => searchDraft.ask();
+
+// ---------- 작업 탭(F10): 탭 하나 = 탐색 화면 한 벌(검색 조건·보기·문장, 결과·쪽, 집계, 차트 설정, 되돌리기 기록). 바꿀 때 통째로 떼어 두고(snapshot) 다시 붙인다(restore) ----------
+const TAB_MAX = 8, TAB_KEEP_ROWS = 2000;  // 이보다 큰 결과는 탭을 떠날 때 버리고 돌아오면 그 쪽만 다시 받는다(count:false·known_count라 다시 세지 않는다)
+const CHART_IDS = ["cx", "cy", "csplit", "cunit", "corder", "ctype", "cdash", "caxis", "cratio", "clabels", "ymin", "ymax", "y1min", "y1max"];
+const newTab = () => ({ name: "", auto: true, st: null });  // auto: 이름이 기준 테이블을 따른다(두 번 눌러 이름을 정하면 false)
+let tabs = [newTab()], tabAt = 0, tabBusy = false, tabsKey = "";
+const tabBase = i => i === tabAt ? S.base : tabs[i].st?.search?.body?.base ?? "";
+const tabName = i => (tabs[i].auto ? tabBase(i) : tabs[i].name) || `탭 ${i + 1}`;
+function snapshot() {
+  const drop = last?.rows?.rows.length > TAB_KEEP_ROWS && searched;
+  return { search: searchState(), undo: searchUndo.dump(), last: drop ? { ...last, rows: null } : last, searched, searchedTexts, knownCount, skip, drawn,
+    series: series.map(s => ({ ...s })), scols: [...scols], chart: Object.fromEntries(CHART_IDS.map(id => [id, $(id).value])), pane: document.querySelector(".tabs2 button.on")?.dataset.tab ?? "rows" };
+}
+async function restore(st) {
+  clearExplore();
+  sentView?.setDraft({ items: [], shared: { on: false, column: "", text: "" } });  // 앞 탭의 문장이 남지 않게
+  if (!st) return;
+  if (st.search) {
+    try { await restoreSearch(st.search); }
+    catch (e) { clearExplore(); throw e; }  // 지금 연결에 없는 테이블이면 앞 탭 조건으로 되돌아가지 않고 빈 탭으로
+  }
+  ({ searched = null, searchedTexts = null, knownCount = null, skip = 0, drawn = null } = st);
+  last = st.last ?? null; series = st.series ?? []; scols = st.scols ?? [];
+  Object.entries(st.chart ?? {}).forEach(([id, v]) => $(id).value = v);
+  showUnit(); showSeries(); fillSummaryCols();
+  if (drawn) mountTable($("ctable"), gridSpec(chartData()));
+  if (last && !last.rows && searched) { const summary = last.summary; last = null; await runSearch(skip, false, true); if (last && summary) last.summary = summary; }
+  renderTables();
+  if (last?.rows) {
+    showBig(last, skip);
+    $("prev").disabled = !skip;
+    $("next").disabled = last.count == null ? last.rows.rows.length < +searched?.limit : skip + last.rows.rows.length >= last.count;
+  }
+  showTab(st.pane ?? "rows");
+  searchUndo.load(st.undo);
+}
+// 검색·집계·차트가 도는 중에는 탭을 바꾸지 않는다(응답이 다른 탭에 그려지지 않게)
+function tabLocked() {
+  if (!["search", "summarize", "draw"].some(id => $(id).disabled)) return false;
+  flash("검색이 끝난 뒤 탭을 바꿔 주세요.", 3000);
+  return true;
+}
+async function goTab(i) {
+  if (tabBusy || i === tabAt || !tabs[i] || tabLocked()) return;
+  tabBusy = true;
+  if (tabAt >= 0) tabs[tabAt].st = snapshot();
+  tabAt = i;
+  try { await restore(tabs[i].st); }
+  catch (e) { $("err-search").textContent = e.message; }
+  finally { tabBusy = false; showTabs(); }
+}
+function addTab() {
+  if (tabLocked()) return Promise.resolve(false);
+  if (tabs.length >= TAB_MAX) { flash(`탭은 ${TAB_MAX}개까지 열 수 있어요. 안 쓰는 탭을 닫아 주세요.`, 3000); return Promise.resolve(false); }
+  tabs.push(newTab());
+  return goTab(tabs.length - 1);
+}
+async function closeTab(i) {
+  if (tabBusy || !tabs[i] || tabLocked()) return;
+  const name = tabName(i), gone = { ...tabs[i], st: i === tabAt ? snapshot() : tabs[i].st };
+  tabs.splice(i, 1);
+  if (!tabs.length) tabs.push(newTab());
+  if (i < tabAt) tabAt--;
+  else if (i === tabAt) { tabAt = -1; await goTab(Math.min(i, tabs.length - 1)); }
+  showTabs();
+  undoToast(`'${name}' 탭을 닫았어요`, () => {
+    if (tabs.length >= TAB_MAX || tabBusy) return;
+    tabs.splice(i, 0, gone);
+    if (tabAt >= i) tabAt++;
+    return goTab(i);
+  });
+}
+// 초안: 지금 탭은 화면에서, 다른 탭은 떼어 둔 검색만(결과는 담지 않는다)
+const tabsDraft = () => tabs.some((t, i) => tabBase(i)) ? { tabs: tabs.map((t, i) => ({ name: t.name, auto: t.auto, search: i === tabAt ? searchState() : t.st?.search ?? null })), at: tabAt } : null;
+async function openTabs(d) {
+  tabs = d.tabs.slice(0, TAB_MAX).map(t => ({ name: t.name ?? "", auto: t.auto !== false, st: t.search ? { search: t.search } : null }));
+  if (!tabs.length) tabs = [newTab()];
+  tabAt = Math.min(Math.max(0, d.at ?? 0), tabs.length - 1);
+  try { await restore(tabs[tabAt].st); } finally { showTabs(); }
+}
+// 다른 탭의 기준 테이블을 조인·행 합치기 목록 끝에 "탭: 이름"으로 더한다(값은 그 테이블 이름). skip: 넣지 않을 테이블
+const otherTabTables = () => tabs.map((t, i) => [i, tabName(i), tabBase(i)]).filter(([i, , b]) => i !== tabAt && b).map(([, n, b]) => [n, b]);
+function addTabGroup(sel, skip = []) {
+  const items = otherTabTables().filter(([, b]) => !skip.includes(b));
+  if (items.length) sel.append(el("optgroup", { label: "다른 탭" }, ...items.map(([n, b]) => new Option(`탭: ${n}`, b))));
+  return sel;
+}
+// 조인 덩어리의 테이블 칸에도 붙인다(renderJoins는 시험이 따로 돌리므로 덧씌운다). 겹쳐 그린 칸에 두 번 붙이지 않는다
+{ const draw = renderJoins; renderJoins = async () => { await draw(); $("join-blocks").querySelectorAll(".jb .r1 select:nth-of-type(2)").forEach(s => { if (!s.querySelector("optgroup")) addTabGroup(s, [S.base]); }); }; }
+function showTabs() {
+  const key = JSON.stringify([tabAt, tabs.map((t, i) => tabName(i))]);
+  if (key === tabsKey) return;  // 요약이 바뀔 때마다 불리므로 이름·고른 탭이 같으면 다시 그리지 않는다(이름 바꾸는 칸이 사라지지 않게)
+  tabsKey = key;
+  $("wtab-list").replaceChildren(...tabs.map((t, i) => {
+    const on = i === tabAt, name = tabName(i);
+    const b = el("button", { type: "button", className: "wtab-b", textContent: name, title: "두 번 누르면 이름을 바꿔요", tabIndex: on ? 0 : -1, onclick: () => goTab(i), ondblclick: () => renameTab(i, b), onkeydown: e => tabKey(e, i) });
+    b.setAttribute("role", "tab"); b.setAttribute("aria-selected", String(on));
+    const x = el("button", { type: "button", className: "ghost wtab-x", textContent: "×", title: "탭 닫기 (Ctrl+W)", tabIndex: -1, onclick: () => closeTab(i) });
+    x.setAttribute("aria-label", `${name} 탭 닫기`);
+    const w = el("span", { className: on ? "wtab on" : "wtab" }, b, x);
+    w.setAttribute("role", "presentation");
+    return w;
+  }));
+}
+// 화살표·Home·End로 탭을 옮기고 그 탭에 초점을 둔다
+function tabKey(e, i) {
+  const to = { ArrowLeft: i - 1, ArrowRight: i + 1, Home: 0, End: tabs.length - 1 }[e.key];
+  if (to === undefined) return;
+  e.preventDefault();
+  const n = (to + tabs.length) % tabs.length;
+  goTab(n).then(() => $("wtab-list").querySelectorAll('[role="tab"]')[n]?.focus());
+}
+// 탭 이름 바꾸기: 비우면 다시 기준 테이블 이름을 따른다. Enter·초점 이동은 반영, Esc는 취소
+function renameTab(i, b) {
+  const input = el("input", { value: tabName(i), className: "wtab-in" });
+  input.setAttribute("aria-label", "탭 이름");
+  let ended = false;
+  const done = keep => {
+    if (ended) return;
+    ended = true;
+    if (keep && tabs[i]) { const v = input.value.trim(); tabs[i].name = v; tabs[i].auto = !v; }
+    tabsKey = "";
+    showTabs();
+  };
+  input.onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) done(true); else if (e.key === "Escape") { e.stopPropagation(); done(false); } };
+  input.onblur = () => done(true);
+  b.replaceWith(input);
+  input.focus(); input.select();
+}
+$("wtab-add").onclick = () => addTab();
+toggleDrop($("wtab-menu"), $("wtab-pop"));
+$("wtab-save").onclick = async () => {  // 저장한 검색(/api/searches)에 탭 이름으로
+  $("wtab-pop").classList.add("hidden");
+  const name = tabName(tabAt);
+  if (searches[name] && !await confirmBox("덮어쓸까요?", `저장한 검색 '${name}'에 덮어쓸까요? 예전 내용은 사라져요.`, "덮어쓰기")) return;
+  $("sname").value = name;
+  $("ssave").click();
+};
+$("wtab-vt").onclick = () => busy($("wtab-vt"), async () => {  // 가상 테이블은 SQL 탭의 [편집기 SQL로 저장]이 만든다: 그 칸들만 채워 준다
+  $("wtab-pop").classList.add("hidden");
+  if (!S.base) { $("err-search").textContent = "먼저 테이블을 고르세요."; return; }
+  try {
+    const sql = (await api("/api/sql", { ...query(0), limit: null })).sql;  // 행 수를 자르지 않은 검색 그대로
+    showView("sql");
+    $("sql-text").value = sql;
+    $("vt-name").value = tabName(tabAt);
+    $("vt-name").focus();
+    flash("이 탭의 SQL을 편집기에 넣었어요. [편집기 SQL로 저장]을 누르세요", 5000);
+  } catch (e) { $("err-search").textContent = e.message; }
+});
+// Ctrl+T 새 탭, Ctrl+W 탭 닫기: 탐색 탭에서, 글자를 쓰는 칸 밖에서만(창이 떠 있으면 무시)
+document.addEventListener("keydown", e => {
+  if (e.defaultPrevented || e.isComposing || e.altKey || e.shiftKey || !(e.ctrlKey || e.metaKey) || !inExplore() || isTyping(e.target) || document.querySelector(".modal:not(.hidden)")) return;
+  const k = e.key.toLowerCase();
+  if (k === "t") { e.preventDefault(); addTab(); }
+  else if (k === "w") { e.preventDefault(); closeTab(tabAt); }
+});
+new MutationObserver(() => showTabs()).observe($("sum-data"), { childList: true, characterData: true, subtree: true });  // 기준 테이블이 바뀌면(요약 글이 바뀌면) 탭 이름도
+showTabs();
+// ---------- 작업 탭 끝 ----------
 // 보기 글자만 바꾼다(변환 없이)
 function paintView(name) {
   view = name;
@@ -1467,13 +1758,15 @@ $("search").addEventListener("click", async e => {
   if (await setView("cards")) $("search").click();
 }, true);
 
+const HANDED = "전처리로 보낸 검색은 대시보드 카드로 만들 수 없어요.";  // 기준이 @이름(전처리로 보낸 검색)이면 다시 구할 테이블이 없다
 // [대시보드에 추가]: 지금 그린 차트를 카드로(다시 구할 조회와 값) 고른 대시보드에 넣는다. 대시보드를 보고 고치는 곳은 대시보드 화면(/dashboard)이다.
 $("dash-add").onclick = () => busy($("dash-add"), async () => {
   if (!drawn) return say("err-chart", "먼저 차트를 그리세요.");
+  if (drawn.query.base.startsWith("@")) return say("err-chart", HANDED);
   const { query, used } = drawn, title = `${query.base} · ${used.map(seriesTitle).join(", ")} / ${drawn.x}`;
   try {
     const added = await addToDashboard({ kind: "chart", title, colors: { series: {}, parts: {}, order: [], parts_order: [] }, source: { schema: query.schema || "", table: query.base, body: query }, data: {},
-      view: { type: "", ratio: +$("chart").parentElement.style.getPropertyValue("--ratio") || 16 / 9, ranges: axisRanges(), styles: used.map(({ type, dash, axis }) => ({ type, dash, axis })) } }, "chart", { schema: query.schema, base: query.base });
+      view: { type: "", ratio: RATIOS[$("cratio").value] ?? autoRatio(drawn.labels.length), ranges: axisRanges(), styles: used.map(({ type, dash, axis }) => ({ type, dash, axis })) } }, "chart", { schema: query.schema, base: query.base });
     if (added) showAdded("err-chart", added);
   } catch (e) { say("err-chart", e.message); }
 });
@@ -1502,6 +1795,7 @@ async function runSql(offset = 0, fresh = true) {
   } catch (e) { say("err-sql", e.message); }
 }
 $("sql-run").onclick = () => busy($("sql-run"), () => runSql(0, true));
+$("sql-run2").onclick = () => $("sql-run").click();  // 편집기 아래의 [실행]도 같은 동작
 $("sql-plan-show").onclick = () => busy($("sql-plan-show"), async () => {
   if (!$("sql-plan").classList.contains("hidden")) { $("sql-plan").classList.add("hidden"); return; }  // 다시 누르면 접는다
   if (!connected) return say("err-sql", "먼저 데이터에 연결하세요.");
@@ -1627,14 +1921,20 @@ $("sql-saved").onchange = async () => {
   try { showSqls(await api("/api/sqls/use", { name }), name); } catch (e) { say("err-sql", e.message); }
 };
 $("sql-save").onclick = () => busy($("sql-save"), async () => {
-  const name = $("sql-name").value.trim() || $("sql-saved").value;
+  const typed = $("sql-name").value.trim(), name = typed || $("sql-saved").value;
+  if (!typed && name && !await confirmBox("덮어쓸까요?", `'${name}'에 덮어쓸까요? 예전 내용은 사라져요.`, "덮어쓰기")) return;
   try { showSqls(await api("/api/sqls", { name, sql: $("sql-text").value }), name); $("sql-name").value = ""; say("err-sql", `저장했어요: ${name}`, true); }
   catch (e) { say("err-sql", e.message); }
 });
 $("sql-del").onclick = () => busy($("sql-del"), async () => {
-  const name = $("sql-saved").value;
-  if (!name) return;
-  try { showSqls(await api("/api/sqls", { name, sql: null })); } catch (e) { say("err-sql", e.message); }
+  const name = $("sql-saved").value, was = sqls[name]?.sql;
+  if (!name || !await confirmBox("저장한 SQL을 지울까요?", `'${name}'을(를) 지울까요? 지운 뒤 5초 안에는 되돌릴 수 있어요.`, "지우기")) return;
+  try {
+    showSqls(await api("/api/sqls", { name, sql: null }));
+    undoToast(`'${name}'을(를) 지웠어요`, async () => {
+      try { showSqls(await api("/api/sqls", { name, sql: was }), name); } catch (e) { say("err-sql", e.message); }
+    });
+  } catch (e) { say("err-sql", e.message); }
 });
 api("/api/sqls").then(d => showSqls(d)).catch(() => {});
 // 가상 테이블: 지금 연결의 것을 많이 쓴 순으로. 이름을 누르면 편집기에 넣고, [정의]는 편집기에 정의를 불러오며, ×로 지운다.
@@ -1684,16 +1984,24 @@ function showSqlSide() {
 
 // ---------- 지표 탭 ----------
 // 지표 파일의 지표를 누르면 탐색의 식(state: 기준 테이블·조인·기간·조건) 위에서 구한다. 비율(percent)은 화면에서 ×100 %로 보인다.
-let metrics = { metrics: [], order: [] }, metDrawn = null, metChart = null;
+let metrics = { metrics: [], order: [] }, metDrawn = null;
 const metricText = (v, format) => v == null ? "—" : format === "percent" ? `${(v * 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
   : typeof v === "number" ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : String(v);
+// 지표 문장 화면(안쪽 [내 지표] 탭)으로 간다
+async function openMyMetrics() {
+  showView("explore");
+  if (await setView("sentence")) $("sent-host").querySelector('[data-tab="metric"]')?.click();
+}
+const noMetrics = () => el("div", { className: "none-box" }, el("b", { textContent: "지표가 없어요" }),
+  el("div", { className: "hint", textContent: "문장 화면에서 직접 만들거나, 지표 파일(YAML·JSON)을 불러오세요." }),
+  el("div", { className: "row" }, el("button", { className: "btn p", textContent: "내 지표 만들기", onclick: openMyMetrics }), el("button", { className: "btn", textContent: "지표 파일 불러오기", onclick: () => $("met-pick").click() })));
 function showMetrics(d) {
   metrics = d;
   $("met-path").value = d.path;
-  $("met-info").textContent = d.error ?? (d.path ? `지표 ${d.metrics.length}개` : "지표 파일 경로를 넣고 [읽기]를 누르면 그 안의 지표가 아래에 나와요.");
+  $("met-info").textContent = d.error ?? (d.path ? `지표 ${d.metrics.length}개` : "지표 파일 경로를 넣고 [불러오기]를 누르면 그 안의 지표가 아래에 나와요.");
   $("met-info").className = d.error ? "err" : "hint";
   const found = Object.fromEntries(d.metrics.map(m => [m.name, m])), on = metDrawn?.used[0];
-  $("met-list").replaceChildren(...d.order.map(name => el("button", { className: "met" + (name === on ? " on" : ""), title: found[name].text, onclick: e => busy(e.currentTarget, () => runMetric(name)) },
+  $("met-list").replaceChildren(...!d.order.length ? [noMetrics()] : d.order.map(name => el("button", { className: "met" + (name === on ? " on" : ""), title: found[name].text, onclick: e => busy(e.currentTarget, () => runMetric(name)) },
     el("b", { textContent: name }), el("span", { className: "hint", textContent: found[name].description || found[name].text }))));
 }
 // 위의 기준 글과 나눌 컬럼 목록(중첩 컬럼은 뺀다). 탐색에서 테이블·조건을 바꾸면 이 탭을 열 때 맞춘다.
@@ -1721,8 +2029,8 @@ async function runMetric(name) {
   } catch (e) { say("err-met", e.message); }
   showMetrics(await api("/api/metrics").catch(() => metrics));  // 많이 쓴 순이 바뀐다
 }
+const metDraw = island($("met-chart"), m => say("err-met", m));
 function drawMetric() {
-  if (metChart) { metChart.destroy(); metChart = null; }
   $("met-box").classList.add("hidden");
   if (!metDrawn) return;
   const name = metDrawn.used[0], m = metrics.metrics.find(x => x.name === name), d = metDrawn.raw, format = d.formats[name];
@@ -1735,17 +2043,19 @@ function drawMetric() {
   $("met-big").textContent = name;
   $("met-sub").textContent = [`${metDrawn.x}별 ${d.labels.length}개`, d.more ? `값이 많아 앞 ${d.max_groups}개만 보여요` : "", m?.description].filter(Boolean).join(". ");
   $("met-box").classList.remove("hidden");
-  $("met-box").style.setProperty("--ratio", 16 / 9);
-  if (typeof Chart === "undefined") return void need(CHART_JS).then(drawMetric);  // 첫 차트
-  metChart = new Chart($("met-chart"), tuneChart(chartConfig(drawnCard(metDrawn, { y: {}, y1: {} }), themeColors(document.documentElement.dataset.theme)), format === "percent"));
+  metDraw({ kind: "series", payload: { labels: metDrawn.labels, datasets: islandSets(metDrawn.datasets) }, opts: { type: "", ranges: {}, percent: format === "percent", ratio: 16 / 9 } });
   mountTable($("met-table"), gridSpec({ columns: [metDrawn.x, name], rows: d.labels.map((label, i) => ({ [metDrawn.x]: label ?? "(빈 값)", [name]: metricText(d.values[name][i], format) })) }));
 }
+$("met-pick").onclick = () => busy($("met-pick"), async () => {  // 파일 선택 창은 프로그램이 띄운다. 라우트가 없거나 취소하면 칸은 그대로
+  try { const d = await api("/api/pick", { kind: "metrics" }); if (d.path) { $("met-path").value = d.path; $("met-read").click(); } } catch { /* 조용히 넘김 */ }
+});
 $("met-read").onclick = () => busy($("met-read"), async () => {
   try { showMetrics(await api("/api/metrics", { path: $("met-path").value.trim() })); }
   catch (e) { showMetrics({ ...metrics, path: $("met-path").value, error: e.message }); }
 });
 $("met-dash").onclick = () => busy($("met-dash"), async () => {
   if (!metDrawn) return say("err-met", "먼저 지표를 구하세요.");
+  if (metDrawn.query.base.startsWith("@")) return say("err-met", HANDED);
   const { query, used } = metDrawn, title = `${query.base} · ${used.join(", ")}` + (query.by ? ` / ${query.by}` : "");
   try {
     const added = await addToDashboard({ kind: "metric", title, colors: { series: {}, parts: {}, order: [], parts_order: [] }, source: { schema: query.schema || "", table: query.base, body: query }, data: {}, view: { type: "", ratio: 16 / 9 } },
@@ -1755,7 +2065,7 @@ $("met-dash").onclick = () => busy($("met-dash"), async () => {
 });
 api("/api/metrics").then(showMetrics).catch(e => say("err-met", e.message));
 
-$("cratio").onchange = () => { fitChart(); saveSetting({ ratio: $("cratio").value }); };
+$("cratio").onchange = () => { drawChart(); saveSetting({ ratio: $("cratio").value }); };
 // 그림 모드는 차트 저장과 집계 표 저장이 함께 쓴다. 한쪽에서 바꾸면 다른 쪽도 바뀐다.
 $("cimage").onchange = $("simage").onchange = e => { $("cimage").value = $("simage").value = e.target.value; saveSetting({ image: e.target.value }); };
 $("cratio").value = saved("ratio") || "auto";

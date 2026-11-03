@@ -27,6 +27,7 @@ VERSION = 1
 LOCKED = "이 PC에서 만든 대시보드가 아니라 값을 읽을 수 없어요. 파일은 그대로 두었어요."
 MAX_DASHBOARDS = 100  # 대시보드 수
 MIN_REFRESH = 3600  # 최신화 주기의 최소(초)
+SETTING_KEYS = ("as_of", "period", "compare_mode", "refresh", "live")  # 카드 없이 바꾸는 대시보드 설정(/api/dash/settings)
 MAX_CARDS = 48  # 대시보드 하나의 카드 수(템플릿이 카드가 많다)
 MAX_CARD_BYTES = 400_000  # 카드 하나의 크기(JSON 글자)
 MAX_STORE_BYTES = 32 * 1024 * 1024  # 전체 크기
@@ -546,6 +547,10 @@ def check_dashboard(d, old=None):
             raise ValueError("기준일(as_of)은 비워 두거나 YYYY-MM-DD 모양의 있는 날짜여야 해요.") from None
         except OverflowError:
             raise ValueError("기준일(as_of)은 오늘 뒤의 날은 쓸 수 없어요.") from None
+    from dashboard import period  # 쿼리·분석 화면이 dash_store만 불러도 대시보드 모듈을 올리지 않게(test_lazy_loading_memory)
+    mode = d.get("compare_mode") or "prev"
+    if mode not in period.MODES:
+        raise ValueError("비교 기준(compare_mode)은 prev(직전 기간)·same_weekday(같은 요일)·yoy(작년 같은 기간) 중 하나여야 해요.")
     star = d.get("north_star") or {}
     if not isinstance(star, dict) or not isinstance(star.get("counters", []), list):
         raise ValueError("북극성(north_star)은 {card, counters: [카드 id]} 모양이어야 해요.")
@@ -555,7 +560,7 @@ def check_dashboard(d, old=None):
     if any(c and c not in ids for c in [north["card"], *north["counters"]]):
         raise ValueError("북극성·카운터 지표로 고른 카드가 이 대시보드에 없어요.")
     return {"id": dash_id, "name": text(d.get("name"), "대시보드 이름", 50, 1), "template": text(d.get("template"), "템플릿 이름", 50),
-            "palette": check_palette(d.get("palette") or []), "period": text(d.get("period") or "", "기간", 40), "as_of": as_of,
+            "palette": check_palette(d.get("palette") or []), "period": text(d.get("period") or "", "기간", 40), "as_of": as_of, "compare_mode": mode,
             "refresh": check_every(d.get("refresh"), "refresh"), "live": check_every(d.get("live"), "live"), "cards": cards, "created": text(d.get("created"), "만든 시각", 40),
             "updated": text(d.get("updated"), "고친 시각", 40), "north_star": north}
 
@@ -653,17 +658,21 @@ def get_dashboard(dash_id):
     return copy.deepcopy(found)
 
 
-def keep_newer(d, old):
-    """자동 저장이 최신화가 쓴 값을 옛 값으로 덮지 않게: 저장된 카드의 data가 들어온 것보다 늦게 구했고(computed_at) 정의 지문(def_hash)이 같으면 저장된 data를 둔다."""
+def keep_newer(d, old, bare=()):
+    """자동 저장이 최신화가 쓴 값을 옛 값으로 덮지 않게: 저장된 카드의 data가 들어온 것보다 늦게 구했고(computed_at) 정의 지문(def_hash)이 같으면 저장된 data를 둔다.
+    bare(data 키 없이 온 카드 id)는 저장된 data를 그대로 둔다(화면이 정의만 보내도 값을 지우지 않게)."""
     saved = {c["id"]: c.get("data") or {} for c in (old or {}).get("cards", []) if isinstance(c, dict)}
     for card in d["cards"]:
         was, now = saved.get(card["id"]) or {}, card["data"]
-        if was.get("def_hash") and was.get("def_hash") == now.get("def_hash") and str(was.get("computed_at") or "") > str(now.get("computed_at") or ""):
+        if card["id"] in bare and card["id"] in saved:
+            card["data"] = was
+        elif was.get("def_hash") and was.get("def_hash") == now.get("def_hash") and str(was.get("computed_at") or "") > str(now.get("computed_at") or ""):
             card["data"] = was
 
 
 def save_dashboard(d):
     """대시보드 하나를 검사해 저장하고(id가 같으면 덮어쓴다) 저장한 모양을 돌려준다. 이름이 겹치거나 100개를 넘으면 오류."""
+    bare = {c.get("id") for c in d.get("cards") or [] if isinstance(c, dict) and "data" not in c} if isinstance(d, dict) and isinstance(d.get("cards"), list) else set()
     with LOCK:
         dashboards = editable()
         d = check_dashboard(d, dashboards.get(d.get("id")) if isinstance(d, dict) and isinstance(d.get("id"), str) else None)
@@ -672,7 +681,7 @@ def save_dashboard(d):
             raise ValueError(f"'{d['name']}' 이름의 대시보드가 이미 있어요.")
         if old is None and len(dashboards) >= MAX_DASHBOARDS:
             raise ValueError(f"대시보드는 {MAX_DASHBOARDS}개까지 저장할 수 있어요. 쓰지 않는 것을 지우세요.")
-        keep_newer(d, old)
+        keep_newer(d, old, bare)
         d["created"], d["updated"] = (old or {}).get("created") or now_text(), now_text()
         write({**dashboards, d["id"]: d})
         return d
@@ -727,14 +736,14 @@ def set_cards_data(dash_id, items):
 
 
 def update_settings(dash_id, fields):
-    """저장한 대시보드의 기준일(as_of)·기간(period)·최신화(refresh)·실시간(live)만 바꾼다(카드는 그대로). 바뀐 대시보드를 돌려준다."""
+    """저장한 대시보드의 SETTING_KEYS(기준일·기간·비교 기준·최신화·실시간)만 바꾼다(카드는 그대로). 바뀐 대시보드를 돌려준다."""
     with LOCK:
         dashboards = editable()
         if dash_id not in dashboards:
             raise ValueError("대시보드를 찾을 수 없어요.")
         old = dashboards[dash_id]
-        new = check_dashboard({**old, **{k: v for k, v in fields.items() if k in ("as_of", "period", "refresh", "live")}}, old)
-        dashboards[dash_id] = {**old, **{k: new[k] for k in ("as_of", "period", "refresh", "live")}}
+        new = check_dashboard({**old, **{k: v for k, v in fields.items() if k in SETTING_KEYS}}, old)
+        dashboards[dash_id] = {**old, **{k: new[k] for k in SETTING_KEYS}}
         write(dashboards)
         return dashboards[dash_id]
 

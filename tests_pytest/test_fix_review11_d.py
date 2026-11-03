@@ -1,7 +1,6 @@
 """11차 리뷰 D 묶음: 퍼널은 표본이 아니라 전체로, 실수 NaN 하루가 일 합을 비우지 않음, 끝값 HH:MM은 그 분 끝까지, 빈 구간 0, 요약의 일부 여부,
 시계열은 최근 기간·빈 기간 0, 산점도 고르게 뽑기, 편차 표 엔티티 먼저 고르기, 최근 N일은 어제까지. 데이터는 시험 안에서 지어낸다."""
 import datetime as dt
-import json
 import shutil
 import subprocess
 
@@ -14,7 +13,6 @@ from analysis import stats
 from core import dash_store
 from core import parse
 from core import server
-from core import sql_funcs
 from dashboard import dash_calc
 from dashboard import period
 from conftest import ROOT
@@ -141,36 +139,13 @@ def test_deviation_picks_entities_first(real, monkeypatch):
     assert [e["name"] for e in v["entities"]] == ["a", "b"] and v["more"] is True and len(v["buckets"]) == 2
 
 
-# ---------- dash.js: 평균의 빈 합, 빈 구간 0, 카드 날마다 값 ----------
+# ---------- lib/dash_calc.js: 평균의 빈 합 ----------
+# (빈 구간 0·카드 날마다 값은 옛 화면 함수(windowValue·cardDays)를 보던 것이라 옛 화면과 함께 지웠다)
 JS = """
 const assert = require("assert");
-globalThis.SERVER = { dash: { types: {}, time_types: [], units: [] }, merge: %(merge)s, agg_names: {} };
 // 11D2 평균: 합이 빈 날만 있으면 0이 아니라 빈 값
 const mean = { agg: "mean", sum: [null, null], count: [3, 0] };
 assert.strictEqual(rollup(mean, ["2026-01-05", "2026-01-06"], "week").get("2026-01-05"), null);
-// 11D5 읽어 온 범위 안의 빈 구간: 개수·합계는 0, 평균은 빈 값, 범위 밖은 빈 값
-const days = ["2026-01-01", "2026-01-05"], loaded = { start: "2026-01-01", end: "2026-01-10" };
-const cnt = { agg: "count", count: [2, 3] }, sum = { agg: "sum", sum: [1, 2], count: [1, 1] }, avg = { agg: "mean", sum: [1, 2], count: [1, 1] };
-assert.strictEqual(windowValue(cnt, days, "2026-01-02", "2026-01-04", loaded), 0);
-assert.strictEqual(windowValue(sum, days, "2026-01-06", "2026-01-10", loaded), 0);
-assert.strictEqual(windowValue(avg, days, "2026-01-02", "2026-01-04", loaded), null);
-assert.strictEqual(windowValue(cnt, days, "2025-12-20", "2025-12-31", loaded), null);  // 읽지 않은 범위
-assert.strictEqual(windowValue(cnt, days, "2026-01-02", "2026-01-04"), null);  // 범위를 모르면 그대로
-const card = { kind: "kpi", range: { start: "2026-01-06", end: "2026-01-10" }, view: {},
-  data: { window: loaded, by_unit: { day: { labels: days, series: [cnt] } } } };
-assert.strictEqual(cardValue(card), 0);
-assert.strictEqual(cardValue({ ...card, data: { ...card.data, window: { start: "2026-01-08", end: "2026-01-10" } } }), null);
-const cmp = compareItem(card, { start: "2026-01-06", end: "2026-01-10" }, { start: "2026-01-01", end: "2026-01-05", text: "직전 5일" });
-assert.deepStrictEqual([cmp.cur, cmp.prev], [0, 5]);
-// 일 값을 앞에서 잘랐으면(월 값이 서버에 있으면) 잘린 앞은 0이라고 하지 않는다
-const cut = { ...card, data: { ...card.data, by_unit: { day: { labels: ["2026-01-05"], series: [cnt] }, month: { labels: ["2026-01-01"], series: [{ name: undefined, values: [5] }] } } } };
-cut.data.by_unit.day.series = [{ ...cnt, name: "n", count: [3] }]; cut.data.by_unit.month.series[0].name = "n";
-assert.strictEqual(windowValue(cut.data.by_unit.day.series[0], ["2026-01-05"], "2026-01-02", "2026-01-03", loadedRange(cut)), null);
-// 11D9 카드의 날마다 값: 개수·합계는 빈 날을 0으로 채운다
-assert.deepStrictEqual(cardDays({ ...card, range: { start: "2026-01-01", end: "2026-01-06" } }).map(d => [d.day, d.v]),
-  [["2026-01-01", 2], ["2026-01-02", 0], ["2026-01-03", 0], ["2026-01-04", 0], ["2026-01-05", 3], ["2026-01-06", 0]]);
-const avgCard = { ...card, range: { start: "2026-01-01", end: "2026-01-06" }, data: { ...card.data, by_unit: { day: { labels: days, series: [avg] } } } };
-assert.deepStrictEqual(cardDays(avgCard).map(d => d.day), days);  // 평균은 있는 날만
 console.log("ok");
 """
 
@@ -178,7 +153,6 @@ console.log("ok");
 @pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 def test_dash_js_empty_windows(tmp_path):
     script = tmp_path / "d.js"
-    script.write_text("".join((ROOT / p).read_text(encoding="utf-8") for p in ("static/core/board.js", "static/core/lib/dash_calc.js", "static/core/dash.js", "static/core/lib/dash_svg.js", "static/dashboard/dash_cards.js"))
-                      + JS.replace("%(merge)s", json.dumps(list(sql_funcs.MERGE))), encoding="utf-8")
+    script.write_text((ROOT / "static" / "core" / "lib" / "dash_calc.js").read_text(encoding="utf-8") + JS, encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0 and done.stdout.strip().endswith("ok"), done.stderr[-3000:]

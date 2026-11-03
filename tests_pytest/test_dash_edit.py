@@ -1,20 +1,19 @@
-"""대시보드 편집 화면(5단계): 격자 배치 계산(세로 압축·이동·크기·칸 좌표)과 카운터 경고·끌어 놓기 규칙·보고서 자리·템플릿 모양을 node로,
+"""대시보드 편집(5단계): 격자 배치 계산(세로 압축·이동·크기·칸 좌표, web/lib/calc.ts)과 쿼리 차트 선반의 끌어 놓기 규칙(dash_shelf.js)을 node로,
 1쪽 PDF(dash_pdf.py)의 구조(개체 위치 표·길이·JPEG 그대로)와 /api/dash/pdf, 내 템플릿 저장, 북극성·카운터 한계 검사, 화면 파일을 파이썬으로 본다. 값은 손으로 센다."""
 import base64
-import json
 import re
 import shutil
 import subprocess
 
 import pytest
 
-from dashboard import dash_pdf
+from dashboard import dash_app, dash_pdf
 from core import dash_store
 from core import server
 from conftest import ROOT
+from test_dash_js import run_ts
 
 STATIC = ROOT / "static"
-url_of = lambda name: "/static/" + next(STATIC.rglob(name)).relative_to(STATIC).as_posix()  # 화면 파일의 주소
 
 
 # ---------- 1쪽 PDF ----------
@@ -127,25 +126,24 @@ def test_north_star_counter_limits(folder):
             dash_store.check_dashboard({**base, "north_star": {"card": "a1", "counters": ["b2"], "limits": limits}})
 
 
-def test_screens_have_edit_parts(client):
-    html = client.get("/dashboard?legacy=1").get_data(as_text=True)  # 옛 화면(Next 빌드가 있어도)
-    for part in ('id="d-gallery"', 'id="d-gallery-box"', 'id="d-panel"', 'id="d-alerts"', 'id="d-template"', 'id="d-tpl-save"', 'id="d-report-png"', 'id="d-report-pdf"', "/static/core/dash_edit.css"):
-        assert part in html, part
-    for script in ("lib/dash_grid.js", "dash_edit.js"):
-        assert f'src="{url_of(script)}"></script>' in html and next(STATIC.rglob(script)).exists()
-    for script in ("dash_templates.js", "dash_menu.js", "dash_shelf.js", "dash_panel.js", "dash_report.js"):  # 편집 도구·보고서는 처음 쓸 때 불러온다(need)
-        assert f'"{url_of(script)}"' in html and f'src="{url_of(script)}"></script>' not in html and next(STATIC.rglob(script)).exists()
-    assert "new EditBoard(" in html and "toTemplate(" in html and "counterAlerts(" in html
+def test_screens_have_edit_parts(client, monkeypatch, tmp_path):
+    """대시보드 편집은 Next 화면 하나(옛 dashboard.html·편집 스크립트는 없다). 쿼리 화면의 차트 선반은 dash_shelf.js 그대로."""
+    built = tmp_path / "dashboard.html"
+    built.write_text('<html><head><link rel="stylesheet" href="/static/core/dash_edit.css"/><script src="/next/_next/a.js"></script></head></html>', encoding="utf-8")
+    monkeypatch.setattr(dash_app, "NEXT_PAGE", built)
+    html = client.get("/dashboard").get_data(as_text=True)
+    assert "/static/core/dash_edit.css" in html and 'src="/next/_next/a.js"' in html and "d-gallery" not in html
+    assert (STATIC / "core" / "dash_edit.css").is_file()  # Next 화면(web/app/layout.tsx)이 그대로 불러 쓴다
+    assert '"/static/core/dash_edit.css"' in (ROOT / "web" / "app" / "layout.tsx").read_text(encoding="utf-8")
+    for gone in ("dashboard", "core/lib/dash_grid.js", "core/lib/dash_rules.js", "core/lib/dash_svg.js"):
+        assert not (STATIC / gone).exists(), gone
     query = client.get("/search").get_data(as_text=True)
     assert 'id="shelf-host"' in query and 'src="/static/core/dash_shelf.js"></script>' in query and "shelfPanel(" in query
-    assert "saveReportPdf" in (STATIC / "dashboard" / "dash_report.js").read_text(encoding="utf-8") and "XMLSerializer" in (STATIC / "dashboard" / "dash_report.js").read_text(encoding="utf-8")
 
 
-# ---------- node: 격자 배치·카운터 경고·끌어 놓기 규칙·보고서 자리 ----------
+# ---------- node: 격자 배치(web/lib/calc.ts)·끌어 놓기 규칙(dash_shelf.js) ----------
 
-SCRIPT = """
-const assert = require("assert");
-globalThis.SERVER = { dash: JSON.parse(%(dash)s) };
+GRID = """
 const L = (x, y, w, h) => ({ x, y, w, h });
 const item = (id, x, y, w, h) => ({ id, layout: L(x, y, w, h) });
 // ---- 범위 맞추기: w·h는 2~12, x는 0 ~ 12-w
@@ -179,29 +177,11 @@ assert.deepStrictEqual(cellAt(100 + 330 + 60, 200 + 100 + 20, m, 60, 20), { x: 3
 assert.deepStrictEqual(sizeAt(450, 200, { col: 110, row: 50, gap: 10 }), { w: 4, h: 4 }); assert.deepStrictEqual(sizeAt(5, 5, { col: 110, row: 50, gap: 10 }), { w: 2, h: 2 });
 assert.deepStrictEqual(sizeAt(9999, 9999, { col: 110, row: 50, gap: 10 }), { w: 12, h: 12 });
 assert.deepStrictEqual(nextLayout([item("A", 0, 0, 6, 4), item("C", 0, 4, 12, 6)]), L(0, 10, 6, 8)); assert.deepStrictEqual(nextLayout([]), L(0, 0, 6, 8));
-// ---- 보고서 자리: 칸 100px, 간격 10, 여백 24, 위 제목 줄 56
-const lay = reportLayout([{ id: "A", layout: L(0, 0, 6, 4) }, { id: "B", layout: L(6, 4, 6, 5) }]);
-assert.deepStrictEqual(lay.rects.A, { x: 24, y: 56, w: 6 * 100 + 5 * 10, h: 4 * 40 + 3 * 10 }); assert.deepStrictEqual(lay.rects.B, { x: 24 + 6 * 110, y: 56 + 4 * 50, w: 650, h: 5 * 40 + 4 * 10 });
-assert.strictEqual(lay.width, 24 * 2 + 12 * 100 + 11 * 10); assert.strictEqual(lay.height, 56 + 9 * 50 - 10 + 24);
-assert.strictEqual(reportLayout([]).height, 56 + 40 + 24);
-// ---- 카운터 경고: 한계(>= 이상 유지, <= 이하 유지)를 벗어난 카운터만. 값은 scalar로 둔 간단한 카드
-const kpi = (id, title, v) => ({ id, kind: "gauge", title, view: { format: "number" }, data: { values: { scalar: [v] } }, source: {} });
-const cards = [kpi("n", "매출", 100), kpi("r", "환불률", 0.08), kpi("s", "만족도", 4.2), kpi("z", "지연", null), kpi("q", "한계 없음", 1)];
-const star = { card: "n", counters: ["r", "s", "z", "q", "none"], limits: { r: { op: "<=", value: 0.05 }, s: { op: ">=", value: 4.0 }, z: { op: ">=", value: 1 } } };
-const bad = counterAlerts(cards, star);
-assert.deepStrictEqual(bad.map(a => a.id), ["r"]); assert(bad[0].text.includes("환불률") && bad[0].text.includes("벗어났어요") && bad[0].text.includes("이하"));
-assert.deepStrictEqual(counterAlerts(cards, { ...star, limits: { ...star.limits, s: { op: ">=", value: 4.5 } } }).map(a => a.id), ["r", "s"]);
-assert.deepStrictEqual(counterAlerts(cards, null), []); assert.deepStrictEqual(counterAlerts(cards, { card: "", counters: [], limits: {} }), []);
-assert.deepStrictEqual(counterAlerts(cards, { ...star, limits: { r: { op: "<=", value: 0.08 } } }), []);  // 한계와 같으면 벗어난 것이 아니다
-// ---- 지운 카드는 북극성·카운터·한계에서 빠진다(남으면 서버가 저장을 거부한다)
-assert.deepStrictEqual(liveStar(star, cards.filter(c => !["n", "r"].includes(c.id))), { card: "", counters: ["s", "z", "q"], limits: { s: star.limits.s, z: star.limits.z } });
-assert.deepStrictEqual(liveStar(null, cards), { card: "", counters: [], limits: {} });
-// ---- 템플릿: 빈 틀 카드와 내 템플릿 모양
-let n = 0; const made = templateCards(DASH_TEMPLATES[0], () => "id" + n++);
-assert.strictEqual(made.length, 7); assert(made.every(c => Object.keys(c.source).length === 0 && isShell(c)) && made[3].view.type === "line" && made[3].kind === "chart");
-assert.deepStrictEqual(DASH_TEMPLATES.map(t => t.id), ["overview", "goal", "monitor", "blank"]); assert.strictEqual(DASH_TEMPLATES[3].cards.length, 0);
-for (const t of DASH_TEMPLATES) { const placed = compactLayout(t.cards.map((c, i) => ({ id: i, layout: c.layout }))); t.cards.forEach((c, i) => assert.deepStrictEqual(placed[i], c.layout, t.id + " 템플릿은 겹치지 않고 위로 붙어 있어야 한다")); }
-assert.deepStrictEqual(Object.keys(toTemplate("내", [{ ...made[0], data: { a: 1 }, source: { table: "비밀" } }]).cards[0]), ["kind", "title", "layout", "colors"]);
+console.log("ok");
+"""
+
+SHELF = """
+const assert = require("assert");
 // ---- 끌어 놓기 규칙(이유 문장)
 const st = { x: "", series: [], split: "", conditions: [] };
 assert(dropCheck("y", "store", "문자", st).reason.includes("합계·평균을 낼 수 없어요")); assert(dropCheck("y", "day", "날짜", st).reason.includes("날짜 컬럼"));
@@ -220,10 +200,13 @@ console.log("ok");
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
-def test_grid_alerts_shelf_in_node(tmp_path):
-    dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE}, ensure_ascii=False)
-    script = tmp_path / "edit_test.js"
-    parts = ["board.js", "lib/dash_calc.js", "dash.js", "lib/dash_svg.js", "dash_cards.js", "lib/dash_rules.js", "dashboard/dash_rules.js", "lib/dash_grid.js", "dash_edit.js", "dash_shelf.js", "dash_templates.js", "dash_report.js"]
-    script.write_text("".join(next(STATIC.rglob(name)).read_text(encoding="utf-8") for name in parts) + SCRIPT.replace("%(dash)s", json.dumps(dash, ensure_ascii=False)), encoding="utf-8")
+def test_grid_in_node(tmp_path):
+    assert run_ts(tmp_path, GRID) == "ok"
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
+def test_shelf_in_node(tmp_path):
+    script = tmp_path / "shelf_test.js"
+    script.write_text((STATIC / "core" / "dash_shelf.js").read_text(encoding="utf-8") + SHELF, encoding="utf-8")
     done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
     assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr[-3000:]

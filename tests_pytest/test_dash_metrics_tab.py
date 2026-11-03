@@ -94,7 +94,3 @@ def test_query_screen_still_follows_S_and_keeps_its_tabs(tmp_path):
     assert got["tabs"] == 2 and got["status"] == {"table": "visits", "schema": ""}
 
 
-def test_dashboard_page_loads_the_shared_scripts_and_button():
-    html = (ROOT / "static/dashboard/dashboard.html").read_text(encoding="utf-8")
-    for needle in ('"/static/query/sentences.js"', '"/static/query/metric_catalog.js"', 'id="d-metrics"', 'id="d-met-host"', "/static/query/sentences.css", "only: \"metric\""):
-        assert needle in html

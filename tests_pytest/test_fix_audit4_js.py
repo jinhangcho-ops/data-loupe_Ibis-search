@@ -31,40 +31,6 @@ def run(tmp_path, body, *parts, fake=True):
     return json.loads(done.stdout.strip().splitlines()[-1])
 
 
-def test_4e1_dash_restore_keeps_last_values(tmp_path):
-    html = page("dashboard/dashboard.html")
-    funcs = fn(html, "let restoreSeq", "\n") + fn(html, "const lastVals", "\n") + fn(html, "const sigOf", "\n") + fn(html, "const rememberVals", "\n") + fn(html, "async function restoreDash(d) {")
-    body = """
-(async () => {
-  const card = { id: "c1", kind: "number", source: { key: "k", table: "t" }, title: "매출", data: { values: [1, 2, 3] }, liveData: { x: 1 }, stored: { values: [9] } };
-  let dashId = "d1", quiet = false; const dashboards = [{ id: "d1" }];
-  const board = { cards: [card], palette: [], star: {}, set(c) { this.cards = c; } };
-  const $ = () => ({ value: "" }); const needsValues = c => c; const boardChanged = () => {};
-  const connected = false, panelHost = {}, say = () => {};
-  %s
-  const before = { id: "d1", palette: [], north_star: {}, cards: [{ id: "c1", kind: "number", source: { key: "k", table: "t" }, title: "매출" }] };
-  rememberVals();                 // dashState가 0.5초마다 하는 일
-  board.cards = [];               // 카드를 지움
-  await restoreDash(before);      // Ctrl+Z
-  const out = { deleted: board.cards.map(c => [c.id, c.data, c.stored]) };
-  rememberVals();
-  // 종류가 바뀐 되돌리기도 예전 값을 둔다
-  board.set([{ ...board.cards[0], kind: "chart", data: { other: 1 } }]);
-  rememberVals();
-  await restoreDash(before);
-  out.kindChanged = board.cards.map(c => c.data);
-  // 다른 대시보드의 같은 카드 id는 섞이지 않는다
-  dashId = "d2"; dashboards.push({ id: "d2" }); board.cards = [];
-  await restoreDash({ ...before, id: "d2" });
-  out.other = board.cards.map(c => c.data);
-  console.log(JSON.stringify(out));
-})();""" % funcs
-    got = run(tmp_path, body, fake=False)
-    assert got["deleted"] == [["c1", {"values": [1, 2, 3]}, {"values": [9]}]]
-    assert got["kindChanged"] == [{}]  # 6E3: 종류가 바뀐 카드는 예전 값을 버린다
-    assert got["other"] == [{}]
-
-
 def test_4e2_prep_restore_drops_removed_copy_edits(tmp_path):
     html = page("prep/prep.html")
     body = """
@@ -134,10 +100,9 @@ console.log(JSON.stringify({ calls, findPrevented: f.defaultPrevented, focused }
 
 
 def test_4e_static_edits():
-    query, dash, prep = page("query/index.html"), page("dashboard/dashboard.html"), page("prep/prep.html")
+    query, prep = page("query/index.html"), page("prep/prep.html")
     assert 'view === "cards" ? searchState() : null' in query                    # 4E3
-    assert 'if (!e.target.closest(".menu")) $("d-add-pop")' in dash              # 4E7
     assert "prepUndo.reset()" in fn(prep, "function resetTable() {")             # 4E8(5E2: prof를 비운 뒤 reset)
     assert "draftBase" not in fn(query, "async function restoreSearch(d) {")      # 4E8
-    for src in (query, dash, prep, page("core/common.js"), page("core/dash_shelf.js")):
+    for src in (query, prep, page("core/common.js"), page("core/dash_shelf.js")):
         assert not [ln for ln in src.splitlines() if 'e.key === "Enter")' in ln and "onkeydown" in ln]   # Enter 칸은 Ctrl+Enter를 제외

@@ -1,4 +1,4 @@
-"""문장 틀 데이터(6-4, 10-4): 탐색 틀 1~53번(48~50은 좌표 틀, 51은 횟수 구간별 대상 수, 52·53은 대상별 요약표)과 지표 틀 1~15번. 틀은 데이터로만 두고(계산은 하지 않는다) GET /api/sentences(flow_app.py)로 화면에 보낸다(모든 화면에 싣지 않으려고 CONSTANTS에 넣지 않는다).
+"""문장 틀 데이터(6-4, 10-4): 탐색 틀 1~56번(48~50은 좌표 틀, 51은 횟수 구간별 대상 수, 52·53은 대상별 요약표, 54~56은 분포·누적 비중·벗어난 기간)과 지표 틀 1~15번. 틀은 데이터로만 두고(계산은 하지 않는다) GET /api/sentences(flow_app.py)로 화면에 보낸다(모든 화면에 싣지 않으려고 CONSTANTS에 넣지 않는다).
 - 틀 하나 = {id, kind(explore·metric), no, name, text(빈칸을 {이름}으로 쓴 문장), slots: [빈칸], uses: [함수 사전 id], extends(변형이면 원래 틀 번호), preset(변형이 정해 둔 빈칸 값)}.
   어느 틀이든 앞에 {기간}을 붙일 수 있다(PERIOD, 틀마다 period: True).
 - 빈칸 = {name, type, label, kinds(컬럼 종류 제한), options(고르는 값), default, optional}. 빈칸 타입은 SLOT_TYPES.
@@ -27,7 +27,7 @@ def choice(name, options, default=None, label=None):
 
 
 def temp(no, name, text, slots=(), uses=(), kind="explore", **extra):
-    """틀 하나. no는 종류 안의 번호(탐색 1~53, 지표 1~15)."""
+    """틀 하나. no는 종류 안의 번호(탐색 1~56, 지표 1~15)."""
     return {"id": f"{'e' if kind == 'explore' else 'm'}{no:02d}", "kind": kind, "no": no, "name": name, "text": text, "slots": list(slots), "uses": list(uses),
             "period": True, **extra}
 
@@ -38,6 +38,8 @@ COND = slot("조건", "cond", "조건")
 ORDER = slot("정렬 기준", "order", "정렬 기준 컬럼")
 UNIT = slot("단위", "unit", "시간 단위", options=["day", "week", "month", "year"], default="day")
 METRIC_A, METRIC_B = slot("지표 A", "metric", "지표 A"), slot("지표 B", "metric", "지표 B")
+MIN_N = slot("최소 N", "n", "최소 대상 수(선택)", optional=True)  # 19·20번: 분모(대상 수)가 이보다 작은 항목은 뺀다
+SPANS = {"일": "day", "주": "week", "월": "month"}  # 36·56번의 묶는 단위 → truncate 단위
 
 EXPLORE = [
     temp(1, "모든 데이터 보기", "모든 데이터 보기"),
@@ -61,13 +63,15 @@ EXPLORE = [
          [slot("테이블 A", "table"), slot("테이블 B", "table"), column("연결 컬럼", "이어 주는 컬럼")], ["count", "rank"]),
     temp(17, "조건에 맞는 비율", "전체 행 중 {조건}에 맞는 비율 구하기", [COND], ["count", "count_if"]),
     temp(18, "항목별 개수와 비중", "{무엇}별 행 수와 전체에서 차지하는 비중 보기", [G], ["count", "share_of_group"]),
-    temp(19, "항목별 조건에 맞는 대상 비율", "{무엇}별로 {조건}에 맞는 행이 있는 {대상}의 비율 구하기", [G, COND, T_], ["count_distinct"]),
-    temp(20, "항목별 대상 1명당 평균", "{무엇}별 {대상} 1명당 평균 {값} 구하기", [G, T_, slot("값", "column", "값 컬럼", NUM)], ["sum", "count_distinct"]),
+    temp(19, "항목별 조건에 맞는 대상 비율", "{무엇}별로 {조건}에 맞는 행이 있는 {대상}의 비율 구하기, {대상} 수가 {최소 N}명보다 적은 항목은 빼기", [G, COND, T_, MIN_N], ["count_distinct"]),
+    temp(20, "항목별 대상 1명당 평균", "{무엇}별 {대상} 1명당 평균 {값} 구하기, {대상} 수가 {최소 N}명보다 적은 항목은 빼기", [G, T_, slot("값", "column", "값 컬럼", NUM), MIN_N], ["sum", "count_distinct"]),
     temp(21, "두 지표 나누기", "{지표 A} ÷ {지표 B} 구하기", [METRIC_A, METRIC_B]),
     temp(22, "일·주·월별 고유 대상 수", "{날짜} 기준 {단위}마다 고유 {대상} 수 보기", [UNIT, T_, column("날짜", "날짜 컬럼", DAT)], ["count_distinct", "truncate"]),
     temp(23, "일·주·월별 대상 수와 1명당 평균", "{날짜} 기준 {단위}마다 {대상} 수와 {대상} 1명당 평균 {값} 보기", [UNIT, T_, slot("값", "column", "값 컬럼", NUM), column("날짜", "날짜 컬럼", DAT)],
          ["count_distinct", "sum", "truncate"]),
-    temp(24, "대상별 첫 값으로 집계", "{대상}마다 {정렬 기준} 순으로 첫 {컬럼} 값을 정하고, 그 값별로 {집계} 보기", [T_, column("컬럼"), ORDER, AGG], ["first", "arg_min"]),
+    temp(24, "대상별 첫 값으로 집계", "{대상}마다 {정렬 기준} 순으로 {접점} {컬럼} 값을 정하고, 그 값별로 {값}의 {집계} 보기",
+         [T_, column("컬럼"), ORDER, AGG, choice("접점", ["첫", "마지막"], "첫"), column("값", "값 컬럼(선택, 비우면 고유 개수는 대상)", optional=True)],
+         ["first", "arg_min", "first_value", "last_value"]),
     temp(25, "목록을 펼쳐 항목별 집계 상위 N개", "{목록 컬럼} 목록을 펼쳐 {무엇}별 {집계} 상위 {N}개 보기",
          [column("목록 컬럼", kinds="array"), G, AGG, slot("N", "n", "N", default=10)], ["unnest"]),
     # 10단계에서 더한 틀 26~47: 함수 사전의 모든 함수가 적어도 한 틀에서 쓰이게 한다
@@ -90,8 +94,9 @@ EXPLORE = [
          ["row_number", "rank", "dense_rank", "qualify"]),
     temp(35, "이전 행과 비교", "{무엇}마다 {정렬 기준} 순으로 앞뒤 행의 {값} 값을 비교해 {보기} 보기", [G, ORDER, slot("값", "column", "값 컬럼", NUM), choice("보기", ["차이", "변화율", "이전 값", "다음 값"])],
          ["lag", "lead", "diff", "pct_change"]),
-    temp(36, "누적 합·이동 평균", "{정렬 기준} 순으로 {값}의 {종류} 보기",
-         [ORDER, slot("값", "column", "값 컬럼", NUM), choice("종류", ["누적 합", "누적 평균", "누적 최소", "누적 최대", "이동 합", "이동 평균", "이동 최소", "이동 최대"]), slot("N", "n", "이동 크기", default=3, optional=True, when={"종류": ["이동 합", "이동 평균", "이동 최소", "이동 최대"]})],
+    temp(36, "누적 합·이동 평균", "{정렬 기준} 순으로 {단위}마다 {값}의 {종류} 보기",
+         [ORDER, slot("값", "column", "값 컬럼", NUM), choice("종류", ["누적 합", "누적 평균", "누적 최소", "누적 최대", "이동 합", "이동 평균", "이동 최소", "이동 최대"]), slot("N", "n", "이동 크기", default=3, optional=True, when={"종류": ["이동 합", "이동 평균", "이동 최소", "이동 최대"]}),
+          choice("단위", ["행", *SPANS], "행", "묶는 단위(일·주·월이면 정렬 기준 날짜로 묶어 빈 기간은 0)")],
          ["cum_sum", "cum_mean", "cum_min", "cum_max", "moving_sum", "moving_mean", "moving_min", "moving_max"]),
     temp(37, "그룹 안에서 차지하는 비율", "{무엇} 안에서 {나눌 것}별로 차지하는 {값}의 비율 보기", [G, column("나눌 것"), slot("값", "column", "값 컬럼", NUM)], ["share_of_group", "sum"]),
     temp(38, "상위 몇 %인지", "행마다 {값} 값이 상위 몇 %인지 보기, 방식은 {방식}", [slot("값", "column", "값 컬럼", NUM), choice("방식", ["백분위 순위", "누적 분포", "N등분"]), slot("N", "n", "구간 수", default=4, optional=True, when={"방식": ["N등분"]})],
@@ -129,6 +134,12 @@ EXPLORE = [
          [COND, T_, slot("집단 이름", "text", "집단 이름", default="조건에 맞는 대상", optional=True), column("날짜", "날짜 컬럼(선택)", DAT, optional=True),
           slot("집단 테이블", "table", "집단을 고를 테이블(선택)", optional=True), slot("집단 테이블 컬럼", "text", "집단 테이블의 대상 컬럼(비우면 같은 이름)", optional=True)],
          ["count", "count_distinct", "mean", "median", "min", "max"]),
+    # 분포·파레토·이상값 54~56
+    temp(54, "값 구간별 분포", "{값} 값을 {구간 폭} 폭의 구간으로 나눠 구간마다 행 수 보기", [V, slot("구간 폭", "number", "구간 폭", default=10)], ["floor", "count"]),
+    temp(55, "누적 비중과 ABC 등급", "{무엇}별 {값} 합계를 큰 순으로 쌓아 누적 비중과 ABC 등급(A는 80%, B는 95%까지) 보기", [G, V], ["sum", "cum_sum"]),
+    temp(56, "크게 벗어난 기간 찾기", "{날짜} 기준 {단위}마다 {값} 합계를 구해 {방법}으로 {k}배 넘게 벗어난 기간 보기",
+         [column("날짜", "날짜 컬럼", DAT), choice("단위", list(SPANS), "일"), slot("값", "column", "값 컬럼(선택, 비우면 행 수)", NUM, optional=True), choice("방법", ["z-점수", "IQR"], "z-점수"),
+          slot("k", "number", "기준 배수(비우면 z-점수 3, IQR 1.5)", optional=True)], ["sum", "count", "truncate", "mean", "std"]),
 ]
 
 METRICS = [

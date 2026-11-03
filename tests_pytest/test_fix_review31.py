@@ -3,34 +3,6 @@ import pytest
 
 from metrics import my_metrics
 from query import sentence_exec
-from test_fix_audit7_js import fn, needs_node, page, run
-
-
-@needs_node
-def test_as_of_only_recompute_stores_value(tmp_path):
-    ctl, dash = page("dashboard/dash_ctl.js"), page("dashboard/dashboard.html")
-    a = dash.index("  recompute: async")
-    recompute = dash[a:dash.index("\n  star:", a)]
-    got = run(tmp_path, r"""
-globalThis.DashBoard = { plain: c => ({ id: c.id, kind: c.kind, source: c.source, layout: c.layout, data: c.data }) };
-""" + fn(ctl, "function showLive") + "\n" + next(x for x in ctl.splitlines() if x.startswith("const storedCard")) + r"""
-let dashId = "d1", valuesDirty = false, valuesSeq = 0, lastSaved;
-""" + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + chr(10) + next(x for x in dash.splitlines() if x.startswith("const sigOf")) + r"""
-const needsValues = c => c;
-const card = { id: 1, kind: "chart", source: { table: "region" }, layout: { x: 0 }, data: { labels: ["서울"] } };
-const board = { cards: [card], ctx: () => ({ range: null, prev: null, as_of: "2026-01-01" }), draw() {} };
-const scheduleSave = () => {};
-lastSaved = JSON.stringify([[], {}, [cardSettings(card)]]);
-const api = async () => ({ data: { labels: ["사과"] } });
-const panelHost = {
-""" + recompute + r"""
-};
-(async () => {
-  await panelHost.recompute(card);
-  console.log(JSON.stringify({ stored: storedCard(card).data }));
-})();
-""", fake=False)
-    assert got["stored"] == {"labels": ["사과"]}
 
 
 def test_reverse_cumsum_refuses_partial_values():

@@ -46,13 +46,17 @@ function sankeySvg(steps, colors = {}, size = {}) {
 }
 
 // 표: 단계별 수, 다음 단계 전환율(이 단계 → 다음 단계), 처음 대비 비율, 이탈 수(이 단계에서 다음 단계로 못 간 사람). 마지막 단계는 다음이 없다.
-function funnelRows(steps) {
+// time이면 "앞 단계에서 걸린 시간(중앙값)" 열을 더한다(분석 화면). 대시보드 카드는 지금처럼 다섯 열.
+function funnelRows(steps, time) {
   return steps.map((s, i) => {
     const next = steps[i + 1];
-    return { 단계: s.name, "사용자 수": s.users, "다음 단계 전환율": next ? fpct(next.conv) : "-", "처음 대비": fpct(s.from_first), "이탈 수": next ? next.drop : "-" };
+    return { 단계: s.name, "사용자 수": s.users, "다음 단계 전환율": next ? fpct(next.conv) : "-", "처음 대비": fpct(s.from_first), "이탈 수": next ? next.drop : "-", ...(time ? { [FUNNEL_TIME]: fsec(s.median_sec) } : {}) };
   });
 }
 const FUNNEL_COLUMNS = ["단계", "사용자 수", "다음 단계 전환율", "처음 대비", "이탈 수"];
+const FUNNEL_TIME = "앞 단계에서 걸린 시간(중앙값)";
+// 초를 읽기 쉽게: 1분 아래는 초, 1시간 아래는 분, 하루 아래는 시간, 그 위는 일. 없으면 "-".
+const fsec = s => s == null ? "-" : s < 60 ? `${+s.toFixed(1)}초` : s < 3600 ? `${+(s / 60).toFixed(1)}분` : s < 86400 ? `${+(s / 3600).toFixed(1)}시간` : `${+(s / 86400).toFixed(1)}일`;
 
 // 한 줄 설명: 처음 단계에서 끝 단계까지 남은 비율과 가장 많이 빠진 곳. 지어내지 않고 숫자가 없으면 그 말을 뺀다.
 function funnelSentence(steps) {

@@ -30,12 +30,13 @@ PARTS = {"users_first": "첫 단계(A)를 한 사용자 수", "users_reached": "
          "pulled_users": "뽑은 사용자 수", "reached_users": "천장에 닿은 사용자 수", "fee_revenue": "수수료 수익", "orders": "주문 수", "buyers": "구매자 수", "searches": "검색 수",
          "zero_searches": "결과 0건 검색 수", "search_sessions": "검색한 세션 수", "exit_sessions": "검색에서 끝난 세션 수", "tp": "맞게 찾은 수(TP)", "fp": "잘못 찾은 수(FP)", "fn": "놓친 수(FN)",
          "control_mean": "대조군 평균", "treat_mean": "실험군 평균", "control_n": "대조군 표본 수", "treat_n": "실험군 표본 수", "queries": "질의 수", "items": "항목 수", "holders": "보유자 수",
-         "prev_revenue": "지난달 매출", "kept_revenue": "그 고객의 이번 달 매출", "users": "사용자 수", "mrr": "MRR"}
+         "prev_revenue": "지난달 매출", "kept_revenue": "그 고객의 이번 달 매출", "users": "사용자 수", "mrr": "MRR",
+         "sales_amount": "판매 금액", "refunds": "환불 건수", "core_users": "핵심 고객 수(R·F 4 이상)", "gaps": "구매 간격 수", "new_revenue": "신규 고객 매출", "returning_revenue": "기존 고객 매출"}
 
 # 계산(calc)마다 표를 읽는 조회 수의 어림(없으면 1). 사본 없이 원격에서 바로 구할 때 확인창에 "표를 약 N번 읽어요"로 알린다.
 PASSES = {"uv": 2, "active": 2, "pv_per_uv": 2, "stickiness": 3, "time_between": 2, "conversion": 2, "ftue": 3, "retention": 5, "flattening": 5, "states": 5, "power_curve": 3, "survival": 2, "new_payers": 3,
           "pur": 5, "recurring": 2, "arpu": 2, "arppu": 2, "arpdau": 2, "ltv": 5, "nrr": 4, "cac": 4, "roas": 5, "payback": 5, "frequency": 2, "tiers": 2, "gini": 2, "aov": 2, "purchase_frequency": 2,
-          "pareto": 2, "pity": 2, "stage_clear": 3, "organic_uplift": 2, "velocity": 5, "money_supply": 4}
+          "pareto": 2, "pity": 2, "stage_clear": 3, "organic_uplift": 2, "velocity": 5, "money_supply": 4, "rfm": 3, "interpurchase": 2, "new_vs_returning_revenue": 3}
 
 # ---------- 빈칸 도서관: 역할마다 한 번만 적고 항목은 역할 이름으로 고른다 ----------
 # (이름, 타입, 안내, 컬럼 종류, 이름 단서(없으면 종류만 본다), 단서가 꼭 있어야 하는지)
@@ -86,6 +87,8 @@ EXTRA = {  # 컬럼이 아닌 빈칸: 역할 → (이름, 타입, 안내, 기본
     "step_b": slot("단계 B", "value", "도착 단계의 이벤트 값"),
     "steps": slot("단계들", "values", "단계 이벤트 값들(순서대로, 2개 이상)"),
     "limit_sec": slot("제한 시간(초)", "number", "첫 단계 뒤 이 시간 안에 끝낸 것만(비우면 제한 없음)", optional=True),
+    "window_days": slot("기한(일)", "number", "A 뒤 이 일수 안에 B를 해야 전환으로 세요(비우면 제한 없음)", optional=True),
+    "refund_value": slot("환불 값", "value", "환불을 뜻하는 상태 값(비우면 음수 금액을 환불로 봐요)", optional=True),
     "n": slot("N", "n", "경과 기간 N", default=7),
     "from_n": slot("범위 시작 N", "number", "범위의 시작 N", default=1),
     "to_n": slot("범위 끝 N", "number", "범위의 끝 N", default=7),
@@ -123,9 +126,9 @@ EXTRA = {  # 컬럼이 아닌 빈칸: 역할 → (이름, 타입, 안내, 기본
     "effect_kind": slot("기대 효과 단위", "choice", "기대 효과가 절대 차이인지 대조군 대비 %인지", options=["절대", "%"], default="절대"),
 }
 CONSTANTS = {"gap", "eps", "run", "inactive_days", "churn_days", "span", "fee", "vat", "n_days", "n", "from_n", "to_n", "method", "mode", "whale", "dolphin", "max_days", "active_days", "pity",
-             "top", "threshold", "k", "alpha", "power", "op", "limit", "basis", "limit_sec", "effect", "effect_kind"}  # 사용자가 적는 상수 빈칸(컬럼을 고르는 칸이 아니다)
+             "top", "threshold", "k", "alpha", "power", "op", "limit", "basis", "limit_sec", "effect", "effect_kind", "window_days"}  # 사용자가 적는 상수 빈칸(컬럼을 고르는 칸이 아니다)
 RANGES = {"gap": (0, None), "eps": (0, 100), "fee": (0, 100), "vat": (0, 100), "whale": (0, None), "dolphin": (0, None), "top": (0, 100), "alpha": (0, 1), "power": (0, 1),
-          "threshold": (None, None), "limit": (None, None), "effect": (None, None), "limit_sec": (0, None), "from_n": (0, None), "to_n": (0, None)}  # 숫자 칸의 범위(열린 쪽은 None)
+          "threshold": (None, None), "limit": (None, None), "effect": (None, None), "limit_sec": (0, None), "from_n": (0, None), "to_n": (0, None), "window_days": (0, None)}  # 숫자 칸의 범위(열린 쪽은 None)
 
 
 def col_slot(role, **over):
@@ -206,9 +209,9 @@ ENTRIES = [
           "최근 {최근 일수}일 중 {사용자}가 {시각}에 며칠 접속했는지의 분포", ["user", "time", "span"], "power_curve", unit="일"),
     # ---------- 2 퍼널·온보딩 ----------
     entry("cvr", F, "단계 전환율", "CVR", "A를 한 사람 중 그 뒤에 B까지 간 비율이에요. 단계마다 구하면 어디서 막히는지 보여요.", "B까지 간 사용자 ÷ A를 한 사용자",
-          "{이벤트}가 {단계 A}인 {사용자} 중 이후 {단계 B}까지 간 비율", ["user", "time", "event", "step_a", "step_b"], "conversion", pair=["users_first", "users_reached"], fmt="percent", better="up", hint="north_star"),
+          "{이벤트}가 {단계 A}인 {사용자} 중 이후 {단계 B}까지 간 비율", ["user", "time", "event", "step_a", "step_b", "window_days"], "conversion", pair=["users_first", "users_reached"], fmt="percent", better="up", hint="north_star"),
     entry("drop_off", F, "단계 이탈률", "Drop-off", "A를 한 사람 중 B로 못 간 비율이에요(1 − 전환율). 가장 큰 이탈 단계를 먼저 고쳐요.", "1 − 전환율",
-          "{이벤트}가 {단계 A}인 {사용자} 중 이후 {단계 B}에 못 간 비율", ["user", "time", "event", "step_a", "step_b"], "conversion", {"invert": True}, pair=["users_first", "users_reached"], fmt="percent", better="down", hint="counter"),
+          "{이벤트}가 {단계 A}인 {사용자} 중 이후 {단계 B}에 못 간 비율", ["user", "time", "event", "step_a", "step_b", "window_days"], "conversion", {"invert": True}, pair=["users_first", "users_reached"], fmt="percent", better="down", hint="counter"),
     entry("bounce", F, "이탈 세션 비율", "Bounce Rate", "한 번만 보고 나간 세션의 비율이에요. 유입의 질이나 첫 화면의 문제를 알려 줘요.", "이벤트 1개짜리 세션 ÷ 세션 수",
           "{사용자}의 세션(간격 {세션 간격(분)}분) 중 {이벤트}가 {이벤트 값}인 행이 하나뿐인 세션의 비율", [*SES, ("event", OPT), "event_value"], "bounce", pair=["sessions"], fmt="percent", better="down", hint="counter", window=True),
     entry("exit_rate", F, "페이지 이탈률", "Exit Rate", "그 페이지가 세션의 마지막이었던 비율이에요. 사용자가 어느 화면에서 떠나는지 보여요.", "마지막 페이지가 p인 세션 ÷ p의 조회 수",
@@ -216,13 +219,17 @@ ENTRIES = [
     entry("ttv", F, "첫 가치까지 걸린 시간", "TTV/TTFV", "처음 가치를 느끼는 행동(A→B)까지 걸린 시간이에요. 짧을수록 온보딩이 잘 돼요.", "사용자별 A 이후 첫 B까지의 시간",
           "{이벤트}가 {단계 A}인 때부터 {단계 B}까지 {사용자}별 걸린 시간", ["user", "time", "event", "step_a", "step_b"], "time_between", pair=["users_first", "users_reached"], spread=True, unit="초", better="down"),
     entry("tutorial", F, "튜토리얼 완료율", "Tutorial Completion", "튜토리얼을 시작한 사람 중 끝까지 한 비율이에요. 낮으면 튜토리얼이 길거나 어려운 거예요.", "튜토리얼 완료 사용자 ÷ 시작 사용자",
-          "{이벤트}가 {튜토리얼 시작 값}인 {사용자} 중 이후 {튜토리얼 완료 값}까지 한 비율", ["user", "time", "event", ("step_a", {"name": "튜토리얼 시작 값", "label": "튜토리얼 시작 이벤트 값"}), ("step_b", {"name": "튜토리얼 완료 값", "label": "튜토리얼 완료 이벤트 값"})],
+          "{이벤트}가 {튜토리얼 시작 값}인 {사용자} 중 이후 {튜토리얼 완료 값}까지 한 비율", ["user", "time", "event", ("step_a", {"name": "튜토리얼 시작 값", "label": "튜토리얼 시작 이벤트 값"}), ("step_b", {"name": "튜토리얼 완료 값", "label": "튜토리얼 완료 이벤트 값"}), "window_days"],
           "conversion", pair=["users_first", "users_reached"], fmt="percent", better="up"),
     entry("ftue", F, "첫 경험 퍼널", "FTUE Funnel", "첫 접속부터 핵심 행동까지 단계별로 몇 명이 남는지예요. 단계 사이 가장 큰 낙폭이 고칠 곳이에요.", "단계별 도달 사용자와 전환",
           "{이벤트}의 {단계들}을 순서대로 거친 {사용자} 수(제한 {제한 시간(초)}초)", ["user", "time", "event", "steps", "limit_sec"], "ftue", pair=["first_step_users", "last_step_users"], fmt="percent", better="up"),
     entry("ttfp", F, "첫 결제까지 걸린 시간", "TTFP", "가입(첫 접속)부터 첫 결제까지 걸린 시간이에요. 길면 첫 구매를 유도할 계기가 필요해요.", "사용자별 가입 이후 첫 결제까지의 시간",
           "{이벤트}가 {가입 값}인 때부터 {첫 결제 값}까지 {사용자}별 걸린 시간", ["user", "time", "event", ("step_a", {"name": "가입 값", "label": "가입(첫 접속) 이벤트 값"}), ("step_b", {"name": "첫 결제 값", "label": "결제 이벤트 값"})],
           "time_between", pair=["users_first", "users_reached"], spread=True, unit="초", better="down"),
+    entry("activation", F, "활성화율", "Activation Rate", "가입한 사람 중 정해진 날 안에 핵심 행동(첫 구매·첫 글 등)까지 한 비율이에요. 온보딩이 가치를 빨리 보여 주는지 봐요.", "기한 안에 핵심 행동을 한 사용자 ÷ 가입한 사용자",
+          "{이벤트}가 {가입 값}인 {사용자} 중 {기한(일)}일 안에 {핵심 행동 값}까지 간 비율",
+          ["user", "time", "event", ("step_a", {"name": "가입 값", "label": "가입(첫 접속) 이벤트 값"}), ("step_b", {"name": "핵심 행동 값", "label": "핵심 행동 이벤트 값"}), ("window_days", {"default": 7})],
+          "conversion", pair=["users_first", "users_reached"], fmt="percent", better="up"),
     # ---------- 3 리텐션·코호트 ----------
     entry("retention_classic", R, "클래식 리텐션", "Day-N Retention", "가입(첫 활동) 후 정확히 N일째에 돌아온 비율이에요. 가장 널리 쓰는 유지율이에요.", "N일째 활동 사용자 ÷ 코호트 크기",
           "{시각}의 {단위} 코호트가 정확히 {N}째에 {사용자} 기준으로 돌아온 비율", ["user", "time", "unit", "n"], "retention", {"mode": "classic"}, pair=["cohort_size"], fmt="percent", better="up", hint="north_star"),
@@ -230,6 +237,8 @@ ENTRIES = [
           "{시각}의 {단위} 코호트가 {N}째 이후에 {사용자} 기준으로 돌아온 비율", ["user", "time", "unit", "n"], "retention", {"mode": "rolling"}, pair=["cohort_size"], fmt="percent", better="up"),
     entry("retention_range", R, "범위 리텐션", "Bracket Retention", "N1~N2일 사이에 한 번이라도 돌아온 비율이에요. 주 단위 유지를 볼 때 하루 변동을 줄여 줘요.", "[a, b] 안에 활동한 사용자 ÷ 코호트 크기",
           "{시각}의 {단위} 코호트가 {범위 시작 N}~{범위 끝 N} 사이에 {사용자} 기준으로 돌아온 비율", ["user", "time", "unit", "from_n", "to_n"], "retention", {"mode": "range"}, pair=["cohort_size"], fmt="percent", better="up"),
+    entry("revenue_retention", R, "코호트 매출 유지율", "Cohort Revenue Retention", "첫 기간 매출 대비 N째 기간에 그 코호트가 낸 매출의 비율이에요. 사람 수 유지율보다 돈이 얼마나 남는지 보여 줘요.", "N째 기간 코호트 매출 ÷ 첫 기간 코호트 매출",
+          "{시각}의 {단위} 코호트가 {N}째에 낸 {금액}의 합 ÷ 첫 기간 {금액}의 합({사용자} 기준)", ["user", "time", "amount", "unit", "n"], "retention", {"mode": "classic"}, pair=["cohort_size"], fmt="percent", better="up"),
     entry("flattening", R, "수평 유지점", "Retention Flattening Point", "유지율 곡선이 더 내려가지 않고 평평해지는 첫 N이에요. 그 높이가 충성 사용자 비율이에요.", "|r(N) − r(N−1)| < ε가 연속으로 이어지는 첫 N",
           "{시각}의 {단위} 코호트의 유지율이 {연속 횟수}번 연속 {허용 오차(%p)}%p 안으로 평평해지는 첫 N({N}까지 관찰)", ["user", "time", "unit", ("n", {"default": 30, "label": "관찰할 최대 N"}), "eps", "run"], "flattening", pair=["cohort_size"], unit="N"),
     entry("churn", R, "이탈률", "Churn Rate", "지난 기간에 쓰던 사람 중 이번에 안 온 비율이에요. 낮을수록 좋고 성장의 가장 큰 적이에요.", "이탈 ÷ 앞 기간 활동자",
@@ -250,12 +259,16 @@ ENTRIES = [
     entry("arpu", M, "사용자당 매출", "ARPU", "활동 사용자 1명당 매출이에요. 결제 안 한 사람까지 나누므로 PUR과 객단가의 곱이에요. 평균은 고래에 끌려가니 중앙값도 함께 봐요.", "매출 ÷ 활동 사용자",
           "{사용자} 1명당 {금액}의 합", ["user", "amount"], "arpu", pair=["gross_revenue", "uv"], spread=True, unit="원", better="up"),
     entry("arppu", M, "결제자당 매출", "ARPPU", "결제한 사람 1명당 매출이에요. 객단가(얼마나 쓰는지)를 봐요.", "매출 ÷ PU", "{금액}을 낸 {사용자} 1명당 {금액}의 합", ["user", "amount"], "arppu", pair=["gross_revenue", "pu"], spread=True, unit="원", better="up"),
+    entry("arpu_period", M, "기간별 사용자당 매출", "ARPU (기간 평균)", "기간(일·주·월)마다 그 기간 활동 사용자 1명당 순매출을 구해 평균한 값이에요. 진행 중인 기간은 평균에서 빼요.", "기간별 (순매출 ÷ 활동 사용자)의 평균",
+          "{시각}의 {단위}마다 {사용자} 1명당 {금액}의 합", ["user", "amount", "time", ("unit", {"default": "month"})], "arpu", pair=["gross_revenue", "uv"], spread=True, unit="원", better="up"),
+    entry("arppu_period", M, "기간별 결제자당 매출", "ARPPU (기간 평균)", "기간마다 그 기간 순매출이 0보다 큰 사람 1명당 순매출을 구해 평균한 값이에요. 진행 중인 기간은 평균에서 빼요.", "기간별 (순매출 ÷ 그 기간 결제자)의 평균",
+          "{시각}의 {단위}마다 {금액}을 낸 {사용자} 1명당 {금액}의 합", ["user", "amount", "time", ("unit", {"default": "month"})], "arppu", pair=["gross_revenue", "pu"], spread=True, unit="원", better="up"),
     entry("arpdau", M, "일 활성 사용자당 매출", "ARPDAU", "하루 접속자 1명당 그날 매출이에요. 일 단위로 수익성을 비교할 때 써요.", "매출 합 ÷ 일별 DAU의 합", "{시각}의 일마다 접속한 {사용자} 1명당 {금액}",
           ["user", "time", "amount"], "arpdau", pair=["gross_revenue", "user_days"], spread=True, unit="원", better="up"),
     entry("ltv", M, "고객 생애 가치", "LTV (LTV7/30/90)", "한 사용자가 N일 동안 가져오는 매출이에요. 코호트 누적은 실제로 관찰한 값이고, ARPU÷이탈률은 앞으로를 어림한 값이에요.", "N일 안 코호트 매출 ÷ 코호트 크기 (또는 ARPU ÷ Churn)",
           "{시각}의 {단위} 코호트가 첫 활동 후 {N일} 안에 {금액}을 낸 {사용자} 1명당 값({계산 방식})", ["user", "time", "amount", "n_days", "unit", "method"], "ltv", pair=["cohort_size", "gross_revenue"], unit="원", better="up", hint="north_star"),
     entry("repeat_rate", M, "재구매율", "Repeat Purchase Rate", "한 번이라도 산 사람 중 N번 이상 산 비율이에요. 단골이 얼마나 되는지 알려 줘요.", "N번 이상 산 사용자 ÷ 구매 사용자",
-          "{금액}을 낸 {사용자} 중 {N}번 이상 산({주문}) 비율", ["user", "amount", ("orders", OPT), ("n", {"default": 2, "label": "N번 이상"})], "repeat", pair=["pu", "repeat_buyers"], fmt="percent", better="up"),
+          "{금액}을 낸 {사용자} 중 {N}번 이상 산({주문}) 비율", ["user", "amount", ("orders", OPT), ("n", {"default": 2, "label": "N번 이상"}), ("time", OPT)], "repeat", pair=["pu", "repeat_buyers"], fmt="percent", better="up"),
     entry("tiers", M, "고래·돌고래·잔챙이 비중", "Whale/Dolphin/Minnow Share", "소수의 큰손이 매출을 얼마나 차지하는지예요. 쏠림이 크면 한 명의 이탈이 매출을 흔들어요.", "등급별 매출 ÷ 전체 매출",
           "{금액}을 낸 {사용자}를 {기준 방식} 기준 Whale {Whale 기준}·Dolphin {Dolphin 기준}으로 나눈 매출 비중", ["user", "amount", "mode", "whale", "dolphin"], "tiers", pair=["pu"], fmt="percent"),
     entry("mrr", M, "월 반복 매출", "MRR", "한 달 동안 반복해서 들어오는 매출이에요(구독). 값이 달마다 얼마나 불어나는지 봐요.", "월별 금액의 합", "{시각}의 월마다 {금액}의 합", ["time", "amount"], "recurring", {"pick": "mrr"}, unit="원", better="up", hint="north_star"),
@@ -315,16 +328,24 @@ ENTRIES = [
     # ---------- 7 이커머스 ----------
     entry("gmv", C, "총거래액", "GMV", "취소·반품을 빼기 전(또는 뺀) 주문 금액의 합이에요. 마켓플레이스의 규모예요.", "주문 금액의 합", "{금액}의 합({상태}가 {제외할 값들}인 행 제외)", ["amount", ("status", OPT), "exclude"], "gmv", unit="원", better="up", hint="north_star"),
     entry("take_rate", C, "수수료율", "Take Rate", "거래액 중 플랫폼이 가져가는 비율이에요.", "수수료 수익 ÷ GMV", "{수수료 수익}의 합 ÷ {금액}의 합", ["amount", "fee_col"], "take_rate", pair=["fee_revenue", "gmv"], fmt="percent"),
-    entry("aov", C, "평균 주문 금액", "AOV", "주문 1건당 평균 금액이에요. 중앙값과 같이 보면 큰 주문의 영향을 알 수 있어요.", "GMV ÷ 주문 수", "{주문} 1건당 {금액}", ["amount", ("orders", OPT)], "aov", pair=["gmv", "orders"], spread=True, unit="원", better="up"),
-    entry("purchase_frequency", C, "구매 빈도", "Purchase Frequency", "구매한 사람이 평균 몇 번 샀는지예요. 재구매 유도가 통하는지 봐요.", "주문 수 ÷ 구매자 수", "{사용자} 1명당 {주문} 수", ["user", ("orders", OPT)], "purchase_frequency", pair=["orders", "buyers"], spread=True, unit="회", better="up"),
+    entry("aov", C, "평균 주문 금액", "AOV", "주문 1건당 평균 금액이에요. 중앙값과 같이 보면 큰 주문의 영향을 알 수 있어요.", "GMV ÷ 주문 수", "{주문} 1건당 {금액}", ["amount", ("orders", OPT), ("user", OPT), ("time", OPT)], "aov", pair=["gmv", "orders"], spread=True, unit="원", better="up"),
+    entry("purchase_frequency", C, "구매 빈도", "Purchase Frequency", "구매한 사람이 평균 몇 번 샀는지예요. 재구매 유도가 통하는지 봐요.", "주문 수 ÷ 구매자 수", "{사용자} 1명당 {주문} 수", ["user", ("orders", OPT), ("time", OPT)], "purchase_frequency", pair=["orders", "buyers"], spread=True, unit="회", better="up"),
     entry("cart_abandon", C, "장바구니 이탈률", "Cart Abandonment Rate", "장바구니에 담고 사지 않은 비율이에요. 결제 단계의 마찰을 보여 줘요.", "1 − (담은 뒤 구매한 사용자 ÷ 담은 사용자)", "{이벤트}가 {장바구니 값}인 {사용자} 중 이후 {구매 값}에 못 간 비율",
-          ["user", "time", "event", ("step_a", {"name": "장바구니 값", "label": "장바구니 담기 이벤트 값"}), ("step_b", {"name": "구매 값", "label": "구매 이벤트 값"})], "conversion", {"invert": True}, pair=["users_first", "users_reached"], fmt="percent", better="down", hint="counter"),
+          ["user", "time", "event", ("step_a", {"name": "장바구니 값", "label": "장바구니 담기 이벤트 값"}), ("step_b", {"name": "구매 값", "label": "구매 이벤트 값"}), "window_days"], "conversion", {"invert": True}, pair=["users_first", "users_reached"], fmt="percent", better="down", hint="counter"),
     entry("search_exit", C, "검색 이탈률", "Search Exit Rate", "검색한 세션 중 검색이 마지막 행동이었던 비율이에요. 검색 결과가 쓸모없을 때 높아져요.", "검색이 마지막인 세션 ÷ 검색한 세션",
           "{사용자}의 세션(간격 {세션 간격(분)}분) 중 {이벤트}가 {검색 이벤트 값}이 마지막인 비율", [*SES, "event", ("event_value", {"name": "검색 이벤트 값", "label": "검색 이벤트 값", "optional": False})],
           "search_exit", pair=["search_sessions", "exit_sessions"], fmt="percent", better="down", window=True),
     entry("zero_result", C, "검색 결과 없음 비율", "Zero-Result Rate", "검색했는데 결과가 0건이었던 비율이에요. 높으면 동의어·상품 구색을 손봐야 해요.", "결과 0건 검색 ÷ 검색", "{검색 결과 수}가 0인 검색의 비율({이벤트}가 {이벤트 값}인 행만)",
           ["results", ("event", OPT), "event_value"], "zero_result", pair=["searches", "zero_searches"], fmt="percent", better="down", hint="counter"),
     entry("sku_pareto", C, "상품 쏠림(파레토)", "SKU Pareto", "상위 20% 상품이 매출의 몇 %인지예요. 80%에 가까우면 소수 상품에 기대는 구조예요.", "상위 p% 항목의 매출 ÷ 전체 매출", "{항목} 중 상위 {상위 %}%가 차지하는 {금액}의 비중", ["item", "amount", "top"], "pareto", pair=["items"], fmt="percent"),
+    entry("rfm", C, "RFM 등급", "RFM", "결제자를 최근성(R)·빈도(F)·금액(M) 5분위 점수로 나눈 표예요. R·F가 높은 핵심 고객이 얼마나 되는지, 잠든 큰손이 누구인지 봐요.", "R·F·M 각각 결제자 안 5분위 점수(5가 가장 좋음)",
+          "{금액}을 낸 {사용자}의 마지막 {시각}·구매 수({주문})·순매출로 매긴 RFM 등급", ["user", "amount", "time", ("orders", OPT)], "rfm", pair=["pu", "core_users"], fmt="percent", better="up"),
+    entry("refund_rate", C, "환불률", "Refund Rate", "판매 중 환불된 비율이에요(금액·건수). 상품·배송 문제를 먼저 알려 줘요.", "환불 금액 ÷ 판매 금액(건수도 함께)",
+          "{금액} 중 환불({상태}가 {환불 값}, 비우면 음수 금액)의 비율", ["amount", ("status", OPT), "refund_value"], "refund_rate", pair=["refund", "sales_amount"], fmt="percent", better="down", hint="counter"),
+    entry("interpurchase", C, "구매 간격", "Inter-purchase Time", "한 사람의 이어진 두 구매 사이가 며칠인지의 중앙값이에요. 재구매 알림을 보낼 때를 정할 때 써요.", "이어진 두 구매 사이 일수의 중앙값",
+          "{금액}을 낸 {사용자}의 이어진 두 {시각} 사이 일수", ["user", "amount", "time"], "interpurchase", pair=["repeat_buyers", "gaps"], spread=True, unit="일"),
+    entry("new_vs_returning_revenue", C, "신규·기존 매출 비중", "New vs Returning Revenue", "기간마다 처음 산 고객과 전에 산 적 있는 고객의 매출을 나눠요. 성장이 새 고객 덕인지 단골 덕인지 봐요.", "신규 고객 매출 ÷ 기간 매출",
+          "{시각}의 {단위}마다 처음 {금액}을 낸 {사용자}의 매출 비중", ["user", "amount", "time", ("unit", {"default": "month"})], "new_vs_returning_revenue", pair=["new_revenue", "returning_revenue"], fmt="percent"),
     # ---------- 8 실험·모델 ----------
     entry("precision", "model", "정밀도", "Precision", "참이라고 한 것 중 실제로 참인 비율이에요. 오탐(헛다리)을 줄이고 싶을 때 봐요.", "TP ÷ (TP + FP)", "{예측}(또는 {점수} ≥ {임계값})이 참인 것 중 {정답}도 참인 비율",
           ["y_true", ("y_pred", OPT), ("score", OPT), "threshold"], "classification", {"pick": "precision"}, pair=["tp", "fp"], fmt="percent", better="up", any_of=[("y_pred", "score")]),
@@ -449,10 +470,11 @@ def available(columns, tables=None):
 # ---------- 구하기 ----------
 
 class Ctx:
-    """계산 맥락. table = 기간·조건까지 건 Ibis 표(없으면 fetch(body, 컬럼들)로 받는다), other = 다른 테이블을 이름으로 주는 함수(광고 테이블), notes = 결과에 실을 알림."""
+    """계산 맥락. table = 기간·조건까지 건 Ibis 표(없으면 fetch(body, 컬럼들)로 받는다), other = 다른 테이블을 이름으로 주는 함수(광고 테이블), notes = 결과에 실을 알림.
+    whole = fetch와 같은 모양의 함수: 기간을 뺀 body를 받아 조건만 건 표를 준다(있으면 전환 지표가 B를 기간 밖에서도 찾는다, later)."""
 
-    def __init__(self, table=None, other=None, fetch=None, align=None):
-        self.table, self.other, self.fetch, self.align, self.notes = table, other, fetch, align, []
+    def __init__(self, table=None, other=None, fetch=None, align=None, whole=None):
+        self.table, self.other, self.fetch, self.align, self.notes, self.whole, self.later = table, other, fetch, align, [], whole, None
 
 
 def used_columns(entry_, slots, align=None):
@@ -567,6 +589,8 @@ def compute(entry_, slots, body, ctx, align=None):
     table = ctx.table if ctx.table is not None else ctx.fetch(body, used_columns(e, slots or {}, align))
     table = table.mutate(**{name: nan_to_null(table[name]) for name, t in table.schema().items() if t.is_floating()})  # NaN·inf는 빈 값(분석 화면과 같게: 합계는 나머지로)
     s = resolve(e, slots, table)
+    if ctx.whole is not None and e["calc"] == "conversion" and (body or {}).get("periods"):  # A만 기간 안이면 되고 B는 기간 뒤여도 센다(분석 퍼널의 entry와 같다)
+        ctx.later = ctx.whole({**body, "periods": []}, used_columns(e, slots or {}, align))
     got = mk.KERNELS[e["calc"]](table, s, e["params"], ctx)
     dist = got.get("dist")
     spread = None

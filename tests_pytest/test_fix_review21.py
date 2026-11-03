@@ -1,4 +1,4 @@
-"""21차 리뷰: 날마다 적은 엑셀 목표의 1일, 작은 값 축 눈금, 버블 말풍선."""
+"""21차 리뷰: 날마다 적은 엑셀 목표의 1일. (작은 값 축 눈금·버블 말풍선 시험은 Chart.js를 지운 R4-D2b에서 뺐다: 차트는 차트 섬(Recharts)이 그린다)"""
 import datetime as dt
 import json
 import shutil
@@ -26,41 +26,6 @@ def test_excel_daily_column_keeps_first_day(tmp_path):
     assert [r["period"] for r in rows] == ["2026-10-01", "2026-10-02", "2026"]
     assert targets.lookup(rows, "방문", "2026-10-01")["row"]["value"] == 7
     assert targets.lookup(rows, "방문", "2026-10")["row"] is None
-
-
-SCRIPT = r"""
-const assert = require("assert"), fs = require("fs"), R = process.argv[2];
-globalThis.Chart = require(R + "chart.umd.min.js");
-globalThis.getComputedStyle = () => ({ getPropertyValue: () => "#fff" });
-globalThis.document = { documentElement: {}, querySelectorAll: () => [] };
-globalThis.matchMedia = () => ({ matches: false });  // 68차: chartLook이 움직임 줄이기 설정을 본다
-const src = fs.readFileSync(R + "common.js", "utf8").replace(/\r/g, "");
-eval(src.match(/const compact[\s\S]*?\n}\n/)[0].replace("const compact", "globalThis.compact").replace("function chartLook", "globalThis.chartLook = function"));
-chartLook();
-const canvas = () => { const c = { width: 600, height: 400, style: {} };
-  const x = new Proxy({}, { get: (t, k) => k === "measureText" ? s => ({ width: String(s).length * 6 }) : k === "canvas" ? c : (k in t ? t[k] : () => {}), set: (t, k, v) => (t[k] = v, true) });
-  c.getContext = () => x; return c; };
-const make = cfg => new Chart(canvas(), { ...cfg, options: { animation: false, responsive: false, ...cfg.options } });
-const small = make({ type: "line", data: { labels: ["a", "b", "c"], datasets: [{ data: [0.0001, 0.0003, 0.0005] }] } });
-assert.ok(small.scales.y.ticks.every(t => t.label !== "0" || t.value === 0), small.scales.y.ticks.map(t => t.label).join("|"));
-const big = make({ type: "bar", data: { labels: ["a"], datasets: [{ data: [12000000] }] } });
-assert.ok(big.scales.y.ticks.some(t => /만/.test(t.label)));
-eval(fs.readFileSync(R + "board.js", "utf8") + "\n" + fs.readFileSync(R + "lib/dash_calc.js", "utf8") + "\n" + fs.readFileSync(R + "dash.js", "utf8"));
-const card = { data: { points: { points: [[1, 1, 5, "A"], [10, 10, 5, "A"], [9, 1, 5, "B"], [2, 9, 5, "B"]], groups: ["A", "B"], size_range: [5, 5] } }, view: { type: "bubble" } };
-const bub = make(pointsConfig(card, { text: "#000", line: "#ccc", series: ["#111111", "#222222"] }, {}));
-const at = bub.getDatasetMeta(0).data[0], mode = bub.options.interaction;
-const hit = bub.getElementsAtEventForMode({ type: "mousemove", x: at.x, y: at.y, native: {} }, mode.mode, mode, false);
-console.log(JSON.stringify(hit.map(e => [e.datasetIndex, e.index])));
-"""
-
-
-@pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
-def test_small_ticks_and_bubble_hover(tmp_path):
-    js = tmp_path / "t.js"
-    js.write_text(SCRIPT, encoding="utf-8")
-    out = subprocess.run(["node", str(js), str(ROOT / "static" / "core") + "/"], capture_output=True, text=True, encoding="utf-8")
-    assert out.returncode == 0, out.stderr
-    assert out.stdout.strip().splitlines()[-1] == "[[0,0]]"  # 마우스 아래 버블 하나만(다른 그룹의 같은 순번 점은 빠진다)
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")

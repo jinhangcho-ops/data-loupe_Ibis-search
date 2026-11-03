@@ -44,5 +44,5 @@ def test_excel_written_in_pieces(table, tmp_path, monkeypatch):
     back = pl.read_excel(tmp_path / "o.xlsx")
     assert back.height == N and back.columns == ["id", "day", "at", "memo", "tags"]
     first = back.row(0, named=True)
-    assert first["memo"] is None and back["memo"][1] == "'=1+1"  # 빈 값은 빈 칸, 수식으로 읽힐 글자는 '를 붙인다
+    assert first["memo"] is None and back["memo"][1] == "=1+1"  # 빈 값은 빈 칸. xlsx는 수식을 실행하지 않고 쓰므로 값을 그대로 둔다(CSV만 ' 붙임)
     assert str(back["day"][0])[:10] == "2026-01-01" and str(back["at"][5]).startswith("2026-01-01 05:00")

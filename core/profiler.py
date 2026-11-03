@@ -172,6 +172,12 @@ def block(con, t, schema, base, size, rows, part):
     """블록 샘플링(TABLESAMPLE SYSTEM): 저장 블록 일부만 읽는다. 행 수를 모르거나 너무 적게 오면 None."""
     if rows is None:
         return None
+    if getattr(con, "name", "") == "polars":  # Polars의 블록 샘플링은 표 전체를 올려 df.sample로 고른다: 앞·가운데·뒤 세 구간만 읽는다(겹치지 않게)
+        import pyarrow as pa
+        third = -(-size // 3)
+        starts = (0, max(third, rows // 2 - third // 2), max(2 * third, rows - third))
+        found = pa.concat_tables([fetch(con, part, **result.streaming(part)) for part in (t.limit(third, offset=start) for start in starts)]).slice(0, size)
+        return found if found.num_rows >= min(size, rows) * settings.get("sample_too_few") else None
     picked = t.sample(min(1.0, size * 1.2 / rows), method="block").limit(size)
     found = fetch(con, picked, **result.streaming(picked))  # 파일 연결(Polars)은 streaming으로 읽어 최대 메모리를 줄인다(표본은 그대로 무작위)
     return found if found.num_rows >= min(size, rows) * settings.get("sample_too_few") else None  # 기대한 행의 이만큼도 못 가져오면(작은 테이블·뷰) 다음 방법으로(설정 sample_too_few, 기본 0.2)

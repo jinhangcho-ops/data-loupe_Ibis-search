@@ -58,10 +58,12 @@ def shown(body, expr):
     return keys, [c for line in body.get("columns", []) for c in parse.parse_columns(line, expr)]
 
 
-def sort_keys(body):
-    """정렬 키 값만 고른 표(k0, k1 …). 같은 값의 행이 있으면 쪽마다 다시 정렬할 때 그 행들의 차례가 바뀌어 쪽이 겹치거나 빠질 수 있다."""
+def sort_keys(body, at):
+    """정렬 순서로 at번째와 그다음(0부터) 행의 정렬 키 값만 고른 표(__ibis_k0, __ibis_k1 …, 두 행까지). 쪽 경계의 두 행 값이 같으면 쪽마다 다시 정렬할 때 그 행들의 차례가 바뀌어 쪽이 겹치거나 빠질 수 있다."""
     expr = staged(body, filtered(body))
-    return expr.select(*[k.op().arg.to_expr().name(f"k{i}") for i, k in enumerate(shown(body, expr)[0])])
+    keys = shown(body, expr)[0]
+    named = {f"__ibis_k{i}": k.op().arg.to_expr() for i, k in enumerate(keys)}
+    return expr.mutate(**named).order_by(keys).limit(2, offset=max(at, 0)).select(*named)
 
 
 def build(body, select=True):
@@ -133,12 +135,15 @@ def runnable(body, select=True, keep=None, extra=(), fresh=False, ask=None):
     이 PC(held의 DuckDB)에 받아 그 위에서 만든 식(요청의 계열·피벗이 고른 집계를 연결이 못 해도 같다: 중앙값 등). 받을 수 없을 만큼 크면 PC_TOO_BIG.
     keep(쓸 컬럼들)을 주면 식을 그 컬럼으로 줄이고, PC에 받는 사본도 조건을 건 뒤 그 컬럼만 받는다(테이블 전체를 받지 않는다). 계산 줄(calcs)이 있으면 줄이지 않는다.
     fresh면 이미 받아 둔 사본을 쓰지 않고 새로 받는다(원본 파일·테이블이 바뀐 뒤에도 옛 사본으로 계산하지 않게).
-    ask(요청 본문)를 주면 원격 DB에서 사본을 새로 받기 전에 처리 용량 확인(server.scan_gate)을 하고, 확인이 필요하면 Confirm을 낸다."""
+    ask(요청 본문)를 주면 원격 DB에서 사본을 새로 받기 전에 처리 용량 확인(server.scan_gate)을 하고, 확인이 필요하면 Confirm을 낸다.
+    BigQuery는 DB 안에서 집계해도 읽는 양에 요금이 나므로 ask가 있으면 식이 읽는 컬럼을 세는 집계로 dry run 바이트를 먼저 묻는다(/api/summary와 같은 방식)."""
     keep = None if body.get("calcs") else keep
     expr = slim(build(body, select), keep) if keep else build(body, select)
-    if source.compiles(expr) and not agg_unsupported(body, expr, extra):
-        return expr
     con = get_con() if ask is not None else None
+    if source.compiles(expr) and not agg_unsupported(body, expr, extra):
+        if con is not None and con.name == "bigquery" and (response := server.scan_gate(ask, lambda: server.expr_sql(con, expr.aggregate([expr[c].count().name(f"c{i}") for i, c in enumerate(expr.columns)])))):
+            raise Confirm(response)
+        return expr
     if ask is not None and held.remote(con) and (fresh or search_key(body, keep) not in held.store["items"]):
         if response := server.scan_gate(ask, lambda: server.expr_sql(con, slim(filtered(body), keep) if keep else filtered(body))):
             raise Confirm(response)

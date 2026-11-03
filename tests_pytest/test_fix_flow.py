@@ -104,7 +104,7 @@ def test_sentence_run_route_asks_before_a_big_scan(c, monkeypatch):
     first = c.post("/api/sentence/run", json=data)
     assert first.get_json()["needs_confirm"] is True and "rows" not in first.get_json() and len(asked) == 1 and "FROM" in asked[0].upper()  # 요청이 둘이어도 같은 body는 한 번만 묻는다
     again = c.post("/api/sentence/run", json={**data, "confirmed": True})
-    assert [r["store"] for r in again.get_json()["rows"]] == ["A", "B", "C"]
+    assert [r["store"] for r in again.get_json()["rows"]] == ["C", "B", "A"]  # 틀 20은 값이 큰 순
 
 
 def test_my_metric_of_another_table_is_refused_at_run_time(c):

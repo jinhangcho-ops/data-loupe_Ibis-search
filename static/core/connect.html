@@ -34,6 +34,9 @@
       <div class="opt" title="DuckDB 파일과 PC에 받아 둔 결과를 계산할 때 쓸 CPU 코어 수예요. 줄이면 계산하는 동안에도 PC가 덜 느려지지만 큰 계산은 오래 걸려요. Parquet, CSV 같은 파일에는 적용되지 않아요. 다음 연결부터 적용돼요."><span>계산에 쓸 CPU 코어</span><select id="threads"></select></div>
       <div class="opt" title="실행 전에 읽을 양을 미리 셀 수 없는 연결(Postgres, BigQuery, 파일 등)에서 어떻게 할지 정해요. 읽을 양이 메모리 한도를 넘으면(제한 없음이면 지금 PC의 남은 메모리) 어느 쪽이든 실행 전에 물어봐요."><span>읽을 양을 미리 모를 때</span><select id="scan-unknown"><option value="run">그대로 실행</option><option value="block">실행하지 않기</option></select></div>
       <div class="opt" title="컬럼 종류를 짐작하려고 표본을 뽑을 때, 기대한 행 수의 이 비율보다 적게 오면 다른 방법(최신 파티션, 앞쪽 행)으로 다시 가져와요. 비우면 20%이고, 5에서 90 사이로 넣을 수 있어요."><span>최소 표본 비율(%)</span><input id="too-few" type="number" min="5" max="90" step="1" placeholder="20" style="width:80px; flex:none"></div>
+      <div class="opt" title="지표의 날·주·월 경계와 차트의 날짜 묶기를 이 시간대로 잘라요. Asia/Seoul 같은 이름이나 +09:00 같은 오프셋을 넣고, 비우면 이 PC의 시간대를 써요."><span>시간대</span><input id="timezone" placeholder="이 PC 시간대" style="width:140px; flex:none"></div>
+      <div class="opt" title="주 단위로 묶을 때 한 주가 시작하는 요일이에요."><span>주의 시작 요일</span><select id="week-start"><option value="mon">월요일</option><option value="sun">일요일</option></select></div>
+      <div class="opt" title="연 단위로 묶을 때 한 해(회계연도)가 시작하는 달이에요."><span>회계연도 첫 달</span><select id="fiscal-start"></select></div>
     </details>
     <button id="connect" class="btn p conn-go">연결</button>
     <div class="err" id="err-connect"></div>

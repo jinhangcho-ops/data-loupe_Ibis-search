@@ -92,9 +92,9 @@ def ask_save(name, file_types):
     return chosen[0] if chosen else None
 
 
-def ask_open():
-    """.env 파일 고르기 대화상자. 고른 경로 또는 취소하면 None."""
-    chosen = window.create_file_dialog(webview.FileDialog.OPEN, file_types=("env 파일 (*.env)", "모든 파일 (*.*)"))
+def ask_open(kind="env"):
+    """파일 고르기 대화상자(종류별 필터는 server.PICK_KINDS). 고른 경로 또는 취소하면 None."""
+    chosen = window.create_file_dialog(webview.FileDialog.OPEN, file_types=server.PICK_KINDS[kind])
     return chosen[0] if chosen else None
 
 

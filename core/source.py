@@ -2,6 +2,7 @@
 import contextlib
 import functools
 import gc
+import logging
 import os
 import queue
 import re
@@ -17,6 +18,7 @@ from core import scratch
 
 STOP_WAIT = 2  # 멈추라고 알린 일이 실제로 끝나기를 기다리는 시간(초).
 FLOOR = "64MB"  # release가 캐시를 비울 때 잠깐 낮추는 상한. 너무 낮으면(1MB) 되돌리는 문장조차 메모리가 모자라 실패했다.
+CSV_INFER_ROWS = 10_000  # CSV 컬럼 타입을 정할 때 읽는 앞 행 수
 
 # 연결을 쓰는 일은 모두 스레드 하나(worker)에서 차례로 돌린다. 만든 스레드에서만 쓸 수 있는 연결(SQLite 등)이 있어서다.
 worker, jobs = None, None
@@ -73,7 +75,8 @@ def within(seconds, work, late, wake=None, drop=lambda value: None, stop=lambda:
         if not (stop() and ended.wait(STOP_WAIT)):
             jobs.put(None)
             start_worker()
-            error.abandoned = True  # 버린 스레드가 아직 연결을 쓴다(server.run이 연결을 새로 연다)
+            error.abandoned = True  # 버린 스레드가 아직 연결을 쓴다(server.run이 연결을 새로 열거나, 파일 연결이면 끝나기를 기다린다)
+            error.ended = ended  # 버린 일이 끝나면 켜진다
         raise error
     if "error" in found:
         raise found["error"]
@@ -150,8 +153,8 @@ def release(con):
             continue
         try:
             c.con.execute(f"set memory_limit='{FLOOR}'")
-        except Exception:  # 쥔 것이 많아 낮추지 못하면 이번에는 비우지 않는다(쿼리 결과에는 영향이 없게).
-            pass
+        except Exception as e:  # 쥔 것이 많아 낮추지 못하면 이번에는 비우지 않는다(쿼리 결과에는 영향이 없게).
+            logging.getLogger("data_loupe").warning("DuckDB 캐시를 비우지 못했어요(메모리 한도를 %s로 낮추지 못함): %s", FLOOR, e)
         c.con.execute(restore)  # 보이는 값("1.3 GiB")은 반올림돼 있어, 연 때의 값으로 되돌린다.
 
 
@@ -287,7 +290,7 @@ def read_csv_table(con, path, name):
     refresh_csv가 이 기록으로 원본이 바뀌었는지 본다(UTF-8이던 것이 CP949로 다시 저장된 경우도 잡는다). 새 표를 등록한 뒤에는 예전 사본(임시 폴더 안의 것만)을 지운다."""
     stamp = stamp_of(path)
     use = utf8_csv(path, con)
-    con.read_csv(use, table_name=name)
+    con.read_csv(use, table_name=name, infer_schema_length=CSV_INFER_ROWS, try_parse_dates=True)  # Polars 기본(앞 100행)은 뒤에서 글자가 섞이면 조회가 실패한다
     sources = con.__dict__.setdefault("csv_sources", {})
     old = sources.pop(name, None)
     sources[name] = (path, stamp, use)
@@ -545,15 +548,17 @@ def unsupported_errors():
 
 def interrupt(con):
     """연결이 돌리고 있는 작업을 멈추라고 드라이버에 알린다. 드라이버 연결(con.con)에 interrupt나 cancel이 있을 때만, 되는 만큼만 한다.
-    알렸으면 True. 다른 스레드에서 부르는 것이라 연결 스레드로 보내지 않는다. side 연결(DuckDB 커서)이 있으면 그것에도 알린다."""
+    알렸으면 True. 다른 스레드에서 부르는 것이라 연결 스레드로 보내지 않는다. side 연결(DuckDB 커서)과 받아 둔 결과(held)의 DuckDB에도 알린다
+    (Polars처럼 멈출 수 없는 연결이라도 그 작업이 held DuckDB에서 돌고 있으면 멈춘다)."""
+    from core import held  # held가 source를 import하므로 여기서
     told = False
-    for backend in (con, getattr(con, "side", None)):
+    for backend in (con, getattr(con, "side", None), held.store["con"]):
         raw = getattr(backend, "con", None)
         stop = getattr(raw, "interrupt", None) or getattr(raw, "cancel", None)
         try:
             if stop:
                 stop()
-                told = told or backend is con
+                told = told or backend is not getattr(con, "side", None)
         except Exception:
             pass
     return told

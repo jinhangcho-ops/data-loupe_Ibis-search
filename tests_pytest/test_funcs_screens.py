@@ -139,10 +139,7 @@ SCREEN_FILES = [p for p in sorted(STATIC.rglob('*')) if p.suffix in (".js", ".ht
 ALLOWED = {  # (파일, 그 줄에 든 글) → 집계 목록이 아니라 다른 뜻인 곳
     ("dash_calc.js", "{ sum: null, count: 0, min: null, max: null }"): "일 값을 다시 묶는 계산(MERGE의 구현)",
     ("dash_calc.js", "mean: g => g.count"):"일 값을 다시 묶는 계산(MERGE의 구현)",
-    ("dash.js", "sum: pick(s.sum)"): "일 값을 다시 묶는 계산(MERGE의 구현)",
-    ("dash_cards.js", '["sum", "count"].include'): "합계 줄은 더해도 되는 열(합계·개수)에만",
     ("prep.html", '["mean", "median"]'): "빈 값 채우기 방법(집계 목록이 아님)",
-    ("dash_rules.js", '"sum" : "count"'): "빈칸 줄의 기본 집계",
 }
 FORBIDDEN = [
     (re.compile(rf'<option value="(?:{AGG_WORDS})"'), "집계를 고르는 <option>을 직접 적음"),
@@ -173,18 +170,14 @@ def test_allowed_exceptions_still_exist():
 
 
 def test_screens_pick_from_the_catalog():
-    pages = {name: next(STATIC.rglob(name)).read_text(encoding="utf-8") for name in ("index.html", "prep.html", "dashboard.html")}
+    pages = {name: next(STATIC.rglob(name)).read_text(encoding="utf-8") for name in ("index.html", "prep.html")}
     for name, text in pages.items():
         assert '<script src="/static/core/funcs.js"></script>' in text and text.index("funcs.js") > text.index("common.js"), name
     assert "Funcs.picker" in pages["index.html"] and "pickers.chart" in pages["index.html"] and "pickers.pivot" in pages["index.html"] and "pickers.calc" in pages["index.html"]
     assert "Funcs.picker" in pages["prep.html"] and "a-gagg" in pages["prep.html"] and "pickers[key]" in pages["prep.html"] and "pickers.keep" in pages["prep.html"] and "Funcs.panel" in pages["prep.html"]
-    assert "Funcs.picker" in (STATIC / "dashboard" / "dash_menu.js").read_text(encoding="utf-8")
     assert "Object.entries(SERVER.calc.hows)" not in pages["index.html"] and "SERVER.funcs" not in pages["index.html"]
-    assert "SERVER.dash.aggs" in (STATIC / "dashboard" / "dash_rules.js").read_text(encoding="utf-8")
-    dash = (STATIC / "core" / "dash.js").read_text(encoding="utf-8")
-    assert "SERVER.merge" in dash and '"nunique"' not in dash and "SERVER.agg_names" in dash
-    for name in ("dash_cards.js", "dash_menu.js"):
-        assert '"nunique"' not in next(STATIC.rglob(name)).read_text(encoding="utf-8"), name
+    common = (STATIC / "core" / "common.js").read_text(encoding="utf-8")  # 집계 이름(aggName)은 R4-D2b에서 dash.js를 지우며 common.js로
+    assert '"nunique"' not in common and "SERVER.agg_names" in common
 
 
 def test_every_screen_list_comes_from_the_catalog():

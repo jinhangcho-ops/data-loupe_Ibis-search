@@ -85,13 +85,16 @@ def sample_containment(a_vals, b_frame, cb, cast):
     return sum(1 for v in mine if v in b_vals) / len(mine)
 
 
-def db_containment(b, cb, a_vals, cast):
-    """A 값들(표본의 서로 다른 값)이 B 컬럼에 있는 비율: B에서 isin으로 찾은 서로 다른 수 / A 값 수. DB에서 센다(원격에서는 부르지 않는다)."""
-    if not a_vals:
-        return None
-    col = b[cb].cast("string") if cast else b[cb]
-    found = b.filter(col.isin(as_text(a_vals) if cast else a_vals)).select(col.name("v")).distinct().count().to_pyarrow().as_py()
-    return min(1.0, found / len(a_vals))
+def db_containment(b, items):
+    """items [(B 컬럼, A 값들(표본의 서로 다른 값), 바꿔야 하는지)]마다 A 값들이 B 컬럼에 있는 비율(B에서 isin으로 찾은 서로 다른 수 / A 값 수, A 값이 없으면 None).
+    짝 수와 상관없이 B를 한 번 읽는 집계 하나로 센다(원격에서는 부르지 않는다)."""
+    aggs = []
+    for i, (cb, a_vals, cast) in enumerate(items):
+        if a_vals:
+            col = b[cb].cast("string") if cast else b[cb]
+            aggs.append(col.nunique(where=col.isin(as_text(a_vals) if cast else a_vals)).name(f"n{i}"))
+    found = b.aggregate(aggs).to_pyarrow().to_pylist()[0] if aggs else {}
+    return [min(1.0, found[f"n{i}"] / len(a_vals)) if a_vals else None for i, (_, a_vals, _) in enumerate(items)]
 
 
 def unique_in(frame, col):
@@ -186,11 +189,12 @@ def suggest(a, b, a_name="", b_name="", remote=False, samples=None):
             per[p[0]] = per.get(p[0], 0) + 1
             chosen.append(p)
     cands, uniq_cache = [], {}
-    for ca, cb, ns, ts, cast in chosen:
+    measured = db_containment(b, [(cb, column_values(fa, ca), cast) for ca, cb, _, _, cast in chosen]) if sampled and not remote and fa.height else None
+    for at, (ca, cb, ns, ts, cast) in enumerate(chosen):
         if sampled and (remote or not fa.height):
             contain, basis = cheap[ca, cb], "표본 기준"
         elif sampled:
-            contain, basis = db_containment(b, cb, column_values(fa, ca), cast), "표본 기준"
+            contain, basis = measured[at], "표본 기준"
         else:
             contain, basis = None, NO_SAMPLE
         if sampled:

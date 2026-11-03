@@ -151,13 +151,18 @@ def drop(con, schema, name):
     source.drop_table(con, name, schema)
 
 
+def uploaded(con, data):
+    """묶음(pyarrow 표)을 con에 올릴 memtable. 쓴 뒤에는 source.drop_memtable로 지운다."""
+    from prep import prep_app
+    # DuckDB는 Arrow 표를 그대로 올린다(pandas로 바꾸면 수십 배 느리다). 빈 날짜시각·큰 정수 문제는 pandas로 바꿀 때만 생긴다
+    return ibis.memtable(data) if con.name == "duckdb" else ibis.memtable(prep_app.plain_rows(data), schema=ibis.Schema.from_pyarrow(data.schema))
+
+
 @source.on_worker
 def insert(con, schema, name, data):
     """묶음(pyarrow 표) 하나를 넣는다. Ibis insert 한 번 = 문장 하나라 묶음째 들어가거나 들어가지 않는다.
     전처리의 테이블 만들기(prep_app.insert_all)처럼 값을 Python 값으로 두고(빈 날짜시각·큰 정수), 올린 임시 테이블은 바로 지운다."""
-    from prep import prep_app
-    # DuckDB는 Arrow 표를 그대로 올린다(pandas로 바꾸면 수십 배 느리다). 빈 날짜시각·큰 정수 문제는 pandas로 바꿀 때만 생긴다
-    part = ibis.memtable(data) if con.name == "duckdb" else ibis.memtable(prep_app.plain_rows(data), schema=ibis.Schema.from_pyarrow(data.schema))
+    part = uploaded(con, data)
     try:
         con.insert(name, part, database=schema or None)
     finally:
@@ -168,7 +173,7 @@ IN_LIMIT = 1000  # IN 목록 하나에 넣는 값의 수. Oracle은 1000개까�
 
 
 def lookups(table, keys, data):
-    """묶음의 키 중 table에 이미 있는 것을 찾는 식들. 빈 값이 없는 키 조합을 IN_LIMIT개씩 나눠 컬럼마다 IN으로 거른다."""
+    """묶음의 키 중 table에 이미 있는 것을 찾는 식들(Oracle용: 임시 테이블 대신). 빈 값이 없는 키 조합을 IN_LIMIT개씩 나눠 컬럼마다 IN으로 거른다."""
     found = list({row for row in zip(*(data.column(k).to_pylist() for k in keys)) if None not in row})
     parts = [found[at:at + IN_LIMIT] for at in range(0, len(found), IN_LIMIT)]
     return [table.filter([table[k].isin(list({row[i] for row in part})) for i, k in enumerate(keys)]).select(keys).distinct() for part in parts]
@@ -176,10 +181,17 @@ def lookups(table, keys, data):
 
 @source.on_worker
 def existing(con, schema, name, keys, data):
-    """묶음의 키 중 테이블에 이미 있는 것들(튜플의 집합). 묶음의 키 값만으로 걸러 조회한다."""
+    """묶음의 키 중 테이블에 이미 있는 것들(튜플의 집합). 묶음의 키를 임시 테이블(memtable)로 올려 semi-join 조회 한 번으로 찾는다(묶음마다 IN 조회 여럿 대신).
+    Oracle은 키 조합을 IN_LIMIT개씩 나눈 조회(lookups)로."""
     table = con.table(name, database=schema or None)
     shape = data.select(keys).schema  # 테이블 칸(시간대 없는 시각)을 묶음 타입(시간대 있는 시각)으로 맞춰야 같은 키로 견준다
-    return {tuple(row[k] for k in keys) for query in lookups(table, keys, data) for row in query.to_pyarrow().cast(shape).to_pylist()}
+    part = None if con.name == "oracle" else uploaded(con, data.select(keys))
+    try:
+        queries = lookups(table, keys, data) if part is None else [table.semi_join(part, keys).select(keys).distinct()]
+        return {tuple(row[k] for k in keys) for query in queries for row in query.to_pyarrow().cast(shape).to_pylist()}
+    finally:
+        if part is not None:
+            source.drop_memtable(con, part)
 
 
 def rename_sql(con, schema, name, new):

@@ -13,4 +13,4 @@
 | 전처리 | 컬럼 정리·새 컬럼·중복 제거·정렬을 고르고, 미리 본 뒤 파일이나 새 테이블로 저장 | [functions/prep.md](functions/prep.md) |
 | 분석 탭 | 분포·상관관계·그룹 비교·기간별 추이를 그래프와 표로 보고 대시보드에 넣기 | [functions/analysis_tab.md](functions/analysis_tab.md) |
 | 퍼널 | 정해 둔 단계를 순서대로 거쳐 간 사람 수와 빠진 곳을 생키 그림과 표로 | [functions/funnel.md](functions/funnel.md) |
-| 기억되는 것·안전 | 표본 행 수, 지난번 전처리, 저장한 설정이 어디에 남는지 | [functions/settings.md](functions/settings.md) |
+| 기억되는 것·안전 | 미리 읽을 행 수, 지난번 전처리, 저장한 설정이 어디에 남는지 | [functions/settings.md](functions/settings.md) |

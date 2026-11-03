@@ -83,7 +83,7 @@ def test_목록_묶음_자주_쓴_지표가_맨_위_찾기는_맞는_영역만(t
                    " units: ['uv', 'gross_revenue', 'retention_classic', 'gini'].map(i => mcUnit(cat.entries.find(e => e.id === i))) }));" % json.dumps(c))
     assert got["plain"] == [a["id"] for a in cat.AREAS]  # 자주 쓴 것이 없으면 묶음도 없다
     assert got["freq"] == [["frequent", ["dau", "arpu"]]]
-    assert got["found"] == [["revenue", ["pu", "arppu"]]]  # pu는 설명에 ARPPU가 든다
+    assert got["found"] == [["revenue", ["pu", "arppu", "arppu_period"]]]  # pu는 설명에 ARPPU가 든다
     assert got["units"] == ["명", "원", "%", ""]
 
 
@@ -93,27 +93,3 @@ def test_사전_목록은_접힌_영역이고_자주_쓴_것만_펼친다(tmp_pa
     assert 'el("details"' in src and 'el("summary"' in src
 
 
-@need_node
-def test_KPI_카드에_단위를_싣고_지표_카드는_지표의_형식을_쓴다(tmp_path):
-    prelude = (ROOT / "tests_pytest" / "test_fix_audit22_dash.py").read_text(encoding="utf-8").split('PRELUDE = """')[1].split('"""')[0]
-    body = """
-var Funcs={cat:null,load:()=>new Promise(()=>{}),loadSupport:()=>Promise.resolve()};
-var tick=()=>new Promise(r=>setTimeout(r,10));
-(async()=>{
-const cards=[], root=new E('div'), m=initCardMenu(root,{metricNames:()=>["매출"],layout:()=>({}),add:async c=>cards.push(c)});
-const all=[]; const walk=n=>{ if(!(n instanceof E)) return; all.push(n); n.children.forEach(walk); }; walk(root);
-const sel=all.filter(n=>n.tag==='select'), table=sel[0], metric=all.find(n=>n.title&&n.title.startsWith('지표 하나'));
-const unit=all.find(n=>n.placeholder==='단위 (예: 명, 회, 원)');
-await m.refill(); table.value="srv"; await table.onchange(); await tick();
-m.preset("kpi"); metric.value="매출"; unit.value="명";
-await all.find(n=>n.textContent==='카드 추가').onclick(); await tick();
-console.log(JSON.stringify({unit:cards[0].view.unit_text, format:cards[0].view.format ?? null, names:cards[0].source.body.names}));
-})().catch(e=>{console.error(e);process.exit(1);});
-"""
-    src = (ROOT / "static" / "dashboard" / "dash_menu.js").read_text(encoding="utf-8")
-    script = tmp_path / "m.js"
-    script.write_text(prelude + "var busy=(b,f)=>f();\n" + src + body, encoding="utf-8")
-    done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=30)
-    assert done.returncode == 0, done.stderr[-3000:]
-    got = json.loads(done.stdout.strip().splitlines()[-1])
-    assert got == {"unit": "명", "format": None, "names": ["매출"]}  # 지표 카드는 지표 파일의 형식(data.values.format)을 쓴다

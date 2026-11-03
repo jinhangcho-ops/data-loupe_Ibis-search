@@ -95,7 +95,9 @@ function Undo(get, restore, { max = 50, quiet = 600, poll = 500 } = {}) {
     return true;
   }
   if (poll) setInterval(tick, poll);
-  return { tick, undo: () => move(back, fwd), redo: () => move(fwd, back), reset() { if (busy) return; base = seen = snap(); back = []; fwd = []; }, why: () => why, size: () => [back.length, fwd.length] };
+  // dump·load: 한 화면에 상태가 여러 벌(쿼리 화면의 작업 탭)일 때 기록을 떼어 두었다가 다시 붙인다. load(없음)는 reset과 같다
+  return { tick, undo: () => move(back, fwd), redo: () => move(fwd, back), reset() { if (busy) return; base = seen = snap(); back = []; fwd = []; }, why: () => why, size: () => [back.length, fwd.length],
+    dump: () => ({ back: [...back], fwd: [...fwd] }), load(d) { if (busy) return; base = seen = snap(); back = [...(d?.back ?? [])]; fwd = [...(d?.fwd ?? [])]; } };
 }
 // 글자를 쓰는 칸(커서가 있으면 창 엔진의 글자 되돌리기에 맡긴다). 체크·라디오·단추 같은 칸은 화면 되돌리기를 쓴다.
 const isTyping = t => !!t && (t.isContentEditable || t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && /^(|text|search|number|email|url|tel|password|date|datetime-local|month|week|time)$/.test(t.type)));

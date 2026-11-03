@@ -10,6 +10,14 @@ import threading
 # 쿼리가 끝나면 그동안 쓴 메모리를 바로 운영체제에 돌려준다(Polars가 쓰는 메모리 관리자 mimalloc의 설정. 라이브러리를 올리기 전에 정해야 한다).
 # 기본값이면 다음 쿼리 때까지 쥐고 있어, 큰 Parquet·CSV를 집계한 뒤 1GB 넘게 남았다.
 os.environ.setdefault("MIMALLOC_PURGE_DELAY", "0")
+# 설정의 계산 코어 수(threads)를 Polars에도 건다(DuckDB는 연결을 열 때 건다). Polars는 처음 계산할 때 이 값을 읽는다.
+from core import settings  # noqa: E402  프로젝트 모듈을 import하지 않는 표준 라이브러리만 쓴다
+try:
+    threads = settings.load().get("threads")
+except OSError:  # 설정 파일을 잠깐 못 읽어도 프로그램은 뜬다(코어 수만 기본값)
+    threads = None
+if threads:
+    os.environ.setdefault("POLARS_MAX_THREADS", str(threads))
 
 for name in ("ibis", "polars", "duckdb", "pyarrow"):
     spec = importlib.util.find_spec(name)

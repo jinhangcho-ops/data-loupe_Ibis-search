@@ -5,36 +5,47 @@ const SCRIPT_NONCE = document.currentScript?.nonce ?? "";
 const needed = new Map();
 const need = (...urls) => Promise.all(urls.map(url => {
   if (!needed.has(url)) needed.set(url, new Promise((done, fail) => {
-    const tag = Object.assign(document.createElement("script"), { src: url, nonce: SCRIPT_NONCE, async: false, onload: () => { if (url === CHART_JS) chartLook(); done(); } });
+    const tag = Object.assign(document.createElement("script"), { src: url, nonce: SCRIPT_NONCE, async: false, onload: done });
     tag.onerror = () => { needed.delete(url); fail(new Error(`${url}을 불러오지 못했어요.`)); };
     document.head.append(tag);
   }));
   return needed.get(url);
 }));
-const CHART_JS = "/static/core/chart.umd.min.js";  // 차트 라이브러리는 첫 차트를 그릴 때 불러온다: typeof Chart === "undefined"이면 need(CHART_JS) 뒤에 다시 그린다.
-// 모든 차트의 공통 모양(불러올 때 한 번): 옅은 가로 격자만, 테두리 없는 축, 끝이 둥근 막대, 가는 선, 원 범례, 카드 색 말풍선. 색은 차트마다 설정이 준다.
-const compact = new Intl.NumberFormat("ko", { notation: "compact", maximumFractionDigits: 1 });
-function chartLook() {
-  const d = Chart.defaults, css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  d.font.family = '"Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif';
-  d.font.size = 12;
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) d.animation = false;  // 움직임 줄이기 설정을 따른다
-  Object.assign(d.elements.bar, { borderRadius: 4, borderSkipped: "start" });  // 기준선 쪽은 각지게
-  Object.assign(d.datasets.bar, { maxBarThickness: 44, categoryPercentage: 0.72, barPercentage: 0.9 });
-  Object.assign(d.elements.line, { borderWidth: 2, borderCapStyle: "round", borderJoinStyle: "round" });
-  Object.assign(d.elements.point, { radius: 0, hoverRadius: 5, hitRadius: 10, hoverBorderWidth: 2 });
-  d.interaction = { mode: "index", intersect: false };  // 막대·선은 같은 칸의 값을 한 말풍선에(점 그림은 pointsConfig가 점 하나로 바꾼다)
-  d.layout.padding = { top: 4, right: 8 };
-  Object.assign(d.plugins.legend, { align: "start" });
-  Object.assign(d.plugins.legend.labels, { usePointStyle: true, pointStyle: "circle", boxWidth: 8, boxHeight: 8, padding: 14 });
-  Object.assign(d.plugins.tooltip, { backgroundColor: () => css("--card"), titleColor: () => css("--text"), bodyColor: () => css("--text"), borderColor: () => css("--line"), borderWidth: 1,
-    padding: 10, cornerRadius: 8, boxPadding: 4, usePointStyle: true, titleFont: { weight: "600" } });
-  d.scale.border.display = false;
-  Object.assign(d.scale.ticks, { padding: 8, maxRotation: 0, autoSkipPadding: 16 });
-  d.scale.grid.drawTicks = false;
-  d.set("scales.category", { grid: { display: false } });  // 항목 축의 세로 격자는 없앤다(값 축의 가로 격자만)
-  const numeric = d.scales.linear.ticks.callback;  // 작은 값은 Chart.js가 간격에 맞춘 자릿수로(0.00015)
-  d.scales.linear.ticks.callback = function (v, i, ticks) { return Math.abs(v) < 10000 ? numeric.call(this, v, i, ticks) : compact.format(v); };  // 1,200만처럼 짧게
+// 차트 섬(/chart iframe, web/lib/island.ts 규약)에 그릴 것을 보낸다: ready 전 것은 마지막 것만 두었다 보내고, size로 높이를 맞추고, error는 onError로.
+// draw(msg)만 부르면 마지막 것을 지금 화면 모드로 다시 보낸다. draw.picture(모드, 형식)는 지금 그림을 그림 파일(data URL)로(섬의 png 답). 쿼리·분석 화면과 문장 결과가 쓴다.
+function island(frame, onError) {
+  let ready = false, last = null, wait = null;
+  const post = () => last && ready && frame.contentWindow.postMessage({ type: "draw", ...last, theme: document.documentElement.dataset.theme === "dark" ? "dark" : "light" }, location.origin);
+  const on = e => {
+    if (!frame.isConnected) return removeEventListener("message", on);  // 지운 iframe
+    if (e.origin !== location.origin || e.source !== frame.contentWindow) return;
+    const m = e.data;
+    if (m?.type === "ready") { ready = true; post(); }
+    else if (m?.type === "size") frame.style.height = `${m.height}px`;
+    else if (m?.type === "png") { wait?.ok(m.dataUrl); wait = null; }
+    else if (m?.type === "error") { if (wait) { wait.no(new Error(m.message)); wait = null; } else onError(m.message); }
+  };
+  addEventListener("message", on);
+  const draw = msg => { if (msg) last = msg; post(); };
+  draw.picture = (theme, format) => new Promise((ok, no) => {
+    if (!ready || !last) return no(new Error("먼저 차트를 그리세요."));
+    wait?.no(new Error("앞의 그림 요청을 취소했어요."));  // 대기 자리는 하나: 연달아 부르면 앞 것을 끝내 준다(매달리지 않게)
+    wait = { ok, no };
+    frame.contentWindow.postMessage({ type: "picture", theme, format }, location.origin);
+  });
+  draw.dispose = () => { removeEventListener("message", on); wait?.no(new Error("차트를 닫았어요.")); wait = null; };  // iframe을 지울 때 바로 푼다(메시지가 안 오면 리스너가 남는다)
+  return draw;
+}
+// 집계 이름은 서버(함수 사전)가 주는 목록이다: SERVER.agg_names
+const aggName = id => SERVER.agg_names?.[id] ?? id;
+// 서버(dash_calc.series_name)와 같은 계열 이름: 개수 / 합계 (컬럼) / 옵션이 있으면 분위수 (컬럼) p=0.9 (order는 뺀다). 쿼리 차트가 쓴다
+const seriesTitle = s => aggName(s.agg) + (s.agg === "count" || !s.y ? "" : ` (${s.y})`) +
+  Object.entries(s.opts ?? {}).filter(([k]) => k !== "order").map(([k, v]) => ` ${k}=${[].concat(v).join(",")}`).join("");
+const UNIT_NAMES = { day: "일", week: "주", month: "월" };
+// 알림 줄(id)에 대시보드에 넣은 결과 글과 "대시보드에서 보기" 링크를 보인다(쿼리·전처리 화면). added: { id, name, cards }
+function showAdded(id, added) {
+  say(id, `‘${added.name}’ 대시보드에 넣었어요. 지금 카드는 ${added.cards}개예요. `, true);
+  $(id).append(el("a", { href: "/dashboard?open=" + encodeURIComponent(added.id), textContent: "대시보드에서 보기" }));
 }
 document.querySelectorAll(".pages a").forEach(a => a.classList.toggle("on", a.pathname === location.pathname));  // 지금 화면의 전환 버튼을 누른 모양으로
 const S = { schema: "", base: "", cols: [] };
@@ -118,7 +129,7 @@ function cell(v, want = "", max) {
 // 스크롤 막대와 위치가 전체 행 기준으로 맞게 한다. 칸은 한 줄(white-space:nowrap, height:40px)이라 줄 높이가 같고,
 // 펼친 중첩 값 줄만 더 크다: 그 늘어난 높이는 g.extra(줄 번호 -> 늘어난 px)에 적어 둔다.
 // 칸 너비는 보이는 줄에 따라 흔들리지 않게, 컬럼마다 가장 긴 글자의 줄을 안 보이는 크기 재기 줄(.vsize)로 늘 함께 그린다.
-const TABLE_MIN = 200, TABLE_OVER = 20, GRIDS = new Set();  // dash_grid.js의 GRID_MIN(카드 칸 수)과 이름이 겹치면 대시보드에서 그 파일 전체가 SyntaxError
+const TABLE_MIN = 200, TABLE_OVER = 20, GRIDS = new Set();  // 표 컬럼 너비 최소·여유와 그려 둔 표 목록
 const gridAt = (g, k) => g.view ? g.view[k] : k;                  // 보이는 목록의 k번째 줄이 가리키는 원래 행 번호
 const gridN = g => g.view ? g.view.length : g.rows.length;
 const gridTop = (g, k) => { let y = k * g.H; for (const [p, e] of g.extra) if (p < k) y += e; return y; };  // k번째 줄의 위 끝(px)
@@ -244,7 +255,7 @@ async function busy(button, fn) {
 
 // 위쪽 줄의 점유율: PC 메모리·CPU와 이 프로그램의 메모리를 2초마다 읽는다(프로그램의 CPU·메모리 비율은 마우스를 올리면).
 async function showUsage() {
-  if (document.hidden) return;  // 숨은 창에서는 묻지 않는다(2초마다 서버를 깨우지 않게)
+  if (document.hidden || $("usage").hidden) return;  // 접혀 있거나 숨은 창에서는 묻지 않는다(2초마다 서버를 깨우지 않게)
   try {
     const d = await api("/api/usage");
     $("usage").innerHTML = `<span>메모리<b>${d.pc_memory}%</b></span><span>CPU<b>${d.pc_cpu}%</b></span><span>앱<b>${d.memory_mb.toLocaleString()}MB</b></span>`;
@@ -252,6 +263,18 @@ async function showUsage() {
   } catch (e) {}
 }
 showUsage();
+// 메모리·CPU·앱 MB는 기본으로 접어 두고 "상태" 알약을 누르면 펼친다(펼침은 이 브라우저에 기억).
+const usageOpen = () => { try { return localStorage.getItem("loupe.usageOpen") === "1"; } catch (e) { return false; } };
+function foldUsage(open) {
+  $("usage").hidden = !open;
+  $("usage-pill").setAttribute("aria-expanded", String(open));
+  $("usage-pill").classList.toggle("on", open);
+  try { localStorage.setItem("loupe.usageOpen", open ? "1" : "0"); } catch (e) {}
+  if (open) showUsage();
+}
+$("usage").before(el("button", { id: "usage-pill", className: "pill", textContent: "상태", title: "메모리와 CPU 사용률을 보거나 숨겨요" }));
+$("usage-pill").onclick = () => foldUsage($("usage").hidden);
+foldUsage(usageOpen());
 setInterval(showUsage, 5000);
 
 // 전체 시간: [검색]을 누르면 0에서 다시 시작하고, 그 뒤의 집계·차트·저장 시간을 더해 간다.
@@ -599,6 +622,17 @@ $("too-few").onchange = () => {
   else if (n >= FEW_LOW - 1e-9 && n <= FEW_HIGH + 1e-9) { saveSetting({ sample_too_few: n }); connMsg(""); }
   else connMsg(`최소 표본 비율은 ${Math.round(FEW_LOW * 100)}에서 ${Math.round(FEW_HIGH * 100)} 사이로 넣어 주세요. 비우면 20%예요.`);
 };
+// 날짜 설정(timezone·week_start·fiscal_start_month): 지표·차트의 날·주·월·연 경계. 시간대를 비우면 PC 시간대(설정에서 빼고, 서버가 예전 쿠키를 지운다).
+$("timezone").value = saved("timezone") || "";
+$("timezone").onchange = () => {
+  const zone = $("timezone").value.trim();
+  api("/api/settings", { timezone: zone || 0 }).then(() => connMsg(""), () => connMsg("시간대는 Asia/Seoul 같은 이름이나 +09:00 같은 오프셋으로 넣어 주세요."));
+};
+$("week-start").value = saved("week_start") || "mon";
+$("week-start").onchange = () => saveSetting({ week_start: $("week-start").value });
+$("fiscal-start").innerHTML = Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}">${i + 1}월</option>`).join("");
+$("fiscal-start").value = saved("fiscal_start_month") || "1";
+$("fiscal-start").onchange = () => saveSetting({ fiscal_start_month: +$("fiscal-start").value });
 $("flat-list").onchange = showFlat;
 $("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
 }
@@ -649,7 +683,7 @@ async function showConnected(flat, schemas, info) {
   if (!hasTables) return showCrumb();
   clearScreen();  // 이전 연결에서 고른 테이블과 조건은 새 연결과 맞지 않으므로 비운다.
   $("schema").classList.toggle("hidden", !schemas.length);
-  fill($("schema"), schemas, "기본 스키마");
+  fill($("schema"), schemas, "스키마(폴더)");
   $("after-connect").classList.remove("hidden");
   await loadTables();
   if (typeof afterTables === "function") afterTables();  // 쿼리·분석: 남은 초안이 있으면 묻는다(기다리지 않는다)
@@ -726,7 +760,11 @@ function connLabel(info) {
   }
   return (info.files ? `파일 ${info.files.length}개` : (info.file || "").split(/[\\/]/).pop()) || info.path;
 }
+// 마지막으로 고른 테이블(연결 이름·스키마·이름): 분석 화면이 열릴 때 쿼리에서 고른 테이블을 이어받는다.
+const LAST_TABLE = "loupe.lastTable";
+function lastTable() { try { return JSON.parse(localStorage.getItem(LAST_TABLE)); } catch (e) { return null; } }
 function showCrumb() {
+  if (connName && S.base) try { localStorage.setItem(LAST_TABLE, JSON.stringify({ conn: connName, schema: S.schema || "", base: S.base })); } catch (e) {}
   $("crumb").classList.toggle("hidden", !hasConnect);
   $("crumb").classList.toggle("on", !!connName);
   $("crumb-text").innerHTML = connName ? esc(connName) + (S.base ? ` <em>/</em> ${esc(S.base)}` : "") : "연결 안 됨";

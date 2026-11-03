@@ -98,11 +98,14 @@ def timed(span):
 
 
 def context(d, today=None):
-    """대시보드의 보는 기간·직전 기간 {range: {start, end}, prev: {start, end, text}}(기준일 as_of로 자름). 읽을 수 없으면 None.
+    """대시보드의 보는 기간·비교 기간 {range: {start, end}, prev: {start, end, text}}(기준일 as_of로 자름). 읽을 수 없으면 None.
+    비교 기간은 대시보드의 비교 기준 compare_mode(period.MODES, 없으면 prev=직전 기간)로 period.previous가 정한다.
     기간이 비었어도 기준일을 정했으면 {as_of}만(문장 카드의 기준일 빈칸)."""
     if not (d.get("period") or "").strip():
-        return {"as_of": d["as_of"]} if d.get("as_of") else None  # 기간이 비면 대시보드의 기간을 걸지 않는다(카드의 원래 조건대로)
+        mode = {"compare_mode": d["compare_mode"]} if d.get("compare_mode") not in (None, "", "prev") else {}  # 카드 자신의 기간 줄(dash_calc.own_range)도 같은 비교 기준으로
+        return {**({"as_of": d["as_of"]} if d.get("as_of") else {}), **mode} or None  # 기간이 비면 대시보드의 기간을 걸지 않는다(카드의 원래 조건대로)
     day = (d.get("as_of") or "") or (today or dt.date.today()).isoformat()  # 기준일(비면 오늘)
+    mode = d.get("compare_mode") or "prev"
     span = period.parse(d.get("period"), day)
     if span["error"] or timed(span):
         return None
@@ -114,7 +117,7 @@ def context(d, today=None):
     if cut:
         first, last, today = (dt.date.fromisoformat(x[:10]) for x in (span["start"], span["end"], day))
         aligned = period.month_count(first, last)
-        if aligned or (first.day == 1 and (first.year, first.month) == (today.year, today.month)):  # 달 단위로 꼭 맞는 기간(월·분기·연…), 또는 1일에 시작해 기준일이 그 달 안: 직전 같은 개월 수의 같은 위치까지
+        if mode == "prev" and (aligned or (first.day == 1 and (first.year, first.month) == (today.year, today.month))):  # 달 단위로 꼭 맞는 기간(월·분기·연…), 또는 1일에 시작해 기준일이 그 달 안: 직전 같은 개월 수의 같은 위치까지
             months = aligned or 1
             name = period.month_name(months, first)
             try:
@@ -122,15 +125,15 @@ def context(d, today=None):
             except ValueError as e:  # 1년 1월처럼 직전 기간이 달력 앞이면 견줄 기간 없이 본다
                 before = {"error": str(e)}
             span = {**span, "to_date": True}
-        else:  # 그 밖의 기간은 같은 일수만큼 바로 앞
-            span = {**span, "end": day, "to_date": None}
-            before = period.previous(span)
+        else:  # 그 밖의 기간은 같은 일수만큼 바로 앞(같은 요일·작년 비교는 기준일까지 자른 기간을 옮긴다)
+            span = {**span, "end": day, "to_date": None if mode == "prev" else span.get("to_date") or ("month" if aligned else None)}  # 달에 맞는 기간은 작년 같은 달로
+            before = period.previous(span, mode)
     else:
-        before = period.previous(span)
+        before = period.previous(span, mode)
     first = None if before["error"] else dt.date.fromisoformat(before["start"][:10])
     months = None if before["error"] or span.get("to_date") else period.month_count(first, dt.date.fromisoformat(before["end"][:10]))
     prev = None if before["error"] else {"start": before["start"][:10], "end": before["end"][:10],
-                                         "text": before["label"] if span.get("to_date") else period.month_name(months, first) if months else f"직전 {before['days']}일"}
+                                         "text": before["label"] if span.get("to_date") or mode != "prev" else period.month_name(months, first) if months else f"직전 {before['days']}일"}
     return {"range": {"start": span["start"] and span["start"][:10], "end": end}, "prev": prev, **({"months": aligned} if cut else {})}  # months: 잘린 기간의 원래 개월 수(달에 맞지 않으면 None) → 목표 달
 
 
@@ -153,21 +156,26 @@ def copy_sqls(card, con):
 
 
 def scan_decision(card, ctx):
-    """이 카드를 읽기 전 처리 용량 판정(8-3). 건너뛸 이유 글(괜찮으면 빈 글자).
+    """이 카드를 읽기 전 처리 용량 판정(8-3). 건너뛸 이유 글(괜찮으면 빈 글자). 판정은 scan_found."""
+    return scan_found(card, ctx).get("text", "")
+
+
+def scan_found(card, ctx):
+    """scan_decision의 판정: 멈출 까닭이 있으면 {over, blocked, text(건너뛸 이유 글), …}, 없으면 {}. 대시보드 카드 구하기 라우트는 이것으로 묻는다(X-Needs-Confirm).
     scan_size.limit_check(con, sql, opened, dialect)가 돌려주는 {over, unknown, blocked, bytes, limit, text}를 본다(그 함수가 없으면 막지 않는다).
     기준을 넘으면(over), 추정할 수 없는데 설정 scan_unknown이 block이면(blocked) 그 이유로 건너뛴다. 최신화는 묻지 않는다(그 카드만 건너뜀).
     DB를 묻는 판정이라 연결 스레드(server.run)에서 부른다. 식을 만들 수 없거나 판정이 실패하면 추정 불가로 보고 설정을 따른다."""
     check = getattr(scan_size, "limit_check", None)
     if check is None:
-        return ""
+        return {}
     try:
         sql = dash_calc.read_sql(card, ctx)
         con = server.state["con"]
         sqls = [sql] if sql is not None else copy_sqls(card, con) + geo_sqls(card, con)  # 분석 카드는 식이 없어도 좌표 단계의 지점·영역 표를 통째로 받는다
         if not sqls:
-            return ""
-        if sql is not None and held.remote(con) and not dash_calc.copies_to_pc(card, ctx):
-            return ""  # 원격 DB에서 DB 안의 집계로 구하는 카드는 결과만 오므로 작다. 크기를 알아보려고 DB에 묻지 않는다(요금)
+            return {}
+        if sql is not None and held.remote(con) and getattr(con, "name", "") != "bigquery" and not dash_calc.copies_to_pc(card, ctx):
+            return {}  # 원격 DB에서 DB 안의 집계로 구하는 카드는 결과만 오므로 작다. 크기를 알아보려고 DB에 묻지 않는다(요금). BigQuery는 집계도 읽는 양에 요금이 나서 묻는다
         found = {}
         for one in sqls:
             found = run(lambda one=one: check(con, one, server.state["opened"], scan_size.files_dialect(con)))
@@ -177,8 +185,8 @@ def scan_decision(card, ctx):
         found = {"over": False, "blocked": scan_size.blocks_unknown(settings.load()), "text": f"처리 용량을 알 수 없어요 ({e})"}
     if found.get("over") or found.get("blocked"):
         note = " 고유 개수는 기간별로 따로 읽어요." if held.remote(server.state["con"]) and dash_calc.unique_per_period(card, ctx) else ""  # 읽는 양이 이번 기간 + 직전 기간 몫이다
-        return (found.get("text") or "처리 용량이 기준을 넘거나 알 수 없어 건너뛰었어요") + note
-    return ""
+        return {**found, "text": (found.get("text") or "처리 용량이 기준을 넘거나 알 수 없어 건너뛰었어요") + note}
+    return {}
 
 
 def parse_time(text):

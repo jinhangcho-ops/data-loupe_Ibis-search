@@ -54,9 +54,9 @@ def test_sentence_tokens_visible_defaults(tmp_path):
 
 
 def test_every_template_text_tokens_match_slots(tmp_path):
-    """모든 문장 틀(탐색·지표 68개): 글 속 {빈칸} 조각이 그 틀의 빈칸 이름에 모두 있다(그려지지 않는 칸이 없다)."""
+    """모든 문장 틀(탐색·지표 71개): 글 속 {빈칸} 조각이 그 틀의 빈칸 이름에 모두 있다(그려지지 않는 칸이 없다)."""
     got = run_node(tmp_path, "const all = %s; console.log(JSON.stringify(all.map(t => [t.id, sentTokens(t.text).filter(x => x.slot).map(x => x.slot).filter(n => !t.slots.some(s => s.name === n))])));" % json.dumps(sentences.TEMPLATES, ensure_ascii=False))
-    assert len(got) == 68 and [row for row in got if row[1]] == []
+    assert len(got) == 71 and [row for row in got if row[1]] == []
 
 
 def test_fit_columns_other_table(tmp_path):
@@ -77,7 +77,7 @@ def test_period_slot_filter_kinds(tmp_path):
                    " f: sentFilter(%s, '중앙값').map(t => t.id), all: sentFilter(%s, '').length, kinds: sentKinds([['a', '정수'], ['b', '문자']], t => t === '정수' ? 'num' : 'text'), chip: ['num', 'date', 'text', 'json'].map(sentChip), fit: [sentFits('any', 'num'), sentFits(['num', 'date'], 'text'), sentFits('text', 'text')] }));"
                    % (json.dumps(sentences.EXPLORE, ensure_ascii=False), json.dumps(sentences.EXPLORE, ensure_ascii=False)))
     assert got["ok"] == {"column": "day", "start": "2026-03-01", "end": "2026-03-31"} and got["open"] == {"column": "day", "start": "2026-03-01", "end": ""}
-    assert got["td"]["to_date"] == "month" and got["err"] is None and got["none"] is None and got["f"] == ["e26", "e53"] and got["all"] == 53
+    assert got["td"]["to_date"] == "month" and got["err"] is None and got["none"] is None and got["f"] == ["e26", "e53"] and got["all"] == 56
     assert got["kinds"] == {"a": "num", "b": "text"} and got["chip"] == ["num", "date", "text", "other"] and got["fit"] == [True, False, True]
 
 
@@ -87,11 +87,11 @@ def test_result_chart_and_card(tmp_path):
     days = [{"일": f"2026-03-{d:02d}", "값": d} for d in range(1, 4)]
     big = [{"k": f"k{i}", "v": i} for i in range(60)]
     pivot = {"ok": True, "runs": [{"route": "/api/pivot", "body": {"base": "orders", "joins": [], "periods": ["d 2026-03-01 ~"], "pivot": {"rows": ["country", "status"], "how": "sum", "value": "amt"}}}]}
-    got = run_node(tmp_path, "const A = sentChart({ columns: ['국가', '합', '건'], rows: %s }, ['#111', '#222']), B = sentChart({ columns: ['일', '값'], rows: %s }), C = sentChart({ columns: ['k', 'v'], rows: %s }), D = sentChart({ columns: ['a'], rows: [{ a: 'x' }] }), E = sentChart({ columns: ['a'], rows: [] });\n"
+    got = run_node(tmp_path, "const A = sentChart({ columns: ['국가', '합', '건'], rows: %s }), B = sentChart({ columns: ['일', '값'], rows: %s }), C = sentChart({ columns: ['k', 'v'], rows: %s }), D = sentChart({ columns: ['a'], rows: [{ a: 'x' }] }), E = sentChart({ columns: ['a'], rows: [] });\n"
                    "const card = sentCard(%s, '제목'), no1 = sentCard({ ok: true, combine: { op: 'ratio' }, runs: [{}, {}] }, 't'), no2 = sentCard({ ok: true, runs: [{ route: '/api/query', body: {} }] }, 't'), no3 = sentCard({ ok: false, reason: '못 만들어요' }, 't');\n"
-                   "console.log(JSON.stringify({ A: [A.type, A.data.labels, A.data.datasets.map(d => [d.label, d.data, d.backgroundColor]), A.options.plugins.legend.display], B: [B.type, B.data.labels.length], C: [C.data.labels.length, C.truncated], D, E, card, no1, no2, no3 }));"
+                   "console.log(JSON.stringify({ A: [A.draw.kind, A.draw.opts.type, A.draw.payload.labels, A.draw.payload.datasets.map(d => [d.label, d.values])], B: [B.draw.opts.type, B.draw.payload.labels.length], C: [C.draw.payload.labels.length, C.truncated], D, E, card, no1, no2, no3 }));"
                    % (json.dumps(rows, ensure_ascii=False), json.dumps(days), json.dumps(big), json.dumps(pivot)))
-    assert got["A"] == ["bar", ["KR", "JP"], [["합", [3, 5], "#111"], ["건", [1, None], "#222"]], True]
+    assert got["A"] == ["series", "bar", ["KR", "JP"], [["합", [3, 5]], ["건", [1, None]]]]  # 차트 섬(web/lib/island.ts) 계열 그림
     assert got["B"] == ["line", 3] and got["C"] == [50, True] and got["D"] is None and got["E"] is None
     assert got["card"] == {"kind": "chart", "title": "제목", "body": {"base": "orders", "joins": [], "periods": ["d 2026-03-01 ~"], "x": "country", "split": "status", "order": "", "series": [{"y": "amt", "agg": "sum"}]}}
     assert "여러 계산" in got["no1"]["reason"] and "묶어 집계" in got["no2"]["reason"] and got["no3"] == {"reason": "못 만들어요"}

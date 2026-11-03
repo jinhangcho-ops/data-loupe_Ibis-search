@@ -374,17 +374,19 @@ def expand_keys(t, name, dtype):
     return sorted(found, key=str)
 
 
-def expand(t, name, _):
+def expand(t, name, arg):
     """구조 컬럼은 필드마다, 맵 컬럼은 앞 행들의 키마다, JSON 글자는 맨 위 키마다 '{컬럼}.{키}' 컬럼을 더한다(원래 컬럼은 그대로).
-    JSON 값은 글자 컬럼으로(글자는 따옴표 없이, 숫자·참거짓·객체는 JSON 글자 그대로, null은 빈 값)."""
+    JSON 값은 글자 컬럼으로(글자는 따옴표 없이, 숫자·참거짓·객체는 JSON 글자 그대로, null은 빈 값).
+    arg가 {"keys": [...]}(처음 찾은 키를 저장해 둔 것)면 맵·JSON의 키를 다시 찾지 않는다(식을 만들 때마다 조회가 나가지 않게)."""
     col, dtype = t[name], t[name].type()
+    found = lambda: arg["keys"] if isinstance(arg, dict) else expand_keys(t, name, dtype)
     if dtype.is_struct():
         new = {f"{name}.{f}": col[f] for f in dtype.names}
     elif dtype.is_map():
-        new = {f"{name}.{k}": col.get(k) for k in expand_keys(t, name, dtype)}
+        new = {f"{name}.{k}": col.get(k) for k in found()}
     elif dtype.is_string() or dtype.is_json():
         js = col if dtype.is_json() else col.cast("json")
-        new = {f"{name}.{k}": ibis.coalesce(js[k].unwrap_as("string"), js[k].cast("string")).nullif("null") for k in expand_keys(t, name, dtype)}
+        new = {f"{name}.{k}": ibis.coalesce(js[k].unwrap_as("string"), js[k].cast("string")).nullif("null") for k in found()}
     else:
         raise ValueError(f"'expand'(컬럼으로 펼치기)는 구조·맵·JSON 글자 컬럼에만 쓸 수 있어요. '{name}' 컬럼은 {parse.type_info(dtype)[0]} 컬럼이에요. (목록은 unnest로 행으로 펼쳐요)")
     return add_columns(t, new)
@@ -427,7 +429,8 @@ OPS = [
      and type(v.get("group", 0)) is int and v.get("group", 0) >= 0, '{"pattern": "정규식", "group": 0}', extract),
     ("has", STRING, is_has, '{"words": ["서울", "부산"], "regex": false} (words는 비어 있지 않은 서로 다른 글자 1~50개)', has),
     ("counts", STRING, lambda v: isinstance(v, dict) and set(v) <= {"sep"} and isinstance(v.get("sep", ""), str), '{"sep": ","}', counts),
-    ("expand", None, lambda v: v is True, "true", expand),
+    ("expand", None, lambda v: v is True or (isinstance(v, dict) and set(v) == {"keys"} and isinstance(v["keys"], list) and 1 <= len(v["keys"]) <= EXPAND_MAX
+                                             and all(isinstance(k, (str, int)) and not isinstance(k, bool) for k in v["keys"])), 'true 또는 {"keys": ["찾아 둔 키", ...]}', expand),
 ]
 
 

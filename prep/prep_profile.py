@@ -16,6 +16,7 @@ SHAPE_KEYS = [f"date{j}" for j in range(len(DATE_FORMATS))] + ["num", "int", "cl
 # 우선순위 순서의 묶음. 묶음의 첫 모양이 맞아야 그 추천이 나온다(뒤의 것은 정수인지를 가른다).
 SHAPE_GROUPS = [*([f"date{j}"] for j in range(len(DATE_FORMATS))), ["num", "int"], ["clean_num", "clean_int"]]
 FEW_NULLS = 0.05  # 빈 값이 이 비율보다 적으면 그 행을 빼라고 추천한다.
+IQR_K = 1.5  # 품질 점검: 사분위 범위(IQR)의 이 배수보다 바깥이면 튀는 값으로 센다(outlier op의 iqr 기본과 같다)
 
 
 def count(cond):
@@ -42,6 +43,24 @@ def length_metrics(table, names):
     return {f"{key}_len{i}": getattr(table[name].length(), key)() for i, name in names.items() for key in ("min", "max")}
 
 
+def money(name):
+    """컬럼 이름에 금액 단서(지표 사전의 금액 컬럼 이름 단서)가 있는지."""
+    from metrics import metric_catalog
+    return any(hint in str(name).lower() for hint in metric_catalog.COLS["amount"][3])
+
+
+def checks(info, found, outside, i, rows):
+    """컬럼 하나의 품질 점검 줄들(표본 기준): 키 후보(서로 다른 값 수 = 행 수), IQR 밖 값 수(숫자), 처음~마지막 날 사이에 값이 없는 날 수(날짜)."""
+    out = []
+    if rows > 1 and not info["nulls"] and info["unique"] == rows:
+        out.append(f"서로 다른 값 수가 행 수({rows:,})와 같아 키 후보예요(표본 기준).")
+    if outside.get(f"out{i}"):
+        out.append(f"IQR(사분위 범위)의 {IQR_K:g}배 밖 값이 {outside[f'out{i}']:,}개예요(표본 기준).")
+    if found.get(f"days{i}") and (gap := (found[f"dlast{i}"] - found[f"dfirst{i}"]).days + 1 - found[f"days{i}"]) > 0:
+        out.append(f"{found[f'dfirst{i}']}~{found[f'dlast{i}']} 사이에 값이 없는 날이 {gap:,}일이에요(표본 기준).")
+    return out
+
+
 def suggestions(info, found, i, rows):
     """컬럼 하나의 추천 [{"text", "why", "ops" 또는 "keep": False}] 중 모양 검사가 필요 없는 것. found는 집계 결과, i는 컬럼 번호."""
     out = []
@@ -58,6 +77,8 @@ def suggestions(info, found, i, rows):
     if info["nulls"] and info["unique"]:  # 채울 값이 하나도 없는 컬럼은 채우기를 추천하지 않는다.
         share = info["nulls"] / rows
         why = f"빈 값이 {info['nulls']:,}개({share:.1%})예요."
+        if info["kind"] in ("int", "float") and money(info["name"]):  # 금액의 빈 값은 대개 0(거래 없음): 행을 빼거나 중앙값으로 채우면 합계가 틀어진다
+            add("빈 값을 0으로 채우기", why + " 금액 컬럼은 빈 값이 대개 0(거래 없음)이라 행을 빼거나 중앙값으로 채우면 합계가 틀어져요.", ops={"fill": {"how": "value", "value": 0}})
         if share < FEW_NULLS:
             add("빈 값인 행 빼기", why + " 5% 미만이라 그 행을 빼도 돼요.", ops={"fill": {"how": "drop"}})
         elif info["kind"] in ("int", "float"):
@@ -70,8 +91,8 @@ def suggestions(info, found, i, rows):
 
 
 def profile(t):
-    """행 수와 컬럼별 통계, 모양 검사가 필요 없는 추천을 집계 조회 한 번으로 구한다. unique는 빈 값을 뺀 서로 다른 값 수다.
-    min·max는 숫자·날짜·시간 컬럼만(나머지는 null), 글자 수·blank·spaces·numeric은 문자 컬럼에만 있다.
+    """행 수와 컬럼별 통계, 모양 검사가 필요 없는 추천을 집계 조회 한 번으로 구한다(숫자 컬럼이 있으면 IQR 밖 값 수를 한 번 더). unique는 빈 값을 뺀 서로 다른 값 수다.
+    min·max는 숫자·날짜·시간 컬럼만(나머지는 null), 글자 수·blank·spaces·numeric은 문자 컬럼에만 있다. checks는 품질 점검 줄들(checks).
     t는 표본을 이 PC에서 계산하는 표(DuckDB)라 length()가 글자 수를 센다."""
     kinds = {name: parse.kind(dtype) for name, dtype in t.schema().items()}
     texts = {i: name for i, (name, kind) in enumerate(kinds.items()) if kind == "string"}
@@ -81,10 +102,19 @@ def profile(t):
         metrics.update({f"nulls{i}": count(col.isnull()), f"unique{i}": col.nunique(where=col.notnull())})
         if kind in ("int", "float", "date", "time"):
             metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})
+        if kind in ("int", "float"):
+            metrics.update({f"q1{i}": col.quantile(0.25), f"q3{i}": col.quantile(0.75)})
+        if kind == "date":
+            day = col.cast("date")
+            metrics.update({f"dfirst{i}": day.min(), f"dlast{i}": day.max(), f"days{i}": day.nunique()})
         if kind == "string":
             metrics.update(text_metrics(col, i))
     metrics.update(length_metrics(t, texts))
     found = stats(t, **metrics)
+    quartiles = {i: (float(found[f"q1{i}"]), float(found[f"q3{i}"])) for i in range(len(kinds)) if found.get(f"q1{i}") is not None}  # 소수(Decimal) 컬럼도 실수로
+    fences = {i: (q1 - IQR_K * (q3 - q1), q3 + IQR_K * (q3 - q1)) for i, (q1, q3) in quartiles.items()}
+    names = list(kinds)
+    outside = stats(t, **{f"out{i}": count(~nan_to_null(t[names[i]]).between(lo, hi)) for i, (lo, hi) in fences.items()}) if fences else {}
     columns = []
     for i, (name, kind) in enumerate(kinds.items()):
         info = {"name": name, "type": type_text(t[name].type()), "kind": kind, "nulls": found[f"nulls{i}"] or 0, "unique": found[f"unique{i}"],
@@ -92,21 +122,27 @@ def profile(t):
         if kind == "string":
             info.update({key: found[f"{key}{i}"] or 0 for key in ("blank", "spaces", "numeric")})
             info.update({key: found[f"{key}{i}"] for key in ("min_len", "max_len")})
-        columns.append({**info, "suggest": suggestions(info, found, i, found["rows"])})
+        columns.append({**info, "suggest": suggestions(info, found, i, found["rows"]), "checks": checks(info, found, outside, i, found["rows"])})
     return {"rows": found["rows"], "columns": columns}
 
 
+FULL_CHUNK = 8  # 전체 프로파일이 집계 한 번에 넣는 컬럼 수. 정확한 COUNT(DISTINCT)를 컬럼마다 한꺼번에 하면 DB 메모리가 컬럼 수만큼 커진다(7컬럼 500만 행에서 +1GB)
+
+
 def full_facts(t):
-    """표 전체(연결에서 그대로)의 행 수와 컬럼별 빈 값 수·서로 다른 값 수·최솟값·최댓값(profile과 같은 뜻, 집계 한 번). 글자 수 세기와 모양 검사는 하지 않는다. 구조·배열 같은 컬럼은 뺀다."""
+    """표 전체(연결에서 그대로)의 행 수와 컬럼별 빈 값 수·서로 다른 값 수·최솟값·최댓값(profile과 같은 뜻). 컬럼 FULL_CHUNK개씩 나눠 집계한다(서로 다른 값 수는 정확값).
+    글자 수 세기와 모양 검사는 하지 않는다. 구조·배열 같은 컬럼은 뺀다."""
     kinds = {name: parse.kind(dtype) for name, dtype in t.schema().items()}
     kinds = {name: kind for name, kind in kinds.items() if kind != "other"}
-    metrics = {"rows": t.count()}
-    for i, (name, kind) in enumerate(kinds.items()):
-        col = nan_to_null(t[name])
-        metrics.update({f"nulls{i}": count(col.isnull()), f"unique{i}": col.nunique(where=col.notnull())})
-        if kind in ("int", "float", "date", "time"):
-            metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})
-    found = stats(t, **metrics)
+    items, found = list(enumerate(kinds.items())), {}
+    for at in range(0, max(len(items), 1), FULL_CHUNK):
+        metrics = {"rows": t.count()}
+        for i, (name, kind) in items[at:at + FULL_CHUNK]:
+            col = nan_to_null(t[name])
+            metrics.update({f"nulls{i}": count(col.isnull()), f"unique{i}": col.nunique(where=col.notnull())})
+            if kind in ("int", "float", "date", "time"):
+                metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})
+        found.update(stats(t, **metrics))
     return {"rows": found["rows"], "columns": [{"name": name, "nulls": found[f"nulls{i}"] or 0, "unique": found[f"unique{i}"],
                                                 "min": result.plain(found.get(f"min{i}")), "max": result.plain(found.get(f"max{i}"))} for i, name in enumerate(kinds)]}
 

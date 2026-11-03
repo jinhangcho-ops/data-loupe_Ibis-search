@@ -22,6 +22,7 @@ dash_refresh = Later("dashboard.dash_refresh")
 dash_store = Later("core.dash_store")
 metric_file = Later("core.metric_file")
 period = Later("dashboard.period")
+querying = Later("core.querying")
 targets = Later("core.targets")
 
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml"}  # 배치도 바탕 그림으로 내려줄 수 있는 것
@@ -29,7 +30,7 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024
 TARGET_PAGE = 100  # 목표 파일의 문제 줄을 한 번에 돌려줄 수(화면은 [이전]/[다음]으로 넘겨 본다)
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/get", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min", "/api/dash/refresh/start",
-                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants"})
+                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart"})
 
 
 def with_source(card):
@@ -39,27 +40,44 @@ def with_source(card):
 
 
 @server.late_constants("query", "prep", "dashboard")
-def dash_constants(found):  # 카드 그리기(dash.js)와 차트 선반이 서버와 같은 상한·종류·기본 색·집계를 쓴다
+def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버와 같은 상한·종류·기본 색·집계를 쓴다
     found["dash"] = {"max_cards": dash_store.MAX_CARDS, "max_dashboards": dash_store.MAX_DASHBOARDS, "max_palette": dash_store.MAX_PALETTE,
         "types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS,
-        "palette": dash_store.DEFAULT_PALETTE, "locked": dash_store.LOCKED, "min_refresh": dash_store.MIN_REFRESH}  # 화면(dash.js)이 서버와 같은 상한·종류·기본 색을 쓴다
+        "palette": dash_store.DEFAULT_PALETTE, "locked": dash_store.LOCKED, "min_refresh": dash_store.MIN_REFRESH}  # 화면(web/·common.js)이 서버와 같은 상한·종류·기본 색을 쓴다
     found["dash"]["max_points"] = result.MAX_POINTS  # 산점도·버블의 점 수 상한
     found["dash"].update(aggs=list(metric_file.AGGS), merge=list(sql_funcs.MERGE), agg_names=metric_file.AGG_NAMES)  # 카드 계열의 집계(함수 사전의 집계 전부), 일 값을 다시 묶을 수 있는 집계, 보이는 이름
+    cal = settings.load()
+    found.update(week_start=cal.get("week_start") or "mon", fiscal_start_month=cal.get("fiscal_start_month") or 1)  # 화면의 주·연 묶음(web/lib/calc.ts BUCKET)이 설정을 따르게
 
 
 PRELOAD = ("dashboard.dash_calc", "dashboard.dash_refresh", "dashboard.period", "dashboard.dash_pdf", "dashboard.summary_text")  # 대시보드를 열면 뒤에서 미리 올리는 기능 모듈
 
 
 NEXT_PAGE = server.NEXT_DIR / "dashboard.html"  # web/을 빌드한 결과. 시험은 임시 파일로 바꿔 끼운다
+NOT_BUILT = ("<!doctype html><meta charset=\"utf-8\"><title>Data Loupe</title>"
+             "<p>대시보드 화면이 빌드되지 않았어요. web/에서 <code>npm ci</code> 뒤 <code>npm run build</code>를 실행하세요.</p>")  # NEXT_PAGE가 없을 때 /dashboard가 돌려주는 안내
 
 
 @app.get("/dashboard")
 def dashboard_page():
     preload(*PRELOAD)
-    """대시보드 화면(dashboard.html). 저장한 대시보드를 보고 고치는 한 곳이다. 연결 없이도 저장된 값으로 보인다."""
-    if NEXT_PAGE.is_file() and request.args.get("legacy") != "1":  # Next 화면을 빌드해 두었으면 그것, 없으면 옛 화면. ?legacy=1은 전환 기간의 비교용(옛 화면)
-        return server.next_page(NEXT_PAGE)
-    return server.page("dashboard/dashboard.html")
+    """대시보드 화면(web/out/dashboard.html, Next). 저장한 대시보드를 보고 고치는 한 곳이다. 연결 없이도 저장된 값으로 보인다."""
+    if not NEXT_PAGE.is_file():  # 소스에서 web/을 빌드하지 않고 돌렸을 때. 옛 화면은 없다
+        return Response(NOT_BUILT, mimetype="text/html")
+    return server.next_page(NEXT_PAGE)
+
+
+CHART_PAGE = server.NEXT_DIR / "chart.html"  # 차트 섬(iframe). 시험은 임시 파일로 바꿔 끼운다
+
+
+@app.get("/chart")
+def chart_page():
+    """차트 섬(web/out/chart.html, Next): 쿼리·분석 화면이 iframe으로 끼우고 postMessage(web/lib/island.ts)로 그릴 것을 보낸다. 상수는 /api/dash/constants로 받는다."""
+    if not CHART_PAGE.is_file():
+        return Response(NOT_BUILT.replace("대시보드 화면이", "차트 화면이"), mimetype="text/html")
+    response = server.next_page(CHART_PAGE)
+    response.headers["Content-Security-Policy"] += "; frame-ancestors 'self'"  # 같은 출처의 화면만 끼울 수 있다
+    return response
 
 
 @app.get("/api/dash/constants")
@@ -116,6 +134,11 @@ def card_compute():
     now = dash_store.current_source()
     if other_source(card["source"].get("key"), now):
         raise ValueError(f"이 카드는 다른 연결({card['source'].get('label') or card['source']['key']})에서 구한 거예요. 그 연결로 바꾼 뒤 다시 구하세요.")
+    found = dash_refresh.scan_found(card, request.json.get("ctx"))  # 최신화와 같은 처리 용량 판정. 넘으면 화면이 묻고(confirmed) 다시 보낸다
+    if found.get("blocked") or (found.get("over") and request.json.get("confirmed") is not True):
+        response = jsonify(needs_confirm=True, **found)
+        response.headers["X-Needs-Confirm"] = "1"
+        return response
     return jsonify(data=dash_calc.compute(card, dt.datetime.now().isoformat(timespec="seconds"), request.json.get("ctx")), source=now)
 
 
@@ -128,6 +151,10 @@ def chart_points():
     if other_source(body.get("source_key"), now):
         raise ValueError("이 카드는 다른 연결에서 구한 거예요. 그 연결로 바꾼 뒤 다시 구하세요.")
     body = dash_calc.with_period(body, body.get("date"), (body.get("ctx") or {}).get("range"))  # 대시보드 기간(카드 compute와 같게)
+    try:
+        querying.runnable(body, select=False, ask=body)  # 처리 용량 확인만(BigQuery의 읽는 양, 원격에서 새로 받을 사본). 받은 사본은 points_of가 그대로 쓴다
+    except querying.Confirm as e:
+        return e.response
     return jsonify(points=dash_calc.points_of(body, body.get("size")))
 
 
@@ -144,6 +171,8 @@ def cards_compute():
             card = dash_store.check_card(one)
             if other_source(card["source"].get("key"), now):
                 raise ValueError("다른 연결에서 구한 카드예요")
+            if why := dash_refresh.scan_decision(card, ctx):  # 실시간 갱신은 묻지 않고 그 카드만 건너뛴다(최신화와 같게)
+                raise ValueError(why)
             out.append({"id": card["id"], "data": dash_calc.compute(card, stamp, ctx)})
         except ValueError as e:
             out.append({"id": (one or {}).get("id", ""), "error": str(e)})
@@ -152,10 +181,10 @@ def cards_compute():
 
 @app.post("/api/dash/settings")
 def dash_settings():
-    """저장한 대시보드의 기준일(as_of)·기간(period)·최신화(refresh)·실시간(live)만 바꾼다(카드는 그대로). 최신화·실시간 주기를 검사한다."""
+    """저장한 대시보드의 기준일(as_of)·기간(period)·비교 기준(compare_mode)·최신화(refresh)·실시간(live)만 바꾼다(카드는 그대로). 최신화·실시간 주기를 검사한다."""
     body = request.json
     saved = dash_store.get_dashboard(body.get("id"))
-    fields = {k: body[k] for k in ("as_of", "period", "refresh", "live") if k in body}
+    fields = {k: body[k] for k in dash_store.SETTING_KEYS if k in body}
     dash_refresh.check_dashboard_every({**saved, **fields})
     return jsonify(dashboard=dash_store.update_settings(body.get("id"), fields))
 
@@ -203,14 +232,15 @@ def refresh_stop():
 
 @app.post("/api/period/parse")
 def period_parse():
-    """기간 글자(text)를 기준일(as_of, 비면 오늘) 기준으로 읽는다. {span: {start, end, days, label, error, ...}, previous: 직전 기간 또는 None, context: 카드를 구할 때 쓰는 {range, prev}(기준일로 자른 것, 비었거나 읽을 수 없으면 None)}.
+    """기간 글자(text)를 기준일(as_of, 비면 오늘) 기준으로 읽는다. 비교 기준(compare_mode, 비면 prev)으로 견줄 기간을 정한다. {span: {start, end, days, label, error, ...}, previous: 비교 기간 또는 None, context: 카드를 구할 때 쓰는 {range, prev}(기준일로 자른 것, 비었거나 읽을 수 없으면 None)}.
     규칙은 period.py와 dash_refresh.context 한 곳에 있다(화면은 이 응답만 쓴다)."""
     body = request.json or {}
     day = (body.get("as_of") or "").strip() or None
     span = period.parse(body.get("text"), day)
     if not span["error"] and body.get("dashboard") and dash_refresh.timed(span):  # 문장·지표 사전의 기간 칸은 시각도 쓴다
         span = {**span, "error": "대시보드 기간은 날짜로 써 주세요(시각은 쓰지 않아요)."}
-    return jsonify(span=span, previous=None if span["error"] else period.previous(span), context=dash_refresh.context({"period": body.get("text"), "as_of": day}))
+    mode = body.get("compare_mode") or "prev"
+    return jsonify(span=span, previous=None if span["error"] else period.previous(span, mode), context=dash_refresh.context({"period": body.get("text"), "as_of": day, "compare_mode": mode}))
 
 
 @app.post("/api/period/day")
@@ -328,6 +358,10 @@ def dash_pdf_save():
         return jsonify(cancelled=True)
     path = Path(chosen if chosen.lower().endswith(".pdf") else chosen + ".pdf")
     part = path.with_name(path.name + ".part")
-    part.write_bytes(pdf)
-    part.replace(path)  # 임시 이름으로 쓴 뒤 바꿔치기(실패해도 원래 파일이 남는다)
+    try:
+        part.write_bytes(pdf)
+        part.replace(path)  # 임시 이름으로 쓴 뒤 바꿔치기(실패해도 원래 파일이 남는다)
+    except BaseException:
+        part.unlink(missing_ok=True)  # 반쯤 쓴 임시 파일을 남기지 않는다
+        raise
     return jsonify(path=str(path))

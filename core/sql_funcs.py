@@ -8,7 +8,10 @@
   unavailable(고를 수 없음 + 이유)로 알려 준다. 대체가 없는 함수는 연결이 못 하면 local이다(core.runnable이 PC 사본으로 돌린다).
 - 대표 값 고르기(10-2): REPRESENTATIVE의 선택지(any_value·first·last·min·max·mode·string_agg·warn)를 pick이 집계 식 하나로, conflicts가 값이 둘 이상인 묶음 수로.
 - SQL 식 직접 쓰기: raw_expr이 'SELECT *, <식> AS 이름 FROM (<지금 식의 SQL>)'을 sql_exec.check(파일 읽기 막기 포함)로 검사한 뒤 연결의 sql()로 붙인다."""
+import datetime
+import functools
 import re
+import zoneinfo
 
 from lazy import Later, ibis
 
@@ -629,13 +632,67 @@ def with_time(c):
 
 
 def period_start(col, unit):
-    """col을 unit(Ibis truncate 단위)의 시작으로 자른다. 주는 어느 DB에서나 월요일 시작(지표·화면과 같다)."""
+    """col을 unit(Ibis truncate 단위)의 시작으로 자른다. 주는 어느 DB에서나 설정 week_start(기본 월요일) 시작, 연은 설정 fiscal_start_month(기본 1월)부터의 회계연도."""
+    from core import settings
+    found = settings.load()
+    if unit == "Y" and found.get("fiscal_start_month", 1) != 1:
+        first = found["fiscal_start_month"]
+        year = col.year() - (col.month() < first).cast("int64")  # 첫 달 전이면 앞 해에 시작한 회계연도(달 간격 더하기는 Polars가 못 한다)
+        return ibis.date(year, first, 1).cast(col.type())
     if unit != "W":
         return col.truncate(unit)
-    # SQL Server DATETRUNC(WEEK)는 DATEFIRST(기본 일요일)를 따르고 MySQL은 WEEK를 못 자른다: 월요일인 1000-01-06부터 센 날 수로 자른다
+    # SQL Server DATETRUNC(WEEK)는 DATEFIRST(기본 일요일)를 따르고 MySQL은 WEEK를 못 자른다: 월요일인 1000-01-06(일요일 시작이면 1000-01-05)부터 센 날 수로 자른다
     # 날짜 컬럼은 날짜시간을 거친다: SQLite는 날짜를 '2026-10-18 00:00:00' 글자로도 두는데 cast('date')만으로는 그대로라 날 수 계산(UDF)이 실패한다
     d = col.cast("timestamp").cast("date") if col.type().is_date() else col.cast("date")
-    return (d - (d.delta(ibis.date(1000, 1, 6), unit="day") % 7).as_interval("D")).cast(col.type())
+    anchor = ibis.date(1000, 1, 5 if found.get("week_start") == "sun" else 6)
+    return (d - (d.delta(anchor, unit="day") % 7).as_interval("D")).cast(col.type())
+
+
+ZONE_YEARS = (1900, 2100)  # 시간대 바뀜(서머타임 등)을 찾는 범위
+
+
+def setting_zone():
+    """설정 timezone(없으면 이 PC의 시간대)."""
+    from core import settings, source
+    return settings.load().get("timezone") or source.pc_zone()
+
+
+@functools.lru_cache(maxsize=16)
+def zone_offsets(zone):
+    """시간대의 [(이 epoch 초부터(첫 줄은 None), UTC와의 차이 초)]. IANA 이름(Asia/Seoul)이나 고정 오프셋(+09:00)을 받고, 모르는 이름이면 ValueError."""
+    fixed = re.fullmatch(r"([+-])(\d{2}):?(\d{2})", zone or "")
+    if fixed:
+        return [(None, (1 if fixed[1] == "+" else -1) * (int(fixed[2]) * 3600 + int(fixed[3]) * 60))]
+    try:
+        z = zoneinfo.ZoneInfo(zone)
+    except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+        raise ValueError(f"‘{zone}’ 시간대를 알 수 없어요. Asia/Seoul처럼 IANA 이름이나 +09:00으로 써 주세요.") from None
+    utc0 = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+    off = lambda sec: int((utc0 + datetime.timedelta(seconds=sec)).astimezone(z).utcoffset().total_seconds())  # fromtimestamp는 Windows에서 1970년 전을 못 읽는다
+    lo = int((datetime.datetime(ZONE_YEARS[0], 1, 2, tzinfo=datetime.timezone.utc) - utc0).total_seconds())
+    out = [(None, off(lo))]
+    for sec in range(lo, int((datetime.datetime(ZONE_YEARS[1], 1, 1, tzinfo=datetime.timezone.utc) - utc0).total_seconds()), 86400):
+        if off(sec + 86400) != out[-1][1]:  # 이 하루 안에서 바뀌었다: 초 단위로 좁힌다
+            a, b = sec, sec + 86400
+            while b - a > 1:
+                mid = (a + b) // 2
+                a, b = (mid, b) if off(mid) == out[-1][1] else (a, mid)
+            out.append((b, off(b)))
+    return out
+
+
+def to_timezone(col, zone=None):
+    """시간대가 있는 날짜시간을 zone(비우면 설정 timezone)의 벽시계 시각(시간대 없는 날짜시간)으로. 시간대 없는 값·날짜는 그대로 둔다(이미 그 지역 시각이라고 본다)."""
+    kind = col.type()
+    if not (kind.is_timestamp() and kind.timezone):
+        return col
+    offsets = zone_offsets(zone or setting_zone())
+    wall = col.cast("timestamp")  # 연결은 UTC로 읽는다(Ibis DuckDB·Polars)
+    if len(offsets) == 1:
+        return wall + ibis.interval(seconds=offsets[0][1])
+    sec = wall.epoch_seconds()
+    shift = ibis.cases(*[(sec >= since, o) for since, o in reversed(offsets[1:])], else_=offsets[0][1])
+    return wall + shift.as_interval("s")
 
 
 row("truncate", "date", "단위로 자르기", "날짜를 연·분기·월·주·일·시·분·초의 시작으로.", [D_, UNIT], lambda c: period_start(with_time(c).x, UNITS[c.unit]), "truncate(주문일, 'month')", DAT, DAT)
@@ -644,6 +701,8 @@ for pid, plabel, method in (("year", "연", "year"), ("quarter", "분기", "quar
     row(pid, "date", f"{plabel} 뽑기", f"날짜에서 {plabel}만 숫자로.", [D_], date_part(method), f"{pid}(주문일)", DAT, NUM)
 row("weekday", "date", "요일 뽑기", "월요일 0 ~ 일요일 6.", [D_], lambda c: c.x.day_of_week.index().cast("int64"), "weekday(주문일)", DAT, NUM)
 row("epoch", "date", "epoch(초)", "1970-01-01부터 지난 초.", [D_], lambda c: c.x.cast("timestamp").epoch_seconds(), "epoch(주문일)", DAT, NUM)
+row("to_timezone", "date", "시간대로 바꾸기", "시간대가 있는 날짜시간을 그 시간대(비우면 설정의 시간대)의 시각으로. 시간대 없는 값은 그대로.", [D_, text("zone", "시간대(Asia/Seoul·+09:00)", "", True)],
+    lambda c: to_timezone(c.x, c.zone), "to_timezone(주문시각, 'Asia/Seoul')", DAT, DAT)
 
 
 def interval(c, sign):

@@ -1,5 +1,6 @@
 """결과 계산과 파일 저장. 이 단계에서 처음으로 연산이 실행된다."""
 import contextvars
+import datetime
 import math
 from decimal import Decimal
 from pathlib import Path
@@ -14,10 +15,14 @@ SUMMARY_COLS = ["name", "type", "count", "nulls", "unique", "min", "max", "mean"
 MAX_GROUPS = 50  # 차트에 표시할 최대 그룹 수
 MAX_SPLITS = 8  # 차트에서 한 컬럼의 값별로 나눌 때 최대 값 개수
 MAX_VALUES = 200  # 조건을 만들 때 보여 줄 컬럼 값 목록의 최대 개수
+VALUE_SCAN = 200_000  # 값 목록은 앞의 이만큼 행에서만 찾는다(값이 많은 큰 표의 전체 DISTINCT는 메모리를 많이 쓴다)
 MAX_POINTS = 5_000  # 산점도·버블의 점 수 상한(분석의 산점도와 대시보드가 같이 쓴다)
+CHART_UNITS = {"day": "D", "week": "W", "month": "M", "year": "Y"}  # 차트 X를 묶는 단위(/api/chart의 x_unit) → period_start 단위
+FILLS = ("count", "sum")  # 빈 기간을 0으로 채우는 집계(행이 없으면 0개·0). 평균 같은 것은 빈 값으로 둔다
 EXCEL_MAX_ROWS = 1_048_575  # Excel 시트 한 장의 행 수(제목 줄 제외)
 CHUNK = 100_000  # 큰 결과를 한 번에 받는 행 수(저장·결과 받아 두기)
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r")  # 스프레드시트가 수식으로 읽는 첫 글자(저장할 때 앞에 '를 붙인다)
+GUARDED = (".csv", ".tsv", ".txt")  # 수식 막기(formula_guard)를 하는 저장 형식
 BOM = b"\xef\xbb\xbf"  # Excel이 UTF-8 글자 파일의 한글을 바로 읽도록 맨 앞에 붙인다
 
 
@@ -233,8 +238,12 @@ def write_excel(expr, path, cut=False):
     options = {"constant_memory": True, "strings_to_formulas": False, "strings_to_numbers": False, "strings_to_urls": False}
     zone = source.pc_zone()
     cuts = []
+    from core import held  # held가 result를 import하므로 여기서
+    for _, one in ([] if cut else expr if isinstance(expr, list) else [(None, expr)]):
+        if not held.remote(ibis.get_backend(one)) and get_count(one) > EXCEL_MAX_ROWS:  # 이 PC에서 세는 연결은 다 써 본 뒤가 아니라 먼저 거절한다
+            raise ValueError(f"Excel은 {EXCEL_MAX_ROWS:,}행까지 저장할 수 있어요. CSV나 Parquet으로 저장하세요.")
     try:
-        with xlsxwriter.Workbook(str(path), options) as book:  # 행 수는 따로 세지 않고(원격 DB에 COUNT를 보내지 않는다) 쓰면서 상한을 넘는지 본다
+        with xlsxwriter.Workbook(str(path), options) as book:  # 원격 DB는 따로 세지 않고(COUNT를 보내지 않는다) 쓰면서 상한을 넘는지 본다
             bold = book.add_format({"bold": True})
             shapes = {pl.Date: book.add_format({"num_format": "yyyy-mm-dd"}), pl.Datetime: book.add_format({"num_format": "yyyy-mm-dd hh:mm:ss"}),
                       pl.Time: book.add_format({"num_format": "hh:mm:ss"})}  # 날짜·시각 타입의 칸 형식
@@ -376,12 +385,21 @@ def get_summary(expr, columns=(), unique=True):
 
 
 def get_values(expr, column):
-    """컬럼(구조 안의 필드 user.name도)의 서로 다른 값(빈 값 제외)을 정렬해 MAX_VALUES개까지 문자로 돌려준다. 더 있으면 두 번째 값이 True."""
-    col = field_of(expr, column)
-    values = expr.filter(col.notnull()).select(col.name("v")).distinct()
+    """컬럼(구조 안의 필드 user.name도)의 서로 다른 값(빈 값 제외)을 정렬해 MAX_VALUES개까지 문자로 돌려준다. 더 있으면 두 번째 값이 True.
+    앞의 VALUE_SCAN행에서만 찾는다(표가 그보다 긴지는 values_partial)."""
+    head = expr.limit(VALUE_SCAN)
+    col = field_of(head, column)
+    values = head.filter(col.notnull()).select(col.name("v")).distinct()
     values = values.order_by(native_key(values, values.v, False)).limit(MAX_VALUES + 1)  # 빈 값은 걸렀으니 그 연결의 기본 정렬로(MySQL·SQL Server에 CASE WHEN이 붙지 않아 인덱스를 탈 수 있다)
     values = [str(v) for v in values.to_polars(**streaming(expr))["v"].to_list()]
     return values[:MAX_VALUES], len(values) > MAX_VALUES
+
+
+def values_partial(expr):
+    """get_values가 표의 앞부분(VALUE_SCAN행)에서만 찾았는지: 표가 그보다 긴지. BigQuery는 None(모름): LIMIT을 걸어도 읽는 양만큼 요금이 나서 더 세지 않는다."""
+    if ibis.get_backend(expr).name == "bigquery":
+        return None
+    return get_count(expr.limit(VALUE_SCAN + 1)) > VALUE_SCAN
 
 
 def chart_aggs():
@@ -412,7 +430,56 @@ def split_parts(expr, split):
     return parts[:MAX_SPLITS], len(parts) > MAX_SPLITS
 
 
-def get_chart(expr, x, series, split=None, order="x"):
+def local_time(col):
+    """시간대 있는 시각을 설정 시간대(timezone, 없으면 이 PC)의 벽시계 시각(시간대 없음)으로 바꾼다: 자를 때 UTC 날짜로 묶이지 않게. 그 밖의 값은 그대로.
+    sql_funcs.to_timezone 하나로(고정 오프셋 +09:00·서머타임도, DB 시간대 함수를 쓰지 않아 엔진과 상관없다)."""
+    return sql_funcs.to_timezone(col)
+
+
+def next_period(value, unit):
+    """기간 시작 value(날짜·시각) 다음 기간의 시작. unit은 CHART_UNITS의 이름."""
+    if unit in ("day", "week"):
+        return value + datetime.timedelta(days=1 if unit == "day" else 7)
+    month = value.month + (12 if unit == "year" else 1)
+    return value.replace(year=value.year + (month - 1) // 12, month=(month - 1) % 12 + 1)
+
+
+def fill_periods(labels, datasets, series, unit):
+    """기간으로 묶은 차트의 첫~마지막 기간 사이 빈 기간을 채운다(개수·합계는 0, 그 밖의 집계는 빈 값). 최근 MAX_GROUPS개까지, 빈 X는 맨 뒤 그대로."""
+    known = [v for v in labels if v is not None]
+    if not known:
+        return labels, datasets
+    full = [known[0]]
+    while full[-1] < known[-1]:
+        full.append(next_period(full[-1], unit))
+    cut = len(full) > MAX_GROUPS
+    full = full[-MAX_GROUPS:] + [None] * (None in labels)
+    for d in datasets:
+        agg = series[d["series"]].get("agg")
+        got = dict(zip(labels, d["values"]))
+        d["values"] = [got.get(v, 0 if sql_funcs.ALIASES.get(agg, agg) in FILLS else None) for v in full]
+        d["truncated"] = d["truncated"] or cut
+    return full, datasets
+
+
+def get_chart(expr, x, series, split=None, order="x", x_unit=""):
+    """group_chart와 같되, x_unit(CHART_UNITS)을 주고 X가 날짜·시각이면 X를 그 단위의 기간 시작으로 묶고(시간대 있는 시각은 local_time으로 바꿔서)
+    x 순이면 첫~마지막 기간 사이 빈 기간을 채운다(fill_periods). X가 날짜·시각이 아니면 x_unit은 무시한다."""
+    check_name(x, expr.columns)
+    if x_unit and x_unit not in CHART_UNITS:
+        raise ValueError(f"묶음 단위는 {', '.join(CHART_UNITS)} 중 하나예요.")
+    kind = expr[x].type()
+    if not (x_unit and (kind.is_date() or kind.is_timestamp())):
+        return group_chart(expr, x, series, split, order)
+    local = local_time(expr[x])
+    expr = expr.mutate(**{x: sql_funcs.period_start(local, CHART_UNITS[x_unit]).cast(local.type())})  # period_start를 부르는 곳은 여기 하나(D1이 시그니처를 바꾸면 여기만). Ibis는 자른 값의 시간대를 잊어 Polars 결과를 UTC로 돌려 다시 붙인다
+    labels, datasets, more = group_chart(expr, x, series, split, order)
+    if order == "value":
+        return labels, datasets, more
+    return (*fill_periods(labels, datasets, series, x_unit), more)
+
+
+def group_chart(expr, x, series, split=None, order="x"):
     """x별로 계열들을 집계한다. series는 [{"y", "agg"}]. order가 "x"면 x 순, "value"면 첫 계열 값이 큰 순으로 최대 MAX_GROUPS개.
     split을 주면 그 컬럼의 값마다(행이 많은 순으로 최대 MAX_SPLITS개) 계열을 나눈다.
     (x 값들, [{"series": 계열 번호, "split": 나눈 값 또는 None, "values": x 값 순서의 값들, "truncated": X 값이 MAX_GROUPS개보다 많아 잘랐는지}], 나눈 값이 더 있는지)를 돌려준다."""
@@ -444,18 +511,20 @@ def get_chart(expr, x, series, split=None, order="x"):
 
 
 def formula_guard(expr):
-    """수식으로 읽힐 글자로 시작하는 문자 값·컬럼 이름은 앞에 '를 붙여 스프레드시트가 실행하지 않게 한다."""
+    """수식으로 읽힐 글자로 시작하는(앞의 빈칸은 건너뛰고 봐도) 문자 값·컬럼 이름은 앞에 '를 붙여 스프레드시트가 실행하지 않게 한다."""
     texts = [name for name, t in expr.schema().items() if t.is_string()]
-    expr = expr.mutate(**{name: expr[name].substr(0, 1).isin(FORMULA_START).ifelse("'" + expr[name], expr[name]) for name in texts})  # 정규식은 SQL Server 등이 못 한다
-    return expr.rename({"'" + name: name for name in expr.columns if name[:1] in FORMULA_START})
+    risky = lambda c: c.substr(0, 1).isin(FORMULA_START) | c.lstrip().substr(0, 1).isin(FORMULA_START)  # noqa: E731  정규식은 SQL Server 등이 못 한다
+    expr = expr.mutate(**{name: risky(expr[name]).ifelse("'" + expr[name], expr[name]) for name in texts})
+    return expr.rename({"'" + name: name for name in expr.columns if name[:1] in FORMULA_START or name.lstrip()[:1] in FORMULA_START})
 
 
 def export(expr, path, guard=True):
     """조건에 맞는 전체 행을 파일로 저장한다. 형식은 확장자(.csv, .xlsx, .parquet, .tsv, .txt 고정폭)로 정한다.
+    수식 막기는 글자 파일(GUARDED: CSV·TSV·고정폭)만 한다. Excel은 write_excel이 글자를 수식으로 읽지 않게 쓰고, Parquet은 값을 바꾸면 안 된다.
     guard가 False면 수식 막기를 하지 않는다(다시 데이터로 읽을 파일)."""
     suffix = Path(path).suffix.lower()
     if suffix not in EXPORTS:
         raise ValueError(f"파일 이름은 {', '.join(EXPORTS)} 중 하나로 끝나야 해요.")
-    if guard and suffix != ".parquet":
+    if guard and suffix in GUARDED:
         expr = formula_guard(expr)
     EXPORTS[suffix](expr, path)

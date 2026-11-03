@@ -85,52 +85,6 @@ def test_7e2_cancelled_pending_edit_clears_old_redo(tmp_path):
 
 # ---------- 7E3 기간을 건 채 다시 구한 값은 저장하지 않는다 ----------
 
-DASH = page("dashboard/dashboard.html")
-CTL = page("dashboard/dash_ctl.js")
-LIVE = CTL[CTL.index("function showLive"):CTL.index("\n", CTL.index("const storedCard"))]
-PRELUDE = """
-const DashBoard = { plain: ({ liveData, stored, ...c }) => c };  // 실제 plain처럼 화면 전용 값(liveData·stored)은 뺀다
-let dashId = "d", valuesDirty = false, valuesSeq = 0, saved = 0, CTX, connected = true, lastSaved = "";
-const cardSettings = c => { const { data, ...rest } = DashBoard.plain(c); return rest; };
-const needsValues = c => c, scheduleSave = () => { saved++; }, isShell = () => false, say = () => {}, timed = (k, f) => f();
-const $ = () => ({ textContent: "" }); const save = async () => true;
-const api = async () => ({ data: { v: "new" } });
-const board = { cards: [], ctx: () => CTX, draw() {}, recompare: async () => {} };
-""" + next(x for x in DASH.splitlines() if x.startswith("const sigOf")) + "\n" + LIVE + "\n"
-
-
-def values_script(call):
-    return PRELUDE + """
-(async () => {
-  const out = {};
-  for (const [name, ctx] of [["period", { range: { start: "2026-01-01", end: "2026-01-31" } }], ["plain", undefined]]) {
-    CTX = ctx; valuesDirty = false;
-    const card = { id: "c", kind: "metric", source: { table: "t", schema: "" }, data: { v: "old" } };
-    board.cards = [card]; lastSaved = JSON.stringify([[], {}, [cardSettings(card)]]);  // 방금 저장한 카드
-    await (%s);
-    out[name] = { shown: card.data.v, stored: storedCard(card).data.v, dirty: valuesDirty };
-  }
-  console.log(JSON.stringify(out));
-})();
-""" % call
-
-
-@needs_node
-def test_7e3_recompute_with_period_stays_on_screen(tmp_path):
-    host = DASH[DASH.index("  recompute: async"):DASH.index("\n  star:")]
-    body = "const panelHost = {\n" + host + "\n};\n" + values_script("panelHost.recompute(card)")
-    got = run(tmp_path, body, fake=False)
-    assert got["period"] == {"shown": "new", "stored": "old", "dirty": False}
-    assert got["plain"] == {"shown": "new", "stored": "new", "dirty": True}
-
-
-@needs_node
-def test_7e3_refresh_all_with_period_stays_on_screen(tmp_path):
-    body = fn(DASH, "async function refreshDash() {") + values_script("refreshDash()")
-    got = run(tmp_path, body, fake=False)
-    assert got["period"]["shown"] == "new" and got["period"]["stored"] == "old"
-    assert got["plain"]["shown"] == "new" and got["plain"]["stored"] == "new"
-
 
 def test_7e3_doc_says_period_values_are_not_saved():
     doc = (ROOT / "docs" / "functions" / "dashboard_basics.md").read_text(encoding="utf-8")
@@ -210,28 +164,6 @@ console.log(JSON.stringify(out));
     assert got == {"beforeFlush": 0, "afterFlush": 1, "ms": [150]}
 
 
-# ---------- 7P3 첫 그리기 뒤의 다시 그리기는 애니메이션 없이 ----------
-
-@needs_node
-def test_7p3_redraw_without_animation(tmp_path):
-    board = page("core/board.js")
-    body = """
-globalThis.document = { documentElement: { dataset: {} } }; globalThis.getComputedStyle = () => ({ getPropertyValue: () => "#000" });
-const el = (tag, props = {}, ...kids) => ({ tag, ...props, style: { setProperty() {} }, classList: { toggle() {} }, dataset: {} });
-const seen = []; globalThis.Chart = class { constructor(c, cfg) { seen.push(cfg); } destroy() {} };
-""" + board + """
-const mk = () => ({ title: "a", ratio: 1, config: (colors, options) => ({ options }) });
-const b = new Board({ replaceChildren() {}, offsetParent: {} }, { empty: "", changed() {} });
-b.cards = [mk(), mk()];
-b.draw(); const first = seen.splice(0).map(c => c.options ?? null);
-b.draw(); const second = seen.splice(0).map(c => c.options ?? null);
-console.log(JSON.stringify({ first, second }));
-"""
-    got = run(tmp_path, body, fake=False)
-    assert got["first"] == [None, None]  # 첫 그리기는 두 장 모두 애니메이션이 있다
-    assert got["second"] == [{"animation": False}] * 2
-
-
 # ---------- 7P4 자동 저장 응답에서 카드 값(data)을 뺀다 ----------
 
 def test_7p4_save_response_has_no_card_data(client):
@@ -246,43 +178,26 @@ def test_7p4_save_response_has_no_card_data(client):
     assert stored["cards"][0]["data"]  # 저장된 값은 그대로 있다
 
 
-# ---------- 7P5 다른 대시보드의 마지막 값은 열 때 버린다 ----------
+# ---------- 7P6 문장 결과 차트는 차트 섬(iframe)을 처음 볼 때 한 번만 끼운다(R4-D2a: Chart.js 대신) ----------
 
 @needs_node
-def test_7p5_remember_vals_drops_other_dashboards(tmp_path):
-    body = """
-let dashId = "a"; const sigOf = c => c.id, board = { cards: [{ id: "1" }, { id: "9" }] };
-const lastVals = new Map([["a/1", 1], ["a/2", 2], ["b/1", 3], ["ab/1", 4]]);
-""" + line(DASH, "const rememberVals") + """
-rememberVals();
-const out = { same: [...lastVals.keys()] };
-dashId = "b"; board.cards = [{ id: "1" }]; rememberVals();
-out.moved = [...lastVals.keys()];
-console.log(JSON.stringify(out));
-"""
-    got = run(tmp_path, body, fake=False)
-    assert got == {"same": ["a/1", "a/2", "a/9"], "moved": ["b/1"]}
-
-
-# ---------- 7P6 문장 결과 차트는 다시 그리기 전에 이전 것을 destroy ----------
-
-@needs_node
-def test_7p6_sentence_chart_destroyed_on_redraw(tmp_path):
+def test_7p6_sentence_chart_island_once(tmp_path):
     show = fn(page("query/sentences.js"), "  function showResult(out, d) {", "\n  }\n")
     body = """
-const made = []; globalThis.Chart = class { constructor() { this.dead = false; made.push(this); } destroy() { this.dead = true; } };
-globalThis.document = { documentElement: {} }; globalThis.getComputedStyle = () => ({ getPropertyValue: () => "#000" });
-const buttons = [];
-const el = (t, props = {}) => { const e = Object.assign({ dataset: {}, classList: { toggle() {} }, querySelector: () => ({}), querySelectorAll: () => [] }, props); buttons.push(e); return e; };
-const sentChart = () => ({}), resultTable = () => "";
+globalThis.document = { documentElement: { dataset: {} }, getElementById: () => null };
+globalThis.addEventListener = () => {};
+const made = [];
+const el = (t, props = {}, ...kids) => { const e = Object.assign({ tag: t, dataset: {}, kids, classList: { toggle() {} }, querySelectorAll: () => [], append(...k) { this.kids.push(...k); } }, props); made.push(e); return e; };
+let themeHooked = false, posted = 0;
+const sentChart = () => ({ draw: { kind: "series" } }), resultTable = () => "", island = () => () => posted++;
 """ + show + """
 const out = { replaceChildren() {} }, d = { rows: [], notes: [] };
-const chartButton = () => buttons.filter(b => b.textContent === "차트").at(-1);
-showResult(out, d); chartButton().onclick();
-showResult(out, d); chartButton().onclick();
-console.log(JSON.stringify([made.length, made[0].dead, made[1].dead]));
+const chartButton = () => made.filter(b => b.textContent === "차트").at(-1);
+showResult(out, d); chartButton().onclick(); chartButton().onclick();
+const frames = made.filter(e => e.tag === "iframe");
+console.log(JSON.stringify([frames.length, frames[0].src, frames[0].title, posted]));
 """
-    assert run(tmp_path, body, fake=False) == [2, True, False]
+    assert run(tmp_path, body, fake=False) == [1, "/chart", "문장 결과 차트", 1]
 
 
 # ---------- 7P7 지표 사전은 한 번 받으면 다시 받지 않는다 ----------

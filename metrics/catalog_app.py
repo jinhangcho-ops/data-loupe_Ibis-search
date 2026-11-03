@@ -116,9 +116,11 @@ def scan_ask(e, slots, body, request_body, align=None):
     """실행 전 처리 용량 확인(server.scan_gate): 읽을 표마다(이미 사본이 있으면 DB를 읽지 않으므로 묻지 않는다) 묻고, 확인이 필요하면 돌려줄 응답, 아니면 None."""
     con, keep = get_con(), metric_catalog.used_columns(e, slots, align)
     copy = needs_copy(con, e, align)
-    if not (copy and querying.search_key(body, keep or stage(body, keep).columns) in held.store["items"]):
-        if ask := server.scan_gate(request_body, lambda: server.expr_sql(con, stage(body, keep))):
-            return with_passes(ask, e, copy)
+    bodies = [body, {**body, "periods": []}] if e["calc"] == "conversion" and body.get("periods") else [body]  # 전환 계열은 기간 밖 B를 찾으려 기간을 뺀 표도 읽는다(compute_entry의 whole)
+    for b in bodies:
+        if not (copy and querying.search_key(b, keep or stage(b, keep).columns) in held.store["items"]):
+            if ask := server.scan_gate(request_body, lambda b=b: server.expr_sql(con, stage(b, keep))):
+                return with_passes(ask, e, copy)
     if e["cross"] and isinstance(slots.get("광고 테이블"), str):
         schema = body.get("schema") or None
 
@@ -146,7 +148,8 @@ def compute_entry(e, slots, body, align=None):
     if not isinstance(body, dict) or not body.get("base"):
         raise ValueError("기준 테이블이 있는 검색 body가 필요해요.")
     slots = slots if isinstance(slots, dict) else {}
-    ctx = metric_catalog.Ctx(fetch=lambda b, keep: table_for(e, b, keep, align), other=other_for(e, body, slots, align) if e["cross"] else None)
+    fetch = lambda b, keep: table_for(e, b, keep, align)  # noqa: E731
+    ctx = metric_catalog.Ctx(fetch=fetch, whole=fetch, other=other_for(e, body, slots, align) if e["cross"] else None)  # whole: compute가 기간을 뺀 body로 부른다(전환 지표의 기간 밖 B)
     return run(lambda: metric_catalog.compute(e, slots, body, ctx, align))
 
 

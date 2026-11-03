@@ -240,22 +240,13 @@ def run_node(tmp_path, files, body):
 
 
 @pytest_node
-def test_live_requests_keep_since(tmp_path):
-    body = """
-const watched = { id: "a", kind: "status", title: "t", view: {}, source: {}, data: { since: { a: "2026-01-01T00:00:00" }, values: { entities: [] } } };
-const plain = { id: "b", kind: "kpi", title: "t", view: {}, source: {}, data: { values: { scalar: [1] } } };
-console.log(JSON.stringify([cardRequest(watched).data, cardRequest(plain).data]));
-"""
-    got = json.loads(run_node(tmp_path, ["board.js", "dash.js", "dash_cards.js", "dash_rules.js", "dash_ctl.js"], body))
-    assert got == [{"since": {"a": "2026-01-01T00:00:00"}}, {}]  # 나빠진 시각은 이어 가고 값은 보내지 않는다
-
-
-@pytest_node
 def test_series_title_matches_server(tmp_path):
     cases = [{"y": "amt", "agg": "quantile", "opts": {"p": 0.9}}, {"y": "amt", "agg": "sum"}, {"y": None, "agg": "count"}, {"y": "amt", "agg": "quantile", "opts": {"p": [0.1, 0.9], "order": "x"}}, {"y": "amt", "agg": "first", "opts": {"order": "t"}}]  # order만 있으면 뒤에 공백이 붙지 않는다
     want = [dash_calc.series_name(s) for s in cases]
-    body = "console.log(JSON.stringify(%s.map(seriesTitle)));\n" % json.dumps(cases)
-    assert json.loads(run_node(tmp_path, ["board.js", "dash.js", "dash_cards.js", "dash_rules.js", "dash_menu.js"], body)) == want
+    common = (ROOT / "static/core/common.js").read_text(encoding="utf-8")
+    names = common[common.index("const aggName = "):common.index("const UNIT_NAMES")]  # common.js 전체는 화면(DOM)이 있어야 해 이름 짓기만 잘라 온다
+    body = names + "console.log(JSON.stringify(%s.map(seriesTitle)));\n" % json.dumps(cases)
+    assert json.loads(run_node(tmp_path, [], body)) == want  # 쿼리 차트의 계열 이름(common.js)
 
 
 # ---------- S 시간대 시각 ----------
@@ -290,11 +281,6 @@ def test_period_parse_returns_context(client):
     month = post(text="2026-10", as_of="2026-10-20")["context"]  # 기준일로 자른다
     assert month["range"] == {"start": "2026-10-01", "end": "2026-10-20"} and month["prev"] == {"start": "2026-09-01", "end": "2026-09-20", "text": "지난달 같은 기간"}
     assert post(text="", as_of="")["context"] is None and post(text="엉터리", as_of="")["context"] is None
-
-
-def test_ctl_uses_server_context_not_its_own_arithmetic():
-    ctl = (ROOT / "static" / "dashboard" / "dash_ctl.js").read_text(encoding="utf-8")
-    assert "parsed.context" in ctl and ".slice(0, 10)" not in ctl.split("async apply")[1].split("async check")[0]
 
 
 # ---------- S 요약 기여 분해 상한 ----------
@@ -398,28 +384,3 @@ def test_unused_constants_removed():
     assert not hasattr(compare, "BETTER") and not hasattr(watch, "LEVEL_NAMES")
 
 
-@pytest_node
-def test_shelf_keeps_each_series_own_opts(tmp_path):
-    """같은 컬럼·집계에 옵션만 다른 계열 둘: 선반이 각자의 옵션을 그대로 들고 다니고, 집계를 바꾸면 옛 옵션은 버린다."""
-    body = """
-const series = [{ y: "amt", agg: "quantile", opts: { p: 0.5 } }, { y: "amt", agg: "quantile", opts: { p: 0.9 } }, { y: "amt", agg: "sum" }];
-console.log(JSON.stringify([shelfSeries(series), setAgg(series, 1, "sum")[1]]));
-"""
-    got = json.loads(run_node(tmp_path, ["board.js", "dash.js", "dash_cards.js", "dash_rules.js", "dash_shelf.js", "dash_panel.js"], body))
-    assert got[0] == [{"y": "amt", "agg": "quantile", "opts": {"p": 0.5}}, {"y": "amt", "agg": "quantile", "opts": {"p": 0.9}}, {"y": "amt", "agg": "sum"}]
-    assert got[1] == {"y": "amt", "agg": "sum"}
-
-
-@pytest_node
-def test_panel_close_does_not_loop_through_board_edit(tmp_path):
-    """[×] 닫기: close → board.edit(null) → onEdit(null) → open(null) → close 가 한 번에서 멈춘다(예전에는 끝없이 돌아 스택 넘침)."""
-    body = """
-const root = { classList: { add() {} } }, host = { popRoot: { append() {} }, menuRoot: {} };
-let edits = 0;
-host.board = { editing: { id: "a" }, edit(card) { edits++; this.editing = card; panel.open(card); } };  // EditBoard.edit과 같은 차례
-const panel = new CardPanel(root, host);
-panel.close();
-console.log(JSON.stringify({ edits, editing: host.board.editing }));
-"""
-    got = json.loads(run_node(tmp_path, ["board.js", "dash.js", "dash_cards.js", "dash_rules.js", "dash_shelf.js", "dash_panel.js"], body))
-    assert got == {"edits": 1, "editing": None}

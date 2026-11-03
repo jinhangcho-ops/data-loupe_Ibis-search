@@ -71,30 +71,16 @@
       <div class="head" style="margin:0"><b class="warn" id="unseen-text" style="font-size:14px"></b><button id="unseen-open" class="ghost">실행 기록 보기</button><button id="unseen-ok" class="btn" title="실패를 확인한 것으로 표시해요. 이 알림이 사라져요">확인</button></div>
     </section>
 
-    <section class="card not-web">
-      <div class="head"><h3>요청 예시로 채우기</h3><button id="parse" class="btn">채우기</button></div>
-      <textarea id="paste" class="code" rows="5" placeholder="curl 'https://api.example.com/v1/items?page=1' -H 'Accept: application/json'&#10;&#10;GET /v1/items?page=1 HTTP/1.1&#10;Host: api.example.com&#10;&#10;{&quot;method&quot;: &quot;GET&quot;, &quot;url&quot;: &quot;https://api.example.com/v1/items&quot;}"></textarea>
-      <div class="hint">curl 명령, HTTP 요청, JSON 중 하나를 붙여 넣고 [채우기]를 누르면 아래 칸이 채워져요. 붙여 넣은 글은 저장하지 않아요.</div>
-      <div class="warn" id="unread"></div>
-      <div id="secret-box" class="hidden">
-        <h2>비밀처럼 보이는 값</h2>
-        <div class="hint">값마다 쓸 env 이름을 고르고 [env 이름으로 바꾸기]를 누르세요. 값 대신 {env:이름}이 들어가요. 비밀이 아니면 ×를 눌러 목록에서 빼세요.</div>
-        <div id="secret-list"></div>
-        <div class="actions"><button id="secretize" class="btn">env 이름으로 바꾸기</button></div>
-      </div>
-      <div class="err" id="parse-msg"></div>
-    </section>
-
     <section class="card for-api">
       <h3>요청</h3>
       <div class="row"><select id="method" style="width:auto; flex:none" title="HTTP 메서드"></select><input id="method-other" class="hidden" placeholder="메서드" style="width:90px; flex:none"><input id="req-url" class="code" placeholder="https://api.example.com/v1/items" title="쿼리는 주소에 붙이지 말고 아래 쿼리 칸에 넣으세요"></div>
       <div class="split">
         <div>
-          <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">쿼리</h2><button class="ghost" data-add="query">행 추가</button></div>
+          <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">쿼리</h2><button class="btn" data-add="query">행 추가</button></div>
           <div id="query"></div>
         </div>
         <div>
-          <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">헤더</h2><button class="ghost" data-add="headers">행 추가</button></div>
+          <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">헤더</h2><button class="btn" data-add="headers">행 추가</button></div>
           <div id="headers"></div>
         </div>
       </div>
@@ -106,7 +92,7 @@
     <section class="card for-file hidden">
       <h3>파일 주소</h3>
       <input id="f-url" class="code" placeholder="https://example.com/data.csv" style="margin-bottom:6px">
-      <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">헤더</h2><button class="ghost" data-add="f-headers">행 추가</button></div>
+      <div class="head" style="margin:6px 0 4px"><h2 style="margin:0">헤더</h2><button class="btn" data-add="f-headers">행 추가</button></div>
       <div id="f-headers"></div>
       <div class="fields" style="margin-top:6px">
         <label title="파일을 몇 조각으로 나눠 동시에 받을지 정해요"><div class="hint">나눠 받을 조각 수 (<span data-range="file.chunks"></span>)</div><input id="f-chunks" type="number"></label>
@@ -155,6 +141,22 @@
       <div class="err" id="w-sample-msg"></div>
     </section>
 
+    <section class="card not-web">
+      <details id="paste-box"><summary><b>요청 예시로 채우기 (curl 붙여넣기)</b></summary>
+      <div class="head" style="margin-top:8px"><span class="hint" style="margin:0">curl, HTTP 요청, JSON 중 하나를 붙여 넣어요.</span><button id="parse" class="btn">채우기</button></div>
+      <textarea id="paste" class="code" rows="5" placeholder="curl 'https://api.example.com/v1/items?page=1' -H 'Accept: application/json'&#10;&#10;GET /v1/items?page=1 HTTP/1.1&#10;Host: api.example.com&#10;&#10;{&quot;method&quot;: &quot;GET&quot;, &quot;url&quot;: &quot;https://api.example.com/v1/items&quot;}"></textarea>
+      <div class="hint">curl 명령, HTTP 요청, JSON 중 하나를 붙여 넣고 [채우기]를 누르면 위 칸이 채워져요. 붙여 넣은 글은 저장하지 않아요.</div>
+      </details>
+      <div class="warn" id="unread"></div>
+      <div id="secret-box" class="hidden">
+        <h2>비밀처럼 보이는 값</h2>
+        <div class="hint">값마다 쓸 env 이름을 고르고 [env 이름으로 바꾸기]를 누르세요. 값 대신 {env:이름}이 들어가요. 비밀이 아니면 ×를 눌러 목록에서 빼세요.</div>
+        <div id="secret-list"></div>
+        <div class="actions"><button id="secretize" class="btn">env 이름으로 바꾸기</button></div>
+      </div>
+      <div class="err" id="parse-msg"></div>
+    </section>
+
     <section class="card for-api">
       <div class="head"><h3>응답</h3><button id="sample-btn" class="btn" title="붙여 넣은 응답에서 지금 지정대로 값을 뽑아 봐요">미리보기</button><button id="try" title="첫 쪽 요청을 한 번 보내 봐요">시험 보내기</button></div>
       <div class="hint">[시험 보내기]도 사용 한도에 포함돼요. 받은 응답은 아래 칸에 채워져요.</div>
@@ -173,7 +175,7 @@
         </div>
       </div>
       <div class="hint" id="sample-info"></div>
-      <div class="table-wrap" id="sample"></div>
+      <div class="table-wrap" id="sample" role="region" aria-label="미리보기 결과" tabindex="0"></div>
       <div class="err" id="resp-msg"></div>
     </section>
 
@@ -188,7 +190,7 @@
       <div class="hint load-on hidden">비밀번호는 저장하지 않아요. 적재할 때마다 입력하세요.</div>
 
       <div id="ld-table" class="hidden">
-        <h2>연결할 DB</h2>
+        <h2>넣을 DB</h2>
         <div class="tabs" style="margin-bottom:6px">
           <label><input type="radio" name="ldkind" value="folder" checked style="width:auto"> 내 PC의 DB 파일</label>
           <label><input type="radio" name="ldkind" value="url" style="width:auto"> DB 주소</label>
@@ -312,8 +314,8 @@
     </section>
 
     <!-- 업로드 기록: 저장한 결과 파일과 테이블·Kafka에 적재한 것(행·바이트·범위). 지울 때 쓸 명령을 보여 주기만 한다. -->
-    <section class="card" id="up-card"><a id="uploads"></a>
-      <div class="head"><h3>업로드 기록</h3><button id="up-toggle" class="ghost">펼치기</button></div>
+    <section class="card" id="up-card"><a id="uploads" aria-label="업로드 기록"></a>
+      <div class="head"><h3>업로드 기록</h3><button id="up-toggle" class="btn">펼치기</button></div>
       <div class="hint" id="up-sum"></div>
       <div id="up-body" class="hidden">
         <div class="row" style="flex-wrap:wrap"><select id="up-kind" style="width:auto"><option value="">모든 종류</option><option value="file">파일</option><option value="table">DB 테이블</option><option value="kafka">Kafka</option></select>
@@ -326,7 +328,7 @@
     </section>
 
     <section class="card" id="runs-card">
-      <div class="head"><h3>실행 기록</h3><button id="runs-toggle" class="ghost">펼치기</button></div>
+      <div class="head"><h3>실행 기록</h3><button id="runs-toggle" class="btn">펼치기</button></div>
       <div class="hint" id="runs-sum"></div>
       <div class="table-wrap hidden" id="runs"></div>
       <div class="err" id="runs-msg"></div>

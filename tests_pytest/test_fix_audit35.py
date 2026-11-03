@@ -64,6 +64,7 @@ def test_next_page_reuses_last_search_conditions(tmp_path):
     from test_fix_audit_js import between, run_node
     code = between("index.html", "let searched = null", "// 결과 표의 머리글을")
     stub = r"""
+let tabs = [{}], tabAt = 0;  // 작업 탭(가짜 화면에는 탭 하나)
 const els = {}; const $ = id => (els[id] ??= { value: id === "limit" ? "2" : "", checked: false, disabled: false, textContent: "", onclick: null });
 const S = { base: "t" }; let panel = ["amt > 0"], skip = 0, last = null; const sent = [];
 const state = () => ({ base: "t", conditions: [...panel] }); const query = offset => ({ ...state(), limit: $("limit").value, offset });

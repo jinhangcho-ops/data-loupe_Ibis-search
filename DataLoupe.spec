@@ -28,9 +28,13 @@ hidden += collect_submodules("slack_sdk.socket_mode.builtin") + ["slack_sdk.web"
 # 좌표 변환(geo/tm.py)은 처음 쓸 때 pyproj를 불러온다. 좌표계 목록(proj.db 등)은 데이터 파일이라 따로 넣어야 exe 안에서 TM 변환이 된다.
 hidden += collect_submodules("pyproj")
 
+# 대시보드 화면은 Next 빌드 결과(web/out)뿐이다. 옛 화면이 없어져 빠진 채 묶이면 대시보드가 빈 안내만 보이므로 빌드를 멈춘다.
+if not os.path.isfile("web/out/dashboard.html"):
+    sys.exit("web/out이 없어요: npm ci --prefix web 뒤 npm run build --prefix web")
+
 a = Analysis(
     ["desktop.py"],
-    datas=[("static", "static"), ("constraints.txt", ".")] + ([("web/out", "web/out")] if os.path.isdir("web/out") else []) + copy_metadata("ibis-framework") + collect_data_files("pyproj"),  # web/out: Next 대시보드(npm run build --prefix web). 없으면 옛 화면으로 돈다  # Ibis는 설치 정보로 백엔드를 찾는다. constraints.txt: 드라이버 설치 명령의 -c(drivers.pip_command)
+    datas=[("static", "static"), ("web/out", "web/out"), ("constraints.txt", ".")] + copy_metadata("ibis-framework") + collect_data_files("pyproj"),  # web/out: Next 대시보드  # Ibis는 설치 정보로 백엔드를 찾는다. constraints.txt: 드라이버 설치 명령의 -c(drivers.pip_command)
     hiddenimports=hidden,
 )
 pyz = PYZ(a.pure)

@@ -5,6 +5,7 @@ import contextlib
 import functools
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 from flask import jsonify, request
 
@@ -76,8 +77,8 @@ def confirms(view):
 def values():
     """조건을 만들 때 고를 수 있게 컬럼의 값 목록을 돌려준다. 화면에서 [목록]을 누를 때만 부른다."""
     expr, column = querying.runnable(request.json, select=False, ask=request.json), request.json.get("column", "")
-    found, more = run(lambda: result.get_values(expr, column))
-    return jsonify(values=found, more=more)
+    found, more, partial = run(lambda: (*result.get_values(expr, column), result.values_partial(expr)))
+    return jsonify(values=found, more=more, partial=partial)  # partial: 앞 VALUE_SCAN행 안에서만 찾았다
 
 
 def paged(body):
@@ -158,17 +159,19 @@ def reruns(key, body):
     return body.get("fresh") or key not in held.store["jobs"]
 
 
-TIES = {}  # 검색(조건·계산·정렬)마다 정렬 값이 겹치는지. 쪽을 넘길 때마다 다시 세지 않게
+TIES = {}  # 검색(조건·계산·정렬)과 쪽 경계마다 정렬 값이 겹치는지. 같은 쪽을 다시 볼 때 다시 묻지 않게
 
 
 def tied(body):
-    """정렬 값이 같은 행이 있는지(querying.sort_keys의 행 수 ≠ 서로 다른 값 수)를 검색마다 한 번만 센다."""
-    key = (querying.search_key(body), repr(body.get("calcs")), repr(body.get("sorts")))
+    """쪽 경계의 두 행(offset−1, offset)의 정렬 값이 같은지. 같은 값이 쪽 경계에 걸칠 때만 쪽마다 다시 정렬하면서 행이 겹치거나 빠진다.
+    결과 전체를 세지 않고 두 행의 정렬 키만 읽는 조회 하나로 본다(querying.sort_keys)."""
+    offset = parse.parse_offset(body.get("offset", 0))
+    key = (querying.search_key(body), repr(body.get("calcs")), repr(body.get("sorts")), offset)
     if key not in TIES:
         if len(TIES) > 64:
             TIES.clear()
-        keys = querying.sort_keys(body)
-        TIES[key] = run(lambda: keys.count().to_pyarrow().as_py() != keys.distinct().count().to_pyarrow().as_py())
+        edge = querying.sort_keys(body, offset - 1)
+        TIES[key] = run(lambda: (two := edge.to_pyarrow().to_pylist()) and len(two) == 2 and two[0] == two[1])
     return TIES[key]
 
 
@@ -182,7 +185,7 @@ def db_page(con, body, expr, limit, offset, count=None):
 
 @app.post("/api/query")
 def query():
-    """count를 false로 주면 전체 행 수를 세지 않고 null로 돌려준다. offset을 주면 그만큼 건너뛴 다음 행부터 준다(count는 그대로).
+    """count를 false로 주면 전체 행 수를 세지 않고 null로 돌려준다(known_count에 0 이상의 정수를 함께 주면 그 값을 count로). offset을 주면 그만큼 건너뛴 다음 행부터 준다(count는 그대로).
     주소로 접속한 DB와 연결이 하지 못하는 계산(파일 연결의 창 함수 등)은 기간·조건까지의 결과를 한 번 받아 두고(held) 계산·정렬·쪽 넘기기를 이 PC에서 한다
     (fresh면 새로 받는다). 받아 두면 행 수는 세지 않아도 안다. held: 받아 둔 결과에서 왔는지, note: 받아 두지 못한 까닭."""
     body = request.json
@@ -213,6 +216,9 @@ def query():
             note = LOCAL_PAGES
     if offset == 0:  # 새로 검색할 때만(쪽 넘기기는 세지 않는다)
         count_virtual([body["base"], *(body.get("union") or {}).get("tables", []), *[line.split()[0] for line in body.get("joins", []) if line.split()]])
+    known = body.get("known_count")
+    if count is None and not counts and type(known) is int and known >= 0:  # 쪽 넘김: 화면이 아는 전체 행 수를 그대로(0 이상의 정수만)
+        count = known
     return server.json_reply(rows, count=count, held=kept, server=note == SERVER_PAGES, note=note)
 
 
@@ -228,8 +234,11 @@ def sent(con, body, expr, limit, offset):
 
 @app.post("/api/sql")
 def sql():
-    """/api/query가 실행할 SQL. 실행하지는 않는다. 결과를 받아 두는 연결이면 받아 둘 때의 조회(정렬·쪽은 이 PC에서)를 보여 준다."""
+    """/api/query가 실행할 SQL. 실행하지는 않는다. 결과를 받아 두는 연결이면 받아 둘 때의 조회(정렬·쪽은 이 PC에서)를 보여 준다.
+    limit이 null이면 행 수를 자르지 않은 검색 식 그대로의 SQL(쿼리 화면의 [가상 테이블로 저장])."""
     body = request.json
+    if "limit" in body and body["limit"] is None:
+        return jsonify(sql=result.get_sql(querying.build(body)))
     expr, limit, offset = paged(body)
     text, kept = sent(get_con(), body, expr, limit, offset)
     return jsonify(sql=("-- 이 조회로 결과를 한 번 받아 두고, 계산·정렬·쪽 넘기기는 이 PC에서 해요.\n" if kept else "") + text)
@@ -302,11 +311,8 @@ def summary():
     """컬럼별 집계. 큰 테이블에서는 오래 걸리므로 검색과 따로, 화면에서 요청할 때만 계산한다.
     원격 DB는 컬럼을 고르지 않으면 고유값을 세지 않는다(컬럼마다 COUNT(DISTINCT)가 무겁다). BigQuery는 읽는 양(요금)을 먼저 묻는다."""
     columns = request.json.get("summary_columns") or []  # 화면에서 고른 컬럼. 없으면 표시 컬럼(없으면 전체).
-    expr, con = querying.runnable(request.json, select=not columns, ask=request.json), get_con()
-    on_db = ibis.get_backend(expr) is con  # 받아 둔 사본에서 하는 요약은 runnable이 이미 물었다
-    counted = lambda: expr.aggregate([expr[c].count().name(f"c{i}") for i, c in enumerate(c for c in (columns or expr.columns) if c in expr.columns)])  # 요약이 읽는 컬럼을 집계로: 받는 양이 아니라 읽는 양(요금)을 묻는다
-    if con.name == "bigquery" and on_db and (ask := server.scan_gate(request.json, lambda: server.expr_sql(con, counted()))):
-        return ask
+    expr, con = querying.runnable(request.json, select=not columns, ask=request.json), get_con()  # BigQuery의 읽는 양(요금)·받아 둘 사본은 runnable이 묻는다
+    on_db = ibis.get_backend(expr) is con
     rows = run(lambda: result.get_summary(expr, columns, unique=bool(columns) or not (on_db and held.remote(con))))
     return jsonify(summary={"columns": result.SUMMARY_COLS, "rows": rows})
 
@@ -351,7 +357,7 @@ def export_tables():
     if server.ask_save is None:
         raise ValueError("저장 위치를 물을 수 없어요. 프로그램 창에서만 쓸 수 있어요.")
     con = get_con()
-    exprs = run(lambda: [result.formula_guard(server.any_table(con, t["name"], t.get("schema") or None)).limit(result.EXCEL_MAX_ROWS + 1) for t in tables])  # 하나 더 받아 넘쳤는지 안다
+    exprs = run(lambda: [server.any_table(con, t["name"], t.get("schema") or None).limit(result.EXCEL_MAX_ROWS + 1) for t in tables])  # xlsx는 수식을 실행하지 않아 수식 막기를 하지 않는다(값 보존)  # 하나 더 받아 넘쳤는지 안다
     for expr in exprs:  # 탐색 저장(explore_gate)과 같은 실행 전 확인을 테이블마다
         make = lambda e=expr: server.expr_sql(con, e)
         if ask := (exporting(con, body, make) if held.remote(con) else server.scan_gate(body, make)):
@@ -371,8 +377,17 @@ def export_tables():
 
 @app.post("/api/handoff")
 def handoff():
-    """조건에 맞는 전체 행을 창의 저장 대화상자로 고른 Parquet 파일에 저장하고, 그 파일 하나에 연결한다(전처리로 넘길 때 쓴다).
+    """전처리로 넘긴다. mode가 "query"면 파일을 만들지 않고 검색 자체를 전처리의 기준 표(@이름, name이 없으면 @검색 결과)로 등록한다:
+    연결은 그대로이고 전처리가 그 검색의 식에서 시작한다(처리 용량 확인은 전처리가 읽을 때). 응답 {base, table, url}.
+    아니면 조건에 맞는 전체 행을 창의 저장 대화상자로 고른 Parquet 파일에 저장하고, 그 파일 하나에 연결한다.
     확장자가 .parquet이 아니면 붙인다. 지금 읽고 있는 파일에는 덮어쓰지 않는다. 임시 이름으로 쓰고 끝나면 바꿔치기해 실패해도 원래 파일이 남는다."""
+    if request.json.get("mode") == "query":
+        if ask := explore_gate(request.json):  # 전처리가 읽을 때도 묻지만, 넘기기 전에 한 번(원격 과금)
+            return ask
+        from prep import prep_app
+        body = {k: v for k, v in request.json.items() if k not in ("mode", "name", "confirmed", "fresh")}
+        base = prep_app.hand_over(body, request.json.get("name"))
+        return jsonify(base=base, table=base, url="/prep?base=" + quote(base, safe=""))
     if server.ask_save is None:
         raise ValueError("저장 위치를 물을 수 없어요. 프로그램 창에서만 쓸 수 있어요.")
     if ask := explore_gate(request.json, streams=True):
@@ -589,7 +604,7 @@ def chart():
     body = request.json
     expr = querying.runnable(body, select=False, ask=body)
     labels, datasets, more = run(lambda: result.get_chart(
-        expr, body["x"], body.get("series") or [], body.get("split") or None, body.get("order", "x")))
+        expr, body["x"], body.get("series") or [], body.get("split") or None, body.get("order", "x"), body.get("x_unit") or ""))
     truncated = any([d.pop("truncated") for d in datasets])  # 계열마다 붙은 표시는 응답 맨 위에 한 번만(계열 모양은 그대로)
     return jsonify(labels=[str(v) for v in labels], datasets=datasets, more_splits=more, truncated=truncated,
                    max_groups=result.MAX_GROUPS, max_splits=result.MAX_SPLITS)

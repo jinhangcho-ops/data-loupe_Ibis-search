@@ -216,6 +216,7 @@ def test_iss_kafka_files_only_for_collect():
     files = [x for x in section("Files").splitlines() if x.startswith("Source:")]
     kafka = [x for x in files if "confluent_kafka" in x.split("Excludes")[0]]
     assert len(kafka) == 2 and all("Components: collect" in x for x in kafka)
+    assert not [x for x in files if "web\\out" in x]  # Next 빌드 결과(web\out, 차트 섬)는 모든 화면이 써서 늘 설치(따로 줄을 두거나 빼지 않는다)
     (main,) = [x for x in files if x.startswith('Source: "dist\\DataLoupe\\*"')]
     assert "confluent_kafka" in main and "Excludes" in main and "Components" not in main  # 나머지는 늘 설치
     assert all("Components" not in x for x in files if x not in kafka)

@@ -5,13 +5,15 @@ from core import server
 def test_pick_env_경로만_돌려준다(client, monkeypatch, tmp_path):
     env = tmp_path / "llm.env"
     env.write_text("LLM_API_KEY=비밀값", encoding="utf-8")
-    monkeypatch.setattr(server, "ask_open", lambda: str(env))
+    monkeypatch.setattr(server, "ask_open", lambda kind: str(env))
     r = client.post("/api/pick", json={"kind": "env"})
     assert r.get_json() == {"path": str(env)} and "비밀값" not in r.get_data(as_text=True)
 
 
 def test_pick_env_취소와_창_없음은_null(client, monkeypatch):
-    monkeypatch.setattr(server, "ask_open", lambda: None)
+    monkeypatch.setattr(server, "ask_open", lambda kind: None)
+    assert client.post("/api/pick", json={"kind": "metrics"}).get_json() == {"path": None}  # 지표 파일 종류도 받는다
+    assert client.post("/api/pick", json={"kind": "exe"}).status_code == 400
     assert client.post("/api/pick", json={"kind": "env"}).get_json() == {"path": None}
     monkeypatch.setattr(server, "ask_open", None)
     assert client.post("/api/pick", json={"kind": "env"}).get_json() == {"path": None}

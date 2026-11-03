@@ -4,7 +4,6 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
 from core import server
 from test_dash_metrics_tab import run_node
 
@@ -48,10 +47,3 @@ def test_metric_in_other_schema_is_not_mine(tmp_path):
     assert got["mine"] == ["판매 합계"]
 
 
-def test_dashboard_page_fixes():
-    """11B3: 연결이 없을 때 안내로 host를 비우면 metView도 버려 다시 만든다. 11B4: 쿼리로 가는 링크는 쿼리 기능이 없으면 숨긴다."""
-    html = (ROOT / "static/dashboard/dashboard.html").read_text(encoding="utf-8")
-    opener = html.split("async function openMetrics()")[1]
-    assert "metView = null" in opener.split("if (!connected)")[1].split("\n")[0]
-    link = html.split("쿼리에서 카드 만들기")[0].rsplit("<a ", 1)[1]
-    assert 'data-feature="query"' in link

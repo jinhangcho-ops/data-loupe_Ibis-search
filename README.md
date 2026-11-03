@@ -59,10 +59,16 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel, GeoJSON)에 �
 
 exe 없이 같은 프로그램 창을 띄울 수 있습니다. exe와 같은 Python 3.14를 쓰고, 버전 고정 목록 `constraints.txt`를 함께 줍니다.
 
+대시보드 화면은 Next.js(`web/`)로 만들어 한 번 빌드해 둡니다. Node.js 24가 필요하고, 빌드 결과는 `web/out`에 생깁니다(Flask가 `/dashboard`로 내줍니다). 빌드하지 않으면 대시보드 화면 대신 빌드하라는 안내만 보이고, 다른 화면은 그대로 씁니다.
+
 ```bash
 pip install -c constraints.txt -r requirements.txt
+npm ci --prefix web
+npm run build --prefix web
 python desktop.py
 ```
+
+exe를 만들 때(`pyinstaller DataLoupe.spec`)도 먼저 위의 `npm run build --prefix web`을 해야 합니다. `web/out`이 없으면 빌드가 멈춥니다.
 
 고친 뒤에는 검사를 돌립니다. 지어낸 데이터로 확인하고 실제 설정 파일은 건드리지 않으며, 바깥 서비스(Slack·Notion·Google·LLM·Kafka)에는 보내지 않고 가짜로 바꿔 끼워 확인합니다. 저장소에 올리면 GitHub Actions(`.github/workflows/test.yml`, `windows-2025`·Python 3.14)에서 같은 검사가 돌고, exe는 `build-exe.yml`이 같은 러너에서 만듭니다.
 
@@ -76,4 +82,4 @@ DuckDB·Parquet·CSV 밖의 DB에 접속하려면 그 DB의 드라이버를 더 
 
 ## 라이선스
 
-Apache License 2.0으로 배포합니다. 전문은 [LICENSE](LICENSE), 저작권 표시는 [NOTICE](NOTICE)에 있습니다. 함께 들어 있는 Chart.js(`static/core/chart.umd.min.js`)는 MIT 라이선스이고 그 저작권 표시는 파일 머리에 그대로 둡니다.
+Apache License 2.0으로 배포합니다. 전문은 [LICENSE](LICENSE), 저작권 표시는 [NOTICE](NOTICE)에 있습니다. 대시보드·차트 화면(`web/`)이 쓰는 npm 패키지의 라이선스는 각 패키지 안에 있습니다.

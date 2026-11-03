@@ -1,5 +1,5 @@
-// 순수 계산만. DOM·SERVER·Chart에 기대지 않는다(web/도 가져다 쓴다).
-// 대시보드 카드의 값 계산(dash.js에서 옮김): 숫자 글자, 색 글자, 라벨 번호, 일 값 다시 묶기, 날짜 계산, 직전 기간, 카드 모양 판정. 옛 화면은 dash.js보다 먼저 <script src>로 불러 온다.
+// 순수 계산만. DOM·SERVER·Chart에 기대지 않는다(web/lib/calc.ts에 같은 본문의 사본이 있다).
+// 카드 값 계산(옛 dash.js에서 옮김): 숫자 글자, 색 글자, 라벨 번호, 일 값 다시 묶기, 날짜 계산, 직전 기간, 카드 모양 판정. 분석 화면이 <script src>로 불러 온다(web/lib/calc.ts에 같은 본문의 TS 사본).
 
 // 숫자는 자릿수 쉼표와 소수 넷째 자리까지
 const shownum = v => v == null ? "" : typeof v === "number" ? v.toLocaleString(undefined, { maximumFractionDigits: 4 }) : String(v);

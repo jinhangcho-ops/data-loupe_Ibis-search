@@ -231,9 +231,9 @@ def test_tiny_targets_keep_their_value():
 
 @pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
 def test_cards_judge_target_like_the_server(tmp_path):
-    from test_fix_audit_js import between, run_node
-    helper = between("lib/dash_svg.js", "const slack", "\n") + "\n"
-    out = run_node(tmp_path, "console.log(JSON.stringify([overTarget(1.1 + 2.2, 3.3), underTarget(0.7 + 0.1, 0.8), overTarget(3.31, 3.3), underTarget(3.29, 3.3)]));", parts=[helper])
+    import json
+    from test_dash_js import run_ts
+    out = json.loads(run_ts(tmp_path, "console.log(JSON.stringify([overTarget(1.1 + 2.2, 3.3), underTarget(0.7 + 0.1, 0.8), overTarget(3.31, 3.3), underTarget(3.29, 3.3)]));"))  # 대시보드 화면(web/lib/calc.ts)
     assert out == [False, False, True, True]  # 꼬리는 같은 값, 진짜 차이는 넘음·모자람
 
 
@@ -260,37 +260,14 @@ def test_position_slots_reject_negative():
 
 @pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
 def test_color_rules_treat_float_tails_as_equal(tmp_path):
-    from test_fix_audit_js import run_node
+    import json
+    from test_dash_js import run_ts
     body = "const m = (t, v) => parseMatch(t).test(v); console.log(JSON.stringify([m('= 0.3', 0.1 + 0.2), m('<= 0.3', 0.1 + 0.2), m('< 0.3', 0.1 + 0.2), m('0.3, 0.5', 0.1 + 0.2), m('!= 0.3', 0.1 + 0.2), m('> 0.3', 0.31)]));"
-    out = run_node(tmp_path, body, files=["lib/dash_rules.js"])
+    out = json.loads(run_ts(tmp_path, body))  # 대시보드 화면(web/lib/calc.ts)
     assert out == [True, True, False, True, False, True]
 
 
 # ---------- 23차 감사 ----------
-
-@pytest.mark.skipif(__import__("shutil").which("node") is None, reason="node가 없다")
-def test_counter_alert_and_cut_table_total(tmp_path):
-    import json, subprocess
-    from pathlib import Path
-    from core import dash_store
-    static = Path(__file__).resolve().parent.parent / "static"
-    dash = json.dumps({"types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS, "max_palette": dash_store.MAX_PALETTE}, ensure_ascii=False)
-    parts = ["board.js", "lib/dash_calc.js", "dash.js", "lib/dash_svg.js", "dash_cards.js", "lib/dash_rules.js", "dashboard/dash_rules.js", "lib/dash_grid.js", "dash_edit.js"]
-    body = """
-const assert = require("assert");
-const kpi = (id, v) => ({ id, kind: "gauge", title: "환불률", view: { format: "number" }, data: { values: { scalar: [v] } }, source: {} });
-const alerts = counterAlerts([kpi("r", 1.1 + 2.2)], { card: "", counters: ["r"], limits: { r: { op: "<=", value: 3.3 } } });
-assert.deepStrictEqual(alerts, []);  // 합계의 꼬리는 한계와 같은 값
-assert.deepStrictEqual(counterAlerts([kpi("r", 0.1 + 0.2 - 0.3)], { card: "", counters: ["r"], limits: { r: { op: "<=", value: 0 } } }), []);  // 한계 0도
-assert.strictEqual(counterAlerts([kpi("r", 3.4)], { card: "", counters: ["r"], limits: { r: { op: "<=", value: 3.3 } } }).length, 1);
-console.log("ok");
-"""
-    script = tmp_path / "t.js"
-    script.write_text(f"globalThis.SERVER = {{ dash: JSON.parse({json.dumps(dash)}) }};\n" + "".join(next(static.rglob(n)).read_text(encoding="utf-8") for n in parts) + body, encoding="utf-8")
-    done = subprocess.run(["node", str(script)], capture_output=True, text=True, encoding="utf-8", timeout=60)
-    assert done.returncode == 0 and done.stdout.strip() == "ok", done.stderr[-2000:]
-    cards = (static / "dashboard" / "dash_cards.js").read_text(encoding="utf-8")
-    assert '!card.data?.values?.more && !rows.some(' in cards  # 앞 500행만 받은 표는 합계를 내지 않는다
 
 
 def test_map_with_nothing_to_draw_explains():
@@ -327,8 +304,6 @@ def test_onehot_with_nan_and_casefold_only_values():
     out = prep_ops.onehot(ibis.memtable(pl.DataFrame({"x": [1.0, float("nan"), 2.0]})), "x", True)
     assert "x_nan" in out.columns  # NaN != NaN에 걸려 '대소문자만 달라요'가 되지 않는다
     assert {"x_Straße", "x_STRASSE"} <= set(prep_ops.onehot(ibis.memtable({"x": ["Straße", "STRASSE"]}), "x", True).columns)  # lower로는 다른 이름
-
-
 
 
 # ---------- 24차 감사 ----------

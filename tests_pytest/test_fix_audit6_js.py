@@ -1,14 +1,13 @@
 """6차 묶음 6E(화면 JS)를 node로 돌려 본다. node가 없으면 건너뛴다.
 test_fix_audit5_js.py와 같은 방식: 화면 파일에서 해당 함수만 잘라 가짜 화면(FAKE) 위에서 돌린다."""
 import json
-import re
 import shutil
 import subprocess
 
 import pytest
 
 from conftest import ROOT
-from test_shortcuts_js import COMMON, DRAFT, FAKE, MENU, TIP
+from test_shortcuts_js import DRAFT, FAKE, MENU, TIP
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
@@ -53,41 +52,6 @@ def test_6e2_setview_keeps_limit_and_restore_clears_it():
     html = page("query/index.html")  # 흐름 → 단계 카드로 옮길 때 쪽 크기를 지키던 줄은 흐름 보기와 함께 없앴다
     # 되돌리기·초안 복원 쪽은 limit이 없던 상태로 돌아간다(loadBody 자체는 그대로)
     assert '$("limit").value = b.limit ?? "";' in html
-
-
-def test_6e3_stale_card_data_emptied():
-    html = page("dashboard/dashboard.html")
-    seg = fn(html, "async function restoreDash(d) {")
-    assert "off = !!o && o.sig !== sigOf(c)" in seg
-    assert "data: off ? {} :" in seg and "...(!off && o?.liveData" in seg
-
-
-def test_6e4_dashboard_recompute_not_piled_up(tmp_path):
-    html = page("dashboard/dashboard.html")
-    seg = fn(html, "async function restoreDash(d) {")
-    assert "forEach(c => panelHost.recompute" not in seg
-    nl = "\n"
-    body = """
-(async () => {
-  const src = x => ({ key: "k", table: "t", body: { x } });
-  let dashId = "d1", quiet = false; const dashboards = [{ id: "d1" }];
-  const board = { cards: [], palette: [], star: {}, set(c) { this.cards = c; } };
-  const $ = () => ({ value: "" }); const needsValues = c => c; const boardChanged = () => {};
-  const connected = true, say = () => {}, recomputed = [], gates = [];
-  const panelHost = { recompute: c => new Promise(r => { recomputed.push(c.id); gates.push(r); }) };
-  %s
-  const before = { id: "d1", palette: [], north_star: {}, cards: [{ id: "c1", kind: "chart", source: src("a"), title: "t" }, { id: "c2", kind: "chart", source: src("a"), title: "t" }] };
-  board.cards = before.cards.map(c => ({ ...c, source: src("z"), data: { v: 1 } }));
-  rememberVals();
-  await restoreDash(before);                        // 첫 되돌리기: c1, c2 둘 다 어긋남
-  board.cards.forEach(c => { c.source = src("z"); }); rememberVals();
-  await restoreDash(before);                        // 곧바로 한 번 더
-  for (let i = 0; i < 6; i++) { gates.splice(0).forEach(r => r()); await new Promise(r => setImmediate(r)); }
-  console.log(JSON.stringify({ recomputed }));
-})();""" % (fn(html, "let restoreSeq", nl) + fn(html, "const lastVals", nl) + fn(html, "const sigOf", nl) + fn(html, "const rememberVals", nl) + seg)
-    got = run(tmp_path, body, fake=False)
-    # 차례로 구하고, 첫 되돌리기의 c2는 두 번째 되돌리기가 순서 번호를 가져가 구하지 않는다
-    assert got["recomputed"] == ["c1", "c1", "c2"]
 
 
 def test_6e4_ctrl_enter_does_not_pick_menu_item(tmp_path):

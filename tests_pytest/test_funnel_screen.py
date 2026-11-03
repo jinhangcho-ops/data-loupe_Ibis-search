@@ -1,7 +1,8 @@
-"""흐름(퍼널) 화면: 분석 종류 funnel(순서 뒤바뀜·되돌아감·기간 제한·대시보드 기간), /api/analyze, funnel 카드(검사·다시 구하기·최신화 대상), 화면 파일, 생키 좌표(node).
+"""흐름(퍼널) 화면: 분석 종류 funnel(순서 뒤바뀜·되돌아감·기간 제한·대시보드 기간), /api/analyze, funnel 카드(검사·다시 구하기·최신화 대상), 화면 파일(분석 화면·대시보드 Next 소스), 생키 좌표(node, 분석 화면의 funnel.js).
 데이터는 테스트 안에서 지어낸다. 값은 손으로 센다."""
 import datetime as dt
 import shutil
+from pathlib import Path
 import subprocess
 
 import duckdb
@@ -131,13 +132,10 @@ def test_screens_have_funnel(client):
     for part in ('value="funnel"', 'id="a-fuser"', 'id="a-fstep"', 'id="a-ftime"', 'id="a-fsteps"', 'id="a-fwin"', 'id="a-funit"', 'id="a-funnel"', "/static/core/funnel.js"):
         assert part in prep, part
     assert 'kind: flow ? "funnel" : "analysis"' in prep
-    dash = client.get("/dashboard?legacy=1").get_data(as_text=True)
-    assert "/static/core/funnel.js" in dash
-    for name in ("dash_cards.js", "dash_menu.js"):
-        text = next((ROOT / "static").rglob(name)).read_text(encoding="utf-8")
-        assert "funnel" in text, name
-    assert "paintFunnel" in (ROOT / "static" / "dashboard" / "dash_cards.js").read_text(encoding="utf-8") and "흐름(퍼널" in (ROOT / "static" / "dashboard" / "dash_menu.js").read_text(encoding="utf-8")
-    assert 'if (k === "funnel")' in (ROOT / "static" / "dashboard" / "dash_menu.js").read_text(encoding="utf-8")
+    web = Path(ROOT, "web", "components")  # 대시보드 화면(Next): 퍼널 카드 그림과 카드 추가 메뉴의 종류
+    assert "sankeyLayout(steps)" in (web / "cards" / "svg" / "Funnel.tsx").read_text(encoding="utf-8")
+    assert "export function sankeyLayout(" in (web / "cards" / "svg" / "__pure__.ts").read_text(encoding="utf-8")
+    assert 'funnel: ["퍼널"' in (web / "edit" / "menu" / "kinds.ts").read_text(encoding="utf-8")
 
 
 SCRIPT = """

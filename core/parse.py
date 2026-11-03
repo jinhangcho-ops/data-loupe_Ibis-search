@@ -14,7 +14,7 @@ UNIONS = ["left", "inner", "intersect", "except"]  # 이어붙이기: left는 �
 STACKS = ("left", "inner")  # 아래로 잇는 방식(출처 컬럼을 붙인다). intersect·except는 행을 고르는 방식이라 붙이지 않는다
 SOURCE = "출처"  # 이어붙이면 더하는 컬럼: 그 행이 온 테이블 이름
 OPS = {"=": operator.eq, "!=": operator.ne, ">=": operator.ge, "<=": operator.le, ">": operator.gt, "<": operator.lt}
-CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값 / 컬럼 < 다른컬럼 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2 / 컬럼 like 값 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / * is not null(모든 컬럼에 값) / near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도 / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
+CONDITION_GUIDE = "컬럼 >= 값 / 컬럼 != 값(빈 값 행도 남김) / 컬럼 =~ 값(대소문자 무시 같음) / 컬럼 < 다른컬럼 / 컬럼 [not] between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2(빈 값 행도 남김) / 컬럼 [not] like 값 / 컬럼 matches 정규식 / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / * is not null(모든 컬럼에 값) / near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도 / 조건 or 조건 / 값에 or·쉼표가 있으면 '값'"
 SORT_GUIDE = "컬럼 [asc|desc]"
 
 # (판별, 종류, 한글 이름, 입력값 변환). 종류는 전처리가 컬럼을 나눌 때 쓴다.
@@ -27,14 +27,14 @@ TYPES = [
     (lambda t: t.is_string(), "string", "문자", str),
 ]
 
-COND_RE = re.compile(r"^(\S+?)\s*(!=|>=|<=|=|>|<)\s*(.+)$")
-BETWEEN_RE = re.compile(r"^(\S+)\s+between\s+(\S+)\s+(?:and\s+)?(\S+)$", re.I)
+COND_RE = re.compile(r"^(\S+?)\s*(!=|=~|>=|<=|=|>|<)\s*(.+)$")  # =~: 글자를 대소문자 가리지 않고 같음
+BETWEEN_RE = re.compile(r"^(\S+)\s+(not\s+)?between\s+(\S+)\s+(?:and\s+)?(\S+)$", re.I)
 IN_RE = re.compile(r"^(\S+)\s+(in|except)\s+(.+)$", re.I)
-LIKE_RE = re.compile(r"^(\S+)\s+(like|starts|ends)\s+(.+)$", re.I)  # like: 포함(대소문자 무시), starts: 이 글자로 시작, ends: 이 글자로 끝
+LIKE_RE = re.compile(r"^(\S+)\s+(not\s+like|like|starts|matches|ends)\s+(.+)$", re.I)  # like: 포함(대소문자 무시), not like: 포함하지 않음, starts: 이 글자로 시작, ends: 이 글자로 끝, matches: 정규식이 맞음
 NULL_RE = re.compile(r"^(\S+)\s+is\s+(not\s+)?null$", re.I)
 GEO_RE = re.compile(r"^(near|box)\s+(.+)$", re.I)  # 좌표 조건: near 위도컬럼 경도컬럼 기준위도 기준경도 반경km / box 위도컬럼 경도컬럼 최소위도 최소경도 최대위도 최대경도
 GEO_COUNTS = {"near": 5, "box": 6}
-NOT_GEO = {"in", "except", "like", "starts", "ends", "between", "is", "=", "!=", ">=", "<=", ">", "<"}  # near·box가 컬럼 이름일 때의 조건('near in 1, 2')은 좌표 조건이 아니다
+NOT_GEO = {"in", "except", "like", "not", "matches", "starts", "ends", "between", "is", "=", "!=", "=~", ">=", "<=", ">", "<"}  # near·box가 컬럼 이름일 때의 조건('near in 1, 2')은 좌표 조건이 아니다
 OR_RE = re.compile(r"(?<!\S)or(?!\S)", re.I)  # 앞뒤가 공백인 단어 or
 COMMA_RE = re.compile(",")
 # 따옴표로 감싼 값: 값의 맨 앞(줄 처음이나 공백 , = < > 뒤)에서 열고, 값의 맨 뒤(줄 끝이나 공백 , 앞)에서 닫는다
@@ -136,7 +136,7 @@ def split(pattern, text, quotes=True):
 SPACED = "\x00col"  # 공백 있는 컬럼 이름 자리에 잠깐 넣는 한 낱말
 
 
-AFTER_NAME = re.compile(r"\s*(?:!=|>=|<=|=|>|<|(?:is|in|except|like|starts|ends|between)(?!\S))", re.I)  # 조건에서 컬럼 이름 바로 뒤에 오는 연산자
+AFTER_NAME = re.compile(r"\s*(?:!=|=~|>=|<=|=|>|<|(?:is|in|except|like|not|matches|starts|ends|between)(?!\S))", re.I)  # 조건에서 컬럼 이름 바로 뒤에 오는 연산자
 
 
 def head_name(text, names, condition=False):
@@ -317,8 +317,14 @@ def parse_period(line, expr):
     date_cols = [c for c, t in expr.schema().items() if t.is_date() or t.is_timestamp()]
     check_name(col, date_cols, "날짜 컬럼")
     start, sep, end = (s.strip() for s in rng.partition("~"))
+    if not sep and start:  # ~가 없으면 대시보드 기간 칸과 같은 글(최근 7일, 지난달, 2026-10)
+        from dashboard import period
+        found = period.parse(start)
+        if found["error"]:
+            raise ValueError(found["error"])
+        start, end, sep = found["start"], found["end"], "~"
     if not sep or not (start or end):
-        raise ValueError("'날짜컬럼 시작 ~ 끝' 형식으로 입력하세요.")
+        raise ValueError("'날짜컬럼 시작 ~ 끝' 또는 '날짜컬럼 최근 7일'처럼 입력하세요.")
     dtype = expr.schema()[col]
     preds = []
     if start:
@@ -380,50 +386,66 @@ def parse_one(line, expr, quotes=True):
         c = get(col)
         return c.notnull() if negate else c.isnull()
     if m := BETWEEN_RE.match(line):
-        col, lo, hi = m.groups()
+        col, negate, lo, hi = m.groups()
         c = get(col)
         lo, hi = unquote(lo, quotes), unquote(hi, quotes)
         after = end_after(c.type(), hi, convert(c.type(), hi))  # 끝을 날짜로만 쓰면 그날 끝까지, HH:MM이면 그 분 끝까지(기간과 같은 규칙)
-        if after:
-            return (c >= convert(c.type(), lo)) & (c < after)
-        return c.between(convert(c.type(), lo), convert(c.type(), hi))
-    if m := IN_RE.match(line):  # except는 in의 반대: 적은 값을 뺀다
+        found = (c >= convert(c.type(), lo)) & (c < after) if after else c.between(convert(c.type(), lo), convert(c.type(), hi))
+        return ~found | c.isnull() if negate else found
+    if m := IN_RE.match(line):  # except는 in의 반대: 적은 값을 뺀다(빈 값 행은 남긴다)
         col, word, raw = m.groups()
         c = get(col)
         values = [convert(c.type(), unquote(v, quotes)) for v in split(COMMA_RE, raw, quotes) if v.strip()]
-        return c.isin(values) if word.lower() == "in" else c.notin(values)
+        return c.isin(values) if word.lower() == "in" else c.notin(values) | c.isnull()
     if m := LIKE_RE.match(line):
         col, word, raw = m.groups()
         c = get(col)
+        word = " ".join(word.lower().split())
         if not c.type().is_string():
-            raise ValueError(f"{word.lower()}는 문자 컬럼에만 쓸 수 있어요.")
+            raise ValueError(f"{word}는 문자 컬럼에만 쓸 수 있어요.")
         raw = unquote(raw, quotes)
-        word = word.lower()
-        found = starts(c, raw) if word == "starts" else ends(c, raw) if word == "ends" else contains(c, raw)
-        from core import source
-        if source.compiles(expr.filter(found)):
-            return found
-        return c.startswith(raw) if word == "starts" else c.endswith(raw) if word == "ends" else c.lower().contains(raw.lower())  # LIKE를 못 하는 연결(파일)
+        if word == "matches":
+            return c.re_search(raw)  # 함수 사전 regex_contains와 같은 식
+        if word == "not like":
+            return ~like_one(expr, c, "like", raw) | c.isnull()
+        return like_one(expr, c, word, raw)
     if m := COND_RE.match(line):
         col, op, raw = m.groups()
         c = get(col)
         if c.type().is_nested():
             raise ValueError(f"'{name or col}'은 {type_name(c.type())} 컬럼이라 비교할 수 없어요. 안의 필드(예: {name or col}.이름)나 is null을 쓰세요.")
+        if op == "=~":
+            if not c.type().is_string():
+                raise ValueError("=~는 문자 컬럼에만 쓸 수 있어요.")
+            return c.lower() == unquote(raw, quotes).lower()
         if quotes and raw.strip() in expr.columns:  # 따옴표 없이 컬럼 이름과 똑같이 쓰면 그 컬럼과 비교. 같은 글자를 값으로 찾으려면 '값'으로 감싼다(따옴표를 끈 줄은 늘 값)
             other = expr[raw.strip()]
             if kind(other.type()) != kind(c.type()) and not (other.type().is_numeric() and c.type().is_numeric()):
                 raise ValueError(f"'{raw.strip()}'은 {type_name(other.type())} 컬럼이라 {type_name(c.type())} 컬럼과 비교할 수 없어요.")
+            if op == "!=":  # 한쪽만 빈 값이어도 다르다(IS DISTINCT FROM)
+                return (c != other) | (c.isnull() != other.isnull())
             return OPS[op](c, other)
         value = convert(c.type(), unquote(raw, quotes))
         after = op in ("=", "!=", "<=", ">") and end_after(c.type(), unquote(raw, quotes), value)  # 날짜만 쓴 값은 그날 하루, HH:MM은 그 1분(기간·between과 같은 규칙)
         if after:
-            return {"=": (c >= value) & (c < after), "!=": (c < value) | (c >= after), "<=": c < after, ">": c >= after}[op]
-        return OPS[op](c, value)
+            found = {"=": (c >= value) & (c < after), "!=": (c < value) | (c >= after), "<=": c < after, ">": c >= after}[op]
+        else:
+            found = OPS[op](c, value)
+        return found | c.isnull() if op == "!=" else found  # !=는 빈 값 행도 '그 값이 아님'으로 남긴다(SQL 비교는 빈 값을 조용히 뺀다)
     raise ValueError(f"형식: {CONDITION_GUIDE}")
 
 
 TABLE_NAME = re.compile(r"[A-Za-z0-9_가-힣]+")  # 새로 만들 테이블·스키마 이름(check_table_name)
 WILD = re.compile(r"[%_\\[]")  # LIKE에서 특별한 뜻이 있는 글자(MSSQL은 [도). 값에 있으면 LIKE를 쓰지 않는다
+
+
+def like_one(expr, c, word, raw):
+    """like·starts·ends 식. LIKE를 못 하는 연결(파일)이면 contains·startswith·endswith로."""
+    found = starts(c, raw) if word == "starts" else ends(c, raw) if word == "ends" else contains(c, raw)
+    from core import source
+    if source.compiles(expr.filter(found)):
+        return found
+    return c.startswith(raw) if word == "starts" else c.endswith(raw) if word == "ends" else c.lower().contains(raw.lower())
 
 
 def contains(c, text):

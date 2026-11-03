@@ -53,7 +53,7 @@ FEATURES = [
     # 날짜
     ("truncate(단위)", ["truncate"], ROW), ("연·분기·월·주·일·요일·시·분·초 뽑기", ["year", "quarter", "month", "week", "day", "weekday", "hour", "minute", "second"], ROW),
     ("epoch", ["epoch"], ROW), ("날짜 더하기·빼기(N 단위)", ["date_add", "date_sub"], ROW), ("두 날짜 차이(단위)", ["date_diff"], ROW), ("형식으로 글자(strftime)", ["strftime"], ROW),
-    ("글자에서 날짜 읽기(형식)", ["parse_date"], ROW), ("날짜만·시각만", ["to_date", "to_time"], ROW), ("오늘·지금 기준 차이", ["diff_now", "diff_today"], ROW),
+    ("글자에서 날짜 읽기(형식)", ["parse_date"], ROW), ("날짜만·시각만", ["to_date", "to_time"], ROW), ("시간대 바꾸기", ["to_timezone"], ROW), ("오늘·지금 기준 차이", ["diff_now", "diff_today"], ROW),
     # 조건
     ("CASE", ["case"], ROW), ("coalesce", ["coalesce"], ROW), ("nullif", ["nullif"], ROW), ("ifelse", ["ifelse"], ROW), ("greatest·least", ["greatest", "least"], ROW),
     ("isin", ["isin"], ROW), ("between", ["between"], ROW), ("isnull·notnull", ["isnull", "notnull"], ROW),

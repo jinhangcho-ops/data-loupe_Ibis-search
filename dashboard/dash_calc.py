@@ -57,7 +57,7 @@ MAX_NUM_COLS = 200  # 카드에 알려 줄 숫자 컬럼 이름 수(버블의 [�
 
 
 def series_name(s):
-    """계열 이름. 화면의 seriesTitle(static/core/dash.js, 쿼리 차트와 카드 메뉴가 함께 씀)과 같다: 개수, 합계 (컬럼), 옵션이 있으면 분위수 (컬럼) p=0.9처럼 뒤에 붙인다(옵션만 다른 두 계열이 이름이 같아지지 않게)."""
+    """계열 이름. 화면의 seriesTitle(static/core/common.js와 web/lib/series.ts, 쿼리 차트와 카드 메뉴가 함께 씀)과 같다: 개수, 합계 (컬럼), 옵션이 있으면 분위수 (컬럼) p=0.9처럼 뒤에 붙인다(옵션만 다른 두 계열이 이름이 같아지지 않게)."""
     name = metric_file.AGG_NAMES[s["agg"]] + ("" if s["agg"] == "count" or not s["y"] else f" ({s['y']})")
     opts = " ".join(f"{k}={','.join(str(x) for x in (v if isinstance(v, list) else [v]))}" for k, v in (s.get("opts") or {}).items() if k != "order")
     return f"{name} {opts}" if opts else name
@@ -115,7 +115,7 @@ def grouped(t, x, unit, split, parts, exprs):
     """x를 unit으로 자르고(나누기가 있으면 그 값과 함께) 묶어 exprs(t)의 집계를 구한 Polars 표(열 x, s, 집계들). 날짜 순."""
     if split:
         t = t.filter(t[split].isin(parts))
-    keys = [stats.period_start(t[x], TRUNC[unit]).name("x")] + ([t[split].name("s")] if split else [])
+    keys = [stats.local_start(t[x], TRUNC[unit]).name("x")] + ([t[split].name("s")] if split else [])
     return t.group_by(keys).aggregate(**exprs(t)).order_by("x").to_polars()
 
 
@@ -260,7 +260,7 @@ def shared_time(expr, body, x, series, split, window, ctx):
     """time_data. 최신화가 같은 테이블·조건·날짜 컬럼의 카드들을 묶었으면(ctx.plan) 그 카드들의 계열을 한 번에 구해 두고(ctx.shared) 카드마다 자기 계열만 돌려준다."""
     shared, key = (ctx or {}).get("shared"), time_key(body, x, split, window)
     union = ((ctx or {}).get("plan") or {}).get("series", {}).get(key)
-    if shared is None or union is None or split:
+    if shared is None or union is None or split or any(s.get("y") and s["y"] not in expr.columns for s in union):  # 모든 컬럼을 읽는 카드가 같은 묶음에 있으면 식이 카드 자기 컬럼으로 줄어 다른 카드의 계열을 못 구한다
         return time_data(expr, x, series, split)
     if key not in shared:
         shared[key] = time_data(expr, x, union, None)
@@ -316,8 +316,10 @@ def time_data(expr, x, series, split):
     def values(unit, only=None):
         picked = {i: s for i, s in enumerate(series) if only is None or only(s["agg"])}
         return unit_section(grouped(t, x, unit, split, parts, lambda tt: {f"s{i}_v": final_expr(tt, s) for i, s in picked.items()}), series, parts, split, only)
+    cal = settings.load()
+    own = {"week": cal.get("week_start") == "sun", "year": cal.get("fiscal_start_month", 1) != 1}  # 기본이 아닌 주 시작·회계연도는 서버가 구한다(화면이 설정을 모르는 때도 같게)
     for unit in ("week", "month", "year"):
-        if cut and unit != "week":
+        if (cut and unit != "week") or own.get(unit):
             by_unit[unit] = values(unit)  # 잘라 낸 앞부분까지 월·연은 서버가 구한다
         elif any(not merges(s["agg"]) for s in series):
             by_unit[unit] = values(unit, lambda agg: not merges(agg))  # 고유 개수·중앙값 같은 집계는 일 값을 다시 묶을 수 없다
@@ -423,10 +425,10 @@ def with_period(body, date, window):
 OWN_PERIOD = re.compile(r"(.+?)\s+(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})")  # 카드의 기간 줄 '날짜컬럼 시작 ~ 끝'(양쪽이 날짜인 것만). 날짜를 끝에서 읽어 공백 있는 컬럼 이름도 된다
 
 
-def own_range(card):
+def own_range(card, mode="prev"):
     """대시보드 기간이 비었을 때 카드 자신의 기간 줄(source.body.periods 중 양쪽 날짜가 다 있고 시작이 끝보다 늦지 않은 첫 줄)을 보는 기간으로,
     대시보드 기간 칸과 같은 직전 기간(period.previous: 달 단위로 꼭 맞으면 직전 같은 개월 수, 아니면 바로 앞 같은 일수)을 삼은 {range, prev: {start, end, text}, column, line}.
-    열린 쪽이 있는 줄은 건너뛰고, 없으면 None. static/core/lib/dash_calc.js의 ownRange와 같은 규칙이다."""
+    mode(period.MODES)가 prev가 아니면 그 비교 기준의 기간과 이름을 쓴다. 열린 쪽이 있는 줄은 건너뛰고, 없으면 None. static/core/lib/dash_calc.js의 ownRange와 같은 규칙이다(prev일 때)."""
     for i, line in enumerate(((card.get("source") or {}).get("body") or {}).get("periods") or []):
         m = OWN_PERIOD.fullmatch(str(line).strip())
         if not m or m[2] > m[3]:
@@ -435,10 +437,10 @@ def own_range(card):
             start, end = dt.date.fromisoformat(m[2]), dt.date.fromisoformat(m[3])
         except ValueError:  # 2026-02-30 같은 없는 날
             continue
-        before = period.previous({"start": m[2], "end": m[3]})
+        before = period.previous({"start": m[2], "end": m[3]}, mode)
         if before.get("error"):
             continue
-        prev = {"start": before["start"], "end": before["end"], "text": period.previous_text(start, end)}
+        prev = {"start": before["start"], "end": before["end"], "text": period.previous_text(start, end) if mode == "prev" else before["label"]}
         return {"range": {"start": m[2], "end": m[3]}, "prev": prev, "column": m[1], "line": i}
     return None
 
@@ -448,7 +450,7 @@ def comparison(card, ctx):
     비었으면 카드 자신의 기간 줄(own_range)을 쓴다(직전 기간은 그 줄을 빼고 같은 컬럼에 직전 기간을 건다). 둘 다 없으면 직전 기간이 없다(비교 문장·직전 칸을 뺀다)."""
     if (ctx or {}).get("range"):
         return ctx["range"], (ctx.get("prev") if card["source"].get("date") else None), lambda w: card_expr(card, ctx, w)
-    own = own_range(card)
+    own = own_range(card, (ctx or {}).get("compare_mode") or "prev")
     if not own:
         return None, None, lambda w: card_expr(card, ctx, w)
     body = card["source"]["body"]
@@ -551,7 +553,7 @@ def summary_data(card, ctx):
     cur = run(lambda: scalars(at(window), series[:1]))[0]
     prev, partial = None, False
     if before:  # 직전 값과 그 기간의 첫 날을 한 번에: 직전 기간 시작이 자료 첫 날보다 앞이면 일부(KPI 카드의 compareItem과 같은 덧말)
-        b, col = at(before), card["source"].get("date") if (ctx or {}).get("range") else own_range(card)["column"]
+        b, col = at(before), card["source"].get("date") if (ctx or {}).get("range") else own_range(card, (ctx or {}).get("compare_mode") or "prev")["column"]
         row = run(lambda: stats.one(b.aggregate(v=final_expr(b, series[0]), first=b[col].min())))
         prev, partial = row["v"], bool(before.get("start")) and (row["first"] is None or label(row["first"]) > before["start"])
     groups, note = None, ""
@@ -721,11 +723,11 @@ def deviation_data(card, ctx):
     t = expr.filter(expr[date].notnull())  # 시각이 빈 행은 시간대를 만들지 않는다
     def recent():
         """가장 최근 MAX_BUCKETS개 시간대 중 가장 이른 것: 그보다 오래된 행은 읽지 않는다."""
-        found = t.select(b=stats.period_start(t[date], BUCKET_UNITS[unit])).distinct()
+        found = t.select(b=stats.local_start(t[date], BUCKET_UNITS[unit])).distinct()
         return found.order_by(found.b.desc()).limit(MAX_BUCKETS).to_polars()["b"].to_list()
     latest = run(recent)
     if latest:
-        t = t.filter(t[date] >= min(latest))
+        t = t.filter(result.local_time(t[date]) >= min(latest))
     def first_entities():
         """엔티티 순으로 앞 MAX_ENTITIES+1개(빈 엔티티는 뒤): 집계를 이 엔티티로만 해 결과가 엔티티 수만큼 커지지 않게."""
         found = t.select(e=t[entity]).distinct()
@@ -734,7 +736,7 @@ def deviation_data(card, ctx):
     more, picked = len(picked) > MAX_ENTITIES, picked[:MAX_ENTITIES]
     known = [e for e in picked if e is not None]
     t = t.filter(t[entity].isin(known) | t[entity].isnull() if None in picked else t[entity].isin(known))
-    frame = run(lambda: t.group_by([t[entity].name("e"), stats.period_start(t[date], BUCKET_UNITS[unit]).name("b")]).aggregate(v=final_expr(t, series[0])).to_polars())
+    frame = run(lambda: t.group_by([t[entity].name("e"), stats.local_start(t[date], BUCKET_UNITS[unit]).name("b")]).aggregate(v=final_expr(t, series[0])).to_polars())
     buckets = sorted({str(b) for b in frame["b"].to_list()})[-MAX_BUCKETS:]
     cells = {}
     for e, b, v in frame.rows():

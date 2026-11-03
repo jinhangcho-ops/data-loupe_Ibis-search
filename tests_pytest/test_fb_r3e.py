@@ -63,7 +63,7 @@ def test_activity_summary_optional_slots_drop_columns(c):
 
 def test_group_vs_all_with_group_table(c):
     done = go("e53", {"대상": "uid", "조건": "reason = spam", "날짜": "ts", "집단 이름": "spam 차단", "집단 테이블": "blocks", "집단 테이블 컬럼": "uid"})
-    assert done["columns"] == ["지표", "전체 uid", "spam 차단"]
+    assert done["columns"] == ["지표", "전체 uid", "spam 차단", "p-value(집단 vs 나머지)"]
     got = {r["지표"]: (r["전체 uid"], r["spam 차단"]) for r in done["rows"]}
     assert got["uid 수"] == (3, 2) and got["전체 행 수"] == (8, 7)  # u9는 투표가 없어 빠진다
     assert got["하루 평균"] == pytest.approx((8 / 6, 7 / 5)) and got["하루 중앙값"] == (1, 1) and got["하루 최소"] == (1, 1) and got["하루 최대"] == (3, 3)

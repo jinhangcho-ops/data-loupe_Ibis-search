@@ -30,12 +30,12 @@ def remote(con):
 
 
 def local():
-    """받아 둔 결과를 넣는 이 PC의 DuckDB(임시 폴더의 파일). 처음 쓸 때 만든다. 계산 코어 수 설정(threads)을 따른다."""
+    """받아 둔 결과를 넣는 이 PC의 DuckDB(임시 폴더의 파일). 처음 쓸 때 만든다. 메모리 한도(memory)·계산 코어 수(threads) 설정을 따른다(server.open_con과 같게)."""
     if store["con"] is None:
         folder = scratch.make()
         try:
-            threads = settings.load().get("threads")
-            store["con"] = source.open_duckdb(Path(folder, "held.duckdb"), read_only=False, threads=threads)  # .local이 있어 source.release가 캐시를 비운다
+            found = settings.load()
+            store["con"] = source.open_duckdb(Path(folder, "held.duckdb"), False, found.get("memory"), found.get("threads"))  # .local이 있어 source.release가 캐시를 비운다
         except Exception:
             scratch.remove(folder)
             raise
@@ -44,10 +44,15 @@ def local():
 
 
 def drop(name):
+    """받아 둔 테이블을 지운다. 지운 뒤 남은 테이블이 없으면 DuckDB를 닫고 파일째 지운다(DROP만으로는 파일이 줄지 않는다)."""
+    if store["con"] is None:
+        return
     try:
-        source.drop_table(local(), name, exists=True)
+        source.drop_table(store["con"], name, exists=True)
     except Exception:  # 지우지 못해도 연결을 바꾸면 폴더째 지운다.
         pass
+    if not any(item[0] for item in store["items"].values()):
+        close()
 
 
 def forget(key):
@@ -193,10 +198,12 @@ def clear():
     """받아 둔 결과를 모두 지운다(연결을 바꾸거나 끊을 때). 연결 스레드에서 부른다."""
     store["items"].clear()
     store["jobs"].clear()
+    close()
+
+
+def close():
+    """받아 둔 결과의 DuckDB를 닫고 그 임시 폴더(파일)를 지운다. 기억한 항목은 두고, 다음에 쓸 때 local이 새로 만든다."""
     if store["con"] is not None:
-        try:
-            store["con"].disconnect()
-        except Exception:
-            pass
+        source.close(store["con"])  # 메모리 한도를 걸면 open_duckdb가 만든 임시 폴더도 지운다
         scratch.remove(store["folder"])
     store.update(con=None, folder=None)

@@ -5,7 +5,8 @@ text_match {match: 포함·으로 시작·으로 끝, text} · cond 조건 줄(�
 metric 지표 이름(지표 파일) · choice 고른 글자 · table 테이블 이름 · text 글자 · transform {func(함수 사전 행 함수 id), args}.
 check(tid, slots, columns) → [{slot, level(bad·warn·info), text}] (bad면 실행하지 않는다). columns = {컬럼: 종류}.
 compile(tid, slots, body, columns) → {ok, text, body, runs: [{label, route, body}], combine?, notes} 또는 {ok: False, reason}.
-runs의 route는 /api/query(행)·/api/pivot(묶어 집계, calc.pivot의 order·top 포함)·metric(지표 값)·nested(대상마다 구한 값을 다시 집계)이다. 값 하나로 합쳐야 하면 combine {op: ratio·percent·share·sub·add·mean_of·change·cumsum, a, b}을 준다.
+runs의 route는 /api/query(행)·/api/pivot(묶어 집계, calc.pivot의 order·top 포함, fill이면 빈 기간 0)·metric(지표 값)·nested(대상마다 구한 값을 다시 집계)·series(날짜 단위 합계를 빈 기간 0으로 채워 누적·이동·벗어난 기간)이다.
+값 하나로 합쳐야 하면 combine {op: ratio·percent·share·sub·add·mean_of·change·cumsum·rest·pareto, a, b}을 준다.
 요청을 실제로 돌려 합치는 것은 sentence_exec(POST /api/sentence/run)가 한다 — 화면은 나누거나 합치지 않는다."""
 import copy
 import re
@@ -172,7 +173,7 @@ def fits(kinds, kind):
 
 def agg_vs_value(t, slots, f, columns, name):
     """집계가 숫자 컬럼을 요구하는데 값 컬럼이 숫자가 아니면 bad."""
-    for key in ("값", "컬럼"):
+    for key in ("값",) if t["id"] == "e24" else ("값", "컬럼"):  # 24번은 {컬럼}으로 묶고 {값}을 집계한다
         col = name_of(slots.get(key))
         if f["kind_in"] == "num" and col in columns and columns[col] != "num":
             return [issue(name, "bad", f"‘{col}’은 {flow.kind_text(columns[col])} 컬럼이라 {f['label']}을(를) 구할 수 없어요. 숫자 컬럼을 고르거나 개수·고유 개수를 쓰세요.")]
@@ -326,22 +327,31 @@ def formula_one(text, columns=None):
         return (" and " if m.group(2) else " or ").join(f"{'notnull' if m.group(2) else 'isnull'}(col({c!r}))" for c in columns)
     if m:
         return f"{'notnull' if m.group(2) else 'isnull'}(col({name(m.group(1))!r}))"
+    def keep_null(g, inner):  # 부정 조건은 빈 값 행도 남긴다(parse.parse_one과 같은 규칙)
+        return f"(not {inner} or isnull(col({name(g)!r})))"
     m = parse.BETWEEN_RE.match(text)
     if m:
-        return f"between(col({name(m.group(1))!r}), {lit(m.group(1), m.group(2))}, {lit(m.group(1), m.group(3))})"
+        inner = f"between(col({name(m.group(1))!r}), {lit(m.group(1), m.group(3))}, {lit(m.group(1), m.group(4))})"
+        return keep_null(m.group(1), inner) if m.group(2) else inner
     m = parse.IN_RE.match(text)
     if m:
         items = [lit(m.group(1), parse.unquote(x)) for x in parse.split(parse.COMMA_RE, m.group(3)) if x.strip()]  # 따옴표 안의 쉼표는 값의 일부
         inner = f"isin(col({name(m.group(1))!r}), [{', '.join(items)}])"
-        return inner if m.group(2).lower() == "in" else f"not {inner}"
+        return inner if m.group(2).lower() == "in" else keep_null(m.group(1), inner)
     m = parse.LIKE_RE.match(text)
     if m:
-        fn = {"starts": "startswith", "ends": "endswith"}.get(m.group(2).lower(), "contains")
-        return f"{fn}(col({name(m.group(1))!r}), {m.group(3).strip().strip(chr(39) + chr(34))!r})"
+        word = " ".join(m.group(2).lower().split())
+        fn = {"starts": "startswith", "ends": "endswith", "matches": "regex_contains"}.get(word, "contains")
+        inner = f"{fn}(col({name(m.group(1))!r}), {m.group(3).strip().strip(chr(39) + chr(34))!r})"
+        return keep_null(m.group(1), inner) if word == "not like" else inner
     m = parse.COND_RE.match(text)
     if m:
+        value = m.group(3).strip().strip(chr(39) + chr(34))
+        if m.group(2) == "=~":
+            return f"lower(col({name(m.group(1))!r})) == {str(value).lower()!r}"
         op = {"=": "==", "!=": "!="}.get(m.group(2), m.group(2))
-        return f"col({name(m.group(1))!r}) {op} {lit(m.group(1), m.group(3).strip().strip(chr(39) + chr(34)))}"
+        inner = f"col({name(m.group(1))!r}) {op} {lit(m.group(1), value)}"
+        return f"({inner} or isnull(col({name(m.group(1))!r})))" if op == "!=" else inner
     raise Bad(f"조건 ‘{shown}’을 계산 식으로 바꿀 수 없어요.")
 
 
@@ -400,7 +410,7 @@ def compile(tid, slots, body=None, columns=None):
     return {**out, "issues": found}
 
 
-# ---------- 탐색 틀 1~50(51~53은 sentence_exec가 COMPILERS에 붙인다) ----------
+# ---------- 탐색 틀 1~50·54~56(51~53은 sentence_exec가 COMPILERS에 붙인다) ----------
 
 def e01(p):
     p.rows("모든 데이터")
@@ -466,9 +476,15 @@ def e12(p):
     p.group("값별 건수", [c], "count")
 
 
+REST_HOWS = ("count", "sum")  # 더해지는 집계: 상위 N 밖을 '기타 = 전체 − 상위 합' 한 줄로 보일 수 있다
+
+
 def e13(p):
     how, opts = agg_of(p.need("집계"))
-    p.group("상위", [p.col("무엇")], how, p.col("값"), opts, order=f"{result_col(how)} desc", top=min(int(p.get("N", 10)), MAX_TOP))
+    value = p.col("값")
+    a = p.group("상위", [p.col("무엇")], how, value, opts, order=f"{result_col(how)} desc", top=min(int(p.get("N", 10)), MAX_TOP))
+    if how in REST_HOWS:
+        p.combine = {"op": "rest", "a": a, "b": p.group("전체", [], how, value, opts)}
 
 
 def e14(p):
@@ -506,14 +522,19 @@ def e19(p):
     g, t = p.col("무엇"), p.col("대상")
     a = p.group("조건을 한 대상", [g], "count_distinct", t, where=p.need("조건"))
     b = p.group("전체 대상", [g], "count_distinct", t)
-    p.combine = {"op": "ratio", "a": a, "b": b, "by": [g]}
+    p.combine = denominator_shown(p, {"op": "ratio", "a": a, "b": b, "by": [g]})
 
 
 def e20(p):
     g, t = p.col("무엇"), p.col("대상")
     a = p.group("값 합계", [g], "sum", p.col("값"))
     b = p.group("대상 수", [g], "count_distinct", t)
-    p.combine = {"op": "ratio", "a": a, "b": b, "by": [g]}
+    p.combine = denominator_shown(p, {"op": "ratio", "a": a, "b": b, "by": [g]})
+
+
+def denominator_shown(p, spec):
+    """19·20번: 분모(대상 수)를 ‘대상 수’ 컬럼으로 함께 보이고 값이 큰 순으로, {최소 N}보다 대상이 적은 항목은 뺀다(표본이 작은 비율이 맨 위에 오지 않게)."""
+    return {**spec, "show_b": True, "b_name": "대상 수", "sort": "desc", **({"min_b": int(p.get("최소 N"))} if p.get("최소 N") else {})}
 
 
 def e21(p):
@@ -529,7 +550,8 @@ def unit_line(p):
 
 
 def e22(p):
-    p.group("단위별 고유 대상 수", [unit_line(p)], "count_distinct", p.col("대상"))
+    i = p.group("단위별 고유 대상 수", [unit_line(p)], "count_distinct", p.col("대상"))
+    p.runs[i]["fill"] = {"key": "기간", "unit": p.get("단위", "day")}  # 대상이 없는 기간도 0으로 보인다
 
 
 def e23(p):
@@ -542,10 +564,14 @@ def e23(p):
 
 def e24(p):
     t, c, order = p.col("대상"), p.col("컬럼"), p.need("정렬 기준")
-    new = word(f"처음_{c}")
-    p.calc(window_line("first_value", c, order, t) + f" 이름 {new}")
+    last = p.get("접점", "첫") == "마지막"
+    new = word(f"{'마지막' if last else '처음'}_{c}")
+    p.calc(window_line("last_value" if last else "first_value", c, order, t) + f" 이름 {new}")
     how, opts = agg_of(p.need("집계"))
-    p.group("처음 값 기준 집계", [new], how, None if not sql_funcs.needs_column(how) else c, opts)
+    value = p.col("값") if p.get("값") else t if how in ("count_distinct", "approx_count_distinct") else None  # 고유 개수는 비우면 대상 수
+    if value is None and sql_funcs.needs_column(how):
+        raise Bad(f"‘{sql_funcs.label_of(how)}’을(를) 구하려면 ‘값’ 칸을 채워 주세요.")
+    p.group(f"{'마지막' if last else '처음'} 값 기준 집계", [new], how, value if sql_funcs.needs_column(how) else None, opts)
 
 
 def e25(p):
@@ -610,7 +636,9 @@ def e33(p):
 
 
 def e34(p):
-    p.calc(f"창거르기 rank <= {int(p.get('N', 3))} 기준 {p.col('값')} desc 그룹 {p.col('무엇')}")
+    v = p.col("값")
+    ties = [c for c, k in (p.columns or {}).items() if k in ("num", "text", "date", "bool") and c != v and "," not in c and " " not in c]  # 같은 값이면 다른 컬럼 순으로 N개만(rank는 동점이면 N개를 넘는다)
+    p.calc(f"창거르기 row_number <= {int(p.get('N', 3))} 기준 {', '.join([f'{v} desc', *ties])} 그룹 {p.col('무엇')}")
     p.rows("행")
 
 
@@ -625,6 +653,13 @@ def e36(p):
     kind = p.need("종류")
     func = {"누적 합": "cum_sum", "누적 평균": "cum_mean", "누적 최소": "cum_min", "누적 최대": "cum_max", "이동 합": "moving_sum", "이동 평균": "moving_mean",
             "이동 최소": "moving_min", "이동 최대": "moving_max"}[kind]
+    span = p.get("단위", "행")
+    if span != "행":  # 날짜 단위로 묶어 합계 → 빈 기간 0 → 기간 N개 이동(행 N개가 아니라 달력 단위)
+        date = order_name(p, "정렬 기준")
+        if p.columns is not None and p.columns.get(date) != "date":
+            raise Bad(f"‘{span}’마다 묶으려면 정렬 기준이 날짜 컬럼이어야 해요.")
+        p.run(kind, "series", copy.deepcopy(p.body), date=date, unit=sentences.SPANS[span], value=p.col("값"), op={"window": func, "n": int(p.get("N", 3)), "name": kind})
+        return
     args = [int(p.get("N", 3)), "rows"] if func.startswith("moving") else []
     p.calc(window_line(func, p.col("값"), p.need("정렬 기준"), None, args))
     p.rows("행")
@@ -695,6 +730,29 @@ def e47(p):
     p.notes.append("SQL 식은 실행 전에 읽기만 하는지 한 번 더 검사해요.")
 
 
+def e54(p):
+    width = number_slot(p, "구간 폭", 10)
+    if width <= 0:
+        raise Bad("구간 폭은 0보다 큰 숫자여야 해요.")
+    p.calc(f"식 floor(col({p.col('값')!r}) / {width:g}) * {width:g} 이름 구간")
+    p.group("구간별 행 수", ["구간"], "count")
+    p.notes.append(f"구간은 시작 값이에요(0이면 0 이상 {width:g} 미만).")
+
+
+def e55(p):
+    g, v = p.col("무엇"), p.col("값")
+    a = p.group("항목별 합계", [g], "sum", v, order="전체 합계 desc")
+    p.combine = {"op": "pareto", "a": a, "b": p.group("전체 합계", [], "sum", v)}
+    p.notes.append("앞 항목들의 누적 비중이 80% 전이면 A, 95% 전이면 B, 나머지는 C예요.")
+
+
+def e56(p):
+    method = p.get("방법", "z-점수")
+    k = number_slot(p, "k", 3 if method == "z-점수" else 1.5)
+    p.run("벗어난 기간", "series", copy.deepcopy(p.body), date=p.col("날짜"), unit=sentences.SPANS[p.get("단위", "일")], value=p.col("값") if p.get("값") else None,
+          op={"outlier": "z" if method == "z-점수" else "iqr", "k": k})
+
+
 def measure(p):
     """좌표 틀 48~50의 {값}·{집계}: (집계 id, 옵션, 값 컬럼 또는 None). 집계가 컬럼을 요구하는데 값 칸이 비었으면 Bad."""
     how, opts = agg_of(p.need("집계"))
@@ -735,7 +793,7 @@ def e50(p):
     p.group("격자별", ["격자"], how, value, opts, order=f"{result_col(how)} desc", top=MAX_TOP)
 
 
-COMPILERS = {f"e{n:02d}": globals()[f"e{n:02d}"] for n in range(1, 51) if f"e{n:02d}" in globals()}
+COMPILERS = {f"e{n:02d}": globals()[f"e{n:02d}"] for n in range(1, 57) if f"e{n:02d}" in globals()}
 COMPILERS["e46"] = e14
 
 
@@ -783,6 +841,10 @@ def period_parts(p):
     if isinstance(v, str):
         col, _, rng = v.partition(" ")
         start, _, end = (x.strip() for x in rng.partition("~"))
+        if "~" not in rng and start:  # '날짜컬럼 최근 7일'처럼 쓴 기간(parse.parse_period와 같은 규칙)
+            from dashboard import period
+            found = period.parse(start)
+            start, end = (found.get("start") or "")[:10], (found.get("end") or "")[:10]
     else:
         col, start, end = v.get("column"), v.get("start", ""), v.get("end", "")
         if not col:
@@ -846,6 +908,7 @@ def metric_def(p):
         new = "기간"
         p.calc(f"식 truncate(col({col!r}), {p.get('단위', 'day')!r}) 이름 {new}")
         i = metric_run(p, "단위마다 지표", metric_ref(p, "지표"), by=new)
+        p.runs[i]["fill"] = {"key": new, "unit": p.get("단위", "day"), "time": col}  # 행이 없는 기간은 0, 자료가 중간에 끝난 마지막 기간은 뺀다
         p.combine = {"op": "mean_of", "a": i}
     elif no == 14:
         col, start, end = period_parts(p)

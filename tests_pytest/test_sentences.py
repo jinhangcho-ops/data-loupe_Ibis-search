@@ -1,4 +1,4 @@
-"""문장 틀 데이터(sentences.py): 탐색 1~53번(48~50은 좌표 틀, 51은 횟수 구간, 52·53은 대상별 요약표)·지표 1~15번이 모두 있고, 글의 빈칸이 빈칸 정의와 맞고, 함수 사전의 함수와 이어진다."""
+"""문장 틀 데이터(sentences.py): 탐색 1~56번(48~50은 좌표 틀, 51은 횟수 구간, 52·53은 대상별 요약표, 54~56은 분포·누적 비중·벗어난 기간)·지표 1~15번이 모두 있고, 글의 빈칸이 빈칸 정의와 맞고, 함수 사전의 함수와 이어진다."""
 import json
 import re
 
@@ -19,8 +19,8 @@ METRIC_NAMES = {1: "행 수", 2: "고유 대상 수", 3: "값 집계", 4: "첫 �
 
 def test_counts_and_numbers():
     explore, metric = [t for t in S.TEMPLATES if t["kind"] == "explore"], [t for t in S.TEMPLATES if t["kind"] == "metric"]
-    assert [t["no"] for t in explore] == list(range(1, 54)) and [t["no"] for t in metric] == list(range(1, 16))
-    assert len({t["id"] for t in S.TEMPLATES}) == len(S.TEMPLATES) == 68
+    assert [t["no"] for t in explore] == list(range(1, 57)) and [t["no"] for t in metric] == list(range(1, 16))
+    assert len({t["id"] for t in S.TEMPLATES}) == len(S.TEMPLATES) == 71
     assert {t["no"]: t["name"] for t in explore if t["no"] <= 25} == EXPLORE_NAMES and {t["no"]: t["name"] for t in metric} == METRIC_NAMES
     assert S.get("e26")["name"] == "중앙값과 분위수" and S.get("m15")["name"] == "누적 값"
     with pytest.raises(ValueError, match="문장 틀이 없"):

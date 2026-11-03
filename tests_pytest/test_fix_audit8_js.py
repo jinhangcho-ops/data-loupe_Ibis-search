@@ -1,6 +1,5 @@
 """8차 묶음 8E(화면 JS)를 node로 돌려 본다. node가 없으면 건너뛴다.
 test_fix_audit7_vscroll.py와 같은 방식: common.js의 표 부분을 가짜 화면 위에서 진짜 함수로 돌린다."""
-import pytest
 
 from test_fix_audit7_js import fn, needs_node, page, run
 from test_fix_audit7_vscroll import HARNESS, pieces
@@ -162,88 +161,3 @@ console.log(JSON.stringify({ union: host._grid.view, plain: plain._grid.view }))
     assert got == {"union": [0], "plain": []}
 
 
-# ---------- 8E3 기간을 건 채 설정을 바꾼 카드: 저장 값에 옛 설정의 값이 남지 않는다 ----------
-
-@needs_node
-def test_8e3_recompute_with_period_does_not_keep_old_stored_values(tmp_path):
-    ctl, dash = page("dashboard/dash_ctl.js"), page("dashboard/dashboard.html")
-    a = dash.index("  recompute: async")
-    recompute = dash[a:dash.index("\n  star:", a)]
-    got = run(tmp_path, r"""
-globalThis.DashBoard = { plain: c => ({ id: c.id, source: c.source }) };
-""" + fn(ctl, "function showLive") + "\n" + next(x for x in ctl.splitlines() if x.startswith("const storedCard")) + r"""
-let dashId = "d1", valuesDirty = false, valuesSeq = 0, period = { range: { start: "2026-01-01" } }, lastSaved;
-""" + next(x for x in dash.splitlines() if x.startswith("const cardSettings")) + "\n" + next(x for x in dash.splitlines() if x.startswith("const sigOf")) + r"""
-const needsValues = c => c, scheduleSave = () => {};
-let reply;
-const api = async () => ({ data: reply });
-const card = { id: 1, source: { table: "region" }, data: { labels: ["서울", "부산"] } };
-const board = { cards: [card], ctx: () => period, draw() {} };
-lastSaved = JSON.stringify([[], {}, [cardSettings(card)]]);   // 방금 저장한 대시보드
-const panelHost = {
-""" + recompute + r"""
-};
-(async () => {
-  reply = { labels: ["서울"] };
-  await panelHost.recompute(card);                 // 기간을 건 채 구함(설정은 그대로 = 저장된 값을 둔다)
-  const kept = JSON.stringify(storedCard(card).data);
-  card.source = { table: "product" }; reply = { labels: ["사과", "배"] };
-  await panelHost.recompute(card);                 // 원천을 바꿈
-  const saved = JSON.stringify(storedCard(card));
-  period = null; reply = { labels: ["사과"] };
-  await panelHost.recompute(card);                 // 기간을 풀면 새 값이 저장 대상
-  console.log(JSON.stringify({ kept, saved, after: storedCard(card).data, shown: card.data.labels }));
-})();
-""", fake=False)
-    assert got == {"kept": '{"labels":["서울","부산"]}', "saved": '{"id":1,"source":{"table":"product"},"data":{}}', "after": {"labels": ["사과"]}, "shown": ["사과"]}
-
-
-# ---------- 8E9 다른 대시보드를 열면 첫 그리기에는 다시 애니메이션 ----------
-
-@needs_node
-def test_8e9_open_dash_resets_board_animation(tmp_path):
-    dash = page("dashboard/dashboard.html")
-    got = run(tmp_path, r"""
-let openSeq = 0, dashId = "", dashName = "", dashMeta = {}, quiet = false, lastSaved = "", valuesDirty = false, seenAnimated;
-const $ = () => ({ value: "", textContent: "" }), metaOf = () => ({}), needsValues = c => c, snapshot = () => "", boardChanged = () => {};
-const panel = { close() {} }, dashUndo = { reset() {} }, ctl = { set: async () => {} };
-const board = { animated: true, set() { seenAnimated = this.animated; } };
-const api = async url => ({ dashboard: { name: "n", north_star: {}, palette: ["#000"], cards: [] } });
-""" + fn(dash, "async function openDash(") + r"""
-openDash("d2").then(() => console.log(JSON.stringify({ seenAnimated })));
-""", fake=False)
-    assert got == {"seenAnimated": False}
-
-
-# ---------- 8E10 제목 없는 칠한 카드 그림은 비율대로 ----------
-
-@needs_node
-def test_8e10_untitled_painted_card_keeps_ratio_height(tmp_path):
-    edit, board = page("dashboard/dash_edit.js"), page("core/board.js")
-    a = edit.index("  async pictures(")
-    method = edit[a:edit.index("\n  }\n", a) + 4]
-    got = run(tmp_path, r"""
-const sizes = [];
-function canvas() {
-  const c = { width: 0, height: 0, getContext: () => ({ fillRect() {}, fillText() {}, drawImage() {}, set fillStyle(v) {}, set font(v) {}, set textBaseline(v) {} }), toDataURL: () => "data:x" };
-  return c;
-}
-global.document = { createElement: () => canvas(), documentElement: { dataset: { theme: "light" } } };
-global.getComputedStyle = () => ({ getPropertyValue: n => n });
-""" + board + r"""
-const paintedCanvas = async (card, mode, width, height, scale) => { sizes.push(height); return Object.assign(canvas(), { width: width * scale, height: height * scale }); };
-const grid = { querySelector: () => null };
-const obj = {
-""" + method + r"""
-};
-(async () => {
-  const mk = title => ({ title, paint: () => null, id: "1" });
-  const out = {};
-  for (const title of ["", "이름"]) {
-    const card = mk(title), self = Object.assign(Object.create(obj), { cards: [card], picked: new Set([card]), grid });
-    sizes.length = 0; await self.pictures("wide", "light", "png"); out[title || "none"] = sizes[0];
-  }
-  console.log(JSON.stringify(out));
-})();
-""", fake=False)
-    assert got == {"none": 450, "이름": 414}

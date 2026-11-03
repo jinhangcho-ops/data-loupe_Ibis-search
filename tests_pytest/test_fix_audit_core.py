@@ -98,8 +98,10 @@ def test_raw_sql_cannot_change_from():
 # ---------- 7 원격 중복 조회 ----------
 
 def test_write_excel_over_limit_counts_while_writing_and_cleans_up(tmp_path, monkeypatch):
-    from core import result
+    """원격 DB는 미리 세지 않고 쓰면서 센다(로컬은 먼저 세서 바로 거절: test_cr_e1)."""
+    from core import held, result
     monkeypatch.setattr(result, "EXCEL_MAX_ROWS", 2)
+    monkeypatch.setattr(held, "remote", lambda con: True)
     monkeypatch.setattr(result, "get_count", lambda *a: pytest.fail("미리 세지 않는다"))
     path = tmp_path / "o.xlsx"
     with pytest.raises(ValueError, match="행까지"):

@@ -82,6 +82,7 @@ CHOICES = {
     "update_check": ["on", "off"],  # 앱을 열 때 GitHub Releases에 새 버전이 있는지 묻기(기본 on)
     "scan_unknown": ["run", "block"],  # 처리 용량을 미리 알 수 없을 때(그 연결이 추정을 못 함): 그대로 실행한다 / 실행하지 않는다(기본은 실행)
     "prep_where": ["all", "new"],  # 원격 DB(주소로 접속)의 전처리를 이 PC의 작업 사본에서 계산하는 범위: 전처리 전체 / 계산 컬럼·PCA가 있을 때만(나머지는 DB에서)
+    "week_start": ["mon", "sun"],  # 주 묶음의 시작 요일(기본 mon). 그 밖에 timezone(IANA 이름)·fiscal_start_month(회계연도 첫 달 1~12, 기본 1)는 valid가 따로 본다
 }
 
 # 끌어서 조절한 크기(px)와 전처리가 미리 볼 행 수(sample), 오래 걸린 작업이 끝났을 때 알림을 보내는 기준 시간(notify_after, 초, 기본 30), DuckDB 파일 조회의 메모리 한도(memory, MB, 기본은 제한 없음), DuckDB 계산에 쓰는 코어 수(threads, 기본은 전부): (최소, 최대). 화면은 이 범위를 server.CONSTANTS로 받는다. 0을 저장하면 기본값으로 돌아간다.
@@ -111,7 +112,25 @@ def valid(name, value):
         return type(value) is int and SIZES[name][0] <= value <= SIZES[name][1]
     if name in FLOATS:
         return type(value) in (int, float) and FLOATS[name][0] <= value <= FLOATS[name][1]
+    if name == "timezone":
+        return valid_zone(value)
+    if name == "fiscal_start_month":
+        return type(value) is int and 1 <= value <= 12
     return value in CHOICES.get(name, [])
+
+
+def valid_zone(value):
+    """시간대 설정 값: IANA 이름(Asia/Seoul)이나 고정 오프셋(+09:00). 지표의 날·주·월 경계를 이 시간대로 자른다(비우면 이 PC의 시간대)."""
+    if type(value) is not str or not value or len(value) > 64:
+        return False
+    if re.fullmatch(r"[+-]\d{2}:?\d{2}", value):
+        return True
+    import zoneinfo
+    try:
+        zoneinfo.ZoneInfo(value)
+    except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+        return False
+    return True
 
 
 def get(name):
@@ -209,7 +228,7 @@ def save(changes):
     if not isinstance(changes, dict) or not changes:
         raise ValueError("저장할 설정이 없어요.")
     for name, value in changes.items():
-        if not valid(name, value) and not ((name in SIZES or name in FLOATS) and value == 0 and type(value) in (int, float)):
+        if not valid(name, value) and not ((name in SIZES or name in FLOATS or name == "timezone") and value == 0 and type(value) in (int, float)):  # 0은 기본값으로(파일에서 뺀다). 시간대는 PC 시간대로
             raise ValueError(f"'{name}' 설정에 쓸 수 없는 값이에요: {value}")
     with updating(PATH.name):
         write(PATH.name, {name: value for name, value in {**load(), **changes}.items() if value != 0})

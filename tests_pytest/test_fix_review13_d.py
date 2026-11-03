@@ -8,7 +8,8 @@ import pytest
 
 from core import compare, server
 from dashboard import dash_calc, period
-from test_fix_audit7_js import fn, needs_node, page, run
+from test_dash_js import run_ts
+from test_fix_audit7_js import needs_node
 
 
 @pytest.fixture
@@ -61,29 +62,13 @@ def test_13d6_deviation_empty_entity_name(db):
 
 @needs_node
 def test_13d3_13d4_show_value(tmp_path):
-    cards = page("core/lib/dash_svg.js")
     nums = [(0.12345, "percent"), (-1234.5, "currency"), (-0.001, "number"), (2.5, "currency"), (1.005, "number"), (0.256, "percent"), (1234.567, "number"), (-0.4, "currency"), (1e21, "number"), (1e-9, "percent")]
-    got = run(tmp_path, f"""
+    got = json.loads(run_ts(tmp_path, f"""
 const out = {json.dumps(nums)}.map(([v, f]) => showValue(v, f));
 console.log(JSON.stringify([out, showValue("가,나"), showValue(true, "percent"), showValue("2026-01-01", "number", "일")]));
-""", fn(cards, "function showValue"), fn(cards, "function roundText"), fake=False)
+"""))  # 대시보드 화면(web/lib/calc.ts)의 showValue
     assert got[0] == [compare.format_value(v, f) for v, f in nums]
     assert got[1:] == ["가,나", "true", "2026-01-01일"]
-
-
-# ---------- 13D5 실시간에서 서버가 돌려준 카드 오류를 카드에 적는다 ----------
-
-@needs_node
-def test_13d5_live_cards_keeps_error(tmp_path):
-    ctl = page("dashboard/dash_ctl.js")
-    got = run(tmp_path, r"""
-globalThis.DashBoard = { plain: c => c };
-const a = { id: "a", source: { key: "k" }, data: {} }, b = { id: "b", source: { key: "k" }, data: {}, rangeNote: "옛 오류" };
-const board = { cards: [a, b], ctx: () => undefined, recompare: async () => {} };
-const api = async () => ({ results: [{ id: "a", error: "컬럼이 없어요" }, { id: "b", data: { values: {} } }] });
-liveCards(board, true).then(() => console.log(JSON.stringify([a.rangeNote, b.rangeNote])));
-""", fn(ctl, "function showLive"), fn(ctl, "async function liveCards"), next(x for x in ctl.splitlines() if x.startswith("const cardRequest")), fake=False)
-    assert got == ["컬럼이 없어요", ""]
 
 
 # ---------- 13D7 0년·아주 긴 주기는 한국어 안내 ----------

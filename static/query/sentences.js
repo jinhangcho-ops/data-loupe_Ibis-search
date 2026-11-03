@@ -47,10 +47,24 @@ const sentPeriod = (column, span) => (column && span && !span.error && (span.sta
 const sentFilter = (templates, query) => { const q = String(query ?? "").trim().toLowerCase(); return templates.filter(t => !q || `${t.no} ${t.name} ${t.text}`.toLowerCase().includes(q)); };
 // {컬럼: 종류} ← [[이름, 화면 타입]] (Funcs.kindOf가 서버 타입 이름을 종류로 바꾼다)
 const sentKinds = (cols, kindOf) => Object.fromEntries(cols.map(([name, type]) => [name, kindOf(type)]));
+// 문장 틀 분류: 서버가 분류를 주지 않으므로 틀 id → 분류 표. 표에 없는 틀(새로 생긴 것)은 마지막 분류에 들어간다.
+const SENT_GROUPS = [
+  ["보기·찾기", "e01 e02 e03 e04 e05 e33 e34"],
+  ["세기", "e06 e07 e08 e09 e10 e11 e12 e14 e15 e16 e22 e46 e51"],
+  ["집계·순위", "e13 e24 e25 e26 e27 e28 e29 e30 e31 e32 e39 e54 e55"],
+  ["비율·비교", "e17 e18 e19 e20 e21 e23 e35 e37 e38 e45 e52 e53"],
+  ["기간·누적", "e36 e42 e56"],
+  ["가공·좌표·기타", "e40 e41 e43 e44 e47 e48 e49 e50"],
+].map(([name, ids]) => [name, ids.split(" ")]);
+// 걸러낸 틀을 분류별로: [[분류 이름, 틀들]] (빈 분류는 뺀다)
+function sentGroups(templates) {
+  const of = t => { const k = SENT_GROUPS.findIndex(([, ids]) => ids.includes(t.id)); return k < 0 ? SENT_GROUPS.length - 1 : k; };
+  return SENT_GROUPS.map(([name], k) => [name, templates.filter(t => of(t) === k)]).filter(([, list]) => list.length);
+}
 // 질문 묶음 저장 모양
 const sentSetOf = (shared, period, items) => ({ shared, period, items: items.map(i => ({ template: i.template, slots: i.slots, period: i.period })) });
-// 끝난 표 → Chart.js 설정: 첫 글자·날짜 컬럼이 라벨, 숫자 컬럼이 계열. 그릴 수 없으면 null. 라벨이 날짜처럼 보이면 선, 아니면 막대.
-function sentChart(result, colors = []) {
+// 끝난 표 → 차트 섬(island)에 보낼 계열 그림 { draw, truncated }: 첫 글자·날짜 컬럼이 라벨, 숫자 컬럼이 계열. 그릴 수 없으면 null. 라벨이 날짜처럼 보이면 선, 아니면 막대.
+function sentChart(result) {
   const { columns, rows } = result;
   if (!rows?.length || !columns?.length) return null;
   const isNum = c => rows.every(r => r[c] == null || typeof r[c] === "number");
@@ -58,8 +72,8 @@ function sentChart(result, colors = []) {
   const values = nums.filter(c => c !== label);
   if (!values.length) return null;
   const shown = rows.slice(0, 50), dateLike = shown.every(r => /^\d{4}-\d{2}/.test(String(r[label] ?? "")));
-  return { type: dateLike ? "line" : "bar", data: { labels: shown.map(r => (label ? String(r[label] ?? "") : "")), datasets: values.map((c, i) => ({ label: c, data: shown.map(r => r[c]), backgroundColor: colors[i % (colors.length || 1)] ?? "#00968f", borderColor: colors[i % (colors.length || 1)] ?? "#00968f", tension: 0.3 })) },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: values.length > 1 } } }, truncated: rows.length > shown.length };
+  return { draw: { kind: "series", payload: { labels: shown.map(r => (label ? String(r[label] ?? "") : "")), datasets: values.map(c => ({ label: c, values: shown.map(r => r[c]) })) }, opts: { type: dateLike ? "line" : "bar" } },
+    truncated: rows.length > shown.length };
 }
 // 컴파일된 문장(/api/sentence/compile의 runs) → 대시보드 카드의 본문. 묶어 집계하는 요청 하나만 차트 카드로 만든다. 못 만들면 { reason }.
 function sentCard(compiled, title) {
@@ -99,9 +113,10 @@ function SentenceView(host, ctx) {
   const inScope = m => sameSource(m.scope?.key, source?.key) && (m.scope.schema ?? "") === (scope().schema ?? "") && (m.scope.table ?? "") === (scope().base ?? "");  // 이 연결·스키마·테이블의 지표인가(서버 my_metrics.scope_id와 같은 기준)
   const kinds = () => sentKinds(ctx.columns(), Funcs.kindOf);
   const colList = () => ctx.columns().map(c => [c[0], Funcs.kindOf(c[1])]);
-  const tabs = el("div", { className: "stabs" }, ...[["explore", "탐색"], ["metric", "지표"]].map(([k, t]) => { const b = el("button", { className: "tab", textContent: t, onclick: () => { tab = k; show(); } }); b.dataset.tab = k; return b; }));
+  const tabs = el("div", { className: "stabs" }, ...[["explore", "문장 만들기"], ["metric", "내 지표"]].map(([k, t]) => { const b = el("button", { className: "tab", textContent: t, onclick: () => { tab = k; show(); } }); b.dataset.tab = k; return b; }));
   const body = el("div", { className: "sbody" });
   host.replaceChildren(...(ctx.only ? [] : [tabs]), body);
+  let themeHooked = false;  // 화면 모드 단추에 결과 차트 다시 보내기를 달았나(첫 차트 때 한 번)
 
   // ----- 빈칸 하나 -----
   // 컬럼 고르기 칸: 눌러서 고르거나(select) 위쪽 컬럼 칩을 끌어다 놓는다
@@ -282,22 +297,24 @@ function SentenceView(host, ctx) {
     } catch (e) { out.replaceChildren(el("div", { className: "sissue bad", textContent: e.message })); }
   }
   function showResult(out, d) {
-    out.chartObj?.destroy();  // 이전 결과의 차트
-    out.chartObj = null;
-    const colors = [1, 2, 3, 4, 5, 6, 7, 8].map(i => getComputedStyle(document.documentElement).getPropertyValue("--c" + i).trim()), cfg = sentChart(d, colors);
+    const cfg = sentChart(d);
     const table = el("div", { className: "table-wrap" });
     resultTable(table, d);
-    const box = el("div", { className: "schart hidden" }, el("canvas", { role: "img", ariaLabel: "문장 결과 차트" }));
-    let chartObj = null;
+    const box = el("div", { className: "schart hidden" });
+    let send = null;
     const switchTo = view => {
       switcher?.querySelectorAll(".seg-b").forEach(b => b.classList.toggle("on", b.dataset.view === view));
       table.classList.toggle("hidden", view === "chart"); box.classList.toggle("hidden", view !== "chart");
-      if (view === "chart" && !chartObj && cfg) {
-        if (typeof Chart === "undefined") need(CHART_JS).then(() => switchTo(view));  // 첫 차트
-        else chartObj = out.chartObj = new Chart(box.querySelector("canvas"), cfg);
+      if (view === "chart" && !send && cfg) {  // 처음 차트를 볼 때 섬을 끼운다(화면 모드가 바뀌면 다시 보낸다)
+        const frame = el("iframe", { src: "/chart", title: "문장 결과 차트" });
+        box.append(frame);
+        send = frame.resend = island(frame, m => box.append(el("div", { className: "sissue bad", textContent: m })));
+        send(cfg.draw);
+        if (!themeHooked) { themeHooked = true; document.getElementById("theme")?.addEventListener("click", () => host.querySelectorAll(".schart iframe").forEach(f => f.resend?.())); }  // 화면 모드가 바뀌면 그 모드로 다시 그린다
       }
     };
     const switcher = cfg ? el("div", { className: "seg" }, ...[["table", "표"], ["chart", "차트"]].map(([k, t]) => { const b = el("button", { className: "seg-b" + (k === "table" ? " on" : ""), textContent: t, onclick: () => switchTo(k) }); b.dataset.view = k; return b; })) : "";
+    out.querySelectorAll?.(".schart iframe").forEach(f => f.resend?.dispose?.());  // 앞 결과의 섬 리스너를 바로 푼다(가짜 DOM 시험에는 querySelectorAll이 없다)
     out.replaceChildren(d.text ? el("div", { className: "stext-result", textContent: d.text }) : "", switcher,
       table, box, ...d.notes.map(n => el("div", { className: "hint", textContent: n })),
       d.more ? el("div", { className: "hint warn", textContent: `결과가 더 있어요. 처음 ${d.rows.length.toLocaleString()}행만 보여요. 기간이나 조건을 좁혀 보세요.` } ) : "",
@@ -340,7 +357,8 @@ function SentenceView(host, ctx) {
   }
   function showExplore() {
     const list = el("div", { className: "stpl" }), filter = el("input", { placeholder: "문장 찾기 (번호나 낱말)" });
-    const draw = () => list.replaceChildren(...sentFilter(explore, filter.value).map(t => el("button", { className: "tpl", title: t.text, onclick: () => { items.push(newItem(t.id)); showExplore(); } }, el("b", { textContent: t.no }), " " + t.name)));
+    const draw = () => list.replaceChildren(...sentGroups(sentFilter(explore, filter.value)).map(([name, tpls]) => el("details", { className: "sgroup", open: !!filter.value?.trim() },  // 찾는 중에는 모두 펼친다
+      el("summary", { textContent: `${name} (${tpls.length})` }), ...tpls.map(t => el("button", { className: "tpl", title: t.text, onclick: () => { items.push(newItem(t.id)); showExplore(); } }, el("b", { textContent: t.no }), " " + t.name)))));
     filter.oninput = draw; draw();
     const cards = el("div", { className: "scards" }, ...(items.length ? items.map(sentenceCard) : [el("div", { className: "hint", textContent: "왼쪽에서 문장을 고르면 여기에 질문이 생겨요. 여러 질문을 모아 한꺼번에 실행할 수 있어요." })]));
     const all = el("button", { className: "btn p", textContent: "모두 실행", disabled: !items.length, onclick: e => busy(e.currentTarget, async () => { for (const c of cards.querySelectorAll(".srun")) if (!c.disabled) c.click(); }) });

@@ -122,7 +122,7 @@ def test_sentence_check_accepts_spaced_column_in_condition_and_order():
 def test_in_values_keep_commas_inside_quotes_and_num_accepts_leading_dot():
     from query import sentence_run as sr
     assert sr.formula_one("store in 'a,b', c, 3") == "isin(col('store'), ['a,b', 'c', 3])"
-    assert sr.formula_one("store except 'x', y") == "not isin(col('store'), ['x', 'y'])"
+    assert sr.formula_one("store except 'x', y") == "(not isin(col('store'), ['x', 'y']) or isnull(col('store')))"  # except는 빈 값 행도 남긴다
     assert [sr.num(x) for x in (".5", "-.5", "+.25")] == [".5", "-.5", "+.25"]
     assert [sr.num(x) for x in ("5.", ".", "1.2.3", ". 5")] == ["'5.'", "'.'", "'1.2.3'", "'. 5'"]
 

@@ -1,4 +1,4 @@
-"""대시보드 화면(/dashboard): 경로, 위쪽 줄의 대시보드 전환 단추, 첫 화면의 다섯째 카드(대시보드 구역은 없음), 쿼리 화면의 탭 이동과 예전 주소(#dashboard) 보내기,
+"""대시보드 화면(/dashboard, Next): 경로, 위쪽 줄의 대시보드 전환 단추, 첫 화면의 다섯째 카드(대시보드 구역은 없음), 쿼리 화면의 탭 이동과 예전 주소(#dashboard) 보내기,
 [대시보드에 추가]의 고르는 창·"대시보드에서 보기" 링크, 최신화 팝업 조각 포함. 화면 파일의 글을 확인한다(브라우저 없이)."""
 import re
 from pathlib import Path
@@ -6,9 +6,11 @@ from pathlib import Path
 import pytest
 
 from core import server
+from dashboard import dash_app
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
-PAGES = ["/", "/search", "/prep", "/dashboard?legacy=1", "/collect", "/integrations"]  # 대시보드는 옛 화면(Next 빌드가 있어도)
+WEB = STATIC.parent / "web"
+PAGES = ["/", "/search", "/prep", "/collect", "/integrations"]  # Flask가 그리는 화면(대시보드는 Next가 위쪽 줄을 그린다)
 
 
 def page(client, path):
@@ -17,15 +19,16 @@ def page(client, path):
     return got.get_data(as_text=True)
 
 
-def test_dashboard_route_and_parts(client):
-    html = page(client, "/dashboard?legacy=1")
-    for part in ('id="d-pick"', 'id="d-settings"', 'id="d-add-pop"', 'href="/search"', "쿼리에서 카드 만들기", 'id="d-modal"', 'id="d-ctl"', 'id="d-palette"', 'id="d-targets"', 'id="refresh-pop"', 'id="rf-pill"'):
-        assert part in html, part
-    for script in ("dash.js", "dash_cards.js", "dash_rules.js", "dash_ctl.js", "dash_refresh.js", "board.js"):
-        assert f'src="/static/{next(STATIC.rglob(script)).relative_to(STATIC).as_posix()}"></script>' in html
-    assert "/static/dashboard/dash_menu.js" in html and "chart.umd.min.js" not in html  # 카드 추가 메뉴와 차트 라이브러리는 처음 쓸 때 불러온다(common.js의 need, CHART_JS)
+def test_dashboard_route_and_parts(client, monkeypatch, tmp_path):
+    built = tmp_path / "dashboard.html"
+    built.write_text('<html><head><script src="/next/_next/a.js"></script></head><body><script>self.__next_f=[]</script></body></html>', encoding="utf-8")
+    monkeypatch.setattr(dash_app, "NEXT_PAGE", built)
+    got = client.get("/dashboard")
+    nonce = re.search(r"script-src 'nonce-([^']+)'", got.headers["Content-Security-Policy"]).group(1)
+    assert got.status_code == 200 and got.get_data(as_text=True).count(f'<script nonce="{nonce}"') == 2  # Next 페이지의 스크립트마다 이번 응답의 nonce
     assert "/dashboard" in server.FREE  # 연결 없이도(조회가 도는 중에도) 열린다
-    assert client.get("/dashboard?open=abc").status_code == 200  # ?open=id로 바로 열기
+    assert client.get("/dashboard?open=abc").status_code == 200  # ?open=id로 바로 열기(쿼리·분석 화면의 "대시보드에서 보기")
+    assert not (STATIC / "dashboard").exists()  # 옛 화면은 없다
 
 
 def test_nav_has_dashboard_on_every_screen(client):
@@ -57,8 +60,8 @@ def test_query_screen_dashboard_tab_moved(client):
 def test_add_to_dashboard_chooser_and_link():
     text = (STATIC / "query" / "dash_add.js").read_text(encoding="utf-8")
     assert "어느 대시보드에 넣을까요?" in text and "새 대시보드" in text and "/api/dash/card/add" in text
-    assert "showAdded" not in text  # 알림 줄 쓰기는 core/dash.js 한 곳(쿼리·전처리 화면이 함께 씀)
-    shown = (STATIC / "core" / "dash.js").read_text(encoding="utf-8")
+    assert "showAdded" not in text  # 알림 줄 쓰기는 core/common.js 한 곳(쿼리·전처리 화면이 함께 씀, R4-D2b에서 dash.js를 지우며 옮김)
+    shown = (STATIC / "core" / "common.js").read_text(encoding="utf-8")
     assert '"/dashboard?open=" + encodeURIComponent(added.id)' in shown and "대시보드에서 보기" in shown
     prep = (STATIC / "prep" / "prep.html").read_text(encoding="utf-8")
     assert 'showAdded("err-ana", added.dashboard)' in prep and "[대시보드] 탭" not in prep  # 분석 화면도 같은 링크
@@ -69,9 +72,8 @@ def test_old_dashboard_tab_leftovers_are_gone():
         text = next(STATIC.rglob(name)).read_text(encoding="utf-8")
         for gone in ("ibis_dashboard", "DASH_KEY", "dash-newcard", "dash-palette", "showDashboards", "[쿼리에서 편집]"):
             assert gone not in text, (name, gone)
-    menu = (STATIC / "dashboard" / "dash_menu.js").read_text(encoding="utf-8")
-    assert "S.cols" not in menu and "state()" not in menu and "addCard(" not in menu  # 탐색의 검색에 기대지 않고 메뉴에서 테이블을 고른다
-    assert "/api/columns" in menu and "/api/tables" in menu
+    assert not (STATIC / "core" / "dash.js").exists()  # 대시보드 화면 전용은 Next(web/)로, 남은 공용 함수는 common.js로 옮겼다(R4-D2b)
+    assert "class Board" not in (STATIC / "core" / "board.js").read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("doc", ["README.md", *sorted(p.relative_to(STATIC.parent).as_posix() for p in (STATIC.parent / "docs").rglob("*.md"))])
@@ -81,7 +83,7 @@ def test_docs_do_not_point_to_old_tab(doc):
 
 
 def test_empty_period_ui_and_own_range():
-    ctl = (STATIC / "dashboard" / "dash_ctl.js").read_text(encoding="utf-8")
-    assert "비우면 카드의 원래 기간" in ctl and 'period: "최근 30일"' not in ctl and 'd.period || "최근 30일"' not in ctl
-    assert "blank = !this.per.value.trim()" in ctl
+    bar = (WEB / "components" / "shell" / "PeriodBar.tsx").read_text(encoding="utf-8")
+    assert "비우면 카드의 원래 기간" in bar and 'period: "최근 30일"' not in bar
+    assert "export function ownRange(card" in (WEB / "lib" / "calc.ts").read_text(encoding="utf-8")
     assert "function ownRange(card)" in (STATIC / "core" / "lib" / "dash_calc.js").read_text(encoding="utf-8")

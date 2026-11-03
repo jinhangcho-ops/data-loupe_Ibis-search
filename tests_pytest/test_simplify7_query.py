@@ -118,12 +118,12 @@ def test_latest_is_int_max_or_none():
 
 def test_cut_rows_notes_keep_their_words():
     ctx = types.SimpleNamespace(notes=[])
-    rows = list(range(mk.MAX_ROWS + 5))
-    assert mk.last_rows(rows, ctx, "코호트") == rows[-mk.MAX_ROWS:] and mk.top_rows(rows, ctx, "페이지") == rows[:mk.MAX_ROWS]
+    rows = list(range(mk.LAST_ROWS + 5))  # last_rows는 LAST_ROWS(400), top_rows는 MAX_ROWS(60)
+    assert mk.last_rows(rows, ctx, "코호트") == rows[-mk.LAST_ROWS:] and mk.top_rows(rows, ctx, "페이지") == rows[:mk.MAX_ROWS]
     mk.last_rows(rows, ctx)
-    assert ctx.notes == [f"코호트이 많아 최근 {mk.MAX_ROWS}개만 표에 실었어요(대표 값은 전체 기준).",
+    assert ctx.notes == [f"코호트이 많아 최근 {mk.LAST_ROWS}개만 표에 실었어요(대표 값은 전체 기준).",
                          f"페이지이 많아 앞의 {mk.MAX_ROWS}개만 표에 실었어요(대표 값은 전체 기준).",
-                         f"기간이 많아 최근 {mk.MAX_ROWS}개만 표에 실었어요(대표 값은 전체 기준)."]
+                         f"기간이 많아 최근 {mk.LAST_ROWS}개만 표에 실었어요(대표 값은 전체 기준)."]
 
 
 def test_users_by_unit_note_and_unique_users():

@@ -2,7 +2,6 @@
 from lazy import ibis
 from core import scan_size
 from metrics import my_metrics as mm
-from test_fix_audit_js import between
 
 S1 = {"key": "k1", "label": "L", "schema": "", "table": "events"}
 SLOTS = {"사용자": "uid", "시각": "ts", "광고 테이블": "ads", "광고비": "spend", "광고 날짜": "d"}
@@ -24,12 +23,6 @@ def test_schema_table_is_counted():
     sql = str(ibis.to_sql(con.table("big", database="s")))
     found = scan_size.limit_check(con, sql, config={"memory": 0.1, "scan_unknown": "block"})
     assert found["bytes"] and found["over"]  # 예전엔 0 B(읽는 테이블 없음)라 묻지 않았다
-
-
-def test_panel_fold_moves_focus_to_the_other_button():
-    js = between("dash_panel.js", "    const head = ", "  // 데이터:")
-    assert 'this.fold(true); this.root.querySelector(":scope > .side-strip")?.focus();' in js
-    assert 'this.fold(false); this.root.querySelector(".fold")?.focus();' in js
 
 
 def test_copy_asks_for_missing_align_key_column(folder):

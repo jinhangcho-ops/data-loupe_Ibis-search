@@ -14,7 +14,7 @@ DB나 파일의 테이블에서 원하는 행만 골라 보고, 합계·평균�
 | 탐색(단계별) | 데이터 → 행 합치기 → 조인 → 기간 → 조건 → 새 컬럼 → 정렬 → 보일 컬럼 순으로 칸을 채웁니다 | [functions/explore.md](functions/explore.md) |
 | 결과 | 결과 안 찾기, 집계·피벗, 파일로 내보내기, SQL 보기, 저장한 검색 | [functions/results.md](functions/results.md) |
 | 차트 | 막대·선 겹치기, 오른쪽 축, 컬럼을 끌어다 놓아 만들기, 대시보드에 추가 | [functions/chart.md](functions/chart.md) |
-| 문장으로 보기 | 문장 틀 53개의 빈칸을 채워 묻고, 질문 묶음으로 모아 실행 | [functions/sentences.md](functions/sentences.md) |
+| 문장으로 보기 | 문장 틀 56개의 빈칸을 채워 묻고, 질문 묶음으로 모아 실행 | [functions/sentences.md](functions/sentences.md) |
 | SQL | SQL 직접 쓰기, 문법 검사, 질문으로 SQL 만들기, 저장한 SQL·가상 테이블 | [functions/sql.md](functions/sql.md) |
 | 지표 | 지표 파일로 바로 구하기, 지표 틀로 내 지표 만들기 / 지표 사전 | [functions/metrics.md](functions/metrics.md) · [functions/metrics_catalog.md](functions/metrics_catalog.md) |
 | 함수 사전 | 집계·계산 칸에서 고르는 함수 전부와 [함수 찾기] | [functions/sql_functions.md](functions/sql_functions.md) |

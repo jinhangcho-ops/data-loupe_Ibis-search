@@ -1,7 +1,8 @@
-"""대시보드 화면 전환(Next.js 정적 내보내기): static/next/dashboard.html이 있으면 그것을, 없으면 옛 화면을 내려준다.
+"""대시보드 화면(Next.js 정적 내보내기): /dashboard는 web/out/dashboard.html만 내려준다(옛 화면은 없다). 빌드 결과가 없으면 빌드하라는 짧은 안내.
 빌드 결과가 있든 없든 같은 결과가 나오게 dash_app.NEXT_PAGE를 임시 파일로 바꿔 끼운다."""
 import re
 
+from conftest import ROOT
 from core import server
 from dashboard import dash_app
 
@@ -10,11 +11,20 @@ def csp_nonce(response):
     return re.search(r"script-src 'nonce-([^']+)'", response.headers["Content-Security-Policy"]).group(1)
 
 
-def test_old_dashboard_without_next(client, monkeypatch, tmp_path):
+def test_not_built_says_how_to_build(client, monkeypatch, tmp_path):
     monkeypatch.setattr(dash_app, "NEXT_PAGE", tmp_path / "없음.html")
-    r = client.get("/dashboard")
-    assert r.status_code == 200 and 'id="d-only"' in r.text
-    assert "'strict-dynamic'" not in r.headers["Content-Security-Policy"]  # 옛 page()의 CSP는 그대로
+    for url in ("/dashboard", "/dashboard?legacy=1"):  # 옛 화면으로 되돌리는 길은 없다
+        r = client.get(url)
+        assert r.status_code == 200 and "대시보드 화면이 빌드되지 않았어요" in r.text and "npm run build" in r.text
+        assert "<script" not in r.text and 'id="d-only"' not in r.text
+    assert not (ROOT / "static" / "dashboard").exists()
+
+
+def test_spec_requires_web_out():
+    """exe 빌드는 web/out을 늘 넣고, 없으면 멈춘다(옛 화면이 없어 빠진 채 묶이면 대시보드가 빈다)."""
+    spec = (ROOT / "DataLoupe.spec").read_text(encoding="utf-8")
+    assert '("web/out", "web/out")' in spec and 'if not os.path.isfile("web/out/dashboard.html"):' in spec and "sys.exit(" in spec
+    assert 'if os.path.isdir("web/out")' not in spec
 
 
 def test_next_dashboard(client, monkeypatch, tmp_path):
@@ -28,8 +38,8 @@ def test_next_dashboard(client, monkeypatch, tmp_path):
     assert f'<link nonce="{nonce}" rel="preload" as="script"' in r.text  # 미리 받기 링크도 script-src 검사를 받는다
     assert f"script-src 'nonce-{nonce}' 'strict-dynamic';" in r.headers["Content-Security-Policy"]
     assert any(h.startswith("key=") for h in r.headers.getlist("Set-Cookie"))
-    legacy = client.get("/dashboard?legacy=1")  # 전환 기간의 비교용: 빌드 결과가 있어도 옛 화면
-    assert 'id="d-only"' in legacy.text and "'strict-dynamic'" not in legacy.headers["Content-Security-Policy"]
+    legacy = client.get("/dashboard?legacy=1")  # 예전 비교용 주소도 Next 화면
+    assert "/next/_next/a.js" in legacy.text and "'strict-dynamic'" in legacy.headers["Content-Security-Policy"]
 
 
 def test_next_assets_served_from_web_out(client, monkeypatch, tmp_path):

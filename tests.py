@@ -461,14 +461,14 @@ def prep_new(tag, got, error, only, preview, values):
         "const": [{"keep": False}],
         "alln": [{"keep": False}],
         "score": [{"fill": {"how": "median"}}], "rate": [{"fill": {"how": "median"}}],
-        "amt": [{"fill": {"how": "median"}}],  # 빈 값이 1개(5.0%)라 5% 미만이 아니다.
+        "amt": [{"fill": {"how": "value", "value": 0}}, {"fill": {"how": "median"}}],  # 금액 단서가 있는 컬럼은 0 채우기를 먼저. 빈 값이 1개(5.0%)라 5% 미만이 아니다.
         "day": [{"fill": {"how": "mode"}}], "city": [{"fill": {"how": "mode"}}],
     }
     for col, ops_list in want.items():
         check(f"{tag} 추천: {col}", what(col), ops_list)
     check(tag + " 추천의 근거 문구에 숫자", (suggest["name"][0]["why"], suggest["amt"][0]["why"], suggest["code"][0]["why"]),
-          ("앞뒤에 공백이 있는 값이 12개 있어요.", "빈 값이 1개(5.0%)예요.", '빈 값을 뜻하는 글자가 있어요: "" 4개, "-" 4개, "N/A" 4개'))
-    check(tag + " 추천: 빈 값이 5% 미만이면 fill drop", [s["ops"] for s in prep_profile.suggestions({"kind": "int", "nulls": 1, "unique": 9}, {}, 0, 100)], [{"fill": {"how": "drop"}}])
+          ("앞뒤에 공백이 있는 값이 12개 있어요.", "빈 값이 1개(5.0%)예요. 금액 컬럼은 빈 값이 대개 0(거래 없음)이라 행을 빼거나 중앙값으로 채우면 합계가 틀어져요.", '빈 값을 뜻하는 글자가 있어요: "" 4개, "-" 4개, "N/A" 4개'))
+    check(tag + " 추천: 빈 값이 5% 미만이면 fill drop", [s["ops"] for s in prep_profile.suggestions({"name": "n", "kind": "int", "nulls": 1, "unique": 9}, {}, 0, 100)], [{"fill": {"how": "drop"}}])
     broken = [(col, i) for col, found in suggest.items() for i, s in enumerate(found) if "ops" in s
               and "error" in got("/api/preview", base="messy", columns=only(col, **{col: {"ops": s["ops"]}}))]
     check(tag + " 추천의 ops를 그대로 recipe에 넣으면 동작", broken, [])
@@ -676,7 +676,9 @@ def prep_section():
             stat("flag", "boolean", "bool", 0, 2),
         ]
         for w, g in zip(want, profile["columns"]):
-            check(f"{tag} profile: {w['name']}", {k: v for k, v in g.items() if k not in ("suggest", "infer")}, w)
+            check(f"{tag} profile: {w['name']}", {k: v for k, v in g.items() if k not in ("suggest", "infer", "checks")}, w)
+        checks = {g["name"]: g["checks"] for g in profile["columns"]}
+        check(f"{tag} profile 품질 점검 줄: 키 후보·IQR 밖·빈 날", (len(checks["id"]), "키 후보" in checks["id"][0], any("IQR" in c for c in checks["score"]), any("값이 없는 날" in c for c in checks["day"]), checks["flag"]), (1, True, True, True, []))
         for name, col, o, want in cases:
             check(f"{tag} {name}", values(preview(ops(col, **o)), col), want)
         r = preview(ops("score", fill={"how": "mean"}))
@@ -2292,7 +2294,7 @@ def sqlite_section(c, got):
     check("SQLite 검색(조인·조건·정렬·표시 컬럼)", r, {"count": len(mine), "rows": {"columns": ["order_id", "name"],
           "rows": [{"order_id": o["order_id"], "name": names.get(o["customer_id"])} for o in mine[:3]]}, "held": True, "server": False, "note": ""})  # 주소로 접속한 DB는 결과를 받아 둔다
     check("SQLite 행 수·값 목록", (got("/api/rowcount", base="orders"), got("/api/values", base="orders", column="status")),
-          ({"rows": len(orders)}, {"values": sorted(STATUSES), "more": False}))
+          ({"rows": len(orders)}, {"values": sorted(STATUSES), "more": False, "partial": False}))
     rows = {row["name"]: row for row in got("/api/summary", base="orders")["summary"]["rows"]}
     amounts = [o["amount"] for o in orders]
     check("SQLite 집계", (list(rows), rows["amount"]["min"], rows["amount"]["max"], round(rows["amount"]["mean"], 6), rows["note"]["nulls"]),
@@ -2390,7 +2392,7 @@ def main():
     check("/api/columns", got("/api/columns", base="orders")["columns"], [["order_id", "정수"], ["customer_id", "정수"], ["status", "문자"],
           ["amount", "정수"], ["ordered_on", "날짜"], ["paid_at", "날짜시간"], ["note", "문자"]])
     check("/api/rowcount", got("/api/rowcount", base="orders"), {"rows": len(orders)})
-    check("/api/values", got("/api/values", base="orders", column="status"), {"values": sorted(STATUSES), "more": False})
+    check("/api/values", got("/api/values", base="orders", column="status"), {"values": sorted(STATUSES), "more": False, "partial": False})  # partial: 앞 20만 행만 봤는지
 
     print("== 검색")
     name_of, city_of = {p["id"]: p["name"] for p in customers}, {p["id"]: p["city"] for p in customers}
@@ -2452,7 +2454,8 @@ def main():
     data = export("csv")
     check("CSV: BOM, 전체 행, 수식 값 앞에 '", (data[:3], len(data.decode("utf-8").splitlines()), b"'=1+1" in data), (b"\xef\xbb\xbf", len(orders) + 1, True))
     book = zipfile.ZipFile(io.BytesIO(export("xlsx")))  # 메모리 절약 모드는 글자를 시트 안에 바로 쓴다(sharedStrings가 아니라)
-    check("Excel: 수식 값 앞에 '", any("'=1+1" in book.read(n).decode("utf-8") for n in book.namelist() if n.endswith(".xml")), True)
+    xml = "".join(book.read(n).decode("utf-8") for n in book.namelist() if n.endswith(".xml"))
+    check("Excel: 수식을 실행하지 않고 쓰므로 값 그대로(' 없음)", ("'=1+1" in xml, "=1+1" in xml), (False, True))
     check("Parquet: 값을 그대로", pl.read_parquet(io.BytesIO(export("parquet")))["note"].to_list(), [o["note"] for o in orders])
     check("고정폭 텍스트(txt)는 머리글 줄부터 시작", export("txt").decode("utf-8-sig").splitlines()[0].split()[0], "order_id")  # 2차 F07: txt는 이제 고정폭 내보내기
     check("모르는 형식은 거절", error("/api/export", base="orders", format="xml")[:6], "파일 이름은")

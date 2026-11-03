@@ -1,16 +1,11 @@
 """보안 12D: 목표 파일의 문제 줄이 많아도 버리지 않고, 서버는 한 쪽(TARGET_PAGE개)씩 돌려주며 화면은 [보기]에서 [이전]/[다음]으로 넘겨 본다.
 파일은 모두 tmp_path 안에서 만든다."""
-import shutil
 import time
-from pathlib import Path
 
 import pytest
 
 from core import targets
 from dashboard import dash_app
-from test_fix_audit_js import run_node
-
-DASH_HTML = (Path(__file__).resolve().parents[1] / "static" / "dashboard" / "dashboard.html").read_text(encoding="utf-8")
 
 
 @pytest.fixture(autouse=True)
@@ -60,34 +55,3 @@ def test_route_returns_one_page(client, tmp_path):
     assert len(page("?offset=-5&limit=3")["errors"]) == 3 and page("?offset=x")["offset"] == 0  # 틀린 값은 기본값
 
 
-@pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
-def test_screen_view_button_pages_with_next(tmp_path):
-    a = DASH_HTML.index("function targetsNote")
-    code = DASH_HTML[a:DASH_HTML.index("async function loadTargets", a)]
-    body = """
-globalThis.document.body = mk("body");
-const asked = [];
-globalThis.api = async url => {
-  asked.push(url);
-  const offset = +(new URL(url, "http://x").searchParams.get("offset") ?? 0);
-  const errors = Array.from({ length: Math.max(0, Math.min(100, 250 - offset)) }, (_, i) => ({ line: offset + i + 1, message: `${offset + i + 1}번째 줄: <b>틀림</b>` }));
-  return { path: "p", rows: [], errors, error_total: 250, offset, limit: 100, error: "" };
-};
-(async () => {
-  const note = mk("div");
-  targetsNote(note, await api("/api/targets"), "비었음");
-  const view = note.children.find(c => c.textContent === "보기");
-  await view.onclick(); await sleep(0);
-  const box = document.body.children[0], inner = box.children[0], list = inner.children[1], [prev, next] = inner.children[2].children;
-  const first = { prev: prev.disabled, next: next.disabled, n: list.children.length, text: list.children[0].textContent };
-  await next.onclick(); await next.onclick();
-  const last = { prev: prev.disabled, next: next.disabled, n: list.children.length };
-  const empty = mk("div"); targetsNote(empty, { path: "", rows: [], errors: [], error_total: 0 }, "비었음");
-  console.log(JSON.stringify({ note: note.textContent, asked, first, last, empty: empty.textContent }));
-})();
-"""
-    got = run_node(tmp_path, body, parts=[code])
-    assert got["note"].startswith("목표 0개를 읽었어요. 읽지 못한 줄이 250개 있어요(1번째 줄: <b>틀림</b>)")
-    assert got["asked"] == ["/api/targets", "/api/targets?offset=0", "/api/targets?offset=100", "/api/targets?offset=200"]
-    assert got["first"] == {"prev": True, "next": False, "n": 100, "text": "1번째 줄: <b>틀림</b>"}  # 글자 그대로(textContent)
-    assert got["last"] == {"prev": False, "next": True, "n": 50} and got["empty"] == "비었음"

@@ -1,7 +1,8 @@
 """지표 계산 바탕: 지표 사전(metric_catalog)이 조합해 쓰는 작은 계산들. 행 단위·그룹 단위 일은 Ibis 식으로(어느 연결에서나 같게), 배열 계산은 numpy로 한다.
 - 세션·동시 수·사건 사이 시간·사용자 상태·코호트·LTV·NRR: 표(Ibis 식)를 받고, 큰 표는 Ibis가 집계해 작은 결과만 PC로 가져온다. 창 함수를 쓰는 것은 세션뿐이다(Polars 연결에서는 안 된다).
 - 분포·생존(Kaplan-Meier)·예측 평가·실험 통계: 숫자 배열을 받는다. 실험 통계는 math·numpy만 쓴다.
-- 시각은 초 단위로 센다(epoch_seconds). 기간 버킷 번호는 day/week(월요일 시작)/month 또는 N일 묶음이다.
+- 시각은 초 단위로 센다(epoch_seconds). 기간 버킷 번호는 day/week(설정 week_start, 기본 월요일 시작)/month 또는 N일 묶음이다.
+- 날·주·월 경계는 설정 timezone(없으면 이 PC의 시간대)의 시각으로 자른다(시간대가 있는 컬럼만, sql_funcs.to_timezone). 시간대 없는 시각은 그대로 둔다.
 - 구할 수 없는 값(0으로 나누기 등)은 None이다."""
 import datetime as dt
 import math
@@ -9,8 +10,10 @@ import math
 import numpy as np
 from lazy import ibis
 
+from core import settings
 from core.funnel import step_value
 from core.parse import check_name
+from core.sql_funcs import to_timezone
 
 MAX_FETCH_ROWS = 5_000_000  # 열 하나를 PC로 가져올 상한. 넘으면 표본이라고 알린다
 EPOCH = dt.date(1970, 1, 1)
@@ -62,9 +65,19 @@ def epoch(col):
     return col.cast("timestamp").epoch_seconds()
 
 
+def local_time(col):
+    """날짜를 자를 시각: 시간대가 있는 컬럼은 설정 timezone의 벽시계 시각으로, 없는 것은 그대로(시간대 없는 날짜시간)."""
+    return to_timezone(col).cast("timestamp")
+
+
 def day_index(col):
-    """1970-01-01부터 센 날 번호."""
-    return epoch(col) // 86400
+    """1970-01-01부터 센 날 번호(설정 timezone의 날)."""
+    return local_time(col).epoch_seconds() // 86400
+
+
+def week_shift():
+    """주 번호를 셀 때 날 번호에 더하는 수: 1970-01-01(목)이 든 주의 시작이 월요일이면 3일 전, 일요일이면 4일 전."""
+    return 4 if settings.load().get("week_start") == "sun" else 3
 
 
 def check_unit(unit):
@@ -75,14 +88,14 @@ def check_unit(unit):
 
 
 def bucket_index(col, unit):
-    """시각이 든 기간 버킷의 번호(정수 식). week는 월요일 시작."""
+    """시각이 든 기간 버킷의 번호(정수 식). week는 설정 week_start(기본 월요일) 시작."""
     unit = check_unit(unit)
     if unit == "month":
-        stamp = col.cast("timestamp")
+        stamp = local_time(col)
         return stamp.year() * 12 + stamp.month() - 1
     days = day_index(col)
     if unit == "week":
-        return (days + 3) // 7
+        return (days + week_shift()) // 7
     return days if unit == "day" else days // unit
 
 
@@ -92,7 +105,7 @@ def bucket_start(index, unit):
     if unit == "month":
         return dt.date(index // 12, index % 12 + 1, 1)
     if unit == "week":
-        return EPOCH + dt.timedelta(days=index * 7 - 3)
+        return EPOCH + dt.timedelta(days=index * 7 - week_shift())
     return EPOCH + dt.timedelta(days=index * (1 if unit == "day" else unit))
 
 
@@ -106,13 +119,17 @@ def today():
     return dt.date.today()
 
 
+def current_days():
+    """아직 안 끝났다고 보는 날 번호들: PC의 오늘과 UTC의 오늘(경계 시간대와 PC 시간대가 다를 수 있다)."""
+    return {(today() - EPOCH).days, (dt.datetime.now(dt.timezone.utc).date() - EPOCH).days}
+
+
 def open_bucket(table, time, unit):
     """자료가 마지막 기간 중간에 끝났으면 그 기간(진행 중이라 값이 아직 작다)의 번호, 아니면 None. 자료의 마지막 날이 PC의 오늘이면 그날은 아직 안 끝났다고 본다(day 단위의 오늘도 진행 중)."""
     r = rows(table.aggregate(p=bucket_index(table[time], unit).max(), d=day_index(table[time]).max()))[0]
     if r["p"] is None:
         return None
-    now = {(today() - EPOCH).days, (dt.datetime.now(dt.timezone.utc).date() - EPOCH).days}  # 경계는 UTC라 PC 오늘과 UTC 오늘 둘 다 진행 중
-    last = int(r["d"]) - (int(r["d"]) in now)
+    last = int(r["d"]) - (int(r["d"]) in current_days())
     end = int(r["p"]) if unit == "day" else bucket_last_day(int(r["p"]), unit)  # day는 버킷 번호가 곧 날 번호(아주 먼 날짜도 날짜로 바꾸지 않는다)
     return None if end <= last else int(r["p"])
 
@@ -212,19 +229,31 @@ def monthly_peak(times, counts):
 
 # ---------- 사건 사이 시간 ----------
 
-def seconds_between(table, user, time, event, first, second):
-    """사용자별로 first 사건의 가장 이른 시각과, 그 뒤(같은 시각 포함) second 사건의 가장 이른 시각의 차이(초) 배열, first를 한 사용자 수."""
+def seconds_between(table, user, time, event, first, second, window_days=None, later=None):
+    """사용자별로 first 사건의 시각과, 그 뒤(같은 시각 포함) second 사건의 가장 이른 시각의 차이(초) 배열, first를 한 사용자 수.
+    window_days(일)를 주면 first 뒤 그 안의 second만 세고, first를 할 때마다 한 번의 시도로 본다(분석 퍼널 funnel.reached와 같다). 없으면 가장 이른 first부터 제한 없이.
+    later(기간을 걸지 않은 같은 표)를 주면 second는 거기서 찾는다: first만 기간 안이면 된다(기간 끝 무렵에 시작한 사람의 전환이 빠지지 않게). 값은 사용자의 첫 전환 시도의 차이."""
     need(table, user, event, time)
     kind = table[event].type()
     a, b = step_value(kind, first), step_value(kind, second)
-    base = table.select(u=table[user], e=table[event], t=table[time].cast("timestamp"))
-    base = base.filter(base.u.notnull(), base.t.notnull())
-    starts = base.filter(base.e == a).group_by("u").aggregate(ta=base.t.min())
-    joined = base.filter(base.e == b).select("u", "t").join(starts, "u").filter(lambda j: j.t >= j.ta)
-    done = joined.group_by("u").aggregate(ta=joined.ta.min(), tb=joined.t.min())
+
+    def events(t):
+        x = t.select(u=t[user], e=t[event], t=t[time].cast("timestamp"))
+        return x.filter(x.u.notnull(), x.t.notnull())
+    base, after = events(table), events(table if later is None else later)
+    starts = base.filter(base.e == a)
+    starts = starts.group_by("u").aggregate(ta=starts.t.min()) if window_days is None else starts.select("u", ta=starts.t).distinct()
+    joined = after.filter(after.e == b).select("u", "t").join(starts, "u").filter(lambda j: j.t >= j.ta)
+    if window_days is None:
+        done = joined.group_by("u").aggregate(ta=joined.ta.min(), tb=joined.t.min())
+    else:
+        span = ibis.interval(milliseconds=round(window_days * 86400 * 1000))
+        joined = joined.filter(lambda j: j.t <= j.ta + span)
+        tries = joined.group_by(["u", "ta"]).aggregate(tb=joined.t.min())
+        done = tries.join(tries.group_by("u").aggregate(ta=tries.ta.min()), ["u", "ta"])  # 사용자마다 첫 전환 시도
     gaps = done.select(sec=epoch(done.tb) - epoch(done.ta))
     values = np.asarray(fetch_table(gaps, "사용자")["sec"].to_numpy(zero_copy_only=False), dtype=float)
-    return values, int(rows(starts.aggregate(n=starts.u.count()))[0]["n"])
+    return values, int(rows(starts.aggregate(n=starts.u.nunique()))[0]["n"])
 
 
 def payback_day(cum_arpu, cac):
@@ -330,12 +359,15 @@ def user_states(table, user, time, unit="month", inactive_days=None, notes=None)
 
 # ---------- 코호트 ----------
 
-def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=None):
+def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=None, amount=None):
     """코호트(첫 활동 기간) × 경과 기간 N의 유지율 {unit, mode, cohorts: [{cohort, size, values}], partial}. 아직 관찰할 수 없는 칸과, 자료가 중간에 끝난 마지막 기간의 칸(N > 0)은 None이고 그런 칸을 뺐으면 partial이 참.
-    classic = 정확히 N에 활동한 비율, rolling = N 이후에라도 활동한(마지막 활동 ≥ N) 비율, range = span=(a, b) 안에 활동한 비율(값이 하나)."""
+    classic = 정확히 N에 활동한 비율, rolling = N 이후에라도 활동한(마지막 활동 ≥ N) 비율, range = span=(a, b) 안에 활동한 비율(값이 하나).
+    amount(금액 컬럼)를 주면 매출 유지율: 코호트의 N 기간 매출 ÷ 첫 기간 매출(classic만)."""
     check_unit(unit)
     if mode not in ("classic", "rolling", "range"):
         raise ValueError("코호트 방식은 classic·rolling·range 중 하나예요.")
+    if amount and mode != "classic":
+        raise ValueError("매출 유지율은 classic 방식만 돼요.")
     if mode == "range" and not (isinstance(span, (tuple, list)) and len(span) == 2 and 0 <= span[0] <= span[1]):
         raise ValueError("range 방식에는 span=(시작 N, 끝 N)이 있어야 해요(0 ≤ 시작 ≤ 끝).")
     act = active_buckets(table, user, time, unit)
@@ -346,7 +378,10 @@ def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=
     last = latest(act, "p")
     if last is None:  # 행이 없거나 시각이 전부 비었다
         return {"unit": unit, "mode": mode, "cohorts": []}
-    counts = cohort_counts(j, mode, span)
+    counts, base = cohort_counts(j, mode, span), sizes
+    if amount:
+        counts = cohort_revenue(table, user, time, unit, amount, first)
+        base = {f: counts.get((f, 0), 0) for f in sizes}
     width = 1 if mode == "range" else n_max + 1
     still = open_bucket(table, time, unit)  # 자료가 마지막 기간 중간에 끝났다
     partial = False
@@ -357,9 +392,18 @@ def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=
             lo, hi = (f + span[0], f + span[1]) if mode == "range" else (f + n, f + n)  # range는 창 [a, b]가 다 지나야 볼 수 있다
             cut = still is not None and lo <= still <= hi and still > f  #진행 중인 기간의 칸은 확정이 아니다(첫 기간 자체는 늘 100%라 둔다)
             partial = partial or cut
-            values.append(ratio(counts.get((f, n), 0), sizes[f]) if hi <= last and not cut else None)
-        cohorts.append({"cohort": bucket_start(f, unit).isoformat(), "size": sizes[f], "values": values})
+            values.append(ratio(counts.get((f, n), 0), base[f]) if hi <= last and not cut else None)
+        cohorts.append({"cohort": bucket_start(f, unit).isoformat(), "size": sizes[f], "values": values, **({"weight": base[f]} if amount else {})})  # 매출 유지율은 첫 기간 매출로 가중
     return {"unit": unit, "mode": mode, "cohorts": cohorts, "partial": partial}
+
+
+def cohort_revenue(table, user, time, unit, amount, first):
+    """{(코호트 번호 f, N): 매출 합}. first는 사용자별 첫 활동 기간(u, f) 표."""
+    need(table, amount)
+    x = table.select(u=table[user], p=bucket_index(table[time], unit), a=table[amount].fill_null(0))
+    x = x.filter(x.u.notnull(), x.p.notnull()).join(first, "u")
+    g = x.group_by(["f", (x.p - x.f).name("off")]).aggregate(r=x.a.sum())
+    return {(int(r["f"]), int(r["off"])): float(r["r"] or 0) for r in rows(g)}
 
 
 def cohort_counts(j, mode, span):
@@ -386,13 +430,13 @@ def cohort_counts(j, mode, span):
 
 
 def average_curve(cohorts):
-    """코호트 크기로 가중한 평균 유지율 곡선(N마다, 값 있는 코호트만). 값이 하나도 없는 N은 None."""
+    """코호트 크기(매출 유지율이면 첫 기간 매출 weight)로 가중한 평균 유지율 곡선(N마다, 값 있는 코호트만). 값이 하나도 없는 N은 None."""
     width = max((len(c["values"]) for c in cohorts), default=0)
     curve = []
     for n in range(width):
         have = [c for c in cohorts if c["values"][n] is not None]
-        size = sum(c["size"] for c in have)
-        curve.append(sum(c["values"][n] * c["size"] for c in have) / size if size else None)
+        size = sum(c.get("weight", c["size"]) for c in have)
+        curve.append(sum(c["values"][n] * c.get("weight", c["size"]) for c in have) / size if size else None)
     return curve
 
 
@@ -411,7 +455,7 @@ def flattening_point(curve, eps=FLAT_EPS, run=FLAT_RUN):
 
 def ltv(table, user, time, amount, n_days, unit="day"):
     """코호트(첫 활동 기간)별 LTV_N [{cohort, size, revenue, ltv, complete}]. revenue = 각 사용자의 첫 활동일로부터 N일 이내 매출 합, ltv = revenue / 코호트 크기.
-    complete = 코호트의 마지막 날 + N일이 자료의 마지막 날 안이면 참(아니면 아직 N일이 다 안 지난 사람이 있다)."""
+    complete = 코호트의 마지막 날 + N일이 자료의 마지막 날(오늘이면 그 전날) 안이면 참(아니면 아직 N일이 다 안 지난 사람이 있다)."""
     need(table, user, time, amount)
     if isinstance(n_days, bool) or not isinstance(n_days, int) or n_days < 0:
         raise ValueError("N일은 0 이상의 정수여야 해요.")
@@ -426,6 +470,7 @@ def ltv(table, user, time, amount, n_days, unit="day"):
     last_day = latest(t, "day")
     if last_day is None:
         return []
+    last_day -= last_day in current_days()  # 오늘은 아직 안 끝난 날
     out = []
     for f in sorted(sizes):
         total = float(revenue.get(f, 0))

@@ -2,11 +2,12 @@
 import contextlib
 import csv
 import datetime as dt
+import hashlib
 import json
 import re
 from pathlib import Path
 
-from flask import jsonify, request
+from flask import has_request_context, jsonify, request
 from lazy import Later, ibis, preload
 
 from core import held
@@ -19,6 +20,7 @@ from core.server import app, get_con, state
 
 
 parse = Later("core.parse")
+querying = Later("core.querying")
 geo_detect = Later("geo.detect")  # 좌표 컬럼 인식(프로파일 응답에 얹는다)
 prep_geo = Later("geo.prep_geo")  # 좌표 단계(recipe.geo)가 있을 때만 올라온다
 prep_derive = Later("core.prep_derive")
@@ -40,6 +42,43 @@ SUMMARY_HEAD = ["컬럼", "타입", "빈 값 비율", "빈 값 수", "고유값 
 EXAMPLES, EXAMPLE_SCAN, EXAMPLE_LEN = 3, 2000, 50  # 예시 값 개수, 예시를 고르려고 훑는 앞 행 수, 예시 한 개의 글자 수 상한
 SAMPLES = {}  # 마지막으로 읽은 표본 하나 {테이블 열쇠: (크기, pyarrow 표, 표본 정보)}. 통계에 이어 타입 추천이 같은 표본을 쓴다.
 server.ON_SWITCH.append(SAMPLES.clear)  # 연결을 바꾸거나 끊으면 버린다(열쇠에 연결 열쇠가 들어 있어 다시 쓸 수 없고 최대 100만 행이 메모리에 남는다)
+HANDOFF = "@"  # 전처리로 보낸 검색의 기준 이름 앞글자(@검색 이름). 연결의 테이블 대신 그 검색의 식에서 시작한다
+HANDOFFS = {}  # {기준 이름: {"body": 검색 요청, "rows": 세어 둔 행 수}}. 이 프로그램이 켜져 있는 동안만
+server.ON_SWITCH.append(HANDOFFS.clear)  # 검색은 그 연결의 테이블을 읽는다
+
+
+def hand_over(body, name):
+    """검색 요청(body)을 전처리의 기준 표로 등록하고 기준 이름(@이름)을 돌려준다. 같은 이름이면 새 검색으로 바꾼다. 데이터는 읽지 않는다."""
+    querying.build(body)  # 잘못된 검색은 지금 거부한다
+    base = HANDOFF + ((name.strip()[:80] if isinstance(name, str) else "") or "검색 결과")
+    HANDOFFS[base] = {"body": body, "rows": None}
+    return base
+
+
+def handed(base):
+    """전처리로 보낸 검색이면 그 항목, 아니면 None. @로 시작하는데 없으면(프로그램을 다시 켰거나 연결을 바꿈) 거부한다."""
+    if not isinstance(base, str) or not base.startswith(HANDOFF):
+        return None
+    if base not in HANDOFFS:
+        raise ValueError(f"전처리로 보낸 검색 '{base[1:]}'이 없어요. 쿼리 화면에서 [전처리로 보내기]를 다시 누르세요.")
+    return HANDOFFS[base]
+
+
+def start_table(recipe):
+    """recipe의 기준 식: 전처리로 보낸 검색이면 그 검색의 식(연결이 못 하는 계산이면 이 PC에 받아 둔 결과), 아니면 None(연결의 테이블)."""
+    found = handed(recipe.get("base"))
+    return querying.runnable(found["body"], ask=request.json if has_request_context() else None) if found else None  # 확인이 필요하면 Confirm(server.on_error가 응답으로). 연결 스레드(scan_sql)에서는 묻지 않는다
+
+
+def count_rows(body):
+    """기준 표의 전체 행 수: 보낸 검색이면 그 결과 행 수(한 번 세어 둔다), 아니면 server.row_count."""
+    found = handed(body["base"])
+    if found is None:
+        return server.row_count(body.get("schema"), body["base"])
+    if found["rows"] is None:
+        expr = start_table(body)
+        found["rows"] = run(lambda: result.get_count(expr))
+    return found["rows"]
 
 
 @server.late_constants("prep")
@@ -88,7 +127,8 @@ def table_key(body):
     base = body.get("base")
     if not isinstance(base, str) or not base:
         raise ValueError("테이블을 고르세요.")
-    return "|".join([server.connection_key(), body.get("schema") or "", base])
+    found = handed(base)  # 보낸 검색은 같은 이름이어도 검색이 다르면 다른 표
+    return "|".join([server.connection_key(), body.get("schema") or "", base, *([hashlib.sha1(json.dumps(found["body"], sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:16]] if found else [])])
 
 
 @app.get("/api/prep/table")
@@ -184,8 +224,10 @@ def local_recipe(recipe):
 def source_table(recipe):
     """DB에서 읽을 기준 테이블: 행 거르기를 걸고, 사본으로 받을 때는 쓰는 컬럼만 고른다."""
     con, schema = get_con(), recipe.get("schema") or None
-    parse.check_name(recipe["base"], server.table_names(con, schema), "테이블")  # 목록·스키마는 기억해 둔 것(사본을 다시 쓸 때 DB에 묻지 않게)
-    t = server.any_table(con, recipe["base"], schema, vts={})
+    t = start_table(recipe)
+    if t is None:
+        parse.check_name(recipe["base"], server.table_names(con, schema), "테이블")  # 목록·스키마는 기억해 둔 것(사본을 다시 쓸 때 DB에 묻지 않게)
+        t = server.any_table(con, recipe["base"], schema, vts={})
     filters = recipe.get("filters") or []
     if filters:
         t = t.filter(*[parse.predicate(cond, t) for cond in filters])
@@ -277,11 +319,13 @@ def built(recipe, info=None):
     if local_mode(recipe):
         table = working_copy(recipe)
         return run(lambda: prep_expr.build(held.local(), local_recipe(recipe), table, info, get_con()))  # 지점·영역 테이블은 원래 연결에서 읽는다
-    con = get_con()
-    return run(lambda: prep_expr.build(con, recipe, None, info))
+    con, table = get_con(), start_table(recipe)
+    return run(lambda: prep_expr.build(con, recipe, table, info))
 
 
 def base_table(body):
+    if (t := start_table(body)) is not None:
+        return t
     con, schema = get_con(), body.get("schema") or None
     parse.check_name(body["base"], source.list_tables(con, schema), "테이블")
     return source.get_table(con, body["base"], schema)
@@ -301,7 +345,7 @@ def shape():
     """행 수와 컬럼의 이름·타입·종류. 조회는 행 수 세기뿐이다. count가 false면(통계를 끈 때) 행 수도 세지 않고 null(데이터를 읽지 않는다)."""
     body = request.json
     table = base_table(body)
-    return jsonify(prep_profile.shape(table, server.row_count(body.get("schema"), body["base"]) if body.get("count", True) else None))
+    return jsonify(prep_profile.shape(table, count_rows(body) if body.get("count", True) else None))
 
 
 def known_rows(body):
@@ -309,7 +353,7 @@ def known_rows(body):
     if body.get("count", True) is False:
         return None
     item = held.store["items"].get(cached_key(body)) if not body.get("filters") and held.remote(get_con()) else None
-    return item[1] if item and item[0] else server.row_count(body.get("schema"), body["base"])
+    return item[1] if item and item[0] else count_rows(body)
 
 
 def sample_run(arrow, work, con=None):
@@ -570,6 +614,9 @@ def preview():
     if ask := copy_gate(recipe):
         return ask
     expr, origin = built(recipe, info)
+    con = get_con()
+    if con.name == "bigquery" and not local_mode(recipe) and prep_expr.changes_rows(recipe) and (ask := server.scan_gate(request.json, lambda: server.expr_sql(con, expr.aggregate([expr[c].count().name(f"c{i}") for i, c in enumerate(expr.columns)])))):
+        return db_reads(ask)  # BigQuery는 행 수를 세는 조회도 읽는 양에 요금이 난다(querying.runnable과 같은 방식)
     rows = run(lambda: result.get_rows(expr, PREVIEW_ROWS))
     before = known_rows(recipe)
     after = None if before is None and recipe.get("count") is False else run(lambda: result.get_count(expr)) if prep_expr.changes_rows(recipe) else before
@@ -629,7 +676,8 @@ def dupes():
     if local_mode(recipe):
         table = working_copy(recipe)
         return jsonify(run(lambda: prep_expr.dupes(held.local(), local_recipe(recipe), table)))
-    return jsonify(run(lambda: prep_expr.dupes(con, recipe)))
+    table = start_table(recipe)
+    return jsonify(run(lambda: prep_expr.dupes(con, recipe, table)))
 
 
 def make_table(recipe, name):
@@ -656,10 +704,11 @@ def make_table(recipe, name):
                 state["con"] = server.open_con(opened, read_only=False)
             except Exception as e:
                 raise ValueError(f"쓰기로 열 수 없어요. 다른 프로그램이 이 파일을 열고 있는지 확인하세요. ({e})") from None
-        db = get_con()
+            server.forget_tables()  # 보낸 검색의 식이 닫은 연결의 테이블 식을 쓰지 않게
+        db, table = get_con(), start_table(recipe)
 
         def create():
-            expr = prep_expr.build(db, recipe)[0]
+            expr = prep_expr.build(db, recipe, table)[0]
             parse.check_new_columns(db, expr.columns)
             db.create_table(name, expr, database=schema)
             return result.get_count(source.get_table(db, name, schema))
@@ -670,7 +719,12 @@ def make_table(recipe, name):
         if reopen:
             if state["con"] is not None:
                 source.close(state["con"])
-            state["con"] = server.open_con(opened)
+                state["con"] = None
+            try:
+                state["con"] = server.open_con(opened)
+            except Exception as e:  # 다시 열지 못하면 반쯤 남은 연결 상태를 두지 않는다
+                server.drop_connection()
+                raise ValueError(f"작업 뒤 연결을 읽기 전용으로 다시 열지 못해 끊었어요. 연결을 다시 한 뒤 테이블이 만들어졌는지 확인하세요. ({e})") from None
 
 
 def plain_rows(arrow):

@@ -78,7 +78,7 @@ def test_여러_테이블을_시트_여러_개로_저장(tables, tmp_path, monke
     sheets = pl.read_excel(tmp_path / "out.xlsx", sheet_id=0)
     assert list(sheets) == ["주문_목록", "t", "t_2"]
     assert sheets["주문_목록"]["id"].to_list() == [0, 1, 2]
-    assert sheets["t"].rows() == [(1, "'=1+1")]  # 수식 막기
+    assert sheets["t"].rows() == [(1, "=1+1")]  # xlsx는 수식을 실행하지 않고 쓰므로 값 그대로(CSV·TSV만 ' 붙임)
     assert sheets["t_2"].rows() == [(2,)]
     assert not list(tmp_path.glob("*.part.xlsx"))
     assert "/api/export/tables" not in server.FREE  # 연결을 쓴다

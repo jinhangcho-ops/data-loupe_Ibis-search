@@ -29,14 +29,15 @@ NEXT_DIR = Path(app.static_folder).parent / "web" / "out"  # Next.js 빌드 결�
 app.json.sort_keys = False  # 구조 컬럼의 필드·행의 컬럼을 원래 차례대로 보낸다(Flask 기본은 이름 순)
 
 # 연결은 메모리에만 둔다. passwords는 오류 문구에서 가릴 값, opened는 다시 열 때 쓸 요청 값, rows는 세어 둔 테이블 행 수, cancel은 지금 도는 데이터 작업의 취소 신호.
-state = {"con": None, "passwords": [], "opened": None, "rows": {}, "names": {}, "tables": {}, "cancel": threading.Event()}
+state = {"con": None, "passwords": [], "opened": None, "rows": {}, "names": {}, "tables": {}, "cancel": threading.Event(), "left": None}  # left: 버린 파일 연결 작업이 끝나면 켜질 Event(run이 기다린다)
 # names: 스키마 → 테이블 목록, tables: (스키마, 이름) → 테이블 식. 검색 칸을 바꿀 때마다 DB에 목록·스키마를 다시 묻지 않게 연결마다 기억한다(forget_tables로 비운다).
 turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 연결을 쓰지 않는 FREE의 경로만 기다리지 않는다.
 FREE = {"/api/pick", "/api/usage", "/api/cancel", "/api/send", "/api/drivers", "/api/funcs", "/api/features/install", "/api/update"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
 ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 목록 예: ("Parquet (*.parquet)",) → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
 ask_folder = None  # 저장할 폴더를 묻는 함수(→ 고른 폴더 또는 None). ask_save처럼 desktop.py가 채운다.
-ask_open = None  # 파일 하나를 고르는 함수(→ 고른 경로 또는 None). ask_save처럼 desktop.py가 채운다.
+ask_open = None  # 파일 하나를 고르는 함수(kind → 고른 경로 또는 None). ask_save처럼 desktop.py가 채운다.
+PICK_KINDS = {"env": ("env 파일 (*.env)", "모든 파일 (*.*)"), "metrics": ("지표 파일 (*.yaml;*.yml;*.json)", "모든 파일 (*.*)")}  # /api/pick의 종류 → 파일 대화상자 필터
 QUERY_TIMEOUT = drivers.QUERY_TIMEOUT  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다. DB 쪽 시간 제한(drivers.settle)도 같은 값.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
 CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS,
@@ -156,7 +157,12 @@ def get_con():
 
 def run(work, drop=lambda value: None):
     """데이터 작업을 따로 돌려 QUERY_TIMEOUT초까지, 취소 요청이 오기 전까지만 기다린다. 그만두면 DB에도 멈추라고 한다.
-    그만둔 작업이 뒤에서 늦게 끝나면 결과는 버린다(치울 것이 있으면 drop으로)."""
+    그만둔 작업이 뒤에서 늦게 끝나면 결과는 버린다(치울 것이 있으면 drop으로).
+    파일 연결(멈추라고 알릴 수 없는 Polars 등)에서 버린 작업이 아직 돌면 같은 연결을 겹쳐 쓰지 않게 STOP_WAIT초만 기다렸다가 오류를 낸다."""
+    left = state.get("left")
+    if left is not None and not left.wait(source.STOP_WAIT):
+        raise ValueError("취소한 이전 작업이 아직 끝나지 않았어요. 잠시 뒤에 다시 하세요.")
+    state["left"] = None
     state["cancel"] = threading.Event()  # 작업마다 새로 만들어 지난 취소가 남지 않게 한다.
     con = state["con"]
 
@@ -171,8 +177,10 @@ def run(work, drop=lambda value: None):
                              lambda: source.interrupt(state["con"]))
     except (TimeoutError, InterruptedError) as e:
         message = str(e) or "취소했어요."
-        if getattr(e, "abandoned", False) and (state["opened"] or {}).get("kind") == "url":  # 파일 연결(DuckDB·Polars)은 겹쳐 읽어도 된다
+        if getattr(e, "abandoned", False) and (state["opened"] or {}).get("kind") == "url":
             message += renew()
+        elif getattr(e, "abandoned", False):  # 파일 연결은 새로 열지 않고, 버린 작업이 끝날 때까지 다음 작업을 받지 않는다
+            state["left"] = e.ended
         raise ValueError(message) from None
 
 
@@ -203,6 +211,9 @@ def run_writing(write, clean, runner=None):
 
 @app.errorhandler(Exception)
 def on_error(e):
+    from core import querying
+    if isinstance(e, querying.Confirm):  # 처리 용량 확인이 필요함: 어느 라우트에서 나든 확인 응답(X-Needs-Confirm)으로
+        return e.response
     if isinstance(e, HTTPException):  # 404, 405, 잘못된 JSON 등은 원래 상태 코드로
         return jsonify(error=e.description), e.code
     if isinstance(e, source.unsupported_errors()):  # 연결(백엔드)이 하지 못하는 계산
@@ -225,7 +236,7 @@ def only_window():
 
 @app.before_request
 def wait_turn():
-    if request.path not in FREE:
+    if request.path not in FREE and not request.path.startswith(("/static/", "/next/")):  # 화면 파일은 연결을 쓰지 않는다(긴 조회 중에도 화면이 뜨게)
         turn.acquire()
         g.turn = True
 
@@ -427,7 +438,7 @@ def drop_connection():
     """지금 연결을 닫고 연결에 매인 것(받아 둔 결과, 기억한 테이블, 비밀번호, 연 곳, 행 수)을 비운다. 연결이 없어도 안전하다."""
     if state["con"] is not None:
         source.close(state["con"])
-    state.update(con=None, passwords=[], opened=None, rows={})
+    state.update(con=None, passwords=[], opened=None, rows={}, left=None)  # 버린 작업이 쓰던 연결은 이제 쓰지 않는다
     forget_tables()
     source.on_worker(held.clear)()  # 받아 둔 결과는 이전 연결의 것
     for hook in ON_SWITCH:
@@ -555,9 +566,10 @@ def features_install():
 @app.post("/api/pick")
 def pick():
     """[찾아보기]: 파일 열기 대화상자로 고른 경로만 돌려준다(내용은 읽지 않는다). 취소하거나 창이 없으면 path는 null."""
-    if (request.json or {}).get("kind") != "env":
+    kind = (request.json or {}).get("kind")
+    if kind not in PICK_KINDS:
         return jsonify(error="알 수 없는 종류예요."), 400
-    return jsonify(path=ask_open() if ask_open else None)
+    return jsonify(path=ask_open(kind) if ask_open else None)
 
 
 @app.get("/api/update")
@@ -601,12 +613,12 @@ def html_response(html, script_extra=""):
     html = html.replace("<script", f'<script nonce="{nonce}"').replace('<link rel="preload" as="script"', f'<link nonce="{nonce}" rel="preload" as="script"')  # Next의 스크립트 미리 받기 링크도 script-src 검사를 받는다
     response = Response(html, mimetype="text/html")
     response.headers["Content-Security-Policy"] = (
-        f"default-src 'none'; script-src 'nonce-{nonce}'{script_extra}; style-src 'self' 'unsafe-inline'; connect-src 'self'; "
+        f"default-src 'none'; script-src 'nonce-{nonce}'{script_extra}; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self'; "  # frame-src: 차트 섬(/chart)을 iframe으로 끼운다
         f"img-src data: blob: {OSM_TILES}; base-uri 'none'; form-action 'none'")
     response.set_cookie("key", KEY, httponly=True, samesite="Strict")
     saved = settings.load()
     for key, value in saved.items():  # 저장된 설정을 쿠키로 알려 준다. 화면이 그리기 전에 읽는다.
         response.set_cookie(key, str(value), samesite="Strict")
-    for key in {*settings.CHOICES, *settings.SIZES, *settings.FLOATS} - set(saved):  # 기본값으로 되돌려 파일에서 빠진 설정의 예전 쿠키를 지운다
+    for key in {*settings.CHOICES, *settings.SIZES, *settings.FLOATS, "timezone", "fiscal_start_month"} - set(saved):  # 기본값으로 되돌려 파일에서 빠진 설정의 예전 쿠키를 지운다
         response.delete_cookie(key, samesite="Strict")
     return response

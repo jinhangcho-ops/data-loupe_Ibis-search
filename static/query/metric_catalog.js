@@ -15,6 +15,11 @@ const mcGroups = (cat, freq = [], q = "") => {
 // 항목의 단위 글(비율은 %, 단위 없는 항목은 ""): 목록 설명에 보인다
 const mcUnit = e => e.format === "percent" ? "%" : e.unit;
 const mcNum = v => Number(v).toLocaleString("en-US", { maximumFractionDigits: 2 });
+// 결과 표: 행은 최근 것부터(서버는 오래된 것부터 준다), 비율 컬럼(이름에 rate·ratio·retention·율·비율이 있고 값이 모두 0~1)은 %로
+const MC_RATE = /rate|ratio|retention|율|비율/i;
+const mcRows = rows => [...rows].reverse();
+const mcPctCols = (cols, rows) => new Set(cols.filter(c => MC_RATE.test(`${c.key} ${c.label ?? ""}`) && rows.every(r => r[c.key] == null || (typeof r[c.key] === "number" && r[c.key] >= 0 && r[c.key] <= 1))).map(c => c.key));
+const mcCell = (c, v, pct) => typeof v !== "number" ? String(v ?? "") : pct.has(c.key) ? `${mcNum(v * 100)}%` : mcNum(v);
 // 값 글: 비율은 0~1 분수라 %로, 나머지는 단위를 붙인다. 없으면 "—"
 const mcValue = (v, format, unit) => v == null ? "—" : format === "percent" ? `${mcNum(v * 100)}%` : `${mcNum(v)}${unit ? " " + unit : ""}`;
 // 검색 body에 기간 줄을 더한 사본(기간이 없으면 그대로)
@@ -137,16 +142,16 @@ async function showMetricCatalog(box, env) {
     }
     // 계산 결과: 값(비율은 %), 짝 절대량, 중앙값·P90·P99, 알림, 표(북극성·가드레일 안내는 위 설명에 이미 있다)
     function result(d) {
-      const rows = d.rows ?? [], cols = d.columns ?? [];
+      const rows = d.rows ?? [], cols = d.columns ?? [], pct = mcPctCols(cols, rows);
       return el("div", { className: "mresult" },
         el("div", { className: "mval" }, mcValue(d.value, d.format, d.unit), d.label ? el("span", { className: "hint", textContent: " " + d.label }) : ""),
         d.text ? el("div", { className: "hint", textContent: d.text }) : "",
         d.pair?.length ? el("div", { className: "mpair" }, el("span", { className: "hint", textContent: "함께 보는 절대량" }), ...d.pair.map(p => el("span", { className: "chip" }, `${p.name} ${p.value == null ? "—" : mcNum(p.value)}`))) : "",
         d.spread ? el("div", { className: "mpair" }, el("span", { className: "hint", textContent: `분포(${mcNum(d.spread.n)}개)` }), ...[["median", "중앙값"], ["p90", "P90"], ["p99", "P99"]].map(([k, t]) => el("span", { className: "chip" }, `${t} ${mcValue(d.spread[k], d.format, d.unit)}`))) : "",
         ...(d.notes ?? []).map(t => el("div", { className: "hint", textContent: t })),
-        rows.length ? el("table", { className: "mtable" }, el("thead", {}, el("tr", {}, ...cols.map(c => el("th", { textContent: c.label })))),
-          el("tbody", {}, ...rows.slice(0, 12).map(r => el("tr", {}, ...cols.map(c => el("td", { textContent: typeof r[c.key] === "number" ? mcNum(r[c.key]) : String(r[c.key] ?? "") })))))) : "",
-        rows.length > 12 ? el("div", { className: "hint", textContent: `앞의 12줄만 보여요(전체 ${rows.length}줄).` }) : "");
+        rows.length ? el("div", { className: "mscroll", style: "max-height: 22em; overflow: auto" }, el("table", { className: "mtable" }, el("thead", {}, el("tr", {}, ...cols.map(c => el("th", { textContent: c.label })))),
+          el("tbody", {}, ...mcRows(rows).map(r => el("tr", {}, ...cols.map(c => el("td", { textContent: mcCell(c, r[c.key], pct) }))))))) : "",
+        rows.length > 1 ? el("div", { className: "hint", textContent: `최근 것부터 ${rows.length}줄이에요.` }) : "");
     }
     drawLine();
     if (e.cross) drawAlign();

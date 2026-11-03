@@ -14,6 +14,12 @@ from core.parse import check_name
 from core.result import chart_metric, plain
 from core.sql_funcs import period_start  # 주 시작 자르기는 식 truncate와 같은 것을 쓴다(dash_calc도 stats.period_start로 부른다)
 
+def local_start(col, unit):
+    """설정 시간대의 기간 시작(시간대 있는 시각만 local_time으로 바꾼다). Ibis는 자른 값의 시간대를 잊어 Polars 결과를 UTC로 돌려 다시 붙인다."""
+    local = result.local_time(col)
+    return period_start(local, unit).cast(local.type())
+
+
 BINS = 20  # 히스토그램 구간 수
 TOP_VALUES = 20  # 값 빈도에 보일 값 수(나머지는 "그 밖")
 MAX_CORR = 12  # 상관관계에 넣을 수 있는 숫자 컬럼 수
@@ -182,7 +188,7 @@ def trend(t, column, unit, value, agg, opts=None):
     chart_metric(t, value, agg, opts)  # 고른 값·집계를 먼저 검사한다
     s = finite_value(t, value).filter(d.notnull())
     metric = chart_metric(s, value, agg, opts)
-    found = rows(s.group_by(period_start(s[column], UNITS[unit]).name("period")).aggregate(v=metric).order_by(ibis.desc("period")).limit(MAX_PERIODS + 1))
+    found = rows(s.group_by(local_start(s[column], UNITS[unit]).name("period")).aggregate(v=metric).order_by(ibis.desc("period")).limit(MAX_PERIODS + 1))
     more, found = len(found) > MAX_PERIODS, found[:MAX_PERIODS][::-1]
     got = {str(r["period"])[:10]: r["v"] for r in found}
     labels = list(got)
@@ -196,15 +202,18 @@ def trend(t, column, unit, value, agg, opts=None):
 
 
 def busiest(t, column, unit, top=None):
-    """데이터가 가장 많은 기간: trend로 날짜 컬럼을 unit(day·week·month)으로 묶어 센 뒤 건수가 많은 상위 top개(기본 TOP_PERIODS)를 [{start, end, count}]로(건수가 같으면 앞선 기간).
-    기간이 MAX_PERIODS개를 넘으면 최근 것만 본다(more)."""
+    """데이터가 가장 많은 기간: 날짜 컬럼을 unit(day·week·month)으로 묶어(trend와 같은 period_start) 센 뒤 건수가 많은 상위 top개(기본 TOP_PERIODS)를 [{start, end, count}]로(건수가 같으면 앞선 기간).
+    모든 기간에서 DB가 고른다(trend처럼 최근 MAX_PERIODS개만 보지 않는다). more는 늘 false(화면 호환)."""
     top = TOP_PERIODS if top is None else top
     if type(top) is not int or not 1 <= top <= MAX_TOP_PERIODS:
         raise ValueError(f"찾을 기간 개수는 1~{MAX_TOP_PERIODS} 사이의 정수로 입력하세요.")
-    found = trend(t, column, unit, "", "count")
+    if unit not in UNITS:
+        raise ValueError("묶음 단위는 day, week, month 중 하나입니다.")
+    s = t.filter(column_of(t, column, "date").notnull())
+    found = rows(s.group_by(local_start(s[column], UNITS[unit]).name("period")).aggregate(n=s.count()).order_by([ibis.desc("n"), "period"]).limit(top))
     ends = {"day": lambda d: d, "week": lambda d: d + dt.timedelta(days=6), "month": lambda d: (d.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)}[unit]
-    best = sorted(((n, l) for l, n in zip(found["labels"], found["values"]) if n), key=lambda x: (-x[0], x[1]))[:top]
-    return {"column": column, "unit": unit, "periods": [{"start": l, "end": ends(dt.date.fromisoformat(l)).isoformat(), "count": n} for n, l in best], "more": found["more"]}
+    labels = [(str(r["period"])[:10], r["n"]) for r in found]
+    return {"column": column, "unit": unit, "periods": [{"start": l, "end": ends(dt.date.fromisoformat(l)).isoformat(), "count": n} for l, n in labels], "more": False}
 
 
 def window_seconds(window):
@@ -219,9 +228,9 @@ def window_seconds(window):
     return n * WINDOW_UNITS[window["unit"]]
 
 
-def funnel_flow(t, user, step, time, steps, window=None, span=None):
+def funnel_flow(t, user, step, time, steps, window=None, span=None, by=None):
     """흐름(퍼널): 사용자(user)가 단계 컬럼(step)의 값 steps를 순서대로 거쳐 간 사람 수(funnel.compute). 중간에 한 다른 행동과 되돌아간 행동은 무시한다.
-    window = {n, unit} 첫 단계부터 이 시간 안에 도달한 것만, span = {start, end} 첫 단계를 이 날짜 안에 한 사람만(대시보드 기간, 뒤 단계는 기간 밖이어도 센다). 필요한 컬럼은 사용자·단계·시각 셋뿐이다."""
+    by = 세그먼트 컬럼(있으면 응답에 segments), 단계마다 median_sec(앞 단계에서 걸린 시간 중앙값)이 steps에 들어 있다. window = {n, unit} 첫 단계부터 이 시간 안에 도달한 것만, span = {start, end} 첫 단계를 이 날짜 안에 한 사람만(대시보드 기간, 뒤 단계는 기간 밖이어도 센다). 필요한 컬럼은 사용자·단계·시각 셋뿐이다."""
     seconds = window_seconds(window)
     funnel.check(t, user, step, time, steps, seconds)
     entry = None
@@ -230,8 +239,8 @@ def funnel_flow(t, user, step, time, steps, window=None, span=None):
             entry = tuple(dt.date.fromisoformat(span[k]) if span.get(k) else None for k in ("start", "end"))
         except (TypeError, ValueError):
             raise ValueError("기간(range)의 시작과 끝은 YYYY-MM-DD 모양이어야 합니다.") from None
-    found = funnel.compute(t, user, step, time, steps, seconds, entry)
-    return {"who": user, "step": step, "time": time, "steps": found["steps"], "window": window or None, "window_seconds": seconds, "range": span or None}
+    found = funnel.compute(t, user, step, time, steps, seconds, entry, by=by or None)
+    return {"who": user, "step": step, "time": time, "steps": found["steps"], **({"segments": found["segments"]} if "segments" in found else {}), "by": by or None, "window": window or None, "window_seconds": seconds, "range": span or None}
 
 
 def columns(t):
@@ -249,5 +258,5 @@ def analyze(t, how):
         raise ValueError(f"분석 종류는 {', '.join(KINDS)} 중 하나입니다.")
     args = {"columns": (), "distribution": ("column",), "correlation": ("columns",), "scatter": ("x", "y"),
             "groups": ("by", "value", "agg", "opts"), "trend": ("column", "unit", "value", "agg", "opts"), "busiest": ("column", "unit", "top"),
-            "funnel": ("who", "step", "time", "steps", "window", "range")}[name]
+            "funnel": ("who", "step", "time", "steps", "window", "range", "by")}[name]
     return {"kind": name, **KINDS[name](t, *[how.get(a) for a in args])}

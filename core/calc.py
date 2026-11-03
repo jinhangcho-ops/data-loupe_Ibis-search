@@ -31,6 +31,8 @@ MAX_ROWS = 500  # 피벗 결과의 최대 행 수
 OLD_HOWS = ("count", "sum", "mean", "min", "max")  # 처음부터 있던 피벗 집계(목록의 앞에 둔다)
 HOWS = {i: sql_funcs.label_of(i) for i in (*OLD_HOWS, *[i for i in sql_funcs.ids_for("pivot") if i not in OLD_HOWS and sql_funcs.FUNCS[i]["aggregate"]])}  # 함수 사전의 집계 전부
 SUBTOTALS = ("rollup", "cube", "sets")  # 피벗의 소계·총계 방식(ROLLUP·CUBE·GROUPING SETS)
+SHOWS = ("value", "row_pct", "col_pct")  # 피벗 칸 보기: 값, 행 합계 대비 비율, 열 합계 대비 비율(0~1)
+EMPTY = "(빈 값)"  # 열로 펼칠 컬럼이 빈 값인 행의 칸 이름
 
 
 def takes_main(kind):
@@ -75,7 +77,7 @@ def window(expr, opts, need_order=True):
     order = opts.get("기준") or []
     if need_order and not order:
         raise ValueError("이 계산은 순서가 필요해요. '기준 컬럼 [asc|desc]'를 넣으세요.")
-    keys = [parse.parse_sort(" ".join(order), expr)] if order else []
+    keys = [parse.parse_sort(part.strip(), expr) for part in " ".join(order).split(",") if part.strip()]  # '기준 금액 desc, id': 쉼표로 2차 키(같은 값의 순서를 정한다)
     groups = [expr[n] for n in names(opts.get("그룹") or [], expr)]
     return keys, groups or None
 
@@ -296,6 +298,21 @@ def metric(expr, how, value, where, opts=None):
     return sql_funcs.aggregate(how, expr, value, where, opts)
 
 
+def pivot_measure(expr, value, how, opts):
+    """피벗 값 하나 (집계 id, 값 컬럼, 옵션)을 검사한다."""
+    if how not in HOWS and how not in sql_funcs.ALIASES:
+        raise ValueError(f"집계는 {', '.join(list(HOWS)[:8])} … 중 하나예요(함수 사전의 집계 {len(HOWS)}가지).")
+    if opts is not None and not isinstance(opts, dict):
+        raise ValueError("집계의 옵션(opts)은 객체여야 해요.")
+    if value is not None:
+        parse.check_name(value, expr.columns, "값 컬럼")
+        if how in ("sum", "mean") and not expr[value].type().is_numeric():
+            raise ValueError("합계·평균은 숫자 컬럼에만 돼요.")
+    elif sql_funcs.needs_column(how):
+        raise ValueError("값 컬럼을 고르세요(개수는 비워도 돼요).")
+    return how, value, opts
+
+
 def having(table, line):
     """집계한 결과 표를 조건 한 줄로 거른다(HAVING). 결과 컬럼 이름에 공백이 있으면('전체 합계') 조건 줄에도 그대로 쓸 수 있게, 잠깐 밑줄로 바꿔 읽는다."""
     plain = {name: name.replace(" ", "_") for name in table.columns if " " in name}
@@ -308,47 +325,50 @@ def having(table, line):
 
 def pivot(expr, spec, values_of):
     """피벗(조건부 집계) 식. spec: {rows: [행 기준 컬럼], column: 열로 펼칠 컬럼(없으면 펼치지 않음), value: 값 컬럼(개수는 없어도 됨), how(함수 사전의 집계 id), opts(그 집계의 나머지 인자),
+    values: [{value, how, opts}] 여러 값(있으면 value·how 대신. 결과 이름은 '값 집계', 펼친 칸은 '열값 값 집계'), show: value·row_pct·col_pct(칸을 행·열 합계 대비 비율로),
     where: 조건 한 줄, subtotals: rollup·cube·sets(소계·총계 줄), sets: 소계 조합(sets일 때), having: 집계한 뒤 거르는 조건 한 줄(결과 컬럼 이름으로),
-    order: 결과 컬럼 순서 한 줄('전체 개수 desc', 없으면 행 기준 순), top: 정렬한 뒤 앞 N행만}.
-    values_of(식)은 열로 펼칠 값 목록을 구하는 조회(MAX_PIVOT+1개까지)를 돌린다. 값마다 조건부 집계 하나와 '전체'를 만든다."""
+    order: 결과 컬럼 순서 한 줄('전체 개수 desc', 없으면 행 기준 순, 같은 값은 행 기준 순), top: 정렬한 뒤 앞 N행만}.
+    values_of(식)은 열로 펼칠 값 목록을 구하는 조회(MAX_PIVOT+2개까지)를 돌린다. 값마다 조건부 집계 하나와 '전체'를 만든다. 열 컬럼이 빈 값인 행은 EMPTY 칸."""
     if not isinstance(spec, dict):
         raise ValueError("피벗 설정이 없어요.")
     rows = [r for r in spec.get("rows") or [] if r]
     for r in rows:
         parse.check_name(r, expr.columns, "행 기준 컬럼")
-    how, value, column = spec.get("how", "count"), spec.get("value") or None, spec.get("column") or None
-    if how not in HOWS and how not in sql_funcs.ALIASES:
-        raise ValueError(f"집계는 {', '.join(list(HOWS)[:8])} … 중 하나예요(함수 사전의 집계 {len(HOWS)}가지).")
-    opts = spec.get("opts")
-    if opts is not None and not isinstance(opts, dict):
-        raise ValueError("집계의 옵션(opts)은 객체여야 해요.")
-    if value is not None:
-        parse.check_name(value, expr.columns, "값 컬럼")
-        if how in ("sum", "mean") and not expr[value].type().is_numeric():
-            raise ValueError("합계·평균은 숫자 컬럼에만 돼요.")
-    elif sql_funcs.needs_column(how):
-        raise ValueError("값 컬럼을 고르세요(개수는 비워도 돼요).")
+    column = spec.get("column") or None
+    many = spec.get("values")
+    if many is not None and (not isinstance(many, list) or not many or not all(isinstance(v, dict) for v in many)):
+        raise ValueError("여러 값(values)은 [{value, how}] 모양이어야 해요.")
+    show = spec.get("show") or "value"
+    if show not in SHOWS:
+        raise ValueError(f"칸 보기는 {', '.join(SHOWS)} 중 하나예요.")
+    measures = [pivot_measure(expr, v.get("value") or None, v.get("how", "count"), v.get("opts", spec.get("opts"))) for v in many or [spec]]
     cond = parse.predicate(spec["where"], expr) if spec.get("where") and (not isinstance(spec["where"], str) or spec["where"].strip()) else None
-    total = f"전체 {sql_funcs.label_of(how)}"
-    aggs = {total: metric(expr, how, value, cond, opts)}
+    totals = [f"전체 {sql_funcs.label_of(how)}" if not many else f"{value} {sql_funcs.label_of(how)}" if value else sql_funcs.label_of(how) for how, value, _ in measures]
+    aggs = {t: metric(expr, how, value, cond, opts) for t, (how, value, opts) in zip(totals, measures)}
+    cells = {t: [] for t in totals}
     if column is not None:
         parse.check_name(column, expr.columns, "열로 펼칠 컬럼")
-        found = values_of(expr.filter(expr[column].notnull()).select(v=expr[column]).distinct().order_by("v").limit(MAX_PIVOT + 1))
-        if len(found) > MAX_PIVOT:
+        found = values_of(expr.select(v=expr[column]).distinct().order_by("v").limit(MAX_PIVOT + 2))
+        found = [v for v in found if v is not None] + ([None] if None in found else [])  # 빈 값은 맨 뒤 칸
+        if len(found) - (None in found) > MAX_PIVOT:
             raise ValueError(f"'{column}'의 값이 {MAX_PIVOT}개보다 많아 열로 펼칠 수 없어요. 조건으로 줄이거나 다른 컬럼을 고르세요.")
         taken = {n.casefold() for n in [*aggs, *rows]}  # DuckDB는 컬럼 이름의 대소문자를 가리지 않아 Y와 y가 부딪친다
         used = set(taken)
         clash = any(str(v).casefold() in taken for v in found)
         for v in found:
-            name = str(v)
-            if clash:
-                name = f"{column}={v}"
-            base, i = name, 2
-            while name.casefold() in used:
-                name, i = f"{base}_{i}", i + 1
-            used.add(name.casefold())
-            is_v = expr[column] == ibis.literal(v, type=expr[column].type())  # 타입 없는 Decimal은 DECIMAL(18,3)이 되어 큰 ID가 넘친다
-            aggs[name] = metric(expr, how, value, is_v if cond is None else is_v & cond, opts)
+            is_v = expr[column].isnull() if v is None else expr[column] == ibis.literal(v, type=expr[column].type())  # 타입 없는 Decimal은 DECIMAL(18,3)이 되어 큰 ID가 넘친다
+            for t, (how, value, opts) in zip(totals, measures):
+                name = EMPTY if v is None else str(v)
+                if clash and v is not None:
+                    name = f"{column}={v}"
+                if many:
+                    name = f"{name} {t}"
+                base, i = name, 2
+                while name.casefold() in used:
+                    name, i = f"{base}_{i}", i + 1
+                used.add(name.casefold())
+                aggs[name] = metric(expr, how, value, is_v if cond is None else is_v & cond, opts)
+                cells[t].append(name)
     subtotals = spec.get("subtotals")
     if subtotals and (subtotals not in SUBTOTALS or not rows):
         raise ValueError(f"소계는 행 기준 컬럼이 있어야 하고 {', '.join(SUBTOTALS)} 중 하나예요.")
@@ -357,13 +377,19 @@ def pivot(expr, spec, values_of):
         table = table.order_by(sql_funcs.grouped_order(table, rows))
     else:
         table = expr.group_by(rows).aggregate(**aggs).order_by(rows) if rows else expr.aggregate(**aggs)
+    if show == "col_pct" and subtotals:
+        raise ValueError("소계·총계 줄이 있으면 열 합계 대비 비율로 볼 수 없어요(소계가 두 번 더해져요).")
+    if show == "row_pct":  # 칸 ÷ 그 행의 전체(전체 칸은 1)
+        table = table.mutate(**{n: table[n] / table[t] for t in totals for n in [*cells[t], t]})
+    elif show == "col_pct":  # 칸 ÷ 그 열의 합
+        table = table.mutate(**{n: table[n] / table[n].sum() for t in totals for n in [t, *cells[t]]})
     if (spec.get("having") or "").strip():  # HAVING: 집계한 뒤 결과 컬럼으로 거른다
         table = having(table, spec["having"])
     if (spec.get("order") or "").strip():  # 결과 컬럼 순서('전체 개수 desc'), top이 있으면 앞 N행만(많은 순 상위 N)
         key, _, way = spec["order"].strip().rpartition(" ")
         key, way = (key, way.lower()) if way.lower() in ("asc", "desc") else (spec["order"].strip(), "asc")
         parse.check_name(key, table.columns, "정렬 컬럼")
-        table = table.order_by(table[key].desc() if way == "desc" else table[key].asc())
+        table = table.order_by([table[key].desc() if way == "desc" else table[key].asc(), *[table[r] for r in rows if r != key]])  # 같은 값은 행 기준 순(상위 N의 경계가 매번 같게)
     if spec.get("top"):
         table = table.limit(min(parse.whole_number(spec["top"], 1, MAX_ROWS, f"상위 N은 1 이상 {MAX_ROWS} 이하의 정수예요."), MAX_ROWS))
     return table.limit(MAX_ROWS + 1)

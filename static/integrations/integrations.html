@@ -29,7 +29,7 @@
 <!--include core/status.html-->
 <div class="hub">
   <h1>연동</h1>
-  <p>Data Loupe를 다른 서비스와 연결해요. 결과를 Slack이나 Notion으로 보내고, Slack 질문에 답하고, GA4 데이터를 가져오고, LLM으로 SQL을 만들 수 있어요. 토큰과 키는 서비스마다 고른 방법으로만 보관해요.</p>
+  <p>Data Loupe를 다른 서비스와 이어요. 결과를 Slack이나 Notion으로 보내고, Slack 질문에 답하고, GA4 데이터를 가져오고, LLM으로 SQL을 만들 수 있어요. 토큰과 키는 서비스마다 고른 방법으로만 보관해요.</p>
   <div class="err" id="err-hub"></div>
   <div class="grid">
     <!-- 보내기: 등록한 보낼 곳(Slack·Notion·웹훅). 관리는 상태 줄의 [보낼 곳] 패널 -->
@@ -59,7 +59,7 @@
       <label><div class="hint">측정항목 (쉼표로 구분, 최대 10개)</div><input id="ga4-mets" placeholder="activeUsers, sessions"></label>
       <label title="같은 이름의 파일이 있으면 덮어쓰지 않아요"><div class="hint">저장할 파일 (.parquet)</div><input id="ga4-out" class="code" placeholder="C:\data\ga4_daily.parquet"></label>
       <div class="row"><button id="ga4-fetch">가져오기</button><button id="ga4-open" class="btn hidden">쿼리로 열기</button><button id="ga4-save" class="btn">저장</button>
-        <button id="ga4-check" class="ghost" title="보고서를 받지 않고 인증과 속성 권한만 확인해요">연결 확인</button></div>
+        <button id="ga4-check" class="btn" title="보고서를 받지 않고 인증과 속성 권한만 확인해요">인증 확인</button></div>
       <div class="err" id="ga4-msg"></div>
     </section>
 

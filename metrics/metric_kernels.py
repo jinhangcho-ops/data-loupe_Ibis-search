@@ -1,5 +1,5 @@
 """지표 사전의 계산(7-2): 항목(metric_catalog)의 calc 이름마다 함수 하나. KERNELS[calc](t, s, p, ctx)가 결과 {value, rows, cols, parts, dist, label, notes}를 돌려준다.
-- t = 기간·조건까지 건 Ibis 표(큰 표는 Ibis가 집계하고 작은 결과만 PC로 가져온다), s = 역할 이름({user, time, amount, …})으로 정리한 빈칸 값, p = 항목이 정한 고정 값(어느 지표인지 등), ctx = 맥락(notes, other, align).
+- t = 기간·조건까지 건 Ibis 표(큰 표는 Ibis가 집계하고 작은 결과만 PC로 가져온다), s = 역할 이름({user, time, amount, …})으로 정리한 빈칸 값, p = 항목이 정한 고정 값(어느 지표인지 등), ctx = 맥락(notes, other, align, later = 기간을 걸지 않은 표 또는 None).
 - value = 대표 값, rows·cols = 표(cols는 {키: 한글 이름}), parts = 비율 지표의 분자·분모 같은 짝 절대량({id: 값}), dist = 평균형 지표의 바탕 분포(중앙값·P90·P99를 구할 배열), label = 대표 값이 무엇인지.
 - 원격 DB에는 값을 읽는 조회만 보낸다(행 수를 미리 세지 않는다). 배열로 가져오는 곳은 상한(mc.MAX_FETCH_ROWS)+1행까지만 묻고, 넘으면 표본이라고 알린다.
 - 비율은 0~1 분수다(화면이 format이 percent일 때 ×100로 보인다). 구할 수 없는 값은 None이다."""
@@ -13,7 +13,8 @@ from core import prep_ops
 from metrics import metric_calc as mc
 
 KERNELS = {}
-MAX_ROWS = 60  # 결과 표에 싣는 행 수(코호트·기간·항목). 넘으면 최근(또는 상위) 것만 싣고 알린다
+MAX_ROWS = 60  # 결과 표에 싣는 행 수(항목·페이지 같은 상위 표, DAU 기간 칸). 넘으면 상위(또는 최근) 것만 싣고 알린다
+LAST_ROWS = 400  # 기간·코호트 표(last_rows, 오래된 것부터)에 싣는 행 수. 넘으면 최근 것만 싣고 알린다
 MAX_RETENTION_COLS = 100  # 리텐션 표의 경과 기간 컬럼 수 상한
 MAX_POINTS = 400  # 생존 곡선에 싣는 점 수
 PARTIAL_NOTE = "마지막 기간은 진행 중이라 그 기간의 유지율 칸은 비우고 평균에서 뺐어요."
@@ -106,16 +107,16 @@ def last_done(rows, t, s, unit, ctx, empty=None):
     return next((r for r in rows if r["period"] == before), empty)
 
 
-def cut_note(ctx, what, side="최근"):
-    """표를 MAX_ROWS개로 자른다는 알림."""
-    ctx.notes.append(f"{what}이 많아 {side} {MAX_ROWS}개만 표에 실었어요(대표 값은 전체 기준).")
+def cut_note(ctx, what, side="최근", n=MAX_ROWS):
+    """표를 n개로 자른다는 알림."""
+    ctx.notes.append(f"{what}이 많아 {side} {n}개만 표에 실었어요(대표 값은 전체 기준).")
 
 
 def last_rows(rows, ctx, what="기간"):
-    """표가 길면 최근 MAX_ROWS개만 싣는다."""
-    if len(rows) > MAX_ROWS:
-        cut_note(ctx, what)
-        return rows[-MAX_ROWS:]
+    """표가 길면 최근 LAST_ROWS개만 싣는다(순서는 그대로 오래된 것부터)."""
+    if len(rows) > LAST_ROWS:
+        cut_note(ctx, what, n=LAST_ROWS)
+        return rows[-LAST_ROWS:]
     return rows
 
 
@@ -302,9 +303,15 @@ def exit_rate(t, s, p, ctx):
                   {"views": views, "exits": exits}, label="전체 이탈률")
 
 
-def between(t, s):
-    """(사건 A → 사건 B 사이 초 배열, A를 한 사용자 수)."""
-    return mc.seconds_between(t, s["user"], s["time"], s["event"], s["step_a"], s["step_b"])
+def between(t, s, ctx=None):
+    """(사건 A → 사건 B 사이 초 배열, A를 한 사용자 수). 기한(window_days)이 있으면 A 뒤 그 일수 안의 B만, 맥락에 기간을 걸지 않은 표(ctx.later)가 있으면 B는 기간 밖에서도 찾는다."""
+    later = getattr(ctx, "later", None)
+    if ctx is not None:
+        if s.get("window_days") is not None:
+            ctx.notes.append(f"A 뒤 {s['window_days']:g}일 안에 B를 한 사람만 전환으로 셌어요. A를 여러 번 했으면 기한 안에 끝낸 시도가 하나라도 있으면 전환이에요.")
+        if later is not None:
+            ctx.notes.append("A는 고른 기간 안의 것만, B는 기간 뒤의 것도 셌어요(기간 끝 무렵에 시작한 사람이 이탈로 잘못 세지지 않게).")
+    return mc.seconds_between(t, s["user"], s["time"], s["event"], s["step_a"], s["step_b"], s.get("window_days"), later)
 
 
 @kernel("time_between")
@@ -316,8 +323,8 @@ def time_between(t, s, p, ctx):
 
 @kernel("conversion")
 def conversion(t, s, p, ctx):
-    """A를 한 사용자 중 B까지 간 비율(invert면 못 간 비율)."""
-    values, first = between(t, s)
+    """A를 한 사용자 중 B까지 간 비율(invert면 못 간 비율). 기한(window_days)·기간 밖 B는 between이 본다."""
+    values, first = between(t, s, ctx)
     rate = mc.ratio(len(values), first)
     value = rate if not p.get("invert") or rate is None else 1 - rate
     return result(value, parts={"users_first": first, "users_reached": int(len(values))}, label="A를 한 사용자 중 B까지 간 비율" if not p.get("invert") else "A를 한 사용자 중 B에 가지 못한 비율")
@@ -339,7 +346,7 @@ def retention(t, s, p, ctx):
     """클래식·롤링·범위 리텐션: 코호트별 표와 코호트 크기로 가중한 평균."""
     mode, unit, n = p["mode"], s.get("unit") or "day", s.get("n") or 7
     span = (s["from_n"], s["to_n"]) if mode == "range" else None
-    m = mc.cohort_matrix(t, s["user"], s["time"], unit, mode, n_max=n, span=span)
+    m = mc.cohort_matrix(t, s["user"], s["time"], unit, mode, n_max=n, span=span, amount=s.get("amount"))  # 금액이 있으면 코호트 매출 유지율
     ctx.notes.append(NEW_NOTE)
     if m.get("partial"):
         ctx.notes.append(PARTIAL_NOTE)
@@ -431,9 +438,41 @@ def survival(t, s, p, ctx):
 
 # ---------- 4 수익화·LTV ----------
 
+def net_per_user(t, s):
+    """사용자별 순매출(금액 합, 환불 음수 포함) 표 (사용자, v)."""
+    x = with_user(t, s)
+    return x.group_by(s["user"]).aggregate(v=x[s["amount"]].fill_null(0).sum())
+
+
 def paid(t, s):
-    """금액이 0보다 큰 행(사용자가 있는 것)."""
-    return t.filter(t[s["user"]].notnull(), t[s["amount"]] > 0)
+    """결제자(순매출 > 0)의 금액이 0보다 큰 행. 환불로 순매출이 0 이하가 된 사람은 결제자가 아니다(PU·ARPPU·PUR이 같은 기준)."""
+    net = net_per_user(t, s)
+    return t.filter(t[s["user"]].notnull(), t[s["amount"]] > 0).semi_join(net.filter(net.v > 0), s["user"])
+
+
+def per_period(t, s, ctx, key):
+    """기간별 ARPU(key가 arppu면 ARPPU) 표 [{period, revenue, users, key}]와 진행 중인 기간을 뺀 기간 평균. 사용자·기간마다 순매출을 먼저 구한다."""
+    unit = s["unit"]
+    x = with_time(t, s)
+    x = x.select(u=x[s["user"]], p=mc.bucket_index(x[s["time"]], unit), a=x[s["amount"]].fill_null(0))
+    per = x.group_by(["u", "p"]).aggregate(v=x.a.sum())
+    if key == "arppu":
+        per = per.filter(per.v > 0)
+    found = mc.fetch_rows(per.group_by("p").aggregate(rev=per.v.sum(), n=per.u.count()).order_by("p"), "기간 수")
+    rows = [{"period": label_of(r["p"], unit), "revenue": num(r["rev"]) or 0.0, "users": int(r["n"]), key: mc.ratio(num(r["rev"]) or 0.0, int(r["n"]))} for r in found]
+    return rows, mc.mean_defined([r[key] for r in done_rows(rows, t, s, unit, ctx)])
+
+
+def order_note(t, s, ctx):
+    """주문 컬럼이 비어 한 행을 주문 하나로 셀 때: 사용자·시각 칸이 있으면 같은 사용자·같은 시각에 여러 행(한 주문이 상품별 여러 행일 수 있다)이 있는지 보고 알린다."""
+    if s.get("orders") or not (s.get("user") and s.get("time")):
+        return
+    x = with_time(t, s)
+    dup = x.group_by([s["user"], s["time"]]).aggregate(n=x.count())
+    dup = dup.filter(dup.n > 1)
+    n = int(one(dup.aggregate(k=dup.count()))["k"])
+    if n:
+        ctx.notes.append(f"주문 컬럼이 비어 한 행을 주문 하나로 셌는데, 같은 사용자·같은 시각에 여러 행인 곳이 {n:,}군데 있어요. 한 주문이 여러 행(상품별)이면 주문 수가 부풀어요. 주문 번호 컬럼을 골라 주세요.")
 
 
 @kernel("revenue")
@@ -450,7 +489,7 @@ def revenue(t, s, p, ctx):
 
 @kernel("payers")
 def payers(t, s, p, ctx):
-    """PU: 금액이 0보다 큰 고유 사용자 수."""
+    """PU: 순매출이 0보다 큰 고유 사용자 수."""
     x = paid(t, s)
     n = unique_users(x, s)
     return result(n, parts={"pu": n}, label="결제한 사용자 수")
@@ -472,37 +511,47 @@ def new_payers(t, s, p, ctx):
 
 @kernel("pur")
 def pur(t, s, p, ctx):
-    """PUR(DPUR·MPUR): 기간마다 결제자 ÷ 활동자."""
+    """PUR(DPUR·MPUR): 기간마다 결제자(그 기간 순매출 > 0) ÷ 활동자."""
     unit = p["unit"] if p.get("unit") else s["unit"]
     x = with_time(t, s)
-    x = x.select(u=x[s["user"]], p=mc.bucket_index(x[s["time"]], unit), a=x[s["amount"]])
-    active_n = {int(r["p"]): int(r["n"]) for r in mc.rows(x.group_by("p").aggregate(n=x.u.nunique()))}
-    y = x.filter(x.a > 0)
-    paid_n = {int(r["p"]): int(r["n"]) for r in mc.rows(y.group_by("p").aggregate(n=y.u.nunique()))}
+    x = x.select(u=x[s["user"]], p=mc.bucket_index(x[s["time"]], unit), a=x[s["amount"]].fill_null(0))
+    per = x.group_by(["u", "p"]).aggregate(v=x.a.sum())
+    active_n = {int(r["p"]): int(r["n"]) for r in mc.rows(per.group_by("p").aggregate(n=per.u.count()))}
+    y = per.filter(per.v > 0)
+    paid_n = {int(r["p"]): int(r["n"]) for r in mc.rows(y.group_by("p").aggregate(n=y.u.count()))}
     rows = [{"period": label_of(k, unit), "payers": paid_n.get(k, 0), "users": v, "pur": mc.ratio(paid_n.get(k, 0), v)} for k, v in sorted(active_n.items())]
     total_users = int(one(x.aggregate(n=x.u.nunique()))["n"])
-    total_payers = int(one(y.aggregate(n=y.u.nunique()))["n"])
+    net = net_per_user(with_time(t, s), s)
+    net = net.filter(net.v > 0)
+    total_payers = int(one(net.aggregate(n=net.count()))["n"])
     return result(mc.mean_defined([r["pur"] for r in done_rows(rows, t, s, unit, ctx)]), last_rows(rows, ctx), {"period": "기간", "payers": "결제자", "users": "활동자", "pur": "결제 비율"},
                   {"pu": total_payers, "uv": total_users}, label="기간별 결제 비율의 평균")
 
 
 @kernel("arpu")
 def arpu(t, s, p, ctx):
-    """ARPU: 활동 사용자 1명당 매출. 분포는 사용자별 매출."""
-    x = with_user(t, s)
-    per = x.group_by(s["user"]).aggregate(v=x[s["amount"]].fill_null(0).sum())
+    """ARPU: 활동 사용자 1명당 순매출(환불 음수 포함). 분포는 사용자별 순매출. 단위를 주면 기간별 ARPU의 평균(진행 중인 기간 제외)."""
+    per = net_per_user(t, s)
     r = one(per.aggregate(rev=per.v.sum(), uv=per.count()))
     rev, users = num(r["rev"]) or 0.0, int(r["uv"])
+    if s.get("unit"):
+        rows, value = per_period(t, s, ctx, "arpu")
+        return result(value, last_rows(rows, ctx), {"period": "기간", "revenue": "순매출", "users": "활동 사용자", "arpu": "ARPU"},
+                      {"gross_revenue": rev, "uv": users}, column_array(per, "v", ctx), "기간별 ARPU의 평균")
     return result(mc.ratio(rev, users), parts={"gross_revenue": rev, "uv": users}, dist=column_array(per, "v", ctx), label="활동 사용자 1명당 매출")
 
 
 @kernel("arppu")
 def arppu(t, s, p, ctx):
-    """ARPPU: 결제자 1명당 매출. 분포는 결제자별 매출."""
-    x = paid(t, s)
-    per = x.group_by(s["user"]).aggregate(v=x[s["amount"]].sum())
+    """ARPPU: 결제자(순매출 > 0) 1명당 순매출. 분포는 결제자별 순매출. 단위를 주면 기간별 ARPPU의 평균(그 기간 순매출 > 0인 사람, 진행 중인 기간 제외)."""
+    per = net_per_user(t, s)
+    per = per.filter(per.v > 0)
     r = one(per.aggregate(rev=per.v.sum(), pu=per.count()))
     rev, pu = num(r["rev"]) or 0.0, int(r["pu"])
+    if s.get("unit"):
+        rows, value = per_period(t, s, ctx, "arppu")
+        return result(value, last_rows(rows, ctx), {"period": "기간", "revenue": "순매출", "users": "결제자", "arppu": "ARPPU"},
+                      {"gross_revenue": rev, "pu": pu}, column_array(per, "v", ctx), "기간별 ARPPU의 평균")
     return result(mc.ratio(rev, pu), parts={"gross_revenue": rev, "pu": pu}, dist=column_array(per, "v", ctx), label="결제자 1명당 매출")
 
 
@@ -549,7 +598,8 @@ def ltv(t, s, p, ctx):
 
 @kernel("repeat")
 def repeat(t, s, p, ctx):
-    """재구매율: N번 이상 산 사용자 ÷ 구매 사용자."""
+    """재구매율: N번 이상 산 사용자 ÷ 구매 사용자(결제자 기준)."""
+    order_note(t, s, ctx)
     x = paid(t, s)
     count = x[s["orders"]].nunique() if s.get("orders") else x.count()
     per = x.group_by(s["user"]).aggregate(n=count)
@@ -560,9 +610,9 @@ def repeat(t, s, p, ctx):
 
 @kernel("tiers")
 def tiers(t, s, p, ctx):
-    """Whale·Dolphin·Minnow 등급별 사용자·매출 비중(분위수 또는 금액 기준)."""
-    x = paid(t, s)
-    per = x.group_by(s["user"]).aggregate(v=x[s["amount"]].sum())
+    """Whale·Dolphin·Minnow 등급별 사용자·매출 비중(분위수 또는 금액 기준). 결제자(순매출 > 0)의 순매출로 나눈다."""
+    per = net_per_user(t, s)
+    per = per.filter(per.v > 0)
     values = column_array(per, "v", ctx)
     if len(values) == 0:
         return result(None)
@@ -995,6 +1045,7 @@ def take_rate(t, s, p, ctx):
 @kernel("aov")
 def aov(t, s, p, ctx):
     """AOV: 주문 1건당 금액. 분포는 주문별 금액."""
+    order_note(t, s, ctx)
     x = t.filter(t[s["amount"]].notnull())  # 금액이 빈 행은 주문 수에도 세지 않는다
     if s.get("orders"):
         per = x.filter(x[s["orders"]].notnull()).group_by(s["orders"]).aggregate(v=x[s["amount"]].sum())
@@ -1008,6 +1059,7 @@ def aov(t, s, p, ctx):
 @kernel("purchase_frequency")
 def purchase_frequency(t, s, p, ctx):
     """구매 빈도: 구매자 1명당 주문 수."""
+    order_note(t, s, ctx)
     x = with_user(t, s)
     if s.get("orders"):
         x = x.filter(x[s["orders"]].notnull())  # 주문이 빈 행만 있는 사용자는 구매자로 세지 않는다(aov와 같은 기준)
@@ -1047,6 +1099,83 @@ def pareto(t, s, p, ctx):
     values = column_array(per, "v", ctx)
     share = mc.pareto_share(values, s["top"] / 100)
     return result(share, parts={"items": int(len(values))}, label=f"상위 {s['top']:g}% 항목이 차지하는 매출 비중")
+
+
+def quintile(values, low_is_good=False):
+    """5분위 점수(1~5, 5가 가장 좋음) 배열. 같은 값은 같은 점수다(경계와 같은 값은 낮은 쪽)."""
+    cuts = np.quantile(values, [0.2, 0.4, 0.6, 0.8])
+    return 1 + ((values[:, None] < cuts).sum(1) if low_is_good else (values[:, None] > cuts).sum(1))
+
+
+@kernel("rfm")
+def rfm(t, s, p, ctx):
+    """RFM: 결제자(순매출 > 0)마다 최근성(마지막 구매 뒤 지난 일수, 자료의 마지막 날 기준)·빈도(구매 수)·금액(순매출)을 5분위 점수로 매긴 등급표. 대표 값은 R·F가 모두 4 이상인 핵심 고객 비중."""
+    order_note(t, s, ctx)
+    x = paid(t, s)
+    x = x.filter(x[s["time"]].notnull())
+    per = x.group_by(s["user"]).aggregate(last=mc.day_index(x[s["time"]]).max(), f=x[s["orders"]].nunique() if s.get("orders") else x.count())
+    per = per.join(net_per_user(t, s), s["user"])
+    got = mc.fetch_table(per.select("last", "f", "v"), "결제자")
+    if got.num_rows == 0:
+        return result(None)
+    last, f, m = (got[c].to_numpy(zero_copy_only=False).astype(float) for c in ("last", "f", "v"))
+    r, fs, ms = quintile(last.max() - last, True), quintile(f), quintile(m)
+    groups = {}
+    for code, money in zip((f"{a}{b}{c}" for a, b, c in zip(r, fs, ms)), m):
+        n, total = groups.get(code, (0, 0.0))
+        groups[code] = (n + 1, total + money)
+    rows = sorted(({"rfm": k, "r": int(k[0]), "f": int(k[1]), "m": int(k[2]), "users": n, "revenue": v} for k, (n, v) in groups.items()), key=lambda r: (-r["users"], r["rfm"]))
+    core = int(((r >= 4) & (fs >= 4)).sum())
+    ctx.notes.append("점수는 결제자 안의 5분위예요(5가 가장 좋음). R은 자료의 마지막 날 기준 마지막 구매가 최근일수록, F는 구매가 잦을수록, M은 순매출이 클수록 높아요.")
+    return result(mc.ratio(core, len(m)), top_rows(rows, ctx, "등급"), {"rfm": "RFM", "r": "R", "f": "F", "m": "M", "users": "사용자 수", "revenue": "순매출"},
+                  {"pu": int(len(m)), "core_users": core}, label="R·F가 모두 4 이상인 결제자 비중")
+
+
+@kernel("refund_rate")
+def refund_rate(t, s, p, ctx):
+    """환불률: 환불(상태 값이 환불이거나, 상태를 안 고르면 음수 금액)인 건수·금액 ÷ 판매(환불이 아니고 금액 > 0) 건수·금액. 대표 값은 금액 기준."""
+    a = t[s["amount"]]
+    if s.get("status") and s.get("refund_value") not in (None, ""):
+        back = (t[s["status"]] == funnel.step_value(t[s["status"]].type(), s["refund_value"])).fill_null(False)
+    else:
+        back = (a < 0).fill_null(False)
+    sold = ~back & (a > 0).fill_null(False)
+    r = one(t.aggregate(n=back.cast("int64").sum(), amt=ibis.ifelse(back, a.abs(), 0).sum(), k=sold.cast("int64").sum(), total=ibis.ifelse(sold, a, 0).sum()))
+    n, amt, k, total = int(r["n"] or 0), num(r["amt"]) or 0.0, int(r["k"] or 0), num(r["total"]) or 0.0
+    rows = [{"name": "건수 기준", "value": mc.ratio(n, k)}, {"name": "금액 기준", "value": mc.ratio(amt, total)}]
+    return result(mc.ratio(amt, total), rows, {"name": "기준", "value": "환불률"}, {"refund": amt, "sales_amount": total, "refunds": n, "orders": k}, label="환불 금액 ÷ 판매 금액")
+
+
+@kernel("interpurchase")
+def interpurchase(t, s, p, ctx):
+    """구매 간격: 결제자의 이어진 두 구매(서로 다른 시각) 사이 일수의 중앙값. 분포는 간격들."""
+    x = paid(t, s)
+    x = x.filter(x[s["time"]].notnull())
+    y = x.select(u=x[s["user"]], sec=mc.epoch(x[s["time"]])).distinct().order_by(["u", "sec"])
+    got = mc.fetch_table(y, "구매 시각")
+    users, sec = np.asarray(got["u"].to_pylist(), dtype=object), got["sec"].to_numpy(zero_copy_only=False).astype(float)
+    same = users[1:] == users[:-1]
+    gaps = (np.diff(sec) / 86400)[same]
+    ctx.notes.append("같은 시각의 구매는 한 번으로 셌어요.")
+    return result(float(np.median(gaps)) if len(gaps) else None, parts={"repeat_buyers": len(set(users[1:][same])), "gaps": int(len(gaps))}, dist=gaps, label="이어진 두 구매 사이 일수의 중앙값")
+
+
+@kernel("new_vs_returning_revenue")
+def new_vs_returning_revenue(t, s, p, ctx):
+    """신규·기존 매출: 기간마다 그 기간에 처음 결제한(금액 > 0) 사용자의 매출 vs 그 전에 결제한 적 있는 사용자의 매출. 대표 값은 가장 최근 끝난 기간의 신규 매출 비중."""
+    unit = s.get("unit") or "month"
+    x = with_time(t, s)
+    x = x.select(u=x[s["user"]], p=mc.bucket_index(x[s["time"]], unit), a=x[s["amount"]].fill_null(0))
+    pos = x.filter(x.a > 0)
+    j = x.left_join(pos.group_by("u").aggregate(f=pos.p.min()), "u")
+    new = (j.p == j.f).fill_null(False)
+    found = mc.fetch_rows(j.group_by("p").aggregate(n=ibis.ifelse(new, j.a, 0).sum(), r=ibis.ifelse(new, 0, j.a).sum()).order_by("p"), "기간 수")
+    rows = [{"period": label_of(r["p"], unit), "new_revenue": num(r["n"]) or 0.0, "returning_revenue": num(r["r"]) or 0.0} for r in found]
+    rows = [{**r, "new_share": mc.ratio(r["new_revenue"], r["new_revenue"] + r["returning_revenue"])} for r in rows]
+    ctx.notes.append(NEW_NOTE)
+    last = last_done(rows, t, s, unit, ctx, {"new_share": None})
+    return result(last["new_share"] if last else None, last_rows(rows, ctx), {"period": "기간", "new_revenue": "신규 매출", "returning_revenue": "기존 매출", "new_share": "신규 매출 비중"},
+                  {"new_revenue": sum(r["new_revenue"] for r in rows), "returning_revenue": sum(r["returning_revenue"] for r in rows)}, label="가장 최근 기간의 신규 매출 비중")
 
 
 # ---------- 8 실험·모델 ----------
@@ -1112,7 +1241,7 @@ def ranking(t, s, p, ctx):
 
 
 def two_groups(t, s, ctx):
-    """실험군·대조군의 요약 {대조: {n, mean, sd, sum}, 실험: …}와 비율 지표인지. 사용자 칸이 있으면 사용자별로 모은 뒤(0/1은 최댓값, 그 밖은 합계) 사용자 수로 센다."""
+    """실험군·대조군의 요약 {대조: {n, mean, sd, sum}, 실험: …}와 비율 지표인지. 사용자 칸이 있으면 사용자별로 모은 뒤(0/1은 최댓값, 그 밖은 합계, 값이 하나도 없는 사람은 0) 사용자 수로 센다."""
     kind = t[s["group"]].type()
     c, e = funnel.step_value(kind, s["control"]), funnel.step_value(kind, s["treat"])
     m = prep_ops.nan_to_null(t[s["metric"]])  # NaN 하나로 표준편차가 오류(STDDEV_SAMP is out of range)가 나지 않게 빈 값으로
@@ -1132,8 +1261,8 @@ def two_groups(t, s, ctx):
     found = summary(x, mm)
     binary = (isbool or m.type().is_integer()) and all(f["lo"] >= 0 and f["hi"] <= 1 for f in found.values())
     if s.get("user"):
-        x = x.filter(x[s["user"]].notnull())
-        per = x.group_by([s["group"], s["user"]]).aggregate(v=mm.max() if binary else mm.sum())
+        x = t.filter(t[s["group"]].isin([c, e]), t[s["user"]].notnull())  # 지표 값이 빈 행만 있는 사용자도 배정된 사람이라 0으로 센다
+        per = x.group_by([s["group"], s["user"]]).aggregate(v=(mm.max() if binary else mm.sum()).fill_null(0))
         found = summary(per, per.v)
     else:
         ctx.notes.append("사용자 칸을 비워 한 행을 한 사용자로 봤어요. 한 사람이 여러 행이면 표본 수·검정이 부풀 수 있으니 사용자 칸을 골라 주세요.")

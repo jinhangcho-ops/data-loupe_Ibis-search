@@ -74,18 +74,9 @@ def test_menu_accessibility_and_close():
         assert s in HTML
 
 
-def test_label_replace(tmp_path):
-    code = index_slice("function labeled(d) {", "$(\"clabels\").oninput")
-    prelude = r'globalThis.$ = id => ({ value: "1=남\n2 = 여\n줄만있음\n3=a=b" });'
-    body = """
-const d = { labels: [1, "2", "x"], datasets: [{ label: "합계 · 1", values: [5, 6, 7] }, { label: "3", values: [1, 2, 3] }] };
-const o = labeled(d);
-console.log(JSON.stringify({ labels: o.labels, ds: o.datasets.map(k => k.label), values: o.datasets[0].values, orig: d.labels }));
-"""
-    got = run_node(tmp_path, body, parts=[prelude, code])
-    assert got["labels"] == ["남", "여", "x"] and got["ds"] == ["합계 · 남", "a=b"]
-    assert got["values"] == [5, 6, 7] and got["orig"] == [1, "2", "x"]  # 값·원본은 그대로
-    assert 'id="clabels"' in HTML and "labeled(drawn)" in HTML
+def test_label_replace():
+    """라벨 바꾸기는 차트 섬(web/lib/island.ts relabel)이 적용한다: 화면은 #clabels 글을 그대로 보낸다(R4-D2b)."""
+    assert 'id="clabels"' in HTML and 'relabel: $("clabels").value' in HTML and "function labeled(" not in HTML
 
 
 def test_not_null_help():

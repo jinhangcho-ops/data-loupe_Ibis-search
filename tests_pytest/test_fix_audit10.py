@@ -89,7 +89,7 @@ def test_paging_note_only_when_sort_values_tie(client, tmp_path):
     """둘째 쪽부터, 정렬 값이 같은 행이 있을 때만 안내. 정렬 끝이 고유하면(tests.py의 amount desc, order_id) 안내 없음."""
     from query.search_app import LOCAL_PAGES, TIES
     con = ibis.duckdb.connect()
-    con.create_table("t", ibis.memtable({"i": list(range(30)), "k": [x % 3 for x in range(30)]}))
+    con.create_table("t", ibis.memtable({"i": list(range(30)), "k": [x % 4 for x in range(30)]}))  # k가 쪽 경계(10행)에 걸치게 4로 나눈다
     server.state.update(con=con, opened={"kind": "folder", "path": str(tmp_path), "file": str(tmp_path / "t.duckdb")})
     TIES.clear()
     try:

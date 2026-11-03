@@ -13,6 +13,7 @@ from core.compare import ending, particle
 UNITS = {"일": "day", "주": "week", "달": "month", "개월": "month", "년": "year"}
 EVERY_SECONDS = {"초": 1, "분": 60, "시간": 3600, "일": 86400, "주": 7 * 86400, "달": 30 * 86400, "개월": 30 * 86400, "년": 365 * 86400}
 TO_DATE_BEFORE = {"week": "지난주 같은 기간", "month": "지난달 같은 기간", "year": "작년 같은 기간"}
+MODES = ("prev", "same_weekday", "yoy")  # previous의 비교 방식: 직전 같은 길이 / 같은 요일(7의 배수 일 앞) / 작년 같은 기간
 WEEKDAYS = "월화수목금토일"
 HINT = "예: 최근 7일, 2026-10, 2026-Q3, 2026-01-01 ~ 2026-03-31"
 
@@ -232,13 +233,34 @@ def previous_text(start, end):
     return month_name(months, start) if months else f"직전 {(end - start).days + 1}일"
 
 
-def previous(span):
-    """span({start, end, ...})의 직전 같은 길이 기간. 달 단위로 꼭 맞는 기간(월·분기·연 포함)은 직전 같은 개월 수 전체, 그 밖의 날짜 기간은 바로 앞 같은 일수, 시각이 든 기간은 바로 앞 같은 시간이다.
-    열린 범위·읽지 못한 기간, 직전 기간이 달력(1년~) 앞으로 넘어가는 기간(0001-01)은 error가 든 결과를 돌려준다."""
+def previous(span, mode="prev"):
+    """span({start, end, ...})과 견줄 기간. mode(MODES):
+    - prev(기본): 직전 같은 길이 기간. 달 단위로 꼭 맞는 기간(월·분기·연 포함)은 직전 같은 개월 수 전체, 그 밖의 날짜 기간은 바로 앞 같은 일수, 시각이 든 기간은 바로 앞 같은 시간이다.
+    - same_weekday: 7의 배수 일수만큼 앞의 같은 길이 기간(요일이 맞는다). - yoy: 1년 전 같은 달력 기간(달 단위로 꼭 맞거나 이번 달·올해면 12개월 앞, 그 밖은 364일 앞이라 요일이 맞는다).
+    열린 범위·읽지 못한 기간, 비교 기간이 달력(1년~) 앞으로 넘어가는 기간(0001-01), 모르는 mode는 error가 든 결과를 돌려준다."""
+    if mode not in MODES:
+        return failed("비교 방식은 prev(직전 기간)·same_weekday(같은 요일)·yoy(작년 같은 기간) 중 하나예요.")
     try:
-        return previous_span(span)
+        return previous_span(span) if mode == "prev" else shifted_span(span, mode)
     except (ValueError, OverflowError):
-        return failed("직전 기간이 1년 1월 1일보다 앞이라 구할 수 없어요.")
+        return failed("비교 기간이 1년 1월 1일보다 앞이라 구할 수 없어요." if mode != "prev" else "직전 기간이 1년 1월 1일보다 앞이라 구할 수 없어요.")
+
+
+def shifted_span(span, mode):
+    """같은 길이 기간을 같은 요일(7의 배수 일수) 앞이나 1년 앞(yoy)으로 옮긴 것. 시각이 있으면 그대로 붙인다."""
+    if not span or span.get("error") or not span.get("start") or not span.get("end"):
+        return failed("끝이 열린 기간이나 읽지 못한 기간은 비교 기간을 구할 수 없어요.")
+    (first, first_clock), (last, last_clock) = split_text(span["start"]), split_text(span["end"])
+    months = month_count(first, last)
+    if mode == "yoy" and (months or span.get("to_date") in ("month", "year")):
+        start, end = add_months(first, -12), add_months(last, -12)
+        end = month_end(end.year, end.month) if months else end  # 2025-02(28일)의 1년 전 달 끝은 2024-02-29
+        label = "작년 같은 기간"
+    else:
+        back = 364 if mode == "yoy" else -(-((last - first).days + 1) // 7) * 7
+        start, end = first - timedelta(days=back), last - timedelta(days=back)
+        label = "작년 같은 요일 기간" if mode == "yoy" else f"{back // 7}주 전 같은 요일 기간"
+    return {"start": day_text(start, first_clock), "end": day_text(end, last_clock), "days": (end - start).days + 1, "label": label, "error": None}
 
 
 def previous_span(span):

@@ -47,7 +47,7 @@ def test_funnel_hides_full_rerun(tmp_path):
     assert prep_app.whole({"how": {"kind": "funnel"}}) and not prep_app.whole({"how": {"kind": "groups"}})
     part = between("prep.html", "function drawAna()", "\n}\n") + "\n}\n"
     stubs = ("let A = { chart: null, result: null, view: 'funnel' }; const VIEW_NAMES = {}, VIEW_RATIOS = {};"
-             "const anaTitle = () => 't', anaNote = () => 'n', anaTable = () => ({}), resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f';")
+             "const anaTitle = () => 't', anaNote = () => 'n', anaTable = () => ({}), anaSpan = () => 0, anaSlice = d => d, showRange = () => {}, resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f';")
     body = """
 A.result = { kind: "funnel", views: ["funnel"], steps: [] }; A.view = "funnel"; drawAna(); const funnel = $("a-full").hidden;
 A.result = { kind: "groups", views: ["groups"], values: [1] }; A.view = "groups"; $("ana").hidden = true; drawAna();
@@ -162,19 +162,9 @@ S.base = "orders";
     assert sentence_run(tmp_path, body) == {"hints": 1, "value": True}
 
 
-@node
-def test_explore_chart_tuning(tmp_path):
-    """6c: 비율(percent) 지표 차트의 세로축 눈금에 %를 붙인다. 8: 범례는 계열을 넣은 순서(Chart.js는 order가 작은 선을 막대보다 앞에 둔다)."""
-    part = between("index.html", "function tuneChart(", "\n}\n") + "\n}\n"
-    body = """
-const cfg = () => ({ options: { plugins: { legend: { labels: {} } }, scales: { y: { ticks: { color: "#000" } } } } });
-const pct = tuneChart(cfg(), true), plain = tuneChart(cfg(), false), pie = tuneChart({ options: { plugins: { legend: { labels: {} } }, scales: {} } }, true);
-const items = [{ datasetIndex: 1, text: "평균" }, { datasetIndex: 0, text: "합계" }].sort((a, b) => a.datasetIndex - b.datasetIndex);  // 범례 정렬은 chartConfig로 옮겼다(test_fix_ui67_c_legend)
-console.log(JSON.stringify({ tick: pct.options.scales.y.ticks.callback(9), color: pct.options.scales.y.ticks.color, plainTick: "callback" in plain.options.scales.y.ticks, order: items.map(i => i.text), pie: Object.keys(pie.options.scales) }));"""
-    got = run_node(tmp_path, body, parts=[part])
-    assert got == {"tick": "9%", "color": "#000", "plainTick": False, "order": ["합계", "평균"], "pie": []}
-    html = read("index.html")
-    assert "tuneChart(chartConfig(drawnCard(labeled(drawn), axisRanges())" in html and 'format === "percent")' in between("index.html", "function drawMetric()", "\n}\n")
+def test_explore_chart_tuning():
+    """6c: 비율(percent) 지표 차트는 세로축 눈금에 %(차트 섬에 percent를 보내고 web SeriesChart가 붙인다). 8: 범례 순서는 섬(Recharts)이 넣은 순서대로. 메시지 모양은 test_cr_r4d2b."""
+    assert 'percent: format === "percent"' in between("index.html", "function drawMetric()", "\n}\n")
 
 
 @node
@@ -217,7 +207,3 @@ def test_pivot_prefix_applies_to_every_value_when_one_clashes():
     t = ib.memtable({"매장": ["강남", "강남", "홍대"], "채널": ["매장", "앱", "웹"], "금액": [1, 2, 3]})
     out = calc.pivot(t, {"rows": ["매장"], "column": "채널", "how": "sum", "value": "금액"}, lambda e: e.to_pyarrow()["v"].to_pylist()).to_pyarrow()
     assert [c for c in out.column_names if c.startswith("채널=")] == ["채널=매장", "채널=앱", "채널=웹"]  # 예전엔 채널=매장, 앱, 웹으로 섞였다
-
-
-def test_legend_keeps_added_order_in_chart_config():
-    assert "sort: (a, b) => a.datasetIndex - b.datasetIndex" in between("dash.js", "function chartConfig(", "\n}\n")

@@ -1,19 +1,9 @@
-"""화면 점검 접근성(JS 묶음): × 단추 이름, 차트 캔버스 대체 글, 움직임 줄이기, Esc로 떠 있는 창 닫기, 정렬한 머리글의 aria-sort."""
+"""화면 점검 접근성(JS 묶음): × 단추 이름, 차트 캔버스 대체 글, Esc로 떠 있는 창 닫기, 정렬한 머리글의 aria-sort."""
 from test_fix_audit_js import between, read, run_node
 
 
 def test_x_buttons_have_names():
-    assert 'textContent: "×", title: "이 줄 빼기", ariaLabel: "이 줄 빼기"' in read("dash_menu.js")
     assert 'textContent: "×", title: "필터 넣기 취소", ariaLabel: "필터 넣기 취소"' in read("dash_shelf.js")
-
-
-def test_chart_canvas_is_an_image_named_by_card_title():
-    assert 'el("canvas", { role: "img", ariaLabel: card.title || "차트" })' in between("board.js", "cardBox(card, colors) {", "const body = ")
-
-
-def test_charts_skip_animation_when_reduced_motion():
-    look = between("common.js", "function chartLook() {", "\n}\n")
-    assert 'if (matchMedia("(prefers-reduced-motion: reduce)").matches) d.animation = false;' in look
 
 
 ESC = between("common.js", "// Esc로 마지막에 뜬 창", "\n});\n") + "\n});\n"
@@ -49,12 +39,6 @@ console.log(JSON.stringify(out));
     got = run_node(tmp_path, ESC_HOST + body)
     assert got == {"first": [True, False, True, ["click"]], "menu": [True, False], "ime": [False, False],
                    "other": [False, False], "second": [True, True], "ask": [False, False, ["click"]]}
-
-
-def test_dash_only_escape_waits_for_modal_and_metrics_modal_closes_on_backdrop():
-    html = read("dashboard.html")
-    assert 'e.key === "Escape" && !e.defaultPrevented && document.body.classList.contains("dash-only")' in html
-    assert '$("d-met-modal").onclick = e => { if (e.target === $("d-met-modal")) $("d-met-modal").classList.add("hidden"); };' in html
 
 
 def test_sorted_header_has_aria_sort(tmp_path):

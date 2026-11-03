@@ -42,11 +42,13 @@ def no_setup_running(monkeypatch):
 
 @pytest.fixture
 def folder():
-    """테스트마다 빈 설정 폴더."""
+    """테스트마다 빈 설정 폴더. 끝난 뒤에도 비워서 저장한 설정(week_start 등)이 다음 시험으로 새지 않게 한다."""
     from core import settings
     shutil.rmtree(settings.PATH.parent, ignore_errors=True)
     settings.PATH.parent.mkdir(parents=True)
-    return settings.PATH.parent
+    yield settings.PATH.parent
+    shutil.rmtree(settings.PATH.parent, ignore_errors=True)
+    settings.PATH.parent.mkdir(parents=True)
 
 
 @pytest.fixture

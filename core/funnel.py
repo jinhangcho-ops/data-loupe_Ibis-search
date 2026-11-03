@@ -10,6 +10,8 @@ from core.parse import check_name
 
 MAX_STEPS = 10  # 단계 수 상한
 MIN_STEPS = 1
+MAX_SEGMENTS = 8  # 세그먼트(by)로 나눌 값 수. 첫 단계 사람이 많은 순, 나머지는 OTHER
+OTHER = "기타"
 
 
 def check(table, user, step, time, steps, window_seconds):
@@ -79,30 +81,73 @@ def reached(base, steps, window_seconds, entry=None):
     return levels
 
 
-def counts(levels):
-    """단계별 사용자 수 목록(조회 한 번). 한 사람은 시도가 여럿이어도 한 번만 센다."""
-    parts = [level.aggregate(n=level.u.nunique()).mutate(i=ibis.literal(i)) for i, level in enumerate(levels)]
+def counts(levels, seg=None):
+    """단계별 사용자 수 목록(조회 한 번). 한 사람은 시도가 여럿이어도 한 번만 센다. seg(사용자 u, 세그먼트 g 표)를 주면 {세그먼트: 목록}."""
+    if seg is None:
+        parts = [level.aggregate(n=level.u.nunique()).mutate(i=ibis.literal(i), g=ibis.literal("")) for i, level in enumerate(levels)]
+    else:
+        parts = [level.join(seg, "u").group_by("g").aggregate(n=ibis._.u.nunique()).mutate(i=ibis.literal(i)) for i, level in enumerate(levels)]
     table = parts[0]
     for part in parts[1:]:
         table = table.union(part)
-    found = {row["i"]: row["n"] for row in table.to_pyarrow().to_pylist()}
-    return [int(found.get(i, 0)) for i in range(len(levels))]
+    found = {(row["g"], row["i"]): row["n"] for row in table.to_pyarrow().to_pylist()}
+    if seg is None:
+        return [int(found.get(("", i), 0)) for i in range(len(levels))]
+    return {g: [int(found.get((g, i), 0)) for i in range(len(levels))] for g in dict.fromkeys(g for g, _ in found)}
 
 
-def compute(table_expr, user, step, time, steps, window_seconds=None, entry=None):
-    """퍼널을 구한다. 결과 {steps: [{name, users, conv, from_first, drop}], window}.
-    conv = 이전 단계 대비, from_first = 첫 단계 대비(나누는 수가 0이면 None), drop = 이전 단계에서 빠진 사람 수(첫 단계는 0).
-    entry = (시작 date 또는 None, 끝 date 또는 None): 첫 단계를 이 날짜 안에 한 사람만 센다(reached)."""
+def gaps(levels):
+    """단계마다 바로 앞 단계에서 걸린 시간(초)의 중앙값 목록(첫 단계는 None, 조회 한 번). 사람마다 가장 빠른 시도 하나로 센다."""
+    if len(levels) < 2:
+        return [None]
+    parts = []
+    for i, (prev, now) in enumerate(zip(levels, levels[1:]), 1):
+        j = now.join(prev, ["u", "t1"]).select("u", d=now.tp.epoch_seconds() - prev.tp.epoch_seconds())
+        per = j.group_by("u").aggregate(d=j.d.min())
+        parts.append(per.aggregate(m=per.d.median().cast("float64")).mutate(i=ibis.literal(i)))
+    table = parts[0]
+    for part in parts[1:]:
+        table = table.union(part)
+    found = {row["i"]: row["m"] for row in table.to_pyarrow().to_pylist()}
+    return [None] + [found.get(i) for i in range(1, len(levels))]
+
+
+def segments(base, first_value):
+    """세그먼트 표(사용자 u, 세그먼트 g): 사람마다 첫 단계를 처음 한 행의 by 값. 첫 단계 사람이 많은 MAX_SEGMENTS개 밖은 OTHER, 빈 값은 '(빈 값)'."""
+    starts = base.filter(base.s == first_value)
+    g = starts.g.cast("string").fill_null("(빈 값)")
+    per = starts.select("u", "t", g=g).group_by("u").aggregate(g=ibis._.g.argmin(ibis._.t))
+    top = per.group_by("g").aggregate(n=per.count()).order_by([ibis.desc("n"), "g"]).limit(MAX_SEGMENTS).to_pyarrow()["g"].to_pylist()
+    return per.select("u", g=ibis.ifelse(per.g.isin(top), per.g, ibis.literal(OTHER))) if top else per.select("u", "g")
+
+
+def compute(table_expr, user, step, time, steps, window_seconds=None, entry=None, by=None):
+    """퍼널을 구한다. 결과 {steps: [{name, users, conv, from_first, drop, median_sec}], window, segments?}.
+    conv = 이전 단계 대비, from_first = 첫 단계 대비(나누는 수가 0이면 None), drop = 이전 단계에서 빠진 사람 수(첫 단계는 0), median_sec = 앞 단계에서 걸린 시간의 중앙값(초, 첫 단계는 None).
+    entry = (시작 date 또는 None, 끝 date 또는 None): 첫 단계를 이 날짜 안에 한 사람만 센다(reached).
+    by = 세그먼트 컬럼(없으면 나누지 않음): segments = [{name, steps}] 첫 단계 사람이 많은 순 MAX_SEGMENTS개와 OTHER."""
     steps, window_seconds = check(table_expr, user, step, time, steps, window_seconds)
+    if by is not None:
+        check_name(by, table_expr.columns)
     values = [step_value(table_expr[step].type(), s) for s in steps]
-    base = table_expr.select(u=table_expr[user], s=table_expr[step], t=table_expr[time].cast("timestamp"))
+    base = table_expr.select(u=table_expr[user], s=table_expr[step], t=table_expr[time].cast("timestamp"), **({"g": table_expr[by]} if by is not None else {}))
     base = base.filter(base.u.notnull(), base.t.notnull())
-    users = counts(reached(base, values, window_seconds, entry))
+    levels = reached(base, values, window_seconds, entry)
+    found = {"steps": step_rows(steps, counts(levels), gaps(levels)), "window": window_seconds}
+    if by is not None:
+        per = counts(levels, segments(base, values[0]))
+        found["segments"] = sorted(({"name": g, "steps": step_rows(steps, n)} for g, n in per.items()), key=lambda x: (x["name"] == OTHER, -x["steps"][0]["users"], x["name"]))
+    return found
+
+
+def step_rows(steps, users, medians=None):
+    """단계별 사람 수 → [{name, users, conv, from_first, drop, median_sec}]."""
     out = []
     for i, (name, n) in enumerate(zip(steps, users)):
         prev = users[i - 1] if i else None
         out.append({"name": str(name), "users": n,
                     "conv": (n / prev if prev else None) if i else (1.0 if n else None),
                     "from_first": n / users[0] if users[0] else None,
-                    "drop": prev - n if i else 0})
-    return {"steps": out, "window": window_seconds}
+                    "drop": prev - n if i else 0,
+                    "median_sec": medians[i] if medians else None})
+    return out
