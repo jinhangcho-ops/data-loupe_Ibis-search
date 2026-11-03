@@ -66,12 +66,10 @@ def test_time_data_week_and_fiscal_year_on_server(monkeypatch, engine):
     monkeypatch.setattr(settings, "load", lambda: {"week_start": "sun", "fiscal_start_month": 4})
     df = pl.DataFrame({"day": [dt.date(2026, 1, 3), dt.date(2026, 1, 4), dt.date(2026, 4, 1)], "amt": [1, 2, 4]})
     t = ibis.memtable(df.to_arrow()) if engine == "memory" else ibis.polars.connect().create_table("t", df)
-    by_unit = dash_calc.time_data(t, "day", [{"y": "amt", "agg": "sum"}], None)["by_unit"]
-    assert by_unit["week"]["labels"] == ["2025-12-28", "2026-01-04", "2026-03-29"] and by_unit["week"]["series"][0]["values"] == [1, 2, 4]
-    assert by_unit["year"]["labels"] == ["2025-04-01", "2026-04-01"] and by_unit["year"]["series"][0]["values"] == [3, 4]
-    assert "month" not in by_unit  # 달은 설정과 상관없어 화면이 일 값을 묶는다
-    monkeypatch.setattr(settings, "load", lambda: {})
-    assert set(dash_calc.time_data(t, "day", [{"y": "amt", "agg": "sum"}], None)["by_unit"]) == {"day"}  # 기본 설정이면 지금처럼 일 값만
+    # 합계처럼 다시 묶을 수 있는 집계는 설정과 상관없이 일 값만 준다: 주 시작·회계연도는 화면이 상수(constants)로 받아 묶는다(서버가 또 구하면 조회가 늘고 설정을 바꿔도 낡은 값이 남는다)
+    assert set(dash_calc.time_data(t, "day", [{"y": "amt", "agg": "sum"}], None)["by_unit"]) == {"day"}
+    by_unit = dash_calc.time_data(t, "day", [{"y": "amt", "agg": "nunique"}], None)["by_unit"]  # 다시 묶을 수 없는 집계만 서버가 설정대로 구한다
+    assert by_unit["week"]["labels"] == ["2025-12-28", "2026-01-04", "2026-03-29"] and by_unit["year"]["labels"] == ["2025-04-01", "2026-04-01"]
 
 
 def test_constants_carry_calendar_settings(monkeypatch):
@@ -180,3 +178,12 @@ def test_dash_pdf_cleans_part_on_failure(tmp_path, monkeypatch):
 def test_values_partial_skipped_on_bigquery(bigquery, remote):
     got = remote.post("/api/values", json={"base": "orders", "column": "grp", "confirmed": True}).get_json()
     assert got["values"] and got["partial"] is None  # 앞부분인지 세는 조회도 읽는 양만큼 요금이라 묻지 않는다(모름)
+
+
+def test_settings_show_app_version():
+    """설정 창에 지금 버전 줄이 있고, 화면 JS가 SERVER.features.version(설치 프로그램이 쓴 features.ini)으로 채운다. 소스 실행이면 개발 실행이라고 보인다."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent / "static" / "core"
+    assert 'id="app-version"' in (root / "status.html").read_text(encoding="utf-8")
+    js = (root / "common.js").read_text(encoding="utf-8")
+    assert '$("app-version").textContent = SERVER.features.version ? `v${SERVER.features.version}` : "개발 실행' in js

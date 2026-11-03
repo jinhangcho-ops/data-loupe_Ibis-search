@@ -291,7 +291,7 @@ def state_counts(act):
 
 
 def gap_counts(table, user, time, unit):
-    """미접속 기준(inactive_days)용 집계. 사용자·기간 버킷마다 첫·마지막 날을 구해 (돌아온 행 {버킷: {쉰 일수: 수}}, 다음 기간에 활동이 없는 행 {버킷: {마지막 활동일: 수}}, 모든 행 [(버킷, 다음 활동 버킷, 마지막 활동일, 수)])를 돌려준다. 창 함수(lag·lead)를 쓴다."""
+    """미접속 기준(inactive_days)용 집계. 사용자·기간 버킷마다 첫·마지막 날을 구해 (돌아온 행 {버킷: {쉰 일수: 수}}, 모든 행 [(버킷, 다음 활동 버킷, 마지막 활동일, 수)])를 돌려준다. 창 함수(lag·lead)를 쓴다."""
     need(table, user, time)
     t = table.select(u=table[user], d=day_index(table[time]), p=bucket_index(table[time], unit))
     t = t.filter(t.u.notnull(), t.d.notnull())
@@ -303,21 +303,16 @@ def gap_counts(table, user, time, unit):
     returns = {}
     for r in rows(back.group_by(["p", "gap"]).aggregate(n=back.u.count())):
         returns.setdefault(int(r["p"]), {})[int(r["gap"])] = int(r["n"])
-    last, rests = {}, []
-    for r in rows(b.group_by(["p", "nq", "dmax"]).aggregate(n=b.u.count())):
-        q, nq, day, n = int(r["p"]), (None if r["nq"] is None else int(r["nq"])), int(r["dmax"]), int(r["n"])
-        rests.append((q, nq, day, n))
-        if nq is None or nq - q > 1:  # 다음 기간에 활동이 없다
-            last.setdefault(q, {})[day] = last.get(q, {}).get(day, 0) + n
-    return returns, last, rests
+    rests = [(int(r["p"]), (None if r["nq"] is None else int(r["nq"])), int(r["dmax"]), int(r["n"])) for r in rows(b.group_by(["p", "nq", "dmax"]).aggregate(n=b.u.count()))]
+    return returns, rests
 
 
 def user_states(table, user, time, unit="month", inactive_days=None, notes=None):
     """기간 버킷마다 사용자 상태 [{period(첫 날), active, new, retained, resurrected, churned, quick_ratio, churn_rate, resurrection_rate}].
     기본(inactive_days 없음)은 버킷만 본다: new = 첫 활동이 그 기간, retained = 앞 기간에도 활동, resurrected = 앞 기간에는 없고 그 전에는 활동한 적 있음, churned = 앞 기간에 활동했고 이번엔 없음.
-    inactive_days = N(미접속 기준 일수)을 주면: churned = 앞 기간에 활동했고 이번엔 없으며 마지막 활동이 이 기간 끝보다 N일 이상 앞인 사람,
+    inactive_days = N(미접속 기준 일수)을 주면: churned = 마지막 활동 뒤 N일이 이 기간 안에서 처음 채워진 사람(그때까지 다시 활동하지 않음. 한 번만 셈),
     resurrected = 이번에 활동했고 앞 기간엔 없으며(그 전 활동이 있고) 직전 활동과 N일 이상 벌어진 사람. 쉬었지만 N일이 안 된 사람이 돌아오면 retained로 센다.
-    quick_ratio = (new + resurrected) / churned, churn_rate = churned / 앞 기간 활동자, resurrection_rate = resurrected / 기간 시작 때 휴면자(앞 기간까지 처음 나타난 사람 − 앞 기간 활동자. N을 주면 기간 시작보다 마지막 활동이 N일 이상 앞선 사람).
+    quick_ratio = (new + resurrected) / churned, churn_rate = churned / 앞 기간 활동자(N을 주면 기간 시작 때 아직 이탈이 아닌 사람), resurrection_rate = resurrected / 기간 시작 때 휴면자(앞 기간까지 처음 나타난 사람 − 앞 기간 활동자. N을 주면 기간 시작보다 마지막 활동이 N일 이상 앞선 사람).
     unit에 일수 N을 주면 N일 묶음마다 본다. 첫 기간은 앞 기간이 없어 churned 등이 None이다. notes(목록)를 주면 기간 칸이 활동 칸보다 훨씬 많을 때 안내를 더한다."""
     check_unit(unit)
     if inactive_days is not None and (isinstance(inactive_days, bool) or not isinstance(inactive_days, int) or inactive_days < 1):
@@ -328,7 +323,7 @@ def user_states(table, user, time, unit="month", inactive_days=None, notes=None)
     msg = sparse_note(max(active) - min(active) + 1, len(active))
     if msg and notes is not None:
         notes.append(msg)
-    returns, last, rests = gap_counts(table, user, time, unit) if inactive_days else ({}, {}, [])
+    returns, rests = gap_counts(table, user, time, unit) if inactive_days else ({}, [])
     out, seen = [], 0  # seen = 앞 기간까지 처음 나타난 사람 수
     for p in range(min(active), max(active) + 1):
         a, n, k = active.get(p, 0), new.get(p, 0), kept.get(p, 0)
@@ -342,9 +337,11 @@ def user_states(table, user, time, unit="month", inactive_days=None, notes=None)
         if p > min(active):
             prev = active.get(p - 1, 0)
             row["churned"] = prev - k
-            if inactive_days:
-                end_day = (bucket_start(p + 1, unit) - EPOCH).days - 1
-                row["churned"] = sum(c for day, c in last.get(p - 1, {}).items() if end_day - day >= inactive_days)
+            if inactive_days:  # 앞 기간 활동자만 보면 다음 기간 끝까지 N일이 안 찬 사람은 영영 안 세어진다
+                end_day, prev_end = ((bucket_start(i + 1, unit) - EPOCH).days - 1 for i in (p, p - 1))
+                live = [(q, nq, day, c) for q, nq, day, c in rests if q < p and (nq is None or nq >= p) and (q == p - 1 or prev_end - day < inactive_days)]
+                row["churned"] = sum(c for q, nq, day, c in live if (nq is None or nq > p) and end_day - day >= inactive_days)
+                prev = sum(c for *_, c in live)  # 기간 시작 때 아직 이탈이 아닌 사람
             row["quick_ratio"] = ratio(n + resurrected, row["churned"])
             row["churn_rate"] = ratio(row["churned"], prev)
             dormant = seen - prev

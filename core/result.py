@@ -472,7 +472,7 @@ def get_chart(expr, x, series, split=None, order="x", x_unit=""):
     if not (x_unit and (kind.is_date() or kind.is_timestamp())):
         return group_chart(expr, x, series, split, order)
     local = local_time(expr[x])
-    expr = expr.mutate(**{x: sql_funcs.period_start(local, CHART_UNITS[x_unit]).cast(local.type())})  # period_start를 부르는 곳은 여기 하나(D1이 시그니처를 바꾸면 여기만). Ibis는 자른 값의 시간대를 잊어 Polars 결과를 UTC로 돌려 다시 붙인다
+    expr = expr.mutate(**{x: sql_funcs.period_start(local, CHART_UNITS[x_unit])})  # period_start를 부르는 곳은 여기 하나
     labels, datasets, more = group_chart(expr, x, series, split, order)
     if order == "value":
         return labels, datasets, more

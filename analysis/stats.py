@@ -15,9 +15,8 @@ from core.result import chart_metric, plain
 from core.sql_funcs import period_start  # 주 시작 자르기는 식 truncate와 같은 것을 쓴다(dash_calc도 stats.period_start로 부른다)
 
 def local_start(col, unit):
-    """설정 시간대의 기간 시작(시간대 있는 시각만 local_time으로 바꾼다). Ibis는 자른 값의 시간대를 잊어 Polars 결과를 UTC로 돌려 다시 붙인다."""
-    local = result.local_time(col)
-    return period_start(local, unit).cast(local.type())
+    """설정 시간대의 기간 시작(시간대 있는 시각만 local_time으로 벽시계 시각으로 바꾼 뒤 자른다)."""
+    return period_start(result.local_time(col), unit)
 
 
 BINS = 20  # 히스토그램 구간 수

@@ -1604,7 +1604,7 @@ async function restore(st) {
 }
 // 검색·집계·차트가 도는 중에는 탭을 바꾸지 않는다(응답이 다른 탭에 그려지지 않게)
 function tabLocked() {
-  if (!["search", "summarize", "draw"].some(id => $(id).disabled)) return false;
+  if (!["search", "summarize", "draw", "pv-run", "peak-find"].some(id => $(id)?.disabled)) return false;  // 피벗·기간 찾기도 늦은 응답이 다른 탭에 들어갈 수 있다
   flash("검색이 끝난 뒤 탭을 바꿔 주세요.", 3000);
   return true;
 }

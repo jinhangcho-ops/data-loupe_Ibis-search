@@ -302,8 +302,11 @@ def first_page(config, env):
     except ValueError:
         data = None
     shown = lambda value: req_mask(value, hide)
-    return {"sent": {"method": sent["method"], "url": shown(sent["url"]), "headers": [[k, shown(v)] for k, v in sent["headers"]]},
-            "status": reply.status, "headers": [[k, shown(v)] for k, v in reply.headers], "text": text, "json": data}
+    secret = collect_http.SECRET_HEADERS | {"set-cookie"}  # Basic 헤더는 base64라 env 값으로 찾을 수 없어 값 전체를 가린다(방식 이름 Basic·Bearer만 남김)
+    hidden = lambda v: (m.group(0) if (m := re.match(r"[A-Za-z-]+ ", v)) else "") + collect_http.HIDE
+    head = lambda pairs: [[k, hidden(v) if k.lower() in secret else shown(v)] for k, v in pairs]
+    return {"sent": {"method": sent["method"], "url": shown(sent["url"]), "headers": head(sent["headers"])},
+            "status": reply.status, "headers": head(reply.headers), "text": text, "json": data}
 
 
 def context(config, env, i, cursor="", now=None):

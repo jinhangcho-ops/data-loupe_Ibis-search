@@ -316,10 +316,8 @@ def time_data(expr, x, series, split):
     def values(unit, only=None):
         picked = {i: s for i, s in enumerate(series) if only is None or only(s["agg"])}
         return unit_section(grouped(t, x, unit, split, parts, lambda tt: {f"s{i}_v": final_expr(tt, s) for i, s in picked.items()}), series, parts, split, only)
-    cal = settings.load()
-    own = {"week": cal.get("week_start") == "sun", "year": cal.get("fiscal_start_month", 1) != 1}  # 기본이 아닌 주 시작·회계연도는 서버가 구한다(화면이 설정을 모르는 때도 같게)
-    for unit in ("week", "month", "year"):
-        if (cut and unit != "week") or own.get(unit):
+    for unit in ("week", "month", "year"):  # 주 시작·회계연도 설정은 화면(web/lib/calc.ts setCalendar)이 상수로 받아 일 값을 묶는다(서버가 또 구하면 조회가 늘고 설정을 바꿔도 낡은 값이 남는다)
+        if cut and unit != "week":
             by_unit[unit] = values(unit)  # 잘라 낸 앞부분까지 월·연은 서버가 구한다
         elif any(not merges(s["agg"]) for s in series):
             by_unit[unit] = values(unit, lambda agg: not merges(agg))  # 고유 개수·중앙값 같은 집계는 일 값을 다시 묶을 수 없다

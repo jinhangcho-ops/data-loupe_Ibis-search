@@ -314,7 +314,6 @@ function SentenceView(host, ctx) {
       }
     };
     const switcher = cfg ? el("div", { className: "seg" }, ...[["table", "표"], ["chart", "차트"]].map(([k, t]) => { const b = el("button", { className: "seg-b" + (k === "table" ? " on" : ""), textContent: t, onclick: () => switchTo(k) }); b.dataset.view = k; return b; })) : "";
-    out.querySelectorAll?.(".schart iframe").forEach(f => f.resend?.dispose?.());  // 앞 결과의 섬 리스너를 바로 푼다(가짜 DOM 시험에는 querySelectorAll이 없다)
     out.replaceChildren(d.text ? el("div", { className: "stext-result", textContent: d.text }) : "", switcher,
       table, box, ...d.notes.map(n => el("div", { className: "hint", textContent: n })),
       d.more ? el("div", { className: "hint warn", textContent: `결과가 더 있어요. 처음 ${d.rows.length.toLocaleString()}행만 보여요. 기간이나 조건을 좁혀 보세요.` } ) : "",

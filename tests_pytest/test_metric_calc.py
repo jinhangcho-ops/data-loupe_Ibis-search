@@ -124,6 +124,7 @@ def test_user_states_inactive_days_disagrees_with_bucket_rule():
     feb, mar = days["2026-02"], days["2026-03"]
     assert (feb["active"], feb["churned"], feb["churn_rate"], feb["quick_ratio"]) == (0, 1, 0.5, 0.0)  # y는 28일 < 45일이라 아직 이탈이 아니다
     assert (mar["active"], mar["resurrected"], mar["retained"], mar["churned"], mar["quick_ratio"]) == (2, 1, 1, 0, None)  # y는 30일 < 45일이라 유지
+    assert mar["churn_rate"] == 0.0  # 3월 시작 때 아직 이탈 아닌 사람은 y 1명(x는 2월에 이미 이탈)
     assert mar["resurrection_rate"] == 1.0 and feb["resurrection_rate"] is None  # 3/1 기준 휴면: x 50일(≥45), y 29일(<45) → 1명, 복귀 1명
     low = {r["period"][:7]: r for r in mc.user_states(t, "uid", "ts", "month", inactive_days=10)}
     assert (low["2026-02"]["churned"], low["2026-03"]["resurrected"]) == (2, 2)  # 기준이 짧으면 버킷 규칙과 같다

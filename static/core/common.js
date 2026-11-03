@@ -29,7 +29,7 @@ function island(frame, onError) {
   const draw = msg => { if (msg) last = msg; post(); };
   draw.picture = (theme, format) => new Promise((ok, no) => {
     if (!ready || !last) return no(new Error("먼저 차트를 그리세요."));
-    wait?.no(new Error("앞의 그림 요청을 취소했어요."));  // 대기 자리는 하나: 연달아 부르면 앞 것을 끝내 준다(매달리지 않게)
+    if (wait) return no(new Error("앞 그림을 만드는 중이에요."));  // 대기 자리는 하나: 앞 요청의 답이 새 요청으로 가지 않게 새 요청을 거절한다
     wait = { ok, no };
     frame.contentWindow.postMessage({ type: "picture", theme, format }, location.origin);
   });
@@ -417,6 +417,7 @@ $("feat-apply").onclick = () => busy($("feat-apply"), async () => {
   catch (e) { say("feat-msg", e.message); }
 });
 // 새 버전 알림: 앱을 열 때 한 번 묻고(서버가 실행마다 한 번만 GitHub에 묻는다), 있으면 위쪽 줄에 [업데이트]. 누르면 지금 고른 기능 그대로 새 버전을 설치한다.
+$("app-version").textContent = SERVER.features.version ? `v${SERVER.features.version}` : "개발 실행(설치 파일이 아님)";  // features.ini의 버전(설치 프로그램이 씀)
 api("/api/update").then(u => {
   $("upd-check").checked = u.check;
   if (!u.newer) return;
