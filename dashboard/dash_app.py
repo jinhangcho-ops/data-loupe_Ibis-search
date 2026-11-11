@@ -30,7 +30,7 @@ IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 TARGET_PAGE = 100  # 목표 파일의 문제 줄을 한 번에 돌려줄 수(화면은 [이전]/[다음]으로 넘겨 본다)
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
-server.FREE.update({"/api/dash", "/api/dash/get", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min",
+server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min",
                     "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart", "/api/viz"})
 
 
@@ -94,12 +94,6 @@ def dash_constants_api():
 def dash_list():
     """목록 {dashboards: [{id, name, cards, updated}], locked, last(첫 화면에서 마지막으로 연 id)}. locked면 이 PC에서 풀 수 없는 파일이다."""
     return jsonify(**dash_store.listing(), last=(settings.read(LAST) or {}).get("id", ""))
-
-
-@app.get("/api/dash/get")
-def dash_get():
-    """대시보드 하나(카드·값 포함): /api/dash/get?id=…. 연결을 쓰지 않으므로 차례를 기다리지 않는다(경로 변수를 쓰면 FREE에 넣을 수 없다)."""
-    return jsonify(dashboard=dash_store.get_dashboard(request.args.get("id")))
 
 
 @app.post("/api/dash/open")

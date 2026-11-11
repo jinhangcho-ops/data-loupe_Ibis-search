@@ -174,7 +174,7 @@ def test_7p4_save_response_has_no_card_data(client):
     assert saved["id"] and saved["name"] == "응답" and saved["cards"][0]["id"] and saved["cards"][0]["layout"]
     assert all("data" not in c for c in saved["cards"])
     assert got["dashboards"][0]["cards"] == 1  # 목록은 그대로
-    stored = client.get("/api/dash/get", query_string={"id": saved["id"]}).get_json()["dashboard"]
+    stored = client.post("/api/dash/open", json={"id": saved["id"]}).get_json()["dashboard"]
     assert stored["cards"][0]["data"]  # 저장된 값은 그대로 있다
 
 
