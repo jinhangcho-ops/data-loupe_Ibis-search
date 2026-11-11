@@ -1271,12 +1271,17 @@ def collect_section(c, got):
            "사용 한도에 쓸 수 없는 값이 있어요: x"])
     r = got("/api/limits", name="초당", group={"per_second": 2, "concurrency": 4})
     check("묶음 저장과 사용량(기본값 채움)", (r["groups"]["초당"]["tz"], r["usage"]["초당"]["day"], r["usage"]["초당"]["broken"], r["usage"]["초당"]["day_limit"]), ("Asia/Seoul", 0, False, None))
-    real_take, times = collect_limits.take, []
-    collect_limits.take = lambda *a: (real_take(*a), times.append(time.time()))[0]  # 받은 시각은 시험 서버의 지연이 섞이므로, 보내도 된다고 정한 시각을 잰다
+    real_write, times = collect_limits.settings.write_atomic, []
+
+    def record(path, data):  # take가 잠금 안에서 정해 기록하는 시각(now)을 잰다. take가 끝난 뒤의 시각은 스레드 지연이 섞여 CI에서 간격이 틀어졌다
+        if path.name == collect_limits.USAGE:
+            times.append(max(data["초당"]["sent"]))
+        return real_write(path, data)
+    collect_limits.settings.write_atomic = record
     try:
         _, st = run(config("/items", "persec.parquet", limit_group="초당", request={"query": [["page", "{page}"]]}, balance={"concurrency": 4}))
     finally:
-        collect_limits.take = real_take
+        collect_limits.settings.write_atomic = real_write
     times.sort()
     check("초당 2번: 어느 1초 안에도 2번 넘게 보내지 않음(보낸 시각 간격)", (st["phase"], len(times) >= 6, min(b - a for a, b in zip(times, times[2:])) >= 0.95, st["usage"]["second"] <= 2),
           ("끝", True, True, True))
