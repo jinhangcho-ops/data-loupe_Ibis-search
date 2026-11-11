@@ -10,7 +10,7 @@ from conftest import ROOT
 
 SCRIPT = r"""
 const assert = require("assert");
-const stubs = (by) => ({ $: id => ({ "a-fuser": { value: "u" }, "a-fstep": { value: "e" }, "a-ftime": { value: "t" }, "a-fwin": { value: "" }, "a-funit": { value: "day" }, "a-fby": { value: by } }[id]), akind: () => "funnel", FLOW: { steps: ["a", "b"] }, pickers: {} });
+const stubs = (by) => ({ $: id => ({ "a-fuser": { value: "u" }, "a-fstep": { value: "e" }, "a-ftime": { value: "t" }, "a-fwin": { value: "" }, "a-funit": { value: "day" }, "a-fby": { value: by }, "a-ftrim": { value: "" }, "a-fdefine": { value: "values" } }[id]), akind: () => "funnel", FLOW: { steps: ["a", "b"] }, pickers: {} });
 const how = by => { const s = stubs(by); return new Function("$", "akind", "FLOW", "pickers", HOW + "; return anaHow();")(s.$, s.akind, s.FLOW, s.pickers); };
 assert.strictEqual("by" in how(""), false);
 assert.strictEqual(how("plan").by, "plan");

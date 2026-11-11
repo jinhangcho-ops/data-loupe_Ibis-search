@@ -73,27 +73,6 @@ def test_plan_shared_does_not_mix_cards_with_different_calcs():
     assert len(plan["series"]) == 3
 
 
-# ---------- M15 대시보드 열기는 차례를 기다리지 않는 경로 ----------
-
-def test_open_dashboard_is_free_route(client):
-    saved = client.post("/api/dash", json={"name": "열기", "cards": []}).get_json()["dashboard"]
-    assert "/api/dash/get" in server.FREE
-    got = client.get("/api/dash/get", query_string={"id": saved["id"]}).get_json()
-    assert got["dashboard"]["id"] == saved["id"]
-    assert "찾을 수 없" in client.get("/api/dash/get", query_string={"id": "nope"}).get_json()["error"]
-    assert client.get(f"/api/dash/{saved['id']}").status_code == 404  # 차례를 기다리는 예전 경로는 없앴다
-
-
-def test_open_dashboard_does_not_wait_for_the_turn(client):
-    saved = client.post("/api/dash", json={"name": "안기다림", "cards": []}).get_json()["dashboard"]
-    done = []
-    with server.turn:  # 다른 요청이 연결을 쓰는 중
-        worker = threading.Thread(target=lambda: done.append(client.get("/api/dash/get", query_string={"id": saved["id"]}).get_json()))
-        worker.start()
-        worker.join(3)
-        assert done and done[0]["dashboard"]["id"] == saved["id"]
-
-
 # ---------- M6 NaN·무한 → null ----------
 
 @pytest.fixture

@@ -65,6 +65,7 @@
   .f-step.over { outline:2px dashed var(--accent); }
   .f-step button { padding:0 6px; }
   .f-add { display:flex; gap:6px; }
+  .f-stage { display:flex; flex-direction:column; gap:4px; padding:6px 0; border-top:1px solid var(--line); }
   .f-add input { flex:1; min-width:0; }
   .f-win { display:flex; gap:6px; align-items:center; }
   .f-win input { width:80px; }
@@ -339,15 +340,25 @@
       </div>
       <div class="a-form hidden" data-kind="funnel">
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-fuser"></select>
-        <div class="hint">행동 이름이 든 컬럼</div><select id="a-fstep"></select>
         <div class="hint">행동한 시각 컬럼</div><select id="a-ftime"></select>
-        <div class="hint">단계 순서(<span id="a-max-steps"></span>개까지, 끌어서 순서를 바꿔요)</div>
-        <div class="f-steps" id="a-fsteps"></div>
-        <div class="f-add"><input id="a-fvalue" data-list="a-fvalues" placeholder="행동 이름을 고르거나 적기"><datalist id="a-fvalues"></datalist><button class="btn" id="a-fadd">추가</button></div>
-        <div class="hint">나눠서 볼 컬럼(고르면 그 값별로도 보여줘요)</div><select id="a-fby" title="비우면 전체만 구해요. 많이 나오면 사람이 많은 값부터 보여주고 나머지는 기타로 묶어요"></select>
+        <div class="hint">단계 정의</div><select id="a-fdefine" title="행동 값 목록은 행동 컬럼의 값을 순서대로, 조건 줄은 단계마다 조건을 적어요"><option value="values">행동 값 목록</option><option value="stages">단계마다 조건 줄</option></select>
+        <div id="a-fvalues-box">
+          <div class="hint">행동 이름이 든 컬럼</div><select id="a-fstep"></select>
+          <div class="hint">단계 순서(<span id="a-max-steps"></span>개까지, 끌어서 순서를 바꿔요)</div>
+          <div class="f-steps" id="a-fsteps"></div>
+          <div class="f-add"><input id="a-fvalue" data-list="a-fvalues" placeholder="행동 이름을 고르거나 적기"><datalist id="a-fvalues"></datalist><button class="btn" id="a-fadd">추가</button></div>
+          <div class="hint">나눠서 볼 컬럼(고르면 그 값별로도 보여줘요)</div><select id="a-fby" title="비우면 전체만 구해요. 많이 나오면 사람이 많은 값부터 보여주고 나머지는 기타로 묶어요"></select>
+          <div class="hint" title="중간에 한 다른 행동과 되돌아간 행동은 무시하고, 같은 시각의 두 단계는 도달한 것으로 봐요">단계를 순서대로 거친 사람 수를 세요.</div>
+        </div>
+        <div id="a-fstages-box" class="hidden">
+          <div class="hint">단계: 조건 줄은 한 줄에 하나(줄끼리 and), 재방문 N일을 적으면 첫 활동 뒤 N일 안에 다시 온 사람이에요</div>
+          <div id="a-fstage-rows"></div>
+          <button class="btn" id="a-fstage-add">단계 더하기</button>
+          <div class="hint">세기</div><select id="a-fcount" title="순서대로는 앞 단계를 거친 사람만, 따로는 단계마다 조건에 맞는 사람을 세요"><option value="order">순서대로</option><option value="each">단계마다 따로</option></select>
+        </div>
         <div class="hint">제한 시간</div>
         <div class="f-win" title="앞 단계부터 이 시간 안에 도달한 사람만 세요. 비우면 제한이 없어요"><input id="a-fwin" type="number" min="0" step="any" placeholder="제한 없음"><select id="a-funit"><option value="minute">분</option><option value="hour">시간</option><option value="day">일</option></select></div>
-        <div class="hint" title="중간에 한 다른 행동과 되돌아간 행동은 무시하고, 같은 시각의 두 단계는 도달한 것으로 봐요">단계를 순서대로 거친 사람 수를 세요.</div>
+        <div class="hint">걸린 시간 절사평균에서 자를 몫(%)</div><input id="a-ftrim" type="number" min="0" step="any" aria-label="절사평균 자르기 %" title="위아래를 합쳐 자를 몫이에요. 비우면 기본값">
       </div>
       <div class="a-form hidden" data-kind="retention">
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-rwho"></select>
@@ -628,11 +639,11 @@ const OPS = {
   has: { label: "글자가 들어 있는지 표시", group: "새 컬럼", need: isStr, init: { words: "", regex: false }, load: v => ({ words: v.words.join(", "), regex: !!v.regex }),
     fields: () => [{ name: "words", placeholder: "찾을 글자 예: 서울, 부산" }, { name: "regex", check: "정규식으로" }],
     value: st => PrepMenu.value("has", st) },
-  expand: { label: "컬럼 여러 개로 펼치기(구조·맵·JSON)", group: "새 컬럼", need: c => /^(struct|map|json)/.test(c.type) || isStr(c), init: { keys: null }, load: v => ({ keys: v?.keys ?? null }),
-    value: st => st.keys?.length ? { keys: st.keys } : true },  // 첫 미리보기에서 찾은 키를 저장해 이후엔 다시 찾지 않는다(saveExpandKeys)
   counts: { label: "단어별 개수 세기", group: "새 컬럼", need: isStr, init: { sep: "" }, load: v => ({ sep: v.sep ?? "" }),
     fields: () => [{ name: "sep", placeholder: "구분자(비우면 공백)" }, { hint: '값을 나눠 단어별 개수를 {"서울": 2, "배송": 1} 모양의 글자로 새 컬럼에 넣어요.' }],
     value: st => PrepMenu.value("counts", st) },
+  expand: { label: "컬럼 여러 개로 펼치기(구조·맵·JSON)", group: "새 컬럼", need: c => /^(struct|map|json)/.test(c.type) || isStr(c), init: { keys: null }, load: v => ({ keys: v?.keys ?? null }),
+    value: st => st.keys?.length ? { keys: st.keys } : true },  // 첫 미리보기에서 찾은 키를 저장해 이후엔 다시 찾지 않는다(saveExpandKeys)
 };
 
 // 값 바꿔 쓰기: 상태 → 서버로 보낼 spec(옛 저장 상태 {from, to}는 똑같은 값 한 쌍으로). 정하지 않았으면 null
@@ -1943,6 +1954,25 @@ async function loadStepValues() {
   } catch (e) { if (mine === stepCall) say("err-ana", e.message); }
 }
 $("a-fstep").onchange = () => { FLOW.steps = []; showSteps(); loadStepValues(); };
+// 조건 단계 퍼널(서버 kind "stages"): 단계 줄 {name, conds(여러 줄 글), revisit(글)}. 검사는 서버(funnel.check_stages)가 한다
+FLOW.stages = [];
+function showStages() {
+  $("a-fstage-rows").replaceChildren(...FLOW.stages.map((s, i) => el("div", { className: "f-stage", role: "group", ariaLabel: `단계 ${i + 1}` },
+    el("input", { value: s.name, placeholder: "단계 이름", ariaLabel: "단계 이름", oninput: e => { s.name = e.target.value; } }),
+    el("textarea", { rows: 2, value: s.conds, placeholder: "한 줄에 하나, 줄끼리 and. 예: event in purchase, refund", ariaLabel: "조건 줄", oninput: e => { s.conds = e.target.value; } }),
+    el("div", { className: "row" },
+      el("input", { type: "number", min: 1, max: SERVER.analysis.max_revisit, step: 1, value: s.revisit, placeholder: "재방문 N일(비우면 아님)", ariaLabel: "재방문 일수", oninput: e => { s.revisit = e.target.value; } }),
+      el("button", { className: "ghost", textContent: "위", ariaLabel: "위로", disabled: i === 0, onclick: () => { FLOW.stages.splice(i - 1, 0, FLOW.stages.splice(i, 1)[0]); showStages(); } }),
+      el("button", { className: "ghost", textContent: "×", ariaLabel: "이 단계 빼기", onclick: () => { FLOW.stages.splice(i, 1); showStages(); } })))));
+  $("a-fstage-add").disabled = FLOW.stages.length >= SERVER.analysis.max_steps;
+}
+$("a-fstage-add").onclick = () => { FLOW.stages.push({ name: "", conds: "", revisit: "" }); showStages(); };
+$("a-fdefine").onchange = () => {
+  const stages = $("a-fdefine").value === "stages";
+  $("a-fvalues-box").classList.toggle("hidden", stages); $("a-fstages-box").classList.toggle("hidden", !stages);
+  if (stages && !FLOW.stages.length) $("a-fstage-add").onclick();
+};
+$("a-ftrim").max = SERVER.analysis.max_trim * PCT; $("a-ftrim").placeholder = String(SERVER.analysis.trim * PCT);
 const akind = () => document.querySelector("input[name=akind]:checked").value;
 // 분석할 표: 체크하면 지금 전처리(recipe), 아니면 원래 테이블
 const anaRecipe = () => $("a-prep").checked ? recipe() : { schema: S.schema, base: S.base };
@@ -2009,9 +2039,13 @@ function anaHow() {
     : { kind: "scatter", x: $("a-sx").value, y: $("a-sy").value };
   const pick = (key, value) => ({ agg: pickers[key].get().agg, ...(pickers[key].get().opts ? { opts: pickers[key].get().opts } : {}), value });
   if (k === "groups") return { kind: k, by: $("a-gby").value, ...pick("groups", $("a-gval").value) };
-  if (k === "funnel") return { kind: k, who: $("a-fuser").value, step: $("a-fstep").value, time: $("a-ftime").value, steps: [...FLOW.steps],
-    ...($("a-fby").value ? { by: $("a-fby").value } : {}), window: $("a-fwin").value === "" ? null : { n: +$("a-fwin").value, unit: $("a-funit").value } };
   const v = id => $(id).value, orNull = id => v(id) === "" ? null : +v(id), pct = id => v(id) === "" ? null : +v(id) / PCT, text = id => v(id) || null;
+  if (k === "funnel") {
+    const common = { who: v("a-fuser"), time: v("a-ftime"), window: v("a-fwin") === "" ? null : { n: +v("a-fwin"), unit: v("a-funit") }, trim: pct("a-ftrim") };
+    return v("a-fdefine") === "stages"
+      ? { kind: "stages", ...common, count: v("a-fcount"), stages: FLOW.stages.map(s => ({ name: s.name.trim(), conds: s.conds.split(/\r?\n/).map(l => l.trim()).filter(Boolean), ...(s.revisit.trim() ? { revisit: +s.revisit } : {}) })) }
+      : { kind: k, ...common, step: v("a-fstep"), steps: [...FLOW.steps], ...(v("a-fby") ? { by: v("a-fby") } : {}) };
+  }
   if (k === "retention") return { kind: k, who: v("a-rwho"), time: v("a-rtime"), unit: v("a-runit"), span: orNull("a-rspan") };
   if (k === "rfm") return { kind: k, who: v("a-mwho"), time: v("a-mtime"), amount: v("a-mamt"), asof: text("a-masof"), tx: text("a-mtx") };
   if (k === "pareto") return { kind: k, item: v("a-pitem"), agg: v("a-pagg"), value: v("a-pagg") === "sum" ? v("a-pval") : null, a: pct("a-pa"), b: pct("a-pb") };
@@ -2037,7 +2071,7 @@ async function runAna(full) {
     const d = await timedHere("analyze", () => api("/api/analyze", { recipe: r, how: asked, sample, full, sample_how: sampleHow() }));
     if (call !== anaRun) return;  // 기다리는 사이 연결을 바꿨다
     const views = d.kind === "distribution" ? (d.histogram ? ["hist", "box", "values"] : ["values"])
-      : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"], funnel: ["funnel"], retention: ["cohort", "curve"], rfm: ["rfm"], pareto: ["pareto"], chisq: ["chi"], abtest: ["ab"], basket: ["basket"], decompose: ["waterfall"], seasonal: ["season"] }[d.kind];
+      : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"], funnel: ["funnel"], stages: ["funnel"], retention: ["cohort", "curve"], rfm: ["rfm"], pareto: ["pareto"], chisq: ["chi"], abtest: ["ab"], basket: ["basket"], decompose: ["waterfall"], seasonal: ["season"] }[d.kind];
     A.result = { ...d, how, prepped, base, recipe: r, views, sample: used };  // 구할 때의 표본 수(카드가 최신화 때 같은 표본으로 다시 구한다)
     A.view = views.includes(A.view) ? A.view : views[0];
     say("err-ana", "");
@@ -2099,7 +2133,7 @@ function anaTitle(d, view) {
   if (NEW_TITLES[view]) return NEW_TITLES[view](d);
   const value = x => x.agg === "count" ? "개수" : `${x.value} ${aggName(x.agg)}`;
   return { hist: `${d.column} 분포`, box: `${d.column} 상자 그림`, values: `${d.column} 값 빈도`, heat: "상관관계",
-           scatter: `${d.x} × ${d.y}`, groups: `${d.by}별 ${value(d)}`, trend: `${d.column} ${UNIT_NAMES[d.unit]}별 ${value(d)}`, funnel: `${d.step} 퍼널(${d.steps?.length}단계)` }[view];
+           scatter: `${d.x} × ${d.y}`, groups: `${d.by}별 ${value(d)}`, trend: `${d.column} ${UNIT_NAMES[d.unit]}별 ${value(d)}`, funnel: `${d.step ?? "조건 단계"} 퍼널(${d.steps?.length}단계)` }[view];
 }
 function anaNote(d) {
   const data = d.data.full ? "테이블 전체로 구함" : `표본 ${d.data.rows.toLocaleString()}행으로 구함, 읽은 방법은 ${SERVER.sample_methods[d.data.method] ?? d.data.method}`;
@@ -2108,7 +2142,7 @@ function anaNote(d) {
     d.kind === "trend" && d.more ? `최근 ${lim.max_periods}개 기간만 보임` : "",
     d.kind === "scatter" ? `점 ${d.points.length.toLocaleString()}개, 상관계수 ${d.r == null ? "-" : d.r.toFixed(3)}(${d.n.toLocaleString()}행)` : "",
     d.kind === "correlation" ? `${d.n.toLocaleString()}행으로 계산` : "",
-    d.kind === "funnel" ? `${windowText(d.window)}, 같은 시각의 두 단계는 도달로 봄` : "",
+    d.kind === "funnel" ? `${windowText(d.window)}, 같은 시각의 두 단계는 도달로 봄` : d.kind === "stages" ? `${windowText(d.window)}, ${d.count === "each" ? "단계마다 따로" : "순서대로"} 셈` : "",
     ...(NEW_NOTES[d.kind]?.(d) ?? []), d.excluded ? `빈 값으로 뺀 행 ${d.excluded.toLocaleString()}개` : ""];
   return [`${d.base}의 ${d.prepped ? "전처리한 결과" : "원래 데이터"}`, data, ...more].filter(Boolean).join(", ") + (d.data?.notes?.length ? " " + d.data.notes.join(" ") : "");
 }
@@ -2178,7 +2212,7 @@ function drawAna() {
   $("a-segs").replaceChildren(...(flow ? [...gapTable(d.gaps), ...segTables(d.segments)] : d && A.view === "ab" ? pairBlock(d) : []));
   $("a-tabs").classList.toggle("hidden", !d || d.views.length < 2);
   $("a-full").disabled = !d;
-  $("a-full").classList.toggle("hidden", SERVER.analysis.whole.includes(d?.kind) || d?.kind === "funnel");  // 퍼널과 새 분석 6종은 늘 테이블 전체로 구한다(prep_app.whole)
+  $("a-full").classList.toggle("hidden", SERVER.analysis.whole.includes(d?.kind) || ["funnel", "stages"].includes(d?.kind));  // 퍼널과 새 분석 6종은 늘 테이블 전체로 구한다(prep_app.whole)
   const noCard = NEW_KINDS.includes(d?.kind);  // 새 분석 8종은 이번에는 대시보드 카드로 담지 않는다
   $("a-add").disabled = !d || text || noCard;
   $("a-add").title = noCard ? "이 분석은 아직 대시보드 카드로 담지 않아요" : ADD_TITLE;
@@ -2242,7 +2276,7 @@ $("a-dash-go").onclick = () => busy($("a-dash-go"), async () => {
   if (!d) return;
   if (String(d.base || "").startsWith("@")) return say("err-ana", "쿼리에서 보낸 검색 결과는 프로그램을 켠 동안만 있어서 대시보드 카드로 만들 수 없어요. 가상 테이블로 저장한 뒤 넣어 주세요.");  // F08: 보낸 검색은 메모리에만
   const { how, prepped, base, recipe, views, sample: used, ...values } = d;  // 구한 값만 data에 둔다
-  const flow = d.kind === "funnel", card = { kind: flow ? "funnel" : "analysis", title: `${base} · ${anaTitle(d, A.view)}`, colors: { series: {}, parts: {}, order: [], parts_order: [] },
+  const flow = ["funnel", "stages"].includes(d.kind), card = { kind: flow ? "funnel" : "analysis", title: `${base} · ${anaTitle(d, A.view)}`, colors: { series: {}, parts: {}, order: [], parts_order: [] },
     view: { type: "", ratio: VIEW_RATIOS[A.view] ?? 16 / 9, analysis_view: A.view, ...(Object.keys(anaAuto).length ? { auto: anaAuto } : {}), ...($("a-all").checked ? { all_data: true } : {}) }, source: { schema: recipe.schema || "", table: base, recipe, analysis: how, full: !!values.data?.full, sample: used, ...(flow ? { date: how.time } : {}) },
     data: { values, computed_at: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19), note: anaNote(d) } };
   try {

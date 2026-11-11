@@ -963,7 +963,7 @@ def analyzed(body):
 def whole(body):
     """분석을 테이블 전체로 구하는지: full이거나 퍼널·가장 많은 기간 찾기·건수·합계를 그대로 보이는 분석(Phase 12 6종)(건수를 표본으로 세면 틀린다)."""
     from analysis import insight
-    return body.get("full") is True or (body.get("how") or {}).get("kind") in ("funnel", "busiest", *insight.WHOLE_KINDS)
+    return body.get("full") is True or (body.get("how") or {}).get("kind") in ("funnel", "stages", "busiest", *insight.WHOLE_KINDS)
 
 
 @app.post("/api/analyze")

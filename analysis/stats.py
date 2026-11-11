@@ -32,7 +32,7 @@ SEED = 20260101  # 점을 고르게 뽑을 때의 고정 씨앗(다시 구해도
 TOP_PERIODS, MAX_TOP_PERIODS = 5, 20  # 가장 많은 기간 찾기에서 보일 기본 개수, 상한
 UNITS = {"day": "D", "week": "W", "month": "M"}  # 시계열 묶음 단위 → Ibis truncate 단위
 WINDOW_UNITS = {"minute": 60, "hour": 3600, "day": 86400}  # 퍼널 기간 제한의 단위 → 초
-LIMITS = {"max_steps": funnel.MAX_STEPS, "bins": BINS, "top_values": TOP_VALUES, "max_corr": MAX_CORR, "max_points": MAX_POINTS, "max_groups": MAX_GROUPS, "max_periods": MAX_PERIODS,
+LIMITS = {"max_steps": funnel.MAX_STEPS, "trim": funnel.DEFAULT_TRIM, "max_trim": funnel.MAX_TRIM, "max_revisit": funnel.MAX_REVISIT_DAYS, "bins": BINS, "top_values": TOP_VALUES, "max_corr": MAX_CORR, "max_points": MAX_POINTS, "max_groups": MAX_GROUPS, "max_periods": MAX_PERIODS,
           "whole": list(insight.WHOLE_KINDS), "cohort_span": insight.COHORT_SPAN, "max_cohort_span": insight.MAX_COHORT_SPAN, "pareto_a": insight.PARETO_A, "pareto_b": insight.PARETO_B,
           "pareto_show": insight.PARETO_SHOW, "min_support": insight.MIN_SUPPORT, "basket_top": insight.BASKET_TOP, "max_basket_top": insight.MAX_BASKET_TOP,
           "season_windows": insight.SEASON_WINDOWS, "max_window": insight.MAX_WINDOW, "mad_k": insight.MAD_K, "max_mad_k": insight.MAX_MAD_K,

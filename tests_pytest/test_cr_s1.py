@@ -73,7 +73,7 @@ def test_compare_mode_rejects_unknown(shop):
     r = shop.post("/api/dash/settings", json={"id": d["id"], "compare_mode": "lastweek"})
     assert r.status_code >= 400 or "error" in r.get_json()
     assert shop.post("/api/dash", json={"name": "틀림", "cards": [], "compare_mode": "x"}).get_json().get("error")
-    assert shop.get("/api/dash/get?id=" + d["id"]).get_json()["dashboard"]["compare_mode"] == "prev"
+    assert shop.post("/api/dash/open", json={"id": d["id"]}).get_json()["dashboard"]["compare_mode"] == "prev"
 
 
 def test_compare_mode_cut_and_own_range():

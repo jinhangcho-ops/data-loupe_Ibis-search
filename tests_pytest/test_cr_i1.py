@@ -4,7 +4,6 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
 from test_cr_e2 import bigquery, remote  # noqa: F401  fixture
 from test_fix_audit_js import between, read, run_node
 
@@ -30,7 +29,7 @@ console.log(JSON.stringify([checkLines(prof), checkLines(null)]));""", parts=[co
 
 @needs_node
 def test_expand_keys_saved_from_first_preview(tmp_path):
-    op = between("prep.html", "  expand: {", "  counts:")
+    op = between("prep.html", "  expand: {", "};\n")  # expand는 화면 OPS의 마지막 단계(서버 OPS 순서와 같다)
     save = between("prep.html", "function saveExpandKeys", '$("preview").onclick')
     got = run_node(tmp_path, r"""
 const OPS = {
