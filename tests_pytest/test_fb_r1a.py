@@ -38,10 +38,12 @@ def test_f07_쪽_번호_칸과_연결():
     assert 'runSql(pageOffset($("sql-go"), sqlPages' in HTML and "sqlPages = d.count === null ? null" in HTML
 
 
-def test_f09_내보내기_형식_단추가_늘_보임():
-    assert '"save-open"' not in HTML and '"save-pop"' not in HTML  # 드롭다운 코드는 지웠다
+def test_f09_내보내기_형식은_메뉴_하나에():
+    assert '"save-open"' not in HTML and '"save-pop"' not in HTML  # 옛 드롭다운 이름은 쓰지 않는다
+    pop = cut('id="export-pop"', "</div></div>")  # 형식 단추는 [내보내기] 메뉴 하나에 묶는다(사용자 결정 2026-11-11)
     for fmt in ("csv", "xlsx", "parquet"):
-        assert re.search(rf'<button class="btn" data-export="{fmt}" title="[^"]+" aria-label="[^"]+">', HTML)
+        assert re.search(rf'<button data-export="{fmt}" title="[^"]+" aria-label="[^"]+">', pop)
+    assert 'toggleDrop($("export-open"), $("export-pop"))' in HTML
     assert 'busy(b, async' in cut('querySelectorAll("[data-export]")', "// 전처리로 보내기")
 
 

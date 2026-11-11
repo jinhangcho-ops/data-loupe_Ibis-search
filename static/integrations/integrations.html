@@ -52,11 +52,11 @@
       <label><div class="hint">서비스 계정 JSON 파일 위치</div><input id="ga4-key" class="code" placeholder="C:\keys\ga4-reader.json"></label>
       <label><div class="hint">GA4 속성 ID (숫자)</div><input id="ga4-prop" placeholder="123456789"></label>
       <div class="two">
-        <label title="예: 28daysAgo, 2024-01-01"><div class="hint">시작일</div><input id="ga4-start" placeholder="28daysAgo"></label>
-        <label title="예: yesterday, today, 2024-01-31"><div class="hint">종료일</div><input id="ga4-end" placeholder="yesterday"></label>
+        <label title="날짜(2024-01-01)나 28daysAgo(28일 전)·yesterday(어제)·today(오늘)"><div class="hint">시작일 (날짜 또는 28daysAgo)</div><input id="ga4-start" placeholder="28daysAgo"></label>
+        <label title="날짜(2024-01-31)나 yesterday(어제)·today(오늘)"><div class="hint">종료일 (날짜 또는 yesterday)</div><input id="ga4-end" placeholder="yesterday"></label>
       </div>
-      <label><div class="hint">측정기준 (쉼표로 구분, 최대 9개)</div><input id="ga4-dims" placeholder="date, country"></label>
-      <label><div class="hint">측정항목 (쉼표로 구분, 최대 10개)</div><input id="ga4-mets" placeholder="activeUsers, sessions"></label>
+      <label title="GA4 API의 이름으로 적어요. 예: date(날짜), country(국가), deviceCategory(기기)"><div class="hint">무엇별로 볼까요 · 측정기준 (쉼표로 구분, 최대 9개)</div><input id="ga4-dims" placeholder="date, country"></label>
+      <label title="GA4 API의 이름으로 적어요. 예: activeUsers(활성 사용자), sessions(세션), screenPageViews(조회수)"><div class="hint">무엇을 셀까요 · 측정항목 (쉼표로 구분, 최대 10개)</div><input id="ga4-mets" placeholder="activeUsers, sessions"></label>
       <label title="같은 이름의 파일이 있으면 덮어쓰지 않아요"><div class="hint">저장할 파일 (.parquet)</div><input id="ga4-out" class="code" placeholder="C:\data\ga4_daily.parquet"></label>
       <div class="row"><button id="ga4-fetch">가져오기</button><button id="ga4-open" class="btn hidden">쿼리로 열기</button><button id="ga4-save" class="btn">저장</button>
         <button id="ga4-check" class="btn" title="보고서를 받지 않고 인증과 속성 권한만 확인해요">인증 확인</button></div>
@@ -77,10 +77,6 @@
       <div class="row"><a class="btn" href="/collect#uploads">업로드 기록 보기</a></div>
     </section>
 
-    <section class="card svc">
-      <div class="head"><h3>새 서비스 추가하기</h3></div>
-      <div class="hint">서비스 하나는 <code>integrations/adapters/</code> 폴더의 파일 하나예요. 보내기 어댑터(label, fields, send, check)를 <code>integrations/adapters/__init__.py</code>의 SENDERS에 넣으면 보낼 곳 종류와 이 화면에 바로 나와요. 가져오기와 받기는 어댑터와 카드를 하나씩 더해요.</div>
-    </section>
   </div>
 </div>
 <!--include core/connect.html-->

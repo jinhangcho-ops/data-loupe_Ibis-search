@@ -12,6 +12,6 @@
 |---|---|---|
 | 보내기(Slack·Notion·웹훅) | 보낼 곳을 등록해 오래 걸린 작업 알림, 집계 표, 차트를 보내기. 토큰 보관 방식 고르기 | [functions/integrations_send.md](functions/integrations_send.md) |
 | Slack 봇 | Slack의 `/ibis` 명령으로 저장한 검색·지표를 묻고 답 받기 | [functions/integrations_bot.md](functions/integrations_bot.md) |
-| Google Analytics 4 · LLM | GA4 보고서를 Parquet 파일로 가져오기, 질문으로 SQL 만들 때 물을 LLM 설정. 업로드 기록·새 서비스 추가하기 카드 | [functions/integrations_ga4_llm.md](functions/integrations_ga4_llm.md) |
+| Google Analytics 4 · LLM | GA4 보고서를 Parquet 파일로 가져오기, 질문으로 SQL 만들 때 물을 LLM 설정. 업로드 기록 카드, 개발자용 새 서비스 추가 방법 | [functions/integrations_ga4_llm.md](functions/integrations_ga4_llm.md) |
 | 업로드 기록 | 수집·GA4로 저장하고 적재한 것의 장부(수집 화면에 있음) | [functions/load.md](functions/load.md) |
 | 안전 | 비밀 값을 저장하지 않는 방식과 밖으로 보내지 않는 것 | [functions/settings.md](functions/settings.md) |

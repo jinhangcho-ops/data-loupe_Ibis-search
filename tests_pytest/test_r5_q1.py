@@ -36,8 +36,8 @@ def test_elements_exist():
 
 def test_datalist_and_export_popup_gone():
     assert "<datalist" not in HTML and 'list="col-list"' not in HTML
-    assert 'id="export-pop"' not in HTML and 'id="export-open"' not in HTML
-    assert len(re.findall(r'<button class="btn" data-export="(?:csv|xlsx|parquet|tsv|fixed)"', HTML)) == 5
+    pop = HTML[HTML.index('id="export-pop"'):HTML.index("</div></div>", HTML.index('id="export-pop"'))]  # 형식 단추는 [내보내기] 메뉴 하나에
+    assert len(re.findall(r'<button data-export="(?:csv|xlsx|parquet|tsv|fixed)"', pop)) == 5 and 'id="export-tables"' in pop
 
 
 def test_contract_calls_in_code():
@@ -194,8 +194,10 @@ PAGE = r"""(async () => {
     await until(() => n("/api/query") > q1, "고른 행 조건으로 검색"); await idle();
     out.pickCond = S.conditions.map(c => c.line ?? c); out.pickCount = last.count;
     S.conditions = []; renderList("conditions");
-    // F06 형식 단추가 펼쳐져 보인다, F04 보일 컬럼 고르기
+    // F06 [내보내기] 메뉴를 열면 형식 단추가 보인다, F04 보일 컬럼 고르기
+    $("export-open").click();
     out.exportShown = [...document.querySelectorAll("[data-export]")].filter(b => b.offsetParent).map(b => b.dataset.export);
+    $("export-open").click();
     out.colPick = [...$("col-pick").options].map(o => o.value);
     // F12 조건 우변 컬럼
     $("bcol").value = "금액"; $("bcol").dispatchEvent(new Event("change"));

@@ -197,9 +197,10 @@ def test_virtual_table_name_clears_after_save(tmp_path):
 
 
 def test_integrations_card_names_the_real_folder():
-    """11: 새 서비스 안내의 폴더는 실제 위치(integrations/adapters/)."""
-    hint = between("integrations.html", "서비스 하나는", "</div>")
-    assert "<code>integrations/adapters/</code>" in hint and "<code>integrations/adapters/__init__.py</code>" in hint
+    """11: 새 서비스 안내(개발자용)는 화면이 아니라 문서에 있고, 폴더는 실제 위치(integrations/adapters/)."""
+    assert "새 서비스 추가하기" not in read("integrations.html")
+    doc = (ROOT / "docs/functions/integrations_ga4_llm.md").read_text(encoding="utf-8")
+    assert "`integrations/adapters/`" in doc and "`SENDERS`" in doc
     assert (ROOT / "integrations/adapters/__init__.py").exists()
 
 

@@ -873,6 +873,7 @@ if (hasConnect) $("find").onclick = () => busy($("find"), async () => {
 async function showConnected(flat, schemas, info) {
   connected = flat ? "flat" : "other";
   connName = connLabel(info);
+  document.body.dataset.conn = info?.kind ?? "";  // 연결 종류(url·folder): 주소 연결에서만 쓰는 칸을 CSS로 가린다
   connMsg("연결했어요.", true);
   closeConnect();
   if (!hasTables) return showCrumb();

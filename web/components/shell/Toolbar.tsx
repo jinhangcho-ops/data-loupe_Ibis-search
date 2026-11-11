@@ -61,7 +61,7 @@ export function Toolbar() {
         <PickDashboard />
         <span className="d-sep"></span>
         <button className={"btn" + (state.editing ? " on" : "")} aria-pressed={state.editing} disabled={!state.dash} onClick={() => dispatch({ type: "editing", on: !state.editing })}
-          title="카드를 끌어 옮기고, 크기를 바꾸고, 빼고, 설정해요">{state.editing ? "편집 끝내기" : "편집"}</button>
+          title={state.dash ? "카드를 끌어 옮기고, 크기를 바꾸고, 빼고, 설정해요" : "대시보드를 고르거나 [새 대시보드]·[+ 카드]로 만들면 편집할 수 있어요"}>{state.editing ? "편집 끝내기" : "편집"}</button>
         <div className="drop" ref={drop} onKeyDown={e => { if (e.key === "Escape" && menu) { setMenu(false); drop.current?.querySelector<HTMLElement>("button")?.focus(); } }}>
           <button className="btn" aria-haspopup="menu" aria-expanded={menu} onClick={() => { setMenu(!menu); setAddOpen(false); }} title="카드를 넣거나 지표를 봐요">+ 카드 ▾</button>
           {menu && (

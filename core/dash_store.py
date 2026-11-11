@@ -131,10 +131,12 @@ def canon_key(key):
 
 
 def source_label(recent):
-    """화면에 보일 연결 이름: 파일 연결은 폴더 이름, 주소 연결은 host/database."""
+    """화면에 보일 연결 이름(다른 화면의 common.js connLabel과 같게): DuckDB 파일은 파일 이름, 고른 표 파일들은 "파일 N개", 그 밖의 파일 연결은 폴더 이름, 주소 연결은 host/database."""
     if recent.get("kind") == "folder":
         path = recent.get("path", "")
-        return Path(path).name or path
+        if recent.get("files"):
+            return f"파일 {len(recent['files'])}개"
+        return Path(recent.get("file") or path).name or path
     parts = urlsplit(recent.get("url", ""))
     return (parts.hostname or "") + (f"/{parts.path.strip('/')}" if parts.path.strip("/") else "")
 
