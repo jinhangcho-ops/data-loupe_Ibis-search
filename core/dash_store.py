@@ -6,6 +6,7 @@ import datetime as dt
 import hashlib
 import copy
 import json
+import math
 import os
 import re
 import secrets
@@ -19,6 +20,7 @@ from core import server
 from core import settings
 from core import source
 from core import use_counts
+from core import viz_rules
 from core import watch
 
 FILE = "dashboards.dat"
@@ -53,6 +55,9 @@ MAX_BANDS = 6  # 불릿 차트의 구간(경계) 수
 ADDITIVE = ("sum", "count")  # 아이 값의 합이 부모 값이 되는 집계(트리맵·선버스트의 아래단계)
 TREE_ADDITIVE = "아랫단계는 합계·개수만 쓸 수 있어요. 평균·최소·최대·중앙값·고유 개수는 아랫단계 값을 더해도 윗단계 값이 되지 않아요."
 FLOW_NEED = {"sankey": ("user", "step", "time"), "cohort": ("user", "time")}  # 다시 구할 분석(source.analysis)에 있어야 하는 컬럼 이름
+FUNNEL_LISTS = {"funnel": "steps", "stages": "stages"}  # 흐름 카드 분석 종류 → 단계 목록 항목
+AUTO_MODE = "auto"  # 생키 자동 흐름
+AUTO_ROLES = ("starts", "middles", "ends")  # 자동 흐름의 시작·중간·끝 값 목록
 FORMATS = ("number", "percent", "currency")  # 값 모양(compare.py와 같다)
 MAX_SLOTS = 5  # 도넛 KPI의 칸(가운데 + 네 꼭지점)
 DEFAULT_PALETTE = ["#00968f", "#eb6834", "#2a78d6", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]  # 화면의 라이트 색 묶음(--c1~--c8)과 같다
@@ -203,7 +208,10 @@ BUCKETS = ("hour", "day", "week", "month")
 MAX_RULES = 20
 EXTRA_VIEW = ("icon", "format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window",
               "cond_rules", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "positions", "bg", "image_path", "group_cols", "formats", "total",
-              "template", "blanks", "bucket", "baseline", "threshold", "geo", "rings", "fit", "layout", "bins", "bands")  # 3·4단계 카드 종류의 설정
+              "template", "blanks", "bucket", "baseline", "threshold", "geo", "rings", "fit", "layout", "bins", "bands",
+              "funnel_shape", "ladder_scale", "gap_stats", "flow_unlimited", "flow_dropout", "groups", "cloud")  # 3·4단계 카드 종류의 설정
+FUNNEL_SHAPES = ("flow", "ladder")  # 퍼널 그림: 흐름(생키+표) / 사다리꼴
+GAP_STATS = ("mean", "median", "trimmed")  # 걸린 시간 표에 보일 값
 
 
 def number_of(value, what, low=None, high=None):
@@ -311,16 +319,222 @@ def check_geo(geo):
     return out
 
 
+GROUP_KINDS = ("chart", "metric", "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud", "funnel", "geomap")  # (Phase 4) 표시할 그룹 고르기(view.groups)를 쓰는 카드. 값 하나짜리·표·상태·분석 카드는 그룹이 없다
+MERGE_AGGS = ("sum", "count", "count_distinct", "nunique")  # (Phase 4) 범위를 한 그룹으로 묶을 수 있는 계열 집계(nunique는 count_distinct의 예전 이름)
+SERVER_MERGE = ("count_distinct", "nunique")  # (Phase 4) 더할 수 없어 서버가 묶은 범위로 다시 집계하는 집계(합계·개수는 화면이 더한다)
+GEO_MERGE = ("count", "sum")  # (Phase 4) 지도 카드에서 영역을 묶을 수 있는 영역 값 집계(view.geo.agg)
+MAX_SETS = 100  # (Phase 4) 지도 영역 묶음(sets) 수
+RANGE_KINDS = {"chart": ("number", "date"), "histogram": ("number",), "calheat": ("date",), "candle": ("date",), "bump": ("date",), "cohort": ("date",)}  # (Phase 4) 범위(ranges)를 쓸 수 있는 카드와 범위 값의 종류
+GROUP_KEYS = {"keep", "series", "ranges", "merge", "rename", "sets"}  # (Phase 4) view.groups에 쓸 수 있는 항목(sets는 지도 영역 묶음 {묶음 이름: [영역…]})
+MAX_GROUP_PICKS = 500  # (Phase 4) keep·series 목록 하나의 이름 수
+MAX_RANGES = 10  # (Phase 4) 범위 수
+MAX_RENAMES = 200  # (Phase 4) 이름 바꾸기 수
+MAX_SHOWN_NAME = 100  # (Phase 4) 바꾼 이름(보이는 이름) 길이
+CLOUD_MODES = ("values", "labels", "words")  # (Phase 4) 워드클라우드: 컬럼 값별 행 수(지금 방식) / 라벨 이름별 행 수 / 글 속 단어 빈도
+CLOUD_POS = {"noun": ("NNG", "NNP"), "verb": ("VV",), "adj": ("VA",), "foreign": ("SL",)}  # (Phase 4) 글 속 단어의 품사 묶음 → kiwipiepy 품사 태그(일반·고유 명사, 동사, 형용사, 외국어)
+CLOUD_KEYS = {"mode", "tags", "text", "pos", "stop", "min_len", "rows", "match"}  # (Phase 4) view.cloud에 쓸 수 있는 항목
+CLOUD_ROWS = ("all", "tagged")  # (Phase 4) 글 속 단어를 뽑을 행: 전체 행 / 고른 태그의 행(기본값 없음, 카드를 만들 때 고른다)
+CLOUD_MATCH = ("any", "all")  # (Phase 4) 고른 태그의 행: 하나라도 / 모두
+MAX_STOP = 300  # (Phase 4) 불용어 수
+MAX_STOP_CHARS = 30  # (Phase 4) 불용어 하나의 길이
+MAX_MIN_LEN = 10  # (Phase 4) 최소 글자 수 상한
+MAX_NAME = 200  # (Phase 4) 그룹·묶음·영역·원래 이름·글 컬럼 이름 길이
+BIN_REQUIRED = {"edges", "counts"}  # (Phase 9) data.bins에 꼭 있는 항목
+BIN_OPTIONAL = {"under", "over", "clip"}  # (Phase 9) data.bins에 있어도 되는 항목
+AUTO_NUMBER_SPEC = 3 # (Phase 9) 숫자 수치 튜플의 칸 수(기본값, 최소, 최대)
+AUTO_TEXT_MAX = 100 # (Phase 9) 자동 규칙의 글자 수치(group_by) 길이
+AUTO_LINKS = (("round", "keep", "max", True), ("spaghetti", "keep", "max", True), ("bins", "min", "max", False), ("tail", "lo", "hi", True))  # (Phase 9) (규칙, 작은 쪽, 큰 쪽, 같으면 안 됨)
+
+
+def check_groups(groups: object) -> dict:
+    """[SPECIFICATION] plans/phase-4.md#check_groups
+    view.groups(keep·series·ranges·merge·rename·sets)의 모양을 검사해 정리한 사본을 돌려준다(카드 종류별 규칙은 check_card)."""
+    if not isinstance(groups, dict):
+        raise ValueError("그룹 고르기(groups)는 객체예요.")
+    if set(groups) - GROUP_KEYS:
+        raise ValueError(f"그룹 고르기(groups)에 쓸 수 없는 항목이 있어요. 쓰는 항목: {', '.join(sorted(GROUP_KEYS))}")
+    out = {}
+    for name, word in (("keep", "보일 그룹"), ("series", "보일 계열")):
+        if groups.get(name) is not None:
+            found = groups[name]
+            if not isinstance(found, list) or len(found) > MAX_GROUP_PICKS:
+                raise ValueError(f"{word}({name})은 이름 {MAX_GROUP_PICKS}개까지의 목록이에요.")
+            if names := list(dict.fromkeys(text(v, "그룹 이름", MAX_NAME, 1) for v in found)):
+                out[name] = names
+    ranges_error = f"범위(ranges)는 [시작, 끝] {MAX_RANGES}개까지예요. 끝은 숫자나 YYYY-MM-DD이고 한쪽은 비울 수 있어요(시작 ≤ 끝)."
+
+    def range_kind(v: object) -> str | None:
+        if v is None:
+            return None
+        if type(v) in (int, float) and math.isfinite(v):
+            return "number"
+        if isinstance(v, str) and DAY.fullmatch(v):
+            return "date"
+        raise ValueError(ranges_error)
+
+    ranges = []
+    if groups.get("ranges") is not None:
+        found = groups["ranges"]
+        if not isinstance(found, list) or len(found) > MAX_RANGES or not all(isinstance(r, list) and len(r) == 2 for r in found):
+            raise ValueError(ranges_error)
+        for lo, hi in found:
+            kinds = {k for k in (range_kind(lo), range_kind(hi)) if k}
+            if not kinds or len(kinds) > 1 or (lo is not None and hi is not None and lo > hi):
+                raise ValueError(ranges_error)
+        ranges = [list(r) for r in found]
+        if ranges:
+            out["ranges"] = ranges
+    if groups.get("merge") is not None:
+        if not isinstance(groups["merge"], bool):
+            raise ValueError("merge는 켬(true)이나 끔(false)이에요.")
+        if groups["merge"]:
+            if not ranges:
+                raise ValueError("범위를 묶으려면(merge) 범위를 하나 이상 정하세요.")
+            if len({range_kind(v) for r in ranges for v in r} - {None}) > 1:
+                raise ValueError(ranges_error)
+            ordered = sorted(ranges, key=lambda r: (r[0] is not None, r[0]))
+            if any(a[1] is None or b[0] is None or a[1] >= b[0] for a, b in zip(ordered, ordered[1:])):
+                raise ValueError("묶을 범위는 서로 겹치지 않게 정하세요.")
+            out["merge"] = True
+    if groups.get("rename") is not None:
+        found = groups["rename"]
+        rename_error = f"이름 바꾸기(rename)는 {{원래 이름: 보일 이름}} {MAX_RENAMES}개까지예요(보일 이름 {MAX_SHOWN_NAME}자까지)."
+        if not isinstance(found, dict) or len(found) > MAX_RENAMES or not all(
+                isinstance(k, str) and isinstance(v, str) and 1 <= len(k.strip()) <= MAX_NAME and 1 <= len(v.strip()) <= MAX_SHOWN_NAME for k, v in found.items()):
+            raise ValueError(rename_error)
+        if found:
+            out["rename"] = {k.strip(): v.strip() for k, v in found.items()}
+    if groups.get("sets") is not None:
+        found = groups["sets"]
+        if not isinstance(found, dict) or len(found) > MAX_SETS or not all(isinstance(v, list) and v for v in found.values()):
+            raise ValueError(f"영역 묶음(sets)은 {{묶음 이름: [영역…]}} {MAX_SETS}개까지예요(묶음마다 영역 1개 이상).")
+        sets = {text(k, "묶음 이름", MAX_NAME, 1): list(dict.fromkeys(text(r, "영역 이름", MAX_NAME, 1) for r in v)) for k, v in found.items()}
+        members = [r for v in sets.values() for r in v]
+        if dup := next((r for r in members if members.count(r) > 1), None):
+            raise ValueError(f"'{dup}' 영역을 두 묶음에 넣을 수 없어요.")
+        if sets:
+            out["sets"] = sets
+    return out
+
+
+def check_cloud(cloud: object) -> dict:
+    """[SPECIFICATION] plans/phase-4.md#check_cloud
+    워드클라우드 설정 view.cloud(mode·tags·text·pos·stop·min_len·rows·match)를 검사해 정리한 사본을 돌려준다."""
+    if not isinstance(cloud, dict):
+        raise ValueError("워드클라우드 설정(cloud)은 객체예요.")
+    if set(cloud) - CLOUD_KEYS:
+        raise ValueError(f"워드클라우드 설정(cloud)에 쓸 수 없는 항목이 있어요. 쓰는 항목: {', '.join(sorted(CLOUD_KEYS))}")
+    mode = cloud.get("mode") or "values"
+    if mode not in CLOUD_MODES:
+        raise ValueError(f"워드클라우드 방식(mode)은 {', '.join(CLOUD_MODES)} 중 하나예요.")
+    if mode == "values" and set(cloud) - {"mode"}:
+        raise ValueError("컬럼 값 방식에는 태그·글 설정을 쓰지 않아요.")
+    if mode == "labels" and {"rows", "match", "text", "pos", "stop", "min_len"} & set(cloud):
+        raise ValueError("라벨 이름 방식에는 rows·match·text·pos·stop·min_len을 쓰지 않아요.")
+    out = {"mode": mode}
+    if cloud.get("tags") is not None:
+        if not isinstance(cloud["tags"], list):
+            raise ValueError("보일 태그(tags)는 태그 목록이에요.")
+        from core import labels
+        if tags := list(dict.fromkeys(labels.check_tag(t) for t in cloud["tags"])):
+            out["tags"] = tags
+    if mode == "words":
+        rows = cloud.get("rows")
+        if rows not in CLOUD_ROWS:
+            raise ValueError("단어를 뽑을 행(rows)을 전체 행(all)·고른 태그의 행(tagged) 중에서 고르세요.")
+        out["rows"] = rows
+        if rows == "tagged":
+            if not out.get("tags"):
+                raise ValueError("고른 태그의 행(tagged)은 태그를 하나 이상 고르세요.")
+            if cloud.get("match") not in CLOUD_MATCH:
+                raise ValueError("고른 태그의 행은 하나라도(any)·모두(all) 중 하나를 고르세요(match).")
+            out["match"] = cloud["match"]
+        elif out.get("tags") or cloud.get("match") is not None:
+            raise ValueError("전체 행(all)에는 태그(tags)·맞춤(match)을 쓰지 않아요.")
+        if not cloud.get("text"):
+            raise ValueError("글 속 단어 방식은 글 컬럼(text)을 고르세요.")
+        out["text"] = text(cloud["text"], "글 컬럼", MAX_NAME, 1)
+        if cloud.get("pos") is not None:
+            pos = cloud["pos"]
+            if not isinstance(pos, list) or not all(isinstance(p, str) and p in CLOUD_POS for p in pos):
+                raise ValueError(f"품사(pos)는 {', '.join(CLOUD_POS)} 중에서 골라요.")
+            if pos := list(dict.fromkeys(pos)):
+                out["pos"] = pos
+        if cloud.get("stop") is not None:
+            stop = cloud["stop"]
+            if not isinstance(stop, list) or len(stop) > MAX_STOP or not all(isinstance(s, str) and 1 <= len(s.strip()) <= MAX_STOP_CHARS for s in stop):
+                raise ValueError(f"불용어(stop)는 {MAX_STOP_CHARS}자까지의 낱말 {MAX_STOP}개까지예요.")
+            if stop := list(dict.fromkeys(s.strip() for s in stop)):
+                out["stop"] = stop
+        if cloud.get("min_len") is not None:
+            if type(cloud["min_len"]) is not int or not 1 <= cloud["min_len"] <= MAX_MIN_LEN:
+                raise ValueError(f"최소 글자 수(min_len)는 1~{MAX_MIN_LEN} 사이의 정수예요.")
+            out["min_len"] = cloud["min_len"]
+    return out
+
+
+def check_auto(auto: object) -> dict:
+    """[SPECIFICATION] plans/phase-9.md#check_auto
+    시각화 자동 규칙 view.auto({규칙: false 또는 {수치: 값}})를 viz_rules.AUTO_PARAMS의 이름·범위·고를 값으로 검사해 정리한 사본을 돌려준다."""
+    if not isinstance(auto, dict):
+        raise ValueError("자동 규칙은 {규칙: false 또는 수치} 모양이어야 해요.")
+    out = {}
+    for rule, found in auto.items():
+        if rule not in viz_rules.AUTO_PARAMS:
+            raise ValueError(f"모르는 자동 규칙이에요: {rule}")
+        if found is False:
+            out[rule] = False
+            continue
+        if not isinstance(found, dict):
+            raise ValueError(f"자동 규칙 {rule}은 false이거나 {{수치: 값}} 객체여야 해요.")
+        table = viz_rules.AUTO_PARAMS[rule]
+        checked = {}
+        for name, value in found.items():
+            if name not in table:
+                raise ValueError(f"자동 규칙 {rule}에 없는 수치예요: {name}")
+            spec, what = table[name], f"{rule}.{name}"
+            if len(spec) == AUTO_NUMBER_SPEC:
+                checked[name] = number_of(value, what, spec[1], spec[2])
+            elif isinstance(spec[0], list):
+                if not isinstance(value, list) or not all(isinstance(v, str) and v in spec[1] for v in value) or len(set(value)) != len(value):
+                    raise ValueError(f"{what}은 {', '.join(spec[1])} 중에서 겹치지 않게 고른 목록이에요.")
+                checked[name] = value
+            elif spec[1] is None:
+                if not isinstance(value, str):
+                    raise ValueError(f"{what}은 글자여야 해요.")
+                checked[name] = text(value, what, AUTO_TEXT_MAX)
+            else:
+                if value not in spec[1]:
+                    raise ValueError(f"{what}은 {', '.join(spec[1])} 중 하나예요.")
+                checked[name] = value
+        merged = {**{n: s[0] for n, s in table.items()}, **checked}
+        for link_rule, low, high, strict in AUTO_LINKS:
+            if rule == link_rule and (merged[low] >= merged[high] if strict else merged[low] > merged[high]):
+                raise ValueError(f"{rule}.{low}은 {rule}.{high}보다 {'작아야' if strict else '크지 않아야'} 해요.")
+        out[rule] = checked
+    return out
+
+
 def check_extra(view):
     """KPI·도넛 KPI·게이지·요약·최근 행·두 계열 추이·칸 채우기·블록·목표 추이 카드의 설정: icon, format(number·percent·currency), unit_text(값 뒤 글자),
     ring(도넛 고리 4방식), slots(도넛의 칸 {label, y, agg, format, unit_text, color}, 최대 5), target({value} 또는 목표 파일의 {name, period, scope}),
     full(칸 채우기가 가득 찬 값), cells(칸 수), size(블록 한 칸의 값), rows(최근 행 수), group(요약의 기여 분해 컬럼), window(보는 구간 {from, to})."""
     out = {}
-    for name, allowed in (("icon", ICONS), ("format", FORMATS), ("ring", RINGS), ("fit", FITS), ("layout", LAYOUTS)):
+    for name, allowed in (("icon", ICONS), ("format", FORMATS), ("ring", RINGS), ("fit", FITS), ("layout", LAYOUTS), ("funnel_shape", FUNNEL_SHAPES)):
         if view.get(name):
             if view[name] not in allowed:
                 raise ValueError(f"{name}은 {', '.join(allowed)} 중 하나예요.")
             out[name] = view[name]
+    for name in ("ladder_scale", "flow_unlimited", "flow_dropout"):  # False도 남긴다(flow_dropout은 없으면 키를 만들지 않는다)
+        if view.get(name) is not None:
+            if not isinstance(view[name], bool):
+                raise ValueError(f"{name}은 켬(true)이나 끔(false)이에요.")
+            out[name] = view[name]
+    if view.get("gap_stats") is not None:
+        found = view["gap_stats"]
+        if not isinstance(found, list) or not all(isinstance(g, str) and g in GAP_STATS for g in found) or len(set(found)) != len(found):
+            raise ValueError(f"gap_stats는 {', '.join(GAP_STATS)} 중에서 겹치지 않게 고른 목록이에요.")
+        out["gap_stats"] = found
     for name, high in (("unit_text", 10), ("group", 200)):
         if view.get(name):
             out[name] = text(view[name], name, high)
@@ -351,6 +565,10 @@ def check_extra(view):
             raise ValueError(f"칸(slots)은 객체 목록이며 {MAX_SLOTS}개까지예요.")
         out["slots"] = [{"label": text(s.get("label"), "칸 이름", 30), "format": s.get("format") if s.get("format") in FORMATS else "number", "unit_text": text(s.get("unit_text"), "칸 단위", 10),
                          "color": check_hex(s["color"], "칸 색") if s.get("color") else ""} for s in slots]
+    if view.get("groups") is not None and (found := check_groups(view["groups"])):
+        out["groups"] = found
+    if view.get("cloud") is not None:
+        out["cloud"] = check_cloud(view["cloud"])
     out.update(check_more(view))
     if view.get("geo") is not None:
         out["geo"] = check_geo(view["geo"])
@@ -366,7 +584,7 @@ def check_view(view):
     """보기 설정: type(차트 종류, ""이면 계열마다 정한 대로), unit(일·주·월·연), compare.mode(span·point), better(up·down).
     차트 탭에서 온 것은 styles(계열마다 {type, dash, axis})·ranges(세로축 범위)·ratio(가로/세로), 분석 카드는 analysis_view."""
     view = {} if view is None else view
-    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", *EXTRA_VIEW}:
+    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "auto", "scale", "all_data", "data_table", *EXTRA_VIEW}:
         raise ValueError("보기(view)에 쓸 수 없는 항목이 있어요.")
     out = {"type": view.get("type") or "", "unit": view.get("unit") or "day", "compare": view.get("compare") or {"mode": "span"}, "better": view.get("better") or "up"}
     if out["type"] and out["type"] not in CHART_TYPES:
@@ -402,6 +620,18 @@ def check_view(view):
             if not isinstance(view[name], bool):
                 raise ValueError(f"{name}은 켬(true)이나 끔(false)이에요.")
             out[name] = view[name]
+    if view.get("auto") is not None:
+        out["auto"] = check_auto(view["auto"])
+    if view.get("scale"):
+        if view["scale"] not in viz_rules.SCALES:
+            raise ValueError("값 축은 log·symlog 중 하나이거나 비워 두세요.")
+        out["scale"] = view["scale"]
+    for name in ("all_data", "data_table"):  # 참일 때만 남긴다
+        if name in view:
+            if not isinstance(view[name], bool):
+                raise ValueError(f"{name}은 켬(true)이나 끔(false)이에요.")
+            if view[name]:
+                out[name] = True
     out.update(check_extra(view))
     if "analysis_view" in view:
         out["analysis_view"] = text(view["analysis_view"], "분석 보기 이름", 20)
@@ -454,7 +684,7 @@ def check_data(data, kind):
     data = {} if data is None else data
     if not isinstance(data, dict):
         raise ValueError("구한 값(data)은 객체여야 해요.")
-    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "bins", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair", "since", "window"}
+    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "bins", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair", "since", "window", "x_scale", "x_levels"}
     if unknown := set(data) - allowed:
         if kind == "recent_rows":
             raise ValueError("recent_rows 카드에는 행 값을 저장할 수 없어요. 보일 때마다 연결에서 읽어요.")
@@ -463,8 +693,12 @@ def check_data(data, kind):
     for name in ("computed_at", "def_hash", "note", "x"):
         if name in data and not isinstance(data[name], str):
             raise ValueError(f"data.{name}은 글자여야 해요.")
-    if "bins" in data and not (isinstance(data["bins"], dict) and set(data["bins"]) == {"edges", "counts"} and all(isinstance(v, list) for v in data["bins"].values())):  # 히스토그램
-        raise ValueError("data.bins는 {edges: 목록, counts: 목록} 모양이어야 해요.")
+    if "bins" in data:  # 히스토그램: edges·counts는 꼭, under·over·clip은 있어도 됨
+        found = data["bins"]
+        if not (isinstance(found, dict) and BIN_REQUIRED <= set(found) <= BIN_REQUIRED | BIN_OPTIONAL and all(isinstance(found[k], list) for k in BIN_REQUIRED)
+                and all(type(found[k]) is int for k in ("under", "over") if k in found)
+                and (found.get("clip") is None or (isinstance(found["clip"], list) and len(found["clip"]) == 2 and all(type(v) in (int, float) for v in found["clip"])))):
+            raise ValueError("data.bins는 {edges: 목록, counts: 목록} 모양이어야 해요(under·over는 정수, clip은 비우거나 숫자 둘).")
     return finite(data)
 
 
@@ -484,16 +718,54 @@ def check_card(card):
     placed = not any(out["source"].get(k) for k in ("body", "recipe", "analysis"))  # 카드 모음에서 막 놓은 빈 틀: 데이터를 정할 때까지 아래 검사를 미룬다
     if out["kind"] == "funnel" and not placed:  # 흐름(퍼널) 카드: 다시 구할 전처리(recipe)와 흐름 분석(analysis.kind = funnel)이 있어야 한다
         how = out["source"].get("analysis") or {}
-        if not isinstance(out["source"].get("recipe"), dict) or how.get("kind") != "funnel" or not isinstance(how.get("steps"), list) or not 1 <= len(how["steps"]) <= 10:
-            raise ValueError("흐름 카드에는 다시 구할 분석(source.recipe, source.analysis의 kind=funnel, 단계 1~10개)이 있어야 해요.")
+        listed = how.get(FUNNEL_LISTS.get(how.get("kind")))  # 값 목록 퍼널은 steps, 조건 단계 퍼널은 stages
+        if not isinstance(out["source"].get("recipe"), dict) or not isinstance(listed, list) or not 1 <= len(listed) <= 10:
+            raise ValueError("흐름 카드에는 다시 구할 분석(source.recipe, source.analysis의 kind=funnel과 단계 1~10개, 또는 kind=stages와 조건 단계 1~10개)이 있어야 해요.")
     if out["kind"] in ("treemap", "sunburst") and isinstance(out["source"].get("body"), dict) and out["source"]["body"].get("split"):
         series = out["source"]["body"].get("series")
         if isinstance(series, list) and series and isinstance(series[0], dict) and series[0].get("agg") not in ADDITIVE:
             raise ValueError(TREE_ADDITIVE)
     if (need := FLOW_NEED.get(out["kind"])) and not placed:  # 생키·코호트 카드: 어느 컬럼이 사용자·단계·시각인지(source.analysis)가 있어야 한다
         how = out["source"].get("analysis") or {}
-        if not all(isinstance(how.get(k), str) and how[k] for k in need) or (out["kind"] == "sankey" and not (isinstance(how.get("steps"), list) and 2 <= len(how["steps"]) <= 10)):
-            raise ValueError(f"{out['kind']} 카드에는 다시 구할 분석(source.analysis의 {', '.join(need)}{', 단계 2~10개 steps' if out['kind'] == 'sankey' else ''})이 있어야 해요.")
+        mode = how.get("mode")
+        if mode is None:
+            shaped = isinstance(how.get("steps"), list) and 2 <= len(how["steps"]) <= 10
+        else:
+            shaped = mode == AUTO_MODE and all(isinstance(v := how.get(k) or [], list) and all(isinstance(s, str) for s in v) for k in AUTO_ROLES)
+        if not all(isinstance(how.get(k), str) and how[k] for k in need) or (out["kind"] == "sankey" and not shaped):
+            raise ValueError(f"{out['kind']} 카드에는 다시 구할 분석(source.analysis의 {', '.join(need)}{', 단계 2~10개 steps 또는 mode=auto와 시작·중간·끝 값 목록' if out['kind'] == 'sankey' else ''})이 있어야 해요.")
+    groups, kind, body = out["view"].get("groups"), out["kind"], out["source"].get("body") or {}
+    if groups:
+        if kind not in GROUP_KINDS:
+            raise ValueError(f"{kind} 카드에는 표시할 그룹을 고를 수 없어요.")
+        if groups.get("ranges"):
+            allowed = RANGE_KINDS.get(kind)
+            if not allowed:
+                raise ValueError(f"{kind} 카드는 범위(ranges)를 쓸 수 없어요(순서 있는 값이 아니에요).")
+            kinds = {"date" if isinstance(v, str) else "number" for r in groups["ranges"] for v in r if v is not None}
+            if kinds - set(allowed):
+                raise ValueError(f"{kind} 카드의 범위는 {'·'.join({'number': '숫자', 'date': '날짜'}[a] for a in allowed)} 값이어야 해요.")
+        if groups.get("merge"):
+            if kind != "chart":
+                raise ValueError("범위를 하나로 묶기(merge)는 차트 카드에서만 돼요.")
+            series = body.get("series") or []
+            if not all(isinstance(s, dict) and s.get("agg") in MERGE_AGGS for s in series):
+                raise ValueError("범위를 하나로 묶기(merge)는 합계·개수·고유 개수 계열만 돼요. 평균·중앙값은 묶으면 값이 달라져요.")
+            if body.get("split") and any(s.get("agg") in SERVER_MERGE for s in series):
+                raise ValueError("고유 개수를 범위로 묶을 때는 나누기(split)를 쓸 수 없어요.")
+        if groups.get("sets"):
+            if kind != "geomap":
+                raise ValueError("영역 묶음(sets)은 지도 카드에서만 써요.")
+            if (out["view"].get("geo") or {}).get("agg") not in GEO_MERGE:
+                raise ValueError("영역 묶기는 영역 값이 합계·개수일 때만 돼요(평균·최소·최대는 묶으면 값이 달라져요).")
+    cloud = out["view"].get("cloud")
+    if cloud:
+        if kind != "wordcloud":
+            raise ValueError("워드클라우드 설정(cloud)은 워드클라우드 카드에만 써요.")
+        from core import labels
+        needs = cloud["mode"] == "labels" or (cloud["mode"] == "words" and cloud.get("rows") == "tagged")
+        if needs and not placed and labels.check_use(body.get("labels")) is None:
+            raise ValueError("라벨 이름·고른 태그의 행 방식은 태그를 켠 조회(source.body.labels)여야 해요.")
     size = len(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
     if size > MAX_CARD_BYTES:
         raise ValueError(f"카드 '{out['title']}'이 {size:,}자로 카드 하나의 상한 {MAX_CARD_BYTES:,}자를 넘어요.")

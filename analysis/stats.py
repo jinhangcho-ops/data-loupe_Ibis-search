@@ -6,10 +6,13 @@ import re
 
 from lazy import ibis
 
+from analysis import insight
+from core import dash_store
 from core import funnel
 from core import prep_ops
 from core import result
 from core import source
+from core import viz_rules
 from core.parse import check_name
 from core.result import chart_metric, plain
 from core.sql_funcs import period_start  # 주 시작 자르기는 식 truncate와 같은 것을 쓴다(dash_calc도 stats.period_start로 부른다)
@@ -29,7 +32,11 @@ SEED = 20260101  # 점을 고르게 뽑을 때의 고정 씨앗(다시 구해도
 TOP_PERIODS, MAX_TOP_PERIODS = 5, 20  # 가장 많은 기간 찾기에서 보일 기본 개수, 상한
 UNITS = {"day": "D", "week": "W", "month": "M"}  # 시계열 묶음 단위 → Ibis truncate 단위
 WINDOW_UNITS = {"minute": 60, "hour": 3600, "day": 86400}  # 퍼널 기간 제한의 단위 → 초
-LIMITS = {"max_steps": funnel.MAX_STEPS, "bins": BINS, "top_values": TOP_VALUES, "max_corr": MAX_CORR, "max_points": MAX_POINTS, "max_groups": MAX_GROUPS, "max_periods": MAX_PERIODS}
+LIMITS = {"max_steps": funnel.MAX_STEPS, "bins": BINS, "top_values": TOP_VALUES, "max_corr": MAX_CORR, "max_points": MAX_POINTS, "max_groups": MAX_GROUPS, "max_periods": MAX_PERIODS,
+          "whole": list(insight.WHOLE_KINDS), "cohort_span": insight.COHORT_SPAN, "max_cohort_span": insight.MAX_COHORT_SPAN, "pareto_a": insight.PARETO_A, "pareto_b": insight.PARETO_B,
+          "pareto_show": insight.PARETO_SHOW, "min_support": insight.MIN_SUPPORT, "basket_top": insight.BASKET_TOP, "max_basket_top": insight.MAX_BASKET_TOP,
+          "season_windows": insight.SEASON_WINDOWS, "max_window": insight.MAX_WINDOW, "mad_k": insight.MAD_K, "max_mad_k": insight.MAX_MAD_K,
+          "rfm_bins": insight.RFM_BINS, "max_levels": insight.MAX_LEVELS, "low_share": insight.LOW_SHARE}
 
 
 def rows(expr):
@@ -78,7 +85,7 @@ def values(t, c, more=None, top=None):
     return found if more is None else (found, {k: counted[f"more_{k}"] for k in more})
 
 
-def distribution(t, column):
+def distribution(t, column, auto=None):
     """컬럼 하나의 분포. 숫자면 요약 통계·히스토그램(BINS 구간)·상자 그림 값, 모든 종류에 값 빈도."""
     c = column_of(t, column)
     if c.type().is_floating():  # NaN·무한은 빈 값으로 본다
@@ -101,15 +108,8 @@ def distribution(t, column):
     out["stats"] = s
     if not s["n"]:
         return out
-    low, high = s["min"], s["max"]
-    half = 2.0 if math.isinf(high - low) else 1.0  # 최대-최소가 실수 범위를 넘으면 반으로 줄여 구간을 나눈다
-    width = (high / half - low / half) / BINS or 1
     kept = t.filter(x.notnull())
-    bucket = ((kept[column].cast("float64") / half - low / half) / width).floor().cast("int64")
-    bucket = ibis.ifelse(bucket >= BINS, BINS - 1, bucket)
-    found = {r["b"]: r["n"] for r in rows(kept.group_by(bucket.name("b")).aggregate(n=kept.count()))}
-    bins = BINS if high > low else 1
-    out["histogram"] = {"edges": [low + width * i for i in range(bins + 1)] if half == 1 else [low * (1 - i / bins) + high * (i / bins) for i in range(bins + 1)], "counts": [found.get(i, 0) for i in range(bins)]}
+    out["histogram"] = viz_rules.tail_histogram(kept, column, *viz_rules.bin_args(auto or {}, None, BINS))
     iqr = s["q3"] - s["q1"]
     fence_low, fence_high = s["q1"] - 1.5 * iqr, s["q3"] + 1.5 * iqr
     inside = (x >= fence_low) & (x <= fence_high)
@@ -139,7 +139,7 @@ def correlation(t, columns):
     return {"columns": columns, "n": n, "matrix": [[r(i, j) for j in range(len(columns))] for i in range(len(columns))]}
 
 
-def scatter(t, x, y):
+def scatter(t, x, y, auto=None):
     """두 숫자 컬럼의 점(둘 다 비어 있지 않은 행, MAX_POINTS개)과 상관계수. 점이 많으면 Table.sample(고정 씨앗 SEED)로 고르게 뽑는다
     (대시보드 points_data와 같은 방법, 연결이 못 하면 앞에서부터)."""
     if x == y:
@@ -152,7 +152,10 @@ def scatter(t, x, y):
         even = picked.sample(MAX_POINTS / corr["n"], seed=SEED)
         picked = even if source.compiles(even) else picked
     found = rows(picked.limit(MAX_POINTS))
-    return {"x": x, "y": y, "points": [[p["x"], p["y"]] for p in found], "n": corr["n"], "r": corr["matrix"][0][1]}
+    dens = (auto or {}).get("density")
+    tier = {k: v[0] for k, v in viz_rules.AUTO_PARAMS["density"].items()} | (dens or {})
+    hexed = {"hex": viz_rules.hex_cells(s, x, y, tier["cols"])} if dens is not False and corr["n"] > tier["hex"] else {}
+    return {"x": x, "y": y, "points": [[p["x"], p["y"]] for p in found], "n": corr["n"], "r": corr["matrix"][0][1], **hexed}
 
 
 def finite_value(t, value, into=None):
@@ -227,19 +230,34 @@ def window_seconds(window):
     return n * WINDOW_UNITS[window["unit"]]
 
 
-def funnel_flow(t, user, step, time, steps, window=None, span=None, by=None):
+def funnel_flow(t, user, step, time, steps, window=None, span=None, by=None, trim=None):
     """흐름(퍼널): 사용자(user)가 단계 컬럼(step)의 값 steps를 순서대로 거쳐 간 사람 수(funnel.compute). 중간에 한 다른 행동과 되돌아간 행동은 무시한다.
     by = 세그먼트 컬럼(있으면 응답에 segments), 단계마다 median_sec(앞 단계에서 걸린 시간 중앙값)이 steps에 들어 있다. window = {n, unit} 앞 단계부터 이 시간 안에 도달한 것만, span = {start, end} 첫 단계를 이 날짜 안에 한 사람만(대시보드 기간, 뒤 단계는 기간 밖이어도 센다). 필요한 컬럼은 사용자·단계·시각 셋뿐이다."""
     seconds = window_seconds(window)
     funnel.check(t, user, step, time, steps, seconds)
-    entry = None
-    if span and (span.get("start") or span.get("end")):
-        try:
-            entry = tuple(dt.date.fromisoformat(span[k]) if span.get(k) else None for k in ("start", "end"))
-        except (TypeError, ValueError):
-            raise ValueError("기간(range)의 시작과 끝은 YYYY-MM-DD 모양이어야 합니다.") from None
-    found = funnel.compute(t, user, step, time, steps, seconds, entry, by=by or None)
-    return {"who": user, "step": step, "time": time, "steps": found["steps"], **({"segments": found["segments"]} if "segments" in found else {}), "by": by or None, "window": window or None, "window_seconds": seconds, "range": span or None}
+    entry = span_entry(span)
+    found = funnel.compute(t, user, step, time, steps, seconds, entry, by=by or None, trim=trim)
+    return {"who": user, "step": step, "time": time, "steps": found["steps"], **({"segments": found["segments"]} if "segments" in found else {}), "by": by or None, "window": window or None, "window_seconds": seconds, "range": span or None, "gaps": found["gaps"], "trim": found["trim"]}
+
+
+def span_entry(span: dict | None) -> tuple[dt.date | None, dt.date | None] | None:
+    """[SPECIFICATION] plans/phase-3.md#span_entry
+    흐름 분석의 range {start, end}(YYYY-MM-DD)를 첫 단계 날짜 범위 (시작 date 또는 None, 끝 date 또는 None)로 읽는다. 둘 다 비면 None, 모양이 틀리면 ValueError."""
+    if not span or not (span.get("start") or span.get("end")):
+        return None
+    try:
+        return tuple(dt.date.fromisoformat(span[k]) if span.get(k) else None for k in ("start", "end"))
+    except (TypeError, ValueError):
+        raise ValueError("기간(range)의 시작과 끝은 YYYY-MM-DD 모양이어야 합니다.") from None
+
+
+def stage_flow(t: "ibis.expr.types.Table", who: str, time: str, stages: list[dict], count: str, window: dict | None = None, span: dict | None = None, trim: float | None = None) -> dict:
+    """[SPECIFICATION] plans/phase-3.md#stage_flow
+    조건 단계 퍼널(AARRR·RARRA 틀 포함): funnel.stage_compute로 단계별 사용자 수·걸린 시간 표를 구해 funnel_flow와 같은 모양(who·time·steps·window·range)에 count·stages·gaps·trim을 더해 돌려준다."""
+    seconds = window_seconds(window)
+    found = funnel.stage_compute(t, who, time, stages, count, seconds, span_entry(span), trim)
+    return {"who": who, "time": time, "count": found["count"], "stages": [s["name"] for s in found["steps"]], "steps": found["steps"], "gaps": found["gaps"],
+            "trim": found["trim"], "window": window or None, "window_seconds": seconds, "range": span or None}
 
 
 def columns(t):
@@ -247,7 +265,9 @@ def columns(t):
     return {"columns": [[name, kind(dtype)] for name, dtype in t.schema().items()]}
 
 
-KINDS = {"columns": columns, "distribution": distribution, "correlation": correlation, "scatter": scatter, "groups": groups, "trend": trend, "busiest": busiest, "funnel": funnel_flow}
+KINDS = {"columns": columns, "distribution": distribution, "correlation": correlation, "scatter": scatter, "groups": groups, "trend": trend, "busiest": busiest, "funnel": funnel_flow, "stages": stage_flow,
+         "retention": insight.retention, "rfm": insight.rfm, "pareto": insight.pareto_abc, "chisq": insight.chi_square, "abtest": insight.ab_test,
+         "basket": insight.basket, "decompose": insight.decompose, "seasonal": insight.seasonal}
 
 
 def analyze(t, how):
@@ -255,7 +275,13 @@ def analyze(t, how):
     name = how.get("kind")
     if name not in KINDS:
         raise ValueError(f"분석 종류는 {', '.join(KINDS)} 중 하나입니다.")
-    args = {"columns": (), "distribution": ("column",), "correlation": ("columns",), "scatter": ("x", "y"),
+    if how.get("auto") is not None:
+        dash_store.check_auto(how["auto"])
+    args = {"columns": (), "distribution": ("column", "auto"), "correlation": ("columns",), "scatter": ("x", "y", "auto"),
             "groups": ("by", "value", "agg", "opts"), "trend": ("column", "unit", "value", "agg", "opts"), "busiest": ("column", "unit", "top"),
-            "funnel": ("who", "step", "time", "steps", "window", "range", "by")}[name]
+            "funnel": ("who", "step", "time", "steps", "window", "range", "by", "trim"),
+            "stages": ("who", "time", "stages", "count", "window", "range", "trim"),
+            "retention": ("who", "time", "unit", "span"), "rfm": ("who", "time", "amount", "asof", "tx"), "pareto": ("item", "value", "agg", "a", "b"),
+            "chisq": ("row", "col"), "abtest": ("group", "metric", "value", "control", "conf"), "basket": ("key", "item", "support", "top"),
+            "decompose": ("time", "base", "compare", "group", "value"), "seasonal": ("time", "unit", "value", "agg", "opts", "window", "k")}[name]
     return {"kind": name, **KINDS[name](t, *[how.get(a) for a in args])}

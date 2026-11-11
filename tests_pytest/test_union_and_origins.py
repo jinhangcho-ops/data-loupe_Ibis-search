@@ -49,7 +49,7 @@ def test_origins_follow_joins(searching):
     found = searching("/api/columns", base="orders", union={"tables": ["old_orders"], "how": "left"}, joins=["customers left cust=cust"])
     origins = found["origins"]
     assert (origins["id"], origins["출처"], origins["name"]) == ("orders", "이어붙인 테이블", "customers")
-    assert origins[next(c for c, _ in found["columns"] if c.startswith("kind_"))] == "customers"  # 이름이 겹쳐 바뀐 컬럼도 그 테이블
+    assert origins[next(c for c, _ in found["columns"] if c == "customers_kind")] == "customers"  # 이름이 겹쳐 바뀐 컬럼(대상_컬럼)도 그 테이블
     assert set(origins) == {c for c, _ in found["columns"]}
 
 

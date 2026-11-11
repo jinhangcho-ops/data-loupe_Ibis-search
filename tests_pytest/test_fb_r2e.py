@@ -33,8 +33,8 @@ def api(folder, tmp_path, monkeypatch):
 
 
 def profile_full(c, **more):
-    c.post("/api/profile", json={"base": "t", "sample": 1000})
-    return c.post("/api/profile/full", json={"base": "t", "sample": 1000, **more}).get_json()
+    c.post("/api/profile", json={"base": "t", "sample": 1000, "sample_how": {"way": "block"}})
+    return c.post("/api/profile/full", json={"base": "t", "sample": 1000, "sample_how": {"way": "block"}, **more}).get_json()
 
 
 def test_전체로_구한_값과_표본과_크게_다른_항목(api):

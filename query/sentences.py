@@ -1,4 +1,4 @@
-"""문장 틀 데이터(6-4, 10-4): 탐색 틀 1~56번(48~50은 좌표 틀, 51은 횟수 구간별 대상 수, 52·53은 대상별 요약표, 54~56은 분포·누적 비중·벗어난 기간)과 지표 틀 1~15번. 틀은 데이터로만 두고(계산은 하지 않는다) GET /api/sentences(flow_app.py)로 화면에 보낸다(모든 화면에 싣지 않으려고 CONSTANTS에 넣지 않는다).
+"""문장 틀 데이터(6-4, 10-4): 탐색 틀 1~57번(57은 행동 순서 컬럼,48~50은 좌표 틀, 51은 횟수 구간별 대상 수, 52·53은 대상별 요약표, 54~56은 분포·누적 비중·벗어난 기간)과 지표 틀 1~15번. 틀은 데이터로만 두고(계산은 하지 않는다) GET /api/sentences(flow_app.py)로 화면에 보낸다(모든 화면에 싣지 않으려고 CONSTANTS에 넣지 않는다).
 - 틀 하나 = {id, kind(explore·metric), no, name, text(빈칸을 {이름}으로 쓴 문장), slots: [빈칸], uses: [함수 사전 id], extends(변형이면 원래 틀 번호), preset(변형이 정해 둔 빈칸 값)}.
   어느 틀이든 앞에 {기간}을 붙일 수 있다(PERIOD, 틀마다 period: True).
 - 빈칸 = {name, type, label, kinds(컬럼 종류 제한), options(고르는 값), default, optional}. 빈칸 타입은 SLOT_TYPES.
@@ -95,9 +95,9 @@ EXPLORE = [
     temp(35, "이전 행과 비교", "{무엇}마다 {정렬 기준} 순으로 앞뒤 행의 {값} 값을 비교해 {보기} 보기", [G, ORDER, slot("값", "column", "값 컬럼", NUM), choice("보기", ["차이", "변화율", "이전 값", "다음 값"])],
          ["lag", "lead", "diff", "pct_change"]),
     temp(36, "누적 합·이동 평균", "{정렬 기준} 순으로 {단위}마다 {값}의 {종류} 보기",
-         [ORDER, slot("값", "column", "값 컬럼", NUM), choice("종류", ["누적 합", "누적 평균", "누적 최소", "누적 최대", "이동 합", "이동 평균", "이동 최소", "이동 최대"]), slot("N", "n", "이동 크기", default=3, optional=True, when={"종류": ["이동 합", "이동 평균", "이동 최소", "이동 최대"]}),
+         [ORDER, slot("값", "column", "값 컬럼", NUM), choice("종류", ["누적 합", "누적 평균", "누적 최소", "누적 최대", "이동 합", "이동 평균", "이동 최소", "이동 최대", "이동 표준편차", "지수 가중 이동 평균"]), slot("N", "n", "이동 크기", default=3, optional=True, when={"종류": ["이동 합", "이동 평균", "이동 최소", "이동 최대", "이동 표준편차", "지수 가중 이동 평균"]}),
           choice("단위", ["행", *SPANS], "행", "묶는 단위(일·주·월이면 정렬 기준 날짜로 묶어 빈 기간은 0)")],
-         ["cum_sum", "cum_mean", "cum_min", "cum_max", "moving_sum", "moving_mean", "moving_min", "moving_max"]),
+         ["cum_sum", "cum_mean", "cum_min", "cum_max", "moving_sum", "moving_mean", "moving_min", "moving_max", "moving_std", "ewma"]),
     temp(37, "그룹 안에서 차지하는 비율", "{무엇} 안에서 {나눌 것}별로 차지하는 {값}의 비율 보기", [G, column("나눌 것"), slot("값", "column", "값 컬럼", NUM)], ["share_of_group", "sum"]),
     temp(38, "상위 몇 %인지", "행마다 {값} 값이 상위 몇 %인지 보기, 방식은 {방식}", [slot("값", "column", "값 컬럼", NUM), choice("방식", ["백분위 순위", "누적 분포", "N등분"]), slot("N", "n", "구간 수", default=4, optional=True, when={"방식": ["N등분"]})],
          ["percent_rank", "cume_dist", "ntile", "first_value", "last_value", "nth_value"]),
@@ -140,6 +140,14 @@ EXPLORE = [
     temp(56, "크게 벗어난 기간 찾기", "{날짜} 기준 {단위}마다 {값} 합계를 구해 {방법}으로 {k}배 넘게 벗어난 기간 보기",
          [column("날짜", "날짜 컬럼", DAT), choice("단위", list(SPANS), "일"), slot("값", "column", "값 컬럼(선택, 비우면 행 수)", NUM, optional=True), choice("방법", ["z-점수", "IQR"], "z-점수"),
           slot("k", "number", "기준 배수(비우면 z-점수 3, IQR 1.5)", optional=True)], ["sum", "count", "truncate", "mean", "std"]),
+    temp(57, "행동 순서로 새 컬럼", "{사람}별로 {시각} 순서에서 {종류} 컬럼 만들기",
+         [column("사람", "사람(묶음) 컬럼"), column("시각", "시각 컬럼", DAT),
+          choice("종류", ["세션 번호", "직전 행동과의 간격", "다음 행동까지 시간", "이벤트 기준 에피소드", "연속 일수", "경로 문자열", "누적 고유 개수"]),
+          slot("간격(분)", "number", "세션 간격(분)", default=sql_funcs.SESSION_GAP_MINUTES, optional=True, when={"종류": ["세션 번호"]}),
+          slot("단위", "choice", "시간 단위", options=list(sql_funcs.UNITS), default="minute", when={"종류": ["직전 행동과의 간격", "다음 행동까지 시간"]}),
+          slot("이벤트", "column", "이벤트(값) 컬럼", optional=True, when={"종류": ["이벤트 기준 에피소드", "경로 문자열", "누적 고유 개수"]}),
+          slot("시작 값", "values", "새 에피소드를 시작할 값들", optional=True, when={"종류": ["이벤트 기준 에피소드"]})],
+         ["session_id", "since_prev", "until_next", "episode_id", "streak", "event_path", "cum_distinct"]),
 ]
 
 METRICS = [

@@ -62,6 +62,7 @@ def test_draft_baseline_is_first_response_after_table_open(tmp_path):
     draft = index_slice("let draftBase", "const searchDraft")
     prelude = """
 const S = { base: "" }; let view = "cards", key = "k0"; const bodyKey = () => key;
+const Labels = { reset() {} };  // labels.js(Phase 4) 대역
 const clearLists = () => {}, showSummaries = () => {}, refreshColumns = async () => { await sleep(5); };
 const els = {}; globalThis.$ = id => els[id] ??= { value: "t1", classList: { add() {} } };
 """
@@ -78,6 +79,6 @@ const els = {}; globalThis.$ = id => els[id] ??= { value: "t1", classList: { add
 
 def test_prep_table_uses_shared_result_table():
     html = (STATIC / "prep" / "prep.html").read_text(encoding="utf-8")
-    assert "tableHtml" not in html and 'resultTable($("a-table"), anaTable(' in html  # 전처리 표도 공용 resultTable(host, data)을 쓴다
+    assert "tableHtml" not in html and 'sortedTable($("a-table"), anaTable(d, A.view), (h, x, s) => resultTable(h, x, s)' in html  # 전처리 표도 공용 resultTable(host, data)을 쓴다(정렬은 Phase 11 sortedTable)
 
 

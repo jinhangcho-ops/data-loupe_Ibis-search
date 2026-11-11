@@ -62,7 +62,7 @@ def test_DE1_Polars_블록_표본은_일부만_읽는다(tmp_path):
                   "f": pl.int_range(rows, eager=True).cast(pl.Float64)}).write_parquet(path, row_group_size=100_000)
     con = source.open_flat_files([path])
     t = con.table("big")
-    small, found = peak_growth(lambda: profiler.block(con, t, None, "big", 5000, rows, None))
+    small, found = peak_growth(lambda: profiler.segments(con, t, None, "big", 5000, rows, None))  # phase-2: 구간 읽기는 segments로 옮김
     full, _ = peak_growth(lambda: t.to_pyarrow())
     assert found is not None and found.num_rows == 5000
     assert len(set(found.column("i").to_pylist())) == 5000  # 구간이 겹치지 않는다

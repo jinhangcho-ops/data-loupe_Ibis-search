@@ -50,7 +50,10 @@ def test_5e2_prep_table_switch_undo_does_not_return_to_old_table(tmp_path):
     body = """
 const els = {}; const $ = id => els[id] ??= { value: "", replaceChildren() {}, textContent: "" };
 let draftBase = "", token = 0, status = "", prof = { t: "A" }, preview = null, shot = null, edits = { x: 1 }, copies = [], filters = [], dedupe = [], sorts = [], drops = [], deriv = [], formulas = [], pca = {}, geoSteps = [], geoTables = [], geoRefCols = [], picked = "", specView = null, first = null;
+let dedupeOn = null, dedupeFound = null, ddContain = []; const SERVER = { dedupe_limit: 1 };  // 중복 제거 확정 기준(Phase 13) 대역
 const resetRun = () => {}, fail = () => {}, showAll = () => {};
+const noLabels = () => ({ on: false, mode: "", tags: [] }); let labelUse = noLabels(), labelInfo = null; const showLabels = () => {};  // [태그 붙이기](Phase 4) 대역
+const noKmeans = () => ({ columns: [], k: 3, name: "cluster" }); let kmeans = noKmeans();  // K-Means 칸(Phase 6) 대역
 const S = { base: "A" }; const restored = [];
 %s
 const config = () => ({ base: S.base, edits });

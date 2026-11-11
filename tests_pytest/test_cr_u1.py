@@ -65,7 +65,7 @@ const showBig = () => {}; const renderTables = () => {}; const conditionTexts = 
 @needs_node
 def test_chart_sends_x_unit_only_for_date_x_and_prefers_date_for_default_x(tmp_path):
     helpers = between(PAGE, "const xRank", "function redraw()")
-    draw = between(PAGE, '$("draw").onclick', "// 차트에 그린 값을")
+    draw = between(PAGE, '$("draw").onclick', "// 차트에 그린 값의 표")
     stub = r"""
 let tabs = [{}], tabAt = 0;  // 작업 탭(가짜 화면에는 탭 하나)
 const els = {}; const $ = id => (els[id] ??= { value: "", classList: { toggle() {}, add() {}, remove() {} }, textContent: "" });
@@ -73,7 +73,7 @@ const S = { cols: [["id", "정수"], ["name", "문자"], ["day", "날짜"]] };
 const sent = []; let series = [], drawn = null;
 const busy = (b, f) => f(); const timed = (k, f) => f(); const state = () => ({ base: "t" });
 const seriesNow = () => ({ y: "", agg: "count" }); const api = async (url, body) => { sent.push(body); return { labels: [], datasets: [] }; };
-const toDrawn = () => ({}); const drawChart = () => {}; const mountTable = () => {}; const gridSpec = () => ({}); const chartData = () => ({}); const rangeError = () => "";
+const toDrawn = () => ({}); const drawChart = () => {}; let chartGroups = {}; const chartKey = q => JSON.stringify(q), groupsChanged = async () => {};  // 그룹 고르기(Phase 4) const mountTable = () => {}; const gridSpec = () => ({}); const chartData = () => ({}); const rangeError = () => "";
 """
     body = r"""
 (async () => {

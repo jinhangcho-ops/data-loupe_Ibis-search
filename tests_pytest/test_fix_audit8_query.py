@@ -12,12 +12,12 @@ def con_with(**tables):
     return con
 
 def test_self_join_works_in_search():
-    """8B2: 자기 조인이 검색에서 3행, 오른쪽 컬럼은 _right."""
+    """8B2: 자기 조인이 검색에서 3행, 오른쪽 컬럼은 emp_…"""
     from core import parse
     con = con_with(emp={"id": [1, 2, 3], "boss": [None, 1, 1], "name": ["a", "b", "c"]})
     get = lambda name, schema=None: con.table(name)
     out = parse.apply_joins(con.table("emp"), [("emp", "left", [("boss", "id")], None)], get)
-    assert out.count().execute() == 3 and "id_right" in out.columns and "name_right" in out.columns
+    assert out.count().execute() == 3 and "emp_id" in out.columns and "emp_name" in out.columns
     # 다른 테이블과의 조인 컬럼 이름 규칙은 그대로
     con2 = con_with(emp={"id": [1, 2], "x": [1, 2]}, other={"id": [1, 2], "y": [5, 6]})
     j = parse.apply_joins(con2.table("emp"), [("other", "inner", [("id", "id")], None)], lambda n: con2.table(n))

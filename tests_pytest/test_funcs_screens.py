@@ -136,7 +136,9 @@ def test_calc_pivot_route_still_rejects_bad_options(real):
 
 AGG_WORDS = "count|sum|mean|min|max|nunique|median"
 SCREEN_FILES = [p for p in sorted(STATIC.rglob('*')) if p.suffix in (".js", ".html") and "chart.umd" not in p.name]
-ALLOWED = {  # (파일, 그 줄에 든 글) → 집계 목록이 아니라 다른 뜻인 곳. 지금은 없다(빈 값 채우기 규칙은 prepmenu.js 한 벌, 쿼리에서 되는 옵션만 적는다)
+ALLOWED = {  # (파일, 그 줄에 든 글) → 집계 목록이 아니라 다른 뜻인 곳(빈 값 채우기 규칙은 prepmenu.js 한 벌, 쿼리에서 되는 옵션만 적는다)
+    ("prep.html", '<select id="a-pagg">'): "파레토 값 고르기: 명세(phase-12)가 정한 합계·행 수 두 가지, 서버 insight.PARETO_AGGS가 검사",
+    ("prep.html", '<select id="a-bmetric">'): "A/B 지표 고르기: 명세(phase-12)가 정한 비율·평균 두 가지, 서버 insight.AB_METRICS가 검사",
 }
 FORBIDDEN = [
     (re.compile(rf'<option value="(?:{AGG_WORDS})"'), "집계를 고르는 <option>을 직접 적음"),

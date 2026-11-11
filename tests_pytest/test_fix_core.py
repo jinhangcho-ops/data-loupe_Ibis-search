@@ -85,7 +85,7 @@ def test_analysis_treats_nan_as_empty():
     s = stats.analyze(t, {"kind": "scatter", "x": "a", "y": "b"})
     assert len(s["points"]) == 3 and s["r"] == pytest.approx(0.5)
     dist = stats.analyze(t, {"kind": "distribution", "column": "a"})
-    assert dist["stats"]["n"] == 3 and (dist["stats"]["min"], dist["stats"]["max"]) == (1, 3) and sum(dist["histogram"]["counts"]) == 3
+    assert dist["stats"]["n"] == 3 and (dist["stats"]["min"], dist["stats"]["max"]) == (1, 3) and sum(dist["histogram"]["counts"]) + dist["histogram"]["under"] + dist["histogram"]["over"] == 3
     assert dist["values"]["nulls"] == 1
 
 

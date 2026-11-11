@@ -10,6 +10,7 @@
 - SQL 식 직접 쓰기: raw_expr이 'SELECT *, <식> AS 이름 FROM (<지금 식의 SQL>)'을 sql_exec.check(파일 읽기 막기 포함)로 검사한 뒤 연결의 sql()로 붙인다."""
 import datetime
 import functools
+import math
 import re
 import zoneinfo
 
@@ -471,7 +472,7 @@ def moving(how):
     return build
 
 
-for how, name in (("sum", "합"), ("mean", "평균"), ("min", "최소"), ("max", "최대")):
+for how, name in (("sum", "합"), ("mean", "평균"), ("min", "최소"), ("max", "최대"), ("std", "표준편차")):
     add(f"moving_{how}", "window", f"이동 {name}", f"최근 N행(또는 N일)의 {name}.",
         [col(kinds=NUM), num("n", "크기 N", 3, kind="int"), choice("unit", "단위", ["rows", "days"], "rows"), order(False), group()],
         moving(how), f"moving_{how}(금액, 3)", NUM, NUM, window=True)
@@ -736,6 +737,343 @@ row("diff_now", "date", "지금까지 지난 시간", "그 날짜부터 지금�
 row("diff_today", "date", "오늘까지 지난 날", "그 날짜부터 오늘까지 지난 단위 수.", [D_, choice("unit", "단위", ["day", "week", "month", "year"], "day")],
     lambda c: passed(c.x, ibis.today(), c.unit), "diff_today(가입일, 'day')", DAT, NUM)
 
+# ---------- 시계열·창 (Phase 7: plans/phase-7.md) ----------
+
+DAY_MINUTES = 1440  # 버킷 간격(분)은 하루를 나누어떨어져야 한다
+MINUTE_SECONDS = 60  # 1분의 초
+WEEKDAY_NAMES = ("월", "화", "수", "목", "금", "토", "일")  # 월요일 0 기준(day_of_week.index())
+WEEK_DAYS = len(WEEKDAY_NAMES)  # 한 주의 날 수
+WEEKEND_DEFAULT = "sat_sun"  # 설정 weekend가 없을 때의 주말 요일(settings.WEEKDAY_CODES를 _로 이은 글자)
+DAY_BOUNDS, DAY_LABELS = (6, 12, 18), ("새벽", "오전", "오후", "야간")  # 시간대 경계(구간의 시작 시)와 이름
+WORK_HOURS = (9, 18)  # 설정 work_hours가 없을 때의 업무시간 [시작 시, 끝 시)
+MONTH_BOUNDS, MONTH_LABELS = (11, 21), ("월초", "월중", "월말")  # 월 구간 경계(구간의 첫날)와 이름
+BUCKET_MINUTES = 15  # 설정 bucket_minutes가 없을 때의 time_bucket 간격(분)
+SESSION_GAP_MINUTES = 30  # 세션을 나누는 기본 간격(분)
+EPISODE_STARTS = ("로그인", "결제완료")  # episode_id 기본 나누는 값
+EWMA_SPAN, MAX_EWMA_SPAN, EWMA_TOL = 7, 1000, 1e-6  # 설정 ewma_span이 없을 때의 EWMA N, N 상한, 자르는 가중치
+YEAR_MONTHS = 12  # 한 해의 달 수
+PATH_SEP = " -> "  # event_path 기본 구분 글자
+STREAK_ANCHOR = (1970, 1, 1)  # 날짜 연속을 셀 때 날 수를 재는 기준일
+BOUND_HOURS, BOUND_DAYS, DAY_HOURS = (1, 23), (2, 31), 24  # 시간대 경계(시)·월 구간 경계(일)의 허용 범위, 하루의 시
+SEQ_TEMP = "__ibis_seq"  # 시퀀스 함수가 잠깐 쓰는 컬럼 이름의 앞글자
+SEQUENCES = ("session_id", "cum_distinct", "ewma", "streak", "event_path")  # 창 위에 창을 한 번 더 쓰는 함수(묶음 함수로 등록)
+
+
+def rebind(c: Args, t: "ibis.expr.types.Table") -> tuple[list["ibis.expr.types.Column"], list["ibis.expr.types.SortExpr"]]:
+    """[SPECIFICATION] plans/phase-7.md#rebind
+    c의 묶음·정렬 식을 한 층 뒤의 표 t의 같은 이름 컬럼으로 다시 만든다."""
+    keys = []
+    for k in c.order or []:
+        op = k.op()
+        column = t[op.arg.name]
+        keys.append(ibis.asc(column, nulls_first=op.nulls_first) if op.ascending else ibis.desc(column, nulls_first=op.nulls_first))
+    return [t[g.get_name()] for g in c.group or []], keys
+
+
+def time_bucket(c: Args) -> "ibis.expr.types.TimestampValue":
+    """[SPECIFICATION] plans/phase-7.md#time_bucket
+    날짜시간을 하루를 나누어떨어지는 N분(인자 또는 설정 bucket_minutes) 간격의 시작 시각으로 내린다."""
+    from core import settings
+    if c.x.type().is_date():
+        raise ValueError("간격으로 묶기는 시각이 있는 컬럼(날짜시간)에만 쓸 수 있어요.")
+    n = c.n if c.n is not None else settings.load().get("bucket_minutes", BUCKET_MINUTES)
+    if n < 1:
+        raise ValueError("간격 N은 1 이상이에요.")
+    if DAY_MINUTES % n != 0:
+        raise ValueError(f"간격은 하루(1440분)를 나누어떨어지게 골라 주세요(예: 5·10·15·20·30·60·360분). {n}분은 안 돼요.")
+    size = n * MINUTE_SECONDS
+    w = to_timezone(c.x).cast("timestamp")
+    m = remainder(w.epoch_seconds(), ibis.literal(size))
+    off = ibis.ifelse(m < 0, m + size, m)
+    return w - off.as_interval("s")
+
+
+def weekday_num(c: Args) -> "ibis.expr.types.IntegerValue":
+    """[SPECIFICATION] plans/phase-7.md#weekday_num
+    설정 week_start의 첫날을 1로 하는 요일 번호(1~7)."""
+    from core import settings
+    idx = c.x.day_of_week.index().cast("int64")
+    return (idx + 1) % WEEK_DAYS + 1 if settings.load().get("week_start") == "sun" else idx + 1
+
+
+def weekday_name(c: Args) -> "ibis.expr.types.StringValue":
+    """[SPECIFICATION] plans/phase-7.md#weekday_name
+    요일 이름(월~일)."""
+    idx = c.x.day_of_week.index().cast("int64")
+    return ibis.cases(*[(idx == i, n) for i, n in enumerate(WEEKDAY_NAMES)], else_=ibis.null().cast("string"))
+
+
+def weekend_days(days: str | None) -> list[int]:
+    """[SPECIFICATION] plans/phase-7.md#weekend_days
+    주말 요일 글자(비우면 설정 weekend, 없으면 WEEKEND_DEFAULT)를 요일 번호(월 0) 목록으로."""
+    from core import settings
+    value = days or settings.load().get("weekend", WEEKEND_DEFAULT)
+    if not settings.valid("weekend", value):
+        raise ValueError("주말 요일은 mon·tue·wed·thu·fri·sat·sun을 _로 이어 써요(예: sat_sun, 1~6개).")
+    return sorted(settings.WEEKDAY_CODES.index(p) for p in value.split("_"))
+
+
+def is_weekend(c: Args) -> "ibis.expr.types.BooleanValue":
+    """[SPECIFICATION] plans/phase-7.md#is_weekend
+    주말 요일(인자 또는 설정 weekend, 기본 토·일)이면 참."""
+    return c.x.day_of_week.index().isin(weekend_days(c.days))
+
+
+def time_of_day(c: Args) -> "ibis.expr.types.StringValue":
+    """[SPECIFICATION] plans/phase-7.md#time_of_day
+    시를 경계로 나눈 시간대 이름(기본 새벽·오전·오후·야간)."""
+    if c.x.type().is_date():
+        raise ValueError("시간대는 시각이 있는 컬럼(날짜시간)에만 쓸 수 있어요.")
+    bounds = list(c.bounds or DAY_BOUNDS)
+    if any(isinstance(b, bool) or not isinstance(b, int) or not BOUND_HOURS[0] <= b <= BOUND_HOURS[1] for b in bounds):
+        raise ValueError("시간대 경계는 1~23 사이의 정수(시)로 써 주세요.")
+    return bucket(Args(x=c.x.hour().cast("int64"), bounds=bounds, labels=list(c.labels or DAY_LABELS)))
+
+
+def work_hours(c: Args) -> "ibis.expr.types.BooleanValue":
+    """[SPECIFICATION] plans/phase-7.md#work_hours
+    시작 시 이상 끝 시 미만(인자 또는 설정 work_hours, 평일만 고르면 주말 요일은 거짓)이면 참."""
+    from core import settings
+    if c.x.type().is_date():
+        raise ValueError("업무시간은 시각이 있는 컬럼(날짜시간)에만 쓸 수 있어요.")
+    saved = settings.load().get("work_hours")
+    default = tuple(int(p) for p in saved.split("_")) if saved else WORK_HOURS
+    start = default[0] if c.start is None else c.start
+    end = default[1] if c.end is None else c.end
+    if not 0 <= start < end <= DAY_HOURS:
+        raise ValueError("업무시간은 0 ≤ 시작 시 < 끝 시 ≤ 24로 써 주세요.")
+    h = c.x.hour()
+    inside = (h >= start) & (h < end)
+    if (c.days or "weekdays") == "weekdays":
+        return inside & ~c.x.day_of_week.index().isin(weekend_days(None))
+    return inside
+
+
+def month_phase(c: Args) -> "ibis.expr.types.StringValue":
+    """[SPECIFICATION] plans/phase-7.md#month_phase
+    일을 경계로 나눈 월 구간 이름(기본 월초·월중·월말)."""
+    bounds = list(c.bounds or MONTH_BOUNDS)
+    if any(isinstance(b, bool) or not isinstance(b, int) or not BOUND_DAYS[0] <= b <= BOUND_DAYS[1] for b in bounds):
+        raise ValueError("월 구간 경계는 2~31 사이의 정수(일)로 써 주세요.")
+    return bucket(Args(x=c.x.day().cast("int64"), bounds=bounds, labels=list(c.labels or MONTH_LABELS)))
+
+
+def is_month_end(c: Args) -> "ibis.expr.types.BooleanValue":
+    """[SPECIFICATION] plans/phase-7.md#is_month_end
+    다음 날이 다른 달이면 참."""
+    d = c.x.cast("date")
+    return (d + ibis.interval(days=1)).month() != d.month()
+
+
+def since_prev(c: Args) -> "ibis.expr.types.NumericValue":
+    """[SPECIFICATION] plans/phase-7.md#since_prev
+    정렬 순서로 바로 앞 행의 시각부터 지금 행까지 지난 시간(창 함수)."""
+    with_time(c)
+    w = ibis.window(group_by=c.group or None, order_by=c.order or [c.x.asc()])
+    return passed(c.x.lag().over(w), c.x, c.unit)
+
+
+def until_next(c: Args) -> "ibis.expr.types.NumericValue":
+    """[SPECIFICATION] plans/phase-7.md#until_next
+    지금 행의 시각부터 정렬 순서로 바로 다음 행까지 남은 시간(창 함수)."""
+    with_time(c)
+    w = ibis.window(group_by=c.group or None, order_by=c.order or [c.x.asc()])
+    return passed(c.x, c.x.lead().over(w), c.unit)
+
+
+def episode_id(c: Args) -> "ibis.expr.types.IntegerValue":
+    """[SPECIFICATION] plans/phase-7.md#episode_id
+    나누는 값의 행이 나올 때마다 1씩 느는 에피소드 번호(창 함수)."""
+    if not c.get("values"):
+        raise ValueError("나누는 값을 하나 이상 넣으세요.")
+    if not c.order:
+        raise ValueError("이벤트 기준 에피소드 번호에는 정렬 기준이 필요해요.")
+    vals = [coerce(c.x, v) for v in c["values"]]
+    flag = ibis.ifelse(c.x.isin(vals), 1, 0).cast("int64").fill_null(0)
+    upto = flag.sum().over(ibis.range_window(group_by=c.group or None, order_by=c.order, preceding=None, following=0))
+    if c.at != "after":
+        return upto
+    same = flag.sum().over(ibis.window(group_by=[*(c.group or []), *[k.op().arg.to_expr() for k in c.order]]))
+    return upto - same + 1
+
+
+def session_id(c: Args) -> "ibis.expr.types.Table":
+    """[SPECIFICATION] plans/phase-7.md#session_id
+    앞 행과 N분 넘게 떨어지면 새 세션인 세션 번호 컬럼을 붙인 표(시퀀스 함수)."""
+    if isinstance(c.gap, bool) or not c.gap > 0:
+        raise ValueError("세션을 나눌 간격(분)은 0보다 큰 숫자여야 해요.")
+    name = c.name or "session_id"
+    if name in c.t.columns:
+        raise ValueError(f"'{name}' 컬럼이 이미 있어요. 끝에 '이름 다른이름'을 붙이세요.")
+    t = c.t
+    new, n = SEQ_TEMP + "_new", SEQ_TEMP + "_n"
+    sec = c.x.cast("timestamp").epoch_seconds()
+    w = ibis.window(group_by=c.group or None, order_by=[c.x.asc()])
+    t1 = t.mutate(**{new: ((sec - sec.lag().over(w)) > c.gap * MINUTE_SECONDS).fill_null(True).cast("int64")})
+    g, k = rebind(Args(group=c.group, order=[c.x.asc()]), t1)
+    t2 = t1.mutate(**{n: t1[new].sum().over(ibis.range_window(group_by=g or None, order_by=k, preceding=None, following=0))})
+    return t2.select(*t.columns, **{name: ibis.ifelse(t2[c.x.get_name()].isnull(), ibis.null("int64"), t2[n])})
+
+
+def cum_distinct(c: Args) -> "ibis.expr.types.Table":
+    """[SPECIFICATION] plans/phase-7.md#cum_distinct
+    처음부터 지금 행까지 나온 서로 다른 값 수 컬럼을 붙인 표(시퀀스 함수)."""
+    name = c.name or "cum_distinct"
+    if name in c.t.columns:
+        raise ValueError(f"'{name}' 컬럼이 이미 있어요. 끝에 '이름 다른이름'을 붙이세요.")
+    if not c.order:
+        raise ValueError("누적 고유 개수에는 정렬 기준이 필요해요.")
+    first = SEQ_TEMP + "_first"
+    w = ibis.window(group_by=[*(c.group or []), c.x], order_by=c.order)
+    t1 = c.t.mutate(**{first: ((ibis.row_number().over(w) == 0) & c.x.notnull()).cast("int64")})
+    g, k = rebind(c, t1)
+    t2 = t1.mutate(**{name: t1[first].sum().over(ibis.range_window(group_by=g or None, order_by=k, preceding=None, following=0))})
+    return t2.select(*c.t.columns, name)
+
+
+def ewma(c: Args) -> "ibis.expr.types.Table":
+    """[SPECIFICATION] plans/phase-7.md#ewma
+    지수 가중 이동 평균(N 또는 α, 비우면 설정 ewma_span; adjust=True, EWMA_TOL에서 자름) 컬럼을 붙인 표(시퀀스 함수)."""
+    from core import settings
+    name = c.name or "ewma"
+    if name in c.t.columns:
+        raise ValueError(f"'{name}' 컬럼이 이미 있어요. 끝에 '이름 다른이름'을 붙이세요.")
+    v = c.span if c.span is not None else settings.load().get("ewma_span", EWMA_SPAN)
+    if 0 < v < 1:
+        alpha = v
+    elif 1 <= v <= MAX_EWMA_SPAN and v == int(v):
+        alpha = 2 / (v + 1)
+    else:
+        raise ValueError(f"EWMA에는 N(1~{MAX_EWMA_SPAN} 정수) 또는 α(0보다 크고 1보다 작은 수)를 넣으세요(span).")
+    if not c.order:
+        raise ValueError("지수 가중 이동 평균에는 정렬 기준이 필요해요.")
+    if alpha == 1:
+        return c.t.select(*c.t.columns, **{name: c.x.cast("float64")})
+    d = 1 - alpha
+    k_rows = math.ceil(math.log(EWMA_TOL) / math.log(d))
+    if k_rows > math.ceil(math.log(EWMA_TOL) / math.log(1 - 2 / (MAX_EWMA_SPAN + 1))):
+        raise ValueError("α가 너무 작아요(N 1000에 해당하는 α 이상으로).")
+    r = SEQ_TEMP + "_r"
+    t1 = c.t.mutate(**{r: ibis.row_number().over(ibis.window(group_by=c.group or None, order_by=c.order))})
+    g, k = rebind(c, t1)
+    m, b = t1[r] % k_rows, t1[r] // k_rows
+    wt = ibis.literal(d) ** (-m)
+    xv = t1[c.x.get_name()].cast("float64")
+    u, wv = xv * wt, ibis.ifelse(xv.notnull(), wt, ibis.null("float64"))
+    rows = dict(preceding=k_rows - 1, following=0)
+    whole = ibis.window(group_by=g or None, order_by=k, **rows)
+    block = ibis.window(group_by=[*g, b], order_by=k, **rows)
+    a_u, s_u = u.sum().over(whole).fill_null(0), u.sum().over(block).fill_null(0)
+    a_v, s_v = wv.sum().over(whole).fill_null(0), wv.sum().over(block).fill_null(0)
+    scale, dk = ibis.literal(d) ** m, d**k_rows
+    num_ = scale * (s_u + dk * (a_u - s_u))
+    den = scale * (s_v + dk * (a_v - s_v))
+    t2 = t1.mutate(**{name: num_ / den.nullif(0)})
+    return t2.select(*c.t.columns, name)
+
+
+def streak(c: Args) -> "ibis.expr.types.Table":
+    """[SPECIFICATION] plans/phase-7.md#streak
+    날·주·월이 이어진 기간 수(days·weeks·months) 또는 참이 이어진 행 수(flag) 컬럼을 붙인 표(시퀀스 함수)."""
+    name = c.name or "streak"
+    if name in c.t.columns:
+        raise ValueError(f"'{name}' 컬럼이 이미 있어요. 끝에 '이름 다른이름'을 붙이세요.")
+    if c.how == "flag":
+        if not c.x.type().is_boolean():
+            raise ValueError("조건 연속은 참거짓 컬럼으로 세요(예: 식 결과 == '승' 이름 이김).")
+        if not c.order:
+            raise ValueError("연속 횟수에는 정렬 기준이 필요해요.")
+        ok = c.x.fill_null(False).cast("int64")
+        brk = SEQ_TEMP + "_b"
+        t1 = c.t.mutate(**{brk: (1 - ok).sum().over(ibis.window(group_by=c.group or None, order_by=c.order, preceding=None, following=0))})
+        g, k = rebind(c, t1)
+        ok1 = t1[c.x.get_name()].fill_null(False).cast("int64")
+        t2 = t1.mutate(**{name: ok1.sum().over(ibis.window(group_by=[*g, t1[brk]], order_by=k, preceding=None, following=0))})
+        return t2.select(*c.t.columns, name)
+    dtype = c.x.type()
+    if not (dtype.is_date() or dtype.is_timestamp()):
+        raise ValueError("날·주·월 연속은 날짜·날짜시간 컬럼으로 세요.")
+    if c.how == "months":
+        p = c.x.cast("date").truncate("M")
+        idx, step = p.year() * YEAR_MONTHS + p.month(), 1
+    else:
+        p = period_start(c.x.cast("date"), "W") if c.how == "weeks" else c.x.cast("date")
+        idx, step = p.delta(ibis.date(*STREAK_ANCHOR), unit="day"), WEEK_DAYS if c.how == "weeks" else 1
+    day, rk, ix = SEQ_TEMP + "_d", SEQ_TEMP + "_k", SEQ_TEMP + "_x"
+    t1 = c.t.mutate(**{day: p, ix: idx, rk: ibis.dense_rank().over(ibis.window(group_by=c.group or None, order_by=[p]))})
+    isl = SEQ_TEMP + "_i"
+    t2 = t1.mutate(**{isl: t1[ix] - step * t1[rk]})
+    g = rebind(c, t2)[0]
+    run = ibis.dense_rank().over(ibis.window(group_by=[*g, t2[isl]], order_by=[t2[day]])) + 1
+    t3 = t2.mutate(**{name: ibis.ifelse(t2[day].isnull(), ibis.null("int64"), run)})
+    return t3.select(*c.t.columns, name)
+
+
+def event_path(c: Args) -> "ibis.expr.types.Table":
+    """[SPECIFICATION] plans/phase-7.md#event_path
+    묶음마다 정렬 순서로 이벤트를 이어 붙인 경로 문자열 컬럼을 붙인 표(시퀀스 함수)."""
+    name = c.name or "event_path"
+    if name in c.t.columns:
+        raise ValueError(f"'{name}' 컬럼이 이미 있어요. 끝에 '이름 다른이름'을 붙이세요.")
+    if c.limit < 0:
+        raise ValueError("최대 단계 수는 0 이상이에요.")
+    if not c.order:
+        raise ValueError("경로 문자열에는 정렬 기준이 필요해요.")
+    x_name = c.x.get_name()
+    ev = c.t.filter(c.x.notnull())
+    prev = SEQ_TEMP + "_p"
+    if c.dedupe != "no":
+        ev = ev.mutate(**{prev: c.x.lag().over(ibis.window(group_by=c.group or None, order_by=c.order))})
+        ev = ev.filter(ibis.or_(ev[prev].isnull(), ev[prev] != ev[x_name]))
+    g, k = rebind(c, ev)
+    step = SEQ_TEMP + "_s"
+    ev = ev.mutate(**{step: ibis.row_number().over(ibis.window(group_by=g or None, order_by=k))})
+    if c.limit > 0:
+        ev = ev.filter(ev[step] < c.limit)
+    group_names = [gc.get_name() for gc in c.group or []]
+    path = ev[x_name].cast("string").group_concat(c.sep, order_by=ev[step])
+    if group_names:
+        keys = {f"{SEQ_TEMP}_g{i}": ev[gn] for i, gn in enumerate(group_names)}
+        agg = ev.group_by(**keys).aggregate(**{name: path})
+        joined = c.t.left_join(agg, [c.t[gn] == agg[f"{SEQ_TEMP}_g{i}"] for i, gn in enumerate(group_names)])
+    else:
+        joined = c.t.cross_join(ev.aggregate(**{name: path}))
+    return joined.select(*c.t.columns, name)
+
+
+row("time_bucket", "date", "N분 간격으로 묶기", "날짜시간을 N분 간격의 시작 시각으로(하루를 나누어떨어지는 간격: 5·15·30·60·360분 …). 비우면 설정의 간격.",
+    [D_, num("n", "간격(분, 비우면 설정)", None, True, "int")], time_bucket, "time_bucket(주문시각, 15)", DAT, DAT)
+row("weekday_num", "date", "요일 번호(1~7)", "주의 첫날(설정 week_start, 기본 월요일)이 1.", [D_], weekday_num, "weekday_num(주문일)", DAT, NUM)
+row("weekday_name", "date", "요일 이름", "월·화·수·목·금·토·일.", [D_], weekday_name, "weekday_name(주문일)", DAT, TXT)
+row("is_weekend", "date", "주말인지", "주말 요일(비우면 설정, 기본 토·일)이면 참.", [D_, text("days", "주말 요일(예: sat_sun, 비우면 설정)", "", True)],
+    is_weekend, "is_weekend(주문일)", DAT, BOOL)
+row("time_of_day", "date", "시간대 나누기", "시를 경계로 나눠 이름을 붙여요(기본 새벽 0~6·오전 6~12·오후 12~18·야간 18~24).",
+    [D_, items("bounds", "경계 시(구간의 시작)", list(DAY_BOUNDS)), items("labels", "구간 이름(비우면 새벽·오전·오후·야간)")], time_of_day, "time_of_day(주문시각)", DAT, TXT)
+row("work_hours", "date", "업무시간인지", "시작 시 이상 끝 시 미만이면 참(비우면 설정, 기본 9~18시; 평일만이면 주말 요일은 거짓).",
+    [D_, choice("days", "요일", ["weekdays", "all"], "weekdays"), num("start", "시작 시(비우면 설정)", None, True, "int"), num("end", "끝 시(비우면 설정)", None, True, "int")],
+    work_hours, "work_hours(주문시각, 'weekdays', 9, 18)", DAT, BOOL)
+row("month_phase", "date", "월초·월중·월말", "일을 경계로 나눠 이름을 붙여요(기본 월초 1~10일·월중 11~20일·월말 21일~).",
+    [D_, items("bounds", "경계 일(구간의 첫날)", list(MONTH_BOUNDS)), items("labels", "구간 이름(비우면 월초·월중·월말)")], month_phase, "month_phase(주문일)", DAT, TXT)
+row("is_month_end", "date", "그 달 마지막 날인지", "다음 날이 다른 달이면 참.", [D_], is_month_end, "is_month_end(주문일)", DAT, BOOL)
+add("since_prev", "window", "직전 행과의 시간", "정렬 순서로 바로 앞 행의 시각부터 지금 행까지 지난 시간(단위로). 첫 행은 빈 값.",
+    [D_, choice("unit", "단위", list(UNITS), "minute"), order(label="정렬 기준(비우면 그 시각)"), group()], since_prev, "since_prev(접속시각, 'minute')", DAT, NUM, window=True)
+add("until_next", "window", "다음 행까지의 시간", "지금 행의 시각부터 정렬 순서로 바로 다음 행까지 남은 시간(단위로). 마지막 행은 빈 값.",
+    [D_, choice("unit", "단위", list(UNITS), "minute"), order(label="정렬 기준(비우면 그 시각)"), group()], until_next, "until_next(접속시각, 'minute')", DAT, NUM, window=True)
+add("episode_id", "window", "이벤트 기준 에피소드 번호", "정렬 순서로 나누는 값의 행이 나올 때마다 번호가 1씩 늘어요(start: 그 행부터, after: 그 다음 행부터). start면 첫 나누는 값 전 행은 0.",
+    [col(), choice("at", "나누는 때", ["start", "after"], "start"), items("values", "나누는 값들", list(EPISODE_STARTS)), order(False), group()],
+    episode_id, "episode_id(이벤트, 'start', '로그인')", "any", NUM, window=True)
+add("session_id", "window", "세션 번호", "같은 묶음(사람)에서 시각 순으로 앞 행과 N분 넘게 떨어지면 새 세션(1부터).",
+    [D_, num("gap", "간격(분)", SESSION_GAP_MINUTES), group()], session_id, "session_id(접속시각, 30)", DAT, NUM, table=True)
+add("cum_distinct", "window", "누적 고유 개수", "정렬 순서로 처음부터 지금 행까지 나온 서로 다른 값 수(빈 값 제외).",
+    [col(), order(False), group()], cum_distinct, "cum_distinct(상품)", "any", NUM, table=True)
+add("ewma", "window", "지수 가중 이동 평균", "최근 값에 더 큰 가중치를 주는 평균. N(1 이상 정수, α = 2/(N+1)) 또는 α(0~1)를 넣고, 비우면 설정의 N(기본 7).",
+    [col(kinds=NUM), num("span", "N 또는 α(비우면 설정)", None, True), order(False), group()], ewma, "ewma(금액, 7)", NUM, NUM, table=True)
+add("streak", "window", "연속 횟수", "days·weeks·months: 날·주·달이 이어진 기간 수, flag: 참이 이어진 행 수(거짓이면 0).",
+    [col(kinds=(DAT, BOOL)), choice("how", "방식", ["days", "weeks", "months", "flag"], "days"), order(), group()], streak, "streak(출석일, 'days')", "any", NUM, table=True)
+add("event_path", "window", "경로 문자열", "묶음마다 정렬 순서로 이벤트를 이어 붙인 경로(예: 메인 -> 상품 -> 결제)를 모든 행에 붙여요.",
+    [col(), choice("dedupe", "연속 중복 빼기", ["yes", "no"], "yes"), num("limit", "최대 단계 수(0이면 모두)", 0, kind="int"), text("sep", "구분 글자", PATH_SEP), order(False), group()],
+    event_path, "event_path(페이지)", "any", TXT, table=True)
+
 # ---------- 조건 ----------
 
 
@@ -952,7 +1290,7 @@ SCREENS = ("pivot", "chart", "metrics", "dash", "calc", "prep", "sentence")  # �
 
 
 GROUP_PIVOT = ("rollup", "cube", "grouping_sets", "having")  # 피벗(집계 탭)이 더 해 주는 묶음 함수
-GROUP_CALC = ("qualify", "unnest")  # 계산 줄이 하는 묶음 함수(창 결과로 거르기, 펼치기)
+GROUP_CALC = ("qualify", "unnest", *SEQUENCES)  # 계산 줄이 하는 묶음 함수(창 결과로 거르기, 펼치기)
 
 
 def ids_for(screen):

@@ -127,7 +127,7 @@ PAGE = r"""(async () => {
     // (R1) 제자리 전처리로 값이 바뀐 컬럼은 조건이 전처리보다 먼저 걸려 틀리므로 값 조건 항목을 내지 않는다
     out.trimmedTd = menu($("rows").querySelector("tbody tr").children[1 + $("rows")._grid.columns.indexOf("고객")]).map(b => b.textContent); closeCtx();
     out.trimmedTh = menu(th("고객")).map(b => b.textContent); closeCtx();
-    // (AB1) 제자리 계산 줄(곱하기 등)은 대상 컬럼을 줄 글자로 알 수 없어 하나라도 있으면 모든 컬럼의 값 조건 항목·조건 칸 컬럼 목록을 막는다
+    // (AB1, phase-10 결정 2) 제자리 계산 줄(곱하기 등)은 그 줄이 바꾸는 컬럼만 값 조건 항목·조건 칸 컬럼 목록에서 막는다
     await addItem("calcs", "곱하기 2 금액", $("err-search"));
     out.inplaceTd = menu($("rows").querySelector("tbody tr").children[1 + $("rows")._grid.columns.indexOf("id")]).map(b => b.textContent); closeCtx();
     out.inplaceBcol = [...$("bcol").options].map(o => o.value);
@@ -356,9 +356,9 @@ def test_query_screen_headless(shop, tmp_path):
     assert re.fullmatch(r"전처리 trim 고객 true", out["calcs"][0])
     assert out["valueCond"] == ["고객 except c1, c2"] and out["valueCondRaw"] == "고객 except c1, c2"  # (R2) {line, quotes: false}가 아니다
     assert out["trimmedTd"] == ["오름차순 정렬", "내림차순 정렬"] and "값 골라서 제외·만 보기…" not in out["trimmedTh"] and "이 컬럼 빼기" in out["trimmedTh"]  # (R1)
-    assert out["inplaceTd"] == ["오름차순 정렬", "내림차순 정렬"] and out["inplaceBcol"] == [] and "id" in out["bcolBack"] and "고객" not in out["bcolBack"]  # (AB1) 곱하기 줄이 있으면 모두, 없으면 trim 건 고객만 막힘
+    assert out["inplaceTd"] == ["이 값 제외", "이 값만", "오름차순 정렬", "내림차순 정렬"] and "금액" not in out["inplaceBcol"] and "id" in out["inplaceBcol"] and "id" in out["bcolBack"] and "고객" not in out["bcolBack"]  # (AB1) 곱하기 줄은 금액만, 없으면 trim 건 고객만 막힘
     assert out["columnsCalc"] == ["id", "고객", "금액", "주문일", "두배"]  # (AB3)
-    assert out["statsItem"] == [True, "쿼리에서는 전처리 화면으로 넘겨서 하세요"], out["statsItem"]  # headItems가 screen "query"를 넘긴다
+    assert out["statsItem"][0] is False, out["statsItem"]  # 쿼리 화면에서도 통계 단계가 켜진다(결정 1)
     assert out["afterDrop"] == {"columns": ["id", "고객", "금액", "주문일"], "cond": True, "err": ""}, out["afterDrop"]  # (RB3)
     assert out["columns"] == ["id", "고객", "금액", "주문일"] and "할인" not in out["gridCols"]
     assert "주문일" in out["perCols"] and out["calOff"] is True
@@ -376,7 +376,7 @@ def test_query_screen_headless(shop, tmp_path):
     assert "고객" in out["colPick"]
     assert out["bvalHidden"] and out["colCond"] == ["금액 > 할인"]
     assert "orders + customers" in out["tabName"]
-    assert out["pt"]["columns"] == ["기간", "orders"] and [r[1] for r in out["pt"]["rows"]] == [31, 28, 6] and out["ptChart"]
+    assert out["pt"]["columns"] == ["기간", "orders", "orders 비중 %"] and [r[1] for r in out["pt"]["rows"]] == [31, 28, 6] and out["ptChart"]  # 비중 % 함께가 기본(Phase 10 결정 9)
     assert out["ptShare"] == ["기간", "orders", "orders 비중 %"] and out["ptShare0"] == "47.69%"
     assert out["metBody"]["period"] == {"start": "2026-02-01", "end": "2026-02-28"} and out["metBody"]["compare"] == "prev"
     assert out["met"][0] == "12,460" and "지난 기간 대비 +168.0%" in out["met"][1]
@@ -508,7 +508,7 @@ const searchUndo = { undo() {} }, PrepMenu = { items: () => [] }, connected = "o
 const cellAt = (tag, index, tr) => { const c = { tagName: tag, cellIndex: index, closest: s => s === "tr" ? tr : null }; return { closest: s => s.includes("#rows") ? c : null }; };
 const row = p => ({ dataset: p === undefined ? {} : { p: String(p) }, sectionRowIndex: 0, classList: { contains: () => false } });
 """
-    code = index_slice("// 우클릭 메뉴:", "document.oncontextmenu") + index_slice("const allDates", "\n") + "\n" + index_slice("const rowPick = ", '$("rows-tools").append') + "\n"
+    code = index_slice("// 우클릭 메뉴:", "document.oncontextmenu") + index_slice("const allDates", "\n") + "\n" + index_slice("const rowKeyPick", '$("rows-tools").append') + "\n"
     body = r"""
 $("rows")._grid = { columns: ["name", "두배"], rows: [{ name: "a", 두배: 2 }, { name: "rock 'n roll", 두배: 4 }], selected: new Set([0, 1]) };
 const labels = t => ctxItems(t).map(i => i[0]);
@@ -584,7 +584,6 @@ def test_inplace_prep_line_changes_values_before_conditions(shop):
     """(R1 근거) 제자리 전처리(전처리 trim)로 값이 바뀌어도 조건은 그 앞에 걸린다: 바뀐 값으로 만든 조건은 0행이라 화면이 그 컬럼에는 값 조건을 내지 않는다."""
     import duckdb
     from core import server
-    from query.search_app import app
     path = server.state["opened"]["file"]
     server.state["con"] = None
     shop.post("/api/disconnect", json={})
@@ -600,10 +599,10 @@ def test_inplace_prep_line_changes_values_before_conditions(shop):
 
 
 def test_newcol_gets_value_list_and_bar_gets_plain_columns():
-    """(R4) 새 컬럼 상자의 값 바꿔 쓰기 목록은 /api/values(colValues), (R3) 고른 행 막대는 plainCol 컬럼만 본다(다시 만드는 코드 없음)."""
+    """(R4) 새 컬럼 상자의 값 바꿔 쓰기 목록은 /api/values(colValues), (R3) 고른 행 막대는 rowCol 컬럼만 본다(다시 만드는 코드 없음)."""
     a = HTML.index("function openNewCol()")
     assert "values: colValues" in HTML[a:HTML.index("\n}\n", a)]
-    assert "columns: plainCol" in HTML and "rowCondition" not in HTML
+    assert "columns: rowCol" in HTML and "rowCondition" not in HTML
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
@@ -623,14 +622,14 @@ def test_close_tab_asks_when_used_by_other_tab_calc(tmp_path):
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 def test_unpivot_blocks_value_conditions_and_lookup_name_is_safe(tmp_path):
-    """(RB2) 세로로 줄도 행을 늘려 값 조건·행 고르기를 막는다. (RB4) 찾기 ③ 기본 새 컬럼 이름은 서버 이름 규칙에 맞게 다듬는다."""
+    """(RB2) 세로로 줄은 행을 늘려 행 고르기만 막는다(값 조건은 된다). (RB4) 찾기 ③ 기본 새 컬럼 이름은 서버 이름 규칙에 맞게 다듬는다."""
     from test_fix_audit_js import index_slice, run_node
     code = index_slice("const INPLACE", "const valuesBody") + index_slice("const safeName", "\n") + "\n"
     body = r'''
-const S = { origins: { 금액: "t", id: "t" }, calcs: [] };
-const a = plainCol("금액"); S.calcs = ["세로로 금액, 할인"]; const b = plainCol("id");
-console.log(JSON.stringify({ a, b, names: ["sales-2024", "2024_orders", "주문 내역", "ok_1"].map(safeName) }));'''
-    assert run_node(tmp_path, body, parts=[code]) == {"a": True, "b": False, "names": ["sales_2024", "_2024_orders", "주문_내역", "ok_1"]}
+const S = { origins: { 금액: "t", id: "t" }, calcs: [], cols: [["금액", "실수"], ["id", "정수"], ["할인", "실수"]] };
+const a = plainCol("금액"); S.calcs = ["세로로 금액, 할인"]; const b = plainCol("id"), r = rowCol("id");
+console.log(JSON.stringify({ a, b, r, names: ["sales-2024", "2024_orders", "주문 내역", "ok_1"].map(safeName) }));'''
+    assert run_node(tmp_path, body, files=["newcol.js"], parts=[code]) == {"a": True, "b": True, "r": False, "names": ["sales_2024", "_2024_orders", "주문_내역", "ok_1"]}
 
 
 def test_lookup_uses_shared_gcol():

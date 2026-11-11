@@ -45,7 +45,8 @@ def test_검색을_파일_없이_넘기고_전처리가_그_행으로_동작(api
     pre = ok(api, "/api/preview", base=base, columns={"amt": {"keep": False}}, filters=["id > 5"])
     assert pre["before"] == len(ODD) and pre["after"] == len([i for i in ODD if i > 5])
     assert pre["rows"]["columns"] == ["id"] and [r["id"] for r in pre["rows"]["rows"]] == [i for i in ODD if i > 5]
-    assert ok(api, "/api/dupes", base=base, dedupe=["id"]) == {"groups": 0, "rows": 0}
+    found = ok(api, "/api/dupes", base=base, dedupe=["id"])  # Phase 13부터 examples·example_groups·moved도 온다
+    assert (found["groups"], found["rows"]) == (0, 0)
     assert ok(api, "/api/run", recipe={"base": base, "columns": {}}, target={"kind": "table", "name": "t2"}) == {"ok": True, "rows": len(ODD)}
     assert ok(api, "/api/rowcount", base="t2") == {"rows": len(ODD)}
     assert sorted(p.name for p in tmp_path.iterdir()) == before

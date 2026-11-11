@@ -164,7 +164,10 @@ def test_prep_recipe_sends_count_false_only_when_stats_off(tmp_path):
     prelude = """
 const cols = () => [], edits = {}, OPS = {}, pca = { columns: [], n: 2 }, filters = [], copies = [], drops = [], sorts = [], formulas = [], geoSteps = [], dedupe = [], keepNow = () => null, S = { schema: "", base: "t" };
 globalThis.$ = () => ({ checked: false });
+const labelsOf = () => ({});  // [태그 붙이기](Phase 4) 대역
+const kmeans = { columns: [], k: 3, name: "cluster" };  // K-Means 칸(Phase 6) 대역
 let statsOn = true;
+let dedupeOn = null;  // 중복 제거 확정 기준(Phase 13) 대역
 """
     body = """
 const on = recipe(); statsOn = false; const off = recipe();

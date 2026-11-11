@@ -46,15 +46,18 @@ function sankeySvg(steps, colors = {}, size = {}) {
 }
 
 // 표: 단계별 수, 다음 단계 전환율(이 단계 → 다음 단계), 처음 대비 비율, 이탈 수(이 단계에서 다음 단계로 못 간 사람). 마지막 단계는 다음이 없다.
-// time이면 "앞 단계에서 걸린 시간(중앙값)" 열을 더한다(분석 화면). 대시보드 카드는 지금처럼 다섯 열.
-function funnelRows(steps, time) {
+function funnelRows(steps) {
   return steps.map((s, i) => {
     const next = steps[i + 1];
-    return { 단계: s.name, "사용자 수": s.users, "다음 단계 전환율": next ? fpct(next.conv) : "-", "처음 대비": fpct(s.from_first), "이탈 수": next ? next.drop : "-", ...(time ? { [FUNNEL_TIME]: fsec(s.median_sec) } : {}) };
+    return { 단계: s.name, "사용자 수": s.users, "다음 단계 전환율": next ? fpct(next.conv) : "-", "처음 대비": fpct(s.from_first), "이탈 수": next ? next.drop : "-" };
   });
 }
 const FUNNEL_COLUMNS = ["단계", "사용자 수", "다음 단계 전환율", "처음 대비", "이탈 수"];
-const FUNNEL_TIME = "앞 단계에서 걸린 시간(중앙값)";
+// 걸린 시간 표: 응답 gaps [{from, to, n, mean, median, trimmed}](초)마다 한 줄.
+function gapRows(gaps) {
+  return gaps.map(g => ({ 단계: `${g.from} → ${g.to}`, "걸린 시간": `평균 ${fsec(g.mean)} · 중앙값 ${fsec(g.median)} · 절사평균(10%) ${fsec(g.trimmed)} (${g.n}명)` }));
+}
+const GAP_COLUMNS = ["단계", "걸린 시간"];
 // 초를 읽기 쉽게: 1분 아래는 초, 1시간 아래는 분, 하루 아래는 시간, 그 위는 일. 없으면 "-".
 const fsec = s => s == null ? "-" : s < 60 ? `${+s.toFixed(1)}초` : s < 3600 ? `${+(s / 60).toFixed(1)}분` : s < 86400 ? `${+(s / 3600).toFixed(1)}시간` : `${+(s / 86400).toFixed(1)}일`;
 

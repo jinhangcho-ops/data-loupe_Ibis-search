@@ -43,3 +43,5 @@ body.dash-only .bcard.sel, body.dash-only .bcard.editing { border-color:var(--li
 .drop .pop .dcal-day.today { text-decoration:underline; text-underline-offset:3px; }
 .drop .pop .dcal-day:disabled { color:var(--faint); background:none; cursor:default; }
 .drop .pop .dcal-day:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+/* 확대·이동 활성 표시(카드 상자 밖이라 그림 저장에 찍히지 않는다) */
+.bcard.zoomable { outline:1px solid var(--accent); outline-offset:-1px; }

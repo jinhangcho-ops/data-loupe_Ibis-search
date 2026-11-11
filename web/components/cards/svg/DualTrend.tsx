@@ -6,7 +6,8 @@ import { clamp, showValue } from "@/lib/calc";
 import { useDash } from "@/lib/store";
 import type { CardView } from "@/lib/types";
 import { pickColor } from "@/lib/series";
-import { cardDays, cardFormat } from "./__pure__";
+import { MIN_POINTS, cardDays, cardFormat, sliceWindow } from "./__pure__";
+import { useZoomX } from "../useZoomX";
 import { Frame, Say, type P } from "./common";
 
 export function DualTrend({ card, colors, range, merge }: P) {
@@ -16,10 +17,12 @@ export function DualTrend({ card, colors, range, merge }: P) {
   const grab = useRef<{ start: number; rect: DOMRect } | null>(null);
   const noWin = { ...card, view: { ...card.view, window: undefined } };
   const a = cardDays(noWin, 0, range, merge), whole = a.map(d => d.day), win = card.view?.window, W = 320, H = 190, pad = 14, top = 10, plot = 118, brushY = 150;
-  if (!whole.length) return <Say text="이 기간의 값이 없어요" />;
   const picked = cardDays(card, 0, range, merge), keep = !!picked.length && whole.includes(picked[0].day) && whole.includes(picked[picked.length - 1].day);  // 구간의 처음·끝이 지금 기간 안일 때만
   const view = keep ? card : noWin;  // 저장한 구간이 지금 기간 밖이면 구간 없이 그린다
-  const rows = [cardDays(view, 0, range, merge), cardDays(view, 1, range, merge)], shown = rows[0].map(d => d.day), from = shown[0], to = shown[shown.length - 1];
+  const fullRows = [cardDays(view, 0, range, merge), cardDays(view, 1, range, merge)], fullShown = fullRows[0].map(d => d.day);
+  const z = useZoomX(fullShown.length > MIN_POINTS ? { kind: "index", count: fullShown.length } : null);
+  const rows = fullRows.map(r => sliceWindow(r, z.view)), shown = sliceWindow(fullShown, z.view), from = shown[0], to = shown[shown.length - 1];
+  if (!whole.length) return <Say text="이 기간의 값이 없어요" />;
   const all = rows.flat().map(d => d.v).filter((v): v is number => v != null), lo = Math.min(...all), hi = Math.max(...all);
   const xOf = (i: number) => pad + (W - 2 * pad) * (shown.length < 2 ? 0.5 : i / (shown.length - 1)), yOf = (v: number) => top + plot - plot * (hi === lo ? 0.5 : (v - lo) / (hi - lo));
   const names = [0, 1].map(i => card.data?.by_unit?.day?.series[i]?.name ?? `계열 ${i + 1}`), cols = names.map((n, i) => pickColor(card, "series", n, colors, i)), today = new Date().toLocaleDateString("sv");
@@ -29,12 +32,14 @@ export function DualTrend({ card, colors, range, merge }: P) {
   const at = (x: number, rect: DOMRect) => clamp(Math.round((x - rect.left) / rect.width * (whole.length - 1)), 0, whole.length - 1);
   const down = (e: React.PointerEvent<SVGRectElement>) => {  // 아래 구간 막대를 끌어 보는 범위를 고른다
     const rect = e.currentTarget.getBoundingClientRect(), start = at(e.clientX, rect);
+    e.stopPropagation();
     e.currentTarget.setPointerCapture(e.pointerId);
     grab.current = { start, rect };
     setDrag([start, start]);
   };
-  const move = (e: React.PointerEvent<SVGRectElement>) => { const g = grab.current; if (g) setDrag([g.start, at(e.clientX, g.rect)]); };
+  const move = (e: React.PointerEvent<SVGRectElement>) => { e.stopPropagation(); const g = grab.current; if (g) setDrag([g.start, at(e.clientX, g.rect)]); };
   const up = (e: React.PointerEvent<SVGRectElement>) => {
+    e.stopPropagation();
     const g = grab.current;
     if (!g) return;
     const k = at(e.clientX, g.rect), next: CardView = { ...card.view };
@@ -45,6 +50,7 @@ export function DualTrend({ card, colors, range, merge }: P) {
   };
   const tip = (e: React.PointerEvent<SVGRectElement>) => { const p = e.currentTarget.getBoundingClientRect(); setTip(clamp(Math.round((e.clientX - p.left) / p.width * (shown.length - 1)), 0, shown.length - 1)); };
   return (
+    <div {...z.bind}>
     <Frame w={W} h={H} label={card.title}>
       <defs>
         <pattern id={hatch} width={6} height={6} patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1={0} y1={0} x2={0} y2={6} stroke={colors.text} strokeWidth={1.5} /></pattern>
@@ -65,5 +71,6 @@ export function DualTrend({ card, colors, range, merge }: P) {
       <rect x={pad} y={brushY - 2} width={W - 2 * pad} height={34} fill="transparent" style={{ cursor: "col-resize", touchAction: "none" }} onPointerDown={down} onPointerMove={move} onPointerUp={up} />
       <text x={pad} y={H - 2} fontSize={10} fill={colors.text}>{names.join(" · ") + (win && keep ? "  (구간을 골랐어요. 한 번 누르면 풀려요)" : "")}</text>
     </Frame>
+    </div>
   );
 }

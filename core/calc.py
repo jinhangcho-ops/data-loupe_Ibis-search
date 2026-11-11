@@ -5,29 +5,36 @@
 import fnmatch
 import json
 import re
+from collections.abc import Iterator
 
 from lazy import ibis
 
+from core import crosstab
 from core import parse
 from core import sql_funcs
 
 GUIDE = ("순위 기준 금액 desc [그룹 매장코드] / 이동평균·이동합계 금액 3행(또는 7일) 기준 주문일 / 누적합 금액 기준 주문일 / "
          "이전값·차이 금액 기준 주문일 / 상위 3 기준 금액 desc 그룹 매장코드 / 반올림 0 숫자 / 곱하기 1.1 금액, 수량 / 빈값채우기 0 숫자 / "
          "공백지우기 글자 / 펼치기 목록컬럼 / 세로로 컬럼1, 컬럼2 / 그룹집계 sum(금액) 그룹 매장코드(또는 테이블 주문 키 고객ID=customer_id) [기준 …] [조건 …] / 전처리 type 금액 {\"to\": \"float\"} · "
-         "끝에 '이름 새이름'으로 새 컬럼 이름")
+         "끝에 '이름 새이름'으로 새 컬럼 이름 · 빈칸이나 이름·기준·그룹·조건 낱말이 든 컬럼은 `고객 이름`처럼 백틱으로 감싸요")
 EXAMPLES = ["순위 기준 금액 desc 그룹 매장코드", "이동평균 금액 3행 기준 주문일 그룹 매장코드", "이동합계 금액 7일 기준 주문일", "누적합 금액 기준 주문일 그룹 매장코드",
             "이전값 금액 기준 주문일", "차이 금액 기준 주문일", "상위 3 기준 금액 desc 그룹 매장코드", "반올림 0 숫자", "곱하기 1.1 금액",
             "빈값채우기 0 숫자", "공백지우기 글자", "펼치기 태그", "세로로 금액, 수량"]  # 화면의 [예시 넣기]
 WINDOWS = ("순위", "이동평균", "이동합계", "누적합", "이전값", "차이", "상위")
 NEW_WINDOWS = tuple(i for i in sql_funcs.ids_for("calc") if sql_funcs.FUNCS[i]["window"])  # 함수 사전의 창 함수 id(dense_rank·lead·cum_mean·ntile …): 줄을 id로 시작한다
+TABLE_WINDOWS = sql_funcs.SEQUENCES  # 함수 사전의 시퀀스 함수 id(session_id·cum_distinct·ewma·streak·event_path): 줄을 id로 시작하고 표를 바꾼다(table_window)
 COLUMNS = ("순위", "이동평균", "이동합계", "누적합", "이전값", "차이", *NEW_WINDOWS)  # 새 컬럼 하나를 만드는 창 함수. 서로 기대지 않으면 mutate 하나로 묶는다
 EACH = ("반올림", "곱하기", "빈값채우기", "공백지우기")
 FORMULAS = ("식", "SQL식", "창거르기")  # 식 = 계산 컬럼의 식(함수 사전의 행 함수 전부), SQL식 = DB 고유 함수(직접 쓰기), 창거르기 = QUALIFY
 LINE_KINDS = ("그룹집계", "전처리")  # 줄을 낱말로 나누지 않는 종류(조건 글·JSON 값이 들어간다)
-KINDS = (*WINDOWS, *EACH, "펼치기", "세로로", *FORMULAS, *NEW_WINDOWS, *LINE_KINDS)
+KINDS = (*WINDOWS, *EACH, "펼치기", "세로로", *FORMULAS, *NEW_WINDOWS, *TABLE_WINDOWS, *LINE_KINDS)
 MAX_GROUPS = 3  # 그룹집계의 그룹 컬럼 수
 CALL_HEAD = re.compile(r"([A-Za-z_]\w*)\(")  # 그룹집계 본문의 '집계id(' (닫는 괄호는 call_parts가 찾는다)
-GROUP_PARTS = re.compile(r"\s*(?:테이블\s+(?P<table>\S+))?\s*(?:키\s+(?P<key>.+?))?\s*(?:그룹\s+(?P<group>.+?))?\s*(?:기준\s+(?P<order>.+?))?\s*(?:조건\s+(?P<cond>.+?))?\s*", re.S)  # 이름은 맨 뒤 ' 이름 '으로 먼저 뗀다
+TOKEN = re.compile(r"`([^`]*)`|`|[^\s`]+")  # 낱말 줄의 낱말: 백틱으로 감싼 컬럼 이름(빈칸·칸 낱말 포함), 짝 없는 백틱, 백틱·빈칸이 아닌 글자 덩어리
+MARKERS = ("테이블", "키", "그룹", "기준", "조건", "이름")  # 그룹집계 나머지의 칸 낱말(이 차례로 한 번씩)
+GROUP_USAGE = ("그룹집계 <집계id>(<값컬럼>[, 인자]) [테이블 대상 키 내컬럼=대상컬럼] [그룹 컬럼1, 컬럼2] [기준 컬럼 asc|desc] [조건 조건문] 이름 새이름. "
+               "빈칸이나 이름·기준·그룹·조건 낱말이 든 컬럼은 `고객 이름`처럼 백틱으로 감싸요. 예: 그룹집계 count_distinct(고객) 그룹 매장 이름 매장고객수")
+COMMA_NAME = "'{name}' 컬럼 이름에는 쉼표가 있어 계산 줄로는 못 써요. 전처리 화면에서 이름을 바꾸거나 식 줄의 col(\"…\")로 쓰세요."  # 백틱 안 쉼표(names가 쉼표로 컬럼을 나눈다). 화면 NewCol.bq와 같은 글
 OPTIONS = ("기준", "그룹", "이름")  # 줄 안에서 뒤따르는 값을 묶는 낱말
 LONG_NAMES = ("항목", "값")  # 세로로 세울 때 만드는 컬럼(원래 컬럼 이름, 값)
 SIZE = re.compile(r"(\d+)(행|일)")
@@ -37,7 +44,7 @@ MAX_ROWS = 500  # 피벗 결과의 최대 행 수
 OLD_HOWS = ("count", "sum", "mean", "min", "max")  # 처음부터 있던 피벗 집계(목록의 앞에 둔다)
 HOWS = {i: sql_funcs.label_of(i) for i in (*OLD_HOWS, *[i for i in sql_funcs.ids_for("pivot") if i not in OLD_HOWS and sql_funcs.FUNCS[i]["aggregate"]])}  # 함수 사전의 집계 전부
 SUBTOTALS = ("rollup", "cube", "sets")  # 피벗의 소계·총계 방식(ROLLUP·CUBE·GROUPING SETS)
-SHOWS = ("value", "row_pct", "col_pct")  # 피벗 칸 보기: 값, 행 합계 대비 비율, 열 합계 대비 비율(0~1)
+SHOWS = ("value", "row_pct", "col_pct", "total_pct", "lift")  # 피벗 칸 보기: 값, 행·열·전체 합계 대비 비율(0~1), 향상도
 EMPTY = "(빈 값)"  # 열로 펼칠 컬럼이 빈 값인 행의 칸 이름
 
 
@@ -45,25 +52,27 @@ def takes_main(kind):
     """줄의 본문에 컬럼(이나 값)을 받는 종류인지. 순위·dense_rank처럼 기준·그룹만 받는 종류는 아니다."""
     if kind == "순위":
         return False
-    if kind in NEW_WINDOWS:
+    if kind in NEW_WINDOWS or kind in TABLE_WINDOWS:
         return any(a["name"] not in sql_funcs.HAS_ARGS for a in sql_funcs.FUNCS[kind]["args"])
     return True
 
 
 def split_words(line, columns=()):
     """(종류, 본문 낱말들, {기준·그룹·이름: 낱말들}). columns(이 표의 컬럼 이름들)를 주면, 본문을 받는 종류의 첫 낱말이 '이름'·'그룹'·'기준'이고
-    그 이름의 컬럼이 있을 때 칸 낱말이 아니라 컬럼으로 읽는다('lag 이름 기준 일자', '식 이름 || '님' 이름 호칭')."""
-    words = line.split()
-    if not words or words[0] not in KINDS:
+    그 이름의 컬럼이 있을 때 칸 낱말이 아니라 컬럼으로 읽는다('lag 이름 기준 일자', '식 이름 || '님' 이름 호칭'). 백틱으로 감싼 낱말은 옵션으로 읽지 않는다."""
+    toks = list(tokens(line))
+    words = [w for w, _, _ in toks]
+    quoted = [q for _, q, _ in toks]
+    if not words or quoted[0] or words[0] not in KINDS:
         raise ValueError(f"계산 종류는 {', '.join(KINDS[:len(WINDOWS) + len(EACH) + 2 + len(FORMULAS)])} 중 하나로 시작해요(함수 사전의 창 함수 id도 돼요: {', '.join(NEW_WINDOWS[:4])} …). 형식: {GUIDE}")
     main, opts, at = [], {}, None
     lead = words[0] in ("곱하기", "빈값채우기") or words[0] == "반올림" and len(words) > 1 and words[1].lstrip("-").isdigit()  # 값이 앞에 오는 줄(반올림의 자리 수는 생략할 수 있다)
     spot = 1 if lead else 0  # 반올림 0 이름·곱하기 2 그룹: 대상 컬럼은 둘째 낱말
-    first = takes_main(words[0]) and len(words) > spot + 1 and words[spot + 1] in columns
-    for k, w in enumerate(words[1:]):
+    first = takes_main(words[0]) and len(words) > spot + 1 and (quoted[spot + 1] or words[spot + 1] in columns)
+    for k, (w, q) in enumerate(zip(words[1:], quoted[1:])):
         if k == spot and first:
             main.append(w)
-        elif w in OPTIONS and not (at is not None and not at):  # 칸 낱말 바로 뒤의 '그룹'·'기준'·'이름'은 그 칸의 값(컬럼 이름이 그 낱말)
+        elif not q and w in OPTIONS and not (at is not None and not at):  # 칸 낱말 바로 뒤의 '그룹'·'기준'·'이름'은 그 칸의 값(컬럼 이름이 그 낱말)
             at = opts.setdefault(w, [])
         else:
             (main if at is None else at).append(w)
@@ -176,21 +185,72 @@ def call_parts(text):
     return None
 
 
+def tokens(line: str) -> Iterator[tuple[str, bool, tuple[int, int]]]:
+    """[SPECIFICATION] plans/phase-10.md#tokens
+    낱말 줄을 (낱말, 백틱으로 감쌌는지, 원래 줄의 자리)로 하나씩 내는 생성기다."""
+    for m in TOKEN.finditer(line):
+        if m[0] == "`":
+            raise ValueError("백틱(`)이 닫히지 않았어요. 빈칸이나 이름·기준·그룹·조건 낱말이 든 컬럼은 `고객 이름`처럼 앞뒤를 백틱으로 감싸요.")
+        if m[1] is None:
+            yield m[0], False, m.span()
+            continue
+        if m[1] == "":
+            raise ValueError("백틱 안이 비었어요. 컬럼 이름을 넣으세요.")
+        if "," in m[1]:
+            raise ValueError(COMMA_NAME.format(name=m[1]))
+        yield m[1], True, m.span()
+
+
+def group_fields(rest: str) -> dict[str, str]:
+    """[SPECIFICATION] plans/phase-10.md#group_fields
+    그룹집계 본문의 닫는 괄호 뒤 글을 테이블·키·그룹·기준·조건·이름 칸으로 나눈다."""
+    field, last, after_marker, cond = None, -1, False, None
+    values: dict[str, list[tuple[str, int, int]]] = {}
+    for w, quoted, (s, e) in tokens(rest):
+        if not quoted and w in MARKERS and not after_marker:
+            at = MARKERS.index(w)
+            if at <= last:
+                raise ValueError(GROUP_USAGE)
+            last = at
+            if w == "조건":
+                cond = rest[e:]
+                break
+            field, values[w], after_marker = w, [], True
+        else:
+            if field is None:
+                raise ValueError(GROUP_USAGE)
+            values[field].append((w, s, e))
+            after_marker = False
+    if not all(values.values()):
+        raise ValueError(GROUP_USAGE)
+    fields = {k: "" for k in MARKERS}
+    for k, found in values.items():
+        fields[k] = "".join(w if i == 0 else (w if found[i - 1][2] == s else " " + w) for i, (w, s, _) in enumerate(found))
+    if fields["테이블"] and len(values["테이블"]) != 1:
+        raise ValueError(GROUP_USAGE)
+    name = fields["이름"]
+    if name and (len(values["이름"]) != 1 or not sql_funcs.NAME.fullmatch(name) or name.lower() in ("asc", "desc")):
+        raise ValueError(GROUP_USAGE)
+    if cond is not None:
+        c = cond.strip()
+        head, sep, nm = c.rpartition(" 이름 ")
+        if sep and sql_funcs.NAME.fullmatch(nm.strip()) and nm.strip().lower() not in ("asc", "desc"):
+            c, name = head.strip(), nm.strip()
+        if not c:
+            raise ValueError(GROUP_USAGE)
+        fields["조건"] = c
+    return {"table": fields["테이블"], "key": fields["키"], "group": fields["그룹"], "order": fields["기준"], "cond": fields["조건"], "name": name}
+
+
 def group_line(text, expr, schema=None):
     """그룹집계 <집계id>(<값컬럼>[, 인자…]) [테이블 대상 키 내컬럼=대상컬럼, …] [그룹 컬럼, …] [기준 컬럼 asc|desc] [조건 조건문] 이름 새이름: 그룹마다 집계해 left join으로 행마다 붙인다
     (창 함수가 아니라 묶어 집계 → 이어 붙이기라 Postgres의 count distinct도 되고 모든 연결에서 같은 SQL). 그룹이 없으면 표 전체 값을 모든 행에(cross join).
     테이블을 주면 대상 테이블(@탭도, querying.table_of)을 키의 오른쪽 컬럼으로 묶어 집계하고(값·기준·조건은 대상의 컬럼) 키 왼쪽 컬럼으로 붙인다.
     그룹·키 값이 빈 행이나 짝이 없는 행은 빈 값이다(SQL의 = 비교)."""
     m = call_parts(text.strip())
-    rest, has_cond, cond = m["rest"].partition(" 조건 ") if m else ("", "", "")  # 조건은 원래 글 그대로 둔다(따옴표 안 빈칸을 줄이지 않게)
-    head, sep, name = (cond if has_cond else rest).rpartition(" 이름 ")
-    if sep and sql_funcs.NAME.fullmatch(name.strip()) and name.strip().lower() not in ("asc", "desc"):  # 맨 뒤 '이름 새이름'만 이름 칸(조건 안의 '이름' 컬럼은 조건, '기준 이름 desc'의 desc는 정렬 방향)
-        rest, cond, name = (rest, head, name.strip()) if has_cond else (head, cond, name.strip())
-    else:
-        name = ""
-    parts = GROUP_PARTS.fullmatch(" " + " ".join(rest.split())) if m else None  # 조건 앞만 빈칸을 하나로 줄여 맞춘다(긴 빈칸에서 정규식이 되짚기를 오래 하지 않게)
-    if not parts:
-        raise ValueError("그룹집계 <집계id>(<값컬럼>[, 인자]) [테이블 대상 키 내컬럼=대상컬럼] [그룹 컬럼1, 컬럼2] [기준 컬럼 asc|desc] [조건 조건문] 이름 새이름. 예: 그룹집계 count_distinct(고객) 그룹 매장 이름 매장고객수")
+    if not m:
+        raise ValueError(GROUP_USAGE)
+    parts = group_fields(m["rest"])
     f = sql_funcs.get(m["id"])
     if not f["aggregate"]:
         raise ValueError(f"'{m['id']}'은 집계 함수가 아니에요. 그룹집계에는 함수 사전의 집계(sum·count_distinct·median …)를 써요.")
@@ -214,16 +274,16 @@ def group_line(text, expr, schema=None):
     if len(words) > len(specs):
         raise ValueError(f"{f['id']}의 인자: 값 컬럼{''.join(', ' + s['label'] for s in specs)}. 예: {f['example']}")
     opts = {s["name"]: word_value(s, w) for s, w in zip(specs, words)}
-    keys, _ = window(src, {"기준": (parts["order"] or "").split()}, need_order=False)
+    keys, _ = window(src, {"기준": [parts["order"]] if parts["order"] else []}, need_order=False)
     if keys:
         if not any(a["name"] == "order" for a in f["args"]):
             raise ValueError(f"{f['id']}는 '기준'을 쓰지 않아요. 예: {f['example']}")
         opts["order"] = keys
-    groups = names((parts["group"] or "").split(), expr, "그룹 컬럼")
+    groups = names([parts["group"]] if parts["group"] else [], expr, "그룹 컬럼")
     if len(groups) > MAX_GROUPS:
         raise ValueError(f"그룹은 {MAX_GROUPS}개까지예요.")
-    name = new_name(expr, {"이름": name.split()}, f"{value or '행'}_{f['id']}")
-    measure = {name: sql_funcs.aggregate(f["id"], src, value, cond.strip() or None, opts)}
+    name = new_name(expr, {"이름": [parts["name"]] if parts["name"] else []}, f"{value or '행'}_{f['id']}")
+    measure = {name: sql_funcs.aggregate(f["id"], src, value, parts["cond"] or None, opts)}
     if pairs:
         found = src.group_by([right for _, right in pairs]).aggregate(**measure)
         return expr.left_join(found, [expr[left] == found[right] for left, right in pairs]).select(*expr.columns, name)
@@ -232,10 +292,10 @@ def group_line(text, expr, schema=None):
     return expr.left_join(expr.group_by(groups).aggregate(**measure), groups).select(*expr.columns, name)
 
 
-def prep_line(text, expr):
-    """전처리 <단계id> <컬럼> <JSON 값>: 전처리 단계 하나(prep_ops.apply_ops)를 건다. 쿼리 화면의 머리글 우클릭 메뉴가 계산 줄로 쓰는 것(계산 줄로 안 되는 단계).
-    표 전체 통계·값 목록을 먼저 읽는 단계(reads_stats)는 거절한다: 식을 만들 때 조회가 나가 연결 스레드 밖(SQLite 오류)·쪽마다 다시 읽고 처리 용량 확인도 거치지 않는다."""
-    from core import prep_ops
+def prep_parts(text: str, expr: "ibis.expr.types.Table") -> tuple[str, str, object]:
+    """[SPECIFICATION] plans/phase-1.md#prep_parts
+    전처리 줄 본문 '<단계id> <컬럼> <JSON 값>'을 (단계id, 컬럼, 값)으로 나눈다."""
+    from core import prep_ops  # 늦은 import(calc.prep_line과 같이)
     op, _, rest = text.strip().partition(" ")
     column = parse.head_name(rest, expr.columns) or rest.split(" ", 1)[0]  # 공백 있는 컬럼 이름도
     try:
@@ -243,33 +303,57 @@ def prep_line(text, expr):
     except ValueError:
         raise ValueError('전처리 줄의 값은 JSON으로 써요. 예: 전처리 type 금액 {"to": "float"} / 전처리 trim 이름 true') from None
     parse.check_name(column, expr.columns)
+    if isinstance(value, dict) and "known" in value:
+        raise ValueError(prep_ops.KNOWN_REFUSED)
+    return op, column, value
+
+
+def stat_step(line: str, expr: "ibis.expr.types.Table") -> tuple[str, str, object] | None:
+    """[SPECIFICATION] plans/phase-1.md#stat_step
+    계산 줄이 표 전체 통계를 먼저 구해야 하는 전처리 단계면 (단계id, 컬럼, 값), 아니면 None을 돌려준다."""
+    head, _, text = line.strip().partition(" ")
+    if head != "전처리":
+        return None
+    op, column, value = prep_parts(text, expr)
+    return (op, column, value) if reads_stats(op, value, expr[column].type()) else None
+
+
+def prep_line(text, expr, pin=None):
+    """전처리 <단계id> <컬럼> <JSON 값>: 전처리 단계 하나(prep_ops.apply_ops)를 건다. 쿼리 화면의 머리글 우클릭 메뉴가 계산 줄로 쓰는 것(계산 줄로 안 되는 단계).
+    표 전체 통계를 먼저 읽는 단계(reads_stats)는 pin(querying.pinned·prep_derive.apply_formulas가 연결 스레드에서 미리 구한 prep_ops.Known)으로 건다. pin이 없으면 거절한다(식을 만들 때 조회가 나가지 않게)."""
+    from core import prep_ops
+    op, column, value = prep_parts(text, expr)
+    value = value if pin is None else pin
     if reads_stats(op, value, expr[column].type()):
-        ref = column if column.isidentifier() else f'col("{column}")'  # 식에서 이름으로 못 쓰는 컬럼(공백·괄호)은 col("…")
-        example = {"scale": f" 또는 식 줄을 쓰세요. 예: 식 ({ref} - mean({ref})) / std({ref}) 이름 표준화",
-                   "fill": f" 또는 식 줄을 쓰세요. 예: 식 coalesce({ref}, mean({ref})) 이름 채움"}.get(op, "")  # 식 줄로 같은 일을 할 수 있는 단계만 예시
-        raise ValueError(f"'{op}'은 표 전체의 통계·값 목록을 먼저 구해야 해서 쿼리 계산 줄로는 못 해요. 전처리 화면으로 넘겨서 하세요.{example}")
+        raise ValueError(f"'{op}'은 표 전체의 통계를 먼저 구해 넣어야 해서 여기서는 못 써요. 쿼리 화면의 계산 줄로 거세요.")
     return prep_ops.apply_ops(expr, column, {op: value})
 
 
 def reads_stats(op, value, dtype):
     """전처리 단계가 표 전체의 통계·값 목록을 먼저 읽는지: fill mean·median·mode, scale, outlier iqr·std, label, onehot, rare, 구조가 아닌 컬럼의 expand(키 찾기, 찾아 둔 키를 주면 아님).
-    counts는 행 안에서 세거나(못 하면 번호표 조인) 식만 만들고 표를 읽지 않아 된다."""
+    counts는 행 안에서 세거나(못 하면 번호표 조인) 식만 만들고 표를 읽지 않아 된다. 미리 구한 값(prep_ops.Known)이면 아님.
+    outlier pct, Phase 6 단계(prep_ops.needs_stats: flags의 상위 %·평균/중앙값·이상치, power 자동 λ, gfill·cut·others·freq·target)도 읽는다."""
+    from core import prep_ops
+    if isinstance(value, prep_ops.Known):
+        return False
     if op == "fill":
         return isinstance(value, dict) and value.get("how") in ("mean", "median", "mode")
     if op == "outlier":
-        return isinstance(value, dict) and value.get("by") in ("iqr", "std")
+        return isinstance(value, dict) and value.get("by") in ("iqr", "std", "pct")
     if op == "expand":
         return not dtype.is_struct() and not isinstance(value, dict)  # 찾아 둔 키({"keys": …})를 주면 읽지 않는다
+    if op in prep_ops.STAT_OPS6:
+        return isinstance(value, dict) and prep_ops.needs_stats(op, value)
     return op in ("scale", "label", "onehot", "rare")
 
 
-def apply_line(line, expr, schema=None):
+def apply_line(line, expr, schema=None, pin=None):
     """계산 한 줄을 식에 건다."""
     head, _, text = line.strip().partition(" ")
     if head == "그룹집계":
         return group_line(text, expr, schema)
     if head == "전처리":
-        return prep_line(text, expr)
+        return prep_line(text, expr, pin)
     kind, main, opts = split_words(line, expr.columns)
     if kind in EACH:
         return each(kind, main, expr)
@@ -284,8 +368,10 @@ def apply_line(line, expr, schema=None):
             raise ValueError("세로로 세울 컬럼을 두 개 이상 넣으세요. 예: 세로로 금액, 수량")
         return longer(expr, cols)
     if kind in FORMULAS:
-        spans = [w.span() for w in re.finditer(r"\S+", line)]  # 본문 낱말은 종류 바로 뒤부터 이어진다(split_words): 원래 줄에서 자른다
+        spans = [span for _, _, span in tokens(line)]  # 본문 낱말은 종류 바로 뒤부터 이어진다(split_words): 원래 줄에서 자른다
         return formula_line(kind, main, opts, expr, line[spans[1][0]:spans[len(main)][1]] if main else "")
+    if kind in TABLE_WINDOWS:
+        return table_window(kind, main, opts, expr)
     if kind == "상위":
         keys, groups = window(expr, opts)
         n = int(number(main[0] if main else None, "상위 몇 개"))
@@ -332,6 +418,8 @@ def column(kind, main, opts, expr, taken=()):
 
 def word_value(spec, word):
     """줄의 낱말 하나를 함수 사전 칸의 값으로: 컬럼은 이름 그대로, 숫자 칸은 수, 그 밖은 글자(숫자로 읽히면 값 칸은 수)."""
+    if spec["kind"] == "list":
+        return [word_value({"kind": "value", "label": spec["label"]}, w) for w in word.split(",") if w]
     if spec["kind"] in ("number", "int") or (spec["kind"] == "value" and re.fullmatch(r"-?\d+(\.\d+)?", word)):
         value = number(word, spec["label"])
         return int(value) if spec["kind"] == "int" or value == int(value) else value
@@ -366,6 +454,19 @@ def catalog_window(kind, main, opts, expr, taken):
     return new_name(expr, opts, f"{first}_{kind}".lstrip("_"), taken), f["build"](sql_funcs.resolve(f, expr, raw))
 
 
+def table_window(kind: str, main: list[str], opts: dict[str, list[str]], expr: "ibis.expr.types.Table") -> "ibis.expr.types.Table":
+    """[SPECIFICATION] plans/phase-7.md#table_window
+    함수 사전의 시퀀스 함수 줄 '<id> [컬럼] [인자…] 기준 … 그룹 … 이름 …'을 걸어 새 컬럼이 붙은 표를 돌려준다."""
+    f = sql_funcs.FUNCS[kind]
+    main = spaced_first(main, expr)
+    raw = window_args(f, main, opts, expr)
+    first = next((w for w in main if w in expr.columns), "")
+    name = new_name(expr, opts, f"{first}_{kind}".lstrip("_"))
+    c = sql_funcs.resolve(f, expr, raw)
+    c["name"] = name
+    return f["build"](c)
+
+
 def formula_line(kind, main, opts, expr, body=None):
     """식·SQL식·창거르기 줄을 건다. 식 <식> 이름 새이름 [기준 …] [그룹 …] / SQL식 <SQL 식> 이름 새이름 / 창거르기 <창 함수 id> [인자…] <비교> <값> 기준 … [그룹 …]."""
     if kind == "창거르기":
@@ -395,11 +496,11 @@ def mentions(main, opts):
     return {n.strip() for n in found if n.strip()}
 
 
-def apply(lines, expr, schema=None):
+def apply(lines, expr, schema=None, pins=None):
     """계산 줄들을 차례로 건다. 비었으면 그대로. 이어진 창 함수 줄(COLUMNS)은 앞 줄이 만든 컬럼을 쓰지 않는 한 mutate 하나로 묶는다
-    (줄마다 mutate하면 SELECT가 한 겹씩 늘어난다)."""
+    (줄마다 mutate하면 SELECT가 한 겹씩 늘어난다). pins는 {줄 번호: 미리 구한 통계 값}(querying.pinned)"""
     batch = {}
-    for line in lines or []:
+    for i, line in enumerate(lines or []):
         kind, main, opts = (None, [], {}) if (line.split() or [""])[0] in LINE_KINDS else split_words(line, expr.columns)
         if kind in COLUMNS and not any(n in line for n in batch):  # 앞 줄이 만든 컬럼(공백 있는 이름 포함)을 글 어디에서든 쓰면 나눈다
             name, value = column(kind, main, opts, expr, batch)
@@ -411,7 +512,7 @@ def apply(lines, expr, schema=None):
             name, value = column(kind, main, opts, expr)
             batch[name] = value
         else:
-            expr = apply_line(line, expr, schema)
+            expr = apply_line(line, expr, schema, (pins or {}).get(i))
     return expr.mutate(**batch) if batch else expr
 
 
@@ -460,13 +561,56 @@ def pivot(expr, spec, values_of):
     many = spec.get("values")
     if many is not None and (not isinstance(many, list) or not many or not all(isinstance(v, dict) for v in many)):
         raise ValueError("여러 값(values)은 [{value, how}] 모양이어야 해요.")
+    preset = spec.get("preset")
+    if preset is not None and (many is not None or spec.get("value")):
+        raise ValueError("프리셋(preset)과 값(values·value)은 함께 쓸 수 없어요.")
     show = spec.get("show") or "value"
     if show not in SHOWS:
         raise ValueError(f"칸 보기는 {', '.join(SHOWS)} 중 하나예요.")
-    measures = [pivot_measure(expr, v.get("value") or None, v.get("how", "count"), v.get("opts", spec.get("opts"))) for v in many or [spec]]
+    flags = {k: spec.get(k) for k in ("share", "parent", "total_row", "pareto")}
+    for k, v in flags.items():
+        if v is not None and not isinstance(v, bool):
+            raise ValueError(f"{k}는 참·거짓이에요.")
+    if preset is not None:
+        found, derived, preset_shares = crosstab.expand(preset, expr)
+    else:
+        derived, preset_shares = [], []
+        found = [{"how": v.get("how", "count"), "value": v.get("value") or None, "opts": v.get("opts", spec.get("opts")),
+                  "where": (v.get("where") or None) if many else None, "name": v.get("name") if many else None} for v in many or [spec]]
+    measures = [pivot_measure(expr, m["value"], m["how"], m["opts"]) for m in found]
+    named = bool(many) or preset is not None
     cond = parse.predicate(spec["where"], expr) if spec.get("where") and (not isinstance(spec["where"], str) or spec["where"].strip()) else None
-    totals = [f"전체 {sql_funcs.label_of(how)}" if not many else f"{value} {sql_funcs.label_of(how)}" if value else sql_funcs.label_of(how) for how, value, _ in measures]
-    aggs = {t: metric(expr, how, value, cond, opts) for t, (how, value, opts) in zip(totals, measures)}
+    totals, conds = [], []
+    for (how, value, _), m in zip(measures, found):
+        label = sql_funcs.label_of(how)
+        name = m["name"] or (f"{value} {label}" if value else label) if named else f"전체 {label}"
+        if m["where"] is not None and not m["name"]:
+            name += f" ({m['where']})"
+        if name.casefold() in {t.casefold() for t in totals}:
+            raise ValueError(f"값 이름 '{name}'이 겹쳐요. name을 정하세요.")
+        totals.append(name)
+        where = m["where"] if preset is not None or m["where"] is None else parse.predicate(m["where"], expr)  # 프리셋의 where는 이미 식
+        conds.append(cond if where is None else where if cond is None else cond & where)
+    subtotals = spec.get("subtotals")
+    if flags["parent"] and len(rows) < 2:
+        raise ValueError("부모 대비 비중은 행 기준 컬럼이 둘 이상이어야 해요.")
+    if flags["total_row"] and not rows:
+        raise ValueError("총계 줄은 행 기준 컬럼이 있어야 해요.")
+    if flags["total_row"] and subtotals:
+        raise ValueError("총계 줄(total_row)은 소계 없이 쓸 때만 골라요(소계·총계 방식에는 이미 있어요).")
+    if flags["pareto"]:
+        if not rows:
+            raise ValueError("파레토 누적은 행 기준 컬럼이 있어야 해요.")
+        if subtotals or flags["total_row"]:
+            raise ValueError("파레토 누적은 소계·총계 줄과 함께 쓸 수 없어요.")
+        if measures[0][0] not in crosstab.ADDITIVE:
+            raise ValueError("파레토 누적은 개수·합계에만 돼요.")
+    if show == "lift":
+        if column is None:
+            raise ValueError("리프트는 열로 펼칠 컬럼이 있어야 해요.")
+        if any(how not in crosstab.ADDITIVE for how, _, _ in measures):
+            raise ValueError("리프트는 개수·합계에만 돼요.")
+    aggs = {t: metric(expr, how, value, c, opts) for t, (how, value, opts), c in zip(totals, measures, conds)}
     cells = {t: [] for t in totals}
     if column is not None:
         parse.check_name(column, expr.columns, "열로 펼칠 컬럼")
@@ -479,37 +623,51 @@ def pivot(expr, spec, values_of):
         clash = any(str(v).casefold() in taken for v in found)
         for v in found:
             is_v = expr[column].isnull() if v is None else expr[column] == ibis.literal(v, type=expr[column].type())  # 타입 없는 Decimal은 DECIMAL(18,3)이 되어 큰 ID가 넘친다
-            for t, (how, value, opts) in zip(totals, measures):
+            for t, (how, value, opts), c in zip(totals, measures, conds):
                 name = EMPTY if v is None else str(v)
                 if clash and v is not None:
                     name = f"{column}={v}"
-                if many:
+                if named:
                     name = f"{name} {t}"
                 base, i = name, 2
                 while name.casefold() in used:
                     name, i = f"{base}_{i}", i + 1
                 used.add(name.casefold())
-                aggs[name] = metric(expr, how, value, is_v if cond is None else is_v & cond, opts)
+                aggs[name] = metric(expr, how, value, is_v if c is None else is_v & c, opts)
                 cells[t].append(name)
-    subtotals = spec.get("subtotals")
     if subtotals and (subtotals not in SUBTOTALS or not rows):
         raise ValueError(f"소계는 행 기준 컬럼이 있어야 하고 {', '.join(SUBTOTALS)} 중 하나예요.")
-    if subtotals:  # 소계·총계 줄: 기준 조합마다 집계해 잇는다(기준 칸은 글자, 빠진 칸은 '(소계)'·'(전체)')
-        table = sql_funcs.grouping(expr, rows, aggs, sql_funcs.group_sets("rollup" if subtotals == "rollup" else "cube" if subtotals == "cube" else "grouping_sets", rows, spec.get("sets")))
-        table = table.order_by(sql_funcs.grouped_order(table, rows))
+    # 소계·총계 줄: 기준 조합마다 집계해 잇는다(기준 칸은 글자, 빠진 칸은 '(소계)'·'(전체)')
+    sets = (sql_funcs.group_sets("rollup" if subtotals == "rollup" else "cube" if subtotals == "cube" else "grouping_sets", rows, spec.get("sets")) if subtotals
+            else [rows, []] if flags["total_row"] else None)
+    if flags["parent"]:
+        table = crosstab.parent_table(expr, rows, aggs, sets or [rows], totals)
+    elif sets:
+        table = sql_funcs.grouping(expr, rows, aggs, sets)
     else:
-        table = expr.group_by(rows).aggregate(**aggs).order_by(rows) if rows else expr.aggregate(**aggs)
+        table = expr.group_by(rows).aggregate(**aggs) if rows else expr.aggregate(**aggs)
+    if spec.get("convert") is not None:  # 전환율: 열로 펼쳤으면 전체 칸마다 펼친 칸 사이, 아니면 값 사이
+        derived = [*derived, *([d for t in totals for d in crosstab.conversions(cells[t], spec["convert"])] if column is not None else crosstab.conversions(totals, spec["convert"]))]
+    table = crosstab.derive(table, derived)
+    shares = list(dict.fromkeys([*(totals if flags["share"] else []), *preset_shares, *([totals[0]] if flags["pareto"] else [])]))
+    distinct = {t for t, (how, _, _) in zip(totals, measures) if how in crosstab.DISTINCT_HOWS}
+    table = crosstab.relative(table, expr, aggs, {t: cells[t] for t in totals}, show, shares, distinct)
+    if sets:
+        table = table.order_by(sql_funcs.grouped_order(table, rows))
+    elif rows:
+        table = table.order_by(rows)
     if show == "col_pct" and subtotals:
         raise ValueError("소계·총계 줄이 있으면 열 합계 대비 비율로 볼 수 없어요(소계가 두 번 더해져요).")
     if show == "row_pct":  # 칸 ÷ 그 행의 전체(전체 칸은 1)
         table = table.mutate(**{n: table[n] / table[t] for t in totals for n in [*cells[t], t]})
-    elif show == "col_pct":  # 칸 ÷ 그 열의 합
-        table = table.mutate(**{n: table[n] / table[n].sum() for t in totals for n in [t, *cells[t]]})
+    elif show == "col_pct" and (plain := {n: table[n] / table[n].sum() for t in totals if t not in distinct for n in [t, *cells[t]]}):  # 더해지는 칸 ÷ 그 열의 합(고유 개수 칸은 relative가 다시 센 분모로)
+        table = table.mutate(**plain)
     if (spec.get("having") or "").strip():  # HAVING: 집계한 뒤 결과 컬럼으로 거른다
         table = having(table, spec["having"])
-    if (spec.get("order") or "").strip():  # 결과 컬럼 순서('전체 개수 desc'), top이 있으면 앞 N행만(많은 순 상위 N)
-        key, _, way = spec["order"].strip().rpartition(" ")
-        key, way = (key, way.lower()) if way.lower() in ("asc", "desc") else (spec["order"].strip(), "asc")
+    order = (spec.get("order") or "").strip() or (f"{totals[0]} desc" if flags["pareto"] else "")
+    if order:  # 결과 컬럼 순서('전체 개수 desc'), top이 있으면 앞 N행만(많은 순 상위 N). 파레토는 기본이 첫 값 큰 순
+        key, _, way = order.rpartition(" ")
+        key, way = (key, way.lower()) if way.lower() in ("asc", "desc") else (order, "asc")
         parse.check_name(key, table.columns, "정렬 컬럼")
         table = table.order_by([table[key].desc() if way == "desc" else table[key].asc(), *[table[r] for r in rows if r != key]])  # 같은 값은 행 기준 순(상위 N의 경계가 매번 같게)
     if spec.get("top"):

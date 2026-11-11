@@ -120,7 +120,8 @@ def test_old_dedupe_recipe_unchanged(t):
     assert sorted(build(t, dedupe=["grp"]).to_polars()["grp"].to_list()) == ["a", "b", "c"]  # 예전처럼 기준마다 한 행
     assert build(t, dedupe=["grp"], dedupe_keep="first").count().execute() == 3  # "first"만 있는 recipe도 같다
     assert build(t, dedupe=["grp", "txt", "id", "val"]).count().execute() == 6
-    assert prep_expr.dupes(None, {"base": "t", "dedupe": ["grp"]}, t) == {"groups": 2, "rows": 3}  # 예전 모양 그대로(conflicts 없음)
+    found = prep_expr.dupes(None, {"base": "t", "dedupe": ["grp"]}, t)  # Phase 13부터 examples·example_groups도 온다
+    assert (found["groups"], found["rows"], "conflicts" in found) == (2, 3, False)  # 예전 값 그대로(conflicts 없음)
 
 
 def test_dedupe_keep_choices(t):
@@ -133,7 +134,8 @@ def test_dedupe_keep_choices(t):
     assert by_grp(merged, "val") == {"a": "1.0|2.0|3.0", "b": "10.0|20.0", "c": "5.0"} and merged.columns == t.columns
     warned = build(t, dedupe=["grp"], dedupe_keep="warn")
     assert by_grp(warned, "val") == {"a": None, "b": None, "c": 5} and by_grp(warned, "txt") == {"a": None, "b": "p", "c": None}  # 값이 둘 이상이면 빈 값
-    assert prep_expr.dupes(None, {"base": "t", "dedupe": ["grp"], "dedupe_keep": "warn"}, t) == {"groups": 2, "rows": 3, "conflicts": 2}  # a와 b에서 값이 여럿
+    found = prep_expr.dupes(None, {"base": "t", "dedupe": ["grp"], "dedupe_keep": "warn"}, t)
+    assert (found["groups"], found["rows"], found["conflicts"]) == (2, 3, 2)  # a와 b에서 값이 여럿
 
 
 @pytest.mark.parametrize("keep, message", [({"how": "median"}, "how는"), ({"how": "last"}, "order"), ({"zzz": 1}, "모양"), ({"how": "first", "order": "val"}, "order는"),

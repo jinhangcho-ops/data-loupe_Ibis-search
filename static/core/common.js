@@ -22,19 +22,35 @@ function island(frame, onError) {
     const m = e.data;
     if (m?.type === "ready") { ready = true; post(); }
     else if (m?.type === "size") frame.style.height = `${m.height}px`;
+    else if (m?.type === "shown") draw.shown = { table: m.table, full: m.full };  // 그린 뒤 보이는 값과 모든 데이터 값(계열 그림만)
     else if (m?.type === "png") { wait?.ok(m.dataUrl); wait = null; }
     else if (m?.type === "error") { if (wait) { wait.no(new Error(m.message)); wait = null; } else onError(m.message); }
   };
   addEventListener("message", on);
   const draw = msg => { if (msg) last = msg; post(); };
-  draw.picture = (theme, format) => new Promise((ok, no) => {
+  draw.picture = (theme, format, all) => new Promise((ok, no) => {
     if (!ready || !last) return no(new Error("먼저 차트를 그리세요."));
     if (wait) return no(new Error("앞 그림을 만드는 중이에요."));  // 대기 자리는 하나: 앞 요청의 답이 새 요청으로 가지 않게 새 요청을 거절한다
     wait = { ok, no };
-    frame.contentWindow.postMessage({ type: "picture", theme, format }, location.origin);
+    frame.contentWindow.postMessage({ type: "picture", theme, format, all }, location.origin);
   });
   draw.dispose = () => { removeEventListener("message", on); wait?.no(new Error("차트를 닫았어요.")); wait = null; };  // iframe을 지울 때 바로 푼다(메시지가 안 오면 리스너가 남는다)
   return draw;
+}
+// 자동 규칙 이름(보이는 글자)은 서버 viz_rules.AUTO_NAMES 하나(SERVER.dash.auto_names). 규칙 목록·기본 켬 여부도 서버(SERVER.dash.auto)가 정한다.
+// [자동 규칙] 판: rules에 든 규칙마다 체크를 그린다(체크 = 켬). 바꾸면 끈 것만 담은 객체 {규칙: false}로 onChange. now는 지금 끈 것. 쿼리·분석 화면이 같이 쓴다.
+function autoPanel(box, rules, now, onChange) {
+  const off = { ...now };
+  box.replaceChildren(...Object.keys(SERVER.dash.auto).filter(r => rules.includes(r)).map(r => {
+    const input = el("input", { type: "checkbox", checked: off[r] !== false });
+    input.onchange = () => { if (input.checked) delete off[r]; else off[r] = false; onChange({ ...off }); };
+    return el("label", { className: "check" }, input, ` ${SERVER.dash.auto_names[r]}`);
+  }));
+}
+// 차트 낱말·쿼리 화면 자동 규칙 기본값을 저장한다(POST /api/viz). 응답으로 SERVER.dash.viz를 갱신하고 돌려준다.
+async function saveVizPrefs(prefs) {
+  SERVER.dash.viz = await api("/api/viz", prefs);
+  return SERVER.dash.viz;
 }
 // 집계 이름은 서버(함수 사전)가 주는 목록이다: SERVER.agg_names
 const aggName = id => SERVER.agg_names?.[id] ?? id;
@@ -80,6 +96,22 @@ const fill = (sel, items, blank) => sel.innerHTML = (blank ? `<option value="">$
   items.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join("");
 // 요소 만들기: 속성을 주고 자식(요소나 글자)을 붙인다.
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
+// 해시·UUID 컬럼 제외(설정 hash_exclude, 서버 /api/diag/hashed). 테이블마다 한 번 묻고 기억한다. restored는 [다시 넣기]로 되살린 이름
+const HASHED = {};   // {schema|base: {on, columns, restored: []}}
+async function hashedOf(schema, base) {
+  const key = `${schema}|${base}`;
+  if (!HASHED[key]) HASHED[key] = { ...(await api("/api/diag/hashed", { schema, base })), restored: [] };
+  return HASHED[key];
+}
+function hashedOut(names, h) {   // web/lib/hashed.ts withoutHashed와 같은 규칙
+  if (!h?.on) return { names, hidden: [] };
+  const hide = new Set(h.columns.filter(n => !h.restored.includes(n)));
+  return { names: names.filter(n => !hide.has(n)), hidden: names.filter(n => hide.has(n)) };
+}
+function hashedNote(box, h, hidden, redraw) {   // 안내 + [다시 넣기]
+  box.replaceChildren(...(hidden.length ? [el("span", { className: "hint", textContent: `ID·해시로 보이는 컬럼 ${hidden.join(", ")}을(를) 목록에서 뺐어요. ` }),
+    el("button", { className: "ghost", textContent: "다시 넣기", onclick: () => { h.restored.push(...hidden); redraw(); } })] : []));
+}
 // SVG 요소 만들기(el의 SVG판): 속성(null은 건너뜀)과 자식을 준다. 카드 그림·흐름·생키가 함께 쓴다.
 const svg = (tag, attrs = {}, ...kids) => {
   const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
@@ -228,9 +260,61 @@ const gridWatch = typeof ResizeObserver === "undefined" ? null : new ResizeObser
 document.addEventListener("scroll", gridSchedule, { capture: true, passive: true });
 globalThis.addEventListener?.("resize", gridSchedule);
 // 결과 표 {columns, rows}: 숫자 컬럼은 머리글도 오른쪽에. SQL 실행과 문장 보기의 결과가 함께 쓴다.
-const resultTable = (host, { columns, rows }) => mountTable(host, { columns, rows,
-  head: columns.map(c => `<th class="${numCol(rows, c) ? "num" : ""}">${esc(c)}</th>`).join(""),
+// sort를 주면(null 포함) 머리글을 눌러 정렬할 수 있게 data-sort·tabindex·화살표를 넣는다. 주지 않으면(undefined) 서버가 쪽을 나누는 표라 그대로.
+const resultTable = (host, { columns, rows }, sort) => mountTable(host, { columns, rows,
+  head: columns.map(c => {
+    const mark = sortMark(sort, c);
+    return `<th class="${numCol(rows, c) ? "num" : ""}"${sort === undefined ? "" : ` data-sort="${esc(c)}" tabindex="0"${mark.aria}`}>${esc(c)}${mark.arrow}</th>`;
+  }).join(""),
   row: (r, want, max) => columns.map(c => cell(r[c], want, max)).join("") });
+// 표 머리글 정렬(화면에서 받아 둔 결과를 정렬): 오름 → 내림 → 원래 순서
+const SORT_COLLATOR = new Intl.Collator("ko", { numeric: true });  // numeric: 글자로 온 숫자("10")가 "9" 뒤에 오게
+const SORT_DATE = /^\d{4}-\d\d-\d\d([ T]\d\d:\d\d(:\d\d(\.\d+)?)?)?$/;
+const nextSort = (sort, column) => sort?.column !== column ? { column, dir: "asc" } : sort.dir === "asc" ? { column, dir: "desc" } : null;
+const sortMark = (sort, column) => sort?.column !== column ? { arrow: "", aria: "" }
+  : sort.dir === "asc" ? { arrow: " ↑", aria: ' aria-sort="ascending"' } : { arrow: " ↓", aria: ' aria-sort="descending"' };
+const sortNote = (shown, total) => total === null ? `일부 행만 정렬했어요(상한 때문에 받은 ${shown.toLocaleString()}개만).`
+  : `일부 행만 정렬했어요(전체 ${total.toLocaleString()}개 중 받은 ${shown.toLocaleString()}개).`;
+function sortCompare(a, b) {  // 큰 정수 글자가 섞이면 BigInt로, 소수가 있으면 Number로 비교한다
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  const x = typeof a === "number" && !Number.isInteger(a) ? null : BigInt(a), y = typeof b === "number" && !Number.isInteger(b) ? null : BigInt(b);
+  if (x === null || y === null) return Number(a) - Number(b);
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+// 행 객체 배열을 column 값으로 정렬한 새 배열. 빈 값(null·undefined)은 방향과 상관없이 뒤에, pinned(r, i)인 행은 맨 끝에 원래 차례로. 같은 값은 원래 차례.
+function sortRows(rows, column, dir, pinned = () => false) {
+  const idx = rows.map((_, i) => i), fixed = idx.filter(i => pinned(rows[i], i)), rest = idx.filter(i => !fixed.includes(i));
+  const empty = rest.filter(i => rows[i][column] == null), live = rest.filter(i => rows[i][column] != null), vals = live.map(i => rows[i][column]);
+  const kind = vals.every(v => typeof v === "number" || bigInt(v)) ? "num" : vals.every(v => typeof v === "string" && SORT_DATE.test(v)) ? "date" : "text";
+  const key = v => kind === "date" ? v.replace("T", " ") : typeof v === "object" ? JSON.stringify(v) : String(v);
+  const cmp = (a, b) => kind === "num" ? sortCompare(a, b) : kind === "date" ? (a < b ? -1 : a > b ? 1 : 0) : SORT_COLLATOR.compare(a, b);
+  const sign = dir === "desc" ? -1 : 1;
+  live.sort((i, j) => sign * cmp(kind === "num" ? rows[i][column] : key(rows[i][column]), kind === "num" ? rows[j][column] : key(rows[j][column])) || i - j);
+  return [...live, ...empty, ...fixed].map(i => rows[i]);
+}
+// 받아 둔 표 data = {columns, rows}를 host에 그리고 머리글을 누르면 화면에서 정렬해 다시 그린다. draw(host, 보일 data, sort)가 그리는 함수.
+// opts: pinned(r, i)(정렬하지 않는 맨 끝 행), cut({total}: 상한으로 잘린 표면 정렬 안내), slice(rows)(정렬한 뒤 보일 행만 자르기). host._shown은 자르기 전 화면 차례(내보내기용).
+function sortedTable(host, data, draw, opts = {}) {
+  if (host._sort && !data.columns.includes(host._sort.column)) host._sort = null;
+  host._sort ??= null;
+  host._sortDraw = () => {
+    const rows = host._sort ? sortRows(data.rows, host._sort.column, host._sort.dir, opts.pinned) : data.rows;
+    host._shown = { ...data, rows };
+    draw(host, { ...data, rows: opts.slice ? opts.slice(rows) : rows }, host._sort);
+    if (host._sort && opts.cut) host.insertAdjacentHTML("beforeend", `<div class="hint sort-note">${esc(sortNote(data.rows.filter((r, i) => !opts.pinned?.(r, i)).length, opts.cut.total))}</div>`);
+  };
+  host._sortDraw();
+}
+function sortClick(e) {  // 머리글(th[data-sort])을 누르거나 Enter·Space
+  if (e.type === "keydown" && (!["Enter", " "].includes(e.key) || e.ctrlKey || e.metaKey || e.altKey)) return;
+  const th = e.target.closest?.("th[data-sort]");
+  let host = th?.parentElement;
+  while (host && !host._sortDraw) host = host.parentElement;
+  if (!host) return;
+  e.preventDefault();
+  host._sort = nextSort(host._sort, th.dataset.sort);
+  host._sortDraw();
+}
 // 고르기 칸: 보이는 k번째 줄을 고르거나(on) 뺀다. shift면 마지막으로 누른 줄부터 k까지 같이. 다시 그리고 rowselect를 낸다.
 function gridPick(g, k, on, shift) {
   const [a, b] = shift && g.pickAt >= 0 ? [Math.min(g.pickAt, k), Math.max(g.pickAt, k)] : [k, k];
@@ -252,6 +336,8 @@ const toggleNest = e => {
   if (g.virtual) s.size ? g.extra.set(p, tr.offsetHeight - g.H) : g.extra.delete(p);
 };
 document.addEventListener("click", toggleNest);
+document.addEventListener("click", sortClick);
+document.addEventListener("keydown", sortClick);
 document.addEventListener("click", e => {  // 표의 고르기 칸(누르면 그 행, Shift면 범위)과 머리글 끝 [+](addCol)
   const box = e.target.closest?.("td.pick input"), add = e.target.closest?.("th.addcol button"), g = (box ?? add)?.closest("table")?.parentNode?._grid;
   if (!g) return;
@@ -645,6 +731,47 @@ $("too-few").onchange = () => {
   else if (n >= FEW_LOW - 1e-9 && n <= FEW_HIGH + 1e-9) { saveSetting({ sample_too_few: n }); connMsg(""); }
   else connMsg(`최소 표본 비율은 ${Math.round(FEW_LOW * 100)}에서 ${Math.round(FEW_HIGH * 100)} 사이로 넣어 주세요. 비우면 20%예요.`);
 };
+// PC에서 구할 통계의 최대 행 수(pc_stat_rows, 비우면 서버 기본값). 범위·기본값은 서버(SERVER.sizes·SERVER.defaults)에서
+const [PCR_LOW, PCR_HIGH] = SERVER.sizes.pc_stat_rows;
+Object.assign($("pc-stat-rows"), { min: PCR_LOW, max: PCR_HIGH, placeholder: SERVER.defaults.pc_stat_rows.toLocaleString() });
+if (saved("pc_stat_rows")) $("pc-stat-rows").value = saved("pc_stat_rows");
+$("pc-stat-rows").onchange = () => {
+  const text = $("pc-stat-rows").value.trim(), n = Number(text);
+  if (!text) { saveSetting({ pc_stat_rows: 0 }); connMsg(""); }
+  else if (Number.isInteger(n) && n >= PCR_LOW && n <= PCR_HIGH) { saveSetting({ pc_stat_rows: n }); connMsg(""); }
+  else connMsg(`PC에서 구할 통계의 최대 행 수는 ${PCR_LOW.toLocaleString()}에서 ${PCR_HIGH.toLocaleString()} 사이의 정수로 넣어 주세요. 비우면 ${SERVER.defaults.pc_stat_rows.toLocaleString()}행이에요.`);
+};
+// 워드클라우드 글 속 단어로 받는 최대 행 수(cloud_rows, 비우면 서버 기본값). 범위·기본값은 서버(SERVER.sizes·SERVER.defaults)에서
+const [CLR_LOW, CLR_HIGH] = SERVER.sizes.cloud_rows;
+Object.assign($("cloud-rows"), { min: CLR_LOW, max: CLR_HIGH, placeholder: SERVER.defaults.cloud_rows.toLocaleString() });
+if (saved("cloud_rows")) $("cloud-rows").value = saved("cloud_rows");
+$("cloud-rows").onchange = () => {
+  const text = $("cloud-rows").value.trim(), n = Number(text);
+  if (!text) { saveSetting({ cloud_rows: 0 }); connMsg(""); }
+  else if (Number.isInteger(n) && n >= CLR_LOW && n <= CLR_HIGH) { saveSetting({ cloud_rows: n }); connMsg(""); }
+  else connMsg(`워드클라우드 단어 분석 최대 행 수는 ${CLR_LOW.toLocaleString()}에서 ${CLR_HIGH.toLocaleString()} 사이의 정수로 넣어 주세요. 비우면 ${SERVER.defaults.cloud_rows.toLocaleString()}행이에요.`);
+};
+// 표본 설정(sampling.config): [칸 id, 설정 이름, 화면 배율(서버 값 × 배율 = 화면 값)]. 범위·기본값은 SERVER.sizes·SERVER.floats·SERVER.defaults
+const SAMPLE_FIELDS = [["sample-conf", "sample_conf", 1], ["sample-e-ratio", "sample_e_ratio", 100], ["sample-e-mean", "sample_e_mean", 100], ["pilot-rows", "pilot_rows", 1],
+  ["strata-h", "strata_h", 1], ["strata-min", "strata_min", 1], ["hash-buckets", "hash_buckets", 1], ["key-over", "key_over", 1]];
+for (const [id, name, scale] of SAMPLE_FIELDS) {
+  const whole = name in SERVER.sizes, [lo, hi] = whole ? SERVER.sizes[name] : SERVER.floats[name];
+  Object.assign($(id), { min: lo * scale, max: hi * scale, placeholder: (SERVER.defaults[name] * scale).toLocaleString() });
+  if (saved(name)) $(id).value = +saved(name) * scale;
+  $(id).onchange = () => {
+    const text = $(id).value.trim(), n = Number(text) / scale;
+    if (!text) { saveSetting({ [name]: 0 }); connMsg(""); }
+    else if ((!whole || Number.isInteger(n)) && n >= lo - 1e-9 && n <= hi + 1e-9) { saveSetting({ [name]: n }); connMsg(""); }
+    else connMsg(`${$(id).closest(".opt").querySelector("span").textContent}은 ${(lo * scale).toLocaleString()}에서 ${(hi * scale).toLocaleString()} 사이로 넣어 주세요. 비우면 ${(SERVER.defaults[name] * scale).toLocaleString()}이에요.`);
+  };
+}
+// ID·해시 컬럼을 묶기·집계 목록에서 뺄지(hash_exclude, 기본 on)
+$("hash-exclude").checked = (saved("hash_exclude") || SERVER.defaults.hash_exclude) === "on";
+$("hash-exclude").onchange = () => saveSetting({ hash_exclude: $("hash-exclude").checked ? "on" : "off" });
+for (const [id, name] of [["pilot-first", "pilot_first"]]) {
+  $(id).value = saved(name) || SERVER.defaults[name];
+  $(id).onchange = () => saveSetting({ [name]: $(id).value });
+}
 // 날짜 설정(timezone·week_start·fiscal_start_month): 지표·차트의 날·주·월·연 경계. 시간대를 비우면 PC 시간대(설정에서 빼고, 서버가 예전 쿠키를 지운다).
 $("timezone").value = saved("timezone") || "";
 $("timezone").onchange = () => {
@@ -653,11 +780,55 @@ $("timezone").onchange = () => {
 };
 $("week-start").value = saved("week_start") || "mon";
 $("week-start").onchange = () => saveSetting({ week_start: $("week-start").value });
-$("fiscal-start").innerHTML = Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}">${i + 1}월</option>`).join("");
+$("fiscal-start").innerHTML = Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}">${i + 1}월 1일</option>`).join("");
 $("fiscal-start").value = saved("fiscal_start_month") || "1";
 $("fiscal-start").onchange = () => saveSetting({ fiscal_start_month: +$("fiscal-start").value });
+// 달력 설정(weekend·work_hours·bucket_minutes·ewma_span): 식 함수가 인자를 비우면 읽는다. 기본값(placeholder)은 서버(SERVER.calendar)에서. 틀린 값은 서버 문장을 그대로 보인다.
+const CAL = SERVER.calendar, calSave = changes => api("/api/settings", changes).then(() => connMsg(""), e => connMsg(e.message));
+const weekendBoxes = [...$("weekend").querySelectorAll("input")];
+for (const b of weekendBoxes) b.checked = (saved("weekend") || CAL.weekend).split("_").includes(b.value);
+$("weekend").onchange = () => calSave({ weekend: weekendBoxes.filter(b => b.checked).map(b => b.value).join("_") || 0 });
+const [WORK_START, WORK_END] = (saved("work_hours") || CAL.work_hours.join("_")).split("_");
+Object.assign($("work-start"), { value: saved("work_hours") ? WORK_START : "", placeholder: CAL.work_hours[0] });
+Object.assign($("work-end"), { value: saved("work_hours") ? WORK_END : "", placeholder: CAL.work_hours[1] });
+$("work-start").onchange = $("work-end").onchange = () => {
+  const [start, end] = [$("work-start").value.trim(), $("work-end").value.trim()];
+  calSave({ work_hours: start && end ? `${start}_${end}` : 0 });
+};
+for (const [id, name] of [["bucket-minutes", "bucket_minutes"], ["ewma-span", "ewma_span"]]) {
+  Object.assign($(id), { value: saved(name) || "", placeholder: CAL[name] });
+  $(id).onchange = () => calSave({ [name]: Number($(id).value.trim()) });  // 비우면 0 = 기본값
+}
 $("flat-list").onchange = showFlat;
 $("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
+// [차트 낱말]·[차트 자동 규칙 기본값]: 상수(SERVER.dash.viz)를 받는 화면에서만 보인다. 저장이 틀리면 서버 문장을 칸에 보이고 저장된 값으로 다시 그린다.
+const WORD_TITLES = { good: "긍정", bad: "부정", other: "기타", null: "결측" };
+let editing = null;  // 눌러 고치는 중인 낱말 { key, word }
+const saveViz = async changes => {
+  try { await saveVizPrefs({ ...SERVER.dash.viz, ...changes }); say("err-viz", "", true); } catch (e) { say("err-viz", e.message); }
+  editing = null;
+  showViz();
+};
+function showViz() {
+  const { words, query_auto } = SERVER.dash.viz;
+  $("viz-words").replaceChildren(...Object.entries(WORD_TITLES).map(([key, title]) => {
+    const input = el("input", { placeholder: "낱말 더하기", style: "width:140px; flex:none", value: editing?.key === key ? editing.word : "" });
+    const add = () => {
+      const word = input.value;
+      const list = editing?.key === key ? words[key].map(w => w === editing.word ? word : w) : [...words[key], word];
+      saveViz({ words: { ...words, [key]: list } });
+    };
+    input.onkeydown = e => { if (e.key === "Enter" && !e.isComposing) add(); };
+    return el("div", { className: "opt" }, el("span", { textContent: title }), ...words[key].map(w => {
+      const c = chip(w, () => saveViz({ words: { ...words, [key]: words[key].filter(x => x !== w) } }));
+      c.title = "눌러서 고쳐요";
+      c.onclick = e => { if (e.target.tagName !== "BUTTON") { editing = { key, word: w }; showViz(); } };
+      return c;
+    }), input, el("button", { className: "ghost", textContent: editing?.key === key ? "고치기" : "더하기", onclick: add }));
+  }));
+  autoPanel($("viz-auto"), Object.keys(SERVER.dash.auto), query_auto, off => saveViz({ query_auto: off }));
+}
+if (SERVER.dash?.viz) { $("viz-prefs").classList.remove("hidden"); showViz(); }
 }
 let connected = null;  // 지금 연결의 종류: "flat"(테이블 파일), "other"(DuckDB 파일·DB 주소), 없으면 null
 // [모두 해제]: 체크를 모두 푼다. 테이블 파일로 연결돼 있었으면 그 연결을 끊고 화면을 연결 전으로 되돌린다(파일을 다시 골라 새로 연결).
@@ -674,6 +845,7 @@ if (hasConnect) $("flat-none").onclick = () => busy($("flat-none"), async () => 
       $("after-connect")?.classList.add("hidden");
       connMsg("연결을 끊었어요. 쓸 파일을 고르고 [연결]을 누르세요.", "hint");
     } else connMsg("연결은 그대로 두고 화면만 비웠어요. 테이블을 다시 고르세요.", "hint");
+    for (const k in HASHED) delete HASHED[k];  // 연결이 바뀌면 해시 컬럼 기억도 비운다
     if (typeof clearScreen === "function") clearScreen();
   } catch (e) { connMsg(e.message); }
 });
@@ -704,6 +876,7 @@ async function showConnected(flat, schemas, info) {
   connMsg("연결했어요.", true);
   closeConnect();
   if (!hasTables) return showCrumb();
+  for (const k in HASHED) delete HASHED[k];
   clearScreen();  // 이전 연결에서 고른 테이블과 조건은 새 연결과 맞지 않으므로 비운다.
   $("schema").classList.toggle("hidden", !schemas.length);
   fill($("schema"), schemas, "스키마(폴더)");

@@ -59,7 +59,7 @@ def test_runnable_passes_fresh_to_held(monkeypatch):
     seen = []
     monkeypatch.setattr(held, "ensure", lambda key, expr, stop, **more: (seen.append(more.get("fresh")), (None, 0))[1])
     monkeypatch.setattr(source, "compiles", lambda expr: False)
-    monkeypatch.setattr(querying, "build", lambda body, select=True: ibis.memtable({"a": [1]}))
+    monkeypatch.setattr(querying, "build", lambda body, select=True, ask=None: ibis.memtable({"a": [1]}))
     monkeypatch.setattr(querying, "filtered", lambda body: ibis.memtable({"a": [1]}))
     monkeypatch.setattr(querying, "run", lambda f: f())
     monkeypatch.setattr(querying, "search_key", lambda body, keep=None: "k")

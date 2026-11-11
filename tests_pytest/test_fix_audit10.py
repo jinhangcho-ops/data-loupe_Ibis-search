@@ -75,7 +75,7 @@ def test_inner_join_merged_key_keeps_the_usual_right_names():
     con = ibis.duckdb.connect()
     o = con.create_table("o", ibis.memtable({"k": [1], "k_right": [2], "v": [3]}))
     con.create_table("r", ibis.memtable({"k": [1], "v": [4]}))
-    assert parse.apply_joins(o, [("r", "inner", [("k", "k")], None)], con.table).columns == ("k", "k_right", "v", "v_right")
+    assert parse.apply_joins(o, [("r", "inner", [("k", "k")], None)], con.table).columns == ("k", "k_right", "v", "r_v")
 
 
 def test_nested_binary_becomes_hex_inside_and_stays_nested():

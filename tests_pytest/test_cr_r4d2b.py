@@ -43,15 +43,16 @@ def island_part():
 def test_chart_tab_posts_series_to_island(tmp_path):
     """drawChart: ready 전에는 마지막 것만 기억했다가 보내고, 모양은 {type:draw, kind:series, payload:{labels, datasets}, opts:{type, ranges, relabel, ratio}, theme}.
     size는 iframe 높이, error는 #err-chart, picture는 png 답(data URL)으로 풀린다. 다른 창·다른 출처의 메시지는 무시한다."""
-    parts = [island_part(), between("index.html", "const badRange", "// 계열:"), between("index.html", "const RATIOS", "// /api/chart의 결과를")]
+    parts = [island_part(), between("index.html", "const badRange", "// 계열:"), between("index.html", "const RATIOS", "let chartGroups")]
     body = r"""
-let drawn = null;
+let drawn = null, chartMerged = null;
+const chartGroups = {}, chartAuto = {}, groupPanel = () => {}, xKind = () => "cat";  // 그룹 고르기·자동 규칙(Phase 4·9)은 이 시험과 상관없다
 (async () => {
   drawChart();
   const hiddenEmpty = $("chart").hidden;
-  drawn = { labels: ["1", "2"], datasets: [{ y: "amt", agg: "sum", label: "합계 (amt)", values: [3, 4], type: "bar", dash: "solid", axis: "left" }] };
+  drawn = { used: [{ agg: "sum" }], labels: ["1", "2"], datasets: [{ y: "amt", agg: "sum", label: "합계 (amt)", values: [3, 4], type: "bar", dash: "solid", axis: "left" }] };
   drawChart();
-  drawn = { labels: ["1", "2", "3"], datasets: [{ y: "amt", agg: "sum", opts: { p: 1 }, label: "합계 (amt)", values: [3, 4, 5], type: "line", dash: "dashed", axis: "right" }] };
+  drawn = { used: [{ agg: "sum" }], labels: ["1", "2", "3"], datasets: [{ y: "amt", agg: "sum", opts: { p: 1 }, label: "합계 (amt)", values: [3, 4, 5], type: "line", dash: "dashed", axis: "right" }] };
   $("ymin").value = "0"; $("cratio").value = "square"; $("clabels").value = "1=가";
   drawChart();
   const before = SENT.length;
@@ -70,7 +71,8 @@ let drawn = null;
     assert got["hiddenEmpty"] and got["shown"] and got["before"] == 0
     assert first == {"id": "chart", "origin": "http://app", "m": {"type": "draw", "kind": "series", "theme": "dark",
         "payload": {"labels": ["1", "2", "3"], "datasets": [{"label": "합계 (amt)", "values": [3, 4, 5], "type": "line", "dash": "dashed", "axis": "right"}]},
-        "opts": {"type": "", "ranges": {"y": {"min": 0}, "y1": {}}, "relabel": "1=가", "ratio": 1}}}
+        "opts": {"type": "", "ranges": {"y": {"min": 0}, "y1": {}}, "relabel": "1=가", "ratio": 1,
+                 "auto": {}, "order": "", "aggs": ["sum"], "rest": None, "x_kind": "cat"}}}  # auto·order·aggs·rest·x_kind는 자동 규칙(Phase 9)이 섬에서 쓴다
     assert "ratio" not in second["m"]["opts"]  # 자동이면 섬이 그룹 수로 정한다
     assert pic["m"] == {"type": "picture", "theme": "light", "format": "jpeg"}
     assert got["height"] == "321px" and got["err"] == "못 그렸어요" and got["png"] == "data:image/jpeg;base64,AA"

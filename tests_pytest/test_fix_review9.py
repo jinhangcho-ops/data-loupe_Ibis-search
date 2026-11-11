@@ -48,7 +48,7 @@ def test_asof_after_a_join_with_shared_names(tmp_path):
     con.create_table("c", ibis.memtable({"cid": [1], "name": ["c"], "t": [1]}))
     con.create_table("p", ibis.memtable({"id": [1], "t": [3], "name": ["p"]}))
     e = parse.apply_joins(o, [("c", "left", [("cid", "cid")], None), ("p", "asof", [("id", "id")], ("t", "t"))], con.table)
-    assert e.execute().to_dict("records")[0]["name_p"] == "p"
+    assert e.execute().to_dict("records")[0]["p_name"] == "p"  # 겹친 이름은 대상_컬럼(Phase 10)
 
 
 def test_right_table_that_already_has_the_renamed_name():
@@ -56,7 +56,7 @@ def test_right_table_that_already_has_the_renamed_name():
     o = con.create_table("o", ibis.memtable({"cid": [1], "name": ["o"]}))
     con.create_table("r2", ibis.memtable({"cid": [1], "name": ["a"], "name_right": ["b"]}))
     e = parse.apply_joins(o, [("r2", "left", [("cid", "cid")], None)], con.table)
-    assert e.execute().to_dict("records") == [{"cid": 1, "name": "o", "cid_r2": 1, "name_r2": "a", "name_right": "b"}]
+    assert e.execute().to_dict("records") == [{"cid": 1, "name": "o", "r2_cid": 1, "r2_name": "a", "name_right": "b"}]  # 대상_컬럼(Phase 10)
 
 
 def test_sql_tab_on_file_connection_warns_about_ties_when_paging(client, tmp_path):

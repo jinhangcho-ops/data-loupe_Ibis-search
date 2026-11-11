@@ -84,7 +84,9 @@ def test_draw_ana_sends_island_message(tmp_path):
     part = between("prep.html", "function drawAna()", "\n}\n") + "\n}\n"
     stubs = ("let A = { result: null, view: 'groups', lo: 0, hi: 0 }; const VIEW_NAMES = {}, VIEW_RATIOS = { box: 2.4 }, sent = [];"
              "const anaTitle = () => 't', anaNote = () => 'n', anaTable = () => ({}), anaSpan = (d, v) => v === 'groups' ? 3 : 0, anaSlice = (d, v, lo, hi) => ({ cut: [v, lo, hi] }),"
-             "showRange = () => {}, resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f', anaDraw = m => sent.push(m);")
+             "showRange = () => {}, resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f', anaDraw = m => sent.push(m);"
+             "const SERVER = { analysis: { whole: [] } }, NEW_KINDS = [], ADD_TITLE = '', anaAuto = {}, gapTable = () => [], segTables = () => [], pairBlock = () => [], gradeLine = () => '', anaRows = r => r,"
+             "sortedTable = (h, d, draw) => draw(h, d, null); globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' }); globalThis.document = { documentElement: {} };")
     body = """
 A.result = { kind: "groups", views: ["groups"], values: [1, 2, 3] }; drawAna();
 A.lo = 1; A.hi = 2; drawAna(true);
@@ -93,9 +95,9 @@ A.result = { kind: "groups", views: ["groups"], values: ["a"] }; A.view = "group
 A.result = { kind: "funnel", views: ["funnel"], steps: [] }; A.view = "funnel"; drawAna();
 console.log(JSON.stringify(sent));"""
     got = run_node(tmp_path, body, parts=[ELS, stubs, part])
-    assert got == [{"kind": "ana", "payload": {"cut": ["groups", 0, 3]}, "opts": {"view": "groups", "ratio": 16 / 9}},
-                   {"kind": "ana", "payload": {"cut": ["groups", 1, 2]}, "opts": {"view": "groups", "ratio": 16 / 9}},
-                   {"kind": "ana", "payload": {"kind": "hist", "views": ["box"], "values": []}, "opts": {"view": "box", "ratio": 2.4}}]  # 글자 결과·퍼널은 섬에 보내지 않는다
+    assert got == [{"kind": "ana", "payload": {"cut": ["groups", 0, 3]}, "opts": {"view": "groups", "ratio": 16 / 9, "auto": {}}},
+                   {"kind": "ana", "payload": {"cut": ["groups", 1, 2]}, "opts": {"view": "groups", "ratio": 16 / 9, "auto": {}}},
+                   {"kind": "ana", "payload": {"kind": "hist", "views": ["box"], "values": []}, "opts": {"view": "box", "ratio": 2.4, "auto": {}}}]  # auto는 자동 규칙(Phase 9), all은 [모든 데이터] 체크(가짜 요소엔 없음)  # 글자 결과·퍼널은 섬에 보내지 않는다
 
 
 @node

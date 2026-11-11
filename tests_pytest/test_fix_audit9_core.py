@@ -76,7 +76,7 @@ def test_two_joins_with_shared_column_name():
     tables = {"customers": c, "products": p}
     out = parse.apply_joins(o, [("customers", "left", [("cid", "cid")], None), ("products", "left", [("pid", "pid")], None)], tables.__getitem__)
     assert out.count().execute() == 1
-    assert len(set(out.columns)) == len(out.columns) == 8 and "name_right" in out.columns and "name_products" in out.columns  # 첫 겹침은 _right 그대로
+    assert len(set(out.columns)) == len(out.columns) == 8 and "customers_name" in out.columns and "products_name" in out.columns  # 첫 겹침도 대상_컬럼
 
 
 def test_self_join_twice():

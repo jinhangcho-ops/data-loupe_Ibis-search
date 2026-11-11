@@ -145,7 +145,7 @@ def test_read_file_bad_coordinates_gives_value_error(tmp_path, coords):
 # 7C9: ±1.7e308 값이 있어도 분포가 나오고 표준편차만 빈 값
 def test_distribution_with_huge_values():
     t = ibis.memtable(pl.DataFrame({"v": [-1.7e308, 1.7e308, 0.0]}))
-    out = stats.analyze(t, {"kind": "distribution", "column": "v"})
+    out = stats.analyze(t, {"kind": "distribution", "column": "v", "auto": {"tail": False}})  # 꼬리 자르기를 꺼서 양끝 값도 구간에
     assert out["stats"]["std"] is None and out["stats"]["n"] == 3
     assert out["histogram"]["counts"][0] == 1 and out["histogram"]["counts"][-1] == 1 and sum(out["histogram"]["counts"]) == 3
     assert all(e == e and abs(e) != INF for e in out["histogram"]["edges"])

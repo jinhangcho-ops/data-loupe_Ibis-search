@@ -69,8 +69,8 @@ FORMS = {
     "struct": ({"how": "struct", "kind": "unnest", "col": "태그"}, ["펼치기 태그"]),
     "struct_fn": ({"how": "struct", "kind": "array_get", "args": [{"col": "태그"}, 1], "name": "첫"}, ["식 array_get(태그, 1) 이름 첫"]),
     "behavior": ({"how": "behavior", "kind": "session", "user": "u", "time": "t", "minutes": "30", "name": "세션"},
-                 ["lag t 1 기준 t 그룹 u 이름 세션_prev", "식 iif(isnull(세션_prev) or date_diff(세션_prev, t, 'minute') > 30, 1, 0) 이름 세션_new", "누적합 세션_new 기준 t 그룹 u 이름 세션"]),
-    "behavior_gap": ({"how": "behavior", "kind": "gap", "user": "u", "time": "t", "unit": "minute", "name": "g"}, ["lag t 1 기준 t 그룹 u 이름 g_prev", "식 date_diff(g_prev, t, 'minute') 이름 g"]),
+                 ["session_id t 30 그룹 u 이름 세션"]),
+    "behavior_gap": ({"how": "behavior", "kind": "gap", "user": "u", "time": "t", "unit": "minute", "name": "g"}, ["since_prev t minute 기준 t 그룹 u 이름 g"]),
     "geo": ({"how": "geo", "fn": "haversine", "args": [{"col": "위도"}, {"col": "경도"}, 37.5, 127], "name": "거리"}, ["식 haversine(위도, 경도, 37.5, 127) 이름 거리"]),
     "join": ({"how": "join", "table": "고객", "kind": "left", "keys": "고객ID=id"}, ["조인 고객 left 고객ID=id"]),
     "expr": ({"how": "expr", "text": "x * 2", "name": "x2"}, ["식 x * 2 이름 x2"]),
@@ -88,7 +88,7 @@ def test_newcol_lines_for_every_method(tmp_path):
                  " out.methods = NewCol.METHODS.map(m => m[0]); return out; })()")
     for k, (_, want) in FORMS.items():
         assert got[k] == want, k
-    assert got["methods"] == ["calc", "cond", "date", "text", "window", "group", "stat", "encode", "struct", "behavior", "geo", "join", "expr"]
+    assert got["methods"] == ["calc", "row", "cond", "flag", "bin", "date", "text", "window", "group", "stat", "encode", "struct", "behavior", "geo", "join", "expr"]  # Phase 6: row·flag·bin
     assert "연·분기·월끼리" in got["mixed"] and got["empty"] == "칸을 채워 주세요: A"
 
 
@@ -252,7 +252,7 @@ PAGE = """(async () => {
   c3.close();
   // 전처리 메뉴: 항목 수 = 단계 수, need가 안 맞으면 실행 없음+이유, JSON 모양 글자는 struct도 켠다, 칸 있는 단계는 상자 → onPick(id, 값)
   await PrepMenu.load();
-  const picks = [], items = PrepMenu.items({ column: "메모", type: "문자", screen: "query", sample: () => ['{"a":1}', '{"b":2}', '[1]', "x", null], onPick: (id, v) => picks.push([id, v]) });
+  const picks = [], items = PrepMenu.items({ column: "메모", type: "문자", sample: () => ['{"a":1}', '{"b":2}', '[1]', "x", null], onPick: (id, v) => picks.push([id, v]) });
   out.labels = items.map(i => i[0]); out.off = items.filter(i => !i[1]).map(i => [i[0], i[2]]);
   out.plain = PrepMenu.items({ column: "메모", type: "문자", sample: () => ["a", "b", "c"], onPick() {} }).filter(i => !i[1]).length;
   items.find(i => i[0] === "글자 › 앞뒤 공백 지우기")[1]();
@@ -261,7 +261,7 @@ PAGE = """(async () => {
   inp.value = "-, N/A"; inp.dispatchEvent(new Event("input")); box.querySelector("input[type=checkbox]").click();
   [...box.querySelectorAll("button")].find(b => b.textContent === "적용").click();
   out.picks = picks; out.boxClosed = !document.querySelector(".pm-box");
-  const qPicks = [], qItems = PrepMenu.items({ column: "금액", type: "실수", screen: "query", sample: () => [], onPick: (id, v) => qPicks.push([id, v]) });
+  const qPicks = [], qItems = PrepMenu.items({ column: "금액", type: "실수", sample: () => [], onPick: (id, v) => qPicks.push([id, v]) });
   qItems.find(i => i[0] === "빈 값 › 빈 값 처리")[1]();
   let fb = document.querySelector(".pm-box");
   out.fillOff = [...fb.querySelectorAll("option")].filter(o => o.disabled).map(o => o.value);
@@ -485,7 +485,7 @@ def test_screens_headless(tmp_path):
     assert out["reversed"] == ["2024-01-20", "2024-02-10"] and out["closed"] and out["forward"] == ["2024-01-10", "2024-01-12"]
     assert len(out["labels"]) == len(FAKE_OPS)
     assert out["labels"][:3] == ["글자 › 앞뒤 공백 지우기", "글자 › 이 값들을 빈 값으로", "글자 › 값 바꿔 쓰기"]  # 그룹별로 모은다
-    assert out["off"] == [["숫자 › 반올림", "숫자 컬럼에만 쓸 수 있어요"], ["숫자 › 범위 밖 값 처리", "숫자 컬럼에만 쓸 수 있어요"], ["새 컬럼 › 컬럼 여러 개로 펼치기", "쿼리에서는 전처리 화면으로 넘겨서 하세요"]]  # 쿼리에서 통계 단계(S1 prep_line이 거절)는 꺼진다
+    assert out["off"] == [["숫자 › 반올림", "숫자 컬럼에만 쓸 수 있어요"], ["숫자 › 범위 밖 값 처리", "숫자 컬럼에만 쓸 수 있어요"]]  # 쿼리에서도 통계 단계가 켜진다(결정 1)
     assert out["plain"] == 3  # JSON 모양이 아니면 struct 단계도 꺼진다(반올림·범위 밖 값은 숫자 컬럼만)
     assert out["picks"] == [["trim", True], ["nulls", ["-", "N/A", ""]]] and out["boxClosed"]
     assert out["valueCount"] == 5 and out["applied"] == [["지역 except 서울, 대구", "지역 is not null"], ["지역 in 서울, 대구 or 지역 is null"]]
@@ -502,10 +502,10 @@ def test_screens_headless(tmp_path):
     assert out["manyCount"] == 151 and "150개" in out["manyNote"] and "일부" in out["manyNote"]
     assert "앞 8개 컬럼" in out["wideNote"] and "키 컬럼" not in out["wideNote"]
     assert "새 컬럼 이름" in out["badName"][0] and out["badName"][1] and out["badName"][2] is None and out["ncClosed"]
-    assert out["fillOff"] == ["mean", "median", "mode"] and "전처리 화면으로 넘겨서 하세요" in out["fillNote"]  # B4: 쿼리에서 통계를 읽는 옵션은 흐리게
-    assert out["qPicks"] == [["fill", {"how": "drop"}]] and out["outlierOff"] == ["iqr", "std"] and out["outlierBy"] == "range"  # 첫 옵션이 막혔으면 쓸 수 있는 첫 옵션으로
-    assert out["encodeOff"] == ["label", "onehot", "rare"] and out["encodeNow"] == "replace"
-    assert "전처리 화면으로 넘겨서 하세요" in out["expandMsg"] and out["countsMsg"] == ""  # 글자 컬럼 펼치기는 막고, 단어 개수는 둔다(S1 reads_stats에서 뺌)
+    assert out["fillOff"] == [] and "전처리 화면으로" not in out["fillNote"]  # 결정 1: 쿼리에서도 통계 옵션을 고른다
+    assert out["qPicks"] == [["fill", {"how": "drop"}]] and out["outlierOff"] == [] and out["outlierBy"] == "iqr"  # 막힌 옵션이 없으니 가짜 목록의 첫 옵션
+    assert out["encodeOff"] == [] and out["encodeNow"] == "label"
+    assert "전처리 화면으로" not in out["expandMsg"] and out["countsMsg"] == ""  # 글자 컬럼 펼치기도 된다
     assert out["ctxAt"] == [500, 200] and out["ctxBtns"] == [["가", False, "가"], ["나", True, "이유"], ["다", False, "다"]]  # B12 공용 우클릭 메뉴
     assert out["ctxFirst"] == "가" and out["ctxDown"] == "다" and out["ctxEsc"] == [True, True]
     assert out["ctxKey"][0] == out["ctxKey"][1] and out["ctxRan"] == [10, True] and out["ctxBlur"] and out["ctxNone"] == [True, False]
@@ -694,7 +694,7 @@ def test_audit6_rowpick_quote_export_and_blank_key(tmp_path):
 @needs_node
 def test_audit6_word_columns_blocked_in_word_lines(tmp_path):
     """AB5: 창 함수·행동 분석·백분위 줄은 낱말 줄이라 '고객 이름'처럼 이름·기준·그룹 낱말이 따로 든 컬럼을 서버가 잘못 읽는다(고치기 전 줄은 calc.apply에서 엉뚱한 오류).
-    그런 컬럼이면 상자 안에서 쉬운 말로 막고, 그룹별 집계(괄호 안)는 그대로 된다."""
+    그런 컬럼이면 백틱으로 감싸서 된다(감싸지 않은 줄은 여전히 오류), 그룹별 집계(괄호 안)는 그대로 된다."""
     from lazy import ibis
     from core import calc
     t = ibis.memtable({"금액": [1.0, 2.0], "고객 이름": ["a", "b"], "t": [dt.datetime(2024, 1, 1), dt.datetime(2024, 1, 2)]})
@@ -709,10 +709,13 @@ def test_audit6_word_columns_blocked_in_word_lines(tmp_path):
       out.group = NewCol.lines({ how: "group", agg: "count_distinct", col: "금액", groups: ["고객 이름"], name: "n" });
       out.okRank = NewCol.lines({ how: "window", kind: "순위", order: "금액", dir: "desc", group: "", name: "r" });
       return out; })()""")
-    for k, word in (("rank", "이름"), ("lag", "기준"), ("session", "이름"), ("pct", "그룹")):
-        assert isinstance(got[k], str) and f"'{word}' 낱말" in got[k] and "그룹별 집계" in got[k], (k, got[k])
-    assert got["group"] == ["그룹집계 count_distinct(금액) 그룹 고객 이름 이름 n"] and got["okRank"] == ["순위 기준 금액 desc 이름 r"]
-    assert ibis.duckdb.connect().execute(calc.apply(got["okRank"], t)).sort_values("금액")["r"].tolist() == [2, 1]  # 행 차례는 엔진이 정한다
+    assert got["rank"] == ["순위 기준 금액 desc 그룹 `고객 이름` 이름 등수"] and got["lag"] == ["lag 금액 1 기준 `기준 일자` 이름 l"]
+    assert got["pct"] == ["percent_rank 기준 금액 그룹 `고객 그룹` 이름 p"] and got["session"] == ["session_id t 30 그룹 `고객 이름` 이름 세션"]
+    assert got["group"] == ["그룹집계 count_distinct(금액) 그룹 `고객 이름` 이름 n"] and got["okRank"] == ["순위 기준 금액 desc 이름 r"]
+    con = ibis.duckdb.connect()
+    assert con.execute(calc.apply(got["rank"], t)).sort_values("금액")["등수"].tolist() == [1, 1]
+    assert con.execute(calc.apply(got["group"], t)).sort_values("금액")["n"].tolist() == [1, 1]
+    assert con.execute(calc.apply(got["okRank"], t)).sort_values("금액")["r"].tolist() == [2, 1]  # 행 차례는 엔진이 정한다
 
 
 
@@ -750,13 +753,12 @@ def test_review7_empty_text_value_is_quoted(tmp_path):
 
 @needs_node
 def test_review7_newcol_group_words_name_rule_gcol(tmp_path):
-    """RB6: 그룹집계 줄의 그룹 컬럼 이름에 '조건'·'기준' 낱말이 따로 있으면(서버 GROUP_PARTS가 옵션으로 읽는다) 상자 안에서 막는다.
+    """RB6: 그룹집계 줄의 그룹 컬럼 이름에 '조건'·'기준' 낱말이 따로 있으면 백틱으로 감싼다.
     RB7: 새 컬럼 이름 규칙은 서버 check_name과 같다(영문·한글·숫자·밑줄). RB8: gcol을 NewCol.gcol로 내보낸다."""
     from lazy import ibis
     from core import calc
     t = ibis.memtable({"조건 코드": ["a", "a", "b"], "x": [1.0, 2.0, 3.0]})
-    with pytest.raises(ValueError):  # 예전에 만들던 줄은 서버가 '조건'을 옵션으로 읽어 실패한다
-        calc.apply(["그룹집계 count() 그룹 조건 코드 이름 n"], t)
+    assert sorted(ibis.duckdb.connect().to_polars(calc.apply(["그룹집계 count() 그룹 조건 코드 이름 n"], t))["n"].to_list()) == [1, 2, 2]  # 칸 낱말 바로 뒤라 이제 된다
     got = vm_run(tmp_path, ["newcol.js"], """(() => { const out = {};
       const forms = { group: { how: "group", agg: "count", col: "", groups: ["조건 코드"], name: "n" },
         z: { how: "stat", kind: "z", col: "x", groups: ["기준 월"], name: "z" },
@@ -766,7 +768,8 @@ def test_review7_newcol_group_words_name_rule_gcol(tmp_path):
       out.ok = NewCol.lines({ how: "group", agg: "count", col: "", groups: ["코드 값"], name: "가_1" });
       out.gcol = ["금액(원)", "a,b", "x"].map(NewCol.gcol);
       return out; })()""")
-    for k, word in (("group", "조건"), ("z", "기준"), ("cohort", "조건")):
-        assert isinstance(got[k], str) and f"'{word}' 낱말" in got[k], (k, got[k])
+    assert got["group"] == ["그룹집계 count() 그룹 `조건 코드` 이름 n"]
+    assert len(got["z"]) == 3 and sum("그룹 `기준 월`" in line for line in got["z"]) == 2  # 평균·표준편차 두 그룹집계 줄(셋째는 식 줄)
+    assert "그룹 `조건 코드`" in got["cohort"][0]  # 둘째 줄은 식 줄
     assert all(isinstance(got[k], str) and "새 컬럼 이름" in got[k] for k in ("cafe", "circled"))
-    assert got["ok"] == ["그룹집계 count() 그룹 코드 값 이름 가_1"] and got["gcol"] == ["'금액(원)'", "'a,b'", "x"]
+    assert got["ok"] == ["그룹집계 count() 그룹 `코드 값` 이름 가_1"] and got["gcol"] == ["'금액(원)'", "'a,b'", "x"]

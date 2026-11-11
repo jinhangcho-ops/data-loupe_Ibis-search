@@ -98,7 +98,7 @@ def test_prep_line():
     assert out["금액"].type().is_floating()
     assert rows_of(out, "판매 채널", "금액") == [("app", 0.0), ("app", 1000.0), ("web", 20.0)]
     for line in ("전처리 label 판매 채널 true", '전처리 fill 금액 {"how": "mean"}', '전처리 scale 금액 "standard"', "전처리 expand 판매 채널 true"):
-        with pytest.raises(ValueError, match="전처리 화면으로 넘겨서"):  # 표 전체 통계를 먼저 읽는 단계는 쿼리 계산 줄로는 거절(리뷰 ①)
+        with pytest.raises(ValueError, match="통계를 먼저 구해"):  # 미리 구한 값(pin) 없이 calc.apply만 부르면 거절(결정 1)
             calc.apply([line], t)
     with pytest.raises(ValueError, match="JSON"):
         calc.apply(["전처리 type 금액 to=float"], t)
@@ -396,13 +396,6 @@ def lite(folder, tmp_path):
     c.post("/api/disconnect", json={})
 
 
-@pytest.mark.parametrize("line", ['전처리 fill n {"how": "mean"}', '전처리 scale n "standard"', "전처리 label s true"])
-def test_prep_line_stats_refused_on_sqlite(lite, line):
-    """① 통계를 먼저 읽는 단계는 식을 만들 때 연결 스레드 밖에서 조회해 SQLite 스레드 오류가 났다: 이제 안내로 거절."""
-    err = lite.post("/api/query", json=body(base="e", limit=10, calcs=[line])).get_json()["error"]
-    assert "전처리 화면으로 넘겨서" in err and "thread" not in err
-
-
 @pytest.fixture
 def csvs(folder, tmp_path):
     from query.search_app import app
@@ -588,18 +581,6 @@ def test_paren_column_names():
     with pytest.raises(ValueError):
         calc.apply(["그룹집계 sum(" + "'" * 40 + "x 이름 n"], t)
     assert time.perf_counter() - start < 0.1
-
-
-def test_stats_refusal_example_only_for_fill_scale():
-    """B4 거절 안내의 식 줄 예시는 같은 일을 식으로 할 수 있는 fill·scale에만(이름에 괄호가 있으면 col("…"))."""
-    t = ibis.memtable({"s": ["x"], "금액(원)": [1.0]})
-    with pytest.raises(ValueError) as e:
-        calc.apply(["전처리 label s true"], t)
-    assert "식 줄" not in str(e.value)
-    with pytest.raises(ValueError, match=r'std\(col\("금액\(원\)"\)\)'):
-        calc.apply(['전처리 scale 금액(원) "standard"'], t)
-    with pytest.raises(ValueError, match=r"coalesce\(s, mean\(s\)\)"):
-        calc.apply(['전처리 fill s {"how": "mean"}'], t)
 
 
 def test_bucket_with_labels():

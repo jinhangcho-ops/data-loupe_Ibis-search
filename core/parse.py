@@ -289,14 +289,12 @@ def asof(left, right, on, keys, rname="{name}_right"):
 
 
 def rname_for(left, right, name):
-    """조인에서 왼쪽과 이름이 겹치는 오른쪽 컬럼의 새 이름 꼴. 첫 겹침은 _right, 그 이름이 양쪽에 이미 있으면(두 번째 조인 등) 테이블 이름을 붙인다."""
+    """조인에서 왼쪽과 이름이 겹치는 오른쪽 컬럼의 새 이름 꼴: 대상(테이블·@탭) 이름_컬럼. 그것도 있으면 끝에 _를 더한다."""
     taken = {*left, *right}
     clash = lambda rname: any(c in left and rname.format(name=c) in taken for c in right)
-    rname = "{name}_right"
-    if clash(rname):
-        rname = "{name}_" + re.sub(r"\W", "_", name)
-        while clash(rname):
-            rname += "_"
+    rname = re.sub(r"\W", "_", name.lstrip("@")) + "_{name}"
+    while clash(rname):
+        rname += "_"
     return rname
 
 

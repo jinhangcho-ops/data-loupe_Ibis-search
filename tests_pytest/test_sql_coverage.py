@@ -40,6 +40,7 @@ FEATURES = [
     ("cume_dist", ["cume_dist"], WIN), ("ntile(N)", ["ntile"], WIN), ("lag·lead(N, 기본값)", ["lag", "lead"], WIN),
     ("first_value·last_value·nth_value", ["first_value", "last_value", "nth_value"], WIN), ("누적 합·평균·최소·최대", ["cum_sum", "cum_mean", "cum_min", "cum_max"], WIN),
     ("이동 합·평균(N행·N일)", ["moving_sum", "moving_mean", "moving_min", "moving_max"], WIN), ("묶음 안 비율", ["share_of_group"], WIN), ("차이·변화율", ["diff", "pct_change"], WIN),
+    ("이동 표준편차", ["moving_std"], WIN), ("직전·다음 행까지 시간", ["since_prev", "until_next"], WIN), ("이벤트 기준 에피소드", ["episode_id"], WIN),
     # 글자
     ("length", ["length"], ROW), ("upper·lower", ["upper", "lower"], ROW), ("첫 글자 대문자", ["capitalize"], ROW), ("trim·ltrim·rtrim", ["trim", "ltrim", "rtrim"], ROW),
     ("substr(시작·길이)", ["substr"], ROW), ("left·right", ["left", "right"], ROW), ("replace", ["replace"], ROW),
@@ -54,6 +55,7 @@ FEATURES = [
     ("truncate(단위)", ["truncate"], ROW), ("연·분기·월·주·일·요일·시·분·초 뽑기", ["year", "quarter", "month", "week", "day", "weekday", "hour", "minute", "second"], ROW),
     ("epoch", ["epoch"], ROW), ("날짜 더하기·빼기(N 단위)", ["date_add", "date_sub"], ROW), ("두 날짜 차이(단위)", ["date_diff"], ROW), ("형식으로 글자(strftime)", ["strftime"], ROW),
     ("글자에서 날짜 읽기(형식)", ["parse_date"], ROW), ("날짜만·시각만", ["to_date", "to_time"], ROW), ("시간대 바꾸기", ["to_timezone"], ROW), ("오늘·지금 기준 차이", ["diff_now", "diff_today"], ROW),
+    ("N분 간격·요일 번호·요일 이름·주말·시간대·업무시간·월초중말·월말 날", ["time_bucket", "weekday_num", "weekday_name", "is_weekend", "time_of_day", "work_hours", "month_phase", "is_month_end"], ROW),
     # 조건
     ("CASE", ["case"], ROW), ("coalesce", ["coalesce"], ROW), ("nullif", ["nullif"], ROW), ("ifelse", ["ifelse"], ROW), ("greatest·least", ["greatest", "least"], ROW),
     ("isin", ["isin"], ROW), ("between", ["between"], ROW), ("isnull·notnull", ["isnull", "notnull"], ROW),
@@ -66,6 +68,7 @@ FEATURES = [
     # 묶음
     ("HAVING", ["having"], ("pivot", "sentence")), ("QUALIFY", ["qualify"], ("calc", "sentence")),
     ("ROLLUP·CUBE·GROUPING SETS", ["rollup", "cube", "grouping_sets"], ("pivot", "sentence")), ("DISTINCT", ["distinct"], ("prep", "sentence")),
+    ("세션 번호·누적 고유 개수·EWMA·연속 횟수·경로 문자열", ["session_id", "cum_distinct", "ewma", "streak", "event_path"], ("calc", "sentence")),
     # DB 고유 함수
     ("SQL 식 직접 쓰기", ["sql_expr"], ("calc", "sentence")),
 ]

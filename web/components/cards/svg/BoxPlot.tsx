@@ -1,6 +1,8 @@
 "use client";
 // boxplot(P14): 그룹마다 상자 그림(data.values.groups = [{name, n, min, q1, med, q3, max, outliers, outlier_count}]). 수염 min~max(1.5 IQR 끝), 상자 q1~q3, 굵은 중앙값, 이상치는 빈 원
 import { shownum } from "@/lib/calc";
+import { autoParams, clipBox } from "@/lib/autoviz";
+import { useConstants } from "@/lib/constants";
 import { tickBy } from "../chart/Charts";
 import { fitText } from "./__pure__";
 import { Box, Frame, NOTHING, Say, more, tone, type P } from "./common";
@@ -9,10 +11,15 @@ const W = 480, H = 260, L = 48, B = 22, T = 8;
 const fine = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 export function BoxPlot(p: P) {
+  const consts = useConstants();
   // 사분위가 없는 그룹(행이 없음)은 빼고, 수염 끝이 비면 상자 끝으로
-  const shown = (more(p).groups ?? []).filter(b => fine(b.q1) && fine(b.med) && fine(b.q3)).map(b => ({ ...b, min: fine(b.min) ? b.min : b.q1, max: fine(b.max) ? b.max : b.q3, outliers: (b.outliers ?? []).filter(fine) }));
-  if (!shown.length) return <Say text={NOTHING} />;
-  const nums = shown.flatMap(b => [b.min, b.max, ...(b.outliers ?? [])]).filter(fine), lo = Math.min(...nums), hi = Math.max(...nums);
+  const all = (more(p).groups ?? []).filter(b => fine(b.q1) && fine(b.med) && fine(b.q3)).map(b => ({ ...b, min: fine(b.min) ? b.min : b.q1, max: fine(b.max) ? b.max : b.q3, outliers: (b.outliers ?? []).filter(fine) }));
+  if (!all.length) return <Say text={NOTHING} />;
+  // 꼬리 자르기: 보이는 범위(P1~P99와 상자)만 그리고, 잘린 건수는 끝에 표시한다
+  const tail = p.card.view.all_data === true || !consts?.dash?.auto ? null : autoParams(p.card.view.auto, consts.dash.auto).tail, box = tail ? clipBox(all) : null;
+  const shown = box ? all.map(b => ({ ...b, min: Math.max(box.lo, b.min), max: Math.min(box.hi, b.max), outliers: b.outliers.filter(o => o >= box.lo && o <= box.hi) })) : all;
+  const nums = shown.flatMap(b => [b.min, b.max, ...(b.outliers ?? [])]).filter(fine), lo = box ? box.lo : Math.min(...nums), hi = box ? box.hi : Math.max(...nums);
+  const pct = (v: number) => +(v * 100).toFixed(2);
   const y = (v: number) => (hi === lo ? (T + H - B) / 2 : T + ((H - B - T) * (hi - v)) / (hi - lo)), band = (W - L) / shown.length, every = Math.ceil(shown.length / 6), w = Math.min(44, band * 0.5), c = tone(p, "주 색", 0);
   return (
     <Box cls="boxplot">
@@ -29,6 +36,8 @@ export function BoxPlot(p: P) {
               <rect x={cx - w / 2} y={y(b.q3)} width={w} height={Math.max(1, y(b.q1) - y(b.q3))} fill={c} fillOpacity={0.35} stroke={c} />
               <line x1={cx - w / 2} x2={cx + w / 2} y1={y(b.med)} y2={y(b.med)} stroke={c} strokeWidth={3} />
               {(b.outliers ?? []).map((o, j) => <circle key={j} cx={cx} cy={y(o)} r={3} fill="none" stroke={c} />)}
+              {tail && !!b.above && <text x={cx} y={y(hi) - 2} fontSize={11} textAnchor="middle" fill="var(--muted)">{fitText(`▲ P${pct(Number(tail.hi))} 초과 ${b.above.toLocaleString()}건`, band - 4, 11)}</text>}
+              {tail && !!b.below && <text x={cx} y={y(lo) + 11} fontSize={11} textAnchor="middle" fill="var(--muted)">{fitText(`▼ P${pct(Number(tail.lo))} 미만 ${b.below.toLocaleString()}건`, band - 4, 11)}</text>}
               {i % every === 0 && <text x={cx} y={H - 6} fontSize={11} textAnchor="middle" fill="var(--muted)">{fitText(b.name, band * every - 4, 11)}</text>}{/* 그룹이 많으면 몇 칸마다 하나(이름 전부는 툴팁) */}
             </g>
           );

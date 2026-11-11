@@ -63,7 +63,7 @@ def test_distribution_overflow_top_queried_once(monkeypatch):
     real = stats.rows
     monkeypatch.setattr(stats, "rows", lambda e: (calls.append(1), real(e))[1])
     out = stats.distribution(t, "v")
-    assert out["stats"]["std"] is None and len(calls) == 5  # top 1 + 집계 2(넘침 한 번 실패 뒤 std 없이) + 히스토그램 1 + 상자 1. 전에는 6
+    assert out["stats"]["std"] is None and len(calls) == 6  # top 1 + 집계 2(넘침 한 번 실패 뒤 std 없이) + 히스토그램 2(범위·분위 집계 1 + 구간 세기 1, Phase 9 tail_histogram) + 상자 1
 
 
 def test_distribution_other_error_is_not_retried(monkeypatch):

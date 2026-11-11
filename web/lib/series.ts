@@ -1,6 +1,7 @@
 // 카드 값 계산 중 여러 카드·화면 틀이 함께 쓰는 순수 함수 한 벌(옛 static/core/dash.js의 windowValue·loadedRange·pointValue·compareItem·pickColor·seriesTitle,
 // common.js의 sameSource). 본문은 옛 것 그대로이고, 옛 전역 SERVER에서 읽던 merge(다시 묶을 수 있는 집계)·agg_names는 인자로 받는다.
-import { daysBetween, labelIndex, ownRange, rollup, shiftDay, zeroWhenEmpty } from "./calc";
+import { currentWords, semanticTone, TONE_COLORS } from "./autoviz";
+import { daysBetween,labelIndex, ownRange, rollup, shiftDay, zeroWhenEmpty } from "./calc";
 import type { Card, CompareItem, CompareMode, DaySeries, PrevSpan } from "./types";
 
 /** 보는 기간·읽은 범위(열린 쪽은 비움) */
@@ -70,7 +71,8 @@ export function pickColor(card: Card, group: "series" | "parts", name: string, c
   const c = card.colors, key = group === "parts" ? "parts_order" : "order";
   if (c && !orders.has(card)) orders.set(card, { order: [...(c.order ?? [])], parts_order: [...(c.parts_order ?? [])] });
   const i = c?.[key] ? labelIndex(orders.get(card)![key], name) : index;
-  return c?.[group]?.[name] ?? colors.palette?.[i] ?? colors.series[i % colors.series.length];
+  const w = card.view?.auto?.semantic === false ? null : currentWords(), tone = w && semanticTone(name, w);
+  return c?.[group]?.[name] ?? (tone ? TONE_COLORS[tone] : undefined) ?? colors.palette?.[i] ?? colors.series[i % colors.series.length];
 }
 
 /** 그린 라벨(names) 중 카드의 색 순서(colors.order·parts_order)에 아직 없는 것을 붙인 새 순서. 늘지 않았으면 null(저장할 것 없음) */

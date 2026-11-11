@@ -10,7 +10,7 @@ import math
 import numpy as np
 from lazy import ibis
 
-from core import settings
+from core import settings, sql_funcs
 from core.funnel import step_value
 from core.parse import check_name
 from core.sql_funcs import to_timezone
@@ -21,6 +21,7 @@ UNITS = ("day", "week", "month")
 FLAT_EPS = 0.005  # 수평 유지점: 이어진 두 N의 차이가 이보다 작아야 한다(0.5%p)
 FLAT_RUN = 3  # 수평 유지점: 이만큼 이어져야 한다
 MONTH = np.timedelta64(1, "M")
+SESSION_N = "__ibis_session_n"  # 세션 번호를 잠깐 담는 컬럼
 
 
 # ---------- 공통 ----------
@@ -153,12 +154,8 @@ def add_sessions(table, user, time, gap_minutes=None, key=None):
         return table.mutate(session=session)
     if isinstance(gap_minutes, bool) or not isinstance(gap_minutes, (int, float)) or not gap_minutes > 0:
         raise ValueError("세션을 나눌 간격(분)은 0보다 큰 숫자여야 해요.")
-    t = table.mutate(_sec=epoch(table[time]))
-    ordered = ibis.window(group_by=user, order_by=time)
-    t = t.mutate(_new=((t._sec - t._sec.lag().over(ordered)) > gap_minutes * 60).fill_null(True).cast("int64"))
-    # 같은 시각의 행은 같은 세션 번호를 받는다(ROWS 누적이면 행마다 번호가 달라져 세션이 쪼개진다)
-    t = t.mutate(_n=t._new.sum().over(ibis.range_window(preceding=None, following=0, group_by=user, order_by=time)))
-    return t.mutate(session=t[user].cast("string") + ibis.literal("#") + t._n.cast("string")).drop("_sec", "_new", "_n")
+    t = sql_funcs.session_id(sql_funcs.Args(t=table, x=table[time], gap=gap_minutes, group=[table[user]], name=SESSION_N))
+    return t.mutate(session=t[user].cast("string") + ibis.literal("#") + t[SESSION_N].cast("string")).select(*table.columns, "session")
 
 
 def exit_rates(table, session, time, page):
@@ -727,6 +724,11 @@ def srm_p(n1, n2, share1=0.5):
     return math.erfc(math.sqrt(chi2 / 2))
 
 
+GAMMA_ITERS = 500  # 불완전 감마 급수·연분수의 반복 상한(range 끝값)
+GAMMA_EPS = 1e-15  # 불완전 감마가 멈추는 상대 오차
+LENTZ_TINY = 1e-300  # 연분수에서 0 대신 쓰는 아주 작은 수
+
+
 def lentz(d):
     """연분수 한 항의 되돌림 값(0 근처는 아주 작은 수로)."""
     return d if abs(d) > 1e-300 else 1e-300
@@ -765,6 +767,51 @@ def betai(a, b, x):
 def t_two_sided_p(t, df):
     """t분포의 양측 p값 = I_{df/(df+t²)}(df/2, 1/2)."""
     return betai(df / 2, 0.5, df / (df + t * t))
+
+
+def chi2_sf(x: float, df: float) -> float:
+    """[SPECIFICATION] plans/phase-12.md#chi2_sf
+    카이제곱 분포(자유도 df)의 위쪽 꼬리 확률 P(X ≥ x) = 정규화 위 불완전 감마 Q(df/2, x/2)."""
+    if df <= 0:
+        raise ValueError("자유도는 0보다 커야 해요.")
+    if x <= 0:
+        return 1.0
+    a, y = df / 2, x / 2
+    front = math.exp(-y + a * math.log(y) - math.lgamma(a))
+    if y < a + 1:
+        term = s = 1 / a
+        for n in range(1, GAMMA_ITERS):
+            term *= y / (a + n)
+            s += term
+            if abs(term) < abs(s) * GAMMA_EPS:
+                break
+        value = 1 - front * s
+    else:
+        b = y + 1 - a
+        c = 1 / LENTZ_TINY
+        d = 1 / lentz(b)
+        h = d
+        for i in range(1, GAMMA_ITERS):
+            an = -i * (i - a)
+            b += 2
+            d = 1 / lentz(an * d + b)
+            c = lentz(b + an / c)
+            step = d * c
+            h *= step
+            if abs(step - 1) < GAMMA_EPS:
+                break
+        value = front * h
+    return min(1.0, max(0.0, value))
+
+
+def f_sf(f: float, d1: float, d2: float) -> float:
+    """[SPECIFICATION] plans/phase-12.md#f_sf
+    F 분포(자유도 d1, d2)의 위쪽 꼬리 확률 P(F ≥ f) = I_{d2/(d2+d1·f)}(d2/2, d1/2)."""
+    if min(d1, d2) <= 0:
+        raise ValueError("자유도는 0보다 커야 해요.")
+    if f <= 0:
+        return 1.0
+    return betai(d2 / 2, d1 / 2, d2 / (d2 + d1 * f))
 
 
 def t_crit(alpha, df):

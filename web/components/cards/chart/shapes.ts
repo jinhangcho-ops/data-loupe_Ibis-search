@@ -4,6 +4,8 @@
 export const ROUND_TYPES = ["doughnut", "pie", "radial", "polar"];
 /** 첫 계열 하나로 그리는 차트(Charts.OneSeries) */
 export const FIRST_ONLY = ["waterfall", "pareto", "trendline", "lollipop"];
+/** 가로로 눕힌 막대류(값 축이 가로) */
+export const HBARS = ["hbar", "hstack", "hstack100", "butterfly"];
 /** 앞 두 계열로 그리는 차트(나비형: 왼쪽·오른쪽, 범위 막대: 아래·위) */
 export const PAIR_ONLY = ["butterfly", "range"];
 

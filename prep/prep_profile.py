@@ -8,7 +8,7 @@ from prep.prep_expr import type_text
 from core.prep_ops import date_pattern, is_number, nan_to_null, stats
 
 # 빈 값을 뜻하는 글자로 흔한 것. ""는 blank로 센다.
-MARKERS = ["", "-", "N/A", "n/a", "NA", "null", "NULL", "None", "없음", "?"]
+MARKERS = ["", "-", "N/A", "n/a", "NA", "null", "NULL", "None", "없음", "?", "none", "undefined", "미입력", "알수없음"]
 # 기호·숫자·단위 순서의 글자(₩1,200, 1,200원, 45%, 3 kg). 이런 모양일 때만 글자를 지우고 숫자로 바꾸라고 추천한다(a1b2 같은 코드는 아니다).
 UNIT_SHAPE = r"^[^0-9A-Za-z가-힣]{0,3}[0-9][0-9,]*(\.[0-9]+)?\s*[^0-9]{0,5}$"
 DATE_FORMATS = [("%Y%m%d", "YYYYMMDD"), ("%Y-%m-%d %H:%M:%S", "YYYY-MM-DD HH:MM:SS"), ("%Y-%m-%d", "YYYY-MM-DD")]  # 앞의 것이 우선
@@ -16,12 +16,14 @@ SHAPE_KEYS = [f"date{j}" for j in range(len(DATE_FORMATS))] + ["num", "int", "cl
 # 우선순위 순서의 묶음. 묶음의 첫 모양이 맞아야 그 추천이 나온다(뒤의 것은 정수인지를 가른다).
 SHAPE_GROUPS = [*([f"date{j}"] for j in range(len(DATE_FORMATS))), ["num", "int"], ["clean_num", "clean_int"]]
 FEW_NULLS = 0.05  # 빈 값이 이 비율보다 적으면 그 행을 빼라고 추천한다.
+QUARTILES = [0.25, 0.75]  # 가중 사분위수(층화 표본)
+COUNT_KEYS = ("rows", "nulls", "blank", "spaces", "numeric", "mark", "out")  # 가중이면 반올림해 정수로 두는 개수 값
 IQR_K = 1.5  # 품질 점검: 사분위 범위(IQR)의 이 배수보다 바깥이면 튀는 값으로 센다(outlier op의 iqr 기본과 같다)
 
 
-def count(cond):
-    """참인 행의 수를 세는 집계 식."""
-    return cond.sum()
+def count(cond, w=None):
+    """참인 행의 수를 세는 집계 식. w(가중치 식)를 주면 가중치 합."""
+    return cond.sum() if w is None else cond.ifelse(w, 0).sum()
 
 
 def shape(t, rows):
@@ -29,12 +31,12 @@ def shape(t, rows):
     return {"rows": rows, "columns": [{"name": name, "type": type_text(dtype), "kind": parse.kind(dtype)} for name, dtype in t.schema().items()]}
 
 
-def text_metrics(col, i):
+def text_metrics(col, i, w=None):
     """문자 컬럼의 통계 식(글자 수는 따로)."""
     stripped = col.strip()
-    metrics = {f"blank{i}": count(col == ""), f"spaces{i}": count(col != stripped), f"numeric{i}": count(is_number(stripped, "float")),
+    metrics = {f"blank{i}": count(col == "", w), f"spaces{i}": count(col != stripped, w), f"numeric{i}": count(is_number(stripped, "float"), w),
                f"lower{i}": col.lower().nunique(where=col.notnull())}
-    metrics.update({f"mark{j}_{i}": count(col == m) for j, m in enumerate(MARKERS) if m})
+    metrics.update({f"mark{j}_{i}": count(col == m, w) for j, m in enumerate(MARKERS) if m})
     return metrics
 
 
@@ -49,13 +51,14 @@ def money(name):
     return any(hint in str(name).lower() for hint in metric_catalog.COLS["amount"][3])
 
 
-def checks(info, found, outside, i, rows):
+def checks(info, found, outside, i, rows, k=IQR_K):
     """컬럼 하나의 품질 점검 줄들(표본 기준): 키 후보(서로 다른 값 수 = 행 수), IQR 밖 값 수(숫자), 처음~마지막 날 사이에 값이 없는 날 수(날짜)."""
     out = []
     if rows > 1 and not info["nulls"] and info["unique"] == rows:
         out.append(f"서로 다른 값 수가 행 수({rows:,})와 같아 키 후보예요(표본 기준).")
-    if outside.get(f"out{i}"):
-        out.append(f"IQR(사분위 범위)의 {IQR_K:g}배 밖 값이 {outside[f'out{i}']:,}개예요(표본 기준).")
+    lo, hi = outside.get(f"outlo{i}") or 0, outside.get(f"outhi{i}") or 0
+    if lo + hi:
+        out.append(f"IQR(사분위 범위)의 {k:g}배 밖 값이 {lo + hi:,}개({(lo + hi) / rows:.1%}: 아래 {lo:,} · 위 {hi:,})예요(표본 기준).")
     if found.get(f"days{i}") and (gap := (found[f"dlast{i}"] - found[f"dfirst{i}"]).days + 1 - found[f"days{i}"]) > 0:
         out.append(f"{found[f'dfirst{i}']}~{found[f'dlast{i}']} 사이에 값이 없는 날이 {gap:,}일이에요(표본 기준).")
     return out
@@ -90,31 +93,42 @@ def suggestions(info, found, i, rows):
     return out
 
 
-def profile(t):
+def profile(t, weight=None, iqr_k=IQR_K):
     """행 수와 컬럼별 통계, 모양 검사가 필요 없는 추천을 집계 조회 한 번으로 구한다(숫자 컬럼이 있으면 IQR 밖 값 수를 한 번 더). unique는 빈 값을 뺀 서로 다른 값 수다.
     min·max는 숫자·날짜·시간 컬럼만(나머지는 null), 글자 수·blank·spaces·numeric은 문자 컬럼에만 있다. checks는 품질 점검 줄들(checks).
-    t는 표본을 이 PC에서 계산하는 표(DuckDB)라 length()가 글자 수를 센다."""
-    kinds = {name: parse.kind(dtype) for name, dtype in t.schema().items()}
+    t는 표본을 이 PC에서 계산하는 표(DuckDB)라 length()가 글자 수를 센다.
+    weight(가중치 컬럼 이름, 층화 표본)를 주면 그 컬럼과 층 번호 컬럼은 빼고, 개수·행 수는 가중치 합(반올림), 사분위수는 sampling.weighted_quantiles.
+    iqr_k: IQR 밖으로 볼 배수(진단 기준 iqr_k)."""
+    from core import sampling
+    kinds = {name: parse.kind(dtype) for name, dtype in t.schema().items() if weight is None or name not in sampling.HELPERS}
     texts = {i: name for i, (name, kind) in enumerate(kinds.items()) if kind == "string"}
-    metrics = {"rows": t.count()}
+    w = None if weight is None else t[weight]
+    metrics = {"rows": t.count() if w is None else w.sum()}
     for i, (name, kind) in enumerate(kinds.items()):
         col = nan_to_null(t[name])  # 실수의 NaN·무한은 빈 값으로(빈 값 수에 들고 min·max가 NaN·inf가 되지 않게, inf를 고유 값으로 세지 않게)
-        metrics.update({f"nulls{i}": count(col.isnull()), f"unique{i}": col.nunique(where=col.notnull())})
+        metrics.update({f"nulls{i}": count(col.isnull(), w), f"unique{i}": col.nunique(where=col.notnull())})
         if kind in ("int", "float", "date", "time"):
             metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})
-        if kind in ("int", "float"):
+        if kind in ("int", "float") and w is None:
             metrics.update({f"q1{i}": col.quantile(0.25), f"q3{i}": col.quantile(0.75)})
         if kind == "date":
             day = col.cast("date")
             metrics.update({f"dfirst{i}": day.min(), f"dlast{i}": day.max(), f"days{i}": day.nunique()})
         if kind == "string":
-            metrics.update(text_metrics(col, i))
+            metrics.update(text_metrics(col, i, w))
     metrics.update(length_metrics(t, texts))
     found = stats(t, **metrics)
+    if w is not None:
+        for i, (name, kind) in enumerate(kinds.items()):
+            if kind in ("int", "float"):
+                found[f"q1{i}"], found[f"q3{i}"] = sampling.weighted_quantiles(t, name, QUARTILES, weight)
     quartiles = {i: (float(found[f"q1{i}"]), float(found[f"q3{i}"])) for i in range(len(kinds)) if found.get(f"q1{i}") is not None}  # 소수(Decimal) 컬럼도 실수로
-    fences = {i: (q1 - IQR_K * (q3 - q1), q3 + IQR_K * (q3 - q1)) for i, (q1, q3) in quartiles.items()}
+    fences = {i: (q1 - iqr_k * (q3 - q1), q3 + iqr_k * (q3 - q1)) for i, (q1, q3) in quartiles.items()}
     names = list(kinds)
-    outside = stats(t, **{f"out{i}": count(~nan_to_null(t[names[i]]).between(lo, hi)) for i, (lo, hi) in fences.items()}) if fences else {}
+    outside = stats(t, **{key: count(cond, w) for i, (lo, hi) in fences.items() for key, cond in
+                          ((f"outlo{i}", nan_to_null(t[names[i]]) < lo), (f"outhi{i}", nan_to_null(t[names[i]]) > hi))}) if fences else {}
+    if w is not None:
+        found, outside = ({key: round(v) if v is not None and key.startswith(COUNT_KEYS) else v for key, v in got.items()} for got in (found, outside))
     columns = []
     for i, (name, kind) in enumerate(kinds.items()):
         info = {"name": name, "type": type_text(t[name].type()), "kind": kind, "nulls": found[f"nulls{i}"] or 0, "unique": found[f"unique{i}"],
@@ -122,7 +136,7 @@ def profile(t):
         if kind == "string":
             info.update({key: found[f"{key}{i}"] or 0 for key in ("blank", "spaces", "numeric")})
             info.update({key: found[f"{key}{i}"] for key in ("min_len", "max_len")})
-        columns.append({**info, "suggest": suggestions(info, found, i, found["rows"]), "checks": checks(info, found, outside, i, found["rows"])})
+        columns.append({**info, "suggest": suggestions(info, found, i, found["rows"]), "checks": checks(info, found, outside, i, found["rows"], iqr_k)})
     return {"rows": found["rows"], "columns": columns}
 
 

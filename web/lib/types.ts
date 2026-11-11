@@ -1,3 +1,6 @@
+import type { AutoRule, AutoTable, AutoView, AxisScale, Order, Scale, SemanticWords } from "@/lib/autoviz";
+import type { GroupView } from "@/lib/groups";
+
 // Flask API가 주고받는 JSON 모양(core/dash_store.py의 check_* 와 dashboard/dash_app.py가 돌려주는 것 그대로). 이름은 서버 키를 바꾸지 않는다.
 
 /** 12칸 격자의 자리(dash_store.check_layout): x 0~11, y 0~999, w·h 2~12, x + w ≤ 12 */
@@ -67,13 +70,24 @@ export type CardView = {
   bands?: number[];                   // 불릿 구간 경계
   fit?: "fill" | "center";            // KPI 큰 값: 칸을 꽉 채우기 | 가운데(기본)
   layout?: "below" | "right";         // KPI 추이선 자리: 값 아래(기본) | 오른쪽
+  funnel_shape?: "flow" | "ladder";   // 퍼널 그림: 흐름(기본) | 사다리꼴
+  ladder_scale?: boolean;             // 사다리꼴 폭을 인원에 비례
+  gap_stats?: ("mean" | "median" | "trimmed")[];  // 걸린 시간 표에 보일 값
+  flow_unlimited?: boolean;           // 생키 자동 흐름: 칸·띠 상한 없음
+  flow_dropout?: boolean;             // 생키 자동 흐름: 이탈 칸(없으면 끝 값을 골랐는지로)
+  auto?: AutoView;                    // 자동 규칙(Phase 9): 키 없음 = 기본 켬, false = 끔, 객체 = 수치
+  scale?: AxisScale;                  // 값 축 눈금: log | symlog(없으면 보통)
+  all_data?: boolean;                 // 모든 데이터: 자동 규칙이 덜어 낸 것을 풀어 그림
+  data_table?: boolean;               // 차트 아래 표로 보기
+  groups?: GroupView;                 // 표시할 그룹 고르기(Phase 4, lib/groups.applyGroups)
+  cloud?: { mode: "values" | "labels" | "words"; tags?: string[]; rows?: "all" | "tagged"; match?: "any" | "all"; text?: string; pos?: ("noun" | "verb" | "adj" | "foreign")[]; stop?: string[]; min_len?: number };  // 워드클라우드 방식(Phase 4)
   [more: string]: unknown;  // stale·entity·time_col·kind_col·link_col·group_cols·formats·total 등(check_more)
 };
 
 /** 다시 구할 기록(check_source). body는 쿼리 화면의 조회 body 그대로 */
 export type CardSource = {
   key?: string; label?: string; schema?: string; table?: string; metric_id?: string; flow_id?: string; date?: string;
-  body?: Record<string, unknown> & { periods?: string[]; series?: { y?: string; agg?: string }[] };
+  body?: Record<string, unknown> & { periods?: string[]; series?: { y?: string; agg?: string }[]; order?: Order };
   recipe?: Record<string, unknown>; analysis?: Record<string, unknown>; full?: unknown; sample?: unknown;
 };
 
@@ -85,14 +99,15 @@ export type UnitSection = { labels: string[]; series: { name: string; values: (n
 export type CardData = {
   computed_at?: string; def_hash?: string; note?: string; x?: string; columns?: string[];
   by_unit?: { day?: { labels: string[]; series: DaySeries[] } } & Partial<Record<Unit, UnitSection>>;
-  values?: Record<string, unknown> & { kind?: string; labels?: string[]; series?: { name: string; values: (number | string | null)[] }[] };
+  values?: Record<string, unknown> & { kind?: string; labels?: string[]; series?: { name: string; values: (number | string | null)[] }[]; merged?: boolean };
   points?: ChartPoints; x_kind?: string; num_cols?: string[]; date_cols?: string[]; text?: string; sentences?: unknown[];
   target?: unknown; pair?: unknown; since?: string; window?: { start?: string; end?: string };
-  bins?: { edges: number[]; counts: number[] };  // histogram(P14)
+  bins?: { edges: number[]; counts: number[]; under?: number; over?: number; clip?: [number, number] | null };  // histogram(P14)
+  x_scale?: Scale; x_levels?: string[];  // 순서형 정보(Phase 5가 채움)
 };
 /** 새 카드(P14, 서버 dash_calc)의 data.values 모양: 종류마다 쓰는 칸만 있다(histogram은 data.bins) */
 export type MoreValues = {
-  groups?: { name: string; n?: number; min: number; q1: number; med: number; q3: number; max: number; outliers?: number[]; outlier_count?: number }[];  // boxplot(min·max는 1.5 IQR 수염 끝)
+  groups?: { name: string; n?: number; min: number; q1: number; med: number; q3: number; max: number; outliers?: number[]; outlier_count?: number; p01?: number | null; p99?: number | null; below?: number; above?: number }[];  // boxplot(min·max는 1.5 IQR 수염 끝)
   rows?: string[]; cols?: string[]; cells?: (number | null)[][];                         // heatmap
   days?: { d: string; v: number | null }[];                                             // calheat
   items?: TreeItem[];                                                                   // treemap·sunburst
@@ -134,7 +149,10 @@ export type EveryParse = { seconds: number | null; error: string | null };
 
 // ---------- 값 구하기 ----------
 export type ComputeResult = { id: string; data?: CardData; error?: string };
-export type ChartPoints = Record<string, unknown> & { groups: string[]; y: string };
+export type ChartPoints = Record<string, unknown> & {
+  groups: string[]; y: string;
+  hex?: { cols: number; x: [number, number] | null; y: [number, number] | null; cells: [number, number, number][] };
+};
 
 // ---------- 최신화·실시간 ----------
 export type RefreshResult = { dashboard: string; card: string; title: string; state: "ok" | "failed" | "skipped"; message: string };
@@ -163,8 +181,9 @@ export type Constants = {
   fiscal_start_month?: number;   // 설정: 회계연도 첫 달 1~12(없으면 1)
   features: { on: string[]; version: string | null; all: { id: string; name: string; path: string }[] };
   dash: {
-    max_cards: number; max_dashboards: number; max_palette: number; types: Partial<Record<Exclude<ChartType, "">, string>>; time_types: ChartType[]; max_bins?: number; max_bands?: number;
+    max_cards: number; max_dashboards: number; max_palette: number; types: Partial<Record<Exclude<ChartType, "">, string>>; time_types: ChartType[]; max_bins?: number; max_bands?: number; server_merge?: string[];
     units: Record<Unit, string>; palette: string[]; locked: string; min_refresh: number; max_points: number; aggs: string[]; merge: string[]; agg_names: Record<string, string>;
+    auto: AutoTable; auto_names: Record<AutoRule, string>; viz: { words: SemanticWords; query_auto: AutoView }; orders: Order[]; order_names: Record<Order, string>;
   };
   [more: string]: unknown;
 };
