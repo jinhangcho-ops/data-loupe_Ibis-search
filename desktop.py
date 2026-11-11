@@ -30,9 +30,12 @@ if sys.argv[1:2] == ["--move-tasks"]:  # 설치 프로그램이 끝날 때 부�
 
 if sys.argv[1:2] == ["--run"]:
     import lazy  # noqa: F401  데이터 라이브러리를 처음 쓸 때 올린다(다른 프로젝트 모듈보다 먼저).
+    from core import labels
     from integrations import schedule
 
-    sys.exit(schedule.run_alone(sys.argv[2] if len(sys.argv) > 2 else ""))
+    code = schedule.run_alone(sys.argv[2] if len(sys.argv) > 2 else "")
+    labels.compact_all()  # 태그 기록을 본 파일에 합친다(실패하면 그대로 알리고, 기록은 남아 데이터를 잃지 않는다)
+    sys.exit(code)
 
 import threading
 
@@ -130,4 +133,7 @@ if hasattr(lazy.loaded("collect.collect_job"), "stop"):  # 반쯤 올라온 모�
 if hasattr(lazy.loaded("collect.collect_browser"), "stop_child"):
     lazy.loaded("collect.collect_browser").stop_child()  # 수집용 창 프로세스를 끝낸다(남아 있어도 메인과의 연결이 끊기면 스스로 끝난다).
 server.release_connection()  # 열어 둔 연결을 닫아 파일을 놓고 임시 폴더를 지운다(도는 쿼리가 있으면 취소하고 5초까지만 기다린다).
+from core import labels  # noqa: E402  끌 때만 쓴다
+
+labels.compact_all()  # 태그 기록을 본 파일에 합친다(실패하면 그대로 알리고, 기록은 남아 데이터를 잃지 않는다)
 filelock.let_go(APP_LOCK)

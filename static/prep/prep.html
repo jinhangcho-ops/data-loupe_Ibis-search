@@ -52,9 +52,9 @@
   #spec-view tbody tr.on { background:var(--accent-bg); }
   #spec-view td.cname { font-weight:600; font-size:13px; width:160px; }
   #spec-view td.sugs { width:260px; }
-  #pca-cols { max-height:200px; overflow:auto; display:flex; flex-direction:column; gap:4px; }
-  #pca-cols label { display:flex; align-items:center; gap:8px; }
-  #pca-cols input { width:auto; margin:0; }
+  #pca-cols, #km-cols { max-height:200px; overflow:auto; display:flex; flex-direction:column; gap:4px; }
+  #pca-cols label, #km-cols label { display:flex; align-items:center; gap:8px; }
+  #pca-cols input, #km-cols input { width:auto; margin:0; }
   /* 분석: 오른쪽 패널에서 고르고 가운데에 그래프와 표. 그래프는 높이 440px 기준으로 비율(--ratio)만큼 넓어진다. */
   .seg2.seg4 { flex-wrap:wrap; border-radius:18px; }
   .seg2.seg4 label { padding:6px 2px; font-size:13px; flex:1 1 30%; }
@@ -115,9 +115,17 @@
       <div class="hint"><span id="counts"></span> <span id="stale" class="warn"></span></div>
     </section>
     <section class="pane hidden" id="p-spec">
-      <div class="head"><span class="hint" id="sampled" style="margin:0"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계와 추천을 다시 구해요">다시 구하기</button><button id="full-stats" class="ghost hidden" title="표본 대신 테이블 전체로 빈칸·값 종류·최솟값·최댓값을 구해 표본과 비교해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="컬럼 요약을 테이블 전체로 구하기">전체로 구하기</button><button id="profile-export" class="ghost" title="연결의 모든 테이블의 컬럼 요약(이름·타입·빈 값 비율·고유값 수·최솟값·최댓값·예시 값 몇 개)을 파일 하나로 저장해요. 테이블이 많으면 오래 걸려요. 표본 크기는 지금 설정을 따르고, 행 데이터는 예시 값 몇 개 외에 넣지 않아요" aria-label="모든 테이블의 컬럼 요약을 파일로 저장">요약 파일로 저장</button><select id="export-format" title="요약 파일 형식. Excel은 테이블마다 시트 하나, CSV는 테이블 이름 컬럼을 넣은 표 하나" aria-label="요약 파일 형식"><option value="xlsx">Excel</option><option value="csv">CSV</option></select><label class="check" title="표본 대신 테이블 전체로 구해요. 큰 테이블은 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요"><input type="checkbox" id="export-full" aria-label="요약 파일을 테이블 전체 기준으로 구하기"> 전체 기준</label><span class="hint" id="export-msg" style="margin:0"></span><span style="flex:1"></span><button id="prune" class="btn hidden" title="표본에서 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾아요. 이미 읽은 표본만 쓰고 DB에는 다시 묻지 않아요">뺄 만한 컬럼 찾기</button><button id="sug-all" class="hidden" title="모든 컬럼의 추천을 정리 방법에 한 번에 넣어요">추천 모두 적용</button></div>
+      <div class="head"><span class="hint" id="sampled" style="margin:0"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계와 추천을 다시 구해요">다시 구하기</button><button id="full-stats" class="ghost hidden" title="표본 대신 테이블 전체로 빈칸·값 종류·최솟값·최댓값을 구해 표본과 비교해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="컬럼 요약을 테이블 전체로 구하기">전체로 구하기</button><button id="diag-opts" class="ghost" title="진단 기준(이상치 배수, 더미 값, 기본값 날짜, 빈 값 표시, 순서 척도 등)을 바꿔요. 바꾸면 같은 표본으로 다시 구해요">진단 기준</button><button id="profile-export" class="ghost" title="연결의 모든 테이블의 컬럼 요약(이름·타입·빈 값 비율·고유값 수·최솟값·최댓값·예시 값 몇 개)을 파일 하나로 저장해요. 테이블이 많으면 오래 걸려요. 표본 크기는 지금 설정을 따르고, 행 데이터는 예시 값 몇 개 외에 넣지 않아요" aria-label="모든 테이블의 컬럼 요약을 파일로 저장">요약 파일로 저장</button><select id="export-format" title="요약 파일 형식. Excel은 테이블마다 시트 하나, CSV는 테이블 이름 컬럼을 넣은 표 하나" aria-label="요약 파일 형식"><option value="xlsx">Excel</option><option value="csv">CSV</option></select><label class="check" title="표본 대신 테이블 전체로 구해요. 큰 테이블은 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요"><input type="checkbox" id="export-full" aria-label="요약 파일을 테이블 전체 기준으로 구하기"> 전체 기준</label><span class="hint" id="export-msg" style="margin:0"></span><span style="flex:1"></span><button id="prune" class="btn hidden" title="표본에서 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾아요. 이미 읽은 표본만 쓰고 DB에는 다시 묻지 않아요">뺄 만한 컬럼 찾기</button><button id="sug-all" class="hidden" title="모든 컬럼의 추천을 정리 방법에 한 번에 넣어요">추천 모두 적용</button></div>
+      <div class="pop hidden" id="diag-pop"><div id="diag-form"></div><div class="row"><button id="diag-save" class="btn p">저장</button><button id="diag-reset" class="btn">기본값으로</button></div><div class="err" id="diag-err"></div></div>
       <div class="hint" id="prune-box"></div>
       <div class="hint" id="prof-extra"></div>
+      <div id="diag-box" class="hidden">
+        <h4 class="a-sec">백분위수</h4><div class="table-wrap" id="diag-pct"></div>
+        <div class="row"><button id="qi-find" class="btn" title="표본에서 2~3개를 묶으면 값이 겹치지 않는 컬럼 조합을 찾아요. 이 PC에서만 계산하고 DB에는 묻지 않아요">조합 키 찾기</button></div><div id="qi-list"></div>
+        <div class="sec">키 중복</div><div class="cols" id="dk-cols"></div><div class="row"><button id="dk-run" class="btn" title="고른 컬럼 기준으로 테이블 전체의 중복 묶음·중복 횟수 분포를 세요. 테이블 전체를 키 컬럼만 4번 읽어요">키 중복 보기</button><button id="dk-all" class="btn" title="모든 컬럼 값이 같은 행을 테이블 전체에서 세요. 테이블 전체를 4번 읽어요">전체 중복 행 세기</button></div><div class="hint" id="dk-out"></div>
+        <div class="sec">빈 시간 구간</div><div class="row"><select id="gap-col" aria-label="날짜 컬럼"></select><select id="gap-unit" aria-label="단위"><option value="day">일</option><option value="hour">시간</option></select><button id="gap-run" class="btn" title="처음~마지막 사이에서 값이 하나도 없는 날·시간을 테이블 전체에서 찾아요. 그 컬럼을 2번 읽어요">빈 구간 찾기</button></div><div class="hint" id="gap-out"></div>
+        <div class="sec">참조 무결성</div><div class="row"><select id="ri-dim" aria-label="차원 테이블"></select></div><div id="ri-pairs"></div><div class="row"><button id="ri-add" class="ghost" aria-label="키 쌍 더하기">+ 키</button><button id="ri-run" class="btn" title="이 테이블의 키가 고른 차원 테이블에 없는 비율을 테이블 전체로 구해요. 이 테이블 키 컬럼을 4번, 차원 테이블 키 컬럼을 2번 읽어요">참조 무결성 확인</button></div><div class="hint" id="ri-out"></div>
+      </div>
       <div id="spec-view"></div>
       <div class="row" style="margin-top:16px; max-width:720px; align-items:center" title="테이블과 컬럼 설명, 파티션 키를 적은 파일(JSON·YAML)이에요. 이 설명은 [질문으로 SQL 만들기]에서도 써요. 칸을 비우고 [불러오기]를 누르면 명세서를 쓰지 않아요"><span class="hint" style="margin:0; flex:none">명세서 파일</span><input id="spec-path" class="code" placeholder="JSON 또는 YAML 파일 경로(없어도 돼요)"><button id="spec-read" class="btn">불러오기</button></div>
       <div class="hint" id="spec-info"></div>
@@ -135,8 +143,16 @@
             <div class="row hidden" id="handed-line" style="align-items:center"><span class="hint" id="handed-text" style="margin:0; flex:1; min-width:0"></span><button id="handed-back" class="btn">쿼리로 돌아가기</button></div>
             <select id="schema" class="hidden" style="margin-bottom:6px"></select>
             <select id="base"></select>
+            <label class="check" title="쿼리 화면에서 켠 태그를 붙여 `태그` 컬럼을 만들어요"><input type="checkbox" id="lb-on"> 태그 붙이기</label>
+            <div id="lb-body" class="hidden">
+              <select id="lb-mode" aria-label="태그로 행 거르기"><option value="">모든 행</option><option value="none">태그 없는 행</option><option value="any">고른 태그 중 하나라도</option><option value="all">고른 태그 모두</option></select>
+              <div class="cols hidden" id="lb-tags"></div>
+            </div>
+            <div class="hint" id="lb-note"></div>
             <div class="row" style="margin-top:8px; align-items:center" title="가장 가벼운 방법부터 시도해 읽고, 구한 통계는 테이블마다 저장해 둬요"><span class="hint" style="margin:0; flex:none">미리 읽을 행 수</span><input id="sample" type="number" aria-label="미리 읽을 행 수" style="width:120px; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
             <div class="hint">테이블 전체 대신 이만큼만 읽어서 통계, 추천, 분석에 써요.</div>
+            <div class="row" style="margin-top:4px; align-items:center"><select id="sample-way" aria-label="표본 방식" style="flex:none"><option value="strata" title="값 크기로 층을 나눠 층마다 다시 뽑고, 가중치로 바로잡아요. 표 전체를 읽는 단계는 요금이 나는 DB에서 먼저 물어요">층화(Neyman, 기본)</option><option value="block" title="블록(못 하면 행 단위)으로 뽑아요">블록(못 하면 행 단위)</option><option value="key" title="키의 행을 통째로 뽑아요. 키가 빈 행은 빠져요. 표 전체를 읽는 단계는 요금이 나는 DB에서 먼저 물어요">키 단위</option></select><select id="sample-col" aria-label="표본 기준 컬럼"></select></div>
+            <div class="hint">미리 읽을 행 수는 상한이에요. 필요한 행 수는 파일럿으로 정해요.</div>
             <label class="check" title="끄면 테이블을 골라도 데이터를 읽지 않고 컬럼 이름과 타입만 보여요. 행 수도 세지 않고 추천도 나오지 않아요. 분석 탭은 그대로 표본을 읽어요"><input type="checkbox" id="stats-on"> 컬럼 통계와 추천 보기</label>
             <div class="row" id="scope-row" style="margin-top:4px; align-items:center" title="통계를 표본으로 빠르게 구할지, 테이블 전체로 정확하게 구할지 골라요. 전체는 큰 테이블에서 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요. 전체로 구하면 추천은 나오지 않아요"><span class="hint" style="margin:0; flex:none">통계 범위</span><label class="check"><input type="radio" name="stats-scope" id="scope-sample"> <span id="scope-sample-text">표본</span></label><label class="check"><input type="radio" name="stats-scope" id="scope-all"> 전체</label></div>
             <div class="row" style="margin-top:8px; align-items:center" title="주소로 연결한 DB에서만 써요. 이 PC에서 계산하면 DB에는 행 거르기까지 한 번만 묻고, 받은 결과로 통계와 전처리, 저장을 이 PC가 계산해요. 테이블이 크면 받는 데 오래 걸리고 디스크 공간을 써요"><span class="hint" style="margin:0; flex:none">계산 위치</span><select id="prep-where" aria-label="계산 위치" style="flex:1; min-width:0"><option value="all" title="전처리 전체를 이 PC에서 계산해요">전부 이 PC</option><option value="new" title="계산 컬럼과 PCA만 이 PC에서 계산해요">계산 컬럼만 이 PC</option></select></div>
@@ -177,6 +193,11 @@
             <div class="cols" id="pca-cols"></div>
             <div class="row" style="align-items:center"><span class="hint" style="margin:0; flex:none">성분 수</span><input id="pca-n" type="number" min="1" value="2" style="width:70px; flex:none"><button id="pca-clear" class="ghost">선택 해제</button></div>
             <div class="hint" id="pca-info"></div>
+            <div class="sec">K-Means(군집 번호)</div>
+            <div class="hint">고른 숫자 컬럼을 표준화해 비슷한 행끼리 k개 군집으로 나누고 번호(0부터)를 새 컬럼으로 붙여요. 표를 군집마다 반복해 집계해요(최대 수십 번 읽어요).</div>
+            <div class="cols" id="km-cols"></div>
+            <div class="row" style="align-items:center"><span class="hint" style="margin:0; flex:none">군집 수</span><input id="km-k" type="number" style="width:70px; flex:none"><input id="km-name" placeholder="새 컬럼 이름" style="width:110px; flex:none"><button id="km-clear" class="ghost">선택 해제</button></div>
+            <div class="hint" id="km-info"></div>
             <div class="sec">좌표</div>
             <div class="hint">TM 좌표를 경도·위도로 바꾸거나, 가장 가까운 지점이나 속한 영역을 새 컬럼으로 붙여요. 계산은 이 PC에서 해요.</div>
             <div class="hint" id="geo-hints"></div>
@@ -192,8 +213,15 @@
             <div class="hint" title="고르지 않은 컬럼은 어느 행의 값이 남을지 정해지지 않아요">고른 컬럼의 값이 모두 같은 행은 하나만 남겨요.</div>
             <div class="row"><select id="dd-col" style="flex:1; min-width:0"></select><button id="dd-all" class="btn">모든 컬럼</button></div>
             <div class="chips open" id="dd-chips"></div>
+            <div class="hint">컬럼을 하나도 안 고르면 모든 컬럼이 기준이에요.</div>
+            <label class="check"><input type="checkbox" id="dd-loose"> 글자 다듬어 비교: 공백·문장부호·기호를 빼고 대소문자 무시</label>
+            <div class="hint">포함: 짧은 값이 긴 값 안에 통째로 있으면 중복(여러 개면 모두 같은 방향). 나머지 기준은 같아야 해요.</div>
+            <div class="row hidden" id="dd-limit-row" style="align-items:center"><label class="check" title="포함으로 비교할 서로 다른 값 조합이 이보다 많으면 계산하지 않아요"><input type="checkbox" id="dd-limit-on" checked> 상한</label><input id="dd-limit" type="number" min="1" step="1" aria-label="포함 비교 상한" style="width:120px; flex:none"></div>
             <div class="row" style="align-items:center"><select id="dd-keep" title="겹치는 행 중 무엇을 남길지 골라요. 직접 고르면 정렬 기준의 첫 행이나 마지막 행, 최소·최대·최빈값, 이어 붙이기를 쓸 수 있고, 값이 여러 개일 때 알려 주게 할 수도 있어요"><option value="">아무 행이나 하나 남기기</option><option value="pick">남길 값 직접 고르기</option></select><span id="dd-pick"></span></div>
-            <div class="row"><button id="dupes" class="btn" disabled>중복 세기</button><span class="hint" id="dd-result" style="align-self:center"></span></div>
+            <div class="row"><button id="dupes" class="btn">중복 찾기</button><span class="hint" id="dd-result" style="align-self:center"></span></div>
+            <div class="table-wrap" id="dd-examples"></div>
+            <div class="row"><button id="dd-apply" class="btn hidden">이 기준으로 지우기</button></div>
+            <div class="hint" id="dd-applied"></div>
           </div></div>
         <div class="cn"></div>
         <div class="step" data-step="sorts"><div class="sp"><i>6</i><span class="t">정렬</span><b id="sum-p-sorts"></b><span class="c"></span></div>
@@ -242,6 +270,14 @@
     <div class="tabs2 hidden" id="a-tabs"></div>
     <section class="pane" id="a-pane">
       <h4 class="a-sec" id="a-gh">그래프</h4>
+      <div class="tool hidden" id="a-tools">
+        <details class="axis-box"><summary class="hint" title="그래프를 그릴 때 알아서 하는 구간 수·꼬리 자르기·점 밀도·숫자 줄이기예요. 끈 것은 다음에도 기억해요">자동 규칙</summary><div id="a-auto"></div></details>
+        <label class="check" title="켜면 자동 규칙이 덜어 낸 것까지 모두 그려요"><input type="checkbox" id="a-all"> 모든 데이터</label>
+        <span style="flex:1"></span>
+        <select id="a-image" title="그림의 색 모드예요" style="flex:0 0 100px"><option value="light">밝게</option><option value="dark">어둡게</option></select>
+        <button data-aimage="png" class="btn">PNG</button><button data-aimage="jpeg" class="btn">JPG</button>
+        <label class="check" title="켜면 자동 규칙이 덜어 낸 것까지 담아 그림으로 저장해요"><input type="checkbox" id="a-export-all"> 모든 데이터 포함</label>
+      </div>
       <div class="chart-box hidden" id="a-box"><iframe id="a-chart" src="/chart" title="분석 그림"></iframe></div>
       <div class="hidden" id="a-funnel"></div>
       <div class="hint hidden" id="a-funnel-text"></div>
@@ -260,6 +296,7 @@
   <aside class="side">
     <header><h3>분석</h3></header>
     <div class="sc">
+      <div class="hint" id="hashed-note-a"></div>
       <label class="check" title="끄면 전처리 없이 원래 테이블을 분석해요"><input type="checkbox" id="a-prep" checked> 전처리한 결과로 분석</label>
       <div class="seg2 seg4" style="margin-top:10px">
         <label><input type="radio" name="akind" value="distribution" checked> 분포</label>
@@ -267,6 +304,16 @@
         <label><input type="radio" name="akind" value="groups"> 그룹 비교</label>
         <label><input type="radio" name="akind" value="trend"> 기간별 추이</label>
         <label><input type="radio" name="akind" value="funnel"> 퍼널</label>
+      </div>
+      <div class="seg2 seg4" style="margin-top:6px">
+        <label><input type="radio" name="akind" value="retention"> 리텐션</label>
+        <label><input type="radio" name="akind" value="rfm"> RFM</label>
+        <label><input type="radio" name="akind" value="pareto"> 파레토</label>
+        <label><input type="radio" name="akind" value="chisq"> 관계 검정</label>
+        <label><input type="radio" name="akind" value="abtest"> A/B 검정</label>
+        <label><input type="radio" name="akind" value="basket"> 장바구니</label>
+        <label><input type="radio" name="akind" value="decompose"> 변화 요인</label>
+        <label><input type="radio" name="akind" value="seasonal"> 시계열 분해</label>
       </div>
       <div class="a-form" data-kind="distribution">
         <div class="hint">컬럼</div><select id="a-col"></select>
@@ -302,6 +349,65 @@
         <div class="f-win" title="앞 단계부터 이 시간 안에 도달한 사람만 세요. 비우면 제한이 없어요"><input id="a-fwin" type="number" min="0" step="any" placeholder="제한 없음"><select id="a-funit"><option value="minute">분</option><option value="hour">시간</option><option value="day">일</option></select></div>
         <div class="hint" title="중간에 한 다른 행동과 되돌아간 행동은 무시하고, 같은 시각의 두 단계는 도달한 것으로 봐요">단계를 순서대로 거친 사람 수를 세요.</div>
       </div>
+      <div class="a-form hidden" data-kind="retention">
+        <div class="hint">사용자를 구분하는 컬럼</div><select id="a-rwho"></select>
+        <div class="hint">시각 컬럼(날짜)</div><select id="a-rtime"></select>
+        <div class="hint">코호트 단위</div><select id="a-runit"><option value="day">일</option><option value="week">주(설정한 주 시작 요일부터)</option><option value="month">월</option></select>
+        <div class="hint">경과 칸 수(비우면 기본값)</div><input id="a-rspan" type="number" step="1">
+        <div class="hint">처음 나타난 기간으로 사용자를 묶어, 이후 기간마다 다시 나타난 비율을 봐요. 테이블 전체로 구해요.</div>
+      </div>
+      <div class="a-form hidden" data-kind="rfm">
+        <div class="hint">사용자를 구분하는 컬럼</div><select id="a-mwho"></select>
+        <div class="hint">시각 컬럼(날짜)</div><select id="a-mtime"></select>
+        <div class="hint">금액 컬럼</div><select id="a-mamt"></select>
+        <div class="hint">기준일(비우면 자료의 마지막 날)</div><input id="a-masof" type="date">
+        <div class="hint">거래 키(빈도를 고유 거래 수로 셀 때)</div><select id="a-mtx"></select>
+        <div class="hint">최근·빈도·금액을 5단계로 나눠 사용자를 세그먼트로 묶어요. 테이블 전체로 구해요.</div>
+      </div>
+      <div class="a-form hidden" data-kind="pareto">
+        <div class="hint">항목 컬럼</div><select id="a-pitem"></select>
+        <div class="hint">값</div><select id="a-pagg"><option value="sum">합계</option><option value="count">행 수</option></select>
+        <div id="a-pvalbox"><div class="hint">값 컬럼</div><select id="a-pval"></select></div>
+        <div class="hint">A 경계(%, 비우면 기본값)</div><input id="a-pa" type="number" step="any">
+        <div class="hint">B 경계(%, 비우면 기본값)</div><input id="a-pb" type="number" step="any">
+        <div class="hint">값이 큰 항목부터 누적 비중으로 A·B·C 등급을 나눠요. 테이블 전체로 구해요.</div>
+      </div>
+      <div class="a-form hidden" data-kind="chisq">
+        <div class="hint">행 컬럼</div><select id="a-xrow"></select>
+        <div class="hint">열 컬럼</div><select id="a-xcol"></select>
+        <div class="hint">두 범주 컬럼이 서로 관계가 있는지 카이제곱 검정으로 봐요.</div>
+      </div>
+      <div class="a-form hidden" data-kind="abtest">
+        <div class="hint">그룹 컬럼</div><select id="a-bgroup"></select>
+        <div class="hint">지표</div><select id="a-bmetric"><option value="rate">비율</option><option value="mean">평균</option></select>
+        <div class="hint">값 컬럼</div><select id="a-bval"></select>
+        <div class="hint">대조군</div><select id="a-bctrl"></select>
+        <div class="hint">신뢰 수준(%, 비우면 설정값)</div><input id="a-bconf" type="number" step="any">
+      </div>
+      <div class="a-form hidden" data-kind="basket">
+        <div class="hint">거래 키</div><select id="a-kkey"></select>
+        <div class="hint">항목 컬럼</div><select id="a-kitem"></select>
+        <div class="hint">최소 지지도(%, 비우면 기본값)</div><input id="a-ksup" type="number" step="any">
+        <div class="hint">상위 쌍 수(비우면 기본값)</div><input id="a-ktop" type="number" step="1">
+        <div class="hint">같은 거래에 함께 들어간 항목 쌍을 향상도 순으로 보여요. 테이블 전체로 구해요.</div>
+      </div>
+      <div class="a-form hidden" data-kind="decompose">
+        <div class="hint">날짜 컬럼</div><select id="a-dtime"></select>
+        <div class="hint">기준 기간</div><div class="row"><input id="a-db0" type="date"><input id="a-db1" type="date"></div>
+        <div class="hint">비교 기간</div><div class="row"><input id="a-dc0" type="date"><input id="a-dc1" type="date"></div>
+        <div class="hint">그룹 컬럼</div><select id="a-dgroup"></select>
+        <div class="hint">값 컬럼(0·1 값이면 비율)</div><select id="a-dval"></select>
+        <div class="hint">두 기간 평균의 차이를 그룹 구성 변화와 그룹 안 변화로 나눠요. 테이블 전체로 구해요.</div>
+      </div>
+      <div class="a-form hidden" data-kind="seasonal">
+        <div class="hint">날짜 컬럼</div><select id="a-stime"></select>
+        <div class="hint">기간 단위</div><select id="a-sunit"><option value="day">일</option><option value="week">주(월요일부터)</option><option value="month">월</option></select>
+        <div class="hint">집계</div><div id="a-sagg"></div>
+        <div class="hint">계산할 컬럼</div><select id="a-sval"></select>
+        <div class="hint">이동평균 창(홀수, 비우면 기본값)</div><input id="a-swin" type="number" step="2">
+        <div class="hint">이상 시점 기준 배수(비우면 기본값)</div><input id="a-sk" type="number" step="any">
+        <div class="hint">추세·계절·나머지로 나누고, 나머지가 유난히 큰 기간을 표시해요. 테이블 전체로 구해요.</div>
+      </div>
     </div>
     <footer><button id="a-run" class="btn p" title="전처리 탭에서 정한 미리 읽을 행 수만큼 읽어 구해요">구하기</button></footer>
   </aside>
@@ -325,6 +431,9 @@ let edits = {};  // 컬럼(복사 포함) 이름 → { keep, rename, ops: { op �
 let copies = [];  // [{ from: 원래 컬럼, name: 복사 컬럼 이름 }]
 let filters = [];  // 행 거르기 조건 줄
 let dedupe = [];  // 중복 기준 (결과 컬럼 이름)
+let dedupeOn = null;  // [이 기준으로 지우기]로 확정한 중복 제거(recipe의 dedupe 키들). 없으면 지우지 않는다
+let dedupeFound = null;  // 마지막 [중복 찾기]의 후보(dedupeAsk). 묶음이 0개면 null
+let ddContain = [];  // 포함으로 볼 기준 컬럼 이름(dedupe의 문자 컬럼)
 let sorts = [];  // ["결과 컬럼 asc", ...]
 let drops = [];  // 끈 파생 컬럼 이름
 let first = null;  // 정보 탭의 앞 20행(/api/head, 표본의 앞부분). 미리보기 전에 보인다
@@ -332,15 +441,26 @@ let specView = null;  // /api/spec/table의 응답(지금 테이블). 명세서 
 let picked = "";  // ③ 컬럼 정리에서 고치는 컬럼(복사 컬럼 포함) 이름
 let formulas = [];  // 계산 컬럼 [{ name, expr }] (④ 새 컬럼)
 let pca = { columns: [], n: 2 };  // PCA에 넣을 숫자 컬럼과 성분 수 (④ 새 컬럼). 컬럼이 없으면 하지 않는다
+const noKmeans = () => ({ columns: [], k: SERVER.kmeans.k, name: SERVER.kmeans.name });
+let kmeans = noKmeans();  // K-Means에 넣을 숫자 컬럼, 군집 수, 새 컬럼 이름 (④ 새 컬럼). 컬럼이 없으면 하지 않는다
 let geoSteps = [];  // 좌표 단계 [{ op: tm | nearest | region, … }] (④ 새 컬럼). 서버가 이 PC에서 계산한다
 const EPSG_LIST = [[5179, "UTM-K (5179, 전국 한 장)"], [5186, "중부원점 2010 (5186)"], [5185, "서부원점 2010 (5185)"], [5187, "동부원점 2010 (5187)"], [5188, "동해원점 2010 (5188)"], [5174, "중부원점 Bessel (5174, 옛 자료)"], [5181, "중부원점 (5181)"]];  // geo/tm.py의 SYSTEMS와 같은 번호
 let deriv = [];  // 미리보기에서 알게 된 파생 컬럼 [{ name, source, type }]. 끈 것도 남긴다.
 let status = "";  // 통계를 구하는 단계: "stats"(통계 계산 중), "patterns"(타입 추천 확인 중), "stopped"(통계를 구하지 못함), "off"(통계를 끔), 끝났으면 ""
 let statsOn = saved("stats") !== "off";  // 테이블을 고를 때 표본을 읽어 통계·추천을 구할지(설정 stats)
 let statsAll = saved("stats_scope") === "all";  // 통계 범위: 표본(기본) / 테이블 전체(설정 stats_scope). 전체면 표본 통계를 건너뛴다
+const noLabels = () => ({ on: false, mode: "", tags: [] });
+let labelUse = noLabels();  // [태그 붙이기]: 켬 여부, 거르기(""=모든 행·none·any·all), 고른 태그. recipe의 labels가 된다
+let labelInfo = null;  // GET /api/labels의 응답. 아직 모르면 null
 let token = 0;  // 테이블·연결이 바뀔 때마다 올려, 늦게 온 이전 테이블의 응답을 버린다
+let diagRules = null;  // GET /api/profile/diag의 응답({options, rules, orphan_pairs}). 진단 기준 칸과 [+ 키]의 상한이 쓴다
+let riDim = { base: "", columns: [] };  // 참조 무결성에서 고른 차원 테이블과 그 컬럼 이름
 let sample = +saved("sample") || SERVER.sample;  // 통계를 낼 표본 행 수(prep_app.DEFAULT_SAMPLE, 범위는 settings.SIZES)
+let sampleWay = "strata", sampleCol = "";  // 표본 방식(sampling.how_of). 테이블마다 다르므로 저장하지 않고 테이블을 열 때 기본(층화·자동)으로
+const sampleHow = () => sampleWay === "strata" ? (sampleCol ? { way: "strata", column: sampleCol } : undefined) : sampleWay === "block" ? { way: "block" } : sampleCol ? { way: "key", column: sampleCol } : undefined;  // undefined = 기본
 let preview = null;  // /api/preview의 응답. 열 구성이 바뀌면 어긋나므로 버린다.
+let vsort = null;  // 데이터 탭의 서버 정렬 {column, dir}(결과 컬럼 이름). 없으면 원래 순서
+let sortedView = null;  // /api/prep/sorted의 응답. 정렬 중일 때 표가 preview 대신 이것을 그린다
 let shot = null;  // 미리보기를 누른 때의 설정(snap). 지금과 다르면 낡았다고 알린다.
 let draftBase = "";  // 테이블을 연 직후의 전처리 글(JSON). 임시 저장은 이것과 달라졌을 때만 한다. 비어 있으면 아직 여는 중
 let confirming = null;  // 새 테이블 만들기를 한 번 더 누르기를 기다리는 이름
@@ -360,9 +480,14 @@ const NUM = ["int", "float"];
 const isStr = c => c.kind === "string";
 const isNum = (c, ops) => NUM.includes(c.kind) || NUM.includes(ops.type?.to);
 const isDate = (c, ops) => c.kind === "date" || ops.type?.to === "date";
-const PARTS = [["year", "연"], ["month", "월"], ["day", "일"], ["weekday", "요일"], ["ym", "월 단위"], ["hour", "시"]];
-// "시"는 날짜시간 컬럼(원래 타입이 timestamp, 또는 타입 바꾸기의 형식에 %H)에서만 고를 수 있다.
+const PARTS = [["year", "연"], ["month", "월"], ["day", "일"], ["weekday", "요일"], ["ym", "월 단위"], ["hour", "시"],
+  ["weekday_num", "요일 번호"], ["weekday_name", "요일 이름"], ["is_weekend", "주말"], ["time_of_day", "시간대"], ["work_hours", "업무시간"], ["month_phase", "월초·중·말"], ["is_month_end", "월말 날"]];
+const CLOCK = ["hour", "time_of_day", "work_hours"];  // prep_ops.CLOCK_PARTS와 같다
+// CLOCK의 것은 날짜시간 컬럼(원래 타입이 timestamp, 또는 타입 바꾸기의 형식에 %H)에서만 고를 수 있다.
 const hasTime = (c, ops) => c.type.startsWith("timestamp") || (ops.type?.format ?? "").includes("%H");
+const numKind = (c, ops) => isNum(c, ops) ? "num" : "str";  // PrepMenu.value의 kind
+const pickCols = blank => [["", blank], ...prof.columns.map(x => [x.name, x.name])];  // 컬럼을 고르는 칸의 선택지(fill의 by와 같다)
+const CLOSED_OPTS = [["left", "[a, b) 왼쪽 포함"], ["right", "(a, b] 오른쪽 포함"]], LABEL_OPTS = [["range", "구간 글자"], ["mid", "구간 가운데 값"], ["index", "구간 번호"]];  // bins·cut 공용
 const OPS = {
   trim: { label: "앞뒤 공백 지우기", group: "글자", need: isStr, init: {}, value: () => true },
   squeeze: { label: "연속 공백을 하나로", group: "글자", need: isStr, init: {}, value: () => true },
@@ -395,6 +520,27 @@ const OPS = {
     value: (st, c) => ({ to: st.to, ...(isStr(c) && NUM.includes(st.to) ? { clean: st.clean } : {}), ...(st.to === "date" && st.format ? { format: st.format } : {}) }),
     load: v => ({ to: v.to, clean: v.clean ?? false, format: v.format ?? "" }) },
   flag: { label: "빈 값 표시 컬럼 만들기", group: "새 컬럼", init: {}, value: () => true },
+  flags: { label: "0·임계치·상위 % 같은 표시 컬럼 만들기", group: "새 컬럼", init: { zero: false, cmp_op: "", cmp: "", top: false, top_pct: "", above: "", low: "", high: "", isin: "", out_by: "", out_k: "" },
+    fields: (st, c, ops) => [
+      ...(isNum(c, ops) ? [{ name: "zero", check: "0이면 1" }] : []),
+      { name: "cmp_op", redraw: true, options: [["", "임계치 비교 안 함"], [">=", ">="], [">", ">"], ["<=", "<="], ["<", "<"], ["==", "=="], ["!=", "!="]] },
+      ...(st.cmp_op ? [{ name: "cmp", placeholder: "임계치 X" }] : []),
+      ...(isNum(c, ops) ? [{ name: "top", check: "상위 % 표시", redraw: true }] : []),
+      ...(isNum(c, ops) && st.top ? [{ name: "top_pct", placeholder: `상위 %들(비우면 ${SERVER.prep6.flag_top.join(", ")})` }] : []),
+      { name: "above", options: [["", "평균·중앙값 비교 안 함"], ["mean", "평균보다 크면"], ["median", "중앙값보다 크면"]] },
+      { name: "out_by", redraw: true, options: [["", "이상치 표시 안 함"], ["iqr", "사분위수(IQR)"], ["std", "Z-Score(σ)"], ["mad", "수정 Z-Score(MAD)"]] },
+      ...(st.out_by ? [{ name: "out_k", placeholder: "k (비우면 저장한 진단 기준의 배수)" }] : []),
+      { name: "low", placeholder: "범위 최소(A ≤ X)" }, { name: "high", placeholder: "범위 최대(X ≤ B)" }, { name: "isin", placeholder: "값 목록(쉼표로), 예: KR, US, JP" },
+    ],
+    value: (st, c, ops) => PrepMenu.value("flags", st, numKind(c, ops)),
+    load: v => ({ zero: !!v.zero, cmp_op: v.cmp?.[0] ?? "", cmp: String(v.cmp?.[1] ?? ""), top: !!v.top, top_pct: Array.isArray(v.top) ? v.top.join(", ") : "", above: v.above ?? "", low: String(v.between?.[0] ?? ""), high: String(v.between?.[1] ?? ""), isin: (v.isin ?? []).join(", "), out_by: v.outlier?.by ?? "", out_k: String(v.outlier?.k ?? "") }) },
+  gfill: { label: "그룹별 값으로 빈 값 채우기", group: "빈 값", init: { how: "mean", g1: "", g2: "", g3: "" },
+    fields: (st, c, ops) => [
+      { name: "how", options: [...(isNum(c, ops) ? [["mean", "그룹 평균으로"], ["median", "그룹 중앙값으로"]] : []), ["mode", "그룹 최빈값으로"]] },
+      { name: "g1", options: pickCols("묶을 컬럼 1") }, { name: "g2", options: pickCols("묶을 컬럼 2(선택)") }, { name: "g3", options: pickCols("묶을 컬럼 3(선택)") },
+    ],
+    value: (st, c, ops) => { if (!isNum(c, ops)) st.how = "mode"; return PrepMenu.value("gfill", st); },  // 글자 컬럼은 목록에 최빈값뿐이라 그것으로 맞춘다
+    load: v => ({ how: v.how, g1: v.group[0] ?? "", g2: v.group[1] ?? "", g3: v.group[2] ?? "" }) },
   fill: { label: "빈 값 처리", group: "빈 값", init: { how: "drop", value: "", by: "" },
     fields: (st, c, ops) => [
       { name: "how", redraw: true, options: [["drop", "그 행 빼기"], ["value", "정한 값으로"], ...(isNum(c, ops) ? [["mean", "평균으로"], ["median", "중앙값으로"]] : []), ["mode", "최빈값으로"],
@@ -404,36 +550,78 @@ const OPS = {
     ],
     value: (st, c, ops) => PrepMenu.value("fill", st, isNum(c, ops) ? "num" : "str"),  // 숫자 칸 읽기·평균·중앙값은 숫자만: 공용 규칙 한 벌
     load: v => ({ how: v.how, value: String(v.value ?? ""), by: v.by ?? "" }) },
-  outlier: { label: "범위 밖 값 처리", group: "숫자", need: isNum, init: { how: "drop", by: "range", low: "", high: "", k: "" },
+  outlier: { label: "범위 밖 값 처리", group: "숫자", need: isNum, init: { how: "drop", by: "range", low: "", high: "", k: "", p_low: "", p_high: "" },
     fields: st => [
       { name: "how", options: [["drop", "그 행 빼기"], ["clip", "범위로 잘라 내기"]] },
-      { name: "by", redraw: true, options: [["range", "직접 범위"], ["iqr", "사분위수(IQR)"], ["std", "표준편차"]] },
-      ...(st.by === "range" ? [{ name: "low", placeholder: "최소" }, { name: "high", placeholder: "최대" }] : [{ name: "k", placeholder: `k (비우면 ${st.by === "iqr" ? 1.5 : 3})` }]),
+      { name: "by", redraw: true, options: [["range", "직접 범위"], ["iqr", "사분위수(IQR)"], ["std", "표준편차"], ["pct", "백분위로(윈저라이징)"]] },
+      ...(st.by === "range" ? [{ name: "low", placeholder: "최소" }, { name: "high", placeholder: "최대" }]
+        : st.by === "pct" ? [{ name: "p_low", placeholder: `하위 %(비우면 ${SERVER.prep6.outlier_pct[0]})` }, { name: "p_high", placeholder: `상위 %(비우면 ${SERVER.prep6.outlier_pct[1]})` }]
+        : [{ name: "k", placeholder: `k (비우면 ${st.by === "iqr" ? 1.5 : 3})` }]),
     ],
     value: st => PrepMenu.value("outlier", st),
-    load: v => ({ how: v.how, by: v.by, low: String(v.low ?? ""), high: String(v.high ?? ""), k: String(v.k ?? "") }) },
+    load: v => ({ how: v.how, by: v.by, low: String(v.low ?? ""), high: String(v.high ?? ""), k: String(v.k ?? ""), p_low: String(v.p_low ?? ""), p_high: String(v.p_high ?? "") }) },
+  power: { label: "거듭제곱·Box-Cox·Yeo-Johnson", group: "숫자", need: isNum, init: { how: "boxcox", p: "", lambda: "" },
+    fields: st => [
+      { name: "how", redraw: true, options: [["boxcox", "Box-Cox(양수만)"], ["yeojohnson", "Yeo-Johnson"], ["power", "거듭제곱 x^p"]] },
+      st.how === "power" ? { name: "p", placeholder: "p (거듭제곱)" } : { name: "lambda", placeholder: "λ (비우면 자동으로 찾기)" },
+    ],
+    value: st => PrepMenu.value("power", st),
+    load: v => ({ how: v.how, p: String(v.p ?? ""), lambda: String(v.lambda ?? "") }) },
   scale: { label: "크기 맞추기(스케일링)", group: "숫자", need: isNum, init: { how: "standard" },
-    fields: () => [{ name: "how", options: [["standard", "표준화"], ["minmax", "0~1 사이로"], ["log", "로그 ln(1+x)"]] }],
+    fields: () => [{ name: "how", options: [["standard", "표준화"], ["minmax", "0~1 사이로"], ["minmax100", "0~100 사이로"], ["robust", "로버스트 (x−중앙값)/IQR"], ["log", "로그 ln(1+x)"], ["log10", "로그 log10(1+x)"]] }],
     value: st => st.how,
     load: v => ({ how: v }) },
   round: { label: "반올림", group: "숫자", need: isNum, init: { digits: "" },
     fields: () => [{ name: "digits", placeholder: "소수점 아래 자릿수(0 이상)" }],
     value: st => PrepMenu.value("round", st),
     load: v => ({ digits: String(v) }) },
-  bins: { label: "구간 나누기", group: "숫자", need: isNum, init: { text: "" },
-    fields: () => [{ name: "text", placeholder: "경계값을 작은 것부터 쉼표로" }],
+  bins: { label: "구간 나누기", group: "숫자", need: isNum, init: { text: "", closed: "left", label: "range" },
+    fields: () => [{ name: "text", placeholder: "경계값을 작은 것부터 쉼표로" }, { name: "closed", options: CLOSED_OPTS }, { name: "label", options: LABEL_OPTS }],
     value: st => PrepMenu.value("bins", st),
-    load: v => ({ text: v.join(", ") }) },
+    load: v => Array.isArray(v) ? { text: v.join(", "), closed: "left", label: "range" } : { text: v.edges.join(", "), closed: v.closed ?? "left", label: v.label ?? "range" } },
+  cut: { label: "자동으로 구간 나누기", group: "숫자", need: isNum, init: { how: "width", n: "", width: "", tail: "", target: "", method: "iv", closed: "left", label: "range" },
+    fields: st => [
+      { name: "how", redraw: true, options: [["width", "등간격"], ["quantile", "등빈도(분위)"], ["zero", "0 따로 + 양수 등빈도"], ["log", "로그 스케일(10배씩)"], ["floor", "단위로 내림(10대·20대)"], ["tails", "양끝 묶고 가운데 등간격"], ["best", "타겟으로 최적 구간"]] },
+      ...(["floor", "log"].includes(st.how) ? [] : [{ name: "n", placeholder: `구간 수(비우면 ${SERVER.prep6.cut_n[st.how]})` }]),
+      ...(st.how === "floor" ? [{ name: "width", placeholder: "단위 폭, 예: 10" }] : []),
+      ...(st.how === "tails" ? [{ name: "tail", placeholder: `양끝 %(비우면 ${SERVER.prep6.cut_tail})` }] : []),
+      ...(st.how === "best" ? [{ name: "target", options: pickCols("타겟 컬럼(0/1)") }, { name: "method", options: [["iv", "IV 최대"], ["chi", "카이제곱 병합"]] }] : []),
+      { name: "closed", options: CLOSED_OPTS }, { name: "label", options: LABEL_OPTS },
+    ],
+    value: st => PrepMenu.value("cut", st),
+    load: v => ({ how: v.how, n: String(v.n ?? ""), width: String(v.width ?? ""), tail: String(v.tail ?? ""), target: v.target ?? "", method: v.method ?? "iv", closed: v.closed ?? "left", label: v.label ?? "range" }) },
   rare: { label: "드문 값 묶기", group: "범주", need: isStr, init: { min: "", label: "기타" },
     fields: () => [{ name: "min", placeholder: "이보다 적게 나오면 묶기(2 이상)" }, { name: "label", placeholder: "묶은 값의 이름(기본: 기타)" }],
     value: st => PrepMenu.value("rare", st),
     load: v => ({ min: String(v.min), label: v.label ?? "기타" }) },
+  others: { label: "많은 값만 남기고 묶기", group: "범주", need: isStr, init: { how: "top", k: "", share: "", cum: "", label: "기타" },
+    fields: st => {
+      const o = SERVER.prep6.others, box = { top: { name: "k", placeholder: `K(비우면 ${o.k})` }, share: { name: "share", placeholder: `X %(비우면 ${o.share})` }, pareto: { name: "cum", placeholder: `누적 %(비우면 ${o.cum})` } };
+      return [{ name: "how", redraw: true, options: [["top", "많이 나온 K개만"], ["share", "비중 X% 미만 묶기"], ["pareto", "누적 비중 X%까지만"]] }, box[st.how], { name: "label", placeholder: "묶은 값의 이름(기본: 기타)" }];
+    },
+    value: st => PrepMenu.value("others", st),
+    load: v => ({ how: v.how, k: String(v.k ?? ""), share: String(v.share ?? ""), cum: String(v.cum ?? ""), label: v.label ?? "기타" }) },
   parts: { label: "날짜에서 뽑기", group: "새 컬럼", need: isDate, init: Object.fromEntries(PARTS.map(([k]) => [k, false])),
-    fields: (st, c, ops) => PARTS.filter(([k]) => k !== "hour" || hasTime(c, ops)).map(([name, check]) => ({ name, check })),
-    value: (st, c, ops) => { const v = PARTS.filter(([k]) => st[k]).map(([k]) => k); return v.length && (!st.hour || hasTime(c, ops)) ? v : null; },
+    fields: (st, c, ops) => PARTS.filter(([k]) => !CLOCK.includes(k) || hasTime(c, ops)).map(([name, check]) => ({ name, check })),
+    value: (st, c, ops) => { const v = PARTS.filter(([k]) => st[k]).map(([k]) => k); return v.length && (!CLOCK.some(k => st[k]) || hasTime(c, ops)) ? v : null; },
     load: v => Object.fromEntries(PARTS.map(([k]) => [k, v.includes(k)])) },
   label: { label: "값을 번호로(라벨 인코딩)", group: "새 컬럼", init: {}, value: () => true },
-  onehot: { label: "값마다 컬럼으로(원-핫 인코딩)", group: "새 컬럼", unkeep: true, init: {}, value: () => true },
+  onehot: { label: "값마다 컬럼으로(원-핫 인코딩)", group: "새 컬럼", unkeep: true, init: { top: "", others: false },
+    fields: st => [{ name: "top", placeholder: "많이 나온 K개만(비우면 모두)", redraw: true }, ...(String(st.top).trim() ? [{ name: "others", check: "나머지 값은 기타 컬럼으로" }] : [])],
+    value: st => PrepMenu.value("onehot", st),
+    load: v => ({ top: v === true ? "" : String(v.top), others: v !== true && !!v.others }) },
+  freq: { label: "값을 등장 횟수로(빈도 인코딩)", group: "새 컬럼", init: { how: "count" },
+    fields: () => [{ name: "how", options: [["count", "등장 횟수"], ["pct", "비율(%)"]] }],
+    value: st => PrepMenu.value("freq", st),
+    load: v => ({ how: v.how ?? "count" }) },
+  target: { label: "값을 타겟 평균으로(타겟 인코딩)", group: "새 컬럼", init: { target: "", smooth: "" },
+    fields: () => [{ name: "target", options: pickCols("타겟 컬럼(숫자·0/1)") }, { name: "smooth", placeholder: "평활 m(비우면 0)" }, { hint: SERVER.prep6.target_note }],
+    value: st => PrepMenu.value("target", st),
+    load: v => ({ target: v.target, smooth: String(v.smooth ?? "") }) },
+  ordinal: { label: "정한 순서의 번호로(순서형)", group: "새 컬럼", need: isStr, init: { map: "", else: "" },
+    fields: () => [{ name: "map", placeholder: "값=번호, 예: 하=1, 중=2, 상=3" }, { name: "else", placeholder: "목록에 없는 값의 번호(비우면 빈 값)" }],
+    value: st => PrepMenu.value("ordinal", st),
+    load: v => ({ map: Object.entries(v.map).map(([k, x]) => `${k}=${x}`).join(", "), else: String(v.else ?? "") }) },
   extract: { label: "패턴에 맞는 부분 뽑기", group: "새 컬럼", need: isStr, init: { pattern: "", group: "" }, load: v => ({ pattern: v.pattern, group: v.group == null ? "" : String(v.group) }),
     fields: () => [{ name: "pattern", placeholder: "정규식, 예: [A-Z]-[0-9]+" }, { name: "group", placeholder: "괄호 묶음 번호(비우면 전체)" }],
     value: st => PrepMenu.value("extract", st) },
@@ -470,10 +658,15 @@ const DESC = {
   case: "'abc' → 'ABC'", replace: "'Y' → '완료'처럼 값을 바꾸기", regex: "규칙(정규식)에 맞는 글자를 바꾸기", type: "글자 '123'을 숫자로, '20250131'을 날짜로(실수→정수는 소수점 버림, 2.9→2)",
   flag: "빈칸이었던 행에 true를 적은 새 컬럼", fill: "빈칸을 채우거나 그 행을 빼기", outlier: "너무 크거나 작은 값을 빼거나 끝값으로 자르기",
   scale: "값의 크기를 비슷하게 맞추기(모델에 넣을 때)", round: "3.14159 → 3.14(자릿수 0이면 3.0처럼 실수로 남음)", bins: "나이 23 → '20~30'처럼 구간으로", rare: "몇 번 안 나오는 값을 '기타'로 묶기",
-  parts: "날짜에서 연·월·요일을 새 컬럼으로", label: "'서울'→0, '부산'→1처럼 번호로", onehot: "값마다 0/1 컬럼으로 펼치기(원래 컬럼은 빠짐)",
+  parts: "날짜에서 연·월·요일·시간대 등을 새 컬럼으로", label: "'서울'→0, '부산'→1처럼 번호로", onehot: "값마다 0/1 컬럼으로 펼치기(원래 컬럼은 빠짐)",
   extract: "'A-123'에서 '123'만 뽑기", has: "'서울'이 들어 있으면 1인 새 컬럼", counts: "단어가 몇 번 나오는지 세기",
   expand: "구조의 필드·맵의 키·JSON 글자의 키마다 '컬럼.키' 새 컬럼(원래 컬럼은 그대로, 맵·JSON은 앞 1,000행에서 키를 모아 최대 50개)",
+  flags: "0인지·X 이상인지·상위 1%인지 같은 0/1 컬럼을 여러 개(예: 금액_is_zero, 금액_top1)", gfill: "같은 등급·연령대 행의 평균·중앙값·최빈값으로 빈칸을 채우기",
+  power: "치우친 분포를 정규에 가깝게(λ는 비우면 자동)", cut: "등간격·분위·0 따로·로그·10단위·양끝 묶음·타겟 최적으로 구간 글자", others: "많이 나온 값만 두고 나머지는 '기타'로",
+  freq: "값을 그 값이 나온 횟수(또는 %)로 새 컬럼에", target: "값을 그 값인 행의 타겟 평균으로 새 컬럼에(누수 주의)", ordinal: "하=1, 중=2, 상=3처럼 정한 번호를 새 컬럼에",
 };
+// 0 분리·로그 구간의 특별 구간에 든 행 수 안내(서버 info.cut의 한 항목)
+const cutText = x => `${x.rows.toLocaleString()}행이 '${x.label}' 구간에 들어갔어요(미리보기 표본 기준).`;
 // 컬럼 종류의 쉬운 이름. 원래 타입(int64 등)은 마우스를 올리면 보인다.
 const KIND_TEXT = { int: "정수", float: "소수", string: "글자", date: "날짜", ts: "날짜·시각", bool: "참·거짓", time: "시각", other: "기타" };
 const kindOf = type => /^u?int/.test(type) ? "int" : /^(float|decimal)/.test(type) ? "float" : type.startsWith("string") ? "string"
@@ -486,7 +679,7 @@ const kept = () => cols().filter(c => edits[c.name].keep);
 const outName = c => edits[c.name].rename.trim() || c.name;  // 결과에서의 컬럼 이름
 const resultNames = () => [...kept().map(outName), ...(preview ? deriv.filter(d => !drops.includes(d.name)).map(d => d.name) : [])];
 const fail = text => { $("err-prep").textContent = text; };
-const snap = () => JSON.stringify([edits, copies, filters, formulas, pca, geoSteps, dedupe, keepNow(), sorts, drops, $("downcast").checked]);
+const snap = () => JSON.stringify([edits, copies, filters, formulas, pca, kmeans, geoSteps, dedupeOn, sorts, drops, $("downcast").checked, labelUse]);
 const stateOf = (key, v) => OPS[key].load?.(v) ?? {};
 
 // 입력 칸 하나
@@ -503,7 +696,8 @@ function opLine(c, e, key) {
   const op = OPS[key], st = e.ops[key];
   const li = el("div", { className: "op" }, el("div", { className: "op-head" }, op.label,
     el("button", { className: "ghost", textContent: "×", title: "이 정리 방법 빼기", ariaLabel: "이 정리 방법 빼기", onclick: () => { delete e.ops[key]; if (OPS[key]?.unkeep && !Object.keys(e.ops).some(k => OPS[k]?.unkeep)) { e.keep = e.keepBefore ?? true; delete e.keepBefore; preview = null; showAll(); return; } renderClean(); renderGrid(); showPrepSummaries(); } })),  // 더하기 전의 유지 여부로 되돌린다
-    el("div", { className: "hint", textContent: DESC[key] ?? "" }));
+    el("div", { className: "hint", textContent: DESC[key] ?? "" }),
+    ...(key === "cut" ? (preview?.info?.cut ?? []).filter(x => x.column === c.name).map(x => el("div", { className: "hint", textContent: cutText(x) })) : []));
   lines.set(st, li);
   for (const f of op.fields?.(st, c, e.ops) ?? []) {
     if (f.hint) { li.append(el("div", { className: "hint", textContent: f.hint })); continue; }
@@ -567,11 +761,11 @@ $("cl-col").onchange = () => pickColumn($("cl-col").value);
 function applySuggest(c, s) {
   const e = edits[c.name];
   if (s.keep === false) { e.keep = false; preview = null; }
-  for (const key in s.ops) e.ops[key] = stateOf(key, s.ops[key]);
+  for (const key in s.ops) e.ops[key] = key === "nulls" && e.ops.nulls ? stateOf(key, [...new Set([...(OPS.nulls.value(e.ops.nulls) ?? []), ...s.ops.nulls])]) : stateOf(key, s.ops[key]);  // 빈 값 표시는 지금 목록과 합친다
 }
 // 컬럼의 추천: 통계의 추천과 타입 추천을 합쳐, 첫 전처리가 OPS에서 나오는 순서로(뺄 것은 맨 뒤)
 const rank = s => s.keep === false ? Object.keys(OPS).length : Object.keys(OPS).indexOf(Object.keys(s.ops)[0]);
-const allSuggest = c => [...c.suggest, ...c.patterns].sort((a, b) => rank(a) - rank(b));
+const allSuggest = c => [...c.suggest, ...c.patterns, ...(prof.diag?.suggest?.[c.name] ?? [])].sort((a, b) => rank(a) - rank(b));
 const suggests = c => allSuggest(c).map(s => {
   const e = edits[c.name], done = s.keep === false ? !e.keep : Object.keys(s.ops).every(key => key in e.ops);
   return el("button", { className: "sug" + (done ? " done" : ""), onclick: () => { applySuggest(c, s); showAll(); } }, s.text, el("span", { className: "why", textContent: " " + s.why }));
@@ -580,6 +774,26 @@ $("sug-all").onclick = () => { prof.columns.forEach(c => allSuggest(c).forEach(s
 // 머리글 2행의 칸(③ 컬럼 정리의 요약과 같다): 종류(쉬운 이름, 원래 타입은 마우스를 올리면), 미리보기 뒤 바뀐 타입, 빈칸, 범위·글자 수, 값 종류, 고칠 점.
 // 통계는 표본으로 구한 것이다(위의 "표본 N행"). now는 미리보기의 결과 타입
 const DIFF_TEXT = { nulls: "빈칸 비율", unique: "값 종류 수", min: "최솟값", max: "최댓값" };
+const DIAG_TAGS = { binary: "이진", ordinal: "순서형", hash: "ID·해시", json: "JSON", zero_inflated: "0이 많음", skewed: "치우침", multimodal: "봉우리 여럿", benford: "벤포드 이탈", heaping: "숫자 쏠림" };
+const BENFORD_TEXT = { close: "잘 맞음", acceptable: "맞는 편", marginal: "조금 다름", nonconform: "다름" };
+// 서버 진단(/api/diagnose)에서 그 컬럼의 줄들. 가중 표본이면 개수 앞에 "약 "
+function diagRows(g) {
+  if (!g) return [];
+  const pre = prof.diag.weighted ? "약 " : "", pctOf = v => (v / prof.diag.rows * 100).toFixed(1) + "%", n = v => `${pre}${v.toLocaleString()}개`;
+  const { signs, moments, outliers, benford, text, entropy, json, dates } = g;
+  const epoch = Object.entries(dates?.epoch ?? {}).map(([e, v]) => `${esc(e)} ${n(v)}`);
+  return [
+    g.tags.length && g.tags.map(t => `<span class="kind">${DIAG_TAGS[t]}</span>`).join(" "),
+    signs && `0 ${pctOf(signs.zero)} · 음수 ${pctOf(signs.neg)} · 양수 ${pctOf(signs.pos)}`,
+    moments && `평균 ${fmt(moments.mean)} · 표준편차 ${fmt(moments.sd)} · 왜도 ${fmt(moments.skew)} · 첨도 ${fmt(moments.kurt)}`,
+    outliers && `Z-Score 밖 ${outliers.z?.rows == null ? "-" : n(outliers.z.rows)} · MAD 밖 ${outliers.mad?.rows == null ? "MAD 0" : n(outliers.mad.rows)}`,
+    benford && !benford.skipped && `벤포드 MAD ${benford.mad.toFixed(4)}(${BENFORD_TEXT[benford.verdict]})`,
+    text?.length.bytes_min != null && `평균 ${fmt(text.length.mean)}글자 · ${text.length.bytes_min}~${text.length.bytes_max}바이트`,
+    entropy && `엔트로피 ${fmt(entropy.bits)}비트(고른 정도 ${(entropy.norm * 100).toFixed(0)}%) · 지니 ${fmt(entropy.gini)}`,
+    json?.share > 0 && `JSON ${(json.share * 100).toFixed(0)}%`,
+    (epoch.length || dates?.future.rows > 0) && [epoch.length && `기본값 날짜 ${epoch.join(", ")}`, dates.future.rows > 0 && `${esc(dates.future.after)} 뒤 시점 ${n(dates.future.rows)}`].filter(Boolean).join(" · "),
+  ].filter(Boolean);
+}
 function statsHtml(c, now) {
   const tag = `<span class="kind" title="원래 타입: ${esc(c.type)}">${c.type.startsWith("timestamp") ? KIND_TEXT.ts : KIND_TEXT[c.kind] ?? KIND_TEXT.other}</span>`;
   const change = !now || now === c.type ? "" : kindOf(now) === kindOf(c.type)
@@ -590,20 +804,24 @@ function statsHtml(c, now) {
   const count = v => v.toLocaleString(), pct = v => n ? ` (${(v / n * 100).toFixed(v / n < 0.01 ? 1 : 0)}%)` : "";
   const range = (lo, hi) => lo == null ? "" : c.kind === "date" ? `${esc(shown(lo)[0])}부터 ${esc(shown(hi)[0])}까지` : `${esc(shown(lo)[0])} ~ ${esc(shown(hi)[0])} 사이`;
   const filled = n - c.nulls;
+  const iv = (k, pctMode = true) => { const v = prof?.sampled?.intervals?.[c.name]?.[k]; return v ? ` [${pctMode ? (v[1] * 100).toFixed(1) + "%" : fmt(v[1])} ~ ${pctMode ? (v[2] * 100).toFixed(1) + "%" : fmt(v[2])}]` : ""; };
+  const mean = prof?.sampled?.intervals?.[c.name]?.mean, approx = prof?.sampled?.way === "strata" ? "약 " : "";
   const variety = guess.constant ? "값이 하나뿐이에요"
     : guess.flags ? `값은 ${count(c.unique)}가지뿐이에요: ${esc(guess.flags.map(v => shown(v)[0]).join(", "))}`
     : filled > 1 && c.unique === filled ? "값이 모두 달라요. 번호나 ID로 보여요" : `값 ${count(c.unique)}가지`;
   const rows = [
     tag, change,
-    c.nulls ? `<b class="warn">빈칸 ${count(c.nulls)}개${pct(c.nulls)}</b>` : `<span class="good">빈칸 없음</span>`,
+    c.nulls ? `<b class="warn">빈칸 ${approx}${count(c.nulls)}개${pct(c.nulls)}${iv("null")}</b>` : `<span class="good">빈칸 없음</span>`,
     range(c.min, c.max),
+    NUM.includes(c.kind) && mean && `평균 ${fmt(mean[0])}${iv("mean", false)}`,
     c.min_len != null && (c.min_len === c.max_len ? `모두 ${c.min_len}글자` : `${c.min_len}~${c.max_len}글자`),
     variety,
-    c.blank && `<span class="warn">글자가 하나도 없는 칸 ${count(c.blank)}개</span>`,
-    c.spaces && `<span class="warn">앞뒤에 공백이 있는 칸 ${count(c.spaces)}개</span>`,
+    c.blank && `<span class="warn">글자가 하나도 없는 칸 ${count(c.blank)}개${iv("blank")}</span>`,
+    c.spaces && `<span class="warn">앞뒤에 공백이 있는 칸 ${count(c.spaces)}개${iv("spaces")}</span>`,
     c.numeric && `숫자로 보이는 칸 ${count(c.numeric)}개(전체 ${count(n)}개 중)`,
     guess.date_format && c.kind === "string" && `날짜로 보여요(형식 ${esc(guess.date_format)})`,
-    full && `<span title="테이블 전체로 구한 값이에요. 표본 값과 비교해요">전체 ${count(prof.full.rows)}행 기준: ${full.nulls ? `빈칸 ${count(full.nulls)}개 (${(full.nulls / prof.full.rows * 100).toFixed(1)}%)` : "빈칸 없음"}, 값 ${count(full.unique)}가지${full.min != null ? `, ${range(full.min, full.max)}` : ""}</span>`,
+    ...diagRows(prof.diag?.columns?.[c.name]),
+    full &&`<span title="테이블 전체로 구한 값이에요. 표본 값과 비교해요">전체 ${count(prof.full.rows)}행 기준: ${full.nulls ? `빈칸 ${count(full.nulls)}개 (${(full.nulls / prof.full.rows * 100).toFixed(1)}%)` : "빈칸 없음"}, 값 ${count(full.unique)}가지${full.min != null ? `, ${range(full.min, full.max)}` : ""}</span>`,
     full?.diff.length && `<b class="warn">표본과 달라요: ${full.diff.map(k => DIFF_TEXT[k]).join(", ")}</b>`,
     exact && `<span title="Parquet 파일 정보로 구한 전체 기준 값이에요. 데이터는 읽지 않아요">파일 전체 기준: ${exact.nulls ? `빈칸 ${count(exact.nulls)}개` : "빈칸 없음"}${exact.min != null ? `, ${range(exact.min, exact.max)}` : ""}${exact.constant ? ", 값이 하나뿐" : ""}</span>`,
   ];
@@ -617,9 +835,10 @@ const copyName = from => {
 };
 // 표의 열: 미리보기가 있으면 응답의 결과 컬럼 순서(파생 컬럼 포함, 끈 것은 숨김), 없으면 남긴 원래·복사 컬럼
 function gridColumns() {
-  if (!preview) return kept().map(c => ({ c }));
+  const view = sortedView ?? preview;
+  if (!view) return kept().map(c => ({ c }));
   const all = cols();
-  return preview.rows.columns.map((name, k) => ({ name, k, derived: preview.derived[k], c: all.find(x => x.name === preview.sources[k]) })).filter(x => !drops.includes(x.name));
+  return view.rows.columns.map((name, k) => ({ name, k, derived: view.derived[k], c: all.find(x => x.name === view.sources[k]) })).filter(x => !drops.includes(x.name));
 }
 function showCounts() {
   $("counts").textContent = !prof ? "" : preview ? `행 수: 전처리 전 ${preview.before.toLocaleString()}행, 후 ${preview.after.toLocaleString()}행${preview.local ? "(이 PC에서 계산)" : ""}` : "[미리보기]를 누르면 전처리한 결과 20행을 여기서 볼 수 있어요.";
@@ -627,15 +846,27 @@ function showCounts() {
 }
 // 표에 그릴 것: head(머리글 칸들의 HTML), keys(행에서 값을 꺼낼 이름), rows. 테이블 정보(prof)가 아직 없어도 쿼리에서 넘어온 쪽(S.handed)이 있으면 그것을 그린다(P10).
 // 미리보기 뒤에는 전처리한 결과 20행, 전에는 쿼리에서 넘어온 쪽 또는 표본의 앞 20행(원래 값). 컬럼 이름을 누르면 ③ 컬럼 정리.
-function gridSpec() {
+function gridSpec(sorter = true) {  // sorter: 머리글에 정렬 단추를 넣는다(분석 탭 맨 위의 표는 넣지 않는다)
   if (!prof) { const s = S.handed?.shown; return s && { head: s.columns.map(n => `<th>${esc(n)}</th>`).join(""), keys: s.columns, rows: s.rows }; }
-  const items = gridColumns(), data = preview ? preview.rows : S.handed?.shown ?? first;  // 넘어온 검색은 [미리보기]가 올 때까지 넘어온 쪽을 그대로 둔다
+  const view = sortedView ?? preview, items = gridColumns(), data = view ? view.rows : S.handed?.shown ?? first;  // 넘어온 검색은 [미리보기]가 올 때까지 넘어온 쪽을 그대로 둔다
+  const button = name => sorter ? `<button type="button" class="ghost sorter" data-vsort="${esc(name)}" aria-label="이름 정렬">${sortMark(vsort, name).arrow.trim() || "↕"}</button>` : "";
   const head = items.map(x => {
-    if (x.derived) return `<th data-col="${esc(x.name)}" title="${esc(`${x.name}: ${preview.sources[x.k] ? preview.sources[x.k] + " 컬럼에서" : "새 컬럼 단계에서"} 만든 새 컬럼이에요(종류: ${KIND_TEXT[kindOf(preview.types[x.k])]})`)}"><div class="colhead"><span>${esc(x.name)}</span><span class="worked">새 컬럼</span></div></th>`;
+    const name = x.name ?? outName(x.c), aria = sorter ? sortMark(vsort, name).aria : "";
+    if (x.derived) return `<th data-col="${esc(x.name)}"${aria} title="${esc(`${x.name}: ${view.sources[x.k] ? view.sources[x.k] + " 컬럼에서" : "새 컬럼 단계에서"} 만든 새 컬럼이에요(종류: ${KIND_TEXT[kindOf(view.types[x.k])]})`)}"><div class="colhead"><span>${esc(x.name)}</span><span class="worked">새 컬럼</span>${button(name)}</div></th>`;
     const rename = edits[x.c.name].rename.trim();
-    return `<th data-col="${esc(x.c.name)}" class="cpick${x.c.name === picked ? " on" : ""}" title="${esc(`${x.c.name}: 누르면 오른쪽 컬럼 정리에서 고칠 수 있어요`)}"><div class="colhead"><span>${esc(x.c.name + (x.c.from ? " (복사)" : "") + (rename ? ` → ${rename}` : ""))}</span>${isWorked(x.c) ? '<span class="worked">정리함</span>' : ""}</div></th>`;
+    return `<th data-col="${esc(x.c.name)}"${aria} class="cpick${x.c.name === picked ? " on" : ""}" title="${esc(`${x.c.name}: 누르면 오른쪽 컬럼 정리에서 고칠 수 있어요`)}"><div class="colhead"><span>${esc(x.c.name + (x.c.from ? " (복사)" : "") + (rename ? ` → ${rename}` : ""))}</span>${isWorked(x.c) ? '<span class="worked">정리함</span>' : ""}${button(name)}</div></th>`;
   }).join("");
-  return { head, keys: items.map(x => preview ? x.name : x.c.from || x.c.name), rows: data?.rows ?? [] };  // 미리보기 전의 복사 컬럼은 원래 컬럼의 값
+  return { head, keys: items.map(x => view ? x.name : x.c.from || x.c.name), rows: data?.rows ?? [] };  // 미리보기 전의 복사 컬럼은 원래 컬럼의 값
+}
+// 데이터 탭 머리글의 정렬 단추: 오름 → 내림 → 원래 순서. 정렬은 테이블 전체를 서버가 다시 조회해 앞 20행을 받는다.
+function sortGrid(name, button) {
+  const next = nextSort(vsort, name);
+  if (!next) { vsort = sortedView = null; renderGrid(); return; }
+  return act(button, async r => {
+    const mine = token, got = await timedHere("preview", () => api("/api/prep/sorted", { ...r, view_sort: next }));
+    if (mine !== token) return;
+    vsort = next; sortedView = got; renderGrid();
+  });
 }
 // 표 하나를 host에 그린다. pick이면 행 고르기 칸과 머리글 끝 [+](P12·P9). 행이 없어도 머리글은 보인다(통계를 끄면 미리보기 전까지 그렇다).
 function drawGrid(host, spec, pick) {
@@ -645,7 +876,7 @@ function drawGrid(host, spec, pick) {
 }
 // 분석 탭 맨 위의 데이터 표: 전처리 미리보기와 같은 표(미리보기가 없으면 넘어온 쪽이나 표본의 앞 20행)
 function renderAnaSrc() {
-  const spec = gridSpec();
+  const spec = gridSpec(false);
   $("a-src-note").textContent = !prof && !spec ? "" : preview ? "전처리한 결과의 앞 20행이에요." : S.handed?.shown ? "쿼리에서 넘어온 검색의 보이던 쪽이에요." : "원래 데이터 표본의 앞 20행이에요.";
   if (!spec) { $("a-src")._grid = null; $("a-src").innerHTML = '<span class="empty">전처리 탭에서 먼저 테이블을 골라 주세요.</span>'; return; }
   drawGrid($("a-src"), spec, false);
@@ -681,12 +912,18 @@ function renderGrid() {
     rp.show();
     return;
   }
-  $("info-note").textContent = preview ? "전처리한 결과의 앞 20행이에요." : S.handed?.shown ? "쿼리에서 넘어온 검색의 보이던 쪽이에요. [미리보기]를 누르면 전처리한 결과로 바뀌어요." : first ? "원래 데이터 표본의 앞 20행이에요. [미리보기]를 누르면 전처리한 결과로 바뀌어요." : statsOn ? "데이터를 읽는 중…" : "통계를 꺼 두어 데이터를 읽지 않았어요. [미리보기]를 누르면 전처리한 결과 20행이 보여요.";
+  $("info-note").textContent = vsort ? `${vsort.column} ${vsort.dir === "asc" ? "오름차순" : "내림차순"}으로 테이블 전체를 정렬한 앞 20행이에요(빈 값은 맨 뒤).` + (preview ? "" : " 전처리 단계가 있으면 적용한 결과예요.")
+    : preview ? "전처리한 결과의 앞 20행이에요." : S.handed?.shown ? "쿼리에서 넘어온 검색의 보이던 쪽이에요. [미리보기]를 누르면 전처리한 결과로 바뀌어요." : first ? "원래 데이터 표본의 앞 20행이에요. [미리보기]를 누르면 전처리한 결과로 바뀌어요." : statsOn ? "데이터를 읽는 중…" : "통계를 꺼 두어 데이터를 읽지 않았어요. [미리보기]를 누르면 전처리한 결과 20행이 보여요.";
   drawGrid($("grid"), gridSpec(), true);
   $("grid").querySelectorAll("th[data-col]").forEach(th => heads.set(th.dataset.col, th));
   rp.show();
 }
-$("grid").addEventListener("click", e => { const th = e.target.closest("th.cpick"); if (th) pickColumn(th.dataset.col); });
+$("grid").addEventListener("click", e => {
+  const sort = e.target.closest("button[data-vsort]");
+  if (sort) return sortGrid(sort.dataset.vsort, sort);
+  const th = e.target.closest("th.cpick");
+  if (th) pickColumn(th.dataset.col);
+});
 // 행 고르기(P12): 표 위 도구줄. 조건 줄은 원래 값을 보고 만드니, 이름을 바꾸거나 정리 방법을 건 컬럼과 새 컬럼은 쓰지 않는다. 키 컬럼은 표본에서 값이 모두 다른 컬럼.
 const plainCol = n => !!prof?.columns.some(c => c.name === n) && !edits[n]?.rename.trim() && !Object.keys(edits[n]?.ops ?? {}).length;
 const keyNames = () => prof?.whole != null ? prof.columns.filter(c => "unique" in c && !c.nulls && c.unique === prof.rows && plainCol(c.name)).map(c => c.name) : [];  // 표본의 고유값은 전체에서 고유하다는 뜻이 아니라, 전체 통계(prof.whole)가 있을 때만 키로 쓴다
@@ -698,7 +935,7 @@ const rp = RowPick.bar($("row-bar"), () => $("grid")._grid, { keyColumns: keyNam
 } });
 async function loadFirst() {
   const mine = token;
-  const d = S.base && statsOn ? await api("/api/head", { schema: S.schema, base: S.base, sample }).catch(() => null) : null;  // 통계를 끄면 데이터를 읽지 않는다
+  const d = S.base && statsOn ? await api("/api/head", { schema: S.schema, base: S.base, sample, sample_how: sampleHow() }).catch(() => null) : null;  // 통계를 끄면 데이터를 읽지 않는다
   if (mine !== token) return;
   first = d?.rows ?? null;
   renderGrid();
@@ -724,13 +961,51 @@ function syncNames() {
   const names = prof ? resultNames() : [];
   sorts = sorts.filter(s => names.includes(s.slice(0, s.lastIndexOf(" "))));
   dedupe = dedupe.filter(n => names.includes(n));
+  ddContain = ddContain.filter(n => dedupe.includes(n));
+  if (dedupeOn) {  // 확정 기준도 지금 결과 컬럼으로 거른다. 포함 컬럼이 다 빠지면 상한도 뺀다
+    const on = { ...dedupeOn, dedupe: dedupeOn.dedupe.filter(n => names.includes(n)) };
+    if (on.dedupe_contain) {
+      on.dedupe_contain = on.dedupe_contain.filter(n => names.includes(n));
+      if (!on.dedupe_contain.length) { delete on.dedupe_contain; delete on.dedupe_limit; }
+    }
+    dedupeOn = on.dedupe.length ? on : null;
+  }
   if (pickers.keep) pickers.keep.refresh();
   fill($("sort-col"), names);
   fill($("dd-col"), names.filter(n => !dedupe.includes(n)), "컬럼 추가");
   $("sorts").replaceChildren(...sorts.map((s, i) => chip(s, () => { sorts.splice(i, 1); syncNames(); })));
-  $("dd-chips").replaceChildren(...dedupe.map((n, i) => chip(n, () => { dedupe.splice(i, 1); syncNames(); })));
-  $("dupes").disabled = !dedupe.length;
+  const texts = prof ? textNames() : [];
+  $("dd-chips").replaceChildren(...dedupe.map((n, i) => {
+    const c = chip(n, () => { dedupe.splice(i, 1); syncNames(); }), on = ddContain.includes(n);
+    if (texts.includes(n)) c.append(el("button", { type: "button", className: "ghost" + (on ? " on" : ""), textContent: on ? "포함 ✓" : "포함", title: "짧은 값이 긴 값 안에 통째로 있으면 같은 값으로 봐요", "aria-pressed": String(on),
+      onclick: e => { e.stopPropagation(); ddContain = on ? ddContain.filter(x => x !== n) : [...ddContain, n]; syncNames(); } }));
+    return c;
+  }));
+  $("dd-limit-row").classList.toggle("hidden", !ddContain.length);
   $("dd-result").textContent = "";
+  $("dd-applied").replaceChildren(...(dedupeOn ? ["지울 기준: " + dedupeText(dedupeOn) + " ", el("button", { id: "dd-off", className: "ghost", textContent: "지우지 않기", onclick: () => { dedupeOn = null; syncNames(); } })] : []));
+  showApply();
+}
+// 결과 컬럼 중 글자 컬럼(미리보기가 있으면 그 결과 타입, 없으면 원래 타입과 타입 바꾸기)
+const textNames = () => preview ? preview.rows.columns.filter((_, k) => preview.types[k].startsWith("string"))
+  : kept().filter(c => (edits[c.name].ops.type?.to ?? c.kind) === "string").map(outName);
+// 확정 기준의 한 줄 글: "a, b · 글자 다듬기 · 포함: a · 상한 50,000"
+const dedupeText = o => [o.dedupe.join(", "), o.dedupe_loose && "글자 다듬기", o.dedupe_contain && "포함: " + o.dedupe_contain.join(", "), o.dedupe_limit && "상한 " + o.dedupe_limit.toLocaleString()].filter(Boolean).join(" · ");
+// 지금 칸의 중복 후보(/api/dupes에 보내고 [이 기준으로 지우기]가 확정하는 recipe 키들)
+const dedupeAsk = () => ({ dedupe: dedupe.length ? [...dedupe] : resultNames(), ...(keepNow() ? { dedupe_keep: keepNow() } : {}), ...($("dd-loose").checked ? { dedupe_loose: true } : {}),
+  ...(ddContain.length ? { dedupe_contain: [...ddContain], ...($("dd-limit-on").checked ? { dedupe_limit: Number($("dd-limit").value) } : {}) } : {}) });
+// 후보 칸이 찾은 결과와 달라지면 [이 기준으로 지우기]를 숨긴다(확정 기준은 그대로)
+const showApply = () => $("dd-apply").classList.toggle("hidden", !dedupeFound || JSON.stringify(dedupeAsk()) !== JSON.stringify(dedupeFound));
+["input", "change", "click"].forEach(type => document.querySelector('#prep-view .step[data-step="dedupe"]').addEventListener(type, showApply));
+$("dd-limit").value = SERVER.dedupe_limit;
+$("dd-apply").onclick = () => { dedupeOn = dedupeFound; syncNames(); };
+function movedNotice() {
+  const box = el("div", { className: "modal", onclick: e => { if (e.target === box) box.remove(); } },
+    el("div", { className: "modal-box" }, el("h3", { textContent: "이 연결에서는 이 비교를 할 수 없어요" }), el("div", { className: "hint", textContent: "이 PC 작업 사본에서 계산했어요." }),
+      el("div", { className: "row" }, el("button", { className: "btn p", textContent: "확인", onclick: () => box.remove() }))));
+  box.setAttribute("role", "dialog");
+  box.setAttribute("aria-modal", "true");
+  document.body.append(box);
 }
 $("sort-add").onclick = () => {
   if ($("sort-col").value) { sorts.push(`${$("sort-col").value} ${$("sort-dir").value}`); syncNames(); }
@@ -779,16 +1054,16 @@ function setKeep(keep) {  // 저장한 구성(글자 또는 객체)에서 칸을
   $("dd-pick").classList.toggle("hidden", $("dd-keep").value !== "pick");
 }
 const fillAnaValues = () => {  // 값 컬럼: 고른 집계의 첫 컬럼 칸이 받는 종류만
-  for (const [id, key] of [["a-gval", "groups"], ["a-tval", "trend"]]) {
+  for (const [id, key] of [["a-gval", "groups"], ["a-tval", "trend"], ["a-sval", "seasonal"]]) {
     const p = pickers[key], was = $(id).value, cols = p ? p.xColumns(A.cols) : A.cols.filter(c => c[1] === "num");
-    fill($(id), cols.map(c => c[0]), "없음(행 개수만 세기)");
+    fill($(id), hashedOut(cols.map(c => c[0]), A.hashed).names, "없음(행 개수만 세기)");
     if (cols.some(c => c[0] === was)) $(id).value = was;
     $(id).classList.toggle("hidden", !!p && p.yMode() === "none");
   }
 };
 async function initFuncs() {
   const cat = await Funcs.load();
-  for (const [key, host] of [["groups", "a-gagg"], ["trend", "a-tagg"]]) {
+  for (const [key, host] of [["groups", "a-gagg"], ["trend", "a-tagg"], ["seasonal", "a-sagg"]]) {
     pickers[key] = Funcs.picker({ ids: cat.screens.chart.filter(i => cat.byId[i].aggregate), columns: () => A.cols, onchange: fillAnaValues });
     $(host).replaceChildren(pickers[key].el);
   }
@@ -818,6 +1093,14 @@ function renderDerive() {
     preview = null; renderGrid(); showPrepSummaries();
   } }), " " + n)));
   $("pca-n").value = pca.n;
+  kmeans.columns = kmeans.columns.filter(n => nums.includes(n));
+  $("km-cols").replaceChildren(...nums.map(n => el("label", {}, el("input", { type: "checkbox", checked: kmeans.columns.includes(n), onchange: e => {
+    if (e.target.checked && kmeans.columns.length >= SERVER.kmeans.max_cols) { e.target.checked = false; return fail(`K-Means에는 컬럼을 ${SERVER.kmeans.max_cols}개까지 넣을 수 있어요.`); }
+    kmeans.columns = e.target.checked ? [...kmeans.columns, n] : kmeans.columns.filter(x => x !== n);
+    preview = null; renderGrid(); showPrepSummaries();
+  } }), " " + n)));
+  Object.assign($("km-k"), { min: 2, max: SERVER.kmeans.max_k, value: kmeans.k });
+  $("km-name").value = kmeans.name;
 }
 $("fx-guide").textContent = SERVER.formula_guide;
 $("fx-add").onclick = () => {
@@ -832,6 +1115,9 @@ $("fx-add").onclick = () => {
 $("fx-expr").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) $("fx-add").click(); };
 $("pca-n").onchange = () => { pca.n = Math.max(1, Math.round(+$("pca-n").value) || 1); preview = null; renderDerive(); renderGrid(); };
 $("pca-clear").onclick = () => { pca = { columns: [], n: pca.n }; $("pca-info").textContent = ""; preview = null; showAll(); };
+$("km-k").onchange = () => { kmeans.k = Math.min(SERVER.kmeans.max_k, Math.max(2, Math.round(+$("km-k").value) || SERVER.kmeans.k)); preview = null; renderDerive(); renderGrid(); };
+$("km-name").onchange = () => { kmeans.name = $("km-name").value.trim() || SERVER.kmeans.name; preview = null; renderDerive(); renderGrid(); };
+$("km-clear").onclick = () => { kmeans = { ...noKmeans(), k: kmeans.k, name: kmeans.name }; $("km-info").textContent = ""; preview = null; showAll(); };
 // ④ 좌표 단계: 고른 종류의 칸을 보이고, 더하면 목록에 chip으로 쌓인다. 계산은 서버가 하고(고유 좌표마다 한 번), 지점·영역 테이블은 쓸 컬럼만 읽는다.
 let geoTables = [], geoRefCols = [];
 const geoOutputs = st => st.op === "tm" ? [st.lon || "경도", st.lat || "위도"] : st.op === "nearest" ? [st.dist || "가까운_거리km"] : [];
@@ -887,7 +1173,7 @@ $("geo-add").onclick = () => {
 };
 // 뺄 만한 컬럼: 표본으로 서버가 고른 것과 이유. [빼기]는 그 컬럼의 선택(keep)을 끈다.
 $("prune").onclick = () => busy($("prune"), async () => {
-  try { showPrune((await api("/api/prune", { schema: S.schema, base: S.base, sample })).columns); fail(""); } catch (e) { fail(e.message); }
+  try { showPrune((await api("/api/prune", { schema: S.schema, base: S.base, sample, sample_how: sampleHow() })).columns); fail(""); } catch (e) { fail(e.message); }
 });
 function showPrune(found) {
   if (!found.length) { $("prune-box").textContent = "표본으로 보면 뺄 만한 컬럼이 없어요."; return; }
@@ -909,7 +1195,27 @@ function showTarget() {
 }
 document.querySelectorAll("input[name=target]").forEach(r => r.onchange = showTarget);
 
-const showAll = () => { renderCols(); syncNames(); syncFilters(); renderClean(); renderDerive(); renderGeo(); renderGrid(); };
+// ① 단계의 [태그 붙이기]: 사전에 태그가 켜져 있을 때만 쓸 수 있다. 바꾸면 `태그` 컬럼이 생기거나 사라지므로 테이블을 다시 연다.
+function showLabels() {
+  const can = !!labelInfo?.on;
+  $("lb-on").disabled = !can;
+  $("lb-on").checked = can && labelUse.on;
+  $("lb-note").textContent = labelInfo && !can ? "쿼리 화면 결과 표의 [태그]에서 먼저 켜세요" : "";
+  $("lb-body").classList.toggle("hidden", !$("lb-on").checked);
+  $("lb-mode").value = labelUse.mode;
+  $("lb-tags").classList.toggle("hidden", !["any", "all"].includes(labelUse.mode));
+  $("lb-tags").replaceChildren(...(labelInfo?.vocab ?? []).map(t => el("label", {}, el("input", { type: "checkbox", checked: labelUse.tags.includes(t),
+    onchange: e => { labelUse.tags = e.target.checked ? [...labelUse.tags, t] : labelUse.tags.filter(x => x !== t); labelChanged(); } }), " " + t)));
+}
+const labelChanged = () => { if (S.base) openTable(S.base, config()); };
+$("lb-on").onchange = () => { labelUse.on = $("lb-on").checked; labelChanged(); };
+$("lb-mode").onchange = () => { labelUse.mode = $("lb-mode").value; labelChanged(); };
+const labelsOf = () => {
+  if (!labelUse.on) return {};
+  if (["any", "all"].includes(labelUse.mode) && !labelUse.tags.length) throw new Error("거를 태그를 하나 이상 고르세요.");
+  return { labels: labelUse.mode === "none" ? { none: true } : labelUse.mode ? { [labelUse.mode]: labelUse.tags } : {} };
+};
+const showAll = () => { renderCols(); syncNames(); syncFilters(); renderClean(); renderDerive(); renderGeo(); renderGrid(); showLabels(); };
 function resetRun() {
   if (confirming === null) return;
   confirming = null;
@@ -921,21 +1227,27 @@ function resetTable() {
   draftBase = "";
   token++;
   status = "";
-  prof = preview = shot = null;
+  prof = preview = shot = vsort = sortedView = null;
   edits = {};
   copies = [];
   filters = [];
   dedupe = [];
+  dedupeOn = dedupeFound = null; ddContain = [];
+  $("dd-loose").checked = false; $("dd-limit-on").checked = true; $("dd-limit").value = SERVER.dedupe_limit;
+  $("dd-examples").replaceChildren(); $("dd-applied").replaceChildren();
   sorts = [];
   drops = [];
   deriv = [];
   formulas = [];
   pca = { columns: [], n: 2 };
+  kmeans = noKmeans();
   geoSteps = [];
   geoTables = []; geoRefCols = [];
+  labelUse = noLabels(); labelInfo = null;
   picked = "";
   $("prune-box").replaceChildren();
   $("pca-info").textContent = "";
+  $("km-info").textContent = "";
   resetRun();
   fail("");
   $("ok-run").textContent = "";
@@ -965,12 +1277,18 @@ async function openTable(base, config, strict) {  // strict: 표를 못 열면 �
     const p = await timed("profile", () => api("/api/shape", { schema: S.schema, base, count: statsOn }), base.startsWith("@") ? {} : undefined);  // 넘어온 검색(@이름)은 행 수 예상을 안 한다(timedHere와 같은 이유)
     if (mine !== token) return;
     prof = { ...p, columns: p.columns.map(c => ({ ...c, suggest: [], patterns: [] })) };
+    $("diag-box").classList.add("hidden"); ["qi-list", "dk-out", "gap-out", "ri-out", "ri-pairs"].forEach(id => $(id).replaceChildren()); riDim = { base: "", columns: [] }; $("ri-add").classList.remove("hidden");
+    sampleWay = "strata"; sampleCol = ""; showSampleWay();
     edits = Object.fromEntries(p.columns.map(c => [c.name, newEdit()]));
     const remembered = config ? null : await api("/api/prep/table?" + new URLSearchParams({ schema: S.schema, base })).then(d => d.config, () => null);
     if (mine !== token) return;
     if (config || remembered) restore(config || remembered);
     draftBase = draftSnap(); prepUndo.reset();  // 저장한 구성을 채운 상태가 기준(복원 중이면 reset은 무시된다)
     showAll();
+    labelInfo = base.startsWith("@") ? { on: false } : await api(`/api/labels?schema=${encodeURIComponent(S.schema)}&base=${encodeURIComponent(base)}`);  // 넘어온 검색(@)은 태그를 붙일 수 없다(ONLY_TABLE)
+    if (mine !== token) return;
+    if (!labelInfo.on) labelUse = noLabels();
+    showLabels();
     if (pickers.keep) Funcs.loadSupport(S.base, S.schema).then(() => Object.values(pickers).forEach(p => p.refresh()));  // 이 연결이 못 하는 함수는 안내를 붙이거나 막는다
     loadSpecView();
     if (remembered && !$("err-prep").textContent) $("ok-run").textContent = "지난번에 이 테이블에 쓴 전처리를 불러왔어요. [미리보기]로 확인해 보세요.";
@@ -992,6 +1310,17 @@ $("stats-on").onchange = () => {
 // 통계 범위(F18): 표본 n행(기본) / 테이블 전체. 전체면 표본 통계를 건너뛰고 처음부터 테이블 전체로 구한다(추천은 표본에서만 나온다).
 $(statsAll ? "scope-all" : "scope-sample").checked = true;
 const showScope = () => { $("scope-sample-text").textContent = `표본 ${sample.toLocaleString()}행`; };
+function showSampleWay() {  // 층화: 숫자 컬럼(비우면 자동), 키 단위: 구조·목록이 아닌 컬럼, 블록: 칸 숨김
+  $("sample-way").value = sampleWay;
+  $("sample-col").classList.toggle("hidden", sampleWay === "block");
+  const names = (prof?.columns ?? []).filter(c => sampleWay === "strata" ? NUM.includes(c.kind) : c.kind !== "other").map(c => c.name);
+  if (!names.includes(sampleCol)) sampleCol = "";
+  fill($("sample-col"), names, sampleWay === "strata" ? "자동(변동계수가 가장 큰 숫자 컬럼)" : "키 컬럼 고르기");
+  $("sample-col").value = sampleCol;
+}
+const restat = () => { if (statsOn && prof && !statsAll && (status === "" || status === "stopped")) computeStats(token); };
+$("sample-way").onchange = () => { sampleWay = $("sample-way").value; showSampleWay(); if (sampleWay !== "key" || sampleCol) restat(); };
+$("sample-col").onchange = () => { sampleCol = $("sample-col").value; if (sampleWay !== "key" || sampleCol) restat(); };
 showScope();
 document.querySelectorAll("input[name=stats-scope]").forEach(r => r.onchange = () => {
   statsAll = $("scope-all").checked;
@@ -1000,17 +1329,25 @@ document.querySelectorAll("input[name=stats-scope]").forEach(r => r.onchange = (
 });
 // 통계가 어느 표본에서 나왔는지: 표본 행 수, 읽은 방법(넘어간 방법은 마우스를 올리면), 구한 때. [다시 구하기]는 통계가 있을 때만.
 // 서버가 컬럼마다 주는 품질 점검 줄들(checks: 키 후보·IQR 밖 값·값이 없는 날): 한 줄씩 "컬럼 · 줄"로 보인다.
-const checkLines = p => (p?.columns ?? []).flatMap(c => (c.checks ?? []).map(t => `${c.name} · ${t}`));
+const checkLines = p => [...(p?.columns ?? []).flatMap(c => [...(c.checks ?? []), ...(p?.diag?.lines?.[c.name] ?? [])].map(t => `${c.name} · ${t}`)), ...(p?.diag?.table_lines ?? [])];
+const fmt = v => v == null ? "-" : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
 function showSampled() {
-  $("prof-extra").replaceChildren(...checkLines(prof).map(t => el("div", { textContent: t })));
   const s = prof?.sampled;
-  $("sampled").textContent = s ? `${s.saved.replace("T", " ")}에 표본 ${s.rows.toLocaleString()}행으로 구한 통계예요.` : prof?.whole != null ? `테이블 전체 ${prof.whole.toLocaleString()}행으로 구한 통계예요.` : "";
-  $("sampled").title = s ? `읽은 방법: ${SERVER.sample_methods[s.method] ?? s.method}` + (s.passed.length ? "\n건너뛴 방법: " + s.passed.map(([m, why]) => `${SERVER.sample_methods[m] ?? m}(${why})`).join(", ") : "") : "";
+  $("prof-extra").replaceChildren(...(s?.notes ?? []).map(t => el("div", { className: "warn", textContent: t })), ...(s?.reads ?? []).map(r => el("div", { textContent: r.text })), ...checkLines(prof).map(t => el("div", { textContent: t })));
+  const m = s?.margins, e = s?.estimate;
+  $("sampled").textContent = s ? `${s.saved.replace("T", " ")}에 표본 ${s.rows.toLocaleString()}행(계획 ${s.n.toLocaleString()}행 · 파일럿 ${s.pilot.toLocaleString()}행 · ${SERVER.sample_methods[s.method] ?? s.method}${s.column ? ` · 기준 ${s.column}` : ""})으로 구한 통계예요.`
+    + (m ? ` 이 표본의 오차: 비율 ±${(m.ratio * 100).toFixed(1)}%p(신뢰수준 ${m.conf}%).` : "")
+    + (e ? ` ${s.column} 평균 ${fmt(e.mean)} [${fmt(e.low)}, ${fmt(e.high)}], 합계 ${fmt(e.total)} ±${fmt(e.moe_total)}(층화 추정).` : "")
+    : prof?.whole != null ? `테이블 전체 ${prof.whole.toLocaleString()}행으로 구한 통계예요.` : "";
+  $("sampled").title = s ? `읽은 방법: ${SERVER.sample_methods[s.method] ?? s.method}` + (s.passed.length ? "\n건너뛴 방법: " + s.passed.map(([m, why]) => `${SERVER.sample_methods[m] ?? m}(${why})`).join(", ") : "")
+    + (m ? `\n비율 ±${m.e_ratio * 100}%p에 필요한 행 수 ${m.ratio_need}` + Object.entries(m.means).map(([name, x]) => `\n${name} 평균 ±${(x.error * 100).toFixed(1)}% (±${m.e_mean * 100}%에 필요한 행 수 ${x.need})`).join("") : "")
+    + (s.strata ?? []).map(x => `\n층 ${x.empty ? "빈 값" : `${x.low ?? "…"}~${x.high ?? "…"}`}: ${x.rows}행 중 ${x.drawn}행(계획 ${x.planned}, 가중치 ${fmt(x.weight)})`).join("") : "";
   $("resample").classList.toggle("hidden", !s || !!status);
   $("full-stats").classList.toggle("hidden", !s || !!status);
+  showDiagBox();
 }
 $("full-stats").onclick = () => busy($("full-stats"), async () => {
-  try { prof.full = await timedHere("profile", () => api("/api/profile/full", { schema: S.schema, base: S.base, sample })); fail(""); } catch (e) { fail(e.message); }
+  try { prof.full = await timedHere("profile", () => api("/api/profile/full", { schema: S.schema, base: S.base, sample, sample_how: sampleHow() })); fail(""); } catch (e) { fail(e.message); }
   showAll();
 });
 $("profile-export").onclick = () => busy($("profile-export"), async () => {
@@ -1021,11 +1358,154 @@ $("profile-export").onclick = () => busy($("profile-export"), async () => {
   } catch (e) { say("export-msg", e.message); }
 });
 $("resample").onclick = async () => { await computeStats(token, true); await loadFirst(); };
+
+// 품질 진단(표본): 통계가 끝난 뒤 /api/diagnose. 실패해도 통계는 그대로 보인다.
+async function loadDiag(mine, fresh) {
+  try {
+    const d = await timedHere("profile", () => api("/api/diagnose", { schema: S.schema, base: S.base, sample, refresh: fresh, sample_how: sampleHow() }));
+    if (mine !== token) return;
+    prof.diag = d;
+    showAll();
+  } catch (e) { if (mine === token) say("diag-err", e.message); }
+}
+const diagBody = () => ({ schema: S.schema, base: S.base, sample, sample_how: sampleHow() });
+const diagErr = (id, e) => $(id).replaceChildren(el("div", { className: "err", textContent: e.message }));
+const diagText = t => el("div", { textContent: t }), readsLine = d => el("div", { className: "hint", textContent: `(테이블을 ${d.reads}번 읽었어요)` });
+const sharePct = v => v == null ? "-" : (v * 100).toFixed(1);
+const GAP_UNIT_TEXT = { day: "일", hour: "시간" };
+// 컬럼 요약 탭의 진단 상자: 백분위수 표와 버튼들의 칸(컬럼·테이블 목록)
+function showDiagBox() {
+  const d = prof?.diag;
+  $("diag-box").classList.toggle("hidden", !d);
+  if (!d) return;
+  const nums = prof.columns.filter(c => d.columns[c.name]?.percentiles), keys = Object.keys(d.columns[nums[0]?.name]?.percentiles ?? {});
+  $("diag-pct").replaceChildren(...(nums.length ? [el("table", {}, el("thead", {}, el("tr", {}, el("th", { textContent: "컬럼" }), ...keys.map(k => el("th", { textContent: `P${+(k * 100).toFixed(2)}` })))),
+    el("tbody", {}, ...nums.map(c => el("tr", {}, el("td", { textContent: c.name }), ...keys.map(k => el("td", { textContent: fmt(d.columns[c.name].percentiles[k]) }))))))] : []));
+  checks($("dk-cols"), prof.columns.filter(c => c.kind !== "other").map(c => c.name), [...$("dk-cols").querySelectorAll("input:checked")].map(i => i.value));
+  fill($("gap-col"), prof.columns.filter(c => c.kind === "date").map(c => c.name));
+  const dim = $("ri-dim").value, bases = [...$("base").options].map(o => o.value).filter(Boolean);
+  fill($("ri-dim"), bases);
+  if (bases.includes(dim)) $("ri-dim").value = dim;
+  if (!$("ri-pairs").children.length) $("ri-pairs").append(riRow());
+  if (riDim.base !== $("ri-dim").value) loadDim();
+}
+// 참조 무결성의 키 쌍 한 줄: 이 테이블의 컬럼과 차원 테이블의 컬럼
+const riRow = () => el("div", { className: "row" },
+  el("select", { className: "ri-f", ariaLabel: "이 테이블의 키 컬럼" }, ...prof.columns.map(c => new Option(c.name, c.name))),
+  el("select", { className: "ri-d", ariaLabel: "차원 테이블의 키 컬럼" }, ...riDim.columns.map(n => new Option(n, n))));
+async function loadDim() {
+  const base = $("ri-dim").value;
+  riDim = { base, columns: [] };
+  try { if (base) riDim.columns = (await api("/api/shape", { schema: S.schema, base, count: false })).columns.map(c => c.name); } catch (e) { diagErr("ri-out", e); }
+  if (riDim.base === base) $("ri-pairs").querySelectorAll("select.ri-d").forEach(s => fill(s, riDim.columns));
+}
+$("ri-dim").onchange = loadDim;
+$("ri-add").onclick = () => busy($("ri-add"), async () => {
+  try {
+    const max = (diagRules ??= await api("/api/profile/diag")).orphan_pairs;
+    $("ri-pairs").append(riRow());
+    $("ri-add").classList.toggle("hidden", $("ri-pairs").children.length >= max);
+  } catch (e) { diagErr("ri-out", e); }
+});
+$("qi-find").onclick = () => busy($("qi-find"), async () => {
+  try {
+    const d = await timedHere("profile", () => api("/api/diag/quasi", diagBody()));
+    $("qi-list").replaceChildren(...d.keys.map(qiLine), el("div", { className: "hint", textContent: d.keys.length ? "표본 기준 후보예요. [전체로 확인]을 누르세요" : "표본에서 겹치지 않는 조합을 찾지 못했어요" }));
+  } catch (e) { diagErr("qi-list", e); }
+});
+function qiLine(k) {
+  const out = el("span", { className: "hint" }), btn = el("button", { className: "ghost", textContent: "전체로 확인" });
+  btn.onclick = () => busy(btn, async () => {
+    try {
+      const d = await timedHere("profile", () => api("/api/diag/dupes", { schema: S.schema, base: S.base, columns: k.columns }));
+      out.textContent = d.unique ? "전체에서도 겹치지 않아요" : `전체에서 겹치는 묶음 ${d.groups.toLocaleString()}개 · 빠질 행 ${d.extra.toLocaleString()}개` + (d.null_rows ? ` · 키가 빈 행 ${d.null_rows.toLocaleString()}개` : "");
+    } catch (e) { out.textContent = e.message; }
+  });
+  return el("div", {}, `${k.columns.join(" + ")} (표본 ${k.rows.toLocaleString()}행에서 겹치지 않음) `, btn, " ", out);
+}
+$("dk-run").onclick = () => busy($("dk-run"), async () => {
+  const columns = [...$("dk-cols").querySelectorAll("input:checked")].map(i => i.value);
+  if (!columns.length) return say("dk-out", "컬럼을 고르세요");
+  try {
+    const d = await timedHere("profile", () => api("/api/diag/dupes", { schema: S.schema, base: S.base, columns }));
+    $("dk-out").replaceChildren(diagText(`중복 묶음 ${d.groups.toLocaleString()}개 · 빠질 행 ${d.extra.toLocaleString()}개 · 가장 많이 겹친 횟수 ${d.max ?? "-"}`),
+      ...(d.sizes.length ? [diagText(d.sizes.map(s => `${s.n}번 ${s.groups.toLocaleString()}묶음`).join(" · ") + (d.more_sizes ? " …" : ""))] : []),
+      ...d.top.map(t => diagText(`${t.values.map(v => v ?? "빈 값").join(", ")} (${t.n.toLocaleString()}번)`)), readsLine(d));
+  } catch (e) { diagErr("dk-out", e); }
+});
+$("dk-all").onclick = () => busy($("dk-all"), async () => {
+  try {
+    const d = await timedHere("profile", () => api("/api/diag/dupes", { schema: S.schema, base: S.base, columns: [] }));
+    $("dk-out").replaceChildren(diagText(`모든 컬럼 값이 같은 행: 묶음 ${d.groups.toLocaleString()}개 · 빠질 행 ${d.extra.toLocaleString()}개`),
+      ...(d.skipped.length ? [diagText(`구조·목록 컬럼 ${d.skipped.join(", ")}은 빼고 셌어요`)] : []), readsLine(d));
+  } catch (e) { diagErr("dk-out", e); }
+});
+$("gap-run").onclick = () => busy($("gap-run"), async () => {
+  const column = $("gap-col").value, unit = $("gap-unit").value, u = GAP_UNIT_TEXT[unit];
+  if (!column) return say("gap-out", "날짜 컬럼이 없어요");
+  try {
+    const d = await timedHere("profile", () => api("/api/diag/gaps", { schema: S.schema, base: S.base, column, unit }));
+    $("gap-out").replaceChildren(diagText(`${d.first}~${d.last} ${d.buckets.toLocaleString()}${u} 중 ${d.missing.toLocaleString()}${u}이 비어 있어요`),
+      ...d.runs.map(r => diagText(`${r.start}~${r.end} (${r.buckets.toLocaleString()}${u})`)), ...(d.more ? [diagText(`외 ${d.more.toLocaleString()}묶음`)] : []), readsLine(d));
+  } catch (e) { diagErr("gap-out", e); }
+});
+$("ri-run").onclick = () => busy($("ri-run"), async () => {
+  const dim = $("ri-dim").value, pairs = [...$("ri-pairs").children].map(r => [...r.querySelectorAll("select")].map(s => s.value));
+  try {
+    const d = await timedHere("profile", () => api("/api/diag/orphans", { schema: S.schema, base: S.base, dim, pairs }));
+    $("ri-out").replaceChildren(diagText(`키가 있는 ${d.key_rows.toLocaleString()}행 중 ${d.orphan_rows.toLocaleString()}행(${sharePct(d.row_share)}%)·서로 다른 키 ${d.keys.toLocaleString()}개 중 ${d.orphan_keys.toLocaleString()}개(${sharePct(d.key_share)}%)가 '${d.dim}'에 없어요`),
+      ...d.top.map(t => diagText(`${t.values.map(v => v ?? "빈 값").join(", ")} (${t.n.toLocaleString()}행)`)), readsLine(d));
+  } catch (e) { diagErr("ri-out", e); }
+});
+
+// 진단 기준: 서버의 rules([종류, 아래, 위, 기본값])대로 칸을 그린다. 라벨만 화면에 둔다.
+const DIAG_LABELS = { iqr_k: "IQR 배수", z_k: "Z-Score 기준(σ)", mad_k: "수정 Z-Score 기준", skew_log: "로그 변환 제안 왜도", percentiles: "백분위수", sentinels: "더미 숫자", epoch_dates: "기본값 날짜",
+  heap_bases: "쏠림을 볼 배수", heap_ratio: "쏠림 기준(배)", qi_size: "조합 키 최대 컬럼 수", qi_columns: "조합 키 후보 컬럼 수", benford_mad: "벤포드 이탈 기준(MAD)", benford_min: "벤포드 최소 행 수",
+  zero_share: "0이 많다고 볼 비율", hash_share: "해시로 볼 비율", json_share: "JSON으로 볼 비율", sentinel_edge: "더미 끝값 비율", sentinel_gap: "더미 끝값 간격(IQR 배)", mode_share: "봉우리 최소 비율", mode_dip: "봉우리 사이 골 비율",
+  gap_max_buckets: "빈 구간 최대 구간 수", gap_list: "빈 구간 목록 수", case_groups: "대소문자 묶음 수", future_days: "미래로 볼 날 수", dup_top: "많이 겹친 키 수", orphan_top: "많이 빠진 키 수",
+  markers_extra: "더할 빈 값 표시", nonneg_hints: "음수가 안 되는 컬럼 이름 단서", time_starts: "시작 컬럼 이름 단서", time_ends: "끝 컬럼 이름 단서", ordinal_scales: "순서 척도", bool_pairs: "이진 쌍 [거짓, 참]" };
+const DIAG_TABLE_KINDS = ["scales", "pairs"];  // 한 줄에 목록 하나(낱말은 쉼표)
+const diagFormat = (kind, v) => DIAG_TABLE_KINDS.includes(kind) ? v.map(r => r.join(", ")).join("\n") : Array.isArray(v) ? v.join(", ") : v;
+const diagValue = (kind, text) => {  // 칸의 글 → 서버로 보낼 값. 비운 숫자 칸은 보내지 않는다(기본값)
+  const words = s => s.split(",").map(x => x.trim()).filter(Boolean);
+  if (kind === "float" || kind === "int") return text.trim() === "" ? undefined : Number(text);
+  if (DIAG_TABLE_KINDS.includes(kind)) return text.split("\n").map(words).filter(r => r.length);
+  return ["floats", "numbers", "ints"].includes(kind) ? words(text).map(Number) : words(text);
+};
+function drawDiagForm() {
+  const { options, rules } = diagRules;
+  $("diag-form").replaceChildren(...Object.entries(rules).map(([name, [kind, lo, hi, dflt]]) => {
+    const list = DIAG_TABLE_KINDS.includes(kind), number = kind === "float" || kind === "int";
+    const input = el(list ? "textarea" : "input", { id: `dg-${name}`, value: diagFormat(kind, options[name]), placeholder: String(diagFormat(kind, dflt)),
+      ...(number ? { type: "number", min: lo, max: hi, step: kind === "int" ? 1 : 0.001 } : {}) });
+    return el("label", { className: "hint" }, DIAG_LABELS[name] ?? name, input);
+  }));
+}
+$("diag-opts").onclick = () => busy($("diag-opts"), async () => {
+  const open = $("diag-pop").classList.contains("hidden");
+  $("diag-pop").classList.toggle("hidden", !open);
+  if (!open) return;
+  say("diag-err", "");
+  try { diagRules = await api("/api/profile/diag"); drawDiagForm(); } catch (e) { diagRules = null; $("diag-form").replaceChildren(); say("diag-err", e.message); }  // 저장 파일이 틀리면 [기본값으로]로 되돌린다
+});
+async function saveDiag(options) {
+  try {
+    await api("/api/profile/diag", { options });
+    $("diag-pop").classList.add("hidden");
+    say("diag-err", "");
+    restat();  // 통계·진단을 같은 표본으로 다시(서버가 지문으로 판단)
+  } catch (e) { say("diag-err", e.message); }
+}
+$("diag-save").onclick = () => busy($("diag-save"), () => {
+  if (!diagRules) return say("diag-err", "진단 기준을 읽지 못했어요. [기본값으로]를 누르세요.");
+  return saveDiag(Object.fromEntries(Object.entries(diagRules.rules).map(([name, [kind]]) => [name, diagValue(kind, $(`dg-${name}`).value)]).filter(([, v]) => v !== undefined)));
+});
+$("diag-reset").onclick = () => busy($("diag-reset"), () => saveDiag({}));
 // ②와 ③. 통계는 테이블 전체가 아니라 표본으로 구하고 서버가 테이블별로 저장해 둔다(fresh면 표본을 새로 읽는다).
 // 오류나 취소로 ②가 멈추면 통계 칸에 "통계를 구하지 못했어요"와 [다시]가 나온다.
 async function computeStats(mine, fresh = false) {
   if (statsAll && !fresh) return computeFull(mine);  // 통계 범위가 전체면 표본 통계는 건너뛴다(F18)
-  const body = { schema: S.schema, base: S.base, sample, refresh: fresh };
+  const body = { schema: S.schema, base: S.base, sample, refresh: fresh, sample_how: sampleHow() };
   prof.full = prof.whole = null;  // 전체로 구한 요약은 표본을 다시 읽으면 버린다
   status = "stats";
   renderGrid();
@@ -1038,12 +1518,13 @@ async function computeStats(mine, fresh = false) {
     status = prof.columns.some(isStr) ? "patterns" : "";
     renderGeo();
     renderGrid();
-    if (!status) return;
+    if (!status) { await loadDiag(mine, fresh); return; }
     const d = await timedHere("profile", () => api("/api/patterns", body));
     if (mine !== token) return;
     prof.columns.forEach(c => c.patterns = d.columns[c.name] ?? []);
     status = "";
     renderGrid();
+    await loadDiag(mine, fresh);
   } catch (e) {
     if (mine !== token) return;
     status = status === "stats" ? "stopped" : "";
@@ -1053,11 +1534,11 @@ async function computeStats(mine, fresh = false) {
 }
 // 통계 범위가 '전체'일 때: 표본 통계를 건너뛰고 /api/profile/full(테이블 전체의 행 수·빈 값·값 종류·최솟값·최댓값)을 컬럼 통계 자리에 채운다.
 async function computeFull(mine) {
-  prof.full = prof.sampled = null;
+  prof.full = prof.sampled = prof.diag = null;
   status = "stats";
   renderGrid();
   try {
-    const whole = await timedHere("profile", () => api("/api/profile/full", { schema: S.schema, base: S.base, sample }));
+    const whole = await timedHere("profile", () => api("/api/profile/full", { schema: S.schema, base: S.base, sample, sample_how: sampleHow() }));
     if (mine !== token) return;
     prof.rows = prof.whole = whole.rows;
     const byName = Object.fromEntries(whole.columns.map(c => [c.name, c]));
@@ -1095,25 +1576,47 @@ async function loadSpecView() {
 }
 // 명세서 탭: 테이블 설명·파티션(명세서 파일)과 컬럼마다 한 줄 — 이름, 쉬운 요약(표본 통계), 명세서의 설명, 추천. 줄을 누르면 ③ 컬럼 정리.
 function renderSpec() {
+  const heads = ["컬럼", "빈 값 비율", "고유값 수", "표본 요약", "명세서 설명", "추천"], sortable = ["컬럼", "빈 값 비율", "고유값 수", "명세서 설명"], numbers = ["빈 값 비율", "고유값 수"];
   const box = $("spec-view"), v = specView ?? { columns: {} };
   if (!prof) return box.replaceChildren(el("div", { className: "empty", textContent: "테이블을 고르면 여기에 컬럼별 요약이 나와요." }));
   const part = v.partition && `파티션 ${v.partition.column}: ${"recent_days" in v.partition ? `최근 ${v.partition.recent_days}일만` : `${v.partition.latest}만`} 표본으로 읽어요`;
-  const rows = cols().map(c => {
-    const rename = edits[c.name].rename.trim(), name = el("td", { className: "cname" }, c.name + (c.from ? " (복사)" : "") + (rename ? ` → ${rename}` : ""));
-    if (isWorked(c)) name.append(el("div", { className: "worked", textContent: "정리함" }));
-    const sugs = c.from ? [] : [
-      ...(status === "stopped" && !("unique" in c) ? [el("button", { className: "ghost", textContent: "통계 다시 구하기", onclick: () => computeStats(token) })] : []),
-      ...suggests(c),
-      ...(status === "patterns" && isStr(c) ? [el("div", { className: "empty", textContent: "타입 추천 확인 중…" })] : []),
-    ];
-    return el("tr", { className: c.name === picked ? "on" : "", onclick: () => pickColumn(c.name) }, name, el("td", { innerHTML: statsHtml(c) }),
-      el("td", {}, v.columns[c.from || c.name] || el("span", { className: "empty", textContent: v.path ? "설명 없음" : "—" })), el("td", { className: "sugs" }, ...sugs));
-  });
-  const have = prof.columns.map(c => c.name), gone = Object.keys(v.columns).filter(n => !have.includes(n));
-  rows.push(...gone.map(n => el("tr", {}, el("td", { className: "cname" }, n), el("td", {}, el("span", { className: "warn", textContent: "명세서에만 있고 테이블에는 없어요" })), el("td", {}, v.columns[n]), el("td"))));
-  box.replaceChildren(
-    ...(v.description ? [el("p", {}, el("b", { textContent: S.base }), " — " + v.description)] : []), ...(part ? [el("p", { className: "hint", textContent: part })] : []),
-    el("div", { className: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ...["컬럼", "표본 요약", "명세서 설명", "추천"].map(t => el("th", { textContent: t })))), el("tbody", {}, ...rows))));
+  const n = prof.sampled?.rows ?? prof.rows ?? 0;  // statsHtml과 같은 분모
+  const rows = cols().map(c => ({ 컬럼: c.name, "빈 값 비율": "unique" in c && n ? c.nulls / n : null, "고유값 수": "unique" in c ? c.unique : null, "명세서 설명": v.columns[c.from || c.name] || null, _c: c }));
+  const have = prof.columns.map(c => c.name), gone = Object.keys(v.columns).filter(g => !have.includes(g));
+  rows.push(...gone.map(g => ({ 컬럼: g, "빈 값 비율": null, "고유값 수": null, "명세서 설명": v.columns[g], _gone: true })));
+  const none = () => el("span", { className: "empty", textContent: "—" });
+  const draw = (h, d, s) => {
+    const body = d.rows.map(r => {
+      if (r._gone) return el("tr", {}, el("td", { className: "cname" }, r.컬럼), el("td", { className: "num" }), el("td", { className: "num" }), el("td", {}, el("span", { className: "warn", textContent: "명세서에만 있고 테이블에는 없어요" })), el("td", {}, r["명세서 설명"]), el("td"));
+      const c = r._c, rename = edits[c.name].rename.trim(), name = el("td", { className: "cname" }, c.name + (c.from ? " (복사)" : "") + (rename ? ` → ${rename}` : ""));
+      if (isWorked(c)) name.append(el("div", { className: "worked", textContent: "정리함" }));
+      const sugs = c.from ? [] : [
+        ...(status === "stopped" && !("unique" in c) ? [el("button", { className: "ghost", textContent: "통계 다시 구하기", onclick: () => computeStats(token) })] : []),
+        ...suggests(c),
+        ...(status === "patterns" && isStr(c) ? [el("div", { className: "empty", textContent: "타입 추천 확인 중…" })] : []),
+      ];
+      const rate = r["빈 값 비율"], uniq = r["고유값 수"];
+      return el("tr", { className: c.name === picked ? "on" : "", onclick: () => pickColumn(c.name) }, name,
+        el("td", { className: "num" }, rate == null ? none() : (rate * 100).toFixed(1) + "%"), el("td", { className: "num" }, uniq == null ? none() : uniq.toLocaleString()),
+        el("td", { innerHTML: statsHtml(c) }), el("td", {}, r["명세서 설명"] || el("span", { className: "empty", textContent: v.path ? "설명 없음" : "—" })), el("td", { className: "sugs" }, ...sugs));
+    });
+    const ths = heads.map(t => {
+      const th = el("th", { className: numbers.includes(t) ? "num" : "", textContent: t });
+      if (numbers.includes(t)) th.title = "표본으로 구한 값이에요";
+      if (sortable.includes(t)) {
+        const m = sortMark(s, t);
+        th.dataset.sort = t;
+        th.tabIndex = 0;
+        th.textContent = t + m.arrow;
+        if (m.aria) th.setAttribute("aria-sort", s.dir === "asc" ? "ascending" : "descending");
+      }
+      return th;
+    });
+    h.replaceChildren(
+      ...(v.description ? [el("p", {}, el("b", { textContent: S.base }), " — " + v.description)] : []), ...(part ? [el("p", { className: "hint", textContent: part })] : []),
+      el("div", { className: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, ...ths)), el("tbody", {}, ...body))));
+  };
+  sortedTable($("spec-view"), { columns: sortable, rows }, draw, { pinned: r => r._gone });
 }
 $("spec-read").onclick = () => busy($("spec-read"), async () => {
   try {
@@ -1123,7 +1626,8 @@ $("spec-read").onclick = () => busy($("spec-read"), async () => {
 });
 
 // 구성 저장·불러오기: 입력 상태를 그대로 저장한다(서버로 보내는 recipe 값이 아니다). 미리 볼 행 수와 미리보기 결과는 넣지 않는다.
-const config = () => ({ schema: S.schema, base: S.base, edits, copies, drops, filters, formulas, pca, geo: geoSteps, dedupe, ...(keepNow() ? { dedupe_keep: keepNow() } : {}), sorts, downcast: $("downcast").checked,
+const config = () => ({ schema: S.schema, base: S.base, edits, copies, drops, filters, formulas, pca, kmeans, geo: geoSteps, dedupe, ...(keepNow() ? { dedupe_keep: keepNow() } : {}),
+  dedupe_loose: $("dd-loose").checked, dedupe_contain: ddContain, dedupe_limit_on: $("dd-limit-on").checked, dedupe_limit: Number($("dd-limit").value), dedupe_on: dedupeOn, sorts, downcast: $("downcast").checked, labels: labelUse,
   target: { kind: $("t-table").checked ? "table" : "file", format: $("fmt").value, name: $("tname").value } });
 // 구성의 원래 컬럼이 모두 이 테이블에 있으면 선택을 채운다. 없는 것이 있으면 채우지 않고 알린다(구성에 없는 새 컬럼은 선택 없이 둔다).
 function restore(c) {
@@ -1137,8 +1641,15 @@ function restore(c) {
   ({ copies, drops, filters, dedupe, sorts } = d);
   formulas = d.formulas ?? [];  // 이 기능 전에 저장한 구성에는 없다
   setKeep(d.dedupe_keep);
-  pca = d.pca ?? { columns: [], n: 2 };
+  $("dd-loose").checked = d.dedupe_loose ?? false;
+  ddContain = Array.isArray(d.dedupe_contain) ? d.dedupe_contain : [];
+  $("dd-limit-on").checked = d.dedupe_limit_on ?? true;
+  $("dd-limit").value = d.dedupe_limit ?? SERVER.dedupe_limit;
+  dedupeOn = d.dedupe_on !== undefined ? d.dedupe_on : (d.dedupe.length ? { dedupe: d.dedupe, ...(d.dedupe_keep ? { dedupe_keep: d.dedupe_keep } : {}) } : null);  // 이 기능 전 구성은 고른 기준이 곧 지울 기준
+  pca =d.pca ?? { columns: [], n: 2 };
+  kmeans = d.kmeans ?? noKmeans();  // 이 기능 전에 저장한 구성에는 없다
   geoSteps = d.geo ?? [];  // 이 기능 전에 저장한 구성에는 없다
+  labelUse = d.labels ?? noLabels();  // 이 기능 전에 저장한 구성에는 없다
   $("downcast").checked = d.downcast;
   $("t-table").checked = d.target.kind === "table";
   $("t-file").checked = !$("t-table").checked;
@@ -1237,9 +1748,10 @@ function recipe() {
     throw new Error(`비어 있거나 잘못 적은 정리 방법이 있어요. 빨갛게 표시한 칸을 고쳐 주세요: ${[...new Set(bad.map(([name]) => name))].join(", ")}`);
   }
   if (pca.columns.length === 1) throw new Error("PCA에는 숫자 컬럼을 2개 이상 골라 주세요.");
-  return { schema: S.schema, base: S.base, columns, filters, copies, drop: drops, sorts,
-    ...(formulas.length ? { formulas } : {}), ...(pca.columns.length ? { pca: { columns: pca.columns, n: pca.n } } : {}), ...(geoSteps.length ? { geo: geoSteps } : {}),
-    ...(dedupe.length ? { dedupe, ...(keepNow() ? { dedupe_keep: keepNow() } : {}) } : {}), ...($("downcast").checked ? { downcast: true } : {}), ...(statsOn ? {} : { count: false }) };  // 통계를 끄면 원격 COUNT도 안 한다
+  if (kmeans.columns.length === 1) throw new Error("K-Means에는 숫자 컬럼을 2개 이상 골라 주세요.");
+  return { schema: S.schema, base: S.base, columns, filters, copies, drop: drops, sorts, ...labelsOf(),
+    ...(formulas.length ? { formulas } : {}), ...(pca.columns.length ? { pca: { columns: pca.columns, n: pca.n } } : {}), ...(kmeans.columns.length ? { kmeans: { columns: kmeans.columns, k: kmeans.k, name: kmeans.name } } : {}), ...(geoSteps.length ? { geo: geoSteps } : {}),
+    ...(dedupeOn ?? {}), ...($("downcast").checked ? { downcast: true } : {}), ...(statsOn ? {} : { count: false }) };  // 통계를 끄면 원격 COUNT도 안 한다
 }
 // [미리보기]·[실행]·[중복 세기]가 함께 쓴다: 테이블을 골랐는지 보고, 레시피를 만들어 fn에 넘기고, 오류는 카드에 보인다.
 function act(button, fn) {
@@ -1262,6 +1774,7 @@ $("preview").onclick = () => act($("preview"), async r => {
   const mine = token, sent = snap(), got = await timedHere("preview", () => api("/api/preview", r));
   if (mine !== token) return;  // 기다리는 사이 테이블·연결을 바꿨으면 앞의 미리보기를 새 화면에 넣지 않는다
   preview = got;
+  vsort = sortedView = null;  // 미리보기는 원래 순서로
   const same = snap() === sent;
   saveExpandKeys(got);
   shot = same ? snap() : sent;  // 보낸 때의 설정: 기다리는 사이 설정을 바꿨으면 "다시 누르세요" 안내가 뜬다
@@ -1270,11 +1783,22 @@ $("preview").onclick = () => act($("preview"), async r => {
   deriv = [...now, ...deriv.filter(d => drops.includes(d.name) && !now.some(n => n.name === d.name))];  // 끈 파생 컬럼은 응답에 없어도 목록에 남긴다.
   const p = preview.info?.pca;
   $("pca-info").textContent = p ? `성분별 설명력: ${p.names.map((n, i) => `${n} ${(p.ratio[i] * 100).toFixed(1)}%`).join(", ")}, 누적 ${(p.cumulative.at(-1) * 100).toFixed(1)}%. 계산에 쓴 행은 ${p.rows.toLocaleString()}개예요.` : "";
+  const km = preview.info?.kmeans;
+  $("km-info").textContent = km ? `군집별 행 수: ${km.sizes.map((n, i) => `${i}번 ${n.toLocaleString()}`).join(", ")}. ${km.iters}번 반복${km.converged ? "해 멈췄어요" : "했지만 아직 움직여요(반복 상한)"}. 계산에 쓴 행은 ${km.rows.toLocaleString()}개예요.` : "";
   showAll();
 });
 $("dupes").onclick = () => act($("dupes"), async r => {
-  const d = await timedHere("preview", () => api("/api/dupes", r));
+  const n = Number($("dd-limit").value);
+  if (ddContain.length && $("dd-limit-on").checked && !(Number.isInteger(n) && n >= 1)) throw new Error("상한은 1 이상의 정수로 적어 주세요.");
+  const ask = dedupeAsk(), body = { ...r };
+  for (const k of Object.keys(dedupeOn ?? {})) delete body[k];  // 확정 기준의 키(예: dedupe_loose)가 후보에 없을 때 섞이지 않게
+  const d = await timedHere("preview", () => api("/api/dupes", { ...body, ...ask }));
   $("dd-result").textContent = `중복 묶음 ${d.groups.toLocaleString()}개, 빠질 행 ${d.rows.toLocaleString()}개` + (d.conflicts != null ? `, 값이 여러 개라 빈 값이 되는 묶음 ${d.conflicts.toLocaleString()}개` : "");
+  if (d.examples.rows.length) resultTable($("dd-examples"), { columns: ["묶음", ...d.examples.columns], rows: d.examples.rows.map((row, i) => ({ 묶음: d.example_groups[i], ...row })) });
+  else $("dd-examples").replaceChildren();
+  if (d.moved) movedNotice();
+  dedupeFound = d.groups ? ask : null;
+  showApply();
 });
 // 새 테이블을 만들 때는 한 번 더 눌러야 실행한다. 다른 것을 건드리면 원래대로 돌아간다.
 $("run").onclick = () => {
@@ -1289,7 +1813,7 @@ $("run").onclick = () => {
   return act($("run"), async r => {
     if ($("t-table").checked) {
       const d = await timedHere("run", () => api("/api/run", { recipe: r, target: { kind: "table", name } }));
-      $("ok-run").textContent = `‘${name}’ 테이블을 만들었어요(${d.rows.toLocaleString()}행)`;
+      $("ok-run").textContent = `‘${name}’ 테이블을 만들었어요(${d.rows.toLocaleString()}행)` + (d.info?.cut ?? []).map(x => " " + cutText(x)).join("");
       await loadTables();  // 새 테이블이 목록에 들어온다. 지금 고른 테이블과 전처리는 그대로 둔다.
       $("base").value = S.base;
     } else {
@@ -1315,8 +1839,8 @@ function showPrepSummaries() {
   put("sum-p-filters", filters.length ? `${filters.length}개` : "없음");
   const worked = prof ? cols().filter(c => isWorked(c)).length : 0;
   put("sum-p-clean", worked ? `${worked}개 컬럼` : "없음");
-  put("sum-p-derive", [formulas.length ? `계산 ${formulas.length}개` : "", pca.columns.length ? `PCA ${pca.columns.length}개를 ${pca.n}개로` : "", geoSteps.length ? `좌표 ${geoSteps.length}개` : ""].filter(Boolean).join(", ") || "없음");
-  put("sum-p-dedupe", dedupe.length ? dedupe.join(", ") : "없음");
+  put("sum-p-derive", [formulas.length ? `계산 ${formulas.length}개` : "", pca.columns.length ? `PCA ${pca.columns.length}개를 ${pca.n}개로` : "", kmeans.columns.length ? `K-Means ${kmeans.columns.length}개를 ${kmeans.k}개 군집으로` : "", geoSteps.length ? `좌표 ${geoSteps.length}개` : ""].filter(Boolean).join(", ") || "없음");
+  put("sum-p-dedupe", dedupeOn ? dedupeText(dedupeOn) : "없음");
   put("sum-p-sorts", sorts.length ? sorts.join(", ") : "없음");
   put("sum-p-save", $("t-table").checked ? `새 테이블 ${$("tname").value.trim()}` : $("fmt").value === "csv" ? "CSV 파일" : "Parquet 파일");
   document.querySelectorAll("#prep-view .step").forEach(s => s.querySelector(".c").textContent = s.classList.contains("open") ? "편집 중" : "⌄");
@@ -1334,13 +1858,46 @@ document.querySelectorAll("#views button").forEach(b => b.onclick = () => showVi
 
 // ---------- 분석 ----------
 // A.cols: 분석할 표의 [컬럼, 종류(num·date·text)]. A.result: 마지막 /api/analyze 결과(how·조건 글 포함). A.view: 보고 있는 그래프.
-const A = { cols: [], result: null, view: null, lo: 0, hi: 0 };
-const VIEW_NAMES = { hist: "히스토그램", box: "상자 그림", values: "값 빈도", heat: "히트맵", scatter: "산점도", groups: "그룹 비교", trend: "추이", funnel: "퍼널" };
-const VIEW_RATIOS = { box: 2.4, heat: 1, scatter: 4 / 3 };  // 나머지는 16:9
+const A = { cols: [], hashed: null, result: null, view: null, lo: 0, hi: 0 };
+const VIEW_NAMES = { hist: "히스토그램", box: "상자 그림", values: "값 빈도", heat: "히트맵", scatter: "산점도", groups: "그룹 비교", trend: "추이", funnel: "퍼널",
+  cohort: "코호트 표", curve: "평균 유지율", rfm: "RFM 세그먼트", pareto: "파레토", chi: "관계 검정", ab: "A/B 검정", basket: "연관 쌍", waterfall: "변화 요인", season: "시계열 분해" };
+const VIEW_RATIOS = { box: 2.4, heat: 1, scatter: 4 / 3, cohort: 1, chi: 1 };  // 나머지는 16:9
+const ADD_TITLE = $("a-add").title;
 const anaDraw = island($("a-chart"), m => say("err-ana", m));
 $("a-max-corr").textContent = SERVER.analysis.max_corr;
 $("a-max-points").textContent = SERVER.analysis.max_points.toLocaleString();
 $("a-max-steps").textContent = SERVER.analysis.max_steps;
+// 새 분석 입력 칸의 기본값·상한은 서버 값(SERVER.analysis, SERVER.defaults)에서 받는다. 비우면 서버 기본값이 쓰인다.
+const PCT = 100;  // 비율 ↔ % 칸
+{
+  const lim = SERVER.analysis, set = (id, attrs) => Object.assign($(id), attrs);
+  set("a-rspan", { placeholder: lim.cohort_span, min: 1, max: lim.max_cohort_span });
+  set("a-pa", { placeholder: lim.pareto_a * PCT, min: 0, max: PCT });
+  set("a-pb", { placeholder: lim.pareto_b * PCT, min: 0, max: PCT });
+  set("a-bconf", { placeholder: SERVER.defaults.sample_conf });
+  set("a-ksup", { placeholder: lim.min_support * PCT, min: 0, max: PCT });
+  set("a-ktop", { placeholder: lim.basket_top, min: 1, max: lim.max_basket_top });
+  set("a-swin", { min: 3, max: lim.max_window });
+  set("a-sk", { placeholder: lim.mad_k, min: 0, max: lim.max_mad_k });
+}
+const showSeasonWindow = () => { $("a-swin").placeholder = SERVER.analysis.season_windows[$("a-sunit").value]; };
+$("a-sunit").onchange = showSeasonWindow;
+showSeasonWindow();
+$("a-pagg").onchange = () => $("a-pvalbox").classList.toggle("hidden", $("a-pagg").value === "count");
+// A/B의 대조군: 그룹 컬럼의 값(많이 나온 순)을 받아 고르게 한다
+let ctrlCall = 0;
+async function loadCtrlValues() {
+  const column = $("a-bgroup").value, mine = ++ctrlCall, was = $("a-bctrl").value, blank = "대조군을 고르세요";
+  fill($("a-bctrl"), [], blank);
+  if (!column || !prof) return;
+  try {
+    const d = await api("/api/analyze", { recipe: anaRecipe(), how: { kind: "distribution", column }, sample, sample_how: sampleHow() });
+    if (mine !== ctrlCall) return;
+    fill($("a-bctrl"), d.values.labels, blank);
+    if (d.values.labels.includes(was)) $("a-bctrl").value = was;
+  } catch (e) { if (mine === ctrlCall) say("err-ana", e.message); }
+}
+$("a-bgroup").onchange = loadCtrlValues;
 // 흐름(퍼널): 단계 칩(끌어서 순서 바꾸기, ×로 빼기, 최대 max_steps개)과 단계 컬럼의 값 목록
 const FLOW = { steps: [], values: [] };
 function showSteps() {
@@ -1379,7 +1936,7 @@ async function loadStepValues() {
   $("a-fvalues").replaceChildren();
   if (!column || !prof) return;
   try {
-    const d = await api("/api/analyze", { recipe: anaRecipe(), how: { kind: "distribution", column }, sample });
+    const d = await api("/api/analyze", { recipe: anaRecipe(), how: { kind: "distribution", column }, sample, sample_how: sampleHow() });
     if (mine !== stepCall) return;
     FLOW.values = d.values.labels;
     $("a-fvalues").replaceChildren(...FLOW.values.map(v => el("option", { value: v })));
@@ -1402,27 +1959,43 @@ async function loadAnaColumns() {
   const mine = ++anaCall;
   let cols = [], err = "전처리 탭에서 먼저 테이블을 골라 주세요.";
   if (prof) {
-    try { cols = (await api("/api/analyze", { recipe: anaRecipe(), how: { kind: "columns" }, sample })).columns; err = ""; }
+    try { cols = (await api("/api/analyze", { recipe: anaRecipe(), how: { kind: "columns" }, sample, sample_how: sampleHow() })).columns; err = ""; }
     catch (e) { err = e.message; }
   }
+  let h = null;  // 해시·UUID 컬럼(common.js). 못 받으면 빼지 않고 그 오류를 보인다
+  if (prof && !err) { try { h = await hashedOf(S.schema, S.base); } catch (e) { err = e.message; } }
   if (mine !== anaCall) return;
   A.cols = cols;
+  A.hashed = h;
   say("err-ana", err);
+  if (h?.on) for (const id of ["a-gby", "a-gval", "a-tval", "a-fby"]) if (h.columns.includes($(id).value) && !h.restored.includes($(id).value)) h.restored.push($(id).value);  // 이미 고른 컬럼은 남긴다
   const names = k => A.cols.filter(c => !k || c[1] === k).map(c => c[0]), nums = names("num");
+  const grouped = hashedOut(names(), h);
+  hashedNote($("hashed-note-a"), h, grouped.hidden, loadAnaColumns);
   const keep = (id, list, blank) => { const now = $(id).value; fill($(id), list, blank); if (list.includes(now)) $(id).value = now; };
   keep("a-col", names());
   keep("a-sx", nums);
   keep("a-sy", nums);
   if ($("a-sy").value === $("a-sx").value && nums[1]) $("a-sy").value = nums[1];
-  keep("a-gby", names());
+  keep("a-gby", grouped.names);
   fillAnaValues();
   keep("a-tcol", names("date"));
   keep("a-fuser", names());
-  keep("a-fby", names(), "나누지 않아요");
+  keep("a-fby", grouped.names, "나누지 않아요");
   const before = $("a-fstep").value;
   keep("a-fstep", names());
   keep("a-ftime", names("date"));
   if ($("a-fstep").value !== before || !FLOW.values.length) loadStepValues();
+  const dates = names("date"), ctrlBefore = $("a-bgroup").value;
+  keep("a-rwho", names()); keep("a-rtime", dates);
+  keep("a-mwho", names()); keep("a-mtime", dates); keep("a-mamt", nums); keep("a-mtx", names(), "고르지 않음 — 빈도 = 행 수");
+  keep("a-pitem", names()); keep("a-pval", nums);
+  keep("a-xrow", grouped.names); keep("a-xcol", grouped.names);
+  keep("a-bgroup", grouped.names); keep("a-bval", names());
+  keep("a-kkey", names()); keep("a-kitem", names());
+  keep("a-dtime", dates); keep("a-dgroup", grouped.names); keep("a-dval", nums);
+  keep("a-stime", dates);
+  if ($("a-bgroup").value !== ctrlBefore || $("a-bctrl").options.length < 2) loadCtrlValues();
   const picked = new Set([...$("a-corr-cols").querySelectorAll("input:checked")].map(b => b.value));
   $("a-corr-cols").replaceChildren(...nums.map((n, i) => el("label", {}, el("input", { type: "checkbox", value: n, checked: picked.size ? picked.has(n) : i < 8 }), " " + n)));
   $("a-tcol").title = names("date").length ? "" : "날짜 컬럼이 없어요. 전처리에서 타입을 날짜로 바꾸면 고를 수 있어요";
@@ -1438,6 +2011,15 @@ function anaHow() {
   if (k === "groups") return { kind: k, by: $("a-gby").value, ...pick("groups", $("a-gval").value) };
   if (k === "funnel") return { kind: k, who: $("a-fuser").value, step: $("a-fstep").value, time: $("a-ftime").value, steps: [...FLOW.steps],
     ...($("a-fby").value ? { by: $("a-fby").value } : {}), window: $("a-fwin").value === "" ? null : { n: +$("a-fwin").value, unit: $("a-funit").value } };
+  const v = id => $(id).value, orNull = id => v(id) === "" ? null : +v(id), pct = id => v(id) === "" ? null : +v(id) / PCT, text = id => v(id) || null;
+  if (k === "retention") return { kind: k, who: v("a-rwho"), time: v("a-rtime"), unit: v("a-runit"), span: orNull("a-rspan") };
+  if (k === "rfm") return { kind: k, who: v("a-mwho"), time: v("a-mtime"), amount: v("a-mamt"), asof: text("a-masof"), tx: text("a-mtx") };
+  if (k === "pareto") return { kind: k, item: v("a-pitem"), agg: v("a-pagg"), value: v("a-pagg") === "sum" ? v("a-pval") : null, a: pct("a-pa"), b: pct("a-pb") };
+  if (k === "chisq") return { kind: k, row: v("a-xrow"), col: v("a-xcol") };
+  if (k === "abtest") return { kind: k, group: v("a-bgroup"), metric: v("a-bmetric"), value: v("a-bval"), control: text("a-bctrl"), conf: orNull("a-bconf") };
+  if (k === "basket") return { kind: k, key: v("a-kkey"), item: v("a-kitem"), support: pct("a-ksup"), top: orNull("a-ktop") };
+  if (k === "decompose") return { kind: k, time: v("a-dtime"), base: { start: v("a-db0"), end: v("a-db1") }, compare: { start: v("a-dc0"), end: v("a-dc1") }, group: v("a-dgroup"), value: v("a-dval") };
+  if (k === "seasonal") return { kind: k, time: v("a-stime"), unit: v("a-sunit"), ...pick("seasonal", v("a-sval")), window: orNull("a-swin"), k: orNull("a-sk") };
   return { kind: k, column: $("a-tcol").value, unit: $("a-tunit").value, ...pick("trend", $("a-tval").value) };
 }
 // 구하기(표본) 또는 전체로 다시 구하기(마지막 분석을 테이블 전체로)
@@ -1448,11 +2030,14 @@ async function runAna(full) {
   try {
     const how = full ? A.result.how : anaHow(), prepped = full ? A.result.prepped : $("a-prep").checked;
     const base = full ? A.result.base : S.base, r = full ? A.result.recipe : prepped ? recipe() : { schema: S.schema, base };  // 기다리는 동안 테이블이 바뀔 수 있어 시작 때 값을 잡아 둔다. 전체로는 마지막 분석의 테이블·전처리 그대로
+    if (how.kind === "abtest" && !how.control) return say("err-ana", "대조군을 골라 주세요.");  // 서버의 첫 그룹 기본값은 화면에서 쓰지 않는다
     const used = full ? A.result.sample : sample;
-    const d = await timedHere("analyze", () => api("/api/analyze", { recipe: r, how, sample, full }));
+    const auto = $("a-all").checked ? { ...anaAuto, tail: false, density: false } : anaAuto;
+    const asked = ANA_AUTO_KINDS.includes(how.kind) && Object.keys(auto).length ? { ...how, auto } : how;  // 저장하는 how에는 넣지 않는다
+    const d = await timedHere("analyze", () => api("/api/analyze", { recipe: r, how: asked, sample, full, sample_how: sampleHow() }));
     if (call !== anaRun) return;  // 기다리는 사이 연결을 바꿨다
     const views = d.kind === "distribution" ? (d.histogram ? ["hist", "box", "values"] : ["values"])
-      : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"], funnel: ["funnel"] }[d.kind];
+      : { correlation: ["heat"], scatter: ["scatter"], groups: ["groups"], trend: ["trend"], funnel: ["funnel"], retention: ["cohort", "curve"], rfm: ["rfm"], pareto: ["pareto"], chisq: ["chi"], abtest: ["ab"], basket: ["basket"], decompose: ["waterfall"], seasonal: ["season"] }[d.kind];
     A.result = { ...d, how, prepped, base, recipe: r, views, sample: used };  // 구할 때의 표본 수(카드가 최신화 때 같은 표본으로 다시 구한다)
     A.view = views.includes(A.view) ? A.view : views[0];
     say("err-ana", "");
@@ -1462,7 +2047,56 @@ async function runAna(full) {
 $("a-run").onclick = () => busy($("a-run"), () => runAna(false));
 $("a-full").onclick = () => busy($("a-full"), () => runAna(true));
 // 분석 결과의 제목과 아래 줄(어느 데이터로 구했는지, 줄인 것)
+// 새 분석 8가지: 제목·안내 글·표. 숫자 기본값·상한은 SERVER.analysis에서 받고 화면에는 적지 않는다.
+const NEW_KINDS = ["retention", "rfm", "pareto", "chisq", "abtest", "basket", "decompose", "seasonal"];
+const SIG = 4;  // 표·안내에 보일 유효 숫자
+const sig = v => v == null ? "-" : +Number(v).toPrecision(SIG);
+const pctText = v => v == null ? "-" : `${(v * PCT).toFixed(1)}%`;
+const pText = p => p == null ? "-" : Number(p).toPrecision(SIG);
+const AB_TESTS = { z: "두 비율 z 검정", welch: "Welch t 검정", anova: "분산분석(ANOVA)", chi2: "카이제곱 동질성 검정" };
+const NEW_TITLES = {
+  cohort: d => `${d.who} ${UNIT_NAMES[d.unit]}별 코호트 리텐션`, curve: d => `${d.who} 평균 유지율`, rfm: d => `${d.who} RFM 세그먼트`,
+  pareto: d => `${d.item} 파레토(${d.agg === "count" ? "행 수" : `합계 ${d.value}`})`, chi: d => `${d.row} × ${d.col} 관계 검정`,
+  ab: d => `${d.group}별 ${d.value} A/B 검정`, basket: d => `${d.item} 연관 쌍`, waterfall: d => `${d.group}별 ${d.value} 변화 요인`, season: d => `${d.time} ${UNIT_NAMES[d.unit]}별 시계열 분해` };
+const NEW_NOTES = {
+  rfm: d => [`기준일 ${d.asof}`, `사용자 ${d.users.toLocaleString()}명`],
+  pareto: d => [d.dropped ? `0 이하·빈 값 항목 ${d.dropped.toLocaleString()}개 뺌` : "", d.more ? `표와 그림에는 앞 ${SERVER.analysis.pareto_show}개만 보임` : ""],
+  chisq: d => [`χ² = ${sig(d.chi2)} · 자유도 ${d.df} · p = ${pText(d.p)} · Cramér's V = ${sig(d.v)}`, d.warn ? `기대 빈도가 작은 칸이 ${pctText(d.low_share)}라 결과를 믿기 어려워요` : ""],
+  abtest: d => [`${AB_TESTS[d.test.kind]} p = ${pText(d.test.p)}`, d.conf != null ? `신뢰 수준 ${d.conf}%` : "", d.small ? "표본이 적어 근사 검정을 믿기 어려워요" : "", d.groups.length > 2 ? "쌍 p값은 Bonferroni 보정" : ""],
+  basket: d => [d.note ?? ""], decompose: d => [d.truncated ? "그룹이 많아 나머지는 기타로 묶음" : ""],
+  seasonal: d => [d.note ?? "", d.more ? `최근 ${SERVER.analysis.max_periods}개 기간만 보임` : ""] };
+const RFM_COLS = ["세그먼트", "사람 수", "비율", "평균 최근(일)", "평균 빈도", "평균 금액", "매출 비중"];
+const NEW_TABLES = {
+  cohort: d => ({ columns: ["코호트", "크기", ...d.periods.map(p => `+${p}`)], rows: d.cohorts.map(c => ({ 코호트: c.start, 크기: c.size, ...Object.fromEntries(d.periods.map((p, i) => [`+${p}`, pctText(c.retained[i])])) })) }),
+  curve: d => ({ columns: ["N", "평균 유지율"], rows: d.average.map((v, i) => ({ N: `+${i}`, "평균 유지율": pctText(v) })) }),
+  rfm: d => {
+    const blank = Object.fromEntries(RFM_COLS.map(c => [c, ""]));
+    return { columns: RFM_COLS, rows: [...d.segments.map(s => ({ 세그먼트: s.segment, "사람 수": s.users, 비율: pctText(s.share), "평균 최근(일)": sig(s.recency), "평균 빈도": sig(s.frequency), "평균 금액": sig(s.monetary), "매출 비중": pctText(s.revenue_share) })),
+      ...["r", "f", "m"].map(k => ({ ...blank, 세그먼트: `${k.toUpperCase()} 분위 경계`, "사람 수": d.cuts[k].map(sig).join(", ") }))] };
+  },
+  pareto: d => ({ columns: ["순위", "항목", "값", "비중", "누적 비중", "등급"], rows: d.rows.map((r, i) => ({ 순위: i + 1, 항목: r.item, 값: sig(r.v), 비중: pctText(r.share), "누적 비중": pctText(r.cum_share), 등급: r.grade })) }),
+  chi: d => {
+    const head = `${d.row} \\ ${d.col}`;
+    return { columns: [head, ...d.cols], rows: d.rows.map((r, i) => ({ [head]: r, ...Object.fromEntries(d.cols.map((c, j) => [c, `${d.observed[i][j]} (${d.expected[i][j].toFixed(1)})`])) })) };
+  },
+  ab: d => { const m = d.metric === "rate" ? "비율" : "평균"; return { columns: ["그룹", "n", m, "표준편차"], rows: d.groups.map(g => ({ 그룹: g.name, n: g.n, [m]: sig(g.mean), 표준편차: sig(g.sd) })) }; },
+  basket: d => ({ columns: ["A", "B", "함께 산 거래", "지지도", "신뢰도 A→B", "신뢰도 B→A", "향상도"], rows: d.pairs.map(p => ({ A: p.a, B: p.b, "함께 산 거래": p.n, 지지도: pctText(p.support), "신뢰도 A→B": pctText(p.conf_ab), "신뢰도 B→A": pctText(p.conf_ba), 향상도: sig(p.lift) })) }),
+  waterfall: d => {
+    const cols = ["그룹", "n0", "n1", "평균0", "평균1", "구성", "그룹 안", "상호작용", "합계"], sum = k => d.groups.reduce((a, g) => a + g[k], 0);
+    return { columns: cols, rows: [...d.groups.map(g => ({ 그룹: g.group, n0: g.n0, n1: g.n1, 평균0: sig(g.m0), 평균1: sig(g.m1), 구성: sig(g.mix), "그룹 안": sig(g.rate), 상호작용: sig(g.interaction), 합계: sig(g.total) })),
+      { 그룹: "전체", n0: sum("n0"), n1: sum("n1"), 평균0: sig(d.before), 평균1: sig(d.after), 구성: sig(d.mix), "그룹 안": sig(d.rate), 상호작용: sig(d.interaction), 합계: sig(d.change) }] };
+  },
+  season: d => ({ columns: ["기간", "값", "추세", "계절", "나머지", "이상"], rows: d.labels.map((l, i) => ({ 기간: l, 값: sig(d.values[i]), 추세: sig(d.trend[i]), 계절: sig(d.seasonal[i]), 나머지: sig(d.remainder[i]), 이상: d.flags.includes(l) ? "●" : "" })) }) };
+// A/B 쌍 표(그룹 표 아래)와 파레토 등급 요약 줄
+const abPairs = d => ({ columns: ["그룹", "차이", "신뢰구간", "Lift", "Lift 구간", "p", "보정 p"], rows: d.pairs.map(p => ({ 그룹: p.name, 차이: sig(p.diff), 신뢰구간: p.ci.map(sig).join(" ~ "), Lift: pctText(p.lift), "Lift 구간": p.lift_ci ? p.lift_ci.map(pctText).join(" ~ ") : "-", p: pText(p.p), "보정 p": pText(p.p_adj) })) });
+function pairBlock(d) {
+  const host = el("div", { className: "table-wrap" });
+  sortedTable(host, abPairs(d), (h, x, s) => resultTable(h, x, s));
+  return [el("div", { className: "hint", textContent: `${d.control} 대비` }), host];
+}
+const gradeLine = d => d.classes.map(c => `${c.grade} ${c.items.toLocaleString()}개 ${pctText(c.share)}`).join(" · ");
 function anaTitle(d, view) {
+  if (NEW_TITLES[view]) return NEW_TITLES[view](d);
   const value = x => x.agg === "count" ? "개수" : `${x.value} ${aggName(x.agg)}`;
   return { hist: `${d.column} 분포`, box: `${d.column} 상자 그림`, values: `${d.column} 값 빈도`, heat: "상관관계",
            scatter: `${d.x} × ${d.y}`, groups: `${d.by}별 ${value(d)}`, trend: `${d.column} ${UNIT_NAMES[d.unit]}별 ${value(d)}`, funnel: `${d.step} 퍼널(${d.steps?.length}단계)` }[view];
@@ -1474,23 +2108,27 @@ function anaNote(d) {
     d.kind === "trend" && d.more ? `최근 ${lim.max_periods}개 기간만 보임` : "",
     d.kind === "scatter" ? `점 ${d.points.length.toLocaleString()}개, 상관계수 ${d.r == null ? "-" : d.r.toFixed(3)}(${d.n.toLocaleString()}행)` : "",
     d.kind === "correlation" ? `${d.n.toLocaleString()}행으로 계산` : "",
-    d.kind === "funnel" ? `${windowText(d.window)}, 같은 시각의 두 단계는 도달로 봄` : ""];
-  return [`${d.base}의 ${d.prepped ? "전처리한 결과" : "원래 데이터"}`, data, ...more].filter(Boolean).join(", ");
+    d.kind === "funnel" ? `${windowText(d.window)}, 같은 시각의 두 단계는 도달로 봄` : "",
+    ...(NEW_NOTES[d.kind]?.(d) ?? []), d.excluded ? `빈 값으로 뺀 행 ${d.excluded.toLocaleString()}개` : ""];
+  return [`${d.base}의 ${d.prepped ? "전처리한 결과" : "원래 데이터"}`, data, ...more].filter(Boolean).join(", ") + (d.data?.notes?.length ? " " + d.data.notes.join(" ") : "");
 }
 // 화면에서 자르는 범위(받은 결과를 줄여 보일 뿐, 서버에는 다시 묻지 않는다). 칸 수 = 시계열·그룹은 기간·그룹, 히스토그램은 구간, 값 빈도는 값 종류
 function anaSpan(d, view) {
-  return { trend: () => d.labels.length, groups: () => d.labels.length, hist: () => d.histogram.counts.length, values: () => d.values.labels.length }[view]?.() ?? 0;
+  return { trend: () => d.labels.length, groups: () => d.labels.length, season: () => d.labels.length, pareto: () => d.rows.length, hist: () => d.histogram.counts.length, values: () => d.values.labels.length }[view]?.() ?? 0;
 }
 // lo(0부터)~hi(미포함)만 남긴 그림용 사본
 function anaSlice(d, view, lo, hi) {
   const cut = a => a.slice(lo, hi);
   if (view === "trend" || view === "groups") return { ...d, labels: cut(d.labels), values: cut(d.values), ...(d.counts ? { counts: cut(d.counts) } : {}) };
+  if (view === "pareto") return { ...d, rows: cut(d.rows) };
+  if (view === "season") return { ...d, labels: cut(d.labels), values: cut(d.values), trend: cut(d.trend), seasonal: cut(d.seasonal), remainder: cut(d.remainder) };
   if (view === "hist") return { ...d, histogram: { edges: d.histogram.edges.slice(lo, hi + 1), counts: cut(d.histogram.counts) } };
   if (view === "values") return { ...d, values: { ...d.values, total: d.values.total ?? d.values.counts.reduce((a, b) => a + b, 0) + d.values.nulls + d.values.other, labels: cut(d.values.labels), counts: cut(d.values.counts), nulls: hi < d.values.labels.length ? 0 : d.values.nulls, other: hi < d.values.labels.length ? 0 : d.values.other } };
   return d;
 }
 // 그래프 아래의 표
 function anaTable(d, view) {
+  if (NEW_TABLES[view]) return NEW_TABLES[view](d);
   const pct = n => d.values ? `${(n * 100 / Math.max(1, d.values.total ?? d.values.counts.reduce((a, b) => a + b, 0) + d.values.nulls + d.values.other)).toFixed(1)}%` : "";  // total: 범위로 자른 표도 비율은 전체 기준
   if (view === "hist" || view === "box") {
     const s = d.stats, b = d.box;
@@ -1503,17 +2141,28 @@ function anaTable(d, view) {
     ...(d.values.other ? [{ 값: `그 밖의 값 ${(d.values.unique - d.values.labels.length).toLocaleString()}종류`, "행 수": d.values.other, 비율: pct(d.values.other) }] : [])] };
   if (view === "heat") return { columns: ["", ...d.columns], rows: d.matrix.map((row, i) => ({ "": d.columns[i], ...Object.fromEntries(row.map((r, j) => [d.columns[j], r == null ? "-" : +r.toFixed(3) || 0])) })) };
   if (view === "scatter") return { columns: ["", "값"], rows: [["상관계수 r", d.r == null ? "-" : +d.r.toFixed(4) || 0], ["쓴 행 수", d.n], ["그린 점 수", d.points.length]].map(([k, v]) => ({ "": k, 값: v })) };
-  if (view === "funnel") return { columns: [...FUNNEL_COLUMNS, FUNNEL_TIME], rows: funnelRows(d.steps, true) };
+  if (view === "funnel") return { columns: FUNNEL_COLUMNS, rows: funnelRows(d.steps) };
   const name = view === "groups" ? d.by : UNIT_NAMES[d.unit], value = d.agg === "count" ? "개수" : `${d.value} ${aggName(d.agg)}`;
   return { columns: [name, value, ...(d.counts ? ["행 수"] : [])], rows: d.labels.map((l, i) => ({ [name]: l, [value]: d.values[i], ...(d.counts ? { "행 수": d.counts[i] } : {}) })) };
+}
+// 정렬한 표를 자른다: n이 0이면 그대로, 아니면 앞 n행(값 줄)에서 lo~hi만 남기고, 끝까지 볼 때(hi >= n)만 고정 행(빈 값·그 밖의 값)을 붙인다.
+function anaRows(rows, n, lo, hi) {
+  return n ? [...rows.slice(0, n).slice(lo, hi), ...(hi >= n ? rows.slice(n) : [])] : rows;
 }
 // 퍼널을 컬럼 값별로 나눈 단계 표들(전체 표 아래). 나눠 보지 않았으면 없다.
 function segTables(segments) {
   return (segments ?? []).flatMap(g => {
     const host = el("div", { className: "table-wrap" });
-    resultTable(host, { columns: [...FUNNEL_COLUMNS, FUNNEL_TIME], rows: funnelRows(g.steps, true) });
-    return [el("div", { className: "hint", textContent: g.name }), host];
+    sortedTable(host, { columns: FUNNEL_COLUMNS, rows: funnelRows(g.steps) }, (h, d, s) => resultTable(h, d, s));
+    return [el("div", { className: "hint", textContent: g.name }), host, ...gapTable(g.gaps)];
   });
+}
+// 단계 사이에 걸린 시간 표(응답의 gaps). 없으면 표를 만들지 않는다.
+function gapTable(gaps) {
+  if (!gaps) return [];
+  const host = el("div", { className: "table-wrap" });
+  resultTable(host, { columns: GAP_COLUMNS, rows: gapRows(gaps) });
+  return [host];
 }
 // 마지막 분석 결과를 보고 있는 그래프로 그린다(화면 모드가 바뀌어도).
 function drawAna() {
@@ -1522,18 +2171,21 @@ function drawAna() {
   const text = !!d && ["groups", "trend"].includes(A.view) && d.values.some(v => v != null && typeof v !== "number");  // 최빈값·이어 붙이기 같은 글자 결과는 그래프 없이 표로만
   const flow = !!d && A.view === "funnel";
   $("a-box").classList.toggle("hidden", !d || text || flow);
+  $("a-tools").classList.toggle("hidden", !d || text || flow);
   $("a-funnel").classList.toggle("hidden", !flow);
   $("a-funnel-text").classList.toggle("hidden", !flow);
   $("a-funnel").replaceChildren();
-  $("a-segs").replaceChildren(...(flow && d.segments?.length ? segTables(d.segments) : []));
+  $("a-segs").replaceChildren(...(flow ? [...gapTable(d.gaps), ...segTables(d.segments)] : d && A.view === "ab" ? pairBlock(d) : []));
   $("a-tabs").classList.toggle("hidden", !d || d.views.length < 2);
   $("a-full").disabled = !d;
-  $("a-full").classList.toggle("hidden", d?.kind === "funnel");  // 퍼널은 늘 테이블 전체로 구한다(prep_app.whole)
-  $("a-add").disabled = !d || text;
+  $("a-full").classList.toggle("hidden", SERVER.analysis.whole.includes(d?.kind) || d?.kind === "funnel");  // 퍼널과 새 분석 6종은 늘 테이블 전체로 구한다(prep_app.whole)
+  const noCard = NEW_KINDS.includes(d?.kind);  // 새 분석 8종은 이번에는 대시보드 카드로 담지 않는다
+  $("a-add").disabled = !d || text || noCard;
+  $("a-add").title = noCard ? "이 분석은 아직 대시보드 카드로 담지 않아요" : ADD_TITLE;
   if (!d) { $("a-title").textContent = "분석"; $("a-table").innerHTML = ""; $("a-data").textContent = ""; return; }
   $("a-tabs").replaceChildren(...d.views.map(v => el("button", { textContent: VIEW_NAMES[v], className: v === A.view ? "on" : "", onclick: () => { A.view = v; drawAna(); } })));
   $("a-title").textContent = anaTitle(d, A.view);
-  $("a-sub").textContent = "";
+  $("a-sub").textContent = A.view === "pareto" ? gradeLine(d) : "";
   $("a-data").textContent = anaNote(d);
   $("a-box").style.setProperty("--ratio", VIEW_RATIOS[A.view] ?? 16 / 9);
   const n = text ? 0 : anaSpan(d, A.view);
@@ -1541,19 +2193,22 @@ function drawAna() {
   $("a-range").classList.toggle("hidden", n < 2);
   showRange(d, n);
   const limit = parseInt($("a-rows").value, 10);  // 보일 행 수: 범위 안에서 앞쪽 몇 행만
-  resultTable($("a-table"), anaTable(n ? anaSlice(d, A.view, A.lo, limit > 0 ? Math.min(A.hi, A.lo + limit) : A.hi) : d, A.view));
+  const pinned = A.view === "values" ? (r, i) => i >= d.values.labels.length : A.view === "rfm" ? (r, i) => i >= d.segments.length : A.view === "waterfall" ? (r, i) => i >= d.groups.length : undefined;  // "(빈 값)"·"그 밖의 값" 줄
+  const cut = (A.view === "groups" || A.view === "trend") && d.more ? { total: null } : A.view === "values" && d.values.other ? { total: d.values.unique } : undefined;
+  const cells = A.view === "hist" ? 0 : n;  // 히스토그램의 표는 통계 표라 구간 범위로 자르지 않는다
+  sortedTable($("a-table"), anaTable(d, A.view), (h, x, s) => resultTable(h, x, s), { pinned, cut, slice: rows => anaRows(rows, cells, A.lo, limit > 0 ? Math.min(A.hi, A.lo + limit) : A.hi) });
   if (flow) {
     $("a-funnel").append(sankeySvg(d.steps, { text: getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "currentColor" }));
     $("a-funnel-text").textContent = funnelSentence(d.steps);
     return;
   }
   if ($("ana").classList.contains("hidden") || text) return;  // 감춰져 있으면 보일 때 그린다
-  anaDraw({ kind: "ana", payload: n ? anaSlice(d, A.view, A.lo, A.hi) : d, opts: { view: A.view, ratio: VIEW_RATIOS[A.view] ?? 16 / 9 } });
+  anaDraw({ kind: "ana", payload: n ? anaSlice(d, A.view, A.lo, A.hi) : d, opts: { view: A.view, ratio: VIEW_RATIOS[A.view] ?? 16 / 9, auto: anaAuto, all: $("a-all").checked } });
 }
 // 슬라이더 글(화면 읽기용 aria-valuetext 포함). 시계열·그룹은 이름, 히스토그램은 구간 번호
 function showRange(d, n) {
   if (n < 2) return;
-  const name = i => A.view === "hist" ? `구간 ${i}` : A.view === "values" ? `${i}번째 값` : String(A.view === "trend" || A.view === "groups" ? d.labels[i - 1] : i);
+  const name = i => A.view === "hist" ? `구간 ${i}` : A.view === "values" ? `${i}번째 값` : A.view === "pareto" ? `${i}번째 항목` : String(["trend", "groups", "season"].includes(A.view) ? d.labels[i - 1] : i);
   $("a-lo").setAttribute("aria-valuetext", `${name(A.lo + 1)}부터`);
   $("a-hi").setAttribute("aria-valuetext", `${name(A.hi)}까지`);
   $("a-rtext").textContent = `${name(A.lo + 1)} ~ ${name(A.hi)} (${A.hi - A.lo}/${n})`;
@@ -1588,7 +2243,7 @@ $("a-dash-go").onclick = () => busy($("a-dash-go"), async () => {
   if (String(d.base || "").startsWith("@")) return say("err-ana", "쿼리에서 보낸 검색 결과는 프로그램을 켠 동안만 있어서 대시보드 카드로 만들 수 없어요. 가상 테이블로 저장한 뒤 넣어 주세요.");  // F08: 보낸 검색은 메모리에만
   const { how, prepped, base, recipe, views, sample: used, ...values } = d;  // 구한 값만 data에 둔다
   const flow = d.kind === "funnel", card = { kind: flow ? "funnel" : "analysis", title: `${base} · ${anaTitle(d, A.view)}`, colors: { series: {}, parts: {}, order: [], parts_order: [] },
-    view: { type: "", ratio: VIEW_RATIOS[A.view] ?? 16 / 9, analysis_view: A.view }, source: { schema: recipe.schema || "", table: base, recipe, analysis: how, full: !!values.data?.full, sample: used, ...(flow ? { date: how.time } : {}) },
+    view: { type: "", ratio: VIEW_RATIOS[A.view] ?? 16 / 9, analysis_view: A.view, ...(Object.keys(anaAuto).length ? { auto: anaAuto } : {}), ...($("a-all").checked ? { all_data: true } : {}) }, source: { schema: recipe.schema || "", table: base, recipe, analysis: how, full: !!values.data?.full, sample: used, ...(flow ? { date: how.time } : {}) },
     data: { values, computed_at: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19), note: anaNote(d) } };
   try {
     const added = await api("/api/dash/card/add", { dashboard: $("a-dash").value, name: $("a-dash-name").value, card });
@@ -1596,13 +2251,29 @@ $("a-dash-go").onclick = () => busy($("a-dash-go"), async () => {
     showAdded("err-ana", added.dashboard);
   } catch (e) { say("err-ana", e.message); }
 });
+// 자동 규칙 판·[모든 데이터]·그림 저장. 끈 규칙은 쿼리 화면과 같은 query_auto로 기억한다. 값이 달라지는 규칙(구간 수·꼬리·점 밀도)은 같은 분석을 다시 구한다.
+const ANA_RULES = ["bins", "tail", "density", "num"], ANA_AUTO_KINDS = ["distribution", "scatter"], ANA_AUTO_VIEWS = ["hist", "scatter"];
+const otherRules = o => Object.fromEntries(Object.entries(o).filter(([k]) => !ANA_RULES.includes(k)));  // 이 판이 다루지 않는 규칙
+let anaAuto = { ...(SERVER.dash.viz.query_auto || {}) };
+const reAna = () => A.result && ANA_AUTO_VIEWS.includes(A.view) ? runAna(!!A.result.data?.full) : drawAna(true);
+autoPanel($("a-auto"), ANA_RULES, anaAuto, async changed => {
+  anaAuto = { ...otherRules(anaAuto), ...changed };
+  try { await saveVizPrefs({ ...SERVER.dash.viz, query_auto: { ...otherRules(SERVER.dash.viz.query_auto || {}), ...changed } }); }
+  catch (e) { say("err-ana", e.message); }
+  reAna();
+});
+$("a-all").onchange = reAna;
+document.querySelectorAll("[data-aimage]").forEach(b => b.onclick = () => busy(b, async () => {
+  try { download(await anaDraw.picture($("a-image").value, b.dataset.aimage, $("a-export-all").checked), "analysis." + imageExt(b.dataset.aimage)); }
+  catch (e) { say("err-ana", e.message); }
+}));
 $("theme").addEventListener("click", () => drawAna(true));  // common.js의 onclick이 화면 모드를 바꾼 뒤에 다시 그린다.
 showAnaForm();
 drawAna();
 
 // ---------- 컬럼 줄 우클릭 메뉴(P4·P5·P5-값·P11), 새 컬럼 상자(P9), 쿼리에서 넘어온 검색(P10) ----------
 // 컬럼의 값 목록(많이 나온 순 앞 20개, 표본 기준). 값 골라서 제외·만 보기, 값 바꾸기 상자가 쓴다.
-const valuesOf = name => api("/api/analyze", { recipe: { schema: S.schema, base: S.base }, how: { kind: "distribution", column: name }, sample }).then(d => ({ values: d.values?.labels ?? [], more: (d.values?.other ?? 0) > 0, partial: true }));  // 표본에서 많이 나온 앞 20개라, 상자가 "일부 행만 보고 모은 목록"이라고 알린다
+const valuesOf = name => api("/api/analyze", { recipe: { schema: S.schema, base: S.base }, how: { kind: "distribution", column: name }, sample, sample_how: sampleHow() }).then(d => ({ values: d.values?.labels ?? [], more: (d.values?.other ?? 0) > 0, partial: true }));  // 표본에서 많이 나온 앞 20개라, 상자가 "일부 행만 보고 모은 목록"이라고 알린다
 const sampleOf = name => (S.handed?.shown?.rows ?? first?.rows ?? []).map(r => r[name]);  // JSON 글자인지 볼 값들
 // 단계를 컬럼에 넣는다: 서버 꼴의 값을 입력 상태로 바꿔 edits에(원-핫처럼 원래 컬럼을 빼는 단계는 빼기까지)
 function putOp(name, id, value) {

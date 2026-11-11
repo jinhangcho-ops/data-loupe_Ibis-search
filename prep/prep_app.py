@@ -7,11 +7,12 @@ import json
 import re
 from pathlib import Path
 
-from flask import has_request_context, jsonify, request
+from flask import Response, has_request_context, jsonify, request
 from lazy import Later, ibis, preload
 
 from core import handoff
 from core import held
+from core import labels
 from core import result
 from core import scan_size
 from core import server
@@ -28,11 +29,14 @@ prep_derive = Later("core.prep_derive")
 prep_ops = Later("core.prep_ops")
 prep_expr = Later("prep.prep_expr")
 prep_profile = Later("prep.prep_profile")
+prep_diag = Later("prep.prep_diag")  # 품질 진단(Phase 5)
 profiler = Later("core.profiler")
+sampling = Later("core.sampling")  # 표본 방식·오차·읽은 양
 stats = Later("analysis.stats")
 sql_funcs = Later("core.sql_funcs")
 
 PREVIEW_ROWS = 20
+VIEW_SORT_DIRS = ("asc", "desc")  # 데이터 탭 머리글 정렬의 방향
 DEFAULT_SAMPLE = 5_000  # 통계를 낼 표본 행 수의 기본값
 FILE_FORMATS = ["parquet", "csv"]
 DATE_FAILED = re.compile(r"out of range|conversion error|invalid (date|timestamp)|could not (be )?(parse|convert).*(date|time)|strptime", re.I)
@@ -43,9 +47,10 @@ SUMMARY_FILES = {"xlsx": "Excel (*.xlsx)", "csv": "CSV (*.csv)"}  # 요약 파�
 SUMMARY_HEAD = ["컬럼", "타입", "빈 값 비율", "빈 값 수", "고유값 수", "최솟값", "최댓값", "예시 값"]
 EXAMPLES, EXAMPLE_SCAN, EXAMPLE_LEN = 3, 2000, 50  # 예시 값 개수, 예시를 고르려고 훑는 앞 행 수, 예시 한 개의 글자 수 상한
 SAMPLES = {}  # 마지막으로 읽은 표본 하나 {테이블 열쇠: (크기, pyarrow 표, 표본 정보)}. 통계에 이어 타입 추천이 같은 표본을 쓴다.
+SAMPLE_PILOT = 3  # SAMPLES 항목 (크기, 표본, 정보, 파일럿)에서 파일럿의 자리
 server.ON_SWITCH.append(SAMPLES.clear)  # 연결을 바꾸거나 끊으면 버린다(열쇠에 연결 열쇠가 들어 있어 다시 쓸 수 없고 최대 100만 행이 메모리에 남는다)
 HANDOFF = handoff.PREFIX  # 전처리로 보낸 검색·탭의 기준 이름 앞글자(@이름). 연결의 테이블 대신 그 검색의 식에서 시작한다
-server.FREE.update({"/api/prep/ops", "/api/prep/handed"})  # 연결을 쓰지 않는다(메모리의 목록·넘긴 쪽만 읽는다)
+server.FREE.update({"/api/prep/ops", "/api/prep/handed", "/api/profile/diag"})  # 연결을 쓰지 않는다(메모리의 목록·넘긴 쪽만 읽는다)
 
 
 def hand_over(body, name, shown=None):
@@ -103,6 +108,9 @@ def analysis_constants(found):
     found.update(sample=DEFAULT_SAMPLE, sample_methods=profiler.METHODS,  # 화면(prep.html)의 표본 행 수 기본값, 표본 방법 이름
                  formula_guide=prep_derive.FORMULA_GUIDE, pca_max=prep_derive.PCA_MAX)  # 계산 식 안내, PCA에 넣을 컬럼 수 상한
     found["analysis"] = stats.LIMITS  # 분석의 상한들(분석 모듈은 전처리 화면을 내려줄 때 올라온다)
+    found["kmeans"] = {"k": prep_derive.KMEANS_K, "max_k": prep_derive.KMEANS_MAX_K, "max_cols": prep_derive.KMEANS_MAX_COLS, "name": prep_derive.KMEANS_NAME}
+    found["prep6"] = prep_ops.SCREEN6  # K-Means 칸, Phase 6 전처리 칸의 기본값 안내
+    found["dedupe_limit"] = prep_expr.CONTAIN_LIMIT  # 중복 제거 포함 비교 상한의 화면 기본값
 
 
 def run(work, drop=lambda value: None):
@@ -128,7 +136,7 @@ def save_recipe():
     return jsonify(recipes=settings.save_recipe(request.json.get("name"), request.json.get("recipe")))
 
 
-PRELOAD = ("prep.prep_profile", "prep.prep_expr", "analysis.stats")  # 전처리·분석 화면을 열면 뒤에서 미리 올리는 기능 모듈
+PRELOAD = ("prep.prep_profile", "prep.prep_expr", "analysis.stats", "prep.prep_diag")  # 전처리·분석 화면을 열면 뒤에서 미리 올리는 기능 모듈
 
 
 @app.get("/prep")
@@ -173,14 +181,23 @@ def save_table_prep():
 
 def local_mode(recipe):
     """recipe를 이 PC의 작업 사본(working_copy)에서 계산할지. 원격 DB(주소로 접속)일 때만: 설정 prep_where가 all(기본)이면 늘,
-    new면 계산 컬럼·PCA·좌표 단계가 있을 때만. 파일·DuckDB 파일 연결은 원래 이 PC에서 계산하므로 사본을 만들지 않는다."""
+    new면 계산 컬럼·PCA·K-Means·좌표 단계가 있을 때만. 파일·DuckDB 파일 연결은 원래 이 PC에서 계산하므로 사본을 만들지 않는다."""
     if not held.remote(get_con()):
         return False
-    return settings.load().get("prep_where", "all") == "all" or bool(recipe.get("formulas") or recipe.get("pca") or recipe.get("geo"))
+    return settings.load().get("prep_where", "all") == "all" or bool(recipe.get("formulas") or recipe.get("pca") or recipe.get("kmeans") or recipe.get("geo")) or dedupe_moves(recipe)
+
+
+def dedupe_moves(recipe: dict) -> bool:
+    """[SPECIFICATION] plans/phase-13.md#dedupe_moves
+    이 연결이 recipe의 중복 비교 옵션(글자 다듬기·문장 포함)을 못 해 이 PC 작업 사본으로 옮겨야 하는지."""
+    loose, contain, _ = prep_expr.dedupe_options(recipe)
+    if not recipe.get("dedupe") or not (loose or contain):
+        return False
+    return held.remote(get_con()) or not prep_expr.dedupe_fits(base_table(recipe), recipe)
 
 
 def named_texts(recipe):
-    """계산식·복사·중복 기준·정렬·좌표·PCA·fill 기준에 적힌 글자들(값만, 키 이름은 아님). 컬럼 이름이 이 안에 나오는지 본다."""
+    """계산식·복사·중복 기준·정렬·좌표·PCA·K-Means·fill 기준·gfill 묶음·target·cut 타겟 컬럼에 적힌 글자들(값만, 키 이름은 아님). 컬럼 이름이 이 안에 나오는지 본다."""
     out = []
 
     def walk(value):
@@ -193,11 +210,14 @@ def named_texts(recipe):
             for v in value:
                 walk(v)
 
-    for key in ("formulas", "copies", "dedupe", "dedupe_keep", "sorts", "geo", "pca"):
+    for key in ("formulas", "copies", "dedupe", "dedupe_keep", "sorts", "geo", "pca", "kmeans"):
         walk(recipe.get(key))
     for spec in (recipe.get("columns") or {}).values():
-        if isinstance(spec, dict) and isinstance(spec.get("ops"), dict) and isinstance(spec["ops"].get("fill"), dict):
-            walk(spec["ops"]["fill"].get("by"))
+        ops = spec.get("ops") if isinstance(spec, dict) else None
+        if isinstance(ops, dict):
+            for key, field in (("fill", "by"), ("gfill", "group"), ("target", "target"), ("cut", "target")):
+                if isinstance(ops.get(key), dict):
+                    walk(ops[key].get(field))
     return out
 
 
@@ -209,7 +229,8 @@ def unused_columns(recipe):
         return []
     texts = named_texts(recipe)
     used = lambda c: any(re.search(r"(?<!\w)" + re.escape(c) + r"(?!\w)", text, re.I) for text in texts)
-    return sorted(c for c, s in specs.items() if isinstance(s, dict) and s.get("keep", True) is False and not s.get("ops") and not used(c))
+    tag_key = labels.store_of(recipe)["key"] if labels.check_use(recipe.get("labels")) is not None else None  # 태그를 붙일 키 컬럼은 남긴다
+    return sorted(c for c, s in specs.items() if isinstance(s, dict) and s.get("keep", True) is False and not s.get("ops") and not used(c) and c != tag_key)
 
 
 def copy_key(recipe):
@@ -240,6 +261,7 @@ def local_recipe(recipe):
 
 def source_table(recipe):
     """DB에서 읽을 기준 테이블: 행 거르기를 걸고, 사본으로 받을 때는 쓰는 컬럼만 고른다."""
+    labels.check_use(recipe.get("labels"))
     con, schema = get_con(), recipe.get("schema") or None
     t = start_table(recipe)
     if t is None:
@@ -248,6 +270,8 @@ def source_table(recipe):
     filters = recipe.get("filters") or []
     if filters:
         t = t.filter(*[parse.predicate(cond, t) for cond in filters])
+    if not held.remote(con):
+        t = labels.attached(recipe, t)  # 로컬 연결은 DB 안에서 붙인다
     skipped = unused_columns(recipe) if local_mode(recipe) else []
     return t.select(*[c for c in t.columns if c not in skipped]) if skipped else t
 
@@ -258,7 +282,7 @@ def working_copy(recipe):
     t, key = source_table(recipe), cached_key(recipe)
     local = run(lambda: held.table(held.ensure(key, t, state["cancel"], cap=False)[0]))  # held.table도 DuckDB에 묻으므로 연결 스레드에서
     skipped = unused_columns(recipe)  # 더 큰 사본을 쓰면 이 recipe가 안 쓰는 컬럼은 뺀다
-    return local.select(*[c for c in local.columns if c != held.ROW and c not in skipped])
+    return labels.attached(recipe, local.select(*[c for c in local.columns if c != held.ROW and c not in skipped]))  # 사본은 붙이기 전의 표
 
 
 def formula_reads_all(expr):
@@ -273,8 +297,8 @@ def formula_reads_all(expr):
 
 def computes_stats(recipe):
     """recipe에 통계를 내는 일이 있는지: fill mean·median·mode·prev·next(전체 정렬), outlier iqr·std, scale standard·minmax·log(최솟값 확인), pca(전체 집계), rare(전체 GROUP BY), label·onehot(서로 다른 값 읽기),
-    counts(서로 다른 값 읽기), 중복 제거(dedupe), 정렬(sorts), 집계·창 함수가 든 계산식(표 전체 window)."""
-    if recipe.get("dedupe") or recipe.get("pca") or recipe.get("sorts") or recipe.get("downcast"):  # downcast는 컬럼마다 최솟값·최댓값을 구한다
+    counts(서로 다른 값 읽기), 중복 제거(dedupe), 정렬(sorts), 집계·창 함수가 든 계산식(표 전체 window), kmeans(반복 집계), gfill(묶음 집계), Phase 6 통계 단계."""
+    if recipe.get("dedupe") or recipe.get("pca") or recipe.get("kmeans") or recipe.get("sorts") or recipe.get("downcast"):  # downcast는 컬럼마다 최솟값·최댓값을 구한다
         return True
     if any(isinstance(f, dict) and (isinstance(f.get("line"), str) or isinstance(f.get("expr"), str) and formula_reads_all(f["expr"])) for f in recipe.get("formulas") or []):  # 계산 줄(그룹집계·창 함수·전처리)은 표 전체를 읽는다
         return True
@@ -283,7 +307,7 @@ def computes_stats(recipe):
         if not isinstance(ops, dict):
             continue
         fill, outlier = ops.get("fill"), ops.get("outlier")
-        if ops.get("scale") in ("standard", "minmax", "log") or "rare" in ops or "label" in ops or "onehot" in ops or "counts" in ops or (isinstance(fill, dict) and fill.get("how") in ("mean", "median", "mode", "prev", "next")) or (isinstance(outlier, dict) and outlier.get("by") in ("iqr", "std")):
+        if ops.get("scale") in prep_ops.SCALES or "rare" in ops or "label" in ops or "onehot" in ops or "counts" in ops or (isinstance(fill, dict) and fill.get("how") in ("mean", "median", "mode", "prev", "next")) or (isinstance(outlier, dict) and outlier.get("by") in ("iqr", "std", "pct")) or any(key in ops for key in prep_ops.STAT_OPS6):
             return True
     return False
 
@@ -294,6 +318,20 @@ def db_reads(ask):
     size = found.get("bytes")
     rest = (found.get("text") or "").split(" · ", 1)[1:]
     found["text"] = "DB가 이 테이블을 읽어요" + (f"(약 {scan_size.size_text(size)})" if size else "") + "".join(" · " + r for r in rest)
+    ask.set_data(json.dumps(found, ensure_ascii=False))
+    return ask
+
+
+def reads_times(ask: Response, times: int) -> Response:
+    """[SPECIFICATION] plans/phase-12.md#reads_times
+    DB가 직접 계산하는 분석의 확인 응답 글에 '표를 N번 읽어요'와 합계 예상(바이트 × N)을 붙인다."""
+    found = ask.get_json()
+    size = found.get("bytes")
+    if times > 1:
+        rest = (found["text"] or "").split(" · ", 1)[1:]
+        found["text"] = f"DB가 이 테이블을 {times}번 읽어요" + (f"(합계 약 {scan_size.size_text(size * times)})" if size else "") + "".join(" · " + r for r in rest)
+    found["times"] = times
+    found["total_bytes"] = size * times if size else None
     ask.set_data(json.dumps(found, ensure_ascii=False))
     return ask
 
@@ -312,8 +350,8 @@ def copy_gate(recipe, reads=False, fresh=False):
 
 def fresh_copy(recipe):
     """산출물(실행·저장·전체 분석)을 만들기 직전에 이 recipe의 작업 사본을 버린다. 그 사이 DB가 바뀌었을 수 있어 미리보기에서 받은 낡은 사본을 쓰지 않고 새로 받는다."""
-    if local_mode(recipe):
-        keys = {cached_key(recipe), *usable_keys(copy_key(recipe))}  # 쓸 수 있는 사본이 여럿이면 모두(하나만 지우면 working_copy가 남은 낡은 사본을 고른다)
+    keys = {cached_key(recipe), *usable_keys(copy_key(recipe))}  # 쓸 수 있는 사본이 여럿이면 모두(하나만 지우면 working_copy가 남은 낡은 사본을 고른다)
+    if local_mode(recipe) or any(k in held.store["items"] for k in keys):
         run(lambda: [held.forget(k) for k in keys])  # 사본 DuckDB의 DROP은 연결 스레드에서(다른 요청이 사본을 받는 중일 수 있다)
 
 
@@ -333,11 +371,15 @@ def geo_gate(recipe):
 def built(recipe, info=None):
     """recipe를 (Ibis 식, 결과 컬럼마다 (recipe상 컬럼, 파생 컬럼인지))로 만든다. 평균 등을 구하는 조회가 있어 run으로 돌린다.
     local_mode면 작업 사본에서(행 거르기는 사본을 받을 때 이미 걸었다). info는 prep.build와 같다(PCA의 설명된 분산 비율)."""
-    if local_mode(recipe):
+    if local_mode(recipe) or dedupe_moves(recipe):
         table = working_copy(recipe)
         return run(lambda: prep_expr.build(held.local(), local_recipe(recipe), table, info, get_con()))  # 지점·영역 테이블은 원래 연결에서 읽는다
     con, table = get_con(), start_table(recipe)
-    return run(lambda: prep_expr.build(con, recipe, table, info))
+    expr, origin = run(lambda: prep_expr.build(con, recipe, table, info))
+    if held.remote(con) or source.compiles(expr):
+        return expr, origin
+    table = working_copy(recipe)  # 파일 연결이 못 하는 계산(창 함수 등): 이 PC 사본(held DuckDB)에서 다시 만든다
+    return run(lambda: prep_expr.build(held.local(), local_recipe(recipe), table, info, con))
 
 
 def base_table(body):
@@ -355,6 +397,56 @@ def sample_size(body):
     if type(n) is not int or not low <= n <= high:
         raise ValueError(f"표본 행 수(sample)는 {low:,} 이상 {high:,} 이하의 정수로 입력하세요.")
     return n
+
+
+def sample_key(body: dict) -> str:
+    """[SPECIFICATION] plans/phase-2.md#sample_key
+    표본·통계 캐시의 열쇠: table_key에 표본 방식(sampling.how_of의 값)을 붙인 글자."""
+    key = table_key(body) + "|" + json.dumps(sampling.how_of(body), sort_keys=True, ensure_ascii=False)
+    return key if (rev := labels.revision(body)) is None else key + "|labels" + str(rev)  # 태그가 바뀌면 표본·통계를 새로 구한다(Phase 4)
+
+
+def sample_gate(body: dict, con: object, stages: list[tuple[str, object]], lead: str = "표본을 뽑으며") -> None:
+    """[SPECIFICATION] plans/phase-2.md#sample_gate
+    표본을 뽑기 전에 읽는 양을 미리 잴 수 있는 연결이면 단계별 예상치를 모두 세어 처리 용량을 확인한다(확인이 필요하면 Confirm)."""
+    if not scan_size.dry_runs(con):
+        return None
+    config = settings.load()
+    confirmed = body.get("confirmed") is True
+    if confirmed and not scan_size.blocks_unknown(config):
+        return None
+
+    def work():
+        out = []
+        for name, expr in stages:
+            if expr is None:
+                out.append({"stage": name, "bytes": 0, "how": "무과금 미리보기"})
+                continue
+            sql, dialect = server.expr_sql(con, expr)
+            found = scan_size.safe(lambda: scan_size.estimate(con, sql, state["opened"], dialect))
+            out.append({"stage": name, "bytes": found["bytes"], "how": found["how"]})
+        return out
+    found = run(work)
+    total = None if any(s["bytes"] is None for s in found) else sum(s["bytes"] for s in found)
+    bound, bound_text = scan_size.limit(config)
+    unknown = total is None
+    blocked = unknown and scan_size.blocks_unknown(config)
+    over = not unknown and total > bound
+    if not (blocked or (over and not confirmed)):
+        return None
+    each = " · ".join(f"{s['stage']} {'알 수 없음' if s['bytes'] is None else scan_size.size_text(s['bytes'])}" for s in found)
+    reads = sum(1 for s in found if s["bytes"] != 0)
+    text = f"{lead} 표를 {reads}번 읽어요: {each} · 합계 {'알 수 없음' if unknown else scan_size.size_text(total)} · {bound_text}"
+    response = jsonify(needs_confirm=True, over=over, unknown=unknown, blocked=blocked, bytes=total, limit=bound, stages=found, text=text)
+    response.headers["X-Needs-Confirm"] = "1"
+    raise querying.Confirm(response)
+
+
+def even_sample(body: dict, key: str, size: int, how: dict) -> object:  # pyarrow 표
+    """[SPECIFICATION] plans/phase-2.md#even_sample
+    가중치 없이 그대로 쓸 수 있는 표본: 층화면 그 표본의 파일럿, 아니면 sampled의 표본(분석·뺄 만한 컬럼이 쓴다)."""
+    arrow, info = sampled(body, key, size, False, how)
+    return SAMPLES[key][SAMPLE_PILOT] if info["way"] == "strata" else arrow
 
 
 @app.post("/api/shape")
@@ -386,19 +478,22 @@ def sample_run(arrow, work, con=None):
     return run(go)
 
 
-def sampled(body, key, size, fresh):
-    """이 테이블의 표본 (pyarrow 표, 표본 정보 {rows, method, passed}). 방금 같은 크기로 읽은 것이 있으면 그것(fresh면 새로 읽는다).
-    표본은 profiler가 싼 방법부터 차례로 읽는다. 행 수는 /api/shape가 세어 둔 것을 쓴다."""
+def sampled(body, key, size, fresh, how):
+    """이 테이블의 표본 (pyarrow 표, 표본 정보). 방금 같은 열쇠·크기로 읽은 것이 있으면 그것(fresh면 새로 읽는다).
+    how(sampling.how_of)대로 sampling.draw가 파일럿을 따로 뽑아 필요한 표본 수(size는 상한)를 정하고 층화·블록·키 단위로 뽑는다.
+    층화를 못 하면 블록(안내는 notes). 뽑기 전에 단계별 처리 용량을 sample_gate로 확인한다. SAMPLES에는 (크기, 표본, 정보, 파일럿)."""
     held = SAMPLES.get(key)
     if held and held[0] == size and not fresh:
         return held[1], held[2]
     con, table, base = get_con(), base_table(body), body["base"]
-    rows = known_rows(body)
-    part = profiler.spec_table(body.get("schema") or "", base).get("partition")
-    arrow, method, passed = run(lambda: profiler.sample(con, table, body.get("schema") or "", base, size, rows, part))
-    info = {"rows": arrow.num_rows, "method": method, "passed": passed}
+    schema, rows, conf = body.get("schema") or "", known_rows(body), sampling.config()
+    part = profiler.spec_table(schema, base).get("partition")
+    how = sampling.settle(table, how, rows)
+    sample_gate(request.json, con, sampling.plan(table, how, size, rows, conf))
+    first = settings.get("pilot_first") == "block"   # 블록 먼저는 파일럿만(사용자 결정)
+    arrow, pilot, info = run(lambda: sampling.draw(con, table, how, size, rows, lambda n, pilot: profiler.sample(con, table, schema, base, n, rows, part, pilot and first), conf))
     SAMPLES.clear()  # 표본은 마지막 테이블 하나만 메모리에 둔다.
-    SAMPLES[key] = (size, arrow, info)
+    SAMPLES[key] = (size, arrow, info, pilot)
     return arrow, info
 
 
@@ -422,15 +517,17 @@ def described(found, body):
 
 def profiled(body):
     """한 테이블의 컬럼 통계(캐시된 것 또는 표본에서 새로 구한 것) {profile, sampled, saved}. profile·요약 파일이 같이 쓴다."""
-    key, size, fresh = table_key(body), sample_size(body), body.get("refresh") is True
+    key, size, fresh, how = sample_key(body), sample_size(body), body.get("refresh") is True, sampling.how_of(body)
+    opts = prep_diag.options(settings.read(prep_diag.OPTIONS_FILE))
+    mark = prep_diag.stamp({"iqr_k": opts["iqr_k"]})
     found = None if fresh else profiler.cached(key, size)
-    if found is None or "profile" not in found:
-        arrow, info = sampled(body, key, size, fresh)
-        stats = sample_run(arrow, prep_profile.profile)  # 표본은 이 PC에서 센다
-        guesses, facts = profiler.infer(arrow), file_facts(body["base"])
+    if found is None or "profile" not in found or found.get("stamp") != mark:
+        arrow, info = sampled(body, key, size, fresh, how)
+        stats = sample_run(arrow, lambda t: prep_profile.profile(t, sampling.WEIGHT if sampling.WEIGHT in arrow.column_names else None, opts["iqr_k"]))  # 표본은 이 PC에서 센다
+        guesses, facts = profiler.infer(sampling.bare(arrow)), file_facts(body["base"])
         for column in stats["columns"]:
             column["infer"] = {**guesses.get(column["name"], {}), **({"exact": facts["columns"][column["name"]]} if facts and column["name"] in facts["columns"] else {})}
-        found = profiler.remember(key, size, profile={**stats, **({"file_rows": facts["rows"]} if facts else {})}, sampled=info)
+        found = profiler.remember(key, size, profile={**stats, **({"file_rows": facts["rows"]} if facts else {})}, sampled=info, stamp=mark)
     return found
 
 
@@ -466,7 +563,7 @@ def profile_full():
     """컬럼 요약을 테이블 전체로 구한다(빈 값·서로 다른 값 수·최솟값·최댓값). 표본 통계를 구해 두었으면 컬럼마다 표본과 크게 다른 항목(diff)을 붙이고,
     없으면(통계 범위 '전체'로 표본을 건너뜀) diff는 빈 목록이다. 분석의 전체 구하기와 같이 처리 용량 확인·사본·취소를 따른다."""
     body = request.json
-    found = profiler.cached(table_key(body), sample_size(body)) or {}
+    found = profiler.cached(sample_key(body), sample_size(body)) or {}
     recipe = {"schema": body.get("schema") or "", "base": body["base"]}
     if ask := copy_gate(recipe, reads=True):
         return ask
@@ -493,7 +590,7 @@ def examples(arrow, name):
 
 def table_summary(body, table, full):
     """한 테이블의 (행 수, 기준 글자, [요약 한 줄 = SUMMARY_HEAD 순서의 값들]). 기본은 표본 통계, full이면 전체 기준의 빈 값·고유값·최솟값·최댓값(구조·목록 컬럼은 표본 값)."""
-    mine = {**body, "base": table}
+    mine = {**body, "base": table, "sample_how": None}
     found = profiled(mine)["profile"]
     rows, basis, total = found["rows"], f"표본 {found['rows']:,}행", known_rows({"schema": body.get("schema") or "", "base": table})
     over = {}
@@ -503,7 +600,8 @@ def table_summary(body, table, full):
         expr = built(recipe)[0]
         whole = run(lambda: prep_profile.full_facts(expr))
         rows, basis, total, over = whole["rows"], "전체", whole["rows"], {c["name"]: c for c in whole["columns"]}
-    arrow = sampled(mine, table_key(mine), sample_size(mine), False)[0]
+    arrow = sampled(mine, sample_key(mine), sample_size(mine), False, sampling.how_of(mine))[0]
+    arrow = sampling.bare(arrow)
     lines = []
     for c in found["columns"]:
         c = {**c, **over.get(c["name"], {})}
@@ -577,12 +675,171 @@ def profile_export():
 def patterns():
     """글자 컬럼의 타입 추천(날짜로, 숫자로, 글자를 지우고 숫자로). profile과 같은 표본에서 구하고 캐시한다(refresh면 다시)."""
     body = request.json
-    key, size, fresh = table_key(body), sample_size(body), body.get("refresh") is True
+    key, size, fresh = sample_key(body), sample_size(body), body.get("refresh") is True
     found = None if fresh else profiler.cached(key, size)
     if found is None or "patterns" not in found:
-        arrow, info = sampled(body, key, size, False)  # profile이 방금 읽은(refresh면 새로 읽은) 표본
-        found = profiler.remember(key, size, patterns=sample_run(arrow, lambda t: prep_profile.patterns(t, size)), sampled=info)
+        arrow, info = sampled(body, key, size, False, sampling.how_of(body))  # profile이 방금 읽은(refresh면 새로 읽은) 표본
+        found = profiler.remember(key, size, patterns=sample_run(sampling.bare(arrow), lambda t: prep_profile.patterns(t, size)), sampled=info)
     return jsonify(columns=found["patterns"])
+
+
+@app.get("/api/profile/diag")
+def diag_options() -> object:
+    """[SPECIFICATION] plans/phase-5.md#diag_options
+    지금 진단 기준(options)과 기준표(rules: 종류·범위·기본값), 참조 무결성 키 쌍 상한을 돌려준다."""
+    return jsonify(options=prep_diag.options(settings.read(prep_diag.OPTIONS_FILE)), rules={k: list(v) for k, v in prep_diag.OPTION_RULES.items()},
+                   orphan_pairs=prep_diag.ORPHAN_MAX_PAIRS)
+
+
+@app.post("/api/profile/diag")
+def save_diag_options() -> object:
+    """[SPECIFICATION] plans/phase-5.md#save_diag_options
+    진단 기준을 검사해 저장하고(빈 dict면 기본값으로) 저장한 값을 돌려준다."""
+    found = prep_diag.options(request.json.get("options"))
+    defaults = prep_diag.options(None)
+    settings.write(prep_diag.OPTIONS_FILE, {k: v for k, v in found.items() if v != defaults[k]})  # 기본값과 다른 것만 저장
+    return jsonify(options=found)
+
+
+@app.post("/api/diagnose")
+def diagnose() -> object:
+    """[SPECIFICATION] plans/phase-5.md#diagnose_route
+    통계와 같은 표본으로 표본 진단(prep_diag.diagnose)을 구하고 진단 기준 지문과 함께 캐시한다(DB 조회 없음)."""
+    import polars as pl
+    body = request.json
+    key, size, fresh, how = sample_key(body), sample_size(body), body.get("refresh") is True, sampling.how_of(body)
+    opts = prep_diag.options(settings.read(prep_diag.OPTIONS_FILE))
+    mark = prep_diag.stamp(opts)
+    found = None if fresh else profiler.cached(key, size)
+    if found and (found.get("diag") or {}).get("stamp") == mark:
+        return jsonify(found["diag"])
+    arrow = sampled(body, key, size, False, how)[0]  # profile이 방금 읽은(refresh면 새로 읽은) 표본(patterns와 같다)
+    plain = sampling.bare(arrow)
+    frame = pl.from_arrow(plain)
+    weight = pl.from_arrow(arrow[sampling.WEIGHT]) if sampling.WEIGHT in arrow.column_names else None
+    kinds = {n: parse.kind(d) for n, d in ibis.memtable(plain).schema().items()}
+    texts = [n for n, k in kinds.items() if k == "string"]
+    jsons = sample_run(arrow, lambda t: prep_diag.json_counts(t, texts, sampling.WEIGHT if weight is not None else None))
+    out = {**prep_diag.diagnose(frame, weight, kinds, opts, jsons, dt.datetime.now()), "stamp": mark}
+    profiler.remember(key, size, diag=out)
+    return jsonify(out)
+
+
+@app.post("/api/diag/quasi")
+def quasi() -> object:
+    """[SPECIFICATION] plans/phase-5.md#quasi
+    표본에서 2~3개를 묶으면 유일해지는 컬럼 조합 후보를 찾는다(이 PC에서만, DB 조회 없음)."""
+    import polars as pl
+    body = request.json
+    arrow = sampling.bare(sampled(body, sample_key(body), sample_size(body), False, sampling.how_of(body))[0])
+    kinds = {n: parse.kind(d) for n, d in ibis.memtable(arrow).schema().items()}
+    opts = prep_diag.options(settings.read(prep_diag.OPTIONS_FILE))
+    return jsonify(keys=prep_diag.quasi_keys(pl.from_arrow(arrow), kinds, opts), rows=arrow.num_rows)
+
+
+@app.post("/api/diag/dupes")
+def diag_dupes() -> object:
+    """[SPECIFICATION] plans/phase-5.md#diag_dupes
+    테이블 전체에서 고른 컬럼(비우면 모든 컬럼) 기준 중복을 센다(처리 용량 확인·사본·취소는 전체 구하기와 같다)."""
+    body = request.json
+    asked = body.get("columns")
+    if asked and (not isinstance(asked, list) or not all(isinstance(c, str) for c in asked)):
+        raise ValueError("컬럼(columns)은 이름 목록이에요.")
+    recipe = {"schema": body.get("schema") or "", "base": body["base"]}
+    con = get_con()
+    dry = not local_mode(recipe) and scan_size.dry_runs(con)  # gate 차례: 사본이면 1, dry run 되는 연결이면 2, 그 밖은 3
+    if not dry and (ask := copy_gate(recipe, reads=True)):
+        return ask
+    fresh_copy(recipe)
+    expr = built(recipe)[0]
+    columns = asked or [c for c, d in expr.schema().items() if parse.kind(d) != "other"]  # 모든 컬럼: 구조·목록 컬럼은 묶을 수 없는 DB가 있어 뺀다
+    for c in columns:
+        parse.check_name(c, expr.columns)
+    if dry:
+        sample_gate(request.json, con, [(name, expr.select(*columns)) for name in prep_diag.DUPES_STAGES], lead="진단하며")  # 확인이 필요하면 Confirm(→ X-Needs-Confirm)
+    opts = prep_diag.options(settings.read(prep_diag.OPTIONS_FILE))
+    found = run(lambda: prep_diag.key_dupes(expr, columns, opts["dup_top"]))
+    return jsonify({**found, "reads": len(prep_diag.DUPES_STAGES), "skipped": [c for c in expr.columns if c not in columns] if not asked else []})
+
+
+@app.post("/api/diag/gaps")
+def diag_gaps() -> object:
+    """[SPECIFICATION] plans/phase-5.md#diag_gaps
+    테이블 전체에서 날짜·시각 컬럼의 값이 없는 일·시간 구간을 찾는다."""
+    body = request.json
+    column = body.get("column")
+    recipe = {"schema": body.get("schema") or "", "base": body["base"]}
+    con = get_con()
+    dry = not local_mode(recipe) and scan_size.dry_runs(con)  # gate 차례: 사본이면 1, dry run 되는 연결이면 2, 그 밖은 3
+    if not dry and (ask := copy_gate(recipe, reads=True)):
+        return ask
+    fresh_copy(recipe)
+    expr = built(recipe)[0]
+    parse.check_name(column, expr.columns)
+    if dry:
+        sample_gate(request.json, con, [(name, expr.select(column)) for name in prep_diag.GAPS_STAGES], lead="진단하며")
+    opts = prep_diag.options(settings.read(prep_diag.OPTIONS_FILE))
+    found = run(lambda: prep_diag.time_gaps(expr, column, body.get("unit") or "day", opts))
+    plain = result.plain
+    return jsonify({**found, "first": plain(found["first"]), "last": plain(found["last"]),
+                    "runs": [{**r, "start": plain(r["start"]), "end": plain(r["end"])} for r in found["runs"]], "reads": len(prep_diag.GAPS_STAGES)})
+
+
+@app.post("/api/diag/orphans")
+def diag_orphans() -> object:
+    """[SPECIFICATION] plans/phase-5.md#diag_orphans
+    지금 테이블(팩트)의 키가 고른 차원 테이블의 키에 없는 비율(참조 무결성)을 테이블 전체로 구한다."""
+    body = request.json
+    schema = body.get("schema") or ""
+    fact_r, dim_r = {"schema": schema, "base": body["base"]}, {"schema": schema, "base": body.get("dim")}
+    if not isinstance(dim_r["base"], str) or not dim_r["base"]:
+        raise ValueError("차원 테이블(dim)을 고르세요.")
+    con = get_con()
+    dry = not local_mode(fact_r) and scan_size.dry_runs(con)  # gate 차례: 사본이면 1, dry run 되는 연결이면 2, 그 밖은 3
+    for recipe in (fact_r, dim_r) if not dry else ():
+        if ask := copy_gate(recipe, reads=True):
+            return ask
+    for recipe in (fact_r, dim_r):
+        fresh_copy(recipe)
+    fact, dim = built(fact_r)[0], built(dim_r)[0]  # local_mode면 둘 다 이 PC 사본(같은 DuckDB), 아니면 둘 다 연결
+    pairs = body.get("pairs")
+    if dry:  # 단계마다 읽는 표의 키 컬럼만
+        if not isinstance(pairs, list) or not 1 <= len(pairs) <= prep_diag.ORPHAN_MAX_PAIRS or not all(isinstance(p, list) and len(p) == 2 and all(isinstance(x, str) for x in p) for p in pairs):
+            raise ValueError(prep_diag.PAIRS_ERROR)
+        for a, b in pairs:
+            parse.check_name(a, fact.columns)
+            parse.check_name(b, dim.columns)
+        cols = {"fact": [p[0] for p in pairs], "dim": [p[1] for p in pairs]}
+        sample_gate(request.json, con, [(f"{name}({'팩트' if side == 'fact' else '차원'})", (fact if side == "fact" else dim).select(*cols[side])) for name, side in prep_diag.ORPHAN_STAGES], lead="진단하며")
+    opts = prep_diag.options(settings.read(prep_diag.OPTIONS_FILE))
+    found = run(lambda: prep_diag.orphans(fact, dim, pairs, opts["orphan_top"]))
+    return jsonify({**found, "dim": dim_r["base"], "reads": len(prep_diag.ORPHAN_STAGES)})
+
+
+@app.post("/api/diag/hashed")
+def hashed() -> object:
+    """[SPECIFICATION] plans/phase-5.md#hashed
+    설정 hash_exclude가 켜져 있으면 이 테이블의 해시·UUID 컬럼 이름들을 표본으로 찾아(캐시) 돌려준다(쿼리·대시보드·분석의 그룹·집계 목록에서 뺄 것)."""
+    import polars as pl
+    body = request.json
+    if settings.get("hash_exclude") != "on":
+        return jsonify(on=False, columns=[])  # 꺼져 있으면 표본을 읽지 않는다
+    key, size, how = sample_key(body), sample_size(body), sampling.how_of(body)
+    opts = prep_diag.options(settings.read(prep_diag.OPTIONS_FILE))
+    mark = prep_diag.stamp({"hash_share": opts["hash_share"]})
+    found = profiler.cached(key, size) or {}
+    if (found.get("hashed") or {}).get("stamp") == mark:
+        return jsonify(on=True, columns=found["hashed"]["columns"])
+    if (found.get("diag") or {}).get("stamp") == prep_diag.stamp(opts):  # 전처리에서 이미 구한 진단이 있으면 그 태그
+        names = [n for n, g in found["diag"]["columns"].items() if "hash" in g["tags"]]
+    else:
+        arrow = sampled(body, key, size, False, how)[0]  # 전처리 통계와 같은 표본(Phase 2 방식·확인 창 그대로)
+        plain = sampling.bare(arrow)
+        weight = pl.from_arrow(arrow[sampling.WEIGHT]) if sampling.WEIGHT in arrow.column_names else None
+        kinds = {n: parse.kind(d) for n, d in ibis.memtable(plain).schema().items()}
+        names = prep_diag.hashed_columns(pl.from_arrow(plain), weight, kinds, opts)
+    profiler.remember(key, size, hashed={"stamp": mark, "columns": names})
+    return jsonify(on=True, columns=names)
 
 
 @app.get("/api/spec")
@@ -608,7 +865,7 @@ def head():
     표본을 한 번 읽는다(화면은 통계를 켰을 때만 부른다)."""
     import polars as pl
     body = request.json
-    arrow = sampled(body, table_key(body), sample_size(body), False)[0]
+    arrow = sampling.bare(sampled(body, sample_key(body), sample_size(body), False, sampling.how_of(body))[0])
     return server.json_reply(pl.from_arrow(arrow.slice(0, PREVIEW_ROWS)))
 
 
@@ -637,7 +894,38 @@ def preview():
     after = None if before is None and recipe.get("count") is False else run(lambda: result.get_count(expr)) if prep_expr.changes_rows(recipe) else before
     return server.json_reply(rows, types=[prep_expr.type_text(t) for t in expr.schema().values()], before=before, after=after,
                    sources=[origin[name][0] for name in expr.columns], derived=[origin[name][1] for name in expr.columns], info=info,
-                   local=local_mode(recipe))
+                   local=ibis.get_backend(expr) is not con)
+
+
+def view_keys(expr: "ibis.Table", column: str, desc: bool) -> list:
+    """[SPECIFICATION] plans/phase-11.md#view_keys
+    데이터 탭 머리글 정렬의 정렬 키: 고른 컬럼(빈 값은 방향과 상관없이 맨 뒤) + 같은 값끼리 순서를 고정할 나머지 정렬 가능 컬럼."""
+    parse.check_name(column, expr.columns, "컬럼")
+    orderable = parse.orderable(expr)
+    if column not in [c.get_name() for c in orderable]:
+        raise ValueError(f"'{column}' 컬럼은 목록·구조·JSON이라 정렬할 수 없어요.")
+    main = expr[column].desc(nulls_first=False) if desc else expr[column].asc(nulls_first=False)
+    return [main, *[c.asc(nulls_first=False) for c in orderable if c.get_name() != column]]
+
+
+@app.post("/api/prep/sorted")
+def sorted_head() -> object:
+    """[SPECIFICATION] plans/phase-11.md#sorted_head
+    전처리를 적용한 테이블 전체를 view_sort 컬럼으로 정렬해 앞 PREVIEW_ROWS행을 미리보기와 같은 모양으로 돌려준다(행 수는 세지 않음)."""
+    recipe, info = request.json, {}
+    vs = recipe.get("view_sort")
+    if not isinstance(vs, dict) or not isinstance(vs.get("column"), str) or not vs["column"] or vs.get("dir") not in VIEW_SORT_DIRS:
+        raise ValueError("정렬(view_sort)은 {column, dir: asc|desc} 꼴로 보내세요.")
+    if ask := copy_gate(recipe):
+        return ask
+    expr, origin = built(recipe, info)
+    ordered = expr.order_by(view_keys(expr, vs["column"], vs["dir"] == "desc"))
+    con = get_con()
+    if scan_size.dry_runs(con) and not local_mode(recipe) and (ask := server.scan_gate(request.json, lambda: server.expr_sql(con, ordered.limit(PREVIEW_ROWS)))):
+        return db_reads(ask)  # ORDER BY는 행 수와 상관없이 테이블 전체를 읽는다
+    rows = run(lambda: result.get_rows(ordered, PREVIEW_ROWS))
+    return server.json_reply(rows, types=[prep_expr.type_text(t) for t in expr.schema().values()], sources=[origin[n][0] for n in expr.columns],
+                             derived=[origin[n][1] for n in expr.columns], info=info, local=local_mode(recipe), view_sort=vs)
 
 
 @app.post("/api/prune")
@@ -645,7 +933,9 @@ def prune():
     """뺄 만한 컬럼 제안(prep_profile.prune): 값이 하나뿐·거의 한 값·상관이 아주 높은 숫자 컬럼. 전처리 탭의 표본(이 PC)으로만 구한다
     (표본을 아직 읽지 않았으면 그때 한 번 읽는다). 빼는 것은 화면에서 사용자가 고른다."""
     body = request.json
-    arrow, info = sampled(body, table_key(body), sample_size(body), False)
+    key, how = sample_key(body), sampling.how_of(body)
+    info = sampled(body, key, sample_size(body), False, how)[1]
+    arrow = even_sample(body, key, sample_size(body), how)
     return jsonify(columns=prep_profile.prune(arrow), sampled=info)
 
 
@@ -658,16 +948,22 @@ def analyzed(body):
     if whole(body):
         expr = built(recipe)[0]
         return {**run(lambda: stats.analyze(expr, how)), "data": {"full": True}}
-    key, size = table_key(recipe), sample_size(body)
-    arrow, info = sampled(recipe, key, size, False)
+    asked = body.get("how") or {}
+    by = asked.get("by")
+    keyed = asked.get("kind") == "groups" and isinstance(by, str) and by in base_table(recipe).columns   # 그룹 비교는 by 컬럼을 키로(키별 값이 깨지지 않게, 사용자 결정 10)
+    way = {"way": "key", "column": by} if keyed else sampling.how_of(body)  # how(분석 인자)와 이름이 겹치지 않게
+    key, size = sample_key({**recipe, "sample_how": way}), sample_size(body)
+    arrow = even_sample(recipe, key, size, way)
+    info = SAMPLES[key][2]
     con = get_con()
     found = sample_run(arrow, lambda t: stats.analyze(prep_expr.build(con, recipe, t)[0], how), con)  # 표본은 이 PC에서 센다
     return {**found, "data": {"full": False, **info}}
 
 
 def whole(body):
-    """분석을 테이블 전체로 구하는지: full이거나 퍼널·가장 많은 기간 찾기(건수를 표본으로 세면 틀린다)."""
-    return body.get("full") is True or (body.get("how") or {}).get("kind") in ("funnel", "busiest")
+    """분석을 테이블 전체로 구하는지: full이거나 퍼널·가장 많은 기간 찾기·건수·합계를 그대로 보이는 분석(Phase 12 6종)(건수를 표본으로 세면 틀린다)."""
+    from analysis import insight
+    return body.get("full") is True or (body.get("how") or {}).get("kind") in ("funnel", "busiest", *insight.WHOLE_KINDS)
 
 
 @app.post("/api/analyze")
@@ -675,7 +971,12 @@ def analyze():
     body = request.json
     recipe = {**body.get("recipe", {}), "sorts": []}  # 분석은 정렬을 쓰지 않으니 사본 열쇠·확인도 정렬 없이(analyzed와 같다)
     full = whole(body)
-    if ask := (copy_gate(recipe, reads=True) if full else geo_gate(recipe)):  # 표본 분석도 원격 지점·영역 테이블은 통째로 받으므로 확인한다
+    ask = copy_gate(recipe, reads=True) if full else geo_gate(recipe)  # 표본 분석도 원격 지점·영역 테이블은 통째로 받으므로 확인한다
+    from analysis import insight
+    how = body.get("how") or {}
+    if ask is not None and full and how.get("kind") in insight.READS and held.remote(get_con()) and not local_mode(recipe):  # DB가 직접 계산할 때만(사본을 받는 길은 1번 읽기)
+        ask = reads_times(ask, insight.READS[how["kind"]] - (how["kind"] == "rfm" and bool(how.get("asof"))))
+    if ask is not None:
         return ask
     if full:
         fresh_copy(recipe)
@@ -688,11 +989,16 @@ def dupes():
     recipe, con = request.json, get_con()
     if ask := copy_gate(recipe, reads=True):
         return ask
-    if local_mode(recipe):
+    moved = dedupe_moves(recipe)
+    if local_mode(recipe) or moved:
         table = working_copy(recipe)
-        return jsonify(run(lambda: prep_expr.dupes(held.local(), local_recipe(recipe), table)))
-    table = start_table(recipe)
-    return jsonify(run(lambda: prep_expr.dupes(con, recipe, table)))
+        out = run(lambda: prep_expr.dupes(held.local(), local_recipe(recipe), table))
+    else:
+        table = start_table(recipe)
+        out = run(lambda: prep_expr.dupes(con, recipe, table))
+    out["examples"] = server.to_json(out["examples"])
+    out["moved"] = moved  # 화면이 "이 연결에서는 이 비교를 할 수 없어요" 팝업을 띄운다
+    return jsonify(out)
 
 
 def make_table(recipe, name):

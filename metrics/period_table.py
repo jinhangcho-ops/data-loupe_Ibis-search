@@ -8,7 +8,6 @@ import datetime as dt
 from core import parse
 from core import querying
 from core import result
-from core import server
 from core import sql_funcs
 from dashboard import period
 
@@ -20,10 +19,11 @@ HOWS = {"count": "개수", "count_distinct": "고유 개수", "sum": "합계"}
 HEAD = "기간"  # 첫 열 이름
 EMPTY = "(빈 값)"  # split 컬럼이 빈 값인 열
 TOO_MANY = "기간을 줄이거나 단위를 키우세요."
+TOTAL = "합계"  # (Phase 8) 총계 줄의 첫 칸
 
 
 def check(spec):
-    """요청 spec을 검사해 정리한 사본({tables, unit, start, end}, 테이블마다 label이 채워짐). 잘못이면 한국어 ValueError."""
+    """요청 spec을 검사해 정리한 사본({tables, unit, start, end, total}, 테이블마다 label이 채워짐). 잘못이면 한국어 ValueError."""
     if not isinstance(spec, dict):
         raise ValueError("요청이 올바르지 않아요.")
     unit = spec.get("unit") or "month"
@@ -47,10 +47,13 @@ def check(spec):
     start, end = (spec.get(k) or None for k in ("start", "end"))
     if any(v is not None and not isinstance(v, str) for v in (start, end)):
         raise ValueError("start·end는 YYYY-MM-DD 모양의 글자여야 해요.")
-    return {"tables": kept, "unit": unit, "start": start, "end": end}
+    total = spec.get("total") or False
+    if not isinstance(total, bool):
+        raise ValueError("total은 참·거짓이에요.")
+    return {"tables": kept, "unit": unit, "start": start, "end": end, "total": total}
 
 
-def grouped(spec, t):
+def grouped(spec, t, by_period: bool = True):
     """테이블 t를 기간(과 split 값)별로 집계한 Ibis 식: 컬럼 p(기간 시작), s(split 값, 있을 때만), v(값). 날짜가 빈 행은 뺀다. 처리 용량 확인이 이 식의 SQL을 센다."""
     expr = querying.joined({"schema": t.get("schema") or None, "base": t["base"]})[0]
     dates = [c for c, kind in expr.schema().items() if kind.is_date() or kind.is_timestamp()]
@@ -65,10 +68,12 @@ def grouped(spec, t):
         if t["how"] == "sum" and not parse.column(expr, t["column"]).type().is_numeric():
             raise ValueError(f"‘{t['column']}’은 숫자 컬럼이 아니라 합계를 구할 수 없어요.")
         value = sql_funcs.aggregate(t["how"], expr, t["column"])
-    keys = {"p": sql_funcs.period_start(result.local_time(expr[t["date"]]), sql_funcs.UNITS[spec["unit"]])}
+    keys = {}
+    if by_period:
+        keys["p"] = sql_funcs.period_start(result.local_time(expr[t["date"]]), sql_funcs.UNITS[spec["unit"]])
     if t.get("split"):
         keys["s"] = parse.column(expr, t["split"])
-    return expr.group_by(**keys).aggregate(v=value)
+    return expr.group_by(**keys).aggregate(v=value) if keys else expr.aggregate(v=value)
 
 
 def day_of(value):
@@ -86,7 +91,7 @@ def fetch(spec, t):
     parts = sorted({r["s"] for r in found.iter_rows(named=True)} if split else [None], key=lambda v: (v is None, str(v)))
     if len(parts) > MAX_SPLITS:
         raise ValueError(f"‘{split}’의 값이 {MAX_SPLITS}개를 넘어 열로 나눌 수 없어요. 값이 적은 컬럼을 고르세요.")
-    names = {part: (f"{t['label']} · {EMPTY if part is None else part}" if split else t["label"]) for part in parts}
+    names = {part: column_name(t, part) for part in parts}
     cells = {name: {} for name in names.values()}
     for r in found.iter_rows(named=True):
         cells[names[r["s"] if split else None]][day_of(r["p"])] = result.number(r["v"]) or 0
@@ -118,22 +123,44 @@ def axis_of(first, last, unit):
     return days
 
 
-def ratios_of(names, rows):
-    """열마다 비중 %(열 합 대비)와 전 기간 대비 %(이전이 0이거나 첫 칸이면 빈 값)."""
+def ratios_of(names, rows, wholes: dict[str, int | float | None] | None = None):
+    """열마다 비중 %(열 합 대비. 고유 개수 열은 wholes의 전체 기간 다시 센 값 대비)와 전 기간 대비 %(이전이 0이거나 첫 칸이면 빈 값)."""
     share, change = {}, {}
     for j, name in enumerate(names, start=1):
         column = [r[j] for r in rows]
-        total = sum(column)
+        total = wholes[name] if wholes and name in wholes else sum(column)
         share[name] = [round(v / total * 100, 2) if total else None for v in column]
         change[name] = [round((v - before) / abs(before) * 100, 2) if before else None for before, v in zip([None, *column], column)]
     return {"share": share, "change": change}
 
 
+def column_name(t: dict, part: object) -> str:
+    """[SPECIFICATION] plans/phase-8.md#column_name
+    테이블 줄 t와 split 값 part(split이 없으면 None)의 표 열 이름."""
+    if not t.get("split"):
+        return t["label"]
+    return f"{t['label']} · {EMPTY if part is None else part}"
+
+
+def whole(spec: dict, t: dict) -> dict[str, int | float | None]:
+    """[SPECIFICATION] plans/phase-8.md#whole
+    고유 개수 테이블 줄 t를 기간으로 나누지 않고 전체 기간에서 다시 세어 {열 이름: 고유 개수}로 돌려준다(DB에 한 번)."""
+    if t["how"] != "count_distinct":
+        raise ValueError("전체 기간 다시 세기는 고유 개수에만 해요.")
+    split = t.get("split")
+    found = grouped(spec, t, by_period=False).limit(MAX_SPLITS + 1).to_polars()
+    if found.height > MAX_SPLITS:
+        raise ValueError(f"‘{split}’의 값이 {MAX_SPLITS}개를 넘어 열로 나눌 수 없어요. 값이 적은 컬럼을 고르세요.")
+    return {column_name(t, r["s"] if split else None): result.number(r["v"]) for r in found.iter_rows(named=True)}
+
+
 def build(spec):
-    """기간별 표 {columns, rows, ratios}. 연결 스레드에서 부른다(server.run). 테이블마다 DB에 한 번 묻는다."""
+    """기간별 표 {columns, rows, ratios, total(spec.total일 때만)}. 연결 스레드에서 부른다(server.run). 테이블마다 DB에 한 번, 고유 개수 줄은 전체 기간을 다시 세느라 한 번 더 묻는다."""
     spec = check(spec)
-    cells = {}
+    cells, wholes = {}, {}
     for t in spec["tables"]:
+        if t["how"] == "count_distinct":
+            wholes.update(whole(spec, t))
         for name, column in fetch(spec, t).items():
             if name in cells or name == HEAD:
                 raise ValueError(f"열 이름 ‘{name}’이 겹쳐요. 라벨을 서로 다르게 정하세요.")
@@ -142,4 +169,7 @@ def build(spec):
     days = {d for column in cells.values() for d in column}
     axis = axis_of(min(days), max(days), spec["unit"]) if days else []
     rows = [[label_of(d, spec["unit"]), *(cells[name].get(d, 0) for name in names)] for d in axis]
-    return {"columns": [HEAD, *names], "rows": rows, "ratios": ratios_of(names, rows)}
+    found = {"columns": [HEAD, *names], "rows": rows, "ratios": ratios_of(names, rows, wholes)}
+    if spec["total"]:
+        found["total"] = [TOTAL, *(wholes[name] if name in wholes else sum(r[j] for r in rows) for j, name in enumerate(names, start=1))]
+    return found

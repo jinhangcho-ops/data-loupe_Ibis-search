@@ -7,11 +7,12 @@ import os
 from pathlib import Path
 from urllib.parse import quote
 
-from flask import jsonify, request
+from flask import Response, jsonify, request
 
 from lazy import Later, ibis, preload
 from core import handoff as registry  # 이 모듈의 /api/handoff 라우트 함수 이름과 겹치지 않게
 from core import held
+from core import labels
 from core import result
 from core import scan_size
 from core import server
@@ -23,12 +24,16 @@ from core.server import app, get_con, run
 
 
 calc = Later("core.calc")
+crosstab = Later("core.crosstab")
+dash_calc = Later("dashboard.dash_calc")
 dash_store = Later("core.dash_store")
+join_names = Later("core.join_names")
 metric_file = Later("core.metric_file")
 nl2sql = Later("query.nl2sql")
 parse = Later("core.parse")
 plan = Later("core.plan")
 querying = Later("core.querying")
+viz_rules = Later("core.viz_rules")
 
 # 그래프 그림 저장(/api/images): 연결을 쓰지 않으므로 차례를 기다리지 않는다.
 server.FREE.add("/api/images")
@@ -39,9 +44,13 @@ MAX_IMAGE_BYTES = 30 * 1024 * 1024  # 그림 하나의 크기
 @server.late_constants("query")
 def search_constants(found):  # 계산 줄·차트·지표 파일 화면이 서버와 같은 형식·집계 목록을 쓴다(계산 모듈은 쿼리 화면을 내려줄 때 올라온다)
     found["calc"] = {"guide": calc.GUIDE, "examples": calc.EXAMPLES, "hows": calc.HOWS, "max_pivot": calc.MAX_PIVOT, "subtotals": calc.SUBTOTALS,
-                     "windows": list(calc.NEW_WINDOWS), "formulas": list(calc.FORMULAS)}  # 계산 줄 형식·예시, 피벗 집계(함수 사전의 집계 전부)·소계 방식, 함수 사전의 창 함수·식 줄
+                     "windows": list(calc.NEW_WINDOWS), "formulas": list(calc.FORMULAS), "shows": list(calc.SHOWS),
+                     "crosstab": {"presets": list(crosstab.PRESETS), "quantiles": list(crosstab.QUANTILES), "above": crosstab.ABOVE, "converts": list(crosstab.CONVERTS),
+                                  "extras": list(crosstab.SUMMARY_EXTRAS)}}  # 계산 줄 형식·예시, 피벗 집계(함수 사전의 집계 전부)·소계 방식, 함수 사전의 창 함수·식 줄, 피벗 보기·교차표 기본값(화면은 이 값만 읽는다)
     found["chart"] = {"aggs": result.chart_aggs(), "names": metric_file.AGG_NAMES}  # 탐색 차트·분석 계열의 집계(함수 사전의 집계 전부)와 보이는 이름
     found["metrics"] = {"aggs": list(metric_file.AGGS)}  # 지표 파일의 분자·분모에 쓸 수 있는 집계
+    from core import prep_ops
+    found["prep6"] = prep_ops.SCREEN6  # 새 컬럼 상자의 기본값 안내
 
 
 PRELOAD = ("query.join_keys", "query.sentences", "query.sentence_run", "query.sentence_exec", "query.nl2sql",
@@ -57,7 +66,7 @@ def search_page():
 @app.post("/api/columns")
 def columns():
     """줄을 모두 검사한 식의 [컬럼, 한글 타입], 구조 컬럼 안의 필드(fields: [user.name, 타입]), 컬럼마다 원래 테이블(origins: 머리글 아래 작은 글씨)."""
-    expr = querying.build(request.json, select=False)
+    expr = querying.build(request.json, select=False, ask=request.json)
     return jsonify(columns=result.columns(expr), fields=result.fields(expr), origins=querying.joined(request.json)[1])
 
 
@@ -84,7 +93,7 @@ def values():
 
 def paged(body):
     """(검색 식, 행 수, 건너뛸 행 수)"""
-    return querying.build(body), parse.parse_limit(body.get("limit", 20)), parse.parse_offset(body.get("offset", 0))
+    return querying.build(body, ask=body), parse.parse_limit(body.get("limit", 20)), parse.parse_offset(body.get("offset", 0))
 
 
 @app.post("/api/scan")
@@ -103,7 +112,7 @@ def explore_gate(body, streams=False):
     con = get_con()
     if not held.remote(con):
         return server.scan_gate(body, lambda: server.expr_sql(con, querying.build(body)))
-    if streams and source.compiles(querying.build(body)):
+    if streams and source.compiles(querying.build(body)) and not labels.needs_pc(body):
         return exporting(con, body, lambda: server.expr_sql(con, querying.build(body)))
     if not body.get("fresh") and querying.search_key(body) in held.store["items"]:
         return None
@@ -192,7 +201,7 @@ def query():
     body = request.json
     expr, limit, offset = paged(body)  # 받기 전에 줄을 모두 검사한다
     con, count, rows, note = get_con(), None, None, ""
-    able = source.compiles(expr)
+    able = source.compiles(expr) and not labels.needs_pc(body)
     pages = able and held.remote(con) and held.pager(con) is not None  # 서버에 결과를 두는 DB(BigQuery): 받아 두거나 세지 않고 처음부터 server_page 한 번
     key = querying.held_key("server", {**{k: v for k, v in body.items() if k not in ("limit", "offset", "count", "fresh", "confirmed")}, "tabs": querying.tab_bodies(body)})  # 쓰는 @탭이 바뀌면 다시 조회
     if (not offset or (pages and reruns(key, body))) and (ask := explore_gate(body)):  # 새로 검색할 때만(쪽 넘기기는 묻지 않는다, 서버의 결과 테이블을 잊어 다시 돌릴 때는 묻는다)
@@ -204,7 +213,7 @@ def query():
         count, rows = run(lambda: held.page(querying.search_key(body), source_expr, lambda t: querying.arrange(body, t, held.ROW), limit, offset,
                                             server.state["cancel"], counter, body.get("fresh")))
         if rows is None and not able:
-            raise ValueError(querying.PC_TOO_BIG)
+            raise ValueError(labels.PC_TOO_BIG if labels.needs_pc(body) else querying.PC_TOO_BIG)
         note = TOO_BIG if rows is None else ""
         count = count if rows is not None or (counts and not body.get("calcs")) else None  # 받기 전에 센 수는 계산 전의 행 수(세지 않을 때는 상한까지만 센 수)
     kept = rows is not None
@@ -226,7 +235,7 @@ def query():
 def sent(con, body, expr, limit, offset):
     """/api/query가 DB에 보내는 조회의 (SQL, 받아 두는지). 받아 두면 기간·조건까지의 조회, 아니면 그 쪽의 조회."""
     item = held.store["items"].get(querying.search_key(body))
-    if (held.remote(con) or not source.compiles(expr)) and not (item and item[0] is None) and not (held.pager(con) and source.compiles(expr)):
+    if (held.remote(con) or not source.compiles(expr)) and not (item and item[0] is None) and not (held.pager(con) and source.compiles(expr) and not labels.needs_pc(body)):
         return result.get_sql(querying.filtered(body)), True
     if offset and not result.can_offset(expr):
         return result.get_sql(querying.numbered(body, limit, offset)), False
@@ -306,6 +315,23 @@ def use_search():
     return searches_view(settings.searches())
 
 
+@app.post("/api/searches/upgrade")
+def upgrade_search() -> Response:
+    """[SPECIFICATION] plans/phase-10.md#upgrade_search
+    저장한 검색 하나의 예전 조인 이름을 지금 연결의 새 이름으로 고쳐 저장하고 돌려준다."""
+    name = request.json.get("name")
+    if name not in settings.searches():
+        raise ValueError(f"저장한 검색 '{name}'이 없어요.")
+    search = settings.searches()[name]
+    found = server.run(lambda: join_names.search_renames(search))
+    if found:
+        search = join_names.upgrade(search, found)
+        saved = settings.save_search(name, search)
+    else:
+        saved = settings.searches()
+    return jsonify(search=search, renamed=found, searches=saved, order=use_counts.order("searches", saved))
+
+
 @app.post("/api/summary")
 @confirms
 def summary():
@@ -314,8 +340,15 @@ def summary():
     columns = request.json.get("summary_columns") or []  # 화면에서 고른 컬럼. 없으면 표시 컬럼(없으면 전체).
     expr, con = querying.runnable(request.json, select=not columns, ask=request.json), get_con()  # BigQuery의 읽는 양(요금)·받아 둘 사본은 runnable이 묻는다
     on_db = ibis.get_backend(expr) is con
-    rows = run(lambda: result.get_summary(expr, columns, unique=bool(columns) or not (on_db and held.remote(con))))
-    return jsonify(summary={"columns": result.SUMMARY_COLS, "rows": rows})
+    extra, above = request.json.get("summary_extra", []), request.json.get("summary_above", crosstab.ABOVE)
+    if not isinstance(extra, list):
+        raise ValueError("summary_extra는 이름 목록이에요.")
+    if isinstance(above, bool) or not isinstance(above, (int, float)):
+        raise ValueError("summary_above는 수여야 해요.")
+    ps = crosstab.check_ps(request.json.get("summary_ps"))
+    unique = bool(columns) or not (on_db and held.remote(con)) or "dup" in extra
+    rows = run(lambda: result.get_summary(expr, columns, unique=unique, extra=extra, ps=ps, above=above))
+    return jsonify(summary={"columns": result.SUMMARY_COLS + crosstab.summary_columns(extra, ps), "rows": rows})
 
 
 @app.post("/api/pivot")
@@ -325,6 +358,10 @@ def pivot():
     expr, spec = querying.runnable(request.json, select=False, ask=request.json), request.json.get("pivot")
     values = lambda e: e.to_pyarrow()["v"].to_pylist()
     table = run(lambda: calc.pivot(expr, spec, values).to_polars())
+    if isinstance(spec, dict) and spec.get("pareto"):
+        value = table.columns[len([r for r in spec.get("rows") or [] if r])]  # 첫 전체 칸
+        share = f"{value} {crosstab.SHARE}"
+        table = crosstab.pareto(table, value, share if share in table.columns else f"{value} {crosstab.REACH}")
     return server.json_reply(table.head(calc.MAX_ROWS), more=table.height > calc.MAX_ROWS)
 
 
@@ -603,12 +640,20 @@ def save_virtual():
 def chart():
     """x별 집계. series는 [{"y", "agg"}]이고, split을 주면 그 컬럼의 값마다 계열을 나눈다."""
     body = request.json
+    if body.get("merge_ranges") and any(s.get("agg") in dash_store.SERVER_MERGE for s in body.get("series") or []):  # 고유 개수는 더할 수 없어 묶은 범위로 다시 집계
+        dash_store.check_groups({"ranges": body["merge_ranges"], "merge": True})
+        return jsonify(**dash_calc.range_data({"kind": "chart", "source": {"body": body}, "view": {"groups": {"ranges": body["merge_ranges"], "merge": True}}})["values"])
     expr = querying.runnable(body, select=False, ask=body)
+    series, split = body.get("series") or [], body.get("split") or None
     labels, datasets, more = run(lambda: result.get_chart(
-        expr, body["x"], body.get("series") or [], body.get("split") or None, body.get("order", "x"), body.get("x_unit") or ""))
+        expr, body["x"], series, split, body.get("order", "x"), body.get("x_unit") or ""))
     truncated = any([d.pop("truncated") for d in datasets])  # 계열마다 붙은 표시는 응답 맨 위에 한 번만(계열 모양은 그대로)
+    extra = {}
+    if truncated and not expr[body["x"]].type().is_temporal():  # 날짜 X는 Top-N 대상이 아니라 받지 못한 그룹 값을 구하지 않는다
+        parts = list(dict.fromkeys(d["split"] for d in datasets)) if split else None
+        extra["rest"] = run(lambda: viz_rules.rest_values(expr, body["x"], series, split, parts, labels))
     return jsonify(labels=[str(v) for v in labels], datasets=datasets, more_splits=more, truncated=truncated,
-                   max_groups=result.MAX_GROUPS, max_splits=result.MAX_SPLITS)
+                   max_groups=result.MAX_GROUPS, max_splits=result.MAX_SPLITS, **extra)
 
 
 
@@ -799,3 +844,4 @@ def lookup_preview():
 
 
 from query import period_app  # noqa: F401,E402  기간별 표·지표 기간 비교 라우트(R5). 못 올라오면 숨기지 않고 바로 알린다
+from query import label_app  # noqa: F401,E402  태그 라우트(Phase 4)

@@ -12,7 +12,7 @@ plain_metrics_run = app.view_functions["metrics_run"]  # search_app의 원래 �
 
 @app.post("/api/period_table")
 def period_table_view():
-    """기간별 표: spec = {tables: [{schema?, base, date, label?, how, column?, split?}], unit, start?, end?} → {columns, rows, ratios}.
+    """기간별 표: spec = {tables: [{schema?, base, date, label?, how, column?, split?}], unit, start?, end?} → {columns, rows, ratios, total(total이 참일 때)}.
     원격 DB는 테이블마다 집계 SQL을 server.scan_gate로 처리 용량 확인한 뒤(넘으면 확인 응답) 구한다. 연결을 쓰므로 FREE가 아니다."""
     from metrics import period_table  # 화면을 열 때가 아니라 쓸 때 올린다(dashboard.period까지 따라오므로, test_lazy_loading_memory)
     body = request.json
@@ -21,6 +21,8 @@ def period_table_view():
     if held.remote(con):
         for t in spec["tables"]:
             if ask := server.scan_gate(body, lambda t=t: server.expr_sql(con, period_table.grouped(spec, t))):
+                return ask
+            if t["how"] == "count_distinct" and (ask := server.scan_gate(body, lambda t=t: server.expr_sql(con, period_table.grouped(spec, t, by_period=False)))):  # build가 전체 기간을 다시 센다(whole)
                 return ask
     return jsonify(**run(lambda: period_table.build(spec)))
 

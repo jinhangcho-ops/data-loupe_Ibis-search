@@ -5,18 +5,21 @@
 // 칸 모양은 menu/build.ts(buildCard, 순수)가 카드 JSON으로 바꾼다. Esc로 닫고 닫으면 열기 전 초점으로 돌아간다.
 import { useEffect, useRef, useState } from "react";
 import { nextLayout, parseLinkLine, parseRuleLine, parseStateLine } from "@/lib/calc";
-import { columns as fetchColumns, getTargets, myMetrics, setTargets, tables as fetchTables } from "@/lib/api";
+import { columns as fetchColumns, getTargets, hashed as fetchHashed, myMetrics, setTargets, tables as fetchTables, values as fetchValues } from "@/lib/api";
 import { useConstants } from "@/lib/constants";
+import { withoutHashed } from "@/lib/hashed";
 import { useDash } from "@/lib/store";
-import type { Card, CardKind, Constants, Targets } from "@/lib/types";
+import type { Card, CardKind, CardView, Constants, Targets } from "@/lib/types";
 import { Block, Check, LineBox, Sel, Txt } from "./menu/Fields";
-import { buildCard, emptyForm, formFromCard, type Form } from "./menu/build";
+import { CloudFields } from "./panel/Tools";
+import { FUNNEL_TEMPLATES, MAX_STAGES, REVISIT_CHOICES, buildCard, condLines, emptyForm, formFromCard, templateStages, type Form, type StageRow } from "./menu/build";
 import { CARD_KINDS, DATE_X, WATCH, WITH_DATE, colsOfType, parseBlankLine } from "./menu/kinds";
 
 export type AddCardMenuProps = { open: boolean; onClose: () => void; onAdd: (card: Partial<Card>) => void; fill?: Card };
 
 const FORMATS: [string, string][] = [["number", "숫자"], ["percent", "% (0~1 값)"], ["currency", "₩ 금액"]];
 const NUM = ["정수", "실수"], DATE = ["날짜", "날짜시간"];
+const REVISIT_CUSTOM = "custom", REVISIT_CUSTOM_START = "0";  // 재방문 목록의 "직접 입력" 값과, 고르면 입력 칸에 먼저 들어가는 값(0은 stagesOf가 거부해 직접 적게 한다)
 /** P14 새 종류의 body.x 칸 이름(boxplot은 비우면 전체 한 상자) */
 const X_LABEL: Partial<Record<CardKind, string>> = { boxplot: "그룹 컬럼", heatmap: "행 컬럼", treemap: "윗단계 컬럼", sunburst: "윗단계 컬럼", wordcloud: "글자 컬럼", bump: "대상 컬럼" };
 
@@ -42,12 +45,19 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
   const [names, setNames] = useState<string[]>([]);       // 연결의 테이블 목록
   const [colsFor, setColsFor] = useState<{ table: string; cols: [string, string][] }>({ table: "", cols: [] });  // 고른 테이블의 [컬럼, 한글 타입]
   const [gColsFor, setGColsFor] = useState<{ table: string; cols: [string, string][] }>({ table: "", cols: [] });  // 영역 테이블의 컬럼(이름·도형 후보)
+  const [hFor, setHFor] = useState<{ table: string; on: boolean; columns: string[] }>({ table: "", on: false, columns: [] });  // 고른 테이블의 해시·UUID 컬럼(/api/diag/hashed)
+  const [rs, setRs] = useState<{ table: string; list: string[] }>(() => ({ table: f.table, list: [f.group, f.split, f.entity, f.timeCol, f.kindCol, f.linkCol, f.cX, f.fUser, f.fStep].filter(Boolean) }));  // 다시 넣은 컬럼(저장하지 않음). 고쳐 여는 카드가 이미 쓰는 이름은 처음부터 넣는다
   const [metrics, setMetrics] = useState<string[]>([]);
   const [targets, setT] = useState<Targets | null>(null);
   const [path, setPath] = useState("");
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [tpl, setTpl] = useState("");  // 고른 틀(FUNNEL_TEMPLATES 키, ""는 직접)
+  const [vals, setVals] = useState<string[]>([]);  // 자동 흐름의 값 목록(저장하지 않음)
+  const [more, setMore] = useState(false);
+  const [loadingVals, setLoadingVals] = useState(false);
+  const [cloud, setCloud] = useState<NonNullable<CardView["cloud"]>>(() => fill?.view?.cloud ?? { mode: "values" });  // 워드클라우드 방식(view.cloud)
   const root = useRef<HTMLDivElement>(null);
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF(p => ({ ...p, [k]: v }));
   const aggOpts: [string, string][] = aggs.map(a => [a, consts.dash.agg_names?.[a] ?? a]);
@@ -75,6 +85,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       const has = (c: string, list: string[]) => !!c && list.includes(c), names = r.columns.map(c => c[0]);  // 새 테이블에 있는 컬럼이면 그대로(다시 정할 때 되돌린 값)
       setF(p => ({ ...p, rows: fit([], p.kind), group: has(p.group, names) ? p.group : "", date: has(p.date, dates) ? p.date : one, fTime: has(p.fTime, dates) ? p.fTime : one, timeCol: has(p.timeCol, names) ? p.timeCol : one }));
     }).catch(e => live && setErr(e.message));
+    fetchHashed(f.table).then(r => live && setHFor({ table: f.table, ...r })).catch(e => live && setErr(e.message));
     return () => { live = false; };
   }, [f.table]);  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -90,7 +101,9 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
   }, [f.gTable]);
 
   const [, low, high] = CARD_KINDS[f.kind]!;
-  const all = cols.map(c => c[0]), dates = colsOfType(cols, DATE), nums = colsOfType(cols, NUM);
+  const h = hFor.table === f.table ? hFor : { on: false, columns: [] }, restored = rs.table === f.table ? rs.list : [];
+  const { names: all, hidden } = withoutHashed(cols.map(c => c[0]), h.columns, h.on, restored);
+  const dates = colsOfType(cols, DATE), nums = colsOfType(cols, NUM);
   const is = (...k: CardKind[]) => k.includes(f.kind);
   const setRow = (i: number, patch: Partial<Form["rows"][number]>) => setF(p => ({ ...p, rows: p.rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) }));
   const close = () => { onClose(); };
@@ -98,6 +111,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
     setBusy(true);
     try {
       const card = buildCard({ ...f, title: f.title || (fill?.title ?? "") }, aggs, a => a !== "count", consts.agg_names, consts.dash.max_bands, consts.dash.max_bins);
+      if (f.kind === "wordcloud" && cloud.mode !== "values") card.view = { ...card.view, cloud } as CardView;  // 컬럼 값 방식은 키 없음(기본)
       if (fill) { delete card.title; if (f.title.trim() || !fill.title) card.title = f.title.trim() || card.title; }
       else card.layout = nextLayout((state.dash?.cards ?? []).map(c => ({ id: c.id, layout: c.layout })));
       setErr("");
@@ -109,12 +123,31 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
   const saveTargets = async () => {
     try { const t = await setTargets(path.trim()); setT(t); setNote(t.error || `목표 ${t.rows.length}개를 읽었어요`); } catch (e) { setNote((e as Error).message); }
   };
+  const setStage = (i: number, patch: Partial<StageRow>) => set("fStages", f.fStages.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const moveStage = (i: number, d: number) => { const out = [...f.fStages]; [out[i], out[i + d]] = [out[i + d]!, out[i]!]; set("fStages", out); };
+  const shownVals = [...new Set([...vals, ...f.fStarts, ...f.fMiddles, ...f.fEnds])];
+  const setRole = (v: string, role: string) => setF(p => {
+    const not = (l: string[]) => l.filter(x => x !== v);
+    return { ...p, fStarts: role === "start" ? [...not(p.fStarts), v] : not(p.fStarts), fMiddles: role === "middle" ? [...not(p.fMiddles), v] : not(p.fMiddles), fEnds: role === "end" ? [...not(p.fEnds), v] : not(p.fEnds) };
+  });
+  const loadValues = async () => {
+    setLoadingVals(true);
+    try {
+      const r = await fetchValues({ schema: "", base: f.table, conditions: condLines(f.fConds) }, f.fStep);
+      setVals(r.values); setMore(r.more); setErr("");
+    } catch (e) { setErr((e as Error).message); }
+    setLoadingVals(false);
+  };
   const targetNames = [...new Set((targets?.rows ?? []).map(r => String(r.name)))];
+  // 글 속 단어는 뽑을 행·(고른 태그의 행이면) 맞춤을 기본값 없이 고르게 한다: 고르기 전에는 [카드 추가]를 잠근다
+  const cloudWhy = is("wordcloud") && cloud.mode === "words"
+    ? (!cloud.rows ? "단어를 뽑을 행을 고르세요" : cloud.rows === "tagged" && !cloud.match ? "하나라도·모두 중 하나를 고르세요" : "") : "";
 
   return (
     <div className="pop cardmenu" ref={root} role="dialog" aria-label={fill ? "카드 데이터 정하기" : "카드 추가"} style={{ display: "flex", flexDirection: "column" }}
       onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); close(); } }}>
       <Sel label="테이블" title="카드가 읽을 테이블. 먼저 데이터에 연결해야 해요" value={f.table} onChange={v => set("table", v)} options={names} blank="(테이블을 고르세요)" />
+      {hidden.length > 0 && <div className="hint">ID·해시로 보이는 컬럼 {hidden.join(", ")}을(를) 목록에서 뺐어요 <button type="button" className="linkish" onClick={() => setRs(p => ({ table: f.table, list: [...(p.table === f.table ? p.list : []), ...hidden] }))}>다시 넣기</button></div>}
       <Sel label="카드 종류" value={f.kind} onChange={v => setF(p => ({ ...p, kind: v as CardKind, rows: fit(p.rows, v as CardKind) }))} options={(Object.entries(CARD_KINDS) as [string, [string, number, number, string]][]).map(([k, v]) => [k, v[0]])} />
       <label className="hint cm-field">카드 이름<input value={f.title} placeholder="카드 이름 (비우면 자동)" onChange={e => set("title", e.target.value)} /></label>
       {high > 0 && (
@@ -142,6 +175,11 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       {is("gauge", "summary") && <Sel label="나눌 컬럼" title="게이지는 이 컬럼의 값마다 한 조각으로 나눠요. 요약 문장은 변화에 가장 크게 기여한 값을 찾을 때 써요" value={f.group} onChange={v => set("group", v)} options={all} blank="(없음)" />}
       {X_LABEL[f.kind] && <Sel label={X_LABEL[f.kind]!} value={f.group} onChange={v => set("group", v)} options={all} blank={is("boxplot") ? "(없음: 전체)" : "(고르세요)"} />}
       {is("heatmap", "treemap", "sunburst") && <Sel label={is("heatmap") ? "열 컬럼" : "아랫단계 컬럼"} value={f.split} onChange={v => set("split", v)} options={all} blank={is("heatmap") ? "(고르세요)" : "(없음)"} />}
+      {is("wordcloud") && (
+        <div className="hint cm-field" role="group" aria-label="워드클라우드 방식" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+          <CloudFields cloud={cloud} schema="" table={f.table} texts={colsOfType(cols, ["문자"])} full={false} tagged={!!fill?.source?.body?.labels} onChange={setCloud} />
+        </div>
+      )}
       {is("histogram") && <Txt label="구간 수" type="number" min={1} max={consts.dash.max_bins ?? 100} width={60} value={f.bins} onChange={v => set("bins", v)} />}
       {is("bullet") && <Txt label="구간" title="바탕 띠의 경계 값. 작은 것부터 쉼표로 1~6개" placeholder="예: 50, 80, 100" value={f.bands} onChange={v => set("bands", v)} />}
       {is("bump", "candle", "cohort") && <Sel label="기간 단위" value={f.cUnit} onChange={v => set("cUnit", v)} options={Object.entries(consts.dash.units)} />}
@@ -189,19 +227,67 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       {is("funnel", "sankey", "cohort") && (
         <>
           <Sel label="사용자 컬럼" title="사용자(사람)를 구분하는 컬럼" value={f.fUser} onChange={v => set("fUser", v)} options={all} blank="(고르세요)" />
-          {!is("cohort") && <Sel label="단계 컬럼" title="단계(행동) 이름이 들어 있는 컬럼" value={f.fStep} onChange={v => set("fStep", v)} options={all} blank="(고르세요)" />}
+          {!is("cohort") && !(is("funnel") && f.fDefine === "stages") && <Sel label="단계 컬럼" title="단계(행동) 이름이 들어 있는 컬럼" value={f.fStep} onChange={v => set("fStep", v)} options={all} blank="(고르세요)" />}
           <Sel label="시각 컬럼" title="행동이 일어난 시각 컬럼. 대시보드 기간도 이 컬럼에 걸려요" value={f.fTime} onChange={v => set("fTime", v)} options={dates} blank="(고르세요)" />
         </>
       )}
-      {is("funnel", "sankey") && (
+      {is("funnel") && <Sel label="단계 정의" title="값 목록은 단계 컬럼의 값을 순서대로, 조건 줄은 단계마다 조건을 적어요" value={f.fDefine} onChange={v => set("fDefine", v as Form["fDefine"])} options={[["values", "값 목록"], ["stages", "조건 줄"]]} />}
+      {is("funnel") && f.fDefine === "stages" && (
         <>
-          <Txt label="단계 순서" title={is("sankey") ? "단계 값을 순서대로 쉼표로 나눠 적어요. 2~10개" : "단계 값을 순서대로 쉼표로 나눠 적어요. 1~10개"} placeholder="예: 방문, 장바구니, 결제" value={f.fSteps} onChange={v => set("fSteps", v)} />
+          <Sel label="틀" title="고르면 단계 이름과 차례를 채워요. 직접은 지금 줄을 그대로 둬요" value={tpl} onChange={v => { setTpl(v); if (v) set("fStages", templateStages(v as keyof typeof FUNNEL_TEMPLATES)); }} options={Object.entries(FUNNEL_TEMPLATES).map(([k, t]): [string, string] => [k, t.label])} blank="직접" />
+          {f.fStages.map((r, i) => (
+            <Block key={i}>
+              <div role="group" aria-label={`단계 ${i + 1}`} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <input aria-label="단계 이름" placeholder="단계 이름" value={r.name} onChange={e => setStage(i, { name: e.target.value })} />
+                <textarea aria-label="조건 줄" rows={2} value={r.conds} placeholder={"한 줄에 하나, 줄끼리 and. 예: event in purchase, refund"} style={{ width: "100%", fontSize: 12 }} onChange={e => setStage(i, { conds: e.target.value })} />
+                <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <select aria-label="재방문" title="첫 활동 뒤 N일 안에 다시 온 사람" value={r.revisit === "" ? "" : REVISIT_CHOICES.map(String).includes(r.revisit) ? r.revisit : REVISIT_CUSTOM} onChange={e => setStage(i, { revisit: e.target.value === REVISIT_CUSTOM ? REVISIT_CUSTOM_START : e.target.value })}>
+                    <option value="">재방문 없음</option>
+                    {REVISIT_CHOICES.map(n => <option key={n} value={String(n)}>{n}일</option>)}
+                    <option value={REVISIT_CUSTOM}>직접 입력</option>
+                  </select>
+                  {r.revisit !== "" && !REVISIT_CHOICES.map(String).includes(r.revisit) && <><input type="number" aria-label="재방문 일수" min={1} step={1} style={{ width: 70 }} value={r.revisit} onChange={e => setStage(i, { revisit: e.target.value })} />N일 안에 다시 온 사람</>}
+                  <button type="button" className="ghost" aria-label="위로" disabled={i === 0} onClick={() => moveStage(i, -1)}>위</button>
+                  <button type="button" className="ghost" aria-label="아래로" disabled={i === f.fStages.length - 1} onClick={() => moveStage(i, 1)}>아래</button>
+                  <button type="button" className="ghost" aria-label="빼기" onClick={() => set("fStages", f.fStages.filter((_, j) => j !== i))}>빼기</button>
+                </span>
+              </div>
+            </Block>
+          ))}
+          {f.fStages.length < MAX_STAGES && <button type="button" className="linkish" style={{ minHeight: 24 }} onClick={() => set("fStages", [...f.fStages, { name: "", conds: "", revisit: "" }])}>단계 더하기</button>}
+          <Sel label="세기" title="순서대로는 앞 단계를 거친 사람만, 따로는 단계마다 조건에 맞는 사람을 세요" value={f.fCount} onChange={v => set("fCount", v as Form["fCount"])} options={[["order", "순서대로"], ["each", "단계마다 따로"]]} />
+        </>
+      )}
+      {is("funnel") && <Txt label="절사평균 자르기 %" title="걸린 시간의 절사평균에서 위아래를 합쳐 자를 몫(%). 비우면 10" type="number" min={0} max={50} placeholder="10" width={80} value={f.fTrim} onChange={v => set("fTrim", v)} />}
+      {is("sankey") && <Sel label="흐름 방식" value={f.fFlow} onChange={v => set("fFlow", v as Form["fFlow"])} options={[["steps", "단계를 적기"], ["auto", "자동"]]} />}
+      {is("sankey") && f.fFlow === "auto" && (
+        <>
+          <button type="button" className="btn" disabled={!f.table || !f.fStep || loadingVals} style={{ minHeight: 24 }} onClick={loadValues}>값 목록 불러오기</button>
+          {more && <div className="hint cm-note">값이 많아 앞 {vals.length}개만 보여요.</div>}
+          {shownVals.map(v => (
+            <label key={v} className="hint cm-field">{v}
+              <select aria-label={`${v} 역할`} value={f.fStarts.includes(v) ? "start" : f.fMiddles.includes(v) ? "middle" : f.fEnds.includes(v) ? "end" : ""} onChange={e => setRole(v, e.target.value)}>
+                <option value="">빼기</option><option value="start">시작</option><option value="middle">중간</option><option value="end">끝</option>
+              </select>
+            </label>
+          ))}
+          <Txt label="단계 깊이" type="number" min={1} placeholder="기본" width={80} value={f.fDepth} onChange={v => set("fDepth", v)} />
+          <div className="hint cm-note">클수록 느려질 수 있어요(기본 6, 최대 50).</div>
+          <Sel label="이탈 칸" value={f.fDropout} onChange={v => set("fDropout", v as Form["fDropout"])} options={[["on", "켬"], ["off", "끔"]]} blank="기본 (끝 값을 골랐으면 켬)" />
+          <div className="hint cm-note">켜면 고른 값 중 뒤에 더 없는 칸에서 멈춘 사람을 “이탈”로 모아요. 깊이로 잘린 사람과 끝 값에 닿은 사람은 빼요.</div>
+        </>
+      )}
+      {is("sankey") && <Block><label className="hint">조건 줄<textarea rows={2} value={f.fConds} placeholder="한 줄에 하나, 줄끼리 and. 예: platform = iOS" style={{ width: "100%", fontSize: 12 }} onChange={e => set("fConds", e.target.value)} /></label></Block>}
+      {is("funnel", "sankey") && (is("funnel") || f.fFlow === "steps") && (
+        <>
+          {(is("sankey") || f.fDefine === "values") && <Txt label="단계 순서" title={is("sankey") ? "단계 값을 순서대로 쉼표로 나눠 적어요. 2~10개" : "단계 값을 순서대로 쉼표로 나눠 적어요. 1~10개"} placeholder="예: 방문, 장바구니, 결제" value={f.fSteps} onChange={v => set("fSteps", v)} />}
           <div className="hint cm-field">기간 제한
             <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <input type="number" aria-label="기간 제한 숫자" min={0} step="any" placeholder="비움" style={{ width: 80 }} value={f.fWin} onChange={e => set("fWin", e.target.value)} />
               <select aria-label="기간 제한 단위" value={f.fUnit} onChange={e => set("fUnit", e.target.value)}><option value="minute">분</option><option value="hour">시간</option><option value="day">일</option></select>안에
             </span>
           </div>
+          {is("funnel") && f.fDefine === "stages" && f.fCount === "each" && <div className="hint cm-note">단계마다 따로 셀 때 기간 제한은 첫 단계를 처음 만족한 때부터 세요. 첫 단계를 만족하지 않은 사람은 모든 단계에서 빠져요.</div>}
         </>
       )}
       {is("geomap") && (
@@ -240,8 +326,9 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       </div>
       <div className="hint cm-note">{note || (targets && !targets.path ? "목표 파일을 정하면 이름으로 목표를 찾을 수 있어요" : "")}</div>
       <div className="err" role="alert">{err}</div>
+      {cloudWhy && <div className="hint cm-note">{cloudWhy}</div>}
       <div className="row">
-        <button type="button" className="btn p" disabled={busy} style={{ minHeight: 24 }} onClick={go}>{fill ? "이 카드에 채우기" : "카드 추가"}</button>
+        <button type="button" className="btn p" disabled={busy || !!cloudWhy} style={{ minHeight: 24 }} onClick={go}>{fill ? "이 카드에 채우기" : "카드 추가"}</button>
         <button type="button" className="btn" style={{ minHeight: 24 }} onClick={close}>닫기</button>
       </div>
     </div>

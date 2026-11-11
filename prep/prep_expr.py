@@ -1,6 +1,11 @@
 """전처리: recipe(테이블, 행 거르기, 컬럼 복사, 컬럼별 일, 계산 컬럼·PCA, 파생 컬럼 빼기, 중복 제거, downcast, 정렬)를 Ibis 식 하나로 만든다.
 컬럼 하나에 하는 일은 prep_ops.py의 OPS 표에, 계산 컬럼·PCA는 prep_derive.py에 있다."""
+from typing import TYPE_CHECKING
+
 from lazy import ibis
+
+if TYPE_CHECKING:
+    import polars as pl
 
 from core import parse
 from core import prep_derive
@@ -65,10 +70,10 @@ def downcast(t):
 
 
 def shape(con, recipe, table=None, info=None, refs=None):
-    """filters → copies → 컬럼별 ops → 계산 컬럼(formulas) → PCA → keep·파생 컬럼 배치·rename → drop까지 만든 식과,
+    """filters → copies → 컬럼별 ops → 계산 컬럼(formulas) → PCA → K-Means → keep·파생 컬럼 배치·rename → drop까지 만든 식과,
     결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지). 계산 컬럼·PCA 성분은 원래 컬럼이 없어 이름이 ""이고 맨 뒤에 놓인다.
     계산 식은 이름을 바꾸기 전의 컬럼 이름을 쓴다. table을 주면 연결의 테이블 대신 그 식(예: 표본을 담은 메모리 표)에서 시작한다.
-    info(dict)를 주면 PCA의 설명된 분산 비율 등을 남긴다. 좌표 단계(recipe.geo, 이 PC에서 계산)는 PCA 뒤에 붙고, 지점·영역 테이블은 refs(없으면 con)에서 읽는다."""
+    info(dict)를 주면 PCA·K-Means의 설명된 분산 비율 등을 남긴다. info["cut"]: 0 분리의 음수·로그의 0 이하 구간에 든 행 수. 좌표 단계(recipe.geo, 이 PC에서 계산)는 PCA 뒤에 붙고, 지점·영역 테이블은 refs(없으면 con)에서 읽는다."""
     if table is None:
         schema = recipe.get("schema") or None
         parse.check_name(recipe["base"], source.list_tables(con, schema), "테이블")
@@ -98,10 +103,19 @@ def shape(con, recipe, table=None, info=None, refs=None):
             before = set(t.columns)
             t = prep_ops.apply_ops(t, name, specs.get(name, {}).get("ops", {}), part, start)
             made.update({new: name for new in t.columns if new not in before})
+    if info is not None:
+        for name, spec in specs.items():
+            cut = (spec.get("ops") or {}).get("cut")
+            if isinstance(cut, dict) and cut.get("how") in ("zero", "log"):
+                info.setdefault("cut", []).append({"column": name, "label": prep_ops.NEG_LABEL if cut["how"] == "zero" else prep_ops.NONPOS_LABEL,
+                                                   "rows": prep_ops.cut_special(t, name, cut)})
     t, new = prep_derive.apply_formulas(t, recipe.get("formulas") or [], recipe.get("schema"))
     if recipe.get("pca"):
         t, components = prep_derive.pca(t, recipe["pca"], {} if info is None else info)
         new += components
+    if recipe.get("kmeans"):
+        t, clusters = prep_derive.kmeans(t, recipe["kmeans"], {} if info is None else info)
+        new += clusters
     if recipe.get("geo"):
         from geo import prep_geo  # 좌표 단계를 쓸 때만 geo 패키지가 올라온다
         t, made_geo = prep_geo.apply(t, recipe["geo"], info.setdefault("geo", []) if info is not None else None, con if refs is None else refs)
@@ -130,6 +144,128 @@ def dedupe_columns(t, recipe):
     for name in columns:
         parse.check_name(name, t.columns)
     return columns
+
+
+LOOSE_PATTERN = r"[\s\p{P}\p{S}]+"  # 글자 다듬어 비교(dedupe_loose): 지울 공백·문장부호·기호
+LOOSE = "__ibis_loose_"  # 다듬은 비교용 숨은 컬럼 이름 앞글자(뒤에 기준 목록의 자리)
+GROUP = "__ibis_group"  # 문장 포함 묶음 번호(숨은 컬럼)
+GID = "__ibis_gid"  # contain_groups 안의 서로 다른 기준 값 조합 번호
+LABEL = "__ibis_label"  # contain_groups 안에서 전파 중인 최소 번호
+CONTAIN_ROUNDS = 30  # 문장 포함 묶음의 최소 번호 전파 반복 상한
+CONTAIN_LIMIT = 50_000  # 화면의 포함 비교 상한 기본값(서로 다른 기준 값 조합 수, 임의값)
+DUPE_EXAMPLES = 20  # 중복 찾기에서 보여 줄 겹친 행 예시 수
+
+
+def dedupe_options(recipe: dict) -> tuple[bool, list[str], int | None]:
+    """[SPECIFICATION] plans/phase-13.md#dedupe_options
+    recipe의 dedupe_loose·dedupe_contain·dedupe_limit을 검사해 (다듬어 비교, 포함 컬럼들, 상한)으로 돌려준다."""
+    loose = recipe.get("dedupe_loose")
+    if loose is None:
+        loose = False
+    if type(loose) is not bool:
+        raise ValueError("dedupe_loose는 true/false여야 해요.")
+    contain = recipe.get("dedupe_contain")
+    if contain is None:
+        contain = []
+    if not isinstance(contain, list) or not all(isinstance(c, str) for c in contain) or len(set(contain)) != len(contain):
+        raise ValueError("dedupe_contain은 포함으로 볼 컬럼 이름 목록이어야 해요.")
+    limit = recipe.get("dedupe_limit")
+    if limit is not None and (type(limit) is not int or limit <= 0):
+        raise ValueError("dedupe_limit은 1 이상의 정수여야 해요(상한 없이 하려면 비우세요).")
+    return loose, contain, limit
+
+
+def loose_text(value: "ibis.expr.types.StringValue") -> "ibis.expr.types.StringValue":
+    """[SPECIFICATION] plans/phase-13.md#loose_text
+    글자에서 공백·문장부호·기호를 지우고 소문자로 바꾼 식."""
+    return value.re_replace(LOOSE_PATTERN, "").lower()
+
+
+def text_contains(hay: str, needle: str) -> bool:
+    """[SPECIFICATION] plans/phase-13.md#text_contains
+    needle이 hay 안에 통째로 들어 있는지(문장 포함 UDF의 본체)."""
+    return hay is not None and needle is not None and needle in hay
+
+
+def contain_groups(t: "ibis.Table", keys: list[str], texts: list[str], limit: int | None) -> "ibis.Table":
+    """[SPECIFICATION] plans/phase-13.md#contain_groups
+    문장 포함으로 이어진 행들에 같은 묶음 번호(GROUP)를 붙인 표."""
+    ids = t.select(*keys).distinct()
+    if limit is not None:
+        n = ids.count().to_pyarrow().as_py()
+        if n > limit:
+            raise ValueError(f"포함으로 비교할 서로 다른 값이 {n:,}개로 상한 {limit:,}개를 넘었어요. 행 거르기로 줄이거나 상한을 끄세요.")
+    ids = ids.mutate(**{GID: ibis.row_number().over(ibis.window(order_by=[ids[k] for k in keys]))})
+    udf = ibis.udf.scalar.python(text_contains)
+    a, b = ids, ids.view()
+    conds = [a[GID] != b[GID]]
+    conds += [a[s].identical_to(b[s]) | ((a[s].length() > 0) & (a[s].length() < b[s].length()) & udf(b[s], a[s])) for s in texts]
+    conds += [a[o].identical_to(b[o]) for o in keys if o not in texts]
+    pairs = a.join(b, conds)
+    edges = pairs.select(src=a[GID], dst=b[GID]).union(pairs.select(src=b[GID], dst=a[GID])).union(ids.select(src=ids[GID], dst=ids[GID]))
+    lab = ids.select(GID, **{LABEL: ids[GID]})
+    for _ in range(CONTAIN_ROUNDS):
+        nxt = edges.join(lab, edges.dst == lab[GID]).group_by(edges.src.name(GID)).aggregate(**{LABEL: lab[LABEL].min()})
+        changed = nxt.join(lab, GID).filter(nxt[LABEL] != lab[LABEL]).count().to_pyarrow().as_py()
+        if changed == 0:
+            break
+        lab = nxt
+    else:
+        raise ValueError(f"문장 포함으로 이어진 묶음을 {CONTAIN_ROUNDS}번 안에 다 잇지 못했어요. 기준 컬럼을 줄이거나 문장 포함 비교를 끄세요.")
+    lk = ids.join(lab, GID).select(*keys, LABEL)
+    return t.left_join(lk, [t[k].identical_to(lk[k]) for k in keys]).select(*t.columns, **{GROUP: lk[LABEL].cast("int64")})
+
+
+def dedupe_keys(t: "ibis.Table", columns: list[str], recipe: dict) -> tuple["ibis.Table", list[str]]:
+    """[SPECIFICATION] plans/phase-13.md#dedupe_keys
+    중복 비교 옵션대로 숨은 비교 컬럼을 붙인 표와 실제로 묶을 기준 이름들."""
+    loose, contain, limit = dedupe_options(recipe)
+    if not loose and not contain:
+        return t, columns
+    for c in contain:
+        if c not in columns:
+            raise ValueError(f"포함으로 볼 '{c}' 컬럼은 중복 기준 컬럼이어야 해요.")
+        if not t[c].type().is_string():
+            raise ValueError(f"포함으로 볼 '{c}' 컬럼은 글자 컬럼이어야 해요.")
+    cols = list(t.columns)
+    keys = list(columns)
+    if loose:
+        hidden = {LOOSE + str(i): loose_text(t[c]) for i, c in enumerate(columns) if t[c].type().is_string()}
+        keys = [LOOSE + str(i) if LOOSE + str(i) in hidden else c for i, c in enumerate(columns)]
+        if hidden:  # 문자 기준 컬럼이 없으면 붙일 것이 없다
+            t = t.mutate(**hidden)
+    if contain:
+        texts = [keys[columns.index(c)] for c in contain]
+        t = contain_groups(t, keys, texts, limit).select(*cols, GROUP)
+        keys = [GROUP]
+    return t, keys
+
+
+def dedupe_fits(t: "ibis.Table", recipe: dict) -> bool:
+    """[SPECIFICATION] plans/phase-13.md#dedupe_fits
+    이 표의 연결이 recipe의 중복 비교 옵션을 직접 계산할 수 있는지(컴파일만)."""
+    loose, contain, _ = dedupe_options(recipe)
+    if not loose and not contain:
+        return True
+    q = t.limit(1).select(s=ibis.literal("a"))
+    if loose:
+        q = q.mutate(l=loose_text(q.s))
+    if contain:  # contain_groups처럼 UDF 조건의 자기 조인(Polars는 같음 조건 조인만 해서 여기서 걸린다)
+        w = q.view()
+        q = q.join(w, ibis.udf.scalar.python(text_contains)(w.s, q.s))
+    return source.compiles(q)
+
+
+def dupe_examples(t: "ibis.Table", keys: list[str], shown: list[str]) -> tuple["pl.DataFrame", list[int]]:
+    """[SPECIFICATION] plans/phase-13.md#dupe_examples
+    겹친 행 예시(최대 DUPE_EXAMPLES행)와 행마다의 묶음 번호."""
+    import polars as pl
+    sizes = t.group_by(keys).aggregate(n=t.count())
+    top = sizes.filter(sizes.n > 1).order_by(keys).limit(DUPE_EXAMPLES).select(*keys)
+    rows = t.semi_join(top, keys).order_by([*[t[k] for k in keys], *[c for c in parse.orderable(t) if c.get_name() not in keys]]).limit(DUPE_EXAMPLES)
+    df = rows.to_polars()
+    groups = df.select(pl.struct(keys).rank("dense")).to_series().cast(pl.Int64).to_list()
+    return df.select(shown), groups
 
 
 FIRST = "__ibis_first"  # first_rows가 잠깐 쓰는 행 번호
@@ -189,15 +325,19 @@ def merged(t, columns, how, order, sep):
 def dedupe_rows(t, columns, recipe):
     """중복 제거. 모든 컬럼이 기준이면 DISTINCT, 아니면 dedupe_keep대로: 아무 행·정렬 기준의 첫/마지막 행·합치기."""
     how, order, sep = keep_choice(recipe)
-    if set(columns) == set(t.columns):
+    loose, contain, _ = dedupe_options(recipe)
+    cols = t.columns
+    if loose or contain:  # 숨은 비교 컬럼으로 묶고 끝에서 뺀다(모든 컬럼 DISTINCT 단축은 원문 비교라 못 쓴다)
+        t, columns = dedupe_keys(t, columns, recipe)
+    elif set(columns) == set(t.columns):
         return t.distinct()
     if how in ("any", "any_value") or (how == "first" and not order):  # 정렬 기준 없는 first는 예전처럼 아무 행
-        return first_rows(t, columns)
+        return first_rows(t, columns).select(*cols)
     if how in ("first", "last"):
         if not order:
             raise ValueError("마지막 행을 남기려면 dedupe_keep의 order(정렬 기준)가 필요해요.")
-        return nth_row(t, columns, order, how == "last")
-    return merged(t, columns, how, order, sep)
+        return nth_row(t, columns, order, how == "last").select(*cols)
+    return merged(t, columns, how, order, sep).select(*cols)
 
 
 def build(con, recipe, table=None, info=None, refs=None):
@@ -215,16 +355,16 @@ def build(con, recipe, table=None, info=None, refs=None):
 def dupes(con, recipe, table=None):
     """dedupe를 적용하기 직전의 식에서 중복 묶음 수(같은 기준 값이 2행 이상)와 빠질 행 수를 센다. table은 shape와 같다."""
     t = shape(con, recipe, table)[0]
-    columns = dedupe_columns(t, recipe)
-    if not columns:
-        raise ValueError("중복 기준 컬럼을 고르세요.")
-    sizes = t.group_by(columns).aggregate(n=t.count())
+    columns = dedupe_columns(t, recipe) or list(t.columns)  # 기준이 비면 모든 컬럼
+    k, keys = dedupe_keys(t, columns, recipe)
+    sizes = k.group_by(keys).aggregate(n=k.count())
     big = sizes.filter(sizes.n > 1)
     found = stats(big, groups=big.count(), extra=(big.n - 1).sum())
     out = {"groups": found["groups"], "rows": found["extra"] or 0}
-    others = [c for c in t.columns if c not in columns]
+    others = [c for c in t.columns if c not in keys]
     if keep_choice(recipe)[0] == "warn" and others:  # 여러 개면 알리기: 같은 기준인데 값이 둘 이상인 묶음 수(그 칸은 빈 값이 된다)
-        out["conflicts"] = sql_funcs.conflicts(t, columns, others).to_pyarrow().as_py()
+        out["conflicts"] = sql_funcs.conflicts(k, keys, others).to_pyarrow().as_py()
+    out["examples"], out["example_groups"] = dupe_examples(k, keys, list(t.columns))
     return out
 
 

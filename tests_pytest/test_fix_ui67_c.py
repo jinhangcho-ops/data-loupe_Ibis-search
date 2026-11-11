@@ -29,7 +29,7 @@ def test_correlation_table_has_no_minus_zero(tmp_path):
 const t = anaTable({ columns: ["a", "b"], matrix: [[1, -0.0001], [-0.0001, 1]] }, "heat");
 const s = anaTable({ r: -0.00001, n: 3, points: [] }, "scatter");
 console.log(JSON.stringify({ heat: Object.is(t.rows[0].b, -0), scat: Object.is(s.rows[0]["값"], -0), one: t.rows[0].a }));"""
-    got = run_node(tmp_path, body, parts=[part])
+    got = run_node(tmp_path, body, parts=["const NEW_TABLES = {};", part])  # 새 분석 8종의 표(Phase 12)는 이 시험과 상관없다
     assert got == {"heat": False, "scat": False, "one": 1}
 
 
@@ -47,7 +47,9 @@ def test_funnel_hides_full_rerun(tmp_path):
     assert prep_app.whole({"how": {"kind": "funnel"}}) and not prep_app.whole({"how": {"kind": "groups"}})
     part = between("prep.html", "function drawAna()", "\n}\n") + "\n}\n"
     stubs = ("let A = { chart: null, result: null, view: 'funnel' }; const VIEW_NAMES = {}, VIEW_RATIOS = {};"
-             "const anaTitle = () => 't', anaNote = () => 'n', anaTable = () => ({}), anaSpan = () => 0, anaSlice = d => d, showRange = () => {}, resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f';")
+             "const anaTitle = () => 't', anaNote = () => 'n', anaTable = () => ({}), anaSpan = () => 0, anaSlice = d => d, showRange = () => {}, resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f';"
+             "const SERVER = { analysis: { whole: [] } }, NEW_KINDS = [], ADD_TITLE = '', anaAuto = {}, gapTable = () => [], segTables = () => [], pairBlock = () => [], gradeLine = () => '', sortedTable = () => {}, anaRows = r => r, anaDraw = () => {};"
+             "globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' }); globalThis.document = { documentElement: {} };")
     body = """
 A.result = { kind: "funnel", views: ["funnel"], steps: [] }; A.view = "funnel"; drawAna(); const funnel = $("a-full").hidden;
 A.result = { kind: "groups", views: ["groups"], values: [1] }; A.view = "groups"; $("ana").hidden = true; drawAna();

@@ -29,7 +29,7 @@ NEXT_DIR = Path(app.static_folder).parent / "web" / "out"  # Next.js 빌드 결�
 app.json.sort_keys = False  # 구조 컬럼의 필드·행의 컬럼을 원래 차례대로 보낸다(Flask 기본은 이름 순)
 
 # 연결은 메모리에만 둔다. passwords는 오류 문구에서 가릴 값, opened는 다시 열 때 쓸 요청 값, rows는 세어 둔 테이블 행 수, cancel은 지금 도는 데이터 작업의 취소 신호.
-state = {"con": None, "passwords": [], "opened": None, "rows": {}, "names": {}, "tables": {}, "cancel": threading.Event(), "left": None}  # left: 버린 파일 연결 작업이 끝나면 켜질 Event(run이 기다린다)
+state = {"con": None, "passwords": [], "opened": None, "rows": {}, "names": {}, "tables": {}, "cancel": threading.Event(), "left": None, "turn_no": 0}  # left: 버린 파일 연결 작업이 끝나면 켜질 Event(run이 기다린다). turn_no: 요청마다 1 늘어나는 차례 번호. [새로 받기]를 요청마다 한 번으로 묶는다(querying.pinned)
 # names: 스키마 → 테이블 목록, tables: (스키마, 이름) → 테이블 식. 검색 칸을 바꿀 때마다 DB에 목록·스키마를 다시 묻지 않게 연결마다 기억한다(forget_tables로 비운다).
 turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 연결을 쓰지 않는 FREE의 경로만 기다리지 않는다.
 FREE = {"/api/pick", "/api/usage", "/api/cancel", "/api/send", "/api/drivers", "/api/funcs", "/api/features/install", "/api/update"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
@@ -40,8 +40,9 @@ ask_open = None  # 파일 하나를 고르는 함수(kind → 고른 경로 또�
 PICK_KINDS = {"env": ("env 파일 (*.env)", "모든 파일 (*.*)"), "metrics": ("지표 파일 (*.yaml;*.yml;*.json)", "모든 파일 (*.*)")}  # /api/pick의 종류 → 파일 대화상자 필터
 QUERY_TIMEOUT = drivers.QUERY_TIMEOUT  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다. DB 쪽 시간 제한(drivers.settle)도 같은 값.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
-CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "time": {"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS,
-             "funcs_ver": sql_funcs.version(), "agg_names": sql_funcs.agg_names(), "merge": list(sql_funcs.MERGE)}  # 함수 사전은 GET /api/funcs로 받는다(버전이 같으면 화면이 가진 것을 쓴다). 여기에는 작은 목록만
+CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "defaults": settings.DEFAULTS, "time":{"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS,
+             "funcs_ver": sql_funcs.version(), "agg_names": sql_funcs.agg_names(), "merge": list(sql_funcs.MERGE),
+             "calendar": {"weekend": sql_funcs.WEEKEND_DEFAULT, "work_hours": list(sql_funcs.WORK_HOURS), "bucket_minutes": sql_funcs.BUCKET_MINUTES, "ewma_span": sql_funcs.EWMA_SPAN}}  # 함수 사전은 GET /api/funcs로 받는다(버전이 같으면 화면이 가진 것을 쓴다). 여기에는 작은 목록만
 LATE = []  # (화면 폴더들, 만드는 함수): 기능 모듈의 값이 든 화면 상수. 그 화면을 내려줄 때 만들어 시작할 때 기능 모듈이 올라오지 않게 한다.
 
 
@@ -159,6 +160,8 @@ def run(work, drop=lambda value: None):
     """데이터 작업을 따로 돌려 QUERY_TIMEOUT초까지, 취소 요청이 오기 전까지만 기다린다. 그만두면 DB에도 멈추라고 한다.
     그만둔 작업이 뒤에서 늦게 끝나면 결과는 버린다(치울 것이 있으면 drop으로).
     파일 연결(멈추라고 알릴 수 없는 Polars 등)에서 버린 작업이 아직 돌면 같은 연결을 겹쳐 쓰지 않게 STOP_WAIT초만 기다렸다가 오류를 낸다."""
+    if threading.current_thread() is source.worker:  # 연결 스레드 안에서 부른 run은 그 자리에서(밖의 run의 취소 Event·버린 작업 확인을 바꾸지 않는다)
+        return work()
     left = state.get("left")
     if left is not None and not left.wait(source.STOP_WAIT):
         raise ValueError("취소한 이전 작업이 아직 끝나지 않았어요. 잠시 뒤에 다시 하세요.")
@@ -238,6 +241,7 @@ def only_window():
 def wait_turn():
     if request.path not in FREE and not request.path.startswith(("/static/", "/next/")):  # 화면 파일은 연결을 쓰지 않는다(긴 조회 중에도 화면이 뜨게)
         turn.acquire()
+        state["turn_no"] += 1
         g.turn = True
 
 
@@ -619,6 +623,6 @@ def html_response(html, script_extra=""):
     saved = settings.load()
     for key, value in saved.items():  # 저장된 설정을 쿠키로 알려 준다. 화면이 그리기 전에 읽는다.
         response.set_cookie(key, str(value), samesite="Strict")
-    for key in {*settings.CHOICES, *settings.SIZES, *settings.FLOATS, "timezone", "fiscal_start_month"} - set(saved):  # 기본값으로 되돌려 파일에서 빠진 설정의 예전 쿠키를 지운다
+    for key in {*settings.CHOICES, *settings.SIZES, *settings.FLOATS, "timezone", "fiscal_start_month", "weekend", "work_hours", "bucket_minutes"} - set(saved):  # 기본값으로 되돌려 파일에서 빠진 설정의 예전 쿠키를 지운다
         response.delete_cookie(key, samesite="Strict")
     return response

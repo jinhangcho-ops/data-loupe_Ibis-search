@@ -20,6 +20,7 @@ from core import sql_funcs
 
 PREPS = {"after_q": "? 뒤 자르기", "first_n": "앞 N글자", "date_only": "날짜만", "lower": "소문자로"}  # 컬럼 가공 옵션 → 계산 줄로
 MAX_TOP = 50
+MOVING_N = 3  # 36번 {N}을 비웠을 때의 이동 크기(sentences.py e36의 default와 같다)
 TEXT_MATCH = {"포함": "like", "으로 시작": "starts", "으로 끝": "ends"}  # 조건 줄에 있는 글자 비교(parse.LIKE_RE)
 SUBTOTAL_BY = {"소계·총계": "rollup", "모든 조합(CUBE)": "cube", "고른 조합(GROUPING SETS)": "sets"}
 WORD = re.compile(r"\{([^{}]+)\}")
@@ -652,15 +653,17 @@ def e35(p):
 def e36(p):
     kind = p.need("종류")
     func = {"누적 합": "cum_sum", "누적 평균": "cum_mean", "누적 최소": "cum_min", "누적 최대": "cum_max", "이동 합": "moving_sum", "이동 평균": "moving_mean",
-            "이동 최소": "moving_min", "이동 최대": "moving_max"}[kind]
+            "이동 최소": "moving_min", "이동 최대": "moving_max", "이동 표준편차": "moving_std", "지수 가중 이동 평균": "ewma"}[kind]
     span = p.get("단위", "행")
+    if span != "행" and func in ("moving_std", "ewma"):
+        raise Bad(f"‘{kind}’는 ‘행’ 단위로만 돼요.")
     if span != "행":  # 날짜 단위로 묶어 합계 → 빈 기간 0 → 기간 N개 이동(행 N개가 아니라 달력 단위)
         date = order_name(p, "정렬 기준")
         if p.columns is not None and p.columns.get(date) != "date":
             raise Bad(f"‘{span}’마다 묶으려면 정렬 기준이 날짜 컬럼이어야 해요.")
         p.run(kind, "series", copy.deepcopy(p.body), date=date, unit=sentences.SPANS[span], value=p.col("값"), op={"window": func, "n": int(p.get("N", 3)), "name": kind})
         return
-    args = [int(p.get("N", 3)), "rows"] if func.startswith("moving") else []
+    args = [int(p.get("N", 3)), "rows"] if func.startswith("moving") else [int(p.get("N", MOVING_N))] if func == "ewma" else []
     p.calc(window_line(func, p.col("값"), p.need("정렬 기준"), None, args))
     p.rows("행")
 
@@ -753,6 +756,30 @@ def e56(p):
           op={"outlier": "z" if method == "z-점수" else "iqr", "k": k})
 
 
+def e57(p: Plan) -> None:
+    """[SPECIFICATION] plans/phase-7.md#e57
+    행동 순서 컬럼(세션 번호·직전/다음까지 시간·에피소드·연속 일수·경로·누적 고유 개수)의 계산 줄 하나와 결과 행 요청을 만든다."""
+    u, t = p.col("사람"), p.col("시각")
+    kind = p.need("종류")
+    tail = f" 기준 {t} 그룹 {u}"
+    if kind == "세션 번호":
+        p.calc(f"session_id {t} {number_slot(p, '간격(분)', sql_funcs.SESSION_GAP_MINUTES):g} 그룹 {u} 이름 세션")
+    elif kind == "직전 행동과의 간격":
+        p.calc(f"since_prev {t} {p.get('단위', 'minute')}{tail} 이름 직전간격")
+    elif kind == "다음 행동까지 시간":
+        p.calc(f"until_next {t} {p.get('단위', 'minute')}{tail} 이름 다음까지")
+    elif kind == "이벤트 기준 에피소드":
+        ev, vals = p.col("이벤트"), p.need("시작 값")
+        p.calc(f"식 episode_id(col({ev!r}), 'start', {', '.join(map(repr, vals))}){tail} 이름 에피소드")
+    elif kind == "연속 일수":
+        p.calc(f"streak {t} days 그룹 {u} 이름 연속일수")
+    elif kind == "경로 문자열":
+        p.calc(f"event_path {p.col('이벤트')} yes 0{tail} 이름 경로")
+    elif kind == "누적 고유 개수":
+        p.calc(f"cum_distinct {p.col('이벤트')}{tail} 이름 누적고유")
+    p.rows("행")
+
+
 def measure(p):
     """좌표 틀 48~50의 {값}·{집계}: (집계 id, 옵션, 값 컬럼 또는 None). 집계가 컬럼을 요구하는데 값 칸이 비었으면 Bad."""
     how, opts = agg_of(p.need("집계"))
@@ -793,7 +820,7 @@ def e50(p):
     p.group("격자별", ["격자"], how, value, opts, order=f"{result_col(how)} desc", top=MAX_TOP)
 
 
-COMPILERS = {f"e{n:02d}": globals()[f"e{n:02d}"] for n in range(1, 57) if f"e{n:02d}" in globals()}
+COMPILERS = {f"e{n:02d}": globals()[f"e{n:02d}"] for n in range(1, 58) if f"e{n:02d}" in globals()}
 COMPILERS["e46"] = e14
 
 

@@ -2,19 +2,23 @@
 // 카드 설정 패널의 [모양] 줄(옛 dash.js tools·svgTools·loadPoints·colorEditor): 차트 종류(바꿀 수 없는 종류는 흐리게, 누르면 이유 = seriesKit.typeReason)·시간 단위,
 // 산점도·버블 점 받기(/api/chart/points)와 [크기]·추세선·r, 목표 칸(값 모양이 있는 SVG 카드), 값 모양(형식·단위·좋은 방향), 비교 방식, 규칙 편집(N6 RulesEditor), 색 편집기(이름마다 HEX).
 // 바꾸면 onChange({view}) 한 번. 점은 카드 값(data.points)에 두고, 기간·실시간으로 구한 값이 보이는 중이면 그 값에도 붙인다(dispatch values).
-import { useMemo, useState } from "react";
+// (Phase 9) GroupPicker 아래 [자동 규칙](규칙 켜고 끄기·수치, 이름은 서버 consts.dash.auto_names)·[값 축]·[정렬](source.body.order)·[모든 데이터]·[표로 보기]·값 축 범위(view.ranges). 다시 구해야 하는 변경은 안내만.
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { CHART_KINDS } from "@/components/cards/ChartCard";
 import { seriesKit } from "@/components/cards/chart/series";
 import { useTheme } from "@/components/cards/svg/common";
-import { funnelColors } from "@/components/cards/svg/__pure__";
-import { cardRequest, chartPoints, computeCard } from "@/lib/api";
-import { HEX } from "@/lib/calc";
+import { funnelColors, flowDropout, GAP_STATS } from "@/components/cards/svg/__pure__";
+import { cardRequest, chartPoints, computeCard, labels as fetchLabels } from "@/lib/api";
+import { anaView, HEX } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { pickColor } from "@/lib/series";
 import { computedUpdate, useDash } from "@/lib/store";
 import type { Card, CardData, CardView, ChartType } from "@/lib/types";
+import { autoParams, percentDomain, type AutoRule, type AutoView, type AxisScale, type Order, type ParamSpec } from "@/lib/autoviz";
 import { RulesEditor } from "../RulesEditor";
+import { Check } from "../menu/Fields";
 import { DATE_X, WATCH } from "../menu/kinds";
+import { GroupPicker } from "./GroupPicker";
 import { parseBands } from "../menu/build";
 import { ROUND_TYPES } from "@/components/cards/chart/shapes";
 
@@ -25,6 +29,34 @@ const PLAIN = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "
   "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud"];
 // P16 KPI 아이콘(svg/common Icon)·P15 큰 값 맞춤·추이선 자리, P14 겹친 도넛을 쓸 수 있는 차트 종류
 const ICONS: [string, string][] = [["chart", "막대"], ["up", "오름"], ["user", "사람"], ["cart", "장바구니"], ["coin", "동전"], ["clock", "시계"]];
+const FUNNEL_SHAPES: [string, string][] = [["flow", "흐름"], ["ladder", "사다리꼴"]];
+const GAP_NAMES: Record<string, string> = { mean: "평균", median: "중앙값", trimmed: "절사평균" };
+// 워드클라우드 방식(view.cloud, 서버 dash_store.check_cloud): 방식·뽑을 행·맞춤·품사의 보이는 이름
+type Cloud = NonNullable<CardView["cloud"]>;
+const CLOUD_MODES: [Cloud["mode"], string][] = [["values", "컬럼 값"], ["labels", "라벨 이름"], ["words", "글 속 단어"]];
+const CLOUD_ROWS: [string, string][] = [["all", "전체 행"], ["tagged", "고른 태그의 행"]];
+const CLOUD_MATCH: [string, string][] = [["any", "하나라도"], ["all", "모두"]];
+const CLOUD_POS: [NonNullable<Cloud["pos"]>[number], string][] = [["noun", "명사"], ["verb", "동사"], ["adj", "형용사"], ["foreign", "외국어"]];
+const DEFAULT_POS = "noun";  // 품사를 비우면 서버 기본(명사)
+// (Phase 9) 자동 규칙 칸. 규칙·정렬의 보이는 이름은 서버 상수(consts.dash.auto_names·order_names), 수치 범위·기본값은 consts.dash.auto
+type Look = "series" | "points" | "scatter" | "ana" | "hist" | "box";
+const SERVER_AUTO: AutoRule[] = ["bins", "tail", "density"];  // 값을 다시 구해야 하는 규칙(서버 viz_rules.SERVER_RULES). 계열 차트에는 이 밖의 규칙만
+const LOOK_RULES: Record<Exclude<Look, "series">, AutoRule[]> = { points: ["density"], scatter: ["density"], ana: [], hist: ["bins", "tail"], box: ["tail"] };
+const PARAM_NAMES: Record<string, string> = {  // 규칙.수치 → 칸 이름
+  "sort.group_by": "기준 계열", "topn.v": "세로 N", "topn.h": "가로 N", "round.max": "최대 조각", "round.keep": "남길 조각", "horizontal.from": "기준 개수",
+  "spaghetti.max": "최대 선", "spaghetti.keep": "색 칠할 선", "spaghetti.mode": "방식", "yzoom.pad": "여백", "log_hint.ratio": "배수", "log_hint.skew": "왜도",
+  "resample.mode": "방식", "resample.px": "점 간격(px)", "density.faint": "옅게 그릴 점 수", "density.hex": "육각 칸 점 수", "density.alpha": "투명도",
+  "density.faint_alpha": "옅을 때 투명도", "density.cols": "육각 칸 가로 수", "num.style": "방식", "refs.lines": "선", "bins.rule": "규칙", "bins.min": "최소 구간",
+  "bins.max": "최대 구간", "tail.lo": "아래", "tail.hi": "위",
+};
+const CHOICE_NAMES: Record<string, string> = { gray: "회색 선", small: "따로 그리기", lttb: "LTTB", rollup: "묶기", ko: "한국식", en: "영어식", mean: "평균", median: "중앙값", p80: "파레토 80%", fd: "FD", sturges: "Sturges" };  // 고를 값의 보이는 이름
+const PCT_PARAMS = ["yzoom.pad", "tail.lo", "tail.hi"];  // 저장은 비율(0.1), 칸은 %(10)
+const PCT = 100, PCT_PRECISION = 12;  // % 칸의 보이는 값 = 저장값 × 100, 부동소수 끝자리(0.07×100 = 7.000000000000001)를 12자리로 다듬는다
+const SCALE_NAMES: [string, string][] = [["", "보통"], ["log", "로그"], ["symlog", "SymLog"]];  // 값 축 눈금(view.scale, 서버 viz_rules.SCALES, 보통은 키 없음)
+const SIDES = { y: "왼쪽", y1: "오른쪽" } as const;  // 값 축 범위 오류 글의 축 이름(쿼리 화면 rangeError와 같은 글)
+const LEGACY_ORDER: Order = "x";  // body.order가 없는 기존 카드의 정렬(서버 viz_rules.LEGACY_ORDER, autoEnv와 같다)
+const RECOMPUTE = "바꾸면 [다시 구하기]를 누르세요. 새 값으로 다시 구해요.";  // 서버가 값을 다시 구해야 하는 변경
+const ORDER_REFETCH = "그룹이 많아 서버가 고른 값이에요. 바꾸면 [다시 구하기]를 누르세요. 서버가 고르는 그룹이 달라져요.";  // 잘린 카드의 정렬 변경
 
 export function Tools({ card, columns, onChange }: { card: Card; columns: string[]; onChange: (patch: Partial<Card>) => void }) {
   const consts = useConstants();
@@ -33,9 +65,26 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
   const kit = useMemo(() => consts && seriesKit(consts), [consts]);
   const [msg, setMsg] = useState("");
   const [paint, setPaint] = useState(false);
+  const [autoOpen, setAutoOpen] = useState(false);
+  const [rangeErr, setRangeErr] = useState("");
   if (!consts || !kit) return null;
   const live = state.values[card.id]?.data, shown: Card = { ...card, data: live ?? card.data };
   const view = card.view, setView = (p: Partial<CardView>, extra: Partial<Card> = {}) => onChange({ view: { ...view, ...p }, ...extra });
+  // 정의(def_hash)가 바뀐 카드를 다시 구한다(setDate와 같은 길): 워드클라우드 방식, 서버 범위 묶기(GroupPicker)
+  const recompute = async (next: Card) => {
+    const r = await computeCard(cardRequest({ ...next, data: {} }), state.ctx);
+    const u = computedUpdate(card.id, r.data, state.ctx, { view: next.view, source: { ...next.source, ...r.source } });
+    onChange(u.patch);
+    dispatch({ type: "values", results: [u.result] });
+  };
+  // 컬럼 값 방식이면 cloud 키를 지운다(기본)
+  const setCloud = (cloud: Cloud) => {
+    const v = { ...view };
+    if (cloud.mode === "values") delete v.cloud; else v.cloud = cloud;
+    const next = { ...card, view: v };
+    onChange({ view: v });
+    recompute(next).then(() => setMsg(""), e => setMsg((e as Error).message));
+  };
   const byUnit = shown.data?.by_unit, timed = !!byUnit?.day && card.kind !== "dual_trend";
   const pointy = ["scatter", "bubble"].includes(view.type);
   // 점을 카드 값에 넣거나 뺀다(보이는 구한 값에도)
@@ -84,7 +133,36 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     </label>
   );
   const tiles = !!(view.geo as { tiles?: boolean } | undefined)?.tiles;
+  const without = (key: keyof CardView) => { const rest = { ...view }; delete rest[key]; onChange({ view: rest }); };  // 키를 지워 기본으로
+  const gapPicked = view.gap_stats ?? [];
+  const autoFlow = (card.source.analysis as { mode?: string } | undefined)?.mode === "auto";
   const kindFields = {
+    funnel: (<>
+      <select className="bunit" style={{ flexBasis: "auto" }} aria-label="그림 모양" value={view.funnel_shape ?? "flow"}
+        onChange={e => e.target.value === "flow" ? without("funnel_shape") : setView({ funnel_shape: e.target.value as CardView["funnel_shape"] })}>
+        {FUNNEL_SHAPES.map(([v, n]) => <option key={v} value={v}>그림 모양: {n}</option>)}
+      </select>
+      {view.funnel_shape === "ladder" && (
+        <label className="hint bset">인원 비례
+          <input type="checkbox" aria-label="인원 비례" checked={view.ladder_scale === true} onChange={e => e.target.checked ? setView({ ladder_scale: true }) : without("ladder_scale")} />
+        </label>
+      )}
+      {GAP_STATS.map(s => (
+        <label key={s} className="hint bset">걸린 시간 {GAP_NAMES[s]}
+          <input type="checkbox" aria-label={`걸린 시간 ${GAP_NAMES[s]}`} checked={gapPicked.includes(s)}
+            onChange={e => setView({ gap_stats: GAP_STATS.filter(g => g === s ? e.target.checked : gapPicked.includes(g)) })} />
+        </label>
+      ))}
+    </>),
+    sankey: autoFlow ? (<>
+      <label className="hint bset">이탈 칸
+        <input type="checkbox" aria-label="이탈 칸" checked={flowDropout(card)} onChange={e => setView({ flow_dropout: e.target.checked })} />
+      </label>
+      <label className="hint bset">상한 없음
+        <input type="checkbox" aria-label="상한 없음" checked={view.flow_unlimited === true} onChange={e => setView({ flow_unlimited: e.target.checked })} />
+      </label>
+      <span className="hint">바꾸면 [다시 구하기]를 누르세요. 새 값으로 다시 구해요.</span>
+    </>) : null,
     geomap: (<>
       <label className="hint bset">지도 배경(OpenStreetMap)
         <input type="checkbox" aria-label="지도 배경" checked={tiles} title="켜면 지금 보는 지도 범위가 OpenStreetMap 서버(tile.openstreetmap.org)로 전송돼요. 끄면 경계만 그리고 아무것도 보내지 않아요."
@@ -99,6 +177,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
         </select>
       </label>
     ),
+    wordcloud: <CloudFields cloud={view.cloud ?? { mode: "values" }} schema={card.source.schema ?? ""} table={card.source.table ?? ""} texts={columns} full tagged={!!card.source.body?.labels} onChange={c => setCloud(c)} />,
     stripes: <>{num("cells", "칸 수", 50, 1, 100)}{num("full", "가득 찬 값", 80)}</>,
     blocks: num("size", "한 칸 크기", 80),
     recent_rows: num("rows", "행 수", 50, 1, 100),
@@ -149,6 +228,82 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
       {dateCols.map(c => <option key={c} value={c}>기간 기준: {c}</option>)}
     </select>
   );
+  const table = consts.dash.auto;
+  const look: Look | null = card.kind === "histogram" ? "hist" : card.kind === "boxplot" ? "box" : !CHART_KINDS.includes(card.kind) ? null
+    : kit.usesAna(shown) ? (anaView(shown) === "scatter" ? "scatter" : "ana") : card.kind === "chart" && pointy ? "points" : "series";
+  const rules = look && table ? (Object.keys(table) as AutoRule[]).filter(r => (look === "series" ? !SERVER_AUTO.includes(r) : LOOK_RULES[look].includes(r))) : [];
+  const p = table ? autoParams(view.auto, table) : null;
+  const s = look === "series" ? kit.cardSeries(shown) : null;
+  const vtype = view.type || "";
+  const right = s ? (vtype === "combo" ? s.datasets.slice(1) : vtype === "" ? s.datasets.filter(d => d.axis === "right") : []) : [];
+  const pct = !!p?.sync && right.length > 0 && percentDomain(right.flatMap(d => d.values)) !== null;  // 보조 축 범위 칸을 %로 읽는가(y1Domain과 같은 조건)
+  const ordered = look === "series" && (card.kind === "chart" || card.kind === "metric") && !!card.source.body;
+  const truncated = Array.isArray(shown.data?.values?.rest);  // 서버가 그룹을 잘랐다(autoEnv와 같은 판정)
+  // 규칙 하나를 바꾼다: undefined면 키를 지워 기본 켬, false면 끔, 객체면 수치(비면 키를 지움). auto가 비면 view에서 지운다
+  const putAuto = (rule: AutoRule, next: false | Record<string, number | string | string[]> | undefined) => {
+    const auto: AutoView = { ...view.auto };
+    if (next === undefined || (next !== false && !Object.keys(next).length)) delete auto[rule]; else auto[rule] = next;
+    if (Object.keys(auto).length) setView({ auto }); else without("auto");
+    setMsg(SERVER_AUTO.includes(rule) && (look === "hist" || look === "box" || look === "points") ? RECOMPUTE : "");
+  };
+  // 수치 하나: 기본값과 같으면 그 키를 지운다(목록은 글자로 비교, 고를 값 차례로 만들므로 같은 차례)
+  const setParam = (rule: AutoRule, name: string, value: number | string | string[]) => {
+    const obj = { ...(view.auto?.[rule] || {}) };
+    if (String(value) === String(table![rule][name][0])) delete obj[name]; else obj[name] = value;
+    putAuto(rule, obj);
+  };
+  // 켜진 규칙의 수치 칸 하나(ParamSpec 모양별: 숫자·여러 개 고르기·자유 글자·하나 고르기)
+  const ruleField = (rule: AutoRule, name: string, spec: ParamSpec): ReactNode => {
+    const key = `${rule}.${name}`, label = PARAM_NAMES[key], aria = `${consts.dash.auto_names[rule]} ${label}`, now = p![rule]![name];
+    if (spec.length === 3) {
+      const k = PCT_PARAMS.includes(key) ? PCT : 1, show = (x: number) => +(x * k).toPrecision(PCT_PRECISION);
+      return (
+        <label key={key} className="hint bset">{label}<input type="number" step="any" aria-label={aria} min={show(spec[1])} max={show(spec[2])} style={{ width: 70 }} key={String(now)} defaultValue={show(now as number)}
+          onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+          onBlur={e => { const t = e.target.value; const v = t === "" ? spec[0] : Math.min(spec[2], Math.max(spec[1], +t / k)); if (v !== now) setParam(rule, name, v); else e.target.value = String(show(v)); }} />{k === PCT ? "%" : ""}</label>
+      );
+    }
+    if (Array.isArray(spec[0])) {
+      const list = now as string[];
+      return (
+        <Fragment key={key}>
+          {(spec[1] as string[]).map(c => (
+            <label key={`${key}.${c}`} className="hint bset">{CHOICE_NAMES[c]}<input type="checkbox" aria-label={`${aria} ${CHOICE_NAMES[c]}`} checked={list.includes(c)}
+              onChange={e => setParam(rule, name, (spec[1] as string[]).filter(x => (x === c ? e.target.checked : list.includes(x))))} /></label>
+          ))}
+        </Fragment>
+      );
+    }
+    if (spec[1] === null) return s && s.datasets.length >= 2 ? (
+      <select key={key} className="bunit" style={{ flexBasis: "auto" }} aria-label={aria} value={now as string} onChange={e => setParam(rule, name, e.target.value)}>
+        <option value={spec[0] as string}>{label}: 합계</option>
+        {s.datasets.map(d => <option key={d.label} value={d.label}>{label}: {d.label}</option>)}
+      </select>
+    ) : null;
+    return (
+      <select key={key} className="bunit" style={{ flexBasis: "auto" }} aria-label={aria} value={now as string} onChange={e => setParam(rule, name, e.target.value)}>
+        {(spec[1] as string[]).map(c => <option key={c} value={c}>{label}: {CHOICE_NAMES[c]}</option>)}
+      </select>
+    );
+  };
+  const rangeInput = (a: "y" | "y1", k: "min" | "max"): ReactNode => {
+    const name = `${SIDES[a]} 축 ${k === "min" ? "최소" : "최대"}`;
+    return (
+      <label key={`${a}.${k}`} className="hint bset">{name}<input type="number" step="any" name={`${a}.${k}`} aria-label={name} style={{ width: 70 }} key={String(view.ranges?.[a]?.[k] ?? "")} defaultValue={view.ranges?.[a]?.[k] ?? ""}
+        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />{a === "y1" && pct ? "%" : ""}</label>
+    );
+  };
+  // 줄의 네 칸을 한꺼번에 읽는다(쿼리 화면처럼 칸 하나만 보면 틀린 최소를 고칠 때 다른 칸 값이 사라진다)
+  const saveRanges = (box: HTMLElement) => {
+    const read = (a: "y" | "y1", k: "min" | "max") => { const i = box.querySelector<HTMLInputElement>(`input[name="${a}.${k}"]`); return i ? (i.value === "" ? undefined : +i.value) : view.ranges?.[a]?.[k]; };  // 숨은 칸(오른쪽 계열 없음)은 저장값 그대로
+    const pick = (a: "y" | "y1") => Object.fromEntries((["min", "max"] as const).flatMap(k => { const v = read(a, k); return v == null ? [] : [[k, v]]; })) as { min?: number; max?: number };
+    const next = { y: pick("y"), y1: pick("y1") };
+    const err = (["y", "y1"] as const).filter(a => { const r = next[a]; return r.min != null && r.max != null && r.min >= r.max; }).map(a => `${SIDES[a]} 축의 최솟값을 최댓값보다 작게 넣어 주세요.`).join(" ");
+    setRangeErr(err);
+    if (err) return;  // 틀리면 저장하지 않는다(칸의 글자는 그대로)
+    if (!Object.keys(next.y).length && !Object.keys(next.y1).length) { if (view.ranges) without("ranges"); return; }
+    if (JSON.stringify(next) !== JSON.stringify(view.ranges)) setView({ ranges: next });
+  };
   return (
     <div className="bextra">
       {card.kind === "chart" && (
@@ -193,6 +348,49 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
           {unitText && <input aria-label="단위" placeholder="단위" maxLength={10} style={{ width: 80, height: 24, fontSize: 12 }} value={view.unit_text ?? ""} onChange={e => setView({ unit_text: e.target.value })} />}
         </div>
       )}
+      <GroupPicker card={card} data={shown.data ?? {}} onChange={onChange} recompute={recompute} />
+      {look && (<>
+        <div className="btools">
+          {rules.length > 0 && <button type="button" className={`btype${autoOpen ? " on" : ""}`} aria-expanded={autoOpen} title="그림을 그릴 때 알아서 하는 정렬·묶기·축 정리예요" onClick={() => setAutoOpen(!autoOpen)}>자동 규칙</button>}
+          {look === "series" && (
+            <select className="bunit" style={{ flexBasis: "auto" }} aria-label="값 축" value={view.scale ?? ""} onChange={e => (e.target.value ? setView({ scale: e.target.value as AxisScale }) : without("scale"))}>
+              {SCALE_NAMES.map(([v, n]) => <option key={v} value={v}>값 축: {n}</option>)}
+            </select>
+          )}
+          {ordered && (
+            <select className="bunit" style={{ flexBasis: "auto" }} aria-label="정렬" value={card.source.body?.order ?? LEGACY_ORDER}
+              onChange={e => { onChange({ source: { ...card.source, body: { ...card.source.body, order: e.target.value as Order } } }); setMsg(truncated ? ORDER_REFETCH : ""); }}>
+              {consts.dash.orders.map(o => <option key={o} value={o}>정렬: {consts.dash.order_names[o]}</option>)}
+            </select>
+          )}
+          {look !== "ana" && (
+            <label className="hint bset">모든 데이터
+              <input type="checkbox" aria-label="모든 데이터" checked={view.all_data === true} onChange={e => { if (e.target.checked) setView({ all_data: true }); else without("all_data"); setMsg(look === "hist" || look === "points" ? RECOMPUTE : ""); }} />
+            </label>
+          )}
+          {CHART_KINDS.includes(card.kind) && (
+            <label className="hint bset">표로 보기
+              <input type="checkbox" aria-label="표로 보기" checked={view.data_table === true} onChange={e => (e.target.checked ? setView({ data_table: true }) : without("data_table"))} />
+            </label>
+          )}
+        </div>
+        {autoOpen && rules.map(r => {
+          const on = view.auto?.[r] !== false, name = consts.dash.auto_names[r];
+          return (
+            <div className="btools" key={r}>
+              <label className="hint bset">{name}<input type="checkbox" aria-label={name} checked={on} onChange={e => putAuto(r, e.target.checked ? undefined : false)} /></label>
+              {on && Object.entries(table![r]).map(([k, spec]) => ruleField(r, k, spec))}
+            </div>
+          );
+        })}
+        {(look === "series" || look === "points") && (
+          <div className="btools" onBlur={e => saveRanges(e.currentTarget)}>
+            {rangeInput("y", "min")}{rangeInput("y", "max")}
+            {right.length > 0 && <>{rangeInput("y1", "min")}{rangeInput("y1", "max")}</>}
+            <span className="err">{rangeErr}</span>
+          </div>
+        )}
+      </>)}
       {timed && (
         <div className="btools">
           {byUnit.day && (
@@ -243,4 +441,76 @@ function ColorEditor({ card, shown, theme, palette, kit, onChange }: { card: Car
       <button type="button" className="ghost" title="이 카드에서 따로 정한 색을 지우고 대시보드 색으로 돌아가요" onClick={() => onChange({ colors: { ...card.colors, series: {}, parts: {}, order: [], parts_order: [] } })}>지정 색 지우기</button>
     </div>
   );
+}
+
+// 워드클라우드 방식 칸(카드 추가 메뉴와 카드 설정이 같이 쓴다): 방식·보일 태그·뽑을 행(기본값 없음)·맞춤(기본값 없음)·글 컬럼, full이면 품사·불용어·최소 글자 수.
+// 태그 사전과 글 컬럼 기본값은 /api/labels. 빈 칸은 cloud에서 지운다(서버 check_cloud가 나머지를 검사)
+export function CloudFields({ cloud, schema, table, texts, full, tagged, onChange }: {
+  cloud: Cloud; schema: string; table: string; texts: string[]; full: boolean; tagged: boolean; onChange: (cloud: Cloud) => void;
+}) {
+  const [info, setInfo] = useState<{ vocab: string[]; text: string } | null>(null);
+  const [err, setErr] = useState("");
+  const [word, setWord] = useState("");
+  useEffect(() => {
+    if (!table) return;
+    let live = true;
+    fetchLabels(schema, table).then(r => { if (live) { setInfo({ vocab: r.vocab ?? [], text: r.text ?? "" }); setErr(""); } }).catch(e => live && setErr((e as Error).message));
+    return () => { live = false; };
+  }, [schema, table]);
+  const put = (p: Partial<Cloud>) => {
+    const next = { ...cloud, ...p } as Record<string, unknown>;
+    for (const k of Object.keys(next)) if (next[k] === undefined || (Array.isArray(next[k]) && !(next[k] as unknown[]).length)) delete next[k];
+    onChange(next as Cloud);
+  };
+  const setMode = (mode: Cloud["mode"]) => mode === "values" ? onChange({ mode })
+    : mode === "labels" ? put({ mode, rows: undefined, match: undefined, text: undefined, pos: undefined, stop: undefined, min_len: undefined })
+    : put({ mode, text: cloud.text || info?.text || undefined });  // 사전의 글 컬럼을 먼저 고른 상태로
+  const tags = cloud.tags ?? [], stop = cloud.stop ?? [];
+  const pos = cloud.pos?.length ? cloud.pos : [DEFAULT_POS];
+  const words = cloud.mode === "words", pickTags = cloud.mode === "labels" || (words && cloud.rows === "tagged");
+  const addStop = () => { const w = word.trim(); if (w && !stop.includes(w)) put({ stop: [...stop, w] }); setWord(""); };
+  return (<>
+    <select className="bunit" style={{ flexBasis: "auto" }} aria-label="워드클라우드 방식" value={cloud.mode} onChange={e => setMode(e.target.value as Cloud["mode"])}>
+      {CLOUD_MODES.map(([v, n]) => <option key={v} value={v}>방식: {n}</option>)}
+    </select>
+    {words && (
+      <select className="bunit" style={{ flexBasis: "auto" }} aria-label="단어를 뽑을 행" value={cloud.rows ?? ""}
+        onChange={e => put(e.target.value === "all" ? { rows: "all", tags: undefined, match: undefined } : { rows: (e.target.value || undefined) as Cloud["rows"] })}>
+        <option value="">단어를 뽑을 행: (고르세요)</option>
+        {CLOUD_ROWS.map(([v, n]) => <option key={v} value={v}>단어를 뽑을 행: {n}</option>)}
+      </select>
+    )}
+    {pickTags && (info?.vocab ?? []).map(t => (
+      <Check key={t} label={t} checked={tags.includes(t)} onChange={on => put({ tags: (info?.vocab ?? []).filter(x => (x === t ? on : tags.includes(x))) })} />
+    ))}
+    {words && cloud.rows === "tagged" && (
+      <select className="bunit" style={{ flexBasis: "auto" }} aria-label="태그 맞춤" value={cloud.match ?? ""} onChange={e => put({ match: (e.target.value || undefined) as Cloud["match"] })}>
+        <option value="">태그: (고르세요)</option>
+        {CLOUD_MATCH.map(([v, n]) => <option key={v} value={v}>태그: {n}</option>)}
+      </select>
+    )}
+    {words && (
+      <select className="bunit" style={{ flexBasis: "auto" }} aria-label="글 컬럼" value={cloud.text ?? ""} onChange={e => put({ text: e.target.value || undefined })}>
+        <option value="">글 컬럼: (고르세요)</option>
+        {texts.map(c => <option key={c} value={c}>글 컬럼: {c}</option>)}
+      </select>
+    )}
+    {words && full && (<>
+      {CLOUD_POS.map(([v, n]) => (
+        <Check key={v} label={n} checked={pos.includes(v)} onChange={on => put({ pos: CLOUD_POS.map(([p]) => p).filter(p => (p === v ? on : pos.includes(p))) })} />
+      ))}
+      <span className="hint bset">불용어
+        {stop.map(s => <span key={s} className="chip">{s}<button type="button" className="ghost" aria-label={`${s} 빼기`} onClick={() => put({ stop: stop.filter(x => x !== s) })}>×</button></span>)}
+        <input aria-label="불용어" placeholder="낱말" style={{ width: 80 }} value={word} onChange={e => setWord(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) addStop(); }} />
+        <button type="button" className="ghost" onClick={addStop}>더하기</button>
+      </span>
+      <label className="hint bset">최소 글자 수
+        <input type="number" aria-label="최소 글자 수" min={1} step={1} placeholder="기본" style={{ width: 50 }} key={String(cloud.min_len ?? "")} defaultValue={cloud.min_len ?? ""}
+          onBlur={e => { const v = e.target.value === "" ? undefined : Math.round(+e.target.value); if (v !== cloud.min_len) put({ min_len: v }); }}
+          onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+      </label>
+    </>)}
+    {pickTags && !tagged && <span className="hint">쿼리 화면에서 태그를 켠 검색으로 카드를 담으세요</span>}
+    <span className="err">{err}</span>
+  </>);
 }

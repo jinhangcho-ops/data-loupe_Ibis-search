@@ -1,9 +1,10 @@
 """비용을 아끼는 컬럼 추론: 테이블 전체를 읽지 않고 메타데이터나 표본(기본 약 5,000행)만 읽어 전처리 통계를 구한다.
 표본은 싼 방법부터 차례로 해 보고(FALLBACK), 되지 않거나 너무 적게 오면 다음 방법으로 넘어간다:
-BigQuery 무과금 미리보기(list_rows) → 블록 샘플링(TABLESAMPLE SYSTEM) → 데이터 명세서의 최신 파티션만 → 앞 행.
+BigQuery 무과금 미리보기(list_rows) → 전체(행 수가 표본보다 적음) → 블록 샘플링(TABLESAMPLE SYSTEM) → 행 단위 표본 → 데이터 명세서의 최신 파티션만 → 앞·가운데·뒤 구간 → 앞 행.
 Parquet 파일은 그와 따로 파일 정보(RowGroup 통계)로 전체의 빈 값·최소·최대·단일값 여부를 읽는다(읽기 비용 없음).
 추론 결과는 테이블별로 CACHE에 두고, [다시 구하기]를 누를 때만 새로 구한다. 표본의 행 자체는 저장하지 않는다."""
 import datetime as dt
+import functools
 import json
 from pathlib import Path
 
@@ -17,9 +18,10 @@ MAX_CACHE = 200  # 기억할 테이블 수. 넘으면 오래전에 구한 것부
 SPEC = "data_spec.json"  # 고른 데이터 명세서의 경로 {"path"}
 MAX_SPEC_BYTES = 5 * 1024 * 1024
 MAX_SPEC_ENTRIES = 200_000  # 명세서의 테이블+컬럼 항목 수(YAML 별칭으로 작은 파일이 큰 명세서가 되는 것을 막는다)
-FLAG_MAX = 20  # 표본에서 서로 다른 값이 이 수 이하인 컬럼은 플래그로 보고 값 목록을 남긴다.
+SEGMENT_COUNT = 3  # segments가 읽는 구간 수(앞·가운데·뒤)
+FLAG_MAX = 20  #표본에서 서로 다른 값이 이 수 이하인 컬럼은 플래그로 보고 값 목록을 남긴다.
 FLAG_TEXT = 100  # 플래그 값 하나의 최대 글자 수(이보다 길면 플래그로 보지 않는다)
-METHODS = {"preview": "무과금 미리보기", "whole": "전체(행 수가 표본보다 적음)", "block": "블록 샘플링", "partition": "최신 파티션", "head": "앞 행"}
+METHODS = {"preview": "무과금 미리보기", "whole": "전체(행 수가 표본보다 적음)", "block": "블록 샘플링", "row": "행 단위 표본", "partition": "최신 파티션", "head": "앞 행", "segments": "앞·가운데·뒤 구간", "key": "키 단위 표본(해시)", "strata": "층화 표본(Neyman)"}
 
 
 # ---------- 데이터 명세서 ----------
@@ -139,18 +141,9 @@ def plain(value):
 # ---------- 표본 ----------
 
 def fetch(con, expr, **kwargs):
-    """식의 결과를 pyarrow 표로. 드라이버가 빈 값이 든 정수 컬럼을 실수로 거쳐 넘겨 큰 정수가 넘치면(SQLite 등) DB-API 커서로 행을 직접 받아 원래 타입으로 만든다."""
-    import pyarrow as pa
-    try:
-        return expr.to_pyarrow(**kwargs)
-    except pa.ArrowInvalid:
-        cursor = con.raw_sql(ibis.to_sql(expr))
-        try:
-            names = [d[0] for d in cursor.description]
-            rows = [dict(zip(names, row)) for row in cursor.fetchall()]
-        finally:
-            cursor.close()
-        return pa.Table.from_pylist(rows, schema=expr.schema().to_pyarrow())
+    """식의 결과를 pyarrow 표로. 드라이버가 빈 값이 든 정수 컬럼을 실수로 거쳐 넘겨 큰 정수가 넘치면(SQLite 등) DB-API 커서로 행을 직접 받아 원래 타입으로 만든다. 읽은 양은 sampling.READS에 남는다(sampling.measured)"""
+    from core import sampling
+    return sampling.measured(con, expr, **kwargs)
 
 
 def preview(con, t, schema, base, size, rows, part):
@@ -168,19 +161,18 @@ def whole(con, t, schema, base, size, rows, part):
     return fetch(con, t.limit(size)) if rows is not None and rows <= size else None
 
 
-def block(con, t, schema, base, size, rows, part):
-    """블록 샘플링(TABLESAMPLE SYSTEM): 저장 블록 일부만 읽는다. 행 수를 모르거나 너무 적게 오면 None."""
+def block(con, t, schema, base, size, rows, part, method="block"):
+    """블록 샘플링(TABLESAMPLE SYSTEM, method="block") 또는 행 단위 표본(베르누이, method="row"). 연결이 그 방식을 하는지는 sampling.sample_way(컴파일)로 보고
+    아니면 None(다음 방법으로). 행 수를 모르거나 너무 적게 오면(DuckDB 블록 알갱이 2,048행 등) None. Polars 구간은 segments로 옮겼다."""
+    from core import sampling
     if rows is None:
         return None
-    if getattr(con, "name", "") == "polars":  # Polars의 블록 샘플링은 표 전체를 올려 df.sample로 고른다: 앞·가운데·뒤 세 구간만 읽는다(겹치지 않게)
-        import pyarrow as pa
-        third = -(-size // 3)
-        starts = (0, max(third, rows // 2 - third // 2), max(2 * third, rows - third))
-        found = pa.concat_tables([fetch(con, part, **result.streaming(part)) for part in (t.limit(third, offset=start) for start in starts)]).slice(0, size)
-        return found if found.num_rows >= min(size, rows) * settings.get("sample_too_few") else None
-    picked = t.sample(min(1.0, size * 1.2 / rows), method="block").limit(size)
-    found = fetch(con, picked, **result.streaming(picked))  # 파일 연결(Polars)은 streaming으로 읽어 최대 메모리를 줄인다(표본은 그대로 무작위)
-    return found if found.num_rows >= min(size, rows) * settings.get("sample_too_few") else None  # 기대한 행의 이만큼도 못 가져오면(작은 테이블·뷰) 다음 방법으로(설정 sample_too_few, 기본 0.2)
+    fraction = min(1.0, size * sampling.BLOCK_OVER / rows)
+    if sampling.sample_way(t, fraction) != method:
+        return None
+    picked = t.sample(fraction, method=method).limit(size)
+    found = fetch(con, picked, **result.streaming(picked))
+    return found if found.num_rows >= min(size, rows) * settings.get("sample_too_few") else None
 
 
 def partition(con, t, schema, base, size, rows, part):
@@ -197,18 +189,31 @@ def partition(con, t, schema, base, size, rows, part):
     return fetch(con, t.filter(pick).limit(size))
 
 
+def segments(con: object, t: "ibis.expr.types.Table", schema: str, base: str, size: int, rows: int | None, part: dict | None) -> object:
+    """[SPECIFICATION] plans/phase-2.md#segments
+    SQL이 아닌 연결(Polars)에서 앞·가운데·뒤 세 구간을 limit/offset으로 읽어 합친 표(FALLBACK의 앞 행 바로 앞 차례). 그 밖의 연결이면 None."""
+    if rows is None or isinstance(ibis.get_backend(t).compile(t), str):
+        return None
+    import pyarrow as pa
+    third = -(-size // SEGMENT_COUNT)
+    starts = (0, max(third, rows // 2 - third // 2), max(2 * third, rows - third))
+    found = pa.concat_tables([fetch(con, part, **result.streaming(part)) for part in (t.limit(third, offset=start) for start in starts)]).slice(0, size)
+    return found if found.num_rows >= min(size, rows) * settings.get("sample_too_few") else None
+
+
 def head(con, t, schema, base, size, rows, part):
     """앞 size행. 마지막 방법이다(DW에 따라 전체를 읽을 수 있다)."""
     return fetch(con, t.limit(size))
 
 
-FALLBACK = [("preview", preview), ("whole", whole), ("block", block), ("partition", partition), ("head", head)]
+FALLBACK = [("preview", preview), ("whole", whole), ("block", block), ("row", functools.partial(block, method="row")), ("partition", partition), ("segments", segments), ("head", head)]
+BLOCK_FIRST = ["whole", "block", "row", "preview", "partition", "segments", "head"]  # 설정 pilot_first가 block일 때의 차례(미리보기를 블록·행 단위 뒤로)
 
 
-def sample(con, t, schema, base, size, rows, part):
-    """(표본 pyarrow 표, 쓴 방법, 넘어간 방법들 [[방법, 이유]]). 방법마다 오류가 나거나 None이면 다음으로."""
+def sample(con, t, schema, base, size, rows, part, block_first=False):
+    """(표본 pyarrow 표, 쓴 방법, 넘어간 방법들 [[방법, 이유]]). 방법마다 오류가 나거나 None이면 다음으로. block_first면 BLOCK_FIRST 차례: 파일럿의 pilot_first 설정용"""
     passed = []
-    for name, step in FALLBACK:
+    for name, step in (sorted(FALLBACK, key=lambda s: BLOCK_FIRST.index(s[0])) if block_first else FALLBACK):
         try:
             found = step(con, t, schema, base, size, rows, part)
         except Exception as e:

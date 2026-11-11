@@ -320,7 +320,7 @@ def test_duckdb_calls_get_no_engine_argument():
 
 def test_block_sample_on_polars_streams_and_keeps_the_size(polars_con, engines):
     t = polars_con.table("sales")
-    found = profiler.block(polars_con, t, "", "sales", 500, 20_000, None)
+    found = profiler.segments(polars_con, t, "", "sales", 500, 20_000, None)  # phase-2: 구간 읽기는 block에서 segments로 옮김(Polars의 block 자리는 Table.sample 행 단위)
     assert found is not None and 0 < found.num_rows <= 500 and found.schema.names == ["id", "city", "grp", "amount"]
     assert "streaming" in engines
 

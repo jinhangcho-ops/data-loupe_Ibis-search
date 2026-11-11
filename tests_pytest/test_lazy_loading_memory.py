@@ -33,7 +33,7 @@ LAZY = {"ibis", "polars", "duckdb", "pyarrow"}  # lazy.py가 이름만 걸어 �
 LIMIT_MB = 80  # 명세의 시작 메모리 목표(50~80MB 이하). 화면을 그리는 WebView2는 다른 프로세스라 들어가지 않는다.
 # 시작할 때 올라와도 되는 기능 패키지의 모듈: 주소를 등록하는 라우트 파일, 그리고 프로그램 안 예약 스레드를 띄우는 schedule(수집·알림은 예약을 돌릴 때 올라온다)
 ROUTES = {"collect.collect_app", "collect.load_app", "dashboard.dash_app", "integrations.bot_app", "integrations.integrations_app", "integrations.notify",
-          "integrations.schedule", "integrations.schedule_app", "metrics.catalog_app", "prep.prep_app", "query.flow_app", "query.period_app", "query.search_app"}
+          "integrations.schedule", "integrations.schedule_app", "metrics.catalog_app", "prep.prep_app", "query.flow_app", "query.label_app", "query.period_app", "query.search_app"}
 FEATURE = ("collect", "dashboard", "integrations", "metrics", "prep", "query", "analysis", "geo")  # geo(좌표)는 어느 화면의 묶음에도 넣지 않는다: 좌표 기능을 쓸 때만 올라온다
 BUNDLES = {"/search": {"query.join_keys", "query.sentences", "query.sentence_run", "query.sentence_exec", "query.nl2sql",
                        "metrics.my_metrics", "metrics.metric_catalog", "metrics.metric_kernels"},

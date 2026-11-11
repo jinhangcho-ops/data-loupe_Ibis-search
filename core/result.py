@@ -7,7 +7,7 @@ from pathlib import Path
 
 from lazy import ibis
 
-from core import prep_ops, source, sql_funcs
+from core import crosstab, prep_ops, source, sql_funcs, viz_rules
 from core.parse import check_name, column as field_of, native_key, struct_fields, type_info
 
 PAGING = contextvars.ContextVar("paging", default=False)  # get_rows가 쪽을 받는 중: 파일 연결(Polars)의 묶기·중복 빼기도 차례를 고정한다(source.fix_polars_text)
@@ -361,11 +361,12 @@ def plain(value):
     return value if value is None or isinstance(value, (int, float)) else str(value)
 
 
-def get_summary(expr, columns=(), unique=True):
+def get_summary(expr, columns=(), unique=True, extra: list[str] = (), ps: tuple[float, ...] = crosstab.QUANTILES, above: float = crosstab.ABOVE):
     """컬럼별 집계를 조회 한 번으로 계산해 SUMMARY_COLS 모양의 줄들로 돌려준다. columns를 주면 그 컬럼만 그 순서로.
     개수(빈 값 제외)·빈 값·고유값은 모든 컬럼, 최소·최대는 숫자와 날짜, 평균은 숫자만 계산한다. unique가 거짓이면 고유값은 세지 않는다(None)."""
     for column in columns:
         check_name(column, expr.columns)
+    names = crosstab.summary_columns(extra, ps)
     if columns:
         expr = expr.select(list(columns))
     kinds = {name: (t.is_numeric() or t.is_temporal(), t.is_numeric()) for name, t in expr.schema().items()}
@@ -378,9 +379,23 @@ def get_summary(expr, columns=(), unique=True):
             metrics.update({f"min{i}": col.min(), f"max{i}": col.max()})
         if numeric:
             metrics[f"mean{i}"] = col.mean()
+            if "gap" in extra:
+                metrics[f"median{i}"] = col.median()
+            if "quantiles" in extra:
+                metrics.update({f"q{j}_{i}": col.quantile(p) for j, p in enumerate(ps)})
+            if "zero" in extra:
+                metrics.update({f"above{i}": col.count(where=col > above), f"above_mean{i}": col.mean(where=col > above)})
     found = expr.aggregate(**metrics).to_polars().row(0, named=True)
+
+    def extras(i):
+        mean, median, unique_count = plain(found.get(f"mean{i}")), plain(found.get(f"median{i}")), found.get(f"unique{i}")
+        values = {"dup": found[f"count{i}"] / unique_count if unique_count else None,
+                  "median": median, "gap": (mean - median) / median if mean is not None and median else None,
+                  "above": plain(found.get(f"above{i}")), "above_mean": plain(found.get(f"above_mean{i}")),
+                  **{crosstab.quantile_name(p): plain(found.get(f"q{j}_{i}")) for j, p in enumerate(ps)}}
+        return {k: values[k] for k in names}
     return [{"name": name, "type": str(expr.schema()[name]).lstrip("!"), "count": found[f"count{i}"], "nulls": found[f"nulls{i}"] or 0,
-             "unique": found.get(f"unique{i}"), **{k: plain(found.get(f"{k}{i}")) for k in ("min", "max", "mean")}}
+             "unique": found.get(f"unique{i}"), **{k: plain(found.get(f"{k}{i}")) for k in ("min", "max", "mean")}, **extras(i)}
             for i, name in enumerate(kinds)]
 
 
@@ -473,25 +488,34 @@ def get_chart(expr, x, series, split=None, order="x", x_unit=""):
         return group_chart(expr, x, series, split, order)
     local = local_time(expr[x])
     expr = expr.mutate(**{x: sql_funcs.period_start(local, CHART_UNITS[x_unit])})  # period_start를 부르는 곳은 여기 하나
+    order = "x" if order == "auto" else order  # 날짜·시각 X의 auto는 x
     labels, datasets, more = group_chart(expr, x, series, split, order)
-    if order == "value":
+    fills = order in ("x", "name")
+    if not fills:
         return labels, datasets, more
     return (*fill_periods(labels, datasets, series, x_unit), more)
 
 
 def group_chart(expr, x, series, split=None, order="x"):
-    """x별로 계열들을 집계한다. series는 [{"y", "agg"}]. order가 "x"면 x 순, "value"면 첫 계열 값이 큰 순으로 최대 MAX_GROUPS개.
+    """x별로 계열들을 집계한다. series는 [{"y", "agg"}]. order는 viz_rules.ORDERS의 다섯 값, 모두 최대 MAX_GROUPS개:
+    "auto"(글자 X는 value, 숫자·날짜 X는 x), "x"(x 순, 날짜 X는 최근 개수), "value"(첫 계열 값 큰 순), "value_asc"(작은 순), "name"(x 차례 앞).
     split을 주면 그 컬럼의 값마다(행이 많은 순으로 최대 MAX_SPLITS개) 계열을 나눈다.
     (x 값들, [{"series": 계열 번호, "split": 나눈 값 또는 None, "values": x 값 순서의 값들, "truncated": X 값이 MAX_GROUPS개보다 많아 잘랐는지}], 나눈 값이 더 있는지)를 돌려준다."""
     check_name(x, expr.columns)
+    if order not in viz_rules.ORDERS:
+        raise ValueError(f"차트 정렬은 {', '.join(viz_rules.ORDERS)} 중 하나예요.")
+    t = expr[x].type()
+    if order == "auto":
+        order = "value" if not (t.is_temporal() or (t.is_numeric() and not t.is_boolean())) else "x"
     if not series:
         raise ValueError("계열을 하나 이상 넣으세요.")
     # 집계 식은 집계할 그 테이블 식에서 만들어야 한다(행 수는 다른 식에서 만든 것을 쓸 수 없다).
     metrics = lambda table: {f"v{i}": chart_metric(table, s.get("y"), s.get("agg"), s.get("opts")) for i, s in enumerate(series)}
     run = streaming(expr, all(sql_funcs.ALIASES.get(s.get("agg"), s.get("agg")) in ("count", "count_distinct") for s in series))  # 개수·고유 개수만 streaming(합계·평균은 부동소수 결과가 달라진다)
     top = expr.group_by(x).aggregate(**metrics(expr))
-    recent = order != "value" and expr[x].type().is_temporal()  # 날짜 X는 최근 MAX_GROUPS개를 남겨 오래된 순으로 보인다
-    top = top.order_by([top.v0.desc(), top[x]] if order == "value" else [top[x].desc()] if recent else [top[x]]).limit(MAX_GROUPS + 1).to_polars(**run)
+    recent = order == "x" and t.is_temporal()  # 날짜 X는 최근 MAX_GROUPS개를 남겨 오래된 순으로 보인다
+    keys = {"value": [top.v0.desc(), top[x]], "value_asc": [top.v0.asc(), top[x]], "name": [top[x]], "x": [top[x].desc()] if recent else [top[x]]}
+    top = top.order_by(keys[order]).limit(MAX_GROUPS + 1).to_polars(**run)
     cut = top.height > MAX_GROUPS  # 하나 더 받아 넘쳤는지 안다(딱 MAX_GROUPS개면 자르지 않은 것)
     top = top.head(MAX_GROUPS)
     if recent:

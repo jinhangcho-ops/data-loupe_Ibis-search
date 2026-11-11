@@ -2,6 +2,8 @@
 // 같은 출처만 받고(event.origin === location.origin, 보낸 쪽은 부모 창), 답도 같은 출처로만 보낸다.
 import type { Ana, Points } from "@/components/cards/chart/Charts";
 import type { Dataset } from "@/components/cards/chart/series";
+import type { AutoView, AxisScale, ChartTable, Order, Scale } from "@/lib/autoviz";
+import type { GroupView } from "@/lib/groups";
 
 export type Theme = "light" | "dark";
 export type AxisRange = { min?: number; max?: number };
@@ -9,22 +11,29 @@ export type AxisRange = { min?: number; max?: number };
 export type Ranges = { y?: AxisRange; y1?: AxisRange };
 /** 계열 차트 값: 옛 toDrawn·metricDrawn의 {labels, datasets}. 계열마다 type(bar|line)·dash(dashed)·axis(right) */
 export type SeriesData = { labels: string[]; datasets: Dataset[] };
-/** type: 차트 종류(""면 계열마다 정한 대로), ranges: 축 범위, percent: 값 축 %, ratio: 가로/세로(없으면 그룹 수로 자동), relabel: 라벨 바꾸기 글(한 줄에 원래값=보일값) */
-export type SeriesOpts = { type?: string; ranges?: Ranges; percent?: boolean; ratio?: number; relabel?: string };
-/** /api/chart/points 응답 그대로. type: scatter|bubble, trend: 추세선, show_r: r 제목 */
-export type PointsOpts = { type?: "scatter" | "bubble"; trend?: boolean; show_r?: boolean; ranges?: Ranges; ratio?: number };
-/** /api/analyze 응답(필요하면 부모가 범위로 자른 것). view: hist|box|values|heat|scatter|groups|trend|funnel */
-export type AnaOpts = { view: string; ratio?: number };
+/** type: 차트 종류(""면 계열마다 정한 대로), ranges: 축 범위, percent: 값 축 %, ratio: 가로/세로(없으면 그룹 수로 자동), relabel: 라벨 바꾸기 글(한 줄에 원래값=보일값).
+ *  groups·merged: 표시할 그룹 고르기(Phase 4, merged면 서버가 이미 묶음), auto·scale·order·all·aggs·rest·x_kind·x_scale·x_levels: 자동 규칙(Phase 9, order가 없으면 지금 순서), x: 표의 X 열 이름 */
+export type SeriesOpts = {
+  type?: string; ranges?: Ranges; percent?: boolean; ratio?: number; relabel?: string; groups?: GroupView; merged?: boolean;
+  auto?: AutoView; scale?: AxisScale; order?: Order; all?: boolean; aggs?: string[]; rest?: (number | null)[] | null;
+  x_kind?: "num" | "date" | "text"; x_scale?: Scale; x_levels?: string[]; x?: string;
+};
+/** /api/chart/points 응답 그대로. type: scatter|bubble, trend: 추세선, show_r: r 제목, auto·all: 자동 규칙(점 밀도) */
+export type PointsOpts = { type?: "scatter" | "bubble"; trend?: boolean; show_r?: boolean; ranges?: Ranges; ratio?: number; auto?: AutoView; all?: boolean };
+/** /api/analyze 응답(필요하면 부모가 범위로 자른 것). view: hist|box|values|heat|scatter|groups|trend|funnel, auto·all: 자동 규칙(꼬리·점 밀도) */
+export type AnaOpts = { view: string; ratio?: number; auto?: AutoView; all?: boolean };
 
 type Common = { type: "draw"; theme?: Theme; palette?: string[] };
 export type Draw = Common & (
   | { kind: "series"; payload: SeriesData; opts?: SeriesOpts }
   | { kind: "points"; payload: Points; opts?: PointsOpts }
   | { kind: "ana"; payload: Ana; opts: AnaOpts });
-/** 부모 → 섬. picture: 지금 그림을 그 모드(없으면 지금 모드)의 그림 파일로 */
-export type ToIsland = Draw | { type: "picture"; theme?: Theme; format?: "png" | "jpeg" };
-/** 섬 → 부모. ready: 받을 준비가 됨(처음 한 번), size: 그린 뒤 필요한 높이(px), png: picture의 답(data URL), error: 그리지 못한 이유 */
-export type FromIsland = { type: "ready" } | { type: "size"; height: number } | { type: "png"; dataUrl: string } | { type: "error"; message: string };
+/** 부모 → 섬. picture: 지금 그림을 그 모드(없으면 지금 모드)의 그림 파일로, all이면 모든 데이터로 다시 그려 찍는다 */
+export type ToIsland = Draw | { type: "picture"; theme?: Theme; format?: "png" | "jpeg"; all?: boolean };
+/** 섬 → 부모. ready: 받을 준비가 됨(처음 한 번), size: 그린 뒤 필요한 높이(px), png: picture의 답(data URL), error: 그리지 못한 이유,
+ *  shown: 계열 그림을 그린 뒤 보이는 값(table)과 모든 데이터 값(full) */
+export type FromIsland = { type: "ready" } | { type: "size"; height: number } | { type: "png"; dataUrl: string } | { type: "error"; message: string }
+  | { type: "shown"; table: ChartTable; full: ChartTable };
 
 /** 받은 메시지가 같은 출처의 부모 창에서 온 규약 메시지면 그것, 아니면 null */
 export const fromParent = (e: MessageEvent): ToIsland | null =>

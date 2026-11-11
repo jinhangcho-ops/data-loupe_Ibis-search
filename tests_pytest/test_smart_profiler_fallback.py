@@ -27,7 +27,7 @@ def db(tmp_path):
 
 
 def test_fallback_order_matches_spec():
-    assert [name for name, _ in profiler.FALLBACK] == ["preview", "whole", "block", "partition", "head"]
+    assert [name for name, _ in profiler.FALLBACK] == ["preview", "whole", "block", "row", "partition", "segments", "head"]  # phase-2: 블록을 못 하는 연결은 행 단위(베르누이), Polars 구간은 앞 행 바로 앞
 
 
 def test_falls_through_errors_and_none(monkeypatch):

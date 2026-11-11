@@ -8,6 +8,7 @@ from lazy import ibis
 
 from core import parse
 from core import prep_ops
+from core import source
 from core import sql_funcs
 from core.prep_ops import stats
 
@@ -17,7 +18,8 @@ MAX_NODES = 200  # 식 하나의 요소 수(너무 복잡한 식을 막는다)
 PCA_MAX = 30  # PCA에 넣을 컬럼 수(상관 행렬을 구하는 집계가 컬럼 수의 제곱만큼 는다)
 NAME = sql_funcs.NAME  # 새 컬럼 이름
 FORMULA_GUIDE = ("사칙연산(+ - * / %)과 괄호, 비교(== != > >= < <=)와 and·or·not, '글자', 숫자. 함수: iif(조건, 참일 때, 거짓일 때), "
-                 "round(x, 자리), abs, sqrt, ln, log10, upper, lower, length, concat(a, b, …), coalesce(a, b, …), col(\"공백 있는 이름\"). "
+                 "round(x, 자리), abs, sqrt, ln, log10, upper, lower, length, concat(a, b, …), coalesce(a, b, …), col(\"공백 있는 이름\")."
+                 " 행 단위: row_sum·row_mean·row_std·row_min·row_max·row_count(빈 값 아닌 수)·row_positive(0보다 큰 수)(a, b, …), row_argmax·row_argmin(컬럼들 중 가장 큰·작은 컬럼 이름), row_dist·row_cosine(a1, a2, b1, b2: 앞 절반과 뒤 절반의 거리·코사인 유사도, 뒤 절반은 수도 됨). "
                  "나누는 값이 0이면, 로그가 0 이하이면, 제곱근이 음수이면 빈 값. 그 밖의 함수는 함수 사전(sql_funcs)의 id를 그대로 쓴다: 글자(substr·split_part·regex_extract …), 숫자(mod·power·clip·bucket …), "
                  "날짜(year·month·date_add·date_diff·strftime …), 조건(case·nullif·greatest·isin …), 형 변환(cast·try_cast), 구조(json_get·struct_field …), "
                  "집계(median·sum·string_agg …: 묶음 기준 안의 값)과 창 함수(rank·lag·cum_sum·moving_mean …: 정렬 기준·묶음 기준 필요). "
@@ -162,6 +164,18 @@ class Formula:
             return self.checked(lambda: ibis.coalesce(*values), "coalesce의 값은 같은 종류")
         if name == "case":
             return self.case(values)
+        if name in ROW_FUNCS + ROW_PICKS + ROW_DISTS:
+            if not 2 <= len(values) <= ROW_MAX or not all(is_number(v) for v in values):
+                self.fail(f"{name}(숫자, 숫자, …: {ROW_MAX}개까지)")
+            if name in ROW_PICKS:
+                if not all(isinstance(a, ast.Name) or (isinstance(a, ast.Call) and getattr(a.func, "id", "") == "col") for a in args):
+                    self.fail(f"{name}(컬럼, 컬럼, …): 컬럼 이름만")
+                return row_pick(values, [v.get_name() for v in values], name == "row_argmax")
+            if name in ROW_DISTS:
+                if len(values) % 2:
+                    self.fail(f"{name}(a1, a2, …, b1, b2, …): 앞 절반과 뒤 절반이 같은 수")
+                return row_distance(values, "euclid" if name == "row_dist" else "cosine")
+            return row_stat(name[len("row_"):], values)
         if name in sql_funcs.FUNCS or name in sql_funcs.ALIASES:
             return self.catalog(name, args, values)
         self.fail(f"{name}() 함수")
@@ -249,7 +263,8 @@ def apply_formulas(t, formulas, schema=None):
             from core import calc  # calc가 이 모듈을 부른다
             before = set(t.columns)
             try:
-                t = calc.apply_line(item["line"], t, schema)  # 그룹집계 '테이블 대상'은 구성의 스키마에서
+                step = calc.stat_step(item["line"], t)  # 통계 단계면 미리 구해 상수로(부르는 쪽이 연결 스레드: prep_app.built)
+                t = calc.apply_line(item["line"], t, schema, None if step is None else prep_ops.pin_value(t, step[1], step[0], step[2]))  # 그룹집계 '테이블 대상'은 구성의 스키마에서
             except ValueError as e:
                 raise ValueError(f"계산 줄 '{item['line'][:60]}': {e}") from None
             made += [c for c in t.columns if c not in before]
@@ -322,3 +337,140 @@ def pca(t, spec, info):
                    "cumulative": [round(float(r), 6) for r in np.cumsum(ratio)[:n]],
                    "weights": {name: {columns[i]: round(float(vectors[i, c]), 6) for i in range(k)} for c, name in enumerate(names)}}
     return prep_ops.add_columns(t, made), names
+
+
+# ---- Phase 6: 행 단위 압축·거리 함수(계산 식의 row_*)와 K-Means(plans/phase-6.md) ----
+ROW_FUNCS = ("row_sum", "row_mean", "row_std", "row_min", "row_max", "row_count", "row_positive")  # 행 단위 통계(빈 값은 건너뜀)
+ROW_PICKS = ("row_argmax", "row_argmin")  # 가장 크거나 작은 값을 가진 컬럼의 이름
+ROW_DISTS = ("row_dist", "row_cosine")  # 앞 절반 컬럼(값)과 뒤 절반의 유클리드 거리·코사인 유사도
+ROW_MAX = 50  # row_* 함수 하나에 넣을 값 수(사용자 결정)
+KMEANS_K = 3  # 군집 수 기본(사용자 결정)
+KMEANS_NAME = "cluster"  # 군집 번호 컬럼 이름 기본(사용자 결정)
+KMEANS_MAX_K = 10  # 군집 수 위(배정 식이 k²에 비례해 커진다)
+KMEANS_MAX_COLS = 10  # 넣을 컬럼 수 위(사용자 결정)
+KMEANS_ITERS = 20  # 반복(표 집계) 최대 횟수(사용자 결정)
+KMEANS_TOL = 1e-4  # 표준화한 중심이 이보다 덜 움직이면 멈춘다(사용자 결정)
+KMEANS_SEED = 0  # k-means++ 첫 중심 고르기의 난수 씨앗(같은 표면 같은 결과)
+KMEANS_INIT_ROWS = 1000  # 첫 중심을 고를 앞 행 수(사용자 결정)
+KMEANS_DIGITS = 6  # info의 중심 값 반올림 자리
+
+
+def row_stat(kind: str, values: "list[ibis.expr.types.NumericValue]") -> "ibis.expr.types.NumericValue":
+    """[SPECIFICATION] plans/phase-6.md#row_stat
+    여러 숫자 값의 행 단위 합·평균·표준편차·최소·최대·빈 값 아닌 수·양수 수를 빈 값을 건너뛰고 구하는 식을 돌려준다."""
+    cnt = sum((v.isnull().ifelse(0, 1) for v in values), ibis.literal(0)).cast("int64")
+    if kind == "count":
+        return cnt
+    if kind == "positive":
+        return sum((ibis.coalesce(v > 0, False).cast("int64") for v in values), ibis.literal(0)).cast("int64")
+    if kind in ("min", "max"):
+        first = ibis.coalesce(*values)
+        return (ibis.least if kind == "min" else ibis.greatest)(*[ibis.coalesce(v, first) for v in values])
+    tot = sum((ibis.coalesce(v, 0) for v in values), ibis.literal(0))
+    if kind == "sum":
+        return (cnt == 0).ifelse(ibis.null(), tot)
+    mean = (cnt == 0).ifelse(ibis.null("float64"), tot.cast("float64") / cnt)
+    if kind == "mean":
+        return mean
+    ss = sum((v.isnull().ifelse(0.0, (v - mean) * (v - mean)) for v in values), ibis.literal(0.0))
+    return (cnt < 2).ifelse(ibis.null("float64"), (ss / (cnt - 1)).sqrt())
+
+
+def row_pick(values: "list[ibis.expr.types.NumericValue]", names: list[str], largest: bool) -> "ibis.expr.types.StringValue":
+    """[SPECIFICATION] plans/phase-6.md#row_pick
+    행마다 가장 큰(작은) 값을 가진 컬럼의 이름을 돌려주는 식(같으면 앞 컬럼)."""
+    first = ibis.coalesce(*values)
+    xs = [ibis.coalesce(v, first) for v in values]
+    best = (ibis.greatest if largest else ibis.least)(*xs)
+    return ibis.cases(*[(v == best, n) for v, n in zip(values, names)], else_=ibis.null("string"))  # 빈 값을 메운 xs가 아니라 원래 값과 비교: 빈 컬럼은 고르지 않는다
+
+
+def row_distance(values: "list[ibis.expr.types.NumericValue]", kind: str) -> "ibis.expr.types.NumericValue":
+    """[SPECIFICATION] plans/phase-6.md#row_distance
+    앞 절반과 뒤 절반 값을 두 벡터로 보고 유클리드 거리(euclid) 또는 코사인 유사도(cosine) 식을 돌려준다."""
+    half = len(values) // 2
+    a, b = [v.cast("float64") for v in values[:half]], [v.cast("float64") for v in values[half:]]
+    if kind == "euclid":
+        return sum(((x - y) * (x - y) for x, y in zip(a, b)), ibis.literal(0.0)).sqrt()
+    dot = sum((x * y for x, y in zip(a, b)), ibis.literal(0.0))
+    na = sum((x * x for x in a), ibis.literal(0.0))
+    nb = sum((y * y for y in b), ibis.literal(0.0))
+    return ((na == 0) | (nb == 0)).ifelse(ibis.null("float64"), dot / (na.sqrt() * nb.sqrt()))
+
+
+def nearest(values: "list[ibis.expr.types.NumericValue]", centers: list[list[float]]) -> "ibis.expr.types.IntegerValue":
+    """[SPECIFICATION] plans/phase-6.md#nearest
+    값 벡터에 가장 가까운(제곱 거리) 중심의 번호(0부터)를 돌려주는 식."""
+    d = [sum(((v - c) * (v - c) for v, c in zip(values, center)), ibis.literal(0.0)) for center in centers]
+    m = ibis.least(*d)
+    return ibis.cases(*[(dj == m, j) for j, dj in enumerate(d)], else_=ibis.null("int64")).cast("int64")
+
+
+def kmeans(t: "ibis.expr.types.Table", spec: dict, info: dict) -> "tuple[ibis.expr.types.Table, list[str]]":
+    """[SPECIFICATION] plans/phase-6.md#kmeans
+    고른 숫자 컬럼을 표준화해 표 집계로 Lloyd 반복을 돌려 K-Means 군집 번호 컬럼을 붙인다(PC에는 중심만)."""
+    import numpy as np
+    if not isinstance(spec, dict) or not set(spec) <= {"columns", "k", "name"}:
+        raise ValueError('K-Means는 {"columns": [숫자 컬럼들], "k": 군집 수, "name": "cluster"} 모양이어야 해요.')
+    columns = spec.get("columns")
+    if not isinstance(columns, list) or not 2 <= len(columns) <= KMEANS_MAX_COLS or len(set(columns)) != len(columns):
+        raise ValueError(f"K-Means에는 서로 다른 숫자 컬럼을 2~{KMEANS_MAX_COLS}개 고르세요.")
+    for c in columns:
+        parse.check_name(c, t.columns)
+        if not t[c].type().is_numeric() or t[c].type().is_boolean():
+            raise ValueError(f"'{c}' 컬럼은 숫자가 아니라 PCA에 넣을 수 없어요. 먼저 숫자로 바꾸세요.")
+    k = spec.get("k", KMEANS_K)
+    if type(k) is not int or not 2 <= k <= KMEANS_MAX_K:
+        raise ValueError(f"군집 수는 2~{KMEANS_MAX_K} 사이의 정수로 입력하세요.")
+    name = spec.get("name", KMEANS_NAME)
+    check_name(name, t, "군집 번호 컬럼")
+    n = len(columns)
+    x = [prep_ops.nan_to_null(t[c].cast("float64")) for c in columns]
+    whole = t.filter(*[v.notnull() for v in x])
+    xs = [whole[c].cast("float64") for c in columns]
+    found = stats(whole, rows=whole.count(), **{f"m{i}": xs[i].mean() for i in range(n)}, **{f"s{i}": xs[i].std() for i in range(n)})
+    rows = found["rows"] or 0
+    if rows < k:
+        raise ValueError(f"고른 컬럼이 모두 들어 있는 행이 {k}개보다 적어 K-Means를 할 수 없어요.")
+    flat = [columns[i] for i in range(n) if not found[f"s{i}"]]
+    if flat:
+        raise ValueError(f"값이 모두 같은 컬럼은 K-Means에 넣을 수 없어요: {', '.join(flat)}")
+    mean = [float(found[f"m{i}"]) for i in range(n)]
+    std = [float(found[f"s{i}"]) for i in range(n)]
+    zn = [f"__km_z{i}" for i in range(n)]
+    prep_ops.check_new(whole, [*zn, "__km"])
+    w = whole.mutate(**{zn[i]: (xs[i] - mean[i]) / std[i] for i in range(n)})
+    z = [w[c] for c in zn]
+    head = w.select(*zn).limit(KMEANS_INIT_ROWS).to_polars().to_numpy()
+    if len(np.unique(head, axis=0)) < k:
+        raise ValueError(f"앞 {KMEANS_INIT_ROWS:,}행에 서로 다른 값 묶음이 {k}개보다 적어 첫 중심을 고를 수 없어요.")
+    rng = np.random.default_rng(KMEANS_SEED)
+    picked = [head[rng.integers(len(head))]]
+    for _ in range(1, k):  # k-means++: 가장 가까운 중심까지 제곱 거리에 비례해 고른다
+        d2 = ((head[:, None, :] - np.array(picked)[None, :, :]) ** 2).sum(axis=2).min(axis=1)
+        picked.append(head[rng.choice(len(head), p=d2 / d2.sum())])
+    centers = np.array(picked, dtype=float)
+    sizes, converged, iters = np.zeros(k, dtype=int), False, 0
+    for it in range(KMEANS_ITERS):
+        a = w.mutate(__km=nearest(z, centers.tolist()))
+        g = a.group_by("__km").aggregate(__n=a.count(), **{f"c{i}": a[zn[i]].mean() for i in range(n)})
+        if it == 0 and not source.compiles(g):
+            raise ValueError("이 연결은 K-Means 배정 식(가장 작은 값 고르기)을 계산하지 못해요. DuckDB 파일로 옮겨 쓰세요.")
+        got = g.to_polars()
+        idx = got["__km"].to_numpy()
+        new = centers.copy()
+        new[idx] = got.select([f"c{i}" for i in range(n)]).to_numpy()  # 행이 없는 군집은 이전 중심
+        sizes = np.zeros(k, dtype=int)
+        sizes[idx] = got["__n"].to_numpy()
+        iters = it + 1
+        moved = float(np.abs(new - centers).max())
+        centers = new
+        if moved < KMEANS_TOL:
+            converged = True
+            break
+    scaled = [(x[i] - mean[i]) / std[i] for i in range(n)]
+    value = ibis.cases((ibis.and_(*[v.notnull() for v in x]), nearest(scaled, centers.tolist())), else_=ibis.null("int64"))
+    info["kmeans"] = {"columns": columns, "k": k, "name": name, "rows": int(rows), "iters": iters, "converged": converged,
+                      "sizes": [int(s) for s in sizes],
+                      "centers": [[round(float(centers[j, i]) * std[i] + mean[i], KMEANS_DIGITS) for i in range(n)] for j in range(k)]}
+    return prep_ops.add_columns(t, {name: value}), [name]

@@ -15,9 +15,8 @@ const how = by => { const s = stubs(by); return new Function("$", "akind", "FLOW
 assert.strictEqual("by" in how(""), false);
 assert.strictEqual(how("plan").by, "plan");
 const steps = [{ name: "a", users: 4, conv: 1, from_first: 1, drop: 0, median_sec: null }, { name: "b", users: 2, conv: 0.5, from_first: 0.5, drop: 2, median_sec: 90 }];
-assert.strictEqual(funnelRows(steps, true)[1][FUNNEL_TIME], "1.5분");
-assert.strictEqual(funnelRows(steps, true)[0][FUNNEL_TIME], "-");
-assert.strictEqual("앞 단계에서 걸린 시간(중앙값)" in funnelRows(steps)[1], false);  // 대시보드 카드는 그대로
+assert.strictEqual("앞 단계에서 걸린 시간(중앙값)" in funnelRows(steps)[1], false);  // 걸린 시간은 Phase 3부터 따로 표(gapRows)
+assert.strictEqual(gapRows([{ from: "a", to: "b", n: 2, mean: 90, median: 90, trimmed: 90 }])[0]["걸린 시간"], "평균 1.5분 · 중앙값 1.5분 · 절사평균(10%) 1.5분 (2명)");
 assert.deepStrictEqual([30, 3600, 172800].map(fsec), ["30초", "1시간", "2일"]);
 console.log("ok");
 """
@@ -36,5 +35,5 @@ def test_funnel_by_and_median_in_node(tmp_path):
 
 def test_prep_has_segment_screen():
     prep = (ROOT / "static" / "prep" / "prep.html").read_text(encoding="utf-8")
-    for part in ('id="a-fby"', 'id="a-segs"', "function segTables", "funnelRows(g.steps, true)", "funnelRows(d.steps, true)"):
+    for part in ('id="a-fby"', 'id="a-segs"', "function segTables", "funnelRows(g.steps)", "funnelRows(d.steps)"):
         assert part in prep, part

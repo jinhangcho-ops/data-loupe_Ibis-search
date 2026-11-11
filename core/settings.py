@@ -68,11 +68,17 @@ def migrate(path=None):
             (new / FAILED).write_text(reason, encoding="utf-8")
         return reason
 
+DAY_HOURS = 24  # work_hours의 끝 시 상한
+DAY_MINUTES = 1440  # bucket_minutes 상한(하루를 나누어떨어져야 한다)
+WEEKDAY_CODES = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")  # 요일 코드(월 0 차례). weekend 설정과 sql_funcs.weekend_days가 쓴다
+
 # 설정 이름: 고를 수 있는 값. 화면(index.html)의 선택지와 같아야 한다.
 CHOICES = {
     "theme": ["light", "dark"],  # 화면 모드. 고른 적이 없으면 Windows 설정을 따른다.
     "ratio": ["auto", "square", "wide"],  # 차트 비율: 데이터 양에 따라 / 1:1 / 16:9
     "image": ["light", "dark"],  # 차트와 집계 표를 그림으로 저장할 때의 모드
+    "hash_exclude": ["on", "off"],  # 해시·UUID 컬럼을 그룹·집계 컬럼 목록에서 뺄지: 뺀다 / 빼지 않는다(prep_diag.hashed_columns)
+    "pilot_first": ["preview", "block"],  # 파일럿의 첫 방법: BigQuery 무과금 미리보기 먼저 / 블록 표본 먼저(본 표본은 늘 미리보기 먼저)
     "stats_scope": ["sample", "all"],  # 전처리 컬럼 통계를 표본으로 구할지 전체로 구할지(F18)
     "quotes": ["on", "off"],  # 조건을 넣을 때 따옴표 해석: 값을 감싸는 기호로 / 글자 그대로
     "cond": ["fields", "line"],  # 조건 입력 방식: 칸으로 선택 / 한 줄 입력
@@ -86,13 +92,18 @@ CHOICES = {
     "week_start": ["mon", "sun"],  # 주 묶음의 시작 요일(기본 mon). 그 밖에 timezone(IANA 이름)·fiscal_start_month(회계연도 첫 달 1~12, 기본 1)는 valid가 따로 본다
 }
 
-# 끌어서 조절한 크기(px)와 전처리가 미리 볼 행 수(sample), 오래 걸린 작업이 끝났을 때 알림을 보내는 기준 시간(notify_after, 초, 기본 30), DuckDB 파일 조회의 메모리 한도(memory, MB, 기본은 제한 없음), DuckDB 계산에 쓰는 코어 수(threads, 기본은 전부): (최소, 최대). 화면은 이 범위를 server.CONSTANTS로 받는다. 0을 저장하면 기본값으로 돌아간다.
-SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "chart": (200, 1000), "sample": (1000, 1_000_000), "notify_after": (5, 3600), "memory": (256, 1_000_000), "threads": (1, os.cpu_count() or 1)}
+# 끌어서 조절한 크기(px)와 전처리가 미리 볼 행 수(sample), 오래 걸린 작업이 끝났을 때 알림을 보내는 기준 시간(notify_after, 초, 기본 30), DuckDB 파일 조회의 메모리 한도(memory, MB, 기본은 제한 없음), DuckDB 계산에 쓰는 코어 수(threads, 기본은 전부), PC에서 중앙값·사분위수를 구할 때 받는 최대 행 수(pc_stat_rows, 기본 1,000,000): (최소, 최대). 화면은 이 범위를 server.CONSTANTS로 받는다. 0을 저장하면 기본값으로 돌아간다.
+SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "chart": (200, 1000), "sample": (1000, 1_000_000), "notify_after": (5, 3600), "memory": (256, 1_000_000), "threads": (1, os.cpu_count() or 1), "pc_stat_rows": (1_000, 50_000_000),
+         # 표본: 파일럿 행 수·층 수·층 최소 행 수·키 해시 칸 수·키 표본 상한 배수(sampling)
+         "pilot_rows": (1_000, 100_000), "strata_h": (2, 20), "strata_min": (2, 1_000), "hash_buckets": (100, 1_000_000), "key_over": (1, 20),
+         "cloud_rows": (1_000, 2_000_000), "ewma_span": (1, 1000)}  # 워드클라우드 글 속 단어로 이 PC에 받는 최대 행 수(cloud_rows)
 
-# 비율 설정: (최소, 최대). 비우거나 0을 저장하면 기본값(DEFAULTS)으로 돌아간다.
+# 비율·크기 설정의 기본값: (최소, 최대). 비우거나 0을 저장하면 기본값(DEFAULTS)으로 돌아간다.
 # sample_too_few: 블록 샘플링이 기대한 행의 이만큼도 못 가져오면 다음 표본 방법으로 넘어가는 기준(profiler).
-FLOATS = {"sample_too_few": (0.05, 0.9)}
-DEFAULTS = {"sample_too_few": 0.2}
+# 표본: 신뢰수준 %(sampling.config가 Z로)·비율 허용 오차·평균 상대 허용 오차
+FLOATS = {"sample_too_few": (0.05, 0.9), "sample_conf": (50, 99.99), "sample_e_ratio": (0.001, 0.2), "sample_e_mean": (0.005, 0.5)}
+DEFAULTS = {"sample_too_few": 0.2, "pc_stat_rows": 1_000_000, "sample_conf": 95, "sample_e_ratio": 0.01, "sample_e_mean": 0.05, "pilot_rows": 5_000, "strata_h": 5, "strata_min": 30,
+            "hash_buckets": 10_000, "key_over": 3, "pilot_first": "preview", "cloud_rows": 100_000, "hash_exclude": "on"}
 
 # 직전 실행의 행당 시간(나노초/행). 작업 종류(검색·집계·차트·저장·전처리의 모양 보기·미리보기·실행)와 기준 테이블 행 수의 구간(10배 단위)마다 하나.
 # 이름은 time_종류_구간이고 구간은 행 수의 자릿수 - 1을 TIME_BANDS 안으로 맞춘 것(1,000행 미만은 모두 2)이다. 화면이 예상 시간을 구할 때 같은 구간의 값만 쓴다.
@@ -117,6 +128,14 @@ def valid(name, value):
         return valid_zone(value)
     if name == "fiscal_start_month":
         return type(value) is int and 1 <= value <= 12
+    if name == "weekend":
+        parts = value.split("_") if type(value) is str else []
+        return 1 <= len(parts) < len(WEEKDAY_CODES) and len(set(parts)) == len(parts) and all(p in WEEKDAY_CODES for p in parts)
+    if name == "work_hours":
+        found = re.fullmatch(r"(\d{1,2})_(\d{1,2})", value) if type(value) is str else None
+        return bool(found) and 0 <= int(found[1]) < int(found[2]) <= DAY_HOURS
+    if name == "bucket_minutes":
+        return type(value) is int and 1 <= value <= DAY_MINUTES and DAY_MINUTES % value == 0
     return value in CHOICES.get(name, [])
 
 
@@ -229,7 +248,7 @@ def save(changes):
     if not isinstance(changes, dict) or not changes:
         raise ValueError("저장할 설정이 없어요.")
     for name, value in changes.items():
-        if not valid(name, value) and not ((name in SIZES or name in FLOATS or name == "timezone") and value == 0 and type(value) in (int, float)):  # 0은 기본값으로(파일에서 뺀다). 시간대는 PC 시간대로
+        if not valid(name, value) and not ((name in SIZES or name in FLOATS or name in ("timezone", "weekend", "work_hours", "bucket_minutes")) and value == 0 and type(value) in (int, float)):  # 0은 기본값으로(파일에서 뺀다). 시간대는 PC 시간대로
             raise ValueError(f"'{name}' 설정에 쓸 수 없는 값이에요: {value}")
     with updating(PATH.name):
         write(PATH.name, {name: value for name, value in {**load(), **changes}.items() if value != 0})

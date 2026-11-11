@@ -31,6 +31,10 @@ ROOT = Path(tempfile.mkdtemp(prefix="data_loupe_tests_"))
 tempfile.tempdir = str(ROOT)  # 프로그램이 만드는 임시 폴더(내보내기)도 이 안에 생긴다.
 os.environ["APPDATA"] = str(ROOT / "appdata")
 sys.dont_write_bytecode = True  # 프로젝트 폴더에 __pycache__를 남기지 않는다.
+WIDE_ROWS = 3000  # 표본 시험: wide 테이블 행 수
+PILOT_ROWS_DEFAULT = 5000  # 파일럿 행 수 기본
+STRATA_MIN_DEFAULT = 30  # 층마다 뽑을 최소 행 수 기본
+STRATA_LAYERS_MAX = 6  # 층 수(5 + 빈 값 층)
 
 import duckdb
 from flask import Flask
@@ -383,10 +387,7 @@ def prep_new(tag, got, error, only, preview, values):
     ]
     for name, col, o, want in windows:
         r = got("/api/preview", base="messy", columns=only("id", col, **{col: {"ops": o}}), sorts=["id"])  # 창 함수는 행 순서를 바꾸므로 정렬한다.
-        if tag == "DuckDB":
-            check(f"{tag} {name}", values(r, col), want)
-        else:
-            check(f"{tag} {name}: 창 함수가 없는 연결은 지원하지 않는 계산이라고 알림", r.get("error", "").startswith("이 연결에서는 지원하지 않는 계산이에요."), True)
+        check(f"{tag} {name}", values(r, col), want)  # 창 함수가 없는 파일 연결은 이 PC 사본(DuckDB)에서 계산한다
     for name, col, o, count in [("outlier iqr drop", "amt", {"how": "drop", "by": "iqr"}, 19), ("outlier range drop", "amt", {"how": "drop", "by": "range", "low": 2, "high": 17}, 17)]:
         r = preview(spec(col, outlier=o))
         check(f"{tag} {name}: after", (r["before"], r["after"]), (20, count))
@@ -401,7 +402,7 @@ def prep_new(tag, got, error, only, preview, values):
         ("표준편차 0", "'flat' 컬럼은 표준편차가 0이거나 구할 수 없어 standard로 바꿀 수 없어요.", bad("flat", scale="standard")),
         ("범위 0", "'flat' 컬럼은 값이 모두 같거나 비어 있어(범위가 0) minmax로 바꿀 수 없어요.", bad("flat", scale="minmax")),
         ("round 음수", "'amt' 컬럼의 'round' 값은 0 이상 15 이하의 정수 형식으로 쓰세요.", bad("amt", round=-1)),
-        ("bins 순서", "'amt' 컬럼의 'bins' 값은 오름차순 경계값 2개 이상. 예: [0, 10, 100] 형식으로 쓰세요.", bad("amt", bins=[10, 5])),
+        ("bins 순서", "'amt' 컬럼의 'bins' 값은 오름차순 경계값 2개 이상. 예: [0, 10, 100] 또는 {\"edges\": [0, 10, 100], \"closed\": \"left\" | \"right\", \"label\": \"range\" | \"mid\" | \"index\"} 형식으로 쓰세요.", bad("amt", bins=[10, 5])),
         ("rare min", "'city' 컬럼의 'rare' 값은 {\"min\": 2 이상의 정수, \"label\": \"기타\"} 형식으로 쓰세요.", bad("city", rare={"min": 1})),
         ("outlier range에 한계 없음", "'amt' 컬럼의 'outlier' 값은 ", bad("amt", outlier={"how": "drop", "by": "range"})),
         ("prev에 by 없음", "'score' 컬럼의 'fill' 값은 ", bad("score", fill={"how": "prev"})),
@@ -423,9 +424,11 @@ def prep_new(tag, got, error, only, preview, values):
         ("중복 없음", dict(columns=only("id"), dedupe=["id"]), {"groups": 0, "rows": 0}),
         ("filters 뒤", dict(columns=only("name"), dedupe=["name"], filters=["id <= 10"]), {"groups": 5, "rows": 5}),
     ]:
-        check(f"{tag} /api/dupes: {name}", got("/api/dupes", base="messy", **body), want)
+        found = got("/api/dupes", base="messy", **body)  # Phase 13부터 examples·example_groups·moved도 온다
+        check(f"{tag} /api/dupes: {name}", {"groups": found["groups"], "rows": found["rows"]}, want)
     check(tag + " dedupe 전후 행 수 = dupes의 rows", (preview(only("name"), dedupe=["name"])["after"], 20 - got("/api/dupes", base="messy", columns=only("name"), dedupe=["name"])["rows"]), (5, 5))
-    check(tag + " 거부: dedupe 기준 없음", error("/api/dupes", base="messy", dedupe=[]), "중복 기준 컬럼을 고르세요.")
+    every = [{k: got("/api/dupes", base="messy", columns=only("name", "code"), dedupe=d)[k] for k in ("groups", "rows")} for d in ([], ["name", "code"])]
+    check(tag + " dedupe 기준 없음 = 모든 컬럼(위 '전체 컬럼'과 같음)", every[0], every[1])
     check(tag + " 거부: dedupe 모르는 컬럼", error("/api/preview", base="messy", dedupe=["zzz"])[:15], "'zzz' 컬럼이 없어요.")
     check(tag + " 거부: drop이 목록이 아님", error("/api/preview", base="messy", drop="x"), "'drop'은 컬럼 이름 목록이어야 해요.")
     cols = ["d8", "d16", "d32", "d64", "dnull", "b8", "b16", "rate", "ratio"]
@@ -505,8 +508,8 @@ def prep_sampling(got, error):
             check(tag + " [다시 구하기](refresh)는 표본을 새로 읽음", (calls, fresh["rows"]), ([5000, 5000], 3000))
             calls.clear()
             part = got("/api/profile", base="wide", sample=1000)
-            check(tag + " 테이블보다 작은 표본: 표본 크기만큼만, 블록 샘플링이 모자라면 앞 행", (part["rows"] == part["sampled"]["rows"], 0 < part["rows"] <= 1000,
-                  part["sampled"]["method"] in ("block", "head"), calls), (True, True, True, [1000]))
+            check(tag + " 테이블보다 작은 표본: 상한을 넘으면 층화(가중치 합이 전체 행 수, 받은 행은 상한 + 층 최소 행 수 여유 안)", (part["rows"] == WIDE_ROWS, 0 < part["sampled"]["rows"] <= 1000 + STRATA_LAYERS_MAX * STRATA_MIN_DEFAULT,
+                  part["sampled"]["method"] == "strata", calls), (True, True, True, [PILOT_ROWS_DEFAULT]))
             kor = next(c for c in part["columns"] if c["name"] == "kor")
             check(tag + " 한글 값의 글자 수(바이트 수가 아님)", {k: kor[k] for k in ("min_len", "max_len")}, {"min_len": 3, "max_len": 5})
             check(tag + " 추론: 단일값 아님, 값이 되풀이되는 컬럼은 플래그(번호 컬럼은 아님)", (kor["infer"]["constant"], kor["infer"]["flags"], "flags" in next(c for c in part["columns"] if c["name"] == "n")["infer"]),
@@ -574,8 +577,8 @@ def numbers_section():
     for name, column, ops in unsupported:  # 기본(prep_where all): 원격 DB도 이 PC의 작업 사본(DuckDB)에서 계산하므로 된다
         check(f"SQLite가 못 하는 계산도 이 PC에서는 됨: {name}", str(values(**{column: ops})).startswith("이 연결에서는"), False)
     prep_where("new")  # 계산 컬럼·PCA가 없으면 DB에서 계산
-    for name, column, ops in unsupported:
-        check(f"DB에서 계산하면 SQLite가 못 하는 계산은 그 문구로: {name}", str(values(**{column: ops})).startswith("이 연결에서는 지원하지 않는 계산이에요."), True)
+    for name, column, ops in unsupported:  # 중앙값·분위수는 연결이 못 구하면 그 컬럼만 이 PC로 받아 구하므로 된다
+        check(f"DB에서 계산하면 SQLite가 못 하는 계산은 그 문구로(분위수는 이 PC에서 구해 됨): {name}", str(values(**{column: ops})).startswith("이 연결에서는 지원하지 않는 계산이에요."), name == "날짜로 바꾸기")
     prep_where("all")
     check("SQLite 연결 해제", got("/api/disconnect"), {"ok": True})
 
@@ -1268,12 +1271,17 @@ def collect_section(c, got):
            "사용 한도에 쓸 수 없는 값이 있어요: x"])
     r = got("/api/limits", name="초당", group={"per_second": 2, "concurrency": 4})
     check("묶음 저장과 사용량(기본값 채움)", (r["groups"]["초당"]["tz"], r["usage"]["초당"]["day"], r["usage"]["초당"]["broken"], r["usage"]["초당"]["day_limit"]), ("Asia/Seoul", 0, False, None))
-    real_take, times = collect_limits.take, []
-    collect_limits.take = lambda *a: (real_take(*a), times.append(time.time()))[0]  # 받은 시각은 시험 서버의 지연이 섞이므로, 보내도 된다고 정한 시각을 잰다
+    real_write, times = collect_limits.settings.write_atomic, []
+
+    def record(path, data):  # take가 잠금 안에서 정해 기록하는 시각(now)을 잰다. take가 끝난 뒤의 시각은 스레드 지연이 섞여 CI에서 간격이 틀어졌다
+        if path.name == collect_limits.USAGE:
+            times.append(max(data["초당"]["sent"]))
+        return real_write(path, data)
+    collect_limits.settings.write_atomic = record
     try:
         _, st = run(config("/items", "persec.parquet", limit_group="초당", request={"query": [["page", "{page}"]]}, balance={"concurrency": 4}))
     finally:
-        collect_limits.take = real_take
+        collect_limits.settings.write_atomic = real_write
     times.sort()
     check("초당 2번: 어느 1초 안에도 2번 넘게 보내지 않음(보낸 시각 간격)", (st["phase"], len(times) >= 6, min(b - a for a, b in zip(times, times[2:])) >= 0.95, st["usage"]["second"] <= 2),
           ("끝", True, True, True))

@@ -59,7 +59,7 @@ def test_엑셀은_테이블마다_시트와_첫_시트_목록(api, tmp_path):
     assert list(cols) == ["id", "tag", "amt", "note", "s", "j", "l"]
     assert cols["tag"]["빈 값 수"] == 4 and cols["tag"]["빈 값 비율"] == 0.4 and cols["tag"]["고유값 수"] == 3
     assert (cols["id"]["최솟값"], cols["id"]["최댓값"]) == (0, 9) and cols["id"]["타입"] == "int64"
-    assert 1 <= len(cols["tag"]["예시 값"].split(" | ")) <= 3 and cols["id"]["예시 값"].startswith("0")
+    assert 1 <= len(cols["tag"]["예시 값"].split(" | ")) <= 3 and set(cols["id"]["예시 값"].split(" | ")) <= {str(i) for i in range(10)}  # 표본은 기본 층화(Phase 2)라 앞 행이 아닐 수 있다
     assert cols["s"]["최솟값"] is None and cols["s"]["예시 값"]  # 구조 컬럼은 최솟값 없이 예시 값만
 
 

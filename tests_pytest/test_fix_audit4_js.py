@@ -35,8 +35,11 @@ def test_4e2_prep_restore_drops_removed_copy_edits(tmp_path):
     html = page("prep/prep.html")
     body = """
 let edits = {}, copies = [], drops = [], filters = [], dedupe = [], sorts = [], formulas = [], pca = {}, geoSteps = [];
+let dedupeOn = null, dedupeFound = null, ddContain = []; const SERVER = { dedupe_limit: 1 };  // 중복 제거 확정 기준(Phase 13) 대역
 const prof = { columns: [{ name: "a" }, { name: "b" }] };
 const $ = id => ({ value: "", checked: false });
+const noLabels = () => ({ on: false, mode: "", tags: [] }); let labelUse = noLabels(), labelInfo = null; const showLabels = () => {};  // [태그 붙이기](Phase 4) 대역
+const noKmeans = () => ({ columns: [], k: 3, name: "cluster" }); let kmeans = noKmeans();  // K-Means 칸(Phase 6) 대역
 const setKeep = () => {}, showTarget = () => {}, fail = m => { console.log(JSON.stringify({ fail: m })); process.exit(0); };
 %s
 const newEdit = () => ({ keep: true, rename: "", ops: {} });

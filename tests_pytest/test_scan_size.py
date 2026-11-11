@@ -117,7 +117,9 @@ def test_too_few_setting(folder):
 
 def test_profiler_uses_setting(folder, monkeypatch):
     from core import profiler
+    from core import sampling
     from core import settings
+    monkeypatch.setattr(sampling, "sample_way", lambda t, fraction: "block")  # phase-2: block이 가짜 표의 방식을 컴파일로 판정하지 않게
     monkeypatch.setattr(profiler, "fetch", lambda con, t: types.SimpleNamespace(num_rows=30))
     table = types.SimpleNamespace(sample=lambda *a, **k: types.SimpleNamespace(limit=lambda n: None))
     assert profiler.block(None, table, None, "t", 100, 1000, None) is not None  # 30행 ≥ 기대 100행의 20%
@@ -140,7 +142,6 @@ def test_server_gate(client, tmp_path, folder):
     settings.save({"memory": 256})
     ok = post_json(client, "/api/sql/run", sql="select * from orders", rows=5)
     assert ok.status_code == 200 and "rows" in ok.get_json()  # 기준(256MB) 아래면 그대로
-    from core import monitor
     mp = pytest.MonkeyPatch()
     try:
         mp.setattr(scan_size, "limit", lambda config=None: (1000, "메모리 한도 테스트"))

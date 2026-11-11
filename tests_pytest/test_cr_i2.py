@@ -38,7 +38,7 @@ def test_naive_unchanged(make):
 def test_funnel_by_passed(make, monkeypatch):
     from core import funnel
     seen = {}
-    monkeypatch.setattr(funnel, "compute", lambda *a, **k: seen.update(k) or {"steps": [], "segments": [{"name": "a", "steps": []}]})
+    monkeypatch.setattr(funnel, "compute", lambda *a, **k: seen.update(k) or {"steps": [], "segments": [{"name": "a", "steps": []}], "gaps": [], "trim": None})
     monkeypatch.setattr(funnel, "check", lambda *a, **k: None)
     d = stats.funnel_flow(make(NAIVE), "v", "v", "t", ["1"], by="v")
     assert seen["by"] == "v" and d["segments"] and d["by"] == "v"

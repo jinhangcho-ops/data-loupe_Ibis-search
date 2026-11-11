@@ -1,5 +1,6 @@
 // 카드의 값 → 그릴 모양: 옛 static/core/dash.js의 함수들(본문 그대로, 타입만). 색 고르기·기간 비교 값·계열 이름은 lib/series.ts 한 벌을 쓴다.
 // 옛 코드가 전역 SERVER에서 읽던 집계 이름(agg_names)·다시 묶을 수 있는 집계(merge)·차트 종류(dash.types·time_types)는 seriesKit(서버 상수)로 받는다.
+import type { AutoHints } from "@/lib/autoviz";
 import { anaView, BUCKET, isPoints, okLabel, pointGroups, rollup } from "@/lib/calc";
 import type { Card, ChartType, Constants, DaySeries, MoreValues, UnitSection } from "@/lib/types";
 import { FIRST_ONLY, PAIR_ONLY, ROUND_TYPES } from "./shapes";
@@ -9,7 +10,7 @@ export type Dataset = { label: string; values: (number | string | null)[]; type?
 export type Series = { labels: string[]; datasets: Dataset[]; time: boolean; chartable: boolean; keys?: string[] };
 export type Range = { start?: string; end?: string } | null | undefined;
 /** 화면에서만 붙이는 것: range(보는 기간), norm(탐색 차트처럼 이미 그릴 모양인 값) */
-export type SCard = Card & { range?: Range; norm?: Partial<Series> & Pick<Series, "labels" | "datasets"> };
+export type SCard = Card & { range?: Range; norm?: Partial<Series> & Pick<Series, "labels" | "datasets">; auto?: AutoHints };
 /** 색 고르기(lib/series.pickColor)에 쓰는 색: 대시보드 팔레트(없을 수 있음)와 화면 모드의 계열 색 */
 export type ThemeColors = { palette?: string[]; series: string[] };
 type ByUnit = { day: { labels: string[]; series: DaySeries[] } } & Record<string, unknown>;

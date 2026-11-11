@@ -103,6 +103,12 @@ def postgres_bytes(con, table, columns, schema=None):
     return int(found[0] * sum(w for n, w in widths.items() if columns is None or n in columns))
 
 
+def dry_runs(con: object) -> bool:
+    """[SPECIFICATION] plans/phase-1.md#dry_runs
+    연결이 조회를 실행하지 않고 읽을 양을 잴 수 있는지(dry run을 받는 클라이언트가 있는지) 돌려준다."""
+    return callable(getattr(getattr(con, "client", None), "query", None))
+
+
 def bigquery_bytes(con, sql):
     from google.cloud import bigquery
     job = con.client.query(sql, job_config=bigquery.QueryJobConfig(dry_run=True, use_query_cache=False))

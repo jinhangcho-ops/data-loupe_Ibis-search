@@ -3,13 +3,17 @@
 // 기간 칸은 바꾸면 그 항목만 저장한다(ShellProvider). 팔레트는 dispatch({type:"meta"})(dirty → 자동 저장 N6), 이름은 바로 저장한다(목록 이름도 바뀐다).
 import { useEffect, useState } from "react";
 import { Templates } from "@/components/edit/Templates";
-import { deleteDashboard, getTargets, saveDashboard, setTargets } from "@/lib/api";
+import { deleteDashboard, getTargets, saveDashboard, saveViz, setTargets, viz } from "@/lib/api";
+import { type SemanticWords, setWords } from "@/lib/autoviz";
 import { HEX } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
-import type { Dashboard, Targets } from "@/lib/types";
+import type { Constants, Dashboard, Targets } from "@/lib/types";
 import { PeriodBar } from "./PeriodBar";
 import { useShell } from "./ShellProvider";
+
+// 낱말 목록 이름(viz_rules.WORD_LISTS)과 보이는 이름
+const WORD_LISTS: [keyof SemanticWords, string][] = [["good", "긍정"], ["bad", "부정"], ["other", "기타"], ["null", "결측"]];
 
 export type SettingsDialogProps = { open: boolean; onClose: () => void };
 
@@ -42,7 +46,26 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
   const [msg, setMsg] = useState<{ text: string; ok?: boolean }>({ text: "" });
   const [sure, setSure] = useState(false);  // 지우기는 두 번 눌러야 한다(창에서 확인 상자가 안 뜰 수 있어 버튼 글자로 묻는다)
   const [busy, setBusy] = useState(false);
+  const [prefs, setPrefs] = useState<Constants["dash"]["viz"] | null>(null);
+  const [wordText, setWordText] = useState<Record<string, string>>({});
+  const [wordMsg, setWordMsg] = useState<{ text: string; ok?: boolean }>({ text: "" });
   useEffect(() => { getTargets().then(t => { setT(t); setPath(t.path); }).catch(e => setTNote((e as Error).message)); }, []);
+  useEffect(() => {
+    viz().then(p => { setPrefs(p); setWordText(Object.fromEntries(WORD_LISTS.map(([k]) => [k, p.words[k].join("\n")]))); }).catch(e => setWordMsg({ text: (e as Error).message }));
+  }, []);
+  // 낱말은 한 줄에 하나. 빈 줄은 건너뛰고, 공백·겹침·길이는 서버가 검사해 그 문장을 보인다
+  const saveWords = async () => {
+    if (!prefs) return;
+    setBusy(true);
+    try {
+      const words = Object.fromEntries(WORD_LISTS.map(([k]) => [k, wordText[k].split("\n").filter(w => w !== "")])) as unknown as SemanticWords;
+      const saved = await saveViz({ ...prefs, words });
+      setPrefs(saved);
+      setWordText(Object.fromEntries(WORD_LISTS.map(([k]) => [k, saved.words[k].join("\n")])));
+      setWords(saved.words);
+      setWordMsg({ text: "차트 낱말을 저장했어요.", ok: true });
+    } catch (e) { setWordMsg({ text: (e as Error).message }); } finally { setBusy(false); }
+  };
 
   // 팔레트: HEX를 쉼표로 나눠 적는다. 틀린 색이 있으면 이유를 보이고 이전 팔레트를 그대로 둔다
   const applyPalette = (found: string[]) => {
@@ -101,6 +124,17 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
       </div>
       <div className="hint" style={{ margin: 0 }}>{tText}{!tNote && t?.error_total ? <button className="linkish" onClick={() => setShowErrs(true)}>보기</button> : null}</div>
       {showErrs && <TargetErrors onClose={() => setShowErrs(false)} />}
+      <h4>차트 낱말</h4>
+      <div className="hint" style={{ margin: 0 }}>한 줄에 낱말 하나. 긍정·부정은 이름에 들어 있으면, 기타·결측은 이름 전체가 같으면 맞아요.</div>
+      <div className="row">
+        {WORD_LISTS.map(([k, label]) => (
+          <label key={k}>{label}
+            <textarea rows={4} value={wordText[k] ?? ""} onChange={e => setWordText({ ...wordText, [k]: e.target.value })} disabled={!prefs} aria-label={`${label} 낱말`} />
+          </label>
+        ))}
+        <button className="btn" onClick={saveWords} disabled={busy || !prefs}>저장</button>
+      </div>
+      <div className={wordMsg.ok ? "hint" : "err"} role="status">{wordMsg.text}</div>
       <h4>내 템플릿</h4>
       <Templates />
       <h4>이름 바꾸기와 지우기</h4>

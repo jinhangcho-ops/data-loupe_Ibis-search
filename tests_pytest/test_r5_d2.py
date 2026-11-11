@@ -43,6 +43,9 @@ def card(kind, view=None, analysis=None, **body):
     return dash_store.check_card({"kind": kind, "title": "t", "source": source, "view": view or {}})
 
 
+OFF, NO_TAIL = {"tail": False}, {"under": 0, "over": 0, "clip": None}  # 꼬리 자르기(Phase 9 자동 규칙, 기본 켬)를 꺼서 구간 계산만 본다
+
+
 def data(kind, view=None, analysis=None, ctx=None, **body):
     return dash_calc.compute(card(kind, view, analysis, **body), "2026-11-03T09:00:00", ctx)
 
@@ -95,11 +98,11 @@ def test_card_add_and_cards_compute_accept_new_kinds(client, mem, monkeypatch):
     body = {"base": "t", "x": "store", "split": "step", "series": SUM}
     dash = ""
     for kind in ("heatmap", "treemap", "histogram"):
-        added = client.post("/api/dash/card/add", json={"dashboard": dash, "name": "새 판", "card": {"kind": kind, "title": kind, "source": {"table": "t", "body": body}, "view": {"bins": 5}}})
+        added = client.post("/api/dash/card/add", json={"dashboard": dash, "name": "새 판", "card": {"kind": kind, "title": kind, "source": {"table": "t", "body": body}, "view": {"bins": 5, "auto": OFF}}})
         assert added.status_code == 200, added.get_json()
         dash = added.get_json()["dashboard"]["id"]
     assert added.get_json()["dashboard"]["cards"] == 3
-    cards = [{"id": f"c{i}", "kind": kind, "title": kind, "source": {"table": "t", "body": {**body, "x": "amt" if kind == "histogram" else "store"}}, "view": {"bins": 5}} for i, kind in enumerate(("heatmap", "treemap", "histogram"))]
+    cards = [{"id": f"c{i}", "kind": kind, "title": kind, "source": {"table": "t", "body": {**body, "x": "amt" if kind == "histogram" else "store"}}, "view": {"bins": 5, "auto": OFF}} for i, kind in enumerate(("heatmap", "treemap", "histogram"))]
     results = client.post("/api/dash/cards/compute", json={"cards": cards}).get_json()["results"]
     assert [list(r) for r in results] == [["id", "data"]] * 3, results
     assert results[0]["data"]["values"]["rows"] == ["A", "B"] and results[2]["data"]["bins"]["counts"] == [3, 1, 2, 1, 2]  # 너비 14: 10·15·20 / 30 / 40·50 / 60 / 70·80
@@ -119,17 +122,17 @@ def test_check_data_accepts_new_shapes():
 # ---------- dash_calc: 새 카드 종류의 값 ----------
 
 def test_histogram(mem):
-    got = data("histogram", {"bins": 4}, x="amt")
-    assert got["bins"] == {"edges": [10.0, 27.5, 45.0, 62.5, 80.0], "counts": [3, 2, 2, 2]}  # 15·10·20 / 30·40 / 50·60 / 70·80(최댓값은 마지막 구간)
-    assert len(data("histogram", x="amt")["bins"]["counts"]) == 20 and sum(data("histogram", x="amt")["bins"]["counts"]) == 9  # 기본 20구간
-    same = dash_calc.histogram_data(mem.filter(mem.step == "buy").mutate(amt=ibis.literal(5.0)), "amt", 4)["bins"]
-    assert same == {"edges": [5.0, 5.0], "counts": [2]}  # 값이 모두 같으면 한 구간
+    got = data("histogram", {"bins": 4, "auto": OFF}, x="amt")
+    assert got["bins"] == {"edges": [10.0, 27.5, 45.0, 62.5, 80.0], "counts": [3, 2, 2, 2], **NO_TAIL}  # 15·10·20 / 30·40 / 50·60 / 70·80(최댓값은 마지막 구간)
+    assert sum(data("histogram", {"auto": OFF}, x="amt")["bins"]["counts"]) == 9  # 구간 수를 안 정하면 자동 규칙(bins)이 정한다(Phase 9)
+    same = dash_calc.histogram_data(mem.filter(mem.step == "buy").mutate(amt=ibis.literal(5.0)), "amt", 4, OFF)["bins"]
+    assert same == {"edges": [5.0, 5.0], "counts": [2], **NO_TAIL}  # 값이 모두 같으면 한 구간
     with pytest.raises(ValueError, match="숫자 컬럼"):
         data("histogram", x="store")
 
 
 def test_boxplot_with_and_without_outliers(mem):
-    got = data("boxplot", x="store", series=[{"y": "amt", "agg": "sum"}])["values"]["groups"]
+    got = data("boxplot", {"auto": OFF}, x="store", series=[{"y": "amt", "agg": "sum"}])["values"]["groups"]
     assert [g["name"] for g in got] == ["A", "B"]  # 행이 많은 매장 먼저
     assert got[0] == {"name": "A", "n": 5, "min": 10, "q1": 20, "med": 50, "q3": 60, "max": 80, "outliers": [], "outlier_count": 0}
     assert got[1] == {"name": "B", "n": 4, "min": 15, "q1": 26.25, "med": 35, "q3": 47.5, "max": 70, "outliers": [], "outlier_count": 0}
@@ -278,7 +281,7 @@ def test_new_kinds_through_the_route_on_a_real_connection(shop):
         assert "data" in got, got
         return got["data"]
     assert run("heatmap", x="store", split="step", series=SUM)["values"]["cells"] == [[60, 20, 140], [70, 40, 45]]
-    assert run("histogram", {"bins": 4}, x="amt")["bins"]["counts"] == [3, 2, 2, 2]
+    assert run("histogram", {"bins": 4, "auto": OFF}, x="amt")["bins"]["counts"] == [3, 2, 2, 2]
     assert run("boxplot", x="store", series=SUM)["values"]["groups"][0]["med"] == 50
     assert run("calheat", x="ts", series=SUM)["values"]["days"][0] == {"d": "2026-01-05", "v": 60}
     assert run("treemap", x="store", series=SUM)["values"]["items"] == [{"name": "A", "value": 220}, {"name": "B", "value": 155}]
@@ -388,7 +391,7 @@ def dated(kind, view=None, ctx=None, **body):
 
 def test_period_reaches_kinds_without_a_date_x(ranged):
     feb, jan = {"range": {"start": "2026-02-01", "end": "2026-02-28"}}, {"range": {"start": "2026-01-01", "end": "2026-01-31"}}
-    cases = [("histogram", {"bins": 2}, {"x": "amt"}, lambda d: d["bins"], {"edges": [15.0, 47.5, 80.0], "counts": [1, 1]}),
+    cases = [("histogram", {"bins": 2, "auto": OFF}, {"x": "amt"}, lambda d: d["bins"], {"edges": [15.0, 47.5, 80.0], "counts": [1, 1], **NO_TAIL}),
              ("boxplot", {}, {"x": "store", "series": SUM}, lambda d: [(g["name"], g["n"]) for g in d["values"]["groups"]], [("A", 1), ("B", 1)]),
              ("heatmap", {}, {"x": "store", "split": "step", "series": SUM}, lambda d: d["values"], {"rows": ["A", "B"], "cols": ["view"], "cells": [[80.0], [15.0]]}),
              ("treemap", {}, {"x": "store", "series": SUM}, lambda d: d["values"]["items"], [{"name": "A", "value": 80.0}, {"name": "B", "value": 15.0}]),

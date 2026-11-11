@@ -55,7 +55,7 @@ const q = encodeURIComponent;
 // ---------- 대시보드 ----------
 export const constants = () => api<Constants>("/api/dash/constants");
 export const listDashboards = () => api<DashList>("/api/dash");
-export const getDashboard = (id: string) => api<{ dashboard: Dashboard }>("/api/dash/get?id=" + q(id));
+export const getDashboard = (id: string) => api<{ dashboard: Dashboard }>("/api/dash/open", { id });
 /** 저장(id가 없으면 새 대시보드). 돌려주는 dashboard에는 카드 값(data)이 빠져 있다 */
 // 카드에 data가 없으면 서버가 저장된 값을 둔다
 export const saveDashboard = (d: Omit<Partial<Dashboard>, "cards"> & { name: string; cards: Partial<Card>[] }) => api<{ dashboard: Dashboard } & DashList>("/api/dash", d);
@@ -113,6 +113,12 @@ export const draft = {
   drop: () => send(DRAFT, undefined, "DELETE").then(() => undefined),
 };
 
+// ---------- 차트 낱말·쿼리 화면 자동 규칙 기본값(viz.json) ----------
+/** 설정 폴더의 차트 설정을 읽는다(없으면 서버 기본 낱말) */
+export const viz = () => api<Constants["dash"]["viz"]>("/api/viz");
+/** 저장하고 검사한 사본을 돌려받는다(틀리면 서버 문장으로 던진다) */
+export const saveViz = (prefs: Constants["dash"]["viz"]) => api<Constants["dash"]["viz"]>("/api/viz", prefs);
+
 // ---------- 목표 파일 ----------
 export const getTargets = (offset = 0) => api<Targets>(`/api/targets?offset=${offset}`);
 export const setTargets = (path: string) => api<Targets>("/api/targets", { path });
@@ -120,6 +126,10 @@ export const setTargets = (path: string) => api<Targets>("/api/targets", { path 
 // ---------- 테이블·컬럼·조회·지표(카드 추가 메뉴·선반·최근 행) ----------
 export const tables = (schema = "", virtual = false) => api<{ tables: string[]; virtual?: string[] }>("/api/tables?schema=" + q(schema) + (virtual ? "&virtual=1" : ""));
 export const columns = (base: string, schema = "") => api<Columns>("/api/columns", { schema, base });
+export const hashed = (base: string, schema = "") => api<{ on: boolean; columns: string[] }>("/api/diag/hashed", { schema, base });
+/** 테이블의 태그 켜기 정보(Phase 4 /api/labels): 켜졌으면 키·글 컬럼·사전 */
+export const labels = (schema: string, base: string) => api<{ on: boolean; key?: string; key_type?: string; text?: string; vocab?: string[]; labeled?: number; quick: number }>(`/api/labels?schema=${encodeURIComponent(schema)}&base=${encodeURIComponent(base)}`);
+export const values = (body: Record<string, unknown>, column: string) => api<{ values: string[]; more: boolean; partial: boolean | null }>("/api/values", { ...body, column });
 /** 앞 N행(recent_rows·table). 옛 화면은 {...source.body, limit, count:false} */
 export const query = (body: Record<string, unknown>) => api<QueryRows>("/api/query", body);
 /** 내 지표(metrics: 테이블에 묶은 정의, text = "이름 · 테이블 (연결)")와 지표 파일의 공통 정의(legacy: 이름으로 KPI 카드의 body.names에 쓴다) */

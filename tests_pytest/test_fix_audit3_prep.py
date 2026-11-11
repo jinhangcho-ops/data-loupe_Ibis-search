@@ -147,4 +147,5 @@ def test_distribution_summary_in_one_aggregate():
     out = stats.distribution(t, "v")
     s = out["stats"]
     assert (s["n"], s["min"], s["max"], s["mean"]) == (4, 1.0, 4.0, 2.5)
-    assert sum(out["histogram"]["counts"]) == 4
+    h = out["histogram"]
+    assert sum(h["counts"]) + h["under"] + h["over"] == 4  # 꼬리 자르기(Phase 9)로 밖에 난 값은 under·over

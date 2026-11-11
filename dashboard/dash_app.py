@@ -24,13 +24,14 @@ metric_file = Later("core.metric_file")
 period = Later("dashboard.period")
 querying = Later("core.querying")
 targets = Later("core.targets")
+viz_rules = Later("core.viz_rules")
 
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml"}  # 배치도 바탕 그림으로 내려줄 수 있는 것
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 TARGET_PAGE = 100  # 목표 파일의 문제 줄을 한 번에 돌려줄 수(화면은 [이전]/[다음]으로 넘겨 본다)
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
-server.FREE.update({"/api/dash", "/api/dash/get", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min", "/api/dash/refresh/start",
-                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart"})
+server.FREE.update({"/api/dash", "/api/dash/get", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min",
+                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart", "/api/viz"})
 
 
 def with_source(card):
@@ -46,7 +47,9 @@ def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버�
         "palette": dash_store.DEFAULT_PALETTE, "locked": dash_store.LOCKED, "min_refresh": dash_store.MIN_REFRESH}  # 화면(web/·common.js)이 서버와 같은 상한·종류·기본 색을 쓴다
     found["dash"]["max_points"] = result.MAX_POINTS  # 산점도·버블의 점 수 상한
     found["dash"].update(max_bins=dash_store.MAX_BINS, max_bands=dash_store.MAX_BANDS)  # 히스토그램의 구간 수, 불릿 차트의 구간 수 상한
+    found["dash"]["server_merge"] = list(dash_store.SERVER_MERGE)  # (Phase 4) 범위 묶기를 서버가 다시 구하는 집계(GroupPicker가 같은 판정을 쓴다)
     found["dash"].update(aggs=list(metric_file.AGGS), merge=list(sql_funcs.MERGE), agg_names=metric_file.AGG_NAMES)  # 카드 계열의 집계(함수 사전의 집계 전부), 일 값을 다시 묶을 수 있는 집계, 보이는 이름
+    found["dash"].update(auto=viz_rules.AUTO_PARAMS, auto_names=viz_rules.AUTO_NAMES, viz=viz_rules.load_prefs(), orders=viz_rules.ORDERS, order_names=viz_rules.ORDER_NAMES)  # 자동 규칙 수치표·이름, 차트 낱말과 쿼리 화면 기본값, 정렬 다섯 값·이름
     cal = settings.load()
     found.update(week_start=cal.get("week_start") or "mon", fiscal_start_month=cal.get("fiscal_start_month") or 1)  # 화면의 주·연 묶음(web/lib/calc.ts BUCKET)이 설정을 따르게
 
@@ -99,6 +102,14 @@ def dash_get():
     return jsonify(dashboard=dash_store.get_dashboard(request.args.get("id")))
 
 
+@app.post("/api/dash/open")
+def dash_open() -> Response:
+    """[SPECIFICATION] plans/phase-10.md#dash_open
+    대시보드를 열 때 예전 조인 이름을 새 이름으로 한 번 바꿔 저장하고 돌려준다(차례를 기다린다)."""
+    d = dash_store.get_dashboard((request.json or {}).get("id"))
+    return jsonify(dashboard=server.run(lambda: dash_calc.upgrade_dashboard(d)))
+
+
 @app.post("/api/dash")
 def dash_save():
     """대시보드 하나를 저장한다(id가 없으면 새 대시보드). 저장한 모양(카드 값 data는 뺀 것)과 새 목록을 돌려준다."""
@@ -143,6 +154,20 @@ def card_compute():
     return jsonify(data=dash_calc.compute(card, dt.datetime.now().isoformat(timespec="seconds"), request.json.get("ctx")), source=now)
 
 
+@app.get("/api/viz")
+def viz_prefs():
+    """[SPECIFICATION] plans/phase-9.md#viz_prefs
+    시각화 설정(낱말 목록·쿼리 화면 자동 규칙 기본값) viz_rules.load_prefs()를 돌려준다."""
+    return jsonify(viz_rules.load_prefs())
+
+
+@app.post("/api/viz")
+def save_viz_prefs():
+    """[SPECIFICATION] plans/phase-9.md#save_viz_prefs
+    body(시각화 설정 전체)를 viz_rules.save_prefs로 저장하고 저장한 것을 돌려준다(틀리면 server.on_error의 400 문장)."""
+    return jsonify(viz_rules.save_prefs(request.json))
+
+
 @app.post("/api/chart/points")
 def chart_points():
     """산점도·버블의 점: body = 차트 조회(테이블·조건 …, x, series[0].y 또는 y, split)와 size(버블의 크기 컬럼). 점·전체 수·뽑았는지·r·추세선을 돌려준다.
@@ -156,7 +181,7 @@ def chart_points():
         querying.runnable(body, select=False, ask=body)  # 처리 용량 확인만(BigQuery의 읽는 양, 원격에서 새로 받을 사본). 받은 사본은 points_of가 그대로 쓴다
     except querying.Confirm as e:
         return e.response
-    return jsonify(points=dash_calc.points_of(body, body.get("size")))
+    return jsonify(points=dash_calc.points_of(body, body.get("size"), body.get("auto")))
 
 
 @app.post("/api/dash/cards/compute")
@@ -218,6 +243,8 @@ def live_min_set():
 @app.post("/api/dash/refresh/start")
 def refresh_start():
     """연결에 성공한 뒤 화면이 부른다: 주기가 지난 카드의 최신화를 작업 스레드에서 시작하고 상태를 돌려준다."""
+    for item in dash_store.listing()["dashboards"]:
+        server.run(lambda i=item["id"]: dash_calc.upgrade_dashboard(dash_store.get_dashboard(i)))
     return jsonify(dash_refresh.start())
 
 

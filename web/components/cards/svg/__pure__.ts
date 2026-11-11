@@ -1,8 +1,12 @@
 // SVG/HTML 카드의 순수 계산(화면 요소 없음): 옛 dash_cards.js의 cardValue·cardDays·cardTarget·cardFormat,
 // funnel.js의 생키 좌표·표·문장, static/geo/geomap.js의 메르카토르·타일 계산을 본문 그대로 옮겼다(SERVER.merge는 인자 merge로 받는다).
-import { TAU, overTarget, polar, shiftDay, showValue, underTarget, zeroWhenEmpty } from "@/lib/calc";
+import { TAU, anaView, clamp, isPoints, overTarget, polar, shiftDay, showValue, underTarget, zeroWhenEmpty } from "@/lib/calc";
 import { loadedRange, windowValue, type Range } from "@/lib/series";
 import type { Card, NorthStar, TreeItem } from "@/lib/types";
+import type { SCard, Series } from "../chart/series";
+import type { Ana } from "../chart/Charts";
+import { HBARS, ROUND_TYPES } from "../chart/shapes";
+const NO_ZOOM_TYPES: string[] = [...ROUND_TYPES, ...HBARS, "radar", "slope"];  // 확대하지 않는 계열 종류(둥근 차트·가로 막대·레이더·슬로프)
 
 /** 그리는 색(옛 board.js themeColors + 대시보드 팔레트). err·ok는 상태 색(옛 cssVar("--err")·("--ok")) */
 export type Theme = { card: string; head: string; ink: string; text: string; line: string; err: string; ok: string; series: string[]; palette?: string[] };
@@ -245,4 +249,122 @@ export function fitText(s: string, px: number, font: number) {
   if (w(s) <= px) return s;
   while (out.length && w(out.join("") + "…") > px) out.pop();
   return out.join("") + "…";
+}
+
+// ======================= Phase 3: 사다리꼴 퍼널 보기·가로축 확대·이동 =======================
+/** 단계마다 따로 센 퍼널(count = each)의 한 줄 설명(순서대로가 아니라 funnelSentence를 쓰지 않는다) */
+export const EACH_TEXT = "단계마다 따로 센 사람 수예요. 앞 단계를 거치지 않은 사람도 들어가요.";
+/** 사다리꼴 한 칸: 번호 i(0부터), 경로, 옆 글 두 줄의 자리 */
+export type LadderRow = { i: number; path: string; top: number; bottom: number; x0: number; x1: number; textX: number; textY: number; lines: [string, string] };
+// [SPECIFICATION] plans/phase-3.md#ladderLines
+export function ladderLines(step: Step, i: number): [string, string] {
+  const users = `${step.users.toLocaleString()}명`;
+  return [`${i + 1}. ${step.name}`, i === 0 ? users : `${users} · 전 단계 대비 ${fpct(step.conv)} · 첫 단계 대비 ${fpct(step.from_first)}`];
+}
+export const LADDER_MIN = 0.06;  // 인원 비례 사다리꼴에서 가장 좁은 폭 = 최대 폭 × 이 몫(0명이어도 보이게)
+// [SPECIFICATION] plans/phase-3.md#ladderLayout
+export function ladderLayout(steps: Step[], { width = 720, height = 340, gap = 6, shapeShare = 0.5, minRatio = 0.3, pad = 8, textGap = 12, scale = false } = {}): { width: number; height: number; rows: LadderRow[] } {
+  const k = steps.length;
+  if (k === 0) return { width, height, rows: [] };
+  const shapeW = width * shapeShare, maxW = shapeW - 2 * pad, minW = maxW * minRatio, cx = shapeW / 2, rowH = (height - 2 * pad - gap * (k - 1)) / k;
+  const most = Math.max(...steps.map(s => s.users)), w = (n: number) => maxW * Math.max(LADDER_MIN, most > 0 ? n / most : 0), f = (n: number) => n.toFixed(1);
+  const rows = steps.map((step, i): LadderRow => {
+    const top = pad + i * (rowH + gap), bottom = top + rowH;
+    const wTop = scale ? w(step.users) : maxW - ((maxW - minW) * i) / k;
+    const wBot = scale ? (i + 1 < k ? w(steps[i + 1].users) : wTop) : maxW - ((maxW - minW) * (i + 1)) / k;
+    const x0 = cx - wTop / 2, x1 = cx + wTop / 2;
+    return { i, path: `M${f(x0)},${f(top)} L${f(x1)},${f(top)} L${f(cx + wBot / 2)},${f(bottom)} L${f(cx - wBot / 2)},${f(bottom)} Z`, top, bottom, x0, x1, textX: shapeW + textGap, textY: top + rowH / 2, lines: ladderLines(step, i) };
+  });
+  return { width, height, rows };
+}
+
+/** 걸린 시간 표의 값 종류(view.gap_stats에 고른 것만, 차례 고정)와 머리글 */
+export const GAP_STATS = ["mean", "median", "trimmed"] as const;
+export type GapStat = (typeof GAP_STATS)[number];
+/** 서버 funnel.gap_stats 한 줄(초, 사람이 없으면 값 null) */
+export type Gap = { from: string; to: string; n: number; mean: number | null; median: number | null; trimmed: number | null };
+const SEC_PER_MIN = 60, SEC_PER_HOUR = 3600, SEC_PER_DAY = 86400;  // 걸린 시간 글자의 단위 경계(초)
+// [SPECIFICATION] plans/phase-3.md#durationText
+export function durationText(sec: number | null | undefined): string {
+  if (sec == null) return "-";
+  if (sec < SEC_PER_MIN) return `${+sec.toFixed(1)}초`;
+  if (sec < SEC_PER_HOUR) return `${+(sec / SEC_PER_MIN).toFixed(1)}분`;
+  if (sec < SEC_PER_DAY) return `${+(sec / SEC_PER_HOUR).toFixed(1)}시간`;
+  return `${+(sec / SEC_PER_DAY).toFixed(1)}일`;
+}
+const GAP_NAMES: Record<Exclude<GapStat, "trimmed">, string> = { mean: "평균", median: "중앙값" };  // 걸린 시간 표의 값 이름(절사평균은 몫을 붙여 따로)
+const PERCENT = 100;  // 자르는 몫(0~0.5)을 글자 %로
+// [SPECIFICATION] plans/phase-3.md#gapRows
+export function gapRows(gaps: Gap[], stats: GapStat[], trim: number): { label: string; values: string }[] {
+  if (!stats.length) return [];
+  const picked = GAP_STATS.filter(s => stats.includes(s));
+  const name = (s: GapStat) => (s === "trimmed" ? `절사평균(${Math.round(trim * PERCENT)}%)` : GAP_NAMES[s]);
+  return gaps.map(g => ({
+    label: `${g.from} → ${g.to}`,
+    values: g.n === 0 ? "지나간 사람이 없어요" : `${picked.map(s => `${name(s)} ${durationText(g[s])}`).join(" · ")} (${g.n.toLocaleString()}명)`,
+  }));
+}
+
+/** 가로축 범위 [시작, 끝]: 순서 축은 번호(0 ~ n-1), 값 축은 x 값 */
+export type Span = [number, number];
+/** 확대할 수 있는 가로축: 순서(라벨 n개) 또는 값(최소~최대). 확대할 수 없는 그림은 null */
+export type ZoomAxis = { kind: "index"; count: number } | { kind: "value"; lo: number; hi: number };
+export const ZOOM_FACTOR = 1.25;  // 휠 한 칸에 보이는 폭이 바뀌는 배수(확대는 1/1.25)
+export const MIN_POINTS = 5;  // 순서 축에서 가장 크게 확대했을 때 남는 라벨 수
+export const MIN_SHARE = 0.001;  // 값 축에서 가장 크게 확대했을 때 폭 = 전체 폭 × 이 몫
+export const DRAG_PX = 4;  // 이만큼 넘게 끌어야 이동으로 본다(덜 움직이면 카드 누르기 그대로)
+// [SPECIFICATION] plans/phase-3.md#flowDropout
+export function flowDropout(card: Card): boolean {
+  const drop = (card.view as { flow_dropout?: unknown } | undefined)?.flow_dropout;
+  if (typeof drop === "boolean") return drop;
+  return (((card.source?.analysis as { ends?: string[] } | undefined)?.ends) ?? []).length > 0;
+}
+// [SPECIFICATION] plans/phase-3.md#fullSpan
+export function fullSpan(axis: ZoomAxis): Span {
+  return axis.kind === "index" ? [0, axis.count - 1] : [axis.lo, axis.hi];
+}
+// [SPECIFICATION] plans/phase-3.md#zoomRange
+export function zoomRange(view: Span, axis: ZoomAxis, anchor: number, notches: number): Span {
+  const [f0, f1] = fullSpan(axis), full = f1 - f0, w = view[1] - view[0];
+  const minW = axis.kind === "index" ? Math.min(full, MIN_POINTS - 1) : full * MIN_SHARE;
+  const nw = clamp(w * ZOOM_FACTOR ** (-notches), minW, full);
+  const s = clamp(view[0] + anchor * w - anchor * nw, f0, f1 - nw);
+  return [s, s + nw];
+}
+// [SPECIFICATION] plans/phase-3.md#panRange
+export function panRange(view: Span, axis: ZoomAxis, share: number): Span {
+  const [f0, f1] = fullSpan(axis), w = view[1] - view[0];
+  const s = clamp(view[0] - share * w, f0, f1 - w);
+  return [s, s + w];
+}
+// [SPECIFICATION] plans/phase-3.md#sliceWindow
+export function sliceWindow<T>(rows: T[], view: Span | null): T[] {
+  if (view === null) return rows;
+  const i0 = Math.max(0, Math.floor(view[0])), i1 = Math.min(rows.length - 1, Math.ceil(view[1]));
+  return rows.slice(i0, i1 + 1);
+}
+// [SPECIFICATION] plans/phase-3.md#zoomAxis
+export function zoomAxis(card: SCard, s: Series | null, ana: boolean): ZoomAxis | null {
+  const index = (n: number): ZoomAxis | null => (n > MIN_POINTS ? { kind: "index", count: n } : null);
+  const value = (xs: number[]): ZoomAxis | null => {
+    const real = xs.filter(Number.isFinite), lo = Math.min(...real), hi = Math.max(...real);
+    return lo < hi ? { kind: "value", lo, hi } : null;
+  };
+  if (ana) {
+    const d = card.data.values as Ana;
+    switch (anaView(card)) {
+      case "hist": return index(d.histogram?.counts.length ?? 0);
+      case "values": {  // 값 목록은 d.values 안에 있다(AnaChart와 같은 모양): 라벨 + (빈 값)·(그 밖) 칸
+        const v = d.values as { labels: string[]; nulls: number; other: number };
+        return index(v.labels.length + (v.nulls ? 1 : 0) + (v.other ? 1 : 0));
+      }
+      case "scatter": return value((d.points ?? []).map(r => r[0]));
+      case "box":
+      case "heat": return null;
+      default: return index((d.labels ?? []).length);
+    }
+  }
+  if (isPoints(card)) return value((card.data.points as unknown as { points: number[][] }).points.map(r => r[0]));
+  if (!s || NO_ZOOM_TYPES.includes(card.view.type)) return null;
+  return index(s.labels.length);
 }

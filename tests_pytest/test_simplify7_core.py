@@ -150,6 +150,7 @@ def test_scan_size_helpers():
 
 def test_drop_connection_clears_everything_and_calls_hooks(monkeypatch):
     closed, hooks = [], []
+    monkeypatch.setitem(server.held.store, "con", None)  # 앞 시험이 남긴 받아 두기 연결까지 닫힌 것으로 세지 않게
     monkeypatch.setattr(source_module(), "close", lambda con: closed.append(con))
     monkeypatch.setattr(server, "ON_SWITCH", [lambda: hooks.append(1), lambda: hooks.append(2)])
     server.state.update(con="C", passwords=["p"], opened={"kind": "folder", "path": "x", "file": "f.db"}, rows={("a", "b"): 1}, names={"s": 1}, tables={"t": 1})
