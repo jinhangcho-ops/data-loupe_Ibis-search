@@ -353,15 +353,18 @@ export function zoomAxis(card: SCard, s: Series | null, ana: boolean): ZoomAxis 
   if (ana) {
     const d = card.data.values as Ana;
     switch (anaView(card)) {
-      case "hist": return index(d.histogram.counts.length);
-      case "values": return index((d.labels ?? []).length + (d.nulls ? 1 : 0) + (d.other ? 1 : 0));
-      case "scatter": return value(d.points.map(r => r[0]));
+      case "hist": return index(d.histogram?.counts.length ?? 0);
+      case "values": {  // 값 목록은 d.values 안에 있다(AnaChart와 같은 모양): 라벨 + (빈 값)·(그 밖) 칸
+        const v = d.values as { labels: string[]; nulls: number; other: number };
+        return index(v.labels.length + (v.nulls ? 1 : 0) + (v.other ? 1 : 0));
+      }
+      case "scatter": return value((d.points ?? []).map(r => r[0]));
       case "box":
       case "heat": return null;
       default: return index((d.labels ?? []).length);
     }
   }
-  if (isPoints(card)) return value((card.data.points as { points: number[][] }).points.map(r => r[0]));
+  if (isPoints(card)) return value((card.data.points as unknown as { points: number[][] }).points.map(r => r[0]));
   if (!s || NO_ZOOM_TYPES.includes(card.view.type)) return null;
   return index(s.labels.length);
 }
