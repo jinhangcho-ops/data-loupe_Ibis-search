@@ -646,12 +646,14 @@ def save_virtual():
 @app.post("/api/chart")
 @confirms
 def chart():
-    """x별 집계. series는 [{"y", "agg"}]이고, split을 주면 그 컬럼의 값마다 계열을 나눈다."""
+    """x별 집계. series는 [{"y", "agg"}]이고, split을 주면 그 컬럼의 값마다 계열을 나눈다. groups {keep, ranges}를 주면 X를 먼저 거른다(result.pick_groups)."""
     body = request.json
     if body.get("merge_ranges"):  # (Phase 17) 범위로 묶으면 집계와 상관없이 서버가 전체 데이터에서 범위마다 고유 개수로 다시 구한다(화면이 받은 MAX_GROUPS개만 더하면 틀린다)
         dash_store.check_groups({"ranges": body["merge_ranges"], "merge": True})
         return jsonify(**dash_calc.range_data({"kind": "chart", "source": {"body": body}, "view": {"groups": {"ranges": body["merge_ranges"], "merge": True}}})["values"])
     expr = querying.runnable(body, select=False, ask=body)
+    picks = dash_store.check_groups(body["groups"]) if body.get("groups") is not None else {}  # (Phase 18) 쿼리 차트 [그룹 고르기]의 보일 그룹(keep)·숫자 범위(ranges): 집계 전에 X를 거른다(받은 50개 밖도 그려진다)
+    expr = result.pick_groups(expr, body["x"], picks.get("keep"), picks.get("ranges"))
     series, split = body.get("series") or [], body.get("split") or None
     labels, datasets, more = run(lambda: result.get_chart(
         expr, body["x"], series, split, body.get("order", "x"), body.get("x_unit") or ""))

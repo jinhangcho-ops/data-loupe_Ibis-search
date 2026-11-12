@@ -1694,31 +1694,37 @@ function drawChart() {
   $("chart").classList.toggle("hidden", !drawn);
   groupPanel();
   if (!drawn) return;
-  const ratio = RATIOS[$("cratio").value], shown = chartMerged ?? drawn;  // 서버가 범위로 묶었으면 그 값
+  const ratio = RATIOS[$("cratio").value], shown = chartMerged ?? drawn;  // 서버가 다시 구한 값(범위 묶기 또는 고른 그룹·범위로 거른 값)이 있으면 그 값
   chartDraw({ kind: "series", payload: { labels: shown.labels, datasets: islandSets(shown.datasets) },
     opts: { type: "", ranges: axisRanges(), relabel: $("clabels").value, ...(ratio ? { ratio } : {}),
-      auto: chartAuto, scale: $("cscale").value || undefined, order: $("corder").value, all: $("call").checked, aggs: drawn.used.map(s => s.agg), rest: drawn.rest ?? null,
+      auto: chartAuto, scale: $("cscale").value || undefined, order: $("corder").value, all: $("call").checked, aggs: drawn.used.map(s => s.agg), rest: (chartMerged && !chartMerged.merged ? chartMerged : drawn).rest ?? null,
       x_kind: xKind(drawn.x), x_scale: drawn.x_scale, x_levels: drawn.x_levels, x: drawn.x,
-      ...(Object.keys(chartGroups).length ? { groups: chartGroups } : {}), ...(chartMerged ? { merged: true } : {}) } });
+      ...(Object.keys(chartGroups).length ? { groups: chartGroups } : {}), ...(chartMerged?.merged ? { merged: true } : {}) } });
 }
 // [그룹 고르기] 판: 고른 것만 chartGroups(web/lib/groups.ts GroupView 모양, 저장하지 않음)에 모으고 계산은 섬의 applyGroups가 한다. 이름 바꾸기는 [라벨 바꾸기]가 맡는다.
-// chartMerged: 묶기를 켜면(집계와 상관없이) 서버가 전체 데이터에서 범위마다 다시 구한 그릴 값(계열 y의 고유 개수, want = 그 조회·범위).
+// chartMerged: 서버가 다시 구한 그릴 값. 묶기를 켜면 범위마다 다시 구한 값(merged: true, 계열 y의 고유 개수), 아니면 고른 그룹(keep)·숫자 범위로 먼저 거른 값(toDrawn 모양). want = 그 조회와 보낸 것.
 let chartGroups = {}, chartMerged = null, mergeSeq = 0, dragging = null;  // dragging: 끌어 고르는 중 { value: 지나는 칸에 넣을 상태, done: 놓을 때 할 일 }
 const chartKey = q => JSON.stringify({ ...q, order: undefined });  // 이것이 바뀌면(새 검색·X·계열·나누기) 이름이 달라져 고른 것을 비운다. 정렬만 바뀌면 남긴다
 document.addEventListener("pointerup", () => { const d = dragging; dragging = null; d?.done(); });
 async function groupsChanged() {
   const seq = ++mergeSeq;  // 늦게 온 앞 조회는 버린다
-  const want = drawn && chartGroups.merge ? JSON.stringify([drawn.query, chartGroups.ranges]) : null;
+  const kind = drawn && xKind(drawn.x), merge = !!(drawn && chartGroups.merge);
+  // (Phase 18) 날짜 X는 화면에서만 거른다. 범위는 숫자 X만 서버로
+  const picks = drawn && !merge && kind !== "date" ? { ...(chartGroups.keep?.length ? { keep: chartGroups.keep } : {}), ...(kind === "num" && chartGroups.ranges?.length ? { ranges: chartGroups.ranges } : {}) } : {};
+  const want = merge || Object.keys(picks).length ? JSON.stringify([drawn.query, merge ? chartGroups.ranges : picks]) : null;
   if (want !== (chartMerged?.want ?? null)) {
     chartMerged = null;
     if (want) {
       try {
-        const r = await api("/api/chart", { ...drawn.query, merge_ranges: chartGroups.ranges });
+        const r = await api("/api/chart", { ...drawn.query, ...(merge ? { merge_ranges: chartGroups.ranges } : { groups: picks }) });
         if (seq !== mergeSeq) return;
-        chartMerged = { want, labels: r.labels, datasets: drawn.datasets.filter(ds => r.series.some(s => s.name === ds.label)).map(ds => ({ ...ds, values: r.series.find(s => s.name === ds.label).values })) };
+        chartMerged = merge ? { want, merged: true, labels: r.labels, datasets: drawn.datasets.filter(ds => r.series.some(s => s.name === ds.label)).map(ds => ({ ...ds, values: r.series.find(s => s.name === ds.label).values })) }
+          : { ...toDrawn(drawn.query, drawn.used, r), want };
       } catch (e) { if (seq === mergeSeq) $("err-chart").textContent = e.message; return; }
     }
   }
+  const now = chartMerged ?? drawn;
+  $("err-chart").textContent = [rangeError(), chartMerged?.merged ? "" : now.cut, now.more].filter(Boolean).join(" ");  // 묶은 값은 전체 데이터라 잘림 안내를 빼고, 거른 값은 거른 응답의 안내
   drawChart();
 }
 // 빈 목록·끈 묶기는 빼고 바꾼다. 조회 없이 다시 그리고, 서버가 묶어야 하면 다시 부른다.
@@ -1746,12 +1752,20 @@ function checkList(key, names) {
 }
 function groupPanel() {
   if (!drawn) { $("cgroups").replaceChildren(); return; }
-  const groups = checkList("keep", drawn.labels);
+  const kind = xKind(drawn.x);
+  const groups = checkList("keep", [...new Set([...drawn.labels, ...(chartGroups.keep ?? [])])]);  // (Phase 18) 찾아 더한 그룹(받은 50개 밖)도 목록에 보여 끌 수 있게
   const all = el("button", { className: "btn", textContent: "모두", onclick: () => setGroups({ ...chartGroups, keep: [] }) });
   const none = el("button", { className: "btn", textContent: "없음", title: "체크를 모두 끄고 보일 그룹을 하나씩 골라요", onclick: () => groups.boxes.forEach(b => { b.checked = false; }) });
-  const parts = [el("div", { className: "hint", textContent: "보일 그룹" }), el("div", { className: "ctl" }, all, none), groups.list];
+  const parts = [el("div", { className: "hint", textContent: "보일 그룹" }), el("div", { className: "ctl" }, all, none)];
+  if (kind !== "date") {  // (Phase 18) 표 전체에서 X 값을 찾아 보일 그룹에 더한다(차트와 같은 조회 본문)
+    const find = el("input", { placeholder: "그룹 찾아 더하기", title: "표 전체에서 X 값을 찾아 보일 그룹에 더해요(Enter 또는 잠시 멈추면 찾아요)" }), found = el("div", { className: "ctl" });
+    findAsTyped(find, q => api("/api/values", { ...drawn.query, column: drawn.x, q }), (d, e) => found.replaceChildren(...(e ? [el("span", { className: "hint", textContent: e.message })]
+      : [...d.values.map(v => el("button", { className: "btn", textContent: v, onclick: () => setGroups({ ...chartGroups, keep: [...new Set([...(chartGroups.keep ?? []), v])] }) })),
+         ...(d.more ? [el("span", { className: "hint", textContent: "더 있어요. 더 좁혀 찾으세요." })] : [])])));
+    parts.push(el("div", { className: "ctl" }, find), found);
+  }
+  parts.push(groups.list);
   if (drawn.datasets.length > 1) parts.push(el("div", { className: "hint", textContent: "보일 계열" }), checkList("series", drawn.datasets.map(d => d.label)).list);
-  const kind = xKind(drawn.x);
   if (kind === "num" || kind === "date") {
     const type = kind === "num" ? "number" : "date", end = v => v === "" ? null : kind === "num" ? +v : v;
     const lo = el("input", { type, placeholder: "시작", title: "범위 시작(비우면 처음부터)" }), hi = el("input", { type, placeholder: "끝", title: "범위 끝(비우면 끝까지)" });
@@ -1784,7 +1798,7 @@ function xKind(x) {
 // 계열 이름: 나누지 않으면 계열 이름, 나누면 나눈 값(계열이 여럿이면 "계열 · 값").
 function toDrawn(query, used, d) {
   const label = k => !query.split ? seriesTitle(used[k.series]) : used.length > 1 ? `${seriesTitle(used[k.series])} · ${k.split}` : k.split;
-  return { query, used, x: query.x, labels: d.labels, truncated: !!d.truncated, rest: d.rest, x_scale: d.x_scale, x_levels: d.x_levels, datasets: d.datasets.map(k => ({ ...used[k.series], label: label(k), values: k.values })) };
+  return { query, used, x: query.x, labels: d.labels, truncated: !!d.truncated, cut: d.truncated ? `그룹이 많아 ${d.max_groups}개만 그려요.` : "", more: d.more_splits ? `나눌 값이 많아 행이 많은 ${d.max_splits}개만 그려요.` : "", rest: d.rest, x_scale: d.x_scale, x_levels: d.x_levels, datasets: d.datasets.map(k => ({ ...used[k.series], label: label(k), values: k.values })) };
 }
 $("draw").onclick = () => busy($("draw"), async () => {
   try {
@@ -1795,9 +1809,7 @@ $("draw").onclick = () => busy($("draw"), async () => {
     if (tabs[tabAt] !== tab) return;  // 그리는 사이 탭이 바뀌었으면 버린다
     if (!drawn || chartKey(drawn.query) !== chartKey(query)) chartGroups = {};
     drawn = toDrawn(query, used, d);
-    $("err-chart").textContent = [rangeError(), d.truncated ? `그룹이 많아 ${d.max_groups}개만 그려요.` : "",
-      d.more_splits ? `나눌 값이 많아 행이 많은 ${d.max_splits}개만 그려요.` : ""].filter(Boolean).join(" ");
-    await groupsChanged();  // 서버 묶기면 묶은 값을 다시 받아 그린다(오류는 위 글 대신 보인다)
+    await groupsChanged();  // 안내 글(잘림·나눌 값)은 groupsChanged가 정한다. 서버가 다시 구해야 하면 다시 받아 그린다(오류는 안내 대신 보인다)
   } catch (e) { $("err-chart").textContent = e.message; }
 });
 // 차트에 그린 값의 표(첫 컬럼은 X, 계열마다 한 컬럼, 그룹마다 한 행)는 섬이 그린 뒤 보낸 shown 메시지의 것이다: all이면 모든 데이터, 아니면 보이는 그대로. 아직 그리지 않았으면 null.

@@ -8,7 +8,7 @@ from pathlib import Path
 from lazy import ibis
 
 from core import crosstab, prep_ops, source, sql_funcs, viz_rules
-from core.parse import check_name, column as field_of, like_one, native_key, struct_fields, type_info, type_name
+from core.parse import check_name, column as field_of, convert, like_one, native_key, struct_fields, type_info, type_name
 
 PAGING = contextvars.ContextVar("paging", default=False)  # get_rows가 쪽을 받는 중: 파일 연결(Polars)의 묶기·중복 빼기도 차례를 고정한다(source.fix_polars_text)
 SUMMARY_COLS = ["name", "type", "count", "nulls", "unique", "min", "max", "mean"]
@@ -26,6 +26,9 @@ CHUNK = 100_000  # 큰 결과를 한 번에 받는 행 수(저장·결과 받아
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r")  # 스프레드시트가 수식으로 읽는 첫 글자(저장할 때 앞에 '를 붙인다)
 GUARDED = (".csv", ".tsv", ".txt")  # 수식 막기(formula_guard)를 하는 저장 형식
 BOM = b"\xef\xbb\xbf"  # Excel이 UTF-8 글자 파일의 한글을 바로 읽도록 맨 앞에 붙인다
+NULL_LABEL = "None"  # (Phase 18) 빈 X 그룹의 차트 라벨(라우트·카드가 str(None)으로 보낸다). 고른 그룹(keep)에 있으면 X가 빈 행도 남긴다
+PICK_DATE = "날짜 가로축 차트는 고른 그룹·범위를 서버에서 거르지 않아요(화면에서 걸러요)."  # (Phase 18) pick_groups
+PICK_RANGE = "범위로 거르려면 범위의 끝이 숫자여야 해요(숫자 가로축)."  # (Phase 18) pick_groups
 
 
 def json_text(df):
@@ -552,6 +555,29 @@ def group_chart(expr, x, series, split=None, order="x"):
     found = {(row[x], row[split]): row for row in cells.iter_rows(named=True)}
     return labels, [{"series": i, "split": str(part), "values": [number(found.get((label, part), {}).get(f"v{i}")) for label in labels], "truncated": cut}
                     for i in range(len(series)) for part in parts], more
+
+
+def pick_groups(expr: "ibis.expr.types.Table", x: str, keep: list[str] | None, ranges: list[list[int | float | None]] | None) -> "ibis.expr.types.Table":
+    """[SPECIFICATION] plans/phase-18.md#pick_groups
+    차트를 집계하기 전에 X를 고른 그룹(keep, 컬럼 타입으로 바꿔 isin)과 숫자 범위(ranges, 양끝 포함)로 거른 식."""
+    check_name(x, expr.columns)
+    if not keep and not ranges:
+        return expr
+    c, dtype = expr[x], expr[x].type()
+    if dtype.is_temporal():
+        raise ValueError(PICK_DATE)
+    conds = []
+    if keep:
+        values = [convert(dtype, k) for k in keep if k != NULL_LABEL or dtype.is_string()]
+        hit = c.isin(values) if values else None
+        if NULL_LABEL in keep:
+            hit = c.isnull() if hit is None else hit | c.isnull()
+        conds.append(hit)
+    if ranges and dtype.is_numeric() and not dtype.is_boolean():
+        if any(isinstance(end, str) for r in ranges for end in r):
+            raise ValueError(PICK_RANGE)
+        conds.append(ibis.or_(*[ibis.and_(*([c >= lo] if lo is not None else []), *([c <= hi] if hi is not None else [])) for lo, hi in ranges]))
+    return expr.filter(conds) if conds else expr
 
 
 def formula_guard(expr):

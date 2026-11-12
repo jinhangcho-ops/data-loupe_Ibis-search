@@ -392,8 +392,10 @@ def time_data(expr, x, series, split):
 
 
 def category_data(expr, body, series):
-    """항목별 차트: result.get_chart의 결과를 {labels, series: [{name, values}]}로."""
+    """항목별 차트: body.groups {keep, ranges}가 있으면 X를 먼저 거르고(result.pick_groups), result.get_chart의 결과를 {labels, series: [{name, values}]}로."""
     split = body.get("split") or None
+    picks = body.get("groups") or {}
+    expr = result.pick_groups(expr, body["x"], picks.get("keep"), picks.get("ranges"))  # (Phase 18) 카드의 고른 그룹·숫자 범위로 먼저 거른다(compute가 server_picks를 body.groups로 넘긴다). rest도 거른 식에서
     labels, datasets, more = run(lambda: result.get_chart(expr, body["x"], series, split, body.get("order", viz_rules.LEGACY_ORDER)))
     truncated = datasets[0]["truncated"]
     parts = list(dict.fromkeys(k["split"] for k in datasets)) if split else None
@@ -1076,8 +1078,8 @@ def wordcloud_data(expr, x, cloud=None, body=None):
 
 
 def merges_on_server(card: dict) -> bool:
-    """[SPECIFICATION] plans/phase-4.md#merges_on_server
-    차트 카드의 범위 묶기(view.groups.merge)를 서버가 다시 집계해야 하는지(계열에 고유 개수가 있을 때)."""
+    """[SPECIFICATION] plans/phase-17.md#merges_on_server
+    차트 카드의 범위 묶기(view.groups.merge)를 켰으면 서버가 범위마다 다시 구한다(집계 종류와 상관없이)."""
     return card["kind"] == "chart" and bool(((card.get("view") or {}).get("groups") or {}).get("merge"))
 
 
@@ -1088,8 +1090,8 @@ def range_label(lo: object, hi: object) -> str:
 
 
 def range_data(card: dict) -> dict:
-    """[SPECIFICATION] plans/phase-4.md#range_data
-    숫자 X 차트 카드를 묶은 범위마다 한 그룹으로 서버에서 다시 집계한 값 {values: {labels, series, merged: true}, x_kind, num_cols, date_cols}."""
+    """[SPECIFICATION] plans/phase-17.md#range_data
+    숫자 X 차트를 묶은 범위마다 한 그룹으로 서버에서 다시 구한 값(계열 y의 고유 개수, y가 없으면 행 개수)."""
     body, ranges = card["source"]["body"], card["view"]["groups"]["ranges"]
     if body.get("split"):
         raise ValueError(dash_store.MERGE_SPLIT)
@@ -1186,6 +1188,19 @@ def analysis_data(source, ctx=None):
     return {"values": found, "note": "테이블 전체" if info.get("full") else f"표본 {info.get('rows', 0):,}행"}
 
 
+def server_picks(card: dict) -> dict:
+    """[SPECIFICATION] plans/phase-18.md#server_picks
+    묶지 않은 차트 카드의 view.groups에서 서버가 X를 먼저 거를 고른 그룹(keep)·숫자 범위(ranges) {keep?, ranges?}(없으면 빈 사전)."""
+    if card["kind"] != "chart":
+        return {}
+    g = (card.get("view") or {}).get("groups") or {}
+    if g.get("merge"):
+        return {}  # 묶기는 range_data가 맡는다
+    ranges = g.get("ranges") or []
+    numeric = bool(ranges) and not any(isinstance(v, str) for r in ranges for v in r)  # 날짜 범위(YYYY-MM-DD)는 화면에서만
+    return {**({"keep": g["keep"]} if g.get("keep") else {}), **({"ranges": ranges} if numeric else {})}
+
+
 def definition(card):
     """카드를 다시 구하는 정의(연결과 이름 빼고): 이 JSON의 지문이 def_hash다."""
     source = card["source"]
@@ -1195,6 +1210,8 @@ def definition(card):
     extra = {"view": {k: view[k] for k in keys if k in view}} if keys else {}  # 값에 영향을 주는 설정
     if merges_on_server(card):
         extra = {"view": {**extra.get("view", {}), "groups": {"ranges": card["view"]["groups"]["ranges"], "merge": True}}}
+    elif picks := server_picks(card):  # (Phase 18) 서버가 X를 먼저 거르면 고른 그룹·숫자 범위가 정의에 든다(바꾸면 다시 구한다)
+        extra = {"view": {**extra.get("view", {}), "groups": picks}}
     rules = {k: v for k, v in (view.get("auto") or {}).items() if k in viz_rules.SERVER_RULES}  # 서버가 값을 구할 때 쓰는 자동 규칙(bins·tail·density)
     if card["kind"] in ("histogram", "boxplot") or points:
         server = {**({"auto": rules} if rules else {}), **({"all_data": True} if view.get("all_data") and (card["kind"] == "histogram" or points) else {})}
@@ -1229,7 +1246,7 @@ def compute(card, now, ctx=None):
         elif card["kind"] in SHAPE_KINDS:
             found = shape_data(card, ctx)
         else:
-            found = range_data(card) if card["kind"] == "chart" and merges_on_server(card) else chart_data(body, fetch_window(ctx)) if card["kind"] == "chart" else metric_data(body)
+            found = range_data(card) if card["kind"] == "chart" and merges_on_server(card) else chart_data({**body, "groups": server_picks(card)}, fetch_window(ctx)) if card["kind"] == "chart" else metric_data(body)
         if card["kind"] in ("table", "sentence", "deviation"):  # 기간 기준 날짜 컬럼 후보(하나뿐이면 화면이 자동으로 채운다)
             found.setdefault("date_cols", date_columns(querying.build(source["body"], select=False)))
         if card["kind"] == "chart" and card["view"]["type"] in POINT_TYPES:  # 점 종류를 고른 카드는 점도 다시 구한다

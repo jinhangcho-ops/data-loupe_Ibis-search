@@ -1,6 +1,7 @@
 "use client";
 // (Phase 4) 카드 설정 패널의 [표시할 그룹] 접기 칸: 보일 그룹·계열 체크(끌어 고르기), 범위, 범위 묶기, 지도 영역 묶음, 이름 바꾸기를 view.groups로 고친다.
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { values as fetchValues } from "@/lib/api";
 import { useConstants } from "@/lib/constants";
 import { dragPick, dragRange, groupNames, rangeName } from "@/lib/groups";
 import type { GroupView, RangeEnd } from "@/lib/groups";
@@ -9,6 +10,7 @@ import { Check } from "../menu/Fields";
 
 // 목록 이름이 이보다 많으면 위에 찾기 칸(쿼리 화면 common.js의 MENU_FIND와 같은 값)
 const GROUP_FIND = 8;
+const FIND_WAIT = 300;  // 그룹 찾아 더하기: 입력이 멈춘 뒤 기다리는 ms(쿼리 화면 common.js의 TYPE_WAIT와 같은 값)
 
 type ListKind = "names" | "series";
 type Drag = { list: ListKind; from: number; to: number };
@@ -30,8 +32,13 @@ export function GroupPicker({ card, data, onChange, recompute }: GroupPickerProp
   const [pick, setPick] = useState<string[]>([]);
   const [setName, setSetName] = useState("");
   const [error, setError] = useState("");
+  const [hunt, setHunt] = useState<{ q: string; values: string[]; more: boolean; error: string }>({ q: "", values: [], more: false, error: "" });
+  const huntSeq = useRef(0);
+  const huntTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const g: GroupView = (card.view as unknown as { groups?: GroupView }).groups ?? {};
-  const { names, series, ordered } = groupNames(card, data);
+  const { names: got, series, ordered } = groupNames(card, data);
+  const served = card.kind === "chart" && data.x_kind !== "date";  // (Phase 18) 서버가 X를 고른 그룹·숫자 범위로 먼저 거르는 카드(dash_calc.server_picks)
+  const names = served ? [...new Set([...got, ...(g.keep ?? [])])] : got;  // 받은 값에 없는 고른 그룹도 보여 끌 수 있게
   if (names.length === 0 && series.length === 0 && ordered === null) return null;
 
   const ranges = g.ranges ?? [];
@@ -55,13 +62,21 @@ export function GroupPicker({ card, data, onChange, recompute }: GroupPickerProp
       setError((e as Error).message);
     }
   };
+  const look = (q: string) => {
+    clearTimeout(huntTimer.current);
+    const mine = ++huntSeq.current;  // 늦게 온 앞 응답은 버린다
+    fetchValues({ ...(card.source.body ?? {}), q }, String(card.source.body?.x ?? "")).then(
+      (r) => { if (mine === huntSeq.current) setHunt({ q, values: r.values, more: r.more, error: "" }); },
+      (e) => { if (mine === huntSeq.current) setHunt({ q, values: [], more: false, error: (e as Error).message }); },
+    );
+  };
   const flip = (cur: string[] | undefined, picked: string[]) => {
     const now = cur ?? [];
     return picked.every((p) => now.includes(p)) ? now.filter((x) => !picked.includes(x)) : [...now, ...picked.filter((p) => !now.includes(p))];
   };
   const toggle = (list: ListKind, picked: string[]) =>
-    update(list === "names" ? { ...g, keep: flip(g.keep, picked) } : { ...g, series: flip(g.series, picked) }, false);
-  const setRanges = (next: NonNullable<GroupView["ranges"]>) => update({ ...g, ranges: next }, !!g.merge);
+    update(list === "names" ? { ...g, keep: flip(g.keep, picked) } : { ...g, series: flip(g.series, picked) }, list === "names" && served);
+  const setRanges = (next: NonNullable<GroupView["ranges"]>) => update({ ...g, ranges: next }, !!g.merge || (served && ordered === "number"));
   const end = (v: string): RangeEnd => (v === "" ? null : ordered === "number" ? +v : v);
   const editRange = (k: number, side: number, v: RangeEnd) =>
     setRanges(ranges.map((x, m): [RangeEnd, RangeEnd] => (m !== k ? [x[0], x[1]] : side ? [x[0], v] : [v, x[1]])));
@@ -140,6 +155,18 @@ export function GroupPicker({ card, data, onChange, recompute }: GroupPickerProp
       </div>
       {open && (
         <div className="bcolors">
+          {served && (
+            <div>
+              <input aria-label="그룹 찾아 더하기" placeholder="그룹 찾아 더하기" value={hunt.q}
+                onChange={(e) => { const q = e.target.value; setHunt({ ...hunt, q }); clearTimeout(huntTimer.current); huntTimer.current = setTimeout(() => look(q.trim()), FIND_WAIT); }}
+                onKeyDown={(e) => { if (e.key !== "Enter" || e.nativeEvent.isComposing) return; e.preventDefault(); look(hunt.q.trim()); }} />
+              {hunt.values.map((v) => (
+                <button key={v} type="button" onClick={() => update({ ...g, keep: [...new Set([...(g.keep ?? []), v])] }, true)}>{v}</button>
+              ))}
+              {hunt.more && <div className="hint">더 있어요. 더 좁혀 찾으세요.</div>}
+              {hunt.error && <div className="hint" role="status">{hunt.error}</div>}
+            </div>
+          )}
           {names.length > 0 && rows("names", names, g.keep)}
           {series.length > 0 && rows("series", series, g.series)}
           {ordered && (
