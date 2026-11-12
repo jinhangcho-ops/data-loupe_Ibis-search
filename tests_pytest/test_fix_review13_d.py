@@ -6,7 +6,7 @@ import subprocess
 import duckdb
 import pytest
 
-from core import compare, server
+from core import compare, server, settings
 from dashboard import dash_calc, period
 from test_dash_js import run_ts
 from test_fix_audit7_js import needs_node
@@ -64,6 +64,7 @@ def test_13d6_deviation_empty_entity_name(db):
 def test_13d3_13d4_show_value(tmp_path):
     nums = [(0.12345, "percent"), (-1234.5, "currency"), (-0.001, "number"), (2.5, "currency"), (1.005, "number"), (0.256, "percent"), (1234.567, "number"), (-0.4, "currency"), (1e21, "number"), (1e-9, "percent")]
     got = json.loads(run_ts(tmp_path, f"""
+setCurrency({json.dumps(settings.get("currency_symbol"))});  // 화면은 통화 기호를 서버 설정에서 받는다
 const out = {json.dumps(nums)}.map(([v, f]) => showValue(v, f));
 console.log(JSON.stringify([out, showValue("가,나"), showValue(true, "percent"), showValue("2026-01-01", "number", "일")]));
 """))  # 대시보드 화면(web/lib/calc.ts)의 showValue

@@ -244,7 +244,7 @@ def agg_unsupported(body, expr, extra=()):
         if agg in sql_funcs.MERGE or not isinstance(agg, str):
             continue
         try:
-            made = sql_funcs.aggregate(agg, expr, y or None, None, opts if isinstance(opts, dict) else None)
+            made = sql_funcs.aggregate_built(agg, expr, y or None, None, opts if isinstance(opts, dict) else None, True)  # 되는지만 본다: 대체 식의 평균 조회는 실제 식을 만들 때 한 번만
         except ValueError:
             continue  # 쓸 수 없는 인자는 실행할 때 이유와 함께 알린다
         if not source.compiles(expr.aggregate(v=made)):

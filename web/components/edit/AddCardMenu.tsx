@@ -17,7 +17,7 @@ import { CARD_KINDS, DATE_X, WATCH, WITH_DATE, colsOfType, kindGroups, parseBlan
 
 export type AddCardMenuProps = { open: boolean; onClose: () => void; onAdd: (card: Partial<Card>) => void; fill?: Card };
 
-const FORMATS: [string, string][] = [["number", "숫자"], ["percent", "% (0~1 값)"], ["currency", "₩ 금액"]];
+const FORMATS: [string, string][] = [["number", "숫자"], ["percent", "% (0~1 값)"], ["currency", "금액"]];
 const NUM = ["정수", "실수"], DATE = ["날짜", "날짜시간"];
 const BUCKET_TIMED = "hour", FUNNEL_TIMED = "minute";  // 날짜시간 컬럼일 때 편차 표 시간대 묶음·퍼널/생키 기간 제한의 기본 단위(날짜만 있는 컬럼은 일)
 const REVISIT_CUSTOM = "custom", REVISIT_CUSTOM_START = "0";  // 재방문 목록의 "직접 입력" 값과, 고르면 입력 칸에 먼저 들어가는 값(0은 stagesOf가 거부해 직접 적게 한다)
@@ -187,7 +187,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       {high > 0 && f.rows.length < high && <button type="button" className="linkish" style={{ minHeight: 24 }} onClick={() => setF(p => ({ ...p, rows: [...p.rows, { label: "", y: "", agg: firstAgg }] }))}>값 추가</button>}
 
       {is("kpi", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation", "bullet", "calheat") && <Sel label="표시 형식" value={f.format} onChange={v => set("format", v)} options={FORMATS} />}
-      {is("kpi", "donut_kpi", "stripes", "bullet", "calheat") && <Txt label="단위" title="값 뒤에 붙일 글자. 사람 수는 명, 횟수는 회처럼 적어요. 돈이면 표시 형식 ₩ 금액을 고르거나 원을 적어요" placeholder="단위 (예: 명, 회, 원)" value={f.unitText} onChange={v => set("unitText", v.slice(0, 10))} width={130} />}
+      {is("kpi", "donut_kpi", "stripes", "bullet", "calheat") && <Txt label="단위" title="값 뒤에 붙일 글자. 사람 수는 명, 횟수는 회처럼 적어요. 돈이면 표시 형식 금액을 고르거나 원을 적어요" placeholder="단위 (예: 명, 회, 원)" value={f.unitText} onChange={v => set("unitText", v.slice(0, 10))} width={130} />}
       {is("kpi") && <Sel label="지표" title="지표 하나를 값으로 써요. 비율 지표는 분자와 분모도 작게 보여요" value={f.metric} onChange={v => set("metric", v)} options={metrics} blank="(쓰지 않음)" />}
       {is("gauge", "summary") && <Sel label="나눌 컬럼" title="게이지는 이 컬럼의 값마다 한 조각으로 나눠요. 요약 문장은 변화에 가장 크게 기여한 값을 찾을 때 써요" value={f.group} onChange={v => set("group", v)} options={all} blank="(없음)" need={is("gauge")} />}
       {X_LABEL[f.kind] && <Sel label={X_LABEL[f.kind]!} value={f.group} onChange={v => set("group", v)} options={all} blank={is("boxplot") ? "(없음: 전체)" : "(고르세요)"} need={!is("boxplot")} />}

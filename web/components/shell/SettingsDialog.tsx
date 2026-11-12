@@ -1,11 +1,11 @@
 "use client";
-// N4 — 설정 창(옛 #d-modal .settings-box): 기준일·기간·주기·실시간(PeriodBar), 카드 색(팔레트), 목표 파일(문제 줄 쪽 넘김), 내 템플릿(N6 Templates), 이름 바꾸기·지우기(두 번 누르기).
+// N4 — 설정 창(옛 #d-modal .settings-box): 기준일·기간·주기·실시간(PeriodBar), 카드 색(팔레트), 목표 파일(문제 줄 쪽 넘김), 통화 기호(앱 설정 currency_symbol), 내 템플릿(N6 Templates), 이름 바꾸기·지우기(두 번 누르기).
 // 기간 칸은 바꾸면 그 항목만 저장한다(ShellProvider). 팔레트는 dispatch({type:"meta"})(dirty → 자동 저장 N6), 이름은 바로 저장한다(목록 이름도 바뀐다).
 import { useEffect, useState } from "react";
 import { Templates } from "@/components/edit/Templates";
-import { deleteDashboard, getTargets, saveDashboard, saveViz, setTargets, viz } from "@/lib/api";
+import { deleteDashboard, getTargets, saveDashboard, saveSetting, saveViz, setTargets, viz } from "@/lib/api";
 import { type SemanticWords, setWords } from "@/lib/autoviz";
-import { HEX } from "@/lib/calc";
+import { HEX, currencySymbol, setCurrency } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import type { Constants, Dashboard, Targets } from "@/lib/types";
@@ -49,6 +49,8 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
   const [prefs, setPrefs] = useState<Constants["dash"]["viz"] | null>(null);
   const [wordText, setWordText] = useState<Record<string, string>>({});
   const [wordMsg, setWordMsg] = useState<{ text: string; ok?: boolean }>({ text: "" });
+  const [money, setMoney] = useState(currencySymbol);
+  const [moneyMsg, setMoneyMsg] = useState<{ text: string; ok?: boolean }>({ text: "" });
   useEffect(() => { getTargets().then(t => { setT(t); setPath(t.path); }).catch(e => setTNote((e as Error).message)); }, []);
   useEffect(() => {
     viz().then(p => { setPrefs(p); setWordText(Object.fromEntries(WORD_LISTS.map(([k]) => [k, p.words[k].join("\n")]))); }).catch(e => setWordMsg({ text: (e as Error).message }));
@@ -74,6 +76,17 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
     setPalErr("");
     setPalette(found.join(", "));
     dispatch({ type: "meta", patch: { palette: found } });
+  };
+  // 통화 기호: 비우면 서버 기본값. 글자 수·못 쓰는 글자는 서버(settings.valid)가 검사해 그 문장을 보인다
+  const saveMoney = async () => {
+    const symbol = money.trim() || String(consts?.defaults.currency_symbol ?? "");
+    setBusy(true);
+    try {
+      await saveSetting({ currency_symbol: symbol });
+      setCurrency(symbol);
+      setMoney(symbol);
+      setMoneyMsg({ text: "통화 기호를 저장했어요. 카드의 금액은 다시 그릴 때, 비교 문장은 다시 구할 때 바뀌어요.", ok: true });
+    } catch (e) { setMoneyMsg({ text: (e as Error).message }); } finally { setBusy(false); }
   };
   const saveTargets = async () => {
     setBusy(true);
@@ -124,6 +137,13 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
       </div>
       <div className="hint" style={{ margin: 0 }}>{tText}{!tNote && t?.error_total ? <button className="linkish" onClick={() => setShowErrs(true)}>보기</button> : null}</div>
       {showErrs && <TargetErrors onClose={() => setShowErrs(false)} />}
+      <h4>통화 기호</h4>
+      <div className="row">
+        <input value={money} onChange={e => setMoney(e.target.value)} maxLength={consts?.currency_max} placeholder={String(consts?.defaults.currency_symbol ?? "")} aria-label="통화 기호" style={{ width: 80 }}
+          title="표시 형식이 금액인 값 앞에 붙는 기호예요($, € 등). 숫자·부호·공백은 쓸 수 없고, 비우면 기본 기호로 돌아가요. 모든 대시보드에 적용돼요" />
+        <button className="btn" onClick={saveMoney} disabled={busy}>저장</button>
+      </div>
+      <div className={moneyMsg.ok ? "hint" : "err"} role="status">{moneyMsg.text}</div>
       <h4>차트 낱말</h4>
       <div className="hint" style={{ margin: 0 }}>한 줄에 낱말 하나. 긍정·부정은 이름에 들어 있으면, 기타·결측은 이름 전체가 같으면 맞아요.</div>
       <div className="row">

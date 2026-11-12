@@ -167,9 +167,13 @@ export function nextLayout(items: GridItem[], w = 6, h = 8): Layout {
 export type Match = { kind?: "num" | "word"; test?: (v: any) => boolean; error?: string };  // eslint-disable-line @typescript-eslint/no-explicit-any
 export type Compiled = { rule: CondRule; parsed: Match; error: string };
 
-// "₩1,000"·"-5%"·"1,234.5" → 숫자(%는 ÷100). 숫자가 아니면 null. 안쪽에 공백이 있으면("100, 200") 숫자가 아니다(목록으로 읽힌다).
+// 통화 기호(서버 설정 currency_symbol, 기본값도 서버가 준다). 상수를 받으면 setCurrency가 바꾼다. strip은 값 글자 맨 앞의 기호를 떼는 식(기호의 정규식 글자는 글자 그대로)
+const MONEY = { symbol: "", strip: /^(-?)/ };
+export const setCurrency = (symbol: string) => { MONEY.symbol = symbol; MONEY.strip = new RegExp("^(-?)" + symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*"); };
+export const currencySymbol = () => MONEY.symbol;
+// "₩1,000"(맨 앞의 통화 기호는 뗀다)·"-5%"·"1,234.5" → 숫자(%는 ÷100). 숫자가 아니면 null. 안쪽에 공백이 있으면("100, 200") 숫자가 아니다(목록으로 읽힌다).
 export function ruleNumber(text: unknown) {
-  const t = String(text).trim().replace(/₩\s*/g, "");
+  const t = String(text).trim().replace(MONEY.strip, "$1");
   if (!/^-?(\d{1,3}(,\d{3})+|\d+)(\.\d+)?%?$/.test(t)) return null;
   const n = parseFloat(t.replace(/,/g, "").replace("%", ""));
   return t.endsWith("%") ? n / 100 : n;
@@ -356,12 +360,12 @@ export function smoothPath(points: string) {
   for (let i = 1; i < p.length - 1; i++) d += ` Q${p[i][0]},${p[i][1]} ${((p[i][0] + p[i + 1][0]) / 2).toFixed(1)},${((p[i][1] + p[i + 1][1]) / 2).toFixed(1)}`;
   return d + ` L${p.at(-1)![0]},${p.at(-1)![1]}`;
 }
-// 값 글자(서버 core/compare.format_value와 같은 모양): number는 쉼표·소수 둘째 자리, percent는 ×100 소수 둘째 자리 %, currency는 ₩ + 쉼표(음수는 -₩). unit은 뒤에 붙인다.
+// 값 글자(서버 core/compare.format_value와 같은 모양): number는 쉼표·소수 둘째 자리, percent는 ×100 소수 둘째 자리 %, currency는 통화 기호(setCurrency, 기본 ₩) + 쉼표(음수는 -₩). unit은 뒤에 붙인다.
 // 숫자가 아닌 값(string_agg·first·any_value 등)은 글자 그대로.
 export function showValue(v: unknown, format = "number", unit = "") {
   if (v == null) return "—";
   if (typeof v !== "number") return String(v) + unit;
-  const text = format === "percent" ? roundText(v * 100, 2) + "%" : format === "currency" ? roundText(v, 0, "₩") : roundText(v, 2);
+  const text = format === "percent" ? roundText(v * 100, 2) + "%" : format === "currency" ? roundText(v, 0, MONEY.symbol) : roundText(v, 2);
   return text + unit;
 }
 // compare.trimmed와 같은 규칙: 절댓값을 d자리에서 5를 올려 반올림(2.5 → 3), 쉼표, 끝의 0을 떼고, -0은 0. prefix(₩)는 부호 뒤에.

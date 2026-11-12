@@ -52,6 +52,7 @@ def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버�
     found["dash"].update(auto=viz_rules.AUTO_PARAMS, auto_names=viz_rules.AUTO_NAMES, viz=viz_rules.load_prefs(), orders=viz_rules.ORDERS, order_names=viz_rules.ORDER_NAMES)  # 자동 규칙 수치표·이름, 차트 낱말과 쿼리 화면 기본값, 정렬 다섯 값·이름
     cal = settings.load()
     found.update(week_start=cal.get("week_start") or "mon", fiscal_start_month=cal.get("fiscal_start_month") or 1)  # 화면의 주·연 묶음(web/lib/calc.ts BUCKET)이 설정을 따르게
+    found.update(currency_symbol=settings.get("currency_symbol"), currency_max=settings.CURRENCY_MAX)  # 값 모양 currency의 기호(web/lib/calc.ts showValue)와 설정 창 칸의 글자 수
 
 
 PRELOAD = ("dashboard.dash_calc", "dashboard.dash_refresh", "dashboard.period", "dashboard.dash_pdf", "dashboard.summary_text")  # 대시보드를 열면 뒤에서 미리 올리는 기능 모듈

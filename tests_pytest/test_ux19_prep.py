@@ -68,7 +68,7 @@ def test_19e_peak_finder_folded():
 
 def test_19f1_question_names_and_two_lines():
     page = html()
-    labels = re.findall(r'<label title="[^"]+"><input type="radio" name="akind" value="(\w+)"(?: checked)?> <span>([^<]+\?)<small>\(([^)]+)\)</small></span></label>', page)
+    labels = re.findall(r'<label data-hint title="[^"]+"><input type="radio" name="akind" value="(\w+)"(?: checked)?> <span>([^<]+\?)<small>\(([^)]+)\)</small></span></label>', page)
     assert [k for k, _, _ in labels] == KINDS
     assert dict((k, o) for k, _, o in labels)["pareto"] == "파레토" and dict((k, q) for k, q, _ in labels)["basket"] == "같이 사는 상품은?"
     assert 'class="akinds"' in page and "seg4" not in page
@@ -92,10 +92,10 @@ def test_19f2_full_rerun_words():
 
 @needs_node
 def test_19f2_rows_box_only_with_result(tmp_path):
-    part = between("prep.html", "function drawAna()", "\n}\n") + "\n}\n"
+    part = between("analysis.js", "function drawAna()", "\n}\n") + "\n}\n"
     stubs = ("let A = { result: null, view: 'groups', lo: 0, hi: 0 }; const VIEW_NAMES = {}, VIEW_RATIOS = {};"
              "const anaTitle = () => 't', anaNote = () => 'n', anaTable = () => ({}), anaSpan = () => 0, anaSlice = d => d, showRange = () => {}, resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f';"
-             "const SERVER = { analysis: { whole: [] } }, NEW_KINDS = [], ADD_TITLE = '', anaAuto = {}, gapTable = () => [], segTables = () => [], pairBlock = () => [], gradeLine = () => '', sortedTable = () => {}, anaRows = r => r, anaDraw = () => {};"
+             "const SERVER = { analysis: { whole: [] } }, NEW_KINDS = [], ADD_TITLE = '', anaAuto = {}, gapTable = () => [], segTables = () => [], pairBlock = () => [], noteLines = () => [], gradeLine = () => '', sortedTable = () => {}, anaRows = r => r, anaDraw = () => {};"
              "globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' }); globalThis.document = { documentElement: {} };")
     body = """
 $("a-rows-box").hidden = true; drawAna(); const none = $("a-rows-box").hidden;

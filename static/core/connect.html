@@ -1,7 +1,7 @@
 <!-- 연결 카드: 화면 가운데에 뜨는 로그인 창 모양. 첫 화면에는 펼쳐 두고, 다른 화면에서는 위쪽 줄의 연결 이름을 누르면 연다. 연결이 없으면 닫을 수 없다. -->
-<div id="conn-panel" class="modal hidden">
+<div id="conn-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="conn-title">
   <div class="modal-box conn-card">
-    <div class="head"><h3>데이터 연결</h3><button id="conn-close" class="ib" title="닫기" style="margin-left:auto"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
+    <div class="head"><h3 id="conn-title">데이터 연결</h3><button id="conn-close" class="ib" title="닫기" style="margin-left:auto"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
     <p class="lead">내 PC의 파일(Excel·CSV 등)이나 회사 DB를 골라 연결해요. 원본은 바뀌지 않아요.</p>
     <span class="hint conn-for" id="conn-for"></span>
     <select id="recent-conn" class="hidden" title="전에 연결했던 폴더와 주소예요. 자주 쓴 것부터 보여요. 고르면 칸이 채워지고, 비밀번호는 다시 넣어야 해요."></select>
@@ -37,9 +37,9 @@
   </div>
 </div>
 <!-- 드라이버 확인: 묶음(DB·DW·DL)별 이름·상태·설명·받는 곳(링크·주소 복사) -->
-<div id="drivers-panel" class="modal hidden">
+<div id="drivers-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="drv-title">
   <div class="modal-box drv-box">
-    <div class="head"><h3>드라이버 확인</h3><button id="drv-close" class="ib" title="닫기" style="margin-left:auto"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
+    <div class="head"><h3 id="drv-title">드라이버 확인</h3><button id="drv-close" class="ib" title="닫기" style="margin-left:auto"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
     <div class="hint">이 PC에 설치된 드라이버만 확인해요. 자동으로 내려받거나 설치하지 않아요. [받는 곳 열기]로 브라우저에서 열거나 주소를 복사해 직접 받으세요.</div>
     <div class="table-wrap"><table class="drv-table"><thead><tr><th>분류</th><th>이름</th><th>상태</th><th>설명</th><th>받는 곳</th></tr></thead><tbody id="drv-rows"></tbody></table></div>
     <div class="err" id="err-drivers"></div>

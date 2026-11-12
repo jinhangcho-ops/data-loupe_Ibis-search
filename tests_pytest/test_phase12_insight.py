@@ -266,7 +266,7 @@ def test_decompose_sums_to_change(t):
     assert (got["before"], got["after"], got["change"]) == (pytest.approx(0.3), pytest.approx(0.55), pytest.approx(0.25))
     assert (got["mix"], got["rate"], got["interaction"]) == (pytest.approx(0.05), pytest.approx(0.2), pytest.approx(0.0))
     x = next(g for g in got["groups"] if g["group"] == "x")
-    assert (x["mix"], x["rate"], x["interaction"], x["total"]) == (pytest.approx(-0.05), pytest.approx(0.1), pytest.approx(-0.05), pytest.approx(0.0))
+    assert (x["mix"], x["rate"], x["interaction"], x["total"]) == (pytest.approx(0.025), pytest.approx(0.1), pytest.approx(-0.05), pytest.approx(0.075))  # 구성 효과는 기준 기간 전체 평균(0.3)과의 차이로(Phase 20): (0.25 − 0.5) × (0.2 − 0.3)
     assert [s["name"] for s in got["steps"]] == ["기준 기간", "구성 변화", "그룹 안 변화", "상호작용", "비교 기간"]
 
 
@@ -274,7 +274,7 @@ def test_mix_parts_new_and_gone_groups():
     got = insight.mix_parts({"x": (10, 0.5)}, {"x": (10, 0.5), "z": (10, 1.0)})
     assert (got["mix"], got["rate"], got["interaction"]) == (pytest.approx(0.25), 0.0, 0.0)
     gone = insight.mix_parts({"x": (10, 0.5), "z": (10, 1.0)}, {"x": (10, 0.5)})
-    assert gone["mix"] == pytest.approx(-0.25) and gone["groups"]["z"]["mix"] == pytest.approx(-0.5)
+    assert gone["mix"] == pytest.approx(-0.25) and gone["groups"]["z"]["mix"] == pytest.approx(-0.125)  # (0 − 0.5) × (1.0 − 전체 평균 0.75), Phase 20
 
 
 def test_decompose_checks():
@@ -306,9 +306,9 @@ def test_seasonal_flags_spike(t):
     for v, tr, s, r in zip(got["values"], got["trend"], got["seasonal"], got["remainder"]):
         if tr is not None:
             assert v == pytest.approx(tr + s + r)
-    assert got["trend"][:3] == [None] * 3 and got["trend"][-3:] == [None] * 3
-    from prep.prep_diag import MAD_C
-    assert got["mad"] > 0 and got["limit"] == pytest.approx(insight.MAD_K * got["mad"] / MAD_C)  # 보정 MAD(Phase 5와 같은 MAD_C)
+    assert None not in got["trend"]  # 끝에서는 있는 칸만으로 추세를 구한다(Phase 20)
+    scale = pl.DataFrame({"remainder": got["remainder"]}).select(s=insight.spread(insight.SCALE_Q))["s"][0]
+    assert got["mad"] > 0 and got["q"] == insight.SCALE_Q and got["limit"] == pytest.approx(insight.MAD_K * scale)  # (Phase 20) 흩어짐은 기본 분위 SCALE_Q로 잰다(0.5를 주면 보정 MAD)
     for label, r in zip(got["labels"], got["remainder"]):
         if r is not None:
             assert (label in got["flags"]) == (abs(r - got["median"]) > got["limit"])

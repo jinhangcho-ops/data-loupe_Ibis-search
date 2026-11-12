@@ -45,7 +45,7 @@ console.log(JSON.stringify(out));"""
 
 
 def test_5e2_prep_table_switch_undo_does_not_return_to_old_table(tmp_path):
-    html = page("prep/prep.html")
+    html = page("prep/prep.html") + page("prep/analysis.js")
     onchange = [l for l in html.splitlines() if l.startswith('$("base").onchange')][0]
     body = """
 const els = {}; const $ = id => els[id] ??= { value: "", replaceChildren() {}, textContent: "" };
@@ -91,7 +91,7 @@ def test_5e2_undo_reset_is_ignored_while_restoring(tmp_path):
 
 
 def test_5e3_add_dash_pop_stays_open_on_menu_click():
-    html = page("prep/prep.html")
+    html = page("prep/prep.html") + page("prep/analysis.js")
     assert '.closest(".pop, .menu")' in fn(html, 'document.addEventListener("click", e => { if (!e.target.closest', "\n")
 
 
@@ -130,7 +130,7 @@ def test_5e5_undo_why_reports_restore_error(tmp_path):
 
 
 def test_5e5_static_edits():
-    prep, index, css, common = page("prep/prep.html"), page("query/index.html"), page("core/common.css"), page("core/common.js")
+    prep, index, css, common = page("prep/prep.html") + page("prep/analysis.js"), page("query/index.html"), page("core/common.css"), page("core/common.js")
     add = fn(prep, "function addStep() {")
     assert "closeMenu()" in add
     assert "scoped(prepUndo, inPrep)" in prep and "scoped(searchUndo, inExplore)" in index

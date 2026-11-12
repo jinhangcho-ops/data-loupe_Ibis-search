@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-HTML = (Path(__file__).resolve().parent.parent / "static/prep/prep.html").read_text(encoding="utf-8")
+HTML = "".join((Path(__file__).resolve().parent.parent / "static/prep" / name).read_text(encoding="utf-8") for name in ("prep.html", "analysis.js"))  # 분석 부분은 analysis.js에 있다
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
 

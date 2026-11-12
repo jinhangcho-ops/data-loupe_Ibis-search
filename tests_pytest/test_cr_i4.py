@@ -24,7 +24,7 @@ console.log("ok");
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 def test_funnel_by_and_median_in_node(tmp_path):
-    prep = (ROOT / "static" / "prep" / "prep.html").read_text(encoding="utf-8")
+    prep = (ROOT / "static" / "prep" / "prep.html").read_text(encoding="utf-8") + (ROOT / "static" / "prep" / "analysis.js").read_text(encoding="utf-8")
     how = re.search(r"function anaHow\(\) \{.*?\n\}\n", prep, re.S).group(0)
     funnel = (ROOT / "static" / "core" / "funnel.js").read_text(encoding="utf-8")
     f = tmp_path / "i4.js"
@@ -34,6 +34,6 @@ def test_funnel_by_and_median_in_node(tmp_path):
 
 
 def test_prep_has_segment_screen():
-    prep = (ROOT / "static" / "prep" / "prep.html").read_text(encoding="utf-8")
+    prep = (ROOT / "static" / "prep" / "prep.html").read_text(encoding="utf-8") + (ROOT / "static" / "prep" / "analysis.js").read_text(encoding="utf-8")
     for part in ('id="a-fby"', 'id="a-segs"', "function segTables", "funnelRows(g.steps)", "funnelRows(d.steps)"):
         assert part in prep, part

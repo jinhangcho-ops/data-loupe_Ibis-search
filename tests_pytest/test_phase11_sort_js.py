@@ -7,7 +7,7 @@ from test_fix_audit_js import COMMON, STATIC, STUBS, index_slice, run_node
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 INDEX = (STATIC / "query" / "index.html").read_text(encoding="utf-8")
-PREP = (STATIC / "prep" / "prep.html").read_text(encoding="utf-8")
+PREP = (STATIC / "prep" / "prep.html").read_text(encoding="utf-8") + (STATIC / "prep" / "analysis.js").read_text(encoding="utf-8")
 
 
 def top_function(text, name):

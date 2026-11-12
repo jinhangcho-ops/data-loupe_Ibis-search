@@ -16,6 +16,7 @@ from pathlib import Path
 
 import yaml
 
+from core import settings
 from core.compare import ending
 
 EXTENSIONS = (".xlsx", ".xls", ".csv", ".yaml", ".yml", ".json", ".md", ".txt")
@@ -29,6 +30,7 @@ FIELDS = {"name": ("이름", "name", "지표", "지표명", "항목"), "value": 
 UNIT = {"억": 10**8, "만": 10**4}
 VALUE_BODY = re.compile(r"(?:(?:\d+(?:\.\d+)?|\.\d+)[억만])*(?:\d+(?:\.\d+)?|\.\d+)[억만]?")  # 숫자 사이에는 단위가 있어야 한다("1.500.000"·"2026.10.05"는 못 읽음)
 NUMBER_RUN = re.compile(r"\d(?:[\d.,]| (?=\d))*")  # 숫자와 그 사이 쉼표·점·한 칸 공백
+PLAIN = re.compile(r"[\d.,\s₩원억만천%+-]*")  # 설정의 통화 기호 없이도 읽는 글자뿐인 값
 GROUPED = re.compile(r"\d{1,3}([, ])\d{3}(?:\1\d{3})*(?:\.\d+)?")  # 쉼표나 공백은 세 자리마다만(한 가지로)
 VALUE_PART = re.compile(r"(\d+(?:\.\d+)?|\.\d+)([억만]?)")
 TABLE_SEPARATOR = re.compile(r"\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*")
@@ -63,7 +65,7 @@ def parse_value(text):
     if not raw:
         raise ValueError("값이 비어 있어요.")
     loose = any(("," in m[0] or " " in m[0]) and not GROUPED.fullmatch(m[0]) for m in NUMBER_RUN.finditer(raw))
-    body = re.sub(r"[₩,\s]", "", raw)
+    body = re.sub(r"[₩,\s]", "", raw if PLAIN.fullmatch(raw) else raw.replace(settings.get("currency_symbol"), ""))  # 설정의 통화 기호($ 등)도 뗀다. 설정은 다른 글자가 있을 때만 읽는다(값마다 파일을 읽으면 8,000줄에 1초가 넘는다)
     body = body[:-1] if body.endswith("원") else body
     percent = body.endswith("%")
     body = body[:-1] if percent else body

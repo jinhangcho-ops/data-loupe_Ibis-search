@@ -40,7 +40,7 @@ def test_old_pages_may_frame_island(client):
 
 
 def test_no_chartjs_calls_left():
-    prep, sent = (ROOT / "static/prep/prep.html").read_text(encoding="utf-8"), (ROOT / "static/query/sentences.js").read_text(encoding="utf-8")
+    prep, sent = (ROOT / "static/prep/prep.html").read_text(encoding="utf-8") + (ROOT / "static/prep/analysis.js").read_text(encoding="utf-8"),(ROOT / "static/query/sentences.js").read_text(encoding="utf-8")
     for text in (prep, sent):
         assert "new Chart" not in text and "CHART_JS" not in text
     assert "anaConfig" not in prep and '<iframe id="a-chart" src="/chart" title="분석 그림"' in prep
@@ -81,11 +81,11 @@ def test_island_helper_queues_until_ready(tmp_path):
 
 @node
 def test_draw_ana_sends_island_message(tmp_path):
-    part = between("prep.html", "function drawAna()", "\n}\n") + "\n}\n"
+    part = between("analysis.js", "function drawAna()", "\n}\n") + "\n}\n"
     stubs = ("let A = { result: null, view: 'groups', lo: 0, hi: 0 }; const VIEW_NAMES = {}, VIEW_RATIOS = { box: 2.4 }, sent = [];"
              "const anaTitle = () => 't', anaNote = () => 'n', anaTable = () => ({}), anaSpan = (d, v) => v === 'groups' ? 3 : 0, anaSlice = (d, v, lo, hi) => ({ cut: [v, lo, hi] }),"
              "showRange = () => {}, resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f', anaDraw = m => sent.push(m);"
-             "const SERVER = { analysis: { whole: [] } }, NEW_KINDS = [], ADD_TITLE = '', anaAuto = {}, gapTable = () => [], segTables = () => [], pairBlock = () => [], gradeLine = () => '', anaRows = r => r,"
+             "const SERVER = { analysis: { whole: [] } }, NEW_KINDS = [], ADD_TITLE = '', anaAuto = {}, gapTable = () => [], segTables = () => [], pairBlock = () => [], noteLines = () => [], gradeLine = () => '', anaRows = r => r,"
              "sortedTable = (h, d, draw) => draw(h, d, null); globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' }); globalThis.document = { documentElement: {} };")
     body = """
 A.result = { kind: "groups", views: ["groups"], values: [1, 2, 3] }; drawAna();

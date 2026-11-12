@@ -36,7 +36,7 @@ querying = Later("core.querying")
 viz_rules = Later("core.viz_rules")
 
 # 그래프 그림 저장(/api/images): 연결을 쓰지 않으므로 차례를 기다리지 않는다.
-server.FREE.add("/api/images")
+server.FREE.update({"/api/images", "/api/searches", "/api/searches/use", "/api/sqls/use"})  # 저장한 검색·SQL 쓴 횟수: 설정 폴더 파일만(쓰기는 settings.updating이 묶는다)
 IMAGE_TYPES = {"data:image/png;base64,": ".png", "data:image/jpeg;base64,": ".jpg"}  # 화면이 보내는 그림(data URL 머리) → 확장자
 MAX_IMAGE_BYTES = 30 * 1024 * 1024  # 그림 하나의 크기
 

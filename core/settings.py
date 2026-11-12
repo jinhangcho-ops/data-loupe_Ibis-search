@@ -105,7 +105,7 @@ SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "char
 # 표본: 신뢰수준 %(sampling.config가 Z로)·비율 허용 오차·평균 상대 허용 오차
 FLOATS = {"sample_too_few": (0.05, 0.9), "sample_conf": (50, 99.99), "sample_e_ratio": (0.001, 0.2), "sample_e_mean": (0.005, 0.5)}
 DEFAULTS = {"sample_too_few": 0.2, "pc_stat_rows": 1_000_000, "sample_conf": 95, "sample_e_ratio": 0.01, "sample_e_mean": 0.05, "pilot_rows": 5_000, "strata_h": 5, "strata_min": 30,
-            "hash_buckets": 10_000, "key_over": 3, "pilot_first": "preview", "cloud_rows": 100_000, "hash_exclude": "on", "ignore_marks": "off"}
+            "hash_buckets": 10_000, "key_over": 3, "pilot_first": "preview", "cloud_rows": 100_000, "hash_exclude": "on", "ignore_marks": "off", "currency_symbol": "₩"}  # currency_symbol: 값 모양 currency의 기호(compare.format_value, 화면 showValue)
 
 # 직전 실행의 행당 시간(나노초/행). 작업 종류(검색·집계·차트·저장·전처리의 모양 보기·미리보기·실행)와 기준 테이블 행 수의 구간(10배 단위)마다 하나.
 # 이름은 time_종류_구간이고 구간은 행 수의 자릿수 - 1을 TIME_BANDS 안으로 맞춘 것(1,000행 미만은 모두 2)이다. 화면이 예상 시간을 구할 때 같은 구간의 값만 쓴다.
@@ -120,9 +120,15 @@ JOIN_KEYS_MAX = 3000  # 쿼리 화면이 테이블 쌍마다 기억한 조인 �
 ADV_OPEN_MAX = 2000  # (Phase 19) 쉬운 보기에서 사람이 펼쳐 둔 [더 많은 설정] 묶음 목록(JSON을 퍼센트 인코딩한 글자). 묶음은 화면 전체에 20개 안쪽이라 넉넉하다
 
 
+CURRENCY_MAX = 4  # (Phase 20) 통화 기호(currency_symbol)의 글자 수 상한. 기본 기호는 DEFAULTS
+CURRENCY_BAD = re.compile(r"[\d\s+-]")  # 기호에 못 쓰는 글자: 숫자·부호·공백(값 글자 "-$1,234"를 숫자로 다시 읽을 수 없게 된다)
+
+
 def valid(name, value):
     if name == "join_keys":
         return type(value) is str and len(value) <= JOIN_KEYS_MAX
+    if name == "currency_symbol":
+        return type(value) is str and 1 <= len(value) <= CURRENCY_MAX and value.isprintable() and not CURRENCY_BAD.search(value)
     if name == "adv_open":
         return type(value) is str and len(value) <= ADV_OPEN_MAX
     if TIME.fullmatch(name):

@@ -53,6 +53,13 @@ def between(name, start, end):
     return text[a:text.index(end, a)]
 
 
+def func(name, fn):
+    """파일에서 `function fn(`(앞에 async가 붙을 수 있다)부터 같은 들여쓰기의 다음 function·async function 줄 직전까지."""
+    text = read(name)
+    start = re.search(rf"^([ \t]*)(?:async )?function {re.escape(fn)}\(", text, re.M)
+    return text[start.start():re.compile(rf"^{start[1]}(?:async )?function ", re.M).search(text, start.end()).start()]
+
+
 def run_node(tmp_path, body, files=(), parts=(), env=None):
     """FAKE_DOM + static 파일들 + 잘라 온 구간들 + body를 이어 붙여 돌리고 마지막 줄(JSON)을 돌려준다."""
     script = tmp_path / "t.js"
