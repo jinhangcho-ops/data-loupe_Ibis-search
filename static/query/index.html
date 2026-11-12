@@ -176,28 +176,28 @@
         <select id="ssend" title="집계 표를 받을 곳" style="flex:0 1 160px"></select><button id="ssend-go" class="btn">보내기</button></div>
       <div class="ctl" style="margin-top:14px" title="행 컬럼으로 묶고, 열 컬럼의 값마다 칸을 만들어요(최대 30개). 조건을 넣으면 그 행만 세요">
         <span class="hint" style="margin:0; flex:none">피벗</span>
-        <select id="pv-rows" title="행으로 묶을 컬럼이에요. 값마다 한 줄이 돼요" style="flex:0 1 150px"></select>
-        <select id="pv-rows2" title="둘째 행 기준 컬럼이에요. 부모 대비 비중에 필요해요" style="flex:0 1 150px"></select>
-        <select id="pv-col" title="열로 펼칠 컬럼이에요. 값마다 한 칸이 돼요" style="flex:0 1 150px"></select>
-        <span id="pv-how" title="집계 방법"></span>
-        <select id="pv-val" title="집계할 값 컬럼이에요. 개수만 셀 때는 비워 두세요" style="flex:0 1 150px"></select>
+        <div class="cf"><span class="cl">행</span><select id="pv-rows" title="행으로 묶을 컬럼이에요. 값마다 한 줄이 돼요" style="flex:0 1 150px"></select></div>
+        <div class="cf"><span class="cl">둘째 행</span><select id="pv-rows2" title="둘째 행 기준 컬럼이에요. 부모 대비 비중에 필요해요" style="flex:0 1 150px"></select></div>
+        <div class="cf"><span class="cl">열</span><select id="pv-col" title="열로 펼칠 컬럼이에요. 값마다 한 칸이 돼요" style="flex:0 1 150px"></select></div>
+        <div class="cf"><span class="cl">집계</span><span id="pv-how" title="집계 방법"></span></div>
+        <div class="cf"><span class="cl">값 컬럼</span><select id="pv-val" title="집계할 값 컬럼이에요. 개수만 셀 때는 비워 두세요" style="flex:0 1 150px"></select></div>
         <input id="pv-where" placeholder="셀 행의 조건 (예: 상태 = 완료)" style="flex:1 1 160px" title="비우면 모든 행을 세요">
-        <select id="pv-sub" title="행 컬럼이 있으면 소계와 총계 줄을 더해요" style="flex:0 0 150px"><option value="">소계 없이</option><option value="rollup">소계와 총계 (ROLLUP)</option><option value="cube">모든 조합 (CUBE)</option></select>
+        <div class="cf"><span class="cl">소계</span><select id="pv-sub" title="행 컬럼이 있으면 소계와 총계 줄을 더해요" style="flex:0 0 150px"><option value="">소계 없이</option><option value="rollup">소계와 총계 (ROLLUP)</option><option value="cube">모든 조합 (CUBE)</option></select></div>
         <input id="pv-having" placeholder="집계 결과로 거르기 (예: 전체 합계 > 100)" style="flex:1 1 160px" title="집계한 결과로 걸러요 (HAVING)">
-        <select id="pv-show" title="칸에 보일 것이에요. 비율은 행 합계나 열 합계에서 차지하는 몫이에요" style="flex:0 0 130px"></select>
+        <div class="cf"><span class="cl">칸 표시</span><select id="pv-show" title="칸에 보일 것이에요. 비율은 행 합계나 열 합계에서 차지하는 몫이에요" style="flex:0 0 130px"></select></div>
         <button id="pv-add" class="btn" title="값을 하나 더 집계해요">+ 값 추가</button>
         <button id="pv-run" class="btn">피벗 만들기</button></div>
       <div class="ctl" title="미리 짜 둔 집계 묶음이에요. 고르면 위의 집계·값 컬럼·[+ 값 추가]는 쓰지 않아요">
-        <select id="pv-preset" style="flex:0 1 150px"></select>
-        <select id="pv-key" title="기준(key) 컬럼이에요" style="flex:0 1 150px"></select>
-        <select id="pv-target" title="값(target) 컬럼이에요. 숫자 컬럼이어야 해요" style="flex:0 1 150px"></select>
+        <div class="cf"><span class="cl">집계 묶음</span><select id="pv-preset" style="flex:0 1 150px"></select></div>
+        <div class="cf"><span class="cl">기준</span><select id="pv-key" title="기준(key) 컬럼이에요" style="flex:0 1 150px"></select></div>
+        <div class="cf"><span class="cl">값</span><select id="pv-target" title="값(target) 컬럼이에요. 숫자 컬럼이어야 해요" style="flex:0 1 150px"></select></div>
         <input id="pv-ps" placeholder="분위 (예: 0.25, 0.5, 0.9)" title="쉼표로 나눈 0과 1 사이 수예요" style="flex:0 1 180px">
         <input id="pv-above" type="number" step="any" placeholder="경계" title="이 값을 넘는 행만 따로 세요" style="flex:0 1 90px">
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-share" checked style="width:auto"> 전체 대비 비중</label>
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-parent" style="width:auto"> 부모 대비 비중</label>
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-total" style="width:auto"> 총계 줄</label>
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-pareto" style="width:auto"> 파레토 누적</label>
-        <select id="pv-convert" title="값 칸끼리의 전환율을 더해요" style="flex:0 1 150px"></select></div>
+        <div class="cf"><span class="cl">전환율</span><select id="pv-convert" title="값 칸끼리의 전환율을 더해요" style="flex:0 1 150px"></select></div></div>
       <div class="ctl" id="pv-extra"></div>
       <div class="err" id="err-pivot"></div>
       <div class="table-wrap" id="pivot"></div>
@@ -236,6 +236,14 @@
         <button id="series-add" class="btn" title="지금 고른 Y축, 집계, 모양, 축을 계열 하나로 넣어요. 넣은 계열은 한 차트에 겹쳐 그려요">계열 추가</button>
       </div>
       <ul class="items" id="series"></ul>
+      <div class="err" id="err-chart"></div>
+      <div class="chart-box"><iframe id="chart" src="/chart" title="차트" class="hidden"></iframe><div class="grip-y" data-size="chart" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div></div>
+      <div class="table-wrap hidden" id="ctable"></div>
+      <div class="ctl" style="margin-top:18px"><button id="ctable-show" class="btn">표로 보기</button><button id="ctable-csv" class="btn">CSV</button><span class="hint grow">차트 내보내기</span>
+        <label class="hint" style="margin:0" title="끄면 화면에 보이는 그대로, 켜면 자동 규칙을 풀어 모든 데이터로 CSV·그림을 저장해요"><input type="checkbox" id="cexport-all" style="width:auto"> 모든 데이터 포함</label>
+        <select id="cimage" title="그림의 색 모드예요. 집계 표 그림과 함께 바뀌어요" style="flex:0 0 100px"><option value="light">밝게</option><option value="dark">어둡게</option></select>
+        <button data-image="png" class="btn">PNG</button><button data-image="jpeg" class="btn">JPG</button>
+        <select id="csend" title="차트를 받을 곳" style="flex:0 1 160px"></select><button id="csend-go" class="btn">보내기</button></div>
       <details class="axis-box"><summary class="hint">세로축 최소·최대</summary>
       <div class="ctl">
         <span class="hint">왼쪽 축</span>
@@ -249,14 +257,6 @@
       <details class="axis-box"><summary class="hint" title="차트를 그릴 때 알아서 하는 정렬·묶기·축 정리예요. 끈 것은 다음에도 기억해요">자동 규칙</summary><div id="cauto"></div></details>
       <div class="ctl"><label class="hint" style="margin:0" title="자동 규칙이 덜어 낸 것(상위 N개 묶기·꼬리 자르기·점 솎기)을 풀어 전부 그려요. 서버가 받는 그룹 수 상한은 그대로예요"><input type="checkbox" id="call" style="width:auto"> 모든 데이터</label></div>
       <div class="ctl"><textarea id="clabels" rows="2" style="flex:1" placeholder="라벨 바꾸기: 한 줄에 원래값=보일값 (예: 1=남)" title="X·범례·툴팁에 보이는 글자만 바꿔요. 데이터는 그대로예요" aria-label="라벨 바꾸기"></textarea></div>
-      <div class="err" id="err-chart"></div>
-      <div class="chart-box"><iframe id="chart" src="/chart" title="차트" class="hidden"></iframe><div class="grip-y" data-size="chart" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div></div>
-      <div class="table-wrap hidden" id="ctable"></div>
-      <div class="ctl" style="margin-top:18px"><button id="ctable-show" class="btn">표로 보기</button><button id="ctable-csv" class="btn">CSV</button><span class="hint grow">차트 내보내기</span>
-        <label class="hint" style="margin:0" title="끄면 화면에 보이는 그대로, 켜면 자동 규칙을 풀어 모든 데이터로 CSV·그림을 저장해요"><input type="checkbox" id="cexport-all" style="width:auto"> 모든 데이터 포함</label>
-        <select id="cimage" title="그림의 색 모드예요. 집계 표 그림과 함께 바뀌어요" style="flex:0 0 100px"><option value="light">밝게</option><option value="dark">어둡게</option></select>
-        <button data-image="png" class="btn">PNG</button><button data-image="jpeg" class="btn">JPG</button>
-        <select id="csend" title="차트를 받을 곳" style="flex:0 1 160px"></select><button id="csend-go" class="btn">보내기</button></div>
     </section>
     <div class="err" id="err-export"></div>
     <div class="pager" id="pager">
@@ -1518,7 +1518,8 @@ function renderTables() {
   rowPick.show();
   LabelBar.show($("label-bar"), $("rows")._grid, true);
   $("rows").querySelectorAll("th:not(.pick, .addcol)").forEach(th => { th.title = "누르면 이 컬럼으로 정렬해요. 우클릭(키보드는 메뉴 키·Shift+F10)하면 컬럼 빼기·값 고르기·전처리를 해요"; th.tabIndex = 0; });
-  if (last?.summary) sortedTable($("summary"), last.summary, (h, d, s) => mountTable(h, gridSpec(d, {}, s))); else { $("summary")._grid = null; $("summary").innerHTML = SUMMARY_HINT; }
+  const sumName = k => SERVER.summary_names[k] ?? k;  // 집계 표 머리글: 서버의 한국어 낱말(정렬·그림·보내기가 같은 이름을 쓰게 키째 바꾼다)
+  if (last?.summary) sortedTable($("summary"), { ...last.summary, columns: last.summary.columns.map(sumName), rows: last.summary.rows.map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [sumName(k), v]))) }, (h, d, s) => mountTable(h, gridSpec(d, {}, s))); else { $("summary")._grid = null; $("summary").innerHTML = SUMMARY_HINT; }
   applyFind();
 }
 let maxTimer; $("maxlen").oninput = () => { clearTimeout(maxTimer); maxTimer = setTimeout(renderTables, 150); };  // 한 글자마다 표 전체를 다시 쓰지 않게(1만 행이면 수 초)

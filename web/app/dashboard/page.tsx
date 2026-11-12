@@ -1,7 +1,7 @@
 "use client";
 // 대시보드 화면의 뿌리(클라이언트 경계). 상수·상태·화면 틀 Provider 아래에 위쪽 줄·도구 줄·격자를 놓고, 목록을 받아 ?open=id → 마지막에 연 것 → 첫 것 순으로 연다.
 // 열 때는 저장된 값을 그대로 보이고, 기간 규칙대로 다시 구할 카드만 연결됐을 때 구한다(ShellProvider). 가운데 격자, 왼쪽 카드 모음, 오른쪽 카드 설정 패널(편집 모드에서 고른 카드). 정적 내보내기라 브라우저 값은 useEffect 안에서만 읽는다.
-// 제목 줄 아래: 카운터 지표 한계 경고(옛 #d-alerts), 고른 카드 수와 [모두 선택]·[선택 해제](옛 .board-ctl), 알림 줄(성공 안내는 보통 색 .ok).
+// 제목 줄 아래: 카운터 지표 한계 경고(옛 #d-alerts), 고른 카드 수와 [모두 선택]·[선택 해제](옛 .board-ctl, 편집 중이거나 고른 카드가 있을 때만), 알림 줄(성공 안내는 보통 색 .ok).
 import { useEffect, useMemo, useState } from "react";
 import { counterAlerts } from "@/components/cards/svg/__pure__";
 import { CardPanel } from "@/components/edit/CardPanel";
@@ -63,7 +63,7 @@ function DashboardView() {
       {dashOnly && <button id="d-only-exit" className="btn" onClick={() => setDashOnly(false)} title="메뉴와 도구를 다시 보여요(Esc)">보기 끝내기</button>}
       <div className="big"><b>{state.dash?.name || "대시보드"}</b><span>{n ? `카드 ${n}개` : ""}</span><span className="hint" id="d-state" role="status" style={{ marginLeft: 12 }}>{state.dirty ? "저장 중…" : savedOnce ? "저장했어요" : ""}</span></div>
       {alerts.length > 0 && <div className="d-alerts" id="d-alerts" role="alert"><b>카운터 지표가 한계를 벗어났어요</b>{alerts.map(f => <div key={f.id}>{f.text}</div>)}</div>}
-      {n > 0 && (
+      {n > 0 && (state.editing || picked > 0) && (
         <div className="ctl board-ctl">
           <span className="hint" id="d-picked" role="status">{picked ? `카드 ${picked}개 선택함` : "저장할 카드를 눌러 선택하세요"}</span>
           <button id="d-all" className="ghost" onClick={() => dispatch({ type: "pick", ids: state.dash?.cards.map(c => c.id) ?? [] })}>모두 선택</button>

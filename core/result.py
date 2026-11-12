@@ -12,6 +12,8 @@ from core.parse import check_name, column as field_of, native_key, struct_fields
 
 PAGING = contextvars.ContextVar("paging", default=False)  # get_rows가 쪽을 받는 중: 파일 연결(Polars)의 묶기·중복 빼기도 차례를 고정한다(source.fix_polars_text)
 SUMMARY_COLS = ["name", "type", "count", "nulls", "unique", "min", "max", "mean"]
+SUMMARY_NAMES = {"name": "컬럼", "type": "타입", "count": "개수", "nulls": "빈 값", "unique": "고유값", "min": "최솟값", "max": "최댓값", "mean": "평균",
+                 "dup": "중복도", "median": "중앙값", "gap": "괴리율", "above": "경계 초과 수", "above_mean": "경계 초과 평균"}  # (Phase 15) 쿼리 집계 표 머리글(화면은 server.CONSTANTS로 받는다). 분위 칸(P25 등)은 이름 그대로
 MAX_GROUPS = 50  # 차트에 표시할 최대 그룹 수
 MAX_SPLITS = 8  # 차트에서 한 컬럼의 값별로 나눌 때 최대 값 개수
 MAX_VALUES = 200  # 조건을 만들 때 보여 줄 컬럼 값 목록의 최대 개수

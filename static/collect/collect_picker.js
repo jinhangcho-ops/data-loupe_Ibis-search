@@ -128,12 +128,14 @@
     try { Array.prototype.slice.call(document.querySelectorAll(sel), 0, 500).forEach(function (e) { e.classList.add(name + "-mark"); }); } catch (e) {}
   },
   // 고르기 켜기(target: field·next)·끄기(off). 켜져 있는 동안 마우스를 올린 요소에 테두리, 누르면 페이지의 원래 동작은 막고 결과를 window[name].picks에 쌓는다.
+  badges: {field: "받을 값 고르는 중 · 클릭하면 컬럼이 추가돼요", next: "다음 버튼 고르는 중 · 클릭하면 정해져요"},
   pick: function (name, target, items) {
     var self = this, old = window[name];
     if (old) old.off();
     if (target === "off") return true;
     var css = "." + name + "-hover{outline:2px solid #e8590c!important;outline-offset:-2px!important;cursor:crosshair!important}" +
-              "." + name + "-mark{outline:1px dashed #1c7ed6!important;background-color:rgba(28,126,214,.08)!important}";
+              "." + name + "-mark{outline:1px dashed #1c7ed6!important;background-color:rgba(28,126,214,.08)!important}" +
+              "." + name + "-badge{position:fixed!important;top:8px!important;right:8px!important;z-index:2147483647!important;pointer-events:none!important;background:#e8590c!important;color:#fff!important;font:600 13px/1.4 sans-serif!important;padding:6px 10px!important;border-radius:6px!important}";
     var sheet = null, style = null;
     try {  // 페이지의 CSP가 style 요소를 막아도 되도록 만든 시트로 넣는다.
       sheet = new CSSStyleSheet();
@@ -145,6 +147,10 @@
       style.textContent = css;
       (document.head || document.documentElement).appendChild(style);
     }
+    var badge = document.createElement("div");
+    badge.className = name + "-badge";
+    badge.textContent = self.badges[target];
+    (document.body || document.documentElement).appendChild(badge);
     var hovered = null, blocked = ["mousedown", "mouseup", "pointerdown", "pointerup", "dblclick", "auxclick", "submit"];
     function over(e) {
       if (hovered) hovered.classList.remove(name + "-hover");
@@ -166,6 +172,7 @@
       blocked.forEach(function (k) { window.removeEventListener(k, block, true); });
       if (sheet) document.adoptedStyleSheets = document.adoptedStyleSheets.filter(function (s) { return s !== sheet; });
       if (style) style.remove();
+      badge.remove();
       ["-hover", "-mark"].forEach(function (k) {
         Array.prototype.forEach.call(document.querySelectorAll("." + name + k), function (e) { e.classList.remove(name + k); });
       });

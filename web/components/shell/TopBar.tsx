@@ -1,5 +1,6 @@
 "use client";
 // 위쪽 줄(옛 static/core/status.html): 연결 이름(crumb, 연결되면 .crumb.on), 화면 탭(설치한 기능만, 상수 features.on), 최신화 알약·팝업(옛 dash_refresh.js), 화면 모드 단추.
+// [보낼 곳 설정]·[설정]은 홈(/?panel=…)으로 가서 static 창을 연다.
 // 최신화는 연결에 성공한 화면(쿼리·홈)이 시작한다. 여기서는 열 때 돌고 있으면 0.8초마다 상태를 읽어 알약에 보이고, 끝나면 document에 dash-refreshed(결과)를 보낸다.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { refreshStatus, saveSetting, stopRefresh } from "@/lib/api";
@@ -14,6 +15,11 @@ const TABS: [string, string, string, string][] = [  // [주소, 기능 id(featur
   ["/dashboard", "dashboard", "대시보드", "모아 둔 차트와 지표를 보고 고쳐요"],
   ["/collect", "collect", "수집", "웹 API나 웹페이지에서 데이터를 받아 저장해요"],
   ["/integrations", "integrations", "연동", "Slack, Notion, GA4, LLM 같은 서비스와 연결해요"],
+];
+const PANEL_PARAM = "panel";
+const PANELS: [string, string, string][] = [  // [창 id, 이름, 설명]
+  ["dest", "보낼 곳 설정", "알림과 결과를 받을 Slack, Notion, 웹훅을 정해요"],
+  ["feat", "설정", "쓸 기능, 업데이트, 메모리·표본·날짜 같은 앱 설정을 정해요"],
 ];
 const REFRESH_STATE: Record<string, string> = { ok: "완료", failed: "실패", skipped: "건너뜀", waiting: "대기" };
 const MOON = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>;
@@ -67,6 +73,9 @@ export function TopBar() {
         )}
         <div className="top-tools">
           <button className="ib" onClick={flip} title={theme === "dark" ? "밝은 화면으로" : "어두운 화면으로"} aria-label={theme === "dark" ? "밝은 화면으로" : "어두운 화면으로"}>{theme === "dark" ? SUN : MOON}</button>
+          {PANELS.map(([id, name, tip]) => (
+            <a key={id} className="btn" href={`/?${PANEL_PARAM}=${id}`} title={tip} style={{ textDecoration: "none" }}>{name}</a>
+          ))}
         </div>
       </header>
       {pop && st && (

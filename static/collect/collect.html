@@ -73,7 +73,7 @@
 
     <section class="card" id="first-guide">
       <h3>처음이면 이 순서로 해요</h3>
-      <ol class="hint" style="margin:4px 0 0; padding-left:20px"><li>오른쪽 [받는 방식]에서 API·파일 주소·웹페이지 중 하나를 골라요.</li><li>아래 칸을 채우고 [시험 보내기]로 응답을 받아 봐요. curl이 있으면 [요청 예시로 채우기]에 붙여 넣으면 돼요.</li><li>오른쪽 [저장]에서 파일 위치를 정하고 [수집 시작]을 눌러요.</li></ol>
+      <ol class="hint" style="margin:4px 0 0; padding-left:20px"><li>오른쪽 [받는 방식]에서 API·파일 주소·웹페이지 중 하나를 골라요.</li><li class="for-api">아래 요청 칸을 채우고 [시험 보내기]로 응답을 받아 봐요. curl이 있으면 [요청 예시로 채우기]에 붙여 넣으면 돼요.</li><li class="for-file hidden">[파일 주소]에 받을 파일의 주소를 넣어요. 헤더가 필요하면 [행 추가]로 넣어요.</li><li class="for-web hidden">주소를 넣고 [수집용 창 열기]를 누른 뒤 [값 고르기]로 받을 값을 수집용 창에서 클릭해요.</li><li>오른쪽 [저장]에서 파일 위치를 정하고 [수집 시작]을 눌러요.</li></ol>
     </section>
 
     <section class="card for-api">
@@ -887,13 +887,20 @@ function showBrowser(s) {
   if (p && lastSeq !== undefined && p.seq !== lastSeq) applyPick(p);
   lastSeq = p ? p.seq : lastSeq ?? null;
 }
+// 고른 선택자의 마지막 조각에서 마지막 클래스를 이름으로 쓴다(없으면 컬럼N). 겹치면 _2, _3…
+function fieldName(selector, taken) {
+  const last = (selector.replace(/\[[^\]]*\]/g, "").split(/[>\s]+/).filter(Boolean).pop() ?? "");  // 속성 선택자 값(a[title="x.pdf"])의 점은 클래스가 아니다
+  const cls = [...last.matchAll(/\.((?:\\.|[\w-])+)/g)].map(m => m[1].replace(/\\/g, "")).pop();
+  const base = cls ?? `컬럼${taken.length + 1}`;
+  let name = base;
+  for (let n = 2; taken.includes(name); n++) name = `${base}_${n}`;
+  return name;
+}
 function applyPick(p) {
   if (p.target === "field") {
     if (p.items && p.items !== val("w-items")) $("w-items").value = p.items;
     $("w-count").textContent = p.count != null ? `항목 ${p.count.toLocaleString()}개를 찾았어요` : "";
-    let n = fields.length + 1;
-    while (fields.some(f => f.name.trim() === `컬럼${n}`)) n++;
-    fields.push({ name: `컬럼${n}`, selector: p.selector ?? "", attr: "text", text: p.text ?? "", attrs: { ...p.attrs } });
+    fields.push({ name: fieldName(p.selector ?? "", fields.map(f => f.name.trim())), selector: p.selector ?? "", attr: "text", text: p.text ?? "", attrs: { ...p.attrs } });
     renderFields();
   } else if (p.target === "next") {
     $("w-pkind").value = "next";

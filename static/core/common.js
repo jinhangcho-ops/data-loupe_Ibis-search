@@ -601,6 +601,8 @@ $("bot-save").onclick = () => busy($("bot-save"), async () => {
   } catch (e) { botMsg(e.message); }
 }));
 $("dest-open").addEventListener("click", () => api("/api/bot").then(showBot).catch(() => {}));  // 열 때마다 켜짐 상태·최근 요청을 새로
+const PANEL_PARAM = "panel", PANELS = ["feat", "dest"];  // Next 대시보드 위쪽 줄의 [설정]·[보낼 곳 설정]이 /?panel=… 로 보낸다
+const askedPanel = new URLSearchParams(location.search).get(PANEL_PARAM); if (PANELS.includes(askedPanel)) $(askedPanel + "-open").click();
 
 // 1. 연결
 document.querySelectorAll("input[name=kind]").forEach(r => r.onchange = () => {
@@ -701,6 +703,10 @@ $("recent-conn").onchange = () => {
   $("recent-conn").value = "";
 };
 $("file").onchange = showFlat;
+$("flat-list").onchange = showFlat;
+$("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
+}
+const setMsg = (text, ok) => say("err-settings", text, ok);  // 앱 설정 저장 오류(위쪽 [설정] 창)
 // 메모리 한도(MB, 0 = 제한 없음): 목록에 있는 값이거나 GB로 직접 넣은 값. 저장만 하고 다음 [연결]부터 서버가 쓴다.
 const memory = saved("memory") || "0";
 $("memory").value = [...$("memory").options].some(o => o.value === memory) ? memory : "custom";
@@ -713,7 +719,7 @@ $("memory").onchange = () => {
 $("memory-gb").onchange = () => {
   const mb = Math.round(Number($("memory-gb").value) * 1000), [low, high] = SERVER.sizes.memory;
   if (mb >= low && mb <= high) saveSetting({ memory: mb });
-  else connMsg(`메모리 한도는 ${low / 1000}GB에서 ${high / 1000}GB 사이로 넣어 주세요.`);
+  else setMsg(`메모리 한도는 ${low / 1000}GB에서 ${high / 1000}GB 사이로 넣어 주세요.`);
 };
 // 계산 코어 수(0 = 전부): 저장만 하고 다음 [연결]부터 서버가 쓴다. 고를 수 있는 값은 1, 2, 4, 8, …과 이 PC의 코어 수.
 const cores = SERVER.sizes.threads[1], coreSteps = [...new Set([1, 2, 4, 8, 16, 32, 64].filter(n => n < cores).concat(cores))];
@@ -727,9 +733,9 @@ const [FEW_LOW, FEW_HIGH] = SERVER.floats.sample_too_few;
 if (saved("sample_too_few")) $("too-few").value = Math.round(saved("sample_too_few") * 100);
 $("too-few").onchange = () => {
   const text = $("too-few").value.trim(), n = Number(text) / 100;
-  if (!text) { saveSetting({ sample_too_few: 0 }); connMsg(""); }
-  else if (n >= FEW_LOW - 1e-9 && n <= FEW_HIGH + 1e-9) { saveSetting({ sample_too_few: n }); connMsg(""); }
-  else connMsg(`최소 표본 비율은 ${Math.round(FEW_LOW * 100)}에서 ${Math.round(FEW_HIGH * 100)} 사이로 넣어 주세요. 비우면 20%예요.`);
+  if (!text) { saveSetting({ sample_too_few: 0 }); setMsg(""); }
+  else if (n >= FEW_LOW - 1e-9 && n <= FEW_HIGH + 1e-9) { saveSetting({ sample_too_few: n }); setMsg(""); }
+  else setMsg(`최소 표본 비율은 ${Math.round(FEW_LOW * 100)}에서 ${Math.round(FEW_HIGH * 100)} 사이로 넣어 주세요. 비우면 20%예요.`);
 };
 // PC에서 구할 통계의 최대 행 수(pc_stat_rows, 비우면 서버 기본값). 범위·기본값은 서버(SERVER.sizes·SERVER.defaults)에서
 const [PCR_LOW, PCR_HIGH] = SERVER.sizes.pc_stat_rows;
@@ -737,9 +743,9 @@ Object.assign($("pc-stat-rows"), { min: PCR_LOW, max: PCR_HIGH, placeholder: SER
 if (saved("pc_stat_rows")) $("pc-stat-rows").value = saved("pc_stat_rows");
 $("pc-stat-rows").onchange = () => {
   const text = $("pc-stat-rows").value.trim(), n = Number(text);
-  if (!text) { saveSetting({ pc_stat_rows: 0 }); connMsg(""); }
-  else if (Number.isInteger(n) && n >= PCR_LOW && n <= PCR_HIGH) { saveSetting({ pc_stat_rows: n }); connMsg(""); }
-  else connMsg(`PC에서 구할 통계의 최대 행 수는 ${PCR_LOW.toLocaleString()}에서 ${PCR_HIGH.toLocaleString()} 사이의 정수로 넣어 주세요. 비우면 ${SERVER.defaults.pc_stat_rows.toLocaleString()}행이에요.`);
+  if (!text) { saveSetting({ pc_stat_rows: 0 }); setMsg(""); }
+  else if (Number.isInteger(n) && n >= PCR_LOW && n <= PCR_HIGH) { saveSetting({ pc_stat_rows: n }); setMsg(""); }
+  else setMsg(`PC에서 구할 통계의 최대 행 수는 ${PCR_LOW.toLocaleString()}에서 ${PCR_HIGH.toLocaleString()} 사이의 정수로 넣어 주세요. 비우면 ${SERVER.defaults.pc_stat_rows.toLocaleString()}행이에요.`);
 };
 // 워드클라우드 글 속 단어로 받는 최대 행 수(cloud_rows, 비우면 서버 기본값). 범위·기본값은 서버(SERVER.sizes·SERVER.defaults)에서
 const [CLR_LOW, CLR_HIGH] = SERVER.sizes.cloud_rows;
@@ -747,9 +753,9 @@ Object.assign($("cloud-rows"), { min: CLR_LOW, max: CLR_HIGH, placeholder: SERVE
 if (saved("cloud_rows")) $("cloud-rows").value = saved("cloud_rows");
 $("cloud-rows").onchange = () => {
   const text = $("cloud-rows").value.trim(), n = Number(text);
-  if (!text) { saveSetting({ cloud_rows: 0 }); connMsg(""); }
-  else if (Number.isInteger(n) && n >= CLR_LOW && n <= CLR_HIGH) { saveSetting({ cloud_rows: n }); connMsg(""); }
-  else connMsg(`워드클라우드 단어 분석 최대 행 수는 ${CLR_LOW.toLocaleString()}에서 ${CLR_HIGH.toLocaleString()} 사이의 정수로 넣어 주세요. 비우면 ${SERVER.defaults.cloud_rows.toLocaleString()}행이에요.`);
+  if (!text) { saveSetting({ cloud_rows: 0 }); setMsg(""); }
+  else if (Number.isInteger(n) && n >= CLR_LOW && n <= CLR_HIGH) { saveSetting({ cloud_rows: n }); setMsg(""); }
+  else setMsg(`워드클라우드 단어 분석 최대 행 수는 ${CLR_LOW.toLocaleString()}에서 ${CLR_HIGH.toLocaleString()} 사이의 정수로 넣어 주세요. 비우면 ${SERVER.defaults.cloud_rows.toLocaleString()}행이에요.`);
 };
 // 표본 설정(sampling.config): [칸 id, 설정 이름, 화면 배율(서버 값 × 배율 = 화면 값)]. 범위·기본값은 SERVER.sizes·SERVER.floats·SERVER.defaults
 const SAMPLE_FIELDS = [["sample-conf", "sample_conf", 1], ["sample-e-ratio", "sample_e_ratio", 100], ["sample-e-mean", "sample_e_mean", 100], ["pilot-rows", "pilot_rows", 1],
@@ -760,9 +766,9 @@ for (const [id, name, scale] of SAMPLE_FIELDS) {
   if (saved(name)) $(id).value = +saved(name) * scale;
   $(id).onchange = () => {
     const text = $(id).value.trim(), n = Number(text) / scale;
-    if (!text) { saveSetting({ [name]: 0 }); connMsg(""); }
-    else if ((!whole || Number.isInteger(n)) && n >= lo - 1e-9 && n <= hi + 1e-9) { saveSetting({ [name]: n }); connMsg(""); }
-    else connMsg(`${$(id).closest(".opt").querySelector("span").textContent}은 ${(lo * scale).toLocaleString()}에서 ${(hi * scale).toLocaleString()} 사이로 넣어 주세요. 비우면 ${(SERVER.defaults[name] * scale).toLocaleString()}이에요.`);
+    if (!text) { saveSetting({ [name]: 0 }); setMsg(""); }
+    else if ((!whole || Number.isInteger(n)) && n >= lo - 1e-9 && n <= hi + 1e-9) { saveSetting({ [name]: n }); setMsg(""); }
+    else setMsg(`${$(id).closest(".opt").querySelector("span").textContent}은 ${(lo * scale).toLocaleString()}에서 ${(hi * scale).toLocaleString()} 사이로 넣어 주세요. 비우면 ${(SERVER.defaults[name] * scale).toLocaleString()}이에요.`);
   };
 }
 // ID·해시 컬럼을 묶기·집계 목록에서 뺄지(hash_exclude, 기본 on)
@@ -776,7 +782,7 @@ for (const [id, name] of [["pilot-first", "pilot_first"]]) {
 $("timezone").value = saved("timezone") || "";
 $("timezone").onchange = () => {
   const zone = $("timezone").value.trim();
-  api("/api/settings", { timezone: zone || 0 }).then(() => connMsg(""), () => connMsg("시간대는 Asia/Seoul 같은 이름이나 +09:00 같은 오프셋으로 넣어 주세요."));
+  api("/api/settings", { timezone: zone || 0 }).then(() => setMsg(""), () => setMsg("시간대는 Asia/Seoul 같은 이름이나 +09:00 같은 오프셋으로 넣어 주세요."));
 };
 $("week-start").value = saved("week_start") || "mon";
 $("week-start").onchange = () => saveSetting({ week_start: $("week-start").value });
@@ -784,7 +790,7 @@ $("fiscal-start").innerHTML = Array.from({ length: 12 }, (_, i) => `<option valu
 $("fiscal-start").value = saved("fiscal_start_month") || "1";
 $("fiscal-start").onchange = () => saveSetting({ fiscal_start_month: +$("fiscal-start").value });
 // 달력 설정(weekend·work_hours·bucket_minutes·ewma_span): 식 함수가 인자를 비우면 읽는다. 기본값(placeholder)은 서버(SERVER.calendar)에서. 틀린 값은 서버 문장을 그대로 보인다.
-const CAL = SERVER.calendar, calSave = changes => api("/api/settings", changes).then(() => connMsg(""), e => connMsg(e.message));
+const CAL = SERVER.calendar, calSave = changes => api("/api/settings", changes).then(() => setMsg(""), e => setMsg(e.message));
 const weekendBoxes = [...$("weekend").querySelectorAll("input")];
 for (const b of weekendBoxes) b.checked = (saved("weekend") || CAL.weekend).split("_").includes(b.value);
 $("weekend").onchange = () => calSave({ weekend: weekendBoxes.filter(b => b.checked).map(b => b.value).join("_") || 0 });
@@ -799,8 +805,6 @@ for (const [id, name] of [["bucket-minutes", "bucket_minutes"], ["ewma-span", "e
   Object.assign($(id), { value: saved(name) || "", placeholder: CAL[name] });
   $(id).onchange = () => calSave({ [name]: Number($(id).value.trim()) });  // 비우면 0 = 기본값
 }
-$("flat-list").onchange = showFlat;
-$("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
 // [차트 낱말]·[차트 자동 규칙 기본값]: 상수(SERVER.dash.viz)를 받는 화면에서만 보인다. 저장이 틀리면 서버 문장을 칸에 보이고 저장된 값으로 다시 그린다.
 const WORD_TITLES = { good: "긍정", bad: "부정", other: "기타", null: "결측" };
 let editing = null;  // 눌러 고치는 중인 낱말 { key, word }
@@ -829,7 +833,6 @@ function showViz() {
   autoPanel($("viz-auto"), Object.keys(SERVER.dash.auto), query_auto, off => saveViz({ query_auto: off }));
 }
 if (SERVER.dash?.viz) { $("viz-prefs").classList.remove("hidden"); showViz(); }
-}
 let connected = null;  // 지금 연결의 종류: "flat"(테이블 파일), "other"(DuckDB 파일·DB 주소), 없으면 null
 // [모두 해제]: 체크를 모두 푼다. 테이블 파일로 연결돼 있었으면 그 연결을 끊고 화면을 연결 전으로 되돌린다(파일을 다시 골라 새로 연결).
 // DuckDB 파일이나 DB 주소로 연결돼 있었으면 연결은 그대로 두고 화면에 올라온 것만 비운다.

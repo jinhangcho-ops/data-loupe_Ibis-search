@@ -22,6 +22,13 @@ const compact = new Intl.NumberFormat("ko", { notation: "compact", maximumFracti
 export const tickNum = (v: unknown) => typeof v !== "number" ? shownum(v) : Math.abs(v) >= 10000 ? compact.format(v) : v !== 0 && Math.abs(v) < 1e-3 ? sig3.format(v) : shownum(v);
 /** 손수 그린 눈금(간격 step, 예: 최소~최대의 3눈금)의 글자: 간격에 맞는 소수 자릿수(2,995.3815 → 2,995). 1만 이상·아주 작은 값은 tickNum */
 export const tickBy = (step: number) => (v: number) => !(step > 0) || Math.abs(v) >= 10000 || (v !== 0 && Math.abs(v) < 1e-3) ? tickNum(v) : decimals(Math.max(0, -Math.floor(Math.log10(step)))).format(v);
+/** [SPECIFICATION] plans/phase-15.md#histLabel
+ *  히스토그램 i번째 구간의 이름 "시작–끝"을 구간 너비에 맞는 소수 자릿수(tickBy)로 만든다. */
+export function histLabel(edges: number[], i: number): string {
+  if (!(Number.isInteger(i) && i >= 0 && i < edges.length - 1)) throw new Error("히스토그램 구간 번호가 범위를 벗어났어요.");
+  const f = tickBy(edges[1] - edges[0]);
+  return `${f(edges[i])}–${f(edges[i + 1])}`;
+}
 const TICK = { fill: "var(--muted)", fontSize: 12 };
 export const AXIS = { tick: TICK, axisLine: false, tickLine: false } as const;
 export const TIP = { contentStyle: { background: "var(--card)", border: "1px solid var(--line)", borderRadius: 8, color: "var(--text)", fontSize: 12 }, labelStyle: { fontWeight: 600 },
@@ -424,7 +431,7 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
   const yName = d.agg === "count" ? "개수" : `${d.value} ${kit.aggName(d.agg ?? "")}`;
   if (view === "hist") {
     const e = d.histogram!.edges, { under = 0, over = 0 } = d.histogram!;
-    const inner = sliceWindow(d.histogram!.counts.map((n, i) => ({ label: `${shownum(e[i])}–${shownum(e[i + 1])}`, n, edge: false })), win ?? null);
+    const inner = sliceWindow(d.histogram!.counts.map((n, i) => ({ label: histLabel(e, i), n, edge: false })), win ?? null);
     const rows = tail ? [...(under > 0 ? [{ label: `P${tail[0] * 100} 미만(${under}건)`, n: under, edge: true }] : []), ...inner, ...(over > 0 ? [{ label: `P${tail[1] * 100} 초과(${over}건)`, n: over, edge: true }] : [])] : inner;
     return (
       <Frame>

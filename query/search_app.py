@@ -51,6 +51,7 @@ def search_constants(found):  # 계산 줄·차트·지표 파일 화면이 서�
     found["metrics"] = {"aggs": list(metric_file.AGGS)}  # 지표 파일의 분자·분모에 쓸 수 있는 집계
     from core import prep_ops
     found["prep6"] = prep_ops.SCREEN6  # 새 컬럼 상자의 기본값 안내
+    found["summary_names"] = result.SUMMARY_NAMES  # 집계 표 머리글의 한국어 이름(화면은 이 값만 읽는다)
 
 
 PRELOAD = ("query.join_keys", "query.sentences", "query.sentence_run", "query.sentence_exec", "query.nl2sql",

@@ -7,6 +7,7 @@ import { AddCardMenu } from "@/components/edit/AddCardMenu";
 import { MetricsWindow } from "@/components/edit/MetricsWindow";
 import { Report } from "@/components/report/Report";
 import { newCardId } from "@/components/edit/Templates";
+import { scrollToCard } from "@/components/grid/Grid";
 import { addCard, cardRequest, computeCard } from "@/lib/api";
 import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
@@ -43,6 +44,7 @@ export function Toolbar() {
         const cur = now.current.dash;
         if (cur?.id !== dash.id) throw new Error("값을 구하는 사이 다른 대시보드를 열어서 카드를 넣지 않았어요.");
         dispatch({ type: "cards", cards: [...cur.cards, { ...full, source: { ...full.source, ...r.source }, data: r.data }] });
+        scrollToCard(full.id);
         await flush();
         dispatch({ type: "notice", message: `카드를 넣었어요. 지금 카드는 ${cur.cards.length + 1}개예요.` });
         return;
@@ -51,6 +53,8 @@ export function Toolbar() {
       const made = await addCard(state.dash?.id ?? "", card, state.dash ? undefined : "내 대시보드");
       dispatch({ type: "list", list: made });
       await open(made.dashboard.id);
+      const last = now.current.dash?.cards.at(-1);
+      if (last) scrollToCard(last.id);
       dispatch({ type: "notice", message: `카드를 넣었어요. 지금 카드는 ${made.dashboard.cards}개예요.` });
     } catch (e) { dispatch({ type: "error", message: (e as Error).message }); }
   };
@@ -69,7 +73,7 @@ export function Toolbar() {
               <button role="menuitem" onClick={() => { setMenu(false); setAddOpen(true); }} title="테이블을 골라 KPI, 표, 문장 같은 카드를 바로 만들어요">카드 추가</button>
               <button role="menuitemcheckbox" aria-checked={gallery} onClick={() => { setMenu(false); setGallery(!gallery); if (!gallery) dispatch({ type: "editing", on: true }); }} title="카드 종류를 끌어 격자에 놓거나 두 번 누르면 빈 카드가 생겨요">카드 모음</button>
               <button role="menuitem" onClick={() => { setMenu(false); setMetrics(true); }} title="내 지표와 지표 사전을 봐요. 쿼리 화면의 [지표] 탭과 같은 내용이에요">지표</button>
-              <a role="menuitem" className="btn" href="/search" style={{ textDecoration: "none" }} title="쿼리 화면에서 차트나 지표를 만들고 [대시보드에 추가]를 누르면 여기에 모여요">쿼리에서 가져오기</a>
+              <a role="menuitem" className="btn" href="/search" style={{ textDecoration: "none", whiteSpace: "nowrap" }} title="쿼리 화면에서 차트나 지표를 만들고 [대시보드에 추가]를 누르면 여기에 모여요">쿼리에서 가져오기</a>
             </div>
           )}
           <AddCardMenu open={addOpen} onClose={() => setAddOpen(false)} onAdd={add} />

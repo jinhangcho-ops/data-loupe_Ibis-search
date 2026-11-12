@@ -46,7 +46,7 @@ def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버�
         "types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS,
         "palette": dash_store.DEFAULT_PALETTE, "locked": dash_store.LOCKED, "min_refresh": dash_store.MIN_REFRESH}  # 화면(web/·common.js)이 서버와 같은 상한·종류·기본 색을 쓴다
     found["dash"]["max_points"] = result.MAX_POINTS  # 산점도·버블의 점 수 상한
-    found["dash"].update(max_bins=dash_store.MAX_BINS, max_bands=dash_store.MAX_BANDS)  # 히스토그램의 구간 수, 불릿 차트의 구간 수 상한
+    found["dash"].update(max_bins=dash_store.MAX_BINS, max_bands=dash_store.MAX_BANDS, max_cells=dash_store.MAX_CELLS)  # 히스토그램의 구간 수, 불릿 차트의 구간 수, 히트맵 칸 수 상한
     found["dash"]["server_merge"] = list(dash_store.SERVER_MERGE)  # (Phase 4) 범위 묶기를 서버가 다시 구하는 집계(GroupPicker가 같은 판정을 쓴다)
     found["dash"].update(aggs=list(metric_file.AGGS), merge=list(sql_funcs.MERGE), agg_names=metric_file.AGG_NAMES)  # 카드 계열의 집계(함수 사전의 집계 전부), 일 값을 다시 묶을 수 있는 집계, 보이는 이름
     found["dash"].update(auto=viz_rules.AUTO_PARAMS, auto_names=viz_rules.AUTO_NAMES, viz=viz_rules.load_prefs(), orders=viz_rules.ORDERS, order_names=viz_rules.ORDER_NAMES)  # 자동 규칙 수치표·이름, 차트 낱말과 쿼리 화면 기본값, 정렬 다섯 값·이름

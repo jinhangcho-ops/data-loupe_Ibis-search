@@ -52,6 +52,7 @@ FITS = ("fill", "center")  # KPI 글자: 칸을 꽉 채움 / 가운데
 LAYOUTS = ("below", "right")  # KPI의 스파크 위치: 값 아래 / 오른쪽
 MAX_BINS = 100  # 히스토그램의 구간 수
 MAX_BANDS = 6  # 불릿 차트의 구간(경계) 수
+MAX_CELLS = 2000  # 히트맵의 칸 수(dash_calc가 쓰고, 카드 추가 안내가 상수로 받는다. 여기 두어 화면 상수가 dash_calc를 올리지 않게)
 ADDITIVE = ("sum", "count")  # 아이 값의 합이 부모 값이 되는 집계(트리맵·선버스트의 아래단계)
 TREE_ADDITIVE = "아랫단계는 합계·개수만 쓸 수 있어요. 평균·최소·최대·중앙값·고유 개수는 아랫단계 값을 더해도 윗단계 값이 되지 않아요."
 FLOW_NEED = {"sankey": ("user", "step", "time"), "cohort": ("user", "time")}  # 다시 구할 분석(source.analysis)에 있어야 하는 컬럼 이름

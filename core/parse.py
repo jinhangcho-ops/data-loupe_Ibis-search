@@ -194,6 +194,8 @@ def check_new_length(name, tail=""):
 
 
 def check_name(name, names, what="컬럼"):
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"{what}을 고르세요.")
     if name not in names:
         close = difflib.get_close_matches(name, list(names), n=1)
         raise ValueError(f"'{name}' {what}이 없어요." + (f" 비슷한 이름: {close[0]}" if close else ""))

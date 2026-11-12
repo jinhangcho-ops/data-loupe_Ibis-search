@@ -34,6 +34,13 @@ export const isShell = (c: Card) => !(c.source && (c.source.body || c.source.rec
 /** 새 카드의 view 기본값: 감시 카드는 상태 규칙·연결선 칸을 빈 목록으로 둔다(규칙 편집이 그 칸을 보인다) */
 export const freshView = (kind: CardKind, type = "") => ({ type, ...(WATCH.includes(kind) ? { rules: [], links: [] } : {}) }) as Card["view"];
 export const colsOfType = (cols: [string, string][], types: string[]) => cols.filter(c => types.includes(c[1])).map(c => c[0]);
+/** 서버 /api/columns가 주는 날짜만 있는 타입의 한글 이름 */
+const DATE_ONLY = "날짜";
+/** [SPECIFICATION] plans/phase-15.md#unitForDate
+ *  고른 날짜 컬럼이 날짜만 있는 타입이면 "day", 아니면 timed(시각이 있는 컬럼의 기본 단위)를 돌려준다. */
+export function unitForDate(cols: [string, string][], column: string, timed: string): string {
+  return cols.some(([n, t]) => n === column && t === DATE_ONLY) ? "day" : timed;
+}
 
 export type Spec = { group: string; kind: CardKind; type?: string; name: string; help: string };
 /** 카드 모음의 칸들: 차트는 종류마다 한 칸 */

@@ -193,6 +193,7 @@ export function buildCard(f: Form, aggs: string[], needs: (agg: string) => boole
   // P14 새 종류(D2 입력 규칙): 가로축·나누기는 body.x·body.split, 첫 값 줄이 series[0]
   if (k === "histogram") { Object.assign(body, { x: need(series[0]?.y ?? "", "값 줄의 숫자 컬럼") }); view.bins = Math.min(maxBins, Math.max(1, Math.round(num(f.bins) || 20))); }
   if (k === "boxplot") { need(series[0]?.y ?? "", "값 줄의 숫자 컬럼"); if (f.group) Object.assign(body, { x: f.group }); }
+  if (k === "candle") need(series[0]?.y ?? "", "값 줄의 숫자 컬럼");
   if (k === "heatmap") Object.assign(body, { x: need(f.group, "행 컬럼"), split: need(f.split, "열 컬럼") });
   if (k === "treemap" || k === "sunburst") Object.assign(body, { x: need(f.group, "윗단계 컬럼"), ...(f.split ? { split: f.split } : {}) });
   if (k === "wordcloud") Object.assign(body, { x: need(f.group, "글자 컬럼") });

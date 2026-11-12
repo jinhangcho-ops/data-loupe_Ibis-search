@@ -397,9 +397,9 @@ def test_pc_stat_rows_setting(monkeypatch, folder):
 
 
 def test_pc_stat_rows_screen_field():
-    connect = (ROOT / "static/core/connect.html").read_text(encoding="utf-8")
+    status = (ROOT / "static/core/status.html").read_text(encoding="utf-8")
     common = (ROOT / "static/core/common.js").read_text(encoding="utf-8")
-    assert 'id="pc-stat-rows"' in connect
+    assert 'id="pc-stat-rows"' in status
     assert "SERVER.sizes.pc_stat_rows" in common and "SERVER.defaults.pc_stat_rows" in common and "saveSetting({ pc_stat_rows" in common and 'saved("pc_stat_rows")' in common
     assert server.CONSTANTS["defaults"]["pc_stat_rows"] == 1_000_000  # 화면은 기본값을 서버에서 받는다(숫자를 화면에 따로 적지 않는다)
 
