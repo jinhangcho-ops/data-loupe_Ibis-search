@@ -1,7 +1,8 @@
 """(Phase 19) 처음 쓰는 사람용 공통 장치: 쉬운 보기 설정·스위치·접기 규칙, 타입 이름 풀이, DB 오류를 쉬운 말로. 값은 시험 안에서 지어낸다."""
 import json
+import re
 import shutil
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
 import pytest
 
@@ -46,24 +47,62 @@ console.log(JSON.stringify([a.cls.has("adv-shown"), b.cls.has("adv-shown")]));""
     assert got == [False, True]
 
 
+def open_page(tmp_path, store, click, box_id="pager", limit=2000):
+    """/search 화면을 한 번 연다: 묶음(box_id) 하나, 설정 저장소는 store(설정 이름 → 저장된 글자). [펼쳐 있었는지, 끝난 뒤 store]."""
+    code = between("common.js", "function showAdv", "// 컬럼 타입을 쉬운 말로")
+    stubs = f"""const store = {json.dumps(store)}; const SERVER = {{ adv_open_max: {limit} }};
+globalThis.saved = n => store[n] === undefined ? undefined : decodeURIComponent(store[n]);
+globalThis.api = (url, body) => {{ Object.assign(store, body); return Promise.resolve({{}}); }};\n"""
+    page = rf"""
+globalThis.location = {{ pathname: "/search" }};
+const b = {{ id: "{box_id}", o: new Set(), btn: null, hasAttribute: a => a === "data-adv", querySelector: s => s === ".adv" ? {{}} : null,
+  querySelectorAll: s => s === ".adv-more" ? (b.btn ? [b.btn] : []) : [], append: x => {{ b.btn = x; x.closest = () => b; }} }};
+b.classList = {{ add: c => b.o.add(c), remove: c => b.o.delete(c), contains: c => b.o.has(c) }};
+globalThis.document = {{ querySelectorAll: () => [b], getElementById: id => id === b.id ? b : null }};
+advMore(document); const shown = b.o.has("adv-shown");
+if ({json.dumps(click)}) b.btn.onclick();  // 펼쳐 있으면 접고, 접혀 있으면 펼친다
+console.log(JSON.stringify([shown, store]));"""
+    return run_node(tmp_path, page, parts=[stubs, code])
+
+
+def adv_list(store):
+    return json.loads(unquote(store["adv_open"]))
+
+
 @needs_node
 def test_adv_more_remembers_opened_box(tmp_path):
     """[더 많은 설정]으로 펼친 묶음은 화면을 다시 열어도(설정 adv_open → 쿠키) 펼쳐 있고, [접기]로 접으면 다시 접힌 채로 연다."""
-    code = between("common.js", "function showAdv", "// 컬럼 타입을 쉬운 말로")
-    stubs = """globalThis.saved = n => store[n] === undefined ? undefined : decodeURIComponent(store[n]);
-globalThis.api = (url, body) => { Object.assign(store, body); return Promise.resolve({}); };\n"""
-    page = r"""
-globalThis.location = { pathname: "/search" };
-const b = { id: "pager", o: new Set(), btn: null, querySelector: s => s === ".adv" ? {} : null, querySelectorAll: s => s === ".adv-more" ? (b.btn ? [b.btn] : []) : [], append: x => { b.btn = x; x.closest = () => b; } };
-b.classList = { add: c => b.o.add(c), remove: c => b.o.delete(c), contains: c => b.o.has(c) };
-advMore({ querySelectorAll: () => [b] }); const shown = b.o.has("adv-shown");
-b.btn.onclick();  // 펼쳐 있으면 접고, 접혀 있으면 펼친다
-console.log(JSON.stringify([shown, store]));"""
     store, seen = {}, []
     for _ in range(3):  # 화면을 세 번 연다: 처음(접힘) → 펼친 뒤 다시 열기(펼침) → 접은 뒤 다시 열기(접힘)
-        shown, store = run_node(tmp_path, page, parts=[f"const store = {json.dumps(store)};\n", stubs, code])
+        shown, store = open_page(tmp_path, store, click=True)
         seen.append(shown)
-    assert seen == [False, True, False] and json.loads(unquote(store["adv_open"])) == ["/search#pager"]  # 마지막에 다시 펼침
+    assert seen == [False, True, False] and adv_list(store) == ["/search#pager"]  # 마지막에 다시 펼침
+
+
+@needs_node
+def test_adv_list_drops_gone_boxes_and_old_ones(tmp_path):
+    """화면에서 빠진 묶음의 기억은 그 화면을 열 때 버리고(다른 화면의 것은 둠), 글자 상한을 넘으면 먼저 펼친 것부터 버린다. id 없는 묶음은 기억하지 않는다."""
+    old = {"adv_open": quote(json.dumps(["/search#gone", "/prep#peak-box", "/search#pager"]))}
+    shown, store = open_page(tmp_path, old, click=False)
+    assert shown and adv_list(store) == ["/prep#peak-box", "/search#pager"]
+    _, same = open_page(tmp_path, store, click=False)
+    assert same == store  # 바뀐 것이 없으면 저장하지 않는다(같은 글자)
+    many = {"adv_open": quote(json.dumps([f"/prep#box{i}" for i in range(40)]))}
+    _, store = open_page(tmp_path, many, click=True, limit=200)
+    kept = adv_list(store)
+    assert kept[-1] == "/search#pager" and "/prep#box0" not in kept and len(store["adv_open"]) <= 200
+    shown, store = open_page(tmp_path, {}, click=True, box_id="")
+    assert not shown and "adv_open" not in store  # id 없는 묶음: 펼쳐도 기억하지 않음
+
+
+def test_every_adv_box_has_unique_id():
+    """묶음을 순서로 기억하지 않으므로 화면의 [data-adv] 묶음은 모두 id가 있어야 하고 화면 안에서 겹치지 않아야 한다."""
+    for name in ("index.html", "prep.html", "collect.html", "integrations.html", "home.html", "status.html", "connect.html"):
+        tags = re.findall(r"<[a-z]+\b[^>]*\bdata-adv\b(?!-)[^>]*>", read(name))
+        ids = [re.search(r'\bid="([^"]+)"', t) for t in tags]
+        assert all(ids), (name, [t for t, i in zip(tags, ids) if not i])
+        page_ids = re.findall(r'\bid="([^"]+)"', read(name))
+        assert all(page_ids.count(i[1]) == 1 for i in ids), name
 
 
 def test_schema_box_hidden_when_one_user_schema():

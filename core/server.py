@@ -40,7 +40,7 @@ ask_open = None  # 파일 하나를 고르는 함수(kind → 고른 경로 또�
 PICK_KINDS = {"env": ("env 파일 (*.env)", "모든 파일 (*.*)"), "metrics": ("지표 파일 (*.yaml;*.yml;*.json)", "모든 파일 (*.*)")}  # /api/pick의 종류 → 파일 대화상자 필터
 QUERY_TIMEOUT = drivers.QUERY_TIMEOUT  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다. DB 쪽 시간 제한(drivers.settle)도 같은 값.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
-CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "defaults": settings.DEFAULTS, "time":{"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS,
+CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "defaults": settings.DEFAULTS, "time":{"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS, "adv_open_max": settings.ADV_OPEN_MAX,
              "funcs_ver": sql_funcs.version(), "agg_names": sql_funcs.agg_names(), "merge": list(sql_funcs.MERGE),
              "calendar": {"weekend": sql_funcs.WEEKEND_DEFAULT, "work_hours": list(sql_funcs.WORK_HOURS), "bucket_minutes": sql_funcs.BUCKET_MINUTES, "ewma_span": sql_funcs.EWMA_SPAN}}  # 함수 사전은 GET /api/funcs로 받는다(버전이 같으면 화면이 가진 것을 쓴다). 여기에는 작은 목록만
 LATE = []  # (화면 폴더들, 만드는 함수): 기능 모듈의 값이 든 화면 상수. 그 화면을 내려줄 때 만들어 시작할 때 기능 모듈이 올라오지 않게 한다.

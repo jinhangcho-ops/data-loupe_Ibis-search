@@ -175,7 +175,7 @@
       <div id="after-connect" class="hidden">
         <div class="cn"></div>
         <div class="step" data-step="filters"><div class="sp"><i>2</i><span class="t" title="조건에 맞는 행만 남기고 나머지 행은 빼요">행 거르기</span><b id="sum-p-filters"></b><span class="c"></span></div>
-          <div class="edx" data-adv>
+          <div class="edx" id="peak-box" data-adv>
             <div class="hint">조건에 맞는 행만 남겨요. 예: price &gt;= 100 / city = 서울 / name starts 김 / 컬럼 in 값1, 값2 / 컬럼 is null</div>
             <div class="row"><input id="f-in" placeholder="조건을 적고 Enter"><button id="f-add" class="btn">추가</button></div>
             <div id="filters"></div>
@@ -352,7 +352,7 @@
         <div class="hint">집계</div><div id="a-tagg"></div>
         <div class="hint">계산할 컬럼</div><select id="a-tval"></select>
       </div>
-      <div class="a-form hidden" data-kind="funnel" data-adv>
+      <div class="a-form hidden" id="akind-funnel" data-kind="funnel" data-adv>
         <p class="lead"><b>이걸 알려 줘요:</b> 사람들이 정한 단계를 순서대로 몇 명이나 거쳤고, 어느 단계에서 빠지는지 보여 줘요.<br><b>필요한 컬럼:</b> 사람을 구분하는 컬럼(예: 회원번호), 행동한 시각 컬럼, 행동 이름 컬럼(또는 단계마다 조건)</p>
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-fuser"></select>
         <div class="hint">행동한 시각 컬럼</div><select id="a-ftime"></select>
@@ -375,14 +375,14 @@
         <div class="f-win" title="앞 단계부터 이 시간 안에 도달한 사람만 세요. 비우면 제한이 없어요"><input id="a-fwin" type="number" min="0" step="any" placeholder="제한 없음"><select id="a-funit"><option value="minute">분</option><option value="hour">시간</option><option value="day">일</option></select></div>
         <div class="adv"><div class="hint">걸린 시간 절사평균에서 자를 몫(%)</div><input id="a-ftrim" type="number" min="0" step="any" aria-label="절사평균 자르기 %" title="위아래를 합쳐 자를 몫이에요. 비우면 기본값"></div>
       </div>
-      <div class="a-form hidden" data-kind="retention" data-adv>
+      <div class="a-form hidden" id="akind-retention" data-kind="retention" data-adv>
         <p class="lead"><b>이걸 알려 줘요:</b> 처음 나타난 기간(일·주·월)으로 사람을 묶어, 그 뒤 기간마다 다시 나타난 사람의 비율을 보여 줘요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 사람을 구분하는 컬럼, 날짜 컬럼</p>
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-rwho"></select>
         <div class="hint">시각 컬럼(날짜)</div><select id="a-rtime"></select>
         <div class="hint">코호트 단위</div><select id="a-runit"><option value="day">일</option><option value="week">주(설정한 주 시작 요일부터)</option><option value="month">월</option></select>
         <div class="adv"><div class="hint">경과 칸 수(비우면 기본값)</div><input id="a-rspan" type="number" step="1"></div>
       </div>
-      <div class="a-form hidden" data-kind="rfm" data-adv>
+      <div class="a-form hidden" id="akind-rfm" data-kind="rfm" data-adv>
         <p class="lead"><b>이걸 알려 줘요:</b> 최근에(R)·자주(F)·많이(M) 산 정도를 5단계로 나눠 점수를 매기고, 고객을 등급(세그먼트)으로 묶어요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 고객을 구분하는 컬럼, 날짜 컬럼, 금액 컬럼</p>
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-mwho"></select>
         <div class="hint">시각 컬럼(날짜)</div><select id="a-mtime"></select>
@@ -390,7 +390,7 @@
         <div class="adv"><div class="hint">기준일(비우면 자료의 마지막 날)</div><input id="a-masof" type="date"></div>
         <div class="adv"><div class="hint">거래 키(빈도를 고유 거래 수로 셀 때)</div><select id="a-mtx"></select></div>
       </div>
-      <div class="a-form hidden" data-kind="pareto" data-adv>
+      <div class="a-form hidden" id="akind-pareto" data-kind="pareto" data-adv>
         <p class="lead"><b>이걸 알려 줘요:</b> 값이 큰 항목부터 쌓아 적은 수의 항목이 전체의 몇 %를 차지하는지 보여 주고, 누적 비중으로 A·B·C 등급을 나눠요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 항목 컬럼(예: 상품), 값 컬럼(값을 행 수로 고르면 없어도 돼요)</p>
         <div class="hint">항목 컬럼</div><select id="a-pitem"></select>
         <div class="hint">값</div><select id="a-pagg"><option value="sum">합계</option><option value="count">행 수</option></select>
@@ -403,7 +403,7 @@
         <div class="hint">행 컬럼</div><select id="a-xrow"></select>
         <div class="hint">열 컬럼</div><select id="a-xcol"></select>
       </div>
-      <div class="a-form hidden" data-kind="abtest" data-adv>
+      <div class="a-form hidden" id="akind-abtest" data-kind="abtest" data-adv>
         <p class="lead"><b>이걸 알려 줘요:</b> 그룹(A·B …)끼리 비율이나 평균의 차이가 우연으로 생길 만한 정도인지 검정하고, 차이의 범위(신뢰구간)를 보여 줘요.<br><b>필요한 컬럼:</b> 그룹 컬럼, 값 컬럼(비율이면 0·1이나 예/아니오 값, 평균이면 숫자)</p>
         <div class="hint">그룹 컬럼</div><select id="a-bgroup"></select>
         <div class="hint">지표</div><select id="a-bmetric"><option value="rate">비율</option><option value="mean">평균</option></select>
@@ -411,7 +411,7 @@
         <div class="hint">대조군</div><select id="a-bctrl"></select>
         <div class="adv"><div class="hint">신뢰 수준(%, 비우면 설정값)</div><input id="a-bconf" type="number" step="any"></div>
       </div>
-      <div class="a-form hidden" data-kind="basket" data-adv>
+      <div class="a-form hidden" id="akind-basket" data-kind="basket" data-adv>
         <p class="lead"><b>이걸 알려 줘요:</b> 같은 거래에 함께 들어간 항목 쌍을 찾아, 우연보다 얼마나 자주 같이 들어가는지(향상도) 순으로 보여 줘요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 거래 키(예: 주문번호), 항목 컬럼(예: 상품)</p>
         <div class="hint">거래 키</div><select id="a-kkey"></select>
         <div class="hint">항목 컬럼</div><select id="a-kitem"></select>
@@ -426,7 +426,7 @@
         <div class="hint">그룹 컬럼</div><select id="a-dgroup"></select>
         <div class="hint">값 컬럼(0·1 값이면 비율)</div><select id="a-dval"></select>
       </div>
-      <div class="a-form hidden" data-kind="seasonal" data-adv>
+      <div class="a-form hidden" id="akind-seasonal" data-kind="seasonal" data-adv>
         <p class="lead"><b>이걸 알려 줘요:</b> 기간별 값을 추세·계절 반복·나머지로 나누고, 나머지가 유난히 큰 기간을 표시해요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 날짜 컬럼, 계산할 컬럼</p>
         <div class="hint">날짜 컬럼</div><select id="a-stime"></select>
         <div class="hint">기간 단위</div><select id="a-sunit"><option value="day">일</option><option value="week">주(월요일부터)</option><option value="month">월</option></select>

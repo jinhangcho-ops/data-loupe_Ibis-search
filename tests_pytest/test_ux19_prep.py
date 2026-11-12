@@ -60,7 +60,7 @@ def test_19e3_footer_says_what_happens():
 
 def test_19e_peak_finder_folded():
     step = between("prep.html", 'data-step="filters"', 'data-step="clean"')
-    assert '<div class="edx" data-adv>' in step
+    assert '<div class="edx" id="peak-box" data-adv>' in step
     adv = between("prep.html", '<div class="adv">\n            <div class="hint" style="margin-top:8px">데이터가 너무 많을 때', '<div class="cn">')
     assert all(f'id="{i}"' in adv for i in ("pk-col", "pk-unit", "peak-find", "pk-list"))
     assert 'id="f-in"' not in adv  # 조건 칸은 접지 않는다

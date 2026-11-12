@@ -1031,12 +1031,22 @@ function showAdv(box) {
   const b = box.querySelector(":scope .adv-more");
   if (b) b.textContent = "접기 ▴";
 }
-// 펼쳐 둔 묶음 기억: 설정 adv_open(JSON을 퍼센트 인코딩한 글자, 서버가 쿠키로 돌려준다. 실행마다 포트가 바뀌어 창의 저장소로는 기억할 수 없다). 열쇠는 화면 주소 + 묶음 id(없으면 화면 안 순서).
+// 펼쳐 둔 묶음 기억: 설정 adv_open(JSON을 퍼센트 인코딩한 글자, 서버가 쿠키로 돌려준다. 실행마다 포트가 바뀌어 창의 저장소로는 기억할 수 없다).
+// 열쇠는 화면 주소 + 묶음 id. id 없는 묶음은 기억하지 않는다(순서로 기억하면 화면에 묶음을 더하거나 뺀 뒤 엉뚱한 묶음이 펼쳐진다).
 let advOpen = [];
 try { advOpen = JSON.parse(saved("adv_open") || "[]"); } catch (e) { }
-const advKey = box => location.pathname + "#" + (box.id || [...document.querySelectorAll("[data-adv]")].indexOf(box));
+const advKey = box => location.pathname + "#" + box.id;
+// 목록 정리 후 바뀌었으면 저장: 이 화면에 더는 없는 묶음(빼거나 id를 바꿈)은 버리고, 글자 상한(settings.ADV_OPEN_MAX)을 넘으면 먼저 펼친 것부터 버린다.
+function keepAdv(list) {
+  const here = location.pathname + "#";
+  const kept = list.filter(k => !k.startsWith(here) || document.getElementById(k.slice(here.length))?.hasAttribute("data-adv"));
+  while (kept.length && encodeURIComponent(JSON.stringify(kept)).length > SERVER.adv_open_max) kept.shift();
+  if (JSON.stringify(kept) !== JSON.stringify(advOpen)) api("/api/settings", { adv_open: encodeURIComponent(JSON.stringify(kept)) }).catch(() => {});  // 못 저장해도 지금 화면은 그대로
+  advOpen = kept;
+}
 // 아직 단추가 없는 [data-adv] 묶음에 [더 많은 설정]을 단다(묶음 안의 [data-adv-slot]이 있으면 그 자리에, 없으면 맨 끝). 접힌 칸에 기본값과 다른 값이 있으면 펼쳐 둔다. 화면이 칸을 새로 그린 뒤 다시 불러도 된다.
 function advMore(root = document) {
+  if (root === document) keepAdv(advOpen);
   root.querySelectorAll("[data-adv]").forEach(box => {
     if (!box.querySelector(".adv")) return;
     let b = [...box.querySelectorAll(".adv-more")].find(x => x.closest("[data-adv]") === box);
@@ -1045,12 +1055,10 @@ function advMore(root = document) {
       b.onclick = () => {
         const open = !box.classList.contains("adv-shown");
         open ? showAdv(box) : (box.classList.remove("adv-shown"), b.textContent = "더 많은 설정 ▾");
-        const key = advKey(box);
-        advOpen = advOpen.filter(k => k !== key).concat(open ? [key] : []);
-        api("/api/settings", { adv_open: encodeURIComponent(JSON.stringify(advOpen)) }).catch(() => {});  // 못 저장해도 지금 화면은 그대로(다음에 열면 접혀 있다)
+        if (box.id) keepAdv(advOpen.filter(k => k !== advKey(box)).concat(open ? [advKey(box)] : []));
       };
       (box.querySelector(":scope [data-adv-slot]") || box).append(b);
-      if (advOpen.length && advOpen.includes(advKey(box))) showAdv(box);  // 사람이 [더 많은 설정]으로 펼쳐 둔 묶음은 다음에도 펼친다
+      if (box.id && advOpen.includes(advKey(box))) showAdv(box);  // 사람이 [더 많은 설정]으로 펼쳐 둔 묶음은 다음에도 펼친다
     }
     // 화면 HTML에 있는 칸(id가 있음)만 본다. 스크립트가 만든 칸은 처음 값(default)이 비어 있어 늘 바뀐 것으로 보인다. 체크·라디오를 되살리는 화면은 showAdv를 직접 부른다.
     const changed = f => f.id && f.type !== "checkbox" && f.type !== "radio"
