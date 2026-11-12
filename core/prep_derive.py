@@ -29,7 +29,7 @@ ARITH = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, a
 COMPARE = {ast.Eq: operator.eq, ast.NotEq: operator.ne, ast.Gt: operator.gt, ast.GtE: operator.ge, ast.Lt: operator.lt, ast.LtE: operator.le}
 NUMERIC_FUNCS = {"abs": lambda x: x.abs(), "sqrt": lambda x: sql_funcs.safe_math("sqrt", x), "ln": lambda x: sql_funcs.safe_math("ln", x),
                  "log10": lambda x: sql_funcs.safe_math("log10", x)}  # 정의역 밖(로그 0 이하·제곱근 음수)은 빈 값
-STRING_FUNCS = {"upper": lambda x: x.upper(), "lower": lambda x: x.lower(), "length": lambda x: x.length().cast("int64")}
+STRING_FUNCS = {"upper": lambda x: x.upper(), "lower": lambda x: x.lower(), "length": prep_ops.chars}
 
 
 def is_number(value):
