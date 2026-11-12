@@ -20,10 +20,10 @@ NAME = re.compile(r"[A-Za-z_가-힣][A-Za-z0-9_가-힣]{0,49}")
 ROOTS = ("Select", "Union", "Intersect", "Except", "Subquery")  # 맨 위에 올 수 있는 것(괄호로 감싼 SELECT 포함)
 FORBIDDEN = ("Drop", "Delete", "Insert", "Update", "Create", "Alter", "TruncateTable", "Grant", "Revoke", "Command", "Merge", "Into",  # 어디에 있어도 막는 것:
              "Pragma", "Set", "Copy", "Attach", "Detach", "Use", "Transaction", "Commit", "Rollback", "LoadData", "Kill", "Refresh",  # 데이터·권한·설정을 바꾸거나
-             "Cache", "Uncache", "Analyze")  # 파일·DB를 붙이는 문장
+             "Cache", "Uncache", "Analyze", "NextValueFor")  # 파일·DB를 붙이는 문장. NextValueFor: SQL Server의 NEXT VALUE FOR(nextval처럼 시퀀스를 올린다)
 PARQUET_BACKENDS = ("duckdb", "polars")
 FILE_FUNCS = {"glob", "sniff_csv", "st_read", "query", "query_table", "postgres_query", "postgres_execute", "mysql_query", "sqlite_query",  # 파일·폴더를 읽거나 문자열을 SQL로 돌리는 함수 이름
-              "pg_read_file", "pg_read_binary_file", "pg_ls_dir", "load_file", "openrowset", "opendatasource", "openquery",  # Postgres·MySQL·MSSQL 서버의 파일·원격 읽기
+              "pg_read_file", "pg_read_binary_file", "pg_ls_dir", "pg_stat_file", "load_file", "openrowset", "opendatasource", "openquery", "external_query",  # Postgres·MySQL·MSSQL 서버의 파일·원격 읽기, BigQuery의 글자 SQL 원격 실행
               "json_execute_serialized_sql", "query_to_xml", "query_to_xml_and_xmlschema", "query_to_xmlschema", "cursor_to_xml",  # 글자로 준 SQL을 돌리는 함수(DuckDB·Postgres)
               "url", "urlcluster", "file", "remote", "remotesecure", "cluster", "clusterallreplicas", "s3", "s3cluster", "gcs", "hdfs", "hdfscluster",  # ClickHouse의 파일·네트워크·다른 서버 읽기
               "azureblobstorage", "azureblobstoragecluster", "mysql", "postgresql", "mongodb", "redis", "sqlite", "jdbc", "odbc", "executable", "input"}
@@ -31,7 +31,7 @@ FILE_PREFIXES = ("read_", "parquet_", "iceberg_", "delta_", "dblink", "xp_", "lo
 FILE_SUFFIXES = ("_scan", "_attach")  # 이름이 이렇게 끝나는 함수(delta_scan, iceberg_scan, excel_scan …, sqlite_attach는 연결한 DB에 뷰를 만든다). DuckDB의 postgres_query 같은 원격 조회는 FILE_FUNCS에 이름으로(json_query처럼 정상인 *_query 함수는 막지 않는다)
 ENV_FUNCS = {"getenv", "current_setting", "current_settings", "duckdb_settings", "duckdb_secrets", "which_secret",
              "setval", "nextval", "set_config", "pg_terminate_backend", "pg_cancel_backend", "sleep", "sleep_ms", "pg_sleep",  # 환경·설정·비밀을 읽거나 서버 상태를 바꾸는 함수
-             "get_lock", "pg_reload_conf", "pg_switch_wal", "pg_rotate_logfile", "pg_promote", "benchmark",  # 잠금을 잡거나 서버 설정·로그·부하를 바꾸는 함수
+             "get_lock", "release_lock", "pg_reload_conf", "pg_switch_wal", "pg_rotate_logfile", "pg_promote", "benchmark",  # 잠금을 잡거나 서버 설정·로그·부하를 바꾸는 함수
              "enable_logging", "disable_logging", "enable_profiling", "disable_profiling", "write_log", "truncate_duckdb_logs",  # DuckDB 로그·프로파일: 아무 파일에나 쓰고 연결을 망가뜨린다
              "checkpoint", "force_checkpoint", "load_aws_credentials"}  # load_aws_credentials: AWS 키를 읽어 보이고 연결의 S3 설정을 바꾼다
 ENV_PREFIXES = ("pg_advisory_", "pg_try_advisory_", "pg_stat_reset", "pg_drop_", "pg_create_", "system$")  # 이름이 이렇게 시작하는 함수(잠금·통계 지우기·복제 슬롯, Snowflake SYSTEM$…)
@@ -121,8 +121,10 @@ def file_read_problem(tree, sql, dialect=None):
     exp = glot()[1]
     classes = tuple(getattr(exp, n) for n in FILE_CLASSES if hasattr(exp, n))
     for node in tree.walk():
-        if isinstance(node, classes):
+        if isinstance(node, classes) or isinstance(node, exp.Summarize) and isinstance(node.this, exp.Literal):  # SUMMARIZE 'a.csv'는 파일을 읽는다
             return READ_MESSAGE
+        if isinstance(node, exp.Column) and node.table and node.name.lower() == "nextval":  # Snowflake s.nextval(시퀀스를 올린다)
+            return ENV_MESSAGE
         if isinstance(node, exp.Lock) or isinstance(node, exp.WithTableHint) and LOCK_HINT.search(node.sql()):
             return LOCK_MESSAGE
         if isinstance(node, exp.Func):

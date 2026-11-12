@@ -4,7 +4,7 @@
 // 저장이 2초 넘게 안 되면(실패 등) 초안(/api/draft?screen=dashboard)을 남기고, 다음에 화면을 열면 "하던 작업을 이어서 할까요?"를 묻는다.
 // ShellProvider가 한 번 부른다(open = 화면 틀의 열기: 저장값을 보이고 기간 규칙대로만 다시 구한다). 저장·단축키·초안은 모듈 공용 한 벌. flush()는 다른 대시보드로 옮기기 전에 부른다(실패면 던진다).
 import { useEffect } from "react";
-import { draft as drafts, saveDashboard } from "@/lib/api";
+import { draft as drafts, getDashboard, saveDashboard } from "@/lib/api";
 import { useDash, type Action, type DashState } from "@/lib/store";
 import type { Card, Dashboard } from "@/lib/types";
 
@@ -75,8 +75,12 @@ function askDraft() {
     go.onclick = async () => {
       try {
         if (!cur.state?.list.some(x => x.id === draft.state.id)) throw new Error("그 대시보드가 지금은 없어요.");
-        if (cur.state.dash?.id !== draft.state.id) await cur.open(draft.state.id);
-        const data = Object.fromEntries((cur.state?.dash?.cards ?? []).map(c => [c.id, c.data]));
+        let cards = cur.state.dash?.cards ?? [];
+        if (cur.state.dash?.id !== draft.state.id) {  // 연 직후의 cur.state는 다음 렌더 전이라 옛 대시보드다: 저장된 카드 값은 서버에서 읽는다
+          await cur.open(draft.state.id);
+          cards = (await getDashboard(draft.state.id)).dashboard.cards;
+        }
+        const data = Object.fromEntries(cards.map(c => [c.id, c.data]));
         cur.dispatch({ type: "cards", cards: draft.state.cards.map(c => ({ ...c, data: data[c.id] ?? {} }) as Card) });  // dirty가 켜져 자동 저장이 이어서 쓴다
         cur.dispatch({ type: "meta", patch: { palette: draft.state.palette, north_star: draft.state.north_star } });
         end();

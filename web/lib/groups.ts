@@ -30,6 +30,7 @@ export const MERGE_AGAIN = "범위 묶기 값은 서버에서 다시 구해요. 
 export function inRanges(value: string | number, ranges: [RangeEnd, RangeEnd][]): boolean {
   if (!ranges.length) return true;
   return ranges.some(([lo, hi]) => {
+    if (lo === null && hi === null) return true;  // 막 더한 빈 범위: 날짜 라벨을 숫자로 비교해 다 지우지 않게
     if (typeof lo === "string" || typeof hi === "string") {
       const s = String(value).slice(0, 10);
       return (lo === null || s >= String(lo)) && (hi === null || s <= String(hi));

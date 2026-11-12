@@ -94,7 +94,7 @@ def table_text(table):
     if not isinstance(table, dict) or not isinstance(table.get("columns"), list) or not isinstance(table.get("rows"), list):
         raise ValueError('표는 {"columns": [...], "rows": [...]} 모양이어야 해요.')
     columns, rows = table["columns"], table["rows"]
-    cell = lambda value: "" if value is None else (text if len(text := str(value)) <= MAX_CELL else text[:MAX_CELL - 1] + "…")
+    cell = lambda value: "" if value is None else (text if len(text := str(value).replace("\n", " ").replace("```", "'''")) <= MAX_CELL else text[:MAX_CELL - 1] + "…")  # 칸의 줄바꿈·```이 표 줄과 코드 블록을 깨지 않게
     lines = [" | ".join(map(cell, columns))]
     for row in rows[:MAX_TABLE_ROWS]:
         lines.append(" | ".join(map(cell, [row.get(c) for c in columns] if isinstance(row, dict) else row)))

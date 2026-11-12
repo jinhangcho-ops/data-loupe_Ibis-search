@@ -90,7 +90,7 @@ def hints(columns):
     for x, y in zip(roles.get("x", []), roles.get("y", [])):
         if max(abs(v or 0) for v in (x[1], x[2], y[1], y[2])) > BIG:
             pairs.append(tm_pair(x, y))
-        else:
+        elif check_range(y[0], "lat", y[1], y[2]) is None and check_range(x[0], "lon", x[1], x[2]) is None:  # 픽셀 좌표(y 0~600)를 경위도로 추천하지 않는다
             pairs.append({"kind": "lonlat", "lat": y[0], "lon": x[0]})
     return {"columns": found, "pairs": [p for p in pairs if p], "warnings": warnings}
 
@@ -100,9 +100,6 @@ def tm_pair(x, y):
     pair = {"kind": "tm", "x": x[0], "y": y[0], "epsg": []}
     if None in (x[1], x[2], y[1], y[2]):
         return pair
-    try:
-        from geo import tm
-        pair["epsg"] = tm.guess(x[1], x[2], y[1], y[2])
-    except Exception:  # pyproj가 없거나 계산이 안 되면 후보 없이 알린다(좌표계는 사용자가 고른다)
-        pass
+    from geo import tm
+    pair["epsg"] = tm.guess(x[1], x[2], y[1], y[2])  # pyproj는 필수 의존성: 계산이 안 되면 원인을 숨기지 않고 그대로 올린다
     return pair

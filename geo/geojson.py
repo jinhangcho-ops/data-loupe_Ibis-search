@@ -14,6 +14,9 @@ NUMBER_COLUMNS = GEO_COLUMNS[1:7]
 GEOMETRY_TYPES = ("Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon", "GeometryCollection")
 EPSG = re.compile(r"EPSG[:/]+(?:[\d.]*:)?(\d+)", re.I)
 MAX_BYTES = 512 * 1024 * 1024  # 이보다 큰 GeoJSON은 읽지 않는다(통째로 메모리에 올리므로)
+PARSE_FACTOR = 10  # 파싱에 드는 메모리 ÷ 파일 크기(74MB 폴리곤 파일에서 파이썬 힙만 6.9배를 쟀다. Polars 몫까지 넉넉히)
+MAX_LON, MAX_LAT = 540, 90  # 이보다 큰 경도·위도는 경위도가 아니다(0~360 경도, 변경선을 넘어 펼친 경도까지는 받는다)
+OUT_OF_RANGE = "경위도 범위를 벗어난 좌표가 있어요. crs가 빠진 TM(미터) 좌표일 수 있어요(예: EPSG:5179). 파일에 crs를 넣거나 경위도로 바꿔 주세요."
 
 
 def is_geojson(path):
@@ -195,14 +198,17 @@ def table(doc):
         geom = shape(f.get("geometry"), epsg)
         lon, lat = center(geom) if geom else (None, None)
         low = bounds(geom) if geom else (None,) * 4
-        xs = [p[0] for kind, coords in parts(geom) for p in leaves(coords)] if geom else []
+        pts = [p for kind, coords in parts(geom) for p in leaves(coords)] if geom else []
+        xs = [p[0] for p in pts]
+        if any(math.isfinite(p[0]) and abs(p[0]) > MAX_LON or math.isfinite(p[1]) and abs(p[1]) > MAX_LAT for p in pts):  # crs 없는 TM(미터) 좌표를 경위도로 그리지 않게
+            raise ValueError(OUT_OF_RANGE)
         moved = bool(xs) and min(xs) < 0 and crosses_dateline(xs)  # unwrapped가 실제로 점을 옮긴 때
         edge = lambda v: None if v is None else back(v) if moved else v  # 변경선을 넘어 점을 옮긴 때만 -180~180 안으로(min_lon > max_lon, in_box와 같은 규칙). 0~360 경도 파일은 그대로
         row = {"geom_type": geom.get("type") if geom else None, "center_lon": lon, "center_lat": lat, "min_lon": edge(low[0]), "min_lat": low[1], "max_lon": edge(low[2]), "max_lat": low[3],
                "geometry": json.dumps(geom, ensure_ascii=False, separators=(",", ":")) if geom else None}
         mine = f.get("properties") if isinstance(f.get("properties"), dict) else {}
         if f.get("id") is not None:
-            mine = {"feature_id": f["id"], **mine}
+            mine = {**mine, "feature_id" if "feature_id" not in mine else "feature_id_id": f["id"]}  # 같은 이름의 속성이 있으면 id를 덮어쓰지 않게 따로 둔다
         for key, value in mine.items():
             name = key if key not in GEO_COLUMNS else f"{key}_속성"
             props.setdefault(name, None)
@@ -230,7 +236,7 @@ def read(path):
 
 
 def read_file(p):
-    limit = min(MAX_BYTES, monitor.bound_bytes() // 6)  # 메모리 한도(없으면 지금 쓸 수 있는 메모리)의 6분의 1이 더 작으면 그것(파싱에 파일의 약 6배 메모리가 든다)
+    limit = min(MAX_BYTES, monitor.bound_bytes() // PARSE_FACTOR)  # 메모리 한도(없으면 지금 쓸 수 있는 메모리)를 PARSE_FACTOR로 나눈 것이 더 작으면 그것
     if p.stat().st_size > limit:
         raise ValueError(f"{p.name}이 {limit // 1024 // 1024}MB보다 커서 읽지 않았어요. 영역을 나누어 쓰세요.")
     try:

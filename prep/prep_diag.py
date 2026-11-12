@@ -881,7 +881,7 @@ def time_gaps(t: "ibis.expr.types.Table", column: str, unit: str, opts: dict) ->
     날짜·시각 컬럼의 처음~마지막 사이에서 값이 하나도 없는 일·시간 구간을 이어진 묶음으로 찾는다."""
     import polars as pl
 
-    from core import parse, prep_ops, source
+    from core import parse, prep_ops, result, source
 
     parse.check_name(column, t.columns)
     if unit not in GAP_UNITS:
@@ -893,7 +893,7 @@ def time_gaps(t: "ibis.expr.types.Table", column: str, unit: str, opts: dict) ->
         raise ValueError("날짜(시간 없음) 컬럼은 시간 단위로 볼 수 없어요.")
 
     col = t[column]
-    b = col if dtype.is_date() and unit == "day" else col.truncate(GAP_UNITS[unit])
+    b = col if dtype.is_date() and unit == "day" else result.local_time(col).truncate(GAP_UNITS[unit])  # 분석·지표처럼 설정 시간대의 날짜로 자른다(UTC 날짜로 묶지 않게)
     if not source.compiles(t.select(b=b)):
         raise ValueError("이 연결은 날짜를 일·시간 단위로 자르지 못해요.")
 

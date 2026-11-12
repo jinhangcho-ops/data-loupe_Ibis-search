@@ -1040,7 +1040,7 @@ $("peak-find").onclick = () => busy($("peak-find"), async () => {
     $("pk-list").replaceChildren(...(d.periods.length ? d.periods.map(p => el("div", {}, `${p.start} ~ ${p.end} · ${p.count.toLocaleString()}건 `,
       el("button", { className: "ghost", textContent: "이 기간 적용", title: `${column} between ${p.start} ${p.end} 조건을 행 거르기에 넣어요`, "aria-label": `${p.start}부터 ${p.end}까지 기간을 조건으로 적용`,
         onclick: () => { filters.push(`${column} between ${p.start} ${p.end}`); syncFilters(); } })))
-      : [el("div", { className: "hint", textContent: "날짜가 있는 행이 없어요." })]), ...(d.more ? [el("div", { className: "hint", textContent: "기간이 많아 최근 400개 기간 안에서만 찾았어요. 더 긴 기간 길이를 고르세요." })] : []));
+      : [el("div", { className: "hint", textContent: "날짜가 있는 행이 없어요." })]));
   } catch (e) { fail(e.message); }
 });
 const addFilter = () => {
@@ -1150,7 +1150,7 @@ function renderGeo() {
   $("geo-list").replaceChildren(...geoSteps.map((st, i) => el("div", {}, chip(geoText(st), () => { geoSteps.splice(i, 1); preview = null; showAll(); }))));
   const hints = prof?.geo, pairs = hints?.pairs ?? [];
   $("geo-hints").replaceChildren(...(hints?.columns?.length ? [el("div", {}, "좌표 컬럼으로 보여요: " + hints.columns.map(c => `${c.name}(${{ lat: "위도", lon: "경도", x: "x", y: "y" }[c.role]})`).join(", "))] : []),
-    ...pairs.filter(p => p.kind === "tm").map(p => el("div", {}, `‘${p.x}’·‘${p.y}’는 미터 단위 TM 좌표로 보여요. ${p.epsg.length ? "값 범위로 보면 EPSG " + p.epsg.join(" 또는 ") + "일 가능성이 커요." : "맞는 좌표계를 값 범위로 찾지 못했어요. 자료의 좌표계를 확인해 고르세요."}`)),
+    ...pairs.filter(p => p.kind === "tm").map(p => el("div", {}, `‘${p.x}’·‘${p.y}’는 미터 단위 TM 좌표로 보여요. ${p.epsg.length === 1 ? "값 범위로 보면 EPSG " + p.epsg[0] + "일 가능성이 커요." : p.epsg.length ? "값 범위로는 EPSG " + p.epsg.join(", ") + " 중 어느 것인지 구분되지 않아요(잘못 고르면 100km쯤 어긋나요). 자료의 좌표계를 확인해 고르세요." :"맞는 좌표계를 값 범위로 찾지 못했어요. 자료의 좌표계를 확인해 고르세요."}`)),
     ...(hints?.warnings ?? []).map(w => el("div", { className: "err", textContent: w })));
   $("geo-info").textContent = (preview?.info?.geo ?? []).map(g => g.op === "tm" ? `TM: 서로 다른 좌표 ${g.pairs.toLocaleString()}개 변환${g.failed ? `, 바뀌지 않은 ${g.failed}개` : ""}`
     : g.op === "nearest" ? `가까운 지점: 서로 다른 좌표 ${g.pairs.toLocaleString()}개 중 ${g.matched.toLocaleString()}개에 지점을 찾음(지점 ${g.reference.toLocaleString()}개)`

@@ -206,8 +206,8 @@ def write_output(con, table, fmt, out, folder):
         return pq.read_metadata(out).num_rows
     texts = [name for name, t in table.schema().items() if t.is_string()]
     number = {name: table[name].try_cast("float64") for name in texts}  # -1500 같은 숫자는 수식이 아니므로 그대로(적재 타입 유지), -inf·nan은 막는다
-    table = table.mutate(**{name: (table[name].substr(0, 1).isin(FORMULA_START) & (number[name].isnull() | number[name].isnan() | number[name].isinf())).ifelse("'" + table[name], table[name]) for name in texts})
-    table = table.rename({"'" + name: name for name in table.columns if name[:1] in FORMULA_START})
+    table = table.mutate(**{name: ((table[name].substr(0, 1).isin(FORMULA_START) | table[name].lstrip().substr(0, 1).isin(FORMULA_START)) & (number[name].isnull() | number[name].isnan() | number[name].isinf())).ifelse("'" + table[name], table[name]) for name in texts})  # 앞 빈칸을 건너뛰고 본다(result.formula_guard와 같게)
+    table = table.rename({"'" + name: name for name in table.columns if name[:1] in FORMULA_START or name.lstrip()[:1] in FORMULA_START})
     plain = Path(folder, "result.csv")
     con.to_csv(table, plain)
     with_bom(plain, out)
@@ -243,6 +243,9 @@ def replace(found, path):
     try:
         os.replace(found["out"], path)
     except PermissionError:
-        found["out"].unlink(missing_ok=True)
+        if found["part"].exists():
+            found["out"].unlink(missing_ok=True)
+        else:  # 파일 방식 Parquet→Parquet은 받은 파일을 그대로 옮겨 왔다: 지우지 않고 되돌려 둔다
+            os.replace(found["out"], found["part"])
         raise Halt("다른 프로그램이 파일을 쓰고 있어요. 그 프로그램에서 결과 파일을 닫고 다시 시작하세요(받은 것은 남아 있어 이어서 바꿔요).") from None
     clean(found)

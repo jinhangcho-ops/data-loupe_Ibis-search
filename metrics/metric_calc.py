@@ -372,7 +372,7 @@ def cohort_matrix(table, user, time, unit="day", mode="classic", n_max=30, span=
     last = latest(act, "p")
     if last is None:  # 행이 없거나 시각이 전부 비었다
         return {"unit": unit, "mode": mode, "cohorts": []}
-    counts, base = cohort_counts(j, mode, span), sizes
+    counts, base = cohort_counts(j.filter(j.off <= n_max) if mode == "classic" else j, mode, span), sizes  # classic은 보일 칸(N ≤ n_max)만 센다: 3년 일 단위면 쓰지 않을 수십만 행을 받았다. rolling은 마지막 활동이 필요해 거르지 않는다
     if amount:
         counts = cohort_revenue(table, user, time, unit, amount, first)
         base = {f: counts.get((f, 0), 0) for f in sizes}

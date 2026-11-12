@@ -323,10 +323,12 @@ const SHORT_DIGITS = 1;  // 줄인 값의 소수 자리
 // [SPECIFICATION] plans/phase-9.md#shortNum
 export function shortNum(v: unknown, style: "ko" | "en" | null): string {
   if (style === null || typeof v !== "number" || !Number.isFinite(v)) return shownum(v);
-  const hit = (style === "ko" ? KO_UNITS : EN_UNITS).find(([min]) => Math.abs(v) >= min);
-  if (hit === undefined) return shownum(v);
-  const [min, unit] = hit;
-  return `${(v / min).toFixed(SHORT_DIGITS).replace(/\.0$/, "")}${unit}`;
+  const units = style === "ko" ? KO_UNITS : EN_UNITS;
+  let j = units.findIndex(([min]) => Math.abs(v) >= min);
+  if (j < 0) return shownum(v);
+  const shown = (k: number) => (v / units[k][0]).toFixed(SHORT_DIGITS);
+  if (j > 0 && Math.abs(Number(shown(j))) * units[j][0] >= units[j - 1][0]) j -= 1;  // 반올림해 다음 단위가 되면(999,950 → 1000K) 한 단위 위로(1M)
+  return `${shown(j).replace(/\.0$/, "")}${units[j][1]}`;
 }
 // [SPECIFICATION] plans/phase-9.md#refValues
 export function refValues(values: (number | string | null)[]): { mean: number; median: number } | null {

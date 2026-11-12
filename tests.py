@@ -861,7 +861,7 @@ def notify_section(c, got):
         text = "\n".join(["n | v"] + [f"{i} | r{i}" for i in range(50)] + ["… 외 10행"])
         presets = {p["label"]: p for p in c.get("/api/destinations").get_json()["kinds"]["webhook"]["presets"]}
         for label, want in [("일반 JSON", {"title": weird, "text": "내용 & x=y", "rows": "1,234", "seconds": "1분 23초", "table": text, "image": base64.b64encode(png).decode()}),
-                            ("Teams", {"text": f"**{weird}**\n\n내용 & x=y\n\n{text}"}), ("Discord", {"content": f"**{weird}**\n내용 & x=y\n{text}"}), ("글자", None)]:
+                            ("Teams", {"text": f"**{weird}**\n\n내용 & x=y\n\n{text}"}), ("Discord", {"content": f"**{weird}**\n내용 & x=y\n{text}", "allowed_mentions": {"parse": []}}), ("글자", None)]:  # Discord: 데이터의 @everyone이 알림이 되지 않게(감사46)
             p = presets[label]
             put("hook", kind="webhook", done=False, url="", content=p["content"], template=p["template"])
             sent.clear()

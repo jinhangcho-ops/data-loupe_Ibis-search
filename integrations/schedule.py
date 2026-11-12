@@ -11,6 +11,7 @@ import time
 
 import psutil
 
+from core import credentials
 from core import filelock
 from core import scratch
 from core import settings
@@ -29,6 +30,7 @@ MAX_RUNS = 200
 MAX_SCHEDULES = settings.MAX_SAVED
 EVERY = ("daily", "weekly", "interval")
 NOTIFY_ON = ("fail", "always")
+SESSION_NOTIFY = "Windows 예약의 알림에는 '이번 실행 동안만' 보관한 보낼 곳을 쓸 수 없어요(예약 작업은 따로 실행돼 그 값이 없어요). 보관 방식을 바꾸거나 다른 보낼 곳을 고르세요."
 DEFAULT = {"every": "daily", "time": "09:00", "days": [0, 1, 2, 3, 4], "minutes": 60, "inapp": True, "windows": False, "notify": "", "notify_on": "fail"}  # 화면(collect.html)도 이 값을 쓴다
 MINUTES = (5, 1440)  # interval 예약의 간격(분) 범위
 TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
@@ -113,6 +115,8 @@ def checked(item):
         raise ValueError("프로그램 안 예약(inapp)과 Windows 작업(windows)은 같이 고를 수 없어요. 하나만 고르세요.")
     if not isinstance(found["notify"], str) or (found["notify"] and found["notify"] not in settings.named(notify.FILE)):
         raise ValueError(f"보낼 곳 '{found['notify']}'이 없어요." if isinstance(found["notify"], str) else "보낼 곳 이름은 글자여야 해요.")
+    if found["windows"] and found["notify"] and credentials.keep_of(settings.named(notify.FILE)[found["notify"]]) == "session":  # Windows 작업은 다른 프로세스라 이번 실행의 값이 없다
+        raise ValueError(SESSION_NOTIFY)
     if found["notify_on"] not in NOTIFY_ON:
         raise ValueError(f"예약의 notify_on은 {', '.join(NOTIFY_ON)} 중 하나예요.")
     found["days"] = sorted(days)
@@ -178,12 +182,12 @@ def save(name, item):
                 return found
         if item is not None and item["windows"]:  # 거부하기 전에 방금 등록한 작업을 되돌린다(예전 항목에 작업이 없었으면 지우고, 있었으면 파일의 지금 값으로 다시 등록)
             try:
-                if not old.get("task"):
-                    wintask.delete(item["task"])
-                elif now.get("windows") and now.get("task"):
+                if now.get("windows") and now.get("task"):  # 파일의 지금 값으로 다시 등록(다른 곳이 같은 작업 이름을 골랐으면 그 작업을 지우지 않는다)
                     register(name, now, [])
+                    if now["task"] != item["task"]:
+                        wintask.delete(item["task"])
                 else:
-                    wintask.delete(old["task"])
+                    wintask.delete(item["task"])
             except Exception:  # 되돌리지 못해도 거부 이유는 그대로 알린다
                 pass
         raise ValueError("저장하는 동안 같은 예약이 다른 곳에서 바뀌었어요. 화면을 새로 고치고 다시 저장하세요.")

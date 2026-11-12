@@ -147,6 +147,6 @@ const addItem = async (key, line, err) => { added.push([key, line]); return true
     assert got["cols"] == ["day", "at"]  # 날짜 타입이고 기준 테이블의 컬럼만
     assert got["sent"] == ["/api/analyze", {"recipe": {"schema": "", "base": "orders", "filters": []}, "how": {"kind": "busiest", "column": "at", "unit": "week", "top": 5}}]
     assert got["added"] == [["periods", "at 2026-01-05 ~ 2026-01-11"]]
-    assert got["text"] == "2026-01-05 ~ 2026-01-11 · 1,200건 " and got["label"] and got["more"] == 2
+    assert got["text"] == "2026-01-05 ~ 2026-01-11 · 1,200건 " and got["label"] and got["more"] == 1  # (감사48) 서버가 늘 false로 주던 more의 "400개" 안내는 지웠다: 기간 줄 하나만
     assert got["none"] == "기준 테이블에 날짜 타입 컬럼이 없어요."
     assert 'id="pk-col"' in HTML and 'id="peak-find"' in HTML and 'fill($("pk-col"), dateCols())' in HTML

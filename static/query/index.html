@@ -830,7 +830,7 @@ async function findPeaks() {
     $("pk-list").replaceChildren(...(d.periods.length ? d.periods.map(p => el("div", {}, `${p.start} ~ ${p.end} · ${p.count.toLocaleString()}건 `,
       el("button", { className: "ghost", textContent: "이 기간 적용", title: `④ 기간에 ${column} ${p.start} ~ ${p.end}을 넣어요`, ariaLabel: `${p.start}부터 ${p.end}까지 기간 적용`,
         onclick: () => addItem("periods", `${column} ${p.start} ~ ${p.end}`, $("err-peak")) })))
-      : [el("div", { className: "hint", textContent: "날짜가 있는 행이 없어요." })]), ...(d.more ? [el("div", { className: "hint", textContent: "기간이 많아 최근 400개 기간 안에서만 찾았어요. 더 긴 기간 길이를 고르세요." })] : []));
+      : [el("div", { className: "hint", textContent: "날짜가 있는 행이 없어요." })]));
   } catch (e) { $("err-peak").textContent = e.message; }
 }
 $("peak-find").onclick = () => busy($("peak-find"), findPeaks);

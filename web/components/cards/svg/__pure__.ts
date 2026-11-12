@@ -31,7 +31,13 @@ export function cardDays(card: Card, i: number, range: Range, merge: string[]): 
     days = [];
     for (let d = lo; d <= hi; d = shiftDay(d, 1)) days.push(d);
   }
-  return days.map(day => ({ day, v: windowValue(s, by.labels, day, day, merge, loaded) }));
+  // 날마다 전체 라벨을 훑지 않게(일수²) 그날 칸만 잘라 windowValue에 넘긴다(같은 규칙)
+  const at = new Map(by.labels.map((d, k) => [d, k])), one = (a: (number | null)[] | undefined, k: number) => a && [a[k]];
+  return days.map(day => {
+    const k = at.get(day);
+    return { day, v: k === undefined ? windowValue(s, [], day, day, merge, loaded)
+      : windowValue({ ...s, values: one(s.values, k), sum: one(s.sum, k), count: one(s.count, k), min: one(s.min, k), max: one(s.max, k) }, [day], day, day, merge, loaded) };
+  });
 }
 export const cardTarget = (card: Card): number | null => (card.data?.target as { value?: number | null } | undefined)?.value ?? (card.view?.target as { value?: number } | undefined)?.value ?? null;
 export const cardFormat = (card: Card): string => card.view?.format || (card.data?.values?.format as string | undefined) || "number";

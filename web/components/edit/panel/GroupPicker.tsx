@@ -86,7 +86,7 @@ export function GroupPicker({ card, data, onChange, recompute }: GroupPickerProp
     setDrag(null);
     if (drag.from === drag.to) toggle(drag.list, [all[drag.from]]);
     else if (drag.list === "names" && ordered) setRanges([...ranges, dragRange(names, drag.from, drag.to, ordered)]);
-    else toggle(drag.list, dragPick(all, drag.from, drag.to));
+    else toggle(drag.list, dragPick(all, drag.from, drag.to).filter((n) => n.includes(find[drag.list])));  // 찾기로 숨은 항목은 끌어도 바꾸지 않는다
   };
   const rename = (name: string, v: string) => {
     const r = { ...(g.rename ?? {}) };

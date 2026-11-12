@@ -80,15 +80,15 @@ def test_fill_mean_after_all_row_drops():
 
 # ---------- 3C4 GeoJSON 상한 ----------
 
-def test_geojson_limit_is_a_sixth_of_bound(tmp_path, monkeypatch):
+def test_geojson_limit_is_a_sixth_of_bound(tmp_path, monkeypatch):  # (감사47) 6배 → PARSE_FACTOR배(잰 값 6.9배)
     from core import monitor
     p = tmp_path / "g.geojson"
     p.write_text(json.dumps({"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {}, "geometry": {"type": "Point", "coordinates": [1, 2]}}]}), encoding="utf-8")
     size = p.stat().st_size
-    monkeypatch.setattr(monitor, "bound_bytes", lambda config=None: size * 5)  # 6배 메모리가 필요한데 5배뿐
+    monkeypatch.setattr(monitor, "bound_bytes", lambda config=None: size * (geojson.PARSE_FACTOR - 1))  # 필요한 배수보다 하나 모자람
     with pytest.raises(ValueError, match="커서"):
         geojson.read_file(p)
-    monkeypatch.setattr(monitor, "bound_bytes", lambda config=None: size * 6)
+    monkeypatch.setattr(monitor, "bound_bytes", lambda config=None: size * geojson.PARSE_FACTOR)
     assert len(geojson.read_file(p)) == 1
 
 

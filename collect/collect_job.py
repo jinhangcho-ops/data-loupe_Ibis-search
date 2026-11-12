@@ -32,6 +32,9 @@ from collect.collect_store import (CAPPED, IDLE, began, SAVE_EVERY, balancer_for
                            update, with_bom, write_output, write_record)
 
 MIN_FREE = 200 * 1024 * 1024  # 시작할 때 결과 폴더의 디스크에 적어도 남아 있어야 하는 공간
+WORK_NAME = "결과 파일 이름이 '.part'로 끝나면 다른 수집의 작업 파일과 겹쳐요. 다른 이름을 고르세요."
+TRY_LIMITED ="사용 한도에 걸려 지금은 시험할 수 없어요. 잠시 뒤 다시 누르세요."
+NOT_FOUND = 404  # 끝을 지난 쪽에 이 상태를 주는 서버가 있어 빈 쪽으로 본다
 MAX_AGE = dt.timedelta(days=1)  # 이어 받기는 마지막으로 받은 지 이만큼 안에서만(오래 내버려 둔 것에 지금 받은 것을 섞지 않게, 하루 한도로 매일 이어 받는 것은 이어짐)
 RUNNING = "이미 수집이 돌고 있어요. 끝나거나 멈춘 뒤에 시작하세요."
 BUSY = "같은 결과 파일에 다른 곳(다른 창, 프로그램 안 예약, Windows 예약 작업)이 수집하고 있어요. 끝난 뒤에 시작하세요."
@@ -175,6 +178,8 @@ def start(config, password=""):
     path = output_path(config)
     if not path.parent.is_dir():
         raise ValueError("결과 파일의 폴더가 없어요.")
+    if path.stem.lower().endswith(".part"):  # 다른 구성(이름.parquet)의 작업 파일(이름.part.parquet)과 겹쳐 서로 지운다
+        raise ValueError(WORK_NAME)
     if server.reading(path):
         raise ValueError("지금 읽고 있는 파일에는 저장할 수 없어요. 다른 이름을 고르세요.")
     group = config["limit_group"]
@@ -259,7 +264,7 @@ def work(config, env, path, found, record, halt, password, lock=None):
         if record is not None:
             made = RUNNERS[config["mode"]](config, env, path, found, record, halt)
             if made:
-                uploads.log_file(path, load_job.total_rows(path))  # 업로드 기록: 저장한 결과 파일
+                uploads.log_file(path, status["rows"])  # 업로드 기록: 저장한 결과 파일(행 수는 CSV도 받은 수로)
         if config["load"]["target"] != "file" and made:
             update(phase="적재 중", output=str(path), wait="")
             loaded = load_job.run(config, path, password, halt, update)
@@ -293,7 +298,14 @@ def first_page(config, env):
     else:
         sent = req.build({"method": "GET", "url": config["file"]["url"], "headers": config["file"]["headers"] + [["Range", "bytes=0-65535"]]}, context(config, env, 0))
     if config["limit_group"]:
-        collect_limits.take(config["limit_group"], threading.Event())
+        now = threading.Event()
+        now.set()  # 시험은 한도가 빌 때까지 기다리지 않는다(화면 요청을 붙잡지 않게)
+        try:
+            collect_limits.take(config["limit_group"], now)
+        except Halt as e:
+            if str(e) != collect_http.STOPPED:
+                raise
+            raise Halt(TRY_LIMITED, failed=False) from None
     reply = collect_http.fetch(sent, config["balance"]["timeout"], hide)
     collect_limits.server_says(config["limit_group"], reply.headers)
     text = req_mask(reply.text()[:200_000], hide)
@@ -442,15 +454,15 @@ def run_api(config, env, path, found, record, halt):
             save_page(found, record, i, rows, len(reply.body))
             if paging["kind"] == "offset" and 0 < len(rows) < paging["step"]:  # 서버가 step보다 적게 주면 다음 offset(step 간격)에서 그 사이 행이 빠진다
                 total, short = record.get("total"), len(rows)
-                if total is None:  # 전체 수를 모르면 다음 쪽이 비지 않은지로 본다
-                    i = claim()
-                    if i is not None:
-                        rows, size = later(i)
-                        with guard:
-                            if not rows:
-                                record["end"] = i
-                        save_page(found, record, i, rows, size)
-                        total = short + 1 if rows else None
+                if total is None:  # 전체 수를 모르면 받은 행 바로 다음(offset+short)이 비었는지로 본다. 다음 쪽(offset+step)으로 보면 그 사이 행을 놓친다
+                    probe = req.build(config["request"], {**context(config, env, 0, "", began(record)), "offset": paging["start"] + short})
+                    try:
+                        more = req.mapped(json.loads(balancer.call(lambda: collect_http.fetch(probe, timeout, hide)).text()), response)[0]
+                    except Halt as e:
+                        if e.status != NOT_FOUND:
+                            raise
+                        more = []
+                    total = short + 1 if more else None
                 if total is not None and total > short:
                     raise Halt(f"서버가 한 번에 {short}행만 줘요. 한 번에 받는 수를 {short}으로 줄이세요.")
         threads = [threading.Thread(target=worker, daemon=True) for _ in range(max(1, balancer.limit))]
