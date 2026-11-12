@@ -180,6 +180,8 @@ def test_query_chart_first_and_pivot_labels():
     assert pane.index('id="series"') < at < pane.index('id="cgroup-box"') and at < pane.index('id="clabels"')  # 차트가 설정 칸들보다 위
     html = read("index.html")
     assert "SERVER.summary_names" in html
+    for tag in re.findall(r'<div class="cf"[^>]*><span class="cl">[^<]*</span><select[^>]*>', html):
+        assert 'style="flex' not in tag.split("<select", 1)[1], tag  # 세로 묶음(.cf) 안의 칸에 flex를 주면 높이로 늘어난다(피벗 칸 140px 회귀)
     for i, name in (("pv-rows", "행"), ("pv-rows2", "둘째 행"), ("pv-col", "열"), ("pv-val", "값 컬럼"), ("pv-sub", "소계"), ("pv-show", "칸 표시"),
                     ("pv-preset", "집계 묶음"), ("pv-key", "기준"), ("pv-target", "값"), ("pv-convert", "전환율")):
         assert f'<span class="cl">{name}</span><select id="{i}"' in html, i
