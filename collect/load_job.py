@@ -7,6 +7,9 @@ import math
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from lazy import ibis
+
+from collect import collect_store
 from collect import load_kafka
 from collect import load_table
 from core import settings
@@ -112,9 +115,18 @@ def empty_columns(path, schema):
     if not names:
         return set()
     with duckdb.connect() as con:
-        found = con.read_parquet(str(path)) if Path(path).suffix.lower() == ".parquet" else con.read_csv(str(path), sample_size=-1)
-        counts = found.aggregate(", ".join('count("' + n.replace('"', '""') + '")' for n in names)).fetchone()
+        if Path(path).suffix.lower() == ".parquet":
+            counts = con.read_parquet(str(path)).aggregate(", ".join('count("' + n.replace('"', '""') + '")' for n in names)).fetchone()
+        else:
+            found = csv_table(con, path)
+            counts = found.aggregate([found[n].count().name(str(i)) for i, n in enumerate(names)]).to_pyarrow().to_pylist()[0].values()
     return {n for n, count in zip(names, counts) if count == 0}
+
+
+def csv_table(con, path):
+    """CSV 결과 파일을 DuckDB 연결 con 위의 ibis 표로 연다. 수집 결과 확인(collect_job.finish_file)처럼 DuckDB가 구분자를 알아내고, 타입은 파일 전체를 보고 정한다(앞부분만 보면 00001이 정수가 되고 앞이 빈 컬럼이 null 타입이 된다).
+    CSV를 쓸 때 붙인 수식 막기 '는 떼어 DB·Kafka에는 원래 값이 들어가게 한다(collect_store.unguarded)."""
+    return collect_store.unguarded(ibis.duckdb.from_connection(con).read_csv(str(path), sample_size=-1))
 
 
 class Batches:
@@ -129,8 +141,8 @@ class Batches:
             if parquet:
                 reader = pq.ParquetFile(self.file)
                 self.schema, self.parts = reader.schema_arrow, reader.iter_batches(batch_size=size)
-            else:  # 수집 결과 확인(collect_job.finish_file)처럼 DuckDB가 구분자를 알아내고, 타입은 파일 전체를 보고 정한다(앞부분만 보면 00001이 정수가 되고 앞이 빈 컬럼이 null 타입이 된다)
-                self.parts = self.file.read_csv(str(path), sample_size=-1).to_arrow_reader(size)
+            else:
+                self.parts = csv_table(self.file, path).to_pyarrow_batches(chunk_size=size)
                 self.schema = self.parts.schema
         except Exception:
             self.file.close()
