@@ -35,10 +35,10 @@
   /* SQL 색: 글 상자는 글자를 투명하게 두고, 같은 자리 뒤의 pre에 같은 글을 색칠해 보인다(글꼴·여백·줄바꿈·스크롤 막대 자리를 같게). */
   .sql-hl { position:relative; display:flex; }
   .sql-hl #sql-text { position:relative; background:transparent; color:transparent; caret-color:var(--text); scrollbar-gutter:stable; }
-  .sql-hl #sql-text::placeholder { color:var(--faint); }
+  .sql-hl #sql-text::placeholder { color:var(--muted); }
   #sql-paint { position:absolute; inset:0; margin:0; padding:6px 10px; border:1px solid transparent; border-radius:9px; background:var(--card); color:var(--text);
     font:13px/1.5 Consolas, ui-monospace, monospace; white-space:pre-wrap; overflow-wrap:break-word; overflow:hidden; scrollbar-gutter:stable; pointer-events:none; }
-  :is(#sql-paint, #sql) .sk { color:var(--sql-kw); font-weight:600; } :is(#sql-paint, #sql) .ss { color:var(--sql-str); } :is(#sql-paint, #sql) .sc { color:var(--faint); font-style:italic; }  /* SQL 색칠 안에서만(패널 스크롤 영역도 .sc를 쓴다) */
+  :is(#sql-paint, #sql) .sk { color:var(--sql-kw); font-weight:600; } :is(#sql-paint, #sql) .ss { color:var(--sql-str); } :is(#sql-paint, #sql) .sc { color:var(--muted); font-style:italic; }  /* SQL 색칠 안에서만(패널 스크롤 영역도 .sc를 쓴다) */
   .sql-edit { padding:0 28px; display:flex; flex-direction:column; gap:8px; }
   .sql-edit .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .sql-edit .row label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; white-space:nowrap; }
@@ -95,7 +95,7 @@
   .axis-box { margin-bottom:10px; } .axis-box > summary { cursor:pointer; }
   /* 아직 검색·실행하지 않았을 때는 큰 글자 없이 회색 보조 글씨만 */
   .big b:empty { display:none; }
-  #rows th:not(.sorted, .pick, .addcol):hover::after { content:" ↕"; color:var(--faint); }
+  #rows th:not(.sorted, .pick, .addcol):hover::after { content:" ↕"; color:var(--muted); }
   #bpick-note { margin:0 0 6px; } #bpick.hidden + #bpick-note, #bpick-note:not(.on) { display:none; }
   .results > .tool { flex-wrap:wrap; }  /* 내보내기 형식 단추를 펼쳐 두어 좁은 창에서는 다음 줄로 */
   #rows th:is(.pick, .addcol) { cursor:default; }
@@ -440,9 +440,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
 
 <div id="undo-bar" class="undo hidden" role="status"><span id="undo-text"></span><button id="undo-go" class="btn">되돌리기</button></div>
 <!--include core/connect.html-->
-<!--include core/dash_refresh.html-->
-<!--include core/notify.html-->
-<script src="/static/core/common.js"></script>
+<!--include core/dash_refresh.html--><script src="/static/core/common.js"></script>
 <script src="/static/core/draft.js"></script>
 <script src="/static/core/funcs.js"></script>
 <script src="/static/core/prepmenu.js"></script>

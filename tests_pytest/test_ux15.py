@@ -72,7 +72,7 @@ def test_menu_required_marks_kind_change_and_words():
 
     def line(marker):
         return next(x for x in lines if marker in x)
-    assert 'setErr("")' in line('label="카드 종류"')  # 종류를 바꾸면 이전 종류의 오류를 지운다
+    assert 'onClick={() => { setErr(""); setF(p => ({ ...p, kind: k, rows: fit(p.rows, k) })); }}' in src  # 종류를 바꾸면 이전 종류의 오류를 지운다(Phase 16: 종류 단추)
     for marker in ('label="테이블"', 'label="가로축"', 'label="사용자 컬럼"', 'label="대상 컬럼"'):
         assert re.search(r"\bneed\b", line(marker)), marker
     assert 'need={is("gauge")}' in line('label="나눌 컬럼"')
@@ -162,7 +162,7 @@ def test_css_words_need_and_settings():
 def test_messages_point_to_settings():
     for path in ("core/prep_ops.py", "dashboard/cloud_words.py"):
         src = (ROOT / path).read_text(encoding="utf-8")
-        assert "고급 설정" not in src and "위쪽 [설정]" in src, path
+        assert "고급 설정" not in src and "왼쪽 메뉴 [설정]" in src, path
 
 
 # ---------- 15F 쿼리 ----------
@@ -206,6 +206,6 @@ def test_collect_field_name_from_class(tmp_path):
 
 def test_topbar_links_open_static_panels():
     bar = web("components/shell/TopBar.tsx")
-    assert 'PANEL_PARAM = "panel"' in bar and '["dest", "보낼 곳 설정"' in bar and '["feat", "설정"' in bar  # 대시보드에도 [보낼 곳 설정]·[설정]
+    assert 'PANEL_PARAM = "panel"' in bar and "href={`/?${PANEL_PARAM}=feat`}" in bar  # 대시보드 왼쪽 메뉴의 [설정](보낼 곳은 그 안의 분류)
     js = read("common.js")
-    assert 'const PANEL_PARAM = "panel", PANELS = ["feat", "dest"]' in js and 'get(PANEL_PARAM)' in js and '"-open").click()' in js  # 홈이 그 창을 연다
+    assert 'const PANEL_PARAM = "panel", PANELS = ["feat", "dest"]' in js and 'get(PANEL_PARAM)' in js and "openSettings(askedPanel)" in js  # 홈이 그 분류를 연다

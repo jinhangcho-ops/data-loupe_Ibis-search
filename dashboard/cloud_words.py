@@ -10,7 +10,7 @@ from lazy import ibis
 if TYPE_CHECKING:
     import polars as pl
 
-ROWS_SETTING = "cloud_rows"  # 형태소 분석을 위해 이 PC로 받는 최대 행 수의 설정 이름(settings.SIZES·DEFAULTS, 위쪽 [설정] 창)
+ROWS_SETTING = "cloud_rows"  # 형태소 분석을 위해 이 PC로 받는 최대 행 수의 설정 이름(settings.SIZES·DEFAULTS, [설정] 창)
 CHARS_PER_ROW = 500  # 받는 글 길이 합의 상한 = 행 상한 × 이 값(연결의 length() 합, 넘으면 거부). 설정을 하나만 두려고 행 상한에 묶었다
 MIN_LEN = 2  # 기본 최소 글자 수(한 글자 명사 '것'·'수' 같은 것을 뺀다)
 STEM_SUFFIX = "다"  # 동사·형용사는 줄기에 붙여 보인다(먹 → 먹다)
@@ -44,7 +44,7 @@ def texts_of(expr: "ibis.expr.types.Table", column: str) -> list[str]:
     size = t.aggregate(n=t.count(), c=t.s.length().sum()).to_pyarrow().to_pylist()[0]
     n, c = size["n"], size["c"] or 0
     if n > limit:
-        raise ValueError(f"글이 있는 행이 {n:,}개라 이 PC로 받아 단어를 나눌 수 있는 {limit:,}행을 넘어요. 기간·조건·태그를 좁히거나 위쪽 [설정]의 '워드클라우드 단어 분석 최대 행 수'를 늘리세요.")
+        raise ValueError(f"글이 있는 행이 {n:,}개라 이 PC로 받아 단어를 나눌 수 있는 {limit:,}행을 넘어요. 기간·조건·태그를 좁히거나 왼쪽 메뉴 [설정]의 '워드클라우드 단어 분석 최대 행 수'를 늘리세요.")
     if c > limit * CHARS_PER_ROW:
         raise ValueError(f"글 길이 합이 {c:,}자라 이 PC로 받을 수 있는 {limit * CHARS_PER_ROW:,}자를 넘어요. 기간·조건·태그를 좁히세요.")
     return t.to_pyarrow().column("s").to_pylist()

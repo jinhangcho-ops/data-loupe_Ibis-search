@@ -497,7 +497,7 @@ def quantiles(t: "ibis.expr.types.Table", name: str, qs: list[float]) -> list[fl
     limit = settings.get("pc_stat_rows")
     frame = t.select(name).limit(limit + 1).to_polars()
     if frame.height > limit or frame.estimated_size() > held.MAX_BYTES:
-        raise ValueError(f"이 연결은 '{name}' 컬럼의 중앙값·사분위수를 구하지 못해 이 PC에서 구하려 했지만 {limit:,}행(또는 {held.MAX_BYTES // BYTES_PER_MB}MB)을 넘어 받지 않았어요. 기간·조건을 좁히거나, 위쪽 [설정]의 'PC에서 구할 통계의 최대 행 수'를 늘리거나, DuckDB 파일로 옮겨 쓰세요.")
+        raise ValueError(f"이 연결은 '{name}' 컬럼의 중앙값·사분위수를 구하지 못해 이 PC에서 구하려 했지만 {limit:,}행(또는 {held.MAX_BYTES // BYTES_PER_MB}MB)을 넘어 받지 않았어요. 기간·조건을 좁히거나, 왼쪽 메뉴 [설정]의 'PC에서 구할 통계의 최대 행 수'를 늘리거나, DuckDB 파일로 옮겨 쓰세요.")
     col = frame[name].cast(pl.Float64).drop_nulls()
     return [col.median() if q == 0.5 else col.quantile(q, interpolation="linear") for q in qs]
 

@@ -1,4 +1,4 @@
-"""대시보드 화면(/dashboard, Next): 경로, 위쪽 줄의 대시보드 전환 단추, 첫 화면의 다섯째 카드(대시보드 구역은 없음), 쿼리 화면의 탭 이동과 예전 주소(#dashboard) 보내기,
+"""대시보드 화면(/dashboard, Next): 경로, 왼쪽 메뉴의 대시보드 단추, 첫 화면의 바로가기(대시보드 구역은 없음), 쿼리 화면의 탭 이동과 예전 주소(#dashboard) 보내기,
 [대시보드에 추가]의 고르는 창·"대시보드에서 보기" 링크, 최신화 팝업 조각 포함. 화면 파일의 글을 확인한다(브라우저 없이)."""
 import re
 from pathlib import Path
@@ -34,17 +34,16 @@ def test_dashboard_route_and_parts(client, monkeypatch, tmp_path):
 def test_nav_has_dashboard_on_every_screen(client):
     for path in PAGES:
         html = page(client, path)
-        assert '<a href="/dashboard"' in html and ">대시보드</a>" in html, path
-    assert re.findall(r'<nav class="pages">(.*?)</nav>', page(client, "/"))[0].count("<a ") == 5  # 쿼리·분석·대시보드·수집·연동
+        assert '<a href="/dashboard" data-feature="dashboard"' in html and "<span>대시보드</span></a>" in html, path
+    assert re.findall(r'<nav class="rail"[^>]*>(.*?)</nav>', page(client, "/"), re.S)[0].count("<a ") == 6  # 홈·쿼리·분석·대시보드·수집·연동
 
 
-def test_home_has_fifth_card_and_no_dashboard_section(client):
+def test_home_shortcuts_and_no_dashboard_section(client):
     html = page(client, "/")
-    assert html.count('class="choice"') == 5 and 'data-go="/dashboard"' in html
-    assert re.search(r'<b>대시보드</b><span>[^<]+</span><em>바로 시작</em>', html)  # 한 줄 설명, 연결 없이 바로 시작
+    go = re.search(r'<nav class="home-go".*?</nav>', html, re.S).group(0)
+    assert go.count('<a class="btn"') == 5 and 'href="/dashboard" data-feature="dashboard"' in go
     for gone in ("h-dash", "h-grid", "h-ctl", "쿼리에서 편집", "dash_menu.js", "dash_cards.js", "chart.umd"):
         assert gone not in html, gone
-    assert '["/collect", "/integrations", "/dashboard"].includes(target)' in html  # 연결 없이 들어간다
     assert 'id="refresh-pop"' in html and "/static/core/dash_refresh.js" in html  # 연결하면 최신화 팝업은 첫 화면에서도
 
 

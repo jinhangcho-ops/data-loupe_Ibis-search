@@ -63,7 +63,7 @@ function showAdded(id, added) {
   say(id, `‘${added.name}’ 대시보드에 넣었어요. 지금 카드는 ${added.cards}개예요. `, true);
   $(id).append(el("a", { href: "/dashboard?open=" + encodeURIComponent(added.id), textContent: "대시보드에서 보기" }));
 }
-document.querySelectorAll(".pages a").forEach(a => a.classList.toggle("on", a.pathname === location.pathname));  // 지금 화면의 전환 버튼을 누른 모양으로
+document.querySelectorAll(".rail a").forEach(a => a.classList.toggle("on", a.pathname === location.pathname));  // 지금 화면의 메뉴를 고른 모양으로
 const S = { schema: "", base: "", cols: [] };
 async function send(url, body) {
   const res = await fetch(url, body === undefined ? {} : {
@@ -516,7 +516,18 @@ applyFeatures();
 // 설정 창: 기능을 고르고 [적용]하면 서버가 설치 프로그램을 받아 실행하고, 앱은 닫혔다가 설치가 끝나면 다시 열린다(개발 실행에서는 서버가 안내만 한다).
 $("feat-list").replaceChildren(...SERVER.features.all.map(f => el("label", { style: "display:block; margin:6px 0" },
   el("input", { type: "checkbox", value: f.id, checked: SERVER.features.on.includes(f.id), style: "width:auto" }), ` ${f.name}`)));
-$("feat-open").onclick = () => $("feat-panel").classList.remove("hidden");
+const SET_TABS = ["feat", "update", "calc", "sample", "date", "viz", "dest"];  // 설정 창(status.html)의 분류(data-set) 차례
+/** [SPECIFICATION] plans/phase-16.md#openSettings
+ *  설정 창을 열고 tab 분류만 보이게 한다(보낼 곳이면 Slack 봇 상태도 새로 읽는다). */
+function openSettings(tab) {
+  if (!SET_TABS.includes(tab)) throw new Error(`없는 설정 분류: ${tab}`);
+  $("feat-panel").classList.remove("hidden");
+  document.querySelectorAll("#feat-panel .set-nav [data-set]").forEach(t => t.setAttribute("aria-selected", String(t.dataset.set === tab)));
+  document.querySelectorAll("#feat-panel .set-page").forEach(p => p.classList.toggle("hidden", p.dataset.set !== tab));
+  if (tab === "dest") api("/api/bot").then(showBot).catch(() => {});
+}
+$("feat-open").onclick = () => openSettings("feat");
+document.querySelectorAll("#feat-panel .set-nav [data-set]").forEach(b => b.onclick = () => openSettings(b.dataset.set));
 $("feat-close").onclick = () => $("feat-panel").classList.add("hidden");
 $("feat-panel").onclick = e => { if (e.target === $("feat-panel")) $("feat-panel").classList.add("hidden"); };
 $("feat-apply").onclick = () => busy($("feat-apply"), async () => {
@@ -543,9 +554,6 @@ api("/api/update").then(u => {
   });
 }).catch(() => {});
 $("upd-check").onchange = () => saveSetting({ update_check: $("upd-check").checked ? "on" : "off" });
-$("dest-open").onclick = () => $("dest-panel").classList.remove("hidden");
-$("dest-close").onclick = () => $("dest-panel").classList.add("hidden");
-$("dest-panel").onclick = e => { if (e.target === $("dest-panel")) $("dest-panel").classList.add("hidden"); };
 const [AFTER_LOW, AFTER_HIGH] = SERVER.sizes.notify_after;
 Object.assign($("notify-after"), { value: notifyAfter, min: AFTER_LOW, max: AFTER_HIGH });
 $("notify-after").onchange = () => {
@@ -600,9 +608,8 @@ $("bot-save").onclick = () => busy($("bot-save"), async () => {
     if (d.message) botMsg(d.message, true); else { showBot(d); botMsg(d.running ? "봇을 켰어요. Slack에서 /ibis 도움 을 보내 보세요." : "봇을 껐어요.", true); }
   } catch (e) { botMsg(e.message); }
 }));
-$("dest-open").addEventListener("click", () => api("/api/bot").then(showBot).catch(() => {}));  // 열 때마다 켜짐 상태·최근 요청을 새로
-const PANEL_PARAM = "panel", PANELS = ["feat", "dest"];  // Next 대시보드 위쪽 줄의 [설정]·[보낼 곳 설정]이 /?panel=… 로 보낸다
-const askedPanel = new URLSearchParams(location.search).get(PANEL_PARAM); if (PANELS.includes(askedPanel)) $(askedPanel + "-open").click();
+const PANEL_PARAM = "panel", PANELS = ["feat", "dest"];  // Next 대시보드 왼쪽 메뉴의 [설정](/?panel=feat)이나 다른 곳의 /?panel=… 로 설정 창의 그 분류를 연다
+const askedPanel = new URLSearchParams(location.search).get(PANEL_PARAM); if (PANELS.includes(askedPanel)) openSettings(askedPanel);
 
 // 1. 연결
 document.querySelectorAll("input[name=kind]").forEach(r => r.onchange = () => {
@@ -626,6 +633,16 @@ async function showRecentConnections() {
   const label = c => (c.info.kind === "url" ? `${c.info.url}${c.info.user ? `, ${c.info.user}` : ""}` : c.info.path) + ` (${c.count}번 사용)`;
   $("recent-conn").replaceChildren(new Option("최근 연결에서 고르기", ""), ...recentConnections.map((c, i) => new Option(label(c), i)));
   $("recent-conn").classList.toggle("hidden", !recentConnections.length);
+  // 첫 화면 오른쪽의 최근 연결 목록(home.html): 누르면 연결 칸을 펴고 그 연결로 칸을 채운다
+  $("recent-list")?.replaceChildren(...recentConnections.map((c, i) => el("button", { type: "button", className: "btn", textContent: label(c), onclick: () => { openConnect(); pickRecent(i); } })));
+  $("recent-none")?.classList.toggle("hidden", !!recentConnections.length);
+}
+// 최근 연결 i번을 연결 칸에 채운다(비밀번호는 저장하지 않아 다시 넣는다). 고르는 칸과 첫 화면 목록이 같이 쓴다.
+function pickRecent(i) {
+  const c = recentConnections[i];
+  if (!c) throw new Error(`없는 최근 연결: ${i}`);
+  fillConnection(c.info);
+  $(c.info.kind === "url" ? "password" : "find").focus();
 }
 // 연결 카드(connect.html): 화면 가운데에 띄운다. 연결이 없으면 닫을 수 없다(첫 화면은 고르기를 그만둘 수 있어 닫힌다).
 // forText: 카드 제목 옆의 글(예: "쿼리로 들어갑니다")
@@ -697,16 +714,12 @@ $("conn-panel").onclick = e => { if (e.target === $("conn-panel") && connClosabl
 $("crumb").classList.add("link");
 $("crumb").title = "눌러서 연결을 바꿔요";
 $("crumb").onclick = () => openConnect();
-$("recent-conn").onchange = () => {
-  const c = recentConnections[$("recent-conn").value];
-  if (c) { fillConnection(c.info); $(c.info.kind === "url" ? "password" : "find").focus(); }
-  $("recent-conn").value = "";
-};
+$("recent-conn").onchange = () => { if ($("recent-conn").value !== "") pickRecent($("recent-conn").value); $("recent-conn").value = ""; };
 $("file").onchange = showFlat;
 $("flat-list").onchange = showFlat;
 $("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
 }
-const setMsg = (text, ok) => say("err-settings", text, ok);  // 앱 설정 저장 오류(위쪽 [설정] 창)
+const setMsg = (text, ok) => say("err-settings", text, ok);  // 앱 설정 저장 오류([설정] 창)
 // 메모리 한도(MB, 0 = 제한 없음): 목록에 있는 값이거나 GB로 직접 넣은 값. 저장만 하고 다음 [연결]부터 서버가 쓴다.
 const memory = saved("memory") || "0";
 $("memory").value = [...$("memory").options].some(o => o.value === memory) ? memory : "custom";
@@ -832,7 +845,7 @@ function showViz() {
   }));
   autoPanel($("viz-auto"), Object.keys(SERVER.dash.auto), query_auto, off => saveViz({ query_auto: off }));
 }
-if (SERVER.dash?.viz) { $("viz-prefs").classList.remove("hidden"); showViz(); }
+if (SERVER.dash?.viz) { $("viz-prefs").classList.remove("hidden"); $("set-tab-viz").classList.remove("hidden"); showViz(); }
 let connected = null;  // 지금 연결의 종류: "flat"(테이블 파일), "other"(DuckDB 파일·DB 주소), 없으면 null
 // [모두 해제]: 체크를 모두 푼다. 테이블 파일로 연결돼 있었으면 그 연결을 끊고 화면을 연결 전으로 되돌린다(파일을 다시 골라 새로 연결).
 // DuckDB 파일이나 DB 주소로 연결돼 있었으면 연결은 그대로 두고 화면에 올라온 것만 비운다.
@@ -951,7 +964,7 @@ async function loadTables() {
 }
 if (hasTables) $("schema").onchange = loadTables;
 
-// 위쪽 줄의 연결 이름: "파일 / 테이블"(주소면 호스트/DB). 연결이 없으면 "연결 안 됨". 연결 칸이 없는 화면(수집)은 숨긴다.
+// 위쪽 줄의 연결 이름: "파일 / 테이블"(주소면 호스트/DB). 연결이 없으면 "연결 안 됨". 연결 칸이 없는 화면(수집)은 서버에 남은 연결(/api/state)을 읽어 같은 자리에 보이고, 누르면 첫 화면으로 간다.
 let connName = null;
 function connLabel(info) {
   if (!info) return null;
@@ -965,12 +978,17 @@ const LAST_TABLE = "loupe.lastTable";
 function lastTable() { try { return JSON.parse(localStorage.getItem(LAST_TABLE)); } catch (e) { return null; } }
 function showCrumb() {
   if (connName && S.base) try { localStorage.setItem(LAST_TABLE, JSON.stringify({ conn: connName, schema: S.schema || "", base: S.base })); } catch (e) {}
-  $("crumb").classList.toggle("hidden", !hasConnect);
   $("crumb").classList.toggle("on", !!connName);
   $("crumb-text").innerHTML = connName ? esc(connName) + (S.base ? ` <em>/</em> ${esc(S.base)}` : "") : "연결 안 됨";
 }
 if (hasTables) $("base").addEventListener("change", () => setTimeout(showCrumb));  // 화면 스크립트가 S.base를 바꾼 뒤에
 showCrumb();
+if (!hasConnect) {
+  $("crumb").classList.add("link");
+  $("crumb").title = "눌러서 첫 화면에서 연결을 바꿔요";
+  $("crumb").onclick = () => { location.href = "/"; };
+  api("/api/state").then(s => { if (s.connected) { connName = connLabel(s.opened); showCrumb(); } });
+}
 
 // 설정(화면 모드, 차트 비율, 그림 저장 모드, 따옴표 해석, 전체 행 수 세기, 조건 입력 방식, 끌어서 조절한 크기, 직전 실행의 행당 시간): 바꾸면 서버가 설정 파일에 저장해 다음 실행 때도 쓴다.
 const saveSetting = changes => api("/api/settings", changes).catch(e => connMsg(e.message));

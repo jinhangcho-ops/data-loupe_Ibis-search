@@ -1,6 +1,6 @@
 /* 대시보드 화면 전용 규칙(옛 static/dashboard/dashboard.html의 <style>을 그대로 옮김). 색 토큰·단추·카드 규칙은 /static/core/common.css·dash_edit.css를 layout이 <link>로 불러 그대로 쓴다. */
 .settings-box { width:min(760px, 94vw); display:flex; flex-direction:column; gap:12px; }
-.settings-box h4 { margin:6px 0 0; font-size:14px; }
+.settings-box h4 { margin:6px 0 0; font-size:var(--fs-md); }
 .settings-box .dctl { padding:0; }
 .settings-box .row { display:flex; gap:6px; align-items:center; }
 .settings-box .row input { flex:1; min-width:0; }
@@ -16,7 +16,8 @@
 .cbox.kpi .kpi-foot { margin-top:auto; display:flex; flex-direction:column; align-items:center; gap:2px; text-align:center; }
 .cbox.kpi .kpi-foot:empty { display:none; }
 /* 대시보드만 보기: 메뉴·도구·패널과 카드의 선택·설정·닫기·크기 손잡이를 숨긴다. 차트의 값 상자 같은 보는 기능은 남는다 */
-body.dash-only :is(.topbar, .nofeature, .d-tool, .board-ctl, #d-state, #err-dash, #d-gallery-box, #d-panel, .bresize, .bhead .bcheck, .bhead button, .bbadge) { display:none !important; }
+body.dash-only :is(.rail, .topbar, .nofeature, .d-tool, .board-ctl, #d-state, #err-dash, #d-gallery-box, #d-panel, .bresize, .bhead .bcheck, .bhead button, .bbadge) { display:none !important; }
+body.dash-only:has(.rail) { padding-left:0; }
 body.dash-only .bhead { pointer-events:none; }
 body.dash-only .btitle { border-color:transparent; background:transparent; }
 body.dash-only .bcard.sel, body.dash-only .bcard.editing { border-color:var(--line); }
@@ -26,18 +27,17 @@ body.dash-only .bcard.sel, body.dash-only .bcard.editing { border-color:var(--li
 .d-tool .btn.on { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
 .board.grid .bcard:focus-visible, .gal-tile:focus-visible, .side-strip:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .board.grid .bresize { width:24px; height:24px; }
-/* N8d: 카드 추가 메뉴는 도구 줄을 밀지 않고 아래에 떠 있게(AddCardMenu가 인라인 static을 줘서 !important), 카드 모음 칸 글자는 본문 색(전역 button의 흰 글자가 밝은 바탕에 묻혔음) */
-.drop .pop.cardmenu { position:absolute; }
+/* N8d: 카드 모음 칸 글자는 본문 색(전역 button의 흰 글자가 밝은 바탕에 묻혔음) */
 .gal-tile { color:var(--text); text-align:left; white-space:normal; min-height:24px; }
 .gal-tile .hint { color:var(--muted); }
 /* P1 기간 달력(shell/Calendar): 기간 칸 아래 왼쪽에 두 달을 나란히. 고른 끝 날은 강조색 칸, 사이 날은 옅은 강조 바탕, 오늘은 밑줄 */
 .drop .pop.dcal { left:0; right:auto; top:calc(100% + 4px); gap:8px; padding:10px; min-width:0; }
 .dcal-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .dcal-months { display:flex; gap:16px; flex-wrap:wrap; }
-.dcal-title { font-weight:600; font-size:13px; text-align:center; margin-bottom:4px; }
+.dcal-title { font-weight:600; font-size:var(--fs-sm); text-align:center; margin-bottom:4px; }
 .dcal-grid { display:grid; grid-template-columns:repeat(7, 32px); gap:2px; }
-.dcal-wd { font-size:11px; color:var(--muted); text-align:center; }
-.drop .pop .dcal-day { width:32px; height:28px; padding:0; justify-content:center; text-align:center; border-radius:6px; font-variant-numeric:tabular-nums; }
+.dcal-wd { font-size:var(--fs-xs); color:var(--muted); text-align:center; }
+.drop .pop .dcal-day { width:32px; height:28px; padding:0; justify-content:center; text-align:center; border-radius:var(--r-ctl); font-variant-numeric:tabular-nums; }
 .drop .pop .dcal-day.mid { background:var(--accent-bg); }
 .drop .pop .dcal-day.on { background:var(--accent); color:var(--on-accent); }
 .drop .pop .dcal-day.today { text-decoration:underline; text-underline-offset:3px; }

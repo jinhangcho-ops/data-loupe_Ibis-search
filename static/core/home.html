@@ -6,64 +6,62 @@
 <title>Data Loupe</title>
 <!--include core/head.html-->
 <style>
-  .hero { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; align-items:center; justify-content:safe center; gap:32px; padding:32px 24px; background:var(--bg); }
-  .hero h1 { margin:0 0 6px; font-size:26px; font-weight:700; letter-spacing:-.02em; }
-  .hero p { margin:0; color:var(--muted); }
-  .choices { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 300px)); gap:14px; justify-content:center; width:min(100%, 1000px); }
-  .choice { min-height:148px; padding:20px 22px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--text); cursor:pointer; text-align:left; font-weight:400; display:flex; flex-direction:column; align-items:flex-start; gap:8px; white-space:normal; height:auto; }
-  .choice:hover { border-color:var(--accent); }
-  .choice b { font-size:17px; font-weight:600; }
-  .choice span { color:var(--muted); line-height:1.55; }
-  .choice em { margin-top:auto; font-style:normal; font-size:12.5px; color:var(--muted); font-weight:500; }
-  .choice em.need { color:var(--accent); }
+  .home { flex:1; min-height:0; overflow:auto; display:grid; grid-template-columns:minmax(0, 560px) minmax(240px, 360px); justify-content:center; align-content:safe center; gap:var(--sp-6); padding:var(--sp-6) var(--sp-5); background:var(--bg); }
+  .home-main { display:flex; flex-direction:column; gap:var(--sp-4); min-width:0; }
+  .home #conn-panel { position:static; inset:auto; z-index:auto; background:none; display:block; }
+  .home #conn-panel .conn-card { width:100%; max-height:none; box-shadow:none; }
+  .home:not(.on) #conn-close { display:none !important; }
+  .home-now { background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:var(--sp-5); display:flex; flex-direction:column; gap:var(--sp-2); }
+  .home-name { font-size:var(--fs-xl); font-weight:700; overflow-wrap:anywhere; }
+  .home-go { display:flex; flex-wrap:wrap; gap:var(--sp-2); margin-top:var(--sp-2); }
+  .home-recent { align-self:start; background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:var(--sp-4); display:flex; flex-direction:column; gap:var(--sp-2); }
+  .home-recent h3 { margin:0; }
+  .recent-list { display:flex; flex-direction:column; gap:var(--sp-1); }
+  .recent-list .btn { justify-content:flex-start; height:auto; min-height:var(--h-md); padding:var(--sp-1) var(--sp-3); white-space:normal; text-align:left; overflow-wrap:anywhere; font-weight:500; }
+  @media (max-width:900px) { .home { grid-template-columns:1fr; } }
 </style>
 </head>
 <body class="app">
 <!--include core/status.html-->
-<div class="hero">
-  <div style="text-align:center"><h1>무엇을 할까요?</h1><p>쿼리와 분석은 데이터를 연결한 뒤에 시작해요.</p></div>
-  <div class="choices">
-    <button class="choice" data-go="/search" data-feature="query"><b>쿼리</b><span>테이블을 조건이나 SQL로 찾아보고 지표와 차트를 만들어요.</span><em class="need">누르면 데이터 연결부터 해요 →</em></button>
-    <button class="choice" data-go="/prep" data-feature="prep"><b>분석</b><span>데이터를 다듬고 분포, 추이, 그룹 차이를 그래프로 살펴봐요.</span><em class="need">누르면 데이터 연결부터 해요 →</em></button>
-    <button class="choice" data-go="/dashboard" data-feature="dashboard"><b>대시보드</b><span>모아 둔 차트와 지표를 한 화면에서 봐요.</span><em>바로 시작</em></button>
-    <button class="choice" data-go="/collect" data-feature="collect"><b>수집</b><span>웹 API나 웹페이지에서 데이터를 받아 파일이나 데이터베이스에 저장해요.</span><em>바로 시작</em></button>
-    <button class="choice" data-go="/integrations" data-feature="integrations"><b>연동</b><span>Slack, Notion, GA4 같은 다른 서비스와 이어요.</span><em>바로 시작</em></button>
-  </div>
-</div>
+<div class="home">
+  <section class="home-main">
+    <div id="home-now" class="home-now hidden">
+      <div class="field-label">지금 연결</div>
+      <div class="home-name" id="home-name"></div>
+      <nav class="home-go" aria-label="화면 바로가기">
+        <a class="btn" href="/search" data-feature="query">쿼리</a>
+        <a class="btn" href="/prep" data-feature="prep">분석</a>
+        <a class="btn" href="/dashboard" data-feature="dashboard">대시보드</a>
+        <a class="btn" href="/collect" data-feature="collect">수집</a>
+        <a class="btn" href="/integrations" data-feature="integrations">연동</a>
+      </nav>
+    </div>
 <!--include core/connect.html-->
+  </section>
+  <aside class="home-recent" aria-label="최근 연결">
+    <h3>최근 연결</h3>
+    <div class="hint">누르면 그 연결로 칸을 채워요. 비밀번호는 저장하지 않아 다시 넣어요.</div>
+    <div id="recent-list" class="recent-list"></div>
+    <p class="hint" id="recent-none">아직 연결한 적이 없어요.</p>
+  </aside>
+</div>
 <!--include core/dash_refresh.html-->
-<!--include core/notify.html-->
 <script src="/static/core/common.js"></script>
 <script src="/static/core/dash_refresh.js"></script>
 <script>
-// 쿼리·분석은 연결이 있으면 바로, 없으면 가운데 연결 카드를 띄워 연결한 뒤에 들어간다(afterConnect). 대시보드·수집·연동은 연결 없이 들어간다.
+// 첫 화면: 연결 전에는 가운데에 연결 칸을 펴 두고, 연결 뒤에는 지금 연결과 화면 바로가기를 보인다. 오른쪽 최근 연결 목록은 common.js(showRecentConnections)가 그린다.
 // 연결에 성공하면 대시보드 최신화가 시작되고(dash_refresh.js) 진행은 팝업과 위쪽 줄 알약에 보인다.
-let target = null;
-function afterConnect() { if (target) location.href = target; }
-// 지난번 연결이 폴더·파일이면 카드를 거치지 않고 그 연결로 잇는다. 저장된 file·files가 있으면 그대로, 옛 저장값(없음)은 찾은 파일이 하나뿐일 때만 잇는다(아니면 false).
-async function connectLast() {
-  const { recent } = await api("/api/recent");
-  if (recent?.kind !== "folder") return false;
-  let body = { kind: "folder", path: recent.path };
-  if (recent.file || recent.files?.length) Object.assign(body, recent.file ? { file: recent.file } : { files: recent.files });
-  else {
-    const { files, flat } = await api("/api/files", { path: recent.path, kinds: SERVER.file_kinds, deep: true });
-    if (files.length + flat.length !== 1) return false;
-    Object.assign(body, files.length ? { file: files[0] } : { files: flat });
-  }
-  const { schemas } = await api("/api/connect", body);
-  await showConnected(!!body.files, schemas, body);  // 위쪽 줄에 연결 이름이 뜬다
-  if (typeof startRefresh === "function") startRefresh();
-  return true;
+/** [SPECIFICATION] plans/phase-16.md#showHome
+ *  연결 상태에 따라 첫 화면을 연결 칸(연결 전) 또는 지금 연결·바로가기(연결 뒤)로 보인다. */
+function showHome() {
+  const on = !!connected;
+  document.querySelector(".home").classList.toggle("on", on);
+  $("home-now").classList.toggle("hidden", !on);
+  $("home-name").textContent = on ? connName : "";
+  if (on) closeConnect(); else openConnect();
 }
-document.querySelectorAll("[data-go]").forEach(b => b.onclick = async () => {
-  target = b.dataset.go;
-  if (["/collect", "/integrations", "/dashboard"].includes(target) || connected) return location.href = target;
-  try { if (await connectLast()) return location.href = target; }
-  catch (e) { connMsg(e.message); }  // 폴더가 사라졌거나 연결이 실패하면 카드에 이유를 보인다
-  openConnect(`연결하면 ${b.querySelector("b").textContent} 화면으로 넘어가요`);
-});
-resume();
+function afterConnect() { showHome(); }  // common.js가 [연결]에 성공한 뒤 부른다
+resume().then(showHome);
 </script>
 </body>
 </html>

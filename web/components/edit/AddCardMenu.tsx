@@ -13,7 +13,7 @@ import type { Card, CardKind, CardView, Constants, Targets } from "@/lib/types";
 import { Block, Check, LineBox, Sel, Txt } from "./menu/Fields";
 import { CloudFields } from "./panel/Tools";
 import { FUNNEL_TEMPLATES, MAX_STAGES, REVISIT_CHOICES, buildCard, condLines, emptyForm, formFromCard, templateStages, type Form, type StageRow } from "./menu/build";
-import { CARD_KINDS, DATE_X, WATCH, WITH_DATE, colsOfType, parseBlankLine, unitForDate } from "./menu/kinds";
+import { CARD_KINDS, DATE_X, WATCH, WITH_DATE, colsOfType, kindGroups, parseBlankLine, unitForDate } from "./menu/kinds";
 
 export type AddCardMenuProps = { open: boolean; onClose: () => void; onAdd: (card: Partial<Card>) => void; fill?: Card };
 
@@ -151,12 +151,22 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
     ? (!cloud.rows ? "단어를 뽑을 행을 고르세요" : cloud.rows === "tagged" && !cloud.match ? "하나라도·모두 중 하나를 고르세요" : "") : "";
 
   return (
-    <div className="pop cardmenu" ref={root} role="dialog" aria-label={fill ? "카드 데이터 정하기" : "카드 추가"} style={{ display: "flex", flexDirection: "column" }}
+    <div id={fill ? undefined : "d-add"} className={fill ? "pop cardmenu" : "d-add cardmenu"} ref={root} role="dialog" aria-label={fill ? "카드 데이터 정하기" : "카드 추가"}
       onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); close(); } }}>
+      {!fill && <div className="phead"><b>카드 추가</b><button type="button" className="ghost" aria-label="카드 추가 닫기" title="닫기" style={{ minWidth: 24, minHeight: 24 }} onClick={close}>×</button></div>}
+      <div className="d-add-body">
       <Sel label="테이블" title="카드가 읽을 테이블. 먼저 데이터에 연결해야 해요" value={f.table} onChange={v => set("table", v)} options={names} blank="(테이블을 고르세요)" need />
       {hidden.length > 0 && <div className="hint">ID·해시로 보이는 컬럼 {hidden.join(", ")}을(를) 목록에서 뺐어요 <button type="button" className="linkish" onClick={() => setRs(p => ({ table: f.table, list: [...(p.table === f.table ? p.list : []), ...hidden] }))}>다시 넣기</button></div>}
-      <Sel label="카드 종류" value={f.kind} onChange={v => { setErr(""); setF(p => ({ ...p, kind: v as CardKind, rows: fit(p.rows, v as CardKind) })); }} options={(Object.entries(CARD_KINDS) as [string, [string, number, number, string]][]).map(([k, v]) => [k, v[0]])} />
-      <label className="hint cm-field">카드 이름<input value={f.title} placeholder="카드 이름 (비우면 자동)" onChange={e => set("title", e.target.value)} /></label>
+      <div className="hint cm-kinds" role="group" aria-label="카드 종류">카드 종류
+        {kindGroups().map(([group, kinds]) => (
+          <div key={group} className="cm-kind-group"><span className="cm-kind-name">{group}</span>
+            {kinds.map(k => (
+              <button key={k} type="button" className={"btype" + (f.kind === k ? " on" : "")} aria-pressed={f.kind === k} title={CARD_KINDS[k]![3]}
+                onClick={() => { setErr(""); setF(p => ({ ...p, kind: k, rows: fit(p.rows, k) })); }}>{CARD_KINDS[k]![0]}</button>
+            ))}
+          </div>
+        ))}
+      </div>
       {high > 0 && (
         <div className="cm-rows" role="group" aria-label="값">
           {f.rows.map((r, i) => (
@@ -328,14 +338,18 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
         </>
       )}
 
-      <div className="row">
-        <input aria-label="목표 파일 경로" title="xlsx, csv, yaml, json, md, txt 파일을 읽을 수 있어요" placeholder="목표 파일 경로" value={path} onChange={e => setPath(e.target.value)} />
-        <button type="button" className="btn" style={{ minHeight: 24 }} onClick={saveTargets}>저장</button>
-      </div>
-      <div className="hint cm-note">{note || (targets && !targets.path ? "목표 파일을 정하면 이름으로 목표를 찾을 수 있어요" : "")}</div>
+      <details className="cm-more"><summary>더 많은 설정</summary>
+        <label className="hint cm-field">카드 이름<input value={f.title} placeholder="카드 이름 (비우면 자동)" onChange={e => set("title", e.target.value)} /></label>
+        <div className="row">
+          <input aria-label="목표 파일 경로" title="xlsx, csv, yaml, json, md, txt 파일을 읽을 수 있어요" placeholder="목표 파일 경로" value={path} onChange={e => setPath(e.target.value)} />
+          <button type="button" className="btn" style={{ minHeight: 24 }} onClick={saveTargets}>저장</button>
+        </div>
+        <div className="hint cm-note">{note || (targets && !targets.path ? "목표 파일을 정하면 이름으로 목표를 찾을 수 있어요" : "")}</div>
+      </details>
       <div className="err" role="alert">{err}</div>
       {cloudWhy && <div className="hint cm-note">{cloudWhy}</div>}
-      <div className="row">
+      </div>
+      <div className="row d-add-foot">
         <button type="button" className="btn p" disabled={busy || !!cloudWhy} style={{ minHeight: 24 }} onClick={go}>{fill ? "이 카드에 채우기" : "카드 추가"}</button>
         <button type="button" className="btn" style={{ minHeight: 24 }} onClick={close}>닫기</button>
       </div>

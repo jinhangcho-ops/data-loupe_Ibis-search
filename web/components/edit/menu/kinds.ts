@@ -59,6 +59,24 @@ export function galleryItems(types: Record<string, string>): Spec[] {
     ...some("지도", [["geomap", "지도", "경계와 점, 영역별 색"]])];
 }
 
+/** 카드 추가 서랍의 첫 묶음 이름(카드 모음 galleryItems의 차트 묶음과 같은 이름) */
+const CHART_GROUP = "차트";
+/** [SPECIFICATION] plans/phase-16.md#kindGroups
+ *  카드 추가 서랍의 종류 단추 묶음: [묶음 이름, 종류들]을 카드 모음(galleryItems)의 묶음 차례로, 맨 앞은 차트. */
+export function kindGroups(): [string, CardKind[]][] {
+  const groups = new Map<string, CardKind[]>([[CHART_GROUP, ["chart"]]]);
+  for (const s of galleryItems({})) {
+    const list = groups.get(s.group) ?? [];
+    if (!list.includes(s.kind)) list.push(s.kind);
+    groups.set(s.group, list);
+  }
+  const all = [...groups.values()].flat();
+  const keys = Object.keys(CARD_KINDS);
+  const off = [...keys.filter(k => !all.includes(k as CardKind)), ...all.filter((k, i) => !keys.includes(k) || all.indexOf(k) !== i)];
+  if (off.length) throw new Error(`카드 종류 묶음이 CARD_KINDS와 맞지 않아요: ${off.join(", ")}`);
+  return [...groups];
+}
+
 /** 빈 틀 카드(source 없음): 카드 모음이 만든다. 데이터는 설정 패널의 [데이터]에서 정한다 */
 export const shellOf = (spec: Spec): Partial<Card> => ({ kind: spec.kind, title: spec.name, colors: freshColors(), view: freshView(spec.kind, spec.type), source: {}, data: {} });
 

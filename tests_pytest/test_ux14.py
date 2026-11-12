@@ -53,4 +53,4 @@ def test_small_touches():
     assert all(f'value="{k}"' in read("prep.html") for k in ("distribution", "seasonal"))
     assert len(re.findall(r'<label title="[^"]+"><input type="radio" name="akind"', read("prep.html"))) == len(re.findall(r'name="akind"', read("prep.html")))
     assert 'value="."' not in read("connect.html")
-    assert "데이터 연결 필요" not in read("home.html") and "데이터 연결부터" in read("home.html")
+    assert "데이터 연결 필요" not in read("home.html")  # Phase 16: 기능 카드("데이터 연결부터")는 없어지고 연결 칸이 펼쳐져 있다

@@ -297,7 +297,7 @@ def test_screens_mark_each_feature():
     status = (ROOT / "static" / "core" / "status.html").read_text(encoding="utf-8")
     home = (ROOT / "static" / "core" / "home.html").read_text(encoding="utf-8")
     for i, path in (("query", "/search"), ("prep", "/prep"), ("dashboard", "/dashboard"), ("collect", "/collect"), ("integrations", "/integrations")):
-        assert f'href="{path}" data-feature="{i}"' in status and f'data-go="{path}" data-feature="{i}"' in home
+        assert f'href="{path}" data-feature="{i}"' in status and f'href="{path}" data-feature="{i}"' in home  # 메뉴와 첫 화면 바로가기
     assert 'id="feat-open"' in status and 'id="feat-apply"' in status and "/api/features/install" in COMMON
 
 

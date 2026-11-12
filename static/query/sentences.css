@@ -8,7 +8,7 @@
 .work.v-sentence #after-connect { display:none; }
 .err.ghost, .ghost.err { color:var(--err); }
 
-.fbadge { font-size:12px; font-weight:700; padding:2px 10px; border-radius:999px; }
+.fbadge { font-size:var(--fs-xs); font-weight:700; padding:2px 10px; border-radius:var(--r-pill); }
 .fbadge.ok { background:color-mix(in srgb, var(--ok) 16%, var(--card)); color:var(--ok); }
 .fbadge.warn { background:color-mix(in srgb, var(--err) 12%, var(--card)); color:var(--err); }
 /* 문장 보기 */
@@ -18,68 +18,68 @@
 .sgrid { display:grid; grid-template-columns:340px minmax(0, 1fr); gap:16px; align-items:start; }
 .sleft { display:flex; flex-direction:column; gap:4px; max-height:72vh; overflow:auto; }
 .stpl { display:flex; flex-direction:column; gap:4px; }
-.tpl { text-align:left; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:9px; padding:5px 10px; font-weight:500; white-space:normal; }
+.tpl { text-align:left; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:var(--r-card); padding:5px 10px; font-weight:500; white-space:normal; }
 .sgroup > summary { cursor:pointer; font-weight:600; padding:4px 2px; color:var(--muted); }
 .sgroup > .tpl { display:block; width:100%; margin-top:4px; }
 .tpl:hover { border-color:var(--accent); }
 .tpl b { color:var(--accent); margin-right:4px; }
 .sright { min-width:0; display:flex; flex-direction:column; gap:10px; }
-.sset { padding:10px; border:1px solid var(--line); border-radius:12px; background:var(--card); }
+.sset { padding:10px; border:1px solid var(--line); border-radius:var(--r-card); background:var(--card); }
 .sset .row, .speriod, .sline { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
 .sset .row input, .sset .row select { flex:1 1 140px; width:auto; }
 .scols { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
-.ccol { padding:2px 10px; border-radius:999px; font-size:12.5px; cursor:grab; border:1px solid var(--line); background:var(--card); border-left-width:4px; }
+.ccol { padding:2px 10px; border-radius:var(--r-pill); font-size:var(--fs-sm); cursor:grab; border:1px solid var(--line); background:var(--card); border-left-width:4px; }
 .ccol.num { border-left-color:var(--c1); } .ccol.date { border-left-color:var(--c5); } .ccol.text { border-left-color:var(--c2); } .ccol.other { border-left-color:var(--c8); }
 .scards { display:flex; flex-direction:column; gap:10px; }
-.scard { padding:12px; border:1px solid var(--line); border-radius:12px; background:var(--card); }
+.scard { padding:12px; border:1px solid var(--line); border-radius:var(--r-card); background:var(--card); }
 .shead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
 .shead .grow, .row .grow { flex:1; }
-.sline { font-size:14.5px; line-height:2.1; }
+.sline { font-size:var(--fs-md); line-height:2.1; }
 .stext { color:var(--text); }
 .slot-wrap, .slot-group { display:inline-flex; flex-wrap:wrap; gap:4px; align-items:center; }
 .slot-wrap.bad select, .slot-wrap.bad input { border-color:var(--err); }
-.slot-wrap select, .slot-wrap input { width:auto; min-width:90px; max-width:260px; padding:3px 8px; border-radius:999px; background:var(--accent-bg); border-color:var(--accent-line); }
+.slot-wrap select, .slot-wrap input { width:auto; min-width:90px; max-width:260px; padding:3px 8px; border-radius:var(--r-pill); background:var(--accent-bg); border-color:var(--accent-line); }
 .slot-wrap input.num { min-width:60px; width:120px; }
 .slot-wrap input.wide { min-width:220px; }
 .slot.drop.over select { outline:2px dashed var(--accent); }
-.slot-wrap .fp select, .slot-wrap .fp input { border-radius:999px; }
-.seg { display:inline-flex; gap:0; border:1px solid var(--accent-line); border-radius:999px; overflow:hidden; }
+.slot-wrap .fp select, .slot-wrap .fp input { border-radius:var(--r-pill); }
+.seg { display:inline-flex; gap:0; border:1px solid var(--accent-line); border-radius:var(--r-pill); overflow:hidden; }
 .seg-b { background:var(--card); color:var(--muted); border:0; border-radius:0; padding:3px 10px; font-weight:500; }
 .seg-b.on { background:var(--accent); color:var(--on-accent); }
-.speriod { margin:4px 0; font-size:13px; }
+.speriod { margin:4px 0; font-size:var(--fs-sm); }
 .speriod input { flex:1 1 220px; width:auto; padding:3px 10px; }
 .speriod select { width:auto; padding:3px 8px; }
 .pfb.err { color:var(--err); }
 .spreview { font-style:italic; }
-.sissue { font-size:12.5px; padding:1px 0; }
+.sissue { font-size:var(--fs-sm); padding:1px 0; }
 .sissue.bad { color:var(--err); } .sissue.warn { color:var(--warn); } .sissue.info { color:var(--muted); }
 .sresult { margin-top:8px; }
 .stext-result { font-weight:600; margin-bottom:6px; }
 .schart { position:relative; margin-top:8px; }
 .schart iframe { display:block; width:100%; height:0; border:0; }  /* 높이는 섬이 그린 뒤 알린다(size) */
 .sadd-note .ok, .sadd-note .err { margin-bottom:2px; }
-.mrow { padding:8px 10px; border:1px solid var(--line); border-radius:10px; margin-bottom:6px; background:var(--card); }
+.mrow { padding:8px 10px; border:1px solid var(--line); border-radius:var(--r-card); margin-bottom:6px; background:var(--card); }
 .mrow.other { opacity:.85; border-style:dashed; }
 .mform:empty { display:none; }
-.mform { padding:10px; border:1px solid var(--accent-line); border-radius:12px; background:var(--card); }
+.mform { padding:10px; border:1px solid var(--accent-line); border-radius:var(--r-card); background:var(--card); }
 .mform .row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px; }
 .mform .row input, .mform .row select { flex:1 1 120px; width:auto; }
-.dep { font-size:12px; padding:1px 10px; border-radius:999px; border:1px solid; }
+.dep { font-size:var(--fs-xs); padding:1px 10px; border-radius:var(--r-pill); border:1px solid; }
 .dep.ok { color:var(--ok); border-color:var(--ok); background:color-mix(in srgb, var(--ok) 10%, var(--card)); }
 .dep.miss { color:var(--err); border-color:var(--err); background:color-mix(in srgb, var(--err) 8%, var(--card)); cursor:pointer; }
 .mdetail:empty { display:none; }
-.mdetail { padding:10px 12px; border:1px solid var(--accent-line); border-radius:12px; background:var(--card); margin-bottom:10px; }
+.mdetail { padding:10px 12px; border:1px solid var(--accent-line); border-radius:var(--r-card); background:var(--card); margin-bottom:10px; }
 .mcat h3 { margin:10px 0 4px; }
-.mitem { display:block; width:100%; text-align:left; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:9px; padding:5px 10px; margin-bottom:4px; font-weight:500; white-space:normal; }
+.mitem { display:block; width:100%; text-align:left; background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:var(--r-card); padding:5px 10px; margin-bottom:4px; font-weight:500; white-space:normal; }
 .mitem:hover:not(:disabled), .mitem.on { border-color:var(--accent); }
 .mitem.off { opacity:.55; cursor:not-allowed; }
-.why { font-size:12.5px; color:var(--err); }
-.mhint { font-size:12.5px; color:var(--accent); margin:2px 0; }
+.why { font-size:var(--fs-sm); color:var(--err); }
+.mhint { font-size:var(--fs-sm); color:var(--accent); margin:2px 0; }
 .mextra { display:inline-flex; gap:4px; align-items:center; margin-right:8px; }
-.mresult { margin-top:6px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; }
-.mval { font-size:22px; font-weight:700; }
+.mresult { margin-top:6px; padding:8px 10px; border:1px solid var(--line); border-radius:var(--r-card); }
+.mval { font-size:var(--fs-xl); font-weight:700; }
 .mpair { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:4px; }
-.mtable { border-collapse:collapse; margin-top:6px; font-size:12.5px; }
+.mtable { border-collapse:collapse; margin-top:6px; font-size:var(--fs-sm); }
 .mtable th, .mtable td { border:1px solid var(--line); padding:2px 8px; text-align:right; }
-.mcatalog:empty::before { content:"지표 사전은 준비 중이에요."; color:var(--muted); font-size:12.5px; }
+.mcatalog:empty::before { content:"지표 사전은 준비 중이에요."; color:var(--muted); font-size:var(--fs-sm); }
 @media (max-width: 900px) { .sgrid { grid-template-columns:1fr; } }
