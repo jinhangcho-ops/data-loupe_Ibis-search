@@ -361,13 +361,11 @@ class Sink:
         """묶음 하나를 넣는다. (넣은 수, 건너뛴 수, 실패 수). 넣지 못하면 오류(다시 시도는 부르는 쪽이)."""
         rows = data.num_rows
         if self.keys:  # 다시 시도할 때도 다시 본다(확정 직후 끊겨 들어간 묶음이 겹치지 않게).
-            import pyarrow as pa
-            have, keep = existing(self.con, self.schema, self.name, self.keys, data), []
-            for k in zip(*(data.column(k).to_pylist() for k in self.keys)):  # 묶음 안에서도 같은 키는 첫 행만(묶음 크기에 따라 결과가 달라지지 않게). 빈 값이 든 키는 늘 넣는다.
-                keep.append(k not in have)
-                if None not in k:
-                    have.add(k)
-            data = data.filter(pa.array(keep, pa.bool_()))
+            import polars as pl
+            frame = pl.from_arrow(data.select(self.keys))
+            have = pl.DataFrame(list(existing(self.con, self.schema, self.name, self.keys, data)), schema=frame.schema, orient="row").select(pl.struct(self.keys)).to_series().implode()
+            key = pl.struct(self.keys)  # 테이블에 없고 묶음 안에서 첫 행인 키만(묶음 크기에 따라 결과가 달라지지 않게). 빈 값이 든 키는 늘 넣는다.
+            data = data.filter(frame.select(~pl.all_horizontal(pl.col(self.keys).is_not_null()) | (~key.is_in(have) & key.is_first_distinct())).to_series().to_arrow())
         for name, kind in self.fill.items():
             data = data.set_column(data.schema.get_field_index(name), name, data.column(name).cast(kind))
         if data.num_rows:
