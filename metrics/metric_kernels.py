@@ -1120,11 +1120,9 @@ def rfm(t, s, p, ctx):
         return result(None)
     last, f, m = (got[c].to_numpy(zero_copy_only=False).astype(float) for c in ("last", "f", "v"))
     r, fs, ms = quintile(last.max() - last, True), quintile(f), quintile(m)
-    groups = {}
-    for code, money in zip((f"{a}{b}{c}" for a, b, c in zip(r, fs, ms)), m):
-        n, total = groups.get(code, (0, 0.0))
-        groups[code] = (n + 1, total + money)
-    rows = sorted(({"rfm": k, "r": int(k[0]), "f": int(k[1]), "m": int(k[2]), "users": n, "revenue": v} for k, (n, v) in groups.items()), key=lambda r: (-r["users"], r["rfm"]))
+    import polars as pl  # 결제자마다 파이썬으로 세지 않고 점수 묶음(최대 125개)으로 모은다
+    groups = pl.DataFrame({"r": r, "f": fs, "m": ms, "v": m}).group_by("r", "f", "m").agg(users=pl.len(), revenue=pl.col("v").sum())
+    rows = sorted(({"rfm": f"{a}{b}{c}", "r": int(a), "f": int(b), "m": int(c), "users": int(n), "revenue": float(v)} for a, b, c, n, v in groups.iter_rows()), key=lambda r: (-r["users"], r["rfm"]))
     core = int(((r >= 4) & (fs >= 4)).sum())
     ctx.notes.append("점수는 결제자 안의 5분위예요(5가 가장 좋음). R은 자료의 마지막 날 기준 마지막 구매가 최근일수록, F는 구매가 잦을수록, M은 순매출이 클수록 높아요.")
     return result(mc.ratio(core, len(m)), top_rows(rows, ctx, "등급"), {"rfm": "RFM", "r": "R", "f": "F", "m": "M", "users": "사용자 수", "revenue": "순매출"},

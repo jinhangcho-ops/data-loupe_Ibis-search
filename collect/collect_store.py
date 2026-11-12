@@ -205,13 +205,25 @@ def write_output(con, table, fmt, out, folder):
         import pyarrow.parquet as pq  # 쓴 파일의 정보에서 행 수를 읽는다(다시 읽어 세지 않는다)
         return pq.read_metadata(out).num_rows
     texts = [name for name, t in table.schema().items() if t.is_string()]
-    number = {name: table[name].try_cast("float64") for name in texts}  # -1500 같은 숫자는 수식이 아니므로 그대로(적재 타입 유지), -inf·nan은 막는다
-    table = table.mutate(**{name: (table[name].substr(0, 1).isin(FORMULA_START) & (number[name].isnull() | number[name].isnan() | number[name].isinf())).ifelse("'" + table[name], table[name]) for name in texts})
-    table = table.rename({"'" + name: name for name in table.columns if name[:1] in FORMULA_START})
+    table = table.mutate(**{name: guarded(table[name]).ifelse("'" + table[name], table[name]) for name in texts})
+    table = table.rename({"'" + name: name for name in table.columns if name[:1] in FORMULA_START or name.lstrip()[:1] in FORMULA_START})
     plain = Path(folder, "result.csv")
     con.to_csv(table, plain)
     with_bom(plain, out)
     return csv_rows(plain)
+
+
+def guarded(value):
+    """write_output이 CSV에서 앞에 '를 붙이는 글자 값인지: 수식 첫 글자로 시작하고(앞 빈칸을 건너뛰고 봐도, result.formula_guard와 같게) 숫자(-1500)로 읽히지 않는다(-inf·nan은 막는다)."""
+    number = value.try_cast("float64")
+    return (value.substr(0, 1).isin(FORMULA_START) | value.lstrip().substr(0, 1).isin(FORMULA_START)) & (number.isnull() | number.isnan() | number.isinf())
+
+
+def unguarded(table):
+    """write_output이 CSV에 붙인 수식 막기 '를 뗀 표(적재용). '를 뺀 나머지가 막혔을 값일 때만 뗀다(원래 '로 시작하던 그런 모양의 값도 떼진다)."""
+    texts = [name for name, t in table.schema().items() if t.is_string()]
+    table = table.mutate(**{name: (table[name].startswith("'") & guarded(table[name].substr(1))).ifelse(table[name].substr(1), table[name]) for name in texts})
+    return table.rename({name[1:]: name for name in table.columns if name[:1] == "'" and (name[1:2] in FORMULA_START or name[1:].lstrip()[:1] in FORMULA_START)})
 
 
 def csv_rows(path):
@@ -243,6 +255,9 @@ def replace(found, path):
     try:
         os.replace(found["out"], path)
     except PermissionError:
-        found["out"].unlink(missing_ok=True)
+        if found["part"].exists():
+            found["out"].unlink(missing_ok=True)
+        else:  # 파일 방식 Parquet→Parquet은 받은 파일을 그대로 옮겨 왔다: 지우지 않고 되돌려 둔다
+            os.replace(found["out"], found["part"])
         raise Halt("다른 프로그램이 파일을 쓰고 있어요. 그 프로그램에서 결과 파일을 닫고 다시 시작하세요(받은 것은 남아 있어 이어서 바꿔요).") from None
     clean(found)

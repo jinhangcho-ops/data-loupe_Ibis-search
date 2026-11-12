@@ -22,7 +22,8 @@ def send(fields, m):
     """글은 chat.postMessage로. 그림이 있으면 파일 올리기(getUploadURLExternal → 받은 주소에 바이트 → completeUploadExternal)로 글과 함께."""
     token, channel = fields["token"], fields["channel"]
     head = f"*{m['title']}*\n{m['text']}"
-    text = head + (f"\n```\n{transport.cut(m['table'], TEXT_LIMIT - len(head) - 9)}\n```" if m["table"] else "")  # 9: 코드 블록 표시
+    table = m["table"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")  # 데이터 값의 <!channel>·<주소|글>이 멘션·링크가 되지 않게(Slack 제어 글자)
+    text = head + (f"\n```\n{transport.cut(table, TEXT_LIMIT - len(head) - 9)}\n```" if table else "")  # 9: 코드 블록 표시
     if not m["image"]:
         call(token, "chat.postMessage", {"channel": channel, "text": text})
         return

@@ -13,7 +13,10 @@
   .home:not(.on) #conn-close { display:none !important; }
   .home-now { background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:var(--sp-5); display:flex; flex-direction:column; gap:var(--sp-2); }
   .home-name { font-size:var(--fs-xl); font-weight:700; overflow-wrap:anywhere; }
-  .home-go { display:flex; flex-wrap:wrap; gap:var(--sp-2); margin-top:var(--sp-2); }
+  .home-go { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:var(--sp-2); margin-top:var(--sp-2); }
+  .home-go .btn { height:auto; flex-direction:column; align-items:flex-start; gap:2px; padding:var(--sp-3); white-space:normal; text-align:left; text-decoration:none; }
+  .home-go .btn b { font-size:var(--fs-md); }
+  .home-go .btn span { color:var(--muted); font-size:var(--fs-sm); line-height:1.4; }  .home-ask { margin:var(--sp-3) 0 0; }
   .home-recent { align-self:start; background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:var(--sp-4); display:flex; flex-direction:column; gap:var(--sp-2); }
   .home-recent h3 { margin:0; }
   .recent-list { display:flex; flex-direction:column; gap:var(--sp-1); }
@@ -28,12 +31,14 @@
     <div id="home-now" class="home-now hidden">
       <div class="field-label">지금 연결</div>
       <div class="home-name" id="home-name"></div>
+      <h3 class="home-ask">무엇을 하고 싶어요?</h3>
+      <p class="lead" data-feature="query">처음이면 [쿼리]에서 테이블을 골라 보세요.</p>
       <nav class="home-go" aria-label="화면 바로가기">
-        <a class="btn" href="/search" data-feature="query">쿼리</a>
-        <a class="btn" href="/prep" data-feature="prep">분석</a>
-        <a class="btn" href="/dashboard" data-feature="dashboard">대시보드</a>
-        <a class="btn" href="/collect" data-feature="collect">수집</a>
-        <a class="btn" href="/integrations" data-feature="integrations">연동</a>
+        <a class="btn" href="/search" data-feature="query"><b>쿼리</b><span>데이터를 표로 훑어보고 조건으로 찾아요</span></a>
+        <a class="btn" href="/prep" data-feature="prep"><b>분석</b><span>데이터를 다듬고 그래프·통계로 살펴봐요</span></a>
+        <a class="btn" href="/dashboard" data-feature="dashboard"><b>대시보드</b><span>늘 보는 숫자와 차트를 한 화면에 모아요</span></a>
+        <a class="btn" href="/collect" data-feature="collect"><b>수집</b><span>인터넷(API·웹페이지)에서 데이터를 받아 와요</span></a>
+        <a class="btn" href="/integrations" data-feature="integrations"><b>연동</b><span>결과를 Slack·Notion으로 보내거나 GA4 데이터를 받아요</span></a>
       </nav>
     </div>
 <!--include core/connect.html-->

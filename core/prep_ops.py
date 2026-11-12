@@ -221,11 +221,16 @@ def strip(col):
 
 
 def on_polars(t):
-    """표가 파일 연결(Polars)의 것인지. 연결이 없는 표(함수 지원 확인용)는 아니다."""
+    """표(또는 컬럼)가 파일 연결(Polars)의 것인지. 연결이 없는 표(함수 지원 확인용)는 아니다."""
     try:
         return t.get_backend().name == "polars"
     except Exception:
         return False
+
+
+def chars(col):
+    """글자 수(정수). Polars의 length()는 UTF-8 바이트 수라('가나' 6) 글자마다 한 바이트로 바꾼 뒤 센다(감사51). 함수 사전 length와 계산 컬럼 length가 쓴다."""
+    return (col.re_replace("(?s).", "a") if on_polars(col) else col).length().cast("int64")
 
 
 def re_replace(t, col, pattern, text):
@@ -333,6 +338,8 @@ def rare(t, name, arg):
 def label(t, name, arg):
     """값을 정렬한 순서의 0부터의 번호. 빈 값은 빈 값."""
     values = arg["known"] if isinstance(arg, Known) else known_stats(t, name, "label", arg)
+    if not values:  # 값이 모두 빈 컬럼: 번호도 모두 빈 값(ibis.cases는 갈래가 하나는 있어야 한다)
+        return add_columns(t, {f"{name}_label": ibis.null("int64")})
     return add_columns(t, {f"{name}_label": ibis.cases(*[(t[name] == v, i) for i, v in enumerate(values)], else_=ibis.null("int64")).cast("int64")})
 
 
@@ -512,6 +519,8 @@ def known_stats(t: "ibis.expr.types.Table", name: str, op: str, value: object) -
             raise ValueError(f"'{how}'은 정수·실수 컬럼에만 쓸 수 있어요. '{name}' 컬럼은 {parse.type_info(col.type())[0]} 컬럼이에요.")
         if how == "median":
             return quantiles(t, name, [0.5])[0]
+        if how == "mode" and not stats(t, n=col.count())["n"]:
+            return None  # 값이 하나도 없음(Polars의 최빈값은 이때 오류를 낸다, 감사51)
         return getattr(col, how)().to_pyarrow().as_py()
     if op == "outlier" and value["by"] in ("iqr", "std", "pct"):
         if value["by"] in ("iqr", "pct"):
@@ -684,7 +693,7 @@ def more_stats(t: "ibis.expr.types.Table", name: str, op: str, value: object) ->
         value_expr = getattr(f[name], how)()  # how는 mean·median·mode: 고른 집계만 만든다(글자 컬럼에는 mean이 없다)
         check_new(f, ["__gfill_v"])
         agg = f.group_by(group).aggregate(__gfill_v=value_expr)
-        if not source.compiles(agg):
+        if not source.compiles(agg) and not (how == "mode" and on_polars(t)):  # Polars 최빈값은 빈 묶음에서만 오류인데 f는 빈 값을 뺀 표라 묶음마다 값이 있다
             raise ValueError(f"이 연결은 그룹별 {'평균' if how == 'mean' else '중앙값' if how == 'median' else '최빈값'}을 구하지 못해요. 그룹 없이 빈 값 처리(fill)를 쓰거나 DuckDB 파일로 옮겨 쓰세요.")
         got = agg.limit(ENCODE_MAX + 1).to_polars()
         if got.height > ENCODE_MAX:

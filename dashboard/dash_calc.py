@@ -832,6 +832,8 @@ def geomap_data(card, ctx):
         for c in (geo["lat"], geo["lon"], geo.get("value")):
             if c:
                 parse.check_name(c, expr.columns, "컬럼")
+        if geo.get("value") and geo.get("agg") in ("sum", "mean"):  # 글자 컬럼을 더하면 파이썬 영어 오류가 났다
+            need_number(expr, geo["value"], "값 컬럼")
         cols = {"lat": expr[geo["lat"]].cast("float64"), "lon": expr[geo["lon"]].cast("float64"), **({"value": expr[geo["value"]]} if geo.get("value") and geo.get("agg", "count") != "count" else {})}
         points = run(lambda: expr.select(**cols).limit(mapcard.MAX_POINT_ROWS + 1).to_polars())
     return mapcard.build(regions, points, geo)

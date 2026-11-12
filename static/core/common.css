@@ -147,7 +147,7 @@ td.nest .nest-full { margin:0; font:var(--fs-xs)/1.4 Consolas, ui-monospace, mon
 .step { border:1px solid var(--line); border-radius:var(--r-card); background:var(--card); }
 .step .sp { display:flex; align-items:center; gap:12px; height:42px; padding:0 14px; cursor:pointer; }
 .step .sp i { width:24px; height:24px; border-radius:50%; background:var(--bg); display:grid; place-items:center; font-style:normal; font-size:var(--fs-xs); font-weight:700; color:var(--muted); flex:none; }
-.step .sp .t { font-size:var(--fs-sm); color:var(--muted); width:66px; flex:none; }
+.step .sp .t { font-size:var(--fs-sm); color:var(--muted); min-width:66px; flex:none; white-space:nowrap; }  /* (Phase 19) 긴 쉬운 이름(비밀 키 파일(env))도 한 줄로 */
 .step .sp b { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 .step .sp .c { margin-left:auto; color:var(--muted); flex:none; font-size:var(--fs-sm); }
 .step .edx { display:none; padding:2px 14px 14px; }
@@ -316,7 +316,7 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .kinds { display:flex; flex-wrap:wrap; gap:6px; }
 .kinds label { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:var(--r-pill); padding:3px 12px; font-size:var(--fs-sm); cursor:pointer; color:var(--muted); }
 .kinds label:has(input:checked) { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); font-weight:600; }
-.kinds input { display:none; }
+.kinds input { position:absolute; opacity:0; width:1px; height:1px; pointer-events:none; }  /* (Phase 19) 보이지 않게만: display:none이면 화면 읽기 프로그램이 체크 상태를 못 읽는다 */
 .check { display:flex; align-items:center; gap:6px; font-size:var(--fs-sm); color:var(--muted); }
 .check input { width:auto; }
 .crumb.link { cursor:pointer; }
@@ -455,3 +455,13 @@ th.addcol button { min-width:28px; font-size:var(--fs-lg); color:var(--accent); 
 .nc-foot .nc-field { flex:1; grid-template-columns:auto minmax(0, 1fr); }
 .nc-preview { max-height:240px; overflow:auto; }
 @media (max-width:700px) { .nc-body { grid-template-columns:1fr; } .nc-methods { border-right:0; flex-direction:row; flex-wrap:wrap; } .cal-months { flex-direction:column; } }
+/* (Phase 19) 쉬운 보기(html.easy): [data-adv] 묶음 안의 .adv 칸은 [더 많은 설정](.adv-more, common.js advMore)을 눌러 펼친 묶음(.adv-shown)에서만 보인다. 꺼져 있으면 모두 보이고 단추는 숨는다.
+   .err의 첫 줄은 쉬운 설명, 둘째 줄부터는 DB가 준 원문(server.plain_error)이다. */
+html.easy [data-adv]:not(.adv-shown) .adv { display:none !important; }
+html:not(.easy) .adv-more { display:none !important; }
+.adv-more { display:inline-flex; align-items:center; gap:4px; min-height:24px; padding:2px 0; border:0; background:none; color:var(--accent); font-size:var(--fs-xs); cursor:pointer; }
+.adv-more:hover { text-decoration:underline; }
+.lead { color:var(--muted); font-size:var(--fs-sm); margin:2px 0 10px; line-height:1.5; }
+.err { white-space:pre-line; }
+.err::first-line { font-weight:600; }
+#easy[aria-pressed="false"] { opacity:.75; }

@@ -40,7 +40,7 @@ ask_open = None  # 파일 하나를 고르는 함수(kind → 고른 경로 또�
 PICK_KINDS = {"env": ("env 파일 (*.env)", "모든 파일 (*.*)"), "metrics": ("지표 파일 (*.yaml;*.yml;*.json)", "모든 파일 (*.*)")}  # /api/pick의 종류 → 파일 대화상자 필터
 QUERY_TIMEOUT = drivers.QUERY_TIMEOUT  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다. DB 쪽 시간 제한(drivers.settle)도 같은 값.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
-CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "defaults": settings.DEFAULTS, "time":{"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS,
+CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "defaults": settings.DEFAULTS, "time":{"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS, "adv_open_max": settings.ADV_OPEN_MAX,
              "funcs_ver": sql_funcs.version(), "agg_names": sql_funcs.agg_names(), "merge": list(sql_funcs.MERGE),
              "calendar": {"weekend": sql_funcs.WEEKEND_DEFAULT, "work_hours": list(sql_funcs.WORK_HOURS), "bucket_minutes": sql_funcs.BUCKET_MINUTES, "ewma_span": sql_funcs.EWMA_SPAN}}  # 함수 사전은 GET /api/funcs로 받는다(버전이 같으면 화면이 가진 것을 쓴다). 여기에는 작은 목록만
 LATE = []  # (화면 폴더들, 만드는 함수): 기능 모듈의 값이 든 화면 상수. 그 화면을 내려줄 때 만들어 시작할 때 기능 모듈이 올라오지 않게 한다.
@@ -212,6 +212,28 @@ def run_writing(write, clean, runner=None):
     return (runner or run)(guarded, lambda done: clean())
 
 
+PLAIN_ERRORS = [  # (Phase 19) DB·엔진이 영어로 준 흔한 오류를 "무슨 일 + 할 일"로: (원문에서 찾을 정규식, 쉬운 말). 이름 묶음 1은 {0}으로 들어간다. 먼저 맞는 것 하나만 쓴다.
+    (r'(?:Referenced column|column) "?([^"\s]+)"? (?:not found|does not exist)|ColumnNotFoundError:?\s*"?([^"\n]+)"?', "‘{0}’ 컬럼이 없어요. 컬럼 이름이 바뀌었거나 다른 테이블에 있는지 확인하세요."),
+    (r'Table with name "?([^"\s]+)"? does not exist|relation "?([^"\s]+)"? does not exist', "‘{0}’ 테이블이 없어요. 테이블 이름을 확인하거나 다시 연결하세요."),
+    (r"Could not convert|Conversion Error|conversion from .* failed|invalid input syntax for type", "값을 바꾸지 못했어요. 숫자·날짜 칸에 맞지 않는 값(예: 글자, 빈칸)이 있어요. 조건 값이나 타입 바꾸기를 확인하세요."),
+    (r"Parser Error|syntax error at or near|SQL compilation error", "SQL 문장을 읽지 못했어요. 쉼표·따옴표·괄호가 짝이 맞는지 확인하세요."),
+    (r"out of memory", "메모리가 모자라요. 왼쪽 메뉴 [설정]의 계산에서 메모리 한도를 올리거나 조건을 좁히세요."),
+    (r"No files found|No such file|cannot open file|Cannot open file|being used by another process", "파일을 열 수 없어요. 경로가 맞는지, 다른 프로그램(Excel 등)이 그 파일을 열고 있지 않은지 확인하세요."),
+    (r"Permission denied|Access is denied|PermissionError", "권한이 없어 그 파일·폴더를 쓰거나 읽지 못했어요. 다른 폴더를 고르거나 파일을 닫고 다시 하세요."),
+    (r"Division by zero|divide by zero", "0으로 나누는 계산이 있어요. 나누는 값이 0인 행을 조건으로 빼세요."),
+]
+
+
+def plain_error(message):
+    """DB·엔진의 영어 원문(message)에 PLAIN_ERRORS가 맞으면 "쉬운 말\\n원문", 아니면 원문 그대로. 원문은 지우지 않는다(문의할 때 필요)."""
+    for pattern, text in PLAIN_ERRORS:
+        m = re.search(pattern, message, re.IGNORECASE)
+        if m:
+            name = next((x for x in m.groups() if x), "")
+            return text.format(name) + "\n" + message
+    return message
+
+
 @app.errorhandler(Exception)
 def on_error(e):
     from core import querying
@@ -224,9 +246,7 @@ def on_error(e):
     message = source.mask(str(e), state["passwords"])
     if isinstance(e, drivers.DriverError):  # 드라이버가 없어서 못 붙음: 화면이 설명·명령을 그 자리에 그리도록 안내를 함께 보낸다.
         return jsonify(error=message, driver=e.driver), 400
-    if "out of memory" in message.lower():
-        message = "메모리가 모자라요. 메모리 한도를 올리거나 조건을 좁히세요. " + message
-    return jsonify(error=message), 400
+    return jsonify(error=plain_error(message)), 400
 
 
 @app.before_request

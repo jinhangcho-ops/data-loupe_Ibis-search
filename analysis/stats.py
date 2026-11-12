@@ -200,12 +200,12 @@ def trend(t, column, unit, value, agg, opts=None):
             labels.insert(0, day.isoformat())
             day = {"day": lambda d: d - dt.timedelta(days=1), "week": lambda d: d - dt.timedelta(days=7), "month": lambda d: (d - dt.timedelta(days=1)).replace(day=1)}[unit](day)
         more = more or labels[0] > first
-    return {"column": column, "unit": unit, "value": value, "agg": agg, "labels": labels, "values": [got.get(l, 0) for l in labels], "more": more}
+    return {"column": column, "unit": unit, "value": value, "agg": agg, "labels": labels, "values": [(got.get(l) or 0) if agg in ("count", "sum") else got.get(l) for l in labels], "more": more}  # 값이 모두 빈 기간의 합계(NULL)도 행이 없는 기간처럼 0
 
 
 def busiest(t, column, unit, top=None):
     """데이터가 가장 많은 기간: 날짜 컬럼을 unit(day·week·month)으로 묶어(trend와 같은 period_start) 센 뒤 건수가 많은 상위 top개(기본 TOP_PERIODS)를 [{start, end, count}]로(건수가 같으면 앞선 기간).
-    모든 기간에서 DB가 고른다(trend처럼 최근 MAX_PERIODS개만 보지 않는다). more는 늘 false(화면 호환)."""
+    모든 기간에서 DB가 고른다(trend처럼 최근 MAX_PERIODS개만 보지 않는다)."""
     top = TOP_PERIODS if top is None else top
     if type(top) is not int or not 1 <= top <= MAX_TOP_PERIODS:
         raise ValueError(f"찾을 기간 개수는 1~{MAX_TOP_PERIODS} 사이의 정수로 입력하세요.")
@@ -215,7 +215,7 @@ def busiest(t, column, unit, top=None):
     found = rows(s.group_by(local_start(s[column], UNITS[unit]).name("period")).aggregate(n=s.count()).order_by([ibis.desc("n"), "period"]).limit(top))
     ends = {"day": lambda d: d, "week": lambda d: d + dt.timedelta(days=6), "month": lambda d: (d.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)}[unit]
     labels = [(str(r["period"])[:10], r["n"]) for r in found]
-    return {"column": column, "unit": unit, "periods": [{"start": l, "end": ends(dt.date.fromisoformat(l)).isoformat(), "count": n} for l, n in labels], "more": False}
+    return {"column": column, "unit": unit, "periods": [{"start": l, "end": ends(dt.date.fromisoformat(l)).isoformat(), "count": n} for l, n in labels]}
 
 
 def window_seconds(window):

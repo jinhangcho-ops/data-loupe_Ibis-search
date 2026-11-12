@@ -16,7 +16,7 @@ SLOTS = ["제목", "내용", "행수", "걸린시간", "표", "그림"]
 PRESETS = [  # 서비스가 받는 모양의 본문 틀. 실제 서비스에 보내 확인한 것이 아니다.
     {"label": "일반 JSON", "content": "json", "template": '{"title": "{제목}", "text": "{내용}", "rows": "{행수}", "seconds": "{걸린시간}", "table": "{표}", "image": "{그림}"}'},
     {"label": "Teams", "content": "json", "template": r'{"text": "**{제목}**\n\n{내용}\n\n{표}"}'},
-    {"label": "Discord", "content": "json", "template": r'{"content": "**{제목}**\n{내용}\n{표}"}'},
+    {"label": "Discord", "content": "json", "template": r'{"content": "**{제목}**\n{내용}\n{표}", "allowed_mentions": {"parse": []}}'},  # 데이터 값의 @everyone이 전체 알림이 되지 않게
     {"label": "글자", "content": "text", "template": "{제목}\n{내용}\n{표}"},
 ]
 

@@ -861,7 +861,7 @@ def notify_section(c, got):
         text = "\n".join(["n | v"] + [f"{i} | r{i}" for i in range(50)] + ["… 외 10행"])
         presets = {p["label"]: p for p in c.get("/api/destinations").get_json()["kinds"]["webhook"]["presets"]}
         for label, want in [("일반 JSON", {"title": weird, "text": "내용 & x=y", "rows": "1,234", "seconds": "1분 23초", "table": text, "image": base64.b64encode(png).decode()}),
-                            ("Teams", {"text": f"**{weird}**\n\n내용 & x=y\n\n{text}"}), ("Discord", {"content": f"**{weird}**\n내용 & x=y\n{text}"}), ("글자", None)]:
+                            ("Teams", {"text": f"**{weird}**\n\n내용 & x=y\n\n{text}"}), ("Discord", {"content": f"**{weird}**\n내용 & x=y\n{text}", "allowed_mentions": {"parse": []}}), ("글자", None)]:  # Discord: 데이터의 @everyone이 알림이 되지 않게(감사46)
             p = presets[label]
             put("hook", kind="webhook", done=False, url="", content=p["content"], template=p["template"])
             sent.clear()
@@ -2264,8 +2264,8 @@ print(json.dumps(out))
     got("/api/disconnect")
     with app.test_request_context():
         found = [server.on_error(Exception(text))[0].get_json()["error"] for text in ("Out of Memory Error: failed to allocate", "OUT OF MEMORY", "다른 오류")]
-    check("메모리 부족 오류에는 안내 문구가 붙음", found, ["메모리가 모자라요. 메모리 한도를 올리거나 조건을 좁히세요. Out of Memory Error: failed to allocate",
-          "메모리가 모자라요. 메모리 한도를 올리거나 조건을 좁히세요. OUT OF MEMORY", "다른 오류"])
+    tip = "메모리가 모자라요. 왼쪽 메뉴 [설정]의 계산에서 메모리 한도를 올리거나 조건을 좁히세요.\n"  # 쉬운 말 한 줄 + 원문(server.plain_error)
+    check("메모리 부족 오류에는 안내 문구가 붙음", found, [tip + "Out of Memory Error: failed to allocate", tip + "OUT OF MEMORY", "다른 오류"])
 
     cached = lambda: server.state["con"].con.execute("select coalesce(sum(memory_usage_bytes), 0) from duckdb_memory() where tag = 'BASE_TABLE'").fetchone()[0]
     for memory in (1500, 0):

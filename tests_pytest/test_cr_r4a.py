@@ -25,7 +25,7 @@ const searchState = () => S.base ? { view: "cards", body: { base: S.base, condit
 const searchUndo = Undo(() => searchState(), async d => restoreSearch(d), { poll: 0, quiet: 0 });
 function clearExplore() { S.base = ""; S.conditions = []; last = drawn = searched = null; searchUndo.reset(); }
 async function restoreSearch(d) { if (d.body.base === "gone") throw new Error("없는 테이블"); S.base = d.body.base; S.conditions = [...d.body.conditions]; }
-const showUnit = () => {}, showSeries = () => {}, fillSummaryCols = () => {}, mountTable = () => {}, gridSpec = () => ({}), chartData = () => ({});
+const showUnit = () => {}, showSeries = () => {}, fillSummaryCols = () => {}, advMore = () => {}, mountTable = () => {}, gridSpec = () => ({}), chartData = () => ({});
 async function renderJoins() {}
 const renderTables = () => {}, showBig = () => {}, showTab = () => {}, inExplore = () => true, showView = () => {};
 let apiHook = async () => ({});

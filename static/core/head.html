@@ -10,6 +10,8 @@
   };
   // 화면 모드: 저장된 설정이 있으면 그것, 없으면 Windows 설정. 그리기 전에 정해 깜빡임을 막는다.
   document.documentElement.dataset.theme = saved("theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  // 쉬운 보기(기본 켬): 켜져 있으면 .adv 칸을 [더 많은 설정] 뒤에 접는다(common.css·common.js의 advMore).
+  document.documentElement.classList.toggle("easy", saved("easy") !== "off");
   // 끌어서 조절하는 크기(px): [최소, 최대, 방향]. 최소·최대는 settings.SIZES에서 온다. 저장된 크기는 CSS 변수(--이름)로 둔다.
   const SIZES = Object.fromEntries(Object.entries({ panel: "x", rows: "y", summary: "y", chart: "y" }).map(([name, axis]) => [name, [...SERVER.sizes[name], axis]]));
   for (const name in SIZES) if (saved(name)) document.documentElement.style.setProperty("--" + name, saved(name) + "px");

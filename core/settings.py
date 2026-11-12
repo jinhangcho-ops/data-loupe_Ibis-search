@@ -90,6 +90,7 @@ CHOICES = {
     "update_check": ["on", "off"],  # 앱을 열 때 GitHub Releases에 새 버전이 있는지 묻기(기본 on)
     "scan_unknown": ["run", "block"],  # 처리 용량을 미리 알 수 없을 때(그 연결이 추정을 못 함): 그대로 실행한다 / 실행하지 않는다(기본은 실행)
     "prep_where": ["all", "new"],  # 원격 DB(주소로 접속)의 전처리를 이 PC의 작업 사본에서 계산하는 범위: 전처리 전체 / 계산 컬럼·PCA가 있을 때만(나머지는 DB에서)
+    "easy": ["on", "off"],  # (Phase 19) 쉬운 보기: 처음 쓰는 사람에게 필요 없는 칸(.adv)을 [더 많은 설정] 뒤에 접는다(기본 on, html.easy)
     "week_start": ["mon", "sun"],  # 주 묶음의 시작 요일(기본 mon). 그 밖에 timezone(IANA 이름)·fiscal_start_month(회계연도 첫 달 1~12, 기본 1)는 valid가 따로 본다
 }
 
@@ -116,9 +117,14 @@ ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")  # env 파일의 이름
 JOIN_KEYS_MAX = 3000  # 쿼리 화면이 테이블 쌍마다 기억한 조인 키(JSON을 퍼센트 인코딩한 글자). 쿠키로 화면에 돌아가서 4KB 안에
 
 
+ADV_OPEN_MAX = 2000  # (Phase 19) 쉬운 보기에서 사람이 펼쳐 둔 [더 많은 설정] 묶음 목록(JSON을 퍼센트 인코딩한 글자). 묶음은 화면 전체에 20개 안쪽이라 넉넉하다
+
+
 def valid(name, value):
     if name == "join_keys":
         return type(value) is str and len(value) <= JOIN_KEYS_MAX
+    if name == "adv_open":
+        return type(value) is str and len(value) <= ADV_OPEN_MAX
     if TIME.fullmatch(name):
         return type(value) is int and 1 <= value <= MAX_TIME
     if name in SIZES:

@@ -81,7 +81,7 @@ def test_count_off_does_not_stream_big_results(remote, monkeypatch):
 def test_count_label_matches_behavior():
     from pathlib import Path
     html = (Path(__file__).resolve().parent.parent / "static" / "query" / "index.html").read_text(encoding="utf-8")
-    label = re.search(r'<label title="([^"]*)"><input type="checkbox" id="count"', html)[1]
+    label = re.search(r'<label(?: class="adv")? title="([^"]*)"><input type="checkbox" id="count"', html)[1]
     assert "한 번으로" not in label and "100만" in label
 
 

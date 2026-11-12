@@ -21,6 +21,8 @@ from core import use_counts
 from integrations.notify import table_text
 from integrations.schedule import VALUE_ERRORS, notice_text
 
+SMART_QUOTES = str.maketrans("“”‘’", "\"\"''")  # 휴대폰·macOS가 바꿔 보내는 둥근 따옴표를 곧은 따옴표로
+
 PYTHON_VALUE = re.compile(r"invalid literal|could not convert|cannot convert|unconverted data|time data|Out of bounds", re.I)  # 파이썬이 데이터 값을 넣는 ValueError 문구
 
 MAX_ROWS = 50  # 검색 결과로 답할 최대 행 수
@@ -38,7 +40,7 @@ HELP = """쓸 수 있는 명령:
 def split(text):
     """글을 (명령, 위치 값들, {키: 값})으로. 따옴표가 맞지 않으면 ValueError."""
     try:
-        words = shlex.split(text.strip())
+        words = shlex.split(text.strip().translate(SMART_QUOTES))
     except ValueError:
         raise ValueError("따옴표가 닫히지 않았어요.") from None
     if not words:

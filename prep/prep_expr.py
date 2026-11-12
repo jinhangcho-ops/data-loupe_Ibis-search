@@ -203,9 +203,10 @@ def contain_groups(t: "ibis.Table", keys: list[str], texts: list[str], limit: in
     conds += [a[o].identical_to(b[o]) for o in keys if o not in texts]
     pairs = a.join(b, conds)
     edges = pairs.select(src=a[GID], dst=b[GID]).union(pairs.select(src=b[GID], dst=a[GID])).union(ids.select(src=ids[GID], dst=ids[GID]))
+    edges = ibis.memtable(edges.to_pyarrow())  # 쌍(UDF 자기 조인)은 한 번만 구한다: 식을 쌓으면 회차마다 앞 회차까지 처음부터 다시 계산했다
     lab = ids.select(GID, **{LABEL: ids[GID]})
     for _ in range(CONTAIN_ROUNDS):
-        nxt = edges.join(lab, edges.dst == lab[GID]).group_by(edges.src.name(GID)).aggregate(**{LABEL: lab[LABEL].min()})
+        nxt = ibis.memtable(edges.join(lab, edges.dst == lab[GID]).group_by(edges.src.name(GID)).aggregate(**{LABEL: lab[LABEL].min()}).to_pyarrow())  # 회차의 라벨(서로 다른 값 수만큼, 작다)
         changed = nxt.join(lab, GID).filter(nxt[LABEL] != lab[LABEL]).count().to_pyarrow().as_py()
         if changed == 0:
             break

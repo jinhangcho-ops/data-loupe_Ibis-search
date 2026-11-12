@@ -56,8 +56,6 @@
   #pca-cols label, #km-cols label { display:flex; align-items:center; gap:8px; }
   #pca-cols input, #km-cols input { width:auto; margin:0; }
   /* 분석: 오른쪽 패널에서 고르고 가운데에 그래프와 표. 그래프는 높이 440px 기준으로 비율(--ratio)만큼 넓어진다. */
-  .seg2.seg4 { flex-wrap:wrap; border-radius:18px; }
-  .seg2.seg4 label { padding:6px 2px; font-size:13px; flex:1 1 30%; }
   #a-funnel { width:min(100%, 900px); height:clamp(240px, 42vh, 380px); margin:0 auto; }
   #a-funnel-text { text-align:center; margin:8px 0 0; }
   .f-steps { display:flex; flex-wrap:wrap; gap:6px; min-height:30px; margin:4px 0; }
@@ -99,6 +97,16 @@
   .sec button.ghost { margin-left:6px; }
   #table-box.handed #schema { display:none !important; }  /* 넘어온 검색은 스키마를 고르지 않는다. 테이블 목록은 남겨 다른 테이블로 돌아갈 수 있게 */
   #a-src-pane h4 { margin:0 0 6px; }
+  /* (Phase 19) 아래 [미리보기]·[실행] 밑의 한 줄 안내 */
+  .side > footer.has-lead { flex-wrap:wrap; }
+  .side > footer.has-lead .lead { flex-basis:100%; margin:0; }
+  /* (Phase 19) 분석 종류: 질문형 이름을 2열 목록으로, 원래 이름은 작게 */
+  .akinds { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
+  .akinds label { display:flex; gap:6px; align-items:flex-start; border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:13px; line-height:1.35; cursor:pointer; }
+  .akinds label:has(input:checked) { border-color:var(--accent); background:var(--accent-bg); }
+  .akinds input { width:auto; margin:2px 0 0; flex:none; }
+  .akinds small { display:block; color:var(--muted); font-size:11px; }
+  .a-form > .lead { margin-top:4px; }
 </style>
 </head>
 <body class="app">
@@ -136,8 +144,8 @@
   <div class="grip-x" data-size="panel" title="끌어서 패널 너비를 바꿔요. 두 번 누르면 기본 너비로 돌아가요"></div>
   <aside class="side">
     <header><h3>전처리 조건</h3></header>
-    <div class="sc"><div class="flow">
-      <div class="step open" data-step="data"><div class="sp"><i>1</i><span class="t">데이터</span><b id="sum-p-data"></b><span class="c"></span></div>
+    <div class="sc"><p class="lead">분석하기 전에 데이터를 다듬어요(행 빼기·고치기·새 컬럼). 원본 데이터는 바뀌지 않아요.</p><div class="flow">
+      <div class="step open" data-step="data"><div class="sp"><i>1</i><span class="t" title="다듬을 테이블을 골라요">데이터</span><b id="sum-p-data"></b><span class="c"></span></div>
         <div class="edx">
           <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">연결되지 않았어요</span><button id="conn-open" class="btn">연결 바꾸기</button></div>
           <div id="table-box">
@@ -145,7 +153,7 @@
             <div class="row hidden" id="handed-line" style="align-items:center"><span class="hint" id="handed-text" style="margin:0; flex:1; min-width:0"></span><button id="handed-back" class="btn">쿼리로 돌아가기</button></div>
             <select id="schema" class="hidden" style="margin-bottom:6px"></select>
             <select id="base"></select>
-            <label class="check" title="쿼리 화면에서 켠 태그를 붙여 `태그` 컬럼을 만들어요"><input type="checkbox" id="lb-on"> 태그 붙이기</label>
+            <label class="check" title="태그는 쿼리 화면에서 행마다 붙여 둔 표시(이름표)예요. 켜면 그 표시를 `태그` 컬럼으로 더하고, 태그로 행을 거를 수도 있어요"><input type="checkbox" id="lb-on"> 태그 붙이기(쿼리에서 행에 단 표시를 컬럼으로)</label>
             <div id="lb-body" class="hidden">
               <select id="lb-mode" aria-label="태그로 행 거르기"><option value="">모든 행</option><option value="none">태그 없는 행</option><option value="any">고른 태그 중 하나라도</option><option value="all">고른 태그 모두</option></select>
               <div class="cols hidden" id="lb-tags"></div>
@@ -166,24 +174,26 @@
         </div></div>
       <div id="after-connect" class="hidden">
         <div class="cn"></div>
-        <div class="step" data-step="filters"><div class="sp"><i>2</i><span class="t">행 거르기</span><b id="sum-p-filters"></b><span class="c"></span></div>
-          <div class="edx">
+        <div class="step" data-step="filters"><div class="sp"><i>2</i><span class="t" title="조건에 맞는 행만 남기고 나머지 행은 빼요">행 거르기</span><b id="sum-p-filters"></b><span class="c"></span></div>
+          <div class="edx" id="peak-box" data-adv>
             <div class="hint">조건에 맞는 행만 남겨요. 예: price &gt;= 100 / city = 서울 / name starts 김 / 컬럼 in 값1, 값2 / 컬럼 is null</div>
             <div class="row"><input id="f-in" placeholder="조건을 적고 Enter"><button id="f-add" class="btn">추가</button></div>
             <div id="filters"></div>
+            <div class="adv">
             <div class="hint" style="margin-top:8px">데이터가 너무 많을 때: 날짜 컬럼에서 건수가 가장 많은 기간을 테이블 전체로 찾아 조건으로 넣어요(날짜 타입 컬럼만, 위의 조건을 건 뒤의 건수)</div>
             <div class="row"><select id="pk-col" title="날짜 컬럼" aria-label="기간을 찾을 날짜 컬럼"></select><select id="pk-unit" title="기간 길이" aria-label="기간 길이"><option value="day">1일</option><option value="week">1주(월요일부터)</option><option value="month" selected>1달</option></select><button id="peak-find" class="btn" title="고른 기간 길이로 나눠 건수가 가장 많은 기간 5개를 테이블 전체로 찾아요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="가장 많은 기간 찾기">가장 많은 기간 찾기</button></div>
             <div id="pk-list"></div>
+            </div>
           </div></div>
         <div class="cn"></div>
-        <div class="step" data-step="clean"><div class="sp"><i>3</i><span class="t">컬럼 정리</span><b id="sum-p-clean"></b><span class="c"></span></div>
+        <div class="step" data-step="clean"><div class="sp"><i>3</i><span class="t" title="컬럼마다 빈칸 채우기, 글자 고치기, 타입 바꾸기, 이름 바꾸기 같은 정리를 해요">컬럼 정리</span><b id="sum-p-clean"></b><span class="c"></span></div>
           <div class="edx">
             <div class="hint">가운데 표에서 컬럼을 누르거나 여기서 고르세요. 정리 방법은 여러 개 넣을 수 있고, 위에서부터 차례로 적용돼요.</div>
             <select id="cl-col"></select>
             <div id="cl-body"></div>
           </div></div>
         <div class="cn"></div>
-        <div class="step" data-step="derive"><div class="sp"><i>4</i><span class="t">새 컬럼</span><b id="sum-p-derive"></b><span class="c"></span></div>
+        <div class="step" data-step="derive"><div class="sp"><i>4</i><span class="t" title="계산식이나 PCA·군집·좌표로 새 컬럼을 더해요">새 컬럼</span><b id="sum-p-derive"></b><span class="c"></span></div>
           <div class="edx">
             <div class="sec">계산 컬럼</div>
             <div class="hint">식에는 이름을 바꾸기 전의 컬럼 이름을 써요.</div>
@@ -212,7 +222,7 @@
             <div class="hint" id="geo-info"></div>
           </div></div>
         <div class="cn"></div>
-        <div class="step" data-step="dedupe"><div class="sp"><i>5</i><span class="t">중복 제거</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
+        <div class="step" data-step="dedupe"><div class="sp"><i>5</i><span class="t" title="같은 값이 여러 번 나오는 행을 하나만 남겨요">중복 제거</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
           <div class="edx">
             <div class="hint" title="고르지 않은 컬럼은 어느 행의 값이 남을지 정해지지 않아요">고른 컬럼의 값이 모두 같은 행은 하나만 남겨요.</div>
             <div class="row"><select id="dd-col" style="flex:1; min-width:0"></select><button id="dd-all" class="btn">모든 컬럼</button></div>
@@ -228,13 +238,13 @@
             <div class="hint" id="dd-applied"></div>
           </div></div>
         <div class="cn"></div>
-        <div class="step" data-step="sorts"><div class="sp"><i>6</i><span class="t">정렬</span><b id="sum-p-sorts"></b><span class="c"></span></div>
+        <div class="step" data-step="sorts"><div class="sp"><i>6</i><span class="t" title="결과 행의 순서를 정해요">정렬</span><b id="sum-p-sorts"></b><span class="c"></span></div>
           <div class="edx">
             <div class="row"><select id="sort-col" style="flex:1; min-width:0" title="전처리한 결과의 컬럼 이름이에요"></select><select id="sort-dir" style="width:auto"><option value="asc">오름차순</option><option value="desc">내림차순</option></select><button id="sort-add" class="btn">추가</button></div>
             <div class="chips open" id="sorts"></div>
           </div></div>
         <div class="cn"></div>
-        <div class="step" data-step="save"><div class="sp"><i>7</i><span class="t">저장</span><b id="sum-p-save"></b><span class="c"></span></div>
+        <div class="step" data-step="save"><div class="sp"><i>7</i><span class="t" title="결과를 파일로 받을지, 같은 DB의 새 테이블로 만들지 정해요">저장</span><b id="sum-p-save"></b><span class="c"></span></div>
           <div class="edx">
             <div class="sec">저장할 곳</div>
             <label><input type="radio" name="target" id="t-file" checked style="width:auto"> 파일</label>
@@ -249,14 +259,14 @@
           </div></div>
       </div>
     </div></div>
-    <footer><button id="preview" class="btn">미리보기</button><button id="run" class="btn p">실행</button></footer>
+    <footer class="has-lead"><button id="preview" class="btn">미리보기</button><button id="run" class="btn p">실행</button><p class="lead" id="prep-foot-lead">[미리보기] 앞 20행만 봐요(저장하지 않아요). [실행] 테이블 전체를 ⑦ 저장에서 고른 곳(Parquet·CSV 파일, 같은 DB의 새 테이블)에 만들어요.</p></footer>
   </aside>
 </div>
-<!-- 분석: 전처리 탭에서 고른 테이블(체크하면 지금 전처리를 적용한 결과)을 표본으로 분석한다. [전체로 다시 구하기]는 테이블 전체로. -->
+<!-- 분석: 전처리 탭에서 고른 테이블(체크하면 지금 전처리를 적용한 결과)을 표본으로 분석한다. [표본 말고 전체 데이터로 다시 구하기]는 테이블 전체로. -->
 <div class="work hidden" id="ana">
   <main class="results">
     <div class="tool"><span class="hint" id="a-data" style="margin:0; flex:1"></span>
-      <button id="a-full" class="btn" title="표본 대신 테이블 전체로 다시 구해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요">전체로 다시 구하기</button>
+      <button id="a-full" class="btn" title="표본(미리 읽은 일부 행) 말고 테이블 전체 데이터로 다시 구해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요">표본 말고 전체 데이터로 다시 구하기</button>
       <div class="drop"><button id="a-add" class="btn p" title="지금 보이는 그래프를 구한 값과 함께 대시보드 카드로 넣어요">대시보드에 추가</button>
         <div class="pop hidden" id="a-pop" style="width:280px">
           <div class="hint" style="margin:0">어느 대시보드에 넣을까요?</div>
@@ -291,7 +301,7 @@
         <span class="hint" id="a-rtext" style="margin:0" aria-live="polite"></span>
         <button class="btn" id="a-rall" title="범위를 처음부터 끝까지로 되돌려요">전체</button>
       </div>
-      <h4 class="a-sec" id="a-th">표 <label class="a-rows">보일 행 수 <input type="number" id="a-rows" min="1" placeholder="전체" title="비우면 범위 안의 모든 행을 보여요. 받은 결과를 화면에서 줄이는 거라 다시 구하지 않아요"></label></h4>
+      <h4 class="a-sec" id="a-th">표 <label class="a-rows hidden" id="a-rows-box">보일 행 수 <input type="number" id="a-rows" min="1" placeholder="전체" title="비우면 범위 안의 모든 행을 보여요. 받은 결과를 화면에서 줄이는 거라 다시 구하지 않아요"></label></h4>
       <div class="table-wrap" id="a-table"></div>
       <div id="a-segs"></div>
     </section>
@@ -302,28 +312,27 @@
     <div class="sc">
       <div class="hint" id="hashed-note-a"></div>
       <label class="check" title="끄면 전처리 없이 원래 테이블을 분석해요"><input type="checkbox" id="a-prep" checked> 전처리한 결과로 분석</label>
-      <div class="seg2 seg4" style="margin-top:10px">
-        <label title="한 컬럼의 값이 어떻게 퍼져 있는지 봐요(히스토그램·상자 그림·값 빈도)"><input type="radio" name="akind" value="distribution" checked> 분포</label>
-        <label title="숫자 컬럼끼리 함께 오르내리는지 봐요(상관계수 표·산점도)"><input type="radio" name="akind" value="correlation"> 상관관계</label>
-        <label title="묶음마다 합계·평균 같은 값을 비교해요"><input type="radio" name="akind" value="groups"> 그룹 비교</label>
-        <label title="날짜 컬럼으로 일·주·월마다 값이 어떻게 바뀌는지 봐요"><input type="radio" name="akind" value="trend"> 기간별 추이</label>
-        <label title="사용자가 단계를 순서대로 몇 명이나 거쳤는지, 어디서 빠지는지 봐요"><input type="radio" name="akind" value="funnel"> 퍼널</label>
-      </div>
-      <div class="seg2 seg4" style="margin-top:6px">
-        <label title="처음 온 기간별로 묶어, 이후에 다시 온 사람의 비율을 봐요"><input type="radio" name="akind" value="retention"> 리텐션</label>
-        <label title="최근에·자주·많이 산 정도로 고객을 등급으로 나눠요"><input type="radio" name="akind" value="rfm"> RFM</label>
-        <label title="값이 큰 항목부터 쌓아, 소수 항목이 전체의 몇 %를 차지하는지(ABC 등급) 봐요"><input type="radio" name="akind" value="pareto"> 파레토</label>
-        <label title="두 범주 컬럼이 서로 관계가 있는지 통계로 확인해요(카이제곱 검정)"><input type="radio" name="akind" value="chisq"> 관계 검정</label>
-        <label title="A·B 그룹의 비율이나 평균 차이가 우연인지 확인해요"><input type="radio" name="akind" value="abtest"> A/B 검정</label>
-        <label title="함께 자주 사는 항목 쌍을 찾아요(장바구니 연관)"><input type="radio" name="akind" value="basket"> 장바구니</label>
-        <label title="두 기간의 평균 차이가 그룹 구성이 바뀌어서인지, 그룹 안에서 바뀌어서인지 나눠 봐요"><input type="radio" name="akind" value="decompose"> 변화 요인</label>
-        <label title="기간별 값을 추세·계절 반복·나머지로 나눠 봐요"><input type="radio" name="akind" value="seasonal"> 시계열 분해</label>
+      <div class="akinds">
+        <label title="한 컬럼의 값이 어떻게 퍼져 있는지 봐요(히스토그램·상자 그림·값 빈도)"><input type="radio" name="akind" value="distribution" checked> <span>값이 어떻게 퍼져 있나요?<small>(분포)</small></span></label>
+        <label title="숫자 컬럼끼리 함께 오르내리는지 봐요(상관계수 표·산점도)"><input type="radio" name="akind" value="correlation"> <span>두 숫자가 같이 움직이나요?<small>(상관관계)</small></span></label>
+        <label title="묶음마다 합계·평균 같은 값을 비교해요"><input type="radio" name="akind" value="groups"> <span>묶음마다 값이 얼마나 다른가요?<small>(그룹 비교)</small></span></label>
+        <label title="날짜 컬럼으로 일·주·월마다 값이 어떻게 바뀌는지 봐요"><input type="radio" name="akind" value="trend"> <span>기간마다 어떻게 바뀌었나요?<small>(기간별 추이)</small></span></label>
+        <label title="사용자가 단계를 순서대로 몇 명이나 거쳤는지, 어디서 빠지는지 봐요"><input type="radio" name="akind" value="funnel"> <span>단계마다 얼마나 남나요?<small>(퍼널)</small></span></label>
+        <label title="처음 온 기간별로 묶어, 이후에 다시 온 사람의 비율을 봐요"><input type="radio" name="akind" value="retention"> <span>다시 오는 고객은 얼마나?<small>(리텐션)</small></span></label>
+        <label title="최근에·자주·많이 산 정도로 고객을 등급으로 나눠요"><input type="radio" name="akind" value="rfm"> <span>좋은 고객은 누구?<small>(RFM)</small></span></label>
+        <label title="값이 큰 항목부터 쌓아, 소수 항목이 전체의 몇 %를 차지하는지(ABC 등급) 봐요"><input type="radio" name="akind" value="pareto"> <span>적은 항목이 대부분을 차지하나요?<small>(파레토)</small></span></label>
+        <label title="두 범주 컬럼이 서로 관계가 있는지 통계로 확인해요(카이제곱 검정)"><input type="radio" name="akind" value="chisq"> <span>두 항목이 서로 관련 있나요?<small>(관계 검정)</small></span></label>
+        <label title="A·B 그룹의 비율이나 평균 차이가 우연인지 확인해요"><input type="radio" name="akind" value="abtest"> <span>A와 B의 차이가 우연인가요?<small>(A/B 검정)</small></span></label>
+        <label title="함께 자주 사는 항목 쌍을 찾아요(장바구니 연관)"><input type="radio" name="akind" value="basket"> <span>같이 사는 상품은?<small>(장바구니)</small></span></label>
+        <label title="두 기간의 평균 차이가 그룹 구성이 바뀌어서인지, 그룹 안에서 바뀌어서인지 나눠 봐요"><input type="radio" name="akind" value="decompose"> <span>평균이 왜 바뀌었나요?<small>(변화 요인)</small></span></label>
+        <label title="기간별 값을 추세·계절 반복·나머지로 나눠 봐요"><input type="radio" name="akind" value="seasonal"> <span>반복되는 흐름과 튀는 때는?<small>(시계열 분해)</small></span></label>
       </div>
       <div class="a-form" data-kind="distribution">
+        <p class="lead"><b>이걸 알려 줘요:</b> 한 컬럼의 값이 어디에 많고 적은지 보여 줘요. 숫자 컬럼은 히스토그램·상자 그림·값 빈도로, 다른 컬럼은 자주 나오는 값(값 빈도)으로 보여 줘요.<br><b>필요한 컬럼:</b> 아무 컬럼 하나</p>
         <div class="hint">컬럼</div><select id="a-col"></select>
-        <div class="hint">숫자 컬럼은 히스토그램, 상자 그림, 값 빈도로 보여 주고, 다른 컬럼은 값 빈도로 보여 줘요.</div>
       </div>
       <div class="a-form hidden" data-kind="correlation">
+        <p class="lead"><b>이걸 알려 줘요:</b> 숫자 컬럼끼리 한쪽이 커질 때 다른 쪽도 커지는지(또는 작아지는지)를 -1~1 사이 숫자(피어슨 상관계수) 표나 점 그림(산점도)으로 보여 줘요.<br><b>필요한 컬럼:</b> 숫자 컬럼 2개 이상</p>
         <select id="a-cmode"><option value="heatmap">여러 컬럼 한꺼번에(히트맵)</option><option value="scatter">두 컬럼 자세히(산점도)</option></select>
         <div id="a-heat"><div class="hint">숫자 컬럼(2~<span id="a-max-corr"></span>개)</div><div class="cols" id="a-corr-cols"></div>
           <div class="hint">고른 컬럼이 모두 채워진 행만으로 피어슨 상관계수를 구해요.</div></div>
@@ -331,17 +340,20 @@
           <div class="hint">점이 <span id="a-max-points"></span>개보다 많으면 전체에서 고르게 뽑아 그려요(다시 구해도 같은 점).</div></div>
       </div>
       <div class="a-form hidden" data-kind="groups">
+        <p class="lead"><b>이걸 알려 줘요:</b> 묶음(예: 지역)마다 행 수·합계·평균 같은 값을 구해 나란히 비교해요.<br><b>필요한 컬럼:</b> 묶을 컬럼 하나, 계산할 컬럼 하나</p>
         <div class="hint">묶을 컬럼</div><select id="a-gby"></select>
         <div class="hint">집계</div><div id="a-gagg"></div>
         <div class="hint">계산할 컬럼</div><select id="a-gval"></select>
       </div>
       <div class="a-form hidden" data-kind="trend">
+        <p class="lead"><b>이걸 알려 줘요:</b> 날짜를 일·주·월로 나눠 기간마다 행 수·합계·평균 같은 값이 어떻게 바뀌었는지 보여 줘요.<br><b>필요한 컬럼:</b> 날짜 컬럼, 계산할 컬럼</p>
         <div class="hint">날짜 컬럼</div><select id="a-tcol"></select>
         <div class="hint">기간 단위</div><select id="a-tunit"><option value="day">일</option><option value="week">주(월요일부터)</option><option value="month">월</option></select>
         <div class="hint">집계</div><div id="a-tagg"></div>
         <div class="hint">계산할 컬럼</div><select id="a-tval"></select>
       </div>
-      <div class="a-form hidden" data-kind="funnel">
+      <div class="a-form hidden" id="akind-funnel" data-kind="funnel" data-adv>
+        <p class="lead"><b>이걸 알려 줘요:</b> 사람들이 정한 단계를 순서대로 몇 명이나 거쳤고, 어느 단계에서 빠지는지 보여 줘요.<br><b>필요한 컬럼:</b> 사람을 구분하는 컬럼(예: 회원번호), 행동한 시각 컬럼, 행동 이름 컬럼(또는 단계마다 조건)</p>
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-fuser"></select>
         <div class="hint">행동한 시각 컬럼</div><select id="a-ftime"></select>
         <div class="hint">단계 정의</div><select id="a-fdefine" title="행동 값 목록은 행동 컬럼의 값을 순서대로, 조건 줄은 단계마다 조건을 적어요"><option value="values">행동 값 목록</option><option value="stages">단계마다 조건 줄</option></select>
@@ -361,66 +373,67 @@
         </div>
         <div class="hint">제한 시간</div>
         <div class="f-win" title="앞 단계부터 이 시간 안에 도달한 사람만 세요. 비우면 제한이 없어요"><input id="a-fwin" type="number" min="0" step="any" placeholder="제한 없음"><select id="a-funit"><option value="minute">분</option><option value="hour">시간</option><option value="day">일</option></select></div>
-        <div class="hint">걸린 시간 절사평균에서 자를 몫(%)</div><input id="a-ftrim" type="number" min="0" step="any" aria-label="절사평균 자르기 %" title="위아래를 합쳐 자를 몫이에요. 비우면 기본값">
+        <div class="adv"><div class="hint">걸린 시간 절사평균에서 자를 몫(%)</div><input id="a-ftrim" type="number" min="0" step="any" aria-label="절사평균 자르기 %" title="위아래를 합쳐 자를 몫이에요. 비우면 기본값"></div>
       </div>
-      <div class="a-form hidden" data-kind="retention">
+      <div class="a-form hidden" id="akind-retention" data-kind="retention" data-adv>
+        <p class="lead"><b>이걸 알려 줘요:</b> 처음 나타난 기간(일·주·월)으로 사람을 묶어, 그 뒤 기간마다 다시 나타난 사람의 비율을 보여 줘요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 사람을 구분하는 컬럼, 날짜 컬럼</p>
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-rwho"></select>
         <div class="hint">시각 컬럼(날짜)</div><select id="a-rtime"></select>
         <div class="hint">코호트 단위</div><select id="a-runit"><option value="day">일</option><option value="week">주(설정한 주 시작 요일부터)</option><option value="month">월</option></select>
-        <div class="hint">경과 칸 수(비우면 기본값)</div><input id="a-rspan" type="number" step="1">
-        <div class="hint">처음 나타난 기간으로 사용자를 묶어, 이후 기간마다 다시 나타난 비율을 봐요. 테이블 전체로 구해요.</div>
+        <div class="adv"><div class="hint">경과 칸 수(비우면 기본값)</div><input id="a-rspan" type="number" step="1"></div>
       </div>
-      <div class="a-form hidden" data-kind="rfm">
+      <div class="a-form hidden" id="akind-rfm" data-kind="rfm" data-adv>
+        <p class="lead"><b>이걸 알려 줘요:</b> 최근에(R)·자주(F)·많이(M) 산 정도를 5단계로 나눠 점수를 매기고, 고객을 등급(세그먼트)으로 묶어요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 고객을 구분하는 컬럼, 날짜 컬럼, 금액 컬럼</p>
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-mwho"></select>
         <div class="hint">시각 컬럼(날짜)</div><select id="a-mtime"></select>
         <div class="hint">금액 컬럼</div><select id="a-mamt"></select>
-        <div class="hint">기준일(비우면 자료의 마지막 날)</div><input id="a-masof" type="date">
-        <div class="hint">거래 키(빈도를 고유 거래 수로 셀 때)</div><select id="a-mtx"></select>
-        <div class="hint">최근·빈도·금액을 5단계로 나눠 사용자를 세그먼트로 묶어요. 테이블 전체로 구해요.</div>
+        <div class="adv"><div class="hint">기준일(비우면 자료의 마지막 날)</div><input id="a-masof" type="date"></div>
+        <div class="adv"><div class="hint">거래 키(빈도를 고유 거래 수로 셀 때)</div><select id="a-mtx"></select></div>
       </div>
-      <div class="a-form hidden" data-kind="pareto">
+      <div class="a-form hidden" id="akind-pareto" data-kind="pareto" data-adv>
+        <p class="lead"><b>이걸 알려 줘요:</b> 값이 큰 항목부터 쌓아 적은 수의 항목이 전체의 몇 %를 차지하는지 보여 주고, 누적 비중으로 A·B·C 등급을 나눠요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 항목 컬럼(예: 상품), 값 컬럼(값을 행 수로 고르면 없어도 돼요)</p>
         <div class="hint">항목 컬럼</div><select id="a-pitem"></select>
         <div class="hint">값</div><select id="a-pagg"><option value="sum">합계</option><option value="count">행 수</option></select>
         <div id="a-pvalbox"><div class="hint">값 컬럼</div><select id="a-pval"></select></div>
-        <div class="hint">A 경계(%, 비우면 기본값)</div><input id="a-pa" type="number" step="any">
-        <div class="hint">B 경계(%, 비우면 기본값)</div><input id="a-pb" type="number" step="any">
-        <div class="hint">값이 큰 항목부터 누적 비중으로 A·B·C 등급을 나눠요. 테이블 전체로 구해요.</div>
+        <div class="adv"><div class="hint">A 경계(%, 비우면 기본값)</div><input id="a-pa" type="number" step="any"></div>
+        <div class="adv"><div class="hint">B 경계(%, 비우면 기본값)</div><input id="a-pb" type="number" step="any"></div>
       </div>
       <div class="a-form hidden" data-kind="chisq">
+        <p class="lead"><b>이걸 알려 줘요:</b> 두 범주 컬럼(예: 지역과 등급)이 서로 관계가 있는지 교차표와 카이제곱 검정으로 확인해요.<br><b>필요한 컬럼:</b> 범주 컬럼 2개</p>
         <div class="hint">행 컬럼</div><select id="a-xrow"></select>
         <div class="hint">열 컬럼</div><select id="a-xcol"></select>
-        <div class="hint">두 범주 컬럼이 서로 관계가 있는지 카이제곱 검정으로 봐요.</div>
       </div>
-      <div class="a-form hidden" data-kind="abtest">
+      <div class="a-form hidden" id="akind-abtest" data-kind="abtest" data-adv>
+        <p class="lead"><b>이걸 알려 줘요:</b> 그룹(A·B …)끼리 비율이나 평균의 차이가 우연으로 생길 만한 정도인지 검정하고, 차이의 범위(신뢰구간)를 보여 줘요.<br><b>필요한 컬럼:</b> 그룹 컬럼, 값 컬럼(비율이면 0·1이나 예/아니오 값, 평균이면 숫자)</p>
         <div class="hint">그룹 컬럼</div><select id="a-bgroup"></select>
         <div class="hint">지표</div><select id="a-bmetric"><option value="rate">비율</option><option value="mean">평균</option></select>
         <div class="hint">값 컬럼</div><select id="a-bval"></select>
         <div class="hint">대조군</div><select id="a-bctrl"></select>
-        <div class="hint">신뢰 수준(%, 비우면 설정값)</div><input id="a-bconf" type="number" step="any">
+        <div class="adv"><div class="hint">신뢰 수준(%, 비우면 설정값)</div><input id="a-bconf" type="number" step="any"></div>
       </div>
-      <div class="a-form hidden" data-kind="basket">
+      <div class="a-form hidden" id="akind-basket" data-kind="basket" data-adv>
+        <p class="lead"><b>이걸 알려 줘요:</b> 같은 거래에 함께 들어간 항목 쌍을 찾아, 우연보다 얼마나 자주 같이 들어가는지(향상도) 순으로 보여 줘요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 거래 키(예: 주문번호), 항목 컬럼(예: 상품)</p>
         <div class="hint">거래 키</div><select id="a-kkey"></select>
         <div class="hint">항목 컬럼</div><select id="a-kitem"></select>
-        <div class="hint">최소 지지도(%, 비우면 기본값)</div><input id="a-ksup" type="number" step="any">
-        <div class="hint">상위 쌍 수(비우면 기본값)</div><input id="a-ktop" type="number" step="1">
-        <div class="hint">같은 거래에 함께 들어간 항목 쌍을 향상도 순으로 보여요. 테이블 전체로 구해요.</div>
+        <div class="adv"><div class="hint">최소 지지도(%, 비우면 기본값)</div><input id="a-ksup" type="number" step="any"></div>
+        <div class="adv"><div class="hint">상위 쌍 수(비우면 기본값)</div><input id="a-ktop" type="number" step="1"></div>
       </div>
       <div class="a-form hidden" data-kind="decompose">
+        <p class="lead"><b>이걸 알려 줘요:</b> 두 기간의 평균(0·1 값이면 비율)이 달라진 까닭을 그룹 구성이 바뀐 몫과 그룹 안 값이 바뀐 몫으로 나눠 보여 줘요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 날짜 컬럼, 그룹 컬럼, 숫자 값 컬럼</p>
         <div class="hint">날짜 컬럼</div><select id="a-dtime"></select>
         <div class="hint">기준 기간</div><div class="row"><input id="a-db0" type="date"><input id="a-db1" type="date"></div>
         <div class="hint">비교 기간</div><div class="row"><input id="a-dc0" type="date"><input id="a-dc1" type="date"></div>
         <div class="hint">그룹 컬럼</div><select id="a-dgroup"></select>
         <div class="hint">값 컬럼(0·1 값이면 비율)</div><select id="a-dval"></select>
-        <div class="hint">두 기간 평균의 차이를 그룹 구성 변화와 그룹 안 변화로 나눠요. 테이블 전체로 구해요.</div>
       </div>
-      <div class="a-form hidden" data-kind="seasonal">
+      <div class="a-form hidden" id="akind-seasonal" data-kind="seasonal" data-adv>
+        <p class="lead"><b>이걸 알려 줘요:</b> 기간별 값을 추세·계절 반복·나머지로 나누고, 나머지가 유난히 큰 기간을 표시해요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 날짜 컬럼, 계산할 컬럼</p>
         <div class="hint">날짜 컬럼</div><select id="a-stime"></select>
         <div class="hint">기간 단위</div><select id="a-sunit"><option value="day">일</option><option value="week">주(월요일부터)</option><option value="month">월</option></select>
         <div class="hint">집계</div><div id="a-sagg"></div>
         <div class="hint">계산할 컬럼</div><select id="a-sval"></select>
-        <div class="hint">이동평균 창(홀수, 비우면 기본값)</div><input id="a-swin" type="number" step="2">
-        <div class="hint">이상 시점 기준 배수(비우면 기본값)</div><input id="a-sk" type="number" step="any">
-        <div class="hint">추세·계절·나머지로 나누고, 나머지가 유난히 큰 기간을 표시해요. 테이블 전체로 구해요.</div>
+        <div class="adv"><div class="hint">이동평균 창(홀수, 비우면 기본값)</div><input id="a-swin" type="number" step="2"></div>
+        <div class="adv"><div class="hint">이상 시점 기준 배수(비우면 기본값)</div><input id="a-sk" type="number" step="any"></div>
       </div>
     </div>
     <footer><button id="a-run" class="btn p" title="전처리 탭에서 정한 미리 읽을 행 수만큼 읽어 구해요">구하기</button></footer>
@@ -680,7 +693,6 @@ const DESC = {
 // 0 분리·로그 구간의 특별 구간에 든 행 수 안내(서버 info.cut의 한 항목)
 const cutText = x => `${x.rows.toLocaleString()}행이 '${x.label}' 구간에 들어갔어요(미리보기 표본 기준).`;
 // 컬럼 종류의 쉬운 이름. 원래 타입(int64 등)은 마우스를 올리면 보인다.
-const KIND_TEXT = { int: "정수", float: "소수", string: "글자", date: "날짜", ts: "날짜·시각", bool: "참·거짓", time: "시각", other: "기타" };
 const kindOf = type => /^u?int/.test(type) ? "int" : /^(float|decimal)/.test(type) ? "float" : type.startsWith("string") ? "string"
   : type.startsWith("timestamp") ? "ts" : type === "date" ? "date" : type === "boolean" ? "bool" : type.startsWith("time") ? "time" : "other";
 const isWorked = c => { const e = edits[c.name]; return !e.keep || !!e.rename.trim() || Object.keys(e.ops).length > 0; };
@@ -807,9 +819,9 @@ function diagRows(g) {
   ].filter(Boolean);
 }
 function statsHtml(c, now) {
-  const tag = `<span class="kind" title="원래 타입: ${esc(c.type)}">${c.type.startsWith("timestamp") ? KIND_TEXT.ts : KIND_TEXT[c.kind] ?? KIND_TEXT.other}</span>`;
+  const tag = `<span class="kind" title="원래 타입: ${esc(c.type)}">${esc(typeWord(c.type))}</span>`;
   const change = !now || now === c.type ? "" : kindOf(now) === kindOf(c.type)
-    ? `<div title="${esc(c.type)} → ${esc(now)}">저장할 때 작은 크기로 줄여요</div>` : `<div>바꾼 뒤: ${KIND_TEXT[kindOf(now)] ?? esc(now)}</div>`;
+    ? `<div title="${esc(c.type)} → ${esc(now)}">저장할 때 작은 크기로 줄여요</div>` : `<div title="${esc(now)}">바꾼 뒤: ${esc(typeWord(now) === typeWord(c.type) ? `${typeWord(now)}(${now})` : typeWord(now))}</div>`;
   if (!("unique" in c)) return `<div>${tag}</div>${change}<div class="empty">${status === "stopped" ? "통계를 구하지 못했어요" : status === "off" ? "통계를 껐어요. 데이터 단계에서 켜면 표본으로 구해요" : prof.whole != null && !status ? "이 컬럼은 전체 통계를 구하지 않아요" : "통계 계산 중…"}</div>`;
   const full = prof.full?.columns.find(x => x.name === (c.from ?? c.name));
   const guess = c.infer ?? {}, exact = guess.exact, n = prof.sampled?.rows ?? prof.rows ?? 0;
@@ -864,7 +876,7 @@ function gridSpec(sorter = true) {  // sorter: 머리글에 정렬 단추를 넣
   const button = name => sorter ? `<button type="button" class="ghost sorter" data-vsort="${esc(name)}" aria-label="이름 정렬">${sortMark(vsort, name).arrow.trim() || "↕"}</button>` : "";
   const head = items.map(x => {
     const name = x.name ?? outName(x.c), aria = sorter ? sortMark(vsort, name).aria : "";
-    if (x.derived) return `<th data-col="${esc(x.name)}"${aria} title="${esc(`${x.name}: ${view.sources[x.k] ? view.sources[x.k] + " 컬럼에서" : "새 컬럼 단계에서"} 만든 새 컬럼이에요(종류: ${KIND_TEXT[kindOf(view.types[x.k])]})`)}"><div class="colhead"><span>${esc(x.name)}</span><span class="worked">새 컬럼</span>${button(name)}</div></th>`;
+    if (x.derived) return `<th data-col="${esc(x.name)}"${aria} title="${esc(`${x.name}: ${view.sources[x.k] ? view.sources[x.k] + " 컬럼에서" : "새 컬럼 단계에서"} 만든 새 컬럼이에요(종류: ${typeWord(view.types[x.k])}, 원래 타입: ${view.types[x.k]})`)}"><div class="colhead"><span>${esc(x.name)}</span><span class="worked">새 컬럼</span>${button(name)}</div></th>`;
     const rename = edits[x.c.name].rename.trim();
     return `<th data-col="${esc(x.c.name)}"${aria} class="cpick${x.c.name === picked ? " on" : ""}" title="${esc(`${x.c.name}: 누르면 오른쪽 컬럼 정리에서 고칠 수 있어요`)}"><div class="colhead"><span>${esc(x.c.name + (x.c.from ? " (복사)" : "") + (rename ? ` → ${rename}` : ""))}</span>${isWorked(x.c) ? '<span class="worked">정리함</span>' : ""}${button(name)}</div></th>`;
   }).join("");
@@ -957,7 +969,7 @@ async function loadFirst() {
 function pcol(name, type, checked, onchange, sub) {
   const box = el("input", { type: "checkbox", checked, onchange: () => onchange(box.checked) });
   const label = el("span", { className: "name", textContent: name, onclick: () => heads.get(name)?.scrollIntoView({ inline: "center", block: "nearest" }) });
-  const row = el("div", { className: "pcol" + (sub ? " sub" : "") }, box, label, el("span", { className: "hint", textContent: type }));
+  const row = el("div", { className: "pcol" + (sub ? " sub" : "") }, box, label, el("span", { className: "hint", textContent: typeWord(type), title: type }));
   row.dataset.col = name;  // 우클릭 메뉴(colItems)가 쓴다
   return row;
 }
@@ -1040,7 +1052,7 @@ $("peak-find").onclick = () => busy($("peak-find"), async () => {
     $("pk-list").replaceChildren(...(d.periods.length ? d.periods.map(p => el("div", {}, `${p.start} ~ ${p.end} · ${p.count.toLocaleString()}건 `,
       el("button", { className: "ghost", textContent: "이 기간 적용", title: `${column} between ${p.start} ${p.end} 조건을 행 거르기에 넣어요`, "aria-label": `${p.start}부터 ${p.end}까지 기간을 조건으로 적용`,
         onclick: () => { filters.push(`${column} between ${p.start} ${p.end}`); syncFilters(); } })))
-      : [el("div", { className: "hint", textContent: "날짜가 있는 행이 없어요." })]), ...(d.more ? [el("div", { className: "hint", textContent: "기간이 많아 최근 400개 기간 안에서만 찾았어요. 더 긴 기간 길이를 고르세요." })] : []));
+      : [el("div", { className: "hint", textContent: "날짜가 있는 행이 없어요." })]));
   } catch (e) { fail(e.message); }
 });
 const addFilter = () => {
@@ -1150,7 +1162,7 @@ function renderGeo() {
   $("geo-list").replaceChildren(...geoSteps.map((st, i) => el("div", {}, chip(geoText(st), () => { geoSteps.splice(i, 1); preview = null; showAll(); }))));
   const hints = prof?.geo, pairs = hints?.pairs ?? [];
   $("geo-hints").replaceChildren(...(hints?.columns?.length ? [el("div", {}, "좌표 컬럼으로 보여요: " + hints.columns.map(c => `${c.name}(${{ lat: "위도", lon: "경도", x: "x", y: "y" }[c.role]})`).join(", "))] : []),
-    ...pairs.filter(p => p.kind === "tm").map(p => el("div", {}, `‘${p.x}’·‘${p.y}’는 미터 단위 TM 좌표로 보여요. ${p.epsg.length ? "값 범위로 보면 EPSG " + p.epsg.join(" 또는 ") + "일 가능성이 커요." : "맞는 좌표계를 값 범위로 찾지 못했어요. 자료의 좌표계를 확인해 고르세요."}`)),
+    ...pairs.filter(p => p.kind === "tm").map(p => el("div", {}, `‘${p.x}’·‘${p.y}’는 미터 단위 TM 좌표로 보여요. ${p.epsg.length === 1 ? "값 범위로 보면 EPSG " + p.epsg[0] + "일 가능성이 커요." : p.epsg.length ? "값 범위로는 EPSG " + p.epsg.join(", ") + " 중 어느 것인지 구분되지 않아요(잘못 고르면 100km쯤 어긋나요). 자료의 좌표계를 확인해 고르세요." :"맞는 좌표계를 값 범위로 찾지 못했어요. 자료의 좌표계를 확인해 고르세요."}`)),
     ...(hints?.warnings ?? []).map(w => el("div", { className: "err", textContent: w })));
   $("geo-info").textContent = (preview?.info?.geo ?? []).map(g => g.op === "tm" ? `TM: 서로 다른 좌표 ${g.pairs.toLocaleString()}개 변환${g.failed ? `, 바뀌지 않은 ${g.failed}개` : ""}`
     : g.op === "nearest" ? `가까운 지점: 서로 다른 좌표 ${g.pairs.toLocaleString()}개 중 ${g.matched.toLocaleString()}개에 지점을 찾음(지점 ${g.reference.toLocaleString()}개)`
@@ -1212,7 +1224,7 @@ function showLabels() {
   const can = !!labelInfo?.on;
   $("lb-on").disabled = !can;
   $("lb-on").checked = can && labelUse.on;
-  $("lb-note").textContent = labelInfo && !can ? "쿼리 화면 결과 표의 [태그]에서 먼저 켜세요" : "";
+  $("lb-note").textContent = labelInfo && !can ? "태그를 쓰려면 쿼리 화면 결과 표의 [태그]에서 먼저 켜 주세요" : "";
   $("lb-body").classList.toggle("hidden", !$("lb-on").checked);
   $("lb-mode").value = labelUse.mode;
   $("lb-tags").classList.toggle("hidden", !["any", "all"].includes(labelUse.mode));
@@ -2218,6 +2230,7 @@ function drawAna() {
   $("a-segs").replaceChildren(...(flow ? [...gapTable(d.gaps), ...segTables(d.segments)] : d && A.view === "ab" ? pairBlock(d) : []));
   $("a-tabs").classList.toggle("hidden", !d || d.views.length < 2);
   $("a-full").disabled = !d;
+  $("a-rows-box").classList.toggle("hidden", !d);  // 결과가 없으면 보일 행 수 칸도 숨긴다
   $("a-full").classList.toggle("hidden", SERVER.analysis.whole.includes(d?.kind) || ["funnel", "stages"].includes(d?.kind));  // 퍼널과 새 분석 6종은 늘 테이블 전체로 구한다(prep_app.whole)
   const noCard = NEW_KINDS.includes(d?.kind);  // 새 분석 8종은 이번에는 대시보드 카드로 담지 않는다
   $("a-add").disabled = !d || text || noCard;

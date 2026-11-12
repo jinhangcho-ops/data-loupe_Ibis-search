@@ -49,7 +49,8 @@ MIN_WINDOW = 3  # 이동평균 창 하한
 MAX_WINDOW = 61  # 이동평균 창 상한
 MAD_K = 3.0  # 이상 시점 기준 배수(원문 예 3×MAD, 보정 MAD는 prep_diag.MAD_C로)
 MAX_MAD_K = 10.0  # 배수 상한
-READS = {"retention": 4, "rfm": 5, "pareto": 1, "chisq": 1, "abtest": 1, "basket": 4, "decompose": 2, "seasonal": 1}  # DB가 계산할 때 표를 읽는 조회 수(rfm은 asof를 주면 4, 거래 키는 같은 조회)
+READS = {"retention": 4, "rfm": 5, "pareto": 1, "chisq": 1, "abtest": 1, "basket": 4, "decompose": 2, "seasonal": 1,
+         "distribution": 5, "scatter": 5}  # DB가 계산할 때 표를 읽는 조회 수(rfm은 asof를 주면 4, 거래 키는 같은 조회). 분포: 상위 값·집계·히스토그램 2·상자, 산점도: 상관 2·표본·육각 2
 WHOLE_KINDS = ("retention", "rfm", "pareto", "basket", "decompose", "seasonal")  # 늘 테이블 전체로 구하는 분석(건수·합계를 그대로 보인다)
 
 
@@ -390,7 +391,7 @@ def ab_test(t: "ibis.expr.types.Table", group: str, metric: str, value: str, con
             "lift": metric_calc.lift(m2, m1),
             "lift_ci": list(ci["lift"]) if ci["lift"] is not None else None,
             "p": test["p"],
-            "p_adj": min(1, test["p"] * (k - 1)),
+            "p_adj": None if test["p"] is None else min(1, test["p"] * (k - 1)),  # 두 그룹이 모두 0(또는 1)이면 p가 없다
         })
     if k > 2:
         if metric == "mean":
@@ -643,7 +644,7 @@ def seasonal(t: "ibis.expr.types.Table", time: str, unit: str, value: str, agg: 
         "flags": parts.filter(pl.col("flag"))["period"].to_list(),
         "median": median,
         "mad": mad,
-        "limit": k * mad / MAD_C,
+        "limit": None if mad is None else k * mad / MAD_C,  # 값이 빈 기간이 끼면 나머지가 비어 mad가 없다
         "more": tr["more"],
         "note": None if mad else "나머지가 거의 같아 이상 시점을 판정하지 않았어요.",
     }

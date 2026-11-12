@@ -280,13 +280,15 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
   const recompute = useCallback(async () => {
     if (!connRef.current) return dispatch({ type: "error", message: "먼저 데이터에 연결하세요." });
     const failed: string[] = [];
-    for (const card of now.current.dash?.cards ?? []) {
-      if (isShell(card)) continue;  // 데이터를 아직 정하지 않은 빈 카드
+    for (const id of (now.current.dash?.cards ?? []).map(c => c.id)) {
+      const card = now.current.dash?.cards.find(c => c.id === id);  // 도는 동안 고친 카드는 지금 정의로 구한다
+      if (!card || isShell(card)) continue;  // 지운 카드, 데이터를 아직 정하지 않은 빈 카드
       const ctx = now.current.ctx;
       try {
         const { data } = await computeCard(cardRequest(card), ctx);
+        if (now.current.dash?.cards.find(c => c.id === id)?.source !== card.source) continue;  // 구하는 사이 정의가 바뀌었다: 옛 값을 넣지 않는다
         const u = computedUpdate(card.id, data, ctx);  // 기간이 걸려 있으면 화면 값에만, 아니면 저장하고 화면 값은 비운다
-        if (Object.keys(u.patch).length) dispatch({ type: "card", id: card.id, patch: u.patch });
+        if (Object.keys(u.patch).length) dispatch({ type: "card", id: card.id, patch: u.patch, auto: true });  // 되돌리기에 쌓지 않는다(사용자 편집이 아니다)
         dispatch({ type: "values", results: [u.result] });
       } catch (e) { failed.push(`${card.title}: ${(e as Error).message}`); }
     }

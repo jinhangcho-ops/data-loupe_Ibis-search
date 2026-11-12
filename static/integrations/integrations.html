@@ -23,6 +23,13 @@
   .dests { margin:8px 0 0; padding:0; list-style:none; }
   .dests li { padding:4px 0; border-bottom:1px solid var(--line); font-size:13px; }
   #err-hub:empty { display:none; }
+  /* (Phase 19) [설정하기]: 입력 칸은 details 안에 접어 둔다. 맨 위 "무엇을 하고 싶어요?"를 누르면 카드를 잠깐 강조(.flash) */
+  .svc details > summary { display:inline-flex; margin-top:10px; padding:4px 12px; border:1px solid var(--line); border-radius:6px; cursor:pointer; font-weight:600; list-style:none; }
+  .svc details > summary::-webkit-details-marker { display:none; }
+  .svc details[open] > summary { margin-bottom:4px; }
+  .want { margin:0 0 18px; padding:0; list-style:none; display:flex; flex-wrap:wrap; gap:8px; }
+  .svc.flash { animation:flash 1.6s ease-out; }
+  @keyframes flash { from { box-shadow:0 0 0 3px var(--accent); } to { box-shadow:0 0 0 3px transparent; } }
 </style>
 </head>
 <body class="app">
@@ -31,6 +38,13 @@
   <h1>연동</h1>
   <p>Data Loupe를 다른 서비스와 이어요. 결과를 Slack이나 Notion으로 보내고, Slack 질문에 답하고, GA4 데이터를 가져오고, LLM으로 SQL을 만들 수 있어요. 토큰과 키는 서비스마다 고른 방법으로만 보관해요.</p>
   <div class="err" id="err-hub"></div>
+  <h2 style="margin:0 0 6px; font-size:15px">무엇을 하고 싶어요?</h2>
+  <ul class="want" id="want">
+    <li><button type="button" class="btn" data-go="svc-send">결과를 Slack·Notion으로 보내기</button></li>
+    <li><button type="button" class="btn" data-go="svc-bot">Slack에서 물어보기</button></li>
+    <li><button type="button" class="btn" data-go="svc-ga4">웹사이트 방문 데이터 받기</button></li>
+    <li><button type="button" class="btn" data-go="svc-llm">질문으로 SQL 만들기</button></li>
+  </ul>
   <div class="grid">
     <!-- 보내기: 등록한 보낼 곳(Slack·Notion·웹훅). 관리는 [설정] 창의 보낼 곳 분류 -->
     <section class="card svc" id="svc-send">
@@ -48,7 +62,9 @@
 
     <section class="card svc" id="svc-ga4">
       <div class="head"><h3>Google Analytics 4</h3><span class="state" id="ga4-state"></span></div>
-      <div class="hint">GA4 보고서를 Parquet 파일로 받아 쿼리나 분석 화면에서 열 수 있어요. 서비스 계정 JSON 파일은 위치만 저장해요.</div>
+      <div class="hint">웹사이트 방문 데이터(GA4 보고서)를 파일로 받아 쿼리나 분석 화면에서 열어요.</div>
+      <details id="ga4-box"><summary>설정하기</summary>
+      <div class="hint">보고서는 Parquet 파일로 저장해요. 서비스 계정 JSON 파일(Google이 주는 열쇠 파일)은 위치만 저장해요.</div>
       <label><div class="hint">서비스 계정 JSON 파일 위치</div><input id="ga4-key" class="code" placeholder="C:\keys\ga4-reader.json"></label>
       <label><div class="hint">GA4 속성 ID (숫자)</div><input id="ga4-prop" placeholder="123456789"></label>
       <div class="two">
@@ -61,14 +77,18 @@
       <div class="row"><button id="ga4-fetch">가져오기</button><button id="ga4-open" class="btn hidden">쿼리로 열기</button><button id="ga4-save" class="btn">저장</button>
         <button id="ga4-check" class="btn" title="보고서를 받지 않고 인증과 속성 권한만 확인해요">인증 확인</button></div>
       <div class="err" id="ga4-msg"></div>
+      </details>
     </section>
 
     <section class="card svc" id="svc-llm">
       <div class="head"><h3>LLM</h3><span class="state" id="llm-state"></span></div>
-      <div class="hint">질문으로 SQL을 만들 때 쓸 LLM을 정해요. env 파일의 위치만 저장하고, API 키는 물어볼 때마다 그 파일에서 읽어요. 데이터 값은 보내지 않아요.</div>
+      <div class="hint">말로 물으면 SQL을 만들어 주는 AI(LLM)를 정해요.</div>
+      <details id="hub-llm-box"><summary>설정하기</summary>
+      <div class="hint">비밀 키 파일(env)의 위치만 저장하고, API 키는 물어볼 때마다 그 파일에서 읽어요. 데이터 값은 보내지 않아요.</div>
       <label title="파일에 LLM_PROVIDER, LLM_API_KEY, LLM_MODEL을 적어 두세요"><div class="hint">LLM env 파일 위치</div><input id="hub-llm-env" class="code" placeholder="C:\keys\llm.env"></label>
       <div class="row"><button id="hub-llm-pick" class="btn" title="파일 대화상자에서 env 파일을 골라요" aria-label="env 파일 찾아보기">찾아보기</button><button id="hub-llm-read">불러오기</button></div>
       <div class="err" id="llm-msg"></div>
+      </details>
     </section>
 
     <section class="card svc">
@@ -107,7 +127,10 @@ $("feat-close").addEventListener("click", loadHub);  // 설정 창(보낼 곳·�
 // GA4
 const GA4_FIELDS = { key_path: "ga4-key", property: "ga4-prop", start: "ga4-start", end: "ga4-end", dimensions: "ga4-dims", metrics: "ga4-mets", output: "ga4-out" };
 const ga4Body = () => Object.fromEntries(Object.entries(GA4_FIELDS).map(([k, id]) => [k, $(id).value.trim()]));
-const showGa4 = d => Object.entries(GA4_FIELDS).forEach(([k, id]) => $(id).value = d[k] ?? "");
+const showGa4 = d => {
+  Object.entries(GA4_FIELDS).forEach(([k, id]) => $(id).value = d[k] ?? "");
+  if (d.key_path || d.property) $("ga4-box").open = true;  // 이미 설정했으면 칸을 펼쳐 둔다(시작일 등은 기본값이 늘 있어 보지 않는다)
+};
 let ga4Output = "";
 $("ga4-save").onclick = () => busy($("ga4-save"), async () => {
   try { showGa4(await api("/api/ga4", ga4Body())); say("ga4-msg", "저장했어요.", true); loadHub(); } catch (e) { say("ga4-msg", e.message); }
@@ -138,7 +161,16 @@ $("hub-llm-pick").onclick = () => busy($("hub-llm-pick"), async () => {
   try { const d = await api("/api/pick", { kind: "env" }); if (d.path) $("hub-llm-env").value = d.path; }
   catch (e) { say("llm-msg", e.message); }
 });
-api("/api/llm").then(d => $("hub-llm-env").value = d.env).catch(() => {});
+api("/api/llm").then(d => { $("hub-llm-env").value = d.env; if (d.env) $("hub-llm-box").open = true; }).catch(() => {});
+// "무엇을 하고 싶어요?": 고른 카드로 스크롤하고 잠깐 강조한다. 접힌 [설정하기]가 있으면 연다.
+document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => {
+  const card = $(b.dataset.go), box = card.querySelector("details");
+  if (box) box.open = true;
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.remove("flash");
+  void card.offsetWidth;  // 같은 카드를 다시 눌러도 강조가 다시 돌게
+  card.classList.add("flash");
+}));
 loadHub();
 resume();
 </script>

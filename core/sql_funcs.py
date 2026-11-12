@@ -35,6 +35,8 @@ NAME = re.compile(r"[A-Za-z_가-힣][A-Za-z0-9_가-힣]{0,62}")
 FUNCS = {}  # id → 항목(등록 차례가 화면에 보이는 차례)
 SUBS = {}  # id → [(대체 설명, build)] 같은 결과를 내는 대체 식(연결이 원래 식을 못 할 때)
 HAS_ARGS = ("where", "order", "group")  # 정해진 자리의 인자: 조건·정렬·묶음
+# 컬럼 칸의 실수 NaN·±inf를 빈 값으로 받는 함수(감사51): 집계표·지표와 같게. DuckDB는 NaN을 가장 큰 값으로 보고, ceil·std·haversine은 NaN·inf에서 오류를 낸다
+FINITE = {"min", "max", "range", "arg_min", "arg_max", "median", "quantile", "p50", "p90", "p95", "p99", "std", "std_pop", "var", "var_pop", "corr", "moving_std", "ceil", "floor", "haversine", "within_km", "grid_id", "grid_lat", "grid_lon"}
 
 
 class Args(dict):
@@ -222,6 +224,8 @@ def resolve(f, t, raw):
             out[name] = [] if spec["kind"] in ("order", "columns") and name in HAS_ARGS else None
             continue
         out[name] = resolve_one(t, value, spec, f)
+        if f["id"] in FINITE and spec["kind"] == "column":
+            out[name] = prep_ops.nan_to_null(out[name])
     return out
 
 
@@ -402,10 +406,15 @@ add("any", "aggregate", "하나라도 참", "묶음의 행 중 하나라도 조�
 add("count_if", "aggregate", "조건 개수", "조건을 만족하는 행 수.", [cond()], lambda c: c.t.count(where=both(c.cond, c.where)), "count_if(금액 > 0)", kout=NUM, aggregate=True)
 add("sum_if", "aggregate", "조건부 합계", "조건을 만족하는 행의 합계.", [col(kinds=NUM), cond()], lambda c: c.x.sum(where=both(c.cond, c.where)), "sum_if(금액, 구분 = A)", NUM, NUM, aggregate=True)
 add("mean_if", "aggregate", "조건부 평균", "조건을 만족하는 행의 평균.", [col(kinds=NUM), cond()], lambda c: c.x.mean(where=both(c.cond, c.where)), "mean_if(금액, 구분 = A)", NUM, NUM, aggregate=True)
+def known_by(c, value):
+    """기준(by)이 모두 빈 값이면 빈 값(감사51: DuckDB는 arg_min을 FIRST ORDER BY로 바꿔 아무 값을 낸다). 창 안에서는 FILTER를 못 쓰므로 개수로 가른다."""
+    return (c.by.count(where=c.where) > 0).ifelse(value, ibis.null(value.type()))
+
+
 add("arg_min", "aggregate", "가장 작은 쪽의 값", "다른 컬럼이 가장 작은(이른) 행의 이 컬럼 값.", [col(), col("by", "기준 컬럼", ORD)],
-    lambda c: c.x.argmin(c.by, where=c.where), "arg_min(상품, 주문일)", aggregate=True)
+    lambda c: known_by(c, c.x.argmin(c.by, where=c.where)), "arg_min(상품, 주문일)", aggregate=True)
 add("arg_max", "aggregate", "가장 큰 쪽의 값", "다른 컬럼이 가장 큰(늦은) 행의 이 컬럼 값.", [col(), col("by", "기준 컬럼", ORD)],
-    lambda c: c.x.argmax(c.by, where=c.where), "arg_max(상품, 주문일)", aggregate=True)
+    lambda c: known_by(c, c.x.argmax(c.by, where=c.where)), "arg_max(상품, 주문일)", aggregate=True)
 add("first", "aggregate", "첫 값", "정렬 기준으로 가장 앞 행의 값.", [col(), order(False)], lambda c: c.x.first(where=c.where, order_by=c.order), "first(상품, 주문일)", aggregate=True)
 add("last", "aggregate", "마지막 값", "정렬 기준으로 가장 뒤 행의 값.", [col(), order(False)], lambda c: c.x.last(where=c.where, order_by=c.order), "last(상품, 주문일)", aggregate=True)
 add("any_value", "aggregate", "아무 값", "묶음에서 아무 값이나 하나(값이 하나뿐일 때 쓴다).", [col()], lambda c: c.x.arbitrary(where=c.where), "any_value(이름)", aggregate=True)
@@ -492,7 +501,7 @@ def row(id, cat, label, help, args, build, example, kin="any", kout="any"):
     add(id, cat, label, help, args, build, example, kin, kout)
 
 
-row("length", "text", "글자 수", "글자가 몇 개인지.", [T1], lambda c: c.x.length().cast("int64"), "length(이름)", TXT, NUM)
+row("length", "text", "글자 수", "글자가 몇 개인지.", [T1], lambda c: prep_ops.chars(c.x), "length(이름)", TXT, NUM)
 row("upper", "text", "대문자로", "영문을 대문자로.", [T1], lambda c: c.x.upper(), "upper(이름)", TXT, TXT)
 row("lower", "text", "소문자로", "영문을 소문자로.", [T1], lambda c: c.x.lower(), "lower(이름)", TXT, TXT)
 row("capitalize", "text", "첫 글자 대문자", "첫 글자만 대문자로.", [T1], lambda c: c.x.capitalize(), "capitalize(이름)", TXT, TXT)
@@ -538,7 +547,7 @@ row("rpad", "text", "오른쪽 채우기", "길이가 N이 되도록 오른쪽�
 row("contains", "text", "포함", "글자가 들어 있으면 참.", [T1, text("find", "찾을 글자", "a")], lambda c: c.x.contains(c.find), "contains(이름, 'a')", TXT, BOOL)
 row("startswith", "text", "시작", "글자로 시작하면 참.", [T1, text("find", "찾을 글자", "a")], lambda c: c.x.startswith(c.find), "startswith(이름, 'a')", TXT, BOOL)
 row("endswith", "text", "끝", "글자로 끝나면 참.", [T1, text("find", "찾을 글자", "a")], lambda c: c.x.endswith(c.find), "endswith(이름, 'a')", TXT, BOOL)
-row("find", "text", "위치 찾기", "글자가 처음 나오는 위치(1부터, 없으면 0).", [T1, text("find", "찾을 글자", "a")], lambda c: c.x.find(c.find) + 1, "find(이름, 'a')", TXT, NUM)
+row("find", "text", "위치 찾기", "글자가 처음 나오는 위치(1부터, 없으면 0).", [T1, text("find", "찾을 글자", "a")], lambda c: c.x.isnull().ifelse(ibis.null("int64"), c.x.find(c.find) + 1), "find(이름, 'a')", TXT, NUM)
 row("reverse", "text", "거꾸로", "글자를 거꾸로.", [T1], lambda c: c.x.reverse(), "reverse(이름)", TXT, TXT)
 row("repeat", "text", "반복", "글자를 N번 이어 붙여요.", [T1, num("n", "횟수", 2, kind="int")], lambda c: c.x.repeat(c.n), "repeat(이름, 2)", TXT, TXT)
 
@@ -585,7 +594,7 @@ row("ceil", "number", "올림", "정수로 올림.", [N_], lambda c: c.x.ceil(),
 row("floor", "number", "내림", "정수로 내림.", [N_], lambda c: c.x.floor(), "floor(금액)", NUM, NUM)
 row("abs", "number", "절댓값", "부호를 뗀 값.", [N_], lambda c: c.x.abs(), "abs(금액)", NUM, NUM)
 row("mod", "number", "나머지", "나눈 나머지(0으로 나누면 빈 값).", [N_, num("by", "나누는 수", 2)], lambda c: remainder(c.x, ibis.literal(c.by)), "mod(번호, 2)", NUM, NUM)
-row("power", "number", "거듭제곱", "x의 N제곱.", [N_, num("n", "N", 2)], lambda c: c.x.pow(c.n), "power(금액, 2)", NUM, NUM)
+row("power", "number", "거듭제곱", "x의 N제곱.", [N_, num("n", "N", 2)], lambda c: c.x.cast("float64").pow(c.n), "power(금액, 2)", NUM, NUM)
 row("sqrt", "number", "제곱근", "제곱근(음수는 빈 값).", [N_], lambda c: safe_math("sqrt", c.x), "sqrt(금액)", NUM, NUM)
 row("exp", "number", "지수", "e의 x제곱.", [N_], lambda c: c.x.exp(), "exp(금액)", NUM, NUM)
 row("ln", "number", "자연로그", "밑이 e인 로그(0 이하는 빈 값).", [N_], lambda c: safe_math("ln", c.x), "ln(금액)", NUM, NUM)
@@ -1388,8 +1397,8 @@ sub("p50", "분위수 0.5로 구해요.", lambda c: c.x.quantile(0.5, where=c.wh
 sub("string_agg", "값을 목록으로 모아 이어 붙여요.", lambda c: c.x.cast("string").collect(where=c.where, distinct=c.distinct == "yes").join(c.sep))
 sub("first", "정렬 기준이 하나면 가장 작은 쪽(내림차순이면 가장 큰 쪽)의 값으로 구해요.",
     lambda c: (c.x.argmax if c.order[0].op().descending else c.x.argmin)(c.order[0].op().arg.to_expr(), where=c.where) if len(c.order) == 1 else c.x.first(where=c.where, order_by=c.order))
-sub("arg_min", "정렬 기준의 첫 값으로 구해요.", lambda c: c.x.first(where=c.where, order_by=[c.by.asc()]))
-sub("arg_max", "정렬 기준의 마지막 값으로 구해요.", lambda c: c.x.last(where=c.where, order_by=[c.by.asc()]))
+sub("arg_min", "정렬 기준의 첫 값으로 구해요.", lambda c: known_by(c, c.x.first(where=c.where, order_by=[c.by.asc()])))
+sub("arg_max", "정렬 기준의 마지막 값으로 구해요.", lambda c: known_by(c, c.x.last(where=c.where, order_by=[c.by.asc()])))
 
 
 def probe_args(f, t):
