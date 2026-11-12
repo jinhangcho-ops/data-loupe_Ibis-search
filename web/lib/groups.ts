@@ -74,6 +74,9 @@ export function renameColors(colors: Colors, g: GroupView | undefined): Colors {
     ...(colors.parts_order && { parts_order: names(colors.parts_order) }),
   };
 }
+// 지도 영역 이름 → 그 영역이 든 묶음 이름
+const regionSets = (g: GroupView | undefined): Map<string, string> =>
+  new Map(Object.entries(g?.sets ?? {}).flatMap(([set, members]) => members.map((m) => [m, set] as const)));
 // [SPECIFICATION] plans/phase-4.md#groupNames
 export function groupNames(card: Card, data: CardData): GroupNames {
   const d = data as unknown as Shaped;
@@ -99,7 +102,10 @@ export function groupNames(card: Card, data: CardData): GroupNames {
     case "sankey": return { names: (v.nodes ?? []).map((x) => (typeof x === "string" ? x : x.name)), series: [], ordered: null };
     case "wordcloud": return { names: (v.words ?? []).map((x) => x.w), series: [], ordered: null };
     case "funnel": return { names: names(v.steps), series: [], ordered: null };
-    case "geomap": return { names: names(v.regions), series: [], ordered: null };
+    case "geomap": {  // 묶음에 든 영역은 묶음 이름으로(applyGroups가 keep을 묶은 뒤에 보므로)
+      const setOf = regionSets((card.view as unknown as { groups?: GroupView }).groups);
+      return { names: [...new Set(names(v.regions).map((r) => setOf.get(r) ?? r))], series: [], ordered: null };
+    }
     default: return { names: [], series: [], ordered: null };
   }
 }
@@ -197,7 +203,7 @@ export function applyGroups(card: Card, data: CardData): CardData {
       return out({ ...v, steps: (v.steps ?? []).filter((x) => keepName(x.name)).map((x) => ({ ...x, name: n(x.name) })) });
     default: {  // geomap
       const regions = v.regions ?? [];
-      const setOf = new Map(Object.entries(g.sets ?? {}).flatMap(([set, members]) => members.map((m) => [m, set] as const)));
+      const setOf = regionSets(g);
       const grouped = regions.flatMap((r) => {
         const set = setOf.get(r.name);
         if (set === undefined) return [r];

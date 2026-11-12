@@ -200,7 +200,7 @@ export function GroupPicker({ card, data, onChange, recompute }: GroupPickerProp
           )}
           {card.kind === "geomap" && (
             <div>
-              {names.map((name) => (
+              {names.filter((name) => !(g.sets && name in g.sets)).map((name) => (  // 이미 묶인 영역(목록에는 묶음 이름)은 새 묶음에 못 넣는다
                 <Check key={name} label={name} checked={pick.includes(name)} onChange={() => setPick(flip(pick, [name]))} />
               ))}
               <input aria-label="묶음 이름" value={setName} onChange={(e) => setSetName(e.target.value)} />
