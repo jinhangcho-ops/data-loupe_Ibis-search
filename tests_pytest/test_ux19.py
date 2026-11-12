@@ -1,5 +1,7 @@
 """(Phase 19) 처음 쓰는 사람용 공통 장치: 쉬운 보기 설정·스위치·접기 규칙, 타입 이름 풀이, DB 오류를 쉬운 말로. 값은 시험 안에서 지어낸다."""
+import json
 import shutil
+from urllib.parse import unquote
 
 import pytest
 
@@ -11,6 +13,9 @@ needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node가 �
 def test_easy_setting_and_switch(client):
     from core import settings
     assert settings.CHOICES["easy"] == ["on", "off"]
+    assert client.post("/api/settings", json={"adv_open": "%5B%22%2Fsearch%23pager%22%5D"}).status_code == 200
+    assert any(c.startswith("adv_open=") and "search" in c for c in client.get("/").headers.getlist("Set-Cookie"))  # 다음 실행의 화면이 쿠키로 받는다
+    assert settings.valid("adv_open", "%5B%22%2Fsearch%23pager%22%5D") and not settings.valid("adv_open", "x" * (settings.ADV_OPEN_MAX + 1)) and not settings.valid("adv_open", 1)
     assert client.post("/api/settings", json={"easy": "off"}).status_code == 200
     assert "easy=off" in client.get("/").headers.get("Set-Cookie", "") + " ".join(client.get("/").headers.getlist("Set-Cookie"))
     assert 'id="easy"' in read("status.html") and 'saved("easy") !== "off"' in read("head.html")  # 고른 적이 없으면 켬
@@ -43,21 +48,22 @@ console.log(JSON.stringify([a.cls.has("adv-shown"), b.cls.has("adv-shown")]));""
 
 @needs_node
 def test_adv_more_remembers_opened_box(tmp_path):
-    """[더 많은 설정]으로 펼친 묶음은 화면을 다시 열어도 펼쳐 있고, [접기]로 접으면 다시 접힌 채로 연다."""
+    """[더 많은 설정]으로 펼친 묶음은 화면을 다시 열어도(설정 adv_open → 쿠키) 펼쳐 있고, [접기]로 접으면 다시 접힌 채로 연다."""
     code = between("common.js", "function showAdv", "// 컬럼 타입을 쉬운 말로")
-    got = run_node(tmp_path, r"""
-const store = {}; globalThis.localStorage = { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } };
+    stubs = """globalThis.saved = n => store[n] === undefined ? undefined : decodeURIComponent(store[n]);
+globalThis.api = (url, body) => { Object.assign(store, body); return Promise.resolve({}); };\n"""
+    page = r"""
 globalThis.location = { pathname: "/search" };
-const box = () => { const b = { id: "pager", o: new Set(), btn: null, querySelector: s => s === ".adv" ? {} : null, querySelectorAll: s => s === ".adv-more" ? (b.btn ? [b.btn] : []) : [], append: x => { b.btn = x; x.closest = () => b; } };
-  b.classList = { add: c => b.o.add(c), remove: c => b.o.delete(c), contains: c => b.o.has(c) }; return b; };
-globalThis.document = { querySelectorAll: () => [] };
-const a = box(); advMore({ querySelectorAll: () => [a] }); const first = a.o.has("adv-shown");
-a.btn.onclick();
-const b = box(); advMore({ querySelectorAll: () => [b] }); const again = b.o.has("adv-shown");
-b.btn.onclick();
-const c = box(); advMore({ querySelectorAll: () => [c] });
-console.log(JSON.stringify([first, again, c.o.has("adv-shown"), store["loupe.advOpen"]]));""", parts=[code])
-    assert got == [False, True, False, "[]"]
+const b = { id: "pager", o: new Set(), btn: null, querySelector: s => s === ".adv" ? {} : null, querySelectorAll: s => s === ".adv-more" ? (b.btn ? [b.btn] : []) : [], append: x => { b.btn = x; x.closest = () => b; } };
+b.classList = { add: c => b.o.add(c), remove: c => b.o.delete(c), contains: c => b.o.has(c) };
+advMore({ querySelectorAll: () => [b] }); const shown = b.o.has("adv-shown");
+b.btn.onclick();  // 펼쳐 있으면 접고, 접혀 있으면 펼친다
+console.log(JSON.stringify([shown, store]));"""
+    store, seen = {}, []
+    for _ in range(3):  # 화면을 세 번 연다: 처음(접힘) → 펼친 뒤 다시 열기(펼침) → 접은 뒤 다시 열기(접힘)
+        shown, store = run_node(tmp_path, page, parts=[f"const store = {json.dumps(store)};\n", stubs, code])
+        seen.append(shown)
+    assert seen == [False, True, False] and json.loads(unquote(store["adv_open"])) == ["/search#pager"]  # 마지막에 다시 펼침
 
 
 def test_schema_box_hidden_when_one_user_schema():

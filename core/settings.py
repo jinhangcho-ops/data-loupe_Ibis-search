@@ -117,9 +117,14 @@ ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")  # env 파일의 이름
 JOIN_KEYS_MAX = 3000  # 쿼리 화면이 테이블 쌍마다 기억한 조인 키(JSON을 퍼센트 인코딩한 글자). 쿠키로 화면에 돌아가서 4KB 안에
 
 
+ADV_OPEN_MAX = 2000  # (Phase 19) 쉬운 보기에서 사람이 펼쳐 둔 [더 많은 설정] 묶음 목록(JSON을 퍼센트 인코딩한 글자). 묶음은 화면 전체에 20개 안쪽이라 넉넉하다
+
+
 def valid(name, value):
     if name == "join_keys":
         return type(value) is str and len(value) <= JOIN_KEYS_MAX
+    if name == "adv_open":
+        return type(value) is str and len(value) <= ADV_OPEN_MAX
     if TIME.fullmatch(name):
         return type(value) is int and 1 <= value <= MAX_TIME
     if name in SIZES:
