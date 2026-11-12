@@ -41,6 +41,25 @@ console.log(JSON.stringify([a.cls.has("adv-shown"), b.cls.has("adv-shown")]));""
     assert got == [False, True]
 
 
+@needs_node
+def test_adv_more_remembers_opened_box(tmp_path):
+    """[더 많은 설정]으로 펼친 묶음은 화면을 다시 열어도 펼쳐 있고, [접기]로 접으면 다시 접힌 채로 연다."""
+    code = between("common.js", "function showAdv", "// 컬럼 타입을 쉬운 말로")
+    got = run_node(tmp_path, r"""
+const store = {}; globalThis.localStorage = { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } };
+globalThis.location = { pathname: "/search" };
+const box = () => { const b = { id: "pager", o: new Set(), btn: null, querySelector: s => s === ".adv" ? {} : null, querySelectorAll: s => s === ".adv-more" ? (b.btn ? [b.btn] : []) : [], append: x => { b.btn = x; x.closest = () => b; } };
+  b.classList = { add: c => b.o.add(c), remove: c => b.o.delete(c), contains: c => b.o.has(c) }; return b; };
+globalThis.document = { querySelectorAll: () => [] };
+const a = box(); advMore({ querySelectorAll: () => [a] }); const first = a.o.has("adv-shown");
+a.btn.onclick();
+const b = box(); advMore({ querySelectorAll: () => [b] }); const again = b.o.has("adv-shown");
+b.btn.onclick();
+const c = box(); advMore({ querySelectorAll: () => [c] });
+console.log(JSON.stringify([first, again, c.o.has("adv-shown"), store["loupe.advOpen"]]));""", parts=[code])
+    assert got == [False, True, False, "[]"]
+
+
 def test_schema_box_hidden_when_one_user_schema():
     code = between("common.js", "async function showConnected", "if (hasConnect)")
     assert "information_schema|pg_catalog" in code and '$("schema").classList.add("hidden")' in code and '$("base").options.length > 1' in code
