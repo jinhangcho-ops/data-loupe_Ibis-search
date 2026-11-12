@@ -6,7 +6,7 @@
 // - PrepMenu.replaceBox({ column, type, values, onApply(spec) }): 치환 상자. spec은 서버 prep_ops replace의 새 꼴(how·pairs·ignore_case·trim·rest·to_new).
 // - PrepMenu.valuesBox({ column, values, onApply(keep, values) }): 값 목록에 체크해 제외(keep=false)·만 보기(keep=true). "(빈 값)"은 null.
 // - PrepMenu.value(id, st, kind): 단계 칸의 입력 상태 → 서버로 보낼 값(전처리 화면 OPS도 이것을 쓴다. Phase 6 단계 flags·gfill·power·cut·others·freq·target·ordinal 포함). 쓸 수 없으면 null.
-// values()는 Promise<값[] | {values, more, partial}>(/api/values 그대로 줘도 된다). common.js의 el·api가 먼저 불려 있어야 한다.
+// values(q)는 Promise<값[] | {values, more, partial, find?}>. find가 참이면 찾기 칸이 values(찾을 글자)로 서버에서 찾는다. common.js의 el·api가 먼저 불려 있어야 한다.
 const PrepMenu = (() => {
   let ops = null, loading = null;
   const load = () => loading ??= api("/api/prep/ops").then(d => ops = d.ops).catch(e => { loading = null; throw e; });  // 실패한 약속을 붙들어 두면 다시 받을 수 없다
@@ -146,19 +146,31 @@ const PrepMenu = (() => {
   }
 
   // 값 목록 체크(받은 값 전부, 최대 LIST_MAX개 + 찾기 칸). values()는 값 배열이나 /api/values 꼴 {values, more, partial}. withNull이면 맨 앞에 "(빈 값)"(값 null). picked()는 체크한 값들.
-  const LIST_MAX = 200;  // /api/values가 주는 최대 수(result.get_values)
+  const LIST_MAX = 200;  // /api/values가 주는 최대 수(result.get_values·find_values)
   function valueList(values, withNull) {
     const find = named(el("input", { placeholder: "값 찾기" }), "값 찾기"), box = el("div", { className: "pm-values" }), note = el("p", { className: "hint", textContent: "값을 읽는 중…" });
-    const boxes = [];
+    let boxes = [];
     const add = (v, text) => { const c = el("input", { type: "checkbox" }); c._v = v; boxes.push(c); box.append(el("label", { className: "check" }, c, text)); };
     const label = v => v === "" ? "(빈 글자)" : String(v);  // 빈 글자 값도 보이고 고를 수 있게
-    if (withNull) add(null, "(빈 값)");
-    Promise.resolve(values?.() ?? []).then(d => {
+    // 받은 값으로 목록을 다시 그린다. 체크해 둔 값은 찾기로 목록이 바뀌어도 맨 앞(빈 값 다음)에 체크된 채 남긴다. q는 찾은 글자(처음 목록이면 "").
+    const fill = (d, q) => {
+      const picked = boxes.filter(c => c.checked).map(c => c._v);
       const vs = (Array.isArray(d) ? d : d?.values ?? []).filter(v => v != null), shown = vs.slice(0, LIST_MAX), more = !Array.isArray(d) && d?.more || vs.length > LIST_MAX;
+      const server = !Array.isArray(d) && !!d?.find;
+      box.replaceChildren(); boxes = [];
+      if (withNull) add(null, "(빈 값)");
+      picked.filter(v => v !== null && !shown.includes(v)).forEach(v => add(v, label(v)));
       shown.forEach(v => add(v, label(v)));
-      note.textContent = [!vs.length && "값이 없어요.", more && `앞의 ${shown.length}개만 받았어요(값 차례). 찾는 값이 없으면 조건을 직접 쓰세요.`, !Array.isArray(d) && d?.partial && "일부 행만 보고 모은 목록이에요."].filter(Boolean).join(" ");
+      boxes.forEach(c => { c.checked = picked.includes(c._v); });
+      note.textContent = q
+        ? [!vs.length && "찾는 값이 없어요.", more && `찾은 값 중 앞의 ${shown.length}개예요. 더 자세히 찾아 주세요.`].filter(Boolean).join(" ")
+        : [!vs.length && "값이 없어요.", more && (server ? `앞의 ${shown.length}개만 받았어요(값 차례). 찾기 칸에 쓰면 표 전체에서 찾아요.` : `앞의 ${shown.length}개만 받았어요(값 차례). 찾는 값이 없으면 조건을 직접 쓰세요.`), !Array.isArray(d) && d?.partial && "일부 행만 보고 모은 목록이에요."].filter(Boolean).join(" ");
+    };
+    Promise.resolve(values?.() ?? []).then(first => {
+      fill(first, "");
+      if (!Array.isArray(first) && first?.find) findAsTyped(find, q => q ? values(q) : first, (d, e) => { if (e) note.textContent = e.message; else fill(d, find.value.trim()); });
+      else find.oninput = () => { const q = find.value.trim().toLowerCase(); boxes.forEach(c => c.parentNode.classList.toggle("hidden", !!q && !c.parentNode.textContent.toLowerCase().includes(q))); };  // 보이는 이름으로 찾는다("(빈 글자)"·"(빈 값)" 포함)
     }).catch(e => { note.textContent = e.message; });
-    find.oninput = () => { const q = find.value.trim().toLowerCase(); boxes.forEach(c => c.parentNode.classList.toggle("hidden", !!q && !c.parentNode.textContent.toLowerCase().includes(q))); };  // 보이는 이름으로 찾는다("(빈 글자)"·"(빈 값)" 포함)
     return { el: el("div", { className: "pm-list" }, find, note, box), picked: () => boxes.filter(c => c.checked).map(c => c._v) };
   }
 

@@ -24,6 +24,7 @@ type Values = {
 type Shaped = { x_kind?: string; values?: Values; by_unit?: Record<string, { labels: string[]; series: Series[] }>; bins?: { edges: number[]; counts: number[] } };
 
 export const MERGE_DATE ="날짜 가로축 차트는 범위를 하나로 묶을 수 없어요. 묶기를 끄세요.";  // merge를 숫자 가로축이 아닌 차트에 쓸 때(Guard가 이 글로 보인다)
+export const MERGE_AGAIN = "범위 묶기 값은 서버에서 다시 구해요. 잠시 기다리거나 [다시 구하기]를 누르세요.";  // (Phase 17) 묶기를 켰는데 서버가 묶은 값(values.merged)이 아닐 때
 
 // [SPECIFICATION] plans/phase-4.md#inRanges
 export function inRanges(value: string | number, ranges: [RangeEnd, RangeEnd][]): boolean {
@@ -48,20 +49,6 @@ export function shownName(name: string, g: GroupView | undefined): string {
 // [SPECIFICATION] plans/phase-4.md#visible
 export function visible(name: string, keep: string[] | undefined, ranges: [RangeEnd, RangeEnd][] | undefined, ordered: boolean): boolean {
   return (!keep?.length || keep.includes(name)) && (!ordered || !ranges?.length || inRanges(name, ranges));
-}
-// [SPECIFICATION] plans/phase-4.md#mergeRanges
-export function mergeRanges(labels: string[], series: { name: string; values: (number | string | null)[] }[], ranges: [RangeEnd, RangeEnd][]): { labels: string[]; series: { name: string; values: (number | null)[] }[] } {
-  const members = ranges.map((r) => labels.map((l, i) => (inRanges(l, [r]) ? i : -1)).filter((i) => i >= 0));
-  return {
-    labels: ranges.map(rangeName),
-    series: series.map((s) => ({
-      name: s.name,
-      values: members.map((idx) => {
-        const nums = idx.map((i) => s.values[i]).filter((v): v is number => typeof v === "number");
-        return nums.length ? nums.reduce((a, b) => a + b, 0) : null;
-      }),
-    })),
-  };
 }
 // [SPECIFICATION] plans/phase-4.md#dragPick
 export function dragPick(names: string[], from: number, to: number): string[] {
@@ -138,9 +125,7 @@ export function applyGroups(card: Card, data: CardData): CardData {
         if (v.merged) {
           values = { ...v, labels: v.labels.map(n), series: series.map((s) => ({ ...s, name: n(s.name) })) };
         } else if (g.merge) {
-          if (d.x_kind !== "num") throw new Error(MERGE_DATE);
-          const m = mergeRanges(v.labels, series.map((s) => ({ name: s.name, values: s.values ?? [] })), ranges);
-          values = { ...v, labels: m.labels.map(n), series: m.series.map((s) => ({ ...s, name: n(s.name) })) };
+          throw new Error(d.x_kind !== "num" ? MERGE_DATE : MERGE_AGAIN);  // (Phase 17) 받은 X 값(최대 MAX_GROUPS개)을 화면이 더하지 않는다
         } else {
           const ord = card.kind === "chart" && (d.x_kind === "num" || d.x_kind === "date");
           const labels = v.labels;

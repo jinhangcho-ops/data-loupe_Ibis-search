@@ -323,8 +323,8 @@ def check_geo(geo):
 
 
 GROUP_KINDS = ("chart", "metric", "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud", "funnel", "geomap")  # (Phase 4) 표시할 그룹 고르기(view.groups)를 쓰는 카드. 값 하나짜리·표·상태·분석 카드는 그룹이 없다
-MERGE_AGGS = ("sum", "count", "count_distinct", "nunique")  # (Phase 4) 범위를 한 그룹으로 묶을 수 있는 계열 집계(nunique는 count_distinct의 예전 이름)
-SERVER_MERGE = ("count_distinct", "nunique")  # (Phase 4) 더할 수 없어 서버가 묶은 범위로 다시 집계하는 집계(합계·개수는 화면이 더한다)
+MERGE_NOTE = "범위로 묶으면 막대 값은 범위 안에서 계열 컬럼의 고유 개수예요(컬럼이 없는 계열은 행 개수). 고른 집계는 쓰지 않아요."  # (Phase 17) 쿼리 차트·카드 [범위 묶기] 아래 안내(server.CONSTANTS dash.merge_note)
+MERGE_SPLIT = "범위를 하나로 묶을 때는 나누기(split)를 쓸 수 없어요."  # (Phase 17) 묶기 + 나누기 거부(check_card·range_data)
 GEO_MERGE = ("count", "sum")  # (Phase 4) 지도 카드에서 영역을 묶을 수 있는 영역 값 집계(view.geo.agg)
 MAX_SETS = 100  # (Phase 4) 지도 영역 묶음(sets) 수
 RANGE_KINDS = {"chart": ("number", "date"), "histogram": ("number",), "calheat": ("date",), "candle": ("date",), "bump": ("date",), "cohort": ("date",)}  # (Phase 4) 범위(ranges)를 쓸 수 있는 카드와 범위 값의 종류
@@ -751,11 +751,8 @@ def check_card(card):
         if groups.get("merge"):
             if kind != "chart":
                 raise ValueError("범위를 하나로 묶기(merge)는 차트 카드에서만 돼요.")
-            series = body.get("series") or []
-            if not all(isinstance(s, dict) and s.get("agg") in MERGE_AGGS for s in series):
-                raise ValueError("범위를 하나로 묶기(merge)는 합계·개수·고유 개수 계열만 돼요. 평균·중앙값은 묶으면 값이 달라져요.")
-            if body.get("split") and any(s.get("agg") in SERVER_MERGE for s in series):
-                raise ValueError("고유 개수를 범위로 묶을 때는 나누기(split)를 쓸 수 없어요.")
+            if body.get("split"):  # (Phase 17) 어떤 집계든 서버가 범위마다 고유 개수로 다시 구한다(평균·중앙값도 묶을 수 있다)
+                raise ValueError(MERGE_SPLIT)
         if groups.get("sets"):
             if kind != "geomap":
                 raise ValueError("영역 묶음(sets)은 지도 카드에서만 써요.")

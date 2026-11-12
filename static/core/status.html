@@ -65,6 +65,7 @@
       <div class="opt" title="연결이 중앙값·사분위수를 직접 구하지 못할 때(SQLite 등) 그 컬럼을 이 PC로 받아 전체로 구하는 최대 행 수예요. 넘으면 구하지 않고 알려요. 비우면 기본값이에요."><span>PC에서 구할 통계의 최대 행 수</span><input id="pc-stat-rows" type="number" step="1" style="width:110px; flex:none"></div>
       <div class="opt" title="워드클라우드 카드가 글 속 단어를 셀 때 이 PC로 받는 최대 행 수예요. 넘으면 세지 않고 알려요. 비우면 기본값이에요."><span>워드클라우드 단어 분석 최대 행 수</span><input id="cloud-rows" type="number" step="1" style="width:110px; flex:none"></div>
       <label class="check"><input type="checkbox" id="hash-exclude"> ID·해시 컬럼을 묶기·집계 목록에서 빼기</label>
+      <label class="check" title="켜면 like·not like 조건과 값 목록 찾기에서 글자·숫자·공백이 아닌 글자(- . _ % 등)를 컬럼과 찾는 글자 양쪽에서 지우고 비교해요(ab로 a-b를 찾아요). 컬럼에 정규식 바꾸기를 씌워 인덱스를 못 타므로 큰 표에서 느릴 수 있고, 정규식 바꾸기를 못 하는 연결에서는 쓸 수 없어요."><input type="checkbox" id="ignore-marks"> 문자 검색에서 특수문자 무시</label>
         </section>
         <section class="set-page hidden" data-set="sample" role="tabpanel" aria-label="표본">
       <div class="opt" title="표본 크기를 정할 때 쓰는 신뢰수준이에요(예: 95, 99). 50에서 99.99 사이로 넣어요. 비우면 기본값이에요."><span>신뢰수준 %</span><input id="sample-conf" type="number" step="0.01" style="width:110px; flex:none"></div>

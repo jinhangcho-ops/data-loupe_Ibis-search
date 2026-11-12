@@ -319,8 +319,8 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
               <div id="conditions"></div>
               <div id="builder">
                 <div class="row"><select id="bcol" title="컬럼"></select><select id="bop" title="비교 방법"></select></div>
-                <div class="row"><select id="bmode" title="오른쪽에 값을 쓸지, 다른 컬럼과 견줄지 골라요" style="flex:0 0 80px"><option value="value">값</option><option value="column">컬럼</option></select><select id="bcol2" class="hidden" title="견줄 컬럼"></select><input id="bval" placeholder="값"><input id="bval2" placeholder="값2" class="hidden"><button id="blist" class="btn hidden" title="이 컬럼에 있는 값을 불러와 골라요 (최대 200개)">값 목록</button></div>
-                <select id="bpick" class="hidden" title="고르면 값 칸에 들어가요"></select><div class="hint" id="bpick-note">일부 행 기준이에요</div>
+                <div class="row"><select id="bmode" title="오른쪽에 값을 쓸지, 다른 컬럼과 견줄지 골라요" style="flex:0 0 80px"><option value="value">값</option><option value="column">컬럼</option></select><select id="bcol2" class="hidden" title="견줄 컬럼"></select><input id="bval" placeholder="값"><input id="bval2" placeholder="값2" class="hidden"><button id="blist" class="btn hidden" title="이 컬럼에 있는 값을 불러와 골라요 (처음 200개, 찾기 칸에 쓰면 표 전체에서 찾아요)">값 목록</button></div>
+                <input id="bfind" class="hidden" placeholder="값 찾기 (표 전체)" title="쓰고 잠시 멈추거나 Enter를 누르면 표 전체에서 이 글자가 든 값을 찾아요"><select id="bpick" class="hidden" title="고르면 값 칸에 들어가요"></select><div class="hint" id="bpick-note">일부 행 기준이에요</div>
                 <div class="row"><button id="badd" class="btn">조건 추가</button></div>
                 <div class="err" id="err-builder"></div>
               </div>
@@ -939,10 +939,11 @@ function showBuilder() {  // 고른 컬럼의 타입에 맞는 연산자만 보�
   $("bcol2").classList.toggle("hidden", !byColumn());
   $("bval").classList.toggle("hidden", byColumn() || op.endsWith("null"));
   $("bval2").classList.toggle("hidden", byColumn() || op !== "between");
-  $("blist").classList.toggle("hidden", byColumn() || op.endsWith("null") || !isText());
+  $("blist").classList.toggle("hidden", byColumn() || op.endsWith("null"));
   $("bval").placeholder = isMulti() ? "값1, 값2" : op === "between" ? "값1" : "값";
 }
-$("bmode").onchange = () => { $("bpick").classList.add("hidden"); showBuilder(); };
+const hidePick = () => { $("bpick").classList.add("hidden"); $("bfind").classList.add("hidden"); $("bfind").value = ""; };
+$("bmode").onchange = () => { hidePick(); showBuilder(); };
 function builderPart() {  // 지금 칸의 내용으로 만든 조건 하나. 값이 비었으면 ""
   const col = $("bcol").value, op = $("bop").value, v = $("bval").value.trim(), v2 = $("bval2").value.trim();
   if (!col) return "";
@@ -951,7 +952,7 @@ function builderPart() {  // 지금 칸의 내용으로 만든 조건 하나. �
   if (!v || (op === "between" && !v2)) return "";
   return op === "between" ? `${col} between ${v} ${v2}` : `${col} ${op} ${isMulti() ? v : wrap(v)}`;
 }
-$("bcol").onchange = () => { $("bpick").classList.add("hidden"); $("bval").value = $("bval2").value = ""; showBuilder(); };  // 컬럼을 바꾸면 이전 컬럼의 값과 목록은 비운다.
+$("bcol").onchange = () => { hidePick(); $("bval").value = $("bval2").value = ""; showBuilder(); };  // 컬럼을 바꾸면 이전 컬럼의 값과 목록은 비운다.
 $("bop").onchange = showBuilder;
 const addBuilt = () => busy($("badd"), async () => {
   const part = builderPart();
@@ -960,17 +961,20 @@ const addBuilt = () => busy($("badd"), async () => {
 });
 $("badd").onclick = addBuilt;
 $("bval").onkeydown = $("bval2").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) addBuilt(); };
-// 값 목록: [목록]을 누를 때만 조회한다. 고르면 값 칸에 넣고, in·except에서는 쉼표로 이어 붙인다.
+// 값 목록: [목록]을 누를 때만 조회한다(처음 200개). 찾기 칸에 쓰면 표 전체에서 찾는다(findAsTyped: 300ms 쉬거나 Enter). 고르면 값 칸에 넣고, in·except에서는 쉼표로 이어 붙인다.
+function pickValues(d, q) {
+  const n = d.values.length;
+  const label = q ? (d.more ? `찾은 값 (앞의 ${n}개)` : `찾은 값 (${n}개)`) : d.more ? `값 고르기 (앞의 ${n}개만)` : `값 고르기 (${n}개)`;
+  $("bpick").replaceChildren(new Option(label, ""), ...d.values.map(v => new Option(v, v)));
+  $("bpick").classList.remove("hidden");
+  $("bfind").classList.remove("hidden");
+  $("bpick-note").classList.toggle("on", !!d.partial);  // 서버가 일부 행만 보고 모은 목록(찾기 결과는 늘 false)
+  $("err-builder").textContent = "";
+}
 $("blist").onclick = () => busy($("blist"), async () => {
-  try {
-    const d = await api("/api/values", valuesBody($("bcol").value));
-    const label = d.more ? `값 고르기 (앞의 ${d.values.length}개만)` : `값 고르기 (${d.values.length}개)`;
-    $("bpick").replaceChildren(new Option(label, ""), ...d.values.map(v => new Option(v, v)));
-    $("bpick").classList.remove("hidden");
-    $("bpick-note").classList.toggle("on", !!d.partial);  // 서버가 일부 행만 보고 모은 목록
-    $("err-builder").textContent = "";
-  } catch (e) { $("err-builder").textContent = e.message; }
+  try { $("bfind").value = ""; pickValues(await colValues($("bcol").value), ""); } catch (e) { $("err-builder").textContent = e.message; }
 });
+findAsTyped($("bfind"), q => colValues($("bcol").value, q), (d, e) => { if (e) $("err-builder").textContent = e.message; else pickValues(d, $("bfind").value.trim()); });
 $("bpick").onchange = () => {
   const v = $("bpick").value, now = $("bval").value.trim();
   if (!v) return;
@@ -1163,7 +1167,7 @@ function rewrites(line, c) {
 const plainCol = c => c in S.origins && !S.calcs.some(l => rewrites(String(l.line ?? l), c));
 const rowCol = c => plainCol(c) && !S.calcs.some(l => GROWS.test(String(l.line ?? l)));  // 행 고르기 막대 전용: 펼치기·세로로가 있으면 모두 잠근다(RB2)
 const valuesBody = column => ({ schema: S.schema, base: S.base, ...(S.union.tables.length ? { union: S.union } : {}), joins: S.joins, column });
-const colValues = column => api("/api/values", valuesBody(column));  // {values, more, partial} 그대로(값 상자가 more·partial 안내를 보인다)
+const colValues = (column, q = "") => api("/api/values", { ...valuesBody(column), ...(q ? { q } : {}) }).then(d => ({ ...d, find: true }));  // {values, more, partial} + find(값 상자가 찾기 칸을 서버로 보낸다). q가 있으면 표 전체에서 찾는다
 // 줄 여러 개를 차례로 더한다. 서버가 하나라도 거부하면 거기서 멈추고 이유를 보인다.
 async function addLines(key, lines) {
   for (const line of lines) if (!await addItem(key, line, $("err-search"), undefined, true)) return false;  // 프로그램이 만든 줄(R2)
@@ -1178,7 +1182,7 @@ async function withNewColumns(add) {
   return ok;
 }
 function headItems(g, col) {
-  const type = S.cols.find(c => c[0] === col)?.[1] ?? "", values = () => colValues(col);
+  const type = S.cols.find(c => c[0] === col)?.[1] ?? "", values = q => colValues(col, q);
   return [["이 컬럼 빼기", () => dropColumn(col)],
     ...(plainCol(col) ? [["값 골라서 제외·만 보기…", () => PrepMenu.valuesBox({ column: col, values, onApply: (keep, picked) => addLines("conditions", RowPick.valueLines(col, keep, picked)) })]] : []),
     ["이 값으로 다른 테이블 찾기…", () => openLookup(col)],
@@ -1698,13 +1702,13 @@ function drawChart() {
       ...(Object.keys(chartGroups).length ? { groups: chartGroups } : {}), ...(chartMerged ? { merged: true } : {}) } });
 }
 // [그룹 고르기] 판: 고른 것만 chartGroups(web/lib/groups.ts GroupView 모양, 저장하지 않음)에 모으고 계산은 섬의 applyGroups가 한다. 이름 바꾸기는 [라벨 바꾸기]가 맡는다.
-// chartMerged: 묶기 + 고유 개수 등(SERVER.dash.server_merge) 계열일 때 서버가 범위로 다시 집계한 그릴 값(want = 그 조회·범위).
+// chartMerged: 묶기를 켜면(집계와 상관없이) 서버가 전체 데이터에서 범위마다 다시 구한 그릴 값(계열 y의 고유 개수, want = 그 조회·범위).
 let chartGroups = {}, chartMerged = null, mergeSeq = 0, dragging = null;  // dragging: 끌어 고르는 중 { value: 지나는 칸에 넣을 상태, done: 놓을 때 할 일 }
 const chartKey = q => JSON.stringify({ ...q, order: undefined });  // 이것이 바뀌면(새 검색·X·계열·나누기) 이름이 달라져 고른 것을 비운다. 정렬만 바뀌면 남긴다
 document.addEventListener("pointerup", () => { const d = dragging; dragging = null; d?.done(); });
 async function groupsChanged() {
   const seq = ++mergeSeq;  // 늦게 온 앞 조회는 버린다
-  const want = drawn && chartGroups.merge && drawn.used.some(s => SERVER.dash.server_merge.includes(s.agg)) ? JSON.stringify([drawn.query, chartGroups.ranges]) : null;
+  const want = drawn && chartGroups.merge ? JSON.stringify([drawn.query, chartGroups.ranges]) : null;
   if (want !== (chartMerged?.want ?? null)) {
     chartMerged = null;
     if (want) {
@@ -1766,7 +1770,7 @@ function groupPanel() {
       merge.style.width = "auto";
       row.style.margin = "0";
       row.append(merge, " 범위를 한 막대로 묶기");
-      parts.push(el("div", { className: "ctl" }, row));
+      parts.push(el("div", { className: "ctl" }, row), el("div", { className: "hint", textContent: SERVER.dash.merge_note }));
     }
   }
   $("cgroups").replaceChildren(...parts);

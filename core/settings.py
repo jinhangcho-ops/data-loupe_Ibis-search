@@ -78,6 +78,7 @@ CHOICES = {
     "ratio": ["auto", "square", "wide"],  # 차트 비율: 데이터 양에 따라 / 1:1 / 16:9
     "image": ["light", "dark"],  # 차트와 집계 표를 그림으로 저장할 때의 모드
     "hash_exclude": ["on", "off"],  # 해시·UUID 컬럼을 그룹·집계 컬럼 목록에서 뺄지: 뺀다 / 빼지 않는다(prep_diag.hashed_columns)
+    "ignore_marks": ["on", "off"],  # (Phase 17) 문자 포함 검색(like·not like)과 값 목록 찾기에서 글자·숫자·공백이 아닌 글자를 지우고 비교할지(parse.like_one, 기본 off)
     "pilot_first": ["preview", "block"],  # 파일럿의 첫 방법: BigQuery 무과금 미리보기 먼저 / 블록 표본 먼저(본 표본은 늘 미리보기 먼저)
     "stats_scope": ["sample", "all"],  # 전처리 컬럼 통계를 표본으로 구할지 전체로 구할지(F18)
     "quotes": ["on", "off"],  # 조건을 넣을 때 따옴표 해석: 값을 감싸는 기호로 / 글자 그대로
@@ -103,7 +104,7 @@ SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "char
 # 표본: 신뢰수준 %(sampling.config가 Z로)·비율 허용 오차·평균 상대 허용 오차
 FLOATS = {"sample_too_few": (0.05, 0.9), "sample_conf": (50, 99.99), "sample_e_ratio": (0.001, 0.2), "sample_e_mean": (0.005, 0.5)}
 DEFAULTS = {"sample_too_few": 0.2, "pc_stat_rows": 1_000_000, "sample_conf": 95, "sample_e_ratio": 0.01, "sample_e_mean": 0.05, "pilot_rows": 5_000, "strata_h": 5, "strata_min": 30,
-            "hash_buckets": 10_000, "key_over": 3, "pilot_first": "preview", "cloud_rows": 100_000, "hash_exclude": "on"}
+            "hash_buckets": 10_000, "key_over": 3, "pilot_first": "preview", "cloud_rows": 100_000, "hash_exclude": "on", "ignore_marks": "off"}
 
 # 직전 실행의 행당 시간(나노초/행). 작업 종류(검색·집계·차트·저장·전처리의 모양 보기·미리보기·실행)와 기준 테이블 행 수의 구간(10배 단위)마다 하나.
 # 이름은 time_종류_구간이고 구간은 행 수의 자릿수 - 1을 TIME_BANDS 안으로 맞춘 것(1,000행 미만은 모두 2)이다. 화면이 예상 시간을 구할 때 같은 구간의 값만 쓴다.

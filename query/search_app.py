@@ -86,8 +86,15 @@ def confirms(view):
 @app.post("/api/values")
 @confirms
 def values():
-    """조건을 만들 때 고를 수 있게 컬럼의 값 목록을 돌려준다. 화면에서 [목록]을 누를 때만 부른다."""
-    expr, column = querying.runnable(request.json, select=False, ask=request.json), request.json.get("column", "")
+    """조건을 만들 때 고를 수 있게 컬럼의 값 목록을 돌려준다. 화면에서 [목록]을 누를 때만 부른다. q를 주면 표 전체에서 그 글자가 든 값(result.find_values)."""
+    body = request.json
+    expr, column = querying.runnable(body, select=False, ask=body), body.get("column", "")
+    q = body.get("q") or ""
+    if not isinstance(q, str):
+        raise ValueError("찾을 글자(q)는 글자여야 해요.")
+    if q.strip():  # (Phase 17) 찾을 글자가 있으면 앞 VALUE_SCAN행이 아니라 표 전체에서
+        found, more = run(lambda: result.find_values(expr, column, q.strip()))
+        return jsonify(values=found, more=more, partial=False)
     found, more, partial = run(lambda: (*result.get_values(expr, column), result.values_partial(expr)))
     return jsonify(values=found, more=more, partial=partial)  # partial: 앞 VALUE_SCAN행 안에서만 찾았다
 
@@ -641,7 +648,7 @@ def save_virtual():
 def chart():
     """x별 집계. series는 [{"y", "agg"}]이고, split을 주면 그 컬럼의 값마다 계열을 나눈다."""
     body = request.json
-    if body.get("merge_ranges") and any(s.get("agg") in dash_store.SERVER_MERGE for s in body.get("series") or []):  # 고유 개수는 더할 수 없어 묶은 범위로 다시 집계
+    if body.get("merge_ranges"):  # (Phase 17) 범위로 묶으면 집계와 상관없이 서버가 전체 데이터에서 범위마다 고유 개수로 다시 구한다(화면이 받은 MAX_GROUPS개만 더하면 틀린다)
         dash_store.check_groups({"ranges": body["merge_ranges"], "merge": True})
         return jsonify(**dash_calc.range_data({"kind": "chart", "source": {"body": body}, "view": {"groups": {"ranges": body["merge_ranges"], "merge": True}}})["values"])
     expr = querying.runnable(body, select=False, ask=body)

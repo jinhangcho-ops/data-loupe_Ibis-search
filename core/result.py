@@ -8,7 +8,7 @@ from pathlib import Path
 from lazy import ibis
 
 from core import crosstab, prep_ops, source, sql_funcs, viz_rules
-from core.parse import check_name, column as field_of, native_key, struct_fields, type_info
+from core.parse import check_name, column as field_of, like_one, native_key, struct_fields, type_info, type_name
 
 PAGING = contextvars.ContextVar("paging", default=False)  # get_rows가 쪽을 받는 중: 파일 연결(Polars)의 묶기·중복 빼기도 차례를 고정한다(source.fix_polars_text)
 SUMMARY_COLS = ["name", "type", "count", "nulls", "unique", "min", "max", "mean"]
@@ -417,6 +417,24 @@ def values_partial(expr):
     if ibis.get_backend(expr).name == "bigquery":
         return None
     return get_count(expr.limit(VALUE_SCAN + 1)) > VALUE_SCAN
+
+
+def find_values(expr: "ibis.expr.types.Table", column: str, q: str) -> tuple[list[str], bool]:
+    """[SPECIFICATION] plans/phase-17.md#find_values
+    표 전체에서 글자로 바꾼 값에 q가 든 서로 다른 값을 정렬해 MAX_VALUES개까지 문자로, 더 있는지와 함께 돌려준다."""
+    col = field_of(expr, column)
+    if col.type().is_nested():
+        raise ValueError(f"'{column}'은 {type_name(col.type())} 컬럼이라 값을 찾을 수 없어요.")
+    text = col if col.type().is_string() else col.cast("string")
+    if col.type().is_numeric():
+        q = q.replace(",", "")  # 글자로 바꾼 숫자에는 쉼표가 없으니 화면의 천 단위 쉼표는 뺀다
+    if not q:
+        raise ValueError("찾을 글자를 넣어 주세요.")
+    found = like_one(expr, text, "like", q)
+    values = expr.filter(col.notnull(), found).select(col.name("v")).distinct()  # VALUE_SCAN 없이 표 전체
+    values = values.order_by(native_key(values, values.v, False)).limit(MAX_VALUES + 1)
+    values = [str(v) for v in values.to_polars(**streaming(expr))["v"].to_list()]
+    return values[:MAX_VALUES], len(values) > MAX_VALUES
 
 
 def chart_aggs():

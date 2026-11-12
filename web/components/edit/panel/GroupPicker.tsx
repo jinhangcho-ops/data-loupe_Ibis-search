@@ -34,9 +34,6 @@ export function GroupPicker({ card, data, onChange, recompute }: GroupPickerProp
   const { names, series, ordered } = groupNames(card, data);
   if (names.length === 0 && series.length === 0 && ordered === null) return null;
 
-  const serverAggs = consts?.dash.server_merge;
-  const bodySeries = (card.source.body as unknown as { series?: { agg?: string }[] } | undefined)?.series ?? [];
-  const serverMerge = !!serverAggs && bodySeries.some((s) => serverAggs.includes(s.agg ?? ""));
   const ranges = g.ranges ?? [];
 
   // 빈 배열·빈 객체·merge false를 지우고, 남은 것이 없으면 view에서 groups 키를 지운다
@@ -64,7 +61,7 @@ export function GroupPicker({ card, data, onChange, recompute }: GroupPickerProp
   };
   const toggle = (list: ListKind, picked: string[]) =>
     update(list === "names" ? { ...g, keep: flip(g.keep, picked) } : { ...g, series: flip(g.series, picked) }, false);
-  const setRanges = (next: NonNullable<GroupView["ranges"]>) => update({ ...g, ranges: next }, !!g.merge && serverMerge);
+  const setRanges = (next: NonNullable<GroupView["ranges"]>) => update({ ...g, ranges: next }, !!g.merge);
   const end = (v: string): RangeEnd => (v === "" ? null : ordered === "number" ? +v : v);
   const editRange = (k: number, side: number, v: RangeEnd) =>
     setRanges(ranges.map((x, m): [RangeEnd, RangeEnd] => (m !== k ? [x[0], x[1]] : side ? [x[0], v] : [v, x[1]])));
@@ -170,8 +167,8 @@ export function GroupPicker({ card, data, onChange, recompute }: GroupPickerProp
           )}
           {consts && card.kind === "chart" && data.x_kind === "num" && (
             <div>
-              <Check label="범위를 한 그룹으로 묶기" checked={!!g.merge} onChange={() => update({ ...g, merge: !g.merge }, serverMerge)} />
-              {serverMerge && <div className="hint">서버에서 다시 구해요</div>}
+              <Check label="범위를 한 그룹으로 묶기" checked={!!g.merge} onChange={() => update({ ...g, merge: !g.merge }, true)} />
+              <div className="hint">{consts.dash.merge_note}</div>
             </div>
           )}
           {card.kind === "geomap" && (

@@ -1078,8 +1078,7 @@ def wordcloud_data(expr, x, cloud=None, body=None):
 def merges_on_server(card: dict) -> bool:
     """[SPECIFICATION] plans/phase-4.md#merges_on_server
     차트 카드의 범위 묶기(view.groups.merge)를 서버가 다시 집계해야 하는지(계열에 고유 개수가 있을 때)."""
-    return card["kind"] == "chart" and bool(((card.get("view") or {}).get("groups") or {}).get("merge")) and any(
-        isinstance(s, dict) and s.get("agg") in dash_store.SERVER_MERGE for s in (card["source"].get("body") or {}).get("series") or [])
+    return card["kind"] == "chart" and bool(((card.get("view") or {}).get("groups") or {}).get("merge"))
 
 
 def range_label(lo: object, hi: object) -> str:
@@ -1092,6 +1091,8 @@ def range_data(card: dict) -> dict:
     """[SPECIFICATION] plans/phase-4.md#range_data
     숫자 X 차트 카드를 묶은 범위마다 한 그룹으로 서버에서 다시 집계한 값 {values: {labels, series, merged: true}, x_kind, num_cols, date_cols}."""
     body, ranges = card["source"]["body"], card["view"]["groups"]["ranges"]
+    if body.get("split"):
+        raise ValueError(dash_store.MERGE_SPLIT)
     series = clean_series(body.get("series"))
     expr = querying.runnable(body, select=False, keep=body_columns(body))
     x = body.get("x")
@@ -1104,7 +1105,7 @@ def range_data(card: dict) -> dict:
     g = ibis.cases(*zip(conds, names), else_=ibis.null("string"))  # 겹침은 check_groups가 막는다(첫 범위에 들어감)
     mutated = expr.mutate(__g=g)
     t = mutated.filter(mutated["__g"].notnull())
-    aggs = {f"s{i}": result.chart_metric(t, s["y"], s["agg"], s.get("opts")) for i, s in enumerate(series)}
+    aggs = {f"s{i}": result.chart_metric(t, s["y"], "count_distinct" if s["y"] else "count", None) for i, s in enumerate(series)}  # (Phase 17) 범위로 묶으면 고른 집계 대신 y의 고유 개수(빈 값 제외). y가 없는 계열(개수)은 범위 안 행 개수
     found = {r["__g"]: r for r in run(lambda: t.group_by("__g").aggregate(**aggs).to_pyarrow().to_pylist())}  # 범위 수(≤ MAX_RANGES)만큼
     values = {"labels": names, "series": [{"name": series_name(s), "values": [result.number(found.get(n, {}).get(f"s{i}")) for n in names]} for i, s in enumerate(series)], "merged": True}
     return {"values": values, "x_kind": "num", "num_cols": [col for col in expr.columns if is_number(expr, col)][:MAX_NUM_COLS], "date_cols": date_columns(querying.build(body, select=False))}

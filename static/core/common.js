@@ -787,6 +787,9 @@ for (const [id, name, scale] of SAMPLE_FIELDS) {
 // ID·해시 컬럼을 묶기·집계 목록에서 뺄지(hash_exclude, 기본 on)
 $("hash-exclude").checked = (saved("hash_exclude") || SERVER.defaults.hash_exclude) === "on";
 $("hash-exclude").onchange = () => saveSetting({ hash_exclude: $("hash-exclude").checked ? "on" : "off" });
+// 문자 검색에서 특수문자 무시(ignore_marks, 기본 off). 서버(parse.like_one)가 설정을 읽는다
+$("ignore-marks").checked = (saved("ignore_marks") || SERVER.defaults.ignore_marks) === "on";
+$("ignore-marks").onchange = () => saveSetting({ ignore_marks: $("ignore-marks").checked ? "on" : "off" });
 for (const [id, name] of [["pilot-first", "pilot_first"]]) {
   $(id).value = saved(name) || SERVER.defaults[name];
   $(id).onchange = () => saveSetting({ [name]: $(id).value });
@@ -1222,6 +1225,21 @@ function flash(text, ms = 1500) {  // 실패 안내는 읽을 시간이 더 필�
   toastBox.classList.remove("hidden");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastBox.classList.add("hidden"), ms);
+}
+
+// (Phase 17) 찾기 칸: 입력이 이어지는 동안은 보내지 않고 마지막 입력 뒤 TYPE_WAIT ms 또는 Enter에서 찾는다. 늦게 온 앞 응답은 버린다.
+const TYPE_WAIT = 300;
+function findAsTyped(input, find, show) {
+  // [SPECIFICATION] plans/phase-17.md#findAsTyped
+  let timer = 0, seq = 0;
+  const go = () => {
+    clearTimeout(timer);
+    const mine = ++seq;
+    new Promise(r => r(find(input.value.trim())))  // find를 바로(같은 차례에) 부르고, 던진 오류도 받는다
+      .then(d => { if (mine === seq) show(d, null); }, e => { if (mine === seq) show(null, e); });  // 늦게 온 앞 응답은 버린다
+  };
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(go, TYPE_WAIT); });  // 입력이 이어지면 다시 기다린다
+  input.addEventListener("keydown", e => { if (e.key !== "Enter" || e.isComposing) return; e.preventDefault(); go(); });  // 한글 조합 중 Enter는 무시
 }
 
 // 우클릭 메뉴(쿼리 표의 칸·머리글, 전처리 컬럼 줄): ctxMenu(e, items, fallbackRect). items는 [[라벨, 실행|null, 안내], …](실행이 없으면 흐리게, 안내는 말풍선).

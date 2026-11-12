@@ -8,6 +8,7 @@ import operator
 import re
 
 from lazy import ibis
+from core import settings
 
 JOINS = ["inner", "left", "right", "outer", "semi", "anti", "asof"]  # semi: 짝이 있는 행만, anti: 짝이 없는 행만(둘은 오른쪽 컬럼을 붙이지 않음), asof: 시각이 같거나 앞선 가장 가까운 행
 UNIONS = ["left", "inner", "intersect", "except"]  # 이어붙이기: left는 기준 테이블의 컬럼을 모두(없는 컬럼은 빈 값), inner는 모든 테이블에 있는 컬럼만, intersect는 모든 테이블에 있는 행만, except는 기준 테이블에만 있는 행
@@ -103,18 +104,22 @@ def kind(dtype):
     return next((k for check, k, *_ in TYPES if check(dtype)), "time" if dtype.is_time() else "other")
 
 
+GROUPED = re.compile(r"[+-]?\d{1,3}(?:,\d{3})+(?:\.\d*)?")  # (Phase 17) 천 단위 쉼표를 쓴 숫자(1,138,757 · -1,234.5). 이 모양일 때만 쉼표를 빼고 읽는다
+
+
 def convert(dtype, text):
     name, cast = type_info(dtype)
+    plain = text.replace(",", "") if kind(dtype) in ("int", "float") and GROUPED.fullmatch(text.strip()) else text  # (Phase 17) 표시용 천 단위 쉼표(1,138,757)는 빼고 읽는다
     try:
         if dtype.is_decimal():  # 실수로 바꾸면 큰 소수(decimal(38,0))가 반올림돼 이웃 값과 같아진다. 타입 없는 Decimal은 DECIMAL(18,3)이 되어 넘치므로 자릿수를 정한다
-            value = decimal.Decimal(text.strip())
+            value = decimal.Decimal(plain.strip())
             if not value.is_finite():
-                raise ValueError(text)
+                raise ValueError(plain)
             scale, width = max(dtype.scale or 0, -value.as_tuple().exponent), max(38, dtype.precision or 0)  # 1E+3은 지수가 양수라 scale 0
             if value.adjusted() + 1 > width - scale:  # 자릿수를 넘는 값(1e40)은 DB가 영어 오류를 낸다
-                raise ValueError(text)
+                raise ValueError(plain)
             return ibis.literal(format(value, "f")).cast(f"decimal({width}, {scale})")  # 글자를 바꾼다: Ibis는 SQL Server에 1000을 '1E+3'으로 써서 못 읽는다. BIGNUMERIC(76,38)은 38자리보다 넓다
-        value = cast(text)
+        value = cast(plain)
         if dtype.is_integer() and not -2**63 <= value < 2**63:  # int64 밖(UBIGINT 최댓값 등): 타입 없는 정수는 Ibis가 비교를 FALSE로 접는다
             return ibis.literal(value, type=dtype)  # 컬럼 타입 범위도 넘으면 Ibis가 ValueError(TypeError)를 낸다
         return value
@@ -476,6 +481,8 @@ WILD = re.compile(r"[%_\\[]")  # LIKE에서 특별한 뜻이 있는 글자(MSSQL
 
 def like_one(expr, c, word, raw):
     """like·starts·ends 식. LIKE를 못 하는 연결(파일)이면 contains·startswith·endswith로."""
+    if word == "like" and settings.get(MARKS_SETTING) == "on":  # (Phase 17) 특수문자 무시: 컬럼·검색어 양쪽에서 지우고 포함 검색
+        c, raw = unmarked(expr, c), strip_marks(raw)
     found = starts(c, raw) if word == "starts" else ends(c, raw) if word == "ends" else contains(c, raw)
     from core import source
     if source.compiles(expr.filter(found)):
@@ -488,6 +495,31 @@ def contains(c, text):
     값에 LIKE 특수 글자가 있으면 와일드카드가 되지 않게 위치 찾기(INSTR 등)로."""
     text = text.lower()
     return c.lower().find(text) >= 0 if WILD.search(text) else c.lower().like(f"%{text}%")
+
+
+MARKS = r"[^\p{L}\p{N}\s]"  # (Phase 17) 특수문자 무시 검색에서 지울 글자: 글자·숫자·공백이 아닌 것(DB 정규식)
+MARKS_SETTING = "ignore_marks"  # (Phase 17) 문자 검색에서 특수문자를 무시할지 정하는 설정 이름(settings.CHOICES)
+NO_MARKS_LEFT = "특수문자를 빼면 찾을 글자가 없어요. 설정의 '문자 검색에서 특수문자 무시'를 끄면 그대로 찾아요."  # (Phase 17)
+MARKS_UNSUPPORTED = "이 연결은 특수문자를 빼고 찾을 수 없어요(정규식 바꾸기를 못 해요). 설정의 '문자 검색에서 특수문자 무시'를 끄세요."  # (Phase 17)
+
+
+def strip_marks(text: str) -> str:
+    """[SPECIFICATION] plans/phase-17.md#strip_marks
+    검색어에서 글자·숫자·공백이 아닌 글자를 지운 글자를 돌려준다."""
+    plain = "".join(ch for ch in text if ch.isalnum() or ch.isspace())
+    if plain.strip() == "":
+        raise ValueError(NO_MARKS_LEFT)
+    return plain
+
+
+def unmarked(expr: "ibis.expr.types.Table", c: "ibis.expr.types.StringValue") -> "ibis.expr.types.StringValue":
+    """[SPECIFICATION] plans/phase-17.md#unmarked
+    문자 식 c에서 특수문자를 지운 Ibis 식을 돌려준다(그 연결이 못 하면 ValueError)."""
+    plain = c.re_replace(MARKS, "")
+    from core import source
+    if not source.compiles(expr.select(plain.name("v"))):
+        raise ValueError(MARKS_UNSUPPORTED)
+    return plain
 
 
 def starts(c, text):

@@ -2,7 +2,7 @@
 // 새 함수가 스켈레톤이면 실패하는 것이 정상이다.
 import { describe, expect, it } from "vitest";
 import type { Card, CardData } from "@/lib/types";
-import { MERGE_DATE, applyGroups, dragPick, dragRange, groupNames, inRanges, mergeRanges, rangeName, renameColors, shownName, visible, type GroupView } from "@/lib/groups";
+import { MERGE_DATE, applyGroups, dragPick, dragRange, groupNames, inRanges, rangeName, renameColors, shownName, visible, type GroupView } from "@/lib/groups";
 
 const card = (kind: Card["kind"], groups?: GroupView): Card =>
   ({ id: "c1", kind, title: "t", layout: { x: 0, y: 0, w: 6, h: 6 }, colors: { series: {}, parts: {}, order: [], parts_order: [] },
@@ -33,10 +33,6 @@ describe("범위·이름(inRanges·rangeName·shownName·visible)", () => {
     expect(visible("3", [], [[1, 2]], true)).toBe(false);
     expect(visible("3", [], [[1, 2]], false)).toBe(true);  // 순서가 없는 값에는 범위를 쓰지 않는다
   });
-  it("범위 묶기: 범위마다 한 그룹, 계열 값을 더한다(숫자가 없으면 null)", () => {
-    expect(mergeRanges(["1", "2", "3", "10", "12"], [{ name: "개수", values: [5, 4, 3, 2, null] }, { name: "x", values: [null, null, 1, null, null] }], [[1, 2], [10, null]]))
-      .toEqual({ labels: ["1~2", "10~"], series: [{ name: "개수", values: [9, 2] }, { name: "x", values: [null, null] }] });
-  });
 });
 
 describe("끌어 고르기·색(dragPick·dragRange·renameColors)", () => {
@@ -66,8 +62,6 @@ describe("카드 종류별로 받은 값에 입히기(applyGroups)", () => {
   it("항목 차트: 범위·keep·계열·묶기·이름", () => {
     expect(applyGroups(card("chart", { ranges: [[1, 2], [10, null]] }), numChart).values).toEqual({ labels: ["1", "2", "10", "12"], series: [{ name: "개수", values: [5, 4, 2, 1] }, { name: "합계 (v)", values: [1, 1, 1, 1] }] });
     expect(applyGroups(card("chart", { keep: ["2", "3"], series: ["개수"] }), numChart).values).toEqual({ labels: ["2", "3"], series: [{ name: "개수", values: [4, 3] }] });
-    expect(applyGroups(card("chart", { ranges: [[1, 2], [10, null]], merge: true, rename: { "1~2": "적음", "합계 (v)": "합" } }), numChart).values)
-      .toEqual({ labels: ["적음", "10~"], series: [{ name: "개수", values: [9, 3] }, { name: "합", values: [2, 2] }] });
     expect(() => applyGroups(card("chart", { ranges: [["2026-01-01", null]], merge: true }), { ...numChart, x_kind: "date" })).toThrow(MERGE_DATE);
   });
   it("서버가 이미 묶은 값(values.merged, 고유 개수)은 다시 더하지 않고 계열·이름만", () => {
