@@ -40,7 +40,7 @@ def run(tmp_path, body, *parts, fake=True):
 
 @needs_node
 def test_7e1_field_enter_does_not_add_while_composing_or_pointing(tmp_path):
-    handler = line(page("prep/prep.html"), '$("a-fvalue").onkeydown')
+    handler = line(page("prep/analysis.js"), '$("a-fvalue").onkeydown')
     body = """
 const field = {}; const $ = () => field; let added = 0; const addStep = () => { added++; };
 let menuFor = null, menuAt = null;

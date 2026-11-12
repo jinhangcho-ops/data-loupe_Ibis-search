@@ -12,7 +12,8 @@ COHORT_SPAN = 12  # 경과 기간 칸 수 기본(N = 0 ~ 12)
 MAX_COHORT_SPAN = 60  # 경과 기간 칸 수 상한
 MAX_COHORTS = 60  # 코호트 줄 수 상한(넘으면 단위를 키우거나 기간을 좁히라고 거절)
 RFM_BINS = 5  # R·F·M 점수 단계(분위 5등분, 1~5점)
-EPOCH = (1970, 1, 1)  # 날 번호 0의 날짜(metric_calc.day_index 기준, datetime은 함수 안에서 import)
+RFM_AXES = {"r": "최근성이", "f": "빈도가", "m": "금액이"}  # 단계가 줄었다는 주의 글의 축 이름(조사까지)
+EPOCH = (1970, 1, 1)# 날 번호 0의 날짜(metric_calc.day_index 기준, datetime은 함수 안에서 import)
 RFM_SEGMENTS = (  # (이름, R 최소, R 최대, F 최소, F 최대) — 위에서부터 처음 맞는 것. 25칸을 모두 덮는다
     ("챔피언", 4, 5, 4, 5),
     ("충성 고객", 3, 3, 4, 5),
@@ -34,6 +35,8 @@ LOW_EXPECTED = 5  # 기대 빈도 기준(원문 5 미만)
 LOW_SHARE = 0.2  # 기대 빈도 5 미만 칸이 이 비율을 넘으면 경고(Cochran 규칙)
 AB_METRICS = ("rate", "mean")  # A/B 지표: 비율(0·1 또는 참거짓) / 평균
 MAX_AB_GROUPS = 10  # A/B 그룹 수 상한
+MIN_MEAN_N = 2  # 평균 지표의 그룹에 있어야 하는 값 수(표준편차를 구할 수 있는 최소)
+AB_ROW_NOTE = "사용자 칸을 비워 한 행을 한 사람으로 봤어요. 한 사람이 여러 행이면 검정이 부풀 수 있으니 사용자 칸을 골라 주세요."
 MIN_SUPPORT = 0.01  # 장바구니 최소 지지도 기본(1%)
 BASKET_TOP = 50  # 장바구니 상위 N쌍 기본
 MAX_BASKET_TOP = 500  # 상위 N 상한
@@ -49,8 +52,11 @@ MIN_WINDOW = 3  # 이동평균 창 하한
 MAX_WINDOW = 61  # 이동평균 창 상한
 MAD_K = 3.0  # 이상 시점 기준 배수(원문 예 3×MAD, 보정 MAD는 prep_diag.MAD_C로)
 MAX_MAD_K = 10.0  # 배수 상한
-READS = {"retention": 4, "rfm": 5, "pareto": 1, "chisq": 1, "abtest": 1, "basket": 4, "decompose": 2, "seasonal": 1,
-         "distribution": 5, "scatter": 5}  # DB가 계산할 때 표를 읽는 조회 수(rfm은 asof를 주면 4, 거래 키는 같은 조회). 분포: 상위 값·집계·히스토그램 2·상자, 산점도: 상관 2·표본·육각 2
+SCALE_Q = 0.9  # 이상 시점의 흩어짐을 재는 분위 기본값: |나머지 − 중앙값|의 q분위를 정규분포의 같은 분위로 나눈다(plans/phase-20.md#seasonal_parts)
+MIN_SCALE_Q = 0.5  # 분위 하한(0.5면 보정 MAD와 같다)
+MAX_SCALE_Q = 0.99  # 분위 상한
+READS = {"retention": 4, "rfm": 6,"pareto": 1, "chisq": 1, "abtest": 1, "basket": 4, "decompose": 2, "seasonal": 1,
+         "distribution": 5, "scatter": 5}  # DB가 계산할 때 표를 읽는 조회 수(rfm은 asof를 주면 하나 적다, 거래 키는 같은 조회. 6은 분위 경계가 겹쳐 고유값 조회 하나가 더 나갈 때의 수: 미리 알 수 없어 많은 쪽으로 알린다). 분포: 상위 값·집계·히스토그램 2·상자, 산점도: 상관 2·표본·육각 2
 WHOLE_KINDS = ("retention", "rfm", "pareto", "basket", "decompose", "seasonal")  # 늘 테이블 전체로 구하는 분석(건수·합계를 그대로 보인다)
 
 
@@ -122,9 +128,17 @@ def rfm(t: "ibis.expr.types.Table", who: str, time: str, amount: str, asof: str 
     cuts = {k: prep_ops.quantiles(u, k, qs) for k in ("r", "f", "m")}
     if any(c is None or None in c for c in cuts.values()):
         raise ValueError("사용자가 없어 점수를 매길 수 없어요.")
-    f_score = score_up(u.f, cuts["f"])
-    m_score = score_up(u.m, cuts["m"])
-    r_score = (RFM_BINS + 1) - score_up(u.r, cuts["r"])
+    scored, levels, notes = {}, {}, []
+    tied = [u.select(k=ibis.literal(k), v=u[k].cast("float64")).distinct().order_by("v").limit(RFM_BINS + 1) for k in cuts if len(set(cuts[k])) < len(cuts[k])]
+    small = stats.rows(tied[0].union(*tied[1:]) if len(tied) > 1 else tied[0]) if tied else []  # 경계가 겹친 축들의 작은 순 고유값: 축이 몇이든 조회 하나
+    for k in cuts:  # 축마다 따로: 같은 값이 몰려 분위 경계가 겹치면 고유값 기준으로 다시 나눠 1~RFM_BINS 눈금으로 편다(규칙은 metric_calc.tied_levels)
+        used, scores = metric_calc.tied_levels(cuts[k], lambda k=k: sorted(row["v"] for row in small if row["k"] == k), RFM_BINS)
+        level = score_up(u[k], used)
+        scored[k] = level if len(scores) == RFM_BINS else ibis.cases(*[(level == i + 1, score) for i, score in enumerate(scores)])
+        levels[k] = len(scores)
+        if len(scores) < RFM_BINS:
+            notes.append(f"{RFM_AXES[k]} 몰려 있어 {len(scores)}단계로만 나눴어요({'·'.join(map(str, scores))}점).")
+    f_score, m_score, r_score = scored["f"], scored["m"], (RFM_BINS + 1) - scored["r"]
     v = u.mutate(rs=r_score, fs=f_score, ms=m_score, seg=segment_of(r_score, f_score))  # 점수 컬럼은 rs·fs·ms: DuckDB는 대소문자를 가리지 않아 R·F·M이 r·f·m과 겹친다
     g = v.group_by(["seg", "rs", "fs"]).aggregate(users=v.count(), r=v.r.sum(), f=v.f.sum(), m=v.m.sum(), mscore=v.ms.sum())
     frame = pl.DataFrame(stats.rows(g))
@@ -161,6 +175,8 @@ def rfm(t: "ibis.expr.types.Table", who: str, time: str, amount: str, asof: str 
         "bins": RFM_BINS,
         "segments": segments.to_dicts(),
         "grid": grid,
+        "levels": levels,
+        "notes": notes,
     }
 
 
@@ -319,7 +335,7 @@ def chi_stats(matrix: list[list[int]]) -> dict:
     }
 
 
-def ab_test(t: "ibis.expr.types.Table", group: str, metric: str, value: str, control: object = None, conf: float | None = None) -> dict:
+def ab_test(t: "ibis.expr.types.Table", group: str, metric: str, value: str, control: object = None, conf: float | None = None, who: str | None = None) -> dict:
     """[SPECIFICATION] plans/phase-12.md#ab_test
     그룹별 비율·평균(조회 한 번)으로 두 그룹은 z·Welch t 검정과 신뢰구간, 세 그룹 이상은 ANOVA(평균)·카이제곱(비율)과 대조군 대비 차이를 구한다."""
     import polars as pl
@@ -346,17 +362,33 @@ def ab_test(t: "ibis.expr.types.Table", group: str, metric: str, value: str, con
     else:
         stats.column_of(t, value, "num")
         x = stats.finite(t[value])
-    if group == value:
+    if who is not None:
+        stats.column_of(t, who)
+    if group == value or who in (group, value):
         raise ValueError("두 칸에는 서로 다른 컬럼을 고르세요.")
-    aggs = {"rows": t.count(), "n": x.count(), "sum": x.sum(), "mean": x.mean(), "sd": x.std()}
+    bad = (x.notnull() & ~x.isin([0.0, 1.0])).sum()
+    if who is None:
+        notes = [AB_ROW_NOTE]
+        src, key, v, rows, used, ok = t, t[group], x, t.count(), x.count(), None
+    else:  # 그룹·사용자별로 먼저 모은다(비율은 최댓값, 평균은 합계: metric_kernels.two_groups와 같은 규칙). 사용자가 비었거나 값이 하나도 없는 사람의 행은 뺀 행으로 센다
+        notes = []
+        src = t.group_by([t[group].name("g"), t[who].name("w")]).aggregate(v=x.max() if metric == "rate" else x.sum(), rows=t.count(), used=x.count(), bad=bad)
+        key, v, rows, ok = src.g, src.v, src.rows.sum(), src.w.notnull() & (src.used > 0)
+        used, bad = src.used.sum(where=ok), src.bad.sum()
+    aggs = {"rows": rows, "used": used, "n": v.count(where=ok), "sum": v.sum(where=ok), "mean": v.mean(where=ok), "sd": v.std(where=ok)}
     if metric == "rate":
-        aggs["bad"] = (x.notnull() & ~x.isin([0.0, 1.0])).sum()
-    got = t.group_by(t[group].name("g")).aggregate(**aggs).order_by("g").limit(MAX_AB_GROUPS + 2).to_polars()
+        aggs["bad"] = bad
+    got = src.group_by(key.name("g")).aggregate(**aggs).order_by("g").limit(MAX_AB_GROUPS + 2).to_polars()
     named = pl.col("g").is_not_null()
-    excluded = got.filter(~named)["rows"].sum() + got.filter(named).select(pl.col("rows") - pl.col("n"))["rows"].sum()
+    excluded = got.filter(~named)["rows"].sum() + got.filter(named).select(pl.col("rows") - pl.col("used").fill_null(0))["rows"].sum()
     if metric == "rate" and got["bad"].sum() > 0:
         raise ValueError("비율 지표의 값은 0 또는 1(참·거짓)이어야 해요.")
-    frame = got.filter(named & (pl.col("n") > 0)).select(name=pl.col("g").cast(pl.String), n="n", mean="mean", sd="sd", sum="sum").sort("name")
+    kept = got.filter(named & (pl.col("n") > 0))
+    alone = (pl.col("n") < MIN_MEAN_N) & (metric == "mean")  # 평균 지표에서 값이 하나뿐인 그룹은 표준편차가 없어 뺀다
+    lone = kept.filter(alone)
+    excluded += lone["used"].sum()
+    notes += [f"그룹 '{name}'은 값이 1개뿐이라 뺐어요." for name in lone["g"].cast(pl.String)]
+    frame = kept.filter(~alone).select(name=pl.col("g").cast(pl.String), n="n", mean="mean", sd="sd", sum="sum").sort("name")
     if frame.height < 2:
         raise ValueError("그룹이 두 개 이상이어야 해요.")
     if frame.height > MAX_AB_GROUPS:
@@ -399,6 +431,17 @@ def ab_test(t: "ibis.expr.types.Table", group: str, metric: str, value: str, con
         else:
             found = chi_stats([[g["sum"], g["n"] - g["sum"]] for g in groups])
             test = {"kind": "chi2", "stat": found["chi2"], "df": found["df"], "p": found["p"]}
+    else:
+        e = groups[1 - names.index(base)]
+        srm = metric_calc.srm_p(c["n"], e["n"])
+        if srm < metric_calc.SRM_P:  # 문장은 metric_kernels.ab_checks와 같다
+            notes.append(f"배정 비율 검사(SRM): 대조군 {c['n']:,}명 대 실험군 {e['n']:,}명은 1:1 배정이라고 보기 어려워요(p={srm:.2g}). 배정·기록에 문제가 없는지 먼저 확인해 보세요.")
+    if who is not None:
+        seen = src.filter(ok, src.g.cast("string").isin(names))
+        seen = seen.group_by("w").aggregate(k=seen.count())
+        twice = stats.one(seen.aggregate(n=(seen.k > 1).sum()))["n"]
+        if twice:
+            notes.append(f"두 그룹 이상에 걸친 사용자 {twice:,}명은 걸친 그룹마다 한 번씩 셌어요.")
     return {
         "group": group,
         "metric": metric,
@@ -410,6 +453,8 @@ def ab_test(t: "ibis.expr.types.Table", group: str, metric: str, value: str, con
         "pairs": pairs,
         "small": small,
         "excluded": excluded,
+        "who": who,
+        "notes": notes,
     }
 
 
@@ -586,13 +631,14 @@ def mix_parts(before: dict[str, tuple[int, float]], after: dict[str, tuple[int, 
     n0_all, n1_all = sum(n for n, _ in before.values()), sum(n for n, _ in after.values())
     if n0_all == 0 or n1_all == 0:
         raise ValueError("두 기간 중 행이 없는 기간이 있어요.")
+    base = sum(n * m for n, m in before.values()) / n0_all  # 그룹의 믹스 효과는 기준 기간 전체 평균과의 차이로(phase-20 mix_parts): 평균이 낮은 그룹이 늘면 음수다. 합계는 같다
     groups: dict[str, dict] = {}
     for g in before.keys() | after.keys():
         n0, m0 = before.get(g, (0, None))
         n1, m1 = after.get(g, (0, None))
         m0, m1 = (m1 if m0 is None else m0), (m0 if m1 is None else m1)  # 한쪽에 없는 그룹은 다른 쪽 평균을 쓴다
         w0, w1 = n0 / n0_all, n1 / n1_all
-        mix, rate, inter = (w1 - w0) * m0, w0 * (m1 - m0), (w1 - w0) * (m1 - m0)
+        mix, rate, inter = (w1 - w0) * (m0 - base), w0 * (m1 - m0), (w1 - w0) * (m1 - m0)
         groups[g] = {"n0": n0, "n1": n1, "w0": w0, "w1": w1, "m0": m0, "m1": m1, "mix": mix, "rate": rate, "interaction": inter, "total": mix + rate + inter}
     return {
         "before": sum(v["w0"] * v["m0"] for v in groups.values()),
@@ -604,14 +650,17 @@ def mix_parts(before: dict[str, tuple[int, float]], after: dict[str, tuple[int, 
     }
 
 
-def seasonal(t: "ibis.expr.types.Table", time: str, unit: str, value: str, agg: str, opts: dict | None = None, window: int | None = None, k: float | None = None) -> dict:
+def seasonal(t: "ibis.expr.types.Table", time: str, unit: str, value: str, agg: str, opts: dict | None = None, window: int | None = None, k: float | None = None, q: float | None = None) -> dict:
     """[SPECIFICATION] plans/phase-12.md#seasonal
     stats.trend의 기간별 값을 이동평균 추세 + 요일·월 계절성 + 나머지로 나누고 나머지의 수정 Z(보정 MAD, prep_diag.MAD_C)가 k를 넘는 기간을 표시한다."""
     import polars as pl
 
     from analysis import stats
-    from prep.prep_diag import MAD_C
 
+    if q is None:
+        q = SCALE_Q
+    if isinstance(q, bool) or not isinstance(q, (int, float)) or not MIN_SCALE_Q <= q <= MAX_SCALE_Q:
+        raise ValueError(f"흩어짐 기준 분위는 {MIN_SCALE_Q:g}~{MAX_SCALE_Q:g} 사이예요.")
     if window is not None and (isinstance(window, bool) or not isinstance(window, int) or window % 2 == 0 or not MIN_WINDOW <= window <= MAX_WINDOW):
         raise ValueError(f"이동평균 창은 {MIN_WINDOW}~{MAX_WINDOW} 사이의 홀수예요.")
     if k is None:
@@ -624,10 +673,11 @@ def seasonal(t: "ibis.expr.types.Table", time: str, unit: str, value: str, agg: 
     if len(tr["labels"]) < 2 * window:
         raise ValueError(f"기간이 적어요. 이동평균 창({window})의 두 배 이상 기간이 있어야 해요.")
     frame = pl.DataFrame({"period": tr["labels"], "value": tr["values"]}, schema={"period": pl.String, "value": pl.Float64})
-    parts = seasonal_parts(frame, unit, window, k)
+    parts = seasonal_parts(frame, unit, window, k, q)
     rest = parts["remainder"]
     median = rest.median()
     mad = (rest - median).abs().median()
+    scale = parts.select(s=spread(q))["s"][0]
     return {
         "time": time,
         "unit": unit,
@@ -635,6 +685,7 @@ def seasonal(t: "ibis.expr.types.Table", time: str, unit: str, value: str, agg: 
         "agg": agg,
         "window": window,
         "k": k,
+        "q": q,
         "season": {"day": "weekday", "month": "month"}.get(unit),
         "labels": parts["period"].to_list(),
         "values": parts["value"].to_list(),
@@ -644,25 +695,34 @@ def seasonal(t: "ibis.expr.types.Table", time: str, unit: str, value: str, agg: 
         "flags": parts.filter(pl.col("flag"))["period"].to_list(),
         "median": median,
         "mad": mad,
-        "limit": None if mad is None else k * mad / MAD_C,  # 값이 빈 기간이 끼면 나머지가 비어 mad가 없다
+        "limit": None if scale is None else k * scale,  # 값이 빈 기간이 끼면 나머지가 비어 흩어짐이 없다
         "more": tr["more"],
-        "note": None if mad else "나머지가 거의 같아 이상 시점을 판정하지 않았어요.",
+        "note": None if scale else "나머지가 거의 같아 이상 시점을 판정하지 않았어요.",
     }
 
 
-def seasonal_parts(frame: "pl.DataFrame", unit: str, window: int, k: float) -> "pl.DataFrame":
+def spread(q: float) -> "pl.Expr":
+    """remainder 컬럼의 흩어짐(표준편차에 맞춘 값): |나머지 − 중앙값|의 q분위 ÷ 정규분포의 같은 분위. q가 0.5면 보정 MAD다."""
+    from statistics import NormalDist
+
+    import polars as pl
+
+    rest = pl.col("remainder")
+    return (rest - rest.median()).abs().quantile(q, "linear") / NormalDist().inv_cdf((1 + q) / 2)
+
+
+def seasonal_parts(frame: "pl.DataFrame", unit: str, window: int, k: float, q: float = SCALE_Q) -> "pl.DataFrame":
     """[SPECIFICATION] plans/phase-12.md#seasonal_parts
     기간(period 글자)·값(value) Polars 표에 trend·season·remainder·flag 컬럼을 더한다."""
     import polars as pl
 
-    from prep.prep_diag import MAD_C
-
     value, trend = pl.col("value"), pl.col("trend")
-    out = frame.with_columns(trend=value.rolling_mean(window_size=window, center=True, min_samples=window))
+    # 추세·계절성은 평균이 아니라 중앙값으로(phase-20 seasonal_parts): 튄 값에 끌려가지 않고, 끝에서는 있는 칸만으로 구해 양 끝도 판정한다
+    out =frame.with_columns(trend=value.rolling_median(window_size=window, center=True, min_samples=window // 2 + 1))
     if unit in ("day", "month"):
         date = pl.col("period").str.to_date()
         out = out.with_columns(no=date.dt.weekday() if unit == "day" else date.dt.month())
-        out = out.with_columns(sm=(value - trend).mean().over("no"))
+        out = out.with_columns(sm=(value - trend).median().over("no"))
         center = out.group_by("no").agg(pl.col("sm").first())["sm"].mean()
         season = pl.col("sm") - pl.lit(center)
     else:  # week: 계절성 없음
@@ -671,6 +731,6 @@ def seasonal_parts(frame: "pl.DataFrame", unit: str, window: int, k: float) -> "
     out = out.with_columns(remainder=value - trend - pl.col("season"))
     rest = pl.col("remainder")
     dev = (rest - rest.median()).abs()
-    mad = dev.median()
-    flag = ((mad > 0) & (dev > k * mad / MAD_C)).fill_null(False)
+    scale = spread(q)  # MAD(q=0.5)는 중앙값으로 뺀 나머지에서 작게 나와 조용한 표에도 표시가 늘어난다: 기본은 SCALE_Q
+    flag = ((scale > 0) & (dev > k * scale)).fill_null(False)
     return out.with_columns(flag=flag).select("period", "value", "trend", "season", "remainder", "flag")

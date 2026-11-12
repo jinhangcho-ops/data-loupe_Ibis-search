@@ -32,7 +32,8 @@ app.json.sort_keys = False  # 구조 컬럼의 필드·행의 컬럼을 원래 �
 state = {"con": None, "passwords": [], "opened": None, "rows": {}, "names": {}, "tables": {}, "cancel": threading.Event(), "left": None, "turn_no": 0}  # left: 버린 파일 연결 작업이 끝나면 켜질 Event(run이 기다린다). turn_no: 요청마다 1 늘어나는 차례 번호. [새로 받기]를 요청마다 한 번으로 묶는다(querying.pinned)
 # names: 스키마 → 테이블 목록, tables: (스키마, 이름) → 테이블 식. 검색 칸을 바꿀 때마다 DB에 목록·스키마를 다시 묻지 않게 연결마다 기억한다(forget_tables로 비운다).
 turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 연결을 쓰지 않는 FREE의 경로만 기다리지 않는다.
-FREE = {"/api/pick", "/api/usage", "/api/cancel", "/api/send", "/api/drivers", "/api/funcs", "/api/features/install", "/api/update"}  # 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
+FREE = {"/api/pick", "/api/usage", "/api/cancel", "/api/send", "/api/drivers", "/api/funcs", "/api/features/install", "/api/update",
+        "/api/settings", "/api/recent", "/api/connections", "/api/files"}  # 뒤의 넷: 설정 폴더 파일만 읽고 쓰거나(쓰기는 settings.updating이 묶는다) 폴더만 훑는다. 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
 ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 목록 예: ("Parquet (*.parquet)",) → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
 ask_folder = None  # 저장할 폴더를 묻는 함수(→ 고른 폴더 또는 None). ask_save처럼 desktop.py가 채운다.
@@ -643,6 +644,6 @@ def html_response(html, script_extra=""):
     saved = settings.load()
     for key, value in saved.items():  # 저장된 설정을 쿠키로 알려 준다. 화면이 그리기 전에 읽는다.
         response.set_cookie(key, str(value), samesite="Strict")
-    for key in {*settings.CHOICES, *settings.SIZES, *settings.FLOATS, "timezone", "fiscal_start_month", "weekend", "work_hours", "bucket_minutes"} - set(saved):  # 기본값으로 되돌려 파일에서 빠진 설정의 예전 쿠키를 지운다
+    for key in {*settings.CHOICES, *settings.SIZES, *settings.FLOATS, "timezone", "fiscal_start_month", "weekend", "work_hours", "bucket_minutes", "adv_open", "currency_symbol"} - set(saved):  # 기본값으로 되돌려 파일에서 빠진 설정의 예전 쿠키를 지운다
         response.delete_cookie(key, samesite="Strict")
     return response

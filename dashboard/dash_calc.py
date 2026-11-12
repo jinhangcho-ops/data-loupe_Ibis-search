@@ -97,6 +97,7 @@ MAX_OUTLIERS = 50  # 상자 하나의 이상치 점 수(중앙값에서 먼 것�
 MAX_CELLS = dash_store.MAX_CELLS  # 히트맵의 칸 수
 MAX_TREE = 200  # 트리맵·선버스트의 항목 수(넘는 윗단계 항목은 기타로 묶는다)
 MAX_COHORT = 52  # 코호트 수와 경과 기간 수
+COHORT_PARTIAL = "마지막 기간은 진행 중이라 낮게 보여요."  # 자료가 마지막 기간 중간에 끝났을 때 코호트 카드 아래 안내
 MAX_WORDS = 150  # 워드클라우드의 단어 수
 MAX_PERIODS = 400  # 양초·순위 차트의 기간 수
 MAX_RANKED = 12  # 순위 차트의 대상 수(합이 큰 것부터)
@@ -1036,12 +1037,14 @@ def slot(day, unit):
 def cohort_data(expr, user, time, unit, window=None):
     """코호트(유지율) 표: 대상(user)마다 가장 이른 시각(time)이 속한 기간(unit)이 코호트, 그 코호트 대상 중 코호트 기간 이후 n번째 기간에도 활동한 고유 대상의 비율
     {periods: [0, 1, …], cohorts: [{start, size, retained: [1.0, …]}]}. 코호트 시작은 이른 순이고 retained는 마지막 기간까지(활동이 없는 기간은 0).
+    자료가 마지막 기간 중간에 끝났으면(그 기간 칸은 며칠 치뿐이다) values.partial = True와 note(COHORT_PARTIAL)를 더한다.
     window({start, end})는 대상의 첫 시각이 start 이후인 대상만 신규로 넣고(기간 앞부터 활동한 대상이 기간 첫 활동만으로 신규가 되지 않게 첫 시각은 기간 없이 구한다), 끝(end) 뒤의 활동은 세지 않는다. 첫 기간부터 마지막 기간까지가 MAX_COHORT기간을 넘으면 ValueError."""
     for name, what in ((user, "대상 컬럼"), (time, "시각 컬럼")):
         parse.check_name(name, expr.columns, what)
     need_date(expr, time, "코호트의 시각")
-    t = expr.filter(expr[user].notnull(), expr[time].notnull(), *([expr[time].cast("date") <= dt.date.fromisoformat(window["end"])] if (window or {}).get("end") else []))
-    seen = t.select(u=t[user], p=stats.local_start(t[time], TRUNC[unit])).distinct()
+    day = result.local_time(expr[time]).cast("date")  # 설정 시간대의 날짜(시간대 있는 시각을 UTC 날짜로 자르지 않게)
+    t = expr.filter(expr[user].notnull(), expr[time].notnull(), *([day <= dt.date.fromisoformat(window["end"])] if (window or {}).get("end") else []))
+    seen =t.select(u=t[user], p=stats.local_start(t[time], TRUNC[unit])).distinct()
     born = seen.group_by("u").aggregate(c=seen.p.min())
     if (window or {}).get("start"):  # 기간 안에 처음 온 사람만(첫 시각의 날짜로: 기간이 주·달 중간에 시작해도 코호트 기간 시작일로 비교하지 않는다)
         first = t.group_by(t[user].name("u")).aggregate(f=result.local_time(t[time]).min())
@@ -1050,7 +1053,7 @@ def cohort_data(expr, user, time, unit, window=None):
     j = seen.join(born, "u")
     edge = stats.one(j.aggregate(lo=j.c.min(), hi=j.p.max()))
     if edge["lo"] is None:
-        return {"values": {"periods": [], "cohorts": []}}
+        return {"values": {"periods": [], "cohorts": []}, "note": ""}
     first, last = (dt.date.fromisoformat(str(edge[k])[:10]) for k in ("lo", "hi"))
     span = slot(last, unit) - slot(first, unit) + 1
     if span > MAX_COHORT:
@@ -1061,7 +1064,12 @@ def cohort_data(expr, user, time, unit, window=None):
         size, begin = cells[(start, start)], slot(dt.date.fromisoformat(start), unit)  # 코호트 기간에는 모든 대상이 활동한 것이다
         gone = {slot(dt.date.fromisoformat(p), unit) - begin: n for (c, p), n in cells.items() if c == start}
         cohorts.append({"start": start, "size": size, "retained": [gone.get(k, 0) / size for k in range(slot(last, unit) - begin + 1)]})
-    return {"values": {"periods": list(range(span)), "cohorts": cohorts}}
+    # 마지막 기간이 진행 중인가(metric_calc.open_bucket과 같은 기준: 자료의 마지막 날이 그 기간의 마지막 날보다 앞이고, 마지막 날이 오늘이면 그날은 아직 안 끝났다). 그 함수는 연 단위를 받지 않아 여기서 날짜로 본다
+    from metrics import metric_calc  # 쓸 때 불러온다(시작할 때 numpy를 올리지 않게, analysis.insight와 같다)
+    final = dt.date.fromisoformat(str(stats.one(t.aggregate(d=result.local_time(t[time]).cast("date").max()))["d"])[:10])
+    done = final - dt.timedelta(days=(final - metric_calc.EPOCH).days in metric_calc.current_days())
+    partial = result.next_period(last, unit) - dt.timedelta(days=1) > done
+    return {"values": {"periods": list(range(span)), "cohorts": cohorts, **({"partial": True} if partial else {})}, "note": COHORT_PARTIAL if partial else ""}
 
 
 def wordcloud_data(expr, x, cloud=None, body=None):

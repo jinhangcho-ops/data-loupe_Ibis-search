@@ -35,7 +35,7 @@ WINDOW_UNITS = {"minute": 60, "hour": 3600, "day": 86400}  # 퍼널 기간 제�
 LIMITS = {"max_steps": funnel.MAX_STEPS, "trim": funnel.DEFAULT_TRIM, "max_trim": funnel.MAX_TRIM, "max_revisit": funnel.MAX_REVISIT_DAYS, "bins": BINS, "top_values": TOP_VALUES, "max_corr": MAX_CORR, "max_points": MAX_POINTS, "max_groups": MAX_GROUPS, "max_periods": MAX_PERIODS,
           "whole": list(insight.WHOLE_KINDS), "cohort_span": insight.COHORT_SPAN, "max_cohort_span": insight.MAX_COHORT_SPAN, "pareto_a": insight.PARETO_A, "pareto_b": insight.PARETO_B,
           "pareto_show": insight.PARETO_SHOW, "min_support": insight.MIN_SUPPORT, "basket_top": insight.BASKET_TOP, "max_basket_top": insight.MAX_BASKET_TOP,
-          "season_windows": insight.SEASON_WINDOWS, "max_window": insight.MAX_WINDOW, "mad_k": insight.MAD_K, "max_mad_k": insight.MAX_MAD_K,
+          "season_windows": insight.SEASON_WINDOWS, "max_window": insight.MAX_WINDOW, "mad_k": insight.MAD_K, "max_mad_k": insight.MAX_MAD_K, "scale_q": insight.SCALE_Q, "min_scale_q": insight.MIN_SCALE_Q, "max_scale_q": insight.MAX_SCALE_Q,
           "rfm_bins": insight.RFM_BINS, "max_levels": insight.MAX_LEVELS, "low_share": insight.LOW_SHARE}
 
 
@@ -282,6 +282,6 @@ def analyze(t, how):
             "funnel": ("who", "step", "time", "steps", "window", "range", "by", "trim"),
             "stages": ("who", "time", "stages", "count", "window", "range", "trim"),
             "retention": ("who", "time", "unit", "span"), "rfm": ("who", "time", "amount", "asof", "tx"), "pareto": ("item", "value", "agg", "a", "b"),
-            "chisq": ("row", "col"), "abtest": ("group", "metric", "value", "control", "conf"), "basket": ("key", "item", "support", "top"),
-            "decompose": ("time", "base", "compare", "group", "value"), "seasonal": ("time", "unit", "value", "agg", "opts", "window", "k")}[name]
+            "chisq": ("row", "col"), "abtest": ("group", "metric", "value", "control", "conf", "who"), "basket": ("key", "item", "support", "top"),
+            "decompose": ("time", "base", "compare", "group", "value"), "seasonal": ("time", "unit", "value", "agg", "opts", "window", "k", "q")}[name]
     return {"kind": name, **KINDS[name](t, *[how.get(a) for a in args])}

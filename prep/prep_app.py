@@ -50,7 +50,7 @@ SAMPLES = {}  # 마지막으로 읽은 표본 하나 {테이블 열쇠: (크기,
 SAMPLE_PILOT = 3  # SAMPLES 항목 (크기, 표본, 정보, 파일럿)에서 파일럿의 자리
 server.ON_SWITCH.append(SAMPLES.clear)  # 연결을 바꾸거나 끊으면 버린다(열쇠에 연결 열쇠가 들어 있어 다시 쓸 수 없고 최대 100만 행이 메모리에 남는다)
 HANDOFF = handoff.PREFIX  # 전처리로 보낸 검색·탭의 기준 이름 앞글자(@이름). 연결의 테이블 대신 그 검색의 식에서 시작한다
-server.FREE.update({"/api/prep/ops", "/api/prep/handed", "/api/profile/diag"})  # 연결을 쓰지 않는다(메모리의 목록·넘긴 쪽만 읽는다)
+server.FREE.update({"/api/prep/ops", "/api/prep/handed", "/api/profile/diag", "/api/recipes"})  # 연결을 쓰지 않는다(메모리의 목록·넘긴 쪽만 읽는다, 구성은 설정 폴더 파일만)
 
 
 def hand_over(body, name, shown=None):
@@ -975,7 +975,7 @@ def analyze():
     from analysis import insight
     how = body.get("how") or {}
     if ask is not None and full and how.get("kind") in insight.READS and held.remote(get_con()) and not local_mode(recipe):  # DB가 직접 계산할 때만(사본을 받는 길은 1번 읽기)
-        ask = reads_times(ask, insight.READS[how["kind"]] - (how["kind"] == "rfm" and bool(how.get("asof"))))
+        ask = reads_times(ask, insight.READS[how["kind"]] - (how["kind"] == "rfm" and bool(how.get("asof"))) + (how["kind"] == "abtest" and bool(how.get("who"))))  # A/B는 사용자 칸을 주면 걸친 사용자를 세는 조회가 하나 더
     if ask is not None:
         return ask
     if full:

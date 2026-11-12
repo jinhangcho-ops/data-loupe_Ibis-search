@@ -112,7 +112,7 @@ export type MoreValues = {
   days?: { d: string; v: number | null }[];                                             // calheat
   items?: TreeItem[];                                                                   // treemap·sunburst
   nodes?: { name: string; users?: number }[]; links?: { s: number; t: number; v: number }[];  // sankey("이탈" 노드는 있을 때만 마지막)
-  periods?: (number | string)[]; cohorts?: { start: string; size: number; retained: (number | null)[] }[];  // cohort(비율 0~1)
+  periods?: (number | string)[]; cohorts?: { start: string; size: number; retained: (number | null)[] }[]; partial?: boolean;  // cohort(비율 0~1, partial: 마지막 기간이 진행 중)
   labels?: string[]; candles?: { open: number | null; high: number | null; low: number | null; close: number | null }[];  // candle(labels와 같은 순서)
   series?: { name: string; values: (number | string | null)[]; ranks?: (number | null)[] }[];  // bump(ranks: 1 = 1등)
   words?: { w: string; n: number }[];                                                   // wordcloud
@@ -179,6 +179,9 @@ export type Constants = {
   merge: string[];
   week_start?: "mon" | "sun";   // 설정: 주 묶음 시작 요일(없으면 mon)
   fiscal_start_month?: number;   // 설정: 회계연도 첫 달 1~12(없으면 1)
+  currency_symbol: string;       // 설정: 값 모양 currency의 기호(고른 적이 없으면 서버 기본값)
+  currency_max: number;          // 통화 기호의 글자 수 상한(settings.CURRENCY_MAX)
+  defaults: Record<string, unknown>;  // 설정 기본값(settings.DEFAULTS)
   features: { on: string[]; version: string | null; all: { id: string; name: string; path: string }[] };
   dash: {
     max_cards: number; max_dashboards: number; max_palette: number; types: Partial<Record<Exclude<ChartType, "">, string>>; time_types: ChartType[]; max_bins?: number; max_bands?: number; max_cells: number; merge_note: string;

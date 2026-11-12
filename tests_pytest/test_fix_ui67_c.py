@@ -1,6 +1,5 @@
 """문서 사진을 찍다 찾은 화면 문제(묶음 C)를 node와 파이썬으로 본다. node가 없으면 JS 시험은 건너뛴다.
 각 시험은 고치기 전 코드에서 실패하도록 짠 것이다(값은 손으로 센 작은 예제)."""
-import json
 import re
 import shutil
 
@@ -24,7 +23,7 @@ globalThis.$ = id => (ELS[id] ??= fakeEl(id));
 @node
 def test_correlation_table_has_no_minus_zero(tmp_path):
     """1: 0으로 반올림되는 작은 음수 상관계수는 표에 -0이 아니라 0으로(toLocaleString(-0)은 '-0')."""
-    part = between("prep.html", "function anaTable(d, view)", "// 마지막 분석 결과를")
+    part = between("analysis.js", "function anaTable(d, view)", "// 마지막 분석 결과를")
     body = """
 const t = anaTable({ columns: ["a", "b"], matrix: [[1, -0.0001], [-0.0001, 1]] }, "heat");
 const s = anaTable({ r: -0.00001, n: 3, points: [] }, "scatter");
@@ -45,10 +44,10 @@ def test_funnel_hides_full_rerun(tmp_path):
     """3: 퍼널은 늘 테이블 전체로 구하니(prep_app.whole) [전체로 다시 구하기]를 숨긴다. 다른 분석은 보인다."""
     from prep import prep_app
     assert prep_app.whole({"how": {"kind": "funnel"}}) and not prep_app.whole({"how": {"kind": "groups"}})
-    part = between("prep.html", "function drawAna()", "\n}\n") + "\n}\n"
+    part = between("analysis.js", "function drawAna()", "\n}\n") + "\n}\n"
     stubs = ("let A = { chart: null, result: null, view: 'funnel' }; const VIEW_NAMES = {}, VIEW_RATIOS = {};"
              "const anaTitle = () => 't', anaNote = () => 'n', anaTable = () => ({}), anaSpan = () => 0, anaSlice = d => d, showRange = () => {}, resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f';"
-             "const SERVER = { analysis: { whole: [] } }, NEW_KINDS = [], ADD_TITLE = '', anaAuto = {}, gapTable = () => [], segTables = () => [], pairBlock = () => [], gradeLine = () => '', sortedTable = () => {}, anaRows = r => r, anaDraw = () => {};"
+             "const SERVER = { analysis: { whole: [] } }, NEW_KINDS = [], ADD_TITLE = '', anaAuto = {}, gapTable = () => [], segTables = () => [], pairBlock = () => [], noteLines = () => [], gradeLine = () => '', sortedTable = () => {}, anaRows = r => r, anaDraw = () => {};"
              "globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' }); globalThis.document = { documentElement: {} };")
     body = """
 A.result = { kind: "funnel", views: ["funnel"], steps: [] }; A.view = "funnel"; drawAna(); const funnel = $("a-full").hidden;

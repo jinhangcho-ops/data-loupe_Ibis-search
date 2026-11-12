@@ -211,7 +211,7 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .bcard.sel { border-color:var(--accent); }
 .bcard.sel { border-width:1px 1px 1px 4px; padding-left:9px; }  /* 고른 카드는 청록 왼쪽 막대 */
 .bhead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
-.bcheck { flex:none; width:16px; height:16px; border:1.5px solid var(--faint); border-radius:var(--r-ctl); display:grid; place-items:center; }
+.bcheck { flex:none; width:16px; height:16px; border:1.5px solid var(--line-strong); border-radius:var(--r-ctl); display:grid; place-items:center; }
 .bcard.sel .bcheck { background:var(--accent); border-color:var(--accent); }
 .bcard.sel .bcheck::after { content:""; width:8px; height:4px; border:solid var(--on-accent); border-width:0 0 2px 2px; transform:translateY(-1px) rotate(-45deg); }
 .btitle { flex:1; min-width:0; height:30px; border:1px solid transparent; background:none; font-weight:600; padding:2px 6px; }
@@ -459,6 +459,9 @@ th.addcol button { min-width:28px; font-size:var(--fs-lg); color:var(--accent); 
    .err의 첫 줄은 쉬운 설명, 둘째 줄부터는 DB가 준 원문(server.plain_error)이다. */
 html.easy [data-adv]:not(.adv-shown) .adv { display:none !important; }
 html:not(.easy) .adv-more { display:none !important; }
+/* (Phase 20) 쉬운 보기에서만 보이는 설명 줄(common.js titleHints): 단계 머리와 분석 종류의 title 글 */
+html:not(.easy) .easy-only { display:none; }
+.step > .easy-only { margin:0; padding:0 14px 8px 50px; }
 .adv-more { display:inline-flex; align-items:center; gap:4px; min-height:24px; padding:2px 0; border:0; background:none; color:var(--accent); font-size:var(--fs-xs); cursor:pointer; }
 .adv-more:hover { text-decoration:underline; }
 .lead { color:var(--muted); font-size:var(--fs-sm); margin:2px 0 10px; line-height:1.5; }

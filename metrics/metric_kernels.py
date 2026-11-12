@@ -424,7 +424,7 @@ def survival(t, s, p, ctx):
     got = per.limit(mc.MAX_FETCH_ROWS + 1).to_pyarrow()
     if got.num_rows > mc.MAX_FETCH_ROWS:
         got = got.slice(0, mc.MAX_FETCH_ROWS)
-        ctx.notes.append(f"사용자가 {mc.MAX_FETCH_ROWS:,}명을 넘어 일부만 썼어요(표본 기준).")
+        ctx.notes.append(f"DB가 돌려준 앞의 {mc.MAX_FETCH_ROWS:,}명만 썼어요(무작위가 아니에요). 기간·조건으로 좁혀 주세요.")
     km = mc.kaplan_meier(got["dur"].to_numpy(zero_copy_only=False), got["gone"].to_numpy(zero_copy_only=False))
     points = list(zip(km["times"], km["survival"], km["at_risk"], km["events"]))
     if len(points) > MAX_POINTS:
@@ -637,6 +637,7 @@ def recurring(t, s, p, ctx):
     rows = [{"period": label_of(r["m"], "month"), "mrr": num(r["v"])} for r in mc.rows(x.group_by("m").aggregate(v=x.a.sum()).order_by("m")) if r["m"] is not None]
     last = last_done(rows, t, s, "month", ctx, {"mrr": 0.0})["mrr"] if rows else None
     value = last if p["pick"] == "mrr" else (None if last is None else last * 12)
+    ctx.notes.append("금액 컬럼의 월 합계예요. 일회성 결제가 섞여 있으면 반복 매출보다 크게 나와요. 구독 결제만 조건으로 남겨 주세요.")
     return result(value, last_rows(rows, ctx, "달"), {"period": "월", "mrr": "월 반복 매출"}, {"mrr": last}, label="가장 최근 달" if p["pick"] == "mrr" else "가장 최근 달 × 12")
 
 
@@ -1101,10 +1102,14 @@ def pareto(t, s, p, ctx):
     return result(share, parts={"items": int(len(values))}, label=f"상위 {s['top']:g}% 항목이 차지하는 매출 비중")
 
 
+QUINTILE_BINS = 5  # 5분위 점수의 단계 수
+
+
 def quintile(values, low_is_good=False):
-    """5분위 점수(1~5, 5가 가장 좋음) 배열. 같은 값은 같은 점수다(경계와 같은 값은 낮은 쪽)."""
-    cuts = np.quantile(values, [0.2, 0.4, 0.6, 0.8])
-    return 1 + ((values[:, None] < cuts).sum(1) if low_is_good else (values[:, None] > cuts).sum(1))
+    """5분위 점수(1~5, 5가 가장 좋음) 배열. 같은 값은 같은 점수다(경계와 같은 값은 낮은 쪽). 같은 값이 몰려 경계가 겹치면 mc.tied_levels의 동점 규칙을 따른다."""
+    cuts, scores = mc.tied_levels(np.quantile(values, [0.2, 0.4, 0.6, 0.8]).tolist(), lambda: np.unique(values)[:QUINTILE_BINS + 1].tolist(), QUINTILE_BINS)
+    cuts = np.array(cuts)
+    return np.array(scores)[(values[:, None] < cuts).sum(1) if low_is_good else (values[:, None] > cuts).sum(1)]
 
 
 @kernel("rfm")
@@ -1186,7 +1191,7 @@ def pairs(t, s, names, ctx):
     got = x.to_pyarrow()
     if got.num_rows > mc.MAX_FETCH_ROWS:
         got = got.slice(0, mc.MAX_FETCH_ROWS)
-        ctx.notes.append(f"행이 {mc.MAX_FETCH_ROWS:,}개를 넘어 일부만 썼어요(표본 기준).")
+        ctx.notes.append(f"DB가 돌려준 앞의 {mc.MAX_FETCH_ROWS:,}행만 썼어요(무작위가 아니에요). 기간·조건으로 좁혀 주세요.")
     return {n: got[n].to_numpy(zero_copy_only=False) for n in names}
 
 
@@ -1219,7 +1224,10 @@ def regression(t, s, p, ctx):
 def ranking(t, s, p, ctx):
     """NDCG@K·MAP@K: 질의마다 구해 평균."""
     k = s["k"]
+    noted = len(ctx.notes)
     a = pairs(t, s, ["qid", "rank", "rel"], ctx)
+    if len(ctx.notes) > noted:  # 상한에서 잘렸다
+        ctx.notes.append("마지막 질의는 일부만 들어 있을 수 있어요.")
     groups = {}
     for q, r, rel in zip(a["qid"], a["rank"], a["rel"]):
         groups.setdefault(q, []).append((r, rel))

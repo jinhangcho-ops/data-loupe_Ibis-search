@@ -83,8 +83,9 @@ function confirmScan(d) {
     const buttons = d.blocked ? [el("button", { className: "btn", textContent: "닫기", onclick: pick(false) })]
       : [el("button", { className: "ghost", textContent: "취소", onclick: pick(false) }), el("button", { className: "btn p", textContent: "그대로 실행", onclick: pick(true) })];
     const box = el("div", { className: "modal", onclick: e => { if (e.target === box) pick(false)(); } },
-      el("div", { className: "modal-box" }, el("h3", { textContent: d.blocked ? "실행하지 않았어요" : "읽을 데이터가 많아요" }),
+      el("div", { className: "modal-box" }, el("h3", { id: "scan-title", textContent: d.blocked ? "실행하지 않았어요" : "읽을 데이터가 많아요" }),
         el("p", { textContent: d.text, style: "white-space:pre-wrap; margin:10px 0 14px" }), el("div", { className: "row", style: "justify-content:flex-end" }, ...buttons)));
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "scan-title");
     document.body.append(box);
     box.querySelector("button:last-child").focus();
   });
@@ -1066,6 +1067,12 @@ function advMore(root = document) {
     if ([...box.querySelectorAll(".adv input, .adv select, .adv textarea, input.adv, select.adv, textarea.adv")].some(changed)) showAdv(box);
   });
 }
+// (Phase 20) [data-hint] 요소의 title 글(자기 것이 없으면 안쪽 첫 title)을 바로 아래 .hint.easy-only 줄로도 보인다(쉬운 보기에서만 보임, common.css). 두 번 불러도 한 줄.
+function titleHints(root = document) {
+  root.querySelectorAll("[data-hint]").forEach(x => {
+    if (!x.nextElementSibling?.classList.contains("easy-only")) x.after(el("div", { className: "hint easy-only", textContent: x.title || x.querySelector("[title]").title }));
+  });
+}
 // 컬럼 타입을 쉬운 말로(원래 이름은 화면이 title로 둔다): int64 → 숫자, string → 글자, timestamp → 날짜·시각.
 function typeWord(type) {
   const t = String(type || "").replace(/^!/, "").toLowerCase();
@@ -1080,6 +1087,7 @@ function typeWord(type) {
   return type;
 }
 advMore();
+titleHints();
 
 // 크기 조절 모드: [크기 조절]을 켰을 때만 경계가 보이고 잡힌다. 켤 때마다 꺼진 상태로 시작한다.
 function showResizing(on) {

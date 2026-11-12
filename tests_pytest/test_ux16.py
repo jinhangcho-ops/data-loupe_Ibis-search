@@ -95,7 +95,7 @@ def test_no_px_font_sizes_or_radius_literals():
             assert not rest, (path.name, v)
 
 
-FAINT_OK = {"common.css": {".crumb i", ".jobx.idle i", ".cn", ".bcheck", ".drop .pop .cal-day:disabled"},
+FAINT_OK = {"common.css": {".crumb i", ".jobx.idle i", ".cn", ".drop .pop .cal-day:disabled"},
             "dash_edit.css": {".bresize"}, "sentences.css": set(), "dashboard.css": {".drop .pop .dcal-day:disabled"}}
 
 

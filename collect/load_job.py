@@ -21,6 +21,7 @@ TARGETS = {"table": load_table, "kafka": load_kafka}
 BACKOFF = 1.0  # 실패한 묶음을 다시 넣기 전에 기다리는 시간(초). 시도마다 두 배, MAX_BACKOFF까지.
 MAX_BACKOFF = 60
 SINGLE_SECONDS = 0.05  # 한 건씩 넣을 때 한 건에 드는 시간의 어림(초). 예상 시간 안내에만 쓴다.
+APPEND_NOTE = " 키 컬럼이 없어 끊긴 묶음 하나가 겹쳐 들어갔을 수 있어요. 적재 ID로 행 수를 확인해 주세요."  # 키 없는 덧붙이기를 이어 넣을 때 "이어 넣어요." 뒤에 붙인다
 
 
 # ---------- 구성 ----------
@@ -222,7 +223,7 @@ def run(config, path, password, halt, note):
                 ledger = uploads.Run(load["target"], path, target, load_id, resumed)
                 write_record(path, record)
                 if resumed:
-                    note(message="이어 넣어요.")
+                    note(message="이어 넣어요." + (APPEND_NOTE if load["target"] == "table" and load["table"]["how"] == "append" and not load["table"]["key"] else ""))  # 묶음이 들어간 직후 기록 전에 죽었으면 그 묶음이 한 번 더 들어간다(키가 있으면 Sink.put이 거른다)
                 show()
                 start, first = divmod(record["rows"], size)
                 for n, part in enumerate(batches):

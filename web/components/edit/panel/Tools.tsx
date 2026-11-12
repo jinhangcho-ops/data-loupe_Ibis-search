@@ -22,7 +22,7 @@ import { GroupPicker } from "./GroupPicker";
 import { parseBands } from "../menu/build";
 import { ROUND_TYPES } from "@/components/cards/chart/shapes";
 
-const FORMATS: [string, string][] = [["number", "숫자"], ["percent", "%"], ["currency", "₩"]];
+const FORMATS: [string, string][] = [["number", "숫자"], ["percent", "%"], ["currency", "금액"]];
 // 목표·값 모양이 없는 SVG 카드(옛 svgTools plain)
 const RINGS: [string, string][] = [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리와 목표 눈금"]];
 const PLAIN = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap",

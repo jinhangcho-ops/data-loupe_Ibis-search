@@ -347,7 +347,7 @@
       <div class="err" id="err-connect"></div><!-- common.js가 설정 저장·알림 오류를 띄우는 칸 -->
       <div class="flow" id="collect-flow" data-adv>
       <div class="cstep">
-      <div class="step open" data-step="config"><div class="sp" title="지금 설정을 이름 붙여 저장하거나, 저장해 둔 설정을 불러와요"><i>1</i><span class="t">구성</span><b id="sum-c-config"></b><span class="c"></span></div>
+      <div class="step open" data-step="config"><div class="sp" data-hint title="지금 설정을 이름 붙여 저장하거나, 저장해 둔 설정을 불러와요"><i>1</i><span class="t">구성</span><b id="sum-c-config"></b><span class="c"></span></div>
         <div class="edx">
       <div class="row"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 구성을 불러와요. 요청은 보내지 않아요"></select><input id="rname" placeholder="새 이름"><button id="rsave" class="btn">저장</button><button id="rdel" class="ghost">삭제</button></div>
       <div class="hint">이름을 비우고 저장하면 지금 고른 구성을 덮어써요.</div>
@@ -356,7 +356,7 @@
 
         </div></div></div>
       <div class="cstep"><div class="cn"></div>
-      <div class="step" data-step="mode"><div class="sp" title="데이터를 어디서 받을지 골라요: API(데이터를 주는 주소), 파일 주소, 웹페이지"><i>2</i><span class="t">받는 방식</span><b id="sum-c-mode"></b><span class="c"></span></div>
+      <div class="step" data-step="mode"><div class="sp" data-hint title="데이터를 어디서 받을지 골라요: API(데이터를 주는 주소), 파일 주소, 웹페이지"><i>2</i><span class="t">받는 방식</span><b id="sum-c-mode"></b><span class="c"></span></div>
         <div class="edx">
       <div class="tabs">
       <label><input type="radio" name="mode" value="api" checked style="width:auto"> API</label>
@@ -367,7 +367,7 @@
 
         </div></div></div>
       <div class="cstep not-web"><div class="cn"></div>
-      <div class="step" data-step="env"><div class="sp" title="API 키·비밀번호를 적어 둔 메모장 파일(이름=값)이에요. 프로그램은 파일 위치만 저장해요"><i>3</i><span class="t">비밀 키 파일(env)</span><b id="sum-c-env"></b><span class="c"></span></div>
+      <div class="step" data-step="env"><div class="sp" data-hint title="API 키·비밀번호를 적어 둔 메모장 파일(이름=값)이에요. 프로그램은 파일 위치만 저장해요"><i>3</i><span class="t">비밀 키 파일(env)</span><b id="sum-c-env"></b><span class="c"></span></div>
         <div class="edx">
       <div class="row"><input id="env-path" placeholder="예: C:\work\.env"><button id="env-read" class="btn">불러오기</button></div>
       <div class="hint">값은 저장하지 않고 파일 경로만 저장해요. 요청에서는 {env:이름}으로 써요.</div>
@@ -375,7 +375,7 @@
       <div class="err" id="env-msg"></div>
         </div></div></div>
       <div class="cstep for-api"><div class="cn"></div>
-      <div class="step" data-step="paging"><div class="sp" title="데이터가 여러 쪽으로 나뉘어 올 때 다음 쪽까지 이어 받는 방법이에요. 한 번에 다 오면 '한 번만 받기'"><i>4</i><span class="t">여러 쪽 받기</span><b id="sum-c-paging"></b><span class="c"></span></div>
+      <div class="step" data-step="paging"><div class="sp" data-hint title="데이터가 여러 쪽으로 나뉘어 올 때 다음 쪽까지 이어 받는 방법이에요. 한 번에 다 오면 '한 번만 받기'"><i>4</i><span class="t">여러 쪽 받기</span><b id="sum-c-paging"></b><span class="c"></span></div>
         <div class="edx">
       <select id="p-kind" style="margin-bottom:6px">
       <option value="none">한 번만 받기</option><option value="page">쪽 번호 {page}</option><option value="offset">건너뛸 개수 {offset}</option><option value="cursor">다음 표시(커서) {cursor}</option><option value="next_url">응답의 다음 주소</option>
@@ -391,7 +391,7 @@
       <div class="warn" id="p-warn"></div>
         </div></div></div>
       <div class="cstep adv"><div class="cn"></div>
-      <div class="step" data-step="speed"><div class="sp" title="얼마나 빨리, 몇 번까지 다시 시도하며 받을지 정해요. 보통은 그대로 두세요"><i>5</i><span class="t">받는 속도</span><b id="sum-c-speed"></b><span class="c"></span></div>
+      <div class="step" data-step="speed"><div class="sp" data-hint title="얼마나 빨리, 몇 번까지 다시 시도하며 받을지 정해요. 보통은 그대로 두세요"><i>5</i><span class="t">받는 속도</span><b id="sum-c-speed"></b><span class="c"></span></div>
         <div class="edx">
       <div class="fields">
       <label class="not-web"><div class="hint">동시 요청 수</div><input id="b-conc" type="number"></label>
@@ -405,7 +405,7 @@
 
         </div></div></div>
       <div class="cstep adv"><div class="cn"></div>
-      <div class="step" data-step="limits"><div class="sp" title="API가 정한 횟수 제한(예: 하루 1만 번)을 넘지 않게 멈추는 설정이에요. 제한이 없으면 비워 두세요"><i>6</i><span class="t">사용 한도</span><b id="sum-c-limits"></b><span class="c"></span></div>
+      <div class="step" data-step="limits"><div class="sp" data-hint title="API가 정한 횟수 제한(예: 하루 1만 번)을 넘지 않게 멈추는 설정이에요. 제한이 없으면 비워 두세요"><i>6</i><span class="t">사용 한도</span><b id="sum-c-limits"></b><span class="c"></span></div>
         <div class="edx">
       <div class="row"><select id="lgroup" style="flex:1; min-width:0" title="이 구성에 적용할 사용 한도예요. 같은 API 키를 쓰는 구성끼리 같은 한도를 고르면 사용량을 함께 세요"></select><input id="lname" placeholder="새 이름"><button id="lsave" class="btn">저장</button><button id="ldel" class="ghost">삭제</button></div>
       <div class="hint">칸을 비우면 제한하지 않아요. 이름을 비우고 저장하면 고른 한도를 덮어써요.</div>
@@ -428,7 +428,7 @@
 
         </div></div></div>
       <div class="cstep"><div class="cn"></div>
-      <div class="step" data-step="output"><div class="sp" title="받은 데이터를 저장할 파일 형식과 위치를 정해요"><i>7</i><span class="t">저장</span><b id="sum-c-output"></b><span class="c"></span></div>
+      <div class="step" data-step="output"><div class="sp" data-hint title="받은 데이터를 저장할 파일 형식과 위치를 정해요"><i>7</i><span class="t">저장</span><b id="sum-c-output"></b><span class="c"></span></div>
         <div class="edx">
       <select id="o-format" style="margin-bottom:6px"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
       <div class="row"><input id="o-path" placeholder="저장할 파일 경로"><button id="o-ask" class="btn">위치 고르기</button></div>

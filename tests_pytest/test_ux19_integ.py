@@ -53,7 +53,7 @@ def test_collect_steps_easy_names_and_folded():
     assert re.search(r'<div class="flow"[^>]*data-adv', html) and "data-adv-slot" in flow
     for step in ("speed", "limits"):
         assert re.search(rf'<div class="cstep adv"><div class="cn"></div>\s*<div class="step" data-step="{step}"', flow), step
-    assert len(re.findall(r'<div class="sp" title="[^"]+">', flow)) == 7  # 단계마다 쉬운 설명
+    assert len(re.findall(r'<div class="sp" data-hint title="[^"]+">', flow)) == 7  # 단계마다 쉬운 설명
     restore = between(COLLECT, "function restore(c)", "\nfunction showCollections")
     assert "showAdv(" in restore and "DEFAULT.balance" in restore  # 저장한 구성이 기본과 다르면 펼친다
     assert 'getComputedStyle(c).display !== "none"' in html  # 접힌 단계는 번호를 건너뛴다

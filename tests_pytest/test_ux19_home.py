@@ -21,7 +21,7 @@ def test_home_cards_name_and_one_line():
 
 def test_connect_lead_and_kind_chip_tip():
     html = read("connect.html")
-    head = html.index("<h3>데이터 연결</h3>")
+    head = html.index('<h3 id="conn-title">데이터 연결</h3>')
     assert html.index('<p class="lead">내 PC의 파일(Excel·CSV 등)이나 회사 DB를 골라 연결해요. 원본은 바뀌지 않아요.</p>') > head
     assert '찾을 파일 종류 <span class="hint" id="kinds-tip">누르면 빼거나 넣어요</span>' in html
     assert 'id="kinds"' in html and 'aria-describedby="kinds-tip"' in html

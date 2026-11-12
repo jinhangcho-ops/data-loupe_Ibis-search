@@ -7,7 +7,6 @@ import subprocess
 
 import pytest
 
-from dashboard import dash_calc
 from conftest import ROOT
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
@@ -36,6 +35,7 @@ console.log("ok");
 # 대시보드 카드의 순수 계산(web/lib/calc.ts). node가 TS의 타입만 지워 그대로 돌린다(옛 static/dashboard 화면의 같은 본문을 옮긴 것).
 PURE = """
 // 카드 모양 계산(web/lib/calc.ts): 호·고리·게이지 조각·칸·블록·교차·다각형·값 글자
+setCurrency("₩");  // (Phase 20) 통화 기호는 서버 상수로 받는다(화면에 박아 두지 않는다): 여기서는 기본 기호를 넣어 준다
 const near = (a, b) => assert(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
 const [px, py] = polar(0, 0, 10, Math.PI / 2); near(px, 10); near(py, 0);
 assert.deepStrictEqual(polar(0, 0, 10, 0), [0, -10]);

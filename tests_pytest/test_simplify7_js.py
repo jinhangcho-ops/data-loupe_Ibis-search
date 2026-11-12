@@ -19,7 +19,7 @@ def test_helpers_live_in_one_place():
         owners = [p.relative_to(STATIC).as_posix() for p in STATIC.rglob("*") if p.suffix in (".js", ".html") and re.search(rf"(?:function\s+{name}\b|(?:const|let)\s+{name}\s*=)", p.read_text(encoding="utf-8"))]
         assert owners == [home], (name, owners)
     assert "aggName" not in text("core/funcs.js") and "Funcs.aggName" not in text("query/index.html")
-    assert "showAdded(\"err-ana\", added.dashboard)" in text("prep/prep.html")
+    assert "showAdded(\"err-ana\", added.dashboard)" in text("prep/analysis.js")
 
 
 def test_image_ext():

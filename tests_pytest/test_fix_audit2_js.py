@@ -78,7 +78,7 @@ const els = {}; globalThis.$ = id => els[id] ??= { value: "t1", classList: { add
 
 
 def test_prep_table_uses_shared_result_table():
-    html = (STATIC / "prep" / "prep.html").read_text(encoding="utf-8")
+    html = (STATIC / "prep" / "prep.html").read_text(encoding="utf-8") + (STATIC / "prep" / "analysis.js").read_text(encoding="utf-8")
     assert "tableHtml" not in html and 'sortedTable($("a-table"), anaTable(d, A.view), (h, x, s) => resultTable(h, x, s)' in html  # 전처리 표도 공용 resultTable(host, data)을 쓴다(정렬은 Phase 11 sortedTable)
 
 

@@ -51,7 +51,8 @@ function Draft(screen, get, restore) {
       } });
       const drop = el("button", { className: "ghost", textContent: "버리기", onclick: async () => { has = true; await clear(); end(); } });
       row.append(drop, d.same ? go : shut);
-      const box = el("div", { className: "modal" }, el("div", { className: "modal-box" }, el("h3", { textContent: "하던 작업을 이어서 할까요?" }), note, row));
+      const box = el("div", { className: "modal" }, el("div", { className: "modal-box" }, el("h3", { id: "draft-title", textContent: "하던 작업을 이어서 할까요?" }), note, row));
+      box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "draft-title");
       document.body.append(box);
       (d.same ? go : shut).focus();
     });

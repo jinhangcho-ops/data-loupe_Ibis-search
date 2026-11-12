@@ -97,9 +97,10 @@ async function sentUsedBy(id) {
 function sentAsk(title, text, ok = "확인") {
   return new Promise(done => {
     const close = v => () => { box.remove(); done(v); };
-    const box = el("div", { className: "modal", onclick: e => { if (e.target === box) close(false)(); } }, el("div", { className: "modal-box" }, el("h3", { textContent: title }),
+    const box = el("div", { className: "modal", onclick: e => { if (e.target === box) close(false)(); } }, el("div", { className: "modal-box" }, el("h3", { id: "sent-ask-title", textContent: title }),
       el("p", { textContent: text, style: "white-space:pre-wrap; margin:10px 0 14px" }), el("div", { className: "row", style: "justify-content:flex-end" },
         el("button", { className: "ghost", textContent: "취소", onclick: close(false) }), el("button", { className: "btn p", textContent: ok, onclick: close(true) }))));
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "sent-ask-title");
     document.body.append(box);
   });
 }

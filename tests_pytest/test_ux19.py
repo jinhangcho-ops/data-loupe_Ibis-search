@@ -6,9 +6,10 @@ from urllib.parse import quote, unquote
 
 import pytest
 
-from test_fix_audit_js import between, read, run_node
+from test_fix_audit_js import between, func, read, run_node
 
 needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
+ADV_FUNCS = ("showAdv", "keepAdv", "advMore")  # 접기 장치의 함수들(showAdv 뒤의 advOpen·advKey 줄은 showAdv 구간에 딸려 온다)
 
 
 def test_easy_setting_and_switch(client):
@@ -35,7 +36,7 @@ def test_type_word(tmp_path):
 @needs_node
 def test_adv_more_ignores_fields_made_by_script(tmp_path):
     """스크립트가 만든 체크 칸(처음 값이 비어 늘 '바뀐' 것으로 보임)은 묶음을 펼치지 않고, HTML의 칸(id)에 넣은 값은 펼친다."""
-    code = between("common.js", "function showAdv", "// 컬럼 타입을 쉬운 말로")
+    code = "".join(func("common.js", fn) for fn in ADV_FUNCS)
     got = run_node(tmp_path, r"""
 const field = (id, type, value, dflt) => ({ id, type, tagName: "INPUT", value, defaultValue: dflt, checked: true, defaultChecked: false });
 const box = fields => ({ cls: new Set(), classList: { add(c) { this.o.add(c); }, contains(c) { return this.o.has(c); }, o: null }, fields,
@@ -49,7 +50,7 @@ console.log(JSON.stringify([a.cls.has("adv-shown"), b.cls.has("adv-shown")]));""
 
 def open_page(tmp_path, store, click, box_id="pager", limit=2000):
     """/search 화면을 한 번 연다: 묶음(box_id) 하나, 설정 저장소는 store(설정 이름 → 저장된 글자). [펼쳐 있었는지, 끝난 뒤 store]."""
-    code = between("common.js", "function showAdv", "// 컬럼 타입을 쉬운 말로")
+    code = "".join(func("common.js", fn) for fn in ADV_FUNCS)
     stubs = f"""const store = {json.dumps(store)}; const SERVER = {{ adv_open_max: {limit} }};
 globalThis.saved = n => store[n] === undefined ? undefined : decodeURIComponent(store[n]);
 globalThis.api = (url, body) => {{ Object.assign(store, body); return Promise.resolve({{}}); }};\n"""

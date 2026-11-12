@@ -6,6 +6,7 @@
 - 구할 수 없는 값(0으로 나누기 등)은 None이다."""
 import datetime as dt
 import math
+from collections.abc import Callable
 
 import numpy as np
 from lazy import ibis
@@ -722,6 +723,19 @@ def srm_p(n1, n2, share1=0.5):
     e1, e2 = total * share1, total * (1 - share1)
     chi2 = (n1 - e1) ** 2 / e1 + (n2 - e2) ** 2 / e2
     return math.erfc(math.sqrt(chi2 / 2))
+
+
+def tied_levels(cuts: list[float], uniques: Callable[[], list[float]], bins: int) -> tuple[list[float], list[int]]:
+    """분위 점수의 동점 규칙 (쓸 경계, 단계별 점수). 단계는 '값이 경계보다 큰 개수'(0부터)이고 점수는 그 자리의 값이다.
+    분위 경계 cuts(bins − 1개)가 겹치지 않으면 그대로 1~bins점. 겹치면(같은 값이 몰려 있으면) uniques()로 작은 순 고유값(bins + 1개까지면 된다)을 받아,
+    고유값이 bins개 이하면 고유값 사이를 경계로(고유값마다 한 단계), 더 많으면 겹친 경계를 하나로 합친다. 단계가 k개면 1~bins 눈금으로 편다(k=3이면 1·3·5, k=1이면 가운데 점수)."""
+    if len(set(cuts)) == len(cuts):
+        return list(cuts), list(range(1, bins + 1))
+    values = uniques()
+    used = [(a + b) / 2 for a, b in zip(values, values[1:])] if len(values) <= bins else sorted(set(cuts))
+    if not used:
+        return used, [(1 + bins) // 2]
+    return used, [round(1 + s * (bins - 1) / len(used)) for s in range(len(used) + 1)]
 
 
 GAMMA_ITERS = 500  # 불완전 감마 급수·연분수의 반복 상한(range 끝값)

@@ -51,7 +51,7 @@ def trimmed(value, digits):
 
 
 def format_value(value, fmt="number"):
-    """값 하나를 글자로. number는 1,234.5, currency는 ₩1,234, percent는 비율을 ×100 한 12.3%. 숫자가 아니면 빈 글자."""
+    """값 하나를 글자로. number는 1,234.5, currency는 ₩1,234(기호는 설정 currency_symbol), percent는 비율을 ×100 한 12.3%. 숫자가 아니면 빈 글자."""
     value = finite(value)
     if value is None:
         return ""
@@ -59,7 +59,7 @@ def format_value(value, fmt="number"):
         return trimmed(value * 100, 2) + "%"
     if fmt == "currency":
         shown = trimmed(abs(value), 0)
-        return ("-" if value < 0 and shown != "0" else "") + "₩" + shown
+        return ("-" if value < 0 and shown != "0" else "") + settings.get("currency_symbol") + shown
     return trimmed(value, 2)
 
 
@@ -68,15 +68,14 @@ def format_delta(delta, fmt="number"):
     delta = finite(delta)
     if delta is None:
         return ""
+    head, tail = "", ""
     if fmt == "percent":
         body, tail = trimmed(abs(delta) * 100, 2), "%p"
     elif fmt == "currency":
-        body, tail = "₩" + trimmed(abs(delta), 0), ""
+        head, body = settings.get("currency_symbol"), trimmed(abs(delta), 0)
     else:
-        body, tail = trimmed(abs(delta), 2), ""
-    if body.lstrip("₩") == "0":
-        return body + tail
-    return ("+" if delta > 0 else "-") + body + tail
+        body = trimmed(abs(delta), 2)
+    return ("" if body == "0" else "+" if delta > 0 else "-") + head + body + tail
 
 
 def percent_change(cur, prev):

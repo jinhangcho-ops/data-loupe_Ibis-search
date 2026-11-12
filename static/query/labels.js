@@ -104,6 +104,7 @@ const Labels = (() => {
   function open() {
     const err = el("div", { className: "err" }), inner = el("div", { className: "modal-box" });
     const box = el("div", { className: "modal", onclick: e => { if (e.target === box) box.remove(); } }, inner);
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-label", "태그");  // 제목(h3)은 그릴 때마다 바뀌어 이름을 직접 붙인다
     const render = () => inner.replaceChildren(...(on() ? editor(render, err) : setup(box, err)), err,
       el("div", { className: "row", style: "justify-content:flex-end" }, el("button", { className: "ghost", textContent: "닫기", onclick: () => box.remove() })));
     render();
@@ -225,6 +226,7 @@ const LabelOne = (() => {
     if (!labelsOn || !Labels.on()) return;
     inner = el("div", { className: "modal-box" });
     box = el("div", { id: "label-one", className: "modal", onclick: e => { if (e.target === box) close(); } }, inner);
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-label", "하나씩 태그");
     document.body.append(box);
     only = true; total = null; row = null; mine = [];
     return load(0);

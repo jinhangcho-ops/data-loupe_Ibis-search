@@ -37,6 +37,9 @@ SUBS = {}  # id → [(대체 설명, build)] 같은 결과를 내는 대체 식(
 HAS_ARGS = ("where", "order", "group")  # 정해진 자리의 인자: 조건·정렬·묶음
 # 컬럼 칸의 실수 NaN·±inf를 빈 값으로 받는 함수(감사51): 집계표·지표와 같게. DuckDB는 NaN을 가장 큰 값으로 보고, ceil·std·haversine은 NaN·inf에서 오류를 낸다
 FINITE = {"min", "max", "range", "arg_min", "arg_max", "median", "quantile", "p50", "p90", "p95", "p99", "std", "std_pop", "var", "var_pop", "corr", "moving_std", "ceil", "floor", "haversine", "within_km", "grid_id", "grid_lat", "grid_lon"}
+# 컬럼 칸의 시간대 있는 시각을 설정 시간대의 벽시계 시각으로 먼저 바꾸는 함수(plans/phase-20.md#date_zone). 시각의 차이를 보는 epoch·date_diff·date_add 등은 넣지 않는다
+ZONED = {"year", "quarter", "month", "week", "day", "hour", "minute", "second", "weekday", "weekday_num", "weekday_name", "is_weekend", "time_of_day", "work_hours", "month_phase",
+         "is_month_end", "truncate", "to_date", "to_time", "strftime"}
 
 
 class Args(dict):
@@ -226,6 +229,8 @@ def resolve(f, t, raw):
         out[name] = resolve_one(t, value, spec, f)
         if f["id"] in FINITE and spec["kind"] == "column":
             out[name] = prep_ops.nan_to_null(out[name])
+        if f["id"] in ZONED and spec["kind"] == "column":
+            out[name] = to_timezone(out[name])
     return out
 
 
@@ -261,6 +266,11 @@ def apply(id, t, raw=None):
 
 def aggregate(id, t, column=None, where=None, opts=None):
     """화면의 집계 칸 {agg: id, y: 컬럼, 옵션}을 집계 식으로. column이 칸의 첫 컬럼(x), where는 조건 줄이나 Ibis 값, opts는 나머지 인자."""
+    return aggregate_built(id, t, column, where, opts, False)
+
+
+def aggregate_built(id, t, column, where, opts, probe):
+    """aggregate의 본체. probe가 참이면 되는지만 볼 식이다(querying.agg_unsupported): 대체 식(moments)이 평균을 구하는 조회를 보내지 않는다(결과 값은 쓰지 않는다)."""
     f = get(id)
     if not f["aggregate"]:
         raise ValueError(f"'{f['label']}'은 집계 함수가 아니에요.")
@@ -270,6 +280,8 @@ def aggregate(id, t, column=None, where=None, opts=None):
     if where is not None:
         raw["where"] = where
     c = resolve(f, t, raw)
+    if probe:
+        c[CENTERS] = NO_CENTERS
     return usable(f, t, c, f["build"](c))
 
 
@@ -660,6 +672,7 @@ def period_start(col, unit):
 
 
 ZONE_YEARS = (1900, 2100)  # 시간대 바뀜(서머타임 등)을 찾는 범위
+WEEK_HELP = " 설정의 주 시작 요일과 상관없이 월요일에 시작하는 ISO 주예요(설정을 따르는 것은 truncate(…, 'week'), weekday_num)."  # week 도움말에 붙이는 글
 
 
 def setting_zone():
@@ -709,8 +722,8 @@ def to_timezone(col, zone=None):
 row("truncate", "date", "단위로 자르기", "날짜를 연·분기·월·주·일·시·분·초의 시작으로.", [D_, UNIT], lambda c: period_start(with_time(c).x, UNITS[c.unit]), "truncate(주문일, 'month')", DAT, DAT)
 for pid, plabel, method in (("year", "연", "year"), ("quarter", "분기", "quarter"), ("month", "월", "month"), ("week", "주(연중 몇 째 주)", "week_of_year"),
                             ("day", "일", "day"), ("hour", "시", "hour"), ("minute", "분", "minute"), ("second", "초", "second")):
-    row(pid, "date", f"{plabel} 뽑기", f"날짜에서 {plabel}만 숫자로.", [D_], date_part(method), f"{pid}(주문일)", DAT, NUM)
-row("weekday", "date", "요일 뽑기", "월요일 0 ~ 일요일 6.", [D_], lambda c: c.x.day_of_week.index().cast("int64"), "weekday(주문일)", DAT, NUM)
+    row(pid, "date", f"{plabel} 뽑기", f"날짜에서 {plabel}만 숫자로." + (WEEK_HELP if pid == "week" else ""), [D_], date_part(method), f"{pid}(주문일)", DAT, NUM)
+row("weekday", "date", "요일 뽑기", "월요일 0 ~ 일요일 6. 설정의 주 시작 요일과 상관없이 월요일이 0이에요(설정을 따르는 것은 weekday_num, truncate(…, 'week')).", [D_], lambda c: c.x.day_of_week.index().cast("int64"), "weekday(주문일)", DAT, NUM)
 row("epoch", "date", "epoch(초)", "1970-01-01부터 지난 초.", [D_], lambda c: c.x.cast("timestamp").epoch_seconds(), "epoch(주문일)", DAT, NUM)
 row("to_timezone", "date", "시간대로 바꾸기", "시간대가 있는 날짜시간을 그 시간대(비우면 설정의 시간대)의 시각으로. 시간대 없는 값은 그대로.", [D_, text("zone", "시간대(Asia/Seoul·+09:00)", "", True)],
     lambda c: to_timezone(c.x, c.zone), "to_timezone(주문시각, 'Asia/Seoul')", DAT, DAT)
@@ -1358,13 +1371,24 @@ def sub(id, note, build):
     SUBS.setdefault(id, []).append((note, build))
 
 
+CENTERS = "moment_centers"  # Args에 넣어 두는 (x 평균, y 평균): 같은 인자로 moments를 여러 번 불러도 조회는 한 번
+NO_CENTERS = (0.0, 0.0)  # 식을 만들어만 보는 지원 판정(probe_expr)이 넣는 값: 조회를 보내지 않는다
+
+
 def moments(c):
-    """분산·공분산·상관계수를 평균·개수만으로 구하는 재료. 두 컬럼이면 둘 다 값이 있는 행만 쓴다."""
-    y = c.y if c.y is not None else c.x
-    w = both(c.x.notnull(), y.notnull(), c.where)
+    """분산·공분산·상관계수를 평균·개수만으로 구하는 재료. 두 컬럼이면 둘 다 값이 있는 행만 쓴다.
+    (plans/phase-20.md#moments) 실수로 바꾸고 전체 평균(작은 집계 한 번)을 뺀 값으로 구한다: 큰 수의 제곱끼리 빼면 자릿수가 사라지고 DECIMAL은 제곱이 넘친다."""
+    x = c.x.cast("float64")
+    y = c.y.cast("float64") if c.y is not None else x
+    w = both(x.notnull(), y.notnull(), c.where)
+    if CENTERS not in c:
+        from core import server  # 늦은 import(server가 이 모듈을 부른다)
+        found = server.run(lambda: prep_ops.stats(c.t, x=x.mean(where=w), y=y.mean(where=w)))  # 식은 요청 스레드에서도 만든다: 조회는 연결 스레드에서
+        c[CENTERS] = (found["x"] or 0.0, found["y"] or 0.0)  # 값이 하나도 없으면 평균도 없다: 옮기지 않는다
+    x, y = x - c[CENTERS][0], y - c[CENTERS][1]
     n = c.t.count(where=w)
-    mx, my, mxy = c.x.mean(where=w), y.mean(where=w), (c.x * y).mean(where=w)
-    return n, mx, my, mxy, (c.x * c.x).mean(where=w), (y * y).mean(where=w), w
+    mx, my, mxy = x.mean(where=w), y.mean(where=w), (x * y).mean(where=w)
+    return n, mx, my, mxy, (x * x).mean(where=w), (y * y).mean(where=w), w
 
 
 def sample(n, pop):
@@ -1465,7 +1489,9 @@ def probe_expr(f, t, build=None):
         return None
     if f["table"]:
         return f["build"](resolve(f, t, raw))
-    value = (build or f["build"])(resolve(f, t, raw))
+    c = resolve(f, t, raw)
+    c[CENTERS] = NO_CENTERS  # 대체 식(moments)이 평균을 구하는 조회를 보내지 않게
+    value = (build or f["build"])(c)
     return t.aggregate(v=value) if f["aggregate"] else t.select(v=value)
 
 
