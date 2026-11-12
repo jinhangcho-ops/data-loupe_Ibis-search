@@ -68,10 +68,10 @@ export function Toolbar() {
         <PickDashboard />
         <span className="d-sep"></span>
         <button className={"btn" + (state.editing ? " on" : "")} aria-pressed={state.editing} disabled={!state.dash} onClick={() => { if (state.editing) setAddOpen(false); dispatch({ type: "editing", on: !state.editing }); }}
-          title={state.dash ? "카드를 끌어 옮기고, 크기를 바꾸고, 빼고, 설정해요" : "대시보드를 고르거나 [새 대시보드]·[+ 카드]로 만들면 편집할 수 있어요"}>{state.editing ? "편집 끝내기" : "편집"}</button>
+          title={state.dash ? "카드를 옮기고, 크기를 바꾸고, 빼고, 고칠 수 있게 해요" : "먼저 대시보드를 고르거나 [새 대시보드]를 만들어요"}>{state.editing ? "편집 끝내기" : "편집"}</button>
         {state.editing && (
         <div className="drop" ref={drop} onKeyDown={e => { if (e.key === "Escape" && menu) { setMenu(false); drop.current?.querySelector<HTMLElement>("button")?.focus(); } }}>
-          <button className="btn" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)} title="카드를 넣거나 지표를 봐요">+ 카드 ▾</button>
+          <button className="btn" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)} title="대시보드에 새 카드(숫자·표·차트)를 넣어요">+ 카드 ▾</button>
           {menu && (
             <div className="pop" role="menu" style={{ left: 0, right: "auto" }}>
               <button role="menuitem" onClick={() => { setMenu(false); dispatch({ type: "select", id: null }); setAddOpen(true); }} title="테이블을 골라 KPI, 표, 문장 같은 카드를 바로 만들어요">카드 추가</button>
@@ -82,11 +82,11 @@ export function Toolbar() {
           )}
         </div>
         )}
-        <button className="btn" onClick={() => setReport(true)} aria-haspopup="dialog" title="카드를 그림이나 PNG·PDF 보고서로 저장해요">내보내기 ▾</button>
+        <button className="btn" onClick={() => setReport(true)} aria-haspopup="dialog" title="대시보드를 그림(PNG)이나 PDF 보고서로 저장해요">내보내기 ▾</button>
         <span style={{ marginLeft: "auto" }}></span>
-        <button className="btn" onClick={again} disabled={busy} title="모든 카드 값을 지금 연결에서 다시 구해 저장해요">다시 구하기</button>
-        {state.editing && <button className="btn" onClick={() => setSettings(true)} aria-haspopup="dialog" title="기준일, 기간, 최신화 주기, 카드 색, 목표 파일, 내 템플릿을 정해요">대시보드 설정</button>}
-        <button className="btn" id="d-only" onClick={() => setDashOnly(true)} title="메뉴와 도구를 숨기고 대시보드만 봐요. Esc나 오른쪽 위 [보기 끝내기]로 돌아와요">대시보드만 보기</button>
+        <button className="btn" onClick={again} disabled={busy} title="데이터를 새로 읽어 카드 숫자를 고쳐요">다시 구하기</button>
+        {state.editing && <button className="btn" onClick={() => setSettings(true)} aria-haspopup="dialog" title="어느 날짜·기간의 숫자를 볼지, 얼마나 자주 새로 읽을지, 카드 색 같은 것을 정해요">대시보드 설정</button>}
+        <button className="btn" id="d-only" onClick={() => setDashOnly(true)} title="왼쪽 메뉴와 단추를 숨기고 카드만 크게 봐요. Esc를 누르면 돌아와요">대시보드만 보기</button>
       </div>
       <SettingsDialog open={settings} onClose={() => setSettings(false)} />
       <MetricsWindow open={metrics} onClose={() => setMetrics(false)} onAdd={add} />

@@ -76,7 +76,9 @@ function DashboardView() {
       <div className={state.locked || !state.ok ? "err" : "ok"} id="err-dash" role="status">{state.locked ? consts?.dash.locked : state.error}</div>
       {!n && (
         <div className="board-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
-          <p className="hint" style={{ fontSize: 14 }}>{state.dash ? "아직 카드가 없어요." : "저장한 대시보드가 없어요."} 카드를 넣거나 쿼리 화면에서 [대시보드에 추가]를 눌러 모으세요.{state.dash ? " 카드 모음의 칸을 아래 격자에 끌어 놓아도 돼요." : ""}</p>
+          <p className="hint" style={{ fontSize: 14 }}>{state.dash ? "아직 카드가 없어요." : "저장한 대시보드가 없어요."} 이렇게 시작해요.</p>
+          <ol className="hint" style={{ fontSize: 14, margin: 0, padding: 0, listStyle: "none", lineHeight: 1.8 }}><li>① [카드 추가]를 눌러요</li><li>② 보고 싶은 카드 종류를 골라요</li></ol>
+          <p className="hint" style={{ fontSize: 14 }}>또는 쿼리 화면에서 차트를 만들고 [대시보드에 추가]를 눌러요.</p>
           <div className="row" style={{ display: "flex", gap: 12 }}>
             <button className="btn p" style={{ height: 44, padding: "0 22px", fontSize: 15 }} onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: null }); setAddOpen(true); }}>카드 추가</button>
             <a className="btn" style={{ height: 44, padding: "0 22px", fontSize: 15, textDecoration: "none" }} href="/search">쿼리에서 가져오기</a>

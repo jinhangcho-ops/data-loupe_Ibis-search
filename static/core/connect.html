@@ -2,6 +2,7 @@
 <div id="conn-panel" class="modal hidden">
   <div class="modal-box conn-card">
     <div class="head"><h3>데이터 연결</h3><button id="conn-close" class="ib" title="닫기" style="margin-left:auto"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
+    <p class="lead">내 PC의 파일(Excel·CSV 등)이나 회사 DB를 골라 연결해요. 원본은 바뀌지 않아요.</p>
     <span class="hint conn-for" id="conn-for"></span>
     <select id="recent-conn" class="hidden" title="전에 연결했던 폴더와 주소예요. 자주 쓴 것부터 보여요. 고르면 칸이 채워지고, 비밀번호는 다시 넣어야 해요."></select>
     <div class="seg2">
@@ -11,8 +12,8 @@
     <div id="folder-box">
       <div class="field-label">폴더나 파일 위치</div>
       <div class="row"><input id="path" placeholder="예: C:\data 또는 C:\data\sales.parquet"><button id="find" class="btn">찾기</button></div>
-      <div class="field-label">찾을 파일 종류</div>
-      <div class="kinds" id="kinds" title="고른 종류의 파일만 찾아요"></div>
+      <div class="field-label">찾을 파일 종류 <span class="hint" id="kinds-tip">누르면 빼거나 넣어요</span></div>
+      <div class="kinds" id="kinds" title="색이 칠해진 종류의 파일만 찾아요. 누르면 빼거나 넣어요" aria-describedby="kinds-tip"></div>
       <label class="check"><input type="checkbox" id="deep" checked> 안쪽 폴더까지 찾기</label>
       <select id="file" class="hidden"></select>
       <div id="flat" class="hidden">

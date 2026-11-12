@@ -8,6 +8,11 @@
 <link rel="stylesheet" href="/static/core/dash_edit.css">
 <link rel="stylesheet" href="/static/query/sentences.css">
 <style>
+  /* (Phase 19) 단계 번호는 보이는 단계만 센다: 쉬운 보기로 접힌 단계(display:none)는 건너뛰어 1, 2, 3…으로 이어진다 */
+  #flow { counter-reset:qstep; }
+  #flow .step { counter-increment:qstep; }
+  #flow .step .sp i { font-size:0; }
+  #flow .step .sp i::before { content:counter(qstep); font-size:var(--fs-xs); }
   .edx .row { margin-bottom:6px; }
   ul.items { list-style:none; margin:0 0 4px; padding:0; }
   ul.items li { display:flex; justify-content:space-between; gap:6px; background:var(--card); border:1px solid var(--accent-line); border-radius:9px; padding:4px 8px; margin-bottom:4px; }
@@ -127,6 +132,10 @@
   #label-filter, #label-tags { display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap; }
   #label-filter.hidden, #label-tags.hidden { display:none; }
   #label-bar { margin-top:8px; }
+  /* (19C1) 테이블을 고르기 전: 1단계만 강조하고 나머지 단계는 흐리게(showFlowGuide) */
+  .flow.first .step:not(#step-data) { opacity:.45; }
+  .flow.first #step-data { box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  #metv .tool { flex-wrap:wrap; }  /* (19D3) 안내 글은 한 줄 전체, 칸들은 다음 줄로 */
 </style>
 </head>
 <body class="app" data-virtual="1">
@@ -138,19 +147,20 @@
       <div class="drop"><button type="button" id="wtab-menu" class="ghost" title="이 탭을 저장해요" aria-label="탭 메뉴">⋯</button>
         <div class="pop hidden" id="wtab-pop"><button id="wtab-save" title="이 탭의 조건을 탭 이름으로 저장한 검색에 넣어요">저장한 검색으로 저장</button><button id="wtab-vt" title="이 탭의 SQL을 SQL 탭 편집기에 넣고 탭 이름을 가상 테이블 이름 칸에 넣어요">가상 테이블로 저장</button></div></div></div>
     <div class="vwide hidden" id="vwide"><div id="sent-host" class="hidden"></div></div>
-    <div class="tool">
+    <div class="tool" data-adv>
       <label class="q" title="지금 보이는 쪽에서만 찾아요"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="row-find" placeholder="결과 안에서 찾기"><span class="hint" id="find-count" style="margin:0; white-space:nowrap"></span></label>
-      <button id="sql-show" class="btn">SQL 보기</button>
-      <button id="plan-show" class="btn" title="DB가 이 검색을 어떻게 읽는지 보여 줘요. 인덱스를 쓰는지, 테이블을 통째로 읽는지 알 수 있어요. 검색은 하지 않아요 (EXPLAIN)">실행 계획</button>
+      <button id="sql-show" class="btn adv" title="이 검색이 DB에 보내는 SQL 문장을 보여 줘요">SQL 보기</button>
+      <button id="plan-show" class="btn adv" title="DB가 이 검색을 어떻게 읽는지 보여 줘요. 인덱스를 쓰는지, 테이블을 통째로 읽는지 알 수 있어요. 검색은 하지 않아요 (EXPLAIN)">실행 계획</button>
       <div class="drop"><button id="export-open" class="btn" title="조건에 맞는 모든 행을 파일로 내보내요. 검색한 뒤에 쓸 수 있어요">내보내기<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button><div class="pop hidden" id="export-pop"><button data-export="csv" title="조건에 맞는 모든 행을 CSV 파일로 내보내요" aria-label="CSV로 내보내기">CSV</button><button data-export="xlsx" title="조건에 맞는 모든 행을 Excel 파일로 내보내요" aria-label="Excel로 내보내기">Excel</button><button data-export="parquet" title="조건에 맞는 모든 행을 Parquet 파일로 내보내요" aria-label="Parquet으로 내보내기">Parquet</button><button data-export="tsv" title="조건에 맞는 모든 행을 탭으로 나눈 TSV 파일로 내보내요" aria-label="TSV로 내보내기">TSV</button><button data-export="fixed" title="조건에 맞는 모든 행을 고정폭 텍스트 파일로 내보내요(칸 너비는 컬럼의 가장 긴 값에 맞춰요)" aria-label="고정폭 텍스트로 내보내기">고정폭</button><button id="export-tables" title="기준·이어붙이기·조인에 올린 테이블들을 한 Excel 파일에 테이블마다 시트 하나로 저장해요(조건은 넣지 않아요)" aria-label="테이블마다 시트 하나로 Excel에 내보내기">테이블별 Excel</button></div></div>
-      <button id="handoff" class="btn" title="지금 검색을 그대로 분석 화면의 전처리 탭으로 넘겨요. 파일을 만들지 않고 연결도 그대로예요">전처리로 보내기</button>
-      <button id="label-open" class="btn" disabled title="결과의 행마다 태그를 달아요. 처음에는 행마다 값이 다른 키 컬럼을 골라 켜요. 켜면 검색 결과에 '태그' 컬럼이 붙어요">태그</button><button id="label-edit" class="btn hidden" title="태그 사전(더하기·이름 바꾸기·차례·지우기)을 고쳐요">태그 사전</button><button id="label-one-open" class="btn hidden" title="검색 결과의 행을 하나씩 크게 보며 태그를 달아요. 숫자 키로 태그를 켜고 끄고, Enter로 다음 행으로 가요">하나씩 태그</button>
+      <button id="handoff" class="btn adv" title="지금 검색을 그대로 분석 화면의 전처리 탭으로 넘겨요. 파일을 만들지 않고 연결도 그대로예요">전처리로 보내기</button>
+      <button id="label-open" class="btn adv" disabled title="결과의 행마다 태그를 달아요. 처음에는 행마다 값이 다른 키 컬럼을 골라 켜요. 켜면 검색 결과에 '태그' 컬럼이 붙어요">태그</button><button id="label-edit" class="btn adv hidden" title="태그 사전(더하기·이름 바꾸기·차례·지우기)을 고쳐요">태그 사전</button><button id="label-one-open" class="btn adv hidden" title="검색 결과의 행을 하나씩 크게 보며 태그를 달아요. 숫자 키로 태그를 켜고 끄고, Enter로 다음 행으로 가요">하나씩 태그</button>
       <span id="label-filter" class="hidden"><select id="label-mode" title="태그로 행을 걸러요"><option value="">모든 행</option><option value="none">태그 없는 행</option><option value="any">고른 태그 중 하나라도</option><option value="all">고른 태그가 모두</option></select><span id="label-tags" class="hidden"></span></span>
     </div>
     <div class="big"><b id="big-count"></b><span id="big-sub">아직 검색하지 않았어요. 오른쪽에서 테이블과 조건을 고른 뒤 [검색]을 누르세요.</span></div>
     <div class="err" id="err-search"></div>
-    <div class="tabs2"><button data-tab="rows" class="on">결과</button><button data-tab="summary">집계</button><button data-tab="chart">차트</button></div>
+    <div class="tabs2"><button data-tab="rows" class="on" title="찾은 행을 표로 봐요">결과</button><button data-tab="summary" title="컬럼마다 개수·평균 같은 요약을 봐요">집계</button><button data-tab="chart" title="값을 그림으로 봐요">차트</button></div>
     <section class="pane" id="pane-rows">
+      <p class="lead">찾은 행을 표로 봐요. 머리글을 누르면 그 컬럼으로 정렬해요.</p>
       <pre id="sql" class="hidden"></pre>
       <div class="ctl" id="rows-tools"><button id="lookup-open" class="btn" title="결과의 한 컬럼 값(ID 등)으로 다른 테이블이나 다른 탭의 결과에서 찾거나 붙여요">다른 테이블에서 찾기</button><button id="newcol-open" class="btn" title="계산·조건·날짜·그룹 집계 같은 방식으로 새 컬럼을 만들어요. 표 머리글 끝의 +와 같아요">+ 새 컬럼</button></div>
       <div class="table-wrap" id="rows"></div>
@@ -158,6 +168,7 @@
       <div class="hint hidden" id="ctx-hint">값을 우클릭하면 이 값만 보기·제외·정렬을 할 수 있어요</div>
     </section>
     <section class="pane hidden" id="pane-summary">
+      <p class="lead">컬럼마다 개수·평균 같은 요약을 봐요. [집계하기]를 누르세요.</p>
       <div class="ctl">
         <button id="summarize">집계하기</button>
         <label class="hint" style="margin:0" title="행 수 / 고유 수"><input type="checkbox" id="s-dup" style="width:auto"> 중복도</label>
@@ -214,22 +225,24 @@
       <div class="chart-box hidden" id="pt-box"><iframe id="pt-chart" src="/chart" title="기간별 표 차트"></iframe></div>
       <div class="grip-y" data-size="summary" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div>
     </section>
-    <section class="pane hidden" id="pane-chart">
-      <details class="shelf-box" id="shelf-box"><summary class="hint" title="컬럼 칩을 X축, 값, 색, 필터 칸에 끌어다 놓으면 차트가 바로 바뀌어요. 칩을 누른 뒤 칸을 눌러도 돼요">컬럼을 끌어다 놓아 차트 만들기</summary><div id="shelf-host"></div></details>
+    <section class="pane hidden" id="pane-chart" data-adv>
+      <p class="lead">값을 그림으로 봐요. X축과 Y축을 고르고 [차트 그리기]를 누르세요.</p>
+      <details class="shelf-box adv" id="shelf-box"><summary class="hint" title="컬럼 칩을 X축, 값, 색, 필터 칸에 끌어다 놓으면 차트가 바로 바뀌어요. 칩을 누른 뒤 칸을 눌러도 돼요">컬럼을 끌어다 놓아 차트 만들기</summary><div id="shelf-host"></div></details>
       <div class="ctl lab">
-        <div class="cf"><span class="cl">X축</span><select id="cx" title="X축 컬럼"></select></div><button id="cswap" class="btn" title="X축과 Y축 컬럼을 서로 바꾸고 다시 그려요" aria-label="X축과 Y축 바꾸기">↔</button>
+        <div class="cf"><span class="cl">X축</span><select id="cx" title="X축 컬럼"></select></div><button id="cswap" class="btn adv" title="X축과 Y축 컬럼을 서로 바꾸고 다시 그려요" aria-label="X축과 Y축 바꾸기">↔</button>
+        <div class="cf"><span class="cl">Y축</span><select id="cy" title="Y축 컬럼이에요. 개수만 셀 때는 비워 두세요"></select></div>
+        <div class="cf wide"><span class="cl">계산</span><span id="cagg" title="집계 방법이에요. 고른 집계에 따라 칸이 더 나와요"></span></div>
+        <div class="cf"><span class="cl">종류</span><select id="ctype" title="그래프 모양"><option value="bar">막대</option><option value="line">선</option></select></div>
+        <button id="draw">차트 그리기</button>
+        <button id="dash-add" class="btn" title="지금 그린 차트를 대시보드에 넣어요">대시보드에 추가</button>
+      </div>
+      <div data-adv-slot></div>
+      <div class="hint" id="hashed-note-c"></div>
+      <div class="ctl lab adv">
         <div class="cf hidden" id="cunit-box"><span class="cl">묶기</span><select id="cunit" title="X축이 날짜·시각일 때 이 기간으로 묶어 세요. 건수가 없는 기간은 0으로 채워요"><option value="">묶지 않음</option><option value="day">일</option><option value="week">주</option><option value="month">월</option><option value="year">연</option></select></div>
         <div class="cf"><span class="cl">나누기</span><select id="csplit" title="이 컬럼의 값마다 막대나 선을 나눠요 (최대 8개)"></select></div>
         <div class="cf"><span class="cl">정렬</span><select id="corder" title="막대 순서. 자동이면 글자 X는 값 큰 순, 숫자·날짜 X는 X축 순이에요"></select></div>
         <div class="cf"><span class="cl">비율</span><select id="cratio" title="차트 비율"><option value="auto">자동</option><option value="square">1:1</option><option value="wide">16:9</option></select></div>
-        <button id="draw">차트 그리기</button>
-        <button id="dash-add" class="btn" title="지금 그린 차트를 대시보드에 넣어요">대시보드에 추가</button>
-      </div>
-      <div class="hint" id="hashed-note-c"></div>
-      <div class="ctl lab">
-        <div class="cf"><span class="cl">Y축</span><select id="cy" title="Y축 컬럼이에요. 개수만 셀 때는 비워 두세요"></select></div>
-        <div class="cf wide"><span class="cl">계산</span><span id="cagg" title="집계 방법이에요. 고른 집계에 따라 칸이 더 나와요"></span></div>
-        <div class="cf"><span class="cl">종류</span><select id="ctype" title="그래프 모양"><option value="bar">막대</option><option value="line">선</option></select></div>
         <div class="cf"><span class="cl">선</span><select id="cdash" title="선 모양" disabled><option value="solid">실선</option><option value="dashed">점선</option></select></div>
         <div class="cf"><span class="cl">축</span><select id="caxis" title="이 값을 그릴 세로축"><option value="left">왼쪽 축</option><option value="right">오른쪽 축</option></select></div>
         <div class="cf"><span class="cl">값 축</span><select id="cscale" title="세로 값 축의 눈금이에요. 값 차이가 아주 클 때 로그나 SymLog를 고르세요"><option value="">보통</option><option value="log">로그</option><option value="symlog">SymLog</option></select></div>
@@ -239,12 +252,12 @@
       <div class="err" id="err-chart"></div>
       <div class="chart-box"><iframe id="chart" src="/chart" title="차트" class="hidden"></iframe><div class="grip-y" data-size="chart" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div></div>
       <div class="table-wrap hidden" id="ctable"></div>
-      <div class="ctl" style="margin-top:18px"><button id="ctable-show" class="btn">표로 보기</button><button id="ctable-csv" class="btn">CSV</button><span class="hint grow">차트 내보내기</span>
+      <div class="ctl adv" style="margin-top:18px"><button id="ctable-show" class="btn">표로 보기</button><button id="ctable-csv" class="btn">CSV</button><span class="hint grow">차트 내보내기</span>
         <label class="hint" style="margin:0" title="끄면 화면에 보이는 그대로, 켜면 자동 규칙을 풀어 모든 데이터로 CSV·그림을 저장해요"><input type="checkbox" id="cexport-all" style="width:auto"> 모든 데이터 포함</label>
         <select id="cimage" title="그림의 색 모드예요. 집계 표 그림과 함께 바뀌어요" style="flex:0 0 100px"><option value="light">밝게</option><option value="dark">어둡게</option></select>
         <button data-image="png" class="btn">PNG</button><button data-image="jpeg" class="btn">JPG</button>
         <select id="csend" title="차트를 받을 곳" style="flex:0 1 160px"></select><button id="csend-go" class="btn">보내기</button></div>
-      <details class="axis-box"><summary class="hint">세로축 최소·최대</summary>
+      <details class="axis-box adv"><summary class="hint">세로축 최소·최대</summary>
       <div class="ctl">
         <span class="hint">왼쪽 축</span>
         <input id="ymin" type="number" step="any" placeholder="최소 (자동)" title="왼쪽 세로축의 최솟값이에요. 비우면 알아서 정해요">
@@ -253,25 +266,25 @@
         <input id="y1min" type="number" step="any" placeholder="최소 (자동)" title="오른쪽 세로축의 최솟값이에요. 비우면 알아서 정해요">
         <input id="y1max" type="number" step="any" placeholder="최대 (자동)" title="오른쪽 세로축의 최댓값이에요. 비우면 알아서 정해요">
       </div></details>
-      <details class="axis-box" id="cgroup-box"><summary class="hint" title="보일 그룹·계열을 고르고, 숫자·날짜 X는 범위로 묶고, 이름을 바꿔요. 저장하지 않고 대시보드에 담을 때 같이 담아요">그룹 고르기</summary><div id="cgroups"></div></details>
-      <details class="axis-box"><summary class="hint" title="차트를 그릴 때 알아서 하는 정렬·묶기·축 정리예요. 끈 것은 다음에도 기억해요">자동 규칙</summary><div id="cauto"></div></details>
-      <div class="ctl"><label class="hint" style="margin:0" title="자동 규칙이 덜어 낸 것(상위 N개 묶기·꼬리 자르기·점 솎기)을 풀어 전부 그려요. 서버가 받는 그룹 수 상한은 그대로예요"><input type="checkbox" id="call" style="width:auto"> 모든 데이터</label></div>
-      <div class="ctl"><textarea id="clabels" rows="2" style="flex:1" placeholder="라벨 바꾸기: 한 줄에 원래값=보일값 (예: 1=남)" title="X·범례·툴팁에 보이는 글자만 바꿔요. 데이터는 그대로예요" aria-label="라벨 바꾸기"></textarea></div>
+      <details class="axis-box adv" id="cgroup-box"><summary class="hint" title="보일 그룹·계열을 고르고, 숫자·날짜 X는 범위로 묶고, 이름을 바꿔요. 저장하지 않고 대시보드에 담을 때 같이 담아요">그룹 고르기</summary><div id="cgroups"></div></details>
+      <details class="axis-box adv"><summary class="hint" title="차트를 그릴 때 알아서 하는 정렬·묶기·축 정리예요. 끈 것은 다음에도 기억해요">자동 규칙</summary><div id="cauto"></div></details>
+      <div class="ctl adv"><label class="hint" style="margin:0" title="자동 규칙이 덜어 낸 것(상위 N개 묶기·꼬리 자르기·점 솎기)을 풀어 전부 그려요. 서버가 받는 그룹 수 상한은 그대로예요"><input type="checkbox" id="call" style="width:auto"> 모든 데이터</label></div>
+      <div class="ctl adv"><textarea id="clabels" rows="2" style="flex:1" placeholder="라벨 바꾸기: 한 줄에 원래값=보일값 (예: 1=남)" title="X·범례·툴팁에 보이는 글자만 바꿔요. 데이터는 그대로예요" aria-label="라벨 바꾸기"></textarea></div>
     </section>
     <div class="err" id="err-export"></div>
-    <div class="pager" id="pager">
+    <div class="pager" id="pager" data-adv>
       <button id="prev" class="btn" disabled>이전</button><button id="next" class="btn" disabled>다음</button><span id="page-info"></span><input id="page-go" inputmode="numeric" size="3" placeholder="쪽" title="가려는 쪽 번호를 쓰고 Enter를 누르세요. 범위 밖이면 처음이나 마지막 쪽으로 가요" aria-label="쪽 번호로 이동">
       <label title="한 쪽에 보일 행 수예요">한 쪽에 <input id="limit" type="number" value="20" min="1">행</label>
-      <label title="이보다 긴 글은 줄여서 보여요. 마우스를 올리면 다 보여요. 0이면 줄이지 않아요">긴 글은 <input id="maxlen" type="number" value="40" min="0">자에서 줄임</label>
-      <label title="끄면 총 행 수와 예상 시간을 구하지 않아요. 쓴 만큼 요금이 나오는 DB에서 아낄 수 있어요. 주소로 접속한 DB는 결과를 이 PC에 받아 둘 수 있는지만 100만 행까지 세요"><input type="checkbox" id="count" checked> 총 행 수 세기</label>
+      <label class="adv" title="이보다 긴 글은 줄여서 보여요. 마우스를 올리면 다 보여요. 0이면 줄이지 않아요">긴 글은 <input id="maxlen" type="number" value="40" min="0">자에서 줄임</label>
+      <label class="adv" title="끄면 총 행 수와 예상 시간을 구하지 않아요. 쓴 만큼 요금이 나오는 DB에서 아낄 수 있어요. 주소로 접속한 DB는 결과를 이 PC에 받아 둘 수 있는지만 100만 행까지 세요"><input type="checkbox" id="count" checked> 총 행 수 세기</label>
     </div>
   </main>
   <div class="grip-x" data-size="panel" title="끌어서 패널 너비를 바꿔요. 두 번 누르면 기본 너비로 돌아가요"></div>
   <aside class="side" id="side">
     <header><h3>검색 조건</h3><button type="button" id="side-close" class="fold" aria-label="검색 조건 접기" title="검색 조건 접기">›</button></header>
     <div class="vswitch" id="vswitch" title="두 보기는 같은 조건을 보여 줘요. 한쪽에서 고치면 다른 쪽에도 그대로 반영돼요"><button data-v="cards" class="on">단계별</button><button data-v="sentence">문장으로</button></div>
-    <div class="sc"><div class="flow" id="flow">
-      <div class="step open" id="step-data" data-step="data"><div class="sp"><i>1</i><span class="t">데이터</span><b id="sum-data"></b><span class="c"></span></div>
+    <div class="sc"><div class="flow" id="flow" data-adv>
+      <div class="step open" id="step-data" data-step="data"><div class="sp"><i>1</i><span class="t" title="검색할 테이블을 골라요">데이터</span><b id="sum-data"></b><span class="c"></span></div>
         <div class="edx">
           <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></span><button id="conn-open" class="btn">연결 바꾸기</button></div>
           <div id="table-box" class="hidden">
@@ -282,8 +295,8 @@
           </div>
         </div></div>
       <div id="after-connect" class="hidden">
-        <div class="cn"></div>
-        <div class="step" data-step="union"><div class="sp"><i>2</i><span class="t">행 합치기</span><b id="sum-union"></b><span class="c"></span></div>
+        <div class="cn adv"></div>
+        <div class="step adv" data-step="union"><div class="sp"><i>2</i><span class="t" title="같은 모양의 테이블을 아래로 이어 붙여요">행 합치기</span><b id="sum-union"></b><span class="c"></span></div>
           <div class="edx">
             <div class="hint" title="교집합과 차집합은 행을 고르기만 해서 출처 컬럼이 없어요">컬럼이 같은 테이블의 행을 기준 테이블 아래에 붙여요. 어느 테이블의 행인지는 '출처' 컬럼에 나와요.</div>
             <select id="u-how" style="margin-bottom:6px"><option value="left">기준 테이블의 컬럼을 모두 (없으면 빈 값)</option><option value="inner">모든 테이블에 있는 컬럼만</option><option value="intersect">모든 테이블에 같이 있는 행만 (교집합)</option><option value="except">기준 테이블에만 있는 행만 (차집합)</option></select>
@@ -291,8 +304,8 @@
             <select id="u-add"></select>
             <div class="err" id="err-union"></div>
           </div></div>
-        <div class="cn"></div>
-        <div class="step" data-step="joins"><div class="sp"><i>3</i><span class="t">조인</span><b id="sum-joins"></b><span class="c"></span></div>
+        <div class="cn adv"></div>
+        <div class="step adv" data-step="joins"><div class="sp"><i>3</i><span class="t" title="다른 테이블의 컬럼을 옆에 붙여요">조인</span><b id="sum-joins"></b><span class="c"></span></div>
           <div class="edx">
             <div id="join-blocks"></div>
             <button class="linkish" id="join-add">+ 조인 추가</button>
@@ -302,13 +315,13 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
             <div class="err" id="err-join"></div>
           </div></div>
         <div class="cn"></div>
-        <div class="step" data-step="periods"><div class="sp"><i>4</i><span class="t">기간</span><b id="sum-periods"></b><span class="c"></span></div>
+        <div class="step" data-step="periods"><div class="sp"><i>4</i><span class="t" title="날짜로 볼 범위를 좁혀요">기간</span><b id="sum-periods"></b><span class="c"></span></div>
           <div class="edx"><div class="hint">예: 주문일 2025-07-01 ~ 2025-09-30. 시작이나 끝 한쪽은 비워도 돼요. <code>날짜컬럼 최근 7일</code> / <code>지난달</code>도 돼요.</div><div id="periods"></div>
             <div class="row"><select id="per-col" title="달력으로 고를 날짜 컬럼" aria-label="달력으로 고를 날짜 컬럼"></select><button id="per-cal" class="btn" title="고른 날짜 컬럼에 있는 날 안에서 시작 날과 끝 날을 눌러 기간을 넣어요">달력</button></div>
             <div class="row" style="margin-top:6px"><select id="pk-col" title="날짜 컬럼(기준 테이블)" aria-label="기간을 찾을 날짜 컬럼"></select><select id="pk-unit" title="기간 길이" aria-label="기간 길이"><option value="day">1일</option><option value="week">1주(월요일부터)</option><option value="month" selected>1달</option></select><button id="peak-find" class="btn" title="고른 기간 길이로 나눠 건수가 가장 많은 기간 5개를 기준 테이블 전체로 찾아요(조인·조건은 넣지 않아요). 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="가장 많은 기간 찾기">가장 많은 기간 찾기</button></div>
             <div id="pk-list"></div><div class="err" id="err-peak"></div></div></div>
         <div class="cn"></div>
-        <div class="step" data-step="conditions"><div class="sp"><i>5</i><span class="t">조건</span><b id="sum-conditions"></b><span class="c"></span></div>
+        <div class="step" data-step="conditions"><div class="sp"><i>5</i><span class="t" title="원하는 행만 남겨요">조건</span><b id="sum-conditions"></b><span class="c"></span></div>
           <div class="edx">
             <div id="cond" class="fields">
               <div class="tabs" style="margin-bottom:6px">
@@ -327,8 +340,8 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
               <label class="hint" title="끄면 따옴표도 글자로 찾아요. 조건을 추가할 때의 설정이 그 조건에 적용돼요"><input type="checkbox" id="quotes" checked style="width:auto"> 따옴표 안은 값 하나로 읽기</label>
             </div>
           </div></div>
-        <div class="cn"></div>
-        <div class="step" data-step="calcs"><div class="sp"><i>6</i><span class="t">새 컬럼</span><b id="sum-calcs"></b><span class="c"></span></div>
+        <div class="cn adv"></div>
+        <div class="step adv" data-step="calcs"><div class="sp"><i>6</i><span class="t" title="계산해서 컬럼을 새로 만들어요">새 컬럼</span><b id="sum-calcs"></b><span class="c"></span></div>
           <div class="edx"><div class="hint" id="calc-guide">순위, 누적 합계, 이전 값 같은 컬럼을 새로 만들어요. 위에서부터 차례로 계산해요.</div>
             <div class="calc-form" id="calc-form">
               <select id="cf-kind" title="만드는 방법"><option value="window">순위, 누적, 이전 값</option><option value="expr">식으로 계산</option><option value="sql">SQL 식 직접 쓰기</option><option value="top">순위로 거르기 (상위 N)</option></select>
@@ -341,12 +354,13 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
             </div>
             <select id="calc-example" title="고르면 아래 칸에 예시가 들어가요. 컬럼 이름만 바꿔 쓰세요"></select><div id="calcs"></div></div></div>
         <div class="cn"></div>
-        <div class="step" data-step="sorts"><div class="sp"><i>7</i><span class="t">정렬</span><b id="sum-sorts"></b><span class="c"></span></div>
+        <div class="step" data-step="sorts"><div class="sp"><i>7</i><span class="t" title="행을 어떤 순서로 볼지 정해요">정렬</span><b id="sum-sorts"></b><span class="c"></span></div>
           <div class="edx"><div class="hint">예: 금액 desc (큰 것부터). 결과 표의 머리글을 눌러도 돼요.</div><div id="sorts"></div></div></div>
-        <div class="cn"></div>
-        <div class="step" data-step="columns"><div class="sp"><i>8</i><span class="t">보일 컬럼</span><b id="sum-columns"></b><span class="c"></span></div>
+        <div class="cn adv"></div>
+        <div class="step adv" data-step="columns"><div class="sp"><i>8</i><span class="t" title="결과에 보일 컬럼만 골라요">보일 컬럼</span><b id="sum-columns"></b><span class="c"></span></div>
           <div class="edx"><div class="hint">예: 이름, 금액. 비우면 모든 컬럼이 보여요.</div><div id="columns"></div>
             <div class="row"><select id="col-pick" aria-label="보일 컬럼 고르기"></select><button id="col-pick-add" class="btn">더하기</button></div></div></div>
+        <div data-adv-slot style="padding-top:8px"></div>
       </div>
     </div></div>
     <div class="hint scan-hint" id="scan-hint" title="검색하지 않고 미리 센 값이에요. BigQuery는 요금 없는 dry run으로 정확히 세고, 나머지는 파일 정보와 통계로 어림해요"></div>
@@ -374,11 +388,11 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
         <button id="nl-prompt" class="btn" title="LLM에 보낼 내용을 보여 줘요. 테이블과 컬럼 이름, 타입, 명세서 설명, 지표 정의, 컬럼별 표본 통계만 들어가고 데이터 값은 넣지 않아요">프롬프트 보기</button></div>
       <details id="llm-box"><summary class="hint"><span id="llm-name">LLM: 없음</span> · 설정</summary><div class="row nl-row"><input id="llm-env" class="code" placeholder="LLM 설정 파일 경로 (LLM_PROVIDER, LLM_API_KEY, LLM_MODEL)" title="키는 저장하지 않고 물을 때마다 이 파일에서 읽어요. 비우고 [불러오기]를 누르면 LLM을 쓰지 않아요"><button id="llm-pick" class="btn" title="파일 선택 창에서 LLM 설정 파일을 골라요" aria-label="LLM 설정 파일 찾아보기">찾아보기</button><button id="llm-read" class="btn">불러오기</button></div></details>
       <pre class="nl-prompt hidden" id="nl-view"></pre>
-      <div class="sql-hl"><pre id="sql-paint" aria-hidden="true"></pre><textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea></div>
+      <div class="sql-hl"><pre id="sql-paint" aria-hidden="true"></pre><textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM 테이블 LIMIT 10    (Ctrl+Enter로 실행)"></textarea></div>
       <div class="sql-check" id="sql-check"></div>
       <pre class="nl-prompt hidden" id="sql-plan"></pre>
-      <div class="row"><button id="sql-run2" class="btn p" title="SQL을 실행해요 (Ctrl+Enter)">실행</button><button id="sql-deep" class="btn" title="데이터는 읽지 않고, 테이블과 컬럼 이름이 맞는지까지 확인해요">검사</button>
-        <button id="sql-plan-show" class="btn" title="DB가 이 SQL을 어떻게 읽는지 보여 줘요. 인덱스를 쓰는지, 테이블을 통째로 읽는지 알 수 있어요. 실행은 하지 않아요 (EXPLAIN)">실행 계획</button>
+      <div class="row"><button id="sql-run2" class="btn p" title="SQL을 실행해요 (Ctrl+Enter)">실행</button><button id="sql-deep" class="btn" title="실행하지 않고 SQL에 틀린 곳이 있는지 봐요. 테이블·컬럼 이름이 맞는지도 봐요. 데이터는 읽지 않아요">검사</button>
+        <button id="sql-plan-show" class="btn" title="실행하지 않고, DB가 이 SQL을 어떤 순서로 읽을지 보여 줘요. 오래 걸릴 때 까닭을 찾는 데 써요 (EXPLAIN)">실행 계획</button>
         <label title="한 쪽에 보일 행 수예요. 전체는 [결과 내보내기]로 받으세요">한 쪽에 <input id="sql-rows" type="number" min="1">행</label>
         <span class="hint" style="margin:0" title="WITH, JOIN, LIKE, *는 쓸 수 있고 DROP, DELETE, INSERT나 여러 문장은 실행하지 않아요">데이터를 읽기만 하는 SELECT 문 하나를 실행해요.</span></div>
     </div>
@@ -395,7 +409,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
       <select id="sql-saved" title="고르면 편집기에 불러와요. 실행은 하지 않아요. 많이 불러온 순이에요"></select>
       <div class="row" style="margin-top:6px"><input id="sql-name" placeholder="이름 (비우면 덮어써요)"><button id="sql-save" class="btn">저장</button><button id="sql-del" class="btn">삭제</button></div>
       <h2>가상 테이블</h2>
-      <div class="hint" title="SQL 탭과 탐색 탭의 테이블 목록에서 테이블처럼 쓸 수 있어요. 많이 쓴 순이에요">SQL이나 Parquet 파일에 이름을 붙여 테이블처럼 써요. 이 연결에서만 쓰고 DB에는 아무것도 만들지 않아요.</div>
+      <div class="hint" title="SQL 탭과 탐색 탭의 테이블 목록에서 테이블처럼 쓸 수 있어요. Parquet 파일에도 이름을 붙일 수 있어요. 이 연결에서만 써요. 많이 쓴 순이에요">자주 쓰는 SQL에 이름을 붙여 테이블처럼 골라 써요. DB는 바뀌지 않아요.</div>
       <div id="vt-list"></div>
       <div class="row" style="margin-top:6px"><input id="vt-name" placeholder="가상 테이블 이름"><button id="vt-save-sql" class="btn" title="편집기의 SQL을 이 이름의 가상 테이블로 저장해요">편집기 SQL로 저장</button></div>
       <div class="row"><input id="vt-path" placeholder="Parquet 파일 경로 (DuckDB, 파일 연결)"><button id="vt-save-pq" class="btn">파일로 저장</button></div>
@@ -410,7 +424,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
 <!-- 지표: 지표 파일(YAML·JSON)에 적은 지표를 탐색의 기준 테이블·조인·기간·조건 위에서 누르는 즉시 구한다. 나눌 컬럼을 고르면 그 값마다. -->
 <div class="work hidden" id="metv">
   <main class="results">
-    <div class="tool"><span class="hint" id="met-on" style="margin:0; flex:1"></span>
+    <div class="tool"><span class="hint" id="met-on" style="margin:0; flex:1 1 100%"></span>
       <select id="met-pcol" title="기간을 걸 날짜 컬럼이에요. 날짜 컬럼이 하나면 비워 둬도 돼요" style="flex:0 1 150px; width:auto"></select>
       <input id="met-period" placeholder="기간 (예: 2025-03-01 ~ 2025-03-31)" title="비우면 탐색의 조건 그대로 구해요" aria-label="지표 기간" style="flex:0 1 240px; width:auto"><button id="met-cal" class="btn" title="날짜 컬럼에 있는 날 안에서 기간을 골라요">달력</button>
       <select id="met-cmp" title="같은 지표를 견줄 기간이에요. 기간을 넣어야 해요" style="flex:0 1 170px; width:auto"><option value="">비교 안 함</option><option value="prev">지난 기간</option><option value="same_weekday">같은 요일 지난 기간</option><option value="yoy">작년 같은 기간</option><option value="mom">한 달 전 같은 기간</option><option value="wow">한 주 전 같은 기간</option></select>
@@ -543,6 +557,13 @@ function showSummaries() {
   $("table-box").classList.toggle("hidden", !connected);
   $("conn-now").textContent = connected ? `연결: ${connName}` : "아직 연결하지 않았어요";
 }
+// (19C1·19C2) 테이블을 고르기 전에는 1단계만 펼쳐 강조하고 나머지는 흐리게(.flow.first). 접어 둔 단계(행 합치기·조인·새 컬럼·보일 컬럼)에 값이 있으면 펼친다.
+function showFlowGuide() {
+  $("flow").classList.toggle("first", !S.base);
+  if (!S.base) document.querySelectorAll(".step").forEach(s => s.classList.toggle("open", s.id === "step-data"));
+  if (S.union.tables.length || S.joins.length || S.calcs.length || S.columns.length) showAdv($("flow"));
+}
+{ const summed = showSummaries; showSummaries = () => { showFlowGuide(); summed(); }; }  // 위 함수(시험이 따로 돌린다)에 덧씌운다: 불러오기·초안·되돌리기도 모두 showSummaries를 거친다
 const UNION_HOW = { left: "컬럼 모두", inner: "공통 컬럼만", intersect: "교집합", except: "차집합" };  // 접힌 요약에 쓰는 짧은 이름
 $("conn-open").onclick = () => openConnect();
 
@@ -660,8 +681,8 @@ async function refreshColumns() {
   S.cols = d.columns;
   S.fields = d.fields ?? [];  // 구조 컬럼 안의 필드(user.name). 조건·정렬·표시 컬럼에 컬럼처럼 쓴다(차트·집계는 컬럼만).
   S.origins = d.origins;
-  $("cols").innerHTML = S.cols.map(([n, t]) => `${esc(n)} (${esc(t)})`).join("<br>") +
-    S.fields.map(([n, t]) => `<br><span class="hint" style="margin:0">　${esc(n)} (${esc(t)})</span>`).join("");
+  $("cols").innerHTML = S.cols.map(([n, t]) => `<span title="${esc(t)}">${esc(n)} (${esc(typeWord(t))})</span>`).join("<br>") +  // (Phase 19) 타입은 쉬운 말, 원래 이름은 title
+    S.fields.map(([n, t]) => `<br><span class="hint" style="margin:0" title="${esc(t)}">　${esc(n)} (${esc(typeWord(t))})</span>`).join("");
   fillGroupCols();
   for (const [id, blank] of [["pv-rows", "행으로 묶지 않음"], ["pv-col", "열로 펼치지 않음"], ["pv-val", "값 없이 개수만"], ["pv-rows2", "둘째 행 기준 없음"], ["pv-key", "기준(key)"], ["pv-target", "값(target)"]]) {  // 고른 것은 남아 있으면 그대로
     const was = $(id).value;
@@ -2036,6 +2057,7 @@ async function restore(st) {
   last = st.last ?? null; series = st.series ?? []; scols = st.scols ?? [];
   Object.entries(st.chart ?? {}).forEach(([id, v]) => $(id).value = v);
   showUnit(); showSeries(); fillSummaryCols();
+  advMore();  // 되살린 차트 칸에 값이 있으면 [더 많은 설정]을 펼친다
   if (last && !last.rows && searched) { const summary = last.summary; last = null; await runSearch(skip, false, true); if (last && summary) last.summary = summary; }
   renderTables();
   if (last?.rows) {
@@ -2540,6 +2562,7 @@ $("vt-save-pq").onclick = () => busy($("vt-save-pq"), () => saveVirtual({ name: 
 function showSqlTables() {
   const names = [...$("base").querySelectorAll(":scope > option")].map(o => o.value).filter(Boolean);
   $("sql-tables").replaceChildren(...names.map(n => el("span", { className: "chip", textContent: n, onclick: () => insertSql(n) })));
+  $("sql-text").placeholder = `SELECT * FROM ${names[0] ?? "테이블"} LIMIT 10    (Ctrl+Enter로 실행)`;  // (19D1) 예시는 연결된 첫 테이블로
 }
 document.addEventListener("tables", () => {  // 연결이 바뀌면 SQL 탭의 연결 이름·가상 테이블, 지표 탭의 기준도
   if ($("sqlv").classList.contains("hidden")) showSqlTables(); else showSqlSide();
@@ -2570,6 +2593,7 @@ function showMetrics(d) {
   $("met-info").textContent = d.error ?? (d.path ? `지표 ${d.metrics.length}개` : "지표 파일 경로를 넣고 [불러오기]를 누르면 그 안의 지표가 아래에 나와요.");
   $("met-info").className = d.error ? "err" : "hint";
   if (d.path || d.error) $("met-file").open = true;  // 파일을 쓰고 있을 때만 경로 칸을 펼쳐 둔다
+  ["met-pcol", "met-period", "met-cal", "met-cmp", "met-dash"].forEach(id => $(id).classList.toggle("hidden", !d.order.length));  // (19D3) 지표가 없으면 기간·비교 줄은 쓸 데가 없다
   const found = Object.fromEntries(d.metrics.map(m => [m.name, m])), on = metDrawn?.used[0];
   $("met-list").replaceChildren(...!d.order.length ? [noMetrics()] : d.order.map(name => el("button", { className: "met" + (name === on ? " on" : ""), title: found[name].text, onclick: e => busy(e.currentTarget, () => runMetric(name)) },
     el("b", { textContent: name }), el("span", { className: "hint", textContent: found[name].description || found[name].text }))));
@@ -2656,6 +2680,7 @@ $("count").checked = saved("count") !== "off";
 showCondMode(saved("cond") || "fields");
 $("quotes").onchange = () => saveSetting({ quotes: $("quotes").checked ? "on" : "off" });
 $("count").onchange = () => saveSetting({ count: $("count").checked ? "on" : "off" });
+advMore();  // 설정에서 읽은 값(비율·총 행 수 세기 등)이 기본과 다르면 접지 않는다
 $("theme").addEventListener("click", () => { drawChart(); drawMetric(); ptDraw(); });  // common.js의 onclick이 화면 모드를 바꾼 뒤에 다시 그린다.
 drawChart();
 showView({ "#sql": "sql", "#metrics": "metric" }[location.hash] ?? "explore");

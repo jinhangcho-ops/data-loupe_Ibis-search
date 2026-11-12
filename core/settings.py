@@ -90,6 +90,7 @@ CHOICES = {
     "update_check": ["on", "off"],  # 앱을 열 때 GitHub Releases에 새 버전이 있는지 묻기(기본 on)
     "scan_unknown": ["run", "block"],  # 처리 용량을 미리 알 수 없을 때(그 연결이 추정을 못 함): 그대로 실행한다 / 실행하지 않는다(기본은 실행)
     "prep_where": ["all", "new"],  # 원격 DB(주소로 접속)의 전처리를 이 PC의 작업 사본에서 계산하는 범위: 전처리 전체 / 계산 컬럼·PCA가 있을 때만(나머지는 DB에서)
+    "easy": ["on", "off"],  # (Phase 19) 쉬운 보기: 처음 쓰는 사람에게 필요 없는 칸(.adv)을 [더 많은 설정] 뒤에 접는다(기본 on, html.easy)
     "week_start": ["mon", "sun"],  # 주 묶음의 시작 요일(기본 mon). 그 밖에 timezone(IANA 이름)·fiscal_start_month(회계연도 첫 달 1~12, 기본 1)는 valid가 따로 본다
 }
 

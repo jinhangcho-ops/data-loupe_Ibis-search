@@ -902,6 +902,8 @@ async function showConnected(flat, schemas, info) {
   fill($("schema"), schemas, "스키마(폴더)");
   $("after-connect").classList.remove("hidden");
   await loadTables();
+  // (Phase 19) 사용자 스키마가 하나뿐이고 처음 고른 스키마에서 테이블이 보이면 스키마 칸은 몰라도 된다(값은 그대로). 시스템 카탈로그(SQL 표준·PostgreSQL 호환)는 세지 않는다.
+  if (schemas.filter(s => !/^(information_schema|pg_catalog)$/i.test(s)).length <= 1 && $("base").options.length > 1) $("schema").classList.add("hidden");
   if (typeof afterTables === "function") afterTables();  // 쿼리·분석: 남은 초안이 있으면 묻는다(기다리지 않는다)
 }
 if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
@@ -1010,6 +1012,55 @@ $("theme").onclick = () => {
   saveSetting({ theme });
 };
 showTheme(document.documentElement.dataset.theme);
+
+// (Phase 19) 쉬운 보기: html.easy면 [data-adv] 묶음 안의 .adv 칸을 접고 묶음마다 [더 많은 설정]을 단다. 기본은 켬(설정 easy).
+function showEasy(on) {
+  document.documentElement.classList.toggle("easy", on);
+  $("easy").setAttribute("aria-pressed", String(on));
+  $("easy-text").textContent = on ? "쉬운 보기 켜짐" : "쉬운 보기 꺼짐";
+}
+$("easy").onclick = () => {
+  const on = !document.documentElement.classList.contains("easy");
+  showEasy(on);
+  saveSetting({ easy: on ? "on" : "off" });
+};
+showEasy(document.documentElement.classList.contains("easy"));
+// 묶음(box)을 펼친다. 값이 들어 있는 접힌 칸을 화면이 채웠을 때 부른다.
+function showAdv(box) {
+  box.classList.add("adv-shown");
+  const b = box.querySelector(":scope .adv-more");
+  if (b) b.textContent = "접기 ▴";
+}
+// 아직 단추가 없는 [data-adv] 묶음에 [더 많은 설정]을 단다(묶음 안의 [data-adv-slot]이 있으면 그 자리에, 없으면 맨 끝). 접힌 칸에 기본값과 다른 값이 있으면 펼쳐 둔다. 화면이 칸을 새로 그린 뒤 다시 불러도 된다.
+function advMore(root = document) {
+  root.querySelectorAll("[data-adv]").forEach(box => {
+    if (!box.querySelector(".adv")) return;
+    let b = [...box.querySelectorAll(".adv-more")].find(x => x.closest("[data-adv]") === box);
+    if (!b) {
+      b = el("button", { type: "button", className: "adv-more", textContent: "더 많은 설정 ▾", title: "처음에는 몰라도 되는 설정이에요" });
+      b.onclick = () => box.classList.contains("adv-shown") ? (box.classList.remove("adv-shown"), b.textContent = "더 많은 설정 ▾") : showAdv(box);
+      (box.querySelector(":scope [data-adv-slot]") || box).append(b);
+    }
+    // 화면 HTML에 있는 칸(id가 있음)만 본다. 스크립트가 만든 칸은 처음 값(default)이 비어 있어 늘 바뀐 것으로 보인다. 체크·라디오를 되살리는 화면은 showAdv를 직접 부른다.
+    const changed = f => f.id && f.type !== "checkbox" && f.type !== "radio"
+      && (f.tagName === "SELECT" ? [...f.options].some(o => o.selected !== o.defaultSelected) && f.selectedIndex > 0 : f.value !== f.defaultValue);
+    if ([...box.querySelectorAll(".adv input, .adv select, .adv textarea, input.adv, select.adv, textarea.adv")].some(changed)) showAdv(box);
+  });
+}
+// 컬럼 타입을 쉬운 말로(원래 이름은 화면이 title로 둔다): int64 → 숫자, string → 글자, timestamp → 날짜·시각.
+function typeWord(type) {
+  const t = String(type || "").replace(/^!/, "").toLowerCase();
+  if (/^(u?int\d|float|decimal|double|real|number|정수|실수)/.test(t)) return "숫자";  // 정수·실수·문자: 서버 type_name이 준 한국어 이름
+  if (/^(string|varchar|text|char|문자)/.test(t)) return "글자";
+  if (t.startsWith("timestamp")) return "날짜·시각";
+  if (t === "date") return "날짜";
+  if (t === "time") return "시각";
+  if (t === "boolean") return "예/아니오";
+  if (/^array/.test(t)) return "목록";
+  if (/^(struct|map|json)/.test(t)) return "묶음";
+  return type;
+}
+advMore();
 
 // 크기 조절 모드: [크기 조절]을 켰을 때만 경계가 보이고 잡힌다. 켤 때마다 꺼진 상태로 시작한다.
 function showResizing(on) {
