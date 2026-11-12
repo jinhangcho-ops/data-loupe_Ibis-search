@@ -211,9 +211,9 @@ FAKE_OPS = [
     {"id": "outlier", "label": "범위 밖 값 처리", "group": "숫자", "need": "num", "fields": [{"name": "how", "options": [["drop", "그 행 빼기"], ["clip", "범위로 잘라 내기"]]}, {"name": "by", "options": [["iqr", "사분위수(IQR)"], ["range", "직접 범위"], ["std", "표준편차"]]}, {"name": "low", "placeholder": "최소"}, {"name": "high", "placeholder": "최대"}, {"name": "k", "placeholder": "k"}]},
 ]
 
-# 빈 시험 화면: 화면들이 함께 쓰는 조각(head·위쪽 줄·연결·알림, common.js가 처음에 찾는 칸)과 공용 스크립트 두 개만. Q2 스크립트는 PAGE가 fetch를 가로챈 뒤 need로 부른다
+# 빈 시험 화면: 화면들이 함께 쓰는 조각(head·메뉴·위쪽 줄(설정 창 포함)·연결, common.js가 처음에 찾는 칸)과 공용 스크립트 두 개만. Q2 스크립트는 PAGE가 fetch를 가로챈 뒤 need로 부른다
 BLANK = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><!--include core/head.html--></head>
-<body><!--include core/status.html--><!--include core/connect.html--><!--include core/notify.html-->
+<body><!--include core/status.html--><!--include core/connect.html-->
 <script src="/static/core/common.js"></script><script src="/static/core/funcs.js"></script></body></html>"""
 
 

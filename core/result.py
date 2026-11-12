@@ -8,10 +8,12 @@ from pathlib import Path
 from lazy import ibis
 
 from core import crosstab, prep_ops, source, sql_funcs, viz_rules
-from core.parse import check_name, column as field_of, native_key, struct_fields, type_info
+from core.parse import check_name, column as field_of, convert, like_one, native_key, struct_fields, type_info, type_name
 
 PAGING = contextvars.ContextVar("paging", default=False)  # get_rows가 쪽을 받는 중: 파일 연결(Polars)의 묶기·중복 빼기도 차례를 고정한다(source.fix_polars_text)
 SUMMARY_COLS = ["name", "type", "count", "nulls", "unique", "min", "max", "mean"]
+SUMMARY_NAMES = {"name": "컬럼", "type": "타입", "count": "개수", "nulls": "빈 값", "unique": "고유값", "min": "최솟값", "max": "최댓값", "mean": "평균",
+                 "dup": "중복도", "median": "중앙값", "gap": "괴리율", "above": "경계 초과 수", "above_mean": "경계 초과 평균"}  # (Phase 15) 쿼리 집계 표 머리글(화면은 server.CONSTANTS로 받는다). 분위 칸(P25 등)은 이름 그대로
 MAX_GROUPS = 50  # 차트에 표시할 최대 그룹 수
 MAX_SPLITS = 8  # 차트에서 한 컬럼의 값별로 나눌 때 최대 값 개수
 MAX_VALUES = 200  # 조건을 만들 때 보여 줄 컬럼 값 목록의 최대 개수
@@ -24,6 +26,9 @@ CHUNK = 100_000  # 큰 결과를 한 번에 받는 행 수(저장·결과 받아
 FORMULA_START = ("=", "+", "-", "@", "\t", "\r")  # 스프레드시트가 수식으로 읽는 첫 글자(저장할 때 앞에 '를 붙인다)
 GUARDED = (".csv", ".tsv", ".txt")  # 수식 막기(formula_guard)를 하는 저장 형식
 BOM = b"\xef\xbb\xbf"  # Excel이 UTF-8 글자 파일의 한글을 바로 읽도록 맨 앞에 붙인다
+NULL_LABEL = "None"  # (Phase 18) 빈 X 그룹의 차트 라벨(라우트·카드가 str(None)으로 보낸다). 고른 그룹(keep)에 있으면 X가 빈 행도 남긴다
+PICK_DATE = "날짜 가로축 차트는 고른 그룹·범위를 서버에서 거르지 않아요(화면에서 걸러요)."  # (Phase 18) pick_groups
+PICK_RANGE = "범위로 거르려면 범위의 끝이 숫자여야 해요(숫자 가로축)."  # (Phase 18) pick_groups
 
 
 def json_text(df):
@@ -417,6 +422,24 @@ def values_partial(expr):
     return get_count(expr.limit(VALUE_SCAN + 1)) > VALUE_SCAN
 
 
+def find_values(expr: "ibis.expr.types.Table", column: str, q: str) -> tuple[list[str], bool]:
+    """[SPECIFICATION] plans/phase-17.md#find_values
+    표 전체에서 글자로 바꾼 값에 q가 든 서로 다른 값을 정렬해 MAX_VALUES개까지 문자로, 더 있는지와 함께 돌려준다."""
+    col = field_of(expr, column)
+    if col.type().is_nested():
+        raise ValueError(f"'{column}'은 {type_name(col.type())} 컬럼이라 값을 찾을 수 없어요.")
+    text = col if col.type().is_string() else col.cast("string")
+    if col.type().is_numeric():
+        q = q.replace(",", "")  # 글자로 바꾼 숫자에는 쉼표가 없으니 화면의 천 단위 쉼표는 뺀다
+    if not q:
+        raise ValueError("찾을 글자를 넣어 주세요.")
+    found = like_one(expr, text, "like", q)
+    values = expr.filter(col.notnull(), found).select(col.name("v")).distinct()  # VALUE_SCAN 없이 표 전체
+    values = values.order_by(native_key(values, values.v, False)).limit(MAX_VALUES + 1)
+    values = [str(v) for v in values.to_polars(**streaming(expr))["v"].to_list()]
+    return values[:MAX_VALUES], len(values) > MAX_VALUES
+
+
 def chart_aggs():
     """차트 계열에서 고를 수 있는 집계 id들(함수 사전의 집계 전부 + 예전 이름 nunique). 화면이 이 목록으로 고른다."""
     return sql_funcs.ids_for("chart") + list(sql_funcs.ALIASES)
@@ -532,6 +555,29 @@ def group_chart(expr, x, series, split=None, order="x"):
     found = {(row[x], row[split]): row for row in cells.iter_rows(named=True)}
     return labels, [{"series": i, "split": str(part), "values": [number(found.get((label, part), {}).get(f"v{i}")) for label in labels], "truncated": cut}
                     for i in range(len(series)) for part in parts], more
+
+
+def pick_groups(expr: "ibis.expr.types.Table", x: str, keep: list[str] | None, ranges: list[list[int | float | None]] | None) -> "ibis.expr.types.Table":
+    """[SPECIFICATION] plans/phase-18.md#pick_groups
+    차트를 집계하기 전에 X를 고른 그룹(keep, 컬럼 타입으로 바꿔 isin)과 숫자 범위(ranges, 양끝 포함)로 거른 식."""
+    check_name(x, expr.columns)
+    if not keep and not ranges:
+        return expr
+    c, dtype = expr[x], expr[x].type()
+    if dtype.is_temporal():
+        raise ValueError(PICK_DATE)
+    conds = []
+    if keep:
+        values = [convert(dtype, k) for k in keep if k != NULL_LABEL or dtype.is_string()]
+        hit = c.isin(values) if values else None
+        if NULL_LABEL in keep:
+            hit = c.isnull() if hit is None else hit | c.isnull()
+        conds.append(hit)
+    if ranges and dtype.is_numeric() and not dtype.is_boolean():
+        if any(isinstance(end, str) for r in ranges for end in r):
+            raise ValueError(PICK_RANGE)
+        conds.append(ibis.or_(*[ibis.and_(*([c >= lo] if lo is not None else []), *([c <= hi] if hi is not None else [])) for lo, hi in ranges]))
+    return expr.filter(conds) if conds else expr
 
 
 def formula_guard(expr):

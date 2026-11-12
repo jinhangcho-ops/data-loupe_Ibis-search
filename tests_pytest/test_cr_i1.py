@@ -11,9 +11,9 @@ needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node가 �
 
 
 def test_dest_button_text_is_in_html_not_js():
-    assert ">보낼 곳 설정</button>" in read("status.html") and 'dest-open").textContent' not in read("common.js")
-    notify = read("notify.html")
-    assert "연결 확인" not in notify and notify.count("인증 확인") == 2
+    assert ">보낼 곳</button>" in read("status.html") and "dest-open" not in read("common.js")  # Phase 16: 설정 창의 보낼 곳 분류
+    dest = between("status.html", 'data-set="dest" role="tabpanel"', "</section>")
+    assert "연결 확인" not in dest and dest.count("인증 확인") == 2
 
 
 @needs_node

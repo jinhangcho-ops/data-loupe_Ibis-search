@@ -15,8 +15,8 @@ def rule(css, selector):
 def test_a1_small_text_uses_muted():
     css = read("common.css")
     th = rule(css, "th small")
-    assert "var(--muted)" in th and "var(--faint)" not in th and "font-size:12px" in th
-    assert "color:var(--muted)" in re.search(r"\.choice em \{[^}]*\}", read("home.html")).group(0)
+    assert "var(--muted)" in th and "var(--faint)" not in th and "font-size:var(--fs-xs)" in th
+    assert "var(--faint)" not in read("home.html")
 
 
 def test_a1_faint_kept_for_decor():

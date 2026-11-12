@@ -1,5 +1,5 @@
 // [+] 새 컬럼 상자(P9). 쿼리·전처리 화면이 함께 쓴다. 왼쪽 방식 16개, 오른쪽 폼, 아래 미리보기(5행)·이름·[추가].
-// - NewCol.open({ columns: () => [[이름, 종류], …], screen: "query"|"prep", funcs: Funcs, groupable, values?: 컬럼 => Promise<값[] | {values, more, partial}>, onPreview: lines => Promise<{columns, rows}>, onAdd: ({ name, lines, joins }) => void })
+// - NewCol.open({ columns: () => [[이름, 종류], …], screen: "query"|"prep", funcs: Funcs, groupable, values?: (컬럼, 찾을 글자) => Promise<값[] | {values, more, partial, find?}>, onPreview: lines => Promise<{columns, rows}>, onAdd: ({ name, lines, joins }) => void })
 //   values는 값 바꿔 쓰기 상자(PrepMenu.replaceBox)의 값 목록(쿼리는 /api/values, 전처리는 표본 분포).
 //   onAdd에 계산 줄 목록(lines, calc.py 문법: `식 …`, `그룹집계 …`, `전처리 …`, 창 함수 줄, `펼치기 …`)과 조인 줄(joins, `<테이블> <종류> <키>=<키>`, 쿼리 화면만)을 준다.
 //   onAdd가 끝나면 닫는다. onAdd가 실패(예외·거절된 Promise)하거나 false를 돌려주면 상자를 두고 오류를 상자 안에 보인다.
@@ -440,7 +440,7 @@ const NewCol = (() => {
         const kk = text("K"), share = text(`X %(비우면 ${P6().others?.share ?? ""})`), cum = text(`누적 %(비우면 ${P6().others?.cum ?? ""})`), target = colPick(null, "타겟 컬럼"), smooth = text("평활 m(비우면 0)");
         const map = text("값=번호, 예: 하=1, 중=2, 상=3"), els = text("목록에 없는 값의 번호(비우면 빈 값)"), others = el("input", { type: "checkbox" }), leak = el("p", { className: "hint", textContent: P6().target_note ?? "" });
         let spec = null;
-        const open_ = el("button", { type: "button", className: "btn", textContent: "바꿀 값 정하기…", onclick: () => PrepMenu.replaceBox({ column: col.value, type: kindOf(col.value), values: () => values?.(col.value), onApply: s => { spec = s; said.textContent = `${s.pairs.length}가지를 정했어요.`; } }) });
+        const open_ = el("button", { type: "button", className: "btn", textContent: "바꿀 값 정하기…", onclick: () => PrepMenu.replaceBox({ column: col.value, type: kindOf(col.value), values: q => values?.(col.value, q), onApply: s => { spec = s; said.textContent = `${s.pairs.length}가지를 정했어요.`; } }) });
         return { el: el("div", {}, field("방식", kind), field("컬럼", col), field("최소 횟수", min), field("묶은 값 이름", label), el("div", { className: "row nc-replace" }, open_, said),
           field("K", kk), field("X %", share), field("누적 %", cum), field("타겟", target), field("평활 m", smooth), field("값=번호", map), field("목록에 없는 값", els), field("나머지 값은 기타 컬럼으로", others), leak,
           el("p", { className: "hint", textContent: "새 컬럼 이름은 단계가 정해요(예: 컬럼_label)." })),

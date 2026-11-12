@@ -5,6 +5,8 @@ import { useState } from "react";
 import { useDash } from "@/lib/store";
 import type { NorthStar } from "@/lib/types";
 
+const STAR_HELP = "북극성은 대시보드에서 가장 중요한 지표 하나(★), 카운터는 북극성을 올리는 동안 나빠지면 안 되는 지표(⚑)예요.";
+
 export function StarSection({ id }: { id: string }) {
   const { state, dispatch } = useDash();
   const star: NorthStar = { card: "", counters: [], limits: {}, ...state.dash?.north_star };
@@ -24,6 +26,7 @@ export function StarSection({ id }: { id: string }) {
             set({ ...star, card: star.card === id ? "" : star.card, counters: isCounter ? star.counters.filter(c => c !== id) : [...star.counters, id], limits });
           }}>{isCounter ? "카운터 지표 해제" : "카운터 지표로 정하기"}</button>
       </div>
+      <div className="hint">{STAR_HELP}</div>
       {isCounter && (
         <>
           <div className="prow">

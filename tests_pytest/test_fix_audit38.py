@@ -396,6 +396,6 @@ def test_shared_css_for_refresh_rows_numeric_headers_and_collect_badge():
     from pathlib import Path
     static = Path(__file__).resolve().parent.parent / "static"
     css = (static / "core" / "common.css").read_text(encoding="utf-8")
-    assert ".rf-list li { display:flex; gap:8px; font-size:13px; color:var(--text);" in css  # 전역 .ok가 완료 줄 전체를 초록으로 칠하지 않게
+    assert ".rf-list li { display:flex; gap:8px; font-size:var(--fs-sm); color:var(--text);" in css  # 전역 .ok가 완료 줄 전체를 초록으로 칠하지 않게
     assert "td.num, th.num { text-align:right; }" in css  # 분석·문장 표의 숫자 머리글도 오른쪽
     assert "border:0; border-radius:6px; background:var(--accent)" in (static / "collect" / "collect.html").read_text(encoding="utf-8")

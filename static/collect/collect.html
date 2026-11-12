@@ -71,6 +71,11 @@
       <div class="head" style="margin:0"><b class="warn" id="unseen-text" style="font-size:14px"></b><button id="unseen-open" class="ghost">실행 기록 보기</button><button id="unseen-ok" class="btn" title="실패를 확인한 것으로 표시해요. 이 알림이 사라져요">확인</button></div>
     </section>
 
+    <section class="card" id="first-guide">
+      <h3>처음이면 이 순서로 해요</h3>
+      <ol class="hint" style="margin:4px 0 0; padding-left:20px"><li>오른쪽 [받는 방식]에서 API·파일 주소·웹페이지 중 하나를 골라요.</li><li class="for-api">아래 요청 칸을 채우고 [시험 보내기]로 응답을 받아 봐요. curl이 있으면 [요청 예시로 채우기]에 붙여 넣으면 돼요.</li><li class="for-file hidden">[파일 주소]에 받을 파일의 주소를 넣어요. 헤더가 필요하면 [행 추가]로 넣어요.</li><li class="for-web hidden">주소를 넣고 [수집용 창 열기]를 누른 뒤 [값 고르기]로 받을 값을 수집용 창에서 클릭해요.</li><li>오른쪽 [저장]에서 파일 위치를 정하고 [수집 시작]을 눌러요.</li></ol>
+    </section>
+
     <section class="card for-api">
       <h3>요청</h3>
       <div class="row"><select id="method" style="width:auto; flex:none" title="HTTP 메서드"></select><input id="method-other" class="hidden" placeholder="메서드" style="width:90px; flex:none"><input id="req-url" class="code" placeholder="https://api.example.com/v1/items" title="쿼리는 주소에 붙이지 말고 아래 쿼리 칸에 넣으세요"></div>
@@ -86,7 +91,7 @@
       </div>
       <div class="row" style="align-items:center; margin-top:6px"><span class="hint" style="margin:0">본문</span><select id="body-kind" style="width:auto"><option value="none">없음</option><option value="json">JSON</option><option value="form">폼</option><option value="text">텍스트</option></select></div>
       <textarea id="body" class="code hidden" rows="4" placeholder="보낼 본문"></textarea>
-      <div class="hint" title="{env:이름}은 env 파일의 값, {page}·{offset}·{cursor}는 쪽 넘기기 값, {today:%Y%m%d}는 오늘 날짜, {now}는 지금 시각으로 바뀌어요">쓸 수 있는 자리 표시: {env:이름} {page} {offset} {cursor} {today:%Y%m%d} {now}</div>
+      <details class="hint"><summary>자리 표시 쓰기</summary>{env:이름}은 env 파일의 값, {page}·{offset}·{cursor}는 쪽 넘기기 값, {today:%Y%m%d}는 오늘 날짜, {now}는 지금 시각으로 바뀌어요.</details>
     </section>
 
     <section class="card for-file hidden">
@@ -100,13 +105,13 @@
         <label><div class="hint">인코딩</div><select id="f-enc"><option value="auto">자동</option><option value="utf-8">UTF-8</option><option value="cp949">CP949</option></select></label>
       </div>
       <div class="hint">서버가 나눠 받기를 지원하지 않으면 한 번에 받아요. 인코딩은 CSV와 JSON에만 적용돼요.</div>
-      <div class="hint" title="{env:이름}은 env 파일의 값, {today:%Y%m%d}는 오늘 날짜, {now}는 지금 시각으로 바뀌어요">쓸 수 있는 자리 표시: {env:이름} {today:%Y%m%d} {now}</div>
+      <details class="hint"><summary>자리 표시 쓰기</summary>{env:이름}은 env 파일의 값, {today:%Y%m%d}는 오늘 날짜, {now}는 지금 시각으로 바뀌어요.</details>
     </section>
 
     <section class="card for-web hidden">
       <h3>웹페이지</h3>
       <div class="row"><input id="w-url" class="code" placeholder="https://shop.example.com/list?page={page}"><button id="w-open">수집용 창 열기</button><button id="w-close" class="ghost">창 닫기</button></div>
-      <div class="hint" title="{page}는 쪽 번호, {today:%Y%m%d}는 오늘 날짜, {now}는 지금 시각으로 바뀌어요">쓸 수 있는 자리 표시: {page} {today:%Y%m%d} {now}</div>
+      <details class="hint"><summary>자리 표시 쓰기</summary>{page}는 쪽 번호, {today:%Y%m%d}는 오늘 날짜, {now}는 지금 시각으로 바뀌어요.</details>
       <div class="hint">수집용 창은 따로 열려요. 로그인이 필요한 사이트는 그 창에서 직접 로그인하세요. 비밀번호는 프로그램이 다루지 않아요.</div>
       <div class="hint usage" id="w-state">수집용 창이 닫혀 있어요</div>
       <div class="row"><button id="w-forget" class="ghost" title="수집용 창에 남은 로그인 정보(쿠키 등)를 지워요. 창을 닫은 뒤에만 지울 수 있어요">로그인 정보 지우기</button></div>
@@ -302,7 +307,7 @@
       <label class="check"><input type="checkbox" id="sc-windows"> Windows 작업 스케줄러에 등록 (프로그램을 꺼도 실행)</label>
       <div class="hint" title="작업 스케줄러의 \DataLoupe\ 폴더에 등록돼요">Windows에 로그인해 있을 때만 실행돼요. 놓친 시각은 PC가 켜진 뒤 한 번 실행해요.</div>
       <div class="fields">
-        <label><div class="hint">알림</div><select id="sc-notify" title="실행이 끝나면 알림을 보낼 곳이에요. 위쪽 [보낼 곳]에서 추가할 수 있어요"></select></label>
+        <label><div class="hint">알림</div><select id="sc-notify" title="실행이 끝나면 알림을 보낼 곳이에요. 왼쪽 메뉴 [설정]의 보낼 곳에서 추가할 수 있어요"></select></label>
         <label id="sc-on-box"><div class="hint">알릴 때</div><select id="sc-notify-on"><option value="fail">실패할 때만</option><option value="always">항상</option></select></label>
       </div>
       <div class="hint">비밀번호가 필요한 적재(DB 주소 계정, Kafka SASL)는 예약할 수 없어요. 비밀번호를 저장하지 않기 때문이에요.</div>
@@ -437,8 +442,6 @@
     <footer><button id="c-estimate" class="btn" title="보낼 요청 수와 오늘 남은 횟수를 미리 계산해요">예상 확인</button><button id="c-start" class="btn p" title="지금 설정으로 수집을 시작해요">수집 시작</button></footer>
   </aside>
 </div>
-
-<!--include core/notify.html-->
 <script src="/static/core/common.js"></script>
 <script>
 // 수집 화면. 서버로 보내는 설정은 config() 하나로 모은다(시험·미리보기·예상·시작·구성 저장이 모두 같은 것을 보낸다).
@@ -882,13 +885,20 @@ function showBrowser(s) {
   if (p && lastSeq !== undefined && p.seq !== lastSeq) applyPick(p);
   lastSeq = p ? p.seq : lastSeq ?? null;
 }
+// 고른 선택자의 마지막 조각에서 마지막 클래스를 이름으로 쓴다(없으면 컬럼N). 겹치면 _2, _3…
+function fieldName(selector, taken) {
+  const last = (selector.replace(/\[[^\]]*\]/g, "").split(/[>\s]+/).filter(Boolean).pop() ?? "");  // 속성 선택자 값(a[title="x.pdf"])의 점은 클래스가 아니다
+  const cls = [...last.matchAll(/\.((?:\\.|[\w-])+)/g)].map(m => m[1].replace(/\\/g, "")).pop();
+  const base = cls ?? `컬럼${taken.length + 1}`;
+  let name = base;
+  for (let n = 2; taken.includes(name); n++) name = `${base}_${n}`;
+  return name;
+}
 function applyPick(p) {
   if (p.target === "field") {
     if (p.items && p.items !== val("w-items")) $("w-items").value = p.items;
     $("w-count").textContent = p.count != null ? `항목 ${p.count.toLocaleString()}개를 찾았어요` : "";
-    let n = fields.length + 1;
-    while (fields.some(f => f.name.trim() === `컬럼${n}`)) n++;
-    fields.push({ name: `컬럼${n}`, selector: p.selector ?? "", attr: "text", text: p.text ?? "", attrs: { ...p.attrs } });
+    fields.push({ name: fieldName(p.selector ?? "", fields.map(f => f.name.trim())), selector: p.selector ?? "", attr: "text", text: p.text ?? "", attrs: { ...p.attrs } });
     renderFields();
   } else if (p.target === "next") {
     $("w-pkind").value = "next";
@@ -1209,6 +1219,7 @@ $("rdel").onclick = () => busy($("rdel"), async () => {
 $("rsaved").onchange = () => {
   const c = collections[$("rsaved").value];
   if (c) { restore(c); say("cfg-msg", ""); }
+  $("first-guide").classList.toggle("hidden", !!c);  // 저장한 구성을 불러오면 처음 안내는 필요 없다
 };
 
 // 실행: 예상 → 시작 → 1초마다 상태. 화면을 다시 열어도 도는 작업이 있으면 이어서 보여 준다.

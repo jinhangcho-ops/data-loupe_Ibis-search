@@ -34,6 +34,12 @@ export function whenLines(card: Card, d: Card["data"], range: Ctx["range"], conn
   ].filter(Boolean).join("\n");
 }
 
+/** [SPECIFICATION] plans/phase-15.md#scrollToCard
+ *  격자에서 id 카드(section[data-id])를 다음 그리기 뒤에 화면 안으로 스크롤한다. */
+export function scrollToCard(id: string): void {
+  requestAnimationFrame(() => document.querySelector<HTMLElement>(`section[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+}
+
 /** 빈 틀 카드 하나 넣기(옛 addShell): 다음 빈 자리(놓은 칸이 있으면 그 자리, 겹치면 다른 카드가 밀린다)에 놓고 편집 모드로 그 카드를 고른다 */
 export function useAddShell() {
   const { state, dispatch } = useDash();
@@ -52,6 +58,7 @@ export function useAddShell() {
     dispatch({ type: "cards", cards });
     dispatch({ type: "editing", on: true });
     dispatch({ type: "select", id: card.id });
+    scrollToCard(card.id);
     dispatch({ type: "notice", message: `빈 ${spec.name} 카드를 놓았어요. 오른쪽 카드 설정에서 데이터를 정하세요.` });
   }, [state.dash, dispatch, max]);
 }

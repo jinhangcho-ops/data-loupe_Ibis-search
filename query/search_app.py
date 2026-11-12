@@ -51,6 +51,7 @@ def search_constants(found):  # 계산 줄·차트·지표 파일 화면이 서�
     found["metrics"] = {"aggs": list(metric_file.AGGS)}  # 지표 파일의 분자·분모에 쓸 수 있는 집계
     from core import prep_ops
     found["prep6"] = prep_ops.SCREEN6  # 새 컬럼 상자의 기본값 안내
+    found["summary_names"] = result.SUMMARY_NAMES  # 집계 표 머리글의 한국어 이름(화면은 이 값만 읽는다)
 
 
 PRELOAD = ("query.join_keys", "query.sentences", "query.sentence_run", "query.sentence_exec", "query.nl2sql",
@@ -85,8 +86,15 @@ def confirms(view):
 @app.post("/api/values")
 @confirms
 def values():
-    """조건을 만들 때 고를 수 있게 컬럼의 값 목록을 돌려준다. 화면에서 [목록]을 누를 때만 부른다."""
-    expr, column = querying.runnable(request.json, select=False, ask=request.json), request.json.get("column", "")
+    """조건을 만들 때 고를 수 있게 컬럼의 값 목록을 돌려준다. 화면에서 [목록]을 누를 때만 부른다. q를 주면 표 전체에서 그 글자가 든 값(result.find_values)."""
+    body = request.json
+    expr, column = querying.runnable(body, select=False, ask=body), body.get("column", "")
+    q = body.get("q") or ""
+    if not isinstance(q, str):
+        raise ValueError("찾을 글자(q)는 글자여야 해요.")
+    if q.strip():  # (Phase 17) 찾을 글자가 있으면 앞 VALUE_SCAN행이 아니라 표 전체에서
+        found, more = run(lambda: result.find_values(expr, column, q.strip()))
+        return jsonify(values=found, more=more, partial=False)
     found, more, partial = run(lambda: (*result.get_values(expr, column), result.values_partial(expr)))
     return jsonify(values=found, more=more, partial=partial)  # partial: 앞 VALUE_SCAN행 안에서만 찾았다
 
@@ -638,12 +646,14 @@ def save_virtual():
 @app.post("/api/chart")
 @confirms
 def chart():
-    """x별 집계. series는 [{"y", "agg"}]이고, split을 주면 그 컬럼의 값마다 계열을 나눈다."""
+    """x별 집계. series는 [{"y", "agg"}]이고, split을 주면 그 컬럼의 값마다 계열을 나눈다. groups {keep, ranges}를 주면 X를 먼저 거른다(result.pick_groups)."""
     body = request.json
-    if body.get("merge_ranges") and any(s.get("agg") in dash_store.SERVER_MERGE for s in body.get("series") or []):  # 고유 개수는 더할 수 없어 묶은 범위로 다시 집계
+    if body.get("merge_ranges"):  # (Phase 17) 범위로 묶으면 집계와 상관없이 서버가 전체 데이터에서 범위마다 고유 개수로 다시 구한다(화면이 받은 MAX_GROUPS개만 더하면 틀린다)
         dash_store.check_groups({"ranges": body["merge_ranges"], "merge": True})
         return jsonify(**dash_calc.range_data({"kind": "chart", "source": {"body": body}, "view": {"groups": {"ranges": body["merge_ranges"], "merge": True}}})["values"])
     expr = querying.runnable(body, select=False, ask=body)
+    picks = dash_store.check_groups(body["groups"]) if body.get("groups") is not None else {}  # (Phase 18) 쿼리 차트 [그룹 고르기]의 보일 그룹(keep)·숫자 범위(ranges): 집계 전에 X를 거른다(받은 50개 밖도 그려진다)
+    expr = result.pick_groups(expr, body["x"], picks.get("keep"), picks.get("ranges"))
     series, split = body.get("series") or [], body.get("split") or None
     labels, datasets, more = run(lambda: result.get_chart(
         expr, body["x"], series, split, body.get("order", "x"), body.get("x_unit") or ""))

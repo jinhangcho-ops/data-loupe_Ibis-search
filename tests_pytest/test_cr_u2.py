@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from conftest import ROOT, kill_edge, spawn_edge
-from test_fix_audit_js import between, read, run_node
+from conftest import kill_edge, spawn_edge
+from test_fix_audit_js import read
 
 EDGE = next((p for p in (r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe") if Path(p).exists()), None)
 
@@ -50,7 +50,7 @@ def test_terms():
 def test_usage_folded_behind_status_pill():
     common, css = read("common.js"), read("common.css")
     assert '$("usage").before(el("button", { id: "usage-pill"' in common and 'textContent: "상태"' in common
-    assert '보낼 곳 설정' in read("status.html") and 'textContent = "보낼 곳 설정"' not in common  # 글자는 status.html에, JS 덮어쓰기는 없다
+    assert '>보낼 곳</button>' in read("status.html") and 'textContent = "보낼 곳 설정"' not in common  # 글자는 status.html에, JS 덮어쓰기는 없다
     assert "#usage.sx { margin-left:0; }" in css and ".pill {" in css
 
 

@@ -63,7 +63,7 @@ function showAdded(id, added) {
   say(id, `‘${added.name}’ 대시보드에 넣었어요. 지금 카드는 ${added.cards}개예요. `, true);
   $(id).append(el("a", { href: "/dashboard?open=" + encodeURIComponent(added.id), textContent: "대시보드에서 보기" }));
 }
-document.querySelectorAll(".pages a").forEach(a => a.classList.toggle("on", a.pathname === location.pathname));  // 지금 화면의 전환 버튼을 누른 모양으로
+document.querySelectorAll(".rail a").forEach(a => a.classList.toggle("on", a.pathname === location.pathname));  // 지금 화면의 메뉴를 고른 모양으로
 const S = { schema: "", base: "", cols: [] };
 async function send(url, body) {
   const res = await fetch(url, body === undefined ? {} : {
@@ -516,7 +516,18 @@ applyFeatures();
 // 설정 창: 기능을 고르고 [적용]하면 서버가 설치 프로그램을 받아 실행하고, 앱은 닫혔다가 설치가 끝나면 다시 열린다(개발 실행에서는 서버가 안내만 한다).
 $("feat-list").replaceChildren(...SERVER.features.all.map(f => el("label", { style: "display:block; margin:6px 0" },
   el("input", { type: "checkbox", value: f.id, checked: SERVER.features.on.includes(f.id), style: "width:auto" }), ` ${f.name}`)));
-$("feat-open").onclick = () => $("feat-panel").classList.remove("hidden");
+const SET_TABS = ["feat", "update", "calc", "sample", "date", "viz", "dest"];  // 설정 창(status.html)의 분류(data-set) 차례
+/** [SPECIFICATION] plans/phase-16.md#openSettings
+ *  설정 창을 열고 tab 분류만 보이게 한다(보낼 곳이면 Slack 봇 상태도 새로 읽는다). */
+function openSettings(tab) {
+  if (!SET_TABS.includes(tab)) throw new Error(`없는 설정 분류: ${tab}`);
+  $("feat-panel").classList.remove("hidden");
+  document.querySelectorAll("#feat-panel .set-nav [data-set]").forEach(t => t.setAttribute("aria-selected", String(t.dataset.set === tab)));
+  document.querySelectorAll("#feat-panel .set-page").forEach(p => p.classList.toggle("hidden", p.dataset.set !== tab));
+  if (tab === "dest") api("/api/bot").then(showBot).catch(() => {});
+}
+$("feat-open").onclick = () => openSettings("feat");
+document.querySelectorAll("#feat-panel .set-nav [data-set]").forEach(b => b.onclick = () => openSettings(b.dataset.set));
 $("feat-close").onclick = () => $("feat-panel").classList.add("hidden");
 $("feat-panel").onclick = e => { if (e.target === $("feat-panel")) $("feat-panel").classList.add("hidden"); };
 $("feat-apply").onclick = () => busy($("feat-apply"), async () => {
@@ -543,9 +554,6 @@ api("/api/update").then(u => {
   });
 }).catch(() => {});
 $("upd-check").onchange = () => saveSetting({ update_check: $("upd-check").checked ? "on" : "off" });
-$("dest-open").onclick = () => $("dest-panel").classList.remove("hidden");
-$("dest-close").onclick = () => $("dest-panel").classList.add("hidden");
-$("dest-panel").onclick = e => { if (e.target === $("dest-panel")) $("dest-panel").classList.add("hidden"); };
 const [AFTER_LOW, AFTER_HIGH] = SERVER.sizes.notify_after;
 Object.assign($("notify-after"), { value: notifyAfter, min: AFTER_LOW, max: AFTER_HIGH });
 $("notify-after").onchange = () => {
@@ -600,7 +608,8 @@ $("bot-save").onclick = () => busy($("bot-save"), async () => {
     if (d.message) botMsg(d.message, true); else { showBot(d); botMsg(d.running ? "봇을 켰어요. Slack에서 /ibis 도움 을 보내 보세요." : "봇을 껐어요.", true); }
   } catch (e) { botMsg(e.message); }
 }));
-$("dest-open").addEventListener("click", () => api("/api/bot").then(showBot).catch(() => {}));  // 열 때마다 켜짐 상태·최근 요청을 새로
+const PANEL_PARAM = "panel", PANELS = ["feat", "dest"];  // Next 대시보드 왼쪽 메뉴의 [설정](/?panel=feat)이나 다른 곳의 /?panel=… 로 설정 창의 그 분류를 연다
+const askedPanel = new URLSearchParams(location.search).get(PANEL_PARAM); if (PANELS.includes(askedPanel)) openSettings(askedPanel);
 
 // 1. 연결
 document.querySelectorAll("input[name=kind]").forEach(r => r.onchange = () => {
@@ -624,6 +633,16 @@ async function showRecentConnections() {
   const label = c => (c.info.kind === "url" ? `${c.info.url}${c.info.user ? `, ${c.info.user}` : ""}` : c.info.path) + ` (${c.count}번 사용)`;
   $("recent-conn").replaceChildren(new Option("최근 연결에서 고르기", ""), ...recentConnections.map((c, i) => new Option(label(c), i)));
   $("recent-conn").classList.toggle("hidden", !recentConnections.length);
+  // 첫 화면 오른쪽의 최근 연결 목록(home.html): 누르면 연결 칸을 펴고 그 연결로 칸을 채운다
+  $("recent-list")?.replaceChildren(...recentConnections.map((c, i) => el("button", { type: "button", className: "btn", textContent: label(c), onclick: () => { openConnect(); pickRecent(i); } })));
+  $("recent-none")?.classList.toggle("hidden", !!recentConnections.length);
+}
+// 최근 연결 i번을 연결 칸에 채운다(비밀번호는 저장하지 않아 다시 넣는다). 고르는 칸과 첫 화면 목록이 같이 쓴다.
+function pickRecent(i) {
+  const c = recentConnections[i];
+  if (!c) throw new Error(`없는 최근 연결: ${i}`);
+  fillConnection(c.info);
+  $(c.info.kind === "url" ? "password" : "find").focus();
 }
 // 연결 카드(connect.html): 화면 가운데에 띄운다. 연결이 없으면 닫을 수 없다(첫 화면은 고르기를 그만둘 수 있어 닫힌다).
 // forText: 카드 제목 옆의 글(예: "쿼리로 들어갑니다")
@@ -695,12 +714,12 @@ $("conn-panel").onclick = e => { if (e.target === $("conn-panel") && connClosabl
 $("crumb").classList.add("link");
 $("crumb").title = "눌러서 연결을 바꿔요";
 $("crumb").onclick = () => openConnect();
-$("recent-conn").onchange = () => {
-  const c = recentConnections[$("recent-conn").value];
-  if (c) { fillConnection(c.info); $(c.info.kind === "url" ? "password" : "find").focus(); }
-  $("recent-conn").value = "";
-};
+$("recent-conn").onchange = () => { if ($("recent-conn").value !== "") pickRecent($("recent-conn").value); $("recent-conn").value = ""; };
 $("file").onchange = showFlat;
+$("flat-list").onchange = showFlat;
+$("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
+}
+const setMsg = (text, ok) => say("err-settings", text, ok);  // 앱 설정 저장 오류([설정] 창)
 // 메모리 한도(MB, 0 = 제한 없음): 목록에 있는 값이거나 GB로 직접 넣은 값. 저장만 하고 다음 [연결]부터 서버가 쓴다.
 const memory = saved("memory") || "0";
 $("memory").value = [...$("memory").options].some(o => o.value === memory) ? memory : "custom";
@@ -713,7 +732,7 @@ $("memory").onchange = () => {
 $("memory-gb").onchange = () => {
   const mb = Math.round(Number($("memory-gb").value) * 1000), [low, high] = SERVER.sizes.memory;
   if (mb >= low && mb <= high) saveSetting({ memory: mb });
-  else connMsg(`메모리 한도는 ${low / 1000}GB에서 ${high / 1000}GB 사이로 넣어 주세요.`);
+  else setMsg(`메모리 한도는 ${low / 1000}GB에서 ${high / 1000}GB 사이로 넣어 주세요.`);
 };
 // 계산 코어 수(0 = 전부): 저장만 하고 다음 [연결]부터 서버가 쓴다. 고를 수 있는 값은 1, 2, 4, 8, …과 이 PC의 코어 수.
 const cores = SERVER.sizes.threads[1], coreSteps = [...new Set([1, 2, 4, 8, 16, 32, 64].filter(n => n < cores).concat(cores))];
@@ -727,9 +746,9 @@ const [FEW_LOW, FEW_HIGH] = SERVER.floats.sample_too_few;
 if (saved("sample_too_few")) $("too-few").value = Math.round(saved("sample_too_few") * 100);
 $("too-few").onchange = () => {
   const text = $("too-few").value.trim(), n = Number(text) / 100;
-  if (!text) { saveSetting({ sample_too_few: 0 }); connMsg(""); }
-  else if (n >= FEW_LOW - 1e-9 && n <= FEW_HIGH + 1e-9) { saveSetting({ sample_too_few: n }); connMsg(""); }
-  else connMsg(`최소 표본 비율은 ${Math.round(FEW_LOW * 100)}에서 ${Math.round(FEW_HIGH * 100)} 사이로 넣어 주세요. 비우면 20%예요.`);
+  if (!text) { saveSetting({ sample_too_few: 0 }); setMsg(""); }
+  else if (n >= FEW_LOW - 1e-9 && n <= FEW_HIGH + 1e-9) { saveSetting({ sample_too_few: n }); setMsg(""); }
+  else setMsg(`최소 표본 비율은 ${Math.round(FEW_LOW * 100)}에서 ${Math.round(FEW_HIGH * 100)} 사이로 넣어 주세요. 비우면 20%예요.`);
 };
 // PC에서 구할 통계의 최대 행 수(pc_stat_rows, 비우면 서버 기본값). 범위·기본값은 서버(SERVER.sizes·SERVER.defaults)에서
 const [PCR_LOW, PCR_HIGH] = SERVER.sizes.pc_stat_rows;
@@ -737,9 +756,9 @@ Object.assign($("pc-stat-rows"), { min: PCR_LOW, max: PCR_HIGH, placeholder: SER
 if (saved("pc_stat_rows")) $("pc-stat-rows").value = saved("pc_stat_rows");
 $("pc-stat-rows").onchange = () => {
   const text = $("pc-stat-rows").value.trim(), n = Number(text);
-  if (!text) { saveSetting({ pc_stat_rows: 0 }); connMsg(""); }
-  else if (Number.isInteger(n) && n >= PCR_LOW && n <= PCR_HIGH) { saveSetting({ pc_stat_rows: n }); connMsg(""); }
-  else connMsg(`PC에서 구할 통계의 최대 행 수는 ${PCR_LOW.toLocaleString()}에서 ${PCR_HIGH.toLocaleString()} 사이의 정수로 넣어 주세요. 비우면 ${SERVER.defaults.pc_stat_rows.toLocaleString()}행이에요.`);
+  if (!text) { saveSetting({ pc_stat_rows: 0 }); setMsg(""); }
+  else if (Number.isInteger(n) && n >= PCR_LOW && n <= PCR_HIGH) { saveSetting({ pc_stat_rows: n }); setMsg(""); }
+  else setMsg(`PC에서 구할 통계의 최대 행 수는 ${PCR_LOW.toLocaleString()}에서 ${PCR_HIGH.toLocaleString()} 사이의 정수로 넣어 주세요. 비우면 ${SERVER.defaults.pc_stat_rows.toLocaleString()}행이에요.`);
 };
 // 워드클라우드 글 속 단어로 받는 최대 행 수(cloud_rows, 비우면 서버 기본값). 범위·기본값은 서버(SERVER.sizes·SERVER.defaults)에서
 const [CLR_LOW, CLR_HIGH] = SERVER.sizes.cloud_rows;
@@ -747,9 +766,9 @@ Object.assign($("cloud-rows"), { min: CLR_LOW, max: CLR_HIGH, placeholder: SERVE
 if (saved("cloud_rows")) $("cloud-rows").value = saved("cloud_rows");
 $("cloud-rows").onchange = () => {
   const text = $("cloud-rows").value.trim(), n = Number(text);
-  if (!text) { saveSetting({ cloud_rows: 0 }); connMsg(""); }
-  else if (Number.isInteger(n) && n >= CLR_LOW && n <= CLR_HIGH) { saveSetting({ cloud_rows: n }); connMsg(""); }
-  else connMsg(`워드클라우드 단어 분석 최대 행 수는 ${CLR_LOW.toLocaleString()}에서 ${CLR_HIGH.toLocaleString()} 사이의 정수로 넣어 주세요. 비우면 ${SERVER.defaults.cloud_rows.toLocaleString()}행이에요.`);
+  if (!text) { saveSetting({ cloud_rows: 0 }); setMsg(""); }
+  else if (Number.isInteger(n) && n >= CLR_LOW && n <= CLR_HIGH) { saveSetting({ cloud_rows: n }); setMsg(""); }
+  else setMsg(`워드클라우드 단어 분석 최대 행 수는 ${CLR_LOW.toLocaleString()}에서 ${CLR_HIGH.toLocaleString()} 사이의 정수로 넣어 주세요. 비우면 ${SERVER.defaults.cloud_rows.toLocaleString()}행이에요.`);
 };
 // 표본 설정(sampling.config): [칸 id, 설정 이름, 화면 배율(서버 값 × 배율 = 화면 값)]. 범위·기본값은 SERVER.sizes·SERVER.floats·SERVER.defaults
 const SAMPLE_FIELDS = [["sample-conf", "sample_conf", 1], ["sample-e-ratio", "sample_e_ratio", 100], ["sample-e-mean", "sample_e_mean", 100], ["pilot-rows", "pilot_rows", 1],
@@ -760,14 +779,17 @@ for (const [id, name, scale] of SAMPLE_FIELDS) {
   if (saved(name)) $(id).value = +saved(name) * scale;
   $(id).onchange = () => {
     const text = $(id).value.trim(), n = Number(text) / scale;
-    if (!text) { saveSetting({ [name]: 0 }); connMsg(""); }
-    else if ((!whole || Number.isInteger(n)) && n >= lo - 1e-9 && n <= hi + 1e-9) { saveSetting({ [name]: n }); connMsg(""); }
-    else connMsg(`${$(id).closest(".opt").querySelector("span").textContent}은 ${(lo * scale).toLocaleString()}에서 ${(hi * scale).toLocaleString()} 사이로 넣어 주세요. 비우면 ${(SERVER.defaults[name] * scale).toLocaleString()}이에요.`);
+    if (!text) { saveSetting({ [name]: 0 }); setMsg(""); }
+    else if ((!whole || Number.isInteger(n)) && n >= lo - 1e-9 && n <= hi + 1e-9) { saveSetting({ [name]: n }); setMsg(""); }
+    else setMsg(`${$(id).closest(".opt").querySelector("span").textContent}은 ${(lo * scale).toLocaleString()}에서 ${(hi * scale).toLocaleString()} 사이로 넣어 주세요. 비우면 ${(SERVER.defaults[name] * scale).toLocaleString()}이에요.`);
   };
 }
 // ID·해시 컬럼을 묶기·집계 목록에서 뺄지(hash_exclude, 기본 on)
 $("hash-exclude").checked = (saved("hash_exclude") || SERVER.defaults.hash_exclude) === "on";
 $("hash-exclude").onchange = () => saveSetting({ hash_exclude: $("hash-exclude").checked ? "on" : "off" });
+// 문자 검색에서 특수문자 무시(ignore_marks, 기본 off). 서버(parse.like_one)가 설정을 읽는다
+$("ignore-marks").checked = (saved("ignore_marks") || SERVER.defaults.ignore_marks) === "on";
+$("ignore-marks").onchange = () => saveSetting({ ignore_marks: $("ignore-marks").checked ? "on" : "off" });
 for (const [id, name] of [["pilot-first", "pilot_first"]]) {
   $(id).value = saved(name) || SERVER.defaults[name];
   $(id).onchange = () => saveSetting({ [name]: $(id).value });
@@ -776,7 +798,7 @@ for (const [id, name] of [["pilot-first", "pilot_first"]]) {
 $("timezone").value = saved("timezone") || "";
 $("timezone").onchange = () => {
   const zone = $("timezone").value.trim();
-  api("/api/settings", { timezone: zone || 0 }).then(() => connMsg(""), () => connMsg("시간대는 Asia/Seoul 같은 이름이나 +09:00 같은 오프셋으로 넣어 주세요."));
+  api("/api/settings", { timezone: zone || 0 }).then(() => setMsg(""), () => setMsg("시간대는 Asia/Seoul 같은 이름이나 +09:00 같은 오프셋으로 넣어 주세요."));
 };
 $("week-start").value = saved("week_start") || "mon";
 $("week-start").onchange = () => saveSetting({ week_start: $("week-start").value });
@@ -784,7 +806,7 @@ $("fiscal-start").innerHTML = Array.from({ length: 12 }, (_, i) => `<option valu
 $("fiscal-start").value = saved("fiscal_start_month") || "1";
 $("fiscal-start").onchange = () => saveSetting({ fiscal_start_month: +$("fiscal-start").value });
 // 달력 설정(weekend·work_hours·bucket_minutes·ewma_span): 식 함수가 인자를 비우면 읽는다. 기본값(placeholder)은 서버(SERVER.calendar)에서. 틀린 값은 서버 문장을 그대로 보인다.
-const CAL = SERVER.calendar, calSave = changes => api("/api/settings", changes).then(() => connMsg(""), e => connMsg(e.message));
+const CAL = SERVER.calendar, calSave = changes => api("/api/settings", changes).then(() => setMsg(""), e => setMsg(e.message));
 const weekendBoxes = [...$("weekend").querySelectorAll("input")];
 for (const b of weekendBoxes) b.checked = (saved("weekend") || CAL.weekend).split("_").includes(b.value);
 $("weekend").onchange = () => calSave({ weekend: weekendBoxes.filter(b => b.checked).map(b => b.value).join("_") || 0 });
@@ -799,8 +821,6 @@ for (const [id, name] of [["bucket-minutes", "bucket_minutes"], ["ewma-span", "e
   Object.assign($(id), { value: saved(name) || "", placeholder: CAL[name] });
   $(id).onchange = () => calSave({ [name]: Number($(id).value.trim()) });  // 비우면 0 = 기본값
 }
-$("flat-list").onchange = showFlat;
-$("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
 // [차트 낱말]·[차트 자동 규칙 기본값]: 상수(SERVER.dash.viz)를 받는 화면에서만 보인다. 저장이 틀리면 서버 문장을 칸에 보이고 저장된 값으로 다시 그린다.
 const WORD_TITLES = { good: "긍정", bad: "부정", other: "기타", null: "결측" };
 let editing = null;  // 눌러 고치는 중인 낱말 { key, word }
@@ -828,8 +848,7 @@ function showViz() {
   }));
   autoPanel($("viz-auto"), Object.keys(SERVER.dash.auto), query_auto, off => saveViz({ query_auto: off }));
 }
-if (SERVER.dash?.viz) { $("viz-prefs").classList.remove("hidden"); showViz(); }
-}
+if (SERVER.dash?.viz) { $("viz-prefs").classList.remove("hidden"); $("set-tab-viz").classList.remove("hidden"); showViz(); }
 let connected = null;  // 지금 연결의 종류: "flat"(테이블 파일), "other"(DuckDB 파일·DB 주소), 없으면 null
 // [모두 해제]: 체크를 모두 푼다. 테이블 파일로 연결돼 있었으면 그 연결을 끊고 화면을 연결 전으로 되돌린다(파일을 다시 골라 새로 연결).
 // DuckDB 파일이나 DB 주소로 연결돼 있었으면 연결은 그대로 두고 화면에 올라온 것만 비운다.
@@ -873,6 +892,7 @@ if (hasConnect) $("find").onclick = () => busy($("find"), async () => {
 async function showConnected(flat, schemas, info) {
   connected = flat ? "flat" : "other";
   connName = connLabel(info);
+  document.body.dataset.conn = info?.kind ?? "";  // 연결 종류(url·folder): 주소 연결에서만 쓰는 칸을 CSS로 가린다
   connMsg("연결했어요.", true);
   closeConnect();
   if (!hasTables) return showCrumb();
@@ -947,7 +967,7 @@ async function loadTables() {
 }
 if (hasTables) $("schema").onchange = loadTables;
 
-// 위쪽 줄의 연결 이름: "파일 / 테이블"(주소면 호스트/DB). 연결이 없으면 "연결 안 됨". 연결 칸이 없는 화면(수집)은 숨긴다.
+// 위쪽 줄의 연결 이름: "파일 / 테이블"(주소면 호스트/DB). 연결이 없으면 "연결 안 됨". 연결 칸이 없는 화면(수집)은 서버에 남은 연결(/api/state)을 읽어 같은 자리에 보이고, 누르면 첫 화면으로 간다.
 let connName = null;
 function connLabel(info) {
   if (!info) return null;
@@ -961,12 +981,17 @@ const LAST_TABLE = "loupe.lastTable";
 function lastTable() { try { return JSON.parse(localStorage.getItem(LAST_TABLE)); } catch (e) { return null; } }
 function showCrumb() {
   if (connName && S.base) try { localStorage.setItem(LAST_TABLE, JSON.stringify({ conn: connName, schema: S.schema || "", base: S.base })); } catch (e) {}
-  $("crumb").classList.toggle("hidden", !hasConnect);
   $("crumb").classList.toggle("on", !!connName);
   $("crumb-text").innerHTML = connName ? esc(connName) + (S.base ? ` <em>/</em> ${esc(S.base)}` : "") : "연결 안 됨";
 }
 if (hasTables) $("base").addEventListener("change", () => setTimeout(showCrumb));  // 화면 스크립트가 S.base를 바꾼 뒤에
 showCrumb();
+if (!hasConnect) {
+  $("crumb").classList.add("link");
+  $("crumb").title = "눌러서 첫 화면에서 연결을 바꿔요";
+  $("crumb").onclick = () => { location.href = "/"; };
+  api("/api/state").then(s => { if (s.connected) { connName = connLabel(s.opened); showCrumb(); } });
+}
 
 // 설정(화면 모드, 차트 비율, 그림 저장 모드, 따옴표 해석, 전체 행 수 세기, 조건 입력 방식, 끌어서 조절한 크기, 직전 실행의 행당 시간): 바꾸면 서버가 설정 파일에 저장해 다음 실행 때도 쓴다.
 const saveSetting = changes => api("/api/settings", changes).catch(e => connMsg(e.message));
@@ -1200,6 +1225,21 @@ function flash(text, ms = 1500) {  // 실패 안내는 읽을 시간이 더 필�
   toastBox.classList.remove("hidden");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastBox.classList.add("hidden"), ms);
+}
+
+// (Phase 17) 찾기 칸: 입력이 이어지는 동안은 보내지 않고 마지막 입력 뒤 TYPE_WAIT ms 또는 Enter에서 찾는다. 늦게 온 앞 응답은 버린다.
+const TYPE_WAIT = 300;
+function findAsTyped(input, find, show) {
+  // [SPECIFICATION] plans/phase-17.md#findAsTyped
+  let timer = 0, seq = 0;
+  const go = () => {
+    clearTimeout(timer);
+    const mine = ++seq;
+    new Promise(r => r(find(input.value.trim())))  // find를 바로(같은 차례에) 부르고, 던진 오류도 받는다
+      .then(d => { if (mine === seq) show(d, null); }, e => { if (mine === seq) show(null, e); });  // 늦게 온 앞 응답은 버린다
+  };
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(go, TYPE_WAIT); });  // 입력이 이어지면 다시 기다린다
+  input.addEventListener("keydown", e => { if (e.key !== "Enter" || e.isComposing) return; e.preventDefault(); go(); });  // 한글 조합 중 Enter는 무시
 }
 
 // 우클릭 메뉴(쿼리 표의 칸·머리글, 전처리 컬럼 줄): ctxMenu(e, items, fallbackRect). items는 [[라벨, 실행|null, 안내], …](실행이 없으면 흐리게, 안내는 말풍선).

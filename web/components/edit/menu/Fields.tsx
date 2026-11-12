@@ -6,11 +6,14 @@ import type { ReactNode } from "react";
 export type Opt = string | [string, string];  // 값 또는 [값, 글자]
 const pair = (o: Opt): [string, string] => (typeof o === "string" ? [o, o] : o);
 
-export function Sel({ label, value, onChange, options, blank, title, wide }: { label: string; value: string; onChange: (v: string) => void; options: Opt[]; blank?: string; title?: string; wide?: boolean }) {
+const Need = () => <b className="cm-need" title="꼭 채울 칸" aria-hidden="true">*</b>;
+
+export function Sel({ label, value, onChange, options, blank, title, wide, need }: { label: string; value: string; onChange: (v: string) => void; options: Opt[]; blank?: string; title?: string; wide?: boolean; need?: boolean }) {
   return (
     <label className="hint cm-field" title={title}>
       {label}
-      <select value={value} onChange={e => onChange(e.target.value)} style={wide ? { flex: "1 1 220px" } : undefined}>
+      {need && <Need />}
+      <select aria-required={need || undefined} value={value} onChange={e => onChange(e.target.value)} style={wide ? { flex: "1 1 220px" } : undefined}>
         {blank !== undefined && <option value="">{blank}</option>}
         {options.map(o => { const [v, n] = pair(o); return <option key={v} value={v}>{n}</option>; })}
       </select>
@@ -18,11 +21,12 @@ export function Sel({ label, value, onChange, options, blank, title, wide }: { l
   );
 }
 
-export function Txt({ label, value, onChange, type = "text", placeholder, title, width, min, max }: { label: string; value: string; onChange: (v: string) => void; type?: "text" | "number"; placeholder?: string; title?: string; width?: number; min?: number; max?: number }) {
+export function Txt({ label, value, onChange, type = "text", placeholder, title, width, min, max, need }: { label: string; value: string; onChange: (v: string) => void; type?: "text" | "number"; placeholder?: string; title?: string; width?: number; min?: number; max?: number; need?: boolean }) {
   return (
     <label className="hint cm-field" title={title}>
       {label}
-      <input type={type} value={value} placeholder={placeholder} min={min} max={max} step={type === "number" ? "any" : undefined} style={width ? { width, flex: "0 0 auto" } : undefined} onChange={e => onChange(e.target.value)} />
+      {need && <Need />}
+      <input aria-required={need || undefined} type={type} value={value} placeholder={placeholder} min={min} max={max} step={type === "number" ? "any" : undefined} style={width ? { width, flex: "0 0 auto" } : undefined} onChange={e => onChange(e.target.value)} />
     </label>
   );
 }

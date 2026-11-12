@@ -93,6 +93,7 @@
   .edx > label:not(.check) { display:flex; align-items:center; gap:6px; margin:6px 0 4px; }
   .cn:empty { height:10px; }
   .big.none { padding-top:16px; }
+  body:not([data-conn=url]) #where-row { display:none; }  /* 계산 위치는 주소로 연결한 DB에서만 쓴다 */
   .big.none b { font-size:16px; }
   .big.none span { font-size:14px; }
   .sec button.ghost { margin-left:6px; }
@@ -150,13 +151,15 @@
               <div class="cols hidden" id="lb-tags"></div>
             </div>
             <div class="hint" id="lb-note"></div>
+            <details id="read-box" style="margin-top:8px"><summary>읽기·통계 설정 <span class="hint" id="read-sum" style="margin:0"></span></summary>
             <div class="row" style="margin-top:8px; align-items:center" title="가장 가벼운 방법부터 시도해 읽고, 구한 통계는 테이블마다 저장해 둬요"><span class="hint" style="margin:0; flex:none">미리 읽을 행 수</span><input id="sample" type="number" aria-label="미리 읽을 행 수" style="width:120px; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
             <div class="hint">테이블 전체 대신 이만큼만 읽어서 통계, 추천, 분석에 써요.</div>
             <div class="row" style="margin-top:4px; align-items:center"><select id="sample-way" aria-label="표본 방식" style="flex:none"><option value="strata" title="값 크기로 층을 나눠 층마다 다시 뽑고, 가중치로 바로잡아요. 표 전체를 읽는 단계는 요금이 나는 DB에서 먼저 물어요">층화(Neyman, 기본)</option><option value="block" title="블록(못 하면 행 단위)으로 뽑아요">블록(못 하면 행 단위)</option><option value="key" title="키의 행을 통째로 뽑아요. 키가 빈 행은 빠져요. 표 전체를 읽는 단계는 요금이 나는 DB에서 먼저 물어요">키 단위</option></select><select id="sample-col" aria-label="표본 기준 컬럼"></select></div>
             <div class="hint">미리 읽을 행 수는 상한이에요. 필요한 행 수는 파일럿으로 정해요.</div>
             <label class="check" title="끄면 테이블을 골라도 데이터를 읽지 않고 컬럼 이름과 타입만 보여요. 행 수도 세지 않고 추천도 나오지 않아요. 분석 탭은 그대로 표본을 읽어요"><input type="checkbox" id="stats-on"> 컬럼 통계와 추천 보기</label>
             <div class="row" id="scope-row" style="margin-top:4px; align-items:center" title="통계를 표본으로 빠르게 구할지, 테이블 전체로 정확하게 구할지 골라요. 전체는 큰 테이블에서 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요. 전체로 구하면 추천은 나오지 않아요"><span class="hint" style="margin:0; flex:none">통계 범위</span><label class="check"><input type="radio" name="stats-scope" id="scope-sample"> <span id="scope-sample-text">표본</span></label><label class="check"><input type="radio" name="stats-scope" id="scope-all"> 전체</label></div>
-            <div class="row" style="margin-top:8px; align-items:center" title="주소로 연결한 DB에서만 써요. 이 PC에서 계산하면 DB에는 행 거르기까지 한 번만 묻고, 받은 결과로 통계와 전처리, 저장을 이 PC가 계산해요. 테이블이 크면 받는 데 오래 걸리고 디스크 공간을 써요"><span class="hint" style="margin:0; flex:none">계산 위치</span><select id="prep-where" aria-label="계산 위치" style="flex:1; min-width:0"><option value="all" title="전처리 전체를 이 PC에서 계산해요">전부 이 PC</option><option value="new" title="계산 컬럼과 PCA만 이 PC에서 계산해요">계산 컬럼만 이 PC</option></select></div>
+            <div class="row" id="where-row" style="margin-top:8px; align-items:center" title="주소로 연결한 DB에서만 써요. 이 PC에서 계산하면 DB에는 행 거르기까지 한 번만 묻고, 받은 결과로 통계와 전처리, 저장을 이 PC가 계산해요. 테이블이 크면 받는 데 오래 걸리고 디스크 공간을 써요"><span class="hint" style="margin:0; flex:none">계산 위치</span><select id="prep-where" aria-label="계산 위치" style="flex:1; min-width:0"><option value="all" title="전처리 전체를 이 PC에서 계산해요">전부 이 PC</option><option value="new" title="계산 컬럼과 PCA만 이 PC에서 계산해요">계산 컬럼만 이 PC</option></select></div>
+            </details>
             <div class="sec">컬럼<button id="nc-add" class="ghost" title="새 컬럼 만들기" aria-label="새 컬럼 만들기">+</button></div>
             <div class="cols" id="pcols"></div>
           </div>
@@ -300,21 +303,21 @@
       <div class="hint" id="hashed-note-a"></div>
       <label class="check" title="끄면 전처리 없이 원래 테이블을 분석해요"><input type="checkbox" id="a-prep" checked> 전처리한 결과로 분석</label>
       <div class="seg2 seg4" style="margin-top:10px">
-        <label><input type="radio" name="akind" value="distribution" checked> 분포</label>
-        <label><input type="radio" name="akind" value="correlation"> 상관관계</label>
-        <label><input type="radio" name="akind" value="groups"> 그룹 비교</label>
-        <label><input type="radio" name="akind" value="trend"> 기간별 추이</label>
-        <label><input type="radio" name="akind" value="funnel"> 퍼널</label>
+        <label title="한 컬럼의 값이 어떻게 퍼져 있는지 봐요(히스토그램·상자 그림·값 빈도)"><input type="radio" name="akind" value="distribution" checked> 분포</label>
+        <label title="숫자 컬럼끼리 함께 오르내리는지 봐요(상관계수 표·산점도)"><input type="radio" name="akind" value="correlation"> 상관관계</label>
+        <label title="묶음마다 합계·평균 같은 값을 비교해요"><input type="radio" name="akind" value="groups"> 그룹 비교</label>
+        <label title="날짜 컬럼으로 일·주·월마다 값이 어떻게 바뀌는지 봐요"><input type="radio" name="akind" value="trend"> 기간별 추이</label>
+        <label title="사용자가 단계를 순서대로 몇 명이나 거쳤는지, 어디서 빠지는지 봐요"><input type="radio" name="akind" value="funnel"> 퍼널</label>
       </div>
       <div class="seg2 seg4" style="margin-top:6px">
-        <label><input type="radio" name="akind" value="retention"> 리텐션</label>
-        <label><input type="radio" name="akind" value="rfm"> RFM</label>
-        <label><input type="radio" name="akind" value="pareto"> 파레토</label>
-        <label><input type="radio" name="akind" value="chisq"> 관계 검정</label>
-        <label><input type="radio" name="akind" value="abtest"> A/B 검정</label>
-        <label><input type="radio" name="akind" value="basket"> 장바구니</label>
-        <label><input type="radio" name="akind" value="decompose"> 변화 요인</label>
-        <label><input type="radio" name="akind" value="seasonal"> 시계열 분해</label>
+        <label title="처음 온 기간별로 묶어, 이후에 다시 온 사람의 비율을 봐요"><input type="radio" name="akind" value="retention"> 리텐션</label>
+        <label title="최근에·자주·많이 산 정도로 고객을 등급으로 나눠요"><input type="radio" name="akind" value="rfm"> RFM</label>
+        <label title="값이 큰 항목부터 쌓아, 소수 항목이 전체의 몇 %를 차지하는지(ABC 등급) 봐요"><input type="radio" name="akind" value="pareto"> 파레토</label>
+        <label title="두 범주 컬럼이 서로 관계가 있는지 통계로 확인해요(카이제곱 검정)"><input type="radio" name="akind" value="chisq"> 관계 검정</label>
+        <label title="A·B 그룹의 비율이나 평균 차이가 우연인지 확인해요"><input type="radio" name="akind" value="abtest"> A/B 검정</label>
+        <label title="함께 자주 사는 항목 쌍을 찾아요(장바구니 연관)"><input type="radio" name="akind" value="basket"> 장바구니</label>
+        <label title="두 기간의 평균 차이가 그룹 구성이 바뀌어서인지, 그룹 안에서 바뀌어서인지 나눠 봐요"><input type="radio" name="akind" value="decompose"> 변화 요인</label>
+        <label title="기간별 값을 추세·계절 반복·나머지로 나눠 봐요"><input type="radio" name="akind" value="seasonal"> 시계열 분해</label>
       </div>
       <div class="a-form" data-kind="distribution">
         <div class="hint">컬럼</div><select id="a-col"></select>
@@ -424,9 +427,7 @@
   </aside>
 </div>
 <!--include core/connect.html-->
-<!--include core/dash_refresh.html-->
-<!--include core/notify.html-->
-<script src="/static/core/common.js"></script>
+<!--include core/dash_refresh.html--><script src="/static/core/common.js"></script>
 <script src="/static/core/draft.js"></script>
 <script src="/static/core/funcs.js"></script>
 <script src="/static/core/prepmenu.js"></script>
@@ -1320,7 +1321,12 @@ $("stats-on").onchange = () => {
 };
 // 통계 범위(F18): 표본 n행(기본) / 테이블 전체. 전체면 표본 통계를 건너뛰고 처음부터 테이블 전체로 구한다(추천은 표본에서만 나온다).
 $(statsAll ? "scope-all" : "scope-sample").checked = true;
-const showScope = () => { $("scope-sample-text").textContent = `표본 ${sample.toLocaleString()}행`; };
+const showScope = () => { $("scope-sample-text").textContent = `표본 ${sample.toLocaleString()}행`; showReadSum(); };
+// 접힌 읽기·통계 설정의 요약 줄: 지금 값만 보인다
+function showReadSum() {
+  $("read-sum").textContent = "· " + (!statsOn ? "통계 끔" : statsAll ? "통계 전체" : `표본 ${sample.toLocaleString()}행, ${$("sample-way").selectedOptions[0]?.textContent ?? ""}`);
+}
+$("read-box").addEventListener("change", showReadSum);
 function showSampleWay() {  // 층화: 숫자 컬럼(비우면 자동), 키 단위: 구조·목록이 아닌 컬럼, 블록: 칸 숨김
   $("sample-way").value = sampleWay;
   $("sample-col").classList.toggle("hidden", sampleWay === "block");

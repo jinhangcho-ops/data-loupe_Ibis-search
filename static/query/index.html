@@ -35,10 +35,10 @@
   /* SQL 색: 글 상자는 글자를 투명하게 두고, 같은 자리 뒤의 pre에 같은 글을 색칠해 보인다(글꼴·여백·줄바꿈·스크롤 막대 자리를 같게). */
   .sql-hl { position:relative; display:flex; }
   .sql-hl #sql-text { position:relative; background:transparent; color:transparent; caret-color:var(--text); scrollbar-gutter:stable; }
-  .sql-hl #sql-text::placeholder { color:var(--faint); }
+  .sql-hl #sql-text::placeholder { color:var(--muted); }
   #sql-paint { position:absolute; inset:0; margin:0; padding:6px 10px; border:1px solid transparent; border-radius:9px; background:var(--card); color:var(--text);
     font:13px/1.5 Consolas, ui-monospace, monospace; white-space:pre-wrap; overflow-wrap:break-word; overflow:hidden; scrollbar-gutter:stable; pointer-events:none; }
-  :is(#sql-paint, #sql) .sk { color:var(--sql-kw); font-weight:600; } :is(#sql-paint, #sql) .ss { color:var(--sql-str); } :is(#sql-paint, #sql) .sc { color:var(--faint); font-style:italic; }  /* SQL 색칠 안에서만(패널 스크롤 영역도 .sc를 쓴다) */
+  :is(#sql-paint, #sql) .sk { color:var(--sql-kw); font-weight:600; } :is(#sql-paint, #sql) .ss { color:var(--sql-str); } :is(#sql-paint, #sql) .sc { color:var(--muted); font-style:italic; }  /* SQL 색칠 안에서만(패널 스크롤 영역도 .sc를 쓴다) */
   .sql-edit { padding:0 28px; display:flex; flex-direction:column; gap:8px; }
   .sql-edit .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .sql-edit .row label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; white-space:nowrap; }
@@ -95,7 +95,7 @@
   .axis-box { margin-bottom:10px; } .axis-box > summary { cursor:pointer; }
   /* 아직 검색·실행하지 않았을 때는 큰 글자 없이 회색 보조 글씨만 */
   .big b:empty { display:none; }
-  #rows th:not(.sorted, .pick, .addcol):hover::after { content:" ↕"; color:var(--faint); }
+  #rows th:not(.sorted, .pick, .addcol):hover::after { content:" ↕"; color:var(--muted); }
   #bpick-note { margin:0 0 6px; } #bpick.hidden + #bpick-note, #bpick-note:not(.on) { display:none; }
   .results > .tool { flex-wrap:wrap; }  /* 내보내기 형식 단추를 펼쳐 두어 좁은 창에서는 다음 줄로 */
   #rows th:is(.pick, .addcol) { cursor:default; }
@@ -142,7 +142,7 @@
       <label class="q" title="지금 보이는 쪽에서만 찾아요"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="row-find" placeholder="결과 안에서 찾기"><span class="hint" id="find-count" style="margin:0; white-space:nowrap"></span></label>
       <button id="sql-show" class="btn">SQL 보기</button>
       <button id="plan-show" class="btn" title="DB가 이 검색을 어떻게 읽는지 보여 줘요. 인덱스를 쓰는지, 테이블을 통째로 읽는지 알 수 있어요. 검색은 하지 않아요 (EXPLAIN)">실행 계획</button>
-      <span class="hint" style="margin:0" title="조건에 맞는 모든 행을 파일로 내보내요. 검색한 뒤에 쓸 수 있어요">내보내기</span><button class="btn" data-export="csv" title="조건에 맞는 모든 행을 CSV 파일로 내보내요" aria-label="CSV로 내보내기">CSV</button><button class="btn" data-export="xlsx" title="조건에 맞는 모든 행을 Excel 파일로 내보내요" aria-label="Excel로 내보내기">Excel</button><button class="btn" data-export="parquet" title="조건에 맞는 모든 행을 Parquet 파일로 내보내요" aria-label="Parquet으로 내보내기">Parquet</button><button class="btn" data-export="tsv" title="조건에 맞는 모든 행을 탭으로 나눈 TSV 파일로 내보내요" aria-label="TSV로 내보내기">TSV</button><button class="btn" data-export="fixed" title="조건에 맞는 모든 행을 고정폭 텍스트 파일로 내보내요(칸 너비는 컬럼의 가장 긴 값에 맞춰요)" aria-label="고정폭 텍스트로 내보내기">고정폭</button><button class="btn" id="export-tables" title="기준·이어붙이기·조인에 올린 테이블들을 한 Excel 파일에 테이블마다 시트 하나로 저장해요(조건은 넣지 않아요)" aria-label="테이블마다 시트 하나로 Excel에 내보내기">테이블별 Excel</button>
+      <div class="drop"><button id="export-open" class="btn" title="조건에 맞는 모든 행을 파일로 내보내요. 검색한 뒤에 쓸 수 있어요">내보내기<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button><div class="pop hidden" id="export-pop"><button data-export="csv" title="조건에 맞는 모든 행을 CSV 파일로 내보내요" aria-label="CSV로 내보내기">CSV</button><button data-export="xlsx" title="조건에 맞는 모든 행을 Excel 파일로 내보내요" aria-label="Excel로 내보내기">Excel</button><button data-export="parquet" title="조건에 맞는 모든 행을 Parquet 파일로 내보내요" aria-label="Parquet으로 내보내기">Parquet</button><button data-export="tsv" title="조건에 맞는 모든 행을 탭으로 나눈 TSV 파일로 내보내요" aria-label="TSV로 내보내기">TSV</button><button data-export="fixed" title="조건에 맞는 모든 행을 고정폭 텍스트 파일로 내보내요(칸 너비는 컬럼의 가장 긴 값에 맞춰요)" aria-label="고정폭 텍스트로 내보내기">고정폭</button><button id="export-tables" title="기준·이어붙이기·조인에 올린 테이블들을 한 Excel 파일에 테이블마다 시트 하나로 저장해요(조건은 넣지 않아요)" aria-label="테이블마다 시트 하나로 Excel에 내보내기">테이블별 Excel</button></div></div>
       <button id="handoff" class="btn" title="지금 검색을 그대로 분석 화면의 전처리 탭으로 넘겨요. 파일을 만들지 않고 연결도 그대로예요">전처리로 보내기</button>
       <button id="label-open" class="btn" disabled title="결과의 행마다 태그를 달아요. 처음에는 행마다 값이 다른 키 컬럼을 골라 켜요. 켜면 검색 결과에 '태그' 컬럼이 붙어요">태그</button><button id="label-edit" class="btn hidden" title="태그 사전(더하기·이름 바꾸기·차례·지우기)을 고쳐요">태그 사전</button><button id="label-one-open" class="btn hidden" title="검색 결과의 행을 하나씩 크게 보며 태그를 달아요. 숫자 키로 태그를 켜고 끄고, Enter로 다음 행으로 가요">하나씩 태그</button>
       <span id="label-filter" class="hidden"><select id="label-mode" title="태그로 행을 걸러요"><option value="">모든 행</option><option value="none">태그 없는 행</option><option value="any">고른 태그 중 하나라도</option><option value="all">고른 태그가 모두</option></select><span id="label-tags" class="hidden"></span></span>
@@ -176,28 +176,28 @@
         <select id="ssend" title="집계 표를 받을 곳" style="flex:0 1 160px"></select><button id="ssend-go" class="btn">보내기</button></div>
       <div class="ctl" style="margin-top:14px" title="행 컬럼으로 묶고, 열 컬럼의 값마다 칸을 만들어요(최대 30개). 조건을 넣으면 그 행만 세요">
         <span class="hint" style="margin:0; flex:none">피벗</span>
-        <select id="pv-rows" title="행으로 묶을 컬럼이에요. 값마다 한 줄이 돼요" style="flex:0 1 150px"></select>
-        <select id="pv-rows2" title="둘째 행 기준 컬럼이에요. 부모 대비 비중에 필요해요" style="flex:0 1 150px"></select>
-        <select id="pv-col" title="열로 펼칠 컬럼이에요. 값마다 한 칸이 돼요" style="flex:0 1 150px"></select>
-        <span id="pv-how" title="집계 방법"></span>
-        <select id="pv-val" title="집계할 값 컬럼이에요. 개수만 셀 때는 비워 두세요" style="flex:0 1 150px"></select>
+        <div class="cf" style="flex:0 1 150px"><span class="cl">행</span><select id="pv-rows" title="행으로 묶을 컬럼이에요. 값마다 한 줄이 돼요"></select></div>
+        <div class="cf" style="flex:0 1 150px"><span class="cl">둘째 행</span><select id="pv-rows2" title="둘째 행 기준 컬럼이에요. 부모 대비 비중에 필요해요"></select></div>
+        <div class="cf" style="flex:0 1 150px"><span class="cl">열</span><select id="pv-col" title="열로 펼칠 컬럼이에요. 값마다 한 칸이 돼요"></select></div>
+        <div class="cf"><span class="cl">집계</span><span id="pv-how" title="집계 방법"></span></div>
+        <div class="cf" style="flex:0 1 150px"><span class="cl">값 컬럼</span><select id="pv-val" title="집계할 값 컬럼이에요. 개수만 셀 때는 비워 두세요"></select></div>
         <input id="pv-where" placeholder="셀 행의 조건 (예: 상태 = 완료)" style="flex:1 1 160px" title="비우면 모든 행을 세요">
-        <select id="pv-sub" title="행 컬럼이 있으면 소계와 총계 줄을 더해요" style="flex:0 0 150px"><option value="">소계 없이</option><option value="rollup">소계와 총계 (ROLLUP)</option><option value="cube">모든 조합 (CUBE)</option></select>
+        <div class="cf" style="flex:0 0 150px"><span class="cl">소계</span><select id="pv-sub" title="행 컬럼이 있으면 소계와 총계 줄을 더해요"><option value="">소계 없이</option><option value="rollup">소계와 총계 (ROLLUP)</option><option value="cube">모든 조합 (CUBE)</option></select></div>
         <input id="pv-having" placeholder="집계 결과로 거르기 (예: 전체 합계 > 100)" style="flex:1 1 160px" title="집계한 결과로 걸러요 (HAVING)">
-        <select id="pv-show" title="칸에 보일 것이에요. 비율은 행 합계나 열 합계에서 차지하는 몫이에요" style="flex:0 0 130px"></select>
+        <div class="cf" style="flex:0 0 130px"><span class="cl">칸 표시</span><select id="pv-show" title="칸에 보일 것이에요. 비율은 행 합계나 열 합계에서 차지하는 몫이에요"></select></div>
         <button id="pv-add" class="btn" title="값을 하나 더 집계해요">+ 값 추가</button>
         <button id="pv-run" class="btn">피벗 만들기</button></div>
       <div class="ctl" title="미리 짜 둔 집계 묶음이에요. 고르면 위의 집계·값 컬럼·[+ 값 추가]는 쓰지 않아요">
-        <select id="pv-preset" style="flex:0 1 150px"></select>
-        <select id="pv-key" title="기준(key) 컬럼이에요" style="flex:0 1 150px"></select>
-        <select id="pv-target" title="값(target) 컬럼이에요. 숫자 컬럼이어야 해요" style="flex:0 1 150px"></select>
+        <div class="cf" style="flex:0 1 150px"><span class="cl">집계 묶음</span><select id="pv-preset"></select></div>
+        <div class="cf" style="flex:0 1 150px"><span class="cl">기준</span><select id="pv-key" title="기준(key) 컬럼이에요"></select></div>
+        <div class="cf" style="flex:0 1 150px"><span class="cl">값</span><select id="pv-target" title="값(target) 컬럼이에요. 숫자 컬럼이어야 해요"></select></div>
         <input id="pv-ps" placeholder="분위 (예: 0.25, 0.5, 0.9)" title="쉼표로 나눈 0과 1 사이 수예요" style="flex:0 1 180px">
         <input id="pv-above" type="number" step="any" placeholder="경계" title="이 값을 넘는 행만 따로 세요" style="flex:0 1 90px">
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-share" checked style="width:auto"> 전체 대비 비중</label>
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-parent" style="width:auto"> 부모 대비 비중</label>
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-total" style="width:auto"> 총계 줄</label>
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-pareto" style="width:auto"> 파레토 누적</label>
-        <select id="pv-convert" title="값 칸끼리의 전환율을 더해요" style="flex:0 1 150px"></select></div>
+        <div class="cf" style="flex:0 1 150px"><span class="cl">전환율</span><select id="pv-convert" title="값 칸끼리의 전환율을 더해요"></select></div></div>
       <div class="ctl" id="pv-extra"></div>
       <div class="err" id="err-pivot"></div>
       <div class="table-wrap" id="pivot"></div>
@@ -236,6 +236,14 @@
         <button id="series-add" class="btn" title="지금 고른 Y축, 집계, 모양, 축을 계열 하나로 넣어요. 넣은 계열은 한 차트에 겹쳐 그려요">계열 추가</button>
       </div>
       <ul class="items" id="series"></ul>
+      <div class="err" id="err-chart"></div>
+      <div class="chart-box"><iframe id="chart" src="/chart" title="차트" class="hidden"></iframe><div class="grip-y" data-size="chart" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div></div>
+      <div class="table-wrap hidden" id="ctable"></div>
+      <div class="ctl" style="margin-top:18px"><button id="ctable-show" class="btn">표로 보기</button><button id="ctable-csv" class="btn">CSV</button><span class="hint grow">차트 내보내기</span>
+        <label class="hint" style="margin:0" title="끄면 화면에 보이는 그대로, 켜면 자동 규칙을 풀어 모든 데이터로 CSV·그림을 저장해요"><input type="checkbox" id="cexport-all" style="width:auto"> 모든 데이터 포함</label>
+        <select id="cimage" title="그림의 색 모드예요. 집계 표 그림과 함께 바뀌어요" style="flex:0 0 100px"><option value="light">밝게</option><option value="dark">어둡게</option></select>
+        <button data-image="png" class="btn">PNG</button><button data-image="jpeg" class="btn">JPG</button>
+        <select id="csend" title="차트를 받을 곳" style="flex:0 1 160px"></select><button id="csend-go" class="btn">보내기</button></div>
       <details class="axis-box"><summary class="hint">세로축 최소·최대</summary>
       <div class="ctl">
         <span class="hint">왼쪽 축</span>
@@ -249,14 +257,6 @@
       <details class="axis-box"><summary class="hint" title="차트를 그릴 때 알아서 하는 정렬·묶기·축 정리예요. 끈 것은 다음에도 기억해요">자동 규칙</summary><div id="cauto"></div></details>
       <div class="ctl"><label class="hint" style="margin:0" title="자동 규칙이 덜어 낸 것(상위 N개 묶기·꼬리 자르기·점 솎기)을 풀어 전부 그려요. 서버가 받는 그룹 수 상한은 그대로예요"><input type="checkbox" id="call" style="width:auto"> 모든 데이터</label></div>
       <div class="ctl"><textarea id="clabels" rows="2" style="flex:1" placeholder="라벨 바꾸기: 한 줄에 원래값=보일값 (예: 1=남)" title="X·범례·툴팁에 보이는 글자만 바꿔요. 데이터는 그대로예요" aria-label="라벨 바꾸기"></textarea></div>
-      <div class="err" id="err-chart"></div>
-      <div class="chart-box"><iframe id="chart" src="/chart" title="차트" class="hidden"></iframe><div class="grip-y" data-size="chart" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div></div>
-      <div class="table-wrap hidden" id="ctable"></div>
-      <div class="ctl" style="margin-top:18px"><button id="ctable-show" class="btn">표로 보기</button><button id="ctable-csv" class="btn">CSV</button><span class="hint grow">차트 내보내기</span>
-        <label class="hint" style="margin:0" title="끄면 화면에 보이는 그대로, 켜면 자동 규칙을 풀어 모든 데이터로 CSV·그림을 저장해요"><input type="checkbox" id="cexport-all" style="width:auto"> 모든 데이터 포함</label>
-        <select id="cimage" title="그림의 색 모드예요. 집계 표 그림과 함께 바뀌어요" style="flex:0 0 100px"><option value="light">밝게</option><option value="dark">어둡게</option></select>
-        <button data-image="png" class="btn">PNG</button><button data-image="jpeg" class="btn">JPG</button>
-        <select id="csend" title="차트를 받을 곳" style="flex:0 1 160px"></select><button id="csend-go" class="btn">보내기</button></div>
     </section>
     <div class="err" id="err-export"></div>
     <div class="pager" id="pager">
@@ -319,8 +319,8 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
               <div id="conditions"></div>
               <div id="builder">
                 <div class="row"><select id="bcol" title="컬럼"></select><select id="bop" title="비교 방법"></select></div>
-                <div class="row"><select id="bmode" title="오른쪽에 값을 쓸지, 다른 컬럼과 견줄지 골라요" style="flex:0 0 80px"><option value="value">값</option><option value="column">컬럼</option></select><select id="bcol2" class="hidden" title="견줄 컬럼"></select><input id="bval" placeholder="값"><input id="bval2" placeholder="값2" class="hidden"><button id="blist" class="btn hidden" title="이 컬럼에 있는 값을 불러와 골라요 (최대 200개)">값 목록</button></div>
-                <select id="bpick" class="hidden" title="고르면 값 칸에 들어가요"></select><div class="hint" id="bpick-note">일부 행 기준이에요</div>
+                <div class="row"><select id="bmode" title="오른쪽에 값을 쓸지, 다른 컬럼과 견줄지 골라요" style="flex:0 0 80px"><option value="value">값</option><option value="column">컬럼</option></select><select id="bcol2" class="hidden" title="견줄 컬럼"></select><input id="bval" placeholder="값"><input id="bval2" placeholder="값2" class="hidden"><button id="blist" class="btn hidden" title="이 컬럼에 있는 값을 불러와 골라요 (처음 200개, 찾기 칸에 쓰면 표 전체에서 찾아요)">값 목록</button></div>
+                <input id="bfind" class="hidden" placeholder="값 찾기 (표 전체)" title="쓰고 잠시 멈추거나 Enter를 누르면 표 전체에서 이 글자가 든 값을 찾아요"><select id="bpick" class="hidden" title="고르면 값 칸에 들어가요"></select><div class="hint" id="bpick-note">일부 행 기준이에요</div>
                 <div class="row"><button id="badd" class="btn">조건 추가</button></div>
                 <div class="err" id="err-builder"></div>
               </div>
@@ -372,7 +372,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
       <div class="row nl-row"><input id="nl-q" placeholder="질문으로 SQL 만들기 (예: 지난달 매장별 매출 합계)" title="만든 SQL은 바로 실행하지 않고 편집기에 넣어요. 검사 결과를 보고 [실행]을 누르세요">
         <button id="nl-ask" class="btn" title="LLM에 물어 SQL을 만들어요">SQL 만들기</button>
         <button id="nl-prompt" class="btn" title="LLM에 보낼 내용을 보여 줘요. 테이블과 컬럼 이름, 타입, 명세서 설명, 지표 정의, 컬럼별 표본 통계만 들어가고 데이터 값은 넣지 않아요">프롬프트 보기</button></div>
-      <div class="row nl-row"><span class="hint" style="margin:0" id="llm-name">LLM: 없음</span><input id="llm-env" class="code" placeholder="LLM 설정 파일 경로 (LLM_PROVIDER, LLM_API_KEY, LLM_MODEL)" title="키는 저장하지 않고 물을 때마다 이 파일에서 읽어요. 비우고 [불러오기]를 누르면 LLM을 쓰지 않아요"><button id="llm-pick" class="btn" title="파일 선택 창에서 LLM 설정 파일을 골라요" aria-label="LLM 설정 파일 찾아보기">찾아보기</button><button id="llm-read" class="btn">불러오기</button></div>
+      <details id="llm-box"><summary class="hint"><span id="llm-name">LLM: 없음</span> · 설정</summary><div class="row nl-row"><input id="llm-env" class="code" placeholder="LLM 설정 파일 경로 (LLM_PROVIDER, LLM_API_KEY, LLM_MODEL)" title="키는 저장하지 않고 물을 때마다 이 파일에서 읽어요. 비우고 [불러오기]를 누르면 LLM을 쓰지 않아요"><button id="llm-pick" class="btn" title="파일 선택 창에서 LLM 설정 파일을 골라요" aria-label="LLM 설정 파일 찾아보기">찾아보기</button><button id="llm-read" class="btn">불러오기</button></div></details>
       <pre class="nl-prompt hidden" id="nl-view"></pre>
       <div class="sql-hl"><pre id="sql-paint" aria-hidden="true"></pre><textarea id="sql-text" spellcheck="false" placeholder="SELECT * FROM orders WHERE 상태 LIKE '완%'    (Ctrl+Enter로 실행)"></textarea></div>
       <div class="sql-check" id="sql-check"></div>
@@ -415,7 +415,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
       <input id="met-period" placeholder="기간 (예: 2025-03-01 ~ 2025-03-31)" title="비우면 탐색의 조건 그대로 구해요" aria-label="지표 기간" style="flex:0 1 240px; width:auto"><button id="met-cal" class="btn" title="날짜 컬럼에 있는 날 안에서 기간을 골라요">달력</button>
       <select id="met-cmp" title="같은 지표를 견줄 기간이에요. 기간을 넣어야 해요" style="flex:0 1 170px; width:auto"><option value="">비교 안 함</option><option value="prev">지난 기간</option><option value="same_weekday">같은 요일 지난 기간</option><option value="yoy">작년 같은 기간</option><option value="mom">한 달 전 같은 기간</option><option value="wow">한 주 전 같은 기간</option></select>
       <button id="met-dash" class="btn" title="지금 구한 지표를 그래프로 대시보드에 넣어요">대시보드에 추가</button></div>
-    <div class="big"><b id="met-big">지표를 고르세요</b><span id="met-sub">오른쪽 목록에서 지표를 누르면 바로 구해요.</span></div>
+    <div class="big"><b id="met-big">지표를 고르세요</b><span id="met-sub">지표는 '매출 합계'처럼 이름을 붙여 둔 계산이에요. 오른쪽 목록에서 지표를 누르면 바로 구해요.</span></div>
     <div class="err" id="err-met"></div>
     <section class="pane">
       <div class="chart-box hidden" id="met-box"><iframe id="met-chart" src="/chart" title="지표 차트"></iframe></div>
@@ -426,9 +426,9 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
   <aside class="side">
     <header><h3>지표</h3></header>
     <div class="sc">
-      <h2>지표 파일</h2>
+      <details id="met-file"><summary><h2 style="display:inline">지표 파일</h2></summary>
       <div class="row"><input id="met-path" class="code" placeholder="지표 파일 경로 (YAML, JSON)" title="지표를 적어 둔 파일이에요. 파일을 고친 뒤에는 [불러오기]를 다시 누르세요. 비우고 [불러오기]를 누르면 쓰지 않아요"><button id="met-pick" class="btn" title="파일 선택 창에서 지표 파일을 골라요" aria-label="지표 파일 찾아보기">찾아보기</button><button id="met-read">불러오기</button></div>
-      <div class="hint" id="met-info"></div>
+      <div class="hint" id="met-info"></div></details>
       <h2>나눠 보기</h2>
       <select id="met-by" title="고르면 이 컬럼의 값마다 따로 구해요 (값 순으로 앞 50개)"></select>
       <h2>지표</h2>
@@ -440,9 +440,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
 
 <div id="undo-bar" class="undo hidden" role="status"><span id="undo-text"></span><button id="undo-go" class="btn">되돌리기</button></div>
 <!--include core/connect.html-->
-<!--include core/dash_refresh.html-->
-<!--include core/notify.html-->
-<script src="/static/core/common.js"></script>
+<!--include core/dash_refresh.html--><script src="/static/core/common.js"></script>
 <script src="/static/core/draft.js"></script>
 <script src="/static/core/funcs.js"></script>
 <script src="/static/core/prepmenu.js"></script>
@@ -941,10 +939,11 @@ function showBuilder() {  // 고른 컬럼의 타입에 맞는 연산자만 보�
   $("bcol2").classList.toggle("hidden", !byColumn());
   $("bval").classList.toggle("hidden", byColumn() || op.endsWith("null"));
   $("bval2").classList.toggle("hidden", byColumn() || op !== "between");
-  $("blist").classList.toggle("hidden", byColumn() || op.endsWith("null") || !isText());
+  $("blist").classList.toggle("hidden", byColumn() || op.endsWith("null"));
   $("bval").placeholder = isMulti() ? "값1, 값2" : op === "between" ? "값1" : "값";
 }
-$("bmode").onchange = () => { $("bpick").classList.add("hidden"); showBuilder(); };
+const hidePick = () => { $("bpick").classList.add("hidden"); $("bfind").classList.add("hidden"); $("bfind").value = ""; };
+$("bmode").onchange = () => { hidePick(); showBuilder(); };
 function builderPart() {  // 지금 칸의 내용으로 만든 조건 하나. 값이 비었으면 ""
   const col = $("bcol").value, op = $("bop").value, v = $("bval").value.trim(), v2 = $("bval2").value.trim();
   if (!col) return "";
@@ -953,7 +952,7 @@ function builderPart() {  // 지금 칸의 내용으로 만든 조건 하나. �
   if (!v || (op === "between" && !v2)) return "";
   return op === "between" ? `${col} between ${v} ${v2}` : `${col} ${op} ${isMulti() ? v : wrap(v)}`;
 }
-$("bcol").onchange = () => { $("bpick").classList.add("hidden"); $("bval").value = $("bval2").value = ""; showBuilder(); };  // 컬럼을 바꾸면 이전 컬럼의 값과 목록은 비운다.
+$("bcol").onchange = () => { hidePick(); $("bval").value = $("bval2").value = ""; showBuilder(); };  // 컬럼을 바꾸면 이전 컬럼의 값과 목록은 비운다.
 $("bop").onchange = showBuilder;
 const addBuilt = () => busy($("badd"), async () => {
   const part = builderPart();
@@ -962,17 +961,20 @@ const addBuilt = () => busy($("badd"), async () => {
 });
 $("badd").onclick = addBuilt;
 $("bval").onkeydown = $("bval2").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) addBuilt(); };
-// 값 목록: [목록]을 누를 때만 조회한다. 고르면 값 칸에 넣고, in·except에서는 쉼표로 이어 붙인다.
+// 값 목록: [목록]을 누를 때만 조회한다(처음 200개). 찾기 칸에 쓰면 표 전체에서 찾는다(findAsTyped: 300ms 쉬거나 Enter). 고르면 값 칸에 넣고, in·except에서는 쉼표로 이어 붙인다.
+function pickValues(d, q) {
+  const n = d.values.length;
+  const label = q ? (d.more ? `찾은 값 (앞의 ${n}개)` : `찾은 값 (${n}개)`) : d.more ? `값 고르기 (앞의 ${n}개만)` : `값 고르기 (${n}개)`;
+  $("bpick").replaceChildren(new Option(label, ""), ...d.values.map(v => new Option(v, v)));
+  $("bpick").classList.remove("hidden");
+  $("bfind").classList.remove("hidden");
+  $("bpick-note").classList.toggle("on", !!d.partial);  // 서버가 일부 행만 보고 모은 목록(찾기 결과는 늘 false)
+  $("err-builder").textContent = "";
+}
 $("blist").onclick = () => busy($("blist"), async () => {
-  try {
-    const d = await api("/api/values", valuesBody($("bcol").value));
-    const label = d.more ? `값 고르기 (앞의 ${d.values.length}개만)` : `값 고르기 (${d.values.length}개)`;
-    $("bpick").replaceChildren(new Option(label, ""), ...d.values.map(v => new Option(v, v)));
-    $("bpick").classList.remove("hidden");
-    $("bpick-note").classList.toggle("on", !!d.partial);  // 서버가 일부 행만 보고 모은 목록
-    $("err-builder").textContent = "";
-  } catch (e) { $("err-builder").textContent = e.message; }
+  try { $("bfind").value = ""; pickValues(await colValues($("bcol").value), ""); } catch (e) { $("err-builder").textContent = e.message; }
 });
+findAsTyped($("bfind"), q => colValues($("bcol").value, q), (d, e) => { if (e) $("err-builder").textContent = e.message; else pickValues(d, $("bfind").value.trim()); });
 $("bpick").onchange = () => {
   const v = $("bpick").value, now = $("bval").value.trim();
   if (!v) return;
@@ -1165,7 +1167,7 @@ function rewrites(line, c) {
 const plainCol = c => c in S.origins && !S.calcs.some(l => rewrites(String(l.line ?? l), c));
 const rowCol = c => plainCol(c) && !S.calcs.some(l => GROWS.test(String(l.line ?? l)));  // 행 고르기 막대 전용: 펼치기·세로로가 있으면 모두 잠근다(RB2)
 const valuesBody = column => ({ schema: S.schema, base: S.base, ...(S.union.tables.length ? { union: S.union } : {}), joins: S.joins, column });
-const colValues = column => api("/api/values", valuesBody(column));  // {values, more, partial} 그대로(값 상자가 more·partial 안내를 보인다)
+const colValues = (column, q = "") => api("/api/values", { ...valuesBody(column), ...(q ? { q } : {}) }).then(d => ({ ...d, find: true }));  // {values, more, partial} + find(값 상자가 찾기 칸을 서버로 보낸다). q가 있으면 표 전체에서 찾는다
 // 줄 여러 개를 차례로 더한다. 서버가 하나라도 거부하면 거기서 멈추고 이유를 보인다.
 async function addLines(key, lines) {
   for (const line of lines) if (!await addItem(key, line, $("err-search"), undefined, true)) return false;  // 프로그램이 만든 줄(R2)
@@ -1180,7 +1182,7 @@ async function withNewColumns(add) {
   return ok;
 }
 function headItems(g, col) {
-  const type = S.cols.find(c => c[0] === col)?.[1] ?? "", values = () => colValues(col);
+  const type = S.cols.find(c => c[0] === col)?.[1] ?? "", values = q => colValues(col, q);
   return [["이 컬럼 빼기", () => dropColumn(col)],
     ...(plainCol(col) ? [["값 골라서 제외·만 보기…", () => PrepMenu.valuesBox({ column: col, values, onApply: (keep, picked) => addLines("conditions", RowPick.valueLines(col, keep, picked)) })]] : []),
     ["이 값으로 다른 테이블 찾기…", () => openLookup(col)],
@@ -1218,7 +1220,7 @@ function showSearches(d, name = "") {
 api("/api/searches").then(d => showSearches(d)).catch(() => {});
 toggleDrop($("saved-open"), $("saved-pop"));
 document.addEventListener("click", e => {  // 밖을 누르면 떠 있는 상자를 닫는다(목록 고르기는 제외)
-  if (!e.target.closest(".pop, .menu")) ["saved-pop", "sql-save-pop", "wtab-pop"].forEach(id => $(id).classList.add("hidden"));
+  if (!e.target.closest(".pop, .menu")) ["saved-pop", "sql-save-pop", "wtab-pop", "export-pop"].forEach(id => $(id).classList.add("hidden"));
 });
 $("ssave").onclick = () => busy($("ssave"), async () => {
   if (!S.base) { $("err-search").textContent = "먼저 테이블을 고르세요."; return; }
@@ -1518,7 +1520,8 @@ function renderTables() {
   rowPick.show();
   LabelBar.show($("label-bar"), $("rows")._grid, true);
   $("rows").querySelectorAll("th:not(.pick, .addcol)").forEach(th => { th.title = "누르면 이 컬럼으로 정렬해요. 우클릭(키보드는 메뉴 키·Shift+F10)하면 컬럼 빼기·값 고르기·전처리를 해요"; th.tabIndex = 0; });
-  if (last?.summary) sortedTable($("summary"), last.summary, (h, d, s) => mountTable(h, gridSpec(d, {}, s))); else { $("summary")._grid = null; $("summary").innerHTML = SUMMARY_HINT; }
+  const sumName = k => SERVER.summary_names[k] ?? k;  // 집계 표 머리글: 서버의 한국어 낱말(정렬·그림·보내기가 같은 이름을 쓰게 키째 바꾼다)
+  if (last?.summary) sortedTable($("summary"), { ...last.summary, columns: last.summary.columns.map(sumName), rows: last.summary.rows.map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [sumName(k), v]))) }, (h, d, s) => mountTable(h, gridSpec(d, {}, s))); else { $("summary")._grid = null; $("summary").innerHTML = SUMMARY_HINT; }
   applyFind();
 }
 let maxTimer; $("maxlen").oninput = () => { clearTimeout(maxTimer); maxTimer = setTimeout(renderTables, 150); };  // 한 글자마다 표 전체를 다시 쓰지 않게(1만 행이면 수 초)
@@ -1553,8 +1556,10 @@ function openNewCol() {
 $("newcol-open").onclick = openNewCol;
 renderTables();
 
-// 결과 내보내기: 서버가 만든 파일을 내려받는다. 형식 단추는 팝업 없이 도구줄에 펼쳐 둔다(F06).
+// 결과 내보내기: 서버가 만든 파일을 내려받는다. 형식 단추는 [내보내기] 메뉴 하나에 묶는다(SQL 탭의 [결과 내보내기]와 같은 모양).
+toggleDrop($("export-open"), $("export-pop"));
 document.querySelectorAll("[data-export]").forEach(b => b.onclick = () => {
+  $("export-pop").classList.add("hidden");
   if (!S.base) { $("err-export").textContent = "먼저 테이블을 고르세요."; return; }
   const format = b.dataset.export;
   return busy(b, async () => {
@@ -1569,6 +1574,7 @@ document.querySelectorAll("[data-export]").forEach(b => b.onclick = () => {
 // 여러 테이블 → 한 Excel(테이블마다 시트 하나): 기준·이어붙이기·조인에 올린 테이블들. 서버가 저장 대화상자를 띄우고 {path}를 돌려준다.
 const exportTables = () => [...new Set([S.base, ...S.union.tables, ...joinsUI.map(j => j.table)].filter(Boolean))].map(name => ({ schema: S.schema, name }));
 $("export-tables").onclick = () => {
+  $("export-pop").classList.add("hidden");
   if (!S.base) { $("err-export").textContent = "먼저 테이블을 고르세요."; return; }
   return busy($("export-tables"), async () => {
     try {
@@ -1688,31 +1694,37 @@ function drawChart() {
   $("chart").classList.toggle("hidden", !drawn);
   groupPanel();
   if (!drawn) return;
-  const ratio = RATIOS[$("cratio").value], shown = chartMerged ?? drawn;  // 서버가 범위로 묶었으면 그 값
+  const ratio = RATIOS[$("cratio").value], shown = chartMerged ?? drawn;  // 서버가 다시 구한 값(범위 묶기 또는 고른 그룹·범위로 거른 값)이 있으면 그 값
   chartDraw({ kind: "series", payload: { labels: shown.labels, datasets: islandSets(shown.datasets) },
     opts: { type: "", ranges: axisRanges(), relabel: $("clabels").value, ...(ratio ? { ratio } : {}),
-      auto: chartAuto, scale: $("cscale").value || undefined, order: $("corder").value, all: $("call").checked, aggs: drawn.used.map(s => s.agg), rest: drawn.rest ?? null,
+      auto: chartAuto, scale: $("cscale").value || undefined, order: $("corder").value, all: $("call").checked, aggs: drawn.used.map(s => s.agg), rest: (chartMerged && !chartMerged.merged ? chartMerged : drawn).rest ?? null,
       x_kind: xKind(drawn.x), x_scale: drawn.x_scale, x_levels: drawn.x_levels, x: drawn.x,
-      ...(Object.keys(chartGroups).length ? { groups: chartGroups } : {}), ...(chartMerged ? { merged: true } : {}) } });
+      ...(Object.keys(chartGroups).length ? { groups: chartGroups } : {}), ...(chartMerged?.merged ? { merged: true } : {}) } });
 }
 // [그룹 고르기] 판: 고른 것만 chartGroups(web/lib/groups.ts GroupView 모양, 저장하지 않음)에 모으고 계산은 섬의 applyGroups가 한다. 이름 바꾸기는 [라벨 바꾸기]가 맡는다.
-// chartMerged: 묶기 + 고유 개수 등(SERVER.dash.server_merge) 계열일 때 서버가 범위로 다시 집계한 그릴 값(want = 그 조회·범위).
+// chartMerged: 서버가 다시 구한 그릴 값. 묶기를 켜면 범위마다 다시 구한 값(merged: true, 계열 y의 고유 개수), 아니면 고른 그룹(keep)·숫자 범위로 먼저 거른 값(toDrawn 모양). want = 그 조회와 보낸 것.
 let chartGroups = {}, chartMerged = null, mergeSeq = 0, dragging = null;  // dragging: 끌어 고르는 중 { value: 지나는 칸에 넣을 상태, done: 놓을 때 할 일 }
 const chartKey = q => JSON.stringify({ ...q, order: undefined });  // 이것이 바뀌면(새 검색·X·계열·나누기) 이름이 달라져 고른 것을 비운다. 정렬만 바뀌면 남긴다
 document.addEventListener("pointerup", () => { const d = dragging; dragging = null; d?.done(); });
 async function groupsChanged() {
   const seq = ++mergeSeq;  // 늦게 온 앞 조회는 버린다
-  const want = drawn && chartGroups.merge && drawn.used.some(s => SERVER.dash.server_merge.includes(s.agg)) ? JSON.stringify([drawn.query, chartGroups.ranges]) : null;
+  const kind = drawn && xKind(drawn.x), merge = !!(drawn && chartGroups.merge);
+  // (Phase 18) 날짜 X는 화면에서만 거른다. 범위는 숫자 X만 서버로
+  const picks = drawn && !merge && kind !== "date" ? { ...(chartGroups.keep?.length ? { keep: chartGroups.keep } : {}), ...(kind === "num" && chartGroups.ranges?.length ? { ranges: chartGroups.ranges } : {}) } : {};
+  const want = merge || Object.keys(picks).length ? JSON.stringify([drawn.query, merge ? chartGroups.ranges : picks]) : null;
   if (want !== (chartMerged?.want ?? null)) {
     chartMerged = null;
     if (want) {
       try {
-        const r = await api("/api/chart", { ...drawn.query, merge_ranges: chartGroups.ranges });
+        const r = await api("/api/chart", { ...drawn.query, ...(merge ? { merge_ranges: chartGroups.ranges } : { groups: picks }) });
         if (seq !== mergeSeq) return;
-        chartMerged = { want, labels: r.labels, datasets: drawn.datasets.filter(ds => r.series.some(s => s.name === ds.label)).map(ds => ({ ...ds, values: r.series.find(s => s.name === ds.label).values })) };
+        chartMerged = merge ? { want, merged: true, labels: r.labels, datasets: drawn.datasets.filter(ds => r.series.some(s => s.name === ds.label)).map(ds => ({ ...ds, values: r.series.find(s => s.name === ds.label).values })) }
+          : { ...toDrawn(drawn.query, drawn.used, r), want };
       } catch (e) { if (seq === mergeSeq) $("err-chart").textContent = e.message; return; }
     }
   }
+  const now = chartMerged ?? drawn;
+  $("err-chart").textContent = [rangeError(), chartMerged?.merged ? "" : now.cut, now.more].filter(Boolean).join(" ");  // 묶은 값은 전체 데이터라 잘림 안내를 빼고, 거른 값은 거른 응답의 안내
   drawChart();
 }
 // 빈 목록·끈 묶기는 빼고 바꾼다. 조회 없이 다시 그리고, 서버가 묶어야 하면 다시 부른다.
@@ -1740,12 +1752,20 @@ function checkList(key, names) {
 }
 function groupPanel() {
   if (!drawn) { $("cgroups").replaceChildren(); return; }
-  const groups = checkList("keep", drawn.labels);
+  const kind = xKind(drawn.x);
+  const groups = checkList("keep", [...new Set([...drawn.labels, ...(chartGroups.keep ?? [])])]);  // (Phase 18) 찾아 더한 그룹(받은 50개 밖)도 목록에 보여 끌 수 있게
   const all = el("button", { className: "btn", textContent: "모두", onclick: () => setGroups({ ...chartGroups, keep: [] }) });
   const none = el("button", { className: "btn", textContent: "없음", title: "체크를 모두 끄고 보일 그룹을 하나씩 골라요", onclick: () => groups.boxes.forEach(b => { b.checked = false; }) });
-  const parts = [el("div", { className: "hint", textContent: "보일 그룹" }), el("div", { className: "ctl" }, all, none), groups.list];
+  const parts = [el("div", { className: "hint", textContent: "보일 그룹" }), el("div", { className: "ctl" }, all, none)];
+  if (kind !== "date") {  // (Phase 18) 표 전체에서 X 값을 찾아 보일 그룹에 더한다(차트와 같은 조회 본문)
+    const find = el("input", { placeholder: "그룹 찾아 더하기", title: "표 전체에서 X 값을 찾아 보일 그룹에 더해요(Enter 또는 잠시 멈추면 찾아요)" }), found = el("div", { className: "ctl" });
+    findAsTyped(find, q => api("/api/values", { ...drawn.query, column: drawn.x, q }), (d, e) => found.replaceChildren(...(e ? [el("span", { className: "hint", textContent: e.message })]
+      : [...d.values.map(v => el("button", { className: "btn", textContent: v, onclick: () => setGroups({ ...chartGroups, keep: [...new Set([...(chartGroups.keep ?? []), v])] }) })),
+         ...(d.more ? [el("span", { className: "hint", textContent: "더 있어요. 더 좁혀 찾으세요." })] : [])])));
+    parts.push(el("div", { className: "ctl" }, find), found);
+  }
+  parts.push(groups.list);
   if (drawn.datasets.length > 1) parts.push(el("div", { className: "hint", textContent: "보일 계열" }), checkList("series", drawn.datasets.map(d => d.label)).list);
-  const kind = xKind(drawn.x);
   if (kind === "num" || kind === "date") {
     const type = kind === "num" ? "number" : "date", end = v => v === "" ? null : kind === "num" ? +v : v;
     const lo = el("input", { type, placeholder: "시작", title: "범위 시작(비우면 처음부터)" }), hi = el("input", { type, placeholder: "끝", title: "범위 끝(비우면 끝까지)" });
@@ -1764,7 +1784,7 @@ function groupPanel() {
       merge.style.width = "auto";
       row.style.margin = "0";
       row.append(merge, " 범위를 한 막대로 묶기");
-      parts.push(el("div", { className: "ctl" }, row));
+      parts.push(el("div", { className: "ctl" }, row), el("div", { className: "hint", textContent: SERVER.dash.merge_note }));
     }
   }
   $("cgroups").replaceChildren(...parts);
@@ -1778,7 +1798,7 @@ function xKind(x) {
 // 계열 이름: 나누지 않으면 계열 이름, 나누면 나눈 값(계열이 여럿이면 "계열 · 값").
 function toDrawn(query, used, d) {
   const label = k => !query.split ? seriesTitle(used[k.series]) : used.length > 1 ? `${seriesTitle(used[k.series])} · ${k.split}` : k.split;
-  return { query, used, x: query.x, labels: d.labels, truncated: !!d.truncated, rest: d.rest, x_scale: d.x_scale, x_levels: d.x_levels, datasets: d.datasets.map(k => ({ ...used[k.series], label: label(k), values: k.values })) };
+  return { query, used, x: query.x, labels: d.labels, truncated: !!d.truncated, cut: d.truncated ? `그룹이 많아 ${d.max_groups}개만 그려요.` : "", more: d.more_splits ? `나눌 값이 많아 행이 많은 ${d.max_splits}개만 그려요.` : "", rest: d.rest, x_scale: d.x_scale, x_levels: d.x_levels, datasets: d.datasets.map(k => ({ ...used[k.series], label: label(k), values: k.values })) };
 }
 $("draw").onclick = () => busy($("draw"), async () => {
   try {
@@ -1789,9 +1809,7 @@ $("draw").onclick = () => busy($("draw"), async () => {
     if (tabs[tabAt] !== tab) return;  // 그리는 사이 탭이 바뀌었으면 버린다
     if (!drawn || chartKey(drawn.query) !== chartKey(query)) chartGroups = {};
     drawn = toDrawn(query, used, d);
-    $("err-chart").textContent = [rangeError(), d.truncated ? `그룹이 많아 ${d.max_groups}개만 그려요.` : "",
-      d.more_splits ? `나눌 값이 많아 행이 많은 ${d.max_splits}개만 그려요.` : ""].filter(Boolean).join(" ");
-    await groupsChanged();  // 서버 묶기면 묶은 값을 다시 받아 그린다(오류는 위 글 대신 보인다)
+    await groupsChanged();  // 안내 글(잘림·나눌 값)은 groupsChanged가 정한다. 서버가 다시 구해야 하면 다시 받아 그린다(오류는 안내 대신 보인다)
   } catch (e) { $("err-chart").textContent = e.message; }
 });
 // 차트에 그린 값의 표(첫 컬럼은 X, 계열마다 한 컬럼, 그룹마다 한 행)는 섬이 그린 뒤 보낸 shown 메시지의 것이다: all이면 모든 데이터, 아니면 보이는 그대로. 아직 그리지 않았으면 null.
@@ -2426,6 +2444,7 @@ $("nl-q").addEventListener("keydown", e => { if (e.key === "Enter" && !e.ctrlKey
 function showLlm(d) {
   $("llm-env").value = d.env;
   $("llm-name").textContent = "LLM: " + d.llm;
+  if (d.env || d.error) $("llm-box").open = true;  // LLM을 쓰지 않으면 설정 줄은 접어 둔다
   if (d.error) say("err-sql", d.error);
 }
 $("llm-read").onclick = () => busy($("llm-read"), async () => {
@@ -2544,12 +2563,13 @@ async function openMyMetrics() {
 }
 const noMetrics = () => el("div", { className: "none-box" }, el("b", { textContent: "지표가 없어요" }),
   el("div", { className: "hint", textContent: "문장 화면에서 직접 만들거나, 지표 파일(YAML·JSON)을 불러오세요." }),
-  el("div", { className: "row" }, el("button", { className: "btn p", textContent: "내 지표 만들기", onclick: openMyMetrics }), el("button", { className: "btn", textContent: "지표 파일 불러오기", onclick: () => $("met-pick").click() })));
+  el("div", { className: "row" }, el("button", { className: "btn p", textContent: "내 지표 만들기", onclick: openMyMetrics }), el("button", { className: "btn", textContent: "지표 파일 불러오기", onclick: () => { $("met-file").open = true; $("met-pick").click(); } })));
 function showMetrics(d) {
   metrics = d;
   $("met-path").value = d.path;
   $("met-info").textContent = d.error ?? (d.path ? `지표 ${d.metrics.length}개` : "지표 파일 경로를 넣고 [불러오기]를 누르면 그 안의 지표가 아래에 나와요.");
   $("met-info").className = d.error ? "err" : "hint";
+  if (d.path || d.error) $("met-file").open = true;  // 파일을 쓰고 있을 때만 경로 칸을 펼쳐 둔다
   const found = Object.fromEntries(d.metrics.map(m => [m.name, m])), on = metDrawn?.used[0];
   $("met-list").replaceChildren(...!d.order.length ? [noMetrics()] : d.order.map(name => el("button", { className: "met" + (name === on ? " on" : ""), title: found[name].text, onclick: e => busy(e.currentTarget, () => runMetric(name)) },
     el("b", { textContent: name }), el("span", { className: "hint", textContent: found[name].description || found[name].text }))));

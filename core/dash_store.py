@@ -52,6 +52,7 @@ FITS = ("fill", "center")  # KPI 글자: 칸을 꽉 채움 / 가운데
 LAYOUTS = ("below", "right")  # KPI의 스파크 위치: 값 아래 / 오른쪽
 MAX_BINS = 100  # 히스토그램의 구간 수
 MAX_BANDS = 6  # 불릿 차트의 구간(경계) 수
+MAX_CELLS = 2000  # 히트맵의 칸 수(dash_calc가 쓰고, 카드 추가 안내가 상수로 받는다. 여기 두어 화면 상수가 dash_calc를 올리지 않게)
 ADDITIVE = ("sum", "count")  # 아이 값의 합이 부모 값이 되는 집계(트리맵·선버스트의 아래단계)
 TREE_ADDITIVE = "아랫단계는 합계·개수만 쓸 수 있어요. 평균·최소·최대·중앙값·고유 개수는 아랫단계 값을 더해도 윗단계 값이 되지 않아요."
 FLOW_NEED = {"sankey": ("user", "step", "time"), "cohort": ("user", "time")}  # 다시 구할 분석(source.analysis)에 있어야 하는 컬럼 이름
@@ -131,10 +132,12 @@ def canon_key(key):
 
 
 def source_label(recent):
-    """화면에 보일 연결 이름: 파일 연결은 폴더 이름, 주소 연결은 host/database."""
+    """화면에 보일 연결 이름(다른 화면의 common.js connLabel과 같게): DuckDB 파일은 파일 이름, 고른 표 파일들은 "파일 N개", 그 밖의 파일 연결은 폴더 이름, 주소 연결은 host/database."""
     if recent.get("kind") == "folder":
         path = recent.get("path", "")
-        return Path(path).name or path
+        if recent.get("files"):
+            return f"파일 {len(recent['files'])}개"
+        return Path(recent.get("file") or path).name or path
     parts = urlsplit(recent.get("url", ""))
     return (parts.hostname or "") + (f"/{parts.path.strip('/')}" if parts.path.strip("/") else "")
 
@@ -320,8 +323,8 @@ def check_geo(geo):
 
 
 GROUP_KINDS = ("chart", "metric", "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud", "funnel", "geomap")  # (Phase 4) 표시할 그룹 고르기(view.groups)를 쓰는 카드. 값 하나짜리·표·상태·분석 카드는 그룹이 없다
-MERGE_AGGS = ("sum", "count", "count_distinct", "nunique")  # (Phase 4) 범위를 한 그룹으로 묶을 수 있는 계열 집계(nunique는 count_distinct의 예전 이름)
-SERVER_MERGE = ("count_distinct", "nunique")  # (Phase 4) 더할 수 없어 서버가 묶은 범위로 다시 집계하는 집계(합계·개수는 화면이 더한다)
+MERGE_NOTE = "범위로 묶으면 막대 값은 범위 안에서 계열 컬럼의 고유 개수예요(컬럼이 없는 계열은 행 개수). 고른 집계는 쓰지 않아요."  # (Phase 17) 쿼리 차트·카드 [범위 묶기] 아래 안내(server.CONSTANTS dash.merge_note)
+MERGE_SPLIT = "범위를 하나로 묶을 때는 나누기(split)를 쓸 수 없어요."  # (Phase 17) 묶기 + 나누기 거부(check_card·range_data)
 GEO_MERGE = ("count", "sum")  # (Phase 4) 지도 카드에서 영역을 묶을 수 있는 영역 값 집계(view.geo.agg)
 MAX_SETS = 100  # (Phase 4) 지도 영역 묶음(sets) 수
 RANGE_KINDS = {"chart": ("number", "date"), "histogram": ("number",), "calheat": ("date",), "candle": ("date",), "bump": ("date",), "cohort": ("date",)}  # (Phase 4) 범위(ranges)를 쓸 수 있는 카드와 범위 값의 종류
@@ -748,11 +751,8 @@ def check_card(card):
         if groups.get("merge"):
             if kind != "chart":
                 raise ValueError("범위를 하나로 묶기(merge)는 차트 카드에서만 돼요.")
-            series = body.get("series") or []
-            if not all(isinstance(s, dict) and s.get("agg") in MERGE_AGGS for s in series):
-                raise ValueError("범위를 하나로 묶기(merge)는 합계·개수·고유 개수 계열만 돼요. 평균·중앙값은 묶으면 값이 달라져요.")
-            if body.get("split") and any(s.get("agg") in SERVER_MERGE for s in series):
-                raise ValueError("고유 개수를 범위로 묶을 때는 나누기(split)를 쓸 수 없어요.")
+            if body.get("split"):  # (Phase 17) 어떤 집계든 서버가 범위마다 고유 개수로 다시 구한다(평균·중앙값도 묶을 수 있다)
+                raise ValueError(MERGE_SPLIT)
         if groups.get("sets"):
             if kind != "geomap":
                 raise ValueError("영역 묶음(sets)은 지도 카드에서만 써요.")

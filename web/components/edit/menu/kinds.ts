@@ -34,6 +34,13 @@ export const isShell = (c: Card) => !(c.source && (c.source.body || c.source.rec
 /** 새 카드의 view 기본값: 감시 카드는 상태 규칙·연결선 칸을 빈 목록으로 둔다(규칙 편집이 그 칸을 보인다) */
 export const freshView = (kind: CardKind, type = "") => ({ type, ...(WATCH.includes(kind) ? { rules: [], links: [] } : {}) }) as Card["view"];
 export const colsOfType = (cols: [string, string][], types: string[]) => cols.filter(c => types.includes(c[1])).map(c => c[0]);
+/** 서버 /api/columns가 주는 날짜만 있는 타입의 한글 이름 */
+const DATE_ONLY = "날짜";
+/** [SPECIFICATION] plans/phase-15.md#unitForDate
+ *  고른 날짜 컬럼이 날짜만 있는 타입이면 "day", 아니면 timed(시각이 있는 컬럼의 기본 단위)를 돌려준다. */
+export function unitForDate(cols: [string, string][], column: string, timed: string): string {
+  return cols.some(([n, t]) => n === column && t === DATE_ONLY) ? "day" : timed;
+}
 
 export type Spec = { group: string; kind: CardKind; type?: string; name: string; help: string };
 /** 카드 모음의 칸들: 차트는 종류마다 한 칸 */
@@ -50,6 +57,24 @@ export function galleryItems(types: Record<string, string>): Spec[] {
     ...some("변화·비교", [["bullet", "불릿", "값, 목표, 구간"], ["bump", "순위 변화", "기간별 순위"], ["candle", "캔들", "시작·최고·최저·끝"]]),
     ...some("흐름", [["funnel", "퍼널", "단계마다 도달한 사람"], ["sankey", "생키", "단계 사이 흐름의 굵기"], ["cohort", "코호트", "시작 시기별 유지율"]]),  // 빈 틀로 놓고 사용자·단계·시각은 설정에서 정한다(서버 check_card placed)
     ...some("지도", [["geomap", "지도", "경계와 점, 영역별 색"]])];
+}
+
+/** 카드 추가 서랍의 첫 묶음 이름(카드 모음 galleryItems의 차트 묶음과 같은 이름) */
+const CHART_GROUP = "차트";
+/** [SPECIFICATION] plans/phase-16.md#kindGroups
+ *  카드 추가 서랍의 종류 단추 묶음: [묶음 이름, 종류들]을 카드 모음(galleryItems)의 묶음 차례로, 맨 앞은 차트. */
+export function kindGroups(): [string, CardKind[]][] {
+  const groups = new Map<string, CardKind[]>([[CHART_GROUP, ["chart"]]]);
+  for (const s of galleryItems({})) {
+    const list = groups.get(s.group) ?? [];
+    if (!list.includes(s.kind)) list.push(s.kind);
+    groups.set(s.group, list);
+  }
+  const all = [...groups.values()].flat();
+  const keys = Object.keys(CARD_KINDS);
+  const off = [...keys.filter(k => !all.includes(k as CardKind)), ...all.filter((k, i) => !keys.includes(k) || all.indexOf(k) !== i)];
+  if (off.length) throw new Error(`카드 종류 묶음이 CARD_KINDS와 맞지 않아요: ${off.join(", ")}`);
+  return [...groups];
 }
 
 /** 빈 틀 카드(source 없음): 카드 모음이 만든다. 데이터는 설정 패널의 [데이터]에서 정한다 */

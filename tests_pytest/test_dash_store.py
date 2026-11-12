@@ -120,6 +120,8 @@ def test_source_key_has_no_account_or_password():
     assert store.source_label(a) == "db.example.com/sales"
     assert store.source_key({"kind": "folder", "path": "C:\\Data\\Sales"}) == store.source_key({"kind": "folder", "path": "c:/data/sales"})  # 소문자·정규화
     assert store.source_label({"kind": "folder", "path": "C:\\Data\\Sales"}) == "Sales"
+    assert store.source_label({"kind": "folder", "path": "C:\\Data", "file": "C:\\Data\\shop.duckdb"}) == "shop.duckdb"  # 쿼리·분석 화면과 같은 이름
+    assert store.source_label({"kind": "folder", "path": "C:\\Data", "files": ["C:\\Data\\a.csv", "C:\\Data\\b.csv"]}) == "파일 2개"
 
 
 def test_def_hash_ignores_key_order():

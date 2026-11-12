@@ -114,14 +114,14 @@ def test_definition_includes_cloud():
     assert found["view"] == {"unit": "day", "cloud": {"mode": "labels"}}  # 그룹 고르기는 보기라 다시 구하지 않는다
 
 
-# ---------- 범위 묶기(고유 개수는 서버) ----------
+# ---------- 범위 묶기(Phase 17: 늘 서버) ----------
 def test_range_label_and_merges_on_server():
     assert [dash_calc.range_label(1, 5), dash_calc.range_label(10, None), dash_calc.range_label(None, 2.5), dash_calc.range_label(1.0, 2)] == ["1~5", "10~", "~2.5", "1~2"]  # JS String과 같게
     chart = lambda aggs, merge=True: {"kind": "chart", "view": {"groups": {"ranges": [[1, 2]], **({"merge": True} if merge else {})}},
                                      "source": {"body": {"series": [{"y": "u", "agg": a} for a in aggs]}}}
     assert dash_calc.merges_on_server(chart(["count", "count_distinct"])) is True
     assert dash_calc.merges_on_server(chart(["nunique"])) is True  # 예전 이름
-    assert dash_calc.merges_on_server(chart(["sum", "count"])) is False  # 화면이 더한다
+    assert dash_calc.merges_on_server(chart(["sum", "count"])) is True  # (Phase 17) 집계와 상관없이 서버
     assert dash_calc.merges_on_server(chart(["count_distinct"], merge=False)) is False
     assert dash_calc.merges_on_server({**chart(["count_distinct"]), "kind": "histogram"}) is False
 
@@ -209,7 +209,6 @@ def test_check_card_group_rules():
            (card("wordcloud", {"groups": {"ranges": [[1, 2]]}}), "범위"),
            (card("histogram", {"groups": {"ranges": [["2026-01-01", None]]}}), "범위는"),
            (card("histogram", {"groups": {"ranges": [[1, 2]], "merge": True}}), "차트 카드에서만"),
-           (card("chart", {"groups": {"ranges": [[1, 2]], "merge": True}}, {"base": "t", "x": "x", "series": [{"y": "v", "agg": "mean"}]}), "합계·개수·고유 개수"),
            (card("chart", {"cloud": {"mode": "values"}}), "워드클라우드 카드에만"),
            (card("wordcloud", {"cloud": {"mode": "labels"}}), "태그를 켠 조회")]
     for c, words in bad:
