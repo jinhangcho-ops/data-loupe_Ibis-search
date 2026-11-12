@@ -528,17 +528,19 @@ def close(con):
 
 def compiles(expr):
     """expr을 그 연결이 실행할 모양(SQL, Polars 계획)으로 바꿀 수 있는지. 실행하지는 않는다. 연결이 하지 못하는 계산(파일 연결의 창 함수,
-    SQLite의 ASOF 등)이면 False. 연결이 없는 식이나 그 밖의 오류는 True로 보고 실행할 때 알린다."""
+    SQLite의 ASOF 등)이면 False. 연결이 없는 식이나 그 밖의 오류는 True로 보고 실행할 때 알린다.
+    (감사51) Polars의 최빈값은 값이 하나도 없는 묶음에서 오류를 내므로(Ibis 번역의 get(0)) False: 이 PC(DuckDB)에서 계산한다."""
     errors = (*unsupported_errors(), ibis.common.exceptions.UnsupportedArgumentError)
     try:
-        ibis.get_backend(expr).compile(expr)
+        backend = ibis.get_backend(expr)
+        backend.compile(expr)
     except errors:
         return False
     except TypeError:  # Polars는 월·분기·연 간격을 변환하지 못하고 TypeError로 알린다: 이 PC(DuckDB)에서 계산하게 한다
         return ibis.get_backend(expr).name != "polars"
     except Exception:
-        pass
-    return True
+        return True
+    return backend.name != "polars" or not expr.op().find(ibis.expr.operations.Mode)
 
 
 def unsupported_errors():

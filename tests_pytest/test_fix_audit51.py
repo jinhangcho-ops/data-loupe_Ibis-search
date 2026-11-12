@@ -65,3 +65,40 @@ def test_arg_min_without_any_key_is_empty(t):
 def test_label_of_all_empty_column(t):
     out = prep_ops.apply_ops(t, "by", {"label": True}).to_pyarrow()
     assert out.column("by_label").to_pylist() == [None, None, None]
+
+
+# ---------- 파일 연결(Polars)의 최빈값: 값이 하나도 없는 묶음에서 오류 → 이 PC 사본(DuckDB)에서 ----------
+
+def test_mode_on_file_connection_is_left_to_the_pc(t):
+    from core import source
+    expr = t.aggregate(v=sf.make("mode", t, {"x": "by"}))
+    assert source.compiles(expr) is (t.get_backend().name != "polars")
+    assert sf.judge(sf.FUNCS["mode"], t, source.compiles)["status"] == ("ok" if t.get_backend().name != "polars" else "local")
+
+
+def test_fill_mode_of_all_empty_column(t):
+    out = prep_ops.apply_ops(t, "by", {"fill": {"how": "mode"}}).to_pyarrow()
+    assert out.column("by").to_pylist() == [None, None, None]
+
+
+def test_gfill_mode_still_runs_on_file_connection(t):
+    out = prep_ops.apply_ops(t, "s", {"gfill": {"how": "mode", "group": ["n"]}}).to_pyarrow()
+    assert out.column("s").to_pylist() == ["가나", "ab", None]
+
+
+def test_pivot_mode_with_empty_group_on_parquet(folder, tmp_path):
+    import pyarrow.parquet as pq
+
+    from core import held, server
+    from query.search_app import app
+    held.store["items"].clear()
+    pq.write_table(pa.table({"region": ["서울", "서울", "부산"], "grade": pa.array(["A", "A", None], pa.string())}), tmp_path / "orders.parquet")
+    c = app.test_client()
+    c.get("/?key=" + server.KEY)
+    assert c.post("/api/connect", json={"kind": "folder", "path": str(tmp_path), "files": [str(tmp_path / "orders.parquet")]}).status_code == 200
+    try:
+        got = c.post("/api/pivot", json={"base": "orders", "pivot": {"rows": ["region"], "how": "mode", "value": "grade"}}).get_json()
+    finally:
+        c.post("/api/disconnect", json={})
+    assert not got.get("error"), got
+    assert {r["region"]: list(r.values())[-1] for r in got["rows"]["rows"]} == {"서울": "A", "부산": None}
