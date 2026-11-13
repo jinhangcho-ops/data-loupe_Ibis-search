@@ -24,11 +24,11 @@
 </header>
 <!-- 업데이트 창: 새 버전의 릴리스 노트(추가·개선·삭제)를 보여 주고 [지금 업데이트]로 설치한다. -->
 <div id="upd-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="upd-title">
-  <div class="modal-box">
-    <div class="head"><h3 id="upd-title">새 버전</h3><button id="upd-close" class="ghost" style="margin-left:auto">나중에</button></div>
-    <div id="upd-notes" style="white-space:pre-wrap; max-height:50vh; overflow:auto"></div>
+  <div class="modal-box upd-box">
+    <div class="head"><h3 id="upd-title">새 버전</h3><span class="hint" id="upd-now" style="margin:0"></span></div>
+    <div id="upd-notes"></div>
     <div class="hint" style="margin-top:12px">고른 기능, 설정, 대시보드는 그대로 남아요. 설치 파일을 받아 지문을 확인한 뒤 따로 묻지 않고 설치하며, 앱이 잠시 닫혔다가 다시 열려요.</div>
-    <div class="row" style="margin-top:10px; justify-content:flex-end"><button id="upd-go">지금 업데이트</button></div>
+    <div class="row" style="margin-top:10px; justify-content:flex-end"><button id="upd-close" class="btn">나중에</button><button id="upd-go" class="btn p">지금 업데이트</button></div>
     <div id="upd-msg" class="err"></div>
   </div>
 </div>
@@ -41,6 +41,7 @@
         <button type="button" role="tab" data-set="feat" aria-selected="true">쓸 기능</button>
         <button type="button" role="tab" data-set="update" aria-selected="false">업데이트</button>
         <button type="button" role="tab" data-set="calc" aria-selected="false">계산</button>
+        <button type="button" role="tab" data-set="memory" aria-selected="false">메모리</button>
         <button type="button" role="tab" data-set="sample" aria-selected="false">표본</button>
         <button type="button" role="tab" data-set="date" aria-selected="false">날짜·달력</button>
         <button type="button" role="tab" data-set="viz" id="set-tab-viz" class="hidden" aria-selected="false">차트 낱말</button>
@@ -70,6 +71,14 @@
       <div class="opt" title="워드클라우드 카드가 글 속 단어를 셀 때 이 PC로 받는 최대 행 수예요. 넘으면 세지 않고 알려요. 비우면 기본값이에요."><span>워드클라우드 단어 분석 최대 행 수</span><input id="cloud-rows" type="number" step="1" style="width:110px; flex:none"></div>
       <label class="check" title="주문번호·회원번호처럼 줄마다 다른 값(ID·해시)은 묶어 봐도 뜻이 없어서 묶기·집계 고르는 목록에서 빼요."><input type="checkbox" id="hash-exclude"> ID·해시 컬럼을 묶기·집계 목록에서 빼기</label>
       <label class="check" title="켜면 like·not like 조건과 값 목록 찾기에서 글자·숫자·공백이 아닌 글자(- . _ % 등)를 컬럼과 찾는 글자 양쪽에서 지우고 비교해요(ab로 a-b를 찾아요). 컬럼에 정규식 바꾸기를 씌워 인덱스를 못 타므로 큰 표에서 느릴 수 있고, 정규식 바꾸기를 못 하는 연결에서는 쓸 수 없어요."><input type="checkbox" id="ignore-marks"> 문자 검색에서 특수문자 무시</label>
+        </section>
+        <section class="set-page hidden" data-set="memory" role="tabpanel" aria-label="메모리">
+      <p class="lead">앱이 붙잡고 있는 데이터를 골라서 놓아요. 놓은 것은 다음에 쓸 때 다시 읽어요. 원본 파일과 DB는 바뀌지 않아요.</p>
+      <div class="opt"><span>지금 앱이 쓰는 메모리</span><span id="mem-now"></span></div>
+      <div id="mem-list"></div>
+      <div class="row" style="margin-top:10px; justify-content:flex-end"><button id="mem-all" class="btn" type="button">모두 고르기</button><button id="mem-drop" class="btn p" type="button">고른 것 비우기</button></div>
+      <div id="mem-msg" class="hint"></div>
+      <div class="hint" id="mem-mods" style="margin-top:14px"></div>
         </section>
         <section class="set-page hidden" data-set="sample" role="tabpanel" aria-label="표본">
       <p class="lead">데이터가 클 때 일부(표본)만 뽑아 빨리 살펴봐요. 몇 줄을 어떻게 뽑을지 정하는 곳이에요. 잘 모르면 그대로 두세요.</p>

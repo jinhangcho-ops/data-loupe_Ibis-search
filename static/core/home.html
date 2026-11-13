@@ -19,8 +19,9 @@
   .home-go .btn span { color:var(--muted); font-size:var(--fs-sm); line-height:1.4; }  .home-ask { margin:var(--sp-3) 0 0; }
   .home-recent { align-self:start; background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:var(--sp-4); display:flex; flex-direction:column; gap:var(--sp-2); }
   .home-recent h3 { margin:0; }
-  .recent-list { display:flex; flex-direction:column; gap:var(--sp-1); }
-  .recent-list .btn { justify-content:flex-start; height:auto; min-height:var(--h-md); padding:var(--sp-1) var(--sp-3); white-space:normal; text-align:left; overflow-wrap:anywhere; font-weight:500; }
+  .recent-list { display:flex; flex-direction:column; gap:var(--sp-1); max-height:60vh; overflow-y:auto; }  /* 길어지면 카드 안에서 굴린다 */
+  .recent-day { color:var(--muted); font-size:var(--fs-sm); font-weight:600; margin-top:var(--sp-2); }
+  .recent-list .btn { flex:none; flex-direction:column; align-items:flex-start; gap:0; justify-content:flex-start; height:auto; min-height:var(--h-md); padding:var(--sp-1) var(--sp-3); white-space:normal; text-align:left; overflow-wrap:anywhere; font-weight:500; }
   @media (max-width:900px) { .home { grid-template-columns:1fr; } }
 </style>
 </head>

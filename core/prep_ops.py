@@ -24,6 +24,7 @@ LABEL_MAX = 1000  # label로 번호를 붙일 서로 다른 값의 최대 개수
 BIN_START = re.compile(r"^(-?[0-9][0-9,]*\.?[0-9]*(?:e[-+]?[0-9]+)?)(?:–| ~ )", re.I)  # bins가 만든 구간 글자의 시작 숫자
 ONEHOT_MAX = 50  # onehot으로 펼칠 서로 다른 값의 최대 개수
 EXPAND_MAX, EXPAND_SCAN = 50, 1000  # expand로 펼칠 맵·JSON 키의 최대 개수, 그 키를 모으려고 읽는 앞 행 수
+UNNEST_LABEL = "목록을 행으로 펼치기"  # unnest의 화면 이름(LABELS와 오류 문구가 같이 쓴다)
 PARTS = {  # 날짜에서 뽑는 값. 정수는 int64로 맞춘다(백엔드마다 int16·int32로 다르다).
     "year": lambda col: col.year().cast("int64"), "month": lambda col: col.month().cast("int64"), "day": lambda col: col.day().cast("int64"),
     "weekday": lambda col: col.day_of_week.index().cast("int64"), "hour": lambda col: col.hour().cast("int64"), "ym": lambda col: col.cast("date").truncate("M"),
@@ -450,11 +451,18 @@ def expand_keys(t, name, dtype):
     else:  # JSON 글자(또는 json 타입): 객체가 아니거나 JSON이 아닌 값은 건너뛴다
         texts = head.filter(head[name].notnull()).select(v=head[name].cast("string")).to_pyarrow()["v"].to_pylist()
         found = {k for v in texts for k in json_keys(v)}
+        if not found and any(v.lstrip().startswith("[") for v in texts):  # 값이 목록([…])이면 갈 곳을 알려 준다
+            raise ValueError(f"'{name}' 컬럼에서 펼칠 키를 찾지 못했어요(앞 {EXPAND_SCAN:,}행 기준). 목록이면 '{UNNEST_LABEL}'를 쓰세요.")
     if len(found) > EXPAND_MAX:
         raise ValueError(f"'{name}' 컬럼은 키가 {EXPAND_MAX}개를 넘어 컬럼으로 펼칠 수 없어요(앞 {EXPAND_SCAN:,}행 기준).")
     if not found:
         raise ValueError(f"'{name}' 컬럼에서 펼칠 키를 찾지 못했어요(앞 {EXPAND_SCAN:,}행 기준).")
     return sorted(found, key=str)
+
+
+def json_plain(value: "ibis.expr.types.JSONValue") -> "ibis.expr.types.StringValue":
+    """JSON 값 하나를 글자로(글자는 따옴표 없이, 숫자·참거짓·객체는 JSON 글자 그대로, null은 빈 값). expand와 unnest가 같이 쓴다."""
+    return ibis.coalesce(value.unwrap_as("string"), value.cast("string")).nullif("null")
 
 
 def expand(t, name, arg):
@@ -469,10 +477,25 @@ def expand(t, name, arg):
         new = {f"{name}.{k}": col.get(k) for k in found()}
     elif dtype.is_string() or dtype.is_json():
         js = col if dtype.is_json() else col.cast("json")
-        new = {f"{name}.{k}": ibis.coalesce(js[k].unwrap_as("string"), js[k].cast("string")).nullif("null") for k in found()}
+        new = {f"{name}.{k}": json_plain(js[k]) for k in found()}
     else:
         raise ValueError(f"'expand'(컬럼으로 펼치기)는 구조·맵·JSON 글자 컬럼에만 쓸 수 있어요. '{name}' 컬럼은 {parse.type_info(dtype)[0]} 컬럼이에요. (목록은 unnest로 행으로 펼쳐요)")
     return add_columns(t, new)
+
+
+def unnest(t: "ibis.expr.types.Table", name: str, arg: bool) -> "ibis.expr.types.Table":
+    """목록(배열 타입, 또는 값이 JSON 배열인 글자·json 컬럼)을 원소마다 한 행으로 펼친다. 컬럼 이름은 그대로, 다른 컬럼 값은 복사된다.
+    배열 타입은 원소 타입 그대로, JSON은 json_plain의 글자로. 빈 목록·빈 값·배열이 아닌 값(JSON으로 읽히지 않는 글자 포함)의 행은 그 컬럼만 빈 값으로 한 행 남는다.
+    목록 컬럼 둘을 같이 펼치면 행마다 원소의 곱(2개×3개 = 6행)이 된다. 전처리 recipe에서는 prep_expr.shape가 모든 컬럼의 다른 일이 끝난 뒤에 부른다.
+    행 순서는 연결이 정한다. 행으로 펼치기를 못 하는 연결(파일 연결 등)에서는 컴파일할 때 그 오류가 난다."""
+    col, dtype = t[name], t[name].type()
+    if dtype.is_array():
+        return t.unnest(name, keep_empty=True)
+    if not (dtype.is_string() or dtype.is_json()):
+        raise ValueError(f"'unnest'({UNNEST_LABEL})는 목록 컬럼이나 JSON 목록 글자 컬럼에만 쓸 수 있어요. '{name}' 컬럼은 {parse.type_info(dtype)[0]} 컬럼이에요.")
+    js = col if dtype.is_json() else col.try_cast("json")
+    t = t.mutate(**{name: js.array}).unnest(name, keep_empty=True)
+    return t.mutate(**{name: json_plain(t[name])})
 
 
 def is_has(v):
@@ -1269,13 +1292,14 @@ OPS = [
     ("counts", STRING, lambda v: isinstance(v, dict) and set(v) <= {"sep"} and isinstance(v.get("sep", ""), str), '{"sep": ","}', counts),
     ("expand", None, lambda v: v is True or (isinstance(v, dict) and set(v) == {"keys"} and isinstance(v["keys"], list) and 1 <= len(v["keys"]) <= EXPAND_MAX
                                              and all(isinstance(k, (str, int)) and not isinstance(k, bool) for k in v["keys"])), 'true 또는 {"keys": ["찾아 둔 키", ...]}', expand),
+    ("unnest", None, lambda v: v is True, "true", unnest),
 ]
 
 
 OPS_NAMES = [op[0] for op in OPS]
 
 # 화면(쿼리 우클릭 메뉴·새 컬럼 상자)에 줄 전처리 단계 목록(GET /api/prep/ops). 차례는 OPS와 같고, 라벨·묶음은 static/prep/prep.html의 OPS와 같은 글이다.
-# need: 고를 수 있는 컬럼 종류(str·num·date·any·struct), fields: 입력 칸 {name(prep.html 입력 상태의 키), placeholder | check | options}.
+# need: 고를 수 있는 컬럼 종류(str·num·date·any·struct·list. struct·list는 글자 컬럼의 값이 JSON일 때도), fields: 입력 칸 {name(prep.html 입력 상태의 키), placeholder | check | options}.
 _F = lambda name, placeholder: {"name": name, "placeholder": placeholder}
 _C = lambda name, check: {"name": name, "check": check}
 _O = lambda name, *options: {"name": name, "options": [list(o) for o in options]}
@@ -1335,6 +1359,7 @@ LABELS = [
     {"id": "has", "label": "글자가 들어 있는지 표시", "group": "새 컬럼", "need": "str", "fields": [_F("words", "찾을 글자 예: 서울, 부산"), _C("regex", "정규식으로")]},
     {"id": "counts", "label": "단어별 개수 세기", "group": "새 컬럼", "need": "str", "fields": [_F("sep", "구분자(비우면 공백)")]},
     {"id": "expand", "label": "컬럼 여러 개로 펼치기(구조·맵·JSON)", "group": "새 컬럼", "need": "struct", "fields": []},
+    {"id": "unnest", "label": UNNEST_LABEL, "group": "새 컬럼", "need": "list", "fields": []},
 ]
 
 

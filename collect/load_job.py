@@ -1,4 +1,4 @@
-"""적재(수집 3단계): 결과 파일(output.path)을 묶음으로 읽어(Parquet은 pyarrow, CSV는 DuckDB. 메모리에 다 올리지 않음) DB 테이블(load_table)이나 Kafka 토픽(load_kafka)에 넣는다.
+"""적재(수집 3단계): 결과 파일(output.path)을 묶음으로 읽어(Parquet은 pyarrow, CSV·DuckDB 파일은 DuckDB, SQLite 파일은 커서. 메모리에 다 올리지 않음. Excel만 시트를 통째로 읽는다) DB 테이블(load_table)이나 Kafka 토픽(load_kafka)에 넣는다.
 결과 파일은 지우거나 고치지 않는다. 넣은 데까지는 결과 파일 옆 '이름.load.json'(대상 서명, 넣은 행·묶음 수)에 적어 같은 설정으로 다시 하면 이어 넣는다.
 비밀번호는 인자로만 받아 작업 동안 메모리에 두고 어디에도 적지 않는다."""
 import hashlib
@@ -12,6 +12,7 @@ from lazy import ibis
 from collect import collect_store
 from collect import load_kafka
 from collect import load_table
+from core import result
 from core import settings
 from core import source
 from collect import uploads
@@ -21,7 +22,8 @@ TARGETS = {"table": load_table, "kafka": load_kafka}
 BACKOFF = 1.0  # 실패한 묶음을 다시 넣기 전에 기다리는 시간(초). 시도마다 두 배, MAX_BACKOFF까지.
 MAX_BACKOFF = 60
 SINGLE_SECONDS = 0.05  # 한 건씩 넣을 때 한 건에 드는 시간의 어림(초). 예상 시간 안내에만 쓴다.
-APPEND_NOTE = " 키 컬럼이 없어 끊긴 묶음 하나가 겹쳐 들어갔을 수 있어요. 적재 ID로 행 수를 확인해 주세요."  # 키 없는 덧붙이기를 이어 넣을 때 "이어 넣어요." 뒤에 붙인다
+EXCEL_VIEW = "excel_result"  # Excel 결과 파일을 읽어 DuckDB 연결에 올려 두는 이름(그 연결 안에서만 쓴다)
+APPEND_NOTE =" 키 컬럼이 없어 끊긴 묶음 하나가 겹쳐 들어갔을 수 있어요. 적재 ID로 행 수를 확인해 주세요."  # 키 없는 덧붙이기를 이어 넣을 때 "이어 넣어요." 뒤에 붙인다
 
 
 # ---------- 구성 ----------
@@ -115,12 +117,15 @@ def empty_columns(path, schema):
     names = [f.name for f in schema if pa.types.is_string(f.type) or pa.types.is_large_string(f.type) or pa.types.is_null(f.type)]
     if not names:
         return set()
-    with duckdb.connect() as con:
-        if Path(path).suffix.lower() == ".parquet":
+    if Path(path).suffix.lower() == ".parquet":
+        with duckdb.connect() as con:
             counts = con.read_parquet(str(path)).aggregate(", ".join('count("' + n.replace('"', '""') + '")' for n in names)).fetchone()
-        else:
-            found = csv_table(con, path)
+    else:
+        con, found = result_table(path)
+        try:
             counts = found.aggregate([found[n].count().name(str(i)) for i, n in enumerate(names)]).to_pyarrow().to_pylist()[0].values()
+        finally:
+            con.close()
     return {n for n, count in zip(names, counts) if count == 0}
 
 
@@ -130,21 +135,47 @@ def csv_table(con, path):
     return collect_store.unguarded(ibis.duckdb.from_connection(con).read_csv(str(path), sample_size=-1))
 
 
+def excel_table(con, path):
+    """Excel 결과 파일(첫 시트)을 DuckDB 연결 con 위의 ibis 표로 연다(Excel 결과에는 수식 막기 '를 붙이지 않는다).
+    shortcut: 시트를 통째로 메모리에 읽는다(Excel은 시트 하나가 result.EXCEL_MAX_ROWS행까지), 메모리가 문제면 Parquet·DuckDB 형식으로 수집한다"""
+    import polars as pl
+    con.register(EXCEL_VIEW, pl.read_excel(path).to_arrow())
+    return ibis.duckdb.from_connection(con).table(EXCEL_VIEW)
+
+
+def result_table(path):
+    """Parquet이 아닌 결과 파일을 (끝날 때 닫을 연결, ibis 표)로 연다. DuckDB·SQLite 파일은 그 안의 결과 테이블(collect_store.table_name)을 읽기만 한다."""
+    import duckdb
+    suffix = Path(path).suffix.lower()
+    if suffix == ".db":
+        db = ibis.sqlite.connect(str(path))
+        return db.con, db.table(collect_store.table_name(path))
+    if suffix == ".duckdb":
+        con = duckdb.connect(str(path), read_only=True)
+        return con, ibis.duckdb.from_connection(con).table(collect_store.table_name(path))
+    con = duckdb.connect()
+    return con, (excel_table if suffix == ".xlsx" else csv_table)(con, path)
+
+
 class Batches:
-    """결과 파일을 size행씩 읽는다(마지막 묶음만 작을 수 있음). 덩어리로 읽어 메모리에 다 올리지 않는다. with로 열고 닫는다."""
+    """결과 파일을 size행씩 읽는다(마지막 묶음만 작을 수 있음). 덩어리로 읽어 메모리에 다 올리지 않는다(Excel만 excel_table이 통째로 읽는다). with로 열고 닫는다."""
 
     def __init__(self, path, size):
-        import duckdb
         import pyarrow.parquet as pq
-        parquet = Path(path).suffix.lower() == ".parquet"
-        self.size, self.file = size, open(path, "rb") if parquet else duckdb.connect()  # file: 끝날 때 닫을 것
-        try:
-            if parquet:
+        self.size = size
+        if Path(path).suffix.lower() == ".parquet":
+            self.file = open(path, "rb")  # file: 끝날 때 닫을 것
+            try:
                 reader = pq.ParquetFile(self.file)
                 self.schema, self.parts = reader.schema_arrow, reader.iter_batches(batch_size=size)
-            else:
-                self.parts = csv_table(self.file, path).to_pyarrow_batches(chunk_size=size)
-                self.schema = self.parts.schema
+            except Exception:
+                self.file.close()
+                raise
+            return
+        self.file, table = result_table(path)
+        try:
+            self.schema = table.schema().to_pyarrow()
+            self.parts = result.batches(table, size)  # SQLite는 커서에서 묶음씩(Ibis가 결과 전체를 받아 버리는 연결)
         except Exception:
             self.file.close()
             raise

@@ -299,7 +299,17 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .app-set .opt select { width:auto; min-width:140px; flex:none; }
 .app-set .opt { flex-wrap:wrap; }  /* 칩이 넘치면 줄바꿈 */
 /* 설정 창(status.html): 왼쪽 분류 목록(.set-nav) + 오른쪽 내용(.app-set). 창 크기는 분류를 바꿔도 그대로. */
-.set-box { width:min(920px, 94vw); height:min(640px, 88vh); display:flex; flex-direction:column; }
+/* 업데이트 창: 묶음(추가·개선)마다 머리와 목록 */
+.modal-box.upd-box { width:min(640px, 94vw); }
+.upd-box > .head { display:flex; align-items:baseline; gap:10px; margin-bottom:8px; }
+.upd-box > .head h3 { margin:0; }
+#upd-notes { max-height:55vh; overflow:auto; padding-right:6px; }
+#upd-notes h4 { margin:14px 0 6px; font-size:var(--fs-sm); color:var(--accent); }
+#upd-notes section:first-child h4 { margin-top:4px; }
+#upd-notes ul { margin:0; padding-left:18px; }
+#upd-notes li { margin:0 0 7px; line-height:1.55; font-size:var(--fs-sm); }
+#upd-notes li b { font-weight:600; }
+.modal-box.set-box { width:min(920px, 94vw); height:min(640px, 88vh); display:flex; flex-direction:column; }
 .set-body { flex:1; min-height:0; display:grid; grid-template-columns:160px minmax(0, 1fr); gap:var(--sp-4); }
 .set-nav { display:flex; flex-direction:column; gap:var(--sp-1); border-right:1px solid var(--line); padding-right:var(--sp-2); }
 .set-nav button { background:none; border:1px solid transparent; color:var(--text); text-align:left; font-weight:500; min-height:var(--h-md); }
@@ -314,8 +324,9 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .seg2 input { display:none; }
 .seg2 label:has(input:checked) { background:var(--card); color:var(--text); box-shadow:0 1px 2px rgb(15 25 30 / .12); }
 .kinds { display:flex; flex-wrap:wrap; gap:6px; }
-.kinds label { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:var(--r-pill); padding:3px 12px; font-size:var(--fs-sm); cursor:pointer; color:var(--muted); }
-.kinds label:has(input:checked) { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); font-weight:600; }
+.kinds label, .kinds button[aria-pressed] { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--line); border-radius:var(--r-pill); padding:3px 12px; font-size:var(--fs-sm); cursor:pointer; color:var(--muted); }
+.kinds button[aria-pressed] { background:none; font-weight:400; }  /* 토글 단추(계산 컬럼의 정렬 기준·묶을 컬럼): label 토글과 같은 모양 */
+.kinds label:has(input:checked), .kinds button[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); font-weight:600; }
 .kinds input { position:absolute; opacity:0; width:1px; height:1px; pointer-events:none; }  /* (Phase 19) 보이지 않게만: display:none이면 화면 읽기 프로그램이 체크 상태를 못 읽는다 */
 .check { display:flex; align-items:center; gap:6px; font-size:var(--fs-sm); color:var(--muted); }
 .check input { width:auto; }

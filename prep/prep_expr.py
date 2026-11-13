@@ -70,7 +70,7 @@ def downcast(t):
 
 
 def shape(con, recipe, table=None, info=None, refs=None):
-    """filters → copies → 컬럼별 ops → 계산 컬럼(formulas) → PCA → K-Means → keep·파생 컬럼 배치·rename → drop까지 만든 식과,
+    """filters → copies → 컬럼별 ops(목록을 행으로 펼치기 unnest는 모든 컬럼의 다른 ops 뒤) → 계산 컬럼(formulas) → PCA → K-Means → keep·파생 컬럼 배치·rename → drop까지 만든 식과,
     결과 컬럼마다 (recipe상 컬럼 이름, 파생 컬럼인지). 계산 컬럼·PCA 성분은 원래 컬럼이 없어 이름이 ""이고 맨 뒤에 놓인다.
     계산 식은 이름을 바꾸기 전의 컬럼 이름을 쓴다. table을 주면 연결의 테이블 대신 그 식(예: 표본을 담은 메모리 표)에서 시작한다.
     info(dict)를 주면 PCA·K-Means의 설명된 분산 비율 등을 남긴다. info["cut"]: 0 분리의 음수·로그의 0 이하 구간에 든 행 수. 좌표 단계(recipe.geo, 이 PC에서 계산)는 PCA 뒤에 붙고, 지점·영역 테이블은 refs(없으면 con)에서 읽는다."""
@@ -101,8 +101,12 @@ def shape(con, recipe, table=None, info=None, refs=None):
     for part in ("rows", "rest"):  # 행을 줄이는 일(fill·outlier drop)을 모든 컬럼에 먼저 하고 나서 통계를 쓰는 일을 한다(컬럼 순서로 결과가 달라지지 않게)
         for name in names:
             before = set(t.columns)
-            t = prep_ops.apply_ops(t, name, specs.get(name, {}).get("ops", {}), part, start)
+            t = prep_ops.apply_ops(t, name, {k: v for k, v in specs.get(name, {}).get("ops", {}).items() if k != "unnest"}, part, start)
             made.update({new: name for new in t.columns if new not in before})
+    for name in names:  # 행을 늘리는 unnest는 모든 컬럼의 다른 일이 끝난 뒤에: 다른 컬럼의 통계(fill mean·scale 등)가 불어난 행으로 구해지지 않게(컬럼 순서와 무관)
+        ops = specs.get(name, {}).get("ops", {})
+        if "unnest" in ops:
+            t = prep_ops.apply_ops(t, name, {"unnest": ops["unnest"]})
     if info is not None:
         for name, spec in specs.items():
             cut = (spec.get("ops") or {}).get("cut")
@@ -370,10 +374,10 @@ def dupes(con, recipe, table=None):
 
 
 def changes_rows(recipe):
-    """recipe가 행 수를 바꿀 수 있는 일(filters, fill drop, outlier drop, dedupe)을 하는지."""
+    """recipe가 행 수를 바꿀 수 있는 일(filters, fill drop, outlier drop, unnest, dedupe)을 하는지."""
     ops = [spec.get("ops", {}) for spec in recipe.get("columns", {}).values()]
     return bool(recipe.get("filters") or recipe.get("dedupe")) or any(
-        o.get("fill", {}).get("how") == "drop" or o.get("outlier", {}).get("how") == "drop" for o in ops)
+        o.get("fill", {}).get("how") == "drop" or o.get("outlier", {}).get("how") == "drop" or "unnest" in o for o in ops)
 
 
 def type_text(dtype):

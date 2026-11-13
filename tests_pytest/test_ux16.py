@@ -179,7 +179,7 @@ def test_dash_only_hides_rail():
 
 # ---------- 16C 설정 합치기 ----------
 
-TABS = ["feat", "update", "calc", "sample", "date", "viz", "dest"]
+TABS = ["feat", "update", "calc", "memory", "sample", "date", "viz", "dest"]
 DEST_IDS = ("dest-list", "dest-name", "dest-kind", "dest-keep", "dest-preset", "dest-fields", "dest-done", "notify-after", "dest-save", "dest-check",
             "dest-test", "dest-del", "msg-dest", "bot-state", "bot-keep", "bot-token", "bot-app", "bot-users", "bot-channels", "bot-save", "bot-check",
             "bot-start", "bot-stop", "msg-bot", "bot-log")
@@ -191,7 +191,7 @@ def test_settings_categories_and_dest_inside():
     panel = status[status.index('id="feat-panel"'):]
     nav = between("status.html", '<nav class="set-nav"', "</nav>")
     assert re.findall(r'data-set="(\w+)"', nav) == TABS
-    assert re.findall(r">([^<]+)</button>", nav) == ["쓸 기능", "업데이트", "계산", "표본", "날짜·달력", "차트 낱말", "보낼 곳"]
+    assert re.findall(r">([^<]+)</button>", nav) == ["쓸 기능", "업데이트", "계산", "메모리", "표본", "날짜·달력", "차트 낱말", "보낼 곳"]
     assert re.search(r'data-set="viz" id="set-tab-viz" class="hidden"', nav)
     assert re.findall(r'<section class="set-page[^"]*" data-set="(\w+)" role="tabpanel"', panel) == TABS
     assert "set-group" not in status and "<details" not in panel and 'class="app-set"' in panel
@@ -214,7 +214,7 @@ def test_settings_css():
     css = read("common.css")
     assert "grid-template-columns:160px minmax(0, 1fr)" in rule(css, ".set-body")
     assert "border-right:1px solid var(--line)" in rule(css, ".set-nav")
-    assert ".set-nav button[aria-selected=true]" in css and ".set-box" in css
+    assert ".set-nav button[aria-selected=true]" in css and ".modal-box.set-box { width:min(920px, 94vw)" in css  # 뒤에 오는 .modal-box의 좁은 너비(440px)에 지지 않게 선택자를 겹쳐 쓴다
     assert ".set-group" not in css
 
 
@@ -238,7 +238,7 @@ try { openSettings("nope"); out.bad = ""; } catch (e) { out.bad = e.message; }
 console.log(JSON.stringify(out));
 """
     got = run_node(tmp_path, body, parts=[code])
-    assert got["open"] is True and got["selected"] == ["dest"] and got["falses"] == 6 and got["shown"] == ["dest"]
+    assert got["open"] is True and got["selected"] == ["dest"] and got["falses"] == 7 and got["shown"] == ["dest"]
     assert got["calls"] == ["/api/bot"] and got["calc"] == ["calc"] and got["calls2"] == 1  # 보낼 곳을 열 때만 봇 상태를 새로
     assert got["bad"] == "없는 설정 분류: nope"
 
@@ -267,23 +267,65 @@ const els = { "recent-conn": { classList: cls(), replaceChildren(...k) { this.ki
   "recent-none": { classList: cls() }, password: { focus() { out.focus = "password"; } }, find: { focus() { out.focus = "find"; } } };
 globalThis.$ = id => els[id];
 globalThis.Option = function (t, v) { this.text = t; this.value = v; };
-globalThis.api = async () => ({ connections: [{ info: { kind: "folder", path: "C:/d" }, count: 3 }, { info: { kind: "url", url: "postgres://h/db", user: "u" }, count: 1 }] });
+const now = new Date(), two = n => String(n).padStart(2, "0"), today = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
+globalThis.api = async () => ({ connections: [{ info: { kind: "folder", path: "C:/d" }, count: 3 }, { info: { kind: "url", url: "postgres://h/db", user: "u" }, count: 1, last: today + "T09:05:00.000000" },
+  { info: { kind: "folder", path: "C:/d", files: ["C:/d/a.csv", "C:\\d\\b.parquet", "C:/d/c.csv"] }, count: 2, last: "2026-01-02T23:40:00.000000" }, { info: { kind: "folder", path: "C:/d", file: "C:/d/x.duckdb" }, count: 5, last: today + "T08:00:00.000000" }] });
 globalThis.fillConnection = i => out.filled.push(i);
 globalThis.openConnect = () => { out.opened++; };
 (async () => {
   await showRecentConnections();
-  const btns = els["recent-list"].kids;
-  out.labels = btns.map(b => b.textContent); out.types = btns.map(b => b.type);
+  const btns = els["recent-list"].kids.filter(k => k.tag === "button");
+  out.rows = els["recent-list"].kids.map(k => k.tag === "button" ? k.children.map(c => c.textContent) : k.textContent); out.types = btns.map(b => b.type);
+  out.options = els["recent-conn"].kids.map(o => o.text);
   out.noneHidden = els["recent-none"].classList.contains("hidden");
-  btns[1].onclick();
+  btns[0].onclick();
   try { pickRecent(9); out.bad = ""; } catch (e) { out.bad = e.message; }
   console.log(JSON.stringify(out));
 })();
 """
     got = run_node(tmp_path, body, parts=[code])
-    assert got["labels"] == ["C:/d (3번 사용)", "postgres://h/db, u (1번 사용)"] and got["types"] == ["button", "button"] and got["noneHidden"] is True
+    # 최근에 쓴 순으로, 날짜마다 머리글. 줄은 [이름, "시각 · 폴더 · 횟수"]: 고른 파일이 있으면 이름은 파일 이름(둘까지)이고 폴더는 아래 줄에
+    assert got["rows"] == ["오늘", ["postgres://h/db, u", "09:05 · 1번 사용"], ["x.duckdb", "08:00 · C:/d · 5번 사용"], "2026-01-02", ["a.csv, b.parquet 외 1개", "23:40 · C:/d · 2번 사용"],
+                           "날짜 모름", ["C:/d", "3번 사용"]]
+    assert got["options"] == ["최근 연결에서 고르기", "C:/d (3번 사용)", "postgres://h/db, u (1번 사용)", "a.csv, b.parquet 외 1개 (2번 사용)", "x.duckdb (5번 사용)"]  # 고르는 칸은 서버가 준 차례(많이 쓴 순) 그대로
+    assert got["types"] == ["button"] * 4 and got["noneHidden"] is True
     assert got["opened"] == 1 and got["filled"] == [{"kind": "url", "url": "postgres://h/db", "user": "u"}] and got["focus"] == "password"
     assert got["bad"] == "없는 최근 연결: 9"
+
+
+@needs_node
+def test_update_notes_become_sections_and_lists(tmp_path):
+    """업데이트 창: 릴리스 노트를 묶음 머리 + 목록으로 그린다. "없음"뿐인 묶음은 빼고, "이름: 설명"은 이름을 굵게, 글자로만 넣는다."""
+    body = r"""
+const el = (tag, props = {}, ...kids) => ({ tagName: tag.toUpperCase(), ...props, children: kids.filter(k => typeof k !== "string"), text: kids.filter(k => typeof k === "string").join(""),
+  get lastChild() { return this.children.at(-1); }, append(k) { this.children.push(k); } });
+const flat = e => [e.tagName, e.textContent ?? e.text, ...e.children.map(flat)];
+console.log(JSON.stringify(updNotes("### 추가\r\n- A/B 검정: 사람마다 모아요.\n- <b>굵게</b>\n\n### 개선\n없음\n### 삭제\n없음\n받지 못했어요").map(flat)));
+"""
+    code = between("common.js", "function updNotes(text)", "// 새 버전 알림")
+    assert run_node(tmp_path, body, parts=[code]) == [
+        ["SECTION", "", ["H4", "추가"], ["UL", "", ["LI", " 사람마다 모아요.", ["B", "A/B 검정"]], ["LI", "<b>굵게</b>"]]],
+        ["P", "받지 못했어요"]]
+    panel = between("status.html", '<div id="upd-panel"', '<div id="upd-msg"')
+    assert 'class="modal-box upd-box"' in panel and 'id="upd-close" class="btn">나중에' in panel and 'id="upd-go" class="btn p"' in panel
+    assert ".modal-box.upd-box { width:min(640px, 94vw); }" in read("common.css")
+
+
+@needs_node
+def test_file_list_shows_names_under_the_folder(tmp_path):
+    """파일 목록에는 경로 칸의 폴더 아래 이름만 보인다(값은 전체 경로 그대로)."""
+    body = r"""
+const box = { value: "C:\\data\\" };
+globalThis.$ = () => box;
+const out = [underPath("C:\\data\\a.csv"), underPath("c:/DATA/sub/b.parquet"), underPath("C:\\database\\c.csv"), underPath("D:\\x\\d.csv")];
+box.value = "C:\\data\\a.csv"; out.push(underPath("C:\\data\\a.csv"));
+box.value = ""; out.push(underPath("C:\\data\\a.csv"));
+console.log(JSON.stringify(out));
+"""
+    code = between("common.js", "function underPath(full)", "const LIST_MAX")
+    assert run_node(tmp_path, body, parts=[code]) == ["a.csv", "sub/b.parquet", "c.csv", "d.csv", "a.csv", "a.csv"]
+    lists = between("common.js", "async function listFiles()", "connMsg(more")
+    assert "o.text = underPath(o.value)" in lists and 'b.nextSibling.textContent = " " + underPath(b.value)' in lists and "b.parentElement.title = b.value" in lists
 
 
 def test_home_layout():

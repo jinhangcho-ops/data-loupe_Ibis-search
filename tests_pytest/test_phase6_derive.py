@@ -122,4 +122,5 @@ def test_screen_constants(folder):
     from query import search_app  # noqa: F401
     prep, query = server.constants("prep"), server.constants("query")
     assert prep["prep6"] == prep_ops.SCREEN6 and query["prep6"] == prep_ops.SCREEN6
-    assert prep["kmeans"] == {"k": prep_derive.KMEANS_K, "max_k": prep_derive.KMEANS_MAX_K, "max_cols": prep_derive.KMEANS_MAX_COLS, "name": prep_derive.KMEANS_NAME}
+    assert prep["kmeans"] == {"k": prep_derive.KMEANS_K, "max_k": prep_derive.KMEANS_MAX_K, "max_cols": prep_derive.KMEANS_MAX_COLS, "name": prep_derive.KMEANS_NAME,
+                              "iters": prep_derive.KMEANS_ITERS, "tol": prep_derive.KMEANS_TOL, "init_rows": prep_derive.KMEANS_INIT_ROWS}

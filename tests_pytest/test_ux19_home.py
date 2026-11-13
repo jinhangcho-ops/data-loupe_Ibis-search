@@ -8,7 +8,7 @@ CARDS = [("/search", "query", "쿼리", "데이터를 표로 훑어보고 조건
          ("/dashboard", "dashboard", "대시보드", "늘 보는 숫자와 차트를 한 화면에 모아요"),
          ("/collect", "collect", "수집", "인터넷(API·웹페이지)에서 데이터를 받아 와요"),
          ("/integrations", "integrations", "연동", "결과를 Slack·Notion으로 보내거나 GA4 데이터를 받아요")]
-TABS = ["feat", "update", "calc", "sample", "date", "viz", "dest"]
+TABS = ["feat", "update", "calc", "memory", "sample", "date", "viz", "dest"]
 
 
 def test_home_cards_name_and_one_line():

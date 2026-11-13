@@ -54,6 +54,7 @@ let dedupeOn = null, dedupeFound = null, ddContain = []; const SERVER = { dedupe
 const resetRun = () => {}, fail = () => {}, showAll = () => {};
 const noLabels = () => ({ on: false, mode: "", tags: [] }); let labelUse = noLabels(), labelInfo = null; const showLabels = () => {};  // [태그 붙이기](Phase 4) 대역
 const noKmeans = () => ({ columns: [], k: 3, name: "cluster" }); let kmeans = noKmeans();  // K-Means 칸(Phase 6) 대역
+const dvOpen = new Set();  // ④ 펼친 기능(Phase 20) 대역
 const S = { base: "A" }; const restored = [];
 %s
 const config = () => ({ base: S.base, edits });

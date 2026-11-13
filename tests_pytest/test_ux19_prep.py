@@ -68,9 +68,9 @@ def test_19e_peak_finder_folded():
 
 def test_19f1_question_names_and_two_lines():
     page = html()
-    labels = re.findall(r'<label data-hint title="[^"]+"><input type="radio" name="akind" value="(\w+)"(?: checked)?> <span>([^<]+\?)<small>\(([^)]+)\)</small></span></label>', page)
+    labels = re.findall(r'<label data-hint title="[^"]+"><input type="radio" name="akind" value="(\w+)"(?: checked)?> <span>([^<]+)<small>([^<]+)</small></span></label>', page)
     assert [k for k, _, _ in labels] == KINDS
-    assert dict((k, o) for k, _, o in labels)["pareto"] == "파레토" and dict((k, q) for k, q, _ in labels)["basket"] == "같이 사는 상품은?"
+    assert dict((k, n) for k, n, _ in labels)["pareto"] == "파레토(ABC 등급)" and dict((k, d) for k, _, d in labels)["basket"] == "한 묶음 안에 함께 자주 나오는 항목 쌍"
     assert 'class="akinds"' in page and "seg4" not in page
     for k in KINDS:
         assert re.search(r'<p class="lead"><b>이걸 알려 줘요:</b> [^<]+<br><b>필요한 컬럼:</b> [^<]+</p>', form(k)), k
@@ -88,6 +88,21 @@ def test_19f2_full_rerun_words():
     btn = between("prep.html", '<button id="a-full"', "</button>")
     assert btn.endswith(">표본 말고 전체 데이터로 다시 구하기") and "표본(미리 읽은 일부 행) 말고 테이블 전체 데이터로" in btn
     assert '<label class="a-rows hidden" id="a-rows-box">보일 행 수 <input type="number" id="a-rows"' in html()
+
+
+def test_spec_tab_folds_details():
+    """(Phase 20) 컬럼 요약 탭: 진단 도구·점검 메모·표본 읽은 방법·파일 저장은 접어 두고, 표본 요약 칸은 앞 몇 줄만 보인다."""
+    pane = between("prep.html", '<section class="pane hidden" id="p-spec">', "</section>")
+    head = between("prep.html", '<section class="pane hidden" id="p-spec">', '<div class="pop hidden" id="diag-pop">')
+    assert 'id="profile-export"' not in head and 'id="export-box"' in pane
+    for title in ("백분위수", "조합 키", "키 중복", "빈 시간 구간", "참조 무결성"):
+        assert f'<details class="tool"><summary>{title}<small>' in pane, title
+    assert pane.count("<details") == pane.count("</details>")
+    assert '<details class="tool hidden" id="checks-box"><summary id="checks-sum"></summary><div class="hint" id="prof-extra">' in pane
+    shown = between("prep.html", "function showSampled()", '$("sampled").title')
+    assert "계획" not in shown.split('$("sampled-more")')[0] and '$("checks-sum").textContent = `점검 메모 ${lines.length}개`' in shown
+    stats = between("prep.html", "function specStats(c)", "function renderSpec()")
+    assert "slice(SPEC_LINES)" in stats and "e.stopPropagation()" in stats and "specStats(c)," in html()
 
 
 @needs_node

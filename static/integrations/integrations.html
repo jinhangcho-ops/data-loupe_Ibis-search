@@ -9,7 +9,8 @@
   .hub { flex:1; min-height:0; overflow:auto; padding:22px 28px 40px; }
   .hub h1 { margin:0 0 4px; font-size:24px; letter-spacing:-.01em; }
   .hub > p { margin:0 0 18px; color:var(--muted); max-width:720px; line-height:1.6; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap:16px; align-items:start; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap:16px; align-items:stretch; max-width:1240px; }  /* 넓은 창에서도 한 줄에 셋까지, 같은 줄의 카드는 높이를 맞춘다 */
+  .svc > .row:last-child { margin-top:auto; padding-top:10px; }  /* 카드의 단추 줄은 맨 아래에 맞춘다 */
   .svc .head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
   .svc .head h3 { margin:0; font-size:15px; font-weight:600; }
   .svc { display:flex; flex-direction:column; gap:4px; }

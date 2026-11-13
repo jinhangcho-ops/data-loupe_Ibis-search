@@ -11,6 +11,7 @@ from core import credentials
 from core import dash_store
 from core import handoff
 from core import held
+from core import memory
 from core import parse
 from core import server
 from core import settings
@@ -38,6 +39,9 @@ ONLY_TABLE = "태그는 연결의 테이블에만 붙일 수 있어요(쿼리 �
 PC_TOO_BIG = (f"원격 DB의 표에 태그를 붙이려면 기간·조건까지의 결과를 이 PC로 받아야 하는데 {held.MAX_ROWS:,}행"
               f"(또는 {held.MAX_BYTES // 1024 // 1024}MB)을 넘어 받지 않았어요. 기간·조건을 좁히세요.")
 CACHE = {}  # 푼 상태 {본 파일 이름: ((본 파일 (mtime_ns, 크기), 기록 (mtime_ns, 크기) 또는 None), 메모리 저장 내용(쌍 표 pairs), 깨진 마지막 줄이 있는지)}. 요청마다 다시 풀지 않는다
+memory.hold("labels", "태그 표(다음에 태그를 쓸 때 파일에서 다시 읽어요)",
+            lambda: f"태그 파일 {len(CACHE)}개 · {memory.size_text(sum(found[1]['pairs'].estimated_size() for found in CACHE.values()))}" if CACHE else "",
+            lambda: (CACHE.clear(), FRAMES.clear()))
 FRAMES = {}  # frame 결과 한 벌 {"pairs": 그 쌍 표 객체, "vocab": 사전 튜플, "frame": 표}. 같은 표·사전이면 검색마다 다시 묶지 않는다
 
 
