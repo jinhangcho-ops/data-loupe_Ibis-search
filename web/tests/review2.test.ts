@@ -1,7 +1,7 @@
 // 리뷰 2차 C(2026-11-04 03:45) RC1~RC7: 기간이 걸린 화면 값, 다시 정하기에서 비운 칸·되돌릴 칸, 눈금 자릿수, 색 이름 한계, 구간 수 상한
 import { describe, expect, it } from "vitest";
 import { MAX_LABEL, labelIndex, okLabel } from "@/lib/calc";
-import { computedUpdate, plainCtx } from "@/lib/store";
+import { computedUpdate, plainCtx, sameContent } from "@/lib/store";
 import type { Card, CardKind } from "@/lib/types";
 import { tickBy, tickNum } from "@/components/cards/chart/Charts";
 import { seriesKit } from "@/components/cards/chart/series";
@@ -74,5 +74,17 @@ describe("RC6·RC7 다시 정하기가 되돌리는 칸·구간 수 상한", () 
   });
   it("구간 수는 서버 상한을 따른다", () => {
     expect(buildCard({ ...emptyForm("histogram"), table: "T", rows: [row], bins: "80" }, ["sum"], () => false, {}, 6, 50).view?.bins).toBe(50);
+  });
+});
+
+describe("sameContent: 카드 정의는 내용으로 견준다", () => {
+  it("자동 저장 응답처럼 새로 만든 객체·다른 키 순서도 같다고 본다", () => {
+    const source = { key: "k", body: { base: "orders", series: [{ y: "금액", agg: "sum" }] } };
+    expect(sameContent(source, JSON.parse(JSON.stringify({ body: { series: [{ agg: "sum", y: "금액" }], base: "orders" }, key: "k" })))).toBe(true);
+  });
+  it("정의가 바뀌었거나 카드가 없으면 다르다", () => {
+    expect(sameContent({ body: { base: "orders" } }, { body: { base: "visits" } })).toBe(false);
+    expect(sameContent(undefined, { body: {} })).toBe(false);
+    expect(sameContent([1, 2], [2, 1])).toBe(false);  // 목록의 순서는 정의의 일부
   });
 });

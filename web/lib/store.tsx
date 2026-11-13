@@ -42,6 +42,9 @@ export function computedUpdate(id: string, data: CardData | undefined, ctx: Ctx 
   if (!ctx?.range) return { patch: { ...patch, data }, result: { id } };
   return { patch: plain ? { ...patch, data: plain } : patch, result: { id, data } };
 }
+const keySorted = (v: unknown) => JSON.stringify(v, (_k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([p], [q]) => (p < q ? -1 : 1))) : x));
+/** 두 값의 내용이 같은가(키 순서 무시). 자동 저장 응답이 카드 객체를 새로 만들므로 카드 정의는 참조가 아니라 내용으로 견준다 */
+export const sameContent = (a: unknown, b: unknown): boolean => a === b || keySorted(a) === keySorted(b);
 /** 기간을 뺀 ctx(저장할 값을 구할 때): 보는 기간·직전 기간만 뺀다 */
 export const plainCtx = (ctx: Ctx | null): Ctx | null => (ctx ? { ...ctx, range: undefined, prev: null } : ctx);
 
