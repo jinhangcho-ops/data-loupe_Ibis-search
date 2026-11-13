@@ -9,6 +9,7 @@ from collect import load_job
 
 VERSION = 1
 COLLECTIONS = "collections.json"  # 저장한 수집 구성(수집 화면과 예약이 쓴다)
+OUTPUT_FORMATS = {"parquet": "Parquet", "csv": "CSV", "xlsx": "Excel", "duckdb": "DuckDB 파일", "db": "SQLite 파일"}  # 결과 파일 형식(= 확장자): 화면에 보일 이름. 형식 목록은 여기에만 둔다(화면·저장 대화상자·검사가 같이 쓴다)
 DEFAULT = {
     "version": VERSION, "mode": "api", "env_path": "", "limit_group": "",
     "request": {"method": "GET", "url": "", "query": [], "headers": [], "body_kind": "none", "body": ""},
@@ -28,7 +29,7 @@ DEFAULT = {
              "kafka": {"destination": "", "key": ""}, "unit": "batch", "batch": 10000, "interval": 0.0, "retries": 3},
 }
 CHOICES = {("mode",): ("api", "file", "web"), ("web", "paging", "kind"): ("none", "next", "url", "scroll"), ("request", "body_kind"): req.BODY_KINDS, ("paging", "kind"): ("none", "page", "offset", "cursor", "next_url"),
-           ("file", "kind"): ("auto", "csv", "parquet", "json"), ("file", "encoding"): ("auto", "utf-8", "cp949"), ("output", "format"): ("parquet", "csv"),
+           ("file", "kind"): ("auto", "csv", "parquet", "json"), ("file", "encoding"): ("auto", "utf-8", "cp949"), ("output", "format"): tuple(OUTPUT_FORMATS),
            ("load", "target"): ("file", "table", "kafka"), ("load", "table", "connection", "kind"): ("folder", "url"), ("load", "table", "how"): ("new", "append", "replace"),
            ("load", "unit"): ("batch", "single")}
 NUMBERS = {("paging", "start"): (int, -10**12, 10**12), ("paging", "step"): (int, 1, 10**9), ("paging", "max_pages"): (int, 1, 1_000_000),

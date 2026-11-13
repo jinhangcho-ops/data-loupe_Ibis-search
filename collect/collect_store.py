@@ -6,6 +6,7 @@ import email.utils
 import json
 import os
 import re
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -15,6 +16,8 @@ from lazy import ibis
 from collect import collect_http
 from collect import collect_limits
 from collect import collect_request as req
+from core import parse
+from core import result
 from core import scratch
 from core import settings
 from core import source
@@ -25,6 +28,12 @@ CAPPED = "최대 쪽 수 {:,}에서 멈췄어요(더 있을 수 있음). 다 받
 SAVE_EVERY = 0.5  # 진행 기록을 적는 간격(초). 쪽·조각마다 쓰면 기록이 커질수록 느려진다(쪽 수의 제곱)
 SKEW = 300  # 응답의 Date와 PC 시계가 이보다 많이 다르면(초) 알린다.
 ORDER = "__ibis_n"  # JSON 줄에 같이 적는 받은 순서(결과에서는 뺀다)
+WORK_TAIL = ".part"  # 바꾸는 중의 결과 파일 이름(collect_job.parts의 out): '이름.part.형식'
+GUARDED_FORMATS = ("csv",)  # 수식 막기를 하는 결과 형식. Excel은 글자를 수식으로 쓰지 않아 하지 않는다(result.export와 같다)
+DB_FORMATS = ("duckdb", "db")  # 결과가 파일 안의 테이블 하나인 형식(DuckDB·SQLite)
+LIVE_TAILS = {"duckdb": (".wal",), "db": ("-wal", "-journal")}  # DB 파일 옆에 이 꼬리의 파일이 있으면 다른 프로그램이 쓰는 중이거나 제대로 닫히지 않은 것
+STAGED = "result.parquet"  # Excel·DuckDB·SQLite로 옮기기 전에 임시 폴더에 써 두는 결과
+DEFAULT_TABLE = "collected"  # 파일 이름에 테이블 이름으로 쓸 글자가 하나도 없을 때의 테이블 이름
 PAGE_FILE = re.compile(r"\d{7}\.jsonl(\.tmp)?")  # .part/ 폴더 안에서 이 작업이 만드는 파일
 IDLE = {"running": False, "phase": "대기", "mode": "", "pages": 0, "requests": 0, "rows": 0, "bytes": 0, "total_bytes": None, "failures": 0,
         "concurrency": 0, "wait": "", "message": "", "error": "", "output": "", "started": None, "elapsed": 0.0, "group": "", "load": None}  # 처음 상태
@@ -198,19 +207,60 @@ def deduped(table, columns, rename=None):
 
 
 def write_output(con, table, fmt, out, folder):
-    """table을 out(parquet 또는 csv)으로 쓰고 행 수를 돌려준다. CSV는 Excel이 한글을 바로 읽도록 UTF-8 BOM을 붙인다.
-    CSV는 수식 막기를 한다(core/result.export와 같은 규칙에 숫자로 읽히는 값(-1500)만 그대로): 수식으로 읽힐 글자로 시작하는 글자 값과 컬럼 이름 앞에 '를 붙인다."""
-    if fmt == "parquet":
-        con.to_parquet(table, out)
-        import pyarrow.parquet as pq  # 쓴 파일의 정보에서 행 수를 읽는다(다시 읽어 세지 않는다)
-        return pq.read_metadata(out).num_rows
-    texts = [name for name, t in table.schema().items() if t.is_string()]
-    table = table.mutate(**{name: guarded(table[name]).ifelse("'" + table[name], table[name]) for name in texts})
-    table = table.rename({"'" + name: name for name in table.columns if name[:1] in FORMULA_START or name.lstrip()[:1] in FORMULA_START})
-    plain = Path(folder, "result.csv")
-    con.to_csv(table, plain)
-    with_bom(plain, out)
-    return csv_rows(plain)
+    """table을 out(collect_config.OUTPUT_FORMATS의 형식 fmt)으로 쓰고 행 수를 돌려준다. CSV는 Excel이 한글을 바로 읽도록 UTF-8 BOM을 붙인다.
+    CSV는 수식 막기를 한다(Excel은 글자를 수식으로 쓰지 않아 하지 않는다.core/result.export와 같은 규칙에 숫자로 읽히는 값(-1500)만 그대로): 수식으로 읽힐 글자로 시작하는 글자 값과 컬럼 이름 앞에 '를 붙인다.
+    Excel·DuckDB·SQLite는 임시 폴더의 Parquet(STAGED)으로 먼저 쓴 뒤 묶음씩 옮긴다(메모리에 다 올리지 않는다)."""
+    if fmt in GUARDED_FORMATS:
+        texts = [name for name, t in table.schema().items() if t.is_string()]
+        table = table.mutate(**{name: guarded(table[name]).ifelse("'" + table[name], table[name]) for name in texts})
+        table = table.rename({"'" + name: name for name in table.columns if name[:1] in FORMULA_START or name.lstrip()[:1] in FORMULA_START})
+    if fmt == "csv":
+        plain = Path(folder, "result.csv")
+        con.to_csv(table, plain)
+        with_bom(plain, out)
+        return csv_rows(plain)
+    staged = out if fmt == "parquet" else Path(folder, STAGED)
+    con.to_parquet(table, staged)
+    import pyarrow.parquet as pq  # 쓴 파일의 정보에서 행 수를 읽는다(다시 읽어 세지 않는다)
+    if fmt == "xlsx":
+        result.write_excel(con.read_parquet(staged), out)  # 시트의 행 한도(result.EXCEL_MAX_ROWS)를 넘으면 자르지 않고 오류
+    elif fmt in DB_FORMATS:
+        write_table(staged, fmt, out, folder)
+    return pq.read_metadata(staged).num_rows
+
+
+def table_name(path):
+    """DuckDB·SQLite 결과 파일 안의 결과 테이블 이름: 파일 이름에서 테이블 이름에 쓸 수 있는 글자(parse.TABLE_NAME: 영문·숫자·밑줄·한글)만 남겨 _로 잇는다."""
+    return "_".join(parse.TABLE_NAME.findall(Path(path).stem)) or DEFAULT_TABLE
+
+
+def write_table(staged, fmt, out, folder):
+    """Parquet 파일 staged를 DB 파일 out(DuckDB 또는 SQLite, '이름.part.형식') 안의 테이블 하나(table_name)로 쓴다. folder는 DuckDB가 넘칠 때 쓸 임시 폴더.
+    결과 파일(out에서 WORK_TAIL을 뺀 이름)이 이미 있으면 그 사본에 쓴다: 같은 이름의 테이블만 바꾸고 다른 테이블은 그대로 둔다(끝나면 replace가 사본으로 바꿔치기한다).
+    결과 파일 옆에 LIVE_TAILS의 파일이 있으면(다른 프로그램이 쓰는 중) 그 내용이 사본에 빠지므로 거절한다."""
+    path = out.with_name(out.stem.removesuffix(WORK_TAIL) + out.suffix)
+    if any(Path(str(path) + tail).exists() for tail in LIVE_TAILS[fmt]):
+        raise Halt("다른 프로그램이 이 DB 파일을 쓰고 있거나 제대로 닫히지 않았어요. 그 프로그램에서 파일을 닫고 다시 시작하세요(받은 것은 남아 있어 이어서 바꿔요).")
+    out.unlink(missing_ok=True)  # 지난번에 쓰다 만 사본
+    if path.exists():
+        shutil.copyfile(path, out)
+    name = table_name(path)
+    if fmt == "duckdb":
+        memory = settings.load().get("memory")
+        db = ibis.duckdb.connect(str(out), temp_directory=folder, **({"memory_limit": f"{memory}MB"} if memory else {}))
+        try:
+            source.drop_table(db, name, exists=True)  # Ibis 12의 overwrite=True는 빈 DROP 문장을 만들어 실패한다(source.drop_table)
+            db.create_table(name, db.read_parquet(staged))
+        finally:
+            db.disconnect()
+        return
+    from prep import prep_app  # 라우트 모듈이라 쓸 때 올린다
+    db = ibis.sqlite.connect(str(out))
+    try:
+        source.drop_table(db, name, exists=True)
+        prep_app.insert_all(db, name, None, ibis.duckdb.connect().read_parquet(staged))
+    finally:
+        db.disconnect()
 
 
 def guarded(value):

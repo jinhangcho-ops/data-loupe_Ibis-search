@@ -125,7 +125,7 @@ def test_prep_ops_labels_match_screen(shop):
     kinds = {None: "any", prep_ops.STRING: "str", prep_ops.NUMBER: "num", prep_ops.DATE: "date"}
     for o, op in zip(found, prep_ops.OPS):
         assert o["need"] in ("str", "num", "date", "any", "struct", "list")
-        assert o["need"] == kinds[op[1]] or o["id"] == "expand"
+        assert o["need"] == kinds[op[1]] or o["id"] in ("expand", "unnest")
         assert all(isinstance(f.get("name"), str) for f in o["fields"])
     assert next(o for o in found if o["id"] == "replace")["need"] == "any"
 

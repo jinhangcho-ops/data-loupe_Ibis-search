@@ -52,6 +52,11 @@
   #spec-view tbody tr.on { background:var(--accent-bg); }
   #spec-view td.cname { font-weight:600; font-size:13px; width:160px; }
   #spec-view td.sugs { width:260px; }
+  #spec-view td details > summary { color:var(--muted); cursor:pointer; }
+  #spec-view thead th { position:sticky; top:0; background:var(--card); }
+  details.tool { border-top:1px solid var(--line); padding:6px 0; }
+  details.tool > summary { font-size:13px; font-weight:600; cursor:pointer; }
+  details.tool > summary small { font-weight:400; color:var(--muted); margin-left:8px; }
   #pca-cols, #km-cols { max-height:200px; overflow:auto; display:flex; flex-direction:column; gap:4px; }
   #pca-cols label, #km-cols label { display:flex; align-items:center; gap:8px; }
   #pca-cols input, #km-cols input { width:auto; margin:0; }
@@ -95,6 +100,10 @@
   .big.none b { font-size:16px; }
   .big.none span { font-size:14px; }
   .sec button.ghost { margin-left:6px; }
+  /* ④ 쓸 수 있는 기능 목록(함수 찾기의 .fpanel-item 모양): 한 줄에 하나, 펼친 기능은 테두리로 */
+  .edx > .fpanel-item { width:100%; margin-top:4px; }
+  .edx > .fpanel-item[aria-expanded="true"] { background:var(--bg); border-color:var(--line); }
+  .dv-used { color:var(--accent); }
   #table-box.handed #schema { display:none !important; }  /* 넘어온 검색은 스키마를 고르지 않는다. 테이블 목록은 남겨 다른 테이블로 돌아갈 수 있게 */
   #a-src-pane h4 { margin:0 0 6px; }
   /* (Phase 19) 아래 [미리보기]·[실행] 밑의 한 줄 안내 */
@@ -105,7 +114,8 @@
   .akinds label { display:flex; gap:6px; align-items:flex-start; border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:13px; line-height:1.35; cursor:pointer; }
   .akinds label:has(input:checked) { border-color:var(--accent); background:var(--accent-bg); }
   .akinds input { width:auto; margin:2px 0 0; flex:none; }
-  .akinds small { display:block; color:var(--muted); font-size:11px; }
+  .akinds span { font-weight:600; }
+  .akinds small { display:block; color:var(--muted); font-size:11px; font-weight:400; }
   html.easy .akinds { grid-template-columns:1fr; }  /* (Phase 20) 쉬운 보기: 종류마다 아래에 설명 줄(titleHints)이 붙어 한 줄에 하나씩 */
   .akinds .easy-only { margin:0 0 4px; }
   .a-form > .lead { margin-top:4px; }
@@ -127,18 +137,21 @@
       <div class="hint"><span id="counts"></span> <span id="stale" class="warn"></span></div>
     </section>
     <section class="pane hidden" id="p-spec">
-      <div class="head"><span class="hint" id="sampled" style="margin:0"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계와 추천을 다시 구해요">다시 구하기</button><button id="full-stats" class="ghost hidden" title="표본 대신 테이블 전체로 빈칸·값 종류·최솟값·최댓값을 구해 표본과 비교해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="컬럼 요약을 테이블 전체로 구하기">전체로 구하기</button><button id="diag-opts" class="ghost" title="진단 기준(이상치 배수, 더미 값, 기본값 날짜, 빈 값 표시, 순서 척도 등)을 바꿔요. 바꾸면 같은 표본으로 다시 구해요">진단 기준</button><button id="profile-export" class="ghost" title="연결의 모든 테이블의 컬럼 요약(이름·타입·빈 값 비율·고유값 수·최솟값·최댓값·예시 값 몇 개)을 파일 하나로 저장해요. 테이블이 많으면 오래 걸려요. 표본 크기는 지금 설정을 따르고, 행 데이터는 예시 값 몇 개 외에 넣지 않아요" aria-label="모든 테이블의 컬럼 요약을 파일로 저장">요약 파일로 저장</button><select id="export-format" title="요약 파일 형식. Excel은 테이블마다 시트 하나, CSV는 테이블 이름 컬럼을 넣은 표 하나" aria-label="요약 파일 형식"><option value="xlsx">Excel</option><option value="csv">CSV</option></select><label class="check" title="표본 대신 테이블 전체로 구해요. 큰 테이블은 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요"><input type="checkbox" id="export-full" aria-label="요약 파일을 테이블 전체 기준으로 구하기"> 전체 기준</label><span class="hint" id="export-msg" style="margin:0"></span><span style="flex:1"></span><button id="prune" class="btn hidden" title="표본에서 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾아요. 이미 읽은 표본만 쓰고 DB에는 다시 묻지 않아요">뺄 만한 컬럼 찾기</button><button id="sug-all" class="hidden" title="모든 컬럼의 추천을 정리 방법에 한 번에 넣어요">추천 모두 적용</button></div>
+      <div class="head"><span class="hint" id="sampled" style="margin:0"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계와 추천을 다시 구해요">다시 구하기</button><button id="full-stats" class="ghost hidden" title="표본 대신 테이블 전체로 빈칸·값 종류·최솟값·최댓값을 구해 표본과 비교해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="컬럼 요약을 테이블 전체로 구하기">전체로 구하기</button><button id="diag-opts" class="ghost" title="진단 기준(이상치 배수, 더미 값, 기본값 날짜, 빈 값 표시, 순서 척도 등)을 바꿔요. 바꾸면 같은 표본으로 다시 구해요">진단 기준</button><span style="flex:1"></span><button id="prune" class="btn hidden" title="표본에서 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾아요. 이미 읽은 표본만 쓰고 DB에는 다시 묻지 않아요">뺄 만한 컬럼 찾기</button><button id="sug-all" class="hidden" title="모든 컬럼의 추천을 정리 방법에 한 번에 넣어요">추천 모두 적용</button></div>
       <div class="pop hidden" id="diag-pop"><div id="diag-form"></div><div class="row"><button id="diag-save" class="btn p">저장</button><button id="diag-reset" class="btn">기본값으로</button></div><div class="err" id="diag-err"></div></div>
       <div class="hint" id="prune-box"></div>
-      <div class="hint" id="prof-extra"></div>
+      <details class="hint hidden" id="sampled-more"><summary>표본을 어떻게 읽었는지</summary><div id="sampled-long"></div></details>
+      <div class="hint" id="prof-notes"></div>
+      <details class="tool hidden" id="checks-box"><summary id="checks-sum"></summary><div class="hint" id="prof-extra"></div></details>
       <div id="diag-box" class="hidden">
-        <h4 class="a-sec">백분위수</h4><div class="table-wrap" id="diag-pct"></div>
-        <div class="row"><button id="qi-find" class="btn" title="표본에서 2~3개를 묶으면 값이 겹치지 않는 컬럼 조합을 찾아요. 이 PC에서만 계산하고 DB에는 묻지 않아요">조합 키 찾기</button></div><div id="qi-list"></div>
-        <div class="sec">키 중복</div><div class="cols" id="dk-cols"></div><div class="row"><button id="dk-run" class="btn" title="고른 컬럼 기준으로 테이블 전체의 중복 묶음·중복 횟수 분포를 세요. 테이블 전체를 키 컬럼만 4번 읽어요">키 중복 보기</button><button id="dk-all" class="btn" title="모든 컬럼 값이 같은 행을 테이블 전체에서 세요. 테이블 전체를 4번 읽어요">전체 중복 행 세기</button></div><div class="hint" id="dk-out"></div>
-        <div class="sec">빈 시간 구간</div><div class="row"><select id="gap-col" aria-label="날짜 컬럼"></select><select id="gap-unit" aria-label="단위"><option value="day">일</option><option value="hour">시간</option></select><button id="gap-run" class="btn" title="처음~마지막 사이에서 값이 하나도 없는 날·시간을 테이블 전체에서 찾아요. 그 컬럼을 2번 읽어요">빈 구간 찾기</button></div><div class="hint" id="gap-out"></div>
-        <div class="sec">참조 무결성</div><div class="row"><select id="ri-dim" aria-label="차원 테이블"></select></div><div id="ri-pairs"></div><div class="row"><button id="ri-add" class="ghost" aria-label="키 쌍 더하기">+ 키</button><button id="ri-run" class="btn" title="이 테이블의 키가 고른 차원 테이블에 없는 비율을 테이블 전체로 구해요. 이 테이블 키 컬럼을 4번, 차원 테이블 키 컬럼을 2번 읽어요">참조 무결성 확인</button></div><div class="hint" id="ri-out"></div>
+        <details class="tool"><summary>백분위수<small>숫자 컬럼의 값이 어디에 몰려 있는지</small></summary><div class="table-wrap" id="diag-pct"></div></details>
+        <details class="tool"><summary>조합 키<small>묶으면 값이 겹치지 않는 컬럼 조합</small></summary><div class="row"><button id="qi-find" class="btn" title="표본에서 2~3개를 묶으면 값이 겹치지 않는 컬럼 조합을 찾아요. 이 PC에서만 계산하고 DB에는 묻지 않아요">조합 키 찾기</button></div><div id="qi-list"></div></details>
+        <details class="tool"><summary>키 중복<small>같은 키가 여러 번 나오는지</small></summary><div class="cols" id="dk-cols"></div><div class="row"><button id="dk-run" class="btn" title="고른 컬럼 기준으로 테이블 전체의 중복 묶음·중복 횟수 분포를 세요. 테이블 전체를 키 컬럼만 4번 읽어요">키 중복 보기</button><button id="dk-all" class="btn" title="모든 컬럼 값이 같은 행을 테이블 전체에서 세요. 테이블 전체를 4번 읽어요">전체 중복 행 세기</button></div><div class="hint" id="dk-out"></div></details>
+        <details class="tool"><summary>빈 시간 구간<small>값이 하나도 없는 날·시간</small></summary><div class="row"><select id="gap-col" aria-label="날짜 컬럼"></select><select id="gap-unit" aria-label="단위"><option value="day">일</option><option value="hour">시간</option></select><button id="gap-run" class="btn" title="처음~마지막 사이에서 값이 하나도 없는 날·시간을 테이블 전체에서 찾아요. 그 컬럼을 2번 읽어요">빈 구간 찾기</button></div><div class="hint" id="gap-out"></div></details>
+        <details class="tool"><summary>참조 무결성<small>다른 테이블에 없는 키</small></summary><div class="row"><select id="ri-dim" aria-label="차원 테이블"></select></div><div id="ri-pairs"></div><div class="row"><button id="ri-add" class="ghost" aria-label="키 쌍 더하기">+ 키</button><button id="ri-run" class="btn" title="이 테이블의 키가 고른 차원 테이블에 없는 비율을 테이블 전체로 구해요. 이 테이블 키 컬럼을 4번, 차원 테이블 키 컬럼을 2번 읽어요">참조 무결성 확인</button></div><div class="hint" id="ri-out"></div></details>
       </div>
       <div id="spec-view"></div>
+      <details class="tool" id="export-box"><summary>요약을 파일로 저장<small>연결의 모든 테이블</small></summary><div class="row" style="align-items:center; flex-wrap:wrap"><button id="profile-export" class="ghost" title="연결의 모든 테이블의 컬럼 요약(이름·타입·빈 값 비율·고유값 수·최솟값·최댓값·예시 값 몇 개)을 파일 하나로 저장해요. 테이블이 많으면 오래 걸려요. 표본 크기는 지금 설정을 따르고, 행 데이터는 예시 값 몇 개 외에 넣지 않아요" aria-label="모든 테이블의 컬럼 요약을 파일로 저장">요약 파일로 저장</button><select id="export-format" title="요약 파일 형식. Excel은 테이블마다 시트 하나, CSV는 테이블 이름 컬럼을 넣은 표 하나" aria-label="요약 파일 형식"><option value="xlsx">Excel</option><option value="csv">CSV</option></select><label class="check" title="표본 대신 테이블 전체로 구해요. 큰 테이블은 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요"><input type="checkbox" id="export-full" aria-label="요약 파일을 테이블 전체 기준으로 구하기"> 전체 기준</label><span class="hint" id="export-msg" style="margin:0"></span></div></details>
       <div class="row" style="margin-top:16px; max-width:720px; align-items:center" title="테이블과 컬럼 설명, 파티션 키를 적은 파일(JSON·YAML)이에요. 이 설명은 [질문으로 SQL 만들기]에서도 써요. 칸을 비우고 [불러오기]를 누르면 명세서를 쓰지 않아요"><span class="hint" style="margin:0; flex:none">명세서 파일</span><input id="spec-path" class="code" placeholder="JSON 또는 YAML 파일 경로(없어도 돼요)"><button id="spec-read" class="btn">불러오기</button></div>
       <div class="hint" id="spec-info"></div>
     </section>
@@ -200,28 +213,44 @@
             <div class="sec">계산 컬럼</div>
             <div class="hint">식에는 이름을 바꾸기 전의 컬럼 이름을 써요.</div>
             <div class="row"><input id="fx-name" placeholder="새 컬럼 이름" style="width:110px; flex:none"><input id="fx-expr" class="code" placeholder="예: 금액 * 수량, median(금액), lag(금액, 1)"><button id="fx-add" class="btn">추가</button></div>
-            <div class="row"><input id="fx-order" placeholder="정렬 기준(선택), 예: 날짜 asc" title="순위, 이전 값, 누적처럼 순서가 필요한 함수가 쓸 정렬 기준이에요. 없어도 돼요"><input id="fx-group" placeholder="묶을 컬럼(선택), 쉼표로 여러 개" title="합계, 중앙값 같은 집계와 순위 같은 함수를 이 컬럼의 값별로 따로 계산해요. 비우면 표 전체로 계산해요"><button id="fx-find" class="ghost" title="함수를 찾아 예시를 식에 넣어요">함수 찾기</button></div>
+            <input id="fx-order" type="hidden"><input id="fx-group" type="hidden">
+            <div class="row"><input id="fx-order-find" placeholder="정렬 기준(선택): 컬럼을 찾고 Enter" aria-label="정렬 기준으로 쓸 컬럼 찾기" title="순위, 이전 값, 누적처럼 순서가 필요한 함수가 쓸 정렬 기준이에요. 없어도 돼요. 글자를 치고 Enter를 누르면 맞는 컬럼이 아래에 나와요(빈 칸이면 모든 컬럼)"><button id="fx-order-open" type="button" class="ghost" aria-expanded="false">목록 ▾</button></div>
+            <div class="kinds cols" id="fx-order-list"></div>
+            <div class="chips open" id="fx-order-chips"></div>
+            <div class="row"><input id="fx-group-find" placeholder="묶을 컬럼(선택): 컬럼을 찾고 Enter" aria-label="묶을 컬럼 찾기" title="합계, 중앙값 같은 집계와 순위 같은 함수를 이 컬럼의 값별로 따로 계산해요. 비우면 표 전체로 계산해요. 글자를 치고 Enter를 누르면 맞는 컬럼이 아래에 나와요(빈 칸이면 모든 컬럼)"><button id="fx-group-open" type="button" class="ghost" aria-expanded="false">목록 ▾</button></div>
+            <div class="kinds cols" id="fx-group-list"></div>
+            <div class="chips open" id="fx-group-chips"></div>
+            <div class="row"><button id="fx-find" class="ghost" title="함수를 찾아 예시를 식에 넣어요">함수 찾기</button></div>
             <div id="fx-panel"></div>
-            <div class="hint" id="fx-guide"></div>
+            <details class="hint" id="fx-help"><summary>사칙연산과 함수를 쓸 수 있어요. 예: 금액 * 수량</summary><div id="fx-guide"></div></details>
             <div id="formulas"></div>
-            <div class="sec">PCA(차원 줄이기)</div>
-            <div class="hint">고른 숫자 컬럼을 pca_1, pca_2 같은 성분 컬럼 몇 개로 줄여요.</div>
+            <div class="sec">쓸 수 있는 기능</div>
+            <div class="hint">누르면 설정 칸이 펼쳐져요. 다시 누르면 접혀요(쓰는 중인 기능은 펼쳐 둬요).</div>
+            <button type="button" class="fpanel-item" data-feat="pca" aria-expanded="false" aria-controls="dv-pca"><b>PCA(차원 줄이기)</b><span class="hint">고른 숫자 컬럼을 pca_1, pca_2 같은 성분 컬럼 몇 개로 줄여요. <b class="dv-used"></b></span></button>
+            <div id="dv-pca" class="hidden">
+            <div class="hint" id="pca-basis"></div>
             <div class="cols" id="pca-cols"></div>
             <div class="row" style="align-items:center"><span class="hint" style="margin:0; flex:none">성분 수</span><input id="pca-n" type="number" min="1" value="2" style="width:70px; flex:none"><button id="pca-clear" class="ghost">선택 해제</button></div>
             <div class="hint" id="pca-info"></div>
-            <div class="sec">K-Means(군집 번호)</div>
+            </div>
+            <button type="button" class="fpanel-item" data-feat="kmeans" aria-expanded="false" aria-controls="dv-kmeans"><b>K-Means(군집 번호)</b><span class="hint">비슷한 행끼리 군집으로 나누고 번호(0부터)를 새 컬럼으로 붙여요. <b class="dv-used"></b></span></button>
+            <div id="dv-kmeans" class="hidden">
             <div class="hint">고른 숫자 컬럼을 표준화해 비슷한 행끼리 k개 군집으로 나누고 번호(0부터)를 새 컬럼으로 붙여요. 표를 군집마다 반복해 집계해요(최대 수십 번 읽어요).</div>
+            <div class="hint" id="km-basis"></div>
             <div class="cols" id="km-cols"></div>
             <div class="row" style="align-items:center"><span class="hint" style="margin:0; flex:none">군집 수</span><input id="km-k" type="number" style="width:70px; flex:none"><input id="km-name" placeholder="새 컬럼 이름" style="width:110px; flex:none"><button id="km-clear" class="ghost">선택 해제</button></div>
             <div class="hint" id="km-info"></div>
-            <div class="sec">좌표</div>
-            <div class="hint">TM 좌표를 경도·위도로 바꾸거나, 가장 가까운 지점이나 속한 영역을 새 컬럼으로 붙여요. 계산은 이 PC에서 해요.</div>
+            </div>
+            <button type="button" class="fpanel-item" data-feat="geo" aria-expanded="false" aria-controls="dv-geo"><b>좌표</b><span class="hint">TM 좌표를 경도·위도로 바꾸거나, 가장 가까운 지점이나 속한 영역을 새 컬럼으로 붙여요. <b class="dv-used"></b></span></button>
+            <div id="dv-geo" class="hidden">
+            <div class="hint">계산은 이 PC에서 해요.</div>
             <div class="hint" id="geo-hints"></div>
             <div id="geo-list"></div>
             <div class="row"><select id="geo-op" style="flex:none"><option value="tm">TM 좌표를 경도·위도로</option><option value="nearest">가장 가까운 지점 찾기</option><option value="region">속한 영역 붙이기</option></select></div>
             <div class="row" id="geo-form" style="flex-wrap:wrap"></div>
             <div class="row"><button id="geo-add" class="btn">좌표 추가</button></div>
             <div class="hint" id="geo-info"></div>
+            </div>
           </div></div>
         <div class="cn"></div>
         <div class="step" data-step="dedupe"><div class="sp" data-hint><i>5</i><span class="t" title="같은 값이 여러 번 나오는 행을 하나만 남겨요">중복 제거</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
@@ -316,19 +345,19 @@
       <div class="hint" id="hashed-note-a"></div>
       <label class="check" title="끄면 전처리 없이 원래 테이블을 분석해요"><input type="checkbox" id="a-prep" checked> 전처리한 결과로 분석</label>
       <div class="akinds">
-        <label data-hint title="한 컬럼의 값이 어떻게 퍼져 있는지 봐요(히스토그램·상자 그림·값 빈도)"><input type="radio" name="akind" value="distribution" checked> <span>값이 어떻게 퍼져 있나요?<small>(분포)</small></span></label>
-        <label data-hint title="숫자 컬럼끼리 함께 오르내리는지 봐요(상관계수 표·산점도)"><input type="radio" name="akind" value="correlation"> <span>두 숫자가 같이 움직이나요?<small>(상관관계)</small></span></label>
-        <label data-hint title="묶음마다 합계·평균 같은 값을 비교해요"><input type="radio" name="akind" value="groups"> <span>묶음마다 값이 얼마나 다른가요?<small>(그룹 비교)</small></span></label>
-        <label data-hint title="날짜 컬럼으로 일·주·월마다 값이 어떻게 바뀌는지 봐요"><input type="radio" name="akind" value="trend"> <span>기간마다 어떻게 바뀌었나요?<small>(기간별 추이)</small></span></label>
-        <label data-hint title="사용자가 단계를 순서대로 몇 명이나 거쳤는지, 어디서 빠지는지 봐요"><input type="radio" name="akind" value="funnel"> <span>단계마다 얼마나 남나요?<small>(퍼널)</small></span></label>
-        <label data-hint title="처음 온 기간별로 묶어, 이후에 다시 온 사람의 비율을 봐요"><input type="radio" name="akind" value="retention"> <span>다시 오는 고객은 얼마나?<small>(리텐션)</small></span></label>
-        <label data-hint title="최근에·자주·많이 산 정도로 고객을 등급으로 나눠요"><input type="radio" name="akind" value="rfm"> <span>좋은 고객은 누구?<small>(RFM)</small></span></label>
-        <label data-hint title="값이 큰 항목부터 쌓아, 소수 항목이 전체의 몇 %를 차지하는지(ABC 등급) 봐요"><input type="radio" name="akind" value="pareto"> <span>적은 항목이 대부분을 차지하나요?<small>(파레토)</small></span></label>
-        <label data-hint title="두 범주 컬럼이 서로 관계가 있는지 통계로 확인해요(카이제곱 검정)"><input type="radio" name="akind" value="chisq"> <span>두 항목이 서로 관련 있나요?<small>(관계 검정)</small></span></label>
-        <label data-hint title="A·B 그룹의 비율이나 평균 차이가 우연인지 확인해요"><input type="radio" name="akind" value="abtest"> <span>A와 B의 차이가 우연인가요?<small>(A/B 검정)</small></span></label>
-        <label data-hint title="함께 자주 사는 항목 쌍을 찾아요(장바구니 연관)"><input type="radio" name="akind" value="basket"> <span>같이 사는 상품은?<small>(장바구니)</small></span></label>
-        <label data-hint title="두 기간의 평균 차이가 그룹 구성이 바뀌어서인지, 그룹 안에서 바뀌어서인지 나눠 봐요"><input type="radio" name="akind" value="decompose"> <span>평균이 왜 바뀌었나요?<small>(변화 요인)</small></span></label>
-        <label data-hint title="기간별 값을 추세·계절 반복·나머지로 나눠 봐요"><input type="radio" name="akind" value="seasonal"> <span>반복되는 흐름과 튀는 때는?<small>(시계열 분해)</small></span></label>
+        <label data-hint title="필요한 컬럼: 아무 컬럼 하나. 히스토그램·상자 그림·값 빈도로 봐요. 예: 금액 분포, 응답 시간 분포, 등급별 건수"><input type="radio" name="akind" value="distribution" checked> <span>분포<small>한 컬럼의 값이 어디에 몰려 있고 얼마나 퍼져 있는지</small></span></label>
+        <label data-hint title="필요한 컬럼: 숫자 컬럼 둘 이상. 상관계수 표와 산점도로 봐요. 예: 가격과 판매량, 온도와 불량률"><input type="radio" name="akind" value="correlation"> <span>상관관계<small>두 숫자 컬럼이 함께 오르내리는 정도</small></span></label>
+        <label data-hint title="필요한 컬럼: 묶을 컬럼과 값. 예: 매장별 매출, 팀별 처리 건수, 기기 종류별 평균 온도"><input type="radio" name="akind" value="groups"> <span>그룹 비교<small>묶음마다 합계·평균 같은 값을 나란히 비교</small></span></label>
+        <label data-hint title="필요한 컬럼: 날짜와 값. 예: 주별 매출, 일별 방문 수, 월별 고장 건수"><input type="radio" name="akind" value="trend"> <span>기간별 추이<small>일·주·월마다 값이 어떻게 바뀌는지</small></span></label>
+        <label data-hint title="필요한 컬럼: 대상(사용자·주문·문서 등)과 단계. 예: 방문→결제, 접수→승인→완료, 지원→면접→합격"><input type="radio" name="akind" value="funnel"> <span>퍼널(단계별 통과)<small>순서가 있는 단계를 얼마나 통과하고 어디서 빠지는지</small></span></label>
+        <label data-hint title="필요한 컬럼: 대상과 날짜. 예: 가입 주별 재방문, 첫 구매 월별 재구매, 설치 주별 재사용"><input type="radio" name="akind" value="retention"> <span>리텐션(다시 나타남)<small>처음 나타난 기간별로 묶어 이후에 다시 나타난 비율</small></span></label>
+        <label data-hint title="필요한 컬럼: 대상, 날짜, 크기(금액·횟수 등). 예: 고객 구매 등급, 사용자 활동 등급, 거래처 거래 등급"><input type="radio" name="akind" value="rfm"> <span>RFM(최근·빈도·크기 등급)<small>대상마다 얼마나 최근에·자주·크게 했는지로 등급 나누기</small></span></label>
+        <label data-hint title="필요한 컬럼: 항목과 값. 예: 매출을 만드는 상품, 문의가 몰리는 유형, 불량이 몰리는 원인"><input type="radio" name="akind" value="pareto"> <span>파레토(ABC 등급)<small>값이 큰 항목부터 쌓아 소수 항목이 전체의 몇 %인지</small></span></label>
+        <label data-hint title="필요한 컬럼: 범주 컬럼 둘. 예: 지역과 선호 상품, 요금제와 해지 여부, 라인과 불량 유형"><input type="radio" name="akind" value="chisq"> <span>관계 검정(카이제곱)<small>두 범주 컬럼이 서로 관련 있는지 통계로 확인</small></span></label>
+        <label data-hint title="필요한 컬럼: 그룹과 값(0/1이나 숫자). 예: 화면 A·B의 전환율, 두 공정의 평균 시간, 쿠폰 유무의 구매액"><input type="radio" name="akind" value="abtest"> <span>A/B 검정(그룹 차이)<small>그룹 사이 비율·평균 차이가 우연인지 확인</small></span></label>
+        <label data-hint title="필요한 컬럼: 묶음(주문·세션·문서 등)과 항목. 예: 같이 사는 상품, 같이 보는 페이지, 같이 나오는 증상"><input type="radio" name="akind" value="basket"> <span>연관 항목(장바구니)<small>한 묶음 안에 함께 자주 나오는 항목 쌍</small></span></label>
+        <label data-hint title="필요한 컬럼: 날짜, 그룹, 값. 예: 객단가가 바뀐 까닭, 평균 처리 시간이 늘어난 까닭"><input type="radio" name="akind" value="decompose"> <span>변화 요인<small>두 기간의 평균 차이를 구성 변화와 그룹 안 변화로 나누기</small></span></label>
+        <label data-hint title="필요한 컬럼: 날짜와 값. 예: 요일마다 반복되는 매출, 월마다 반복되는 수요, 평소와 다른 날"><input type="radio" name="akind" value="seasonal"> <span>시계열 분해<small>기간별 값을 추세·반복·나머지로 나누고 튀는 때 찾기</small></span></label>
       </div>
       <div class="a-form" data-kind="distribution">
         <p class="lead"><b>이걸 알려 줘요:</b> 한 컬럼의 값이 어디에 많고 적은지 보여 줘요. 숫자 컬럼은 히스토그램·상자 그림·값 빈도로, 다른 컬럼은 자주 나오는 값(값 빈도)으로 보여 줘요.<br><b>필요한 컬럼:</b> 아무 컬럼 하나</p>
@@ -664,6 +693,9 @@ const OPS = {
     value: st => PrepMenu.value("counts", st) },
   expand: { label: "컬럼 여러 개로 펼치기(구조·맵·JSON)", group: "새 컬럼", need: c => /^(struct|map|json)/.test(c.type) || isStr(c), init: { keys: null }, load: v => ({ keys: v?.keys ?? null }),
     value: st => st.keys?.length ? { keys: st.keys } : true },  // 첫 미리보기에서 찾은 키를 저장해 이후엔 다시 찾지 않는다(saveExpandKeys)
+  unnest: { label: "목록을 행으로 펼치기", group: "새 컬럼", need: c => /^(array|json)/.test(c.type) || isStr(c), init: {}, load: () => ({}),
+    fields: () => [{ hint: "값 하나마다 행 하나로 늘어나요. 다른 컬럼 값은 복사돼요." }],
+    value: () => true },
 };
 
 // 값 바꿔 쓰기: 상태 → 서버로 보낼 spec(옛 저장 상태 {from, to}는 똑같은 값 한 쌍으로). 정하지 않았으면 null
@@ -1132,8 +1164,72 @@ function renderDerive() {
   } }), " " + n)));
   Object.assign($("km-k"), { min: 2, max: SERVER.kmeans.max_k, value: kmeans.k });
   $("km-name").value = kmeans.name;
+  fxPickers.forEach(p => p.show());
 }
 $("fx-guide").textContent = SERVER.formula_guide;
+// 계산 컬럼의 정렬 기준·묶을 컬럼 고르기: 찾는 칸에서 Enter를 치면 이름이 그 글자와 같거나 그 글자가 든 컬럼이 토글 단추로 나온다(빈 칸이면 모두).
+// 고른 값은 숨은 칸(#fx-order "날짜 desc; 금액", #fx-group "지역, 등급")에 예전에 손으로 적던 글자 그대로 두어 [추가]가 예전처럼 읽는다. 정렬 기준은 칩에서 오름·내림을 바꾼다.
+const fxCols = () => prof ? [...new Set([...cols().map(c => c.name), ...deriv.map(d => d.name), ...formulas.map(f => f.name).filter(Boolean)])] : [];  // 식에서 쓸 수 있는 이름: 이름을 바꾸기 전의 컬럼, 파생 컬럼, 앞의 계산 컬럼
+function fxMatch(names, text) {  // 대소문자 무시. 똑같은 이름이 맨 앞
+  const q = text.trim().toLowerCase();
+  return names.filter(n => n.toLowerCase().includes(q)).sort((a, b) => (b.toLowerCase() === q) - (a.toLowerCase() === q));
+}
+function fxPicker(key, sep, dir) {
+  const store = $("fx-" + key), find = $(`fx-${key}-find`), list = $(`fx-${key}-list`), chips = $(`fx-${key}-chips`), more = $(`fx-${key}-open`);
+  let open = false;
+  const picked = () => store.value.split(sep).map(x => x.trim()).filter(Boolean);
+  const nameOf = v => dir ? v.replace(/ (asc|desc)$/i, "") : v;
+  const put = vals => { store.value = vals.join(sep + " "); show(); };
+  const toggle = n => put(picked().some(v => nameOf(v) === n) ? picked().filter(v => nameOf(v) !== n) : [...picked(), n]);
+  const flip = n => put(picked().map(v => nameOf(v) !== n ? v : / desc$/i.test(v) ? n : n + " desc"));
+  function show() {
+    const now = picked();
+    chips.replaceChildren(...now.map(v => { const n = nameOf(v), desc = / desc$/i.test(v); return !dir ? chip(n, () => toggle(n)) : el("span", { className: "chip" }, n,
+      el("button", { type: "button", className: "ghost", textContent: desc ? "▼ 내림" : "▲ 오름", title: "누르면 오름차순·내림차순이 바뀌어요", onclick: () => flip(n) }),
+      el("button", { type: "button", className: "ghost", textContent: "×", title: "빼기", onclick: () => toggle(n) })); }));
+    list.replaceChildren(...(open ? fxMatch(fxCols(), find.value) : []).map(n => { const b = el("button", { type: "button", textContent: n, onclick: () => toggle(n) }); b.setAttribute("aria-pressed", String(now.some(v => nameOf(v) === n))); return b; }));
+    more.setAttribute("aria-expanded", String(open));
+    more.textContent = open ? "접기 ▴" : "목록 ▾";
+  }
+  find.onkeydown = e => {
+    if (e.isComposing) return;  // 한글 조합 중의 키는 입력기 몫
+    if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); open = true; show(); }  // [추가] 같은 다른 단추로 번지지 않게
+    else if (e.key === "Escape" && open) { e.stopPropagation(); open = false; show(); }
+  };
+  more.onclick = () => { open = !open; show(); };
+  return { show };
+}
+const fxPickers = [fxPicker("order", ";", true), fxPicker("group", ",", false)];
+// ④ 쓸 수 있는 기능(PCA·K-Means·좌표): 처음에는 접혀 있고 목록의 단추로 펴고 접는다. 값이 있는(쓰는 중인) 기능은 늘 펼쳐 둔다(저장한 구성·초안을 되살린 뒤에도).
+const DV_USED = { pca: () => pca.columns.length > 0, kmeans: () => kmeans.columns.length > 0, geo: () => geoSteps.length > 0 };
+const dvOpen = new Set();
+function showFeatures() {
+  for (const b of document.querySelectorAll("[data-feat]")) {
+    const key = b.dataset.feat, used = DV_USED[key]();
+    if (used) dvOpen.add(key);
+    b.setAttribute("aria-expanded", String(dvOpen.has(key)));
+    b.querySelector(".dv-used").textContent = used ? "쓰는 중" : "";
+    $("dv-" + key).classList.toggle("hidden", !dvOpen.has(key));
+  }
+}
+for (const b of document.querySelectorAll("[data-feat]")) b.onclick = () => { dvOpen.has(b.dataset.feat) ? dvOpen.delete(b.dataset.feat) : dvOpen.add(b.dataset.feat); showFeatures(); };
+// PCA·K-Means가 어떤 기준으로 계산하는지(서버 core/prep_derive.py의 pca·kmeans가 하는 그대로. 숫자는 서버가 내려준 것만 쓴다)
+$("pca-basis").replaceChildren(...[
+  "계산 기준",
+  "· 표준화: 컬럼마다 평균을 빼고 표준편차로 나눠요(단위가 달라도 같은 무게).",
+  "· 빈 값: 고른 컬럼 중 하나라도 비어 있는(NaN 포함) 행은 계산에서 빼고, 그 행의 성분도 빈 값이에요.",
+  "· 성분 구하기: 표준화한 컬럼의 상관 행렬을 고유값 분해해 설명력이 큰 순서로 성분을 뽑아요. 부호는 계수의 절댓값이 가장 큰 컬럼이 양수가 되게 정해요.",
+  `· 컬럼은 2~${SERVER.pca_max}개, 성분 수는 1부터 고른 컬럼 수까지예요. 값이 모두 같은 컬럼은 넣을 수 없어요.`,
+].map(t => el("div", { textContent: t })));
+$("km-basis").replaceChildren(...[
+  "계산 기준",
+  "· 표준화: 컬럼마다 평균을 빼고 표준편차로 나눠요.",
+  "· 거리: 표준화한 값의 유클리드 거리(제곱 거리)가 가장 가까운 중심의 군집에 넣어요.",
+  `· 처음 중심: 표의 앞 ${SERVER.kmeans.init_rows.toLocaleString()}행에서 k-means++로 골라요(이미 고른 중심에서 멀수록 잘 뽑혀요). 난수 씨앗이 고정이라 같은 표면 결과가 같아요.`,
+  `· 반복: 배정하고 중심을 군집 평균으로 옮기기를 되풀이하다가, 중심이 ${SERVER.kmeans.tol}보다 덜 움직이거나 ${SERVER.kmeans.iters}번을 채우면 멈춰요. 행이 없는 군집은 이전 중심을 그대로 써요.`,
+  "· 빈 값: 고른 컬럼 중 하나라도 비어 있는(NaN 포함) 행은 계산에서 빼고, 군집 번호도 빈 값이에요.",
+  `· 컬럼은 2~${SERVER.kmeans.max_cols}개, 군집 수는 2~${SERVER.kmeans.max_k}(기본 ${SERVER.kmeans.k})이에요. 값이 모두 같은 컬럼은 넣을 수 없어요.`,
+].map(t => el("div", { textContent: t })));
 $("fx-add").onclick = () => {
   const name = $("fx-name").value.trim(), expr = $("fx-expr").value.trim();
   const order = $("fx-order").value.split(";").map(x => x.trim()).filter(Boolean), group = $("fx-group").value.split(",").map(x => x.trim()).filter(Boolean);
@@ -1273,6 +1369,7 @@ function resetTable() {
   pca = { columns: [], n: 2 };
   kmeans = noKmeans();
   geoSteps = [];
+  dvOpen.clear();
   geoTables = []; geoRefCols = [];
   labelUse = noLabels(); labelInfo = null;
   picked = "";
@@ -1369,12 +1466,21 @@ const checkLines = p => [...(p?.columns ?? []).flatMap(c => [...(c.checks ?? [])
 const fmt = v => v == null ? "-" : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 });
 function showSampled() {
   const s = prof?.sampled;
-  $("prof-extra").replaceChildren(...(s?.notes ?? []).map(t => el("div", { className: "warn", textContent: t })), ...(s?.reads ?? []).map(r => el("div", { textContent: r.text })), ...checkLines(prof).map(t => el("div", { textContent: t })));
+  // 주의 줄만 늘 보이고, 점검 줄(컬럼마다 여러 줄)은 접어 둔다
+  const lines = [...(s?.reads ?? []).map(r => r.text), ...checkLines(prof)];
+  $("prof-notes").replaceChildren(...(s?.notes ?? []).map(t => el("div", { className: "warn", textContent: t })));
+  $("prof-extra").replaceChildren(...lines.map(t => el("div", { textContent: t })));
+  $("checks-box").classList.toggle("hidden", !lines.length);
+  $("checks-sum").textContent = `점검 메모 ${lines.length}개`;
   const m = s?.margins, e = s?.estimate;
-  $("sampled").textContent = s ? `${s.saved.replace("T", " ")}에 표본 ${s.rows.toLocaleString()}행(계획 ${s.n.toLocaleString()}행 · 파일럿 ${s.pilot.toLocaleString()}행 · ${SERVER.sample_methods[s.method] ?? s.method}${s.column ? ` · 기준 ${s.column}` : ""})으로 구한 통계예요.`
-    + (m ? ` 이 표본의 오차: 비율 ±${(m.ratio * 100).toFixed(1)}%p(신뢰수준 ${m.conf}%).` : "")
-    + (e ? ` ${s.column} 평균 ${fmt(e.mean)} [${fmt(e.low)}, ${fmt(e.high)}], 합계 ${fmt(e.total)} ±${fmt(e.moe_total)}(층화 추정).` : "")
+  $("sampled").textContent = s ? `표본 ${s.rows.toLocaleString()}행으로 구한 통계예요(${s.saved.replace("T", " ")}).`
     : prof?.whole != null ? `테이블 전체 ${prof.whole.toLocaleString()}행으로 구한 통계예요.` : "";
+  $("sampled-more").classList.toggle("hidden", !s);
+  $("sampled-long").replaceChildren(...(s ? [
+    `계획 ${s.n.toLocaleString()}행 · 파일럿 ${s.pilot.toLocaleString()}행 · ${SERVER.sample_methods[s.method] ?? s.method}${s.column ? ` · 기준 ${s.column}` : ""}`,
+    m && `이 표본의 오차: 비율 ±${(m.ratio * 100).toFixed(1)}%p(신뢰수준 ${m.conf}%)`,
+    e && `${s.column} 평균 ${fmt(e.mean)} [${fmt(e.low)}, ${fmt(e.high)}], 합계 ${fmt(e.total)} ±${fmt(e.moe_total)}(층화 추정)`,
+  ] : []).filter(Boolean).map(t => el("div", { textContent: t })));
   $("sampled").title = s ? `읽은 방법: ${SERVER.sample_methods[s.method] ?? s.method}` + (s.passed.length ? "\n건너뛴 방법: " + s.passed.map(([m, why]) => `${SERVER.sample_methods[m] ?? m}(${why})`).join(", ") : "")
     + (m ? `\n비율 ±${m.e_ratio * 100}%p에 필요한 행 수 ${m.ratio_need}` + Object.entries(m.means).map(([name, x]) => `\n${name} 평균 ±${(x.error * 100).toFixed(1)}% (±${m.e_mean * 100}%에 필요한 행 수 ${x.need})`).join("") : "")
     + (s.strata ?? []).map(x => `\n층 ${x.empty ? "빈 값" : `${x.low ?? "…"}~${x.high ?? "…"}`}: ${x.rows}행 중 ${x.drawn}행(계획 ${x.planned}, 가중치 ${fmt(x.weight)})`).join("") : "";
@@ -1611,6 +1717,15 @@ async function loadSpecView() {
   if (mine === token) renderSpec();
 }
 // 명세서 탭: 테이블 설명·파티션(명세서 파일)과 컬럼마다 한 줄 — 이름, 쉬운 요약(표본 통계), 명세서의 설명, 추천. 줄을 누르면 ③ 컬럼 정리.
+const SPEC_LINES = 3;  // 표본 요약 칸에 늘 보이는 줄 수(타입·빈칸·범위). 나머지는 [자세히]
+// 표본 요약 칸: 앞 몇 줄만 보이고 나머지는 접는다. 접힌 줄에 주의가 있으면 개수를 알린다. [자세히]를 눌러도 컬럼은 고르지 않는다.
+function specStats(c) {
+  const td = el("td", { innerHTML: statsHtml(c) }), rest = [...td.children].slice(SPEC_LINES);
+  if (rest.length < 2) return td;
+  const warns = rest.filter(d => d.querySelector(".warn")).length;
+  td.append(el("details", { onclick: e => e.stopPropagation() }, el("summary", { textContent: `자세히 ${rest.length}줄` + (warns ? ` · 주의 ${warns}` : "") }), ...rest));
+  return td;
+}
 function renderSpec() {
   const heads = ["컬럼", "빈 값 비율", "고유값 수", "표본 요약", "명세서 설명", "추천"], sortable = ["컬럼", "빈 값 비율", "고유값 수", "명세서 설명"], numbers = ["빈 값 비율", "고유값 수"];
   const box = $("spec-view"), v = specView ?? { columns: {} };
@@ -1634,7 +1749,7 @@ function renderSpec() {
       const rate = r["빈 값 비율"], uniq = r["고유값 수"];
       return el("tr", { className: c.name === picked ? "on" : "", onclick: () => pickColumn(c.name) }, name,
         el("td", { className: "num" }, rate == null ? none() : (rate * 100).toFixed(1) + "%"), el("td", { className: "num" }, uniq == null ? none() : uniq.toLocaleString()),
-        el("td", { innerHTML: statsHtml(c) }), el("td", {}, r["명세서 설명"] || el("span", { className: "empty", textContent: v.path ? "설명 없음" : "—" })), el("td", { className: "sugs" }, ...sugs));
+        specStats(c), el("td", {}, r["명세서 설명"] || el("span", { className: "empty", textContent: v.path ? "설명 없음" : "—" })), el("td", { className: "sugs" }, ...sugs));
     });
     const ths = heads.map(t => {
       const th = el("th", { className: numbers.includes(t) ? "num" : "", textContent: t });
@@ -1876,6 +1991,7 @@ function showPrepSummaries() {
   const worked = prof ? cols().filter(c => isWorked(c)).length : 0;
   put("sum-p-clean", worked ? `${worked}개 컬럼` : "없음");
   put("sum-p-derive", [formulas.length ? `계산 ${formulas.length}개` : "", pca.columns.length ? `PCA ${pca.columns.length}개를 ${pca.n}개로` : "", kmeans.columns.length ? `K-Means ${kmeans.columns.length}개를 ${kmeans.k}개 군집으로` : "", geoSteps.length ? `좌표 ${geoSteps.length}개` : ""].filter(Boolean).join(", ") || "없음");
+  showFeatures();
   put("sum-p-dedupe", dedupeOn ? dedupeText(dedupeOn) : "없음");
   put("sum-p-sorts", sorts.length ? sorts.join(", ") : "없음");
   put("sum-p-save", $("t-table").checked ? `새 테이블 ${$("tname").value.trim()}` : $("fmt").value === "csv" ? "CSV 파일" : "Parquet 파일");

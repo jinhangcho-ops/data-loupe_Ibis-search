@@ -9,6 +9,10 @@ function draftTick(m, now, snap, quiet = DRAFT_QUIET) {
   return true;
 }
 const draftTime = iso => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const DRAFT_SCREENS = { search: "쿼리", prep: "분석", dashboard: "대시보드" };  // 팝업에 보일 화면 이름
+const MINUTE_MS = 60000, HOUR_MIN = 60, DAY_MIN = 1440;
+// 저장한 지 얼마나 됐는지: 방금·N분 전·N시간 전·N일 전
+const draftAgo = (iso, now = Date.now()) => { const min = Math.max(0, Math.floor((now - new Date(iso)) / MINUTE_MS)); return min < 1 ? "방금" : min < HOUR_MIN ? `${min}분 전` : min < DAY_MIN ? `${Math.floor(min / HOUR_MIN)}시간 전` : `${Math.floor(min / DAY_MIN)}일 전`; };
 // screen: "search"·"prep"·"dashboard". get(): 저장할 상태 객체(없으면 null). restore(state): 초안으로 화면을 채운다(안 되면 던진다).
 // ask()를 부를 때까지는 저장하지 않는다(남은 초안을 덮어쓰지 않으려고). clear(): 단계가 끝났을 때 초안을 지운다.
 function Draft(screen, get, restore) {
@@ -39,9 +43,12 @@ function Draft(screen, get, restore) {
   }
   function popup(d) {
     return new Promise(done => {
-      const note = el("p", { style: "white-space:pre-wrap; margin:10px 0 14px" }), conn = d.draft.connection?.name;
-      note.textContent = `${draftTime(d.draft.saved)}에 하던 작업이 남아 있어요.${conn ? `\n연결: ${conn}` : ""}`
-        + (d.same ? "" : `\n\n지금과 다른 연결에서 하던 작업이에요. 그 연결로 바꾸면 이어서 할 수 있어요.`);
+      // 무엇이 남아 있는지 줄로 나눠 보인다(저장한 때·화면·연결). 그 아래에 두 단추가 하는 일을 한 줄로 알린다.
+      const conn = d.draft.connection?.name, facts = [["저장한 때", `${draftTime(d.draft.saved)} (${draftAgo(d.draft.saved)})`], ["화면", DRAFT_SCREENS[screen] ?? screen], ...(conn ? [["연결", conn]] : [])];
+      const note = el("div", { style: "margin:10px 0 14px" },
+        el("div", { style: "display:grid; grid-template-columns:auto 1fr; gap:4px 12px" }, ...facts.flatMap(([k, v]) => [el("span", { className: "hint", style: "margin:0", textContent: k }), el("b", { style: "overflow-wrap:anywhere", textContent: v })])),
+        el("p", { className: "hint", style: "margin:10px 0 0", textContent: d.same ? "이어서 하면 그때의 조건과 설정을 화면에 다시 채워요. 버리면 지워지고 되돌릴 수 없어요."
+          : "지금과 다른 연결에서 하던 작업이에요. 그 연결로 바꾸면 이어서 할 수 있어요. 버리면 지워지고 되돌릴 수 없어요." }));
       const end = () => { box.remove(); done(); };
       const shut = el("button", { className: "btn", textContent: "닫기", onclick: end });
       const row = el("div", { className: "row", style: "justify-content:flex-end" });
@@ -49,7 +56,7 @@ function Draft(screen, get, restore) {
         try { await restore(d.draft.state); has = true; m.sent = m.seen = snapNow(); end(); }
         catch (e) { note.textContent = e.message; go.replaceWith(shut); shut.focus(); }  // 컬럼이 없어졌다 같은 이유를 그대로 보인다
       } });
-      const drop = el("button", { className: "ghost", textContent: "버리기", onclick: async () => { has = true; await clear(); end(); } });
+      const drop = el("button", { className: "ghost", textContent: "버리고 새로 시작", onclick: async () => { has = true; await clear(); end(); } });
       row.append(drop, d.same ? go : shut);
       const box = el("div", { className: "modal" }, el("div", { className: "modal-box" }, el("h3", { id: "draft-title", textContent: "하던 작업을 이어서 할까요?" }), note, row));
       box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "draft-title");

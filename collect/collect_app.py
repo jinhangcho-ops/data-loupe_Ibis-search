@@ -6,6 +6,7 @@ from flask import jsonify, request
 
 from collect import load_app  # 적재 라우트가 앱에 달린다.
 from lazy import Later, preload
+from core import parse
 from core import server
 from core import settings
 from core import source
@@ -23,7 +24,7 @@ load_kafka = Later("collect.load_kafka")
 uploads = Later("collect.uploads")
 
 MAX_COLLECTION_SIZE = 100_000  # 구성 하나의 크기(JSON 글자 수)
-FILE_TYPES = {"parquet": ("Parquet (*.parquet)",), "csv": ("CSV (*.csv)",)}
+SQLITE_URL = "sqlite:///"  # SQLite 결과 파일을 쿼리·분석에서 열 때 쓰는 연결 주소의 앞부분(뒤에 파일 경로)
 
 # 수집 화면(collect.html)이 쓰는 기본값과 숫자 칸의 범위. 범위 이름은 구성의 경로(paging.max_pages)나 limit.이름.
 server.FREE.update({"/api/collect/parse", "/api/collect/secretize", "/api/collect/env", "/api/collect/try", "/api/collect/sample",
@@ -35,7 +36,8 @@ server.FREE.update({"/api/collect/parse", "/api/collect/secretize", "/api/collec
 
 @server.late_constants("collect")
 def collect_constants(found):
-    found.update(collect=collect_config.DEFAULT, kafka=load_kafka.DEFAULT, limit=collect_limits.DEFAULT)
+    found.update(collect=collect_config.DEFAULT, kafka=load_kafka.DEFAULT, limit=collect_limits.DEFAULT,
+                 collect_formats=list(collect_config.OUTPUT_FORMATS.items()))  # 결과 형식 [[확장자, 이름]]: 목록이라 순서가 그대로 간다
     found.setdefault("numbers", {}).update({
         **{".".join(where): server.number_range(*spec) for where, spec in collect_config.NUMBERS.items()},
         **{f"limit.{key}": server.number_range(*spec[:3]) for key, spec in collect_limits.NUMBERS.items()}})  # schedule_app이 예약 칸의 범위를 더한다
@@ -94,12 +96,13 @@ def estimate():
 def ask_path():
     """창의 저장 대화상자로 결과 파일 경로를 묻는다. 형식의 확장자로 끝나지 않으면 붙인다."""
     fmt = request.json.get("format")
-    if fmt not in FILE_TYPES:
-        raise ValueError("형식은 parquet, csv 중 하나예요.")
+    formats = collect_config.OUTPUT_FORMATS
+    if fmt not in formats:
+        raise ValueError(f"형식은 {', '.join(formats)} 중 하나예요.")
     if server.ask_save is None:
         raise ValueError("저장 위치를 물을 수 없어요. 프로그램 창에서만 쓸 수 있어요.")
     name = request.json.get("name") or f"collected.{fmt}"
-    chosen = server.ask_save(name if name.lower().endswith("." + fmt) else f"{name}.{fmt}", FILE_TYPES[fmt])
+    chosen = server.ask_save(name if name.lower().endswith("." + fmt) else f"{name}.{fmt}", (f"{formats[fmt]} (*.{fmt})",))
     if not chosen:
         return jsonify(path=None)
     return jsonify(path=chosen if chosen.lower().endswith("." + fmt) else f"{chosen}.{fmt}")
@@ -165,12 +168,20 @@ def web_sample():
 
 @app.post("/api/collect/open")
 def open_result():
-    """결과 파일 하나에 연결한다(차례를 기다린다). 화면은 이어서 /search나 /prep?base=테이블로 간다."""
+    """결과 파일 하나에 연결한다(차례를 기다린다). 화면은 이어서 /search나 /prep?base=테이블로 간다.
+    Parquet·CSV·Excel은 파일이 곧 테이블이고, DuckDB·SQLite 파일은 그 안의 결과 테이블(collect_store.table_name)을 연다."""
     path = Path(request.json.get("path") or "")
-    if path.suffix.lower() not in (".parquet", ".csv") or not path.is_file():
-        raise ValueError("열 결과 파일(Parquet·CSV)이 없어요.")
-    server.switch({"kind": "folder", "path": str(path.parent), "files": [str(path)]})
-    return jsonify(table=source.list_tables(get_con())[0])
+    fmt = path.suffix.lower()[1:]
+    if fmt not in collect_config.OUTPUT_FORMATS or not path.is_file():
+        raise ValueError("열 결과 파일이 없어요.")
+    if fmt not in collect_store.DB_FORMATS:
+        server.switch({"kind": "folder", "path": str(path.parent), "files": [str(path)]})
+        return jsonify(table=source.list_tables(get_con())[0])
+    # shortcut: SQLite 주소에 경로를 그대로 붙인다(?·# 가 든 경로는 열지 못한다), 그런 경로가 필요해지면 주소 인코딩을 더한다
+    server.switch({"kind": "folder", "path": str(path.parent), "file": str(path)} if fmt == "duckdb" else {"kind": "url", "url": SQLITE_URL + path.as_posix()})
+    table = collect_store.table_name(path)
+    parse.check_name(table, source.list_tables(get_con()), "테이블")
+    return jsonify(table=table)
 
 
 @app.get("/api/collections")

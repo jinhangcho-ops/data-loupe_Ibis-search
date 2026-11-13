@@ -36,8 +36,10 @@ def ready(config):
     link = table["connection"]
     if link["kind"] == "folder":
         file = link["file"].strip()
-        if not file or Path(file).suffix.lower() != ".duckdb" or not Path(file).parent.is_dir():
+        if not file or Path(file).suffix.lower() != ".duckdb":
             raise ValueError("적재할 DB 파일(.duckdb)을 고르세요.")
+        if not Path(file).parent.is_dir():  # 없는 파일은 적재할 때 새로 만들지만 폴더는 만들지 않는다(잘못 적은 경로에 폴더가 생기지 않게)
+            raise ValueError(f"DB 파일을 둘 폴더가 없어요: {Path(file).parent}. 폴더를 먼저 만들거나 경로를 확인하세요.")
         if server.reading(file):
             raise ValueError(OPENED_HERE)
     elif not link["url"].strip():
@@ -255,17 +257,21 @@ def swap(con, schema, name, staging):
 def check(config, password, file_columns):
     """적재 전 확인(/api/load/table/check). file_columns는 결과 파일의 컬럼([[이름, 타입]]), 파일이 아직 없으면 None."""
     table = config["load"]["table"]
-    con = connect(table["connection"], password)
-    try:
-        real, columns = look(con, table["schema"], table["name"])
-    finally:
-        source.close(con)
+    link = table["connection"]
+    will_create = link["kind"] == "folder" and not Path(link["file"].strip()).exists()  # 없는 DB 파일: 적재할 때 새로 만든다(확인만으로는 만들지 않는다)
+    real = columns = None
+    if not will_create:
+        con = connect(link, password)
+        try:
+            real, columns = look(con, table["schema"], table["name"])
+        finally:
+            source.close(con)
     if table["load_id"] and file_columns is not None:  # 적재 ID 컬럼도 함께 넣는다
         file_columns = [*file_columns, [uploads.LOAD_ID, "문자"]]
-    ours = real is not None and mine(table["connection"], table["schema"], real) is not None
-    found = {"exists": real is not None, "columns": file_columns, "table_columns": columns, "ours": ours, "ok": True}
+    ours = real is not None and mine(link, table["schema"], real) is not None
+    found = {"exists": real is not None, "columns": file_columns, "table_columns": columns, "ours": ours, "ok": True, "will_create": will_create}
     try:
-        found["message"] = plan(table, real, columns, file_columns)
+        found["message"] = (f"DB 파일 '{Path(link['file'].strip()).name}'이 없어 새로 만들어요. " if will_create else "") + plan(table, real, columns, file_columns)
     except ValueError as e:
         found.update(ok=False, message=str(e))
     return found

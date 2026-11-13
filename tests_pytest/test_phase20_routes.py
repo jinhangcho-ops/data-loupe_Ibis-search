@@ -19,7 +19,7 @@ USES_CONNECTION = {
     "/api/diag/dupes", "/api/diag/gaps", "/api/diag/hashed", "/api/diag/orphans", "/api/diag/quasi", "/api/diagnose", "/api/disconnect", "/api/dupes",
     "/api/export", "/api/export/tables", "/api/funcs/support", "/api/handoff", "/api/head", "/api/join_keys",
     "/api/labels", "/api/labels/apply", "/api/labels/apply_where", "/api/labels/drop", "/api/labels/rename", "/api/labels/setup", "/api/labels/vocab",
-    "/api/llm", "/api/lookup/preview", "/api/metrics", "/api/metrics/run", "/api/nl2sql/ask", "/api/nl2sql/prompt",
+    "/api/llm", "/api/lookup/preview", "/api/memory", "/api/memory/drop", "/api/metrics", "/api/metrics/run", "/api/nl2sql/ask", "/api/nl2sql/prompt",
     "/api/patterns", "/api/period_table", "/api/pivot", "/api/plan", "/api/prep/sorted", "/api/prep/table", "/api/preview",
     "/api/profile", "/api/profile/export", "/api/profile/full", "/api/prune", "/api/query", "/api/release", "/api/rowcount", "/api/run",
     "/api/scan", "/api/searches/upgrade", "/api/sentence/run", "/api/shape", "/api/spec", "/api/spec/table",

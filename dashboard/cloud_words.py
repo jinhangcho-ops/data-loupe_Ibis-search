@@ -3,6 +3,7 @@ kiwipiepy는 이 방식을 처음 쓸 때만 올린다(tokenizer 안에서 불�
 from typing import TYPE_CHECKING
 
 from core import dash_store
+from core import memory
 from core import parse
 from core import settings
 from lazy import ibis
@@ -17,7 +18,8 @@ STEM_SUFFIX = "다"  # 동사·형용사는 줄기에 붙여 보인다(먹 → �
 STEM_POS = ("verb", "adj")  # 줄기에 STEM_SUFFIX를 붙이는 품사 묶음
 DEFAULT_POS = ("noun",)  # 품사를 고르지 않았을 때
 NO_KIWI = "글 속 단어 방식에 필요한 형태소 분석기(kiwipiepy)가 설치되어 있지 않아요. 라벨 이름 방식을 쓰거나 kiwipiepy가 든 버전으로 바꾸세요."
-KIWI = {}  # 처음 쓸 때 만든 Kiwi 객체 {"kiwi": Kiwi()}. 한 번 올리면 프로그램이 끝날 때까지 둔다
+KIWI = {}  # 처음 쓸 때 만든 Kiwi 객체 {"kiwi": Kiwi()}. 설정 창 [메모리]에서 비우기 전까지 둔다
+memory.hold("kiwi", "단어 분석기(워드클라우드. 다음에 쓸 때 다시 만들어요)", lambda: "사전을 올려 둠" if KIWI else "", KIWI.clear)
 
 
 def tokenizer() -> object:

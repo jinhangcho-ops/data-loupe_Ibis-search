@@ -203,7 +203,7 @@ def test_file_list_is_capped(tmp_path):
     body = """
 (async () => {
   const flat = Array.from({ length: 5000 }, (_, i) => "f" + i + ".csv"), made = {};
-  const stubs = { kinds: { querySelectorAll: () => [] }, path: { value: "x" }, deep: { checked: false }, file: mk("select"), "flat-list": mk("div") };
+  const stubs = { kinds: { querySelectorAll: () => [] }, path: { value: "x" }, deep: { checked: false }, file: mk("select", { options: [] }), "flat-list": mk("div") };
   globalThis.$ = id => stubs[id];
   globalThis.api = async () => ({ files: [], flat });
   globalThis.Option = class { constructor(t, v) { this.t = t; } };

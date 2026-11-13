@@ -14,6 +14,7 @@ from werkzeug.exceptions import HTTPException
 from core import drivers
 from core import features
 from core import held
+from core import memory
 from core import monitor
 from core import result
 from core import scan_size
@@ -39,6 +40,7 @@ ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 �
 ask_folder = None  # 저장할 폴더를 묻는 함수(→ 고른 폴더 또는 None). ask_save처럼 desktop.py가 채운다.
 ask_open = None  # 파일 하나를 고르는 함수(kind → 고른 경로 또는 None). ask_save처럼 desktop.py가 채운다.
 PICK_KINDS = {"env": ("env 파일 (*.env)", "모든 파일 (*.*)"), "metrics": ("지표 파일 (*.yaml;*.yml;*.json)", "모든 파일 (*.*)")}  # /api/pick의 종류 → 파일 대화상자 필터
+PICK_FOLDER = "folder"  # /api/pick의 종류: 파일이 아니라 폴더를 고른다(ask_folder)
 QUERY_TIMEOUT = drivers.QUERY_TIMEOUT  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다. DB 쪽 시간 제한(drivers.settle)도 같은 값.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
 CONSTANTS = {"sizes": settings.SIZES, "floats": settings.FLOATS, "defaults": settings.DEFAULTS, "time":{"bands": settings.TIME_BANDS, "max": settings.MAX_TIME}, "file_kinds": source.KINDS, "adv_open_max": settings.ADV_OPEN_MAX,
@@ -296,6 +298,27 @@ def usage():
     return jsonify(monitor.usage())
 
 
+def memory_view():
+    """설정 창 [메모리]에 보일 것: 붙잡고 있는 항목들, 올라온 큰 라이브러리, 지금 앱이 쓰는 메모리(MB)."""
+    return {"items": memory.listing(), "modules": memory.modules(), "mb": monitor.usage()["memory_mb"]}
+
+
+@app.get("/api/memory")
+def memory_list():
+    return jsonify(memory_view())
+
+
+@app.post("/api/memory/drop")
+def memory_drop():
+    """고른 항목(ids)을 놓고 비운 뒤의 목록을 돌려준다(before: 비우기 전 MB). 차례(turn)를 기다리므로 도는 조회가 끝난 뒤에 놓는다."""
+    ids = request.json.get("ids")
+    if not isinstance(ids, list) or not ids:
+        raise ValueError("비울 것을 하나 이상 고르세요.")
+    before = monitor.usage()["memory_mb"]
+    memory.drop(ids)
+    return jsonify(before=before, **memory_view())
+
+
 @app.post("/api/cancel")
 def cancel():
     """지금 도는 데이터 작업을 그만두게 한다. 없으면 아무 일도 하지 않는다."""
@@ -470,6 +493,27 @@ def drop_connection():
         hook()
 
 
+def held_detail():
+    """받아 둔 결과가 있으면 "결과 N개 · 파일 크기"."""
+    count = sum(bool(item[0]) for item in held.store["items"].values())
+    if not count or not held.store["folder"]:
+        return ""
+    return f"결과 {count}개 · 이 PC의 임시 파일 {memory.size_text(sum(p.stat().st_size for p in Path(held.store['folder']).iterdir() if p.is_file()))}"
+
+
+def opened_detail():
+    """지금 연결을 한 줄로(파일 이름·파일 수·DB 접속). 주소는 보이지 않는다."""
+    opened = state["opened"]
+    if state["con"] is None or not opened:
+        return ""
+    files = [p for p in (opened.get("file"), *opened.get("files", [])) if p]
+    return "DB 접속" if not files else Path(files[0]).name if len(files) == 1 else f"파일 {len(files)}개"
+
+
+memory.hold("held", "DB에서 받아 둔 결과", held_detail, lambda: source.on_worker(held.clear)())
+memory.hold("connection", "지금 연결(연 파일·접속을 놓아요. 다시 쓰려면 다시 연결해요)", opened_detail, drop_connection)
+
+
 def switch(new):
     """연결을 new(연결 요청 값)로 바꾸고 스키마 목록을 돌려준다. 이전 연결을 먼저 닫고, 새 연결이 실패하면 이전 연결을 다시 열어 둔다."""
     old = state["opened"]
@@ -592,6 +636,8 @@ def features_install():
 def pick():
     """[찾아보기]: 파일 열기 대화상자로 고른 경로만 돌려준다(내용은 읽지 않는다). 취소하거나 창이 없으면 path는 null."""
     kind = (request.json or {}).get("kind")
+    if kind == PICK_FOLDER:  # 연결 칸의 [폴더 고르기]: 폴더 고르기 대화상자
+        return jsonify(path=ask_folder() if ask_folder else None)
     if kind not in PICK_KINDS:
         return jsonify(error="알 수 없는 종류예요."), 400
     return jsonify(path=ask_open(kind) if ask_open else None)

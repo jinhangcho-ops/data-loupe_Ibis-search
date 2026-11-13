@@ -200,7 +200,7 @@
           <label><input type="radio" name="ldkind" value="folder" checked style="width:auto"> 내 PC의 DB 파일</label>
           <label><input type="radio" name="ldkind" value="url" style="width:auto"> DB 주소</label>
         </div>
-        <input id="ld-file" class="code" placeholder="예: C:\work\warehouse.duckdb" style="margin-bottom:6px">
+        <input id="ld-file" class="code" placeholder="예: C:\work\warehouse.duckdb (없는 파일 이름을 적으면 새로 만들어요)" title="DuckDB 파일(.duckdb)의 경로를 적어요. 없는 파일 이름을 적으면 새로 만들어요. 폴더는 미리 있어야 해요" style="margin-bottom:6px">
         <div id="ld-url-box" class="hidden">
           <input id="ld-url" class="code" placeholder="예: postgres://host:5432/db (비밀번호는 넣지 마세요)" style="margin-bottom:6px">
           <div class="fields">
@@ -378,8 +378,9 @@
       <div class="step" data-step="paging"><div class="sp" data-hint title="데이터가 여러 쪽으로 나뉘어 올 때 다음 쪽까지 이어 받는 방법이에요. 한 번에 다 오면 '한 번만 받기'"><i>4</i><span class="t">여러 쪽 받기</span><b id="sum-c-paging"></b><span class="c"></span></div>
         <div class="edx">
       <select id="p-kind" style="margin-bottom:6px">
-      <option value="none">한 번만 받기</option><option value="page">쪽 번호 {page}</option><option value="offset">건너뛸 개수 {offset}</option><option value="cursor">다음 표시(커서) {cursor}</option><option value="next_url">응답의 다음 주소</option>
+      <option value="none">한 번만 받기</option><option value="page">쪽 번호로 넘기기 (page=1, 2, 3…)</option><option value="offset">건너뛸 개수로 넘기기 (offset=0, 100…)</option><option value="cursor">응답의 다음 표시로 넘기기 (cursor)</option><option value="next_url">응답의 다음 주소로 넘기기</option>
       </select>
+      <div class="hint" id="p-help" style="margin-bottom:6px"></div>
       <div class="fields">
       <label id="p-start-box"><div class="hint" id="p-start-name">첫 쪽 번호</div><input id="p-start" type="number"></label>
       <label id="p-step-box"><div class="hint">한 번에 늘릴 값</div><input id="p-step" type="number"></label>
@@ -430,7 +431,7 @@
       <div class="cstep"><div class="cn"></div>
       <div class="step" data-step="output"><div class="sp" data-hint title="받은 데이터를 저장할 파일 형식과 위치를 정해요"><i>7</i><span class="t">저장</span><b id="sum-c-output"></b><span class="c"></span></div>
         <div class="edx">
-      <select id="o-format" style="margin-bottom:6px"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
+      <select id="o-format" style="margin-bottom:6px"></select>
       <div class="row"><input id="o-path" placeholder="저장할 파일 경로"><button id="o-ask" class="btn">위치 고르기</button></div>
       <div class="hint" title="고른 컬럼의 값이 모두 같은 행은 하나만 남겨요">중복 기준 컬럼 (선택, 쉼표로 구분)</div>
       <input id="dd-text" placeholder="예: id" style="margin-bottom:4px">
@@ -610,8 +611,17 @@ function showPaging() {
   show("p-next-box", kind === "next_url");
   show("p-total-box", kind !== "none");
   $("p-start-name").textContent = kind === "offset" ? "처음 건너뛸 개수(offset)" : "첫 쪽 번호";
+  $("p-help").textContent = PAGING_HELP[kind];
   checkPaging();
 }
+// 쪽 넘기기 종류마다 언제 고르고 요청에 무엇을 적어야 하는지(고른 종류의 것만 칸 아래에 보인다)
+const PAGING_HELP = {
+  none: "요청 한 번으로 끝나요. 데이터가 나뉘어 오지 않을 때 골라요. 어느 것인지 모르겠으면 API 설명서에서 page·offset·cursor·next 중 어떤 말이 나오는지 보세요.",
+  page: "쪽 번호를 1, 2, 3…으로 바꿔 가며 받아요. 요청의 쪽 번호 자리에 {page}라고 적어 두세요. 예: ?page={page}",
+  offset: "앞에서 몇 개를 건너뛸지를 0, 100, 200…처럼 늘려 가며 받아요. 요청의 그 자리에 {offset}이라고 적어 두세요. 예: ?offset={offset}&limit=100",
+  cursor: "응답이 알려 주는 '다음 표시' 값을 다음 요청에 넣어 이어 받아요. 요청의 그 자리에 {cursor}라고 적고, 아래에서 응답의 어디에 그 값이 있는지 골라요. 예: ?cursor={cursor}",
+  next_url: "응답이 다음 쪽의 주소를 통째로 알려 줄 때 골라요. 그 주소를 그대로 따라가요. 아래에서 응답의 어디에 주소가 있는지 골라요(비우면 Link 헤더).",
+};
 $("p-kind").onchange = showPaging;
 // 고른 종류의 자리 표시가 요청(주소·쿼리·헤더·본문) 어디에도 없으면 알린다.
 function checkPaging() {
@@ -827,7 +837,10 @@ $("o-ask").onclick = () => busy($("o-ask"), async () => {
     say("out-msg", "");
   } catch (e) { say("out-msg", e.message); }
 });
-$("o-format").onchange = () => { $("o-path").value = $("o-path").value.replace(/\.(parquet|csv)$/i, "." + $("o-format").value); };
+// 결과 형식 목록은 서버가 준다(SERVER.collect_formats = collect_config.OUTPUT_FORMATS: [[확장자, 이름]]). 형식을 바꾸면 경로의 확장자도 바꾼다.
+$("o-format").innerHTML = SERVER.collect_formats.map(([format, name]) => `<option value="${esc(format)}">${esc(name)}</option>`).join("");
+const FORMAT_SUFFIX = new RegExp("\\.(" + SERVER.collect_formats.map(([format]) => format).join("|") + ")$", "i");
+$("o-format").onchange = () => { $("o-path").value = $("o-path").value.replace(FORMAT_SUFFIX, "." + $("o-format").value); };
 
 // 웹페이지: 수집용 창(서버가 띄우는 따로 된 창)을 열고, 그 창에서 누른 것으로 항목·컬럼·다음 버튼을 정한다.
 // 컬럼 이름이 비면 "컬럼N"으로 보낸다.

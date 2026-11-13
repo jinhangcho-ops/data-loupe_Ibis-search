@@ -415,7 +415,7 @@ def test_validators_modified():
 
 def test_ops_order():
     assert prep_ops.OPS_NAMES == ["trim", "squeeze", "nulls", "remove", "case", "replace", "regex", "type", "flag", "flags", "gfill", "fill", "outlier", "power", "scale", "round",
-                                  "bins", "cut", "rare", "others", "parts", "label", "onehot", "freq", "target", "ordinal", "extract", "has", "counts", "expand"]
+                                  "bins", "cut", "rare", "others", "parts", "label", "onehot", "freq", "target", "ordinal", "extract", "has", "counts", "expand", "unnest"]
     assert prep_ops.OUTLIER_AT == prep_ops.OPS_NAMES.index("outlier")
 
 

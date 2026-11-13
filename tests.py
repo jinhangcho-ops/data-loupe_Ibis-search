@@ -1405,7 +1405,7 @@ def collect_section(c, got):
     server.ask_save = None
     check("/api/collect/open: 결과 파일에 연결하고 테이블 이름", (got("/api/collect/open", path=str(out / "items.parquet")), c.get("/api/state").get_json()["opened"]["files"],
           got("/api/query", base="items", limit=1)["count"]), ({"table": "items"}, [str(out / "items.parquet")], 15))
-    check("열 결과가 없으면 거부", error("/api/collect/open", path=str(out / "none.parquet")), "열 결과 파일(Parquet·CSV)이 없어요.")
+    check("열 결과가 없으면 거부", error("/api/collect/open", path=str(out / "none.parquet")), "열 결과 파일이 없어요.")
     check("읽고 있는 파일에는 수집 결과를 쓰지 않음", error("/api/collect/start", config=config("/items", "items.parquet", request={"query": [["page", "{page}"]]})),
           "지금 읽고 있는 파일에는 저장할 수 없어요. 다른 이름을 고르세요.")
     got("/api/disconnect")
@@ -1737,7 +1737,7 @@ def load_section(c, got):
                "이미 있는 키를 건너뛰는 것(key)은 덧붙이기(append)에서만 써요.", "적재할 결과 파일이 없어요. 먼저 수집하세요.", "적재할 곳(DB 테이블 또는 Kafka)을 고르세요."])
         r = got("/api/load/table/check", config=lcfg("items.parquet"), password=secret)
         check("확인: 없는 테이블은 새로 만듦, 결과 파일의 컬럼", r, {"exists": False, "columns": [["id", "정수"], ["name", "문자"], ["amount", "실수"], ["day", "날짜"]],
-              "table_columns": None, "ours": False, "ok": True, "message": "새 테이블로 만들어요."})
+              "table_columns": None, "ours": False, "ok": True, "will_create": True, "message": "DB 파일 'warehouse.duckdb'이 없어 새로 만들어요. 새 테이블로 만들어요."})
         started, st = load(lcfg("items.parquet"), secrets={"password": secret})
         check("new: 묶음 10행씩 3묶음, 상태의 load 칸, 기록 파일은 다 넣으면 지움", (started, st["phase"], st["load"], (out / "items.load.json").exists()),
               ({"ok": True}, "끝", {"target": "table", "rows": 25, "total": 25, "batches": 3, "skipped": 0, "failures": 0, "where": "warehouse.duckdb · items"}, False))
@@ -2335,6 +2335,39 @@ def sqlite_section(c, got):
     check("SQLite 연결 해제", (got("/api/disconnect"), c.get("/api/tables").get_json()), ({"ok": True}, {"error": "먼저 연결하세요."}))
 
 
+AB_USERS = 40  # 분석 확인: 지어낸 사용자 수(앞 절반이 A, 뒤 절반이 B)
+AB_ROWS = 400  # 한 사람이 10행
+AB_START = dt.date(2026, 1, 1)  # 지어낸 방문의 첫 날
+AB_DAYS = 50  # 방문이 퍼진 날 수
+AB_AMOUNT = 100  # 금액의 단위(사용자 번호에 비례)
+AB_CONF = 95  # 신뢰 수준(%)
+AB_FILE = "analysis.duckdb"
+AB_API = "/api/analyze"
+
+
+def analysis_section(got):
+    """A/B 검정(사용자 칸·주의 글)과 RFM(동점 주의 글)을 /api/analyze로 확인한다."""
+    print("== 분석(A/B·RFM)")
+    folder = ROOT / "analysis"
+    folder.mkdir()
+    rows = [{"user": f"u{i % AB_USERS}", "grp": "A" if i % AB_USERS < AB_USERS // 2 else "B", "hit": int(i % AB_USERS >= AB_USERS // 2), "day": AB_START + dt.timedelta(days=i % AB_DAYS),
+             "amount": AB_AMOUNT * (1 + i % AB_USERS)} for i in range(AB_ROWS)]
+    file = folder / AB_FILE
+    con = duckdb.connect(str(file))
+    con.register("frame", pl.DataFrame(rows))
+    con.execute("create table visits as select * from frame")
+    con.close()
+    check("분석용 연결", "schemas" in got("/api/connect", kind="folder", path=str(folder), file=str(file)), True)
+    ask = lambda **how: got(AB_API, recipe={"base": "visits"}, how=how, full=True)
+    ab = dict(kind="abtest", group="grp", metric="rate", value="hit", control="A", conf=AB_CONF)
+    by_user, by_row = ask(**ab, who="user"), ask(**ab)
+    check("A/B: 사용자 칸을 주면 사람 수로 검정", ([(g["name"], g["n"], g["mean"]) for g in by_user["groups"]], by_user["notes"]), ([("A", AB_USERS // 2, 0.0), ("B", AB_USERS // 2, 1.0)], []))
+    check("A/B: 사용자 칸을 비우면 행 수로 검정하고 알림", ([g["n"] for g in by_row["groups"]], ["사용자 칸" in note for note in by_row["notes"]]), ([AB_ROWS // 2, AB_ROWS // 2], [True]))
+    rfm = ask(kind="rfm", who="user", time="day", amount="amount", asof="2026-03-01")
+    check("RFM: 사람 수, 단계 수, 몰린 빈도는 알림", (rfm["users"], rfm["levels"], sum(s["users"] for s in rfm["segments"]), ["빈도가 몰려" in note for note in rfm["notes"]]),
+          (AB_USERS, {"r": 5, "f": 1, "m": 5}, AB_USERS, [True]))
+
+
 def main():
     make_data()
     c = app.test_client()
@@ -2568,6 +2601,7 @@ def main():
     schedule_section(c, got)
     memory_section(got, duck)
     sqlite_section(c, got)
+    analysis_section(got)
     prep_section()
     numbers_section()
 

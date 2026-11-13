@@ -517,7 +517,7 @@ applyFeatures();
 // 설정 창: 기능을 고르고 [적용]하면 서버가 설치 프로그램을 받아 실행하고, 앱은 닫혔다가 설치가 끝나면 다시 열린다(개발 실행에서는 서버가 안내만 한다).
 $("feat-list").replaceChildren(...SERVER.features.all.map(f => el("label", { style: "display:block; margin:6px 0" },
   el("input", { type: "checkbox", value: f.id, checked: SERVER.features.on.includes(f.id), style: "width:auto" }), ` ${f.name}`)));
-const SET_TABS = ["feat", "update", "calc", "sample", "date", "viz", "dest"];  // 설정 창(status.html)의 분류(data-set) 차례
+const SET_TABS = ["feat", "update", "calc", "memory", "sample", "date", "viz", "dest"];  // 설정 창(status.html)의 분류(data-set) 차례
 /** [SPECIFICATION] plans/phase-16.md#openSettings
  *  설정 창을 열고 tab 분류만 보이게 한다(보낼 곳이면 Slack 봇 상태도 새로 읽는다). */
 function openSettings(tab) {
@@ -526,7 +526,28 @@ function openSettings(tab) {
   document.querySelectorAll("#feat-panel .set-nav [data-set]").forEach(t => t.setAttribute("aria-selected", String(t.dataset.set === tab)));
   document.querySelectorAll("#feat-panel .set-page").forEach(p => p.classList.toggle("hidden", p.dataset.set !== tab));
   if (tab === "dest") api("/api/bot").then(showBot).catch(() => {});
+  if (tab === "memory") api("/api/memory").then(showMemory).catch(e => say("mem-msg", e.message));
 }
+// 설정 [메모리]: 앱이 붙잡고 있는 것(서버 core/memory.py에 등록된 것)을 체크 목록으로. 올라온 라이브러리는 내릴 수 없어 이름만 알린다.
+function showMemory(d) {
+  $("mem-now").textContent = `${d.mb.toLocaleString()}MB`;
+  $("mem-list").replaceChildren(...(d.items.length ? d.items.map(i => el("label", { className: "check", style: "display:block; margin:8px 0" },
+    el("input", { type: "checkbox", value: i.id }), ` ${i.label}`, el("div", { className: "hint", style: "margin-left:22px", textContent: i.detail })))
+    : [el("div", { className: "empty", textContent: "지금 붙잡고 있는 데이터가 없어요." })]));
+  $("mem-all").disabled = $("mem-drop").disabled = !d.items.length;
+  $("mem-mods").textContent = d.modules.length ? `올라온 계산 라이브러리: ${d.modules.join(", ")}. 이것은 앱이 켜져 있는 동안 내릴 수 없어요. 앱을 껐다 켜면 내려가요.` : "";
+}
+$("mem-all").onclick = () => $("mem-list").querySelectorAll("input").forEach(i => i.checked = true);
+$("mem-drop").onclick = () => busy($("mem-drop"), async () => {
+  const ids = [...$("mem-list").querySelectorAll("input:checked")].map(i => i.value);
+  if (!ids.length) return say("mem-msg", "비울 것을 골라 주세요.");
+  try {
+    const d = await api("/api/memory/drop", { ids });
+    showMemory(d);
+    say("mem-msg", `비웠어요. 앱 메모리 ${d.before.toLocaleString()}MB → ${d.mb.toLocaleString()}MB`, "hint");
+    if (ids.includes("connection")) location.reload();  // 연결을 놓았으면 화면도 연결 전 상태로
+  } catch (e) { say("mem-msg", e.message); }
+});
 $("feat-open").onclick = () => openSettings("feat");
 document.querySelectorAll("#feat-panel .set-nav [data-set]").forEach(b => b.onclick = () => openSettings(b.dataset.set));
 $("feat-close").onclick = () => $("feat-panel").classList.add("hidden");
@@ -536,6 +557,20 @@ $("feat-apply").onclick = () => busy($("feat-apply"), async () => {
   try { say("feat-msg", (await api("/api/features/install", { features: [...$("feat-list").querySelectorAll("input:checked")].map(i => i.value) })).text, true); }
   catch (e) { say("feat-msg", e.message); }
 });
+// 릴리스 노트(CHANGELOG의 한 절) → 요소들: "### 제목"은 묶음 머리, "- 줄"은 목록("이름: 설명"이면 이름을 굵게), "없음"뿐인 묶음은 뺀다.
+// 글자로만 넣는다(노트의 HTML은 실행하지 않는다).
+function updNotes(text) {
+  const out = [];
+  let list = null;
+  for (const line of text.split(/\r?\n/).map(l => l.trim()).filter(l => l && l !== "없음")) {
+    const head = line.match(/^#{2,3} (.+)/), item = line.match(/^- (.+)/);
+    if (head) { list = el("ul"); out.push(el("section", {}, el("h4", { textContent: head[1] }), list)); continue; }
+    if (!item) { out.push(el("p", { textContent: line })); continue; }
+    const cut = item[1].indexOf(": "), li = cut > 0 ? el("li", {}, el("b", { textContent: item[1].slice(0, cut) }), item[1].slice(cut + 1)) : el("li", { textContent: item[1] });
+    list ? list.append(li) : out.push(el("ul", {}, li));
+  }
+  return out.filter(e => e.tagName !== "SECTION" || e.lastChild.children.length);
+}
 // 새 버전 알림: 앱을 열 때 한 번 묻고(서버가 실행마다 한 번만 GitHub에 묻는다), 있으면 위쪽 줄에 [업데이트]. 누르면 지금 고른 기능 그대로 새 버전을 설치한다.
 $("app-version").textContent = SERVER.features.version ? `v${SERVER.features.version}` : "개발 실행(설치 파일이 아님)";  // features.ini의 버전(설치 프로그램이 씀)
 api("/api/update").then(u => {
@@ -543,8 +578,9 @@ api("/api/update").then(u => {
   if (!u.newer) return;
   $("upd-text").textContent = `v${u.latest} 새 버전이 나왔어요`;
   $("upd").classList.remove("hidden");
-  $("upd-title").textContent = `v${u.latest}에서 바뀐 점 (지금 v${u.current})`;
-  $("upd-notes").textContent = (u.notes || "릴리스 노트를 받지 못했어요. GitHub Releases에서 볼 수 있어요.").replace(/^#{2,3} /gm, "■ ");  // 글자로만 넣는다(노트의 HTML은 실행하지 않는다)
+  $("upd-title").textContent = `v${u.latest}에서 바뀐 점`;
+  $("upd-now").textContent = `지금 v${u.current}`;
+  $("upd-notes").replaceChildren(...updNotes(u.notes || "릴리스 노트를 받지 못했어요. GitHub Releases에서 볼 수 있어요."));
   $("upd-open").onclick = () => $("upd-panel").classList.remove("hidden");
   $("upd-close").onclick = () => $("upd-panel").classList.add("hidden");
   $("upd-panel").onclick = e => { if (e.target === $("upd-panel")) $("upd-panel").classList.add("hidden"); };
@@ -631,12 +667,28 @@ function fillConnection(info) {
 let recentConnections = [];
 async function showRecentConnections() {
   try { recentConnections = (await api("/api/connections")).connections; } catch (e) { return; }
-  const label = c => (c.info.kind === "url" ? `${c.info.url}${c.info.user ? `, ${c.info.user}` : ""}` : c.info.path) + ` (${c.count}번 사용)`;
+  const label = c => recentName(c.info) + ` (${c.count}번 사용)`;
   $("recent-conn").replaceChildren(new Option("최근 연결에서 고르기", ""), ...recentConnections.map((c, i) => new Option(label(c), i)));
   $("recent-conn").classList.toggle("hidden", !recentConnections.length);
-  // 첫 화면 오른쪽의 최근 연결 목록(home.html): 누르면 연결 칸을 펴고 그 연결로 칸을 채운다
-  $("recent-list")?.replaceChildren(...recentConnections.map((c, i) => el("button", { type: "button", className: "btn", textContent: label(c), onclick: () => { openConnect(); pickRecent(i); } })));
+  // 첫 화면 오른쪽의 최근 연결 목록(home.html): 최근에 쓴 순으로, 날짜마다 머리글을 두고 줄마다 시각·이름·폴더·횟수를 보인다. 누르면 연결 칸을 펴고 그 연결로 칸을 채운다
+  const byLast = recentConnections.map((c, i) => [c, i]).sort((a, b) => String(b[0].last ?? "").localeCompare(String(a[0].last ?? "")));
+  const days = Map.groupBy(byLast, ([c]) => String(c.last ?? "").slice(0, 10));  // last는 이 PC 시각의 ISO 글자(없으면 빈 글자: 예전 기록)
+  $("recent-list")?.replaceChildren(...[...days].flatMap(([day, list]) => [el("div", { className: "recent-day", textContent: recentDay(day) }),
+    ...list.map(([c, i]) => el("button", { type: "button", className: "btn", title: label(c), onclick: () => { openConnect(); pickRecent(i); } },
+      el("b", { textContent: recentName(c.info) }), el("span", { className: "hint", textContent: [String(c.last ?? "").slice(11, 16), c.info.kind === "folder" && recentName(c.info) !== c.info.path ? c.info.path : "", `${c.count}번 사용`].filter(Boolean).join(" · ") })))]));
   $("recent-none")?.classList.toggle("hidden", !!recentConnections.length);
+}
+// 연결을 알아볼 이름: 주소는 주소와 아이디, 폴더는 고른 파일 이름(RECENT_NAMES개까지, 나머지는 개수), 고른 파일이 없으면 폴더 경로
+const RECENT_NAMES = 2;
+function recentName(info) {
+  if (info.kind === "url") return info.url + (info.user ? `, ${info.user}` : "");
+  const files = (info.file ? [info.file] : info.files ?? []).map(f => String(f).split(/[\\/]/).pop());
+  return files.length ? files.slice(0, RECENT_NAMES).join(", ") + (files.length > RECENT_NAMES ? ` 외 ${files.length - RECENT_NAMES}개` : "") : info.path;
+}
+// 날짜 머리글: 오늘·어제는 말로, 그 밖은 날짜 그대로, 시각을 모르면(예전 기록) "날짜 모름"
+function recentDay(day) {
+  const iso = back => { const d = new Date(); d.setDate(d.getDate() - back); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+  return !day ? "날짜 모름" : day === iso(0) ? "오늘" : day === iso(1) ? "어제" : day;
 }
 // 최근 연결 i번을 연결 칸에 채운다(비밀번호는 저장하지 않아 다시 넣는다). 고르는 칸과 첫 화면 목록이 같이 쓴다.
 function pickRecent(i) {
@@ -870,15 +922,29 @@ if (hasConnect) $("flat-none").onclick = () => busy($("flat-none"), async () => 
   } catch (e) { connMsg(e.message); }
 });
 // 경로(폴더나 파일 하나)에서 체크한 종류의 파일을 찾는다. 하위 폴더까지 찾을지는 체크로. 파일이 하나뿐이면 바로 고른 상태로 둔다.
+// [폴더 고르기]: 폴더 고르기 대화상자에서 고른 폴더를 칸에 넣고 바로 찾는다. 취소하면(path 없음) 그대로 둔다.
+if (hasConnect) $("pick-folder").onclick = () => busy($("pick-folder"), async () => {
+  const d = await api("/api/pick", { kind: "folder" });
+  if (d.path) { $("path").value = d.path; $("find").click(); }
+});
+// 파일 목록에 보일 이름: 경로 칸의 폴더 아래 부분만(안쪽 폴더의 파일은 "안쪽\이름"). 그 폴더 아래가 아니면 파일 이름만. 값(전체 경로)은 바꾸지 않고 title로 보인다.
+function underPath(full) {
+  const root = $("path").value.trim().replace(/[\\/]+$/, "");
+  const same = s => s.toLowerCase().replaceAll("\\", "/");  // 대소문자와 \ · / 차이는 같은 경로로 본다
+  const under = root && same(full).startsWith(same(root)) && /[\\/]/.test(full[root.length] ?? "");
+  return under ? full.slice(root.length + 1) : full.split(/[\\/]/).pop();
+}
 const LIST_MAX = 2000;  // 화면에 올리는 파일 수의 상한(수만 개를 한 번에 그리면 화면이 멎는다)
 async function listFiles() {
   const kinds = [...$("kinds").querySelectorAll("input:checked")].map(b => b.value);
   const d = await api("/api/files", { path: $("path").value.trim(), kinds, deep: $("deep").checked });
   const files = d.files.slice(0, LIST_MAX), flat = d.flat.slice(0, LIST_MAX);
   fill($("file"), files);
+  [...$("file").options].forEach(o => { o.title = o.value; o.text = underPath(o.value); });
   if (d.flat.length) $("file").append(new Option(`표 형식 파일에서 여러 개 고르기 (${d.flat.length}개)`, FLAT));
   offList.clear();
   checks($("flat-list"), flat);  // 처음에는 아무것도 고르지 않은 상태. 쓸 파일만 체크한다.
+  flatBoxes().forEach(b => { b.parentElement.title = b.value; b.nextSibling.textContent = " " + underPath(b.value); });
   if (!d.files.length && d.flat.length === 1) { $("file").value = FLAT; flatBoxes()[0].checked = true; }
   $("file").classList.remove("hidden");
   showFlat();
@@ -1024,7 +1090,12 @@ $("easy").onclick = () => {
   const on = !document.documentElement.classList.contains("easy");
   showEasy(on);
   saveSetting({ easy: on ? "on" : "off" });
+  // 무엇이 바뀌었는지 알린다: 접을 칸이 없는 화면(첫 화면·연동)이나 이미 펼쳐 둔 묶음뿐이면 눌러도 달라 보이지 않는다
+  const folded = document.querySelectorAll("[data-adv]:not(.adv-shown) .adv").length, lines = document.querySelectorAll(".easy-only").length;
+  flash(!on ? "쉬운 보기를 껐어요. 모든 설정을 펼쳐 보여요." : folded || lines ? `쉬운 보기를 켰어요. 이 화면에서 설정 ${folded}개를 [더 많은 설정] 뒤로 접고 설명 ${lines}줄을 보여요.`
+    : "쉬운 보기를 켰어요. 이 화면에는 접을 설정이 없어요.", EASY_NOTE_MS);
 };
+const EASY_NOTE_MS = 4000;  // 쉬운 보기 알림을 보일 시간
 showEasy(document.documentElement.classList.contains("easy"));
 // 묶음(box)을 펼친다. 값이 들어 있는 접힌 칸을 화면이 채웠을 때 부른다.
 function showAdv(box) {

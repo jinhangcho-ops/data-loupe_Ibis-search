@@ -743,7 +743,10 @@ def suggest(name: str, kind: str, found: dict, opts: dict) -> list[dict]:
             out.append({"text": "더한 빈 값 표시를 빈 값으로", "why": why, "ops": {"nulls": list(tx["markers"])}})
 
     if (js := found.get("json")) and js["share"] >= opts["json_share"]:
-        out.append({"text": "JSON 펼치기", "why": f"값의 {js['share']:.0%}가 JSON이에요.", "ops": {"expand": True}})
+        if js["arrays"] > js["objects"]:  # 배열이 대부분이면 행으로, 아니면(객체) 컬럼으로
+            out.append({"text": "목록을 행으로 펼치기", "why": f"값의 {js['share']:.0%}가 JSON이고 대부분 목록(배열)이에요.", "ops": {"unnest": True}})
+        else:
+            out.append({"text": "JSON 펼치기", "why": f"값의 {js['share']:.0%}가 JSON이에요.", "ops": {"expand": True}})
 
     if kind in ("int", "float"):
         sg = found["signs"]
