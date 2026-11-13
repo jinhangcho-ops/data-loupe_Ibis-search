@@ -34,6 +34,7 @@ export const AXIS = { tick: TICK, axisLine: false, tickLine: false } as const;
 export const TIP = { contentStyle: { background: "var(--card)", border: "1px solid var(--line)", borderRadius: 8, color: "var(--text)", fontSize: 12 }, labelStyle: { fontWeight: 600 },
   isAnimationActive: false, formatter: (v: unknown) => shownum(v) } as const;
 const xTitle = (text?: string) => text ? { value: text, position: "insideBottom" as const, offset: -4, fill: "var(--muted)", fontSize: 12 } : undefined;
+const NOT_ZERO_W = 64;  // 세로로 쓴 "0부터 아님" 안내가 눈금 글자와 겹치지 않을 축 너비
 const yTitle = (text?: string) => text ? { value: text, angle: -90, position: "insideLeft" as const, fill: "var(--muted)", fontSize: 12, style: { textAnchor: "middle" as const } } : undefined;
 export const MARGIN = { top: 4, right: 8, bottom: 4, left: 0 };
 const TITLED = { top: 4, right: 8, bottom: 16, left: 8 };  // 축 제목이 있는 그림
@@ -166,7 +167,7 @@ export function SeriesChart({ card, s, colors, percent, win }: { card: SCard; s:
         {hbar ? <XAxis type="number" {...AXIS} scale={scale === "log" ? "log" : undefined} tickFormatter={valueTick} domain={ydom} allowDataOverflow={ranged(ranges.y)} />
           : <XAxis dataKey="label" {...AXIS} />}
         {hbar ? <YAxis type="category" dataKey="label" {...AXIS} width={80} />
-          : <YAxis yAxisId="y" {...AXIS} scale={scale === "log" ? "log" : undefined} tickFormatter={valueTick} domain={ydom} allowDataOverflow={ranged(ranges.y)} width={48} label={au?.notZero ? { ...yTitle(NOT_ZERO_TEXT)!, fontSize: 11 } : undefined} />}
+          : <YAxis yAxisId="y" {...AXIS} scale={scale === "log" ? "log" : undefined} tickFormatter={valueTick} domain={ydom} allowDataOverflow={ranged(ranges.y)} width={au?.notZero ? NOT_ZERO_W : 48} label={au?.notZero ? { ...yTitle(NOT_ZERO_TEXT)!, fontSize: 11 } : undefined} />}
         {right ? <YAxis yAxisId="y1" orientation="right" {...AXIS} tickFormatter={au?.y1Pct ? pct100 : vt} domain={au?.y1Pct ?? domainOf(ranges.y1)} allowDataOverflow={!!au?.y1Pct || ranged(ranges.y1)} width={48} /> : null}
         {bars}
         {lines}

@@ -12,7 +12,7 @@ import { useUndo, type Undo } from "@/components/hooks/useUndo";
 import { cardRequest, compare, computeCard, computeCards, getDashboard, getLiveMin, parseDay, parseEvery, parsePeriod, saveSettings, setLast, setLiveMin } from "@/lib/api";
 import { outsideWindow } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
-import { computedUpdate, useActionLog, useDash } from "@/lib/store";
+import { computedUpdate, sameContent, useActionLog, useDash } from "@/lib/store";
 import { compareItem, newOrder, sameSource } from "@/lib/series";
 import { seriesKit } from "@/components/cards/chart/series";
 import type { Card, CompareMode, ComputeResult, Ctx, DashSettings, Dashboard, PrevSpan, Source } from "@/lib/types";
@@ -286,7 +286,7 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
       const ctx = now.current.ctx;
       try {
         const { data } = await computeCard(cardRequest(card), ctx);
-        if (now.current.dash?.cards.find(c => c.id === id)?.source !== card.source) continue;  // 구하는 사이 정의가 바뀌었다: 옛 값을 넣지 않는다
+        if (!sameContent(now.current.dash?.cards.find(c => c.id === id)?.source, card.source)) continue;  // 구하는 사이 정의가 바뀌었다: 옛 값을 넣지 않는다
         const u = computedUpdate(card.id, data, ctx);  // 기간이 걸려 있으면 화면 값에만, 아니면 저장하고 화면 값은 비운다
         if (Object.keys(u.patch).length) dispatch({ type: "card", id: card.id, patch: u.patch, auto: true });  // 되돌리기에 쌓지 않는다(사용자 편집이 아니다)
         dispatch({ type: "values", results: [u.result] });
