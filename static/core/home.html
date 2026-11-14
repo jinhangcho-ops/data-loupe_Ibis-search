@@ -22,6 +22,10 @@
   .recent-list { display:flex; flex-direction:column; gap:var(--sp-1); max-height:60vh; overflow-y:auto; }  /* 길어지면 카드 안에서 굴린다 */
   .recent-day { color:var(--muted); font-size:var(--fs-sm); font-weight:600; margin-top:var(--sp-2); }
   .recent-list .btn { flex:none; flex-direction:column; align-items:flex-start; gap:0; justify-content:flex-start; height:auto; min-height:var(--h-md); padding:var(--sp-1) var(--sp-3); white-space:normal; text-align:left; overflow-wrap:anywhere; font-weight:500; }
+  .recent-more { display:flex; flex-direction:column; gap:var(--sp-1); margin-top:var(--sp-2); }
+  .recent-more > summary { cursor:pointer; color:var(--accent); font-size:var(--fs-sm); padding:var(--sp-1) 0; }
+  .recent-more[open] > summary { margin-bottom:var(--sp-1); }
+  .recent-more .btn { width:100%; margin-bottom:var(--sp-1); }
   @media (max-width:900px) { .home { grid-template-columns:1fr; } }
 </style>
 </head>

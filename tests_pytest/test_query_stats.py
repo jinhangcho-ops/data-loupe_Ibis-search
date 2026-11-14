@@ -376,6 +376,27 @@ def test_quantiles_pc_too_big(monkeypatch, folder):
     with pytest.raises(ValueError, match="3행"):
         prep_ops.quantiles(ibis.memtable({"n": [1.0, 2.0, 3.0, 4.0]}), "n", [0.5])
     assert prep_ops.quantiles(ibis.memtable({"n": [1.0, 2.0, 3.0]}), "n", [0.5]) == [2.0]  # 상한 안이면 전체로 정확히
+    settings.save({"pc_stat_unlimited": "on"})  # 제한 없음: 행 수·크기 상한을 넘어도 모두 받아 구한다
+    monkeypatch.setattr("core.held.MAX_BYTES", 1)
+    assert prep_ops.quantiles(ibis.memtable({"n": [1.0, 2.0, 3.0, 4.0]}), "n", [0.5]) == [2.5]
+    settings.save({"pc_stat_unlimited": "off"})
+    with pytest.raises(ValueError, match="3행"):
+        prep_ops.quantiles(ibis.memtable({"n": [1.0, 2.0, 3.0, 4.0]}), "n", [0.5])
+
+
+def test_safe_threads_default(folder):
+    """권장 코어 수는 코어의 20%(적어도 1개)를 남긴 수이고, 설정이 없으면 그 수로 계산한다."""
+    import os
+    from core import settings
+    assert [settings.safe_threads(n) for n in (12, 8, 4, 2, 1)] == [10, 7, 3, 1, 1]
+    assert settings.DEFAULTS["threads"] == settings.SAFE_THREADS == settings.safe_threads(os.cpu_count() or 1)
+    assert settings.get("threads") == settings.SAFE_THREADS and server.CONSTANTS["defaults"]["threads"] == settings.SAFE_THREADS
+    settings.save({"threads": 1})
+    assert settings.get("threads") == 1
+    status = (ROOT / "static/core/status.html").read_text(encoding="utf-8")
+    common = (ROOT / "static/core/common.js").read_text(encoding="utf-8")
+    assert 'id="threads-n"' in status and 'id="threads-warn"' in status
+    assert "SERVER.defaults.threads" in common and "CPU 과부하가 걸릴 수 있어요" in common and '<option value="custom">직접 입력</option>' in common
 
 
 def test_pc_stat_rows_setting(monkeypatch, folder):
@@ -399,7 +420,8 @@ def test_pc_stat_rows_setting(monkeypatch, folder):
 def test_pc_stat_rows_screen_field():
     status = (ROOT / "static/core/status.html").read_text(encoding="utf-8")
     common = (ROOT / "static/core/common.js").read_text(encoding="utf-8")
-    assert 'id="pc-stat-rows"' in status
+    assert 'id="pc-stat-rows"' in status and 'id="pc-stat-unlimited"' in status and 'id="cloud-unlimited"' in status
+    assert '["pc-stat-unlimited", "pc-stat-rows", "pc_stat_unlimited"], ["cloud-unlimited", "cloud-rows", "cloud_unlimited"]' in common and "$(field).disabled = $(box).checked" in common
     assert "SERVER.sizes.pc_stat_rows" in common and "SERVER.defaults.pc_stat_rows" in common and "saveSetting({ pc_stat_rows" in common and 'saved("pc_stat_rows")' in common
     assert server.CONSTANTS["defaults"]["pc_stat_rows"] == 1_000_000  # 화면은 기본값을 서버에서 받는다(숫자를 화면에 따로 적지 않는다)
 

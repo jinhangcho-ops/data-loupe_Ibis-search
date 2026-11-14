@@ -672,14 +672,18 @@ async function showRecentConnections() {
   $("recent-conn").classList.toggle("hidden", !recentConnections.length);
   // 첫 화면 오른쪽의 최근 연결 목록(home.html): 최근에 쓴 순으로, 날짜마다 머리글을 두고 줄마다 시각·이름·폴더·횟수를 보인다. 누르면 연결 칸을 펴고 그 연결로 칸을 채운다
   const byLast = recentConnections.map((c, i) => [c, i]).sort((a, b) => String(b[0].last ?? "").localeCompare(String(a[0].last ?? "")));
-  const days = Map.groupBy(byLast, ([c]) => String(c.last ?? "").slice(0, 10));  // last는 이 PC 시각의 ISO 글자(없으면 빈 글자: 예전 기록)
-  $("recent-list")?.replaceChildren(...[...days].flatMap(([day, list]) => [el("div", { className: "recent-day", textContent: recentDay(day) }),
+  // 날짜 머리글과 줄들. last는 이 PC 시각의 ISO 글자(없으면 빈 글자: 예전 기록)
+  const rows = items => [...Map.groupBy(items, ([c]) => String(c.last ?? "").slice(0, 10))].flatMap(([day, list]) => [el("div", { className: "recent-day", textContent: recentDay(day) }),
     ...list.map(([c, i]) => el("button", { type: "button", className: "btn", title: label(c), onclick: () => { openConnect(); pickRecent(i); } },
-      el("b", { textContent: recentName(c.info) }), el("span", { className: "hint", textContent: [String(c.last ?? "").slice(11, 16), c.info.kind === "folder" && recentName(c.info) !== c.info.path ? c.info.path : "", `${c.count}번 사용`].filter(Boolean).join(" · ") })))]));
+      el("b", { textContent: recentName(c.info) }), el("span", { className: "hint", textContent: [String(c.last ?? "").slice(11, 16), c.info.kind === "folder" && recentName(c.info) !== c.info.path ? c.info.path : "", `${c.count}번 사용`].filter(Boolean).join(" · ") })))]);
+  // 가장 최근 RECENT_SHOWN개만 바로 보이고, 나머지는 접어 둔다
+  const rest = byLast.slice(RECENT_SHOWN);
+  $("recent-list")?.replaceChildren(...rows(byLast.slice(0, RECENT_SHOWN)),
+    ...(rest.length ? [el("details", { className: "recent-more" }, el("summary", { textContent: `이전 연결 ${rest.length}개 더 보기` }), ...rows(rest))] : []));
   $("recent-none")?.classList.toggle("hidden", !!recentConnections.length);
 }
 // 연결을 알아볼 이름: 주소는 주소와 아이디, 폴더는 고른 파일 이름(RECENT_NAMES개까지, 나머지는 개수), 고른 파일이 없으면 폴더 경로
-const RECENT_NAMES = 2;
+const RECENT_NAMES = 2, RECENT_SHOWN = 3;  // RECENT_SHOWN: 첫 화면 목록에 바로 보이는 최근 연결 수
 function recentName(info) {
   if (info.kind === "url") return info.url + (info.user ? `, ${info.user}` : "");
   const files = (info.file ? [info.file] : info.files ?? []).map(f => String(f).split(/[\\/]/).pop());
@@ -787,11 +791,28 @@ $("memory-gb").onchange = () => {
   if (mb >= low && mb <= high) saveSetting({ memory: mb });
   else setMsg(`메모리 한도는 ${low / 1000}GB에서 ${high / 1000}GB 사이로 넣어 주세요.`);
 };
-// 계산 코어 수(0 = 전부): 저장만 하고 다음 [연결]부터 서버가 쓴다. 고를 수 있는 값은 1, 2, 4, 8, …과 이 PC의 코어 수.
-const cores = SERVER.sizes.threads[1], coreSteps = [...new Set([1, 2, 4, 8, 16, 32, 64].filter(n => n < cores).concat(cores))];
-$("threads").innerHTML = `<option value="0">모두 (${cores}개)</option>` + coreSteps.filter(n => n < cores).map(n => `<option value="${n}">${n}개</option>`).join("");
-$("threads").value = [...$("threads").options].some(o => o.value === String(saved("threads") || 0)) ? String(saved("threads") || 0) : "0";
-$("threads").onchange = () => saveSetting({ threads: +$("threads").value });
+// 계산 코어 수(0 = 권장: 시스템 몫을 남긴 수, 서버 SERVER.defaults.threads): 저장만 하고 다음 [연결]부터 서버가 쓴다. 고를 수 있는 값은 권장, 그보다 작은 1, 2, 4, 8, …, 직접 입력(이 PC의 코어 수까지).
+const cores = SERVER.sizes.threads[1], safeCores = SERVER.defaults.threads, coreNow = String(saved("threads") || 0);
+$("threads").innerHTML = `<option value="0">권장 (${safeCores}개)</option>` + [1, 2, 4, 8, 16, 32, 64].filter(n => n < safeCores).map(n => `<option value="${n}">${n}개</option>`).join("") + `<option value="custom">직접 입력</option>`;
+$("threads").value = [...$("threads").options].some(o => o.value === coreNow) ? coreNow : "custom";
+Object.assign($("threads-n"), { min: 1, max: cores });
+if ($("threads").value === "custom") $("threads-n").value = coreNow;
+// 권장보다 많이 쓰면 과부하 안내를 보인다
+function showCores(n) {
+  $("threads-n").classList.toggle("hidden", $("threads").value !== "custom");
+  $("threads-warn").textContent = n > safeCores ? `코어 ${cores}개 중 ${n}개를 쓰면 CPU 과부하가 걸릴 수 있어요. 계산하는 동안 PC가 느려질 수 있으니 권장(${safeCores}개) 이하로 두는 것이 좋아요.` : "";
+  $("threads-warn").classList.toggle("hidden", n <= safeCores);
+}
+showCores(+coreNow);
+$("threads").onchange = () => {
+  if ($("threads").value !== "custom") saveSetting({ threads: +$("threads").value });
+  showCores($("threads").value === "custom" ? +$("threads-n").value : +$("threads").value);
+};
+$("threads-n").onchange = () => {
+  const n = Number($("threads-n").value);
+  if (Number.isInteger(n) && n >= 1 && n <= cores) { saveSetting({ threads: n }); setMsg(""); showCores(n); }
+  else setMsg(`코어 수는 1에서 ${cores} 사이의 정수로 넣어 주세요.`);
+};
 // 자세히: 처리 용량을 알 수 없을 때(scan_unknown: run·block)와 표본이 너무 적게 오는 기준(sample_too_few, 화면은 %, 비우면 기본 20%).
 $("scan-unknown").value = saved("scan_unknown") || "run";
 $("scan-unknown").onchange = () => saveSetting({ scan_unknown: $("scan-unknown").value });
@@ -823,6 +844,12 @@ $("cloud-rows").onchange = () => {
   else if (Number.isInteger(n) && n >= CLR_LOW && n <= CLR_HIGH) { saveSetting({ cloud_rows: n }); setMsg(""); }
   else setMsg(`워드클라우드 단어 분석 최대 행 수는 ${CLR_LOW.toLocaleString()}에서 ${CLR_HIGH.toLocaleString()} 사이의 정수로 넣어 주세요. 비우면 ${SERVER.defaults.cloud_rows.toLocaleString()}행이에요.`);
 };
+// 두 최대 행 수의 '제한 없음'(pc_stat_unlimited·cloud_unlimited, 기본 off): 켜면 숫자 칸을 잠근다(값은 남겨 두어 끄면 되돌아온다)
+for (const [box, field, name] of [["pc-stat-unlimited", "pc-stat-rows", "pc_stat_unlimited"], ["cloud-unlimited", "cloud-rows", "cloud_unlimited"]]) {
+  $(box).checked = (saved(name) || SERVER.defaults[name]) === "on";
+  $(field).disabled = $(box).checked;
+  $(box).onchange = () => { $(field).disabled = $(box).checked; saveSetting({ [name]: $(box).checked ? "on" : "off" }); };
+}
 // 표본 설정(sampling.config): [칸 id, 설정 이름, 화면 배율(서버 값 × 배율 = 화면 값)]. 범위·기본값은 SERVER.sizes·SERVER.floats·SERVER.defaults
 const SAMPLE_FIELDS = [["sample-conf", "sample_conf", 1], ["sample-e-ratio", "sample_e_ratio", 100], ["sample-e-mean", "sample_e_mean", 100], ["pilot-rows", "pilot_rows", 1],
   ["strata-h", "strata_h", 1], ["strata-min", "strata_min", 1], ["hash-buckets", "hash_buckets", 1], ["key-over", "key_over", 1]];

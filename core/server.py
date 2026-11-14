@@ -467,8 +467,7 @@ def open_con(info, read_only=True):
             return source.open_flat_files(chosen)
         if not info.get("file"):
             raise ValueError("파일을 고르세요.")
-        found = settings.load()
-        return source.open_duckdb(info["file"], read_only, found.get("memory"), found.get("threads"))
+        return source.open_duckdb(info["file"], read_only, settings.get("memory"), settings.get("threads"))
     return source.open_url(info["url"], info.get("user", ""), info.get("password", ""))
 
 

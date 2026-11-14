@@ -76,10 +76,13 @@ def test_texts_of_limits(table, monkeypatch):
     monkeypatch.setattr(cloud_words, "CHARS_PER_ROW", 1)  # 길이 상한 = 3 × 1자
     with pytest.raises(ValueError, match="길이"):
         cloud_words.texts_of(table, "txt")
+    monkeypatch.setitem(settings.DEFAULTS, cloud_words.ROWS_SETTING, 2)
+    monkeypatch.setitem(settings.DEFAULTS, cloud_words.UNLIMITED_SETTING, "on")  # 제한 없음: 행 수·길이 상한을 넘어도 모두 받는다
+    assert sorted(cloud_words.texts_of(table, "txt")) == ["가격 좋음", "배송 늦음", "배송 빠름"]
 
 
 def test_cloud_rows_setting(folder):
-    assert settings.SIZES["cloud_rows"] == (1_000, 2_000_000) and settings.DEFAULTS["cloud_rows"] == 100_000
+    assert settings.SIZES["cloud_rows"] == (1_000, 10_000_000) and settings.DEFAULTS["cloud_rows"] == 100_000 and settings.DEFAULTS["cloud_unlimited"] == "off"
     settings.save({"cloud_rows": 5_000})
     assert settings.get("cloud_rows") == 5_000
     with pytest.raises(ValueError):
