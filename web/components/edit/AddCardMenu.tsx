@@ -22,6 +22,7 @@ const NUM = ["정수", "실수"], DATE = ["날짜", "날짜시간"];
 const BUCKET_TIMED = "hour", FUNNEL_TIMED = "minute";  // 날짜시간 컬럼일 때 편차 표 시간대 묶음·퍼널/생키 기간 제한의 기본 단위(날짜만 있는 컬럼은 일)
 const REVISIT_CUSTOM = "custom", REVISIT_CUSTOM_START = "0";  // 재방문 목록의 "직접 입력" 값과, 고르면 입력 칸에 먼저 들어가는 값(0은 stagesOf가 거부해 직접 적게 한다)
 /** P14 새 종류의 body.x 칸 이름(boxplot은 비우면 전체 한 상자) */
+const KIND_GROUPS = kindGroups();  // 위 구역은 묶음만, 아래 구역은 고른 묶음의 종류만 보인다
 const X_LABEL: Partial<Record<CardKind, string>> = { boxplot: "그룹 컬럼", heatmap: "행 컬럼", treemap: "윗단계 컬럼", sunburst: "윗단계 컬럼", wordcloud: "글자 컬럼", bump: "대상 컬럼" };
 
 /** 닫혀 있으면 아무것도 그리지 않는다. 열 때마다 새로 마운트되어 처음 모양으로 시작한다 */
@@ -43,6 +44,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
     const kind: CardKind = fill ? (fill.kind === "analysis" || fill.kind === "metric" ? "kpi" : fill.kind) : "kpi";
     return { ...emptyForm(kind, fill?.view?.type ?? ""), ...(fill ? formFromCard(fill) : {}), table: fill?.source?.table ?? "", rows: fit([], kind) };  // 다시 정할 때는 카드의 모양 설정을 지킨다
   });
+  const [group, setGroup] = useState(() => KIND_GROUPS.find(g => g[1].includes(f.kind))![0]);  // 펼쳐 볼 묶음(처음에는 고른 종류가 든 묶음)
   const [names, setNames] = useState<string[]>([]);       // 연결의 테이블 목록
   const [colsFor, setColsFor] = useState<{ table: string; cols: [string, string][] }>({ table: "", cols: [] });  // 고른 테이블의 [컬럼, 한글 타입]
   const [gColsFor, setGColsFor] = useState<{ table: string; cols: [string, string][] }>({ table: "", cols: [] });  // 영역 테이블의 컬럼(이름·도형 후보)
@@ -157,15 +159,18 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       <div className="d-add-body">
       <Sel label="테이블" title="카드가 읽을 테이블. 먼저 데이터에 연결해야 해요" value={f.table} onChange={v => set("table", v)} options={names} blank="(테이블을 고르세요)" need />
       {hidden.length > 0 && <div className="hint">ID·해시로 보이는 컬럼 {hidden.join(", ")}을(를) 목록에서 뺐어요 <button type="button" className="linkish" onClick={() => setRs(p => ({ table: f.table, list: [...(p.table === f.table ? p.list : []), ...hidden] }))}>다시 넣기</button></div>}
-      <div className="hint cm-kinds" role="group" aria-label="카드 종류">카드 종류
-        {kindGroups().map(([group, kinds]) => (
-          <div key={group} className="cm-kind-group"><span className="cm-kind-name">{group}</span>
-            {kinds.map(k => (
-              <button key={k} type="button" className={"btype" + (f.kind === k ? " on" : "")} aria-pressed={f.kind === k} title={CARD_KINDS[k]![3]}
-                onClick={() => { setErr(""); setF(p => ({ ...p, kind: k, rows: fit(p.rows, k) })); }}>{CARD_KINDS[k]![0]}</button>
-            ))}
-          </div>
-        ))}
+      <div className="hint cm-kinds">카드 종류
+        <div className="cm-groups" role="group" aria-label="카드 종류 묶음">
+          {KIND_GROUPS.map(([g, kinds]) => (
+            <button key={g} type="button" className={"btype" + (g === group ? " on" : "") + (kinds.includes(f.kind) ? " cur" : "")} aria-pressed={g === group} onClick={() => setGroup(g)}>{g}</button>
+          ))}
+        </div>
+        <div className="cm-kind-list" role="group" aria-label={`${group} 묶음의 카드 종류`}>
+          {KIND_GROUPS.find(([g]) => g === group)![1].map(k => (
+            <button key={k} type="button" className={"cm-kind" + (f.kind === k ? " on" : "")} aria-pressed={f.kind === k}
+              onClick={() => { setErr(""); setF(p => ({ ...p, kind: k, rows: fit(p.rows, k) })); }}><b>{CARD_KINDS[k]![0]}</b><span>{CARD_KINDS[k]![3]}</span></button>
+          ))}
+        </div>
       </div>
       {high > 0 && (
         <div className="cm-rows" role="group" aria-label="값">

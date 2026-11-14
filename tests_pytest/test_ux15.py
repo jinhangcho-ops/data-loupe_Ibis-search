@@ -134,7 +134,7 @@ def test_query_import_menu_item_no_wrap():
 
 # ---------- 15E 설정 ----------
 
-SETTING_IDS = ("memory", "memory-gb", "threads", "scan-unknown", "too-few", "pc-stat-rows", "cloud-rows", "hash-exclude",
+SETTING_IDS = ("memory", "memory-gb", "threads", "threads-n", "scan-unknown", "too-few", "pc-stat-rows", "pc-stat-unlimited", "cloud-rows", "cloud-unlimited", "hash-exclude",
                "sample-conf", "sample-e-ratio", "sample-e-mean", "pilot-rows", "strata-h", "strata-min", "hash-buckets", "key-over", "pilot-first",
                "timezone", "week-start", "fiscal-start", "weekend", "work-start", "work-end", "bucket-minutes", "ewma-span",
                "viz-prefs", "viz-words", "viz-auto", "err-viz")

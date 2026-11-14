@@ -13,11 +13,13 @@ os.environ.setdefault("MIMALLOC_PURGE_DELAY", "0")
 # 설정의 계산 코어 수(threads)를 Polars에도 건다(DuckDB는 연결을 열 때 건다). Polars는 처음 계산할 때 이 값을 읽는다.
 from core import settings  # noqa: E402  프로젝트 모듈을 import하지 않는 표준 라이브러리만 쓴다
 try:
-    threads = settings.load().get("threads")
+    threads = settings.get("threads")  # 설정이 없으면 권장 코어 수(settings.SAFE_THREADS)
 except OSError:  # 설정 파일을 잠깐 못 읽어도 프로그램은 뜬다(코어 수만 기본값)
     threads = None
+THREADS_ENV = "POLARS_MAX_THREADS"
+OWN_THREADS = THREADS_ENV not in os.environ  # 이 값을 이 프로그램이 정했는지(다시 시작할 때 desktop.py가 새 설정을 읽게 지운다. 사용자가 밖에서 정한 값은 둔다)
 if threads:
-    os.environ.setdefault("POLARS_MAX_THREADS", str(threads))
+    os.environ.setdefault(THREADS_ENV, str(threads))
 
 for name in ("ibis", "polars", "duckdb", "pyarrow"):
     spec = importlib.util.find_spec(name)

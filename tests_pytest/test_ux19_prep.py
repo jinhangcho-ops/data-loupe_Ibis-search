@@ -68,12 +68,12 @@ def test_19e_peak_finder_folded():
 
 def test_19f1_question_names_and_two_lines():
     page = html()
-    labels = re.findall(r'<label data-hint title="[^"]+"><input type="radio" name="akind" value="(\w+)"(?: checked)?> <span>([^<]+)<small>([^<]+)</small></span></label>', page)
+    labels = re.findall(r'<label><input type="radio" name="akind" value="(\w+)"(?: checked)?> <span>([^<]+)<small>([^<]+)</small></span></label>', page)
     assert [k for k, _, _ in labels] == KINDS
-    assert dict((k, n) for k, n, _ in labels)["pareto"] == "파레토(ABC 등급)" and dict((k, d) for k, _, d in labels)["basket"] == "한 묶음 안에 함께 자주 나오는 항목 쌍"
+    assert dict((k, n) for k, n, _ in labels)["pareto"] == "큰 몫을 차지하는 항목(파레토)" and dict((k, d) for k, _, d in labels)["basket"] == "한 번에 같이 나오는 일이 많은 항목 짝을 찾아요"
     assert 'class="akinds"' in page and "seg4" not in page
     for k in KINDS:
-        assert re.search(r'<p class="lead"><b>이걸 알려 줘요:</b> [^<]+<br><b>필요한 컬럼:</b> [^<]+</p>', form(k)), k
+        assert re.search(r'<p class="lead"><b>고를 것:</b> [^<]+<br><b>이럴 때 써요:</b> [^<]+\?(<br>[^<]+)?</p>', form(k)), k
 
 
 def test_19f_optional_fields_folded():

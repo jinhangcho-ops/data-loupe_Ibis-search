@@ -26,7 +26,7 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel, GeoJSON)에 �
 | 기능 | 하는 일 | 설명 |
 |---|---|---|
 | 쿼리 | 테이블을 조건으로 찾아보기(단계별로 채우기·문장 틀 57개의 빈칸 채우기), 작업 탭으로 여러 검색 나란히, 다른 테이블에서 찾기, 집계·피벗·기간별 표·차트, 행에 태그 붙이기, SQL 직접 쓰기·질문으로 SQL 만들기, 지표(내 지표·지표 사전 103개·지표 파일), 파일로 내보내기 | [docs/query.md](docs/query.md) |
-| 분석 | 전처리(행 거르기·컬럼 정리·목록을 행으로 펼치기·계산 컬럼·PCA·K-Means·좌표·중복 제거)해 새 파일·테이블로, 컬럼 요약과 품질 진단, 분석 종류 카드 13개(분포·상관관계·그룹 비교·기간별 추이·퍼널·리텐션·RFM·파레토·관계 검정·A/B 검정·연관 항목·변화 요인·시계열 분해) | [docs/analysis.md](docs/analysis.md) |
+| 분석 | 전처리(행 거르기·컬럼 정리·목록을 행으로 펼치기·계산 컬럼·PCA·K-Means·좌표·중복 제거)해 새 파일·테이블로, 컬럼 요약과 품질 진단, 분석 종류 카드 13개(분포·상관관계·묶음끼리 비교·날짜에 따른 변화·퍼널·리텐션·RFM·파레토·카이제곱 검정·A/B 검정·장바구니 분석·평균이 바뀐 이유·시계열 분해) | [docs/analysis.md](docs/analysis.md) |
 | 수집 | 웹 API·파일 주소·웹페이지에서 받아 저장, DB 테이블·Kafka에 적재, 업로드 기록, 예약 실행 | [docs/collect.md](docs/collect.md) |
 | 연동 | Slack·Notion·웹훅으로 보내기, Slack 명령 받기, GA4 가져오기, LLM 설정 | [docs/integrations.md](docs/integrations.md) |
 | 대시보드 | 모아 둔 차트·KPI·표·상태를 저장된 값으로 보기, 기준일·기간·최신화·실시간, 목표와 비교 | [docs/dashboard.md](docs/dashboard.md) |

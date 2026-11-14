@@ -114,11 +114,22 @@ def closing():
     if running is None or not running():
         return True
     if not window.create_confirmation_dialog("수집 중", "수집이 아직 돌고 있습니다. 닫으면 받은 데까지 남기고 멈춥니다(다시 시작하면 이어 받습니다). 닫을까요?"):
+        RESTART.clear()  # 닫지 않기로 했으면 다시 시작도 없던 일로(나중에 직접 닫을 때 다시 뜨지 않게)
         return False
     collect_job.stop()
     return True
 
 
+RESTART = threading.Event()  # 켜져 있으면 창이 닫히고 정리가 끝난 뒤(파일 맨 끝) 프로그램을 다시 띄운다
+
+
+def restart():
+    """프로그램을 다시 시작한다: 표시를 켜고 창을 닫는다. 응답을 화면에 돌려준 뒤 닫히도록 따로 돌린다."""
+    RESTART.set()
+    threading.Thread(target=window.destroy, daemon=True).start()
+
+
+server.restart = restart
 server.ask_save = ask_save
 server.ask_open = ask_open
 server.ask_folder = ask_folder
@@ -137,3 +148,9 @@ from core import labels  # noqa: E402  끌 때만 쓴다
 
 labels.compact_all()  # 태그 기록을 본 파일에 합친다(실패하면 그대로 알리고, 기록은 남아 데이터를 잃지 않는다)
 filelock.let_go(APP_LOCK)
+if RESTART.is_set():  # 단일 실행 잠금을 놓은 뒤에 띄운다. 이 프로그램이 정한 Polars 코어 수는 지워 새 설정을 읽게 하고, exe는 새 프로세스가 제 환경으로 뜨게 한다
+    import os
+    import subprocess
+
+    fresh = {k: v for k, v in os.environ.items() if not (k == lazy.THREADS_ENV and lazy.OWN_THREADS)}
+    subprocess.Popen([sys.executable] if drivers.frozen() else [sys.executable, os.path.abspath(__file__)], env={**fresh, "PYINSTALLER_RESET_ENVIRONMENT": "1"})

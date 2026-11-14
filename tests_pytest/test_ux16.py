@@ -274,8 +274,10 @@ globalThis.fillConnection = i => out.filled.push(i);
 globalThis.openConnect = () => { out.opened++; };
 (async () => {
   await showRecentConnections();
-  const btns = els["recent-list"].kids.filter(k => k.tag === "button");
-  out.rows = els["recent-list"].kids.map(k => k.tag === "button" ? k.children.map(c => c.textContent) : k.textContent); out.types = btns.map(b => b.type);
+  const more = els["recent-list"].kids.find(k => k.tag === "details");
+  out.top = els["recent-list"].kids.filter(k => k.tag === "button").length; out.more = more.children[0].textContent;  // 바로 보이는 줄 수와 접힌 묶음의 머리글
+  const kids = [...els["recent-list"].kids.filter(k => k !== more), ...more.children.slice(1)], btns = kids.filter(k => k.tag === "button");
+  out.rows = kids.map(k => k.tag === "button" ? k.children.map(c => c.textContent) : k.textContent); out.types = btns.map(b => b.type);
   out.options = els["recent-conn"].kids.map(o => o.text);
   out.noneHidden = els["recent-none"].classList.contains("hidden");
   btns[0].onclick();
@@ -288,6 +290,7 @@ globalThis.openConnect = () => { out.opened++; };
     assert got["rows"] == ["오늘", ["postgres://h/db, u", "09:05 · 1번 사용"], ["x.duckdb", "08:00 · C:/d · 5번 사용"], "2026-01-02", ["a.csv, b.parquet 외 1개", "23:40 · C:/d · 2번 사용"],
                            "날짜 모름", ["C:/d", "3번 사용"]]
     assert got["options"] == ["최근 연결에서 고르기", "C:/d (3번 사용)", "postgres://h/db, u (1번 사용)", "a.csv, b.parquet 외 1개 (2번 사용)", "x.duckdb (5번 사용)"]  # 고르는 칸은 서버가 준 차례(많이 쓴 순) 그대로
+    assert got["top"] == 3 and got["more"] == "이전 연결 1개 더 보기"  # 가장 최근 3개만 바로 보이고 나머지는 접힌 묶음(details) 안에
     assert got["types"] == ["button"] * 4 and got["noneHidden"] is True
     assert got["opened"] == 1 and got["filled"] == [{"kind": "url", "url": "postgres://h/db", "user": "u"}] and got["focus"] == "password"
     assert got["bad"] == "없는 최근 연결: 9"
@@ -372,8 +375,10 @@ def test_changed_files_have_no_control_chars():
 
 def test_add_card_drawer_markup():
     src = web("components/edit/AddCardMenu.tsx")
-    assert '<Sel label="카드 종류"' not in src and "kindGroups().map(([group, kinds]) =>" in src
-    assert 'className={"btype" + (f.kind === k ? " on" : "")}' in src and "aria-pressed={f.kind === k}" in src
+    assert '<Sel label="카드 종류"' not in src and "KIND_GROUPS.map(([g, kinds]) =>" in src
+    assert 'className="cm-groups"' in src and 'className="cm-kind-list"' in src and "cm-kind-name" not in src  # 묶음 구역과 종류 구역이 따로
+    assert "KIND_GROUPS.find(([g]) => g === group)![1].map(k =>" in src  # 종류 구역에는 고른 묶음의 종류만
+    assert 'className={"cm-kind" + (f.kind === k ? " on" : "")}' in src and "aria-pressed={f.kind === k}" in src
     assert 'onClick={() => { setErr(""); setF(p => ({ ...p, kind: k, rows: fit(p.rows, k) })); }}' in src
     assert 'id={fill ? undefined : "d-add"}' in src and 'className={fill ? "pop cardmenu" : "d-add cardmenu"}' in src
     assert '{!fill && <div className="phead"><b>카드 추가</b>' in src
@@ -418,4 +423,4 @@ def test_drawer_css():
         assert part in d, part
     assert "flex:1; min-height:0; overflow:auto;" in rule(css, "#d-add .d-add-body")
     assert "flex:none;" in rule(css, "#d-add .d-add-foot")
-    assert ".cardmenu .cm-kind-group" in css and ".cardmenu .cm-more" in css
+    assert ".cardmenu .cm-groups" in css and ".cardmenu .cm-kind-list" in css and ".cardmenu .cm-more" in css

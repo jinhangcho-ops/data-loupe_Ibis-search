@@ -35,8 +35,7 @@ def local():
     if store["con"] is None:
         folder = scratch.make()
         try:
-            found = settings.load()
-            store["con"] = source.open_duckdb(Path(folder, "held.duckdb"), False, found.get("memory"), found.get("threads"))  # .local이 있어 source.release가 캐시를 비운다
+            store["con"] = source.open_duckdb(Path(folder, "held.duckdb"), False, settings.get("memory"), settings.get("threads"))  # .local이 있어 source.release가 캐시를 비운다
         except Exception:
             scratch.remove(folder)
             raise

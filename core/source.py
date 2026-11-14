@@ -118,17 +118,18 @@ def find_files(folder, kinds=KINDS, deep=True):
 def open_duckdb(path, read_only=True, memory=None, threads=None):
     """DuckDB 파일을 연다. 파일에 뷰·매크로가 있으면 locked=True로 파일·네트워크 읽기를 막는다(결과 저장은 result가 Arrow로 쓴다). memory(MB, 정수)를 주면 메모리 한도를 걸고 넘치는 것은 임시 폴더에 쓴다
     (그 폴더는 close가 지운다). None이면 제한 없이(DuckDB 기본) 연다. threads(정수)를 주면 계산에 쓰는 코어 수, None이면 전부(DuckDB 기본)."""
-    cores = {"threads": threads} if threads else {}
     if not memory:
-        con = ibis.duckdb.connect(path, read_only=read_only, **cores)
+        con = ibis.duckdb.connect(path, read_only=read_only)
     else:
         folder = scratch.make()
         try:
-            con = ibis.duckdb.connect(path, read_only=read_only, temp_directory=folder, memory_limit=f"{memory}MB", **cores)
+            con = ibis.duckdb.connect(path, read_only=read_only, temp_directory=folder, memory_limit=f"{memory}MB")
         except Exception:
             scratch.remove(folder)
             raise
         con.scratch = folder
+    if threads:  # 여는 설정으로 주지 않고 연 뒤에 건다: 여는 설정이 다르면 같은 파일을 여는 다른 연결(이 프로그램의 읽기 전용 연결 등)이 거부된다
+        con.con.execute("SET threads = ?", [threads])
     # 파일에 든 뷰·매크로는 SQL 검사(sql_exec.check)를 거치지 않고 펼쳐진다(남이 만든 파일이 PC 파일·UNC·URL을 읽게 할 수 있다). 있으면 이 연결의 파일·네트워크 읽기를 막는다
     code = "select (select count(*) from duckdb_views() where not internal) + (select count(*) from duckdb_functions() where function_type in ('macro', 'table_macro') and not internal)"
     con.locked = bool(con.con.execute(code).fetchone()[0])

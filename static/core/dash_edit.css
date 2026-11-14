@@ -10,8 +10,13 @@
 #d-add .d-add-body { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:var(--sp-2); }
 #d-add .d-add-foot { flex:none; margin:0; padding-top:var(--sp-2); border-top:1px solid var(--line); }
 .cardmenu .cm-kinds { display:flex; flex-direction:column; gap:var(--sp-1); margin:0; }
-.cardmenu .cm-kind-group { display:flex; flex-wrap:wrap; gap:var(--sp-1); align-items:center; }
-.cardmenu .cm-kind-name { flex:0 0 72px; color:var(--muted); }
+.cardmenu .cm-groups { display:flex; flex-wrap:wrap; gap:var(--sp-1); padding-bottom:6px; border-bottom:1px solid var(--line); }
+.cardmenu .cm-groups .cur { color:var(--text); font-weight:600; }  /* 지금 고른 종류가 든 묶음 */
+.cardmenu .cm-kind-list { display:flex; flex-direction:column; gap:var(--sp-1); }
+.cardmenu .cm-kind { display:flex; gap:8px; align-items:baseline; text-align:left; background:none; border:1px solid var(--line); border-radius:var(--r-ctl); padding:5px 9px; min-height:24px; color:var(--text); transition:border-color .15s, background-color .15s; }
+.cardmenu .cm-kind b { flex:none; font-size:var(--fs-sm); }
+.cardmenu .cm-kind span { color:var(--muted); font-size:var(--fs-xs); }
+.cardmenu .cm-kind.on { border-color:var(--accent); background:var(--accent-bg); }
 .cardmenu .cm-more > summary { cursor:pointer; color:var(--muted); font-weight:600; min-height:24px; }
 .cardmenu .cm-more[open] { display:flex; flex-direction:column; gap:var(--sp-2); }
 .d-main > aside h5 { margin:12px 0 6px; font-size:var(--fs-sm); }
