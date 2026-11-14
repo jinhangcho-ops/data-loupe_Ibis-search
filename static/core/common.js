@@ -804,14 +804,32 @@ function showCores(n) {
   $("threads-warn").classList.toggle("hidden", n <= safeCores);
 }
 showCores(+coreNow);
+// 알리기만 하는 창([확인] 하나). 닫으면 끝난다
+function noticeBox(title, text) {
+  return new Promise(done => {
+    const box = el("div", { className: "modal" }, el("div", { className: "modal-box" }, el("h3", { id: "notice-title", textContent: title }),
+      el("p", { textContent: text, style: "white-space:pre-wrap; margin:10px 0 14px" }), el("div", { className: "row", style: "justify-content:flex-end" },
+        el("button", { className: "btn p", textContent: "확인", onclick: () => { box.remove(); done(); } }))));
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "notice-title");
+    document.body.append(box);
+    box.querySelector("button").focus();
+  });
+}
+// 코어 수는 프로그램을 다시 켜야 모든 계산에 적용된다: 저장하고, 알린 뒤 다시 시작한다(서버 /api/restart). 다시 시작할 수 없는 실행 방식이면 그 이유를 보인다
+async function saveCores(n) {
+  showCores(n);
+  await api("/api/settings", { threads: n });
+  await noticeBox("프로그램을 다시 시작할게요", "계산에 쓸 CPU 코어 수를 바꿨어요. 바뀐 코어 수를 적용하려고 프로그램을 다시 시작해요.\n저장하지 않은 작업이 있으면 사라질 수 있어요.");
+  await api("/api/restart", {});
+}
 $("threads").onchange = () => {
-  if ($("threads").value !== "custom") saveSetting({ threads: +$("threads").value });
-  showCores($("threads").value === "custom" ? +$("threads-n").value : +$("threads").value);
+  if ($("threads").value !== "custom") return saveCores(+$("threads").value).catch(e => setMsg(e.message));
+  showCores(+$("threads-n").value);
 };
 $("threads-n").onchange = () => {
   const n = Number($("threads-n").value);
-  if (Number.isInteger(n) && n >= 1 && n <= cores) { saveSetting({ threads: n }); setMsg(""); showCores(n); }
-  else setMsg(`코어 수는 1에서 ${cores} 사이의 정수로 넣어 주세요.`);
+  if (Number.isInteger(n) && n >= 1 && n <= cores) { setMsg(""); return saveCores(n).catch(e => setMsg(e.message)); }
+  setMsg(`코어 수는 1에서 ${cores} 사이의 정수로 넣어 주세요.`);
 };
 // 자세히: 처리 용량을 알 수 없을 때(scan_unknown: run·block)와 표본이 너무 적게 오는 기준(sample_too_few, 화면은 %, 비우면 기본 20%).
 $("scan-unknown").value = saved("scan_unknown") || "run";

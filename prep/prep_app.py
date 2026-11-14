@@ -54,7 +54,7 @@ memory.hold("sample", "분석 화면의 표본(다음에 통계를 구할 때 �
             lambda: ", ".join(f"{s[SAMPLE_ARROW].num_rows:,}행 · {memory.size_text(s[SAMPLE_ARROW].nbytes)}" for s in SAMPLES.values()), SAMPLES.clear)
 server.ON_SWITCH.append(SAMPLES.clear)  # 연결을 바꾸거나 끊으면 버린다(열쇠에 연결 열쇠가 들어 있어 다시 쓸 수 없고 최대 100만 행이 메모리에 남는다)
 HANDOFF = handoff.PREFIX  # 전처리로 보낸 검색·탭의 기준 이름 앞글자(@이름). 연결의 테이블 대신 그 검색의 식에서 시작한다
-server.FREE.update({"/api/prep/ops", "/api/prep/handed", "/api/profile/diag", "/api/recipes"})  # 연결을 쓰지 않는다(메모리의 목록·넘긴 쪽만 읽는다, 구성은 설정 폴더 파일만)
+server.FREE.update({"/api/prep/ops", "/api/prep/handed", "/api/profile/diag", "/api/recipes", "/api/analyses", "/api/analyses/recent"})  # 연결을 쓰지 않는다(메모리의 목록·넘긴 쪽만 읽는다, 구성은 설정 폴더 파일만)
 
 
 def hand_over(body, name, shown=None):
@@ -111,7 +111,7 @@ def count_rows(body):
 def analysis_constants(found):
     found.update(sample=DEFAULT_SAMPLE, sample_methods=profiler.METHODS,  # 화면(prep.html)의 표본 행 수 기본값, 표본 방법 이름
                  formula_guide=prep_derive.FORMULA_GUIDE, pca_max=prep_derive.PCA_MAX)  # 계산 식 안내, PCA에 넣을 컬럼 수 상한
-    found["analysis"] = stats.LIMITS  # 분석의 상한들(분석 모듈은 전처리 화면을 내려줄 때 올라온다)
+    found["analysis"] = {**stats.LIMITS, "max_auto_saved": settings.MAX_AUTO_ANALYSES}  # 분석의 상한들(분석 모듈은 전처리 화면을 내려줄 때 올라온다)과 자동으로 남기는 분석 설정 수
     found["kmeans"] = {"k": prep_derive.KMEANS_K, "max_k": prep_derive.KMEANS_MAX_K, "max_cols": prep_derive.KMEANS_MAX_COLS, "name": prep_derive.KMEANS_NAME,
                        "iters": prep_derive.KMEANS_ITERS, "tol": prep_derive.KMEANS_TOL, "init_rows": prep_derive.KMEANS_INIT_ROWS}  # 화면의 계산 기준 글에 쓰는 숫자
     found["prep6"] = prep_ops.SCREEN6  # K-Means 칸, Phase 6 전처리 칸의 기본값 안내
@@ -139,6 +139,24 @@ def recipes():
 def save_recipe():
     """recipe가 null이면 그 이름을 지운다."""
     return jsonify(recipes=settings.save_recipe(request.json.get("name"), request.json.get("recipe")))
+
+
+@app.get("/api/analyses")
+def analyses():
+    """분석 설정 {saved: 사용자가 저장한 것, recent: 자동으로 남긴 것}."""
+    return jsonify(settings.analyses())
+
+
+@app.post("/api/analyses")
+def save_analysis():
+    """사용자가 이름을 붙여 저장한다. item이 null이면 그 이름을 지운다."""
+    return jsonify(settings.save_analysis(request.json.get("name"), request.json.get("item")))
+
+
+@app.post("/api/analyses/recent")
+def keep_analysis():
+    """[구하기]에 성공한 설정을 자동 목록에 남긴다(최근 것만)."""
+    return jsonify(settings.keep_analysis(request.json.get("item")))
 
 
 PRELOAD = ("prep.prep_profile", "prep.prep_expr", "analysis.stats", "prep.prep_diag")  # 전처리·분석 화면을 열면 뒤에서 미리 올리는 기능 모듈

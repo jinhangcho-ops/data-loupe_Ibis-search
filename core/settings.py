@@ -341,6 +341,45 @@ def save_recipe(name, recipe):
     return save_named("recipes.json", "구성", MAX_RECIPE_SIZE, name, recipe)
 
 
+ANALYSES, ANALYSES_AUTO = "analyses.json", "analyses_recent.json"  # 분석 설정: 사용자가 이름을 붙여 저장한 것 {이름: 설정} / [구하기] 때 자동으로 남긴 것 {"list": [설정, …]}(최근 것이 앞)
+MAX_ANALYSIS_SIZE = MAX_RECIPE_SIZE + MAX_SEARCH_SIZE  # 분석 설정 하나의 크기: 전처리 구성 + 분석 칸
+MAX_AUTO_ANALYSES = 20  # 자동으로 남기는 분석 설정 수(넘으면 오래된 것부터 버린다)
+NO_LIMIT = float("inf")  # 사용자가 저장한 분석 설정은 개수 제한이 없다
+
+
+def analyses() -> dict:
+    """분석 설정 {"saved": {이름: 설정}, "recent": [설정, …]}. 설정은 {config(전처리 구성), ana(분석 탭의 칸), …}이고 연결 정보·데이터 값은 없다."""
+    return {"saved": named(ANALYSES), "recent": named(ANALYSES_AUTO).get("list", [])}
+
+
+def check_analysis(item: object) -> None:
+    """분석 설정의 모양(config·ana가 객체)과 탭(@이름) 사용을 본다. 탭을 쓰는 구성은 앱을 다시 켜면 깨지므로 거절한다(구성 저장과 같은 규칙)."""
+    from core import dash_store
+    if not isinstance(item, dict) or not isinstance(item.get("config"), dict) or not isinstance(item.get("ana"), dict):
+        raise ValueError("저장할 분석 설정이 올바르지 않아요.")
+    if dash_store.uses_tab(item["config"]):
+        raise ValueError(dash_store.TAB_SAVE)
+
+
+def save_analysis(name: object, item: dict | None) -> dict:
+    """분석 설정을 그 이름으로 저장한다(같은 이름은 덮어쓴다, 개수 제한 없음). item이 None이면 그 이름을 지운다. 바뀐 analyses()를 돌려준다."""
+    if item is not None:
+        check_analysis(item)
+    save_named(ANALYSES, "분석 설정", MAX_ANALYSIS_SIZE, name, item, NO_LIMIT)
+    return analyses()
+
+
+def keep_analysis(item: dict) -> dict:
+    """[구하기]에 성공한 분석 설정을 자동 목록 맨 앞에 남긴다. 같은 설정(config·ana)이 있으면 그 줄을 맨 앞으로 올리고, MAX_AUTO_ANALYSES개만 남긴다. 바뀐 analyses()를 돌려준다."""
+    check_analysis(item)
+    if len(json.dumps(item, ensure_ascii=False)) > MAX_ANALYSIS_SIZE:
+        raise ValueError("저장할 분석 설정이 너무 커요.")
+    with updating(ANALYSES_AUTO):
+        others = [a for a in named(ANALYSES_AUTO).get("list", []) if (a.get("config"), a.get("ana")) != (item["config"], item["ana"])]
+        write(ANALYSES_AUTO, {"list": [item, *others][:MAX_AUTO_ANALYSES]})
+    return analyses()
+
+
 def read_env(path):
     """KEY=VALUE 줄의 env 파일을 {이름: 값}으로. export 앞말, 따옴표, # 주석, BOM, 빈 줄을 다룬다. 오류 문구에는 값을 넣지 않는다. 수집({env:이름})과 LLM 설정이 쓴다."""
     try:

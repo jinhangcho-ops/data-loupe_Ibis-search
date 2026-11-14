@@ -33,11 +33,12 @@ app.json.sort_keys = False  # 구조 컬럼의 필드·행의 컬럼을 원래 �
 state = {"con": None, "passwords": [], "opened": None, "rows": {}, "names": {}, "tables": {}, "cancel": threading.Event(), "left": None, "turn_no": 0}  # left: 버린 파일 연결 작업이 끝나면 켜질 Event(run이 기다린다). turn_no: 요청마다 1 늘어나는 차례 번호. [새로 받기]를 요청마다 한 번으로 묶는다(querying.pinned)
 # names: 스키마 → 테이블 목록, tables: (스키마, 이름) → 테이블 식. 검색 칸을 바꿀 때마다 DB에 목록·스키마를 다시 묻지 않게 연결마다 기억한다(forget_tables로 비운다).
 turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 연결을 쓰지 않는 FREE의 경로만 기다리지 않는다.
-FREE = {"/api/pick", "/api/usage", "/api/cancel", "/api/send", "/api/drivers", "/api/funcs", "/api/features/install", "/api/update",
+FREE = {"/api/pick", "/api/usage", "/api/cancel", "/api/restart", "/api/send", "/api/drivers", "/api/funcs", "/api/features/install", "/api/update",
         "/api/settings", "/api/recent", "/api/connections", "/api/files"}  # 뒤의 넷: 설정 폴더 파일만 읽고 쓰거나(쓰기는 settings.updating이 묶는다) 폴더만 훑는다. 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
 ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 목록 예: ("Parquet (*.parquet)",) → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
 ask_folder = None  # 저장할 폴더를 묻는 함수(→ 고른 폴더 또는 None). ask_save처럼 desktop.py가 채운다.
+restart = None  # 프로그램을 닫고 다시 여는 함수. ask_save처럼 desktop.py가 채운다(창 없이 돌면 None)
 ask_open = None  # 파일 하나를 고르는 함수(kind → 고른 경로 또는 None). ask_save처럼 desktop.py가 채운다.
 PICK_KINDS = {"env": ("env 파일 (*.env)", "모든 파일 (*.*)"), "metrics": ("지표 파일 (*.yaml;*.yml;*.json)", "모든 파일 (*.*)")}  # /api/pick의 종류 → 파일 대화상자 필터
 PICK_FOLDER = "folder"  # /api/pick의 종류: 파일이 아니라 폴더를 고른다(ask_folder)
@@ -323,6 +324,18 @@ def memory_drop():
 def cancel():
     """지금 도는 데이터 작업을 그만두게 한다. 없으면 아무 일도 하지 않는다."""
     state["cancel"].set()
+    return jsonify(ok=True)
+
+
+NO_RESTART = "이 실행 방식에서는 다시 시작할 수 없어요. 프로그램을 껐다 켜 주세요."
+
+
+@app.post("/api/restart")
+def restart_app():
+    """프로그램을 닫고 다시 연다(계산 코어 수처럼 다시 켜야 적용되는 설정을 바꾼 뒤 화면이 부른다)."""
+    if restart is None:
+        raise ValueError(NO_RESTART)
+    restart()
     return jsonify(ok=True)
 
 

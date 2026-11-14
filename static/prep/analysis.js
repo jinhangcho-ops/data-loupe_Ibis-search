@@ -208,6 +208,7 @@ async function runAna(full) {
     A.view = views.includes(A.view) ? A.view : views[0];
     say("err-ana", "");
     drawAna();
+    if (!full) keepAnalysis();  // 구한 설정을 자동 목록에 남긴다(prep.html)
   } catch (e) { if (call === anaRun) say("err-ana", e.message); }  // 연결을 바꾼 뒤 옛 분석의 늦은 오류는 보이지 않는다
 }
 $("a-run").onclick = () => busy($("a-run"), () => runAna(false));

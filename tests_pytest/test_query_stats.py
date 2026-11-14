@@ -376,9 +376,12 @@ def test_quantiles_pc_too_big(monkeypatch, folder):
     with pytest.raises(ValueError, match="3행"):
         prep_ops.quantiles(ibis.memtable({"n": [1.0, 2.0, 3.0, 4.0]}), "n", [0.5])
     assert prep_ops.quantiles(ibis.memtable({"n": [1.0, 2.0, 3.0]}), "n", [0.5]) == [2.0]  # 상한 안이면 전체로 정확히
-    settings.save({"pc_stat_unlimited": "on"})  # 제한 없음: 행 수·크기 상한을 넘어도 모두 받아 구한다
-    monkeypatch.setattr("core.held.MAX_BYTES", 1)
+    settings.save({"pc_stat_unlimited": "on"})  # 제한 없음: 행 수 상한을 넘어도 모두 받아 구한다
     assert prep_ops.quantiles(ibis.memtable({"n": [1.0, 2.0, 3.0, 4.0]}), "n", [0.5]) == [2.5]
+    with monkeypatch.context() as m:  # 제한 없음이어도 크기 상한은 본다
+        m.setattr("core.held.MAX_BYTES", 1)
+        with pytest.raises(ValueError, match="MB를 넘어"):
+            prep_ops.quantiles(ibis.memtable({"n": [1.0, 2.0, 3.0, 4.0]}), "n", [0.5])
     settings.save({"pc_stat_unlimited": "off"})
     with pytest.raises(ValueError, match="3행"):
         prep_ops.quantiles(ibis.memtable({"n": [1.0, 2.0, 3.0, 4.0]}), "n", [0.5])
@@ -397,6 +400,26 @@ def test_safe_threads_default(folder):
     common = (ROOT / "static/core/common.js").read_text(encoding="utf-8")
     assert 'id="threads-n"' in status and 'id="threads-warn"' in status
     assert "SERVER.defaults.threads" in common and "CPU 과부하가 걸릴 수 있어요" in common and '<option value="custom">직접 입력</option>' in common
+
+
+def test_restart_after_core_change(folder, monkeypatch):
+    """코어 수를 바꾸면 화면이 알림 창([확인]만) 뒤에 /api/restart를 부른다. 창 없이 돌면 그 이유를 알린다."""
+    from query.search_app import app
+    c = app.test_client()
+    c.get("/?key=" + server.KEY)
+    monkeypatch.setattr(server, "restart", None)
+    refused = c.post("/api/restart", json={})
+    assert refused.status_code != 200 and refused.get_json()["error"] == server.NO_RESTART
+    called = []
+    monkeypatch.setattr(server, "restart", lambda: called.append(True))
+    assert c.post("/api/restart", json={}).get_json() == {"ok": True} and called == [True]
+    common = (ROOT / "static/core/common.js").read_text(encoding="utf-8")
+    save = common[common.index("async function saveCores(n)"):common.index('$("threads").onchange')]
+    assert save.index('api("/api/settings", { threads: n })') < save.index("await noticeBox(") < save.index('api("/api/restart", {})')  # 저장 → 알림 → 다시 시작
+    notice = common[common.index("function noticeBox(title, text)"):common.index("async function saveCores(n)")]
+    assert notice.count('el("button"') == 1 and 'textContent: "확인"' in notice  # 단추는 [확인] 하나
+    desktop = (ROOT / "desktop.py").read_text(encoding="utf-8")
+    assert "server.restart = restart" in desktop and desktop.index("filelock.let_go(APP_LOCK)") < desktop.index("if RESTART.is_set():")  # 단일 실행 잠금을 놓은 뒤에 다시 띄운다
 
 
 def test_pc_stat_rows_setting(monkeypatch, folder):

@@ -524,8 +524,10 @@ def quantiles(t: "ibis.expr.types.Table", name: str, qs: list[float]) -> list[fl
     from core import held  # 늦은 import(지연 로딩·순환 import)
     from core import settings
     import polars as pl
-    limit, capped = settings.get("pc_stat_rows"), settings.get("pc_stat_unlimited") != "on"  # 제한 없음이면 행 수·크기를 보지 않고 모두 받는다
+    limit, capped = settings.get("pc_stat_rows"), settings.get("pc_stat_unlimited") != "on"  # 제한 없음이면 행 수는 보지 않는다(크기 상한 held.MAX_BYTES는 그대로 본다)
     frame = (t.select(name).limit(limit + 1) if capped else t.select(name)).to_polars()
+    if not capped and frame.estimated_size() > held.MAX_BYTES:
+        raise ValueError(f"이 연결은 '{name}' 컬럼의 중앙값·사분위수를 구하지 못해 이 PC에서 구하려 했지만 {held.MAX_BYTES // BYTES_PER_MB}MB를 넘어 받지 않았어요. 기간·조건을 좁히거나 DuckDB 파일로 옮겨 쓰세요.")
     if capped and (frame.height > limit or frame.estimated_size() > held.MAX_BYTES):
         raise ValueError(f"이 연결은 '{name}' 컬럼의 중앙값·사분위수를 구하지 못해 이 PC에서 구하려 했지만 {limit:,}행(또는 {held.MAX_BYTES // BYTES_PER_MB}MB)을 넘어 받지 않았어요. 기간·조건을 좁히거나, 왼쪽 메뉴 [설정]의 'PC에서 구할 통계의 최대 행 수'를 늘리거나 '제한 없음'을 켜거나, DuckDB 파일로 옮겨 쓰세요.")
     col = frame[name].cast(pl.Float64).drop_nulls()

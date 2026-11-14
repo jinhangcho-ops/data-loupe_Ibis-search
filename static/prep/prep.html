@@ -110,6 +110,10 @@
   .side > footer.has-lead { flex-wrap:wrap; }
   .side > footer.has-lead .lead { flex-basis:100%; margin:0; }
   /* (Phase 19) 분석 종류: 질문형 이름을 2열 목록으로, 원래 이름은 작게 */
+  .asave { margin-top:10px; border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
+  .asave > summary { cursor:pointer; font-size:13px; font-weight:600; }
+  .asave .hint { margin:8px 0 4px; }
+  .asave .row { margin-bottom:4px; }
   .ahead { margin:12px 0 4px; font-weight:600; }
   .akinds { display:grid; grid-template-columns:1fr; gap:6px; }  /* 종류만 보이는 구역. 고른 종류의 설명과 칸은 아래 .a-form 구역에 */
   .akinds label { display:flex; gap:6px; align-items:flex-start; border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:13px; line-height:1.35; cursor:pointer; }
@@ -344,6 +348,14 @@
     <div class="sc">
       <div class="hint" id="hashed-note-a"></div>
       <label class="check" title="끄면 전처리 없이 원래 테이블을 분석해요"><input type="checkbox" id="a-prep" checked> 전처리 탭에서 정리한 데이터로 분석</label>
+      <details class="asave" id="a-save-box">
+        <summary title="전처리 구성과 분석 설정을 한 묶음으로 저장하고 불러와요. 불러와도 자동으로 구하지는 않아요">설정 저장·불러오기</summary>
+        <div class="hint">저장된 설정 (내가 저장한 것)</div>
+        <div class="row"><select id="a-saved" style="flex:1; min-width:0" title="고르면 테이블을 열고 전처리와 분석 칸을 채워요"></select><button id="a-saved-del" class="ghost">삭제</button></div>
+        <div class="row"><input id="a-save-name" placeholder="설정 이름"><button id="a-save" class="btn">설정 저장</button></div>
+        <div class="hint">최근 분석 (자동 저장, <span id="a-recent-max"></span>개까지)</div>
+        <select id="a-recent" title="[구하기]에 성공한 설정이 자동으로 남아요. 고르면 그 설정을 불러와요"></select>
+      </details>
       <div class="hint ahead">분석 종류</div>
       <div class="akinds" role="radiogroup" aria-label="분석 종류">
         <label><input type="radio" name="akind" value="distribution" checked> <span>값이 퍼진 모양(분포)<small>값이 주로 얼마쯤이고 얼마나 고르게 퍼져 있는지 봐요</small></span></label>
@@ -1850,6 +1862,73 @@ $("rsaved").onchange = async () => {
   if (!c) return;
   try { await openConfig(c); } catch (e) { $("rsaved").value = ""; fail(e.message); }
 };
+// 분석 설정 저장·불러오기: 전처리 구성(config)과 분석 탭의 칸(anaState)을 한 묶음으로. 사용자가 저장한 것(/api/analyses, 개수 제한 없음)과 [구하기] 때 자동으로 남긴 것(/api/analyses/recent, 서버가 최근 것만 남김)을 따로 보인다.
+const ANA_AGGS = ["groups", "trend", "seasonal"];  // 집계를 함수 사전에서 고르는 분석(pickers의 키)
+const anaForm = () => document.querySelector(`.a-form[data-kind="${akind()}"]`);
+const anaKindName = () => document.querySelector("input[name=akind]:checked").closest("label").querySelector("span").firstChild.textContent;
+// 지금 고른 분석 종류의 칸 값(그 종류의 칸만), 퍼널 단계, 상관관계에서 고른 컬럼, 집계
+const anaState = () => ({ prep: $("a-prep").checked, kind: akind(),
+  fields: Object.fromEntries([...anaForm().querySelectorAll("select[id], input[id]")].filter(x => x.type !== "checkbox").map(x => [x.id, x.value])),
+  corr: [...$("a-corr-cols").querySelectorAll("input:checked")].map(b => b.value), flow: { steps: [...FLOW.steps], stages: structuredClone(FLOW.stages) },
+  aggs: Object.fromEntries(ANA_AGGS.filter(k => pickers[k]).map(k => [k, pickers[k].get()])) });
+const anaItem = () => ({ config: config(), ana: anaState(), base: S.base, kind_name: anaKindName(), at: new Date().toLocaleString("sv").slice(0, 16) });  // at: 이 PC 시각 "YYYY-MM-DD HH:MM"
+// 분석 칸을 채운다(컬럼 목록을 받은 뒤). 지금 테이블에 없는 컬럼을 고른 칸은 비워 두고 그 이름들을 돌려준다.
+async function restoreAna(a) {
+  $("a-prep").checked = a.prep;
+  await loadAnaColumns();
+  document.querySelector(`input[name=akind][value="${a.kind}"]`).checked = true;
+  for (const k of ANA_AGGS) if (a.aggs?.[k] && pickers[k]) pickers[k].set(a.aggs[k]);
+  fillAnaValues();
+  FLOW.steps = [...a.flow.steps]; FLOW.stages = structuredClone(a.flow.stages);
+  const gone = [], put = (id, value) => {
+    const x = $(id);
+    if (x.tagName === "SELECT" && value !== "" && ![...x.options].some(o => o.value === value)) gone.push(value); else x.value = value;
+  };
+  const late = ["a-bctrl"];  // 다른 칸을 고른 뒤 목록을 받아야 채울 수 있는 칸
+  for (const [id, value] of Object.entries(a.fields)) if ($(id) && !late.includes(id)) put(id, value);
+  if (a.kind === "abtest") { await loadCtrlValues(); put("a-bctrl", a.fields["a-bctrl"] ?? ""); }
+  const picked = new Set(a.corr);
+  $("a-corr-cols").querySelectorAll("input").forEach(b => { b.checked = picked.has(b.value); });
+  showSteps(); showStages();
+  $("a-fvalues-box").classList.toggle("hidden", $("a-fdefine").value === "stages"); $("a-fstages-box").classList.toggle("hidden", $("a-fdefine").value !== "stages");
+  $("a-pagg").onchange(); showSeasonWindow(); showAnaForm();
+  if (a.kind === "funnel") loadStepValues();
+  return gone;
+}
+let analyses = { saved: {}, recent: [] };
+function showAnalyses(d, name = "") {
+  analyses = d;
+  fill($("a-saved"), Object.keys(d.saved), "저장된 설정 불러오기");
+  $("a-saved").value = name;
+  $("a-recent").replaceChildren(new Option(d.recent.length ? "최근 분석 불러오기" : "아직 자동으로 남긴 분석이 없어요", ""), ...d.recent.map((r, i) => new Option(`${r.at} · ${r.base} · ${r.kind_name}`, i)));
+}
+$("a-recent-max").textContent = SERVER.analysis.max_auto_saved;
+api("/api/analyses").then(showAnalyses).catch(() => {});
+// 고르면 테이블을 열고 전처리와 분석 칸을 채운다(구하지는 않는다). 지금 연결에 없는 테이블이면 아무것도 바꾸지 않고 알린다.
+async function openAnalysis(item, pick) {
+  try {
+    await openConfig(item.config);
+    showView("ana");
+    const gone = await restoreAna(item.ana);
+    say("err-ana", gone.length ? `저장한 설정의 컬럼 중 이 테이블에 없는 것이 있어 그 칸은 비워 두었어요: ${[...new Set(gone)].join(", ")}` : "");
+    if (!gone.length) flash("설정을 불러왔어요. [구하기]를 누르면 구해요");
+  } catch (e) { pick.value = ""; say("err-ana", e.message); }
+}
+$("a-saved").onchange = () => { const item = analyses.saved[$("a-saved").value]; if (item) { $("a-recent").value = ""; return openAnalysis(item, $("a-saved")); } };
+$("a-recent").onchange = () => { const item = analyses.recent[$("a-recent").value]; if ($("a-recent").value !== "" && item) { $("a-saved").value = ""; return openAnalysis(item, $("a-recent")); } };
+$("a-save").onclick = () => {
+  if (!prof) return say("err-ana", "전처리 탭에서 먼저 테이블을 골라 주세요.");
+  return busy($("a-save"), async () => {
+    const name = $("a-save-name").value.trim() || $("a-saved").value;  // 이름을 비우면 지금 고른 설정에 덮어쓴다
+    try { showAnalyses(await api("/api/analyses", { name, item: anaItem() }), name); $("a-save-name").value = ""; say("err-ana", ""); flash("분석 설정을 저장했어요"); } catch (e) { say("err-ana", e.message); }
+  });
+};
+$("a-saved-del").onclick = () => busy($("a-saved-del"), async () => {
+  if (!$("a-saved").value) return;
+  try { showAnalyses(await api("/api/analyses", { name: $("a-saved").value, item: null })); say("err-ana", ""); } catch (e) { say("err-ana", e.message); }
+});
+// [구하기]에 성공하면 그 설정을 자동 목록에 남긴다(analysis.js runAna). 탭(@이름)을 쓰는 구성처럼 저장할 수 없는 설정은 남기지 않는다.
+const keepAnalysis = () => api("/api/analyses/recent", { item: anaItem() }).then(d => showAnalyses(d, $("a-saved").value)).catch(e => console.warn("분석 설정을 자동으로 남기지 못했어요:", e.message));
 // 임시 저장(초안): 고친 전처리 단계가 2초 조용하면 서버에 쓴다(draft.js). 테이블을 연 직후 모양(draftBase)과 같으면 저장할 것이 없다. [실행]으로 결과를 저장하면 지운다.
 const draftSnap = () => JSON.stringify(config());
 const prepDraft = Draft("prep", () => prof && draftBase && draftSnap() !== draftBase ? config() : null, openConfig);
