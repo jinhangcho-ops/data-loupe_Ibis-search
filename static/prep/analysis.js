@@ -1,8 +1,8 @@
 // ---------- 분석 ----------
 // A.cols: 분석할 표의 [컬럼, 종류(num·date·text)]. A.result: 마지막 /api/analyze 결과(how·조건 글 포함). A.view: 보고 있는 그래프.
 const A = { cols: [], hashed: null, result: null, view: null, lo: 0, hi: 0 };
-const VIEW_NAMES = { hist: "히스토그램", box: "상자 그림", values: "값 빈도", heat: "히트맵", scatter: "산점도", groups: "그룹 비교", trend: "추이", funnel: "퍼널",
-  cohort: "코호트 표", curve: "평균 유지율", rfm: "RFM 세그먼트", pareto: "파레토", chi: "관계 검정", ab: "A/B 검정", basket: "연관 쌍", waterfall: "변화 요인", season: "시계열 분해" };
+const VIEW_NAMES = { hist: "히스토그램", box: "상자 그림", values: "값 빈도", heat: "히트맵", scatter: "산점도", groups: "묶음끼리 비교", trend: "날짜에 따른 변화", funnel: "퍼널",
+  cohort: "코호트 표", curve: "평균 유지율", rfm: "RFM 세그먼트", pareto: "파레토", chi: "카이제곱 검정", ab: "A/B 검정", basket: "함께 나오는 짝", waterfall: "평균이 바뀐 이유", season: "시계열 분해" };
 const VIEW_RATIOS = { box: 2.4, heat: 1, scatter: 4 / 3, cohort: 1, chi: 1 };  // 나머지는 16:9
 const ADD_TITLE = $("a-add").title;
 const anaDraw = island($("a-chart"), m => say("err-ana", m));
@@ -222,8 +222,8 @@ const pText = p => p == null ? "-" : Number(p).toPrecision(SIG);
 const AB_TESTS = { z: "두 비율 z 검정", welch: "Welch t 검정", anova: "분산분석(ANOVA)", chi2: "카이제곱 동질성 검정" };
 const NEW_TITLES = {
   cohort: d => `${d.who} ${UNIT_NAMES[d.unit]}별 코호트 리텐션`, curve: d => `${d.who} 평균 유지율`, rfm: d => `${d.who} RFM 세그먼트`,
-  pareto: d => `${d.item} 파레토(${d.agg === "count" ? "행 수" : `합계 ${d.value}`})`, chi: d => `${d.row} × ${d.col} 관계 검정`,
-  ab: d => `${d.group}별 ${d.value} A/B 검정`, basket: d => `${d.item} 연관 쌍`, waterfall: d => `${d.group}별 ${d.value} 변화 요인`, season: d => `${d.time} ${UNIT_NAMES[d.unit]}별 시계열 분해` };
+  pareto: d => `${d.item} 파레토(${d.agg === "count" ? "행 수" : `합계 ${d.value}`})`, chi: d => `${d.row} × ${d.col} 카이제곱 검정`,
+  ab: d => `${d.group}별 ${d.value} A/B 검정`, basket: d => `${d.item} 함께 나오는 짝`, waterfall: d => `${d.group}별 ${d.value} 평균이 바뀐 이유`, season: d => `${d.time} ${UNIT_NAMES[d.unit]}별 시계열 분해` };
 const NEW_NOTES = {
   rfm: d => [`기준일 ${d.asof}`, `사용자 ${d.users.toLocaleString()}명`],
   pareto: d => [d.dropped ? `0 이하·빈 값 항목 ${d.dropped.toLocaleString()}개 뺌` : "", d.more ? `표와 그림에는 앞 ${SERVER.analysis.pareto_show}개만 보임` : ""],

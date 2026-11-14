@@ -372,8 +372,10 @@ def test_changed_files_have_no_control_chars():
 
 def test_add_card_drawer_markup():
     src = web("components/edit/AddCardMenu.tsx")
-    assert '<Sel label="카드 종류"' not in src and "kindGroups().map(([group, kinds]) =>" in src
-    assert 'className={"btype" + (f.kind === k ? " on" : "")}' in src and "aria-pressed={f.kind === k}" in src
+    assert '<Sel label="카드 종류"' not in src and "KIND_GROUPS.map(([g, kinds]) =>" in src
+    assert 'className="cm-groups"' in src and 'className="cm-kind-list"' in src and "cm-kind-name" not in src  # 묶음 구역과 종류 구역이 따로
+    assert "KIND_GROUPS.find(([g]) => g === group)![1].map(k =>" in src  # 종류 구역에는 고른 묶음의 종류만
+    assert 'className={"cm-kind" + (f.kind === k ? " on" : "")}' in src and "aria-pressed={f.kind === k}" in src
     assert 'onClick={() => { setErr(""); setF(p => ({ ...p, kind: k, rows: fit(p.rows, k) })); }}' in src
     assert 'id={fill ? undefined : "d-add"}' in src and 'className={fill ? "pop cardmenu" : "d-add cardmenu"}' in src
     assert '{!fill && <div className="phead"><b>카드 추가</b>' in src
@@ -418,4 +420,4 @@ def test_drawer_css():
         assert part in d, part
     assert "flex:1; min-height:0; overflow:auto;" in rule(css, "#d-add .d-add-body")
     assert "flex:none;" in rule(css, "#d-add .d-add-foot")
-    assert ".cardmenu .cm-kind-group" in css and ".cardmenu .cm-more" in css
+    assert ".cardmenu .cm-groups" in css and ".cardmenu .cm-kind-list" in css and ".cardmenu .cm-more" in css
