@@ -72,12 +72,12 @@ def test_title_hints_marked_on_steps_and_kinds():
     assert "html:not(.easy) .easy-only { display:none; }" in read("common.css")
     assert re.search(r"^advMore\(\);\ntitleHints\(\);$", read("common.js"), re.M)  # 화면이 뜰 때 한 번
     prep = read("prep.html")
-    assert len(re.findall(r'<label data-hint title="[^"]+"><input type="radio" name="akind"', prep)) == ANA_KINDS == prep.count('name="akind"')
-    for page in STEP_PAGES:  # 단계 머리마다. 분석 종류와 단계 머리 말고는 붙이지 않는다
+    assert len(re.findall(r'<label><input type="radio" name="akind"', prep)) == ANA_KINDS == prep.count('name="akind"')  # 분석 종류 사이에는 설명 줄을 끼우지 않는다(고른 종류의 설명은 아래 구역에)
+    for page in STEP_PAGES:  # 단계 머리마다. 단계 머리 말고는 붙이지 않는다
         html = read(page)
         steps = len(re.findall(r'<div class="step[ "]', html))
         assert steps and len(re.findall(r'<div class="sp" data-hint[ >]', html)) == steps, page
-        assert html.count(" data-hint") == steps + (ANA_KINDS if page == "prep.html" else 0), page
+        assert html.count(" data-hint") == steps, page
 
 
 # ---------- 20D bcheck ----------

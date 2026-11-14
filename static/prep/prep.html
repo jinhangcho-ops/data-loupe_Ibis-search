@@ -110,15 +110,15 @@
   .side > footer.has-lead { flex-wrap:wrap; }
   .side > footer.has-lead .lead { flex-basis:100%; margin:0; }
   /* (Phase 19) 분석 종류: 질문형 이름을 2열 목록으로, 원래 이름은 작게 */
-  .akinds { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
+  .ahead { margin:12px 0 4px; font-weight:600; }
+  .akinds { display:grid; grid-template-columns:1fr; gap:6px; }  /* 종류만 보이는 구역. 고른 종류의 설명과 칸은 아래 .a-form 구역에 */
   .akinds label { display:flex; gap:6px; align-items:flex-start; border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:13px; line-height:1.35; cursor:pointer; }
   .akinds label:has(input:checked) { border-color:var(--accent); background:var(--accent-bg); }
   .akinds input { width:auto; margin:2px 0 0; flex:none; }
   .akinds span { font-weight:600; }
   .akinds small { display:block; color:var(--muted); font-size:11px; font-weight:400; }
-  html.easy .akinds { grid-template-columns:1fr; }  /* (Phase 20) 쉬운 보기: 종류마다 아래에 설명 줄(titleHints)이 붙어 한 줄에 하나씩 */
-  .akinds .easy-only { margin:0 0 4px; }
-  .a-form > .lead { margin-top:4px; }
+  .a-form { border-top:1px solid var(--line); padding-top:10px; }
+  .a-form > .lead { margin-top:0; }
 </style>
 </head>
 <body class="app">
@@ -343,28 +343,29 @@
     <header><h3>분석</h3></header>
     <div class="sc">
       <div class="hint" id="hashed-note-a"></div>
-      <label class="check" title="끄면 전처리 없이 원래 테이블을 분석해요"><input type="checkbox" id="a-prep" checked> 전처리한 결과로 분석</label>
-      <div class="akinds">
-        <label data-hint title="필요한 컬럼: 아무 컬럼 하나. 히스토그램·상자 그림·값 빈도로 봐요. 예: 금액 분포, 응답 시간 분포, 등급별 건수"><input type="radio" name="akind" value="distribution" checked> <span>분포<small>한 컬럼의 값이 어디에 몰려 있고 얼마나 퍼져 있는지</small></span></label>
-        <label data-hint title="필요한 컬럼: 숫자 컬럼 둘 이상. 상관계수 표와 산점도로 봐요. 예: 가격과 판매량, 온도와 불량률"><input type="radio" name="akind" value="correlation"> <span>상관관계<small>두 숫자 컬럼이 함께 오르내리는 정도</small></span></label>
-        <label data-hint title="필요한 컬럼: 묶을 컬럼과 값. 예: 매장별 매출, 팀별 처리 건수, 기기 종류별 평균 온도"><input type="radio" name="akind" value="groups"> <span>그룹 비교<small>묶음마다 합계·평균 같은 값을 나란히 비교</small></span></label>
-        <label data-hint title="필요한 컬럼: 날짜와 값. 예: 주별 매출, 일별 방문 수, 월별 고장 건수"><input type="radio" name="akind" value="trend"> <span>기간별 추이<small>일·주·월마다 값이 어떻게 바뀌는지</small></span></label>
-        <label data-hint title="필요한 컬럼: 대상(사용자·주문·문서 등)과 단계. 예: 방문→결제, 접수→승인→완료, 지원→면접→합격"><input type="radio" name="akind" value="funnel"> <span>퍼널(단계별 통과)<small>순서가 있는 단계를 얼마나 통과하고 어디서 빠지는지</small></span></label>
-        <label data-hint title="필요한 컬럼: 대상과 날짜. 예: 가입 주별 재방문, 첫 구매 월별 재구매, 설치 주별 재사용"><input type="radio" name="akind" value="retention"> <span>리텐션(다시 나타남)<small>처음 나타난 기간별로 묶어 이후에 다시 나타난 비율</small></span></label>
-        <label data-hint title="필요한 컬럼: 대상, 날짜, 크기(금액·횟수 등). 예: 고객 구매 등급, 사용자 활동 등급, 거래처 거래 등급"><input type="radio" name="akind" value="rfm"> <span>RFM(최근·빈도·크기 등급)<small>대상마다 얼마나 최근에·자주·크게 했는지로 등급 나누기</small></span></label>
-        <label data-hint title="필요한 컬럼: 항목과 값. 예: 매출을 만드는 상품, 문의가 몰리는 유형, 불량이 몰리는 원인"><input type="radio" name="akind" value="pareto"> <span>파레토(ABC 등급)<small>값이 큰 항목부터 쌓아 소수 항목이 전체의 몇 %인지</small></span></label>
-        <label data-hint title="필요한 컬럼: 범주 컬럼 둘. 예: 지역과 선호 상품, 요금제와 해지 여부, 라인과 불량 유형"><input type="radio" name="akind" value="chisq"> <span>관계 검정(카이제곱)<small>두 범주 컬럼이 서로 관련 있는지 통계로 확인</small></span></label>
-        <label data-hint title="필요한 컬럼: 그룹과 값(0/1이나 숫자). 예: 화면 A·B의 전환율, 두 공정의 평균 시간, 쿠폰 유무의 구매액"><input type="radio" name="akind" value="abtest"> <span>A/B 검정(그룹 차이)<small>그룹 사이 비율·평균 차이가 우연인지 확인</small></span></label>
-        <label data-hint title="필요한 컬럼: 묶음(주문·세션·문서 등)과 항목. 예: 같이 사는 상품, 같이 보는 페이지, 같이 나오는 증상"><input type="radio" name="akind" value="basket"> <span>연관 항목(장바구니)<small>한 묶음 안에 함께 자주 나오는 항목 쌍</small></span></label>
-        <label data-hint title="필요한 컬럼: 날짜, 그룹, 값. 예: 객단가가 바뀐 까닭, 평균 처리 시간이 늘어난 까닭"><input type="radio" name="akind" value="decompose"> <span>변화 요인<small>두 기간의 평균 차이를 구성 변화와 그룹 안 변화로 나누기</small></span></label>
-        <label data-hint title="필요한 컬럼: 날짜와 값. 예: 요일마다 반복되는 매출, 월마다 반복되는 수요, 평소와 다른 날"><input type="radio" name="akind" value="seasonal"> <span>시계열 분해<small>기간별 값을 추세·반복·나머지로 나누고 튀는 때 찾기</small></span></label>
+      <label class="check" title="끄면 전처리 없이 원래 테이블을 분석해요"><input type="checkbox" id="a-prep" checked> 전처리 탭에서 정리한 데이터로 분석</label>
+      <div class="hint ahead">분석 종류</div>
+      <div class="akinds" role="radiogroup" aria-label="분석 종류">
+        <label><input type="radio" name="akind" value="distribution" checked> <span>값이 퍼진 모양(분포)<small>값이 주로 얼마쯤이고 얼마나 고르게 퍼져 있는지 봐요</small></span></label>
+        <label><input type="radio" name="akind" value="correlation"> <span>같이 움직이는 숫자(상관관계)<small>한 숫자가 커질 때 다른 숫자도 커지는지 봐요</small></span></label>
+        <label><input type="radio" name="akind" value="groups"> <span>묶음끼리 비교<small>매장·팀 같은 묶음마다 합계나 평균을 구해 나란히 봐요</small></span></label>
+        <label><input type="radio" name="akind" value="trend"> <span>날짜에 따른 변화<small>날·주·달이 지나면서 값이 늘었는지 줄었는지 봐요</small></span></label>
+        <label><input type="radio" name="akind" value="funnel"> <span>단계마다 남는 수(퍼널)<small>여러 단계를 차례로 거칠 때 몇 명이 남고 어디서 많이 빠지는지 봐요</small></span></label>
+        <label><input type="radio" name="akind" value="retention"> <span>다시 오는 비율(리텐션)<small>처음 온 사람들이 그 뒤에도 계속 오는지 봐요</small></span></label>
+        <label><input type="radio" name="akind" value="rfm"> <span>고객 등급 나누기(RFM)<small>얼마나 최근에, 자주, 많이 샀는지로 점수를 매겨 등급을 나눠요</small></span></label>
+        <label><input type="radio" name="akind" value="pareto"> <span>큰 몫을 차지하는 항목(파레토)<small>몇 안 되는 항목이 전체의 대부분을 차지하는지 봐요</small></span></label>
+        <label><input type="radio" name="akind" value="chisq"> <span>두 분류가 관련 있는지(카이제곱 검정)<small>두 분류가 정말 관련이 있는지, 우연히 그렇게 보이는지 확인해요</small></span></label>
+        <label><input type="radio" name="akind" value="abtest"> <span>두 그룹의 차이가 진짜인지(A/B 검정)<small>두 그룹의 결과 차이가 우연이 아닌지 확인해요</small></span></label>
+        <label><input type="radio" name="akind" value="basket"> <span>함께 나오는 항목(장바구니 분석)<small>한 번에 같이 나오는 일이 많은 항목 짝을 찾아요</small></span></label>
+        <label><input type="radio" name="akind" value="decompose"> <span>평균이 바뀐 이유<small>평균이 바뀐 까닭이 그룹의 비중이 달라져서인지, 그룹 안의 값이 달라져서인지 나눠 봐요</small></span></label>
+        <label><input type="radio" name="akind" value="seasonal"> <span>되풀이되는 흐름과 튀는 날(시계열 분해)<small>값의 변화를 큰 흐름과 되풀이되는 모양으로 나누고 평소와 다른 날을 찾아요</small></span></label>
       </div>
       <div class="a-form" data-kind="distribution">
-        <p class="lead"><b>이걸 알려 줘요:</b> 한 컬럼의 값이 어디에 많고 적은지 보여 줘요. 숫자 컬럼은 히스토그램·상자 그림·값 빈도로, 다른 컬럼은 자주 나오는 값(값 빈도)으로 보여 줘요.<br><b>필요한 컬럼:</b> 아무 컬럼 하나</p>
+        <p class="lead"><b>고를 것:</b> 컬럼 1개<br><b>이럴 때 써요:</b> 주문 금액은 주로 얼마인가?</p>
         <div class="hint">컬럼</div><select id="a-col"></select>
       </div>
       <div class="a-form hidden" data-kind="correlation">
-        <p class="lead"><b>이걸 알려 줘요:</b> 숫자 컬럼끼리 한쪽이 커질 때 다른 쪽도 커지는지(또는 작아지는지)를 -1~1 사이 숫자(피어슨 상관계수) 표나 점 그림(산점도)으로 보여 줘요.<br><b>필요한 컬럼:</b> 숫자 컬럼 2개 이상</p>
+        <p class="lead"><b>고를 것:</b> 숫자 컬럼 2개 이상<br><b>이럴 때 써요:</b> 가격이 오르면 판매량이 줄어드는가?<br>결과는 -1에서 1 사이 숫자예요. 1에 가까우면 같이 커지고, -1에 가까우면 반대로 움직여요.</p>
         <select id="a-cmode"><option value="heatmap">여러 컬럼 한꺼번에(히트맵)</option><option value="scatter">두 컬럼 자세히(산점도)</option></select>
         <div id="a-heat"><div class="hint">숫자 컬럼(2~<span id="a-max-corr"></span>개)</div><div class="cols" id="a-corr-cols"></div>
           <div class="hint">고른 컬럼이 모두 채워진 행만으로 피어슨 상관계수를 구해요.</div></div>
@@ -372,20 +373,20 @@
           <div class="hint">점이 <span id="a-max-points"></span>개보다 많으면 전체에서 고르게 뽑아 그려요(다시 구해도 같은 점).</div></div>
       </div>
       <div class="a-form hidden" data-kind="groups">
-        <p class="lead"><b>이걸 알려 줘요:</b> 묶음(예: 지역)마다 행 수·합계·평균 같은 값을 구해 나란히 비교해요.<br><b>필요한 컬럼:</b> 묶을 컬럼 하나, 계산할 컬럼 하나</p>
+        <p class="lead"><b>고를 것:</b> 묶을 컬럼 1개, 계산할 컬럼 1개<br><b>이럴 때 써요:</b> 어느 매장의 매출이 가장 큰가?</p>
         <div class="hint">묶을 컬럼</div><select id="a-gby"></select>
         <div class="hint">집계</div><div id="a-gagg"></div>
         <div class="hint">계산할 컬럼</div><select id="a-gval"></select>
       </div>
       <div class="a-form hidden" data-kind="trend">
-        <p class="lead"><b>이걸 알려 줘요:</b> 날짜를 일·주·월로 나눠 기간마다 행 수·합계·평균 같은 값이 어떻게 바뀌었는지 보여 줘요.<br><b>필요한 컬럼:</b> 날짜 컬럼, 계산할 컬럼</p>
+        <p class="lead"><b>고를 것:</b> 날짜 컬럼, 계산할 컬럼<br><b>이럴 때 써요:</b> 매출이 달마다 늘고 있는가?</p>
         <div class="hint">날짜 컬럼</div><select id="a-tcol"></select>
         <div class="hint">기간 단위</div><select id="a-tunit"><option value="day">일</option><option value="week">주(월요일부터)</option><option value="month">월</option></select>
         <div class="hint">집계</div><div id="a-tagg"></div>
         <div class="hint">계산할 컬럼</div><select id="a-tval"></select>
       </div>
       <div class="a-form hidden" id="akind-funnel" data-kind="funnel" data-adv>
-        <p class="lead"><b>이걸 알려 줘요:</b> 사람들이 정한 단계를 순서대로 몇 명이나 거쳤고, 어느 단계에서 빠지는지 보여 줘요.<br><b>필요한 컬럼:</b> 사람을 구분하는 컬럼(예: 회원번호), 행동한 시각 컬럼, 행동 이름 컬럼(또는 단계마다 조건)</p>
+        <p class="lead"><b>고를 것:</b> 사람을 구분하는 컬럼(예: 회원번호), 행동한 시각 컬럼, 행동 이름 컬럼(또는 단계마다 조건)<br><b>이럴 때 써요:</b> 방문한 사람 중 몇 명이 결제까지 가는가?</p>
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-fuser"></select>
         <div class="hint">행동한 시각 컬럼</div><select id="a-ftime"></select>
         <div class="hint">단계 정의</div><select id="a-fdefine" title="행동 값 목록은 행동 컬럼의 값을 순서대로, 조건 줄은 단계마다 조건을 적어요"><option value="values">행동 값 목록</option><option value="stages">단계마다 조건 줄</option></select>
@@ -408,14 +409,14 @@
         <div class="adv"><div class="hint">걸린 시간 절사평균에서 자를 몫(%)</div><input id="a-ftrim" type="number" min="0" step="any" aria-label="절사평균 자르기 %" title="위아래를 합쳐 자를 몫이에요. 비우면 기본값"></div>
       </div>
       <div class="a-form hidden" id="akind-retention" data-kind="retention" data-adv>
-        <p class="lead"><b>이걸 알려 줘요:</b> 처음 나타난 기간(일·주·월)으로 사람을 묶어, 그 뒤 기간마다 다시 나타난 사람의 비율을 보여 줘요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 사람을 구분하는 컬럼, 날짜 컬럼</p>
+        <p class="lead"><b>고를 것:</b> 사람을 구분하는 컬럼, 날짜 컬럼<br><b>이럴 때 써요:</b> 이번 달에 가입한 사람이 다음 달에도 오는가?<br>표본이 아니라 테이블 전체로 구해요.</p>
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-rwho"></select>
         <div class="hint">시각 컬럼(날짜)</div><select id="a-rtime"></select>
         <div class="hint">코호트 단위</div><select id="a-runit"><option value="day">일</option><option value="week">주(설정한 주 시작 요일부터)</option><option value="month">월</option></select>
         <div class="adv"><div class="hint">경과 칸 수(비우면 기본값)</div><input id="a-rspan" type="number" step="1"></div>
       </div>
       <div class="a-form hidden" id="akind-rfm" data-kind="rfm" data-adv>
-        <p class="lead"><b>이걸 알려 줘요:</b> 최근에(R)·자주(F)·많이(M) 산 정도를 5단계로 나눠 점수를 매기고, 고객을 등급(세그먼트)으로 묶어요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 고객을 구분하는 컬럼, 날짜 컬럼, 금액 컬럼</p>
+        <p class="lead"><b>고를 것:</b> 고객을 구분하는 컬럼, 날짜 컬럼, 금액 컬럼<br><b>이럴 때 써요:</b> 단골은 누구이고 떠나려는 고객은 누구인가?<br>표본이 아니라 테이블 전체로 구해요.</p>
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-mwho"></select>
         <div class="hint">시각 컬럼(날짜)</div><select id="a-mtime"></select>
         <div class="hint">금액 컬럼</div><select id="a-mamt"></select>
@@ -423,7 +424,7 @@
         <div class="adv"><div class="hint">거래 키(빈도를 고유 거래 수로 셀 때)</div><select id="a-mtx"></select></div>
       </div>
       <div class="a-form hidden" id="akind-pareto" data-kind="pareto" data-adv>
-        <p class="lead"><b>이걸 알려 줘요:</b> 값이 큰 항목부터 쌓아 적은 수의 항목이 전체의 몇 %를 차지하는지 보여 주고, 누적 비중으로 A·B·C 등급을 나눠요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 항목 컬럼(예: 상품), 값 컬럼(값을 행 수로 고르면 없어도 돼요)</p>
+        <p class="lead"><b>고를 것:</b> 항목 컬럼(예: 상품), 값 컬럼(값을 행 수로 고르면 없어도 돼요)<br><b>이럴 때 써요:</b> 매출의 80%를 만드는 상품은 몇 개인가?<br>표본이 아니라 테이블 전체로 구해요.</p>
         <div class="hint">항목 컬럼</div><select id="a-pitem"></select>
         <div class="hint">값</div><select id="a-pagg"><option value="sum">합계</option><option value="count">행 수</option></select>
         <div id="a-pvalbox"><div class="hint">값 컬럼</div><select id="a-pval"></select></div>
@@ -431,12 +432,12 @@
         <div class="adv"><div class="hint">B 경계(%, 비우면 기본값)</div><input id="a-pb" type="number" step="any"></div>
       </div>
       <div class="a-form hidden" data-kind="chisq">
-        <p class="lead"><b>이걸 알려 줘요:</b> 두 범주 컬럼(예: 지역과 등급)이 서로 관계가 있는지 교차표와 카이제곱 검정으로 확인해요.<br><b>필요한 컬럼:</b> 범주 컬럼 2개</p>
+        <p class="lead"><b>고를 것:</b> 종류로 나뉘는 컬럼 2개(예: 지역과 등급)<br><b>이럴 때 써요:</b> 지역에 따라 잘 팔리는 상품이 다른가?</p>
         <div class="hint">행 컬럼</div><select id="a-xrow"></select>
         <div class="hint">열 컬럼</div><select id="a-xcol"></select>
       </div>
       <div class="a-form hidden" id="akind-abtest" data-kind="abtest" data-adv>
-        <p class="lead"><b>이걸 알려 줘요:</b> 그룹(A·B …)끼리 비율이나 평균의 차이가 우연으로 생길 만한 정도인지 검정하고, 차이의 범위(신뢰구간)를 보여 줘요.<br><b>필요한 컬럼:</b> 그룹 컬럼, 값 컬럼(비율이면 0·1이나 예/아니오 값, 평균이면 숫자)</p>
+        <p class="lead"><b>고를 것:</b> 그룹 컬럼, 값 컬럼(비율이면 0·1이나 예/아니오 값, 평균이면 숫자)<br><b>이럴 때 써요:</b> 새 화면을 본 사람이 더 많이 샀는가?</p>
         <div class="hint">그룹 컬럼</div><select id="a-bgroup"></select>
         <div class="hint">지표</div><select id="a-bmetric"><option value="rate">비율</option><option value="mean">평균</option></select>
         <div class="hint">값 컬럼</div><select id="a-bval"></select>
@@ -446,14 +447,14 @@
         <div class="adv"><div class="hint">신뢰 수준(%, 비우면 설정값)</div><input id="a-bconf" type="number" step="any"></div>
       </div>
       <div class="a-form hidden" id="akind-basket" data-kind="basket" data-adv>
-        <p class="lead"><b>이걸 알려 줘요:</b> 같은 거래에 함께 들어간 항목 쌍을 찾아, 우연보다 얼마나 자주 같이 들어가는지(향상도) 순으로 보여 줘요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 거래 키(예: 주문번호), 항목 컬럼(예: 상품)</p>
+        <p class="lead"><b>고를 것:</b> 묶음을 구분하는 컬럼(예: 주문번호), 항목 컬럼(예: 상품)<br><b>이럴 때 써요:</b> 빵을 산 사람은 우유도 같이 사는가?<br>표본이 아니라 테이블 전체로 구해요.</p>
         <div class="hint">거래 키</div><select id="a-kkey"></select>
         <div class="hint">항목 컬럼</div><select id="a-kitem"></select>
         <div class="adv"><div class="hint">최소 지지도(%, 비우면 기본값)</div><input id="a-ksup" type="number" step="any"></div>
         <div class="adv"><div class="hint">상위 쌍 수(비우면 기본값)</div><input id="a-ktop" type="number" step="1"></div>
       </div>
       <div class="a-form hidden" data-kind="decompose">
-        <p class="lead"><b>이걸 알려 줘요:</b> 두 기간의 평균(0·1 값이면 비율)이 달라진 까닭을 그룹 구성이 바뀐 몫과 그룹 안 값이 바뀐 몫으로 나눠 보여 줘요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 날짜 컬럼, 그룹 컬럼, 숫자 값 컬럼</p>
+        <p class="lead"><b>고를 것:</b> 날짜 컬럼, 그룹 컬럼, 숫자 값 컬럼, 견줄 두 기간<br><b>이럴 때 써요:</b> 객단가가 내린 것은 싼 상품이 많이 팔려서인가?<br>표본이 아니라 테이블 전체로 구해요.</p>
         <div class="hint">날짜 컬럼</div><select id="a-dtime"></select>
         <div class="hint">기준 기간</div><div class="row"><input id="a-db0" type="date"><input id="a-db1" type="date"></div>
         <div class="hint">비교 기간</div><div class="row"><input id="a-dc0" type="date"><input id="a-dc1" type="date"></div>
@@ -461,7 +462,7 @@
         <div class="hint">값 컬럼(0·1 값이면 비율)</div><select id="a-dval"></select>
       </div>
       <div class="a-form hidden" id="akind-seasonal" data-kind="seasonal" data-adv>
-        <p class="lead"><b>이걸 알려 줘요:</b> 기간별 값을 추세·계절 반복·나머지로 나누고, 나머지가 유난히 큰 기간을 표시해요. 테이블 전체로 구해요.<br><b>필요한 컬럼:</b> 날짜 컬럼, 계산할 컬럼</p>
+        <p class="lead"><b>고를 것:</b> 날짜 컬럼, 계산할 컬럼<br><b>이럴 때 써요:</b> 주말마다 매출이 오르는가? 평소와 달랐던 날은 언제인가?<br>표본이 아니라 테이블 전체로 구해요.</p>
         <div class="hint">날짜 컬럼</div><select id="a-stime"></select>
         <div class="hint">기간 단위</div><select id="a-sunit"><option value="day">일</option><option value="week">주(월요일부터)</option><option value="month">월</option></select>
         <div class="hint">집계</div><div id="a-sagg"></div>

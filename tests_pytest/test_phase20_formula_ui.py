@@ -17,10 +17,9 @@ FEATURES = ("pca", "kmeans", "geo")
 OLD_QUESTIONS = ("값이 어떻게 퍼져 있나요?", "두 숫자가 같이 움직이나요?", "묶음마다 값이 얼마나 다른가요?", "기간마다 어떻게 바뀌었나요?", "단계마다 얼마나 남나요?",
                  "다시 오는 고객은 얼마나?", "좋은 고객은 누구?", "적은 항목이 대부분을 차지하나요?", "두 항목이 서로 관련 있나요?", "A와 B의 차이가 우연인가요?",
                  "같이 사는 상품은?", "평균이 왜 바뀌었나요?", "반복되는 흐름과 튀는 때는?")
-KIND_NAMES = {"distribution": "분포", "correlation": "상관관계", "groups": "그룹 비교", "trend": "기간별 추이", "funnel": "퍼널(단계별 통과)",
-              "retention": "리텐션(다시 나타남)", "rfm": "RFM(최근·빈도·크기 등급)", "pareto": "파레토(ABC 등급)", "chisq": "관계 검정(카이제곱)",
-              "abtest": "A/B 검정(그룹 차이)", "basket": "연관 항목(장바구니)", "decompose": "변화 요인", "seasonal": "시계열 분해"}
-KIND_NEED = "필요한 컬럼: "
+KIND_NAMES = {"distribution": "값이 퍼진 모양(분포)", "correlation": "같이 움직이는 숫자(상관관계)", "groups": "묶음끼리 비교", "trend": "날짜에 따른 변화", "funnel": "단계마다 남는 수(퍼널)",
+              "retention": "다시 오는 비율(리텐션)", "rfm": "고객 등급 나누기(RFM)", "pareto": "큰 몫을 차지하는 항목(파레토)", "chisq": "두 분류가 관련 있는지(카이제곱 검정)",
+              "abtest": "두 그룹의 차이가 진짜인지(A/B 검정)", "basket": "함께 나오는 항목(장바구니 분석)", "decompose": "평균이 바뀐 이유", "seasonal": "되풀이되는 흐름과 튀는 날(시계열 분해)"}
 FAKE_SERVER = {"pca_max": 7, "kmeans": {"max_cols": 8, "max_k": 9, "k": 4, "iters": 13, "tol": 0.5, "init_rows": 1234}}  # 서버 기본값과 다른 숫자: 화면이 숫자를 따로 적지 않았는지 본다
 
 # 계산 컬럼 칸의 대역: id마다 가짜 요소 하나, 컬럼 다섯 개(대소문자·한글), [추가]가 부르는 것들
@@ -192,10 +191,9 @@ def test_unnest_is_the_last_screen_op() -> None:
 
 def test_analysis_cards_have_name_line_and_needed_columns() -> None:
     page = read(PAGE)
-    cards = re.findall(r'<label data-hint title="([^"]+)"><input type="radio" name="akind" value="(\w+)"(?: checked)?> <span>([^<]+)<small>([^<]+)</small></span></label>', page)
-    assert {value: name for _, value, name, _ in cards} == KIND_NAMES and [value for _, value, _, _ in cards] == list(KIND_NAMES)
-    for title, value, _, line in cards:
-        assert title.startswith(KIND_NEED) and "예: " in title, value
+    cards = re.findall(r'<label><input type="radio" name="akind" value="(\w+)"(?: checked)?> <span>([^<]+)<small>([^<]+)</small></span></label>', page)
+    assert {value: name for value, name, _ in cards} == KIND_NAMES and [value for value, _, _ in cards] == list(KIND_NAMES)
+    for value, _, line in cards:
         assert line.strip() and "?" not in line, value
     for text in (page, read(ANALYSIS)):
         assert not [q for q in OLD_QUESTIONS if q in text]
