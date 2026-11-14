@@ -23,7 +23,9 @@
 .board.grid .bcard { display:flex; flex-direction:column; min-height:0; overflow:hidden; position:relative; cursor:default; }
 .board.grid .bhead.movable { cursor:grab; touch-action:none; user-select:none; flex-wrap:wrap; row-gap:2px; }
 .board.grid .bhead.movable .btitle { flex-basis:5em; }  /* 좁은 카드에서는 단추가 아랫줄로 내려가 이름이 보인다 */
-.board.grid .bhead.movable .btitle + .ib { margin-left:auto; }
+.board.grid .bhead.movable .ib:first-of-type { margin-left:auto; }
+.bat { flex:none; margin:0; white-space:nowrap; font-variant-numeric:tabular-nums; }  /* 카드 머리 오른쪽의 값을 구한 시각 */
+.board.grid .bhead.movable .bat { order:1; flex-basis:100%; }  /* 편집 중에는 단추에 자리를 내주고 이름 아랫줄로 */
 .board.grid .bcard.dragging { opacity:.8; box-shadow:0 8px 24px rgba(0, 0, 0, .25); z-index:2; }
 .board.grid .bcard.dragging .bhead.movable { cursor:grabbing; }
 .board.grid .bcard.editing { border-color:var(--accent); }

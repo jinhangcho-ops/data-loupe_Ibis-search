@@ -20,13 +20,12 @@ import { metrics, useDrag } from "./useDrag";
 // 빈 틀 카드(템플릿·카드 모음에서 막 놓은 카드)의 안내
 const SHELL_NOTE = "아직 데이터가 없어요. 제목 옆 ⚙를 눌러 테이블과 컬럼을 고르세요.";
 
-/** 카드 아래 안내(옛 dash.js .bwhen): 다른 연결의 이전 값, 값을 구한 시각, 서버 안내, 저장된 일 값의 시작일, 기간 기준 날짜, 연결해서 다시 구해야 하는 집계. 한 줄에 하나 */
+/** 카드 아래 안내(옛 dash.js .bwhen): 다른 연결의 이전 값, 서버 안내(값을 구한 시각은 카드 머리 오른쪽 .bat), 저장된 일 값의 시작일, 기간 기준 날짜, 연결해서 다시 구해야 하는 집계. 한 줄에 하나 */
 export function whenLines(card: Card, d: Card["data"], range: Ctx["range"], conn: Source, merge: string[]) {
   const first = d.by_unit?.day?.labels[0], paint = !CHART_KINDS.includes(card.kind);
   const noDate = range && !d.by_unit && !card.source?.date && !["recent_rows", "status", "alerts", "map"].includes(card.kind) && !isPoints(card);
   return [
     conn && card.source?.key && !sameSource(card.source.key, conn.key) ? "다른 연결에서 구한 이전 값이에요" : "",
-    d.computed_at ? "값을 구한 시각 " + d.computed_at.replace("T", " ") : "",
     d.note,
     range?.start && first && range.start < first ? `저장된 일 값은 ${first}부터예요` : "",
     card.source?.date && !d.by_unit ? `기간 기준 날짜: ${card.source.date}` : noDate ? "기간·기준일은 날짜 X축 카드나 기간 기준 날짜 컬럼을 고른 카드에만 적용돼요" : "",
@@ -122,6 +121,7 @@ export function Grid() {
         const sel = state.picked.includes(card.id), open = state.selected === card.id;
         const paint = !CHART_KINDS.includes(card.kind);
         const result = state.values[card.id], said = card.kind === "kpi" ? undefined : compares[card.id];
+        const at = isShell(card) ? undefined : (result?.data ?? card.data)?.computed_at;
         return (
           <section key={card.id} data-id={card.id} tabIndex={0} aria-label={card.title + (sel ? " (선택됨)" : "")} title={dashOnly ? undefined : "눌러서 선택해요. 여러 개 고를 수 있어요"}
             className={"bcard" + (sel ? " sel" : "") + (open && edit ? " editing" : "")}
@@ -134,6 +134,7 @@ export function Grid() {
               <input className="btitle" key={card.title} defaultValue={card.title} readOnly={!edit} aria-label="카드 이름" title="카드 이름. 그림으로 저장할 때 파일 이름이 돼요"
                 onClick={e => e.stopPropagation()}
                 onBlur={e => { const t = e.target.value.trim() || card.title; e.target.value = t; if (t !== card.title) dispatch({ type: "card", id: card.id, patch: { title: t } }); }} />
+              {at && <time className="hint bat" dateTime={at} title="값을 구한 시각">{at.replace("T", " ")}</time>}
               {edit && <button className="ib" title="카드 설정" aria-label={`${card.title} 카드 설정`} onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: card.id }); }}>⚙</button>}
               {edit && <button className="ib" title="이 카드 빼기" aria-label={`${card.title} 카드 빼기`} onClick={e => { e.stopPropagation(); remove(card.id); }}>×</button>}
             </div>
