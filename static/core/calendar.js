@@ -1,9 +1,10 @@
 // 기간 달력(P1): 두 달을 나란히 보이고, 첫 클릭은 시작 날·둘째 클릭은 끝 날(앞 날을 누르면 둘을 바꾼다). min~max 밖 날은 못 고른다.
 // Calendar.open({ anchor, min, max, start, end, onPick(start, end) }) → { el, close }. 날짜는 "YYYY-MM-DD"(시각이 붙어 와도 앞 10자만 본다).
-// 처음 보이는 달은 max의 달(오른쪽, 없으면 오늘). 키보드: 화살표로 날 이동, Enter 고르기, Esc 닫기. 모양은 우클릭 메뉴처럼 .drop .pop을 빌려 쓴다.
+// 처음 보이는 달은 max의 달(오른쪽, 없으면 오늘). 달 머리의 연도를 누르면 연도 목록에서 다른 해로 바로 간다. 키보드: 화살표로 날 이동, Enter 고르기, Esc 닫기(연도 목록에서는 달 보기로). 모양은 우클릭 메뉴처럼 .drop .pop을 빌려 쓴다.
 // common.js의 el이 먼저 불려 있어야 한다. 대시보드(web/components/shell/Calendar.tsx)도 같은 규칙·같은 클래스를 쓴다.
 const Calendar = (() => {
   const DAY = 864e5, WEEK = ["일", "월", "화", "수", "목", "금", "토"];
+  const YEAR_SPAN = 10;  // 날짜 범위를 모를 때 연도 목록에 보일 올해 앞뒤 햇수
   const ymd = v => v ? String(v).slice(0, 10) : "";
   const at = s => new Date(s + "T00:00:00Z");  // UTC로 다뤄 PC 시간대·서머타임에 날이 밀리지 않게
   const iso = d => d.toISOString().slice(0, 10);
@@ -37,14 +38,29 @@ const Calendar = (() => {
         cells += `<td aria-selected="${on || !!inside}"><button type="button" class="${cls}" data-d="${d}" tabindex="${d === st.focus ? 0 : -1}" aria-label="${korean(d)}"${d === now ? ' aria-current="date"' : ""}${off(d) ? " disabled" : ""}>${n}</button></td>`;
         if ((lead + n) % 7 === 0 && n < days) cells += "</tr><tr>";
       }
-      return `<table class="cal-grid" role="grid" aria-label="${korean(m)}"><caption>${korean(m)}</caption><thead><tr>${WEEK.map(w => `<th scope="col">${w}</th>`).join("")}</tr></thead><tbody>${cells}</tr></tbody></table>`;
+      return `<table class="cal-grid" role="grid" aria-label="${korean(m)}"><caption><button type="button" class="ghost cal-year" data-years title="다른 연도로 가기">${+m.slice(0, 4)}년</button> ${+m.slice(5, 7)}월</caption><thead><tr>${WEEK.map(w => `<th scope="col">${w}</th>`).join("")}</tr></thead><tbody>${cells}</tr></tbody></table>`;
+    }
+    // 연도 탐색: 달 머리의 연도를 누르면 연도 목록(min~max의 연도, 범위를 모르면 올해 앞뒤 YEAR_SPAN년)으로 바뀌고, 고르면 그 해의 같은 달로 간다
+    function years() {
+      const now = +today().slice(0, 4), lo = min ? +min.slice(0, 4) : now - YEAR_SPAN, hi = max ? +max.slice(0, 4) : now + YEAR_SPAN, cur = +st.month.slice(0, 4);
+      return `<div class="cal-years" role="group" aria-label="연도 고르기">${Array.from({ length: hi - lo + 1 }, (_, i) => lo + i).map(y =>
+        `<button type="button" class="cal-day cal-y${y === cur ? " on" : ""}" data-y="${y}">${y}</button>`).join("")}</div>`;
+    }
+    function jump(y) {  // 그 해의 같은 달로(범위 밖이면 가장 가까운 달)
+      let m = `${String(y).padStart(4, "0")}-${st.month.slice(5, 7)}`;
+      if (max && m > addMonths(monthOf(max), -1)) m = addMonths(monthOf(max), -1);
+      if (min && m < monthOf(min)) m = monthOf(min);
+      st.month = m; st.years = false;
+      if (!visible(st.focus)) st.focus = clamp(st.month + "-01");
+      draw(true);
     }
     function draw(focus) {
-      months.innerHTML = grid(st.month) + grid(addMonths(st.month, 1));
-      prev.disabled = !!min && st.month <= monthOf(min);
-      next.disabled = !!max && addMonths(st.month, 1) >= monthOf(max);
-      note.textContent = st.start && !st.end ? `끝 날을 고르세요(시작 ${st.start})` : "시작 날을 고르세요";
-      if (focus) months.querySelector(`[data-d="${st.focus}"]`)?.focus();
+      months.innerHTML = st.years ? years() : grid(st.month) + grid(addMonths(st.month, 1));
+      prev.disabled = st.years || (!!min && st.month <= monthOf(min));
+      next.disabled = st.years || (!!max && addMonths(st.month, 1) >= monthOf(max));
+      note.textContent = st.years ? "연도를 고르세요" : st.start && !st.end ? `끝 날을 고르세요(시작 ${st.start})` : "시작 날을 고르세요";
+      if (st.years) months.querySelector(".cal-y.on")?.focus();
+      else if (focus) months.querySelector(`[data-d="${st.focus}"]`)?.focus();
     }
     function pick(d) {
       if (off(d)) return;
@@ -64,10 +80,17 @@ const Calendar = (() => {
     const turn = n => { st.month = addMonths(st.month, n); if (!visible(st.focus)) st.focus = clamp(st.month + "-01"); draw(); };  // 달을 넘겨도 키보드로 들어갈 날을 보이는 달에 둔다
     prev.onclick = () => turn(-1);
     next.onclick = () => turn(1);
-    months.onclick = e => { const b = e.target.closest("button[data-d]"); if (b) pick(b.dataset.d); };
+    months.onclick = e => {
+      const b = e.target.closest("button[data-d], button[data-y], button[data-years]");
+      if (!b) return;
+      if (b.dataset.d) pick(b.dataset.d);
+      else if (b.dataset.y) jump(+b.dataset.y);
+      else { st.years = true; draw(); }
+    };
     pop.onkeydown = e => {
       const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
       if (step && e.target.dataset?.d) { e.preventDefault(); move(addDays(e.target.dataset.d, step)); }
+      else if (e.key === "Escape" && st.years) { e.preventDefault(); e.stopPropagation(); st.years = false; draw(true); }  // 연도 목록에서는 달 보기로 돌아간다
       else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); anchor?.focus?.(); }
     };
     const outside = e => { if (!box.contains(e.target) && e.target !== anchor) close(); };

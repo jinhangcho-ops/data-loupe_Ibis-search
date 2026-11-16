@@ -127,6 +127,15 @@ def convert(dtype, text):
         raise ValueError(f"'{text}'은 {name} 값이 아니에요.")
 
 
+def fits(dtype, text: str) -> bool:
+    """text를 dtype 값으로 읽을 수 있는가(convert가 받는가). 조건의 =·!=·in·except가 안 맞는 값을 글자로 견줄지 정할 때 쓴다."""
+    try:
+        convert(dtype, text)
+    except ValueError:
+        return False
+    return True
+
+
 def split(pattern, text, quotes=True):
     """pattern으로 나눈다. 따옴표로 감싼 부분은 나누지 않는다. quotes가 False면 따옴표도 글자로 본다."""
     if not quotes:
@@ -435,14 +444,20 @@ def parse_one(line, expr, quotes=True):
     if m := IN_RE.match(line):  # except는 in의 반대: 적은 값을 뺀다(빈 값 행은 남긴다)
         col, word, raw = m.groups()
         c = get(col)
-        values = [convert(c.type(), unquote(v, quotes)) for v in split(COMMA_RE, raw, quotes) if v.strip()]
+        texts = [unquote(v, quotes) for v in split(COMMA_RE, raw, quotes) if v.strip()]
+        if all(fits(c.type(), t) for t in texts):
+            values = [convert(c.type(), t) for t in texts]
+        else:  # 타입에 안 맞는 값이 있으면 컬럼을 글자로 바꿔 견준다
+            c, values = c.cast("string"), texts
         return c.isin(values) if word.lower() == "in" else c.notin(values) | c.isnull()
     if m := LIKE_RE.match(line):
         col, word, raw = m.groups()
         c = get(col)
         word = " ".join(word.lower().split())
         if not c.type().is_string():
-            raise ValueError(f"{word}는 문자 컬럼에만 쓸 수 있어요.")
+            if word == "matches" or c.type().is_nested():
+                raise ValueError(f"{word}는 문자 컬럼에만 쓸 수 있어요.")
+            c = c.cast("string")  # 숫자·날짜 컬럼은 글자로 바꿔 포함·시작·끝을 찾는다(id에 12가 든 행)
         raw = unquote(raw, quotes)
         if word == "matches":
             return c.re_search(raw)  # 함수 사전 regex_contains와 같은 식
@@ -465,6 +480,9 @@ def parse_one(line, expr, quotes=True):
             if op == "!=":  # 한쪽만 빈 값이어도 다르다(IS DISTINCT FROM)
                 return (c != other) | (c.isnull() != other.isnull())
             return OPS[op](c, other)
+        if op in ("=", "!=") and not fits(c.type(), unquote(raw, quotes)):  # 타입에 안 맞는 값(정수 컬럼에 apple): 오류 대신 컬럼을 글자로 바꿔 견준다. 크기 비교는 글자로 견주면 뜻이 달라 그대로 오류
+            found = c.cast("string") == unquote(raw, quotes)
+            return ~found | c.isnull() if op == "!=" else found
         value = convert(c.type(), unquote(raw, quotes))
         after = op in ("=", "!=", "<=", ">") and end_after(c.type(), unquote(raw, quotes), value)  # 날짜만 쓴 값은 그날 하루, HH:MM은 그 1분(기간·between과 같은 규칙)
         if after:

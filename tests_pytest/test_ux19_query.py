@@ -64,7 +64,7 @@ def test_19c2_rare_steps_folded_common_steps_shown():
         assert 'class="step adv"' in step(html, key), key
     for key in ("data", "periods", "conditions", "sorts"):
         assert "adv" not in step(html, key).split(">")[0], key
-    for name in ("u-how", "join-add", "cf-kind", "col-pick"):  # 접힌 단계 안의 칸, id 그대로
+    for name in ("u-how", "join-add", "calc-new", "col-pick"):  # 접힌 단계 안의 칸, id 그대로
         assert folded(ids, name), name
     for name in ("base", "periods", "conditions", "sorts", "search"):
         assert not folded(ids, name), name

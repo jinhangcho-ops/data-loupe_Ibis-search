@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { addMonth, keepFocus, monthCells, moveFocus, pickDay, type Pick } from "./calPick";
 
 const WEEK = ["월", "화", "수", "목", "금", "토", "일"];
+const YEAR_SPAN = 14;  // 연도 목록에 보일 햇수(마지막 해에서 거슬러, 5칸 3줄)
 const localToday = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 const spoken = (d: string) => `${+d.slice(0, 4)}년 ${+d.slice(5, 7)}월 ${+d.slice(8, 10)}일`;
 
@@ -20,6 +21,12 @@ export function Calendar({ start = "", end = "", max = "", sunday = false, onPic
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => { if (jump.current) root.current?.querySelector<HTMLButtonElement>(`[data-day="${focus}"]`)?.focus(); jump.current = false; }, [focus]);
   const flip = (n: number) => { const m = addMonth(month, n); setMonth(m); setFocus(f => keepFocus(f, m, max)); };
+  // 연도 탐색: 달 제목의 연도를 누르면 연도 목록으로 바뀌고, 고르면 그 해의 같은 달로 간다(마지막 달을 넘지 않게)
+  const [years, setYears] = useState(false);
+  const toYear = (y: number) => {
+    const want = `${String(y).padStart(4, "0")}-${month.slice(5, 7)}`, top = addMonth(last.slice(0, 7), -1), m = want > top ? top : want;
+    setMonth(m); setFocus(f => keepFocus(f, m, max)); setYears(false);
+  };
   const week = sunday ? ["일", ...WEEK.slice(0, 6)] : WEEK;
   // 날로 초점 옮기기: max 뒤면 max로, 보이는 두 달 밖이면 달을 넘긴다
   const choose = (d: string) => {
@@ -29,7 +36,8 @@ export function Calendar({ start = "", end = "", max = "", sunday = false, onPic
     if (next.done) onPick(next.start, next.end);
   };
   const key = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") { e.stopPropagation(); onClose(); return; }
+    if (e.key === "Escape") { e.stopPropagation(); if (years) setYears(false); else onClose(); return; }  // 연도 목록에서는 달 보기로
+    if (years) return;
     const next = moveFocus(focus, e.key, month, max);  // 화살표·PageUp·PageDown(calPick, 시험 있음)
     if (!next) return;
     e.preventDefault();
@@ -41,14 +49,21 @@ export function Calendar({ start = "", end = "", max = "", sunday = false, onPic
   return (
     <div className="pop dcal" role="dialog" aria-label="기간 달력" ref={root} onKeyDown={key}>
       <div className="dcal-head">
-        <button type="button" className="btn" aria-label="이전 달" onClick={() => flip(-1)}>‹</button>
-        <span className="hint" role="status">{sel.start && !sel.end ? `${sel.start}부터, 끝 날을 고르세요` : "시작 날을 고르세요"}</span>
-        <button type="button" className="btn" aria-label="다음 달" disabled={addMonth(month, 1) >= last.slice(0, 7)} onClick={() => flip(1)}>›</button>
+        <button type="button" className="btn" aria-label="이전 달" disabled={years} onClick={() => flip(-1)}>‹</button>
+        <span className="hint" role="status">{years ? "연도를 고르세요" : sel.start && !sel.end ? `${sel.start}부터, 끝 날을 고르세요` : "시작 날을 고르세요"}</span>
+        <button type="button" className="btn" aria-label="다음 달" disabled={years || addMonth(month, 1) >= last.slice(0, 7)} onClick={() => flip(1)}>›</button>
       </div>
-      <div className="dcal-months">
+      {years && (
+        <div className="dcal-years" role="group" aria-label="연도 고르기">
+          {Array.from({ length: YEAR_SPAN + 1 }, (_, i) => +last.slice(0, 4) - YEAR_SPAN + i).map(y => (
+            <button key={y} type="button" autoFocus={y === +month.slice(0, 4)} className={"dcal-day" + (y === +month.slice(0, 4) ? " on" : "")} onClick={() => toYear(y)}>{y}</button>
+          ))}
+        </div>
+      )}
+      <div className="dcal-months" hidden={years}>
         {[month, addMonth(month, 1)].map(ym => (
           <div key={ym} className="dcal-month" role="group" aria-label={`${+ym.slice(0, 4)}년 ${+ym.slice(5, 7)}월`}>
-            <div className="dcal-title">{`${+ym.slice(0, 4)}년 ${+ym.slice(5, 7)}월`}</div>
+            <div className="dcal-title"><button type="button" className="dcal-year" title="다른 연도로 가기" onClick={() => setYears(true)}>{`${+ym.slice(0, 4)}년`}</button>{` ${+ym.slice(5, 7)}월`}</div>
             <div className="dcal-grid">
               {week.map(w => <span key={w} className="dcal-wd" aria-hidden="true">{w}</span>)}
               {monthCells(ym, sunday).map((d, i) => d == null ? <span key={"e" + i} /> : (

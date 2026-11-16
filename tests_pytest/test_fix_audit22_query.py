@@ -50,7 +50,7 @@ eval(cut("let searched = null", '$("search").onclick').replace(/^let /, "var "))
   await applyJoins();
   assert.deepStrictEqual(S.joins, ["customers left cid=cid"]);
   await renderJoins();
-  const tableSel = box.kids[0].children[0].children[1];
+  const tableSel = box.kids[0].children[0].children[3];  // 첫 줄: 종류 · 기준 테이블 · = · 붙일 테이블
   tableSel.value = "products"; tableSel.onchange();
   await new Promise(r => setTimeout(r, 0));
   assert.deepStrictEqual(joinsUI[0], { table: "products", how: "left", pairs: [["", ""]] });

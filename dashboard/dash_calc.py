@@ -730,19 +730,43 @@ def sentence_data(card, ctx):
     계산하지 못하는 빈칸은 값 없이 이유(error)만 담는다(화면이 '—'와 이유를 보임)."""
     view = card["view"]
     window, before, at = comparison(card, ctx)
+    blanks = view.get("blanks") or []
+    series, errors = {}, {}  # 빈칸 번호 → 검사한 계열 / 계산하지 못하는 이유
+    for i, blank in enumerate(blanks):
+        if blank["kind"] == "asof":
+            continue
+        try:
+            s = clean_series([{"y": blank.get("y") or None, "agg": blank.get("agg") or ("sum" if blank.get("y") else "count")}])[0]
+            final_expr(at(window), s)  # 식만 만들어 본다(조회 없음): 틀린 빈칸 하나가 한 번에 묻는 조회를 깨지 않게
+            if before and blank["kind"] in ("prev", "delta"):
+                final_expr(at(before), s)
+            series[i] = s
+        except ValueError as e:
+            errors[i] = str(e)
+    cur, prev = {}, {}
+    try:
+        if series:  # 빈칸마다 묻지 않고 한 번에(원격 DB는 조회마다 요금)
+            cur = dict(zip(series, run(lambda: scalars(at(window), list(series.values())))))
+    except ValueError as e:
+        errors.update(dict.fromkeys(series, str(e)))
+    past = [i for i in series if i not in errors and before and blanks[i]["kind"] in ("prev", "delta")]
+    try:
+        if past:
+            prev = dict(zip(past, run(lambda: scalars(at(before), [series[i] for i in past]))))
+    except ValueError as e:
+        errors.update(dict.fromkeys(past, str(e)))
     out = {}
-    for blank in view.get("blanks") or []:
+    for i, blank in enumerate(blanks):
         name, kind, fmt = blank["name"], blank["kind"], blank["format"]
         if kind == "asof":
             out[name] = {"kind": kind, "text": (window or {}).get("end") or (ctx or {}).get("as_of") or dt.date.today().isoformat(), "format": fmt}  # 기간의 끝, 기간이 없으면 대시보드 기준일(비면 오늘)
             continue
         try:
-            s = clean_series([{"y": blank.get("y") or None, "agg": blank.get("agg") or ("sum" if blank.get("y") else "count")}])
-            cur = run(lambda: scalars(at(window), s))[0]
-            prev = run(lambda: scalars(at(before), s))[0] if before and kind in ("prev", "delta") else None
-            item = {"kind": kind, "cur": cur, "prev": prev, "format": fmt}
+            if i in errors:
+                raise ValueError(errors[i])
+            item = {"kind": kind, "cur": cur[i], "prev": prev.get(i), "format": fmt}
             if kind == "delta":
-                item["text"] = compare.compare(cur, prev, fmt, view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"])["text"]
+                item["text"] = compare.compare(item["cur"], item["prev"], fmt, view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"])["text"]
             out[name] = item
         except ValueError as e:
             out[name] = {"kind": kind, "error": str(e), "format": fmt}

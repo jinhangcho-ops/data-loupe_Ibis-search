@@ -670,29 +670,57 @@ async function showRecentConnections() {
   const label = c => recentName(c.info) + ` (${c.count}번 사용)`;
   $("recent-conn").replaceChildren(new Option("최근 연결에서 고르기", ""), ...recentConnections.map((c, i) => new Option(label(c), i)));
   $("recent-conn").classList.toggle("hidden", !recentConnections.length);
-  // 첫 화면 오른쪽의 최근 연결 목록(home.html): 최근에 쓴 순으로, 날짜마다 머리글을 두고 줄마다 시각·이름·폴더·횟수를 보인다. 누르면 연결 칸을 펴고 그 연결로 칸을 채운다
+  // 첫 화면 오른쪽의 최근 연결 목록(home.html): 최근에 쓴 순으로, 날짜마다 머리글을 두고 줄마다 시각·이름·폴더·횟수를 보인다. 누르면 그 연결을 연다(openRecent)
+  const dayOf = c => String(c.last ?? "").slice(0, 10);  // last는 이 PC 시각의 ISO 글자(없으면 빈 글자: 예전 기록)
   const byLast = recentConnections.map((c, i) => [c, i]).sort((a, b) => String(b[0].last ?? "").localeCompare(String(a[0].last ?? "")));
-  // 날짜 머리글과 줄들. last는 이 PC 시각의 ISO 글자(없으면 빈 글자: 예전 기록)
-  const rows = items => [...Map.groupBy(items, ([c]) => String(c.last ?? "").slice(0, 10))].flatMap(([day, list]) => [el("div", { className: "recent-day", textContent: recentDay(day) }),
-    ...list.map(([c, i]) => el("button", { type: "button", className: "btn", title: label(c), onclick: () => { openConnect(); pickRecent(i); } },
-      el("b", { textContent: recentName(c.info) }), el("span", { className: "hint", textContent: [String(c.last ?? "").slice(11, 16), c.info.kind === "folder" && recentName(c.info) !== c.info.path ? c.info.path : "", `${c.count}번 사용`].filter(Boolean).join(" · ") })))]);
-  // 가장 최근 RECENT_SHOWN개만 바로 보이고, 나머지는 접어 둔다
-  const rest = byLast.slice(RECENT_SHOWN);
-  $("recent-list")?.replaceChildren(...rows(byLast.slice(0, RECENT_SHOWN)),
-    ...(rest.length ? [el("details", { className: "recent-more" }, el("summary", { textContent: `이전 연결 ${rest.length}개 더 보기` }), ...rows(rest))] : []));
+  const days = items => [...Map.groupBy(items, ([c]) => dayOf(c))];
+  // 줄: 여는 동안은 잠근다(busy는 글자만 있는 버튼용이라 쓰지 않는다)
+  const row = ([c, i]) => el("button", { type: "button", className: "btn", title: label(c), onclick: async e => { const b = e.currentTarget; b.disabled = true; try { await openRecent(i); } finally { b.disabled = false; } } },
+    el("b", { textContent: recentName(c.info) }), el("span", { className: "hint", textContent: [String(c.last ?? "").slice(11, 16), c.info.kind === "folder" && recentName(c.info) !== c.info.path ? c.info.path : "", `${c.count}번 사용`].filter(Boolean).join(" · ") }));
+  // 최근 연결 카드에는 오늘 것 전부(적으면 가장 최근 RECENT_SHOWN개까지), 나머지는 이전 연결 카드(#recent-older)에 날짜 폴더로 둔다. 그래서 이전 연결에 오늘 것은 없다
+  const shown = Math.max(RECENT_SHOWN, byLast.filter(([c]) => dayOf(c) === dayIso(0)).length), rest = byLast.slice(shown);
+  $("recent-list")?.replaceChildren(...days(byLast.slice(0, shown)).flatMap(([day, list]) => [el("div", { className: "recent-day", textContent: recentDay(day) }), ...list.map(row)]),
+    ...(rest.length ? [el("button", { type: "button", id: "recent-more", className: "ghost", textContent: `이전 연결 ${rest.length}개 더 보기`, onclick: () => showOlder($("recent-older").classList.contains("hidden")) })] : []));
+  $("older-list")?.replaceChildren(...days(rest).map(([day, list]) => el("details", { className: "recent-folder" },
+    el("summary", {}, el("b", { textContent: recentDay(day) }), el("span", { className: "hint", textContent: `${list.length}개` })), ...list.map(row))));
+  if ($("recent-older")) showOlder(!!rest.length && !$("recent-older").classList.contains("hidden"));  // 다시 그려도 열림 상태를 지킨다
   $("recent-none")?.classList.toggle("hidden", !!recentConnections.length);
 }
+// 이전 연결 카드(첫 화면 오른쪽 끝)를 열거나 닫는다
+function showOlder(open) {
+  $("recent-older").classList.toggle("hidden", !open);
+  document.querySelector(".home").classList.toggle("older", open);
+  $("recent-more")?.setAttribute("aria-expanded", open);
+}
 // 연결을 알아볼 이름: 주소는 주소와 아이디, 폴더는 고른 파일 이름(RECENT_NAMES개까지, 나머지는 개수), 고른 파일이 없으면 폴더 경로
-const RECENT_NAMES = 2, RECENT_SHOWN = 3;  // RECENT_SHOWN: 첫 화면 목록에 바로 보이는 최근 연결 수
+const RECENT_NAMES = 2, RECENT_SHOWN = 3;  // RECENT_SHOWN: 오늘 연결이 이보다 적을 때 최근 연결 카드에 채워 보이는 수
 function recentName(info) {
   if (info.kind === "url") return info.url + (info.user ? `, ${info.user}` : "");
   const files = (info.file ? [info.file] : info.files ?? []).map(f => String(f).split(/[\\/]/).pop());
   return files.length ? files.slice(0, RECENT_NAMES).join(", ") + (files.length > RECENT_NAMES ? ` 외 ${files.length - RECENT_NAMES}개` : "") : info.path;
 }
+// back일 전 날짜(이 PC 시각, YYYY-MM-DD)
+function dayIso(back) {
+  const d = new Date();
+  d.setDate(d.getDate() - back);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 // 날짜 머리글: 오늘·어제는 말로, 그 밖은 날짜 그대로, 시각을 모르면(예전 기록) "날짜 모름"
-function recentDay(day) {
-  const iso = back => { const d = new Date(); d.setDate(d.getDate() - back); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
-  return !day ? "날짜 모름" : day === iso(0) ? "오늘" : day === iso(1) ? "어제" : day;
+const recentDay = day => !day ? "날짜 모름" : day === dayIso(0) ? "오늘" : day === dayIso(1) ? "어제" : day;
+// 첫 화면의 최근 연결 i번을 연다. 바로 연결할 수 있으면(고른 파일이 기억된 파일 연결, 아이디 없는 주소) 연결하고 쿼리로 간다(goQuery: home.html).
+// 아니면 연결 칸을 채워 남은 것(비밀번호·파일 고르기)만 받고, 그 [연결]이 성공하면 쿼리로 간다(recentGo). 실패 문구는 최근 연결 카드에 보인다.
+let recentGo = false;
+async function openRecent(i) {
+  const { info } = recentConnections[i], url = info.kind === "url";
+  say("msg-recent", "연결하고 있어요…", "hint");
+  try {
+    if (url ? !info.user : info.file || info.files) { await connectWith(url ? { ...info, password: "" } : info); return goQuery(); }
+    recentGo = true;
+    openConnect();
+    pickRecent(i);
+    if (!url) await listFiles();
+    say("msg-recent", url ? "비밀번호를 넣고 [연결]을 누르면 쿼리로 넘어가요." : "파일을 고르고 [연결]을 누르면 쿼리로 넘어가요.", "hint");
+  } catch (e) { say("msg-recent", e.message); }
 }
 // 최근 연결 i번을 연결 칸에 채운다(비밀번호는 저장하지 않아 다시 넣는다). 고르는 칸과 첫 화면 목록이 같이 쓴다.
 function pickRecent(i) {
@@ -744,9 +772,19 @@ function checks(box, values) {
 // 테이블 파일(Parquet·CSV·JSON·Excel)은 여러 개를 골라 연다(파일마다 테이블 하나). 파일 목록에서 이 항목을 고르면 체크 목록이 나온다.
 const FLAT = "*flat";  // 파일 이름에 쓸 수 없는 글자로 시작해 실제 경로와 겹치지 않는다.
 const flatBoxes = () => [...document.querySelectorAll("#flat-list input")];
+const PICKED_SHOWN = 8;  // 고른 파일 요약에 칩으로 보이는 수(나머지는 "외 N개")
 function showFlat() {
   $("flat").classList.toggle("hidden", $("file").value !== FLAT);
   $("flat-count").textContent = `${flatBoxes().length}개 중 ${flatBoxes().filter(b => b.checked).length}개 고름` + (offList.size ? `, 목록에 안 보이는 ${offList.size}개도 고름` : "");
+  // 고른 파일 요약: 이름 칩의 ×로 뺀다(목록에 안 그린 것도)
+  const picked = pickedFiles(), drop = f => { const box = flatBoxes().find(b => b.value === f); if (box) box.checked = false; else offList.delete(f); showFlat(); };
+  $("flat-picked").replaceChildren(...picked.slice(0, PICKED_SHOWN).map(f => Object.assign(chip(underPath(f), () => drop(f)), { title: f })),
+    ...(picked.length > PICKED_SHOWN ? [el("span", { className: "hint", textContent: `외 ${picked.length - PICKED_SHOWN}개` })] : []));
+}
+// 파일 이름 찾기: 친 글자가 경로에 든 줄만 남긴다(대소문자 무시). 체크는 그대로 둔다
+function filterFlat() {
+  const q = $("flat-find").value.trim().toLowerCase();
+  flatBoxes().forEach(b => b.parentElement.classList.toggle("hidden", !!q && !b.value.toLowerCase().includes(q)));
 }
 // 고른 파일 중 화면 목록(LIST_MAX개까지)에 안 그린 것. 연결할 때 함께 보낸다.
 const offList = new Set();
@@ -774,7 +812,8 @@ $("crumb").onclick = () => openConnect();
 $("recent-conn").onchange = () => { if ($("recent-conn").value !== "") pickRecent($("recent-conn").value); $("recent-conn").value = ""; };
 $("file").onchange = showFlat;
 $("flat-list").onchange = showFlat;
-$("flat-all").onclick = () => { flatBoxes().forEach(b => b.checked = true); showFlat(); };
+$("flat-all").onclick = () => { flatBoxes().filter(b => !b.parentElement.classList.contains("hidden")).forEach(b => b.checked = true); showFlat(); };  // 찾기로 남은 파일만
+$("flat-find").oninput = filterFlat;
 }
 const setMsg = (text, ok) => say("err-settings", text, ok);  // 앱 설정 저장 오류([설정] 창)
 // 메모리 한도(MB, 0 = 제한 없음): 목록에 있는 값이거나 GB로 직접 넣은 값. 저장만 하고 다음 [연결]부터 서버가 쓴다.
@@ -989,9 +1028,11 @@ async function listFiles() {
   if (d.flat.length) $("file").append(new Option(`표 형식 파일에서 여러 개 고르기 (${d.flat.length}개)`, FLAT));
   offList.clear();
   checks($("flat-list"), flat);  // 처음에는 아무것도 고르지 않은 상태. 쓸 파일만 체크한다.
-  flatBoxes().forEach(b => { b.parentElement.title = b.value; b.nextSibling.textContent = " " + underPath(b.value); });
-  if (!d.files.length && d.flat.length === 1) { $("file").value = FLAT; flatBoxes()[0].checked = true; }
-  $("file").classList.remove("hidden");
+  flatBoxes().forEach(b => { b.parentElement.title = b.value; b.nextSibling.textContent = " " + underPath(b.value); b.parentElement.append(el("span", { className: "tag", textContent: b.value.split(".").pop().toLowerCase() })); });  // 줄 끝에 파일 종류
+  $("flat-find").value = "";
+  if (!d.files.length && d.flat.length) $("file").value = FLAT;  // 표 형식 파일뿐이면 고르는 칸 없이 바로 체크 목록
+  if (!d.files.length && d.flat.length === 1) flatBoxes()[0].checked = true;
+  $("file").classList.toggle("hidden", !d.files.length && !!d.flat.length);
   showFlat();
   const more = Math.max(d.files.length, d.flat.length) > LIST_MAX;
   connMsg(more ? `파일이 많아 앞의 ${LIST_MAX.toLocaleString()}개만 보여요. 경로나 종류를 좁혀 주세요.` : "", "hint");
@@ -1025,13 +1066,17 @@ if (hasConnect) $("connect").onclick = () => busy($("connect"), async () => {
     : { kind, url: $("url").value, user: $("user").value, password: $("password").value };
   $("driver-hint").classList.add("hidden");
   try {
-    const { schemas } = await api("/api/connect", body);
-    showRecentConnections();  // 쓴 횟수가 바뀌었다
-    await showConnected(!!body.files, schemas, body);
-    if (typeof startRefresh === "function") startRefresh();  // 연결에 성공하면 어느 화면에서나 대시보드 최신화를 시작한다(dash_refresh.js)
+    await connectWith(body);
     if (typeof afterConnect === "function") afterConnect();  // 첫 화면: 고른 화면으로 넘어간다
   } catch (e) { connMsg(e.message); if (e.driver) showDriverHint(e.driver); }
 });
+// body(연결 칸의 값 또는 최근 연결의 info)로 연결하고 연결된 상태로 만든다. [연결] 버튼과 첫 화면의 최근 연결이 같이 쓴다.
+async function connectWith(body) {
+  const { schemas } = await api("/api/connect", body);
+  showRecentConnections();  // 쓴 횟수가 바뀌었다
+  await showConnected(!!body.files, schemas, body);
+  if (typeof startRefresh === "function") startRefresh();  // 연결에 성공하면 어느 화면에서나 대시보드 최신화를 시작한다(dash_refresh.js)
+}
 // 드라이버 안내(drivers.py의 entry): 설명, 설치 명령과 [복사], 따로 설치할 프로그램, exe 안내. 연결이 드라이버 때문에 실패한 자리와 드라이버 표가 함께 쓴다.
 const DRIVER_STATUS = { installed: "설치됨", missing: "설치 안 됨", program_needed: "프로그램 필요" };
 function copyCommand(text, label = "복사") {

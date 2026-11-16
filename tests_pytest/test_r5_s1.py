@@ -711,5 +711,6 @@ def test_ubigint_max_in_conditions():
     pick = lambda cond: sorted(r["id"] for r in t.filter(parse.predicate(cond, t)).to_pyarrow().to_pylist())  # noqa: E731
     assert pick("u = 18446744073709551615") == [1] and pick("(id, u) in (1, 18446744073709551615)") == [1]
     assert pick("u in 5, 18446744073709551615") == [1, 2] and pick("u != 18446744073709551615") == [2]
+    assert pick("u = 18446744073709551616") == []  # 타입 범위를 넘는 값: 글자로 견줘 0행(=·!=·in·except는 오류를 내지 않는다)
     with pytest.raises(ValueError, match="정수 값이 아니에요"):
-        parse.predicate("u = 18446744073709551616", t)
+        parse.predicate("u > 18446744073709551616", t)

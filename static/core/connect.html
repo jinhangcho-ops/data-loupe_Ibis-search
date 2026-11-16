@@ -17,8 +17,10 @@
       <label class="check"><input type="checkbox" id="deep" checked> 안쪽 폴더까지 찾기</label>
       <select id="file" class="hidden"></select>
       <div id="flat" class="hidden">
+        <input id="flat-find" type="search" placeholder="파일 이름으로 찾기" aria-label="파일 이름으로 찾기" title="친 글자가 이름에 든 파일만 남겨요. [모두 선택]은 남은 파일만 골라요">
         <div class="row" style="align-items:center"><button class="ghost" id="flat-all">모두 선택</button><button class="ghost" id="flat-none">모두 해제</button><span class="hint" id="flat-count" style="margin:0"></span></div>
         <div class="cols" id="flat-list"></div>
+        <div class="chips open" id="flat-picked" aria-label="고른 파일"></div>
       </div>
     </div>
     <div id="url-box" class="hidden">

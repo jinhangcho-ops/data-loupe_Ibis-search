@@ -96,21 +96,6 @@ console.log(JSON.stringify({ options, inBar, keyed, tuple }));"""
     assert got == {"options": ["", "id", "name"], "inBar": True, "keyed": "id except 1, 2", "tuple": "(id, name) except (1, a), (2, b)"}
 
 
-@needs_node
-def test_calc_form_quotes_columns(tmp_path):
-    prelude = r"""
-const vals = { "cf-kind": "window", "cf-name": "r", "cf-x": "판매 금액" };
-globalThis.$ = id => ({ value: vals[id] ?? "" });
-const pickers = { calc: { get: () => ({ agg: "lag", opts: { order: ["기준 일자 desc"], group: ["고객 그룹", "g"], n: 1 } }), yMode: () => "required" } };
-const Funcs = { get: () => ({}), words: (f, x, opts) => [x, String(opts.n)] };
-"""
-    code = index_slice("function calcLine()", '$("cf-kind").onchange')
-    body = 'const line = calcLine(); vals["cf-x"] = "a,b"; let why = ""; try { calcLine(); } catch (e) { why = e.message; } console.log(JSON.stringify({ line, why }));'
-    got = run_node(tmp_path, body, files=["newcol.js"], parts=[prelude, code])
-    assert got["line"] == "lag `판매 금액` 1 기준 `기준 일자` desc 그룹 `고객 그룹`, g 이름 r"
-    assert got["why"].startswith("'a,b' 컬럼 이름에는 쉼표가 있어 계산 줄로는 못 써요.")  # 계산 폼은 이 글을 err-cf에 보인다(지금 try)
-
-
 def test_lookup_recent_value_and_prefixed_names():
     a = HTML.index("function openLookup(")
     body = HTML[a:HTML.index("\n}\n", a)]

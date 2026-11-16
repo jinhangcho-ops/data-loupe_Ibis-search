@@ -36,8 +36,9 @@ def test_decimal_conditions_exact(backend):
     assert ids("id > 12345678901234567890") == ["12345678901234567891"]
     assert ids("amt = 0.1") == ["12345678901234567890"]
     assert ids("amt < 0.155") == ["12345678901234567890"]
+    assert ids("id = abc") == []  # 타입에 안 맞는 값은 글자로 견준다(오류가 아니라 0행)
     with pytest.raises(ValueError, match="실수 값이 아니에요"):
-        parse.parse_condition("id = abc", t)
+        parse.parse_condition("id > abc", t)  # 크기 비교는 타입에 맞는 값만
 
 
 @pytest.mark.parametrize("backend", BACKENDS)

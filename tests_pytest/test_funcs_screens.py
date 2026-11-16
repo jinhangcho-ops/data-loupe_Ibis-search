@@ -172,7 +172,7 @@ def test_screens_pick_from_the_catalog():
     pages = {name: next(STATIC.rglob(name)).read_text(encoding="utf-8") for name in ("index.html", "prep.html")}
     for name, text in pages.items():
         assert '<script src="/static/core/funcs.js"></script>' in text and text.index("funcs.js") > text.index("common.js"), name
-    assert "Funcs.picker" in pages["index.html"] and "pickers.chart" in pages["index.html"] and "pickers.pivot" in pages["index.html"] and "pickers.calc" in pages["index.html"]
+    assert "Funcs.picker" in pages["index.html"] and "pickers.chart" in pages["index.html"] and "pickers.pivot" in pages["index.html"]  # 새 컬럼 칸의 폼(pickers.calc)은 없앴다: 새 컬럼 상자가 함수 사전을 쓴다
     assert "Funcs.picker" in pages["prep.html"] and "a-gagg" in pages["prep.html"] and "pickers[key]" in pages["prep.html"] and "pickers.keep" in pages["prep.html"] and "Funcs.panel" in pages["prep.html"]
     assert "Object.entries(SERVER.calc.hows)" not in pages["index.html"] and "SERVER.funcs" not in pages["index.html"]
     common = (STATIC / "core" / "common.js").read_text(encoding="utf-8")  # 집계 이름(aggName)은 R4-D2b에서 dash.js를 지우며 common.js로

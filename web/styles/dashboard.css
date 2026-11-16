@@ -34,7 +34,11 @@ body.dash-only .bcard.sel, body.dash-only .bcard.editing { border-color:var(--li
 .drop .pop.dcal { left:0; right:auto; top:calc(100% + 4px); gap:8px; padding:10px; min-width:0; }
 .dcal-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .dcal-months { display:flex; gap:16px; flex-wrap:wrap; }
+.dcal-months[hidden] { display:none; }
 .dcal-title { font-weight:600; font-size:var(--fs-sm); text-align:center; margin-bottom:4px; }
+.drop .pop .dcal-year { width:auto; padding:0 4px; font-weight:600; color:var(--accent); cursor:pointer; }  /* 누르면 연도 목록 */
+.dcal-years { display:grid; grid-template-columns:repeat(5, 1fr); gap:4px; min-width:260px; }
+.drop .pop .dcal-years .dcal-day { width:auto; }
 .dcal-grid { display:grid; grid-template-columns:repeat(7, 32px); gap:2px; }
 .dcal-wd { font-size:var(--fs-xs); color:var(--muted); text-align:center; }
 .drop .pop .dcal-day { width:32px; height:28px; padding:0; justify-content:center; text-align:center; border-radius:var(--r-ctl); font-variant-numeric:tabular-nums; }

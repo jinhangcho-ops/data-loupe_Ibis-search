@@ -201,7 +201,7 @@ PAGE = r"""(async () => {
     out.colPick = [...$("col-pick").options].map(o => o.value);
     // F12 조건 우변 컬럼
     $("bcol").value = "금액"; $("bcol").dispatchEvent(new Event("change"));
-    $("bmode").value = "column"; $("bmode").dispatchEvent(new Event("change"));
+    document.querySelector("input[name=bmode][value=column]").click();  // 오른쪽 위 [컬럼으로 찾기]
     out.bvalHidden = $("bval").classList.contains("hidden");
     $("bop").value = ">"; $("bcol2").value = "할인"; $("badd").click();
     await until(() => S.conditions.length, "컬럼 비교 조건"); out.colCond = S.conditions.map(c => c.line ?? c);

@@ -21,9 +21,21 @@
   ul.items .tools { flex:none; white-space:nowrap; }
   ul.items .link { color:var(--accent); font-size:12px; }
   /* 조건 입력 방식: 칸으로 선택(.fields)이면 한 줄 입력칸과 형식 안내를, 한 줄 입력(.line)이면 칸들을 감춘다. 조건 목록은 둘 다 같이 쓴다. */
-  #cond.fields :is(#conditions .row, .format), #cond.line #builder { display:none; }
-  #builder .row select { flex:1; min-width:0; }
+  #cond.fields :is(#conditions .row, .format), #cond.line :is(#builder, #bmode) { display:none; }
+  #builder .row select { flex:1 1 120px; min-width:0; }
   #builder #bop { flex:none; width:110px; }
+  .edx .row.one { flex-wrap:wrap; align-items:center; }  /* 한 줄로 끝내는 고르기 줄(좁으면 넘긴다) */
+  .edx .row.one > :is(select, input) { flex:1 1 120px; min-width:0; width:auto; }
+  .edx .row.one > .btn { flex:none; }
+  .edx .tabs { display:flex; align-items:center; flex-wrap:wrap; gap:4px 12px; }
+  #bmode { margin-left:auto; }  /* 조건 칸 오른쪽 위: 값으로 찾기 | 컬럼으로 찾기 */
+  #bmode label { padding:2px 10px; font-size:var(--fs-sm); white-space:nowrap; }
+  /* 단계마다 [골라서 넣기 | 직접 쓰기](stepModes): 고르는 칸(.pick)과 한 줄 입력(.direct) 중 하나만 보인다 */
+  .edx[data-mode=pick] .direct, .edx[data-mode=line] .pick { display:none; }
+  .span-row { align-items:center; } .span-row select { flex:1 1 120px; min-width:0; } .span-row .btn { flex:none; }
+  #join-blocks .jb .r1 { grid-template-columns:76px minmax(0, auto) 10px minmax(0, 1fr) 28px; }  /* 종류 · 기준 테이블 = 붙일 테이블 · × */
+  .jb .r1 .jbase { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  details.more { margin-top:6px; } details.more > summary { cursor:pointer; color:var(--accent); font-size:var(--fs-sm); }
   #bpick { margin-bottom:6px; }
   .drop.up .pop { top:auto; bottom:46px; left:0; right:auto; min-width:340px; }
   #saved-pop { padding:10px; gap:6px; }
@@ -307,19 +319,21 @@
         <div class="cn adv"></div>
         <div class="step adv" data-step="joins"><div class="sp" data-hint><i>3</i><span class="t" title="다른 테이블의 컬럼을 옆에 붙여요">조인</span><b id="sum-joins"></b><span class="c"></span></div>
           <div class="edx">
-            <div id="join-blocks"></div>
-            <button class="linkish" id="join-add">+ 조인 추가</button>
-            <div class="row" style="margin-top:6px"><input id="join-line" placeholder="한 줄로 쓰기 (예: customers left 고객ID=ID)" title="형식: 테이블 [inner|left|right|outer|semi|anti] 왼쪽=오른쪽
+            <div class="pick"><div id="join-blocks"></div>
+            <button class="linkish" id="join-add">+ 조인 추가</button></div>
+            <div class="row direct"><input id="join-line" placeholder="한 줄로 쓰기 (예: customers left 고객ID=ID)" title="형식: 테이블 [inner|left|right|outer|semi|anti] 왼쪽=오른쪽
 시각으로 붙일 때: 테이블 asof 왼쪽시각>=오른쪽시각, 왼쪽=오른쪽
 semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 컬럼은 붙이지 않아요). asof는 시각이 같거나 앞선 가장 가까운 행 하나를 붙여요."><button id="join-line-add" class="btn">추가</button></div>
             <div class="err" id="err-join"></div>
           </div></div>
         <div class="cn"></div>
         <div class="step" data-step="periods"><div class="sp" data-hint><i>4</i><span class="t" title="날짜로 볼 범위를 좁혀요">기간</span><b id="sum-periods"></b><span class="c"></span></div>
-          <div class="edx"><div class="hint">예: 주문일 2025-07-01 ~ 2025-09-30. 시작이나 끝 한쪽은 비워도 돼요. <code>날짜컬럼 최근 7일</code> / <code>지난달</code>도 돼요.</div><div id="periods"></div>
-            <div class="row"><select id="per-col" title="달력으로 고를 날짜 컬럼" aria-label="달력으로 고를 날짜 컬럼"></select><button id="per-cal" class="btn" title="고른 날짜 컬럼에 있는 날 안에서 시작 날과 끝 날을 눌러 기간을 넣어요">달력</button></div>
+          <div class="edx">
+            <div class="row pick span-row"><select id="per-col" title="기간을 걸 날짜 컬럼" aria-label="기간을 걸 날짜 컬럼"></select><button id="per-cal" class="btn" title="달력에서 시작 날과 끝 날을 차례로 눌러 기간을 넣어요(고른 날짜 컬럼에 있는 날 안에서)">시작 날짜</button><span>~</span><button id="per-end" class="btn" title="달력에서 시작 날과 끝 날을 차례로 눌러 기간을 넣어요">끝 날짜</button></div>
+            <div class="hint direct">예: 주문일 2025-07-01 ~ 2025-09-30. 시작이나 끝 한쪽은 비워도 돼요. <code>날짜컬럼 최근 7일</code> / <code>지난달</code>도 돼요.</div><div id="periods"></div>
+            <details class="more"><summary>데이터가 가장 많은 기간 찾기</summary>
             <div class="row" style="margin-top:6px"><select id="pk-col" title="날짜 컬럼(기준 테이블)" aria-label="기간을 찾을 날짜 컬럼"></select><select id="pk-unit" title="기간 길이" aria-label="기간 길이"><option value="day">1일</option><option value="week">1주(월요일부터)</option><option value="month" selected>1달</option></select><button id="peak-find" class="btn" title="고른 기간 길이로 나눠 건수가 가장 많은 기간 5개를 기준 테이블 전체로 찾아요(조인·조건은 넣지 않아요). 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="가장 많은 기간 찾기">가장 많은 기간 찾기</button></div>
-            <div id="pk-list"></div><div class="err" id="err-peak"></div></div></div>
+            <div id="pk-list"></div><div class="err" id="err-peak"></div></details></div></div>
         <div class="cn"></div>
         <div class="step" data-step="conditions"><div class="sp" data-hint><i>5</i><span class="t" title="원하는 행만 남겨요">조건</span><b id="sum-conditions"></b><span class="c"></span></div>
           <div class="edx">
@@ -327,14 +341,13 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
               <div class="tabs" style="margin-bottom:6px">
                 <label><input type="radio" name="cmode" value="fields" checked style="width:auto"> 골라서 넣기</label>
                 <label><input type="radio" name="cmode" value="line" style="width:auto"> 직접 쓰기</label>
+                <span class="seg2" id="bmode" title="오른쪽에 값을 쓸지, 다른 컬럼과 견줄지 골라요(컬럼으로 찾기: 두 컬럼의 값이 같은 행 등)"><label><input type="radio" name="bmode" value="value" checked> 값으로 찾기</label><label><input type="radio" name="bmode" value="column"> 컬럼으로 찾기</label></span>
               </div>
               <div class="hint format">쓰는 법: 컬럼 &gt;= 값 / 컬럼 != 값(빈 값 행도 남겨요) / 컬럼 &lt; 다른컬럼 / 컬럼 between 값1 값2 / 컬럼 in 값1, 값2 / 컬럼 except 값1, 값2(빈 값 행도 남겨요) / 컬럼 like 값 / 컬럼 not like 값 / 컬럼 matches 정규식(예: 이름 matches ^김.*) / 컬럼 =~ 값(대소문자 무시 같음) / 컬럼 not between 값1 값2(빈 값 행도 남겨요) / 컬럼 starts 값 / 컬럼 ends 값 / 컬럼 is [not] null / * is not null(모든 컬럼이 비어 있지 않은 행만) / 조건 or 조건. 값에 or나 쉼표가 있으면 '값'처럼 따옴표로 감싸요. 값 자리에 컬럼 이름을 그대로 쓰면 두 컬럼을 비교하고, 같은 글자를 값으로 찾으려면 '값'처럼 감싸요.</div>
               <div id="conditions"></div>
               <div id="builder">
-                <div class="row"><select id="bcol" title="컬럼"></select><select id="bop" title="비교 방법"></select></div>
-                <div class="row"><select id="bmode" title="오른쪽에 값을 쓸지, 다른 컬럼과 견줄지 골라요" style="flex:0 0 80px"><option value="value">값</option><option value="column">컬럼</option></select><select id="bcol2" class="hidden" title="견줄 컬럼"></select><input id="bval" placeholder="값"><input id="bval2" placeholder="값2" class="hidden"><button id="blist" class="btn hidden" title="이 컬럼에 있는 값을 불러와 골라요 (처음 200개, 찾기 칸에 쓰면 표 전체에서 찾아요)">값 목록</button></div>
+                <div class="row one"><select id="bcol" title="컬럼"></select><select id="bop" title="비교 방법"></select><select id="bcol2" class="hidden" title="견줄 컬럼"></select><input id="bval" placeholder="값"><input id="bval2" placeholder="값2" class="hidden"><button id="blist" class="btn hidden" title="이 컬럼에 있는 값을 불러와 골라요 (처음 200개, 찾기 칸에 쓰면 표 전체에서 찾아요)">값 목록</button><button id="badd" class="btn p">조건 추가</button></div>
                 <input id="bfind" class="hidden" placeholder="값 찾기 (표 전체)" title="쓰고 잠시 멈추거나 Enter를 누르면 표 전체에서 이 글자가 든 값을 찾아요"><select id="bpick" class="hidden" title="고르면 값 칸에 들어가요"></select><div class="hint" id="bpick-note">일부 행 기준이에요</div>
-                <div class="row"><button id="badd" class="btn">조건 추가</button></div>
                 <div class="err" id="err-builder"></div>
               </div>
               <label class="hint" title="끄면 따옴표도 글자로 찾아요. 조건을 추가할 때의 설정이 그 조건에 적용돼요"><input type="checkbox" id="quotes" checked style="width:auto"> 따옴표 안은 값 하나로 읽기</label>
@@ -342,24 +355,19 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
           </div></div>
         <div class="cn adv"></div>
         <div class="step adv" data-step="calcs"><div class="sp" data-hint><i>6</i><span class="t" title="계산해서 컬럼을 새로 만들어요">새 컬럼</span><b id="sum-calcs"></b><span class="c"></span></div>
-          <div class="edx"><div class="hint" id="calc-guide">순위, 누적 합계, 이전 값 같은 컬럼을 새로 만들어요. 위에서부터 차례로 계산해요.</div>
-            <div class="calc-form" id="calc-form">
-              <select id="cf-kind" title="만드는 방법"><option value="window">순위, 누적, 이전 값</option><option value="expr">식으로 계산</option><option value="sql">SQL 식 직접 쓰기</option><option value="top">순위로 거르기 (상위 N)</option></select>
-              <span id="cf-window" class="fp-line"><span id="cf-pick"></span><select id="cf-x" title="계산할 컬럼"></select></span>
-              <span id="cf-text" class="fp-line hidden"><input id="cf-expr" class="code" placeholder="식 (예: 금액 * 수량, case(금액 >= 100, '고액', '소액'))"></span>
-              <span id="cf-top" class="fp-line hidden"><select id="cf-op" title="비교"><option>&lt;=</option><option>&lt;</option><option>==</option><option>&gt;=</option><option>&gt;</option></select><input id="cf-val" type="number" value="3" title="비교할 값"></span>
-              <span class="fp-line"><span id="cf-expr-opts" class="hidden"><input id="cf-group" placeholder="묶을 컬럼 (쉼표로 여러 개)" title="식 안의 집계를 이 컬럼별로 따로 구해요 (선택)"><input id="cf-order" placeholder="순서 (예: 날짜 asc)" title="순위나 누적을 셀 순서예요 (선택)"></span><input id="cf-name" placeholder="새 컬럼 이름 (선택)" style="flex:0 1 140px"></span>
-              <div class="row"><button id="cf-add" class="btn">새 컬럼 추가</button><button id="cf-find" class="ghost" title="함수를 찾아 예시를 넣어요">함수 찾기</button><span class="hint" id="cf-line" style="align-self:center"></span></div>
-              <div class="err" id="err-cf"></div><div id="cf-panel"></div>
-            </div>
-            <select id="calc-example" title="고르면 아래 칸에 예시가 들어가요. 컬럼 이름만 바꿔 쓰세요"></select><div id="calcs"></div></div></div>
+          <div class="edx"><div class="hint" id="calc-guide">계산, 순위, 누적 합계, 날짜 자르기 같은 컬럼을 새로 만들어요. 위에서부터 차례로 계산해요.</div>
+            <div class="row pick"><button id="calc-new" class="btn p" title="방식을 고르고 5행을 미리 본 뒤 더해요">+ 새 컬럼 만들기</button></div>
+            <select id="calc-example" class="direct" title="고르면 아래 칸에 예시가 들어가요. 컬럼 이름만 바꿔 쓰세요"></select><div id="calcs"></div></div></div>
         <div class="cn"></div>
         <div class="step" data-step="sorts"><div class="sp" data-hint><i>7</i><span class="t" title="행을 어떤 순서로 볼지 정해요">정렬</span><b id="sum-sorts"></b><span class="c"></span></div>
-          <div class="edx"><div class="hint">예: 금액 desc (큰 것부터). 결과 표의 머리글을 눌러도 돼요.</div><div id="sorts"></div></div></div>
+          <div class="edx">
+            <div class="row pick one"><select id="sort-col" aria-label="정렬할 컬럼"></select><select id="sort-how" aria-label="정렬 방향"><option value="asc">작은 것부터 (asc)</option><option value="desc">큰 것부터 (desc)</option></select><button id="sort-add" class="btn">추가</button></div>
+            <div class="hint direct">예: 금액 desc (큰 것부터).</div><div class="hint">결과 표의 머리글을 눌러도 돼요.</div><div id="sorts"></div></div></div>
         <div class="cn adv"></div>
         <div class="step adv" data-step="columns"><div class="sp" data-hint><i>8</i><span class="t" title="결과에 보일 컬럼만 골라요">보일 컬럼</span><b id="sum-columns"></b><span class="c"></span></div>
-          <div class="edx"><div class="hint">예: 이름, 금액. 비우면 모든 컬럼이 보여요.</div><div id="columns"></div>
-            <div class="row"><select id="col-pick" aria-label="보일 컬럼 고르기"></select><button id="col-pick-add" class="btn">더하기</button></div></div></div>
+          <div class="edx">
+            <div class="row pick one"><select id="col-pick" aria-label="보일 컬럼 고르기"></select><button id="col-pick-add" class="btn">더하기</button></div>
+            <div class="hint direct">예: 이름, 금액.</div><div class="hint">비우면 모든 컬럼이 보여요.</div><div id="columns"></div></div></div>
         <div data-adv-slot style="padding-top:8px"></div>
       </div>
     </div></div>
@@ -699,6 +707,7 @@ async function refreshColumns() {
   if (condCols.some(c => c[0] === col)) $("bcol").value = col; else $("bpick").classList.add("hidden");
   keepFill($("bcol2"), condCols.map(c => c[0]));
   keepFill($("col-pick"), S.cols.map(c => c[0]), "보일 컬럼 고르기");
+  keepFill($("sort-col"), S.cols.map(c => c[0]), "정렬할 컬럼 고르기");
   keepFill($("per-col"), allDates());
   const pk = $("pk-col").value;  // 가장 많은 기간 찾기의 날짜 컬럼도 고른 것은 남아 있으면 그대로
   fill($("pk-col"), dateCols());
@@ -715,7 +724,7 @@ async function refreshColumns() {
 function autoSearch() {
   if (view === "cards" && S.base && !last && !S.union.tables.length && LISTS.every(k => !S[k].length)) runSearch(0);
 }
-{ const opened = $("base").onchange; $("base").onchange = async () => { await opened(); autoSearch(); }; }  // 위 핸들러(시험이 따로 돌린다)에 덧씌운다
+const openBase = $("base").onchange; $("base").onchange = async () => { await openBase(); autoSearch(); };  // 위 핸들러(시험이 따로 돌린다)에 덧씌운다
 // 실행하면 처리할 용량(실행하지 않고 셈). 검색이 바뀔 때마다 잠깐 기다렸다가 다시 센다. 늦게 온 답은 버린다.
 let scanTimer, scanSeq = 0;
 function showScan() {
@@ -819,13 +828,14 @@ async function renderJoins() {
       el("span", { textContent: (j.how === "asof" && !k) || ge ? "≥" : "=", title: j.how === "asof" && !k ? "왼쪽 시각과 같거나 그보다 앞선 가장 가까운 오른쪽 행 하나를 붙여요" : ge ? "≥는 asof 조인의 시각 쌍에만 써요. 종류를 바꾸면 =가 돼요" : "" }),
       select(right, r, "오른쪽 키", v => { j.pairs[k][1] = v; applyJoins(); }),
       el("button", { className: "ghost", textContent: "×", title: "키 빼기", onclick: () => { j.pairs.splice(k, 1); renderJoins(); applyJoins(); } }));
+    // 첫 줄은 "종류 기준 테이블 = 붙일 테이블". 테이블만 고르면 autoKeys가 키를 채워 바로 조인된다. 키 줄은 테이블을 고른 뒤에만 보인다
     return el("div", { className: "jb" },
       el("div", { className: "r1" },
         select(JOIN_HOWS, j.how, null, v => { j.how = v; j.pairs.forEach(p => p[2] = false); renderJoins(); applyJoins(); }),  // 종류를 바꾸면 줄에 쓴 >=는 버린다(화면은 asof 시각 쌍만 ≥로 보인다)
-        select(tableNames(), j.table, "테이블", v => { j.table = v; j.pairs = [["", ""]]; renderJoins(); applyJoins().then(() => autoKeys(j)); }),  // 키가 빈 덩어리는 S.joins에서 빠진다. 키는 autoKeys가 채운다
+        el("span", { className: "jbase", textContent: S.base, title: `기준 테이블 ${S.base}` }), el("span", { textContent: "=" }),
+        select(tableNames(), j.table, "붙일 테이블 고르기", v => { j.table = v; j.pairs = [["", ""]]; renderJoins(); applyJoins().then(() => autoKeys(j)); }),  // 키가 빈 덩어리는 S.joins에서 빠진다. 키는 autoKeys가 채운다
         el("button", { className: "ghost", textContent: "×", title: "조인 빼기", onclick: () => { joinsUI.splice(i, 1); renderJoins(); applyJoins(); } })),
-      ...j.pairs.map(pairRow),
-      el("button", { className: "linkish", textContent: "+ 키 추가", onclick: () => { j.pairs.push(["", ""]); renderJoins(); } }));
+      ...(j.table ? [...j.pairs.map(pairRow), el("button", { className: "linkish", textContent: "+ 키 추가", onclick: () => { j.pairs.push(["", ""]); renderJoins(); } })] : []));
   }));
   $("join-blocks").replaceChildren(...blocks);
 }
@@ -880,11 +890,12 @@ async function pickSpan(anchor, base, column, err, onPick) {
   const d = column ? await dateRange(base, column).catch(e => { err.textContent = e.message; return {}; }) : {};
   Calendar.open({ anchor, min: d.min, max: d.max, onPick });
 }
-$("per-cal").onclick = () => {
+// [시작 날짜] ~ [끝 날짜]: 어느 쪽을 눌러도 같은 달력이 열리고, 시작·끝을 고르면 기간에 넣고 두 단추에 고른 날을 보인다
+$("per-cal").onclick = $("per-end").onclick = e => {
   const column = $("per-col").value, err = $("periods").querySelector(".err");
   if (!column) { err.textContent = "날짜 타입 컬럼이 없어요."; return; }
   err.textContent = "";
-  pickSpan($("per-cal"), tableOf(column), column, err, (a, b) => addItem("periods", `${column} ${a} ~ ${b}`, err));
+  pickSpan(e.currentTarget, tableOf(column), column, err, (a, b) => { $("per-cal").textContent = a; $("per-end").textContent = b; return addItem("periods", `${column} ${a} ~ ${b}`, err); });
 };
 
 // 4~7. 기간·조건·정렬·표시 컬럼: 한 줄 입력 → 서버에서 검사 → 목록에 추가
@@ -915,7 +926,7 @@ function renderList(key) {
     `<button class="ghost link" data-or="${i}" title="다음 조건과 잇는 방법이에요. 누르면 and와 or가 바뀌어요. or로 이은 조건끼리 먼저 묶여요.">${ored(i) ? "or" : "and"}</button>`;
   box.innerHTML = `<ul class="items">${S[key].map((item, i) =>  // 조건은 문자열이거나 { line, quotes: false(따옴표 해석 끔), or: true(다음 조건과 or) }
       `<li class="${ored(i) || ored(i - 1) ? "any" : ""}"><span>${esc(text(item))}${item.quotes === false ? ' <span class="hint">따옴표 그대로</span>' : ""}</span><span class="tools">${link(i)}<button class="ghost" data-edit="${i}" title="고치기">✎</button><button class="ghost" data-i="${i}" title="빼기">×</button></span></li>`).join("")}</ul>
-    <div class="row"><input placeholder="입력하고 Enter"><button class="btn">추가</button></div><div class="err"></div>`;
+    <div class="row direct"><input placeholder="입력하고 Enter"><button class="btn">추가</button></div><div class="err"></div>`;
   const input = box.querySelector("input"), err = box.querySelector(".err"), button = box.querySelector(".row button");
   let at;  // [✎]로 고치는 항목의 위치. 있으면 다음 추가가 그 항목을 바꾼다. 목록을 다시 그리면 없어진다.
   const add = () => busy(button, async () => {  // 요청 중에는 Enter를 다시 눌러도 보내지 않는다.
@@ -926,7 +937,7 @@ function renderList(key) {
   input.onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) add(); };
   box.querySelectorAll("button[data-edit]").forEach(b => b.onclick = () => {
     at = +b.dataset.edit;
-    if (key === "conditions") showCondMode("line");  // 한 줄 입력칸이 보여야 고칠 수 있다.
+    key === "conditions" ? showCondMode("line") : stepMode(key, "line");  // 한 줄 입력칸이 보여야 고칠 수 있다.
     input.value = text(S[key][at]);
     input.focus();
   });
@@ -944,17 +955,30 @@ function renderList(key) {
 }
 // 8. 보일 컬럼: 목록에서 골라 더한다(F04, 직접 쓰기도 그대로)
 $("col-pick-add").onclick = () => busy($("col-pick-add"), async () => { if ($("col-pick").value) await addItem("columns", $("col-pick").value, $("columns").querySelector(".err")); });
+// 7. 정렬: 컬럼과 방향을 골라 더한다(직접 쓰기와 같은 줄 "컬럼 asc|desc")
+$("sort-add").onclick = () => busy($("sort-add"), async () => { if ($("sort-col").value) await addItem("sorts", `${$("sort-col").value} ${$("sort-how").value}`, $("sorts").querySelector(".err")); });
+// 조인·기간·새 컬럼·정렬·보일 컬럼: 칸 위에 [골라서 넣기 | 직접 쓰기]. 고르는 칸(.pick)과 한 줄 입력(.direct) 중 하나만 보인다(조건 칸의 cmode와 같은 모양, 기억하지는 않는다)
+const STEP_MODES = ["joins", "periods", "calcs", "sorts", "columns"];
+function stepMode(key, mode) {
+  document.querySelector(`[data-step=${key}] .edx`).dataset.mode = mode;
+  document.querySelector(`input[name=mode-${key}][value=${mode}]`).checked = true;
+}
+for (const key of STEP_MODES) {
+  const tab = (mode, label) => el("label", {}, el("input", { type: "radio", name: `mode-${key}`, value: mode, style: "width:auto", onchange: () => stepMode(key, mode) }), ` ${label}`);
+  document.querySelector(`[data-step=${key}] .edx`).prepend(el("div", { className: "tabs", style: "margin-bottom:6px" }, tab("pick", "골라서 넣기"), tab("line", "직접 쓰기")));
+  stepMode(key, "pick");
+}
 
 // 5. 조건을 칸으로 만들기: 컬럼·연산자·값을 골라 조건 하나를 만든다. 만든 조건은 한 줄 입력과 똑같이 검사되어 같은 목록에 들어간다.
 // 조건끼리의 and/or는 목록의 연결 버튼으로 정한다.
 const OPS_TEXT = ["=", "!=", "like", "starts", "ends", "in", "except", "is null", "is not null"];  // like: 포함, starts: 로 시작(인덱스를 탈 수 있음), ends: 로 끝
-const OPS_OTHER = ["=", "!=", ">=", "<=", ">", "<", "between", "in", "except", "is null", "is not null"];
+const OPS_OTHER = ["=", "!=", ">=", "<=", ">", "<", "between", "in", "except", "like", "starts", "ends", "is null", "is not null"];  // 숫자·날짜도 글자로 바꿔 포함·시작·끝을 찾는다(서버 parse.parse_one)
 const isText = () => ([...S.cols, ...(S.fields ?? [])].find(c => c[0] === $("bcol").value) || [])[1] === "문자";
 const isMulti = () => ["in", "except"].includes($("bop").value);
 // 따옴표 해석이 켜져 있으면, or·쉼표가 들었거나 따옴표로 시작하는 값을 따옴표로 감싸 한 값으로 읽히게 한다.
 const wrap = v => !$("quotes").checked || !/(^|\s)or(\s|$)|,|^['"]/i.test(v) ? v : v.includes("'") ? `"${v}"` : `'${v}'`;
 const OPS_COLUMN = ["=", "!=", ">=", "<=", ">", "<"];  // 오른쪽이 컬럼일 때(F12): 같은 종류끼리 견준다
-const byColumn = () => $("bmode").value === "column";
+const byColumn = () => document.querySelector("input[name=bmode]:checked").value === "column";
 function showBuilder() {  // 고른 컬럼의 타입에 맞는 연산자만 보이고, 연산자에 맞게 값 칸을 바꾼다. 오른쪽이 컬럼이면 값 칸 대신 컬럼 고르기.
   const ops = byColumn() ? OPS_COLUMN : isText() ? OPS_TEXT : OPS_OTHER, op = ops.includes($("bop").value) ? $("bop").value : "=";
   fill($("bop"), ops);
@@ -966,7 +990,7 @@ function showBuilder() {  // 고른 컬럼의 타입에 맞는 연산자만 보�
   $("bval").placeholder = isMulti() ? "값1, 값2" : op === "between" ? "값1" : "값";
 }
 const hidePick = () => { $("bpick").classList.add("hidden"); $("bfind").classList.add("hidden"); $("bfind").value = ""; };
-$("bmode").onchange = () => { hidePick(); showBuilder(); };
+$("bmode").onchange = () => { hidePick(); showBuilder(); };  // 안의 라디오가 바뀌면 올라온다
 function builderPart() {  // 지금 칸의 내용으로 만든 조건 하나. 값이 비었으면 ""
   const col = $("bcol").value, op = $("bop").value, v = $("bval").value.trim(), v2 = $("bval2").value.trim();
   if (!col) return "";
@@ -1457,69 +1481,9 @@ async function initFuncs() {
     pickers[key] = Funcs.picker({ ids: aggs(key), columns: () => S.cols, onchange: () => { fillValueColumns(); redraw(); } });
     $(host).replaceChildren(pickers[key].el);
   }
-  pickers.calc = Funcs.picker({ ids: cat.screens.calc.filter(i => cat.byId[i].category === "window"), columns: () => S.cols, onchange: showCalcForm });
-  $("cf-pick").replaceChildren(pickers.calc.el);
   fillValueColumns();
-  showCalcForm();
   if (S.base) Funcs.loadSupport(S.base, S.schema).then(() => Object.values(pickers).forEach(p => p.refresh()));
 }
-// 계산 줄 만들기 폼: 고른 종류에 맞는 칸만 보인다. 만든 줄은 서버가 검사해 아래 목록에 넣는다(목록의 줄을 직접 쓰거나 고쳐도 된다).
-function showCalcForm() {
-  const kind = $("cf-kind").value, window = kind === "window" || kind === "top";
-  $("cf-window").classList.toggle("hidden", !window);
-  $("cf-text").classList.toggle("hidden", window);
-  $("cf-top").classList.toggle("hidden", kind !== "top");
-  $("cf-expr-opts").classList.toggle("hidden", kind !== "expr");
-  $("cf-expr").placeholder = kind === "sql" ? "SQL 식 한 줄 (예: UPPER(이름) || '!', DATE_TRUNC('month', 날짜))" : "식 (예: 금액 * 수량, case(금액 >= 100, '고액', '소액'), median(금액))";
-  const p = pickers.calc;
-  if (!p) return;
-  const cols = p.xColumns(S.cols), was = $("cf-x").value;
-  fill($("cf-x"), cols.map(c => c[0]), "컬럼");
-  if (cols.some(c => c[0] === was)) $("cf-x").value = was;
-  $("cf-x").classList.toggle("hidden", p.yMode() === "none");
-}
-function calcLine() {
-  const kind = $("cf-kind").value, name = $("cf-name").value.trim(), tail = (order, group) => [...(order ? ["기준", order] : []), ...(group ? ["그룹", group] : [])];
-  if (kind === "window" || kind === "top") {
-    const { agg, opts = {} } = pickers.calc.get(), f = Funcs.get(agg), x = $("cf-x").value;
-    if (pickers.calc.yMode() === "required" && !x) throw new Error("계산할 컬럼을 고르세요.");
-    const [, oc, dir] = /^(.*?)\s+(asc|desc)$/i.exec(opts.order?.[0] ?? "") ?? [];  // 정렬 글 "컬럼 asc|desc"
-    const order = dir ? `${NewCol.bq(oc)} ${dir}` : opts.order?.[0] && NewCol.bq(opts.order[0]);
-    const after = tail(order, opts.group && [].concat(opts.group).map(c => NewCol.bq(c)).join(", ")), body = Funcs.words(f, x && NewCol.bq(x), opts);
-    return kind === "window" ? [agg, ...body, ...after, ...(name ? ["이름", name] : [])].join(" ")
-      : ["창거르기", agg, ...body, $("cf-op").value, $("cf-val").value, ...after].join(" ");
-  }
-  const expr = $("cf-expr").value.trim();
-  if (!expr) throw new Error("식을 넣어 주세요.");
-  if (!name) throw new Error("새 컬럼 이름을 넣어 주세요.");
-  return kind === "sql" ? `SQL식 ${expr} 이름 ${name}` : ["식", expr, ...tail($("cf-order").value.trim(), $("cf-group").value.trim()), "이름", name].join(" ");
-}
-$("cf-kind").onchange = showCalcForm;
-$("cf-add").onclick = () => busy($("cf-add"), async () => {
-  if (!S.base) return say("err-cf", "먼저 테이블을 고르세요.");
-  try {
-    const line = calcLine();
-    $("cf-line").textContent = line;
-    if (await addItem("calcs", line, $("err-cf"))) say("err-cf", "");
-  } catch (e) { say("err-cf", e.message); }
-});
-$("cf-find").onclick = async () => {
-  if ($("cf-panel").firstChild) return $("cf-panel").replaceChildren();
-  const cat = await Funcs.load();
-  $("cf-panel").replaceChildren(Funcs.panel({ ids: cat.screens.calc, columns: () => S.cols, onpick: f => {
-    const kind = f.window || f.category === "window" ? "window" : f.id === "qualify" ? "top" : f.raw ? "sql" : null;
-    if (f.id === "unnest") {  // 목록 펼치기는 아래 목록의 줄로
-      const input = $("calcs").querySelector("input");
-      input.value = "펼치기 " + (S.cols.find(c => c[1].startsWith("목록"))?.[0] ?? "컬럼");
-      return input.focus();
-    }
-    $("cf-kind").value = kind ?? "expr";
-    if (f.category === "window" || f.id === "qualify") pickers.calc.set({ agg: f.category === "window" ? f.id : "rank" });
-    else if (f.raw) $("cf-expr").value = "";
-    else $("cf-expr").value = ($("cf-expr").value ? $("cf-expr").value + " " : "") + f.example;
-    showCalcForm();
-  } }).el);
-};
 initFuncs();
 PrepMenu.load().catch(e => console.warn("전처리 단계 목록을 못 받았어요:", e.message));  // 머리글 우클릭의 전처리 단계 목록(못 받으면 메뉴에 그 항목만 없다)
 // 계산 단계: [예시 넣기]를 고르면 입력칸에 예시를 넣는다. 형식 전체는 안내에 마우스를 올리면 보인다.
@@ -1576,7 +1540,7 @@ function openNewCol() {
       throw new Error(why);
     } });
 }
-$("newcol-open").onclick = openNewCol;
+$("newcol-open").onclick = $("calc-new").onclick = openNewCol;  // ⑥ 새 컬럼 칸의 [+ 새 컬럼 만들기]도 같은 상자
 renderTables();
 
 // 결과 내보내기: 서버가 만든 파일을 내려받는다. 형식 단추는 [내보내기] 메뉴 하나에 묶는다(SQL 탭의 [결과 내보내기]와 같은 모양).
@@ -2025,7 +1989,13 @@ Shortcuts({
   run: () => pressBtn($("search")) || pressBtn($("sql-run")),
   find: () => $("row-find"),
 });
-const afterTables = () => searchDraft.ask();
+// 테이블 목록을 받은 뒤: 남은 초안을 묻고, 테이블이 하나뿐인데 아직 고른 것이 없으면 그 테이블을 기준으로 고른다.
+// 컬럼만 채우고 검색은 하지 않는다(openBase: 자동 검색을 덧씌우기 전의 핸들러). 표는 [검색]을 눌러야 나온다.
+const afterTables = () => {
+  searchDraft.ask();
+  const only = [...$("base").options].filter(o => o.value);
+  if (only.length === 1 && !$("base").value) { $("base").value = only[0].value; return openBase(); }
+};
 
 // ---------- 작업 탭(F10): 탭 하나 = 탐색 화면 한 벌(검색 조건·보기·문장, 결과·쪽, 집계, 차트 설정, 되돌리기 기록). 바꿀 때 통째로 떼어 두고(snapshot) 다시 붙인다(restore) ----------
 const TAB_MAX = 8, TAB_KEEP_ROWS = 2000;  // 이보다 큰 결과는 탭을 떠날 때 버리고 돌아오면 그 쪽만 다시 받는다(count:false·known_count라 다시 세지 않는다)

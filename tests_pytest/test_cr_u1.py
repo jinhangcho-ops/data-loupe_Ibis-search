@@ -89,7 +89,7 @@ const toDrawn = () => ({}); const drawChart = () => {}; let chartGroups = {}; co
 
 @needs_node
 def test_picking_a_table_runs_first_page_search_only_when_everything_else_is_empty(tmp_path):
-    code = between(PAGE, "function autoSearch()", "{ const opened")
+    code = between(PAGE, "function autoSearch()", "const openBase")
     stub = r"""
 const LISTS = ["joins", "conditions"]; let view = "cards", last = null, runs = 0;
 const S = { base: "t", joins: [], conditions: [], union: { tables: [] } }; const runSearch = () => { runs++; };

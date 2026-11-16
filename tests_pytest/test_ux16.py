@@ -262,10 +262,17 @@ def test_settings_wiring():
 def test_recent_list_fills_and_opens(tmp_path):
     code = between("common.js", "let recentConnections = [];", "// 연결 카드(connect.html)")
     body = CLS + r"""
-const out = { filled: [], opened: 0, focus: "" };
+const out = { filled: [], opened: 0, focus: "", said: [], connected: [], went: 0, listed: 0 };
 const els = { "recent-conn": { classList: cls(), replaceChildren(...k) { this.kids = k; } }, "recent-list": { replaceChildren(...k) { this.kids = k; } },
+  "older-list": { replaceChildren(...k) { this.kids = k; } }, "recent-older": { classList: cls("hidden") },
   "recent-none": { classList: cls() }, password: { focus() { out.focus = "password"; } }, find: { focus() { out.focus = "find"; } } };
 globalThis.$ = id => els[id];
+const home = { classList: cls() };
+globalThis.document = { querySelector: () => home };
+globalThis.say = (id, text, ok) => out.said.push([id, text, ok]);
+globalThis.connectWith = async body => { if (body.path === "C:/gone") throw new Error("그런 폴더나 파일이 없어요."); out.connected.push(body); };
+globalThis.goQuery = () => { out.went++; };
+globalThis.listFiles = async () => { out.listed++; };
 globalThis.Option = function (t, v) { this.text = t; this.value = v; };
 const now = new Date(), two = n => String(n).padStart(2, "0"), today = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
 globalThis.api = async () => ({ connections: [{ info: { kind: "folder", path: "C:/d" }, count: 3 }, { info: { kind: "url", url: "postgres://h/db", user: "u" }, count: 1, last: today + "T09:05:00.000000" },
@@ -274,26 +281,40 @@ globalThis.fillConnection = i => out.filled.push(i);
 globalThis.openConnect = () => { out.opened++; };
 (async () => {
   await showRecentConnections();
-  const more = els["recent-list"].kids.find(k => k.tag === "details");
-  out.top = els["recent-list"].kids.filter(k => k.tag === "button").length; out.more = more.children[0].textContent;  // 바로 보이는 줄 수와 접힌 묶음의 머리글
-  const kids = [...els["recent-list"].kids.filter(k => k !== more), ...more.children.slice(1)], btns = kids.filter(k => k.tag === "button");
+  const more = els["recent-list"].kids.find(k => k.id === "recent-more"), folders = els["older-list"].kids;
+  const kids = els["recent-list"].kids.filter(k => k !== more), btns = kids.filter(k => k.tag === "button");
+  out.top = btns.length; out.more = more.textContent;  // 최근 연결 카드의 줄 수와 [이전 연결 더 보기] 단추
   out.rows = kids.map(k => k.tag === "button" ? k.children.map(c => c.textContent) : k.textContent); out.types = btns.map(b => b.type);
+  out.folders = folders.map(f => [f.tag, f.children[0].children.map(c => c.textContent), f.children.slice(1).map(b => b.children[0].textContent)]);  // 이전 연결 카드: 날짜 폴더(머리글, 그 날의 연결들)
   out.options = els["recent-conn"].kids.map(o => o.text);
   out.noneHidden = els["recent-none"].classList.contains("hidden");
-  btns[0].onclick();
-  try { pickRecent(9); out.bad = ""; } catch (e) { out.bad = e.message; }
+  out.olderShut = els["recent-older"].classList.contains("hidden");
+  more.onclick(); out.olderOpen = !els["recent-older"].classList.contains("hidden") && home.classList.contains("older");
+  await btns[0].onclick({ currentTarget: btns[0] });  // 아이디가 있는 주소: 칸을 채우고 비밀번호만 받는다
+  out.afterUrl = { opened: out.opened, filled: out.filled.length, focus: out.focus, go: recentGo, connected: out.connected.length, said: out.said.at(-1) };
+  await btns[1].onclick({ currentTarget: btns[1] });  // 고른 파일이 기억된 파일 연결: 바로 연결하고 쿼리로
+  out.afterFile = { connected: out.connected.at(-1), went: out.went, disabled: btns[1].disabled };
+  await folders[0].children[1].onclick({ currentTarget: {} });  // 고른 파일 기록이 없는 예전 연결: 칸을 채우고 파일 목록까지 편다
+  out.afterOld = { listed: out.listed, said: out.said.at(-1)[1], went: out.went };
+  recentConnections.push({ info: { kind: "folder", path: "C:/gone", file: "C:/gone/a.duckdb" }, count: 1 });
+  await openRecent(recentConnections.length - 1); out.failed = out.said.at(-1);  // 실패 문구는 최근 연결 카드에
+  try { pickRecent(99); out.bad = ""; } catch (e) { out.bad = e.message; }
   console.log(JSON.stringify(out));
 })();
 """
     got = run_node(tmp_path, body, parts=[code])
     # 최근에 쓴 순으로, 날짜마다 머리글. 줄은 [이름, "시각 · 폴더 · 횟수"]: 고른 파일이 있으면 이름은 파일 이름(둘까지)이고 폴더는 아래 줄에
-    assert got["rows"] == ["오늘", ["postgres://h/db, u", "09:05 · 1번 사용"], ["x.duckdb", "08:00 · C:/d · 5번 사용"], "2026-01-02", ["a.csv, b.parquet 외 1개", "23:40 · C:/d · 2번 사용"],
-                           "날짜 모름", ["C:/d", "3번 사용"]]
+    assert got["rows"] == ["오늘", ["postgres://h/db, u", "09:05 · 1번 사용"], ["x.duckdb", "08:00 · C:/d · 5번 사용"], "2026-01-02", ["a.csv, b.parquet 외 1개", "23:40 · C:/d · 2번 사용"]]
     assert got["options"] == ["최근 연결에서 고르기", "C:/d (3번 사용)", "postgres://h/db, u (1번 사용)", "a.csv, b.parquet 외 1개 (2번 사용)", "x.duckdb (5번 사용)"]  # 고르는 칸은 서버가 준 차례(많이 쓴 순) 그대로
-    assert got["top"] == 3 and got["more"] == "이전 연결 1개 더 보기"  # 가장 최근 3개만 바로 보이고 나머지는 접힌 묶음(details) 안에
-    assert got["types"] == ["button"] * 4 and got["noneHidden"] is True
-    assert got["opened"] == 1 and got["filled"] == [{"kind": "url", "url": "postgres://h/db", "user": "u"}] and got["focus"] == "password"
-    assert got["bad"] == "없는 최근 연결: 9"
+    assert got["top"] == 3 and got["more"] == "이전 연결 1개 더 보기"  # 오늘 것(적으면 최근 3개까지)만 카드에, 나머지는 이전 연결 카드에
+    assert got["folders"] == [["details", ["날짜 모름", "1개"], ["C:/d"]]]  # 날짜마다 폴더 하나(오늘 것은 없다), 안에 그 날의 연결
+    assert got["types"] == ["button"] * 3 and got["noneHidden"] is True
+    assert got["olderShut"] is True and got["olderOpen"] is True  # 이전 연결 카드는 단추를 눌러야 열린다
+    assert got["afterUrl"] == {"opened": 1, "filled": 1, "focus": "password", "go": True, "connected": 0, "said": ["msg-recent", "비밀번호를 넣고 [연결]을 누르면 쿼리로 넘어가요.", "hint"]}
+    assert got["afterFile"] == {"connected": {"kind": "folder", "path": "C:/d", "file": "C:/d/x.duckdb"}, "went": 1, "disabled": False}
+    assert got["afterOld"] == {"listed": 1, "said": "파일을 고르고 [연결]을 누르면 쿼리로 넘어가요.", "went": 1}
+    assert got["failed"] == ["msg-recent", "그런 폴더나 파일이 없어요.", None]
+    assert got["bad"] == "없는 최근 연결: 99"
 
 
 @needs_node
@@ -340,8 +361,11 @@ def test_home_layout():
     go = between("home.html", '<nav class="home-go"', "</nav>")
     assert re.findall(r'href="(/\w+)" data-feature="(\w+)"', go) == [(h, f) for h, f, _ in RAIL[1:]]
     aside = between("home.html", '<aside class="home-recent"', "</aside>")
-    assert 'id="recent-list"' in aside and 'id="recent-none"' in aside
-    assert "function afterConnect() { showHome(); }" in html and "resume().then(showHome);" in html
+    assert 'id="recent-list"' in aside and 'id="recent-none"' in aside and 'id="msg-recent"' in aside
+    older = between("home.html", '<aside id="recent-older"', "</aside>")
+    assert 'class="home-recent hidden"' in older and 'id="older-list"' in older and 'id="older-close"' in older  # 이전 연결 카드는 닫힌 채로 시작
+    assert "function afterConnect() { recentGo ? goQuery() : showHome(); }" in html and "resume().then(showHome);" in html  # 최근 연결로 연결하면 쿼리로
+    assert 'SERVER.features.on.includes("query") ? location.assign("/search") : showHome()' in html and 'id="demo-go"' in html
     assert ".home:not(.on) #conn-close { display:none !important; }" in html
 
 
@@ -349,8 +373,8 @@ def test_home_layout():
 def test_show_home_switches_views(tmp_path):
     code = between("home.html", "function showHome() {", "\n}\n") + "\n}\n"
     body = CLS + r"""
-const home = { classList: cls() }, now = { classList: cls("hidden") }, name = { textContent: "x" };
-globalThis.$ = id => ({ "home-now": now, "home-name": name })[id];
+const home = { classList: cls() }, now = { classList: cls("hidden") }, name = { textContent: "x" }, demo = { classList: cls() };
+globalThis.$ = id => ({ "home-now": now, "home-name": name, "demo-go": demo })[id];
 globalThis.document = { querySelector: q => (q === ".home" ? home : null) };
 const n = { open: 0, close: 0 };
 globalThis.openConnect = () => { n.open++; }; globalThis.closeConnect = () => { n.close++; };
