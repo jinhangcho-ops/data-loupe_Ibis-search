@@ -76,6 +76,8 @@ describe("W6 달력 Tab 칸", () => {
     const html = renderToStaticMarkup(<Calendar start="2026-12-01" end="2027-02-10" max="2026-11-03" onPick={() => {}} onClose={() => {}} />);
     expect(html.match(/tabindex="0"/g)?.length).toBe(1);
     expect(html).toContain("2026년 11월");
+    expect(html.match(/class="dcal-year"/g)?.length).toBe(2);  // 달 제목의 연도는 단추(누르면 연도 목록)
+    expect(html).not.toContain("dcal-years");  // 연도 목록은 연도를 눌러야 나온다
   });
   it("달을 넘기면 초점은 보이는 달의 날로(기준일 뒤면 기준일)", () => {
     expect(keepFocus("2026-11-03", "2026-08", "2026-11-03")).toBe("2026-08-01");

@@ -155,14 +155,16 @@ def test_picked_files_outside_drawn_list_survive_restore_and_connect(tmp_path):
     body = """
 const boxes = ["a", "b"].map(v => ({ value: v, checked: false }));
 document.querySelectorAll = () => boxes;
-const els = {}; globalThis.$ = id => els[id] ??= { value: FLAT, textContent: "", classList: { toggle() {} } };
+const els = {}; globalThis.$ = id => els[id] ??= { value: FLAT, textContent: "", classList: { toggle() {} }, replaceChildren(...k) { this.kids = k; } };
+globalThis.chip = text => ({ text }); globalThis.underPath = f => f; globalThis.el = (tag, props) => props;
 restoreFlat(["b", "z1", "z2"]);   // z1·z2는 화면 목록(2000개)에 안 그려진 파일
 boxes[0].checked = true;          // 사용자가 a도 체크
-console.log(JSON.stringify({ picked: pickedFiles(), text: els["flat-count"].textContent }));
+console.log(JSON.stringify({ picked: pickedFiles(), text: els["flat-count"].textContent, chips: els["flat-picked"].kids.map(k => k.text) }));
 """
     got = run_node(tmp_path, body, parts=[flat])
     assert got["picked"] == ["a", "b", "z1", "z2"]
     assert "목록에 안 보이는 2개도 고름" in got["text"]
+    assert got["chips"] == ["b", "z1", "z2"]  # 고른 파일 요약에는 목록에 안 그린 것도 나온다(되살린 때의 것)
 
 
 def test_prep_recipe_sends_count_false_only_when_stats_off(tmp_path):
@@ -203,7 +205,7 @@ def test_file_list_is_capped(tmp_path):
     body = """
 (async () => {
   const flat = Array.from({ length: 5000 }, (_, i) => "f" + i + ".csv"), made = {};
-  const stubs = { kinds: { querySelectorAll: () => [] }, path: { value: "x" }, deep: { checked: false }, file: mk("select", { options: [] }), "flat-list": mk("div") };
+  const stubs = { kinds: { querySelectorAll: () => [] }, path: { value: "x" }, deep: { checked: false }, file: mk("select", { options: [] }), "flat-list": mk("div"), "flat-find": { value: "x" } };
   globalThis.$ = id => stubs[id];
   globalThis.api = async () => ({ files: [], flat });
   globalThis.Option = class { constructor(t, v) { this.t = t; } };

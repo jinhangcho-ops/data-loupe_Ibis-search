@@ -7,6 +7,7 @@ import re
 
 from core import metric_file
 from core import profiler
+from core import server
 from core import settings
 from core import source
 from core import sql_exec
@@ -46,7 +47,7 @@ def context(con, conn_key, schema=None, vts=None):
         spec = (schema and spec_tables.get(f"{schema}.{name}")) or spec_tables.get(name) or {}
         guesses, described = cached_infer(conn_key, schema, name), spec.get("columns", {})
         cols = []
-        for col, dtype in list(source.get_table(con, name, schema).schema().items())[:MAX_COLUMNS]:
+        for col, dtype in list(server.any_table(con, name, schema, vts={}).schema().items())[:MAX_COLUMNS]:  # 스키마는 기억해 둔 것(물을 때마다 테이블 수만큼 DB에 묻지 않게). 목록의 이름은 연결의 테이블이라 가상 테이블은 보지 않는다
             cols.append({"name": col, "type": str(dtype).lstrip("!"), **({"description": described[col]["description"]} if described.get(col, {}).get("description") else {}),
                          **({"infer": guesses[col]} if guesses.get(col) else {})})
         part = spec.get("partition")

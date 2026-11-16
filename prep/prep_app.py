@@ -409,8 +409,8 @@ def base_table(body):
     if (t := start_table(body)) is not None:
         return t
     con, schema = get_con(), body.get("schema") or None
-    parse.check_name(body["base"], source.list_tables(con, schema), "테이블")
-    return source.get_table(con, body["base"], schema)
+    parse.check_name(body["base"], server.table_names(con, schema), "테이블")  # 목록·스키마는 기억해 둔 것(source_table과 같게, 열 때마다 DB에 묻지 않게)
+    return server.any_table(con, body["base"], schema, vts={})
 
 
 def sample_size(body):

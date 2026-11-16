@@ -22,11 +22,18 @@
   .recent-list { display:flex; flex-direction:column; gap:var(--sp-1); max-height:60vh; overflow-y:auto; }  /* 길어지면 카드 안에서 굴린다 */
   .recent-day { color:var(--muted); font-size:var(--fs-sm); font-weight:600; margin-top:var(--sp-2); }
   .recent-list .btn { flex:none; flex-direction:column; align-items:flex-start; gap:0; justify-content:flex-start; height:auto; min-height:var(--h-md); padding:var(--sp-1) var(--sp-3); white-space:normal; text-align:left; overflow-wrap:anywhere; font-weight:500; }
-  .recent-more { display:flex; flex-direction:column; gap:var(--sp-1); margin-top:var(--sp-2); }
-  .recent-more > summary { cursor:pointer; color:var(--accent); font-size:var(--fs-sm); padding:var(--sp-1) 0; }
-  .recent-more[open] > summary { margin-bottom:var(--sp-1); }
-  .recent-more .btn { width:100%; margin-bottom:var(--sp-1); }
-  @media (max-width:900px) { .home { grid-template-columns:1fr; } }
+  #recent-more { align-self:flex-start; margin-top:var(--sp-2); }
+  .home.older { grid-template-columns:minmax(0, 560px) repeat(2, minmax(240px, 360px)); }  /* 이전 연결 카드가 열리면 오른쪽에 칸 하나 더 */
+  .home-recent .head { display:flex; align-items:center; }
+  .recent-folder { border:1px solid var(--line); border-radius:var(--r-card); }
+  .recent-folder > summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:var(--sp-2); padding:var(--sp-2) var(--sp-3); }
+  .recent-folder > summary::-webkit-details-marker { display:none; }
+  .recent-folder > summary::before { content:""; flex:none; width:18px; height:14px; background:var(--accent); clip-path:polygon(0 0, 40% 0, 52% 18%, 100% 18%, 100% 100%, 0 100%); border-radius:2px; opacity:.75; }  /* 폴더 그림 */
+  .recent-folder > summary .hint { margin:0 0 0 auto; }
+  .recent-folder[open] > summary { border-bottom:1px solid var(--line); }
+  .recent-folder .btn { width:calc(100% - var(--sp-2) * 2); margin:var(--sp-2) var(--sp-2) 0; }
+  .recent-folder .btn:last-child { margin-bottom:var(--sp-2); }
+  @media (max-width:900px) { .home, .home.older { grid-template-columns:1fr; } }
 </style>
 </head>
 <body class="app">
@@ -47,12 +54,19 @@
       </nav>
     </div>
 <!--include core/connect.html-->
+    <button id="demo-go" class="ghost" title="지어낸 주문·고객·방문기록 표에 연결해요. 연결할 데이터가 없어도 쿼리·분석·대시보드를 써 볼 수 있어요">연결할 데이터가 없나요? 예시 데이터로 둘러보기</button>
   </section>
   <aside class="home-recent" aria-label="최근 연결">
     <h3>최근 연결</h3>
-    <div class="hint">누르면 그 연결로 칸을 채워요. 비밀번호는 저장하지 않아 다시 넣어요.</div>
+    <div class="hint">누르면 바로 연결하고 쿼리 화면으로 넘어가요. 비밀번호가 필요한 연결은 비밀번호만 넣으면 돼요.</div>
     <div id="recent-list" class="recent-list"></div>
+    <div id="msg-recent" class="hint" role="status"></div>
     <p class="hint" id="recent-none">아직 연결한 적이 없어요.</p>
+  </aside>
+  <aside id="recent-older" class="home-recent hidden" aria-label="이전 연결">
+    <div class="head"><h3>이전 연결</h3><button id="older-close" class="ib" title="닫기" style="margin-left:auto"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
+    <div class="hint">날짜를 누르면 그 날의 연결이 펼쳐져요.</div>
+    <div id="older-list" class="recent-list"></div>
   </aside>
 </div>
 <!--include core/dash_refresh.html-->
@@ -68,9 +82,15 @@ function showHome() {
   document.querySelector(".home").classList.toggle("on", on);
   $("home-now").classList.toggle("hidden", !on);
   $("home-name").textContent = on ? connName : "";
+  $("demo-go").classList.toggle("hidden", on);
   if (on) closeConnect(); else openConnect();
 }
-function afterConnect() { showHome(); }  // common.js가 [연결]에 성공한 뒤 부른다
+// 예시 데이터: 서버가 지어낸 표 파일을 준비해 준 칸 값으로 연결한다([연결]과 같은 길)
+$("demo-go").onclick = () => busy($("demo-go"), async () => { try { await connectWith(await api("/api/demo", {})); showHome(); } catch (e) { connMsg(e.message); } });
+// 최근 연결로 연결한 뒤: 쿼리 화면으로 간다(쿼리 기능을 설치하지 않았으면 첫 화면의 지금 연결)
+const goQuery = () => SERVER.features.on.includes("query") ? location.assign("/search") : showHome();
+function afterConnect() { recentGo ? goQuery() : showHome(); }  // common.js가 [연결]에 성공한 뒤 부른다
+$("older-close").onclick = () => showOlder(false);
 resume().then(showHome);
 </script>
 </body>

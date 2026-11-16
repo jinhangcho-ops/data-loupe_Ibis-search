@@ -338,8 +338,16 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .modal-box { background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:var(--r-card); padding:18px; width:min(440px, 92vw); max-height:90vh; overflow:auto; box-shadow:0 20px 60px rgb(15 25 30 / .25); }
 #flat { margin-top:6px; }
 #flat .row { align-items:center; margin-bottom:2px; }
-#flat-list label { display:block; white-space:nowrap; }
+#flat-find { margin-bottom:4px; }
+#flat-list { max-height:260px; border:1px solid var(--line); border-radius:var(--r-ctl); padding:2px; }
+#flat-list label { display:flex; align-items:center; gap:8px; white-space:nowrap; padding:6px 8px; border-radius:var(--r-ctl); cursor:pointer; font-size:var(--fs-sm); color:var(--text); }  /* 줄 어디를 눌러도 체크 */
+#flat-list label.hidden { display:none; }
+#flat-list label:hover { background:var(--accent-bg); }
 #flat-list input { width:auto; }
+#flat-list .tag { margin-left:auto; padding:0 8px; border:1px solid var(--line); border-radius:var(--r-pill); font-size:var(--fs-xs); color:var(--muted); }
+#flat-picked { margin-top:6px; flex:none; }
+.seg2 label { justify-content:center; }  /* 라디오가 든 라벨은 inline-flex라 text-align이 먹지 않는다 */
+.conn-card .kinds { justify-content:center; }
 
 /* 고르는 칸을 펼친 목록. 창 엔진이 그리는 목록은 화면 모드의 색을 따르지 않아 직접 그린다(common.js). */
 .menu { position:fixed; z-index:300; background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:4px 0; box-shadow:0 10px 30px rgb(15 25 30 / .18); }
@@ -426,6 +434,9 @@ a.btn { text-decoration:none; color:var(--text); }  /* 받는 곳 열기 같은 
 .drop .pop .cal-day.on { background:var(--accent); color:var(--on-accent); }
 .drop .pop .cal-day:disabled { color:var(--faint); background:none; }
 .cal-note { margin:0; }
+.drop .pop .cal-year { padding:0 4px; font-weight:700; color:var(--accent); cursor:pointer; }
+.cal-years { display:grid; grid-template-columns:repeat(5, 1fr); gap:4px; max-height:240px; overflow-y:auto; min-width:300px; }
+.drop .pop .cal-years .cal-day { width:auto; padding:0 8px; }
 th.pick, td.pick { width:32px; padding:0 4px; text-align:center; }
 td.pick label.check { display:inline-flex; align-items:center; justify-content:center; min-width:24px; cursor:pointer; }
 tr.picked td { background:var(--accent-bg); }

@@ -34,6 +34,7 @@ state = {"con": None, "passwords": [], "opened": None, "rows": {}, "names": {}, 
 # names: 스키마 → 테이블 목록, tables: (스키마, 이름) → 테이블 식. 검색 칸을 바꿀 때마다 DB에 목록·스키마를 다시 묻지 않게 연결마다 기억한다(forget_tables로 비운다).
 turn = threading.Lock()  # 연결 하나를 같이 쓰므로 요청은 한 번에 하나만 처리한다. 연결을 쓰지 않는 FREE의 경로만 기다리지 않는다.
 FREE = {"/api/pick", "/api/usage", "/api/cancel", "/api/restart", "/api/send", "/api/drivers", "/api/funcs", "/api/features/install", "/api/update",
+        "/api/demo",  # 예시 파일만 만든다(연결은 화면이 이어서 /api/connect로)
         "/api/settings", "/api/recent", "/api/connections", "/api/files"}  # 뒤의 넷: 설정 폴더 파일만 읽고 쓰거나(쓰기는 settings.updating이 묶는다) 폴더만 훑는다. 차례(turn)를 기다리지 않는 경로. 연결을 쓰지 않는 라우트 모듈이 더한다.
 KEY = secrets.token_urlsafe(32)  # 실행할 때마다 새로 만드는 열쇠. desktop.py가 창 주소에 넣는다.
 ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 목록 예: ("Parquet (*.parquet)",) → 고른 경로 또는 None). 창을 만든 desktop.py가 채운다. 창 없이 돌 때는 None.
@@ -447,6 +448,13 @@ def download(expr, fmt, guard=True):
 def save_settings():
     settings.save(request.json)
     return jsonify(ok=True)
+
+
+@app.post("/api/demo")
+def demo_data():
+    """예시 데이터(지어낸 표 세 개) 파일을 준비하고 그 파일에 연결할 칸 값을 돌려준다. 화면은 이 값으로 /api/connect를 부른다."""
+    from core import demo
+    return jsonify(demo.make())
 
 
 @app.post("/api/files")

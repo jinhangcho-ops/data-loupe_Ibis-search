@@ -52,6 +52,9 @@ async function send(url: string, body?: unknown, method?: "DELETE"): Promise<Res
 const api = async <T>(url: string, body?: unknown): Promise<T> => (await send(url, body)).json();
 const q = encodeURIComponent;
 
+// 예시 데이터(지어낸 표)에 연결한다: 서버가 파일을 준비해 준 칸 값으로 연결(연결할 데이터가 없어도 카드를 만들어 볼 수 있게)
+export const connectDemo = async () => api<{ schemas: string[] }>("/api/connect", await api<Record<string, string>>("/api/demo", {}));
+
 // ---------- 대시보드 ----------
 export const constants = () => api<Constants>("/api/dash/constants");
 export const listDashboards = () => api<DashList>("/api/dash");

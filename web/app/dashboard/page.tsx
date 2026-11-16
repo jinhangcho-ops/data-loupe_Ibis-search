@@ -11,7 +11,7 @@ import { Grid, useAddShell } from "@/components/grid/Grid";
 import { ShellProvider, useShell } from "@/components/shell/ShellProvider";
 import { Toolbar, useAddCard } from "@/components/shell/Toolbar";
 import { TopBar } from "@/components/shell/TopBar";
-import { listDashboards } from "@/lib/api";
+import { connectDemo, listDashboards } from "@/lib/api";
 import { ConstantsProvider, useConstants } from "@/lib/constants";
 import { DashProvider, selectedCard, useActionLog, useDash } from "@/lib/store";
 
@@ -83,6 +83,8 @@ function DashboardView() {
             <button className="btn p" style={{ height: 44, padding: "0 22px", fontSize: 15 }} onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: null }); setAddOpen(true); }}>카드 추가</button>
             <a className="btn" style={{ height: 44, padding: "0 22px", fontSize: 15, textDecoration: "none" }} href="/search">쿼리에서 가져오기</a>
           </div>
+          {!conn && <button id="d-demo" className="ghost" title="지어낸 주문·고객·방문기록 표에 연결해요. 연결할 데이터가 없어도 카드가 어떻게 보이는지 볼 수 있어요"
+            onClick={e => { e.stopPropagation(); connectDemo().then(() => location.reload(), err => dispatch({ type: "error", message: err.message })); }}>예시 데이터로 둘러보기</button>}
         </div>
       )}
       <div className="d-main">
