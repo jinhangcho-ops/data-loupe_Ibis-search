@@ -72,7 +72,6 @@
   .f-add input { flex:1; min-width:0; }
   .f-win { display:flex; gap:6px; align-items:center; }
   .f-win input { width:80px; }
-  .a-form { margin-top:12px; }
   .a-form .hint { margin:8px 0 4px; }
   #a-pane .chart-box { width:min(100%, calc(var(--chart, clamp(260px, 52vh, 900px)) * var(--ratio, 16 / 9))); margin:0 auto; position:relative; }
   #a-chart { display:block; width:100%; height:0; border:0; }  /* 높이는 섬이 그린 뒤 알린다(size) */
@@ -109,28 +108,35 @@
   /* (Phase 19) 아래 [미리보기]·[실행] 밑의 한 줄 안내 */
   .side > footer.has-lead { flex-wrap:wrap; }
   .side > footer.has-lead .lead { flex-basis:100%; margin:0; }
-  /* (Phase 19) 분석 종류: 질문형 이름을 2열 목록으로, 원래 이름은 작게 */
+  /* [전처리 | 분석] 토글: 설정 패널(aside.side) 맨 위. 요소는 하나이고 showView가 보이는 쪽 패널로 옮긴다 */
+  .side > #views { margin:14px 22px 0; padding:3px; min-height:0; align-items:stretch; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-card); }
+  .side > #views button { flex:1; padding:6px; border:0; border-radius:var(--r-ctl); }
+  .side > #views button.on { background:var(--card); color:var(--accent); }
+  /* 결과 카드 머리: 제목·설명은 왼쪽, [대시보드에 추가]는 오른쪽 끝 */
+  .big.a-head { align-items:center; }
+  .big.a-head > #a-sub { flex:1; min-width:0; }
   .asave { margin-top:10px; border:1px solid var(--line); border-radius:8px; padding:6px 10px; }
   .asave > summary { cursor:pointer; font-size:13px; font-weight:600; }
   .asave .hint { margin:8px 0 4px; }
   .asave .row { margin-bottom:4px; }
   .ahead { margin:12px 0 4px; font-weight:600; }
-  .akinds { display:grid; grid-template-columns:1fr; gap:6px; }  /* 종류만 보이는 구역. 고른 종류의 설명과 칸은 아래 .a-form 구역에 */
-  .akinds label { display:flex; gap:6px; align-items:flex-start; border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:13px; line-height:1.35; cursor:pointer; }
+  /* 무엇이 궁금해요?: 종류를 한 줄에 하나. 고른 종류의 칸(.a-form)은 showAnaForm이 그 label 바로 아래로 옮기고, 둘이 강조 테두리 하나로 이어진다 */
+  .akinds { display:grid; grid-template-columns:1fr; gap:6px; }
+  .akinds > label { display:flex; gap:6px; align-items:flex-start; border:1px solid var(--line); border-radius:var(--r-card); padding:6px 8px; font-size:var(--fs-sm); line-height:1.35; cursor:pointer; }
   .akinds label:has(input:checked) { border-color:var(--accent); background:var(--accent-bg); }
+  .akinds > label:has(input:checked) { border-bottom:0; border-radius:var(--r-card) var(--r-card) 0 0; }
   .big.a-answer { display:block; font-size:var(--fs-xl); font-weight:600; }  /* 분석 결과의 한 문장 답(제목 아래, 그래프 위). 여백은 .big 그대로 */
   .big.a-answer:empty { display:none; }
   .big.a-answer b { font-size:inherit; color:var(--accent); }
-  .akinds input { width:auto; margin:2px 0 0; flex:none; }
-  .akinds span { font-weight:600; }
-  .akinds small { display:block; color:var(--muted); font-size:11px; font-weight:400; }
-  .a-form { border-top:1px solid var(--line); padding-top:10px; }
+  .akinds > label > input { width:auto; margin:2px 0 0; flex:none; }
+  .akinds > label > span { font-weight:600; }
+  .akinds > label small { display:block; color:var(--muted); font-size:var(--fs-xs); font-weight:400; }
+  .a-form { margin-top:-6px; border:1px solid var(--accent); border-top:0; border-radius:0 0 var(--r-card) var(--r-card); background:var(--accent-bg); padding:0 8px 8px; }  /* -6px: .akinds의 gap을 메워 고른 label에 붙인다 */
   .a-form > .lead { margin-top:0; }
 </style>
 </head>
 <body class="app">
 <!--include core/status.html-->
-<nav class="subnav" id="views"><button data-view="prep" class="on">전처리</button><button data-view="ana">분석</button></nav>
 <div class="work" id="prep-view">
   <main class="results">
     <div class="big"><b id="p-big">테이블을 고르세요</b><span id="p-sub">오른쪽 데이터 단계에서 연결과 테이블을 고르면 여기에 데이터가 나와요.</span></div>
@@ -165,6 +171,7 @@
   </main>
   <div class="grip-x" data-size="panel" title="끌어서 패널 너비를 바꿔요. 두 번 누르면 기본 너비로 돌아가요"></div>
   <aside class="side">
+    <nav class="subnav" id="views"><button data-view="prep" class="on">전처리</button><button data-view="ana">분석</button></nav>
     <header><h3>전처리 조건</h3></header>
     <div class="sc"><p class="lead">분석하기 전에 데이터를 다듬어요(행 빼기·고치기·새 컬럼). 원본 데이터는 바뀌지 않아요.</p><div class="flow">
       <div class="step open" data-step="data"><div class="sp" data-hint><i>1</i><span class="t" title="다듬을 테이블을 골라요">데이터</span><b id="sum-p-data"></b><span class="c"></span></div>
@@ -304,7 +311,12 @@
 <div class="work hidden" id="ana">
   <main class="results">
     <div class="tool"><span class="hint" id="a-data" style="margin:0; flex:1"></span>
-      <button id="a-full" class="btn" title="표본(미리 읽은 일부 행) 말고 테이블 전체 데이터로 다시 구해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요">표본 말고 전체 데이터로 다시 구하기</button>
+      <button id="a-full" class="btn" title="표본(미리 읽은 일부 행) 말고 테이블 전체 데이터로 다시 구해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요">표본 말고 전체 데이터로 다시 구하기</button></div>
+    <section class="pane" id="a-src-pane">
+      <h4 class="a-sec" id="a-src-h">분석에 쓰는 데이터 <span class="a-rows" id="a-src-note"></span></h4>
+      <div class="table-wrap" id="a-src"></div>
+    </section>
+    <div class="big a-head"><b id="a-title">분석</b><span id="a-sub">오른쪽 [무엇이 궁금해요?]에서 하나를 고르고 [구하기]를 누르면 여기에 그래프가 나와요.</span>
       <div class="drop"><button id="a-add" class="btn p" title="지금 보이는 그래프를 구한 값과 함께 대시보드 카드로 넣어요">대시보드에 추가</button>
         <div class="pop hidden" id="a-pop" style="width:280px">
           <div class="hint" style="margin:0">어느 대시보드에 넣을까요?</div>
@@ -313,11 +325,6 @@
           <div class="row"><button id="a-dash-go" class="btn p">추가</button></div>
           <div class="hint" style="margin:0">카드에는 구한 값이 들어가요. 이 PC의 이 계정에서만 열 수 있게 암호화해 저장하고, 대시보드 화면에서 볼 수 있어요.</div>
         </div></div></div>
-    <section class="pane" id="a-src-pane">
-      <h4 class="a-sec" id="a-src-h">분석에 쓰는 데이터 <span class="a-rows" id="a-src-note"></span></h4>
-      <div class="table-wrap" id="a-src"></div>
-    </section>
-    <div class="big"><b id="a-title">분석</b><span id="a-sub">오른쪽에서 분석 종류를 고르고 [구하기]를 누르면 여기에 그래프가 나와요.</span></div>
     <div class="big a-answer" id="a-answer"></div>
     <div id="a-notes"></div>
     <div class="err" id="err-ana"></div>
@@ -360,8 +367,8 @@
         <div class="hint">최근 분석 (자동 저장, <span id="a-recent-max"></span>개까지)</div>
         <select id="a-recent" title="[구하기]에 성공한 설정이 자동으로 남아요. 고르면 그 설정을 불러와요"></select>
       </details>
-      <div class="hint ahead">분석 종류</div>
-      <div class="akinds" role="radiogroup" aria-label="분석 종류">
+      <div class="hint ahead">무엇이 궁금해요?</div>
+      <div class="akinds" role="radiogroup" aria-label="무엇이 궁금해요?">
         <label><input type="radio" name="akind" value="distribution" checked> <span>값이 퍼진 모양(분포)<small>값이 주로 얼마쯤이고 얼마나 고르게 퍼져 있는지 봐요</small></span></label>
         <label><input type="radio" name="akind" value="correlation"> <span>같이 움직이는 숫자(상관관계)<small>한 숫자가 커질 때 다른 숫자도 커지는지 봐요</small></span></label>
         <label><input type="radio" name="akind" value="groups"> <span>묶음끼리 비교<small>매장·팀 같은 묶음마다 합계나 평균을 구해 나란히 봐요</small></span></label>
@@ -2086,6 +2093,7 @@ function showPrepSummaries() {
 const VIEWS = { prep: "prep-view", ana: "ana" }, HASHES = { ana: "#analysis" };
 function showView(name) {
   document.querySelectorAll("#views button").forEach(b => b.classList.toggle("on", b.dataset.view === name));
+  $(VIEWS[name]).querySelector(".side").prepend($("views"));  // 토글은 하나: 보이는 쪽 설정 패널의 맨 위로 옮긴다
   Object.entries(VIEWS).forEach(([v, id]) => $(id).classList.toggle("hidden", v !== name));
   history.replaceState(null, "", HASHES[name] ?? location.pathname + location.search);
   if (name === "ana") { renderAnaSrc(); loadAnaColumns(); drawAna(true); }

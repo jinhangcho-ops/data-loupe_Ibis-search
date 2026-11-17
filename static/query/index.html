@@ -13,6 +13,7 @@
   #flow .step { counter-increment:qstep; }
   #flow .step .sp i { font-size:0; }
   #flow .step .sp i::before { content:counter(qstep); font-size:var(--fs-xs); }
+  #flow .step .sp svg { flex:none; color:var(--muted); }  /* 단계 제목 앞의 선 그림 아이콘 */
   .edx .row { margin-bottom:6px; }
   ul.items { list-style:none; margin:0 0 4px; padding:0; }
   ul.items li { display:flex; justify-content:space-between; gap:6px; background:var(--card); border:1px solid var(--accent-line); border-radius:9px; padding:4px 8px; margin-bottom:4px; }
@@ -37,12 +38,13 @@
   .jb .r1 .jbase { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   details.more { margin-top:6px; } details.more > summary { cursor:pointer; color:var(--accent); font-size:var(--fs-sm); }
   #bpick { margin-bottom:6px; }
-  .drop.up .pop { top:auto; bottom:46px; left:0; right:auto; min-width:340px; }
+  .drop.up .pop { top:auto; bottom:calc(100% + var(--sp-1)); left:0; right:auto; min-width:340px; }
   #saved-pop { padding:10px; gap:6px; }
   #saved-pop .row { margin:0; flex-wrap:nowrap; }
   #saved-pop .row input { flex:1; min-width:0; }
   #saved-pop .row button { flex:none; border:1px solid var(--line); background:var(--card); font-weight:600; justify-content:center; }
-  #sql { margin:0 0 10px; padding:8px 10px; background:var(--bg); border-radius:10px; font:12px/1.4 Consolas, monospace; white-space:pre-wrap; word-break:break-all; max-height:200px; overflow:auto; }
+  #sql { margin:0 0 10px; padding:8px 10px; background:var(--bg); border-radius:10px; font:12px/1.4 Consolas, monospace; white-space:pre-wrap; word-break:break-all; }
+  #sql:empty { display:none; }
   #rows th { cursor:pointer; }  /* 결과 표의 머리글은 누르면 그 컬럼으로 정렬한다. */
   .pane > .table-wrap > table { min-width:100%; }
   #err-search, #err-export { padding:0 28px; }
@@ -93,16 +95,22 @@
   /* SQL 탭의 질문 줄과 프롬프트 미리보기 */
   .sql-edit .nl-row input { flex:1 1 240px; width:auto; }
   .nl-prompt { margin:0; padding:8px 10px; background:var(--bg); border:1px solid var(--line); border-radius:10px; font:12px/1.45 Consolas, monospace; white-space:pre-wrap; max-height:260px; overflow:auto; }
-  /* 단계 카드 사이는 화살표 대신 가는 세로선 하나 */
+  /* 단계 사이는 구분선(.step의 위쪽 선)이라 잇는 선 없이 틈만 둔다 */
   .flow .cn { height:12px; }
-  .flow .cn::before { content:""; width:1px; height:100%; background:var(--line); }
   .step .sp .t { width:72px; }
-  /* 결과 머리: 행 수가 주인공, 아래 한 줄은 보고 있는 범위와 조건 */
-  .big { flex-direction:column; align-items:flex-start; gap:2px; padding-bottom:12px; }
+  /* 결과 머리 한 줄: 탭(왼쪽) · 큰 행 수 · 내보내기(오른쪽 끝). 아래 한 줄(.big)은 보고 있는 범위와 조건 */
+  .rhead { display:flex; align-items:center; flex-wrap:wrap; gap:0 var(--sp-3); padding:var(--sp-3) 28px 0; border-bottom:1px solid var(--line); }
+  .rhead .tabs2 { align-self:flex-end; padding:0; border:0; }
+  .rhead #big-count { margin-left:auto; font-size:var(--fs-xl); font-weight:700; white-space:nowrap; }
+  @media (max-width:1280px) { .rhead { padding-left:18px; padding-right:18px; } }  /* common.css의 .tool·.pane과 같은 좁은 창 여백 */
+  .big { padding-top:var(--sp-2); padding-bottom:0; }
   .big span { max-width:100%; font-size:13px; }
   .side > header { padding-right:14px; }
   .fold, .side-strip b { font-size:18px; line-height:1; }
-  .side > footer #search { flex:1.4; }
+  /* 패널 아래: [저장한 검색]은 작은 단추, 그 아래 [검색]은 한 줄 가득 */
+  #side > footer { flex-direction:column; align-items:stretch; gap:var(--sp-1); }
+  #side > footer #saved-open { flex:none; height:auto; }
+  #side > footer #search { flex:none; }
   /* 차트 설정 칸: 칸 위에 작은 이름표 */
   .cf { display:flex; flex-direction:column; gap:2px; flex:1 1 120px; min-width:0; max-width:clamp(160px, 18vw, 280px); }
   .cf > .cl { font-size:11.5px; color:var(--muted); }
@@ -110,11 +118,9 @@
   .ctl.lab { align-items:flex-start; } .ctl.lab > button { margin-top:17px; }  /* 이름표 높이만큼 내려 칸과 줄을 맞춘다 */
   .cf.wide { flex:2 1 240px; max-width:460px; } #cagg { display:block; } #cagg .fp { width:100%; }
   .axis-box { margin-bottom:10px; } .axis-box > summary { cursor:pointer; }
-  /* 아직 검색·실행하지 않았을 때는 큰 글자 없이 회색 보조 글씨만 */
-  .big b:empty { display:none; }
   #rows th:not(.sorted, .pick, .addcol):hover::after { content:" ↕"; color:var(--muted); }
   #bpick-note { margin:0 0 6px; } #bpick.hidden + #bpick-note, #bpick-note:not(.on) { display:none; }
-  .results > .tool { flex-wrap:wrap; }  /* 내보내기 형식 단추를 펼쳐 두어 좁은 창에서는 다음 줄로 */
+  .results > .tool { flex-wrap:wrap; }  /* 단추가 많아 좁은 창에서는 다음 줄로 */
   #rows th:is(.pick, .addcol) { cursor:default; }
   #page-go, #sql-go { width:auto; }
   #pt-tables .row { margin-bottom:6px; flex-wrap:wrap; }
@@ -159,21 +165,21 @@
       <div class="drop"><button type="button" id="wtab-menu" class="ghost" title="이 탭을 저장해요" aria-label="탭 메뉴">⋯</button>
         <div class="pop hidden" id="wtab-pop"><button id="wtab-save" title="이 탭의 조건을 탭 이름으로 저장한 검색에 넣어요">저장한 검색으로 저장</button><button id="wtab-vt" title="이 탭의 SQL을 SQL 탭 편집기에 넣고 탭 이름을 가상 테이블 이름 칸에 넣어요">가상 테이블로 저장</button></div></div></div>
     <div class="vwide hidden" id="vwide"><div id="sent-host" class="hidden"></div></div>
+    <div class="rhead">
+      <div class="tabs2"><button data-tab="rows" class="on" title="찾은 행을 표로 봐요">표</button><button data-tab="summary" title="컬럼마다 개수·평균 같은 요약을 봐요">집계</button><button data-tab="chart" title="값을 그림으로 봐요">차트</button><button data-tab="sql" id="sql-show" title="이 검색이 DB에 보내는 SQL 문장을 보여 줘요">SQL</button></div>
+      <b id="big-count"></b>
+      <div class="drop"><button id="export-open" class="btn" title="조건에 맞는 모든 행을 파일로 내보내요. 검색한 뒤에 쓸 수 있어요">내보내기<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button><div class="pop hidden" id="export-pop"><button data-export="csv" title="조건에 맞는 모든 행을 CSV 파일로 내보내요" aria-label="CSV로 내보내기">CSV</button><button data-export="xlsx" title="조건에 맞는 모든 행을 Excel 파일로 내보내요" aria-label="Excel로 내보내기">Excel</button><button data-export="parquet" title="조건에 맞는 모든 행을 Parquet 파일로 내보내요" aria-label="Parquet으로 내보내기">Parquet</button><button data-export="tsv" title="조건에 맞는 모든 행을 탭으로 나눈 TSV 파일로 내보내요" aria-label="TSV로 내보내기">TSV</button><button data-export="fixed" title="조건에 맞는 모든 행을 고정폭 텍스트 파일로 내보내요(칸 너비는 컬럼의 가장 긴 값에 맞춰요)" aria-label="고정폭 텍스트로 내보내기">고정폭</button><button id="export-tables" title="기준·이어붙이기·조인에 올린 테이블들을 한 Excel 파일에 테이블마다 시트 하나로 저장해요(조건은 넣지 않아요)" aria-label="테이블마다 시트 하나로 Excel에 내보내기">테이블별 Excel</button></div></div>
+    </div>
+    <div class="big"><span id="big-sub">아직 검색하지 않았어요. 오른쪽에서 테이블과 조건을 고른 뒤 [검색]을 누르세요.</span></div>
+    <div class="err" id="err-search"></div>
     <div class="tool" id="result-tools" data-adv>
       <label class="q" title="지금 보이는 쪽에서만 찾아요"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="row-find" placeholder="결과 안에서 찾기"><span class="hint" id="find-count" style="margin:0; white-space:nowrap"></span></label>
-      <button id="sql-show" class="btn adv" title="이 검색이 DB에 보내는 SQL 문장을 보여 줘요">SQL 보기</button>
-      <button id="plan-show" class="btn adv" title="DB가 이 검색을 어떻게 읽는지 보여 줘요. 인덱스를 쓰는지, 테이블을 통째로 읽는지 알 수 있어요. 검색은 하지 않아요 (EXPLAIN)">실행 계획</button>
-      <div class="drop"><button id="export-open" class="btn" title="조건에 맞는 모든 행을 파일로 내보내요. 검색한 뒤에 쓸 수 있어요">내보내기<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 4.5l3 3 3-3"/></svg></button><div class="pop hidden" id="export-pop"><button data-export="csv" title="조건에 맞는 모든 행을 CSV 파일로 내보내요" aria-label="CSV로 내보내기">CSV</button><button data-export="xlsx" title="조건에 맞는 모든 행을 Excel 파일로 내보내요" aria-label="Excel로 내보내기">Excel</button><button data-export="parquet" title="조건에 맞는 모든 행을 Parquet 파일로 내보내요" aria-label="Parquet으로 내보내기">Parquet</button><button data-export="tsv" title="조건에 맞는 모든 행을 탭으로 나눈 TSV 파일로 내보내요" aria-label="TSV로 내보내기">TSV</button><button data-export="fixed" title="조건에 맞는 모든 행을 고정폭 텍스트 파일로 내보내요(칸 너비는 컬럼의 가장 긴 값에 맞춰요)" aria-label="고정폭 텍스트로 내보내기">고정폭</button><button id="export-tables" title="기준·이어붙이기·조인에 올린 테이블들을 한 Excel 파일에 테이블마다 시트 하나로 저장해요(조건은 넣지 않아요)" aria-label="테이블마다 시트 하나로 Excel에 내보내기">테이블별 Excel</button></div></div>
       <button id="handoff" class="btn adv" title="지금 검색을 그대로 분석 화면의 전처리 탭으로 넘겨요. 파일을 만들지 않고 연결도 그대로예요">전처리로 보내기</button>
       <button id="label-open" class="btn adv" disabled title="결과의 행마다 태그를 달아요. 처음에는 행마다 값이 다른 키 컬럼을 골라 켜요. 켜면 검색 결과에 '태그' 컬럼이 붙어요">태그</button><button id="label-edit" class="btn adv hidden" title="태그 사전(더하기·이름 바꾸기·차례·지우기)을 고쳐요">태그 사전</button><button id="label-one-open" class="btn adv hidden" title="검색 결과의 행을 하나씩 크게 보며 태그를 달아요. 숫자 키로 태그를 켜고 끄고, Enter로 다음 행으로 가요">하나씩 태그</button>
       <span id="label-filter" class="hidden"><select id="label-mode" title="태그로 행을 걸러요"><option value="">모든 행</option><option value="none">태그 없는 행</option><option value="any">고른 태그 중 하나라도</option><option value="all">고른 태그가 모두</option></select><span id="label-tags" class="hidden"></span></span>
     </div>
-    <div class="big"><b id="big-count"></b><span id="big-sub">아직 검색하지 않았어요. 오른쪽에서 테이블과 조건을 고른 뒤 [검색]을 누르세요.</span></div>
-    <div class="err" id="err-search"></div>
-    <div class="tabs2"><button data-tab="rows" class="on" title="찾은 행을 표로 봐요">결과</button><button data-tab="summary" title="컬럼마다 개수·평균 같은 요약을 봐요">집계</button><button data-tab="chart" title="값을 그림으로 봐요">차트</button></div>
     <section class="pane" id="pane-rows">
       <p class="lead">찾은 행을 표로 봐요. 머리글을 누르면 그 컬럼으로 정렬해요.</p>
-      <pre id="sql" class="hidden"></pre>
       <div class="ctl" id="rows-tools"><button id="lookup-open" class="btn" title="결과의 한 컬럼 값(ID 등)으로 다른 테이블이나 다른 탭의 결과에서 찾거나 붙여요">다른 테이블에서 찾기</button><button id="newcol-open" class="btn" title="계산·조건·날짜·그룹 집계 같은 방식으로 새 컬럼을 만들어요. 표 머리글 끝의 +와 같아요">+ 새 컬럼</button></div>
       <div class="table-wrap" id="rows"></div>
       <div class="ctl hidden" id="label-bar"></div>
@@ -283,6 +289,11 @@
       <div class="ctl adv"><label class="hint" style="margin:0" title="자동 규칙이 덜어 낸 것(상위 N개 묶기·꼬리 자르기·점 솎기)을 풀어 전부 그려요. 서버가 받는 그룹 수 상한은 그대로예요"><input type="checkbox" id="call" style="width:auto"> 모든 데이터</label></div>
       <div class="ctl adv"><textarea id="clabels" rows="2" style="flex:1" placeholder="라벨 바꾸기: 한 줄에 원래값=보일값 (예: 1=남)" title="X·범례·툴팁에 보이는 글자만 바꿔요. 데이터는 그대로예요" aria-label="라벨 바꾸기"></textarea></div>
     </section>
+    <section class="pane hidden" id="pane-sql">
+      <p class="lead">이 검색이 DB에 보내는 SQL 문장이에요. [실행 계획]을 누르면 DB가 이 검색을 어떻게 읽는지 보여 줘요.</p>
+      <div class="ctl"><button id="plan-show" class="btn" title="DB가 이 검색을 어떻게 읽는지 보여 줘요. 인덱스를 쓰는지, 테이블을 통째로 읽는지 알 수 있어요. 검색은 하지 않아요 (EXPLAIN)">실행 계획</button></div>
+      <pre id="sql"></pre>
+    </section>
     <div class="err" id="err-export"></div>
     <div class="pager" id="pager" data-adv>
       <button id="prev" class="btn" disabled>이전</button><button id="next" class="btn" disabled>다음</button><span id="page-info"></span><input id="page-go" inputmode="numeric" size="3" placeholder="쪽" title="가려는 쪽 번호를 쓰고 Enter를 누르세요. 범위 밖이면 처음이나 마지막 쪽으로 가요" aria-label="쪽 번호로 이동">
@@ -296,7 +307,7 @@
     <header><h3>검색 조건</h3><button type="button" id="side-close" class="fold" aria-label="검색 조건 접기" title="검색 조건 접기">›</button></header>
     <div class="vswitch" id="vswitch" title="두 보기는 같은 조건을 보여 줘요. 한쪽에서 고치면 다른 쪽에도 그대로 반영돼요"><button data-v="cards" class="on">단계별</button><button data-v="sentence">문장으로</button></div>
     <div class="sc"><div class="flow" id="flow" data-adv>
-      <div class="step open" id="step-data" data-step="data"><div class="sp" data-hint><i>1</i><span class="t" title="검색할 테이블을 골라요">데이터</span><b id="sum-data"></b><span class="c"></span></div>
+      <div class="step open" id="step-data" data-step="data"><div class="sp" data-hint><i>1</i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></svg><span class="t" title="검색할 테이블을 골라요">데이터</span><b id="sum-data"></b><span class="c"></span></div>
         <div class="edx">
           <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></span><button id="conn-open" class="btn">연결 바꾸기</button></div>
           <div id="table-box" class="hidden">
@@ -308,7 +319,7 @@
         </div></div>
       <div id="after-connect" class="hidden">
         <div class="cn adv"></div>
-        <div class="step adv" data-step="union"><div class="sp" data-hint><i>2</i><span class="t" title="같은 모양의 테이블을 아래로 이어 붙여요">행 합치기</span><b id="sum-union"></b><span class="c"></span></div>
+        <div class="step adv" data-step="union"><div class="sp" data-hint><i>2</i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="7" rx="1"/><rect x="4" y="14" width="16" height="7" rx="1"/></svg><span class="t" title="같은 모양의 테이블을 아래로 이어 붙여요">행 합치기</span><b id="sum-union"></b><span class="c"></span></div>
           <div class="edx">
             <div class="hint" title="교집합과 차집합은 행을 고르기만 해서 출처 컬럼이 없어요">컬럼이 같은 테이블의 행을 기준 테이블 아래에 붙여요. 어느 테이블의 행인지는 '출처' 컬럼에 나와요.</div>
             <select id="u-how" style="margin-bottom:6px"><option value="left">기준 테이블의 컬럼을 모두 (없으면 빈 값)</option><option value="inner">모든 테이블에 있는 컬럼만</option><option value="intersect">모든 테이블에 같이 있는 행만 (교집합)</option><option value="except">기준 테이블에만 있는 행만 (차집합)</option></select>
@@ -316,8 +327,8 @@
             <select id="u-add"></select>
             <div class="err" id="err-union"></div>
           </div></div>
-        <div class="cn adv"></div>
-        <div class="step adv" data-step="joins"><div class="sp" data-hint><i>3</i><span class="t" title="다른 테이블의 컬럼을 옆에 붙여요">조인</span><b id="sum-joins"></b><span class="c"></span></div>
+        <div class="cn"></div>
+        <div class="step" data-step="joins"><div class="sp" data-hint><i>3</i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17H7a5 5 0 0 1 0-10h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M8 12h8"/></svg><span class="t" title="다른 테이블의 컬럼을 옆에 붙여요">조인</span><b id="sum-joins"></b><span class="c"></span></div>
           <div class="edx">
             <div class="pick"><div id="join-blocks"></div>
             <button class="linkish" id="join-add">+ 조인 추가</button></div>
@@ -327,7 +338,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
             <div class="err" id="err-join"></div>
           </div></div>
         <div class="cn"></div>
-        <div class="step" data-step="periods"><div class="sp" data-hint><i>4</i><span class="t" title="날짜로 볼 범위를 좁혀요">기간</span><b id="sum-periods"></b><span class="c"></span></div>
+        <div class="step" data-step="periods"><div class="sp" data-hint><i>4</i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span class="t" title="날짜로 볼 범위를 좁혀요">기간</span><b id="sum-periods"></b><span class="c"></span></div>
           <div class="edx">
             <div class="row pick span-row"><select id="per-col" title="기간을 걸 날짜 컬럼" aria-label="기간을 걸 날짜 컬럼"></select><button id="per-cal" class="btn" title="달력에서 시작 날과 끝 날을 차례로 눌러 기간을 넣어요(고른 날짜 컬럼에 있는 날 안에서)">시작 날짜</button><span>~</span><button id="per-end" class="btn" title="달력에서 시작 날과 끝 날을 차례로 눌러 기간을 넣어요">끝 날짜</button></div>
             <div class="hint direct">예: 주문일 2025-07-01 ~ 2025-09-30. 시작이나 끝 한쪽은 비워도 돼요. <code>날짜컬럼 최근 7일</code> / <code>지난달</code>도 돼요.</div><div id="periods"></div>
@@ -335,7 +346,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
             <div class="row" style="margin-top:6px"><select id="pk-col" title="날짜 컬럼(기준 테이블)" aria-label="기간을 찾을 날짜 컬럼"></select><select id="pk-unit" title="기간 길이" aria-label="기간 길이"><option value="day">1일</option><option value="week">1주(월요일부터)</option><option value="month" selected>1달</option></select><button id="peak-find" class="btn" title="고른 기간 길이로 나눠 건수가 가장 많은 기간 5개를 기준 테이블 전체로 찾아요(조인·조건은 넣지 않아요). 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="가장 많은 기간 찾기">가장 많은 기간 찾기</button></div>
             <div id="pk-list"></div><div class="err" id="err-peak"></div></details></div></div>
         <div class="cn"></div>
-        <div class="step" data-step="conditions"><div class="sp" data-hint><i>5</i><span class="t" title="원하는 행만 남겨요">조건</span><b id="sum-conditions"></b><span class="c"></span></div>
+        <div class="step" data-step="conditions"><div class="sp" data-hint><i>5</i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg><span class="t" title="원하는 행만 남겨요">조건</span><b id="sum-conditions"></b><span class="c"></span></div>
           <div class="edx">
             <div id="cond" class="fields">
               <div class="tabs" style="margin-bottom:6px">
@@ -354,17 +365,17 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
             </div>
           </div></div>
         <div class="cn adv"></div>
-        <div class="step adv" data-step="calcs"><div class="sp" data-hint><i>6</i><span class="t" title="계산해서 컬럼을 새로 만들어요">새 컬럼</span><b id="sum-calcs"></b><span class="c"></span></div>
+        <div class="step adv" data-step="calcs"><div class="sp" data-hint><i>6</i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="8" height="16" rx="1"/><path d="M17 8v8M13 12h8"/></svg><span class="t" title="계산해서 컬럼을 새로 만들어요">새 컬럼</span><b id="sum-calcs"></b><span class="c"></span></div>
           <div class="edx"><div class="hint" id="calc-guide">계산, 순위, 누적 합계, 날짜 자르기 같은 컬럼을 새로 만들어요. 위에서부터 차례로 계산해요.</div>
             <div class="row pick"><button id="calc-new" class="btn p" title="방식을 고르고 5행을 미리 본 뒤 더해요">+ 새 컬럼 만들기</button></div>
             <select id="calc-example" class="direct" title="고르면 아래 칸에 예시가 들어가요. 컬럼 이름만 바꿔 쓰세요"></select><div id="calcs"></div></div></div>
-        <div class="cn"></div>
-        <div class="step" data-step="sorts"><div class="sp" data-hint><i>7</i><span class="t" title="행을 어떤 순서로 볼지 정해요">정렬</span><b id="sum-sorts"></b><span class="c"></span></div>
+        <div class="cn adv"></div>
+        <div class="step adv" data-step="sorts"><div class="sp" data-hint><i>7</i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M3 16l4 4 4-4"/><path d="M17 20V4M13 8l4-4 4 4"/></svg><span class="t" title="행을 어떤 순서로 볼지 정해요">정렬</span><b id="sum-sorts"></b><span class="c"></span></div>
           <div class="edx">
             <div class="row pick one"><select id="sort-col" aria-label="정렬할 컬럼"></select><select id="sort-how" aria-label="정렬 방향"><option value="asc">작은 것부터 (asc)</option><option value="desc">큰 것부터 (desc)</option></select><button id="sort-add" class="btn">추가</button></div>
             <div class="hint direct">예: 금액 desc (큰 것부터).</div><div class="hint">결과 표의 머리글을 눌러도 돼요.</div><div id="sorts"></div></div></div>
         <div class="cn adv"></div>
-        <div class="step adv" data-step="columns"><div class="sp" data-hint><i>8</i><span class="t" title="결과에 보일 컬럼만 골라요">보일 컬럼</span><b id="sum-columns"></b><span class="c"></span></div>
+        <div class="step adv" data-step="columns"><div class="sp" data-hint><i>8</i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span class="t" title="결과에 보일 컬럼만 골라요">보일 컬럼</span><b id="sum-columns"></b><span class="c"></span></div>
           <div class="edx">
             <div class="row pick one"><select id="col-pick" aria-label="보일 컬럼 고르기"></select><button id="col-pick-add" class="btn">더하기</button></div>
             <div class="hint direct">예: 이름, 금액.</div><div class="hint">비우면 모든 컬럼이 보여요.</div><div id="columns"></div></div></div>
@@ -373,7 +384,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
     </div></div>
     <div class="hint scan-hint" id="scan-hint" title="검색하지 않고 미리 센 값이에요. BigQuery는 요금 없는 dry run으로 정확히 세고, 나머지는 파일 정보와 통계로 어림해요"></div>
     <footer>
-      <div class="drop up" style="flex:1; display:flex"><button id="saved-open" class="btn" style="flex:1; justify-content:center">저장한 검색</button>
+      <div class="drop up"><button id="saved-open" class="ghost">저장한 검색</button>
         <div class="pop hidden" id="saved-pop">
           <select id="saved" title="고르면 저장한 조건을 불러와요. 검색은 하지 않아요. 많이 불러온 순이에요"></select>
           <div class="row"><input id="sname" placeholder="이름 (비우면 덮어써요)"><button id="ssave">저장</button><button id="sdel" class="btn">삭제</button></div>
@@ -567,11 +578,11 @@ function showSummaries() {
   $("table-box").classList.toggle("hidden", !connected);
   $("conn-now").textContent = connected ? `연결: ${connName}` : "아직 연결하지 않았어요";
 }
-// (19C1·19C2) 테이블을 고르기 전에는 1단계만 펼쳐 강조하고 나머지는 흐리게(.flow.first). 접어 둔 단계(행 합치기·조인·새 컬럼·보일 컬럼)에 값이 있으면 펼친다.
+// (19C1·19C2) 테이블을 고르기 전에는 1단계만 펼쳐 강조하고 나머지는 흐리게(.flow.first). 접어 둔 단계(행 합치기·새 컬럼·정렬·보일 컬럼)에 값이 있으면 펼친다.
 function showFlowGuide() {
   $("flow").classList.toggle("first", !S.base);
   if (!S.base) document.querySelectorAll(".step").forEach(s => s.classList.toggle("open", s.id === "step-data"));
-  if (S.union.tables.length || S.joins.length || S.calcs.length || S.columns.length) showAdv($("flow"));
+  if (S.union.tables.length || S.calcs.length || S.sorts.length || S.columns.length) showAdv($("flow"));
 }
 { const summed = showSummaries; showSummaries = () => { showFlowGuide(); summed(); }; }  // 위 함수(시험이 따로 돌린다)에 덧씌운다: 불러오기·초안·되돌리기도 모두 showSummaries를 거친다
 const UNION_HOW = { left: "컬럼 모두", inner: "공통 컬럼만", intersect: "교집합", except: "차집합" };  // 접힌 요약에 쓰는 짧은 이름
@@ -647,7 +658,8 @@ function clearExplore() {
   $("chart").classList.add("hidden");
   skip = 0;
   $("prev").disabled = $("next").disabled = true;
-  ["sql", "ctable"].forEach(id => $(id).classList.add("hidden"));
+  $("sql").textContent = "";
+  $("ctable").classList.add("hidden");
   $("saved").value = "";
   showBig(null);
   renderTables();
@@ -1037,11 +1049,11 @@ function showCondMode(mode) {
 document.querySelectorAll("input[name=cmode]").forEach(r => r.onchange = () => { showCondMode(r.value); saveSetting({ cond: r.value }); });
 showBuilder();
 
-// 결과·집계·차트 탭
+// 표·집계·차트·SQL 탭
 function showTab(name) {
   document.querySelectorAll(".tabs2 button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
-  ["rows", "summary", "chart"].forEach(t => $("pane-" + t).classList.toggle("hidden", t !== name));
-  $("pager").classList.toggle("hidden", name !== "rows");  // 집계·차트에는 쪽이 없다
+  ["rows", "summary", "chart", "sql"].forEach(t => $("pane-" + t).classList.toggle("hidden", t !== name));
+  $("pager").classList.toggle("hidden", name !== "rows");  // 집계·차트·SQL에는 쪽이 없다
   if (name === "chart") drawChart();
 }
 document.querySelectorAll(".tabs2 button").forEach(b => b.onclick = () => showTab(b.dataset.tab));
@@ -1063,7 +1075,7 @@ function gridSpec(data, origins = {}, sort) {
   const source = c => c === "출처" && origins[c] === "이어붙인 테이블";
   return { columns: data.columns, rows: data.rows, head, text: (r, c) => source(c) ? String(r[c] ?? "") : undefined, row: (r, want, max) => data.columns.map(c => source(c) ? `<td class="src">${lit(String(r[c] ?? ""), want)}</td>` : cell(when(r[c]), want, max)).join("") };
 }
-// 검색과 [SQL 보기]가 똑같이 보내는 내용. 행 수는 입력한 그대로 보낸다. 0·음수·빈칸은 서버가 안내한다.
+// 검색과 [SQL 보기](지금은 결과의 SQL 탭)가 똑같이 보내는 내용. 행 수는 입력한 그대로 보낸다. 0·음수·빈칸은 서버가 안내한다.
 const query = offset => ({ ...state(), limit: $("limit").value, offset });
 // 쪽 번호 칸(page-go·sql-go): 쓴 쪽의 첫 행 위치. 범위 밖은 1~마지막 쪽으로 자른다(마지막 쪽을 모르면 1 이상만).
 function pageOffset(input, pages, limit) { const n = Math.min(Math.max(1, Math.floor(+input.value) || 1), pages ?? Infinity); input.value = ""; input.size = 3; return (n - 1) * limit; }
@@ -1153,12 +1165,11 @@ async function sortBy(col, dir) {
   renderList("sorts");
   if (!await runSearch(0)) { S.sorts = before; renderList("sorts"); }  // 서버가 거부하면(잘못된 정렬 등) 이전 정렬로 되돌려 칩이 박히지 않게
 }
+// 결과의 SQL 탭(#sql-show, 옛 [SQL 보기] 단추의 일): 열 때마다 이 검색이 DB에 보내는 SQL을 다시 받아 보인다. 탭 줄의 공통 핸들러 대신 이 핸들러가 탭도 연다.
 $("sql-show").onclick = () => busy($("sql-show"), async () => {
-  if (!$("sql").classList.contains("hidden")) { $("sql").classList.add("hidden"); return; }
+  showTab("sql");
   try {
     $("sql").innerHTML = sqlColor((await api("/api/sql", query(skip))).sql);
-    $("sql").classList.remove("hidden");
-    showTab("rows");
     $("err-search").textContent = "";
   } catch (e) { $("err-search").textContent = e.message; }
 });
@@ -1173,8 +1184,6 @@ $("plan-show").onclick = () => busy($("plan-show"), async () => {
   if (!S.base) { $("err-search").textContent = "먼저 테이블을 고르세요."; return; }
   try {
     $("sql").textContent = planText(await api("/api/plan", query(skip)));
-    $("sql").classList.remove("hidden");
-    showTab("rows");
     $("err-search").textContent = "";
   } catch (e) { $("err-search").textContent = e.message; }
 });
@@ -2040,6 +2049,7 @@ async function restore(st) {
     $("next").disabled = last.count == null ? last.rows.rows.length < +searched?.limit : skip + last.rows.rows.length >= last.count;
   }
   showTab(st.pane ?? "rows");
+  if (st.pane === "sql") $("sql-show").onclick();  // SQL 탭은 되살린 이 탭의 검색으로 다시 받는다
   searchUndo.load(st.undo);
 }
 // 기준 테이블을 바꾸거나 탭을 닫으면 앞 테이블의 받아 둔 결과·표본을 서버 메모리에서 지운다(F01). 실패해도 화면은 그대로.

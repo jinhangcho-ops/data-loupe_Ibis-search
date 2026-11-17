@@ -1,5 +1,5 @@
 "use client";
-// N4 — 설정 창(옛 #d-modal .settings-box): 기준일·기간·주기·실시간(PeriodBar), 카드 색(팔레트), 목표 파일(문제 줄 쪽 넘김), 통화 기호(앱 설정 currency_symbol), 내 템플릿(N6 Templates), 이름 바꾸기·지우기(두 번 누르기).
+// N4 — 설정 창(옛 #d-modal .settings-box): 기준일·기간·주기·실시간(PeriodBar. 기간 칸 PeriodField는 머리 줄과 같은 것), 카드 색(팔레트), 목표 파일(문제 줄 쪽 넘김), 통화 기호(앱 설정 currency_symbol), 내 템플릿(N6 Templates), 이름 바꾸기·지우기(두 번 누르기).
 // 기간 칸은 바꾸면 그 항목만 저장한다(ShellProvider). 팔레트는 dispatch({type:"meta"})(dirty → 자동 저장 N6), 이름은 바로 저장한다(목록 이름도 바뀐다).
 import { useEffect, useState } from "react";
 import { Templates } from "@/components/edit/Templates";

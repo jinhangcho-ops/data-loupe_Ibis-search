@@ -54,7 +54,7 @@ function DashboardView() {
     document.getElementById("d-only-exit")?.focus();
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) setDashOnly(false); };
     document.addEventListener("keydown", esc);
-    return () => { document.removeEventListener("keydown", esc); document.getElementById("d-only")?.focus(); };
+    return () => { document.removeEventListener("keydown", esc); document.getElementById("d-more")?.focus(); };  // [대시보드만 보기]는 닫힌 [더 보기 ▾] 메뉴 안이라 메뉴 단추로 초점을 돌려준다
   }, [dashOnly, setDashOnly, dispatch]);
   const n = state.dash?.cards.length ?? 0, picked = state.picked.length;
   const merge = consts?.merge, alerts = useMemo(() => !state.dash || !merge ? [] :

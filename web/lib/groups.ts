@@ -24,7 +24,7 @@ type Values = {
 type Shaped = { x_kind?: string; values?: Values; by_unit?: Record<string, { labels: string[]; series: Series[] }>; bins?: { edges: number[]; counts: number[] } };
 
 export const MERGE_DATE ="날짜 가로축 차트는 범위를 하나로 묶을 수 없어요. 묶기를 끄세요.";  // merge를 숫자 가로축이 아닌 차트에 쓸 때(Guard가 이 글로 보인다)
-export const MERGE_AGAIN = "범위 묶기 값은 서버에서 다시 구해요. 잠시 기다리거나 [다시 구하기]를 누르세요.";  // (Phase 17) 묶기를 켰는데 서버가 묶은 값(values.merged)이 아닐 때
+export const MERGE_AGAIN = "범위 묶기 값은 서버에서 다시 구해요. 잠시 기다리거나 [최신화]를 누르세요.";  // (Phase 17) 묶기를 켰는데 서버가 묶은 값(values.merged)이 아닐 때
 
 // [SPECIFICATION] plans/phase-4.md#inRanges
 export function inRanges(value: string | number, ranges: [RangeEnd, RangeEnd][]): boolean {

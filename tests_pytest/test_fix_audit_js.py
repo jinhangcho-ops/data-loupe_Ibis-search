@@ -165,7 +165,7 @@ console.log(JSON.stringify({ picked: pickedFiles(), text: els["flat-count"].text
     got = run_node(tmp_path, body, parts=[flat])
     assert got["picked"] == ["a", "b", "z1", "z2"]
     assert got["button"] == "파일 3개 연결"  # [연결] 단추는 되살린 때 고른 수(목록에 안 그린 것 포함)
-    assert "목록에 안 보이는 2개도 고름" in got["text"]
+    assert "목록에 안 보이는 2개도 골랐어요" in got["text"]
     assert got["chips"] == ["b", "z1", "z2"]  # 고른 파일 요약에는 목록에 안 그린 것도 나온다(되살린 때의 것)
 
 
