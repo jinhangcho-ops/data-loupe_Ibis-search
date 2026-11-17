@@ -38,7 +38,6 @@
   .recent-folder[open] > summary { border-bottom:1px solid var(--line); }
   .recent-folder .btn { width:calc(100% - var(--sp-2) * 2); margin:var(--sp-2) var(--sp-2) 0; }
   .recent-folder .btn:last-child { margin-bottom:var(--sp-2); }
-  #demo-go { align-self:center; }
   @media (max-width:900px) { .home { grid-template-columns:1fr; } .home-recent { height:auto; min-height:0; } .recent-list { max-height:60vh; } }
 </style>
 </head>
@@ -70,7 +69,6 @@
   </aside>
 </div>
 <!--include core/connect.html-->
-<button id="demo-go" class="ghost" title="지어낸 주문·고객·방문기록 표에 연결해요. 연결할 데이터가 없어도 쿼리·분석·대시보드를 써 볼 수 있어요">연결할 데이터가 없나요? 예시 데이터로 둘러보기</button>
 <!--include core/dash_refresh.html-->
 <script src="/static/core/common.js"></script>
 <script src="/static/core/dash_refresh.js"></script>
@@ -86,13 +84,9 @@ function showHome() {
   $("home-state").textContent = on ? "연결됨" : "연결 안 됨";
   $("home-state").classList.toggle("on", on);
   $("home-conn").textContent = on ? "다른 데이터 연결" : "데이터 연결";
-  $("demo-go").classList.toggle("hidden", on);
   if (on) closeConnect(); else openConnect();
 }
 $("home-conn").onclick = () => openConnect();
-document.querySelector("#conn-panel .conn-card").append($("demo-go"));  // 예시 데이터 단추는 첫 화면의 연결 창 맨 아래에 둔다
-// 예시 데이터: 서버가 지어낸 표 파일을 준비해 준 칸 값으로 연결한다([연결]과 같은 길)
-$("demo-go").onclick = () => busy($("demo-go"), async () => { try { await connectWith(await api("/api/demo", {})); showHome(); } catch (e) { connMsg(e.message); } });
 // 최근 연결로 연결한 뒤: 쿼리 화면으로 간다(쿼리 기능을 설치하지 않았으면 첫 화면의 지금 연결)
 const goQuery = () => SERVER.features.on.includes("query") ? location.assign("/search") : showHome();
 function afterConnect() { recentGo ? goQuery() : showHome(); }  // common.js가 [연결]에 성공한 뒤 부른다

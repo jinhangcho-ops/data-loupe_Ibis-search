@@ -2,15 +2,19 @@
 // donut_kpi: 가운데 칸(0)과 네 꼭지점 칸(1~4), 고리 4방식(view.ring: stack·double·half·ticks). 목표를 넘은 부분은 진한 색(옛 paintDonut)
 import { TAU, arcPath, clamp, darken, overTarget, polar, ringDash, showValue, underTarget } from "@/lib/calc";
 import { pickColor } from "@/lib/series";
-import { cardFormat, cardTarget, cardValue } from "./__pure__";
+import { useRootScale } from "../chart/scale";
+import { cardFormat, cardTarget, cardValue, growFont } from "./__pure__";
 import { Frame, type P } from "./common";
+
+const MAIN = 22, LABEL = 11, CORNER = 32;  // 가운데 값·이름의 기준 글자 크기, 꼭지점 칸 두 줄의 높이(화면 크기 배율 1)
 
 type SlotLike = { label: string; format?: string; unit_text?: string; color?: string };
 
 export function Donut({ card, colors, range, merge }: P) {
+  const s = useRootScale();
   const slots: SlotLike[] = card.view?.slots?.length ? card.view.slots : (card.data?.by_unit?.day?.series ?? []).map(s => ({ label: s.name })), ring = card.view?.ring || "stack";
   const vals = slots.map((_, i) => cardValue(card, i, range, merge)), target = cardTarget(card), main = vals[0] ?? 0, color = (i: number) => slots[i]?.color || pickColor(card, "series", slots[i]?.label ?? String(i), colors, i);
-  const W = 260, H = 200, cx = W / 2, cy = 100, r = 62, sw = 16, track = colors.line, c0 = color(0), over = darken(c0), fmt = (i: number) => showValue(vals[i], slots[i]?.format || cardFormat(card), slots[i]?.unit_text);
+  const grow = CORNER * (s - 1), W = 260, H = 200 + 2 * grow, cx = W / 2, cy = 100 + grow, r = 62, sw = 16, track = colors.line, c0 = color(0), over = darken(c0), fmt = (i: number) => showValue(vals[i], slots[i]?.format || cardFormat(card), slots[i]?.unit_text);
   const kids: React.ReactNode[] = [];
   const circle = (key: string, rad: number, ratio: number, stroke: string, width = sw, off = 0) => (
     <circle key={key} cx={cx} cy={cy} r={rad} fill="none" stroke={stroke} strokeWidth={width} strokeDasharray={ringDash(rad, ratio).dash} strokeDashoffset={-ringDash(rad, off).len} transform={`rotate(-90 ${cx} ${cy})`} />
@@ -36,16 +40,17 @@ export function Donut({ card, colors, range, merge }: P) {
       if (target) { const a = TAU * clamp(target / full, 0, 1), [x0, y0] = polar(cx, cy, r - sw / 2 - 3, a), [x1, y1] = polar(cx, cy, r + sw / 2 + 3, a); kids.push(<line key="tick" x1={x0} y1={y0} x2={x1} y2={y1} stroke={colors.ink} strokeWidth={2.5} />); }
     }
   }
-  const corners = [[8, 18, "start"], [W - 8, 18, "end"], [8, H - 22, "start"], [W - 8, H - 22, "end"]] as const;
+  const corners = [[8, 18 * s, "start"], [W - 8, 18 * s, "end"], [8, H - 22 * s, "start"], [W - 8, H - 22 * s, "end"]] as const;
+  const hole = 2 * r - sw, big = fmt(0), name = slots[0]?.label ?? "", km = growFont(big, hole, MAIN, s) / MAIN, kn = growFont(name, hole, LABEL, s) / LABEL;  // 가운데 글은 고리 안쪽 폭까지만 키운다
   return (
     <Frame w={W} h={H} label={card.title}>
       {kids}
-      <text x={cx} y={cy + 6} textAnchor="middle" fontSize={22} fontWeight={700} fill={colors.ink}>{fmt(0)}</text>
-      <text x={cx} y={cy + 24} textAnchor="middle" fontSize={11} fill={colors.text}>{slots[0]?.label ?? ""}</text>
+      <text x={cx} y={cy + 6 * km} textAnchor="middle" fontSize={MAIN * km} fontWeight={700} fill={colors.ink}>{big}</text>
+      <text x={cx} y={cy + 6 * km + 18 * kn} textAnchor="middle" fontSize={LABEL * kn} fill={colors.text}>{name}</text>
       {corners.map(([x, y, anchor], j) => slots[j + 1] && (  // 네 꼭지점 칸
         <g key={j}>
-          <text x={x} y={y} textAnchor={anchor} fontSize={11} fill={colors.text}>{slots[j + 1].label}</text>
-          <text x={x} y={y + 14} textAnchor={anchor} fontSize={14} fontWeight={600} fill={colors.ink}>{fmt(j + 1)}</text>
+          <text x={x} y={y} textAnchor={anchor} fontSize={LABEL * s} fill={colors.text}>{slots[j + 1].label}</text>
+          <text x={x} y={y + 14 * s} textAnchor={anchor} fontSize={14 * s} fontWeight={600} fill={colors.ink}>{fmt(j + 1)}</text>
         </g>
       ))}
     </Frame>

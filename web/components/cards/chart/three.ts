@@ -18,7 +18,11 @@ export const LABEL_PX = 72, LABEL_FONT = 11;  // 축 글자 한 칸의 폭·크�
 const BAR_FILL = 0.7;  // 막대 굵기 = 칸 × 이 몫
 const TICK_GAP = 0.05, NAME_GAP = 0.4;  // 눈금 글자·축 이름이 바닥 모서리에서 떨어진 거리(이름은 눈금 글자 한 칸 너머)
 const SHADE = { x: 82, y: 66 };  // 막대 옆면의 밝기(윗면 색 %)
-const LINE_W = { over: 2.5, link: 1.5 }, DOT_R = 3;
+const LINE_W = { over: 2.5, link: 1.5, grid: 0.5 }, DOT_R = 3;
+export const SMOOTH_STEPS = [1, 2, 4, 8];  // 곡면 매끈함 단계(0단계 = 받은 그대로)마다 칸 한 변을 나누는 배수
+export const MAX_FACES_3D = 8000;  // 곡면을 잘게 나눠 그리는 면 수 상한(넘는 매끈함 단계는 고를 수 없다)
+export const SPREAD_RANGE: [number, number] = [0, 10], SPREAD_START = 2, SPREAD_STEP = 0.5;  // 손잡이를 끌 때 주변이 따라오는 넓이(칸 수, 0이면 그 점만)
+const GRIP_R = 3.5, GRIP_HELP = "위아래로 끌면 이 점의 높이가 바뀌어요.";  // 모양 조절 손잡이
 
 /** 정육면체 안의 점 → [화면 x, 화면 y, 깊이(클수록 보는 쪽에 가깝다)]. 원근 없이(평행 투영) 정육면체 가운데가 그림 가운데 */
 export function project([x, y, z]: P3, v: View3, w: number, h: number): P3 {
@@ -30,6 +34,11 @@ export function project([x, y, z]: P3, v: View3, w: number, h: number): P3 {
 export const orbit = (v: View3, dx: number, dy: number): View3 => ({ ...v, yaw: v.yaw + dx * ROTATE_PER_PX, pitch: clamp(v.pitch + dy * ROTATE_PER_PX, ...PITCH_RANGE) });
 /** 휠 notches칸(양수 = 크게) */
 export const zoomed = (v: View3, notches: number): View3 => ({ ...v, zoom: clamp(v.zoom * ZOOM_FACTOR ** notches, ...ZOOM_RANGE) });
+
+/** 왼쪽 단추로 끌기 시작할 때 할 일: Ctrl을 눌렀으면 언제나 돌리기(켜지 않았어도, 손잡이 위여도), 아니면 켜진 그림에서만 손잡이 위는 높이 조절("lift")·그 밖은 돌리기("turn"). 아무것도 안 하면 null */
+export const dragMode = (ctrl: boolean, active: boolean, onGrip: boolean): "turn" | "lift" | null => (ctrl ? "turn" : !active ? null : onGrip ? "lift" : "turn");
+/** 화면에서 1px 위로 끌 때 정육면체 높이(z)가 바뀌는 양(project의 세로 식을 뒤집은 것) */
+export const zPerPx = (v: View3, w: number, h: number): number => 1 / (Math.min(w, h) * FILL * v.zoom * Math.cos(v.pitch));
 
 /** 높이 t(0 낮음 ~ 1 높음)의 색: low와 high 사이를 섞는다(CSS 변수 색도 된다) */
 export const heightColor = (t: number, low: string, high: string) => `color-mix(in srgb, ${high} ${Math.round(clamp(t, 0, 1) * 100)}%, ${low})`;
@@ -48,7 +57,7 @@ type Order = { anchor?: P3; bias?: number; layer?: -1 | 1 };
 export type Shape = Order & (
   | { kind: "poly"; pts: P3[]; fill: string; stroke?: string; normal?: P3; title?: string }
   | { kind: "line"; pts: P3[]; stroke: string; width: number }
-  | { kind: "dot"; pts: P3[]; fill: string; r: number; title?: string }
+  | { kind: "dot"; pts: P3[]; fill: string; r: number; title?: string; grip?: [number, number] }  // grip: 모양 조절 손잡이의 격자 자리 [X 번호, 계열 번호]
   | { kind: "text"; pts: P3[]; text: string; align: "start" | "middle" | "end"; dx?: number; dy?: number; bold?: boolean });
 export type Painted = { shape: Shape; xy: [number, number][]; key: number; depth: number };
 
@@ -109,11 +118,54 @@ export function gridReason(type: GridType, labels: number, sets: { values: (numb
   return "";
 }
 
+type Cell = number | null;
+/** Catmull-Rom 곡선: p1~p2 사이 t(0~1)의 값(t = 0이면 p1, 1이면 p2). 바깥 이웃(p0·p3)이 없으면(줄의 끝이거나 빈 값) 직선으로 이어 간 자리로 본다 */
+function catmull(p0: Cell | undefined, p1: number, p2: number, p3: Cell | undefined, t: number): number {
+  const a = p0 ?? 2 * p1 - p2, d = p3 ?? 2 * p2 - p1;
+  return 0.5 * (2 * p1 + (p2 - a) * t + (2 * a - 5 * p1 + 4 * p2 - d) * t * t + (3 * p1 - a - 3 * p2 + d) * t * t * t);
+}
+/** 한 줄을 k배로 잘게: 원래 점은 그대로, 사이는 곡선. 빈 값에 닿는 구간의 사이 점은 빈 값 */
+const refine = (row: Cell[], k: number): Cell[] => Array.from({ length: (row.length - 1) * k + 1 }, (_, n) => {
+  const i = Math.floor(n / k), t = (n % k) / k, p1 = row[i], p2 = row[i + 1];
+  return t === 0 || p1 === null ? p1 : p2 === null ? null : catmull(row[i - 1], p1, p2, row[i + 2], t);
+});
+/** 격자 vals[계열][X]를 가로·세로 k배로 잘게(Catmull-Rom). 원래 격자점의 값은 그대로 지나고, 네 꼭짓점 중 빈 값이 있는 칸의 안쪽 점은 빈 값(채우지 않는다) */
+export function smoothGrid(vals: Cell[][], k: number): Cell[][] {
+  const wide = vals.map(row => refine(row, k)), cols = wide[0].map((_, n) => refine(wide.map(row => row[n]), k));
+  return cols[0].map((_, m) => cols.map(col => col[m]));
+}
+/** 매끈함 단계 step(SMOOTH_STEPS의 번호)으로 그릴 면 수가 상한을 넘으면 그 이유(고를 수 있으면 빈 글자) */
+export function smoothReason(nx: number, ny: number, step: number): string {
+  const faces = (nx - 1) * (ny - 1) * SMOOTH_STEPS[step] ** 2;
+  return faces > MAX_FACES_3D ? `면이 ${faces.toLocaleString()}개가 되어 이 단계는 그릴 수 없어요(상한 ${MAX_FACES_3D.toLocaleString()}개). X축 값이나 계열 수를 줄이면 고를 수 있어요.` : "";
+}
+/** 고른 단계 want 이하에서 그릴 수 있는 가장 높은 단계(0단계는 칸 수 상한 MAX_CELLS_3D 안이라 늘 된다) */
+export function smoothStep(nx: number, ny: number, want: number): number {
+  let step = want;
+  while (smoothReason(nx, ny, step)) step--;
+  return step;
+}
+/** 손잡이 (i, j)를 값 dv만큼 끌어 올린 뒤의 더할 높이 격자 [계열][X](값 단위). 그 점은 dv, 주변은 칸 거리 d에 따라 dv × exp(-d² / 2·spread²)(가우스, spread 0이면 그 점만). lift는 끌기 전의 격자(없으면 0) */
+export function liftGrid(lift: number[][] | null, nx: number, ny: number, i: number, j: number, dv: number, spread: number): number[][] {
+  return Array.from({ length: ny }, (_, y) => Array.from({ length: nx }, (_, x) => {
+    const d2 = (x - i) ** 2 + (y - j) ** 2;
+    return (lift?.[y][x] ?? 0) + dv * (d2 === 0 ? 1 : Math.exp(-d2 / (2 * spread * spread)));
+  }));
+}
+
+/** 곡면 모양: smooth = 칸을 나누는 배수(SMOOTH_STEPS의 값), lift = 격자점마다 더할 높이(liftGrid, 없으면 받은 값 그대로), grips = 격자점 손잡이를 그릴지 */
+export type Shaping = { smooth: number; lift: number[][] | null; grips: boolean };
+export const PLAIN: Shaping = { smooth: 1, lift: null, grips: false };
+/** 3차원 막대·곡면의 그림: span은 값 축의 길이(값 단위, 끈 거리를 값으로 바꿀 때 쓴다) */
+export type GridScene = Scene & { span: number };
+
 /** 3차원 막대·곡면의 그릴 모양. 막대는 칸마다 상자(계열 색, 0에서 값까지), 곡면은 이웃한 네 값의 면(높이 색 low→high)과 격자선, 선 계열(line)은 곡면 위의 선.
- *  names = [X축 이름, 계열 축 이름, 값 축 이름], fmt는 값 눈금 글자 */
-export function gridScene(type: GridType, labels: string[], sets: GridSet[], low: string, high: string, names: [string, string, string], fmt: (v: number) => string): Scene {
-  const nx = labels.length, ny = sets.length, vals = sets.map(d => labels.map((_, i) => num(d.values[i]))), flat = vals.flat().filter((v): v is number => v !== null);
-  const bars = type === "bar3d", ticks = niceTicks(Math.min(...flat, ...(bars ? [0] : [])), Math.max(...flat, ...(bars ? [0] : [])));
+ *  names = [X축 이름, 계열 축 이름, 값 축 이름], fmt는 값 눈금 글자. shape(곡면만): 잘게 나눈 면은 테두리를 면 색으로 칠하고 원래 격자선만 따로 긋는다. 높이 축은 조절·보간한 값까지 덮는다 */
+export function gridScene(type: GridType, labels: string[], sets: GridSet[], low: string, high: string, names: [string, string, string], fmt: (v: number) => string, shape: Shaping = PLAIN): GridScene {
+  const nx = labels.length, ny = sets.length, bars = type === "bar3d", k = shape.smooth;
+  const vals = sets.map((d, j) => labels.map((_, i) => { const v = num(d.values[i]); return v === null ? null : v + (shape.lift?.[j][i] ?? 0); }));
+  const fine = bars ? vals : smoothGrid(vals, k), some = (v: Cell): v is number => v !== null, flat = vals.flat().filter(some), drawn = fine.flat().filter(some);
+  const ticks = niceTicks(Math.min(...drawn, ...(bars ? [0] : [])), Math.max(...drawn, ...(bars ? [0] : [])));
   const z0 = ticks[0], z1 = ticks[ticks.length - 1], zn = (v: number) => (v - z0) / (z1 - z0);
   const xa = (i: number) => (bars ? (i + 0.5) / nx : i / (nx - 1)), ya = (j: number) => (bars ? (j + 0.5) / ny : j / (ny - 1));
   const shapes: Shape[] = [];
@@ -130,23 +182,36 @@ export function gridScene(type: GridType, labels: string[], sets: GridSet[], low
         face(side([x - hx, y - hy], [x + hx, y - hy]), [0, -1, 0], shade(c, SHADE.y)), face(side([x - hx, y + hy], [x + hx, y + hy]), [0, 1, 0], shade(c, SHADE.y)));
     }));
   } else {
-    const over = 0.5 / (nx - 1) + 0.5 / (ny - 1);  // 선은 이웃한 면보다 나중에(면 가운데까지의 거리보다 크게)
-    for (let j = 0; j < ny; j++) {
-      for (let i = 0; i + 1 < nx; i++) {
-        const a = vals[j][i], b = vals[j][i + 1], c = vals[j + 1]?.[i + 1], d = vals[j + 1]?.[i];
-        if (a !== null && b !== null && c != null && d != null) {
-          shapes.push({ kind: "poly", pts: [[xa(i), ya(j), zn(a)], [xa(i + 1), ya(j), zn(b)], [xa(i + 1), ya(j + 1), zn(c)], [xa(i), ya(j + 1), zn(d)]],
-            fill: heightColor((zn(a) + zn(b) + zn(c) + zn(d)) / 4, low, high), stroke: "var(--card)", anchor: [(xa(i) + xa(i + 1)) / 2, (ya(j) + ya(j + 1)) / 2, 0.5] });
+    const fx = (n: number) => n / ((nx - 1) * k), fy = (m: number) => m / ((ny - 1) * k);  // 잘게 나눈 격자의 자리(k = 1이면 xa·ya와 같다)
+    const over = (fx(1) + fy(1)) / 2;  // 선은 이웃한 면보다 나중에(면 가운데까지의 거리보다 크게)
+    const face = (m: number, n: number) => [fine[m]?.[n], fine[m]?.[n + 1], fine[m + 1]?.[n + 1], fine[m + 1]?.[n]].every(v => v != null);
+    const rule = (pts: P3[], stroke: string, width: number): Shape => ({ kind: "line", pts, stroke, width, anchor: [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2, 0.5], bias: over });
+    for (let m = 0; m < fine.length; m++) {
+      for (let n = 0; n < fine[m].length; n++) {
+        const a = fine[m][n], b = fine[m][n + 1], c = fine[m + 1]?.[n + 1], d = fine[m + 1]?.[n];
+        if (a === null) continue;
+        if (b != null && c != null && d != null) {
+          const fill = heightColor((zn(a) + zn(b) + zn(c) + zn(d)) / 4, low, high);
+          shapes.push({ kind: "poly", pts: [[fx(n), fy(m), zn(a)], [fx(n + 1), fy(m), zn(b)], [fx(n + 1), fy(m + 1), zn(c)], [fx(n), fy(m + 1), zn(d)]],
+            fill, stroke: k > 1 ? fill : "var(--card)", anchor: [(fx(n) + fx(n + 1)) / 2, (fy(m) + fy(m + 1)) / 2, 0.5] });
         }
-        if (sets[j].line && a !== null && b !== null) {
-          shapes.push({ kind: "line", pts: [[xa(i), ya(j), zn(a)], [xa(i + 1), ya(j), zn(b)]], stroke: sets[j].color, width: LINE_W.over, anchor: [(xa(i) + xa(i + 1)) / 2, ya(j), 0.5], bias: over });
+        if (b != null && m % k === 0) {  // 원래 격자의 계열 줄: 선 계열이면 곡면 위의 선, 잘게 나눴으면 격자선(면에 닿은 것만)
+          const across: P3[] = [[fx(n), fy(m), zn(a)], [fx(n + 1), fy(m), zn(b)]];
+          if (sets[m / k].line) shapes.push(rule(across, sets[m / k].color, LINE_W.over));
+          else if (k > 1 && (face(m, n) || face(m - 1, n))) shapes.push(rule(across, "var(--card)", LINE_W.grid));
         }
+        if (k > 1 && d != null && n % k === 0 && (face(m, n) || face(m, n - 1))) shapes.push(rule([[fx(n), fy(m), zn(a)], [fx(n), fy(m + 1), zn(d)]], "var(--card)", LINE_W.grid));  // 원래 격자의 X 줄
       }
+    }
+    if (shape.grips) {
+      vals.forEach((row, j) => row.forEach((v, i) => {
+        if (v !== null) shapes.push({ kind: "dot", pts: [[xa(i), ya(j), zn(v)]], fill: "var(--text)", r: GRIP_R, grip: [i, j], title: GRIP_HELP, anchor: [xa(i), ya(j), 0.5], bias: over * 2 });
+      }));
     }
   }
   const lines = sets.filter(d => d.line).map(d => ({ name: d.label, color: d.color }));
   return {
-    shapes, axes: { x: { name: names[0], ticks: nameTicks(labels, xa) }, y: { name: names[1], ticks: nameTicks(sets.map(d => d.label), ya) }, z: { name: names[2], ticks: valueTicks(ticks, fmt) } },
+    span: z1 - z0, shapes, axes: { x: { name: names[0], ticks: nameTicks(labels, xa) }, y: { name: names[1], ticks: nameTicks(sets.map(d => d.label), ya) }, z: { name: names[2], ticks: valueTicks(ticks, fmt) } },
     keys: bars ? sets.map(d => ({ name: d.label, color: d.color })) : [{ name: `낮음 ${fmt(Math.min(...flat))}`, color: low }, { name: `높음 ${fmt(Math.max(...flat))}`, color: high }, ...lines],
   };
 }

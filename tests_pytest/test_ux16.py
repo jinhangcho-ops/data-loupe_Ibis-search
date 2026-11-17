@@ -370,21 +370,61 @@ def test_home_layout():
     assert ".home-recent { height:0; min-height:100%;" in html and "align-self:start" not in html
     assert ".recent-list { flex:1; min-height:0; overflow-y:auto;" in html and ".recent-folder { flex:none;" in html
     assert "function afterConnect() { recentGo ? goQuery() : showHome(); }" in html and "resume().then(showHome);" in html  # 최근 연결로 연결하면 쿼리로
-    assert 'SERVER.features.on.includes("query") ? location.assign("/search") : showHome()' in html and 'id="demo-go"' in html
+    assert 'SERVER.features.on.includes("query") ? location.assign("/search") : showHome()' in html
     assert "#conn-close { display:none" not in html and ".home #conn-panel" not in html  # 첫 화면도 연결 창을 띄우고, 연결 전에도 닫을 수 있다
-    assert 'document.querySelector("#conn-panel .conn-card").append($("demo-go"));' in html and '$("home-conn").onclick = () => openConnect();' in html
+    assert '$("home-conn").onclick = () => openConnect();' in html
+
+
+def test_demo_button_lives_in_settings_only():
+    """[예시 데이터로 둘러보기]는 설정 [쓸 기능]에만 있다(첫 화면·연결 창에는 없다). 연결이 바뀐다는 것을 단추 설명에 적는다."""
+    for page in ("home.html", "connect.html"):
+        assert "demo" not in read(page) and "예시 데이터" not in read(page), page
+    feat = between("status.html", 'data-set="feat" role="tabpanel"', "</section>")
+    button = re.search(r'<button id="set-demo" class="btn" type="button" title="([^"]+)">예시 데이터로 둘러보기</button>', feat)
+    assert button and "연결이 예시 데이터로 바뀌어요" in button[1] and 'id="set-demo-msg"' in feat
+    assert '$("set-demo").onclick = () => busy($("set-demo"), async () => {' in read("common.js")
+
+
+@needs_node
+def test_settings_demo_connects_like_the_connect_button(tmp_path):
+    """연결 칸이 있는 화면은 connectWith 뒤 afterConnect(있을 때만), 없는 화면(수집)은 연결만 하고 위쪽 줄 이름을 바꾼다.
+    성공하면 설정 창을 닫고, 실패하면 문구를 보이고 열어 둔다."""
+    code = between("common.js", '$("set-demo").onclick', "// 릴리스 노트")
+    body = CLS + r"""
+const INFO = { kind: "folder", path: "C:/demo", file: "C:/demo/demo.duckdb" };
+async function run({ hasConnect, after, fail }) {
+  const log = [], button = {}, panel = { classList: cls() };
+  const $ = id => ({ "set-demo": button, "feat-panel": panel })[id];
+  const api = async url => { log.push(url); if (fail) throw new Error("못 만들었어요"); return url === "/api/demo" ? INFO : { schemas: [] }; };
+  const busy = (b, fn) => fn();
+  const connectWith = async info => { log.push(["connectWith", info.file]); };
+  const afterConnect = after ? () => log.push("afterConnect") : undefined;
+  const connLabel = info => info.file.split("/").pop(), showCrumb = () => log.push(["crumb", connName]);
+  const say = (id, text) => log.push([id, text]);
+  let connName = null;
+""" + code + r"""
+  await button.onclick();
+  return { log, closed: panel.classList.contains("hidden") };
+}
+(async () => console.log(JSON.stringify([await run({ hasConnect: true, after: true }), await run({ hasConnect: true }), await run({ hasConnect: false }), await run({ hasConnect: true, fail: true })])))();
+"""
+    home, query, collect, failed = run_node(tmp_path, body)
+    assert home == {"log": ["/api/demo", ["connectWith", "C:/demo/demo.duckdb"], "afterConnect", ["set-demo-msg", ""]], "closed": True}
+    assert query == {"log": ["/api/demo", ["connectWith", "C:/demo/demo.duckdb"], ["set-demo-msg", ""]], "closed": True}
+    assert collect == {"log": ["/api/demo", "/api/connect", ["crumb", "demo.duckdb"], ["set-demo-msg", ""]], "closed": True}
+    assert failed == {"log": ["/api/demo", ["set-demo-msg", "못 만들었어요"]], "closed": False}
 
 
 @needs_node
 def test_show_home_switches_views(tmp_path):
     code = between("home.html", "function showHome() {", "\n}\n") + "\n}\n"
     body = CLS + r"""
-const home = { classList: cls() }, name = { textContent: "x" }, tag = { textContent: "", classList: cls() }, conn = { textContent: "" }, demo = { classList: cls() };
-globalThis.$ = id => ({ "home-name": name, "home-state": tag, "home-conn": conn, "demo-go": demo })[id];
+const home = { classList: cls() }, name = { textContent: "x" }, tag = { textContent: "", classList: cls() }, conn = { textContent: "" };
+globalThis.$ = id => ({ "home-name": name, "home-state": tag, "home-conn": conn })[id];
 globalThis.document = { querySelector: q => (q === ".home" ? home : null) };
 const n = { open: 0, close: 0 };
 globalThis.openConnect = () => { n.open++; }; globalThis.closeConnect = () => { n.close++; };
-const look = () => ({ on: home.classList.contains("on"), name: name.textContent, tag: [tag.textContent, tag.classList.contains("on")], conn: conn.textContent, demoHidden: demo.classList.contains("hidden"), ...n });
+const look = () => ({ on: home.classList.contains("on"), name: name.textContent, tag: [tag.textContent, tag.classList.contains("on")], conn: conn.textContent, ...n });
 globalThis.connected = null; globalThis.connName = null;
 showHome(); const before = look();
 globalThis.connected = "other"; globalThis.connName = "sales.duckdb";
@@ -392,8 +432,8 @@ showHome();
 console.log(JSON.stringify({ before, after: look() }));
 """
     got = run_node(tmp_path, body, parts=[code])
-    assert got["before"] == {"on": False, "name": "연결된 데이터가 없어요", "tag": ["연결 안 됨", False], "conn": "데이터 연결", "demoHidden": False, "open": 1, "close": 0}
-    assert got["after"] == {"on": True, "name": "sales.duckdb", "tag": ["연결됨", True], "conn": "다른 데이터 연결", "demoHidden": True, "open": 1, "close": 1}
+    assert got["before"] == {"on": False, "name": "연결된 데이터가 없어요", "tag": ["연결 안 됨", False], "conn": "데이터 연결", "open": 1, "close": 0}
+    assert got["after"] == {"on": True, "name": "sales.duckdb", "tag": ["연결됨", True], "conn": "다른 데이터 연결", "open": 1, "close": 1}
 
 
 def test_changed_files_have_no_control_chars():

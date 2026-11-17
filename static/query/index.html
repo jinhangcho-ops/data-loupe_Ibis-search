@@ -261,7 +261,7 @@
       <div class="hint" id="hashed-note-c"></div>
       <div class="ctl lab adv">
         <div class="cf hidden" id="cunit-box"><span class="cl">묶기</span><select id="cunit" title="X축이 날짜·시각일 때 이 기간으로 묶어 세요. 건수가 없는 기간은 0으로 채워요"><option value="">묶지 않음</option><option value="day">일</option><option value="week">주</option><option value="month">월</option><option value="year">연</option></select></div>
-        <div class="cf"><span class="cl">나누기</span><select id="csplit" title="이 컬럼의 값마다 막대나 선을 나눠요 (최대 8개)"></select></div>
+        <div class="cf"><span class="cl">나누기</span><select id="csplit" title="이 컬럼의 값마다 막대나 선을 나눠요. 값이 많으면 행이 많은 것부터 그려요(3차원 막대·곡면은 더 많이)"></select></div>
         <div class="cf"><span class="cl">정렬</span><select id="corder" title="막대 순서. 자동이면 글자 X는 값 큰 순, 숫자·날짜 X는 X축 순이에요"></select></div>
         <div class="cf"><span class="cl">비율</span><select id="cratio" title="차트 비율"><option value="auto">자동</option><option value="square">1:1</option><option value="wide">16:9</option></select></div>
         <div class="cf"><span class="cl">선</span><select id="cdash" title="선 모양" disabled><option value="solid">실선</option><option value="dashed">점선</option></select></div>
@@ -1737,7 +1737,7 @@ async function groupsChanged() {
     chartMerged = null;
     if (want) {
       try {
-        const r = await api("/api/chart", { ...drawn.query, ...(merge ? { merge_ranges: chartGroups.ranges } : { groups: picks }) });
+        const r = await api("/api/chart", { ...drawn.query, chart_type: kind3d(), ...(merge ? { merge_ranges: chartGroups.ranges } : { groups: picks }) });
         if (seq !== mergeSeq) return;
         chartMerged = merge ? { want, merged: true, labels: r.labels, datasets: drawn.datasets.filter(ds => r.series.some(s => s.name === ds.label)).map(ds => ({ ...ds, values: r.series.find(s => s.name === ds.label).values })) }
           : { ...toDrawn(drawn.query, drawn.used, r), want };
@@ -1829,7 +1829,7 @@ $("draw").onclick = () => busy($("draw"), async () => {
     const tab = tabs[tabAt];
     const query = { ...state(), x: $("cx").value, x_unit: dateX() ? $("cunit").value : "", split: $("csplit").value, order: $("corder").value, series: used.map(s => ({ y: s.y, agg: s.agg, ...(s.opts ? { opts: s.opts } : {}) })) };
     const z = $("cz").value;
-    const d = await timed("chart", () => points ? api("/api/chart/points", { ...query, size: z, auto: { density: false } }) : api("/api/chart", query));  // 점은 받은 그대로 찍는다(육각 칸 없음)
+    const d = await timed("chart", () => points ? api("/api/chart/points", { ...query, size: z, auto: { density: false } }) : api("/api/chart", { ...query, chart_type: kind3 }));  // chart_type은 요청에만(나눌 값 상한을 고른다. query는 대시보드 카드의 body가 되므로 넣지 않는다). 점은 받은 그대로 찍는다(육각 칸 없음)
     if (tabs[tabAt] !== tab) return;  // 그리는 사이 탭이 바뀌었으면 버린다
     if (!drawn || chartKey(drawn.query) !== chartKey(query)) chartGroups = {};
     drawn = points ? { query, used, x: query.x, labels: [], datasets: [], truncated: false, points: d.points, z, kind3 } : { ...toDrawn(query, used, d), kind3 };

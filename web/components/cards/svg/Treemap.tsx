@@ -6,6 +6,7 @@ import { Tooltip, Treemap as Tree, type TreemapNode } from "recharts";
 import { polar, shownum } from "@/lib/calc";
 import type { TreeItem } from "@/lib/types";
 import { Frame, TIP } from "../chart/Charts";
+import { useRootScale } from "../chart/scale";
 import { fitText, sectorPath, sunburstArcs, treeRoot, withRest } from "./__pure__";
 import { Box, Frame as SvgFrame, NOTHING, Say, more, tone, type P } from "./common";
 
@@ -46,7 +47,7 @@ export function Treemap(p: P) {
 
 const S = 320, C = S / 2;
 export function Sunburst(p: P) {
-  const root = treeRoot(p.card.title, withRest(more(p).items)), arcs = sunburstArcs(root);
+  const font = 11 * useRootScale(), root = treeRoot(p.card.title, withRest(more(p).items)), arcs = sunburstArcs(root);
   if (!arcs.length) return <Say text={NOTHING} />;
   const two = arcs.some(a => a.depth === 2), ring = (d: 1 | 2): [number, number] => (d === 1 ? [44, two ? 104 : 156] : [106, 156]);
   return (
@@ -59,7 +60,7 @@ export function Sunburst(p: P) {
               <path d={sectorPath(C, C, r0, r1, a.a0, a.a1)} fill={tone(p, arcs.find(b => b.depth === 1 && b.top === a.top)!.name, a.top)} fillOpacity={a.depth === 2 ? 0.7 : 1} stroke="var(--card)" strokeWidth={1.5}>
                 <title>{`${a.parent ? `${a.parent} › ` : ""}${a.name}: ${shownum(a.value)} (${((a.value / root.value) * 100).toFixed(1)}%)`}</title>
               </path>
-              {room > 20 && fitText(a.name, room - 6, 11) !== "…" && <text x={x} y={y} fontSize={11} textAnchor="middle" dominantBaseline="middle" {...LABEL}>{fitText(a.name, room - 6, 11)}</text>}
+              {room > 20 && fitText(a.name, room - 6, font) !== "…" && <text x={x} y={y} fontSize={font} textAnchor="middle" dominantBaseline="middle" {...LABEL}>{fitText(a.name, room - 6, font)}</text>}
             </g>
           );
         })}

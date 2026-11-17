@@ -14,8 +14,9 @@ import { pickColor } from "@/lib/series";
 import { UNIT_NAMES, type SCard, type Series, type SeriesKit, type ThemeColors } from "./series";
 import { FIRST_ONLY, GRID_3D, HBARS, ROUND_TYPES, fitLine, paretoRows, ringRadii, waterfallRows } from "./shapes";
 import { Chart3D } from "./Chart3D";
-import { gridReason, gridScene, pointsReason, pointsScene, type GridType } from "./three";
+import { PLAIN, gridReason, gridScene, pointsReason, pointsScene, type GridType, type Shaping } from "./three";
 import { sliceWindow, type Span } from "../svg/__pure__";
+import { scaledBox, useRootScale } from "./scale";
 
 const compact = new Intl.NumberFormat("ko", { notation: "compact", maximumFractionDigits: 1 }), sig3 = new Intl.NumberFormat(undefined, { maximumSignificantDigits: 3 });
 /** 값 축 눈금: 1만 미만은 쉼표, 넘으면 1.2만처럼 */
@@ -57,12 +58,15 @@ export function Keys({ items }: { items: Key[] }) {
 
 /** 범례·제목 줄 + 남은 높이를 채우는 그림(카드 크기를 따라간다) */
 export function Frame({ keys, title, children }: { keys?: Key[]; title?: string; children: ReactNode }) {
+  const s = useRootScale();  // 안의 px(글자·여백·점·막대)가 바탕 글자 크기를 따라간다. 마우스 좌표는 Recharts가 배율을 재서 맞춘다
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", fontSize: 12 }}>
-      {title ? <div style={{ textAlign: "center", color: "var(--muted)", fontWeight: 600, padding: "0 0 4px" }}>{title}</div> : null}
-      {keys?.length ? <Keys items={keys} /> : null}
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <ResponsiveContainer width="100%" height="100%" minHeight={60}>{children as React.ReactElement}</ResponsiveContainer>
+    <div style={{ height: "100%" }}>
+      <div style={{ display: "flex", flexDirection: "column", fontSize: 12, ...scaledBox(s) }}>
+        {title ? <div style={{ textAlign: "center", color: "var(--muted)", fontWeight: 600, padding: "0 0 4px" }}>{title}</div> : null}
+        {keys?.length ? <Keys items={keys} /> : null}
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <ResponsiveContainer width="100%" height="100%" minHeight={60}>{children as React.ReactElement}</ResponsiveContainer>
+        </div>
       </div>
     </div>
   );
@@ -198,8 +202,10 @@ function Grid3D({ card, s, colors, active }: { card: SCard; s: Series; colors: T
   const why = gridReason(type, s.labels.length, s.datasets);
   if (why) throw new Error(why);
   const sets = s.datasets.map((d, i) => ({ label: d.label, values: d.values, line: d.type === "line", color: pickColor(card, "series", d.label, colors, i) }));
-  const scene = gridScene(type, s.labels, sets, LOW_3D, HIGH_3D, [card.data?.x ?? "", SETS_NAME, VALUE_NAME], vt);
-  return <Chart3D scene={scene} legend={legend3(scene.keys)} active={active} />;
+  const make = (shape: Shaping) => gridScene(type, s.labels, sets, LOW_3D, HIGH_3D, [card.data?.x ?? "", SETS_NAME, VALUE_NAME], vt, shape);
+  const scene = make(PLAIN);
+  // 곡면이면 매끈함·모양 조절 칸을 Chart3D가 그린다(조절한 모양대로 그림·범례를 다시 만든다)
+  return <Chart3D scene={scene} legend={legend3(scene.keys)} active={active} surface={type === "surface3d" ? { nx: s.labels.length, ny: sets.length, scene: make, legend: legend3 } : undefined} />;
 }
 
 /** 3차원 산점도(Chart3D): 점 [x, y, z, (그룹)]. z는 서버 점의 [크기] 열(view.points.size), view.connect면 그룹마다 차례대로 선으로 잇는다 */

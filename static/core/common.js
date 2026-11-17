@@ -575,6 +575,17 @@ $("feat-apply").onclick = () => busy($("feat-apply"), async () => {
   try { say("feat-msg", (await api("/api/features/install", { features: [...$("feat-list").querySelectorAll("input:checked")].map(i => i.value) })).text, true); }
   catch (e) { say("feat-msg", e.message); }
 });
+// 설정 [쓸 기능]의 [예시 데이터로 둘러보기]: 서버가 지어낸 표 파일을 준비해 준 칸 값으로 연결한다. 어느 화면에서나 [연결]에 성공했을 때와 같은 상태가 되고 설정 창은 닫힌다.
+// 연결 칸이 없는 화면(수집)은 연결만 하고 위쪽 줄의 연결 이름을 바꾼다.
+$("set-demo").onclick = () => busy($("set-demo"), async () => {
+  try {
+    const body = await api("/api/demo", {});
+    if (hasConnect) { await connectWith(body); if (typeof afterConnect === "function") afterConnect(); }
+    else { await api("/api/connect", body); connName = connLabel(body); showCrumb(); }
+    say("set-demo-msg", "", true);
+    $("feat-panel").classList.add("hidden");
+  } catch (e) { say("set-demo-msg", e.message); }
+});
 // 릴리스 노트(CHANGELOG의 한 절) → 요소들: "### 제목"은 묶음 머리, "- 줄"은 목록("이름: 설명"이면 이름을 굵게), "없음"뿐인 묶음은 뺀다.
 // 글자로만 넣는다(노트의 HTML은 실행하지 않는다).
 function updNotes(text) {

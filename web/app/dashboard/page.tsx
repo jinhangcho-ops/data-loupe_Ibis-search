@@ -9,9 +9,9 @@ import { CardPanel } from "@/components/edit/CardPanel";
 import { Gallery } from "@/components/edit/Shelf";
 import { Grid, useAddShell } from "@/components/grid/Grid";
 import { ShellProvider, useShell } from "@/components/shell/ShellProvider";
-import { Toolbar, useAddCard } from "@/components/shell/Toolbar";
+import { Toolbar, useAddCard, useDemo } from "@/components/shell/Toolbar";
 import { TopBar } from "@/components/shell/TopBar";
-import { connectDemo, listDashboards } from "@/lib/api";
+import { listDashboards } from "@/lib/api";
 import { ConstantsProvider, useConstants } from "@/lib/constants";
 import { DashProvider, selectedCard, useActionLog, useDash } from "@/lib/store";
 
@@ -34,6 +34,7 @@ function DashboardView() {
   const consts = useConstants();
   const addShell = useAddShell();
   const add = useAddCard();
+  const demo = useDemo();
   const [savedOnce, setSavedOnce] = useState(false);  // 연 뒤 한 번이라도 저장했나(옛 d-state "저장했어요")
   useActionLog(a => { if (a.type === "open") setSavedOnce(false); else if (a.type === "saved") setSavedOnce(true); });
   useEffect(() => {
@@ -84,7 +85,7 @@ function DashboardView() {
             <a className="btn" style={{ height: "2.75rem", padding: "0 1.375rem", fontSize: ".9375rem", textDecoration: "none" }} href="/search">쿼리에서 가져오기</a>
           </div>
           {!conn && <button id="d-demo" className="ghost" title="지어낸 주문·고객·방문기록 표에 연결해요. 연결할 데이터가 없어도 카드가 어떻게 보이는지 볼 수 있어요"
-            onClick={e => { e.stopPropagation(); connectDemo().then(() => location.reload(), err => dispatch({ type: "error", message: err.message })); }}>예시 데이터로 둘러보기</button>}
+            onClick={e => { e.stopPropagation(); demo(); }}>예시 데이터로 확인하기</button>}
         </div>
       )}
       <div className="d-main">

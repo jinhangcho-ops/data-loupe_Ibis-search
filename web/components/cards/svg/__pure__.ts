@@ -249,9 +249,13 @@ export function sectorPath(cx: number, cy: number, r0: number, r1: number, a0: n
 
 /** KPI 글자 폭 어림(글자 수 --n 대신, dashboard.css가 0.62em × n으로 나눈다): 한글·한자·전각은 약 1em이라 1/0.62, 나머지는 1 */
 export const textUnits = (text: string) => [...text].reduce((a, c) => a + (/[\u1100-\u11ff\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/.test(c) ? 1 / 0.62 : 1), 0);
-/** 글자를 px 폭(글자 크기 font)에 맞춰 자른다(넘치면 끝에 …). 폭은 textUnits × 0.62em(한글 약 1em) */
+/** 글자 폭 어림: textUnits 하나 = 0.62em(한글 약 1em) */
+const UNIT_EM = 0.62;
+/** 화면 크기 배율(chart/scale.useRootScale)만큼 키운 viewBox 글자 크기. 한 줄이 폭 px를 넘으면 들어가는 크기까지만 키운다(기준 크기 font보다 작아지지는 않는다) */
+export const growFont = (s: string, px: number, font: number, scale: number): number => Math.max(font, Math.min(font * scale, px / (textUnits(s) * UNIT_EM)));
+/** 글자를 px 폭(글자 크기 font)에 맞춰 자른다(넘치면 끝에 …) */
 export function fitText(s: string, px: number, font: number) {
-  const w = (t: string) => textUnits(t) * 0.62 * font, out = [...s];
+  const w = (t: string) => textUnits(t) * UNIT_EM * font, out = [...s];
   if (w(s) <= px) return s;
   while (out.length && w(out.join("") + "…") > px) out.pop();
   return out.join("") + "…";

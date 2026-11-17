@@ -2,8 +2,9 @@
 // 값은 모두 시험 안에서 지어낸다.
 import { describe, expect, it } from "vitest";
 import {
-  MAX_CELLS_3D, NEED_THREE, NEED_Z, PITCH_RANGE, START_VIEW, ZOOM_RANGE, axisShapes, gridReason, gridScene, heightColor, niceTicks, orbit, paint, pointsReason, pointsScene, project, zoomed,
-  type GridSet, type P3, type Shape, type View3,
+  MAX_CELLS_3D, MAX_FACES_3D, NEED_THREE, NEED_Z, PITCH_RANGE, PLAIN, SMOOTH_STEPS, START_VIEW, ZOOM_RANGE, axisShapes, dragMode, gridReason, gridScene, heightColor, liftGrid, niceTicks, orbit, paint, pointsReason, pointsScene, project,
+  smoothGrid, smoothReason, smoothStep, zPerPx, zoomed,
+  type GridSet, type P3, type Shape, type Shaping, type View3,
 } from "@/components/cards/chart/three";
 import { GRID_3D, THREE_TYPES } from "@/components/cards/chart/shapes";
 import { seriesKit } from "@/components/cards/chart/series";
@@ -178,6 +179,109 @@ describe("3차원 곡면", () => {
   it("이름 눈금이 많으면 건너뛰며 적는다", () => {
     const many = gridScene("surface3d", Array.from({ length: 30 }, (_, i) => `x${i}`), [set("갑", Array(30).fill(1)), set("을", Array(30).fill(2))], "L", "H", ["", "", ""], fmt);
     expect(many.axes.x.ticks.map(t => t.text)).toEqual(["x0", "x8", "x16", "x24"]);
+  });
+});
+
+describe("곡면 매끈함(잘게 나누기)", () => {
+  const vals = [[0, 5, 10], [10, 5, null], [0, 0, 10]], K = 4;
+  const sets = [set("갑", [0, 5, 10]), set("을", [10, 5, null], true), set("병", [0, 0, 10])];
+  const scene = (shape?: Shaping) => gridScene("surface3d", ["a", "b", "c"], sets, "L", "H", ["x", "계열", "값"], fmt, shape);
+  const polys = (s: Shape[]) => s.filter(x => x.kind === "poly") as Extract<Shape, { kind: "poly" }>[], lines = (s: Shape[]) => s.filter(x => x.kind === "line") as Extract<Shape, { kind: "line" }>[];
+  it("보간한 격자는 원래 격자점의 값을 그대로 지난다", () => {
+    const fine = smoothGrid(vals, K);
+    expect([fine.length, fine[0].length]).toEqual([9, 9]);
+    vals.forEach((row, j) => row.forEach((v, i) => expect(fine[j * K][i * K], `${j},${i}`).toBe(v)));
+  });
+  it("곧은 줄은 곧게 남는다(값을 지어내지 않는다)", () => {
+    expect(smoothGrid([[0, 1, 2], [0, 1, 2]], 2)[0]).toEqual([0, 0.5, 1, 1.5, 2]);
+    expect(smoothGrid([[0, 1, 2], [0, 1, 2]], 2).map(r => r[2])).toEqual([1, 1, 1]);
+  });
+  it("빈 값에 닿는 칸의 안쪽 점은 빈 값(채우지 않는다)", () => {
+    const fine = smoothGrid(vals, K);
+    expect(fine[0][5]).not.toBeNull();  // 갑의 b~c 사이(둘 다 값이 있다)
+    expect(fine[4][5]).toBeNull();  // 을의 b~c 사이(c가 비었다)
+    expect(fine[2][6]).toBeNull();  // 빈 꼭짓점이 있는 칸의 안쪽
+    expect(fine[2][8]).toBeNull();  // c 줄의 갑~을 사이
+    expect(fine[6][8]).toBeNull();  // c 줄의 을~병 사이
+    expect(fine[2][2]).not.toBeNull();  // 네 꼭짓점이 다 있는 칸의 안쪽
+  });
+  it("2배면 면이 칸마다 넷, 빈 값이 낀 칸은 여전히 비고, 면 테두리는 면 색", () => {
+    const s = scene({ ...PLAIN, smooth: 2 }), q = polys(s.shapes);
+    expect(q).toHaveLength(2 * 4);
+    expect(q.every(p => p.stroke === p.fill)).toBe(true);
+    expect(q.every(p => p.pts.every(([x]) => x <= 0.5))).toBe(true);  // 빈 값(c)에 닿는 오른쪽 칸에는 면이 없다
+  });
+  it("원래 격자선만 따로 긋고(0단계는 면 테두리가 격자선), 선 계열은 매끈해진 곡면을 따라간다", () => {
+    expect(lines(scene().shapes).filter(l => l.stroke === "var(--card)")).toHaveLength(0);
+    expect(polys(scene().shapes).every(p => p.stroke === "var(--card)")).toBe(true);
+    const s = scene({ ...PLAIN, smooth: 2 }), grid = lines(s.shapes).filter(l => l.stroke === "var(--card)"), over = lines(s.shapes).filter(l => l.stroke === "색을");
+    expect(grid.length).toBeGreaterThan(0);
+    expect(grid.every(l => l.pts.every(([x, y]) => x % 0.5 === 0 || y % 0.5 === 0))).toBe(true);  // 원래 격자 줄 위에만
+    expect(grid.every(l => l.pts.every(([x]) => x <= 0.5))).toBe(true);  // 면이 없는 칸에는 격자선도 없다
+    expect(over.map(l => l.pts.map(p => p[0]))).toEqual([[0, 0.25], [0.25, 0.5]]);  // 을: a~b를 두 토막으로(c는 비었다)
+    const mid = smoothGrid(vals, 2)[2][1]!, z = s.axes.z.ticks.length - 1;
+    expect(over[0].pts[1][2]).toBeCloseTo((mid - Number(s.axes.z.ticks[0].text)) / (Number(s.axes.z.ticks[z].text) - Number(s.axes.z.ticks[0].text)));
+  });
+  it("면 수 상한: 넘는 단계는 이유가 있고, 고른 단계는 그릴 수 있는 가장 높은 단계로 내려간다", () => {
+    expect(smoothReason(50, 40, 0)).toBe("");
+    expect(smoothReason(50, 40, 1)).toBe("");  // 49 × 39 × 4 = 7,644
+    expect(smoothReason(50, 40, 2)).toBe(`면이 ${(49 * 39 * 16).toLocaleString()}개가 되어 이 단계는 그릴 수 없어요(상한 ${MAX_FACES_3D.toLocaleString()}개). X축 값이나 계열 수를 줄이면 고를 수 있어요.`);
+    expect(smoothStep(50, 40, 3)).toBe(1);
+    expect(smoothStep(3, 3, 3)).toBe(3);
+    SMOOTH_STEPS.forEach((k, n) => expect(polys(scene({ ...PLAIN, smooth: k }).shapes).length, `${n}단계`).toBeLessThanOrEqual(MAX_FACES_3D));
+  });
+});
+
+describe("곡면 모양 조절(손잡이 끌기)", () => {
+  const sets = [set("갑", [0, 5, 10]), set("을", [10, 5, null]), set("병", [0, 0, 10])];
+  const scene = (shape?: Shaping) => gridScene("surface3d", ["a", "b", "c"], sets, "L", "H", ["x", "계열", "값"], fmt, shape);
+  it("끈 점은 끈 만큼, 주변은 거리에 따라 덜(가우스), 퍼짐 0이면 그 점만", () => {
+    const g = liftGrid(null, 5, 4, 2, 1, 10, 1);
+    expect(g.length).toBe(4);
+    expect(g[1][2]).toBe(10);
+    expect(g[1][3]).toBeCloseTo(10 * Math.exp(-0.5));
+    expect(g[1][1]).toBeCloseTo(g[1][3]);
+    expect(g[2][3]).toBeCloseTo(10 * Math.exp(-1));
+    expect(g[1][4]).toBeLessThan(g[1][3]);
+    expect(liftGrid(null, 5, 4, 2, 1, 10, 3)[1][3]).toBeGreaterThan(g[1][3]);  // 퍼짐이 넓으면 더 따라온다
+    expect(liftGrid(null, 3, 2, 0, 0, 7, 0)).toEqual([[7, 0, 0], [0, 0, 0]]);
+  });
+  it("이미 조절한 모양 위에 더하고, 반대로 끌면 처음으로 돌아온다", () => {
+    const once = liftGrid(null, 3, 3, 1, 1, 4, 1.5), twice = liftGrid(once, 3, 3, 0, 0, 2, 0), back = liftGrid(once, 3, 3, 1, 1, -4, 1.5);
+    expect(twice[0][0]).toBeCloseTo(once[0][0] + 2);
+    expect(twice[1][1]).toBe(4);
+    back.flat().forEach(v => expect(v).toBeCloseTo(0));
+  });
+  it("조절한 높이는 그림에만 더해지고 높이 축이 그 범위를 덮는다. 빈 값 칸은 그대로 빈다", () => {
+    const lift = liftGrid(null, 3, 3, 0, 0, 100, 0), s = scene({ ...PLAIN, lift }), top = Number(s.axes.z.ticks.at(-1)!.text);
+    expect(top).toBeGreaterThanOrEqual(100);
+    expect(s.span).toBe(top - Number(s.axes.z.ticks[0].text));
+    expect(s.shapes.filter(x => x.kind === "poly")).toHaveLength(2);
+    expect((s.shapes[0] as Extract<Shape, { kind: "poly" }>).pts[0][2]).toBeCloseTo((100 - Number(s.axes.z.ticks[0].text)) / s.span);
+    expect(sets[0].values[0]).toBe(0);  // 받은 값은 바뀌지 않는다
+  });
+  it("처음 모양(조절 없음)은 모양을 주지 않은 그림과 같다", () => {
+    expect(scene(PLAIN)).toEqual(scene());
+    expect(scene().span).toBe(10);
+  });
+  it("손잡이는 값이 있는 원래 격자점마다(빈 값 자리에는 없다), 켰을 때만", () => {
+    const grips = (s: Shape[]) => s.filter(x => x.kind === "dot") as Extract<Shape, { kind: "dot" }>[];
+    expect(grips(scene().shapes)).toHaveLength(0);
+    const g = grips(scene({ smooth: 2, lift: null, grips: true }).shapes);
+    expect(g.map(d => d.grip)).toEqual([[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [0, 2], [1, 2], [2, 2]]);
+    expect(grips(scene({ ...PLAIN, grips: true }).shapes)[1].pts[0]).toEqual([0.5, 0, 0.5]);  // 손잡이는 그 점의 값 높이에
+  });
+  it("끌기 판단: Ctrl이면 언제나 돌리기, 아니면 켜진 그림에서만(손잡이 위는 높이 조절)", () => {
+    expect(dragMode(true, false, false)).toBe("turn");
+    expect(dragMode(true, true, true)).toBe("turn");
+    expect(dragMode(false, false, true)).toBeNull();
+    expect(dragMode(false, false, false)).toBeNull();
+    expect(dragMode(false, true, true)).toBe("lift");
+    expect(dragMode(false, true, false)).toBe("turn");
+  });
+  it("끈 px을 높이로: 투영의 반대", () => {
+    const dz = 0.2, px = project([0.5, 0.5, 0.5], START_VIEW, W, H)[1] - project([0.5, 0.5, 0.5 + dz], START_VIEW, W, H)[1];
+    expect(px * zPerPx(START_VIEW, W, H)).toBeCloseTo(dz);
   });
 });
 

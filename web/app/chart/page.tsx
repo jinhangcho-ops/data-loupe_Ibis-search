@@ -5,6 +5,7 @@
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { NO_AUTO, SIZE_NAME, THEME_SERIES, pointsTable } from "@/components/cards/ChartCard";
 import { AnaChart, PointsChart, SeriesChart } from "@/components/cards/chart/Charts";
+import { layoutWidth, useRootScale } from "@/components/cards/chart/scale";
 import { GRID_3D } from "@/components/cards/chart/shapes";
 import { seriesKit, type Dataset, type SCard, type Series, type SeriesKit, type ThemeColors } from "@/components/cards/chart/series";
 import { useTheme } from "@/components/cards/svg/common";
@@ -98,7 +99,8 @@ function paint(m: Draw, consts: Constants, kit: SeriesKit, width: number, all: b
 function Body({ m, width, shotAll }: { m: Draw; width: number; shotAll: boolean }) {
   const consts = useConstants(), kit = useMemo(() => seriesKit(consts ?? NO_CONSTANTS), [consts]);
   const all = !!m.opts?.all || shotAll;
-  const out = useMemo(() => paint(m, consts ?? NO_CONSTANTS, kit, width, all), [m, consts, kit, width, all]);
+  const lay = layoutWidth(width, useRootScale());  // 그림은 너비/배율로 배치된다(chart/scale)
+  const out = useMemo(() => paint(m, consts ?? NO_CONSTANTS, kit, lay, all), [m, consts, kit, lay, all]);
   const z = useZoomX(out.axis);  // 대시보드 카드와 같은 확대·이동(한 번 눌러 켜고 휠·끌기, Esc·바깥 누름으로 끈다). 3차원 그림은 같은 켜기로 돌린다
   // 모든 데이터로 찍는 동안에는 보내지 않는다(부모 표가 흔들리지 않게)
   useEffect(() => { if (out.shown && !shotAll) toParent({ type: "shown", ...out.shown }); }, [out, shotAll]);

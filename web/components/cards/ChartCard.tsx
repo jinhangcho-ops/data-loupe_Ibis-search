@@ -9,6 +9,7 @@ import type { CardProps } from "./types";
 import { AnaChart, PointsChart, SeriesChart, type Ana, type Points } from "./chart/Charts";
 import { pickColor } from "@/lib/series";
 import { seriesKit, type SCard, type Series, type SeriesKit, type ThemeColors } from "./chart/series";
+import { layoutWidth, useRootScale } from "./chart/scale";
 import { useZoomX } from "./useZoomX";
 import { useWidth } from "./useWidth";
 import { Box } from "./svg/common";
@@ -120,7 +121,7 @@ export class Guard extends Component<{ children: ReactNode }, { error: Error | n
 export function ChartCard({ card, data, palette, ctx }: CardProps) {
   const consts = useConstants();
   const kit = useMemo(() => consts && seriesKit(consts), [consts]);
-  const { ref, width } = useWidth();
+  const { ref, width } = useWidth(), scale = useRootScale();
   // 카드 상자와 .bbody(격자 칸 높이)는 Grid가 준다. 여기는 그 높이를 그림과 안내 줄로 나눈다.
   const box = (body: ReactNode, note?: string, table?: ReactNode) => (
     <div ref={ref} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -130,7 +131,7 @@ export function ChartCard({ card, data, palette, ctx }: CardProps) {
     </div>
   );
   const c0: SCard = { ...card, data, range: ctx?.range };
-  const d = kit && consts ? autoDraw(c0, kit, consts, width, false) : null;
+  const d = kit && consts ? autoDraw(c0, kit, consts, layoutWidth(width, scale), false) : null;  // 그림은 너비/배율로 배치된다(chart/scale)
   const c = d ? d.c : c0, s = d ? d.s : null;
   const ana = !!kit && !!s && kit.usesAna(c);
   const z = useZoomX(kit ? zoomAxis(c, s, ana) : null);  // 훅이라 early return 앞에서 부른다

@@ -12,6 +12,8 @@ CSS_COMMENT = re.compile(r"/\*.*?\*/", re.S)  # 설명 글의 px는 보지 않�
 PX_VALUE =re.compile(r"(\d*\.?\d+)px")
 MAX_PX = 1.0  # 가는 선(1px 이하)은 px로 둔다
 PX_ALLOWED_LINES = ("@media", "@container", "html { font-size:")  # 창 너비 조건과 바탕 글자 크기 줄만 px
+CHART_SCALE_HOOK = "useRootScale()"  # 차트 그림 안의 px를 바탕 글자 크기에 맞추는 배율(web/components/cards/chart/scale.ts)
+CHART_SCALE_USERS = ("web/components/cards/chart/Charts.tsx", "web/components/cards/ChartCard.tsx", "web/app/chart/page.tsx")  # 그림 뿌리, 카드·차트 섬의 배치 너비
 SETTING = "ui_scale"
 BASE_SCALE = "normal"  # 바탕 크기 그대로라 규칙이 없다
 
@@ -32,6 +34,11 @@ def test_html_style_blocks_have_no_px_lengths() -> None:
     assert pages
     for path in pages:
         assert big_px("\n".join(STYLE_BLOCK.findall(path.read_text(encoding="utf-8")))) == [], path.name
+
+
+def test_chart_pictures_use_the_root_scale() -> None:
+    for name in CHART_SCALE_USERS:
+        assert CHART_SCALE_HOOK in (ROOT / name).read_text(encoding="utf-8"), name
 
 
 def test_ui_scale_default_is_a_choice() -> None:

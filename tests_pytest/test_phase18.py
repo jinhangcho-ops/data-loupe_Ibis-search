@@ -151,7 +151,7 @@ def run_node(tmp_path, body):
     head = r"""
 const ELS = {}, $ = id => (ELS[id] ??= { textContent: "" }), calls = [], KIND = { v: "num" };
 let drawn = null, chartGroups = {}, chartMerged = null, mergeSeq = 0;
-const rangeError = () => "", drawChart = () => {}, seriesTitle = s => s.agg, xKind = () => KIND.v;
+const rangeError = () => "", drawChart = () => {}, seriesTitle = s => s.agg, xKind = () => KIND.v, kind3d = () => "";
 const api = async (url, body) => {
   calls.push(JSON.parse(JSON.stringify(body)));
   return body.merge_ranges ? { labels: ["1~2"], series: [{ name: "count", values: [3] }], merged: true }

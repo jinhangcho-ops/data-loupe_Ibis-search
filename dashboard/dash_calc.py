@@ -397,13 +397,14 @@ def category_data(expr, body, series):
     split = body.get("split") or None
     picks = body.get("groups") or {}
     expr = result.pick_groups(expr, body["x"], picks.get("keep"), picks.get("ranges"))  # (Phase 18) 카드의 고른 그룹·숫자 범위로 먼저 거른다(compute가 server_picks를 body.groups로 넘긴다). rest도 거른 식에서
-    labels, datasets, more = run(lambda: result.get_chart(expr, body["x"], series, split, body.get("order", viz_rules.LEGACY_ORDER)))
+    max_splits = result.split_limit(body.get("chart_type"))  # compute가 카드의 view.type을 chart_type으로 넘긴다(3차원 막대·곡면은 더 많이)
+    labels, datasets, more = run(lambda: result.get_chart(expr, body["x"], series, split, body.get("order", viz_rules.LEGACY_ORDER), "", max_splits))
     truncated = datasets[0]["truncated"]
     parts = list(dict.fromkeys(k["split"] for k in datasets)) if split else None
     rest = {"rest": run(lambda: viz_rules.rest_values(expr, body["x"], series, split, parts, labels))} if truncated else {}
     name =lambda k: series_name(series[k["series"]]) if not body.get("split") else f"{series_name(series[k['series']])} · {k['split']}" if len(series) > 1 else k["split"]
     notes = [f"그룹이 많아 {result.MAX_GROUPS}개만 표시해요." if truncated else "",  # 딱 MAX_GROUPS개면 자르지 않은 것
-             f"나눌 값이 많아 행이 많은 {result.MAX_SPLITS}개만 표시해요." if more else ""]
+             f"나눌 값이 많아 행이 많은 {max_splits}개만 표시해요." if more else ""]
     return {"x": body["x"], "values": {"labels": [str(v) for v in labels], "series": [{"name": name(k), "values": k["values"]} for k in datasets], **rest}, "note": " ".join(filter(None, notes))}
 
 
@@ -1246,6 +1247,8 @@ def definition(card):
         extra = {"view": {**extra.get("view", {}), "groups": {"ranges": card["view"]["groups"]["ranges"], "merge": True}}}
     elif picks := server_picks(card):  # (Phase 18) 서버가 X를 먼저 거르면 고른 그룹·숫자 범위가 정의에 든다(바꾸면 다시 구한다)
         extra = {"view": {**extra.get("view", {}), "groups": picks}}
+    if card["kind"] == "chart" and view["type"] in result.GRID_3D_TYPES:  # 나눌 값 상한이 달라 종류를 3차원 막대·곡면으로(또는 거기서) 바꾸면 다시 구한다
+        extra = {"view": {**extra.get("view", {}), "max_splits": result.MAX_SPLITS_3D}}
     rules = {k: v for k, v in (view.get("auto") or {}).items() if k in viz_rules.SERVER_RULES}  # 서버가 값을 구할 때 쓰는 자동 규칙(bins·tail·density)
     if card["kind"] in ("histogram", "boxplot") or points:
         server = {**({"auto": rules} if rules else {}), **({"all_data": True} if view.get("all_data") and (card["kind"] == "histogram" or points) else {})}
@@ -1280,7 +1283,7 @@ def compute(card, now, ctx=None):
         elif card["kind"] in SHAPE_KINDS:
             found = shape_data(card, ctx)
         else:
-            found = range_data(card) if card["kind"] == "chart" and merges_on_server(card) else chart_data({**body, "groups": server_picks(card)}, fetch_window(ctx)) if card["kind"] == "chart" else metric_data(body)
+            found = range_data(card) if card["kind"] == "chart" and merges_on_server(card) else chart_data({**body, "groups": server_picks(card), "chart_type": card["view"]["type"]}, fetch_window(ctx)) if card["kind"] == "chart" else metric_data(body)
         if card["kind"] in ("table", "sentence", "deviation"):  # 기간 기준 날짜 컬럼 후보(하나뿐이면 화면이 자동으로 채운다)
             found.setdefault("date_cols", date_columns(querying.build(source["body"], select=False)))
         if card["kind"] == "chart" and card["view"]["type"] in POINT_TYPES:  # 점 종류를 고른 카드는 점도 다시 구한다

@@ -108,3 +108,25 @@ def test_query_chart_tab_draws_on_change():
     assert 'if ($("cx").value && (series.length || now.series.length)) $("draw").click();' not in html  # 예전: 선반은 값이 있어야만 그렸고, 그리는 중이면 버렸다
     assert "SERVER.dash.three_types" in html and 'api("/api/chart/points", { ...query, size: z, auto: { density: false } })' in html
     assert "onclick=" not in pane  # 인라인 핸들러 없음(CSP nonce)
+
+
+def test_grid_3d_takes_more_split_values():
+    """3차원 막대·곡면만 나눌 값 상한이 오른다(나눈 값이 한 축이라 가짓수가 많아야 곡면이 촘촘하다). 다른 종류는 8개 그대로."""
+    import ibis
+
+    from core import result
+    assert [result.split_limit(kind) for kind in ("surface3d", "bar3d", "scatter3d", "bar", "", None)] == [result.MAX_SPLITS_3D] * 2 + [result.MAX_SPLITS] * 4
+    kinds = [f"k{i:02d}" for i in range(result.MAX_SPLITS + 4)]
+    t = ibis.memtable({"x": ["가"] * len(kinds), "kind": kinds, "v": list(range(len(kinds)))})
+    series = [{"y": "v", "agg": "sum"}]
+    _, usual, more = result.get_chart(t, "x", series, "kind")
+    assert len(usual) == result.MAX_SPLITS and more is True
+    _, wide, more = result.get_chart(t, "x", series, "kind", "x", "", result.split_limit("surface3d"))
+    assert [d["split"] for d in wide] == kinds and more is False
+
+
+def test_card_definition_changes_with_grid_3d_type():
+    """카드 종류를 3차원 막대·곡면으로 바꾸면 정의(지문)가 달라져 더 많은 나눈 값으로 다시 구한다."""
+    card = {"kind": "chart", "source": {"body": {"x": "x"}}, "view": {"type": "bar"}}
+    flat, grid = dash_calc.definition(card), dash_calc.definition({**card, "view": {"type": "surface3d"}})
+    assert "max_splits" not in flat.get("view", {}) and grid["view"]["max_splits"] == dash_calc.result.MAX_SPLITS_3D

@@ -5,18 +5,19 @@
 import { useState } from "react";
 import { showValue } from "@/lib/calc";
 import { OSM_CREDIT, cardFormat, fillLevels, mapFrame, ringPath, tileZoom, tilesFor } from "./__pure__";
+import { useRootScale } from "../chart/scale";
 import type { P } from "./common";
 
-const GEO_W = 640;
+const GEO_W = 640, BAR_W = 90, FONT = 10;  // 범례 띠 폭·글자 크기(화면 크기 배율 1)
 type Geo = { bounds: number[]; regions: { name: string; value: number | null; rings: number[][] }[]; points: [number, number][]; label?: string };
 
 export default function GeoMap({ card, colors }: P) {
-  const [lost, setLost] = useState<Set<string>>(() => new Set());
+  const [lost, setLost] = useState<Set<string>>(() => new Set()), s = useRootScale(), font = FONT * s;
   const v = card.data.values as unknown as Geo, geo = (card.view.geo ?? {}) as { tiles?: boolean; color?: string }, frame = mapFrame(v.bounds, GEO_W);
   const base = geo.color ?? colors.palette?.[0] ?? colors.series[0], fmt = cardFormat(card);
   const tiles = geo.tiles ? tilesFor(frame, tileZoom(frame)) : [], kept = tiles.filter(t => !lost.has(t.url));
   const levels = fillLevels(v.regions.map(r => r.value)), shade = geo.tiles ? 0.7 : 1;
-  const nums = v.regions.map(r => r.value).filter((x): x is number => typeof x === "number"), id = "geo-" + card.id, y = frame.h - 22;
+  const nums = v.regions.map(r => r.value).filter((x): x is number => typeof x === "number"), id = "geo-" + card.id, y = frame.h - 8 - 14 * s;  // 범례: 띠 아래 글자 줄만큼 위로
   const dot = card.colors?.series?.["점"] ?? colors.palette?.[1] ?? colors.series[1];
   return (
     <svg viewBox={`0 0 ${frame.w.toFixed(1)} ${frame.h.toFixed(1)}`} preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%", overflow: "hidden" }} role="img" aria-label={card.title}>
@@ -40,13 +41,13 @@ export default function GeoMap({ card, colors }: P) {
       {nums.length > 0 && (  // 범례: 옅은 색 → 진한 색과 가장 작은·큰 값
         <>
           <defs><linearGradient id={id}><stop offset="0%" stopColor={base} stopOpacity={0.18} /><stop offset="100%" stopColor={base} stopOpacity={0.9} /></linearGradient></defs>
-          <rect x={8} y={y} width={90} height={8} fill={`url(#${id})`} stroke={colors.line} />
-          <text x={8} y={y - 3} fontSize={10} fill={colors.text}>{v.label}</text>
-          <text x={8} y={y + 19} fontSize={10} fill={colors.text}>{showValue(Math.min(...nums), fmt)}</text>
-          <text x={98} y={y + 19} fontSize={10} fill={colors.text} textAnchor="end">{showValue(Math.max(...nums), fmt)}</text>
+          <rect x={8} y={y} width={BAR_W * s} height={8} fill={`url(#${id})`} stroke={colors.line} />
+          <text x={8} y={y - 3} fontSize={font} fill={colors.text}>{v.label}</text>
+          <text x={8} y={y + 8 + 11 * s} fontSize={font} fill={colors.text}>{showValue(Math.min(...nums), fmt)}</text>
+          <text x={8 + BAR_W * s} y={y + 8 + 11 * s} fontSize={font} fill={colors.text} textAnchor="end">{showValue(Math.max(...nums), fmt)}</text>
         </>
       )}
-      {kept.length > 0 && <text x={frame.w - 4} y={frame.h - 4} fontSize={9} fill="#333" textAnchor="end" stroke="#fff" strokeWidth={2} paintOrder="stroke">{OSM_CREDIT}</text>}
+      {kept.length > 0 && <text x={frame.w - 4} y={frame.h - 4} fontSize={9 * s} fill="#333" textAnchor="end" stroke="#fff" strokeWidth={2} paintOrder="stroke">{OSM_CREDIT}</text>}
     </svg>
   );
 }

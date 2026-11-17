@@ -19,6 +19,20 @@ describe("머리 줄 [더 보기 ▾]", () => {
     expect(menu).toContain("setMenu(false); setDashOnly(true);");
     expect(bar).not.toContain("내보내기 ▾");
   });
+  it("[예시 데이터로 확인하기]는 연결과 상관없이 늘 있고, 연결돼 있으면 한 번 더 눌러야 연결을 바꾼다", () => {
+    const line = menu.split("\n").findIndex(l => l.includes('id="d-demo-menu"')), item = menu.split("\n").slice(line, line + 2).join("\n");
+    expect(line).toBeGreaterThan(0);
+    expect(menu.split("\n")[line].trimStart().startsWith("<button")).toBe(true);  // conn 조건으로 감싸지 않는다
+    expect(item).toContain("if (conn && !sure) return setSure(true); setMenu(false); demo();");
+    expect(item).toContain("onBlur={() => setSure(false)}");
+    expect(item).toContain('{sure ? "한 번 더 누르면 연결이 바뀌어요" : "예시 데이터로 확인하기"}');
+    expect(item).toContain("연결이 예시 데이터로 바뀌어요");
+    expect(bar).toContain("return () => { connectDemo().then(() => location.reload(), (e: Error) => dispatch({ type: \"error\", message: e.message })); };");
+    const page = src("app/dashboard/page.tsx");
+    expect(page).toContain("{!conn && <button id=\"d-demo\"");
+    expect(page).toContain("onClick={e => { e.stopPropagation(); demo(); }}>예시 데이터로 확인하기</button>}");
+    expect(page).not.toContain("둘러보기");
+  });
   it("대시보드 설정은 편집 조건으로 감싸지 않는다", () => {
     const line = bar.split("\n").find(l => l.includes(">대시보드 설정</button>"))!;
     expect(line.trimStart().startsWith("<button")).toBe(true);
