@@ -1,10 +1,9 @@
-"""(Phase 19) 묶음 H: 홈의 "무엇을 하고 싶어요?" 카드, 연결 칸의 안내 글, 설정 창 분류마다 한 줄 설명."""
+"""(Phase 19) 묶음 H: 홈의 "어떤 걸 하실 건가요?" 카드, 연결 칸의 안내 글, 설정 창 분류마다 한 줄 설명."""
 import re
 
 from test_fix_audit_js import between, read
 
-CARDS = [("/search", "query", "쿼리", "데이터를 표로 훑어보고 조건으로 찾아요"),
-         ("/prep", "prep", "분석", "데이터를 다듬고 그래프·통계로 살펴봐요"),
+CARDS = [("/prep", "prep", "분석", "데이터를 다듬고 그래프·통계로 살펴봐요"),
          ("/dashboard", "dashboard", "대시보드", "늘 보는 숫자와 차트를 한 화면에 모아요"),
          ("/collect", "collect", "수집", "인터넷(API·웹페이지)에서 데이터를 받아 와요"),
          ("/integrations", "integrations", "연동", "결과를 Slack·Notion으로 보내거나 GA4 데이터를 받아요")]
@@ -13,10 +12,27 @@ TABS = ["feat", "update", "calc", "memory", "sample", "date", "viz", "dest"]
 
 def test_home_cards_name_and_one_line():
     now = between("home.html", '<div id="home-now"', "</nav>")
-    assert "무엇을 하고 싶어요?" in now
-    found = re.findall(r'<a class="btn" href="(/\w+)" data-feature="(\w+)"><b>([^<]+)</b><span>([^<]+)</span></a>', now)
-    assert found == CARDS  # 메뉴 이름 그대로, 쓸 기능에서 끈 화면은 data-feature로 숨는다(common.js)
-    assert '<p class="lead" data-feature="query">처음이면 [쿼리]에서 테이블을 골라 보세요.</p>' in now  # 쿼리를 끄면 이 안내도 숨는다
+    assert "어떤 걸 하실 건가요?" in now
+    found = re.findall(r'<a class="btn" href="(/\w+)" data-feature="(\w+)"><span class="icon-tile"><svg [^>]+>.*?</svg></span><b>([^<]+)</b><span>([^<]+)</span><span class="card-art" data-art="\w+" aria-hidden="true"></span></a>', now)
+    assert found == CARDS  # 작은 카드: 그림 타일 + 메뉴 이름 그대로 + 한 줄 + 카드 그림. 쓸 기능에서 끈 화면은 data-feature로 숨는다(common.js)
+    # [쿼리]는 큰 시작 카드: 제목 + 한 줄 설명(처음 쓰는 사람 안내 포함) + 강조 단추 모양. 쿼리를 끄면 카드째 숨는다
+    start = re.search(r'<a class="btn" href="/search" data-feature="query" id="home-start"><b>([^<]+)</b><span>([^<]+)</span><span class="btn p"><svg [^>]+>.*?</svg>([^<]+)</span><span class="card-art" data-art="table" aria-hidden="true"></span></a>', now)
+    assert start.groups() == ("쿼리로 시작하기", "데이터를 표로 훑어보고 조건으로 찾아요. 처음이면 여기에서 테이블을 골라 보세요.", "쿼리 열기")
+    assert now.index('id="home-start"') < now.index('data-feature="prep"')  # 시작 카드가 맨 위
+    css = read("common.css")
+    assert "#home-start { grid-column:1 / -1;" in css and ".icon-tile {" in css
+    assert ".home-go { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr));" in read("home.html")  # 작은 카드는 2열
+
+
+def test_card_art_is_decoration_only():
+    """카드 그림(첫 화면 5장, 연동 4장)은 장식이다: 읽어 주지 않고, 글자·숫자가 없고, 색은 CSS 변수만 쓰고, 좁은 창에서는 숨는다."""
+    css = between("common.css", ".card-art { display:none; }", "\n}\n")
+    assert css.startswith(".card-art { display:none; }\n@media (min-width:900px) {")
+    assert not re.search(r"#[0-9a-fA-F]{3,8}\b|rgb\(|content:\"[^\"]", css)
+    arts = re.findall(r'<span class="card-art" data-art="(\w+)" aria-hidden="true"></span>', read("home.html") + read("integrations.html"))
+    assert arts == ["table", "bars", "stat", "picks", "msg", "msg", "chat", "stat", "code"]
+    assert all(f".card-art[data-art={kind}]::before" in css for kind in arts)
+    assert (read("home.html") + read("integrations.html")).count('class="card-art"') == len(arts)  # 그림마다 빈 태그 하나
 
 
 def test_connect_lead_and_kind_chip_tip():

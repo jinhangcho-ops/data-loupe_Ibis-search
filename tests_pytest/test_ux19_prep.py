@@ -110,7 +110,7 @@ def test_19f2_rows_box_only_with_result(tmp_path):
     part = between("analysis.js", "function drawAna()", "\n}\n") + "\n}\n"
     stubs = ("let A = { result: null, view: 'groups', lo: 0, hi: 0 }; const VIEW_NAMES = {}, VIEW_RATIOS = {};"
              "const anaTitle = () => 't', anaNote = () => 'n', anaTable = () => ({}), anaSpan = () => 0, anaSlice = d => d, showRange = () => {}, resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f';"
-             "const SERVER = { analysis: { whole: [] } }, NEW_KINDS = [], ADD_TITLE = '', anaAuto = {}, gapTable = () => [], segTables = () => [], pairBlock = () => [], noteLines = () => [], gradeLine = () => '', sortedTable = () => {}, anaRows = r => r, anaDraw = () => {};"
+             "const SERVER = { analysis: { whole: [] } }, NEW_KINDS = [], ADD_TITLE = '', anaAuto = {}, gapTable = () => [], segTables = () => [], pairBlock = () => [], noteLines = () => [], anaAnswer = () => [], gradeLine = () => '', sortedTable = () => {}, anaRows = r => r, anaDraw = () => {};"
              "globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' }); globalThis.document = { documentElement: {} };")
     body = """
 $("a-rows-box").hidden = true; drawAna(); const none = $("a-rows-box").hidden;

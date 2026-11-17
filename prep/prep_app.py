@@ -111,7 +111,7 @@ def count_rows(body):
 def analysis_constants(found):
     found.update(sample=DEFAULT_SAMPLE, sample_methods=profiler.METHODS,  # 화면(prep.html)의 표본 행 수 기본값, 표본 방법 이름
                  formula_guide=prep_derive.FORMULA_GUIDE, pca_max=prep_derive.PCA_MAX)  # 계산 식 안내, PCA에 넣을 컬럼 수 상한
-    found["analysis"] = {**stats.LIMITS, "max_auto_saved": settings.MAX_AUTO_ANALYSES}  # 분석의 상한들(분석 모듈은 전처리 화면을 내려줄 때 올라온다)과 자동으로 남기는 분석 설정 수
+    found["analysis"] = {**stats.LIMITS, "max_auto_saved": settings.MAX_AUTO_ANALYSES, "additive": list(stats.ADDITIVE)}  # 분석의 상한들(분석 모듈은 전처리 화면을 내려줄 때 올라온다)과 자동으로 남기는 분석 설정 수
     found["kmeans"] = {"k": prep_derive.KMEANS_K, "max_k": prep_derive.KMEANS_MAX_K, "max_cols": prep_derive.KMEANS_MAX_COLS, "name": prep_derive.KMEANS_NAME,
                        "iters": prep_derive.KMEANS_ITERS, "tol": prep_derive.KMEANS_TOL, "init_rows": prep_derive.KMEANS_INIT_ROWS}  # 화면의 계산 기준 글에 쓰는 숫자
     found["prep6"] = prep_ops.SCREEN6  # K-Means 칸, Phase 6 전처리 칸의 기본값 안내

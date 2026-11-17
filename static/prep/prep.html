@@ -118,6 +118,9 @@
   .akinds { display:grid; grid-template-columns:1fr; gap:6px; }  /* 종류만 보이는 구역. 고른 종류의 설명과 칸은 아래 .a-form 구역에 */
   .akinds label { display:flex; gap:6px; align-items:flex-start; border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:13px; line-height:1.35; cursor:pointer; }
   .akinds label:has(input:checked) { border-color:var(--accent); background:var(--accent-bg); }
+  .big.a-answer { display:block; font-size:var(--fs-xl); font-weight:600; }  /* 분석 결과의 한 문장 답(제목 아래, 그래프 위). 여백은 .big 그대로 */
+  .big.a-answer:empty { display:none; }
+  .big.a-answer b { font-size:inherit; color:var(--accent); }
   .akinds input { width:auto; margin:2px 0 0; flex:none; }
   .akinds span { font-weight:600; }
   .akinds small { display:block; color:var(--muted); font-size:11px; font-weight:400; }
@@ -315,6 +318,7 @@
       <div class="table-wrap" id="a-src"></div>
     </section>
     <div class="big"><b id="a-title">분석</b><span id="a-sub">오른쪽에서 분석 종류를 고르고 [구하기]를 누르면 여기에 그래프가 나와요.</span></div>
+    <div class="big a-answer" id="a-answer"></div>
     <div id="a-notes"></div>
     <div class="err" id="err-ana"></div>
     <div class="tabs2 hidden" id="a-tabs"></div>

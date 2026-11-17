@@ -32,16 +32,33 @@ def test_integ_cards_fold_inputs_behind_setup():
 
 
 def test_integ_want_list_jumps_to_cards():
-    """19G2: 맨 위 "무엇을 하고 싶어요?" 목록이 카드로 데려간다(스크롤·강조)."""
+    """19G2: 맨 위 "어떤 걸 하실 건가요?" 목록이 카드로 데려간다(스크롤·강조)."""
     html = read(INTEG)
     want = between(INTEG, 'id="want"', "</ul>")
     assert html.index('id="want"') < html.index('class="grid"')
-    assert "무엇을 하고 싶어요?" in html
+    assert "어떤 걸 하실 건가요?" in html
     assert re.findall(r'data-go="([\w-]+)"', want) == ["svc-send", "svc-bot", "svc-ga4", "svc-llm"]
     for word in ("Slack·Notion으로 보내기", "Slack에서 물어보기", "웹사이트 방문 데이터 받기", "질문으로 SQL 만들기"):
         assert word in want, word
-    assert "scrollIntoView" in between(INTEG, "[data-go]", "}));") and "flash" in html
+    assert "scrollIntoView" in between(INTEG, 'querySelectorAll("[data-go]")', "}));") and "flash" in html
     assert "onclick=\"" not in html
+
+
+def test_integ_want_cards_show_state():
+    """맨 위는 카드 4장(2열): 아이콘 타일·제목·한 줄 설명·상태 꼬리표·단추 하나. 꼬리표와 단추 글자는 아래 카드 배지와 같은 ready 값으로 정한다."""
+    cards =re.findall(r'<li class="card" data-go="[\w-]+">(.*?)</li>', between(INTEG, 'id="want"', "</ul>"), re.S)
+    assert len(cards) == 4
+    for card in cards:
+        for part in ('<span class="ico"><svg ', '<span class="state"></span>', "<h3>", '<div class="hint">', '<button type="button" class="btn">'):
+            assert card.count(part) == 1, part
+        assert re.search(r'<div class="foot"><button type="button" class="btn">설정하기</button><span class="state"></span></div><span class="card-art" data-art="\w+" aria-hidden="true"></span>\s*$', card)  # 단추 옆 꼬리표, 맨 끝에 카드 그림
+    assert "grid-template-columns:repeat(2," in between(INTEG, ".want {", "}")
+    show = between(INTEG, "function showWant(id, on)", "\n}")
+    assert '"연결됨" : "설정 전"' in show and '"열기" : "설정하기"' in show
+    hub = between(INTEG, "async function loadHub()", "\n}")
+    assert 'showWant("svc-send", senders.some(s => s.ready))' in hub and "showWant(card, by[key].ready)" in hub
+    assert re.findall(r'\["(\w+)", "[\w-]+", "(svc-\w+)"\]', hub) == [("slack_bot", "svc-bot"), ("ga4", "svc-ga4"), ("llm", "svc-llm")]
+    assert not re.search(r"#[0-9a-fA-F]{3,8}\b|rgba?\(", between(INTEG, "<style>", "</style>"))  # 색은 CSS 변수만
 
 
 def test_collect_steps_easy_names_and_folded():
@@ -65,5 +82,5 @@ def test_collect_request_and_response_words():
     assert "행이 될 배열" not in html and "줄이 될 목록 위치" in html
     for i in ("query", "headers", "f-headers", "body-kind", "body", "records", "p-kind", "b-conc", "lgroup", "env-path", "first-guide"):
         assert html.count(f'id="{i}"') == 1, i
-    guide = between(COLLECT, 'id="first-guide"', "</section>")
+    guide = between(COLLECT, 'id="first-guide"', "</section>") + between(COLLECT, "const STEP_HELP", "function stepStates")  # 안내 글과 진행 표시줄 칸의 풀이
     assert "curl" not in guide.replace("(curl)", "")  # curl은 풀이와 함께만

@@ -155,14 +155,16 @@ def test_picked_files_outside_drawn_list_survive_restore_and_connect(tmp_path):
     body = """
 const boxes = ["a", "b"].map(v => ({ value: v, checked: false }));
 document.querySelectorAll = () => boxes;
+document.querySelector = () => ({ value: "folder" });  // 연결 종류 라디오: 내 PC의 파일
 const els = {}; globalThis.$ = id => els[id] ??= { value: FLAT, textContent: "", classList: { toggle() {} }, replaceChildren(...k) { this.kids = k; } };
 globalThis.chip = text => ({ text }); globalThis.underPath = f => f; globalThis.el = (tag, props) => props;
 restoreFlat(["b", "z1", "z2"]);   // z1·z2는 화면 목록(2000개)에 안 그려진 파일
 boxes[0].checked = true;          // 사용자가 a도 체크
-console.log(JSON.stringify({ picked: pickedFiles(), text: els["flat-count"].textContent, chips: els["flat-picked"].kids.map(k => k.text) }));
+console.log(JSON.stringify({ picked: pickedFiles(), text: els["flat-count"].textContent, chips: els["flat-picked"].kids.map(k => k.text), button: els.connect.textContent }));
 """
     got = run_node(tmp_path, body, parts=[flat])
     assert got["picked"] == ["a", "b", "z1", "z2"]
+    assert got["button"] == "파일 3개 연결"  # [연결] 단추는 되살린 때 고른 수(목록에 안 그린 것 포함)
     assert "목록에 안 보이는 2개도 고름" in got["text"]
     assert got["chips"] == ["b", "z1", "z2"]  # 고른 파일 요약에는 목록에 안 그린 것도 나온다(되살린 때의 것)
 

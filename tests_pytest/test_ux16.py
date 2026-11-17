@@ -284,8 +284,9 @@ globalThis.openConnect = () => { out.opened++; };
   const more = els["recent-list"].kids.find(k => k.id === "recent-more"), folders = els["older-list"].kids;
   const kids = els["recent-list"].kids.filter(k => k !== more), btns = kids.filter(k => k.tag === "button");
   out.top = btns.length; out.more = more.textContent;  // 최근 연결 카드의 줄 수와 [이전 연결 더 보기] 단추
-  out.rows = kids.map(k => k.tag === "button" ? k.children.map(c => c.textContent) : k.textContent); out.types = btns.map(b => b.type);
-  out.folders = folders.map(f => [f.tag, f.children[0].children.map(c => c.textContent), f.children.slice(1).map(b => b.children[0].textContent)]);  // 이전 연결 카드: 날짜 폴더(머리글, 그 날의 연결들)
+  out.rows = kids.map(k => k.tag === "button" ? k.children.slice(1).map(c => c.textContent) : k.textContent); out.types = btns.map(b => b.type);
+  out.icons = btns.map(b => [b.children[0].className, b.children[0].children[0].tag, b.children[0].children[0].children.map(p => p.attrs.d).join(" ") === RECENT_ICONS.url.join(" ")]);  // 줄 앞의 종류 그림 타일: 주소는 DB, 파일은 문서
+  out.folders = folders.map(f => [f.tag, f.children[0].children.map(c => c.textContent), f.children.slice(1).map(b => b.children[1].textContent)]);  // 이전 연결 카드: 날짜 폴더(머리글, 그 날의 연결들)
   out.options = els["recent-conn"].kids.map(o => o.text);
   out.noneHidden = els["recent-none"].classList.contains("hidden");
   out.olderShut = els["recent-older"].classList.contains("hidden");
@@ -305,6 +306,7 @@ globalThis.openConnect = () => { out.opened++; };
     got = run_node(tmp_path, body, parts=[code])
     # 최근에 쓴 순으로, 날짜마다 머리글. 줄은 [이름, "시각 · 폴더 · 횟수"]: 고른 파일이 있으면 이름은 파일 이름(둘까지)이고 폴더는 아래 줄에
     assert got["rows"] == ["오늘", ["postgres://h/db, u", "09:05 · 1번 사용"], ["x.duckdb", "08:00 · C:/d · 5번 사용"], "2026-01-02", ["a.csv, b.parquet 외 1개", "23:40 · C:/d · 2번 사용"]]
+    assert got["icons"] == [["icon-tile", "svg", True], ["icon-tile", "svg", False], ["icon-tile", "svg", False]]
     assert got["options"] == ["최근 연결에서 고르기", "C:/d (3번 사용)", "postgres://h/db, u (1번 사용)", "a.csv, b.parquet 외 1개 (2번 사용)", "x.duckdb (5번 사용)"]  # 고르는 칸은 서버가 준 차례(많이 쓴 순) 그대로
     assert got["top"] == 3 and got["more"] == "이전 연결 1개 더 보기"  # 오늘 것(적으면 최근 3개까지)만 카드에, 나머지는 이전 연결 카드에
     assert got["folders"] == [["details", ["날짜 모름", "1개"], ["C:/d"]]]  # 날짜마다 폴더 하나(오늘 것은 없다), 안에 그 날의 연결

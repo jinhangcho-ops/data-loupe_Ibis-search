@@ -37,7 +37,7 @@ def test_join_keys_auto_then_remembered(tmp_path):
   const j = { table: "customers", how: "left", pairs: [["", ""]] };
   joinsUI.push(j);
   await autoKeys(j);
-  out.auto = JSON.parse(JSON.stringify(j.pairs)); out.joins = [...S.joins]; out.asked = calls.filter(c => c === "/api/join_keys").length; out.save1 = saves.at(-1);
+  out.auto = JSON.parse(JSON.stringify(j.pairs)); out.told = j.auto; out.joins = [...S.joins]; out.asked = calls.filter(c => c === "/api/join_keys").length; out.save1 = saves.at(-1);
   j.pairs[0] = ["day", "day"];  // 사용자가 키를 바꾼다
   await applyJoins();
   out.save2 = saves.at(-1);
@@ -56,7 +56,7 @@ def test_join_keys_auto_then_remembered(tmp_path):
   out.gone = m.pairs; out.asked3 = calls.filter(c => c === "/api/join_keys").length;
   const busy = { table: "customers", how: "left", pairs: [["cid", "id"]] };  // 이미 고른 키는 덮지 않는다
   await autoKeys(busy);
-  out.kept = busy.pairs;
+  out.kept = busy.pairs; out.quiet = busy.auto === undefined;
   console.log(JSON.stringify(out));
 })();
 """
@@ -69,6 +69,12 @@ def test_join_keys_auto_then_remembered(tmp_path):
     assert got["again"] == [["day", "day", False]] and got["asked2"] == 0  # 기억한 키를 먼저, 서버에 묻지 않는다
     assert got["gone"] == [["cid", "id", False]] and got["asked3"] == 1
     assert got["kept"] == [["cid", "id"]]
+    assert got["told"] is True and got["quiet"] is True  # 프로그램이 키를 채웠을 때만 "자동으로 맞췄어요"를 보인다
+
+
+def test_join_auto_hint_shown_and_cleared_on_edit():
+    assert 'j.auto ? [el("div", { className: "hint jauto"' in HTML
+    assert HTML.count("j.auto = false") == 3  # 왼쪽 키·오른쪽 키를 바꾸거나 키를 빼면 안내를 끈다
 
 
 @node

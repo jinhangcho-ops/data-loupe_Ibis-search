@@ -283,6 +283,24 @@ function anaNote(d) {
     ...(NEW_NOTES[d.kind]?.(d) ?? []), d.excluded ? `빈 값으로 뺀 행 ${d.excluded.toLocaleString()}개` : ""];
   return [`${d.base}의 ${d.prepped ? "전처리한 결과" : "원래 데이터"}`, data, ...more].filter(Boolean).join(", ") + (d.data?.notes?.length ? " " + d.data.notes.join(" ") : "");
 }
+// 그래프 위의 한 문장 답: [앞 글, 강조할 숫자, 뒤 글]. 묶음끼리 비교·날짜에 따른 변화만 내고, 낼 수 없으면 [].
+// 묶음: 합계·개수이고 묶음이 모두 왔고(d.more 아님) 음수가 없을 때만 비중(받은 값의 합이 전체). 그 밖에는 값. 잘렸으면(d.more) 서버가 행이 많은 묶음만 주어 더 큰 묶음이 빠졌을 수 있으니 "보이는 묶음 중"을 붙인다.
+// 날짜: 첫 기간 값이 0 이하·빈 값이거나 마지막 값이 비었거나 둘이 같으면 내지 않는다.
+function anaAnswer(d, view) {
+  if (view === "groups") {
+    const nums = d.values.map((v, i) => [v, i]).filter(([v]) => v != null);
+    if (!nums.length) return [];
+    const [top, at] = nums.reduce((a, b) => b[0] > a[0] ? b : a), total = nums.reduce((a, [v]) => a + v, 0), head = `${d.more ? "보이는 묶음 중 " : ""}${subject(d.labels[at])} `;
+    const adds = SERVER.analysis.additive.includes(d.agg);  // 합이 전체가 되는 집계(서버 stats.ADDITIVE)
+    return adds && !d.more && total > 0 && nums.every(([v]) => v >= 0) ? [head + "전체의 ", pctText(top / total), "로 가장 커요."] : [head + "가장 커요(", fmt(top), ")."];
+  }
+  if (view === "trend") {
+    const first = d.values[0], last = d.values.at(-1), unit = UNIT_NAMES[d.unit];
+    if (d.values.length < 2 || !(first > 0) || last == null || last === first) return [];
+    return [`${d.more ? "보이는 기간 중 " : ""}첫 ${unit}보다 마지막 ${subject(unit)} `, pctText(Math.abs(last / first - 1)), last > first ? " 늘었어요." : " 줄었어요."];
+  }
+  return [];
+}
 // 화면에서 자르는 범위(받은 결과를 줄여 보일 뿐, 서버에는 다시 묻지 않는다). 칸 수 = 시계열·그룹은 기간·그룹, 히스토그램은 구간, 값 빈도는 값 종류
 function anaSpan(d, view) {
   return { trend: () => d.labels.length, groups: () => d.labels.length, season: () => d.labels.length, pareto: () => d.rows.length, hist: () => d.histogram.counts.length, values: () => d.values.labels.length }[view]?.() ?? 0;
@@ -348,6 +366,7 @@ function drawAna() {
   $("a-funnel").replaceChildren();
   $("a-segs").replaceChildren(...(flow ? [...gapTable(d.gaps), ...segTables(d.segments)] : d && A.view === "ab" ? pairBlock(d) : []));
   $("a-notes").replaceChildren(...(d ? noteLines(d) : []));
+  $("a-answer").replaceChildren(...(d && !text ? anaAnswer(d, A.view).map((part, i) => i === 1 ? el("b", { textContent: part }) : part) : []));  // 글자 그대로 넣는다(태그로 읽지 않는다)
   $("a-tabs").classList.toggle("hidden", !d || d.views.length < 2);
   $("a-full").disabled = !d;
   $("a-rows-box").classList.toggle("hidden", !d);  // 결과가 없으면 보일 행 수 칸도 숨긴다

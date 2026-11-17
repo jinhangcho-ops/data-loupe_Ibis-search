@@ -13,15 +13,21 @@
   .home:not(.on) #conn-close { display:none !important; }
   .home-now { background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:var(--sp-5); display:flex; flex-direction:column; gap:var(--sp-2); }
   .home-name { font-size:var(--fs-xl); font-weight:700; overflow-wrap:anywhere; }
-  .home-go { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:var(--sp-2); margin-top:var(--sp-2); }
-  .home-go .btn { height:auto; flex-direction:column; align-items:flex-start; gap:2px; padding:var(--sp-3); white-space:normal; text-align:left; text-decoration:none; }
-  .home-go .btn b { font-size:var(--fs-md); }
-  .home-go .btn span { color:var(--muted); font-size:var(--fs-sm); line-height:1.4; }  .home-ask { margin:var(--sp-3) 0 0; }
+  .home-go { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--sp-2); margin-top:var(--sp-2); }  /* 맨 위 [쿼리] 시작 카드(#home-start, common.css)는 두 칸을 다 쓰고, 나머지는 2열 */
+  .home-go > .btn { height:auto; display:grid; grid-template-columns:auto minmax(0, 1fr); gap:0 var(--sp-3); align-items:center; padding:var(--sp-3); white-space:normal; text-align:left; text-decoration:none; }
+  .home-go > .btn b { font-size:var(--fs-md); }
+  .home-go > .btn > b + span { grid-column:2; color:var(--muted); font-size:var(--fs-sm); line-height:1.4; }
+  .recent-list .icon-tile { grid-row:span 2; }
+  .home-go { --art-w:96px; }
+  .home-go > .btn { min-height:88px; align-content:start; }
+  .home-go .icon-tile { width:auto; height:auto; background:none; color:var(--accent); }  /* 카드에서는 제목 옆 작은 그림: 오른쪽은 카드 그림(.card-art) 자리 */
+  .home-go > .btn > .icon-tile ~ span:not(.card-art) { grid-column:1 / -1; margin-top:var(--sp-1); }
+  .home-ask { margin:var(--sp-3) 0 0; }
   .home-recent { align-self:start; background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:var(--sp-4); display:flex; flex-direction:column; gap:var(--sp-2); }
   .home-recent h3 { margin:0; }
   .recent-list { display:flex; flex-direction:column; gap:var(--sp-1); max-height:60vh; overflow-y:auto; }  /* 길어지면 카드 안에서 굴린다 */
   .recent-day { color:var(--muted); font-size:var(--fs-sm); font-weight:600; margin-top:var(--sp-2); }
-  .recent-list .btn { flex:none; flex-direction:column; align-items:flex-start; gap:0; justify-content:flex-start; height:auto; min-height:var(--h-md); padding:var(--sp-1) var(--sp-3); white-space:normal; text-align:left; overflow-wrap:anywhere; font-weight:500; }
+  .recent-list .btn { flex:none; display:grid; grid-template-columns:auto minmax(0, 1fr); gap:0 var(--sp-2); align-items:center; height:auto; min-height:var(--h-md); padding:var(--sp-1) var(--sp-3); white-space:normal; text-align:left; overflow-wrap:anywhere; font-weight:500; }
   #recent-more { align-self:flex-start; margin-top:var(--sp-2); }
   .home.older { grid-template-columns:minmax(0, 560px) repeat(2, minmax(240px, 360px)); }  /* 이전 연결 카드가 열리면 오른쪽에 칸 하나 더 */
   .home-recent .head { display:flex; align-items:center; }
@@ -43,14 +49,13 @@
     <div id="home-now" class="home-now hidden">
       <div class="field-label">지금 연결</div>
       <div class="home-name" id="home-name"></div>
-      <h3 class="home-ask">무엇을 하고 싶어요?</h3>
-      <p class="lead" data-feature="query">처음이면 [쿼리]에서 테이블을 골라 보세요.</p>
+      <h3 class="home-ask">어떤 걸 하실 건가요?</h3>
       <nav class="home-go" aria-label="화면 바로가기">
-        <a class="btn" href="/search" data-feature="query"><b>쿼리</b><span>데이터를 표로 훑어보고 조건으로 찾아요</span></a>
-        <a class="btn" href="/prep" data-feature="prep"><b>분석</b><span>데이터를 다듬고 그래프·통계로 살펴봐요</span></a>
-        <a class="btn" href="/dashboard" data-feature="dashboard"><b>대시보드</b><span>늘 보는 숫자와 차트를 한 화면에 모아요</span></a>
-        <a class="btn" href="/collect" data-feature="collect"><b>수집</b><span>인터넷(API·웹페이지)에서 데이터를 받아 와요</span></a>
-        <a class="btn" href="/integrations" data-feature="integrations"><b>연동</b><span>결과를 Slack·Notion으로 보내거나 GA4 데이터를 받아요</span></a>
+        <a class="btn" href="/search" data-feature="query" id="home-start"><b>쿼리로 시작하기</b><span>데이터를 표로 훑어보고 조건으로 찾아요. 처음이면 여기에서 테이블을 골라 보세요.</span><span class="btn p"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>쿼리 열기</span><span class="card-art" data-art="table" aria-hidden="true"></span></a>
+        <a class="btn" href="/prep" data-feature="prep"><span class="icon-tile"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg></span><b>분석</b><span>데이터를 다듬고 그래프·통계로 살펴봐요</span><span class="card-art" data-art="bars" aria-hidden="true"></span></a>
+        <a class="btn" href="/dashboard" data-feature="dashboard"><span class="icon-tile"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg></span><b>대시보드</b><span>늘 보는 숫자와 차트를 한 화면에 모아요</span><span class="card-art" data-art="stat" aria-hidden="true"></span></a>
+        <a class="btn" href="/collect" data-feature="collect"><span class="icon-tile"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg></span><b>수집</b><span>인터넷(API·웹페이지)에서 데이터를 받아 와요</span><span class="card-art" data-art="picks" aria-hidden="true"></span></a>
+        <a class="btn" href="/integrations" data-feature="integrations"><span class="icon-tile"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span><b>연동</b><span>결과를 Slack·Notion으로 보내거나 GA4 데이터를 받아요</span><span class="card-art" data-art="msg" aria-hidden="true"></span></a>
       </nav>
     </div>
 <!--include core/connect.html-->

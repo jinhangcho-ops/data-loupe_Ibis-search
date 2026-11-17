@@ -43,14 +43,69 @@ def test_candle_without_value_column_asks_to_pick():
 
 
 def test_collect_first_guide_follows_mode():
+    """처음 안내는 진행 표시줄(3칸)이 대신한다. 받는 방식별 문장은 칸의 풀이(STEP_HELP, 툴팁)로 옮겼다."""
     box = between("collect.html", 'id="first-guide"', "</section>")
-    assert box.count("[시험 보내기]") == 1
-    api = re.search(r'<li class="for-api">(.*?)</li>', box)
-    assert api and "[시험 보내기]" in api.group(1)
-    assert '<li class="for-file hidden">' in box and "[파일 주소]" in box
-    page = re.search(r'<li class="for-web hidden">(.*?)</li>', box)
-    assert page and "[수집용 창 열기]" in page.group(1) and "[값 고르기]" in page.group(1)
-    assert "[받는 방식]" in box and "[수집 시작]" in box  # test_ux14가 보는 글자
+    assert re.findall(r"<button type=\"button\"><i>(\d)</i>([^<]+)</button>", box) == [("1", "주소 넣기"), ("2", "받을 값 고르기"), ("3", "저장하고 실행")]
+    assert "[받는 방식]" in box and "onclick" not in box  # CSP: 이벤트는 스크립트에서 붙인다
+    text = between("collect.html", "const STEP_SAVE", "function stepStates")
+    api, file, page = (re.search(rf"^  {m}: \[(.*)\],$", text, re.M).group(1) for m in ("api", "file", "web"))
+    assert api.count("[시험 보내기]") == 1 and "(curl)" in api and "[요청 예시로 채우기]" in api
+    assert "[파일 주소]" in file and "[행 추가]" in file and "[시험 보내기]" not in file
+    assert "[수집용 창 열기]" in page and "[값 고르기]" in page
+    assert "[저장]" in text and "[수집 시작]" in text and all(s.count("STEP_SAVE") == 1 for s in (api, file, page))
+
+
+def test_collect_progress_uses_css_variables_only():
+    css = between("collect.html", "  .prog {", "</style>")
+    assert not re.search(r"#[0-9a-fA-F]{3,8}\b|rgb\(", css.replace("#prog-help", ""))
+    assert ".prog [data-state=on] { border-color:var(--accent-line); background:var(--accent-bg);" in css and "background:none; border:1px solid transparent;" in css  # 지금 단계만 면으로 띄운다
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
+def test_collect_progress_states(tmp_path):
+    """칸의 상태: 끝난 칸 done, 끝나지 않은 첫 칸 on. 파일 주소는 값을 고르는 단계가 없어 상태 없이 순서만 보인다."""
+    part = between("collect.html", "const STEP_GO", '$("prog").onclick')
+    body = r"""
+const els = { prog: { children: [new FakeEl('button'), new FakeEl('button'), new FakeEl('button')] } };
+let now = 'api', cols = [];
+const values = {};
+const $ = id => els[id], val = id => values[id] ?? '', mode = () => now, knownCols = () => cols;
+const look = () => { showSteps(); return els.prog.children.map(b => [b.dataset.state ?? '', b.attrs['aria-current'], b.disabled]); };
+const out = {};
+out.pure = [stepStates([false, false, false]), stepStates([true, false, true]), stepStates([false, true, true]), stepStates([true, true, true]), stepStates([true, null, true])];
+out.empty = look();
+values['req-url'] = 'https://example.invalid/items';
+out.address = look();
+values['f-url'] = values['w-url'] = ''; now = 'web';
+out.otherAddress = look();  // 다른 방식의 주소 칸은 세지 않는다
+values['w-url'] = 'https://example.invalid/list'; cols = ['title']; values['o-path'] = 'out.parquet';
+out.all = look();
+now = 'file'; values['f-url'] = 'https://example.invalid/a.csv';
+out.file = look();
+out.fileTitle = els.prog.children[1].title;
+now = 'api'; cols = [];
+out.back = look();  // 상태가 없던 칸에 다시 상태가 붙고, 끝났던 칸의 상태는 지워진다
+console.log(JSON.stringify(out));
+"""
+    out = run_node(tmp_path, body, parts=[part])
+    assert out["pure"] == [["on", "", ""], ["done", "on", "done"], ["on", "done", "done"], ["done", "done", "done"], ["", "", ""]]
+    assert out["empty"] == [["on", "step", False], ["", "false", False], ["", "false", False]]
+    assert out["address"] == [["done", "false", False], ["on", "step", False], ["", "false", False]]
+    assert out["otherAddress"] == [["on", "step", False], ["", "false", False], ["", "false", False]]
+    assert out["all"] == [["done", "false", False]] * 3
+    assert out["file"] == [["", "false", False], ["", "false", True], ["", "false", False]]  # 가운데 칸은 갈 곳이 없어 잠근다
+    assert "통째로" in out["fileTitle"]
+    assert out["back"] == [["done", "false", False], ["on", "step", False], ["done", "false", False]]
+
+
+def test_collect_progress_redrawn_where_inputs_change():
+    html = read("collect.html")
+    assert html.count("showSteps();") == 5  # 요약 갱신(입력·클릭·불러오기), 미리보기 컬럼, 저장 위치 고르기, 요청 예시 채우기, 웹 컬럼
+    assert "showSteps();" in between("collect.html", "function showCollectSummaries()", "\n}")
+    assert "showSteps();" in between("collect.html", "function renderFields()", "\n}")
+    assert "showSteps();" in between("collect.html", "async function sample()", "\n}")
+    go = between("collect.html", '$("prog").onclick', "\n};")
+    assert 'step.querySelector(".sp").click()' in go and "scrollIntoView" in go and "focus(" in go
 
 
 # ---------- 15B 카드 추가 창 ----------

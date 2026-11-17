@@ -342,12 +342,36 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 #flat-list { max-height:260px; border:1px solid var(--line); border-radius:var(--r-ctl); padding:2px; }
 #flat-list label { display:flex; align-items:center; gap:8px; white-space:nowrap; padding:6px 8px; border-radius:var(--r-ctl); cursor:pointer; font-size:var(--fs-sm); color:var(--text); }  /* 줄 어디를 눌러도 체크 */
 #flat-list label.hidden { display:none; }
-#flat-list label:hover { background:var(--accent-bg); }
+#flat-list label:hover, #flat-list label:has(input:checked) { background:var(--accent-bg); }  /* 고른 파일 줄은 강조색 바탕으로 남는다 */
 #flat-list input { width:auto; }
 #flat-list .tag { margin-left:auto; padding:0 8px; border:1px solid var(--line); border-radius:var(--r-pill); font-size:var(--fs-xs); color:var(--muted); }
 #flat-picked { margin-top:6px; flex:none; }
 .seg2 label { justify-content:center; }  /* 라디오가 든 라벨은 inline-flex라 text-align이 먹지 않는다 */
 .conn-card .kinds { justify-content:center; }
+/* 첫 화면(home.html): 그림 타일(바로가기 카드와 최근 연결 줄 앞, 왼쪽 메뉴와 같은 선 그림)과 [쿼리] 시작 카드(제목·설명 왼쪽, 강조 단추 모양 오른쪽) */
+.icon-tile { flex:none; display:grid; place-items:center; width:var(--h-md); height:var(--h-md); border-radius:var(--r-ctl); background:var(--bg); color:var(--muted); }
+#home-start { grid-column:1 / -1; grid-template-columns:minmax(0, 1fr); padding:var(--sp-5); --art-w:200px; }
+#home-start > b { font-size:var(--fs-lg); }
+#home-start > b + span { grid-column:1; }
+#home-start > .btn { justify-self:start; margin-top:var(--sp-3); height:var(--h-lg); }
+/* 카드 그림(첫 화면·연동 카드): 카드 오른쪽 면에 종이 한 장이 걸린 장식. 글자·숫자 없이 막대로만 그린다(지어낸 값을 내 데이터로 읽지 않게).
+   그림은 종이 위쪽에서 끝나 카드가 낮아도 잘리지 않는다. 너비는 카드의 --art-w, 좁은 창에서는 숨긴다 */
+.card-art { display:none; }
+@media (min-width:900px) {
+  :has(> .card-art) { position:relative; overflow:hidden; padding-right:calc(var(--art-w) + var(--sp-3)) !important; }  /* 카드마다 다른 안쪽 여백 규칙(#home-start 등)보다 앞서야 글자가 그림 밑으로 안 들어간다 */
+  .card-art { display:block; position:absolute; top:0; right:0; bottom:0; width:var(--art-w); background:var(--bg); border-left:1px solid var(--line);
+    --a:linear-gradient(var(--accent), var(--accent)); --s:linear-gradient(var(--accent-line), var(--accent-line)); --l:linear-gradient(var(--line), var(--line)); --g:linear-gradient(var(--bg), var(--bg)); }
+  .card-art::before { content:""; position:absolute; inset:14px -1px -1px 14px; border:1px solid var(--line); border-radius:var(--r-ctl) 0 0 0; background-color:var(--card); background-repeat:no-repeat; }
+  .card-art[data-art=bars]::before { background-image:var(--a), var(--s), var(--s); background-position:12px 14px, 12px 32px, 12px 50px; background-size:56px 10px, 36px 10px, 24px 10px; }
+  .card-art[data-art=stat]::before { background-image:var(--l), var(--s), var(--s), var(--s), var(--s), var(--s), var(--a); background-position:12px 12px, 12px 24px, 12px 54px, 24px 50px, 36px 52px, 48px 46px, 60px 42px; background-size:28px 6px, 44px 12px, 8px 8px, 8px 12px, 8px 10px, 8px 16px, 8px 20px; }
+  .card-art[data-art=picks]::before { background-image:radial-gradient(circle, var(--accent) 5px, transparent 5.5px), var(--l), radial-gradient(circle, var(--accent) 5px, transparent 5.5px), var(--l), radial-gradient(circle, var(--line) 5px, transparent 5.5px), var(--l); background-position:12px 12px, 32px 15px, 12px 30px, 32px 33px, 12px 48px, 32px 51px; background-size:12px 12px, 40px 6px, 12px 12px, 28px 6px, 12px 12px, 34px 6px; }
+  .card-art[data-art=msg]::before { background-image:var(--s), var(--l), var(--l), var(--a), var(--l), var(--l); background-position:12px 12px, 36px 13px, 36px 23px, 12px 40px, 36px 41px, 36px 51px; background-size:16px 16px, 36px 6px, 24px 6px, 16px 16px, 30px 6px, 40px 6px; }
+  .card-art[data-art=chat]::before { background-image:var(--s), var(--a), var(--l), var(--l); background-position:right 12px top 12px, 12px 40px, 36px 41px, 36px 51px; background-size:64px 18px, 16px 16px, 56px 6px, 36px 6px; }
+  .card-art[data-art=code]::before { background-image:var(--a), var(--l), var(--l), var(--a), var(--l), var(--l); background-position:12px 14px, 44px 14px, 24px 28px, 12px 42px, 36px 42px, 24px 56px; background-size:26px 6px, 48px 6px, 60px 6px, 18px 6px, 40px 6px, 32px 6px; }
+  .card-art[data-art=table]::before { background-image:var(--l), var(--l), var(--l), var(--l), var(--l), var(--l), var(--l), var(--l), var(--s), var(--l), var(--l), var(--l), var(--l), var(--l), var(--l), var(--l), var(--g);
+    background-position:12px 9px, 72px 9px, 130px 9px, 12px 33px, 72px 33px, 130px 33px, 12px 57px, 72px 57px, 130px 57px, 12px 81px, 72px 81px, 130px 81px, 0 24px, 0 48px, 0 72px, 0 96px, 0 0;
+    background-size:24px 6px, 24px 6px, 20px 6px, 40px 6px, 28px 6px, 36px 6px, 34px 6px, 22px 6px, 30px 6px, 44px 6px, 26px 6px, 36px 6px, 100% 1px, 100% 1px, 100% 1px, 100% 1px, 100% 24px; }
+}
 
 /* 고르는 칸을 펼친 목록. 창 엔진이 그리는 목록은 화면 모드의 색을 따르지 않아 직접 그린다(common.js). */
 .menu { position:fixed; z-index:300; background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:4px 0; box-shadow:0 10px 30px rgb(15 25 30 / .18); }
