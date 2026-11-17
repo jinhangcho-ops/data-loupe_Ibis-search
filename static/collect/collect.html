@@ -60,6 +60,13 @@
   .collect-pane .table-wrap { overflow:auto; max-height:420px; }
   .collect-pane th { z-index:2; background:var(--card); }
   .step .edx .tabs { display:flex; flex-wrap:wrap; gap:4px 12px; margin:4px 0; }
+  /* 맨 위 진행 표시줄(3칸). 끝난 칸(done)과 지금 칸(on)은 번호가 강조색이고, 지금 칸은 테두리·바탕도 강조색이다. */
+  .prog { display:flex; gap:8px; }
+  .prog button { flex:1; min-width:0; display:flex; align-items:center; gap:8px; height:var(--h-lg); padding:0 14px; border-radius:var(--r-card); background:none; border:1px solid transparent; color:var(--text); font-weight:500; overflow:hidden; }
+  .prog i { flex:none; width:22px; height:22px; display:grid; place-items:center; border-radius:var(--r-pill); background:var(--card); font-style:normal; font-size:var(--fs-xs); }
+  .prog [data-state] i { background:var(--accent); color:var(--on-accent); }
+  .prog [data-state=on] { border-color:var(--accent-line); background:var(--accent-bg); color:var(--accent); font-weight:600; }  /* 지금 단계만 면으로 띄운다(나머지는 바탕 없이 글자만) */
+  #prog-help { margin:6px 0 0; }
 </style>
 </head>
 <body class="app">
@@ -71,9 +78,9 @@
       <div class="head" style="margin:0"><b class="warn" id="unseen-text" style="font-size:14px"></b><button id="unseen-open" class="ghost">실행 기록 보기</button><button id="unseen-ok" class="btn" title="실패를 확인한 것으로 표시해요. 이 알림이 사라져요">확인</button></div>
     </section>
 
-    <section class="card" id="first-guide">
-      <h3>처음이면 이 순서로 해요</h3>
-      <ol class="hint" style="margin:4px 0 0; padding-left:20px"><li>오른쪽 [받는 방식]에서 골라요. API는 데이터를 주는 주소, 파일 주소는 올라와 있는 파일 하나, 웹페이지는 화면에 보이는 값을 받아요.</li><li class="for-api">아래 요청 칸을 채우고 [시험 보내기]로 응답을 받아 봐요. 다른 곳에서 복사한 요청 글(curl)이 있으면 [요청 예시로 채우기]에 붙여 넣으면 돼요.</li><li class="for-file hidden">[파일 주소]에 받을 파일의 주소를 넣어요. 열쇠 같은 추가 정보(헤더)가 필요하면 [행 추가]로 넣어요.</li><li class="for-web hidden">주소를 넣고 [수집용 창 열기]를 누른 뒤 [값 고르기]로 받을 값을 수집용 창에서 클릭해요.</li><li>오른쪽 [저장]에서 파일 위치를 정하고 [수집 시작]을 눌러요.</li></ol>
+    <section id="first-guide" aria-label="수집 순서">
+      <div class="prog" id="prog"><button type="button"><i>1</i>주소 넣기</button><button type="button"><i>2</i>받을 값 고르기</button><button type="button"><i>3</i>저장하고 실행</button></div>
+      <div class="hint" id="prog-help">처음이면 오른쪽 [받는 방식]에서 먼저 골라요. API는 데이터를 주는 주소, 파일 주소는 올라와 있는 파일 하나, 웹페이지는 화면에 보이는 값을 받아요. 위 칸에 마우스를 올리면 할 일을 알려 주고, 누르면 그 칸으로 가요.</div>
     </section>
 
     <section class="card for-api">
@@ -661,6 +668,7 @@ $("parse").onclick = () => busy($("parse"), async () => {
     secrets = d.secrets.map(s => ({ ...s, env: "" }));
     plain = [];  // 새로 읽은 요청: 전에 뺀 자리는 이 요청의 것이 아니다
     showSecrets();
+    showSteps();
     $("unread").textContent = d.unread.length ? `읽지 못한 부분이 있어요: ${d.unread.join(" / ")}` : "";
     say("parse-msg", `${FORMATS[d.format] ?? d.format}으로 읽어서 칸을 채웠어요.`, true);
     checkPaging();
@@ -786,6 +794,7 @@ async function sample() {
     const d = await api("/api/collect/sample", { config: config(), text });
     if (mine !== sampleToken) return;
     sampleCols = d.columns.map(c => c.name);
+    showSteps();
     $("sample-info").textContent = [`줄 ${d.count.toLocaleString()}개`, d.cursor != null && `다음 표시(커서) ${d.cursor}`, d.next != null && `다음 주소 ${d.next}`, d.total != null && `전체 수 ${d.total}`].filter(Boolean).join(", ");
     $("sample").innerHTML = sampleTable(d.columns.map(c => ({ name: c.name, title: `${c.path} (${c.type})` })), d.rows, "뽑힌 줄이 없어요. 표의 줄이 될 목록 위치를 확인하세요.");
     say("resp-msg", "");
@@ -825,6 +834,40 @@ function showDedupe() {
 }
 $("dd-text").onchange = showDedupe;
 
+// 맨 위 진행 표시줄: 받는 방식마다 [주소 칸, 받을 값을 고르는 곳, 저장 위치 칸]의 id와 칸의 풀이(툴팁).
+// 파일 주소는 파일을 통째로 받아 값을 고르는 곳이 없다(null).
+const STEP_GO = { api: ["req-url", "try", "o-path"], file: ["f-url", null, "o-path"], web: ["w-url", "pick-field", "o-path"] };
+const STEP_SAVE = "오른쪽 [저장]에서 파일 위치를 정하고 [수집 시작]을 눌러요.";
+const STEP_HELP = {
+  api: ["아래 요청 칸에 주소를 넣어요. 다른 곳에서 복사한 요청 글(curl)이 있으면 [요청 예시로 채우기]에 붙여 넣으면 돼요.", "[시험 보내기]로 응답을 받아 보고, 응답에서 받을 값을 골라요.", STEP_SAVE],
+  file: ["[파일 주소]에 받을 파일의 주소를 넣어요. 열쇠 같은 추가 정보(헤더)가 필요하면 [행 추가]로 넣어요.", "파일 주소는 파일을 통째로 받아서 값을 고르지 않아요.", STEP_SAVE],
+  web: ["주소를 넣고 [수집용 창 열기]를 눌러요.", "[값 고르기]로 받을 값을 수집용 창에서 클릭해요.", STEP_SAVE],
+};
+// 칸의 상태: 끝난 칸은 "done", 끝나지 않은 첫 칸은 "on", 그 뒤는 "". done에 알 수 없는 칸(null)이 있으면 상태를 매기지 않고 순서만 보인다.
+function stepStates(done) {
+  if (done.includes(null)) return done.map(() => "");
+  const now = done.indexOf(false);
+  return done.map((d, i) => d ? "done" : i === now ? "on" : "");
+}
+function showSteps() {
+  const go = STEP_GO[mode()], states = stepStates([!!val(go[0]), go[1] ? knownCols().length > 0 : null, !!val("o-path")]);
+  [...$("prog").children].forEach((b, i) => {
+    if (states[i]) b.dataset.state = states[i]; else delete b.dataset.state;
+    b.setAttribute("aria-current", states[i] === "on" ? "step" : "false");
+    b.title = STEP_HELP[mode()][i];
+    b.disabled = !go[i];
+  });
+}
+// 칸을 누르면 그 입력 칸으로 간다. 오른쪽 패널의 접힌 단계 안이면 그 단계를 먼저 편다.
+$("prog").onclick = e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  const target = $(STEP_GO[mode()][[...$("prog").children].indexOf(b)]), step = target.closest(".step");
+  if (step && !step.classList.contains("open")) step.querySelector(".sp").click();
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  target.focus({ preventScroll: true });
+};
+
 // 저장 위치: 창의 저장 대화상자. 기본 이름은 주소의 마지막 부분.
 function baseName() {
   const last = val({ file: "f-url", web: "w-url" }[mode()] ?? "req-url").replace(/[?#].*/, "").split("/").filter(Boolean).pop() ?? "";
@@ -833,7 +876,7 @@ function baseName() {
 $("o-ask").onclick = () => busy($("o-ask"), async () => {
   try {
     const { path } = await api("/api/collect/ask_path", { format: $("o-format").value, name: baseName() });
-    if (path) $("o-path").value = path;
+    if (path) { $("o-path").value = path; showSteps(); }
     say("out-msg", "");
   } catch (e) { say("out-msg", e.message); }
 });
@@ -864,6 +907,7 @@ function renderFields() {
       peek);
   }) : [el("div", { className: "hint", textContent: "아직 컬럼이 없어요. [값 고르기]로 추가하세요." })]));
   showDedupe();
+  showSteps();
 }
 // 쪽 넘기기(웹): 종류에 맞는 칸만 보인다.
 function showWebPaging() {
@@ -1235,7 +1279,7 @@ $("rdel").onclick = () => busy($("rdel"), async () => {
 $("rsaved").onchange = () => {
   const c = collections[$("rsaved").value];
   if (c) { restore(c); say("cfg-msg", ""); }
-  $("first-guide").classList.toggle("hidden", !!c);  // 저장한 구성을 불러오면 처음 안내는 필요 없다
+  $("prog-help").classList.toggle("hidden", !!c);  // 저장한 구성을 불러오면 처음 안내는 필요 없다(진행 표시줄은 남는다)
 };
 
 // 실행: 예상 → 시작 → 1초마다 상태. 화면을 다시 열어도 도는 작업이 있으면 이어서 보여 준다.
@@ -1598,6 +1642,7 @@ function showCollectSummaries() {
   let n = 0;
   document.querySelectorAll(".side .cstep").forEach(c => { if (getComputedStyle(c).display !== "none") c.querySelector(".sp i").textContent = ++n; });  // 숨은 단계·접힌 단계(.adv)는 건너뛴다
   document.querySelectorAll(".side .step").forEach(s => s.querySelector(".c").textContent = s.classList.contains("open") ? "편집 중" : "⌄");
+  showSteps();  // 주소·컬럼·저장 위치·받는 방식이 바뀌면 진행 표시줄도 다시 그린다
 }
 ["click", "input", "change"].forEach(type => document.addEventListener(type, () => setTimeout(showCollectSummaries)));  // 화면 스크립트가 값을 바꾼 뒤에
 // 패널 아래의 [예상 확인]·[시작]: 실행 카드를 보이고 그 카드의 버튼을 누른다. 잠김은 실행 카드의 버튼을 따른다.

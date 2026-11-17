@@ -75,11 +75,11 @@ def type_bytes(dtype):
 
 def duckdb_bytes(con, table, columns, schema=None, catalog=None):
     """DuckDB 테이블(schema·catalog를 주면 그 스키마·DB의 것): 추정 행 수 × 읽는 컬럼의 타입 크기."""
-    q = lambda s: s.replace("'", "''")
-    where = (f" and lower(database_name) = lower('{q(catalog)}') and lower(schema_name) = lower('{q(schema)}')" if catalog
-             else f" and (lower(schema_name) = lower('{q(schema)}') or (lower(database_name) = lower('{q(schema)}') and schema_name = 'main'))" if schema else "")  # o.big: 붙인 DB o의 main
-    rows = con.raw_sql(f"select estimated_size, database_name, schema_name from duckdb_tables() where lower(table_name) = lower('{q(table)}'){where}"
-                       + (f" order by lower(schema_name) = lower('{q(schema)}') desc" if schema else "")).fetchone()
+    where, values = ((" and lower(database_name) = lower(?) and lower(schema_name) = lower(?)", [catalog, schema]) if catalog
+                     else (" and (lower(schema_name) = lower(?) or (lower(database_name) = lower(?) and schema_name = 'main'))", [schema, schema]) if schema else ("", []))  # o.big: 붙인 DB o의 main
+    order = (" order by lower(schema_name) = lower(?) desc", [schema]) if schema else ("", [])
+    rows = con.con.execute("select estimated_size, database_name, schema_name from duckdb_tables() where lower(table_name) = lower(?)" + where + order[0],
+                           [table, *values, *order[1]]).fetchone()  # 이름은 값으로 넘긴다(매개변수)
     if not rows:
         return None
     schema = con.table(table, database=(rows[1], rows[2])).schema() if schema else con.table(table).schema()
@@ -367,8 +367,9 @@ def partition_rows(con, sql, dialect, tables):
     low, high = date_bounds(sql, dialect, part["column"])
     try:
         schema = bigquery_name(con, "x").rsplit(".", 1)[0]  # 프로젝트.데이터셋(앞부분)
-        name = tables[0].replace("'", "")
-        rows = client.query(f"select partition_id, total_rows from `{schema}.INFORMATION_SCHEMA.PARTITIONS` where table_name = '{name}'").result()
+        from google.cloud import bigquery
+        named = bigquery.QueryJobConfig(query_parameters=[bigquery.ScalarQueryParameter("name", "STRING", tables[0])])  # 테이블 이름은 값으로 넘긴다
+        rows = client.query(f"select partition_id, total_rows from `{schema}.INFORMATION_SCHEMA.PARTITIONS` where table_name = @name", job_config=named).result()  # 데이터셋 자리는 매개변수가 안 돼 연결의 값을 그대로
         total = 0
         for row in rows:
             pid = str(row["partition_id"])

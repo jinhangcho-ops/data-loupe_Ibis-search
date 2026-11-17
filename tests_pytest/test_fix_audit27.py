@@ -75,14 +75,20 @@ def test_mysql_join_plan_rows_multiplies_tables():
 
 
 def test_bigquery_partition_rows_unknown_for_month_partitions_and_counts_unpartitioned(monkeypatch):
+    import sys
     import types
     from core import profiler, scan_size
+    cloud = types.ModuleType("google.cloud")
+    cloud.bigquery = types.SimpleNamespace(QueryJobConfig=lambda **k: k, ScalarQueryParameter=lambda *a: a)  # 이 PC에 BigQuery 라이브러리가 없어도 시험하도록 가짜
+    monkeypatch.setitem(sys.modules, "google", types.ModuleType("google"))
+    monkeypatch.setitem(sys.modules, "google.cloud", cloud)
+    monkeypatch.setitem(sys.modules, "google.cloud.bigquery", cloud.bigquery)
     monkeypatch.setattr(profiler, "spec_table", lambda schema, base: {"partition": {"column": "day"}})
     monkeypatch.setattr(scan_size, "bigquery_name", lambda con, name: "p.d." + name)
 
     def count(parts, sql="SELECT * FROM events WHERE day >= '2026-01-01'"):
         job = types.SimpleNamespace(result=lambda: parts)
-        con = types.SimpleNamespace(name="bigquery", client=types.SimpleNamespace(query=lambda q: job))
+        con = types.SimpleNamespace(name="bigquery", client=types.SimpleNamespace(query=lambda q, job_config: job))
         return scan_size.partition_rows(con, sql, "bigquery", ["events"])
 
     assert count([{"partition_id": "202601", "total_rows": 5}]) is None

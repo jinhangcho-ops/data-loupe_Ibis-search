@@ -11,6 +11,13 @@ describe("19I1 위쪽 줄 title과 빈 화면", () => {
     expect(bar).toContain('title="데이터를 새로 읽어 카드 숫자를 고쳐요">다시 구하기</button>');
     expect(bar).toContain('title="왼쪽 메뉴와 단추를 숨기고 카드만 크게 봐요. Esc를 누르면 돌아와요">대시보드만 보기</button>');
   });
+  it("강조 단추 [카드 추가](#d-add)는 편집 밖에서도 보이고, 편집을 켠 뒤 [+ 카드 ▾] → 카드 추가와 같은 길로 서랍을 연다", () => {
+    const line = bar.split("\n").find(l => l.includes('id="d-add"'))!;
+    expect(line).toContain('className="btn p"');
+    expect(line).toContain("disabled={!state.dash}");
+    expect(line).toContain('dispatch({ type: "editing", on: true }); dispatch({ type: "select", id: null }); setAddOpen(true);');
+    expect(line.trimStart().startsWith("<button")).toBe(true);  // {state.editing && …}로 감싸지 않음
+  });
   it("빈 화면은 ① [카드 추가] ② 카드 종류 고르기, 또는 쿼리에서 [대시보드에 추가]", () => {
     const page = src("app/dashboard/page.tsx");
     expect(page).toContain("① [카드 추가]를 눌러요");

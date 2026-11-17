@@ -1,11 +1,13 @@
 """연결·쿼리 화면 쓰기 쉽게(v2.3.4): 연결 창의 파일 고르기, 쿼리 칸의 [골라서 넣기 | 직접 쓰기], 테이블 하나면 기준 자동 고르기,
 조인 첫 줄, 기간 달력 단추·연도 탐색, 조건의 글자 비교, 예시 데이터. 화면 글자·배치는 정적 검사, 서버 동작은 지어낸 데이터로 돌려 본다."""
+import shutil
+
 import duckdb
 import ibis
 import pytest
 
 from core import demo, parse, settings
-from test_fix_audit_js import between, read
+from test_fix_audit_js import between, read, run_node
 
 
 # ---------- 조건: 타입이 안 맞는 값은 글자로 비교 ----------
@@ -86,6 +88,26 @@ def test_connect_card_file_picker():
     assert 'flatBoxes().filter(b => !b.parentElement.classList.contains("hidden")).forEach(b => b.checked = true)' in js  # [모두 선택]은 찾기로 남은 파일만
     assert '$("flat-picked").replaceChildren(' in between("common.js", "function showFlat()", "function filterFlat()") and "PICKED_SHOWN" in js
     assert 'id="recent-conn"' in html
+    assert "#flat-list label:has(input:checked) { background:var(--accent-bg); }" in css  # 고른 파일 줄은 강조색 바탕
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
+def test_connect_button_names_the_picked_file_count(tmp_path):
+    """[연결] 단추: 표 형식 파일을 골랐을 때만 "파일 N개 연결"(목록에 안 그린 것도 센다). 고른 것이 없거나 DuckDB 파일·DB 주소면 "연결"."""
+    body = r"""
+const FLAT = "*flat", state = { kind: "folder", file: FLAT, picked: [] }, button = { textContent: "" };
+globalThis.$ = id => ({ connect: button, file: { value: state.file } })[id];
+globalThis.document = { querySelector: () => ({ value: state.kind }) };
+globalThis.pickedFiles = () => state.picked;
+const label = change => { Object.assign(state, change); showConnectLabel(); return button.textContent; };
+console.log(JSON.stringify([label({}), label({ picked: ["a.csv", "b.parquet", "c.csv"] }), label({ file: "C:/d/x.duckdb" }), label({ file: FLAT, kind: "url" }), label({ kind: "folder", picked: ["a.csv"] })]));
+"""
+    code = between("common.js", "function showConnectLabel()", "// 파일 이름 찾기")
+    assert run_node(tmp_path, body, parts=[code]) == ["연결", "파일 3개 연결", "연결", "연결", "파일 1개 연결"]
+    js = read("common.js")
+    assert "  showConnectLabel();\n}" in between("common.js", "function showFlat()", "function showConnectLabel()")  # 체크가 바뀔 때마다
+    assert "  showConnectLabel();\n});" in between("common.js", 'document.querySelectorAll("input[name=kind]")', "function fillConnection")  # 종류(파일·DB)를 바꿀 때도
+    assert js.count("showConnectLabel()") == 3
 
 
 def test_query_steps_pick_first_and_direct_by_mode():

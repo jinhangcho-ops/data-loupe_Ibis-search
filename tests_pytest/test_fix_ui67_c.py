@@ -46,7 +46,7 @@ def test_funnel_hides_full_rerun(tmp_path):
     assert prep_app.whole({"how": {"kind": "funnel"}}) and not prep_app.whole({"how": {"kind": "groups"}})
     part = between("analysis.js", "function drawAna()", "\n}\n") + "\n}\n"
     stubs = ("let A = { chart: null, result: null, view: 'funnel' }; const VIEW_NAMES = {}, VIEW_RATIOS = {};"
-             "const anaTitle = () => 't', anaNote = () => 'n', anaTable = () => ({}), anaSpan = () => 0, anaSlice = d => d, showRange = () => {}, resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f';"
+             "const anaTitle = () => 't', anaNote = () => 'n', anaAnswer = () => [], anaTable = () => ({}), anaSpan = () => 0, anaSlice = d => d, showRange = () => {}, resultTable = () => {}, sankeySvg = () => 's', funnelSentence = () => 'f';"
              "const SERVER = { analysis: { whole: [] } }, NEW_KINDS = [], ADD_TITLE = '', anaAuto = {}, gapTable = () => [], segTables = () => [], pairBlock = () => [], noteLines = () => [], gradeLine = () => '', sortedTable = () => {}, anaRows = r => r, anaDraw = () => {};"
              "globalThis.getComputedStyle = () => ({ getPropertyValue: () => '' }); globalThis.document = { documentElement: {} };")
     body = """

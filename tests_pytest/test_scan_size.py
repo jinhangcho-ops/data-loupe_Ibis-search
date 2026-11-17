@@ -307,7 +307,7 @@ def test_bigquery_partitions_and_dry_run(folder, tmp_path, monkeypatch):
 
     from core import profiler
     cloud = types.ModuleType("google.cloud")
-    cloud.bigquery = types.SimpleNamespace(QueryJobConfig=lambda **k: k)  # 이 PC에 BigQuery 라이브러리가 없어도 시험하도록 가짜
+    cloud.bigquery = types.SimpleNamespace(QueryJobConfig=lambda **k: k, ScalarQueryParameter=lambda *a: a)  # 이 PC에 BigQuery 라이브러리가 없어도 시험하도록 가짜
     monkeypatch.setitem(sys.modules, "google", types.ModuleType("google"))
     monkeypatch.setitem(sys.modules, "google.cloud", cloud)
     monkeypatch.setitem(sys.modules, "google.cloud.bigquery", cloud.bigquery)
@@ -328,6 +328,8 @@ def test_bigquery_partitions_and_dry_run(folder, tmp_path, monkeypatch):
 
     def query(sql, job_config=None, **k):
         asked.append(sql)
+        if "INFORMATION_SCHEMA.PARTITIONS" in sql:  # 테이블 이름은 SQL 글이 아니라 매개변수로 간다
+            assert "events" not in sql and job_config == {"query_parameters": [("name", "STRING", "events")]}
         return Job(parts) if "INFORMATION_SCHEMA.PARTITIONS" in sql else Job([])
     info = types.SimpleNamespace(num_bytes=0, num_rows=0)
     bq = types.SimpleNamespace(name="bigquery", dialect="bigquery", current_catalog="p", current_database="d",

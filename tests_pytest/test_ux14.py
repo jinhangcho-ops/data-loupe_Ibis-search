@@ -9,7 +9,8 @@ def test_collect_first_guide_and_folded_placeholders():
     assert html.index('id="first-guide"') < html.index("<h3>요청</h3>")  # 처음 안내가 요청 카드보다 위
     assert "[받는 방식]" in between("collect.html", 'id="first-guide"', "</section>") and "[수집 시작]" in html
     assert '<details class="hint"><summary>자리 표시 쓰기</summary>' in html and "쓸 수 있는 자리 표시:" not in html
-    assert '$("first-guide").classList.toggle("hidden", !!c)' in html  # 저장한 구성을 불러오면 숨긴다
+    assert '$("prog-help").classList.toggle("hidden", !!c)' in html  # 저장한 구성을 불러오면 안내 글만 숨긴다(진행 표시줄은 남는다)
+    assert '$("first-guide").classList.toggle' not in html
 
 
 def test_metric_file_folded_until_used():

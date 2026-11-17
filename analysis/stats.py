@@ -27,6 +27,7 @@ TOP_VALUES = 20  # 값 빈도에 보일 값 수(나머지는 "그 밖")
 MAX_CORR = 12  # 상관관계에 넣을 수 있는 숫자 컬럼 수
 MAX_POINTS = result.MAX_POINTS  # 산점도의 점 수
 MAX_GROUPS = 30  # 그룹 비교에 보일 그룹 수(행이 많은 순)
+ADDITIVE = dash_store.ADDITIVE  # 묶음 값의 합이 전체가 되는 집계(화면의 한 문장 답이 비중을 낼 때 쓴다)
 MAX_PERIODS = 400  # 시계열 추이에 보일 기간 수(최근 것)
 SEED = 20260101  # 점을 고르게 뽑을 때의 고정 씨앗(다시 구해도 같은 점, 대시보드 dash_calc도 쓴다)
 TOP_PERIODS, MAX_TOP_PERIODS = 5, 20  # 가장 많은 기간 찾기에서 보일 기본 개수, 상한

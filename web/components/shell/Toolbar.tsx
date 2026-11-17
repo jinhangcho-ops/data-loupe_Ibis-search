@@ -1,6 +1,6 @@
 "use client";
 // N4 — 위 도구 줄(옛 .d-tool, UI 지적 14로 묶음): [대시보드 ▾][새 대시보드] | [편집] [+ 카드 ▾](카드 추가·카드 모음 N5 Gallery·지표 N6 MetricsWindow·쿼리에서 가져오기) [내보내기 ▾](N6 Report)
-// | 다시 구하기·[대시보드 설정]·대시보드만 보기. [+ 카드 ▾]·[대시보드 설정]은 편집 상태에서만, 카드 추가는 오른쪽 서랍(page.tsx). 편집 모드(state.editing)에서만 격자 끌기·×·크기 손잡이와 카드 설정 패널이 있다.
+// | 다시 구하기·[대시보드 설정]·대시보드만 보기·[카드 추가](강조 단추 #d-add: 편집을 켜고 카드 추가 서랍을 연다, 편집 밖에서도 보임). [+ 카드 ▾]·[대시보드 설정]은 편집 상태에서만, 카드 추가는 오른쪽 서랍(page.tsx). 편집 모드(state.editing)에서만 격자 끌기·×·크기 손잡이와 카드 설정 패널이 있다.
 // 카드 추가(useAddCard)는 옛 화면처럼 값을 먼저 구해(지금 기간) 카드로 넣고 저장한다. 대시보드가 없으면 api.addCard로 "내 대시보드"를 새로 만든다.
 import { useEffect, useRef, useState } from "react";
 import { MetricsWindow } from "@/components/edit/MetricsWindow";
@@ -87,6 +87,8 @@ export function Toolbar() {
         <button className="btn" onClick={again} disabled={busy} title="데이터를 새로 읽어 카드 숫자를 고쳐요">다시 구하기</button>
         {state.editing && <button className="btn" onClick={() => setSettings(true)} aria-haspopup="dialog" title="어느 날짜·기간의 숫자를 볼지, 얼마나 자주 새로 읽을지, 카드 색 같은 것을 정해요">대시보드 설정</button>}
         <button className="btn" id="d-only" onClick={() => setDashOnly(true)} title="왼쪽 메뉴와 단추를 숨기고 카드만 크게 봐요. Esc를 누르면 돌아와요">대시보드만 보기</button>
+        <button className="btn p" id="d-add" disabled={!state.dash} onClick={() => { dispatch({ type: "editing", on: true }); dispatch({ type: "select", id: null }); setAddOpen(true); }}
+          title={state.dash ? "편집을 켜고 카드 추가 서랍을 열어요. 테이블을 골라 KPI, 표, 차트 같은 카드를 만들어요" : "먼저 대시보드를 고르거나 [새 대시보드]를 만들어요"}>카드 추가</button>
       </div>
       <SettingsDialog open={settings} onClose={() => setSettings(false)} />
       <MetricsWindow open={metrics} onClose={() => setMetrics(false)} onAdd={add} />

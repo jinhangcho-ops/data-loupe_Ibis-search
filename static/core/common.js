@@ -653,6 +653,7 @@ document.querySelectorAll("input[name=kind]").forEach(r => r.onchange = () => {
   const folder = r.value === "folder" && r.checked;
   $("folder-box").classList.toggle("hidden", !folder);
   $("url-box").classList.toggle("hidden", folder);
+  showConnectLabel();
 });
 // 연결 칸 채우기(비밀번호는 빼고): 종류 라디오와 경로 또는 주소·아이디
 function fillConnection(info) {
@@ -674,9 +675,9 @@ async function showRecentConnections() {
   const dayOf = c => String(c.last ?? "").slice(0, 10);  // last는 이 PC 시각의 ISO 글자(없으면 빈 글자: 예전 기록)
   const byLast = recentConnections.map((c, i) => [c, i]).sort((a, b) => String(b[0].last ?? "").localeCompare(String(a[0].last ?? "")));
   const days = items => [...Map.groupBy(items, ([c]) => dayOf(c))];
-  // 줄: 여는 동안은 잠근다(busy는 글자만 있는 버튼용이라 쓰지 않는다)
+  // 줄: 앞에 종류 그림(파일·DB), 여는 동안은 잠근다(busy는 글자만 있는 버튼용이라 쓰지 않는다)
   const row = ([c, i]) => el("button", { type: "button", className: "btn", title: label(c), onclick: async e => { const b = e.currentTarget; b.disabled = true; try { await openRecent(i); } finally { b.disabled = false; } } },
-    el("b", { textContent: recentName(c.info) }), el("span", { className: "hint", textContent: [String(c.last ?? "").slice(11, 16), c.info.kind === "folder" && recentName(c.info) !== c.info.path ? c.info.path : "", `${c.count}번 사용`].filter(Boolean).join(" · ") }));
+    el("span", { className: "icon-tile" }, svg("svg", RECENT_ICON, ...RECENT_ICONS[c.info.kind === "url" ? "url" : "folder"].map(d => svg("path", { d })))), el("b", { textContent: recentName(c.info) }), el("span", { className: "hint", textContent: [String(c.last ?? "").slice(11, 16), c.info.kind === "folder" && recentName(c.info) !== c.info.path ? c.info.path : "", `${c.count}번 사용`].filter(Boolean).join(" · ") }));
   // 최근 연결 카드에는 오늘 것 전부(적으면 가장 최근 RECENT_SHOWN개까지), 나머지는 이전 연결 카드(#recent-older)에 날짜 폴더로 둔다. 그래서 이전 연결에 오늘 것은 없다
   const shown = Math.max(RECENT_SHOWN, byLast.filter(([c]) => dayOf(c) === dayIso(0)).length), rest = byLast.slice(shown);
   $("recent-list")?.replaceChildren(...days(byLast.slice(0, shown)).flatMap(([day, list]) => [el("div", { className: "recent-day", textContent: recentDay(day) }), ...list.map(row)]),
@@ -694,6 +695,9 @@ function showOlder(open) {
 }
 // 연결을 알아볼 이름: 주소는 주소와 아이디, 폴더는 고른 파일 이름(RECENT_NAMES개까지, 나머지는 개수), 고른 파일이 없으면 폴더 경로
 const RECENT_NAMES = 2, RECENT_SHOWN = 3;  // RECENT_SHOWN: 오늘 연결이 이보다 적을 때 최근 연결 카드에 채워 보이는 수
+// 최근 연결 줄 앞의 종류 그림: 왼쪽 메뉴(status.html)와 같은 선 그림. folder는 파일(문서), url은 DB(통)
+const RECENT_ICON = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round", "aria-hidden": "true" };
+const RECENT_ICONS = { folder: ["M14 3H6v18h12V7z", "M14 3v4h4"], url: ["M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z", "M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6", "M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"] };
 function recentName(info) {
   if (info.kind === "url") return info.url + (info.user ? `, ${info.user}` : "");
   const files = (info.file ? [info.file] : info.files ?? []).map(f => String(f).split(/[\\/]/).pop());
@@ -780,6 +784,12 @@ function showFlat() {
   const picked = pickedFiles(), drop = f => { const box = flatBoxes().find(b => b.value === f); if (box) box.checked = false; else offList.delete(f); showFlat(); };
   $("flat-picked").replaceChildren(...picked.slice(0, PICKED_SHOWN).map(f => Object.assign(chip(underPath(f), () => drop(f)), { title: f })),
     ...(picked.length > PICKED_SHOWN ? [el("span", { className: "hint", textContent: `외 ${picked.length - PICKED_SHOWN}개` })] : []));
+  showConnectLabel();
+}
+// [연결] 단추의 글자: 표 형식 파일을 골랐으면 "파일 N개 연결", 아니면(고른 것이 없음·DuckDB 파일·DB 주소) "연결"
+function showConnectLabel() {
+  const n = document.querySelector("input[name=kind]:checked").value === "folder" && $("file").value === FLAT ? pickedFiles().length : 0;
+  $("connect").textContent = n ? `파일 ${n}개 연결` : "연결";
 }
 // 파일 이름 찾기: 친 글자가 경로에 든 줄만 남긴다(대소문자 무시). 체크는 그대로 둔다
 function filterFlat() {
