@@ -264,7 +264,6 @@ def test_recent_list_fills_and_opens(tmp_path):
     body = CLS + r"""
 const out = { filled: [], opened: 0, focus: "", said: [], connected: [], went: 0, listed: 0 };
 const els = { "recent-conn": { classList: cls(), replaceChildren(...k) { this.kids = k; } }, "recent-list": { replaceChildren(...k) { this.kids = k; } },
-  "older-list": { replaceChildren(...k) { this.kids = k; } }, "recent-older": { classList: cls("hidden") },
   "recent-none": { classList: cls() }, password: { focus() { out.focus = "password"; } }, find: { focus() { out.focus = "find"; } } };
 globalThis.$ = id => els[id];
 const home = { classList: cls() };
@@ -281,16 +280,15 @@ globalThis.fillConnection = i => out.filled.push(i);
 globalThis.openConnect = () => { out.opened++; };
 (async () => {
   await showRecentConnections();
-  const more = els["recent-list"].kids.find(k => k.id === "recent-more"), folders = els["older-list"].kids;
-  const kids = els["recent-list"].kids.filter(k => k !== more), btns = kids.filter(k => k.tag === "button");
-  out.top = btns.length; out.more = more.textContent;  // 최근 연결 카드의 줄 수와 [이전 연결 더 보기] 단추
+  const all = els["recent-list"].kids, folders = all.filter(k => k.tag === "details");  // 줄과 날짜 폴더가 한 카드(#recent-list)에 있다
+  const kids = all.filter(k => k.tag !== "details"), btns = kids.filter(k => k.tag === "button");
+  out.top = btns.length;  // 폴더 밖에 보이는 줄 수
   out.rows = kids.map(k => k.tag === "button" ? k.children.slice(1).map(c => c.textContent) : k.textContent); out.types = btns.map(b => b.type);
   out.icons = btns.map(b => [b.children[0].className, b.children[0].children[0].tag, b.children[0].children[0].children.map(p => p.attrs.d).join(" ") === RECENT_ICONS.url.join(" ")]);  // 줄 앞의 종류 그림 타일: 주소는 DB, 파일은 문서
-  out.folders = folders.map(f => [f.tag, f.children[0].children.map(c => c.textContent), f.children.slice(1).map(b => b.children[1].textContent)]);  // 이전 연결 카드: 날짜 폴더(머리글, 그 날의 연결들)
+  out.folders = folders.map(f => [f.tag, f.children[0].children.map(c => c.textContent), f.children.slice(1).map(b => b.children[1].textContent)]);  // 이전: 날짜 폴더(머리글, 그 날의 연결들)
+  out.last = all.at(-1).tag;  // 폴더는 줄들 뒤에 온다
   out.options = els["recent-conn"].kids.map(o => o.text);
   out.noneHidden = els["recent-none"].classList.contains("hidden");
-  out.olderShut = els["recent-older"].classList.contains("hidden");
-  more.onclick(); out.olderOpen = !els["recent-older"].classList.contains("hidden") && home.classList.contains("older");
   await btns[0].onclick({ currentTarget: btns[0] });  // 아이디가 있는 주소: 칸을 채우고 비밀번호만 받는다
   out.afterUrl = { opened: out.opened, filled: out.filled.length, focus: out.focus, go: recentGo, connected: out.connected.length, said: out.said.at(-1) };
   await btns[1].onclick({ currentTarget: btns[1] });  // 고른 파일이 기억된 파일 연결: 바로 연결하고 쿼리로
@@ -304,14 +302,14 @@ globalThis.openConnect = () => { out.opened++; };
 })();
 """
     got = run_node(tmp_path, body, parts=[code])
-    # 최근에 쓴 순으로, 날짜마다 머리글. 줄은 [이름, "시각 · 폴더 · 횟수"]: 고른 파일이 있으면 이름은 파일 이름(둘까지)이고 폴더는 아래 줄에
-    assert got["rows"] == ["오늘", ["postgres://h/db, u", "09:05 · 1번 사용"], ["x.duckdb", "08:00 · C:/d · 5번 사용"], "2026-01-02", ["a.csv, b.parquet 외 1개", "23:40 · C:/d · 2번 사용"]]
+    # 최근에 쓴 순으로, 날짜마다 머리글. 줄은 [이름, 시각(오른쪽 끝), "폴더 · 횟수"]: 고른 파일이 있으면 이름은 파일 이름(둘까지)이고 폴더는 아래 줄에. 나머지가 있으면 "이전" 머리글
+    assert got["rows"] == ["오늘", ["postgres://h/db, u", "09:05", "1번 사용"], ["x.duckdb", "08:00", "C:/d · 5번 사용"], "2026-01-02", ["a.csv, b.parquet 외 1개", "23:40", "C:/d · 2번 사용"], "이전"]
     assert got["icons"] == [["icon-tile", "svg", True], ["icon-tile", "svg", False], ["icon-tile", "svg", False]]
     assert got["options"] == ["최근 연결에서 고르기", "C:/d (3번 사용)", "postgres://h/db, u (1번 사용)", "a.csv, b.parquet 외 1개 (2번 사용)", "x.duckdb (5번 사용)"]  # 고르는 칸은 서버가 준 차례(많이 쓴 순) 그대로
-    assert got["top"] == 3 and got["more"] == "이전 연결 1개 더 보기"  # 오늘 것(적으면 최근 3개까지)만 카드에, 나머지는 이전 연결 카드에
-    assert got["folders"] == [["details", ["날짜 모름", "1개"], ["C:/d"]]]  # 날짜마다 폴더 하나(오늘 것은 없다), 안에 그 날의 연결
+    assert got["top"] == 3 and got["last"] == "details"  # 오늘 것(적으면 최근 3개까지)만 줄로, 나머지는 같은 카드의 날짜 폴더에
+    assert got["folders"] == [["details", ["날짜 모름", "연결 1개"], ["C:/d"]]]  # 날짜마다 폴더 하나(오늘 것은 없다), 안에 그 날의 연결
     assert got["types"] == ["button"] * 3 and got["noneHidden"] is True
-    assert got["olderShut"] is True and got["olderOpen"] is True  # 이전 연결 카드는 단추를 눌러야 열린다
+    assert "showOlder" not in read("common.js") and "recent-older" not in read("home.html")  # 이전 연결 카드는 따로 없다
     assert got["afterUrl"] == {"opened": 1, "filled": 1, "focus": "password", "go": True, "connected": 0, "said": ["msg-recent", "비밀번호를 넣고 [연결]을 누르면 쿼리로 넘어가요.", "hint"]}
     assert got["afterFile"] == {"connected": {"kind": "folder", "path": "C:/d", "file": "C:/d/x.duckdb"}, "went": 1, "disabled": False}
     assert got["afterOld"] == {"listed": 1, "said": "파일을 고르고 [연결]을 누르면 쿼리로 넘어가요.", "went": 1}
@@ -359,28 +357,31 @@ def test_home_layout():
     for gone in ('class="choice"', "data-go", "connectLast", "let target", ".hero", "var(--faint)"):
         assert gone not in html, gone
     main = between("home.html", '<section class="home-main"', "</section>")
-    assert main.index('id="home-now"') < main.index("<!--include core/connect.html-->") and 'id="home-name"' in main
+    assert 'id="home-name"' in main and 'id="home-state"' in main and 'id="home-conn"' in main  # 지금 연결 줄: 이름 · 꼬리표 · 단추
+    assert "<!--include core/connect.html-->" not in main and html.index("</aside>") < html.index("<!--include core/connect.html-->")  # 연결 창은 첫 화면 칸 밖(막 위에 뜬다)
     go = between("home.html", '<nav class="home-go"', "</nav>")
     assert re.findall(r'href="(/\w+)" data-feature="(\w+)"', go) == [(h, f) for h, f, _ in RAIL[1:]]
     aside = between("home.html", '<aside class="home-recent"', "</aside>")
     assert 'id="recent-list"' in aside and 'id="recent-none"' in aside and 'id="msg-recent"' in aside
-    older = between("home.html", '<aside id="recent-older"', "</aside>")
-    assert 'class="home-recent hidden"' in older and 'id="older-list"' in older and 'id="older-close"' in older  # 이전 연결 카드는 닫힌 채로 시작
+    # 최근 연결 카드는 왼쪽 칸과 같은 높이로 늘고, 목록(날짜 폴더 포함)은 카드 안에서 굴린다: 폴더를 펼쳐도 카드가 커지지 않는다
+    assert ".home-recent { height:0; min-height:100%;" in html and "align-self:start" not in html
+    assert ".recent-list { flex:1; min-height:0; overflow-y:auto;" in html and ".recent-folder { flex:none;" in html
     assert "function afterConnect() { recentGo ? goQuery() : showHome(); }" in html and "resume().then(showHome);" in html  # 최근 연결로 연결하면 쿼리로
     assert 'SERVER.features.on.includes("query") ? location.assign("/search") : showHome()' in html and 'id="demo-go"' in html
-    assert ".home:not(.on) #conn-close { display:none !important; }" in html
+    assert "#conn-close { display:none" not in html and ".home #conn-panel" not in html  # 첫 화면도 연결 창을 띄우고, 연결 전에도 닫을 수 있다
+    assert 'document.querySelector("#conn-panel .conn-card").append($("demo-go"));' in html and '$("home-conn").onclick = () => openConnect();' in html
 
 
 @needs_node
 def test_show_home_switches_views(tmp_path):
     code = between("home.html", "function showHome() {", "\n}\n") + "\n}\n"
     body = CLS + r"""
-const home = { classList: cls() }, now = { classList: cls("hidden") }, name = { textContent: "x" }, demo = { classList: cls() };
-globalThis.$ = id => ({ "home-now": now, "home-name": name, "demo-go": demo })[id];
+const home = { classList: cls() }, name = { textContent: "x" }, tag = { textContent: "", classList: cls() }, conn = { textContent: "" }, demo = { classList: cls() };
+globalThis.$ = id => ({ "home-name": name, "home-state": tag, "home-conn": conn, "demo-go": demo })[id];
 globalThis.document = { querySelector: q => (q === ".home" ? home : null) };
 const n = { open: 0, close: 0 };
 globalThis.openConnect = () => { n.open++; }; globalThis.closeConnect = () => { n.close++; };
-const look = () => ({ on: home.classList.contains("on"), nowHidden: now.classList.contains("hidden"), name: name.textContent, ...n });
+const look = () => ({ on: home.classList.contains("on"), name: name.textContent, tag: [tag.textContent, tag.classList.contains("on")], conn: conn.textContent, demoHidden: demo.classList.contains("hidden"), ...n });
 globalThis.connected = null; globalThis.connName = null;
 showHome(); const before = look();
 globalThis.connected = "other"; globalThis.connName = "sales.duckdb";
@@ -388,8 +389,8 @@ showHome();
 console.log(JSON.stringify({ before, after: look() }));
 """
     got = run_node(tmp_path, body, parts=[code])
-    assert got["before"] == {"on": False, "nowHidden": True, "name": "", "open": 1, "close": 0}
-    assert got["after"] == {"on": True, "nowHidden": False, "name": "sales.duckdb", "open": 1, "close": 1}
+    assert got["before"] == {"on": False, "name": "연결된 데이터가 없어요", "tag": ["연결 안 됨", False], "conn": "데이터 연결", "demoHidden": False, "open": 1, "close": 0}
+    assert got["after"] == {"on": True, "name": "sales.duckdb", "tag": ["연결됨", True], "conn": "다른 데이터 연결", "demoHidden": True, "open": 1, "close": 1}
 
 
 def test_changed_files_have_no_control_chars():
@@ -425,7 +426,8 @@ def test_use_add_card_exists():
 def test_toolbar_edit_only_tools():
     bar = web("components/shell/Toolbar.tsx")
     assert re.search(r'\{state\.editing && \(\s*<div className="drop" ref=\{drop\}', bar)
-    assert re.search(r'\{state\.editing && <button className="btn" onClick=\{\(\) => setSettings\(true\)\}[^\n]*>대시보드 설정</button>\}', bar)
+    # 대시보드 설정은 [더 보기] 메뉴 안에 있고 편집을 켜지 않아도 열린다
+    assert re.search(r'\n\s*<button role="menuitem"[^\n]*setMenu\(false\); setSettings\(true\);[^\n]*>대시보드 설정</button>', bar) and not re.search(r'state\.editing && <button[^\n]*대시보드 설정', bar)
     assert ">설정</button>" not in bar and "<AddCardMenu" not in bar and "conn.label" not in bar
     assert 'setMenu(false); dispatch({ type: "select", id: null }); setAddOpen(true);' in bar
     assert "}, [menu]);" in bar and "[menu, addOpen, setAddOpen]" not in bar

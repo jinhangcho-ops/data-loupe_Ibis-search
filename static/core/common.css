@@ -143,17 +143,15 @@ td.nest .nest-full { margin:0; font:var(--fs-xs)/1.4 Consolas, ui-monospace, mon
 .side > footer button { flex:1; justify-content:center; height:40px; }
 .flow { display:flex; flex-direction:column; }
 .cn { height:16px; display:flex; justify-content:center; color:var(--faint); }
-/* 단계 카드: 접혀 있으면 한 줄 요약(.sp), 누르면 펼쳐 편집(.edx). 고른 단계는 .open */
-.step { border:1px solid var(--line); border-radius:var(--r-card); background:var(--card); }
+/* 단계: 접혀 있으면 한 줄 요약(.sp), 누르면 펼쳐 편집(.edx). 단계 사이는 구분선, 번호 원은 늘 강조색. 고른 단계는 .open(옅은 강조색 바탕) */
+.step { border-top:1px solid var(--line); background:var(--card); }
 .step .sp { display:flex; align-items:center; gap:12px; height:42px; padding:0 14px; cursor:pointer; }
-.step .sp i { width:24px; height:24px; border-radius:50%; background:var(--bg); display:grid; place-items:center; font-style:normal; font-size:var(--fs-xs); font-weight:700; color:var(--muted); flex:none; }
+.step .sp i { width:24px; height:24px; border-radius:50%; background:var(--accent); display:grid; place-items:center; font-style:normal; font-size:var(--fs-xs); font-weight:700; color:var(--on-accent); flex:none; }
 .step .sp .t { font-size:var(--fs-sm); color:var(--muted); min-width:66px; flex:none; white-space:nowrap; }  /* (Phase 19) 긴 쉬운 이름(비밀 키 파일(env))도 한 줄로 */
 .step .sp b { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 .step .sp .c { margin-left:auto; color:var(--muted); flex:none; font-size:var(--fs-sm); }
 .step .edx { display:none; padding:2px 14px 14px; }
-.step.open { border:2px solid var(--accent); background:var(--accent-bg); }
-.step.open .sp i { background:var(--accent); color:var(--on-accent); }
-.step.open { border-width:1px 1px 1px 3px; }  /* 고른 단계는 옅은 청록 바탕에 청록 왼쪽 막대 */
+.step.open { background:var(--accent-bg); }
 .step.open .sp .c { color:var(--accent); font-weight:600; }
 .step.open .edx { display:block; }
 .step.off { opacity:.55; }
@@ -318,7 +316,9 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .set-body > .app-set { min-height:0; overflow:auto; padding-right:var(--sp-2); }
 .set-page > .hint:first-child { margin-top:0; }
 @media (max-width:700px) { .set-body { grid-template-columns:1fr; } .set-nav { flex-direction:row; flex-wrap:wrap; border-right:0; padding-right:0; } }
-.conn-go { height:44px; justify-content:center; font-size:var(--fs-md); margin-top:6px; }
+.conn-foot { display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }  /* 연결 창 아래: [취소] [연결] */
+.conn-foot .btn { height:44px; justify-content:center; font-size:var(--fs-md); }
+.conn-go { min-width:140px; }
 .seg2 { display:flex; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-card); padding:3px; }
 .seg2 label { flex:1; text-align:center; padding:6px; border-radius:var(--r-ctl); color:var(--muted); cursor:pointer; font-weight:600; }
 .seg2 input { display:none; }

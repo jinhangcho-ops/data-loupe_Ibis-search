@@ -21,7 +21,7 @@ export const CHART_KINDS: string[] = ["chart", "analysis", "metric"];
 /** 화면 모드의 계열 색(common.css --c1~--c8, 테마 따라 바뀐다) */
 export const THEME_SERIES = [1, 2, 3, 4, 5, 6, 7, 8].map(i => `var(--c${i})`);
 /** 값이 아직 없는 카드의 안내(옛 dash.js needsValues) */
-export const NO_VALUES = "아직 구한 값이 없어요. 연결한 뒤 [다시 구하기]를 누르세요.";
+export const NO_VALUES = "아직 구한 값이 없어요. 연결한 뒤 [최신화]를 누르세요.";
 /** 상수는 받았지만 자동 규칙 표(dash.auto)가 없을 때의 안내 */
 export const NO_AUTO = "자동 규칙 설정을 받지 못해 규칙 없이 그렸어요.";
 /** [표로 보기]를 켰지만 표로 만들 수 없는 그림의 안내 */

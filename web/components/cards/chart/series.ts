@@ -54,7 +54,7 @@ export function seriesKit(server: Server) {
   // 이 종류로 바꿀 수 없는 이유(바꿀 수 있으면 빈 글자). 버튼은 숨기지 않고 누르면 이 이유를 보인다.
   function typeReason(card: SCard, type: Exclude<ChartType, "">) {
     const s = cardSeries(card), names = server.dash.types;
-    if (!s) return "아직 값이 없어서 종류를 바꿀 수 없어요. 연결한 뒤 [다시 구하기]를 누르세요.";
+    if (!s) return "아직 값이 없어서 종류를 바꿀 수 없어요. 연결한 뒤 [최신화]를 누르세요.";
     if (!s.chartable) return "이 분석 그림은 종류를 바꿀 수 없어요. 묶음끼리 비교와 날짜에 따른 변화만 바꿀 수 있어요.";
     if (type === "scatter" || type === "bubble") {  // X와 값이 숫자 컬럼일 때만(버블은 [크기]도)
       const d = card.data ?? {}, body = card.source?.body ?? {}, y = body.series?.[0]?.y ?? body.y;

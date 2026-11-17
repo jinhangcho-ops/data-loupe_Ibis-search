@@ -548,6 +548,24 @@ $("mem-drop").onclick = () => busy($("mem-drop"), async () => {
     if (ids.includes("connection")) location.reload();  // 연결을 놓았으면 화면도 연결 전 상태로
   } catch (e) { say("mem-msg", e.message); }
 });
+// 모두 비우기(flush): 앱이 붙잡고 있는 것 전부(core/memory.py의 목록: 지금 연결·받아 둔 결과·표본 등)를 놓고 첫 화면으로 간다. 처음 켰을 때와 같은 상태가 된다(저장한 검색·대시보드·설정은 그대로).
+// 잘못 누르지 않게 한 번 더 눌러야 비운다(다른 곳을 누르면 원래 글자로). 위쪽 줄(#flush)과 설정 [메모리](#mem-flush)가 같이 쓴다. fail: 못 비웠을 때 문구를 보일 곳
+const FLUSH_SURE = "한 번 더 누르면 모두 비워요";
+function flushButton(b, fail) {
+  const label = b.textContent;
+  b.onblur = () => { if (!b.disabled) b.textContent = label; };
+  b.onclick = async () => {
+    if (b.textContent !== FLUSH_SURE) { b.textContent = FLUSH_SURE; return; }
+    b.disabled = true;
+    try {
+      const ids = (await api("/api/memory")).items.map(i => i.id);
+      if (ids.length) await api("/api/memory/drop", { ids });
+      location.assign("/");
+    } catch (e) { b.disabled = false; b.textContent = label; fail(e.message); }
+  };
+}
+flushButton($("flush"), text => { $("flush").title = text; });
+flushButton($("mem-flush"), text => say("mem-msg", text));
 $("feat-open").onclick = () => openSettings("feat");
 document.querySelectorAll("#feat-panel .set-nav [data-set]").forEach(b => b.onclick = () => openSettings(b.dataset.set));
 $("feat-close").onclick = () => $("feat-panel").classList.add("hidden");
@@ -671,27 +689,20 @@ async function showRecentConnections() {
   const label = c => recentName(c.info) + ` (${c.count}번 사용)`;
   $("recent-conn").replaceChildren(new Option("최근 연결에서 고르기", ""), ...recentConnections.map((c, i) => new Option(label(c), i)));
   $("recent-conn").classList.toggle("hidden", !recentConnections.length);
-  // 첫 화면 오른쪽의 최근 연결 목록(home.html): 최근에 쓴 순으로, 날짜마다 머리글을 두고 줄마다 시각·이름·폴더·횟수를 보인다. 누르면 그 연결을 연다(openRecent)
+  // 첫 화면 오른쪽의 최근 연결 목록(home.html): 최근에 쓴 순으로, 날짜마다 머리글을 두고 줄마다 이름·시각·폴더·횟수를 보인다. 누르면 그 연결을 연다(openRecent)
   const dayOf = c => String(c.last ?? "").slice(0, 10);  // last는 이 PC 시각의 ISO 글자(없으면 빈 글자: 예전 기록)
   const byLast = recentConnections.map((c, i) => [c, i]).sort((a, b) => String(b[0].last ?? "").localeCompare(String(a[0].last ?? "")));
   const days = items => [...Map.groupBy(items, ([c]) => dayOf(c))];
-  // 줄: 앞에 종류 그림(파일·DB), 여는 동안은 잠근다(busy는 글자만 있는 버튼용이라 쓰지 않는다)
+  // 줄: 앞에 종류 그림(파일·DB), 이름, 오른쪽 끝에 시각, 둘째 줄에 폴더·쓴 횟수. 여는 동안은 잠근다(busy는 글자만 있는 버튼용이라 쓰지 않는다)
   const row = ([c, i]) => el("button", { type: "button", className: "btn", title: label(c), onclick: async e => { const b = e.currentTarget; b.disabled = true; try { await openRecent(i); } finally { b.disabled = false; } } },
-    el("span", { className: "icon-tile" }, svg("svg", RECENT_ICON, ...RECENT_ICONS[c.info.kind === "url" ? "url" : "folder"].map(d => svg("path", { d })))), el("b", { textContent: recentName(c.info) }), el("span", { className: "hint", textContent: [String(c.last ?? "").slice(11, 16), c.info.kind === "folder" && recentName(c.info) !== c.info.path ? c.info.path : "", `${c.count}번 사용`].filter(Boolean).join(" · ") }));
-  // 최근 연결 카드에는 오늘 것 전부(적으면 가장 최근 RECENT_SHOWN개까지), 나머지는 이전 연결 카드(#recent-older)에 날짜 폴더로 둔다. 그래서 이전 연결에 오늘 것은 없다
+    el("span", { className: "icon-tile" }, svg("svg", RECENT_ICON, ...RECENT_ICONS[c.info.kind === "url" ? "url" : "folder"].map(d => svg("path", { d })))), el("b", { textContent: recentName(c.info) }), el("span", { className: "hint", textContent: String(c.last ?? "").slice(11, 16) }),
+    el("span", { className: "hint", textContent: [c.info.kind === "folder" && recentName(c.info) !== c.info.path ? c.info.path : "", `${c.count}번 사용`].filter(Boolean).join(" · ") }));
+  // 한 카드 안에: 오늘 것 전부(적으면 가장 최근 RECENT_SHOWN개까지)는 줄로, 나머지는 "이전" 아래 날짜 폴더로 둔다(펼치면 카드 안에서 굴린다). 그래서 이전에 오늘 것은 없다
   const shown = Math.max(RECENT_SHOWN, byLast.filter(([c]) => dayOf(c) === dayIso(0)).length), rest = byLast.slice(shown);
   $("recent-list")?.replaceChildren(...days(byLast.slice(0, shown)).flatMap(([day, list]) => [el("div", { className: "recent-day", textContent: recentDay(day) }), ...list.map(row)]),
-    ...(rest.length ? [el("button", { type: "button", id: "recent-more", className: "ghost", textContent: `이전 연결 ${rest.length}개 더 보기`, onclick: () => showOlder($("recent-older").classList.contains("hidden")) })] : []));
-  $("older-list")?.replaceChildren(...days(rest).map(([day, list]) => el("details", { className: "recent-folder" },
-    el("summary", {}, el("b", { textContent: recentDay(day) }), el("span", { className: "hint", textContent: `${list.length}개` })), ...list.map(row))));
-  if ($("recent-older")) showOlder(!!rest.length && !$("recent-older").classList.contains("hidden"));  // 다시 그려도 열림 상태를 지킨다
+    ...(rest.length ? [el("div", { className: "recent-day", textContent: "이전" })] : []),
+    ...days(rest).map(([day, list]) => el("details", { className: "recent-folder" }, el("summary", {}, el("b", { textContent: recentDay(day) }), el("span", { className: "hint", textContent: `연결 ${list.length}개` })), ...list.map(row))));
   $("recent-none")?.classList.toggle("hidden", !!recentConnections.length);
-}
-// 이전 연결 카드(첫 화면 오른쪽 끝)를 열거나 닫는다
-function showOlder(open) {
-  $("recent-older").classList.toggle("hidden", !open);
-  document.querySelector(".home").classList.toggle("older", open);
-  $("recent-more")?.setAttribute("aria-expanded", open);
 }
 // 연결을 알아볼 이름: 주소는 주소와 아이디, 폴더는 고른 파일 이름(RECENT_NAMES개까지, 나머지는 개수), 고른 파일이 없으면 폴더 경로
 const RECENT_NAMES = 2, RECENT_SHOWN = 3;  // RECENT_SHOWN: 오늘 연결이 이보다 적을 때 최근 연결 카드에 채워 보이는 수
@@ -738,7 +749,7 @@ function pickRecent(i) {
 const connClosable = () => !!connected || typeof afterConnect === "function";
 function openConnect(forText = "") {
   $("conn-for").textContent = forText;
-  $("conn-close").classList.toggle("hidden", !connClosable());
+  [$("conn-close"), $("conn-cancel")].forEach(b => b.classList.toggle("hidden", !connClosable()));
   $("conn-panel").classList.remove("hidden");
 }
 const closeConnect = () => $("conn-panel").classList.add("hidden");
@@ -779,7 +790,7 @@ const flatBoxes = () => [...document.querySelectorAll("#flat-list input")];
 const PICKED_SHOWN = 8;  // 고른 파일 요약에 칩으로 보이는 수(나머지는 "외 N개")
 function showFlat() {
   $("flat").classList.toggle("hidden", $("file").value !== FLAT);
-  $("flat-count").textContent = `${flatBoxes().length}개 중 ${flatBoxes().filter(b => b.checked).length}개 고름` + (offList.size ? `, 목록에 안 보이는 ${offList.size}개도 고름` : "");
+  $("flat-count").textContent = `파일 ${flatBoxes().filter(b => b.checked).length}개를 골랐어요 · 폴더에 ${flatBoxes().length}개` + (offList.size ? `, 목록에 안 보이는 ${offList.size}개도 골랐어요` : "");
   // 고른 파일 요약: 이름 칩의 ×로 뺀다(목록에 안 그린 것도)
   const picked = pickedFiles(), drop = f => { const box = flatBoxes().find(b => b.value === f); if (box) box.checked = false; else offList.delete(f); showFlat(); };
   $("flat-picked").replaceChildren(...picked.slice(0, PICKED_SHOWN).map(f => Object.assign(chip(underPath(f), () => drop(f)), { title: f })),
@@ -814,7 +825,7 @@ if (hasConnect) {
 showRecentConnections();
 $("kinds").replaceChildren(...SERVER.file_kinds.map(k => el("label", {}, el("input", { type: "checkbox", value: k, checked: true }), KIND_LABELS[k] ?? k)));
 $("path").onkeydown = e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) $("find").click(); };
-$("conn-close").onclick = closeConnect;
+$("conn-close").onclick = $("conn-cancel").onclick = closeConnect;
 $("conn-panel").onclick = e => { if (e.target === $("conn-panel") && connClosable()) closeConnect(); };
 $("crumb").classList.add("link");
 $("crumb").title = "눌러서 연결을 바꿔요";
@@ -1038,7 +1049,7 @@ async function listFiles() {
   if (d.flat.length) $("file").append(new Option(`표 형식 파일에서 여러 개 고르기 (${d.flat.length}개)`, FLAT));
   offList.clear();
   checks($("flat-list"), flat);  // 처음에는 아무것도 고르지 않은 상태. 쓸 파일만 체크한다.
-  flatBoxes().forEach(b => { b.parentElement.title = b.value; b.nextSibling.textContent = " " + underPath(b.value); b.parentElement.append(el("span", { className: "tag", textContent: b.value.split(".").pop().toLowerCase() })); });  // 줄 끝에 파일 종류
+  flatBoxes().forEach(b => { b.parentElement.title = b.value; b.nextSibling.textContent = " " + underPath(b.value); b.parentElement.append(el("span", { className: "tag", textContent: (ext => KIND_LABELS[ext] ?? ext.toUpperCase())(b.value.split(".").pop().toLowerCase()) })); });  // 줄 끝에 파일 종류(이름이 있으면 그 이름, 없으면 확장자)
   $("flat-find").value = "";
   if (!d.files.length && d.flat.length) $("file").value = FLAT;  // 표 형식 파일뿐이면 고르는 칸 없이 바로 체크 목록
   if (!d.files.length && d.flat.length === 1) flatBoxes()[0].checked = true;

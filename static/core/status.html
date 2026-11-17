@@ -18,6 +18,7 @@
   <span class="jobx idle hidden" id="job" title="마지막으로 검색한 뒤 실행한 작업에 걸린 시간이에요. 예상 시간은 테이블 행 수와 지난번 실행 속도로 계산해요."><i></i><span id="job-name"></span><em id="timing"></em><button id="cancel" title="실행 중인 작업을 멈춰요">취소</button></span>
   <span class="jobx hidden" id="rf-pill" role="button" style="cursor:pointer" title="대시보드를 최신 값으로 바꾸는 중이에요. 누르면 진행 상황을 볼 수 있어요."><i></i><span id="rf-pill-text"></span></span>
   <div class="top-tools">
+    <button id="flush" class="btn" type="button" title="연결을 끊고 앱이 붙잡고 있는 데이터(받아 둔 결과·표본 등)를 모두 비워 처음 켠 상태로 돌아가요. 저장한 검색·대시보드·설정은 그대로예요">비우기</button>
     <span id="upd" class="hidden"><span id="upd-text" class="upd-note"></span> <button id="upd-open" class="btn" title="바뀐 내용을 보고 업데이트해요">업데이트</button></span>
     <button id="resize" class="ib" aria-label="크기 조절" title="켜면 패널, 표, 차트의 가장자리를 끌어 크기를 바꿀 수 있어요"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
   </div>
@@ -74,10 +75,10 @@
       <label class="check" title="켜면 like·not like 조건과 값 목록 찾기에서 글자·숫자·공백이 아닌 글자(- . _ % 등)를 컬럼과 찾는 글자 양쪽에서 지우고 비교해요(ab로 a-b를 찾아요). 컬럼에 정규식 바꾸기를 씌워 인덱스를 못 타므로 큰 표에서 느릴 수 있고, 정규식 바꾸기를 못 하는 연결에서는 쓸 수 없어요."><input type="checkbox" id="ignore-marks"> 문자 검색에서 특수문자 무시</label>
         </section>
         <section class="set-page hidden" data-set="memory" role="tabpanel" aria-label="메모리">
-      <p class="lead">앱이 붙잡고 있는 데이터를 골라서 놓아요. 놓은 것은 다음에 쓸 때 다시 읽어요. 원본 파일과 DB는 바뀌지 않아요.</p>
+      <p class="lead">앱이 붙잡고 있는 데이터를 골라서 놓아요. 놓은 것은 다음에 쓸 때 다시 읽어요. 원본 파일과 DB는 바뀌지 않아요. [모두 비우고 처음으로]는 전부 놓고 첫 화면으로 가요.</p>
       <div class="opt"><span>지금 앱이 쓰는 메모리</span><span id="mem-now"></span></div>
       <div id="mem-list"></div>
-      <div class="row" style="margin-top:10px; justify-content:flex-end"><button id="mem-all" class="btn" type="button">모두 고르기</button><button id="mem-drop" class="btn p" type="button">고른 것 비우기</button></div>
+      <div class="row" style="margin-top:10px; justify-content:flex-end"><button id="mem-flush" class="btn" type="button" title="연결을 끊고 아래 목록을 모두 비운 뒤 첫 화면으로 가요. 처음 켠 상태와 같아져요">모두 비우고 처음으로</button><button id="mem-all" class="btn" type="button">모두 고르기</button><button id="mem-drop" class="btn p" type="button">고른 것 비우기</button></div>
       <div id="mem-msg" class="hint"></div>
       <div class="hint" id="mem-mods" style="margin-top:14px"></div>
         </section>

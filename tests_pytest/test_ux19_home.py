@@ -11,8 +11,8 @@ TABS = ["feat", "update", "calc", "memory", "sample", "date", "viz", "dest"]
 
 
 def test_home_cards_name_and_one_line():
-    now = between("home.html", '<div id="home-now"', "</nav>")
-    assert "어떤 걸 하실 건가요?" in now
+    now = between("home.html", '<section class="home-main"', "</nav>")
+    assert now.index('<h2 class="home-ask">어떤 걸 하실 건가요?</h2>') < now.index('<div id="home-now"')  # 묻는 말이 맨 위, 그 아래 지금 연결 줄
     found = re.findall(r'<a class="btn" href="(/\w+)" data-feature="(\w+)"><span class="icon-tile"><svg [^>]+>.*?</svg></span><b>([^<]+)</b><span>([^<]+)</span><span class="card-art" data-art="\w+" aria-hidden="true"></span></a>', now)
     assert found == CARDS  # 작은 카드: 그림 타일 + 메뉴 이름 그대로 + 한 줄 + 카드 그림. 쓸 기능에서 끈 화면은 data-feature로 숨는다(common.js)
     # [쿼리]는 큰 시작 카드: 제목 + 한 줄 설명(처음 쓰는 사람 안내 포함) + 강조 단추 모양. 쿼리를 끄면 카드째 숨는다
@@ -38,7 +38,13 @@ def test_card_art_is_decoration_only():
 def test_connect_lead_and_kind_chip_tip():
     html = read("connect.html")
     head = html.index('<h3 id="conn-title">데이터 연결</h3>')
-    assert html.index('<p class="lead">내 PC의 파일(Excel·CSV 등)이나 회사 DB를 골라 연결해요. 원본은 바뀌지 않아요.</p>') > head
+    assert html.index('<p class="lead">내 PC의 파일이나 회사 DB를 열어요. 원본은 바뀌지 않아요.</p>') > head
+    assert '<div class="field-label">데이터가 있는 위치</div>' in html
+    foot = between("connect.html", '<div class="conn-foot">', "</div>")
+    assert foot.index('id="conn-cancel"') < foot.index('id="connect" class="btn p conn-go"')  # 아래 오른쪽: [취소] [연결]
+    js = read("common.js")
+    assert '[$("conn-close"), $("conn-cancel")].forEach(b => b.classList.toggle("hidden", !connClosable()));' in js  # 닫을 수 없으면 [취소]도 숨는다
+    assert '$("conn-close").onclick = $("conn-cancel").onclick = closeConnect;' in js
     assert '찾을 파일 종류 <span class="hint" id="kinds-tip">누르면 빼거나 넣어요</span>' in html
     assert 'id="kinds"' in html and 'aria-describedby="kinds-tip"' in html
 

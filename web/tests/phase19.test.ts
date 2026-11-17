@@ -7,8 +7,9 @@ const src = (path: string) => readFileSync(fileURLToPath(new URL("../" + path, i
 
 describe("19I1 위쪽 줄 title과 빈 화면", () => {
   const bar = src("components/shell/Toolbar.tsx");
-  it("[다시 구하기]·[대시보드만 보기] title이 쉬운 말", () => {
-    expect(bar).toContain('title="데이터를 새로 읽어 카드 숫자를 고쳐요">다시 구하기</button>');
+  it("[최신화](옛 [다시 구하기])·[대시보드만 보기] title이 쉬운 말", () => {
+    expect(bar).toContain('<button className="btn" onClick={again} disabled={busy} title="데이터를 새로 읽어 카드 숫자를 최신으로 고쳐요">최신화</button>');
+    expect(bar).not.toContain("다시 구하기</button>");
     expect(bar).toContain('title="왼쪽 메뉴와 단추를 숨기고 카드만 크게 봐요. Esc를 누르면 돌아와요">대시보드만 보기</button>');
   });
   it("강조 단추 [카드 추가](#d-add-open)는 편집 밖에서도 보이고, 편집을 켠 뒤 [+ 카드 ▾] → 카드 추가와 같은 길로 서랍을 연다", () => {

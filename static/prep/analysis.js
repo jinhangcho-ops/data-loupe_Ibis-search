@@ -108,8 +108,11 @@ $("a-ftrim").max = SERVER.analysis.max_trim * PCT; $("a-ftrim").placeholder = St
 const akind = () => document.querySelector("input[name=akind]:checked").value;
 // 분석할 표: 체크하면 지금 전처리(recipe), 아니면 원래 테이블
 const anaRecipe = () => $("a-prep").checked ? recipe() : { schema: S.schema, base: S.base };
+// 고른 종류의 칸(.a-form)만 보이고, 그 칸을 고른 라디오 항목(label) 바로 아래로 옮긴다
 function showAnaForm() {
   document.querySelectorAll(".a-form").forEach(f => f.classList.toggle("hidden", f.dataset.kind !== akind()));
+  const label = document.querySelector("input[name=akind]:checked").closest("label");
+  if (label.nextElementSibling !== anaForm()) label.after(anaForm());  // 이미 그 자리면 옮기지 않는다(옮기면 칸의 포커스가 풀린다)
   $("a-heat").classList.toggle("hidden", $("a-cmode").value !== "heatmap");
   $("a-scat").classList.toggle("hidden", $("a-cmode").value === "heatmap");
 }

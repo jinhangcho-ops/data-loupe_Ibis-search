@@ -83,7 +83,8 @@ def test_connect_card_file_picker():
     assert "#flat-list label { display:flex;" in css and "max-height:260px" in css and "#flat-list label:hover" in css  # 큰 줄, 줄 전체 클릭
     lists = between("common.js", "async function listFiles()", "connMsg(more")
     assert 'if (!d.files.length && d.flat.length) $("file").value = FLAT;' in lists and '$("file").classList.toggle("hidden", !d.files.length && !!d.flat.length);' in lists  # 표 형식 파일뿐이면 고르는 칸 없이
-    assert 'className: "tag"' in lists
+    assert 'className: "tag"' in lists and "KIND_LABELS[ext] ?? ext.toUpperCase()" in lists  # 줄 끝 꼬리표는 종류 이름(Parquet·CSV…)
+    assert "`파일 ${flatBoxes().filter(b => b.checked).length}개를 골랐어요 · 폴더에 ${flatBoxes().length}개`" in js  # 목록 머리: 고른 수와 폴더의 파일 수
     assert "function filterFlat()" in js and '$("flat-find").oninput = filterFlat;' in js
     assert 'flatBoxes().filter(b => !b.parentElement.classList.contains("hidden")).forEach(b => b.checked = true)' in js  # [모두 선택]은 찾기로 남은 파일만
     assert '$("flat-picked").replaceChildren(' in between("common.js", "function showFlat()", "function filterFlat()") and "PICKED_SHOWN" in js

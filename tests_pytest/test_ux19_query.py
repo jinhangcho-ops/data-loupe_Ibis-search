@@ -60,23 +60,24 @@ def step(ids_html: str, key: str) -> str:
 def test_19c2_rare_steps_folded_common_steps_shown():
     ids, html = tree(), read("index.html")
     assert "data-adv" in ids["flow"][0]
-    for key in ("union", "joins", "calcs", "columns"):
+    for key in ("union", "calcs", "sorts", "columns"):
         assert 'class="step adv"' in step(html, key), key
-    for key in ("data", "periods", "conditions", "sorts"):
+    for key in ("data", "joins", "periods", "conditions"):  # 시안의 기본 단계: 기준 테이블·붙일 테이블·기간·조건
         assert "adv" not in step(html, key).split(">")[0], key
-    for name in ("u-how", "join-add", "calc-new", "col-pick"):  # 접힌 단계 안의 칸, id 그대로
+    for name in ("u-how", "calc-new", "sort-col", "col-pick"):  # 접힌 단계 안의 칸, id 그대로
         assert folded(ids, name), name
-    for name in ("base", "periods", "conditions", "sorts", "search"):
+    for name in ("base", "join-add", "periods", "conditions", "search"):
         assert not folded(ids, name), name
 
 
 def test_19c3_toolbar_keeps_find_and_export_only():
     ids = tree()
-    assert "data-adv" in ids["sql-show"][1]
-    for name in ("sql-show", "plan-show", "handoff", "label-open", "label-edit", "label-one-open"):
+    assert "data-adv" in ids["handoff"][1]
+    for name in ("handoff", "label-open", "label-edit", "label-one-open"):
         assert folded(ids, name), name
-    for name in ("row-find", "export-open"):
+    for name in ("row-find", "export-open", "sql-show", "plan-show"):  # SQL은 탭, 실행 계획은 그 탭 안(도구 줄에서 빠졌다)
         assert not folded(ids, name), name
+    assert any(a.get("id") == "pane-sql" for a in ids["plan-show"])
 
 
 def test_19c4_pager_folds_maxlen_and_count():
@@ -101,12 +102,12 @@ def test_19c5_chart_starts_with_axes_calc_type_draw():
 
 def test_19c_tabs_and_steps_explained():
     html = read("index.html")
-    for pane, word in (("pane-rows", "행"), ("pane-summary", "개수·평균 같은 요약"), ("pane-chart", "그림으로")):
+    for pane, word in (("pane-rows", "행"), ("pane-summary", "개수·평균 같은 요약"), ("pane-chart", "그림으로"), ("pane-sql", "SQL 문장")):
         a = html.index(f'id="{pane}"')
         lead = html[a:html.index("</p>", a)]
         assert '<p class="lead">' in lead and word in lead, pane
     tabs = html[html.index('<div class="tabs2">'):html.index("</div>", html.index('<div class="tabs2">'))]
-    assert tabs.count("title=") == 3
+    assert tabs.count("title=") == 4
     assert '<span class="t" title="다른 테이블의 컬럼을 옆에 붙여요">조인</span>' in html
     assert '<span class="t" title="같은 모양의 테이블을 아래로 이어 붙여요">행 합치기</span>' in html
     assert html.count('<span class="t" title=') == 8
@@ -119,7 +120,7 @@ const ELS = {}, steps = ["data", "union", "joins", "periods"].map(k => ({ id: k 
 const $ = id => ELS[id] ??= { id, classList: cls() };
 globalThis.document.querySelectorAll = sel => sel === ".step" ? steps : [];
 let shownAdv = 0; const showAdv = box => { if (box === $("flow")) shownAdv++; };
-const S = { base: "", union: { tables: [] }, joins: [], calcs: [], columns: [] };
+const S = { base: "", union: { tables: [] }, joins: [], calcs: [], sorts: [], columns: [] };
 """
 
 
@@ -145,10 +146,11 @@ def test_19c2_folded_step_with_value_opens(tmp_path):
     part = between("index.html", "function showFlowGuide()", "\n}\n") + "\n}\n"
     body = r"""
 S.base = "orders"; showFlowGuide(); const empty = shownAdv;
-S.joins = ["customers left id=id"]; showFlowGuide(); const joined = shownAdv;
-S.joins = []; S.columns = ["a"]; showFlowGuide();
-console.log(JSON.stringify([empty, joined, shownAdv]));"""
-    assert run_node(tmp_path, body, parts=[FLOW, part]) == [0, 1, 2]
+S.joins = ["customers left id=id"]; showFlowGuide(); const joined = shownAdv;  // 조인은 늘 보이는 단계라 펼칠 것이 없다
+S.joins = []; S.sorts = ["amount desc"]; showFlowGuide(); const sorted = shownAdv;
+S.sorts = []; S.columns = ["a"]; showFlowGuide();
+console.log(JSON.stringify([empty, joined, sorted, shownAdv]));"""
+    assert run_node(tmp_path, body, parts=[FLOW, part]) == [0, 0, 1, 2]
     html = read("index.html")
     assert "showSummaries = () => { showFlowGuide(); summed(); }" in html  # 모든 화면 갱신(불러오기·초안·되돌리기 포함) 때
     rest = html[html.index("async function restore(st)"):]
