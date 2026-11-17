@@ -28,9 +28,10 @@ def css_text(path):
 
 # ---------- 16A 디자인 토큰 ----------
 
-TOKENS = {"--fs-xs": "12px", "--fs-sm": "13px", "--fs-md": "14px", "--fs-lg": "16px", "--fs-xl": "20px", "--fs-2xl": "28px",
-          "--sp-1": "4px", "--sp-2": "8px", "--sp-3": "12px", "--sp-4": "16px", "--sp-5": "24px", "--sp-6": "32px",
-          "--r-ctl": "6px", "--r-card": "10px", "--r-pill": "999px", "--h-sm": "28px", "--h-md": "32px", "--h-lg": "40px"}
+# 1rem = 16px 기준: 12·13·14·16·20·28px, 4·8·12·16·24·32px, 6·10·999px, 28·32·40px
+TOKENS = {"--fs-xs": ".75rem", "--fs-sm": ".8125rem", "--fs-md": ".875rem", "--fs-lg": "1rem", "--fs-xl": "1.25rem", "--fs-2xl": "1.75rem",
+          "--sp-1": ".25rem", "--sp-2": ".5rem", "--sp-3": ".75rem", "--sp-4": "1rem", "--sp-5": "1.5rem", "--sp-6": "2rem",
+          "--r-ctl": ".375rem", "--r-card": ".625rem", "--r-pill": "62.4375rem", "--h-sm": "1.75rem", "--h-md": "2rem", "--h-lg": "2.5rem"}
 
 
 def root_vars(css, dark):
@@ -141,11 +142,11 @@ def test_rail_css():
     css = read("common.css")
     assert "position:fixed" in rule(css, ".rail")
     assert "padding-left:var(--rail-w)" in rule(css, "body:has(.rail)")
-    assert root_vars(css, False)["--rail-w"] == "200px"
+    assert root_vars(css, False)["--rail-w"] == "12.5rem"  # 200px
     media = re.search(r"@media \(max-width:1099px\) \{(.*?)\n\}", css, re.S).group(1)
-    assert ":root { --rail-w:56px; }" in media and ".rail :is(a, .rail-btn, .rail-name) span { display:none; }" in media
+    assert ":root { --rail-w:3.5rem; }" in media and ".rail :is(a, .rail-btn, .rail-name) span { display:none; }" in media
     assert ".pages" not in css and ".rail a" in re.search(r"^(\.btn, \.ib[^{]*)\{", css, re.M).group(1)
-    assert "min(var(--panel, clamp(300px, 28vw, 520px)), calc((100vw - var(--rail-w)) * .6))" in rule(css, ".work")
+    assert "min(var(--panel, clamp(18.75rem, 28vw, 32.5rem)), calc((100vw - var(--rail-w)) * .6))" in rule(css, ".work")
 
 
 def test_rail_marks_current_and_crumb_everywhere():
@@ -179,7 +180,7 @@ def test_dash_only_hides_rail():
 
 # ---------- 16C 설정 합치기 ----------
 
-TABS = ["feat", "update", "calc", "memory", "sample", "date", "viz", "dest"]
+TABS = ["feat", "view", "update", "calc", "memory", "sample", "date", "viz", "dest"]
 DEST_IDS = ("dest-list", "dest-name", "dest-kind", "dest-keep", "dest-preset", "dest-fields", "dest-done", "notify-after", "dest-save", "dest-check",
             "dest-test", "dest-del", "msg-dest", "bot-state", "bot-keep", "bot-token", "bot-app", "bot-users", "bot-channels", "bot-save", "bot-check",
             "bot-start", "bot-stop", "msg-bot", "bot-log")
@@ -191,7 +192,7 @@ def test_settings_categories_and_dest_inside():
     panel = status[status.index('id="feat-panel"'):]
     nav = between("status.html", '<nav class="set-nav"', "</nav>")
     assert re.findall(r'data-set="(\w+)"', nav) == TABS
-    assert re.findall(r">([^<]+)</button>", nav) == ["쓸 기능", "업데이트", "계산", "메모리", "표본", "날짜·달력", "차트 낱말", "보낼 곳"]
+    assert re.findall(r">([^<]+)</button>", nav) == ["쓸 기능", "화면 크기", "업데이트", "계산", "메모리", "표본", "날짜·달력", "차트 낱말", "보낼 곳"]
     assert re.search(r'data-set="viz" id="set-tab-viz" class="hidden"', nav)
     assert re.findall(r'<section class="set-page[^"]*" data-set="(\w+)" role="tabpanel"', panel) == TABS
     assert "set-group" not in status and "<details" not in panel and 'class="app-set"' in panel
@@ -212,9 +213,9 @@ def test_settings_categories_and_dest_inside():
 
 def test_settings_css():
     css = read("common.css")
-    assert "grid-template-columns:160px minmax(0, 1fr)" in rule(css, ".set-body")
+    assert "grid-template-columns:10rem minmax(0, 1fr)" in rule(css, ".set-body")
     assert "border-right:1px solid var(--line)" in rule(css, ".set-nav")
-    assert ".set-nav button[aria-selected=true]" in css and ".modal-box.set-box { width:min(920px, 94vw)" in css  # 뒤에 오는 .modal-box의 좁은 너비(440px)에 지지 않게 선택자를 겹쳐 쓴다
+    assert ".set-nav button[aria-selected=true]" in css and ".modal-box.set-box { width:min(57.5rem, 94vw)" in css  # 뒤에 오는 .modal-box의 좁은 너비(27.5rem)에 지지 않게 선택자를 겹쳐 쓴다
     assert ".set-group" not in css
 
 
@@ -234,11 +235,13 @@ const out = { open: !panel.classList.contains("hidden"), selected: tabs.filter(t
   falses: tabs.filter(t => t.attrs["aria-selected"] === "false").length, shown: shown(), calls: [...calls] };
 openSettings("calc");
 out.calc = shown(); out.calls2 = calls.length;
+openSettings("view"); out.view = shown();
 try { openSettings("nope"); out.bad = ""; } catch (e) { out.bad = e.message; }
 console.log(JSON.stringify(out));
 """
     got = run_node(tmp_path, body, parts=[code])
-    assert got["open"] is True and got["selected"] == ["dest"] and got["falses"] == 7 and got["shown"] == ["dest"]
+    assert got["open"] is True and got["selected"] == ["dest"] and got["falses"] == len(TABS) - 1 and got["shown"] == ["dest"]
+    assert got["view"] == ["view"]  # [화면 크기] 분류도 열린다
     assert got["calls"] == ["/api/bot"] and got["calc"] == ["calc"] and got["calls2"] == 1  # 보낼 곳을 열 때만 봇 상태를 새로
     assert got["bad"] == "없는 설정 분류: nope"
 
@@ -332,7 +335,7 @@ console.log(JSON.stringify(updNotes("### 추가\r\n- A/B 검정: 사람마다 �
         ["P", "받지 못했어요"]]
     panel = between("status.html", '<div id="upd-panel"', '<div id="upd-msg"')
     assert 'class="modal-box upd-box"' in panel and 'id="upd-close" class="btn">나중에' in panel and 'id="upd-go" class="btn p"' in panel
-    assert ".modal-box.upd-box { width:min(640px, 94vw); }" in read("common.css")
+    assert ".modal-box.upd-box { width:min(40rem, 94vw); }" in read("common.css")
 
 
 @needs_node
@@ -447,7 +450,7 @@ def test_dashboard_drawer_slot():
 def test_drawer_css():
     css = read("dash_edit.css")
     d = rule(css, ".d-main > #d-add")
-    for part in ("grid-column:3;", "position:sticky;", "display:flex;", "flex-direction:column;", "overflow:hidden;", "max-height:calc(100vh - 160px);"):
+    for part in ("grid-column:3;", "position:sticky;", "display:flex;", "flex-direction:column;", "overflow:hidden;", "max-height:calc(100vh - 10rem);"):
         assert part in d, part
     assert "flex:1; min-height:0; overflow:auto;" in rule(css, "#d-add .d-add-body")
     assert "flex:none;" in rule(css, "#d-add .d-add-foot")

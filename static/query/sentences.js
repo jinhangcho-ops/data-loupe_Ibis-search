@@ -98,7 +98,7 @@ function sentAsk(title, text, ok = "확인") {
   return new Promise(done => {
     const close = v => () => { box.remove(); done(v); };
     const box = el("div", { className: "modal", onclick: e => { if (e.target === box) close(false)(); } }, el("div", { className: "modal-box" }, el("h3", { id: "sent-ask-title", textContent: title }),
-      el("p", { textContent: text, style: "white-space:pre-wrap; margin:10px 0 14px" }), el("div", { className: "row", style: "justify-content:flex-end" },
+      el("p", { textContent: text, style: "white-space:pre-wrap; margin:.625rem 0 .875rem" }), el("div", { className: "row", style: "justify-content:flex-end" },
         el("button", { className: "ghost", textContent: "취소", onclick: close(false) }), el("button", { className: "btn p", textContent: ok, onclick: close(true) }))));
     box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "sent-ask-title");
     document.body.append(box);
@@ -428,7 +428,7 @@ function SentenceView(host, ctx) {
         if (!need.length) { msg.textContent = e.message; return; }
         const sel = Object.fromEntries(need.map(c => [c, pickCol(null, mapping[c], v => { mapping[c] = v; }, "이 테이블의 컬럼")]));
         form.replaceChildren(el("h3", { textContent: "컬럼 짝 고르기" }), el("div", { className: "hint", textContent: e.message.split(":")[0] + ": 원래 컬럼에 맞는 이 테이블의 컬럼을 고르세요." }),
-          ...need.map(c => el("div", { className: "row" }, el("span", { textContent: c, style: "min-width:120px" }), sel[c])), el("button", { className: "btn p", textContent: "복사", onclick: () => copyMetric(m, mapping) }));
+          ...need.map(c => el("div", { className: "row" }, el("span", { textContent: c, style: "min-width:7.5rem" }), sel[c])), el("button", { className: "btn p", textContent: "복사", onclick: () => copyMetric(m, mapping) }));
         msg.textContent = "";
       }
     }

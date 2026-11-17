@@ -5,6 +5,8 @@ import re
 from test_fix_audit_js import between, read, run_node
 
 HTML = "collect.html"
+ROOT_PX = 16  # 1rem의 기준 px(화면 크기 "보통", 좁은 창)
+FIELD_MIN_PX = 150  # 고르는 칸의 최소 너비
 DOLLAR = r"""
 const els = {};
 globalThis.$ = id => els[id] ??= Object.assign(new FakeEl('div'), { value: '', firstElementChild: { style: {} }, querySelectorAll: () => [] });
@@ -50,8 +52,8 @@ def test_runs_empty_text_says_what_is_recorded():
 
 def test_select_fields_wide_enough():
     """'새 테이블 만들기'·'구성을 고르세요'가 110px 칸에서 잘렸다."""
-    m = re.search(r"\.fields \{[^}]*minmax\((\d+)px", read(HTML))
-    assert int(m[1]) >= 150
+    m = re.search(r"\.fields \{[^}]*minmax\(([\d.]+)rem", read(HTML))
+    assert float(m[1]) * ROOT_PX >= FIELD_MIN_PX
 
 
 def test_collect_tables_scroll_in_their_box():

@@ -84,8 +84,10 @@ export function ownRange(card: Card, mode: "prev" | "same_weekday" | "yoy" = "pr
 }
 // 분석 카드가 어떤 그림인지(없으면 분석 종류에서)
 export const anaView = (card: Card) => card.view.analysis_view || ({ distribution: "hist", correlation: "heat", scatter: "scatter", groups: "groups", trend: "trend" } as Record<string, string>)[card.data?.values?.kind as string];
-// 산점도·버블: 점은 data.points(서버가 구한 점·r·추세선), 버블의 [크기] 컬럼·추세선·r 보이기는 view.points·trend·show_r
-export const isPoints = (card: Card) => ["scatter", "bubble"].includes(card.view?.type) && !!card.data?.points;
+// 산점도·버블·3차원 산점도: 점은 data.points(서버가 구한 점·r·추세선), 버블의 [크기]·3차원 산점도의 Z축 컬럼·추세선·r 보이기·점 잇기는 view.points·trend·show_r·connect
+/** 서버가 구한 점으로 그리는 차트 종류(서버 dash_calc.POINT_TYPES) */
+export const POINT_TYPES = ["scatter", "bubble", "scatter3d"];
+export const isPoints = (card: Card) => POINT_TYPES.includes(card.view?.type) && !!card.data?.points;
 export const pointGroups = (p: { groups: string[]; y: string }) => p.groups.length ? p.groups : [p.y];
 // 최신화가 읽은 날짜 범위(data.window: 직전 기간 시작 ~ 보는 기간 끝) 밖으로 보는 기간이 나갔는지. 나갔으면 그 기간으로 다시 읽어야 한다.
 export const outsideWindow = (card: Card, range?: { start?: string; end?: string } | null) => !!(range && card.data?.window && ((range.start && card.data.window.start && range.start < card.data.window.start) || (range.end && card.data.window.end && range.end > card.data.window.end)));

@@ -8,7 +8,7 @@ import { useDash } from "@/lib/store";
 import type { Template } from "@/lib/types";
 import { useShell } from "./ShellProvider";
 
-const LABEL = { margin: 0, display: "inline-flex", alignItems: "center", gap: 6 } as const;
+const LABEL = { margin: 0, display: "inline-flex", alignItems: "center", gap: ".375rem" } as const;
 
 export function PickDashboard() {
   const { state, dispatch } = useDash();
@@ -49,14 +49,14 @@ export function PickDashboard() {
   return (
     <>
       <label className="hint" style={LABEL}>대시보드
-        <select className="d-pick" value={state.dash?.id ?? ""} onChange={e => open(e.target.value)} title="열어 볼 대시보드. 마지막에 연 대시보드가 먼저 열려요" style={{ width: "auto", minWidth: 200 }}>
+        <select className="d-pick" value={state.dash?.id ?? ""} onChange={e => open(e.target.value)} title="열어 볼 대시보드. 마지막에 연 대시보드가 먼저 열려요" style={{ width: "auto", minWidth: "12.5rem" }}>
           {items.map(d => <option key={d.id} value={d.id}>{d.id ? `${d.name} (카드 ${d.cards}개)` : d.name}</option>)}
         </select>
       </label>
       <span className="drop" ref={wrap} onKeyDown={e => { if (e.key === "Escape" && making) { e.stopPropagation(); close(); } }}>
         <button ref={opener} className="btn" onClick={toggle} aria-expanded={making} aria-haspopup="dialog" title="이름과 시작 모양을 정해 새 대시보드를 만들어요">새 대시보드</button>
         {making && (
-          <div className="pop" role="dialog" aria-label="새 대시보드" style={{ left: 0, right: "auto", width: "min(320px, 92vw)", gap: 8, padding: 12 }}>
+          <div className="pop" role="dialog" aria-label="새 대시보드" style={{ left: 0, right: "auto", width: "min(20rem, 92vw)", gap: ".5rem", padding: ".75rem" }}>
             <input value={name} onChange={e => setName(e.target.value)} placeholder="대시보드 이름" aria-label="새 대시보드 이름" autoFocus
               onKeyDown={e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !busy) make(); }} />
             <label className="hint" style={LABEL}>시작 모양

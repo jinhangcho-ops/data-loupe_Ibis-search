@@ -5,8 +5,8 @@ import { loadedRange, windowValue, type Range } from "@/lib/series";
 import type { Card, NorthStar, TreeItem } from "@/lib/types";
 import type { SCard, Series } from "../chart/series";
 import type { Ana } from "../chart/Charts";
-import { HBARS, ROUND_TYPES } from "../chart/shapes";
-const NO_ZOOM_TYPES: string[] = [...ROUND_TYPES, ...HBARS, "radar", "slope"];  // 확대하지 않는 계열 종류(둥근 차트·가로 막대·레이더·슬로프)
+import { HBARS, ROUND_TYPES, THREE_TYPES } from "../chart/shapes";
+const NO_ZOOM_TYPES: string[] = [...ROUND_TYPES, ...HBARS, ...THREE_TYPES, "radar", "slope"];  // 확대하지 않는 종류(둥근 차트·가로 막대·레이더·슬로프, 3차원은 끌면 돈다)
 
 /** 그리는 색(옛 board.js themeColors + 대시보드 팔레트). err·ok는 상태 색(옛 cssVar("--err")·("--ok")) */
 export type Theme = { card: string; head: string; ink: string; text: string; line: string; err: string; ok: string; series: string[]; palette?: string[] };
@@ -370,7 +370,7 @@ export function zoomAxis(card: SCard, s: Series | null, ana: boolean): ZoomAxis 
       default: return index((d.labels ?? []).length);
     }
   }
-  if (isPoints(card)) return value((card.data.points as unknown as { points: number[][] }).points.map(r => r[0]));
+  if (isPoints(card)) return NO_ZOOM_TYPES.includes(card.view.type) ? null : value((card.data.points as unknown as { points: number[][] }).points.map(r => r[0]));
   if (!s || NO_ZOOM_TYPES.includes(card.view.type)) return null;
   return index(s.labels.length);
 }

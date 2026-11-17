@@ -25,6 +25,14 @@ function dropCheck(shelf, column, type, state) {
   return { ok: true, reason: "" };
 }
 
+// 3차원 산점도(쿼리 화면 차트 탭)를 그릴 수 없는 이유, 그릴 수 있으면 빈 글자: X축·Y축·Z축 칸이 모두 숫자 컬럼이어야 한다. columns = [[이름, 한글 타입]]
+function scatter3dReason(x, y, z, columns) {
+  const axes = [["X축", x], ["Y축", y], ["Z축", z]], empty = axes.filter(a => !a[1]).map(a => `[${a[0]}]`);
+  if (empty.length) return `3차원 산점도는 숫자 컬럼이 셋 필요해요. ${empty.join("·")}에 숫자 컬럼을 골라 주세요.`;
+  const bad = axes.filter(a => shelfKind(columns.find(c => c[0] === a[1])?.[1]) !== "num").map(a => `${a[0]} ‘${a[1]}’`);
+  return bad.length ? `3차원 산점도의 X축·Y축·Z축은 모두 숫자 컬럼이어야 해요. ${bad.join(", ")}은(는) 숫자 컬럼이 아니에요.` : "";
+}
+
 // 놓은 결과의 새 상태(dropCheck를 통과한 뒤에). 필터는 조건 한 줄 `컬럼 연산자 값`을 conditions에 더한다.
 function applyDrop(shelf, column, type, state, value = "", op = "=") {
   const next = { ...state, series: [...(state.series ?? [])], conditions: [...(state.conditions ?? [])] };
@@ -75,7 +83,7 @@ function shelfPanel(host) {
   };
   // 필터 칸의 조건 입력: 컬럼 이름 + 연산자 + 값
   function filterForm() {
-    const op = el("select", {}, ...["=", "!=", ">", ">=", "<", "<="].map(o => el("option", { value: o, textContent: o }))), value = el("input", { placeholder: "값", style: "width:90px" });
+    const op = el("select", {}, ...["=", "!=", ">", ">=", "<", "<="].map(o => el("option", { value: o, textContent: o }))), value = el("input", { placeholder: "값", style: "width:5.625rem" });
     const go = () => {
       if (!value.value.trim()) return void host.say("조건의 값을 적어 주세요.");
       const name = pending.name, next = applyDrop("filter", name, pending.type, host.state(), value.value.trim(), op.value);
@@ -124,5 +132,5 @@ function shelfPanel(host) {
   msg.hidden = true;
   const root = el("div", { className: "shelf" }, palette, shelves);
   refresh();
-  return { el: root, refresh, drop, now: () => host.state() };
+  return { el: root, refresh, drop };
 }

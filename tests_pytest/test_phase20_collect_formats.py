@@ -167,7 +167,7 @@ def test_screen_draws_formats_from_server():
     assert formats == [list(pair) for pair in collect_config.OUTPUT_FORMATS.items()] or formats == list(collect_config.OUTPUT_FORMATS.items())
     assert [f for f, _ in formats] == list(collect_config.CHOICES[("output", "format")]) == ["parquet", "csv", "xlsx", "duckdb", "db"]
     html = STATIC.read_text(encoding="utf-8")
-    assert '<select id="o-format" style="margin-bottom:6px"></select>' in html  # 목록을 화면에 박지 않는다
+    assert '<select id="o-format" style="margin-bottom:.375rem"></select>' in html  # 목록을 화면에 박지 않는다
     assert "SERVER.collect_formats" in html and "(parquet|csv)" not in html
 
 

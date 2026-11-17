@@ -186,8 +186,8 @@ const LabelOne = (() => {
     inner.replaceChildren(el("h3", { textContent: "하나씩 태그" }),
       el("div", { className: "row", style: "align-items:center; justify-content:space-between" }, el("span", { className: "hint", style: "margin:0", textContent: `${(at + 1).toLocaleString()} / ${total?.toLocaleString() ?? "?"}` }),
         el("label", { className: "check" }, el("input", { type: "checkbox", checked: only, onchange: e => { only = e.target.checked; total = null; load(0); } }), "태그 없는 행만")),
-      el("div", { style: "font-size:18px; white-space:pre-wrap; max-height:40vh; overflow:auto; margin:10px 0", textContent: row ? (textCol ? String(row[textCol] ?? "") : "") : "더 볼 행이 없어요." }),
-      ...rest, el("div", { className: "row", style: "margin-top:10px; flex-wrap:wrap" }, ...chips),
+      el("div", { style: "font-size:1.125rem; white-space:pre-wrap; max-height:40vh; overflow:auto; margin:.625rem 0", textContent: row ? (textCol ? String(row[textCol] ?? "") : "") : "더 볼 행이 없어요." }),
+      ...rest, el("div", { className: "row", style: "margin-top:.625rem; flex-wrap:wrap" }, ...chips),
       el("div", { className: "hint", textContent: lock || "숫자: 태그 켜기·끄기, Enter: 다음 행, ←: 앞 행, Esc: 닫기" }), el("div", { className: "err", textContent: msg }),
       el("div", { className: "row", style: "justify-content:flex-end" }, el("button", { className: "ghost", textContent: "닫기", onclick: close })));
   }

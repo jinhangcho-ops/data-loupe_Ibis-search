@@ -53,7 +53,7 @@ def data(kind, view=None, analysis=None, ctx=None, **body):
 # ---------- dash_store: 이름 등록과 view 검증 ----------
 
 def test_chart_types_and_time_types_registered():
-    assert set(NEW_CHARTS) <= set(dash_store.CHART_TYPES) and len(dash_store.CHART_TYPES) == 28
+    assert set(NEW_CHARTS) <= set(dash_store.CHART_TYPES) and len(dash_store.CHART_TYPES) == 28 + len(dash_store.THREE_D_TYPES)  # 뒤에 3차원 셋이 더해졌다
     assert all(isinstance(v, str) and v for v in dash_store.CHART_TYPES.values())
     assert {"sarea", "sarea100", "step", "combo", "waterfall", "pareto", "slope"} <= set(dash_store.TIME_TYPES)
     assert not {"group", "radial", "scatter"} & set(dash_store.TIME_TYPES)

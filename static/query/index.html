@@ -14,123 +14,124 @@
   #flow .step .sp i { font-size:0; }
   #flow .step .sp i::before { content:counter(qstep); font-size:var(--fs-xs); }
   #flow .step .sp svg { flex:none; color:var(--muted); }  /* 단계 제목 앞의 선 그림 아이콘 */
-  .edx .row { margin-bottom:6px; }
-  ul.items { list-style:none; margin:0 0 4px; padding:0; }
-  ul.items li { display:flex; justify-content:space-between; gap:6px; background:var(--card); border:1px solid var(--accent-line); border-radius:9px; padding:4px 8px; margin-bottom:4px; }
+  .edx .row { margin-bottom:.375rem; }
+  ul.items { list-style:none; margin:0 0 .25rem; padding:0; }
+  ul.items li { display:flex; justify-content:space-between; gap:.375rem; background:var(--card); border:1px solid var(--accent-line); border-radius:.5625rem; padding:.25rem .5rem; margin-bottom:.25rem; }
   ul.items li span:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; }
-  ul.items li.any { border-left:3px solid var(--accent); }
+  ul.items li.any { border-left:.1875rem solid var(--accent); }
   ul.items .tools { flex:none; white-space:nowrap; }
-  ul.items .link { color:var(--accent); font-size:12px; }
+  ul.items .link { color:var(--accent); font-size:.75rem; }
   /* 조건 입력 방식: 칸으로 선택(.fields)이면 한 줄 입력칸과 형식 안내를, 한 줄 입력(.line)이면 칸들을 감춘다. 조건 목록은 둘 다 같이 쓴다. */
   #cond.fields :is(#conditions .row, .format), #cond.line :is(#builder, #bmode) { display:none; }
-  #builder .row select { flex:1 1 120px; min-width:0; }
-  #builder #bop { flex:none; width:110px; }
+  #builder .row select { flex:1 1 7.5rem; min-width:0; }
+  #builder #bop { flex:none; width:6.875rem; }
   .edx .row.one { flex-wrap:wrap; align-items:center; }  /* 한 줄로 끝내는 고르기 줄(좁으면 넘긴다) */
-  .edx .row.one > :is(select, input) { flex:1 1 120px; min-width:0; width:auto; }
+  .edx .row.one > :is(select, input) { flex:1 1 7.5rem; min-width:0; width:auto; }
   .edx .row.one > .btn { flex:none; }
-  .edx .tabs { display:flex; align-items:center; flex-wrap:wrap; gap:4px 12px; }
+  .edx .tabs { display:flex; align-items:center; flex-wrap:wrap; gap:.25rem .75rem; }
   #bmode { margin-left:auto; }  /* 조건 칸 오른쪽 위: 값으로 찾기 | 컬럼으로 찾기 */
-  #bmode label { padding:2px 10px; font-size:var(--fs-sm); white-space:nowrap; }
+  #bmode label { padding:.125rem .625rem; font-size:var(--fs-sm); white-space:nowrap; }
   /* 단계마다 [골라서 넣기 | 직접 쓰기](stepModes): 고르는 칸(.pick)과 한 줄 입력(.direct) 중 하나만 보인다 */
   .edx[data-mode=pick] .direct, .edx[data-mode=line] .pick { display:none; }
-  .span-row { align-items:center; } .span-row select { flex:1 1 120px; min-width:0; } .span-row .btn { flex:none; }
-  #join-blocks .jb .r1 { grid-template-columns:76px minmax(0, auto) 10px minmax(0, 1fr) 28px; }  /* 종류 · 기준 테이블 = 붙일 테이블 · × */
+  .span-row { align-items:center; } .span-row select { flex:1 1 7.5rem; min-width:0; } .span-row .btn { flex:none; }
+  #join-blocks .jb .r1 { grid-template-columns:4.75rem minmax(0, auto) .625rem minmax(0, 1fr) 1.75rem; }  /* 종류 · 기준 테이블 = 붙일 테이블 · × */
   .jb .r1 .jbase { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  details.more { margin-top:6px; } details.more > summary { cursor:pointer; color:var(--accent); font-size:var(--fs-sm); }
-  #bpick { margin-bottom:6px; }
-  .drop.up .pop { top:auto; bottom:calc(100% + var(--sp-1)); left:0; right:auto; min-width:340px; }
-  #saved-pop { padding:10px; gap:6px; }
+  details.more { margin-top:.375rem; } details.more > summary { cursor:pointer; color:var(--accent); font-size:var(--fs-sm); }
+  #bpick { margin-bottom:.375rem; }
+  .drop.up .pop { top:auto; bottom:calc(100% + var(--sp-1)); left:0; right:auto; min-width:21.25rem; }
+  #saved-pop { padding:.625rem; gap:.375rem; }
   #saved-pop .row { margin:0; flex-wrap:nowrap; }
   #saved-pop .row input { flex:1; min-width:0; }
   #saved-pop .row button { flex:none; border:1px solid var(--line); background:var(--card); font-weight:600; justify-content:center; }
-  #sql { margin:0 0 10px; padding:8px 10px; background:var(--bg); border-radius:10px; font:12px/1.4 Consolas, monospace; white-space:pre-wrap; word-break:break-all; }
+  #sql { margin:0 0 .625rem; padding:.5rem .625rem; background:var(--bg); border-radius:.625rem; font:.75rem/1.4 Consolas, monospace; white-space:pre-wrap; word-break:break-all; }
   #sql:empty { display:none; }
   #rows th { cursor:pointer; }  /* 결과 표의 머리글은 누르면 그 컬럼으로 정렬한다. */
   .pane > .table-wrap > table { min-width:100%; }
-  #err-search, #err-export { padding:0 28px; }
+  #err-search, #err-export { padding:0 1.75rem; }
   #err-search:empty, #err-export:empty, #err-summary:empty { display:none; }
   /* SQL 탭: 편집기는 결과 위에서 높이를 조금만 쓰고(끌어서 늘림), 결과 표가 남은 높이를 쓴다. */
-  #sql-text { font:13px/1.5 Consolas, ui-monospace, monospace; min-height:120px; height:clamp(120px, 24vh, 320px); resize:vertical; }
+  #sql-text { font:.8125rem/1.5 Consolas, ui-monospace, monospace; min-height:7.5rem; height:clamp(7.5rem, 24vh, 20rem); resize:vertical; }
   /* SQL 색: 글 상자는 글자를 투명하게 두고, 같은 자리 뒤의 pre에 같은 글을 색칠해 보인다(글꼴·여백·줄바꿈·스크롤 막대 자리를 같게). */
   .sql-hl { position:relative; display:flex; }
   .sql-hl #sql-text { position:relative; background:transparent; color:transparent; caret-color:var(--text); scrollbar-gutter:stable; }
   .sql-hl #sql-text::placeholder { color:var(--muted); }
-  #sql-paint { position:absolute; inset:0; margin:0; padding:6px 10px; border:1px solid transparent; border-radius:9px; background:var(--card); color:var(--text);
-    font:13px/1.5 Consolas, ui-monospace, monospace; white-space:pre-wrap; overflow-wrap:break-word; overflow:hidden; scrollbar-gutter:stable; pointer-events:none; }
+  #sql-paint { position:absolute; inset:0; margin:0; padding:.375rem .625rem; border:1px solid transparent; border-radius:.5625rem; background:var(--card); color:var(--text);
+    font:.8125rem/1.5 Consolas, ui-monospace, monospace; white-space:pre-wrap; overflow-wrap:break-word; overflow:hidden; scrollbar-gutter:stable; pointer-events:none; }
   :is(#sql-paint, #sql) .sk { color:var(--sql-kw); font-weight:600; } :is(#sql-paint, #sql) .ss { color:var(--sql-str); } :is(#sql-paint, #sql) .sc { color:var(--muted); font-style:italic; }  /* SQL 색칠 안에서만(패널 스크롤 영역도 .sc를 쓴다) */
-  .sql-edit { padding:0 28px; display:flex; flex-direction:column; gap:8px; }
-  .sql-edit .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  .sql-edit .row label { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; white-space:nowrap; }
-  .sql-edit .row input { width:100px; }
-  #err-sql { padding:0 28px; }
-  .sql-check { font-size:12.5px; min-height:18px; color:var(--muted); white-space:pre-line; }
-  .scan-hint { margin:0; padding:6px 16px 0; }
+  .sql-edit { padding:0 1.75rem; display:flex; flex-direction:column; gap:.5rem; }
+  .sql-edit .row { display:flex; align-items:center; gap:.625rem; flex-wrap:wrap; }
+  .sql-edit .row label { display:flex; align-items:center; gap:.375rem; color:var(--muted); font-size:.8125rem; white-space:nowrap; }
+  .sql-edit .row input { width:6.25rem; }
+  #err-sql { padding:0 1.75rem; }
+  .sql-check { font-size:.7812rem; min-height:1.125rem; color:var(--muted); white-space:pre-line; }
+  .scan-hint { margin:0; padding:.375rem 1rem 0; }
   .scan-hint:empty { display:none; }
   .sql-check.ok { color:var(--ok); } .sql-check.err { color:var(--err); }
   #sql-text.bad { border-color:var(--err); outline-color:color-mix(in srgb, var(--err) 40%, transparent); }
   #err-sql:empty, #err-vt:empty { display:none; }
-  .vt { display:flex; align-items:center; gap:6px; padding:5px 8px; border:1px solid var(--line); border-radius:9px; margin-bottom:4px; }
+  .vt { display:flex; align-items:center; gap:.375rem; padding:.3125rem .5rem; border:1px solid var(--line); border-radius:.5625rem; margin-bottom:.25rem; }
   .vt b { cursor:pointer; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .vt .hint { margin:0 auto 0 0; white-space:nowrap; }
   #sql-tables { flex-wrap:wrap; }
   #sql-tables .chip { cursor:pointer; }
-  .ctl { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; align-items:center; }
-  .ctl select, .ctl input { flex:1 1 120px; width:auto; max-width:clamp(160px, 18vw, 280px); }  /* 큰 창에서 칸이 끝없이 늘지 않게 */
+  .ctl { display:flex; flex-wrap:wrap; gap:.375rem; margin-bottom:.625rem; align-items:flex-end; }  /* 이름표가 있는 칸과 없는 칸의 아래선을 맞춘다 */
+  .ctl > label, .ctl > .hint { display:inline-flex; align-items:center; gap:.25rem; min-height:var(--h-md); }  /* 글자·체크 칸도 입력 칸 높이의 가운데에 */
+  .ctl select, .ctl input { flex:1 1 7.5rem; width:auto; max-width:clamp(10rem, 18vw, 17.5rem); }  /* 큰 창에서 칸이 끝없이 늘지 않게 */
   .ctl .hint { margin:0; white-space:nowrap; }
   .ctl .grow { margin-left:auto; }
   #summary { height:var(--summary, auto); max-height:var(--summary, none); overflow:auto; }
-  #ctable { margin-top:10px; }
-  /* 차트: 차트 섬(iframe)이 너비/비율로 그리고 높이를 알린다(size). 너비는 끌어서 정한 높이(--chart, 없으면 창 높이의 52%를 260~900px 안으로)의 16:9, 결과 영역보다 넓으면 그 너비. */
-  .chart-box { width:min(100%, calc(var(--chart, clamp(260px, 52vh, 900px)) * 16 / 9)); margin:0 auto; position:relative; }
+  #ctable { margin-top:.625rem; }
+  /* 차트: 차트 섬(iframe)이 너비/비율로 그리고 높이를 알린다(size). 너비는 끌어서 정한 높이(--chart, 없으면 창 높이의 52%를 260~56.25rem 안으로)의 16:9, 결과 영역보다 넓으면 그 너비. */
+  .chart-box { width:min(100%, calc(var(--chart, clamp(16.25rem, 52vh, 56.25rem)) * 16 / 9)); margin:0 auto; position:relative; }
   .chart-box iframe { display:block; width:100%; height:0; border:0; }  /* 높이는 섬이 그린 뒤 알린다(size) */
-  .chart-box .grip-y { bottom:-12px; }
+  .chart-box .grip-y { bottom:-.75rem; }
   /* 지표 탭: 목록은 누르는 버튼(이름 + 설명), 결과는 큰 값이나 그래프와 표 */
-  .met { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; text-align:left; padding:7px 10px; margin-bottom:5px; border:1px solid var(--line); border-radius:9px; background:var(--card); color:var(--text); cursor:pointer; }
+  .met { display:flex; flex-direction:column; align-items:flex-start; gap:.125rem; width:100%; text-align:left; padding:.4375rem .625rem; margin-bottom:.3125rem; border:1px solid var(--line); border-radius:.5625rem; background:var(--card); color:var(--text); cursor:pointer; }
   .met:hover, .met.on { border-color:var(--accent); }
-  .met.on { box-shadow:inset 3px 0 0 var(--accent); }
-  .met .hint { margin:0; font-size:12px; }
-  #met-box { margin-bottom:12px; }
-  #err-met { padding:0 28px; }
+  .met.on { box-shadow:inset .1875rem 0 0 var(--accent); }
+  .met .hint { margin:0; font-size:.75rem; }
+  #met-box { margin-bottom:.75rem; }
+  #err-met { padding:0 1.75rem; }
   #err-met:empty { display:none; }
   /* SQL 탭의 질문 줄과 프롬프트 미리보기 */
-  .sql-edit .nl-row input { flex:1 1 240px; width:auto; }
-  .nl-prompt { margin:0; padding:8px 10px; background:var(--bg); border:1px solid var(--line); border-radius:10px; font:12px/1.45 Consolas, monospace; white-space:pre-wrap; max-height:260px; overflow:auto; }
+  .sql-edit .nl-row input { flex:1 1 15rem; width:auto; }
+  .nl-prompt { margin:0; padding:.5rem .625rem; background:var(--bg); border:1px solid var(--line); border-radius:.625rem; font:.75rem/1.45 Consolas, monospace; white-space:pre-wrap; max-height:16.25rem; overflow:auto; }
   /* 단계 사이는 구분선(.step의 위쪽 선)이라 잇는 선 없이 틈만 둔다 */
-  .flow .cn { height:12px; }
-  .step .sp .t { width:72px; }
+  .flow .cn { height:.75rem; }
+  .step .sp .t { width:4.5rem; }
   /* 결과 머리 한 줄: 탭(왼쪽) · 큰 행 수 · 내보내기(오른쪽 끝). 아래 한 줄(.big)은 보고 있는 범위와 조건 */
-  .rhead { display:flex; align-items:center; flex-wrap:wrap; gap:0 var(--sp-3); padding:var(--sp-3) 28px 0; border-bottom:1px solid var(--line); }
+  .rhead { display:flex; align-items:center; flex-wrap:wrap; gap:0 var(--sp-3); padding:var(--sp-3) 1.75rem 0; border-bottom:1px solid var(--line); }
   .rhead .tabs2 { align-self:flex-end; padding:0; border:0; }
   .rhead #big-count { margin-left:auto; font-size:var(--fs-xl); font-weight:700; white-space:nowrap; }
   @media (max-width:1280px) { .rhead { padding-left:18px; padding-right:18px; } }  /* common.css의 .tool·.pane과 같은 좁은 창 여백 */
   .big { padding-top:var(--sp-2); padding-bottom:0; }
-  .big span { max-width:100%; font-size:13px; }
-  .side > header { padding-right:14px; }
-  .fold, .side-strip b { font-size:18px; line-height:1; }
+  .big span { max-width:100%; font-size:.8125rem; }
+  .side > header { padding-right:.875rem; }
+  .fold, .side-strip b { font-size:1.125rem; line-height:1; }
   /* 패널 아래: [저장한 검색]은 작은 단추, 그 아래 [검색]은 한 줄 가득 */
   #side > footer { flex-direction:column; align-items:stretch; gap:var(--sp-1); }
   #side > footer #saved-open { flex:none; height:auto; }
   #side > footer #search { flex:none; }
   /* 차트 설정 칸: 칸 위에 작은 이름표 */
-  .cf { display:flex; flex-direction:column; gap:2px; flex:1 1 120px; min-width:0; max-width:clamp(160px, 18vw, 280px); }
-  .cf > .cl { font-size:11.5px; color:var(--muted); }
+  .cf { display:flex; flex-direction:column; gap:.125rem; flex:1 1 7.5rem; min-width:0; max-width:clamp(10rem, 18vw, 17.5rem); }
+  .cf > .cl { font-size:.7188rem; color:var(--muted); }
   .cf > select { width:100%; max-width:none; flex:none; }
-  .ctl.lab { align-items:flex-start; } .ctl.lab > button { margin-top:17px; }  /* 이름표 높이만큼 내려 칸과 줄을 맞춘다 */
-  .cf.wide { flex:2 1 240px; max-width:460px; } #cagg { display:block; } #cagg .fp { width:100%; }
-  .axis-box { margin-bottom:10px; } .axis-box > summary { cursor:pointer; }
+  .cf:has(> .hidden) { display:none; }  /* 칸을 숨기면 이름표도 같이 */
+  .cf.wide { flex:2 1 15rem; max-width:28.75rem; } #cagg { display:block; } #cagg .fp { width:100%; }
+  .axis-box { margin-bottom:.625rem; } .axis-box > summary { cursor:pointer; }
   #rows th:not(.sorted, .pick, .addcol):hover::after { content:" ↕"; color:var(--muted); }
-  #bpick-note { margin:0 0 6px; } #bpick.hidden + #bpick-note, #bpick-note:not(.on) { display:none; }
+  #bpick-note { margin:0 0 .375rem; } #bpick.hidden + #bpick-note, #bpick-note:not(.on) { display:none; }
   .results > .tool { flex-wrap:wrap; }  /* 단추가 많아 좁은 창에서는 다음 줄로 */
   #rows th:is(.pick, .addcol) { cursor:default; }
   #page-go, #sql-go { width:auto; }
-  #pt-tables .row { margin-bottom:6px; flex-wrap:wrap; }
-  #pt-tables select, #pt-tables input { flex:1 1 110px; width:auto; max-width:200px; }
-  .undo { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:500; display:flex; align-items:center; gap:10px; padding:6px 8px 6px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); font-size:13px; box-shadow:0 6px 20px rgb(15 25 30 / .18); }
-  .keys-table { width:100%; border-collapse:collapse; margin:10px 0 14px; }
-  .keys-table td { padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  #pt-tables .row { margin-bottom:.375rem; flex-wrap:wrap; }
+  #pt-tables select, #pt-tables input { flex:1 1 6.875rem; width:auto; max-width:12.5rem; }
+  .undo { position:fixed; left:50%; bottom:1.5rem; transform:translateX(-50%); z-index:500; display:flex; align-items:center; gap:.625rem; padding:.375rem .5rem .375rem .75rem; border:1px solid var(--line); border-radius:.5rem; background:var(--card); font-size:.8125rem; box-shadow:0 .375rem 1.25rem rgb(15 25 30 / .18); }
+  .keys-table { width:100%; border-collapse:collapse; margin:.625rem 0 .875rem; }
+  .keys-table td { padding:.3125rem .5rem; border-bottom:1px solid var(--line); vertical-align:top; }
   .keys-table td:first-child { white-space:nowrap; font-weight:600; }
-  .none-box { padding:14px 4px; display:flex; flex-direction:column; gap:6px; }
-  .none-box .row { display:flex; gap:6px; flex-wrap:wrap; }
+  .none-box { padding:.875rem .25rem; display:flex; flex-direction:column; gap:.375rem; }
+  .none-box .row { display:flex; gap:.375rem; flex-wrap:wrap; }
   /* 좁은 창: 패널이 결과 아래로 내려가도 [검색]은 화면 아래에 붙어 있다(패널 상자를 풀어 푸터를 화면 전체의 막대로) */
   @media (max-width:900px) {
     .work:not(.closed) > .side { display:contents; }
@@ -138,21 +139,21 @@
     .work:not(.closed) > .side > :is(header, .vswitch, .sc, .scan-hint) { background:var(--card); }
   }
   /* 작업 탭 줄(F10): 탭 하나가 탐색 화면 한 벌 */
-  .wtabs { display:flex; align-items:center; gap:4px; padding:6px 28px 0; border-bottom:1px solid var(--line); }
-  .wtab-list { display:flex; gap:2px; overflow-x:auto; min-width:0; }
-  .wtab { display:inline-flex; align-items:center; border-bottom:2px solid transparent; }
+  .wtabs { display:flex; align-items:center; gap:.25rem; padding:.375rem 1.75rem 0; border-bottom:1px solid var(--line); }
+  .wtab-list { display:flex; gap:.125rem; overflow-x:auto; min-width:0; }
+  .wtab { display:inline-flex; align-items:center; border-bottom:.125rem solid transparent; }
   .wtab.on { border-bottom-color:var(--text); }
-  .wtab-b { background:none; border:0; border-radius:0; color:var(--muted); padding:6px 2px 6px 10px; font-weight:600; max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .wtab-b { background:none; border:0; border-radius:0; color:var(--muted); padding:.34375rem .125rem .34375rem .625rem; font-weight:600; max-width:11.25rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .wtab.on .wtab-b { color:var(--text); }
-  .wtab-x { padding:2px 6px; }
-  .wtab-in { width:140px; }
+  .wtab-x { padding:.125rem .375rem; }
+  .wtab-in { width:8.75rem; }
   /* 행 태그(labels.js): 도구 줄의 거르기와 결과 표 아래 태그 막대 */
-  #label-filter, #label-tags { display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  #label-filter, #label-tags { display:inline-flex; align-items:center; gap:.375rem; flex-wrap:wrap; }
   #label-filter.hidden, #label-tags.hidden { display:none; }
-  #label-bar { margin-top:8px; }
+  #label-bar { margin-top:.5rem; }
   /* (19C1) 테이블을 고르기 전: 1단계만 강조하고 나머지 단계는 흐리게(showFlowGuide) */
   .flow.first .step:not(#step-data) { opacity:.45; }
-  .flow.first #step-data { box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .flow.first #step-data { box-shadow:0 0 0 .1875rem color-mix(in srgb, var(--accent) 25%, transparent); }
   #metv .tool { flex-wrap:wrap; }  /* (19D3) 안내 글은 한 줄 전체, 칸들은 다음 줄로 */
 </style>
 </head>
@@ -191,50 +192,50 @@
         <button id="summarize">집계하기</button>
         <label class="hint" style="margin:0" title="행 수 / 고유 수"><input type="checkbox" id="s-dup" style="width:auto"> 중복도</label>
         <label class="hint" style="margin:0" title="중앙값과 평균-중앙값 괴리율"><input type="checkbox" id="s-gap" style="width:auto"> 괴리율</label>
-        <label class="hint" style="margin:0"><input type="checkbox" id="s-quant" style="width:auto"> 분위수</label><input id="s-ps" placeholder="분위" title="쉼표로 나눈 0과 1 사이 수예요" style="flex:0 1 150px">
-        <label class="hint" style="margin:0"><input type="checkbox" id="s-zero" style="width:auto"> 0 제외</label><input id="s-above" type="number" step="any" placeholder="경계" title="이 값을 넘는 행만 세요" style="flex:0 1 80px">
-        <select id="scol-add" title="집계할 컬럼을 골라요. 고르지 않으면 모든 컬럼을 집계해요" style="flex:0 1 200px"></select>
+        <label class="hint" style="margin:0"><input type="checkbox" id="s-quant" style="width:auto"> 분위수</label><input id="s-ps" placeholder="분위" title="쉼표로 나눈 0과 1 사이 수예요" style="flex:0 1 9.375rem">
+        <label class="hint" style="margin:0"><input type="checkbox" id="s-zero" style="width:auto"> 0 제외</label><input id="s-above" type="number" step="any" placeholder="경계" title="이 값을 넘는 행만 세요" style="flex:0 1 5rem">
+        <select id="scol-add" title="집계할 컬럼을 골라요. 고르지 않으면 모든 컬럼을 집계해요" style="flex:0 1 12.5rem"></select>
         <div class="chips" id="scols"></div>
       </div>
       <div class="hint" id="hashed-note-s"></div>
       <div class="err" id="err-summary"></div>
       <div class="table-wrap" id="summary"></div>
-      <div class="ctl" style="margin-top:10px"><span class="hint grow">집계 표 내보내기</span>
-        <select id="simage" title="그림의 색 모드예요. 차트 그림과 함께 바뀌어요" style="flex:0 0 100px"><option value="light">밝게</option><option value="dark">어둡게</option></select>
+      <div class="ctl" style="margin-top:.625rem"><span class="hint grow">집계 표 내보내기</span>
+        <select id="simage" title="그림의 색 모드예요. 차트 그림과 함께 바뀌어요" style="flex:0 0 6.25rem"><option value="light">밝게</option><option value="dark">어둡게</option></select>
         <button data-table="png" class="btn">PNG</button><button data-table="jpeg" class="btn">JPG</button>
-        <select id="ssend" title="집계 표를 받을 곳" style="flex:0 1 160px"></select><button id="ssend-go" class="btn">보내기</button></div>
-      <div class="ctl" style="margin-top:14px" title="행 컬럼으로 묶고, 열 컬럼의 값마다 칸을 만들어요(최대 30개). 조건을 넣으면 그 행만 세요">
+        <select id="ssend" title="집계 표를 받을 곳" style="flex:0 1 10rem"></select><button id="ssend-go" class="btn">보내기</button></div>
+      <div class="ctl" style="margin-top:.875rem" title="행 컬럼으로 묶고, 열 컬럼의 값마다 칸을 만들어요(최대 30개). 조건을 넣으면 그 행만 세요">
         <span class="hint" style="margin:0; flex:none">피벗</span>
-        <div class="cf" style="flex:0 1 150px"><span class="cl">행</span><select id="pv-rows" title="행으로 묶을 컬럼이에요. 값마다 한 줄이 돼요"></select></div>
-        <div class="cf" style="flex:0 1 150px"><span class="cl">둘째 행</span><select id="pv-rows2" title="둘째 행 기준 컬럼이에요. 부모 대비 비중에 필요해요"></select></div>
-        <div class="cf" style="flex:0 1 150px"><span class="cl">열</span><select id="pv-col" title="열로 펼칠 컬럼이에요. 값마다 한 칸이 돼요"></select></div>
+        <div class="cf" style="flex:0 1 9.375rem"><span class="cl">행</span><select id="pv-rows" title="행으로 묶을 컬럼이에요. 값마다 한 줄이 돼요"></select></div>
+        <div class="cf" style="flex:0 1 9.375rem"><span class="cl">둘째 행</span><select id="pv-rows2" title="둘째 행 기준 컬럼이에요. 부모 대비 비중에 필요해요"></select></div>
+        <div class="cf" style="flex:0 1 9.375rem"><span class="cl">열</span><select id="pv-col" title="열로 펼칠 컬럼이에요. 값마다 한 칸이 돼요"></select></div>
         <div class="cf"><span class="cl">집계</span><span id="pv-how" title="집계 방법"></span></div>
-        <div class="cf" style="flex:0 1 150px"><span class="cl">값 컬럼</span><select id="pv-val" title="집계할 값 컬럼이에요. 개수만 셀 때는 비워 두세요"></select></div>
-        <input id="pv-where" placeholder="셀 행의 조건 (예: 상태 = 완료)" style="flex:1 1 160px" title="비우면 모든 행을 세요">
-        <div class="cf" style="flex:0 0 150px"><span class="cl">소계</span><select id="pv-sub" title="행 컬럼이 있으면 소계와 총계 줄을 더해요"><option value="">소계 없이</option><option value="rollup">소계와 총계 (ROLLUP)</option><option value="cube">모든 조합 (CUBE)</option></select></div>
-        <input id="pv-having" placeholder="집계 결과로 거르기 (예: 전체 합계 > 100)" style="flex:1 1 160px" title="집계한 결과로 걸러요 (HAVING)">
-        <div class="cf" style="flex:0 0 130px"><span class="cl">칸 표시</span><select id="pv-show" title="칸에 보일 것이에요. 비율은 행 합계나 열 합계에서 차지하는 몫이에요"></select></div>
+        <div class="cf" style="flex:0 1 9.375rem"><span class="cl">값 컬럼</span><select id="pv-val" title="집계할 값 컬럼이에요. 개수만 셀 때는 비워 두세요"></select></div>
+        <input id="pv-where" placeholder="셀 행의 조건 (예: 상태 = 완료)" style="flex:1 1 10rem" title="비우면 모든 행을 세요">
+        <div class="cf" style="flex:0 1 9.375rem"><span class="cl">소계</span><select id="pv-sub" title="행 컬럼이 있으면 소계와 총계 줄을 더해요"><option value="">소계 없이</option><option value="rollup">소계와 총계 (ROLLUP)</option><option value="cube">모든 조합 (CUBE)</option></select></div>
+        <input id="pv-having" placeholder="집계 결과로 거르기 (예: 전체 합계 > 100)" style="flex:1 1 10rem" title="집계한 결과로 걸러요 (HAVING)">
+        <div class="cf" style="flex:0 1 9.375rem"><span class="cl">칸 표시</span><select id="pv-show" title="칸에 보일 것이에요. 비율은 행 합계나 열 합계에서 차지하는 몫이에요"></select></div>
         <button id="pv-add" class="btn" title="값을 하나 더 집계해요">+ 값 추가</button>
         <button id="pv-run" class="btn">피벗 만들기</button></div>
       <div class="ctl" title="미리 짜 둔 집계 묶음이에요. 고르면 위의 집계·값 컬럼·[+ 값 추가]는 쓰지 않아요">
-        <div class="cf" style="flex:0 1 150px"><span class="cl">집계 묶음</span><select id="pv-preset"></select></div>
-        <div class="cf" style="flex:0 1 150px"><span class="cl">기준</span><select id="pv-key" title="기준(key) 컬럼이에요"></select></div>
-        <div class="cf" style="flex:0 1 150px"><span class="cl">값</span><select id="pv-target" title="값(target) 컬럼이에요. 숫자 컬럼이어야 해요"></select></div>
-        <input id="pv-ps" placeholder="분위 (예: 0.25, 0.5, 0.9)" title="쉼표로 나눈 0과 1 사이 수예요" style="flex:0 1 180px">
-        <input id="pv-above" type="number" step="any" placeholder="경계" title="이 값을 넘는 행만 따로 세요" style="flex:0 1 90px">
+        <div class="cf" style="flex:0 1 9.375rem"><span class="cl">집계 묶음</span><select id="pv-preset"></select></div>
+        <div class="cf" style="flex:0 1 9.375rem"><span class="cl">기준</span><select id="pv-key" title="기준(key) 컬럼이에요"></select></div>
+        <div class="cf" style="flex:0 1 9.375rem"><span class="cl">값</span><select id="pv-target" title="값(target) 컬럼이에요. 숫자 컬럼이어야 해요"></select></div>
+        <input id="pv-ps" placeholder="분위 (예: 0.25, 0.5, 0.9)" title="쉼표로 나눈 0과 1 사이 수예요" style="flex:0 1 9.375rem">
+        <input id="pv-above" type="number" step="any" placeholder="경계" title="이 값을 넘는 행만 따로 세요" style="flex:0 1 5.625rem">
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-share" checked style="width:auto"> 전체 대비 비중</label>
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-parent" style="width:auto"> 부모 대비 비중</label>
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-total" style="width:auto"> 총계 줄</label>
         <label class="hint" style="margin:0"><input type="checkbox" id="pv-pareto" style="width:auto"> 파레토 누적</label>
-        <div class="cf" style="flex:0 1 150px"><span class="cl">전환율</span><select id="pv-convert" title="값 칸끼리의 전환율을 더해요"></select></div></div>
+        <div class="cf" style="flex:0 1 9.375rem"><span class="cl">전환율</span><select id="pv-convert" title="값 칸끼리의 전환율을 더해요"></select></div></div>
       <div class="ctl" id="pv-extra"></div>
       <div class="err" id="err-pivot"></div>
       <div class="table-wrap" id="pivot"></div>
-      <div class="ctl" style="margin-top:14px" title="테이블마다 날짜 컬럼으로 기간을 묶어 건수·고유 개수·합계를 한 표에 나란히 놓아요. 검색 조건은 넣지 않아요">
+      <div class="ctl" style="margin-top:.875rem" title="테이블마다 날짜 컬럼으로 기간을 묶어 건수·고유 개수·합계를 한 표에 나란히 놓아요. 검색 조건은 넣지 않아요">
         <span class="hint" style="margin:0; flex:none">기간별 표</span>
-        <select id="pt-unit" title="기간 단위" style="flex:0 0 90px"><option value="day">일</option><option value="week">주</option><option value="month" selected>월</option><option value="quarter">분기</option><option value="year">연</option></select>
-        <input id="pt-period" placeholder="기간 (예: 2025-01-01 ~ 2025-06-30, 비우면 전체)" style="flex:1 1 220px" aria-label="기간별 표의 기간"><button id="pt-cal" class="btn" title="첫 줄 테이블의 날짜 컬럼 범위에서 기간을 골라요">달력</button>
-        <select id="pt-show" title="값 옆에 함께 보일 비율이에요" style="flex:0 0 150px"><option value="value">값만</option><option value="share" selected>비중 % 함께</option><option value="change">전 기간 대비 % 함께</option></select>
+        <select id="pt-unit" title="기간 단위" style="flex:0 0 5.625rem"><option value="day">일</option><option value="week">주</option><option value="month" selected>월</option><option value="quarter">분기</option><option value="year">연</option></select>
+        <input id="pt-period" placeholder="기간 (예: 2025-01-01 ~ 2025-06-30, 비우면 전체)" style="flex:1 1 13.75rem" aria-label="기간별 표의 기간"><button id="pt-cal" class="btn" title="첫 줄 테이블의 날짜 컬럼 범위에서 기간을 골라요">달력</button>
+        <select id="pt-show" title="값 옆에 함께 보일 비율이에요" style="flex:0 0 9.375rem"><option value="value">값만</option><option value="share" selected>비중 % 함께</option><option value="change">전 기간 대비 % 함께</option></select>
         <label class="hint" style="margin:0" title="표 끝에 합계 줄을 더해요. 고유 개수는 전체에서 다시 세요"><input type="checkbox" id="pt-total" style="width:auto"> 합계 줄</label>
         <button id="pt-add" class="btn">+ 테이블</button><button id="pt-run" class="btn">기간별 표 만들기</button><button id="pt-csv" class="btn" title="기간별 표를 CSV 파일로 저장해요">CSV</button></div>
       <div id="pt-tables"></div>
@@ -244,14 +245,16 @@
       <div class="grip-y" data-size="summary" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div>
     </section>
     <section class="pane hidden" id="pane-chart" data-adv>
-      <p class="lead">값을 그림으로 봐요. X축과 Y축을 고르고 [차트 그리기]를 누르세요.</p>
+      <p class="lead">값을 그림으로 봐요. X축과 Y축을 고르면 바로 그려요. 그림을 한 번 누르면 휠로 확대하고 끌어서 옮길 수 있어요(3차원 그림은 끌면 돌아가요).</p>
       <details class="shelf-box adv" id="shelf-box"><summary class="hint" title="컬럼 칩을 X축, 값, 색, 필터 칸에 끌어다 놓으면 차트가 바로 바뀌어요. 칩을 누른 뒤 칸을 눌러도 돼요">컬럼을 끌어다 놓아 차트 만들기</summary><div id="shelf-host"></div></details>
       <div class="ctl lab">
         <div class="cf"><span class="cl">X축</span><select id="cx" title="X축 컬럼"></select></div><button id="cswap" class="btn adv" title="X축과 Y축 컬럼을 서로 바꾸고 다시 그려요" aria-label="X축과 Y축 바꾸기">↔</button>
         <div class="cf"><span class="cl">Y축</span><select id="cy" title="Y축 컬럼이에요. 개수만 셀 때는 비워 두세요"></select></div>
+        <div class="cf hidden" id="cz-box"><span class="cl">Z축</span><select id="cz" title="3차원 산점도의 높이(Z축)로 쓸 숫자 컬럼이에요"></select></div>
         <div class="cf wide"><span class="cl">계산</span><span id="cagg" title="집계 방법이에요. 고른 집계에 따라 칸이 더 나와요"></span></div>
-        <div class="cf"><span class="cl">종류</span><select id="ctype" title="그래프 모양"><option value="bar">막대</option><option value="line">선</option></select></div>
-        <button id="draw">차트 그리기</button>
+        <div class="cf"><span class="cl">종류</span><select id="ctype" title="그래프 모양이에요. 3차원 막대·곡면은 [나누기]나 계열이 둘 이상, 3차원 산점도는 숫자 컬럼 셋(X축·Y축·Z축)이 필요해요"><option value="bar">막대</option><option value="line">선</option></select></div>
+        <label class="hint hidden" id="cconnect-box" style="margin:0" title="[나누기]의 값마다(없으면 전체) 점을 받은 차례대로 선으로 이어요"><input type="checkbox" id="cconnect" style="width:auto"> 점 잇기</label>
+        <button id="draw" title="지금 칸대로 다시 조회해 그려요. 칸을 바꾸면 누르지 않아도 바로 그려요">차트 그리기</button>
         <button id="dash-add" class="btn" title="지금 그린 차트를 대시보드에 넣어요">대시보드에 추가</button>
       </div>
       <div data-adv-slot></div>
@@ -270,11 +273,11 @@
       <div class="err" id="err-chart"></div>
       <div class="chart-box"><iframe id="chart" src="/chart" title="차트" class="hidden"></iframe><div class="grip-y" data-size="chart" title="끌어서 높이를 바꿔요. 두 번 누르면 기본 높이로 돌아가요"></div></div>
       <div class="table-wrap hidden" id="ctable"></div>
-      <div class="ctl adv" style="margin-top:18px"><button id="ctable-show" class="btn">표로 보기</button><button id="ctable-csv" class="btn">CSV</button><span class="hint grow">차트 내보내기</span>
+      <div class="ctl adv" style="margin-top:1.125rem"><button id="ctable-show" class="btn">표로 보기</button><button id="ctable-csv" class="btn">CSV</button><span class="hint grow">차트 내보내기</span>
         <label class="hint" style="margin:0" title="끄면 화면에 보이는 그대로, 켜면 자동 규칙을 풀어 모든 데이터로 CSV·그림을 저장해요"><input type="checkbox" id="cexport-all" style="width:auto"> 모든 데이터 포함</label>
-        <select id="cimage" title="그림의 색 모드예요. 집계 표 그림과 함께 바뀌어요" style="flex:0 0 100px"><option value="light">밝게</option><option value="dark">어둡게</option></select>
+        <select id="cimage" title="그림의 색 모드예요. 집계 표 그림과 함께 바뀌어요" style="flex:0 0 6.25rem"><option value="light">밝게</option><option value="dark">어둡게</option></select>
         <button data-image="png" class="btn">PNG</button><button data-image="jpeg" class="btn">JPG</button>
-        <select id="csend" title="차트를 받을 곳" style="flex:0 1 160px"></select><button id="csend-go" class="btn">보내기</button></div>
+        <select id="csend" title="차트를 받을 곳" style="flex:0 1 10rem"></select><button id="csend-go" class="btn">보내기</button></div>
       <details class="axis-box adv"><summary class="hint">세로축 최소·최대</summary>
       <div class="ctl">
         <span class="hint">왼쪽 축</span>
@@ -311,10 +314,10 @@
         <div class="edx">
           <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap"></span><button id="conn-open" class="btn">연결 바꾸기</button></div>
           <div id="table-box" class="hidden">
-            <div class="hint" style="margin-top:8px" title="조인할 때 왼쪽이 되는 테이블이에요">기준 테이블</div>
-            <select id="schema" class="hidden" style="margin-bottom:6px"></select>
+            <div class="hint" style="margin-top:.5rem" title="조인할 때 왼쪽이 되는 테이블이에요">기준 테이블</div>
+            <select id="schema" class="hidden" style="margin-bottom:.375rem"></select>
             <select id="base"></select>
-            <div class="cols" id="cols" style="margin-top:6px"></div>
+            <div class="cols" id="cols" style="margin-top:.375rem"></div>
           </div>
         </div></div>
       <div id="after-connect" class="hidden">
@@ -322,8 +325,8 @@
         <div class="step adv" data-step="union"><div class="sp" data-hint><i>2</i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="7" rx="1"/><rect x="4" y="14" width="16" height="7" rx="1"/></svg><span class="t" title="같은 모양의 테이블을 아래로 이어 붙여요">행 합치기</span><b id="sum-union"></b><span class="c"></span></div>
           <div class="edx">
             <div class="hint" title="교집합과 차집합은 행을 고르기만 해서 출처 컬럼이 없어요">컬럼이 같은 테이블의 행을 기준 테이블 아래에 붙여요. 어느 테이블의 행인지는 '출처' 컬럼에 나와요.</div>
-            <select id="u-how" style="margin-bottom:6px"><option value="left">기준 테이블의 컬럼을 모두 (없으면 빈 값)</option><option value="inner">모든 테이블에 있는 컬럼만</option><option value="intersect">모든 테이블에 같이 있는 행만 (교집합)</option><option value="except">기준 테이블에만 있는 행만 (차집합)</option></select>
-            <div class="chips open" id="u-chips" style="margin-bottom:6px"></div>
+            <select id="u-how" style="margin-bottom:.375rem"><option value="left">기준 테이블의 컬럼을 모두 (없으면 빈 값)</option><option value="inner">모든 테이블에 있는 컬럼만</option><option value="intersect">모든 테이블에 같이 있는 행만 (교집합)</option><option value="except">기준 테이블에만 있는 행만 (차집합)</option></select>
+            <div class="chips open" id="u-chips" style="margin-bottom:.375rem"></div>
             <select id="u-add"></select>
             <div class="err" id="err-union"></div>
           </div></div>
@@ -343,13 +346,13 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
             <div class="row pick span-row"><select id="per-col" title="기간을 걸 날짜 컬럼" aria-label="기간을 걸 날짜 컬럼"></select><button id="per-cal" class="btn" title="달력에서 시작 날과 끝 날을 차례로 눌러 기간을 넣어요(고른 날짜 컬럼에 있는 날 안에서)">시작 날짜</button><span>~</span><button id="per-end" class="btn" title="달력에서 시작 날과 끝 날을 차례로 눌러 기간을 넣어요">끝 날짜</button></div>
             <div class="hint direct">예: 주문일 2025-07-01 ~ 2025-09-30. 시작이나 끝 한쪽은 비워도 돼요. <code>날짜컬럼 최근 7일</code> / <code>지난달</code>도 돼요.</div><div id="periods"></div>
             <details class="more"><summary>데이터가 가장 많은 기간 찾기</summary>
-            <div class="row" style="margin-top:6px"><select id="pk-col" title="날짜 컬럼(기준 테이블)" aria-label="기간을 찾을 날짜 컬럼"></select><select id="pk-unit" title="기간 길이" aria-label="기간 길이"><option value="day">1일</option><option value="week">1주(월요일부터)</option><option value="month" selected>1달</option></select><button id="peak-find" class="btn" title="고른 기간 길이로 나눠 건수가 가장 많은 기간 5개를 기준 테이블 전체로 찾아요(조인·조건은 넣지 않아요). 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="가장 많은 기간 찾기">가장 많은 기간 찾기</button></div>
+            <div class="row" style="margin-top:.375rem"><select id="pk-col" title="날짜 컬럼(기준 테이블)" aria-label="기간을 찾을 날짜 컬럼"></select><select id="pk-unit" title="기간 길이" aria-label="기간 길이"><option value="day">1일</option><option value="week">1주(월요일부터)</option><option value="month" selected>1달</option></select><button id="peak-find" class="btn" title="고른 기간 길이로 나눠 건수가 가장 많은 기간 5개를 기준 테이블 전체로 찾아요(조인·조건은 넣지 않아요). 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="가장 많은 기간 찾기">가장 많은 기간 찾기</button></div>
             <div id="pk-list"></div><div class="err" id="err-peak"></div></details></div></div>
         <div class="cn"></div>
         <div class="step" data-step="conditions"><div class="sp" data-hint><i>5</i><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg><span class="t" title="원하는 행만 남겨요">조건</span><b id="sum-conditions"></b><span class="c"></span></div>
           <div class="edx">
             <div id="cond" class="fields">
-              <div class="tabs" style="margin-bottom:6px">
+              <div class="tabs" style="margin-bottom:.375rem">
                 <label><input type="radio" name="cmode" value="fields" checked style="width:auto"> 골라서 넣기</label>
                 <label><input type="radio" name="cmode" value="line" style="width:auto"> 직접 쓰기</label>
                 <span class="seg2" id="bmode" title="오른쪽에 값을 쓸지, 다른 컬럼과 견줄지 골라요(컬럼으로 찾기: 두 컬럼의 값이 같은 행 등)"><label><input type="radio" name="bmode" value="value" checked> 값으로 찾기</label><label><input type="radio" name="bmode" value="column"> 컬럼으로 찾기</label></span>
@@ -379,7 +382,7 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
           <div class="edx">
             <div class="row pick one"><select id="col-pick" aria-label="보일 컬럼 고르기"></select><button id="col-pick-add" class="btn">더하기</button></div>
             <div class="hint direct">예: 이름, 금액.</div><div class="hint">비우면 모든 컬럼이 보여요.</div><div id="columns"></div></div></div>
-        <div data-adv-slot style="padding-top:8px"></div>
+        <div data-adv-slot style="padding-top:.5rem"></div>
       </div>
     </div></div>
     <div class="hint scan-hint" id="scan-hint" title="검색하지 않고 미리 센 값이에요. BigQuery는 요금 없는 dry run으로 정확히 세고, 나머지는 파일 정보와 통계로 어림해요"></div>
@@ -426,11 +429,11 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
     <div class="sc">
       <h2>저장한 SQL</h2>
       <select id="sql-saved" title="고르면 편집기에 불러와요. 실행은 하지 않아요. 많이 불러온 순이에요"></select>
-      <div class="row" style="margin-top:6px"><input id="sql-name" placeholder="이름 (비우면 덮어써요)"><button id="sql-save" class="btn">저장</button><button id="sql-del" class="btn">삭제</button></div>
+      <div class="row" style="margin-top:.375rem"><input id="sql-name" placeholder="이름 (비우면 덮어써요)"><button id="sql-save" class="btn">저장</button><button id="sql-del" class="btn">삭제</button></div>
       <h2>가상 테이블</h2>
       <div class="hint" title="SQL 탭과 탐색 탭의 테이블 목록에서 테이블처럼 쓸 수 있어요. Parquet 파일에도 이름을 붙일 수 있어요. 이 연결에서만 써요. 많이 쓴 순이에요">자주 쓰는 SQL에 이름을 붙여 테이블처럼 골라 써요. DB는 바뀌지 않아요.</div>
       <div id="vt-list"></div>
-      <div class="row" style="margin-top:6px"><input id="vt-name" placeholder="가상 테이블 이름"><button id="vt-save-sql" class="btn" title="편집기의 SQL을 이 이름의 가상 테이블로 저장해요">편집기 SQL로 저장</button></div>
+      <div class="row" style="margin-top:.375rem"><input id="vt-name" placeholder="가상 테이블 이름"><button id="vt-save-sql" class="btn" title="편집기의 SQL을 이 이름의 가상 테이블로 저장해요">편집기 SQL로 저장</button></div>
       <div class="row"><input id="vt-path" placeholder="Parquet 파일 경로 (DuckDB, 파일 연결)"><button id="vt-save-pq" class="btn">파일로 저장</button></div>
       <div class="err" id="err-vt"></div>
       <h2>테이블</h2>
@@ -444,9 +447,9 @@ semi는 짝이 있는 행만, anti는 짝이 없는 행만 남겨요(오른쪽 �
 <div class="work hidden" id="metv">
   <main class="results">
     <div class="tool"><span class="hint" id="met-on" style="margin:0; flex:1 1 100%"></span>
-      <select id="met-pcol" title="기간을 걸 날짜 컬럼이에요. 날짜 컬럼이 하나면 비워 둬도 돼요" style="flex:0 1 150px; width:auto"></select>
-      <input id="met-period" placeholder="기간 (예: 2025-03-01 ~ 2025-03-31)" title="비우면 탐색의 조건 그대로 구해요" aria-label="지표 기간" style="flex:0 1 240px; width:auto"><button id="met-cal" class="btn" title="날짜 컬럼에 있는 날 안에서 기간을 골라요">달력</button>
-      <select id="met-cmp" title="같은 지표를 견줄 기간이에요. 기간을 넣어야 해요" style="flex:0 1 170px; width:auto"><option value="">비교 안 함</option><option value="prev">지난 기간</option><option value="same_weekday">같은 요일 지난 기간</option><option value="yoy">작년 같은 기간</option><option value="mom">한 달 전 같은 기간</option><option value="wow">한 주 전 같은 기간</option></select>
+      <select id="met-pcol" title="기간을 걸 날짜 컬럼이에요. 날짜 컬럼이 하나면 비워 둬도 돼요" style="flex:0 1 9.375rem; width:auto"></select>
+      <input id="met-period" placeholder="기간 (예: 2025-03-01 ~ 2025-03-31)" title="비우면 탐색의 조건 그대로 구해요" aria-label="지표 기간" style="flex:0 1 15rem; width:auto"><button id="met-cal" class="btn" title="날짜 컬럼에 있는 날 안에서 기간을 골라요">달력</button>
+      <select id="met-cmp" title="같은 지표를 견줄 기간이에요. 기간을 넣어야 해요" style="flex:0 1 10.625rem; width:auto"><option value="">비교 안 함</option><option value="prev">지난 기간</option><option value="same_weekday">같은 요일 지난 기간</option><option value="yoy">작년 같은 기간</option><option value="mom">한 달 전 같은 기간</option><option value="wow">한 주 전 같은 기간</option></select>
       <button id="met-dash" class="btn" title="지금 구한 지표를 그래프로 대시보드에 넣어요">대시보드에 추가</button></div>
     <div class="big"><b id="met-big">지표를 고르세요</b><span id="met-sub">지표는 '매출 합계'처럼 이름을 붙여 둔 계산이에요. 오른쪽 목록에서 지표를 누르면 바로 구해요.</span></div>
     <div class="err" id="err-met"></div>
@@ -492,7 +495,7 @@ function confirmBox(title, text, ok) {
   return new Promise(done => {
     const close = v => () => { box.remove(); done(v); };
     const box = el("div", { className: "modal", onclick: e => { if (e.target === box) close(false)(); } }, el("div", { className: "modal-box" }, el("h3", { id: "ask-title", textContent: title }),
-      el("p", { textContent: text, style: "white-space:pre-wrap; margin:10px 0 14px" }), el("div", { className: "row", style: "justify-content:flex-end" },
+      el("p", { textContent: text, style: "white-space:pre-wrap; margin:.625rem 0 .875rem" }), el("div", { className: "row", style: "justify-content:flex-end" },
         el("button", { className: "ghost", textContent: "취소", onclick: close(false) }), el("button", { className: "btn p", textContent: ok, onclick: close(true) }))));
     box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "ask-title");
     document.body.append(box);
@@ -689,6 +692,7 @@ function fillGroupCols() {
   $("cx").value = names.includes(x) ? x : bestX(S.cols.filter(c => names.includes(c[0])));
   fill($("csplit"), names, "나누지 않음");
   if (names.includes(split)) $("csplit").value = split;
+  keepFill($("cz"), S.cols.filter(c => names.includes(c[0]) && shelfKind(c[1]) === "num").map(c => c[0]), "Z축 없음");  // 3차원 산점도의 Z축은 숫자 컬럼만
   hashedNote($("hashed-note-c"), S.hashed, hidden, fillGroupCols);
   showUnit();
 }
@@ -979,7 +983,7 @@ function stepMode(key, mode) {
 }
 for (const key of STEP_MODES) {
   const tab = (mode, label) => el("label", {}, el("input", { type: "radio", name: `mode-${key}`, value: mode, style: "width:auto", onchange: () => stepMode(key, mode) }), ` ${label}`);
-  document.querySelector(`[data-step=${key}] .edx`).prepend(el("div", { className: "tabs", style: "margin-bottom:6px" }, tab("pick", "골라서 넣기"), tab("line", "직접 쓰기")));
+  document.querySelector(`[data-step=${key}] .edx`).prepend(el("div", { className: "tabs", style: "margin-bottom:.375rem" }, tab("pick", "골라서 넣기"), tab("line", "직접 쓰기")));
   stepMode(key, "pick");
 }
 
@@ -1616,7 +1620,14 @@ const axisRanges = () => ({ y: axisRange("ymin", "ymax"), y1: axisRange("y1min",
 ["ymin", "ymax", "y1min", "y1max"].forEach(id => $(id).oninput = () => { $("err-chart").textContent = rangeError(); drawChart(); });  // 다시 조회하지 않고 바로 반영
 // 계열: 차트에 겹쳐 그릴 값 하나하나. 넣어 둔 것이 없으면 지금 고른 칸의 내용이 계열 하나가 된다.
 let series = [];
-const seriesNow = () => ({ y: $("cy").value, ...pickers.chart.get(), type: $("ctype").value, dash: $("cdash").value, axis: $("caxis").value });
+// [종류]의 3차원 그래프(서버 dash.three_types, 이름은 dash.types): 3차원 막대·곡면은 계열 그림(X × 계열·나누기 × 값), 3차원 산점도는 점(X축·Y축·Z축 숫자 컬럼 셋, /api/chart/points의 [크기] 열이 Z).
+// 3차원을 고른 동안 새 계열의 모양은 막대다(미리 넣어 둔 선 계열은 곡면 위의 선으로 그린다).
+const THREE_D = SERVER.dash.three_types, POINTS_3D = THREE_D.at(-1), SERIES_BAR = "bar";
+THREE_D.forEach(k => $("ctype").add(new Option(SERVER.dash.types[k], k)));
+const kind3d = () => THREE_D.includes($("ctype").value) ? $("ctype").value : "";
+const seriesType = () => kind3d() ? SERIES_BAR : $("ctype").value;
+const show3d = () => ["cz-box", "cconnect-box"].forEach(id => $(id).classList.toggle("hidden", kind3d() !== POINTS_3D));  // Z축·점 잇기는 3차원 산점도에서만
+const seriesNow = () => ({ y: $("cy").value, ...pickers.chart.get(), type: seriesType(), dash: $("cdash").value, axis: $("caxis").value });
 function showSeries() {
   $("series").innerHTML = series.map((s, i) => `<li><span>${esc(seriesTitle(s))} <span class="hint">${s.type === "bar" ? "막대" : s.dash === "dashed" ? "점선" : "선"}, ${s.axis === "right" ? "오른쪽 축" : "왼쪽 축"}</span></span>` +
     `<button class="ghost" data-series="${i}" title="빼기">×</button></li>`).join("");
@@ -1629,9 +1640,10 @@ $("series-add").onclick = () => {
   $("err-chart").textContent = "";
   showSeries();
 };
-$("ctype").onchange = () => { $("cdash").disabled = $("ctype").value === "bar"; redraw(); };  // 막대에는 선 모양이 없다.
+$("ctype").onchange = () => { $("cdash").disabled = seriesType() === SERIES_BAR; show3d(); redraw(); };  // 막대에는 선 모양이 없다.
 $("cx").onchange = () => { showUnit(); redraw(); };
-["cunit", "csplit", "cy", "cdash", "caxis"].forEach(id => $(id).onchange = redraw);
+["cunit", "csplit", "cy", "cz", "cdash", "caxis"].forEach(id => $(id).onchange = redraw);
+$("cconnect").onchange = () => drawChart();  // 점 잇기는 조회 없이 섬이 다시 그린다
 // 정렬 다섯 가지: 값·차례는 서버(SERVER.dash.orders), 보이는 이름도 서버(SERVER.dash.order_names). 받은 그룹이 다 있으면 조회 없이 다시 그리고, 서버가 50개로 잘랐으면 고르는 50개가 달라지므로 다시 조회한다.
 const ORDER_DEFAULT = "auto";
 $("corder").replaceChildren(...SERVER.dash.orders.map(k => new Option(SERVER.dash.order_names[k], k)));
@@ -1652,16 +1664,15 @@ const shelf = shelfPanel({
   state: () => ({ x: $("cx").value, split: $("csplit").value, series: series.map(s => ({ y: s.y || null, agg: s.agg })), conditions: S.conditions.map(text) }),
   say: t => { $("err-chart").textContent = t; },
   change: async (next, why) => {
-    const now = shelf.now();
     $("cx").value = next.x || "";
     $("csplit").value = next.split || "";
-    series = next.series.map((s, i) => { const old = series.find(o => (o.y || null) === s.y && o.agg === s.agg) ?? null; return old ?? { y: s.y ?? "", agg: s.agg, type: $("ctype").value, dash: $("cdash").value, axis: "left" }; });
+    series = next.series.map((s, i) => { const old = series.find(o => (o.y || null) === s.y && o.agg === s.agg) ?? null; return old ?? { y: s.y ?? "", agg: s.agg, type: seriesType(), dash: $("cdash").value, axis: "left" }; });
     showSeries();
     if (next.conditions.length > S.conditions.length) await addItem("conditions", next.conditions.at(-1), $("err-chart"));
     else if (next.conditions.length < S.conditions.length) { for (let i = S.conditions.length - 1; i >= 0; i--) if (!next.conditions.includes(text(S.conditions[i]))) dropItem(S.conditions, i); renderList("conditions"); }
     shelf.refresh();
-    if ($("cx").value && (series.length || now.series.length)) $("draw").click();
     $("err-chart").textContent = $("err-chart").textContent || `${why} 반영했어요.`;
+    redraw();  // 그릴 수 있으면 바로(그리는 중이면 끝난 뒤 한 번 더)
   } });
 $("shelf-host").append(shelf.el);
 $("shelf-box").addEventListener("toggle", () => shelf.refresh());
@@ -1679,8 +1690,18 @@ const xRank = ([, type]) => String(type).startsWith("날짜") ? 0 : type === "�
 const bestX = cols => [...cols].sort((a, b) => xRank(a) - xRank(b))[0]?.[0] ?? "";
 const dateX = () => String(S.cols.find(c => c[0] === $("cx").value)?.[1] ?? "").startsWith("날짜");  // X가 날짜·시각 컬럼인가
 const showUnit = () => $("cunit-box").classList.toggle("hidden", !dateX());  // [묶기]는 날짜·시각 X에서만
-// 차트가 이미 그려져 있을 때만, 설정이 바뀌면 바로 다시 그린다
-function redraw() { if (drawn && !$("draw").disabled) $("draw").click(); }
+// 칸(X축·Y축·Z축·계산·종류·나누기·묶기)이나 선반이 바뀌면 [차트 그리기]를 누르지 않아도 바로 그린다. 탭을 열기만 해서는 그리지 않는다(DB 조회 비용).
+// 그릴 수 있을 때만: 테이블을 골랐고 X가 있고, 넣어 둔 계열이 없으면 지금 집계가 Y를 요구할 때 Y가 있어야 한다. 3차원 산점도는 숫자 컬럼 셋이 아니면 이유를 보이고 조회하지 않는다.
+// 그리는 중([차트 그리기]가 잠긴 동안)에 또 바뀌면 끝난 뒤 한 번 더 그린다. 그냥 버리면 빨리 잇달아 놓은 두 번째 컬럼이 그림에서 빠진다.
+let drawAgain = false;
+function redraw() {
+  const points = kind3d() === POINTS_3D;
+  if (!S.base || !$("cx").value || (!points && !series.length && pickers.chart.yMode() === "required" && !$("cy").value)) return;
+  if (points && pointsWhy()) { $("err-chart").textContent = pointsWhy(); return; }
+  if ($("draw").disabled) { drawAgain = true; return; }
+  $("draw").click();
+}
+const pointsWhy = () => scatter3dReason($("cx").value, $("cy").value, $("cz").value, S.cols);  // 3차원 산점도를 그릴 수 없는 이유(dash_shelf.js)
 const RATIOS = { square: 1, wide: 16 / 9 };  // 자동이면 섬이 그룹 수로 정한다(autoRatio)
 const autoRatio = groups => 1 + (RATIOS.wide - 1) * Math.min(1, Math.max(0, (groups - 5) / 20));  // 섬(web/lib/island.ts)과 같은 자동 비율: 그룹 5개 이하 1:1 ~ 25개 이상 16:9
 $("clabels").oninput = () => drawChart();
@@ -1693,8 +1714,9 @@ function drawChart() {
   groupPanel();
   if (!drawn) return;
   const ratio = RATIOS[$("cratio").value], shown = chartMerged ?? drawn;  // 서버가 다시 구한 값(범위 묶기 또는 고른 그룹·범위로 거른 값)이 있으면 그 값
+  if (drawn.points) return chartDraw({ kind: "points", payload: drawn.points, opts: { type: POINTS_3D, connect: $("cconnect").checked, z: drawn.z, ...(ratio ? { ratio } : {}) } });  // 3차원 산점도
   chartDraw({ kind: "series", payload: { labels: shown.labels, datasets: islandSets(shown.datasets) },
-    opts: { type: "", ranges: axisRanges(), relabel: $("clabels").value, ...(ratio ? { ratio } : {}),
+    opts: { type: drawn.kind3 ?? "", ranges: axisRanges(), relabel: $("clabels").value, ...(ratio ? { ratio } : {}),
       auto: chartAuto, scale: $("cscale").value || undefined, order: $("corder").value, all: $("call").checked, aggs: drawn.used.map(s => s.agg), rest: (chartMerged && !chartMerged.merged ? chartMerged : drawn).rest ?? null,
       x_kind: xKind(drawn.x), x_scale: drawn.x_scale, x_levels: drawn.x_levels, x: drawn.x,
       ...(Object.keys(chartGroups).length ? { groups: chartGroups } : {}), ...(chartMerged?.merged ? { merged: true } : {}) } });
@@ -1706,6 +1728,7 @@ const chartKey = q => JSON.stringify({ ...q, order: undefined });  // 이것이 
 document.addEventListener("pointerup", () => { const d = dragging; dragging = null; d?.done(); });
 async function groupsChanged() {
   const seq = ++mergeSeq;  // 늦게 온 앞 조회는 버린다
+  if (drawn?.points) { chartGroups = {}; chartMerged = null; $("err-chart").textContent = ""; return drawChart(); }  // 3차원 산점도의 점에는 그룹 고르기가 없다(점을 줄인 안내는 섬이 보인다)
   const kind = drawn && xKind(drawn.x), merge = !!(drawn && chartGroups.merge);
   // (Phase 18) 날짜 X는 화면에서만 거른다. 범위는 숫자 X만 서버로
   const picks = drawn && !merge && kind !== "date" ? { ...(chartGroups.keep?.length ? { keep: chartGroups.keep } : {}), ...(kind === "num" && chartGroups.ranges?.length ? { ranges: chartGroups.ranges } : {}) } : {};
@@ -1749,7 +1772,7 @@ function checkList(key, names) {
   return { list, boxes, done };
 }
 function groupPanel() {
-  if (!drawn) { $("cgroups").replaceChildren(); return; }
+  if (!drawn || drawn.points) { $("cgroups").replaceChildren(); return; }
   const kind = xKind(drawn.x);
   const groups = checkList("keep", [...new Set([...drawn.labels, ...(chartGroups.keep ?? [])])]);  // (Phase 18) 찾아 더한 그룹(받은 50개 밖)도 목록에 보여 끌 수 있게
   const all = el("button", { className: "btn", textContent: "모두", onclick: () => setGroups({ ...chartGroups, keep: [] }) });
@@ -1800,16 +1823,19 @@ function toDrawn(query, used, d) {
 }
 $("draw").onclick = () => busy($("draw"), async () => {
   try {
-    const used = series.length ? series : [seriesNow()];
+    const kind3 = kind3d(), points = kind3 === POINTS_3D;
+    if (points && pointsWhy()) { $("err-chart").textContent = pointsWhy(); return; }
+    const used = series.length && !points ? series : [seriesNow()];  // 3차원 산점도는 지금 칸의 Y축 하나(넣어 둔 계열은 쓰지 않는다)
     const tab = tabs[tabAt];
     const query = { ...state(), x: $("cx").value, x_unit: dateX() ? $("cunit").value : "", split: $("csplit").value, order: $("corder").value, series: used.map(s => ({ y: s.y, agg: s.agg, ...(s.opts ? { opts: s.opts } : {}) })) };
-    const d = await timed("chart", () => api("/api/chart", query));
+    const z = $("cz").value;
+    const d = await timed("chart", () => points ? api("/api/chart/points", { ...query, size: z, auto: { density: false } }) : api("/api/chart", query));  // 점은 받은 그대로 찍는다(육각 칸 없음)
     if (tabs[tabAt] !== tab) return;  // 그리는 사이 탭이 바뀌었으면 버린다
     if (!drawn || chartKey(drawn.query) !== chartKey(query)) chartGroups = {};
-    drawn = toDrawn(query, used, d);
+    drawn = points ? { query, used, x: query.x, labels: [], datasets: [], truncated: false, points: d.points, z, kind3 } : { ...toDrawn(query, used, d), kind3 };
     await groupsChanged();  // 안내 글(잘림·나눌 값)은 groupsChanged가 정한다. 서버가 다시 구해야 하면 다시 받아 그린다(오류는 안내 대신 보인다)
   } catch (e) { $("err-chart").textContent = e.message; }
-});
+}).then(() => { if (drawAgain) { drawAgain = false; redraw(); } });  // 그리는 사이 칸이 또 바뀌었으면 지금 칸대로 한 번 더
 // 차트에 그린 값의 표(첫 컬럼은 X, 계열마다 한 컬럼, 그룹마다 한 행)는 섬이 그린 뒤 보낸 shown 메시지의 것이다: all이면 모든 데이터, 아니면 보이는 그대로. 아직 그리지 않았으면 null.
 const chartTable = all => { const shown = chartDraw.shown; return shown && (all ? shown.full : shown.table); };
 const chartData = () => chartTable($("call").checked);  // 표로 보기·보내기는 [모든 데이터]를 따른다
@@ -2010,7 +2036,7 @@ const afterTables = () => {
 
 // ---------- 작업 탭(F10): 탭 하나 = 탐색 화면 한 벌(검색 조건·보기·문장, 결과·쪽, 집계, 차트 설정, 되돌리기 기록). 바꿀 때 통째로 떼어 두고(snapshot) 다시 붙인다(restore) ----------
 const TAB_MAX = 8, TAB_KEEP_ROWS = 2000;  // 이보다 큰 결과는 탭을 떠날 때 버리고 돌아오면 그 쪽만 다시 받는다(count:false·known_count라 다시 세지 않는다)
-const CHART_IDS = ["cx", "cy", "csplit", "cunit", "corder", "ctype", "cdash", "caxis", "cscale", "cratio", "clabels", "ymin", "ymax", "y1min", "y1max"];
+const CHART_IDS = ["cx", "cy", "cz", "csplit", "cunit", "corder", "ctype", "cdash", "caxis", "cscale", "cratio", "clabels", "ymin", "ymax", "y1min", "y1max"];
 let tabSeq = 0;  // 탭 번호(등록 이름 @탭N). 탭을 새로 만들 때마다 늘고 다시 쓰지 않는다
 const newTab = () => ({ id: ++tabSeq, name: "", auto: true, st: null });  // auto: 이름이 기준 테이블을 따른다(두 번 눌러 이름을 정하면 false)
 let tabs = [newTab()], tabAt = 0, tabBusy = false, tabsKey = "";
@@ -2039,7 +2065,7 @@ async function restore(st) {
   ({ searched = null, searchedTexts = null, knownCount = null, skip = 0, drawn = null } = st);
   last = st.last ?? null; series = st.series ?? []; scols = st.scols ?? [];
   Object.entries(st.chart ?? {}).forEach(([id, v]) => $(id).value = v);
-  showUnit(); showSeries(); fillSummaryCols();
+  showUnit(); show3d(); showSeries(); fillSummaryCols();
   advMore();  // 되살린 차트 칸에 값이 있으면 [더 많은 설정]을 펼친다
   if (last && !last.rows && searched) { const summary = last.summary; last = null; await runSearch(skip, false, true); if (last && summary) last.summary = summary; }
   renderTables();
@@ -2339,7 +2365,8 @@ $("dash-add").onclick = () => busy($("dash-add"), async () => {
   const { query, used } = drawn, title = `${query.base} · ${used.map(seriesTitle).join(", ")} / ${drawn.x}`;
   try {
     const added = await addToDashboard({ kind: "chart", title, colors: { series: {}, parts: {}, order: [], parts_order: [] }, source: { schema: query.schema || "", table: query.base, body: { ...query, order: $("corder").value } }, data: {},  // 정렬은 지금 칸 값(새 카드는 기본 auto)
-      view: { type: "", ratio: RATIOS[$("cratio").value] ?? autoRatio(drawn.labels.length), ranges: axisRanges(), styles: used.map(({ type, dash, axis }) => ({ type, dash, axis })),
+      view: { type: drawn.kind3 ?? "", ...(drawn.points ? { points: { size: drawn.z }, ...($("cconnect").checked ? { connect: true } : {}) } : {}),  // 3차원 종류, 3차원 산점도는 Z축 컬럼과 점 잇기
+        ratio: RATIOS[$("cratio").value] ?? autoRatio(drawn.labels.length), ranges: axisRanges(), styles: used.map(({ type, dash, axis }) => ({ type, dash, axis })),
         ...(Object.keys(chartAuto).length ? { auto: chartAuto } : {}), ...($("cscale").value ? { scale: $("cscale").value } : {}), ...($("call").checked ? { all_data: true } : {}), ...(Object.keys(chartGroups).length ? { groups: chartGroups } : {}) } }, "chart", { schema: query.schema, base: query.base });
     if (added) showAdded("err-chart", added);
   } catch (e) { say("err-chart", e.message); }

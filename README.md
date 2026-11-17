@@ -16,7 +16,7 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel, GeoJSON)에 �
 
 | 자리 | 있는 것 |
 |---|---|
-| 왼쪽 메뉴 아래 | **[설정]**(쓸 기능·업데이트·계산·메모리·표본·날짜·달력·차트 낱말·보낼 곳), **[쉬운 보기]**(켜면 덜 쓰는 칸을 [더 많은 설정 ▾] 뒤에 접음, 누르면 무엇이 바뀌는지 알림), 밝은/어두운 화면 단추 |
+| 왼쪽 메뉴 아래 | **[설정]**(쓸 기능·화면 크기·업데이트·계산·메모리·표본·날짜·달력·차트 낱말·보낼 곳), **[쉬운 보기]**(켜면 덜 쓰는 칸을 [더 많은 설정 ▾] 뒤에 접음, 누르면 무엇이 바뀌는지 알림), 밝은/어두운 화면 단추 |
 | 위쪽 줄 | 지금 연결 이름(누르면 연결 바꾸기), **[상태]**(PC 메모리·CPU, 앱 메모리), 진행 중인 작업과 **[취소]**, 새 버전 **[업데이트]**, 크기 조절 단추 |
 
 쉬운 보기는 처음에 켜져 있습니다. 문서에 나온 단추나 칸이 화면에 안 보이면 **[더 많은 설정 ▾]**을 누르거나 쉬운 보기를 끄세요.
@@ -36,7 +36,7 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel, GeoJSON)에 �
 | 공통 | 내용 |
 |---|---|
 | [데이터 연결](docs/functions/connect.md) | 내 PC의 파일·데이터베이스 연결, 폴더 고르기, 최근 연결, 드라이버 확인 |
-| [화면 설정과 안전](docs/functions/settings.md) | 진행 상황과 취소, 어두운 화면·쉬운 보기·크기 조절, 설정 창(쓸 기능·업데이트·계산·메모리 비우기·표본·날짜·달력·차트 낱말·보낼 곳), 안전하게 쓰기(자세히), 기억되는 것, DB별 드라이버(Supabase 포함) |
+| [화면 설정과 안전](docs/functions/settings.md) | 진행 상황과 취소, 어두운 화면·쉬운 보기·크기 조절, 설정 창(쓸 기능·화면 크기·업데이트·계산·메모리 비우기·표본·날짜·달력·차트 낱말·보낼 곳), 안전하게 쓰기(자세히), 기억되는 것, DB별 드라이버(Supabase 포함) |
 | [임시 저장](docs/functions/drafts.md) | 앱이 갑자기 꺼져도 만들던 화면을 이어서 하기([이어서 하기]·[버리고 새로 시작]), 되돌리기, 단축키 |
 
 기능마다의 자세한 문서는 위 다섯 문서에서 이어집니다. 쿼리: [탐색](docs/functions/explore.md)·[결과](docs/functions/results.md)·[차트](docs/functions/chart.md)·[문장으로 보기](docs/functions/sentences.md)·[SQL](docs/functions/sql.md)·[지표](docs/functions/metrics.md)·[지표 사전](docs/functions/metrics_catalog.md)·[함수 사전](docs/functions/sql_functions.md)·[좌표](docs/functions/geo.md). 분석: [전처리](docs/functions/prep.md)·[분석 탭](docs/functions/analysis_tab.md)·[퍼널](docs/functions/funnel.md).

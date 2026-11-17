@@ -84,7 +84,7 @@ function confirmScan(d) {
       : [el("button", { className: "ghost", textContent: "취소", onclick: pick(false) }), el("button", { className: "btn p", textContent: "그대로 실행", onclick: pick(true) })];
     const box = el("div", { className: "modal", onclick: e => { if (e.target === box) pick(false)(); } },
       el("div", { className: "modal-box" }, el("h3", { id: "scan-title", textContent: d.blocked ? "실행하지 않았어요" : "읽을 데이터가 많아요" }),
-        el("p", { textContent: d.text, style: "white-space:pre-wrap; margin:10px 0 14px" }), el("div", { className: "row", style: "justify-content:flex-end" }, ...buttons)));
+        el("p", { textContent: d.text, style: "white-space:pre-wrap; margin:.625rem 0 .875rem" }), el("div", { className: "row", style: "justify-content:flex-end" }, ...buttons)));
     box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "scan-title");
     document.body.append(box);
     box.querySelector("button:last-child").focus();
@@ -515,9 +515,9 @@ function applyFeatures() {
 }
 applyFeatures();
 // 설정 창: 기능을 고르고 [적용]하면 서버가 설치 프로그램을 받아 실행하고, 앱은 닫혔다가 설치가 끝나면 다시 열린다(개발 실행에서는 서버가 안내만 한다).
-$("feat-list").replaceChildren(...SERVER.features.all.map(f => el("label", { style: "display:block; margin:6px 0" },
+$("feat-list").replaceChildren(...SERVER.features.all.map(f => el("label", { style: "display:block; margin:.375rem 0" },
   el("input", { type: "checkbox", value: f.id, checked: SERVER.features.on.includes(f.id), style: "width:auto" }), ` ${f.name}`)));
-const SET_TABS = ["feat", "update", "calc", "memory", "sample", "date", "viz", "dest"];  // 설정 창(status.html)의 분류(data-set) 차례
+const SET_TABS = ["feat", "view", "update", "calc", "memory", "sample", "date", "viz", "dest"];  // 설정 창(status.html)의 분류(data-set) 차례
 /** [SPECIFICATION] plans/phase-16.md#openSettings
  *  설정 창을 열고 tab 분류만 보이게 한다(보낼 곳이면 Slack 봇 상태도 새로 읽는다). */
 function openSettings(tab) {
@@ -531,8 +531,8 @@ function openSettings(tab) {
 // 설정 [메모리]: 앱이 붙잡고 있는 것(서버 core/memory.py에 등록된 것)을 체크 목록으로. 올라온 라이브러리는 내릴 수 없어 이름만 알린다.
 function showMemory(d) {
   $("mem-now").textContent = `${d.mb.toLocaleString()}MB`;
-  $("mem-list").replaceChildren(...(d.items.length ? d.items.map(i => el("label", { className: "check", style: "display:block; margin:8px 0" },
-    el("input", { type: "checkbox", value: i.id }), ` ${i.label}`, el("div", { className: "hint", style: "margin-left:22px", textContent: i.detail })))
+  $("mem-list").replaceChildren(...(d.items.length ? d.items.map(i => el("label", { className: "check", style: "display:block; margin:.5rem 0" },
+    el("input", { type: "checkbox", value: i.id }), ` ${i.label}`, el("div", { className: "hint", style: "margin-left:1.375rem", textContent: i.detail })))
     : [el("div", { className: "empty", textContent: "지금 붙잡고 있는 데이터가 없어요." })]));
   $("mem-all").disabled = $("mem-drop").disabled = !d.items.length;
   $("mem-mods").textContent = d.modules.length ? `올라온 계산 라이브러리: ${d.modules.join(", ")}. 이것은 앱이 켜져 있는 동안 내릴 수 없어요. 앱을 껐다 켜면 내려가요.` : "";
@@ -868,7 +868,7 @@ showCores(+coreNow);
 function noticeBox(title, text) {
   return new Promise(done => {
     const box = el("div", { className: "modal" }, el("div", { className: "modal-box" }, el("h3", { id: "notice-title", textContent: title }),
-      el("p", { textContent: text, style: "white-space:pre-wrap; margin:10px 0 14px" }), el("div", { className: "row", style: "justify-content:flex-end" },
+      el("p", { textContent: text, style: "white-space:pre-wrap; margin:.625rem 0 .875rem" }), el("div", { className: "row", style: "justify-content:flex-end" },
         el("button", { className: "btn p", textContent: "확인", onclick: () => { box.remove(); done(); } }))));
     box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); box.setAttribute("aria-labelledby", "notice-title");
     document.body.append(box);
@@ -948,6 +948,9 @@ $("hash-exclude").onchange = () => saveSetting({ hash_exclude: $("hash-exclude")
 // 문자 검색에서 특수문자 무시(ignore_marks, 기본 off). 서버(parse.like_one)가 설정을 읽는다
 $("ignore-marks").checked = (saved("ignore_marks") || SERVER.defaults.ignore_marks) === "on";
 $("ignore-marks").onchange = () => saveSetting({ ignore_marks: $("ignore-marks").checked ? "on" : "off" });
+// 화면 크기: 고르면 바로 바뀌고(html[data-scale]) 저장한다.
+$("ui-scale").value = document.documentElement.dataset.scale;
+$("ui-scale").onchange = () => { document.documentElement.dataset.scale = $("ui-scale").value; saveSetting({ ui_scale: $("ui-scale").value }); };
 for (const [id, name] of [["pilot-first", "pilot_first"]]) {
   $(id).value = saved(name) || SERVER.defaults[name];
   $(id).onchange = () => saveSetting({ [name]: $(id).value });
@@ -990,7 +993,7 @@ const saveViz = async changes => {
 function showViz() {
   const { words, query_auto } = SERVER.dash.viz;
   $("viz-words").replaceChildren(...Object.entries(WORD_TITLES).map(([key, title]) => {
-    const input = el("input", { placeholder: "낱말 더하기", style: "width:140px; flex:none", value: editing?.key === key ? editing.word : "" });
+    const input = el("input", { placeholder: "낱말 더하기", style: "width:8.75rem; flex:none", value: editing?.key === key ? editing.word : "" });
     const add = () => {
       const word = input.value;
       const list = editing?.key === key ? words[key].map(w => w === editing.word ? word : w) : [...words[key], word];
@@ -1124,7 +1127,7 @@ if (hasConnect) {
       const { drivers } = await api("/api/drivers");
       $("drv-rows").replaceChildren(...drivers.map(d => el("tr", {}, el("td", { textContent: d.group }), el("td", { textContent: d.name, title: "주소 예: " + d.address }),
         el("td", { className: d.status, textContent: DRIVER_STATUS[d.status] }),
-        el("td", {}, d.explanation, ...[`주소 예: ${d.address}`, ...driverExtra(d)].map(t => el("div", { className: "hint", textContent: t, style: "margin:2px 0 0; user-select:text" }))),
+        el("td", {}, d.explanation, ...[`주소 예: ${d.address}`, ...driverExtra(d)].map(t => el("div", { className: "hint", textContent: t, style: "margin:.125rem 0 0; user-select:text" }))),
         el("td", {}, ...driverGet(d)))));
       say("err-drivers", "", true);
       $("drivers-panel").classList.remove("hidden");

@@ -18,10 +18,10 @@ EDGE = next((p for p in (r"C:\Program Files (x86)\Microsoft\Edge\Application\mse
 
 def test_css_sizes_and_labels():
     css = read("common.css")
-    assert "input[type=checkbox], input[type=radio] { width:16px !important; height:16px !important;" in css
-    assert re.search(r"label:has\(> input\[type=checkbox\]\)[^{]*label\.check \{ min-height:24px; \}", css)
-    assert re.search(r"button\.ghost \{[^}]*min-height:24px;", css)
-    assert re.search(r"summary \{ padding:2px 0; \}", css)
+    assert "input[type=checkbox], input[type=radio] { width:1rem !important; height:1rem !important;" in css  # 16px
+    assert re.search(r"label:has\(> input\[type=checkbox\]\)[^{]*label\.check \{ min-height:1\.5rem; \}", css)  # 24px
+    assert re.search(r"button\.ghost \{[^}]*min-height:1\.5rem;", css)
+    assert re.search(r"summary \{ padding:\.125rem 0; \}", css)
 
 
 def test_accessible_names_and_button_sizes():
@@ -56,7 +56,7 @@ def test_usage_folded_behind_status_pill():
 
 def test_empty_title_is_section_title():
     prep = read("prep.html")
-    assert re.search(r"\.big\.none b \{ font-size:16px; \}", prep) and ".big.none { padding-top:16px; }" in prep
+    assert re.search(r"\.big\.none b \{ font-size:1rem; \}", prep) and ".big.none { padding-top:1rem; }" in prep
     assert '$("p-big").parentNode.classList.toggle("none", !prof)' in prep
 
 

@@ -29,11 +29,14 @@ export function useZoomX(axis: ZoomAxis | null) {
     const esc = (e: KeyboardEvent) => {
       if (e.key === "Escape") setActive(false);
     };
+    const off = () => setActive(false);  // 창이 초점을 잃음: 차트 섬(iframe) 밖을 누른 것은 pointerdown으로 오지 않는다
     document.addEventListener("pointerdown", down);
     document.addEventListener("keydown", esc);
+    window.addEventListener("blur", off);
     return () => {
       document.removeEventListener("pointerdown", down);
       document.removeEventListener("keydown", esc);
+      window.removeEventListener("blur", off);
     };
   }, []);
 
@@ -88,6 +91,7 @@ export function useZoomX(axis: ZoomAxis | null) {
 
   return {
     view,
+    active,
     bind: {
       ref,
       onClick: () => setActive(true),

@@ -1,9 +1,10 @@
 // 카드의 값 → 그릴 모양: 옛 static/core/dash.js의 함수들(본문 그대로, 타입만). 색 고르기·기간 비교 값·계열 이름은 lib/series.ts 한 벌을 쓴다.
 // 옛 코드가 전역 SERVER에서 읽던 집계 이름(agg_names)·다시 묶을 수 있는 집계(merge)·차트 종류(dash.types·time_types)는 seriesKit(서버 상수)로 받는다.
 import type { AutoHints } from "@/lib/autoviz";
-import { anaView, BUCKET, isPoints, okLabel, pointGroups, rollup } from "@/lib/calc";
+import { anaView, BUCKET, isPoints, okLabel, pointGroups, POINT_TYPES, rollup } from "@/lib/calc";
 import type { Card, ChartType, Constants, DaySeries, MoreValues, UnitSection } from "@/lib/types";
-import { FIRST_ONLY, PAIR_ONLY, ROUND_TYPES } from "./shapes";
+import { FIRST_ONLY, GRID_3D, PAIR_ONLY, ROUND_TYPES } from "./shapes";
+import { NEED_THREE, NEED_Z } from "./three";
 
 export type Dataset = { label: string; values: (number | string | null)[]; type?: "bar" | "line"; dash?: string; axis?: string };
 /** 그릴 모양: 라벨, 계열, 날짜 X축인지, 종류를 바꿀 수 있는지 */
@@ -56,11 +57,13 @@ export function seriesKit(server: Server) {
     const s = cardSeries(card), names = server.dash.types;
     if (!s) return "아직 값이 없어서 종류를 바꿀 수 없어요. 연결한 뒤 [최신화]를 누르세요.";
     if (!s.chartable) return "이 분석 그림은 종류를 바꿀 수 없어요. 묶음끼리 비교와 날짜에 따른 변화만 바꿀 수 있어요.";
-    if (type === "scatter" || type === "bubble") {  // X와 값이 숫자 컬럼일 때만(버블은 [크기]도)
+    if (POINT_TYPES.includes(type)) {  // X와 값이 숫자 컬럼일 때만(버블은 [크기], 3차원 산점도는 [Z축]도)
       const d = card.data ?? {}, body = card.source?.body ?? {}, y = body.series?.[0]?.y ?? body.y;
       if (d.x_kind !== "num" || !(d.num_cols ?? []).includes(y as string)) return "산점도·버블은 X가 숫자 컬럼이고 값이 숫자 컬럼일 때만 쓸 수 있어요.";
-      return type === "bubble" && !card.view.points?.size ? "버블은 [크기]에 숫자 컬럼을 먼저 고르세요." : "";
+      if (card.view.points?.size) return "";
+      return type === "bubble" ? "버블은 [크기]에 숫자 컬럼을 먼저 고르세요." : type === "scatter3d" ? NEED_Z : "";
     }
+    if (GRID_3D.includes(type) && s.datasets.length < 2) return NEED_THREE;
     if (s.time && !server.dash.time_types.includes(type)) return `날짜 X축 그림에는 ${server.dash.time_types.map(t => names[t as keyof typeof names]).join("·")}만 쓸 수 있어요.`;
     if (type === "stacked" && s.datasets.length < 2) return "누적 막대는 계열이 2개 이상일 때만 쓸 수 있어요.";
     if (["stack100", "hstack", "hstack100", "sarea100", "combo", "range", "butterfly"].includes(type) && s.datasets.length < 2) return `${names[type] ?? type}은(는) 계열이 2개 이상일 때만 쓸 수 있어요.`;

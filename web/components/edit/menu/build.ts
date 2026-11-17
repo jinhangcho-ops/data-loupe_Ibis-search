@@ -1,5 +1,6 @@
 // 카드 추가 메뉴의 칸들 → 카드 JSON(옛 dash_menu.js build). 화면 없이 계산하고, 잘못된 입력은 옛 문장 그대로 Error로 던진다.
-import { linkLine, readLines, parseRuleLine, parseStateLine, parseLinkLine, ruleLine, stateLine } from "@/lib/calc";
+import { NEED_Z } from "@/components/cards/chart/three";
+import { POINT_TYPES, linkLine, readLines, parseRuleLine, parseStateLine, parseLinkLine, ruleLine, stateLine } from "@/lib/calc";
 import { seriesTitle } from "@/lib/series";
 import type { Card, CardKind } from "@/lib/types";
 import { CARD_KINDS, DATE_X, WATCH, WITH_DATE, blankLine, freshColors, isShell, parseBlankLine } from "./kinds";
@@ -162,8 +163,9 @@ export function buildCard(f: Form, aggs: string[], needs: (agg: string) => boole
   if (k === "chart") {
     view.type = f.cType;
     view.ratio = 16 / 9;
-    if (f.cSize && f.cType === "bubble") view.points = { size: f.cSize };
-    if (["scatter", "bubble"].includes(f.cType) && series.length !== 1) throw new Error("산점도와 버블은 값을 하나만 넣으세요. 가로축과 값이 점의 위치예요.");
+    if (f.cSize && (f.cType === "bubble" || f.cType === "scatter3d")) view.points = { size: f.cSize };
+    if (POINT_TYPES.includes(f.cType) && series.length !== 1) throw new Error("산점도와 버블은 값을 하나만 넣으세요. 가로축과 값이 점의 위치예요.");
+    if (f.cType === "scatter3d" && !f.cSize) throw new Error(NEED_Z);
   }
   if (k === "stripes") view.cells = num(f.cells) || 10;
   if (k === "blocks" && f.size) view.size = num(f.size);

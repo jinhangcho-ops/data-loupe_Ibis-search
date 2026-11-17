@@ -8,6 +8,9 @@ import pytest
 from conftest import ROOT
 from test_fix_audit_js import between, read, run_node
 
+ROOT_PX = 16  # 1rem의 기준 px(common.css 바탕 크기의 보통 값)
+NUM_MIN_PX = 110  # 문장 숫자 칸의 최소 너비
+
 node = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
 # $(id)가 돌려줄 가짜 요소: 값·글·숨김(hidden 클래스)만 흉내 낸다.
@@ -69,10 +72,10 @@ console.log(JSON.stringify({ region: first("region"), nearest: first("nearest") 
 
 
 def test_sentence_number_input_fits_coordinates():
-    """5a: 문장 카드의 숫자 칸은 37.5665·126.978이 잘리지 않을 만큼 넓다(전에는 80px)."""
+    """5a: 문장 카드의 숫자 칸은 37.5665·126.978이 잘리지 않을 만큼 넓다(전에는 80px). 크기는 rem(1rem = ROOT_PX)."""
     css = read("sentences.css")
-    width = int(re.search(r"\.slot-wrap input\.num \{[^}]*?[^-]width:(\d+)px", css).group(1))
-    assert width >= 110
+    width = float(re.search(r"\.slot-wrap input\.num \{[^}]*?[^-]width:([\d.]+)rem", css).group(1)) * ROOT_PX
+    assert width >= NUM_MIN_PX
 
 
 SENT_HEAD = r"""

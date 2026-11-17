@@ -6,39 +6,39 @@
 <title>Data Loupe · 연동</title>
 <!--include core/head.html-->
 <style>
-  .hub { flex:1; min-height:0; overflow:auto; padding:22px 28px 40px; }
-  .hub h1 { margin:0 0 4px; font-size:24px; letter-spacing:-.01em; }
-  .hub > p { margin:0 0 18px; color:var(--muted); max-width:720px; line-height:1.6; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 380px), 1fr)); gap:16px; align-items:stretch; max-width:1240px; }  /* 넓은 창에서도 한 줄에 셋까지, 같은 줄의 카드는 높이를 맞춘다 */
-  .svc > .row:last-child { margin-top:auto; padding-top:10px; }  /* 카드의 단추 줄은 맨 아래에 맞춘다 */
-  .svc .head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
-  .svc .head h3 { margin:0; font-size:15px; font-weight:600; }
-  .svc { display:flex; flex-direction:column; gap:4px; }
-  .state { margin-left:auto; font-size:12px; color:var(--muted); background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:1px 10px; }
+  .hub { flex:1; min-height:0; overflow:auto; padding:1.375rem 1.75rem 2.5rem; }
+  .hub h1 { margin:0 0 .25rem; font-size:1.5rem; letter-spacing:-.01em; }
+  .hub > p { margin:0 0 1.125rem; color:var(--muted); max-width:45rem; line-height:1.6; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 23.75rem), 1fr)); gap:1rem; align-items:stretch; max-width:77.5rem; }  /* 넓은 창에서도 한 줄에 셋까지, 같은 줄의 카드는 높이를 맞춘다 */
+  .svc > .row:last-child { margin-top:auto; padding-top:.625rem; }  /* 카드의 단추 줄은 맨 아래에 맞춘다 */
+  .svc .head { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; margin-bottom:.25rem; }
+  .svc .head h3 { margin:0; font-size:.9375rem; font-weight:600; }
+  .svc { display:flex; flex-direction:column; gap:.25rem; }
+  .state { margin-left:auto; font-size:.75rem; color:var(--muted); background:var(--bg); border:1px solid var(--line); border-radius:62.4375rem; padding:1px .625rem; }
   .state:empty { display:none; }
   .state.on { color:var(--ok); border-color:currentColor; font-weight:600; }
-  .svc .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
-  .svc label { display:block; margin-top:6px; }
-  .svc label .hint { font-size:12.5px; font-weight:600; color:var(--text); margin:0 0 4px; }
-  .svc .two { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  .dests { margin:8px 0 0; padding:0; list-style:none; }
-  .dests li { padding:4px 0; border-bottom:1px solid var(--line); font-size:13px; }
+  .svc .row { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; margin-top:.625rem; }
+  .svc label { display:block; margin-top:.375rem; }
+  .svc label .hint { font-size:.7812rem; font-weight:600; color:var(--text); margin:0 0 .25rem; }
+  .svc .two { display:grid; grid-template-columns:1fr 1fr; gap:.5rem; }
+  .dests { margin:.5rem 0 0; padding:0; list-style:none; }
+  .dests li { padding:.25rem 0; border-bottom:1px solid var(--line); font-size:.8125rem; }
   #err-hub:empty { display:none; }
   /* (Phase 19) [설정하기]: 입력 칸은 details 안에 접어 둔다. 맨 위 "어떤 걸 하실 건가요?"를 누르면 카드를 잠깐 강조(.flash) */
-  .svc details > summary { display:inline-flex; margin-top:10px; padding:4px 12px; border:1px solid var(--line); border-radius:6px; cursor:pointer; font-weight:600; list-style:none; }
+  .svc details > summary { display:inline-flex; margin-top:.625rem; padding:.25rem .75rem; border:1px solid var(--line); border-radius:.375rem; cursor:pointer; font-weight:600; list-style:none; }
   .svc details > summary::-webkit-details-marker { display:none; }
-  .svc details[open] > summary { margin-bottom:4px; }
+  .svc details[open] > summary { margin-bottom:.25rem; }
   /* "어떤 걸 하실 건가요?": 카드 4장(2열). 카드 어디를 눌러도 아래 카드로 간다 */
-  .want { margin:0 0 18px; padding:0; list-style:none; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:16px; max-width:1240px; }
-  .want li { display:flex; flex-direction:column; gap:12px; cursor:pointer; --art-w:220px; }  /* 오른쪽은 카드 그림(.card-art, common.css) */
+  .want { margin:0 0 1.125rem; padding:0; list-style:none; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:1rem; max-width:77.5rem; }
+  .want li { display:flex; flex-direction:column; gap:.75rem; cursor:pointer; --art-w:13.75rem; }  /* 오른쪽은 카드 그림(.card-art, common.css) */
   .want li:hover { border-color:var(--muted); }
   .want .foot { display:flex; align-items:center; gap:var(--sp-3); margin-top:auto; }  /* 단추 옆에 상태 꼬리표 */
   .want .foot .state { margin-left:0; }
   .want .ico { display:grid; place-items:center; color:var(--accent); }  /* 제목 줄 안의 작은 그림 */
-  .want h3 { margin:0 0 2px; font-size:15px; font-weight:600; display:flex; align-items:center; gap:var(--sp-2); }
+  .want h3 { margin:0 0 .125rem; font-size:.9375rem; font-weight:600; display:flex; align-items:center; gap:var(--sp-2); }
   .want .hint { margin:0; }
   .svc.flash { animation:flash 1.6s ease-out; }
-  @keyframes flash { from { box-shadow:0 0 0 3px var(--accent); } to { box-shadow:0 0 0 3px transparent; } }
+  @keyframes flash { from { box-shadow:0 0 0 .1875rem var(--accent); } to { box-shadow:0 0 0 .1875rem transparent; } }
 </style>
 </head>
 <body class="app">

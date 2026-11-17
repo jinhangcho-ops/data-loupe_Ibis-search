@@ -93,6 +93,7 @@ CHOICES = {
     "scan_unknown": ["run", "block"],  # 처리 용량을 미리 알 수 없을 때(그 연결이 추정을 못 함): 그대로 실행한다 / 실행하지 않는다(기본은 실행)
     "prep_where": ["all", "new"],  # 원격 DB(주소로 접속)의 전처리를 이 PC의 작업 사본에서 계산하는 범위: 전처리 전체 / 계산 컬럼·PCA가 있을 때만(나머지는 DB에서)
     "easy": ["on", "off"],  # (Phase 19) 쉬운 보기: 처음 쓰는 사람에게 필요 없는 칸(.adv)을 [더 많은 설정] 뒤에 접는다(기본 on, html.easy)
+    "ui_scale": ["small", "normal", "large", "xlarge"],  # 화면 크기: 바탕 글자 크기에 곱하는 단계(common.css html[data-scale], 기본 normal)
     "week_start": ["mon", "sun"],  # 주 묶음의 시작 요일(기본 mon). 그 밖에 timezone(IANA 이름)·fiscal_start_month(회계연도 첫 달 1~12, 기본 1)는 valid가 따로 본다
 }
 
@@ -116,7 +117,7 @@ SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "char
 # 표본: 신뢰수준 %(sampling.config가 Z로)·비율 허용 오차·평균 상대 허용 오차
 FLOATS = {"sample_too_few": (0.05, 0.9), "sample_conf": (50, 99.99), "sample_e_ratio": (0.001, 0.2), "sample_e_mean": (0.005, 0.5)}
 DEFAULTS = {"sample_too_few": 0.2, "pc_stat_rows": 1_000_000, "sample_conf": 95, "sample_e_ratio": 0.01, "sample_e_mean": 0.05, "pilot_rows": 5_000, "strata_h": 5, "strata_min": 30,
-            "hash_buckets": 10_000, "key_over": 3, "pilot_first": "preview", "cloud_rows": 100_000, "pc_stat_unlimited": "off", "cloud_unlimited": "off", "threads": SAFE_THREADS, "hash_exclude": "on", "ignore_marks": "off", "currency_symbol": "₩"}  # currency_symbol: 값 모양 currency의 기호(compare.format_value, 화면 showValue)
+            "hash_buckets": 10_000, "key_over": 3, "pilot_first": "preview", "cloud_rows": 100_000, "pc_stat_unlimited": "off", "cloud_unlimited": "off", "threads": SAFE_THREADS, "hash_exclude": "on", "ignore_marks": "off", "currency_symbol": "₩", "ui_scale": "normal"}  # currency_symbol: 값 모양 currency의 기호(compare.format_value, 화면 showValue)
 
 # 직전 실행의 행당 시간(나노초/행). 작업 종류(검색·집계·차트·저장·전처리의 모양 보기·미리보기·실행)와 기준 테이블 행 수의 구간(10배 단위)마다 하나.
 # 이름은 time_종류_구간이고 구간은 행 수의 자릿수 - 1을 TIME_BANDS 안으로 맞춘 것(1,000행 미만은 모두 2)이다. 화면이 예상 시간을 구할 때 같은 구간의 값만 쓴다.

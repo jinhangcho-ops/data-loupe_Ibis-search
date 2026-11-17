@@ -139,7 +139,7 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
       {showErrs && <TargetErrors onClose={() => setShowErrs(false)} />}
       <h4>통화 기호</h4>
       <div className="row">
-        <input value={money} onChange={e => setMoney(e.target.value)} maxLength={consts?.currency_max} placeholder={String(consts?.defaults.currency_symbol ?? "")} aria-label="통화 기호" style={{ width: 80 }}
+        <input value={money} onChange={e => setMoney(e.target.value)} maxLength={consts?.currency_max} placeholder={String(consts?.defaults.currency_symbol ?? "")} aria-label="통화 기호" style={{ width: "5rem" }}
           title="표시 형식이 금액인 값 앞에 붙는 기호예요($, € 등). 숫자·부호·공백은 쓸 수 없고, 비우면 기본 기호로 돌아가요. 모든 대시보드에 적용돼요" />
         <button className="btn" onClick={saveMoney} disabled={busy}>저장</button>
       </div>
@@ -180,7 +180,7 @@ function TargetErrors({ onClose }: { onClose: () => void }) {
     <div className="modal" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-box" role="dialog" aria-modal="true" aria-label="읽지 못한 줄">
         <h3>읽지 못한 줄</h3>
-        <div style={{ whiteSpace: "pre-wrap", margin: "10px 0 14px" }}>{err || errs.map((x, i) => <div key={i}>{x.message}</div>)}</div>
+        <div style={{ whiteSpace: "pre-wrap", margin: ".625rem 0 .875rem" }}>{err || errs.map((x, i) => <div key={i}>{x.message}</div>)}</div>
         <div className="row">
           <button className="btn" disabled={!t || offset <= 0} onClick={() => setOffset(Math.max(0, offset - (t?.limit ?? 0)))}>이전</button>
           <button className="btn" disabled={!t || offset + t.limit >= t.error_total} onClick={() => setOffset(offset + (t?.limit ?? 0))}>다음</button>
