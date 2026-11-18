@@ -85,7 +85,7 @@ export function Chart3D({ scene, legend, active, surface }: { scene: Scene; lege
   };
   const live = (run: () => void) => () => { if (active) run(); };  // 조절 칸은 그림이 켜져 있을 때만 듣는다(꺼져 있으면 그 누르기가 그림을 켠다)
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", fontSize: 12 }}>
+    <div className="[display:flex] flex-col h-full [font-size:12px]">
       {surface && made ? surface.legend(made.keys) : legend}
       {surface ? (
         <div role="group" aria-label="곡면 모양" data-noprint="" title={active ? undefined : NEED_ACTIVE} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 12px", fontSize: rem(CONTROL_FONT), color: "var(--muted)", padding: "0 0 4px", opacity: active ? undefined : DIM }}>
@@ -101,10 +101,10 @@ export function Chart3D({ scene, legend, active, surface }: { scene: Scene; lege
           <button type="button" aria-label="처음 모양으로" disabled={!lift} onClick={live(() => setLift(null))} style={{ ...BUTTON, ...(lift ? {} : { opacity: DIM, cursor: "default" }) }}>처음 모양으로</button>
         </div>
       ) : null}
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div className="flex-1 min-h-0">
       <div ref={box} title={HELP_3D} style={{ ...scaledBox(s), overflow: "hidden", userSelect: "none", touchAction: active ? "none" : undefined, cursor: active ? "grab" : undefined }}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onClickCapture={afterDrag} onDoubleClick={() => setView(START_VIEW)}>
-        <svg width={w} height={h} role="img" aria-label="3차원 그래프" style={{ display: "block" }}>
+        <svg width={w} height={h} role="img" aria-label="3차원 그래프" className="[display:block]">
           {drawn.map(({ shape, xy }, i) => {
             if (shape.kind === "poly") return <polygon key={i} points={pts(xy)} fill={shape.fill} stroke={shape.stroke} strokeWidth={0.5} strokeLinejoin="round">{shape.title ? <title>{shape.title}</title> : null}</polygon>;
             if (shape.kind === "line") return <polyline key={i} points={pts(xy)} fill="none" stroke={shape.stroke} strokeWidth={shape.width} strokeLinecap="round" strokeLinejoin="round" />;

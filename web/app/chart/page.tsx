@@ -157,7 +157,7 @@ function Island() {
     return () => { live = false; cancelAnimationFrame(id); };
   }, [drawn, width, shotAll]);
   return (
-    <div ref={box} style={{ width: "100%" }}>
+    <div ref={box} className="w-full">
       {m && width ? <Guard key={drawn!.n}><Body m={m} width={width} shotAll={shotAll} /></Guard> : null}
     </div>
   );

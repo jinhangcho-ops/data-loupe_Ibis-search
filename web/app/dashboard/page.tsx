@@ -55,7 +55,7 @@ function DashboardView() {
     document.getElementById("d-only-exit")?.focus();
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) setDashOnly(false); };
     document.addEventListener("keydown", esc);
-    return () => { document.removeEventListener("keydown", esc); document.getElementById("d-more")?.focus(); };  // [대시보드만 보기]는 닫힌 [더 보기 ▾] 메뉴 안이라 메뉴 단추로 초점을 돌려준다
+    return () => { document.removeEventListener("keydown", esc); document.getElementById("d-only")?.focus(); };  // 보기를 켠 단추로 초점을 돌려준다
   }, [dashOnly, setDashOnly, dispatch]);
   const n = state.dash?.cards.length ?? 0, picked = state.picked.length;
   const merge = consts?.merge, alerts = useMemo(() => !state.dash || !merge ? [] :
@@ -65,7 +65,7 @@ function DashboardView() {
     <div className="board-view" id="dash">
       <Toolbar />
       {dashOnly && <button id="d-only-exit" className="btn" onClick={() => setDashOnly(false)} title="메뉴와 도구를 다시 보여요(Esc)">보기 끝내기</button>}
-      <div className="big"><b>{state.dash?.name || "대시보드"}</b><span className="d-conn" title="지금 연결된 데이터">{conn ? conn.label || "연결됨" : "연결 안 됨"}</span><span>{n ? `카드 ${n}개` : ""}</span><span className="hint" id="d-state" role="status" style={{ marginLeft: 12 }}>{state.dirty ? "저장 중…" : savedOnce ? "저장했어요" : ""}</span></div>
+      <div className="big"><b>{state.dash?.name || "대시보드"}</b><span className="d-conn" title="지금 연결된 데이터">{conn ? conn.label || "연결됨" : "연결 안 됨"}</span><span>{n ? `카드 ${n}개` : ""}</span><span className="hint ml-[12px]" id="d-state" role="status">{state.dirty ? "저장 중…" : savedOnce ? "저장했어요" : ""}</span></div>
       {alerts.length > 0 && <div className="d-alerts" id="d-alerts" role="alert"><b>카운터 지표가 한계를 벗어났어요</b>{alerts.map(f => <div key={f.id}>{f.text}</div>)}</div>}
       {n > 0 && (state.editing || picked > 0) && (
         <div className="ctl board-ctl">
@@ -76,13 +76,13 @@ function DashboardView() {
       )}
       <div className={state.locked || !state.ok ? "err" : "ok"} id="err-dash" role="status">{state.locked ? consts?.dash.locked : state.error}</div>
       {!n && (
-        <div className="board-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: ".875rem" }}>
-          <p className="hint" style={{ fontSize: ".875rem" }}>{state.dash ? "아직 카드가 없어요." : "저장한 대시보드가 없어요."} 이렇게 시작해요.</p>
-          <ol className="hint" style={{ fontSize: ".875rem", margin: 0, padding: 0, listStyle: "none", lineHeight: 1.8 }}><li>① [카드 추가]를 눌러요</li><li>② 보고 싶은 카드 종류를 골라요</li></ol>
-          <p className="hint" style={{ fontSize: ".875rem" }}>또는 쿼리 화면에서 차트를 만들고 [대시보드에 추가]를 눌러요.</p>
-          <div className="row" style={{ display: "flex", gap: ".75rem" }}>
-            <button className="btn p" style={{ height: "2.75rem", padding: "0 1.375rem", fontSize: ".9375rem" }} onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: null }); setAddOpen(true); }}>카드 추가</button>
-            <a className="btn" style={{ height: "2.75rem", padding: "0 1.375rem", fontSize: ".9375rem", textDecoration: "none" }} href="/search">쿼리에서 가져오기</a>
+        <div className="board-empty [display:flex] flex-col items-center gap-3.5">
+          <p className="hint [font-size:.875rem]">{state.dash ? "아직 카드가 없어요." : "저장한 대시보드가 없어요."} 이렇게 시작해요.</p>
+          <ol className="hint [font-size:.875rem] m-0 p-0 [list-style:none] [line-height:1.8]"><li>① [카드 추가]를 눌러요</li><li>② 보고 싶은 카드 종류를 골라요</li></ol>
+          <p className="hint [font-size:.875rem]">또는 쿼리 화면에서 차트를 만들고 [대시보드에 추가]를 눌러요.</p>
+          <div className="row [display:flex] gap-3">
+            <button className="btn p h-[2.75rem] [padding:0_1.375rem] [font-size:.9375rem]" onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: null }); setAddOpen(true); }}>카드 추가</button>
+            <a className="btn h-[2.75rem] [padding:0_1.375rem] [font-size:.9375rem] [text-decoration:none]" href="/search">쿼리에서 가져오기</a>
           </div>
           {!conn && <button id="d-demo" className="ghost" title="지어낸 주문·고객·방문기록 표에 연결해요. 연결할 데이터가 없어도 카드가 어떻게 보이는지 볼 수 있어요"
             onClick={e => { e.stopPropagation(); demo(); }}>예시 데이터로 확인하기</button>}
@@ -91,7 +91,7 @@ function DashboardView() {
       <div className="d-main">
         {gallery && !dashOnly && (
           <aside id="d-gallery-box" aria-label="카드 모음">
-            <div className="phead"><b>카드 모음</b><button type="button" className="ghost" aria-label="카드 모음 닫기" title="카드 모음 닫기" style={{ minWidth: "1.5rem", minHeight: "1.5rem" }} onClick={() => setGallery(false)}>×</button></div>
+            <div className="phead"><b>카드 모음</b><button type="button" className="ghost min-w-[1.5rem] min-h-[1.5rem]" aria-label="카드 모음 닫기" title="카드 모음 닫기" onClick={() => setGallery(false)}>×</button></div>
             <Gallery onAdd={spec => addShell(spec)} />
           </aside>
         )}

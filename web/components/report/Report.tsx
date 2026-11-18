@@ -118,23 +118,23 @@ export function Report({ open, onClose }: ReportProps) {
   return (
     <div className="modal" onClick={e => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={e => { if (e.key === "Escape") onClose(); }}>
       <div className="modal-box" role="dialog" aria-label="그림·보고서">
-        <div className="head row" style={{ gap: 8 }}>
+        <div className="head row gap-[8px]">
           <h3>그림·보고서</h3>
-          <button className="ib" title="닫기" style={{ marginLeft: "auto" }} onClick={onClose}>×</button>
+          <button className="ib ml-auto" title="닫기" onClick={onClose}>×</button>
         </div>
-        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-          <select title="그림 비율" value={picks.board_ratio} onChange={e => pick("board_ratio", e.target.value)} style={{ width: "auto" }}>
+        <div className="row gap-[6px] flex-wrap">
+          <select title="그림 비율" value={picks.board_ratio} onChange={e => pick("board_ratio", e.target.value)} className="w-auto">
             <option value="screen">화면대로</option><option value="square">1:1</option><option value="4:3">4:3</option><option value="wide">16:9</option>
           </select>
-          <select title="그림 색. 쿼리 화면의 그림 저장과 같은 설정이에요" value={picks.image} onChange={e => pick("image", e.target.value)} style={{ width: "auto" }}>
+          <select title="그림 색. 쿼리 화면의 그림 저장과 같은 설정이에요" value={picks.image} onChange={e => pick("image", e.target.value)} className="w-auto">
             <option value="light">밝게</option><option value="dark">어둡게</option>
           </select>
-          <select title="그림 형식" value={picks.board_format} onChange={e => pick("board_format", e.target.value)} style={{ width: "auto" }}>
+          <select title="그림 형식" value={picks.board_format} onChange={e => pick("board_format", e.target.value)} className="w-auto">
             <option value="png">PNG</option><option value="jpeg">JPG</option>
           </select>
         </div>
-        <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 10 }}>
-          <label className="row" style={{ gap: 4 }} title="켜면 자동 규칙(Top-N·꼬리 자르기·점 줄이기 등)이 덜어 낸 것까지 담아요. 보고서에는 쓰지 않아요"><input type="checkbox" checked={all} onChange={e => setAll(e.target.checked)} />모든 데이터 포함</label>
+        <div className="row gap-[6px] flex-wrap mt-[10px]">
+          <label className="row gap-[4px]" title="켜면 자동 규칙(Top-N·꼬리 자르기·점 줄이기 등)이 덜어 낸 것까지 담아요. 보고서에는 쓰지 않아요"><input type="checkbox" checked={all} onChange={e => setAll(e.target.checked)} />모든 데이터 포함</label>
           <button className="btn" disabled={!!busy} onClick={pictures} title="선택한 카드를 그림 파일로 저장해요. 프로그램 창에서는 저장할 폴더를 한 번 물어봐요">{label("down", "그림으로 저장")}</button>
           <button className="btn" disabled={!!busy || !consts} onClick={csv} title="선택한 차트 카드의 값을 CSV 파일로 내려받아요">{label("csv", "CSV로 저장")}</button>
           <button className="btn" disabled={!!busy || !cards.length} onClick={reportPng} title="모든 카드를 화면 배치대로 PNG 한 장에 담아요">{label("png", "PNG 보고서")}</button>

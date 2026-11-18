@@ -23,8 +23,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   return (
     <div className="modal" onClick={e => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={e => { if (e.key === "Escape") { e.preventDefault(); onClose(); } }}>
       <div className="modal-box settings-box" role="dialog" aria-modal="true" aria-labelledby="d-set-title">
-        <div className="head"><h3 id="d-set-title">대시보드 설정</h3><span className="hint" style={{ margin: 0 }}>{state.dash?.name ?? ""}</span>
-          <button className="ib" title="닫기" aria-label="닫기" style={{ marginLeft: "auto" }} onClick={onClose} autoFocus>×</button></div>
+        <div className="head"><h3 id="d-set-title">대시보드 설정</h3><span className="hint m-0">{state.dash?.name ?? ""}</span>
+          <button className="ib ml-auto" title="닫기" aria-label="닫기" onClick={onClose} autoFocus>×</button></div>
         {state.dash ? <Body dash={state.dash} onClose={onClose} /> : <p className="hint">대시보드를 먼저 고르거나 새로 만드세요.</p>}
       </div>
     </div>
@@ -135,17 +135,17 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
         <input value={path} onChange={e => setPath(e.target.value)} placeholder="목표 파일 경로" aria-label="목표 파일 경로" title="xlsx, csv, yaml, json, md, txt 파일을 읽을 수 있어요" />
         <button className="btn" onClick={saveTargets} disabled={busy}>저장</button>
       </div>
-      <div className="hint" style={{ margin: 0 }}>{tText}{!tNote && t?.error_total ? <button className="linkish" onClick={() => setShowErrs(true)}>보기</button> : null}</div>
+      <div className="hint m-0">{tText}{!tNote && t?.error_total ? <button className="linkish" onClick={() => setShowErrs(true)}>보기</button> : null}</div>
       {showErrs && <TargetErrors onClose={() => setShowErrs(false)} />}
       <h4>통화 기호</h4>
       <div className="row">
-        <input value={money} onChange={e => setMoney(e.target.value)} maxLength={consts?.currency_max} placeholder={String(consts?.defaults.currency_symbol ?? "")} aria-label="통화 기호" style={{ width: "5rem" }}
+        <input value={money} onChange={e => setMoney(e.target.value)} maxLength={consts?.currency_max} placeholder={String(consts?.defaults.currency_symbol ?? "")} aria-label="통화 기호" className="w-[5rem]"
           title="표시 형식이 금액인 값 앞에 붙는 기호예요($, € 등). 숫자·부호·공백은 쓸 수 없고, 비우면 기본 기호로 돌아가요. 모든 대시보드에 적용돼요" />
         <button className="btn" onClick={saveMoney} disabled={busy}>저장</button>
       </div>
       <div className={moneyMsg.ok ? "hint" : "err"} role="status">{moneyMsg.text}</div>
       <h4>차트 낱말</h4>
-      <div className="hint" style={{ margin: 0 }}>한 줄에 낱말 하나. 긍정·부정은 이름에 들어 있으면, 기타·결측은 이름 전체가 같으면 맞아요.</div>
+      <div className="hint m-0">한 줄에 낱말 하나. 긍정·부정은 이름에 들어 있으면, 기타·결측은 이름 전체가 같으면 맞아요.</div>
       <div className="row">
         {WORD_LISTS.map(([k, label]) => (
           <label key={k}>{label}
@@ -161,10 +161,10 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
       <div className="row">
         <input value={name} onChange={e => setName(e.target.value)} aria-label="대시보드 이름" />
         <button className="btn" onClick={rename} disabled={busy}>이름 바꾸기</button>
-        <button className="ghost" style={{ color: "var(--err)" }} onClick={remove} onBlur={() => setSure(false)} disabled={busy}>{sure ? "한 번 더 누르면 지워져요" : "대시보드 지우기"}</button>
+        <button className="ghost [color:var(--err)]" onClick={remove} onBlur={() => setSure(false)} disabled={busy}>{sure ? "한 번 더 누르면 지워져요" : "대시보드 지우기"}</button>
       </div>
       <div className={msg.ok ? "hint" : "err"} role="status">{msg.text}</div>
-      <div className="hint" style={{ margin: 0 }} title="연결 계정과 비밀번호는 저장하지 않아요">카드 값은 이 PC의 이 계정에서만 열 수 있게 암호화해 저장해요.</div>
+      <div className="hint m-0" title="연결 계정과 비밀번호는 저장하지 않아요">카드 값은 이 PC의 이 계정에서만 열 수 있게 암호화해 저장해요.</div>
     </>
   );
 }
@@ -180,12 +180,12 @@ function TargetErrors({ onClose }: { onClose: () => void }) {
     <div className="modal" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-box" role="dialog" aria-modal="true" aria-label="읽지 못한 줄">
         <h3>읽지 못한 줄</h3>
-        <div style={{ whiteSpace: "pre-wrap", margin: ".625rem 0 .875rem" }}>{err || errs.map((x, i) => <div key={i}>{x.message}</div>)}</div>
+        <div className="whitespace-pre-wrap [margin:.625rem_0_.875rem]">{err || errs.map((x, i) => <div key={i}>{x.message}</div>)}</div>
         <div className="row">
           <button className="btn" disabled={!t || offset <= 0} onClick={() => setOffset(Math.max(0, offset - (t?.limit ?? 0)))}>이전</button>
           <button className="btn" disabled={!t || offset + t.limit >= t.error_total} onClick={() => setOffset(offset + (t?.limit ?? 0))}>다음</button>
-          <span className="hint" style={{ margin: 0 }}>{t ? (errs.length ? `${offset + 1}~${offset + errs.length} / ${t.error_total}` : `0 / ${t.error_total}`) : ""}</span>
-          <button className="btn" style={{ marginLeft: "auto" }} onClick={onClose}>닫기</button>
+          <span className="hint m-0">{t ? (errs.length ? `${offset + 1}~${offset + errs.length} / ${t.error_total}` : `0 / ${t.error_total}`) : ""}</span>
+          <button className="btn ml-auto" onClick={onClose}>닫기</button>
         </div>
       </div>
     </div>

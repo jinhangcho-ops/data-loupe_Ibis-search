@@ -56,7 +56,7 @@ export function Shelf({ card, columns, onChange }: ShelfProps) {
       <div className="shelf-cols" role="group" aria-label="컬럼 칩">
         {[[SHELF_ROWS, ""] as [string, string], ...columns].map(([n, t]) => (
           <button key={n} type="button" draggable aria-pressed={held?.name === n} title={n === SHELF_ROWS ? "행 개수를 세요" : t}
-            className={`shelf-chip ${n === SHELF_ROWS ? "n" : CLASS[shelfKind(t)]}${held?.name === n ? " held" : ""}`} style={{ minHeight: "1.5rem" }}
+            className={`shelf-chip ${n === SHELF_ROWS ? "n" : CLASS[shelfKind(t)]}${held?.name === n ? " held" : ""} min-h-[1.5rem]`}
             onDragStart={e => { e.dataTransfer.setData("text/plain", JSON.stringify({ name: n, type: t })); e.dataTransfer.effectAllowed = "copy"; }} onClick={() => pick(n, t)}>{n}</button>
         ))}
       </div>
@@ -84,7 +84,7 @@ export function Shelf({ card, columns, onChange }: ShelfProps) {
                     )}
                     {row?.y ? ` (${row.y})` : text}
                   </span>
-                  <button type="button" className="ghost" title="빼기" aria-label={`${SHELVES[key]}에서 ${text} 빼기`} style={{ minWidth: "1.5rem", minHeight: "1.5rem" }} onClick={e => { e.stopPropagation(); remove(key, i); }}>×</button>
+                  <button type="button" className="ghost min-w-[1.5rem] min-h-[1.5rem]" title="빼기" aria-label={`${SHELVES[key]}에서 ${text} 빼기`} onClick={e => { e.stopPropagation(); remove(key, i); }}>×</button>
                 </span>
               );
             })}
@@ -92,9 +92,9 @@ export function Shelf({ card, columns, onChange }: ShelfProps) {
               <span className="shelf-form" onClick={e => e.stopPropagation()}>
                 <b>{pending.name}</b>
                 <select aria-label="연산자" value={op} onChange={e => setOp(e.target.value)}>{OPS.map(o => <option key={o} value={o}>{o}</option>)}</select>
-                <input aria-label="조건 값" placeholder="값" style={{ width: "5.625rem" }} value={val} onChange={e => setVal(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) fire(); }} />
+                <input aria-label="조건 값" placeholder="값" className="w-[5.625rem]" value={val} onChange={e => setVal(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) fire(); }} />
                 <button type="button" className="btn" onClick={fire}>넣기</button>
-                <button type="button" className="ghost" title="필터 넣기 취소" aria-label="필터 넣기 취소" style={{ minWidth: "1.5rem", minHeight: "1.5rem" }} onClick={() => { setPending(null); setMsg(""); }}>×</button>
+                <button type="button" className="ghost min-w-[1.5rem] min-h-[1.5rem]" title="필터 넣기 취소" aria-label="필터 넣기 취소" onClick={() => { setPending(null); setMsg(""); }}>×</button>
               </span>
             )}
             {!chips[key].length && !(key === "filter" && pending) && <span className="hint">여기에 끌어 놓기{held ? " (또는 누르기)" : ""}</span>}
@@ -121,7 +121,7 @@ export function Gallery({ onAdd }: GalleryProps) {
           <h5>{g}</h5>
           <div className="gal">
             {tiles.filter(t => t.group === g).map(t => (
-              <button key={t.kind + (t.type ?? "")} type="button" className="gal-tile" draggable title={`${t.help} (두 번 누르거나 Enter)`} style={{ minHeight: "1.5rem" }}
+              <button key={t.kind + (t.type ?? "")} type="button" className="gal-tile min-h-[1.5rem]" draggable title={`${t.help} (두 번 누르거나 Enter)`}
                 onDragStart={e => { e.dataTransfer.setData(CARD_MIME, JSON.stringify(t)); e.dataTransfer.setData("text/plain", t.name); e.dataTransfer.effectAllowed = "copy"; }}
                 onDoubleClick={() => onAdd(t)} onKeyDown={e => { if (e.key === "Enter") onAdd(t); }}>
                 <b>{t.name}</b><span className="hint">{t.help}</span>

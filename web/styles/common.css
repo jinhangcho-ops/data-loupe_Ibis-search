@@ -220,7 +220,7 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .bcheck { flex:none; width:1rem; height:1rem; border:.0938rem solid var(--line-strong); border-radius:var(--r-ctl); display:grid; place-items:center; }
 .bcard.sel .bcheck { background:var(--accent); border-color:var(--accent); }
 .bcard.sel .bcheck::after { content:""; width:.5rem; height:.25rem; border:solid var(--on-accent); border-width:0 0 .125rem .125rem; transform:translateY(-1px) rotate(-45deg); }
-.btitle { flex:1; min-width:0; height:1.875rem; border:1px solid transparent; background:none; font-weight:600; padding:.125rem .375rem; }
+.btitle { flex:1; min-width:0; text-overflow:ellipsis; height:1.875rem; border:1px solid transparent; background:none; font-weight:600; padding:.125rem .375rem; }
 .btitle:hover, .btitle:focus { border-color:var(--line); background:var(--bg); }
 .bbody { aspect-ratio:var(--ratio, 16 / 9); max-height:50vh; position:relative; }  /* 큰 창에서 1:1 카드가 너무 길어지지 않게 */
 .bnote { display:grid; place-items:center; height:100%; margin:0; text-align:center; padding:0 .75rem; }

@@ -32,7 +32,7 @@ export function Txt({ label, value, onChange, type = "text", placeholder, title,
 }
 
 export function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return <label className="hint cm-field">{label}<input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ width: "1.5rem", height: "1.5rem", flex: "0 0 auto" }} /></label>;
+  return <label className="hint cm-field">{label}<input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="w-[1.5rem] h-[1.5rem] [flex:0_0_auto]" /></label>;
 }
 
 /** 여러 줄 글 칸. parse는 한 줄 읽기 함수({error} 또는 결과) */
@@ -41,7 +41,7 @@ export function LineBox({ label, value, onChange, parse, placeholder }: { label:
   return (
     <div className="cm-block">
       <label className="hint">{label}
-        <textarea rows={3} value={value} placeholder={placeholder} style={{ width: "100%", fontSize: ".75rem" }} onChange={e => onChange(e.target.value)} />
+        <textarea rows={3} value={value} placeholder={placeholder} className="w-full [font-size:.75rem]" onChange={e => onChange(e.target.value)} />
       </label>
       {bad.map((f, i) => <div key={i} className="err" role="alert">{f.line} → {f.error}</div>)}
     </div>

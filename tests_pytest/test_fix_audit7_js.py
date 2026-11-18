@@ -125,7 +125,7 @@ console.log(JSON.stringify(out));
 # ---------- 7E5 토스트는 display:none이 아니라 투명으로 숨긴다 ----------
 
 def test_7e5_toast_hidden_by_opacity():
-    css = (STATIC / "core" / "common.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "styles" / "common.css").read_text(encoding="utf-8")
     rule = re.search(r"\.toast\.hidden\s*\{([^}]*)\}", css)
     assert rule and "opacity:0" in rule.group(1).replace(" ", "") and "display:block" in rule.group(1).replace(" ", "")
     assert "visibility" not in rule.group(1)  # visibility:hidden도 접근성 트리에서 빠진다

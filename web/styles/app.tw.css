@@ -1,12 +1,12 @@
 /* Tailwind 입력. `npm run build:css`가 static/core/app.css를 만든다(모든 화면이 그 파일 하나를 읽는다. CDN 없음).
-   색·크기는 common.css의 CSS 변수에 묶는다: 밝은·어두운 테마, rem, [화면 크기]가 그대로 따라온다. */
+   색·크기는 common.css(이 폴더)의 CSS 변수에 묶는다: 밝은·어두운 테마, rem, [화면 크기]가 그대로 따라온다. */
 @layer theme, components, utilities;
 @import "tailwindcss/theme" layer(theme);
 /* 공통 부품(이름은 그대로, JS가 이름으로 붙였다 뗀다). 화면별 <style>·dashboard.css도 같은 레이어에 넣어 선택자 우선순위가 예전처럼 겨룬다.
    preflight(기본 초기화)는 넣지 않는다: 넣으면 체크 칸 여백·글자 자리가 모든 화면에서 1~3px 달라진다(T1에서 잼) */
-@import "../../static/core/common.css" layer(components);
-@import "../../static/core/dash_edit.css" layer(components);
-@import "../../static/query/sentences.css" layer(components);
+@import "./common.css" layer(components);
+@import "./dash_edit.css" layer(components);
+@import "./sentences.css" layer(components);
 @import "tailwindcss/utilities" layer(utilities) source(none);
 
 @source "../../static/**/*.html";

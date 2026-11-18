@@ -55,7 +55,7 @@ export function Templates({ onPick }: TemplatesProps) {
   return (
     <div className="templates">
       {onPick && (
-        <select value={picked} title="시작 모양. 카드 자리만 놓이고, 데이터는 카드마다 정해요" style={{ width: "auto" }}
+        <select value={picked} title="시작 모양. 카드 자리만 놓이고, 데이터는 카드마다 정해요" className="w-auto"
           onChange={e => { setPicked(e.target.value); const t = all.find(x => x.id === e.target.value); if (t) onPick(t); }}>
           {all.map(t => <option key={t.id} value={t.id} title={t.help ?? ""}>{t.name}</option>)}
         </select>
@@ -64,10 +64,10 @@ export function Templates({ onPick }: TemplatesProps) {
         <input placeholder="템플릿 이름" value={name} onChange={e => setName(e.target.value)} />
         <button className="btn" title="카드 종류, 자리, 색, 이름만 저장해요. 값과 연결 정보는 담지 않아요" onClick={save}>내 템플릿으로 저장</button>
       </div>
-      <div className={note.ok ? "hint" : "err"} style={{ margin: 0 }}>{note.text}</div>
+      <div className={`${note.ok ? "hint" : "err"} m-0`}>{note.text}</div>
       {mine.map(t => (
         <div key={t.id} className="row">
-          <span className="hint" style={{ flex: 1 }}>{t.name} (카드 {t.cards.length}개)</span>
+          <span className="hint flex-1">{t.name} (카드 {t.cards.length}개)</span>
           <button className="ghost" onClick={() => drop(t.id)}>지우기</button>
         </div>
       ))}

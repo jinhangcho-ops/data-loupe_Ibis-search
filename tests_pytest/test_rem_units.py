@@ -4,8 +4,8 @@ import re
 from conftest import ROOT
 from core import settings
 
-COMMON_CSS = ROOT / "static/core/common.css"
-CSS_FILES = (COMMON_CSS, ROOT / "static/core/dash_edit.css", ROOT / "static/query/sentences.css", ROOT / "web/styles/dashboard.css")
+COMMON_CSS = ROOT / "web/styles/common.css"
+CSS_FILES = (COMMON_CSS, ROOT / "web/styles/dash_edit.css", ROOT / "web/styles/sentences.css", ROOT / "web/styles/dashboard.css")
 HTML_GLOB = "static/*/*.html"
 STYLE_BLOCK = re.compile(r"<style[^>]*>(.*?)</style>", re.S)
 CSS_COMMENT = re.compile(r"/\*.*?\*/", re.S)  # 설명 글의 px는 보지 않는다

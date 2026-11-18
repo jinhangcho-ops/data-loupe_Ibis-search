@@ -9,7 +9,7 @@ export function WordCloud(p: P) {
   const lo = shown[shown.length - 1].n, hi = shown[0].n, size = (n: number) => (hi === lo ? 24 : 12 + (36 * (n - lo)) / (hi - lo));
   return (
     <Box cls="wordcloud">
-      <div role="list" aria-label={p.card.title} style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", alignItems: "center", alignContent: "center", gap: "2px 10px", flex: 1, overflow: "hidden" }}>
+      <div role="list" aria-label={p.card.title} className="[display:flex] flex-wrap justify-center items-center [align-content:center] [gap:2px_10px] flex-1 overflow-hidden">
         {shown.map((x, i) => <span key={x.w} role="listitem" title={`${x.w}: ${x.n.toLocaleString()}번`} style={{ fontSize: rem(size(x.n)), lineHeight: 1.1, fontWeight: 600, color: tone(p, x.w, i) }}>{x.w}</span>)}
       </div>
     </Box>

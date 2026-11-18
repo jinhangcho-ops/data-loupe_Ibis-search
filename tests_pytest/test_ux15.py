@@ -184,7 +184,7 @@ def test_board_pick_line_only_when_editing_or_picked():
 
 def test_query_import_menu_item_no_wrap():
     bar = web("components/shell/Toolbar.tsx")
-    assert re.search(r'<a role="menuitem"[^\n]*whiteSpace: "nowrap"[^\n]*>쿼리에서 가져오기</a>', bar)
+    assert re.search(r'<a role="menuitem"[^\n]*className="[^"\n]*\bwhitespace-nowrap\b[^\n]*>쿼리에서 가져오기</a>', bar)
 
 
 # ---------- 15E 설정 ----------

@@ -42,7 +42,7 @@ function TableView({ card, columns, rows, prev }: Pick<P, "card"> & { columns: C
   return (
     <table>
       <thead><tr>{names.map((n, i) => (
-        <th key={i} style={{ cursor: "pointer" }} title="눌러서 정렬해요" onClick={() => setSort({ i, dir: sort?.i === i ? -sort.dir : 1 })}>{n + (sort?.i === i ? (sort.dir > 0 ? " ▲" : " ▼") : "")}</th>
+        <th key={i} className="cursor-pointer" title="눌러서 정렬해요" onClick={() => setSort({ i, dir: sort?.i === i ? -sort.dir : 1 })}>{n + (sort?.i === i ? (sort.dir > 0 ? " ▲" : " ▼") : "")}</th>
       ))}</tr></thead>
       <tbody>
         {order.map(r => {

@@ -21,9 +21,9 @@ export function Funnel({ card, colors }: P) {
   return (
     <Box cls="table">
       <div className="hint">{d?.count === "each" ? EACH_TEXT : `${funnelSentence(steps)} (${windowText(d?.window)})`}</div>
-      <div style={{ flex: 1, minHeight: 140 }}>
+      <div className="flex-1 min-h-[140px]">
         {lad ? (
-          <svg viewBox={`0 0 ${lad.width} ${lad.height}`} preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }} role="img" aria-label={card.title}>
+          <svg viewBox={`0 0 ${lad.width} ${lad.height}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" role="img" aria-label={card.title}>
             {lad.rows.map((r, i) => (
               <g key={"l" + i}>
                 <path d={r.path} fill={c.bar}><title>{r.lines[1]}</title></path>
@@ -35,7 +35,7 @@ export function Funnel({ card, colors }: P) {
             ))}
           </svg>
         ) : g && (
-        <svg viewBox={`0 0 ${g.width} ${g.height}`} preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }} role="img" aria-label={card.title}>
+        <svg viewBox={`0 0 ${g.width} ${g.height}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" role="img" aria-label={card.title}>
           {g.nexts.map((b, i) => <path key={"n" + i} d={b.path} fill={c.next} opacity={0.45}><title>{`${steps[b.from].name} → ${steps[b.to].name}: ${b.users.toLocaleString()}명`}</title></path>)}
           {g.drops.map((b, i) => <path key={"d" + i} d={b.path} fill={c.drop} opacity={0.55}><title>{`${steps[b.step - 1].name}에서 ${b.users.toLocaleString()}명 이탈`}</title></path>)}
           {g.bars.map((b, i) => <rect key={"b" + i} x={b.x} y={b.y} width={b.w} height={Math.max(b.h, 1)} fill={c.bar} rx={2}><title>{`${b.name}: ${b.users.toLocaleString()}명`}</title></rect>)}

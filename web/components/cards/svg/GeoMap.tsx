@@ -20,7 +20,7 @@ export default function GeoMap({ card, colors }: P) {
   const nums = v.regions.map(r => r.value).filter((x): x is number => typeof x === "number"), id = "geo-" + card.id, y = frame.h - 8 - 14 * s;  // 범례: 띠 아래 글자 줄만큼 위로
   const dot = card.colors?.series?.["점"] ?? colors.palette?.[1] ?? colors.series[1];
   return (
-    <svg viewBox={`0 0 ${frame.w.toFixed(1)} ${frame.h.toFixed(1)}`} preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%", overflow: "hidden" }} role="img" aria-label={card.title}>
+    <svg viewBox={`0 0 ${frame.w.toFixed(1)} ${frame.h.toFixed(1)}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full overflow-hidden" role="img" aria-label={card.title}>
       {geo.tiles && <g>{kept.map(t => (
         <image key={t.url} href={t.url} x={t.px.toFixed(1)} y={t.py.toFixed(1)} width={t.size.toFixed(1)} height={t.size.toFixed(1)} preserveAspectRatio="none" onError={() => setLost(s => new Set(s).add(t.url))} />
       ))}</g>}

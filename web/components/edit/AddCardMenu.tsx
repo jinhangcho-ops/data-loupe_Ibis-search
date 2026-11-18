@@ -155,7 +155,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
   return (
     <div id={fill ? undefined : "d-add"} className={fill ? "pop cardmenu" : "d-add cardmenu"} ref={root} role="dialog" aria-label={fill ? "카드 데이터 정하기" : "카드 추가"}
       onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); close(); } }}>
-      {!fill && <div className="phead"><b>카드 추가</b><button type="button" className="ghost" aria-label="카드 추가 닫기" title="닫기" style={{ minWidth: "1.5rem", minHeight: "1.5rem" }} onClick={close}>×</button></div>}
+      {!fill && <div className="phead"><b>카드 추가</b><button type="button" className="ghost min-w-[1.5rem] min-h-[1.5rem]" aria-label="카드 추가 닫기" title="닫기" onClick={close}>×</button></div>}
       <div className="d-add-body">
       <Sel label="테이블" title="카드가 읽을 테이블. 먼저 데이터에 연결해야 해요" value={f.table} onChange={v => set("table", v)} options={names} blank="(테이블을 고르세요)" need />
       {hidden.length > 0 && <div className="hint">ID·해시로 보이는 컬럼 {hidden.join(", ")}을(를) 목록에서 뺐어요 <button type="button" className="linkish" onClick={() => setRs(p => ({ table: f.table, list: [...(p.table === f.table ? p.list : []), ...hidden] }))}>다시 넣기</button></div>}
@@ -184,12 +184,12 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
               <select aria-label="집계" value={r.agg} onChange={e => setRow(i, { agg: e.target.value })}>
                 {aggOpts.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
               </select>
-              {f.rows.length > low && <button type="button" className="ghost" title="이 줄 빼기" aria-label="이 줄 빼기" style={{ minWidth: "1.5rem", minHeight: "1.5rem" }} onClick={() => setF(p => ({ ...p, rows: p.rows.filter((_, j) => j !== i) }))}>×</button>}
+              {f.rows.length > low && <button type="button" className="ghost min-w-[1.5rem] min-h-[1.5rem]" title="이 줄 빼기" aria-label="이 줄 빼기" onClick={() => setF(p => ({ ...p, rows: p.rows.filter((_, j) => j !== i) }))}>×</button>}
             </div>
           ))}
         </div>
       )}
-      {high > 0 && f.rows.length < high && <button type="button" className="linkish" style={{ minHeight: "1.5rem" }} onClick={() => setF(p => ({ ...p, rows: [...p.rows, { label: "", y: "", agg: firstAgg }] }))}>값 추가</button>}
+      {high > 0 && f.rows.length < high && <button type="button" className="linkish min-h-[1.5rem]" onClick={() => setF(p => ({ ...p, rows: [...p.rows, { label: "", y: "", agg: firstAgg }] }))}>값 추가</button>}
 
       {is("kpi", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation", "bullet", "calheat") && <Sel label="표시 형식" value={f.format} onChange={v => set("format", v)} options={FORMATS} />}
       {is("kpi", "donut_kpi", "stripes", "bullet", "calheat") && <Txt label="단위" title="값 뒤에 붙일 글자. 사람 수는 명, 횟수는 회처럼 적어요. 돈이면 표시 형식 금액을 고르거나 원을 적어요" placeholder="단위 (예: 명, 회, 원)" value={f.unitText} onChange={v => set("unitText", v.slice(0, 10))} width={130} />}
@@ -199,7 +199,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       {is("heatmap", "treemap", "sunburst") && <Sel label={is("heatmap") ? "열 컬럼" : "아랫단계 컬럼"} value={f.split} onChange={v => set("split", v)} options={all} blank={is("heatmap") ? "(고르세요)" : "(없음)"} need={is("heatmap")} />}
       {is("heatmap") && <div className="hint cm-note">{`행 값 수 × 열 값 수가 ${consts.dash.max_cells.toLocaleString()}칸을 넘으면 그릴 수 없어요. 지역·요일처럼 고유값이 적은 컬럼을 고르세요.`}</div>}
       {is("wordcloud") && (
-        <div className="hint cm-field" role="group" aria-label="워드클라우드 방식" style={{ display: "flex", flexWrap: "wrap", gap: ".375rem", alignItems: "center" }}>
+        <div className="hint cm-field [display:flex] flex-wrap gap-1.5 items-center" role="group" aria-label="워드클라우드 방식">
           <CloudFields cloud={cloud} schema="" table={f.table} texts={colsOfType(cols, ["문자"])} full={false} tagged={!!fill?.source?.body?.labels} onChange={setCloud} />
         </div>
       )}
@@ -210,8 +210,8 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       {is(...WITH_DATE) && <Sel label="날짜 컬럼" title="대시보드 기간과 기준일을 이 날짜 컬럼에 걸어요. 날짜 컬럼이 하나뿐이면 자동으로 골라요" value={f.date} onChange={v => set("date", v)} options={dates} blank="(없음: 기간을 걸지 않음)" />}
       {is("kpi", "donut_kpi", "summary", "stripes", "blocks", "target_trend", "bullet") && (
         <div className="hint cm-field">목표
-          <span style={{ display: "flex", gap: ".375rem", alignItems: "center" }}>
-            <input type="number" aria-label="목표 숫자" placeholder="목표 숫자" style={{ width: "6.875rem" }} value={f.targetValue} onChange={e => set("targetValue", e.target.value)} /><span className="cm-word">또는</span>
+          <span className="[display:flex] gap-1.5 items-center">
+            <input type="number" aria-label="목표 숫자" placeholder="목표 숫자" className="w-[6.875rem]" value={f.targetValue} onChange={e => set("targetValue", e.target.value)} /><span className="cm-word">또는</span>
             <select aria-label="목표 이름" title="목표 파일에서 이름으로 찾아요" value={f.targetName} onChange={e => set("targetName", e.target.value)}>
               <option value="">(이름으로 찾지 않음)</option>{targetNames.map(n => <option key={n} value={n}>{n}</option>)}
             </select>
@@ -260,16 +260,16 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
           <Sel label="틀" title="고르면 단계 이름과 차례를 채워요. 직접은 지금 줄을 그대로 둬요" value={tpl} onChange={v => { setTpl(v); if (v) set("fStages", templateStages(v as keyof typeof FUNNEL_TEMPLATES)); }} options={Object.entries(FUNNEL_TEMPLATES).map(([k, t]): [string, string] => [k, t.label])} blank="직접" />
           {f.fStages.map((r, i) => (
             <Block key={i}>
-              <div role="group" aria-label={`단계 ${i + 1}`} style={{ display: "flex", flexDirection: "column", gap: ".25rem" }}>
+              <div role="group" aria-label={`단계 ${i + 1}`} className="[display:flex] flex-col gap-1">
                 <input aria-label="단계 이름" placeholder="단계 이름" value={r.name} onChange={e => setStage(i, { name: e.target.value })} />
-                <textarea aria-label="조건 줄" rows={2} value={r.conds} placeholder={"한 줄에 하나, 줄끼리 and. 예: event in purchase, refund"} style={{ width: "100%", fontSize: ".75rem" }} onChange={e => setStage(i, { conds: e.target.value })} />
-                <span style={{ display: "flex", gap: ".375rem", alignItems: "center" }}>
+                <textarea aria-label="조건 줄" rows={2} value={r.conds} placeholder={"한 줄에 하나, 줄끼리 and. 예: event in purchase, refund"} className="w-full [font-size:.75rem]" onChange={e => setStage(i, { conds: e.target.value })} />
+                <span className="[display:flex] gap-1.5 items-center">
                   <select aria-label="재방문" title="첫 활동 뒤 N일 안에 다시 온 사람" value={r.revisit === "" ? "" : REVISIT_CHOICES.map(String).includes(r.revisit) ? r.revisit : REVISIT_CUSTOM} onChange={e => setStage(i, { revisit: e.target.value === REVISIT_CUSTOM ? REVISIT_CUSTOM_START : e.target.value })}>
                     <option value="">재방문 없음</option>
                     {REVISIT_CHOICES.map(n => <option key={n} value={String(n)}>{n}일</option>)}
                     <option value={REVISIT_CUSTOM}>직접 입력</option>
                   </select>
-                  {r.revisit !== "" && !REVISIT_CHOICES.map(String).includes(r.revisit) && <><input type="number" aria-label="재방문 일수" min={1} step={1} style={{ width: "4.375rem" }} value={r.revisit} onChange={e => setStage(i, { revisit: e.target.value })} /><span className="cm-word">N일 안에 다시 온 사람</span></>}
+                  {r.revisit !== "" && !REVISIT_CHOICES.map(String).includes(r.revisit) && <><input type="number" aria-label="재방문 일수" min={1} step={1} className="w-[4.375rem]" value={r.revisit} onChange={e => setStage(i, { revisit: e.target.value })} /><span className="cm-word">N일 안에 다시 온 사람</span></>}
                   <button type="button" className="ghost" aria-label="위로" disabled={i === 0} onClick={() => moveStage(i, -1)}>위</button>
                   <button type="button" className="ghost" aria-label="아래로" disabled={i === f.fStages.length - 1} onClick={() => moveStage(i, 1)}>아래</button>
                   <button type="button" className="ghost" aria-label="빼기" onClick={() => set("fStages", f.fStages.filter((_, j) => j !== i))}>빼기</button>
@@ -277,7 +277,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
               </div>
             </Block>
           ))}
-          {f.fStages.length < MAX_STAGES && <button type="button" className="linkish" style={{ minHeight: "1.5rem" }} onClick={() => set("fStages", [...f.fStages, { name: "", conds: "", revisit: "" }])}>단계 더하기</button>}
+          {f.fStages.length < MAX_STAGES && <button type="button" className="linkish min-h-[1.5rem]" onClick={() => set("fStages", [...f.fStages, { name: "", conds: "", revisit: "" }])}>단계 더하기</button>}
           <Sel label="세기" title="순서대로는 앞 단계를 거친 사람만, 따로는 단계마다 조건에 맞는 사람을 세요" value={f.fCount} onChange={v => set("fCount", v as Form["fCount"])} options={[["order", "순서대로"], ["each", "단계마다 따로"]]} />
         </>
       )}
@@ -285,7 +285,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       {is("sankey") && <Sel label="흐름 방식" value={f.fFlow} onChange={v => set("fFlow", v as Form["fFlow"])} options={[["steps", "단계를 적기"], ["auto", "자동"]]} />}
       {is("sankey") && f.fFlow === "auto" && (
         <>
-          <button type="button" className="btn" disabled={!f.table || !f.fStep || loadingVals} style={{ minHeight: "1.5rem" }} onClick={loadValues}>값 목록 불러오기</button>
+          <button type="button" className="btn min-h-[1.5rem]" disabled={!f.table || !f.fStep || loadingVals} onClick={loadValues}>값 목록 불러오기</button>
           {more && <div className="hint cm-note">값이 많아 앞 {vals.length}개만 보여요.</div>}
           {shownVals.map(v => (
             <label key={v} className="hint cm-field">{v}
@@ -300,13 +300,13 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
           <div className="hint cm-note">켜면 고른 값 중 뒤에 더 없는 칸에서 멈춘 사람을 “이탈”로 모아요. 깊이로 잘린 사람과 끝 값에 닿은 사람은 빼요.</div>
         </>
       )}
-      {is("sankey") && <Block><label className="hint">조건 줄<textarea rows={2} value={f.fConds} placeholder="한 줄에 하나, 줄끼리 and. 예: platform = iOS" style={{ width: "100%", fontSize: ".75rem" }} onChange={e => set("fConds", e.target.value)} /></label></Block>}
+      {is("sankey") && <Block><label className="hint">조건 줄<textarea rows={2} value={f.fConds} placeholder="한 줄에 하나, 줄끼리 and. 예: platform = iOS" className="w-full [font-size:.75rem]" onChange={e => set("fConds", e.target.value)} /></label></Block>}
       {is("funnel", "sankey") && (is("funnel") || f.fFlow === "steps") && (
         <>
           {(is("sankey") || f.fDefine === "values") && <Txt label="단계 순서" title={is("sankey") ? "단계 값을 순서대로 쉼표로 나눠 적어요. 2~10개" : "단계 값을 순서대로 쉼표로 나눠 적어요. 1~10개"} placeholder="예: 방문, 장바구니, 결제" value={f.fSteps} onChange={v => set("fSteps", v)} />}
           <div className="hint cm-field">기간 제한
-            <span style={{ display: "flex", gap: ".375rem", alignItems: "center" }}>
-              <input type="number" aria-label="기간 제한 숫자" min={0} step="any" placeholder="비움" style={{ width: "5rem" }} value={f.fWin} onChange={e => set("fWin", e.target.value)} />
+            <span className="[display:flex] gap-1.5 items-center">
+              <input type="number" aria-label="기간 제한 숫자" min={0} step="any" placeholder="비움" className="w-[5rem]" value={f.fWin} onChange={e => set("fWin", e.target.value)} />
               <select aria-label="기간 제한 단위" value={f.fUnit} onChange={e => set("fUnit", e.target.value)}><option value="minute">분</option><option value="hour">시간</option><option value="day">일</option></select><span className="cm-word">안에</span>
             </span>
           </div>
@@ -338,7 +338,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       )}
       {is("sentence") && (
         <>
-          <Block><label className="hint">문장 틀<b className="cm-need" title="꼭 채울 칸">*</b><textarea rows={2} value={f.template} placeholder="예: 오늘 매출은 {매출}이고 {비교} ({기준일} 기준)" style={{ width: "100%", fontSize: ".75rem" }} onChange={e => set("template", e.target.value)} /></label></Block>
+          <Block><label className="hint">문장 틀<b className="cm-need" title="꼭 채울 칸">*</b><textarea rows={2} value={f.template} placeholder="예: 오늘 매출은 {매출}이고 {비교} ({기준일} 기준)" className="w-full [font-size:.75rem]" onChange={e => set("template", e.target.value)} /></label></Block>
           <LineBox label="빈칸" value={f.blankText} onChange={v => set("blankText", v)} parse={l => parseBlankLine(l, aggs)} placeholder={"빈칸(한 줄에 하나): 이름 = 종류(값·직전·비교·기준일) [컬럼 [집계 [모양]]]\n예: 매출 = 값 amt sum 금액 / 비교 = 비교 amt sum / 기준일 = 기준일"} />
         </>
       )}
@@ -347,7 +347,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
         <label className="hint cm-field">카드 이름<input value={f.title} placeholder="카드 이름 (비우면 자동)" onChange={e => set("title", e.target.value)} /></label>
         <div className="row">
           <input aria-label="목표 파일 경로" title="xlsx, csv, yaml, json, md, txt 파일을 읽을 수 있어요" placeholder="목표 파일 경로" value={path} onChange={e => setPath(e.target.value)} />
-          <button type="button" className="btn" style={{ minHeight: "1.5rem" }} onClick={saveTargets}>저장</button>
+          <button type="button" className="btn min-h-[1.5rem]" onClick={saveTargets}>저장</button>
         </div>
         <div className="hint cm-note">{note || (targets && !targets.path ? "목표 파일을 정하면 이름으로 목표를 찾을 수 있어요" : "")}</div>
       </details>
@@ -355,8 +355,8 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       {cloudWhy && <div className="hint cm-note">{cloudWhy}</div>}
       </div>
       <div className="row d-add-foot">
-        <button type="button" className="btn p" disabled={busy || !!cloudWhy} style={{ minHeight: "1.5rem" }} onClick={go}>{fill ? "이 카드에 채우기" : "카드 추가"}</button>
-        <button type="button" className="btn" style={{ minHeight: "1.5rem" }} onClick={close}>닫기</button>
+        <button type="button" className="btn p min-h-[1.5rem]" disabled={busy || !!cloudWhy} onClick={go}>{fill ? "이 카드에 채우기" : "카드 추가"}</button>
+        <button type="button" className="btn min-h-[1.5rem]" onClick={close}>닫기</button>
       </div>
     </div>
   );

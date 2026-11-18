@@ -49,7 +49,7 @@ export function MapCard({ card, colors }: P) {
   };
   const middle = (text: string, fill: string, size = 12) => <text x={W / 2} y={H / 2} textAnchor="middle" fontSize={growFont(text, W, size, s)} fill={fill}>{text}</text>;
   return (
-    <svg ref={root} viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "100%", touchAction: "none" }} role="img" aria-label={card.title}>
+    <svg ref={root} viewBox={`0 0 ${W} ${H}`} className="w-full h-full [touch-action:none]" role="img" aria-label={card.title}>
       <g>
         {bg === "rack" ? Array.from({ length: 6 }, (_, i) => <rect key={i} x={20 + i * 62} y={14} width={52} height={H - 28} rx={4} fill="none" stroke={colors.line} strokeWidth={1.5} />)
           : bg === "network" ? Array.from({ length: 9 }, (_, k) => k + 1).flatMap(i => [
@@ -65,7 +65,7 @@ export function MapCard({ card, colors }: P) {
       <g>{entities.map(e => {
         const [x, y] = [pos[e.name][0] * W, pos[e.name][1] * H];
         return (
-          <g key={e.name} style={{ cursor: "grab" }} onPointerDown={down(e.name)} onPointerMove={move} onPointerUp={up}>
+          <g key={e.name} className="cursor-grab" onPointerDown={down(e.name)} onPointerMove={move} onPointerUp={up}>
             <circle cx={x} cy={y} r={e.level === "ok" ? 8 : 10} fill={levelColor(e.level, colors)} stroke={colors.card} strokeWidth={2}>
               <title>{`${e.name}: ${LEVEL_NAMES[e.level]}${e.since_text ? ", " + e.since_text : ""}${e.reasons.length ? ", " + e.reasons.join(", ") : ""}`}</title>
             </circle>

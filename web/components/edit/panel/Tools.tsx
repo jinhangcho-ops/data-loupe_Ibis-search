@@ -140,7 +140,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
   const autoFlow = (card.source.analysis as { mode?: string } | undefined)?.mode === "auto";
   const kindFields = {
     funnel: (<>
-      <label className="hint bset">그림 모양<select className="bunit" style={{ flexBasis: "auto" }} aria-label="그림 모양" value={view.funnel_shape ?? "flow"}
+      <label className="hint bset">그림 모양<select className="bunit [flex-basis:auto]" aria-label="그림 모양" value={view.funnel_shape ?? "flow"}
           onChange={e => e.target.value === "flow" ? without("funnel_shape") : setView({ funnel_shape: e.target.value as CardView["funnel_shape"] })}>
           {FUNNEL_SHAPES.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
         </select>
@@ -175,15 +175,15 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     </>),
     donut_kpi: (
       <label className="hint bset">고리
-        <select className="bunit" style={{ flexBasis: "auto" }} aria-label="고리" value={view.ring || "stack"} onChange={e => setView({ ring: e.target.value as CardView["ring"] })}>
+        <select className="bunit [flex-basis:auto]" aria-label="고리" value={view.ring || "stack"} onChange={e => setView({ ring: e.target.value as CardView["ring"] })}>
           {RINGS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
         </select>
       </label>
     ),
     wordcloud: <CloudFields cloud={view.cloud ?? { mode: "values" }} schema={card.source.schema ?? ""} table={card.source.table ?? ""} texts={columns} full tagged={!!card.source.body?.labels} onChange={c => setCloud(c)} />,
     sentence: (
-      <label className="hint bset" style={{ flexBasis: "100%" }}>문장 틀
-        <textarea aria-label="문장 틀" rows={2} style={{ width: "100%", fontSize: ".75rem" }} key={view.template ?? ""} defaultValue={view.template ?? ""}
+      <label className="hint bset [flex-basis:100%]">문장 틀
+        <textarea aria-label="문장 틀" rows={2} className="w-full [font-size:.75rem]" key={view.template ?? ""} defaultValue={view.template ?? ""}
           onBlur={e => {
             const v = e.target.value.trim();
             if (!v) { e.target.value = view.template ?? ""; return setMsg(TEMPLATE_EMPTY); }
@@ -197,7 +197,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     histogram: <>{num("bins", "구간 수", 50, 1, consts.dash.max_bins ?? 100)}<span className="hint">바꾸면 [다시 구하기]를 누르세요. 새 구간으로 다시 구해요.</span></>,
     bullet: (
       <label className="hint bset">구간
-        <input aria-label="구간" placeholder="예: 50, 80, 100" title="바탕 띠의 경계 값. 작은 것부터 쉼표로 1~6개, 비우면 띠 없음" style={{ width: "7.5rem" }} key={(view.bands ?? []).join(",")} defaultValue={(view.bands ?? []).join(", ")}
+        <input aria-label="구간" placeholder="예: 50, 80, 100" title="바탕 띠의 경계 값. 작은 것부터 쉼표로 1~6개, 비우면 띠 없음" className="w-[7.5rem]" key={(view.bands ?? []).join(",")} defaultValue={(view.bands ?? []).join(", ")}
           onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} onBlur={e => {
             if (!e.target.value.trim()) { if (!view.bands) return; const rest = { ...view }; delete rest.bands; return onChange({ view: rest }); }
             try { const bands = parseBands(e.target.value, consts.dash.max_bands); setMsg(""); if (bands.join() !== (view.bands ?? []).join()) setView({ bands }); } catch (err) { setMsg((err as Error).message); }
@@ -205,15 +205,15 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
       </label>
     ),
     kpi: (<>
-      <label className="hint bset">아이콘<select className="bunit" style={{ flexBasis: "auto" }} aria-label="아이콘" title="큰 값 옆 아이콘" value={view.icon ?? "chart"} onChange={e => setView({ icon: e.target.value as CardView["icon"] })}>
+      <label className="hint bset">아이콘<select className="bunit [flex-basis:auto]" aria-label="아이콘" title="큰 값 옆 아이콘" value={view.icon ?? "chart"} onChange={e => setView({ icon: e.target.value as CardView["icon"] })}>
           {ICONS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
         </select>
       </label>
-      <label className="hint bset">큰 값 크기<select className="bunit" style={{ flexBasis: "auto" }} aria-label="큰 값 크기" value={view.fit ?? "center"} onChange={e => setView({ fit: e.target.value as CardView["fit"] })}>
+      <label className="hint bset">큰 값 크기<select className="bunit [flex-basis:auto]" aria-label="큰 값 크기" value={view.fit ?? "center"} onChange={e => setView({ fit: e.target.value as CardView["fit"] })}>
           <option value="center">가운데</option><option value="fill">꽉 채우기</option>
         </select>
       </label>
-      <label className="hint bset">추이선 자리<select className="bunit" style={{ flexBasis: "auto" }} aria-label="추이선 자리" value={view.layout ?? "below"} onChange={e => setView({ layout: e.target.value as CardView["layout"] })}>
+      <label className="hint bset">추이선 자리<select className="bunit [flex-basis:auto]" aria-label="추이선 자리" value={view.layout ?? "below"} onChange={e => setView({ layout: e.target.value as CardView["layout"] })}>
           <option value="below">아래</option><option value="right">오른쪽</option>
         </select>
       </label>
@@ -221,7 +221,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
   }[card.kind as string] ?? null;
   // 순위·캔들·코호트는 기간 단위를 다시 고를 수 있다(서버가 그 단위로 다시 구한다)
   const unitSel = ["bump", "candle", "cohort"].includes(card.kind) && (
-    <label className="hint bset">기간 단위<select className="bunit" style={{ flexBasis: "auto" }} aria-label="기간 단위" title="바꾸면 [다시 구하기]로 그 단위의 값을 구해요" value={view.unit || "month"} onChange={e => setView({ unit: e.target.value as CardView["unit"] })}>
+    <label className="hint bset">기간 단위<select className="bunit [flex-basis:auto]" aria-label="기간 단위" title="바꾸면 [다시 구하기]로 그 단위의 값을 구해요" value={view.unit || "month"} onChange={e => setView({ unit: e.target.value as CardView["unit"] })}>
         {Object.entries(consts.dash.units).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
       </select>
     </label>
@@ -240,7 +240,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     } catch (e) { setMsg(`${(e as Error).message} 기간 기준 날짜는 ${was ? `그대로(${was})` : "그대로(없음)"}예요.`); }
   };
   const dateSel = dateCols.length > 0 && card.kind !== "sankey" && card.kind !== "cohort" && (
-    <label className="hint bset">기간 기준<select className="bunit" style={{ flexBasis: "auto" }} aria-label="기간 기준 날짜" title="대시보드 기간과 기준일을 이 날짜 컬럼에 걸어 다시 구해요" value={card.source.date ?? ""} onChange={e => setDate(e.target.value)}>
+    <label className="hint bset">기간 기준<select className="bunit [flex-basis:auto]" aria-label="기간 기준 날짜" title="대시보드 기간과 기준일을 이 날짜 컬럼에 걸어 다시 구해요" value={card.source.date ?? ""} onChange={e => setDate(e.target.value)}>
         <option value="">{DATE_X.includes(card.kind) ? `가로축 날짜${card.source.body?.x ? ` (${String(card.source.body.x)})` : ""}` : "없음"}</option>{/* 날짜가 가로축이면 비워도 서버가 가로축 날짜에 건다 */}
         {dateCols.map(c => <option key={c} value={c}>{c}</option>)}
       </select>
@@ -276,7 +276,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     if (spec.length === 3) {
       const k = PCT_PARAMS.includes(key) ? PCT : 1, show = (x: number) => +(x * k).toPrecision(PCT_PRECISION);
       return (
-        <label key={key} className="hint bset">{label}<input type="number" step="any" aria-label={aria} min={show(spec[1])} max={show(spec[2])} style={{ width: "4.375rem" }} key={String(now)} defaultValue={show(now as number)}
+        <label key={key} className="hint bset">{label}<input type="number" step="any" aria-label={aria} min={show(spec[1])} max={show(spec[2])} className="w-[4.375rem]" key={String(now)} defaultValue={show(now as number)}
           onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
           onBlur={e => { const t = e.target.value; const v = t === "" ? spec[0] : Math.min(spec[2], Math.max(spec[1], +t / k)); if (v !== now) setParam(rule, name, v); else e.target.value = String(show(v)); }} />{k === PCT ? "%" : ""}</label>
       );
@@ -294,7 +294,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     }
     if (spec[1] === null) return s && s.datasets.length >= 2 ? (
       <label key={key} className="hint bset">{label}
-        <select className="bunit" style={{ flexBasis: "auto" }} aria-label={aria} value={now as string} onChange={e => setParam(rule, name, e.target.value)}>
+        <select className="bunit [flex-basis:auto]" aria-label={aria} value={now as string} onChange={e => setParam(rule, name, e.target.value)}>
           <option value={spec[0] as string}>합계</option>
           {s.datasets.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
         </select>
@@ -302,7 +302,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     ) : null;
     return (
       <label key={key} className="hint bset">{label}
-        <select className="bunit" style={{ flexBasis: "auto" }} aria-label={aria} value={now as string} onChange={e => setParam(rule, name, e.target.value)}>
+        <select className="bunit [flex-basis:auto]" aria-label={aria} value={now as string} onChange={e => setParam(rule, name, e.target.value)}>
           {(spec[1] as string[]).map(c => <option key={c} value={c}>{CHOICE_NAMES[c]}</option>)}
         </select>
       </label>
@@ -311,7 +311,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
   const rangeInput = (a: "y" | "y1", k: "min" | "max"): ReactNode => {
     const name = `${SIDES[a]} 축 ${k === "min" ? "최소" : "최대"}`;
     return (
-      <label key={`${a}.${k}`} className="hint bset">{name}<input type="number" step="any" name={`${a}.${k}`} aria-label={name} style={{ width: "4.375rem" }} key={String(view.ranges?.[a]?.[k] ?? "")} defaultValue={view.ranges?.[a]?.[k] ?? ""}
+      <label key={`${a}.${k}`} className="hint bset">{name}<input type="number" step="any" name={`${a}.${k}`} aria-label={name} className="w-[4.375rem]" key={String(view.ranges?.[a]?.[k] ?? "")} defaultValue={view.ranges?.[a]?.[k] ?? ""}
         onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />{a === "y1" && pct ? "%" : ""}</label>
     );
   };
@@ -360,7 +360,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
         <div className="btools">
           {withTarget && (target?.name ? <span className="hint">목표: {target.name}{targetErr ? ` (${targetErr})` : ""}</span> : (
             <label className="hint bset">목표
-              <input type="number" aria-label="목표" style={{ width: "5.625rem" }} key={String(target?.value ?? "")} defaultValue={target?.value ?? ""}
+              <input type="number" aria-label="목표" className="w-[5.625rem]" key={String(target?.value ?? "")} defaultValue={target?.value ?? ""}
                 onBlur={e => setTarget(e.target.value)} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />
             </label>
           ))}
@@ -373,7 +373,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
           )}
           {kindFields}
           {unitSel}
-          {unitText && <label className="hint bset">단위<input aria-label="단위" placeholder="단위" maxLength={10} style={{ width: "5rem", height: "1.5rem", fontSize: ".75rem" }} value={view.unit_text ?? ""} onChange={e => setView({ unit_text: e.target.value })} /></label>}
+          {unitText && <label className="hint bset">단위<input aria-label="단위" placeholder="단위" maxLength={10} className="w-[5rem] h-[1.5rem] [font-size:.75rem]" value={view.unit_text ?? ""} onChange={e => setView({ unit_text: e.target.value })} /></label>}
         </div>
       )}
       <GroupPicker card={card} data={shown.data ?? {}} onChange={onChange} recompute={recompute} />
@@ -381,13 +381,13 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
         <div className="btools">
           {rules.length > 0 && <button type="button" className={`btype${autoOpen ? " on" : ""}`} aria-expanded={autoOpen} title="그림을 그릴 때 알아서 하는 정렬·묶기·축 정리예요" onClick={() => setAutoOpen(!autoOpen)}>자동 규칙</button>}
           {look === "series" && (
-            <label className="hint bset">값 축<select className="bunit" style={{ flexBasis: "auto" }} aria-label="값 축" value={view.scale ?? ""} onChange={e => (e.target.value ? setView({ scale: e.target.value as AxisScale }) : without("scale"))}>
+            <label className="hint bset">값 축<select className="bunit [flex-basis:auto]" aria-label="값 축" value={view.scale ?? ""} onChange={e => (e.target.value ? setView({ scale: e.target.value as AxisScale }) : without("scale"))}>
                 {SCALE_NAMES.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
               </select>
             </label>
           )}
           {ordered && (
-            <label className="hint bset">정렬<select className="bunit" style={{ flexBasis: "auto" }} aria-label="정렬" value={card.source.body?.order ?? LEGACY_ORDER}
+            <label className="hint bset">정렬<select className="bunit [flex-basis:auto]" aria-label="정렬" value={card.source.body?.order ?? LEGACY_ORDER}
                 onChange={e => { onChange({ source: { ...card.source, body: { ...card.source.body, order: e.target.value as Order } } }); setMsg(truncated ? ORDER_REFETCH : ""); }}>
                 {consts.dash.orders.map(o => <option key={o} value={o}>{consts.dash.order_names[o]}</option>)}
               </select>
@@ -425,13 +425,13 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
         <div className="btools">
           {byUnit.day && (
             <label className="hint bset">비교
-              <select className="bunit" style={{ flexBasis: "auto" }} aria-label="비교 방식" value={view.compare?.mode ?? "span"} onChange={e => setView({ compare: { mode: e.target.value as "span" | "point" } })}>
+              <select className="bunit [flex-basis:auto]" aria-label="비교 방식" value={view.compare?.mode ?? "span"} onChange={e => setView({ compare: { mode: e.target.value as "span" | "point" } })}>
                 <option value="span">기간 비교</option><option value="point">시점 비교</option>
               </select>
             </label>
           )}
           <label className="hint bset">좋은 방향
-            <select className="bunit" style={{ flexBasis: "auto" }} aria-label="좋은 방향" value={view.better ?? "up"} onChange={e => setView({ better: e.target.value as "up" | "down" })}>
+            <select className="bunit [flex-basis:auto]" aria-label="좋은 방향" value={view.better ?? "up"} onChange={e => setView({ better: e.target.value as "up" | "down" })}>
               <option value="up">늘수록 좋음</option><option value="down">줄수록 좋음</option>
             </select>
           </label>
@@ -504,11 +504,11 @@ export function CloudFields({ cloud, schema, table, texts, full, tagged, onChang
   const words = cloud.mode === "words", pickTags = cloud.mode === "labels" || (words && cloud.rows === "tagged");
   const addStop = () => { const w = word.trim(); if (w && !stop.includes(w)) put({ stop: [...stop, w] }); setWord(""); };
   return (<>
-    <select className="bunit" style={{ flexBasis: "auto" }} aria-label="워드클라우드 방식" value={cloud.mode} onChange={e => setMode(e.target.value as Cloud["mode"])}>
+    <select className="bunit [flex-basis:auto]" aria-label="워드클라우드 방식" value={cloud.mode} onChange={e => setMode(e.target.value as Cloud["mode"])}>
       {CLOUD_MODES.map(([v, n]) => <option key={v} value={v}>방식: {n}</option>)}
     </select>
     {words && (
-      <select className="bunit" style={{ flexBasis: "auto" }} aria-label="단어를 뽑을 행" value={cloud.rows ?? ""}
+      <select className="bunit [flex-basis:auto]" aria-label="단어를 뽑을 행" value={cloud.rows ?? ""}
         onChange={e => put(e.target.value === "all" ? { rows: "all", tags: undefined, match: undefined } : { rows: (e.target.value || undefined) as Cloud["rows"] })}>
         <option value="">단어를 뽑을 행: (고르세요)</option>
         {CLOUD_ROWS.map(([v, n]) => <option key={v} value={v}>단어를 뽑을 행: {n}</option>)}
@@ -518,13 +518,13 @@ export function CloudFields({ cloud, schema, table, texts, full, tagged, onChang
       <Check key={t} label={t} checked={tags.includes(t)} onChange={on => put({ tags: (info?.vocab ?? []).filter(x => (x === t ? on : tags.includes(x))) })} />
     ))}
     {words && cloud.rows === "tagged" && (
-      <select className="bunit" style={{ flexBasis: "auto" }} aria-label="태그 맞춤" value={cloud.match ?? ""} onChange={e => put({ match: (e.target.value || undefined) as Cloud["match"] })}>
+      <select className="bunit [flex-basis:auto]" aria-label="태그 맞춤" value={cloud.match ?? ""} onChange={e => put({ match: (e.target.value || undefined) as Cloud["match"] })}>
         <option value="">태그: (고르세요)</option>
         {CLOUD_MATCH.map(([v, n]) => <option key={v} value={v}>태그: {n}</option>)}
       </select>
     )}
     {words && (
-      <select className="bunit" style={{ flexBasis: "auto" }} aria-label="글 컬럼" value={cloud.text ?? ""} onChange={e => put({ text: e.target.value || undefined })}>
+      <select className="bunit [flex-basis:auto]" aria-label="글 컬럼" value={cloud.text ?? ""} onChange={e => put({ text: e.target.value || undefined })}>
         <option value="">글 컬럼: (고르세요)</option>
         {texts.map(c => <option key={c} value={c}>글 컬럼: {c}</option>)}
       </select>
@@ -535,11 +535,11 @@ export function CloudFields({ cloud, schema, table, texts, full, tagged, onChang
       ))}
       <span className="hint bset">불용어
         {stop.map(s => <span key={s} className="chip">{s}<button type="button" className="ghost" aria-label={`${s} 빼기`} onClick={() => put({ stop: stop.filter(x => x !== s) })}>×</button></span>)}
-        <input aria-label="불용어" placeholder="낱말" style={{ width: "5rem" }} value={word} onChange={e => setWord(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) addStop(); }} />
+        <input aria-label="불용어" placeholder="낱말" className="w-[5rem]" value={word} onChange={e => setWord(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) addStop(); }} />
         <button type="button" className="ghost" onClick={addStop}>더하기</button>
       </span>
       <label className="hint bset">최소 글자 수
-        <input type="number" aria-label="최소 글자 수" min={1} step={1} placeholder="기본" style={{ width: "3.125rem" }} key={String(cloud.min_len ?? "")} defaultValue={cloud.min_len ?? ""}
+        <input type="number" aria-label="최소 글자 수" min={1} step={1} placeholder="기본" className="w-[3.125rem]" key={String(cloud.min_len ?? "")} defaultValue={cloud.min_len ?? ""}
           onBlur={e => { const v = e.target.value === "" ? undefined : Math.round(+e.target.value); if (v !== cloud.min_len) put({ min_len: v }); }}
           onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />
       </label>

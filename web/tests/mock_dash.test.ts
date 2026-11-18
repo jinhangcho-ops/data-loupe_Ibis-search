@@ -9,21 +9,23 @@ const bar = src("components/shell/Toolbar.tsx"), period = src("components/shell/
 
 describe("머리 줄 [더 보기 ▾]", () => {
   const from = bar.indexOf('<div className="drop" ref={more}'), menu = bar.slice(from, bar.indexOf("<SettingsDialog"));
-  it("내보내기·대시보드 설정·대시보드만 보기가 role=menu 안에 차례로 있다", () => {
+  it("내보내기·대시보드 설정이 role=menu 안에 차례로 있고, 대시보드만 보기는 메뉴 밖 도구 줄에 있다", () => {
     expect(from).toBeGreaterThan(0);
     expect(menu).toContain('<div className="pop" role="menu">');
-    const at = [">내보내기</button>", ">대시보드 설정</button>", 'id="d-only"'].map(t => menu.indexOf(t));
+    const at = [">내보내기</button>", ">대시보드 설정</button>"].map(t => menu.indexOf(t));
     expect(at.every(i => i > 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(menu).toContain("setMenu(false); setReport(true);");
-    expect(menu).toContain("setMenu(false); setDashOnly(true);");
+    expect(menu).not.toContain("d-only");
+    expect(bar.slice(0, from)).toContain('<button className="btn" id="d-only" onClick={() => setDashOnly(true)}');
     expect(bar).not.toContain("내보내기 ▾");
   });
-  it("[예시 데이터로 확인하기]는 연결과 상관없이 늘 있고, 연결돼 있으면 한 번 더 눌러야 연결을 바꾼다", () => {
-    const line = menu.split("\n").findIndex(l => l.includes('id="d-demo-menu"')), item = menu.split("\n").slice(line, line + 2).join("\n");
+  it("[예시 데이터로 확인하기]는 메뉴 밖 도구 줄에 연결과 상관없이 늘 있고, 연결돼 있으면 한 번 더 눌러야 연결을 바꾼다", () => {
+    const rows = bar.slice(0, from).split("\n"), line = rows.findIndex(l => l.includes('id="d-demo-bar"')), item = rows.slice(line, line + 2).join("\n");
     expect(line).toBeGreaterThan(0);
-    expect(menu.split("\n")[line].trimStart().startsWith("<button")).toBe(true);  // conn 조건으로 감싸지 않는다
-    expect(item).toContain("if (conn && !sure) return setSure(true); setMenu(false); demo();");
+    expect(menu).not.toContain("예시 데이터");
+    expect(rows[line].trimStart().startsWith("<button")).toBe(true);  // conn 조건으로 감싸지 않는다
+    expect(item).toContain("if (conn && !sure) return setSure(true); demo();");
     expect(item).toContain("onBlur={() => setSure(false)}");
     expect(item).toContain('{sure ? "한 번 더 누르면 연결이 바뀌어요" : "예시 데이터로 확인하기"}');
     expect(item).toContain("연결이 예시 데이터로 바뀌어요");

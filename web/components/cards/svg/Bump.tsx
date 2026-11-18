@@ -16,7 +16,7 @@ export function Bump(p: P) {
   return (
     <Box cls="bump">
       <div {...z.bind}>
-      <div style={{ flex: 1, minHeight: 0, height: "100%" }}>
+      <div className="flex-1 min-h-0 h-full">
         <Frame keys={series.map((d, i) => ({ name: d.name, color: color[i] }))}>
           <ComposedChart data={sliceWindow(rows, z.view)} margin={MARGIN}>
             <XAxis dataKey="label" {...AXIS} />
