@@ -28,8 +28,8 @@
   .svc details > summary { display:inline-flex; margin-top:.625rem; padding:.25rem .75rem; border:1px solid var(--line); border-radius:.375rem; cursor:pointer; font-weight:600; list-style:none; }
   .svc details > summary::-webkit-details-marker { display:none; }
   .svc details[open] > summary { margin-bottom:.25rem; }
-  /* "어떤 걸 하실 건가요?": 카드 4장(2열). 카드 어디를 눌러도 아래 카드로 간다 */
-  .want { margin:0 0 1.125rem; padding:0; list-style:none; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:1rem; max-width:77.5rem; }
+  /* "어떤 걸 하실 건가요?": 카드 4장(2열, 칸이 21rem보다 좁아지면 1열: 글자가 커도 단추가 카드 밖으로 안 나간다). 카드 어디를 눌러도 아래 카드로 간다 */
+  .want { margin:0 0 1.125rem; padding:0; list-style:none; display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, max(21rem, calc(50% - 1rem))), 1fr)); gap:1rem; max-width:77.5rem; }
   .want li { display:flex; flex-direction:column; gap:.75rem; cursor:pointer; --art-w:13.75rem; }  /* 오른쪽은 카드 그림(.card-art, common.css) */
   .want li:hover { border-color:var(--muted); }
   .want .foot { display:flex; align-items:center; gap:var(--sp-3); margin-top:auto; }  /* 단추 옆에 상태 꼬리표 */

@@ -52,7 +52,7 @@ def test_integ_want_cards_show_state():
         for part in ('<span class="ico"><svg ', '<span class="state"></span>', "<h3>", '<div class="hint">', '<button type="button" class="btn">'):
             assert card.count(part) == 1, part
         assert re.search(r'<div class="foot"><button type="button" class="btn">설정하기</button><span class="state"></span></div><span class="card-art" data-art="\w+" aria-hidden="true"></span>\s*$', card)  # 단추 옆 꼬리표, 맨 끝에 카드 그림
-    assert "grid-template-columns:repeat(2," in between(INTEG, ".want {", "}")
+    assert "grid-template-columns:repeat(auto-fit, minmax(min(100%, max(21rem, calc(50% - 1rem))), 1fr))" in between(INTEG, ".want {", "}")  # 넓으면 2열, 칸이 21rem보다 좁아지면 1열
     show = between(INTEG, "function showWant(id, on)", "\n}")
     assert '"연결됨" : "설정 전"' in show and '"열기" : "설정하기"' in show
     hub = between(INTEG, "async function loadHub()", "\n}")
