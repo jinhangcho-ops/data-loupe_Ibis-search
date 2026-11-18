@@ -105,8 +105,9 @@ def test_sentence_set_shape(tmp_path):
 def test_page_has_views_and_ends_operator():
     """단계 카드 화면에 두 보기(단계 카드·문장) 전환과 파일들이 달려 있고 흐름 보기는 없으며, 조건 연산자 목록에 ends가 있다(서버 parse가 지원한다)."""
     html = (ROOT / "static" / "query" / "index.html").read_text(encoding="utf-8")
-    for needle in ('id="vswitch"', 'data-v="cards"', 'data-v="sentence"', '"/static/query/sentences.js"', 'href="/static/query/sentences.css"'):
+    for needle in ('id="vswitch"', 'data-v="cards"', 'data-v="sentence"', '"/static/query/sentences.js"'):
         assert needle in html
+    assert '"../../static/query/sentences.css"' in (ROOT / "web" / "styles" / "app.tw.css").read_text(encoding="utf-8")  # 문장 보기 CSS는 app.css에 묶여 온다
     assert 'data-v="flow"' not in html and "flow.js" not in html and "flow.css" not in html and "/api/flow" not in html
     ops = re.search(r"const OPS_TEXT = \[(.*?)\]", html).group(1)
     assert '"ends"' in ops and "컬럼 ends 값" in html

@@ -1,4 +1,6 @@
-/* 대시보드 화면 전용 규칙(옛 static/dashboard/dashboard.html의 <style>을 그대로 옮김). 색 토큰·단추·카드 규칙은 /static/core/common.css·dash_edit.css를 layout이 <link>로 불러 그대로 쓴다. */
+/* 대시보드 화면 전용 규칙(옛 static/dashboard/dashboard.html의 <style>을 그대로 옮김). 색 토큰·단추·카드 규칙은 /static/core/app.css(common.css·dash_edit.css가 들어 있다)를 layout이 <link>로 불러 쓴다. */
+@layer theme, components, utilities;  /* app.css와 같은 차례(이 파일이 먼저 읽힌다) */
+@layer components {
 .settings-box { width:min(47.5rem, 94vw); display:flex; flex-direction:column; gap:.75rem; }
 .settings-box h4 { margin:.375rem 0 0; font-size:var(--fs-md); }
 .settings-box .dctl { padding:0; }
@@ -55,3 +57,4 @@ body.dash-only .bcard.sel, body.dash-only .bcard.editing { border-color:var(--li
 .drop .pop .dcal-day:focus-visible { outline:.125rem solid var(--accent); outline-offset:1px; }
 /* 확대·이동 활성 표시(카드 상자 밖이라 그림 저장에 찍히지 않는다) */
 .bcard.zoomable { outline:1px solid var(--accent); outline-offset:-1px; }
+}

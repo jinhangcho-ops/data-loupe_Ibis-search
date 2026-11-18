@@ -133,8 +133,9 @@ def test_screens_have_edit_parts(client, monkeypatch, tmp_path):
     monkeypatch.setattr(dash_app, "NEXT_PAGE", built)
     html = client.get("/dashboard").get_data(as_text=True)
     assert "/static/core/dash_edit.css" in html and 'src="/next/_next/a.js"' in html and "d-gallery" not in html
-    assert (STATIC / "core" / "dash_edit.css").is_file()  # Next 화면(web/app/layout.tsx)이 그대로 불러 쓴다
-    assert '"/static/core/dash_edit.css"' in (ROOT / "web" / "app" / "layout.tsx").read_text(encoding="utf-8")
+    assert (STATIC / "core" / "dash_edit.css").is_file()  # Tailwind 입력(app.tw.css)이 app.css에 묶고, Next 화면(web/app/layout.tsx)은 app.css를 읽는다
+    assert '"../../static/core/dash_edit.css"' in (ROOT / "web" / "styles" / "app.tw.css").read_text(encoding="utf-8")
+    assert '"/static/core/app.css"' in (ROOT / "web" / "app" / "layout.tsx").read_text(encoding="utf-8")
     for gone in ("dashboard", "core/lib/dash_grid.js", "core/lib/dash_rules.js", "core/lib/dash_svg.js"):
         assert not (STATIC / gone).exists(), gone
     query = client.get("/search").get_data(as_text=True)

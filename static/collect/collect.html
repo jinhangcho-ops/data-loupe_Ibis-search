@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Data Loupe · 수집</title>
 <!--include core/head.html-->
-<style>  .code, .tree, #sent { font-family:Consolas, ui-monospace, monospace; font-size:.75rem; }
+<style>@layer components {  /* 공통 부품(app.css)과 같은 레이어: 선택자 우선순위가 예전처럼 겨룬다 */
+  .code, .tree, #sent { font-family:Consolas, ui-monospace, monospace; font-size:.75rem; }
   input.code { height:var(--h-md); }  /* 글자가 작아도 다른 입력 칸과 같은 높이 */
   textarea { resize:vertical; }
   .warn { color:var(--err); font-size:.75rem; }
@@ -68,7 +69,7 @@
   .prog [data-state] i { background:var(--accent); color:var(--on-accent); }
   .prog [data-state=on] { border-color:var(--accent-line); background:var(--accent-bg); color:var(--accent); font-weight:600; }  /* 지금 단계만 면으로 띄운다(나머지는 바탕 없이 글자만) */
   #prog-help { margin:.375rem 0 0; }
-</style>
+}</style>
 </head>
 <body class="app">
 <!--include core/status.html-->

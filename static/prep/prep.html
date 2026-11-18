@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Data Loupe · 분석</title>
 <!--include core/head.html-->
-<style>
+<style>@layer components {  /* 공통 부품(app.css)과 같은 레이어: 선택자 우선순위가 예전처럼 겨룬다 */
   .pcol { display:flex; gap:.375rem; align-items:center; white-space:nowrap; }
   .pcol input { width:auto; }
   .pcol .name { color:var(--text); cursor:pointer; }
@@ -133,7 +133,7 @@
   .akinds > label small { display:block; color:var(--muted); font-size:var(--fs-xs); font-weight:400; }
   .a-form { margin-top:-.375rem; border:1px solid var(--accent); border-top:0; border-radius:0 0 var(--r-card) var(--r-card); background:var(--accent-bg); padding:0 .5rem .5rem; }  /* -.375rem: .akinds의 gap을 메워 고른 label에 붙인다 */
   .a-form > .lead { margin-top:0; }
-</style>
+}</style>
 </head>
 <body class="app">
 <!--include core/status.html-->

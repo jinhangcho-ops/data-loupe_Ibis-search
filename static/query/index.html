@@ -5,9 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Data Loupe · 쿼리</title>
 <!--include core/head.html-->
-<link rel="stylesheet" href="/static/core/dash_edit.css">
-<link rel="stylesheet" href="/static/query/sentences.css">
-<style>
+<style>@layer components {  /* 공통 부품(app.css)과 같은 레이어: 선택자 우선순위가 예전처럼 겨룬다 */
   /* (Phase 19) 단계 번호는 보이는 단계만 센다: 쉬운 보기로 접힌 단계(display:none)는 건너뛰어 1, 2, 3…으로 이어진다 */
   #flow { counter-reset:qstep; }
   #flow .step { counter-increment:qstep; }
@@ -155,7 +153,7 @@
   .flow.first .step:not(#step-data) { opacity:.45; }
   .flow.first #step-data { box-shadow:0 0 0 .1875rem color-mix(in srgb, var(--accent) 25%, transparent); }
   #metv .tool { flex-wrap:wrap; }  /* (19D3) 안내 글은 한 줄 전체, 칸들은 다음 줄로 */
-</style>
+}</style>
 </head>
 <body class="app" data-virtual="1">
 <!--include core/status.html-->
