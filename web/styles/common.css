@@ -223,7 +223,7 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .btitle { flex:1; min-width:0; text-overflow:ellipsis; height:1.875rem; border:1px solid transparent; background:none; font-weight:600; padding:.125rem .375rem; }
 .btitle:hover, .btitle:focus { border-color:var(--line); background:var(--bg); }
 .bbody { aspect-ratio:var(--ratio, 16 / 9); max-height:50vh; position:relative; }  /* 큰 창에서 1:1 카드가 너무 길어지지 않게 */
-.bnote { display:grid; place-items:center; height:100%; margin:0; text-align:center; padding:0 .75rem; }
+.bnote { display:grid; place-items:center; height:100%; margin:0; text-align:center; padding:0 .75rem; overflow:hidden; }  /* 아주 좁은 카드에서 안내가 아래 글과 겹치지 않게 */
 .bextra { margin:0 0 .375rem; cursor:default; }
 .btools { display:flex; flex-wrap:wrap; gap:.25rem; align-items:center; }
 .btype { background:none; border:1px solid var(--line); border-radius:var(--r-ctl); padding:1px .5625rem; min-height:1.5rem; font-size:var(--fs-xs); color:var(--muted); }
@@ -251,8 +251,8 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .drop .cardmenu { width:min(28.75rem, 92vw); max-height:80vh; overflow:auto; gap:.375rem; padding:.75rem; right:auto; left:0; }
 .cardmenu .cm-row { display:flex; gap:.25rem; align-items:center; }
 .cardmenu .cm-row select, .cardmenu .cm-row input { flex:1 1 5.625rem; min-width:0; }
-.cardmenu .cm-field { display:flex; gap:.5rem; align-items:center; justify-content:space-between; margin:0; }
-.cardmenu .cm-field > select, .cardmenu .cm-field > input { flex:0 1 13.75rem; }
+.cardmenu .cm-field { display:flex; gap:.5rem; align-items:center; justify-content:space-between; margin:0; word-break:keep-all; }  /* 좁은 서랍에서 라벨이 낱말 중간에 꺾이지 않게 */
+.cardmenu .cm-field > select, .cardmenu .cm-field > input { flex:0 1 13.75rem; min-width:0; }
 .cardmenu .cm-note { margin:0; }
 .cardmenu .cm-word { white-space:nowrap; flex:none; }
 .cm-need { color:var(--err); margin-left:.125rem; font-weight:700; }
