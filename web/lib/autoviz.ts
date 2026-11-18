@@ -6,7 +6,7 @@ import type { Dataset, SCard, Series } from "@/components/cards/chart/series";
 import type { ChartType, Unit } from "@/lib/types";
 import { textUnits } from "@/components/cards/svg/__pure__";
 import { shownum } from "@/lib/calc";
-import { HBARS, ROUND_TYPES } from "@/components/cards/chart/shapes";
+import { GRID_3D, HBARS, ROUND_TYPES } from "@/components/cards/chart/shapes";
 
 /** 범주 축의 종류(Phase 5 서버 추론 결과, 임시 키 data.x_scale·x_levels) */
 export type Scale = "nominal" | "ordinal" | "interval";
@@ -424,7 +424,7 @@ export function autoSeries(card: SCard, s: Series, env: AutoEnv): { card: SCard 
     changed = true;
   }
   // 3. Top-N·파이
-  if (cat && !view.groups?.keep?.length && view.all_data !== true) {
+  if (cat && !view.groups?.keep?.length && view.all_data !== true && !GRID_3D.includes(type)) {  // 3차원 격자는 X 칸을 줄이지 않는다('기타' 칸이 혼자 솟는다)
     let n: number | null = null;
     if (ROUND_TYPES.includes(type)) {
       if (p.round && labels.length > (p.round.max as number)) n = p.round.keep as number;

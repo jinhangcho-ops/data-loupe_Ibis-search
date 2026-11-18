@@ -88,7 +88,7 @@ export function Chart3D({ scene, legend, active, surface }: { scene: Scene; lege
     <div style={{ display: "flex", flexDirection: "column", height: "100%", fontSize: 12 }}>
       {surface && made ? surface.legend(made.keys) : legend}
       {surface ? (
-        <div role="group" aria-label="곡면 모양" title={active ? undefined : NEED_ACTIVE} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 12px", fontSize: rem(CONTROL_FONT), color: "var(--muted)", padding: "0 0 4px", opacity: active ? undefined : DIM }}>
+        <div role="group" aria-label="곡면 모양" data-noprint="" title={active ? undefined : NEED_ACTIVE} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 12px", fontSize: rem(CONTROL_FONT), color: "var(--muted)", padding: "0 0 4px", opacity: active ? undefined : DIM }}>
           <span style={FIELD}>매끈함
             {SMOOTH_STEPS.map((times, n) => {
               const why = smoothReason(surface.nx, surface.ny, n);
@@ -108,7 +108,7 @@ export function Chart3D({ scene, legend, active, surface }: { scene: Scene; lege
           {drawn.map(({ shape, xy }, i) => {
             if (shape.kind === "poly") return <polygon key={i} points={pts(xy)} fill={shape.fill} stroke={shape.stroke} strokeWidth={0.5} strokeLinejoin="round">{shape.title ? <title>{shape.title}</title> : null}</polygon>;
             if (shape.kind === "line") return <polyline key={i} points={pts(xy)} fill="none" stroke={shape.stroke} strokeWidth={shape.width} strokeLinecap="round" strokeLinejoin="round" />;
-            if (shape.kind === "dot") return <circle key={i} cx={xy[0][0]} cy={xy[0][1]} r={shape.r} fill={shape.fill} fillOpacity={0.8} data-grip={shape.grip?.join()} style={shape.grip && active ? { cursor: "ns-resize" } : undefined}>{shape.title ? <title>{shape.title}</title> : null}</circle>;
+            if (shape.kind === "dot") return <circle key={i} cx={xy[0][0]} cy={xy[0][1]} r={shape.r} fill={shape.fill} fillOpacity={0.8} data-grip={shape.grip?.join()} data-noprint={shape.grip ? "" : undefined} style={shape.grip && active ? { cursor: "ns-resize" } : undefined}>{shape.title ? <title>{shape.title}</title> : null}</circle>;
             return <text key={i} x={xy[0][0] + (shape.dx ?? 0)} y={xy[0][1] + (shape.dy ?? 0)} textAnchor={shape.align} fontSize={LABEL_FONT} fontWeight={shape.bold ? 600 : undefined} fill="var(--muted)" pointerEvents="none">{shape.text}</text>;
           })}
           {made && lift ? <text x={NOTE_AT.x} y={NOTE_AT.y} fontSize={LABEL_FONT} fontWeight={600} fill="var(--text)" pointerEvents="none">{SHAPED_NOTE}</text> : null}
