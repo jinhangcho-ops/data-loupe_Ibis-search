@@ -25,7 +25,7 @@ describe("머리 줄 [더 보기 ▾]", () => {
     expect(line).toBeGreaterThan(0);
     expect(menu).not.toContain("예시 데이터");
     expect(rows[line].trimStart().startsWith("<button")).toBe(true);  // conn 조건으로 감싸지 않는다
-    expect(item).toContain("if (conn && !sure) return setSure(true); demo();");
+    expect(item).toContain("if (conn && !sure) return setSure(true); setSure(false); demo();");  // 연결이 실패해도 단추 글자는 돌아온다
     expect(item).toContain("onBlur={() => setSure(false)}");
     expect(item).toContain('{sure ? "한 번 더 누르면 연결이 바뀌어요" : "예시 데이터로 확인하기"}');
     expect(item).toContain("연결이 예시 데이터로 바뀌어요");

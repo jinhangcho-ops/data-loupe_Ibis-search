@@ -55,7 +55,7 @@ function DashboardView() {
     document.getElementById("d-only-exit")?.focus();
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) setDashOnly(false); };
     document.addEventListener("keydown", esc);
-    return () => { document.removeEventListener("keydown", esc); document.getElementById("d-only")?.focus(); };  // 보기를 켠 단추로 초점을 돌려준다
+    return () => { document.removeEventListener("keydown", esc); document.body.classList.remove("dash-only"); document.getElementById("d-only")?.focus(); };  // 보기를 켠 단추로 초점을 돌려준다(숨겨진 단추는 초점을 못 받아 클래스를 먼저 뗀다)
   }, [dashOnly, setDashOnly, dispatch]);
   const n = state.dash?.cards.length ?? 0, picked = state.picked.length;
   const merge = consts?.merge, alerts = useMemo(() => !state.dash || !merge ? [] :

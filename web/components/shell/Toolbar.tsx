@@ -101,7 +101,7 @@ export function Toolbar() {
         </div>
         )}
         <button className="btn" id="d-only" onClick={() => setDashOnly(true)} title="왼쪽 메뉴와 단추를 숨기고 카드만 크게 봐요. Esc를 누르면 돌아와요">대시보드만 보기</button>
-        <button className="btn" id="d-demo-bar" onBlur={() => setSure(false)} onClick={() => { if (conn && !sure) return setSure(true); demo(); }}
+        <button className="btn" id="d-demo-bar" onBlur={() => setSure(false)} onClick={() => { if (conn && !sure) return setSure(true); setSure(false); demo(); }}
           title="지어낸 주문·고객·방문기록 표에 연결하고 대시보드를 다시 열어요. 지금 다른 데이터에 연결돼 있으면 연결이 예시 데이터로 바뀌어요">{sure ? "한 번 더 누르면 연결이 바뀌어요" : "예시 데이터로 확인하기"}</button>
         <div className="drop" ref={more} onKeyDown={esc}>
           <button className="btn" id="d-more" aria-haspopup="menu" aria-expanded={menu === "more"} onClick={() => setMenu(menu === "more" ? false : "more")} title="내보내기, 대시보드 설정">더 보기 ▾</button>
