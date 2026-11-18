@@ -131,7 +131,7 @@ def test_5e5_undo_why_reports_restore_error(tmp_path):
 
 
 def test_5e5_static_edits():
-    prep, index, css, common = page("prep/prep.html") + page("prep/analysis.js"), page("query/index.html"), page("core/common.css"), page("core/common.js")
+    prep, index, css, common = page("prep/prep.html") + page("prep/analysis.js"), page("query/index.html"), page("../web/styles/common.css"), page("core/common.js")
     add = fn(prep, "function addStep() {")
     assert "closeMenu()" in add
     assert "scoped(prepUndo, inPrep)" in prep and "scoped(searchUndo, inExplore)" in index

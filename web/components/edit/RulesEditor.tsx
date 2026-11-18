@@ -26,7 +26,7 @@ function LineBox<T>({ items, line, parse, pick, placeholder, title, onRead }: Li
   };
   return (
     <div>
-      <textarea rows={3} value={box.text} placeholder={placeholder} title={title} style={{ width: "100%", fontSize: ".75rem" }}
+      <textarea rows={3} value={box.text} placeholder={placeholder} title={title} className="w-full [font-size:.75rem]"
         onChange={e => setBox({ ...box, text: e.target.value })} onBlur={read} />
       {box.errors.map((e, i) => <div key={i} className="err">{e}</div>)}
     </div>

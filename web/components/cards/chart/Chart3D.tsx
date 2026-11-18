@@ -85,10 +85,10 @@ export function Chart3D({ scene, legend, active, surface }: { scene: Scene; lege
   };
   const live = (run: () => void) => () => { if (active) run(); };  // 조절 칸은 그림이 켜져 있을 때만 듣는다(꺼져 있으면 그 누르기가 그림을 켠다)
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", fontSize: 12 }}>
+    <div className="[display:flex] flex-col h-full [font-size:12px]">
       {surface && made ? surface.legend(made.keys) : legend}
       {surface ? (
-        <div role="group" aria-label="곡면 모양" title={active ? undefined : NEED_ACTIVE} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 12px", fontSize: rem(CONTROL_FONT), color: "var(--muted)", padding: "0 0 4px", opacity: active ? undefined : DIM }}>
+        <div role="group" aria-label="곡면 모양" data-noprint="" title={active ? undefined : NEED_ACTIVE} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "2px 12px", fontSize: rem(CONTROL_FONT), color: "var(--muted)", padding: "0 0 4px", opacity: active ? undefined : DIM }}>
           <span style={FIELD}>매끈함
             {SMOOTH_STEPS.map((times, n) => {
               const why = smoothReason(surface.nx, surface.ny, n);
@@ -101,14 +101,14 @@ export function Chart3D({ scene, legend, active, surface }: { scene: Scene; lege
           <button type="button" aria-label="처음 모양으로" disabled={!lift} onClick={live(() => setLift(null))} style={{ ...BUTTON, ...(lift ? {} : { opacity: DIM, cursor: "default" }) }}>처음 모양으로</button>
         </div>
       ) : null}
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div className="flex-1 min-h-0">
       <div ref={box} title={HELP_3D} style={{ ...scaledBox(s), overflow: "hidden", userSelect: "none", touchAction: active ? "none" : undefined, cursor: active ? "grab" : undefined }}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onClickCapture={afterDrag} onDoubleClick={() => setView(START_VIEW)}>
-        <svg width={w} height={h} role="img" aria-label="3차원 그래프" style={{ display: "block" }}>
+        <svg width={w} height={h} role="img" aria-label="3차원 그래프" className="[display:block]">
           {drawn.map(({ shape, xy }, i) => {
             if (shape.kind === "poly") return <polygon key={i} points={pts(xy)} fill={shape.fill} stroke={shape.stroke} strokeWidth={0.5} strokeLinejoin="round">{shape.title ? <title>{shape.title}</title> : null}</polygon>;
             if (shape.kind === "line") return <polyline key={i} points={pts(xy)} fill="none" stroke={shape.stroke} strokeWidth={shape.width} strokeLinecap="round" strokeLinejoin="round" />;
-            if (shape.kind === "dot") return <circle key={i} cx={xy[0][0]} cy={xy[0][1]} r={shape.r} fill={shape.fill} fillOpacity={0.8} data-grip={shape.grip?.join()} style={shape.grip && active ? { cursor: "ns-resize" } : undefined}>{shape.title ? <title>{shape.title}</title> : null}</circle>;
+            if (shape.kind === "dot") return <circle key={i} cx={xy[0][0]} cy={xy[0][1]} r={shape.r} fill={shape.fill} fillOpacity={0.8} data-grip={shape.grip?.join()} data-noprint={shape.grip ? "" : undefined} style={shape.grip && active ? { cursor: "ns-resize" } : undefined}>{shape.title ? <title>{shape.title}</title> : null}</circle>;
             return <text key={i} x={xy[0][0] + (shape.dx ?? 0)} y={xy[0][1] + (shape.dy ?? 0)} textAnchor={shape.align} fontSize={LABEL_FONT} fontWeight={shape.bold ? 600 : undefined} fill="var(--muted)" pointerEvents="none">{shape.text}</text>;
           })}
           {made && lift ? <text x={NOTE_AT.x} y={NOTE_AT.y} fontSize={LABEL_FONT} fontWeight={600} fill="var(--text)" pointerEvents="none">{SHAPED_NOTE}</text> : null}

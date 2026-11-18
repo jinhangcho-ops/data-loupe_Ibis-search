@@ -72,7 +72,7 @@ export function DualTrend({ card, colors, range, merge }: P) {
       )}
       {a.map((d, i) => { const h = d.v == null ? 0 : 28 * (d.v - lo) / ((hi - lo) || 1); return <rect key={d.day} x={bx(i) - 1} y={brushY + 28 - h} width={2} height={d.v == null ? 0 : h + 1} fill={colors.text} />; })}
       <rect x={bx(i0)} y={brushY - 2} width={Math.max(4, bx(i1) - bx(i0))} height={34} fill={colors.series[0]} opacity={0.25} stroke={colors.series[0]} />
-      <rect x={pad} y={brushY - 2} width={W - 2 * pad} height={34} fill="transparent" style={{ cursor: "col-resize", touchAction: "none" }} onPointerDown={down} onPointerMove={move} onPointerUp={up} />
+      <rect x={pad} y={brushY - 2} width={W - 2 * pad} height={34} fill="transparent" className="[cursor:col-resize] [touch-action:none]" onPointerDown={down} onPointerMove={move} onPointerUp={up} />
       <text x={pad} y={H - 2} fontSize={footFont} fill={colors.text}>{foot}</text>
     </Frame>
     </div>

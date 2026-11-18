@@ -79,7 +79,7 @@ def test_pip_command_uses_constraints(monkeypatch):
     assert pins in drivers.pip_command("postgres") and (ROOT / "constraints.txt").is_file()
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     assert pins in drivers.pip_command("postgres") and "--target" in drivers.pip_command("postgres")
-    assert '("constraints.txt", ".")' in (ROOT / "DataLoupe.spec").read_text(encoding="utf-8")  # exe에서는 같은 자리(_internal)에 들어간다
+    assert '--add-data "constraints.txt:."' in (ROOT / ".github/workflows/build-exe.yml").read_text(encoding="utf-8")  # exe에서는 같은 자리(_internal)에 들어간다
 
 
 class NoCancel:

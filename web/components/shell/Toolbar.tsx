@@ -1,6 +1,6 @@
 "use client";
 // N4 — 머리 줄(.d-tool): [대시보드 ▾][새 대시보드] | 기간 칸(PeriodBar.PeriodField, 설정 창과 같은 것)·"N분 전 최신화"(LastRefreshed) … [최신화](recompute)·[카드 추가](강조 단추 #d-add-open: 편집을 켜고 카드 추가 서랍을 연다)
-// ·[편집]·[+ 카드 ▾](편집 중에만: 카드 추가·카드 모음 N5 Gallery·지표 N6 MetricsWindow·쿼리에서 가져오기)·[더 보기 ▾](내보내기 N6 Report·대시보드 설정·대시보드만 보기 #d-only·예시 데이터로 확인하기 #d-demo-menu: 연결돼 있으면 한 번 더 눌러야 바꾼다).
+// ·[편집]·[+ 카드 ▾](편집 중에만: 카드 추가·카드 모음 N5 Gallery·지표 N6 MetricsWindow·쿼리에서 가져오기)·[대시보드만 보기]·[예시 데이터로 확인하기]·[더 보기 ▾](내보내기 N6 Report·대시보드 설정). [대시보드만 보기] #d-only와 [예시 데이터로 확인하기] #d-demo-bar(연결돼 있으면 한 번 더 눌러야 바꾼다)는 메뉴 밖 도구 줄에 늘 보인다.
 // 두 메뉴는 menu 상태 하나("card"·"more")를 같이 써 바깥 클릭·Esc로 닫는다. 카드 추가는 오른쪽 서랍(page.tsx). 편집 모드(state.editing)에서만 격자 끌기·×·크기 손잡이와 카드 설정 패널이 있다.
 // 카드 추가(useAddCard)는 옛 화면처럼 값을 먼저 구해(지금 기간) 카드로 넣고 저장한다. 대시보드가 없으면 api.addCard로 "내 대시보드"를 새로 만든다.
 import { useEffect, useRef, useState } from "react";
@@ -51,7 +51,7 @@ export function useAddCard(): (card: Partial<Card>) => Promise<void> {
   return add;
 }
 
-/** 예시 데이터(지어낸 표)에 연결하고 대시보드를 다시 여는 함수를 돌려준다([더 보기 ▾]와 빈 화면 안내가 같이 쓴다). */
+/** 예시 데이터(지어낸 표)에 연결하고 대시보드를 다시 여는 함수를 돌려준다(도구 줄 단추와 빈 화면 안내가 같이 쓴다). */
 export function useDemo(): () => void {
   const { dispatch } = useDash();
   return () => { connectDemo().then(() => location.reload(), (e: Error) => dispatch({ type: "error", message: e.message })); };
@@ -81,7 +81,7 @@ export function Toolbar() {
         <span className="d-sep"></span>
         <div className="dc-field d-per"><PeriodField id="d-per" /></div>
         <LastRefreshed />
-        <span style={{ marginLeft: "auto" }}></span>
+        <span className="ml-auto"></span>
         <button className="btn" onClick={again} disabled={busy} title="데이터를 새로 읽어 카드 숫자를 최신으로 고쳐요">최신화</button>
         <button className="btn p" id="d-add-open" disabled={!state.dash} onClick={() => { dispatch({ type: "editing", on: true }); dispatch({ type: "select", id: null }); setAddOpen(true); }}
           title={state.dash ? "편집을 켜고 카드 추가 서랍을 열어요. 테이블을 골라 KPI, 표, 차트 같은 카드를 만들어요" : "먼저 대시보드를 고르거나 [새 대시보드]를 만들어요"}>카드 추가</button>
@@ -95,20 +95,20 @@ export function Toolbar() {
               <button role="menuitem" onClick={() => { setMenu(false); dispatch({ type: "select", id: null }); setAddOpen(true); }} title="테이블을 골라 KPI, 표, 문장 같은 카드를 바로 만들어요">카드 추가</button>
               <button role="menuitemcheckbox" aria-checked={gallery} onClick={() => { setMenu(false); setGallery(!gallery); if (!gallery) dispatch({ type: "editing", on: true }); }} title="카드 종류를 끌어 격자에 놓거나 두 번 누르면 빈 카드가 생겨요">카드 모음</button>
               <button role="menuitem" onClick={() => { setMenu(false); setMetrics(true); }} title="내 지표와 지표 사전을 봐요. 쿼리 화면의 [지표] 탭과 같은 내용이에요">지표</button>
-              <a role="menuitem" className="btn" href="/search" style={{ textDecoration: "none", whiteSpace: "nowrap" }} title="쿼리 화면에서 차트나 지표를 만들고 [대시보드에 추가]를 누르면 여기에 모여요">쿼리에서 가져오기</a>
+              <a role="menuitem" className="btn [text-decoration:none] whitespace-nowrap" href="/search" title="쿼리 화면에서 차트나 지표를 만들고 [대시보드에 추가]를 누르면 여기에 모여요">쿼리에서 가져오기</a>
             </div>
           )}
         </div>
         )}
+        <button className="btn" id="d-only" onClick={() => setDashOnly(true)} title="왼쪽 메뉴와 단추를 숨기고 카드만 크게 봐요. Esc를 누르면 돌아와요">대시보드만 보기</button>
+        <button className="btn" id="d-demo-bar" onBlur={() => setSure(false)} onClick={() => { if (conn && !sure) return setSure(true); setSure(false); demo(); }}
+          title="지어낸 주문·고객·방문기록 표에 연결하고 대시보드를 다시 열어요. 지금 다른 데이터에 연결돼 있으면 연결이 예시 데이터로 바뀌어요">{sure ? "한 번 더 누르면 연결이 바뀌어요" : "예시 데이터로 확인하기"}</button>
         <div className="drop" ref={more} onKeyDown={esc}>
-          <button className="btn" id="d-more" aria-haspopup="menu" aria-expanded={menu === "more"} onClick={() => setMenu(menu === "more" ? false : "more")} title="내보내기, 대시보드 설정, 대시보드만 보기, 예시 데이터로 확인하기">더 보기 ▾</button>
+          <button className="btn" id="d-more" aria-haspopup="menu" aria-expanded={menu === "more"} onClick={() => setMenu(menu === "more" ? false : "more")} title="내보내기, 대시보드 설정">더 보기 ▾</button>
           {menu === "more" && (
             <div className="pop" role="menu">
               <button role="menuitem" aria-haspopup="dialog" onClick={() => { setMenu(false); setReport(true); }} title="대시보드를 그림(PNG)이나 PDF 보고서로 저장해요">내보내기</button>
               <button role="menuitem" aria-haspopup="dialog" onClick={() => { setMenu(false); setSettings(true); }} title="어느 날짜·기간의 숫자를 볼지, 얼마나 자주 새로 읽을지, 카드 색 같은 것을 정해요">대시보드 설정</button>
-              <button role="menuitem" id="d-only" onClick={() => { setMenu(false); setDashOnly(true); }} title="왼쪽 메뉴와 단추를 숨기고 카드만 크게 봐요. Esc를 누르면 돌아와요">대시보드만 보기</button>
-              <button role="menuitem" id="d-demo-menu" onBlur={() => setSure(false)} onClick={() => { if (conn && !sure) return setSure(true); setMenu(false); demo(); }}
-                title="지어낸 주문·고객·방문기록 표에 연결하고 대시보드를 다시 열어요. 지금 다른 데이터에 연결돼 있으면 연결이 예시 데이터로 바뀌어요">{sure ? "한 번 더 누르면 연결이 바뀌어요" : "예시 데이터로 확인하기"}</button>
             </div>
           )}
         </div>

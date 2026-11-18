@@ -6,6 +6,7 @@ import { fitRect, PICTURE_HEIGHT, REPORT, reportLayout, TITLE_BAND } from "./lay
 import type { Card } from "@/lib/types";
 
 export type Colors = { card: string; head: string; ink: string; text: string; line: string };
+const NOPRINT = "[data-noprint]";  // 화면에서만 쓰는 조작 칸(곡면 조절 줄·손잡이): 그림에는 넣지 않는다
 const FONT = `"Segoe UI", "Malgun Gothic", sans-serif`;
 
 /** 그 모드의 색(CSS 변수). 잠깐 바꿨다가 되돌린다(옛 themeColors) */
@@ -54,7 +55,7 @@ async function nodeToImage(node: HTMLElement, drop = "") {
   const width = Math.max(1, node.clientWidth), height = Math.max(1, node.clientHeight);
   const copy = node.cloneNode(true) as HTMLElement;
   inlineStyles(node, copy);
-  if (drop) copy.querySelectorAll(drop).forEach(n => n.remove());
+  copy.querySelectorAll([drop, NOPRINT].filter(Boolean).join(", ")).forEach(n => n.remove());
   Object.assign(copy.style, { position: "static", left: "0px", top: "0px", margin: "0px", width: width + "px", height: height + "px" });
   await inlineTiles(copy);
   const NS = "http://www.w3.org/2000/svg", wrap = document.createElementNS(NS, "svg"), fo = document.createElementNS(NS, "foreignObject");

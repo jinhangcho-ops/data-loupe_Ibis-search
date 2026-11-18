@@ -398,7 +398,7 @@ def category_data(expr, body, series):
     picks = body.get("groups") or {}
     expr = result.pick_groups(expr, body["x"], picks.get("keep"), picks.get("ranges"))  # (Phase 18) 카드의 고른 그룹·숫자 범위로 먼저 거른다(compute가 server_picks를 body.groups로 넘긴다). rest도 거른 식에서
     max_splits = result.split_limit(body.get("chart_type"))  # compute가 카드의 view.type을 chart_type으로 넘긴다(3차원 막대·곡면은 더 많이)
-    labels, datasets, more = run(lambda: result.get_chart(expr, body["x"], series, split, body.get("order", viz_rules.LEGACY_ORDER), "", max_splits))
+    labels, datasets, more = run(lambda: result.get_chart(expr, body["x"], series, split, result.grid_order(body.get("chart_type"), body.get("order", viz_rules.LEGACY_ORDER)), "", max_splits))
     truncated = datasets[0]["truncated"]
     parts = list(dict.fromkeys(k["split"] for k in datasets)) if split else None
     rest = {"rest": run(lambda: viz_rules.rest_values(expr, body["x"], series, split, parts, labels))} if truncated else {}

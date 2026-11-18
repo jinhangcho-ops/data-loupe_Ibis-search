@@ -46,9 +46,9 @@ export type Key = { name: string; color: string; opacity?: number };
 /** 범례: 넣은 순서 그대로(Recharts 기본은 이름순이라 쓰지 않는다), 원 표시 8px */
 export function Keys({ items }: { items: Key[] }) {
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 14px", fontSize: 12, color: "var(--muted)", padding: "0 0 4px" }}>
+    <div className="[display:flex] flex-wrap [gap:2px_14px] [font-size:12px] [color:var(--muted)] [padding:0_0_4px]">
       {items.map((k, i) => (
-        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <span key={i} className="[display:inline-flex] items-center gap-[6px]">
           <i style={{ width: 8, height: 8, borderRadius: "50%", background: k.color, opacity: k.opacity, flex: "none" }} />{k.name}
         </span>
       ))}
@@ -60,11 +60,11 @@ export function Keys({ items }: { items: Key[] }) {
 export function Frame({ keys, title, children }: { keys?: Key[]; title?: string; children: ReactNode }) {
   const s = useRootScale();  // 안의 px(글자·여백·점·막대)가 바탕 글자 크기를 따라간다. 마우스 좌표는 Recharts가 배율을 재서 맞춘다
   return (
-    <div style={{ height: "100%" }}>
+    <div className="h-full">
       <div style={{ display: "flex", flexDirection: "column", fontSize: 12, ...scaledBox(s) }}>
-        {title ? <div style={{ textAlign: "center", color: "var(--muted)", fontWeight: 600, padding: "0 0 4px" }}>{title}</div> : null}
+        {title ? <div className="text-center [color:var(--muted)] [font-weight:600] [padding:0_0_4px]">{title}</div> : null}
         {keys?.length ? <Keys items={keys} /> : null}
-        <div style={{ flex: 1, minHeight: 0 }}>
+        <div className="flex-1 min-h-0">
           <ResponsiveContainer width="100%" height="100%" minHeight={60}>{children as React.ReactElement}</ResponsiveContainer>
         </div>
       </div>

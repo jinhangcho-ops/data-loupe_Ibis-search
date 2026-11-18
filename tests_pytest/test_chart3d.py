@@ -125,6 +125,20 @@ def test_grid_3d_takes_more_split_values():
     assert [d["split"] for d in wide] == kinds and more is False
 
 
+def test_grid_3d_auto_order_keeps_x_order():
+    """3차원 막대·곡면의 자동 정렬은 X 순이다(값 큰 순이면 지형이 달라 보인다). 다른 종류와 직접 고른 정렬은 그대로."""
+    import ibis
+
+    from core import result
+    assert [result.grid_order(kind, "auto") for kind in ("surface3d", "bar3d", "bar", None)] == ["x", "x", "auto", "auto"]
+    assert result.grid_order("surface3d", "value") == "value"
+    t = ibis.memtable({"x": ["a", "b", "c"], "kind": ["k"] * 3, "v": [1, 3, 2]})
+    series = [{"y": "v", "agg": "sum"}]
+    by_value, _, _ = result.get_chart(t, "x", series, "kind", "auto")
+    in_x, _, _ = result.get_chart(t, "x", series, "kind", result.grid_order("surface3d", "auto"))
+    assert (by_value, in_x) == (["b", "c", "a"], ["a", "b", "c"])
+
+
 def test_card_definition_changes_with_grid_3d_type():
     """카드 종류를 3차원 막대·곡면으로 바꾸면 정의(지문)가 달라져 더 많은 나눈 값으로 다시 구한다."""
     card = {"kind": "chart", "source": {"body": {"x": "x"}}, "view": {"type": "bar"}}

@@ -17,8 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/* 색 토큰·단추·카드 규칙은 옛 화면과 같은 파일을 Flask(/static)에서 그대로 쓴다(복사 없음, 색이 한 곳) */}
         {/* eslint-disable @next/next/no-css-tags */}
-        <link rel="stylesheet" href="/static/core/common.css" />
-        <link rel="stylesheet" href="/static/core/dash_edit.css" />
+        <link rel="stylesheet" href="/static/core/app.css" />
         {/* eslint-enable @next/next/no-css-tags */}
         <script dangerouslySetInnerHTML={{ __html: THEME }} />
       </head>

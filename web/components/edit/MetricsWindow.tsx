@@ -66,39 +66,39 @@ function Window({ onClose, onAdd }: MetricsWindowProps) {
   const rows = (cat?.entries ?? []).filter(e => e.area === area);
   return (
     <div className="modal" onClick={e => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={e => { if (e.key === "Escape") onClose(); }}>
-      <div className="modal-box" role="dialog" aria-label="지표" style={{ width: "min(53.75rem, 94vw)", display: "flex", flexDirection: "column", gap: ".625rem" }}>
-        <div className="head row" style={{ gap: ".5rem" }}>
+      <div className="modal-box w-[min(53.75rem,94vw)] [display:flex] flex-col gap-2.5" role="dialog" aria-label="지표">
+        <div className="head row gap-2">
           <h3>지표</h3>
           {names && (
-            <select id="d-met-table" aria-label="테이블" value={table} onChange={e => setTable(e.target.value)} style={{ width: "auto" }}>
+            <select id="d-met-table" aria-label="테이블" value={table} onChange={e => setTable(e.target.value)} className="w-auto">
               <option value="">테이블 고르기</option>
               {names.map(n => <option key={n} value={n}>{n}</option>)}
             </select>
           )}
-          <button className="ib" title="닫기" style={{ marginLeft: "auto" }} onClick={onClose}>×</button>
+          <button className="ib ml-auto" title="닫기" onClick={onClose}>×</button>
         </div>
         {!names && <div className="hint">데이터에 연결하면 테이블을 골라 지표를 카드로 넣거나 쓸 수 있는지 볼 수 있어요.</div>}
         <div className={note.ok ? "ok" : "err"} id="err-met" role="status">{note.text}</div>
 
-        <h4 style={{ margin: 0 }}>지표 파일의 지표</h4>
+        <h4 className="m-0">지표 파일의 지표</h4>
         {mine?.legacy.length ? (
           <table style={TABLE} id="d-met-legacy"><tbody>
             {mine.legacy.map(m => (
               <tr key={m.id}>
                 <td><b>{m.name}</b><div className="hint">{m.description || m.text}</div></td>
-                <td style={{ width: 1 }}><button className="btn" disabled={!table} title={table ? `${table} 테이블로 KPI 카드를 넣어요` : "테이블을 먼저 고르세요"} onClick={() => addLegacy(m.name)}>카드로 추가</button></td>
+                <td className="w-[1px]"><button className="btn" disabled={!table} title={table ? `${table} 테이블로 KPI 카드를 넣어요` : "테이블을 먼저 고르세요"} onClick={() => addLegacy(m.name)}>카드로 추가</button></td>
               </tr>
             ))}
           </tbody></table>
         ) : <div className="hint">{mine ? "지표 파일에 지표가 없어요. 쿼리 화면 [지표] 탭에서 지표 파일을 정해요." : "읽는 중…"}</div>}
 
-        <h4 style={{ margin: 0 }}>내 지표</h4>
+        <h4 className="m-0">내 지표</h4>
         {mine?.metrics.length ? (
-          <ul id="d-met-mine" style={{ margin: 0, paddingLeft: "1.125rem" }}>{mine.metrics.map(m => <li key={m.id}>{m.text}</li>)}</ul>
+          <ul id="d-met-mine" className="m-0 pl-4.5">{mine.metrics.map(m => <li key={m.id}>{m.text}</li>)}</ul>
         ) : <div className="hint">{mine ? "저장한 내 지표가 없어요. 아래 지표 사전에서 [내 지표로 저장]을 누르거나 쿼리 화면 [지표] 탭에서 만들어요." : ""}</div>}
         <div className="hint">내 지표는 문장·쿼리 화면에서 구해요. 카드로 넣으려면 쿼리 화면에서 차트로 만든 뒤 [대시보드에 추가]를 누르세요.</div>
 
-        <h4 style={{ margin: 0 }}>지표 사전</h4>
+        <h4 className="m-0">지표 사전</h4>
         {cat ? (
           <>
             <div className="btools" role="group" aria-label="영역">
@@ -112,14 +112,14 @@ function Window({ onClose, onAdd }: MetricsWindowProps) {
                     <td><b>{e.name}</b>{e.abbr ? <span className="hint"> {e.abbr}</span> : null}</td>
                     <td className="hint">{e.help}</td>
                     <td className="hint">{!table ? "테이블을 고르세요" : !a ? "…" : a.usable ? a.note ?? "쓸 수 있어요" : a.reason}</td>
-                    <td style={{ width: 1 }}><button className="btn" disabled={!ok} title={e.cross ? "다른 테이블과 맞춤 구절이 필요해서 쿼리 화면 [지표] 탭에서 저장해요" : "추천 컬럼으로 이 테이블에 묶은 내 지표로 저장해요"} onClick={() => save(e)}>내 지표로 저장</button></td>
+                    <td className="w-[1px]"><button className="btn" disabled={!ok} title={e.cross ? "다른 테이블과 맞춤 구절이 필요해서 쿼리 화면 [지표] 탭에서 저장해요" : "추천 컬럼으로 이 테이블에 묶은 내 지표로 저장해요"} onClick={() => save(e)}>내 지표로 저장</button></td>
                   </tr>
                 );
               })}
             </tbody></table></div>
           </>
         ) : <div className="hint">읽는 중…</div>}
-        <div className="row" style={{ justifyContent: "flex-end" }}>
+        <div className="row justify-end">
           <a className="btn" href="/search#metrics">지표 화면 열기</a>
           <button className="ghost" onClick={onClose}>닫기</button>
         </div>

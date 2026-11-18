@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Data Loupe</title>
 <!--include core/head.html-->
-<style>
+<style>@layer components {  /* 공통 부품(app.css)과 같은 레이어: 선택자 우선순위가 예전처럼 겨룬다 */
   .home { flex:1; min-height:0; overflow:auto; display:grid; grid-template-columns:minmax(0, 35rem) minmax(15rem, 22.5rem); justify-content:center; align-content:safe center; gap:var(--sp-6); padding:var(--sp-6) var(--sp-5); background:var(--bg); }
   .home-main { display:flex; flex-direction:column; gap:var(--sp-3); min-width:0; }
   .home-ask { margin:0; font-size:var(--fs-xl); }
@@ -39,7 +39,7 @@
   .recent-folder .btn { width:calc(100% - var(--sp-2) * 2); margin:var(--sp-2) var(--sp-2) 0; }
   .recent-folder .btn:last-child { margin-bottom:var(--sp-2); }
   @media (max-width:900px) { .home { grid-template-columns:1fr; } .home-recent { height:auto; min-height:0; } .recent-list { max-height:60vh; } }
-</style>
+}</style>
 </head>
 <body class="app">
 <!--include core/status.html-->

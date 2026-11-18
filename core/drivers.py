@@ -146,7 +146,7 @@ def has_python():
 
 def pip_command(extra):
     """Ibis 드라이버(extra)를 설치하는 명령. 소스 실행은 평범한 pip, exe는 따로 설치 폴더로 받는다."""
-    # 간접 의존까지 빌드 때 버전으로 고정한다. constraints.txt는 소스 실행이면 저장소의 것, exe면 spec이 넣은 것(같은 자리)
+    # 간접 의존까지 빌드 때 버전으로 고정한다. constraints.txt는 소스 실행이면 저장소의 것, exe면 빌드(build-exe.yml)가 넣은 것(같은 자리)
     spec = f'-c "{Path(__file__).resolve().parent.parent / "constraints.txt"}" "ibis-framework[{extra}]=={ibis_version()}"'
     if frozen():
         return f'py -{FROZEN_PYTHON} -m pip install --target "%APPDATA%\\DataLoupe\\drivers" {spec}'

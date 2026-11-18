@@ -29,7 +29,7 @@ export function Candle(p: P) {
               <title>{`${c.label}: 시작 ${shownum(c.open)} · 최고 ${shownum(c.high)} · 최저 ${shownum(c.low)} · 끝 ${shownum(c.close)}`}</title>
               <line x1={cx} x2={cx} y1={y(c.high!)} y2={y(c.low!)} stroke={col} />
               <rect x={cx - w / 2} y={y(Math.max(open, close))} width={w} height={Math.max(1, Math.abs(y(open) - y(close)))} fill={col} />
-              {i % every === 0 && <text x={cx} y={H - 5 * s} fontSize={10 * s} textAnchor="middle" fill="var(--muted)">{c.label}</text>}
+              {i % every === 0 && <text x={i ? cx : L} y={H - 5 * s} fontSize={10 * s} textAnchor={i ? "middle" : "start"} fill="var(--muted)">{c.label}</text>}
             </g>
           );
         })}

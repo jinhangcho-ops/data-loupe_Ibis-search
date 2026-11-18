@@ -203,4 +203,4 @@ console.log(JSON.stringify({ none, some }));"""
     got = run_node(tmp_path, body, parts=[stubs, part])
     assert got == {"none": [True] * 5, "some": [False] * 5}
     ids = tree()
-    assert "flex:1 1 100%" in ids["met-on"][0]["style"]  # 안내 글은 좁은 칸에 꺾이지 않고 한 줄 전체
+    assert "flex-[1_1_100%]" in ids["met-on"][0]["class"].split()  # 안내 글은 좁은 칸에 꺾이지 않고 한 줄 전체

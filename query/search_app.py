@@ -657,7 +657,7 @@ def chart():
     series, split = body.get("series") or [], body.get("split") or None
     max_splits = result.split_limit(body.get("chart_type"))  # 3차원 막대·곡면은 나눈 값이 한 축이라 더 많이 받는다
     labels, datasets, more = run(lambda: result.get_chart(
-        expr, body["x"], series, split, body.get("order", "x"), body.get("x_unit") or "", max_splits))
+        expr, body["x"], series, split, result.grid_order(body.get("chart_type"), body.get("order", "x")), body.get("x_unit") or "", max_splits))
     truncated = any([d.pop("truncated") for d in datasets])  # 계열마다 붙은 표시는 응답 맨 위에 한 번만(계열 모양은 그대로)
     extra = {}
     if truncated and not expr[body["x"]].type().is_temporal():  # 날짜 X는 Top-N 대상이 아니라 받지 못한 그룹 값을 구하지 않는다

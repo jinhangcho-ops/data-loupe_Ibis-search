@@ -5,6 +5,8 @@ import { useState } from "react";
 import { useDash } from "@/lib/store";
 import type { NorthStar } from "@/lib/types";
 
+/** 좁은 패널에서 긴 단추: 줄 밖으로 나가지 않고 글자가 줄바꿈된다(높이는 조작 칸 높이부터) */
+export const FIT = "max-w-full h-auto min-h-ctl-md whitespace-normal";
 const STAR_HELP = "북극성은 대시보드에서 가장 중요한 지표 하나(★), 카운터는 북극성을 올리는 동안 나빠지면 안 되는 지표(⚑)예요.";
 
 export function StarSection({ id }: { id: string }) {
@@ -17,9 +19,9 @@ export function StarSection({ id }: { id: string }) {
     <div>
       <h5>중요 지표</h5>
       <div className="prow">
-        <button type="button" className={`btn${isStar ? " on" : ""}`} aria-pressed={isStar} style={{ minHeight: "1.5rem" }} title="대시보드에서 가장 중요한 지표 하나예요. 카드 제목 옆에 ★가 붙어요"
+        <button type="button" className={`btn${isStar ? " on" : ""} ${FIT}`} aria-pressed={isStar} title="대시보드에서 가장 중요한 지표 하나예요. 카드 제목 옆에 ★가 붙어요"
           onClick={() => set({ ...star, card: isStar ? "" : id, counters: star.counters.filter(c => c !== id) })}>{isStar ? "북극성 지표 해제" : "북극성 지표로 정하기"}</button>
-        <button type="button" className={`btn${isCounter ? " on" : ""}`} aria-pressed={isCounter} style={{ minHeight: "1.5rem" }} title="북극성 지표를 올리는 동안 나빠지면 안 되는 지표예요(예: 환불률). 카드 제목 옆에 ⚑가 붙어요"
+        <button type="button" className={`btn${isCounter ? " on" : ""} ${FIT}`} aria-pressed={isCounter} title="북극성 지표를 올리는 동안 나빠지면 안 되는 지표예요(예: 환불률). 카드 제목 옆에 ⚑가 붙어요"
           onClick={() => {
             const limits = { ...star.limits };
             if (isCounter) delete limits[id];
@@ -31,8 +33,8 @@ export function StarSection({ id }: { id: string }) {
         <>
           <div className="prow">
             <select aria-label="한계 방향" value={op} onChange={e => setOp(e.target.value)}><option value=">=">이 값 이상 유지</option><option value="<=">이 값 이하 유지</option></select>
-            <input type="number" step="any" aria-label="한계 값" placeholder="한계 값" style={{ width: "6.25rem" }} value={value} onChange={e => setValue(e.target.value)} />
-            <button type="button" className="btn" style={{ minHeight: "1.5rem" }} onClick={() => {
+            <input type="number" step="any" aria-label="한계 값" placeholder="한계 값" className="w-[6.25rem]" value={value} onChange={e => setValue(e.target.value)} />
+            <button type="button" className="btn min-h-[1.5rem]" onClick={() => {
               if (value === "" || !Number.isFinite(+value)) return setNote("한계는 숫자로 적어 주세요.");
               setNote("");
               set({ ...star, limits: { ...star.limits, [id]: { op: op as ">=" | "<=", value: +value } } });

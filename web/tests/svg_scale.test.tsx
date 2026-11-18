@@ -62,3 +62,10 @@ describe("viewBox 카드 그림의 글자 배율", () => {
     ys.forEach(y => { expect(y - 10 * scale).toBeGreaterThanOrEqual(46); expect(y).toBeLessThan(84); });
   });
 });
+describe("growFont의 아래 한계", () => {
+  it("min을 주면 폭에 맞춰 기준 크기 아래로 줄이고, 안 주면 기준 크기를 지킨다", () => {
+    expect(growFont("62,643,000", 62, 22, 1.25)).toBe(22);
+    expect(growFont("62,643,000", 62, 22, 1.25, 8)).toBeCloseTo(10, 5);
+    expect(growFont("62,643,000", 6.2, 22, 1.25, 8)).toBe(8);
+  });
+});

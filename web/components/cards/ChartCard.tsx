@@ -124,7 +124,7 @@ export function ChartCard({ card, data, palette, ctx }: CardProps) {
   const { ref, width } = useWidth(), scale = useRootScale();
   // 카드 상자와 .bbody(격자 칸 높이)는 Grid가 준다. 여기는 그 높이를 그림과 안내 줄로 나눈다.
   const box = (body: ReactNode, note?: string, table?: ReactNode) => (
-    <div ref={ref} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div ref={ref} className="[display:flex] flex-col h-full">
       <div style={{ flex: CHART_FLEX, minHeight: 0 }}>{body}</div>
       {table ? <div style={{ flex: TABLE_FLEX, minHeight: 0, overflow: "auto" }}>{table}</div> : null}
       {note ? <div className="hint">{note}</div> : null}

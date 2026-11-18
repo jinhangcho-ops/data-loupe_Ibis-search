@@ -1,4 +1,6 @@
-/* 대시보드 화면 전용 규칙(옛 static/dashboard/dashboard.html의 <style>을 그대로 옮김). 색 토큰·단추·카드 규칙은 /static/core/common.css·dash_edit.css를 layout이 <link>로 불러 그대로 쓴다. */
+/* 대시보드 화면 전용 규칙(옛 static/dashboard/dashboard.html의 <style>을 그대로 옮김). 색 토큰·단추·카드 규칙은 /static/core/app.css(common.css·dash_edit.css가 들어 있다)를 layout이 <link>로 불러 쓴다. */
+@layer theme, components, utilities;  /* app.css와 같은 차례(이 파일이 먼저 읽힌다) */
+@layer components {
 .settings-box { width:min(47.5rem, 94vw); display:flex; flex-direction:column; gap:.75rem; }
 .settings-box h4 { margin:.375rem 0 0; font-size:var(--fs-md); }
 .settings-box .dctl { padding:0; }
@@ -26,7 +28,7 @@ body.dash-only .bcard.sel, body.dash-only .bcard.editing { border-color:var(--li
 /* N7: 켜진 도구 단추(편집), 카드·카드 모음 칸·패널 단추의 키보드 초점 링, 크기 손잡이 누름 영역 1.5rem */
 .d-tool .btn.on { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
 /* 머리 줄(시안 DashboardBody): 대시보드 고르기는 제목처럼 크게, 기간 칸은 한 줄(안내는 있을 때만 옆에), "N분 전 최신화"는 작은 글자 */
-.d-tool .d-pick { font-size:var(--fs-xl); font-weight:700; }
+.d-tool .d-pick { height:var(--h-lg); font-size:var(--fs-xl); font-weight:700; }
 .d-tool .d-per { flex-direction:row; align-items:center; gap:.5rem; }
 .d-tool .d-per .row { margin:0; width:min(15rem, 40vw); }
 .d-tool .d-per .dc-note:not(.bad) { display:none; }  /* 머리 줄에서는 잘못 쓴 기간만 알린다(읽은 기간은 칸에 그대로 보이고, 설정 창에는 안내가 다 나온다) */
@@ -55,3 +57,4 @@ body.dash-only .bcard.sel, body.dash-only .bcard.editing { border-color:var(--li
 .drop .pop .dcal-day:focus-visible { outline:.125rem solid var(--accent); outline-offset:1px; }
 /* 확대·이동 활성 표시(카드 상자 밖이라 그림 저장에 찍히지 않는다) */
 .bcard.zoomable { outline:1px solid var(--accent); outline-offset:-1px; }
+}

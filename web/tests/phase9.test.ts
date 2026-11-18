@@ -334,4 +334,14 @@ describe("한데 묶기(autoSeries·autoEnv)", () => {
     expect(r.notes.join(" ")).toContain("로그");
     expect(r.card.view.scale).toBeUndefined();
   });
+  it("3차원 격자(bar3d·surface3d)는 X 칸을 큰 N개와 기타로 줄이지 않는다", () => {
+    const many = ser(names(20), [ds("a", names(20).map((_, i) => i)), ds("b", names(20).map((_, i) => i))]);
+    expect(autoSeries(card({ type: "bar" }), many, env()).s.labels).toHaveLength(16);
+    for (const type of ["bar3d", "surface3d"]) {
+      const r = autoSeries(card({ type }), many, env());
+      expect(r.s.labels, type).toHaveLength(20);
+      expect(r.notes.join(" "), type).not.toContain("기타");
+      expect(r.s.labels, type).toEqual(names(20));  // 값이 뒤로 갈수록 커도 받은 차례 그대로(값 큰 순으로 뒤집지 않는다)
+    }
+  });
 });

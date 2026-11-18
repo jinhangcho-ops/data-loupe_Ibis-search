@@ -23,6 +23,11 @@ GRID_3D_TYPES = ("bar3d", "surface3d")  # 나눈 값이 한 축이 되는 3차�
 def split_limit(chart_type: str | None) -> int:
     """차트 종류에 맞는 나눌 값 개수 상한: 3차원 막대·곡면은 MAX_SPLITS_3D, 그 밖은 MAX_SPLITS."""
     return MAX_SPLITS_3D if chart_type in GRID_3D_TYPES else MAX_SPLITS
+
+
+def grid_order(chart_type: str | None, order: str) -> str:
+    """차트 종류에 맞는 X 정렬: 3차원 막대·곡면의 자동(auto)은 X 순(값 큰 순으로 놓으면 지형이 달라 보인다). 그 밖과 직접 고른 정렬은 그대로."""
+    return "x" if chart_type in GRID_3D_TYPES and order == "auto" else order
 MAX_VALUES = 200  # 조건을 만들 때 보여 줄 컬럼 값 목록의 최대 개수
 VALUE_SCAN = 200_000  # 값 목록은 앞의 이만큼 행에서만 찾는다(값이 많은 큰 표의 전체 DISTINCT는 메모리를 많이 쓴다)
 MAX_POINTS = 5_000  # 산점도·버블의 점 수 상한(분석의 산점도와 대시보드가 같이 쓴다)

@@ -72,5 +72,5 @@ def test_result_head_has_title_and_add_button():
     head = between("prep.html", '<div class="big a-head">', '<div class="big a-answer" id="a-answer">')
     assert head.index('id="a-title"') < head.index('id="a-sub"') < head.index('id="a-add"') < head.index('id="a-pop"')
     assert all(f'id="{i}"' in head for i in ("a-dash", "a-dash-name", "a-dash-go"))
-    assert 'id="a-add"' not in between("prep.html", '<div class="tool"><span class="hint" id="a-data"', "</div>")  # 도구 줄에는 데이터 설명과 [전체로 다시 구하기]만
+    assert 'id="a-add"' not in between("prep.html", '<div class="tool"><span class="hint m-0 flex-1" id="a-data"', "</div>")  # 도구 줄에는 데이터 설명과 [전체로 다시 구하기]만
     assert page.index('id="a-full"') < page.index('id="a-src"') < page.index('id="a-title"') < page.index('id="a-answer"') < page.index('id="a-box"')

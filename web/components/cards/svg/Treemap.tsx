@@ -38,7 +38,7 @@ export function Treemap(p: P) {
   if (!items.length) return <Say text={NOTHING} />;
   return (
     <Box cls="treemap">
-      <div style={{ flex: 1, minHeight: 0 }}>
+      <div className="flex-1 min-h-0">
         <Frame><Tree data={items} dataKey="value" nameKey="name" isAnimationActive={false} content={TreeCell}><Tooltip {...TIP} /></Tree></Frame>
       </div>
     </Box>

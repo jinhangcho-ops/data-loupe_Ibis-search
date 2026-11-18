@@ -41,7 +41,7 @@ export const Box = ({ cls, children }: { cls: string; children?: React.ReactNode
 export const Say = ({ text, cls = "summary" }: { text: string; cls?: string }) => <Box cls={cls}><div className={cls === "summary" ? "sum-text" : "hint"}>{text}</div></Box>;
 /** viewBox에 맞춰 늘어나는 SVG. 화면 읽기 프로그램에는 카드 이름으로 */
 export const Frame = ({ w, h, label, children }: { w: number; h: number; label: string; children?: React.ReactNode }) => (
-  <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }} role="img" aria-label={label}>{children}</svg>
+  <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" role="img" aria-label={label}>{children}</svg>
 );
 
 const ICON_PATHS: Record<string, string> = { chart: "M3 20h18M6 16v-5M11 16V7M16 16v-8", up: "M4 16l6-6 4 4 6-8M15 6h5v5", user: "M12 12a4 4 0 100-8 4 4 0 000 8zM5 20c0-4 3-6 7-6s7 2 7 6", cart: "M3 4h3l2 11h10l2-8H7M10 20h.01M17 20h.01", coin: "M12 3a9 9 0 100 18 9 9 0 000-18zM9 12h6M12 8v8", clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2" };

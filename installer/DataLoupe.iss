@@ -1,4 +1,4 @@
-; Windows 설치 파일(DataLoupe-setup.exe)을 만든다. 먼저 pyinstaller DataLoupe.spec로 dist\DataLoupe를 만든 뒤:
+; Windows 설치 파일(DataLoupe-setup.exe)을 만든다. 먼저 dist\DataLoupe를 만든 뒤(.github/workflows/build-exe.yml의 "exe 만들기" 단계):
 ;   iscc /DAppVersion=1.0.0 installer\DataLoupe.iss   → installer\Output\DataLoupe-setup.exe
 ; 설치 위치는 고를 수 있고(기본: 관리자 권한 없이 이 사용자의 프로그램 폴더), 바탕화면 바로가기는 체크로 정한다.
 ; 설정·대시보드는 %APPDATA%\DataLoupe에 있어 지우거나 다시 설치해도 남는다.

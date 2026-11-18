@@ -11,7 +11,7 @@ import { AddCardMenu } from "./AddCardMenu";
 import { refillColors, refillView } from "./menu/build";
 import { Shelf } from "./Shelf";
 import { KIND_NAMES, isShell } from "./menu/kinds";
-import { StarSection } from "./panel/StarSection";
+import { FIT, StarSection } from "./panel/StarSection";
 import { Tools } from "./panel/Tools";
 
 export type CardPanelProps = { card: Card | null; onChange: (patch: Partial<Card>) => void; onClose: () => void };
@@ -88,8 +88,8 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
     <aside id="d-panel" className={`d-panel${folded ? " folded" : ""}`} aria-label="카드 설정" onKeyDown={e => { if (e.key === "Escape" && !folded) { e.stopPropagation(); onClose(); } }}>
       <div className="phead">
         <b>{KIND_NAMES[card.kind] ?? card.kind} 카드 설정</b>
-        <button type="button" className="fold" ref={fold} aria-label="패널 접기" title="패널 접기" style={{ minWidth: "1.5rem", minHeight: "1.5rem" }} onClick={() => { setFolded(true); queueMicrotask(() => strip.current?.focus()); }}>›</button>
-        <button type="button" className="ghost" aria-label="패널 닫기" title="패널 닫기" style={{ minWidth: "1.5rem", minHeight: "1.5rem" }} onClick={onClose}>×</button>
+        <button type="button" className="fold min-w-[1.5rem] min-h-[1.5rem]" ref={fold} aria-label="패널 접기" title="패널 접기" onClick={() => { setFolded(true); queueMicrotask(() => strip.current?.focus()); }}>›</button>
+        <button type="button" className="ghost min-w-[1.5rem] min-h-[1.5rem]" aria-label="패널 닫기" title="패널 닫기" onClick={onClose}>×</button>
       </div>
       <label className="hint pfield"><span>이름</span>
         <input key={card.title} defaultValue={card.title} onBlur={e => { const v = e.target.value.trim() || card.title; e.target.value = v; if (v !== card.title) onChange({ title: v }); }}
@@ -98,7 +98,7 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
       <div>
         <h5>데이터</h5>
         <div className="hint">{what}</div>
-        <button type="button" className={isShell(card) && !builder ? "btn p" : "btn"} style={{ minHeight: "1.5rem" }} aria-expanded={builder} onClick={() => setBuilder(b => !b)}>
+        <button type="button" className={`btn${isShell(card) && !builder ? " p" : ""} ${FIT}`} aria-expanded={builder} onClick={() => setBuilder(b => !b)}>
           {builder ? "접기" : isShell(card) ? "데이터 정하기" : "데이터 다시 정하기"}
         </button>
         <div className="pdata"><AddCardMenu open={builder} fill={card} onClose={() => setBuilder(false)} onAdd={fill} /></div>
@@ -107,12 +107,12 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
       <StarSection id={card.id} />
       {isChart && (<><h5 title="컬럼을 끌어 칸에 놓거나, 컬럼을 누른 뒤 칸을 눌러요">차트 구성</h5>
         {cols.length ? <Shelf card={card} columns={cols} onChange={reshelf} /> : <div className="hint">데이터에 연결하면 컬럼을 끌어 가로축, 값, 색, 필터를 바꿀 수 있어요.</div>}</>)}
-      {!isShell(card) && <button type="button" className="btn" style={{ minHeight: "1.5rem" }} title="이 카드 값만 지금 연결에서 다시 구해요" onClick={again}>이 카드 다시 구하기</button>}{/* 빈 틀은 구할 기록이 없다 */}
+      {!isShell(card) && <button type="button" className="btn min-h-[1.5rem]" title="이 카드 값만 지금 연결에서 다시 구해요" onClick={again}>이 카드 다시 구하기</button>}{/* 빈 틀은 구할 기록이 없다 */}
       <details className="pplace"><summary>위치·크기</summary>
         <div className="prow">
           {(["w", "h", "x", "y"] as const).map(k => (
             <label key={k + card.layout[k]} className="hint pfield"><span>{{ w: "너비(칸)", h: "높이(칸)", x: "가로 위치", y: "세로 위치" }[k]}</span>
-              <input type="number" style={{ width: "4rem" }} min={LIMITS[k][0]} max={k === "x" ? 12 - card.layout.w : LIMITS[k][1]} defaultValue={card.layout[k]}
+              <input type="number" className="w-[4rem]" min={LIMITS[k][0]} max={k === "x" ? 12 - card.layout.w : LIMITS[k][1]} defaultValue={card.layout[k]}
                 onBlur={e => { if (+e.target.value !== card.layout[k]) place(k, e.target.value); }} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />
             </label>
           ))}

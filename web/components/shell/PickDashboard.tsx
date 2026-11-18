@@ -49,18 +49,18 @@ export function PickDashboard() {
   return (
     <>
       <label className="hint" style={LABEL}>대시보드
-        <select className="d-pick" value={state.dash?.id ?? ""} onChange={e => open(e.target.value)} title="열어 볼 대시보드. 마지막에 연 대시보드가 먼저 열려요" style={{ width: "auto", minWidth: "12.5rem" }}>
+        <select className="d-pick w-auto min-w-[12.5rem]" value={state.dash?.id ?? ""} onChange={e => open(e.target.value)} title="열어 볼 대시보드. 마지막에 연 대시보드가 먼저 열려요">
           {items.map(d => <option key={d.id} value={d.id}>{d.id ? `${d.name} (카드 ${d.cards}개)` : d.name}</option>)}
         </select>
       </label>
       <span className="drop" ref={wrap} onKeyDown={e => { if (e.key === "Escape" && making) { e.stopPropagation(); close(); } }}>
         <button ref={opener} className="btn" onClick={toggle} aria-expanded={making} aria-haspopup="dialog" title="이름과 시작 모양을 정해 새 대시보드를 만들어요">새 대시보드</button>
         {making && (
-          <div className="pop" role="dialog" aria-label="새 대시보드" style={{ left: 0, right: "auto", width: "min(20rem, 92vw)", gap: ".5rem", padding: ".75rem" }}>
+          <div className="pop [left:0] [right:auto] w-[min(20rem,92vw)] gap-2 p-3" role="dialog" aria-label="새 대시보드">
             <input value={name} onChange={e => setName(e.target.value)} placeholder="대시보드 이름" aria-label="새 대시보드 이름" autoFocus
               onKeyDown={e => { if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !busy) make(); }} />
             <label className="hint" style={LABEL}>시작 모양
-              <select value={tpl} onChange={e => setTpl(e.target.value)} title="시작 모양. 카드 자리만 놓이고, 데이터는 카드마다 정해요" style={{ width: "auto", flex: 1 }}>
+              <select value={tpl} onChange={e => setTpl(e.target.value)} title="시작 모양. 카드 자리만 놓이고, 데이터는 카드마다 정해요" className="w-auto flex-1">
                 {all.map(t => <option key={t.id} value={t.id} title={t.help ?? ""}>{t.name}</option>)}
               </select>
             </label>

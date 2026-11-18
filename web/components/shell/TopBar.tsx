@@ -95,10 +95,10 @@ export function TopBar() {
       <header className="topbar">
         <div id="crumb" className={"crumb" + (conn ? " on" : "")} title="지금 연결된 데이터"><i></i><span id="crumb-text">{conn?.label || "연결 안 됨"}</span></div>
         {st?.running && (
-          <button className="jobx" id="rf-pill" style={{ cursor: "pointer", border: 0 }} onClick={() => setPop(true)} title="대시보드를 최신 값으로 바꾸는 중이에요. 누르면 진행 상황을 볼 수 있어요.">
+          <button className="jobx cursor-pointer [border:0]" id="rf-pill" onClick={() => setPop(true)} title="대시보드를 최신 값으로 바꾸는 중이에요. 누르면 진행 상황을 볼 수 있어요.">
             <i></i><span>{`대시보드 최신화 ${st.done}/${st.total}`}</span></button>
         )}
-        <div className="top-tools" style={{ marginLeft: "auto" }}>
+        <div className="top-tools ml-auto">
           <button id="flush" className="btn" onClick={flush} onBlur={() => setSure(false)}
             title={flushErr || "연결을 끊고 앱이 붙잡고 있는 데이터(받아 둔 결과·표본 등)를 모두 비워 처음 켠 상태로 돌아가요. 저장한 검색·대시보드·설정은 그대로예요"}>{sure ? "한 번 더 누르면 모두 비워요" : "비우기"}</button>
         </div>
@@ -113,7 +113,7 @@ export function TopBar() {
                   <b>{REFRESH_STATE[r.state] ?? r.state}</b><span>{r.title + (r.message ? `: ${r.message}` : "")}</span></li>
               ))}
             </ul>
-            <div className="row" style={{ justifyContent: "flex-end" }}>
+            <div className="row justify-end">
               <button className="ghost" disabled={!st.running} onClick={() => stopRefresh().then(setSt).catch(() => {})}>멈추기</button>
               <button className="btn" onClick={() => setPop(false)} autoFocus>{st.running ? "닫고 계속하기" : "닫기"}</button>
             </div>

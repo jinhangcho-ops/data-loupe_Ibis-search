@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Data Loupe · 분석</title>
 <!--include core/head.html-->
-<style>
+<style>@layer components {  /* 공통 부품(app.css)과 같은 레이어: 선택자 우선순위가 예전처럼 겨룬다 */
   .pcol { display:flex; gap:.375rem; align-items:center; white-space:nowrap; }
   .pcol input { width:auto; }
   .pcol .name { color:var(--text); cursor:pointer; }
@@ -133,15 +133,15 @@
   .akinds > label small { display:block; color:var(--muted); font-size:var(--fs-xs); font-weight:400; }
   .a-form { margin-top:-.375rem; border:1px solid var(--accent); border-top:0; border-radius:0 0 var(--r-card) var(--r-card); background:var(--accent-bg); padding:0 .5rem .5rem; }  /* -.375rem: .akinds의 gap을 메워 고른 label에 붙인다 */
   .a-form > .lead { margin-top:0; }
-</style>
+}</style>
 </head>
 <body class="app">
 <!--include core/status.html-->
 <div class="work" id="prep-view">
   <main class="results">
     <div class="big"><b id="p-big">테이블을 고르세요</b><span id="p-sub">오른쪽 데이터 단계에서 연결과 테이블을 고르면 여기에 데이터가 나와요.</span></div>
-    <div class="ok" id="ok-run" style="padding:0 1.75rem"></div>
-    <div class="err" id="err-prep" style="padding:0 1.75rem"></div>
+    <div class="ok p-[0_1.75rem]" id="ok-run"></div>
+    <div class="err p-[0_1.75rem]" id="err-prep"></div>
     <div class="tabs2" id="p-tabs"><button data-ptab="info" class="on">데이터</button><button data-ptab="spec" title="컬럼마다 표본 요약, 명세서 설명, 추천을 봐요">컬럼 요약</button></div>
     <section class="pane" id="p-info">
       <div class="hint" id="info-note"></div>
@@ -150,7 +150,7 @@
       <div class="hint"><span id="counts"></span> <span id="stale" class="warn"></span></div>
     </section>
     <section class="pane hidden" id="p-spec">
-      <div class="head"><span class="hint" id="sampled" style="margin:0"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계와 추천을 다시 구해요">다시 구하기</button><button id="full-stats" class="ghost hidden" title="표본 대신 테이블 전체로 빈칸·값 종류·최솟값·최댓값을 구해 표본과 비교해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="컬럼 요약을 테이블 전체로 구하기">전체로 구하기</button><button id="diag-opts" class="ghost" title="진단 기준(이상치 배수, 더미 값, 기본값 날짜, 빈 값 표시, 순서 척도 등)을 바꿔요. 바꾸면 같은 표본으로 다시 구해요">진단 기준</button><span style="flex:1"></span><button id="prune" class="btn hidden" title="표본에서 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾아요. 이미 읽은 표본만 쓰고 DB에는 다시 묻지 않아요">뺄 만한 컬럼 찾기</button><button id="sug-all" class="hidden" title="모든 컬럼의 추천을 정리 방법에 한 번에 넣어요">추천 모두 적용</button></div>
+      <div class="head"><span class="hint m-0" id="sampled"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계와 추천을 다시 구해요">다시 구하기</button><button id="full-stats" class="ghost hidden" title="표본 대신 테이블 전체로 빈칸·값 종류·최솟값·최댓값을 구해 표본과 비교해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="컬럼 요약을 테이블 전체로 구하기">전체로 구하기</button><button id="diag-opts" class="ghost" title="진단 기준(이상치 배수, 더미 값, 기본값 날짜, 빈 값 표시, 순서 척도 등)을 바꿔요. 바꾸면 같은 표본으로 다시 구해요">진단 기준</button><span class="flex-1"></span><button id="prune" class="btn hidden" title="표본에서 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾아요. 이미 읽은 표본만 쓰고 DB에는 다시 묻지 않아요">뺄 만한 컬럼 찾기</button><button id="sug-all" class="hidden" title="모든 컬럼의 추천을 정리 방법에 한 번에 넣어요">추천 모두 적용</button></div>
       <div class="pop hidden" id="diag-pop"><div id="diag-form"></div><div class="row"><button id="diag-save" class="btn p">저장</button><button id="diag-reset" class="btn">기본값으로</button></div><div class="err" id="diag-err"></div></div>
       <div class="hint" id="prune-box"></div>
       <details class="hint hidden" id="sampled-more"><summary>표본을 어떻게 읽었는지</summary><div id="sampled-long"></div></details>
@@ -164,8 +164,8 @@
         <details class="tool"><summary>참조 무결성<small>다른 테이블에 없는 키</small></summary><div class="row"><select id="ri-dim" aria-label="차원 테이블"></select></div><div id="ri-pairs"></div><div class="row"><button id="ri-add" class="ghost" aria-label="키 쌍 더하기">+ 키</button><button id="ri-run" class="btn" title="이 테이블의 키가 고른 차원 테이블에 없는 비율을 테이블 전체로 구해요. 이 테이블 키 컬럼을 4번, 차원 테이블 키 컬럼을 2번 읽어요">참조 무결성 확인</button></div><div class="hint" id="ri-out"></div></details>
       </div>
       <div id="spec-view"></div>
-      <details class="tool" id="export-box"><summary>요약을 파일로 저장<small>연결의 모든 테이블</small></summary><div class="row" style="align-items:center; flex-wrap:wrap"><button id="profile-export" class="ghost" title="연결의 모든 테이블의 컬럼 요약(이름·타입·빈 값 비율·고유값 수·최솟값·최댓값·예시 값 몇 개)을 파일 하나로 저장해요. 테이블이 많으면 오래 걸려요. 표본 크기는 지금 설정을 따르고, 행 데이터는 예시 값 몇 개 외에 넣지 않아요" aria-label="모든 테이블의 컬럼 요약을 파일로 저장">요약 파일로 저장</button><select id="export-format" title="요약 파일 형식. Excel은 테이블마다 시트 하나, CSV는 테이블 이름 컬럼을 넣은 표 하나" aria-label="요약 파일 형식"><option value="xlsx">Excel</option><option value="csv">CSV</option></select><label class="check" title="표본 대신 테이블 전체로 구해요. 큰 테이블은 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요"><input type="checkbox" id="export-full" aria-label="요약 파일을 테이블 전체 기준으로 구하기"> 전체 기준</label><span class="hint" id="export-msg" style="margin:0"></span></div></details>
-      <div class="row" style="margin-top:1rem; max-width:45rem; align-items:center" title="테이블과 컬럼 설명, 파티션 키를 적은 파일(JSON·YAML)이에요. 이 설명은 [질문으로 SQL 만들기]에서도 써요. 칸을 비우고 [불러오기]를 누르면 명세서를 쓰지 않아요"><span class="hint" style="margin:0; flex:none">명세서 파일</span><input id="spec-path" class="code" placeholder="JSON 또는 YAML 파일 경로(없어도 돼요)"><button id="spec-read" class="btn">불러오기</button></div>
+      <details class="tool" id="export-box"><summary>요약을 파일로 저장<small>연결의 모든 테이블</small></summary><div class="row items-center flex-wrap"><button id="profile-export" class="ghost" title="연결의 모든 테이블의 컬럼 요약(이름·타입·빈 값 비율·고유값 수·최솟값·최댓값·예시 값 몇 개)을 파일 하나로 저장해요. 테이블이 많으면 오래 걸려요. 표본 크기는 지금 설정을 따르고, 행 데이터는 예시 값 몇 개 외에 넣지 않아요" aria-label="모든 테이블의 컬럼 요약을 파일로 저장">요약 파일로 저장</button><select id="export-format" title="요약 파일 형식. Excel은 테이블마다 시트 하나, CSV는 테이블 이름 컬럼을 넣은 표 하나" aria-label="요약 파일 형식"><option value="xlsx">Excel</option><option value="csv">CSV</option></select><label class="check" title="표본 대신 테이블 전체로 구해요. 큰 테이블은 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요"><input type="checkbox" id="export-full" aria-label="요약 파일을 테이블 전체 기준으로 구하기"> 전체 기준</label><span class="hint m-0" id="export-msg"></span></div></details>
+      <div class="row mt-4 max-w-[45rem] items-center" title="테이블과 컬럼 설명, 파티션 키를 적은 파일(JSON·YAML)이에요. 이 설명은 [질문으로 SQL 만들기]에서도 써요. 칸을 비우고 [불러오기]를 누르면 명세서를 쓰지 않아요"><span class="hint m-0 flex-none">명세서 파일</span><input id="spec-path" class="code" placeholder="JSON 또는 YAML 파일 경로(없어도 돼요)"><button id="spec-read" class="btn">불러오기</button></div>
       <div class="hint" id="spec-info"></div>
     </section>
   </main>
@@ -176,11 +176,11 @@
     <div class="sc"><p class="lead">분석하기 전에 데이터를 다듬어요(행 빼기·고치기·새 컬럼). 원본 데이터는 바뀌지 않아요.</p><div class="flow">
       <div class="step open" data-step="data"><div class="sp" data-hint><i>1</i><span class="t" title="다듬을 테이블을 골라요">데이터</span><b id="sum-p-data"></b><span class="c"></span></div>
         <div class="edx">
-          <div class="row" style="align-items:center"><span class="hint" id="conn-now" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">연결되지 않았어요</span><button id="conn-open" class="btn">연결 바꾸기</button></div>
+          <div class="row items-center"><span class="hint m-0 flex-1 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap" id="conn-now">연결되지 않았어요</span><button id="conn-open" class="btn">연결 바꾸기</button></div>
           <div id="table-box">
             <div class="sec">테이블</div>
-            <div class="row hidden" id="handed-line" style="align-items:center"><span class="hint" id="handed-text" style="margin:0; flex:1; min-width:0"></span><button id="handed-back" class="btn">쿼리로 돌아가기</button></div>
-            <select id="schema" class="hidden" style="margin-bottom:.375rem"></select>
+            <div class="row hidden items-center" id="handed-line"><span class="hint m-0 flex-1 min-w-0" id="handed-text"></span><button id="handed-back" class="btn">쿼리로 돌아가기</button></div>
+            <select id="schema" class="hidden mb-1.5"></select>
             <select id="base"></select>
             <label class="check" title="태그는 쿼리 화면에서 행마다 붙여 둔 표시(이름표)예요. 켜면 그 표시를 `태그` 컬럼으로 더하고, 태그로 행을 거를 수도 있어요"><input type="checkbox" id="lb-on"> 태그 붙이기(쿼리에서 행에 단 표시를 컬럼으로)</label>
             <div id="lb-body" class="hidden">
@@ -188,14 +188,14 @@
               <div class="cols hidden" id="lb-tags"></div>
             </div>
             <div class="hint" id="lb-note"></div>
-            <details id="read-box" style="margin-top:.5rem"><summary>읽기·통계 설정 <span class="hint" id="read-sum" style="margin:0"></span></summary>
-            <div class="row" style="margin-top:.5rem; align-items:center" title="가장 가벼운 방법부터 시도해 읽고, 구한 통계는 테이블마다 저장해 둬요"><span class="hint" style="margin:0; flex:none">미리 읽을 행 수</span><input id="sample" type="number" aria-label="미리 읽을 행 수" style="width:7.5rem; flex:none"><span class="err" id="err-sample" style="align-self:center"></span></div>
+            <details id="read-box" class="mt-2"><summary>읽기·통계 설정 <span class="hint m-0" id="read-sum"></span></summary>
+            <div class="row mt-2 items-center" title="가장 가벼운 방법부터 시도해 읽고, 구한 통계는 테이블마다 저장해 둬요"><span class="hint m-0 flex-none">미리 읽을 행 수</span><input id="sample" type="number" aria-label="미리 읽을 행 수" class="w-[7.5rem] flex-none"><span class="err self-center" id="err-sample"></span></div>
             <div class="hint">테이블 전체 대신 이만큼만 읽어서 통계, 추천, 분석에 써요.</div>
-            <div class="row" style="margin-top:.25rem; align-items:center"><select id="sample-way" aria-label="표본 방식" style="flex:none"><option value="strata" title="값 크기로 층을 나눠 층마다 다시 뽑고, 가중치로 바로잡아요. 표 전체를 읽는 단계는 요금이 나는 DB에서 먼저 물어요">층화(Neyman, 기본)</option><option value="block" title="블록(못 하면 행 단위)으로 뽑아요">블록(못 하면 행 단위)</option><option value="key" title="키의 행을 통째로 뽑아요. 키가 빈 행은 빠져요. 표 전체를 읽는 단계는 요금이 나는 DB에서 먼저 물어요">키 단위</option></select><select id="sample-col" aria-label="표본 기준 컬럼"></select></div>
+            <div class="row mt-1 items-center"><select id="sample-way" aria-label="표본 방식" class="flex-none"><option value="strata" title="값 크기로 층을 나눠 층마다 다시 뽑고, 가중치로 바로잡아요. 표 전체를 읽는 단계는 요금이 나는 DB에서 먼저 물어요">층화(Neyman, 기본)</option><option value="block" title="블록(못 하면 행 단위)으로 뽑아요">블록(못 하면 행 단위)</option><option value="key" title="키의 행을 통째로 뽑아요. 키가 빈 행은 빠져요. 표 전체를 읽는 단계는 요금이 나는 DB에서 먼저 물어요">키 단위</option></select><select id="sample-col" aria-label="표본 기준 컬럼"></select></div>
             <div class="hint">미리 읽을 행 수는 상한이에요. 필요한 행 수는 파일럿으로 정해요.</div>
             <label class="check" title="끄면 테이블을 골라도 데이터를 읽지 않고 컬럼 이름과 타입만 보여요. 행 수도 세지 않고 추천도 나오지 않아요. 분석 탭은 그대로 표본을 읽어요"><input type="checkbox" id="stats-on"> 컬럼 통계와 추천 보기</label>
-            <div class="row" id="scope-row" style="margin-top:.25rem; align-items:center" title="통계를 표본으로 빠르게 구할지, 테이블 전체로 정확하게 구할지 골라요. 전체는 큰 테이블에서 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요. 전체로 구하면 추천은 나오지 않아요"><span class="hint" style="margin:0; flex:none">통계 범위</span><label class="check"><input type="radio" name="stats-scope" id="scope-sample"> <span id="scope-sample-text">표본</span></label><label class="check"><input type="radio" name="stats-scope" id="scope-all"> 전체</label></div>
-            <div class="row" id="where-row" style="margin-top:.5rem; align-items:center" title="주소로 연결한 DB에서만 써요. 이 PC에서 계산하면 DB에는 행 거르기까지 한 번만 묻고, 받은 결과로 통계와 전처리, 저장을 이 PC가 계산해요. 테이블이 크면 받는 데 오래 걸리고 디스크 공간을 써요"><span class="hint" style="margin:0; flex:none">계산 위치</span><select id="prep-where" aria-label="계산 위치" style="flex:1; min-width:0"><option value="all" title="전처리 전체를 이 PC에서 계산해요">전부 이 PC</option><option value="new" title="계산 컬럼과 PCA만 이 PC에서 계산해요">계산 컬럼만 이 PC</option></select></div>
+            <div class="row mt-1 items-center" id="scope-row" title="통계를 표본으로 빠르게 구할지, 테이블 전체로 정확하게 구할지 골라요. 전체는 큰 테이블에서 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요. 전체로 구하면 추천은 나오지 않아요"><span class="hint m-0 flex-none">통계 범위</span><label class="check"><input type="radio" name="stats-scope" id="scope-sample"> <span id="scope-sample-text">표본</span></label><label class="check"><input type="radio" name="stats-scope" id="scope-all"> 전체</label></div>
+            <div class="row mt-2 items-center" id="where-row" title="주소로 연결한 DB에서만 써요. 이 PC에서 계산하면 DB에는 행 거르기까지 한 번만 묻고, 받은 결과로 통계와 전처리, 저장을 이 PC가 계산해요. 테이블이 크면 받는 데 오래 걸리고 디스크 공간을 써요"><span class="hint m-0 flex-none">계산 위치</span><select id="prep-where" aria-label="계산 위치" class="flex-1 min-w-0"><option value="all" title="전처리 전체를 이 PC에서 계산해요">전부 이 PC</option><option value="new" title="계산 컬럼과 PCA만 이 PC에서 계산해요">계산 컬럼만 이 PC</option></select></div>
             </details>
             <div class="sec">컬럼<button id="nc-add" class="ghost" title="새 컬럼 만들기" aria-label="새 컬럼 만들기">+</button></div>
             <div class="cols" id="pcols"></div>
@@ -209,7 +209,7 @@
             <div class="row"><input id="f-in" placeholder="조건을 적고 Enter"><button id="f-add" class="btn">추가</button></div>
             <div id="filters"></div>
             <div class="adv">
-            <div class="hint" style="margin-top:.5rem">데이터가 너무 많을 때: 날짜 컬럼에서 건수가 가장 많은 기간을 테이블 전체로 찾아 조건으로 넣어요(날짜 타입 컬럼만, 위의 조건을 건 뒤의 건수)</div>
+            <div class="hint mt-2">데이터가 너무 많을 때: 날짜 컬럼에서 건수가 가장 많은 기간을 테이블 전체로 찾아 조건으로 넣어요(날짜 타입 컬럼만, 위의 조건을 건 뒤의 건수)</div>
             <div class="row"><select id="pk-col" title="날짜 컬럼" aria-label="기간을 찾을 날짜 컬럼"></select><select id="pk-unit" title="기간 길이" aria-label="기간 길이"><option value="day">1일</option><option value="week">1주(월요일부터)</option><option value="month" selected>1달</option></select><button id="peak-find" class="btn" title="고른 기간 길이로 나눠 건수가 가장 많은 기간 5개를 테이블 전체로 찾아요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="가장 많은 기간 찾기">가장 많은 기간 찾기</button></div>
             <div id="pk-list"></div>
             </div>
@@ -226,7 +226,7 @@
           <div class="edx">
             <div class="sec">계산 컬럼</div>
             <div class="hint">식에는 이름을 바꾸기 전의 컬럼 이름을 써요.</div>
-            <div class="row"><input id="fx-name" placeholder="새 컬럼 이름" style="width:6.875rem; flex:none"><input id="fx-expr" class="code" placeholder="예: 금액 * 수량, median(금액), lag(금액, 1)"><button id="fx-add" class="btn">추가</button></div>
+            <div class="row"><input id="fx-name" placeholder="새 컬럼 이름" class="w-[6.875rem] flex-none"><input id="fx-expr" class="code" placeholder="예: 금액 * 수량, median(금액), lag(금액, 1)"><button id="fx-add" class="btn">추가</button></div>
             <input id="fx-order" type="hidden"><input id="fx-group" type="hidden">
             <div class="row"><input id="fx-order-find" placeholder="정렬 기준(선택): 컬럼을 찾고 Enter" aria-label="정렬 기준으로 쓸 컬럼 찾기" title="순위, 이전 값, 누적처럼 순서가 필요한 함수가 쓸 정렬 기준이에요. 없어도 돼요. 글자를 치고 Enter를 누르면 맞는 컬럼이 아래에 나와요(빈 칸이면 모든 컬럼)"><button id="fx-order-open" type="button" class="ghost" aria-expanded="false">목록 ▾</button></div>
             <div class="kinds cols" id="fx-order-list"></div>
@@ -244,7 +244,7 @@
             <div id="dv-pca" class="hidden">
             <div class="hint" id="pca-basis"></div>
             <div class="cols" id="pca-cols"></div>
-            <div class="row" style="align-items:center"><span class="hint" style="margin:0; flex:none">성분 수</span><input id="pca-n" type="number" min="1" value="2" style="width:4.375rem; flex:none"><button id="pca-clear" class="ghost">선택 해제</button></div>
+            <div class="row items-center"><span class="hint m-0 flex-none">성분 수</span><input id="pca-n" type="number" min="1" value="2" class="w-[4.375rem] flex-none"><button id="pca-clear" class="ghost">선택 해제</button></div>
             <div class="hint" id="pca-info"></div>
             </div>
             <button type="button" class="fpanel-item" data-feat="kmeans" aria-expanded="false" aria-controls="dv-kmeans"><b>K-Means(군집 번호)</b><span class="hint">비슷한 행끼리 군집으로 나누고 번호(0부터)를 새 컬럼으로 붙여요. <b class="dv-used"></b></span></button>
@@ -252,7 +252,7 @@
             <div class="hint">고른 숫자 컬럼을 표준화해 비슷한 행끼리 k개 군집으로 나누고 번호(0부터)를 새 컬럼으로 붙여요. 표를 군집마다 반복해 집계해요(최대 수십 번 읽어요).</div>
             <div class="hint" id="km-basis"></div>
             <div class="cols" id="km-cols"></div>
-            <div class="row" style="align-items:center"><span class="hint" style="margin:0; flex:none">군집 수</span><input id="km-k" type="number" style="width:4.375rem; flex:none"><input id="km-name" placeholder="새 컬럼 이름" style="width:6.875rem; flex:none"><button id="km-clear" class="ghost">선택 해제</button></div>
+            <div class="row items-center"><span class="hint m-0 flex-none">군집 수</span><input id="km-k" type="number" class="w-[4.375rem] flex-none"><input id="km-name" placeholder="새 컬럼 이름" class="w-[6.875rem] flex-none"><button id="km-clear" class="ghost">선택 해제</button></div>
             <div class="hint" id="km-info"></div>
             </div>
             <button type="button" class="fpanel-item" data-feat="geo" aria-expanded="false" aria-controls="dv-geo"><b>좌표</b><span class="hint">TM 좌표를 경도·위도로 바꾸거나, 가장 가까운 지점이나 속한 영역을 새 컬럼으로 붙여요. <b class="dv-used"></b></span></button>
@@ -260,8 +260,8 @@
             <div class="hint">계산은 이 PC에서 해요.</div>
             <div class="hint" id="geo-hints"></div>
             <div id="geo-list"></div>
-            <div class="row"><select id="geo-op" style="flex:none"><option value="tm">TM 좌표를 경도·위도로</option><option value="nearest">가장 가까운 지점 찾기</option><option value="region">속한 영역 붙이기</option></select></div>
-            <div class="row" id="geo-form" style="flex-wrap:wrap"></div>
+            <div class="row"><select id="geo-op" class="flex-none"><option value="tm">TM 좌표를 경도·위도로</option><option value="nearest">가장 가까운 지점 찾기</option><option value="region">속한 영역 붙이기</option></select></div>
+            <div class="row flex-wrap" id="geo-form"></div>
             <div class="row"><button id="geo-add" class="btn">좌표 추가</button></div>
             <div class="hint" id="geo-info"></div>
             </div>
@@ -270,14 +270,14 @@
         <div class="step" data-step="dedupe"><div class="sp" data-hint><i>5</i><span class="t" title="같은 값이 여러 번 나오는 행을 하나만 남겨요">중복 제거</span><b id="sum-p-dedupe"></b><span class="c"></span></div>
           <div class="edx">
             <div class="hint" title="고르지 않은 컬럼은 어느 행의 값이 남을지 정해지지 않아요">고른 컬럼의 값이 모두 같은 행은 하나만 남겨요.</div>
-            <div class="row"><select id="dd-col" style="flex:1; min-width:0"></select><button id="dd-all" class="btn">모든 컬럼</button></div>
+            <div class="row"><select id="dd-col" class="flex-1 min-w-0"></select><button id="dd-all" class="btn">모든 컬럼</button></div>
             <div class="chips open" id="dd-chips"></div>
             <div class="hint">컬럼을 하나도 안 고르면 모든 컬럼이 기준이에요.</div>
             <label class="check"><input type="checkbox" id="dd-loose"> 글자 다듬어 비교: 공백·문장부호·기호를 빼고 대소문자 무시</label>
             <div class="hint">포함: 짧은 값이 긴 값 안에 통째로 있으면 중복(여러 개면 모두 같은 방향). 나머지 기준은 같아야 해요.</div>
-            <div class="row hidden" id="dd-limit-row" style="align-items:center"><label class="check" title="포함으로 비교할 서로 다른 값 조합이 이보다 많으면 계산하지 않아요"><input type="checkbox" id="dd-limit-on" checked> 상한</label><input id="dd-limit" type="number" min="1" step="1" aria-label="포함 비교 상한" style="width:7.5rem; flex:none"></div>
-            <div class="row" style="align-items:center"><select id="dd-keep" title="겹치는 행 중 무엇을 남길지 골라요. 직접 고르면 정렬 기준의 첫 행이나 마지막 행, 최소·최대·최빈값, 이어 붙이기를 쓸 수 있고, 값이 여러 개일 때 알려 주게 할 수도 있어요"><option value="">아무 행이나 하나 남기기</option><option value="pick">남길 값 직접 고르기</option></select><span id="dd-pick"></span></div>
-            <div class="row"><button id="dupes" class="btn">중복 찾기</button><span class="hint" id="dd-result" style="align-self:center"></span></div>
+            <div class="row hidden items-center" id="dd-limit-row"><label class="check" title="포함으로 비교할 서로 다른 값 조합이 이보다 많으면 계산하지 않아요"><input type="checkbox" id="dd-limit-on" checked> 상한</label><input id="dd-limit" type="number" min="1" step="1" aria-label="포함 비교 상한" class="w-[7.5rem] flex-none"></div>
+            <div class="row items-center"><select id="dd-keep" title="겹치는 행 중 무엇을 남길지 골라요. 직접 고르면 정렬 기준의 첫 행이나 마지막 행, 최소·최대·최빈값, 이어 붙이기를 쓸 수 있고, 값이 여러 개일 때 알려 주게 할 수도 있어요"><option value="">아무 행이나 하나 남기기</option><option value="pick">남길 값 직접 고르기</option></select><span id="dd-pick"></span></div>
+            <div class="row"><button id="dupes" class="btn">중복 찾기</button><span class="hint self-center" id="dd-result"></span></div>
             <div class="table-wrap" id="dd-examples"></div>
             <div class="row"><button id="dd-apply" class="btn hidden">이 기준으로 지우기</button></div>
             <div class="hint" id="dd-applied"></div>
@@ -285,21 +285,21 @@
         <div class="cn"></div>
         <div class="step" data-step="sorts"><div class="sp" data-hint><i>6</i><span class="t" title="결과 행의 순서를 정해요">정렬</span><b id="sum-p-sorts"></b><span class="c"></span></div>
           <div class="edx">
-            <div class="row"><select id="sort-col" style="flex:1; min-width:0" title="전처리한 결과의 컬럼 이름이에요"></select><select id="sort-dir" style="width:auto"><option value="asc">오름차순</option><option value="desc">내림차순</option></select><button id="sort-add" class="btn">추가</button></div>
+            <div class="row"><select id="sort-col" class="flex-1 min-w-0" title="전처리한 결과의 컬럼 이름이에요"></select><select id="sort-dir" class="w-auto"><option value="asc">오름차순</option><option value="desc">내림차순</option></select><button id="sort-add" class="btn">추가</button></div>
             <div class="chips open" id="sorts"></div>
           </div></div>
         <div class="cn"></div>
         <div class="step" data-step="save"><div class="sp" data-hint><i>7</i><span class="t" title="결과를 파일로 받을지, 같은 DB의 새 테이블로 만들지 정해요">저장</span><b id="sum-p-save"></b><span class="c"></span></div>
           <div class="edx">
             <div class="sec">저장할 곳</div>
-            <label><input type="radio" name="target" id="t-file" checked style="width:auto"> 파일</label>
-            <select id="fmt" style="margin-bottom:.375rem"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
-            <label><input type="radio" name="target" id="t-table" style="width:auto"> 같은 DB의 새 테이블</label>
+            <label><input type="radio" name="target" id="t-file" checked class="w-auto"> 파일</label>
+            <select id="fmt" class="mb-1.5"><option value="parquet">Parquet</option><option value="csv">CSV</option></select>
+            <label><input type="radio" name="target" id="t-table" class="w-auto"> 같은 DB의 새 테이블</label>
             <input id="tname" placeholder="새 테이블 이름">
-            <label style="margin-top:.75rem" title="값이 그대로일 때만 줄여요. 예: int64를 int16으로"><input type="checkbox" id="downcast" checked style="width:auto"> 숫자 컬럼을 더 작은 타입으로 줄이기</label>
+            <label class="mt-3" title="값이 그대로일 때만 줄여요. 예: int64를 int16으로"><input type="checkbox" id="downcast" checked class="w-auto"> 숫자 컬럼을 더 작은 타입으로 줄이기</label>
             <div class="sec">설정 저장</div>
             <div class="hint">지금 고른 전처리를 이름을 붙여 저장해 두고 나중에 불러와요.</div>
-            <div class="row"><select id="rsaved" style="flex:1; min-width:0" title="고르면 저장해 둔 설정을 불러와요. 미리보기나 실행은 하지 않아요"></select></div>
+            <div class="row"><select id="rsaved" class="flex-1 min-w-0" title="고르면 저장해 둔 설정을 불러와요. 미리보기나 실행은 하지 않아요"></select></div>
             <div class="row"><input id="rname" placeholder="설정 이름"><button id="rsave" class="btn">저장</button><button id="rdel" class="ghost">삭제</button></div>
           </div></div>
       </div>
@@ -310,7 +310,7 @@
 <!-- 분석: 전처리 탭에서 고른 테이블(체크하면 지금 전처리를 적용한 결과)을 표본으로 분석한다. [표본 말고 전체 데이터로 다시 구하기]는 테이블 전체로. -->
 <div class="work hidden" id="ana">
   <main class="results">
-    <div class="tool"><span class="hint" id="a-data" style="margin:0; flex:1"></span>
+    <div class="tool"><span class="hint m-0 flex-1" id="a-data"></span>
       <button id="a-full" class="btn" title="표본(미리 읽은 일부 행) 말고 테이블 전체 데이터로 다시 구해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요">표본 말고 전체 데이터로 다시 구하기</button></div>
     <section class="pane" id="a-src-pane">
       <h4 class="a-sec" id="a-src-h">분석에 쓰는 데이터 <span class="a-rows" id="a-src-note"></span></h4>
@@ -318,12 +318,12 @@
     </section>
     <div class="big a-head"><b id="a-title">분석</b><span id="a-sub">오른쪽 [무엇이 궁금해요?]에서 하나를 고르고 [구하기]를 누르면 여기에 그래프가 나와요.</span>
       <div class="drop"><button id="a-add" class="btn p" title="지금 보이는 그래프를 구한 값과 함께 대시보드 카드로 넣어요">대시보드에 추가</button>
-        <div class="pop hidden" id="a-pop" style="width:17.5rem">
-          <div class="hint" style="margin:0">어느 대시보드에 넣을까요?</div>
+        <div class="pop hidden w-[17.5rem]" id="a-pop">
+          <div class="hint m-0">어느 대시보드에 넣을까요?</div>
           <div class="row"><select id="a-dash" title="저장한 대시보드나 새 대시보드를 골라요"></select></div>
           <div class="row"><input id="a-dash-name" placeholder="새 대시보드 이름"></div>
           <div class="row"><button id="a-dash-go" class="btn p">추가</button></div>
-          <div class="hint" style="margin:0">카드에는 구한 값이 들어가요. 이 PC의 이 계정에서만 열 수 있게 암호화해 저장하고, 대시보드 화면에서 볼 수 있어요.</div>
+          <div class="hint m-0">카드에는 구한 값이 들어가요. 이 PC의 이 계정에서만 열 수 있게 암호화해 저장하고, 대시보드 화면에서 볼 수 있어요.</div>
         </div></div></div>
     <div class="big a-answer" id="a-answer"></div>
     <div id="a-notes"></div>
@@ -334,8 +334,8 @@
       <div class="tool hidden" id="a-tools">
         <details class="axis-box"><summary class="hint" title="그래프를 그릴 때 알아서 하는 구간 수·꼬리 자르기·점 밀도·숫자 줄이기예요. 끈 것은 다음에도 기억해요">자동 규칙</summary><div id="a-auto"></div></details>
         <label class="check" title="켜면 자동 규칙이 덜어 낸 것까지 모두 그려요"><input type="checkbox" id="a-all"> 모든 데이터</label>
-        <span style="flex:1"></span>
-        <select id="a-image" title="그림의 색 모드예요" style="flex:0 0 6.25rem"><option value="light">밝게</option><option value="dark">어둡게</option></select>
+        <span class="flex-1"></span>
+        <select id="a-image" title="그림의 색 모드예요" class="flex-[0_0_6.25rem]"><option value="light">밝게</option><option value="dark">어둡게</option></select>
         <button data-aimage="png" class="btn">PNG</button><button data-aimage="jpeg" class="btn">JPG</button>
         <label class="check" title="켜면 자동 규칙이 덜어 낸 것까지 담아 그림으로 저장해요"><input type="checkbox" id="a-export-all"> 모든 데이터 포함</label>
       </div>
@@ -345,7 +345,7 @@
       <div class="a-range hidden" id="a-range">
         <label>시작 <input type="range" id="a-lo" min="1" max="1" value="1"></label>
         <label>끝 <input type="range" id="a-hi" min="1" max="1" value="1"></label>
-        <span class="hint" id="a-rtext" style="margin:0" aria-live="polite"></span>
+        <span class="hint m-0" id="a-rtext" aria-live="polite"></span>
         <button class="btn" id="a-rall" title="범위를 처음부터 끝까지로 되돌려요">전체</button>
       </div>
       <h4 class="a-sec" id="a-th">표 <label class="a-rows hidden" id="a-rows-box">보일 행 수 <input type="number" id="a-rows" min="1" placeholder="전체" title="비우면 범위 안의 모든 행을 보여요. 받은 결과를 화면에서 줄이는 거라 다시 구하지 않아요"></label></h4>
@@ -362,7 +362,7 @@
       <details class="asave" id="a-save-box">
         <summary title="전처리 구성과 분석 설정을 한 묶음으로 저장하고 불러와요. 불러와도 자동으로 구하지는 않아요">설정 저장·불러오기</summary>
         <div class="hint">저장된 설정 (내가 저장한 것)</div>
-        <div class="row"><select id="a-saved" style="flex:1; min-width:0" title="고르면 테이블을 열고 전처리와 분석 칸을 채워요"></select><button id="a-saved-del" class="ghost">삭제</button></div>
+        <div class="row"><select id="a-saved" class="flex-1 min-w-0" title="고르면 테이블을 열고 전처리와 분석 칸을 채워요"></select><button id="a-saved-del" class="ghost">삭제</button></div>
         <div class="row"><input id="a-save-name" placeholder="설정 이름"><button id="a-save" class="btn">설정 저장</button></div>
         <div class="hint">최근 분석 (자동 저장, <span id="a-recent-max"></span>개까지)</div>
         <select id="a-recent" title="[구하기]에 성공한 설정이 자동으로 남아요. 고르면 그 설정을 불러와요"></select>

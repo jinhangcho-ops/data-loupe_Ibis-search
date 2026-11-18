@@ -11,7 +11,7 @@ from test_fix_audit_js import between, read, run_node
 from test_ux15 import SETTING_IDS
 
 WEB = ROOT / "web"
-CSS_FILES = (ROOT / "static/core/common.css", ROOT / "static/core/dash_edit.css", ROOT / "static/query/sentences.css", WEB / "styles/dashboard.css")
+CSS_FILES = (WEB / "styles/common.css", WEB / "styles/dash_edit.css", WEB / "styles/sentences.css", WEB / "styles/dashboard.css")
 needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
 # 가짜 classList(Set): init에 든 클래스로 시작한다

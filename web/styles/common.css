@@ -24,6 +24,7 @@ input, select, textarea, button { font:inherit; }
 /* 조작 칸 높이 세 단계: 작게 --h-sm(줄 안 작은 단추), 보통 --h-md(입력 칸·고르기 칸·단추), 크게 --h-lg(탭·화면의 주 단추) */
 /* 입력 칸·단추: 위아래 여백 .28125rem + 글줄 1.3125rem + 선 2px = --h-md(2rem) */
 input, select, textarea { padding:.28125rem .625rem; border:1px solid var(--line-strong); border-radius:var(--r-ctl); width:100%; background:var(--card); color:var(--text); }
+:where(select:not([multiple])) { height:var(--h-md); }  /* 고르기 칸은 엔진이 글줄 높이를 따로 잡아 [아주 크게]에서 2px 모자랐다 */
 input:focus, select:focus, textarea:focus { outline:.125rem solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset:0; border-color:var(--accent); }
 /* 버튼: 기본은 강조색으로 채운 주 동작(한 영역에 하나). .btn은 테두리만(보조 동작), .ghost는 글자만, .btn.k는 검게 채움. 모서리는 각지게(알약은 상태 칩에만). */
 button { background:var(--accent); color:var(--on-accent); border:1px solid var(--accent); border-radius:var(--r-ctl); cursor:pointer; width:auto; padding:.28125rem .875rem; flex:none; white-space:nowrap; font-weight:600; }
@@ -131,7 +132,7 @@ td.nest .nest-full { margin:0; font:var(--fs-xs)/1.4 Consolas, ui-monospace, mon
 .pager input[type=checkbox] { width:1rem; height:1rem; }
 .drop { position:relative; }
 .drop .pop { position:absolute; right:0; top:2.5rem; z-index:40; background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:.375rem; box-shadow:0 .625rem 1.875rem rgb(15 25 30 / .14); display:flex; flex-direction:column; min-width:9.375rem; }
-.drop .pop button { background:none; border:0; color:var(--text); text-align:left; border-radius:var(--r-card); font-weight:500; }
+.drop .pop button { min-height:var(--h-md); background:none; border:0; color:var(--text); text-align:left; border-radius:var(--r-card); font-weight:500; }
 .drop .pop button:hover { background:var(--accent-bg); }
 
 /* 오른쪽 설정 패널: 제목, 단계 카드 목록(.flow), 아래 버튼 */
@@ -139,7 +140,7 @@ td.nest .nest-full { margin:0; font:var(--fs-xs)/1.4 Consolas, ui-monospace, mon
 .side > header { display:flex; align-items:center; justify-content:space-between; padding:.875rem 1.375rem .5rem; }
 .side > header h3 { margin:0; font-size:var(--fs-lg); }
 /* 패널 접기·펴기: 머리글의 › 단추로 접으면 오른쪽 가장자리에 제목과 ‹만 있는 띠가 남는다 */
-.fold { background:none; border:1px solid transparent; color:var(--muted); width:1.875rem; height:1.875rem; padding:0; display:inline-grid; place-items:center; }
+.fold { background:none; border:1px solid transparent; color:var(--muted); width:var(--h-md); height:var(--h-md); padding:0; display:inline-grid; place-items:center; }
 .fold:hover { border-color:var(--line); color:var(--text); }
 .side-strip { display:none; }
 .work.closed > .side-strip { display:flex; flex-direction:column; align-items:center; gap:.625rem; padding:.875rem 0; background:var(--card); border:0; border-left:1px solid var(--line); border-radius:0; color:var(--muted); font-weight:600; }
@@ -219,7 +220,7 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .bcheck { flex:none; width:1rem; height:1rem; border:.0938rem solid var(--line-strong); border-radius:var(--r-ctl); display:grid; place-items:center; }
 .bcard.sel .bcheck { background:var(--accent); border-color:var(--accent); }
 .bcard.sel .bcheck::after { content:""; width:.5rem; height:.25rem; border:solid var(--on-accent); border-width:0 0 .125rem .125rem; transform:translateY(-1px) rotate(-45deg); }
-.btitle { flex:1; min-width:0; height:1.875rem; border:1px solid transparent; background:none; font-weight:600; padding:.125rem .375rem; }
+.btitle { flex:1; min-width:0; text-overflow:ellipsis; height:1.875rem; border:1px solid transparent; background:none; font-weight:600; padding:.125rem .375rem; }
 .btitle:hover, .btitle:focus { border-color:var(--line); background:var(--bg); }
 .bbody { aspect-ratio:var(--ratio, 16 / 9); max-height:50vh; position:relative; }  /* 큰 창에서 1:1 카드가 너무 길어지지 않게 */
 .bnote { display:grid; place-items:center; height:100%; margin:0; text-align:center; padding:0 .75rem; }

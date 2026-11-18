@@ -42,8 +42,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 """
 
 
+STYLES = ROOT / "web" / "styles"  # 공통 CSS 원본(Tailwind 입력). 화면은 이것을 묶은 static/core/app.css만 읽는다
+
+
 def read(name):
-    return next(STATIC.rglob(name)).read_text(encoding="utf-8")
+    return next(p for folder in (STATIC, STYLES) for p in folder.rglob(name)).read_text(encoding="utf-8")
 
 
 def between(name, start, end):
