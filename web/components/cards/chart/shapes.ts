@@ -8,6 +8,8 @@ export const FIRST_ONLY = ["waterfall", "pareto", "trendline", "lollipop"];
 export const HBARS = ["hbar", "hstack", "hstack100", "butterfly"];
 /** 앞 두 계열로 그리는 차트(나비형: 왼쪽·오른쪽, 범위 막대: 아래·위) */
 export const PAIR_ONLY = ["butterfly", "range"];
+/** 3차원 그래프(Chart3D): 격자(X 값 × 계열 × 값)로 그리는 막대·곡면, 그리고 숫자 셋으로 찍는 산점도까지 */
+export const GRID_3D = ["bar3d", "surface3d"], THREE_TYPES = [...GRID_3D, "scatter3d"];
 
 /** 링 n개가 inner~outer(%)를 고르게 나눠 갖는 반지름(안쪽 링이 먼저). gap은 링 사이 틈(%) */
 export function ringRadii(n: number, inner: number, outer: number, gap = 2) {

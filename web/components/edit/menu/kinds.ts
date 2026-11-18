@@ -1,4 +1,5 @@
 // 카드 추가 메뉴·카드 모음의 종류 표(옛 dash_menu.js CARD_KINDS·dash_panel.js galleryItems·shellOf)와 순수 보조 함수. 화면 없이 계산한다.
+import { POINT_TYPES } from "@/lib/calc";
 import type { Card, CardKind, Colors } from "@/lib/types";
 
 /** [이름, 값 줄 최소, 최대, 설명] */
@@ -45,7 +46,7 @@ export function unitForDate(cols: [string, string][], column: string, timed: str
 export type Spec = { group: string; kind: CardKind; type?: string; name: string; help: string };
 /** 카드 모음의 칸들: 차트는 종류마다 한 칸 */
 export function galleryItems(types: Record<string, string>): Spec[] {
-  const charts = Object.entries(types).map(([type, name]) => ({ group: "차트", kind: "chart" as CardKind, type, name, help: type === "scatter" || type === "bubble" ? "가로축과 값 하나로 점을 찍어요" : "가로축 컬럼과 값 최대 5개" }));
+  const charts = Object.entries(types).map(([type, name]) => ({ group: "차트", kind: "chart" as CardKind, type, name, help: POINT_TYPES.includes(type) ? "가로축과 값 하나로 점을 찍어요" : "가로축 컬럼과 값 최대 5개" }));
   const some = (group: string, list: [CardKind, string, string][]) => list.map(([kind, name, help]) => ({ group, kind, name, help }));
   return [...charts,
     ...some("값·목표", [["kpi", "KPI", "큰 숫자와 비교"], ["donut_kpi", "도넛 KPI", "가운데 값과 모서리 값"], ["gauge", "게이지", "항목마다 몫"], ["summary", "요약 문장", "목표와 비교한 문장"],

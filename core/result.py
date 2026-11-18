@@ -16,6 +16,13 @@ SUMMARY_NAMES = {"name": "컬럼", "type": "타입", "count": "개수", "nulls":
                  "dup": "중복도", "median": "중앙값", "gap": "괴리율", "above": "경계 초과 수", "above_mean": "경계 초과 평균"}  # (Phase 15) 쿼리 집계 표 머리글(화면은 server.CONSTANTS로 받는다). 분위 칸(P25 등)은 이름 그대로
 MAX_GROUPS = 50  # 차트에 표시할 최대 그룹 수
 MAX_SPLITS = 8  # 차트에서 한 컬럼의 값별로 나눌 때 최대 값 개수
+MAX_SPLITS_3D = 40  # 3차원 막대·곡면(GRID_3D_TYPES)에서 나눌 때 최대 값 개수(X MAX_GROUPS개 × 이 값 = 화면의 칸 수 상한)
+GRID_3D_TYPES = ("bar3d", "surface3d")  # 나눈 값이 한 축이 되는 3차원 그래프 종류
+
+
+def split_limit(chart_type: str | None) -> int:
+    """차트 종류에 맞는 나눌 값 개수 상한: 3차원 막대·곡면은 MAX_SPLITS_3D, 그 밖은 MAX_SPLITS."""
+    return MAX_SPLITS_3D if chart_type in GRID_3D_TYPES else MAX_SPLITS
 MAX_VALUES = 200  # 조건을 만들 때 보여 줄 컬럼 값 목록의 최대 개수
 VALUE_SCAN = 200_000  # 값 목록은 앞의 이만큼 행에서만 찾는다(값이 많은 큰 표의 전체 DISTINCT는 메모리를 많이 쓴다)
 MAX_POINTS = 5_000  # 산점도·버블의 점 수 상한(분석의 산점도와 대시보드가 같이 쓴다)
@@ -459,13 +466,13 @@ def chart_metric(expr, y, agg, opts=None):
     return sql_funcs.aggregate(agg, expr, y, None, opts)
 
 
-def split_parts(expr, split):
-    """나눔 컬럼 split에서 많이 나온 값부터(같으면 값 순) MAX_SPLITS개까지(빈 값 제외)와 더 있는지: (값들, 더 있는지)."""
+def split_parts(expr, split, limit=MAX_SPLITS):
+    """나눔 컬럼 split에서 많이 나온 값부터(같으면 값 순) limit개까지(빈 값 제외)와 더 있는지: (값들, 더 있는지)."""
     check_name(split, expr.columns)
     filled = expr.filter(expr[split].notnull())
     sizes = filled.group_by(split).aggregate(n=filled.count())
-    parts = sizes.order_by([sizes.n.desc(), sizes[split]]).limit(MAX_SPLITS + 1).to_polars(**streaming(expr))[split].to_list()
-    return parts[:MAX_SPLITS], len(parts) > MAX_SPLITS
+    parts = sizes.order_by([sizes.n.desc(), sizes[split]]).limit(limit + 1).to_polars(**streaming(expr))[split].to_list()
+    return parts[:limit], len(parts) > limit
 
 
 def local_time(col):
@@ -500,29 +507,29 @@ def fill_periods(labels, datasets, series, unit):
     return full, datasets
 
 
-def get_chart(expr, x, series, split=None, order="x", x_unit=""):
-    """group_chart와 같되, x_unit(CHART_UNITS)을 주고 X가 날짜·시각이면 X를 그 단위의 기간 시작으로 묶고(시간대 있는 시각은 local_time으로 바꿔서)
+def get_chart(expr, x, series, split=None, order="x", x_unit="", max_splits=MAX_SPLITS):
+    """group_chart와 같되(max_splits는 나눌 값 개수 상한), x_unit(CHART_UNITS)을 주고 X가 날짜·시각이면 X를 그 단위의 기간 시작으로 묶고(시간대 있는 시각은 local_time으로 바꿔서)
     x 순이면 첫~마지막 기간 사이 빈 기간을 채운다(fill_periods). X가 날짜·시각이 아니면 x_unit은 무시한다."""
     check_name(x, expr.columns)
     if x_unit and x_unit not in CHART_UNITS:
         raise ValueError(f"묶음 단위는 {', '.join(CHART_UNITS)} 중 하나예요.")
     kind = expr[x].type()
     if not (x_unit and (kind.is_date() or kind.is_timestamp())):
-        return group_chart(expr, x, series, split, order)
+        return group_chart(expr, x, series, split, order, max_splits)
     local = local_time(expr[x])
     expr = expr.mutate(**{x: sql_funcs.period_start(local, CHART_UNITS[x_unit])})  # period_start를 부르는 곳은 여기 하나
     order = "x" if order == "auto" else order  # 날짜·시각 X의 auto는 x
-    labels, datasets, more = group_chart(expr, x, series, split, order)
+    labels, datasets, more = group_chart(expr, x, series, split, order, max_splits)
     fills = order in ("x", "name")
     if not fills:
         return labels, datasets, more
     return (*fill_periods(labels, datasets, series, x_unit), more)
 
 
-def group_chart(expr, x, series, split=None, order="x"):
+def group_chart(expr, x, series, split=None, order="x", max_splits=MAX_SPLITS):
     """x별로 계열들을 집계한다. series는 [{"y", "agg"}]. order는 viz_rules.ORDERS의 다섯 값, 모두 최대 MAX_GROUPS개:
     "auto"(글자 X는 value, 숫자·날짜 X는 x), "x"(x 순, 날짜 X는 최근 개수), "value"(첫 계열 값 큰 순), "value_asc"(작은 순), "name"(x 차례 앞).
-    split을 주면 그 컬럼의 값마다(행이 많은 순으로 최대 MAX_SPLITS개) 계열을 나눈다.
+    split을 주면 그 컬럼의 값마다(행이 많은 순으로 최대 max_splits개) 계열을 나눈다.
     (x 값들, [{"series": 계열 번호, "split": 나눈 값 또는 None, "values": x 값 순서의 값들, "truncated": X 값이 MAX_GROUPS개보다 많아 잘랐는지}], 나눈 값이 더 있는지)를 돌려준다."""
     check_name(x, expr.columns)
     if order not in viz_rules.ORDERS:
@@ -546,7 +553,7 @@ def group_chart(expr, x, series, split=None, order="x"):
     labels = top[x].to_list()
     if not split:
         return labels, [{"series": i, "split": None, "values": [number(v) for v in top[f"v{i}"].to_list()], "truncated": cut} for i in range(len(series))], False
-    parts, more = split_parts(expr, split)
+    parts, more = split_parts(expr, split, max_splits)
     if not parts:  # 나눌 값이 없다(행이 없거나 나누는 컬럼이 모두 빈 값): 계열은 두고 값만 비운다
         return labels, [{"series": i, "split": None, "values": [None] * len(labels), "truncated": cut} for i in range(len(series))], False
     known = [v for v in labels if v is not None]

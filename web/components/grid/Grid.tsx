@@ -64,7 +64,7 @@ export function useAddShell() {
 
 function WhenLine({ card, d }: { card: Card; d: Card["data"] }) {
   const { state } = useDash(), { conn } = useShell(), merge = useConstants()?.dash.merge ?? [];
-  return <div className="hint bwhen" style={{ padding: "0 10px" }}>{whenLines(card, d ?? {}, state.ctx?.range, conn, merge)}</div>;
+  return <div className="hint bwhen" style={{ padding: "0 .625rem" }}>{whenLines(card, d ?? {}, state.ctx?.range, conn, merge)}</div>;
 }
 
 export function Grid() {
@@ -141,9 +141,9 @@ export function Grid() {
             <div className={"bbody" + (paint ? " paint" : "")}>
               {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={card} result={result} palette={dash.palette} ctx={state.ctx} />}
             </div>
-            {said && <div className={"bcmp " + said.tone} title={said.delta_text} style={{ padding: "0 10px" }}>{said.text}</div>}
+            {said && <div className={"bcmp " + said.tone} title={said.delta_text} style={{ padding: "0 .625rem" }}>{said.text}</div>}
             {!isShell(card) && <WhenLine card={card} d={result?.data ?? card.data} />}
-            {result?.error && <div className="hint bnote" role="status" style={{ padding: "0 10px", margin: 0 }}>{result.error}</div>}
+            {result?.error && <div className="hint bnote" role="status" style={{ padding: "0 .625rem", margin: 0 }}>{result.error}</div>}
             {edit && <i className="bresize" title="끌어서 크기를 바꿔요" aria-hidden="true" onPointerDown={e => startResize(e, card.id)} />}
           </section>
         );

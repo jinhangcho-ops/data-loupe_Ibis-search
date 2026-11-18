@@ -3,10 +3,14 @@
 // 너비는 iframe을 따르고 높이는 너비/비율. 그린 뒤 필요한 높이를 부모에 알리고({type:"size"}), {type:"picture"}를 받으면 그림 파일(report/picture)로 답한다.
 // 계열 그림은 대시보드와 같은 차례(그룹 고르기 applyGroups → 라벨 바꾸기 → 자동 규칙 autoSeries)로 그리고, 보이는 값·모든 데이터 값의 표를 부모에 보낸다({type:"shown"}).
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { NO_AUTO, THEME_SERIES } from "@/components/cards/ChartCard";
+import { NO_AUTO, SIZE_NAME, THEME_SERIES, pointsTable } from "@/components/cards/ChartCard";
 import { AnaChart, PointsChart, SeriesChart } from "@/components/cards/chart/Charts";
+import { layoutWidth, useRootScale } from "@/components/cards/chart/scale";
+import { GRID_3D } from "@/components/cards/chart/shapes";
 import { seriesKit, type Dataset, type SCard, type Series, type SeriesKit, type ThemeColors } from "@/components/cards/chart/series";
 import { useTheme } from "@/components/cards/svg/common";
+import { zoomAxis, type Span, type ZoomAxis } from "@/components/cards/svg/__pure__";
+import { useZoomX } from "@/components/cards/useZoomX";
 import { Funnel } from "@/components/cards/svg/Funnel";
 import { cardPicture, inMode } from "@/components/report/picture";
 import { autoParams, autoSeries, scatterTier, seriesTable, type AutoEnv, type ChartTable } from "@/lib/autoviz";
@@ -19,8 +23,8 @@ const NO_CONSTANTS = { agg_names: {}, merge: [], dash: { types: {}, time_types: 
 const SHOT_FRAMES = 2;  // 모든 데이터로 다시 그린 뒤 찍기 전에 기다리는 프레임 수(Recharts가 크기를 잰다)
 const POINTS_RATIO = 16 / 9;  // 점·분석 그림의 기본 가로/세로
 
-/** 그릴 것: 그림, 안내 문장, 가로/세로(null이면 높이 auto), 계열 그림의 보이는 값·모든 데이터 값 표 */
-type Painted = { chart: ReactNode; notes: (string | undefined)[]; ratio: number | null; shown: { table: ChartTable; full: ChartTable } | null };
+/** 그릴 것: 그림(win = 확대한 가로 범위, active = 눌러서 확대·돌리기를 켰는가), 확대할 가로축(없으면 null), 안내 문장, 가로/세로(null이면 높이 auto), 보이는 값·모든 데이터 값 표 */
+type Painted = { chart: (win: Span | null, active: boolean) => ReactNode; axis: ZoomAxis | null; notes: (string | undefined)[]; ratio: number | null; shown: { table: ChartTable; full: ChartTable } | null };
 
 /** 그리다 던지면 부모에 이유를 알린다(같은 문장을 섬에도 보인다) */
 class Guard extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -62,28 +66,31 @@ function paint(m: Draw, consts: Constants, kit: SeriesKit, width: number, all: b
       full = autoSeries(card({ ...view, all_data: true }), s, env).s;
       c = a.card; shown = a.s; notes = a.notes;
     }
+    const drawn = { ...c, data: { ...c.data, x: o.x } } as SCard;  // 3차원 그림의 X축 이름
     return {
-      chart: <SeriesChart card={c} s={shown} colors={colors} percent={o.percent} />, notes,
-      ratio: o.ratio || (c.view.type === "hbar" ? 1 : autoRatio(shown.labels.length)),
+      chart: (win, active) => <SeriesChart card={drawn} s={shown} colors={colors} percent={o.percent} win={win} active={active} />, axis: zoomAxis(c, shown, false), notes,
+      ratio: o.ratio || (c.view.type === "hbar" ? 1 : GRID_3D.includes(c.view.type) ? POINTS_RATIO : autoRatio(shown.labels.length)),  // 3차원은 그룹 수와 상관없이 넓게
       shown: { table: seriesTable(o.x ?? "", shown), full: seriesTable(o.x ?? "", full) },
     };
   }
   if (m.kind === "points") {
     const o = m.opts ?? {}, pts = m.payload;
     const tier = p ? scatterTier(pts.total ?? pts.n ?? pts.points.length, all ? null : p.density) : null;
+    const c = card({ type: o.type ?? "scatter", trend: o.trend, show_r: o.show_r, connect: o.connect, ranges: o.ranges, ...(o.z ? { points: { size: o.z } } : {}) }, { points: pts });
+    const table = pointsTable(pts, o.z ?? SIZE_NAME);
     return {
-      chart: <PointsChart card={card({ type: o.type ?? "scatter", trend: o.trend, show_r: o.show_r, ranges: o.ranges }, { points: pts })} colors={colors} tier={tier} />,
-      notes: [pts.note, ...noAuto], ratio: o.ratio || POINTS_RATIO, shown: null,  // 점을 줄여 그렸으면 서버 문장
+      chart: (_win, active) => <PointsChart card={c} colors={colors} tier={tier} active={active} />, axis: null,
+      notes: [pts.note, ...noAuto], ratio: o.ratio || POINTS_RATIO, shown: { table, full: table },  // 점을 줄여 그렸으면 서버 문장
     };
   }
   if (m.kind === "ana") {
-    if (m.opts.view === "funnel") return { chart: <FunnelBody d={m.payload} />, notes: [], ratio: null, shown: null };
+    if (m.opts.view === "funnel") return { chart: () => <FunnelBody d={m.payload} />, axis: null, notes: [], ratio: null, shown: null };
     const d = m.payload;
     const tail: [number, number] | undefined = p && !all && p.tail ? [Number(p.tail.lo), Number(p.tail.hi)] : undefined;
     const tier = p && m.opts.view === "scatter" ? scatterTier(d.n ?? (d.points ?? []).length, all ? null : p.density) : null;
     return {
-      chart: <AnaChart d={d} view={m.opts.view} main={colors.palette?.[0] ?? THEME_SERIES[0]} second={colors.palette?.[1] ?? THEME_SERIES[1]} kit={kit} tail={tail} tier={tier} />,
-      notes: noAuto, ratio: m.opts.ratio || POINTS_RATIO, shown: null,
+      chart: () => <AnaChart d={d} view={m.opts.view} main={colors.palette?.[0] ?? THEME_SERIES[0]} second={colors.palette?.[1] ?? THEME_SERIES[1]} kit={kit} tail={tail} tier={tier} />,
+      axis: null, notes: noAuto, ratio: m.opts.ratio || POINTS_RATIO, shown: null,
     };
   }
   throw new Error(`모르는 그림 종류예요: ${String((m as { kind?: unknown }).kind)}`);
@@ -92,13 +99,15 @@ function paint(m: Draw, consts: Constants, kit: SeriesKit, width: number, all: b
 function Body({ m, width, shotAll }: { m: Draw; width: number; shotAll: boolean }) {
   const consts = useConstants(), kit = useMemo(() => seriesKit(consts ?? NO_CONSTANTS), [consts]);
   const all = !!m.opts?.all || shotAll;
-  const out = useMemo(() => paint(m, consts ?? NO_CONSTANTS, kit, width, all), [m, consts, kit, width, all]);
+  const lay = layoutWidth(width, useRootScale());  // 그림은 너비/배율로 배치된다(chart/scale)
+  const out = useMemo(() => paint(m, consts ?? NO_CONSTANTS, kit, lay, all), [m, consts, kit, lay, all]);
+  const z = useZoomX(out.axis);  // 대시보드 카드와 같은 확대·이동(한 번 눌러 켜고 휠·끌기, Esc·바깥 누름으로 끈다). 3차원 그림은 같은 켜기로 돌린다
   // 모든 데이터로 찍는 동안에는 보내지 않는다(부모 표가 흔들리지 않게)
   useEffect(() => { if (out.shown && !shotAll) toParent({ type: "shown", ...out.shown }); }, [out, shotAll]);
   const note = out.notes.filter(Boolean).join(" ");
   return (
     <>
-      <div style={{ height: out.ratio === null ? "auto" : Math.round(width / out.ratio) }}>{out.chart}</div>
+      <div style={{ height: out.ratio === null ? "auto" : Math.round(width / out.ratio) }}><div {...z.bind}>{out.chart(z.view, z.active)}</div></div>
       {note ? <div className="hint">{note}</div> : null}
     </>
   );

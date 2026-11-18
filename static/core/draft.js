@@ -45,9 +45,9 @@ function Draft(screen, get, restore) {
     return new Promise(done => {
       // 무엇이 남아 있는지 줄로 나눠 보인다(저장한 때·화면·연결). 그 아래에 두 단추가 하는 일을 한 줄로 알린다.
       const conn = d.draft.connection?.name, facts = [["저장한 때", `${draftTime(d.draft.saved)} (${draftAgo(d.draft.saved)})`], ["화면", DRAFT_SCREENS[screen] ?? screen], ...(conn ? [["연결", conn]] : [])];
-      const note = el("div", { style: "margin:10px 0 14px" },
-        el("div", { style: "display:grid; grid-template-columns:auto 1fr; gap:4px 12px" }, ...facts.flatMap(([k, v]) => [el("span", { className: "hint", style: "margin:0", textContent: k }), el("b", { style: "overflow-wrap:anywhere", textContent: v })])),
-        el("p", { className: "hint", style: "margin:10px 0 0", textContent: d.same ? "이어서 하면 그때의 조건과 설정을 화면에 다시 채워요. 버리면 지워지고 되돌릴 수 없어요."
+      const note = el("div", { style: "margin:.625rem 0 .875rem" },
+        el("div", { style: "display:grid; grid-template-columns:auto 1fr; gap:.25rem .75rem" }, ...facts.flatMap(([k, v]) => [el("span", { className: "hint", style: "margin:0", textContent: k }), el("b", { style: "overflow-wrap:anywhere", textContent: v })])),
+        el("p", { className: "hint", style: "margin:.625rem 0 0", textContent: d.same ? "이어서 하면 그때의 조건과 설정을 화면에 다시 채워요. 버리면 지워지고 되돌릴 수 없어요."
           : "지금과 다른 연결에서 하던 작업이에요. 그 연결로 바꾸면 이어서 할 수 있어요. 버리면 지워지고 되돌릴 수 없어요." }));
       const end = () => { box.remove(); done(); };
       const shut = el("button", { className: "btn", textContent: "닫기", onclick: end });

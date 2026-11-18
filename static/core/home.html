@@ -6,20 +6,20 @@
 <title>Data Loupe</title>
 <!--include core/head.html-->
 <style>
-  .home { flex:1; min-height:0; overflow:auto; display:grid; grid-template-columns:minmax(0, 560px) minmax(240px, 360px); justify-content:center; align-content:safe center; gap:var(--sp-6); padding:var(--sp-6) var(--sp-5); background:var(--bg); }
+  .home { flex:1; min-height:0; overflow:auto; display:grid; grid-template-columns:minmax(0, 35rem) minmax(15rem, 22.5rem); justify-content:center; align-content:safe center; gap:var(--sp-6); padding:var(--sp-6) var(--sp-5); background:var(--bg); }
   .home-main { display:flex; flex-direction:column; gap:var(--sp-3); min-width:0; }
   .home-ask { margin:0; font-size:var(--fs-xl); }
   .home-now { background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:var(--sp-3) var(--sp-4); display:flex; align-items:center; gap:var(--sp-3); }  /* 지금 연결 줄: 그림 · 이름 · 꼬리표 · 단추 */
   .home-name { flex:1; min-width:0; font-weight:700; overflow-wrap:anywhere; }
-  .home-state { flex:none; font-size:var(--fs-sm); color:var(--muted); background:var(--bg); border:1px solid var(--line); border-radius:var(--r-pill); padding:1px 10px; }
+  .home-state { flex:none; font-size:var(--fs-sm); color:var(--muted); background:var(--bg); border:1px solid var(--line); border-radius:var(--r-pill); padding:1px .625rem; }
   .home-state.on { color:var(--ok); border-color:currentColor; font-weight:600; }
   .home-go { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--sp-2); }  /* 맨 위 [쿼리] 시작 카드(#home-start, common.css)는 두 칸을 다 쓰고, 나머지는 2열 */
   .home-go > .btn { height:auto; display:grid; grid-template-columns:auto minmax(0, 1fr); gap:0 var(--sp-3); align-items:center; padding:var(--sp-3); white-space:normal; text-align:left; text-decoration:none; }
   .home-go > .btn b { font-size:var(--fs-md); }
   .home-go > .btn > b + span { grid-column:2; color:var(--muted); font-size:var(--fs-sm); line-height:1.4; }
   .recent-list .icon-tile { grid-row:span 2; }
-  .home-go { --art-w:96px; }
-  .home-go > .btn { min-height:88px; align-content:start; }
+  .home-go { --art-w:6rem; }
+  .home-go > .btn { min-height:5.5rem; align-content:start; }
   .home-go .icon-tile { width:auto; height:auto; background:none; color:var(--accent); }  /* 카드에서는 제목 옆 작은 그림: 오른쪽은 카드 그림(.card-art) 자리 */
   .home-go > .btn > .icon-tile ~ span:not(.card-art) { grid-column:1 / -1; margin-top:var(--sp-1); }
   /* 최근 연결 카드는 왼쪽 칸과 같은 높이: 줄 높이 계산에는 끼지 않고(height:0) 줄만큼 늘어난다. 목록이 길거나 날짜 폴더를 펼치면 카드 안에서 굴린다 */
@@ -33,12 +33,11 @@
   .recent-folder { flex:none; border:1px solid var(--line); border-radius:var(--r-card); }
   .recent-folder > summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:var(--sp-2); padding:var(--sp-2) var(--sp-3); }
   .recent-folder > summary::-webkit-details-marker { display:none; }
-  .recent-folder > summary::before { content:""; flex:none; width:18px; height:14px; background:var(--accent); clip-path:polygon(0 0, 40% 0, 52% 18%, 100% 18%, 100% 100%, 0 100%); border-radius:2px; opacity:.75; }  /* 폴더 그림 */
+  .recent-folder > summary::before { content:""; flex:none; width:1.125rem; height:.875rem; background:var(--accent); clip-path:polygon(0 0, 40% 0, 52% 18%, 100% 18%, 100% 100%, 0 100%); border-radius:.125rem; opacity:.75; }  /* 폴더 그림 */
   .recent-folder > summary .hint { margin:0 0 0 auto; }
   .recent-folder[open] > summary { border-bottom:1px solid var(--line); }
   .recent-folder .btn { width:calc(100% - var(--sp-2) * 2); margin:var(--sp-2) var(--sp-2) 0; }
   .recent-folder .btn:last-child { margin-bottom:var(--sp-2); }
-  #demo-go { align-self:center; }
   @media (max-width:900px) { .home { grid-template-columns:1fr; } .home-recent { height:auto; min-height:0; } .recent-list { max-height:60vh; } }
 </style>
 </head>
@@ -70,7 +69,6 @@
   </aside>
 </div>
 <!--include core/connect.html-->
-<button id="demo-go" class="ghost" title="지어낸 주문·고객·방문기록 표에 연결해요. 연결할 데이터가 없어도 쿼리·분석·대시보드를 써 볼 수 있어요">연결할 데이터가 없나요? 예시 데이터로 둘러보기</button>
 <!--include core/dash_refresh.html-->
 <script src="/static/core/common.js"></script>
 <script src="/static/core/dash_refresh.js"></script>
@@ -86,13 +84,9 @@ function showHome() {
   $("home-state").textContent = on ? "연결됨" : "연결 안 됨";
   $("home-state").classList.toggle("on", on);
   $("home-conn").textContent = on ? "다른 데이터 연결" : "데이터 연결";
-  $("demo-go").classList.toggle("hidden", on);
   if (on) closeConnect(); else openConnect();
 }
 $("home-conn").onclick = () => openConnect();
-document.querySelector("#conn-panel .conn-card").append($("demo-go"));  // 예시 데이터 단추는 첫 화면의 연결 창 맨 아래에 둔다
-// 예시 데이터: 서버가 지어낸 표 파일을 준비해 준 칸 값으로 연결한다([연결]과 같은 길)
-$("demo-go").onclick = () => busy($("demo-go"), async () => { try { await connectWith(await api("/api/demo", {})); showHome(); } catch (e) { connMsg(e.message); } });
 // 최근 연결로 연결한 뒤: 쿼리 화면으로 간다(쿼리 기능을 설치하지 않았으면 첫 화면의 지금 연결)
 const goQuery = () => SERVER.features.on.includes("query") ? location.assign("/search") : showHome();
 function afterConnect() { recentGo ? goQuery() : showHome(); }  // common.js가 [연결]에 성공한 뒤 부른다

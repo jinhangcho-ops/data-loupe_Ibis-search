@@ -9,9 +9,9 @@ import { CardPanel } from "@/components/edit/CardPanel";
 import { Gallery } from "@/components/edit/Shelf";
 import { Grid, useAddShell } from "@/components/grid/Grid";
 import { ShellProvider, useShell } from "@/components/shell/ShellProvider";
-import { Toolbar, useAddCard } from "@/components/shell/Toolbar";
+import { Toolbar, useAddCard, useDemo } from "@/components/shell/Toolbar";
 import { TopBar } from "@/components/shell/TopBar";
-import { connectDemo, listDashboards } from "@/lib/api";
+import { listDashboards } from "@/lib/api";
 import { ConstantsProvider, useConstants } from "@/lib/constants";
 import { DashProvider, selectedCard, useActionLog, useDash } from "@/lib/store";
 
@@ -34,6 +34,7 @@ function DashboardView() {
   const consts = useConstants();
   const addShell = useAddShell();
   const add = useAddCard();
+  const demo = useDemo();
   const [savedOnce, setSavedOnce] = useState(false);  // 연 뒤 한 번이라도 저장했나(옛 d-state "저장했어요")
   useActionLog(a => { if (a.type === "open") setSavedOnce(false); else if (a.type === "saved") setSavedOnce(true); });
   useEffect(() => {
@@ -75,22 +76,22 @@ function DashboardView() {
       )}
       <div className={state.locked || !state.ok ? "err" : "ok"} id="err-dash" role="status">{state.locked ? consts?.dash.locked : state.error}</div>
       {!n && (
-        <div className="board-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
-          <p className="hint" style={{ fontSize: 14 }}>{state.dash ? "아직 카드가 없어요." : "저장한 대시보드가 없어요."} 이렇게 시작해요.</p>
-          <ol className="hint" style={{ fontSize: 14, margin: 0, padding: 0, listStyle: "none", lineHeight: 1.8 }}><li>① [카드 추가]를 눌러요</li><li>② 보고 싶은 카드 종류를 골라요</li></ol>
-          <p className="hint" style={{ fontSize: 14 }}>또는 쿼리 화면에서 차트를 만들고 [대시보드에 추가]를 눌러요.</p>
-          <div className="row" style={{ display: "flex", gap: 12 }}>
-            <button className="btn p" style={{ height: 44, padding: "0 22px", fontSize: 15 }} onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: null }); setAddOpen(true); }}>카드 추가</button>
-            <a className="btn" style={{ height: 44, padding: "0 22px", fontSize: 15, textDecoration: "none" }} href="/search">쿼리에서 가져오기</a>
+        <div className="board-empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: ".875rem" }}>
+          <p className="hint" style={{ fontSize: ".875rem" }}>{state.dash ? "아직 카드가 없어요." : "저장한 대시보드가 없어요."} 이렇게 시작해요.</p>
+          <ol className="hint" style={{ fontSize: ".875rem", margin: 0, padding: 0, listStyle: "none", lineHeight: 1.8 }}><li>① [카드 추가]를 눌러요</li><li>② 보고 싶은 카드 종류를 골라요</li></ol>
+          <p className="hint" style={{ fontSize: ".875rem" }}>또는 쿼리 화면에서 차트를 만들고 [대시보드에 추가]를 눌러요.</p>
+          <div className="row" style={{ display: "flex", gap: ".75rem" }}>
+            <button className="btn p" style={{ height: "2.75rem", padding: "0 1.375rem", fontSize: ".9375rem" }} onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: null }); setAddOpen(true); }}>카드 추가</button>
+            <a className="btn" style={{ height: "2.75rem", padding: "0 1.375rem", fontSize: ".9375rem", textDecoration: "none" }} href="/search">쿼리에서 가져오기</a>
           </div>
           {!conn && <button id="d-demo" className="ghost" title="지어낸 주문·고객·방문기록 표에 연결해요. 연결할 데이터가 없어도 카드가 어떻게 보이는지 볼 수 있어요"
-            onClick={e => { e.stopPropagation(); connectDemo().then(() => location.reload(), err => dispatch({ type: "error", message: err.message })); }}>예시 데이터로 둘러보기</button>}
+            onClick={e => { e.stopPropagation(); demo(); }}>예시 데이터로 확인하기</button>}
         </div>
       )}
       <div className="d-main">
         {gallery && !dashOnly && (
           <aside id="d-gallery-box" aria-label="카드 모음">
-            <div className="phead"><b>카드 모음</b><button type="button" className="ghost" aria-label="카드 모음 닫기" title="카드 모음 닫기" style={{ minWidth: 24, minHeight: 24 }} onClick={() => setGallery(false)}>×</button></div>
+            <div className="phead"><b>카드 모음</b><button type="button" className="ghost" aria-label="카드 모음 닫기" title="카드 모음 닫기" style={{ minWidth: "1.5rem", minHeight: "1.5rem" }} onClick={() => setGallery(false)}>×</button></div>
             <Gallery onAdd={spec => addShell(spec)} />
           </aside>
         )}

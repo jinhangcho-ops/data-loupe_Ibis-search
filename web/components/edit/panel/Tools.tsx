@@ -9,7 +9,7 @@ import { seriesKit } from "@/components/cards/chart/series";
 import { useTheme } from "@/components/cards/svg/common";
 import { funnelColors, flowDropout, GAP_STATS } from "@/components/cards/svg/__pure__";
 import { cardRequest, chartPoints, computeCard, labels as fetchLabels } from "@/lib/api";
-import { anaView, HEX } from "@/lib/calc";
+import { anaView, HEX, POINT_TYPES } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { pickColor } from "@/lib/series";
 import { computedUpdate, useDash } from "@/lib/store";
@@ -22,7 +22,8 @@ import { GroupPicker } from "./GroupPicker";
 import { parseBands } from "../menu/build";
 import { ROUND_TYPES } from "@/components/cards/chart/shapes";
 
-const FORMATS: [string, string][] = [["number", "숫자"], ["percent", "%"], ["currency", "금액"]];
+export const SIZE_LABEL = "버블 크기·Z축";  // 점 차트의 셋째 숫자 컬럼(view.points.size): 버블은 크기, 3차원 산점도는 Z축
+const FORMATS: [string, string][] =[["number", "숫자"], ["percent", "%"], ["currency", "금액"]];
 // 목표·값 모양이 없는 SVG 카드(옛 svgTools plain)
 const RINGS: [string, string][] = [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리와 목표 눈금"]];
 const PLAIN = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap",
@@ -87,7 +88,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     recompute(next).then(() => setMsg(""), e => setMsg((e as Error).message));
   };
   const byUnit = shown.data?.by_unit, timed = !!byUnit?.day && card.kind !== "dual_trend";
-  const pointy = ["scatter", "bubble"].includes(view.type);
+  const pointy = POINT_TYPES.includes(view.type), three = view.type === "scatter3d";
   // 점을 카드 값에 넣거나 뺀다(보이는 구한 값에도)
   const withPoints = (data: CardData | undefined, points: CardData["points"]) => { const d = { ...(data ?? {}) }; if (points) d.points = points; else delete d.points; return d; };
   const putPoints = (next: Partial<CardView>, points: CardData["points"]) => {
@@ -97,9 +98,9 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
   // 산점도·버블이면 서버에서 점을 받는다(연결 필요, 다시 구하기와 같은 기간). 다른 종류면 점은 버린다(카드 크기)
   const loadPoints = async (next: Partial<CardView>) => {
     const v = { ...view, ...next };
-    if (!["scatter", "bubble"].includes(v.type)) return putPoints(next, undefined);
+    if (!POINT_TYPES.includes(v.type)) return putPoints(next, undefined);
     const body = (card.source.body ?? {}) as Record<string, unknown> & { series?: { y?: string }[] };
-    const { points } = await chartPoints({ ...body, y: body.series?.[0]?.y, size: v.type === "bubble" ? v.points?.size ?? "" : "", source_key: card.source.key, date: card.source.date, ctx: state.ctx });
+    const { points } = await chartPoints({ ...body, y: body.series?.[0]?.y, size: v.type === "scatter" ? "" : v.points?.size ?? "", source_key: card.source.key, date: card.source.date, ctx: state.ctx });
     putPoints(next, points);
   };
   const tryPoints = (next: Partial<CardView>, ok = "") => loadPoints(next).then(() => setMsg(ok), e => setMsg((e as Error).message));  // ok: 바꾼 뒤 보일 안내(첫 계열만 그림 등)
@@ -182,7 +183,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     wordcloud: <CloudFields cloud={view.cloud ?? { mode: "values" }} schema={card.source.schema ?? ""} table={card.source.table ?? ""} texts={columns} full tagged={!!card.source.body?.labels} onChange={c => setCloud(c)} />,
     sentence: (
       <label className="hint bset" style={{ flexBasis: "100%" }}>문장 틀
-        <textarea aria-label="문장 틀" rows={2} style={{ width: "100%", fontSize: 12 }} key={view.template ?? ""} defaultValue={view.template ?? ""}
+        <textarea aria-label="문장 틀" rows={2} style={{ width: "100%", fontSize: ".75rem" }} key={view.template ?? ""} defaultValue={view.template ?? ""}
           onBlur={e => {
             const v = e.target.value.trim();
             if (!v) { e.target.value = view.template ?? ""; return setMsg(TEMPLATE_EMPTY); }
@@ -196,7 +197,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     histogram: <>{num("bins", "구간 수", 50, 1, consts.dash.max_bins ?? 100)}<span className="hint">바꾸면 [다시 구하기]를 누르세요. 새 구간으로 다시 구해요.</span></>,
     bullet: (
       <label className="hint bset">구간
-        <input aria-label="구간" placeholder="예: 50, 80, 100" title="바탕 띠의 경계 값. 작은 것부터 쉼표로 1~6개, 비우면 띠 없음" style={{ width: 120 }} key={(view.bands ?? []).join(",")} defaultValue={(view.bands ?? []).join(", ")}
+        <input aria-label="구간" placeholder="예: 50, 80, 100" title="바탕 띠의 경계 값. 작은 것부터 쉼표로 1~6개, 비우면 띠 없음" style={{ width: "7.5rem" }} key={(view.bands ?? []).join(",")} defaultValue={(view.bands ?? []).join(", ")}
           onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} onBlur={e => {
             if (!e.target.value.trim()) { if (!view.bands) return; const rest = { ...view }; delete rest.bands; return onChange({ view: rest }); }
             try { const bands = parseBands(e.target.value, consts.dash.max_bands); setMsg(""); if (bands.join() !== (view.bands ?? []).join()) setView({ bands }); } catch (err) { setMsg((err as Error).message); }
@@ -275,7 +276,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     if (spec.length === 3) {
       const k = PCT_PARAMS.includes(key) ? PCT : 1, show = (x: number) => +(x * k).toPrecision(PCT_PRECISION);
       return (
-        <label key={key} className="hint bset">{label}<input type="number" step="any" aria-label={aria} min={show(spec[1])} max={show(spec[2])} style={{ width: 70 }} key={String(now)} defaultValue={show(now as number)}
+        <label key={key} className="hint bset">{label}<input type="number" step="any" aria-label={aria} min={show(spec[1])} max={show(spec[2])} style={{ width: "4.375rem" }} key={String(now)} defaultValue={show(now as number)}
           onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
           onBlur={e => { const t = e.target.value; const v = t === "" ? spec[0] : Math.min(spec[2], Math.max(spec[1], +t / k)); if (v !== now) setParam(rule, name, v); else e.target.value = String(show(v)); }} />{k === PCT ? "%" : ""}</label>
       );
@@ -310,7 +311,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
   const rangeInput = (a: "y" | "y1", k: "min" | "max"): ReactNode => {
     const name = `${SIDES[a]} 축 ${k === "min" ? "최소" : "최대"}`;
     return (
-      <label key={`${a}.${k}`} className="hint bset">{name}<input type="number" step="any" name={`${a}.${k}`} aria-label={name} style={{ width: 70 }} key={String(view.ranges?.[a]?.[k] ?? "")} defaultValue={view.ranges?.[a]?.[k] ?? ""}
+      <label key={`${a}.${k}`} className="hint bset">{name}<input type="number" step="any" name={`${a}.${k}`} aria-label={name} style={{ width: "4.375rem" }} key={String(view.ranges?.[a]?.[k] ?? "")} defaultValue={view.ranges?.[a]?.[k] ?? ""}
         onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />{a === "y1" && pct ? "%" : ""}</label>
     );
   };
@@ -331,16 +332,17 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
         <div className="btools" role="group" aria-label="차트 종류">
           {Object.entries(consts.dash.types).map(typeBtn)}
           {(pointy || shown.data?.x_kind === "num") && (
-            <label className="hint bset">버블 크기
-              <select className="bunit" aria-label="버블 크기" title="버블 크기로 쓸 숫자 컬럼" value={view.points?.size ?? ""} onChange={e => tryPoints({ points: { size: e.target.value } })}>
+            <label className="hint bset">{SIZE_LABEL}
+              <select className="bunit" aria-label={SIZE_LABEL} title="버블 크기나 3차원 산점도의 Z축으로 쓸 숫자 컬럼" value={view.points?.size ?? ""} onChange={e => tryPoints({ points: { size: e.target.value } })}>
                 <option value="">크기 없음</option>
                 {(shown.data?.num_cols ?? []).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </label>
           )}
-          {pointy && ([["trend", "추세선"], ["show_r", "r"]] as const).map(([k, name]) => (
+          {pointy && !three && ([["trend", "추세선"], ["show_r", "r"]] as const).map(([k, name]) => (
             <button key={k} type="button" className={`btype${view[k] ? " on" : ""}`} aria-pressed={!!view[k]} title={k === "show_r" ? "상관계수 r 보이기" : "추세선 보이기"} onClick={() => setView({ [k]: !view[k] })}>{name}</button>
           ))}
+          {three && <button type="button" className={`btype${view.connect ? " on" : ""}`} aria-pressed={!!view.connect} title="그룹마다 점을 차례대로 선으로 이어요" onClick={() => setView({ connect: !view.connect })}>점 잇기</button>}
           {ROUND_TYPES.includes(view.type) && (
             <button type="button" className={`btype${view.rings ? " on" : ""}`} aria-pressed={!!view.rings} title="계열마다 고리 하나씩 겹쳐 그려요(안쪽이 첫 계열)" onClick={() => setView({ rings: !view.rings })}>겹친 고리</button>
           )}
@@ -358,7 +360,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
         <div className="btools">
           {withTarget && (target?.name ? <span className="hint">목표: {target.name}{targetErr ? ` (${targetErr})` : ""}</span> : (
             <label className="hint bset">목표
-              <input type="number" aria-label="목표" style={{ width: 90 }} key={String(target?.value ?? "")} defaultValue={target?.value ?? ""}
+              <input type="number" aria-label="목표" style={{ width: "5.625rem" }} key={String(target?.value ?? "")} defaultValue={target?.value ?? ""}
                 onBlur={e => setTarget(e.target.value)} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />
             </label>
           ))}
@@ -371,7 +373,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
           )}
           {kindFields}
           {unitSel}
-          {unitText && <label className="hint bset">단위<input aria-label="단위" placeholder="단위" maxLength={10} style={{ width: 80, height: 24, fontSize: 12 }} value={view.unit_text ?? ""} onChange={e => setView({ unit_text: e.target.value })} /></label>}
+          {unitText && <label className="hint bset">단위<input aria-label="단위" placeholder="단위" maxLength={10} style={{ width: "5rem", height: "1.5rem", fontSize: ".75rem" }} value={view.unit_text ?? ""} onChange={e => setView({ unit_text: e.target.value })} /></label>}
         </div>
       )}
       <GroupPicker card={card} data={shown.data ?? {}} onChange={onChange} recompute={recompute} />
@@ -533,11 +535,11 @@ export function CloudFields({ cloud, schema, table, texts, full, tagged, onChang
       ))}
       <span className="hint bset">불용어
         {stop.map(s => <span key={s} className="chip">{s}<button type="button" className="ghost" aria-label={`${s} 빼기`} onClick={() => put({ stop: stop.filter(x => x !== s) })}>×</button></span>)}
-        <input aria-label="불용어" placeholder="낱말" style={{ width: 80 }} value={word} onChange={e => setWord(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) addStop(); }} />
+        <input aria-label="불용어" placeholder="낱말" style={{ width: "5rem" }} value={word} onChange={e => setWord(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.nativeEvent.isComposing) addStop(); }} />
         <button type="button" className="ghost" onClick={addStop}>더하기</button>
       </span>
       <label className="hint bset">최소 글자 수
-        <input type="number" aria-label="최소 글자 수" min={1} step={1} placeholder="기본" style={{ width: 50 }} key={String(cloud.min_len ?? "")} defaultValue={cloud.min_len ?? ""}
+        <input type="number" aria-label="최소 글자 수" min={1} step={1} placeholder="기본" style={{ width: "3.125rem" }} key={String(cloud.min_len ?? "")} defaultValue={cloud.min_len ?? ""}
           onBlur={e => { const v = e.target.value === "" ? undefined : Math.round(+e.target.value); if (v !== cloud.min_len) put({ min_len: v }); }}
           onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />
       </label>

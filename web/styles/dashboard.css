@@ -1,19 +1,19 @@
 /* 대시보드 화면 전용 규칙(옛 static/dashboard/dashboard.html의 <style>을 그대로 옮김). 색 토큰·단추·카드 규칙은 /static/core/common.css·dash_edit.css를 layout이 <link>로 불러 그대로 쓴다. */
-.settings-box { width:min(760px, 94vw); display:flex; flex-direction:column; gap:12px; }
-.settings-box h4 { margin:6px 0 0; font-size:var(--fs-md); }
+.settings-box { width:min(47.5rem, 94vw); display:flex; flex-direction:column; gap:.75rem; }
+.settings-box h4 { margin:.375rem 0 0; font-size:var(--fs-md); }
 .settings-box .dctl { padding:0; }
-.settings-box .row { display:flex; gap:6px; align-items:center; }
+.settings-box .row { display:flex; gap:.375rem; align-items:center; }
 .settings-box .row input { flex:1; min-width:0; }
 /* KPI 값(P15): 상자 폭(아이콘 자리를 뺀)을 글자 폭(--n, Kpi가 textUnits로 어림: 숫자 1·한글 1/0.62)으로 나눈 크기와 상자 높이(보조 줄 --kpi-rest를 뺀)로 맞춘 크기 중 작은 것. 편집 중 좁은 칸에서 "12,2…"로 잘리지 않게.
    가로·세로 가운데, 비교 문장·짝은 아래에 붙는다. fit-center(기본)는 56px까지, fit-fill은 160px까지 키운다. lay-right(P16)는 추이선이 값 오른쪽(값 폭 60%) */
-.cbox.kpi { container-type:size; --kpi-rest:96px; --kpi-max:56px; --kpi-w:1; }
-.cbox.kpi.fit-fill { --kpi-max:160px; }
-.cbox.kpi.lay-right { --kpi-rest:40px; --kpi-w:.6; }
-.cbox.kpi .kpi-main { flex:1 1 auto; min-height:0; display:flex; align-items:center; justify-content:center; gap:12px; }
+.cbox.kpi { container-type:size; --kpi-rest:6rem; --kpi-max:3.5rem; --kpi-w:1; }
+.cbox.kpi.fit-fill { --kpi-max:10rem; }
+.cbox.kpi.lay-right { --kpi-rest:2.5rem; --kpi-w:.6; }
+.cbox.kpi .kpi-main { flex:1 1 auto; min-height:0; display:flex; align-items:center; justify-content:center; gap:.75rem; }
 .cbox.kpi .kpi-top { justify-content:center; min-width:0; }
-.cbox.kpi .kpi-val { font-size:clamp(14px, min(calc((100cqi * var(--kpi-w) - 56px) / (var(--n, 6) * .62)), calc((100cqh - var(--kpi-rest)) / 1.1)), var(--kpi-max)); line-height:1.1; }
-.cbox.kpi.lay-right .kpi-spark { flex:0 0 38%; height:60%; min-height:24px; margin:0; }
-.cbox.kpi .kpi-foot { margin-top:auto; display:flex; flex-direction:column; align-items:center; gap:2px; text-align:center; }
+.cbox.kpi .kpi-val { font-size:clamp(.875rem, min(calc((100cqi * var(--kpi-w) - 3.5rem) / (var(--n, 6) * .62)), calc((100cqh - var(--kpi-rest)) / 1.1)), var(--kpi-max)); line-height:1.1; }
+.cbox.kpi.lay-right .kpi-spark { flex:0 0 38%; height:60%; min-height:1.5rem; margin:0; }
+.cbox.kpi .kpi-foot { margin-top:auto; display:flex; flex-direction:column; align-items:center; gap:.125rem; text-align:center; }
 .cbox.kpi .kpi-foot:empty { display:none; }
 /* 대시보드만 보기: 메뉴·도구·패널과 카드의 선택·설정·닫기·크기 손잡이를 숨긴다. 차트의 값 상자 같은 보는 기능은 남는다 */
 body.dash-only :is(.rail, .topbar, .nofeature, .d-tool, .board-ctl, #d-state, #err-dash, #d-gallery-box, #d-panel, .bresize, .bhead .bcheck, .bhead button, .bbadge) { display:none !important; }
@@ -21,37 +21,37 @@ body.dash-only:has(.rail) { padding-left:0; }
 body.dash-only .bhead { pointer-events:none; }
 body.dash-only .btitle { border-color:transparent; background:transparent; }
 body.dash-only .bcard.sel, body.dash-only .bcard.editing { border-color:var(--line); }
-#d-only-exit { position:fixed; top:10px; right:12px; z-index:60; opacity:.35; }
+#d-only-exit { position:fixed; top:.625rem; right:.75rem; z-index:60; opacity:.35; }
 #d-only-exit:hover, #d-only-exit:focus-visible { opacity:1; }
-/* N7: 켜진 도구 단추(편집), 카드·카드 모음 칸·패널 단추의 키보드 초점 링, 크기 손잡이 누름 영역 24px */
+/* N7: 켜진 도구 단추(편집), 카드·카드 모음 칸·패널 단추의 키보드 초점 링, 크기 손잡이 누름 영역 1.5rem */
 .d-tool .btn.on { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
 /* 머리 줄(시안 DashboardBody): 대시보드 고르기는 제목처럼 크게, 기간 칸은 한 줄(안내는 있을 때만 옆에), "N분 전 최신화"는 작은 글자 */
 .d-tool .d-pick { font-size:var(--fs-xl); font-weight:700; }
-.d-tool .d-per { flex-direction:row; align-items:center; gap:8px; }
-.d-tool .d-per .row { margin:0; width:min(240px, 40vw); }
+.d-tool .d-per { flex-direction:row; align-items:center; gap:.5rem; }
+.d-tool .d-per .row { margin:0; width:min(15rem, 40vw); }
 .d-tool .d-per .dc-note:not(.bad) { display:none; }  /* 머리 줄에서는 잘못 쓴 기간만 알린다(읽은 기간은 칸에 그대로 보이고, 설정 창에는 안내가 다 나온다) */
 .d-tool .d-fresh { margin:0; white-space:nowrap; }
-.board.grid .bcard:focus-visible, .gal-tile:focus-visible, .side-strip:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-.board.grid .bresize { width:24px; height:24px; }
+.board.grid .bcard:focus-visible, .gal-tile:focus-visible, .side-strip:focus-visible { outline:.125rem solid var(--accent); outline-offset:.125rem; }
+.board.grid .bresize { width:1.5rem; height:1.5rem; }
 /* N8d: 카드 모음 칸 글자는 본문 색(전역 button의 흰 글자가 밝은 바탕에 묻혔음) */
-.gal-tile { color:var(--text); text-align:left; white-space:normal; min-height:24px; }
+.gal-tile { color:var(--text); text-align:left; white-space:normal; min-height:1.5rem; }
 .gal-tile .hint { color:var(--muted); }
 /* P1 기간 달력(shell/Calendar): 기간 칸 아래 왼쪽에 두 달을 나란히. 고른 끝 날은 강조색 칸, 사이 날은 옅은 강조 바탕, 오늘은 밑줄 */
-.drop .pop.dcal { left:0; right:auto; top:calc(100% + 4px); gap:8px; padding:10px; min-width:0; }
-.dcal-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.dcal-months { display:flex; gap:16px; flex-wrap:wrap; }
+.drop .pop.dcal { left:0; right:auto; top:calc(100% + .25rem); gap:.5rem; padding:.625rem; min-width:0; }
+.dcal-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+.dcal-months { display:flex; gap:1rem; flex-wrap:wrap; }
 .dcal-months[hidden] { display:none; }
-.dcal-title { font-weight:600; font-size:var(--fs-sm); text-align:center; margin-bottom:4px; }
-.drop .pop .dcal-year { width:auto; padding:0 4px; font-weight:600; color:var(--accent); cursor:pointer; }  /* 누르면 연도 목록 */
-.dcal-years { display:grid; grid-template-columns:repeat(5, 1fr); gap:4px; min-width:260px; }
+.dcal-title { font-weight:600; font-size:var(--fs-sm); text-align:center; margin-bottom:.25rem; }
+.drop .pop .dcal-year { width:auto; padding:0 .25rem; font-weight:600; color:var(--accent); cursor:pointer; }  /* 누르면 연도 목록 */
+.dcal-years { display:grid; grid-template-columns:repeat(5, 1fr); gap:.25rem; min-width:16.25rem; }
 .drop .pop .dcal-years .dcal-day { width:auto; }
-.dcal-grid { display:grid; grid-template-columns:repeat(7, 32px); gap:2px; }
+.dcal-grid { display:grid; grid-template-columns:repeat(7, 2rem); gap:.125rem; }
 .dcal-wd { font-size:var(--fs-xs); color:var(--muted); text-align:center; }
-.drop .pop .dcal-day { width:32px; height:28px; padding:0; justify-content:center; text-align:center; border-radius:var(--r-ctl); font-variant-numeric:tabular-nums; }
+.drop .pop .dcal-day { width:2rem; height:1.75rem; padding:0; justify-content:center; text-align:center; border-radius:var(--r-ctl); font-variant-numeric:tabular-nums; }
 .drop .pop .dcal-day.mid { background:var(--accent-bg); }
 .drop .pop .dcal-day.on { background:var(--accent); color:var(--on-accent); }
-.drop .pop .dcal-day.today { text-decoration:underline; text-underline-offset:3px; }
+.drop .pop .dcal-day.today { text-decoration:underline; text-underline-offset:.1875rem; }
 .drop .pop .dcal-day:disabled { color:var(--faint); background:none; cursor:default; }
-.drop .pop .dcal-day:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.drop .pop .dcal-day:focus-visible { outline:.125rem solid var(--accent); outline-offset:1px; }
 /* 확대·이동 활성 표시(카드 상자 밖이라 그림 저장에 찍히지 않는다) */
 .bcard.zoomable { outline:1px solid var(--accent); outline-offset:-1px; }

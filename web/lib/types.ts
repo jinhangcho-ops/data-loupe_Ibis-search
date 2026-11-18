@@ -14,7 +14,7 @@ export type CardKind =
 
 /** 차트 종류(dash_store.CHART_TYPES). ""이면 계열마다 정한 대로 */
 export type ChartType = "" | "bar" | "hbar" | "stacked" | "line" | "polyline" | "area" | "doughnut" | "pie" | "radar" | "scatter" | "bubble"
-  | "group" | "stack100" | "hstack" | "hstack100" | "sarea" | "sarea100" | "step" | "combo" | "waterfall" | "pareto" | "radial" | "polar" | "range" | "slope" | "trendline" | "butterfly" | "lollipop";
+  | "group" | "stack100" | "hstack" | "hstack100" | "sarea" | "sarea100" | "step" | "combo" | "waterfall" | "pareto" | "radial" | "polar" | "range" | "slope" | "trendline" | "butterfly" | "lollipop" | "bar3d" | "surface3d" | "scatter3d";
 export type Unit = "day" | "week" | "month" | "year";
 export type ValueFormat = "number" | "percent" | "currency";
 
@@ -41,6 +41,7 @@ export type CardView = {
   points?: { size: string };
   trend?: boolean;
   show_r?: boolean;
+  connect?: boolean;
   icon?: "chart" | "up" | "user" | "cart" | "coin" | "clock";
   format?: ValueFormat;
   unit_text?: string;

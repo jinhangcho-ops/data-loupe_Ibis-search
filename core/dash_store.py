@@ -43,8 +43,10 @@ CHART_TYPES = {"bar": "막대", "hbar": "가로 막대", "stacked": "누적 막�
                "doughnut": "도넛", "pie": "파이", "radar": "레이더", "scatter": "산점도", "bubble": "버블",
                "group": "묶은 막대", "stack100": "100% 누적 막대", "hstack": "가로 누적 막대", "hstack100": "가로 100% 누적 막대", "sarea": "누적 영역", "sarea100": "100% 누적 영역",
                "step": "계단형 라인", "combo": "막대·라인 혼합", "waterfall": "폭포", "pareto": "파레토", "radial": "방사형 막대", "polar": "극좌표 영역", "range": "범위 막대",
-               "slope": "슬로프(두 시점 비교)", "trendline": "추세선", "butterfly": "나비형 막대", "lollipop": "롤리팝"}  # 뒤 열일곱(4단계 P14)은 계열 데이터 그대로, 화면이 다르게 그린다
-TIME_TYPES = ("bar", "stacked", "line", "polyline", "area", "sarea", "sarea100", "step", "combo", "waterfall", "pareto", "slope")  # 날짜 X축 카드에서 고를 수 있는 종류
+               "slope": "슬로프(두 시점 비교)", "trendline": "추세선", "butterfly": "나비형 막대", "lollipop": "롤리팝",  # 여기까지 열일곱(4단계 P14)은 계열 데이터 그대로, 화면이 다르게 그린다
+               "bar3d": "3차원 막대", "surface3d": "3차원 곡면", "scatter3d": "3차원 산점도"}  # 3차원: 막대·곡면은 계열 데이터(X × 계열 × 값), 산점도는 점([크기] 열이 Z축)
+THREE_D_TYPES = ("bar3d", "surface3d", "scatter3d")  # 3차원 그래프 종류(쿼리 화면의 [종류] 칸이 이 차례로 더한다)
+TIME_TYPES = ("bar", "stacked", "line", "polyline", "area", "sarea", "sarea100", "step", "combo", "waterfall", "pareto", "slope", "bar3d", "surface3d")  # 날짜 X축 카드에서 고를 수 있는 종류
 UNITS = {"day": "일", "week": "주", "month": "월", "year": "연"}
 RINGS = ("stack", "double", "half", "ticks")  # 도넛 KPI 고리 4방식: 한 고리 누적, 겹친 두 고리, 반원 게이지, 고리+목표 눈금
 ICONS = ("chart", "up", "user", "cart", "coin", "clock")  # KPI 카드 아이콘
@@ -587,7 +589,7 @@ def check_view(view):
     """보기 설정: type(차트 종류, ""이면 계열마다 정한 대로), unit(일·주·월·연), compare.mode(span·point), better(up·down).
     차트 탭에서 온 것은 styles(계열마다 {type, dash, axis})·ranges(세로축 범위)·ratio(가로/세로), 분석 카드는 analysis_view."""
     view = {} if view is None else view
-    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "auto", "scale", "all_data", "data_table", *EXTRA_VIEW}:
+    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "connect", "auto", "scale", "all_data", "data_table", *EXTRA_VIEW}:
         raise ValueError("보기(view)에 쓸 수 없는 항목이 있어요.")
     out = {"type": view.get("type") or "", "unit": view.get("unit") or "day", "compare": view.get("compare") or {"mode": "span"}, "better": view.get("better") or "up"}
     if out["type"] and out["type"] not in CHART_TYPES:
@@ -618,7 +620,7 @@ def check_view(view):
         if not isinstance(view["points"], dict) or set(view["points"]) - {"size"}:
             raise ValueError("점 설정(points)은 {size: 컬럼} 모양이어야 해요.")
         out["points"] = {"size": text(view["points"].get("size"), "크기 컬럼 이름", 200)}
-    for name in ("trend", "show_r"):  # 추세선, 상관계수 r 보이기
+    for name in ("trend", "show_r", "connect"):  # 추세선, 상관계수 r 보이기, 3차원 산점도의 점 잇기
         if name in view:
             if not isinstance(view[name], bool):
                 raise ValueError(f"{name}은 켬(true)이나 끔(false)이에요.")

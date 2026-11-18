@@ -35,9 +35,9 @@ def test_a3_input_focus_ring():
 
 def test_a4_target_size():
     css = read("common.css")
-    assert "min-height:24px" in rule(css, ".btype")
+    assert "min-height:1.5rem" in rule(css, ".btype")  # 24px
     ghost = rule(css, ".chip .ghost")
-    assert "min-width:24px" in ghost and "min-height:24px" in ghost
+    assert "min-width:1.5rem" in ghost and "min-height:1.5rem" in ghost
 
 
 def test_a5_transition_only_colors():

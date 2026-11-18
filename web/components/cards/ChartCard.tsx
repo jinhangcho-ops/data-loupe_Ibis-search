@@ -9,6 +9,7 @@ import type { CardProps } from "./types";
 import { AnaChart, PointsChart, SeriesChart, type Ana, type Points } from "./chart/Charts";
 import { pickColor } from "@/lib/series";
 import { seriesKit, type SCard, type Series, type SeriesKit, type ThemeColors } from "./chart/series";
+import { layoutWidth, useRootScale } from "./chart/scale";
 import { useZoomX } from "./useZoomX";
 import { useWidth } from "./useWidth";
 import { Box } from "./svg/common";
@@ -37,6 +38,13 @@ export const CHART_FLEX = 2, TABLE_FLEX = 1;
 
 /** autoDraw 결과: 그릴 카드·계열, 안내 문장, 데이터 표, 산점도 점 단계, 히스토그램 꼬리 이름 */
 export type Drawn = { c: SCard; s: Series | null; notes: string[]; table: ChartTable | null; tier: Tier | null; tail: [number, number] | undefined };
+
+/** 산점도·버블·3차원 산점도 점의 데이터 표: X, Y, (크기·Z 열이 있으면 sizeName), (그룹). 카드와 차트 섬이 같이 쓴다 */
+export function pointsTable(pts: Points, sizeName: string): ChartTable {
+  const size = pts.points.some(r => r.length - (pts.groups.length ? 1 : 0) > 2);
+  const columns = [pts.x, pts.y, ...(size ? [sizeName] : []), ...(pts.groups.length ? [GROUP_NAME] : [])];
+  return { columns, rows: pts.points.map(r => Object.fromEntries(columns.map((k, i) => [k, i === columns.length - 1 && pts.groups.length ? r[r.length - 1] : r[i]]))) } as ChartTable;
+}
 
 /** [SPECIFICATION] plans/phase-9.md#autoDraw
  *  자동 묶기 → autoSeries(또는 점·분석의 tier·tail) → 데이터 표까지 한 번에(ChartCard와 Report CSV가 같이 쓴다). */
@@ -96,12 +104,8 @@ export function autoDraw(card: SCard, kit: SeriesKit, consts: Constants, width: 
       const columns = [d.x ?? X_NAME, d.y ?? Y_NAME];
       table = { columns, rows: (d.points ?? []).map(([x, y]) => ({ [columns[0]]: x, [columns[1]]: y })) } as ChartTable;
     } else table = s.chartable && s.datasets.length ? seriesTable(c.data.x ?? X_NAME, s) : null;
-  } else if (isPoints(c)) {
-    const pts = c.data.points as unknown as Points;
-    const size = pts.points.some(r => r.length - (pts.groups.length ? 1 : 0) > 2);
-    const columns = [pts.x, pts.y, ...(size ? [c.view.points?.size ?? SIZE_NAME] : []), ...(pts.groups.length ? [GROUP_NAME] : [])];
-    table = { columns, rows: pts.points.map(r => Object.fromEntries(columns.map((k, i) => [k, i === columns.length - 1 && pts.groups.length ? r[r.length - 1] : r[i]]))) } as ChartTable;
-  } else table = seriesTable(c.data.x ?? X_NAME, s);
+  } else if (isPoints(c)) table = pointsTable(c.data.points as unknown as Points, c.view.points?.size ?? SIZE_NAME);
+  else table = seriesTable(c.data.x ?? X_NAME, s);
   return { c, s, notes, table, tier, tail };
 }
 
@@ -117,7 +121,7 @@ export class Guard extends Component<{ children: ReactNode }, { error: Error | n
 export function ChartCard({ card, data, palette, ctx }: CardProps) {
   const consts = useConstants();
   const kit = useMemo(() => consts && seriesKit(consts), [consts]);
-  const { ref, width } = useWidth();
+  const { ref, width } = useWidth(), scale = useRootScale();
   // 카드 상자와 .bbody(격자 칸 높이)는 Grid가 준다. 여기는 그 높이를 그림과 안내 줄로 나눈다.
   const box = (body: ReactNode, note?: string, table?: ReactNode) => (
     <div ref={ref} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -127,7 +131,7 @@ export function ChartCard({ card, data, palette, ctx }: CardProps) {
     </div>
   );
   const c0: SCard = { ...card, data, range: ctx?.range };
-  const d = kit && consts ? autoDraw(c0, kit, consts, width, false) : null;
+  const d = kit && consts ? autoDraw(c0, kit, consts, layoutWidth(width, scale), false) : null;  // 그림은 너비/배율로 배치된다(chart/scale)
   const c = d ? d.c : c0, s = d ? d.s : null;
   const ana = !!kit && !!s && kit.usesAna(c);
   const z = useZoomX(kit ? zoomAxis(c, s, ana) : null);  // 훅이라 early return 앞에서 부른다
@@ -138,8 +142,8 @@ export function ChartCard({ card, data, palette, ctx }: CardProps) {
   if (ana) {
     const main = pickColor(c, "series", "주 색", colors, 0), second = pickColor(c, "series", "보조 색", colors, 1);
     body = <AnaChart d={data.values as never} view={anaView(c)} main={main} second={second} kit={kit!} win={z.view} tail={d.tail} tier={d.tier} />;
-  } else if (isPoints(c)) body = <PointsChart card={c} colors={colors} xWin={z.view} tier={d.tier} />;
-  else body = <SeriesChart card={c} s={s} colors={colors} win={z.view} />;
+  } else if (isPoints(c)) body = <PointsChart card={c} colors={colors} xWin={z.view} tier={d.tier} active={z.active} />;
+  else body = <SeriesChart card={c} s={s} colors={colors} win={z.view} active={z.active} />;
   // 점이 max_points를 넘어 줄여 그렸으면 서버 문장, 그 뒤에 자동 규칙 문장
   const note = [isPoints(c) ? (data.points as { note?: string }).note : undefined, ...d.notes].filter(Boolean).join(" ");
   const table = card.view.data_table ? (d.table ? (

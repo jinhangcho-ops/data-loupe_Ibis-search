@@ -8,7 +8,8 @@ export const metadata: Metadata = {
 // 화면 모드(옛 head.html과 같다): 저장된 설정(쿠키 theme)이 있으면 그것, 없으면 Windows 설정. 쉬운 보기(쿠키 easy)는 off가 아니면 html.easy. 그리기 전에 정해 깜빡임을 막는다(Flask가 nonce를 붙인다).
 const THEME = `(() => { const saved = name => { const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)")); return m && m[1].replace(/^"(.*)"$/, "$1"); };
   document.documentElement.dataset.theme = saved("theme") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-  document.documentElement.classList.toggle("easy", saved("easy") !== "off"); })();`;
+  document.documentElement.classList.toggle("easy", saved("easy") !== "off");
+  document.documentElement.dataset.scale = saved("ui_scale") ?? ""; })();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

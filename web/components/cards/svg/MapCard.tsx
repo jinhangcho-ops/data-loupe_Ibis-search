@@ -5,11 +5,13 @@ import { useEffect, useRef, useState } from "react";
 import { autoGrid, clamp } from "@/lib/calc";
 import { imageUrl } from "@/lib/api";
 import { useDash } from "@/lib/store";
+import { useRootScale } from "../chart/scale";
+import { growFont } from "./__pure__";
 import { LEVEL_NAMES, Say, levelColor, type P } from "./common";
 import type { Entity } from "./Status";
 
 export function MapCard({ card, colors }: P) {
-  const { state, dispatch } = useDash();
+  const { state, dispatch } = useDash(), s = useRootScale();
   const dashId = state.dash?.id ?? "", view = card.view, bg = view.bg || "rack", W = 400, H = 260;
   const entities = (card.data?.values?.entities ?? []) as Entity[];
   const [drag, setDrag] = useState<Record<string, [number, number]> | null>(null);
@@ -45,7 +47,7 @@ export function MapCard({ card, colors }: P) {
     setDrag(null);
     dispatch({ type: "card", id: card.id, patch: { view: { ...view, positions } } });
   };
-  const middle = (text: string, fill: string, size = 12) => <text x={W / 2} y={H / 2} textAnchor="middle" fontSize={size} fill={fill}>{text}</text>;
+  const middle = (text: string, fill: string, size = 12) => <text x={W / 2} y={H / 2} textAnchor="middle" fontSize={growFont(text, W, size, s)} fill={fill}>{text}</text>;
   return (
     <svg ref={root} viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "100%", touchAction: "none" }} role="img" aria-label={card.title}>
       <g>
@@ -67,7 +69,7 @@ export function MapCard({ card, colors }: P) {
             <circle cx={x} cy={y} r={e.level === "ok" ? 8 : 10} fill={levelColor(e.level, colors)} stroke={colors.card} strokeWidth={2}>
               <title>{`${e.name}: ${LEVEL_NAMES[e.level]}${e.since_text ? ", " + e.since_text : ""}${e.reasons.length ? ", " + e.reasons.join(", ") : ""}`}</title>
             </circle>
-            <text x={x} y={y + 22} textAnchor="middle" fontSize={10} fill={colors.ink}>{e.name}</text>
+            <text x={x} y={y + 12 + 10 * s} textAnchor="middle" fontSize={10 * s} fill={colors.ink}>{e.name}</text>
           </g>
         );
       })}</g>

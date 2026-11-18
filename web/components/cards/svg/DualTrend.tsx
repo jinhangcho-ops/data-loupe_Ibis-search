@@ -6,17 +6,20 @@ import { clamp, showValue } from "@/lib/calc";
 import { useDash } from "@/lib/store";
 import type { CardView } from "@/lib/types";
 import { pickColor } from "@/lib/series";
-import { MIN_POINTS, cardDays, cardFormat, sliceWindow } from "./__pure__";
+import { useRootScale } from "../chart/scale";
+import { MIN_POINTS, cardDays, cardFormat, growFont, sliceWindow } from "./__pure__";
 import { useZoomX } from "../useZoomX";
 import { Frame, Say, type P } from "./common";
 
+const FOOT_FONT = 10, FOOT_TOP = 180;  // 맨 아래 계열 이름 줄: 기준 글자 크기, 글자 윗자리(구간 막대 아래)
+
 export function DualTrend({ card, colors, range, merge }: P) {
-  const { dispatch } = useDash();
+  const { dispatch } = useDash(), s = useRootScale();
   const [tipAt, setTip] = useState<number | null>(null);
   const [drag, setDrag] = useState<[number, number] | null>(null);
   const grab = useRef<{ start: number; rect: DOMRect } | null>(null);
   const noWin = { ...card, view: { ...card.view, window: undefined } };
-  const a = cardDays(noWin, 0, range, merge), whole = a.map(d => d.day), win = card.view?.window, W = 320, H = 190, pad = 14, top = 10, plot = 118, brushY = 150;
+  const a = cardDays(noWin, 0, range, merge), whole = a.map(d => d.day), win = card.view?.window, W = 320, pad = 14, top = 10, plot = 118, brushY = 150;
   const picked = cardDays(card, 0, range, merge), keep = !!picked.length && whole.includes(picked[0].day) && whole.includes(picked[picked.length - 1].day);  // 구간의 처음·끝이 지금 기간 안일 때만
   const view = keep ? card : noWin;  // 저장한 구간이 지금 기간 밖이면 구간 없이 그린다
   const fullRows = [cardDays(view, 0, range, merge), cardDays(view, 1, range, merge)], fullShown = fullRows[0].map(d => d.day);
@@ -48,6 +51,7 @@ export function DualTrend({ card, colors, range, merge }: P) {
     setDrag(null);
     dispatch({ type: "card", id: card.id, patch: { view: next } });
   };
+  const foot = names.join(" · ") + (win && keep ? "  (구간을 골랐어요. 한 번 누르면 풀려요)" : ""), footFont = growFont(foot, W - 2 * pad, FOOT_FONT, s), H = FOOT_TOP + footFont;  // 글자가 커지면 그만큼 그림을 아래로 늘린다
   const tip = (e: React.PointerEvent<SVGRectElement>) => { const p = e.currentTarget.getBoundingClientRect(); setTip(clamp(Math.round((e.clientX - p.left) / p.width * (shown.length - 1)), 0, shown.length - 1)); };
   return (
     <div {...z.bind}>
@@ -59,17 +63,17 @@ export function DualTrend({ card, colors, range, merge }: P) {
       {rows.map((r, k) => <polyline key={k} points={r.map((d, i) => d.v == null ? null : `${xOf(i).toFixed(1)},${yOf(d.v).toFixed(1)}`).filter(Boolean).join(" ")} fill="none" stroke={cols[k]} strokeWidth={2} />)}
       <rect x={pad} y={top} width={W - 2 * pad} height={plot} fill="transparent" onPointerMove={tip} onPointerLeave={() => setTip(null)} />
       {tipAt != null && (
-        <g transform={`translate(${clamp(xOf(tipAt) + 8, 0, W - 152)} ${top})`} pointerEvents="none">
-          <rect width={150} height={52} rx={6} fill={colors.card} stroke={colors.line} />
-          <text x={8} y={15} fontSize={11} fill={colors.text}>{shown[tipAt]}</text>
-          <text x={8} y={30} fontSize={11} fill={cols[0]}>{`${names[0]} ${showValue(rows[0][tipAt]?.v, fmt)}`}</text>
-          <text x={8} y={45} fontSize={11} fill={cols[1]}>{`${names[1]} ${showValue(rows[1][tipAt]?.v, fmt)}`}</text>
+        <g transform={`translate(${clamp(xOf(tipAt) + 8, 0, W - 150 * s - 2)} ${top})`} pointerEvents="none">
+          <rect width={150 * s} height={52 * s} rx={6} fill={colors.card} stroke={colors.line} />
+          <text x={8 * s} y={15 * s} fontSize={11 * s} fill={colors.text}>{shown[tipAt]}</text>
+          <text x={8 * s} y={30 * s} fontSize={11 * s} fill={cols[0]}>{`${names[0]} ${showValue(rows[0][tipAt]?.v, fmt)}`}</text>
+          <text x={8 * s} y={45 * s} fontSize={11 * s} fill={cols[1]}>{`${names[1]} ${showValue(rows[1][tipAt]?.v, fmt)}`}</text>
         </g>
       )}
       {a.map((d, i) => { const h = d.v == null ? 0 : 28 * (d.v - lo) / ((hi - lo) || 1); return <rect key={d.day} x={bx(i) - 1} y={brushY + 28 - h} width={2} height={d.v == null ? 0 : h + 1} fill={colors.text} />; })}
       <rect x={bx(i0)} y={brushY - 2} width={Math.max(4, bx(i1) - bx(i0))} height={34} fill={colors.series[0]} opacity={0.25} stroke={colors.series[0]} />
       <rect x={pad} y={brushY - 2} width={W - 2 * pad} height={34} fill="transparent" style={{ cursor: "col-resize", touchAction: "none" }} onPointerDown={down} onPointerMove={move} onPointerUp={up} />
-      <text x={pad} y={H - 2} fontSize={10} fill={colors.text}>{names.join(" · ") + (win && keep ? "  (구간을 골랐어요. 한 번 누르면 풀려요)" : "")}</text>
+      <text x={pad} y={H - 2} fontSize={footFont} fill={colors.text}>{foot}</text>
     </Frame>
     </div>
   );

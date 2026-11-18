@@ -28,9 +28,10 @@ def css_text(path):
 
 # ---------- 16A 디자인 토큰 ----------
 
-TOKENS = {"--fs-xs": "12px", "--fs-sm": "13px", "--fs-md": "14px", "--fs-lg": "16px", "--fs-xl": "20px", "--fs-2xl": "28px",
-          "--sp-1": "4px", "--sp-2": "8px", "--sp-3": "12px", "--sp-4": "16px", "--sp-5": "24px", "--sp-6": "32px",
-          "--r-ctl": "6px", "--r-card": "10px", "--r-pill": "999px", "--h-sm": "28px", "--h-md": "32px", "--h-lg": "40px"}
+# 1rem = 16px 기준: 12·13·14·16·20·28px, 4·8·12·16·24·32px, 6·10·999px, 28·32·40px
+TOKENS = {"--fs-xs": ".75rem", "--fs-sm": ".8125rem", "--fs-md": ".875rem", "--fs-lg": "1rem", "--fs-xl": "1.25rem", "--fs-2xl": "1.75rem",
+          "--sp-1": ".25rem", "--sp-2": ".5rem", "--sp-3": ".75rem", "--sp-4": "1rem", "--sp-5": "1.5rem", "--sp-6": "2rem",
+          "--r-ctl": ".375rem", "--r-card": ".625rem", "--r-pill": "62.4375rem", "--h-sm": "1.75rem", "--h-md": "2rem", "--h-lg": "2.5rem"}
 
 
 def root_vars(css, dark):
@@ -141,11 +142,11 @@ def test_rail_css():
     css = read("common.css")
     assert "position:fixed" in rule(css, ".rail")
     assert "padding-left:var(--rail-w)" in rule(css, "body:has(.rail)")
-    assert root_vars(css, False)["--rail-w"] == "200px"
+    assert root_vars(css, False)["--rail-w"] == "12.5rem"  # 200px
     media = re.search(r"@media \(max-width:1099px\) \{(.*?)\n\}", css, re.S).group(1)
-    assert ":root { --rail-w:56px; }" in media and ".rail :is(a, .rail-btn, .rail-name) span { display:none; }" in media
+    assert ":root { --rail-w:3.5rem; }" in media and ".rail :is(a, .rail-btn, .rail-name) span { display:none; }" in media
     assert ".pages" not in css and ".rail a" in re.search(r"^(\.btn, \.ib[^{]*)\{", css, re.M).group(1)
-    assert "min(var(--panel, clamp(300px, 28vw, 520px)), calc((100vw - var(--rail-w)) * .6))" in rule(css, ".work")
+    assert "min(var(--panel, clamp(18.75rem, 28vw, 32.5rem)), calc((100vw - var(--rail-w)) * .6))" in rule(css, ".work")
 
 
 def test_rail_marks_current_and_crumb_everywhere():
@@ -179,7 +180,7 @@ def test_dash_only_hides_rail():
 
 # ---------- 16C 설정 합치기 ----------
 
-TABS = ["feat", "update", "calc", "memory", "sample", "date", "viz", "dest"]
+TABS = ["feat", "view", "update", "calc", "memory", "sample", "date", "viz", "dest"]
 DEST_IDS = ("dest-list", "dest-name", "dest-kind", "dest-keep", "dest-preset", "dest-fields", "dest-done", "notify-after", "dest-save", "dest-check",
             "dest-test", "dest-del", "msg-dest", "bot-state", "bot-keep", "bot-token", "bot-app", "bot-users", "bot-channels", "bot-save", "bot-check",
             "bot-start", "bot-stop", "msg-bot", "bot-log")
@@ -191,7 +192,7 @@ def test_settings_categories_and_dest_inside():
     panel = status[status.index('id="feat-panel"'):]
     nav = between("status.html", '<nav class="set-nav"', "</nav>")
     assert re.findall(r'data-set="(\w+)"', nav) == TABS
-    assert re.findall(r">([^<]+)</button>", nav) == ["쓸 기능", "업데이트", "계산", "메모리", "표본", "날짜·달력", "차트 낱말", "보낼 곳"]
+    assert re.findall(r">([^<]+)</button>", nav) == ["쓸 기능", "화면 크기", "업데이트", "계산", "메모리", "표본", "날짜·달력", "차트 낱말", "보낼 곳"]
     assert re.search(r'data-set="viz" id="set-tab-viz" class="hidden"', nav)
     assert re.findall(r'<section class="set-page[^"]*" data-set="(\w+)" role="tabpanel"', panel) == TABS
     assert "set-group" not in status and "<details" not in panel and 'class="app-set"' in panel
@@ -212,9 +213,9 @@ def test_settings_categories_and_dest_inside():
 
 def test_settings_css():
     css = read("common.css")
-    assert "grid-template-columns:160px minmax(0, 1fr)" in rule(css, ".set-body")
+    assert "grid-template-columns:10rem minmax(0, 1fr)" in rule(css, ".set-body")
     assert "border-right:1px solid var(--line)" in rule(css, ".set-nav")
-    assert ".set-nav button[aria-selected=true]" in css and ".modal-box.set-box { width:min(920px, 94vw)" in css  # 뒤에 오는 .modal-box의 좁은 너비(440px)에 지지 않게 선택자를 겹쳐 쓴다
+    assert ".set-nav button[aria-selected=true]" in css and ".modal-box.set-box { width:min(57.5rem, 94vw)" in css  # 뒤에 오는 .modal-box의 좁은 너비(27.5rem)에 지지 않게 선택자를 겹쳐 쓴다
     assert ".set-group" not in css
 
 
@@ -234,11 +235,13 @@ const out = { open: !panel.classList.contains("hidden"), selected: tabs.filter(t
   falses: tabs.filter(t => t.attrs["aria-selected"] === "false").length, shown: shown(), calls: [...calls] };
 openSettings("calc");
 out.calc = shown(); out.calls2 = calls.length;
+openSettings("view"); out.view = shown();
 try { openSettings("nope"); out.bad = ""; } catch (e) { out.bad = e.message; }
 console.log(JSON.stringify(out));
 """
     got = run_node(tmp_path, body, parts=[code])
-    assert got["open"] is True and got["selected"] == ["dest"] and got["falses"] == 7 and got["shown"] == ["dest"]
+    assert got["open"] is True and got["selected"] == ["dest"] and got["falses"] == len(TABS) - 1 and got["shown"] == ["dest"]
+    assert got["view"] == ["view"]  # [화면 크기] 분류도 열린다
     assert got["calls"] == ["/api/bot"] and got["calc"] == ["calc"] and got["calls2"] == 1  # 보낼 곳을 열 때만 봇 상태를 새로
     assert got["bad"] == "없는 설정 분류: nope"
 
@@ -332,7 +335,7 @@ console.log(JSON.stringify(updNotes("### 추가\r\n- A/B 검정: 사람마다 �
         ["P", "받지 못했어요"]]
     panel = between("status.html", '<div id="upd-panel"', '<div id="upd-msg"')
     assert 'class="modal-box upd-box"' in panel and 'id="upd-close" class="btn">나중에' in panel and 'id="upd-go" class="btn p"' in panel
-    assert ".modal-box.upd-box { width:min(640px, 94vw); }" in read("common.css")
+    assert ".modal-box.upd-box { width:min(40rem, 94vw); }" in read("common.css")
 
 
 @needs_node
@@ -367,21 +370,61 @@ def test_home_layout():
     assert ".home-recent { height:0; min-height:100%;" in html and "align-self:start" not in html
     assert ".recent-list { flex:1; min-height:0; overflow-y:auto;" in html and ".recent-folder { flex:none;" in html
     assert "function afterConnect() { recentGo ? goQuery() : showHome(); }" in html and "resume().then(showHome);" in html  # 최근 연결로 연결하면 쿼리로
-    assert 'SERVER.features.on.includes("query") ? location.assign("/search") : showHome()' in html and 'id="demo-go"' in html
+    assert 'SERVER.features.on.includes("query") ? location.assign("/search") : showHome()' in html
     assert "#conn-close { display:none" not in html and ".home #conn-panel" not in html  # 첫 화면도 연결 창을 띄우고, 연결 전에도 닫을 수 있다
-    assert 'document.querySelector("#conn-panel .conn-card").append($("demo-go"));' in html and '$("home-conn").onclick = () => openConnect();' in html
+    assert '$("home-conn").onclick = () => openConnect();' in html
+
+
+def test_demo_button_lives_in_settings_only():
+    """[예시 데이터로 둘러보기]는 설정 [쓸 기능]에만 있다(첫 화면·연결 창에는 없다). 연결이 바뀐다는 것을 단추 설명에 적는다."""
+    for page in ("home.html", "connect.html"):
+        assert "demo" not in read(page) and "예시 데이터" not in read(page), page
+    feat = between("status.html", 'data-set="feat" role="tabpanel"', "</section>")
+    button = re.search(r'<button id="set-demo" class="btn" type="button" title="([^"]+)">예시 데이터로 둘러보기</button>', feat)
+    assert button and "연결이 예시 데이터로 바뀌어요" in button[1] and 'id="set-demo-msg"' in feat
+    assert '$("set-demo").onclick = () => busy($("set-demo"), async () => {' in read("common.js")
+
+
+@needs_node
+def test_settings_demo_connects_like_the_connect_button(tmp_path):
+    """연결 칸이 있는 화면은 connectWith 뒤 afterConnect(있을 때만), 없는 화면(수집)은 연결만 하고 위쪽 줄 이름을 바꾼다.
+    성공하면 설정 창을 닫고, 실패하면 문구를 보이고 열어 둔다."""
+    code = between("common.js", '$("set-demo").onclick', "// 릴리스 노트")
+    body = CLS + r"""
+const INFO = { kind: "folder", path: "C:/demo", file: "C:/demo/demo.duckdb" };
+async function run({ hasConnect, after, fail }) {
+  const log = [], button = {}, panel = { classList: cls() };
+  const $ = id => ({ "set-demo": button, "feat-panel": panel })[id];
+  const api = async url => { log.push(url); if (fail) throw new Error("못 만들었어요"); return url === "/api/demo" ? INFO : { schemas: [] }; };
+  const busy = (b, fn) => fn();
+  const connectWith = async info => { log.push(["connectWith", info.file]); };
+  const afterConnect = after ? () => log.push("afterConnect") : undefined;
+  const connLabel = info => info.file.split("/").pop(), showCrumb = () => log.push(["crumb", connName]);
+  const say = (id, text) => log.push([id, text]);
+  let connName = null;
+""" + code + r"""
+  await button.onclick();
+  return { log, closed: panel.classList.contains("hidden") };
+}
+(async () => console.log(JSON.stringify([await run({ hasConnect: true, after: true }), await run({ hasConnect: true }), await run({ hasConnect: false }), await run({ hasConnect: true, fail: true })])))();
+"""
+    home, query, collect, failed = run_node(tmp_path, body)
+    assert home == {"log": ["/api/demo", ["connectWith", "C:/demo/demo.duckdb"], "afterConnect", ["set-demo-msg", ""]], "closed": True}
+    assert query == {"log": ["/api/demo", ["connectWith", "C:/demo/demo.duckdb"], ["set-demo-msg", ""]], "closed": True}
+    assert collect == {"log": ["/api/demo", "/api/connect", ["crumb", "demo.duckdb"], ["set-demo-msg", ""]], "closed": True}
+    assert failed == {"log": ["/api/demo", ["set-demo-msg", "못 만들었어요"]], "closed": False}
 
 
 @needs_node
 def test_show_home_switches_views(tmp_path):
     code = between("home.html", "function showHome() {", "\n}\n") + "\n}\n"
     body = CLS + r"""
-const home = { classList: cls() }, name = { textContent: "x" }, tag = { textContent: "", classList: cls() }, conn = { textContent: "" }, demo = { classList: cls() };
-globalThis.$ = id => ({ "home-name": name, "home-state": tag, "home-conn": conn, "demo-go": demo })[id];
+const home = { classList: cls() }, name = { textContent: "x" }, tag = { textContent: "", classList: cls() }, conn = { textContent: "" };
+globalThis.$ = id => ({ "home-name": name, "home-state": tag, "home-conn": conn })[id];
 globalThis.document = { querySelector: q => (q === ".home" ? home : null) };
 const n = { open: 0, close: 0 };
 globalThis.openConnect = () => { n.open++; }; globalThis.closeConnect = () => { n.close++; };
-const look = () => ({ on: home.classList.contains("on"), name: name.textContent, tag: [tag.textContent, tag.classList.contains("on")], conn: conn.textContent, demoHidden: demo.classList.contains("hidden"), ...n });
+const look = () => ({ on: home.classList.contains("on"), name: name.textContent, tag: [tag.textContent, tag.classList.contains("on")], conn: conn.textContent, ...n });
 globalThis.connected = null; globalThis.connName = null;
 showHome(); const before = look();
 globalThis.connected = "other"; globalThis.connName = "sales.duckdb";
@@ -389,8 +432,8 @@ showHome();
 console.log(JSON.stringify({ before, after: look() }));
 """
     got = run_node(tmp_path, body, parts=[code])
-    assert got["before"] == {"on": False, "name": "연결된 데이터가 없어요", "tag": ["연결 안 됨", False], "conn": "데이터 연결", "demoHidden": False, "open": 1, "close": 0}
-    assert got["after"] == {"on": True, "name": "sales.duckdb", "tag": ["연결됨", True], "conn": "다른 데이터 연결", "demoHidden": True, "open": 1, "close": 1}
+    assert got["before"] == {"on": False, "name": "연결된 데이터가 없어요", "tag": ["연결 안 됨", False], "conn": "데이터 연결", "open": 1, "close": 0}
+    assert got["after"] == {"on": True, "name": "sales.duckdb", "tag": ["연결됨", True], "conn": "다른 데이터 연결", "open": 1, "close": 1}
 
 
 def test_changed_files_have_no_control_chars():
@@ -447,7 +490,7 @@ def test_dashboard_drawer_slot():
 def test_drawer_css():
     css = read("dash_edit.css")
     d = rule(css, ".d-main > #d-add")
-    for part in ("grid-column:3;", "position:sticky;", "display:flex;", "flex-direction:column;", "overflow:hidden;", "max-height:calc(100vh - 160px);"):
+    for part in ("grid-column:3;", "position:sticky;", "display:flex;", "flex-direction:column;", "overflow:hidden;", "max-height:calc(100vh - 10rem);"):
         assert part in d, part
     assert "flex:1; min-height:0; overflow:auto;" in rule(css, "#d-add .d-add-body")
     assert "flex:none;" in rule(css, "#d-add .d-add-foot")

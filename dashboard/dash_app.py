@@ -43,7 +43,7 @@ def with_source(card):
 @server.late_constants("query", "prep", "dashboard")
 def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버와 같은 상한·종류·기본 색·집계를 쓴다
     found["dash"] = {"max_cards": dash_store.MAX_CARDS, "max_dashboards": dash_store.MAX_DASHBOARDS, "max_palette": dash_store.MAX_PALETTE,
-        "types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "units": dash_store.UNITS,
+        "types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "three_types": dash_store.THREE_D_TYPES, "units": dash_store.UNITS,
         "palette": dash_store.DEFAULT_PALETTE, "locked": dash_store.LOCKED, "min_refresh": dash_store.MIN_REFRESH}  # 화면(web/·common.js)이 서버와 같은 상한·종류·기본 색을 쓴다
     found["dash"]["max_points"] = result.MAX_POINTS  # 산점도·버블의 점 수 상한
     found["dash"].update(max_bins=dash_store.MAX_BINS, max_bands=dash_store.MAX_BANDS, max_cells=dash_store.MAX_CELLS)  # 히스토그램의 구간 수, 불릿 차트의 구간 수, 히트맵 칸 수 상한

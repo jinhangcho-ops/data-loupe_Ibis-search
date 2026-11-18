@@ -13,7 +13,7 @@ export type MetricsWindowProps = { open: boolean; onClose: () => void; onAdd: (c
 
 // 서버 타입 이름 → 지표 사전의 종류(옛 funcs.js KIND_OF)
 const KIND_OF: Record<string, string> = { 정수: "num", 실수: "num", 문자: "text", 날짜: "date", 날짜시간: "date", "참/거짓": "bool", json: "json" };
-const TABLE = { width: "100%", whiteSpace: "normal", fontSize: 12.5 } as const;
+const TABLE = { width: "100%", whiteSpace: "normal", fontSize: ".7812rem" } as const;
 const kindOf = (t: string) => KIND_OF[t] ?? (["num", "text", "date", "bool", "json", "array", "struct"].includes(t) ? t : t.startsWith("목록") ? "array" : t.startsWith("구조") ? "struct" : "other");
 
 export function MetricsWindow(props: MetricsWindowProps) {
@@ -66,8 +66,8 @@ function Window({ onClose, onAdd }: MetricsWindowProps) {
   const rows = (cat?.entries ?? []).filter(e => e.area === area);
   return (
     <div className="modal" onClick={e => { if (e.target === e.currentTarget) onClose(); }} onKeyDown={e => { if (e.key === "Escape") onClose(); }}>
-      <div className="modal-box" role="dialog" aria-label="지표" style={{ width: "min(860px, 94vw)", display: "flex", flexDirection: "column", gap: 10 }}>
-        <div className="head row" style={{ gap: 8 }}>
+      <div className="modal-box" role="dialog" aria-label="지표" style={{ width: "min(53.75rem, 94vw)", display: "flex", flexDirection: "column", gap: ".625rem" }}>
+        <div className="head row" style={{ gap: ".5rem" }}>
           <h3>지표</h3>
           {names && (
             <select id="d-met-table" aria-label="테이블" value={table} onChange={e => setTable(e.target.value)} style={{ width: "auto" }}>
@@ -94,7 +94,7 @@ function Window({ onClose, onAdd }: MetricsWindowProps) {
 
         <h4 style={{ margin: 0 }}>내 지표</h4>
         {mine?.metrics.length ? (
-          <ul id="d-met-mine" style={{ margin: 0, paddingLeft: 18 }}>{mine.metrics.map(m => <li key={m.id}>{m.text}</li>)}</ul>
+          <ul id="d-met-mine" style={{ margin: 0, paddingLeft: "1.125rem" }}>{mine.metrics.map(m => <li key={m.id}>{m.text}</li>)}</ul>
         ) : <div className="hint">{mine ? "저장한 내 지표가 없어요. 아래 지표 사전에서 [내 지표로 저장]을 누르거나 쿼리 화면 [지표] 탭에서 만들어요." : ""}</div>}
         <div className="hint">내 지표는 문장·쿼리 화면에서 구해요. 카드로 넣으려면 쿼리 화면에서 차트로 만든 뒤 [대시보드에 추가]를 누르세요.</div>
 

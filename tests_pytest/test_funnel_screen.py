@@ -133,7 +133,7 @@ def test_screens_have_funnel(client):
         assert part in prep, part
     assert 'kind: flow ? "funnel" : "analysis"' in prep
     web = Path(ROOT, "web", "components")  # 대시보드 화면(Next): 퍼널 카드 그림과 카드 추가 메뉴의 종류
-    assert "sankeyLayout(steps)" in (web / "cards" / "svg" / "Funnel.tsx").read_text(encoding="utf-8")
+    assert "sankeyLayout(steps, " in(web / "cards" / "svg" / "Funnel.tsx").read_text(encoding="utf-8")
     assert "export function sankeyLayout(" in (web / "cards" / "svg" / "__pure__.ts").read_text(encoding="utf-8")
     assert 'funnel: ["퍼널"' in (web / "edit" / "menu" / "kinds.ts").read_text(encoding="utf-8")
 

@@ -18,8 +18,8 @@ export type SeriesOpts = {
   auto?: AutoView; scale?: AxisScale; order?: Order; all?: boolean; aggs?: string[]; rest?: (number | null)[] | null;
   x_kind?: "num" | "date" | "text"; x_scale?: Scale; x_levels?: string[]; x?: string;
 };
-/** /api/chart/points 응답 그대로. type: scatter|bubble, trend: 추세선, show_r: r 제목, auto·all: 자동 규칙(점 밀도) */
-export type PointsOpts = { type?: "scatter" | "bubble"; trend?: boolean; show_r?: boolean; ranges?: Ranges; ratio?: number; auto?: AutoView; all?: boolean };
+/** /api/chart/points 응답 그대로. type: scatter|bubble|scatter3d(점의 [크기] 열이 Z, z는 그 컬럼 이름), trend: 추세선, show_r: r 제목, connect: 3차원 점 잇기, auto·all: 자동 규칙(점 밀도) */
+export type PointsOpts = { type?: "scatter" | "bubble" | "scatter3d"; trend?: boolean; show_r?: boolean; connect?: boolean; z?: string; ranges?: Ranges; ratio?: number; auto?: AutoView; all?: boolean };
 /** /api/analyze 응답(필요하면 부모가 범위로 자른 것). view: hist|box|values|heat|scatter|groups|trend|funnel, auto·all: 자동 규칙(꼬리·점 밀도) */
 export type AnaOpts = { view: string; ratio?: number; auto?: AutoView; all?: boolean };
 

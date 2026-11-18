@@ -72,6 +72,7 @@ const els = {}; const $ = id => (els[id] ??= { value: "", classList: { toggle() 
 const S = { cols: [["id", "정수"], ["name", "문자"], ["day", "날짜"]] };
 const sent = []; let series = [], drawn = null;
 const busy = (b, f) => f(); const timed = (k, f) => f(); const state = () => ({ base: "t" });
+const kind3d = () => "", POINTS_3D = "scatter3d", pointsWhy = () => "", redraw = () => {};  // 3차원 종류가 아닌 보통 차트(바로 그리기는 여기서 보지 않는다)
 const seriesNow = () => ({ y: "", agg: "count" }); const api = async (url, body) => { sent.push(body); return { labels: [], datasets: [] }; };
 const toDrawn = () => ({}); const drawChart = () => {}; let chartGroups = {}; const chartKey = q => JSON.stringify(q), groupsChanged = async () => {};  // 그룹 고르기(Phase 4) const mountTable = () => {}; const gridSpec = () => ({}); const chartData = () => ({}); const rangeError = () => "";
 """

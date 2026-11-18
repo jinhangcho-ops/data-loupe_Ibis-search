@@ -12,8 +12,11 @@ import { decimals, pointGroups, shownum } from "@/lib/calc";
 import { LOG_NEEDS_POSITIVE, NOT_ZERO_TEXT, TONE_COLORS, fromSymlog, hexVertices, shortNum, thinRows, toSymlog, type Tier } from "@/lib/autoviz";
 import { pickColor } from "@/lib/series";
 import { UNIT_NAMES, type SCard, type Series, type SeriesKit, type ThemeColors } from "./series";
-import { FIRST_ONLY, HBARS, ROUND_TYPES, fitLine, paretoRows, ringRadii, waterfallRows } from "./shapes";
+import { FIRST_ONLY, GRID_3D, HBARS, ROUND_TYPES, fitLine, paretoRows, ringRadii, waterfallRows } from "./shapes";
+import { Chart3D } from "./Chart3D";
+import { PLAIN, gridReason, gridScene, pointsReason, pointsScene, type GridType, type Shaping } from "./three";
 import { sliceWindow, type Span } from "../svg/__pure__";
+import { scaledBox, useRootScale } from "./scale";
 
 const compact = new Intl.NumberFormat("ko", { notation: "compact", maximumFractionDigits: 1 }), sig3 = new Intl.NumberFormat(undefined, { maximumSignificantDigits: 3 });
 /** 값 축 눈금: 1만 미만은 쉼표, 넘으면 1.2만처럼 */
@@ -55,12 +58,15 @@ export function Keys({ items }: { items: Key[] }) {
 
 /** 범례·제목 줄 + 남은 높이를 채우는 그림(카드 크기를 따라간다) */
 export function Frame({ keys, title, children }: { keys?: Key[]; title?: string; children: ReactNode }) {
+  const s = useRootScale();  // 안의 px(글자·여백·점·막대)가 바탕 글자 크기를 따라간다. 마우스 좌표는 Recharts가 배율을 재서 맞춘다
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", fontSize: 12 }}>
-      {title ? <div style={{ textAlign: "center", color: "var(--muted)", fontWeight: 600, padding: "0 0 4px" }}>{title}</div> : null}
-      {keys?.length ? <Keys items={keys} /> : null}
-      <div style={{ flex: 1, minHeight: 0 }}>
-        <ResponsiveContainer width="100%" height="100%" minHeight={60}>{children as React.ReactElement}</ResponsiveContainer>
+    <div style={{ height: "100%" }}>
+      <div style={{ display: "flex", flexDirection: "column", fontSize: 12, ...scaledBox(s) }}>
+        {title ? <div style={{ textAlign: "center", color: "var(--muted)", fontWeight: 600, padding: "0 0 4px" }}>{title}</div> : null}
+        {keys?.length ? <Keys items={keys} /> : null}
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <ResponsiveContainer width="100%" height="100%" minHeight={60}>{children as React.ReactElement}</ResponsiveContainer>
+        </div>
       </div>
     </div>
   );
@@ -79,8 +85,9 @@ type Row = Record<string, string | number | null>;
  *  P14 새 종류: 묶은 막대(group), 100%·가로 누적(stack100·hstack·hstack100, stackOffset expand), 누적 영역(sarea·sarea100), 계단 선(step), 막대+선(combo, 둘째 계열부터 오른쪽 축 선),
  *  범위 막대(range, 두 계열 [첫째, 둘째]), 기울기(slope, 처음·끝 두 시점), 나비(butterfly, 첫 계열을 왼쪽 음수 방향). 도넛·파이·방사형·장미는 RoundChart, 폭포·파레토·추세선·롤리팝은 OneSeries.
  *  percent면 왼쪽 값 축 눈금에 %(옛 쿼리 화면 tuneChart, 비율 지표) */
-export function SeriesChart({ card, s, colors, percent, win }: { card: SCard; s: Series; colors: ThemeColors; percent?: boolean; win?: Span | null }) {
+export function SeriesChart({ card, s, colors, percent, win, active }: { card: SCard; s: Series; colors: ThemeColors; percent?: boolean; win?: Span | null; active?: boolean }) {
   const view = card.view ?? {}, type = view.type || "", ranges = view.ranges ?? { y: {}, y1: {} };
+  if (GRID_3D.includes(type)) return <Grid3D card={card} s={s} colors={colors} active={active} />;
   if (ROUND_TYPES.includes(type)) return <RoundChart card={card} s={s} colors={colors} />;
   if (FIRST_ONLY.includes(type)) return <OneSeries card={card} s={s} colors={colors} win={win} />;
   const hbar = HBARS.includes(type), stacked = STACKS.includes(type), full = FULL.includes(type), butterfly = type === "butterfly", combo = type === "combo", range = type === "range" && s.datasets.length > 1;
@@ -180,6 +187,33 @@ export function SeriesChart({ card, s, colors, percent, win }: { card: SCard; s:
       </ComposedChart>
     </Frame>
   );
+}
+
+/** 3차원 곡면의 높이 색 두 끝(화면 모드 계열 색): 낮은 값은 파랑(--c3), 높은 값은 빨강(--c8) */
+const LOW_3D = "var(--c3)", HIGH_3D = "var(--c8)";
+/** 3차원 축 이름: 계열 축과 값 축(X축 이름은 카드 값의 x) */
+const SETS_NAME = "계열", VALUE_NAME = "값";
+const legend3 = (keys: Key[]) => (keys.length > 1 ? <Keys items={keys} /> : null);
+
+/** 3차원 막대·곡면(Chart3D): X 값 × 계열 × 값. 계열 색은 다른 차트와 같고, 곡면은 높이 색. 선 계열(계열의 type이 line)은 곡면 위의 선.
+ *  그릴 수 없으면 이유(three.gridReason)를 던져 Guard가 그 문장을 보인다 */
+function Grid3D({ card, s, colors, active }: { card: SCard; s: Series; colors: ThemeColors; active?: boolean }) {
+  const type = card.view.type as GridType, vt = card.auto ? (v: number) => shortNum(v, card.auto!.num) : tickNum;
+  const why = gridReason(type, s.labels.length, s.datasets);
+  if (why) throw new Error(why);
+  const sets = s.datasets.map((d, i) => ({ label: d.label, values: d.values, line: d.type === "line", color: pickColor(card, "series", d.label, colors, i) }));
+  const make = (shape: Shaping) => gridScene(type, s.labels, sets, LOW_3D, HIGH_3D, [card.data?.x ?? "", SETS_NAME, VALUE_NAME], vt, shape);
+  const scene = make(PLAIN);
+  // 곡면이면 매끈함·모양 조절 칸을 Chart3D가 그린다(조절한 모양대로 그림·범례를 다시 만든다)
+  return <Chart3D scene={scene} legend={legend3(scene.keys)} active={active} surface={type === "surface3d" ? { nx: s.labels.length, ny: sets.length, scene: make, legend: legend3 } : undefined} />;
+}
+
+/** 3차원 산점도(Chart3D): 점 [x, y, z, (그룹)]. z는 서버 점의 [크기] 열(view.points.size), view.connect면 그룹마다 차례대로 선으로 잇는다 */
+function Scatter3D({ card, colors, active }: { card: SCard; colors: ThemeColors; active?: boolean }) {
+  const p = card.data.points as unknown as Points, why = pointsReason(p);
+  if (why) throw new Error(why);
+  const scene = pointsScene(p, pointGroups(p).map((name, i) => pickColor(card, "series", name, colors, i)), !!card.view.connect, card.view.points?.size ?? "", tickNum);
+  return <Chart3D scene={scene} legend={legend3(scene.keys)} active={active} />;
 }
 
 /** 겹친 고리 수 상한(링이 너무 얇아지지 않게) */
@@ -303,8 +337,9 @@ function HexCells({ hex, color }: { hex: NonNullable<Points["hex"]>; color: stri
     </g>
   );
 }
-/** 산점도·버블(pointsConfig). 점 하나는 [x, y, (크기), (그룹)]. 버블 반지름 = 3 + 17·√((v−min)/(max−min)) px. 추세선 y = a + b·x와 r은 서버가 전체 행으로 구한 값 */
-export function PointsChart({ card, colors, xWin, tier }: { card: SCard; colors: ThemeColors; xWin?: Span | null; tier?: Tier | null }) {
+/** 산점도·버블(pointsConfig)과 3차원 산점도(Scatter3D). 점 하나는 [x, y, (크기), (그룹)]. 버블 반지름 = 3 + 17·√((v−min)/(max−min)) px. 추세선 y = a + b·x와 r은 서버가 전체 행으로 구한 값 */
+export function PointsChart({ card, colors, xWin, tier, active }: { card: SCard; colors: ThemeColors; xWin?: Span | null; tier?: Tier | null; active?: boolean }) {
+  if (card.view.type === "scatter3d") return <Scatter3D card={card} colors={colors} active={active} />;
   const p = card.data.points as unknown as Points, view = card.view, bubble = view.type === "bubble", hex = tier?.mode === "hex" && p.hex?.cells.length ? p.hex : null;
   const [lo, hi] = p.size_range ?? [0, 0], radius = (v: number) => hi > lo ? 3 + 17 * Math.sqrt((v - lo) / (hi - lo)) : 10;
   const groups = pointGroups(p).map((name, i) => {

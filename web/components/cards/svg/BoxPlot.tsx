@@ -4,14 +4,15 @@ import { shownum } from "@/lib/calc";
 import { autoParams, clipBox } from "@/lib/autoviz";
 import { useConstants } from "@/lib/constants";
 import { tickBy } from "../chart/Charts";
+import { useRootScale } from "../chart/scale";
 import { fitText } from "./__pure__";
 import { Box, Frame, NOTHING, Say, more, tone, type P } from "./common";
 
-const W = 480, H = 260, L = 48, B = 22, T = 8;
+const W = 480, H = 260, L0 = 48, B0 = 22, T0 = 8, FONT = 11;  // 왼쪽·아래·위 글자 자리와 글자 크기(화면 크기 배율 1)
 const fine = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
 export function BoxPlot(p: P) {
-  const consts = useConstants();
+  const consts = useConstants(), s = useRootScale(), L = L0 * s, B = B0 * s, T = T0 * s, font = FONT * s;  // 글자 자리는 글자와 같이 커진다
   // 사분위가 없는 그룹(행이 없음)은 빼고, 수염 끝이 비면 상자 끝으로
   const all = (more(p).groups ?? []).filter(b => fine(b.q1) && fine(b.med) && fine(b.q3)).map(b => ({ ...b, min: fine(b.min) ? b.min : b.q1, max: fine(b.max) ? b.max : b.q3, outliers: (b.outliers ?? []).filter(fine) }));
   if (!all.length) return <Say text={NOTHING} />;
@@ -24,7 +25,7 @@ export function BoxPlot(p: P) {
   return (
     <Box cls="boxplot">
       <Frame w={W} h={H} label={p.card.title}>
-        {[0, 0.5, 1].map(k => { const v = lo + (hi - lo) * k; return <g key={k}><line x1={L} x2={W} y1={y(v)} y2={y(v)} stroke="var(--line)" /><text x={L - 6} y={y(v)} fontSize={11} textAnchor="end" dominantBaseline="middle" fill="var(--muted)">{tickBy((hi - lo) / 2)(v)}</text></g>; })}
+        {[0, 0.5, 1].map(k => { const v = lo + (hi - lo) * k; return <g key={k}><line x1={L} x2={W} y1={y(v)} y2={y(v)} stroke="var(--line)" /><text x={L - 6} y={y(v)} fontSize={font} textAnchor="end" dominantBaseline="middle" fill="var(--muted)">{tickBy((hi - lo) / 2)(v)}</text></g>; })}
         {shown.map((b, i) => {
           const cx = L + band * (i + 0.5);
           return (
@@ -36,9 +37,9 @@ export function BoxPlot(p: P) {
               <rect x={cx - w / 2} y={y(b.q3)} width={w} height={Math.max(1, y(b.q1) - y(b.q3))} fill={c} fillOpacity={0.35} stroke={c} />
               <line x1={cx - w / 2} x2={cx + w / 2} y1={y(b.med)} y2={y(b.med)} stroke={c} strokeWidth={3} />
               {(b.outliers ?? []).map((o, j) => <circle key={j} cx={cx} cy={y(o)} r={3} fill="none" stroke={c} />)}
-              {tail && !!b.above && <text x={cx} y={y(hi) - 2} fontSize={11} textAnchor="middle" fill="var(--muted)">{fitText(`▲ P${pct(Number(tail.hi))} 초과 ${b.above.toLocaleString()}건`, band - 4, 11)}</text>}
-              {tail && !!b.below && <text x={cx} y={y(lo) + 11} fontSize={11} textAnchor="middle" fill="var(--muted)">{fitText(`▼ P${pct(Number(tail.lo))} 미만 ${b.below.toLocaleString()}건`, band - 4, 11)}</text>}
-              {i % every === 0 && <text x={cx} y={H - 6} fontSize={11} textAnchor="middle" fill="var(--muted)">{fitText(b.name, band * every - 4, 11)}</text>}{/* 그룹이 많으면 몇 칸마다 하나(이름 전부는 툴팁) */}
+              {tail && !!b.above && <text x={cx} y={y(hi) - 2} fontSize={font} textAnchor="middle" fill="var(--muted)">{fitText(`▲ P${pct(Number(tail.hi))} 초과 ${b.above.toLocaleString()}건`, band - 4, font)}</text>}
+              {tail && !!b.below && <text x={cx} y={y(lo) + font} fontSize={font} textAnchor="middle" fill="var(--muted)">{fitText(`▼ P${pct(Number(tail.lo))} 미만 ${b.below.toLocaleString()}건`, band - 4, font)}</text>}
+              {i % every === 0 && <text x={cx} y={H - 6 * s} fontSize={font} textAnchor="middle" fill="var(--muted)">{fitText(b.name, band * every - 4, font)}</text>}{/* 그룹이 많으면 몇 칸마다 하나(이름 전부는 툴팁) */}
             </g>
           );
         })}

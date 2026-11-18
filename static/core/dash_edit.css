@@ -1,75 +1,75 @@
 /* 대시보드 편집 화면(dashboard.html): 12칸 격자, 카드 모음(왼쪽), 카드 설정(오른쪽), 차트 선반, 카운터 경고 */
-.d-main { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:start; gap:12px; padding:0 18px 18px; }
-.d-main > aside { position:sticky; top:0; width:min(280px, 28vw); max-height:calc(100vh - 160px); overflow:auto; border:1px solid var(--line); border-radius:var(--r-card); background:var(--card); padding:12px 14px; }
+.d-main { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:start; gap:.75rem; padding:0 1.125rem 1.125rem; }
+.d-main > aside { position:sticky; top:0; width:min(17.5rem, 28vw); max-height:calc(100vh - 10rem); overflow:auto; border:1px solid var(--line); border-radius:var(--r-card); background:var(--card); padding:.75rem .875rem; }
 .d-main > div { min-width:0; grid-column:2; }  /* 칸을 정해 둔다: 카드 모음(1칸)을 닫아도 보드가 가운데, 설정 패널이 오른쪽에 남는다 */
 .d-main > #d-gallery-box { grid-column:1; }
 .d-main > #d-panel { grid-column:3; }
 /* 카드 추가 서랍(AddCardMenu, fill이 아닐 때 #d-add): 카드 설정 패널과 같은 오른쪽 칸. 위 제목·닫기, 가운데만 스크롤, 아래 [카드 추가]·[닫기] 고정 */
-.d-main > #d-add { grid-column:3; position:sticky; top:0; width:min(360px, 34vw); max-height:calc(100vh - 160px); display:flex; flex-direction:column; gap:var(--sp-2); overflow:hidden; border:1px solid var(--line); border-radius:var(--r-card); background:var(--card); padding:var(--sp-3) var(--sp-4); }
+.d-main > #d-add { grid-column:3; position:sticky; top:0; width:min(22.5rem, 34vw); max-height:calc(100vh - 10rem); display:flex; flex-direction:column; gap:var(--sp-2); overflow:hidden; border:1px solid var(--line); border-radius:var(--r-card); background:var(--card); padding:var(--sp-3) var(--sp-4); }
 #d-add .phead { flex:none; }
 #d-add .d-add-body { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:var(--sp-2); }
 #d-add .d-add-foot { flex:none; margin:0; padding-top:var(--sp-2); border-top:1px solid var(--line); }
 .cardmenu .cm-kinds { display:flex; flex-direction:column; gap:var(--sp-1); margin:0; }
-.cardmenu .cm-groups { display:flex; flex-wrap:wrap; gap:var(--sp-1); padding-bottom:6px; border-bottom:1px solid var(--line); }
+.cardmenu .cm-groups { display:flex; flex-wrap:wrap; gap:var(--sp-1); padding-bottom:.375rem; border-bottom:1px solid var(--line); }
 .cardmenu .cm-groups .cur { color:var(--text); font-weight:600; }  /* 지금 고른 종류가 든 묶음 */
 .cardmenu .cm-kind-list { display:flex; flex-direction:column; gap:var(--sp-1); }
-.cardmenu .cm-kind { display:flex; gap:8px; align-items:baseline; text-align:left; background:none; border:1px solid var(--line); border-radius:var(--r-ctl); padding:5px 9px; min-height:24px; color:var(--text); transition:border-color .15s, background-color .15s; }
+.cardmenu .cm-kind { display:flex; gap:.5rem; align-items:baseline; text-align:left; background:none; border:1px solid var(--line); border-radius:var(--r-ctl); padding:.3125rem .5625rem; min-height:1.5rem; color:var(--text); transition:border-color .15s, background-color .15s; }
 .cardmenu .cm-kind b { flex:none; font-size:var(--fs-sm); }
 .cardmenu .cm-kind span { color:var(--muted); font-size:var(--fs-xs); }
 .cardmenu .cm-kind.on { border-color:var(--accent); background:var(--accent-bg); }
-.cardmenu .cm-more > summary { cursor:pointer; color:var(--muted); font-weight:600; min-height:24px; }
+.cardmenu .cm-more > summary { cursor:pointer; color:var(--muted); font-weight:600; min-height:1.5rem; }
 .cardmenu .cm-more[open] { display:flex; flex-direction:column; gap:var(--sp-2); }
-.d-main > aside h5 { margin:12px 0 6px; font-size:var(--fs-sm); }
+.d-main > aside h5 { margin:.75rem 0 .375rem; font-size:var(--fs-sm); }
 .d-main > aside.hidden { display:none; }
-.d-alerts { margin:0 28px 8px; padding:8px 12px; border:1px solid var(--err); border-radius:var(--r-card); color:var(--err); font-size:var(--fs-sm); }
+.d-alerts { margin:0 1.75rem .5rem; padding:.5rem .75rem; border:1px solid var(--err); border-radius:var(--r-card); color:var(--err); font-size:var(--fs-sm); }
 .d-alerts.hidden { display:none; }
-.board.grid { grid-template-columns:repeat(12, minmax(0, 1fr)); grid-auto-rows:40px; gap:10px; align-items:stretch; padding-left:10px; padding-right:10px; }
-.board.grid.drop-ready { outline:2px dashed var(--accent); outline-offset:-4px; }
+.board.grid { grid-template-columns:repeat(12, minmax(0, 1fr)); grid-auto-rows:2.5rem; gap:.625rem; align-items:stretch; padding-left:.625rem; padding-right:.625rem; }
+.board.grid.drop-ready { outline:.125rem dashed var(--accent); outline-offset:-.25rem; }
 .board.grid .bcard { display:flex; flex-direction:column; min-height:0; overflow:hidden; position:relative; cursor:default; }
-.board.grid .bhead.movable { cursor:grab; touch-action:none; user-select:none; flex-wrap:wrap; row-gap:2px; }
+.board.grid .bhead.movable { cursor:grab; touch-action:none; user-select:none; flex-wrap:wrap; row-gap:.125rem; }
 .board.grid .bhead.movable .btitle { flex-basis:5em; }  /* 좁은 카드에서는 단추가 아랫줄로 내려가 이름이 보인다 */
 .board.grid .bhead.movable .ib:first-of-type { margin-left:auto; }
 .bat { flex:none; margin:0; white-space:nowrap; font-variant-numeric:tabular-nums; }  /* 카드 머리 오른쪽의 값을 구한 시각 */
 .board.grid .bhead.movable .bat { order:1; flex-basis:100%; }  /* 편집 중에는 단추에 자리를 내주고 이름 아랫줄로 */
-.board.grid .bcard.dragging { opacity:.8; box-shadow:0 8px 24px rgba(0, 0, 0, .25); z-index:2; }
+.board.grid .bcard.dragging { opacity:.8; box-shadow:0 .5rem 1.5rem rgba(0, 0, 0, .25); z-index:2; }
 .board.grid .bcard.dragging .bhead.movable { cursor:grabbing; }
 .board.grid .bcard.editing { border-color:var(--accent); }
 .board.grid .bbody { flex:1; aspect-ratio:auto; max-height:none; min-height:0; }
-.board.grid .bhead .ib { width:26px; height:26px; flex:none; font-size:var(--fs-sm); }
+.board.grid .bhead .ib { width:1.625rem; height:1.625rem; flex:none; font-size:var(--fs-sm); }
 .bbadge { color:var(--accent); font-weight:700; flex:none; }
-.bresize { position:absolute; right:0; bottom:0; width:18px; height:18px; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg, transparent 52%, var(--faint) 52%, var(--faint) 60%, transparent 60%, transparent 72%, var(--faint) 72%, var(--faint) 80%, transparent 80%); }
-.gal { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
-.gal-tile { display:flex; flex-direction:column; gap:2px; border:1px solid var(--line); border-radius:var(--r-card); padding:6px 8px; cursor:grab; background:var(--bg); font-size:var(--fs-xs); }
+.bresize { position:absolute; right:0; bottom:0; width:1.125rem; height:1.125rem; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg, transparent 52%, var(--faint) 52%, var(--faint) 60%, transparent 60%, transparent 72%, var(--faint) 72%, var(--faint) 80%, transparent 80%); }
+.gal { display:grid; grid-template-columns:1fr 1fr; gap:.375rem; }
+.gal-tile { display:flex; flex-direction:column; gap:.125rem; border:1px solid var(--line); border-radius:var(--r-card); padding:.375rem .5rem; cursor:grab; background:var(--bg); font-size:var(--fs-xs); }
 .gal-tile:hover { border-color:var(--accent); }
 .gal-tile .hint { margin:0; font-size:var(--fs-xs); }
-.phead { display:flex; align-items:center; justify-content:space-between; margin:-4px -6px 8px 0; }
+.phead { display:flex; align-items:center; justify-content:space-between; margin:-.25rem -.375rem .5rem 0; }
 .phead b { font-size:var(--fs-md); }
-.prow { display:flex; gap:6px; flex-wrap:wrap; align-items:flex-end; margin:6px 0; }
-.pfield { display:flex; flex-direction:column; gap:2px; margin:6px 0; }
+.prow { display:flex; gap:.375rem; flex-wrap:wrap; align-items:flex-end; margin:.375rem 0; }
+.pfield { display:flex; flex-direction:column; gap:.125rem; margin:.375rem 0; }
 .pfield input, .pfield select { width:100%; }
 .prow .pfield { margin:0; }
 .pdata .cardmenu, .pdata > div { max-width:100%; }
-.shelf { display:flex; flex-direction:column; gap:8px; }
-.shelf-cols { display:flex; flex-wrap:wrap; gap:4px; max-height:120px; overflow:auto; }
-.shelf-chip, .shelf-on { display:inline-block; border-radius:var(--r-pill); padding:1px 10px; font-size:var(--fs-xs); border:1px solid var(--line); background:var(--bg); cursor:grab; user-select:none; }
+.shelf { display:flex; flex-direction:column; gap:.5rem; }
+.shelf-cols { display:flex; flex-wrap:wrap; gap:.25rem; max-height:7.5rem; overflow:auto; }
+.shelf-chip, .shelf-on { display:inline-block; border-radius:var(--r-pill); padding:1px .625rem; font-size:var(--fs-xs); border:1px solid var(--line); background:var(--bg); cursor:grab; user-select:none; }
 .shelf-chip.n { border-color:var(--c1); } .shelf-chip.d { border-color:var(--c2); } .shelf-chip.t { border-color:var(--c3); }
-.shelf-chip.held { outline:2px solid var(--accent); }
-.shelf-slots { display:grid; gap:6px; }
-.shelf-slot { border:1px dashed var(--line); border-radius:var(--r-card); padding:6px 8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; min-height:34px; }
+.shelf-chip.held { outline:.125rem solid var(--accent); }
+.shelf-slots { display:grid; gap:.375rem; }
+.shelf-slot { border:1px dashed var(--line); border-radius:var(--r-card); padding:.375rem .5rem; display:flex; flex-wrap:wrap; gap:.375rem; align-items:center; min-height:2.125rem; }
 .shelf-slot.over { border-color:var(--accent); background:var(--bg); }
-.shelf-slot b { font-size:var(--fs-xs); min-width:70px; }
+.shelf-slot b { font-size:var(--fs-xs); min-width:4.375rem; }
 .shelf-on { cursor:pointer; background:var(--card); }
-.shelf-wrap { display:inline-flex; align-items:center; gap:2px; }
-.shelf-wrap .ghost { padding:0 6px; }
-.shelf-form { display:inline-flex; gap:4px; align-items:center; flex-wrap:wrap; }
+.shelf-wrap { display:inline-flex; align-items:center; gap:.125rem; }
+.shelf-wrap .ghost { padding:0 .375rem; }
+.shelf-form { display:inline-flex; gap:.25rem; align-items:center; flex-wrap:wrap; }
 .shelf-msg { margin:0; }
 /* 위쪽 도구 줄: 대시보드 고르기 | 카드 만들기(주 동작 [카드 추가]) | 오른쪽 끝에 연결·다시 구하기·설정. 그림 줄: 선택 | 그림 형식과 저장 | 보고서 */
-.d-tool { flex-wrap:wrap; gap:8px; }
-.d-sep { flex:none; width:1px; height:22px; background:var(--line); margin:0 4px; }
-.board-view .board-ctl .ghost { height:28px; }
+.d-tool { flex-wrap:wrap; gap:.5rem; }
+.d-sep { flex:none; width:1px; height:1.375rem; background:var(--line); margin:0 .25rem; }
+.board-view .board-ctl .ghost { height:1.75rem; }
 /* 카드 설정 패널을 접으면 ‹와 이름만 있는 세로 띠(UI_PLAN C: ×로 닫지 않는다) */
-.d-main > #d-panel.folded { width:40px; padding:0; overflow:hidden; }
+.d-main > #d-panel.folded { width:2.5rem; padding:0; overflow:hidden; }
 #d-panel.folded > :not(.side-strip) { display:none !important; }
-#d-panel > .side-strip { display:flex; flex-direction:column; align-items:center; gap:10px; width:100%; padding:14px 0; background:var(--card); border:0; border-radius:0; color:var(--muted); font-weight:600; }
+#d-panel > .side-strip { display:flex; flex-direction:column; align-items:center; gap:.625rem; width:100%; padding:.875rem 0; background:var(--card); border:0; border-radius:0; color:var(--muted); font-weight:600; }
 #d-panel > .side-strip:hover { color:var(--text); background:var(--bg); }
 .prow .btn.on { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
