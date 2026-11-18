@@ -22,9 +22,9 @@ def test_not_built_says_how_to_build(client, monkeypatch, tmp_path):
 
 def test_spec_requires_web_out():
     """exe 빌드는 web/out을 늘 넣고, 없으면 멈춘다(옛 화면이 없어 빠진 채 묶이면 대시보드가 빈다)."""
-    spec = (ROOT / "DataLoupe.spec").read_text(encoding="utf-8")
-    assert '("web/out", "web/out")' in spec and 'if not os.path.isfile("web/out/dashboard.html"):' in spec and "sys.exit(" in spec
-    assert 'if os.path.isdir("web/out")' not in spec
+    build = (ROOT / ".github/workflows/build-exe.yml").read_text(encoding="utf-8")
+    assert '--add-data "web/out:web/out"' in build and "if (-not (Test-Path web/out/dashboard.html)) {" in build
+    assert build.index("Test-Path web/out/dashboard.html") < build.index("pyinstaller desktop.py")
 
 
 def test_next_dashboard(client, monkeypatch, tmp_path):
