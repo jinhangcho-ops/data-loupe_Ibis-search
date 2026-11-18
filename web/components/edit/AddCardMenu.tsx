@@ -73,8 +73,9 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
     myMetrics().then(r => setMetrics(r.legacy.map(m => m.name))).catch(() => setMetrics([]));  // KPI의 지표는 지표 파일의 이름(서버 metric_scalar가 metric_file에서 찾는다, 옛 /api/metrics)
     getTargets().then(t => { setT(t); setPath(t.path); }).catch(e => setNote(e.message));
     root.current?.querySelector<HTMLElement>("select, input")?.focus();
+    if (!fill) root.current?.scrollIntoView({ block: "nearest" });  // 도구 줄이 여러 줄이면 아래 [카드 추가]가 화면 밖이라, 서랍 전체가 보이게 한 번 맞춘다
     return () => back?.focus?.();
-  }, []);
+  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // 테이블을 고르면 그 컬럼을 받아 날짜 컬럼이 하나뿐일 때 자동으로 채운다
   useEffect(() => {
@@ -210,7 +211,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       {is(...WITH_DATE) && <Sel label="날짜 컬럼" title="대시보드 기간과 기준일을 이 날짜 컬럼에 걸어요. 날짜 컬럼이 하나뿐이면 자동으로 골라요" value={f.date} onChange={v => set("date", v)} options={dates} blank="(없음: 기간을 걸지 않음)" />}
       {is("kpi", "donut_kpi", "summary", "stripes", "blocks", "target_trend", "bullet") && (
         <div className="hint cm-field">목표
-          <span className="[display:flex] gap-1.5 items-center">
+          <span className="[display:flex] flex-wrap justify-end min-w-0 gap-1.5 items-center">
             <input type="number" aria-label="목표 숫자" placeholder="목표 숫자" className="w-[6.875rem]" value={f.targetValue} onChange={e => set("targetValue", e.target.value)} /><span className="cm-word">또는</span>
             <select aria-label="목표 이름" title="목표 파일에서 이름으로 찾아요" value={f.targetName} onChange={e => set("targetName", e.target.value)}>
               <option value="">(이름으로 찾지 않음)</option>{targetNames.map(n => <option key={n} value={n}>{n}</option>)}
@@ -263,7 +264,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
               <div role="group" aria-label={`단계 ${i + 1}`} className="[display:flex] flex-col gap-1">
                 <input aria-label="단계 이름" placeholder="단계 이름" value={r.name} onChange={e => setStage(i, { name: e.target.value })} />
                 <textarea aria-label="조건 줄" rows={2} value={r.conds} placeholder={"한 줄에 하나, 줄끼리 and. 예: event in purchase, refund"} className="w-full [font-size:.75rem]" onChange={e => setStage(i, { conds: e.target.value })} />
-                <span className="[display:flex] gap-1.5 items-center">
+                <span className="[display:flex] flex-wrap justify-end min-w-0 gap-1.5 items-center">
                   <select aria-label="재방문" title="첫 활동 뒤 N일 안에 다시 온 사람" value={r.revisit === "" ? "" : REVISIT_CHOICES.map(String).includes(r.revisit) ? r.revisit : REVISIT_CUSTOM} onChange={e => setStage(i, { revisit: e.target.value === REVISIT_CUSTOM ? REVISIT_CUSTOM_START : e.target.value })}>
                     <option value="">재방문 없음</option>
                     {REVISIT_CHOICES.map(n => <option key={n} value={String(n)}>{n}일</option>)}
@@ -305,7 +306,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
         <>
           {(is("sankey") || f.fDefine === "values") && <Txt label="단계 순서" title={is("sankey") ? "단계 값을 순서대로 쉼표로 나눠 적어요. 2~10개" : "단계 값을 순서대로 쉼표로 나눠 적어요. 1~10개"} placeholder="예: 방문, 장바구니, 결제" value={f.fSteps} onChange={v => set("fSteps", v)} />}
           <div className="hint cm-field">기간 제한
-            <span className="[display:flex] gap-1.5 items-center">
+            <span className="[display:flex] flex-wrap justify-end min-w-0 gap-1.5 items-center">
               <input type="number" aria-label="기간 제한 숫자" min={0} step="any" placeholder="비움" className="w-[5rem]" value={f.fWin} onChange={e => set("fWin", e.target.value)} />
               <select aria-label="기간 제한 단위" value={f.fUnit} onChange={e => set("fUnit", e.target.value)}><option value="minute">분</option><option value="hour">시간</option><option value="day">일</option></select><span className="cm-word">안에</span>
             </span>
