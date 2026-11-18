@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run --config tests/vitest.config.mts"
+    "test": "vitest run --config tests/vitest.config.mts",
+    "build:css": "tailwindcss -i styles/app.tw.css -o ../static/core/app.css --minify"
   },
   "dependencies": {
     "next": "16.4.6",
@@ -16,11 +17,13 @@
     "recharts": "^3.10.1"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "^4.3.5",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
+    "tailwindcss": "^4.3.5",
     "typescript": "^5",
     "vitest": "^3.2.4"
   }

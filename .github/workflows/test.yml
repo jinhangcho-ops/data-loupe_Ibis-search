@@ -23,6 +23,8 @@ jobs:
       - run: npm ci --prefix web
       - run: npm run lint --prefix web  # eslint(빌드는 타입만 보고 lint 규칙은 보지 않는다)
       - run: npm test --prefix web  # vitest(순수 계산·카드 렌더)
+      - run: npm run build:css --prefix web  # Tailwind → static/core/app.css
+      - run: git diff --exit-code -- static/core/app.css  # 저장소의 app.css가 낡았으면(build:css를 안 돌리고 올림) 실패
       - run: npm run build --prefix web
       - run: pip install -c constraints.txt -r requirements.txt -r requirements-dev.txt
       - run: python tests.py

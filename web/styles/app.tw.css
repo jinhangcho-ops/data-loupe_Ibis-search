@@ -1,0 +1,53 @@
+/* Tailwind 입력. `npm run build:css`가 static/core/app.css를 만든다(모든 화면이 그 파일 하나를 읽는다. CDN 없음).
+   색·크기는 common.css의 CSS 변수에 묶는다: 밝은·어두운 테마, rem, [화면 크기]가 그대로 따라온다. */
+@layer theme, components, utilities;
+@import "tailwindcss/theme" layer(theme);
+@import "tailwindcss/utilities" layer(utilities) source(none);
+
+@source "../../static/**/*.html";
+@source "../../static/**/*.js";
+@source "../app/**/*.tsx";
+@source "../components/**/*.tsx";
+/* 옛 CSS가 다른 뜻으로 쓰는 이름(.grid 등)이나 JS·TSX의 보통 낱말이 유틸리티로 만들어지지 않게 막는다. 부품을 옮기며(T1~) 하나씩 푼다 */
+@source not inline("{block,blur,border,filter,fixed,flex,grid,grow,hidden,inline,inline-flex,ordinal,relative,resize,ring,static,table,transform,visible,w-max}");
+
+@theme inline {
+  --color-*: initial;
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-head: var(--head);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-accent-bg: var(--accent-bg);
+  --color-accent-line: var(--accent-line);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-err: var(--err);
+  --color-c1: var(--c1);
+  --color-c2: var(--c2);
+  --color-c3: var(--c3);
+  --color-c4: var(--c4);
+  --color-c5: var(--c5);
+  --color-c6: var(--c6);
+  --color-c7: var(--c7);
+  --color-c8: var(--c8);
+  --text-*: initial;
+  --text-xs: var(--fs-xs);
+  --text-sm: var(--fs-sm);
+  --text-md: var(--fs-md);
+  --text-lg: var(--fs-lg);
+  --text-xl: var(--fs-xl);
+  --text-2xl: var(--fs-2xl);
+  --radius-*: initial;
+  --radius-card: var(--r-card);
+  --radius-ctl: var(--r-ctl);
+  --radius-pill: var(--r-pill);
+  --spacing-ctl-sm: var(--h-sm);
+  --spacing-ctl-md: var(--h-md);
+  --spacing-ctl-lg: var(--h-lg);
+}
