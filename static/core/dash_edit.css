@@ -47,6 +47,7 @@
 .prow { display:flex; gap:.375rem; flex-wrap:wrap; align-items:flex-end; margin:.375rem 0; }
 .pfield { display:flex; flex-direction:column; gap:.125rem; margin:.375rem 0; }
 .pfield input, .pfield select { width:100%; }
+:where(#d-panel) input:where(:not([type=checkbox], [type=radio], [type=range], [type=color])) { height:var(--h-md); }  /* 패널은 글자가 작아 입력 칸이 3px 낮았다. :where라 .bunit 같은 class 높이가 이긴다 */
 .prow .pfield { margin:0; }
 .pdata .cardmenu, .pdata > div { max-width:100%; }
 .shelf { display:flex; flex-direction:column; gap:.5rem; }

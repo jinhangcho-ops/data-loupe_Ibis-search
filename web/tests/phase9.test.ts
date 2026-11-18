@@ -341,6 +341,7 @@ describe("한데 묶기(autoSeries·autoEnv)", () => {
       const r = autoSeries(card({ type }), many, env());
       expect(r.s.labels, type).toHaveLength(20);
       expect(r.notes.join(" "), type).not.toContain("기타");
+      expect(r.s.labels, type).toEqual(names(20));  // 값이 뒤로 갈수록 커도 받은 차례 그대로(값 큰 순으로 뒤집지 않는다)
     }
   });
 });

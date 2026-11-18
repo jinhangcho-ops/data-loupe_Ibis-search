@@ -163,6 +163,7 @@ export function axisOrder(s: Series, env: Pick<AutoEnv, "xKind" | "scale" | "lev
   if ((env.scale === "ordinal" || env.scale === "interval") && env.levels?.length) return { rule: "ordinal", index: levelIndex(labels, env.levels), stack: null };
   const calendar = calendarIndex(labels, env.weekStart);
   if (calendar) return { rule: "calendar", index: calendar, stack: null };
+  if (GRID_3D.includes(type)) return { rule: "user", index: id, stack: null };  // 3차원 격자는 받은 차례(X 순) 그대로: 값 큰 순으로 놓으면 지형이 달라 보인다
   const ds = s.datasets;
   if (STACKED.includes(type)) return { rule: "stack", index: valueIndex(labelKeys(ds, "")), stack: stackIndex(ds) };
   if (ds.length >= 2) return { rule: "grouped", index: valueIndex(labelKeys(ds, groupBy)), stack: null };

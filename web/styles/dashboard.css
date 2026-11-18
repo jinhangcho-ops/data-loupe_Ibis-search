@@ -26,7 +26,7 @@ body.dash-only .bcard.sel, body.dash-only .bcard.editing { border-color:var(--li
 /* N7: 켜진 도구 단추(편집), 카드·카드 모음 칸·패널 단추의 키보드 초점 링, 크기 손잡이 누름 영역 1.5rem */
 .d-tool .btn.on { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
 /* 머리 줄(시안 DashboardBody): 대시보드 고르기는 제목처럼 크게, 기간 칸은 한 줄(안내는 있을 때만 옆에), "N분 전 최신화"는 작은 글자 */
-.d-tool .d-pick { font-size:var(--fs-xl); font-weight:700; }
+.d-tool .d-pick { height:var(--h-lg); font-size:var(--fs-xl); font-weight:700; }
 .d-tool .d-per { flex-direction:row; align-items:center; gap:.5rem; }
 .d-tool .d-per .row { margin:0; width:min(15rem, 40vw); }
 .d-tool .d-per .dc-note:not(.bad) { display:none; }  /* 머리 줄에서는 잘못 쓴 기간만 알린다(읽은 기간은 칸에 그대로 보이고, 설정 창에는 안내가 다 나온다) */

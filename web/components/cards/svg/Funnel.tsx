@@ -1,11 +1,11 @@
 "use client";
 // funnel: 흐름(퍼널) 생키 + 한 줄 설명 + 단계별 표(옛 paintFunnel·funnel.js sankeySvg). 색: 막대는 팔레트 첫 색, 다음 단계 띠는 초록, 이탈 띠는 주황(카드 색 "단계 막대"·"다음 단계"·"이탈"로 바꿈)
-import { EACH_TEXT, FUNNEL_COLUMNS, fpct, funnelColors, funnelRows, funnelSentence, gapRows, ladderLayout, sankeyLayout, windowText, type Step } from "./__pure__";
+import { EACH_TEXT, FUNNEL_COLUMNS, fitText, fpct, funnelColors, funnelRows, funnelSentence, gapRows, ladderLayout, sankeyLayout, windowText, type Step } from "./__pure__";
 import { useRootScale } from "../chart/scale";
 import { Box, type P } from "./common";
 
 // 배율 1의 값: 단계 이름 글자 수, 생키 위·아래 글자 자리, 사다리꼴 그림 높이·도형 몫, 단계마다 두 줄 글에 더 줄 높이(배율 1을 넘는 만큼)
-const NAME_MAX = 14, TOP = 30, BOTTOM = 40, LADDER_H = 340, SHAPE_SHARE = 0.5, ROW_TEXT = 36;
+const NAME_MAX = 14, NAME_GAP = 4, TOP = 30, BOTTOM = 40, LADDER_H = 340, SHAPE_SHARE = 0.5, ROW_TEXT = 36;
 const short = (s: string, max: number) => (s.length > max ? s.slice(0, max - 1) + "…" : s);
 
 export function Funnel({ card, colors }: P) {
@@ -43,7 +43,7 @@ export function Funnel({ card, colors }: P) {
             const anchor = i === 0 ? "start" : i === g.bars.length - 1 ? "end" : "middle", lx = anchor === "start" ? b.x : anchor === "end" ? b.x + b.w : b.x + b.w / 2;
             return (
               <g key={"t" + i}>
-                {label(lx, 16 * s, short(b.name, Math.floor(NAME_MAX / s)), anchor, { fontWeight: 600 })}
+                {label(lx, 16 * s, fitText(short(b.name, Math.floor(NAME_MAX / s)), (g.bars[1] ? g.bars[1].x - g.bars[0].x : g.width) - NAME_GAP, 11 * s), anchor, { fontWeight: 600 })}
                 {label(lx, g.height - 22 * s, `${b.users.toLocaleString()}명`, anchor)}
                 {label(lx, g.height - 8 * s, i ? fpct(steps[i].from_first) : "100%", anchor, { opacity: 0.7 })}
               </g>

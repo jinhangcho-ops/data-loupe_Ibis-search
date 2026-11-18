@@ -6,7 +6,7 @@ import { useRootScale } from "../chart/scale";
 import { cardFormat, cardTarget, cardValue, growFont } from "./__pure__";
 import { Frame, type P } from "./common";
 
-const MAIN = 22, LABEL = 11, CORNER = 32;  // 가운데 값·이름의 기준 글자 크기, 꼭지점 칸 두 줄의 높이(화면 크기 배율 1)
+const MAIN = 22, LABEL = 11, CORNER = 32, HOLE_FIT = 0.85, MAIN_MIN = 12;  // 가운데 값·이름의 기준 글자 크기, 꼭지점 칸 두 줄의 높이(화면 크기 배율 1)
 
 type SlotLike = { label: string; format?: string; unit_text?: string; color?: string };
 
@@ -41,7 +41,7 @@ export function Donut({ card, colors, range, merge }: P) {
     }
   }
   const corners = [[8, 18 * s, "start"], [W - 8, 18 * s, "end"], [8, H - 22 * s, "start"], [W - 8, H - 22 * s, "end"]] as const;
-  const hole = 2 * r - sw, big = fmt(0), name = slots[0]?.label ?? "", km = growFont(big, hole, MAIN, s) / MAIN, kn = growFont(name, hole, LABEL, s) / LABEL;  // 가운데 글은 고리 안쪽 폭까지만 키운다
+  const hole = (2 * r - sw) * HOLE_FIT, big = fmt(0), name = slots[0]?.label ?? "", km = growFont(big, hole, MAIN, s, MAIN_MIN) / MAIN, kn = growFont(name, hole, LABEL, s) / LABEL;  // 가운데 글은 고리 안쪽 폭까지만 키운다
   return (
     <Frame w={W} h={H} label={card.title}>
       {kids}
