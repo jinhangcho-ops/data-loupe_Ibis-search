@@ -79,7 +79,7 @@ def test_connect_card_file_picker():
     html, js, css = read("connect.html"), read("common.js"), read("common.css")
     flat = between("connect.html", '<div id="flat"', '<div id="url-box"')
     assert flat.index('id="flat-find"') < flat.index('id="flat-all"') < flat.index('id="flat-list"') < flat.index('id="flat-picked"')
-    assert ".seg2 label { justify-content:center; }" in css and ".conn-card .kinds { justify-content:center; }" in css  # 가운데 정렬
+    assert ".seg2 label { justify-content:center; }" in css and ".conn-card .kinds" not in css  # 탭 글자는 가운데, 파일 종류 칩은 다른 칸처럼 왼쪽
     assert "#flat-list label { display:flex;" in css and "max-height:16.25rem" in css and "#flat-list label:hover" in css  # 큰 줄, 줄 전체 클릭
     lists = between("common.js", "async function listFiles()", "connMsg(more")
     assert 'if (!d.files.length && d.flat.length) $("file").value = FLAT;' in lists and '$("file").classList.toggle("hidden", !d.files.length && !!d.flat.length);' in lists  # 표 형식 파일뿐이면 고르는 칸 없이

@@ -1,8 +1,9 @@
 // 컬럼 우클릭의 전처리 메뉴(P4)와 값 고르기 상자들(P5-값·P11). 쿼리·전처리 화면이 함께 쓴다.
 // - PrepMenu.load(): 단계 목록(GET /api/prep/ops)을 한 번 받아 둔다. items()는 받아 둔 목록으로 바로 항목을 돌려준다(못 받았으면 빈 목록을 주고 받기 시작).
-// - PrepMenu.items({ column, type, sample, onPick, values, flat }): 우클릭 메뉴 항목 [[라벨, 실행, 안내], …]. 라벨은 "그룹 › 이름", 컬럼 종류에 안 맞으면 실행이 null(흐리게)이고 안내가 이유.
+// - PrepMenu.items({ column, type, sample, onPick, values, flat, units }): units는 이 연결이 담을 수 있는 날짜시간 단위(서버 cast_units, T1: 타입 바꾸기 상자의 단위 목록에서 나머지를 뺀다). 우클릭 메뉴 항목 [[라벨, 실행, 안내], …]. 라벨은 "그룹 › 이름", 컬럼 종류에 안 맞으면 실행이 null(흐리게)이고 안내가 이유.
 //   flat: 테이블 파일 연결이면 true — 칸 상자에서 파일 연결이 못 하는 옵션(빈 값 처리의 앞·뒤 값 채우기)을 숨긴다(전처리 정리 칸 OPS.fill과 같은 규칙).
 //   설정 칸이 있는 단계는 작은 상자에서 값을 받은 뒤 onPick(단계id, 값), 값 바꿔 쓰기(replace)는 replaceBox로 받는다.
+// - PrepMenu.menu(같은 인자): items()의 항목을 묶음 3개(BUNDLES: 글자 다듬기·타입 바꾸기·새 컬럼 만들기)의 하위 메뉴로 담은 [[묶음 이름, null, "", 항목들], …]. 화면의 머리글 메뉴는 이것을 쓴다.
 // - PrepMenu.replaceBox({ column, type, values, onApply(spec) }): 치환 상자. spec은 서버 prep_ops replace의 새 꼴(how·pairs·ignore_case·trim·rest·to_new).
 // - PrepMenu.valuesBox({ column, values, onApply(keep, values) }): 값 목록에 체크해 제외(keep=false)·만 보기(keep=true). "(빈 값)"은 null.
 // - PrepMenu.value(id, st, kind): 단계 칸의 입력 상태 → 서버로 보낼 값(전처리 화면 OPS도 이것을 쓴다. Phase 6 단계 flags·gfill·power·cut·others·freq·target·ordinal 포함). 쓸 수 없으면 null.
@@ -20,19 +21,29 @@ const PrepMenu = (() => {
   const looksJson = sample => (sample?.() ?? []).slice(0, 5).filter(v => typeof v === "string" && /^\s*[[{]/.test(v) && parsed(v)).length >= 3;
 
   const FLAT_HIDDEN = { fill: { how: ["prev", "next"] } };  // 테이블 파일 연결은 행 차례가 없어 앞·뒤 값으로 채울 수 없다
-  function items({ column, type, sample, onPick, values, flat }) {
+  function items({ column, type, sample, onPick, values, flat, units }) {
     if (!ops) { load().catch(e => console.warn("전처리 단계 목록을 못 받았어요:", e.message)); return []; }
     const kind = kindOf(type), json = kind === "str" && looksJson(sample), groups = [...new Set(ops.map(o => o.group))];
     return [...ops].sort((a, b) => groups.indexOf(a.group) - groups.indexOf(b.group)).map(op => {
       const fits = op.need === "any" || op.need === kind || (json && (op.need === "struct" || op.need === "list"));
-      return [`${op.group} › ${op.label}`, fits ? () => pickOp(op, column, kind, onPick, values, flat) : null, fits ? "" : `${NEED[op.need] ?? op.need} 컬럼에만 쓸 수 있어요`];
+      return [`${op.group} › ${op.label}`, fits ? () => pickOp(op, column, kind, onPick, values, flat, units) : null, fits ? "" : `${NEED[op.need] ?? op.need} 컬럼에만 쓸 수 있어요`];
     });
   }
-  function pickOp(op, column, kind, onPick, values, flat) {
+  // 머리글 메뉴의 묶음 3개(M1): items()의 항목을 그룹("그룹 › 이름"의 앞)별로 하위 메뉴에 담는다 → [[묶음 이름, null, "", 항목들], …](common.js ctxMenu의 묶음 꼴).
+  // 빈 값·숫자·범주 그룹은 세 묶음 이름에 딱 맞지 않지만 첫 단계를 9개 안으로 두려고 값을 제자리에서 다듬는 "글자 다듬기"에 둔다. 표에 없는 그룹도 거기로(항목이 사라지지 않게).
+  const BUNDLES = [["글자 다듬기", ["글자", "빈 값", "숫자", "범주"]], ["타입 바꾸기", ["타입"]], ["새 컬럼 만들기", ["새 컬럼"]]];
+  function menu(opts) {
+    const all = items(opts), known = BUNDLES.flatMap(b => b[1]), groupOf = i => i[0].split(" › ")[0];
+    if (!all.length) return [];
+    return BUNDLES.map(([name, groups], n) => [name, null, "", all.filter(i => groups.includes(groupOf(i)) || (!n && !known.includes(groupOf(i))))]);
+  }
+  function pickOp(op, column, kind, onPick, values, flat, units) {
     if (op.id === "replace") return replaceBox({ column, type: kind, values, onApply: spec => onPick(op.id, spec) });
     if (!(op.fields ?? []).some(f => f.name)) return onPick(op.id, true);  // 칸 없는 단계(trim·label·onehot·expand …)는 true
-    fieldBox(op, column, kind, onPick, flat);
+    fieldBox(op, column, kind, onPick, flat, units);
   }
+  // (T1) 타입 바꾸기의 날짜시간 단위 옵션 중 이 연결이 담을 수 있는 것(units: 서버 cast_units)만. "단위 고르지 않음"("")은 늘 남긴다. 전처리 화면의 정리 칸도 쓴다.
+  const unitOptions = units => (ops?.find(o => o.id === "type")?.fields.find(f => f.name === "unit")?.options ?? []).filter(o => !o[0] || (units ?? []).includes(o[0]));
 
   // 화면 위 상자(.modal). 바깥을 누르거나 Esc면 닫힌다(Esc는 common.js가 바깥 누르기로 보낸다).
   function modal(title, cls, ...body) {
@@ -55,7 +66,8 @@ const PrepMenu = (() => {
     nulls: s => { const v = list(s.text); if (s.blank) v.push(""); return v.length ? v : null; },
     remove: s => s.text || null,
     regex: s => s.pattern ? [s.pattern, s.to ?? ""] : null,
-    type: (s, kind) => ({ to: s.to, ...(s.clean && kind === "str" && ["int", "float"].includes(s.to) ? { clean: true } : {}), ...(s.to === "date" && s.format ? { format: s.format } : {}) }),  // 쉼표·단위 떼기는 글자 → 숫자일 때만
+    type: (s, kind) => ({ to: s.to, ...(s.clean && kind === "str" && ["int", "float"].includes(s.to) ? { clean: true } : {}), ...(["date", "datetime"].includes(s.to) && s.format ? { format: s.format } : {}),  // 쉼표·단위 떼기는 글자 → 숫자일 때만
+      ...(s.to === "datetime" && s.unit ? { unit: s.unit } : {}) }),  // (T1) 단위는 날짜시간일 때만. 비우면 자르지 않는다
     fill: (s, kind) => {
       if (s.how === "value") { const v = kind === "num" ? num(s.value) : s.value ?? ""; return v === null || v === "" || Number.isNaN(v) ? null : { how: "value", value: v }; }
       if (s.how === "prev" || s.how === "next") return s.by ? { how: s.how, by: s.by } : null;
@@ -120,20 +132,27 @@ const PrepMenu = (() => {
   };
   const valueOf = (id, s, kind) => { if (VALUE[id]) return VALUE[id](s, kind); const v = Object.values(s); return v.length === 1 ? (v[0] === "" ? null : v[0]) : s; };  // case·scale처럼 칸 하나면 그 값
 
-  function fieldBox(op, column, kind, onPick, flat) {
+  function fieldBox(op, column, kind, onPick, flat, units) {
     const state = {}, msg = el("div", { className: "err" }), hide = flat ? FLAT_HIDDEN[op.id] ?? {} : {};
-    const rows = op.fields.map(f => {
+    const whens = [];  // [칸의 요소들, 보일 조건 {다른 칸 이름: 값}]: 조건이 안 맞으면 숨긴다(타입 바꾸기의 단위는 날짜시간일 때만, T1)
+    const sync = () => whens.forEach(([nodes, when]) => nodes.forEach(n => n.classList.toggle("hidden", Object.entries(when).some(([k, v]) => state[k] !== v))));
+    const rows = op.fields.flatMap(f => {
       if (!f.name) return el("p", { className: "hint", textContent: f.hint ?? "" });
       if (f.check) { const c = el("input", { type: "checkbox", onchange: () => { state[f.name] = c.checked; } }); state[f.name] = false; return el("label", { className: "check" }, c, f.check); }
       if (f.options) {
-        const s = named(el("select", { onchange: () => { state[f.name] = s.value; } }, ...f.options.filter(o => !(hide[f.name] ?? []).includes([].concat(o)[0])).map(o => { const [v, t] = [].concat(o); return el("option", { value: v, textContent: t ?? v }); })), f.placeholder ?? op.label);
+        const opts = (op.id === "type" && f.name === "unit" ? unitOptions(units) : f.options).map(o => [].concat(o)).filter(o => !(hide[f.name] ?? []).includes(o[0]));
+        const eg = el("p", { className: "hint" }), show = () => { eg.textContent = opts.find(o => o[0] === s.value)?.[2] ?? ""; };  // 옵션의 셋째 값은 예시 글(고른 것만 보인다)
+        const s = named(el("select", { onchange: () => { state[f.name] = s.value; show(); sync(); } }, ...opts.map(([v, t]) => el("option", { value: v, textContent: t ?? v }))), f.placeholder ?? op.label);
         state[f.name] = s.value;
-        return s;
+        const nodes = opts.some(o => o[2]) ? [s, eg] : [s];
+        if (f.when) whens.push([nodes, f.when]);
+        return nodes;
       }
       const i = named(el("input", { placeholder: f.placeholder ?? "", oninput: () => { state[f.name] = i.value; } }), f.placeholder || f.name);
       state[f.name] = "";
       return i;
     });
+    sync();
     const apply = () => {
       const v = valueOf(op.id, state, kind);
       if (v === null || Number.isNaN(v)) { msg.textContent = "칸을 알맞게 채워 주세요."; return; }
@@ -242,5 +261,5 @@ const PrepMenu = (() => {
     show();
     return m;
   }
-  return { load, items, kindOf, value: valueOf, replaceBox, valuesBox, parsePairs, replaceSpec, get ops() { return ops; } };
+  return { load, items, menu, BUNDLES, unitOptions, kindOf, value: valueOf, replaceBox, valuesBox, parsePairs, replaceSpec, get ops() { return ops; } };
 })();

@@ -2262,7 +2262,7 @@ print(json.dumps(out))
     check("주소 연결에는 적용하지 않음", hasattr(server.state["con"], "scratch"), False)
     got("/api/settings", memory=0)
     got("/api/disconnect")
-    with app.test_request_context():
+    with app.test_request_context(server.JSON_ERRORS[0]):  # API 주소라야 JSON 오류다(화면 주소는 오류 화면)
         found = [server.on_error(Exception(text))[0].get_json()["error"] for text in ("Out of Memory Error: failed to allocate", "OUT OF MEMORY", "다른 오류")]
     tip = "메모리가 모자라요. 왼쪽 메뉴 [설정]의 계산에서 메모리 한도를 올리거나 조건을 좁히세요.\n"  # 쉬운 말 한 줄 + 원문(server.plain_error)
     check("메모리 부족 오류에는 안내 문구가 붙음", found, [tip + "Out of Memory Error: failed to allocate", tip + "OUT OF MEMORY", "다른 오류"])

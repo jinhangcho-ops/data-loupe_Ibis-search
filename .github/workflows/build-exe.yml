@@ -14,6 +14,9 @@ jobs:
     runs-on: windows-2025  # 이미지 버전을 고정한다(windows-latest는 바뀌면 빌드 환경이 몰래 달라진다)
     permissions:
       contents: read  # 만들기만 한다. Releases에 올리는 쓰기 권한은 아래 release 작업에만 있다.
+    env:
+      # 기능 폴더: lazy.Later가 모듈을 이름으로 처음 쓸 때 불러와 PyInstaller가 스스로 찾지 못한다. "exe 만들기"가 통째로 넣고 "기능 모듈 확인"이 검사한다. 폴더를 더하면 여기에만 적는다.
+      FEATURE_PACKAGES: core query prep analysis metrics dashboard collect integrations geo
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -46,12 +49,17 @@ jobs:
       - run: python -m pytest tests_pytest -q
       - name: exe 만들기(dist/DataLoupe/, exe + 라이브러리 폴더)
         shell: pwsh
+        env:
+          # --collect-submodules는 pyinstaller가 프로젝트 폴더를 찾는 길에 넣기 전에 계산된다(pyinstaller 명령은 지금 폴더를 sys.path에 넣지 않는다).
+          # 이 값이 없으면 기능 폴더가 "패키지가 아님"으로 빈 목록이 되어 v2.3.8처럼 모듈이 빠진다.
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           # 대시보드 화면은 Next 빌드 결과(web/out)뿐이다. 빠진 채 묶이면 대시보드가 빈 안내만 보이므로 빌드를 멈춘다.
           if (-not (Test-Path web/out/dashboard.html)) { Write-Host "web/out이 없어요: npm ci --prefix web 뒤 npm run build --prefix web"; exit 1 }
           # exe에 넣을 DB는 core/drivers.py의 DRIVERS에서 가져온다. Java가 필요한 pyspark·flink는 뺀다.
           $drivers = (python -c "from core.drivers import DRIVERS; print(' '.join(f'--collect-submodules ibis.backends.{name} --collect-submodules {v[1]}' for name, v in DRIVERS.items() if v[-1] != 'java'))") -split ' '
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $features = -split $env:FEATURE_PACKAGES | ForEach-Object { '--collect-submodules', $_ }
           # 실행 중에 이름으로 불러오는 모듈은 PyInstaller가 찾지 못하므로 통째로 넣는다(--collect-submodules, --hidden-import).
           # 기능 패키지(core…geo)는 lazy.Later가 이름으로 처음 쓸 때 불러온다. cryptography: Oracle 접속 암호화, xlsxwriter: Excel 저장,
           # confluent_kafka: Kafka 적재, fastexcel: polars가 Excel을 읽을 때, slack_sdk: Slack 봇을 켤 때, pyproj: 좌표 변환, kiwipiepy: 워드클라우드 단어.
@@ -60,13 +68,17 @@ jobs:
             --add-data "static:static" --add-data "web/out:web/out" --add-data "constraints.txt:." `
             --copy-metadata ibis-framework --collect-data pyproj --collect-data kiwipiepy_model `
             --collect-submodules sqlglot.dialects --collect-submodules ibis.backends.polars @drivers `
-            --collect-submodules core --collect-submodules query --collect-submodules prep --collect-submodules analysis --collect-submodules metrics `
-            --collect-submodules dashboard --collect-submodules collect --collect-submodules integrations --collect-submodules geo `
+            @features `
             --collect-submodules psycopg_binary --collect-submodules cryptography --collect-submodules xlsxwriter `
             --collect-submodules slack_sdk.socket_mode.builtin --collect-submodules pyproj --collect-submodules kiwipiepy `
             --hidden-import confluent_kafka --hidden-import confluent_kafka.cimpl --hidden-import fastexcel `
             --hidden-import slack_sdk.web --hidden-import slack_sdk.webhook --hidden-import slack_sdk.socket_mode.response
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: 기능 모듈 확인(exe에 기능 폴더의 모듈이 하나라도 빠졌으면 멈춘다)
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8  # 빠진 모듈 안내(한글)를 로그에 그대로 찍는다
+        run: python -c "import sys; from installer import check_modules; check_modules.check(sys.argv[1], sys.argv[2:])" dist/DataLoupe/DataLoupe.exe $FEATURE_PACKAGES
       - name: 설치 파일 만들기
         shell: pwsh
         run: |

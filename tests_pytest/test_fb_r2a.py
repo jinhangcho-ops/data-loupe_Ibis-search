@@ -1,12 +1,9 @@
 """F14·F24 우클릭 메뉴, F20 라벨 바꾸기, F11 도움말(결과 표·차트 화면). node로 해당 구간만 돌린다."""
-import json
-import re
 import shutil
-import subprocess
 
 import pytest
 
-from test_fix_audit_js import FAKE_DOM, STATIC, index_slice, run_node
+from test_fix_audit_js import STATIC, index_slice, run_node
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 HTML = (STATIC / "query" / "index.html").read_text(encoding="utf-8")
@@ -24,7 +21,7 @@ const sortBy = (c, d) => sorted.push(c + " " + d);
 const flash = () => {};
 const searchUndo = { undo: () => undone.push(1) };
 const inExplore = () => true, connected = "other";  // 연결 종류(머리글 메뉴가 PrepMenu에 flat으로 넘긴다)
-const PrepMenu = { items: ({ column, onPick }) => [["글자 › 앞뒤 공백 지우기", () => onPick("trim", true)], ["숫자 › 반올림", null, "숫자 컬럼에만 쓸 수 있어요"]] };  // (R5) 머리글 메뉴의 전처리 단계(가짜)
+const PrepMenu = { menu: ({ column, onPick }) => [["글자 다듬기", null, "", [["글자 › 앞뒤 공백 지우기", () => onPick("trim", true)], ["숫자 › 반올림", null, "숫자 컬럼에만 쓸 수 있어요"]]]] };  // (R5·M1) 머리글 메뉴의 전처리 단계 묶음(가짜)
 const cellAt = (tag, index, tr) => { const c = { tagName: tag, cellIndex: index, closest: s => s === "tr" ? tr : null }; return { closest: s => s.includes("#rows") ? c : null }; };
 const row = p => ({ dataset: p === undefined ? {} : { p: String(p) }, sectionRowIndex: 0, classList: { contains: () => false } });
 """
@@ -47,8 +44,8 @@ def test_td_menu_exclude_only_sort(tmp_path):
   await go(tn, "빈 값 제외"); await go(tn, "빈 값만");
   await go(t0, "내림차순 정렬");
   const th = ctxItems(cellAt("TH", 1, row()));
-  await th.find(i => i[0] === "글자 › 앞뒤 공백 지우기")[1]();  // 전처리 단계는 계산 줄로
-  console.log(JSON.stringify({ added, sorted, l0: labels(t0), ln: labels(tn), th: th.map(i => [i[0], !!i[1]]) }));
+  await th.find(i => i[0] === "글자 다듬기")[3].find(i => i[0] === "글자 › 앞뒤 공백 지우기")[1]();  // 전처리 단계(묶음의 하위 메뉴)는 계산 줄로
+  console.log(JSON.stringify({ added, sorted, l0: labels(t0), ln: labels(tn), th: th.map(i => i[3] ? [i[0], i[3].map(k => [k[0], !!k[1]])] : [i[0], !!i[1]]) }));
 })();
 """
     got = ctx(tmp_path, body)
@@ -56,7 +53,7 @@ def test_td_menu_exclude_only_sort(tmp_path):
     assert got["sorted"] == ["name desc"]
     assert got["l0"] == ["이 값 제외", "이 값만", "오름차순 정렬", "내림차순 정렬"]
     assert got["th"] == [["오름차순 정렬", True], ["내림차순 정렬", True], ["이 컬럼 빼기", True], ["값 골라서 제외·만 보기…", True], ["이 값으로 다른 테이블 찾기…", True],
-                         ["글자 › 앞뒤 공백 지우기", True], ["숫자 › 반올림", False]]  # (R5) 머리글은 정렬 + 컬럼 빼기·값 고르기·찾기 + 전처리 단계(안 맞는 단계는 실행 없음)
+                         ["글자 다듬기", [["글자 › 앞뒤 공백 지우기", True], ["숫자 › 반올림", False]]]]  # (R5·M1) 머리글은 정렬 + 컬럼 빼기·값 고르기·찾기 + 전처리 단계 묶음(안 맞는 단계는 하위 메뉴 안에서 실행 없음)
 
 
 def test_blank_menu_undo_and_native_menu_kept(tmp_path):

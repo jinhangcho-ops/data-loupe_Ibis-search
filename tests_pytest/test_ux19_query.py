@@ -96,16 +96,19 @@ def test_19c5_chart_starts_with_axes_calc_type_draw():
                  "ctable-show", "ctable-csv", "cexport-all", "cimage", "csend", "csend-go", "ymin", "y1max", "cgroup-box", "cauto", "call"):
         assert folded(ids, name), name
     html = read("index.html")
-    row1 = html[html.index('id="cx"'):html.index('id="draw"')]
-    assert 'id="cy"' in row1 and 'id="cagg"' in row1 and 'id="ctype"' in row1  # 첫 줄에 X·Y·계산·종류
+    row1 = html[html.index('id="cx"'):html.index('<div class="cf hidden adv" id="cunit-box"')]
+    assert 'id="cy"' in row1 and 'id="cagg"' in row1 and 'id="ctype"' in row1 and "adv" not in row1  # 격자 첫머리에 X·Y·계산·종류
+    assert html.index('<h3>차트</h3>') < html.index('id="draw"') < html.index('id="cx"')  # [차트 그리기]는 카드 제목 줄
 
 
 def test_19c_tabs_and_steps_explained():
     html = read("index.html")
-    for pane, word in (("pane-rows", "행"), ("pane-summary", "개수·평균 같은 요약"), ("pane-chart", "그림으로"), ("pane-sql", "SQL 문장")):
+    # 표·SQL 탭은 안내 글 한 줄(.lead), 집계·차트 탭은 첫 카드 제목 줄의 한 줄 설명(.hint)
+    for pane, mark, end, word in (("pane-rows", '<p class="lead">', "</p>", "행"), ("pane-summary", '<h3>컬럼 요약</h3><span class="hint">', "</span>", "개수·평균 같은 요약"),
+                                  ("pane-chart", '<h3>차트</h3><span class="hint" ', "</span>", "그림으로"), ("pane-sql", '<p class="lead">', "</p>", "SQL 문장")):
         a = html.index(f'id="{pane}"')
-        lead = html[a:html.index("</p>", a)]
-        assert '<p class="lead">' in lead and word in lead, pane
+        lead = html[a:html.index(end, a)]
+        assert mark in lead and word in lead, pane
     tabs = html[html.index('<div class="tabs2">'):html.index("</div>", html.index('<div class="tabs2">'))]
     assert tabs.count("title=") == 4
     assert '<span class="t" title="다른 테이블의 컬럼을 옆에 붙여요">조인</span>' in html

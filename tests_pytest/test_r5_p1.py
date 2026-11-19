@@ -3,7 +3,6 @@
 데이터는 시험 안에서 지어낸 임시 DuckDB. 헤드리스는 다운로드를 하지 않는다(Browser.setDownloadBehavior deny)."""
 import datetime as dt
 import json
-import shutil
 import socket
 import tempfile
 import threading
@@ -14,7 +13,7 @@ from pathlib import Path
 import duckdb
 import pytest
 
-from conftest import ROOT, kill_edge, spawn_edge
+from conftest import kill_edge, spawn_edge
 from test_fix_audit_js import read
 
 EDGE = next((p for p in (r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe", r"C:\Program Files\Microsoft\Edge\Application\msedge.exe") if Path(p).exists()), None)
@@ -31,7 +30,7 @@ def test_scripts_ids_and_texts():
         assert f'id="{ident}"' in html, ident
     assert 'id="a-rows"' in html  # 예전 보일 행 수 칸은 그대로
     assert "앞 단계부터 이 시간 안에" in html and "첫 단계부터 이 시간 안에" not in html
-    for code in ('api("/api/release"', '"/api/prep/handed?base="', 'saveSetting({ stats_scope', '"/api/profile/full"', "PrepMenu.load()", 'api("/api/tabs")', "PrepMenu.items(", "PrepMenu.valuesBox(", "PrepMenu.replaceBox(",
+    for code in ('api("/api/release"', '"/api/prep/handed?base="', 'saveSetting({ stats_scope', '"/api/profile/full"', "PrepMenu.load()", 'api("/api/tabs")', "PrepMenu.menu(", "PrepMenu.valuesBox(", "PrepMenu.replaceBox(",
                  "RowPick.bar(", "RowPick.valueLines(", "NewCol.open(", "selectable: true", "addCol: openNewCol", "f.line ??"):
         assert code in html, code
     for op in ("nulls", "remove", "regex", "outlier", "round", "bins", "rare", "extract", "has", "counts"):  # 값 변환 규칙은 공용 PrepMenu.value 한 벌
@@ -166,14 +165,16 @@ def test_handed_search_screen(app, tmp_path):
         assert ana["rows"] == 20 and not ana["hidden"] and "쿼리에서 넘어온" in ana["note"] and ana["first"], ana
         page.ev("showView('prep'); return 1;")
 
-        # 컬럼 줄 우클릭: 항목 = 4 + 단계 수, 안 맞는 단계는 흐리게
+        # 컬럼 줄 우클릭(M1): 첫 단계 = 둘 + 묶음 3개(흐린 항목 없음), 단계는 묶음의 하위 메뉴에 전부, 안 맞는 단계는 하위 메뉴 안에서만 흐리게
         menu = page.ev("""const row = [...document.querySelectorAll('#pcols .pcol')].find(r => r.dataset.col === '금액');
           row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 600, clientY: 60 }));
           const b = [...document.querySelectorAll('body > .drop .pop button')];
-          return { left: document.querySelector('body > .drop').style.left, labels: b.map(x => x.textContent), off: b.filter(x => x.disabled).map(x => [x.textContent, x.title]), ops: PrepMenu.ops.length }; """)
-        assert menu["labels"][:2] == ["이 컬럼 빼기", "값 골라서 제외·만 보기…"], menu["labels"][:6]
-        assert len(menu["labels"]) == 2 + menu["ops"]  # PrepMenu 항목 전부 + 둘. 같은 상자를 여는 "값 바꾸기…"는 따로 두지 않는다(글자 › 값 바꿔 쓰기)
-        assert "값 바꾸기…" not in menu["labels"] and menu["labels"].count("글자 › 값 바꿔 쓰기") == 1
+          const inner = b.filter(x => x.getAttribute('aria-haspopup')).flatMap(g => { g.click(); return [...document.querySelectorAll('body > .drop .ctx-sub button')]; });  // 묶음을 차례로 펼쳐 모은다
+          return { left: document.querySelector('body > .drop').style.left, labels: b.map(x => x.textContent), topOff: b.filter(x => x.disabled).length, inner: inner.map(x => x.textContent),
+            off: inner.filter(x => x.disabled).map(x => [x.textContent, x.title]), ops: PrepMenu.ops.length }; """)
+        assert menu["labels"] == ["이 컬럼 빼기", "값 골라서 제외·만 보기…", "글자 다듬기", "타입 바꾸기", "새 컬럼 만들기"] and menu["topOff"] == 0, menu["labels"]
+        assert len(menu["inner"]) == menu["ops"]  # PrepMenu 항목 전부. 같은 상자를 여는 "값 바꾸기…"는 따로 두지 않는다(글자 › 값 바꿔 쓰기)
+        assert "값 바꾸기…" not in menu["labels"] + menu["inner"] and menu["inner"].count("글자 › 값 바꿔 쓰기") == 1
         assert menu["left"] == "600px"  # 누른 자리에 뜬다
         key = page.ev("""document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
           const row = [...document.querySelectorAll('#pcols .pcol')].find(r => r.dataset.col === '금액'), b = row.getBoundingClientRect();
@@ -187,7 +188,8 @@ def test_handed_search_screen(app, tmp_path):
         out = page.ev("""document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
           const row = [...document.querySelectorAll('#pcols .pcol')].find(r => r.dataset.col === '채널');
           row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 60, clientY: 60 }));
-          [...document.querySelectorAll('body > .drop .pop button')].find(x => x.textContent === '글자 › 앞뒤 공백 지우기').click();
+          const btn = t => [...document.querySelectorAll('body > .drop .pop button')].find(x => x.textContent === t);
+          btn('글자 다듬기').click(); btn('글자 › 앞뒤 공백 지우기').click();  // 묶음을 펼친 뒤 하위 메뉴에서
           return { ops: Object.keys(edits['채널'].ops), picked, open: document.querySelector('#prep-view .step[data-step=clean]').classList.contains('open'), menuGone: !document.querySelector('body > .drop') };""")
         assert out == {"ops": ["trim"], "picked": "채널", "open": True, "menuGone": True}, out
 
@@ -206,7 +208,8 @@ def test_handed_search_screen(app, tmp_path):
         # 글자 › 값 바꿔 쓰기: 상자 → ops.replace.spec, 요약 글
         page.ev("""const row = [...document.querySelectorAll('#pcols .pcol')].find(r => r.dataset.col === '채널');
           row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-          [...document.querySelectorAll('body > .drop .pop button')].find(x => x.textContent === '글자 › 값 바꿔 쓰기').click(); return 1;""")
+          const btn = t => [...document.querySelectorAll('body > .drop .pop button')].find(x => x.textContent === t);
+          btn('글자 다듬기').click(); btn('글자 › 값 바꿔 쓰기').click(); return 1;""")
         page.until("document.querySelector('.pm-pair input')")
         got = page.ev("""const pair = document.querySelector('.pm-pair'), [a, b] = pair.querySelectorAll('input'); a.value = '가'; b.value = 'A';
           [...document.querySelectorAll('.pm-box label.check')].find(l => l.textContent.includes('대소문자')).querySelector('input').checked = true;
@@ -280,7 +283,8 @@ def test_handed_search_screen(app, tmp_path):
         # 파일 연결(flat)에서는 '빈 값 처리' 상자에 앞·뒤 값 채우기가 없다(정리 칸 OPS.fill과 같은 규칙)
         got = page.ev("""const was = connected, how = flat => { connected = flat; document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
             [...document.querySelectorAll('#pcols .pcol')].find(r => r.dataset.col === '채널').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
-            [...document.querySelectorAll('body > .drop .pop button')].find(x => x.textContent === '빈 값 처리' || x.textContent.endsWith('빈 값 처리')).click();
+            const btn = ok => [...document.querySelectorAll('body > .drop .pop button')].find(x => ok(x.textContent));
+            btn(t => t === '글자 다듬기').click(); btn(t => t.endsWith('빈 값 처리')).click();  // 묶음을 펼친 뒤 하위 메뉴에서
             const o = [...document.querySelectorAll('.pm-box select option')].map(x => x.value); document.querySelectorAll('.pm-box').forEach(x => x.parentNode.click()); return o; };
           const out = { flat: how('flat'), other: how('other') }; connected = was; return out; """)
         assert "prev" not in got["flat"] and "drop" in got["flat"] and "prev" in got["other"] and "next" in got["other"], got

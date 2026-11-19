@@ -297,7 +297,14 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .conn-card { width:min(clamp(23.75rem, 36vw, 35rem), 94vw); padding:1.5rem 1.625rem; display:flex; flex-direction:column; gap:.5rem; }
 .conn-card .head { margin-bottom:0; }
 .conn-card .head h3 { font-size:var(--fs-lg); }
-.conn-for { margin:-.375rem 0 .25rem; }
+.conn-for { margin:.125rem 0 .625rem; font-size:var(--fs-sm); }
+.conn-card .lead:has(+ .conn-for:not(:empty)) { display:none; }  /* 안내 글은 한 줄만: 다른 화면에서 열어 까닭을 알릴 때는 그 글이 설명 자리에 */
+.conn-card { min-height:min(33rem, 90vh); }  /* 두 탭의 높이를 같게 해 [연결]이 움직이지 않게. 낮은 창에서는 .modal-box의 최대 높이를 넘지 않는다 */
+#folder-top, #url-top, #folder-box, #url-box { display:contents; }  /* 묶음 안 칸들도 카드의 세로 간격(gap)을 그대로 받는다. 숨김(.hidden)은 !important라 이긴다 */
+.conn-two { flex-wrap:wrap; }
+.conn-two > * { flex:1 1 8rem; min-width:0; justify-content:center; }  /* 한 줄에 반반, 좁은 창·큰 글자에서는 아랫줄로 */
+.conn-card .row, .conn-card .field-label { margin-bottom:0; }  /* 간격은 카드의 gap 하나로 */
+.conn-card .check input { margin-left:0; }
 .conn-for:empty { display:none; }
 .field-label { font-size:var(--fs-sm); font-weight:600; margin:.375rem 0 .375rem; }
 .app-set .opt { display:flex; align-items:center; gap:.625rem; margin-top:.375rem; }
@@ -324,7 +331,8 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .set-body > .app-set { min-height:0; overflow:auto; padding-right:var(--sp-2); }
 .set-page > .hint:first-child { margin-top:0; }
 @media (max-width:700px) { .set-body { grid-template-columns:1fr; } .set-nav { flex-direction:row; flex-wrap:wrap; border-right:0; padding-right:0; } }
-.conn-foot { display:flex; justify-content:flex-end; gap:.5rem; margin-top:.375rem; }  /* 연결 창 아래: [취소] [연결] */
+.conn-foot { display:flex; justify-content:flex-end; align-items:center; gap:.5rem; margin-top:auto; padding-top:.75rem; }
+.conn-foot .hint { flex:1; margin:0; }  /* 연결 창 아래: [취소] [연결] */
 .conn-foot .btn { height:var(--h-lg); justify-content:center; font-size:var(--fs-md); }
 .conn-go { min-width:8.75rem; }
 .seg2 { display:flex; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-card); padding:.1875rem; }
@@ -355,7 +363,6 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 #flat-list .tag { margin-left:auto; padding:0 .5rem; border:1px solid var(--line); border-radius:var(--r-pill); font-size:var(--fs-xs); color:var(--muted); }
 #flat-picked { margin-top:.375rem; flex:none; }
 .seg2 label { justify-content:center; }  /* 라디오가 든 라벨은 inline-flex라 text-align이 먹지 않는다 */
-.conn-card .kinds { justify-content:center; }
 /* 첫 화면(home.html): 그림 타일(바로가기 카드와 최근 연결 줄 앞, 왼쪽 메뉴와 같은 선 그림)과 [쿼리] 시작 카드(제목·설명 왼쪽, 강조 단추 모양 오른쪽) */
 .icon-tile { flex:none; display:grid; place-items:center; width:var(--h-md); height:var(--h-md); border-radius:var(--r-ctl); background:var(--bg); color:var(--muted); }
 #home-start { grid-column:1 / -1; grid-template-columns:minmax(0, 1fr); padding:var(--sp-5); --art-w:12.5rem; }
@@ -455,6 +462,10 @@ a.btn { text-decoration:none; color:var(--text); }  /* 받는 곳 열기 같은 
 
 /* R5 공용 화면(Q2): 기간 달력(calendar.js), 표 고르기 칸·[+](common.js mountTable selectable·addCol), 고른 행 막대(rowpick.js), 전처리 메뉴 상자(prepmenu.js), 새 컬럼 상자(newcol.js) */
 .drop .pop.ctx-pop { position:static; max-height:70vh; overflow:auto; }  /* 우클릭 메뉴(common.js ctxMenu): 머리글 메뉴는 전처리 단계까지 길다 */
+.drop .pop.ctx-sub { position:fixed; right:auto; }  /* 묶음의 하위 메뉴(M1): 자리(left·top)는 ctxMenu가 묶음 단추 옆으로 정한다 */
+.drop .pop.ctx-pop [aria-haspopup] { display:flex; justify-content:space-between; align-items:center; gap:.75rem; }
+.drop .pop.ctx-pop [aria-haspopup]::after { content:"›"; color:var(--muted); }
+.drop .pop.ctx-pop [aria-expanded="true"] { background:var(--accent-bg); }
 .drop .pop.cal { position:static; min-width:0; padding:.625rem; gap:.375rem; }
 .cal-head { display:flex; justify-content:space-between; }
 .cal-months { display:flex; gap:1rem; align-items:flex-start; }
@@ -520,6 +531,30 @@ html:not(.easy) .easy-only { display:none; }
 .adv-more { display:inline-flex; align-items:center; gap:.25rem; min-height:1.5rem; padding:.125rem 0; border:0; background:none; color:var(--accent); font-size:var(--fs-xs); cursor:pointer; }
 .adv-more:hover { text-decoration:underline; }
 .lead { color:var(--muted); font-size:var(--fs-sm); margin:.125rem 0 .625rem; line-height:1.5; }
+/* 쿼리 화면의 일 단위 카드(.card.q-card): 제목 줄(.head = 제목 + 한 줄 설명 + 실행 단추) · 4칸 격자(.q-grid, 칸마다 .cf > .cl 이름표) · 체크·단추 줄(.q-row) · 맨 아래 내보내기 줄(.q-foot) */
+.q-card + .q-card { margin-top:var(--sp-3); }
+.q-card > .head > .hint { flex:1 1 12rem; margin:0; }
+.q-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:var(--sp-2) var(--sp-3); align-items:end; margin-bottom:var(--sp-3); }
+@media (max-width:800px) { .q-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+.q-grid > .cf, .q-grid > .cf.wide { max-width:none; }
+.q-grid > .cf.wide { grid-column:span 2; }
+.q-grid .cf > :is(input, select) { width:100%; max-width:none; flex:none; }
+.q-grid .row { margin:0; }
+.q-grid .cf .fp { display:flex; }  /* inline-flex면 글줄 높이만큼 칸이 커져 이웃 칸과 이름표 높이가 어긋난다 */
+.q-grid .cf .fp > select { flex:1; min-width:0; }
+@media (min-width:801px) { .q-folds .ctl { flex-wrap:nowrap; align-items:center; } .q-folds .ctl > input { flex:1 1 0; min-width:0; } .q-folds .ctl > .hint { flex:none; margin:0; } }  /* 세로축 칸 4개가 한 줄에 */
+.q-grid .chips { flex:none; min-height:var(--h-md); }  /* 고른 컬럼 칩: 세로로 쌓는 칸(.cf) 안이라 높이를 늘리지 않는다 */
+.q-row { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-2) var(--sp-4); margin-bottom:var(--sp-3); }
+.q-card > .q-foot { border-top:1px solid var(--line); margin:var(--sp-3) 0 0; padding:var(--sp-3) 0 0; min-height:0; }
+.q-card .drop.up .pop { left:auto; right:0; min-width:0; }  /* 카드 아래 줄의 내보내기 목록은 위로, 오른쪽 끝에 맞춰 편다 */
+/* 접는 설정은 한 줄에 나란히. 펼친 항목은 접힌 줄 아래에 한 줄 가득 */
+.q-folds { display:flex; flex-wrap:wrap; align-items:flex-start; gap:0 var(--sp-4); margin-top:var(--sp-3); }
+.q-folds > details > summary { cursor:pointer; }
+.q-folds > details[open] { flex-basis:100%; order:1; }
+/* 결과 카드가 남은 높이를 채우고 표만 그 안에서 스크롤한다(아래 줄의 쪽 넘기기·내보내기는 늘 보인다) */
+.q-fill { display:flex; flex-direction:column; }
+.q-fill > .q-card { flex:1; min-height:14rem; display:flex; flex-direction:column; }  /* 낮은 창에서도 결과 표가 몇 줄은 보이게 */
+.q-fill .table-wrap { flex:1; min-height:0; overflow:auto; }
 .err { white-space:pre-line; }
 .err::first-line { font-weight:600; }
 #easy[aria-pressed="false"] { opacity:.75; }

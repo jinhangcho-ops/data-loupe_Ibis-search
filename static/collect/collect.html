@@ -327,6 +327,29 @@
       <div class="table-wrap" id="sc-list"></div>
     </section>
 
+    <!-- GA4: 위의 구성(API·파일 주소·웹페이지)·실행과 따로 도는 받기. 설정은 /api/ga4에 두고 보고서를 Parquet으로 받아 업로드 기록에 남긴다. -->
+    <section class="card" id="ga4-card">
+      <details id="ga4-box"><summary><b>Google Analytics 4 보고서 받기</b></summary>
+      <div class="hint mt-2">웹사이트 방문 데이터(GA4 보고서)를 Parquet 파일로 받아요. 위의 구성·실행·예약과는 따로 움직여요. 서비스 계정 JSON 파일(Google이 주는 열쇠 파일)은 위치만 저장해요.</div>
+      <div class="hint">서비스 계정 JSON 파일 위치</div>
+      <input id="ga4-key" class="code mb-1.5" placeholder="C:\keys\ga4-reader.json">
+      <div class="fields">
+        <label><div class="hint">GA4 속성 ID (숫자)</div><input id="ga4-prop" placeholder="123456789"></label>
+        <label title="날짜(2024-01-01)나 28daysAgo(28일 전)·yesterday(어제)·today(오늘)"><div class="hint">시작일 (날짜 또는 28daysAgo)</div><input id="ga4-start" placeholder="28daysAgo"></label>
+        <label title="날짜(2024-01-31)나 yesterday(어제)·today(오늘)"><div class="hint">종료일 (날짜 또는 yesterday)</div><input id="ga4-end" placeholder="yesterday"></label>
+      </div>
+      <div class="hint" title="GA4 API의 이름으로 적어요. 예: date(날짜), country(국가), deviceCategory(기기)">무엇별로 볼까요 · 측정기준 (쉼표로 구분, 최대 9개)</div>
+      <input id="ga4-dims" class="mb-1.5" placeholder="date, country">
+      <div class="hint" title="GA4 API의 이름으로 적어요. 예: activeUsers(활성 사용자), sessions(세션), screenPageViews(조회수)">무엇을 셀까요 · 측정항목 (쉼표로 구분, 최대 10개)</div>
+      <input id="ga4-mets" class="mb-1.5" placeholder="activeUsers, sessions">
+      <div class="hint" title="같은 이름의 파일이 있으면 덮어쓰지 않아요">저장할 파일 (.parquet)</div>
+      <input id="ga4-out" class="code" placeholder="C:\data\ga4_daily.parquet">
+      <div class="actions"><button id="ga4-fetch">가져오기</button><button id="ga4-open" class="btn hidden" title="연결을 받은 파일로 바꾸고 쿼리 화면으로 가요">쿼리로 열기</button><button id="ga4-save" class="btn">저장</button>
+        <button id="ga4-check" class="btn" title="보고서를 받지 않고 인증과 속성 권한만 확인해요">인증 확인</button></div>
+      <div class="err" id="ga4-msg"></div>
+      </details>
+    </section>
+
     <!-- 업로드 기록: 저장한 결과 파일과 테이블·Kafka에 적재한 것(행·바이트·범위). 지울 때 쓸 명령을 보여 주기만 한다. -->
     <section class="card" id="up-card"><a id="uploads" aria-label="업로드 기록"></a>
       <div class="head"><h3>업로드 기록</h3><button id="up-toggle" class="btn">펼치기</button></div>
@@ -1617,8 +1640,37 @@ function renderUploads() {
 $("up-toggle").onclick = () => { upOpen = !upOpen; renderUploads(); if (upOpen) loadUploads(); };
 $("up-kind").onchange = $("up-find").oninput = renderUploads;
 
+// GA4: 칸의 값을 /api/ga4에 저장한 뒤 인증 확인·가져오기를 한다. 받은 파일은 업로드 기록에 남는다.
+const GA4_FIELDS = { key_path: "ga4-key", property: "ga4-prop", start: "ga4-start", end: "ga4-end", dimensions: "ga4-dims", metrics: "ga4-mets", output: "ga4-out" };
+const ga4Body = () => Object.fromEntries(Object.entries(GA4_FIELDS).map(([k, id]) => [k, $(id).value.trim()]));
+const showGa4 = d => {
+  Object.entries(GA4_FIELDS).forEach(([k, id]) => $(id).value = d[k] ?? "");
+  if (d.key_path || d.property) $("ga4-box").open = true;  // 이미 설정했으면 칸을 펼쳐 둔다(시작일 등은 기본값이 늘 있어 보지 않는다)
+};
+let ga4Output = "";
+$("ga4-save").onclick = () => busy($("ga4-save"), async () => {
+  try { showGa4(await api("/api/ga4", ga4Body())); say("ga4-msg", "저장했어요.", true); } catch (e) { say("ga4-msg", e.message); }
+});
+$("ga4-check").onclick = () => busy($("ga4-check"), async () => {
+  try { await api("/api/ga4", ga4Body()); say("ga4-msg", (await api("/api/ga4/check", {})).message, true); } catch (e) { say("ga4-msg", e.message); }
+});
+$("ga4-fetch").onclick = () => busy($("ga4-fetch"), async () => {
+  try {
+    await api("/api/ga4", ga4Body());
+    const d = await api("/api/ga4/fetch", {});
+    ga4Output = d.path;
+    $("ga4-open").classList.remove("hidden");
+    say("ga4-msg", `${d.rows.toLocaleString()}행을 ${d.path}에 저장했어요. 컬럼: ${d.columns.join(", ")}` + (d.notes?.length ? "\n" + d.notes.join(" ") : ""), !d.notes?.length);
+    loadUploads();
+  } catch (e) { say("ga4-msg", e.message); }
+});
+$("ga4-open").onclick = () => busy($("ga4-open"), async () => {
+  try { await api("/api/collect/open", { path: ga4Output }); location.href = "/search"; } catch (e) { say("ga4-msg", e.message); }
+});
+api("/api/ga4").then(showGa4).catch(() => {});
+
 loadRuns();
-if (location.hash === "#uploads") { upOpen = true; setTimeout(() => $("up-card").scrollIntoView({ block: "start" }), 300); }  // 연동 화면의 [업로드 기록 보기]
+if (location.hash === "#uploads") { upOpen = true; setTimeout(() => $("up-card").scrollIntoView({ block: "start" }), 300); }  // 주소에 #uploads를 붙여 열면 업로드 기록을 펼친다
 loadUploads();
 setInterval(() => { if (!document.hidden) { loadRuns(); if (upOpen) loadUploads(); } }, 30000);  // 창이 가려져 있지 않을 때만
 loadLimits();

@@ -680,7 +680,9 @@ const askedPanel = new URLSearchParams(location.search).get(PANEL_PARAM); if (PA
 // 1. 연결
 document.querySelectorAll("input[name=kind]").forEach(r => r.onchange = () => {
   const folder = r.value === "folder" && r.checked;
+  $("folder-top").classList.toggle("hidden", !folder);
   $("folder-box").classList.toggle("hidden", !folder);
+  $("url-top").classList.toggle("hidden", folder);
   $("url-box").classList.toggle("hidden", folder);
   showConnectLabel();
 });
@@ -1519,35 +1521,68 @@ function findAsTyped(input, find, show) {
 // 우클릭 메뉴(쿼리 표의 칸·머리글, 전처리 컬럼 줄): ctxMenu(e, items, fallbackRect). items는 [[라벨, 실행|null, 안내], …](실행이 없으면 흐리게, 안내는 말풍선).
 // 열린 목록(.drop .pop) 모양, ↑↓로 흐리지 않은 항목 사이를 옮기고, 화면 밖으로 나가지 않게 둔다. 키보드(메뉴 키·Shift+F10)로 열면 좌표가 0이라 fallbackRect 아래에.
 // items가 없으면 열린 메뉴만 닫고 브라우저 기본 메뉴를 둔다. ctxBox는 열린 메뉴, ctxFrom은 연 요소(닫으면 초점을 돌려준다).
-let ctxBox = null, ctxFrom = null;
+// 묶음(M1): 항목의 넷째 값이 항목 목록이면 [라벨 ›] 묶음 단추(aria-haspopup·aria-expanded)다. 가리키거나 누르면(Enter·→) 옆에 하위 메뉴가 펼쳐지고(오른쪽이 모자라면 왼쪽), ←·Esc로 하위 메뉴만 닫는다.
+// 하위 메뉴는 한 단계뿐이다. ctxSub는 열린 하위 메뉴 { pop, from(연 묶음 단추) }.
+let ctxBox = null, ctxFrom = null, ctxSub = null;
 function closeCtx() {  // 메뉴 안에 초점이 있었으면(키보드로 쓰던 중) 연 요소로 초점을 돌려준다. 바깥을 눌러 닫을 때는 누른 곳이 초점을 가져간다
   const box = ctxBox;
   if (!box) return;
-  ctxBox = null;  // 지우기 전에 비운다: 초점이 든 상자를 지우면 focusout이 다시 closeCtx를 부른다
+  ctxBox = ctxSub = null;  // 지우기 전에 비운다: 초점이 든 상자를 지우면 focusout이 다시 closeCtx를 부른다
   const back = box.contains(document.activeElement);
   box.remove();
   if (back) ctxFrom?.focus?.();
+}
+function closeSub() {  // 하위 메뉴만 닫는다. 초점이 그 안에 있었으면 연 묶음 단추로(지우기 전에 옮겨야 focusout이 메뉴 전체를 닫지 않는다)
+  const s = ctxSub;
+  if (!s) return;
+  ctxSub = null;
+  s.from.setAttribute("aria-expanded", "false");
+  if (s.pop.contains(document.activeElement)) s.from.focus();
+  s.pop.remove();
+}
+function openSub(from, items, focus) {
+  if (ctxSub?.from !== from) {
+    closeSub();
+    const pop = ctxPop(items, true);
+    ctxBox.append(pop); ctxSub = { pop, from }; from.setAttribute("aria-expanded", "true");
+    const a = from.getBoundingClientRect(), r = pop.getBoundingClientRect();
+    pop.style.left = `${a.right + r.width <= innerWidth ? a.right : Math.max(0, a.left - r.width)}px`;  // 오른쪽에서 잘리면 왼쪽으로
+    pop.style.top = `${Math.max(0, Math.min(a.top, innerHeight - r.height))}px`;
+  }
+  if (focus) [...ctxSub.pop.children].find(b => !b.disabled)?.focus();
+}
+// 메뉴 한 칸(role=menu). sub면 하위 메뉴(.ctx-sub, 묶음을 다시 품지 않는다).
+function ctxPop(items, sub) {
+  const pop = el("div", { className: sub ? "pop ctx-pop ctx-sub" : "pop ctx-pop" });
+  pop.setAttribute("role", "menu");
+  pop.onkeydown = k => {
+    const b = [...pop.children].filter(x => !x.disabled), now = document.activeElement, step = { ArrowDown: 1, ArrowUp: -1 }[k.key];
+    if (step && b.length) { k.preventDefault(); b[(b.indexOf(now) + step + b.length) % b.length].focus(); }
+    else if (k.key === "ArrowRight" && now.getAttribute("aria-haspopup")) { k.preventDefault(); now.click(); }
+    else if (k.key === "ArrowLeft" && ctxSub) { k.preventDefault(); closeSub(); }
+  };
+  for (const [label, run, why, kids] of items) {  // 하위 메뉴의 쓸 수 있는 항목은 말풍선(title)을 달지 않는다: 글자가 다 보여 같은 글이 아래 항목만 가린다
+    const group = !sub && Array.isArray(kids);
+    const b = el("button", { type: "button", textContent: label, title: run || group ? (sub ? "" : label) : why || label, disabled: !run && !group, onclick: group ? () => openSub(b, kids, true) : () => { closeCtx(); run(); } });
+    b.setAttribute("role", "menuitem"); b.setAttribute("aria-label", label);
+    if (group) { b.setAttribute("aria-haspopup", "menu"); b.setAttribute("aria-expanded", "false"); }
+    if (!sub) b.onmouseenter = () => group ? openSub(b, kids, false) : closeSub();
+    pop.append(b);
+  }
+  return pop;
 }
 function ctxMenu(e, items, fallbackRect) {
   closeCtx();
   if (!items?.length) return;
   e.preventDefault();
   ctxFrom = e.target;
-  const pop = el("div", { className: "pop ctx-pop" }), box = el("div", { className: "drop" }, pop);
-  pop.setAttribute("role", "menu");
-  const live = () => [...pop.children].filter(b => !b.disabled);
-  pop.onkeydown = k => { const b = live(), i = b.indexOf(document.activeElement), step = { ArrowDown: 1, ArrowUp: -1 }[k.key]; if (step && b.length) { k.preventDefault(); b[(i + step + b.length) % b.length].focus(); } };
-  for (const [label, run, why] of items) {
-    const b = el("button", { type: "button", textContent: label, title: run ? label : why || label, disabled: !run, onclick: () => { closeCtx(); run(); } });
-    b.setAttribute("role", "menuitem"); b.setAttribute("aria-label", label);
-    pop.append(b);
-  }
-  pop.addEventListener("focusout", f => { if (!pop.contains(f.relatedTarget)) closeCtx(); });  // Tab 등으로 초점이 메뉴 밖으로 나가면 닫는다
+  const pop = ctxPop(items, false), box = el("div", { className: "drop" }, pop);
+  box.addEventListener("focusout", f => { if (!box.contains(f.relatedTarget)) closeCtx(); });  // Tab 등으로 초점이 메뉴(하위 메뉴 포함) 밖으로 나가면 닫는다
   box.style.cssText = "position:fixed;z-index:300;left:0;top:0";  // 먼저 띄워서 잰다(블록인 .drop을 그냥 재면 화면 너비라 왼쪽 끝에 붙었다, B1)
   document.body.append(box); ctxBox = box;
   const r = box.getBoundingClientRect(), [x, y] = e.clientX || e.clientY || !fallbackRect ? [e.clientX, e.clientY] : [fallbackRect.left, fallbackRect.bottom];
   box.style.left = `${Math.max(0, Math.min(x, innerWidth - r.width))}px`; box.style.top = `${Math.max(0, Math.min(y, innerHeight - r.height))}px`;  // 화면 밖으로 나가지 않게
-  live()[0]?.focus();
+  [...pop.children].find(b => !b.disabled)?.focus();
 }
 document.addEventListener("mousedown", e => { if (ctxBox && !ctxBox.contains(e.target)) closeCtx(); });
-document.addEventListener("keydown", e => { if (e.key === "Escape" && ctxBox) { e.stopPropagation(); closeCtx(); } }, true);
+document.addEventListener("keydown", e => { if (e.key === "Escape" && ctxBox) { e.stopPropagation(); if (ctxSub) closeSub(); else closeCtx(); } }, true);  // 하위 메뉴가 열려 있으면 그것만

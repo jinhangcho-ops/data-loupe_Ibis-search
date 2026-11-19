@@ -32,6 +32,7 @@ metric_file = Later("core.metric_file")
 nl2sql = Later("query.nl2sql")
 parse = Later("core.parse")
 plan = Later("core.plan")
+prep_ops = Later("core.prep_ops")
 querying = Later("core.querying")
 viz_rules = Later("core.viz_rules")
 
@@ -66,9 +67,10 @@ def search_page():
 
 @app.post("/api/columns")
 def columns():
-    """줄을 모두 검사한 식의 [컬럼, 한글 타입], 구조 컬럼 안의 필드(fields: [user.name, 타입]), 컬럼마다 원래 테이블(origins: 머리글 아래 작은 글씨)."""
+    """줄을 모두 검사한 식의 [컬럼, 한글 타입], 구조 컬럼 안의 필드(fields: [user.name, 타입]), 컬럼마다 원래 테이블(origins: 머리글 아래 작은 글씨),
+    이 연결이 담을 수 있는 날짜시간 단위(cast_units: 머리글 메뉴 타입 바꾸기의 단위 목록, T1)."""
     expr = querying.build(request.json, select=False, ask=request.json)
-    return jsonify(columns=result.columns(expr), fields=result.fields(expr), origins=querying.joined(request.json)[1])
+    return jsonify(columns=result.columns(expr), fields=result.fields(expr), origins=querying.joined(request.json)[1], cast_units=prep_ops.cast_units(expr))
 
 
 def confirms(view):

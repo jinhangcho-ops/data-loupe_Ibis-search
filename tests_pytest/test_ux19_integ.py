@@ -5,8 +5,7 @@ from test_fix_audit_js import between, read
 
 INTEG = "integrations.html"
 COLLECT = "collect.html"
-INTEG_IDS = ("send-state", "send-kinds", "send-list", "send-manage", "bot-hub-state", "bot-manage", "ga4-state", "ga4-key", "ga4-prop",
-             "ga4-start", "ga4-end", "ga4-dims", "ga4-mets", "ga4-out", "ga4-fetch", "ga4-open", "ga4-save", "ga4-check", "ga4-msg",
+INTEG_IDS = ("send-state", "send-kinds", "send-list", "send-manage", "bot-hub-state", "bot-manage",
              "llm-state", "hub-llm-env", "hub-llm-pick", "hub-llm-read", "llm-msg", "err-hub")
 GA4_INPUTS = ("ga4-key", "ga4-prop", "ga4-start", "ga4-end", "ga4-dims", "ga4-mets", "ga4-out", "ga4-fetch", "ga4-save", "ga4-check")
 
@@ -18,36 +17,34 @@ def test_integ_ids_kept():
 
 
 def test_integ_cards_fold_inputs_behind_setup():
-    """19G1: GA4·LLM 카드의 입력 칸은 [설정하기]를 눌러야 보이고, 저장된 값이 있으면 펼쳐 둔다."""
-    ga4 = between(INTEG, 'id="ga4-box"', "</details>")
-    assert "<summary" in ga4 and "설정하기" in ga4
+    """19G1: GA4 칸(수집 화면으로 옮김)은 접는 카드 안에 있고, 저장된 값이 있으면 펼쳐 둔다. LLM 칸은 [설정하기]로 가는 하위 페이지(#llm)에 펼쳐져 있다."""
+    ga4 = between(COLLECT, 'id="ga4-box"', "</details>")
+    assert "<summary" in ga4
     for i in GA4_INPUTS:
         assert f'id="{i}"' in ga4, i
-    llm = between(INTEG, 'id="hub-llm-box"', "</details>")
-    assert "<summary" in llm and "설정하기" in llm
+    llm = between(INTEG, 'data-page="llm"', "</section>")
     for i in ("hub-llm-env", "hub-llm-pick", "hub-llm-read"):
         assert f'id="{i}"' in llm, i
-    html = read(INTEG)
-    assert '$("ga4-box").open = true' in html and '$("hub-llm-box").open = true' in html
+    assert '$("ga4-box").open = true' in read(COLLECT) and "<details" not in read(INTEG)
 
 
 def test_integ_want_list_jumps_to_cards():
-    """19G2: 맨 위 "어떤 걸 하실 건가요?" 목록이 카드로 데려간다(스크롤·강조)."""
+    """19G2: 맨 위 "어떤 걸 하실 건가요?" 카드가 그 하위 페이지(주소의 해시)로 데려간다."""
     html = read(INTEG)
     want = between(INTEG, 'id="want"', "</ul>")
     assert html.index('id="want"') < html.index('class="grid"')
     assert "어떤 걸 하실 건가요?" in html
-    assert re.findall(r'data-go="([\w-]+)"', want) == ["svc-send", "svc-bot", "svc-ga4", "svc-llm"]
-    for word in ("Slack·Notion으로 보내기", "Slack에서 물어보기", "웹사이트 방문 데이터 받기", "질문으로 SQL 만들기"):
+    assert re.findall(r'data-go="([\w-]+)"', want) == ["send", "llm"]
+    for word in ("결과 보내기 (Slack, Notion 등)", "질문으로 SQL 만들기"):
         assert word in want, word
-    assert "scrollIntoView" in between(INTEG, 'querySelectorAll("[data-go]")', "}));") and "flash" in html
+    assert "location.hash = b.dataset.go" in between(INTEG, 'querySelectorAll("[data-go]")', "}));")
     assert "onclick=\"" not in html
 
 
 def test_integ_want_cards_show_state():
-    """맨 위는 카드 4장(2열): 아이콘 타일·제목·한 줄 설명·상태 꼬리표·단추 하나. 꼬리표와 단추 글자는 아래 카드 배지와 같은 ready 값으로 정한다."""
+    """맨 위는 카드 2장(2열): 아이콘 타일·제목·한 줄 설명·상태 꼬리표·단추 하나. 꼬리표와 단추 글자는 하위 페이지 카드 배지와 같은 ready 값으로 정한다."""
     cards =re.findall(r'<li class="card" data-go="[\w-]+">(.*?)</li>', between(INTEG, 'id="want"', "</ul>"), re.S)
-    assert len(cards) == 4
+    assert len(cards) == 2
     for card in cards:
         for part in ('<span class="ico"><svg ', '<span class="state"></span>', "<h3>", '<div class="hint">', '<button type="button" class="btn">'):
             assert card.count(part) == 1, part
@@ -56,8 +53,8 @@ def test_integ_want_cards_show_state():
     show = between(INTEG, "function showWant(id, on)", "\n}")
     assert '"연결됨" : "설정 전"' in show and '"열기" : "설정하기"' in show
     hub = between(INTEG, "async function loadHub()", "\n}")
-    assert 'showWant("svc-send", senders.some(s => s.ready))' in hub and "showWant(card, by[key].ready)" in hub
-    assert re.findall(r'\["(\w+)", "[\w-]+", "(svc-\w+)"\]', hub) == [("slack_bot", "svc-bot"), ("ga4", "svc-ga4"), ("llm", "svc-llm")]
+    assert 'showWant("send", senders.some(s => s.ready))' in hub and 'showWant("llm", by.llm.ready)' in hub
+    assert re.findall(r'\["(\w+)", "([\w-]+)"\]', hub) == [("slack_bot", "bot-hub-state"), ("llm", "llm-state")]
     assert not re.search(r"#[0-9a-fA-F]{3,8}\b|rgba?\(", between(INTEG, "<style>", "</style>"))  # 색은 CSS 변수만
 
 

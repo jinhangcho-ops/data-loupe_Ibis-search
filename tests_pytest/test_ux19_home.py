@@ -6,7 +6,7 @@ from test_fix_audit_js import between, read
 CARDS = [("/prep", "prep", "분석", "데이터를 다듬고 그래프·통계로 살펴봐요"),
          ("/dashboard", "dashboard", "대시보드", "늘 보는 숫자와 차트를 한 화면에 모아요"),
          ("/collect", "collect", "수집", "인터넷(API·웹페이지)에서 데이터를 받아 와요"),
-         ("/integrations", "integrations", "연동", "결과를 Slack·Notion으로 보내거나 GA4 데이터를 받아요")]
+         ("/integrations", "integrations", "연동", "결과를 Slack·Notion으로 보내거나 질문으로 SQL을 만들어요")]
 TABS = ["feat", "view", "update", "calc", "memory", "sample", "date", "viz", "dest"]
 
 
@@ -25,12 +25,12 @@ def test_home_cards_name_and_one_line():
 
 
 def test_card_art_is_decoration_only():
-    """카드 그림(첫 화면 5장, 연동 4장)은 장식이다: 읽어 주지 않고, 글자·숫자가 없고, 색은 CSS 변수만 쓰고, 좁은 창에서는 숨는다."""
+    """카드 그림(첫 화면 5장, 연동 2장)은 장식이다: 읽어 주지 않고, 글자·숫자가 없고, 색은 CSS 변수만 쓰고, 좁은 창에서는 숨는다."""
     css = between("common.css", ".card-art { display:none; }", "\n}\n")
     assert css.startswith(".card-art { display:none; }\n@media (min-width:900px) {")
     assert not re.search(r"#[0-9a-fA-F]{3,8}\b|rgb\(|content:\"[^\"]", css)
     arts = re.findall(r'<span class="card-art" data-art="(\w+)" aria-hidden="true"></span>', read("home.html") + read("integrations.html"))
-    assert arts == ["table", "bars", "stat", "picks", "msg", "msg", "chat", "stat", "code"]
+    assert arts == ["table", "bars", "stat", "picks", "msg", "msg", "code"]
     assert all(f".card-art[data-art={kind}]::before" in css for kind in arts)
     assert (read("home.html") + read("integrations.html")).count('class="card-art"') == len(arts)  # 그림마다 빈 태그 하나
 
