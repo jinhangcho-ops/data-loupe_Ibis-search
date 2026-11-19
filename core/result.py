@@ -2,6 +2,7 @@
 import contextvars
 import datetime
 import math
+import re
 from decimal import Decimal
 from pathlib import Path
 
@@ -347,11 +348,19 @@ def can_offset(expr):
     return True
 
 
+ONE_PICK = re.compile(r"^( *)(SELECT(?: DISTINCT)?)\n\1  (?! )(.*[^,\n])$(?=\n\1(?! )|\Z)", re.M)  # SELECT 줄 + 한 줄짜리 고른 것 하나(쉼표로 안 끝남) + 같은 깊이의 다음 줄(FROM 등)이나 글의 끝
+
+
 def get_sql(expr, limit=None, offset=0):
     """get_rows가 실행할 조회를 SQL 글로(limit이 None이면 행 수를 자르지 않은 식 그대로). 실행하지는 않는다.
+    고른 것이 하나뿐이고 한 줄인 SELECT는 `SELECT *`처럼 SELECT와 같은 줄에 쓴다(하위 질의도). 여럿이면 sqlglot이 쓴 대로 한 줄에 하나.
+    이 글은 실행 계획(EXPLAIN)과 가상 테이블 저장에 그대로 쓰이므로 줄바꿈 하나를 공백으로 바꾸기만 한다.
     SQL을 쓰지 않는 연결(Parquet·CSV·JSON·Excel 파일)은 보여 줄 수 없다."""
+    cut = expr if limit is None else expr.limit(limit, offset=offset)
     try:
-        return str(ibis.to_sql(expr if limit is None else expr.limit(limit, offset=offset)))
+        text = str(ibis.to_sql(cut))
+        # shortcut: 값·이름 안에 줄바꿈이 든 조회(한 줄로 써도 줄바꿈이 남는다)는 글을 건드리지 않는다. 그런 조회도 한 줄로 보여야 하면 방언의 토큰 위치로 바꾼다.
+        return text if "\n" in str(ibis.to_sql(cut, pretty=False)) else ONE_PICK.sub(r"\1\2 \3", text)
     except NotImplementedError:
         raise ValueError("이 연결의 조회는 SQL로 보여 줄 수 없어요.") from None
 

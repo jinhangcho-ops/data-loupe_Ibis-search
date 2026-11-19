@@ -4,14 +4,22 @@
     <div class="head"><h3 id="conn-title">데이터 연결</h3><button id="conn-close" class="ib ml-auto" title="닫기"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
     <p class="lead">내 PC의 파일이나 회사 DB를 열어요. 원본은 바뀌지 않아요.</p>
     <span class="hint conn-for" id="conn-for"></span>
-    <select id="recent-conn" class="hidden" title="전에 연결했던 폴더와 주소예요. 자주 쓴 것부터 보여요. 고르면 칸이 채워지고, 비밀번호는 다시 넣어야 해요."></select>
     <div class="seg2">
       <label><input type="radio" name="kind" value="folder" checked> 내 PC의 파일</label>
       <label><input type="radio" name="kind" value="url"> 데이터베이스</label>
     </div>
-    <div id="folder-box">
+    <!-- 칸 순서: 탭 → 위치·주소 칸(-top) → 최근 연결(두 탭이 같이 쓴다) → 나머지(-box). 탭을 바꾸면 -top과 -box를 같이 숨긴다 -->
+    <div id="folder-top">
       <div class="field-label">데이터가 있는 위치</div>
-      <div class="row"><input id="path" placeholder="예: C:\data 또는 C:\data\sales.parquet"><button id="pick-folder" class="btn" type="button" title="폴더를 골라서 넣어요. 직접 적지 않아도 돼요">폴더 고르기</button><button id="find" class="btn">찾기</button></div>
+      <div class="row"><input id="path" placeholder="예: C:\data 또는 C:\data\sales.parquet"></div>
+      <div class="row conn-two"><button id="pick-folder" class="btn" type="button" title="폴더를 골라서 넣어요. 직접 적지 않아도 돼요">폴더 고르기</button><button id="find" class="btn">파일 찾기</button></div>
+    </div>
+    <div id="url-top" class="hidden">
+      <div class="field-label">데이터베이스 주소</div>
+      <input id="url" placeholder="예: postgres://host:5432/db" title="Supabase는 Session pooler 주소를 붙여 넣고, 비밀번호는 아래 칸에 따로 넣으세요.">
+    </div>
+    <select id="recent-conn" class="hidden" title="전에 연결했던 폴더와 주소예요. 자주 쓴 것부터 보여요. 고르면 칸이 채워지고, 비밀번호는 다시 넣어야 해요."></select>
+    <div id="folder-box">
       <div class="field-label">찾을 파일 종류 <span class="hint" id="kinds-tip">누르면 빼거나 넣어요</span></div>
       <div class="kinds" id="kinds" title="색이 칠해진 종류의 파일만 찾아요. 누르면 빼거나 넣어요" aria-describedby="kinds-tip"></div>
       <label class="check"><input type="checkbox" id="deep" checked> 안쪽 폴더까지 찾기</label>
@@ -24,17 +32,13 @@
       </div>
     </div>
     <div id="url-box" class="hidden">
-      <div class="field-label">데이터베이스 주소</div>
-      <input id="url" placeholder="예: postgres://host:5432/db" title="Supabase는 Session pooler 주소를 붙여 넣고, 비밀번호는 아래 칸에 따로 넣으세요." class="mb-2.5">
-      <div class="field-label">아이디와 비밀번호</div>
-      <input id="user" placeholder="아이디 (없으면 비워 두세요)" class="mb-1.5" autocomplete="off">
-      <input id="password" type="password" placeholder="비밀번호 (없으면 비워 두세요)" autocomplete="off">
+      <div class="field-label">아이디와 비밀번호 <span class="hint">없으면 비워 두세요</span></div>
+      <div class="row conn-two"><input id="user" placeholder="아이디" autocomplete="off"><input id="password" type="password" placeholder="비밀번호" autocomplete="off"></div>
       <div class="hint">비밀번호는 저장하지 않아요.</div>
-      <div class="row items-center"><button class="ghost" id="drv-open" title="데이터베이스마다 필요한 드라이버가 이 PC에 있는지 보고 받는 곳을 알려 줘요. 아무것도 내려받지 않아요.">드라이버 확인</button></div>
+      <div class="row"><button class="btn" id="drv-open" title="데이터베이스마다 필요한 드라이버가 이 PC에 있는지 보고 받는 곳을 알려 줘요. 아무것도 내려받지 않아요.">드라이버 확인</button></div>
     </div>
-    <div class="hint">메모리·표본·날짜 같은 설정은 왼쪽 메뉴 [설정]에 있어요.</div>
     <div class="err" id="err-connect"></div>
-    <div class="conn-foot"><button id="conn-cancel" class="btn" type="button">취소</button><button id="connect" class="btn p conn-go">연결</button></div>
+    <div class="conn-foot"><span class="hint">메모리·표본·날짜 같은 설정은 왼쪽 메뉴 [설정]에 있어요.</span><button id="conn-cancel" class="btn" type="button">취소</button><button id="connect" class="btn p conn-go">연결</button></div>
     <div id="driver-hint" class="hidden"></div>
   </div>
 </div>

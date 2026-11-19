@@ -5,7 +5,7 @@ from lazy import ibis
 from core import parse
 from core import result
 from prep.prep_expr import type_text
-from core.prep_ops import date_pattern, is_number, nan_to_null, stats
+from core.prep_ops import cast_units, date_pattern, is_number, nan_to_null, stats
 
 # 빈 값을 뜻하는 글자로 흔한 것. ""는 blank로 센다.
 MARKERS = ["", "-", "N/A", "n/a", "NA", "null", "NULL", "None", "없음", "?", "none", "undefined", "미입력", "알수없음"]
@@ -27,8 +27,8 @@ def count(cond, w=None):
 
 
 def shape(t, rows):
-    """행 수와 컬럼의 이름·타입·종류."""
-    return {"rows": rows, "columns": [{"name": name, "type": type_text(dtype), "kind": parse.kind(dtype)} for name, dtype in t.schema().items()]}
+    """행 수와 컬럼의 이름·타입·종류, 이 연결이 담을 수 있는 날짜시간 단위(cast_units: 타입 바꾸기의 단위 목록에서 못 담는 것을 뺀다, T1)."""
+    return {"rows": rows, "columns": [{"name": name, "type": type_text(dtype), "kind": parse.kind(dtype)} for name, dtype in t.schema().items()], "cast_units": cast_units(t)}
 
 
 def text_metrics(col, i, w=None):

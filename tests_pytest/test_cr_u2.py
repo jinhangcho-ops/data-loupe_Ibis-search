@@ -25,12 +25,12 @@ def test_css_sizes_and_labels():
 
 
 def test_accessible_names_and_button_sizes():
-    prep, collect, integ = read("prep.html"), read("collect.html"), read("integrations.html")
+    prep, collect = read("prep.html"), read("collect.html")
     assert re.search(r'<input id="sample"[^>]*aria-label="미리 읽을 행 수"', prep)
     assert 'id="uploads" aria-label=' in collect
     assert 'id="sample" role="region" aria-label=' in collect
     assert re.search(r'class="btn" data-add="query"', collect) and 'id="up-toggle" class="btn"' in collect and 'id="runs-toggle" class="btn"' in collect
-    assert 'id="ga4-check" class="btn"' in integ and ">인증 확인<" in integ
+    assert 'id="ga4-check" class="btn"' in collect and ">인증 확인<" in collect  # GA4 칸은 수집 화면으로 옮겼다
 
 
 def test_request_card_first_and_paste_is_details():

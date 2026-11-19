@@ -27,7 +27,7 @@ const TABS: [string, string, string, string, React.ReactNode][] = [  // [주소,
   ["/prep", "prep", "분석", "데이터를 다듬고 그래프로 살펴봐요", I_PREP],
   ["/dashboard", "dashboard", "대시보드", "모아 둔 차트와 지표를 보고 고쳐요", I_DASH],
   ["/collect", "collect", "수집", "웹 API나 웹페이지에서 데이터를 받아 저장해요", I_COLLECT],
-  ["/integrations", "integrations", "연동", "Slack, Notion, GA4, LLM 같은 서비스와 연결해요", I_LINK],
+  ["/integrations", "integrations", "연동", "Slack, Notion, LLM 같은 서비스와 연결해요", I_LINK],
 ];
 const PANEL_PARAM = "panel";
 

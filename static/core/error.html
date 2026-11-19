@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Loupe · 화면을 열지 못했어요</title>
+<!--include core/head.html-->
+</head>
+<body class="app">
+<!--include core/status.html-->
+<!-- 화면 주소가 서버 오류로 열리지 않았을 때(server.error_page). 왼쪽 메뉴로 다른 화면에 갈 수 있다. 주소와 오류 글은 서버가 넣는다. -->
+<div class="pane">
+  <div class="card">
+    <h3>화면을 열지 못했어요</h3>
+    <div class="hint">주소 <!--path--> 화면을 여는 중에 오류가 났어요. 왼쪽 메뉴에서 다른 화면으로 갈 수 있어요.</div>
+    <div class="err" id="page-error"><!--error--></div>
+  </div>
+</div>
+<!--include core/connect.html-->
+<!--include core/dash_refresh.html--><script src="/static/core/common.js"></script>
+<script src="/static/core/dash_refresh.js"></script>
+<script>
+resume();
+</script>
+</body>
+</html>

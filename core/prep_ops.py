@@ -13,7 +13,20 @@ from core import parse
 from core import source
 from core import sql_funcs
 
-TYPE_TO = {"int": "int64", "float": "float64", "string": "string", "date": "date"}
+TYPE_TO = {"int": "int64", "float": "float64", "string": "string", "date": "date", "datetime": "timestamp"}
+# (T1) 날짜시간으로 바꿀 때 고르는 단위: (이름, 화면 글, Ibis truncate 단위, 예시 글). 고른 단위 아래는 잘린다(월 → 그 달 1일 0시, 초 → 소수 초 없음). 결과 타입은 날짜시간 그대로.
+# 예시는 지어낸 고정 글이다(화면이 데이터 값으로 계산하지 않는다).
+CAST_UNITS = [
+    ("year", "연", "Y", "2024-03-17 14:25:36.123 → 2024-01-01 00:00:00"), ("month", "월", "M", "2024-03-17 14:25:36.123 → 2024-03-01 00:00:00"),
+    ("day", "일", "D", "2024-03-17 14:25:36.123 → 2024-03-17 00:00:00"), ("hour", "시", "h", "2024-03-17 14:25:36.123 → 2024-03-17 14:00:00"),
+    ("minute", "분", "m", "2024-03-17 14:25:36.123 → 2024-03-17 14:25:00"), ("second", "초", "s", "2024-03-17 14:25:36.123 → 2024-03-17 14:25:36"),
+    ("ms", "밀리초(ms)", "ms", "14:25:36.123456789 → 14:25:36.123"), ("us", "마이크로초(us)", "us", "14:25:36.123456789 → 14:25:36.123456"),
+    ("ns", "나노초(ns)", "ns", "14:25:36.123456789 → 14:25:36.123456789"),
+]
+CAST_TRUNCATE = {name: code for name, _, code, _ in CAST_UNITS}
+SUBSECOND = ("ms", "us", "ns")
+# 초보다 작은 단위를 담고 자를 수 있다고 실제로 확인한 엔진만(DuckDB 파일: us까지, ns는 truncate를 못 함 / 테이블 파일의 Polars: ns까지). 여기 없는 연결은 초까지만 보여 준다(추측하지 않는다).
+ENGINE_SUBSECOND = {"duckdb": ("ms", "us"), "polars": ("ms", "us", "ns")}
 FLOAT_SHAPE = r"^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$"  # 12, -1.5, .5, 1e5. inf·nan은 숫자로 보지 않는다.
 FILLS = ["drop", "value", "mean", "median", "mode", "prev", "next"]
 STRING, NUMBER, DATE = ("string",), ("int", "float"), ("date",)
@@ -248,6 +261,27 @@ def regex_replace(t, name, pair):
     return t.mutate(**{name: re_replace(t, t[name], *pair)})
 
 
+def cast_units(t: "ibis.Expr") -> list[str]:
+    """(T1) t(표·컬럼)의 연결이 담을 수 있는 날짜시간 단위 이름들(CAST_UNITS의 차례). 초보다 작은 단위는 ENGINE_SUBSECOND에 확인해 둔 엔진의 것만 넣는다."""
+    fine = ENGINE_SUBSECOND.get(t.get_backend().name, ())
+    return [name for name, *_ in CAST_UNITS if name not in SUBSECOND or name in fine]
+
+
+def to_datetime(col: "ibis.Column", arg: dict) -> "ibis.Column":
+    """(T1) 날짜시간으로. 글자는 to_date와 같은 규칙(형식, 안 맞으면 빈 값)으로 읽고, 이미 날짜시간이면 그대로 둔다. unit이 있으면 그 단위 아래를 잘라 낸다(타입은 날짜시간 그대로).
+    연결이 담지 못하는 단위는 다른 단위로 바꾸지 않고 거절한다."""
+    if arg.get("format") or col.type().is_string():
+        col = to_date(col, arg.get("format") or "%Y-%m-%d").cast("timestamp")
+    elif not col.type().is_timestamp():
+        col = col.cast("timestamp")
+    unit = arg.get("unit")
+    if not unit:
+        return col
+    if unit not in cast_units(col):
+        raise ValueError(f"이 연결은 날짜시간을 '{unit}' 단위까지 담지 못해요. 고를 수 있는 단위: {', '.join(cast_units(col))}")
+    return col.truncate(CAST_TRUNCATE[unit])
+
+
 def retype(col, arg):
     to = arg["to"]
     if to == "string":  # 글자로는 값을 바꾸지 않고 타입만 바꾼다(숫자 모양 검사·공백 지우기를 거치지 않는다).
@@ -259,6 +293,8 @@ def retype(col, arg):
         col = col.re_search(FLOAT_SHAPE).ifelse(col, col.re_replace(r"[^0-9.+\-]", ""))
     if to == "date":
         return to_date(col, arg.get("format") or "%Y-%m-%d") if arg.get("format") or col.type().is_string() else col.cast("date")
+    if to == "datetime":
+        return to_datetime(col, arg)
     return to_number(col, to)
 
 
@@ -1259,9 +1295,10 @@ OPS = [
     ("replace", None, is_replace, '[["찾을 값", "바꿀 값"], ...] 또는 {"how": "exact" | "contains" | "prefix" | "suffix" | "regex" | "list" | "cond" | "null_to" | "to_null", '
      '"pairs": [[찾을, 바꿀], ...], "ignore_case": false, "trim": false, "rest": "keep" | "null" | 값, "to_new": "새 컬럼"}', replace),
     ("regex", STRING, lambda v: is_strs(v) and len(v) == 2 and v[0] != "", '["패턴", "바꿀 글자"]', regex_replace),
-    ("type", None, lambda v: isinstance(v, dict) and v.get("to") in TYPE_TO and set(v) <= {"to", "clean", "format"}
-     and isinstance(v.get("clean", False), bool) and isinstance(v.get("format", ""), str),
-     '{"to": "int" | "float" | "string" | "date", "clean": true, "format": "%Y%m%d"}', column(retype)),
+    ("type", None, lambda v: isinstance(v, dict) and v.get("to") in TYPE_TO and set(v) <= {"to", "clean", "format", "unit"}
+     and isinstance(v.get("clean", False), bool) and isinstance(v.get("format", ""), str)
+     and ("unit" not in v or (v["to"] == "datetime" and v["unit"] in CAST_TRUNCATE)),  # 단위는 날짜시간으로 바꿀 때만(T1). 없으면 자르지 않는다(옛 단계)
+     '{"to": "int" | "float" | "string" | "date" | "datetime", "clean": true, "format": "%Y%m%d", "unit": ' + " | ".join(f'"{u}"' for u in CAST_TRUNCATE) + "(datetime일 때만, 그 아래를 자름)}", column(retype)),
     ("flag", None, lambda v: v is True, "true", lambda t, name, _: add_columns(t, {f"{name}_isnull": t[name].isnull()})),
     ("flags", None, with_known(is_flags), '{"zero": true, "cmp": [">=", 60], "top": [1, 5, 10] 또는 true, "above": "mean" | "median", "between": [최소, 최대], "isin": [값, ...], "outlier": {"by": "iqr" | "std" | "mad", "k": 수}} 중 하나 이상', flags),
     ("gfill", None, with_known(is_gfill), '{"how": "mean" | "median" | "mode", "group": ["묶을 컬럼", ...](1~3개)}', group_fill),
@@ -1314,7 +1351,9 @@ LABELS = [
     {"id": "replace", "label": "값 바꿔 쓰기", "group": "글자", "need": "any", "fields": [_F("from", "찾을 값"), _F("to", "바꿀 값")]},
     {"id": "regex", "label": "정규식으로 바꾸기", "group": "글자", "need": "str", "fields": [_F("pattern", "패턴"), _F("to", "바꿀 글자")]},
     {"id": "type", "label": "타입 바꾸기", "group": "타입", "need": "any",
-     "fields": [_O("to", ("int", "정수"), ("float", "실수"), ("string", "글자"), ("date", "날짜")), _C("clean", "쉼표·단위 떼기"), _F("format", "%Y-%m-%d")]},
+     "fields": [_O("to", ("int", "정수"), ("float", "실수"), ("string", "글자"), ("date", "날짜"), ("datetime", "날짜시간")), _C("clean", "쉼표·단위 떼기"), _F("format", "%Y-%m-%d"),
+                # (T1) 날짜시간일 때만(when) 보이는 단위. 옵션의 셋째 값은 고르면 그 아래에 보이는 예시 글. 연결이 못 담는 단위는 화면이 cast_units로 뺀다
+                {**_O("unit", ("", "단위 고르지 않음(그대로)", "자르지 않고 날짜시간으로만 바꿔요."), *[(name, f"{text} 단위로 자르기", example) for name, text, _, example in CAST_UNITS]), "placeholder": "날짜시간 단위", "when": {"to": "datetime"}}]},
     {"id": "flag", "label": "빈 값 표시 컬럼 만들기", "group": "새 컬럼", "need": "any", "fields": []},
     {"id": "flags", "label": "0·임계치·상위 % 같은 표시 컬럼 만들기", "group": "새 컬럼", "need": "any",
      "fields": [_C("zero", "0이면 1"), _O("cmp_op", ("", "임계치 비교 안 함"), *[(o, o) for o in FLAG_CMPS]), _F("cmp", "임계치 X"), _C("top", "상위 % 표시"),

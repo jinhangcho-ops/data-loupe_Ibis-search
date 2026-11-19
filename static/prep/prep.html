@@ -563,12 +563,13 @@ const GROUPS = ["글자", "빈 값", "타입", "숫자", "범주", "새 컬럼"]
 const NUM = ["int", "float"];
 const isStr = c => c.kind === "string";
 const isNum = (c, ops) => NUM.includes(c.kind) || NUM.includes(ops.type?.to);
-const isDate = (c, ops) => c.kind === "date" || ops.type?.to === "date";
+const DATES = ["date", "datetime"];  // 타입 바꾸기의 날짜·날짜시간
+const isDate = (c, ops) => c.kind === "date" || DATES.includes(ops.type?.to);
 const PARTS = [["year", "연"], ["month", "월"], ["day", "일"], ["weekday", "요일"], ["ym", "월 단위"], ["hour", "시"],
   ["weekday_num", "요일 번호"], ["weekday_name", "요일 이름"], ["is_weekend", "주말"], ["time_of_day", "시간대"], ["work_hours", "업무시간"], ["month_phase", "월초·중·말"], ["is_month_end", "월말 날"]];
 const CLOCK = ["hour", "time_of_day", "work_hours"];  // prep_ops.CLOCK_PARTS와 같다
 // CLOCK의 것은 날짜시간 컬럼(원래 타입이 timestamp, 또는 타입 바꾸기의 형식에 %H)에서만 고를 수 있다.
-const hasTime = (c, ops) => c.type.startsWith("timestamp") || (ops.type?.format ?? "").includes("%H");
+const hasTime = (c, ops) => c.type.startsWith("timestamp") || (ops.type?.format ?? "").includes("%H") || ops.type?.to === "datetime";
 const numKind = (c, ops) => isNum(c, ops) ? "num" : "str";  // PrepMenu.value의 kind
 const pickCols = blank => [["", blank], ...prof.columns.map(x => [x.name, x.name])];  // 컬럼을 고르는 칸의 선택지(fill의 by와 같다)
 const CLOSED_OPTS = [["left", "[a, b) 왼쪽 포함"], ["right", "(a, b] 오른쪽 포함"]], LABEL_OPTS = [["range", "구간 글자"], ["mid", "구간 가운데 값"], ["index", "구간 번호"]];  // bins·cut 공용
@@ -595,14 +596,17 @@ const OPS = {
     fields: () => [{ name: "pattern", placeholder: "패턴" }, { name: "to", placeholder: "바꿀 글자" }],
     value: st => PrepMenu.value("regex", st),
     load: v => ({ pattern: v[0], to: v[1] }) },
-  type: { label: "타입 바꾸기", group: "타입", init: { to: "int", clean: false, format: "" },
-    fields: (st, c) => [
-      { name: "to", redraw: true, options: [["int", "정수"], ["float", "실수"], ["string", "글자"], ["date", "날짜"]] },
+  // (T1) 날짜시간(datetime)은 단위를 고르면 그 아래를 잘라 바꾼다(월 → 그 달 1일 0시). 단위 목록·예시 글은 서버 것(PrepMenu.unitOptions), 이 연결이 못 담는 단위(prof.cast_units 밖)는 뺀다
+  type: { label: "타입 바꾸기", group: "타입", init: { to: "int", clean: false, format: "", unit: "" },
+    fields: (st, c) => { const units = PrepMenu.unitOptions(prof?.cast_units); return [
+      { name: "to", redraw: true, options: [["int", "정수"], ["float", "실수"], ["string", "글자"], ["date", "날짜"], ["datetime", "날짜시간"]] },
       ...(isStr(c) && NUM.includes(st.to) ? [{ name: "clean", check: "쉼표·단위 떼기" }] : []),
       ...(st.to === "date" ? [{ name: "format", placeholder: "%Y-%m-%d" }, { hint: "예: %Y%m%d, %Y-%m-%d %H:%M:%S. 시각까지 있으면 날짜시간이 돼요." }] : []),
-    ],
-    value: (st, c) => ({ to: st.to, ...(isStr(c) && NUM.includes(st.to) ? { clean: st.clean } : {}), ...(st.to === "date" && st.format ? { format: st.format } : {}) }),
-    load: v => ({ to: v.to, clean: v.clean ?? false, format: v.format ?? "" }) },
+      ...(st.to === "datetime" ? [{ name: "format", placeholder: "%Y-%m-%d" }, { hint: "글자를 읽을 형식이에요. 예: %Y-%m-%d %H:%M:%S" }, { name: "unit", redraw: true, options: units },
+        ...units.filter(o => o[0] === st.unit && o[2]).map(o => ({ hint: o[2] }))] : []),  // 고른 단위의 예시 한 줄
+    ]; },
+    value: (st, c) => ({ to: st.to, ...(isStr(c) && NUM.includes(st.to) ? { clean: st.clean } : {}), ...(DATES.includes(st.to) && st.format ? { format: st.format } : {}), ...(st.to === "datetime" && st.unit ? { unit: st.unit } : {}) }),
+    load: v => ({ to: v.to, clean: v.clean ?? false, format: v.format ?? "", unit: v.unit ?? "" }) },
   flag: { label: "빈 값 표시 컬럼 만들기", group: "새 컬럼", init: {}, value: () => true },
   flags: { label: "0·임계치·상위 % 같은 표시 컬럼 만들기", group: "새 컬럼", init: { zero: false, cmp_op: "", cmp: "", top: false, top_pct: "", above: "", low: "", high: "", isin: "", out_by: "", out_k: "" },
     fields: (st, c, ops) => [
@@ -2131,7 +2135,7 @@ function colItems(name) {
   const box = () => PrepMenu.valuesBox({ column: src, values: () => valuesOf(src), onApply: (keep, vals) => { RowPick.valueLines(src, keep, vals).forEach(l => filters.push(l)); syncFilters(); } });
   return [["이 컬럼 빼기", e.keep ? () => { e.keep = false; preview = null; showAll(); } : null, "이미 뺐어요"],
     ["값 골라서 제외·만 보기…", box],
-    ...PrepMenu.items({ column: name, type: c.type, sample: () => sampleOf(src), values: () => valuesOf(src), onPick: (id, v) => addOp(name, id, v), flat: connected === "flat" })];
+    ...PrepMenu.menu({ column: name, type: c.type, sample: () => sampleOf(src), values: () => valuesOf(src), onPick: (id, v) => addOp(name, id, v), flat: connected === "flat", units: prof?.cast_units })];
 }
 // 컬럼 줄 우클릭(메뉴 상자·키보드·위치·초점은 common.js ctxMenu). 입력칸·표·선택한 글자 위에서는 브라우저 기본 메뉴를 둔다. 메뉴 키·Shift+F10은 그 컬럼 줄 아래에
 document.oncontextmenu = e => { const row = e.target.closest?.("#pcols .pcol"); ctxMenu(e, row && !getSelection()?.toString() ? colItems(row.dataset.col) : null, row?.getBoundingClientRect()); };

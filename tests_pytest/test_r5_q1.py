@@ -44,7 +44,7 @@ def test_contract_calls_in_code():
     assert '"/api/release"' in HTML and '"/api/period_table"' in HTML and "/api/date_range?" in HTML and "&confirmed=1" in HTML
     assert "selectable: true" in HTML and "addCol: openNewCol" in HTML and "RowPick.bar($(\"rows-tools\")" in HTML
     assert "shown: {" in HTML  # 전처리로 보내기에 지금 보이는 쪽
-    assert "PrepMenu.items(" in HTML and "PrepMenu.valuesBox(" in HTML and "RowPick.valueLines(" in HTML
+    assert "PrepMenu.menu(" in HTML and "PrepMenu.valuesBox(" in HTML and "RowPick.valueLines(" in HTML
     assert "g.columns[c.cellIndex - (g.selectable ? 1 : 0)]" in HTML  # 고르기 칸만큼 밀린 칸 번호(고르기 칸 없는 표는 그대로)
     for id_ in ("page-go", "sql-go"):
         assert f'$("{id_}")' in HTML
@@ -119,7 +119,8 @@ PAGE = r"""(async () => {
     $("quotes").checked = true;
     S.conditions = []; renderList("conditions");
     // P4 머리글 우클릭: 정렬·컬럼 빼기·값 고르기·전처리 단계
-    let items = menu(th("고객"));
+    const top = menu(th("고객")), sub = name => { top.find(b => b.textContent === name).click(); return [...document.querySelectorAll(".ctx-sub [role=menuitem]")]; };
+    let items = [...top, ...sub("새 컬럼 만들기"), ...sub("글자 다듬기")];  // 전처리 단계는 묶음의 하위 메뉴에 있다(마지막에 연 묶음이 떠 있다)
     out.thMenu = items.map(b => b.textContent); out.thOff = items.filter(b => b.disabled).length;
     out.statsItem = (b => b && [b.disabled, b.title])(items.find(b => b.textContent.includes("라벨 인코딩")));  // 표 전체 통계를 읽는 단계는 쿼리 화면에서 흐리게 + 안내
     items.find(b => b.textContent.endsWith("앞뒤 공백 지우기")).click();
@@ -506,7 +507,7 @@ globalThis.$ = id => els[id] ??= mk("x", {});
 document.getElementById = id => $(id);  // rowpick.js가 따옴표 해석 칸을 본다
 const added = [], runSearch = async () => true;
 const wrap = v => v, gridAt = (g, k) => g.view ? g.view[k] : k, addItem = async (k, l) => { added.push(l); return true; }, sortBy = () => {}, flash = () => {}, inExplore = () => true;
-const searchUndo = { undo() {} }, PrepMenu = { items: () => [] }, connected = "other";
+const searchUndo = { undo() {} }, PrepMenu = { menu: () => [] }, connected = "other";
 const cellAt = (tag, index, tr) => { const c = { tagName: tag, cellIndex: index, closest: s => s === "tr" ? tr : null }; return { closest: s => s.includes("#rows") ? c : null }; };
 const row = p => ({ dataset: p === undefined ? {} : { p: String(p) }, sectionRowIndex: 0, classList: { contains: () => false } });
 """

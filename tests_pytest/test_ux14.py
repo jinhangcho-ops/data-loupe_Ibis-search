@@ -33,6 +33,7 @@ def test_prep_read_settings_folded():
 def test_integrations_dev_card_gone_and_ga4_hints():
     html = read("integrations.html")
     assert "새 서비스 추가하기" not in html and "SENDERS" not in html
+    html = read("collect.html")  # GA4 칸은 수집 화면으로 옮겼다
     assert "무엇별로 볼까요" in html and "무엇을 셀까요" in html and "28daysAgo(28일 전)" in html
 
 

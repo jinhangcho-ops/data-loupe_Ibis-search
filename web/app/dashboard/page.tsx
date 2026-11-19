@@ -75,19 +75,6 @@ function DashboardView() {
         </div>
       )}
       <div className={state.locked || !state.ok ? "err" : "ok"} id="err-dash" role="status">{state.locked ? consts?.dash.locked : state.error}</div>
-      {!n && (
-        <div className="board-empty [display:flex] flex-col items-center gap-3.5">
-          <p className="hint [font-size:.875rem]">{state.dash ? "아직 카드가 없어요." : "저장한 대시보드가 없어요."} 이렇게 시작해요.</p>
-          <ol className="hint [font-size:.875rem] m-0 p-0 [list-style:none] [line-height:1.8]"><li>① [카드 추가]를 눌러요</li><li>② 보고 싶은 카드 종류를 골라요</li></ol>
-          <p className="hint [font-size:.875rem]">또는 쿼리 화면에서 차트를 만들고 [대시보드에 추가]를 눌러요.</p>
-          <div className="row [display:flex] gap-3">
-            <button className="btn p h-[2.75rem] [padding:0_1.375rem] [font-size:.9375rem]" onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: null }); setAddOpen(true); }}>카드 추가</button>
-            <a className="btn h-[2.75rem] [padding:0_1.375rem] [font-size:.9375rem] [text-decoration:none]" href="/search">쿼리에서 가져오기</a>
-          </div>
-          {!conn && <button id="d-demo" className="ghost" title="지어낸 주문·고객·방문기록 표에 연결해요. 연결할 데이터가 없어도 카드가 어떻게 보이는지 볼 수 있어요"
-            onClick={e => { e.stopPropagation(); demo(); }}>예시 데이터로 확인하기</button>}
-        </div>
-      )}
       <div className="d-main">
         {gallery && !dashOnly && (
           <aside id="d-gallery-box" aria-label="카드 모음">
@@ -95,7 +82,20 @@ function DashboardView() {
             <Gallery onAdd={spec => addShell(spec)} />
           </aside>
         )}
-        <div><Grid /></div>
+        {/* 시작 안내는 가운데 칸 안에 둔다: .d-main 위에 두면 그 높이만큼 카드 모음·카드 추가 서랍이 아래로 밀려 잘린다 */}
+        <div>{!n && (
+          <div className="board-empty [display:flex] flex-col items-center gap-3.5">
+            <p className="hint [font-size:.875rem]">{state.dash ? "아직 카드가 없어요." : "저장한 대시보드가 없어요."} 이렇게 시작해요.</p>
+            <ol className="hint [font-size:.875rem] m-0 p-0 [list-style:none] [line-height:1.8]"><li>① [카드 추가]를 눌러요</li><li>② 보고 싶은 카드 종류를 골라요</li></ol>
+            <p className="hint [font-size:.875rem]">또는 쿼리 화면에서 차트를 만들고 [대시보드에 추가]를 눌러요.</p>
+            <div className="row [display:flex] gap-3">
+              <button className="btn p h-[2.75rem] [padding:0_1.375rem] [font-size:.9375rem]" onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: null }); setAddOpen(true); }}>카드 추가</button>
+              <a className="btn h-[2.75rem] [padding:0_1.375rem] [font-size:.9375rem] [text-decoration:none]" href="/search">쿼리에서 가져오기</a>
+            </div>
+            {!conn && <button id="d-demo" className="ghost" title="지어낸 주문·고객·방문기록 표에 연결해요. 연결할 데이터가 없어도 카드가 어떻게 보이는지 볼 수 있어요"
+              onClick={e => { e.stopPropagation(); demo(); }}>예시 데이터로 확인하기</button>}
+          </div>
+        )}<Grid /></div>
         {addOpen && !dashOnly ? <AddCardMenu open onClose={() => setAddOpen(false)} onAdd={add} /> : <CardPanel card={card} onChange={patch => card && dispatch({ type: "card", id: card.id, patch })} onClose={() => dispatch({ type: "select", id: null })} />}
       </div>
     </div>

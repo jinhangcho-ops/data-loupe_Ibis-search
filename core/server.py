@@ -6,9 +6,11 @@ import os
 import re
 import secrets
 import threading
+from http import HTTPStatus
 from pathlib import Path
 
 from flask import Flask, Response, abort, current_app, g, jsonify, request, send_from_directory
+from markupsafe import escape
 from werkzeug.exceptions import HTTPException
 
 from core import drivers
@@ -239,6 +241,9 @@ def plain_error(message):
     return message
 
 
+JSON_ERRORS = ("/api/", "/chart")  # 오류를 JSON으로 주는 주소: API와 차트 섬(iframe 안이라 메뉴를 그리면 화면 속에 화면이 생긴다). 그 밖의 주소는 화면이라 오류 화면을 준다
+
+
 @app.errorhandler(Exception)
 def on_error(e):
     from core import querying
@@ -246,6 +251,8 @@ def on_error(e):
         return e.response
     if isinstance(e, HTTPException):  # 404, 405, 잘못된 JSON 등은 원래 상태 코드로
         return jsonify(error=e.description), e.code
+    if not request.path.startswith(JSON_ERRORS):  # 화면 주소: JSON만 뜨면 메뉴가 없어 다른 화면으로 갈 수 없다(창에 주소 줄이 없다)
+        return error_page(plain_error(source.mask(str(e), state["passwords"]))), HTTPStatus.BAD_REQUEST  # 상태 코드는 JSON 오류와 같다
     if isinstance(e, source.unsupported_errors()):  # 연결(백엔드)이 하지 못하는 계산
         return jsonify(error=f"이 연결에서는 지원하지 않는 계산이에요. ({e})"), 400
     message = source.mask(str(e), state["passwords"])
@@ -685,6 +692,13 @@ def page(name):
     html = re.sub(r"<!--include ([A-Za-z0-9._/-]+)-->", lambda m: Path(folder, m[1]).read_text(encoding="utf-8"), html)
     html = html.replace("/*SERVER*/{}", json.dumps(constants(name.split("/")[0]), ensure_ascii=False).replace("<", "\\u003c"))
     return html_response(html)
+
+
+def error_page(message):
+    """화면 주소가 실패했을 때의 화면(core/error.html): 왼쪽 메뉴와 머리는 다른 화면과 같고, 열려던 주소와 오류 글을 넣는다(글자 그대로 보이게 escape)."""
+    response = page("core/error.html")
+    response.set_data(response.get_data(as_text=True).replace("<!--path-->", str(escape(request.path))).replace("<!--error-->", str(escape(message))))
+    return response
 
 
 def next_page(path):
