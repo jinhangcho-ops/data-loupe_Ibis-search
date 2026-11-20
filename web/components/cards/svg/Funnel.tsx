@@ -6,6 +6,7 @@ import { Box, type P } from "./common";
 
 // 배율 1의 값: 단계 이름 글자 수, 생키 위·아래 글자 자리, 사다리꼴 그림 높이·도형 몫, 단계마다 두 줄 글에 더 줄 높이(배율 1을 넘는 만큼)
 const NAME_MAX = 14, NAME_GAP = 4, TOP = 30, BOTTOM = 40, LADDER_H = 340, SHAPE_SHARE = 0.5, ROW_TEXT = 36;
+const NODE_RX = 4, LINK_OPACITY = 0.38;  // 72-sankey: 단계 막대 모서리, 띠 진하기(띠는 솟지 않는다)
 const short = (s: string, max: number) => (s.length > max ? s.slice(0, max - 1) + "…" : s);
 
 export function Funnel({ card, colors }: P) {
@@ -21,12 +22,12 @@ export function Funnel({ card, colors }: P) {
   return (
     <Box cls="table">
       <div className="hint">{d?.count === "each" ? EACH_TEXT : `${funnelSentence(steps)} (${windowText(d?.window)})`}</div>
-      <div className="flex-1 min-h-[140px]">
+      <div className="nm-well flex-1 min-h-[140px]">
         {lad ? (
           <svg viewBox={`0 0 ${lad.width} ${lad.height}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" role="img" aria-label={card.title}>
             {lad.rows.map((r, i) => (
               <g key={"l" + i}>
-                <path d={r.path} fill={c.bar}><title>{r.lines[1]}</title></path>
+                <path className="nm-raise" d={r.path} fill={c.bar}><title>{r.lines[1]}</title></path>
                 <text x={r.textX} y={r.textY} fill={c.text}>
                   <tspan x={r.textX} dy="-0.3em" fontSize={12 * s} fontWeight={600}>{r.lines[0]}</tspan>
                   <tspan x={r.textX} dy="1.3em" fontSize={11 * s} opacity={0.8}>{r.lines[1]}</tspan>
@@ -36,9 +37,9 @@ export function Funnel({ card, colors }: P) {
           </svg>
         ) : g && (
         <svg viewBox={`0 0 ${g.width} ${g.height}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" role="img" aria-label={card.title}>
-          {g.nexts.map((b, i) => <path key={"n" + i} d={b.path} fill={c.next} opacity={0.45}><title>{`${steps[b.from].name} → ${steps[b.to].name}: ${b.users.toLocaleString()}명`}</title></path>)}
-          {g.drops.map((b, i) => <path key={"d" + i} d={b.path} fill={c.drop} opacity={0.55}><title>{`${steps[b.step - 1].name}에서 ${b.users.toLocaleString()}명 이탈`}</title></path>)}
-          {g.bars.map((b, i) => <rect key={"b" + i} x={b.x} y={b.y} width={b.w} height={Math.max(b.h, 1)} fill={c.bar} rx={2}><title>{`${b.name}: ${b.users.toLocaleString()}명`}</title></rect>)}
+          {g.nexts.map((b, i) => <path key={"n" + i} d={b.path} fill={c.next} fillOpacity={LINK_OPACITY}><title>{`${steps[b.from].name} → ${steps[b.to].name}: ${b.users.toLocaleString()}명`}</title></path>)}
+          {g.drops.map((b, i) => <path key={"d" + i} d={b.path} fill={c.drop} fillOpacity={LINK_OPACITY}><title>{`${steps[b.step - 1].name}에서 ${b.users.toLocaleString()}명 이탈`}</title></path>)}
+          {g.bars.map((b, i) => <rect key={"b" + i} className="nm-raise" x={b.x} y={b.y} width={b.w} height={Math.max(b.h, 1)} fill={c.bar} rx={NODE_RX}><title>{`${b.name}: ${b.users.toLocaleString()}명`}</title></rect>)}
           {g.bars.map((b, i) => {
             const anchor = i === 0 ? "start" : i === g.bars.length - 1 ? "end" : "middle", lx = anchor === "start" ? b.x : anchor === "end" ? b.x + b.w : b.x + b.w / 2;
             return (

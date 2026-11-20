@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="히트맵 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.5"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.045"/>
+</filter>
+</defs>
+<text x="32" y="23" text-anchor="end" font-size="10" fill="#8F979F">월</text>
+<rect x="41" y="9" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="66" y="9" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="91" y="9" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="116" y="9" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="141" y="9" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="166" y="9" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="191" y="9" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="216" y="9" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="241" y="9" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="266" y="9" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="291" y="9" width="22" height="19" rx="4" fill="#3D6DF2"/>
+<rect x="316" y="9" width="22" height="19" rx="4" fill="#6690F7"/>
+<text x="32" y="45" text-anchor="end" font-size="10" fill="#8F979F">화</text>
+<rect x="41" y="31" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="66" y="31" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="91" y="31" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="116" y="31" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="141" y="31" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="166" y="31" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="191" y="31" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="216" y="31" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="241" y="31" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="266" y="31" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="291" y="31" width="22" height="19" rx="4" fill="#3D6DF2"/>
+<rect x="316" y="31" width="22" height="19" rx="4" fill="#6690F7"/>
+<text x="32" y="67" text-anchor="end" font-size="10" fill="#8F979F">수</text>
+<rect x="41" y="53" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="66" y="53" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="91" y="53" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="116" y="53" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="141" y="53" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="166" y="53" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="191" y="53" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="216" y="53" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="241" y="53" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="266" y="53" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="291" y="53" width="22" height="19" rx="4" fill="#2348B8"/>
+<rect x="316" y="53" width="22" height="19" rx="4" fill="#6690F7"/>
+<text x="32" y="89" text-anchor="end" font-size="10" fill="#8F979F">목</text>
+<rect x="41" y="75" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="66" y="75" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="91" y="75" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="116" y="75" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="141" y="75" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="166" y="75" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="191" y="75" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="216" y="75" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="241" y="75" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="266" y="75" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="291" y="75" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="316" y="75" width="22" height="19" rx="4" fill="#6690F7"/>
+<text x="32" y="111" text-anchor="end" font-size="10" fill="#8F979F">금</text>
+<rect x="41" y="97" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="66" y="97" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="91" y="97" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="116" y="97" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="141" y="97" width="22" height="19" rx="4" fill="#2D343C"/>
+<rect x="166" y="97" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="191" y="97" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="216" y="97" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="241" y="97" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="266" y="97" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="291" y="97" width="22" height="19" rx="4" fill="#3D6DF2"/>
+<rect x="316" y="97" width="22" height="19" rx="4" fill="#6690F7"/>
+<text x="32" y="133" text-anchor="end" font-size="10" fill="#8F979F">토</text>
+<rect x="41" y="119" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="66" y="119" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="91" y="119" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="116" y="119" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="141" y="119" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="166" y="119" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="191" y="119" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="216" y="119" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="241" y="119" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="266" y="119" width="22" height="19" rx="4" fill="#3D6DF2"/>
+<rect x="291" y="119" width="22" height="19" rx="4" fill="#2348B8"/>
+<rect x="316" y="119" width="22" height="19" rx="4" fill="#3D6DF2"/>
+<text x="32" y="155" text-anchor="end" font-size="10" fill="#8F979F">일</text>
+<rect x="41" y="141" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="66" y="141" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="91" y="141" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="116" y="141" width="22" height="19" rx="4" fill="#B7C8EE"/>
+<rect x="141" y="141" width="22" height="19" rx="4" fill="#8FB0FF"/>
+<rect x="166" y="141" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="191" y="141" width="22" height="19" rx="4" fill="#3D6DF2"/>
+<rect x="216" y="141" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="241" y="141" width="22" height="19" rx="4" fill="#6690F7"/>
+<rect x="266" y="141" width="22" height="19" rx="4" fill="#3D6DF2"/>
+<rect x="291" y="141" width="22" height="19" rx="4" fill="#2348B8"/>
+<rect x="316" y="141" width="22" height="19" rx="4" fill="#3D6DF2"/>
+<text x="51" y="174" text-anchor="middle" font-size="10" fill="#8F979F">0시</text>
+<text x="126" y="174" text-anchor="middle" font-size="10" fill="#8F979F">6시</text>
+<text x="201" y="174" text-anchor="middle" font-size="10" fill="#8F979F">12시</text>
+<text x="276" y="174" text-anchor="middle" font-size="10" fill="#8F979F">18시</text>
+</svg>

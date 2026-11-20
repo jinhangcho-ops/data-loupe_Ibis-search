@@ -16,8 +16,8 @@ export function StarSection({ id }: { id: string }) {
   const [op, setOp] = useState<string>(lim.op), [value, setValue] = useState(String(lim.value)), [note, setNote] = useState("");
   const set = (next: NorthStar) => dispatch({ type: "meta", patch: { north_star: next } });
   return (
-    <div>
-      <h5>중요 지표</h5>
+    <details className="pplace" open={isStar || isCounter || undefined}>{/* 정해 둔 카드는 펼친 채로(한계 칸이 보이게) */}
+      <summary>중요 지표</summary>
       <div className="prow">
         <button type="button" className={`btn${isStar ? " on" : ""} ${FIT}`} aria-pressed={isStar} title="대시보드에서 가장 중요한 지표 하나예요. 카드 제목 옆에 ★가 붙어요"
           onClick={() => set({ ...star, card: isStar ? "" : id, counters: star.counters.filter(c => c !== id) })}>{isStar ? "북극성 지표 해제" : "북극성 지표로 정하기"}</button>
@@ -43,6 +43,6 @@ export function StarSection({ id }: { id: string }) {
           <div className="hint">{note || "지금 값이 한계를 벗어나면 대시보드 위에 경고가 떠요."}</div>
         </>
       )}
-    </div>
+    </details>
   );
 }

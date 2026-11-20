@@ -26,23 +26,32 @@
 .board.grid { grid-template-columns:repeat(12, minmax(0, 1fr)); grid-auto-rows:2.5rem; gap:.625rem; align-items:stretch; padding-left:.625rem; padding-right:.625rem; }
 .board.grid.drop-ready { outline:.125rem dashed var(--accent); outline-offset:-.25rem; }
 .board.grid .bcard { display:flex; flex-direction:column; min-height:0; overflow:hidden; position:relative; cursor:default; }
-.board.grid .bhead { flex-wrap:wrap; row-gap:.125rem; }  /* 좁은 카드에서는 시각·단추가 아랫줄로 내려가 이름이 보인다 */
-.board.grid .bhead.movable { cursor:grab; touch-action:none; user-select:none; }
-.board.grid .bhead .btitle { flex-basis:5em; }
-.board.grid .bhead.movable .ib:first-of-type { margin-left:auto; }
-.bat { flex:none; margin:0; white-space:nowrap; font-variant-numeric:tabular-nums; }  /* 카드 머리 오른쪽의 값을 구한 시각 */
-.board.grid .bhead.movable .bat { order:1; flex-basis:100%; }  /* 편집 중에는 단추에 자리를 내주고 이름 아랫줄로 */
+.board.grid .bhead.movable { cursor:grab; touch-action:none; user-select:none; }  /* 머리는 늘 한 줄: 이름이 줄어들고(말줄임) ⚙·×는 같은 줄 오른쪽. 값을 구한 시각은 머리의 title */
 .board.grid .bcard.dragging { opacity:.8; box-shadow:0 .5rem 1.5rem rgba(0, 0, 0, .25); z-index:2; }
 .board.grid .bcard.dragging .bhead.movable { cursor:grabbing; }
 .board.grid .bcard.editing { border-color:var(--accent); }
 .board.grid .bbody { flex:1; aspect-ratio:auto; max-height:none; min-height:2.5rem; }  /* 아주 좁은 카드에서도 그림 자리 한 줄은 남긴다 */
 .board.grid .bwhen { flex:0 1 auto; min-height:0; overflow:hidden; }  /* 자리가 모자라면 아래 안내가 줄어든다(그림과 겹치지 않게) */
 .board.grid .bhead .ib { width:1.625rem; height:1.625rem; flex:none; font-size:var(--fs-sm); }
+.board.grid .bcard:not(:hover, :focus-within, .editing) .bhead .ib { display:none; }  /* ⚙·×는 그 카드에 마우스·포커스가 있거나 설정 중일 때만: 좁은 카드에서 이름이 한 글자로 줄지 않게 */
 .bbadge { color:var(--accent); font-weight:700; flex:none; }
 .bresize { position:absolute; right:0; bottom:0; width:1.125rem; height:1.125rem; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg, transparent 52%, var(--faint) 52%, var(--faint) 60%, transparent 60%, transparent 72%, var(--faint) 72%, var(--faint) 80%, transparent 80%); }
 .gal { display:grid; grid-template-columns:1fr 1fr; gap:.375rem; }
 .gal-tile { display:flex; flex-direction:column; gap:.125rem; border:1px solid var(--line); border-radius:var(--r-card); padding:.375rem .5rem; cursor:grab; background:var(--bg); font-size:var(--fs-xs); }
 .gal-tile:hover { border-color:var(--accent); }
+/* 그림으로 고르기 화면(Toolbar의 .pick-box > Gallery pics): 넓은 창에 그림 타일을 여러 줄로 */
+.modal-box.pick-box { width:min(75rem, 94vw); height:88vh; }
+.gal-pics .gal { grid-template-columns:repeat(auto-fill, minmax(13.75rem, 1fr)); gap:.75rem; }
+.gal-pics .gal-tile { cursor:pointer; padding:.5rem; gap:.25rem; }
+/* 미리보기 그림(예시 그림 파일): 밝은·어두운 두 장 중 테마에 맞는 한 장만. 바탕은 그림의 바탕색과 같게 */
+.gal-pic, .gal-pic-dark { width:100%; aspect-ratio:9 / 5; object-fit:contain; border-radius:var(--r-ctl); background:#e3e8ef; pointer-events:none; }
+.gal-pic-dark { background:#20252c; }
+.gal-pic-dark, :root[data-theme=dark] .gal-pic { display:none; }
+:root[data-theme=dark] .gal-pic-dark { display:block; }
+.gal-more > summary, .d-main > aside .pplace > summary { cursor:pointer; color:var(--muted); font-weight:600; font-size:var(--fs-sm); min-height:1.5rem; margin-top:.375rem; }  /* 접힌 묶음([차트 더 보기], 카드 설정의 [중요 지표]·[위치·크기])은 같은 모양 */
+/* 카드 설정 [모양]: 고르는 칸·적는 칸은 한 줄에 하나(라벨 왼쪽, 입력 오른쪽. 카드 추가 서랍의 .cm-field와 같은 배치). 종류 단추·체크 칸은 그대로 줄바꿈 */
+#d-panel .bextra .bset:has(> select, > input:not([type=checkbox])) { flex:1 1 100%; gap:.5rem; word-break:keep-all; }
+#d-panel .bextra .bset > :is(select, input:not([type=checkbox])) { margin-left:auto; }
 .gal-tile .hint { margin:0; font-size:var(--fs-xs); }
 .phead { display:flex; align-items:center; justify-content:space-between; margin:-.25rem -.375rem .5rem 0; }
 .phead b { font-size:var(--fs-md); }
@@ -76,3 +85,9 @@
 #d-panel > .side-strip { display:flex; flex-direction:column; align-items:center; gap:.625rem; width:100%; padding:.875rem 0; background:var(--card); border:0; border-radius:0; color:var(--muted); font-weight:600; }
 #d-panel > .side-strip:hover { color:var(--text); background:var(--bg); }
 .prow .btn.on { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
+/* neumorphism 면(common.css 끝의 규칙과 같은 뜻) */
+.d-main > aside, .d-main > #d-add, .cardmenu .cm-kind, .gal-tile { border-color:var(--edge); box-shadow:var(--raise-sm); }
+.gal-tile { background:var(--card); }
+.cardmenu .cm-kind.on { border-color:transparent; box-shadow:var(--press); }
+.shelf-slot { border-color:transparent; box-shadow:var(--press); }
+.shelf-slot.over { box-shadow:var(--press), 0 0 0 .125rem var(--accent); }

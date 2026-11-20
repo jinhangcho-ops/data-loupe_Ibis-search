@@ -1,6 +1,8 @@
 """pytest 공통 준비: 프로젝트 폴더를 import 경로에 넣고, 설정 폴더(APPDATA)를 임시 폴더로 바꾼다. 실제 사용자 설정은 건드리지 않는다.
 데이터는 테스트 안에서 지어내 쓰고 저장소에 두지 않는다."""
+import inspect
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -88,6 +90,33 @@ def pytest_configure(config):
     config.addinivalue_line("filterwarnings", "ignore:fetch_arrow_table:DeprecationWarning")  # Ibis 안의 경고(우리 코드가 아님)
     config.addinivalue_line("filterwarnings", "ignore:fetch_record_batch:DeprecationWarning")  # 같음(CSV를 묶음으로 저장할 때)
     sweep_edges()  # 앞선 실행이 남긴 헤드리스 Edge 정리
+    for name, what in GROUPS.items():
+        config.addinivalue_line("markers", f"{name}: {what}")
+
+
+# 시험 묶음: 고친 영역의 묶음만 돌린다(pytest tests_pytest -m ui). 묶음은 시험마다 하나.
+GROUPS = {"edge": "헤드리스 Edge를 띄우는 시험(느림)", "ui": "화면 파일(static·web)의 글자·모양을 보는 시험",
+          "calc": "계산(분석·지표·쿼리·전처리·대시보드·지도) 함수 시험", "func": "나머지 기능 시험(라우트·수집·연동·core)"}
+BACKEND = re.compile(r"^(?:from|import) (?:analysis|metrics|geo|query|prep|dashboard|core|collect|integrations|app|lazy|desktop)\b", re.M)
+CALC = re.compile(r"^(?:from|import) (?:analysis|metrics|geo|query|prep|dashboard)\b", re.M)
+SCREEN = re.compile(r"static|web/|\.css|\.html|\.tsx?\b|\.js\b")
+
+
+def group_of(item: pytest.Item) -> str:
+    """시험 하나의 묶음 이름. 위에서부터 먼저 맞는 것: Edge → 라우트(client) → 화면 파일 → 계산 → 기능."""
+    module = Path(item.path).read_text(encoding="utf-8")
+    if "spawn_edge" in module:
+        return "edge"
+    if "client" in item.fixturenames:
+        return "func"
+    if not BACKEND.search(module) or SCREEN.search(inspect.getsource(item.function)):
+        return "ui"
+    return "calc" if CALC.search(module) else "func"
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    for item in items:
+        item.add_marker(group_of(item))
 
 
 def pytest_sessionfinish():  # pytest가 다 끝나면(받을 인자는 쓰지 않아 뺀다)

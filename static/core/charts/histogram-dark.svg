@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="히스토그램 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.5"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.045"/>
+</filter>
+</defs>
+<line x1="40" x2="344" y1="168" y2="168" stroke="#2D343C" stroke-width="1"/>
+<text x="32" y="171.5" text-anchor="end" font-size="10" fill="#8F979F">0</text>
+<line x1="40" x2="344" y1="129.5" y2="129.5" stroke="#2D343C" stroke-width="1"/>
+<text x="32" y="133" text-anchor="end" font-size="10" fill="#8F979F">25</text>
+<line x1="40" x2="344" y1="91" y2="91" stroke="#2D343C" stroke-width="1"/>
+<text x="32" y="94.5" text-anchor="end" font-size="10" fill="#8F979F">50</text>
+<line x1="40" x2="344" y1="52.5" y2="52.5" stroke="#2D343C" stroke-width="1"/>
+<text x="32" y="56" text-anchor="end" font-size="10" fill="#8F979F">75</text>
+<line x1="40" x2="344" y1="14" y2="14" stroke="#2D343C" stroke-width="1"/>
+<text x="32" y="17.5" text-anchor="end" font-size="10" fill="#8F979F">100</text>
+<rect x="41" y="166.5" width="17" height="1.5" rx="3" fill="#8FB0FF"/>
+<rect x="60" y="161.8" width="17" height="6.2" rx="3" fill="#8FB0FF"/>
+<rect x="79" y="154.1" width="17" height="13.9" rx="3" fill="#8FB0FF"/>
+<rect x="98" y="137.2" width="17" height="30.8" rx="3" fill="#8FB0FF"/>
+<rect x="117" y="126.4" width="17" height="41.6" rx="3" fill="#8FB0FF"/>
+<rect x="136" y="100.2" width="17" height="67.8" rx="3" fill="#8FB0FF"/>
+<rect x="155" y="41.7" width="17" height="126.3" rx="3" fill="#8FB0FF"/>
+<rect x="174" y="3.2" width="17" height="164.8" rx="3" fill="#8FB0FF"/>
+<rect x="193" y="10.9" width="17" height="157.1" rx="3" fill="#8FB0FF"/>
+<rect x="212" y="14" width="17" height="154" rx="3" fill="#8FB0FF"/>
+<rect x="231" y="89.5" width="17" height="78.5" rx="3" fill="#8FB0FF"/>
+<rect x="250" y="131" width="17" height="37" rx="3" fill="#8FB0FF"/>
+<rect x="269" y="151.1" width="17" height="16.9" rx="3" fill="#8FB0FF"/>
+<rect x="288" y="146.4" width="17" height="21.6" rx="3" fill="#8FB0FF"/>
+<rect x="307" y="161.8" width="17" height="6.2" rx="3" fill="#8FB0FF"/>
+<rect x="326" y="168" width="17" height="0" rx="3" fill="#8FB0FF"/>
+<line x1="192.1" x2="192.1" y1="14" y2="168" stroke="#E8803A" stroke-width="2" stroke-dasharray="4 3"/>
+<text x="198.1" y="24" font-size="10" font-weight="600" fill="#E6EAEE">평균</text>
+<text x="40" y="186" text-anchor="middle" font-size="10" fill="#8F979F">10</text>
+<text x="116" y="186" text-anchor="middle" font-size="10" fill="#8F979F">30</text>
+<text x="192" y="186" text-anchor="middle" font-size="10" fill="#8F979F">50</text>
+<text x="268" y="186" text-anchor="middle" font-size="10" fill="#8F979F">70</text>
+<text x="344" y="186" text-anchor="middle" font-size="10" fill="#8F979F">90</text>
+</svg>

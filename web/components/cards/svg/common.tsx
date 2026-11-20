@@ -6,11 +6,12 @@ import type { Card, Ctx, MoreValues } from "@/lib/types";
 import { pickColor, sameSource } from "@/lib/series";
 import type { Theme } from "./__pure__";
 import { THEME_SERIES } from "../ChartCard";
+import { rem } from "../chart/scale";
 
 /** 종류별 카드 컴포넌트가 받는 것: card.data는 이미 그릴 값(구한 값 또는 저장된 값), range는 보는 기간(ctx.range), merge는 상수 merge */
 export type P = { card: Card; colors: Theme; range: Ctx["range"]; merge: string[] };
 
-const LIGHT: Theme = { card: "#fff", head: "#f5f6f6", ink: "#16191b", text: "#5f666b", line: "#dedfdf", err: "#c0392b", ok: "#1c7448",
+const LIGHT: Theme = { card: "#f1f3f7", head: "#e6e9ef", ink: "#1c2230", text: "#586174", line: "#d5dae3", err: "#b53124", ok: "#1c7448",
   series: ["#00968f", "#eb6834", "#2a78d6", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"] };  // common.css 밝게(그리기 전·prerender)
 const themeKey = () => document.documentElement.dataset.theme ?? "";
 const watchTheme = (fn: () => void) => { const mo = new MutationObserver(fn); mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] }); return () => mo.disconnect(); };
@@ -39,9 +40,10 @@ export const levelColor = (level: string, colors: Theme) => level === "bad" ? co
 export const Box = ({ cls, children }: { cls: string; children?: React.ReactNode }) => <div className={"cbox " + cls}>{children}</div>;
 /** 안내 한 줄 상자(옛 box("summary", sum-text)) */
 export const Say = ({ text, cls = "summary" }: { text: string; cls?: string }) => <Box cls={cls}><div className={cls === "summary" ? "sum-text" : "hint"}>{text}</div></Box>;
-/** viewBox에 맞춰 늘어나는 SVG. 화면 읽기 프로그램에는 카드 이름으로 */
-export const Frame = ({ w, h, label, children }: { w: number; h: number; label: string; children?: React.ReactNode }) => (
-  <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" role="img" aria-label={label}>{children}</svg>
+/** viewBox에 맞춰 늘어나는 SVG. 화면 읽기 프로그램에는 카드 이름으로. max(px, 배율 1)를 주면 그 너비까지만 커지고 가운데에 놓인다(카드마다 그림 크기가 같게) */
+export const Frame = ({ w, h, label, max, children }: { w: number; h: number; label: string; max?: number; children?: React.ReactNode }) => (
+  <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full" role="img" aria-label={label}
+    style={max ? { maxWidth: rem(max), maxHeight: rem((max * h) / w), margin: "auto" } : undefined}>{children}</svg>
 );
 
 const ICON_PATHS: Record<string, string> = { chart: "M3 20h18M6 16v-5M11 16V7M16 16v-8", up: "M4 16l6-6 4 4 6-8M15 6h5v5", user: "M12 12a4 4 0 100-8 4 4 0 000 8zM5 20c0-4 3-6 7-6s7 2 7 6", cart: "M3 4h3l2 11h10l2-8H7M10 20h.01M17 20h.01", coin: "M12 3a9 9 0 100 18 9 9 0 000-18zM9 12h6M12 8v8", clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2" };

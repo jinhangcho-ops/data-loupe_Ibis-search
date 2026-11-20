@@ -1,4 +1,4 @@
-"""모두 비우기(flush): 위쪽 줄 [비우기]와 설정 [메모리]의 [모두 비우고 처음으로].
+"""모두 비우기(flush): 설정 [메모리]의 [모두 비우고 처음으로](위쪽 줄의 [비우기]는 모든 화면에서 없앴다).
 한 번 더 눌러야 비우고, 붙잡고 있는 것 전부를 놓은 뒤 첫 화면으로 간다. 화면 함수(flushButton)는 node로 돌려 본다."""
 from test_fix_audit_js import between, read, run_node
 from test_ux16 import needs_node, web
@@ -6,7 +6,7 @@ from test_ux16 import needs_node, web
 
 @needs_node
 def test_flush_asks_once_then_drops_everything_and_goes_home(tmp_path):
-    code = between("common.js", 'const FLUSH_SURE = ', 'flushButton($("flush")')
+    code = between("common.js", 'const FLUSH_SURE = ', 'flushButton($("mem-flush")')
     body = r"""
 const out = { calls: [], went: [], failed: [] };
 let items = [{ id: "connection" }, { id: "sample" }], broken = false;
@@ -32,13 +32,11 @@ flushButton(b, text => out.failed.push(text));
     assert got["broken"] == [False, "비우기", [], ["비우지 못했어요"]]
 
 
-def test_flush_buttons_are_on_topbar_and_memory_page():
+def test_flush_button_is_on_memory_page_only():
     top = between("status.html", '<header class="topbar">', "</header>")
-    assert top.index('<div class="top-tools">') < top.index('<button id="flush" class="btn" type="button"') and ">비우기</button>" in top
+    assert 'id="flush"' not in top  # 위쪽 줄에는 두지 않는다(드물게 쓰는 단추)
     page = between("status.html", '<section class="set-page hidden" data-set="memory"', "</section>")
     assert page.index('id="mem-flush"') < page.index('id="mem-all"') and ">모두 비우고 처음으로</button>" in page
     js = read("common.js")
-    assert 'flushButton($("flush"), text => { $("flush").title = text; });' in js and 'flushButton($("mem-flush"), text => say("mem-msg", text));' in js
-    bar, api = web("components/shell/TopBar.tsx"), web("lib/api.ts")  # 대시보드 위쪽 줄도 같은 길
-    assert 'id="flush"' in bar and 'await flushMemory(); location.replace("/");' in bar and "if (!sure) return setSure(true);" in bar
-    assert 'if (ids.length) await api("/api/memory/drop", { ids });' in api
+    assert 'flushButton($("flush")' not in js and 'flushButton($("mem-flush"), text => say("mem-msg", text));' in js
+    assert 'id="flush"' not in web("components/shell/TopBar.tsx") and "flushMemory" not in web("lib/api.ts")  # 대시보드 위쪽 줄에도 없다

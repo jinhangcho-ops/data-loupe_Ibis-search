@@ -138,8 +138,9 @@ describe("3차원 막대", () => {
     expect(s.axes.z.ticks.map(t => t.text)).toEqual(["-5", "0", "5", "10", "15", "20"]);
     expect(tops.map(t => t.pts[0][2])).toEqual([15 / 25, 5 / 25, 1]);
   });
-  it("윗면은 계열 색, 옆면은 어둡게, 범례는 계열", () => {
-    expect(tops[0].fill).toBe("색갑");
+  it("윗면은 계열 색을 밝게, 옆면은 어둡게, 테두리 없음, 범례는 계열", () => {
+    expect(tops[0].fill).toBe("color-mix(in srgb, 색갑 70%, var(--card))");
+    expect(s.shapes.every(x => x.kind === "poly" && x.stroke === undefined)).toBe(true);
     expect((s.shapes[1] as { fill: string }).fill).toContain("색갑");
     expect((s.shapes[1] as { fill: string }).fill).not.toBe("색갑");
     expect(s.keys).toEqual([{ name: "갑", color: "색갑" }, { name: "을", color: "색을" }]);
@@ -211,13 +212,10 @@ describe("곡면 매끈함(잘게 나누기)", () => {
     expect(q.every(p => p.stroke === p.fill)).toBe(true);
     expect(q.every(p => p.pts.every(([x]) => x <= 0.5))).toBe(true);  // 빈 값(c)에 닿는 오른쪽 칸에는 면이 없다
   });
-  it("원래 격자선만 따로 긋고(0단계는 면 테두리가 격자선), 선 계열은 매끈해진 곡면을 따라간다", () => {
-    expect(lines(scene().shapes).filter(l => l.stroke === "var(--card)")).toHaveLength(0);
-    expect(polys(scene().shapes).every(p => p.stroke === "var(--card)")).toBe(true);
-    const s = scene({ ...PLAIN, smooth: 2 }), grid = lines(s.shapes).filter(l => l.stroke === "var(--card)"), over = lines(s.shapes).filter(l => l.stroke === "색을");
-    expect(grid.length).toBeGreaterThan(0);
-    expect(grid.every(l => l.pts.every(([x, y]) => x % 0.5 === 0 || y % 0.5 === 0))).toBe(true);  // 원래 격자 줄 위에만
-    expect(grid.every(l => l.pts.every(([x]) => x <= 0.5))).toBe(true);  // 면이 없는 칸에는 격자선도 없다
+  it("격자선 없이 면만(테두리는 면 색), 선 계열은 매끈해진 곡면을 따라간다", () => {
+    expect(polys(scene().shapes).every(p => p.stroke === p.fill)).toBe(true);
+    const s = scene({ ...PLAIN, smooth: 2 }), over = lines(s.shapes).filter(l => l.stroke === "색을");
+    expect(lines(s.shapes)).toEqual(over);  // 선 계열 말고는 선이 없다
     expect(over.map(l => l.pts.map(p => p[0]))).toEqual([[0, 0.25], [0.25, 0.5]]);  // 을: a~b를 두 토막으로(c는 비었다)
     const mid = smoothGrid(vals, 2)[2][1]!, z = s.axes.z.ticks.length - 1;
     expect(over[0].pts[1][2]).toBeCloseTo((mid - Number(s.axes.z.ticks[0].text)) / (Number(s.axes.z.ticks[z].text) - Number(s.axes.z.ticks[0].text)));
@@ -288,7 +286,7 @@ describe("곡면 모양 조절(손잡이 끌기)", () => {
 describe("3차원 산점도", () => {
   const p = { x: "가로", y: "세로", groups: ["갑", "을"], points: [[0, 0, 0, "갑"], [10, 10, 10, "을"], [5, 10, 0, "갑"], [10, 0, 5, "을"]] as (number | string)[][] };
   it("점마다 원(그룹 색), 자리는 축 범위에 맞춘다", () => {
-    const s = pointsScene(p, ["색갑", "색을"], false, "높이", fmt), dots = s.shapes as Extract<Shape, { kind: "dot" }>[];
+    const s = pointsScene(p, ["색갑", "색을"], false, "높이", fmt), dots = s.shapes.filter(x => x.kind === "dot" && x.title) as Extract<Shape, { kind: "dot" }>[];
     expect(dots.map(d => d.fill)).toEqual(["색갑", "색갑", "색을", "색을"]);
     expect(dots.map(d => d.pts[0])).toEqual([[0, 0, 0], [0.5, 1, 0], [1, 1, 1], [1, 0, 0.5]]);
     expect(dots[1].title).toBe("갑 · 가로 5, 세로 10, 높이 0");
@@ -296,13 +294,28 @@ describe("3차원 산점도", () => {
     expect(s.keys).toEqual([{ name: "갑", color: "색갑" }, { name: "을", color: "색을" }]);
   });
   it("점 잇기: 그룹마다 받은 차례대로 선", () => {
-    const lines = pointsScene(p, ["색갑", "색을"], true, "높이", fmt).shapes.filter(x => x.kind === "line") as Extract<Shape, { kind: "line" }>[];
+    const lines = pointsScene(p, ["색갑", "색을"], true, "높이", fmt).shapes.filter(x => x.kind === "line" && !x.layer && !x.dash) as Extract<Shape, { kind: "line" }>[];
     expect(lines.map(l => [l.stroke, l.pts])).toEqual([["색갑", [[0, 0, 0], [0.5, 1, 0]]], ["색을", [[1, 1, 1], [1, 0, 0.5]]]]);
   });
   it("그룹이 없으면 한 색, 범례 없음", () => {
     const s = pointsScene({ ...p, groups: [], points: [[1, 2, 3], [2, 3, 4]] }, ["색"], true, "z", fmt);
-    expect(s.shapes.map(x => x.kind)).toEqual(["dot", "dot", "line"]);
+    expect(s.shapes.filter(x => !x.layer && !(x.kind === "line" && x.dash) && !(x.kind === "dot" && !x.title)).map(x => x.kind)).toEqual(["dot", "dot", "line"]);
     expect(s.keys).toEqual([]);
+  });
+  it("점마다 바닥으로 내린 점선과 바닥 점, 차례는 바닥 점 → 점선 → 점", () => {
+    const s = pointsScene({ ...p, groups: [], points: [[0, 0, 10], [10, 10, 0]] }, ["색"], false, "z", fmt);
+    const order = paint(s.shapes.slice(0, 3), START_VIEW, W, H).map(d => d.shape);  // 첫 점(높이 1)의 세 모양
+    expect(order.map(x => x.kind)).toEqual(["dot", "line", "dot"]);
+    const drop = order[1] as Extract<Shape, { kind: "line" }>;
+    expect(drop).toMatchObject({ pts: [[0, 0, 0], [0, 0, 1]], opacity: 0.5, dash: "2 2" });
+    expect(order[0]).toMatchObject({ kind: "dot", pts: [[0, 0, 0]], r: 1.6 });
+  });
+  it("맨 뒤 층: 먼 두 벽과 바닥 안쪽의 X·Y 눈금 격자선(가장자리 빼고)", () => {
+    const s = pointsScene(p, ["색갑", "색을"], false, "높이", fmt), back = s.shapes.filter(x => x.layer === -1);
+    const grid = back.filter(x => x.kind === "line"), inner = (t: { at: number }[]) => t.filter(x => x.at > 0 && x.at < 1).length;
+    expect(grid).toHaveLength(inner(s.axes.x.ticks) + inner(s.axes.y.ticks));
+    expect(grid.every(g => g.pts.every(q => q[2] === 0))).toBe(true);
+    expect(paint(back.filter(x => x.kind === "poly"), START_VIEW, W, H)).toHaveLength(2);  // 네 벽 중 안쪽이 보이는 둘
   });
   it("데이터 표의 셋째 열 이름은 Z축 컬럼", () => {
     expect(pointsTable({ ...p, groups: [], points: [[1, 2, 3]] }, "높이")).toEqual({ columns: ["가로", "세로", "높이"], rows: [{ 가로: 1, 세로: 2, 높이: 3 }] });
@@ -312,10 +325,10 @@ describe("3차원 산점도", () => {
 describe("축 그리기", () => {
   const axes = { x: { name: "가로", ticks: [{ at: 0.5, text: "x가운데" }] }, y: { name: "", ticks: [{ at: 0.5, text: "y가운데" }] }, z: { name: "값", ticks: [{ at: 0, text: "0" }, { at: 1, text: "9" }] } };
   const texts = (v: View3) => (axisShapes(axes, v).filter(s => s.kind === "text") as Extract<Shape, { kind: "text" }>[]);
-  it("이름이 빈 축은 이름을 적지 않고, 글자는 맨 앞·선은 맨 뒤 층", () => {
+  it("이름이 빈 축은 이름을 적지 않고, 선 없이 글자만 맨 앞 층", () => {
     const all = axisShapes(axes, START_VIEW);
     expect(texts(START_VIEW).map(t => t.text).sort()).toEqual(["0", "9", "x가운데", "y가운데", "가로", "값"].sort());
-    expect(all.every(s => s.layer === (s.kind === "text" ? 1 : -1))).toBe(true);
+    expect(all.every(s => s.kind === "text" && s.layer === 1)).toBe(true);
   });
   it("X축 글자는 보는 쪽 바닥 모서리에(돌리면 반대쪽으로 옮긴다)", () => {
     const at = (v: View3) => texts(v).find(t => t.text === "x가운데")!.pts[0][1];

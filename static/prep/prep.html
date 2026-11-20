@@ -13,6 +13,7 @@
   #grid { flex:1; min-height:12.5rem; max-height:none; overflow:auto; }  /* 남은 높이를 채우고 그 안에서 스크롤(머리글은 위에 붙는다) */
   #prep-view .pane > .head { display:flex; align-items:center; gap:.625rem; flex-wrap:wrap; margin-bottom:.5rem; }
   #prep-view .pane > .head h3 { margin:0; }
+  #prep-view .pane > .head .diag-opts { font-size:var(--fs-xs); }  /* 거의 안 쓰는 [진단 기준]: 줄 끝의 작은 글자 단추 */
   /* 컬럼마다 한 열(13.75rem). 머리글 세 줄은 한 덩어리(thead)로 위에 붙는다. */
   #grid th, #grid td, #a-src th, #a-src td { width:13.75rem; min-width:13.75rem; max-width:13.75rem; overflow:hidden; text-overflow:ellipsis; }
   #grid th.pick, #grid td.pick, #grid th.addcol, #a-src th.pick, #a-src td.pick { width:2.25rem; min-width:2.25rem; max-width:2.25rem; }  /* 행 고르기 칸과 [+] 칸은 좁게 */
@@ -24,10 +25,13 @@
   #grid td.null { color:var(--muted); opacity:.5; }
   #grid th > select, #grid th > input { margin-top:.25rem; }
   .warn { color:var(--err); }
-  .op { border:1px solid var(--line); border-radius:.375rem; padding:.25rem .375rem; margin-top:.25rem; }
+  .op { border:1px solid var(--edge); box-shadow:var(--raise-sm); border-radius:.375rem; padding:.25rem .375rem; margin-top:.25rem; }
   .op-head { display:flex; justify-content:space-between; align-items:center; }
   .op input, .op select { margin-top:.1875rem; }
   .op input[type=checkbox] { width:auto; margin:0; }
+  /* 이어진 체크 칸(날짜에서 뽑기 등)은 같은 폭 열로: 체크 칸이 앞 글자에 붙어 보이지 않게 */
+  .op-checks { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:var(--sp-1) var(--sp-3); margin-top:var(--sp-1); }
+  .op-checks > label.hint { margin:0; }
   .op.bad { border-color:var(--err); }
   .op.bad::after { content:"값을 확인해 주세요"; color:var(--err); font-size:.75rem; }
   .colhead { display:flex; gap:.375rem; align-items:center; justify-content:space-between; }
@@ -44,7 +48,7 @@
   .kind { display:inline-block; padding:0 .375rem; border-radius:.25rem; background:var(--accent-bg); color:var(--accent); font-size:.6875rem; }
   .good { color:var(--ok); }
   .worked { font-size:.6875rem; color:var(--accent); font-weight:normal; }
-  #cl-body .facts { font-size:.75rem; color:var(--muted); border:1px solid var(--line); border-radius:.375rem; padding:.375rem .5rem; margin:.375rem 0; }
+  #cl-body .facts { font-size:.75rem; color:var(--muted); border:1px solid transparent; box-shadow:var(--press); border-radius:.375rem; padding:.375rem .5rem; margin:.375rem 0; }
   #cl-body > input, #cl-body > select, #cl-body > button { margin-top:.375rem; }
   #spec-view table { width:100%; }
   #spec-view td { vertical-align:top; white-space:normal; font-size:.75rem; }
@@ -64,7 +68,7 @@
   #a-funnel { width:min(100%, 56.25rem); height:clamp(15rem, 42vh, 23.75rem); margin:0 auto; }
   #a-funnel-text { text-align:center; margin:.5rem 0 0; }
   .f-steps { display:flex; flex-wrap:wrap; gap:.375rem; min-height:1.875rem; margin:.25rem 0; }
-  .f-step { display:inline-flex; align-items:center; gap:.25rem; border:1px solid var(--line); border-radius:62.4375rem; padding:.125rem .25rem .125rem .625rem; font-size:.75rem; background:var(--bg); cursor:grab; }
+  .f-step { display:inline-flex; align-items:center; gap:.25rem; border:1px solid var(--edge); box-shadow:var(--raise-sm); border-radius:62.4375rem; padding:.125rem .25rem .125rem .625rem; font-size:.75rem; background:var(--bg); cursor:grab; }
   .f-step.over { outline:.125rem dashed var(--accent); }
   .f-step button { padding:0 .375rem; }
   .f-add { display:flex; gap:.375rem; }
@@ -109,30 +113,35 @@
   .side > footer.has-lead { flex-wrap:wrap; }
   .side > footer.has-lead .lead { flex-basis:100%; margin:0; }
   /* [전처리 | 분석] 토글: 설정 패널(aside.side) 맨 위. 요소는 하나이고 showView가 보이는 쪽 패널로 옮긴다 */
-  .side > #views { margin:.875rem 1.375rem 0; padding:.1875rem; min-height:0; align-items:stretch; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-card); }
+  .side > #views { margin:.875rem 1.375rem 0; padding:.1875rem; min-height:0; align-items:stretch; background:var(--bg); border:1px solid transparent; box-shadow:var(--press); border-radius:var(--r-card); }
   .side > #views button { flex:1; padding:.28125rem .375rem; border:0; border-radius:var(--r-ctl); }
-  .side > #views button.on { background:var(--card); color:var(--accent); }
+  .side > #views button.on { background:var(--card); box-shadow:var(--raise-sm); color:var(--accent); }
   /* 결과 카드 머리: 제목·설명은 왼쪽, [대시보드에 추가]는 오른쪽 끝 */
   .big.a-head { align-items:center; }
   .big.a-head > #a-sub { flex:1; min-width:0; }
-  .asave { margin-top:.625rem; border:1px solid var(--line); border-radius:.5rem; padding:.375rem .625rem; }
+  .asave { margin-top:.625rem; border:1px solid var(--edge); box-shadow:var(--raise-sm); border-radius:.5rem; padding:.375rem .625rem; }
   .asave > summary { cursor:pointer; font-size:.8125rem; font-weight:600; }
   .asave .hint { margin:.5rem 0 .25rem; }
   .asave .row { margin-bottom:.25rem; }
   .ahead { margin:.75rem 0 .25rem; font-weight:600; }
   /* 무엇이 궁금해요?: 종류를 한 줄에 하나. 고른 종류의 칸(.a-form)은 showAnaForm이 그 label 바로 아래로 옮기고, 둘이 강조 테두리 하나로 이어진다 */
-  .akinds { display:grid; grid-template-columns:1fr; gap:.375rem; }
-  .akinds > label { display:flex; gap:.375rem; align-items:flex-start; border:1px solid var(--line); border-radius:var(--r-card); padding:.375rem .5rem; font-size:var(--fs-sm); line-height:1.35; cursor:pointer; }
+  .akinds { --kgap:.375rem; display:grid; grid-template-columns:1fr; gap:var(--kgap); }
+  /* 고급 종류(퍼널~시계열)는 [더 보기] 안에. 고른 것이 그 안이면 showAnaForm이 펼친다 */
+  .a-more > summary { cursor:pointer; font-size:var(--fs-sm); font-weight:600; color:var(--accent); padding:var(--sp-1) var(--sp-2); }
+  .a-more-list { display:grid; gap:var(--kgap); padding-top:var(--kgap); }
+  :is(.akinds, .a-more-list) > label { display:flex; gap:.375rem; align-items:flex-start; border:1px solid var(--edge); box-shadow:var(--raise-sm); border-radius:var(--r-card); padding:.375rem .5rem; font-size:var(--fs-sm); line-height:1.35; cursor:pointer; }
   .akinds label:has(input:checked) { border-color:var(--accent); background:var(--accent-bg); }
-  .akinds > label:has(input:checked) { border-bottom:0; border-radius:var(--r-card) var(--r-card) 0 0; }
+  :is(.akinds, .a-more-list) > label:has(input:checked) { border-bottom:0; border-radius:var(--r-card) var(--r-card) 0 0; }
   .big.a-answer { display:block; font-size:var(--fs-xl); font-weight:600; }  /* 분석 결과의 한 문장 답(제목 아래, 그래프 위). 여백은 .big 그대로 */
   .big.a-answer:empty { display:none; }
   .big.a-answer b { font-size:inherit; color:var(--accent); }
-  .akinds > label > input { width:auto; margin:.125rem 0 0; flex:none; }
-  .akinds > label > span { font-weight:600; }
-  .akinds > label small { display:block; color:var(--muted); font-size:var(--fs-xs); font-weight:400; }
+  :is(.akinds, .a-more-list) > label > input { width:auto; margin:.125rem 0 0; flex:none; }
+  :is(.akinds, .a-more-list) > label > span { font-weight:600; }
+  :is(.akinds, .a-more-list) > label small { display:block; color:var(--muted); font-size:var(--fs-xs); font-weight:400; }
   .a-form { margin-top:-.375rem; border:1px solid var(--accent); border-top:0; border-radius:0 0 var(--r-card) var(--r-card); background:var(--accent-bg); padding:0 .5rem .5rem; }  /* -.375rem: .akinds의 gap을 메워 고른 label에 붙인다 */
   .a-form > .lead { margin-top:0; }
+  #a-img-pop { gap:var(--sp-2); padding:var(--sp-3); }  /* [그림 저장 ▾]: 색·담을 범위·형식 */
+  #a-img-pop > .row { margin:0; }
 }</style>
 </head>
 <body class="app">
@@ -150,7 +159,7 @@
       <div class="hint"><span id="counts"></span> <span id="stale" class="warn"></span></div>
     </section>
     <section class="pane hidden" id="p-spec">
-      <div class="head"><span class="hint m-0" id="sampled"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계와 추천을 다시 구해요">다시 구하기</button><button id="full-stats" class="ghost hidden" title="표본 대신 테이블 전체로 빈칸·값 종류·최솟값·최댓값을 구해 표본과 비교해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="컬럼 요약을 테이블 전체로 구하기">전체로 구하기</button><button id="diag-opts" class="ghost" title="진단 기준(이상치 배수, 더미 값, 기본값 날짜, 빈 값 표시, 순서 척도 등)을 바꿔요. 바꾸면 같은 표본으로 다시 구해요">진단 기준</button><span class="flex-1"></span><button id="prune" class="btn hidden" title="표본에서 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾아요. 이미 읽은 표본만 쓰고 DB에는 다시 묻지 않아요">뺄 만한 컬럼 찾기</button><button id="sug-all" class="hidden" title="모든 컬럼의 추천을 정리 방법에 한 번에 넣어요">추천 모두 적용</button></div>
+      <div class="head"><span class="hint m-0" id="sampled"></span><button id="resample" class="ghost hidden" title="표본을 새로 읽어 통계와 추천을 다시 구해요">다시 구하기</button><button id="full-stats" class="ghost hidden" title="표본 대신 테이블 전체로 빈칸·값 종류·최솟값·최댓값을 구해 표본과 비교해요. 큰 테이블은 오래 걸리고, 쓴 만큼 요금을 받는 DB에서는 비용이 들어요" aria-label="컬럼 요약을 테이블 전체로 구하기">전체로 구하기</button><span class="flex-1"></span><button id="prune" class="btn hidden" title="표본에서 값이 하나뿐이거나 거의 한 값인 컬럼, 다른 숫자 컬럼과 상관이 아주 높은 컬럼을 찾아요. 이미 읽은 표본만 쓰고 DB에는 다시 묻지 않아요">뺄 만한 컬럼 찾기</button><button id="sug-all" class="hidden" title="모든 컬럼의 추천을 정리 방법에 한 번에 넣어요">추천 모두 적용</button><button id="diag-opts" class="ghost diag-opts" title="진단 기준(이상치 배수, 더미 값, 기본값 날짜, 빈 값 표시, 순서 척도 등)을 바꿔요. 바꾸면 같은 표본으로 다시 구해요">진단 기준 ▾</button></div>
       <div class="pop hidden" id="diag-pop"><div id="diag-form"></div><div class="row"><button id="diag-save" class="btn p">저장</button><button id="diag-reset" class="btn">기본값으로</button></div><div class="err" id="diag-err"></div></div>
       <div class="hint" id="prune-box"></div>
       <details class="hint hidden" id="sampled-more"><summary>표본을 어떻게 읽었는지</summary><div id="sampled-long"></div></details>
@@ -190,9 +199,8 @@
             <div class="hint" id="lb-note"></div>
             <details id="read-box" class="mt-2"><summary>읽기·통계 설정 <span class="hint m-0" id="read-sum"></span></summary>
             <div class="row mt-2 items-center" title="가장 가벼운 방법부터 시도해 읽고, 구한 통계는 테이블마다 저장해 둬요"><span class="hint m-0 flex-none">미리 읽을 행 수</span><input id="sample" type="number" aria-label="미리 읽을 행 수" class="w-[7.5rem] flex-none"><span class="err self-center" id="err-sample"></span></div>
-            <div class="hint">테이블 전체 대신 이만큼만 읽어서 통계, 추천, 분석에 써요.</div>
+            <div class="hint">테이블 전체 대신 이만큼까지만 읽어 통계, 추천, 분석에 써요.</div>
             <div class="row mt-1 items-center"><select id="sample-way" aria-label="표본 방식" class="flex-none"><option value="strata" title="값 크기로 층을 나눠 층마다 다시 뽑고, 가중치로 바로잡아요. 표 전체를 읽는 단계는 요금이 나는 DB에서 먼저 물어요">층화(Neyman, 기본)</option><option value="block" title="블록(못 하면 행 단위)으로 뽑아요">블록(못 하면 행 단위)</option><option value="key" title="키의 행을 통째로 뽑아요. 키가 빈 행은 빠져요. 표 전체를 읽는 단계는 요금이 나는 DB에서 먼저 물어요">키 단위</option></select><select id="sample-col" aria-label="표본 기준 컬럼"></select></div>
-            <div class="hint">미리 읽을 행 수는 상한이에요. 필요한 행 수는 파일럿으로 정해요.</div>
             <label class="check" title="끄면 테이블을 골라도 데이터를 읽지 않고 컬럼 이름과 타입만 보여요. 행 수도 세지 않고 추천도 나오지 않아요. 분석 탭은 그대로 표본을 읽어요"><input type="checkbox" id="stats-on"> 컬럼 통계와 추천 보기</label>
             <div class="row mt-1 items-center" id="scope-row" title="통계를 표본으로 빠르게 구할지, 테이블 전체로 정확하게 구할지 골라요. 전체는 큰 테이블에서 오래 걸리고 쓴 만큼 요금을 받는 DB에서는 비용이 들어요. 전체로 구하면 추천은 나오지 않아요"><span class="hint m-0 flex-none">통계 범위</span><label class="check"><input type="radio" name="stats-scope" id="scope-sample"> <span id="scope-sample-text">표본</span></label><label class="check"><input type="radio" name="stats-scope" id="scope-all"> 전체</label></div>
             <div class="row mt-2 items-center" id="where-row" title="주소로 연결한 DB에서만 써요. 이 PC에서 계산하면 DB에는 행 거르기까지 한 번만 묻고, 받은 결과로 통계와 전처리, 저장을 이 PC가 계산해요. 테이블이 크면 받는 데 오래 걸리고 디스크 공간을 써요"><span class="hint m-0 flex-none">계산 위치</span><select id="prep-where" aria-label="계산 위치" class="flex-1 min-w-0"><option value="all" title="전처리 전체를 이 PC에서 계산해요">전부 이 PC</option><option value="new" title="계산 컬럼과 PCA만 이 PC에서 계산해요">계산 컬럼만 이 PC</option></select></div>
@@ -217,7 +225,7 @@
         <div class="cn"></div>
         <div class="step" data-step="clean"><div class="sp" data-hint><i>3</i><span class="t" title="컬럼마다 빈칸 채우기, 글자 고치기, 타입 바꾸기, 이름 바꾸기 같은 정리를 해요">컬럼 정리</span><b id="sum-p-clean"></b><span class="c"></span></div>
           <div class="edx">
-            <div class="hint">가운데 표에서 컬럼을 누르거나 여기서 고르세요. 정리 방법은 여러 개 넣을 수 있고, 위에서부터 차례로 적용돼요.</div>
+            <div class="hint">표에서 컬럼을 누르거나 여기서 고르세요. 정리 방법은 위에서부터 차례로 적용돼요.</div>
             <select id="cl-col"></select>
             <div id="cl-body"></div>
           </div></div>
@@ -239,7 +247,6 @@
             <details class="hint" id="fx-help"><summary>사칙연산과 함수를 쓸 수 있어요. 예: 금액 * 수량</summary><div id="fx-guide"></div></details>
             <div id="formulas"></div>
             <div class="sec">쓸 수 있는 기능</div>
-            <div class="hint">누르면 설정 칸이 펼쳐져요. 다시 누르면 접혀요(쓰는 중인 기능은 펼쳐 둬요).</div>
             <button type="button" class="fpanel-item" data-feat="pca" aria-expanded="false" aria-controls="dv-pca"><b>PCA(차원 줄이기)</b><span class="hint">고른 숫자 컬럼을 pca_1, pca_2 같은 성분 컬럼 몇 개로 줄여요. <b class="dv-used"></b></span></button>
             <div id="dv-pca" class="hidden">
             <div class="hint" id="pca-basis"></div>
@@ -249,7 +256,7 @@
             </div>
             <button type="button" class="fpanel-item" data-feat="kmeans" aria-expanded="false" aria-controls="dv-kmeans"><b>K-Means(군집 번호)</b><span class="hint">비슷한 행끼리 군집으로 나누고 번호(0부터)를 새 컬럼으로 붙여요. <b class="dv-used"></b></span></button>
             <div id="dv-kmeans" class="hidden">
-            <div class="hint">고른 숫자 컬럼을 표준화해 비슷한 행끼리 k개 군집으로 나누고 번호(0부터)를 새 컬럼으로 붙여요. 표를 군집마다 반복해 집계해요(최대 수십 번 읽어요).</div>
+            <div class="hint">표를 반복해 집계해요(최대 수십 번 읽어요).</div>
             <div class="hint" id="km-basis"></div>
             <div class="cols" id="km-cols"></div>
             <div class="row items-center"><span class="hint m-0 flex-none">군집 수</span><input id="km-k" type="number" class="w-[4.375rem] flex-none"><input id="km-name" placeholder="새 컬럼 이름" class="w-[6.875rem] flex-none"><button id="km-clear" class="ghost">선택 해제</button></div>
@@ -298,13 +305,12 @@
             <input id="tname" placeholder="새 테이블 이름">
             <label class="mt-3" title="값이 그대로일 때만 줄여요. 예: int64를 int16으로"><input type="checkbox" id="downcast" checked class="w-auto"> 숫자 컬럼을 더 작은 타입으로 줄이기</label>
             <div class="sec">설정 저장</div>
-            <div class="hint">지금 고른 전처리를 이름을 붙여 저장해 두고 나중에 불러와요.</div>
             <div class="row"><select id="rsaved" class="flex-1 min-w-0" title="고르면 저장해 둔 설정을 불러와요. 미리보기나 실행은 하지 않아요"></select></div>
             <div class="row"><input id="rname" placeholder="설정 이름"><button id="rsave" class="btn">저장</button><button id="rdel" class="ghost">삭제</button></div>
           </div></div>
       </div>
     </div></div>
-    <footer class="has-lead"><button id="preview" class="btn">미리보기</button><button id="run" class="btn p">실행</button><p class="lead" id="prep-foot-lead">[미리보기] 앞 20행만 봐요(저장하지 않아요). [실행] 테이블 전체를 ⑦ 저장에서 고른 곳(Parquet·CSV 파일, 같은 DB의 새 테이블)에 만들어요.</p></footer>
+    <footer class="has-lead"><button id="preview" class="btn">미리보기</button><button id="run" class="btn p">실행</button><p class="lead" id="prep-foot-lead">미리보기는 앞 20행만(저장하지 않아요), 실행은 테이블 전체를 ⑦ 저장에서 고른 곳에 만들어요.</p></footer>
   </aside>
 </div>
 <!-- 분석: 전처리 탭에서 고른 테이블(체크하면 지금 전처리를 적용한 결과)을 표본으로 분석한다. [표본 말고 전체 데이터로 다시 구하기]는 테이블 전체로. -->
@@ -323,7 +329,7 @@
           <div class="row"><select id="a-dash" title="저장한 대시보드나 새 대시보드를 골라요"></select></div>
           <div class="row"><input id="a-dash-name" placeholder="새 대시보드 이름"></div>
           <div class="row"><button id="a-dash-go" class="btn p">추가</button></div>
-          <div class="hint m-0">카드에는 구한 값이 들어가요. 이 PC의 이 계정에서만 열 수 있게 암호화해 저장하고, 대시보드 화면에서 볼 수 있어요.</div>
+          <div class="hint m-0">카드에는 구한 값이 들어가요. 이 PC의 이 계정에서만 열 수 있게 암호화해 저장해요.</div>
         </div></div></div>
     <div class="big a-answer" id="a-answer"></div>
     <div id="a-notes"></div>
@@ -335,9 +341,12 @@
         <details class="axis-box"><summary class="hint" title="그래프를 그릴 때 알아서 하는 구간 수·꼬리 자르기·점 밀도·숫자 줄이기예요. 끈 것은 다음에도 기억해요">자동 규칙</summary><div id="a-auto"></div></details>
         <label class="check" title="켜면 자동 규칙이 덜어 낸 것까지 모두 그려요"><input type="checkbox" id="a-all"> 모든 데이터</label>
         <span class="flex-1"></span>
-        <select id="a-image" title="그림의 색 모드예요" class="flex-[0_0_6.25rem]"><option value="light">밝게</option><option value="dark">어둡게</option></select>
-        <button data-aimage="png" class="btn">PNG</button><button data-aimage="jpeg" class="btn">JPG</button>
-        <label class="check" title="켜면 자동 규칙이 덜어 낸 것까지 담아 그림으로 저장해요"><input type="checkbox" id="a-export-all"> 모든 데이터 포함</label>
+        <div class="drop"><button id="a-img-open" type="button" class="btn" aria-haspopup="true" aria-controls="a-img-pop">그림 저장 ▾</button>
+          <div class="pop hidden" id="a-img-pop">
+            <select id="a-image" title="그림의 색 모드예요" aria-label="그림 색"><option value="light">밝게</option><option value="dark">어둡게</option></select>
+            <label class="check" title="켜면 자동 규칙이 덜어 낸 것까지 담아 그림으로 저장해요"><input type="checkbox" id="a-export-all"> 그림에도 모두 담기</label>
+            <div class="row"><button data-aimage="png" class="btn">PNG</button><button data-aimage="jpeg" class="btn">JPG</button></div>
+          </div></div>
       </div>
       <div class="chart-box hidden" id="a-box"><iframe id="a-chart" src="/chart" title="분석 그림"></iframe></div>
       <div class="hidden" id="a-funnel"></div>
@@ -361,7 +370,7 @@
       <label class="check" title="끄면 전처리 없이 원래 테이블을 분석해요"><input type="checkbox" id="a-prep" checked> 전처리 탭에서 정리한 데이터로 분석</label>
       <details class="asave" id="a-save-box">
         <summary title="전처리 구성과 분석 설정을 한 묶음으로 저장하고 불러와요. 불러와도 자동으로 구하지는 않아요">설정 저장·불러오기</summary>
-        <div class="hint">저장된 설정 (내가 저장한 것)</div>
+        <div class="hint">저장된 설정</div>
         <div class="row"><select id="a-saved" class="flex-1 min-w-0" title="고르면 테이블을 열고 전처리와 분석 칸을 채워요"></select><button id="a-saved-del" class="ghost">삭제</button></div>
         <div class="row"><input id="a-save-name" placeholder="설정 이름"><button id="a-save" class="btn">설정 저장</button></div>
         <div class="hint">최근 분석 (자동 저장, <span id="a-recent-max"></span>개까지)</div>
@@ -373,6 +382,7 @@
         <label><input type="radio" name="akind" value="correlation"> <span>같이 움직이는 숫자(상관관계)<small>한 숫자가 커질 때 다른 숫자도 커지는지 봐요</small></span></label>
         <label><input type="radio" name="akind" value="groups"> <span>묶음끼리 비교<small>매장·팀 같은 묶음마다 합계나 평균을 구해 나란히 봐요</small></span></label>
         <label><input type="radio" name="akind" value="trend"> <span>날짜에 따른 변화<small>날·주·달이 지나면서 값이 늘었는지 줄었는지 봐요</small></span></label>
+        <details class="a-more"><summary>더 보기</summary><div class="a-more-list">
         <label><input type="radio" name="akind" value="funnel"> <span>단계마다 남는 수(퍼널)<small>여러 단계를 차례로 거칠 때 몇 명이 남고 어디서 많이 빠지는지 봐요</small></span></label>
         <label><input type="radio" name="akind" value="retention"> <span>다시 오는 비율(리텐션)<small>처음 온 사람들이 그 뒤에도 계속 오는지 봐요</small></span></label>
         <label><input type="radio" name="akind" value="rfm"> <span>고객 등급 나누기(RFM)<small>얼마나 최근에, 자주, 많이 샀는지로 점수를 매겨 등급을 나눠요</small></span></label>
@@ -382,13 +392,14 @@
         <label><input type="radio" name="akind" value="basket"> <span>함께 나오는 항목(장바구니 분석)<small>한 번에 같이 나오는 일이 많은 항목 짝을 찾아요</small></span></label>
         <label><input type="radio" name="akind" value="decompose"> <span>평균이 바뀐 이유<small>평균이 바뀐 까닭이 그룹의 비중이 달라져서인지, 그룹 안의 값이 달라져서인지 나눠 봐요</small></span></label>
         <label><input type="radio" name="akind" value="seasonal"> <span>되풀이되는 흐름과 튀는 날(시계열 분해)<small>값의 변화를 큰 흐름과 되풀이되는 모양으로 나누고 평소와 다른 날을 찾아요</small></span></label>
+        </div></details>
       </div>
       <div class="a-form" data-kind="distribution">
-        <p class="lead"><b>고를 것:</b> 컬럼 1개<br><b>이럴 때 써요:</b> 주문 금액은 주로 얼마인가?</p>
+        <p class="lead"><b>이럴 때 써요:</b> 주문 금액은 주로 얼마인가?</p>
         <div class="hint">컬럼</div><select id="a-col"></select>
       </div>
       <div class="a-form hidden" data-kind="correlation">
-        <p class="lead"><b>고를 것:</b> 숫자 컬럼 2개 이상<br><b>이럴 때 써요:</b> 가격이 오르면 판매량이 줄어드는가?<br>결과는 -1에서 1 사이 숫자예요. 1에 가까우면 같이 커지고, -1에 가까우면 반대로 움직여요.</p>
+        <p class="lead"><b>이럴 때 써요:</b> 가격이 오르면 판매량이 줄어드는가?<br>결과는 -1에서 1 사이 숫자예요. 1에 가까우면 같이 커지고, -1에 가까우면 반대로 움직여요.</p>
         <select id="a-cmode"><option value="heatmap">여러 컬럼 한꺼번에(히트맵)</option><option value="scatter">두 컬럼 자세히(산점도)</option></select>
         <div id="a-heat"><div class="hint">숫자 컬럼(2~<span id="a-max-corr"></span>개)</div><div class="cols" id="a-corr-cols"></div>
           <div class="hint">고른 컬럼이 모두 채워진 행만으로 피어슨 상관계수를 구해요.</div></div>
@@ -396,13 +407,13 @@
           <div class="hint">점이 <span id="a-max-points"></span>개보다 많으면 전체에서 고르게 뽑아 그려요(다시 구해도 같은 점).</div></div>
       </div>
       <div class="a-form hidden" data-kind="groups">
-        <p class="lead"><b>고를 것:</b> 묶을 컬럼 1개, 계산할 컬럼 1개<br><b>이럴 때 써요:</b> 어느 매장의 매출이 가장 큰가?</p>
+        <p class="lead"><b>이럴 때 써요:</b> 어느 매장의 매출이 가장 큰가?</p>
         <div class="hint">묶을 컬럼</div><select id="a-gby"></select>
         <div class="hint">집계</div><div id="a-gagg"></div>
         <div class="hint">계산할 컬럼</div><select id="a-gval"></select>
       </div>
       <div class="a-form hidden" data-kind="trend">
-        <p class="lead"><b>고를 것:</b> 날짜 컬럼, 계산할 컬럼<br><b>이럴 때 써요:</b> 매출이 달마다 늘고 있는가?</p>
+        <p class="lead"><b>이럴 때 써요:</b> 매출이 달마다 늘고 있는가?</p>
         <div class="hint">날짜 컬럼</div><select id="a-tcol"></select>
         <div class="hint">기간 단위</div><select id="a-tunit"><option value="day">일</option><option value="week">주(월요일부터)</option><option value="month">월</option></select>
         <div class="hint">집계</div><div id="a-tagg"></div>
@@ -432,14 +443,14 @@
         <div class="adv"><div class="hint">걸린 시간 절사평균에서 자를 몫(%)</div><input id="a-ftrim" type="number" min="0" step="any" aria-label="절사평균 자르기 %" title="위아래를 합쳐 자를 몫이에요. 비우면 기본값"></div>
       </div>
       <div class="a-form hidden" id="akind-retention" data-kind="retention" data-adv>
-        <p class="lead"><b>고를 것:</b> 사람을 구분하는 컬럼, 날짜 컬럼<br><b>이럴 때 써요:</b> 이번 달에 가입한 사람이 다음 달에도 오는가?<br>표본이 아니라 테이블 전체로 구해요.</p>
+        <p class="lead"><b>이럴 때 써요:</b> 이번 달에 가입한 사람이 다음 달에도 오는가?<br>표본이 아니라 테이블 전체로 구해요.</p>
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-rwho"></select>
         <div class="hint">시각 컬럼(날짜)</div><select id="a-rtime"></select>
         <div class="hint">코호트 단위</div><select id="a-runit"><option value="day">일</option><option value="week">주(설정한 주 시작 요일부터)</option><option value="month">월</option></select>
         <div class="adv"><div class="hint">경과 칸 수(비우면 기본값)</div><input id="a-rspan" type="number" step="1"></div>
       </div>
       <div class="a-form hidden" id="akind-rfm" data-kind="rfm" data-adv>
-        <p class="lead"><b>고를 것:</b> 고객을 구분하는 컬럼, 날짜 컬럼, 금액 컬럼<br><b>이럴 때 써요:</b> 단골은 누구이고 떠나려는 고객은 누구인가?<br>표본이 아니라 테이블 전체로 구해요.</p>
+        <p class="lead"><b>이럴 때 써요:</b> 단골은 누구이고 떠나려는 고객은 누구인가?<br>표본이 아니라 테이블 전체로 구해요.</p>
         <div class="hint">사용자를 구분하는 컬럼</div><select id="a-mwho"></select>
         <div class="hint">시각 컬럼(날짜)</div><select id="a-mtime"></select>
         <div class="hint">금액 컬럼</div><select id="a-mamt"></select>
@@ -477,7 +488,7 @@
         <div class="adv"><div class="hint">상위 쌍 수(비우면 기본값)</div><input id="a-ktop" type="number" step="1"></div>
       </div>
       <div class="a-form hidden" data-kind="decompose">
-        <p class="lead"><b>고를 것:</b> 날짜 컬럼, 그룹 컬럼, 숫자 값 컬럼, 견줄 두 기간<br><b>이럴 때 써요:</b> 객단가가 내린 것은 싼 상품이 많이 팔려서인가?<br>표본이 아니라 테이블 전체로 구해요.</p>
+        <p class="lead"><b>이럴 때 써요:</b> 객단가가 내린 것은 싼 상품이 많이 팔려서인가?<br>표본이 아니라 테이블 전체로 구해요.</p>
         <div class="hint">날짜 컬럼</div><select id="a-dtime"></select>
         <div class="hint">기준 기간</div><div class="row"><input id="a-db0" type="date"><input id="a-db1" type="date"></div>
         <div class="hint">비교 기간</div><div class="row"><input id="a-dc0" type="date"><input id="a-dc1" type="date"></div>
@@ -485,7 +496,7 @@
         <div class="hint">값 컬럼(0·1 값이면 비율)</div><select id="a-dval"></select>
       </div>
       <div class="a-form hidden" id="akind-seasonal" data-kind="seasonal" data-adv>
-        <p class="lead"><b>고를 것:</b> 날짜 컬럼, 계산할 컬럼<br><b>이럴 때 써요:</b> 주말마다 매출이 오르는가? 평소와 달랐던 날은 언제인가?<br>표본이 아니라 테이블 전체로 구해요.</p>
+        <p class="lead"><b>이럴 때 써요:</b> 주말마다 매출이 오르는가? 평소와 달랐던 날은 언제인가?<br>표본이 아니라 테이블 전체로 구해요.</p>
         <div class="hint">날짜 컬럼</div><select id="a-stime"></select>
         <div class="hint">기간 단위</div><select id="a-sunit"><option value="day">일</option><option value="week">주(월요일부터)</option><option value="month">월</option></select>
         <div class="hint">집계</div><div id="a-sagg"></div>
@@ -789,7 +800,9 @@ function opLine(c, e, key) {
     el("div", { className: "hint", textContent: DESC[key] ?? "" }),
     ...(key === "cut" ? (preview?.info?.cut ?? []).filter(x => x.column === c.name).map(x => el("div", { className: "hint", textContent: cutText(x) })) : []));
   lines.set(st, li);
+  let checks = null;  // 이어진 체크 칸들은 한 격자(.op-checks)에 같은 폭으로 모은다
   for (const f of op.fields?.(st, c, e.ops) ?? []) {
+    if (!f.check) checks = null;
     if (f.hint) { li.append(el("div", { className: "hint", textContent: f.hint })); continue; }
     if (f.custom) { li.append(f.custom(() => { li.classList.remove("bad"); renderClean(); renderGrid(); })); continue; }  // 칸 하나로 못 그리는 것(값 바꿔 쓰기)
     const input = control(f, st);
@@ -798,7 +811,9 @@ function opLine(c, e, key) {
       li.classList.remove("bad");
       if (f.redraw) { renderClean(); renderGrid(); }
     };
-    li.append(f.check ? el("label", { className: "hint" }, input, " " + f.check) : input);
+    if (!f.check) { li.append(input); continue; }
+    if (!checks) li.append(checks = el("div", { className: "op-checks" }));
+    checks.append(el("label", { className: "hint" }, input, " " + f.check));
   }
   return li;
 }

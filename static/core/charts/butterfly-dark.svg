@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="인구 피라미드 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.5"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.045"/>
+</filter>
+</defs>
+<rect x="110" y="6" width="52" height="17" rx="5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<rect x="198" y="6" width="78" height="17" rx="5" fill="#E8803A" filter="url(#nm-raise)"/>
+<text x="180" y="18" text-anchor="middle" font-size="9.5" fill="#E6EAEE">70+</text>
+<rect x="71" y="28" width="91" height="17" rx="5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<rect x="198" y="28" width="104" height="17" rx="5" fill="#E8803A" filter="url(#nm-raise)"/>
+<text x="180" y="40" text-anchor="middle" font-size="9.5" fill="#E6EAEE">60대</text>
+<rect x="45" y="50" width="117" height="17" rx="5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<rect x="198" y="50" width="117" height="17" rx="5" fill="#E8803A" filter="url(#nm-raise)"/>
+<text x="180" y="62" text-anchor="middle" font-size="9.5" fill="#E6EAEE">50대</text>
+<rect x="32" y="72" width="130" height="17" rx="5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<rect x="198" y="72" width="130" height="17" rx="5" fill="#E8803A" filter="url(#nm-raise)"/>
+<text x="180" y="84" text-anchor="middle" font-size="9.5" fill="#E6EAEE">40대</text>
+<rect x="45" y="94" width="117" height="17" rx="5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<rect x="198" y="94" width="104" height="17" rx="5" fill="#E8803A" filter="url(#nm-raise)"/>
+<text x="180" y="106" text-anchor="middle" font-size="9.5" fill="#E6EAEE">30대</text>
+<rect x="58" y="116" width="104" height="17" rx="5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<rect x="198" y="116" width="91" height="17" rx="5" fill="#E8803A" filter="url(#nm-raise)"/>
+<text x="180" y="128" text-anchor="middle" font-size="9.5" fill="#E6EAEE">20대</text>
+<rect x="84" y="138" width="78" height="17" rx="5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<rect x="198" y="138" width="78" height="17" rx="5" fill="#E8803A" filter="url(#nm-raise)"/>
+<text x="180" y="150" text-anchor="middle" font-size="9.5" fill="#E6EAEE">10대</text>
+<rect x="97" y="160" width="65" height="17" rx="5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<rect x="198" y="160" width="65" height="17" rx="5" fill="#E8803A" filter="url(#nm-raise)"/>
+<text x="180" y="172" text-anchor="middle" font-size="9.5" fill="#E6EAEE">0-9</text>
+</svg>

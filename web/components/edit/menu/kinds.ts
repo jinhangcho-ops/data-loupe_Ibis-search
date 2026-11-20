@@ -44,6 +44,12 @@ export function unitForDate(cols: [string, string][], column: string, timed: str
 }
 
 export type Spec = { group: string; kind: CardKind; type?: string; name: string; help: string };
+/** 카드 모음에서 먼저 보이는 차트 종류(자주 쓰는 것). 나머지는 [차트 더 보기]에 접힌다. 보이는 차례는 서버 종류 표(dash.types) 그대로 */
+export const COMMON_CHARTS = ["bar", "hbar", "stacked", "line", "area", "doughnut", "pie", "scatter"];
+/** 미리보기 그림이 있는 종류(차트는 type, 카드는 kind). 그림은 static/core/charts/이름.svg와 이름-dark.svg(예시 neumorphism-charts에서 꺼낸 파일) */
+export const TILE_PICS = ["bar", "hbar", "stacked", "line", "area", "doughnut", "pie", "radar", "scatter", "bubble", "group", "stack100", "sarea", "step", "combo", "waterfall", "pareto", "radial", "polar", "range",
+  "slope", "butterfly", "lollipop", "bar3d", "scatter3d", "kpi", "donut_kpi", "gauge", "stripes", "blocks", "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "wordcloud", "bullet", "bump", "candle",
+  "funnel", "sankey", "cohort", "geomap"];
 /** 카드 모음의 칸들: 차트는 종류마다 한 칸 */
 export function galleryItems(types: Record<string, string>): Spec[] {
   const charts = Object.entries(types).map(([type, name]) => ({ group: "차트", kind: "chart" as CardKind, type, name, help: POINT_TYPES.includes(type) ? "가로축과 값 하나로 점을 찍어요" : "가로축 컬럼과 값 최대 5개" }));

@@ -83,3 +83,8 @@
 .mtable th, .mtable td { border:1px solid var(--line); padding:.125rem .5rem; text-align:right; }
 .mcatalog:empty::before { content:"지표 사전은 준비 중이에요."; color:var(--muted); font-size:var(--fs-sm); }
 @media (max-width: 900px) { .sgrid { grid-template-columns:1fr; } }
+/* neumorphism 면(common.css 끝의 규칙과 같은 뜻) */
+.vswitch button, .tpl, .sset, .scard, .mrow, .mform, .mdetail, .mitem, .ccol { border-color:var(--edge); box-shadow:var(--raise-sm); }
+.ccol.num { border-left-color:var(--c1); } .ccol.date { border-left-color:var(--c5); } .ccol.text { border-left-color:var(--c2); } .ccol.other { border-left-color:var(--c8); }
+.vswitch button.on, .mitem.on, .mresult { border-color:transparent; box-shadow:var(--press); }
+.tpl:hover, .mitem:hover:not(:disabled) { border-color:var(--accent); }

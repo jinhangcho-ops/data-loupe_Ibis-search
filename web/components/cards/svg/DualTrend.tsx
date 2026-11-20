@@ -12,6 +12,7 @@ import { useZoomX } from "../useZoomX";
 import { Frame, Say, type P } from "./common";
 
 const FOOT_FONT = 10, FOOT_TOP = 180;  // 맨 아래 계열 이름 줄: 기준 글자 크기, 글자 윗자리(구간 막대 아래)
+const GRID_LINES = 5, LINE_MAIN = 3, LINE_SUB = 2, SUB_DASH = "5 4", DOT_R = 4, DOT_W = 2.5, DOT_MAX = 16;  // 예시(neumorphism 라인): 눈금선 수, 주 선·보조(점선) 굵기, 점 반지름·테두리, 점을 그리는 최대 점 수(넘으면 점 없이 선만)
 
 export function DualTrend({ card, colors, range, merge }: P) {
   const { dispatch } = useDash(), s = useRootScale();
@@ -54,13 +55,15 @@ export function DualTrend({ card, colors, range, merge }: P) {
   const foot = names.join(" · ") + (win && keep ? "  (구간을 골랐어요. 한 번 누르면 풀려요)" : ""), footFont = growFont(foot, W - 2 * pad, FOOT_FONT, s), H = FOOT_TOP + footFont;  // 글자가 커지면 그만큼 그림을 아래로 늘린다
   const tip = (e: React.PointerEvent<SVGRectElement>) => { const p = e.currentTarget.getBoundingClientRect(); setTip(clamp(Math.round((e.clientX - p.left) / p.width * (shown.length - 1)), 0, shown.length - 1)); };
   return (
-    <div {...z.bind}>
+    <div {...z.bind} className="nm-well">
     <Frame w={W} h={H} label={card.title}>
       <defs>
         <pattern id={hatch} width={6} height={6} patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1={0} y1={0} x2={0} y2={6} stroke={colors.text} strokeWidth={1.5} /></pattern>
       </defs>
+      {Array.from({ length: GRID_LINES }, (_, g) => <line key={g} x1={pad} x2={W - pad} y1={top + plot * g / (GRID_LINES - 1)} y2={top + plot * g / (GRID_LINES - 1)} stroke={colors.line} strokeWidth={1} />)}
       {future >= 0 && <rect x={xOf(Math.max(0, future - 1))} y={top} width={W - pad - xOf(Math.max(0, future - 1))} height={plot} fill={`url(#${hatch})`} opacity={0.35} />}
-      {rows.map((r, k) => <polyline key={k} points={r.map((d, i) => d.v == null ? null : `${xOf(i).toFixed(1)},${yOf(d.v).toFixed(1)}`).filter(Boolean).join(" ")} fill="none" stroke={cols[k]} strokeWidth={2} />)}
+      {rows.map((r, k) => <polyline key={k} points={r.map((d, i) => d.v == null ? null : `${xOf(i).toFixed(1)},${yOf(d.v).toFixed(1)}`).filter(Boolean).join(" ")} fill="none" stroke={cols[k]} strokeWidth={k ? LINE_SUB : LINE_MAIN} strokeDasharray={k ? SUB_DASH : undefined} strokeLinecap="round" />)}
+      {shown.length <= DOT_MAX && rows[0].map((d, i) => d.v == null ? null : <circle key={i} cx={xOf(i)} cy={yOf(d.v)} r={DOT_R} fill={colors.card} stroke={cols[0]} strokeWidth={DOT_W} />)}
       <rect x={pad} y={top} width={W - 2 * pad} height={plot} fill="transparent" onPointerMove={tip} onPointerLeave={() => setTip(null)} />
       {tipAt != null && (
         <g transform={`translate(${clamp(xOf(tipAt) + 8, 0, W - 150 * s - 2)} ${top})`} pointerEvents="none">

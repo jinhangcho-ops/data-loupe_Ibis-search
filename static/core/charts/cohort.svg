@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="코호트 리텐션 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#A3B1C6" flood-opacity="0.7"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.9"/>
+</filter>
+</defs>
+<text x="76.0" y="14" text-anchor="middle" font-size="9.5" fill="#5B6576">0주</text>
+<text x="112.0" y="14" text-anchor="middle" font-size="9.5" fill="#5B6576">1주</text>
+<text x="148.0" y="14" text-anchor="middle" font-size="9.5" fill="#5B6576">2주</text>
+<text x="184.0" y="14" text-anchor="middle" font-size="9.5" fill="#5B6576">3주</text>
+<text x="220.0" y="14" text-anchor="middle" font-size="9.5" fill="#5B6576">4주</text>
+<text x="256.0" y="14" text-anchor="middle" font-size="9.5" fill="#5B6576">5주</text>
+<text x="292.0" y="14" text-anchor="middle" font-size="9.5" fill="#5B6576">6주</text>
+<text x="328.0" y="14" text-anchor="middle" font-size="9.5" fill="#5B6576">7주</text>
+<text x="50" y="36" text-anchor="end" font-size="9.5" fill="#5B6576">1월 가입</text>
+<rect x="59" y="23" width="33" height="19" rx="4" fill="#2348B8"/>
+<text x="75.5" y="36" text-anchor="middle" font-size="9" font-weight="600" fill="#FFFFFF">100%</text>
+<rect x="95" y="23" width="33" height="19" rx="4" fill="#6690F7"/>
+<text x="111.5" y="36" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">64%</text>
+<rect x="131" y="23" width="33" height="19" rx="4" fill="#8FB0FF"/>
+<text x="147.5" y="36" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">47%</text>
+<rect x="167" y="23" width="33" height="19" rx="4" fill="#B7C8EE"/>
+<text x="183.5" y="36" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">36%</text>
+<rect x="203" y="23" width="33" height="19" rx="4" fill="#B7C8EE"/>
+<text x="219.5" y="36" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">27%</text>
+<rect x="239" y="23" width="33" height="19" rx="4" fill="#B7C8EE"/>
+<text x="255.5" y="36" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">23%</text>
+<rect x="275" y="23" width="33" height="19" rx="4" fill="#D6DEEA"/>
+<text x="291.5" y="36" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">16%</text>
+<rect x="311" y="23" width="33" height="19" rx="4" fill="#D6DEEA"/>
+<text x="327.5" y="36" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">12%</text>
+<text x="50" y="58" text-anchor="end" font-size="9.5" fill="#5B6576">2월 가입</text>
+<rect x="59" y="45" width="33" height="19" rx="4" fill="#2348B8"/>
+<text x="75.5" y="58" text-anchor="middle" font-size="9" font-weight="600" fill="#FFFFFF">100%</text>
+<rect x="95" y="45" width="33" height="19" rx="4" fill="#6690F7"/>
+<text x="111.5" y="58" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">69%</text>
+<rect x="131" y="45" width="33" height="19" rx="4" fill="#8FB0FF"/>
+<text x="147.5" y="58" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">50%</text>
+<rect x="167" y="45" width="33" height="19" rx="4" fill="#B7C8EE"/>
+<text x="183.5" y="58" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">36%</text>
+<rect x="203" y="45" width="33" height="19" rx="4" fill="#B7C8EE"/>
+<text x="219.5" y="58" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">29%</text>
+<rect x="239" y="45" width="33" height="19" rx="4" fill="#B7C8EE"/>
+<text x="255.5" y="58" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">21%</text>
+<rect x="275" y="45" width="33" height="19" rx="4" fill="#D6DEEA"/>
+<text x="291.5" y="58" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">18%</text>
+<text x="50" y="80" text-anchor="end" font-size="9.5" fill="#5B6576">3월 가입</text>
+<rect x="59" y="67" width="33" height="19" rx="4" fill="#2348B8"/>
+<text x="75.5" y="80" text-anchor="middle" font-size="9" font-weight="600" fill="#FFFFFF">100%</text>
+<rect x="95" y="67" width="33" height="19" rx="4" fill="#6690F7"/>
+<text x="111.5" y="80" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">72%</text>
+<rect x="131" y="67" width="33" height="19" rx="4" fill="#8FB0FF"/>
+<text x="147.5" y="80" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">52%</text>
+<rect x="167" y="67" width="33" height="19" rx="4" fill="#B7C8EE"/>
+<text x="183.5" y="80" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">39%</text>
+<rect x="203" y="67" width="33" height="19" rx="4" fill="#B7C8EE"/>
+<text x="219.5" y="80" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">29%</text>
+<rect x="239" y="67" width="33" height="19" rx="4" fill="#B7C8EE"/>
+<text x="255.5" y="80" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">23%</text>
+<text x="50" y="102" text-anchor="end" font-size="9.5" fill="#5B6576">4월 가입</text>
+<rect x="59" y="89" width="33" height="19" rx="4" fill="#2348B8"/>
+<text x="75.5" y="102" text-anchor="middle" font-size="9" font-weight="600" fill="#FFFFFF">100%</text>
+<rect x="95" y="89" width="33" height="19" rx="4" fill="#6690F7"/>
+<text x="111.5" y="102" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">70%</text>
+<rect x="131" y="89" width="33" height="19" rx="4" fill="#8FB0FF"/>
+<text x="147.5" y="102" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">54%</text>
+<rect x="167" y="89" width="33" height="19" rx="4" fill="#8FB0FF"/>
+<text x="183.5" y="102" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">40%</text>
+<rect x="203" y="89" width="33" height="19" rx="4" fill="#B7C8EE"/>
+<text x="219.5" y="102" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">32%</text>
+<text x="50" y="124" text-anchor="end" font-size="9.5" fill="#5B6576">5월 가입</text>
+<rect x="59" y="111" width="33" height="19" rx="4" fill="#2348B8"/>
+<text x="75.5" y="124" text-anchor="middle" font-size="9" font-weight="600" fill="#FFFFFF">100%</text>
+<rect x="95" y="111" width="33" height="19" rx="4" fill="#6690F7"/>
+<text x="111.5" y="124" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">73%</text>
+<rect x="131" y="111" width="33" height="19" rx="4" fill="#8FB0FF"/>
+<text x="147.5" y="124" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">53%</text>
+<rect x="167" y="111" width="33" height="19" rx="4" fill="#8FB0FF"/>
+<text x="183.5" y="124" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">42%</text>
+<text x="50" y="146" text-anchor="end" font-size="9.5" fill="#5B6576">6월 가입</text>
+<rect x="59" y="133" width="33" height="19" rx="4" fill="#2348B8"/>
+<text x="75.5" y="146" text-anchor="middle" font-size="9" font-weight="600" fill="#FFFFFF">100%</text>
+<rect x="95" y="133" width="33" height="19" rx="4" fill="#6690F7"/>
+<text x="111.5" y="146" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">78%</text>
+<rect x="131" y="133" width="33" height="19" rx="4" fill="#8FB0FF"/>
+<text x="147.5" y="146" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">57%</text>
+<text x="50" y="168" text-anchor="end" font-size="9.5" fill="#5B6576">7월 가입</text>
+<rect x="59" y="155" width="33" height="19" rx="4" fill="#2348B8"/>
+<text x="75.5" y="168" text-anchor="middle" font-size="9" font-weight="600" fill="#FFFFFF">100%</text>
+<rect x="95" y="155" width="33" height="19" rx="4" fill="#6690F7"/>
+<text x="111.5" y="168" text-anchor="middle" font-size="9" font-weight="600" fill="#2E3746">79%</text>
+</svg>

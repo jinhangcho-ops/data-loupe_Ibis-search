@@ -3,6 +3,7 @@
 // 그림 모드(밝게·어둡게)는 data-theme을 잠깐 바꿔 그 모드의 계산된 색을 박는다. 몸통은 화면 크기 그대로 그리고 그림 칸에 비율을 지켜 맞춘다(fitRect).
 // 모두 브라우저에서만(단추를 눌렀을 때) 부른다.
 import { fitRect, PICTURE_HEIGHT, REPORT, reportLayout, TITLE_BAND } from "./layout";
+import { gridItems } from "@/components/grid/useDrag";
 import type { Card } from "@/lib/types";
 
 export type Colors = { card: string; head: string; ink: string; text: string; line: string };
@@ -115,7 +116,7 @@ export async function cardPicture(box: HTMLElement, title: string, mode: string,
 
 /** 보고서 canvas(옛 reportCanvas): 제목 줄 + 카드마다 격자 자리의 상자(이름 줄 + 그림). 그리지 못한 카드는 이유 글만 */
 export async function reportCanvas(cards: Card[], title: string, mode: string, scale = 2) {
-  const colors = themeColors(mode), lay = reportLayout(cards);
+  const colors = themeColors(mode), lay = reportLayout(gridItems(cards));  // 화면 격자와 같은 자리(둥근 카드 최소 높이 포함)
   const out = Object.assign(document.createElement("canvas"), { width: lay.width * scale, height: lay.height * scale });
   const ctx = out.getContext("2d")!;
   const font = (px: number, weight = 400) => `${weight} ${px * scale}px ${FONT}`;

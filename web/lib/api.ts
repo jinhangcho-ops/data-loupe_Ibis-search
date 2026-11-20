@@ -107,11 +107,6 @@ export const saveImages = (images: { name: string; data: string }[]) => api<{ wi
 
 // ---------- 화면 설정·초안 ----------
 /** 앱 설정 몇 항목(theme·board_ratio·image·board_format …)을 바꾼다(/api/settings, 쿠키로 돌아온다) */
-// 모두 비우기(flush): 앱이 붙잡고 있는 것 전부(지금 연결·받아 둔 결과·표본 등)를 놓는다. static 화면의 common.js flushButton과 같은 길
-export const flushMemory = async () => {
-  const ids = (await api<{ items: { id: string }[] }>("/api/memory")).items.map(i => i.id);
-  if (ids.length) await api("/api/memory/drop", { ids });
-};
 export const saveSetting = (changes: Record<string, string>) => api<Record<string, unknown>>("/api/settings", changes);
 const DRAFT = "/api/draft?screen=dashboard";
 /** 저장하지 못한 편집의 초안(draft.js): 읽기·쓰기·지우기. same이 false면 다른 연결에서 하던 것 */

@@ -1,5 +1,6 @@
 "use client";
 // 3차원 그래프(막대·곡면·산점도)를 SVG에 직접 그린다(계산은 three.ts). 한 번 눌러 켠 뒤(active, 가로축 확대와 같은 켜기) 끌면 돌고, 휠로 크게·작게, 두 번 누르면 처음 각도.
+// 그림은 눌린 영역(.nm-well) 안에: 바닥 면을 먼저 칠하고 모양을 뒤에서 앞으로 그린다. 솟은 그림자(.nm-raise)는 예시 84처럼 산점도의 점에만 건다.
 // 켜져 있을 때만 휠을 막아(preventDefault) 페이지·부모 창이 같이 스크롤되지 않는다. 그림은 SVG라 카드 그림 저장·보고서에 지금 각도 그대로 찍힌다.
 // 곡면(surface)이면 범례 아래에 조절 칸: 매끈함 단계(칸을 잘게 나눠 곡선으로), [모양 조절](격자점 손잡이를 위아래로 끌어 높이를 바꾼다)·퍼짐·[처음 모양으로].
 // 조절한 높이는 이 컴포넌트 상태에만 있다(값·서버에는 보내지 않는다). 같은 격자 크기로 다시 그려지면 남고, 크기가 바뀌면 지운다.
@@ -7,8 +8,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEve
 import { DRAG_PX } from "../svg/__pure__";
 import { rem, scaledBox, useRootScale } from "./scale";
 import {
-  LABEL_FONT, SMOOTH_STEPS, SPREAD_RANGE, SPREAD_START, SPREAD_STEP, START_VIEW, axisShapes, dragMode, liftGrid, orbit, paint, smoothReason, smoothStep, zPerPx, zoomed,
-  type GridScene, type Key3, type Scene, type Shaping, type View3,
+  FLOOR, LABEL_FONT, SMOOTH_STEPS, SPREAD_RANGE, SPREAD_START, SPREAD_STEP, START_VIEW, axisShapes, dragMode, liftGrid, orbit, paint, project, smoothReason, smoothStep, zPerPx, zoomed,
+  type GridScene, type Key3, type Painted, type Scene, type Shaping, type View3,
 } from "./three";
 
 export const HELP_3D = "그림을 한 번 누른 뒤 끌면 돌아가요. Ctrl을 누른 채 끌어도 돌아가요. 휠로 크게·작게, 두 번 누르면 처음 각도로 돌아가요.";
@@ -21,6 +22,7 @@ const pts = (xy: [number, number][]) => xy.map(p => `${p[0].toFixed(1)},${p[1].t
 const BUTTON: CSSProperties = { font: "inherit", color: "var(--muted)", background: "none", border: "1px solid var(--line)", borderRadius: 4, padding: "0 6px", cursor: "pointer" };
 const PICKED: CSSProperties = { color: "var(--text)", borderColor: "var(--text)" };
 const FIELD: CSSProperties = { display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" };
+const FLOOR_FILL = "var(--bg)";  // 바닥 면: 카드보다 한 단 어두운 바탕색(예시의 바닥 면처럼 눌려 보인다)
 
 /** 곡면 조절에 필요한 것: 격자 크기(X 값 수 nx × 계열 수 ny), 모양(Shaping)대로 그림을 만드는 함수, 그 그림의 범례 */
 export type Reshape = { nx: number; ny: number; scene: (shape: Shaping) => GridScene; legend: (keys: Key3[]) => ReactNode };
@@ -84,6 +86,13 @@ export function Chart3D({ scene, legend, active, surface }: { scene: Scene; lege
     e.preventDefault();
   };
   const live = (run: () => void) => () => { if (active) run(); };  // 조절 칸은 그림이 켜져 있을 때만 듣는다(꺼져 있으면 그 누르기가 그림을 켠다)
+  // 모양 하나를 SVG 요소로(drawn은 이미 뒤에서 앞으로의 차례). 솟은 그림자는 제목(값)이 있는 손잡이 아닌 점, 곧 산점도의 점에만
+  const draw = ({ shape, xy }: Painted, i: number) => {
+    if (shape.kind === "poly") return <polygon key={i} points={pts(xy)} fill={shape.fill} stroke={shape.stroke} strokeWidth={0.5} strokeLinejoin="round">{shape.title ? <title>{shape.title}</title> : null}</polygon>;
+    if (shape.kind === "line") return <polyline key={i} points={pts(xy)} fill="none" stroke={shape.stroke} strokeWidth={shape.width} strokeOpacity={shape.opacity} strokeDasharray={shape.dash} strokeLinecap={shape.dash ? undefined : "round"} strokeLinejoin="round" />;
+    if (shape.kind === "dot") return <circle key={i} cx={xy[0][0]} cy={xy[0][1]} r={shape.r} fill={shape.fill} className={shape.title && !shape.grip ? "nm-raise" : undefined} data-grip={shape.grip?.join()} data-noprint={shape.grip ? "" : undefined} style={shape.grip && active ? { cursor: "ns-resize" } : undefined}>{shape.title ? <title>{shape.title}</title> : null}</circle>;
+    return <text key={i} x={xy[0][0] + (shape.dx ?? 0)} y={xy[0][1] + (shape.dy ?? 0)} textAnchor={shape.align} fontSize={LABEL_FONT} fontWeight={shape.bold ? 600 : undefined} fill="var(--muted)" pointerEvents="none">{shape.text}</text>;
+  };
   return (
     <div className="[display:flex] flex-col h-full [font-size:12px]">
       {surface && made ? surface.legend(made.keys) : legend}
@@ -101,16 +110,12 @@ export function Chart3D({ scene, legend, active, surface }: { scene: Scene; lege
           <button type="button" aria-label="처음 모양으로" disabled={!lift} onClick={live(() => setLift(null))} style={{ ...BUTTON, ...(lift ? {} : { opacity: DIM, cursor: "default" }) }}>처음 모양으로</button>
         </div>
       ) : null}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 nm-well">
       <div ref={box} title={HELP_3D} style={{ ...scaledBox(s), overflow: "hidden", userSelect: "none", touchAction: active ? "none" : undefined, cursor: active ? "grab" : undefined }}
         onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onClickCapture={afterDrag} onDoubleClick={() => setView(START_VIEW)}>
         <svg width={w} height={h} role="img" aria-label="3차원 그래프" className="[display:block]">
-          {drawn.map(({ shape, xy }, i) => {
-            if (shape.kind === "poly") return <polygon key={i} points={pts(xy)} fill={shape.fill} stroke={shape.stroke} strokeWidth={0.5} strokeLinejoin="round">{shape.title ? <title>{shape.title}</title> : null}</polygon>;
-            if (shape.kind === "line") return <polyline key={i} points={pts(xy)} fill="none" stroke={shape.stroke} strokeWidth={shape.width} strokeLinecap="round" strokeLinejoin="round" />;
-            if (shape.kind === "dot") return <circle key={i} cx={xy[0][0]} cy={xy[0][1]} r={shape.r} fill={shape.fill} fillOpacity={0.8} data-grip={shape.grip?.join()} data-noprint={shape.grip ? "" : undefined} style={shape.grip && active ? { cursor: "ns-resize" } : undefined}>{shape.title ? <title>{shape.title}</title> : null}</circle>;
-            return <text key={i} x={xy[0][0] + (shape.dx ?? 0)} y={xy[0][1] + (shape.dy ?? 0)} textAnchor={shape.align} fontSize={LABEL_FONT} fontWeight={shape.bold ? 600 : undefined} fill="var(--muted)" pointerEvents="none">{shape.text}</text>;
-          })}
+          {w && h ? <polygon points={pts(FLOOR.map(p => { const [x, y] = project(p, view, w, h); return [x, y]; }))} fill={FLOOR_FILL} /> : null}
+          {drawn.map(draw)}
           {made && lift ? <text x={NOTE_AT.x} y={NOTE_AT.y} fontSize={LABEL_FONT} fontWeight={600} fill="var(--text)" pointerEvents="none">{SHAPED_NOTE}</text> : null}
         </svg>
       </div>

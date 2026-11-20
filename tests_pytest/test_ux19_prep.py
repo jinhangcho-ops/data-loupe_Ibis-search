@@ -55,7 +55,7 @@ def test_19e3_footer_says_what_happens():
     foot = between("prep.html", '<footer class="has-lead">', "</footer>")
     assert 'id="preview"' in foot and 'id="run"' in foot
     lead = between("prep.html", 'id="prep-foot-lead">', "</p>")
-    assert "앞 20행" in lead and "저장하지 않아요" in lead and "테이블 전체" in lead and "Parquet·CSV 파일" in lead and "같은 DB의 새 테이블" in lead
+    assert "앞 20행" in lead and "저장하지 않아요" in lead and "테이블 전체" in lead and "⑦ 저장" in lead
 
 
 def test_19e_peak_finder_folded():
@@ -73,7 +73,7 @@ def test_19f1_question_names_and_two_lines():
     assert dict((k, n) for k, n, _ in labels)["pareto"] == "큰 몫을 차지하는 항목(파레토)" and dict((k, d) for k, _, d in labels)["basket"] == "한 번에 같이 나오는 일이 많은 항목 짝을 찾아요"
     assert 'class="akinds"' in page and "seg4" not in page
     for k in KINDS:
-        assert re.search(r'<p class="lead"><b>고를 것:</b> [^<]+<br><b>이럴 때 써요:</b> [^<]+\?(<br>[^<]+)?</p>', form(k)), k
+        assert re.search(r'<p class="lead">(<b>고를 것:</b> [^<]+<br>)?<b>이럴 때 써요:</b> [^<]+\?(<br>[^<]+)?</p>', form(k)), k  # 고를 것은 아래 이름표와 다른 말을 할 때만
 
 
 def test_19f_optional_fields_folded():

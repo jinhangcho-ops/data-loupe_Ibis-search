@@ -113,6 +113,8 @@ function showAnaForm() {
   document.querySelectorAll(".a-form").forEach(f => f.classList.toggle("hidden", f.dataset.kind !== akind()));
   const label = document.querySelector("input[name=akind]:checked").closest("label");
   if (label.nextElementSibling !== anaForm()) label.after(anaForm());  // 이미 그 자리면 옮기지 않는다(옮기면 칸의 포커스가 풀린다)
+  const more = label.closest(".a-more");
+  if (more) more.open = true;  // 불러온 분석이 [더 보기] 안의 종류여도 보이게
   $("a-heat").classList.toggle("hidden", $("a-cmode").value !== "heatmap");
   $("a-scat").classList.toggle("hidden", $("a-cmode").value === "heatmap");
 }
@@ -423,7 +425,8 @@ $("a-rows").oninput = () => drawAna(true);
 // ---------- 대시보드에 추가: 지금 보이는 분석 그래프를 카드로 ----------
 // 카드 = 다시 구할 기록(source: 테이블·전처리 recipe·분석 how)과 지금 결과(data.values). 저장한 대시보드나 새 대시보드에 서버가 더해 저장한다(연결의 key·label은 서버가 채운다).
 toggleDrop($("a-add"), $("a-pop"));
-document.addEventListener("click", e => { if (!e.target.closest(".pop, .menu")) $("a-pop").classList.add("hidden"); });
+toggleDrop($("a-img-open"), $("a-img-pop"));
+document.addEventListener("click", e => { if (!e.target.closest(".pop, .menu")) ["a-pop", "a-img-pop"].forEach(id => $(id).classList.add("hidden")); });
 const NEW_DASH = "";
 async function fillDashboards() {
   const found = (await api("/api/dash")).dashboards;
@@ -459,6 +462,7 @@ autoPanel($("a-auto"), ANA_RULES, anaAuto, async changed => {
 });
 $("a-all").onchange = reAna;
 document.querySelectorAll("[data-aimage]").forEach(b => b.onclick = () => busy(b, async () => {
+  $("a-img-pop").classList.add("hidden");
   try { download(await anaDraw.picture($("a-image").value, b.dataset.aimage, $("a-export-all").checked), "analysis." + imageExt(b.dataset.aimage)); }
   catch (e) { say("err-ana", e.message); }
 }));

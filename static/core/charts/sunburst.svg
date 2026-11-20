@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="선버스트 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#A3B1C6" flood-opacity="0.7"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.9"/>
+</filter>
+</defs>
+<path d="M130 42 A58 58 0 0 1 169.7 142.3 L150.5 121.9 A30 30 0 0 0 130 70 Z" fill="#3D6DF2" stroke="#E3E8EF" stroke-width="2" filter="url(#nm-raise)"/>
+<path d="M130 12 A88 88 0 0 1 209.6 62.5 L184.3 74.5 A60 60 0 0 0 130 40 Z" fill="#3D6DF2" stroke="#E3E8EF" stroke-width="2" fill-opacity="0.85"/>
+<path d="M209.6 62.5 A88 88 0 0 1 213.7 127.2 L187.1 118.5 A60 60 0 0 0 184.3 74.5 Z" fill="#3D6DF2" stroke="#E3E8EF" stroke-width="2" fill-opacity="0.68"/>
+<path d="M213.7 127.2 A88 88 0 0 1 190.2 164.1 L171.1 143.7 A60 60 0 0 0 187.1 118.5 Z" fill="#3D6DF2" stroke="#E3E8EF" stroke-width="2" fill-opacity="0.51"/>
+<text x="170.9" y="87.8" text-anchor="middle" font-size="11" font-weight="700" fill="#FFFFFF">A</text>
+<path d="M169.7 142.3 A58 58 0 0 1 90.3 142.3 L109.5 121.9 A30 30 0 0 0 150.5 121.9 Z" fill="#E8803A" stroke="#E3E8EF" stroke-width="2" filter="url(#nm-raise)"/>
+<path d="M190.2 164.1 A88 88 0 0 1 119 187.3 L122.5 159.5 A60 60 0 0 0 171.1 143.7 Z" fill="#E8803A" stroke="#E3E8EF" stroke-width="2" fill-opacity="0.85"/>
+<path d="M119 187.3 A88 88 0 0 1 69.8 164.1 L88.9 143.7 A60 60 0 0 0 122.5 159.5 Z" fill="#E8803A" stroke="#E3E8EF" stroke-width="2" fill-opacity="0.68"/>
+<text x="130" y="148" text-anchor="middle" font-size="11" font-weight="700" fill="#2E3746">B</text>
+<path d="M90.3 142.3 A58 58 0 0 1 130 42 L130 70 A30 30 0 0 0 109.5 121.9 Z" fill="#8FB0FF" stroke="#E3E8EF" stroke-width="2" filter="url(#nm-raise)"/>
+<path d="M69.8 164.1 A88 88 0 0 1 43.6 83.5 L71.1 88.8 A60 60 0 0 0 88.9 143.7 Z" fill="#8FB0FF" stroke="#E3E8EF" stroke-width="2" fill-opacity="0.85"/>
+<path d="M43.6 83.5 A88 88 0 0 1 65.9 39.8 L86.3 58.9 A60 60 0 0 0 71.1 88.8 Z" fill="#8FB0FF" stroke="#E3E8EF" stroke-width="2" fill-opacity="0.68"/>
+<path d="M65.9 39.8 A88 88 0 0 1 97.6 18.2 L107.9 44.2 A60 60 0 0 0 86.3 58.9 Z" fill="#8FB0FF" stroke="#E3E8EF" stroke-width="2" fill-opacity="0.51"/>
+<path d="M97.6 18.2 A88 88 0 0 1 130 12 L130 40 A60 60 0 0 0 107.9 44.2 Z" fill="#8FB0FF" stroke="#E3E8EF" stroke-width="2" fill-opacity="0.34"/>
+<text x="89.1" y="87.8" text-anchor="middle" font-size="11" font-weight="700" fill="#2E3746">C</text>
+<circle cx="130" cy="100" r="27" fill="#E3E8EF" filter="url(#nm-raise)"/>
+<text x="130" y="104" text-anchor="middle" font-size="11" font-weight="700" fill="#2E3746">전체</text>
+<rect x="250" y="53" width="12" height="12" rx="4" fill="#3D6DF2"/>
+<text x="270" y="63" font-size="11.5" fill="#2E3746">A · 3개 하위</text>
+<rect x="250" y="85" width="12" height="12" rx="4" fill="#E8803A"/>
+<text x="270" y="95" font-size="11.5" fill="#2E3746">B · 2개 하위</text>
+<rect x="250" y="117" width="12" height="12" rx="4" fill="#8FB0FF"/>
+<text x="270" y="127" font-size="11.5" fill="#2E3746">C · 4개 하위</text>
+</svg>

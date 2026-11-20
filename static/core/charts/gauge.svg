@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="게이지 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#A3B1C6" flood-opacity="0.7"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.9"/>
+</filter>
+</defs>
+<path d="M76 150 A104 104 0 0 1 284 150" fill="none" stroke="#D3DAE5" stroke-width="22" stroke-linecap="round"/>
+<path d="M76 150 A104 104 0 0 1 246.3 69.9" fill="none" stroke="#3D6DF2" stroke-width="22" stroke-linecap="round" filter="url(#nm-raise)"/>
+<line x1="96" y1="150" x2="106" y2="150" stroke="#8E9AAD" stroke-width="1.5" stroke-linecap="round"/>
+<line x1="100.1" y1="124" x2="105.8" y2="125.9" stroke="#8E9AAD" stroke-width="1.5" stroke-linecap="round"/>
+<line x1="112" y1="100.6" x2="116.9" y2="104.2" stroke="#8E9AAD" stroke-width="1.5" stroke-linecap="round"/>
+<line x1="130.6" y1="82" x2="134.2" y2="86.9" stroke="#8E9AAD" stroke-width="1.5" stroke-linecap="round"/>
+<line x1="154" y1="70.1" x2="155.9" y2="75.8" stroke="#8E9AAD" stroke-width="1.5" stroke-linecap="round"/>
+<line x1="180" y1="66" x2="180" y2="76" stroke="#8E9AAD" stroke-width="1.5" stroke-linecap="round"/>
+<line x1="206" y1="70.1" x2="204.1" y2="75.8" stroke="#8E9AAD" stroke-width="1.5" stroke-linecap="round"/>
+<line x1="229.4" y1="82" x2="225.8" y2="86.9" stroke="#8E9AAD" stroke-width="1.5" stroke-linecap="round"/>
+<line x1="248" y1="100.6" x2="243.1" y2="104.2" stroke="#8E9AAD" stroke-width="1.5" stroke-linecap="round"/>
+<line x1="259.9" y1="124" x2="254.2" y2="125.9" stroke="#8E9AAD" stroke-width="1.5" stroke-linecap="round"/>
+<line x1="264" y1="150" x2="254" y2="150" stroke="#8E9AAD" stroke-width="1.5" stroke-linecap="round"/>
+<line x1="180" y1="150" x2="220.8" y2="100.7" stroke="#2E3746" stroke-width="3" stroke-linecap="round"/>
+<circle cx="180" cy="150" r="12" fill="#E3E8EF" filter="url(#nm-raise)"/>
+<text x="180" y="118" text-anchor="middle" font-size="26" font-weight="800" fill="#2E3746">72%</text>
+<text x="76" y="174" text-anchor="middle" font-size="10" fill="#5B6576">0</text>
+<text x="284" y="174" text-anchor="middle" font-size="10" fill="#5B6576">100</text>
+</svg>

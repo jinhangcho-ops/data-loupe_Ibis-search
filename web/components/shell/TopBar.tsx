@@ -3,7 +3,7 @@
 // 위쪽 줄: 연결 이름(crumb), 최신화 알약·팝업(옛 dash_refresh.js). 사용률·작업·업데이트·크기 조절은 static 화면(common.js)에만 있다(결정 D2).
 // 최신화는 연결에 성공한 화면(쿼리·홈)이 시작한다. 여기서는 열 때 돌고 있으면 0.8초마다 상태를 읽어 알약에 보이고, 끝나면 document에 dash-refreshed(결과)를 보낸다.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { flushMemory, refreshStatus, saveSetting, stopRefresh } from "@/lib/api";
+import { refreshStatus, saveSetting, stopRefresh } from "@/lib/api";
 import { useConstants } from "@/lib/constants";
 import type { RefreshStatus } from "@/lib/types";
 import { useShell } from "./ShellProvider";
@@ -69,13 +69,6 @@ export function TopBar() {
     setEasy(next);
     saveSetting({ easy: next ? "on" : "off" }).catch(() => {});
   };
-  // 모두 비우기(status.html의 #flush와 같다): 한 번 더 눌러야 비우고, 비운 뒤 첫 화면으로 간다
-  const [sure, setSure] = useState(false);
-  const [flushErr, setFlushErr] = useState("");
-  const flush = async () => {
-    if (!sure) return setSure(true);
-    try { await flushMemory(); location.replace("/"); } catch (e) { setSure(false); setFlushErr(e instanceof Error ? e.message : String(e)); }
-  };
   const count = (s: string) => st?.results.filter(r => r.state === s).length ?? 0;
   const title = !st ? "" : st.running ? `대시보드를 최신 값으로 바꾸고 있어요 (${st.done}/${st.total})`
     : `대시보드를 최신 값으로 바꿨어요. 완료 ${count("ok")}개, 실패 ${count("failed")}개, 건너뜀 ${count("skipped")}개`;
@@ -98,10 +91,6 @@ export function TopBar() {
           <button className="jobx cursor-pointer [border:0]" id="rf-pill" onClick={() => setPop(true)} title="대시보드를 최신 값으로 바꾸는 중이에요. 누르면 진행 상황을 볼 수 있어요.">
             <i></i><span>{`대시보드 최신화 ${st.done}/${st.total}`}</span></button>
         )}
-        <div className="top-tools ml-auto">
-          <button id="flush" className="btn" onClick={flush} onBlur={() => setSure(false)}
-            title={flushErr || "연결을 끊고 앱이 붙잡고 있는 데이터(받아 둔 결과·표본 등)를 모두 비워 처음 켠 상태로 돌아가요. 저장한 검색·대시보드·설정은 그대로예요"}>{sure ? "한 번 더 누르면 모두 비워요" : "비우기"}</button>
-        </div>
       </header>
       {pop && st && (
         <div className="modal" onClick={e => { if (e.target === e.currentTarget) setPop(false); }}>

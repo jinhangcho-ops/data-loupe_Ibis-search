@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="원형 막대 그래프 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.5"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.045"/>
+</filter>
+</defs>
+<circle cx="180" cy="100" r="26" fill="#20252C" filter="url(#nm-raise)"/>
+<text x="180" y="104" text-anchor="middle" font-size="10" font-weight="700" fill="#E6EAEE">월별</text>
+<path d="M184 8.1 A92 92 0 0 1 222.5 18.4 L194.8 71.6 A32 32 0 0 0 181.4 68 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M182.8 35.1 A65 65 0 0 1 210 42.3 L194.8 71.6 A32 32 0 0 0 181.4 68 Z" fill="#8FB0FF" stroke="#20252C" stroke-width="2" />
+<path d="M229.4 22.4 A92 92 0 0 1 257.6 50.6 L207 82.8 A32 32 0 0 0 197.2 73 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M217.2 41.6 A69.2 69.2 0 0 1 238.4 62.8 L207 82.8 A32 32 0 0 0 197.2 73 Z" fill="#8FB0FF" stroke="#20252C" stroke-width="2" />
+<path d="M261.6 57.5 A92 92 0 0 1 271.9 96 L212 98.6 A32 32 0 0 0 208.4 85.2 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M245.6 65.8 A74 74 0 0 1 253.9 96.8 L212 98.6 A32 32 0 0 0 208.4 85.2 Z" fill="#8FB0FF" stroke="#20252C" stroke-width="2" />
+<path d="M271.9 104 A92 92 0 0 1 261.6 142.5 L208.4 114.8 A32 32 0 0 0 212 101.4 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M258.7 103.4 A78.8 78.8 0 0 1 249.9 136.4 L208.4 114.8 A32 32 0 0 0 212 101.4 Z" fill="#8FB0FF" stroke="#20252C" stroke-width="2" />
+<path d="M257.6 149.4 A92 92 0 0 1 229.4 177.6 L197.2 127 A32 32 0 0 0 207 117.2 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M250.5 144.9 A83.6 83.6 0 0 1 224.9 170.5 L197.2 127 A32 32 0 0 0 207 117.2 Z" fill="#8FB0FF" stroke="#20252C" stroke-width="2" />
+<path d="M222.5 181.6 A92 92 0 0 1 184 191.9 L181.4 132 A32 32 0 0 0 194.8 128.4 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M221.1 178.9 A89 89 0 0 1 183.9 188.9 L181.4 132 A32 32 0 0 0 194.8 128.4 Z" fill="#8FB0FF" stroke="#20252C" stroke-width="2" />
+<path d="M176 191.9 A92 92 0 0 1 137.5 181.6 L165.2 128.4 A32 32 0 0 0 178.6 132 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M176 191.9 A92 92 0 0 1 137.5 181.6 L165.2 128.4 A32 32 0 0 0 178.6 132 Z" fill="#3D6DF2" stroke="#20252C" stroke-width="2" />
+<path d="M130.6 177.6 A92 92 0 0 1 102.4 149.4 L153 117.2 A32 32 0 0 0 162.8 127 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M131.5 176.1 A90.2 90.2 0 0 1 103.9 148.5 L153 117.2 A32 32 0 0 0 162.8 127 Z" fill="#8FB0FF" stroke="#20252C" stroke-width="2" />
+<path d="M98.4 142.5 A92 92 0 0 1 88.1 104 L148 101.4 A32 32 0 0 0 151.6 114.8 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M106.9 138 A82.4 82.4 0 0 1 97.7 103.6 L148 101.4 A32 32 0 0 0 151.6 114.8 Z" fill="#8FB0FF" stroke="#20252C" stroke-width="2" />
+<path d="M88.1 96 A92 92 0 0 1 98.4 57.5 L151.6 85.2 A32 32 0 0 0 148 98.6 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M104.9 96.7 A75.2 75.2 0 0 1 113.3 65.3 L151.6 85.2 A32 32 0 0 0 148 98.6 Z" fill="#8FB0FF" stroke="#20252C" stroke-width="2" />
+<path d="M102.4 50.6 A92 92 0 0 1 130.6 22.4 L162.8 73 A32 32 0 0 0 153 82.8 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M122.6 63.5 A68 68 0 0 1 143.5 42.6 L162.8 73 A32 32 0 0 0 153 82.8 Z" fill="#8FB0FF" stroke="#20252C" stroke-width="2" />
+<path d="M137.5 18.4 A92 92 0 0 1 176 8.1 L178.6 68 A32 32 0 0 0 165.2 71.6 Z" fill="#2A3038" stroke="#20252C" stroke-width="2" />
+<path d="M150.8 43.9 A63.2 63.2 0 0 1 177.2 36.9 L178.6 68 A32 32 0 0 0 165.2 71.6 Z" fill="#8FB0FF" stroke="#20252C" stroke-width="2" />
+</svg>

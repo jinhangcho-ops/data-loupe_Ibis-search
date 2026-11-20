@@ -21,7 +21,7 @@ def test_css_sizes_and_labels():
     assert "input[type=checkbox], input[type=radio] { width:1rem !important; height:1rem !important;" in css  # 16px
     assert re.search(r"label:has\(> input\[type=checkbox\]\)[^{]*label\.check \{ min-height:1\.5rem; \}", css)  # 24px
     assert re.search(r"button\.ghost \{[^}]*min-height:1\.5rem;", css)
-    assert re.search(r"summary \{ padding:\.125rem 0; \}", css)
+    assert re.search(r"summary \{ padding:\.125rem 0;[^}]*\}", css)
 
 
 def test_accessible_names_and_button_sizes():
@@ -30,7 +30,7 @@ def test_accessible_names_and_button_sizes():
     assert 'id="uploads" aria-label=' in collect
     assert 'id="sample" role="region" aria-label=' in collect
     assert re.search(r'class="btn" data-add="query"', collect) and 'id="up-toggle" class="btn"' in collect and 'id="runs-toggle" class="btn"' in collect
-    assert 'id="ga4-check" class="btn"' in collect and ">인증 확인<" in collect  # GA4 칸은 수집 화면으로 옮겼다
+    assert 'id="ga4-check" class="ghost"' in collect and ">인증 확인<" in collect  # GA4 칸은 수집 화면으로 옮겼다
 
 
 def test_request_card_first_and_paste_is_details():

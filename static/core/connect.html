@@ -38,7 +38,7 @@
       <div class="row"><button class="btn" id="drv-open" title="데이터베이스마다 필요한 드라이버가 이 PC에 있는지 보고 받는 곳을 알려 줘요. 아무것도 내려받지 않아요.">드라이버 확인</button></div>
     </div>
     <div class="err" id="err-connect"></div>
-    <div class="conn-foot"><span class="hint">메모리·표본·날짜 같은 설정은 왼쪽 메뉴 [설정]에 있어요.</span><button id="conn-cancel" class="btn" type="button">취소</button><button id="connect" class="btn p conn-go">연결</button></div>
+    <div class="conn-foot"><button id="conn-cancel" class="btn" type="button">취소</button><button id="connect" class="btn p conn-go">연결</button></div>
     <div id="driver-hint" class="hidden"></div>
   </div>
 </div>
@@ -46,7 +46,7 @@
 <div id="drivers-panel" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="drv-title">
   <div class="modal-box drv-box">
     <div class="head"><h3 id="drv-title">드라이버 확인</h3><button id="drv-close" class="ib ml-auto" title="닫기"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></button></div>
-    <div class="hint">이 PC에 설치된 드라이버만 확인해요. 자동으로 내려받거나 설치하지 않아요. [받는 곳 열기]로 브라우저에서 열거나 주소를 복사해 직접 받으세요.</div>
+    <div class="hint">이 PC에 설치된 드라이버만 확인해요. 자동으로 설치하지 않으니 [받는 곳 열기]나 주소 복사로 직접 받으세요.</div>
     <div class="table-wrap"><table class="drv-table"><thead><tr><th>분류</th><th>이름</th><th>상태</th><th>설명</th><th>받는 곳</th></tr></thead><tbody id="drv-rows"></tbody></table></div>
     <div class="err" id="err-drivers"></div>
   </div>

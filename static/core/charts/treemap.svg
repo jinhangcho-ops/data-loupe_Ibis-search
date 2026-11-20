@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="트리맵 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#A3B1C6" flood-opacity="0.7"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.9"/>
+</filter>
+</defs>
+<rect x="8" y="8" width="93.4" height="184" rx="8" fill="#3D6DF2" fill-opacity="1" filter="url(#nm-raise)"/>
+<text x="16" y="26" font-size="11.5" font-weight="700" fill="#FFFFFF">의류</text>
+<text x="16" y="40" font-size="10.5" fill="#FFFFFF">28%</text>
+<rect x="105.4" y="8" width="128.2" height="104.8" rx="8" fill="#8FB0FF" fill-opacity="1" filter="url(#nm-raise)"/>
+<text x="113.4" y="26" font-size="11.5" font-weight="700" fill="#2E3746">전자</text>
+<text x="113.4" y="40" font-size="10.5" fill="#2E3746">22%</text>
+<rect x="105.4" y="116.8" width="128.2" height="75.2" rx="8" fill="#E8803A" fill-opacity="1" filter="url(#nm-raise)"/>
+<text x="113.4" y="134.8" font-size="11.5" font-weight="700" fill="#2E3746">식품</text>
+<text x="113.4" y="148.8" font-size="10.5" fill="#2E3746">16%</text>
+<rect x="237.7" y="8" width="114.3" height="56.8" rx="8" fill="#3D6DF2" fill-opacity="0.72" filter="url(#nm-raise)"/>
+<text x="245.7" y="26" font-size="11.5" font-weight="700" fill="#FFFFFF">뷰티</text>
+<text x="245.7" y="40" font-size="10.5" fill="#FFFFFF">11%</text>
+<rect x="237.7" y="68.8" width="63.6" height="73.4" rx="8" fill="#8FB0FF" fill-opacity="1" filter="url(#nm-raise)"/>
+<text x="245.7" y="86.8" font-size="11.5" font-weight="700" fill="#2E3746">가구</text>
+<text x="245.7" y="100.8" font-size="10.5" fill="#2E3746">8%</text>
+<rect x="305.3" y="68.8" width="46.7" height="73.4" rx="8" fill="#E8803A" fill-opacity="1" filter="url(#nm-raise)"/>
+<text x="313.3" y="86.8" font-size="11.5" font-weight="700" fill="#2E3746">도서</text>
+<text x="313.3" y="100.8" font-size="10.5" fill="#2E3746">6%</text>
+<rect x="237.7" y="146.2" width="61.7" height="45.8" rx="8" fill="#8E9AAD" fill-opacity="1" filter="url(#nm-raise)"/>
+<text x="245.7" y="164.2" font-size="11.5" font-weight="700" fill="#2E3746">스포츠</text>
+<text x="245.7" y="178.2" font-size="10.5" fill="#2E3746">5%</text>
+<rect x="303.4" y="146.2" width="48.6" height="45.8" rx="8" fill="#8E9AAD" fill-opacity="1" filter="url(#nm-raise)"/>
+<text x="311.4" y="164.2" font-size="11.5" font-weight="700" fill="#2E3746">완구</text>
+<text x="311.4" y="178.2" font-size="10.5" fill="#2E3746">4%</text>
+</svg>

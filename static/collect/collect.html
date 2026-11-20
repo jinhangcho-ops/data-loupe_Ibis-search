@@ -27,9 +27,9 @@
   .collect-pane .actions { display:flex; flex-wrap:wrap; gap:.5rem; margin:.5rem 0 .375rem; }
   .usage { white-space:pre-line; font-variant-numeric:tabular-nums; }
   .path { font-family:Consolas, ui-monospace, monospace; font-size:.75rem; color:var(--accent); word-break:break-all; }
-  #sent { white-space:pre-wrap; word-break:break-all; background:var(--bg); padding:.375rem .5rem; border-radius:.375rem; margin:.375rem 0; max-height:12.5rem; overflow:auto; }
+  #sent { white-space:pre-wrap; word-break:break-all; background:var(--bg); box-shadow:var(--press); padding:.375rem .5rem; border-radius:.375rem; margin:.375rem 0; max-height:12.5rem; overflow:auto; }
   /* 응답 트리: 펼친 노드의 자식만 그린다. 배열은 앞 몇 개만. */
-  .tree { max-height:26.25rem; overflow:auto; border:1px solid var(--line); border-radius:.375rem; padding:.25rem; }
+  .tree { max-height:26.25rem; overflow:auto; border:1px solid transparent; box-shadow:var(--press); border-radius:.375rem; padding:.25rem; }
   .tree .kids { margin-left:1rem; }
   .tree .tr { display:flex; gap:.375rem; align-items:center; white-space:nowrap; padding:0 .25rem; border-radius:.25rem; cursor:pointer; }
   .tree .tr:hover { background:var(--bg); }
@@ -39,7 +39,7 @@
   .badge { flex:none; font-size:.6875rem; padding:0 .375rem; border:0; border-radius:.375rem; background:var(--accent); color:var(--on-accent); }
   #pick { display:flex; flex-wrap:wrap; gap:.375rem; align-items:center; min-height:1.75rem; margin:.375rem 0; }
   /* 진행 막대. 전체를 모르면 움직이는 막대 */
-  .bar { height:.5rem; background:var(--bg); border-radius:.25rem; overflow:hidden; margin:.375rem 0; }
+  .bar { height:.5rem; background:var(--bg); box-shadow:var(--press); border-radius:.25rem; overflow:hidden; margin:.375rem 0; }
   .bar > div { height:100%; width:0; background:var(--accent); }
   .bar.unknown > div { width:30%; animation:slide 1.2s linear infinite; }
   @keyframes slide { from { margin-left:-30%; } to { margin-left:100%; } }
@@ -82,7 +82,7 @@
 
     <section id="first-guide" aria-label="수집 순서">
       <div class="prog" id="prog"><button type="button"><i>1</i>주소 넣기</button><button type="button"><i>2</i>받을 값 고르기</button><button type="button"><i>3</i>저장하고 실행</button></div>
-      <div class="hint" id="prog-help">처음이면 오른쪽 [받는 방식]에서 먼저 골라요. API는 데이터를 주는 주소, 파일 주소는 올라와 있는 파일 하나, 웹페이지는 화면에 보이는 값을 받아요. 위 칸에 마우스를 올리면 할 일을 알려 주고, 누르면 그 칸으로 가요.</div>
+      <div class="hint" id="prog-help">처음이면 오른쪽 [받는 방식]에서 먼저 골라요. 위 칸을 누르면 그 칸으로 가요.</div>
     </section>
 
     <section class="card for-api">
@@ -157,9 +157,8 @@
 
     <section class="card not-web">
       <details id="paste-box"><summary><b>요청 예시로 채우기 (curl 붙여넣기)</b></summary>
-      <div class="head mt-2"><span class="hint m-0">curl, HTTP 요청, JSON 중 하나를 붙여 넣어요.</span><button id="parse" class="btn">채우기</button></div>
+      <div class="head mt-2"><span class="hint m-0">curl, HTTP 요청, JSON 중 하나를 붙여 넣으면 위 칸이 채워져요. 붙여 넣은 글은 저장하지 않아요.</span><button id="parse" class="btn">채우기</button></div>
       <textarea id="paste" class="code" rows="5" placeholder="curl 'https://api.example.com/v1/items?page=1' -H 'Accept: application/json'&#10;&#10;GET /v1/items?page=1 HTTP/1.1&#10;Host: api.example.com&#10;&#10;{&quot;method&quot;: &quot;GET&quot;, &quot;url&quot;: &quot;https://api.example.com/v1/items&quot;}"></textarea>
-      <div class="hint">curl 명령, HTTP 요청, JSON 중 하나를 붙여 넣고 [채우기]를 누르면 위 칸이 채워져요. 붙여 넣은 글은 저장하지 않아요.</div>
       </details>
       <div class="warn" id="unread"></div>
       <div id="secret-box" class="hidden">
@@ -173,7 +172,7 @@
 
     <section class="card for-api">
       <div class="head"><h3>응답</h3><button id="sample-btn" class="btn" title="붙여 넣은 응답에서 지금 지정대로 값을 뽑아 봐요">미리보기</button><button id="try" title="첫 쪽 요청을 한 번 보내 봐요">시험 보내기</button></div>
-      <div class="hint">[시험 보내기]도 사용 한도에 포함돼요. 받은 응답은 아래 칸에 채워져요.</div>
+      <div class="hint">[시험 보내기]도 사용 한도에 포함돼요.</div>
       <div id="sent-box" class="hidden"><pre id="sent"></pre></div>
       <textarea id="resp-text" class="code" rows="4" placeholder="응답 예시를 붙여 넣으세요. JSON이면 아래에 펼쳐 볼 수 있는 목록(트리)으로 보여요."></textarea>
       <div class="split mt-1.5">
@@ -193,9 +192,9 @@
       <div class="err" id="resp-msg"></div>
     </section>
 
-    <section class="card">
-      <h3>적재</h3>
-      <div class="tabs">
+    <section class="card" id="ld-card">
+      <details id="ld-box"><summary><b>적재 (DB 테이블·Kafka에도 넣기)</b></summary>
+      <div class="tabs mt-2">
         <label><input type="radio" name="ltarget" value="file" checked class="w-auto"> 파일로만 저장</label>
         <label><input type="radio" name="ltarget" value="table" class="w-auto"> DB 테이블</label>
         <label><input type="radio" name="ltarget" value="kafka" class="w-auto"> Kafka 토픽</label>
@@ -230,7 +229,7 @@
           <div class="hint">키를 확인하려고 DB에 조회를 보내요. 데이터 웨어하우스는 요금이 나올 수 있어요.</div>
         </div>
         <label class="m-[.375rem_0]" style="display:block"><input type="checkbox" id="ld-loadid" class="w-auto"> 적재 ID 컬럼 넣기 (_ibis_load_id)</label>
-        <div class="hint">켜면 행마다 이번 적재의 ID가 들어가서, 나중에 [업로드 기록]에서 이번에 넣은 행만 골라 지울 수 있어요. 기존 테이블에 추가할 때는 테이블에도 이 컬럼이 있어야 해요. 덮어쓰기는 테이블을 새 내용으로 바꿔서 없어도 돼요.</div>
+        <div class="hint">켜면 [업로드 기록]에서 이번에 넣은 행만 골라 지울 수 있어요. 기존 테이블에 추가할 때는 테이블에도 이 컬럼이 있어야 해요.</div>
         <div class="actions"><button id="ld-check" class="btn" title="테이블이 있는지, 결과 파일과 컬럼이 맞는지 확인해요. 데이터는 넣지 않아요">테이블 확인</button></div>
         <div class="hint" id="ld-check-msg"></div>
         <div class="table-wrap" id="ld-cols"></div>
@@ -269,10 +268,11 @@
         </div>
         <div class="hint">묶음을 넣은 직후 연결이 끊기면 들어갔는지 알 수 없어서, 다시 넣을 때 중복될 수 있어요. 이미 있는 키 건너뛰기를 쓰면 막을 수 있어요.</div>
       </div>
+      </details>
     </section>
 
     <section class="card">
-      <div class="head"><h3>실행</h3><button id="estimate" class="btn" title="보낼 요청 수와 오늘 남은 횟수를 미리 계산해요">예상 확인</button><button id="stop" class="btn" disabled>멈추기</button><button id="start">수집 시작</button></div>
+      <div class="head"><h3>실행</h3><button id="stop" class="btn" disabled>멈추기</button></div>
       <div class="hint" id="est"></div>
       <div class="warn" id="est-warn"></div>
       <div class="hint" id="est-robots"></div>
@@ -299,9 +299,9 @@
       <div class="err" id="run-msg"></div>
     </section>
 
-    <section class="card">
-      <h3>예약</h3>
-      <div class="hint">예약은 저장한 구성으로 실행돼요. 구성을 고쳤다면 먼저 다시 저장하세요.</div>
+    <section class="card" id="sc-card">
+      <details id="sc-box"><summary><b>예약 (정해진 시각에 자동 실행)</b></summary>
+      <div class="hint mt-2">예약은 저장한 구성으로 실행돼요. 구성을 고쳤다면 먼저 다시 저장하세요.</div>
       <div class="fields">
         <label><div class="hint">예약할 구성</div><select id="sc-name" title="저장한 구성 중에서 골라요"></select></label>
         <label><div class="hint">주기</div><select id="sc-every"><option value="daily">매일</option><option value="weekly">매주</option><option value="interval">N분마다</option></select></label>
@@ -325,6 +325,7 @@
       <div class="warn" id="sc-stale"></div>
       <div class="row"><button id="sc-rereg" class="btn hidden" title="경로가 맞지 않는 Windows 예약 작업을 지금 프로그램 경로로 다시 등록해요">다시 등록</button></div>
       <div class="table-wrap" id="sc-list"></div>
+      </details>
     </section>
 
     <!-- GA4: 위의 구성(API·파일 주소·웹페이지)·실행과 따로 도는 받기. 설정은 /api/ga4에 두고 보고서를 Parquet으로 받아 업로드 기록에 남긴다. -->
@@ -344,8 +345,8 @@
       <input id="ga4-mets" class="mb-1.5" placeholder="activeUsers, sessions">
       <div class="hint" title="같은 이름의 파일이 있으면 덮어쓰지 않아요">저장할 파일 (.parquet)</div>
       <input id="ga4-out" class="code" placeholder="C:\data\ga4_daily.parquet">
-      <div class="actions"><button id="ga4-fetch">가져오기</button><button id="ga4-open" class="btn hidden" title="연결을 받은 파일로 바꾸고 쿼리 화면으로 가요">쿼리로 열기</button><button id="ga4-save" class="btn">저장</button>
-        <button id="ga4-check" class="btn" title="보고서를 받지 않고 인증과 속성 권한만 확인해요">인증 확인</button></div>
+      <div class="actions"><button id="ga4-fetch">가져오기</button><button id="ga4-open" class="btn hidden" title="연결을 받은 파일로 바꾸고 쿼리 화면으로 가요">쿼리로 열기</button></div>
+      <div class="actions"><button id="ga4-save" class="ghost" title="받지 않고 위 칸의 설정만 저장해요">설정만 저장</button><button id="ga4-check" class="ghost" title="보고서를 받지 않고 인증과 속성 권한만 확인해요">인증 확인</button></div>
       <div class="err" id="ga4-msg"></div>
       </details>
     </section>
@@ -473,7 +474,7 @@
       <div data-adv-slot></div>
       </div>
     </div>
-    <footer><button id="c-estimate" class="btn" title="보낼 요청 수와 오늘 남은 횟수를 미리 계산해요">예상 확인</button><button id="c-start" class="btn p" title="지금 설정으로 수집을 시작해요">수집 시작</button></footer>
+    <footer><button id="estimate" class="btn" title="보낼 요청 수와 오늘 남은 횟수를 미리 계산해요">예상 확인</button><button id="start" class="btn p" title="지금 설정으로 수집을 시작해요">수집 시작</button></footer>
   </aside>
 </div>
 <script src="/static/core/common.js"></script>
@@ -1120,6 +1121,7 @@ const readLoad = () => ({
 });
 function fillLoad(l) {
   document.querySelector(`input[name=ltarget][value=${["file", "table", "kafka"].includes(l.target) ? l.target : "file"}]`).checked = true;
+  if (loadTarget() !== "file") $("ld-box").open = true;  // 파일 밖으로 적재하는 구성은 접어 두면 모르고 지나친다
   const c = l.table.connection ?? {}, url = c.kind === "url";
   document.querySelector(`input[name=ldkind][value=${url ? "url" : "folder"}]`).checked = true;
   $("ld-file").value = url ? "" : c.file ?? "";
@@ -1318,7 +1320,9 @@ function showEstimate(d) {
   $("est-load").textContent = d.load_note ?? "";  // 한 건씩 적재일 때 걸릴 시간 안내
   $("est-resume").textContent = d.resume ? `이미 받은 ${d.resume.pages.toLocaleString()}쪽(${bytesText(d.resume.bytes)}) 다음부터 이어서 받아요.` : "";
 }
+const showRunCard = () => $("run-msg").closest(".card").scrollIntoView({ behavior: "smooth", block: "nearest" });  // 오른쪽 아래 단추의 결과는 실행 카드에 나온다
 $("estimate").onclick = () => busy($("estimate"), async () => {
+  showRunCard();
   try {
     const d = await api("/api/collect/estimate", { config: checked() });
     est = d.requests;
@@ -1378,6 +1382,7 @@ async function watch(fresh, quiet) {
   } finally { watching = false; }
 }
 $("start").onclick = () => busy($("start"), async () => {
+  showRunCard();
   try {
     const cfg = checked();
     if (!cfg.output.path) throw new Error("저장할 파일 경로를 정하세요. 오른쪽 저장 단계에서 고를 수 있어요.");
@@ -1497,6 +1502,7 @@ function renderSchedules() {
   $("sc-del").classList.toggle("hidden", !(now in sched.schedules));
   $("sc-stale").textContent = sched.stale.length ? `Windows 예약 작업에 저장된 프로그램 경로가 지금과 달라요: ${sched.stale.join(", ")}. 프로그램을 옮겼거나 새로 설치했다면 [다시 등록]을 누르세요.` : "";
   $("sc-rereg").classList.toggle("hidden", !sched.stale.length);
+  if (sched.stale.length) $("sc-box").open = true;  // 경로가 틀린 예약 경고는 접힌 채 두지 않는다
   const cols = ["구성", "주기", "다음 실행(프로그램)", "Windows 작업", "다음 실행(Windows)", "마지막 실행(Windows)", "알림"].map(name => ({ name }));
   const rows = names.map(name => {
     const s = sched.schedules[name], t = sched.tasks[name] ?? {}, stale = sched.stale.includes(name);
@@ -1699,13 +1705,6 @@ function showCollectSummaries() {
   showSteps();  // 주소·컬럼·저장 위치·받는 방식이 바뀌면 진행 표시줄도 다시 그린다
 }
 ["click", "input", "change"].forEach(type => document.addEventListener(type, () => setTimeout(showCollectSummaries)));  // 화면 스크립트가 값을 바꾼 뒤에
-// 패널 아래의 [예상 확인]·[시작]: 실행 카드를 보이고 그 카드의 버튼을 누른다. 잠김은 실행 카드의 버튼을 따른다.
-[["c-estimate", "estimate"], ["c-start", "start"]].forEach(([mine, theirs]) => {
-  $(mine).onclick = () => { $(theirs).closest(".card").scrollIntoView({ behavior: "smooth", block: "nearest" }); $(theirs).click(); };
-  const follow = () => { $(mine).disabled = $(theirs).disabled; };
-  new MutationObserver(follow).observe($(theirs), { attributes: true, attributeFilter: ["disabled"] });
-  follow();
-});
 showCollectSummaries();
 </script>
 </body>

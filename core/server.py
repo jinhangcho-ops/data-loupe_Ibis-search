@@ -719,7 +719,7 @@ def html_response(html, script_extra=""):
     response = Response(html, mimetype="text/html")
     response.headers["Content-Security-Policy"] = (
         f"default-src 'none'; script-src 'nonce-{nonce}'{script_extra}; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self'; "  # frame-src: 차트 섬(/chart)을 iframe으로 끼운다
-        f"img-src data: blob: {OSM_TILES}; base-uri 'none'; form-action 'none'")
+        f"img-src 'self' data: blob: {OSM_TILES}; base-uri 'none'; form-action 'none'")
     response.set_cookie("key", KEY, httponly=True, samesite="Strict")
     saved = settings.load()
     for key, value in saved.items():  # 저장된 설정을 쿠키로 알려 준다. 화면이 그리기 전에 읽는다.

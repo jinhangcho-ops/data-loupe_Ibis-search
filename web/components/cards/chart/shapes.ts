@@ -2,6 +2,12 @@
 
 /** 둥근 차트(겹친 고리를 켤 수 있다) */
 export const ROUND_TYPES = ["doughnut", "pie", "radial", "polar"];
+/** 둥근 차트가 그려지는 정사각형 한 변(px, 배율 1). 카드가 커도 이 크기라 카드마다 원 크기가 같다(카드가 더 작으면 그만큼만 줄어든다) */
+export const ROUND_PX = 200;
+/** 둥근 그림 카드(둥근 차트·도넛 KPI·게이지)의 최소 높이(격자 칸): ROUND_PX 원 + 카드 머리 + 범례 + 안내 한 줄이 들어가는 높이. 이보다 낮으면 원이 줄어 카드마다 크기가 달라진다 */
+export const ROUND_MIN_H = 6;
+/** 차트 종류와 상관없이 둥근 그림을 그리는 카드 종류 */
+export const ROUND_KINDS = ["donut_kpi", "gauge"];
 /** 첫 계열 하나로 그리는 차트(Charts.OneSeries) */
 export const FIRST_ONLY = ["waterfall", "pareto", "trendline", "lollipop"];
 /** 가로로 눕힌 막대류(값 축이 가로) */

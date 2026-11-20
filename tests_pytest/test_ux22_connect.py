@@ -26,7 +26,7 @@ def test_user_and_password_share_one_line():
 
 def test_foot_has_hint_cancel_connect_in_one_line():
     foot = between("connect.html", '<div class="conn-foot">', "</div>")
-    assert foot.index('<span class="hint">') < foot.index('id="conn-cancel"') < foot.index('id="connect"')  # C8
+    assert foot.index('id="conn-cancel"') < foot.index('id="connect"')  # C8
     css = read("common.css")
     assert CARD_MIN_HEIGHT in css and "margin-top:auto" in between("common.css", ".conn-foot {", "}")  # 탭이 바뀌어도 [연결]은 아래 그 자리
     assert ".conn-foot .btn { height:var(--h-lg);" in css  # C9: 주 단추 높이

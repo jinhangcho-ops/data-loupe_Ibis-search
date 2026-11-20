@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="레이더 차트 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.5"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.045"/>
+</filter>
+</defs>
+<polygon points="180,82.5 196.9,92.2 196.9,111.8 180,121.5 163.1,111.8 163.1,92.2" fill="none" stroke="#2D343C" stroke-width="1"/>
+<polygon points="180,63 213.8,82.5 213.8,121.5 180,141 146.2,121.5 146.2,82.5" fill="none" stroke="#2D343C" stroke-width="1"/>
+<polygon points="180,43.5 230.7,72.8 230.7,131.2 180,160.5 129.3,131.3 129.3,72.8" fill="none" stroke="#2D343C" stroke-width="1"/>
+<polygon points="180,24 247.5,63 247.5,141 180,180 112.5,141 112.5,63" fill="none" stroke="#2D343C" stroke-width="1"/>
+<line x1="180" y1="102" x2="180" y2="24" stroke="#2D343C" stroke-width="1"/>
+<text x="180" y="14" text-anchor="middle" font-size="10.5" fill="#E6EAEE">공격</text>
+<line x1="180" y1="102" x2="247.5" y2="63" stroke="#2D343C" stroke-width="1"/>
+<text x="259.7" y="60" text-anchor="middle" font-size="10.5" fill="#E6EAEE">방어</text>
+<line x1="180" y1="102" x2="247.5" y2="141" stroke="#2D343C" stroke-width="1"/>
+<text x="259.7" y="152" text-anchor="middle" font-size="10.5" fill="#E6EAEE">속도</text>
+<line x1="180" y1="102" x2="180" y2="180" stroke="#2D343C" stroke-width="1"/>
+<text x="180" y="198" text-anchor="middle" font-size="10.5" fill="#E6EAEE">체력</text>
+<line x1="180" y1="102" x2="112.5" y2="141" stroke="#2D343C" stroke-width="1"/>
+<text x="100.3" y="152" text-anchor="middle" font-size="10.5" fill="#E6EAEE">지능</text>
+<line x1="180" y1="102" x2="112.5" y2="63" stroke="#2D343C" stroke-width="1"/>
+<text x="100.3" y="60" text-anchor="middle" font-size="10.5" fill="#E6EAEE">운</text>
+<polygon points="180,63 234,70.8 217.2,123.4 180,168.3 146.2,121.5 132.7,74.7" fill="#E8803A" fill-opacity="0.3" stroke="#E8803A" stroke-width="2.5" stroke-linejoin="round" filter="url(#nm-raise)"/>
+<circle cx="180" cy="63" r="3.5" fill="#E8803A"/>
+<circle cx="234" cy="70.8" r="3.5" fill="#E8803A"/>
+<circle cx="217.2" cy="123.4" r="3.5" fill="#E8803A"/>
+<circle cx="180" cy="168.3" r="3.5" fill="#E8803A"/>
+<circle cx="146.2" cy="121.5" r="3.5" fill="#E8803A"/>
+<circle cx="132.7" cy="74.7" r="3.5" fill="#E8803A"/>
+<polygon points="180,35.7 217.2,80.5 227.3,129.3 180,148.8 119.2,137.1 149.6,84.4" fill="#3D6DF2" fill-opacity="0.3" stroke="#3D6DF2" stroke-width="2.5" stroke-linejoin="round" filter="url(#nm-raise)"/>
+<circle cx="180" cy="35.7" r="3.5" fill="#3D6DF2"/>
+<circle cx="217.2" cy="80.5" r="3.5" fill="#3D6DF2"/>
+<circle cx="227.3" cy="129.3" r="3.5" fill="#3D6DF2"/>
+<circle cx="180" cy="148.8" r="3.5" fill="#3D6DF2"/>
+<circle cx="119.2" cy="137.1" r="3.5" fill="#3D6DF2"/>
+<circle cx="149.6" cy="84.4" r="3.5" fill="#3D6DF2"/>
+</svg>
