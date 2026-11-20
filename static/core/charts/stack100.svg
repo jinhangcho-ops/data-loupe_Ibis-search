@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="100% 누적 막대 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#A3B1C6" flood-opacity="0.7"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.9"/>
+</filter>
+</defs>
+<text x="42" y="27" text-anchor="end" font-size="11" fill="#2E3746">A사</text>
+<rect x="50" y="12" width="151.9" height="20" rx="6" fill="#3D6DF2"/>
+<text x="127" y="26" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">52%</text>
+<rect x="203.9" y="12" width="86.8" height="20" rx="2" fill="#8FB0FF"/>
+<text x="248.3" y="26" text-anchor="middle" font-size="10" font-weight="700" fill="#2E3746">30%</text>
+<rect x="292.7" y="12" width="51.3" height="20" rx="6" fill="#E8803A"/>
+<text x="42" y="61" text-anchor="end" font-size="11" fill="#2E3746">B사</text>
+<rect x="50" y="46" width="116.4" height="20" rx="6" fill="#3D6DF2"/>
+<text x="109.2" y="60" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">40%</text>
+<rect x="168.4" y="46" width="110.5" height="20" rx="2" fill="#8FB0FF"/>
+<text x="224.6" y="60" text-anchor="middle" font-size="10" font-weight="700" fill="#2E3746">38%</text>
+<rect x="280.9" y="46" width="63.1" height="20" rx="6" fill="#E8803A"/>
+<text x="313.4" y="60" text-anchor="middle" font-size="10" font-weight="700" fill="#2E3746">22%</text>
+<text x="42" y="95" text-anchor="end" font-size="11" fill="#2E3746">C사</text>
+<rect x="50" y="80" width="178.6" height="20" rx="6" fill="#3D6DF2"/>
+<text x="140.3" y="94" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">61%</text>
+<rect x="230.6" y="80" width="69" height="20" rx="2" fill="#8FB0FF"/>
+<text x="266.1" y="94" text-anchor="middle" font-size="10" font-weight="700" fill="#2E3746">24%</text>
+<rect x="301.6" y="80" width="42.4" height="20" rx="6" fill="#E8803A"/>
+<text x="42" y="129" text-anchor="end" font-size="11" fill="#2E3746">D사</text>
+<rect x="50" y="114" width="101.6" height="20" rx="6" fill="#3D6DF2"/>
+<text x="101.8" y="128" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">35%</text>
+<rect x="153.6" y="114" width="119.4" height="20" rx="2" fill="#8FB0FF"/>
+<text x="214.3" y="128" text-anchor="middle" font-size="10" font-weight="700" fill="#2E3746">41%</text>
+<rect x="275" y="114" width="69" height="20" rx="6" fill="#E8803A"/>
+<text x="310.5" y="128" text-anchor="middle" font-size="10" font-weight="700" fill="#2E3746">24%</text>
+<text x="42" y="163" text-anchor="end" font-size="11" fill="#2E3746">E사</text>
+<rect x="50" y="148" width="137.1" height="20" rx="6" fill="#3D6DF2"/>
+<text x="119.6" y="162" text-anchor="middle" font-size="10" font-weight="700" fill="#FFFFFF">47%</text>
+<rect x="189.1" y="148" width="95.7" height="20" rx="2" fill="#8FB0FF"/>
+<text x="238" y="162" text-anchor="middle" font-size="10" font-weight="700" fill="#2E3746">33%</text>
+<rect x="286.8" y="148" width="57.2" height="20" rx="6" fill="#E8803A"/>
+<text x="316.4" y="162" text-anchor="middle" font-size="10" font-weight="700" fill="#2E3746">20%</text>
+</svg>

@@ -34,11 +34,11 @@ describe("viewBox 카드 그림의 글자 배율", () => {
     expect(capped).toBeCloseTo(15, 5);
     expect(growFont("가나다라마바사아자차", 50, 11, 1.5625)).toBe(11);
   });
-  it("배율 1: 고치기 전과 같은 그림(게이지 260×200·글자 11, 히트맵 칸 44)", () => {
+  it("배율 1: 고치기 전과 같은 그림(게이지 262×200·글자 11, 히트맵 칸 44; 범례 견본은 예시대로 12칸)", () => {
     const g = draw(GAUGE, 1);
-    expect(g).toContain('viewBox="0 0 260 200"');
+    expect(g).toContain('viewBox="0 0 262 200"');
     expect(texts(g, "font-size")).toEqual([16, 11, 11, 11, 11]);
-    expect(texts(g, "y").slice(1)).toEqual([49, 67, 85, 103]);
+    expect(texts(g, "y").slice(1)).toEqual([50, 68, 86, 104]);
     expect(draw(HEAT, 1)).toContain('viewBox="0 0 222 70"');
   });
   it.each(SCALES)("게이지 배율 %s: 범례 글자가 곱해지고 줄 간격이 글자 크기 이상", scale => {
@@ -54,12 +54,12 @@ describe("viewBox 카드 그림의 글자 배율", () => {
     expect(size.filter(n => n === 11 * scale)).toHaveLength(5);  // 머리글 3 + 줄 이름 2
     expect(size.filter(n => n === 10 * scale)).toHaveLength(5);  // 값이 있는 칸 5
     expect(h).toContain(`viewBox="0 0 ${(90 + 3 * 44) * scale} 70"`);
-    expect(h).toContain(`width="${44 * scale - 2}"`);
+    expect(h).toContain(`width="${44 * scale - 3}"`);
   });
-  it.each(SCALES)("불릿 배율 %s: 눈금 글자가 곱해지고 막대·목표 선(아래 끝 46) 아래에 놓인다", scale => {
+  it.each(SCALES)("불릿 배율 %s: 눈금 글자가 곱해지고 막대·목표 선(아래 끝 32) 아래에 놓인다", scale => {
     const b = draw(BULLET, scale), size = texts(b, "font-size"), ys = texts(b, "y");
     expect(size).toEqual([10 * scale, 10 * scale, 10 * scale]);
-    ys.forEach(y => { expect(y - 10 * scale).toBeGreaterThanOrEqual(46); expect(y).toBeLessThan(84); });
+    ys.forEach(y => { expect(y - 10 * scale).toBeGreaterThanOrEqual(32); expect(y).toBeLessThan(76); });
   });
 });
 describe("growFont의 아래 한계", () => {

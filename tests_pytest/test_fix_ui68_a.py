@@ -44,7 +44,7 @@ def test_a5_transition_only_colors():
     css = read("common.css")
     m = re.search(r"^(\.btn, \.ib[^{]*)\{([^}]*)\}", css, re.M)
     assert m and ".tabs2 button" in m.group(1) and ".btype" in m.group(1)
-    assert "transition: border-color .15s, background-color .15s, color .15s;" in m.group(2)
+    assert "transition: border-color .15s, background-color .15s, color .15s, box-shadow .15s;" in m.group(2)
     assert "transform" not in m.group(2) and "width" not in m.group(2)
 
 

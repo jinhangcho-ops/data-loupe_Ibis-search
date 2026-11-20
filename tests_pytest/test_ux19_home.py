@@ -17,7 +17,7 @@ def test_home_cards_name_and_one_line():
     assert found == CARDS  # 작은 카드: 그림 타일 + 메뉴 이름 그대로 + 한 줄 + 카드 그림. 쓸 기능에서 끈 화면은 data-feature로 숨는다(common.js)
     # [쿼리]는 큰 시작 카드: 제목 + 한 줄 설명(처음 쓰는 사람 안내 포함) + 강조 단추 모양. 쿼리를 끄면 카드째 숨는다
     start = re.search(r'<a class="btn" href="/search" data-feature="query" id="home-start"><b>([^<]+)</b><span>([^<]+)</span><span class="btn p"><svg [^>]+>.*?</svg>([^<]+)</span><span class="card-art" data-art="table" aria-hidden="true"></span></a>', now)
-    assert start.groups() == ("쿼리로 시작하기", "데이터를 표로 훑어보고 조건으로 찾아요. 처음이면 여기에서 테이블을 골라 보세요.", "쿼리 열기")
+    assert start.groups() == ("쿼리로 시작하기", "데이터를 표로 보고 조건으로 찾아요.", "쿼리 열기")
     assert now.index('id="home-start"') < now.index('data-feature="prep"')  # 시작 카드가 맨 위
     css = read("common.css")
     assert "#home-start { grid-column:1 / -1;" in css and ".icon-tile {" in css

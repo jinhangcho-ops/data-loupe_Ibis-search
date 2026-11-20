@@ -14,10 +14,11 @@ type Painted = TreeItem & { fill: string; fillOpacity?: number; children?: Paint
 // 첫 단계 항목마다 색을 칠해 둘째 단계에 물려준다
 const paint = (p: P, items: TreeItem[]): Painted[] => items.map((it, i) => {
   const fill = tone(p, it.name, i);
-  return { ...it, fill, children: it.children?.map(ch => ({ ...ch, fill, fillOpacity: 0.7, children: undefined })) };
+  return { ...it, fill, children: it.children?.map(ch => ({ ...ch, fill, fillOpacity: CHILD_OPACITY, children: undefined })) };
 });
 /** 어느 바탕에서도 읽히는 글자: 본문 색, 카드 색 테두리를 먼저 그린다 */
 const LABEL = { fill: "var(--text)", stroke: "var(--card)", strokeWidth: 3, paintOrder: "stroke", pointerEvents: "none" } as const;
+const TILE_RX = 8, TILE_GAP = 4, CHILD_OPACITY = 0.72, RING_GAP = 2;  // 54-treemap: 칸 모서리, 칸 사이 틈(칸마다 양쪽 반씩 줄인다), 둘째 단계 진하기 / 55-sunburst: 조각 사이 카드 색 선
 
 /** 사각형 하나(뿌리는 그리지 않는다). 잎 칸이 넉넉하면 이름. 둘째 단계는 툴팁이 "부모 › 이름"이고, 부모 칸의 왼쪽 위에 놓인 칸이 부모 이름을 굵게 먼저 쓴다
  *  (Recharts는 부모 칸을 아이 칸이 다 덮어서 부모 이름이 안 보인다). n.root는 부모 칸 */
@@ -26,7 +27,7 @@ export function TreeCell(n: TreemapNode) {
   const fill = n.fill as string, name = String(n.name ?? ""), up = n.depth > 1 ? n.root : undefined, head = !!up && n.x === up.x && n.y === up.y, room = n.width - 8;
   return (
     <g>
-      <rect x={n.x} y={n.y} width={n.width} height={n.height} fill={fill} fillOpacity={(n.fillOpacity as number | undefined) ?? 1} stroke="var(--card)" strokeWidth={2}><title>{`${up ? `${up.name} › ` : ""}${name}: ${shownum(n.value)}`}</title></rect>
+      <rect className="nm-raise" x={n.x + TILE_GAP / 2} y={n.y + TILE_GAP / 2} width={Math.max(0, n.width - TILE_GAP)} height={Math.max(0, n.height - TILE_GAP)} rx={TILE_RX} fill={fill} fillOpacity={(n.fillOpacity as number | undefined) ?? 1}><title>{`${up ? `${up.name} › ` : ""}${name}: ${shownum(n.value)}`}</title></rect>
       {head && n.height > 18 && room > 12 && <text x={n.x + 6} y={n.y + 13} fontSize={10} fontWeight={700} {...LABEL}>{fitText(String(up!.name), room, 10)}</text>}
       {n.height > (head ? 32 : 18) && room > 12 && !(n.children?.length) && <text x={n.x + 6} y={n.y + (head ? 27 : 14)} fontSize={11} {...LABEL}>{fitText(name, room, 11)}</text>}
     </g>
@@ -38,7 +39,7 @@ export function Treemap(p: P) {
   if (!items.length) return <Say text={NOTHING} />;
   return (
     <Box cls="treemap">
-      <div className="flex-1 min-h-0">
+      <div className="nm-well flex-1 min-h-0">
         <Frame><Tree data={items} dataKey="value" nameKey="name" isAnimationActive={false} content={TreeCell}><Tooltip {...TIP} /></Tree></Frame>
       </div>
     </Box>
@@ -57,7 +58,7 @@ export function Sunburst(p: P) {
           const [r0, r1] = ring(a.depth), mid = (a.a0 + a.a1) / 2, rm = (r0 + r1) / 2, [x, y] = polar(C, C, rm, mid), room = (a.a1 - a.a0) * rm;
           return (
             <g key={i}>
-              <path d={sectorPath(C, C, r0, r1, a.a0, a.a1)} fill={tone(p, arcs.find(b => b.depth === 1 && b.top === a.top)!.name, a.top)} fillOpacity={a.depth === 2 ? 0.7 : 1} stroke="var(--card)" strokeWidth={1.5}>
+              <path className={a.depth === 1 ? "nm-raise" : undefined} d={sectorPath(C, C, r0, r1, a.a0, a.a1)} fill={tone(p, arcs.find(b => b.depth === 1 && b.top === a.top)!.name, a.top)} fillOpacity={a.depth === 2 ? CHILD_OPACITY : 1} stroke="var(--card)" strokeWidth={RING_GAP}>
                 <title>{`${a.parent ? `${a.parent} › ` : ""}${a.name}: ${shownum(a.value)} (${((a.value / root.value) * 100).toFixed(1)}%)`}</title>
               </path>
               {room > 20 && fitText(a.name, room - 6, font) !== "…" && <text x={x} y={y} fontSize={font} textAnchor="middle" dominantBaseline="middle" {...LABEL}>{fitText(a.name, room - 6, font)}</text>}

@@ -17,12 +17,19 @@ export const MAX_AXIS_LABELS = 4;  // 이름 축(X·계열)에 적는 글자 수
 export const LABEL_PX = 72, LABEL_FONT = 11;  // 축 글자 한 칸의 폭·크기(px)
 const BAR_FILL = 0.7;  // 막대 굵기 = 칸 × 이 몫
 const TICK_GAP = 0.05, NAME_GAP = 0.4;  // 눈금 글자·축 이름이 바닥 모서리에서 떨어진 거리(이름은 눈금 글자 한 칸 너머)
-const SHADE = { x: 82, y: 66 };  // 막대 옆면의 밝기(윗면 색 %)
-const LINE_W = { over: 2.5, link: 1.5, grid: 0.5 }, DOT_R = 3;
+// 막대 면의 명암(계열 색 %, 예시 83-bar-3d): 윗면은 바탕 쪽(--card)으로 밝게, 옆면은 글자 쪽(--text)으로 어둡게
+const SHADE = { top: 70, x: 95, y: 82 };
+const LINE_W = { over: 2.5, link: 1.5 };
+// 산점도(예시 84-scatter-3d): 점, 바닥으로 내린 점선과 바닥 점, 먼 두 벽(바닥 --bg와 바탕 --card 사이, --card 쪽 %)
+const DOT_R = 4.5, FLOOR_DOT_R = 1.6, DROP = { width: 1, opacity: 0.5, dash: "2 2" }, WALL_TINT = { x: 30, y: 55 };
 export const SMOOTH_STEPS = [1, 2, 4, 8];  // 곡면 매끈함 단계(0단계 = 받은 그대로)마다 칸 한 변을 나누는 배수
 export const MAX_FACES_3D = 8000;  // 곡면을 잘게 나눠 그리는 면 수 상한(넘는 매끈함 단계는 고를 수 없다)
 export const SPREAD_RANGE: [number, number] = [0, 10], SPREAD_START = 2, SPREAD_STEP = 0.5;  // 손잡이를 끌 때 주변이 따라오는 넓이(칸 수, 0이면 그 점만)
 const GRIP_R = 3.5, GRIP_HELP = "위아래로 끌면 이 점의 높이가 바뀌어요.";  // 모양 조절 손잡이
+/** 바닥(z = 0)의 네 꼭짓점: 바닥 면(Chart3D가 맨 먼저 칠한다) */
+export const FLOOR: P3[] = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]];
+/** 맨 뒤 층의 보조선(산점도의 바닥 격자) */
+const guide = (pts: P3[]): Shape => ({ kind: "line", pts, stroke: "var(--line)", width: 1, layer: -1 });
 
 /** 정육면체 안의 점 → [화면 x, 화면 y, 깊이(클수록 보는 쪽에 가깝다)]. 원근 없이(평행 투영) 정육면체 가운데가 그림 가운데 */
 export function project([x, y, z]: P3, v: View3, w: number, h: number): P3 {
@@ -42,7 +49,7 @@ export const zPerPx = (v: View3, w: number, h: number): number => 1 / (Math.min(
 
 /** 높이 t(0 낮음 ~ 1 높음)의 색: low와 high 사이를 섞는다(CSS 변수 색도 된다) */
 export const heightColor = (t: number, low: string, high: string) => `color-mix(in srgb, ${high} ${Math.round(clamp(t, 0, 1) * 100)}%, ${low})`;
-const shade = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, var(--text))`;
+const mix = (color: string, pct: number, toward: string) => `color-mix(in srgb, ${color} ${pct}%, ${toward})`;
 
 /** lo~hi를 덮는 깔끔한 눈금(간격은 1·2·5 × 10^k). 값이 하나뿐이면(lo = hi) 그 값의 크기만큼(0이면 1) 위아래로 넓힌다 */
 export function niceTicks(lo: number, hi: number, n = AXIS_TICKS): number[] {
@@ -56,7 +63,7 @@ export function niceTicks(lo: number, hi: number, n = AXIS_TICKS): number[] {
 type Order = { anchor?: P3; bias?: number; layer?: -1 | 1 };
 export type Shape = Order & (
   | { kind: "poly"; pts: P3[]; fill: string; stroke?: string; normal?: P3; title?: string }
-  | { kind: "line"; pts: P3[]; stroke: string; width: number }
+  | { kind: "line"; pts: P3[]; stroke: string; width: number; opacity?: number; dash?: string }
   | { kind: "dot"; pts: P3[]; fill: string; r: number; title?: string; grip?: [number, number] }  // grip: 모양 조절 손잡이의 격자 자리 [X 번호, 계열 번호]
   | { kind: "text"; pts: P3[]; text: string; align: "start" | "middle" | "end"; dx?: number; dy?: number; bold?: boolean });
 export type Painted = { shape: Shape; xy: [number, number][]; key: number; depth: number };
@@ -77,19 +84,17 @@ export type Axis3 = { name: string; ticks: { at: number; text: string }[] };
 export type Key3 = { name: string; color: string };
 export type Scene = { shapes: Shape[]; axes: { x: Axis3; y: Axis3; z: Axis3 }; keys: Key3[] };
 
-/** 보는 각도에 맞춘 축: 바닥 테두리, 먼 두 벽의 높이 눈금선, 가까운 바닥 모서리의 X·계열 글자, 화면 왼쪽 끝 모서리의 높이 글자, 축 이름 */
+/** 보는 각도에 맞춘 축 글자: 가까운 바닥 모서리의 X·계열 글자, 화면 왼쪽 끝 모서리의 높이 글자, 축 이름(선은 긋지 않는다) */
 export function axisShapes(axes: Scene["axes"], v: View3): Shape[] {
   const at = (p: P3) => project(p, v, 1, 1);
   const xn = at([1, 0.5, 0.5])[2] > at([0, 0.5, 0.5])[2] ? 1 : 0, yn = at([0.5, 1, 0.5])[2] > at([0.5, 0, 0.5])[2] ? 1 : 0, xf = 1 - xn, yf = 1 - yn;  // 가까운 쪽·먼 쪽
   const [zx, zy] = at([xf, yn, 0])[0] < at([xn, yf, 0])[0] ? [xf, yn] : [xn, yf];  // 두 옆 모서리 중 화면 왼쪽
   const out = (near: number, gap: number) => (near ? 1 + gap : -gap);
-  const rule = (pts: P3[]): Shape => ({ kind: "line", pts, stroke: "var(--line)", width: 1, layer: -1 });
   const text = (p: P3, t: string, align: "start" | "end", more: { dx?: number; dy?: number; bold?: boolean } = {}): Shape => ({ kind: "text", pts: [p], text: t, align, layer: 1, ...more });
   const away = (edge: P3, p: P3) => (at(p)[0] < at(edge)[0] ? "end" : "start");  // 글자는 모서리에서 바깥쪽으로 뻗는다(두 축의 글자가 가까운 꼭짓점에서 겹치지 않게)
   const floor = (edge: P3, p: P3, t: string, bold = false) => text(p, t, away(edge, p), { dy: 4, bold });
   const all: Shape[] = [
-    rule([[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 0]]), rule([[xf, yf, 0], [xf, yf, 1]]), rule([[xf, yn, 0], [xf, yn, 1]]), rule([[xn, yf, 0], [xn, yf, 1]]),
-    ...axes.z.ticks.flatMap(t => [rule([[xf, 0, t.at], [xf, 1, t.at]]), rule([[0, yf, t.at], [1, yf, t.at]]), text([zx, zy, t.at], t.text, "end", { dx: -6, dy: 4 })]),
+    ...axes.z.ticks.map(t => text([zx, zy, t.at], t.text, "end", { dx: -6, dy: 4 })),
     ...axes.x.ticks.map(t => floor([t.at, yn, 0], [t.at, out(yn, TICK_GAP), 0], t.text)),
     ...axes.y.ticks.map(t => floor([xn, t.at, 0], [out(xn, TICK_GAP), t.at, 0], t.text)),
     floor([0.5, yn, 0], [0.5, out(yn, NAME_GAP), 0], axes.x.name, true), floor([xn, 0.5, 0], [out(xn, NAME_GAP), 0.5, 0], axes.y.name, true),
@@ -159,8 +164,8 @@ export const PLAIN: Shaping = { smooth: 1, lift: null, grips: false };
 /** 3차원 막대·곡면의 그림: span은 값 축의 길이(값 단위, 끈 거리를 값으로 바꿀 때 쓴다) */
 export type GridScene = Scene & { span: number };
 
-/** 3차원 막대·곡면의 그릴 모양. 막대는 칸마다 상자(계열 색, 0에서 값까지), 곡면은 이웃한 네 값의 면(높이 색 low→high)과 격자선, 선 계열(line)은 곡면 위의 선.
- *  names = [X축 이름, 계열 축 이름, 값 축 이름], fmt는 값 눈금 글자. shape(곡면만): 잘게 나눈 면은 테두리를 면 색으로 칠하고 원래 격자선만 따로 긋는다. 높이 축은 조절·보간한 값까지 덮는다 */
+/** 3차원 막대·곡면의 그릴 모양. 막대는 칸마다 상자(0에서 값까지, 윗면은 계열 색을 밝게·옆면은 어둡게, 테두리 없음), 곡면은 이웃한 네 값의 면(높이 색 low→high, 선 없음), 선 계열(line)은 곡면 위의 선.
+ *  names = [X축 이름, 계열 축 이름, 값 축 이름], fmt는 값 눈금 글자. shape(곡면만): 매끈함·조절 높이·손잡이. 높이 축은 조절·보간한 값까지 덮는다 */
 export function gridScene(type: GridType, labels: string[], sets: GridSet[], low: string, high: string, names: [string, string, string], fmt: (v: number) => string, shape: Shaping = PLAIN): GridScene {
   const nx = labels.length, ny = sets.length, bars = type === "bar3d", k = shape.smooth;
   const vals = sets.map((d, j) => labels.map((_, i) => { const v = num(d.values[i]); return v === null ? null : v + (shape.lift?.[j][i] ?? 0); }));
@@ -174,33 +179,30 @@ export function gridScene(type: GridType, labels: string[], sets: GridSet[], low
     vals.forEach((row, j) => row.forEach((v, i) => {
       if (v === null) return;
       const x = xa(i), y = ya(j), lo = Math.min(base, zn(v)), hi = Math.max(base, zn(v)), anchor: P3 = [x, y, 0.5], c = sets[j].color, title = `${labels[i]} · ${sets[j].label}: ${shownum(v)}`;
-      const face = (pts: P3[], normal: P3, fill: string): Shape => ({ kind: "poly", pts, fill, stroke: "var(--card)", normal, anchor, title });
+      const face = (pts: P3[], normal: P3, fill: string): Shape => ({ kind: "poly", pts, fill, normal, anchor, title });
       const side = (a: [number, number], b: [number, number]): P3[] => [[a[0], a[1], lo], [b[0], b[1], lo], [b[0], b[1], hi], [a[0], a[1], hi]];
+      const sx = mix(c, SHADE.x, "var(--text)"), sy = mix(c, SHADE.y, "var(--text)");
       shapes.push(
-        face([[x - hx, y - hy, hi], [x + hx, y - hy, hi], [x + hx, y + hy, hi], [x - hx, y + hy, hi]], [0, 0, 1], c),
-        face(side([x - hx, y - hy], [x - hx, y + hy]), [-1, 0, 0], shade(c, SHADE.x)), face(side([x + hx, y - hy], [x + hx, y + hy]), [1, 0, 0], shade(c, SHADE.x)),
-        face(side([x - hx, y - hy], [x + hx, y - hy]), [0, -1, 0], shade(c, SHADE.y)), face(side([x - hx, y + hy], [x + hx, y + hy]), [0, 1, 0], shade(c, SHADE.y)));
+        face([[x - hx, y - hy, hi], [x + hx, y - hy, hi], [x + hx, y + hy, hi], [x - hx, y + hy, hi]], [0, 0, 1], mix(c, SHADE.top, "var(--card)")),
+        face(side([x - hx, y - hy], [x - hx, y + hy]), [-1, 0, 0], sx), face(side([x + hx, y - hy], [x + hx, y + hy]), [1, 0, 0], sx),
+        face(side([x - hx, y - hy], [x + hx, y - hy]), [0, -1, 0], sy), face(side([x - hx, y + hy], [x + hx, y + hy]), [0, 1, 0], sy));
     }));
   } else {
     const fx = (n: number) => n / ((nx - 1) * k), fy = (m: number) => m / ((ny - 1) * k);  // 잘게 나눈 격자의 자리(k = 1이면 xa·ya와 같다)
     const over = (fx(1) + fy(1)) / 2;  // 선은 이웃한 면보다 나중에(면 가운데까지의 거리보다 크게)
-    const face = (m: number, n: number) => [fine[m]?.[n], fine[m]?.[n + 1], fine[m + 1]?.[n + 1], fine[m + 1]?.[n]].every(v => v != null);
-    const rule = (pts: P3[], stroke: string, width: number): Shape => ({ kind: "line", pts, stroke, width, anchor: [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2, 0.5], bias: over });
     for (let m = 0; m < fine.length; m++) {
       for (let n = 0; n < fine[m].length; n++) {
         const a = fine[m][n], b = fine[m][n + 1], c = fine[m + 1]?.[n + 1], d = fine[m + 1]?.[n];
         if (a === null) continue;
-        if (b != null && c != null && d != null) {
+        if (b != null && c != null && d != null) {  // 예시 83처럼 면 사이에 선을 긋지 않는다(테두리를 면 색으로 칠해 이음매만 메운다)
           const fill = heightColor((zn(a) + zn(b) + zn(c) + zn(d)) / 4, low, high);
           shapes.push({ kind: "poly", pts: [[fx(n), fy(m), zn(a)], [fx(n + 1), fy(m), zn(b)], [fx(n + 1), fy(m + 1), zn(c)], [fx(n), fy(m + 1), zn(d)]],
-            fill, stroke: k > 1 ? fill : "var(--card)", anchor: [(fx(n) + fx(n + 1)) / 2, (fy(m) + fy(m + 1)) / 2, 0.5] });
+            fill, stroke: fill, anchor: [(fx(n) + fx(n + 1)) / 2, (fy(m) + fy(m + 1)) / 2, 0.5] });
         }
-        if (b != null && m % k === 0) {  // 원래 격자의 계열 줄: 선 계열이면 곡면 위의 선, 잘게 나눴으면 격자선(면에 닿은 것만)
+        if (b != null && m % k === 0 && sets[m / k].line) {  // 선 계열: 원래 격자의 그 계열 줄을 곡면 위의 선으로
           const across: P3[] = [[fx(n), fy(m), zn(a)], [fx(n + 1), fy(m), zn(b)]];
-          if (sets[m / k].line) shapes.push(rule(across, sets[m / k].color, LINE_W.over));
-          else if (k > 1 && (face(m, n) || face(m - 1, n))) shapes.push(rule(across, "var(--card)", LINE_W.grid));
+          shapes.push({ kind: "line", pts: across, stroke: sets[m / k].color, width: LINE_W.over, anchor: [(across[0][0] + across[1][0]) / 2, (across[0][1] + across[1][1]) / 2, 0.5], bias: over });
         }
-        if (k > 1 && d != null && n % k === 0 && (face(m, n) || face(m, n - 1))) shapes.push(rule([[fx(n), fy(m), zn(a)], [fx(n), fy(m + 1), zn(d)]], "var(--card)", LINE_W.grid));  // 원래 격자의 X 줄
       }
     }
     if (shape.grips) {
@@ -226,7 +228,8 @@ export function pointsReason(p: Points3): string {
   return "";
 }
 
-/** 3차원 산점도의 그릴 모양: 점마다 원(그룹마다 colors의 색), connect면 그룹마다 받은 차례대로 선으로 잇는다. zName은 Z축 이름 */
+/** 3차원 산점도의 그릴 모양(예시 84-scatter-3d): 점마다 원(그룹마다 colors의 색)과 바닥으로 내린 점선·바닥 점(점과 한 묶음으로 그린다), connect면 그룹마다 받은 차례대로 선으로 잇는다.
+ *  맨 뒤 층에는 네 벽(안쪽을 보는 면이라 먼 두 벽만 그려진다)과 바닥 안쪽의 X·Y 눈금 격자선. zName은 Z축 이름 */
 export function pointsScene(p: Points3, colors: string[], connect: boolean, zName: string, fmt: (v: number) => string): Scene {
   const names = [p.x, p.y, zName], groups = p.groups.length ? p.groups : [p.y];
   const ticks = [0, 1, 2].map(k => { const vs = p.points.map(r => r[k] as number); return niceTicks(Math.min(...vs), Math.max(...vs)); });
@@ -235,10 +238,21 @@ export function pointsScene(p: Points3, colors: string[], connect: boolean, zNam
   groups.forEach((g, gi) => {
     const rows = p.points.filter(r => !p.groups.length || r[r.length - 1] === g);
     rows.forEach((r, i) => {
-      shapes.push({ kind: "dot", pts: [at(r)], fill: colors[gi], r: DOT_R, title: `${p.groups.length ? `${g} · ` : ""}${names.map((n, k) => `${n} ${shownum(r[k])}`).join(", ")}` });
+      const top = at(r), foot: P3 = [top[0], top[1], 0];  // 같은 anchor라 깊이 차례로 바닥 점 → 점선 → 점
+      shapes.push(
+        { kind: "line", pts: [foot, top], stroke: "var(--faint)", width: DROP.width, opacity: DROP.opacity, dash: DROP.dash, anchor: top },
+        { kind: "dot", pts: [foot], fill: "var(--faint)", r: FLOOR_DOT_R, anchor: top },
+        { kind: "dot", pts: [top], fill: colors[gi], r: DOT_R, title: `${p.groups.length ? `${g} · ` : ""}${names.map((n, k) => `${n} ${shownum(r[k])}`).join(", ")}` });
       if (connect && i > 0) shapes.push({ kind: "line", pts: [at(rows[i - 1]), at(r)], stroke: colors[gi], width: LINE_W.link });
     });
   });
   const axis = (k: number): Axis3 => ({ name: names[k], ticks: valueTicks(ticks[k], fmt) });
-  return { shapes, axes: { x: axis(0), y: axis(1), z: axis(2) }, keys: p.groups.length ? groups.map((g, gi) => ({ name: g, color: colors[gi] })) : [] };
+  const axes = { x: axis(0), y: axis(1), z: axis(2) };
+  const inner = (a: Axis3) => a.ticks.filter(t => t.at > 0 && t.at < 1);  // 바닥 가장자리는 벽과 닿아 선을 긋지 않는다
+  const wall = (pts: P3[], normal: P3, tint: number): Shape => ({ kind: "poly", pts, normal, fill: mix("var(--card)", tint, "var(--bg)"), layer: -1 });
+  shapes.push(
+    wall([[0, 0, 0], [0, 1, 0], [0, 1, 1], [0, 0, 1]], [1, 0, 0], WALL_TINT.x), wall([[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]], [-1, 0, 0], WALL_TINT.x),
+    wall([[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], [0, 1, 0], WALL_TINT.y), wall([[0, 1, 0], [1, 1, 0], [1, 1, 1], [0, 1, 1]], [0, -1, 0], WALL_TINT.y),
+    ...inner(axes.x).map(t => guide([[t.at, 0, 0], [t.at, 1, 0]])), ...inner(axes.y).map(t => guide([[0, t.at, 0], [1, t.at, 0]])));
+  return { shapes, axes, keys: p.groups.length ? groups.map((g, gi) => ({ name: g, color: colors[gi] })) : [] };
 }

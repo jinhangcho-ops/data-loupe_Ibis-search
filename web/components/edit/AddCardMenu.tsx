@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { nextLayout, parseLinkLine, parseRuleLine, parseStateLine } from "@/lib/calc";
 import { columns as fetchColumns, getTargets, hashed as fetchHashed, myMetrics, setTargets, tables as fetchTables, values as fetchValues } from "@/lib/api";
+import { gridItems } from "@/components/grid/useDrag";
 import { useConstants } from "@/lib/constants";
 import { withoutHashed } from "@/lib/hashed";
 import { useDash } from "@/lib/store";
@@ -123,7 +124,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       const card = buildCard({ ...f, title: f.title || (fill?.title ?? "") }, aggs, a => a !== "count", consts.agg_names, consts.dash.max_bands, consts.dash.max_bins);
       if (f.kind === "wordcloud" && cloud.mode !== "values") card.view = { ...card.view, cloud } as CardView;  // 컬럼 값 방식은 키 없음(기본)
       if (fill) { delete card.title; if (f.title.trim() || !fill.title) card.title = f.title.trim() || card.title; }
-      else card.layout = nextLayout((state.dash?.cards ?? []).map(c => ({ id: c.id, layout: c.layout })));
+      else card.layout = nextLayout(gridItems(state.dash?.cards ?? []));
       setErr("");
       onAdd(card);
       close();
@@ -192,9 +193,6 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       )}
       {high > 0 && f.rows.length < high && <button type="button" className="linkish min-h-[1.5rem]" onClick={() => setF(p => ({ ...p, rows: [...p.rows, { label: "", y: "", agg: firstAgg }] }))}>값 추가</button>}
 
-      {is("kpi", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation", "bullet", "calheat") && <Sel label="표시 형식" value={f.format} onChange={v => set("format", v)} options={FORMATS} />}
-      {is("kpi", "donut_kpi", "stripes", "bullet", "calheat") && <Txt label="단위" title="값 뒤에 붙일 글자. 사람 수는 명, 횟수는 회처럼 적어요. 돈이면 표시 형식 금액을 고르거나 원을 적어요" placeholder="단위 (예: 명, 회, 원)" value={f.unitText} onChange={v => set("unitText", v.slice(0, 10))} width={130} />}
-      {is("kpi") && <Sel label="지표" title="지표 하나를 값으로 써요. 비율 지표는 분자와 분모도 작게 보여요" value={f.metric} onChange={v => set("metric", v)} options={metrics} blank="(쓰지 않음)" />}
       {is("gauge", "summary") && <Sel label="나눌 컬럼" title="게이지는 이 컬럼의 값마다 한 조각으로 나눠요. 요약 문장은 변화에 가장 크게 기여한 값을 찾을 때 써요" value={f.group} onChange={v => set("group", v)} options={all} blank="(없음)" need={is("gauge")} />}
       {X_LABEL[f.kind] && <Sel label={X_LABEL[f.kind]!} value={f.group} onChange={v => set("group", v)} options={all} blank={is("boxplot") ? "(없음: 전체)" : "(고르세요)"} need={!is("boxplot")} />}
       {is("heatmap", "treemap", "sunburst") && <Sel label={is("heatmap") ? "열 컬럼" : "아랫단계 컬럼"} value={f.split} onChange={v => set("split", v)} options={all} blank={is("heatmap") ? "(고르세요)" : "(없음)"} need={is("heatmap")} />}
@@ -345,6 +343,10 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       )}
 
       <details className="cm-more"><summary>더 많은 설정</summary>
+        {/* 비워 둬도 카드가 만들어지는 칸(기본값으로 충분한 것)은 여기에 접어 둔다 */}
+        {is("kpi", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation", "bullet", "calheat") && <Sel label="표시 형식" value={f.format} onChange={v => set("format", v)} options={FORMATS} />}
+        {is("kpi", "donut_kpi", "stripes", "bullet", "calheat") && <Txt label="단위" title="값 뒤에 붙일 글자. 사람 수는 명, 횟수는 회처럼 적어요. 돈이면 표시 형식 금액을 고르거나 원을 적어요" placeholder="단위 (예: 명, 회, 원)" value={f.unitText} onChange={v => set("unitText", v.slice(0, 10))} width={130} />}
+        {is("kpi") && <Sel label="지표" title="지표 하나를 값으로 써요. 비율 지표는 분자와 분모도 작게 보여요" value={f.metric} onChange={v => set("metric", v)} options={metrics} blank="(쓰지 않음)" />}
         <label className="hint cm-field">카드 이름<input value={f.title} placeholder="카드 이름 (비우면 자동)" onChange={e => set("title", e.target.value)} /></label>
         <div className="row">
           <input aria-label="목표 파일 경로" title="xlsx, csv, yaml, json, md, txt 파일을 읽을 수 있어요" placeholder="목표 파일 경로" value={path} onChange={e => setPath(e.target.value)} />

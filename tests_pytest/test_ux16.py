@@ -28,10 +28,10 @@ def css_text(path):
 
 # ---------- 16A 디자인 토큰 ----------
 
-# 1rem = 16px 기준: 12·13·14·16·20·28px, 4·8·12·16·24·32px, 6·10·999px, 28·32·40px
+# 1rem = 16px 기준: 12·13·14·16·20·28px, 4·8·12·16·24·32px, 10·16·999px, 28·32·40px
 TOKENS = {"--fs-xs": ".75rem", "--fs-sm": ".8125rem", "--fs-md": ".875rem", "--fs-lg": "1rem", "--fs-xl": "1.25rem", "--fs-2xl": "1.75rem",
           "--sp-1": ".25rem", "--sp-2": ".5rem", "--sp-3": ".75rem", "--sp-4": "1rem", "--sp-5": "1.5rem", "--sp-6": "2rem",
-          "--r-ctl": ".375rem", "--r-card": ".625rem", "--r-pill": "62.4375rem", "--h-sm": "1.75rem", "--h-md": "2rem", "--h-lg": "2.5rem"}
+          "--r-ctl": ".625rem", "--r-card": "1rem", "--r-pill": "62.4375rem", "--h-sm": "1.75rem", "--h-md": "2rem", "--h-lg": "2.5rem"}
 
 
 def root_vars(css, dark):
@@ -80,7 +80,8 @@ def test_line_strong_contrast_on_cards():
 
 def test_inputs_and_buttons_use_tokens():
     css = read("common.css")
-    assert "border:1px solid var(--line-strong)" in rule(css, "input, select, textarea")
+    assert "border:1px solid transparent" in rule(css, "input, select, textarea")  # 선 대신 눌린 면(neumorphism). 높이 계산의 2px는 그대로
+    assert "box-shadow:var(--press)" in rule(css, ":where(input:not([type=checkbox], [type=radio], [type=range], [type=color]), select, textarea)")
     assert "height:var(--h-md)" in rule(css, ".btn")
     ib = rule(css, ".ib")
     assert "width:var(--h-md)" in ib and "height:var(--h-md)" in ib
@@ -195,7 +196,7 @@ def test_settings_categories_and_dest_inside():
     assert re.findall(r">([^<]+)</button>", nav) == ["쓸 기능", "화면 크기", "업데이트", "계산", "메모리", "표본", "날짜·달력", "차트 낱말", "보낼 곳"]
     assert re.search(r'data-set="viz" id="set-tab-viz" class="hidden"', nav)
     assert re.findall(r'<section class="set-page[^"]*" data-set="(\w+)" role="tabpanel"', panel) == TABS
-    assert "set-group" not in status and "<details" not in panel and 'class="app-set"' in panel
+    assert "set-group" not in status and panel.count("<details") == 2 and 'class="app-set"' in panel  # 접는 곳: 표본 [자세히], 보낼 곳의 Slack 봇
     for i in SETTING_IDS:
         assert f'id="{i}"' in panel, i
     viz = between("status.html", 'data-set="viz" role="tabpanel"', "</section>")
@@ -472,7 +473,7 @@ def test_toolbar_edit_only_tools():
     # 대시보드 설정은 [더 보기] 메뉴 안에 있고 편집을 켜지 않아도 열린다
     assert re.search(r'\n\s*<button role="menuitem"[^\n]*setMenu\(false\); setSettings\(true\);[^\n]*>대시보드 설정</button>', bar) and not re.search(r'state\.editing && <button[^\n]*대시보드 설정', bar)
     assert ">설정</button>" not in bar and "<AddCardMenu" not in bar and "conn.label" not in bar
-    assert 'setMenu(false); dispatch({ type: "select", id: null }); setAddOpen(true);' in bar
+    assert 'setMenu(false); dispatch({ type: "select", id: null }); setAddOpen(true);' not in bar and bar.count(">카드 추가</button>") == 1  # 메뉴 안의 같은 일을 하는 [카드 추가]는 뺐다(강조 단추 하나만)
     assert "}, [menu]);" in bar and "[menu, addOpen, setAddOpen]" not in bar
     assert "if (state.editing) setAddOpen(false);" in bar
     assert "const add = useAddCard();" in bar

@@ -100,7 +100,7 @@ def test_bcheck_border_is_visible():
     assert re.search(r"^\.bcheck \{[^}]*border:\.0938rem solid var\(--line-strong\);", css, re.M)
     light, dark = css[css.index(":root {"):css.index(":root[data-theme=dark]")], css[css.index(":root[data-theme=dark]"):]
     ratios = [contrast(*[re.search(rf"--{name}:(#[0-9a-f]{{3,6}});", block)[1] for name in ("line-strong", "card")]) for block in (light, dark)]
-    assert [round(r, 1) for r in ratios] == [3.4, 3.6] and min(ratios) >= WCAG_UI  # 카드 바탕 위: 밝은 화면 3.4:1, 어두운 화면 3.6:1 (고치기 전 --faint는 2.6·3.0)
+    assert [round(r, 1) for r in ratios] == [3.1, 3.4] and min(ratios) >= WCAG_UI  # 카드 바탕 위: 밝은 화면 3.1:1, 어두운 화면 3.4:1 (고치기 전 --faint는 2.6·3.0)
 
 
 # ---------- 20G modal_role ----------

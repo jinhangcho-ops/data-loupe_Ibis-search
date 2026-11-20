@@ -6,6 +6,10 @@
 .settings-box .dctl { padding:0; }
 .settings-box .row { display:flex; gap:.375rem; align-items:center; }
 .settings-box .row input { flex:1; min-width:0; }
+.settings-box .set-more > summary { cursor:pointer; color:var(--muted); font-weight:600; min-height:1.5rem; }  /* 접힌 묶음(카드 추가 서랍의 [더 많은 설정]과 같은 모양) */
+.settings-box .set-more[open] { display:flex; flex-direction:column; gap:.75rem; }
+/* 연결 이름은 바로 위 줄(.topbar #crumb)에 이미 있다. 위 줄이 숨는 [대시보드만 보기]에서만 제목 옆에 보인다 */
+body:not(.dash-only) .big .d-conn { display:none; }
 /* KPI 값(P15): 상자 폭(아이콘 자리를 뺀)을 글자 폭(--n, Kpi가 textUnits로 어림: 숫자 1·한글 1/0.62)으로 나눈 크기와 상자 높이(보조 줄 --kpi-rest를 뺀)로 맞춘 크기 중 작은 것. 편집 중 좁은 칸에서 "12,2…"로 잘리지 않게.
    가로·세로 가운데, 비교 문장·짝은 아래에 붙는다. fit-center(기본)는 56px까지, fit-fill은 160px까지 키운다. lay-right(P16)는 추이선이 값 오른쪽(값 폭 60%) */
 .cbox.kpi { container-type:size; --kpi-rest:6rem; --kpi-max:3.5rem; --kpi-w:1; }

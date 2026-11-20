@@ -10,6 +10,8 @@ import { growFont } from "./__pure__";
 import { LEVEL_NAMES, Say, levelColor, type P } from "./common";
 import type { Entity } from "./Status";
 
+const DOT_STROKE = 1.5, DOT_OPACITY = 0.75, RACK_RX = 6;  // 점의 바탕색 테두리 굵기·채움 투명도, 배경 칸 모서리 둥글기(예시 80-bubble-map: 칸 rx 6)
+
 export function MapCard({ card, colors }: P) {
   const { state, dispatch } = useDash(), s = useRootScale();
   const dashId = state.dash?.id ?? "", view = card.view, bg = view.bg || "rack", W = 400, H = 260;
@@ -49,9 +51,10 @@ export function MapCard({ card, colors }: P) {
   };
   const middle = (text: string, fill: string, size = 12) => <text x={W / 2} y={H / 2} textAnchor="middle" fontSize={growFont(text, W, size, s)} fill={fill}>{text}</text>;
   return (
+    <div className="nm-well h-full">
     <svg ref={root} viewBox={`0 0 ${W} ${H}`} className="w-full h-full [touch-action:none]" role="img" aria-label={card.title}>
       <g>
-        {bg === "rack" ? Array.from({ length: 6 }, (_, i) => <rect key={i} x={20 + i * 62} y={14} width={52} height={H - 28} rx={4} fill="none" stroke={colors.line} strokeWidth={1.5} />)
+        {bg === "rack" ? Array.from({ length: 6 }, (_, i) => <rect key={i} x={20 + i * 62} y={14} width={52} height={H - 28} rx={RACK_RX} fill={colors.line} />)
           : bg === "network" ? Array.from({ length: 9 }, (_, k) => k + 1).flatMap(i => [
             <line key={"v" + i} x1={i * 40} y1={0} x2={i * 40} y2={H} stroke={colors.line} strokeDasharray="2 6" />,
             <line key={"h" + i} x1={0} y1={i * 26} x2={W} y2={i * 26} stroke={colors.line} strokeDasharray="2 6" />])
@@ -66,7 +69,7 @@ export function MapCard({ card, colors }: P) {
         const [x, y] = [pos[e.name][0] * W, pos[e.name][1] * H];
         return (
           <g key={e.name} className="cursor-grab" onPointerDown={down(e.name)} onPointerMove={move} onPointerUp={up}>
-            <circle cx={x} cy={y} r={e.level === "ok" ? 8 : 10} fill={levelColor(e.level, colors)} stroke={colors.card} strokeWidth={2}>
+            <circle className="nm-raise" cx={x} cy={y} r={e.level === "ok" ? 8 : 10} fill={levelColor(e.level, colors)} stroke={colors.card} strokeWidth={DOT_STROKE} fillOpacity={DOT_OPACITY}>
               <title>{`${e.name}: ${LEVEL_NAMES[e.level]}${e.since_text ? ", " + e.since_text : ""}${e.reasons.length ? ", " + e.reasons.join(", ") : ""}`}</title>
             </circle>
             <text x={x} y={y + 12 + 10 * s} textAnchor="middle" fontSize={10 * s} fill={colors.ink}>{e.name}</text>
@@ -74,5 +77,6 @@ export function MapCard({ card, colors }: P) {
         );
       })}</g>
     </svg>
+    </div>
   );
 }

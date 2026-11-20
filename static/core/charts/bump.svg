@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="범프 차트 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#A3B1C6" flood-opacity="0.7"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.9"/>
+</filter>
+</defs>
+<text x="30" y="28" text-anchor="end" font-size="10" fill="#5B6576">1위</text>
+<text x="30" y="72" text-anchor="end" font-size="10" fill="#5B6576">2위</text>
+<text x="30" y="116" text-anchor="end" font-size="10" fill="#5B6576">3위</text>
+<text x="30" y="160" text-anchor="end" font-size="10" fill="#5B6576">4위</text>
+<path d="M60 24 C68.7 24 94.7 16.7 112 24 C129.3 31.3 146.7 53.3 164 68 C181.3 82.7 198.7 112 216 112 C233.3 112 250.7 82.7 268 68 C285.3 53.3 311.3 31.3 320 24" fill="none" stroke="#3D6DF2" stroke-width="4" stroke-linecap="round" stroke-opacity="1"/>
+<circle cx="60" cy="24" r="9" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<circle cx="112" cy="24" r="9" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<circle cx="164" cy="68" r="9" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<circle cx="216" cy="112" r="9" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<circle cx="268" cy="68" r="9" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<circle cx="320" cy="24" r="9" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<text x="60" y="27.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">A</text>
+<text x="112" y="27.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">A</text>
+<text x="164" y="71.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">A</text>
+<text x="216" y="115.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">A</text>
+<text x="268" y="71.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">A</text>
+<text x="320" y="27.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">A</text>
+<path d="M60 68 C68.7 75.3 94.7 119.3 112 112 C129.3 104.7 146.7 38.7 164 24 C181.3 9.3 198.7 24 216 24 C233.3 24 250.7 16.7 268 24 C285.3 31.3 311.3 60.7 320 68" fill="none" stroke="#E8803A" stroke-width="4" stroke-linecap="round" stroke-opacity="1"/>
+<circle cx="60" cy="68" r="9" fill="#E8803A" filter="url(#nm-raise)"/>
+<circle cx="112" cy="112" r="9" fill="#E8803A" filter="url(#nm-raise)"/>
+<circle cx="164" cy="24" r="9" fill="#E8803A" filter="url(#nm-raise)"/>
+<circle cx="216" cy="24" r="9" fill="#E8803A" filter="url(#nm-raise)"/>
+<circle cx="268" cy="24" r="9" fill="#E8803A" filter="url(#nm-raise)"/>
+<circle cx="320" cy="68" r="9" fill="#E8803A" filter="url(#nm-raise)"/>
+<text x="60" y="71.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">B</text>
+<text x="112" y="115.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">B</text>
+<text x="164" y="27.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">B</text>
+<text x="216" y="27.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">B</text>
+<text x="268" y="27.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">B</text>
+<text x="320" y="71.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#FFFFFF">B</text>
+<path d="M60 112 C68.7 104.7 94.7 68 112 68 C129.3 68 146.7 112 164 112 C181.3 112 198.7 60.7 216 68 C233.3 75.3 250.7 148.7 268 156 C285.3 163.3 311.3 119.3 320 112" fill="none" stroke="#8FB0FF" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.7"/>
+<circle cx="60" cy="112" r="9" fill="#8FB0FF" filter="url(#nm-raise)"/>
+<circle cx="112" cy="68" r="9" fill="#8FB0FF" filter="url(#nm-raise)"/>
+<circle cx="164" cy="112" r="9" fill="#8FB0FF" filter="url(#nm-raise)"/>
+<circle cx="216" cy="68" r="9" fill="#8FB0FF" filter="url(#nm-raise)"/>
+<circle cx="268" cy="156" r="9" fill="#8FB0FF" filter="url(#nm-raise)"/>
+<circle cx="320" cy="112" r="9" fill="#8FB0FF" filter="url(#nm-raise)"/>
+<text x="60" y="115.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">C</text>
+<text x="112" y="71.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">C</text>
+<text x="164" y="115.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">C</text>
+<text x="216" y="71.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">C</text>
+<text x="268" y="159.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">C</text>
+<text x="320" y="115.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">C</text>
+<path d="M60 156 C68.7 156 94.7 156 112 156 C129.3 156 146.7 156 164 156 C181.3 156 198.7 163.3 216 156 C233.3 148.7 250.7 112 268 112 C285.3 112 311.3 148.7 320 156" fill="none" stroke="#8E9AAD" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.7"/>
+<circle cx="60" cy="156" r="9" fill="#8E9AAD" filter="url(#nm-raise)"/>
+<circle cx="112" cy="156" r="9" fill="#8E9AAD" filter="url(#nm-raise)"/>
+<circle cx="164" cy="156" r="9" fill="#8E9AAD" filter="url(#nm-raise)"/>
+<circle cx="216" cy="156" r="9" fill="#8E9AAD" filter="url(#nm-raise)"/>
+<circle cx="268" cy="112" r="9" fill="#8E9AAD" filter="url(#nm-raise)"/>
+<circle cx="320" cy="156" r="9" fill="#8E9AAD" filter="url(#nm-raise)"/>
+<text x="60" y="159.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">D</text>
+<text x="112" y="159.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">D</text>
+<text x="164" y="159.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">D</text>
+<text x="216" y="159.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">D</text>
+<text x="268" y="115.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">D</text>
+<text x="320" y="159.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="#2E3746">D</text>
+<text x="60" y="192" text-anchor="middle" font-size="10" fill="#5B6576">1주</text>
+<text x="112" y="192" text-anchor="middle" font-size="10" fill="#5B6576">2주</text>
+<text x="164" y="192" text-anchor="middle" font-size="10" fill="#5B6576">3주</text>
+<text x="216" y="192" text-anchor="middle" font-size="10" fill="#5B6576">4주</text>
+<text x="268" y="192" text-anchor="middle" font-size="10" fill="#5B6576">5주</text>
+<text x="320" y="192" text-anchor="middle" font-size="10" fill="#5B6576">6주</text>
+</svg>

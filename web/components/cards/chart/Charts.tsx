@@ -1,18 +1,18 @@
 "use client";
 // 차트 카드의 그림(Recharts 3): 옛 dash.js chartConfig(11종 + 계열마다 정한 막대·선 겹치기)·pointsConfig(산점도·버블)·anaConfig(분석 그림 7종)를 옮겼고, P14 새 계열 종류 17개를 더했다.
 // 색은 토큰 그대로(var(--c1)… · --muted · --line · --text · --card)라 화면 모드가 바뀌면 따라 바뀐다. 투명도는 alpha() 대신 fill-opacity로(변수 색에도 된다).
-// 공통 모양은 옛 common.js chartLook: 12px 글자, 값 축 가로 격자만, 축 선 없음, 위쪽만 둥근 막대(4px, 최대 44px), 범례는 위 왼쪽 원 표시, 1만 이상 눈금은 짧게(1.2만).
+// 그리는 모양(막대 모서리·굵기, 선 굵기·점, 솟음 nm-raise, 격자 유무)은 사용자가 준 예시(neumorphism-charts)를 그대로 따른다(아래 상수). 12px 글자, 축 선 없음, 1만 이상 눈금은 짧게(1.2만).
 // 애니메이션은 끈다(사진 비교·다시 그릴 때 움직이지 않게).
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import {
-  Area, Bar, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, RadialBar, RadialBarChart, Sector,
+  Area, Bar, CartesianGrid, Cell, ComposedChart, LabelList, Line, Pie, PieChart, PolarAngleAxis, PolarGrid, Radar, RadarChart, RadialBar, RadialBarChart, Sector,
   Customized, ErrorBar, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, usePlotArea, useXAxisScale, useYAxisScale, type PieSectorShapeProps,
 } from "recharts";
 import { decimals, pointGroups, shownum } from "@/lib/calc";
 import { LOG_NEEDS_POSITIVE, NOT_ZERO_TEXT, TONE_COLORS, fromSymlog, hexVertices, shortNum, thinRows, toSymlog, type Tier } from "@/lib/autoviz";
 import { pickColor } from "@/lib/series";
 import { UNIT_NAMES, type SCard, type Series, type SeriesKit, type ThemeColors } from "./series";
-import { FIRST_ONLY, GRID_3D, HBARS, ROUND_TYPES, fitLine, paretoRows, ringRadii, waterfallRows } from "./shapes";
+import { FIRST_ONLY, GRID_3D, HBARS, ROUND_PX, ROUND_TYPES, fitLine, paretoRows, ringRadii, waterfallRows } from "./shapes";
 import { Chart3D } from "./Chart3D";
 import { PLAIN, gridReason, gridScene, pointsReason, pointsScene, type GridType, type Shaping } from "./three";
 import { sliceWindow, type Span } from "../svg/__pure__";
@@ -34,19 +34,42 @@ export function histLabel(edges: number[], i: number): string {
 }
 const TICK = { fill: "var(--muted)", fontSize: 12 };
 export const AXIS = { tick: TICK, axisLine: false, tickLine: false } as const;
-export const TIP = { contentStyle: { background: "var(--card)", border: "1px solid var(--line)", borderRadius: 8, color: "var(--text)", fontSize: 12 }, labelStyle: { fontWeight: 600 },
+export const TIP = { contentStyle: { background: "var(--card)", border: "1px solid var(--edge)", boxShadow: "var(--raise-sm)", borderRadius: 10, color: "var(--text)", fontSize: 12 }, labelStyle: { fontWeight: 600 },
   isAnimationActive: false, formatter: (v: unknown) => shownum(v) } as const;
 const xTitle = (text?: string) => text ? { value: text, position: "insideBottom" as const, offset: -4, fill: "var(--muted)", fontSize: 12 } : undefined;
 const NOT_ZERO_W = 64;  // 세로로 쓴 "0부터 아님" 안내가 눈금 글자와 겹치지 않을 축 너비
 const yTitle = (text?: string) => text ? { value: text, angle: -90, position: "insideLeft" as const, fill: "var(--muted)", fontSize: 12, style: { textAnchor: "middle" as const } } : undefined;
 export const MARGIN = { top: 4, right: 8, bottom: 4, left: 0 };
+/** 예시(neumorphism-charts recharts/NN-*.jsx, 없으면 svg/NN-*.html)의 모양 값. 솟음(RAISE 클래스)은 예시가 className="nm-raise"(svg는 filter)를 준 요소에만 */
+const RAISE = "nm-raise";
+const R_BAR = 7, W_BAR = 24;                          // 17 막대
+const R_GROUP = 6, W_GROUP = 18;                      // 18 묶은 막대
+const W_HBAR = 14, TRACK = { fill: "var(--line)", radius: R_BAR };  // 19 가로 막대: 칸 전체 길이의 홈
+const R_COMBO = 6, W_COMBO = 22;                      // 20 막대+선
+const R_STEP = 5, W_PARETO = 24, W_WATERFALL = 28;    // 21 파레토·27 나비·71 폭포 모서리 5
+const R_RANGE = 8, W_RANGE = 16;                      // 25 범위 막대
+const R_STACK = 6, W_STACK = 26, W_HSTACK = 20;       // 46 누적(맨 위 계열 위쪽만 둥글게)·47 가로 100% 누적
+const R_HIST = 3;                                     // 32 히스토그램 위쪽
+const W_LINE = 3, W_DASH = 2, DASH = "5 4", W_SUB = 2.5, REF_DASH = "4 3";  // 01 주 선·보조 점선, 21 누적 선·기준선
+const DOT = { r: 4, strokeWidth: 2.5, fill: "var(--card)" };  // 01 주 선의 점: 속은 바탕색·테두리는 계열색
+const AREA_TOP = 0.35, STACK_FILL = 0.92, RADAR_FILL = 0.3;  // 02 영역 그라데이션 위 진하기·03 누적 영역·28 레이더
+const SLOPE = { dot: 5, pad: { left: 60, right: 60 }, w: 2, font: 10 };  // 11 기울기: 첫 계열만 W_LINE
+const W_RING = 16, R_RING = 8;                        // 75 활동 링
+const DONUT = { plate: "91%", outer: "82%", inner: "55%" }, PIE_OUTER = "80%", W_SLICE = 2;  // 49 도넛·48 파이
+const PLATE = { data: [{ v: 1 }], dataKey: "v", stroke: "none", fill: "var(--card)", innerRadius: 0, outerRadius: DONUT.plate, isAnimationActive: false, tooltipType: "none", legendType: "none" } as const;
+const SCATTER_R = 4.5, SCATTER_ALPHA = 0.85, BUBBLE_ALPHA = 0.78, W_BUBBLE = 1.5;  // svg 61 산점도·62 버블
+const R_LOLLI = 8;                                    // svg 22 롤리팝 점(막대는 W_LINE)
+const R_CELL = 5, R_GRID_CELL = 4;                    // svg 64 상관행렬·12 코호트 칸 모서리
+const R_BOX = 6, W_WHISKER = 1.5, W_MEDIAN = 3, CAP = 16;  // svg 37 상자 그림
+const W_HEX = 1.5;                                    // svg 43 육각 칸 테두리(바탕색)
+const ERR = { width: 16, w: 2 };                      // 41 오차 막대
 const TITLED = { top: 4, right: 8, bottom: 16, left: 8 };  // 축 제목이 있는 그림
 
 export type Key = { name: string; color: string; opacity?: number };
 /** 범례: 넣은 순서 그대로(Recharts 기본은 이름순이라 쓰지 않는다), 원 표시 8px */
 export function Keys({ items }: { items: Key[] }) {
   return (
-    <div className="[display:flex] flex-wrap [gap:2px_14px] [font-size:12px] [color:var(--muted)] [padding:0_0_4px]">
+    <div className="[display:flex] flex-wrap [gap:2px_14px] [font-size:12px] [color:var(--muted)] [padding:6px_0_0]">
       {items.map((k, i) => (
         <span key={i} className="[display:inline-flex] items-center gap-[6px]">
           <i style={{ width: 8, height: 8, borderRadius: "50%", background: k.color, opacity: k.opacity, flex: "none" }} />{k.name}
@@ -57,16 +80,17 @@ export function Keys({ items }: { items: Key[] }) {
 }
 
 /** 범례·제목 줄 + 남은 높이를 채우는 그림(카드 크기를 따라간다) */
-export function Frame({ keys, title, children }: { keys?: Key[]; title?: string; children: ReactNode }) {
+export function Frame({ keys, title, round, children }: { keys?: Key[]; title?: string; round?: boolean; children: ReactNode }) {
   const s = useRootScale();  // 안의 px(글자·여백·점·막대)가 바탕 글자 크기를 따라간다. 마우스 좌표는 Recharts가 배율을 재서 맞춘다
+  const plot = <ResponsiveContainer width="100%" height="100%" minHeight={60}>{children as React.ReactElement}</ResponsiveContainer>;
   return (
     <div className="h-full">
       <div style={{ display: "flex", flexDirection: "column", fontSize: 12, ...scaledBox(s) }}>
         {title ? <div className="text-center [color:var(--muted)] [font-weight:600] [padding:0_0_4px]">{title}</div> : null}
-        {keys?.length ? <Keys items={keys} /> : null}
-        <div className="flex-1 min-h-0">
-          <ResponsiveContainer width="100%" height="100%" minHeight={60}>{children as React.ReactElement}</ResponsiveContainer>
+        <div className="nm-well flex-1 min-h-0" style={round ? { display: "grid", placeItems: "center" } : undefined}>
+          {round ? <div style={{ width: "100%", height: "100%", maxWidth: ROUND_PX, maxHeight: ROUND_PX }}>{plot}</div> : plot}
         </div>
+        {keys?.length ? <Keys items={keys} /> : null}
       </div>
     </div>
   );
@@ -86,6 +110,7 @@ type Row = Record<string, string | number | null>;
  *  범위 막대(range, 두 계열 [첫째, 둘째]), 기울기(slope, 처음·끝 두 시점), 나비(butterfly, 첫 계열을 왼쪽 음수 방향). 도넛·파이·방사형·장미는 RoundChart, 폭포·파레토·추세선·롤리팝은 OneSeries.
  *  percent면 왼쪽 값 축 눈금에 %(옛 쿼리 화면 tuneChart, 비율 지표) */
 export function SeriesChart({ card, s, colors, percent, win, active }: { card: SCard; s: Series; colors: ThemeColors; percent?: boolean; win?: Span | null; active?: boolean }) {
+  const gid = useId().replace(/:/g, "");  // 영역 채움 그라데이션 id(카드마다 다르게)
   const view = card.view ?? {}, type = view.type || "", ranges = view.ranges ?? { y: {}, y1: {} };
   if (GRID_3D.includes(type)) return <Grid3D card={card} s={s} colors={colors} active={active} />;
   if (ROUND_TYPES.includes(type)) return <RoundChart card={card} s={s} colors={colors} />;
@@ -102,7 +127,7 @@ export function SeriesChart({ card, s, colors, percent, win, active }: { card: S
   const vis = lineKeys.length === shown.length ? thinRows(seen, lineKeys, au?.thin ?? null) : seen;  // 선 그림만 보이는 범위에서 LTTB
   if (scale === "log" && shown.some(d => d.values.some(v => v != null && Number(v) <= 0))) throw new Error(LOG_NEEDS_POSITIVE);
   const plot = scale === "symlog" ? vis.map(r => ({ ...r, ...Object.fromEntries(shown.flatMap((_, i) => [[`r${i}`, r[`s${i}`]], [`s${i}`, r[`s${i}`] == null ? null : toSymlog(Number(r[`s${i}`]))]])) })) : vis;
-  const dot = vis.length > 24 ? false : { r: type === "slope" ? 4 : 3, strokeWidth: 0 };
+  const dot = vis.length > 24 ? false : DOT;
   const color = shown.map((d, i) => pickColor(card, "series", d.label, colors, i));
   const keys = shown.length > 1 && !range ? [...shown.flatMap((d, i) => (gray.includes(i) ? [] : [{ name: d.label, color: color[i] }])), ...(gray.length ? [{ name: `그 밖 ${gray.length}개`, color: "var(--line)" }] : [])] : undefined;  // 계열이 하나면 범례 없음
   if (au?.small) {
@@ -116,7 +141,7 @@ export function SeriesChart({ card, s, colors, percent, win, active }: { card: S
               <CartesianGrid stroke="var(--line)" vertical={false} />
               <XAxis dataKey="label" {...AXIS} />
               <YAxis {...AXIS} tickFormatter={vt} domain={dom} width={48} />
-              <Line dataKey={`s${i}`} name={d.label} type="monotone" stroke={color[i]} strokeWidth={2} dot={dot ? { ...dot, fill: color[i] } : false} connectNulls isAnimationActive={false} />
+              <Line dataKey={`s${i}`} name={d.label} type="monotone" stroke={color[i]} strokeWidth={W_LINE} dot={dot ? { ...dot, stroke: color[i] } : false} className={RAISE} connectNulls isAnimationActive={false} />
               <Tooltip {...TIP} />
             </ComposedChart>
           </Frame>
@@ -127,54 +152,68 @@ export function SeriesChart({ card, s, colors, percent, win, active }: { card: S
   if (type === "radar") {
     return (
       <Frame keys={keys}>
-        <RadarChart data={vis}margin={MARGIN} outerRadius="80%">
+        <RadarChart data={vis}margin={MARGIN} outerRadius="75%">
           <PolarGrid stroke="var(--line)" />
           <PolarAngleAxis dataKey="label" tick={TICK} />
-          <PolarRadiusAxis tick={TICK} axisLine={false} tickFormatter={tickNum} />
-          {shown.map((d, i) => <Radar key={i} dataKey={`s${i}`} name={d.label} stroke={color[i]} strokeWidth={2} fill={color[i]} fillOpacity={0.14} dot={dot} isAnimationActive={false} />)}
+          {shown.map((d, i) => <Radar key={i} dataKey={`s${i}`} name={d.label} stroke={color[i]} strokeWidth={W_SUB} fill={color[i]} fillOpacity={RADAR_FILL} dot={false} className={i === 0 ? RAISE : undefined} isAnimationActive={false} />)}
           <Tooltip {...TIP} />
         </RadarChart>
       </Frame>
     );
   }
   const semantic = !!au?.semantic && shown.length === 1 && !isLine(0), better = view.better;
-  const bar = (i: number) => {
-    if (butterfly) return 0;
-    const top = !stacked || i === shown.length - 1;  // 누적 막대는 맨 위 조각만 둥글게
-    return top ? (hbar ? [0, 4, 4, 0] : [4, 4, 0, 0]) as [number, number, number, number] : 0;
+  const baseTick = full ? pct100 : butterfly ? absTick : percent ? (v: unknown) => `${Number(v).toLocaleString()}%` : vt;
+  const valueTick = scale === "symlog" ? (v: unknown) => baseTick(fromSymlog(Number(v))) : baseTick;
+  const plainH = hbar && !stacked && !butterfly, grouped = shown.filter((_, k) => !isLine(k)).length > 1;
+  /** 막대 모양: 나비 27, 세로 누적 46(첫 계열 굵기, 맨 위 계열 위쪽만 둥글게), 가로 누적 47, 가로 19, 막대+선 20, 묶은 18, 하나 17 */
+  const bar = (i: number): { radius?: number | [number, number, number, number]; barSize?: number; raise: boolean } => {
+    if (butterfly) return { radius: R_STEP, raise: true };
+    if (stacked && hbar) return { barSize: i === 0 ? W_HSTACK : undefined, raise: false };
+    if (stacked) return { barSize: i === 0 ? W_STACK : undefined, radius: i === shown.length - 1 ? [R_STACK, R_STACK, 0, 0] : undefined, raise: false };
+    if (hbar) return { radius: R_BAR, barSize: W_HBAR, raise: true };
+    if (combo) return { radius: R_COMBO, barSize: W_COMBO, raise: true };
+    return grouped ? { radius: R_GROUP, barSize: W_GROUP, raise: true } : { radius: R_BAR, barSize: W_BAR, raise: true };
   };
-  const curve = type === "polyline" || type === "slope" ? "linear" : type === "step" ? "step" : "monotone";
-  const series = range ? [<Bar key="r" dataKey={(r: Row) => [r.s0, r.s1]} name={`${shown[0].label} ~ ${shown[1].label}`} yAxisId="y" fill={color[0]} radius={4} maxBarSize={44} isAnimationActive={false} />]
+  const mainLine = (i: number) => !gray.includes(i) && shown[i].dash !== "dashed";  // 주 선: 굵기 3에 솟음. 점선·회색 선은 평평
+  const curve = type === "polyline" || type === "slope" ? "linear" : type === "step" ? "stepAfter" : "monotone";
+  const series = range ? [<Bar key="r" dataKey={(r: Row) => [r.s0, r.s1]} name={`${shown[0].label} ~ ${shown[1].label}`} yAxisId="y" fill={color[0]} radius={R_RANGE} barSize={W_RANGE} className={RAISE} isAnimationActive={false} />]
     : shown.map((d, i) => {
       const grayed = gray.includes(i), c = grayed ? "var(--line)" : color[i], key = `s${i}`, yAxisId = (d.axis === "right" && !type) || (combo && i > 0) ? "y1" : "y";
       if (!isLine(i)) {
+        const b = bar(i);
         return (
-          <Bar key={i} dataKey={key} name={d.label} yAxisId={hbar ? undefined : yAxisId} fill={c} radius={bar(i)} maxBarSize={44} stackId={stacked ? "a" : undefined} isAnimationActive={false}>
+          <Bar key={i} dataKey={key} name={d.label} yAxisId={hbar ? undefined : yAxisId} fill={c} radius={b.radius} barSize={b.barSize} background={plainH ? TRACK : undefined} stackId={stacked ? "a" : undefined} className={b.raise ? RAISE : undefined} isAnimationActive={false}>
             {semantic ? plot.map((r, j) => {
               const up = Number(r.s0) >= 0, good = better === "down" ? !up : up;  // 증가가 좋은 지표면 양수 = 긍정
               return <Cell key={j} fill={good ? TONE_COLORS.good : TONE_COLORS.bad} />;
             }) : null}
+            {plainH ? <LabelList dataKey={key} position="right" {...TICK} formatter={valueTick} /> : null}
           </Bar>
         );
       }
-      const dash = d.dash === "dashed" ? "6 4" : undefined, sw = grayed ? 1 : 2;
-      if (AREAS.includes(type)) return <Area key={i} dataKey={key} name={d.label} yAxisId="y" type={curve} stroke={c} strokeWidth={sw} fill={c} fillOpacity={stacked ? 0.45 : 0.14} dot={stacked || grayed ? false : dot} stackId={stacked ? "a" : undefined} connectNulls isAnimationActive={false} />;
-      return <Line key={i} dataKey={key} name={d.label} yAxisId={yAxisId} type={curve} stroke={c} strokeWidth={sw} strokeDasharray={dash} dot={dot && !grayed ? { ...dot, fill: c } : false} connectNulls isAnimationActive={false} />;
+      if (AREAS.includes(type)) {
+        return stacked ? <Area key={i} dataKey={key} name={d.label} yAxisId="y" type={curve} stackId="a" stroke="var(--card)" fill={c} fillOpacity={STACK_FILL} dot={false} connectNulls isAnimationActive={false} />
+          : <Area key={i} dataKey={key} name={d.label} yAxisId="y" type={curve} stroke={c} strokeWidth={grayed ? 1 : mainLine(i) ? W_LINE : W_DASH} fill={`url(#${gid}${i})`} dot={false} className={mainLine(i) ? RAISE : undefined} connectNulls isAnimationActive={false} />;
+      }
+      if (type === "slope") return <Line key={i} dataKey={key} name={d.label} yAxisId={yAxisId} type={curve} stroke={c} strokeWidth={i === 0 ? W_LINE : SLOPE.w} dot={{ r: SLOPE.dot, fill: c }} label={{ position: "right", fontSize: SLOPE.font, fill: "var(--muted)", formatter: valueTick }} connectNulls isAnimationActive={false} />;
+      if (combo) return <Line key={i} dataKey={key} name={d.label} yAxisId={yAxisId} type={curve} stroke={c} strokeWidth={W_LINE} fill="var(--card)" dot={!!dot} connectNulls isAnimationActive={false} />;  // 20: 점은 Recharts 기본(속은 바탕색)
+      const sw = grayed ? 1 : mainLine(i) ? W_LINE : W_DASH;
+      return <Line key={i} dataKey={key} name={d.label} yAxisId={yAxisId} type={curve} stroke={c} strokeWidth={sw} strokeDasharray={d.dash === "dashed" ? DASH : undefined} dot={dot && mainLine(i) && type !== "step" ? { ...dot, stroke: c } : false} className={mainLine(i) ? RAISE : undefined} connectNulls isAnimationActive={false} />;
     });
   const lines = range ? [] : series.filter((_, i) => isLine(i)), bars = series.filter(x => !lines.includes(x));  // 선은 막대 앞에
-  const baseTick = full ? pct100 : butterfly ? absTick : percent ? (v: unknown) => `${Number(v).toLocaleString()}%` : vt;
-  const valueTick = scale === "symlog" ? (v: unknown) => baseTick(fromSymlog(Number(v))) : baseTick;
   const ydom: [number | "auto", number | "auto"] = full ? [0, 1] : ranged(ranges.y) ? domainOf(ranges.y) : scale ? ["auto", "auto"] : au?.yDomain ?? (au?.barLo != null ? [au.barLo, "auto"] : domainOf(ranges.y));
   const lineTip = scale === "symlog" ? (_v: unknown, _n: unknown, item: { dataKey?: unknown; payload?: Row }) => shownum(item.payload?.[`r${String(item.dataKey).slice(1)}`]) : TIP.formatter;
-  const refProps = { stroke: "var(--muted)", strokeDasharray: "4 4" };
+  const refProps = { stroke: "var(--muted)", strokeDasharray: REF_DASH };
+  const slope = type === "slope";
   return (
     <Frame keys={keys}>
-      <ComposedChart data={plot} layout={hbar ? "vertical" : "horizontal"} margin={MARGIN} barCategoryGap="28%" stackOffset={full ? "expand" : butterfly ? "sign" : undefined}>
-        <CartesianGrid stroke="var(--line)" vertical={hbar} horizontal={!hbar} />
-        {hbar ? <XAxis type="number" {...AXIS} scale={scale === "log" ? "log" : undefined} tickFormatter={valueTick} domain={ydom} allowDataOverflow={ranged(ranges.y)} />
-          : <XAxis dataKey="label" {...AXIS} />}
+      <ComposedChart data={plot} layout={hbar ? "vertical" : "horizontal"} margin={MARGIN} stackOffset={full ? "expand" : butterfly ? "sign" : undefined}>
+        {AREAS.includes(type) && !stacked ? <defs>{color.map((c, i) => <linearGradient key={i} id={`${gid}${i}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={c} stopOpacity={AREA_TOP} /><stop offset="1" stopColor={c} stopOpacity={0} /></linearGradient>)}</defs> : null}
+        {hbar || slope ? null : <CartesianGrid stroke="var(--line)" vertical={false} />}{/* 가로 막대류(19·27·47)·기울기(11)는 격자 없음 */}
+        {hbar ? <XAxis type="number" {...AXIS} hide={plainH} scale={scale === "log" ? "log" : undefined} tickFormatter={valueTick} domain={ydom} allowDataOverflow={ranged(ranges.y)} />
+          : <XAxis dataKey="label" {...AXIS} padding={slope ? SLOPE.pad : undefined} />}
         {hbar ? <YAxis type="category" dataKey="label" {...AXIS} width={80} />
-          : <YAxis yAxisId="y" {...AXIS} scale={scale === "log" ? "log" : undefined} tickFormatter={valueTick} domain={ydom} allowDataOverflow={ranged(ranges.y)} width={au?.notZero ? NOT_ZERO_W : 48} label={au?.notZero ? { ...yTitle(NOT_ZERO_TEXT)!, fontSize: 11 } : undefined} />}
+          : <YAxis yAxisId="y" {...AXIS} hide={slope} scale={scale === "log" ? "log" : undefined} tickFormatter={valueTick} domain={ydom} allowDataOverflow={ranged(ranges.y)} width={au?.notZero ? NOT_ZERO_W : 48} label={au?.notZero ? { ...yTitle(NOT_ZERO_TEXT)!, fontSize: 11 } : undefined} />}
         {right ? <YAxis yAxisId="y1" orientation="right" {...AXIS} tickFormatter={au?.y1Pct ? pct100 : vt} domain={au?.y1Pct ?? domainOf(ranges.y1)} allowDataOverflow={!!au?.y1Pct || ranged(ranges.y1)} width={48} /> : null}
         {bars}
         {lines}
@@ -240,33 +279,35 @@ function RoundChart({ card, s, colors }: { card: SCard; s: Series; colors: Theme
     const data = many ? slices.map((sl, i) => ({ ring: sets[i].label, ...Object.fromEntries(sl.map((x, j) => [`p${j}`, x.v])) })) : (slices[0] ?? []).map((x, j) => ({ ...x, fill: parts[j] }));
     const max = Math.max(0, ...(many ? slices.map(sl => sl.reduce((a, x) => a + x.v, 0)) : (slices[0] ?? []).map(x => x.v))) || 1;  // 값이 1보다 작아도 꽉 차게, 모두 0이면 1
     return (
-      <Frame keys={keys} title={title}>
-        <RadialBarChart data={data} innerRadius="18%" outerRadius="95%" startAngle={90} endAngle={-270} margin={MARGIN}>
+      <Frame keys={keys} title={title} round>
+        <RadialBarChart data={data} innerRadius="30%" outerRadius="95%" startAngle={90} endAngle={-270} barSize={many ? undefined : W_RING} margin={MARGIN}>
           <PolarAngleAxis type="number" domain={[0, max]} tick={false} axisLine={false} />
           {many ? s.labels.map((l, j) => <RadialBar key={j} dataKey={`p${j}`} name={l} stackId="a" fill={parts[j]} isAnimationActive={false} />)
-            : <RadialBar dataKey="v" name={sets[0]?.label} background={{ fill: "var(--line)", fillOpacity: 0.35 }} cornerRadius={4} isAnimationActive={false}>{parts.map((c, j) => <Cell key={j} fill={c} />)}</RadialBar>}
+            : <RadialBar dataKey="v" name={sets[0]?.label} background={{ fill: "var(--line)" }} cornerRadius={R_RING} className={RAISE} isAnimationActive={false}>{parts.map((c, j) => <Cell key={j} fill={c} />)}</RadialBar>}
           <Tooltip {...TIP} />
         </RadialBarChart>
       </Frame>
     );
   }
   const angles = card.auto?.clockwise ? { startAngle: 90, endAngle: -270 } : {};  // 12시부터 시계 방향
+  const donut = type === "doughnut" && !many;
   const radii = ringRadii(sets.length, type === "doughnut" ? 30 : 0, 95), top = Math.max(0, ...slices.flat().map(x => x.v)) || 1;
   return (
     <Frame keys={keys} title={title}>
       <PieChart margin={MARGIN}>
+        {donut ? <Pie {...PLATE} className={RAISE} /> : null}{/* svg 49: 솟은 바탕 원은 조각 뒤에만, 조각은 평평(링 두께가 가려지지 않게) */}
         {slices.map((sl, i) => {
-          const inner = `${type === "doughnut" && !many ? 59 : radii[i].inner}%`, outer = `${radii[i].outer}%`;
-          if (type === "polar") {  // 장미: 칸 각도는 같고 반지름이 값에 비례
+          const inner = donut ? DONUT.inner : `${radii[i].inner}%`, outer = donut ? DONUT.outer : many || type === "polar" ? `${radii[i].outer}%` : PIE_OUTER;
+          if (type === "polar") {  // 장미(svg 29): 칸 각도는 같고 반지름이 값에 비례, 조각이 솟는다
             return (
-              <Pie key={i} {...angles} data={sl.map(x => ({ ...x, v: 1 }))} dataKey="v" nameKey="label" innerRadius={inner} outerRadius={outer} stroke="var(--card)" strokeWidth={2} isAnimationActive={false}
+              <Pie key={i} {...angles} data={sl.map(x => ({ ...x, v: 1 }))} dataKey="v" nameKey="label" innerRadius={inner} outerRadius={outer} stroke="var(--card)" strokeWidth={W_SLICE} className={RAISE} isAnimationActive={false}
                 shape={(p: PieSectorShapeProps) => <Sector {...p} outerRadius={p.innerRadius + ((p.outerRadius - p.innerRadius) * (p.payload as Slice).real) / top} />}>
                 {parts.map((c, j) => <Cell key={j} fill={c} fillOpacity={fade(i)} />)}
               </Pie>
             );
           }
           return (
-            <Pie key={i} {...angles} data={sl} dataKey="v" nameKey="label" innerRadius={inner} outerRadius={outer} cornerRadius={type === "doughnut" ? 4 : 0} stroke="var(--card)" strokeWidth={2} isAnimationActive={false}>
+            <Pie key={i} {...angles} data={sl} dataKey="v" nameKey="label" innerRadius={inner} outerRadius={outer} stroke="var(--card)" strokeWidth={W_SLICE} className={type === "pie" && !many ? RAISE : undefined} isAnimationActive={false}>
               {parts.map((c, j) => <Cell key={j} fill={c} fillOpacity={fade(i)} />)}
             </Pie>
           );
@@ -282,33 +323,33 @@ function RoundChart({ card, s, colors }: { card: SCard; s: Series; colors: Theme
 function OneSeries({ card, s, colors, win }: { card: SCard; s: Series; colors: ThemeColors; win?: Span | null }) {
   const type = card.view.type, d = s.datasets[0];
   if (!d) return null;
-  const c = pickColor(card, "series", d.label, colors, 0), bar = { yAxisId: "y", maxBarSize: 44, isAnimationActive: false } as const;
+  const c = pickColor(card, "series", d.label, colors, 0), bar = { yAxisId: "y", isAnimationActive: false } as const;
   let rows: Row[], body: ReactNode, tip: object = TIP, right = false;
   if (type === "waterfall") {
     const w = waterfallRows(d.values);
     rows = s.labels.map((label, j) => ({ label, lo: w[j].base, hi: w[j].base + w[j].size, v: Number(d.values[j]) || 0, end: w[j].end }));
     tip = { ...TIP, formatter: (_v: unknown, _n: unknown, item: { payload?: Row }) => [`${shownum(item.payload?.v)} (누적 ${shownum(item.payload?.end)})`, d.label] };
-    body = <Bar dataKey={(r: Row) => [r.lo, r.hi]} name={d.label} radius={2} {...bar}>{sliceWindow(w, win ?? null).map((x, j) => <Cell key={j} fill={x.up ? "var(--ok)" : "var(--err)"} />)}</Bar>;
+    body = <Bar dataKey={(r: Row) => [r.lo, r.hi]} name={d.label} radius={R_STEP} barSize={W_WATERFALL} className={RAISE} {...bar}>{sliceWindow(w, win ?? null).map((x, j) => <Cell key={j} fill={x.up ? "var(--ok)" : "var(--err)"} />)}</Bar>;
   } else if (type === "pareto") {
     rows = paretoRows(s.labels, d.values);
     right = true;
-    body = [<Bar key="b" dataKey="v" name={d.label} fill={c} radius={[4, 4, 0, 0]} {...bar} />,
-      <Line key="l" dataKey="pct" yAxisId="y1" name="누적 %" type="linear" stroke="var(--muted)" strokeWidth={2} dot={{ r: 3, strokeWidth: 0, fill: "var(--muted)" }} isAnimationActive={false} />,
+    body = [<Bar key="b" dataKey="v" name={d.label} fill={c} radius={R_STEP} barSize={W_PARETO} className={RAISE} {...bar} />,
       ...(card.auto?.refs ?? []).filter(r => r.axis === "y1").map((r, k) => (
-        <ReferenceLine key={`ref${k}`} y={r.value} yAxisId="y1" stroke="var(--muted)" strokeDasharray="4 4" label={{ value: r.label, position: "insideTopRight", fill: "var(--muted)", fontSize: 11 }} />))];
+        <ReferenceLine key={`ref${k}`} y={r.value} yAxisId="y1" stroke="var(--muted)" strokeDasharray={REF_DASH} label={{ value: r.label, position: "insideTopRight", fill: "var(--muted)", fontSize: 11 }} />)),
+      <Line key="l" dataKey="pct" yAxisId="y1" name="누적 %" type="linear" stroke="var(--muted)" strokeWidth={W_SUB} fill="var(--card)" isAnimationActive={false} />];  // 21: 점은 Recharts 기본(속은 바탕색)
   } else if (type === "trendline") {
     const f = fitLine(d.values);
     rows = s.labels.map((label, j) => ({ label, v: d.values[j], fit: f ? f.a + f.b * j : null }));
-    body = [<Scatter key="p" dataKey="v" name={d.label} yAxisId="y" fill={c} isAnimationActive={false} />,
-      f ? <Line key="f" dataKey="fit" name="추세선" yAxisId="y" type="linear" stroke="var(--muted)" strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} /> : null];
-  } else {
+    body = [<Scatter key="p" dataKey="v" name={d.label} yAxisId="y" fill={c} className={RAISE} isAnimationActive={false} />,
+      f ? <Line key="f" dataKey="fit" name="추세선" yAxisId="y" type="linear" stroke="var(--muted)" strokeWidth={W_DASH} strokeDasharray={DASH} dot={false} isAnimationActive={false} /> : null];
+  } else {  // 롤리팝(svg 22): 평평한 줄기 + 솟은 점
     rows = s.labels.map((label, j) => ({ label, v: d.values[j] }));
-    body = [<Bar key="s" dataKey="v" name={d.label} fill={c} barSize={2} {...bar} />, <Scatter key="d" dataKey="v" name={d.label} yAxisId="y" fill={c} isAnimationActive={false} />];
+    body = [<Bar key="s" dataKey="v" name={d.label} fill={c} barSize={W_LINE} {...bar} />, <Scatter key="d" dataKey="v" name={d.label} yAxisId="y" fill={c} shape={(q: { cx?: number; cy?: number }) => <circle cx={q.cx} cy={q.cy} r={R_LOLLI} fill={c} />} className={RAISE} isAnimationActive={false} />];
   }
   rows = sliceWindow(rows, win ?? null);  // 받침·누적·추세선은 위에서 전체로 계산한 뒤 자른다
   return (
     <Frame keys={right ? [{ name: d.label, color: c }, { name: "누적 %", color: "var(--muted)" }] : undefined}>
-      <ComposedChart data={rows} margin={MARGIN} barCategoryGap="28%">
+      <ComposedChart data={rows} margin={MARGIN}>
         <CartesianGrid stroke="var(--line)" vertical={false} />
         <XAxis dataKey="label" {...AXIS} />
         <YAxis yAxisId="y" {...AXIS} tickFormatter={card.auto ? (v: unknown) => shortNum(v, card.auto!.num) : tickNum} width={48} />
@@ -330,7 +371,7 @@ function HexCells({ hex, color }: { hex: NonNullable<Points["hex"]>; color: stri
   return (
     <g>
       {hex.cells.map(([u, v, n], i) => (
-        <polygon key={i} points={hexVertices(u, v, 1 / hex.cols).map(([a, b]) => `${x(xlo + a * (xhi - xlo)) ?? 0},${y(ylo + b * (yhi - ylo)) ?? 0}`).join(" ")} fill={color} fillOpacity={0.15 + (0.85 * n) / top}>
+        <polygon key={i} points={hexVertices(u, v, 1 / hex.cols).map(([a, b]) => `${x(xlo + a * (xhi - xlo)) ?? 0},${y(ylo + b * (yhi - ylo)) ?? 0}`).join(" ")} fill={color} fillOpacity={0.15 + (0.85 * n) / top} stroke="var(--card)" strokeWidth={W_HEX}>
           <title>{`${n.toLocaleString()}개`}</title>
         </polygon>
       ))}
@@ -344,23 +385,23 @@ export function PointsChart({ card, colors, xWin, tier, active }: { card: SCard;
   const [lo, hi] = p.size_range ?? [0, 0], radius = (v: number) => hi > lo ? 3 + 17 * Math.sqrt((v - lo) / (hi - lo)) : 10;
   const groups = pointGroups(p).map((name, i) => {
     const c = pickColor(card, "series", name, colors, i), rows = p.points.filter(r => !p.groups.length || r[r.length - 1] === name);
-    return { name, c, data: rows.map(r => ({ x: r[0], y: r[1], r: bubble ? radius(r[2] as number) : tier?.r ?? 3 })) };
+    return { name, c, data: rows.map(r => ({ x: r[0], y: r[1], r: bubble ? radius(r[2] as number) : tier?.r ?? SCATTER_R })) };
   });
   const xs = p.points.map(r => r[0] as number), trend = view.trend && p.b != null && xs.length ? ([Math.min(...xs), Math.max(...xs)].map(x => ({ x, y: p.a! + p.b! * x })) as [{ x: number; y: number }, { x: number; y: number }]) : null;
   const keys: Key[] = [...groups.map(g => ({ name: g.name, color: g.c })), ...(trend ? [{ name: "추세선", color: "var(--muted)" }] : [])];
   const title = view.show_r && p.r != null ? `r = ${p.r.toFixed(3)} (${(p.n ?? 0).toLocaleString()}개)` : undefined;
   const shape = (o: number, stroke: boolean) => function Dot(props: { cx?: number; cy?: number; payload?: { r: number }; fill?: string }) {
-    return <circle cx={props.cx} cy={props.cy} r={props.payload?.r ?? 3} fill={props.fill} fillOpacity={o} stroke={stroke ? props.fill : "none"} />;
+    return <circle cx={props.cx} cy={props.cy} r={props.payload?.r ?? SCATTER_R} fill={props.fill} fillOpacity={o} stroke={stroke ? "var(--card)" : "none"} strokeWidth={stroke ? W_BUBBLE : undefined} />;
   };
   return (
     <Frame keys={keys.length > 1 ? keys : undefined} title={title}>
       <ScatterChart margin={TITLED}>
-        <CartesianGrid stroke="var(--line)" vertical={false} />
+        <CartesianGrid stroke="var(--line)" />
         <XAxis type="number" dataKey="x" name={p.x} {...AXIS} tickFormatter={tickNum} domain={xWin ?? hex?.x ?? ["auto", "auto"]} allowDataOverflow={!!xWin} label={xTitle(p.x)} />
         <YAxis type="number" dataKey="y" name={p.y} {...AXIS} tickFormatter={tickNum} domain={view.ranges?.y ? domainOf(view.ranges.y) : hex?.y ?? ["auto", "auto"]} allowDataOverflow={ranged(view.ranges?.y)} label={yTitle(p.y)} width={56} />
-        {groups.map((g, i) => <Scatter key={i} name={g.name} data={g.data} fill={g.c} shape={hex ? () => <g /> : shape(tier?.alpha ?? (bubble ? 0.55 : 0.7), bubble)} isAnimationActive={false} />)}
+        {groups.map((g, i) => <Scatter key={i} name={g.name} data={g.data} fill={g.c} shape={hex ? () => <g /> : shape(tier?.alpha ?? (bubble ? BUBBLE_ALPHA : SCATTER_ALPHA), bubble)} className={RAISE} isAnimationActive={false} />)}
         {hex ? <Customized component={<HexCells hex={hex} color={groups[0].c} />} /> : null}
-        {trend ? <ReferenceLine segment={trend} stroke="var(--muted)" strokeDasharray="6 4" strokeWidth={2} ifOverflow={xWin ? "hidden" : "extendDomain"} /> : null}
+        {trend ? <ReferenceLine segment={trend} stroke="var(--muted)" strokeDasharray={DASH} strokeWidth={W_DASH} ifOverflow={xWin ? "hidden" : "extendDomain"} /> : null}
         <Tooltip {...TIP} cursor={{ strokeDasharray: "3 3" }} />
       </ScatterChart>
     </Frame>
@@ -391,9 +432,10 @@ function BoxShape({ b, main, second }: { b: NonNullable<Ana["box"]>; main: strin
   const low = b.low ?? b.q1, high = b.high ?? b.q3;
   return (
     <g>
-      <rect x={at(low)} y={cy - 1} width={Math.max(1, at(high) - at(low))} height={2} fill="var(--muted)"><title>{`수염: ${shownum(low)} ~ ${shownum(high)}`}</title></rect>
-      <rect x={at(b.q1)} y={cy - h / 2} width={Math.max(1, at(b.q3) - at(b.q1))} height={h} fill={main} fillOpacity={0.85} stroke={main}><title>{`Q1~Q3: ${shownum(b.q1)} ~ ${shownum(b.q3)}`}</title></rect>
-      <rect x={at(b.median) - 1.5} y={cy - h / 2} width={3} height={h} fill={second}><title>{`중앙값: ${shownum(b.median)}`}</title></rect>
+      <line x1={at(low)} x2={at(high)} y1={cy} y2={cy} stroke="var(--muted)" strokeWidth={W_WHISKER}><title>{`수염: ${shownum(low)} ~ ${shownum(high)}`}</title></line>
+      {[low, high].map((v, i) => <line key={i} x1={at(v)} x2={at(v)} y1={cy - CAP / 2} y2={cy + CAP / 2} stroke="var(--muted)" strokeWidth={W_WHISKER} strokeLinecap="round" />)}
+      <rect x={at(b.q1)} y={cy - h / 2} width={Math.max(1, at(b.q3) - at(b.q1))} height={h} rx={R_BOX} fill={main} className={RAISE}><title>{`Q1~Q3: ${shownum(b.q1)} ~ ${shownum(b.q3)}`}</title></rect>
+      <line x1={at(b.median)} x2={at(b.median)} y1={cy - h / 2} y2={cy + h / 2} stroke={second} strokeWidth={W_MEDIAN}><title>{`중앙값: ${shownum(b.median)}`}</title></line>
     </g>
   );
 }
@@ -410,7 +452,7 @@ function HeatCells({ d, main, second }: { d: Ana; main: string; second: string }
         const cx = x(j) ?? 0, cy = y(i) ?? 0;
         return (
           <g key={`${i}-${j}`}>
-            <rect x={cx - w / 2 + 1} y={cy - h / 2 + 1} width={Math.max(0, w - 2)} height={Math.max(0, h - 2)} fill={r == null ? "var(--line)" : r >= 0 ? main : second} fillOpacity={r == null ? 1 : 0.1 + 0.9 * Math.abs(r)}>
+            <rect x={cx - w / 2 + 1} y={cy - h / 2 + 1} width={Math.max(0, w - 2)} height={Math.max(0, h - 2)} rx={R_CELL} fill={r == null ? "var(--line)" : r >= 0 ? main : second} fillOpacity={r == null ? 1 : 0.1 + 0.9 * Math.abs(r)}>
               <title>{`${cols[i]} × ${cols[j]}: ${r == null ? "-" : r.toFixed(3)}`}</title>
             </rect>
             <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize={font} fill={r != null && Math.abs(r) > 0.55 ? "#fff" : "var(--text)"} pointerEvents="none">
@@ -435,7 +477,7 @@ function GridCells({ nRows, nCols, cell }: { nRows: number; nCols: number; cell:
         const c = cell(i, j), cx = x(j) ?? 0, cy = y(i) ?? 0;
         return (
           <g key={`${i}-${j}`}>
-            <rect x={cx - w / 2 + 1} y={cy - h / 2 + 1} width={Math.max(0, w - 2)} height={Math.max(0, h - 2)} fill={c.fill} fillOpacity={c.opacity}><title>{c.title}</title></rect>
+            <rect x={cx - w / 2 + 1} y={cy - h / 2 + 1} width={Math.max(0, w - 2)} height={Math.max(0, h - 2)} rx={R_GRID_CELL} fill={c.fill} fillOpacity={c.opacity}><title>{c.title}</title></rect>
             <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize={font} fill={c.light ? "#fff" : "var(--text)"} pointerEvents="none">{c.text}</text>
           </g>
         );
@@ -471,11 +513,11 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
     const rows = tail ? [...(under > 0 ? [{ label: `P${tail[0] * 100} 미만(${under}건)`, n: under, edge: true }] : []), ...inner, ...(over > 0 ? [{ label: `P${tail[1] * 100} 초과(${over}건)`, n: over, edge: true }] : [])] : inner;
     return (
       <Frame>
-        <ComposedChart data={rows} margin={TITLED} barCategoryGap="4%" barGap={0}>
+        <ComposedChart data={rows} margin={TITLED} barCategoryGap={1}>
           <CartesianGrid stroke="var(--line)" vertical={false} />
           <XAxis dataKey="label" {...AXIS} label={xTitle(d.column)} />
           <YAxis {...AXIS} tickFormatter={tickNum} label={yTitle("행 수")} width={56} />
-          <Bar dataKey="n" name="행 수" fill={main} radius={[2, 2, 0, 0]} maxBarSize={120} isAnimationActive={false}>
+          <Bar dataKey="n" name="행 수" fill={main} radius={[R_HIST, R_HIST, 0, 0]} isAnimationActive={false}>
             {rows.map((r, i) => <Cell key={i} fill={r.edge ? "var(--line)" : main} />)}
           </Bar>
           <Tooltip {...TIP} cursor={{ fill: "var(--line)", fillOpacity: 0.4 }} />
@@ -486,7 +528,7 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
   if (view === "box") {
     const b = d.box!, nums = [b.low, b.high, b.q1, b.q3, b.median].filter((v): v is number => v != null);
     return (
-      <Frame keys={[{ name: "수염 (1.5×IQR 안의 최소~최대)", color: "var(--muted)" }, { name: "Q1~Q3", color: main, opacity: 0.85 }, { name: "중앙값", color: second }]}>
+      <Frame keys={[{ name: "수염 (1.5×IQR 안의 최소~최대)", color: "var(--muted)" }, { name: "Q1~Q3", color: main }, { name: "중앙값", color: second }]}>
         <ComposedChart data={[{ label: d.column }]} layout="vertical" margin={MARGIN}>
           <CartesianGrid stroke="var(--line)" horizontal={false} />
           <XAxis type="number" {...AXIS} tickFormatter={tickNum} domain={[Math.min(...nums), Math.max(...nums)]} />
@@ -503,11 +545,11 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
     const bars = sliceWindow(labels.map((label, i) => ({ label, n: data[i], other: label === "그 밖" || label === "(빈 값)" })), win ?? null);
     return (
       <Frame>
-        <ComposedChart data={bars} margin={TITLED} barCategoryGap="28%">
+        <ComposedChart data={bars} margin={TITLED}>
           <CartesianGrid stroke="var(--line)" vertical={false} />
           <XAxis dataKey="label" {...AXIS} />
           <YAxis {...AXIS} tickFormatter={tickNum} label={yTitle("행 수")} width={56} />
-          <Bar dataKey="n" name="행 수" radius={[4, 4, 0, 0]} maxBarSize={44} isAnimationActive={false}>
+          <Bar dataKey="n" name="행 수" radius={R_BAR} barSize={W_BAR} className={RAISE} isAnimationActive={false}>
             {bars.map((b, i) => <Cell key={i} fill={b.other ? "var(--line)" : main} />)}
           </Bar>
           <Tooltip {...TIP} cursor={{ fill: "var(--line)", fillOpacity: 0.4 }} />
@@ -532,10 +574,10 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
     return (
       <Frame>
         <ScatterChart margin={TITLED}>
-          <CartesianGrid stroke="var(--line)" vertical={false} />
+          <CartesianGrid stroke="var(--line)" />
           <XAxis type="number" dataKey="x" name={d.x} {...AXIS} tickFormatter={tickNum} domain={win ?? ["auto", "auto"]} allowDataOverflow={!!win} label={xTitle(d.x)} />
           <YAxis type="number" dataKey="y" name={d.y} {...AXIS} tickFormatter={tickNum} domain={["auto", "auto"]} label={yTitle(d.y)} width={56} />
-          <Scatter data={d.points!.map(([x, y]) => ({ x, y }))} fill={main} fillOpacity={tier?.alpha ?? 0.55} shape={(p: { cx?: number; cy?: number }) => <circle cx={p.cx} cy={p.cy} r={tier?.r ?? 2.5} fill={main} fillOpacity={tier?.alpha ?? 0.55} />} isAnimationActive={false} />
+          <Scatter data={d.points!.map(([x, y]) => ({ x, y }))} fill={main} fillOpacity={tier?.alpha ?? SCATTER_ALPHA} shape={(p: { cx?: number; cy?: number }) => <circle cx={p.cx} cy={p.cy} r={tier?.r ?? SCATTER_R} fill={main} fillOpacity={tier?.alpha ?? SCATTER_ALPHA} />} className={RAISE} isAnimationActive={false} />
           <Tooltip {...TIP} cursor={{ strokeDasharray: "3 3" }} />
         </ScatterChart>
       </Frame>
@@ -558,7 +600,7 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
           <CartesianGrid stroke="var(--line)" vertical={false} />
           <XAxis dataKey="label" {...AXIS} />
           <YAxis {...AXIS} tickFormatter={pct100} domain={[0, 1]} label={yTitle("평균 유지율")} width={56} />
-          <Line dataKey="v" name="평균 유지율" type="monotone" stroke={main} strokeWidth={2} dot={rows.length > 24 ? false : { r: 3, strokeWidth: 0, fill: main }} connectNulls isAnimationActive={false} />
+          <Line dataKey="v" name="평균 유지율" type="monotone" stroke={main} strokeWidth={W_LINE} dot={rows.length > 24 ? false : { ...DOT, stroke: main }} className={RAISE} connectNulls isAnimationActive={false} />
           <Tooltip {...TIP} formatter={(v: unknown) => `${(Number(v) * 100).toFixed(1)}%`} />
         </ComposedChart>
       </Frame>
@@ -571,31 +613,31 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
     };
     return (
       <Frame>
-        <ComposedChart data={d.segments!} margin={TITLED} barCategoryGap="28%">
+        <ComposedChart data={d.segments!} margin={TITLED}>
           <CartesianGrid stroke="var(--line)" vertical={false} />
           <XAxis dataKey="segment" {...AXIS} interval={0} />
           <YAxis {...AXIS} tickFormatter={tickNum} label={yTitle("사람 수")} width={56} />
-          <Bar dataKey="users" name="사람 수" fill={main} radius={[4, 4, 0, 0]} maxBarSize={44} isAnimationActive={false} />
+          <Bar dataKey="users" name="사람 수" fill={main} radius={R_BAR} barSize={W_BAR} className={RAISE} isAnimationActive={false} />
           <Tooltip {...TIP} formatter={tip} cursor={{ fill: "var(--line)", fillOpacity: 0.4 }} />
         </ComposedChart>
       </Frame>
     );
   }
   if (view === "pareto") {
-    const pr = sliceWindow((d.rows as AnaParetoRow[]).map(r => ({ ...r, label: r.item })), win ?? null), refProps = { yAxisId: "y1", stroke: "var(--muted)", strokeDasharray: "4 4" };
+    const pr = sliceWindow((d.rows as AnaParetoRow[]).map(r => ({ ...r, label: r.item })), win ?? null), refProps = { yAxisId: "y1", stroke: "var(--muted)", strokeDasharray: REF_DASH };
     return (
       <Frame keys={[{ name: "A", color: main }, { name: "B", color: second }, { name: "C", color: "var(--muted)" }, { name: "누적 %", color: "var(--text)" }]}>
-        <ComposedChart data={pr} margin={TITLED} barCategoryGap="28%">
+        <ComposedChart data={pr} margin={TITLED}>
           <CartesianGrid stroke="var(--line)" vertical={false} />
           <XAxis dataKey="label" {...AXIS} />
           <YAxis yAxisId="y" {...AXIS} tickFormatter={tickNum} label={yTitle(d.agg === "count" ? "개수" : d.value)} width={56} />
           <YAxis yAxisId="y1" orientation="right" {...AXIS} domain={[0, 1]} tickFormatter={pct100} width={44} />
-          <Bar yAxisId="y" dataKey="v" name={d.agg === "count" ? "개수" : d.value} radius={[4, 4, 0, 0]} maxBarSize={44} isAnimationActive={false}>
+          <Bar yAxisId="y" dataKey="v" name={d.agg === "count" ? "개수" : d.value} radius={R_STEP} barSize={W_PARETO} className={RAISE} isAnimationActive={false}>
             {pr.map((r, i) => <Cell key={i} fill={GRADE_FILL(r.grade, main, second)} />)}
           </Bar>
-          <Line yAxisId="y1" dataKey="cum_share" name="누적 %" type="linear" stroke="var(--text)" strokeWidth={2} dot={pr.length > 24 ? false : { r: 3, strokeWidth: 0, fill: "var(--text)" }} isAnimationActive={false} />
           {d.a != null ? <ReferenceLine y={d.a} {...refProps} /> : null}
           {d.b != null ? <ReferenceLine y={d.b} {...refProps} /> : null}
+          <Line yAxisId="y1" dataKey="cum_share" name="누적 %" type="linear" stroke="var(--text)" strokeWidth={W_SUB} fill="var(--card)" isAnimationActive={false} />
           <Tooltip {...TIP} formatter={(v: unknown, n: unknown) => n === "누적 %" ? `${(Number(v) * 100).toFixed(1)}%` : shownum(v)} cursor={{ fill: "var(--line)", fillOpacity: 0.4 }} />
         </ComposedChart>
       </Frame>
@@ -619,8 +661,8 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
           <XAxis type="number" dataKey="x" {...AXIS} tickFormatter={tickNum} domain={["auto", "auto"]} label={xTitle(d.control ? `${d.control} 대비 차이` : "차이")} />
           <YAxis type="number" dataKey="y" {...AXIS} domain={[-0.5, ps.length - 0.5]} ticks={ticks} tickFormatter={(v: number) => names[v] ?? ""} interval={0} reversed width={80} />
           <ReferenceLine x={0} stroke="var(--text)" strokeWidth={1.5} />
-          <Scatter data={pts} fill={main} isAnimationActive={false} shape={(p: { cx?: number; cy?: number; payload?: { tip: string } }) => <circle cx={p.cx} cy={p.cy} r={5} fill={main}><title>{p.payload?.tip}</title></circle>}>
-            <ErrorBar dataKey="err" direction="x" stroke="var(--muted)" strokeWidth={1.5} width={6} />
+          <Scatter data={pts} fill={main} className={RAISE} isAnimationActive={false} shape={(p: { cx?: number; cy?: number; payload?: { tip: string } }) => <circle cx={p.cx} cy={p.cy} r={SCATTER_R} fill={main}><title>{p.payload?.tip}</title></circle>}>
+            <ErrorBar dataKey="err" direction="x" stroke="var(--text)" strokeWidth={ERR.w} width={ERR.width} />
           </Scatter>
         </ScatterChart>
       </Frame>
@@ -630,12 +672,13 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
     const rows = (d.pairs ?? []).map(p => ({ label: `${p.a} + ${p.b}`, v: p.lift }));
     return (
       <Frame>
-        <ComposedChart data={rows} layout="vertical" margin={TITLED} barCategoryGap="28%">
-          <CartesianGrid stroke="var(--line)" horizontal={false} />
-          <XAxis type="number" {...AXIS} tickFormatter={tickNum} label={xTitle("향상도")} />
+        <ComposedChart data={rows} layout="vertical" margin={TITLED}>
+          <XAxis type="number" {...AXIS} hide />
           <YAxis type="category" dataKey="label" {...AXIS} interval={0} width={120} />
-          <Bar dataKey="v" name="향상도" fill={main} radius={[0, 4, 4, 0]} maxBarSize={28} isAnimationActive={false} />
-          <ReferenceLine x={1} stroke="var(--muted)" strokeDasharray="4 4" />
+          <Bar dataKey="v" name="향상도" fill={main} radius={R_BAR} barSize={W_HBAR} background={TRACK} className={RAISE} isAnimationActive={false}>
+            <LabelList dataKey="v" position="right" {...TICK} formatter={tickNum} />
+          </Bar>
+          <ReferenceLine x={1} stroke="var(--muted)" strokeDasharray={REF_DASH} />
           <Tooltip {...TIP} cursor={{ fill: "var(--line)", fillOpacity: 0.4 }} />
         </ComposedChart>
       </Frame>
@@ -652,11 +695,11 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
     });
     return (
       <Frame>
-        <ComposedChart data={rows} margin={TITLED} barCategoryGap="28%">
+        <ComposedChart data={rows} margin={TITLED}>
           <CartesianGrid stroke="var(--line)" vertical={false} />
           <XAxis dataKey="label" {...AXIS} interval={0} />
           <YAxis {...AXIS} tickFormatter={tickNum} label={yTitle(d.value)} width={56} />
-          <Bar dataKey={(r: { lo: number; hi: number }) => [r.lo, r.hi]} name={d.value} radius={2} maxBarSize={56} isAnimationActive={false}>
+          <Bar dataKey={(r: { lo: number; hi: number }) => [r.lo, r.hi]} name={d.value} radius={R_STEP} barSize={W_WATERFALL} className={RAISE} isAnimationActive={false}>
             {rows.map((r, i) => <Cell key={i} fill={r.whole || r.v >= 0 ? main : second} />)}
           </Bar>
           <Tooltip {...TIP} formatter={(_v: unknown, _n: unknown, item: { payload?: { v: number } }) => shownum(item.payload?.v)} cursor={{ fill: "var(--line)", fillOpacity: 0.4 }} />
@@ -673,8 +716,8 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
           <CartesianGrid stroke="var(--line)" vertical={false} />
           <XAxis dataKey="label" {...AXIS} label={xTitle(UNIT_NAMES[d.unit ?? ""])} />
           <YAxis {...AXIS} tickFormatter={tickNum} label={yTitle(yName)} width={56} />
-          <Line dataKey="v" name="값" type="monotone" stroke={main} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-          <Line dataKey="trend" name="추세" type="monotone" stroke={second} strokeWidth={2} strokeDasharray="6 4" dot={false} isAnimationActive={false} />
+          <Line dataKey="v" name="값" type="monotone" stroke={main} strokeWidth={W_LINE} dot={false} className={RAISE} connectNulls isAnimationActive={false} />
+          <Line dataKey="trend" name="추세" type="monotone" stroke={second} strokeWidth={W_DASH} strokeDasharray={DASH} dot={false} isAnimationActive={false} />
           <Line dataKey="flag" name="이상 시점" stroke="none" dot={{ r: 5, strokeWidth: 0, fill: "var(--err)" }} activeDot={false} isAnimationActive={false} />
           <Tooltip {...TIP} />
         </ComposedChart>
@@ -685,11 +728,11 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
   if (view === "groups") {
     return (
       <Frame>
-        <ComposedChart data={rows} margin={TITLED} barCategoryGap="28%">
+        <ComposedChart data={rows} margin={TITLED}>
           <CartesianGrid stroke="var(--line)" vertical={false} />
           <XAxis dataKey="label" {...AXIS} label={xTitle(d.by)} />
           <YAxis {...AXIS} tickFormatter={tickNum} label={yTitle(yName)} width={56} />
-          <Bar dataKey="v" name={kit.aggName(d.agg ?? "")} fill={main} radius={[4, 4, 0, 0]} maxBarSize={44} isAnimationActive={false} />
+          <Bar dataKey="v" name={kit.aggName(d.agg ?? "")} fill={main} radius={R_BAR} barSize={W_BAR} className={RAISE} isAnimationActive={false} />
           <Tooltip {...TIP} cursor={{ fill: "var(--line)", fillOpacity: 0.4 }} />
         </ComposedChart>
       </Frame>
@@ -701,7 +744,7 @@ export function AnaChart({ d, view, main, second, kit, win, tail, tier }: { d: A
         <CartesianGrid stroke="var(--line)" vertical={false} />
         <XAxis dataKey="label" {...AXIS} label={xTitle(UNIT_NAMES[d.unit ?? ""])} />
         <YAxis {...AXIS} tickFormatter={tickNum} label={yTitle(yName)} width={56} />
-        <Line dataKey="v" name={kit.aggName(d.agg ?? "")} type="monotone" stroke={main} strokeWidth={2} dot={rows.length > 24 ? false : { r: 3, strokeWidth: 0, fill: main }} connectNulls isAnimationActive={false} />
+        <Line dataKey="v" name={kit.aggName(d.agg ?? "")} type="monotone" stroke={main} strokeWidth={W_LINE} dot={rows.length > 24 ? false : { ...DOT, stroke: main }} className={RAISE} connectNulls isAnimationActive={false} />
         <Tooltip {...TIP} />
       </ComposedChart>
     </Frame>

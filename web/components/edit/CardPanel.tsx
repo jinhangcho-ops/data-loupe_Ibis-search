@@ -4,6 +4,7 @@
 // dispatch({type:"cards"})로 직접 넣는다. 북극성은 dispatch({type:"meta"}). Esc나 [닫기]로 닫고, 접으면 오른쪽 띠 하나만 남는다(고르던 값은 그대로).
 import { useEffect, useRef, useState } from "react";
 import { columns as fetchColumns, cardRequest, computeCard } from "@/lib/api";
+import { gridItems, minHeight } from "@/components/grid/useDrag";
 import { moveCard, resizeCard } from "@/lib/calc";
 import { computedUpdate, plainCtx, useDash } from "@/lib/store";
 import type { Card, Columns } from "@/lib/types";
@@ -45,12 +46,12 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
   }, [table, schema]);
 
   const place = (key: keyof typeof NAMES, raw: string) => {
-    const v = +raw, [min, max] = LIMITS[key], top = key === "x" ? 12 - card.layout.w - 0 : max;
+    const v = +raw, min = key === "h" ? minHeight(card) : LIMITS[key][0], max = LIMITS[key][1], top = key === "x" ? 12 - card.layout.w - 0 : max;
     if (raw.trim() === "" || !Number.isInteger(v) || v < min || v > Math.min(max, top)) {
       return setErr(`${NAMES[key]}는 ${min}~${Math.min(max, top)} 사이의 정수로 적어 주세요. 이전 값은 그대로예요.`);
     }
     setErr("");
-    const items = state.dash?.cards.map(c => ({ id: c.id, layout: c.layout })) ?? [];
+    const items = gridItems(state.dash?.cards ?? []);
     const next = key === "w" || key === "h" ? resizeCard(items, card.id, key === "w" ? v : card.layout.w, key === "h" ? v : card.layout.h)
       : moveCard(items, card.id, { x: key === "x" ? v : card.layout.x, y: key === "y" ? v : card.layout.y });
     if (state.dash) dispatch({ type: "cards", cards: state.dash.cards.map(c => ({ ...c, layout: next[c.id] ?? c.layout })) });
@@ -112,7 +113,7 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
         <div className="prow">
           {(["w", "h", "x", "y"] as const).map(k => (
             <label key={k + card.layout[k]} className="hint pfield"><span>{{ w: "너비(칸)", h: "높이(칸)", x: "가로 위치", y: "세로 위치" }[k]}</span>
-              <input type="number" className="w-[4rem]" min={LIMITS[k][0]} max={k === "x" ? 12 - card.layout.w : LIMITS[k][1]} defaultValue={card.layout[k]}
+              <input type="number" className="w-[4rem]" min={k === "h" ? minHeight(card) : LIMITS[k][0]} max={k === "x" ? 12 - card.layout.w : LIMITS[k][1]} defaultValue={card.layout[k]}
                 onBlur={e => { if (+e.target.value !== card.layout[k]) place(k, e.target.value); }} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />
             </label>
           ))}

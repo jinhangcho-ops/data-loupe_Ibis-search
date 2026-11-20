@@ -105,7 +105,7 @@ def test_19c_tabs_and_steps_explained():
     html = read("index.html")
     # 표·SQL 탭은 안내 글 한 줄(.lead), 집계·차트 탭은 첫 카드 제목 줄의 한 줄 설명(.hint)
     for pane, mark, end, word in (("pane-rows", '<p class="lead">', "</p>", "행"), ("pane-summary", '<h3>컬럼 요약</h3><span class="hint">', "</span>", "개수·평균 같은 요약"),
-                                  ("pane-chart", '<h3>차트</h3><span class="hint" ', "</span>", "그림으로"), ("pane-sql", '<p class="lead">', "</p>", "SQL 문장")):
+                                  ("pane-chart", '<h3>차트</h3><span class="hint" ', "</span>", "바로 그려요"), ("pane-sql", '<p class="lead">', "</p>", "SQL 문장")):
         a = html.index(f'id="{pane}"')
         lead = html[a:html.index(end, a)]
         assert mark in lead and word in lead, pane

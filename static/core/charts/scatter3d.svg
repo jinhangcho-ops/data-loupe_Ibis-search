@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="3D 산점도 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#A3B1C6" flood-opacity="0.7"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.9"/>
+</filter>
+</defs>
+<polygon points="180,96 257.9,141 180,186 102.1,141" fill="#D3DAE5" />
+<polygon points="180,96 257.9,141 257.9,61 180,16" fill="#DCE2EA" />
+<polygon points="180,96 102.1,141 102.1,61 180,16" fill="#D8DEE7" />
+<line x1="206" y1="111" x2="128" y2="156" stroke="#CDD5E1"/>
+<line x1="154" y1="111" x2="232" y2="156" stroke="#CDD5E1"/>
+<line x1="232" y1="126" x2="154" y2="171" stroke="#CDD5E1"/>
+<line x1="128" y1="126" x2="206" y2="171" stroke="#CDD5E1"/>
+<line x1="170.2" y1="110.2" x2="170.2" y2="76.2" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="170.2" cy="110.2" r="1.6" fill="#8E9AAD"/>
+<circle cx="170.2" cy="76.2" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="170.9" y1="113.7" x2="170.9" y2="106.1" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="170.9" cy="113.7" r="1.6" fill="#8E9AAD"/>
+<circle cx="170.9" cy="106.1" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="157" y1="122.7" x2="157" y2="60.3" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="157" cy="122.7" r="1.6" fill="#8E9AAD"/>
+<circle cx="157" cy="60.3" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="172.2" y1="123.1" x2="172.2" y2="53.7" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="172.2" cy="123.1" r="1.6" fill="#8E9AAD"/>
+<circle cx="172.2" cy="53.7" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="162.8" y1="125" x2="162.8" y2="114.4" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="162.8" cy="125" r="1.6" fill="#8E9AAD"/>
+<circle cx="162.8" cy="114.4" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="220.8" y1="131.3" x2="220.8" y2="74.4" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="220.8" cy="131.3" r="1.6" fill="#8E9AAD"/>
+<circle cx="220.8" cy="74.4" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="199.5" y1="134.6" x2="199.5" y2="100.5" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="199.5" cy="134.6" r="1.6" fill="#8E9AAD"/>
+<circle cx="199.5" cy="100.5" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="207.3" y1="134.7" x2="207.3" y2="71.3" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="207.3" cy="134.7" r="1.6" fill="#8E9AAD"/>
+<circle cx="207.3" cy="71.3" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="202.9" y1="135" x2="202.9" y2="103.2" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="202.9" cy="135" r="1.6" fill="#8E9AAD"/>
+<circle cx="202.9" cy="103.2" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="176.4" y1="138.9" x2="176.4" y2="96.8" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="176.4" cy="138.9" r="1.6" fill="#8E9AAD"/>
+<circle cx="176.4" cy="96.8" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="116.8" y1="139.5" x2="116.8" y2="118.2" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="116.8" cy="139.5" r="1.6" fill="#8E9AAD"/>
+<circle cx="116.8" cy="118.2" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="135.6" y1="139.7" x2="135.6" y2="92.2" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="135.6" cy="139.7" r="1.6" fill="#8E9AAD"/>
+<circle cx="135.6" cy="92.2" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="236.3" y1="140" x2="236.3" y2="82.3" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="236.3" cy="140" r="1.6" fill="#8E9AAD"/>
+<circle cx="236.3" cy="82.3" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="216.3" y1="142.7" x2="216.3" y2="97.8" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="216.3" cy="142.7" r="1.6" fill="#8E9AAD"/>
+<circle cx="216.3" cy="97.8" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="195.6" y1="143.2" x2="195.6" y2="71.2" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="195.6" cy="143.2" r="1.6" fill="#8E9AAD"/>
+<circle cx="195.6" cy="71.2" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="148" y1="144.7" x2="148" y2="120.7" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="148" cy="144.7" r="1.6" fill="#8E9AAD"/>
+<circle cx="148" cy="120.7" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="238.3" y1="146.2" x2="238.3" y2="118.7" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="238.3" cy="146.2" r="1.6" fill="#8E9AAD"/>
+<circle cx="238.3" cy="118.7" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="147.6" y1="149.9" x2="147.6" y2="92.9" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="147.6" cy="149.9" r="1.6" fill="#8E9AAD"/>
+<circle cx="147.6" cy="92.9" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="169.9" y1="151.7" x2="169.9" y2="137" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="169.9" cy="151.7" r="1.6" fill="#8E9AAD"/>
+<circle cx="169.9" cy="137" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="210.4" y1="152.3" x2="210.4" y2="110.3" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="210.4" cy="152.3" r="1.6" fill="#8E9AAD"/>
+<circle cx="210.4" cy="110.3" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="166.4" y1="154.2" x2="166.4" y2="132.5" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="166.4" cy="154.2" r="1.6" fill="#8E9AAD"/>
+<circle cx="166.4" cy="132.5" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="190.4" y1="159" x2="190.4" y2="118.1" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="190.4" cy="159" r="1.6" fill="#8E9AAD"/>
+<circle cx="190.4" cy="118.1" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="155.9" y1="161.4" x2="155.9" y2="128.2" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="155.9" cy="161.4" r="1.6" fill="#8E9AAD"/>
+<circle cx="155.9" cy="128.2" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<line x1="189.2" y1="172.8" x2="189.2" y2="146.5" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="189.2" cy="172.8" r="1.6" fill="#8E9AAD"/>
+<circle cx="189.2" cy="146.5" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="173.5" y1="172.9" x2="173.5" y2="149" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="173.5" cy="172.9" r="1.6" fill="#8E9AAD"/>
+<circle cx="173.5" cy="149" r="4.5" fill="#E8803A" filter="url(#nm-raise)"/>
+<line x1="175.7" y1="174.6" x2="175.7" y2="156.1" stroke="#8E9AAD" stroke-opacity="0.5" stroke-dasharray="2 2"/>
+<circle cx="175.7" cy="174.6" r="1.6" fill="#8E9AAD"/>
+<circle cx="175.7" cy="156.1" r="4.5" fill="#3D6DF2" filter="url(#nm-raise)"/>
+</svg>

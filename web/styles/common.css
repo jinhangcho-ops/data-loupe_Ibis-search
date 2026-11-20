@@ -1,13 +1,18 @@
-/* 색: 밝게(기본, 흰 바탕에 짙은 청록)·어둡게(남색 회색 바탕에 청록). --accent-bg는 강조색의 옅은 바탕(고른 단계, 진행 중 작업). --c1~8은 차트 계열 색(색맹·대비 검사를 통과한 순서. 차례대로 쓴다). */
-:root { --bg:#f5f6f6; --card:#fff; --head:#fff; --line:#dedfdf; --text:#16191b; --muted:#5f666b; --faint:#9ba1a5; --accent:#11706f; --on-accent:#fff; --accent-bg:#dcefee; --accent-line:#a8d2d0;
-        --err:#c0392b; --warn:#8a5300; --ok:#1c7448; --dot:#2e9e6f; color-scheme:light; --sql-kw:#0b57d0; --sql-str:#a8461a;
+/* 색: 밝게(기본, 푸른 회색 바탕에 짙은 청록)·어둡게(남색 회색 바탕에 청록). --accent-bg는 강조색의 옅은 바탕(고른 단계, 진행 중 작업). --c1~8은 차트 계열 색(색맹·대비 검사를 통과한 순서. 차례대로 쓴다).
+   면은 그림자로 나눈다(neumorphism): 솟은 면은 --raise(카드)·--raise-sm(단추·칩), 눌린 면은 --press(입력 칸·고른 것). 빛은 왼쪽 위(--sh-l·--in-l), 그늘은 오른쪽 아래(--sh-d·--in-d). 솟은 면의 테두리는 --edge. */
+:root { --bg:#e6e9ef; --card:#f1f3f7; --head:#f1f3f7; --line:#d5dae3; --text:#1c2230; --muted:#586174; --faint:#8b93a3; --accent:#11706f; --on-accent:#fff; --accent-bg:#d8e9ea; --accent-line:#a8d2d0;
+        --edge:#fff; --sh-d:rgb(150 160 182 / .45); --sh-l:rgb(255 255 255 / .85); --in-d:#c6ccd8; --in-l:#fff;
+        --raise:.375rem .375rem .75rem var(--sh-d), -.375rem -.375rem .75rem var(--sh-l); --raise-sm:.1875rem .1875rem .375rem var(--sh-d), -.1875rem -.1875rem .375rem var(--sh-l);
+        --press:inset .1875rem .1875rem .375rem var(--in-d), inset -.1875rem -.1875rem .375rem var(--in-l);
+        --err:#b53124; --warn:#8a5300; --ok:#1c7448; --dot:#2e9e6f; color-scheme:light; --sql-kw:#0b57d0; --sql-str:#a8461a;
         --c1:#00968f; --c2:#eb6834; --c3:#2a78d6; --c4:#eda100; --c5:#e87ba4; --c6:#008300; --c7:#6250d6; --c8:#e34948;
         --fs-xs:.75rem; --fs-sm:.8125rem; --fs-md:.875rem; --fs-lg:1rem; --fs-xl:1.25rem; --fs-2xl:1.75rem;
         --sp-1:.25rem; --sp-2:.5rem; --sp-3:.75rem; --sp-4:1rem; --sp-5:1.5rem; --sp-6:2rem;
-        --r-ctl:.375rem; --r-card:.625rem; --r-pill:62.4375rem; --h-sm:1.75rem; --h-md:2rem; --h-lg:2.5rem;
+        --r-ctl:.625rem; --r-card:1rem; --r-pill:62.4375rem; --h-sm:1.75rem; --h-md:2rem; --h-lg:2.5rem;
         --line-strong:#858c91; --rail-w:12.5rem; }
 /* 어둡게: 남색 회색 바탕에 청록 강조(선택한 줄은 청록 왼쪽 막대와 옅은 청록 바탕). 강조색 위 글자는 어둡게. */
-:root[data-theme=dark] { --bg:#161b20; --card:#1c2127; --head:#1c2127; --line:#2c333a; --text:#e6eaee; --muted:#8f979f; --faint:#626a72; --accent:#4cc4c8; --on-accent:#0e1d1f; --accent-bg:#17363a; --accent-line:#2a5f63;
+:root[data-theme=dark] { --edge:#2a3038; --sh-d:rgb(0 0 0 / .5); --sh-l:rgb(255 255 255 / .045); --in-d:#111418; --in-l:#2a3038;
+        --bg:#1b1f25; --card:#20252c; --head:#20252c; --line:#2d343c; --text:#e6eaee; --muted:#8f979f; --faint:#626a72; --accent:#4cc4c8; --on-accent:#0e1d1f; --accent-bg:#17363a; --accent-line:#2a5f63;
         --err:#f2777a; --warn:#e0a030; --ok:#5fc48b; --dot:#4cc4c8; color-scheme:dark; --sql-kw:#7cacf8; --sql-str:#e8a07a;
         --c1:#14a89f; --c2:#d95926; --c3:#3987e5; --c4:#c98500; --c5:#d55181; --c6:#008300; --c7:#9085e9; --c8:#e66767; --line-strong:#6f7880; }
 * { box-sizing:border-box; }
@@ -23,7 +28,8 @@ h3 { font-size:var(--fs-md); margin:0 0 .625rem; }
 input, select, textarea, button { font:inherit; }
 /* 조작 칸 높이 세 단계: 작게 --h-sm(줄 안 작은 단추), 보통 --h-md(입력 칸·고르기 칸·단추), 크게 --h-lg(탭·화면의 주 단추) */
 /* 입력 칸·단추: 위아래 여백 .28125rem + 글줄 1.3125rem + 선 2px = --h-md(2rem) */
-input, select, textarea { padding:.28125rem .625rem; border:1px solid var(--line-strong); border-radius:var(--r-ctl); width:100%; background:var(--card); color:var(--text); }
+input, select, textarea { padding:.28125rem .625rem; border:1px solid transparent; border-radius:var(--r-ctl); width:100%; background:var(--bg); color:var(--text); }
+:where(input:not([type=checkbox], [type=radio], [type=range], [type=color]), select, textarea) { box-shadow:var(--press); }  /* 입력 칸은 눌린 면. :where라 바탕 없는 칸(.q input 등)의 box-shadow:none이 이긴다 */
 :where(select:not([multiple])) { height:var(--h-md); }  /* 고르기 칸은 엔진이 글줄 높이를 따로 잡아 [아주 크게]에서 2px 모자랐다 */
 input:focus, select:focus, textarea:focus { outline:.125rem solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset:0; border-color:var(--accent); }
 /* 버튼: 기본은 강조색으로 채운 주 동작(한 영역에 하나). .btn은 테두리만(보조 동작), .ghost는 글자만, .btn.k는 검게 채움. 모서리는 각지게(알약은 상태 칩에만). */
@@ -35,10 +41,11 @@ button.ghost { background:none; border-color:transparent; color:var(--muted); pa
 input[type=checkbox], input[type=radio] { width:1rem !important; height:1rem !important; padding:0; flex:none; }  /* 곳곳의 style="width:auto"보다 앞서게 */
 label:has(> input[type=checkbox]), label:has(> input[type=radio]), label.check { min-height:1.5rem; }
 label:has(> input[type=checkbox]):not(.check), label:has(> input[type=radio]):not(.check) { display:inline-flex; align-items:center; gap:.25rem; }  /* 줄 안 라벨도 높이가 서게 */
-summary { padding:.125rem 0; }
+summary { padding:.125rem 0; cursor:pointer; color:var(--muted); font-weight:600; }
+details[open] > summary { color:var(--text); }
 .btn { background:var(--card); color:var(--text); border:1px solid var(--line); height:var(--h-md); padding:0 .875rem; display:inline-flex; align-items:center; gap:.5rem; }
-.btn:hover { border-color:var(--muted); }
-.btn, .ib, .ghost, .bcard, .step, .btype, .rail a, .subnav button, .tabs2 button { transition: border-color .15s, background-color .15s, color .15s; }
+.btn:hover { color:var(--accent); }
+.btn, .ib, .ghost, .bcard, .step, .btype, .rail a, .subnav button, .tabs2 button { transition: border-color .15s, background-color .15s, color .15s, box-shadow .15s; }
 .btn.k { background:var(--text); border-color:var(--text); color:var(--card); }
 .btn.p { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
 .ib { width:var(--h-md); height:var(--h-md); padding:0; border:1px solid var(--line); border-radius:var(--r-ctl); background:var(--card); color:var(--muted); display:inline-grid; place-items:center; }
@@ -46,7 +53,7 @@ summary { padding:.125rem 0; }
 .row { display:flex; gap:.375rem; margin-bottom:.375rem; }
 .row input { flex:1; min-width:0; }
 .tabs label { margin-right:.75rem; }
-.hint { color:var(--muted); font-size:var(--fs-xs); margin:.125rem 0 .375rem; }
+.hint { color:var(--muted); font-size:var(--fs-xs); margin:var(--sp-1) 0 var(--sp-2); }
 details.hint > summary { padding:.1875rem 0; }  /* .75rem 글자에서도 누를 자리가 1.5rem 이상 */
 .err { color:var(--err); font-size:var(--fs-xs); min-height:1rem; }
 .ok { color:var(--ok); font-size:var(--fs-xs); min-height:1rem; }
@@ -57,16 +64,16 @@ details.hint > summary { padding:.1875rem 0; }  /* .75rem 글자에서도 누를
 
 /* 왼쪽 메뉴(status.html nav.rail, Next TopBar): 앱 이름, 화면 바로가기, 아래쪽 [설정]·화면 모드. 메뉴는 고정이고 내용은 body의 왼쪽 여백(--rail-w) 오른쪽에 그대로 놓인다(세로 계산이 그대로 돈다). 메뉴가 없는 화면(차트 섬)은 여백도 없다. */
 body:has(.rail) { padding-left:var(--rail-w); }
-.rail { position:fixed; left:0; top:0; bottom:0; z-index:60; width:var(--rail-w); display:flex; flex-direction:column; gap:var(--sp-1); padding:var(--sp-3) var(--sp-2); background:var(--card); border-right:1px solid var(--line); overflow-y:auto; }
+.rail { position:fixed; left:0; top:0; bottom:0; z-index:60; width:var(--rail-w); display:flex; flex-direction:column; gap:var(--sp-1); padding:var(--sp-3) var(--sp-2); background:var(--bg); border-right:1px solid var(--edge); box-shadow:.25rem 0 .75rem var(--sh-d); overflow-y:auto; }
 .rail-name { display:flex; align-items:center; gap:var(--sp-3); min-height:var(--h-lg); padding:0 var(--sp-3); margin-bottom:var(--sp-2); font-size:var(--fs-lg); font-weight:700; white-space:nowrap; }
 .rail a, .rail .rail-btn { display:flex; align-items:center; gap:var(--sp-3); min-height:var(--h-lg); padding:0 var(--sp-3); border:0; border-radius:var(--r-ctl); background:none; color:var(--muted); text-decoration:none; font-weight:500; white-space:nowrap; width:100%; }
-.rail a:hover, .rail .rail-btn:hover { background:var(--bg); color:var(--text); }
-.rail a.on { background:var(--accent-bg); color:var(--accent); font-weight:700; }
+.rail a:hover, .rail .rail-btn:hover { box-shadow:var(--raise-sm); color:var(--text); }
+.rail a.on { box-shadow:var(--press); color:var(--accent); font-weight:700; }
 .rail svg { flex:none; }
 .rail-foot { margin-top:auto; display:flex; flex-direction:column; gap:var(--sp-1); align-items:flex-start; }
 .rail-foot #theme { margin-left:var(--sp-2); }
 /* 위쪽 줄: 연결 이름, 점유율, 진행 중 작업, 업데이트, 크기 조절. 모든 화면이 같이 쓴다(status.html, Next는 TopBar.tsx). */
-.topbar { position:sticky; top:0; z-index:50; min-height:3.25rem; flex:none; display:flex; align-items:center; gap:1.25rem; padding:0 1.5rem; background:var(--card); border-bottom:1px solid var(--line); }
+.topbar { position:sticky; top:0; z-index:50; min-height:3.25rem; flex:none; display:flex; align-items:center; gap:1.25rem; padding:0 1.5rem; background:var(--bg); border-bottom:1px solid var(--edge); box-shadow:0 .25rem .5rem -.125rem var(--sh-d); }
 .crumb { display:flex; align-items:center; gap:.5625rem; font-size:var(--fs-md); font-weight:700; min-width:min(6.875rem, 20vw); max-width:clamp(10rem, 24vw, 26.25rem); }
 .crumb span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .crumb i { width:.5rem; height:.5rem; border-radius:50%; background:var(--faint); flex:none; }
@@ -110,14 +117,14 @@ td.nest .nest-full { margin:0; font:var(--fs-xs)/1.4 Consolas, ui-monospace, mon
 /* 결과가 크고 설정은 오른쪽 패널인 배치(쿼리·분석·수집): .work = .results + 경계 + .side
    화면(.app)은 창 높이의 세로 묶음이고, 위쪽 줄·탭 줄을 뺀 남은 높이를 .work·.board-view가 채운다(창 크기를 바꾸면 따라 바뀐다).
    패널 너비는 끌어서 정한 값(--panel)이 없으면 창 너비에 비례(28%, 300~32.5rem)하고, 어느 쪽이든 창의 60%를 넘지 않는다. */
-.app { background:var(--card); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+.app { background:var(--bg); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 .work { display:grid; grid-template-columns:minmax(0, 1fr) 1rem min(var(--panel, clamp(18.75rem, 28vw, 32.5rem)), calc((100vw - var(--rail-w)) * .6)); flex:1; min-height:0; }
 .work.closed { grid-template-columns:minmax(0, 1fr) 2.5rem; }
 .work.closed > :is(.side, .grip-x) { display:none; }
 .results { display:flex; flex-direction:column; min-width:0; min-height:0; }
 .tool { display:flex; align-items:center; gap:.625rem; padding:1.125rem 1.75rem .75rem; }
-.q { flex:1; height:var(--h-md); border:1px solid var(--line-strong); border-radius:var(--r-card); display:flex; align-items:center; gap:.625rem; padding:0 1rem; color:var(--muted); }
-.q input { border:0; padding:0; height:100%; background:none; outline:0; }
+.q { flex:1; height:var(--h-md); border:1px solid transparent; border-radius:var(--r-card); box-shadow:var(--press); display:flex; align-items:center; gap:.625rem; padding:0 1rem; color:var(--muted); }
+.q input { border:0; padding:0; height:100%; background:none; outline:0; box-shadow:none; }
 .q:focus-within { border-color:var(--accent); outline:.125rem solid color-mix(in srgb, var(--accent) 45%, transparent); }
 .big { padding:.125rem 1.75rem .625rem; display:flex; align-items:baseline; gap:.875rem; min-width:0; }
 .big b { font-size:var(--fs-2xl); font-weight:700; letter-spacing:-.025em; white-space:nowrap; }
@@ -131,12 +138,12 @@ td.nest .nest-full { margin:0; font:var(--fs-xs)/1.4 Consolas, ui-monospace, mon
 .pager label { display:flex; align-items:center; gap:.375rem; white-space:nowrap; font-size:var(--fs-sm); }
 .pager input[type=checkbox] { width:1rem; height:1rem; }
 .drop { position:relative; }
-.drop .pop { position:absolute; right:0; top:2.5rem; z-index:40; background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:.375rem; box-shadow:0 .625rem 1.875rem rgb(15 25 30 / .14); display:flex; flex-direction:column; min-width:9.375rem; }
+.drop .pop { position:absolute; right:0; top:calc(100% + var(--sp-1)); z-index:40; background:var(--card); border:1px solid var(--line); border-radius:var(--r-card); padding:.375rem; box-shadow:0 .625rem 1.875rem rgb(15 25 30 / .14); display:flex; flex-direction:column; min-width:9.375rem; }
 .drop .pop button { min-height:var(--h-md); background:none; border:0; color:var(--text); text-align:left; border-radius:var(--r-card); font-weight:500; }
 .drop .pop button:hover { background:var(--accent-bg); }
 
 /* 오른쪽 설정 패널: 제목, 단계 카드 목록(.flow), 아래 버튼 */
-.side { background:var(--card); border-left:1px solid var(--line); box-shadow:-1rem 0 2.5rem rgb(15 25 30 / .08); display:flex; flex-direction:column; min-height:0; }
+.side { background:var(--card); border-left:1px solid var(--edge); box-shadow:-.375rem 0 .75rem var(--sh-d); display:flex; flex-direction:column; min-height:0; }
 .side > header { display:flex; align-items:center; justify-content:space-between; padding:.875rem 1.375rem .5rem; }
 .side > header h3 { margin:0; font-size:var(--fs-lg); }
 /* 패널 접기·펴기: 머리글의 › 단추로 접으면 오른쪽 가장자리에 제목과 ‹만 있는 띠가 남는다 */
@@ -163,7 +170,7 @@ td.nest .nest-full { margin:0; font:var(--fs-xs)/1.4 Consolas, ui-monospace, mon
 .step.open .sp .c { color:var(--accent); font-weight:600; }
 .step.open .edx { display:block; }
 .step.off { opacity:.55; }
-.step .edx :is(input, select, textarea) { border-color:var(--accent-line); background:var(--card); }
+.step .edx :is(input, select, textarea) { background:var(--card); }
 /* 조인 한 덩어리: 종류·테이블·× / 키 = 키 */
 .jb { display:flex; flex-direction:column; gap:.3125rem; padding:.5rem 0; border-bottom:1px dashed var(--accent-line); }
 .jb .r1 { display:grid; grid-template-columns:5.75rem minmax(0, 1fr) 1.75rem; gap:.375rem; align-items:center; }
@@ -198,7 +205,7 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .chip.more { padding:.125rem .625rem; color:var(--accent); cursor:pointer; }
 
 /* 화면 안의 큰 탭(쿼리: 탐색·SQL·지표·대시보드, 분석: 전처리·분석). 탭 줄 아래 내용은 남은 높이를 쓴다. */
-.subnav { display:flex; gap:.25rem; padding:0 1.5rem; min-height:2.75rem; flex:none; align-items:flex-end; background:var(--card); border-bottom:1px solid var(--line); }
+.subnav { display:flex; gap:.25rem; padding:0 1.5rem; min-height:2.75rem; flex:none; align-items:flex-end; background:var(--bg); border-bottom:1px solid var(--line); }
 .subnav button { background:none; border:0; border-bottom:.125rem solid transparent; border-radius:0; color:var(--muted); min-height:var(--h-lg); padding:.5rem .875rem; font-weight:600; }
 .subnav button.on { color:var(--accent); border-bottom-color:var(--accent); }
 .subnav em { font-style:normal; font-size:var(--fs-xs); background:var(--accent-bg); color:var(--accent); border-radius:var(--r-pill); padding:1px .4375rem; margin-left:.375rem; }
@@ -220,8 +227,8 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .bcheck { flex:none; width:1rem; height:1rem; border:.0938rem solid var(--line-strong); border-radius:var(--r-ctl); display:grid; place-items:center; }
 .bcard.sel .bcheck { background:var(--accent); border-color:var(--accent); }
 .bcard.sel .bcheck::after { content:""; width:.5rem; height:.25rem; border:solid var(--on-accent); border-width:0 0 .125rem .125rem; transform:translateY(-1px) rotate(-45deg); }
-.btitle { flex:1; min-width:0; text-overflow:ellipsis; height:1.875rem; border:1px solid transparent; background:none; font-weight:600; padding:.125rem .375rem; }
-.btitle:hover, .btitle:focus { border-color:var(--line); background:var(--bg); }
+.btitle { flex:1; min-width:0; text-overflow:ellipsis; height:1.875rem; border:1px solid transparent; background:none; box-shadow:none; font-weight:600; padding:.125rem .375rem; }
+.btitle:hover, .btitle:focus { box-shadow:var(--press); background:var(--bg); }
 .bbody { aspect-ratio:var(--ratio, 16 / 9); max-height:50vh; position:relative; }  /* 큰 창에서 1:1 카드가 너무 길어지지 않게 */
 .bnote { display:grid; place-items:center; height:100%; margin:0; text-align:center; padding:0 .75rem; overflow:hidden; }  /* 아주 좁은 카드에서 안내가 아래 글과 겹치지 않게 */
 .bextra { margin:0 0 .375rem; cursor:default; }
@@ -338,9 +345,9 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .seg2 { display:flex; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-card); padding:.1875rem; }
 .seg2 label { flex:1; text-align:center; min-height:var(--h-md); padding:.25rem .375rem; border-radius:var(--r-ctl); color:var(--muted); cursor:pointer; font-weight:600; }
 .seg2 input { display:none; }
-.seg2 label:has(input:checked) { background:var(--card); color:var(--text); box-shadow:0 1px .125rem rgb(15 25 30 / .12); }
-.kinds { display:flex; flex-wrap:wrap; gap:.375rem; }
-.kinds label, .kinds button[aria-pressed] { display:inline-flex; align-items:center; gap:.375rem; border:1px solid var(--line); border-radius:var(--r-pill); padding:.1875rem .75rem; font-size:var(--fs-sm); cursor:pointer; color:var(--muted); }
+.seg2 label:has(input:checked) { background:var(--card); color:var(--text); box-shadow:var(--raise-sm); }
+.kinds { display:flex; flex-wrap:wrap; gap:.25rem; }
+.kinds label, .kinds button[aria-pressed] { display:inline-flex; align-items:center; gap:.375rem; border:1px solid var(--line); border-radius:var(--r-pill); padding:.1875rem .625rem; font-size:var(--fs-sm); cursor:pointer; color:var(--muted); }
 .kinds button[aria-pressed] { background:none; font-weight:400; }  /* 토글 단추(계산 컬럼의 정렬 기준·묶을 컬럼): label 토글과 같은 모양 */
 .kinds label:has(input:checked), .kinds button[aria-pressed="true"] { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); font-weight:600; }
 .kinds input { position:absolute; opacity:0; width:1px; height:1px; pointer-events:none; }  /* (Phase 19) 보이지 않게만: display:none이면 화면 읽기 프로그램이 체크 상태를 못 읽는다 */
@@ -558,3 +565,29 @@ html:not(.easy) .easy-only { display:none; }
 .err { white-space:pre-line; }
 .err::first-line { font-weight:600; }
 #easy[aria-pressed="false"] { opacity:.75; }
+
+/* neumorphism 면(맨 끝: 위의 같은 무게 규칙을 이긴다). 솟은 면은 --edge 테두리와 바깥 그림자, 눌린 면은 테두리 없이 안쪽 그림자.
+   화면을 덮는 상자(.modal-box)·글 상자(.tip)는 어두운 막 위라 원래의 어두운 그림자를 그대로 쓴다 */
+.card { border-color:var(--edge); box-shadow:var(--raise); }
+.btn, .ib, .pill, .chip, .btype, .bcard, .menu, .drop .pop, .kinds label, .kinds button[aria-pressed], .fpanel, .drv-guide { border-color:var(--edge); box-shadow:var(--raise-sm); }
+.btype, .kinds label, .kinds button[aria-pressed], .chip, .pill { background:var(--card); }
+.drop .pop .btn { border-color:var(--edge); }
+.modal-box, .tip, .toast { border-color:var(--edge); }
+.btn:active, .btn.on, .ib:active, .ib.on, .pill.on, .btype.on, .kinds label:has(input:checked), .kinds button[aria-pressed="true"],
+.set-nav button[aria-selected=true], .nc-method[aria-selected=true], .seg2, .jobx, .sum-bar, .kpi-icon, .icon-tile, #flat-list, .pm-values { border-color:transparent; box-shadow:var(--press); }
+.btn.p:active, .btn.k:active { box-shadow:none; }  /* 채운 단추는 밝은 안쪽 그림자가 어울리지 않아 그림자만 뗀다 */
+.bcard.sel { border-color:var(--accent); }
+.bcard:hover { border-color:var(--accent-line); }
+/* 체크·라디오·밀어 고르는 칸: 비어 있으면 눌린 홈, 고르면 강조색으로 솟는다(창 엔진의 기본 모양을 쓰지 않는다) */
+input[type=checkbox], input[type=radio] { appearance:none; border:0; border-radius:var(--r-ctl); background:var(--bg); box-shadow:var(--press); display:inline-grid; place-content:center; cursor:pointer; margin:.1875rem; }
+input[type=radio] { border-radius:50%; }
+input:is([type=checkbox], [type=radio]):checked { background:var(--accent); box-shadow:var(--raise-sm); }
+input[type=checkbox]:checked::after { content:""; width:.5rem; height:.25rem; border:solid var(--on-accent); border-width:0 0 .125rem .125rem; transform:translateY(-1px) rotate(-45deg); }
+input[type=checkbox]:indeterminate::after { content:""; width:.5rem; height:.125rem; background:var(--accent); }
+input[type=radio]:checked::after { content:""; width:.375rem; height:.375rem; border-radius:50%; background:var(--on-accent); }
+input:is([type=checkbox], [type=radio]):disabled { opacity:.5; cursor:default; }
+input[type=range] { appearance:none; height:.5rem; padding:0; border:0; border-radius:var(--r-pill); background:var(--bg); box-shadow:var(--press); }
+input[type=range]::-webkit-slider-thumb { appearance:none; width:1.125rem; height:1.125rem; border-radius:50%; border:1px solid var(--edge); background:var(--card); box-shadow:var(--raise-sm); cursor:pointer; }
+/* 2D 그래프의 솟은 효과(예시 neumorphism-charts의 .nm-raise): 예시가 준 곳에만 className으로 준다. 그림자 색만 앱 테마 값. 그림 저장에는 들어가지 않는다(화면 전용) */
+.nm-raise { filter:drop-shadow(.125rem .125rem .125rem var(--sh-d)) drop-shadow(-.125rem -.125rem .125rem var(--sh-l)); }
+.nm-well { border-radius:var(--r-card); padding:.5rem; box-shadow:var(--press); }  /* 그림이 들어가는 눌린 영역(예시 neumorphism-charts의 .nm-well) */

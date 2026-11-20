@@ -549,7 +549,7 @@ $("mem-drop").onclick = () => busy($("mem-drop"), async () => {
   } catch (e) { say("mem-msg", e.message); }
 });
 // 모두 비우기(flush): 앱이 붙잡고 있는 것 전부(core/memory.py의 목록: 지금 연결·받아 둔 결과·표본 등)를 놓고 첫 화면으로 간다. 처음 켰을 때와 같은 상태가 된다(저장한 검색·대시보드·설정은 그대로).
-// 잘못 누르지 않게 한 번 더 눌러야 비운다(다른 곳을 누르면 원래 글자로). 위쪽 줄(#flush)과 설정 [메모리](#mem-flush)가 같이 쓴다. fail: 못 비웠을 때 문구를 보일 곳
+// 잘못 누르지 않게 한 번 더 눌러야 비운다(다른 곳을 누르면 원래 글자로). 설정 [메모리](#mem-flush)가 쓴다. fail: 못 비웠을 때 문구를 보일 곳
 const FLUSH_SURE = "한 번 더 누르면 모두 비워요";
 function flushButton(b, fail) {
   const label = b.textContent;
@@ -564,7 +564,6 @@ function flushButton(b, fail) {
     } catch (e) { b.disabled = false; b.textContent = label; fail(e.message); }
   };
 }
-flushButton($("flush"), text => { $("flush").title = text; });
 flushButton($("mem-flush"), text => say("mem-msg", text));
 $("feat-open").onclick = () => openSettings("feat");
 document.querySelectorAll("#feat-panel .set-nav [data-set]").forEach(b => b.onclick = () => openSettings(b.dataset.set));

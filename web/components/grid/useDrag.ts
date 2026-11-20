@@ -3,8 +3,22 @@
 // 포인터를 잡으면 격자 상자(GridBox: left·top·칸+간격 col·row)로 calc.cellAt/sizeAt을 구하고, calc.moveCard/resizeCard로 모든 카드의 새 자리를 preview로 준다.
 // 놓으면 commit(새 자리들), Esc·취소면 버린다. 키보드 대안은 패널의 자리 숫자 칸(N5)이 맡는다.
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
-import { GRID_COLS, GRID_GAP, GRID_ROW, cellAt, moveCard, resizeCard, sizeAt, type GridBox, type GridItem } from "@/lib/calc";
-import type { Layout } from "@/lib/types";
+import { ROUND_KINDS, ROUND_MIN_H, ROUND_TYPES } from "@/components/cards/chart/shapes";
+import { GRID_COLS, GRID_GAP, GRID_MIN, GRID_ROW, cellAt, clampLayout, compactLayout, moveCard, resizeCard, sizeAt, type GridBox, type GridItem } from "@/lib/calc";
+import type { Card, Layout } from "@/lib/types";
+
+/** 카드의 최소 높이(칸): 둥근 그림 카드(둥근 차트·도넛 KPI·게이지)는 ROUND_MIN_H, 나머지는 GRID_MIN */
+export const minHeight = (card: Pick<Card, "kind" | "view">) => (ROUND_KINDS.includes(card.kind) || ROUND_TYPES.includes(card.view?.type ?? "") ? ROUND_MIN_H : GRID_MIN);
+
+/** 카드들의 격자 자리(최소 높이 포함). 낮게 저장된 둥근 카드가 올라갔으면 같은 줄·같은 높이였던 카드도 같이 올리고(줄 높이 통일) 아래 카드를 밀어 겹치지 않게 하며(세로 압축), 올라간 카드가 없으면 저장된 자리 그대로 */
+export function gridItems(cards: Card[]): GridItem[] {
+  const row = (c: Card) => `${c.layout.y}:${c.layout.h}`;
+  const raised = new Map(cards.filter(c => c.layout.h < minHeight(c)).map(c => [row(c), minHeight(c)]));
+  const items = cards.map(c => ({ id: c.id, minH: minHeight(c), layout: clampLayout(c.layout, raised.get(row(c)) ?? minHeight(c)) }));
+  if (items.every((it, i) => it.layout.h === clampLayout(cards[i].layout).h)) return items;
+  const at = compactLayout(items);
+  return items.map(it => ({ ...it, layout: at[it.id] }));
+}
 
 export type Drag = {
   /** 끌기 중의 미리보기 자리(id → layout). 끌지 않을 때 null */

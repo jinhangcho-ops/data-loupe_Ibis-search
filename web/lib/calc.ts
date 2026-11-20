@@ -96,15 +96,15 @@ export const outsideWindow = (card: Card, range?: { start?: string; end?: string
 // 대시보드 격자 배치의 계산(화면 요소 없이): 12칸 × 행 높이 40px의 격자, 카드 이동·크기 바꾸기, 세로 압축.
 // 카드 자리(layout) = {x, y, w, h}: x는 칸(0~11), y는 행, w·h는 2~12. 서버(dash_store.check_layout)와 같은 범위다.
 export const GRID_COLS = 12, GRID_ROW = 40, GRID_GAP = 10, GRID_MIN = 2, GRID_MAX = 12;
-export type GridItem = { id: string; layout: Layout };
+export type GridItem = { id: string; layout: Layout; minH?: number };  // minH: 이 카드의 최소 높이(둥근 그림 카드. 없으면 GRID_MIN)
 export type GridBox = { left: number; top: number; col: number; row: number; gap?: number };
 
 const toInt = (v: unknown, fallback: number) => (Number.isFinite(+(v as number)) ? Math.round(+(v as number)) : fallback);
 const clampInt = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-// 범위 안으로 맞춘 자리: w·h는 2~12, x는 0 ~ 12 - w, y는 0 이상(999까지)
-export function clampLayout(l?: Partial<Layout> | null): Layout {
-  const w = clampInt(toInt(l?.w, 6), GRID_MIN, GRID_MAX), h = clampInt(toInt(l?.h, 6), GRID_MIN, GRID_MAX);
+// 범위 안으로 맞춘 자리: w·h는 2~12(h는 minH부터), x는 0 ~ 12 - w, y는 0 이상(999까지)
+export function clampLayout(l?: Partial<Layout> | null, minH = GRID_MIN): Layout {
+  const w = clampInt(toInt(l?.w, 6), GRID_MIN, GRID_MAX), h = clampInt(toInt(l?.h, 6), minH, GRID_MAX);
   return { x: clampInt(toInt(l?.x, 0), 0, GRID_COLS - w), y: clampInt(toInt(l?.y, 0), 0, 999), w, h };
 }
 
@@ -117,8 +117,8 @@ export function compactLayout(items: GridItem[], movedId?: string) {
   const placed: Layout[] = [], out: Record<string, Layout> = {};
   const put = (id: string, l: Layout) => { out[id] = l; placed.push(l); };
   const moved = items.find(i => i.id === movedId);
-  if (moved) put(moved.id, clampLayout(moved.layout));
-  const rest = items.filter(i => i !== moved).map(i => ({ id: i.id, layout: clampLayout(i.layout) })).sort((a, b) => a.layout.y - b.layout.y || a.layout.x - b.layout.x);
+  if (moved) put(moved.id, clampLayout(moved.layout, moved.minH));
+  const rest = items.filter(i => i !== moved).map(i => ({ id: i.id, layout: clampLayout(i.layout, i.minH) })).sort((a, b) => a.layout.y - b.layout.y || a.layout.x - b.layout.x);
   for (const { id, layout } of rest) {
     let y = 0;
     while (placed.some(p => overlaps({ ...layout, y }, p))) {
@@ -138,16 +138,16 @@ export function cellAt(px: number, py: number, { left, top, col, row }: GridBox,
 export function moveCard(items: GridItem[], id: string, cell: { x: number; y: number }) {
   const item = items.find(i => i.id === id);
   if (!item) return compactLayout(items);
-  const once = compactLayout(items.map(i => (i === item ? { id, layout: { ...i.layout, x: cell.x, y: cell.y } } : i)), id);
-  return compactLayout(items.map(i => ({ id: i.id, layout: once[i.id] })));  // 놓은 카드도 위로 붙인다(빈 아래쪽에 뜨지 않게, docs: 빈 곳은 위로 메워진다)
+  const once = compactLayout(items.map(i => (i === item ? { ...i, layout: { ...i.layout, x: cell.x, y: cell.y } } : i)), id);
+  return compactLayout(items.map(i => ({ ...i, layout: once[i.id] })));  // 놓은 카드도 위로 붙인다(빈 아래쪽에 뜨지 않게, docs: 빈 곳은 위로 메워진다)
 }
 
 // 카드 크기를 w·h(2~12)로 바꾼 뒤의 모든 카드 자리. 오른쪽 끝을 넘으면 x를 당긴다.
 export function resizeCard(items: GridItem[], id: string, w: number, h: number) {
   const item = items.find(i => i.id === id);
   if (!item) return compactLayout(items);
-  const next = clampLayout({ ...item.layout, w, h });
-  return compactLayout(items.map(i => (i === item ? { id, layout: next } : i)), id);
+  const next = clampLayout({ ...item.layout, w, h }, item.minH);
+  return compactLayout(items.map(i => (i === item ? { ...i, layout: next } : i)), id);
 }
 
 // 손잡이를 끌 때의 새 크기: 포인터가 카드 왼쪽 위에서 얼마나 떨어졌는지(dx, dy 픽셀)를 칸으로

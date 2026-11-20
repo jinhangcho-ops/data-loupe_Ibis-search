@@ -7,6 +7,7 @@ import { fillLevels, fitText } from "./__pure__";
 import { Box, Frame, NOTHING, Say, more, tone, type P } from "./common";
 
 const CW0 = 44, CH = 24, LW0 = 90, HH = 22, FONT = 11;  // 칸 폭·높이, 줄 이름 폭, 머리글 높이, 이름 글자 크기(화면 크기 배율 1)
+const GAP = 3, RX = 4;  // 칸 사이 틈, 칸 모서리 둥글기(예시 42-heatmap: 칸 22x19, 간격 25x22, rx 4)
 
 export function Heatmap(p: P) {
   const s = useRootScale(), CW = CW0 * s, LW = LW0 * s, font = FONT * s;  // 글자가 가로로 들어갈 자리(칸 폭·줄 이름 폭)는 글자와 같이 커진다
@@ -15,7 +16,7 @@ export function Heatmap(p: P) {
   const levels = fillLevels(rows.flatMap((_, i) => cols.map((_, j) => cells[i]?.[j]))), c = tone(p, "주 색", 0), words = rows.length * cols.length <= 100;
   const real = cells.flat().filter((x): x is number => typeof x === "number"), short = tickBy((Math.max(...real) - Math.min(...real)) / 100);  // 칸 숫자: 값 범위의 1/100까지(툴팁은 전체)
   return (
-    <Box cls="heatmap">
+    <Box cls="heatmap nm-well">
       <Frame w={LW + cols.length * CW} h={HH + rows.length * CH} label={p.card.title}>
         {cols.map((name, j) => <text key={j} x={LW + j * CW + CW / 2} y={HH - 6} fontSize={font} textAnchor="middle" fill="var(--muted)">{fitText(name, CW - 4, font)}</text>)}
         {rows.map((name, i) => (
@@ -25,7 +26,7 @@ export function Heatmap(p: P) {
               const v = cells[i]?.[j], o = levels[i * cols.length + j];
               return (
                 <g key={j}>
-                  <rect x={LW + j * CW + 1} y={HH + i * CH + 1} width={CW - 2} height={CH - 2} rx={3} fill={o == null ? "var(--line)" : c} fillOpacity={o ?? 1}><title>{`${name} × ${col}: ${v == null ? "-" : shownum(v)}`}</title></rect>
+                  <rect x={LW + j * CW + GAP / 2} y={HH + i * CH + GAP / 2} width={CW - GAP} height={CH - GAP} rx={RX} fill={o == null ? "var(--line)" : c} fillOpacity={o ?? 1}><title>{`${name} × ${col}: ${v == null ? "-" : shownum(v)}`}</title></rect>
                   {words && v != null && <text x={LW + j * CW + CW / 2} y={HH + i * CH + CH / 2} fontSize={10 * s} textAnchor="middle" dominantBaseline="middle" fill="var(--text)" stroke="var(--card)" strokeWidth={3} paintOrder="stroke" pointerEvents="none">{short(v)}</text>}
                 </g>
               );

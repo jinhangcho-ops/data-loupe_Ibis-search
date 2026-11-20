@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="산키 다이어그램 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.5"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.045"/>
+</filter>
+</defs>
+<path d="M82 10 C186 10 186 10 290 10 L290 45.2 C186 45.2 186 45.2 82 45.2 Z" fill="#3D6DF2" fill-opacity="0.38"/>
+<path d="M82 45.2 C186 45.2 186 76 290 76 L290 104.8 C186 104.8 186 74 82 74 Z" fill="#3D6DF2" fill-opacity="0.38"/>
+<path d="M82 74 C186 74 186 158 290 158 L290 174 C186 174 186 90 82 90 Z" fill="#3D6DF2" fill-opacity="0.38"/>
+<path d="M82 100 C186 100 186 45.2 290 45.2 L290 54.8 C186 54.8 186 109.6 82 109.6 Z" fill="#E8803A" fill-opacity="0.38"/>
+<path d="M82 109.6 C186 109.6 186 104.8 290 104.8 L290 136.8 C186 136.8 186 141.6 82 141.6 Z" fill="#E8803A" fill-opacity="0.38"/>
+<path d="M82 141.6 C186 141.6 186 174 290 174 L290 180.4 C186 180.4 186 148 82 148 Z" fill="#E8803A" fill-opacity="0.38"/>
+<path d="M82 158 C186 158 186 54.8 290 54.8 L290 66 C186 66 186 169.2 82 169.2 Z" fill="#8FB0FF" fill-opacity="0.38"/>
+<path d="M82 169.2 C186 169.2 186 136.8 290 136.8 L290 148 C186 148 186 180.4 82 180.4 Z" fill="#8FB0FF" fill-opacity="0.38"/>
+<path d="M82 180.4 C186 180.4 186 180.4 290 180.4 L290 190 C186 190 186 190 82 190 Z" fill="#8FB0FF" fill-opacity="0.38"/>
+<rect x="70" y="10" width="12" height="80" rx="4" fill="#3D6DF2" filter="url(#nm-raise)"/>
+<text x="62" y="54" text-anchor="end" font-size="11" fill="#E6EAEE">검색</text>
+<rect x="70" y="100" width="12" height="48" rx="4" fill="#E8803A" filter="url(#nm-raise)"/>
+<text x="62" y="128" text-anchor="end" font-size="11" fill="#E6EAEE">광고</text>
+<rect x="70" y="158" width="12" height="32" rx="4" fill="#8FB0FF" filter="url(#nm-raise)"/>
+<text x="62" y="178" text-anchor="end" font-size="11" fill="#E6EAEE">추천</text>
+<rect x="290" y="10" width="12" height="56" rx="4" fill="#8E9AAD" filter="url(#nm-raise)"/>
+<text x="310" y="42" font-size="11" fill="#E6EAEE">구매</text>
+<rect x="290" y="76" width="12" height="72" rx="4" fill="#8E9AAD" filter="url(#nm-raise)"/>
+<text x="310" y="116" font-size="11" fill="#E6EAEE">이탈</text>
+<rect x="290" y="158" width="12" height="32" rx="4" fill="#8E9AAD" filter="url(#nm-raise)"/>
+<text x="310" y="178" font-size="11" fill="#E6EAEE">재방문</text>
+</svg>

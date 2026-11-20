@@ -38,7 +38,6 @@ def test_sub_pages_hold_the_cards_and_a_way_back():
             assert part.count(f'id="{i}"') == 1 and html.count(f'id="{i}"') == 1, i
         if name:
             assert re.search(r'<div class="hidden" data-page="\w+">\s*<a class="btn back" href="#">← 연동</a>', html[html.index(f'data-page="{name}"') - 20:])
-    assert "보낼 곳은 앞으로 더 늘어나요" in page("send")
     for fake in ("Mattermost", "Jira", "준비 중"):
         assert fake not in html, fake
 

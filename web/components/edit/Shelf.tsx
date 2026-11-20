@@ -1,11 +1,11 @@
 "use client";
 // N5 — 차트 선반(옛 static/core/dash_shelf.js shelfPanel)과 카드 모음(옛 dash_panel.js initGallery). 계산은 panel/shelf.ts(순수).
 // Shelf: 컬럼 칩을 X축·값·색(나누기)·필터 칸에 끌어 놓거나(누르기 대체: 칩을 누르고 칸을 누른다) 놓으면 onChange(새 body). 부른 쪽이 source.body를 바꾸고 다시 구한다.
-// Gallery: 빈 틀 카드 칸 모음. 두 번 누르거나 Enter로 onAdd(spec), 격자에 끌어 놓을 수 있게 CARD_MIME으로 spec을 싣는다(놓는 쪽은 Grid).
+// Gallery: 빈 틀 카드 칸 모음(차트는 자주 쓰는 종류 COMMON_CHARTS만 먼저, 나머지는 [차트 더 보기]). 두 번 누르거나 Enter로 onAdd(spec), 격자에 끌어 놓을 수 있게 CARD_MIME으로 spec을 싣는다(놓는 쪽은 Grid).
 import { useState } from "react";
 import { useConstants } from "@/lib/constants";
 import type { Card, Columns } from "@/lib/types";
-import { CARD_MIME, galleryItems, type Spec } from "./menu/kinds";
+import { CARD_MIME, COMMON_CHARTS, TILE_PICS, galleryItems, type Spec } from "./menu/kinds";
 import { SHELF_ROWS, SHELVES, applyDrop, dropCheck, setAgg, shelfChips, shelfKind, stateOf, type ShelfKey, type ShelfState } from "./panel/shelf";
 
 type Body = NonNullable<Card["source"]["body"]>;
@@ -106,30 +106,39 @@ export function Shelf({ card, columns, onChange }: ShelfProps) {
   );
 }
 
-export type GalleryProps = { onAdd: (spec: Spec) => void };
+export type GalleryProps = { onAdd: (spec: Spec) => void; pics?: boolean };
 
-/** 카드 모음: 칸을 두 번 누르거나 Enter를 누르면 빈 틀 카드가 생긴다 */
-export function Gallery({ onAdd }: GalleryProps) {
+/** 카드 모음: 칸을 두 번 누르거나 Enter를 누르면 빈 틀 카드가 생긴다. pics면 그림으로 고르기 화면: 칸마다 예시 그림, 한 번 누르면 고른다(끌기·접기 없음) */
+export function Gallery({ onAdd, pics }: GalleryProps) {
   const consts = useConstants();
   if (!consts) return null;
   const tiles = galleryItems(consts.dash.types), groups = [...new Set(tiles.map(t => t.group))];
+  const rare = (t: Spec) => !pics && t.kind === "chart" && !COMMON_CHARTS.includes(t.type ?? "");  // 덜 쓰는 차트 종류는 [차트 더 보기]에 접는다
+  const tile = (t: Spec) => pics ? (
+    <button key={t.kind + (t.type ?? "")} type="button" className="gal-tile min-h-[1.5rem]" title={t.help} onClick={() => onAdd(t)}>
+      {TILE_PICS.includes(t.type ?? t.kind) && ["", "-dark"].map(d => <img key={d} className={"gal-pic" + d} src={`/static/core/charts/${t.type ?? t.kind}${d}.svg`} alt="" loading="lazy" />)}{/* 테마에 맞는 한 장만 보인다(CSS) */}
+      <b>{t.name}</b><span className="hint">{t.help}</span>
+    </button>
+  ) : (
+    <button key={t.kind + (t.type ?? "")} type="button" className="gal-tile min-h-[1.5rem]" draggable title={`${t.help} (두 번 누르거나 Enter)`}
+      onDragStart={e => { e.dataTransfer.setData(CARD_MIME, JSON.stringify(t)); e.dataTransfer.setData("text/plain", t.name); e.dataTransfer.effectAllowed = "copy"; }}
+      onDoubleClick={() => onAdd(t)} onKeyDown={e => { if (e.key === "Enter") onAdd(t); }}>
+      <b>{t.name}</b>{t.kind !== "chart" && <span className="hint">{t.help}</span>}{/* 차트 칸은 풀이가 거의 같아 title에만 둔다 */}
+    </button>
+  );
   return (
-    <div className="gallery">
-      <div className="hint">끌어서 놓거나 두 번 누르면 빈 카드가 생겨요. 데이터는 카드 설정에서 정해요.</div>
-      {groups.map(g => (
-        <div key={g}>
-          <h5>{g}</h5>
-          <div className="gal">
-            {tiles.filter(t => t.group === g).map(t => (
-              <button key={t.kind + (t.type ?? "")} type="button" className="gal-tile min-h-[1.5rem]" draggable title={`${t.help} (두 번 누르거나 Enter)`}
-                onDragStart={e => { e.dataTransfer.setData(CARD_MIME, JSON.stringify(t)); e.dataTransfer.setData("text/plain", t.name); e.dataTransfer.effectAllowed = "copy"; }}
-                onDoubleClick={() => onAdd(t)} onKeyDown={e => { if (e.key === "Enter") onAdd(t); }}>
-                <b>{t.name}</b><span className="hint">{t.help}</span>
-              </button>
-            ))}
+    <div className={pics ? "gallery gal-pics" : "gallery"}>
+      <div className="hint">{pics ? "그림을 누르면 그 종류의 빈 카드가 생겨요. 데이터는 카드 설정에서 정해요. 그림은 예시예요." : "끌어서 놓거나 두 번 누르면 빈 카드가 생겨요. 데이터는 카드 설정에서 정해요."}</div>
+      {groups.map(g => {
+        const mine = tiles.filter(t => t.group === g), more = mine.filter(rare);
+        return (
+          <div key={g}>
+            <h5>{g}</h5>
+            <div className="gal">{mine.filter(t => !rare(t)).map(tile)}</div>
+            {more.length > 0 && <details className="gal-more"><summary>차트 더 보기</summary><div className="gal">{more.map(tile)}</div></details>}
           </div>
-        </div>
-      ))}
+        );
+      })}
       <div className="hint">분석 결과나 쿼리 화면의 차트는 그 화면에서 [대시보드에 추가]를 눌러 넣어요.</div>
     </div>
   );

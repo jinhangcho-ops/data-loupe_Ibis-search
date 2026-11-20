@@ -62,7 +62,7 @@ console.log(JSON.stringify({ first, again: again.moves, last: seen() }));"""
 
 def test_picked_kind_and_form_share_one_accent_box():
     css = between("prep.html", "<style>", "</style>")
-    assert ".akinds > label:has(input:checked) { border-bottom:0; border-radius:var(--r-card) var(--r-card) 0 0; }" in css
+    assert ":is(.akinds, .a-more-list) > label:has(input:checked) { border-bottom:0; border-radius:var(--r-card) var(--r-card) 0 0; }" in css
     form = re.search(r"^  \.a-form \{([^}]*)\}", css, re.M).group(1)
     assert "border:1px solid var(--accent)" in form and "border-top:0" in form and "background:var(--accent-bg)" in form
 

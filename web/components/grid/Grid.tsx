@@ -15,12 +15,12 @@ import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import { sameSource } from "@/lib/series";
 import type { Card, Ctx, Layout, Source } from "@/lib/types";
-import { metrics, useDrag } from "./useDrag";
+import { gridItems, metrics, minHeight, useDrag } from "./useDrag";
 
 // 빈 틀 카드(템플릿·카드 모음에서 막 놓은 카드)의 안내
 const SHELL_NOTE = "아직 데이터가 없어요. 제목 옆 ⚙를 눌러 테이블과 컬럼을 고르세요.";
 
-/** 카드 아래 안내(옛 dash.js .bwhen): 다른 연결의 이전 값, 서버 안내(값을 구한 시각은 카드 머리 오른쪽 .bat), 저장된 일 값의 시작일, 기간 기준 날짜, 연결해서 다시 구해야 하는 집계. 한 줄에 하나 */
+/** 카드 아래 안내(옛 dash.js .bwhen): 다른 연결의 이전 값, 서버 안내(값을 구한 시각은 카드 머리 .bhead의 title), 저장된 일 값의 시작일, 기간 기준 날짜, 연결해서 다시 구해야 하는 집계. 한 줄에 하나 */
 export function whenLines(card: Card, d: Card["data"], range: Ctx["range"], conn: Source, merge: string[]) {
   const first = d.by_unit?.day?.labels[0], paint = !CHART_KINDS.includes(card.kind);
   const noDate = range && !d.by_unit && !card.source?.date && !["recent_rows", "status", "alerts", "map"].includes(card.kind) && !isPoints(card);
@@ -47,11 +47,11 @@ export function useAddShell() {
     const dash = state.dash;
     if (!dash) return dispatch({ type: "error", message: "대시보드를 먼저 고르거나 새로 만드세요." });
     if (dash.cards.length >= max) return dispatch({ type: "error", message: `대시보드에는 카드를 ${max}개까지 넣을 수 있어요.` });
-    const items = dash.cards.map(c => ({ id: c.id, layout: clampLayout(c.layout) }));
+    const items = gridItems(dash.cards);
     const card = { ...shellOf(spec), id: newCardId(), layout: nextLayout(items, 6, 8) } as Card;
     let cards = [...dash.cards, card];
     if (cell) {
-      const at = moveCard([...items, { id: card.id, layout: card.layout }], card.id, { x: Math.min(Math.max(0, cell.x), GRID_COLS - 6), y: Math.max(0, cell.y) });
+      const at = moveCard([...items, { id: card.id, layout: card.layout, minH: minHeight(card) }], card.id, { x: Math.min(Math.max(0, cell.x), GRID_COLS - 6), y: Math.max(0, cell.y) });
       cards = cards.map(c => ({ ...c, layout: at[c.id] ?? c.layout }));
     }
     dispatch({ type: "cards", cards });
@@ -75,9 +75,10 @@ export function Grid() {
   const [ready, setReady] = useState(false);
   const dash = state.dash;
   const cards = dash?.cards ?? [];
+  const items = gridItems(cards), placed = Object.fromEntries(items.map(i => [i.id, i.layout]));  // 낮게 저장된 둥근 카드는 여기서 올라간다(저장은 다음 편집 때)
   const { preview, startMove, startResize } = useDrag(
     ref,
-    cards.map(c => ({ id: c.id, layout: clampLayout(c.layout) })),
+    items,
     layouts => {
       const same = cards.every(c => !layouts[c.id] || JSON.stringify(layouts[c.id]) === JSON.stringify(clampLayout(c.layout)));
       if (!same) dispatch({ type: "cards", cards: cards.map(c => (layouts[c.id] ? { ...c, layout: layouts[c.id] } : c)) });
@@ -117,7 +118,7 @@ export function Grid() {
     <div className={"board grid" + (ready ? " drop-ready" : "")} ref={ref} style={cards.length ? undefined : { minHeight: 200 }}
       onDragOver={e => { if (gallery(e)) { e.preventDefault(); setReady(true); } }} onDragLeave={e => { if (e.target === e.currentTarget) setReady(false); }} onDrop={drop}>
       {cards.map(card => {
-        const l: Layout = preview?.[card.id] ?? clampLayout(card.layout);
+        const l: Layout = preview?.[card.id] ?? placed[card.id];
         const sel = state.picked.includes(card.id), open = state.selected === card.id;
         const paint = !CHART_KINDS.includes(card.kind);
         const result = state.values[card.id], said = card.kind === "kpi" ? undefined : compares[card.id];
@@ -127,14 +128,13 @@ export function Grid() {
             className={"bcard" + (sel ? " sel" : "") + (open && edit ? " editing" : "")}
             style={{ gridColumn: `${l.x + 1} / span ${l.w}`, gridRow: `${l.y + 1} / span ${l.h}` }}
             onClick={() => pick(card.id)} onKeyDown={e => key(e, card.id)}>
-            <div className={"bhead" + (edit ? " movable" : "")} onPointerDown={edit ? e => startMove(e, card.id) : undefined}>
+            <div className={"bhead" + (edit ? " movable" : "")} title={at ? `값을 구한 시각 ${at.replace("T", " ")}` : undefined} onPointerDown={edit ? e => startMove(e, card.id) : undefined}>
               <i className="bcheck" />
               {star.card === card.id && <span className="bbadge" title="북극성 지표">★</span>}
               {star.counters.includes(card.id) && <span className="bbadge" title="카운터 지표">⚑</span>}
-              <input className="btitle" key={card.title} defaultValue={card.title} readOnly={!edit} aria-label="카드 이름" title="카드 이름. 그림으로 저장할 때 파일 이름이 돼요"
+              <input className="btitle" key={card.title} defaultValue={card.title} readOnly={!edit} aria-label="카드 이름" title={edit ? "카드 이름. 그림으로 저장할 때 파일 이름이 돼요" : undefined}
                 onClick={e => e.stopPropagation()}
                 onBlur={e => { const t = e.target.value.trim() || card.title; e.target.value = t; if (t !== card.title) dispatch({ type: "card", id: card.id, patch: { title: t } }); }} />
-              {at && <time className="hint bat" dateTime={at} title="값을 구한 시각">{at.replace("T", " ")}</time>}
               {edit && <button className="ib" title="카드 설정" aria-label={`${card.title} 카드 설정`} onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: card.id }); }}>⚙</button>}
               {edit && <button className="ib" title="이 카드 빼기" aria-label={`${card.title} 카드 빼기`} onClick={e => { e.stopPropagation(); remove(card.id); }}>×</button>}
             </div>

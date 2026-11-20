@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="라인 차트 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.5"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.045"/>
+</filter>
+</defs>
+<line x1="40" x2="344" y1="168" y2="168" stroke="#2D343C" stroke-width="1"/>
+<text x="32" y="171.5" text-anchor="end" font-size="10" fill="#8F979F">20</text>
+<line x1="40" x2="344" y1="129.5" y2="129.5" stroke="#2D343C" stroke-width="1"/>
+<text x="32" y="133" text-anchor="end" font-size="10" fill="#8F979F">40</text>
+<line x1="40" x2="344" y1="91" y2="91" stroke="#2D343C" stroke-width="1"/>
+<text x="32" y="94.5" text-anchor="end" font-size="10" fill="#8F979F">60</text>
+<line x1="40" x2="344" y1="52.5" y2="52.5" stroke="#2D343C" stroke-width="1"/>
+<text x="32" y="56" text-anchor="end" font-size="10" fill="#8F979F">80</text>
+<line x1="40" x2="344" y1="14" y2="14" stroke="#2D343C" stroke-width="1"/>
+<text x="32" y="17.5" text-anchor="end" font-size="10" fill="#8F979F">100</text>
+<path d="M40 133.3 C44.6 132.7 58.4 131.4 67.6 129.5 C76.8 127.6 86.1 122.8 95.3 121.8 C104.5 120.8 113.7 125.6 122.9 123.7 C132.1 121.8 141.3 113.1 150.5 110.2 C159.8 107.4 169 108 178.2 106.4 C187.4 104.8 196.6 101.3 205.8 100.6 C215 100 224.2 104.2 233.5 102.5 C242.7 100.9 251.9 93.6 261.1 91 C270.3 88.4 279.5 89.1 288.7 87.1 C297.9 85.2 307.2 82 316.4 79.5 C325.6 76.9 339.4 73 344 71.8" fill="none" stroke="#8E9AAD" stroke-width="2" stroke-dasharray="5 4" stroke-linecap="round"/>
+<path d="M40 125.7 C44.6 123.7 58.4 115.1 67.6 114.1 C76.8 113.1 86.1 122.4 95.3 119.9 C104.5 117.3 113.7 103.8 122.9 98.7 C132.1 93.6 141.3 89.7 150.5 89.1 C159.8 88.4 169 96.8 178.2 94.9 C187.4 92.9 196.6 82 205.8 77.5 C215 73 224.2 68.5 233.5 67.9 C242.7 67.3 251.9 75.6 261.1 73.7 C270.3 71.8 279.5 61.2 288.7 56.4 C297.9 51.5 307.2 48 316.4 44.8 C325.6 41.6 339.4 38.4 344 37.1" fill="none" stroke="#3D6DF2" stroke-width="3" stroke-linecap="round" filter="url(#nm-raise)"/>
+<circle cx="40" cy="125.7" r="4" fill="#20252C" stroke="#3D6DF2" stroke-width="2.5" filter="url(#nm-raise)"/>
+<circle cx="95.3" cy="119.9" r="4" fill="#20252C" stroke="#3D6DF2" stroke-width="2.5" filter="url(#nm-raise)"/>
+<circle cx="150.5" cy="89.1" r="4" fill="#20252C" stroke="#3D6DF2" stroke-width="2.5" filter="url(#nm-raise)"/>
+<circle cx="205.8" cy="77.5" r="4" fill="#20252C" stroke="#3D6DF2" stroke-width="2.5" filter="url(#nm-raise)"/>
+<circle cx="261.1" cy="73.7" r="4" fill="#20252C" stroke="#3D6DF2" stroke-width="2.5" filter="url(#nm-raise)"/>
+<circle cx="316.4" cy="44.8" r="4" fill="#20252C" stroke="#3D6DF2" stroke-width="2.5" filter="url(#nm-raise)"/>
+<circle cx="344" cy="37.1" r="4" fill="#20252C" stroke="#3D6DF2" stroke-width="2.5" filter="url(#nm-raise)"/>
+<text x="40" y="186" text-anchor="middle" font-size="10" fill="#8F979F">1월</text>
+<text x="95.3" y="186" text-anchor="middle" font-size="10" fill="#8F979F">3월</text>
+<text x="150.5" y="186" text-anchor="middle" font-size="10" fill="#8F979F">5월</text>
+<text x="205.8" y="186" text-anchor="middle" font-size="10" fill="#8F979F">7월</text>
+<text x="261.1" y="186" text-anchor="middle" font-size="10" fill="#8F979F">9월</text>
+<text x="316.4" y="186" text-anchor="middle" font-size="10" fill="#8F979F">11월</text>
+</svg>

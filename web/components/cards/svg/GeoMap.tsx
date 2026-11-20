@@ -9,6 +9,7 @@ import { useRootScale } from "../chart/scale";
 import type { P } from "./common";
 
 const GEO_W = 640, BAR_W = 90, FONT = 10;  // 범례 띠 폭·글자 크기(화면 크기 배율 1)
+const DOT_STROKE = 1.5;  // 점의 바탕색 테두리 굵기(예시 버블 지도)
 type Geo = { bounds: number[]; regions: { name: string; value: number | null; rings: number[][] }[]; points: [number, number][]; label?: string };
 
 export default function GeoMap({ card, colors }: P) {
@@ -20,6 +21,7 @@ export default function GeoMap({ card, colors }: P) {
   const nums = v.regions.map(r => r.value).filter((x): x is number => typeof x === "number"), id = "geo-" + card.id, y = frame.h - 8 - 14 * s;  // 범례: 띠 아래 글자 줄만큼 위로
   const dot = card.colors?.series?.["점"] ?? colors.palette?.[1] ?? colors.series[1];
   return (
+    <div className="nm-well h-full">
     <svg viewBox={`0 0 ${frame.w.toFixed(1)} ${frame.h.toFixed(1)}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full overflow-hidden" role="img" aria-label={card.title}>
       {geo.tiles && <g>{kept.map(t => (
         <image key={t.url} href={t.url} x={t.px.toFixed(1)} y={t.py.toFixed(1)} width={t.size.toFixed(1)} height={t.size.toFixed(1)} preserveAspectRatio="none" onError={() => setLost(s => new Set(s).add(t.url))} />
@@ -27,21 +29,21 @@ export default function GeoMap({ card, colors }: P) {
       {v.regions.map((r, i) => {
         const own = card.colors?.parts?.[r.name], color = own ?? base;
         return (
-          <path key={i} d={r.rings.map(ring => ringPath(ring, frame.project)).join("")} fillRule="evenodd" fill={own || levels[i] != null ? color : "none"}
+          <path key={i} className={own || levels[i] != null ? "nm-raise" : undefined} d={r.rings.map(ring => ringPath(ring, frame.project)).join("")} fillRule="evenodd" fill={own || levels[i] != null ? color : "none"}
             fillOpacity={own ? 0.85 : levels[i] == null ? 0 : (levels[i]! * shade).toFixed(3)} stroke={colors.text} strokeOpacity={0.55} strokeWidth={0.8} vectorEffect="non-scaling-stroke">
             <title>{`${r.name}${r.value == null ? "" : " · " + showValue(r.value, fmt)}`}</title>
           </path>
         );
       })}
       {v.points.length > 0 && (
-        <g fill={dot} fillOpacity={0.75} stroke={colors.card} strokeWidth={0.5}>
+        <g fill={dot} fillOpacity={0.75} stroke={colors.card} strokeWidth={DOT_STROKE}>
           {v.points.map(([lon, lat], i) => { const [x, yy] = frame.project(lon, lat); return <circle key={i} cx={x.toFixed(1)} cy={yy.toFixed(1)} r={2.6} />; })}
         </g>
       )}
       {nums.length > 0 && (  // 범례: 옅은 색 → 진한 색과 가장 작은·큰 값
         <>
           <defs><linearGradient id={id}><stop offset="0%" stopColor={base} stopOpacity={0.18} /><stop offset="100%" stopColor={base} stopOpacity={0.9} /></linearGradient></defs>
-          <rect x={8} y={y} width={BAR_W * s} height={8} fill={`url(#${id})`} stroke={colors.line} />
+          <rect x={8} y={y} width={BAR_W * s} height={8} rx={4} fill={`url(#${id})`} stroke={colors.line} />
           <text x={8} y={y - 3} fontSize={font} fill={colors.text}>{v.label}</text>
           <text x={8} y={y + 8 + 11 * s} fontSize={font} fill={colors.text}>{showValue(Math.min(...nums), fmt)}</text>
           <text x={8 + BAR_W * s} y={y + 8 + 11 * s} fontSize={font} fill={colors.text} textAnchor="end">{showValue(Math.max(...nums), fmt)}</text>
@@ -49,5 +51,6 @@ export default function GeoMap({ card, colors }: P) {
       )}
       {kept.length > 0 && <text x={frame.w - 4} y={frame.h - 4} fontSize={9 * s} fill="#333" textAnchor="end" stroke="#fff" strokeWidth={2} paintOrder="stroke">{OSM_CREDIT}</text>}
     </svg>
+    </div>
   );
 }

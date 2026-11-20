@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" font-family="system-ui, sans-serif" viewBox="0 0 360 200" width="100%" role="img" aria-label="폴라 에어리어 예시">
+<defs>
+<filter id="nm-raise" x="-30%" y="-30%" width="160%" height="160%">
+<feDropShadow dx="2" dy="2" stdDeviation="2" flood-color="#A3B1C6" flood-opacity="0.7"/>
+<feDropShadow dx="-2" dy="-2" stdDeviation="2" flood-color="#FFFFFF" flood-opacity="0.9"/>
+</filter>
+</defs>
+<circle cx="180" cy="100" r="27.7" fill="none" stroke="#CDD5E1" stroke-width="1"/>
+<circle cx="180" cy="100" r="55.4" fill="none" stroke="#CDD5E1" stroke-width="1"/>
+<circle cx="180" cy="100" r="84" fill="none" stroke="#CDD5E1" stroke-width="1"/>
+<path d="M180 24.4 A75.6 75.6 0 0 1 233.5 46.5 L180 100 A0 0 0 0 0 180 100 Z" fill="#3D6DF2" stroke="#E3E8EF" stroke-width="2" filter="url(#nm-raise)"/>
+<path d="M218.6 61.4 A54.6 54.6 0 0 1 234.6 100 L180 100 A0 0 0 0 0 180 100 Z" fill="#B7C8EE" stroke="#E3E8EF" stroke-width="2" filter="url(#nm-raise)"/>
+<path d="M245.5 100 A65.5 65.5 0 0 1 226.3 146.3 L180 100 A0 0 0 0 0 180 100 Z" fill="#8FB0FF" stroke="#E3E8EF" stroke-width="2" filter="url(#nm-raise)"/>
+<path d="M209.7 129.7 A42 42 0 0 1 180 142 L180 100 A0 0 0 0 0 180 100 Z" fill="#B7C8EE" stroke="#E3E8EF" stroke-width="2" filter="url(#nm-raise)"/>
+<path d="M180 160.5 A60.5 60.5 0 0 1 137.2 142.8 L180 100 A0 0 0 0 0 180 100 Z" fill="#8FB0FF" stroke="#E3E8EF" stroke-width="2" filter="url(#nm-raise)"/>
+<path d="M156.2 123.8 A33.6 33.6 0 0 1 146.4 100 L180 100 A0 0 0 0 0 180 100 Z" fill="#B7C8EE" stroke="#E3E8EF" stroke-width="2" filter="url(#nm-raise)"/>
+<path d="M131.3 100 A48.7 48.7 0 0 1 145.5 65.5 L180 100 A0 0 0 0 0 180 100 Z" fill="#8FB0FF" stroke="#E3E8EF" stroke-width="2" filter="url(#nm-raise)"/>
+<path d="M131.3 51.3 A68.9 68.9 0 0 1 180 31.1 L180 100 A0 0 0 0 0 180 100 Z" fill="#B7C8EE" stroke="#E3E8EF" stroke-width="2" filter="url(#nm-raise)"/>
+</svg>

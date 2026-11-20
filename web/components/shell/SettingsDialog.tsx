@@ -1,5 +1,5 @@
 "use client";
-// N4 — 설정 창(옛 #d-modal .settings-box): 기준일·기간·주기·실시간(PeriodBar. 기간 칸 PeriodField는 머리 줄과 같은 것), 카드 색(팔레트), 목표 파일(문제 줄 쪽 넘김), 통화 기호(앱 설정 currency_symbol), 내 템플릿(N6 Templates), 이름 바꾸기·지우기(두 번 누르기).
+// N4 — 설정 창(옛 #d-modal .settings-box): 기준일·기간·주기·실시간(PeriodBar. 기간 칸 PeriodField는 머리 줄과 같은 것), 카드 색(팔레트), 목표 파일(문제 줄 쪽 넘김), 내 템플릿(N6 Templates), 이름 바꾸기·지우기(두 번 누르기), 접힌 묶음(.set-more: 통화 기호 = 앱 설정 currency_symbol, 차트 낱말).
 // 기간 칸은 바꾸면 그 항목만 저장한다(ShellProvider). 팔레트는 dispatch({type:"meta"})(dirty → 자동 저장 N6), 이름은 바로 저장한다(목록 이름도 바뀐다).
 import { useEffect, useState } from "react";
 import { Templates } from "@/components/edit/Templates";
@@ -137,6 +137,17 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
       </div>
       <div className="hint m-0">{tText}{!tNote && t?.error_total ? <button className="linkish" onClick={() => setShowErrs(true)}>보기</button> : null}</div>
       {showErrs && <TargetErrors onClose={() => setShowErrs(false)} />}
+      <h4>내 템플릿</h4>
+      <Templates />
+      <h4>이름 바꾸기와 지우기</h4>
+      <div className="row">
+        <input value={name} onChange={e => setName(e.target.value)} aria-label="대시보드 이름" />
+        <button className="btn" onClick={rename} disabled={busy}>이름 바꾸기</button>
+        <button className="ghost [color:var(--err)]" onClick={remove} onBlur={() => setSure(false)} disabled={busy}>{sure ? "한 번 더 누르면 지워져요" : "대시보드 지우기"}</button>
+      </div>
+      <div className={msg.ok ? "hint" : "err"} role="status">{msg.text}</div>
+      {/* 모든 대시보드에 같이 쓰이고 드물게 바꾸는 것은 접어 둔다 */}
+      <details className="set-more"><summary>모든 대시보드에 쓰는 설정</summary>
       <h4>통화 기호</h4>
       <div className="row">
         <input value={money} onChange={e => setMoney(e.target.value)} maxLength={consts?.currency_max} placeholder={String(consts?.defaults.currency_symbol ?? "")} aria-label="통화 기호" className="w-[5rem]"
@@ -155,15 +166,7 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
         <button className="btn" onClick={saveWords} disabled={busy || !prefs}>저장</button>
       </div>
       <div className={wordMsg.ok ? "hint" : "err"} role="status">{wordMsg.text}</div>
-      <h4>내 템플릿</h4>
-      <Templates />
-      <h4>이름 바꾸기와 지우기</h4>
-      <div className="row">
-        <input value={name} onChange={e => setName(e.target.value)} aria-label="대시보드 이름" />
-        <button className="btn" onClick={rename} disabled={busy}>이름 바꾸기</button>
-        <button className="ghost [color:var(--err)]" onClick={remove} onBlur={() => setSure(false)} disabled={busy}>{sure ? "한 번 더 누르면 지워져요" : "대시보드 지우기"}</button>
-      </div>
-      <div className={msg.ok ? "hint" : "err"} role="status">{msg.text}</div>
+      </details>
       <div className="hint m-0" title="연결 계정과 비밀번호는 저장하지 않아요">카드 값은 이 PC의 이 계정에서만 열 수 있게 암호화해 저장해요.</div>
     </>
   );

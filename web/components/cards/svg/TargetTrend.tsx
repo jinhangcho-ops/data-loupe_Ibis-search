@@ -8,6 +8,7 @@ import { useZoomX } from "../useZoomX";
 import { Frame, Say, type P } from "./common";
 
 const FONT = 11;  // 아래 한 줄 글의 기준 글자 크기(화면 크기 배율 1)
+const LINE_W = 2, TARGET_W = 1.5, TARGET_DASH = "5 4", DOT_R = 3, DOT_MAX = 24;  // 예시 08-control: 선 굵기, 목표(관리 한계) 점선 굵기·모양, 점 반지름. 점을 그리는 최대 점 수(넘으면 선만)
 
 export function TargetTrend({ card, colors, range, merge }: P) {
   const s = useRootScale(), vs =cardDays(card, 0, range, merge).map(d => d.v), target = cardTarget(card), fmt = cardFormat(card), W = 300, H = 160, pad = 12, color = pickColor(card, "series", card.title, colors, 0);
@@ -22,11 +23,12 @@ export function TargetTrend({ card, colors, range, merge }: P) {
     : `${daily ? "일 평균이 " : ""}목표보다 ${showGap(now - target, fmt)} ${underTarget(now, target) ? "낮아요" : overTarget(now, target) ? "높아요" : "같아요"}. 목표 아래로 ${crossDown(vs, target)}번 내려갔어요`;
   const k = growFont(says, W - 2 * pad, FONT, s) / FONT, foot = 24 * k, yOf = (v: number) => H - foot - (H - foot - pad) * (hi === lo ? 0.5 : (v - lo) / (hi - lo));  // 글 줄의 자리(선 아래)도 글자만큼 키운다
   return (
-    <div {...z.bind}>
+    <div {...z.bind} className="nm-well">
     <Frame w={W} h={H} label={card.title}>
       {target != null && belowPolygons(xs, vsV, target, yOf).map((p, k) => <polygon key={k} points={p.map(q => q.map(n => n.toFixed(1)).join(",")).join(" ")} fill={colors.series[1]} opacity={0.3} />)}
-      <polyline points={vsV.map((v, i) => v == null ? null : `${xs[i].toFixed(1)},${yOf(v).toFixed(1)}`).filter(Boolean).join(" ")} fill="none" stroke={color} strokeWidth={2} />
-      {target != null && <line x1={pad} x2={W - pad} y1={yOf(target)} y2={yOf(target)} stroke={colors.ink} strokeDasharray="6 4" />}
+      {target != null && <line x1={pad} x2={W - pad} y1={yOf(target)} y2={yOf(target)} stroke={colors.ink} strokeWidth={TARGET_W} strokeDasharray={TARGET_DASH} />}
+      <polyline points={vsV.map((v, i) => v == null ? null : `${xs[i].toFixed(1)},${yOf(v).toFixed(1)}`).filter(Boolean).join(" ")} fill="none" stroke={color} strokeWidth={LINE_W} strokeLinejoin="round" />
+      {vsV.length <= DOT_MAX && vsV.map((v, i) => v == null ? null : <circle key={i} cx={xs[i]} cy={yOf(v)} r={DOT_R} fill={color} />)}
       <text x={pad} y={H - 6 * k} fontSize={FONT * k} fill={colors.text}>{says}</text>
     </Frame>
     </div>
