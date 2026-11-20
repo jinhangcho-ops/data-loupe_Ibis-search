@@ -46,5 +46,7 @@ describe("대시보드가 고른 두 색", () => {
   it("색 변수는 밝은·어두운 화면에 표시색·강조색이 하나씩", () => {
     const css = src("styles/common.css");
     expect(css.match(/--mark:#[0-9a-f]{6}; --hi:#[0-9a-f]{6};/g)).toHaveLength(2);
+    // 화면은 묶은 app.css만 읽는다. 다시 묶지 않으면 색이 비어 검게 그려진다
+    expect(src("../static/core/app.css").match(/--mark:#[0-9a-f]{6}/g)).toHaveLength(2);
   });
 });
