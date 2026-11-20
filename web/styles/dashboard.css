@@ -27,6 +27,7 @@ body.dash-only .d-tool { position:sticky; top:0; z-index:50; padding:.625rem 1.5
 .d-tool .d-name { font-size:var(--fs-xl); font-weight:700; letter-spacing:-.025em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 .d-tool .d-conn { padding:.125rem .625rem; border-radius:var(--r-pill); background:var(--accent-bg); color:var(--accent); font-size:var(--fs-sm); font-weight:700; white-space:nowrap; }
 body.dash-only .d-tool .d-per { margin-left:auto; }
+body.dash-only .d-tool .d-per .row { width:min(19rem, 40vw); }  /* 날짜 두 개(2025-12-01 ~ 2025-12-31)가 잘리지 않게 */
 body.dash-only .d-tool #d-filters { padding:0; margin:0; }
 body.dash-only .d-tool select { border-radius:var(--r-pill); }
 /* 색: 보라 강조(밝게·어둡게 두 벌). 계열 1번과 7번(보라)을 바꿔 첫 계열이 보라가 된다. 그림자 변수(--raise·--press)는 :root에서 정해져 그대로다 */
