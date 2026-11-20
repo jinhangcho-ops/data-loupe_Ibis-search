@@ -118,7 +118,7 @@ export class Guard extends Component<{ children: ReactNode }, { error: Error | n
   }
 }
 
-export function ChartCard({ card, data, palette, ctx }: CardProps) {
+export function ChartCard({ card, data, palette, ctx, onPick }: CardProps) {
   const consts = useConstants();
   const kit = useMemo(() => consts && seriesKit(consts), [consts]);
   const { ref, width } = useWidth(), scale = useRootScale();
@@ -143,7 +143,13 @@ export function ChartCard({ card, data, palette, ctx }: CardProps) {
     const main = pickColor(c, "series", "주 색", colors, 0), second = pickColor(c, "series", "보조 색", colors, 1);
     body = <AnaChart d={data.values as never} view={anaView(c)} main={main} second={second} kit={kit!} win={z.view} tail={d.tail} tier={d.tier} />;
   } else if (isPoints(c)) body = <PointsChart card={c} colors={colors} xWin={z.view} tier={d.tier} active={z.active} />;
-  else body = <SeriesChart card={c} s={s} colors={colors} win={z.view} active={z.active} />;
+  else {
+    // 누르면 거르기: 가로축이 컬럼이고 날짜 축이 아닐 때만. 자동 규칙이 합친 이름("그 밖" 등)은 실제 값이 아니라 받지 않는다
+    const x = (card.source?.body as { x?: unknown } | undefined)?.x;
+    const pick = onPick && card.view.cross && typeof x === "string" && x && !data.by_unit
+      ? (label: string, e: { stopPropagation: () => void }) => { if (kit!.cardSeries(c0)?.labels.includes(label)) { e.stopPropagation(); onPick(x, label); } } : undefined;
+    body = <SeriesChart card={c} s={s} colors={colors} win={z.view} active={z.active} onPick={pick} />;
+  }
   // 점이 max_points를 넘어 줄여 그렸으면 서버 문장, 그 뒤에 자동 규칙 문장
   const note = [isPoints(c) ? (data.points as { note?: string }).note : undefined, ...d.notes].filter(Boolean).join(" ");
   const table = card.view.data_table ? (d.table ? (

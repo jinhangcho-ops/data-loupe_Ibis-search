@@ -20,7 +20,7 @@ describe("필터를 건 값", () => {
 describe("필터 줄", () => {
   const bar = src("components/shell/FilterBar.tsx"), shell = src("components/shell/ShellProvider.tsx");
   it("필터가 없으면 보는 곳에는 줄이 없고, 만드는 곳에만 [필터 추가]와 ×", () => {
-    expect(bar).toContain("if (!dash || (!filters.length && !build)) return null;");
+    expect(bar).toContain("if (!dash || (!filters.length && !build && !pressed.length)) return null;");
     expect(bar).toContain("{build && filters.length < max && (");
     expect(bar).toContain('{build && <button type="button" className="ghost" title="이 필터 칸 빼기"');
   });

@@ -80,6 +80,7 @@ export type CardView = {
   scale?: AxisScale;                  // 값 축 눈금: log | symlog(없으면 보통)
   all_data?: boolean;                 // 모든 데이터: 자동 규칙이 덜어 낸 것을 풀어 그림
   data_table?: boolean;               // 차트 아래 표로 보기
+  cross?: boolean;                    // 누르면 거르기: 보는 곳에서 막대·조각을 누르면 가로축 값으로 모든 카드를 거른다
   groups?: GroupView;                 // 표시할 그룹 고르기(Phase 4, lib/groups.applyGroups)
   cloud?: { mode: "values" | "labels" | "words"; tags?: string[]; rows?: "all" | "tagged"; match?: "any" | "all"; text?: string; pos?: ("noun" | "verb" | "adj" | "foreign")[]; stop?: string[]; min_len?: number };  // 워드클라우드 방식(Phase 4)
   [more: string]: unknown;  // stale·entity·time_col·kind_col·link_col·group_cols·formats·total 등(check_more)

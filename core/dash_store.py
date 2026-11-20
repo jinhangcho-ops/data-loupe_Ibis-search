@@ -590,7 +590,7 @@ def check_view(view):
     """보기 설정: type(차트 종류, ""이면 계열마다 정한 대로), unit(일·주·월·연), compare.mode(span·point), better(up·down).
     차트 탭에서 온 것은 styles(계열마다 {type, dash, axis})·ranges(세로축 범위)·ratio(가로/세로), 분석 카드는 analysis_view."""
     view = {} if view is None else view
-    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "connect", "auto", "scale", "all_data", "data_table", *EXTRA_VIEW}:
+    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "connect", "auto", "scale", "all_data", "data_table", "cross", *EXTRA_VIEW}:
         raise ValueError("보기(view)에 쓸 수 없는 항목이 있어요.")
     out = {"type": view.get("type") or "", "unit": view.get("unit") or "day", "compare": view.get("compare") or {"mode": "span"}, "better": view.get("better") or "up"}
     if out["type"] and out["type"] not in CHART_TYPES:
@@ -632,7 +632,7 @@ def check_view(view):
         if view["scale"] not in viz_rules.SCALES:
             raise ValueError("값 축은 log·symlog 중 하나이거나 비워 두세요.")
         out["scale"] = view["scale"]
-    for name in ("all_data", "data_table"):  # 참일 때만 남긴다
+    for name in ("all_data", "data_table", "cross"):  # 참일 때만 남긴다(cross: 보는 곳에서 막대·조각을 누르면 그 값으로 거르기)
         if name in view:
             if not isinstance(view[name], bool):
                 raise ValueError(f"{name}은 켬(true)이나 끔(false)이에요.")

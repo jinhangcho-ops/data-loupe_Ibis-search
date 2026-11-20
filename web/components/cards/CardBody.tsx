@@ -6,15 +6,15 @@ import { applyGroups, renameColors } from "@/lib/groups";
 import { CHART_KINDS, ChartCard, Guard } from "./ChartCard";
 import { SvgCard } from "./SvgCards";
 
-type BodyProps = { card: Card; result?: ComputeResult; palette: string[]; ctx: Ctx | null };
+type BodyProps = { card: Card; result?: ComputeResult; palette: string[]; ctx: Ctx | null; onPick?: (column: string, value: string) => void };
 
 // 표시할 그룹 고르기·이름 바꾸기를 입힌 값으로 그린다. applyGroups가 던지면(MERGE_DATE) 바깥 Guard가 보인다.
-function Shown({ card, result, palette, ctx }: BodyProps) {
+function Shown({ card, result, palette, ctx, onPick }: BodyProps) {
   const raw = result?.data ?? card.data ?? {};
   const data = applyGroups(card, raw);
   const colors = renameColors(card.colors, card.view.groups);
   const shown = data === raw && colors === card.colors ? card : { ...card, data, colors };
-  const props = { card: shown, data, result, palette, ctx };
+  const props = { card: shown, data, result, palette, ctx, onPick };
   return CHART_KINDS.includes(card.kind) ? <ChartCard {...props} /> : <SvgCard {...props} />;
 }
 

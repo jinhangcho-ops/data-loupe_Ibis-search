@@ -403,6 +403,11 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
               <input type="checkbox" aria-label="표로 보기" checked={view.data_table === true} onChange={e => (e.target.checked ? setView({ data_table: true }) : without("data_table"))} />
             </label>
           )}
+          {CHART_KINDS.includes(card.kind) && look !== "ana" && look !== "points" && (
+            <label className="hint bset" title="보는 곳에서 이 카드의 막대·조각을 누르면 그 가로축 값으로 모든 카드를 걸러요. 다시 누르면 풀려요. 날짜 가로축은 안 돼요(기간으로 거르세요)">누르면 거르기
+              <input type="checkbox" aria-label="누르면 거르기" checked={view.cross === true} onChange={e => (e.target.checked ? setView({ cross: true }) : without("cross"))} />
+            </label>
+          )}
         </div>
         {autoOpen && rules.map(r => {
           const on = view.auto?.[r] !== false, name = consts.dash.auto_names[r];

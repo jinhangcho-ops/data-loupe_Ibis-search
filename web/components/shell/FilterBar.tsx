@@ -35,7 +35,8 @@ export function FilterBar() {
     const b = (c.source?.body ?? {}) as Body;
     return [b.x, b.split, ...(b.series ?? []).map(s => s.y), ...((c.data as { columns?: unknown } | undefined)?.columns instanceof Array ? (c.data as { columns: unknown[] }).columns : [])];
   }).filter((x): x is string => typeof x === "string" && !!x))].sort(), [dash?.cards]);
-  if (!dash || (!filters.length && !build)) return null;
+  const pressed = picks.filter(p => !filters.some(f => f.column === p.column));  // 카드를 눌러 건 것(4단계) 가운데 필터 칸이 없는 컬럼: 칩으로 보이고 ×로 푼다
+  if (!dash || (!filters.length && !build && !pressed.length)) return null;
   const save = (next: DashFilter[]) => dispatch({ type: "meta", patch: { filters: next } });
   const column = name.trim(), taken = filters.some(f => f.column === column);
   const add = () => { save([...filters, { column, label: "" }]); setName(""); setError(""); };
@@ -52,6 +53,11 @@ export function FilterBar() {
           {build && <button type="button" className="ghost" title="이 필터 칸 빼기" aria-label={`${f.label || f.column} 필터 빼기`}
             onClick={() => { save(filters.filter(x => x.column !== f.column)); setFilter(f.column, []); }}>×</button>}
         </label>
+      ))}
+      {pressed.map(p => (
+        <span key={p.column} className="chip">{p.column}: {p.in.join(", ")}
+          <button type="button" className="ghost" title="이 거르기 풀기" aria-label={`${p.column} 거르기 풀기`} onClick={() => { setFilter(p.column, []); }}>×</button>
+        </span>
       ))}
       {build && filters.length < max && (
         <>

@@ -108,12 +108,14 @@ type Row = Record<string, string | number | null>;
 /** 계열 차트(chartConfig): 막대·가로 막대·누적 막대·라인·꺾인 선·영역형·레이더, 종류가 비면 계열마다 정한 대로(막대·선 겹치기, 점선, 오른쪽 축).
  *  P14 새 종류: 묶은 막대(group), 100%·가로 누적(stack100·hstack·hstack100, stackOffset expand), 누적 영역(sarea·sarea100), 계단 선(step), 막대+선(combo, 둘째 계열부터 오른쪽 축 선),
  *  범위 막대(range, 두 계열 [첫째, 둘째]), 기울기(slope, 처음·끝 두 시점), 나비(butterfly, 첫 계열을 왼쪽 음수 방향). 도넛·파이·방사형·장미는 RoundChart, 폭포·파레토·추세선·롤리팝은 OneSeries.
- *  percent면 왼쪽 값 축 눈금에 %(옛 쿼리 화면 tuneChart, 비율 지표) */
-export function SeriesChart({ card, s, colors, percent, win, active }: { card: SCard; s: Series; colors: ThemeColors; percent?: boolean; win?: Span | null; active?: boolean }) {
+ *  percent면 왼쪽 값 축 눈금에 %(옛 쿼리 화면 tuneChart, 비율 지표).
+ *  onPick(누르면 거르기)이 있으면 막대·선의 가로축 자리나 도넛·파이 조각을 눌렀을 때 그 이름으로 부른다(작게 나눈 그림·레이더·방사형·3차원·첫 계열 그림은 받지 않는다) */
+type PickFn = (label: string, e: { stopPropagation: () => void }) => void;
+export function SeriesChart({ card, s, colors, percent, win, active, onPick }: { card: SCard; s: Series; colors: ThemeColors; percent?: boolean; win?: Span | null; active?: boolean; onPick?: PickFn }) {
   const gid = useId().replace(/:/g, "");  // 영역 채움 그라데이션 id(카드마다 다르게)
   const view = card.view ?? {}, type = view.type || "", ranges = view.ranges ?? { y: {}, y1: {} };
   if (GRID_3D.includes(type)) return <Grid3D card={card} s={s} colors={colors} active={active} />;
-  if (ROUND_TYPES.includes(type)) return <RoundChart card={card} s={s} colors={colors} />;
+  if (ROUND_TYPES.includes(type)) return <RoundChart card={card} s={s} colors={colors} onPick={onPick} />;
   if (FIRST_ONLY.includes(type)) return <OneSeries card={card} s={s} colors={colors} win={win} />;
   const hbar = HBARS.includes(type), stacked = STACKS.includes(type), full = FULL.includes(type), butterfly = type === "butterfly", combo = type === "combo", range = type === "range" && s.datasets.length > 1;
   const shown = butterfly || range ? s.datasets.slice(0, 2) : s.datasets;
@@ -207,7 +209,8 @@ export function SeriesChart({ card, s, colors, percent, win, active }: { card: S
   const slope = type === "slope";
   return (
     <Frame keys={keys}>
-      <ComposedChart data={plot} layout={hbar ? "vertical" : "horizontal"} margin={MARGIN} stackOffset={full ? "expand" : butterfly ? "sign" : undefined}>
+      <ComposedChart data={plot} layout={hbar ? "vertical" : "horizontal"} margin={MARGIN} stackOffset={full ? "expand" : butterfly ? "sign" : undefined}
+        style={onPick ? { cursor: "pointer" } : undefined} onClick={onPick ? (st, e) => { if (st?.activeLabel != null) onPick(String(st.activeLabel), e); } : undefined}>
         {AREAS.includes(type) && !stacked ? <defs>{color.map((c, i) => <linearGradient key={i} id={`${gid}${i}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={c} stopOpacity={AREA_TOP} /><stop offset="1" stopColor={c} stopOpacity={0} /></linearGradient>)}</defs> : null}
         {hbar || slope ? null : <CartesianGrid stroke="var(--line)" vertical={false} />}{/* 가로 막대류(19·27·47)·기울기(11)는 격자 없음 */}
         {hbar ? <XAxis type="number" {...AXIS} hide={plainH} scale={scale === "log" ? "log" : undefined} tickFormatter={valueTick} domain={ydom} allowDataOverflow={ranged(ranges.y)} />
@@ -265,7 +268,8 @@ const sliceTip = { ...TIP, formatter: (v: unknown, _n: unknown, item: { payload?
 } };
 
 /** 둥근 차트: 도넛·파이·방사형 막대(radial)·장미(polar). view.rings면 계열마다 링(안쪽부터, 같은 조각은 같은 색에 바깥 링일수록 옅게), 아니면 첫 계열만 */
-function RoundChart({ card, s, colors }: { card: SCard; s: Series; colors: ThemeColors }) {
+function RoundChart({ card, s, colors, onPick }: { card: SCard; s: Series; colors: ThemeColors; onPick?: PickFn }) {
+  const press = onPick ? { style: { cursor: "pointer" }, onClick: (d: { payload?: Slice }, _i: number, e: { stopPropagation: () => void }) => { if (d.payload) onPick(d.payload.label, e); } } : {};
   const type = card.view.type, sets = card.view.rings && s.datasets.length > 1 ? s.datasets.slice(0, MAX_RINGS) : s.datasets.slice(0, 1), cut = card.view.rings && s.datasets.length > MAX_RINGS;
   const parts = s.labels.map((l, j) => pickColor(card, "parts", l, colors, j)), keys = s.labels.map((l, j) => ({ name: l, color: parts[j] }));
   const many = sets.length > 1, title = many ? `안쪽부터 ${sets.map(d => d.label).join(" · ")}${cut ? ` (앞 ${MAX_RINGS}개)` : ""}` : undefined;
@@ -300,14 +304,14 @@ function RoundChart({ card, s, colors }: { card: SCard; s: Series; colors: Theme
           const inner = donut ? DONUT.inner : `${radii[i].inner}%`, outer = donut ? DONUT.outer : many || type === "polar" ? `${radii[i].outer}%` : PIE_OUTER;
           if (type === "polar") {  // 장미(svg 29): 칸 각도는 같고 반지름이 값에 비례, 조각이 솟는다
             return (
-              <Pie key={i} {...angles} data={sl.map(x => ({ ...x, v: 1 }))} dataKey="v" nameKey="label" innerRadius={inner} outerRadius={outer} stroke="var(--card)" strokeWidth={W_SLICE} className={RAISE} isAnimationActive={false}
+              <Pie key={i} {...angles} data={sl.map(x => ({ ...x, v: 1 }))} dataKey="v" nameKey="label" innerRadius={inner} outerRadius={outer} stroke="var(--card)" strokeWidth={W_SLICE} className={RAISE} isAnimationActive={false} {...press}
                 shape={(p: PieSectorShapeProps) => <Sector {...p} outerRadius={p.innerRadius + ((p.outerRadius - p.innerRadius) * (p.payload as Slice).real) / top} />}>
                 {parts.map((c, j) => <Cell key={j} fill={c} fillOpacity={fade(i)} />)}
               </Pie>
             );
           }
           return (
-            <Pie key={i} {...angles} data={sl} dataKey="v" nameKey="label" innerRadius={inner} outerRadius={outer} stroke="var(--card)" strokeWidth={W_SLICE} className={type === "pie" && !many ? RAISE : undefined} isAnimationActive={false}>
+            <Pie key={i} {...angles} data={sl} dataKey="v" nameKey="label" innerRadius={inner} outerRadius={outer} stroke="var(--card)" strokeWidth={W_SLICE} className={type === "pie" && !many ? RAISE : undefined} isAnimationActive={false} {...press}>
               {parts.map((c, j) => <Cell key={j} fill={c} fillOpacity={fade(i)} />)}
             </Pie>
           );

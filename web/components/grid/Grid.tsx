@@ -71,7 +71,9 @@ function WhenLine({ card, d }: { card: Card; d: Card["data"] }) {
 
 export function Grid() {
   const { state, dispatch } = useDash();
-  const { compares, dashOnly } = useShell();
+  const { compares, dashOnly, build, conn, picks, setFilter } = useShell();
+  // 누르면 거르기(4단계): 같은 값을 다시 누르면 푼다. 보는 곳에서 연결돼 있을 때만(만드는 곳에서는 카드 누르기가 설정 열기다)
+  const cross = useCallback((column: string, value: string) => { setFilter(column, picks.some(p => p.column === column && p.in[0] === value) ? [] : [value]); }, [picks, setFilter]);
   const addShell = useAddShell();
   const ref = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
@@ -150,7 +152,7 @@ export function Grid() {
               {edit && <button className="ib" title="이 카드 빼기" aria-label={`${card.title} 카드 빼기`} onClick={e => { e.stopPropagation(); remove(card.id); }}>×</button>}
             </div>
             <div className={"bbody" + (paint ? " paint" : "")}>
-              {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={card} result={result} palette={dash.palette} ctx={state.ctx} />}
+              {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={card} result={result} palette={dash.palette} ctx={state.ctx} onPick={build || !conn ? undefined : cross} />}
             </div>
             {said && <div className={`bcmp ${said.tone} [padding:0_.625rem]`} title={said.delta_text}>{said.text}</div>}
             {!isShell(card) && <WhenLine card={card} d={result?.data ?? card.data} />}
