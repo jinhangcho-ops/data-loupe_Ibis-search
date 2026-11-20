@@ -8,7 +8,7 @@ import type { P } from "@/components/cards/svg/common";
 import { PAINTERS } from "@/components/cards/SvgCards";
 import { EACH_TEXT } from "@/components/cards/svg/__pure__";
 
-const THEME = { card: "#fff", head: "#eee", ink: "#000", text: "#555", line: "#ddd", err: "#c00", ok: "#070", series: ["#111"] };
+const THEME = { card: "#fff", head: "#eee", ink: "#000", text: "#555", line: "#ddd", err: "#c00", ok: "#070", series: ["#111"], hi: "#333" };
 const steps = [{ name: "획득", users: 600, conv: 1, from_first: 1, drop: 0 }, { name: "활성", users: 300, conv: 0.5, from_first: 0.5, drop: 300 }];
 const funnel = (view: Record<string, unknown>, values: Record<string, unknown>): Card => ({ id: "c", kind: "funnel", title: "퍼널", layout: { x: 0, y: 0, w: 4, h: 4 },
   colors: { series: {}, parts: {}, order: [], parts_order: [] }, view: { type: "", ...view } as Card["view"], source: {}, data: { values } });

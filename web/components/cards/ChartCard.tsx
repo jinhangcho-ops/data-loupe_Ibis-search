@@ -1,9 +1,9 @@
 "use client";
 // 차트 카드(chart·analysis·metric)의 몸통: 옛 board.js cardBox + dash.js chartConfig를 Recharts로(그림은 chart/Charts.tsx, 값 → 모양은 chart/series.ts).
 // 분석 카드가 종류를 정하지 않았으면 분석 그림(AnaChart), 산점도·버블은 서버가 구한 점(data.points), 나머지는 계열 차트. 값이 없으면 옛 안내 문장.
-// 색: 카드 지정 색 → 대시보드 팔레트(비었으면 없음) → 화면 모드 계열 색(var(--c1)…, 어두운 모드에선 다른 색).
+// 색: 카드 지정 색 → 표시색의 진하기 단계(대시보드가 고른 표시색, 없으면 화면 모드의 var(--mark)).
 import { Component, useMemo, type ReactNode } from "react";
-import { anaView, isPoints, shownum } from "@/lib/calc";
+import { anaView, isPoints, shades, shownum } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import type { CardProps } from "./types";
 import { AnaChart, PointsChart, SeriesChart, type Ana, type Points } from "./chart/Charts";
@@ -19,8 +19,10 @@ import type { Constants, Unit } from "@/lib/types";
 
 /** 이 컴포넌트가 맡는 카드 종류 */
 export const CHART_KINDS: string[] = ["chart", "analysis", "metric"];
-/** 화면 모드의 계열 색(common.css --c1~--c8, 테마 따라 바뀐다) */
-export const THEME_SERIES = [1, 2, 3, 4, 5, 6, 7, 8].map(i => `var(--c${i})`);
+/** 화면 모드의 계열 색: 표시색(common.css --mark) 하나의 진하기 단계. 강조색은 --hi */
+export const THEME_SERIES = shades("var(--mark)"), THEME_ACCENT = "var(--hi)";
+/** 그림 색: 대시보드가 고른 두 색(palette = [표시색, 강조색])이 있으면 그 표시색의 단계, 없으면 화면 모드의 단계 */
+export const markColors = (palette?: string[]): ThemeColors => ({ palette: palette?.length ? palette : undefined, series: palette?.length ? shades(palette[0]) : THEME_SERIES });
 /** 값이 아직 없는 카드의 안내(옛 dash.js needsValues) */
 export const NO_VALUES = "아직 구한 값이 없어요. 연결한 뒤 [최신화]를 누르세요.";
 /** 상수는 받았지만 자동 규칙 표(dash.auto)가 없을 때의 안내 */
@@ -137,7 +139,7 @@ export function ChartCard({ card, data, palette, ctx, onPick }: CardProps) {
   const z = useZoomX(kit ? zoomAxis(c, s, ana) : null);  // 훅이라 early return 앞에서 부른다
   if (!d) return box(null);
   if (!s) return box(<div className="hint bnote">{NO_VALUES}</div>);
-  const colors: ThemeColors = { palette: palette.length ? palette : undefined, series: THEME_SERIES };
+  const colors = markColors(palette);
   let body: ReactNode;
   if (ana) {
     const main = pickColor(c, "series", "주 색", colors, 0), second = pickColor(c, "series", "보조 색", colors, 1);

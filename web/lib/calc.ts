@@ -10,6 +10,12 @@ export const shownum = (v: unknown) => v == null ? "" : typeof v === "number" ? 
 // HEX 색 검사(#rgb, #rrggbb)와 3자리 → 6자리
 export const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 export const hex6 = (c: string) => c.length === 4 ? "#" + [...c.slice(1)].map(h => h + h).join("") : c;
+/** 표시색 하나의 진하기 여섯 단계(그대로·연하게·진하게·더 연하게·더 진하게·조금 연하게): [섞는 색, 표시색 몫 %] */
+const SHADE_STEPS: [string, number][] = [["#ffffff", 100], ["#ffffff", 55], ["#000000", 70], ["#ffffff", 35], ["#000000", 50], ["#ffffff", 75]];
+/** 표시색(#hex 또는 var(--mark))을 진하기 단계 색으로. hex는 hex로(alpha·darken이 받는다), 변수는 color-mix로(화면 모드를 따라간다) */
+export const shades = (mark: string) => SHADE_STEPS.map(([to, pct]) => pct === 100 ? mark : HEX.test(mark)
+  ? "#" + [1, 3, 5].map(i => Math.round((parseInt(hex6(mark).slice(i, i + 2), 16) * pct + parseInt(to.slice(i, i + 2), 16) * (100 - pct)) / 100).toString(16).padStart(2, "0")).join("")
+  : `color-mix(in srgb, ${mark} ${pct}%, ${to})`);
 // 색 글자(#rgb, #rrggbb 또는 rgb)에 투명도를 준다(히트맵 칸, 영역형 라인).
 export function alpha(color: string, a: number) {
   const hex = hex6(color).match(/^#([0-9a-f]{6})$/i);

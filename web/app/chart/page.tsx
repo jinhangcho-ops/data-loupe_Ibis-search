@@ -3,11 +3,11 @@
 // 너비는 iframe을 따르고 높이는 너비/비율. 그린 뒤 필요한 높이를 부모에 알리고({type:"size"}), {type:"picture"}를 받으면 그림 파일(report/picture)로 답한다.
 // 계열 그림은 대시보드와 같은 차례(그룹 고르기 applyGroups → 라벨 바꾸기 → 자동 규칙 autoSeries)로 그리고, 보이는 값·모든 데이터 값의 표를 부모에 보낸다({type:"shown"}).
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { NO_AUTO, SIZE_NAME, THEME_SERIES, pointsTable } from "@/components/cards/ChartCard";
+import { NO_AUTO, SIZE_NAME, THEME_ACCENT, markColors, pointsTable } from "@/components/cards/ChartCard";
 import { AnaChart, PointsChart, SeriesChart } from "@/components/cards/chart/Charts";
 import { layoutWidth, useRootScale } from "@/components/cards/chart/scale";
 import { GRID_3D } from "@/components/cards/chart/shapes";
-import { seriesKit, type Dataset, type SCard, type Series, type SeriesKit, type ThemeColors } from "@/components/cards/chart/series";
+import { seriesKit, type Dataset, type SCard, type Series, type SeriesKit } from "@/components/cards/chart/series";
 import { useTheme } from "@/components/cards/svg/common";
 import { zoomAxis, type Span, type ZoomAxis } from "@/components/cards/svg/__pure__";
 import { useZoomX } from "@/components/cards/useZoomX";
@@ -42,7 +42,7 @@ const card = (view: Record<string, unknown>, data: Record<string, unknown> = {})
 
 /** 받은 메시지를 그릴 것으로(던지면 Guard가 보인다). all: 모든 데이터로(opts.all 또는 picture all) */
 function paint(m: Draw, consts: Constants, kit: SeriesKit, width: number, all: boolean): Painted {
-  const colors: ThemeColors = { palette: m.palette?.length ? m.palette : undefined, series: THEME_SERIES };
+  const colors = markColors(m.palette);
   const table = consts.dash.auto;  // 상수를 못 받았거나 규칙 표가 없으면 규칙 없이
   const p = table ? autoParams(m.opts?.auto, table) : null;
   const noAuto = table ? [] : [NO_AUTO];
@@ -89,7 +89,7 @@ function paint(m: Draw, consts: Constants, kit: SeriesKit, width: number, all: b
     const tail: [number, number] | undefined = p && !all && p.tail ? [Number(p.tail.lo), Number(p.tail.hi)] : undefined;
     const tier = p && m.opts.view === "scatter" ? scatterTier(d.n ?? (d.points ?? []).length, all ? null : p.density) : null;
     return {
-      chart: () => <AnaChart d={d} view={m.opts.view} main={colors.palette?.[0] ?? THEME_SERIES[0]} second={colors.palette?.[1] ?? THEME_SERIES[1]} kit={kit} tail={tail} tier={tier} />,
+      chart: () => <AnaChart d={d} view={m.opts.view} main={colors.series[0]} second={colors.palette?.[1] ?? THEME_ACCENT} kit={kit} tail={tail} tier={tier} />,
       axis: null, notes: noAuto, ratio: m.opts.ratio || POINTS_RATIO, shown: null,
     };
   }

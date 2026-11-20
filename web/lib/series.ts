@@ -65,14 +65,14 @@ export function compareItem(card: Card, range: { start: string; end: string } | 
 // 카드 객체(그리는 한 번에 쓰는 것)마다 색 순서의 복사본. 새 라벨은 이 복사본에만 붙는다(React 상태인 card.colors를 그리는 중에 바꾸지 않는다).
 // 새 라벨의 순서는 값이 바뀐 뒤 화면 틀(ShellProvider)이 newOrders로 찾아 dispatch card로 저장한다(옛 화면은 그리면서 card.colors에 붙여 저장했다).
 const orders = new WeakMap<Card, { order: string[]; parts_order: string[] }>();
-/** 색 정하기: 카드가 지정한 색 → 대시보드 팔레트의 번호째 → 화면 모드의 기본 색. group은 "series"(계열) 또는 "parts"(도넛·파이의 조각).
+/** 색 정하기: 카드가 지정한 색 → 표시색의 진하기 단계(colors.series, 번호째). group은 "series"(계열) 또는 "parts"(도넛·파이의 조각).
  *  카드에 colors가 없는 임시 카드(탐색 차트)는 계열 순서(index)로 정한다. 지정 색은 라이트·다크가 같다 */
 export function pickColor(card: Card, group: "series" | "parts", name: string, colors: { palette?: string[]; series: string[] }, index = 0) {
   const c = card.colors, key = group === "parts" ? "parts_order" : "order";
   if (c && !orders.has(card)) orders.set(card, { order: [...(c.order ?? [])], parts_order: [...(c.parts_order ?? [])] });
   const i = c?.[key] ? labelIndex(orders.get(card)![key], name) : index;
   const w = card.view?.auto?.semantic === false ? null : currentWords(), tone = w && semanticTone(name, w);
-  return c?.[group]?.[name] ?? (tone ? TONE_COLORS[tone] : undefined) ?? colors.palette?.[i] ?? colors.series[i % colors.series.length];
+  return c?.[group]?.[name] ?? (tone ? TONE_COLORS[tone] : undefined) ?? colors.series[i % colors.series.length];
 }
 
 /** 그린 라벨(names) 중 카드의 색 순서(colors.order·parts_order)에 아직 없는 것을 붙인 새 순서. 늘지 않았으면 null(저장할 것 없음) */

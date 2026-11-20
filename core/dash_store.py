@@ -64,7 +64,6 @@ AUTO_MODE = "auto"  # 생키 자동 흐름
 AUTO_ROLES = ("starts", "middles", "ends")  # 자동 흐름의 시작·중간·끝 값 목록
 FORMATS = ("number", "percent", "currency")  # 값 모양(compare.py와 같다)
 MAX_SLOTS = 5  # 도넛 KPI의 칸(가운데 + 네 꼭지점)
-DEFAULT_PALETTE = ["#00968f", "#eb6834", "#2a78d6", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]  # 화면의 라이트 색 묶음(--c1~--c8)과 같다
 HEX = re.compile(r"#([0-9a-f]{3}|[0-9a-f]{6})", re.I)
 ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
 DAY = re.compile(r"\d{4}-\d{2}-\d{2}")

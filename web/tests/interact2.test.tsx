@@ -9,7 +9,7 @@ import type { P } from "@/components/cards/svg/common";
 import { PAINTERS } from "@/components/cards/SvgCards";
 
 const src = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
-const THEME = { card: "#fff", head: "#eee", ink: "#000", text: "#555", line: "#ddd", err: "#c00", ok: "#070", series: ["#111", "#222"] };
+const THEME = { card: "#fff", head: "#eee", ink: "#000", text: "#555", line: "#ddd", err: "#c00", ok: "#070", series: ["#111", "#222"], hi: "#333" };
 const DAYS = ["2026-01-01", "2026-01-02", "2026-01-03"];
 const card = (kind: string, view: Record<string, unknown>, data: Record<string, unknown>): Card => ({ id: "c", kind, title: "카드", layout: { x: 0, y: 0, w: 4, h: 4 },
   colors: { series: {}, parts: {}, order: [], parts_order: [] }, view: { type: "", ...view } as Card["view"], source: {}, data } as Card);

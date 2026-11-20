@@ -3,6 +3,7 @@
 // 계산은 lib/calc.ts와 svg/__pure__.ts만 쓴다. 색은 화면 모드의 CSS 변수(svg/common.useTheme) + 대시보드 팔레트, 집계 묶기는 상수 merge.
 // geomap은 React.lazy로 처음 그릴 때만 조각을 받는다(못 받으면 옛 문장).
 import { Component, Suspense, lazy, useMemo, type ComponentType, type ReactNode } from "react";
+import { shades } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import type { CardProps } from "./types";
 import { RawValue } from "./RawValue";
@@ -54,7 +55,7 @@ export const PAINTERS: Record<string, ComponentType<P>> = {
 };
 export function SvgCard({ card, data, result, palette, ctx }: CardProps) {
   const theme = useTheme(), merge = useConstants()?.merge;
-  const colors = useMemo(() => ({ ...theme, palette }), [theme, palette]);
+  const colors = useMemo(() => ({ ...theme, palette, ...(palette.length ? { series: shades(palette[0]), hi: palette[1] ?? theme.hi } : {}) }), [theme, palette]);  // 대시보드가 고른 표시색·강조색
   const Paint = PAINTERS[card.kind];
   if (!Paint) return <RawValue data={data} result={result} />;
   if (!(data.by_unit || data.values || data.columns || data.bins)) return <Box cls="summary"><div className="sum-text">아직 구한 값이 없어요</div></Box>;

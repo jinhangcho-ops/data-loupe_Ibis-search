@@ -192,7 +192,7 @@ export type Constants = {
   features: { on: string[]; version: string | null; all: { id: string; name: string; path: string }[] };
   dash: {
     max_cards: number; max_filters: number; max_dashboards: number; max_palette: number; types: Partial<Record<Exclude<ChartType, "">, string>>; time_types: ChartType[]; max_bins?: number; max_bands?: number; max_cells: number; merge_note: string;
-    units: Record<Unit, string>; palette: string[]; locked: string; min_refresh: number; max_points: number; aggs: string[]; merge: string[]; agg_names: Record<string, string>;
+    units: Record<Unit, string>; locked: string; min_refresh: number; max_points: number; aggs: string[]; merge: string[]; agg_names: Record<string, string>;
     auto: AutoTable; auto_names: Record<AutoRule, string>; viz: { words: SemanticWords; query_auto: AutoView }; orders: Order[]; order_names: Record<Order, string>;
   };
   [more: string]: unknown;
