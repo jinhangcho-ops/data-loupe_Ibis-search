@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { refreshStatus, saveSetting, stopRefresh } from "@/lib/api";
 import { useConstants } from "@/lib/constants";
 import type { RefreshStatus } from "@/lib/types";
-import { useShell } from "./ShellProvider";
+import { BUILD_PATH, VIEW_PATH, useShell } from "./ShellProvider";
 
 const REFRESH_STATE: Record<string, string> = { ok: "완료", failed: "실패", skipped: "건너뜀", waiting: "대기" };
 const MOON = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>;
@@ -17,6 +17,7 @@ const I_HOME = icon(<><path d="M3 11l9-8 9 8" /><path d="M5 10v10h14V10" /></>);
 const I_QUERY = icon(<><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.3-4.3" /></>);
 const I_PREP = icon(<><path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 5-6" /></>);
 const I_DASH = icon(<><rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" /></>);
+const I_BUILD = icon(<><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><path d="M17.5 14v7M14 17.5h7" /></>);
 const I_COLLECT = icon(<><path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M5 21h14" /></>);
 const I_LINK = icon(<><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7" /><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7" /></>);
 const I_SET = icon(<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />);
@@ -25,7 +26,8 @@ const TABS: [string, string, string, string, React.ReactNode][] = [  // [주소,
   ["/", "", "홈", "처음 화면: 데이터 연결과 최근 연결", I_HOME],
   ["/search", "query", "쿼리", "테이블을 찾아보고 SQL, 지표, 차트를 만들어요", I_QUERY],
   ["/prep", "prep", "분석", "데이터를 다듬고 그래프로 살펴봐요", I_PREP],
-  ["/dashboard", "dashboard", "대시보드", "모아 둔 차트와 지표를 보고 고쳐요", I_DASH],
+  ["/dashboard", "dashboard", "대시보드", "모아 둔 차트와 지표를 봐요", I_DASH],
+  ["/dashboard/build", "dashboard", "대시보드 만들기", "대시보드에 카드를 넣고, 옮기고, 고쳐요", I_BUILD],
   ["/collect", "collect", "수집", "웹 API나 웹페이지에서 데이터를 받아 저장해요", I_COLLECT],
   ["/integrations", "integrations", "연동", "Slack, Notion, LLM 같은 서비스와 연결해요", I_LINK],
 ];
@@ -34,7 +36,8 @@ const PANEL_PARAM = "panel";
 
 export function TopBar() {
   const on = useConstants()?.features.on;
-  const { conn, loadConn } = useShell();
+  const { conn, loadConn, build } = useShell();
+  const here = build ? BUILD_PATH : VIEW_PATH;
   const [st, setSt] = useState<RefreshStatus | null>(null);
   const [pop, setPop] = useState(false);
   const [theme, setTheme] = useState("");
@@ -77,7 +80,7 @@ export function TopBar() {
       <nav className="rail" aria-label="화면">
         <div className="rail-name" title="Data Loupe">{I_LOGO}<span>Data Loupe</span></div>
         {TABS.filter(([, id]) => !id || !on || on.includes(id)).map(([href, , name, tip, ic]) => (
-          <a key={href} href={href} title={tip} className={href === "/dashboard" ? "on" : undefined} aria-current={href === "/dashboard" ? "page" : undefined}>{ic}<span>{name}</span></a>
+          <a key={href} href={href} title={tip} className={href === here ? "on" : undefined} aria-current={href === here ? "page" : undefined}>{ic}<span>{name}</span></a>
         ))}
         <div className="rail-foot">
           <a className="rail-btn" href={`/?${PANEL_PARAM}=feat`} title="쓸 기능, 업데이트, 계산·표본·날짜, 차트 낱말, 보낼 곳을 정해요">{I_SET}<span>설정</span></a>

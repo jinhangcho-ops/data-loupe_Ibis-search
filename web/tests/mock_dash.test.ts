@@ -30,7 +30,7 @@ describe("머리 줄 [더 보기 ▾]", () => {
     expect(item).toContain('{sure ? "한 번 더 누르면 연결이 바뀌어요" : "예시 데이터로 확인하기"}');
     expect(item).toContain("연결이 예시 데이터로 바뀌어요");
     expect(bar).toContain("return () => { connectDemo().then(() => location.reload(), (e: Error) => dispatch({ type: \"error\", message: e.message })); };");
-    const page = src("app/dashboard/page.tsx");
+    const page = src("components/shell/DashboardScreen.tsx");
     expect(page).toContain("{!conn && <button id=\"d-demo\"");
     expect(page).toContain("onClick={e => { e.stopPropagation(); demo(); }}>예시 데이터로 확인하기</button>}");
     expect(page).not.toContain("둘러보기");

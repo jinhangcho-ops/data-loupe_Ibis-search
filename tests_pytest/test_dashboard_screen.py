@@ -35,7 +35,7 @@ def test_nav_has_dashboard_on_every_screen(client):
     for path in PAGES:
         html = page(client, path)
         assert '<a href="/dashboard" data-feature="dashboard"' in html and "<span>대시보드</span></a>" in html, path
-    assert re.findall(r'<nav class="rail"[^>]*>(.*?)</nav>', page(client, "/"), re.S)[0].count("<a ") == 6  # 홈·쿼리·분석·대시보드·수집·연동
+    assert re.findall(r'<nav class="rail"[^>]*>(.*?)</nav>', page(client, "/"), re.S)[0].count("<a ") == 7  # 홈·쿼리·분석·대시보드·대시보드 만들기·수집·연동
 
 
 def test_home_shortcuts_and_no_dashboard_section(client):

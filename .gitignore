@@ -6,6 +6,7 @@
 __pycache__/
 .venv/
 build/
+!web/app/dashboard/build/
 dist/
 *.spec
 check.py

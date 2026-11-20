@@ -31,7 +31,7 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024
 TARGET_PAGE = 100  # 목표 파일의 문제 줄을 한 번에 돌려줄 수(화면은 [이전]/[다음]으로 넘겨 본다)
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min",
-                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart", "/api/viz"})
+                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/dashboard/build", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart", "/api/viz"})
 
 
 def with_source(card):
@@ -70,6 +70,18 @@ def dashboard_page():
     if not NEXT_PAGE.is_file():  # 소스에서 web/을 빌드하지 않고 돌렸을 때. 옛 화면은 없다
         return Response(NOT_BUILT, mimetype="text/html")
     return server.next_page(NEXT_PAGE)
+
+
+BUILD_PAGE = server.NEXT_DIR / "dashboard" / "build.html"  # 만드는 곳(web/app/dashboard/build). 시험은 임시 파일로 바꿔 끼운다
+
+
+@app.get("/dashboard/build")
+def dashboard_build_page():
+    """대시보드 만드는 곳(web/out/dashboard/build.html, Next): 카드를 넣고 옮기고 고친다. /dashboard는 보기만 한다. 빌드가 없으면 NOT_BUILT."""
+    preload(*PRELOAD)
+    if not BUILD_PAGE.is_file():
+        return Response(NOT_BUILT, mimetype="text/html")
+    return server.next_page(BUILD_PAGE)
 
 
 CHART_PAGE = server.NEXT_DIR / "chart.html"  # 차트 섬(iframe). 시험은 임시 파일로 바꿔 끼운다

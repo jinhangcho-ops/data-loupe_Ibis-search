@@ -1,4 +1,5 @@
 "use client";
+// 새 대시보드는 만드는 곳(useShell().build)에서만 보인다.
 // N4 — 대시보드 고르기·새 대시보드(옛 #d-pick·showList·#d-new·#d-new-go).
 // 고르면 useShell().open(지금 편집을 먼저 저장하고, 못 하면 옮기지 않는다). 새 대시보드는 이름 + 시작 모양(기본 4종 edit/Templates.TEMPLATES·내 템플릿 api.listTemplates)으로 api.saveDashboard → 목록 → 열기.
 import { useEffect, useRef, useState } from "react";
@@ -12,7 +13,7 @@ const LABEL = { margin: 0, display: "inline-flex", alignItems: "center", gap: ".
 
 export function PickDashboard() {
   const { state, dispatch } = useDash();
-  const { open, flush } = useShell();
+  const { open, flush, build } = useShell();
   const [making, setMaking] = useState(false);
   const [name, setName] = useState("");
   const [tpl, setTpl] = useState("overview");
@@ -53,7 +54,7 @@ export function PickDashboard() {
           {items.map(d => <option key={d.id} value={d.id}>{d.id ? `${d.name} (카드 ${d.cards}개)` : d.name}</option>)}
         </select>
       </label>
-      <span className="drop" ref={wrap} onKeyDown={e => { if (e.key === "Escape" && making) { e.stopPropagation(); close(); } }}>
+      {build && <span className="drop" ref={wrap} onKeyDown={e => { if (e.key === "Escape" && making) { e.stopPropagation(); close(); } }}>
         <button ref={opener} className="btn" onClick={toggle} aria-expanded={making} aria-haspopup="dialog" title="이름과 시작 모양을 정해 새 대시보드를 만들어요">새 대시보드</button>
         {making && (
           <div className="pop [left:0] [right:auto] w-[min(20rem,92vw)] gap-2 p-3" role="dialog" aria-label="새 대시보드">
@@ -67,7 +68,7 @@ export function PickDashboard() {
             <button className="btn p" onClick={make} disabled={busy}>만들기</button>
           </div>
         )}
-      </span>
+      </span>}
     </>
   );
 }

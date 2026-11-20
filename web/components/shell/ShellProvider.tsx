@@ -36,7 +36,14 @@ export type Shell = {
   compares: Record<string, Said>; recompute: () => Promise<void>; period: Period;
   addOpen: boolean; setAddOpen: (on: boolean) => void; gallery: boolean; setGallery: (on: boolean) => void; dashOnly: boolean; setDashOnly: (on: boolean) => void;
   saving: boolean; undo: Undo;
+  build: boolean;  // 만드는 곳(/dashboard/build)이면 true, 보는 곳(/dashboard)이면 false
 };
+
+/** 만드는 곳·보는 곳 주소(지금 연 대시보드를 그대로 열게 ?open=id) */
+export const BUILD_PATH = "/dashboard/build", VIEW_PATH = "/dashboard";
+const withOpen = (path: string, id?: string) => path + (id ? "?open=" + encodeURIComponent(id) : "");
+export const buildHref = (id?: string) => withOpen(BUILD_PATH, id);
+export const viewHref = (id?: string) => withOpen(VIEW_PATH, id);
 
 const Ctx_ = createContext<Shell | null>(null);
 /** 화면 틀 상태(ShellProvider 안에서만) */
@@ -52,7 +59,7 @@ export const useCompare = (id: string) => useContext(Ctx_)?.compares[id];
 const typing = () => { const a = document.activeElement as HTMLElement | null; return !!a && !!a.closest(".board") && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); };
 const EMPTY: Fields = { as_of: "", period: "", refresh: "", live: "" };
 
-export function ShellProvider({ children }: { children: React.ReactNode }) {
+export function ShellProvider({ children, build }: { children: React.ReactNode; build: boolean }) {
   const { state, dispatch } = useDash();
   const consts = useConstants();
   const now = useRef(state);
@@ -332,6 +339,6 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
     commitPeriod: (text?: string) => { const t = text ?? inputs.period; setInput("period", t); if (t.trim() !== saved.current.period) apply(true, inputs.as_of, t); },  // text: 달력이 고른 기간(칸 값이 아직 안 바뀐 때)
     commitEvery: kind => { commitEvery(kind); }, toggleLive: () => { toggleLive(); }, saveMin: () => { saveMin(); },
   };
-  const value: Shell = { conn, loadConn, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo };
+  const value: Shell = { conn, loadConn, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo, build };
   return <Ctx_.Provider value={value}>{children}</Ctx_.Provider>;
 }

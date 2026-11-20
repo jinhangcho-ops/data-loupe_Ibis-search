@@ -177,7 +177,7 @@ def test_star_section_explains_terms():
 # ---------- 15D 대시보드 ----------
 
 def test_board_pick_line_only_when_editing_or_picked():
-    src = web("app/dashboard/page.tsx")
+    src = web("components/shell/DashboardScreen.tsx")
     assert "n > 0 && (state.editing || picked > 0) && (" in src
     assert 'id="d-picked"' in src and 'id="d-all"' in src and 'id="d-none"' in src
 
