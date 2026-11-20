@@ -2,10 +2,12 @@
 // N3 — 카드 격자와 카드 상자(옛 dash_edit.js EditBoard·board.js cardBox). N7: 카드 모음 놓기(옛 dash_panel.js acceptGalleryDrops·dashboard.html addShell), 비교 문장·다시 구하지 못한 이유.
 // 12칸 × 40px 격자(dash_edit.css .board.grid)에 card.layout대로 놓는다. 편집 모드에서만 제목 줄 끌기·⚙·×·크기 손잡이가 있다(대시보드만 보기에서는 고르기·편집 없음).
 // 카드를 누르면 고른 카드(state.picked, 여러 개, .sel)에 넣고 빼고(옛 board.toggle), 넣을 때는 그 카드를 설정 패널 대상(selected, 편집 모드에서 .editing)으로도 삼는다.
+// 제목 줄의 ⤢(보는 곳·만드는 곳 모두)를 누르면 그 카드를 큰 창(Pop .zoom-box)에 다시 그린다. 카드를 누르는 것은 고르기라 그대로 둔다.
 // 끌기·크기는 useDrag가 미리보기를 주고, 놓으면 dispatch({type:"cards"})로 layout을 바꾼다(세로 압축은 calc가 한다). 카드가 없어도 격자를 그려 카드 모음을 놓을 수 있다.
 import { useCallback, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { CardBody } from "@/components/cards/CardBody";
 import { CHART_KINDS } from "@/components/cards/ChartCard";
+import { Pop } from "@/components/cards/Pop";
 import { newCardId } from "@/components/edit/Templates";
 import { CARD_MIME, isShell, shellOf, type Spec } from "@/components/edit/menu/kinds";
 import { useShell } from "@/components/shell/ShellProvider";
@@ -73,6 +75,7 @@ export function Grid() {
   const addShell = useAddShell();
   const ref = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
+  const [zoom, setZoom] = useState<string | null>(null);  // 크게 보는 카드 id
   const dash = state.dash;
   const cards = dash?.cards ?? [];
   const items = gridItems(cards), placed = Object.fromEntries(items.map(i => [i.id, i.layout]));  // 낮게 저장된 둥근 카드는 여기서 올라간다(저장은 다음 편집 때)
@@ -114,7 +117,14 @@ export function Grid() {
     addShell(JSON.parse(raw) as Spec, cellAt(e.clientX, e.clientY, metrics(ref.current)));
   };
 
+  const big = cards.find(c => c.id === zoom);
   return (
+    <>
+    {big && (
+      <Pop title={big.title} cls="zoom-box" onClose={() => setZoom(null)}>
+        <div className={"bbody" + (CHART_KINDS.includes(big.kind) ? "" : " paint")}><CardBody card={big} result={state.values[big.id]} palette={dash.palette} ctx={state.ctx} /></div>
+      </Pop>
+    )}
     <div className={"board grid" + (ready ? " drop-ready" : "")} ref={ref} style={cards.length ? undefined : { minHeight: 200 }}
       onDragOver={e => { if (gallery(e)) { e.preventDefault(); setReady(true); } }} onDragLeave={e => { if (e.target === e.currentTarget) setReady(false); }} onDrop={drop}>
       {cards.map(card => {
@@ -135,6 +145,7 @@ export function Grid() {
               <input className="btitle" key={card.title} defaultValue={card.title} readOnly={!edit} aria-label="카드 이름" title={edit ? "카드 이름. 그림으로 저장할 때 파일 이름이 돼요" : undefined}
                 onClick={e => e.stopPropagation()}
                 onBlur={e => { const t = e.target.value.trim() || card.title; e.target.value = t; if (t !== card.title) dispatch({ type: "card", id: card.id, patch: { title: t } }); }} />
+              {!isShell(card) && <button className="ib" title="크게 보기" aria-label={`${card.title} 카드 크게 보기`} onClick={e => { e.stopPropagation(); setZoom(card.id); }}>⤢</button>}
               {edit && <button className="ib" title="카드 설정" aria-label={`${card.title} 카드 설정`} onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: card.id }); }}>⚙</button>}
               {edit && <button className="ib" title="이 카드 빼기" aria-label={`${card.title} 카드 빼기`} onClick={e => { e.stopPropagation(); remove(card.id); }}>×</button>}
             </div>
@@ -149,5 +160,6 @@ export function Grid() {
         );
       })}
     </div>
+    </>
   );
 }

@@ -40,6 +40,14 @@
 .gal-tile { display:flex; flex-direction:column; gap:.125rem; border:1px solid var(--line); border-radius:var(--r-card); padding:.375rem .5rem; cursor:grab; background:var(--bg); font-size:var(--fs-xs); }
 .gal-tile:hover { border-color:var(--accent); }
 /* 그림으로 고르기 화면(Toolbar의 .pick-box > Gallery pics): 넓은 창에 그림 타일을 여러 줄로 */
+.modal-box.zoom-box { width:min(75rem, 94vw); height:88vh; display:flex; flex-direction:column; }  /* 카드 크게 보기: 그림이 남는 높이를 다 쓴다 */
+.zoom-box .head, .row-box .head { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }  /* 제목은 왼쪽, [닫기]는 오른쪽 끝 */
+.zoom-box .bbody { flex:1; min-height:0; aspect-ratio:auto; max-height:none; }
+.row-box dl { display:grid; grid-template-columns:max-content 1fr; gap:.375rem .875rem; margin:0; }  /* 표 줄 상세: 컬럼 이름 · 값 */
+.row-box dt { color:var(--muted); }
+.row-box dd { margin:0; overflow-wrap:anywhere; }
+.cbox tbody tr.pickable { cursor:pointer; }
+.cbox tbody tr.pickable:hover { background:var(--line); }
 .modal-box.pick-box { width:min(75rem, 94vw); height:88vh; }
 .gal-pics .gal { grid-template-columns:repeat(auto-fill, minmax(13.75rem, 1fr)); gap:.75rem; }
 .gal-pics .gal-tile { cursor:pointer; padding:.5rem; gap:.25rem; }

@@ -20,7 +20,7 @@
 
 | 기능 | 한 줄 설명 | 링크 |
 |---|---|---|
-| 기본 쓰기 | 대시보드 만들기·저장, 기준일·기간·비교 기준, 최신화와 실시간, 통화 기호, 대시보드만 보기 | [dashboard_basics.md](functions/dashboard_basics.md) |
+| 기본 쓰기 | 대시보드 만들기·저장, 기준일·기간·비교 기준, 최신화와 실시간, 통화 기호, 자세히 보기(값·크게 보기·줄 상세), 대시보드만 보기 | [dashboard_basics.md](functions/dashboard_basics.md) |
 | 카드 종류 | 차트·KPI·도넛 KPI·게이지·요약 문장·표·문장·상태·경고·배치도·편차 표·히스토그램·히트맵·생키·코호트·지도 등 카드 30가지와 목표 파일·색 규칙 | [dashboard_cards.md](functions/dashboard_cards.md) |
 | 편집 | [대시보드 만들기]에서 카드 끌어 옮기기·크기 바꾸기·설정 패널, 템플릿, 그림·보고서 저장, 카드 색 | [dashboard_edit.md](functions/dashboard_edit.md) |
 | 지표 | [+ 카드 ▾] → [지표]로 여는 내 지표·지표 사전 목록(계산·고치기는 쿼리 화면) | [metrics.md](functions/metrics.md) |
