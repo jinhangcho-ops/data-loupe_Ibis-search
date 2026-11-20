@@ -553,13 +553,18 @@ def ends(c, text):
 
 def predicate(cond, expr):
     """조건 하나를 Ibis 식으로. 문자열, 따옴표 해석을 끈 {"line": ..., "quotes": False},
-    화면에서 or로 이은 묶음 {"any": [조건, ...]}, 조건 목록(모두 and) 중 하나다. 묶음 안은 or, 조건끼리는 and."""
+    화면에서 or로 이은 묶음 {"any": [조건, ...]}, 대시보드 필터 {"column": 컬럼, "in": [값 글자, ...]}, 조건 목록(모두 and) 중 하나다. 묶음 안은 or, 조건끼리는 and."""
     if isinstance(cond, list):
         if not cond:
             raise ValueError("and로 묶을 조건이 없어요.")
         return functools.reduce(operator.and_, [predicate(c, expr) for c in cond])
     if isinstance(cond, str):
         return parse_condition(cond, expr)
+    if "column" in cond:  # 대시보드 필터(dash_calc.with_filters): 컬럼 값이 고른 값들 가운데 하나인 행. 값은 글자로 와서 컬럼 타입으로 바꾼다
+        col, values = column(expr, cond["column"]), cond.get("in")
+        if not isinstance(values, list) or not 1 <= len(values) <= MAX_TUPLES or not all(isinstance(v, str) for v in values):
+            raise ValueError(f"필터 값은 글자 1~{MAX_TUPLES}개의 목록이어야 해요.")
+        return col.isin([convert(col.type(), v) for v in values])
     if "any" in cond:
         if not cond["any"]:
             raise ValueError("or로 묶을 조건이 없어요.")

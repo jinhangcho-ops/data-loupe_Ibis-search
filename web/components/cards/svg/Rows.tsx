@@ -21,8 +21,8 @@ function RowDetail({ names, values, onClose }: { names: string[]; values: string
   );
 }
 
-export function RecentRows({ card }: P) {
-  const got = useRows(card, card.view?.rows || 10);
+export function RecentRows({ card, filters }: P) {
+  const got = useRows(card, card.view?.rows || 10, true, filters);
   const [open, setOpen] = useState<number | null>(null);
   const text = (v: unknown) => v == null ? "" : String(v);
   return (
@@ -90,9 +90,9 @@ function TableView({ card, columns, rows, prev }: Pick<P, "card"> & { columns: C
   );
 }
 
-export function Table({ card }: P) {
+export function Table({ card, filters }: P) {
   const v = card.data?.values as { columns: Col[]; rows: unknown[][]; prev?: Record<string, unknown[]> | null } | undefined;
-  const got = useRows(card, card.view?.rows || 20, !v);
+  const got = useRows(card, card.view?.rows || 20, !v, filters);
   return (
     <Box cls="table">
       {v ? <TableView card={card} columns={v.columns} rows={v.rows} prev={v.prev} />

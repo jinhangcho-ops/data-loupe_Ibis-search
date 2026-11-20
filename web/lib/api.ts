@@ -76,7 +76,11 @@ export const imageUrl = (dash: string, card: string) => `/api/dash/image?dash=${
 export const computeCard = (card: Card, ctx?: Ctx | null) => api<{ data: Card["data"]; source: Source }>("/api/dash/card/compute", { card, ctx: ctx ?? undefined });
 /** 카드 여러 개(실시간·기간 바꾸기). 카드마다 {id, data} 또는 {id, error} */
 export const computeCards = (cards: Card[], ctx?: Ctx | null) => api<{ results: ComputeResult[]; seconds: number }>("/api/dash/cards/compute", { cards, ctx: ctx ?? undefined });
-/** 옛 dash_ctl.cardRequest: 구할 때는 저장된 값 대신 since만 보낸다 */
+/** 필터 칸에 보일 값 목록(저장한 대시보드의 카드 가운데 그 컬럼이 있는 첫 카드의 테이블에서). 연결이 있어야 한다 */
+export const filterValues = (id: string, column: string) => api<{ values: string[]; more: boolean }>("/api/dash/filter/values", { id, column });
+/** 원래 행을 보이는 카드가 필터를 건 채 읽을 조회(body)와 걸지 못한 필터 컬럼(missed) */
+export const filteredBody = (card: Card, ctx: Ctx) => api<{ body: Record<string, unknown>; missed: string[] }>("/api/dash/card/filtered", { card, ctx });
+/** 옛 dash_ctl.cardRequest:구할 때는 저장된 값 대신 since만 보낸다 */
 export const cardRequest = (c: Card): Card => ({ ...c, data: c.data?.since ? { since: c.data.since } : {} });
 /** 산점도·버블의 점. body는 카드의 source.body(옛 dash.js: {...body, y, size, source_key, date, ctx}) */
 export const chartPoints = (body: Record<string, unknown> & { y?: string; size?: string; source_key?: string; date?: string; ctx?: Ctx | null }) =>

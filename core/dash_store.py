@@ -30,7 +30,8 @@ LOCKED = "이 PC에서 만든 대시보드가 아니라 값을 읽을 수 없어
 MAX_DASHBOARDS = 100  # 대시보드 수
 MIN_REFRESH = 3600  # 최신화 주기의 최소(초)
 SETTING_KEYS = ("as_of", "period", "compare_mode", "refresh", "live")  # 카드 없이 바꾸는 대시보드 설정(/api/dash/settings)
-MAX_CARDS = 48  # 대시보드 하나의 카드 수(템플릿이 카드가 많다)
+MAX_FILTERS, MAX_FILTER_NAME = 8, 100  # 대시보드 필터 칸 수, 필터 컬럼·이름의 글자 수
+MAX_CARDS = 48# 대시보드 하나의 카드 수(템플릿이 카드가 많다)
 MAX_CARD_BYTES = 400_000  # 카드 하나의 크기(JSON 글자)
 MAX_STORE_BYTES = 32 * 1024 * 1024  # 전체 크기
 MAX_DAYS = 3660  # 시간별 카드에 두는 일 값의 최대 일수
@@ -888,7 +889,18 @@ def check_dashboard(d, old=None):
     return {"id": dash_id, "name": text(d.get("name"), "대시보드 이름", 50, 1), "template": text(d.get("template"), "템플릿 이름", 50),
             "palette": check_palette(d.get("palette") or []), "period": text(d.get("period") or "", "기간", 40), "as_of": as_of, "compare_mode": mode,
             "refresh": check_every(d.get("refresh"), "refresh"), "live": check_every(d.get("live"), "live"), "cards": cards, "created": text(d.get("created"), "만든 시각", 40),
-            "updated": text(d.get("updated"), "고친 시각", 40), "north_star": north}
+            "updated": text(d.get("updated"), "고친 시각", 40), "north_star": north, "filters": check_filters(d.get("filters"))}
+
+
+def check_filters(found):
+    """대시보드의 필터 칸 목록 [{column: 컬럼 이름, label: 보일 이름(비면 컬럼 이름)}]을 검사해 정리한다. 없으면 빈 목록. 같은 컬럼은 한 번만, MAX_FILTERS개까지."""
+    found = found or []
+    if not isinstance(found, list) or len(found) > MAX_FILTERS or not all(isinstance(f, dict) for f in found):
+        raise ValueError(f"필터는 {MAX_FILTERS}개까지 넣을 수 있어요.")
+    out = [{"column": text(f.get("column"), "필터 컬럼", MAX_FILTER_NAME, 1), "label": text(f.get("label"), "필터 이름", MAX_FILTER_NAME)} for f in found]
+    if len({f["column"] for f in out}) != len(out):
+        raise ValueError("같은 컬럼의 필터가 두 번 있어요.")
+    return out
 
 
 # ---------- 읽고 쓰기 ----------

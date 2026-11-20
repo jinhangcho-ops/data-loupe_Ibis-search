@@ -2,6 +2,7 @@
 // 보는 곳(/dashboard, build 아님): [대시보드 ▾] | 기간 칸 … [최신화]·[대시보드만 보기]·[만들기](#d-build, 만드는 곳으로)·[예시 데이터로 확인하기]·[내보내기](#d-more). 만드는 곳(/dashboard/build): 아래 설명에서 [편집]·[대시보드만 보기]가 빠지고(늘 편집 상태) [보러 가기](#d-view, 저장한 뒤 보는 곳으로)가 있다.
 // N4 — 머리 줄(.d-tool): [대시보드 ▾][새 대시보드] | 기간 칸(PeriodBar.PeriodField, 설정 창과 같은 것)·"N분 전 최신화"(LastRefreshed) … [최신화](recompute)·[카드 추가](강조 단추 #d-add-open: 편집을 켜고 카드 추가 서랍을 연다)
 // ·[편집]·[+ 카드 ▾](편집 중에만: 카드 모음 N5 Gallery·그림으로 고르기(예시 그림 타일을 누르면 빈 카드, Gallery pics)·지표 N6 MetricsWindow·쿼리에서 가져오기)·[대시보드만 보기]·[예시 데이터로 확인하기]·[더 보기 ▾](내보내기 N6 Report·대시보드 설정). [대시보드만 보기] #d-only와 [예시 데이터로 확인하기] #d-demo-bar(연결돼 있으면 한 번 더 눌러야 바꾼다)는 메뉴 밖 도구 줄에 늘 보인다.
+// [대시보드만 보기](dashOnly)에서는 이 줄이 화면의 위쪽 줄이 된다: 왼쪽에 대시보드 이름·연결 이름, 오른쪽에 기간 칸·필터 칸(FilterBar)·[최신화]·화면 모드·[보기 끝내기](#d-only-exit). 나머지 단추는 CSS(body.dash-only)가 숨긴다.
 // 두 메뉴는 menu 상태 하나("card"·"more")를 같이 써 바깥 클릭·Esc로 닫는다. 카드 추가는 오른쪽 서랍(page.tsx). 편집 모드(state.editing)에서만 격자 끌기·×·크기 손잡이와 카드 설정 패널이 있다.
 // 카드 추가(useAddCard)는 옛 화면처럼 값을 먼저 구해(지금 기간) 카드로 넣고 저장한다. 대시보드가 없으면 api.addCard로 "내 대시보드"를 새로 만든다.
 import { useEffect, useRef, useState } from "react";
@@ -14,10 +15,12 @@ import { addCard, cardRequest, computeCard, connectDemo } from "@/lib/api";
 import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import type { Card } from "@/lib/types";
+import { FilterBar } from "./FilterBar";
 import { LastRefreshed, PeriodField } from "./PeriodBar";
 import { PickDashboard } from "./PickDashboard";
 import { SettingsDialog } from "./SettingsDialog";
 import { buildHref, useShell, viewHref } from "./ShellProvider";
+import { ThemeButton } from "./TopBar";
 
 /** [SPECIFICATION] plans/phase-16.md#useAddCard
  *  카드 하나를 값을 구해 지금 대시보드에 넣는 함수를 돌려준다(도구 줄 지표 창과 카드 추가 서랍이 같이 쓴다). */
@@ -61,7 +64,7 @@ export function useDemo(): () => void {
 
 export function Toolbar() {
   const { state, dispatch } = useDash();
-  const { recompute, setAddOpen, gallery, setGallery, setDashOnly, conn, build, flush } = useShell();
+  const { recompute, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, conn, build, flush } = useShell();
   const demo = useDemo();
   const [sure, setSure] = useState(false);  // 연결돼 있으면 [예시 데이터로 확인하기]를 한 번 더 눌러야 연결을 바꾼다(TopBar [비우기]와 같은 방식)
   const [menu, setMenu] = useState<false | "card" | "more">(false);  // 열린 메뉴: [+ 카드 ▾] 또는 [더 보기 ▾]
@@ -81,10 +84,11 @@ export function Toolbar() {
   return (
     <>
       <div className="tool d-tool">
-        <PickDashboard />
+        {dashOnly ? <><b className="d-name">{state.dash?.name || "대시보드"}</b><span className="d-conn" title="지금 연결된 데이터">{conn ? conn.label || "연결됨" : "연결 안 됨"}</span></> : <PickDashboard />}
         <span className="d-sep"></span>
         <div className="dc-field d-per"><PeriodField id="d-per" /></div>
         <LastRefreshed />
+        {dashOnly && <FilterBar />}
         <span className="ml-auto"></span>
         <button className="btn" onClick={again} disabled={busy} title="데이터를 새로 읽어 카드 숫자를 최신으로 고쳐요">최신화</button>
         {build && <button className="btn p" id="d-add-open" disabled={!state.dash} onClick={() => { dispatch({ type: "select", id: null }); setAddOpen(true); }}
@@ -110,6 +114,7 @@ export function Toolbar() {
         <button className="btn" id="d-demo-bar" onBlur={() => setSure(false)} onClick={() => { if (conn && !sure) return setSure(true); setSure(false); demo(); }}
           title="지어낸 주문·고객·방문기록 표에 연결하고 대시보드를 다시 열어요. 지금 다른 데이터에 연결돼 있으면 연결이 예시 데이터로 바뀌어요">{sure ? "한 번 더 누르면 연결이 바뀌어요" : "예시 데이터로 확인하기"}</button>
         {!build && <button className="btn" id="d-more" aria-haspopup="dialog" onClick={() => setReport(true)} title="대시보드를 그림(PNG)이나 PDF 보고서로 저장해요">내보내기</button>}
+        {dashOnly && <><ThemeButton /><button id="d-only-exit" className="btn" onClick={() => setDashOnly(false)} title="메뉴와 도구를 다시 보여요(Esc)">보기 끝내기</button></>}
         {build && <div className="drop" ref={more} onKeyDown={esc}>
           <button className="btn" id="d-more" aria-haspopup="menu" aria-expanded={menu === "more"} onClick={() => setMenu(menu === "more" ? false : "more")} title="내보내기, 대시보드 설정">더 보기 ▾</button>
           {menu === "more" && (

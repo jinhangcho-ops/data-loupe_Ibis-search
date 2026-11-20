@@ -8,6 +8,7 @@ import { AddCardMenu } from "@/components/edit/AddCardMenu";
 import { CardPanel } from "@/components/edit/CardPanel";
 import { Gallery } from "@/components/edit/Shelf";
 import { Grid, useAddShell } from "@/components/grid/Grid";
+import { FilterBar } from "./FilterBar";
 import { ShellProvider, buildHref, useShell } from "./ShellProvider";
 import { Toolbar, useAddCard, useDemo } from "./Toolbar";
 import { TopBar } from "./TopBar";
@@ -46,7 +47,7 @@ function DashboardView() {
   }, [dispatch, open]);
   useEffect(() => { dispatch({ type: "editing", on: build }); }, [build, dispatch]);  // 만드는 곳은 늘 편집 상태, 보는 곳은 늘 아님
   useEffect(() => { if (state.selected) setAddOpen(false); }, [state.selected, setAddOpen]);  // 카드를 고르면 서랍 자리에 카드 설정이 온다
-  // 대시보드만 보기: 메뉴·도구를 숨기고(body.dash-only, 옛 CSS) 선택·편집 모드를 푼다. Esc가 떠 있는 창을 닫았으면(defaultPrevented) 보기는 그대로
+  // 대시보드만 보기: 메뉴·도구를 숨기고(body.dash-only) 도구 줄이 위쪽 줄이 된다(이름·연결·기간·필터·화면 모드·[보기 끝내기]는 Toolbar가 그린다). 색도 보라 강조로 바뀐다(dashboard.css). 선택·편집 모드를 푼다. Esc가 떠 있는 창을 닫았으면(defaultPrevented) 보기는 그대로
   useEffect(() => {
     document.body.classList.toggle("dash-only", dashOnly);
     if (!dashOnly) return;
@@ -64,9 +65,9 @@ function DashboardView() {
   return (
     <div className="board-view" id="dash">
       <Toolbar />
-      {dashOnly && <button id="d-only-exit" className="btn" onClick={() => setDashOnly(false)} title="메뉴와 도구를 다시 보여요(Esc)">보기 끝내기</button>}
-      <div className="big"><b>{state.dash?.name || "대시보드"}</b><span className="d-conn" title="지금 연결된 데이터">{conn ? conn.label || "연결됨" : "연결 안 됨"}</span><span className="hint ml-[12px]" id="d-state" role="status">{state.dirty ? "저장 중…" : savedOnce ? "저장했어요" : ""}</span></div>
+      <div className="big"><b>{state.dash?.name || "대시보드"}</b><span className="hint ml-[12px]" id="d-state" role="status">{state.dirty ? "저장 중…" : savedOnce ? "저장했어요" : ""}</span></div>
       {alerts.length > 0 && <div className="d-alerts" id="d-alerts" role="alert"><b>카운터 지표가 한계를 벗어났어요</b>{alerts.map(f => <div key={f.id}>{f.text}</div>)}</div>}
+      {!dashOnly && <FilterBar />}
       {n > 0 && (state.editing || picked > 0) && (
         <div className="ctl board-ctl">
           <span className="hint" id="d-picked" role="status">{picked ? `카드 ${picked}개 선택함` : "그림으로 내보낼 카드를 눌러 고르세요"}</span>

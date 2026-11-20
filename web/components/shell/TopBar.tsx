@@ -2,7 +2,7 @@
 // 왼쪽 메뉴(static/core/status.html의 nav.rail과 같은 마크업): 앱 이름, 화면(설치한 기능만, 상수 features.on), 아래쪽 [설정](홈 /?panel=feat로 가서 static 설정 창을 연다)·쉬운 보기(#easy)·화면 모드.
 // 위쪽 줄: 연결 이름(crumb), 최신화 알약·팝업(옛 dash_refresh.js). 사용률·작업·업데이트·크기 조절은 static 화면(common.js)에만 있다(결정 D2).
 // 최신화는 연결에 성공한 화면(쿼리·홈)이 시작한다. 여기서는 열 때 돌고 있으면 0.8초마다 상태를 읽어 알약에 보이고, 끝나면 document에 dash-refreshed(결과)를 보낸다.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { refreshStatus, saveSetting, stopRefresh } from "@/lib/api";
 import { useConstants } from "@/lib/constants";
 import type { RefreshStatus } from "@/lib/types";
@@ -32,7 +32,19 @@ const TABS: [string, string, string, string, React.ReactNode][] = [  // [주소,
   ["/integrations", "integrations", "연동", "Slack, Notion, LLM 같은 서비스와 연결해요", I_LINK],
 ];
 const PANEL_PARAM = "panel";
+const watchTheme = (changed: () => void) => { const o = new MutationObserver(changed); o.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] }); return () => o.disconnect(); };
 
+/** 화면 모드 단추(밝게·어둡게). 왼쪽 메뉴 아래와 [대시보드만 보기]의 위쪽 줄이 같이 쓴다. 지금 모드는 html의 data-theme에서 읽어 두 곳이 늘 같다. */
+export function ThemeButton({ id }: { id?: string }) {
+  const theme = useSyncExternalStore(watchTheme, () => document.documentElement.dataset.theme ?? "light", () => "");
+  const tip = theme === "dark" ? "밝은 화면으로" : "어두운 화면으로";
+  const flip = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    saveSetting({ theme: next }).catch(() => {});
+  };
+  return <button id={id} className="ib" onClick={flip} title={tip} aria-label={tip}>{theme === "dark" ? SUN : MOON}</button>;
+}
 
 export function TopBar() {
   const on = useConstants()?.features.on;
@@ -40,7 +52,6 @@ export function TopBar() {
   const here = build ? BUILD_PATH : VIEW_PATH;
   const [st, setSt] = useState<RefreshStatus | null>(null);
   const [pop, setPop] = useState(false);
-  const [theme, setTheme] = useState("");
   const [easy, setEasy] = useState(true);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -56,15 +67,9 @@ export function TopBar() {
   }, [loadConn]);
   useEffect(() => {
     refreshStatus().then(s => { if (s.running) { setSt(s); poll(); } }).catch(() => {});  // 다른 화면에서 시작해 아직 돌고 있으면 이어서
-    setTimeout(() => { setTheme(document.documentElement.dataset.theme ?? "light"); setEasy(document.documentElement.classList.contains("easy")); });
+    setTimeout(() => setEasy(document.documentElement.classList.contains("easy")));
     return () => clearTimeout(timer.current);
   }, [poll]);
-  const flip = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    setTheme(next);
-    saveSetting({ theme: next }).catch(() => {});
-  };
   // 쉬운 보기(status.html의 #easy, common.js showEasy와 같다): html.easy를 바꾸고 설정 easy로 저장한다
   const flipEasy = () => {
     const next = !easy;
@@ -85,7 +90,7 @@ export function TopBar() {
         <div className="rail-foot">
           <a className="rail-btn" href={`/?${PANEL_PARAM}=feat`} title="쓸 기능, 업데이트, 계산·표본·날짜, 차트 낱말, 보낼 곳을 정해요">{I_SET}<span>설정</span></a>
           <button id="easy" className="rail-btn" aria-pressed={easy} onClick={flipEasy} title="켜면 처음 쓰는 사람에게 필요 없는 칸을 [더 많은 설정] 뒤에 접어요">{I_EASY}<span id="easy-text">{easy ? "쉬운 보기 켜짐" : "쉬운 보기 꺼짐"}</span></button>
-          <button id="theme" className="ib" onClick={flip} title={theme === "dark" ? "밝은 화면으로" : "어두운 화면으로"} aria-label={theme === "dark" ? "밝은 화면으로" : "어두운 화면으로"}>{theme === "dark" ? SUN : MOON}</button>
+          <ThemeButton id="theme" />
         </div>
       </nav>
       <header className="topbar">

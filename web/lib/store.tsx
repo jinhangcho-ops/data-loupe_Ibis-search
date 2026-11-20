@@ -39,14 +39,14 @@ export type Action =
  *  아니면 카드에 저장하고 화면 값은 비운다. patch는 함께 바꿀 카드 칸(source·view 등, 기간과 상관없이 저장). 돌려주는 것: 카드 patch와 values 결과 하나.
  *  plain: 기간이 걸린 채 카드 정의가 바뀌었을 때 기간 없이 따로 구한 값(저장 값도 새 정의로 바꿔 기간을 지웠을 때 정의와 값이 어긋나지 않게) */
 export function computedUpdate(id: string, data: CardData | undefined, ctx: Ctx | null, patch: Partial<Card> = {}, plain?: CardData): { patch: Partial<Card>; result: ComputeResult } {
-  if (!ctx?.range) return { patch: { ...patch, data }, result: { id } };
+  if (!ctx?.range && !ctx?.filters?.length) return { patch: { ...patch, data }, result: { id } };  // 필터를 건 값도 화면에만(저장 값은 거르지 않은 값)
   return { patch: plain ? { ...patch, data: plain } : patch, result: { id, data } };
 }
 const keySorted = (v: unknown) => JSON.stringify(v, (_k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([p], [q]) => (p < q ? -1 : 1))) : x));
 /** 두 값의 내용이 같은가(키 순서 무시). 자동 저장 응답이 카드 객체를 새로 만들므로 카드 정의는 참조가 아니라 내용으로 견준다 */
 export const sameContent = (a: unknown, b: unknown): boolean => a === b || keySorted(a) === keySorted(b);
-/** 기간을 뺀 ctx(저장할 값을 구할 때): 보는 기간·직전 기간만 뺀다 */
-export const plainCtx = (ctx: Ctx | null): Ctx | null => (ctx ? { ...ctx, range: undefined, prev: null } : ctx);
+/** 기간을 뺀 ctx(저장할 값을 구할 때): 보는 기간·직전 기간과 보는 사람의 필터를 뺀다 */
+export const plainCtx = (ctx: Ctx | null): Ctx | null => (ctx ? { ...ctx, range: undefined, prev: null, filters: undefined } : ctx);
 
 export const initialState: DashState = { list: [], locked: false, last: "", dash: null, values: {}, selected: null, picked: [], editing: false, ctx: null, dirty: false, error: "", ok: false };
 

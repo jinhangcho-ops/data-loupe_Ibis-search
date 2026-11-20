@@ -129,6 +129,7 @@ export type NorthStar = { card: string; counters: string[]; limits?: Record<stri
 export type Dashboard = {
   id: string; name: string; template: string; palette: string[]; period: string; as_of: string; compare_mode?: CompareMode;
   refresh: Every; live: Every; cards: Card[]; created: string; updated: string; north_star: NorthStar;
+  filters?: DashFilter[];  // 필터 칸 목록(옛 저장본에는 없다)
 };
 /** POST /api/dash/settings가 바꾸는 항목만 */
 export type DashSettings = Partial<Pick<Dashboard, "as_of" | "period" | "compare_mode" | "refresh" | "live">>;
@@ -143,7 +144,11 @@ export type DashList = { dashboards: DashSummary[]; locked: boolean; last: strin
 export type Span = { start: string | null; end: string | null; days?: number; label: string; error: string | null; [more: string]: unknown };
 export type PrevSpan = { start: string; end: string; text: string };
 /** 카드를 구할 때 보내는 ctx(DashBoard.ctx, dash_refresh.context): 보는 기간·직전 기간·기준일 */
-export type Ctx = { range?: { start: string; end: string }; prev?: PrevSpan | null; months?: number; as_of?: string; compare_mode?: CompareMode };
+export type Ctx = { range?: { start: string; end: string }; prev?: PrevSpan | null; months?: number; as_of?: string; compare_mode?: CompareMode; filters?: PickedFilter[] };
+/** 대시보드의 필터 칸 하나(만드는 곳에서 정한다): 컬럼 이름과 보일 이름(비면 컬럼 이름) */
+export type DashFilter = { column: string; label: string };
+/** 보는 사람이 필터 칸에서 고른 값(ctx.filters): 컬럼 값이 in 가운데 하나인 행만. 저장하지 않는다 */
+export type PickedFilter = { column: string; in: string[] };
 export type PeriodParse = { span: Span; previous: PrevSpan | null; context: Ctx | null };
 export type DayParse = { date: string | null; label: string; error: string | null };
 export type EveryParse = { seconds: number | null; error: string | null };
@@ -185,7 +190,7 @@ export type Constants = {
   defaults: Record<string, unknown>;  // 설정 기본값(settings.DEFAULTS)
   features: { on: string[]; version: string | null; all: { id: string; name: string; path: string }[] };
   dash: {
-    max_cards: number; max_dashboards: number; max_palette: number; types: Partial<Record<Exclude<ChartType, "">, string>>; time_types: ChartType[]; max_bins?: number; max_bands?: number; max_cells: number; merge_note: string;
+    max_cards: number; max_filters: number; max_dashboards: number; max_palette: number; types: Partial<Record<Exclude<ChartType, "">, string>>; time_types: ChartType[]; max_bins?: number; max_bands?: number; max_cells: number; merge_note: string;
     units: Record<Unit, string>; palette: string[]; locked: string; min_refresh: number; max_points: number; aggs: string[]; merge: string[]; agg_names: Record<string, string>;
     auto: AutoTable; auto_names: Record<AutoRule, string>; viz: { words: SemanticWords; query_auto: AutoView }; orders: Order[]; order_names: Record<Order, string>;
   };

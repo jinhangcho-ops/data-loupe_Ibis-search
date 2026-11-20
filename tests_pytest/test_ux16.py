@@ -473,7 +473,7 @@ def test_toolbar_edit_only_tools():
     assert "편집 끝내기" not in bar and 'id="d-view"' in bar and 'id="d-build"' in bar  # [편집] 단추 대신 두 곳을 오가는 단추
     # 대시보드 설정은 [더 보기] 메뉴 안에 있다(만드는 곳)
     assert re.search(r'\n\s*<button role="menuitem"[^\n]*setMenu\(false\); setSettings\(true\);[^\n]*>대시보드 설정</button>', bar) and not re.search(r'state\.editing && <button[^\n]*대시보드 설정', bar)
-    assert ">설정</button>" not in bar and "<AddCardMenu" not in bar and "conn.label" not in bar
+    assert ">설정</button>" not in bar and "<AddCardMenu" not in bar and bar.count("conn.label") == 1  # 연결 이름은 [대시보드만 보기]의 위쪽 줄에만
     assert 'setMenu(false); dispatch({ type: "select", id: null }); setAddOpen(true);' not in bar and bar.count(">카드 추가</button>") == 1  # 메뉴 안의 같은 일을 하는 [카드 추가]는 뺐다(강조 단추 하나만)
     assert "}, [menu]);" in bar and "[menu, addOpen, setAddOpen]" not in bar
     assert "const add = useAddCard();" in bar
@@ -484,7 +484,8 @@ def test_dashboard_drawer_slot():
     assert "const add = useAddCard();" in src
     assert "{addOpen && !dashOnly ? <AddCardMenu open onClose={() => setAddOpen(false)} onAdd={add} /> : <CardPanel" in src
     assert "useEffect(() => { if (state.selected) setAddOpen(false); }, [state.selected, setAddOpen]);" in src
-    assert '<b>{state.dash?.name || "대시보드"}</b><span className="d-conn"' in src
+    assert '<b>{state.dash?.name || "대시보드"}</b><span className="hint ml-[12px]" id="d-state"' in src
+    assert '<span className="d-conn" title="지금 연결된 데이터">' in web("components/shell/Toolbar.tsx")  # 연결 이름은 [대시보드만 보기]의 위쪽 줄에
     assert 'onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: null }); setAddOpen(true); }}' in src
 
 
