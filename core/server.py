@@ -5,6 +5,7 @@ import json
 import os
 import re
 import secrets
+import sys
 import threading
 from http import HTTPStatus
 from pathlib import Path
@@ -348,7 +349,9 @@ def restart_app():
 
 
 def connection_key():
-    """지금 연결을 알아보는 열쇠(비밀번호 없음). 가상 테이블을 연결마다 따로 둘 때 쓴다."""
+    """지금 연결을 알아보는 열쇠(비밀번호 없음). 가상 테이블을 연결마다 따로 둘 때 쓴다. 이 PC 계산 중(dash_pull.on_pc)이면 받아 둔 칸의 연결 열쇠로 만든 글자(연결이 없어도 된다)."""
+    if state.get("pc"):
+        return state["pc"]
     if state["opened"] is None:
         raise ValueError("먼저 연결하세요.")
     return use_counts.connection_key(opened_info())
@@ -360,7 +363,9 @@ def opened_info():
 
 
 def virtual_tables():
-    """지금 연결의 가상 테이블 {이름: 정의}. 연결이 없으면 빈 것."""
+    """지금 연결의 가상 테이블 {이름: 정의}. 연결이 없으면 빈 것. 이 PC 계산 중(state["pc"], dash_pull.on_pc)이면 빈 것(받은 파일의 뷰를 가상 테이블이 가리지 않게)."""
+    if state.get("pc"):
+        return {}
     return sql_exec.virtual(connection_key()) if state["opened"] is not None else {}
 
 
@@ -378,7 +383,15 @@ def release_connection(wait=5):
         return
     state["cancel"].set()
     source.interrupt(con)
-    closer = threading.Thread(target=lambda: (source.close(con), source.on_worker(held.clear)()), daemon=True)  # 닫은 뒤 받아 둔 결과(임시 폴더)도 지운다
+
+    def close_all() -> None:
+        source.close(con)
+        source.on_worker(held.clear)()  # 닫은 뒤 받아 둔 결과(임시 폴더)도 지운다
+        dash_pull = sys.modules.get("dashboard.dash_pull")  # 대시보드 모듈이 안 올라왔으면 열린 PC 계산도 없다
+        if dash_pull is not None:
+            dash_pull.close_pc()
+
+    closer = threading.Thread(target=close_all, daemon=True)
     closer.start()
     closer.join(wait)
 

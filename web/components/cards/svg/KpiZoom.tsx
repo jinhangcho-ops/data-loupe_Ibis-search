@@ -15,6 +15,7 @@ import { compareItem } from "@/lib/series";
 import { useConstants } from "@/lib/constants";
 import { cardHours } from "@/lib/api";
 import { useCompare } from "@/components/shell/ShellProvider";
+import { useDash } from "@/lib/store";
 
 export const HOUR_LOADING = "시간 눈금 값을 읽는 중이에요. 그동안 일 눈금으로 보여요.";
 export const HOUR_OFFLINE = "연결하면 시간 눈금을 볼 수 있어요. 지금은 일 눈금으로 보여요.";
@@ -35,7 +36,7 @@ export function KpiZoom({ card, result, palette, ctx, unit, live, onClose }: Kpi
   const fmt = cardFormat(shown), unitText = shown.view?.unit_text ?? "";
   const num = showValue(cardValue(shown, 0, ctx?.range, merge), fmt);
   const mode = ctx?.compare_mode ?? "prev";
-  const said = useCompare(card.id);
+  const said = useCompare(card.id), dash = useDash().state.dash?.id ?? "";
   const label = compareItem(shown, ctx?.range, ctx?.prev, merge, mode)?.label ?? "";
   const spans = trendSpans(shown, ctx?.range, ctx?.prev, mode), ticks = ZOOM_TICKS[unit ?? "none"], timed = !!shown.data?.by_unit?.day;
   const [tick, setTick] = useState<Tick>(ticks[0]);
@@ -45,7 +46,7 @@ export function KpiZoom({ card, result, palette, ctx, unit, live, onClose }: Kpi
   useEffect(() => {
     if (!hourly || !live) return;
     let on = true;
-    cardHours(shown, ctx).then(h => { if (!on) return; setHours(h); setNote(h.reason || (h.labels.length ? "" : HOUR_EMPTY)); }, e => { if (on) setNote((e as Error).message); });
+    cardHours(shown, ctx, dash).then(h => { if (!on) return; setHours(h); setNote(h.reason || (h.labels.length ? "" : HOUR_EMPTY)); }, e => { if (on) setNote((e as Error).message); });
     return () => { on = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

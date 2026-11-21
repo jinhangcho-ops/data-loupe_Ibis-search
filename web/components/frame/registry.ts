@@ -28,6 +28,7 @@ export const FRAME_ACTIONS = {
   zoom: { name: "카드 크게 보기", arg: "card" },
   easy: { name: "쉬운 보기 켜고 끄기", arg: "" },
   filters_clear: { name: "필터 모두 풀기", arg: "" },
+  settings: { name: "대시보드 설정 창 열기", arg: "" },
 } as const satisfies Record<string, { name: string; arg: "" | "page" | "card" }>;
 export type FrameAction = keyof typeof FRAME_ACTIONS;
 
@@ -44,7 +45,7 @@ export type FrameSettings = Partial<FrameItem> & { ambient?: boolean; items?: Fr
 export type ActionHost = {
   recompute: () => unknown; setPage: (page: string) => void; dashOnly: boolean; setDashOnly: (on: boolean) => void;
   setReport: (open: boolean) => void; setZoom: (id: string | null) => void; flipTheme: () => void; pages: string[]; cardIds: string[];
-  flipEasy: () => void; clearFilters: () => unknown;
+  flipEasy: () => void; clearFilters: () => unknown; setSettings: (open: boolean) => void;
 };
 
 /** [SPECIFICATION] plans/dash-blocks.md#isFrame
@@ -97,6 +98,7 @@ export function runAction(item: Pick<FrameItem, "action" | "arg">, host: ActionH
   else if (action === "dash_only") host.setDashOnly(!host.dashOnly);
   else if (action === "easy") host.flipEasy();
   else if (action === "filters_clear") host.clearFilters();
+  else if (action === "settings") host.setSettings(true);
   else if (action === "page") host.setPage(arg);
   else host.setZoom(arg);
 }

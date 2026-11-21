@@ -30,7 +30,7 @@ const PRESSABLE = "button, a, input, select, textarea, label, summary";  // 몸�
 /** 카드 아래 안내(옛 dash.js .bwhen): 다른 연결의 이전 값, 서버 안내(값을 구한 시각은 카드 머리 .bhead의 title), 저장된 일 값의 시작일, 기간 기준 날짜, 연결해서 다시 구해야 하는 집계. 한 줄에 하나 */
 export function whenLines(card: Card, d: Card["data"], range: Ctx["range"], conn: Source, merge: string[]) {
   const first = d.by_unit?.day?.labels[0], paint = !CHART_KINDS.includes(card.kind);
-  const noDate = range && !d.by_unit && !card.source?.date && !["recent_rows", "status", "alerts", "map"].includes(card.kind) && !isPoints(card);
+  const noDate = range && !d.by_unit && !card.source?.date && !["status", "alerts", "map"].includes(card.kind) && !isPoints(card);
   return [
     conn && card.source?.key && !sameSource(card.source.key, conn.key) ? "다른 연결에서 구한 이전 값이에요" : "",
     d.note,

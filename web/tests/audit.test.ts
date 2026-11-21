@@ -102,7 +102,6 @@ describe("C6 기간을 바꾸면 다시 구할 카드", () => {
       expect(datedCard(c, null, true), k).toBe(true);    // 기간을 지웠으면 원래 값으로
     }
     expect(datedCard({ ...card("kpi", timed(1)), source: { date: "ts" } }, r, false)).toBe(false);  // 일 값은 화면이 기간으로 묶는다
-    expect(datedCard({ ...card("recent_rows", {}), source: { date: "ts" } }, r, false)).toBe(false);
   });
 });
 

@@ -34,7 +34,7 @@ describe("표 줄 상세", () => {
   });
   it("줄을 누르면 카드 고르기로 번지지 않고 상세 창(RowDetail)을 연다", () => {
     const rows = src("components/cards/svg/Rows.tsx");
-    expect(rows.match(/onClick=\{e => \{ e\.stopPropagation\(\); setOpen\(/g)).toHaveLength(2);  // 앞 N행 표, 집계 표
+    expect(rows.match(/onClick=\{e => \{ e\.stopPropagation\(\); setOpen\(/g)).toHaveLength(1);  // 집계 표(앞 N행 표는 B11에서 없앰)
     expect(rows).toContain('<Pop title="줄 상세" cls="row-box"');
   });
 });

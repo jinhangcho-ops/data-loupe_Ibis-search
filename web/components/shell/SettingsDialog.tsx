@@ -10,6 +10,8 @@ import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import type { Constants, Dashboard, Targets } from "@/lib/types";
 import { PeriodBar } from "./PeriodBar";
+import { PeriodField } from "./PeriodBar";
+import { PullSettings } from "./PullSettings";
 import { useShell } from "./ShellProvider";
 
 // 낱말 목록 이름(viz_rules.WORD_LISTS)과 보이는 이름
@@ -35,7 +37,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
 function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
   const { dispatch } = useDash();
   const consts = useConstants();
-  const { period, open, flush } = useShell();
+  const { period, open, flush, build } = useShell();
   const [mark, setMark] = useState(dash.palette[0] ?? ""), [hi, setHi] = useState(dash.palette[1] ?? "");
   const [palErr, setPalErr] = useState("");
   const [path, setPath] = useState("");
@@ -117,10 +119,12 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
   };
   const t = targets, tText = tNote || (!t ? "" : t.error || !t.path ? t.error || "목표 파일을 정하면 카드가 이름으로 목표를 찾을 수 있어요"
     : `목표 ${t.rows.length}개를 읽었어요.` + (t.error_total ? ` 읽지 못한 줄이 ${t.error_total}개 있어요(${(t.errors[0] as { message?: string })?.message ?? ""}). ` : ""));
+  if (!build) return <><div className="dc-field"><label className="hint" htmlFor="dc-view-per">기간</label><PeriodField id="dc-view-per" /></div><PullSettings dash={dash} /></>;
   return (
     <>
       <PeriodBar />
       <div className="err" role="alert">{period.settingsError}</div>
+      <PullSettings dash={dash} />
       <h4>그림 색</h4>
       <div className="row">
         <label className="hint">표시색 <input value={mark} onChange={e => setMark(e.target.value)} placeholder="#6250d6" aria-label="표시색"

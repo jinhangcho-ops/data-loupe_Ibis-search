@@ -1,5 +1,5 @@
-"""대시보드의 라우트. server.app에 달린다. 저장·목록·지우기·카드 더하기·기간 읽기·비교 문장·최신화 상태는 연결을 쓰지 않으므로 차례(turn)를 기다리지 않는다.
-카드 값을 구하는 /api/dash/card/compute와 /api/dash/cards/compute만 연결에서 구한다(차례를 기다린다). 최신화는 dash_refresh의 작업 스레드가 한다."""
+"""대시보드의 라우트. server.app에 달린다. 저장·목록·지우기·카드 더하기·기간 읽기·비교 문장은 연결을 쓰지 않으므로 차례(turn)를 기다리지 않는다.
+카드 값을 구하는 /api/dash/card/compute와 /api/dash/cards/compute만 연결에서 구한다(차례를 기다린다)."""
 import datetime as dt
 import time
 from pathlib import Path
@@ -18,21 +18,32 @@ from core.server import app
 compare = Later("core.compare")
 dash_calc = Later("dashboard.dash_calc")
 dash_pdf = Later("dashboard.dash_pdf")
+dash_pull = Later("dashboard.dash_pull")
+dash_files = Later("dashboard.dash_files")
+dash_keys = Later("dashboard.dash_keys")
 dash_refresh = Later("dashboard.dash_refresh")
 dash_store = Later("core.dash_store")
+held = Later("core.held")
 kpi_hours = Later("dashboard.kpi_hours")
 metric_file = Later("core.metric_file")
 period = Later("dashboard.period")
 querying = Later("core.querying")
+scan_size = Later("core.scan_size")
 targets = Later("core.targets")
 viz_rules = Later("core.viz_rules")
 
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".svg": "image/svg+xml"}  # 배치도 바탕 그림으로 내려줄 수 있는 것
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
-TARGET_PAGE = 100  # 목표 파일의 문제 줄을 한 번에 돌려줄 수(화면은 [이전]/[다음]으로 넘겨 본다)
+PULL_HOWS = ("pull", "rewrite")  # 암호화를 바꾸는 방법: 다시 받기, 풀어서 다시 쓰기
+MAX_DASH_ID = 32  # 요청의 대시보드 id 글자 수
+MAX_FRESH_ID = 64  # 요청의 갱신 표(fresh) 글자 수
+MAX_SLOT_ID = 16  # 받은 데이터 칸 id 글자 수(def_hash 16자)
+DATE_CHARS = 10  # 날짜 글자 수(YYYY-MM-DD). 모양 검사는 refetch_range가 한다
+TARGET_PAGE = 100 # 목표 파일의 문제 줄을 한 번에 돌려줄 수(화면은 [이전]/[다음]으로 넘겨 본다)
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min",
-                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/dashboard/build", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart", "/api/viz"})
+                    "/api/period/parse", "/api/period/day", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/dashboard/build", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart", "/api/viz",
+                    "/api/dash/pull/state", "/api/dash/pull/crypt", "/api/dash/pull/orphans", "/api/dash/pull/orphans/drop", "/api/dash/bell"})
 
 
 def with_source(card):
@@ -45,7 +56,7 @@ def with_source(card):
 def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버와 같은 상한·종류·기본 색·집계를 쓴다
     found["dash"] = {"max_cards": dash_store.MAX_CARDS, "max_dashboards": dash_store.MAX_DASHBOARDS, "max_palette": dash_store.MAX_PALETTE,
         "types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "three_types": dash_store.THREE_D_TYPES, "units": dash_store.UNITS,
-        "locked": dash_store.LOCKED, "min_refresh": dash_store.MIN_REFRESH}  # 화면(web/·common.js)이 서버와 같은 상한·종류·기본 색을 쓴다
+        "locked": dash_store.LOCKED}  # 화면(web/·common.js)이 서버와 같은 상한·종류·기본 색을 쓴다
     found["dash"]["max_points"] = result.MAX_POINTS  # 산점도·버블의 점 수 상한
     found["dash"]["max_filters"] = dash_store.MAX_FILTERS  # 대시보드 필터 칸 수 상한
     found["dash"]["max_pages"] = dash_store.MAX_PAGES  # 대시보드 쪽(탭) 수 상한
@@ -53,6 +64,8 @@ def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버�
     found["dash"]["merge_note"] = dash_store.MERGE_NOTE  # (Phase 17) 범위 묶기 안내 한 줄(쿼리 차트 groupPanel·카드 GroupPicker가 같은 글을 보인다)
     found["dash"].update(aggs=list(metric_file.AGGS), merge=list(sql_funcs.MERGE), agg_names=metric_file.AGG_NAMES)  # 카드 계열의 집계(함수 사전의 집계 전부), 일 값을 다시 묶을 수 있는 집계, 보이는 이름
     found["dash"].update(auto=viz_rules.AUTO_PARAMS, auto_names=viz_rules.AUTO_NAMES, viz=viz_rules.load_prefs(), orders=viz_rules.ORDERS, order_names=viz_rules.ORDER_NAMES)  # 자동 규칙 수치표·이름, 차트 낱말과 쿼리 화면 기본값, 정렬 다섯 값·이름
+    found["dash"]["pull"] = {"calcs": list(dash_store.PULL_CALCS), "ranges": list(dash_store.PULL_RANGES), "crypts": list(dash_store.PULL_CRYPTS), "units": dash_store.PULL_UNITS, "unit_names": dash_store.PULL_UNIT_NAMES, "min_every": dash_store.MIN_PULL_EVERY, "max_every": dash_store.MAX_PULL_EVERY, "default": dash_store.check_pull(None), "gap_note": dash_store.GAP_NOTE}  # 받기 설정 칸(계산 방식·갱신 주기·받는 범위·암호화)의 선택지와 상한
+    found["dash"].update(gone_kinds=list(dash_store.GONE_KINDS), gone_text=dash_store.GONE_CARD)  # 앱에서 없앤 카드 종류와 그 안내 글(화면이 서버와 같은 글자로 보인다)
     cal = settings.load()
     found.update(week_start=cal.get("week_start") or "mon", fiscal_start_month=cal.get("fiscal_start_month") or 1)  # 화면의 주·연 묶음(web/lib/calc.ts BUCKET)이 설정을 따르게
     found.update(currency_symbol=settings.get("currency_symbol"), currency_max=settings.CURRENCY_MAX)  # 값 모양 currency의 기호(web/lib/calc.ts showValue)와 설정 창 칸의 글자 수
@@ -123,7 +136,7 @@ def dash_open() -> Response:
 @app.post("/api/dash")
 def dash_save():
     """대시보드 하나를 저장한다(id가 없으면 새 대시보드). 저장한 모양(카드 값 data는 뺀 것)과 새 목록을 돌려준다."""
-    dash_refresh.check_dashboard_every(request.json)
+    dash_refresh.check_pull_every(request.json)
     saved = dash_store.save_dashboard(request.json)
     slim = {**saved, "cards": [{k: v for k, v in c.items() if k != "data"} for c in saved["cards"]]}  # 화면은 보낸 카드를 이미 갖고 있다: 카드 값(data, 수 MB)은 돌려주지 않는다
     return jsonify(dashboard=slim, **dash_store.listing())
@@ -131,8 +144,179 @@ def dash_save():
 
 @app.post("/api/dash/delete")
 def dash_delete():
-    dash_store.delete_dashboard(request.json.get("id"))
+    dash_id = request.json.get("id")
+    dash_store.delete_dashboard(dash_id)
+    with dash_files.LOCK:
+        if dash_pull.OPEN["dash"] == dash_id:
+            dash_pull.close_pc()
+        dash_files.forget(dash_id)
+        dash_keys.forget(dash_id)
     return jsonify(dash_store.listing())
+
+
+@app.get("/api/dash/pull/state")
+def pull_state() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#pull_state
+    `GET /api/dash/pull/state?id=` 그 대시보드가 쓰는 받은 데이터: 크기 {bytes, text}와 칸마다 {slot, schema, table, bytes, pulled_at, shared, lost}(연결을 쓰지 않는다, FREE)."""
+    dash_id = request.args.get("id", "")
+    dash_store.get_dashboard(dash_id)
+    found = dash_files.slots(dash_id)
+    slots = []
+    for slot, man in found.items():
+        folder = dash_files.root() / slot
+        size = sum((folder / name).stat().st_size for name in man["parts"] if (folder / name).is_file())
+        slots.append({"slot": slot, "schema": man["schema"], "table": man["table"], "bytes": size,
+                      "pulled_at": man["pulled_at"], "shared": len(man["users"]) > 1, "lost": man["lost"]})
+    n = dash_files.size_of(dash_id)
+    return jsonify(bytes=n, text=scan_size.size_text(n), slots=slots)
+
+
+@app.post("/api/dash/pull/tables")
+def pull_tables() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#pull_tables
+    `POST /api/dash/pull/tables` {id}: 지금 연결이 원격 DB인지와 그 대시보드 카드들이 읽는 테이블·새 줄 컬럼 후보 {remote, tables}."""
+    body = request.json or {}
+    d = dash_store.get_dashboard(body.get("id"))
+    con = server.get_con()
+    return jsonify(remote=held.remote(con), tables=server.run(lambda: dash_pull.mark_tables(d)))
+
+
+@app.post("/api/dash/pull/crypt")
+def pull_crypt() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#pull_crypt
+    `POST /api/dash/pull/crypt` {id, crypt, pass, how}: 그 대시보드의 암호화(와 암호문)를 바꾸고, how가 rewrite면 받아 둔 파일을 새 열쇠로 다시 쓴다(암호문은 돌려주지 않는다, FREE)."""
+    body = request.json or {}
+    d = dash_store.get_dashboard(body.get("id"))
+    dash_id, crypt, how, text = d["id"], body.get("crypt"), body.get("how"), body.get("pass")
+    if how not in PULL_HOWS:
+        raise ValueError("암호화를 바꾸는 방법(how)은 pull(다시 받기)·rewrite(풀어서 다시 쓰기)예요.")
+    if text is not None and not isinstance(text, str):
+        raise ValueError("암호문은 글자여야 해요.")
+    if crypt == "pass" and not text and not dash_keys.load()["pass"].get(dash_id):
+        raise ValueError(dash_keys.NO_PASS)
+    old_keys = {}
+    if how == "rewrite":  # 옛 암호문 열쇠는 set_pass가 덮기 전에 구한다
+        old_keys = {s: dash_keys.slot_key(m["crypt"]["group"], dash_id, m["crypt"]["salt"]) for s, m in dash_files.slots(dash_id).items()}
+    if text:
+        dash_keys.set_pass(dash_id, text)
+    saved = dash_store.update_settings(dash_id, {"pull": {**dash_store.check_pull(d.get("pull")), "crypt": crypt}})
+    if how == "rewrite":
+        with dash_files.LOCK:
+            dash_pull.rewrite_crypt(saved, old_keys)
+    return jsonify(dashboard=saved)
+
+
+@app.post("/api/dash/pull/full")
+def pull_full() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#pull_full
+    `POST /api/dash/pull/full` {id, ctx}: [전체 갱신] 그 대시보드가 쓰는 칸을 모두 DB에서 전부 다시 받는다 {slots}."""
+    body = request.json or {}
+    d = dash_store.get_dashboard(body.get("id"))
+    server.get_con()
+    slots = server.run(lambda: dash_pull.full(d, body.get("ctx")))
+    return jsonify(slots=slots)
+
+
+@app.post("/api/dash/pull/range")
+def pull_range() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#pull_range
+    `POST /api/dash/pull/range` {id, slot, start, end}: 마지막 줄을 못 찾은 칸의 그 기간을 다시 받는다 {rows}."""
+    body = request.json or {}
+    d = dash_store.get_dashboard(body.get("id"))
+    server.get_con()
+    slot = dash_store.text(body.get("slot"), "칸", MAX_SLOT_ID, 1)
+    start = dash_store.text(body.get("start"), "시작 날짜", DATE_CHARS, 1)
+    end = dash_store.text(body.get("end"), "끝 날짜", DATE_CHARS, 1)
+    return jsonify(**server.run(lambda: dash_pull.refetch_range(d, slot, start, end)))
+
+
+BELL_FILE = "dash_bell.json"  # (B11) 설정 폴더의 알림 읽음 기록 {"read": [알림 id]}
+MAX_BELL = 500  # (B11) 기억하는 읽은 알림 id 수
+MAX_BELL_ID = 300  # (B11) 알림 id 글자 수
+
+
+@app.get("/api/dash/bell")
+def bell_get() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#bell_get
+    `GET /api/dash/bell` 읽은 알림 id 목록 {read}(FREE)."""
+    found = settings.read(BELL_FILE) or {}
+    read = found.get("read")
+    if not isinstance(read, list) or not all(isinstance(x, str) for x in read):
+        read = []
+    return jsonify(read=read)
+
+
+@app.post("/api/dash/bell")
+def bell_set() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#bell_set
+    `POST /api/dash/bell` {read, current}: 읽은 알림 id를 더하고, 지금 있는 알림(current)에 없는 옛 기록은 지워 {read}를 돌려준다(FREE)."""
+    body = request.json or {}
+    read, current = body.get("read"), body.get("current")
+    if not isinstance(read, list) or not isinstance(current, list):
+        raise ValueError("알림 id 목록이 맞지 않아요.")
+    new = [dash_store.text(x, "알림 id", MAX_BELL_ID, 1) for x in read]
+    now = {dash_store.text(x, "알림 id", MAX_BELL_ID, 1) for x in current}
+    with settings.updating(BELL_FILE):
+        old = (settings.read(BELL_FILE) or {}).get("read")
+        if not isinstance(old, list):
+            old = []
+        keep = list(dict.fromkeys(x for x in [*old, *new] if isinstance(x, str) and x in now))[-MAX_BELL:]
+        settings.write(BELL_FILE, {"read": keep})
+    return jsonify(read=keep)
+
+
+@app.get("/api/dash/pull/orphans")
+def pull_orphans() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#pull_orphans
+    `GET /api/dash/pull/orphans` 아무 대시보드도 쓰지 않는 받은 데이터 {orphans: [{slot, schema, table, bytes}], text}(FREE)."""
+    store = dash_store.load()
+    if store["locked"]:
+        return jsonify(orphans=[], text="0 B")
+    found = dash_files.orphans(set(store["dashboards"]))
+    return jsonify(orphans=found, text=scan_size.size_text(sum(o["bytes"] for o in found)))
+
+
+@app.post("/api/dash/pull/orphans/drop")
+def pull_orphans_drop() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#pull_orphans_drop
+    `POST /api/dash/pull/orphans/drop` 사용자가 확인한 뒤 주인 없는 받은 데이터를 지운다 {dropped}(FREE)."""
+    store = dash_store.load()
+    if store["locked"]:
+        raise ValueError(dash_store.LOCKED)
+    known = set(store["dashboards"])
+    with dash_files.LOCK:
+        orphan = {o["slot"] for o in dash_files.orphans(known)}
+        if any(p.parent.name in orphan for paths in dash_pull.OPEN["views"].values() for p in paths):
+            dash_pull.close_pc()
+        dropped = dash_files.drop_orphans(known)
+    return jsonify(dropped=dropped)
+
+
+@app.post("/api/dash/pull/unused")
+def pull_unused() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#pull_unused
+    `POST /api/dash/pull/unused` {id}: 그 대시보드에서 더는 쓰지 않는 받은 파일 {unused: [{slot, schema, table, bytes, shared}]}."""
+    body = request.json or {}
+    d = dash_store.get_dashboard(body.get("id"))
+    server.get_con()
+    return jsonify(unused=server.run(lambda: dash_pull.unused(d)))
+
+
+@app.post("/api/dash/pull/unused/drop")
+def pull_unused_drop() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#pull_unused_drop
+    `POST /api/dash/pull/unused/drop` {id, slots}: 사용자가 확인한 칸 가운데 지금도 안 쓰는 것만 지운다 {dropped, kept}."""
+    body = request.json or {}
+    slots = body.get("slots")
+    if not isinstance(slots, list) or not all(isinstance(s, str) for s in slots):
+        raise ValueError("지울 칸(slots)은 글자 목록이에요.")
+    d = dash_store.get_dashboard(body.get("id"))
+    server.get_con()
+    still = {u["slot"] for u in server.run(lambda: dash_pull.unused(d))}
+    for slot in slots:
+        if slot in still:
+            dash_files.drop_user(slot, d["id"])
+    return jsonify(dropped=[s for s in slots if s in still], kept=[s for s in slots if s not in still])
 
 
 @app.post("/api/dash/card/add")
@@ -152,27 +336,21 @@ def other_source(key, now):
 @app.post("/api/dash/card/compute")
 def card_compute():
     """카드 하나의 source로 data를 구해 돌려준다(저장하지 않는다). source.key가 있는데 지금 연결과 다르면 거부한다. 지금 연결의 key·label도 함께 준다."""
-    card = dash_store.check_card((request.json or {}).get("card") or {})
+    body = request.json or {}
+    card = dash_store.check_card(body.get("card") or {})
+    dash_id = dash_store.text(body.get("dash"), "대시보드", MAX_DASH_ID)
+    fresh = dash_store.text(body.get("fresh"), "갱신 표", MAX_FRESH_ID)
+    pc = dash_pull.uses_pc(dash_id)
     now = dash_store.current_source()
     if other_source(card["source"].get("key"), now):
         raise ValueError(f"이 카드는 다른 연결({card['source'].get('label') or card['source']['key']})에서 구한 거예요. 그 연결로 바꾼 뒤 다시 구하세요.")
-    found = dash_refresh.scan_found(card, request.json.get("ctx"))  # 최신화와 같은 처리 용량 판정. 넘으면 화면이 묻고(confirmed) 다시 보낸다
-    if found.get("blocked") or (found.get("over") and request.json.get("confirmed") is not True):
-        response = jsonify(needs_confirm=True, **found)
-        response.headers["X-Needs-Confirm"] = "1"
-        return response
-    return jsonify(data=dash_calc.compute_filtered(card, dt.datetime.now().isoformat(timespec="seconds"), request.json.get("ctx")), source=now)
-
-
-@app.post("/api/dash/card/filtered")
-def card_filtered():
-    """원래 행을 보이는 카드(표·최근 행)가 필터를 건 채 행을 읽을 조회: 카드의 source.body에 ctx.filters 가운데 걸 수 있는 것을 조건으로 더한 body와 걸지 못한 컬럼 이름(missed).
-    화면은 이 body로 /api/query를 부른다."""
-    card = dash_store.check_card((request.json or {}).get("card") or {})
-    if other_source(card["source"].get("key"), dash_store.current_source()):
-        raise ValueError("다른 연결에서 만든 카드라 지금은 볼 수 없어요")
-    cut, missed = dash_calc.with_filters(card, request.json.get("ctx"))
-    return jsonify(body=cut["source"].get("body"), missed=missed)
+    if not pc:
+        found = dash_refresh.scan_found(card, body.get("ctx"))  # 최신화와 같은 처리 용량 판정. 넘으면 화면이 묻고(confirmed) 다시 보낸다
+        if found.get("blocked") or (found.get("over") and body.get("confirmed") is not True):
+            response = jsonify(needs_confirm=True, **found)
+            response.headers["X-Needs-Confirm"] = "1"
+            return response
+    return jsonify(data=dash_pull.compute(card, dt.datetime.now().isoformat(timespec="seconds"), body.get("ctx"), dash_id, fresh), source=now)
 
 
 @app.post("/api/dash/card/hours")
@@ -182,19 +360,32 @@ def card_hours() -> Response:
     card = dash_store.check_card(body.get("card") or {})
     if other_source(card["source"].get("key"), dash_store.current_source()):
         raise ValueError("다른 연결에서 만든 카드라 지금은 시간 눈금을 볼 수 없어요.")
-    if why := dash_refresh.scan_decision(card, body.get("ctx")):
-        raise ValueError(why)
-    return jsonify(kpi_hours.hour_values(dash_calc.with_filters(card, body.get("ctx"))[0], body.get("ctx")))
+    dash_id = dash_store.text(body.get("dash"), "대시보드", MAX_DASH_ID)
+    if not dash_pull.uses_pc(dash_id):
+        if why := dash_refresh.scan_decision(card, body.get("ctx")):
+            raise ValueError(why)
+        return jsonify(kpi_hours.hour_values(dash_calc.with_filters(card, body.get("ctx"))[0], body.get("ctx")))
+    files, _ = dash_pull.files_for(card, body.get("ctx"), dash_id, "")
+    with dash_pull.on_pc(files, dash_id):
+        return jsonify(kpi_hours.hour_values(dash_calc.with_filters(card, body.get("ctx"))[0], body.get("ctx")))
 
 
 @app.post("/api/dash/filter/values")
 def filter_values():
     """필터 칸에 보일 값 목록 {values, more}: 저장한 대시보드(id)의 지금 연결 카드들에서 column의 서로 다른 값(dash_calc.filter_values)."""
     body, now = request.json or {}, dash_store.current_source()
-    if not now:
+    pc = dash_pull.uses_pc(body.get("id"))
+    if not now and not pc:
         raise ValueError("데이터에 연결하면 거를 수 있어요.")
-    cards = [c for c in dash_store.get_dashboard(body.get("id"))["cards"] if not other_source(c["source"].get("key"), now)]
-    values, more = dash_calc.filter_values(cards, dash_store.text(body.get("column"), "필터 컬럼", dash_store.MAX_FILTER_NAME, 1))
+    d = dash_store.get_dashboard(body.get("id"))
+    cards = [c for c in d["cards"] if not now or not other_source(c["source"].get("key"), now)]
+    column = dash_store.text(body.get("column"), "필터 컬럼", dash_store.MAX_FILTER_NAME, 1)
+    if not pc:
+        values, more = dash_calc.filter_values(cards, column)
+        return jsonify(values=values, more=more)
+    files, _ = dash_pull.held_files(d, None)
+    with dash_pull.on_pc(files, d["id"]):
+        values, more = dash_calc.filter_values(cards, column)
     return jsonify(values=values, more=more)
 
 
@@ -222,11 +413,18 @@ def chart_points():
         raise ValueError("이 카드는 다른 연결에서 구한 거예요. 그 연결로 바꾼 뒤 다시 구하세요.")
     body = dash_calc.with_period(body, body.get("date"), (body.get("ctx") or {}).get("range"))  # 대시보드 기간(카드 compute와 같게)
     body = dash_calc.with_filters({"source": {"body": body}}, body.get("ctx"))[0]["source"]["body"]  # 보는 사람의 필터(걸 수 있는 것만)
-    try:
-        querying.runnable(body, select=False, ask=body)  # 처리 용량 확인만(BigQuery의 읽는 양, 원격에서 새로 받을 사본). 받은 사본은 points_of가 그대로 쓴다
-    except querying.Confirm as e:
-        return e.response
-    return jsonify(points=dash_calc.points_of(body, body.get("size"), body.get("auto")))
+    dash_id = dash_store.text(body.get("dash"), "대시보드", MAX_DASH_ID)
+    if not dash_pull.uses_pc(dash_id):
+        try:
+            querying.runnable(body, select=False, ask=body)  # 처리 용량 확인만(BigQuery의 읽는 양, 원격에서 새로 받을 사본). 받은 사본은 points_of가 그대로 쓴다
+        except querying.Confirm as e:
+            return e.response
+        return jsonify(points=dash_calc.points_of(body, body.get("size"), body.get("auto")))
+    sized = [{"y": body["size"], "agg": "count"}] if body.get("size") else []  # 크기 컬럼도 받게
+    card = {"id": "", "kind": "chart", "view": {}, "source": {"body": {**body, "series": [*(body.get("series") or []), *sized]}, "date": body.get("date")}}
+    files, _ = dash_pull.files_for(card, body.get("ctx"), dash_id, "")
+    with dash_pull.on_pc(files, dash_id):
+        return jsonify(points=dash_calc.points_of(body, body.get("size"), body.get("auto")))
 
 
 @app.post("/api/dash/cards/compute")
@@ -235,16 +433,20 @@ def cards_compute():
     구한 데 걸린 초(seconds)도 준다. 다른 연결의 카드는 error로 돌려준다."""
     now, started, out = dash_store.current_source(), time.monotonic(), []
     stamp = dt.datetime.now().isoformat(timespec="seconds")
-    given = (request.json or {}).get("cards") or []
-    ctx = dash_calc.shared_context([c for c in given if isinstance(c, dict)], (request.json or {}).get("ctx"))  # 같은 테이블·조건의 카드들은 한 번에 읽는다(최신화와 같은 계획)
+    body = request.json or {}
+    given = body.get("cards") or []
+    dash_id = dash_store.text(body.get("dash"), "대시보드", MAX_DASH_ID)
+    fresh = dash_store.text(body.get("fresh"), "갱신 표", MAX_FRESH_ID)
+    pc = dash_pull.uses_pc(dash_id)
+    ctx = dash_calc.shared_context([c for c in given if isinstance(c, dict)], body.get("ctx"))  # 같은 테이블·조건의 카드들은 한 번에 읽는다(최신화와 같은 계획)
     for one in given:
         try:
             card = dash_store.check_card(one)
             if other_source(card["source"].get("key"), now):
                 raise ValueError("다른 연결에서 구한 카드예요")
-            if why := dash_refresh.scan_decision(card, ctx):  # 실시간 갱신은 묻지 않고 그 카드만 건너뛴다(최신화와 같게)
+            if not pc and (why := dash_refresh.scan_decision(card, ctx)):  # 실시간 갱신은 묻지 않고 그 카드만 건너뛴다(최신화와 같게)
                 raise ValueError(why)
-            out.append({"id": card["id"], "data": dash_calc.compute_filtered(card, stamp, ctx)})
+            out.append({"id": card["id"], "data": dash_pull.compute(card, stamp, ctx, dash_id, fresh)})
         except ValueError as e:
             out.append({"id": (one or {}).get("id", ""), "error": str(e)})
     return jsonify(results=out, seconds=round(time.monotonic() - started, 2))
@@ -256,7 +458,7 @@ def dash_settings():
     body = request.json
     saved = dash_store.get_dashboard(body.get("id"))
     fields = {k: body[k] for k in dash_store.SETTING_KEYS if k in body}
-    dash_refresh.check_dashboard_every({**saved, **fields})
+    dash_refresh.check_pull_every({**saved, **fields})
     return jsonify(dashboard=dash_store.update_settings(body.get("id"), fields))
 
 
@@ -272,35 +474,9 @@ def dash_last():
 
 @app.get("/api/dash/live_min")
 def live_min_get():
-    """지금 연결의 실시간 간격 최소(초, 0이면 제한 없음)와 연결 이름."""
+    """지금 연결과 계산 방식 DB의 갱신 주기 최소(초)"""
     now = dash_store.current_source()
     return jsonify(source=now, seconds=dash_refresh.live_min(now["key"]) if now else 0)
-
-
-@app.post("/api/dash/live_min")
-def live_min_set():
-    """지금 연결의 실시간 간격 최소(초)를 사용자가 정한다. 0이면 지운다."""
-    now = dash_store.current_source()
-    dash_refresh.set_live_min(now["key"] if now else None, (request.json or {}).get("seconds"))
-    return live_min_get()
-
-
-@app.post("/api/dash/refresh/start")
-def refresh_start():
-    """연결에 성공한 뒤 화면이 부른다: 주기가 지난 카드의 최신화를 작업 스레드에서 시작하고 상태를 돌려준다."""
-    for item in dash_store.listing()["dashboards"]:
-        server.run(lambda i=item["id"]: dash_calc.upgrade_dashboard(dash_store.get_dashboard(i)))
-    return jsonify(dash_refresh.start())
-
-
-@app.get("/api/dash/refresh/status")
-def refresh_status():
-    return jsonify(dash_refresh.status())
-
-
-@app.post("/api/dash/refresh/stop")
-def refresh_stop():
-    return jsonify(dash_refresh.stop())
 
 
 @app.post("/api/period/parse")
@@ -320,21 +496,6 @@ def period_parse():
 def period_day():
     """기준일 글자(text)를 읽는다: {date, label("2026-10-01(목) 기준"), error}. 오늘보다 뒤의 날은 막는다."""
     return jsonify(period.parse_day((request.json or {}).get("text")))
-
-
-@app.post("/api/period/every")
-def period_every():
-    """주기 글자(text)를 초로 읽는다. kind가 refresh면 최신화 주기(1시간 이상), live면 실시간 간격(지금 연결의 최소 이상). {seconds, error}."""
-    body = request.json or {}
-    now = dash_store.current_source()
-    try:
-        if body.get("kind") == "live":
-            seconds = dash_refresh.every_seconds(body.get("text"), max(1, dash_refresh.live_min(now["key"]) if now else 0), "실시간")
-        else:
-            seconds = dash_refresh.every_seconds(body.get("text"), dash_refresh.MIN_REFRESH, "최신화")
-    except ValueError as e:
-        return jsonify(seconds=None, error=str(e))
-    return jsonify(seconds=seconds, error=None)
 
 
 @app.post("/api/compare")

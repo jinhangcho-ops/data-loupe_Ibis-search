@@ -16,7 +16,7 @@ import { Funnel } from "./svg/Funnel";
 import { Gauge } from "./svg/Gauge";
 import { Kpi } from "./svg/Kpi";
 import { MapCard } from "./svg/MapCard";
-import { RecentRows, Table } from "./svg/Rows";
+import { Table } from "./svg/Rows";
 import { Sentence } from "./svg/Sentence";
 import { Alerts, Status } from "./svg/Status";
 import { Stripes } from "./svg/Stripes";
@@ -48,14 +48,16 @@ const Geo = (p: P) => (
 
 /** 이 컴포넌트가 그리는 카드 종류 → 컴포넌트(옛 SVG_KINDS) */
 export const PAINTERS: Record<string, ComponentType<P>> = {
-  kpi: Kpi, donut_kpi: Donut, gauge: Gauge, summary: Summary, recent_rows: RecentRows, dual_trend: DualTrend, stripes: Stripes, blocks: Blocks, target_trend: TargetTrend,
+  kpi: Kpi, donut_kpi: Donut, gauge: Gauge, summary: Summary,dual_trend: DualTrend, stripes: Stripes, blocks: Blocks, target_trend: TargetTrend,
   table: Table, funnel: Funnel, status: Status, sentence: Sentence, alerts: Alerts, map: MapCard, deviation: Deviation, geomap: Geo,
   histogram: Histogram, boxplot: BoxPlot, heatmap: Heatmap, calheat: CalHeat, treemap: Treemap, sunburst: Sunburst, bullet: Bullet, bump: Bump,
   sankey: Sankey, cohort: Cohort, candle: Candle, wordcloud: WordCloud,
 };
 export function SvgCard({ card, data, result, palette, ctx }: CardProps) {
-  const theme = useTheme(), merge = useConstants()?.merge;
+  const theme = useTheme(), consts = useConstants(), merge = consts?.merge;
   const colors = useMemo(() => ({ ...theme, palette, ...(palette.length ? { series: shades(palette[0]), hi: palette[1] ?? theme.hi } : {}) }), [theme, palette]);  // 대시보드가 고른 표시색·강조색
+  const gone = !!consts && (consts.dash.gone_kinds.includes(card.kind) || (card.kind === "table" && !!card.source?.body && !(card.source.body.series?.length)));  // 더는 지원하지 않는 카드(서버 GONE_KINDS·계열 없는 표)
+  if (gone) return <Say text={consts.dash.gone_text} />;
   const Paint = PAINTERS[card.kind];
   if (!Paint) return <RawValue data={data} result={result} />;
   if (!(data.by_unit || data.values || data.columns || data.bins)) return <Box cls="summary"><div className="sum-text">아직 구한 값이 없어요</div></Box>;

@@ -152,6 +152,7 @@ export function buildCard(f: Form, aggs: string[], needs: (agg: string) => boole
   });
   const series = values.map(({ y, agg }) => ({ y, agg })), byMetric = k === "kpi" && !!f.metric;
   if (!byMetric && minRows && !series.length) throw new Error("값을 하나 이상 넣으세요.");
+  if (k === "table" && !series.length) throw new Error("표는 집계할 값을 하나 이상 골라 주세요.");
   if (k === "gauge" && !f.group) throw new Error("게이지는 나눌 컬럼을 고르세요.");
   const body = { ...empty, series: byMetric ? [] : series, ...(k === "gauge" ? { x: f.group } : {}), ...(k === "chart" ? { x: f.cX, order: "auto" as const } : {}), ...(byMetric ? { names: [f.metric] } : {}) };
   const view: Record<string, unknown> = { type: "", ratio: 4 / 3, format: f.format, compare: { mode: f.compare || "span" }, better: f.better || "up" };
@@ -169,7 +170,7 @@ export function buildCard(f: Form, aggs: string[], needs: (agg: string) => boole
   }
   if (k === "stripes") view.cells = num(f.cells) || 10;
   if (k === "blocks" && f.size) view.size = num(f.size);
-  if (k === "recent_rows" || k === "table") view.rows = num(f.rowCount) || 10;
+  if (k === "table") view.rows = num(f.rowCount) || 10;
   if (k === "summary" && f.group) view.group = f.group;
   if (k === "table") {
     view.group_cols = f.groupCols.split(",").map(c => c.trim()).filter(Boolean);

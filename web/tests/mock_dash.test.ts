@@ -36,7 +36,7 @@ describe("머리 줄 [더 보기 ▾]", () => {
     expect(page).not.toContain("둘러보기");
   });
   it("대시보드 설정은 편집 조건으로 감싸지 않는다", () => {
-    const line = bar.split("\n").find(l => l.includes(">대시보드 설정</button>"))!;
+    const line = bar.split("\n").find(l => l.includes('role="menuitem"') && l.includes(">대시보드 설정</button>"))!;  // 대시보드만 보기의 단추(d-settings)는 따로 있다(B11)
     expect(line.trimStart().startsWith("<button")).toBe(true);
     expect(line).toContain("setMenu(false); setSettings(true);");
     expect(bar).not.toMatch(/state\.editing && <button[^\n]*대시보드 설정/);
@@ -58,7 +58,7 @@ describe("기간 칸과 최신화 시각", () => {
     expect(period.match(/<Calendar /g)).toHaveLength(1);
     expect(period.match(/commitPeriod\(/g)).toHaveLength(3);  // 칸 벗어남·Enter·달력, 한 벌뿐
     expect(src("components/shell/SettingsDialog.tsx")).toContain("<PeriodBar />");
-    for (const id of ["dc-asof", "dc-cmp", "dc-every", "dc-live", "dc-min"]) expect(period).toContain(`id="${id}"`);  // 나머지 5칸은 설정 창에 그대로
+    for (const id of ["dc-asof", "dc-cmp"]) expect(period).toContain(`id="${id}"`);  // 나머지 2칸은 설정 창에 그대로
   });
   it("머리 줄에 <LastRefreshed />, 설정 창 안내와 같은 시각(useLastComputed)을 쓴다", () => {
     expect(bar).toContain("<LastRefreshed />");

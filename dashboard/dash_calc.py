@@ -229,8 +229,6 @@ def body_columns(body, *more):
 def card_columns(card, ctx=None):
     """카드가 읽는 컬럼들(없으면 None = 줄이지 않음). 최신화가 같은 테이블·조건의 카드들을 묶었으면(ctx.plan) 그 카드들이 쓰는 컬럼의 합집합이다."""
     src, view = card["source"], card["view"]
-    if card["kind"] == "recent_rows" or (card["kind"] == "table" and not src["body"].get("series")):
-        return None  # 원래 행을 보이는 카드는 모든 컬럼
     cols = body_columns(src["body"], src.get("date"), view.get("group"), *(view.get("group_cols") or []), view.get("entity"), view.get("time_col"), view.get("kind_col"), view.get("link_col"),
                         *(b.get("y") for b in view.get("blanks") or []), *(r.get("column") for r in view.get("rules") or []),  # 상태 규칙이 보는 컬럼도 읽는다
                         *([(view.get("geo") or {}).get(k) for k in ("lat", "lon", "value")] if card["kind"] == "geomap" else []),  # 지도 카드의 점 컬럼
@@ -278,9 +276,9 @@ def period_column(card):
 
 
 def fetched(card, ctx=None):
-    """카드가 읽는 조회(기간을 건 것). 식을 만들 수 없는 종류(조회가 없거나 recent_rows·analysis)는 None."""
+    """카드가 읽는 조회(기간을 건 것). 식을 만들 수 없는 종류(조회가 없거나 analysis)는 None."""
     body = (card["source"] or {}).get("body")
-    if not isinstance(body, dict) or card["kind"] in ("recent_rows", "analysis"):
+    if not isinstance(body, dict) or card["kind"] == "analysis":
         return None
     if card["kind"] in SHAPE_KINDS:
         return with_period(body, period_column(card), (ctx or {}).get("range"))  # 새 종류는 직전 기간 없이 보는 기간만 읽는다(shape_data와 같다)
@@ -765,13 +763,9 @@ def js_text(v):
 
 
 def table_data(card, ctx):
-    """table 카드: 쿼리의 집계(묶음 컬럼 + 계열)를 표로(최대 MAX_TABLE_ROWS행). 날짜 컬럼과 직전 기간이 있으면 직전 기간 값도 줘 ▲▼ 칸을 그린다.
-    계열이 없으면 원래 행 표라 값은 저장하지 않고 컬럼 이름만 준다(보일 때마다 연결에서 읽는다)."""
+    """table 카드: 쿼리의 집계(묶음 컬럼 + 계열)를 표로(최대 MAX_TABLE_ROWS행). 날짜 컬럼과 직전 기간이 있으면 직전 기간 값도 줘 ▲▼ 칸을 그린다."""
     view, body = card["view"], card["source"]["body"]
-    series = body.get("series") or []
-    if not series:
-        return {"columns": list(querying.build(body).columns)}
-    series, groups = clean_series(series), view.get("group_cols") or []
+    series, groups = clean_series(body["series"]), view.get("group_cols") or []
     window, before, at = comparison(card, ctx)
     now = run(lambda: table_rows(at(window), groups, series))
     old = run(lambda: table_rows(at(before), groups, series)) if before and groups else None
@@ -1316,15 +1310,15 @@ def compute(card, now, ctx=None):
     """검사한 카드(dash_store.check_card)의 source로 data를 구해 돌려준다(저장하지 않는다). now는 구한 시각 글자.
     ctx = {range: {start, end}, prev: {start, end, text}}(대시보드의 보는 기간과 직전 기간)는 source.date(기간 기준 날짜 컬럼)가 있는 날짜 X축이 아닌 카드에 기간 줄로 걸리고, 요약 문장이 쓴다."""
     source = card["source"]
+    if card["kind"] in dash_store.GONE_KINDS or (card["kind"] == "table" and isinstance(source.get("body"), dict) and not source["body"].get("series")):
+        raise ValueError(dash_store.GONE_CARD)
     if source.get("flow_id") and not isinstance(source.get("body"), dict) and not isinstance(source.get("recipe"), dict):
         raise ValueError(FLOW_GONE)
-    if card["kind"] in ("chart", "metric", "recent_rows", "geomap", *VALUE_KINDS, *TABLE_KINDS, *SHAPE_KINDS):
+    if card["kind"] in ("chart", "metric", "geomap", *VALUE_KINDS, *TABLE_KINDS, *SHAPE_KINDS):
         if not isinstance(source.get("body"), dict):
             raise ValueError("이 카드에는 다시 구할 조회(source.body)가 없어요.")
         body = with_period(source["body"], source.get("date"), (ctx or {}).get("range")) if card["kind"] in ("chart", "metric") else source["body"]
-        if card["kind"] == "recent_rows":
-            found = {"columns": list(querying.build(body).columns)}  # 행 값은 저장하지 않는다(보일 때마다 연결에서 읽는다)
-        elif card["kind"] in VALUE_KINDS:
+        if card["kind"] in VALUE_KINDS:
             found = value_data(card, ctx)
         elif card["kind"] == "table":
             found = table_data(card, ctx)

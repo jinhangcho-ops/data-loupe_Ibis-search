@@ -121,31 +121,6 @@ def test_set_cards_data_isolates_failed_card(folder):
     assert [c["data"].get("note") for c in store.get_dashboard(d["id"])["cards"]] == ["a", None, "c"]
 
 
-def test_refresh_flushes_midway_and_reports_failed_card(folder, monkeypatch):
-    import contextlib
-    import datetime as dt
-    from core import dash_store as store, querying, server
-    from dashboard import dash_calc, dash_refresh as refresh
-    monkeypatch.setitem(server.state, "opened", {"kind": "folder", "path": "C:/x"})
-    here = lambda c: {**c, "source": {**c["source"], "key": store.current_source()["key"]}}  # 지금 연결에서 구한 카드(카드를 구하기 전에 연결이 같은지 다시 본다)
-    d = store.save_dashboard({"name": "중간", "refresh": {"every": "1일"}, "cards": [here(_card("가")), here(_card("나")), here(_card("다"))]})
-    monkeypatch.setattr(querying, "using", lambda **k: contextlib.nullcontext())
-    monkeypatch.setattr(refresh, "scan_decision", lambda card, ctx: "")
-    monkeypatch.setattr(refresh, "FLUSH_SECONDS", 0)  # 카드 하나 구할 때마다 저장
-    monkeypatch.setattr(dash_calc, "compute", lambda card, now, ctx=None: {"note": card["title"], "computed_at": now})
-    writes = []
-    real = store.set_cards_data
-    monkeypatch.setattr(store, "set_cards_data", lambda *a: (writes.append(len(a[1])), real(*a))[1])
-    for c in d["cards"]:
-        store.set_cards_data(d["id"], [(c["id"], {"computed_at": "2000-01-01T00:00:00"}, None)])
-    writes.clear()
-    plan = [(store.editable()[d["id"]], c) for c in store.editable()[d["id"]]["cards"]]
-    refresh.JOB.update(running=True, total=3, done=0, current="", results=[refresh.result(dd, c, "waiting") for dd, c in plan])
-    refresh.work(plan, dt.datetime(2026, 10, 24, 12, 0, 0))
-    assert writes == [1, 1, 1]  # 끝에 한 번이 아니라 카드마다
-    assert [c["data"]["note"] for c in store.get_dashboard(d["id"])["cards"]] == ["가", "나", "다"]
-
-
 def test_check_data_allows_user_key_inside_group_values(folder):
     from core import dash_store as store
     card = {"kind": "analysis", "title": "그룹", "source": {"key": "k", "label": "x", "table": "t", "recipe": {"base": "t"}, "analysis": {"kind": "groups", "by": "user", "agg": "count"}},
@@ -247,7 +222,7 @@ def test_kafka_keyed_topic_stops_sending_after_failure_and_resends_in_order(monk
 def test_kafka_partial_delivery_is_recorded_so_resume_does_not_duplicate(tmp_path, folder, monkeypatch):
     import threading
     from collect import load_job, load_kafka, uploads
-    from test_fix_collect import load_config, write_result
+    from test_fix_collect import load_config
     monkeypatch.setitem(load_job.TARGETS, "kafka", load_kafka)
     monkeypatch.setattr(load_job, "BACKOFF", 0)
     path = tmp_path / "out.parquet"

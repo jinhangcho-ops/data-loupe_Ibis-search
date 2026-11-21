@@ -97,7 +97,7 @@ CHOICES = {
     "week_start": ["mon", "sun"],  # 주 묶음의 시작 요일(기본 mon). 그 밖에 timezone(IANA 이름)·fiscal_start_month(회계연도 첫 달 1~12, 기본 1)는 valid가 따로 본다
 }
 
-# 끌어서 조절한 크기(px)와 전처리가 미리 볼 행 수(sample), 오래 걸린 작업이 끝났을 때 알림을 보내는 기준 시간(notify_after, 초, 기본 30), DuckDB 파일 조회의 메모리 한도(memory, MB, 기본은 제한 없음), DuckDB 계산에 쓰는 코어 수(threads, 기본은 전부), PC에서 중앙값·사분위수를 구할 때 받는 최대 행 수(pc_stat_rows, 기본 1,000,000): (최소, 최대). 화면은 이 범위를 server.CONSTANTS로 받는다. 0을 저장하면 기본값으로 돌아간다.
+# 끌어서 조절한 크기(px)와 전처리가 미리 볼 행 수(sample), 오래 걸린 작업이 끝났을 때 알림을 보내는 기준 시간(notify_after, 초, 기본 30), DuckDB 파일 조회의 메모리 한도(memory, MB, 기본은 제한 없음), DuckDB 계산에 쓰는 코어 수(threads, 기본은 전부), PC에서 중앙값·사분위수를 구할 때 받는 최대 행 수(pc_stat_rows, 기본 1,000,000), 이 PC 계산을 닫을 때까지 쉬는 분(pc_idle, 기본 10): (최소, 최대). 화면은 이 범위를 server.CONSTANTS로 받는다. 0을 저장하면 기본값으로 돌아간다.
 CORE_RESERVE = 0.2  # 시스템이 쓸 몫으로 남기는 코어의 비율(적어도 1개)
 
 
@@ -107,7 +107,7 @@ def safe_threads(cores: int) -> int:
 
 
 SAFE_THREADS = safe_threads(os.cpu_count() or 1)  # 설정 threads가 없을 때 쓰는 코어 수(DEFAULTS)
-SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "chart": (200, 1000), "sample": (1000, 1_000_000), "notify_after": (5, 3600), "memory": (256, 1_000_000), "threads": (1, os.cpu_count() or 1), "pc_stat_rows": (1_000, 50_000_000),
+SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "chart": (200, 1000), "sample": (1000, 1_000_000), "notify_after": (5, 3600), "memory": (256, 1_000_000), "threads": (1, os.cpu_count() or 1), "pc_stat_rows": (1_000, 50_000_000), "pc_idle": (1, 120),
          # 표본: 파일럿 행 수·층 수·층 최소 행 수·키 해시 칸 수·키 표본 상한 배수(sampling)
          "pilot_rows": (1_000, 100_000), "strata_h": (2, 20), "strata_min": (2, 1_000), "hash_buckets": (100, 1_000_000), "key_over": (1, 20),
          "cloud_rows": (1_000, 10_000_000), "ewma_span": (1, 1000)}  # 워드클라우드 글 속 단어로 이 PC에 받는 최대 행 수(cloud_rows)
@@ -117,7 +117,7 @@ SIZES = {"panel": (240, 640), "rows": (120, 1200), "summary": (120, 1200), "char
 # 표본: 신뢰수준 %(sampling.config가 Z로)·비율 허용 오차·평균 상대 허용 오차
 FLOATS = {"sample_too_few": (0.05, 0.9), "sample_conf": (50, 99.99), "sample_e_ratio": (0.001, 0.2), "sample_e_mean": (0.005, 0.5)}
 DEFAULTS = {"sample_too_few": 0.2, "pc_stat_rows": 1_000_000, "sample_conf": 95, "sample_e_ratio": 0.01, "sample_e_mean": 0.05, "pilot_rows": 5_000, "strata_h": 5, "strata_min": 30,
-            "hash_buckets": 10_000, "key_over": 3, "pilot_first": "preview", "cloud_rows": 100_000, "pc_stat_unlimited": "off", "cloud_unlimited": "off", "threads": SAFE_THREADS, "hash_exclude": "on", "ignore_marks": "off", "currency_symbol": "₩", "ui_scale": "normal"}  # currency_symbol: 값 모양 currency의 기호(compare.format_value, 화면 showValue)
+            "hash_buckets": 10_000, "key_over": 3, "pilot_first": "preview", "cloud_rows": 100_000, "pc_stat_unlimited": "off", "cloud_unlimited": "off", "threads": SAFE_THREADS, "hash_exclude": "on", "ignore_marks": "off", "currency_symbol": "₩", "ui_scale": "normal", "pc_idle": 10}  # currency_symbol: 값 모양 currency의 기호(compare.format_value, 화면 showValue)
 
 # 직전 실행의 행당 시간(나노초/행). 작업 종류(검색·집계·차트·저장·전처리의 모양 보기·미리보기·실행)와 기준 테이블 행 수의 구간(10배 단위)마다 하나.
 # 이름은 time_종류_구간이고 구간은 행 수의 자릿수 - 1을 TIME_BANDS 안으로 맞춘 것(1,000행 미만은 모두 2)이다. 화면이 예상 시간을 구할 때 같은 구간의 값만 쓴다.

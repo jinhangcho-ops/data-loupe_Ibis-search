@@ -28,8 +28,7 @@ PLAIN = "dashboards.json"  # 예전 평문 파일(그래프 이름별 조회만 
 VERSION = 1
 LOCKED = "이 PC에서 만든 대시보드가 아니라 값을 읽을 수 없어요. 파일은 그대로 두었어요."
 MAX_DASHBOARDS = 100  # 대시보드 수
-MIN_REFRESH = 3600  # 최신화 주기의 최소(초)
-SETTING_KEYS = ("as_of", "period", "compare_mode", "refresh", "live")  # 카드 없이 바꾸는 대시보드 설정(/api/dash/settings)
+SETTING_KEYS = ("as_of", "period", "compare_mode", "pull")  # 카드 없이 바꾸는 대시보드 설정(/api/dash/settings)
 MAX_FILTERS, MAX_FILTER_NAME = 8, 100  # 대시보드 필터 칸 수, 필터 컬럼·이름의 글자 수
 MAX_PAGES, MAX_PAGE_NAME = 8, 30  # 대시보드 쪽(탭) 수, 쪽 이름의 글자 수
 MAX_CARDS = 48# 대시보드 하나의 카드 수(템플릿이 카드가 많다)
@@ -38,9 +37,12 @@ MAX_STORE_BYTES = 32 * 1024 * 1024  # 전체 크기
 MAX_DAYS = 3660  # 시간별 카드에 두는 일 값의 최대 일수
 MAX_PALETTE = 12  # 대시보드 팔레트의 색 수
 MAX_COLORS = 100  # 카드 하나의 지정 색 수
-KINDS = ("chart", "analysis", "metric", "kpi", "donut_kpi", "gauge", "summary", "recent_rows", "dual_trend", "stripes", "blocks",
+KINDS = ("chart", "analysis", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks",
          "target_trend", "map", "alerts", "deviation", "funnel", "table", "status", "sentence", "geomap",
          "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bullet", "bump", "sankey", "cohort", "candle", "wordcloud")  # 앞의 셋만 1단계에서 만든다. geomap: 좌표 지도(경계·점·영역별 색). 뒤 열둘(4단계 P14)은 값 모양이 종류마다 달라 dash_calc가 따로 구한다
+GONE_KINDS = ("recent_rows",)  # (B11) 앱에서 없앤 카드 종류: 옛 저장본은 열리고 저장되지만 값을 구하지 않는다
+GONE_CARD = "더는 지원하지 않는 카드예요. 지우고 다른 카드로 만들어 주세요."
+GAP_NOTE = "데이터가 없는 구간이 있어요."  # 연결 없이 받아 둔 기간 밖을 볼 때 카드 안내(사용자 답 2-12)
 CHART_TYPES = {"bar": "막대", "hbar": "가로 막대", "stacked": "누적 막대", "line": "라인", "polyline": "꺾인 선", "area": "영역형 라인",
                "doughnut": "도넛", "pie": "파이", "radar": "레이더", "scatter": "산점도", "bubble": "버블",
                "group": "묶은 막대", "stack100": "100% 누적 막대", "hstack": "가로 누적 막대", "hstack100": "가로 100% 누적 막대", "sarea": "누적 영역", "sarea100": "100% 누적 영역",
@@ -218,7 +220,7 @@ GONE_VIEW = ("icon", "fit", "layout")  # (B10b) 없앤 KPI 모양 설정(아이�
 FUNNEL_SHAPES = ("flow", "ladder")  # 퍼널 그림: 흐름(생키+표) / 사다리꼴
 GAP_STATS = ("mean", "median", "trimmed")  # 걸린 시간 표에 보일 값
 FRAME_KINDS = ("button", "nav_rail", "top_strip", "page_tabs", "period_pick", "asof_field", "unit_seg")  # (B10) 격자에 놓는 틀 요소 종류. 화면의 한 벌은 web/components/frame/registry.ts
-FRAME_ACTIONS = {"export": "", "refresh": "", "page": "page", "theme": "", "dash_only": "", "zoom": "card", "easy": "", "filters_clear": ""}  # 틀 요소의 할 일 → 받는 값(arg)의 종류("" 없음, page 쪽 이름, card 카드 id)
+FRAME_ACTIONS = {"export": "", "refresh": "", "page": "page", "theme": "", "dash_only": "", "zoom": "card", "easy": "", "filters_clear": "", "settings": ""}  # 틀 요소의 할 일 → 받는 값(arg)의 종류("" 없음, page 쪽 이름, card 카드 id)
 FRAME_PARTS = ("name", "period", "asof", "theme")  # 위쪽 화면 줄에 보일 칸
 FRAME_KEYS = {"button": ("label", "icon", "action", "arg", "ambient"), "nav_rail": ("items", "ambient"), "top_strip": ("parts", "items"),
               "page_tabs": (), "period_pick": (), "asof_field": (), "unit_seg": ()}  # 종류마다 view.frame에 쓸 수 있는 항목
@@ -753,14 +755,12 @@ def check_source(source):
 
 
 def check_data(data, kind):
-    """구한 값: computed_at·def_hash·note·x·by_unit(시간별: 일 값과 단위별 값)·values(항목별 값, 지표, 분석 결과). recent_rows는 행 값을 거부한다."""
+    """구한 값: computed_at·def_hash·note·x·by_unit(시간별: 일 값과 단위별 값)·values(항목별 값, 지표, 분석 결과)."""
     data = {} if data is None else data
     if not isinstance(data, dict):
         raise ValueError("구한 값(data)은 객체여야 해요.")
-    allowed = {"computed_at", "def_hash", "note", "x", "columns"} if kind == "recent_rows" else {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "bins", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair", "since", "window", "x_scale", "x_levels"}
+    allowed = {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "bins", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair", "since", "window", "x_scale", "x_levels"}
     if unknown := set(data) - allowed:
-        if kind == "recent_rows":
-            raise ValueError("recent_rows 카드에는 행 값을 저장할 수 없어요. 보일 때마다 연결에서 읽어요.")
         raise ValueError(f"data에 쓸 수 없는 항목이 있어요: {', '.join(sorted(unknown))}")
     # 값 안(그룹 이름 "user" 등)은 사용자 데이터라 검사하지 않는다. 최상위 키는 위 허용 목록이 이미 막는다
     for name in ("computed_at", "def_hash", "note", "x"):
@@ -780,8 +780,8 @@ def check_card(card):
     if not isinstance(card, dict):
         raise ValueError("카드는 객체여야 해요.")
     frame = card.get("kind") in FRAME_KINDS
-    if card.get("kind") not in KINDS and not frame:
-        raise ValueError(f"카드 종류(kind)는 {', '.join(KINDS + FRAME_KINDS)} 중 하나예요.")
+    if card.get("kind") not in KINDS + GONE_KINDS and not frame:
+        raise ValueError(f"카드 종류(kind)는 {', '.join(KINDS + GONE_KINDS + FRAME_KINDS)} 중 하나예요.")
     card_id = card.get("id") or secrets.token_hex(8)
     if not isinstance(card_id, str) or not ID.fullmatch(card_id):
         raise ValueError("카드 id는 영문·숫자·_·- 32자까지예요.")
@@ -790,7 +790,7 @@ def check_card(card):
     out = {"id": card_id, "kind": card["kind"], "title": text(card.get("title"), "카드 이름", 100, 1),
            "layout": check_layout(card["layout"], FRAME_MIN if frame else 2) if card.get("layout") is not None else {"x": 0, "y": 0, "w": 6, "h": 6},
            "colors": check_colors(card.get("colors")), "view": check_view(card.get("view")),
-           "source": check_source(card.get("source")), "data": {} if frame else check_data(card.get("data"), card["kind"])}
+           "source": check_source(card.get("source")), "data": {} if frame or card["kind"] in GONE_KINDS else check_data(card.get("data"), card["kind"])}
     placed = not any(out["source"].get(k) for k in ("body", "recipe", "analysis"))  # 카드 모음에서 막 놓은 빈 틀: 데이터를 정할 때까지 아래 검사를 미룬다
     if frame:
         if not placed:
@@ -851,11 +851,54 @@ def check_card(card):
     return out
 
 
-def check_every(found, name):
-    """주기 {every: "7일"} (비면 쓰지 않음). 글자를 읽는 규칙은 2단계가 맡고 여기서는 모양만 본다."""
-    if found is not None and not isinstance(found, dict):
-        raise ValueError(f"{name}은 {{every: 글자}} 객체여야 해요.")
-    return {"every": text((found or {}).get("every"), f"{name}.every", 20)}
+PULL_CALCS =("pc", "db")  # (B11) 계산 방식: pc = DB는 거르기만 하고 계산은 이 PC, db = 지금처럼 DB가 계산
+PULL_RANGES = ("all", "new")  # (B11) 받는 범위: all = 전부 다시 받기, new = 없는 것만 받기(새 줄 컬럼 marks가 필요)
+PULL_UNITS = {"s": 1, "m": 60, "h": 3600}  # (B11) 갱신 주기 단위 → 초
+PULL_UNIT_NAMES = {"s": "초", "m": "분", "h": "시"}  # (B11) 갱신 주기 단위의 화면 이름
+MIN_PULL_EVERY = 10  # (B11) 갱신 주기의 최소(초). 계산 방식 db면 연결별 최소(dash_refresh.live_min)도 넘어야 한다
+MAX_PULL_EVERY = 7 * 86400  # (B11) 갱신 주기의 최대(초): 7일 = 168시(사용자 답 4)
+PULL_CRYPTS = ("none", "aes128", "aes256", "pass")  # (B11) 받은 Parquet 암호화: 없음, AES-128·AES-256(열쇠는 앱이 만듦), 사용자가 적는 암호문
+MAX_PULL_MARKS = 20  # (B11) 새 줄 컬럼(marks) 항목 수
+MAX_PULL_NAME = 200  # (B11) marks의 스키마·테이블·컬럼 이름 글자 수
+PULL_KEYS = ("calc", "every", "range", "marks", "crypt")  # (B11) 받기 설정(pull)의 항목
+MARK_KEYS = ("schema", "table", "column")  # (B11) 새 줄 컬럼 항목 하나의 항목
+PULL_DEFAULT = {"calc": "pc", "every": None, "range": "all", "marks": [], "crypt": "none"}  # (B11) 받기 설정이 없는(이미 만든) 대시보드의 값: DB는 거르기만, 단추를 누를 때만, 전부 다시 받기, 암호화 없음
+
+
+def check_pull(found: object) -> dict[str, object]:
+    """[SPECIFICATION] plans/dash-blocks.md#check_pull
+    대시보드의 받기 설정(pull: 계산 방식·갱신 주기·받는 범위·새 줄 컬럼·암호화)을 검사해 정리한 새 사본을 돌려준다(없으면 PULL_DEFAULT의 사본)."""
+    if found is None:
+        return copy.deepcopy(PULL_DEFAULT)
+    if not isinstance(found, dict):
+        raise ValueError("받기 설정(pull)은 객체여야 해요.")
+    extra = set(found) - set(PULL_KEYS)
+    if extra:
+        raise ValueError(f"받기 설정에 쓸 수 없는 항목이 있어요: {', '.join(sorted(extra))}")
+    calc = found.get("calc", "pc")
+    if calc not in PULL_CALCS:
+        raise ValueError(f"계산 방식(calc)은 {', '.join(PULL_CALCS)} 중 하나예요.")
+    every = found.get("every")
+    if every is not None:
+        if not (isinstance(every, dict) and set(every) == {"n", "unit"} and type(every["n"]) is int and every["n"] >= 1 and every["unit"] in PULL_UNITS):
+            raise ValueError("갱신 주기는 1 이상의 정수와 단위(초·분·시)로 적어 주세요.")
+        if not MIN_PULL_EVERY <= every["n"] * PULL_UNITS[every["unit"]] <= MAX_PULL_EVERY:
+            raise ValueError(f"갱신 주기는 {MIN_PULL_EVERY}초 이상 {MAX_PULL_EVERY // PULL_UNITS['h']}시 이하예요.")
+        every = {"n": every["n"], "unit": every["unit"]}
+    pull_range = found.get("range", "all")
+    if pull_range not in PULL_RANGES:
+        raise ValueError(f"받는 범위(range)는 {', '.join(PULL_RANGES)} 중 하나예요.")
+    crypt = found.get("crypt", "none")
+    if crypt not in PULL_CRYPTS:
+        raise ValueError(f"암호화(crypt)는 {', '.join(PULL_CRYPTS)} 중 하나예요.")
+    marks = found.get("marks") or []
+    if not isinstance(marks, list) or len(marks) > MAX_PULL_MARKS or not all(isinstance(m, dict) and set(m) == set(MARK_KEYS) for m in marks):
+        raise ValueError(f"새 줄 컬럼(marks)은 {{schema, table, column}} 목록이에요({MAX_PULL_MARKS}개까지).")
+    checked = [{"schema": text(m["schema"], "스키마", MAX_PULL_NAME), "table": text(m["table"], "테이블", MAX_PULL_NAME, 1),
+                "column": text(m["column"], "새 줄 컬럼", MAX_PULL_NAME, 1)} for m in marks]
+    if len({(m["schema"], m["table"]) for m in checked}) != len(checked):
+        raise ValueError("같은 테이블의 새 줄 컬럼이 두 번 있어요.")
+    return {"calc": calc, "every": every, "range": pull_range, "marks": checked, "crypt": crypt}
 
 
 LIMIT_OPS = (">=", "<=")  # 카운터 지표의 한계: 값이 이 선보다 작아지면(>=) 또는 커지면(<=) 경고
@@ -964,7 +1007,7 @@ def check_dashboard(d, old=None):
         raise ValueError("북극성·카운터 지표로 고른 카드가 이 대시보드에 없어요.")
     return {"id": dash_id, "name": text(d.get("name"), "대시보드 이름", 50, 1), "template": text(d.get("template"), "템플릿 이름", 50),
             "palette": check_palette(d.get("palette") or []), "period": text(d.get("period") or "", "기간", 40), "as_of": as_of, "compare_mode": mode,
-            "refresh": check_every(d.get("refresh"), "refresh"), "live": check_every(d.get("live"), "live"), "cards": cards, "created": text(d.get("created"), "만든 시각", 40),
+            "pull": check_pull(d.get("pull")), "cards": cards, "created": text(d.get("created"), "만든 시각", 40),
             "updated": text(d.get("updated"), "고친 시각", 40), "north_star": north, "filters": check_filters(d.get("filters")), "pages": check_pages(d.get("pages"))}
 
 
@@ -1161,7 +1204,7 @@ def set_cards_data(dash_id, items):
 
 
 def update_settings(dash_id, fields):
-    """저장한 대시보드의 SETTING_KEYS(기준일·기간·비교 기준·최신화·실시간)만 바꾼다(카드는 그대로). 바뀐 대시보드를 돌려준다."""
+    """저장한 대시보드의 SETTING_KEYS(기준일·기간·비교 기준·받기 설정)만 바꾼다(카드는 그대로). 바뀐 대시보드를 돌려준다."""
     with LOCK:
         dashboards = editable()
         if dash_id not in dashboards:

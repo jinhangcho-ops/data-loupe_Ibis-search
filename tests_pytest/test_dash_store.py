@@ -1,5 +1,5 @@
 """대시보드 저장소(dash_store): DPAPI 암호화 왕복, 다른 계정(풀 수 없음)이면 locked, 예전 평문 옮기기, 상한, 원자적 쓰기(.bak),
-recent_rows 값 거부, 연결 열쇠에 계정·비밀번호가 없음, 정의 지문, HEX·기준일 검사. 값은 테스트 안에서 지어낸다."""
+옛 recent_rows 카드 열기, 연결 열쇠에 계정·비밀번호가 없음, 정의 지문, HEX·기준일 검사. 값은 테스트 안에서 지어낸다."""
 import json
 import os
 
@@ -92,12 +92,10 @@ def test_limits(folder, monkeypatch):
     assert len(store.load()["dashboards"]) == 2  # 넘긴 저장은 반영되지 않았다
 
 
-def test_recent_rows_values_rejected():
-    ok = {"kind": "recent_rows", "title": "최근 주문", "data": {"computed_at": "2026-10-01T09:00:00", "columns": ["id", "금액"]}}
-    assert store.check_card(ok)["data"]["columns"] == ["id", "금액"]
-    for bad in ({"rows": [[1, 100]]}, {"values": {"rows": [[1, 100]]}}, {"by_unit": {}}):
-        with pytest.raises(ValueError, match="행 값을 저장할 수 없"):
-            store.check_card({**ok, "data": bad})
+def test_old_recent_rows_card_opens_with_empty_data():
+    old = {"kind": "recent_rows", "title": "최근 주문", "data": {"computed_at": "2026-10-01T09:00:00", "columns": ["id", "금액"], "rows": [[1, 100]]}}
+    assert store.check_card(old)["data"] == {}
+    assert "recent_rows" not in store.KINDS
 
 
 def test_secrets_never_stored():
@@ -225,6 +223,3 @@ def test_old_file_keys_are_still_matched(folder):
     d["cards"][0]["source"]["key"] = old  # 예전에 저장된 파일 그대로
     store.write({"d2": {**d, "id": "d2"}})
     assert store.load()["dashboards"]["d2"]["cards"][0]["source"]["key"] == new
-    from dashboard import dash_refresh
-    dash_refresh.set_live_min(old, 60)
-    assert dash_refresh.live_min(new) == 60 and dash_refresh.live_min(old) == 60 and list(dash_refresh.live_mins()) == [new]

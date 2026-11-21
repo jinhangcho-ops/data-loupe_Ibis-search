@@ -171,13 +171,6 @@ def test_keyed_permanent_error_in_the_middle_continues():
 # set_cards_data가 저장값이 이겼을 때 KEPT를 돌리는 것은 test_fix_audit3_dash.test_set_cards_data_keeps_newer_saved_value가 본다.
 
 
-def test_refresh_marks_kept_card_not_ok():
-    text = (ROOT / "dashboard" / "dash_refresh.py").read_text(encoding="utf-8")
-    assert "dash_store.KEPT" in text and "here = (" in text and "here =(" not in text
-
-
-def test_ci_runs_pytest_and_docs_match_behavior():
+def test_ci_runs_pytest():
     flow = (ROOT / ".github" / "workflows" / "build-exe.yml").read_text(encoding="utf-8")
     assert "python -m pytest tests_pytest -q" in flow and "requirements-dev.txt" in flow
-    doc = (ROOT / "docs" / "functions" / "dashboard_basics.md").read_text(encoding="utf-8")
-    assert "남은 카드는 \"멈췄어요\"" in doc

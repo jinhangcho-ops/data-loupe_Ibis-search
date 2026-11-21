@@ -17,7 +17,6 @@
   <div class="crumb" id="crumb" title="지금 연결된 데이터와 고른 테이블"><i></i><span id="crumb-text">연결 안 됨</span></div>
   <div class="sx" id="usage" title="PC의 메모리와 CPU 사용률, 이 앱이 쓰는 메모리예요."></div>
   <span class="jobx idle hidden" id="job" title="마지막으로 검색한 뒤 실행한 작업에 걸린 시간이에요. 예상 시간은 테이블 행 수와 지난번 실행 속도로 계산해요."><i></i><span id="job-name"></span><em id="timing"></em><button id="cancel" title="실행 중인 작업을 멈춰요">취소</button></span>
-  <span class="jobx hidden cursor-pointer" id="rf-pill" role="button" title="대시보드를 최신 값으로 바꾸는 중이에요. 누르면 진행 상황을 볼 수 있어요."><i></i><span id="rf-pill-text"></span></span>
   <div class="top-tools">
     <span id="upd" class="hidden"><span id="upd-text" class="upd-note"></span> <button id="upd-open" class="btn" title="바뀐 내용을 보고 업데이트해요">업데이트</button></span>
     <button id="resize" class="ib" aria-label="크기 조절" title="켜면 패널, 표, 차트의 가장자리를 끌어 크기를 바꿀 수 있어요"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
@@ -76,6 +75,7 @@
       <div class="opt" id="memory-box" title="DuckDB 파일을 계산할 때 쓸 메모리의 최대치예요. 너무 낮으면 큰 집계가 느려지거나 메모리가 모자라 실패할 수 있어요. 다음 연결부터 적용돼요."><span>메모리 한도</span><select id="memory"><option value="0">제한 없음</option><option value="1000">1GB</option><option value="2000">2GB</option><option value="4000">4GB</option><option value="8000">8GB</option><option value="custom">직접 입력</option></select><input id="memory-gb" type="number" step="any" placeholder="GB" class="hidden w-[5rem] flex-none"></div>
       <div class="opt" title="DuckDB 파일과 PC에 받아 둔 결과를 계산할 때 쓸 CPU 코어 수예요. 줄이면 계산하는 동안에도 PC가 덜 느려지지만 큰 계산은 오래 걸려요. 시스템이 쓸 몫으로 코어의 20%를 남긴 수가 권장이에요. 바꾸면 프로그램을 다시 시작해 적용해요."><span>계산에 쓸 CPU 코어</span><select id="threads"></select><input id="threads-n" type="number" step="1" placeholder="개" aria-label="코어 수 직접 입력" class="hidden w-[5rem] flex-none"></div>
       <div class="hint warn hidden" id="threads-warn" role="status"></div>
+      <div class="opt" title="대시보드를 이만큼 쓰지 않으면 이 PC 계산에 쓰던 메모리를 놓아요. 다시 보면 그때 다시 열어요."><span>대시보드 이 PC 계산을 닫을 때까지(분)</span><input id="pc-idle" type="number" step="1" class="w-[5rem] flex-none"></div>
       <div class="opt" title="실행 전에 읽을 양을 미리 셀 수 없는 연결(Postgres, BigQuery, 파일 등)에서 어떻게 할지 정해요. 읽을 양이 메모리 한도를 넘으면(제한 없음이면 지금 PC의 남은 메모리) 어느 쪽이든 실행 전에 물어봐요."><span>읽을 양을 미리 모를 때</span><select id="scan-unknown"><option value="run">그대로 실행</option><option value="block">실행하지 않기</option></select></div>
       <div class="opt" title="컬럼 종류를 짐작하려고 표본을 뽑을 때, 기대한 행 수의 이 비율보다 적게 오면 다른 방법(최신 파티션, 앞쪽 행)으로 다시 가져와요. 비우면 20%이고, 5에서 90 사이로 넣을 수 있어요."><span>최소 표본 비율(%)</span><input id="too-few" type="number" min="5" max="90" step="1" placeholder="20" class="w-[5rem] flex-none"></div>
       <div class="opt" title="연결이 중앙값·사분위수를 직접 구하지 못할 때(SQLite 등) 그 컬럼을 이 PC로 받아 전체로 구하는 최대 행 수예요. 넘으면 구하지 않고 알려요. 비우면 기본값이에요. 제한 없음을 켜면 행 수를 보지 않아요. 받는 크기가 500MB를 넘으면 그때도 받지 않아요."><span>PC에서 구할 통계의 최대 행 수</span><label class="check flex-none"><input type="checkbox" id="pc-stat-unlimited"> 제한 없음</label><input id="pc-stat-rows" type="number" step="1" class="w-[6.875rem] flex-none"></div>

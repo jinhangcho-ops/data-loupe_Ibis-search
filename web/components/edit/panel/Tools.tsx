@@ -26,7 +26,7 @@ export const SIZE_LABEL = "버블 크기·Z축";  // 점 차트의 셋째 숫자
 const FORMATS: [string, string][] =[["number", "숫자"], ["percent", "%"], ["currency", "금액"]];
 // 목표·값 모양이 없는 SVG 카드(옛 svgTools plain)
 const RINGS: [string, string][] = [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리와 목표 눈금"]];
-const PLAIN = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap",
+const PLAIN = ["gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap",
   "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud"];
 // 단추 요소의 아이콘(svg/common ICON_PATHS, FramePanel이 쓴다), P14 겹친 도넛을 쓸 수 있는 차트 종류
 export const ICONS: [string, string][] = [["chart", "막대"], ["up", "오름"], ["user", "사람"], ["cart", "장바구니"], ["coin", "동전"], ["clock", "시계"]];
@@ -74,7 +74,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
   const view = card.view, setView = (p: Partial<CardView>, extra: Partial<Card> = {}) => onChange({ view: { ...view, ...p }, ...extra });
   // 정의(def_hash)가 바뀐 카드를 다시 구한다(setDate와 같은 길): 워드클라우드 방식, 서버 범위 묶기(GroupPicker)
   const recompute = async (next: Card) => {
-    const r = await computeCard(cardRequest({ ...next, data: {} }), state.ctx);
+    const r = await computeCard(cardRequest({ ...next, data: {} }), state.ctx, state.dash?.id ?? "");
     const u = computedUpdate(card.id, r.data, state.ctx, { view: next.view, source: { ...next.source, ...r.source } });
     onChange(u.patch);
     dispatch({ type: "values", results: [u.result] });
@@ -100,7 +100,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     const v = { ...view, ...next };
     if (!POINT_TYPES.includes(v.type)) return putPoints(next, undefined);
     const body = (card.source.body ?? {}) as Record<string, unknown> & { series?: { y?: string }[] };
-    const { points } = await chartPoints({ ...body, y: body.series?.[0]?.y, size: v.type === "scatter" ? "" : v.points?.size ?? "", source_key: card.source.key, date: card.source.date, ctx: state.ctx });
+    const { points } = await chartPoints({ ...body, y: body.series?.[0]?.y, size: v.type === "scatter" ? "" : v.points?.size ?? "", source_key: card.source.key, date: card.source.date, ctx: state.ctx, dash: state.dash?.id ?? "" });
     putPoints(next, points);
   };
   const tryPoints = (next: Partial<CardView>, ok = "") => loadPoints(next).then(() => setMsg(ok), e => setMsg((e as Error).message));  // ok: 바꾼 뒤 보일 안내(첫 계열만 그림 등)
@@ -193,7 +193,6 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     ),
     stripes: <>{num("cells", "칸 수", 50, 1, 100)}{num("full", "가득 찬 값", 80)}</>,
     blocks: num("size", "한 칸 크기", 80),
-    recent_rows: num("rows", "행 수", 50, 1, 100),
     histogram: <>{num("bins", "구간 수", 50, 1, consts.dash.max_bins ?? 100)}<span className="hint">바꾸면 [다시 구하기]를 누르세요. 새 구간으로 다시 구해요.</span></>,
     bullet: (
       <label className="hint bset">구간
@@ -218,7 +217,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
     const source = { ...card.source }, was = card.source.date;
     if (value) source.date = value; else delete source.date;
     try {  // 비울 때도 다시 구한다(기간을 걸지 않은 값으로)
-      const r = await computeCard(cardRequest({ ...card, source, data: {} }), state.ctx);
+      const r = await computeCard(cardRequest({ ...card, source, data: {} }), state.ctx, state.dash?.id ?? "");
       setMsg("");
       const u = computedUpdate(card.id, r.data, state.ctx, { source: { ...source, ...r.source } });  // 기간이 걸려 있으면 화면 값에
       onChange(u.patch);

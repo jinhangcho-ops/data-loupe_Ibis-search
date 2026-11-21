@@ -44,7 +44,7 @@ def test_home_shortcuts_and_no_dashboard_section(client):
     assert go.count('<a class="btn"') == 5 and 'href="/dashboard" data-feature="dashboard"' in go
     for gone in ("h-dash", "h-grid", "h-ctl", "쿼리에서 편집", "dash_menu.js", "dash_cards.js", "chart.umd"):
         assert gone not in html, gone
-    assert 'id="refresh-pop"' in html and "/static/core/dash_refresh.js" in html  # 연결하면 최신화 팝업은 첫 화면에서도
+    assert 'id="refresh-pop"' not in html and "/static/core/dash_refresh.js" not in html  # 옛 최신화 팝업은 없앴다(B11)
 
 
 def test_query_screen_dashboard_tab_moved(client):

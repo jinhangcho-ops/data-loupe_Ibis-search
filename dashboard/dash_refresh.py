@@ -1,12 +1,6 @@
-"""대시보드 최신화(2단계): 연결에 성공한 뒤 주기가 지난 카드를 작업 스레드 하나가 차례로 다시 구해 저장한다. 최신화 주기·실시간 간격 검사와 연결별 실시간 간격 최소도 여기 있다.
-주기 글자는 period.parse_every가 읽는다(숫자 + 초·분·시간·일·주·달·개월·년). 최신화 주기는 MIN_REFRESH(1시간) 이상, 실시간 간격의 최소는 연결(source_key)마다 사용자가 정한다(설정 live_min.json, 없으면 원격 연결은 REMOTE_LIVE_MIN(1분), 이 PC 파일 연결은 제한 없음).
-카드 하나씩 화면 요청과 같은 차례(querying.using)를 잡고 dash_calc.compute로 구해 dash_store.set_cards_data로 대시보드마다 한 번에 쓴다. 실패한 카드는 이전 값을 두고 이유만 남긴다."""
-import contextlib
+"""기간·비교 기간(context), 처리 용량 판정, 계산 방식 DB의 갱신 주기 최소."""
 import datetime as dt
-import threading
-import time
 
-from core import querying
 from dashboard import dash_calc
 from core import dash_store
 from prep import prep_app
@@ -15,32 +9,9 @@ from dashboard import period
 from core import scan_size
 from core import server
 from core import settings
-from core import source
-from core import use_counts
 from core.server import run
 
-MIN_REFRESH = dash_store.MIN_REFRESH  # 최신화 주기의 최소(초)
-LIVE_FILE = "live_min.json"  # {source_key: 실시간 간격 최소(초)}
-MAX_LIVE_MIN = 86400
-REMOTE_LIVE_MIN = 60  # 최소를 정하지 않은 원격 연결(DB 서버)의 실시간 간격 최소(초): 짧은 간격으로 서버를 두드리지 않게
-GROW = 4 * 1024 * 1024  # 저장소가 이 크기를 넘을 때마다 중간 저장 간격을 FLUSH_SECONDS만큼 늘린다
-FLUSH_SECONDS = 30  # 한 대시보드를 구하는 동안 이만큼 지나면 그때까지 구한 카드를 먼저 저장한다(중간에 꺼져도 다 잃지 않게)
-REFRESHABLE = ("chart", "analysis", "funnel", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "table", "status", "sentence", "alerts", "map", "deviation", "geomap", "bullet", "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud")  # 지금 다시 구할 수 있는 카드 종류
-JOB = {"running": False, "total": 0, "done": 0, "current": "", "results": []}  # 마지막 최신화 작업의 상태(status가 복사해 준다)
-LOCK = threading.Lock()
-STOP = threading.Event()
-INSIDE = threading.Event()  # 최신화가 차례(turn)를 잡고 카드를 구하는 중: 이때만 [멈추기]가 지금 조회를 취소한다(차례를 기다리는 동안 도는 것은 사용자 조회)
-THREAD = [None]
-
-
-def every_seconds(text, minimum, what):
-    """주기 글자를 초로. minimum초보다 짧으면 ValueError. 비었으면 0(쓰지 않음)."""
-    if not (text or "").strip():
-        return 0
-    seconds = period.parse_every(text)
-    if seconds < minimum:
-        raise ValueError(f"{what} 주기는 {minimum_text(minimum)} 이상이어야 해요. (‘{text.strip()}’)")
-    return seconds
+REMOTE_LIVE_MIN = 60  # 최소를 정하지 않은 원격 연결(DB 서버)의 갱신 주기 최소(초): 짧은 간격으로 서버를 두드리지 않게
 
 
 def minimum_text(seconds):
@@ -51,45 +22,27 @@ def minimum_text(seconds):
     return f"{seconds}초"
 
 
-def live_mins():
-    """연결별 실시간 간격 최소 {source_key: 초}(잘못된 항목은 뺀다)."""
-    found = settings.read(LIVE_FILE) or {}
-    return {dash_store.canon_key(k): v for k, v in found.items() if isinstance(k, str) and type(v) is int and 0 < v <= MAX_LIVE_MIN}  # 예전 모양의 열쇠도 지금 모양으로
-
-
 def live_min(key):
-    """이 연결의 실시간 간격 최소(초). 정해 두었으면 그 값, 아니면 원격 연결은 REMOTE_LIVE_MIN, 이 PC 파일(폴더·sqlite·duckdb)은 0(제한 없음)."""
+    """이 연결의 갱신 주기 최소(초): 원격 연결은 REMOTE_LIVE_MIN, 이 PC 파일(폴더·sqlite·duckdb)은 0(제한 없음)."""
     key = dash_store.canon_key(key)
     local = not isinstance(key, str) or not key.startswith("url:") or key.startswith(tuple(f"url:{s}://" for s in dash_store.FILE_SCHEMES))
-    return live_mins().get(key) or (0 if local else REMOTE_LIVE_MIN)
+    return 0 if local else REMOTE_LIVE_MIN
 
 
-def set_live_min(key, seconds):
-    """이 연결(key)의 실시간 간격 최소를 정한다. 0이면 지운다(기본값: 원격 연결 1분, 이 PC 파일은 제한 없음)."""
-    if not isinstance(key, str) or not key:
-        raise ValueError("먼저 데이터에 연결하세요.")
-    if type(seconds) is not int or not 0 <= seconds <= MAX_LIVE_MIN:
-        raise ValueError(f"실시간 간격 최소는 0~{MAX_LIVE_MIN}초의 정수예요(0이면 기본값: 원격 연결 1분, 이 PC 파일은 제한 없음).")
-    with settings.updating(LIVE_FILE):
-        found, key = live_mins(), dash_store.canon_key(key)
-        if seconds:
-            found[key] = seconds
-        else:
-            found.pop(key, None)
-        settings.write(LIVE_FILE, found)
-    return found
-
-
-def check_dashboard_every(d):
-    """저장하려는 대시보드의 최신화 주기(1시간 이상)와 실시간 간격(카드가 쓰는 연결들의 최소 이상)을 검사한다."""
-    every_seconds((d.get("refresh") or {}).get("every"), MIN_REFRESH, "최신화")
-    live = every_seconds((d.get("live") or {}).get("every"), 1, "실시간")
+def check_pull_every(d: dict) -> None:
+    """[SPECIFICATION] plans/dash-blocks.md#check_pull_every
+    저장하려는 대시보드의 갱신 주기를 검사한다: 계산 방식 db면 카드가 쓰는 연결마다 연결별 최소(live_min) 이상이어야 한다."""
+    pull = dash_store.check_pull(d.get("pull"))
+    every = pull["every"]
+    if pull["calc"] != "db" or every is None:
+        return
+    seconds = every["n"] * dash_store.PULL_UNITS[every["unit"]]
     keys = {(c.get("source") or {}).get("key") for c in d.get("cards") or [] if isinstance(c, dict)} - {None, ""}
     for key in sorted(keys):
         least = live_min(key)
-        if live and live < least:
+        if seconds < least:
             label = next((c["source"].get("label") for c in d["cards"] if c["source"].get("key") == key and c["source"].get("label")), key)
-            raise ValueError(f"‘{label}’ 연결의 실시간 간격은 {minimum_text(least)} 이상이어야 해요. 더 짧게 쓰려면 그 연결의 최소를 먼저 바꾸세요.")
+            raise ValueError(f"‘{label}’ 연결의 갱신 주기는 {minimum_text(least)} 이상이어야 해요(계산 방식 DB).")
 
 
 def timed(span):
@@ -187,173 +140,3 @@ def scan_found(card, ctx):
         note = " 고유 개수는 기간별로 따로 읽어요." if held.remote(server.state["con"]) and dash_calc.unique_per_period(card, ctx) else ""  # 읽는 양이 이번 기간 + 직전 기간 몫이다
         return {**found, "text": (found.get("text") or "처리 용량이 기준을 넘거나 알 수 없어 건너뛰었어요") + note}
     return {}
-
-
-def parse_time(text):
-    try:
-        return dt.datetime.fromisoformat(text)
-    except (TypeError, ValueError):
-        return None
-
-
-class Changed(Exception):
-    """카드를 구하기 직전에 연결이 바뀐 것을 알았다(그 카드를 건너뛰고 작업을 멈춘다)."""
-
-
-def skip_reason(d, card, key, now):
-    """이 카드를 이번에 다시 구하지 않는 이유(구하면 빈 글자)."""
-    every = every_seconds((d.get("refresh") or {}).get("every"), 0, "최신화")
-    if card["kind"] not in REFRESHABLE:
-        return "아직 다시 구할 수 없는 종류예요"
-    if not (card.get("source") or {}).get("key"):  # 카드 모음에서 막 놓은 빈 틀은 연결이 없다
-        return "데이터를 아직 정하지 않은 카드예요"
-    if not use_counts.same_source((card.get("source") or {}).get("key"), key):
-        return "다른 연결에서 구한 카드예요"
-    done = parse_time((card.get("data") or {}).get("computed_at"))
-    if done is not None and (now - done).total_seconds() < every:
-        return "아직 주기가 지나지 않았어요"
-    return ""
-
-
-def status():
-    """마지막 최신화 작업의 상태 {running, total, done, current, results: [{dashboard, card, title, state(ok·failed·skipped), message}]}."""
-    with LOCK:
-        return {**JOB, "results": [dict(r) for r in JOB["results"]]}
-
-
-def stop():
-    """돌고 있는 최신화를 멈춘다: 지금 카드는 취소를 요청하고 남은 카드는 건너뛴다."""
-    STOP.set()
-    with LOCK:
-        if INSIDE.is_set():
-            server.state["cancel"].set()
-    return status()
-
-
-@contextlib.contextmanager
-def inside():
-    INSIDE.set()
-    try:
-        yield
-    finally:
-        with LOCK:
-            INSIDE.clear()
-
-
-def wait(timeout=30):
-    """최신화 작업이 끝나기를 기다린다(시험용)."""
-    thread = THREAD[0]
-    if thread is not None:
-        thread.join(timeout)
-
-
-def result(d, card, state, message=""):
-    return {"dashboard": d["id"], "card": card["id"], "title": card["title"], "state": state, "message": message}
-
-
-def start(now=None):
-    """지금 연결로 주기가 지난 카드의 최신화를 작업 스레드에서 시작한다. 이미 돌고 있으면 그 상태를 돌려준다. 연결이 없으면 오류.
-    저장한 대시보드마다 주기가 있는 것만 보며, 이번에 안 구하는 카드는 이유와 함께 건너뜀으로 적는다. 돌고 있는지 확인하는 데서 작업 상태를 쓰는 데까지 한 잠금 안이라 동시에 두 번 눌러도 한 번만 시작한다."""
-    now_source = dash_store.current_source()
-    if now_source is None:
-        raise ValueError("먼저 데이터에 연결하세요.")
-    given, now = now, now or dt.datetime.now()  # given: 시험이 정한 시각(없으면 카드마다 구한 시각을 찍는다)
-    with LOCK:
-        if JOB["running"]:
-            return {**JOB, "results": [dict(r) for r in JOB["results"]]}
-        dashboards = [d for d in dash_store.editable().values() if (d.get("refresh") or {}).get("every")]
-        plan, results = [], []
-        for d in sorted(dashboards, key=lambda x: x["name"]):
-            for card in [c for c in d["cards"] if c["kind"] not in dash_store.FRAME_KINDS]:  # 틀 요소는 다시 구할 대상도 건너뛴 카드도 아니다
-                why = skip_reason(d, card, now_source["key"], now)
-                if why:
-                    results.append(result(d, card, "skipped", why))
-                else:
-                    plan.append((d, card))
-                    results.append(result(d, card, "waiting"))
-        STOP.clear()
-        JOB.update(running=bool(plan), total=len(plan), done=0, current="", results=results)
-        if plan:
-            THREAD[0] = threading.Thread(target=work, args=(plan, given), daemon=True)
-            THREAD[0].start()
-    return status()
-
-
-def flush_gap():
-    """중간 저장 간격(초): 저장소를 통째로 풀고 다시 쓰므로 저장소가 클수록(GROW 바이트마다 한 배씩) 드물게 한다."""
-    try:
-        size = dash_store.path_of().stat().st_size
-    except OSError:
-        size = 0
-    return FLUSH_SECONDS * max(1, size // GROW)
-
-
-def work(plan, given):
-    """작업 스레드: 카드를 차례로 구한다. 멈추기를 누르면 남은 카드는 건너뜀. 끝나면 running을 끈다. 카드마다 연결이 아직 같은지 다시 보고 바뀌었으면 그 카드부터 멈춘다.
-    대시보드마다 보는 기간과 같은 테이블·조건을 묶은 읽기 계획은 그 대시보드의 첫 카드를 구할 때 세운다(실패하면 그 카드만 실패로 남는다)."""
-    try:
-        contexts, plans, mine, pending = {}, {}, {}, {}  # pending: 대시보드 id → [(slot, 카드 id, 값, 같은지 확인)]. 한 대시보드를 다 구한 뒤 저장소를 한 번만 쓴다
-
-        last = [time.monotonic()]  # 마지막으로 저장한 때
-
-        def flush(dash_id):
-            last[0] = time.monotonic()
-            items = pending.pop(dash_id, [])
-            if items:
-                try:
-                    saved = dash_store.set_cards_data(dash_id, [(c, v, s) for _, c, v, s in items])
-                except Exception as e:
-                    saved = [e] * len(items)
-                for (slot, *_), got in zip(items, saved):
-                    # 구하는 동안 사용자가 조회를 고쳐 저장했으면(None) 옛 정의로 구한 값을 새 정의에 붙이지 않는다
-                    outcome = ("failed", source.mask(str(got), server.state["passwords"])) if isinstance(got, Exception) else (
-                        ("skipped", "구하는 동안 카드를 고쳤어요. 다음에 다시 구해요") if got is None else ("skipped", "저장된 값이 더 최근이라 그대로 뒀어요") if got == dash_store.KEPT else ("failed", "그사이 지운 카드예요") if not got else ("ok", ""))
-                    with LOCK:
-                        slot.update(state=outcome[0], message=outcome[1])
-        for d, card in plan:
-            mine.setdefault(d["id"], []).append(card)
-        renewed = set()  # 이 작업이 읽는 PC 사본은 처음 쓸 때 한 번만 새로 받는다(카드마다 차례를 다시 잡아도 같은 집합)
-        for d, card in plan:
-            for other in [k for k in pending if k != d["id"]]:
-                flush(other)
-            slot = next(r for r in JOB["results"] if r["dashboard"] == d["id"] and r["card"] == card["id"])
-            if STOP.is_set():
-                with LOCK:
-                    slot.update(state="skipped", message="멈췄어요")
-                continue
-            with LOCK:
-                JOB["current"] = card["title"]
-            try:
-                with querying.using(renewed=renewed), inside():
-                    here = (dash_store.current_source() or {}).get("key")
-                    if not here or not use_counts.same_source((card.get("source") or {}).get("key"), here):  # 카드 사이에 사용자가 다른 연결로 바꿨다
-                        STOP.set()
-                        raise Changed("연결이 바뀌어 건너뛰었어요")
-                    if d["id"] not in plans:
-                        contexts[d["id"]] = context(d)
-                        plans[d["id"]] = dash_calc.shared_context(mine[d["id"]], contexts[d["id"]])  # 같은 테이블·조건의 카드들을 묶는다
-                    ctx = plans[d["id"]]
-                    checked = dash_store.check_card({**card, "data": {k: v for k, v in (card.get("data") or {}).items() if k == "since"}})
-                    why = scan_decision(checked, ctx)
-                    if why:
-                        outcome = ("skipped", why)
-                    else:
-                        data = dash_calc.compute(checked, (given or dt.datetime.now()).isoformat(timespec="seconds"), ctx)
-                        want = dash_store.def_hash(dash_calc.definition(checked))
-                        pending.setdefault(d["id"], []).append((slot, card["id"], data, lambda c, want=want: dash_store.def_hash(dash_calc.definition(dash_store.check_card(c))) == want))
-                        outcome = None  # 저장하며 정한다(flush)
-            except Changed as e:
-                outcome = ("skipped", str(e))
-            except Exception as e:  # 이전 값은 그대로 두고 이유만 남긴다
-                outcome = ("failed", source.mask(str(e), server.state["passwords"]))
-            with LOCK:
-                if outcome:
-                    slot.update(state=outcome[0], message=outcome[1])
-                JOB["done"] += 1
-            if time.monotonic() - last[0] >= flush_gap():
-                flush(d["id"])
-    finally:
-        for k in list(pending):
-            flush(k)
-        with LOCK:
-            JOB.update(running=False, current="")

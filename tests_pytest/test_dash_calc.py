@@ -306,11 +306,6 @@ def test_metric_kpi_has_pair_amounts(db, tmp_path):
     assert data["pair"] == {"num_label": "개수 [store = A]", "num": 5, "den_label": "개수", "den": 7}
 
 
-def test_recent_rows_stores_columns_only(db):
-    data = compute(db, card=card("recent_rows", body={"base": "orders"}))["data"]
-    assert data["columns"] == ["day", "store", "amt", "uid"] and set(data) <= {"columns", "computed_at", "def_hash"}
-
-
 # ---------- 3단계 B: 표·문장·상태·경고·편차, 고유 개수 기간 값 ----------
 RANGE = {"range": {"start": "2026-01-12", "end": "2026-02-02"}, "prev": {"start": "2025-12-21", "end": "2026-01-11", "text": "직전 22일"}}
 
@@ -324,8 +319,7 @@ def test_table_card_groups_rows_and_previous_period(db):
     assert whole["rows"] == [["A", 100], ["B", 55]] and whole["prev"] is None
     total = compute(db, card=value_card("table", [*SUM, {"y": None, "agg": "count"}]))["data"]["values"]
     assert total["rows"] == [[155, 7]]  # 묶음 컬럼이 없으면 한 줄
-    raw = compute(db, card=card("table", body={"base": "orders"}))["data"]
-    assert raw["columns"] == ["day", "store", "amt", "uid"] and "values" not in raw  # 원래 행 표는 값을 저장하지 않는다
+    assert "더는 지원하지 않는 카드" in compute(db, card=card("table", body={"base": "orders"}))["error"]
     assert "묶음 컬럼" in compute(db, card=value_card("table", SUM, view={"group_cols": ["nope"]}))["error"]
 
 

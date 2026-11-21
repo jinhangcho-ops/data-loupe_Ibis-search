@@ -1,11 +1,11 @@
 "use client";
-// recent_rows(앞 N행)와 table(집계 값 또는 원래 행 표: 머리글 정렬, 합계 줄, 직전 기간 대비 ▲▼, 조건 색 규칙)(옛 paintRecent·paintTable·renderTable·styledCell).
+// table(집계 값 표: 머리글 정렬, 합계 줄, 직전 기간 대비 ▲▼, 조건 색 규칙)(옛 paintTable·renderTable·styledCell).
 // 줄을 누르면 그 줄의 모든 컬럼 값을 창(Pop .row-box)으로 보여 준다(카드 고르기로는 번지지 않는다).
-// 행 값은 연결돼 있을 때만 읽고 저장하지 않는다(useRows). 정렬은 화면에만(옛 card.sortBy).
+// 정렬은 화면에만(옛 card.sortBy).
 import { useState } from "react";
 import { alpha, compileRules, kindOfValues, matchRule, ruleArrow, showValue } from "@/lib/calc";
 import { Pop } from "../Pop";
-import { Box, useRows, type P } from "./common";
+import { Box, type P } from "./common";
 
 type Col = { name: string; kind?: string; agg?: string };
 type Arrow = { text: string; color: string | null; tone: string } | null;
@@ -18,23 +18,6 @@ function RowDetail({ names, values, onClose }: { names: string[]; values: string
     <Pop title="줄 상세" cls="row-box" onClose={onClose}>
       <dl>{names.flatMap((n, i) => [<dt key={"n" + i}>{n}</dt>, <dd key={"v" + i}>{values[i]}</dd>])}</dl>
     </Pop>
-  );
-}
-
-export function RecentRows({ card, filters }: P) {
-  const got = useRows(card, card.view?.rows || 10, true, filters);
-  const [open, setOpen] = useState<number | null>(null);
-  const text = (v: unknown) => v == null ? "" : String(v);
-  return (
-    <Box cls="recent">
-      {got.rows ? (
-        <table>
-          <thead><tr>{got.columns!.map(c => <th key={c}>{c}</th>)}</tr></thead>
-          <tbody>{got.rows.map((r, i) => <tr key={i} className="pickable" title={ROW_TIP} onClick={e => { e.stopPropagation(); setOpen(i); }}>{r.map((v, j) => <td key={j}>{text(v)}</td>)}</tr>)}</tbody>
-        </table>
-      ) : got.error ? <div className="err">{got.error}</div> : <div className="hint">{got.hint}</div>}
-      {open != null && got.rows?.[open] && <RowDetail names={got.columns!} values={got.rows[open].map(text)} onClose={() => setOpen(null)} />}
-    </Box>
   );
 }
 
@@ -90,14 +73,11 @@ function TableView({ card, columns, rows, prev }: Pick<P, "card"> & { columns: C
   );
 }
 
-export function Table({ card, filters }: P) {
+export function Table({ card }: P) {
   const v = card.data?.values as { columns: Col[]; rows: unknown[][]; prev?: Record<string, unknown[]> | null } | undefined;
-  const got = useRows(card, card.view?.rows || 20, !v, filters);
   return (
     <Box cls="table">
-      {v ? <TableView card={card} columns={v.columns} rows={v.rows} prev={v.prev} />
-        : got.rows ? <TableView card={card} columns={got.columns!.map(n => ({ name: n, kind: "value" }))} rows={got.rows} prev={null} />
-        : got.error ? <div className="err">{got.error}</div> : <div className="hint">{got.hint}</div>}
+      {v ? <TableView card={card} columns={v.columns} rows={v.rows} prev={v.prev} /> : <div className="hint">아직 구한 값이 없어요</div>}
     </Box>
   );
 }

@@ -12,7 +12,6 @@ from lazy import ibis
 
 from analysis import stats
 from dashboard import dash_calc
-from dashboard import dash_refresh
 from core import dash_store
 from core import server
 from conftest import ROOT
@@ -118,13 +117,6 @@ def test_funnel_card_store_checks():
     assert saved["colors"]["series"]["이탈"] == "#e8590c"
     with pytest.raises(ValueError, match="HEX"):
         dash_store.check_card({**base, "colors": {"series": {"이탈": "주황"}}})
-
-
-def test_funnel_card_is_refreshed():
-    assert "funnel" in dash_refresh.REFRESHABLE
-    card = dash_store.check_card({"kind": "funnel", "title": "흐름", "source": {"key": "k", "recipe": {"base": "t"}, "analysis": HOW}})
-    assert dash_refresh.skip_reason({"refresh": {"every": "1시간"}}, card, "k", dt.datetime(2026, 1, 1)) == ""  # 다시 구할 수 있는 종류
-    assert "다른 연결" in dash_refresh.skip_reason({"refresh": {"every": "1시간"}}, card, "other", dt.datetime(2026, 1, 1))
 
 
 def test_screens_have_funnel(client):

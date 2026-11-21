@@ -10,9 +10,9 @@ from query import search_app  # noqa: F401  /api/columns·query·images 라우�
 
 WEB = Path(__file__).resolve().parent.parent / "web"
 NEEDED = {"/api/dash", "/api/dash/open", "/api/dash/delete", "/api/dash/card/add", "/api/dash/card/compute", "/api/dash/cards/compute", "/api/dash/settings",
-          "/api/dash/last", "/api/dash/live_min", "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/dash/image",
-          "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/pdf", "/api/chart/points", "/api/period/parse", "/api/period/day", "/api/period/every",
-          "/api/compare", "/api/targets", "/api/tables", "/api/columns", "/api/query", "/api/my_metrics", "/api/images", "/api/dash/constants"}  # 대시보드 화면이 쓰는 API(NEXT_PLAN 계약, 열기는 Phase 10부터 /api/dash/open). refresh/start는 옛 화면의 static/core/dash_refresh.js가 연결 뒤에 부른다
+          "/api/dash/last", "/api/dash/live_min", "/api/dash/image",
+          "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/pdf", "/api/chart/points", "/api/period/parse", "/api/period/day",
+          "/api/compare", "/api/targets", "/api/tables", "/api/columns", "/api/my_metrics", "/api/images", "/api/dash/constants"}  # 대시보드 화면이 쓰는 API(NEXT_PLAN 계약, 열기는 Phase 10부터 /api/dash/open)
 
 
 def api_paths(text):

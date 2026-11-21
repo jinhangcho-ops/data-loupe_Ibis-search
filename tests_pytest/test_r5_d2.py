@@ -492,17 +492,6 @@ def test_boxplot_and_candle_work_on_sqlite(lite):
     assert candles["candles"][0] == {"open": 100, "high": 120, "low": 90, "close": 99}
 
 
-# ---------- web 2차 감사 AC9: 빈 틀 카드의 최신화 건너뜀 이유 ----------
-
-def test_refresh_skip_reason_for_a_card_without_data_choice():
-    from dashboard import dash_refresh
-    now = dt.datetime.now()
-    empty = dash_store.check_card({"kind": "sankey", "title": "t", "source": {}})
-    assert dash_refresh.skip_reason({"refresh": {"every": "1일"}}, empty, "file:///x#a.csv", now) == "데이터를 아직 정하지 않은 카드예요"
-    other = {**empty, "source": {"key": "file:///y#b.csv", "body": {"base": "t"}, "analysis": FLOW}}
-    assert dash_refresh.skip_reason({"refresh": {"every": "1일"}}, other, "file:///x#a.csv", now) == "다른 연결에서 구한 카드예요"
-
-
 # ---------- 서버 2차 리뷰 RA1: 처리 용량 판정(copies_to_pc)이 상자 그림·양초의 집계도 본다 ----------
 
 def made(kind, view=None, **body):

@@ -16,6 +16,7 @@ import { onPageNow } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import type { Card } from "@/lib/types";
+import { Bell } from "./Bell";
 import { FilterBar } from "./FilterBar";
 import { LastRefreshed } from "./PeriodBar";
 import { PickDashboard } from "./PickDashboard";
@@ -36,7 +37,7 @@ export function useAddCard(): (card: Partial<Card>) => Promise<void> {
       const dash = state.dash;
       if (dash) {
         if (dash.cards.length >= max) throw new Error(`대시보드에는 카드를 ${max}개까지 넣을 수 있어요.`);
-        const full = onPageNow({ ...card, id: newCardId() } as Card, dash.pages, page), r = await computeCard(cardRequest(full), state.ctx);
+        const full = onPageNow({ ...card, id: newCardId() } as Card, dash.pages, page), r = await computeCard(cardRequest(full), state.ctx, dash.id);
         const cur = now.current.dash;
         if (cur?.id !== dash.id) throw new Error("값을 구하는 사이 다른 대시보드를 열어서 카드를 넣지 않았어요.");
         dispatch({ type: "cards", cards: [...cur.cards, { ...full, source: { ...full.source, ...r.source }, data: r.data }] });
@@ -65,14 +66,13 @@ export function useDemo(): () => void {
 
 export function Toolbar() {
   const { state, dispatch } = useDash();
-  const { recompute, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, conn, build, flush, report, setReport } = useShell();
+  const { recompute, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, conn, build, flush, report, setReport, settings, setSettings } = useShell();
   const demo = useDemo();
   const [sure, setSure] = useState(false);  // 연결돼 있으면 [예시 데이터로 확인하기]를 한 번 더 눌러야 연결을 바꾼다(TopBar [비우기]와 같은 방식)
   const [menu, setMenu] = useState<false | "card" | "more">(false);  // 열린 메뉴: [+ 카드 ▾] 또는 [더 보기 ▾]
   const [metrics, setMetrics] = useState(false);
   const [picker, setPicker] = useState(false);  // 그림으로 고르기 화면
   const addShell = useAddShell();
-  const [settings, setSettings] = useState(false);
   const [busy, setBusy] = useState(false);
   const drop = useRef<HTMLDivElement>(null), more = useRef<HTMLDivElement>(null);
   const add = useAddCard();
@@ -87,6 +87,7 @@ export function Toolbar() {
         {dashOnly ? <><b className="d-name">{state.dash?.name || "대시보드"}</b><span className="d-conn" title="지금 연결된 데이터">{conn ? conn.label || "연결됨" : "연결 안 됨"}</span></> : <PickDashboard />}
         <span className="d-sep"></span>
         <LastRefreshed />
+        <Bell />
         {dashOnly && <FilterBar />}
         <span className="ml-auto"></span>
         <button className="btn" onClick={again} disabled={busy} title="데이터를 새로 읽어 카드 숫자를 최신으로 고쳐요">최신화</button>
@@ -113,7 +114,7 @@ export function Toolbar() {
         <button className="btn" id="d-demo-bar" onBlur={() => setSure(false)} onClick={() => { if (conn && !sure) return setSure(true); setSure(false); demo(); }}
           title="지어낸 주문·고객·방문기록 표에 연결하고 대시보드를 다시 열어요. 지금 다른 데이터에 연결돼 있으면 연결이 예시 데이터로 바뀌어요">{sure ? "한 번 더 누르면 연결이 바뀌어요" : "예시 데이터로 확인하기"}</button>
         {!build && <button className="btn" id="d-more" aria-haspopup="dialog" onClick={() => setReport(true)} title="대시보드를 그림(PNG)이나 PDF 보고서로 저장해요">내보내기</button>}
-        {dashOnly && <><ThemeButton /><button id="d-only-exit" className="btn" onClick={() => setDashOnly(false)} title="메뉴와 도구를 다시 보여요(Esc)">보기 끝내기</button></>}
+        {dashOnly && <><button className="btn" id="d-settings" aria-haspopup="dialog" onClick={() => setSettings(true)} title="갱신 주기·받는 범위·암호화·기간을 정해요">대시보드 설정</button><ThemeButton /><button id="d-only-exit" className="btn" onClick={() => setDashOnly(false)} title="메뉴와 도구를 다시 보여요(Esc)">보기 끝내기</button></>}
         {build && <div className="drop" ref={more} onKeyDown={esc}>
           <button className="btn" id="d-more" aria-haspopup="menu" aria-expanded={menu === "more"} onClick={() => setMenu(menu === "more" ? false : "more")} title="내보내기, 대시보드 설정">더 보기 ▾</button>
           {menu === "more" && (

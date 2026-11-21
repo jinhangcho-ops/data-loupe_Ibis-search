@@ -133,7 +133,7 @@ def test_rail_markup_and_topbar_order():
     foot = rail[rail.index('class="rail-foot"'):]
     assert foot.index('id="feat-open"') < foot.index('id="theme"') and ">설정</span>" in foot
     top = between("status.html", '<header class="topbar">', "</header>")
-    at = [top.index(f'id="{i}"') for i in ("crumb", "usage", "job", "rf-pill", "upd", "resize")]
+    at = [top.index(f'id="{i}"') for i in ("crumb", "usage", "job", "upd", "resize")]
     assert at == sorted(at)
     for gone in ('id="feat-open"', 'id="dest-open"', 'id="theme"', "<nav"):
         assert gone not in top, gone

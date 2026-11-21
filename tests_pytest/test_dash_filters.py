@@ -70,13 +70,6 @@ def test_filter_bad_shape(db):
     assert "목록" in compute(db, card=card("orders", "kind", SUM), ctx={"filters": [{"column": "store", "in": [1]}]})["error"]
 
 
-def test_filtered_body_for_row_cards(db):
-    found = db.post("/api/dash/card/filtered", json={"card": card("orders", "", [], "recent_rows"), "ctx": {"filters": [*ONLY_A["filters"], {"column": "none", "in": ["z"]}]}}).get_json()
-    assert found["missed"] == ["none"] and found["body"]["conditions"] == [{"column": "store", "in": ["A"]}]
-    rows = db.post("/api/query", json={**found["body"], "limit": 10, "count": False}).get_json()["rows"]["rows"]
-    assert sorted(r["amt"] for r in rows) == [10, 20]
-
-
 def test_filter_values(db):
     saved = db.post("/api/dash", json={"name": "필터", "cards": [card("visits", "kind", [{"y": "n", "agg": "sum"}]), card("orders", "kind", SUM)],
                                        "filters": [{"column": "store", "label": "매장"}]}).get_json()["dashboard"]

@@ -242,6 +242,21 @@ def group_fields(rest: str) -> dict[str, str]:
     return {"table": fields["테이블"], "key": fields["키"], "group": fields["그룹"], "order": fields["기준"], "cond": fields["조건"], "name": name}
 
 
+def used_tables(lines: list) -> list[str]:
+    """[SPECIFICATION] plans/dash-blocks.md#calc_used_tables
+    계산 줄들이 그룹집계의 '테이블 대상' 자리에 쓰는 테이블 이름들(처음 나온 차례, 실행하지 않는다)."""
+    found: dict[str, None] = {}
+    for line in lines:
+        text = (line["line"] if isinstance(line, dict) else line).strip()
+        head, _, body = text.partition(" ")
+        if head != "그룹집계":
+            continue
+        m = call_parts(body.strip())
+        if m and (table := group_fields(m["rest"])["table"]):
+            found[table] = None
+    return list(found)
+
+
 def group_line(text, expr, schema=None):
     """그룹집계 <집계id>(<값컬럼>[, 인자…]) [테이블 대상 키 내컬럼=대상컬럼, …] [그룹 컬럼, …] [기준 컬럼 asc|desc] [조건 조건문] 이름 새이름: 그룹마다 집계해 left join으로 행마다 붙인다
     (창 함수가 아니라 묶어 집계 → 이어 붙이기라 Postgres의 count distinct도 되고 모든 연결에서 같은 SQL). 그룹이 없으면 표 전체 값을 모든 행에(cross join).

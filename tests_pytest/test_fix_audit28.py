@@ -10,8 +10,7 @@ import pytest
 from lazy import ibis
 
 from collect import load_job
-from core import parse, prep_derive, prep_ops, server, source
-from dashboard import dash_refresh
+from core import parse, prep_derive, prep_ops, source
 
 
 def cfg(db, how="append", key=("id",), name="items"):
@@ -57,18 +56,6 @@ def test_long_table_name_refused_only_when_created():
         parse.check_new_length("가" * 18, "_ibis_load")
     with pytest.raises(ValueError, match="너무 길어요"):
         parse.check_new_length("가" * 22)
-
-
-def test_refresh_stop_does_not_cancel_user_query_while_waiting(monkeypatch):
-    event = threading.Event()
-    monkeypatch.setitem(server.state, "cancel", event)
-    monkeypatch.setitem(dash_refresh.JOB, "running", True)
-    dash_refresh.stop()
-    assert not event.is_set()  # 최신화는 차례를 기다리는 중: 도는 것은 사용자 조회
-    with dash_refresh.inside():
-        dash_refresh.stop()
-    assert event.is_set()
-    dash_refresh.STOP.clear()
 
 
 def test_password_with_plus_in_url_reaches_driver_intact(monkeypatch):

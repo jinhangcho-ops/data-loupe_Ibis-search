@@ -903,6 +903,14 @@ $("threads-n").onchange = () => {
   if (Number.isInteger(n) && n >= 1 && n <= cores) { setMsg(""); return saveCores(n).catch(e => setMsg(e.message)); }
   setMsg(`코어 수는 1에서 ${cores} 사이의 정수로 넣어 주세요.`);
 };
+// 대시보드 이 PC 계산을 닫을 때까지(분, pc_idle): 비우면 기본값
+const [IDLE_LOW, IDLE_HIGH] = SERVER.sizes.pc_idle;
+Object.assign($("pc-idle"), { value: saved("pc_idle") || SERVER.defaults.pc_idle, min: IDLE_LOW, max: IDLE_HIGH });
+$("pc-idle").onchange = () => {
+  const n = $("pc-idle").value === "" ? SERVER.defaults.pc_idle : Number($("pc-idle").value);
+  if (Number.isInteger(n) && n >= IDLE_LOW && n <= IDLE_HIGH) { setMsg(""); $("pc-idle").value = n; return saveSetting({ pc_idle: n }); }
+  setMsg(`닫을 때까지의 시간은 ${IDLE_LOW}에서 ${IDLE_HIGH} 사이의 정수(분)로 넣어 주세요.`);
+};
 // 자세히: 처리 용량을 알 수 없을 때(scan_unknown: run·block)와 표본이 너무 적게 오는 기준(sample_too_few, 화면은 %, 비우면 기본 20%).
 $("scan-unknown").value = saved("scan_unknown") || "run";
 $("scan-unknown").onchange = () => saveSetting({ scan_unknown: $("scan-unknown").value });
@@ -1111,7 +1119,6 @@ async function connectWith(body) {
   const { schemas } = await api("/api/connect", body);
   showRecentConnections();  // 쓴 횟수가 바뀌었다
   await showConnected(!!body.files, schemas, body);
-  if (typeof startRefresh === "function") startRefresh();  // 연결에 성공하면 어느 화면에서나 대시보드 최신화를 시작한다(dash_refresh.js)
 }
 // 드라이버 안내(drivers.py의 entry): 설명, 설치 명령과 [복사], 따로 설치할 프로그램, exe 안내. 연결이 드라이버 때문에 실패한 자리와 드라이버 표가 함께 쓴다.
 const DRIVER_STATUS = { installed: "설치됨", missing: "설치 안 됨", program_needed: "프로그램 필요" };

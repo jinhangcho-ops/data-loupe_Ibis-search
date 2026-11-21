@@ -2,13 +2,11 @@
 // 왼쪽 메뉴(static/core/status.html의 nav.rail과 같은 마크업): 앱 이름, 화면(설치한 기능만, 상수 features.on), 아래쪽 [설정](홈 /?panel=feat로 가서 static 설정 창을 연다)·쉬운 보기(#easy)·화면 모드.
 // 위쪽 줄: 연결 이름(crumb), 최신화 알약·팝업(옛 dash_refresh.js). 사용률·작업·업데이트·크기 조절은 static 화면(common.js)에만 있다(결정 D2).
 // 최신화는 연결에 성공한 화면(쿼리·홈)이 시작한다. 여기서는 열 때 돌고 있으면 0.8초마다 상태를 읽어 알약에 보이고, 끝나면 document에 dash-refreshed(결과)를 보낸다.
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { refreshStatus, saveSetting, stopRefresh } from "@/lib/api";
+import { useSyncExternalStore } from "react";
+import { saveSetting } from "@/lib/api";
 import { useConstants } from "@/lib/constants";
-import type { RefreshStatus } from "@/lib/types";
 import { BUILD_PATH, VIEW_PATH, useShell } from "./ShellProvider";
 
-const REFRESH_STATE: Record<string, string> = { ok: "완료", failed: "실패", skipped: "건너뜀", waiting: "대기" };
 const MOON = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>;
 const SUN = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>;
 const icon = (body: React.ReactNode) => <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{body}</svg>;  // status.html 메뉴 아이콘과 같은 모양
@@ -59,30 +57,9 @@ export function ThemeButton({ id }: { id?: string }) {
 
 export function TopBar() {
   const on = useConstants()?.features.on;
-  const { conn, loadConn, build } = useShell();
+  const { conn, build } = useShell();
   const here = build ? BUILD_PATH : VIEW_PATH;
-  const [st, setSt] = useState<RefreshStatus | null>(null);
-  const [pop, setPop] = useState(false);
   const easy = useSyncExternalStore(watchEasy, () => document.documentElement.classList.contains("easy"), () => true);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const poll = useCallback(async function step() {
-    clearTimeout(timer.current);
-    try {
-      const s = await refreshStatus();
-      setSt(s);
-      if (s.running) { timer.current = setTimeout(step, 800); return; }
-      loadConn();
-      document.dispatchEvent(new CustomEvent("dash-refreshed", { detail: s }));  // 다시 열기는 자동 저장(N6 useAutosave)이 저장을 끝낸 뒤 한다(옛 dash-refreshed)
-    } catch { /* 상태를 못 읽어도 화면은 그대로 쓴다 */ }
-  }, [loadConn]);
-  useEffect(() => {
-    refreshStatus().then(s => { if (s.running) { setSt(s); poll(); } }).catch(() => {});  // 다른 화면에서 시작해 아직 돌고 있으면 이어서
-    return () => clearTimeout(timer.current);
-  }, [poll]);
-  const count = (s: string) => st?.results.filter(r => r.state === s).length ?? 0;
-  const title = !st ? "" : st.running ? `대시보드를 최신 값으로 바꾸고 있어요 (${st.done}/${st.total})`
-    : `대시보드를 최신 값으로 바꿨어요. 완료 ${count("ok")}개, 실패 ${count("failed")}개, 건너뜀 ${count("skipped")}개`;
   return (
     <>
       <nav className="rail" aria-label="화면">
@@ -98,28 +75,7 @@ export function TopBar() {
       </nav>
       <header className="topbar">
         <div id="crumb" className={"crumb" + (conn ? " on" : "")} title="지금 연결된 데이터"><i></i><span id="crumb-text">{conn?.label || "연결 안 됨"}</span></div>
-        {st?.running && (
-          <button className="jobx cursor-pointer [border:0]" id="rf-pill" onClick={() => setPop(true)} title="대시보드를 최신 값으로 바꾸는 중이에요. 누르면 진행 상황을 볼 수 있어요.">
-            <i></i><span>{`대시보드 최신화 ${st.done}/${st.total}`}</span></button>
-        )}
       </header>
-      {pop && st && (
-        <div className="modal" onClick={e => { if (e.target === e.currentTarget) setPop(false); }}>
-          <div className="modal-box" role="dialog" aria-modal="true" aria-labelledby="rf-title">
-            <div className="head"><h3 id="rf-title">{title}</h3></div>
-            <ul className="rf-list">
-              {st.results.map((r, i) => (
-                <li key={i} className={r.state + (st.running && r.title === st.current && (r.state as string) === "waiting" ? " now" : "")}>
-                  <b>{REFRESH_STATE[r.state] ?? r.state}</b><span>{r.title + (r.message ? `: ${r.message}` : "")}</span></li>
-              ))}
-            </ul>
-            <div className="row justify-end">
-              <button className="ghost" disabled={!st.running} onClick={() => stopRefresh().then(setSt).catch(() => {})}>멈추기</button>
-              <button className="btn" onClick={() => setPop(false)} autoFocus>{st.running ? "닫고 계속하기" : "닫기"}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

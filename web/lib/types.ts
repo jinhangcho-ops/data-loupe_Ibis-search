@@ -9,7 +9,7 @@ export type Layout = { x: number; y: number; w: number; h: number };
 
 /** 카드 종류(dash_store.KINDS) */
 export type CardKind =
-  | "chart" | "analysis" | "metric" | "kpi" | "donut_kpi" | "gauge" | "summary" | "recent_rows" | "dual_trend" | "stripes" | "blocks"
+  | "chart" | "analysis" | "metric" | "kpi" | "donut_kpi" | "gauge" | "summary" | "dual_trend" | "stripes" | "blocks"
   | "target_trend" | "map" | "alerts" | "deviation" | "funnel" | "table" | "status" | "sentence" | "geomap"
   | "histogram" | "boxplot" | "heatmap" | "calheat" | "treemap" | "sunburst" | "bullet" | "bump" | "sankey" | "cohort" | "candle" | "wordcloud" | FrameKind;
 
@@ -123,18 +123,34 @@ export type TreeItem = { name: string; value: number; children?: TreeItem[] };
 
 export type Card = { id: string; kind: CardKind; title: string; layout: Layout; colors: Colors; view: CardView; source: CardSource; data: CardData };
 
-export type Every = { every: string };
 export type NorthStar = { card: string; counters: string[]; limits?: Record<string, { op: ">=" | "<="; value: number }> };
 
 /** 대시보드 하나(check_dashboard) */
 export type Dashboard = {
   id: string; name: string; template: string; palette: string[]; period: string; as_of: string; compare_mode?: CompareMode;
-  refresh: Every; live: Every; cards: Card[]; created: string; updated: string; north_star: NorthStar;
+  cards: Card[]; created: string; updated: string; north_star: NorthStar;
   filters?: DashFilter[];  // 필터 칸 목록(옛 저장본에는 없다)
   pages?: string[];        // 쪽(탭) 이름 목록. 비었으면 쪽을 나누지 않는다(옛 저장본에는 없다)
+  pull?: Pull;             // (B11) 받기 설정(옛 저장본에는 없다: consts.dash.pull.default)
 };
+/** (B11) 갱신 주기 단위(dash_store.PULL_UNITS의 키) */
+export type PullUnit = "s" | "m" | "h";
+/** (B11) 새 줄을 알아볼 컬럼 하나(테이블마다) */
+export type PullMark = { schema: string; table: string; column: string };
+/** (B11) 받은 Parquet 암호화(dash_store.PULL_CRYPTS): 없음·AES-128·AES-256·사용자가 적는 암호문 */
+export type PullCrypt = "none" | "aes128" | "aes256" | "pass";
+/** (B11) 대시보드 받기 설정(dash_store.check_pull): 계산 방식, 갱신 주기(null = 단추를 누를 때만), 받는 범위, 새 줄 컬럼, 암호화 */
+export type Pull = { calc: "pc" | "db"; every: { n: number; unit: PullUnit } | null; range: "all" | "new"; marks: PullMark[]; crypt: PullCrypt };
+/** (B11) 아무 대시보드도 쓰지 않는 칸(GET /api/dash/pull/orphans)·이 대시보드에서 더는 안 쓰는 칸(POST /api/dash/pull/unused, shared = 다른 대시보드도 씀) */
+export type PullOrphan = { slot: string; schema: string; table: string; bytes: number };
+export type PullUnused = PullOrphan & { shared: boolean };
+/** (B11) GET /api/dash/pull/state: 이 대시보드가 쓰는 칸들. lost = 마지막 줄을 못 찾았을 때 다시 받을 기간 컬럼("" 없음, "-" 기간 컬럼이 하나가 아님) */
+export type PullSlot = PullUnused & { pulled_at: string; lost: string | null };
+export type PullState = { bytes: number; text: string; slots: PullSlot[] };
+/** (B11) POST /api/dash/pull/tables의 테이블 하나: 새 줄 컬럼 후보(정수·날짜·시각)와 조인으로만 읽는지 */
+export type PullTable = { schema: string; table: string; columns: string[]; join: boolean };
 /** POST /api/dash/settings가 바꾸는 항목만 */
-export type DashSettings = Partial<Pick<Dashboard, "as_of" | "period" | "compare_mode" | "refresh" | "live">>;
+export type DashSettings = Partial<Pick<Dashboard, "as_of" | "period" | "compare_mode" | "pull">>;
 /** 비교 기준(dashboard/period.MODES): 직전 기간·같은 요일 기간·작년 같은 기간 */
 export type CompareMode = "prev" | "same_weekday" | "yoy";
 
@@ -153,7 +169,6 @@ export type DashFilter = { column: string; label: string };
 export type PickedFilter = { column: string; in: string[] };
 export type PeriodParse = { span: Span; previous: PrevSpan | null; context: Ctx | null };
 export type DayParse = { date: string | null; label: string; error: string | null };
-export type EveryParse = { seconds: number | null; error: string | null };
 
 // ---------- 값 구하기 ----------
 export type ComputeResult = { id: string; data?: CardData; error?: string };
@@ -162,9 +177,7 @@ export type ChartPoints = Record<string, unknown> & {
   hex?: { cols: number; x: [number, number] | null; y: [number, number] | null; cells: [number, number, number][] };
 };
 
-// ---------- 최신화·실시간 ----------
-export type RefreshResult = { dashboard: string; card: string; title: string; state: "ok" | "failed" | "skipped"; message: string };
-export type RefreshStatus = { running: boolean; total: number; done: number; current: string; results: RefreshResult[]; [more: string]: unknown };
+// ---------- 연결 ----------
 export type Source = { key: string; label: string } | null;
 export type LiveMin = { source: Source; seconds: number };
 
@@ -174,7 +187,9 @@ export type Targets = { path: string; rows: Record<string, unknown>[]; errors: u
 export type CompareItem = { cur: unknown; prev: unknown; fmt?: ValueFormat; mode?: string; label?: string; better?: "up" | "down"; partial?: boolean };
 /** /api/columns: [컬럼, 한글 타입] */
 export type Columns = { columns: [string, string][]; fields: [string, string][]; origins: Record<string, string> };
-export type QueryRows = { rows: { columns: string[]; rows: Record<string, unknown>[] }; [more: string]: unknown };
+
+/** (B11) 받기 설정 상수(서버 dash_store.PULL_*와 같은 값) */
+export type PullConsts = { calcs: Pull["calc"][]; ranges: Pull["range"][]; crypts: PullCrypt[]; units: Record<PullUnit, number>; unit_names: Record<PullUnit, string>; min_every: number; max_every: number; default: Pull; gap_note: string };
 
 /** GET /api/dash/constants(server.constants("dashboard")) */
 export type Constants = {
@@ -193,8 +208,10 @@ export type Constants = {
   features: { on: string[]; version: string | null; all: { id: string; name: string; path: string }[] };
   dash: {
     max_cards: number; max_filters: number; max_pages: number;max_dashboards: number; max_palette: number; types: Partial<Record<Exclude<ChartType, "">, string>>; time_types: ChartType[]; max_bins?: number; max_bands?: number; max_cells: number; merge_note: string;
-    units: Record<Unit, string>; locked: string; min_refresh: number; max_points: number; aggs: string[]; merge: string[]; agg_names: Record<string, string>;
+    units: Record<Unit, string>; locked: string; max_points: number; aggs: string[]; merge: string[]; agg_names: Record<string, string>;
     auto: AutoTable; auto_names: Record<AutoRule, string>; viz: { words: SemanticWords; query_auto: AutoView }; orders: Order[]; order_names: Record<Order, string>;
+    pull: PullConsts;  // (B11) dash_store.PULL_* (dash_app.dash_constants)
+    gone_kinds: string[]; gone_text: string;  // (B11) 앱에서 없앤 카드 종류(dash_store.GONE_KINDS)와 그 안내 글(dash_store.GONE_CARD)
   };
   [more: string]: unknown;
 };

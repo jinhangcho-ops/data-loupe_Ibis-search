@@ -1,5 +1,4 @@
 """3차 감사 3D(대시보드·수집·연동·사본): 고치기 전에는 실패하던 것들을 하나씩 재현한다. 연결·알림·Kafka는 모두 가짜다."""
-import contextlib
 import datetime as dt
 import threading
 import time
@@ -12,7 +11,6 @@ from core import dash_store as store
 from core import querying
 from core import server
 from dashboard import dash_calc
-from dashboard import dash_refresh as refresh
 
 A = {"kind": "folder", "path": "C:/dbA"}
 B = {"kind": "folder", "path": "C:/dbB"}
@@ -23,60 +21,7 @@ def chart(title, key):
             "data": {"values": {"labels": ["old"], "series": []}}}
 
 
-@pytest.fixture
-def quiet(folder, monkeypatch):
-    monkeypatch.setitem(server.state, "opened", A)
-    monkeypatch.setitem(server.state, "passwords", [])
-    refresh.JOB.update(running=False, total=0, done=0, current="", results=[])
-    monkeypatch.setattr(refresh, "scan_decision", lambda c, x: "")
-    monkeypatch.setattr(dash_calc, "shared_context", lambda m, c: None)
-    monkeypatch.setattr(refresh, "context", lambda d: None)
-    yield
-    refresh.wait(10)
-
-
-# ---------- 3D1 카드 사이에 다른 DB로 연결하면 남은 카드는 건너뛴다 ----------
-
-def test_connection_change_between_cards_skips_the_rest(quiet, monkeypatch):
-    key = store.current_source()["key"]
-    d = store.save_dashboard({"name": "D", "cards": [chart("c1", key), chart("c2", key), chart("c3", key)], "refresh": {"every": "1시간"}})
-    turns = []
-
-    @contextlib.contextmanager
-    def using(fresh=False, renewed=None):
-        turns.append(1)
-        if len(turns) == 2:
-            server.state["opened"] = B  # 카드 사이에 사용자가 다른 DB에 연결한다
-        yield
-    monkeypatch.setattr(querying, "using", using)
-    monkeypatch.setattr(dash_calc, "compute", lambda c, now, ctx=None: {"values": {"labels": [server.state["opened"]["path"]], "series": []}, "computed_at": now})
-    refresh.start()
-    refresh.wait()
-    by = {r["title"]: r for r in refresh.status()["results"]}
-    assert by["c1"]["state"] == "ok" and by["c2"]["state"] == "skipped" and "연결이 바뀌어" in by["c2"]["message"] and by["c3"]["state"] == "skipped"
-    saved = {c["title"]: c for c in store.get_dashboard(d["id"])["cards"]}
-    assert saved["c1"]["data"]["values"]["labels"] == ["C:/dbA"]
-    assert saved["c2"]["data"]["values"]["labels"] == ["old"] and saved["c3"]["data"]["values"]["labels"] == ["old"]  # B로 구한 값이 A 열쇠로 저장되지 않는다
-
-
-# ---------- 3D2 카드를 구한 시각을 찍고, 저장된 값이 더 늦으면 쓰지 않는다 ----------
-
-def test_cards_are_stamped_when_computed(quiet, monkeypatch):
-    key = store.current_source()["key"]
-    store.save_dashboard({"name": "D", "cards": [chart("c1", key), chart("c2", key)], "refresh": {"every": "1시간"}})
-    stamps = {}
-
-    def compute(c, now, ctx=None):
-        stamps[c["title"]] = dt.datetime.fromisoformat(now)
-        if c["title"] == "c1":
-            time.sleep(1.2)
-        return {"values": {"labels": ["new"], "series": []}, "computed_at": now}
-    monkeypatch.setattr(dash_calc, "compute", compute)
-    monkeypatch.setattr(querying, "using", lambda **k: contextlib.nullcontext())
-    refresh.start()
-    refresh.wait()
-    assert (stamps["c2"] - stamps["c1"]).total_seconds() >= 1  # 작업 시작 시각이 아니라 카드마다 구한 시각
-
+# ---------- 3D2 저장된 값이 더 늦으면 쓰지 않는다 ----------
 
 def test_set_cards_data_keeps_newer_saved_value(folder):
     d = store.save_dashboard({"name": "D", "cards": [chart("c", "folder:c:/dba")]})
@@ -255,13 +200,6 @@ def test_ensure_renews_used_copy_once_and_leaves_others(tmp_path):
 
 
 # ---------- 3D9 큰 저장소는 중간 저장 간격을 늘린다 ----------
-
-def test_flush_gap_grows_with_store_size(folder, monkeypatch):
-    small = refresh.flush_gap()
-    assert small == refresh.FLUSH_SECONDS
-    monkeypatch.setattr(store, "path_of", lambda: type("P", (), {"stat": lambda self: type("S", (), {"st_size": 32 * 1024 * 1024})()})())
-    assert refresh.flush_gap() >= refresh.FLUSH_SECONDS * 4
-
 
 # ---------- 3D10 기준일이 오늘 뒤면 거부 ----------
 

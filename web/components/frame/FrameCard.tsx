@@ -75,7 +75,7 @@ export function FrameCard(props: FrameCardProps): ReactNode {
   const kind = card.kind as FrameKind;
   const pages = state.dash?.pages ?? [];
   const host: ActionHost = {
-    recompute: shell.recompute, setPage: shell.setPage, dashOnly: shell.dashOnly, setDashOnly: shell.setDashOnly, setReport: shell.setReport, setZoom: shell.setZoom,
+    recompute: shell.recompute, setPage: shell.setPage, dashOnly: shell.dashOnly, setDashOnly: shell.setDashOnly, setReport: shell.setReport, setZoom: shell.setZoom, setSettings: shell.setSettings,
     flipTheme, flipEasy, clearFilters: shell.clearFilters, pages, cardIds: (state.dash?.cards ?? []).map(c => c.id),
   };
   return DRAW[kind]({

@@ -12,8 +12,6 @@ import { readSpan } from "./calPick";
 import { useShell, type Note } from "./ShellProvider";
 
 const NoteLine = ({ n }: { n?: Note }) => <div className={"hint dc-note" + (n?.bad ? " bad" : "")} role={n?.bad ? "alert" : undefined}>{n?.text ?? ""}</div>;
-// 초를 "1시간"·"30분"·"45초" 글자로(서버 dash_refresh.minimum_text와 같다)
-const minimumText = (s: number) => s % 3600 === 0 ? `${s / 3600}시간` : s % 60 === 0 ? `${s / 60}분` : `${s}초`;
 const enter = (go: () => void) => (e: React.KeyboardEvent) => { if (e.key === "Enter") go(); };
 
 /** 카드 값을 마지막으로 구한 시각(ISO 글자). 구한 값이 없으면 undefined. 설정 창의 최신화 주기 안내와 머리 줄의 "N분 전 최신화"가 같이 쓴다. */
@@ -87,7 +85,6 @@ export function AsOfField({ id }: { id: string }) {
 
 export function PeriodBar() {
   const { period: p } = useShell();
-  const minRefresh = useConstants()?.dash.min_refresh ?? 3600;
   const at = useLastComputed();
   const last = at ? `마지막으로 구한 시각 ${at.replace("T", " ")}` : "아직 구한 값이 없어요";
   return (
@@ -99,6 +96,7 @@ export function PeriodBar() {
       <div className="dc-field">
         <label className="hint" htmlFor="dc-per">기간</label>
         <PeriodField id="dc-per" />
+        <NoteLine n={{ text: last }} />
       </div>
       <div className="dc-field">
         <label className="hint" htmlFor="dc-cmp">비교 기준</label>
@@ -107,30 +105,6 @@ export function PeriodBar() {
           <option value="same_weekday">같은 요일 기간</option>
           <option value="yoy">작년 같은 기간</option>
         </select>
-      </div>
-      <div className="dc-field">
-        <label className="hint" htmlFor="dc-every">최신화 주기</label>
-        <input id="dc-every" value={p.inputs.refresh} placeholder="예: 1일 (비우면 안 함)" title={`연결할 때 이 주기가 지난 카드만 다시 구해요. ${minimumText(minRefresh)} 이상으로 적어 주세요`}
-          onChange={e => p.setInput("refresh", e.target.value)} onBlur={() => p.commitEvery("refresh")} onKeyDown={enter(() => p.commitEvery("refresh"))} />
-        <NoteLine n={p.notes.refresh?.bad ? p.notes.refresh : { text: last }} />
-      </div>
-      <div className="dc-field">
-        <label className="hint" htmlFor="dc-live">실시간 간격</label>
-        <div className="row">
-          <input id="dc-live" value={p.inputs.live} placeholder="예: 30초" title="화면을 보는 동안 이 간격으로 카드를 다시 구해요. 앞 조회가 끝난 뒤부터 세고, 이 값은 저장하지 않아요"
-            onChange={e => p.setInput("live", e.target.value)} onBlur={() => p.commitEvery("live")} onKeyDown={enter(() => p.commitEvery("live"))} />
-          <button className="btn" onClick={p.toggleLive}>{p.liveOn ? "멈추기" : "시작"}</button>
-        </div>
-        <NoteLine n={p.notes.live} />
-      </div>
-      <div className="dc-field">
-        <label className="hint" htmlFor="dc-min">실시간 최소 간격(초)</label>
-        <div className="row">
-          <input id="dc-min" type="number" min={0} value={p.min} placeholder="기본값" disabled={!p.minOn} onChange={e => p.setMin(e.target.value)}
-            title="지금 연결에서 쓸 수 있는 가장 짧은 실시간 간격(초)이에요. 비우면 기본값을 써요(원격 연결 60초, 이 PC 파일은 제한 없음)" />
-          <button className="btn" onClick={p.saveMin} disabled={!p.minOn}>적용</button>
-        </div>
-        <NoteLine n={p.notes.min} />
       </div>
       {p.past && <span className="dc-past">지난 날짜 기준으로 보는 중</span>}
     </div>

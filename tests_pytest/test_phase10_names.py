@@ -117,14 +117,6 @@ def test_dash_open_route_renames_and_saves(shop):
     assert dash_store.get_dashboard(dash_id)["cards"][0]["source"]["body"]["x"] == "customers_id"  # 한 번 바꿔 저장(카드 편집 칸에도 새 이름)
 
 
-def test_refresh_start_upgrades_stored_dashboards(shop):
-    from core import dash_store, server
-    dash_id = old_dashboard()
-    assert "/api/dash/refresh/start" not in server.FREE  # 연결을 쓰므로 차례를 기다린다
-    assert shop.post("/api/dash/refresh/start", json={}).status_code == 200
-    assert dash_store.get_dashboard(dash_id)["cards"][0]["source"]["body"]["x"] == "customers_id"  # 열지 않은 대시보드도 최신화 전에
-
-
 def test_web_opens_dashboard_through_upgrade():
     api = (ROOT / "web" / "lib" / "api.ts").read_text(encoding="utf-8")
     line = next(s for s in api.splitlines() if s.startswith("export const getDashboard"))

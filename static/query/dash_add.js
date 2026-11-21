@@ -29,7 +29,7 @@ async function addToDashboard(card, kind, table, picked) {
   if (!pick) return null;
   let d = await timed(kind, () => api("/api/dash/card/compute", { card }), table);
   card.source = { ...card.source, ...d.source };
-  if (!card.source.date && !d.data.by_unit && d.data.date_cols?.length === 1 && card.kind !== "recent_rows") {  // 날짜 컬럼이 하나뿐이면 기간 기준으로 자동으로 채운다
+  if (!card.source.date && !d.data.by_unit && d.data.date_cols?.length === 1) {  // 날짜 컬럼이 하나뿐이면 기간 기준으로 자동으로 채운다
     card.source.date = d.data.date_cols[0];
     d = await api("/api/dash/card/compute", { card: { ...card, data: {} } });
   }

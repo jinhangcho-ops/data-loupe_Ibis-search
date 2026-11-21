@@ -128,13 +128,9 @@ def test_card_check_overwrites_old_key(client):
 
 
 def test_refresh_and_compute_accept_old_key(client):
-    import datetime as dt
     from core import dash_store
-    from dashboard import dash_refresh
     open_file("a.duckdb")
     now = dash_store.current_source()["key"]
-    card = {"kind": "kpi", "source": {"key": now.split("#")[0]}, "data": {}}
-    assert dash_refresh.skip_reason({"refresh": {}}, card, now, dt.datetime.now()) != "다른 연결에서 구한 카드예요"
     res = client.post("/api/dash/card/compute?key=", json={"card": {"kind": "kpi", "title": "k", "source": {"key": now.split("#")[0], "table": "t"}}})
     assert "다른 연결" not in res.get_data(as_text=True)
 

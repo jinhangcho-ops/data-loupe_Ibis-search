@@ -40,8 +40,7 @@ SUM = lambda y: {"y": y, "agg": "sum"}  # noqa: E731
 def test_cards_compute_keeps_each_card_series(shop):
     """kpi(금액)가 먼저, 같은 테이블의 donut_kpi(금액·수량)가 뒤에, 모든 컬럼을 읽는 recent_rows가 있으면 kpi가 '수량'을 찾다 실패했다."""
     cards = [card("kpi", series=[SUM("금액")]),
-             card("donut_kpi", {"ring": "stack", "slots": [{"label": "금액"}, {"label": "수량"}]}, series=[SUM("금액"), SUM("수량")]),
-             card("recent_rows", {"rows": 5}, date=None, columns=["주문번호", "주문일", "금액"])]
+             card("donut_kpi", {"ring": "stack", "slots": [{"label": "금액"}, {"label": "수량"}]}, series=[SUM("금액"), SUM("수량")])]
     ctx = {"range": {"start": "2026-01-15", "end": "2026-01-28"}, "prev": {"start": "2026-01-01", "end": "2026-01-14", "text": "직전 14일"}}
     together = shop.post("/api/dash/cards/compute", json={"cards": cards, "ctx": ctx}).get_json()["results"]
     assert all("error" not in r for r in together), together

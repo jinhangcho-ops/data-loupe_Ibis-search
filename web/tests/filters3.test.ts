@@ -36,8 +36,6 @@ describe("필터 줄", () => {
     expect(shell).toContain("picked.current.length ? { ...base, filters: picked.current } : base");  // 기간을 바꿔도 남는다
   });
   it("행을 직접 읽는 카드는 서버가 걸러 준 조회로 읽는다", () => {
-    const common = src("components/cards/svg/common.tsx");
-    expect(common).toContain("f.length ? (await filteredBody(cardRequest(latest.current), { filters: f })).body : JSON.parse(body)");
     expect(src("components/cards/SvgCards.tsx")).toContain("filters={ctx?.filters}");
   });
 });

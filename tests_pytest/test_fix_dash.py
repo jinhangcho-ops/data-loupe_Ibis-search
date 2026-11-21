@@ -1,20 +1,15 @@
 """리뷰 반영 묶음 4(대시보드): 계열 이름의 옵션, 같은 읽기 묶음 열쇠의 계산 줄, 대시보드 열기 경로, NaN, 최신화 중 편집·두 번 시작·예외,
 실시간 since, 시간대 시각, 기간 숫자 넘침, 요약 기여 분해 상한, 편차 표, 저장소 읽기 캐시. 값은 손으로 계산하고 데이터는 테스트 안에서 지어낸다."""
-import contextlib
 import datetime as dt
 import json
 import shutil
 import subprocess
-import threading
-import time
 
 import duckdb
 import pytest
 
-from core import querying
 from core import credentials
 from dashboard import dash_calc
-from dashboard import dash_refresh as refresh
 from core import dash_store as store
 from core import metric_file
 from dashboard import period
@@ -109,36 +104,6 @@ def test_stored_nan_is_cleaned_when_read(folder):
 
 # ---------- S 최신화 중 편집 / 두 번 시작 / 예외 ----------
 
-@pytest.fixture
-def fake(folder, monkeypatch):
-    monkeypatch.setitem(server.state, "opened", FOLDER)
-    monkeypatch.setattr(querying, "using", lambda **k: contextlib.nullcontext())
-    refresh.JOB.update(running=False, total=0, done=0, current="", results=[])
-    yield
-    refresh.wait(10)
-
-
-def save(name, cards, every="1일"):
-    return store.save_dashboard({"name": name, "cards": cards, "refresh": {"every": every}})
-
-
-def test_edit_during_refresh_keeps_the_edit_and_skips_the_stale_value(fake, monkeypatch):
-    d = save("편집", [card("가")])
-    edited = {**store.get_dashboard(d["id"])}
-    edited["cards"] = [{**edited["cards"][0], "source": {**edited["cards"][0]["source"], "body": {"base": "t", "x": "b", "series": [{"y": None, "agg": "count"}]}}}]
-
-    def slow(c, now, ctx=None):
-        store.save_dashboard(edited)  # 구하는 동안 사용자가 조회를 바꿔 저장했다
-        return {"values": {"labels": ["stale"], "series": []}, "computed_at": now}
-    monkeypatch.setattr(dash_calc, "compute", slow)
-    refresh.start(NOW)
-    refresh.wait()
-    result = refresh.status()["results"][0]
-    now_card = store.get_dashboard(d["id"])["cards"][0]
-    assert result["state"] == "skipped" and "고쳤" in result["message"]
-    assert now_card["data"]["values"]["labels"] == ["old"] and now_card["source"]["body"]["x"] == "b"  # 옛 정의로 구한 값을 새 정의에 붙이지 않는다
-
-
 def test_set_cards_data_same_check(folder):
     d = store.save_dashboard({"name": "확인", "cards": [card("가")]})
     cid = d["cards"][0]["id"]
@@ -146,51 +111,6 @@ def test_set_cards_data_same_check(folder):
     assert store.get_dashboard(d["id"])["cards"][0]["data"].get("note") is None
     assert store.set_cards_data(d["id"], [(cid, {"note": "b"}, lambda c: True)]) == [True]
     assert store.set_cards_data(d["id"], [("없음", {"note": "c"}, None)]) == [False]
-
-
-def test_start_twice_launches_one_job(fake, monkeypatch):
-    save("둘", [card("가")])
-    original, started = store.editable, []
-    monkeypatch.setattr(store, "editable", lambda: (time.sleep(0.3), original())[1])  # 확인과 JOB 갱신 사이를 벌린다
-    monkeypatch.setattr(refresh, "work", lambda plan, now: started.append(1))
-    outs = []
-    threads = [threading.Thread(target=lambda: outs.append(refresh.start(NOW))) for _ in range(2)]
-    threads[0].start()
-    time.sleep(0.05)
-    threads[1].start()
-    for th in threads:
-        th.join(5)
-    refresh.wait(5)
-    assert len(started) == 1 and len(outs) == 2
-
-
-def test_one_bad_dashboard_does_not_kill_the_job(fake, monkeypatch):
-    save("가", [card("가카드")])
-    save("나", [card("나카드")])
-    real = refresh.context
-
-    def context(d, today=None):
-        if d["name"] == "가":
-            raise OverflowError("날짜가 너무 커요")
-        return real(d, today)
-    monkeypatch.setattr(refresh, "context", context)
-    monkeypatch.setattr(dash_calc, "compute", lambda c, now, ctx=None: {"values": {"labels": ["new"], "series": []}, "computed_at": now})
-    refresh.start(NOW)
-    refresh.wait()
-    done = refresh.status()
-    assert not done["running"] and done["done"] == 2
-    assert {r["title"]: r["state"] for r in done["results"]} == {"가카드": "failed", "나카드": "ok"}
-
-
-def test_refresh_reads_cards_together_via_plan(fake, monkeypatch):
-    """같은 테이블·조건의 값 카드 둘은 일 값 집계를 한 번만 구한다(최신화)."""
-    body = lambda y: {"base": "t", "series": [{"y": y, "agg": "sum"}]}
-    save("묶음", [card("가", kind="kpi", body=body("a"), date="day"), card("나", kind="kpi", body=body("b"), date="day")])
-    seen = []
-    monkeypatch.setattr(dash_calc, "compute", lambda c, now, ctx=None: (seen.append(sorted((ctx or {}).get("plan", {}).get("series", {}).values())), {"values": {}, "computed_at": now})[1])
-    refresh.start(NOW)
-    refresh.wait()
-    assert seen and all(len(s) == 1 and len(s[0]) == 2 for s in seen)  # 계열 합집합이 둘
 
 
 def test_cards_compute_route_shares_reads(client, monkeypatch):

@@ -42,7 +42,6 @@ def test_read_sql_dialect_follows_files_dialect(monkeypatch):
 # ---------- S-S8: fetched ----------
 
 def test_fetched_none_for_unreadable_kinds_and_shaped_otherwise():
-    assert dash_calc.fetched({"kind": "recent_rows", "source": {"body": {"base": "t"}}}) is None
     assert dash_calc.fetched({"kind": "analysis", "source": {"body": {"base": "t"}}}) is None
     assert dash_calc.fetched({"kind": "chart", "source": {"body": "x"}}) is None
     assert dash_calc.fetched({"kind": "chart", "source": None}) is None
@@ -51,7 +50,6 @@ def test_fetched_none_for_unreadable_kinds_and_shaped_otherwise():
     assert dash_calc.fetched(c, ctx) == dash_calc.with_period({"base": "t", "x": "day"}, "day", dash_calc.fetch_window(ctx))  # 차트는 X가 날짜 컬럼
     n = {"kind": "number", "source": {"body": {"base": "t", "x": "day"}}}
     assert dash_calc.fetched(n, ctx) == dash_calc.with_period({"base": "t", "x": "day"}, None, dash_calc.fetch_window(ctx))
-    assert dash_calc.copies_to_pc({"kind": "recent_rows", "source": {"body": {}}}) is False
     assert dash_calc.copies_to_pc({"kind": "chart", "source": None}) is False
 
 

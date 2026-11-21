@@ -1,8 +1,8 @@
 // Flask API 클라이언트: 대시보드가 쓰는 API 전부를 타입 있는 함수로. 요청 body는 옛 화면(static/dashboard/*.js, static/core/dash*.js)이 보내던 것 그대로.
 // 같은 출처(/api/...)라 열쇠는 Flask가 첫 페이지에서 둔 쿠키(key)로 간다. 경로를 고치면 tests_pytest/test_cr_n0.py가 Flask 라우트와 대조한다.
 import type {
-  Card, ChartPoints, Columns, CompareItem, CompareMode, ComputeResult, Constants, Ctx, DashList, DashSettings, Dashboard, DayParse, EveryParse,
-  LiveMin, PeriodParse, QueryRows, RefreshStatus, Source, Targets, Template,
+  Card, ChartPoints, Columns, CompareItem, CompareMode, ComputeResult, Constants, Ctx, DashList, DashSettings, Dashboard, DayParse,
+  LiveMin, PeriodParse, PullCrypt, PullOrphan, PullState, PullTable, PullUnused, Source, Targets, Template,
 } from "./types";
 
 /** 서버가 돌려준 오류(응답의 error 문장). driver는 드라이버가 없어 못 붙었을 때의 안내 */
@@ -68,24 +68,77 @@ export const addCard = (dashboard: string, card: Partial<Card>, name?: string) =
   api<{ dashboard: { id: string; name: string; cards: number } } & DashList>("/api/dash/card/add", { dashboard, name, card });
 export const saveSettings = (id: string, fields: DashSettings) => api<{ dashboard: Dashboard }>("/api/dash/settings", { id, ...fields });
 export const setLast = (id: string) => api<{ ok: true }>("/api/dash/last", { id });
+/** [SPECIFICATION] plans/dash-blocks.md#pullState
+ *  (B11) 그 대시보드가 쓰는 받은 데이터(크기·칸들) GET /api/dash/pull/state?id=. */
+export function pullState(id: string): Promise<PullState> {
+  return api<PullState>("/api/dash/pull/state?id=" + q(id));
+}
+/** [SPECIFICATION] plans/dash-blocks.md#bellRead
+ *  (B11) 읽은 알림 id 목록 GET /api/dash/bell. */
+export function bellRead(): Promise<{ read: string[] }> {
+  return api<{ read: string[] }>("/api/dash/bell");
+}
+/** [SPECIFICATION] plans/dash-blocks.md#bellMark
+ *  (B11) 읽은 알림 더하기와 지금 없는 알림 기록 정리 POST /api/dash/bell. */
+export function bellMark(read: string[], current: string[]): Promise<{ read: string[] }> {
+  return api<{ read: string[] }>("/api/dash/bell", { read, current });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#pullFull
+ *  (B11) [전체 갱신] POST /api/dash/pull/full. */
+export function pullFull(id: string, ctx: Ctx | null): Promise<{ slots: string[] }> {
+  return api<{ slots: string[] }>("/api/dash/pull/full", { id, ctx });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#pullRange
+ *  (B11) 마지막 줄을 못 찾은 칸의 기간 다시 받기 POST /api/dash/pull/range. */
+export function pullRange(id: string, slot: string, start: string, end: string): Promise<{ rows: number }> {
+  return api<{ rows: number }>("/api/dash/pull/range", { id, slot, start, end });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#pullTables
+ *  (B11) 지금 연결이 원격 DB인지와 그 대시보드 카드들이 읽는 테이블·새 줄 컬럼 후보 POST /api/dash/pull/tables. */
+export function pullTables(id: string): Promise<{ remote: boolean; tables: PullTable[] }> {
+  return api<{ remote: boolean; tables: PullTable[] }>("/api/dash/pull/tables", { id });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#setPullCrypt
+ *  (B11) 암호화(와 암호문) 바꾸기, how = "pull"(다시 받기) | "rewrite"(풀어서 다시 쓰기) POST /api/dash/pull/crypt. */
+export function setPullCrypt(id: string, crypt: PullCrypt, pass: string, how: "pull" | "rewrite"): Promise<{ dashboard: Dashboard }> {
+  return api<{ dashboard: Dashboard }>("/api/dash/pull/crypt", { id, crypt, pass, how });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#pullOrphans
+ *  (B11) 지운 대시보드가 남긴 받은 데이터 GET /api/dash/pull/orphans. */
+export function pullOrphans(): Promise<{ orphans: PullOrphan[]; text: string }> {
+  return api<{ orphans: PullOrphan[]; text: string }>("/api/dash/pull/orphans");
+}
+/** [SPECIFICATION] plans/dash-blocks.md#dropOrphans
+ *  (B11) 확인한 뒤 주인 없는 받은 데이터 지우기 POST /api/dash/pull/orphans/drop. */
+export function dropOrphans(): Promise<{ dropped: string[] }> {
+  return api<{ dropped: string[] }>("/api/dash/pull/orphans/drop", {});
+}
+/** [SPECIFICATION] plans/dash-blocks.md#pullUnused
+ *  (B11) 그 대시보드에서 더는 쓰지 않는 받은 파일 POST /api/dash/pull/unused. */
+export function pullUnused(id: string): Promise<{ unused: PullUnused[] }> {
+  return api<{ unused: PullUnused[] }>("/api/dash/pull/unused", { id });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#dropUnused
+ *  (B11) 확인한 칸 지우기 POST /api/dash/pull/unused/drop. */
+export function dropUnused(id: string, slots: string[]): Promise<{ dropped: string[]; kept: string[] }> {
+  return api<{ dropped: string[]; kept: string[] }>("/api/dash/pull/unused/drop", { id, slots });
+}
 /** 배치도 바탕 그림 주소(<img src>). 서버가 저장된 카드의 경로만 쓴다 */
 export const imageUrl = (dash: string, card: string) => `/api/dash/image?dash=${q(dash)}&card=${q(card)}`;
 
 // ---------- 카드 값 ----------
 /** 카드 하나를 구한다(저장하지 않음). 옛 화면은 card.data를 {since}만 남겨 보낸다(cardRequest) */
-export const computeCard = (card: Card, ctx?: Ctx | null) => api<{ data: Card["data"]; source: Source }>("/api/dash/card/compute", { card, ctx: ctx ?? undefined });
-/** 카드 여러 개(실시간·기간 바꾸기). 카드마다 {id, data} 또는 {id, error} */
-export const computeCards = (cards: Card[], ctx?: Ctx | null) => api<{ results: ComputeResult[]; seconds: number }>("/api/dash/cards/compute", { cards, ctx: ctx ?? undefined });
+export const computeCard = (card: Card, ctx: Ctx | null | undefined, dash: string, fresh = "") => api<{ data: Card["data"]; source: Source }>("/api/dash/card/compute", { card, ctx: ctx ?? undefined, dash, fresh });
+/** 카드 여러 개(기간 바꾸기). 카드마다 {id, data} 또는 {id, error} */
+export const computeCards = (cards: Card[], ctx: Ctx | null | undefined, dash: string, fresh = "") => api<{ results: ComputeResult[]; seconds: number }>("/api/dash/cards/compute", { cards, ctx: ctx ?? undefined, dash, fresh });
 /** (B10b) KPI 큰 창의 시간 눈금 값(첫 계열을 시로 묶은 값). 시각 없는 날짜 컬럼이면 빈 목록과 이유(reason) */
-export const cardHours = (card: Card, ctx: Ctx | null) => api<{ labels: string[]; values: (number | null)[]; reason: string }>("/api/dash/card/hours", { card: cardRequest(card), ctx });
+export const cardHours = (card: Card, ctx: Ctx | null, dash: string) => api<{ labels: string[]; values: (number | null)[]; reason: string }>("/api/dash/card/hours", { card: cardRequest(card), ctx, dash });
 /** 필터 칸에 보일 값 목록(저장한 대시보드의 카드 가운데 그 컬럼이 있는 첫 카드의 테이블에서). 연결이 있어야 한다 */
 export const filterValues = (id: string, column: string) => api<{ values: string[]; more: boolean }>("/api/dash/filter/values", { id, column });
-/** 원래 행을 보이는 카드가 필터를 건 채 읽을 조회(body)와 걸지 못한 필터 컬럼(missed) */
-export const filteredBody = (card: Card, ctx: Ctx) => api<{ body: Record<string, unknown>; missed: string[] }>("/api/dash/card/filtered", { card, ctx });
 /** 옛 dash_ctl.cardRequest:구할 때는 저장된 값 대신 since만 보낸다 */
 export const cardRequest = (c: Card): Card => ({ ...c, data: c.data?.since ? { since: c.data.since } : {} });
 /** 산점도·버블의 점. body는 카드의 source.body(옛 dash.js: {...body, y, size, source_key, date, ctx}) */
-export const chartPoints = (body: Record<string, unknown> & { y?: string; size?: string; source_key?: string; date?: string; ctx?: Ctx | null }) =>
+export const chartPoints = (body: Record<string, unknown> & { y?: string; size?: string; source_key?: string; date?: string; ctx?: Ctx | null; dash?: string }) =>
   api<{ points: ChartPoints }>("/api/chart/points", body);
 export const compare = (items: CompareItem[]) => api<{ results: unknown[] }>("/api/compare", { items });
 
@@ -93,13 +146,7 @@ export const compare = (items: CompareItem[]) => api<{ results: unknown[] }>("/a
 /** dashboard: true면 시각이 든 기간을 막는다(대시보드 기간 칸). compare_mode로 견줄 기간(previous·context.prev)을 정한다(비면 직전 기간) */
 export const parsePeriod = (text: string, as_of?: string, dashboard = true, compare_mode?: CompareMode) => api<PeriodParse>("/api/period/parse", { text, as_of, dashboard, compare_mode });
 export const parseDay = (text: string) => api<DayParse>("/api/period/day", { text });
-export const parseEvery = (text: string, kind: "refresh" | "live") => api<EveryParse>("/api/period/every", { text, kind });
 export const getLiveMin = () => api<LiveMin>("/api/dash/live_min");
-export const setLiveMin = (seconds: number) => api<LiveMin>("/api/dash/live_min", { seconds });
-
-// ---------- 최신화 ----------
-export const refreshStatus = () => api<RefreshStatus>("/api/dash/refresh/status");
-export const stopRefresh = () => api<RefreshStatus>("/api/dash/refresh/stop", {});
 
 // ---------- 템플릿·보고서 ----------
 export const listTemplates = () => api<{ templates: Template[] }>("/api/dash/templates");
@@ -139,8 +186,6 @@ export const hashed = (base: string, schema = "") => api<{ on: boolean; columns:
 /** 테이블의 태그 켜기 정보(Phase 4 /api/labels): 켜졌으면 키·글 컬럼·사전 */
 export const labels = (schema: string, base: string) => api<{ on: boolean; key?: string; key_type?: string; text?: string; vocab?: string[]; labeled?: number; quick: number }>(`/api/labels?schema=${encodeURIComponent(schema)}&base=${encodeURIComponent(base)}`);
 export const values = (body: Record<string, unknown>, column: string) => api<{ values: string[]; more: boolean; partial: boolean | null }>("/api/values", { ...body, column });
-/** 앞 N행(recent_rows·table). 옛 화면은 {...source.body, limit, count:false} */
-export const query = (body: Record<string, unknown>) => api<QueryRows>("/api/query", body);
 /** 내 지표(metrics: 테이블에 묶은 정의, text = "이름 · 테이블 (연결)")와 지표 파일의 공통 정의(legacy: 이름으로 KPI 카드의 body.names에 쓴다) */
 export const myMetrics = () => api<{ metrics: (Record<string, unknown> & { id: string; name: string; text: string; scope?: { table?: string; flow_id?: string } })[];
   templates: unknown; legacy: { id: string; name: string; text: string; description: string; format: string }[]; source: Source; better: string[] }>("/api/my_metrics");

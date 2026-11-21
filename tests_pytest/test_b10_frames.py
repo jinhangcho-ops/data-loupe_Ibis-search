@@ -24,7 +24,7 @@ def test_check_frame_button_needs_label_or_icon() -> None:
 
 
 def test_check_frame_rejects_bad_values() -> None:
-    bad = [({"label": "가", "icon": "rocket"}, "아이콘"), ({"label": "가", "action": "help"}, "할 일"), ({"label": "가", "action": "settings"}, "할 일"), ({"label": "가", "action": "page"}, "arg"),
+    bad = [({"label": "가", "icon": "rocket"}, "아이콘"), ({"label": "가", "action": "help"}, "할 일"),({"label": "가", "action": "page"}, "arg"),
            ({"label": "가", "action": "zoom", "arg": "카드 하나"}, "arg"), ({"label": "가", "action": "refresh", "arg": "x"}, "arg"),
            ({"label": "가", "ambient": "yes"}, "ambient"), ({"label": "가", "color": "#fff"}, "쓸 수 없는 항목"),
            ({"label": "가" * (dash_store.MAX_FRAME_LABEL + 1)}, "단추 글자"), ("단추", "객체")]

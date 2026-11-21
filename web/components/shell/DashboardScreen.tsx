@@ -11,6 +11,7 @@ import { isFrame } from "@/components/frame/registry";
 import { Grid, useAddShell } from "@/components/grid/Grid";
 import { FilterBar } from "./FilterBar";
 import { PageTabs } from "./PageTabs";
+import { PullCleanup } from "./PullCleanup";
 import { ShellProvider, buildHref, useShell } from "./ShellProvider";
 import { Toolbar, useAddCard, useDemo } from "./Toolbar";
 import { TopBar } from "./TopBar";
@@ -25,6 +26,7 @@ export function DashboardScreen({ build }: { build: boolean }) {
       <DashProvider>
         <ShellProvider build={build}>
           <TopBar />
+          <PullCleanup />
           <DashboardView />
         </ShellProvider>
       </DashProvider>

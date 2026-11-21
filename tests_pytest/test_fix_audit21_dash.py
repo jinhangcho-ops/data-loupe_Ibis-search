@@ -5,7 +5,6 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
 from dashboard import dash_calc
 from test_dash_js import run_ts
 
@@ -34,8 +33,3 @@ def test_state_rule_spaced_column(tmp_path):
     got = json.loads(run_ts(tmp_path, body))
     assert got[0]["rule"] == {"column": "cpu 사용률", "op": ">=", "value": 90, "level": "bad"}
     assert got[1]["rule"] == {"column": "상태", "op": "=", "value": "DOWN", "level": "warn"} and got[2]["rule"]["column"] == "cpu"
-
-
-def test_live_min_hint_says_default():
-    text = (ROOT / "web" / "components" / "shell" / "PeriodBar.tsx").read_text(encoding="utf-8")  # 대시보드 화면(Next)의 기간 줄
-    assert "0이면 제한 없음" not in text and "원격 연결 60초" in text

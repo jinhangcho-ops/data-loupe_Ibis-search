@@ -69,12 +69,9 @@
   </aside>
 </div>
 <!--include core/connect.html-->
-<!--include core/dash_refresh.html-->
 <script src="/static/core/common.js"></script>
-<script src="/static/core/dash_refresh.js"></script>
 <script>
 // 첫 화면: 지금 연결 줄과 화면 바로가기는 늘 보이고, 연결 전에는 그 위에 연결 창을 띄운다(닫으면 "연결 안 됨" 줄과 최근 연결이 보인다). 오른쪽 최근 연결 목록은 common.js(showRecentConnections)가 그린다.
-// 연결에 성공하면 대시보드 최신화가 시작되고(dash_refresh.js) 진행은 팝업과 위쪽 줄 알약에 보인다.
 /** [SPECIFICATION] plans/phase-16.md#showHome
  *  연결 상태에 따라 지금 연결 줄(이름·꼬리표·단추)을 채우고, 연결 전이면 연결 창을 띄운다. */
 function showHome() {

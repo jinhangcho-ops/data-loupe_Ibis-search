@@ -14,7 +14,7 @@ const server = readFileSync(join(__dirname, "..", "..", "core", "dash_store.py")
 const words = (text: string) => [...text.matchAll(/"(\w*)"/g)].map(m => m[1]);
 const host = (over: Partial<ActionHost> = {}): ActionHost => ({
   recompute: vi.fn(), setPage: vi.fn(), dashOnly: false, setDashOnly: vi.fn(), setReport: vi.fn(), setZoom: vi.fn(), flipTheme: vi.fn(), pages: ["첫 쪽", "둘째 쪽"], cardIds: ["c1"],
-  flipEasy: vi.fn(), clearFilters: vi.fn(), ...over,
+  flipEasy: vi.fn(), clearFilters: vi.fn(), setSettings: vi.fn(), ...over,
 });
 const frameCard = (kind: string, layout = { x: 0, y: 0, w: 1, h: 1 }) => ({ id: "f1", kind, title: "요소", layout, view: {} }) as unknown as Card;
 
@@ -39,7 +39,7 @@ describe("등록 자리 한 곳: 화면 registry.ts와 서버 dash_store.py", ()
     expect(Object.keys(FRAME_KINDS).sort()).toEqual(["asof_field", "button", "nav_rail", "page_tabs", "period_pick", "top_strip", "unit_seg"]);
   });
   it("할 일 목록에 LLM·도움말처럼 앱에 없는 일이 없다", () => {
-    expect(Object.keys(FRAME_ACTIONS).sort()).toEqual(["dash_only", "easy", "export", "filters_clear", "page", "refresh", "theme", "zoom"]);  // 설정 창 열기(settings)는 B11
+    expect(Object.keys(FRAME_ACTIONS).sort()).toEqual(["dash_only", "easy", "export", "filters_clear", "page", "refresh", "settings", "theme", "zoom"]);
   });
 });
 
@@ -120,13 +120,14 @@ describe("runAction: 이미 있는 기능만 부른다", () => {
     expect(() => runAction({ action: "zoom", arg: "gone" }, h)).toThrow("크게 볼 카드가 없어요.");
     expect(h.setPage).toHaveBeenCalledTimes(1);
     expect(h.setZoom).toHaveBeenCalledTimes(1);
+    runAction({ action: "settings", arg: "" }, h);
+    expect(h.setSettings).toHaveBeenCalledWith(true);
   });
   it("정하지 않은 일·모르는 일은 던진다(다른 일로 바꿔 하지 않는다)", () => {
     const h = host();
     expect(() => runAction({ action: "", arg: "" }, h)).toThrow("이 단추가 할 일을 아직 정하지 않았어요.");
     expect(() => runAction({ action: "help" as never, arg: "" }, h)).toThrow("모르는 할 일이에요: help");
-    expect(() => runAction({ action: "settings" as never, arg: "" }, h)).toThrow("모르는 할 일이에요: settings");  // 설정 창 열기는 B11
-    for (const fn of [h.recompute, h.setPage, h.setDashOnly, h.setReport, h.setZoom, h.flipTheme, h.flipEasy, h.clearFilters]) expect(fn).not.toHaveBeenCalled();
+    for (const fn of [h.recompute, h.setPage, h.setDashOnly, h.setReport, h.setZoom, h.flipTheme, h.flipEasy, h.clearFilters, h.setSettings]) expect(fn).not.toHaveBeenCalled();
   });
 });
 
@@ -215,7 +216,7 @@ describe("화면 파일이 요소를 잇는다", () => {
     for (const word of ["clearFilters", "setReport", "setZoom", "setUnit"]) expect(shell).toContain(word);
     const bar = src("components/shell/Toolbar.tsx");
     expect(bar).not.toContain("const [report, setReport] = useState");  // 그림·보고서 창의 열림 상태는 화면 틀(Shell)에
-    expect(bar).toContain("const [settings, setSettings] = useState");  // 설정 창은 그대로(B11)
+    expect(bar).toContain("settings, setSettings } = useShell()");  // 설정 창 열림은 Shell에(B11)
   });
   it("CSS: 요소 모양·엠비언트가 있고 길이는 rem만", () => {
     const css = src("styles/dash_edit.css"), mine = css.split("\n").filter(l => /\.fr-|\.bcard\.frame|fr-amb/.test(l));

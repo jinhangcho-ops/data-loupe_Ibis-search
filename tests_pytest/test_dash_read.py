@@ -124,13 +124,13 @@ def test_scan_estimate_is_smaller_than_the_whole_table(wide):
     slim = scan_size.estimate(con, sql, opened)
     full = scan_size.estimate(con, "SELECT * FROM wide", opened)
     assert slim["bytes"] and full["bytes"] and slim["bytes"] < full["bytes"]
-    assert START in sql and not any(u in sql for u in UNUSED) and dash_calc.read_sql(card("recent_rows", []), RANGE) is None
+    assert START in sql and not any(u in sql for u in UNUSED)
 
 
 def test_columns_used_by_each_kind(wide):
     status = card("status", [], date=None, view={"entity": "store", "time_col": "day", "rules": [{"column": "amt", "op": ">", "value": 1, "level": "warn"}]})
     assert dash_calc.card_columns(status) == ["amt", "day", "store"]  # 상태 규칙이 보는 컬럼도 읽는다
-    assert dash_calc.card_columns(card("table", [], date=None)) is None and dash_calc.card_columns(card("recent_rows", [], date=None)) is None
+    assert dash_calc.card_columns(card("table", [], date=None)) is None
     assert dash_calc.card_columns(card("kpi", [{"y": "amt", "agg": "sum"}], conditions=["store = A"])) == ["amt", "day"]  # 조건 컬럼은 거르기에만 쓰고 읽지 않는다
     assert dash_calc.body_columns({"series": [{"y": "amt"}], "calcs": ["x"]}) is None and dash_calc.body_columns({"names": ["지표"]}) is None
     assert dash_calc.fetch_window(RANGE) == WINDOW and dash_calc.fetch_window(None) is None and dash_calc.fetch_window({"range": {"start": None, "end": "2026-03-01"}}) == {"start": None, "end": "2026-03-01"}

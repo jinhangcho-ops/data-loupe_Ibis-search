@@ -22,7 +22,7 @@ export const TEMPLATES: BaseTemplate[] = [
   { id: "goal", name: "목표 달성형", help: "달성률, 목표 추이, 진행 칸, 한 줄 문장",
     cards: [shell("donut_kpi", "달성률", 0, 0, 4, 8), shell("target_trend", "목표 추이", 4, 0, 8, 8), shell("stripes", "진행", 0, 8, 6, 4), shell("blocks", "채운 양", 6, 8, 6, 4), shell("sentence", "한 줄 문장", 0, 12, 12, 3)] },
   { id: "monitor", name: "모니터링형", help: "상태, 경고 목록, 배치도, 편차 표, 최근 행",
-    cards: [shell("status", "상태", 0, 0, 4, 6), shell("alerts", "경고 목록", 4, 0, 8, 6), shell("map", "배치도", 0, 6, 6, 9), shell("deviation", "편차 표", 6, 6, 6, 9), shell("recent_rows", "최근 행", 0, 15, 12, 8)] },
+    cards: [shell("status", "상태", 0, 0, 4, 6), shell("alerts", "경고 목록", 4, 0, 8, 6), shell("map", "배치도", 0, 6, 6, 9), shell("deviation", "편차 표", 6, 6, 6, 9), shell("table", "집계 표", 0, 15, 12, 8)] },
   { id: "blank", name: "직접 구성", help: "빈 화면에서 카드를 하나씩 놓아요", cards: [] },
 ];
 

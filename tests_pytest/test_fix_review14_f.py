@@ -1,7 +1,6 @@
 """14차 리뷰 묶음 F: 달마다 목표가 있는 목표 파일을 대시보드 기간(달·분기·연)으로 고르기(A8), 원격 연결의 실시간 간격 기본 최소(D11). 값은 시험 안에서 지어낸다."""
 import pytest
 
-from core import server
 from core import dash_store as store
 from core import targets
 from dashboard import dash_calc
@@ -43,21 +42,5 @@ def test_remote_live_default_min(folder):
     sqlite = store.source_key({"kind": "url", "url": "sqlite:///C:/data/shop.db"})
     folder_key = store.source_key({"kind": "folder", "path": "C:/data/sales"})
     assert refresh.live_min(REMOTE) == 60 and refresh.live_min(folder_key) == 0 and refresh.live_min(sqlite) == 0  # 이 PC 파일은 그대로
-    card = {"source": {"key": REMOTE, "label": "shop"}}
-    with pytest.raises(ValueError, match="1분 이상"):
-        refresh.check_dashboard_every({"cards": [card], "live": {"every": "10초"}})
-    refresh.set_live_min(REMOTE, 5)  # 연결별로 정했으면 그 값
-    assert refresh.live_min(REMOTE) == 5
-    refresh.check_dashboard_every({"cards": [card], "live": {"every": "10초"}})
-    refresh.set_live_min(REMOTE, 0)
-    assert refresh.live_min(REMOTE) == 60
-
-
-def test_period_every_route_uses_remote_default(client, monkeypatch):
-    monkeypatch.setitem(server.state, "opened", {"kind": "url", "url": "postgres://db.example:5432/shop"})
-    got = client.post("/api/period/every", json={"text": "10초", "kind": "live"}).get_json()
-    assert got["seconds"] is None and "1분" in got["error"]
-    assert client.post("/api/period/every", json={"text": "1분", "kind": "live"}).get_json()["seconds"] == 60
-    assert client.get("/api/dash/live_min").get_json()["seconds"] == 60
 
 
