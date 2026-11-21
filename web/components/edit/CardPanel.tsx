@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { columns as fetchColumns, cardRequest, computeCard } from "@/lib/api";
 import { gridItems, minHeight } from "@/components/grid/useDrag";
-import { moveCard, resizeCard } from "@/lib/calc";
+import { moveCard, pageOf, resizeCard } from "@/lib/calc";
 import { computedUpdate, plainCtx, useDash } from "@/lib/store";
 import type { Card, Columns } from "@/lib/types";
 import { AddCardMenu } from "./AddCardMenu";
@@ -84,6 +84,7 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
   };
   const what = isShell(card) ? "아직 데이터를 정하지 않았어요" : card.source.recipe ? `${card.source.table ?? ""} 테이블의 분석 결과` : card.source.metric_id ? `지표 ${card.source.metric_id}` : `${card.source.table ?? ""} 테이블${card.source.date ? `, 기간 기준 날짜 ${card.source.date}` : ""}`;
   const isChart = card.kind === "chart" && !!card.source?.body;
+  const pages = state.dash?.pages ?? [];
 
   return (
     <aside id="d-panel" className={`d-panel${folded ? " folded" : ""}`} aria-label="카드 설정" onKeyDown={e => { if (e.key === "Escape" && !folded) { e.stopPropagation(); onClose(); } }}>
@@ -96,6 +97,13 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
         <input key={card.title} defaultValue={card.title} onBlur={e => { const v = e.target.value.trim() || card.title; e.target.value = v; if (v !== card.title) onChange({ title: v }); }}
           onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />
       </label>
+      {pages.length > 0 && (
+        <label className="hint pfield"><span>쪽</span>
+          <select aria-label="쪽" title="이 카드가 보일 쪽(탭)이에요" value={pageOf(card, pages)} onChange={e => onChange({ view: { ...card.view, page: e.target.value } })}>
+            {pages.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </label>
+      )}
       <div>
         <h5>데이터</h5>
         <div className="hint">{what}</div>

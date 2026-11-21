@@ -9,10 +9,12 @@ import { CardPanel } from "@/components/edit/CardPanel";
 import { Gallery } from "@/components/edit/Shelf";
 import { Grid, useAddShell } from "@/components/grid/Grid";
 import { FilterBar } from "./FilterBar";
+import { PageTabs } from "./PageTabs";
 import { ShellProvider, buildHref, useShell } from "./ShellProvider";
 import { Toolbar, useAddCard, useDemo } from "./Toolbar";
 import { TopBar } from "./TopBar";
 import { listDashboards } from "@/lib/api";
+import { onPage } from "@/lib/calc";
 import { ConstantsProvider, useConstants } from "@/lib/constants";
 import { DashProvider, selectedCard, useActionLog, useDash } from "@/lib/store";
 
@@ -31,7 +33,7 @@ export function DashboardScreen({ build }: { build: boolean }) {
 
 function DashboardView() {
   const { state, dispatch } = useDash();
-  const { open, dashOnly, setDashOnly, addOpen, setAddOpen, gallery, setGallery, conn, build } = useShell();
+  const { open, dashOnly, setDashOnly, addOpen, setAddOpen, gallery, setGallery, conn, build, page } = useShell();
   const consts = useConstants();
   const addShell = useAddShell();
   const add = useAddCard();
@@ -67,11 +69,12 @@ function DashboardView() {
       <Toolbar />
       <div className="big"><b>{state.dash?.name || "대시보드"}</b><span className="hint ml-[12px]" id="d-state" role="status">{state.dirty ? "저장 중…" : savedOnce ? "저장했어요" : ""}</span></div>
       {alerts.length > 0 && <div className="d-alerts" id="d-alerts" role="alert"><b>카운터 지표가 한계를 벗어났어요</b>{alerts.map(f => <div key={f.id}>{f.text}</div>)}</div>}
+      <PageTabs />
       {!dashOnly && <FilterBar />}
       {n > 0 && (state.editing || picked > 0) && (
         <div className="ctl board-ctl">
           <span className="hint" id="d-picked" role="status">{picked ? `카드 ${picked}개 선택함` : "그림으로 내보낼 카드를 눌러 고르세요"}</span>
-          <button id="d-all" className="ghost" onClick={() => dispatch({ type: "pick", ids: state.dash?.cards.map(c => c.id) ?? [] })}>모두 선택</button>
+          <button id="d-all" className="ghost" title="지금 쪽의 카드를 모두 골라요" onClick={() => dispatch({ type: "pick", ids: onPage(state.dash?.cards ?? [], state.dash?.pages, page).map(c => c.id) })}>모두 선택</button>
           <button id="d-none" className="ghost" onClick={() => dispatch({ type: "pick", ids: [] })}>선택 해제</button>
         </div>
       )}

@@ -27,7 +27,7 @@ describe("카드 눌러 서로 거르기", () => {
     const grid = src("components/grid/Grid.tsx");
     expect(grid).toContain("setFilter(column, picks.some(p => p.column === column && p.in[0] === value) ? [] : [value]);");
     expect(grid).toContain("onPick={build || !conn ? undefined : cross}");
-    expect(grid).toContain('<CardBody card={big} result={state.values[big.id]} palette={dash.palette} ctx={state.ctx} />');  // 크게 보기 창에서는 받지 않는다
+    expect(grid).toContain('<CardBody card={big} result={state.values[big.id]} palette={dash.palette} ctx={state.ctx} share={shares.includes(big.id)} />');  // 크게 보기 창에서는 받지 않는다
   });
   it("필터 줄: 필터 칸이 없는 컬럼에 걸린 것은 칩으로 보이고 ×로 푼다. 칩만 있어도 줄이 보인다", () => {
     const bar = src("components/shell/FilterBar.tsx");

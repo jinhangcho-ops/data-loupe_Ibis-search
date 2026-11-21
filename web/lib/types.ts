@@ -81,7 +81,8 @@ export type CardView = {
   all_data?: boolean;                 // 모든 데이터: 자동 규칙이 덜어 낸 것을 풀어 그림
   data_table?: boolean;               // 차트 아래 표로 보기
   cross?: boolean;                    // 누르면 거르기: 보는 곳에서 막대·조각을 누르면 가로축 값으로 모든 카드를 거른다
-  groups?: GroupView;                 // 표시할 그룹 고르기(Phase 4, lib/groups.applyGroups)
+  page?: string;                      // 놓인 쪽(탭) 이름. 대시보드의 쪽 목록에 없으면 첫 쪽에 보인다
+  groups?: GroupView;              // 표시할 그룹 고르기(Phase 4, lib/groups.applyGroups)
   cloud?: { mode: "values" | "labels" | "words"; tags?: string[]; rows?: "all" | "tagged"; match?: "any" | "all"; text?: string; pos?: ("noun" | "verb" | "adj" | "foreign")[]; stop?: string[]; min_len?: number };  // 워드클라우드 방식(Phase 4)
   [more: string]: unknown;  // stale·entity·time_col·kind_col·link_col·group_cols·formats·total 등(check_more)
 };
@@ -131,6 +132,7 @@ export type Dashboard = {
   id: string; name: string; template: string; palette: string[]; period: string; as_of: string; compare_mode?: CompareMode;
   refresh: Every; live: Every; cards: Card[]; created: string; updated: string; north_star: NorthStar;
   filters?: DashFilter[];  // 필터 칸 목록(옛 저장본에는 없다)
+  pages?: string[];        // 쪽(탭) 이름 목록. 비었으면 쪽을 나누지 않는다(옛 저장본에는 없다)
 };
 /** POST /api/dash/settings가 바꾸는 항목만 */
 export type DashSettings = Partial<Pick<Dashboard, "as_of" | "period" | "compare_mode" | "refresh" | "live">>;
@@ -191,7 +193,7 @@ export type Constants = {
   defaults: Record<string, unknown>;  // 설정 기본값(settings.DEFAULTS)
   features: { on: string[]; version: string | null; all: { id: string; name: string; path: string }[] };
   dash: {
-    max_cards: number; max_filters: number; max_dashboards: number; max_palette: number; types: Partial<Record<Exclude<ChartType, "">, string>>; time_types: ChartType[]; max_bins?: number; max_bands?: number; max_cells: number; merge_note: string;
+    max_cards: number; max_filters: number; max_pages: number;max_dashboards: number; max_palette: number; types: Partial<Record<Exclude<ChartType, "">, string>>; time_types: ChartType[]; max_bins?: number; max_bands?: number; max_cells: number; merge_note: string;
     units: Record<Unit, string>; locked: string; min_refresh: number; max_points: number; aggs: string[]; merge: string[]; agg_names: Record<string, string>;
     auto: AutoTable; auto_names: Record<AutoRule, string>; viz: { words: SemanticWords; query_auto: AutoView }; orders: Order[]; order_names: Record<Order, string>;
   };

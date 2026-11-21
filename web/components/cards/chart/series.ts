@@ -22,6 +22,16 @@ const ONE_COLOR: string[] = ["histogram", "boxplot", "heatmap", "calheat", "coho
 /** 날짜 X축 시간 단위의 이름(축 제목) */
 export const UNIT_NAMES: Record<string, string> = { day: "일", week: "주", month: "월" };
 
+/** 값 → 비율(%, 소수 한 자리): 계열이 여럿이면 가로축 값마다 계열들 가운데의 몫, 하나면 전체 합 가운데 각 값의 몫.
+ *  음수가 있으면 몫이 뜻이 없어 null. 합이 0이거나 숫자가 아닌 칸은 빈 값 */
+export function toShare(s: Series): Series | null {
+  if (s.datasets.some(d => d.values.some(v => typeof v === "number" && v < 0))) return null;
+  const num = (v: unknown) => typeof v === "number" ? v : 0;
+  const many = s.datasets.length > 1;
+  const totals = many ? s.labels.map((_, i) => s.datasets.reduce((t, d) => t + num(d.values[i]), 0)) : [(s.datasets[0]?.values ?? []).reduce<number>((t, v) => t + num(v), 0)];
+  return { ...s, datasets: s.datasets.map(d => ({ ...d, values: d.values.map((v, i) => { const t = totals[many ? i : 0]; return typeof v === "number" && t > 0 ? Math.round(v / t * 1000) / 10 : null; }) })) };
+}
+
 /** 서버 상수로 묶은 계열·비교 함수들(옛 dash.js의 전역 함수) */
 export function seriesKit(server: Server) {
   const aggName = (id: string) => server.agg_names?.[id] ?? id;

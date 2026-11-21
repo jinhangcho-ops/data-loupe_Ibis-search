@@ -47,6 +47,7 @@ def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버�
         "locked": dash_store.LOCKED, "min_refresh": dash_store.MIN_REFRESH}  # 화면(web/·common.js)이 서버와 같은 상한·종류·기본 색을 쓴다
     found["dash"]["max_points"] = result.MAX_POINTS  # 산점도·버블의 점 수 상한
     found["dash"]["max_filters"] = dash_store.MAX_FILTERS  # 대시보드 필터 칸 수 상한
+    found["dash"]["max_pages"] = dash_store.MAX_PAGES  # 대시보드 쪽(탭) 수 상한
     found["dash"].update(max_bins=dash_store.MAX_BINS, max_bands=dash_store.MAX_BANDS, max_cells=dash_store.MAX_CELLS)  # 히스토그램의 구간 수, 불릿 차트의 구간 수, 히트맵 칸 수 상한
     found["dash"]["merge_note"] = dash_store.MERGE_NOTE  # (Phase 17) 범위 묶기 안내 한 줄(쿼리 차트 groupPanel·카드 GroupPicker가 같은 글을 보인다)
     found["dash"].update(aggs=list(metric_file.AGGS), merge=list(sql_funcs.MERGE), agg_names=metric_file.AGG_NAMES)  # 카드 계열의 집계(함수 사전의 집계 전부), 일 값을 다시 묶을 수 있는 집계, 보이는 이름

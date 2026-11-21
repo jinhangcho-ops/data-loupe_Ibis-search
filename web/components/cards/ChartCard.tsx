@@ -8,7 +8,7 @@ import { useConstants } from "@/lib/constants";
 import type { CardProps } from "./types";
 import { AnaChart, PointsChart, SeriesChart, type Ana, type Points } from "./chart/Charts";
 import { pickColor } from "@/lib/series";
-import { seriesKit, type SCard, type Series, type SeriesKit, type ThemeColors } from "./chart/series";
+import { seriesKit, toShare, type SCard, type Series, type SeriesKit, type ThemeColors } from "./chart/series";
 import { layoutWidth, useRootScale } from "./chart/scale";
 import { useZoomX } from "./useZoomX";
 import { useWidth } from "./useWidth";
@@ -35,6 +35,8 @@ export const X_NAME = "X", Y_NAME = "Y", SIZE_NAME = "크기", GROUP_NAME = "그
 export const HIST_COLUMNS = ["구간", "행 수"];
 /** 날짜 X축 종류 중 막대만 그리는 것(자동 묶기 판정, 서버 TIME_TYPES 중 선이 없는 것) */
 export const ROLLUP_BARS = ["bar", "stacked", "waterfall"];
+/** 비율로 보기(카드 머리의 % 단추)의 안내: 계열이 여럿일 때, 하나일 때, 바꾸지 못할 때 */
+export const SHARE_MANY = "비율(%)로 보여요: 가로축 값마다 계열들 가운데의 몫이에요.", SHARE_ONE = "비율(%)로 보여요: 전체 합 가운데의 몫이에요.", NO_SHARE = "음수 값이 있어 비율로 바꾸지 못했어요.";
 /** 그림 : 데이터 표의 높이 몫(표는 1/3) */
 export const CHART_FLEX = 2, TABLE_FLEX = 1;
 
@@ -120,7 +122,7 @@ export class Guard extends Component<{ children: ReactNode }, { error: Error | n
   }
 }
 
-export function ChartCard({ card, data, palette, ctx, onPick }: CardProps) {
+export function ChartCard({ card, data, palette, ctx, onPick, share }: CardProps) {
   const consts = useConstants();
   const kit = useMemo(() => consts && seriesKit(consts), [consts]);
   const { ref, width } = useWidth(), scale = useRootScale();
@@ -140,6 +142,9 @@ export function ChartCard({ card, data, palette, ctx, onPick }: CardProps) {
   if (!d) return box(null);
   if (!s) return box(<div className="hint bnote">{NO_VALUES}</div>);
   const colors = markColors(palette);
+  const series = !ana && !isPoints(c);  // 계열 차트(비율로 볼 수 있는 것)
+  const pct = share && series ? toShare(s) : null;
+  const shareNote = !share || !series ? "" : !pct ? NO_SHARE : s.datasets.length > 1 ? SHARE_MANY : SHARE_ONE;
   let body: ReactNode;
   if (ana) {
     const main = pickColor(c, "series", "주 색", colors, 0), second = pickColor(c, "series", "보조 색", colors, 1);
@@ -150,15 +155,16 @@ export function ChartCard({ card, data, palette, ctx, onPick }: CardProps) {
     const x = (card.source?.body as { x?: unknown } | undefined)?.x;
     const pick = onPick && card.view.cross && typeof x === "string" && x && !data.by_unit
       ? (label: string, e: { stopPropagation: () => void }) => { if (kit!.cardSeries(c0)?.labels.includes(label)) { e.stopPropagation(); onPick(x, label); } } : undefined;
-    body = <SeriesChart card={c} s={s} colors={colors} win={z.view} active={z.active} onPick={pick} />;
+    body = <SeriesChart card={c} s={pct ?? s} colors={colors} win={z.view} active={z.active} onPick={pick} />;
   }
   // 점이 max_points를 넘어 줄여 그렸으면 서버 문장, 그 뒤에 자동 규칙 문장
-  const note = [isPoints(c) ? (data.points as { note?: string }).note : undefined, ...d.notes].filter(Boolean).join(" ");
-  const table = card.view.data_table ? (d.table ? (
+  const note = [isPoints(c) ? (data.points as { note?: string }).note : undefined, ...d.notes, shareNote].filter(Boolean).join(" ");
+  const tbl = pct ? seriesTable(c.data.x ?? X_NAME, pct) : d.table;  // 표로 보기도 비율로
+  const table = card.view.data_table ? (tbl ? (
     <Box cls="table"><table>
-      <thead><tr>{d.table.columns.map(k => <th key={k}>{k}</th>)}</tr></thead>
-      <tbody>{d.table.rows.map((r, i) => <tr key={i}>{d.table!.columns.map(k => <td key={k} className={typeof r[k] === "number" ? "num" : undefined}>{r[k] == null ? "" : typeof r[k] === "number" ? shownum(r[k]) : String(r[k])}</td>)}</tr>)}</tbody>
+      <thead><tr>{tbl.columns.map(k => <th key={k}>{k}</th>)}</tr></thead>
+      <tbody>{tbl.rows.map((r, i) => <tr key={i}>{tbl.columns.map(k =><td key={k} className={typeof r[k] === "number" ? "num" : undefined}>{r[k] == null ? "" : typeof r[k] === "number" ? shownum(r[k]) : String(r[k])}</td>)}</tr>)}</tbody>
     </table></Box>
   ) : <div className="hint">{NO_TABLE}</div>) : null;
-  return box(<div {...z.bind}><Guard key={JSON.stringify(card.view) + (data.computed_at ?? "")}>{body}</Guard></div>, note || undefined, table);
+  return box(<div {...z.bind}><Guard key={JSON.stringify(card.view) + (data.computed_at ?? "") + (pct ? "%" : "")}>{body}</Guard></div>, note || undefined, table);
 }

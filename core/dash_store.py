@@ -31,6 +31,7 @@ MAX_DASHBOARDS = 100  # 대시보드 수
 MIN_REFRESH = 3600  # 최신화 주기의 최소(초)
 SETTING_KEYS = ("as_of", "period", "compare_mode", "refresh", "live")  # 카드 없이 바꾸는 대시보드 설정(/api/dash/settings)
 MAX_FILTERS, MAX_FILTER_NAME = 8, 100  # 대시보드 필터 칸 수, 필터 컬럼·이름의 글자 수
+MAX_PAGES, MAX_PAGE_NAME = 8, 30  # 대시보드 쪽(탭) 수, 쪽 이름의 글자 수
 MAX_CARDS = 48# 대시보드 하나의 카드 수(템플릿이 카드가 많다)
 MAX_CARD_BYTES = 400_000  # 카드 하나의 크기(JSON 글자)
 MAX_STORE_BYTES = 32 * 1024 * 1024  # 전체 크기
@@ -589,7 +590,7 @@ def check_view(view):
     """보기 설정: type(차트 종류, ""이면 계열마다 정한 대로), unit(일·주·월·연), compare.mode(span·point), better(up·down).
     차트 탭에서 온 것은 styles(계열마다 {type, dash, axis})·ranges(세로축 범위)·ratio(가로/세로), 분석 카드는 analysis_view."""
     view = {} if view is None else view
-    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "connect", "auto", "scale", "all_data", "data_table", "cross", *EXTRA_VIEW}:
+    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "connect", "auto", "scale", "all_data", "data_table", "cross", "page", *EXTRA_VIEW}:
         raise ValueError("보기(view)에 쓸 수 없는 항목이 있어요.")
     out = {"type": view.get("type") or "", "unit": view.get("unit") or "day", "compare": view.get("compare") or {"mode": "span"}, "better": view.get("better") or "up"}
     if out["type"] and out["type"] not in CHART_TYPES:
@@ -637,6 +638,8 @@ def check_view(view):
                 raise ValueError(f"{name}은 켬(true)이나 끔(false)이에요.")
             if view[name]:
                 out[name] = True
+    if page := text(view.get("page"), "쪽 이름", MAX_PAGE_NAME):  # 이 카드가 놓인 쪽. 대시보드의 쪽 목록에 없는 이름이면 화면이 첫 쪽에 보인다
+        out["page"] = page
     out.update(check_extra(view))
     if "analysis_view" in view:
         out["analysis_view"] = text(view["analysis_view"], "분석 보기 이름", 20)
@@ -888,7 +891,18 @@ def check_dashboard(d, old=None):
     return {"id": dash_id, "name": text(d.get("name"), "대시보드 이름", 50, 1), "template": text(d.get("template"), "템플릿 이름", 50),
             "palette": check_palette(d.get("palette") or []), "period": text(d.get("period") or "", "기간", 40), "as_of": as_of, "compare_mode": mode,
             "refresh": check_every(d.get("refresh"), "refresh"), "live": check_every(d.get("live"), "live"), "cards": cards, "created": text(d.get("created"), "만든 시각", 40),
-            "updated": text(d.get("updated"), "고친 시각", 40), "north_star": north, "filters": check_filters(d.get("filters"))}
+            "updated": text(d.get("updated"), "고친 시각", 40), "north_star": north, "filters": check_filters(d.get("filters")), "pages": check_pages(d.get("pages"))}
+
+
+def check_pages(found):
+    """대시보드의 쪽(탭) 이름 목록을 검사해 정리한다. 없으면 빈 목록(쪽을 나누지 않음). 같은 이름은 한 번만, MAX_PAGES개까지."""
+    found = found or []
+    if not isinstance(found, list) or len(found) > MAX_PAGES:
+        raise ValueError(f"쪽은 {MAX_PAGES}개까지 만들 수 있어요.")
+    out = [text(p, "쪽 이름", MAX_PAGE_NAME, 1) for p in found]
+    if len(set(out)) != len(out):
+        raise ValueError("같은 이름의 쪽이 두 번 있어요.")
+    return out
 
 
 def check_filters(found):

@@ -12,6 +12,7 @@ import { newCardId } from "@/components/edit/Templates";
 import { Gallery } from "@/components/edit/Shelf";
 import { scrollToCard, useAddShell } from "@/components/grid/Grid";
 import { addCard, cardRequest, computeCard, connectDemo } from "@/lib/api";
+import { onPageNow } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import type { Card } from "@/lib/types";
@@ -26,7 +27,7 @@ import { ThemeButton } from "./TopBar";
  *  카드 하나를 값을 구해 지금 대시보드에 넣는 함수를 돌려준다(도구 줄 지표 창과 카드 추가 서랍이 같이 쓴다). */
 export function useAddCard(): (card: Partial<Card>) => Promise<void> {
   const { state, dispatch } = useDash();
-  const { open, flush } = useShell();
+  const { open, flush, page } = useShell();
   const max = useConstants()?.dash.max_cards ?? Infinity;
   const now = useRef(state);
   useEffect(() => { now.current = state; });
@@ -35,7 +36,7 @@ export function useAddCard(): (card: Partial<Card>) => Promise<void> {
       const dash = state.dash;
       if (dash) {
         if (dash.cards.length >= max) throw new Error(`대시보드에는 카드를 ${max}개까지 넣을 수 있어요.`);
-        const full = { ...card, id: newCardId() } as Card, r = await computeCard(cardRequest(full), state.ctx);
+        const full = onPageNow({ ...card, id: newCardId() } as Card, dash.pages, page), r = await computeCard(cardRequest(full), state.ctx);
         const cur = now.current.dash;
         if (cur?.id !== dash.id) throw new Error("값을 구하는 사이 다른 대시보드를 열어서 카드를 넣지 않았어요.");
         dispatch({ type: "cards", cards: [...cur.cards, { ...full, source: { ...full.source, ...r.source }, data: r.data }] });

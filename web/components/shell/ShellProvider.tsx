@@ -37,6 +37,7 @@ export type Shell = {
   addOpen: boolean; setAddOpen: (on: boolean) => void; gallery: boolean; setGallery: (on: boolean) => void; dashOnly: boolean; setDashOnly: (on: boolean) => void;
   saving: boolean; undo: Undo;
   build: boolean;  // 만드는 곳(/dashboard/build)이면 true, 보는 곳(/dashboard)이면 false
+  page: string; setPage: (name: string) => void;  // 지금 보는 쪽(탭) 이름. 쪽 목록에 없으면 첫 쪽으로 본다(저장하지 않는다)
   picks: PickedFilter[]; setFilter: (column: string, values: string[]) => Promise<void>;  // 필터 칸에서 고른 값, 고르기(빈 목록이면 풀기)
 };
 
@@ -71,6 +72,7 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
   const [addOpen, setAddOpen] = useState(false);
   const [gallery, setGallery] = useState(false);
   const [dashOnly, setDashOnly] = useState(false);
+  const [page, setPage] = useState("");
   const [picks, setPicks] = useState<PickedFilter[]>([]);  // 보는 사람이 필터 칸에서 고른 값(저장하지 않는다)
   const picked = useRef<PickedFilter[]>([]);
   // ---------- 기간 칸(DashCtl) ----------
@@ -357,6 +359,6 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     commitPeriod: (text?: string) => { const t = text ?? inputs.period; setInput("period", t); if (t.trim() !== saved.current.period) apply(true, inputs.as_of, t); },  // text: 달력이 고른 기간(칸 값이 아직 안 바뀐 때)
     commitEvery: kind => { commitEvery(kind); }, toggleLive: () => { toggleLive(); }, saveMin: () => { saveMin(); },
   };
-  const value: Shell = { conn, loadConn, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo, build, picks, setFilter };
+  const value: Shell = { conn, loadConn, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo, build, page, setPage, picks, setFilter };
   return <Ctx_.Provider value={value}>{children}</Ctx_.Provider>;
 }
