@@ -38,6 +38,8 @@ describe("쪽(탭)", () => {
     expect(tabs).toContain("if (!state.dash || (!pages.length && !build)) return null;");
     expect(tabs).toContain('dispatch({ type: "meta", patch: { pages: next } })');
     expect(src("components/shell/DashboardScreen.tsx")).toContain("<PageTabs />");
+    // [대시보드만 보기]는 .board-ctl을 숨기는데 쪽 줄은 남긴다(안 그러면 그 화면에서 쪽을 못 바꾼다). 이 CSS는 next 빌드가 싣는다(layout.tsx)
+    expect(src("styles/dashboard.css")).toContain(".board-ctl:not(#d-filters, #d-pages)");
     expect(src("components/edit/CardPanel.tsx")).toContain('onChange({ view: { ...card.view, page: e.target.value } })');
   });
 });
