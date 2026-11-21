@@ -68,23 +68,33 @@ export function PeriodField({ id }: { id: string }) {
   );
 }
 
+/** 기준일 칸 + [달력](브라우저 날짜 고르기) + 안내 줄. id는 칸의 id. */
+export function AsOfField({ id }: { id: string }) {
+  const { period: p } = useShell();
+  const pick = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <div className="row">
+        <input id={id} value={p.inputs.as_of} placeholder="오늘" title="이 날짜를 기준으로 값을 봐요. 예: 2026-10-01, 어제, 지난달 말. 비우면 오늘이에요"
+          onChange={e => p.setInput("as_of", e.target.value)} onBlur={() => p.commitDay()} onKeyDown={enter(() => p.commitDay())} />
+        <button className="btn" title="달력에서 기준일을 골라요" onClick={() => { const el = pick.current; if (el) { if (el.showPicker) el.showPicker(); else el.click(); } }}>달력</button>
+        <input ref={pick} type="date" className="dc-pick" tabIndex={-1} aria-hidden="true" max={p.today || undefined} onChange={e => { if (e.target.value) p.commitDay(e.target.value); }} />
+      </div>
+      <NoteLine n={p.notes.asof} />
+    </>
+  );
+}
+
 export function PeriodBar() {
   const { period: p } = useShell();
   const minRefresh = useConstants()?.dash.min_refresh ?? 3600;
-  const pick = useRef<HTMLInputElement>(null);
   const at = useLastComputed();
   const last = at ? `마지막으로 구한 시각 ${at.replace("T", " ")}` : "아직 구한 값이 없어요";
   return (
     <div className="dctl">
       <div className="dc-field">
         <label className="hint" htmlFor="dc-asof">기준일</label>
-        <div className="row">
-          <input id="dc-asof" value={p.inputs.as_of} placeholder="오늘" title="이 날짜를 기준으로 값을 봐요. 예: 2026-10-01, 어제, 지난달 말. 비우면 오늘이에요"
-            onChange={e => p.setInput("as_of", e.target.value)} onBlur={() => p.commitDay()} onKeyDown={enter(() => p.commitDay())} />
-          <button className="btn" title="달력에서 기준일을 골라요" onClick={() => { const el = pick.current; if (el) { if (el.showPicker) el.showPicker(); else el.click(); } }}>달력</button>
-          <input ref={pick} type="date" className="dc-pick" tabIndex={-1} aria-hidden="true" max={p.today || undefined} onChange={e => { if (e.target.value) p.commitDay(e.target.value); }} />
-        </div>
-        <NoteLine n={p.notes.asof} />
+        <AsOfField id="dc-asof" />
       </div>
       <div className="dc-field">
         <label className="hint" htmlFor="dc-per">기간</label>

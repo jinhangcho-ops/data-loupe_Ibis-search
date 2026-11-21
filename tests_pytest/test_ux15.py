@@ -127,7 +127,7 @@ def test_menu_required_marks_kind_change_and_words():
 
     def line(marker):
         return next(x for x in lines if marker in x)
-    assert 'onClick={() => { setErr(""); setF(p => ({ ...p, kind: k, rows: fit(p.rows, k) })); }}' in src  # 종류를 바꾸면 이전 종류의 오류를 지운다(Phase 16: 종류 단추)
+    assert 'onClick={() => { setErr(""); setQuery(""); setTop(FIRST_GROUP); setGroup(KIND_GROUPS.find(g => g[1].includes(k))![0]); setF(p => ({ ...p, kind: k, rows: fit(p.rows, k) })); }}' in src  # 종류를 바꾸면 이전 종류의 오류를 지운다(Phase 16: 종류 단추)
     for marker in ('label="테이블"', 'label="가로축"', 'label="사용자 컬럼"', 'label="대상 컬럼"'):
         assert re.search(r"\bneed\b", line(marker)), marker
     assert 'need={is("gauge")}' in line('label="나눌 컬럼"')

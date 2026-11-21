@@ -14,7 +14,9 @@ import type { Card, CardKind, CardView, Constants, Targets } from "@/lib/types";
 import { Block, Check, LineBox, Sel, Txt } from "./menu/Fields";
 import { CloudFields, SIZE_LABEL } from "./panel/Tools";
 import { FUNNEL_TEMPLATES, MAX_STAGES, REVISIT_CHOICES, buildCard, condLines, emptyForm, formFromCard, templateStages, type Form, type StageRow } from "./menu/build";
-import { CARD_KINDS, DATE_X, WATCH, WITH_DATE, colsOfType, kindGroups, parseBlankLine, unitForDate } from "./menu/kinds";
+import { CARD_KINDS, DATE_X, TILE_PICS, WATCH, WITH_DATE, colsOfType, kindGroups, parseBlankLine, shellOf, unitForDate } from "./menu/kinds";
+import { FrameCard } from "@/components/frame/FrameCard";
+import { FRAME_GROUPS, FRAME_KINDS, findSpecs, freshFrame, isFrame, type FrameGroup, type FrameKind } from "@/components/frame/registry";
 
 export type AddCardMenuProps = { open: boolean; onClose: () => void; onAdd: (card: Partial<Card>) => void; fill?: Card };
 
@@ -24,7 +26,11 @@ const BUCKET_TIMED = "hour", FUNNEL_TIMED = "minute";  // 날짜시간 컬럼일
 const REVISIT_CUSTOM = "custom", REVISIT_CUSTOM_START = "0";  // 재방문 목록의 "직접 입력" 값과, 고르면 입력 칸에 먼저 들어가는 값(0은 stagesOf가 거부해 직접 적게 한다)
 /** P14 새 종류의 body.x 칸 이름(boxplot은 비우면 전체 한 상자) */
 const KIND_GROUPS = kindGroups();  // 위 구역은 묶음만, 아래 구역은 고른 묶음의 종류만 보인다
-const X_LABEL: Partial<Record<CardKind, string>> = { boxplot: "그룹 컬럼", heatmap: "행 컬럼", treemap: "윗단계 컬럼", sunburst: "윗단계 컬럼", wordcloud: "글자 컬럼", bump: "대상 컬럼" };
+/** 찾기 대상: 요소 전부(먼저)와 카드 종류 전부 */
+const FRAME_SPECS = (Object.keys(FRAME_KINDS) as FrameKind[]).map(kind => ({ kind, ...FRAME_KINDS[kind] }));
+const KIND_SPECS = (Object.keys(CARD_KINDS) as CardKind[]).map(kind => ({ kind, name: CARD_KINDS[kind]![0], help: CARD_KINDS[kind]![3] }));
+const FIRST_GROUP: FrameGroup = "보기";
+const X_LABEL: Partial<Record<CardKind, string>> ={ boxplot: "그룹 컬럼", heatmap: "행 컬럼", treemap: "윗단계 컬럼", sunburst: "윗단계 컬럼", wordcloud: "글자 컬럼", bump: "대상 컬럼" };
 
 /** 닫혀 있으면 아무것도 그리지 않는다. 열 때마다 새로 마운트되어 처음 모양으로 시작한다 */
 export function AddCardMenu(props: AddCardMenuProps) {
@@ -46,6 +52,8 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
     return { ...emptyForm(kind, fill?.view?.type ?? ""), ...(fill ? formFromCard(fill) : {}), table: fill?.source?.table ?? "", rows: fit([], kind) };  // 다시 정할 때는 카드의 모양 설정을 지킨다
   });
   const [group, setGroup] = useState(() => KIND_GROUPS.find(g => g[1].includes(f.kind))![0]);  // 펼쳐 볼 묶음(처음에는 고른 종류가 든 묶음)
+  const [top, setTop] = useState<FrameGroup>(FIRST_GROUP);  // 맨 위 묶음(조작·보기·틀). fill이면 늘 보기
+  const [query, setQuery] = useState("");  // 찾기 칸의 글자
   const [names, setNames] = useState<string[]>([]);       // 연결의 테이블 목록
   const [colsFor, setColsFor] = useState<{ table: string; cols: [string, string][] }>({ table: "", cols: [] });  // 고른 테이블의 [컬럼, 한글 타입]
   const [gColsFor, setGColsFor] = useState<{ table: string; cols: [string, string][] }>({ table: "", cols: [] });  // 영역 테이블의 컬럼(이름·도형 후보)
@@ -149,6 +157,26 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
     } catch (e) { setErr((e as Error).message); }
     setLoadingVals(false);
   };
+  // 요소는 누르면 바로 놓는다(처음 크기, 막 놓은 설정)
+  const place = (kind: FrameKind) => {
+    const { name, group: g, help, w, h: height } = FRAME_KINDS[kind], shell = shellOf({ group: g, kind, name, help });
+    onAdd({ ...shell, layout: { ...nextLayout(gridItems(state.dash?.cards ?? [])), w, h: height }, view: { ...shell.view!, frame: freshFrame(kind) } });
+    close();
+  };
+  const frameButton = (kind: FrameKind) => (
+    <button key={kind} type="button" className="cm-kind" onClick={() => place(kind)}>
+      <div className="fr-pic" aria-hidden="true"><FrameCard card={{ id: "", kind, view: { frame: freshFrame(kind) } as Card["view"] }} live={false} /></div>
+      <b>{FRAME_KINDS[kind].name}</b><span>{FRAME_KINDS[kind].help}</span></button>
+  );
+  // 카드 종류를 고르면 보기 화면(폼)으로 간다(찾기에서 골랐을 때도)
+  const kindButton = (k: CardKind) => (
+    <button key={k} type="button" className={"cm-kind" + (f.kind === k ? " on" : "")} aria-pressed={f.kind === k}
+      onClick={() => { setErr(""); setQuery(""); setTop(FIRST_GROUP); setGroup(KIND_GROUPS.find(g => g[1].includes(k))![0]); setF(p => ({ ...p, kind: k, rows: fit(p.rows, k) })); }}>
+      {TILE_PICS.includes(k) && ["", "-dark"].map(d => <img key={d} className={"gal-pic" + d} src={`/static/core/charts/${k}${d}.svg`} alt="" loading="lazy" />)}
+      <b>{CARD_KINDS[k]![0]}</b><span>{CARD_KINDS[k]![3]}</span></button>
+  );
+  const found = query.trim() ? findSpecs<{ kind: CardKind; name: string; help: string }>([...FRAME_SPECS, ...KIND_SPECS], query) : null;
+  const view = !found && top === FIRST_GROUP;  // 지금의 카드 추가 화면(테이블·종류·폼)을 그리는지
   const targetNames = [...new Set((targets?.rows ?? []).map(r => String(r.name)))];
   // 글 속 단어는 뽑을 행·(고른 태그의 행이면) 맞춤을 기본값 없이 고르게 한다: 고르기 전에는 [카드 추가]를 잠근다
   const cloudWhy = is("wordcloud") && cloud.mode === "words"
@@ -159,6 +187,25 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); close(); } }}>
       {!fill && <div className="phead"><b>카드 추가</b><button type="button" className="ghost min-w-[1.5rem] min-h-[1.5rem]" aria-label="카드 추가 닫기" title="닫기" onClick={close}>×</button></div>}
       <div className="d-add-body">
+      {!fill && (
+        <>
+          <input id="cm-find" type="search" aria-label="요소·카드 찾기" value={query} onChange={e => setQuery(e.target.value)} />
+          <div className="cm-groups" role="group" aria-label="요소·카드 묶음">
+            {FRAME_GROUPS.map(g => <button key={g} type="button" className={"btype" + (g === top ? " on" : "")} aria-pressed={g === top} onClick={() => setTop(g)}>{g}</button>)}
+          </div>
+        </>
+      )}
+      {found && (
+        <div className="cm-kind-list" role="group" aria-label="찾은 요소·카드">
+          {found.length ? found.map(s => (isFrame(s.kind) ? frameButton(s.kind) : kindButton(s.kind))) : <div className="hint">찾는 것이 없어요.</div>}
+        </div>
+      )}
+      {!found && top !== FIRST_GROUP && (
+        <div className="cm-kind-list" role="group" aria-label={`${top} 묶음의 요소`}>
+          {FRAME_SPECS.filter(s => s.group === top).map(s => frameButton(s.kind))}
+        </div>
+      )}
+      {view && (<>
       <Sel label="테이블" title="카드가 읽을 테이블. 먼저 데이터에 연결해야 해요" value={f.table} onChange={v => set("table", v)} options={names} blank="(테이블을 고르세요)" need />
       {hidden.length > 0 && <div className="hint">ID·해시로 보이는 컬럼 {hidden.join(", ")}을(를) 목록에서 뺐어요 <button type="button" className="linkish" onClick={() => setRs(p => ({ table: f.table, list: [...(p.table === f.table ? p.list : []), ...hidden] }))}>다시 넣기</button></div>}
       <div className="hint cm-kinds">카드 종류
@@ -168,10 +215,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
           ))}
         </div>
         <div className="cm-kind-list" role="group" aria-label={`${group} 묶음의 카드 종류`}>
-          {KIND_GROUPS.find(([g]) => g === group)![1].map(k => (
-            <button key={k} type="button" className={"cm-kind" + (f.kind === k ? " on" : "")} aria-pressed={f.kind === k}
-              onClick={() => { setErr(""); setF(p => ({ ...p, kind: k, rows: fit(p.rows, k) })); }}><b>{CARD_KINDS[k]![0]}</b><span>{CARD_KINDS[k]![3]}</span></button>
-          ))}
+          {KIND_GROUPS.find(([g]) => g === group)![1].map(k => kindButton(k))}
         </div>
       </div>
       {high > 0 && (
@@ -242,7 +286,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       {is("chart") && (
         <>
           <Sel label="차트 종류" title="차트 종류. 자동은 막대로 그려요" value={f.cType} onChange={v => set("cType", v)} options={Object.entries(consts.dash.types)} blank="자동" />
-          <Sel label="가로축" title="가로축 컬럼. 날짜 컬럼이면 일, 주, 월, 연으로 바꿔 볼 수 있어요" value={f.cX} onChange={v => set("cX", v)} options={all} blank="(고르세요)" need />
+          <Sel label="가로축" title="가로축 컬럼. 날짜 컬럼이면 일, 주, 월, 분기, 연으로 바꿔 볼 수 있어요" value={f.cX} onChange={v => set("cX", v)} options={all} blank="(고르세요)" need />
           <Sel label={SIZE_LABEL} title="버블 크기나 3차원 산점도의 Z축으로 쓸 숫자 컬럼" value={f.cSize} onChange={v => set("cSize", v)} options={nums} blank="(없음)" />
         </>
       )}
@@ -354,11 +398,12 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
         </div>
         <div className="hint cm-note">{note || (targets && !targets.path ? "목표 파일을 정하면 이름으로 목표를 찾을 수 있어요" : "")}</div>
       </details>
+      </>)}
       <div className="err" role="alert">{err}</div>
-      {cloudWhy && <div className="hint cm-note">{cloudWhy}</div>}
+      {view && cloudWhy && <div className="hint cm-note">{cloudWhy}</div>}
       </div>
       <div className="row d-add-foot">
-        <button type="button" className="btn p min-h-[1.5rem]" disabled={busy || !!cloudWhy} onClick={go}>{fill ? "이 카드에 채우기" : "카드 추가"}</button>
+        {view && <button type="button" className="btn p min-h-[1.5rem]" disabled={busy || !!cloudWhy} onClick={go}>{fill ? "이 카드에 채우기" : "카드 추가"}</button>}
         <button type="button" className="btn min-h-[1.5rem]" onClick={close}>닫기</button>
       </div>
     </div>

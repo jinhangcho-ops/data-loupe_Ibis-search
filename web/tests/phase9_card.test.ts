@@ -16,7 +16,7 @@ const TABLE = {
 } as unknown as AutoTable;
 const consts = (auto: AutoTable | null = TABLE) => ({  // null = 규칙 표를 못 받음(undefined를 넘기면 기본값 TABLE이 들어간다)
   agg_names: { sum: "합계" }, merge: ["sum", "count", "min", "max"], week_start: "mon",
-  dash: { types: {}, time_types: ["bar", "line"], units: { day: "일", week: "주", month: "월", year: "연" }, auto, viz: { words: WORDS, query_auto: {} } },
+  dash: { types: {}, time_types: ["bar", "line"], units: { day: "일", week: "주", month: "월", quarter: "분기", year: "연" }, auto, viz: { words: WORDS, query_auto: {} } },
 }) as unknown as Constants;
 const card = (kind: string, view: Record<string, unknown>, data: Record<string, unknown>): SCard =>
   ({ id: "c1", kind, title: "t", layout: { x: 0, y: 0, w: 6, h: 6 }, view: { unit: "day", ...view }, source: { body: { series: [{ agg: "sum" }] } }, data }) as unknown as SCard;

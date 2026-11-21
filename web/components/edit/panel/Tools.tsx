@@ -29,7 +29,7 @@ const RINGS: [string, string][] = [["stack", "한 고리 누적"], ["double", "�
 const PLAIN = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap",
   "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud"];
 // P16 KPI 아이콘(svg/common Icon)·P15 큰 값 맞춤·추이선 자리, P14 겹친 도넛을 쓸 수 있는 차트 종류
-const ICONS: [string, string][] = [["chart", "막대"], ["up", "오름"], ["user", "사람"], ["cart", "장바구니"], ["coin", "동전"], ["clock", "시계"]];
+export const ICONS: [string, string][] = [["chart", "막대"], ["up", "오름"], ["user", "사람"], ["cart", "장바구니"], ["coin", "동전"], ["clock", "시계"]];
 const FUNNEL_SHAPES: [string, string][] = [["flow", "흐름"], ["ladder", "사다리꼴"]];
 const GAP_NAMES: Record<string, string> = { mean: "평균", median: "중앙값", trimmed: "절사평균" };
 // 워드클라우드 방식(view.cloud, 서버 dash_store.check_cloud): 방식·뽑을 행·맞춤·품사의 보이는 이름

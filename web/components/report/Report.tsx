@@ -7,6 +7,10 @@ import { useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { saveImages, savePdf, saveSetting } from "@/lib/api";
 import { isShell } from "@/components/edit/menu/kinds";
+import { useShell } from "@/components/shell/ShellProvider";
+import { isFrame, filterNote } from "@/components/frame/registry";
+import { gridItems } from "@/components/grid/useDrag";
+import { compactLayout } from "@/lib/calc";
 import { useDash } from "@/lib/store";
 import { CardBody } from "@/components/cards/CardBody";
 import { CHART_KINDS, autoDraw } from "@/components/cards/ChartCard";
@@ -36,6 +40,7 @@ const download = (href: string, name: string) => Object.assign(document.createEl
 
 export function Report({ open, onClose }: ReportProps) {
   const { state } = useDash();
+  const { period, picks: filters } = useShell();
   const [chosen, setPicks] = useState<Picks | null>(null);  // 이 창에서 고른 것. 아직 없으면 설정 쿠키
   const [msg, setMsg] = useState({ text: "", ok: false });
   const [busy, setBusy] = useState("");
@@ -46,6 +51,10 @@ export function Report({ open, onClose }: ReportProps) {
   if (!open) return null;  // 아래는 브라우저에서만(열렸을 때) 돈다
   const picks = chosen ?? { board_ratio: cookie("board_ratio") || DEFAULTS.board_ratio, image: cookie("image") || DEFAULTS.image, board_format: cookie("board_format") || DEFAULTS.board_format };
   const cards = state.dash?.cards ?? [], title = state.dash?.name || "대시보드";
+  // 보고서에는 요소가 없다: 요소를 뺀 카드를 위로 붙인 자리로(순서·가로 자리는 그대로), 걸린 기간·기준일·필터는 글 한 줄로
+  const reportCards = cards.filter(c => !isFrame(c.kind)), packed = compactLayout(gridItems(reportCards));
+  const placed = reportCards.map(c => ({ ...c, layout: packed[c.id] }));
+  const note = filterNote(period.inputs.period, period.inputs.as_of, filters);
   const pick = (key: keyof Picks, value: string) => {
     setPicks({ ...picks, [key]: value });
     saveSetting({ [key]: value }).catch(() => {});
@@ -83,14 +92,14 @@ export function Report({ open, onClose }: ReportProps) {
     return { text: `${d.saved?.length ?? 0}개를 저장했어요. 위치: ${d.folder}${more}`, ok: true };
   });
   const reportPng = run("png", async () => {
-    const data = (await inMode(picks.image, () => reportCanvas(cards, title, picks.image))).toDataURL("image/png");
+    const data = (await inMode(picks.image, () => reportCanvas(placed, title, picks.image, undefined, note))).toDataURL("image/png");
     const d = await saveImages([{ name: title, data }]) as { cancelled?: boolean; window?: false; folder?: string; saved?: string[] };
     if (d.cancelled) return;
     if (d.window === false) { download(data, `${title}.png`); return { text: "보고서를 PNG로 내려받았어요.", ok: true }; }
     return { text: `보고서를 저장했어요. 위치: ${d.folder}/${d.saved?.[0]}`, ok: true };
   });
   const reportPdf = run("pdf", async () => {
-    const data = (await inMode(picks.image, () => reportCanvas(cards, title, picks.image, 1.5))).toDataURL("image/jpeg", 0.92);  // 서버(dash_pdf.py)가 JPEG 한 장을 1쪽 PDF로
+    const data = (await inMode(picks.image, () => reportCanvas(placed, title, picks.image, 1.5, note))).toDataURL("image/jpeg", 0.92);  // 서버(dash_pdf.py)가 JPEG 한 장을 1쪽 PDF로
     const d = await savePdf(data, title);
     if (d.cancelled) return;
     if (d.window === false) { download(d.pdf!, d.name!); return { text: "보고서를 PDF로 내려받았어요.", ok: true }; }

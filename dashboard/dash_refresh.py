@@ -264,7 +264,7 @@ def start(now=None):
         dashboards = [d for d in dash_store.editable().values() if (d.get("refresh") or {}).get("every")]
         plan, results = [], []
         for d in sorted(dashboards, key=lambda x: x["name"]):
-            for card in d["cards"]:
+            for card in [c for c in d["cards"] if c["kind"] not in dash_store.FRAME_KINDS]:  # 틀 요소는 다시 구할 대상도 건너뛴 카드도 아니다
                 why = skip_reason(d, card, now_source["key"], now)
                 if why:
                     results.append(result(d, card, "skipped", why))

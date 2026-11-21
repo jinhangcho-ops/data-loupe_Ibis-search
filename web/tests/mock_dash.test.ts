@@ -50,9 +50,9 @@ describe("머리 줄 [더 보기 ▾]", () => {
 });
 
 describe("기간 칸과 최신화 시각", () => {
-  it("머리 줄과 설정 창이 같은 PeriodField를 쓴다(구현은 PeriodBar.tsx 한 곳)", () => {
-    expect(bar).toContain('import { LastRefreshed, PeriodField } from "./PeriodBar";');
-    expect(bar).toContain('<PeriodField id="d-per" />');
+  it("설정 창의 PeriodField는 PeriodBar.tsx 한 곳(머리 줄에는 기간 칸이 없다)", () => {
+    expect(bar).toContain('import { LastRefreshed } from "./PeriodBar";');
+    expect(bar).not.toContain("d-per");
     expect(period).toContain("export function PeriodField(");
     expect(period.slice(period.indexOf("export function PeriodBar("))).toContain('<PeriodField id="dc-per" />');
     expect(period.match(/<Calendar /g)).toHaveLength(1);

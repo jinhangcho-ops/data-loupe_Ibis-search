@@ -4,6 +4,8 @@ import type { Layout } from "@/lib/types";
 
 /** 보고서 한 칸의 너비(px), 위쪽 제목 줄, 카드 안의 이름 줄(간격·여백은 reportBox가 CSS에서 낸다) */
 export const REPORT = { col: 100, head: 56, band: 34 };
+/** 보고서 그림에서 걸린 필터 글 한 줄의 높이(px) */
+export const NOTE_BAND = 20;
 const REM_VALUE = /^\d*\.?\d+rem$/;
 /** 그림 비율(가로/세로). screen은 화면 모양 그대로. 고른 비율은 세로 PICTURE_HEIGHT로 그린다 */
 export const BOARD_RATIOS: Record<string, number> = { square: 1, "4:3": 4 / 3, wide: 16 / 9 };

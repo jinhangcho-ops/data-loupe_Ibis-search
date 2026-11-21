@@ -1,7 +1,7 @@
 // 카드의 값 → 그릴 모양: 옛 static/core/dash.js의 함수들(본문 그대로, 타입만). 색 고르기·기간 비교 값·계열 이름은 lib/series.ts 한 벌을 쓴다.
 // 옛 코드가 전역 SERVER에서 읽던 집계 이름(agg_names)·다시 묶을 수 있는 집계(merge)·차트 종류(dash.types·time_types)는 seriesKit(서버 상수)로 받는다.
 import type { AutoHints } from "@/lib/autoviz";
-import { anaView, BUCKET, isPoints, okLabel, pointGroups, POINT_TYPES, rollup } from "@/lib/calc";
+import { anaView, BUCKET, isPoints, okLabel, pointGroups, POINT_TYPES, rollup, unitLabel } from "@/lib/calc";
 import type { Card, ChartType, Constants, DaySeries, MoreValues, UnitSection } from "@/lib/types";
 import { FIRST_ONLY, GRID_3D, PAIR_ONLY, ROUND_TYPES } from "./shapes";
 import { NEED_THREE, NEED_Z } from "./three";
@@ -35,7 +35,7 @@ export function toShare(s: Series): Series | null {
 /** 서버 상수로 묶은 계열·비교 함수들(옛 dash.js의 전역 함수) */
 export function seriesKit(server: Server) {
   const aggName = (id: string) => server.agg_names?.[id] ?? id;
-  const merges = (agg: string) => server.merge.includes(agg);  // 아니면 일 값을 주·월·연으로 다시 묶을 수 없다(서버가 단위마다 따로 구한다)
+  const merges = (agg: string) => server.merge.includes(agg);  // 아니면 일 값을 주·월·분기·연으로 다시 묶을 수 없다(서버가 단위마다 따로 구한다)
 
   // 시간별 값(data.by_unit)을 unit으로. 서버가 그 단위로 따로 구한 계열은 그 값을 쓰고, 나머지는 일 값을 다시 묶는다.
   // range({start, end}, 없으면 열린 쪽)를 주면 그 기간의 칸만 남긴다(월·연 칸은 그 기간과 겹치는 것).
@@ -45,7 +45,7 @@ export function seriesKit(server: Server) {
     const maps = day.series.map(s => server.get(s.name) ?? (merges(s.agg) ? rollup(s, day.labels, unit) : unit === "day" ? new Map(day.labels.map((l, i) => [l, s.values?.[i] ?? null])) : new Map<string, number | null>()));
     const from = range?.start ? BUCKET[unit](range.start) : "", to = range?.end ?? "9999";
     const labels = [...new Set(maps.flatMap(m => [...m.keys()]))].sort().filter(l => l >= from && l.slice(0, 10) <= to);
-    return { keys: labels, labels: labels.map(l => unit === "month" ? l.slice(0, 7) : unit === "year" ? l.slice(0, 4) : l),
+    return { keys: labels, labels: labels.map(l => unitLabel(l, unit)),
              datasets: day.series.map((s, i) => ({ label: s.name, values: labels.map(l => (maps[i] as Map<string, number | string | null>).get(l) ?? null) })) };
   }
   // 카드의 값을 그릴 모양. 값이 아직 없으면 null.

@@ -33,14 +33,22 @@ export const okLabel = (name: string) => name.length >= 1 && name.length <= MAX_
 export const labelIndex = (order: string[], name: string) => { const i = order.indexOf(name); return i >= 0 ? i : order.length >= MAX_ORDER || !okLabel(name) ? MAX_ORDER : order.push(name) - 1; };
 
 // ---------- 카드의 값 → 그릴 모양 ----------
-// 일(YYYY-MM-DD)이 속한 주의 월요일, 월의 1일, 연의 1월 1일. 서버(analysis.trend의 주)와 같다.
+// 일(YYYY-MM-DD)이 속한 주의 월요일, 월의 1일, 달력 분기의 첫날(1·4·7·10월 1일), 연의 1월 1일. 서버(analysis.trend의 주)와 같다.
 export const monday = (day: string) => { const [y, m, d] = day.split("-").map(Number), t = new Date(Date.UTC(y, m - 1, d)); t.setUTCDate(t.getUTCDate() - (t.getUTCDay() + 6) % 7); return t.toISOString().slice(0, 10); };
 // 주 시작 요일·회계연도 첫 달(서버 설정 week_start·fiscal_start_month, sql_funcs.period_start와 같은 규칙). 상수를 받으면 setCalendar가 바꾼다
 const CAL = { sunday: false, fiscal: 1 };
 export const setCalendar = (weekStart?: string, fiscalStart?: number) => { CAL.sunday = weekStart === "sun"; CAL.fiscal = fiscalStart && fiscalStart >= 1 && fiscalStart <= 12 ? fiscalStart : 1; };
 const weekStart = (day: string) => CAL.sunday ? shiftDay(monday(shiftDay(day, 1)), -1) : monday(day);  // 일요일 시작 = 다음 날이 속한 월요일 주의 전날
 const fiscalYear = (day: string) => { const y = +day.slice(0, 4) - (+day.slice(5, 7) < CAL.fiscal ? 1 : 0); return `${y}-${String(CAL.fiscal).padStart(2, "0")}-01`; };
-export const BUCKET: Record<string, (d: string) => string> = { day: d => d, week: d => weekStart(d), month: d => d.slice(0, 7) + "-01", year: d => fiscalYear(d) };
+export const BUCKET: Record<string, (d: string) => string> = { day: d => d, week: d => weekStart(d), month: d => d.slice(0, 7) + "-01", quarter: d => d.slice(0, 5) + String(Math.floor((+d.slice(5, 7) - 1) / 3) * 3 + 1).padStart(2, "0") + "-01", year: d => fiscalYear(d) };
+/** [SPECIFICATION] plans/dash-blocks.md#unitLabel
+ *  기간 시작(YYYY-MM-DD)을 그 단위의 가로축 라벨로(월 YYYY-MM, 분기 YYYY-Qn, 연 YYYY). */
+export function unitLabel(key: string, unit: string): string {
+  if (unit === "month") return key.slice(0, 7);
+  if (unit === "quarter") return `${key.slice(0, 4)}-Q${Math.floor((+key.slice(5, 7) - 1) / 3) + 1}`;
+  if (unit === "year") return key.slice(0, 4);
+  return key;
+}
 type Group = { sum: number | null; count: number; min: number | null; max: number | null };
 // 일 값 계열 하나를 unit으로 다시 묶은 Map(라벨 → 값). sum=Σsum, count=Σcount, mean=Σsum/Σcount, min·max=min·max(빈 값은 건너뜀).
 export function rollup(s: DaySeries, days: string[], unit: string) {
@@ -102,15 +110,16 @@ export const outsideWindow = (card: Card, range?: { start?: string; end?: string
 // 대시보드 격자 배치의 계산(화면 요소 없이): 12칸 격자(칸 사이·줄 높이는 CSS #dash의 --grid-gap·--grid-row), 카드 이동·크기 바꾸기, 세로 압축.
 // 카드 자리(layout) = {x, y, w, h}: x는 칸(0~11), y는 행, w·h는 2~12. 서버(dash_store.check_layout)와 같은 범위다.
 export const GRID_COLS = 12, GRID_MIN = 2, GRID_MAX = 12;
-export type GridItem = { id: string; layout: Layout; minH?: number };  // minH: 이 카드의 최소 높이(둥근 그림 카드. 없으면 GRID_MIN)
+export const FRAME_MIN = 1;  // 틀 요소의 최소 칸(서버 dash_store.FRAME_MIN과 같다)
+export type GridItem = { id: string; layout: Layout; minH?: number; minW?: number };  // minH: 이 카드의 최소 높이(둥근 그림 카드. 없으면 GRID_MIN), minW: 최소 너비(없으면 GRID_MIN)
 export type GridBox = { left: number; top: number; col: number; row: number; gap: number };
 
 const toInt = (v: unknown, fallback: number) => (Number.isFinite(+(v as number)) ? Math.round(+(v as number)) : fallback);
 const clampInt = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 // 범위 안으로 맞춘 자리: w·h는 2~12(h는 minH부터), x는 0 ~ 12 - w, y는 0 이상(999까지)
-export function clampLayout(l?: Partial<Layout> | null, minH = GRID_MIN): Layout {
-  const w = clampInt(toInt(l?.w, 6), GRID_MIN, GRID_MAX), h = clampInt(toInt(l?.h, 6), minH, GRID_MAX);
+export function clampLayout(l?: Partial<Layout> | null, minH = GRID_MIN, minW = GRID_MIN): Layout {
+  const w = clampInt(toInt(l?.w, 6), minW, GRID_MAX), h = clampInt(toInt(l?.h, 6), minH, GRID_MAX);
   return { x: clampInt(toInt(l?.x, 0), 0, GRID_COLS - w), y: clampInt(toInt(l?.y, 0), 0, 999), w, h };
 }
 
@@ -123,8 +132,8 @@ export function compactLayout(items: GridItem[], movedId?: string) {
   const placed: Layout[] = [], out: Record<string, Layout> = {};
   const put = (id: string, l: Layout) => { out[id] = l; placed.push(l); };
   const moved = items.find(i => i.id === movedId);
-  if (moved) put(moved.id, clampLayout(moved.layout, moved.minH));
-  const rest = items.filter(i => i !== moved).map(i => ({ id: i.id, layout: clampLayout(i.layout, i.minH) })).sort((a, b) => a.layout.y - b.layout.y || a.layout.x - b.layout.x);
+  if (moved) put(moved.id, clampLayout(moved.layout, moved.minH, moved.minW));
+  const rest = items.filter(i => i !== moved).map(i => ({ id: i.id, layout: clampLayout(i.layout, i.minH, i.minW) })).sort((a, b) => a.layout.y - b.layout.y || a.layout.x - b.layout.x);
   for (const { id, layout } of rest) {
     let y = 0;
     while (placed.some(p => overlaps({ ...layout, y }, p))) {
@@ -152,13 +161,13 @@ export function moveCard(items: GridItem[], id: string, cell: { x: number; y: nu
 export function resizeCard(items: GridItem[], id: string, w: number, h: number) {
   const item = items.find(i => i.id === id);
   if (!item) return compactLayout(items);
-  const next = clampLayout({ ...item.layout, w, h }, item.minH);
+  const next = clampLayout({ ...item.layout, w, h }, item.minH, item.minW);
   return compactLayout(items.map(i => (i === item ? { ...i, layout: next } : i)), id);
 }
 
 // 손잡이를 끌 때의 새 크기: 포인터가 카드 왼쪽 위에서 얼마나 떨어졌는지(dx, dy 픽셀)를 칸으로
 export function sizeAt(dx: number, dy: number, { col, row, gap }: GridBox) {
-  return { w: clampInt(Math.round((dx + gap) / col), GRID_MIN, GRID_MAX), h: clampInt(Math.round((dy + gap) / row), GRID_MIN, GRID_MAX) };
+  return { w: clampInt(Math.round((dx + gap) / col), FRAME_MIN, GRID_MAX), h: clampInt(Math.round((dy + gap) / row), FRAME_MIN, GRID_MAX) };
 }
 
 // 새 카드를 놓을 자리: 맨 아래(왼쪽)

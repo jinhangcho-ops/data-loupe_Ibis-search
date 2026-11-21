@@ -175,7 +175,7 @@ assert.deepStrictEqual(cellAt(100, 200, m), { x: 0, y: 0 }); assert.deepStrictEq
 assert.deepStrictEqual(cellAt(100 + 160, 200 + 70, m), { x: 1, y: 1 }); assert.deepStrictEqual(cellAt(100 + 140, 200 + 80, m), { x: 1, y: 2 });  // 반올림
 assert.deepStrictEqual(cellAt(100 + 330 + 60, 200 + 100 + 20, m, 60, 20), { x: 3, y: 2 });  // 잡은 자리(60, 20)를 뺀 카드 왼쪽 위 기준
 // 손잡이: 가로 (dx + 간격)/110, 세로 (dy + 간격)/50 반올림, 2~12
-assert.deepStrictEqual(sizeAt(450, 200, { col: 110, row: 50, gap: 10 }), { w: 4, h: 4 }); assert.deepStrictEqual(sizeAt(5, 5, { col: 110, row: 50, gap: 10 }), { w: 2, h: 2 });
+assert.deepStrictEqual(sizeAt(450, 200, { col: 110, row: 50, gap: 10 }), { w: 4, h: 4 }); assert.deepStrictEqual(sizeAt(5, 5, { col: 110, row: 50, gap: 10 }), { w: 1, h: 1 });
 assert.deepStrictEqual(sizeAt(9999, 9999, { col: 110, row: 50, gap: 10 }), { w: 12, h: 12 });
 assert.deepStrictEqual(nextLayout([item("A", 0, 0, 6, 4), item("C", 0, 4, 12, 6)]), L(0, 10, 6, 8)); assert.deepStrictEqual(nextLayout([]), L(0, 0, 6, 8));
 console.log("ok");

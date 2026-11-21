@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { deleteTemplate, listTemplates, saveTemplate } from "@/lib/api";
 import { useDash } from "@/lib/store";
 import type { Card, CardKind, ChartType, Template } from "@/lib/types";
+import { isFrame } from "@/components/frame/registry";
 import { freshView } from "./menu/kinds";
 
 export type TemplatesProps = { onPick?: (t: Template) => void };
@@ -43,7 +44,7 @@ export function Templates({ onPick }: TemplatesProps) {
   useEffect(() => { onPick?.(all[0]); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
   const save = async () => {
     try {
-      const cards = state.dash?.cards ?? [];
+      const cards = (state.dash?.cards ?? []).filter(c => !isFrame(c.kind));
       if (!cards.length) throw new Error("카드가 하나 이상 있어야 템플릿으로 저장할 수 있어요.");
       setMine((await saveTemplate({ name, cards: cards.map(({ kind, title, layout, colors }) => ({ kind, title, layout, colors })) })).templates);
       setNote({ text: "내 템플릿으로 저장했어요. 카드 종류, 자리, 색, 이름만 담겼어요.", ok: true });

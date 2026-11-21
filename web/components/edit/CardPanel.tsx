@@ -5,7 +5,9 @@
 import { useEffect, useRef, useState } from "react";
 import { columns as fetchColumns, cardRequest, computeCard } from "@/lib/api";
 import { gridItems, minHeight } from "@/components/grid/useDrag";
-import { moveCard, pageOf, resizeCard } from "@/lib/calc";
+import { FramePanel } from "@/components/frame/FramePanel";
+import { FRAME_KINDS, isFrame, type FrameKind } from "@/components/frame/registry";
+import { FRAME_MIN, moveCard, pageOf, resizeCard } from "@/lib/calc";
 import { computedUpdate, plainCtx, useDash } from "@/lib/store";
 import type { Card, Columns } from "@/lib/types";
 import { AddCardMenu } from "./AddCardMenu";
@@ -46,7 +48,7 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
   }, [table, schema]);
 
   const place = (key: keyof typeof NAMES, raw: string) => {
-    const v = +raw, min = key === "h" ? minHeight(card) : LIMITS[key][0], max = LIMITS[key][1], top = key === "x" ? 12 - card.layout.w - 0 : max;
+    const v = +raw, min = key === "h" ? minHeight(card) : limits[key][0], max = limits[key][1], top = key === "x" ? 12 - card.layout.w - 0 : max;
     if (raw.trim() === "" || !Number.isInteger(v) || v < min || v > Math.min(max, top)) {
       return setErr(`${NAMES[key]}는 ${min}~${Math.min(max, top)} 사이의 정수로 적어 주세요. 이전 값은 그대로예요.`);
     }
@@ -85,11 +87,13 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
   const what = isShell(card) ? "아직 데이터를 정하지 않았어요" : card.source.recipe ? `${card.source.table ?? ""} 테이블의 분석 결과` : card.source.metric_id ? `지표 ${card.source.metric_id}` : `${card.source.table ?? ""} 테이블${card.source.date ? `, 기간 기준 날짜 ${card.source.date}` : ""}`;
   const isChart = card.kind === "chart" && !!card.source?.body;
   const pages = state.dash?.pages ?? [];
+  const frame = isFrame(card.kind);
+  const limits: Record<keyof typeof NAMES, readonly [number, number]> = frame ? { ...LIMITS, w: [FRAME_MIN, LIMITS.w[1]], h: [FRAME_MIN, LIMITS.h[1]] } : LIMITS;
 
   return (
     <aside id="d-panel" className={`d-panel${folded ? " folded" : ""}`} aria-label="카드 설정" onKeyDown={e => { if (e.key === "Escape" && !folded) { e.stopPropagation(); onClose(); } }}>
       <div className="phead">
-        <b>{KIND_NAMES[card.kind] ?? card.kind} 카드 설정</b>
+        <b>{frame ? FRAME_KINDS[card.kind as FrameKind].name : KIND_NAMES[card.kind] ?? card.kind} 카드 설정</b>
         <button type="button" className="fold min-w-[1.5rem] min-h-[1.5rem]" ref={fold} aria-label="패널 접기" title="패널 접기" onClick={() => { setFolded(true); queueMicrotask(() => strip.current?.focus()); }}>›</button>
         <button type="button" className="ghost min-w-[1.5rem] min-h-[1.5rem]" aria-label="패널 닫기" title="패널 닫기" onClick={onClose}>×</button>
       </div>
@@ -104,6 +108,7 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
           </select>
         </label>
       )}
+      {frame ? <FramePanel card={card} onChange={f => dispatch({ type: "card", id: card.id, patch: { view: { ...card.view, frame: f } } })} /> : (<>
       <div>
         <h5>데이터</h5>
         <div className="hint">{what}</div>
@@ -117,11 +122,12 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
       {isChart && (<><h5 title="컬럼을 끌어 칸에 놓거나, 컬럼을 누른 뒤 칸을 눌러요">차트 구성</h5>
         {cols.length ? <Shelf card={card} columns={cols} onChange={reshelf} /> : <div className="hint">데이터에 연결하면 컬럼을 끌어 가로축, 값, 색, 필터를 바꿀 수 있어요.</div>}</>)}
       {!isShell(card) && <button type="button" className="btn min-h-[1.5rem]" title="이 카드 값만 지금 연결에서 다시 구해요" onClick={again}>이 카드 다시 구하기</button>}{/* 빈 틀은 구할 기록이 없다 */}
+      </>)}
       <details className="pplace"><summary>위치·크기</summary>
         <div className="prow">
           {(["w", "h", "x", "y"] as const).map(k => (
             <label key={k + card.layout[k]} className="hint pfield"><span>{{ w: "너비(칸)", h: "높이(칸)", x: "가로 위치", y: "세로 위치" }[k]}</span>
-              <input type="number" className="w-[4rem]" min={k === "h" ? minHeight(card) : LIMITS[k][0]} max={k === "x" ? 12 - card.layout.w : LIMITS[k][1]} defaultValue={card.layout[k]}
+              <input type="number" className="w-[4rem]" min={k === "h" ? minHeight(card) : limits[k][0]} max={k === "x" ? 12 - card.layout.w : limits[k][1]} defaultValue={card.layout[k]}
                 onBlur={e => { if (+e.target.value !== card.layout[k]) place(k, e.target.value); }} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }} />
             </label>
           ))}

@@ -15,7 +15,7 @@ import { useConstants } from "@/lib/constants";
 import { computedUpdate, sameContent, useActionLog, useDash } from "@/lib/store";
 import { compareItem, newOrder, sameSource } from "@/lib/series";
 import { seriesKit } from "@/components/cards/chart/series";
-import type { Card, CompareMode, ComputeResult, Ctx, DashSettings, Dashboard, PickedFilter, PrevSpan, Source } from "@/lib/types";
+import type { Card, CompareMode, ComputeResult, Ctx, DashSettings, Dashboard, PickedFilter, PrevSpan, Source, Unit } from "@/lib/types";
 
 export type Note = { text: string; bad?: boolean };
 export type Said = { text: string; tone: string; delta_text?: string; [more: string]: unknown };
@@ -39,6 +39,10 @@ export type Shell = {
   build: boolean;  // 만드는 곳(/dashboard/build)이면 true, 보는 곳(/dashboard)이면 false
   page: string; setPage: (name: string) => void;  // 지금 보는 쪽(탭) 이름. 쪽 목록에 없으면 첫 쪽으로 본다(저장하지 않는다)
   picks: PickedFilter[]; setFilter: (column: string, values: string[]) => Promise<void>;  // 필터 칸에서 고른 값, 고르기(빈 목록이면 풀기)
+  report: boolean; setReport: (open: boolean) => void;  // 그림·보고서 창 열림(저장하지 않는다)
+  zoom: string | null; setZoom: (id: string | null) => void;  // 크게 보는 카드 id
+  unit: Unit | null; setUnit: (unit: Unit | null) => void;  // 기간 단위 요소가 고른 단위(null = 카드마다 저장된 단위)
+  clearFilters: () => Promise<void>;  // 걸린 필터를 모두 푼다
 };
 
 /** 만드는 곳·보는 곳 주소(지금 연 대시보드를 그대로 열게 ?open=id) */
@@ -74,6 +78,9 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
   const [dashOnly, setDashOnly] = useState(false);
   const [page, setPage] = useState("");
   const [picks, setPicks] = useState<PickedFilter[]>([]);  // 보는 사람이 필터 칸에서 고른 값(저장하지 않는다)
+  const [report, setReport] = useState(false);
+  const [zoom, setZoom] = useState<string | null>(null);
+  const [unit, setUnit] = useState<Unit | null>(null);
   const picked = useRef<PickedFilter[]>([]);
   // ---------- 기간 칸(DashCtl) ----------
   const [inputs, setInputs] = useState<Fields>(EMPTY);
@@ -154,8 +161,8 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
 
   // 필터 칸에서 값을 고른다(values가 비면 그 필터를 푼다): ctx.filters를 바꾸고 모든 카드를 그 조건으로 다시 구해 화면에만 보인다(저장 값은 거르지 않은 값 그대로).
   // 필터가 다 풀리고 보는 기간도 없으면 다시 구하지 않고 화면 값을 비워 저장된 값을 보인다.
-  const setFilter = useCallback(async (column: string, values: string[]) => {
-    picked.current = [...picked.current.filter(f => f.column !== column), ...(values.length ? [{ column, in: values }] : [])];
+  const applyPicks = useCallback(async (next: PickedFilter[]) => {
+    picked.current = next;
     setPicks(picked.current);
     const rest: Ctx = { ...now.current.ctx, filters: undefined };
     const ctx: Ctx | null = picked.current.length ? { ...rest, filters: picked.current } : Object.values(rest).some(v => v != null) ? rest : null;
@@ -164,6 +171,9 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     if (!picked.current.length && !ctx?.range) return dispatch({ type: "values", results: cards.map(c => ({ id: c.id })) });
     await recomputeRange(cards, ctx);
   }, [dispatch, recomputeRange]);
+  const setFilter = useCallback((column: string, values: string[]) => applyPicks([...picked.current.filter(f => f.column !== column), ...(values.length ? [{ column, in: values }] : [])]), [applyPicks]);
+  // 걸린 필터를 모두 푼다(걸린 것이 없으면 다시 구하지 않는다)
+  const clearFilters = useCallback(async () => { if (picked.current.length) await applyPicks([]); }, [applyPicks]);
 
   const stopLive = useCallback((text: string) => {
     live.current.on = false;
@@ -295,6 +305,7 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
       const { dashboard } = await getDashboard(id);
       if (mine !== seqs.current.open) return;
       picked.current = []; setPicks([]);  // 다른 대시보드를 열면 고른 필터를 푼다
+      setUnit(null);
       dispatch({ type: "open", dash: dashboard });
       setLast(id).catch(() => {});
     } catch (e) { if (mine === seqs.current.open) dispatch({ type: "error", message: (e as Error).message }); }
@@ -359,6 +370,6 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     commitPeriod: (text?: string) => { const t = text ?? inputs.period; setInput("period", t); if (t.trim() !== saved.current.period) apply(true, inputs.as_of, t); },  // text: 달력이 고른 기간(칸 값이 아직 안 바뀐 때)
     commitEvery: kind => { commitEvery(kind); }, toggleLive: () => { toggleLive(); }, saveMin: () => { saveMin(); },
   };
-  const value: Shell = { conn, loadConn, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo, build, page, setPage, picks, setFilter };
+  const value: Shell = { conn, loadConn, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo, build, page, setPage, picks, setFilter, report, setReport, zoom, setZoom, unit, setUnit, clearFilters };
   return <Ctx_.Provider value={value}>{children}</Ctx_.Provider>;
 }

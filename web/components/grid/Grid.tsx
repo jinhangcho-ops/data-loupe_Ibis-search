@@ -9,6 +9,8 @@ import { CardBody } from "@/components/cards/CardBody";
 import { CHART_KINDS } from "@/components/cards/ChartCard";
 import { Pop } from "@/components/cards/Pop";
 import { newCardId } from "@/components/edit/Templates";
+import { FrameCard } from "@/components/frame/FrameCard";
+import { isFrame } from "@/components/frame/registry";
 import { CARD_MIME, isShell, shellOf, type Spec } from "@/components/edit/menu/kinds";
 import { useShell } from "@/components/shell/ShellProvider";
 import { cardValue } from "@/components/cards/svg/__pure__";
@@ -72,14 +74,13 @@ function WhenLine({ card, d }: { card: Card; d: Card["data"] }) {
 
 export function Grid() {
   const { state, dispatch } = useDash();
-  const { compares, dashOnly, build, conn, picks, setFilter, page } = useShell();
+  const { compares, dashOnly, build, conn, picks, setFilter, page, zoom, setZoom, unit } = useShell();
   const [shares, setShares] = useState<string[]>([]);  // 비율(%)로 보는 카드 id(저장하지 않는다)
   // 누르면 거르기(4단계): 같은 값을 다시 누르면 푼다. 보는 곳에서 연결돼 있을 때만(만드는 곳에서는 카드 누르기가 설정 열기다)
   const cross = useCallback((column: string, value: string) => { setFilter(column, picks.some(p => p.column === column && p.in[0] === value) ? [] : [value]); }, [picks, setFilter]);
   const addShell = useAddShell();
   const ref = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
-  const [zoom, setZoom] = useState<string | null>(null);  // 크게 보는 카드 id
   const dash = state.dash;
   const all = dash?.cards ?? [], paged = !!dash?.pages?.length;
   const cards = onPage(all, dash?.pages, page);  // 지금 쪽의 카드만 그린다(쪽을 나누지 않았으면 전부)
@@ -123,7 +124,8 @@ export function Grid() {
     addShell(JSON.parse(raw) as Spec, cellAt(e.clientX, e.clientY, metrics(ref.current)));
   };
 
-  const big = cards.find(c => c.id === zoom);
+  const withUnit = (card: Card): Card => unit ? { ...card, view: { ...card.view, unit } } : card;  // 기간 단위 요소가 고른 단위로 그리기만(저장하지 않는다)
+  const zoomed = cards.find(c => c.id === zoom), big = zoomed && withUnit(zoomed);
   return (
     <>
     {big && (
@@ -136,6 +138,28 @@ export function Grid() {
       {cards.map(card => {
         const l: Layout = preview?.[card.id] ?? placed[card.id];
         const sel = state.picked.includes(card.id), open = state.selected === card.id;
+        const tools = edit && (
+          <>
+            <button className="ib" title="카드 설정" aria-label={`${card.title} 카드 설정`} onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: card.id }); }}>⚙</button>
+            <button className="ib" title="이 카드 빼기" aria-label={`${card.title} 카드 빼기`} onClick={e => { e.stopPropagation(); remove(card.id); }}>×</button>
+          </>
+        );
+        const resize = edit && <i className="bresize" title="끌어서 크기를 바꿔요" aria-hidden="true" onPointerDown={e => startResize(e, card.id)} />;
+        // 요소: 머리 줄·안내 없이 몸통만, 고르기(pick) 없음(그림 저장 대상이 아니다). 편집 중에는 .fr-tools 줄과 몸통을 잡아 옮긴다
+        if (isFrame(card.kind)) return (
+          <section key={card.id} data-id={card.id} aria-label={card.title}
+            className={"bcard frame" + (open && edit ? " editing" : "")}
+            style={{ gridColumn: `${l.x + 1} / span ${l.w}`, gridRow: `${l.y + 1} / span ${l.h}` }}>
+            {edit && (
+              <div className="fr-tools" data-noprint onPointerDown={e => startMove(e, card.id)}>
+                <i className="fr-grip" aria-hidden="true" title="끌어서 옮겨요" />
+                {tools}
+              </div>
+            )}
+            <div className="bbody" onPointerDown={edit ? e => startMove(e, card.id) : undefined}><FrameCard card={card} live={!edit} /></div>
+            {resize}
+          </section>
+        );
         const paint = !CHART_KINDS.includes(card.kind);
         const result = state.values[card.id], said = card.kind === "kpi" ? undefined : compares[card.id];
         const at = isShell(card) ? undefined : (result?.data ?? card.data)?.computed_at;
@@ -156,16 +180,15 @@ export function Grid() {
                   onClick={e => { e.stopPropagation(); setShares(v => v.includes(card.id) ? v.filter(x => x !== card.id) : [...v, card.id]); }}>%</button>
               )}
               {!isShell(card) && <button className="ib" title="크게 보기" aria-label={`${card.title} 카드 크게 보기`} onClick={e => { e.stopPropagation(); setZoom(card.id); }}>⤢</button>}
-              {edit && <button className="ib" title="카드 설정" aria-label={`${card.title} 카드 설정`} onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: card.id }); }}>⚙</button>}
-              {edit && <button className="ib" title="이 카드 빼기" aria-label={`${card.title} 카드 빼기`} onClick={e => { e.stopPropagation(); remove(card.id); }}>×</button>}
+              {tools}
             </div>
             <div className={"bbody" + (paint ? " paint" : "")}>
-              {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={card} result={result} palette={dash.palette} ctx={state.ctx} onPick={build || !conn ? undefined : cross} share={shares.includes(card.id)} />}
+              {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={withUnit(card)} result={result} palette={dash.palette} ctx={state.ctx} onPick={build || !conn ? undefined : cross} share={shares.includes(card.id)} />}
             </div>
             {said && <div className={`bcmp ${said.tone} [padding:0_.625rem]`} title={said.delta_text}>{said.text}</div>}
             {!isShell(card) && <WhenLine card={card} d={result?.data ?? card.data} />}
             {result?.error && <div className="hint bnote [padding:0_.625rem] m-0" role="status">{result.error}</div>}
-            {edit && <i className="bresize" title="끌어서 크기를 바꿔요" aria-hidden="true" onPointerDown={e => startResize(e, card.id)} />}
+            {resize}
           </section>
         );
       })}

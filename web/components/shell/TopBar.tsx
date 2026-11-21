@@ -34,15 +34,26 @@ const TABS: [string, string, string, string, React.ReactNode][] = [  // [주소,
 const PANEL_PARAM = "panel";
 const watchTheme = (changed: () => void) => { const o = new MutationObserver(changed); o.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] }); return () => o.disconnect(); };
 
+const watchEasy = (changed: () => void) => { const o = new MutationObserver(changed); o.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] }); return () => o.disconnect(); };
+
+// 쉬운 보기(status.html의 #easy, common.js showEasy와 같다): html.easy를 바꾸고 설정 easy로 저장한다
+export function flipEasy(): void {
+  const next = !document.documentElement.classList.contains("easy");
+  document.documentElement.classList.toggle("easy", next);
+  saveSetting({ easy: next ? "on" : "off" }).catch(() => {});
+}
+
+export function flipTheme(): void {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  saveSetting({ theme: next }).catch(() => {});
+}
+
 /** 화면 모드 단추(밝게·어둡게). 왼쪽 메뉴 아래와 [대시보드만 보기]의 위쪽 줄이 같이 쓴다. 지금 모드는 html의 data-theme에서 읽어 두 곳이 늘 같다. */
 export function ThemeButton({ id }: { id?: string }) {
   const theme = useSyncExternalStore(watchTheme, () => document.documentElement.dataset.theme ?? "light", () => "");
   const tip = theme === "dark" ? "밝은 화면으로" : "어두운 화면으로";
-  const flip = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    saveSetting({ theme: next }).catch(() => {});
-  };
+  const flip = () => flipTheme();
   return <button id={id} className="ib" onClick={flip} title={tip} aria-label={tip}>{theme === "dark" ? SUN : MOON}</button>;
 }
 
@@ -52,7 +63,7 @@ export function TopBar() {
   const here = build ? BUILD_PATH : VIEW_PATH;
   const [st, setSt] = useState<RefreshStatus | null>(null);
   const [pop, setPop] = useState(false);
-  const [easy, setEasy] = useState(true);
+  const easy = useSyncExternalStore(watchEasy, () => document.documentElement.classList.contains("easy"), () => true);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const poll = useCallback(async function step() {
@@ -67,16 +78,8 @@ export function TopBar() {
   }, [loadConn]);
   useEffect(() => {
     refreshStatus().then(s => { if (s.running) { setSt(s); poll(); } }).catch(() => {});  // 다른 화면에서 시작해 아직 돌고 있으면 이어서
-    setTimeout(() => setEasy(document.documentElement.classList.contains("easy")));
     return () => clearTimeout(timer.current);
   }, [poll]);
-  // 쉬운 보기(status.html의 #easy, common.js showEasy와 같다): html.easy를 바꾸고 설정 easy로 저장한다
-  const flipEasy = () => {
-    const next = !easy;
-    document.documentElement.classList.toggle("easy", next);
-    setEasy(next);
-    saveSetting({ easy: next ? "on" : "off" }).catch(() => {});
-  };
   const count = (s: string) => st?.results.filter(r => r.state === s).length ?? 0;
   const title = !st ? "" : st.running ? `대시보드를 최신 값으로 바꾸고 있어요 (${st.done}/${st.total})`
     : `대시보드를 최신 값으로 바꿨어요. 완료 ${count("ok")}개, 실패 ${count("failed")}개, 건너뜀 ${count("skipped")}개`;

@@ -17,7 +17,7 @@ import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import type { Card } from "@/lib/types";
 import { FilterBar } from "./FilterBar";
-import { LastRefreshed, PeriodField } from "./PeriodBar";
+import { LastRefreshed } from "./PeriodBar";
 import { PickDashboard } from "./PickDashboard";
 import { SettingsDialog } from "./SettingsDialog";
 import { buildHref, useShell, viewHref } from "./ShellProvider";
@@ -65,14 +65,13 @@ export function useDemo(): () => void {
 
 export function Toolbar() {
   const { state, dispatch } = useDash();
-  const { recompute, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, conn, build, flush } = useShell();
+  const { recompute, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, conn, build, flush, report, setReport } = useShell();
   const demo = useDemo();
   const [sure, setSure] = useState(false);  // 연결돼 있으면 [예시 데이터로 확인하기]를 한 번 더 눌러야 연결을 바꾼다(TopBar [비우기]와 같은 방식)
   const [menu, setMenu] = useState<false | "card" | "more">(false);  // 열린 메뉴: [+ 카드 ▾] 또는 [더 보기 ▾]
   const [metrics, setMetrics] = useState(false);
   const [picker, setPicker] = useState(false);  // 그림으로 고르기 화면
   const addShell = useAddShell();
-  const [report, setReport] = useState(false);
   const [settings, setSettings] = useState(false);
   const [busy, setBusy] = useState(false);
   const drop = useRef<HTMLDivElement>(null), more = useRef<HTMLDivElement>(null);
@@ -87,7 +86,6 @@ export function Toolbar() {
       <div className="tool d-tool">
         {dashOnly ? <><b className="d-name">{state.dash?.name || "대시보드"}</b><span className="d-conn" title="지금 연결된 데이터">{conn ? conn.label || "연결됨" : "연결 안 됨"}</span></> : <PickDashboard />}
         <span className="d-sep"></span>
-        <div className="dc-field d-per"><PeriodField id="d-per" /></div>
         <LastRefreshed />
         {dashOnly && <FilterBar />}
         <span className="ml-auto"></span>

@@ -33,6 +33,7 @@ MAX_VALUES = 200  # 조건을 만들 때 보여 줄 컬럼 값 목록의 최대 
 VALUE_SCAN = 200_000  # 값 목록은 앞의 이만큼 행에서만 찾는다(값이 많은 큰 표의 전체 DISTINCT는 메모리를 많이 쓴다)
 MAX_POINTS = 5_000  # 산점도·버블의 점 수 상한(분석의 산점도와 대시보드가 같이 쓴다)
 CHART_UNITS = {"day": "D", "week": "W", "month": "M", "year": "Y"}  # 차트 X를 묶는 단위(/api/chart의 x_unit) → period_start 단위
+MONTHS_PER_UNIT = {"month": 1, "quarter": 3, "year": 12}  # next_period가 달 단위 기간을 넘길 달 수(달력 분기는 3달)
 FILLS = ("count", "sum")  # 빈 기간을 0으로 채우는 집계(행이 없으면 0개·0). 평균 같은 것은 빈 값으로 둔다
 EXCEL_MAX_ROWS = 1_048_575  # Excel 시트 한 장의 행 수(제목 줄 제외)
 CHUNK = 100_000  # 큰 결과를 한 번에 받는 행 수(저장·결과 받아 두기)
@@ -496,10 +497,10 @@ def local_time(col):
 
 
 def next_period(value, unit):
-    """기간 시작 value(날짜·시각) 다음 기간의 시작. unit은 CHART_UNITS의 이름."""
+    """기간 시작 value(날짜·시각) 다음 기간의 시작. unit은 CHART_UNITS의 이름 또는 quarter."""
     if unit in ("day", "week"):
         return value + datetime.timedelta(days=1 if unit == "day" else 7)
-    month = value.month + (12 if unit == "year" else 1)
+    month = value.month + MONTHS_PER_UNIT[unit]
     return value.replace(year=value.year + (month - 1) // 12, month=(month - 1) % 12 + 1)
 
 

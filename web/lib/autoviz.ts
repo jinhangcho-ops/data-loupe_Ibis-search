@@ -292,7 +292,7 @@ export function thinRows<T extends Record<string, unknown>>(rows: T[], keys: str
   }
   return [...picked].sort((a, b) => a - b).map((i) => rows[i]);
 }
-const AUTO_UNITS: Unit[] = ["day", "week", "month", "year"];  // 자동 묶기 단위, 작은 것부터
+const AUTO_UNITS: Unit[] = ["day", "week", "month", "quarter", "year"];  // 자동 묶기 단위, 작은 것부터
 // [SPECIFICATION] plans/phase-9.md#autoUnit
 export function autoUnit(counts: Partial<Record<Unit, number>>, width: number, px: number): Unit {
   if (width <= 0) return "day";

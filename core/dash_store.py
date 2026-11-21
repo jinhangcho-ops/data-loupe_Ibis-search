@@ -49,7 +49,7 @@ CHART_TYPES = {"bar": "막대", "hbar": "가로 막대", "stacked": "누적 막�
                "bar3d": "3차원 막대", "surface3d": "3차원 곡면", "scatter3d": "3차원 산점도"}  # 3차원: 막대·곡면은 계열 데이터(X × 계열 × 값), 산점도는 점([크기] 열이 Z축)
 THREE_D_TYPES = ("bar3d", "surface3d", "scatter3d")  # 3차원 그래프 종류(쿼리 화면의 [종류] 칸이 이 차례로 더한다)
 TIME_TYPES = ("bar", "stacked", "line", "polyline", "area", "sarea", "sarea100", "step", "combo", "waterfall", "pareto", "slope", "bar3d", "surface3d")  # 날짜 X축 카드에서 고를 수 있는 종류
-UNITS = {"day": "일", "week": "주", "month": "월", "year": "연"}
+UNITS = {"day": "일", "week": "주", "month": "월", "quarter": "분기", "year": "연"}
 RINGS = ("stack", "double", "half", "ticks")  # 도넛 KPI 고리 4방식: 한 고리 누적, 겹친 두 고리, 반원 게이지, 고리+목표 눈금
 ICONS = ("chart", "up", "user", "cart", "coin", "clock")  # KPI 카드 아이콘
 FITS = ("fill", "center")  # KPI 글자: 칸을 꽉 채움 / 가운데
@@ -179,11 +179,11 @@ def no_secrets(value, what):
             no_secrets(v, what)
 
 
-def check_layout(layout):
-    """12칸 격자의 자리: x·y는 0 이상, w·h는 2~12, x + w는 12 이하."""
+def check_layout(layout, low: int = 2):
+    """12칸 격자의 자리: x·y는 0 이상, w·h는 low~12, x + w는 12 이하."""
     ok = isinstance(layout, dict) and all(type(layout.get(k)) is int for k in "xywh")
-    if not ok or not (0 <= layout["x"] and 0 <= layout["y"] <= 999 and 2 <= layout["w"] <= 12 and 2 <= layout["h"] <= 12 and layout["x"] + layout["w"] <= 12):
-        raise ValueError("카드 자리(layout)는 12칸 격자의 x·y와 너비 w·높이 h(2~12)여야 해요.")
+    if not ok or not (0 <= layout["x"] and 0 <= layout["y"] <= 999 and low <= layout["w"] <= 12 and low <= layout["h"] <= 12 and layout["x"] + layout["w"] <= 12):
+        raise ValueError(f"카드 자리(layout)는 12칸 격자의 x·y와 너비 w·높이 h({low}~12)여야 해요.")
     return {k: layout[k] for k in "xywh"}
 
 
@@ -218,6 +218,72 @@ EXTRA_VIEW = ("icon", "format", "unit_text", "ring", "slots", "target", "full", 
               "funnel_shape", "ladder_scale", "gap_stats", "flow_unlimited", "flow_dropout", "groups", "cloud")  # 3·4단계 카드 종류의 설정
 FUNNEL_SHAPES = ("flow", "ladder")  # 퍼널 그림: 흐름(생키+표) / 사다리꼴
 GAP_STATS = ("mean", "median", "trimmed")  # 걸린 시간 표에 보일 값
+FRAME_KINDS = ("button", "nav_rail", "top_strip", "page_tabs", "period_pick", "asof_field", "unit_seg")  # (B10) 격자에 놓는 틀 요소 종류. 화면의 한 벌은 web/components/frame/registry.ts
+FRAME_ACTIONS = {"export": "", "refresh": "", "page": "page", "theme": "", "dash_only": "", "zoom": "card", "easy": "", "filters_clear": ""}  # 틀 요소의 할 일 → 받는 값(arg)의 종류("" 없음, page 쪽 이름, card 카드 id)
+FRAME_PARTS = ("name", "period", "asof", "theme")  # 위쪽 화면 줄에 보일 칸
+FRAME_KEYS = {"button": ("label", "icon", "action", "arg", "ambient"), "nav_rail": ("items", "ambient"), "top_strip": ("parts", "items"),
+              "page_tabs": (), "period_pick": (), "asof_field": (), "unit_seg": ()}  # 종류마다 view.frame에 쓸 수 있는 항목
+ITEM_KEYS = ("label", "icon", "action", "arg")  # 줄 안 항목(단추 하나)의 항목
+MAX_FRAME_ITEMS, MAX_FRAME_LABEL = 8, 30  # 줄 안 항목 수, 단추 글자 수
+FRAME_MIN = 1  # 틀 요소의 최소 너비·높이(칸). 카드는 2
+FRAME_EMPTY = "단추에는 글자나 아이콘 중 하나가 있어야 해요."
+
+
+def check_frame(frame: object, kind: str) -> dict[str, object]:
+    """[SPECIFICATION] plans/dash-blocks.md#check_frame
+    틀 요소 카드의 설정(view.frame)을 종류에 맞게 검사해 정리한 사본을 돌려준다."""
+    if kind not in FRAME_KINDS:
+        raise ValueError(f"요소 종류(kind)는 {', '.join(FRAME_KINDS)} 중 하나예요.")
+    frame = {} if frame is None else frame
+    if not isinstance(frame, dict):
+        raise ValueError("요소 설정(frame)은 객체여야 해요.")
+    if extra := set(frame) - set(FRAME_KEYS[kind]):
+        raise ValueError(f"{kind} 요소 설정에 쓸 수 없는 항목이 있어요: {', '.join(sorted(extra))}")
+
+    def one(found: dict) -> dict[str, str]:
+        label = text(found.get("label") or "", "단추 글자", MAX_FRAME_LABEL).strip()
+        icon = found.get("icon") or ""
+        if icon and icon not in ICONS:
+            raise ValueError(f"단추 아이콘은 {', '.join(ICONS)} 중 하나예요.")
+        if label == "" and icon == "":
+            raise ValueError(FRAME_EMPTY)
+        action = found.get("action") or ""
+        if action and action not in FRAME_ACTIONS:
+            raise ValueError(f"할 일은 {', '.join(FRAME_ACTIONS)} 중 하나예요.")
+        arg = found.get("arg") or ""
+        if not isinstance(arg, str):
+            raise ValueError("받는 값(arg)은 글자여야 해요.")
+        need = FRAME_ACTIONS.get(action, "")
+        if need == "" and arg != "":
+            raise ValueError("이 할 일은 받는 값(arg)을 쓰지 않아요.")
+        if need == "page" and not 1 <= len(arg) <= MAX_PAGE_NAME:
+            raise ValueError(f"쪽 이동의 받는 값(arg)은 쪽 이름({MAX_PAGE_NAME}자까지)이에요.")
+        if need == "card" and not ID.fullmatch(arg):
+            raise ValueError("크게 보기의 받는 값(arg)은 카드 id예요.")
+        return {"label": label, "icon": icon, "action": action, "arg": arg}
+
+    out: dict[str, object] = {}
+    if kind == "button":
+        out.update(one(frame))
+    if "ambient" in FRAME_KEYS[kind]:
+        ambient = frame.get("ambient", False)
+        if type(ambient) is not bool:
+            raise ValueError("엠비언트(ambient)는 참·거짓이에요.")
+        out["ambient"] = ambient
+    if "items" in FRAME_KEYS[kind]:
+        items = frame.get("items", [])
+        if not isinstance(items, list) or len(items) > MAX_FRAME_ITEMS:
+            raise ValueError(f"줄 안 항목은 목록이며 {MAX_FRAME_ITEMS}개까지예요.")
+        for item in items:
+            if not isinstance(item, dict) or set(item) - set(ITEM_KEYS):
+                raise ValueError(f"줄 안 항목에 쓸 수 없는 항목이 있어요: {', '.join(sorted(set(item) - set(ITEM_KEYS))) if isinstance(item, dict) else item}")
+        out["items"] = [one(item) for item in items]
+    if "parts" in FRAME_KEYS[kind]:
+        parts = frame.get("parts", list(FRAME_PARTS))
+        if not isinstance(parts, list) or not all(isinstance(p, str) and p in FRAME_PARTS for p in parts) or len(set(parts)) != len(parts):
+            raise ValueError(f"보일 칸(parts)은 {', '.join(FRAME_PARTS)} 중에서 겹치지 않게 골라요.")
+        out["parts"] = parts
+    return out
 
 
 def number_of(value, what, low=None, high=None):
@@ -587,10 +653,10 @@ def check_extra(view):
 
 
 def check_view(view):
-    """보기 설정: type(차트 종류, ""이면 계열마다 정한 대로), unit(일·주·월·연), compare.mode(span·point), better(up·down).
+    """보기 설정: type(차트 종류, ""이면 계열마다 정한 대로), unit(일·주·월·분기·연), compare.mode(span·point), better(up·down).
     차트 탭에서 온 것은 styles(계열마다 {type, dash, axis})·ranges(세로축 범위)·ratio(가로/세로), 분석 카드는 analysis_view."""
     view = {} if view is None else view
-    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "connect", "auto", "scale", "all_data", "data_table", "cross", "page", *EXTRA_VIEW}:
+    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "connect", "auto", "scale", "all_data", "data_table", "cross", "page", "frame", *EXTRA_VIEW}:
         raise ValueError("보기(view)에 쓸 수 없는 항목이 있어요.")
     out = {"type": view.get("type") or "", "unit": view.get("unit") or "day", "compare": view.get("compare") or {"mode": "span"}, "better": view.get("better") or "up"}
     if out["type"] and out["type"] not in CHART_TYPES:
@@ -714,16 +780,25 @@ def check_card(card):
     """카드 하나를 검사해 정리한 사본을 돌려준다(없는 항목은 기본값). 카드 하나의 크기는 MAX_CARD_BYTES(JSON 글자) 이하."""
     if not isinstance(card, dict):
         raise ValueError("카드는 객체여야 해요.")
-    if card.get("kind") not in KINDS:
-        raise ValueError(f"카드 종류(kind)는 {', '.join(KINDS)} 중 하나예요.")
+    frame = card.get("kind") in FRAME_KINDS
+    if card.get("kind") not in KINDS and not frame:
+        raise ValueError(f"카드 종류(kind)는 {', '.join(KINDS + FRAME_KINDS)} 중 하나예요.")
     card_id = card.get("id") or secrets.token_hex(8)
     if not isinstance(card_id, str) or not ID.fullmatch(card_id):
         raise ValueError("카드 id는 영문·숫자·_·- 32자까지예요.")
+    if frame and card.get("data") not in (None, {}):
+        raise ValueError("틀 요소에는 값(data)을 넣을 수 없어요.")
     out = {"id": card_id, "kind": card["kind"], "title": text(card.get("title"), "카드 이름", 100, 1),
-           "layout": check_layout(card["layout"]) if card.get("layout") is not None else {"x": 0, "y": 0, "w": 6, "h": 6},
+           "layout": check_layout(card["layout"], FRAME_MIN if frame else 2) if card.get("layout") is not None else {"x": 0, "y": 0, "w": 6, "h": 6},
            "colors": check_colors(card.get("colors")), "view": check_view(card.get("view")),
-           "source": check_source(card.get("source")), "data": check_data(card.get("data"), card["kind"])}
+           "source": check_source(card.get("source")), "data": {} if frame else check_data(card.get("data"), card["kind"])}
     placed = not any(out["source"].get(k) for k in ("body", "recipe", "analysis"))  # 카드 모음에서 막 놓은 빈 틀: 데이터를 정할 때까지 아래 검사를 미룬다
+    if frame:
+        if not placed:
+            raise ValueError("틀 요소에는 데이터를 정할 수 없어요.")
+        out["view"]["frame"] = check_frame((card.get("view") or {}).get("frame"), out["kind"])
+    elif (card.get("view") or {}).get("frame") is not None:
+        raise ValueError("틀 요소 설정(frame)은 틀 요소 카드에만 써요.")
     if out["kind"] == "funnel" and not placed:  # 흐름(퍼널) 카드: 다시 구할 전처리(recipe)와 흐름 분석(analysis.kind = funnel)이 있어야 한다
         how = out["source"].get("analysis") or {}
         listed = how.get(FUNNEL_LISTS.get(how.get("kind")))  # 값 목록 퍼널은 steps, 조건 단계 퍼널은 stages

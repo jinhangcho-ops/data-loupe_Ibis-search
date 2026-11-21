@@ -1,5 +1,6 @@
 import type { AutoRule, AutoTable, AutoView, AxisScale, Order, Scale, SemanticWords } from "@/lib/autoviz";
 import type { GroupView } from "@/lib/groups";
+import type { FrameKind, FrameSettings } from "@/components/frame/registry";
 
 // Flask API가 주고받는 JSON 모양(core/dash_store.py의 check_* 와 dashboard/dash_app.py가 돌려주는 것 그대로). 이름은 서버 키를 바꾸지 않는다.
 
@@ -10,12 +11,12 @@ export type Layout = { x: number; y: number; w: number; h: number };
 export type CardKind =
   | "chart" | "analysis" | "metric" | "kpi" | "donut_kpi" | "gauge" | "summary" | "recent_rows" | "dual_trend" | "stripes" | "blocks"
   | "target_trend" | "map" | "alerts" | "deviation" | "funnel" | "table" | "status" | "sentence" | "geomap"
-  | "histogram" | "boxplot" | "heatmap" | "calheat" | "treemap" | "sunburst" | "bullet" | "bump" | "sankey" | "cohort" | "candle" | "wordcloud";
+  | "histogram" | "boxplot" | "heatmap" | "calheat" | "treemap" | "sunburst" | "bullet" | "bump" | "sankey" | "cohort" | "candle" | "wordcloud" | FrameKind;
 
 /** 차트 종류(dash_store.CHART_TYPES). ""이면 계열마다 정한 대로 */
 export type ChartType = "" | "bar" | "hbar" | "stacked" | "line" | "polyline" | "area" | "doughnut" | "pie" | "radar" | "scatter" | "bubble"
   | "group" | "stack100" | "hstack" | "hstack100" | "sarea" | "sarea100" | "step" | "combo" | "waterfall" | "pareto" | "radial" | "polar" | "range" | "slope" | "trendline" | "butterfly" | "lollipop" | "bar3d" | "surface3d" | "scatter3d";
-export type Unit = "day" | "week" | "month" | "year";
+export type Unit = "day" | "week" | "month" | "quarter" | "year";
 export type ValueFormat = "number" | "percent" | "currency";
 
 /** 지정 색(check_colors): 이름별 HEX와 라벨이 처음 나온 순서 */
@@ -84,6 +85,7 @@ export type CardView = {
   page?: string;                      // 놓인 쪽(탭) 이름. 대시보드의 쪽 목록에 없으면 첫 쪽에 보인다
   groups?: GroupView;              // 표시할 그룹 고르기(Phase 4, lib/groups.applyGroups)
   cloud?: { mode: "values" | "labels" | "words"; tags?: string[]; rows?: "all" | "tagged"; match?: "any" | "all"; text?: string; pos?: ("noun" | "verb" | "adj" | "foreign")[]; stop?: string[]; min_len?: number };  // 워드클라우드 방식(Phase 4)
+  frame?: FrameSettings;              // 틀 요소(B10)의 설정: 요소 카드에만 쓴다
   [more: string]: unknown;  // stale·entity·time_col·kind_col·link_col·group_cols·formats·total 등(check_more)
 };
 

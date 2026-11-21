@@ -72,7 +72,7 @@ def upgrade_dashboard(d: dict) -> dict:
 def merges(agg):
     """일 값을 다시 묶을 수 있는 집계인지(아니면 일 값은 하루 몫의 값 v 하나이고, 주·월·연은 서버가 따로 구한다)."""
     return agg in MERGE
-TRUNC = {"day": "D", "week": "W", "month": "M", "year": "Y"}  # 단위 → stats.period_start 단위(주는 어느 DB에서나 월요일 시작, analysis.trend와 같다)
+TRUNC = {"day": "D", "week": "W", "month": "M", "quarter": "Q", "year": "Y"}  # 단위 → stats.period_start 단위(주는 어느 DB에서나 월요일 시작, analysis.trend와 같다)
 ROOM = 0.8  # 일 값이 카드 크기 상한의 이만큼까지만 차지하게 한다(나머지는 source 같은 다른 항목)
 PERCENT = "percent"
 MAX_POINTS = result.MAX_POINTS  # 산점도·버블의 점 수(분석의 산점도와 같다)
@@ -104,6 +104,8 @@ MAX_RANKED = 12  # 순위 차트의 대상 수(합이 큰 것부터)
 OTHER = funnel.OTHER  # 트리맵의 기타
 ADDITIVE = dash_store.ADDITIVE  # 아이의 합이 부모가 되는 집계
 TREE_ADDITIVE = dash_store.TREE_ADDITIVE
+MONTHS_PER_YEAR = 12  # 기간 번호의 달 수(연·분기 계산용)
+MONTHS_PER_QUARTER = 3  # 달력 분기 하나의 달 수
 
 
 def series_name(s):
@@ -370,7 +372,7 @@ def shared_context(cards, ctx=None):
 
 
 def time_data(expr, x, series, split):
-    """날짜 X축: by_unit = {day: 일 값, week·month·year: 서버에서 따로 구한 단위별 값(고유 개수 계열, 잘랐을 때는 월·연의 모든 계열)}.
+    """날짜 X축: by_unit = {day: 일 값, week·month·quarter·year: 서버에서 따로 구한 단위별 값(고유 개수 계열, 잘랐을 때는 월·연의 모든 계열)}.
     일 값이 많아 잘랐으면 note에 적는다."""
     parse.check_name(x, expr.columns)
     t = expr.filter(expr[x].notnull())
@@ -383,7 +385,7 @@ def time_data(expr, x, series, split):
     def values(unit, only=None):
         picked = {i: s for i, s in enumerate(series) if only is None or only(s["agg"])}
         return unit_section(grouped(t, x, unit, split, parts, lambda tt: {f"s{i}_v": final_expr(tt, s) for i, s in picked.items()}), series, parts, split, only)
-    for unit in ("week", "month", "year"):  # 주 시작·회계연도 설정은 화면(web/lib/calc.ts setCalendar)이 상수로 받아 일 값을 묶는다(서버가 또 구하면 조회가 늘고 설정을 바꿔도 낡은 값이 남는다)
+    for unit in ("week", "month", "quarter", "year"):  # 주 시작·회계연도 설정은 화면(web/lib/calc.ts setCalendar)이 상수로 받아 일 값을 묶는다(서버가 또 구하면 조회가 늘고 설정을 바꿔도 낡은 값이 남는다)
         if cut and unit != "week":
             by_unit[unit] = values(unit)  # 잘라 낸 앞부분까지 월·연은 서버가 구한다
         elif any(not merges(s["agg"]) for s in series):
@@ -1092,7 +1094,7 @@ def candle_data(expr, x, y, unit):
 
 def slot(day, unit):
     """날짜의 기간 번호(같은 단위의 기간 시작끼리 빼면 몇 기간 떨어졌는지). 주는 모든 기간 시작의 요일이 같아 7일로 나눈 몫의 차가 주 수다."""
-    return {"day": day.toordinal(), "week": day.toordinal() // 7, "month": day.year * 12 + day.month - 1, "year": day.year}[unit]
+    return {"day": day.toordinal(), "week": day.toordinal() // 7, "month": day.year * MONTHS_PER_YEAR + day.month - 1, "quarter": (day.year * MONTHS_PER_YEAR + day.month - 1) // MONTHS_PER_QUARTER, "year": day.year}[unit]
 
 
 def cohort_data(expr, user, time, unit, window=None):

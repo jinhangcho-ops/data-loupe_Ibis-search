@@ -2,7 +2,7 @@
 // Recharts 차트도 SVG라 차트·SVG·HTML 카드를 모두 같은 길로 그린다: 화면의 카드 몸통을 복사해 계산된 스타일을 박고 SVG foreignObject로 직렬화 → Image → canvas.
 // 그림 모드(밝게·어둡게)는 data-theme을 잠깐 바꿔 그 모드의 계산된 색을 박는다. 몸통은 화면 크기 그대로 그리고 그림 칸에 비율을 지켜 맞춘다(fitRect).
 // 모두 브라우저에서만(단추를 눌렀을 때) 부른다.
-import { fitRect, PICTURE_HEIGHT, REPORT, reportBox, reportLayout, TITLE_BAND } from "./layout";
+import { fitRect, NOTE_BAND, PICTURE_HEIGHT, REPORT, reportBox, reportLayout, TITLE_BAND } from "./layout";
 import { gridItems } from "@/components/grid/useDrag";
 import type { Card } from "@/lib/types";
 
@@ -115,11 +115,11 @@ export async function cardPicture(box: HTMLElement, title: string, mode: string,
 }
 
 /** 보고서 canvas(옛 reportCanvas): 제목 줄 + 카드마다 격자 자리의 상자(이름 줄 + 그림). 그리지 못한 카드는 이유 글만 */
-export async function reportCanvas(cards: Card[], title: string, mode: string, scale = 2) {
+export async function reportCanvas(cards: Card[], title: string, mode: string, scale = 2, note = "") {
   const grid = document.querySelector<HTMLElement>(".board.grid");
   if (!grid) throw new Error("화면에 대시보드 격자가 없어 보고서를 그리지 못했어요.");
   const css = getComputedStyle(grid), box = reportBox(name => css.getPropertyValue(name));
-  const colors = themeColors(mode), lay = reportLayout(gridItems(cards), box);  // 화면 격자와 같은 자리(둥근 카드 최소 높이 포함)
+  const colors = themeColors(mode), lay = reportLayout(gridItems(cards), note ? { ...box, head: box.head + NOTE_BAND } : box);  // 화면 격자와 같은 자리(둥근 카드 최소 높이 포함)
   const out = Object.assign(document.createElement("canvas"), { width: lay.width * scale, height: lay.height * scale });
   const ctx = out.getContext("2d")!;
   const font = (px: number, weight = 400) => `${weight} ${px * scale}px ${FONT}`;
@@ -134,6 +134,7 @@ export async function reportCanvas(cards: Card[], title: string, mode: string, s
   ctx.textAlign = "right";
   ctx.fillText(new Date().toLocaleDateString("sv"), (lay.width - box.pad) * scale, (REPORT.head / 2 + 4) * scale);
   ctx.textAlign = "left";
+  if (note) ctx.fillText(note, box.pad * scale, (REPORT.head + NOTE_BAND / 2) * scale, (lay.width - box.pad * 2) * scale);
   const say = (text: string, x: number, y: number, w: number) => { ctx.fillStyle = colors.text; ctx.font = font(box.small); ctx.fillText(text, x + box.padX * scale, y + (box.padY + REPORT.band + 20) * scale, w - 2 * box.padX * scale); };
   for (const card of cards) {
     const r = lay.rects[card.id], [x, y, w, h] = [r.x * scale, r.y * scale, r.w * scale, r.h * scale];
