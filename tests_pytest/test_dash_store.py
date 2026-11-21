@@ -177,7 +177,7 @@ def test_card_kind_view_settings_checks():
                                                                   "slots": [{"label": "실제", "format": "currency", "color": "#abc"}, {"label": "목표"}]}})["view"]
     assert v["ring"] == "half" and v["target"] == {"name": "매출", "period": "2026-10"} and v["slots"][1] == {"label": "목표", "format": "number", "unit_text": "", "color": ""} and v["window"]["to"] == "2026-02-01"
     assert store.check_card({**CARD, "view": {"target": {"value": 12.5}}})["view"]["target"] == {"value": 12.5}
-    for bad in ({"ring": "square"}, {"format": "euro"}, {"icon": "x"}, {"target": {"value": 1, "name": "a"}}, {"target": {}}, {"target": {"value": "많이"}}, {"cells": 0}, {"slots": [{}] * 6},
+    for bad in ({"ring": "square"}, {"format": "euro"}, {"target": {"value": 1, "name": "a"}}, {"target": {}}, {"target": {"value": "많이"}}, {"cells": 0}, {"slots": [{}] * 6},
                 {"slots": [{"color": "red"}]}, {"window": {"from": "어제", "to": "2026-01-01"}}, {"rows": 101}):
         with pytest.raises(ValueError):
             store.check_card({**CARD, "view": bad})

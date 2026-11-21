@@ -223,12 +223,12 @@ def month_count(first, last):
 def month_name(months, first):
     """직전 기간 이름: 달력 분기·연과 맞을 때만 '직전 분기'·'작년'(dash_calc.target_period와 같은 규칙), 아니면 '직전 N개월'."""
     if months == 1 or months == 3 and first.month % 3 == 1 or months == 12 and first.month == 1:
-        return {1: "지난달", 3: "직전 분기", 12: "작년"}[months]
+        return {1: "전월", 3: "직전 분기", 12: "작년"}[months]
     return f"직전 {months}개월"
 
 
 def previous_text(start, end):
-    """날짜 기간 start~end(date)의 직전 기간을 부르는 말: 대시보드 기간 칸(dash_refresh.context)과 같은 이름(지난달·직전 분기·작년·직전 N개월), 달에 맞지 않으면 '직전 N일'."""
+    """날짜 기간 start~end(date)의 직전 기간을 부르는 말: 대시보드 기간 칸(dash_refresh.context)과 같은 이름(전월·직전 분기·작년·직전 N개월), 달에 맞지 않으면 '직전 N일'."""
     months = month_count(start, end)
     return month_name(months, start) if months else f"직전 {(end - start).days + 1}일"
 

@@ -74,7 +74,7 @@ export function previousSpan(start: string, end: string): PrevSpan {
   const [y1, m1] = start.split("-").map(Number), [y2, m2] = end.split("-").map(Number);
   if (start.endsWith("-01") && shiftDay(end, 1).endsWith("-01")) {
     const months = (y2 - y1) * 12 + m2 - m1 + 1, back = new Date(Date.UTC(y1, m1 - 1 - months, 1)).toISOString().slice(0, 10);
-    const named = months === 1 || (months === 3 && m1 % 3 === 1) || (months === 12 && m1 === 1) ? ({ 1: "지난달", 3: "직전 분기", 12: "작년" } as Record<number, string>)[months] : `직전 ${months}개월`;  // 서버 period.month_name
+    const named = months === 1 || (months === 3 && m1 % 3 === 1) || (months === 12 && m1 === 1) ? ({ 1: "전월", 3: "직전 분기", 12: "작년" } as Record<number, string>)[months] : `직전 ${months}개월`;  // 서버 period.month_name
     return { start: back, end: shiftDay(start, -1), text: named };
   }
   const n = daysBetween(start, end);

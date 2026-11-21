@@ -162,8 +162,10 @@ def test_tools_select_labels_color_reason_template_funnel():
     src = web("components/edit/panel/Tools.tsx")
     for old in ("기간 기준: ", "그림 모양: {n}", "아이콘: {n}", "값 축: {n}", "정렬: {", ">추이선 아래<", ">색</button>"):
         assert old not in src, old
-    for label in ("기간 기준", "그림 모양", "아이콘", "큰 값 크기", "추이선 자리", "기간 단위", "표시 형식", "값 축", "정렬", "단위"):
+    for label in ("기간 기준", "그림 모양", "기간 단위", "표시 형식", "값 축", "정렬", "단위"):
         assert f'<label className="hint bset">{label}<' in src, label
+    for gone in ("아이콘", "큰 값 크기", "추이선 자리"):
+        assert f'<label className="hint bset">{gone}<' not in src, gone
     assert "title={why || undefined}" in src and "색 바꾸기" in src
     assert 'aria-label="문장 틀"' in src and "TEMPLATE_EMPTY" in src
     assert re.search(r'<label key=\{s\} className="hint bset"><input type="checkbox" aria-label=\{`걸린 시간 \$\{GAP_NAMES\[s\]\}`\}', src)  # 칸 먼저, aria-label은 그대로

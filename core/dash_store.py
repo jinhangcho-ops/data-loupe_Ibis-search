@@ -52,8 +52,6 @@ TIME_TYPES = ("bar", "stacked", "line", "polyline", "area", "sarea", "sarea100",
 UNITS = {"day": "일", "week": "주", "month": "월", "quarter": "분기", "year": "연"}
 RINGS = ("stack", "double", "half", "ticks")  # 도넛 KPI 고리 4방식: 한 고리 누적, 겹친 두 고리, 반원 게이지, 고리+목표 눈금
 ICONS = ("chart", "up", "user", "cart", "coin", "clock")  # KPI 카드 아이콘
-FITS = ("fill", "center")  # KPI 글자: 칸을 꽉 채움 / 가운데
-LAYOUTS = ("below", "right")  # KPI의 스파크 위치: 값 아래 / 오른쪽
 MAX_BINS = 100  # 히스토그램의 구간 수
 MAX_BANDS = 6  # 불릿 차트의 구간(경계) 수
 MAX_CELLS = 2000  # 히트맵의 칸 수(dash_calc가 쓰고, 카드 추가 안내가 상수로 받는다. 여기 두어 화면 상수가 dash_calc를 올리지 않게)
@@ -212,10 +210,11 @@ BGS = ("rack", "network", "image")  # 배치도 바탕: 서버실 칸 / 네트�
 BLANK_KINDS = ("value", "prev", "delta", "asof")  # 문장 빈칸: 이번 기간 값 / 직전 기간 값 / 비교 문장 / 기준일
 BUCKETS = ("hour", "day", "week", "month")
 MAX_RULES = 20
-EXTRA_VIEW = ("icon", "format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window",
+EXTRA_VIEW = ("format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window",
               "cond_rules", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "positions", "bg", "image_path", "group_cols", "formats", "total",
-              "template", "blanks", "bucket", "baseline", "threshold", "geo", "rings", "fit", "layout", "bins", "bands",
+              "template", "blanks", "bucket", "baseline", "threshold", "geo", "rings", "bins", "bands",
               "funnel_shape", "ladder_scale", "gap_stats", "flow_unlimited", "flow_dropout", "groups", "cloud")  # 3·4단계 카드 종류의 설정
+GONE_VIEW = ("icon", "fit", "layout")  # (B10b) 없앤 KPI 모양 설정(아이콘·값 맞춤·추이선 자리): 저장된 보기에 있으면 받되 버린다
 FUNNEL_SHAPES = ("flow", "ladder")  # 퍼널 그림: 흐름(생키+표) / 사다리꼴
 GAP_STATS = ("mean", "median", "trimmed")  # 걸린 시간 표에 보일 값
 FRAME_KINDS = ("button", "nav_rail", "top_strip", "page_tabs", "period_pick", "asof_field", "unit_seg")  # (B10) 격자에 놓는 틀 요소 종류. 화면의 한 벌은 web/components/frame/registry.ts
@@ -588,11 +587,11 @@ def check_auto(auto: object) -> dict:
 
 
 def check_extra(view):
-    """KPI·도넛 KPI·게이지·요약·최근 행·두 계열 추이·칸 채우기·블록·목표 추이 카드의 설정: icon, format(number·percent·currency), unit_text(값 뒤 글자),
+    """KPI·도넛 KPI·게이지·요약·최근 행·두 계열 추이·칸 채우기·블록·목표 추이 카드의 설정: format(number·percent·currency), unit_text(값 뒤 글자),
     ring(도넛 고리 4방식), slots(도넛의 칸 {label, y, agg, format, unit_text, color}, 최대 5), target({value} 또는 목표 파일의 {name, period, scope}),
     full(칸 채우기가 가득 찬 값), cells(칸 수), size(블록 한 칸의 값), rows(최근 행 수), group(요약의 기여 분해 컬럼), window(보는 구간 {from, to})."""
     out = {}
-    for name, allowed in (("icon", ICONS), ("format", FORMATS), ("ring", RINGS), ("fit", FITS), ("layout", LAYOUTS), ("funnel_shape", FUNNEL_SHAPES)):
+    for name, allowed in (("format", FORMATS), ("ring", RINGS), ("funnel_shape", FUNNEL_SHAPES)):
         if view.get(name):
             if view[name] not in allowed:
                 raise ValueError(f"{name}은 {', '.join(allowed)} 중 하나예요.")
@@ -656,7 +655,7 @@ def check_view(view):
     """보기 설정: type(차트 종류, ""이면 계열마다 정한 대로), unit(일·주·월·분기·연), compare.mode(span·point), better(up·down).
     차트 탭에서 온 것은 styles(계열마다 {type, dash, axis})·ranges(세로축 범위)·ratio(가로/세로), 분석 카드는 analysis_view."""
     view = {} if view is None else view
-    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "connect", "auto", "scale", "all_data", "data_table", "cross", "page", "frame", *EXTRA_VIEW}:
+    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "connect", "auto", "scale", "all_data", "data_table", "cross", "page", "frame", *EXTRA_VIEW, *GONE_VIEW}:
         raise ValueError("보기(view)에 쓸 수 없는 항목이 있어요.")
     out = {"type": view.get("type") or "", "unit": view.get("unit") or "day", "compare": view.get("compare") or {"mode": "span"}, "better": view.get("better") or "up"}
     if out["type"] and out["type"] not in CHART_TYPES:

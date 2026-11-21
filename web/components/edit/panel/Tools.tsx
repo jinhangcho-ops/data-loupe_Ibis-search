@@ -28,7 +28,7 @@ const FORMATS: [string, string][] =[["number", "숫자"], ["percent", "%"], ["cu
 const RINGS: [string, string][] = [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리와 목표 눈금"]];
 const PLAIN = ["recent_rows", "gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap",
   "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud"];
-// P16 KPI 아이콘(svg/common Icon)·P15 큰 값 맞춤·추이선 자리, P14 겹친 도넛을 쓸 수 있는 차트 종류
+// 단추 요소의 아이콘(svg/common ICON_PATHS, FramePanel이 쓴다), P14 겹친 도넛을 쓸 수 있는 차트 종류
 export const ICONS: [string, string][] = [["chart", "막대"], ["up", "오름"], ["user", "사람"], ["cart", "장바구니"], ["coin", "동전"], ["clock", "시계"]];
 const FUNNEL_SHAPES: [string, string][] = [["flow", "흐름"], ["ladder", "사다리꼴"]];
 const GAP_NAMES: Record<string, string> = { mean: "평균", median: "중앙값", trimmed: "절사평균" };
@@ -204,20 +204,6 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
           }} />
       </label>
     ),
-    kpi: (<>
-      <label className="hint bset">아이콘<select className="bunit [flex-basis:auto]" aria-label="아이콘" title="큰 값 옆 아이콘" value={view.icon ?? "chart"} onChange={e => setView({ icon: e.target.value as CardView["icon"] })}>
-          {ICONS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
-        </select>
-      </label>
-      <label className="hint bset">큰 값 크기<select className="bunit [flex-basis:auto]" aria-label="큰 값 크기" value={view.fit ?? "center"} onChange={e => setView({ fit: e.target.value as CardView["fit"] })}>
-          <option value="center">가운데</option><option value="fill">꽉 채우기</option>
-        </select>
-      </label>
-      <label className="hint bset">추이선 자리<select className="bunit [flex-basis:auto]" aria-label="추이선 자리" value={view.layout ?? "below"} onChange={e => setView({ layout: e.target.value as CardView["layout"] })}>
-          <option value="below">아래</option><option value="right">오른쪽</option>
-        </select>
-      </label>
-    </>),
   }[card.kind as string] ?? null;
   // 순위·캔들·코호트는 기간 단위를 다시 고를 수 있다(서버가 그 단위로 다시 구한다)
   const unitSel = ["bump", "candle", "cohort"].includes(card.kind) && (

@@ -18,7 +18,7 @@ def test_dashboard_period_with_time_is_refused(db):
 
 
 def test_month_period_compare_label():
-    assert dash_refresh.context({"period": "2026-10", "as_of": "2026-11-20"})["prev"]["text"] == "지난달"
+    assert dash_refresh.context({"period": "2026-10", "as_of": "2026-11-20"})["prev"]["text"] == "전월"
     assert dash_refresh.context({"period": "2026-Q3", "as_of": "2026-11-20"})["prev"]["text"] == "직전 분기"
     assert dash_refresh.context({"period": "", "as_of": "2026-09-30"}) == {"as_of": "2026-09-30"}
 

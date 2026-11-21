@@ -1,8 +1,8 @@
 "use client";
-// SVG/HTML 카드가 함께 쓰는 것: 화면 모드 색(useTheme), 상자·그림 틀·아이콘, 상태 이름·색, 연결돼 있을 때만 앞 N행 읽기(useRows).
+// SVG/HTML 카드가 함께 쓰는 것: 화면 모드 색(useTheme), 상자·그림 틀·단추 아이콘 모양, 상태 이름·색, 연결돼 있을 때만 앞 N행 읽기(useRows).
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { cardRequest, filteredBody, getLiveMin, query } from "@/lib/api";
-import type { Card, Ctx, MoreValues } from "@/lib/types";
+import type { Card, CompareMode, Ctx, MoreValues } from "@/lib/types";
 import { pickColor, sameSource } from "@/lib/series";
 import { shades } from "@/lib/calc";
 import type { Theme } from "./__pure__";
@@ -10,7 +10,7 @@ import { markColors } from "../ChartCard";
 import { rem } from "../chart/scale";
 
 /** 종류별 카드 컴포넌트가 받는 것: card.data는 이미 그릴 값(구한 값 또는 저장된 값), range는 보는 기간(ctx.range), merge는 상수 merge */
-export type P = { card: Card; colors: Theme; range: Ctx["range"]; merge: string[]; filters?: Ctx["filters"] };  // filters: 보는 사람이 고른 필터(행을 직접 읽는 카드만 쓴다)
+export type P = { card: Card; colors: Theme; range: Ctx["range"]; merge: string[]; filters?: Ctx["filters"]; prev?: Ctx["prev"]; mode?: CompareMode };  // filters: 보는 사람이 고른 필터(행을 직접 읽는 카드만 쓴다); prev·mode: 직전 기간·비교 기준(KPI 추이 나누기)
 
 const LIGHT: Theme = { card: "#f1f3f7", head: "#e6e9ef", ink: "#1c2230", text: "#586174", line: "#d5dae3", err: "#b53124", ok: "#1c7448",
   series: shades("#6250d6"), hi: "#00968f" };  // common.css 밝게(그리기 전·prerender)
@@ -48,9 +48,6 @@ export const Frame = ({ w, h, label, max, children }: { w: number; h: number; la
 );
 
 export const ICON_PATHS: Record<string, string> = { chart: "M3 20h18M6 16v-5M11 16V7M16 16v-8", up: "M4 16l6-6 4 4 6-8M15 6h5v5", user: "M12 12a4 4 0 100-8 4 4 0 000 8zM5 20c0-4 3-6 7-6s7 2 7 6", cart: "M3 4h3l2 11h10l2-8H7M10 20h.01M17 20h.01", coin: "M12 3a9 9 0 100 18 9 9 0 000-18zM9 12h6M12 8v8", clock: "M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v5l3 2" };
-export const Icon = ({ name }: { name?: string }) => (
-  <svg viewBox="0 0 24 24" width={22} height={22} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON_PATHS[name ?? ""] ?? ICON_PATHS.chart} /></svg>
-);
 
 type Rows = { hint?: string; error?: string; columns?: string[]; rows?: unknown[][] };
 // 행 값 읽기: 연결돼 있을 때만 /api/query로 앞 limit행(저장하지 않는다). 연결 열쇠는 /api/dash/live_min의 source.key(옛 dash_ctl.loadMin).

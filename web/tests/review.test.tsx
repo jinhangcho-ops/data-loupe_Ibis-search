@@ -25,10 +25,9 @@ describe("W1 [데이터 다시 정하기]", () => {
   const again = (old: Card, more: Partial<ReturnType<typeof emptyForm>> = {}) =>
     refillView(old.view, buildCard({ ...emptyForm(old.kind), ...formFromCard(old), table: "T", rows: [row], ...more }, ["sum", "count"]).view!);
   it("목표·단위를 비우면 지운다(옛 값이 남지 않게)", () => {
-    const v = again(card("kpi", {}, { target: { value: 100 }, unit_text: "명", fit: "fill" }), { targetValue: "", unitText: "" });
+    const v = again(card("kpi", {}, { target: { value: 100 }, unit_text: "명" }), { targetValue: "", unitText: "" });
     expect(v.target).toBeUndefined();
     expect(v.unit_text).toBeUndefined();
-    expect(v.fit).toBe("fill");  // 폼이 다루지 않는 모양 설정은 그대로
   });
   it("이름 목표는 기간·범위까지 그대로", () => {
     expect(again(card("kpi", {}, { target: { name: "매출", period: "2026-Q3", scope: "서울" } })).target).toEqual({ name: "매출", period: "2026-Q3", scope: "서울" });

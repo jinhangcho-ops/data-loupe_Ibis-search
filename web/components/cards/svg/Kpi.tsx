@@ -1,48 +1,44 @@
 "use client";
-// kpi: 아이콘 · 큰 값 · 스파크라인(일 값 곡선) · 아래에 비교 문장(화면 틀 useCompare)과 비율이면 짝 절대량(옛 paintKpi).
-// P15: 큰 값은 상자 크기(컨테이너 쿼리, dashboard.css)에 맞춰 가로·세로 가운데, view.fit(fill = 꽉 채우기, center = 가운데 기본).
-// P16: view.layout(below = 추이선이 값 아래 기본, right = 값 오른쪽), 목표(cardTarget)가 있으면 추이선에 점선과 값 색(목표를 채우면 --ok, 좋은 방향 view.better를 따른다)
+// kpi(B10b, 그림 1): 왼쪽에 큰 값(+작은 단위)·비교 한 줄(useCompare → kpiDelta)·비율이면 짝 절대량, 오른쪽 절반에 추이선.
+// 추이선: 직전 기간 회색 선·옅은 바탕 + 이번 기간 계열 색 선·바탕(kpi_trend), 가로 점선 눈금, 끝 점, 목표(cardTarget)가 있으면 점선과 값 색(--ok, view.better).
 import type { CSSProperties } from "react";
-import { overTarget, showValue, smoothPath, sparkPoints, underTarget } from "@/lib/calc";
+import { overTarget, showValue, underTarget } from "@/lib/calc";
+import { compareItem } from "@/lib/series";
 import { useCompare } from "@/components/shell/ShellProvider";
-import { pickColor } from "@/lib/series";
-import { cardDays, cardFormat, cardTarget, cardValue, sparkY, textUnits } from "./__pure__";
-import { Box, Icon, type P } from "./common";
+import { cardFormat, cardTarget, cardValue, sparkY, textUnits } from "./__pure__";
+import { Box, type P } from "./common";
+import { GRID_DASH, NOW_FILL, PREV_FILL, dayTrend, kpiColor, kpiDelta, sparkParts, trendSpans } from "./kpi_trend";
 
-const SPARK_W = 2.5, END_DOT = 7;  // 77-kpi: 추이선 굵기, 끝 점 지름(r 3.5)
+const SPARK_W = 2.5, END_DOT = 7, GRID_W = 1;  // 77-kpi: 추이선 굵기, 끝 점 지름(r 3.5), 점선 눈금 굵기
+const BOX = { w: 120, h: 30 };  // 추이선 viewBox(늘어나는 그림)
 
 type Pair = { num_label: string; num: number | null; den_label: string; den: number | null };
 
-export function Kpi({ card, colors, range, merge }: P) {
-  const v = cardValue(card, 0, range, merge), fmt = cardFormat(card), dated = cardDays(card, 0, range, merge), days = dated.map(d => d.v), pair = card.data?.pair as Pair | undefined;
-  const color = pickColor(card, "series", card.data?.by_unit?.day?.series[0]?.name ?? (card.data?.values?.names as string[] | undefined)?.[0] ?? card.title, colors, 0);
-  const pts = days.filter(x => x != null).length > 1 ? sparkPoints(days, 120, 30) : "", curve = pts && smoothPath(pts), end = pts.split(" ").at(-1);
-  const view = card.view ?? {}, unit = view.unit_text, text = showValue(v, fmt, unit), said = useCompare(card.id), t = cardTarget(card);
-  const layout = view.layout === "right" ? "right" : "below", fit = view.fit === "fill" ? "fill" : "center";
+export function Kpi({ card, colors, range, merge, prev, mode = "prev" }: P) {
+  const v = cardValue(card, 0, range, merge), fmt = cardFormat(card), pair = card.data?.pair as Pair | undefined;
+  const view = card.view ?? {}, unit = view.unit_text ?? "", num = showValue(v, fmt), said = useCompare(card.id), t = cardTarget(card), color = kpiColor(card, colors);
+  const trend = dayTrend(card, trendSpans(card, range, prev, mode), merge), all = [...trend.prev, ...trend.now], parts = sparkParts(trend, BOX.w, BOX.h);
   const met = v != null && t != null && (view.better === "down" ? !overTarget(v, t) : !underTarget(v, t));
-  const goal = t == null ? undefined : `목표 ${showValue(t, fmt, unit)}`, ty = t != null && pts ? sparkY(days, t, 30) : null;
-  const spark = pts && (
-    <svg viewBox="0 0 120 30" className="kpi-spark" preserveAspectRatio="none" aria-hidden="true">
-      <path d={curve} fill="none" stroke={color} strokeWidth={SPARK_W} strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-      <path d={`M${end} h0`} stroke={color} strokeWidth={END_DOT} strokeLinecap="round" vectorEffect="non-scaling-stroke" />{/* 끝 점: 늘어나는 그림(preserveAspectRatio none)에서도 둥글게 길이 0 선의 둥근 끝으로 */}
-      {ty != null && <line x1={0} x2={120} y1={ty} y2={ty} stroke="var(--muted)" strokeWidth={1.5} strokeDasharray="4 3" vectorEffect="non-scaling-stroke"><title>{goal}</title></line>}
-      {dated.map((d, i) => d.v != null && <rect key={d.day} x={120 * (i - 0.5) / (days.length - 1)} width={120 / (days.length - 1)} height={30} fill="transparent"><title>{`${d.day}: ${showValue(d.v, fmt, unit)}`}</title></rect>)}{/* 마우스를 올리면 그날 값 */}
+  const goal = t == null ? undefined : `목표 ${showValue(t, fmt, unit)}`, ty = t != null && parts ? sparkY(all.map(p => p.v), t, BOX.h) : null;
+  const label = compareItem(card, range, prev, merge, mode)?.label ?? "";
+  const spark = parts && (
+    <svg viewBox={`0 0 ${BOX.w} ${BOX.h}`} className="kpi-spark" preserveAspectRatio="none" aria-hidden="true">
+      {parts.grid.map(y => <line key={y} x1={0} x2={BOX.w} y1={y} y2={y} stroke="var(--line)" strokeWidth={GRID_W} strokeDasharray={GRID_DASH} vectorEffect="non-scaling-stroke" />)}
+      {parts.prev && <><path d={parts.prevArea} fill="var(--muted)" fillOpacity={PREV_FILL} /><path d={parts.prev} fill="none" stroke="var(--muted)" strokeWidth={SPARK_W} strokeLinecap="round" vectorEffect="non-scaling-stroke" /></>}
+      {parts.now && <><path d={parts.nowArea} fill={color} fillOpacity={NOW_FILL} /><path d={parts.now} fill="none" stroke={color} strokeWidth={SPARK_W} strokeLinecap="round" vectorEffect="non-scaling-stroke" /></>}
+      <path d={`M${parts.end} h0`} stroke={parts.now ? color : "var(--muted)"} strokeWidth={END_DOT} strokeLinecap="round" vectorEffect="non-scaling-stroke" />{/* 끝 점: 늘어나는 그림(preserveAspectRatio none)에서도 둥글게 길이 0 선의 둥근 끝으로 */}
+      {ty != null && <line x1={0} x2={BOX.w} y1={ty} y2={ty} stroke="var(--muted)" strokeWidth={1.5} strokeDasharray="4 3" vectorEffect="non-scaling-stroke"><title>{goal}</title></line>}
+      {all.map((p, i) => p.v != null && <rect key={p.key} x={BOX.w * (i - 0.5) / (all.length - 1)} width={BOX.w / (all.length - 1)} height={BOX.h} fill="transparent"><title>{`${p.key}: ${showValue(p.v, fmt, unit)}`}</title></rect>)}{/* 마우스를 올리면 그날 값 */}
     </svg>
   );
   return (
-    <Box cls={`kpi fit-${fit} lay-${layout}`}>
-      <div className="kpi-main">
-        <div className="kpi-top">
-          <span className="kpi-icon" style={{ color }}><Icon name={view.icon} /></span>
-          <div className="kpi-val" title={goal} style={{ "--n": textUnits(text).toFixed(2), color: met ? "var(--ok)" : undefined } as CSSProperties}>{text}</div>
-        </div>
-        {layout === "right" && spark}
-      </div>
-      {layout === "below" && spark}
-      <div className="kpi-foot">
-        {said && <div className={"bcmp " + said.tone} title={said.delta_text}>{said.text}</div>}
+    <Box cls="kpi">
+      <div className="kpi-text">
+        <div className="kpi-val" title={goal} style={{ "--n": textUnits(num + unit).toFixed(2), color: met ? "var(--ok)" : undefined } as CSSProperties}>{num}{unit && <span className="kpi-unit">{unit}</span>}</div>
+        {said && <div className={"bcmp kpi-cmp " + said.tone} title={said.text}>{kpiDelta(said, label, fmt)}</div>}
         {pair && <div className="hint kpi-pair">{`${pair.num_label} ${showValue(pair.num)} · ${pair.den_label} ${showValue(pair.den)}`}</div>}
       </div>
+      {spark}
     </Box>
   );
 }

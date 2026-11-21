@@ -224,7 +224,7 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .bcard.sel { border-color:var(--accent); }
 .bcard.sel { border-width:1px 1px 1px .25rem; padding-left:.5625rem; }  /* 고른 카드는 청록 왼쪽 막대 */
 .bhead { display:flex; align-items:center; gap:.5rem; margin-bottom:.375rem; }
-.bcheck { flex:none; width:1rem; height:1rem; border:.0938rem solid var(--line-strong); border-radius:var(--r-ctl); display:grid; place-items:center; }
+.bcheck { flex:none; width:1rem; height:1rem; border:.0938rem solid var(--line-strong); border-radius:var(--r-ctl); display:grid; place-items:center; padding:0; background:none; min-height:0; cursor:pointer; }
 .bcard.sel .bcheck { background:var(--accent); border-color:var(--accent); }
 .bcard.sel .bcheck::after { content:""; width:.5rem; height:.25rem; border:solid var(--on-accent); border-width:0 0 .125rem .125rem; transform:translateY(-1px) rotate(-45deg); }
 .btitle { flex:1; min-width:0; text-overflow:ellipsis; height:1.875rem; border:1px solid transparent; background:none; box-shadow:none; font-weight:600; padding:.125rem .375rem; }
@@ -270,10 +270,9 @@ mark { background:var(--accent-bg); color:var(--accent); border-radius:var(--r-c
 .drop .pop.cardmenu .linkish { color:var(--accent); align-self:flex-start; padding:.25rem 0; }
 .cbox { height:100%; overflow:auto; display:flex; flex-direction:column; gap:.375rem; }
 .bbody.paint { aspect-ratio:auto; min-height:10.625rem; max-height:none; }
-.kpi-top { display:flex; align-items:center; gap:.75rem; }  /* 아이콘 옆에 값을 크게: KPI 카드의 주인공은 값 */
-.kpi-icon { flex:none; width:2.5rem; height:2.5rem; border-radius:var(--r-card); background:var(--bg); display:grid; place-items:center; }
 .kpi-val { font-size:var(--fs-2xl); line-height:1.15; font-weight:700; letter-spacing:-.025em; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.kpi-spark { width:100%; flex:1 1 2.125rem; min-height:2.125rem; max-height:7.5rem; margin-top:auto; }  /* 카드가 크면 남는 높이를 추이가 채우고 아래에 붙는다(값이 위에 몰려 아래가 비지 않게) */
+.kpi-unit { margin-left:.25rem; font-size:var(--fs-md); font-weight:600; letter-spacing:0; color:var(--muted); }  /* 큰 값 옆 작은 단위 */
+.kpi-spark { flex:1 1 50%; min-width:0; height:100%; max-height:7.5rem; }  /* 오른쪽 절반(그림 1). 높이는 카드를 따른다 */
 .kpi-pair { margin:0; }
 .sum-text { font-size:var(--fs-md); line-height:1.6; }
 .sum-bar { position:relative; height:.75rem; background:var(--line); border-radius:var(--r-pill); }
@@ -575,7 +574,7 @@ html:not(.easy) .easy-only { display:none; }
 .drop .pop .btn { border-color:var(--edge); }
 .modal-box, .tip, .toast { border-color:var(--edge); }
 .btn:active, .btn.on, .ib:active, .ib.on, .pill.on, .btype.on, .kinds label:has(input:checked), .kinds button[aria-pressed="true"],
-.set-nav button[aria-selected=true], .nc-method[aria-selected=true], .seg2, .jobx, .sum-bar, .kpi-icon, .icon-tile, #flat-list, .pm-values { border-color:transparent; box-shadow:var(--press); }
+.set-nav button[aria-selected=true], .nc-method[aria-selected=true], .seg2, .jobx, .sum-bar, .icon-tile, #flat-list, .pm-values { border-color:transparent; box-shadow:var(--press); }
 .btn.p:active, .btn.k:active { box-shadow:none; }  /* 채운 단추는 밝은 안쪽 그림자가 어울리지 않아 그림자만 뗀다 */
 .bcard.sel { border-color:var(--accent); }
 .bcard:hover { border-color:var(--accent-line); }

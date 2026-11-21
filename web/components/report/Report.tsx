@@ -69,7 +69,7 @@ export function Report({ open, onClose }: ReportProps) {
   const pictures = run("down", async () => {
     const picked = cards.filter(c => state.picked.includes(c.id)), boxes = picked.map(c => [c, !isShell(c) && cardBox(cards, c.id)] as const).filter(([, box]) => box);
     const skipped = picked.length - boxes.length;
-    if (!boxes.length) return { text: skipped ? "고른 카드가 아직 그려지지 않았어요." : "저장할 카드를 먼저 고르세요. 카드를 누르면 선택돼요.", ok: false };
+    if (!boxes.length) return { text: skipped ? "고른 카드가 아직 그려지지 않았어요." : "저장할 카드를 먼저 고르세요. 카드 제목 줄의 체크 칸을 누르면 선택돼요.", ok: false };
     const type = picks.board_format === "jpeg" ? "jpeg" : "png", ext = type === "jpeg" ? "jpg" : "png";
     const shots = await inMode(picks.image, async () => {
       try {
@@ -108,7 +108,7 @@ export function Report({ open, onClose }: ReportProps) {
   const csv = run("csv", async () => {
     const kit = seriesKit(consts!);
     const picked = cards.filter(c => state.picked.includes(c.id) && CHART_KINDS.includes(c.kind) && !isShell(c));
-    if (!picked.length) return { text: "CSV로 저장할 차트 카드를 먼저 고르세요. 카드를 누르면 선택돼요.", ok: false };
+    if (!picked.length) return { text: "CSV로 저장할 차트 카드를 먼저 고르세요. 카드 제목 줄의 체크 칸을 누르면 선택돼요.", ok: false };
     let n = 0, k = 0;
     for (const card of picked) {
       const box = cardBox(cards, card.id);

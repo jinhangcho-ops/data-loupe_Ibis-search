@@ -249,6 +249,20 @@ def fetch_window(ctx):
     return {"start": min(starts) if starts else None, "end": rng.get("end")}
 
 
+def kpi_window(card: dict, ctx: dict | None) -> tuple[dict, dict | None]:
+    """[SPECIFICATION] plans/dash-blocks.md#kpi_window
+    일 값을 읽을 (카드, 날짜 범위): 대시보드 기간 없이 카드 기간 줄만 있는 KPI는 그 줄을 뺀 카드와 직전 기간 시작 ~ 이번 기간 끝, 그 밖은 (card, fetch_window(ctx))."""
+    window = fetch_window(ctx)
+    if window is not None or card["kind"] != "kpi":
+        return card, window
+    own = own_range(card, (ctx or {}).get("compare_mode") or "prev")
+    if own is None or own["column"] != card["source"].get("date"):
+        return card, None
+    body = card["source"]["body"]
+    read = {**card, "source": {**card["source"], "body": {**body, "periods": [line for i, line in enumerate(body["periods"]) if i != own["line"]]}}}
+    return read, {"start": min(own["prev"]["start"], own["range"]["start"]), "end": own["range"]["end"]}
+
+
 def card_expr(card, ctx=None, window=None):
     """카드가 읽을 식: 날짜 컬럼(source.date)에 window의 기간을 걸고 쓰는 컬럼으로 줄인 것(core.runnable의 keep)."""
     body = card["source"]["body"]
@@ -268,7 +282,10 @@ def fetched(card, ctx=None):
     body = (card["source"] or {}).get("body")
     if not isinstance(body, dict) or card["kind"] in ("recent_rows", "analysis"):
         return None
-    return with_period(body, period_column(card), (ctx or {}).get("range") if card["kind"] in SHAPE_KINDS else fetch_window(ctx))  # 새 종류는 직전 기간 없이 보는 기간만 읽는다(shape_data와 같다)
+    if card["kind"] in SHAPE_KINDS:
+        return with_period(body, period_column(card), (ctx or {}).get("range"))  # 새 종류는 직전 기간 없이 보는 기간만 읽는다(shape_data와 같다)
+    read, window = kpi_window(card, ctx)  # (B10b) 카드 기간 줄만 있는 KPI는 직전 기간까지(value_data와 같은 범위)
+    return with_period(read["source"]["body"], period_column(read), window)
 
 
 def shape_extra(card):
@@ -701,8 +718,9 @@ def value_data(card, ctx):
         parse.check_name(date, shape.columns, "날짜 컬럼")
         if date not in date_columns(shape):
             raise ValueError(f"'{date}'은 날짜 컬럼이 아니에요.")
-        series, fetch = clean_series(body.get("series")), fetch_window(ctx)  # 읽을 범위: 직전 기간 시작 ~ 보는 기간 끝
-        expr = card_expr(card, ctx, fetch)
+        series = clean_series(body.get("series"))
+        read, fetch = kpi_window(card, ctx)  # 읽을 범위: 직전 기간 시작 ~ 보는 기간 끝(대시보드 기간, 없으면 KPI 카드 기간 줄의 직전 기간부터)
+        expr = card_expr(read, ctx, fetch)
         found = run(lambda: shared_time(expr, body, date, series, None, fetch, ctx))
         if fetch:
             found = {**found, "window": fetch}

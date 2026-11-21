@@ -15,7 +15,7 @@ APPEND_NOTE = "키 컬럼이 없어 끊긴 묶음 하나가 겹쳐 들어갔을 
 # 새 /api 경로를 만들면 여기(차례를 기다림)나 server.FREE(연결을 쓰지 않음) 중 하나에 넣는다.
 USES_CONNECTION = {
     "/api/analyze", "/api/catalog/compute", "/api/chart", "/api/chart/points", "/api/collect/open", "/api/columns", "/api/connect",
-    "/api/dash/card/compute", "/api/dash/card/filtered", "/api/dash/cards/compute", "/api/dash/filter/values", "/api/dash/open", "/api/dash/refresh/start", "/api/date_range",
+    "/api/dash/card/compute", "/api/dash/card/filtered", "/api/dash/card/hours", "/api/dash/cards/compute", "/api/dash/filter/values", "/api/dash/open", "/api/dash/refresh/start", "/api/date_range",
     "/api/diag/dupes", "/api/diag/gaps", "/api/diag/hashed", "/api/diag/orphans", "/api/diag/quasi", "/api/diagnose", "/api/disconnect", "/api/dupes",
     "/api/export", "/api/export/tables", "/api/funcs/support", "/api/handoff", "/api/head", "/api/join_keys",
     "/api/labels", "/api/labels/apply", "/api/labels/apply_where", "/api/labels/drop", "/api/labels/rename", "/api/labels/setup", "/api/labels/vocab",

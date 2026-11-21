@@ -20,6 +20,7 @@ dash_calc = Later("dashboard.dash_calc")
 dash_pdf = Later("dashboard.dash_pdf")
 dash_refresh = Later("dashboard.dash_refresh")
 dash_store = Later("core.dash_store")
+kpi_hours = Later("dashboard.kpi_hours")
 metric_file = Later("core.metric_file")
 period = Later("dashboard.period")
 querying = Later("core.querying")
@@ -172,6 +173,18 @@ def card_filtered():
         raise ValueError("다른 연결에서 만든 카드라 지금은 볼 수 없어요")
     cut, missed = dash_calc.with_filters(card, request.json.get("ctx"))
     return jsonify(body=cut["source"].get("body"), missed=missed)
+
+
+@app.post("/api/dash/card/hours")
+def card_hours() -> Response:
+    """(B10b) KPI 큰 창의 시간 눈금 값 {labels, values, reason}(kpi_hours.hour_values). 다른 연결의 카드·처리 용량을 넘는 카드는 거부하고, 보는 사람의 필터(ctx.filters)는 건다."""
+    body = request.json or {}
+    card = dash_store.check_card(body.get("card") or {})
+    if other_source(card["source"].get("key"), dash_store.current_source()):
+        raise ValueError("다른 연결에서 만든 카드라 지금은 시간 눈금을 볼 수 없어요.")
+    if why := dash_refresh.scan_decision(card, body.get("ctx")):
+        raise ValueError(why)
+    return jsonify(kpi_hours.hour_values(dash_calc.with_filters(card, body.get("ctx"))[0], body.get("ctx")))
 
 
 @app.post("/api/dash/filter/values")

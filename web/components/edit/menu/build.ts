@@ -16,7 +16,7 @@ export type Form = {
   gTable: string; gPath: string; gName: string; gGeom: string; gRegion: string; gLat: string; gLon: string; gValue: string; gAgg: string; gPoints: boolean; gTiles: boolean;
   template: string; condText: string; stateText: string; linkText: string; blankText: string;
   split: string; bins: string; bands: string; cUnit: string;  // P14: body.split(열·아랫단계), 히스토그램 구간 수, 불릿 구간, 순위·캔들·코호트 기간 단위
-  icon: string; better: string; compare: string;  // 메뉴에는 칸이 없고 [데이터 다시 정하기] 때 카드의 값을 지킨다
+  better: string; compare: string;  // 메뉴에는 칸이 없고 [데이터 다시 정하기] 때 카드의 값을 지킨다
   targetKeep: Record<string, unknown>;  // 이름 목표의 나머지(period·scope 등, 다시 정할 때 같은 이름이면 그대로)
   fDefine: "values" | "stages"; fStages: StageRow[]; fCount: "order" | "each"; fTrim: string;  // Phase 3 퍼널: 단계 정의·조건 단계·세기·절사평균 자르는 %
   fFlow: "steps" | "auto"; fStarts: string[]; fMiddles: string[]; fEnds: string[]; fDepth: string; fDropout: "" | "on" | "off"; fConds: string;  // Phase 3 생키: 방식·자동 흐름 값·깊이·이탈 칸·조건 줄
@@ -28,7 +28,7 @@ export const emptyForm = (kind: CardKind = "kpi", cType = ""): Form => ({
   cType, cX: "", cSize: "", fUser: "", fStep: "", fTime: "", fSteps: "", fWin: "", fUnit: "minute",
   gTable: "", gPath: "", gName: "", gGeom: "geometry", gRegion: "", gLat: "", gLon: "", gValue: "", gAgg: "sum", gPoints: true, gTiles: false,
   template: "", condText: "", stateText: "", linkText: "", blankText: "",
-  split: "", bins: "20", bands: "", cUnit: "month", icon: "chart", better: "up", compare: "span", targetKeep: {},
+  split: "", bins: "20", bands: "", cUnit: "month", better: "up", compare: "span", targetKeep: {},
   fDefine: "values", fStages: [], fCount: "order", fTrim: "", fFlow: "steps", fStarts: [], fMiddles: [], fEnds: [], fDepth: "", fDropout: "", fConds: "",
 });
 
@@ -58,7 +58,7 @@ export function formFromCard(card: Card): Partial<Form> {
     // 가로축·나누기 컬럼(source.body.x·split)과 버블 크기: 종류마다 어느 폼 칸인지(buildCard의 반대)
     date: s(card.source?.date ?? (DATE_X.includes(card.kind) ? b.x : undefined)), cX: card.kind === "chart" ? s(b.x) : "", cSize: s(v.points?.size),
     group: s(v.group ?? (card.kind === "bump" ? b.split : X_GROUP.includes(card.kind) ? b.x : undefined)), split: ["heatmap", "treemap", "sunburst"].includes(card.kind) ? s(b.split) : "",
-    format: v.format ?? "number", unitText: v.unit_text ?? "", icon: v.icon ?? "chart", better: v.better ?? "up", compare: v.compare?.mode ?? "span",
+    format: v.format ?? "number", unitText: v.unit_text ?? "", better: v.better ?? "up", compare: v.compare?.mode ?? "span",
     targetValue: s(t?.value), targetName: s(name), targetKeep: { ...keep, name }, ring: v.ring ?? "stack", cells: s(v.cells ?? 10), size: s(v.size), rowCount: s(v.rows ?? 10),
     groupCols: ((v.group_cols ?? []) as string[]).join(", "), total: !!v.total,
     entity: s(v.entity), kindCol: s(v.kind_col), linkCol: s(v.link_col), stale: s(v.stale), bg: v.bg ?? "rack", imagePath: v.image_path ?? "",
@@ -154,7 +154,7 @@ export function buildCard(f: Form, aggs: string[], needs: (agg: string) => boole
   if (!byMetric && minRows && !series.length) throw new Error("값을 하나 이상 넣으세요.");
   if (k === "gauge" && !f.group) throw new Error("게이지는 나눌 컬럼을 고르세요.");
   const body = { ...empty, series: byMetric ? [] : series, ...(k === "gauge" ? { x: f.group } : {}), ...(k === "chart" ? { x: f.cX, order: "auto" as const } : {}), ...(byMetric ? { names: [f.metric] } : {}) };
-  const view: Record<string, unknown> = { type: "", ratio: 4 / 3, format: f.format, icon: f.icon || "chart", compare: { mode: f.compare || "span" }, better: f.better || "up" };
+  const view: Record<string, unknown> = { type: "", ratio: 4 / 3, format: f.format, compare: { mode: f.compare || "span" }, better: f.better || "up" };
   if (byMetric && f.format === "number") delete view.format;  // 형식을 따로 고르지 않은 지표 카드는 지표 파일의 형식을 쓴다(F22: 지표마다 단위가 다르다)
   if (f.unitText.trim() && ["kpi", "donut_kpi", "stripes", "bullet", "calheat"].includes(k)) view.unit_text = f.unitText.trim();
   if (f.targetValue !== "") view.target = { value: num(f.targetValue) };

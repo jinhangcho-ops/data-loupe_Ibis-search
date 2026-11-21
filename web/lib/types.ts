@@ -43,7 +43,6 @@ export type CardView = {
   trend?: boolean;
   show_r?: boolean;
   connect?: boolean;
-  icon?: "chart" | "up" | "user" | "cart" | "coin" | "clock";
   format?: ValueFormat;
   unit_text?: string;
   ring?: "stack" | "double" | "half" | "ticks";
@@ -70,8 +69,6 @@ export type CardView = {
   rings?: boolean;                    // 겹친 도넛: 도넛·파이·방사형·장미에서 계열마다 링
   bins?: number;                      // 히스토그램 구간 수(1~100)
   bands?: number[];                   // 불릿 구간 경계
-  fit?: "fill" | "center";            // KPI 큰 값: 칸을 꽉 채우기 | 가운데(기본)
-  layout?: "below" | "right";         // KPI 추이선 자리: 값 아래(기본) | 오른쪽
   funnel_shape?: "flow" | "ladder";   // 퍼널 그림: 흐름(기본) | 사다리꼴
   ladder_scale?: boolean;             // 사다리꼴 폭을 인원에 비례
   gap_stats?: ("mean" | "median" | "trimmed")[];  // 걸린 시간 표에 보일 값

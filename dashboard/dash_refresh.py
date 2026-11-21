@@ -119,9 +119,9 @@ def context(d, today=None):
         aligned = period.month_count(first, last)
         if mode == "prev" and (aligned or (first.day == 1 and (first.year, first.month) == (today.year, today.month))):  # 달 단위로 꼭 맞는 기간(월·분기·연…), 또는 1일에 시작해 기준일이 그 달 안: 직전 같은 개월 수의 같은 위치까지
             months = aligned or 1
-            name = period.month_name(months, first)
+            label = period.TO_DATE_BEFORE["month"] if months == 1 else f"{period.month_name(months, first)} 같은 기간"  # 한 달은 풀어 쓴 "지난달 같은 기간"(딱 한 달 이름 "전월"과 따로)
             try:
-                before = {"start": period.add_months(first, -months).isoformat(), "end": period.add_months(today, -months).isoformat(), "label": f"{name} 같은 기간", "error": None}
+                before = {"start": period.add_months(first, -months).isoformat(), "end": period.add_months(today, -months).isoformat(), "label": label, "error": None}
             except ValueError as e:  # 1년 1월처럼 직전 기간이 달력 앞이면 견줄 기간 없이 본다
                 before = {"error": str(e)}
             span = {**span, "to_date": True}

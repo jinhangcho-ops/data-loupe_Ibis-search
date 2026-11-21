@@ -59,5 +59,5 @@ export function SvgCard({ card, data, result, palette, ctx }: CardProps) {
   const Paint = PAINTERS[card.kind];
   if (!Paint) return <RawValue data={data} result={result} />;
   if (!(data.by_unit || data.values || data.columns || data.bins)) return <Box cls="summary"><div className="sum-text">아직 구한 값이 없어요</div></Box>;
-  return <Paint card={{ ...card, data }} colors={colors} range={ctx?.range} merge={merge ?? []} filters={ctx?.filters} />;
+  return <Paint card={{ ...card, data }} colors={colors} range={ctx?.range} merge={merge ?? []} filters={ctx?.filters} prev={ctx?.prev} mode={ctx?.compare_mode} />;
 }

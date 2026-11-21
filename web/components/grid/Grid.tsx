@@ -1,13 +1,14 @@
 "use client";
 // N3 — 카드 격자와 카드 상자(옛 dash_edit.js EditBoard·board.js cardBox). N7: 카드 모음 놓기(옛 dash_panel.js acceptGalleryDrops·dashboard.html addShell), 비교 문장·다시 구하지 못한 이유.
 // 12칸 격자(dash_edit.css .board.grid)에 card.layout대로 놓는다. 편집 모드에서만 제목 줄 끌기·⚙·×·크기 손잡이가 있다(대시보드만 보기에서는 고르기·편집 없음).
-// 카드를 누르면 고른 카드(state.picked, 여러 개, .sel)에 넣고 빼고(옛 board.toggle), 넣을 때는 그 카드를 설정 패널 대상(selected, 편집 모드에서 .editing)으로도 삼는다.
-// 제목 줄의 ⤢(보는 곳·만드는 곳 모두)를 누르면 그 카드를 큰 창(Pop .zoom-box)에 다시 그린다. 카드를 누르는 것은 고르기라 그대로 둔다.
+// 보는 곳: 몸통을 누르면 큰 창(KPI는 KpiZoom, 나머지는 같은 그림을 Pop .zoom-box에), 고르기는 머리 줄 체크 칸(.bcheck 단추)으로만.
+// 만드는 곳: 카드를 누르면 고르기(state.picked)·설정 대상(selected). ⤢는 두 곳 모두.
 // 끌기·크기는 useDrag가 미리보기를 주고, 놓으면 dispatch({type:"cards"})로 layout을 바꾼다(세로 압축은 calc가 한다). 카드가 없어도 격자를 그려 카드 모음을 놓을 수 있다.
 import { useCallback, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { CardBody } from "@/components/cards/CardBody";
 import { CHART_KINDS } from "@/components/cards/ChartCard";
 import { Pop } from "@/components/cards/Pop";
+import { KpiZoom } from "@/components/cards/svg/KpiZoom";
 import { newCardId } from "@/components/edit/Templates";
 import { FrameCard } from "@/components/frame/FrameCard";
 import { isFrame } from "@/components/frame/registry";
@@ -23,6 +24,8 @@ import { gridItems, metrics, minHeight, useDrag } from "./useDrag";
 
 // 빈 틀 카드(템플릿·카드 모음에서 막 놓은 카드)의 안내
 const SHELL_NOTE = "아직 데이터가 없어요. 제목 옆 ⚙를 눌러 테이블과 컬럼을 고르세요.";
+const LOOK_TIP = "눌러서 크게 봐요. 그림으로 내보낼 카드는 제목 줄의 체크 칸으로 골라요";  // 보는 곳 카드의 풍선
+const PRESSABLE = "button, a, input, select, textarea, label, summary";  // 몸통 안에서 눌러도 큰 창을 열지 않는 것
 
 /** 카드 아래 안내(옛 dash.js .bwhen): 다른 연결의 이전 값, 서버 안내(값을 구한 시각은 카드 머리 .bhead의 title), 저장된 일 값의 시작일, 기간 기준 날짜, 연결해서 다시 구해야 하는 집계. 한 줄에 하나 */
 export function whenLines(card: Card, d: Card["data"], range: Ctx["range"], conn: Source, merge: string[]) {
@@ -96,6 +99,7 @@ export function Grid() {
   );
   if (!dash) return null;
   const star = dash.north_star, edit = state.editing && !dashOnly;
+  const look = !build;  // 보는 곳: 몸통을 누르면 큰 창, 고르기는 체크 칸으로만
 
   function remove(id: string) {
     dispatch({ type: "cards", cards: all.filter(c => c.id !== id) });
@@ -111,8 +115,10 @@ export function Grid() {
     dispatch({ type: "pick", ids: on ? [...state.picked, id] : state.picked.filter(p => p !== id) });
     if (on) dispatch({ type: "select", id }); else if (state.selected === id) dispatch({ type: "select", id: null });
   };
-  const key = (e: KeyboardEvent, id: string) => {
-    if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); pick(id); }
+  const key = (e: KeyboardEvent, card: Card) => {
+    if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+    e.preventDefault();
+    if (!look) pick(card.id); else if (!isShell(card)) setZoom(card.id);
   };
   // 카드 모음 칸을 끌어 놓기
   const gallery = (e: DragEvent) => !dashOnly && [...e.dataTransfer.types].includes(CARD_MIME);
@@ -128,7 +134,8 @@ export function Grid() {
   const zoomed = cards.find(c => c.id === zoom), big = zoomed && withUnit(zoomed);
   return (
     <>
-    {big && (
+    {big && big.kind === "kpi" && <KpiZoom card={big} result={state.values[big.id]} palette={dash.palette} ctx={state.ctx} unit={unit} live={!!conn && (!big.source?.key || sameSource(big.source.key, conn.key))} onClose={() => setZoom(null)} />}
+    {big && big.kind !== "kpi" && (
       <Pop title={big.title} cls="zoom-box" onClose={() => setZoom(null)}>
         <div className={"bbody" + (CHART_KINDS.includes(big.kind) ? "" : " paint")}><CardBody card={big} result={state.values[big.id]} palette={dash.palette} ctx={state.ctx} share={shares.includes(big.id)} /></div>
       </Pop>
@@ -164,12 +171,12 @@ export function Grid() {
         const result = state.values[card.id], said = card.kind === "kpi" ? undefined : compares[card.id];
         const at = isShell(card) ? undefined : (result?.data ?? card.data)?.computed_at;
         return (
-          <section key={card.id} data-id={card.id} tabIndex={0} aria-label={card.title + (sel ? " (선택됨)" : "")} title={dashOnly ? undefined : "눌러서 선택해요. 여러 개 고를 수 있어요"}
-            className={"bcard" + (sel ? " sel" : "") + (open && edit ? " editing" : "")}
+          <section key={card.id} data-id={card.id} tabIndex={0} aria-label={card.title + (sel ? " (선택됨)" : "")} title={dashOnly ? undefined : look ? LOOK_TIP : "눌러서 선택해요. 여러 개 고를 수 있어요"}
+            className={"bcard" + (sel ? " sel" : "") + (open && edit ? " editing" : "") + (look && !isShell(card) ? " zoomin" : "")}
             style={{ gridColumn: `${l.x + 1} / span ${l.w}`, gridRow: `${l.y + 1} / span ${l.h}` }}
-            onClick={() => pick(card.id)} onKeyDown={e => key(e, card.id)}>
+            onClick={look ? undefined : () => pick(card.id)} onKeyDown={e => key(e, card)}>
             <div className={"bhead" + (edit ? " movable" : "")} title={at ? `값을 구한 시각 ${at.replace("T", " ")}` : undefined} onPointerDown={edit ? e => startMove(e, card.id) : undefined}>
-              <i className="bcheck" />
+              <button type="button" className="bcheck" aria-pressed={sel} aria-label={`${card.title} 카드 고르기`} title="그림·보고서로 내보낼 카드로 골라요" onClick={e => { e.stopPropagation(); pick(card.id); }} />
               {star.card === card.id && <span className="bbadge" title="북극성 지표">★</span>}
               {star.counters.includes(card.id) && <span className="bbadge" title="카운터 지표">⚑</span>}
               <input className="btitle" key={card.title} defaultValue={card.title} readOnly={!edit} aria-label="카드 이름" title={edit ? "카드 이름. 그림으로 저장할 때 파일 이름이 돼요" : undefined}
@@ -182,7 +189,7 @@ export function Grid() {
               {!isShell(card) && <button className="ib" title="크게 보기" aria-label={`${card.title} 카드 크게 보기`} onClick={e => { e.stopPropagation(); setZoom(card.id); }}>⤢</button>}
               {tools}
             </div>
-            <div className={"bbody" + (paint ? " paint" : "")}>
+            <div className={"bbody" + (paint ? " paint" : "")} onClick={look && !isShell(card) ? e => { const hit = (e.target as Element).closest(PRESSABLE); if (!hit || !e.currentTarget.contains(hit)) setZoom(card.id); } : undefined}>
               {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={withUnit(card)} result={result} palette={dash.palette} ctx={state.ctx} onPick={build || !conn ? undefined : cross} share={shares.includes(card.id)} />}
             </div>
             {said && <div className={`bcmp ${said.tone} [padding:0_.625rem]`} title={said.delta_text}>{said.text}</div>}

@@ -43,11 +43,11 @@ describe("C4 [데이터 다시 정하기]는 모양 설정을 지킨다", () => 
     const view = buildCard({ ...emptyForm(kind), ...formFromCard(old), table: "t", rows: [row], ...more }, ["sum", "count"]).view!;
     return { ...old.view, ...view };  // CardPanel.fill과 같은 합치기
   };
-  it("캔들 기간 단위·히스토그램 구간 수·KPI 아이콘·형식·좋은 방향·단위·목표", () => {
+  it("캔들 기간 단위·히스토그램 구간 수·형식·좋은 방향·단위·목표", () => {
     expect(again(card("candle", {}, { unit: "week" }), "candle", { date: "ts" }).unit).toBe("week");
     expect(again(card("histogram", {}, { bins: 50 }), "histogram").bins).toBe(50);
-    const k = again(card("kpi", {}, { icon: "cart", format: "percent", better: "down", unit_text: "명", target: { value: 3 }, compare: { mode: "point" } }), "kpi");
-    expect(k).toMatchObject({ icon: "cart", format: "percent", better: "down", unit_text: "명", target: { value: 3 }, compare: { mode: "point" } });
+    const k = again(card("kpi", {}, { format: "percent", better: "down", unit_text: "명", target: { value: 3 }, compare: { mode: "point" } }), "kpi");
+    expect(k).toMatchObject({ format: "percent", better: "down", unit_text: "명", target: { value: 3 }, compare: { mode: "point" } });
   });
   it("규칙·빈칸 글도 되돌려 다시 읽는다", () => {
     const rules = [{ column: "상태", match: "*지연*", color: "#e03131", arrow: "none", scope: "row" }];

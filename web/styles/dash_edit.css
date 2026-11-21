@@ -50,6 +50,14 @@
 .modal-box.zoom-box { width:min(75rem, 94vw); height:88vh; display:flex; flex-direction:column; }  /* 카드 크게 보기: 그림이 남는 높이를 다 쓴다 */
 .zoom-box .head, .row-box .head { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }  /* 제목은 왼쪽, [닫기]는 오른쪽 끝 */
 .zoom-box .bbody { flex:1; min-height:0; aspect-ratio:auto; max-height:none; }
+.bcard.zoomin > .bbody { cursor:zoom-in; }  /* 보는 곳: 몸통을 누르면 큰 창 */
+.kpi-zoom .head { align-items:flex-start; }  /* KPI 큰 창(그림 2): 왼쪽 위 이름·값·비교, 오른쪽 위 눈금 단추·× */
+.kpi-zoom .zoom-head { display:flex; flex-direction:column; gap:.25rem; min-width:0; }
+.kpi-zoom .zoom-head h3 { margin:0; font-size:var(--fs-sm); font-weight:600; color:var(--muted); }
+.kpi-zoom .zoom-val { font-size:var(--fs-2xl); font-weight:700; line-height:1.15; letter-spacing:-.025em; }
+.kpi-zoom .zoom-tools, .kpi-zoom .zoom-ticks { display:flex; align-items:center; gap:.375rem; }
+.kpi-zoom .zoom-ticks .btn[aria-pressed=true] { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
+.kpi-zoom .zoom-chart { flex:1; min-height:0; }
 .row-box dl { display:grid; grid-template-columns:max-content 1fr; gap:.375rem .875rem; margin:0; }  /* 표 줄 상세: 컬럼 이름 · 값 */
 .row-box dt { color:var(--muted); }
 .row-box dd { margin:0; overflow-wrap:anywhere; }

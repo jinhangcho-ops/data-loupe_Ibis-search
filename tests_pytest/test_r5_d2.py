@@ -75,11 +75,11 @@ def test_kinds_registered_and_pass_check_card():
         card("sankey", analysis={**FLOW, "steps": ["view"]})
 
 
-def test_view_rings_fit_layout_bins_bands():
-    ok = dash_store.check_view({"type": "doughnut", "rings": True, "fit": "fill", "layout": "right", "bins": 100, "bands": [50, 80.5, 100]})
-    assert ok["rings"] is True and ok["fit"] == "fill" and ok["layout"] == "right" and ok["bins"] == 100 and ok["bands"] == [50, 80.5, 100]
-    assert "rings" not in dash_store.check_view({}) and dash_store.check_view({"fit": "center", "layout": "below"})["layout"] == "below"
-    bad = [({"rings": "yes"}, "rings"), ({"fit": "stretch"}, "fit"), ({"layout": "left"}, "layout"), ({"bins": 101}, "구간 수"), ({"bins": 0}, "구간 수"),
+def test_view_rings_bins_bands():
+    ok = dash_store.check_view({"type": "doughnut", "rings": True, "bins": 100, "bands": [50, 80.5, 100]})
+    assert ok["rings"] is True and ok["bins"] == 100 and ok["bands"] == [50, 80.5, 100]
+    assert "rings" not in dash_store.check_view({})
+    bad = [({"rings": "yes"}, "rings"), ({"bins": 101}, "구간 수"), ({"bins": 0}, "구간 수"),
            ({"bins": True}, "구간 수"), ({"bins": 2.5}, "구간 수"), ({"bands": [3, 2]}, "bands"), ({"bands": "x"}, "bands"), ({"bands": list(range(7))}, "bands"), ({"bands": [True]}, "bands")]
     for view, why in bad:
         with pytest.raises(ValueError, match=why):

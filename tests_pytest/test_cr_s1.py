@@ -84,7 +84,7 @@ def test_compare_mode_cut_and_own_range():
     ctx = dash_refresh.context({"period": "", "compare_mode": "yoy"})
     c = {"source": {"body": {"periods": ["주문일 2026-03-01 ~ 2026-03-31"]}}}
     assert dash_calc.own_range(c, ctx["compare_mode"])["prev"] == {"start": "2025-03-01", "end": "2025-03-31", "text": "작년 같은 기간"}
-    assert dash_calc.own_range(c)["prev"]["text"] == "지난달" and dash_refresh.context({"period": ""}) is None
+    assert dash_calc.own_range(c)["prev"]["text"] == "전월" and dash_refresh.context({"period": ""}) is None
 
 
 def test_date_settings_saved_and_timezone_cleared(folder):

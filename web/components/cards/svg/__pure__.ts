@@ -1,6 +1,6 @@
 // SVG/HTML 카드의 순수 계산(화면 요소 없음): 옛 dash_cards.js의 cardValue·cardDays·cardTarget·cardFormat,
 // funnel.js의 생키 좌표·표·문장, static/geo/geomap.js의 메르카토르·타일 계산을 본문 그대로 옮겼다(SERVER.merge는 인자 merge로 받는다).
-import { TAU, anaView, clamp, isPoints, overTarget, polar, shiftDay, showValue, underTarget, zeroWhenEmpty } from "@/lib/calc";
+import { TAU, anaView, clamp, isPoints, overTarget, ownRange, polar, shiftDay, showValue, underTarget, zeroWhenEmpty } from "@/lib/calc";
 import { loadedRange, windowValue, type Range } from "@/lib/series";
 import type { Card, NorthStar, TreeItem } from "@/lib/types";
 import type { SCard, Series } from "../chart/series";
@@ -12,6 +12,7 @@ const NO_ZOOM_TYPES: string[] = [...ROUND_TYPES, ...HBARS, ...THREE_TYPES, "rada
 export type Theme = { card: string; head: string; ink: string; text: string; line: string; err: string; ok: string; series: string[]; hi: string; palette?: string[] };
 // 기간(range)의 계열 i 값: 일 값이 있으면 기간으로 묶고, 없으면 날짜 컬럼 없이 구한 값
 export function cardValue(card: Card, i: number, range: Range, merge: string[]): number | null {
+  if (!range?.start && !range?.end && card.data?.window) range = ownRange(card)?.range ?? range;  // (B10b) 서버가 카드 기간 줄의 직전 기간까지 읽었으면(data.window) 값은 카드 기간만
   const by = card.data?.by_unit?.day;
   if (by && by.series[i] && !merge.includes(by.series[i].agg) && range && by.labels.some(d => (!range.start || d >= range.start) && (!range.end || d <= range.end)) && windowValue(by.series[i], by.labels, range.start, range.end, merge) == null) {
     const w = card.data.values?.window_nunique as { start?: string | null; end?: string | null; values: Record<string, number | null> } | undefined;  // 고유 개수는 일 값을 묶을 수 없어, 서버가 이 기간으로 따로 구한 값만 쓴다(없으면 —)
