@@ -4,7 +4,7 @@
 // 놓으면 commit(새 자리들), Esc·취소면 버린다. 키보드 대안은 패널의 자리 숫자 칸(N5)이 맡는다.
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
 import { ROUND_KINDS, ROUND_MIN_H, ROUND_TYPES } from "@/components/cards/chart/shapes";
-import { GRID_COLS, GRID_GAP, GRID_MIN, GRID_ROW, cellAt, clampLayout, compactLayout, moveCard, resizeCard, sizeAt, type GridBox, type GridItem } from "@/lib/calc";
+import { GRID_COLS, GRID_MIN, cellAt, clampLayout, compactLayout, moveCard, resizeCard, sizeAt, type GridBox, type GridItem } from "@/lib/calc";
 import type { Card, Layout } from "@/lib/types";
 
 /** 카드의 최소 높이(칸): 둥근 그림 카드(둥근 차트·도넛 KPI·게이지)는 ROUND_MIN_H, 나머지는 GRID_MIN */
@@ -29,12 +29,14 @@ export type Drag = {
   startResize: (e: ReactPointerEvent, id: string) => void;
 };
 
-// 격자 한 칸의 크기: left·top(격자 안쪽 왼쪽 위), col·row(칸 하나 + 간격의 길이), gap
+// 칸 하나의 크기와 간격은 화면 CSS(#dash의 --grid-gap·--grid-row)에서 읽는다
 export function metrics(grid: HTMLElement): GridBox {
   const rect = grid.getBoundingClientRect(), css = getComputedStyle(grid);
-  const padL = parseFloat(css.paddingLeft) || 0, padR = parseFloat(css.paddingRight) || 0, gap = parseFloat(css.columnGap) || GRID_GAP;
+  const gap = parseFloat(css.columnGap), rowH = parseFloat(css.gridAutoRows);
+  if (!Number.isFinite(gap) || !Number.isFinite(rowH)) throw new Error("대시보드 격자의 간격·줄 높이를 읽지 못했어요.");
+  const padL = parseFloat(css.paddingLeft) || 0, padR = parseFloat(css.paddingRight) || 0;
   const colW = (rect.width - padL - padR - gap * (GRID_COLS - 1)) / GRID_COLS;
-  return { left: rect.left + padL, top: rect.top + (parseFloat(css.paddingTop) || 0), col: colW + gap, row: GRID_ROW + gap, gap };
+  return { left: rect.left + padL, top: rect.top + (parseFloat(css.paddingTop) || 0), col: colW + gap, row: rowH + gap, gap };
 }
 
 export function useDrag(grid: RefObject<HTMLElement | null>, items: GridItem[], commit: (layouts: Record<string, Layout>) => void): Drag {

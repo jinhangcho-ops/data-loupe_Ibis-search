@@ -2,7 +2,7 @@
 // Recharts 차트도 SVG라 차트·SVG·HTML 카드를 모두 같은 길로 그린다: 화면의 카드 몸통을 복사해 계산된 스타일을 박고 SVG foreignObject로 직렬화 → Image → canvas.
 // 그림 모드(밝게·어둡게)는 data-theme을 잠깐 바꿔 그 모드의 계산된 색을 박는다. 몸통은 화면 크기 그대로 그리고 그림 칸에 비율을 지켜 맞춘다(fitRect).
 // 모두 브라우저에서만(단추를 눌렀을 때) 부른다.
-import { fitRect, PICTURE_HEIGHT, REPORT, reportLayout, TITLE_BAND } from "./layout";
+import { fitRect, PICTURE_HEIGHT, REPORT, reportBox, reportLayout, TITLE_BAND } from "./layout";
 import { gridItems } from "@/components/grid/useDrag";
 import type { Card } from "@/lib/types";
 
@@ -116,7 +116,10 @@ export async function cardPicture(box: HTMLElement, title: string, mode: string,
 
 /** 보고서 canvas(옛 reportCanvas): 제목 줄 + 카드마다 격자 자리의 상자(이름 줄 + 그림). 그리지 못한 카드는 이유 글만 */
 export async function reportCanvas(cards: Card[], title: string, mode: string, scale = 2) {
-  const colors = themeColors(mode), lay = reportLayout(gridItems(cards));  // 화면 격자와 같은 자리(둥근 카드 최소 높이 포함)
+  const grid = document.querySelector<HTMLElement>(".board.grid");
+  if (!grid) throw new Error("화면에 대시보드 격자가 없어 보고서를 그리지 못했어요.");
+  const css = getComputedStyle(grid), box = reportBox(name => css.getPropertyValue(name));
+  const colors = themeColors(mode), lay = reportLayout(gridItems(cards), box);  // 화면 격자와 같은 자리(둥근 카드 최소 높이 포함)
   const out = Object.assign(document.createElement("canvas"), { width: lay.width * scale, height: lay.height * scale });
   const ctx = out.getContext("2d")!;
   const font = (px: number, weight = 400) => `${weight} ${px * scale}px ${FONT}`;
@@ -125,30 +128,30 @@ export async function reportCanvas(cards: Card[], title: string, mode: string, s
   ctx.fillStyle = colors.ink;
   ctx.font = font(22, 700);
   ctx.textBaseline = "middle";
-  ctx.fillText(title, REPORT.pad * scale, (REPORT.head / 2 + 4) * scale, (lay.width - REPORT.pad * 2) * scale);
+  ctx.fillText(title, box.pad * scale, (REPORT.head / 2 + 4) * scale, (lay.width - box.pad * 2) * scale);
   ctx.fillStyle = colors.text;
-  ctx.font = font(12);
+  ctx.font = font(box.small);
   ctx.textAlign = "right";
-  ctx.fillText(new Date().toLocaleDateString("sv"), (lay.width - REPORT.pad) * scale, (REPORT.head / 2 + 4) * scale);
+  ctx.fillText(new Date().toLocaleDateString("sv"), (lay.width - box.pad) * scale, (REPORT.head / 2 + 4) * scale);
   ctx.textAlign = "left";
-  const say = (text: string, x: number, y: number, w: number) => { ctx.fillStyle = colors.text; ctx.font = font(12); ctx.fillText(text, x + 14 * scale, y + (REPORT.band + 20) * scale, w - 28 * scale); };
+  const say = (text: string, x: number, y: number, w: number) => { ctx.fillStyle = colors.text; ctx.font = font(box.small); ctx.fillText(text, x + box.padX * scale, y + (box.padY + REPORT.band + 20) * scale, w - 2 * box.padX * scale); };
   for (const card of cards) {
     const r = lay.rects[card.id], [x, y, w, h] = [r.x * scale, r.y * scale, r.w * scale, r.h * scale];
     ctx.fillStyle = colors.card;
     ctx.strokeStyle = colors.line;
     ctx.lineWidth = scale;
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 12 * scale);
+    ctx.roundRect(x, y, w, h, box.radius * scale);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = colors.ink;
     ctx.font = font(14, 600);
-    ctx.fillText(card.title, x + 14 * scale, y + REPORT.band / 2 * scale, w - 28 * scale);
-    const bodyH = r.h - REPORT.band - 8, bodyW = r.w - 16, box = cardBox(cards, card.id);
-    if (!box || bodyH < 20) { say(box ? "" : "화면에 없는 카드예요.", x, y, w); continue; }
+    ctx.fillText(card.title, x + box.padX * scale, y + (box.padY + REPORT.band / 2) * scale, w - 2 * box.padX * scale);
+    const bodyH = r.h - 2 * box.padY - REPORT.band, bodyW = r.w - 2 * box.padX, cardEl = cardBox(cards, card.id);
+    if (!cardEl || bodyH < 20) { say(cardEl ? "" : "화면에 없는 카드예요.", x, y, w); continue; }
     try {
-      const img = await cardImage(box), f = fitRect(img.width, img.height, bodyW, bodyH);
-      ctx.drawImage(img, x + (8 + f.x) * scale, y + (REPORT.band + f.y) * scale, f.w * scale, f.h * scale);
+      const img = await cardImage(cardEl), f = fitRect(img.width, img.height, bodyW, bodyH);
+      ctx.drawImage(img, x + (box.padX + f.x) * scale, y + (box.padY + REPORT.band + f.y) * scale, f.w * scale, f.h * scale);
     } catch (e) { say((e as Error).message, x, y, w); }
   }
   return out;

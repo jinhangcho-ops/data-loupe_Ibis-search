@@ -93,7 +93,7 @@ def test_no_px_font_sizes_or_radius_literals():
         assert not re.findall(r"font-size:\s*[\d.]+px", css), path.name
         assert not re.findall(r"\bfont:\s*[\d.]+px", css), path.name
         for v in re.findall(r"border-radius:\s*([^;}]+)", css):
-            rest = re.sub(r"var\(--r-(?:ctl|card|pill)\)|\b0\b|50%", "", v).strip()
+            rest = re.sub(r"var\(--r-(?:ctl|card|pill|board)\)|\b0\b|50%", "", v).strip()
             assert not rest, (path.name, v)
 
 

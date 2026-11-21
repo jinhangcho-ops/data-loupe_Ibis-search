@@ -1,11 +1,13 @@
 /* 대시보드 편집 화면(dashboard.html): 12칸 격자, 카드 모음(왼쪽), 카드 설정(오른쪽), 차트 선반, 카운터 경고 */
-.d-main { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:start; gap:.75rem; padding:0 1.125rem 1.125rem; }
+/* B1 간격·모양(참조 dashboard/src/report.css 69·89·94·184줄): 대시보드(#dash) 안에서만 쓰는 고정 값 한 벌. 끌기(useDrag.metrics)는 계산된 격자 스타일을, 보고서 그림(report/layout.ts REPORT_TOKENS)은 이 변수를 읽는다 */
+#dash { --page-x:1.25rem; --grid-gap:.75rem; --grid-row:2.5rem; --card-py:1rem; --card-px:1.125rem; --r-board:1.125rem; --fs-xs:.6875rem; }
+.d-main { display:grid; grid-template-columns:auto minmax(0, 1fr) auto; align-items:start; gap:var(--grid-gap); column-gap:0; padding:0 var(--page-x) 1.5rem; }  /* 칸 사이 간격은 옆 칸(aside)의 margin이 낸다: 옆 칸이 없을 때 빈 칸의 간격만큼 격자가 안으로 밀리지 않게 */
 .d-main > aside { position:sticky; top:0; width:min(17.5rem, 28vw); max-height:calc(100vh - 10rem); overflow:auto; border:1px solid var(--line); border-radius:var(--r-card); background:var(--card); padding:.75rem .875rem; }
 .d-main > div { min-width:0; grid-column:2; }  /* 칸을 정해 둔다: 카드 모음(1칸)을 닫아도 보드가 가운데, 설정 패널이 오른쪽에 남는다 */
-.d-main > #d-gallery-box { grid-column:1; }
-.d-main > #d-panel { grid-column:3; }
+.d-main > #d-gallery-box { grid-column:1; margin-right:var(--grid-gap); }
+.d-main > #d-panel { grid-column:3; margin-left:var(--grid-gap); }
 /* 카드 추가 서랍(AddCardMenu, fill이 아닐 때 #d-add): 카드 설정 패널과 같은 오른쪽 칸. 위 제목·닫기, 가운데만 스크롤, 아래 [카드 추가]·[닫기] 고정 */
-.d-main > #d-add { grid-column:3; position:sticky; top:0; width:min(22.5rem, 34vw); max-height:calc(100vh - 10rem); display:flex; flex-direction:column; gap:var(--sp-2); overflow:hidden; border:1px solid var(--line); border-radius:var(--r-card); background:var(--card); padding:var(--sp-3) var(--sp-4); }
+.d-main > #d-add { grid-column:3; margin-left:var(--grid-gap); position:sticky; top:0; width:min(22.5rem, 34vw); max-height:calc(100vh - 10rem); display:flex; flex-direction:column; gap:var(--sp-2); overflow:hidden; border:1px solid var(--line); border-radius:var(--r-card); background:var(--card); padding:var(--sp-3) var(--sp-4); }
 #d-add .phead { flex:none; }
 #d-add .d-add-body { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:var(--sp-2); }
 #d-add .d-add-foot { flex:none; margin:0; padding-top:var(--sp-2); border-top:1px solid var(--line); }
@@ -23,9 +25,13 @@
 .d-main > aside.hidden { display:none; }
 .d-alerts { margin:0 1.75rem .5rem; padding:.5rem .75rem; border:1px solid var(--err); border-radius:var(--r-card); color:var(--err); font-size:var(--fs-sm); }
 .d-alerts.hidden { display:none; }
-.board.grid { grid-template-columns:repeat(12, minmax(0, 1fr)); grid-auto-rows:2.5rem; gap:.625rem; align-items:stretch; padding-left:.625rem; padding-right:.625rem; }
+#dash :is(.tool, .big, .board-ctl), #dash > [id^="err-"] { padding-left:var(--page-x); padding-right:var(--page-x); }
+#dash .d-alerts { margin-left:var(--page-x); margin-right:var(--page-x); }
+#dash .d-tool > :is(button, .btn), #dash .d-tool > .drop > button, #dash .d-tool .d-per .row > :is(input, .btn), #dash #d-filters > :is(input, button), #dash #d-filters > label > select { height:var(--h-sm); padding-top:0; padding-bottom:0; }
+.board.grid { grid-template-columns:repeat(12, minmax(0, 1fr)); grid-auto-rows:var(--grid-row); gap:var(--grid-gap); align-items:stretch; padding:.375rem 0 0; }
 .board.grid.drop-ready { outline:.125rem dashed var(--accent); outline-offset:-.25rem; }
-.board.grid .bcard { display:flex; flex-direction:column; min-height:0; overflow:hidden; position:relative; cursor:default; }
+.board.grid .bcard { display:flex; flex-direction:column; min-height:0; overflow:hidden; position:relative; cursor:default; padding:var(--card-py) var(--card-px); border-radius:var(--r-board); }
+.board.grid .bcard.sel { padding-left:calc(var(--card-px) - .1875rem); }
 .board.grid .bhead.movable { cursor:grab; touch-action:none; user-select:none; }  /* 머리는 늘 한 줄: 이름이 줄어들고(말줄임) ⚙·×는 같은 줄 오른쪽. 값을 구한 시각은 머리의 title */
 .board.grid .bcard.dragging { opacity:.8; box-shadow:0 .5rem 1.5rem rgba(0, 0, 0, .25); z-index:2; }
 .board.grid .bhead.movable .btitle:not(:focus) { cursor:grab; }

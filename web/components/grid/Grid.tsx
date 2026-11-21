@@ -1,6 +1,6 @@
 "use client";
 // N3 — 카드 격자와 카드 상자(옛 dash_edit.js EditBoard·board.js cardBox). N7: 카드 모음 놓기(옛 dash_panel.js acceptGalleryDrops·dashboard.html addShell), 비교 문장·다시 구하지 못한 이유.
-// 12칸 × 40px 격자(dash_edit.css .board.grid)에 card.layout대로 놓는다. 편집 모드에서만 제목 줄 끌기·⚙·×·크기 손잡이가 있다(대시보드만 보기에서는 고르기·편집 없음).
+// 12칸 격자(dash_edit.css .board.grid)에 card.layout대로 놓는다. 편집 모드에서만 제목 줄 끌기·⚙·×·크기 손잡이가 있다(대시보드만 보기에서는 고르기·편집 없음).
 // 카드를 누르면 고른 카드(state.picked, 여러 개, .sel)에 넣고 빼고(옛 board.toggle), 넣을 때는 그 카드를 설정 패널 대상(selected, 편집 모드에서 .editing)으로도 삼는다.
 // 제목 줄의 ⤢(보는 곳·만드는 곳 모두)를 누르면 그 카드를 큰 창(Pop .zoom-box)에 다시 그린다. 카드를 누르는 것은 고르기라 그대로 둔다.
 // 끌기·크기는 useDrag가 미리보기를 주고, 놓으면 dispatch({type:"cards"})로 layout을 바꾼다(세로 압축은 calc가 한다). 카드가 없어도 격자를 그려 카드 모음을 놓을 수 있다.

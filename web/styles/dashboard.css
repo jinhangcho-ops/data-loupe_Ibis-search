@@ -23,7 +23,7 @@
 body.dash-only :is(.rail, .topbar, .nofeature, .big, .board-ctl:not(#d-filters, #d-pages), .d-tool > .d-sep, .d-tool > .ml-auto, #d-only, #d-build, #d-demo-bar, #d-more, #err-dash, #d-gallery-box, #d-panel, .bresize, .bhead .bcheck, .bhead button, .bbadge) { display:none !important; }
 body.dash-only:has(.rail) { padding-left:0; }
 /* 도구 줄이 위쪽 줄이 된다: 왼쪽에 이름·연결 이름(알약), 오른쪽에 기간·필터·[최신화]·화면 모드·[보기 끝내기]. 스크롤해도 위에 붙어 있다 */
-body.dash-only .d-tool { position:sticky; top:0; z-index:50; padding:.625rem 1.5rem; margin-bottom:1.25rem; background:var(--bg); border-bottom:1px solid var(--edge); box-shadow:0 .25rem .5rem -.125rem var(--sh-d); }
+body.dash-only .d-tool { position:sticky; top:0; z-index:50; min-height:3.25rem; padding-top:.375rem; padding-bottom:.375rem; margin-bottom:1.25rem; background:var(--bg); border-bottom:1px solid var(--edge); box-shadow:0 .25rem .5rem -.125rem var(--sh-d); }
 .d-tool .d-name { font-size:var(--fs-xl); font-weight:700; letter-spacing:-.025em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
 .d-tool .d-conn { padding:.125rem .625rem; border-radius:var(--r-pill); background:var(--accent-bg); color:var(--accent); font-size:var(--fs-sm); font-weight:700; white-space:nowrap; }
 body.dash-only .d-tool .d-per { margin-left:auto; }
