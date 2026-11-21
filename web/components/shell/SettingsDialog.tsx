@@ -36,7 +36,7 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
   const { dispatch } = useDash();
   const consts = useConstants();
   const { period, open, flush } = useShell();
-  const [palette, setPalette] = useState(dash.palette.join(", "));
+  const [mark, setMark] = useState(dash.palette[0] ?? ""), [hi, setHi] = useState(dash.palette[1] ?? "");
   const [palErr, setPalErr] = useState("");
   const [path, setPath] = useState("");
   const [targets, setT] = useState<Targets | null>(null);
@@ -69,12 +69,12 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
     } catch (e) { setWordMsg({ text: (e as Error).message }); } finally { setBusy(false); }
   };
 
-  // 팔레트: HEX를 쉼표로 나눠 적는다. 틀린 색이 있으면 이유를 보이고 이전 팔레트를 그대로 둔다
-  const applyPalette = (found: string[]) => {
-    const bad = found.filter(c => !HEX.test(c)), max = consts?.dash.max_palette ?? 20;
-    if (bad.length || found.length > max) return setPalErr(bad.length ? `색 코드가 아니에요: ${bad.join(", ")}. #11706f처럼 적어 주세요. 이전 색은 그대로예요.` : `색은 ${max}개까지 넣을 수 있어요. 이전 색은 그대로예요.`);
+  // 그림 색: 표시색·강조색 두 개만(dash.palette = [표시색, 강조색]). 틀린 색이 있으면 이유를 보이고 이전 색을 그대로 둔다
+  const applyPalette = (m: string, h: string) => {
+    const found = [m.trim(), h.trim()].filter(Boolean), bad = found.filter(c => !HEX.test(c));
+    if (bad.length || (h.trim() && !m.trim())) return setPalErr(bad.length ? `색 코드가 아니에요: ${bad.join(", ")}. #6250d6처럼 적어 주세요. 이전 색은 그대로예요.` : "표시색도 적어 주세요. 이전 색은 그대로예요.");
     setPalErr("");
-    setPalette(found.join(", "));
+    setMark(m.trim()); setHi(h.trim());
     dispatch({ type: "meta", patch: { palette: found } });
   };
   // 통화 기호: 비우면 서버 기본값. 글자 수·못 쓰는 글자는 서버(settings.valid)가 검사해 그 문장을 보인다
@@ -121,13 +121,14 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
     <>
       <PeriodBar />
       <div className="err" role="alert">{period.settingsError}</div>
-      <h4>카드 색</h4>
+      <h4>그림 색</h4>
       <div className="row">
-        <input value={palette} onChange={e => setPalette(e.target.value)} placeholder="#11706f, #e8590c" aria-label="카드 색"
-          title="색 코드를 쉼표로 나눠 적어요. 카드에서 따로 정한 색이 먼저 쓰이고, 비워 두면 기본 색을 써요" />
-        <button className="btn" onClick={() => applyPalette(palette.split(/[\s,]+/).filter(Boolean))}>적용</button>
-        <button className="ghost" onClick={() => applyPalette(consts?.dash.palette ?? [])}>기본 색 넣기</button>
-        <button className="ghost" onClick={() => applyPalette([])}>비우기</button>
+        <label className="hint">표시색 <input value={mark} onChange={e => setMark(e.target.value)} placeholder="#6250d6" aria-label="표시색"
+          title="막대·선·조각의 색이에요. 여러 개를 나눠 보일 때는 이 색을 연하게·진하게 바꿔 써요. 비워 두면 기본 색을 써요" /></label>
+        <label className="hint">강조색 <input value={hi} onChange={e => setHi(e.target.value)} placeholder="#00968f" aria-label="강조색"
+          title="눈에 띄어야 하는 것 하나에 쓰는 색이에요. 비워 두면 기본 색을 써요" /></label>
+        <button className="btn" onClick={() => applyPalette(mark, hi)}>적용</button>
+        <button className="ghost" onClick={() => applyPalette("", "")}>기본 색으로</button>
       </div>
       <div className="err">{palErr}</div>
       <h4>목표 파일</h4>

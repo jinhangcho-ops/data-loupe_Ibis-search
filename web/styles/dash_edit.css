@@ -28,7 +28,8 @@
 .board.grid .bcard { display:flex; flex-direction:column; min-height:0; overflow:hidden; position:relative; cursor:default; }
 .board.grid .bhead.movable { cursor:grab; touch-action:none; user-select:none; }  /* 머리는 늘 한 줄: 이름이 줄어들고(말줄임) ⚙·×는 같은 줄 오른쪽. 값을 구한 시각은 머리의 title */
 .board.grid .bcard.dragging { opacity:.8; box-shadow:0 .5rem 1.5rem rgba(0, 0, 0, .25); z-index:2; }
-.board.grid .bcard.dragging .bhead.movable { cursor:grabbing; }
+.board.grid .bhead.movable .btitle:not(:focus) { cursor:grab; }
+.board.grid .bcard.dragging .bhead.movable, .board.grid .bcard.dragging .btitle { cursor:grabbing; }
 .board.grid .bcard.editing { border-color:var(--accent); }
 .board.grid .bbody { flex:1; aspect-ratio:auto; max-height:none; min-height:2.5rem; }  /* 아주 좁은 카드에서도 그림 자리 한 줄은 남긴다 */
 .board.grid .bwhen { flex:0 1 auto; min-height:0; overflow:hidden; }  /* 자리가 모자라면 아래 안내가 줄어든다(그림과 겹치지 않게) */
@@ -40,6 +41,14 @@
 .gal-tile { display:flex; flex-direction:column; gap:.125rem; border:1px solid var(--line); border-radius:var(--r-card); padding:.375rem .5rem; cursor:grab; background:var(--bg); font-size:var(--fs-xs); }
 .gal-tile:hover { border-color:var(--accent); }
 /* 그림으로 고르기 화면(Toolbar의 .pick-box > Gallery pics): 넓은 창에 그림 타일을 여러 줄로 */
+.modal-box.zoom-box { width:min(75rem, 94vw); height:88vh; display:flex; flex-direction:column; }  /* 카드 크게 보기: 그림이 남는 높이를 다 쓴다 */
+.zoom-box .head, .row-box .head { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }  /* 제목은 왼쪽, [닫기]는 오른쪽 끝 */
+.zoom-box .bbody { flex:1; min-height:0; aspect-ratio:auto; max-height:none; }
+.row-box dl { display:grid; grid-template-columns:max-content 1fr; gap:.375rem .875rem; margin:0; }  /* 표 줄 상세: 컬럼 이름 · 값 */
+.row-box dt { color:var(--muted); }
+.row-box dd { margin:0; overflow-wrap:anywhere; }
+.cbox tbody tr.pickable { cursor:pointer; }
+.cbox tbody tr.pickable:hover { background:var(--line); }
 .modal-box.pick-box { width:min(75rem, 94vw); height:88vh; }
 .gal-pics .gal { grid-template-columns:repeat(auto-fill, minmax(13.75rem, 1fr)); gap:.75rem; }
 .gal-pics .gal-tile { cursor:pointer; padding:.5rem; gap:.25rem; }

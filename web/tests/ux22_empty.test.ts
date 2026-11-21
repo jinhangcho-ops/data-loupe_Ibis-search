@@ -7,7 +7,7 @@ const src = (path: string) => readFileSync(fileURLToPath(new URL("../" + path, i
 
 describe("빈 대시보드: 시작 안내와 카드 추가 서랍이 나란히", () => {
   it("시작 안내(.board-empty)는 .d-main의 가운데 칸에서 격자 바로 위에 있다", () => {
-    const page = src("app/dashboard/page.tsx");
+    const page = src("components/shell/DashboardScreen.tsx");
     const main = page.indexOf('<div className="d-main">'), empty = page.indexOf('className="board-empty'), grid = page.indexOf("<Grid />"), add = page.indexOf("<AddCardMenu");
     expect(main).toBeGreaterThan(-1);
     expect(empty).toBeGreaterThan(main);

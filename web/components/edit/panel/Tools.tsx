@@ -9,7 +9,7 @@ import { seriesKit } from "@/components/cards/chart/series";
 import { useTheme } from "@/components/cards/svg/common";
 import { funnelColors, flowDropout, GAP_STATS } from "@/components/cards/svg/__pure__";
 import { cardRequest, chartPoints, computeCard, labels as fetchLabels } from "@/lib/api";
-import { anaView, HEX, POINT_TYPES } from "@/lib/calc";
+import { anaView, HEX, POINT_TYPES, shades } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { pickColor } from "@/lib/series";
 import { computedUpdate, useDash } from "@/lib/store";
@@ -403,6 +403,11 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
               <input type="checkbox" aria-label="표로 보기" checked={view.data_table === true} onChange={e => (e.target.checked ? setView({ data_table: true }) : without("data_table"))} />
             </label>
           )}
+          {CHART_KINDS.includes(card.kind) && look !== "ana" && look !== "points" && (
+            <label className="hint bset" title="보는 곳에서 이 카드의 막대·조각을 누르면 그 가로축 값으로 모든 카드를 걸러요. 다시 누르면 풀려요. 날짜 가로축은 안 돼요(기간으로 거르세요)">누르면 거르기
+              <input type="checkbox" aria-label="누르면 거르기" checked={view.cross === true} onChange={e => (e.target.checked ? setView({ cross: true }) : without("cross"))} />
+            </label>
+          )}
         </div>
         {autoOpen && rules.map(r => {
           const on = view.auto?.[r] !== false, name = consts.dash.auto_names[r];
@@ -450,12 +455,12 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
 // 이름마다 HEX 칸(옛 colorEditor). 틀린 값은 칸 옆에 이유를 보이고 이전 색을 그대로 둔다
 function ColorEditor({ card, shown, theme, palette, kit, onChange }: { card: Card; shown: Card; theme: string[]; palette: string[]; kit: ReturnType<typeof seriesKit>; onChange: (patch: Partial<Card>) => void }) {
   const [errs, setErrs] = useState<Record<string, string>>({});
-  const colors = { palette: palette.length ? palette : undefined, series: theme }, { group, names } = kit.colorNames(shown);
+  const colors = { palette: palette.length ? palette : undefined, series: palette.length ? shades(palette[0]) : theme }, { group, names } = kit.colorNames(shown);
   return (
     <div className="bcolors">
       {names.map((name, i) => {
         // 지도 카드: 정하지 않은 영역은 모두 바탕 색(값에 따라 진하기만 다름)
-        const now = card.kind === "geomap" && !card.colors?.[group]?.[name] ? (card.view.geo?.color as string | undefined) ?? colors.palette?.[0] ?? colors.series[0]
+        const now = card.kind === "geomap" && !card.colors?.[group]?.[name] ? (card.view.geo?.color as string | undefined) ?? colors.series[0]
           : card.kind === "funnel" ? funnelColors(card, colors.palette)[name] : pickColor(shown, group, name, colors, i);  // 퍼널은 그림과 같은 고정 색
         return (
           <div className="brow" key={name + now}>

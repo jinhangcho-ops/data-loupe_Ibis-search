@@ -497,6 +497,42 @@ def with_period(body, date, window):
     return {**body, "periods": [*(body.get("periods") or []), f"{date} {window.get('start') or ''} ~ {window.get('end') or ''}"]}
 
 
+def with_filters(card: dict, ctx: dict | None) -> tuple[dict, list[str]]:
+    """보는 사람이 고른 필터(ctx.filters = [{column, in: [값 글자]}])를 카드 조회의 조건에 더한 사본과, 이 카드에 걸지 못한 필터의 컬럼 이름들.
+    조인까지 한 테이블에 그 컬럼이 있는 필터만 건다(parse.predicate의 {column, in}). 조회(source.body)가 없는 카드에는 하나도 걸지 못한다. 저장된 카드는 건드리지 않는다."""
+    filters = (ctx or {}).get("filters") or []
+    if not isinstance(filters, list) or not all(isinstance(f, dict) and isinstance(f.get("column"), str) for f in filters):
+        raise ValueError("필터(ctx.filters)는 [{column, in: [값]}] 모양이어야 해요.")
+    body = card["source"].get("body")
+    if not filters or not isinstance(body, dict):
+        return card, [f["column"] for f in filters]
+    columns = querying.joined(body)[0].columns
+    hit = [{"column": f["column"], "in": f.get("in")} for f in filters if f["column"] in columns]
+    cut = {**card, "source": {**card["source"], "body": {**body, "conditions": [*(body.get("conditions") or []), *hit]}}} if hit else card
+    return cut, [f["column"] for f in filters if f["column"] not in columns]
+
+
+def filter_note(missed: list[str]) -> str:
+    """걸지 못한 필터를 카드 아래 안내(data.note)에 적을 문장. 없으면 빈 글."""
+    return f"필터({', '.join(missed)})는 이 카드의 테이블에 그 컬럼이 없어 걸리지 않았어요." if missed else ""
+
+
+def compute_filtered(card: dict, now: str, ctx: dict | None = None) -> dict:
+    """compute에 보는 사람의 필터(ctx.filters)를 건 것(저장하지 않는 화면 값). 걸지 못한 필터는 data.note에 적는다. 필터가 없으면 compute와 같다."""
+    cut, missed = with_filters(card, ctx)
+    data = compute(cut, now, ctx)
+    return {**data, "note": " ".join(filter(None, [data.get("note"), filter_note(missed)]))} if missed else data
+
+
+def filter_values(cards: list[dict], column: str) -> tuple[list[str], bool]:
+    """필터 칸에 보일 값 목록: 조회가 있는 카드 가운데 조인까지 한 테이블에 column이 있는 첫 카드에서 result.get_values(서로 다른 값, 더 있는지). 그런 카드가 없으면 ValueError."""
+    for card in cards:
+        body = card["source"].get("body")
+        if isinstance(body, dict) and column in (t := querying.joined(body)[0]).columns:
+            return run(lambda: result.get_values(t, column))
+    raise ValueError(f"'{column}' 컬럼이 있는 카드가 이 대시보드에 없어요.")
+
+
 OWN_PERIOD = re.compile(r"(.+?)\s+(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})")  # 카드의 기간 줄 '날짜컬럼 시작 ~ 끝'(양쪽이 날짜인 것만). 날짜를 끝에서 읽어 공백 있는 컬럼 이름도 된다
 
 

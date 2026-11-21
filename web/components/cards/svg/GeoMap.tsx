@@ -15,11 +15,11 @@ type Geo = { bounds: number[]; regions: { name: string; value: number | null; ri
 export default function GeoMap({ card, colors }: P) {
   const [lost, setLost] = useState<Set<string>>(() => new Set()), s = useRootScale(), font = FONT * s;
   const v = card.data.values as unknown as Geo, geo = (card.view.geo ?? {}) as { tiles?: boolean; color?: string }, frame = mapFrame(v.bounds, GEO_W);
-  const base = geo.color ?? colors.palette?.[0] ?? colors.series[0], fmt = cardFormat(card);
+  const base = geo.color ?? colors.series[0], fmt = cardFormat(card);
   const tiles = geo.tiles ? tilesFor(frame, tileZoom(frame)) : [], kept = tiles.filter(t => !lost.has(t.url));
   const levels = fillLevels(v.regions.map(r => r.value)), shade = geo.tiles ? 0.7 : 1;
   const nums = v.regions.map(r => r.value).filter((x): x is number => typeof x === "number"), id = "geo-" + card.id, y = frame.h - 8 - 14 * s;  // 범례: 띠 아래 글자 줄만큼 위로
-  const dot = card.colors?.series?.["점"] ?? colors.palette?.[1] ?? colors.series[1];
+  const dot = card.colors?.series?.["점"] ?? colors.hi;
   return (
     <div className="nm-well h-full">
     <svg viewBox={`0 0 ${frame.w.toFixed(1)} ${frame.h.toFixed(1)}`} preserveAspectRatio="xMidYMid meet" className="w-full h-full overflow-hidden" role="img" aria-label={card.title}>

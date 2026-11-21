@@ -31,7 +31,7 @@ MAX_IMAGE_BYTES = 8 * 1024 * 1024
 TARGET_PAGE = 100  # 목표 파일의 문제 줄을 한 번에 돌려줄 수(화면은 [이전]/[다음]으로 넘겨 본다)
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min",
-                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart", "/api/viz"})
+                    "/api/dash/refresh/status", "/api/dash/refresh/stop", "/api/period/parse", "/api/period/day", "/api/period/every", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/dashboard/build", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart", "/api/viz"})
 
 
 def with_source(card):
@@ -44,8 +44,10 @@ def with_source(card):
 def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버와 같은 상한·종류·기본 색·집계를 쓴다
     found["dash"] = {"max_cards": dash_store.MAX_CARDS, "max_dashboards": dash_store.MAX_DASHBOARDS, "max_palette": dash_store.MAX_PALETTE,
         "types": dash_store.CHART_TYPES, "time_types": dash_store.TIME_TYPES, "three_types": dash_store.THREE_D_TYPES, "units": dash_store.UNITS,
-        "palette": dash_store.DEFAULT_PALETTE, "locked": dash_store.LOCKED, "min_refresh": dash_store.MIN_REFRESH}  # 화면(web/·common.js)이 서버와 같은 상한·종류·기본 색을 쓴다
+        "locked": dash_store.LOCKED, "min_refresh": dash_store.MIN_REFRESH}  # 화면(web/·common.js)이 서버와 같은 상한·종류·기본 색을 쓴다
     found["dash"]["max_points"] = result.MAX_POINTS  # 산점도·버블의 점 수 상한
+    found["dash"]["max_filters"] = dash_store.MAX_FILTERS  # 대시보드 필터 칸 수 상한
+    found["dash"]["max_pages"] = dash_store.MAX_PAGES  # 대시보드 쪽(탭) 수 상한
     found["dash"].update(max_bins=dash_store.MAX_BINS, max_bands=dash_store.MAX_BANDS, max_cells=dash_store.MAX_CELLS)  # 히스토그램의 구간 수, 불릿 차트의 구간 수, 히트맵 칸 수 상한
     found["dash"]["merge_note"] = dash_store.MERGE_NOTE  # (Phase 17) 범위 묶기 안내 한 줄(쿼리 차트 groupPanel·카드 GroupPicker가 같은 글을 보인다)
     found["dash"].update(aggs=list(metric_file.AGGS), merge=list(sql_funcs.MERGE), agg_names=metric_file.AGG_NAMES)  # 카드 계열의 집계(함수 사전의 집계 전부), 일 값을 다시 묶을 수 있는 집계, 보이는 이름
@@ -70,6 +72,18 @@ def dashboard_page():
     if not NEXT_PAGE.is_file():  # 소스에서 web/을 빌드하지 않고 돌렸을 때. 옛 화면은 없다
         return Response(NOT_BUILT, mimetype="text/html")
     return server.next_page(NEXT_PAGE)
+
+
+BUILD_PAGE = server.NEXT_DIR / "dashboard" / "build.html"  # 만드는 곳(web/app/dashboard/build). 시험은 임시 파일로 바꿔 끼운다
+
+
+@app.get("/dashboard/build")
+def dashboard_build_page():
+    """대시보드 만드는 곳(web/out/dashboard/build.html, Next): 카드를 넣고 옮기고 고친다. /dashboard는 보기만 한다. 빌드가 없으면 NOT_BUILT."""
+    preload(*PRELOAD)
+    if not BUILD_PAGE.is_file():
+        return Response(NOT_BUILT, mimetype="text/html")
+    return server.next_page(BUILD_PAGE)
 
 
 CHART_PAGE = server.NEXT_DIR / "chart.html"  # 차트 섬(iframe). 시험은 임시 파일로 바꿔 끼운다
@@ -146,7 +160,29 @@ def card_compute():
         response = jsonify(needs_confirm=True, **found)
         response.headers["X-Needs-Confirm"] = "1"
         return response
-    return jsonify(data=dash_calc.compute(card, dt.datetime.now().isoformat(timespec="seconds"), request.json.get("ctx")), source=now)
+    return jsonify(data=dash_calc.compute_filtered(card, dt.datetime.now().isoformat(timespec="seconds"), request.json.get("ctx")), source=now)
+
+
+@app.post("/api/dash/card/filtered")
+def card_filtered():
+    """원래 행을 보이는 카드(표·최근 행)가 필터를 건 채 행을 읽을 조회: 카드의 source.body에 ctx.filters 가운데 걸 수 있는 것을 조건으로 더한 body와 걸지 못한 컬럼 이름(missed).
+    화면은 이 body로 /api/query를 부른다."""
+    card = dash_store.check_card((request.json or {}).get("card") or {})
+    if other_source(card["source"].get("key"), dash_store.current_source()):
+        raise ValueError("다른 연결에서 만든 카드라 지금은 볼 수 없어요")
+    cut, missed = dash_calc.with_filters(card, request.json.get("ctx"))
+    return jsonify(body=cut["source"].get("body"), missed=missed)
+
+
+@app.post("/api/dash/filter/values")
+def filter_values():
+    """필터 칸에 보일 값 목록 {values, more}: 저장한 대시보드(id)의 지금 연결 카드들에서 column의 서로 다른 값(dash_calc.filter_values)."""
+    body, now = request.json or {}, dash_store.current_source()
+    if not now:
+        raise ValueError("데이터에 연결하면 거를 수 있어요.")
+    cards = [c for c in dash_store.get_dashboard(body.get("id"))["cards"] if not other_source(c["source"].get("key"), now)]
+    values, more = dash_calc.filter_values(cards, dash_store.text(body.get("column"), "필터 컬럼", dash_store.MAX_FILTER_NAME, 1))
+    return jsonify(values=values, more=more)
 
 
 @app.get("/api/viz")
@@ -172,6 +208,7 @@ def chart_points():
     if other_source(body.get("source_key"), now):
         raise ValueError("이 카드는 다른 연결에서 구한 거예요. 그 연결로 바꾼 뒤 다시 구하세요.")
     body = dash_calc.with_period(body, body.get("date"), (body.get("ctx") or {}).get("range"))  # 대시보드 기간(카드 compute와 같게)
+    body = dash_calc.with_filters({"source": {"body": body}}, body.get("ctx"))[0]["source"]["body"]  # 보는 사람의 필터(걸 수 있는 것만)
     try:
         querying.runnable(body, select=False, ask=body)  # 처리 용량 확인만(BigQuery의 읽는 양, 원격에서 새로 받을 사본). 받은 사본은 points_of가 그대로 쓴다
     except querying.Confirm as e:
@@ -194,7 +231,7 @@ def cards_compute():
                 raise ValueError("다른 연결에서 구한 카드예요")
             if why := dash_refresh.scan_decision(card, ctx):  # 실시간 갱신은 묻지 않고 그 카드만 건너뛴다(최신화와 같게)
                 raise ValueError(why)
-            out.append({"id": card["id"], "data": dash_calc.compute(card, stamp, ctx)})
+            out.append({"id": card["id"], "data": dash_calc.compute_filtered(card, stamp, ctx)})
         except ValueError as e:
             out.append({"id": (one or {}).get("id", ""), "error": str(e)})
     return jsonify(results=out, seconds=round(time.monotonic() - started, 2))

@@ -118,7 +118,7 @@ def test_query_screen_text_not_faint():
 # ---------- 16B 왼쪽 메뉴 ----------
 
 RAIL = [("/", "", "홈"), ("/search", "query", "쿼리"), ("/prep", "prep", "분석"), ("/dashboard", "dashboard", "대시보드"),
-        ("/collect", "collect", "수집"), ("/integrations", "integrations", "연동")]
+        ("/dashboard/build", "dashboard", "대시보드 만들기"), ("/collect", "collect", "수집"), ("/integrations", "integrations", "연동")]
 
 
 def test_rail_markup_and_topbar_order():
@@ -167,7 +167,7 @@ def test_topbar_tsx_matches_status():
     assert 'PANEL_PARAM = "panel"' in bar and "href={`/?${PANEL_PARAM}=feat`}" in bar
     assert "보낼 곳 설정" not in bar and "PANELS" not in bar and 'className="pages"' not in bar
     assert 'id="crumb"' in bar and 'id="crumb-text"' in bar and 'id="theme"' in bar
-    tabs = re.findall(r'\["(/\w*)", "(\w*)", "([^"]+)", "[^"]*", \w+\]', bar)
+    tabs = re.findall(r'\["(/[\w/]*)", "(\w*)", "([^"]+)", "[^"]*", \w+\]', bar)
     assert tabs == RAIL
     assert bar.index('<nav className="rail"') < bar.index('<header className="topbar">')
 
@@ -364,7 +364,7 @@ def test_home_layout():
     assert 'id="home-name"' in main and 'id="home-state"' in main and 'id="home-conn"' in main  # 지금 연결 줄: 이름 · 꼬리표 · 단추
     assert "<!--include core/connect.html-->" not in main and html.index("</aside>") < html.index("<!--include core/connect.html-->")  # 연결 창은 첫 화면 칸 밖(막 위에 뜬다)
     go = between("home.html", '<nav class="home-go"', "</nav>")
-    assert re.findall(r'href="(/\w+)" data-feature="(\w+)"', go) == [(h, f) for h, f, _ in RAIL[1:]]
+    assert re.findall(r'href="(/\w+)" data-feature="(\w+)"', go) == [(h, f) for h, f, _ in RAIL[1:] if h != "/dashboard/build"]  # 첫 화면 카드는 기능마다 하나(만드는 곳은 왼쪽 메뉴에만)
     aside = between("home.html", '<aside class="home-recent"', "</aside>")
     assert 'id="recent-list"' in aside and 'id="recent-none"' in aside and 'id="msg-recent"' in aside
     # 최근 연결 카드는 왼쪽 칸과 같은 높이로 늘고, 목록(날짜 폴더 포함)은 카드 안에서 굴린다: 폴더를 펼쳐도 카드가 커지지 않는다
@@ -469,22 +469,23 @@ def test_use_add_card_exists():
 
 def test_toolbar_edit_only_tools():
     bar = web("components/shell/Toolbar.tsx")
-    assert re.search(r'\{state\.editing && \(\s*<div className="drop" ref=\{drop\}', bar)
-    # 대시보드 설정은 [더 보기] 메뉴 안에 있고 편집을 켜지 않아도 열린다
+    assert re.search(r'\{build && \(\s*<div className="drop" ref=\{drop\}', bar)  # [+ 카드 ▾]는 만드는 곳에만
+    assert "편집 끝내기" not in bar and 'id="d-view"' in bar and 'id="d-build"' in bar  # [편집] 단추 대신 두 곳을 오가는 단추
+    # 대시보드 설정은 [더 보기] 메뉴 안에 있다(만드는 곳)
     assert re.search(r'\n\s*<button role="menuitem"[^\n]*setMenu\(false\); setSettings\(true\);[^\n]*>대시보드 설정</button>', bar) and not re.search(r'state\.editing && <button[^\n]*대시보드 설정', bar)
-    assert ">설정</button>" not in bar and "<AddCardMenu" not in bar and "conn.label" not in bar
+    assert ">설정</button>" not in bar and "<AddCardMenu" not in bar and bar.count("conn.label") == 1  # 연결 이름은 [대시보드만 보기]의 위쪽 줄에만
     assert 'setMenu(false); dispatch({ type: "select", id: null }); setAddOpen(true);' not in bar and bar.count(">카드 추가</button>") == 1  # 메뉴 안의 같은 일을 하는 [카드 추가]는 뺐다(강조 단추 하나만)
     assert "}, [menu]);" in bar and "[menu, addOpen, setAddOpen]" not in bar
-    assert "if (state.editing) setAddOpen(false);" in bar
     assert "const add = useAddCard();" in bar
 
 
 def test_dashboard_drawer_slot():
-    src = web("app/dashboard/page.tsx")
+    src = web("components/shell/DashboardScreen.tsx")
     assert "const add = useAddCard();" in src
     assert "{addOpen && !dashOnly ? <AddCardMenu open onClose={() => setAddOpen(false)} onAdd={add} /> : <CardPanel" in src
     assert "useEffect(() => { if (state.selected) setAddOpen(false); }, [state.selected, setAddOpen]);" in src
-    assert '<b>{state.dash?.name || "대시보드"}</b><span className="d-conn"' in src
+    assert '<b>{state.dash?.name || "대시보드"}</b><span className="hint ml-[12px]" id="d-state"' in src
+    assert '<span className="d-conn" title="지금 연결된 데이터">' in web("components/shell/Toolbar.tsx")  # 연결 이름은 [대시보드만 보기]의 위쪽 줄에
     assert 'onClick={e => { e.stopPropagation(); dispatch({ type: "select", id: null }); setAddOpen(true); }}' in src
 
 

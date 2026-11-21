@@ -55,7 +55,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           # 대시보드 화면은 Next 빌드 결과(web/out)뿐이다. 빠진 채 묶이면 대시보드가 빈 안내만 보이므로 빌드를 멈춘다.
-          if (-not (Test-Path web/out/dashboard.html)) { Write-Host "web/out이 없어요: npm ci --prefix web 뒤 npm run build --prefix web"; exit 1 }
+          if (-not ((Test-Path web/out/dashboard.html) -and (Test-Path web/out/dashboard/build.html))) { Write-Host "web/out이 없어요: npm ci --prefix web 뒤 npm run build --prefix web"; exit 1 }
           # exe에 넣을 DB는 core/drivers.py의 DRIVERS에서 가져온다. Java가 필요한 pyspark·flink는 뺀다.
           $drivers = (python -c "from core.drivers import DRIVERS; print(' '.join(f'--collect-submodules ibis.backends.{name} --collect-submodules {v[1]}' for name, v in DRIVERS.items() if v[-1] != 'java'))") -split ' '
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

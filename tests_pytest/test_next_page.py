@@ -23,7 +23,7 @@ def test_not_built_says_how_to_build(client, monkeypatch, tmp_path):
 def test_spec_requires_web_out():
     """exe 빌드는 web/out을 늘 넣고, 없으면 멈춘다(옛 화면이 없어 빠진 채 묶이면 대시보드가 빈다)."""
     build = (ROOT / ".github/workflows/build-exe.yml").read_text(encoding="utf-8")
-    assert '--add-data "web/out:web/out"' in build and "if (-not (Test-Path web/out/dashboard.html)) {" in build
+    assert '--add-data "web/out:web/out"' in build and "if (-not ((Test-Path web/out/dashboard.html) -and (Test-Path web/out/dashboard/build.html))) {" in build
     assert build.index("Test-Path web/out/dashboard.html") < build.index("pyinstaller desktop.py")
 
 
@@ -40,6 +40,22 @@ def test_next_dashboard(client, monkeypatch, tmp_path):
     assert any(h.startswith("key=") for h in r.headers.getlist("Set-Cookie"))
     legacy = client.get("/dashboard?legacy=1")  # 예전 비교용 주소도 Next 화면
     assert "/next/_next/a.js" in legacy.text and "'strict-dynamic'" in legacy.headers["Content-Security-Policy"]
+
+
+def test_build_page_is_its_own_file(client, monkeypatch, tmp_path):
+    """만드는 곳(/dashboard/build)은 web/out/dashboard/build.html을 내려주고, 없으면 빌드 안내. 조회 중에도 열린다(FREE). 왼쪽 메뉴에 두 곳이 다 있다."""
+    monkeypatch.setattr(dash_app, "BUILD_PAGE", tmp_path / "없음.html")
+    assert "대시보드 화면이 빌드되지 않았어요" in client.get("/dashboard/build").text
+    page = tmp_path / "build.html"
+    page.write_text('<html><body><p id="only-build"></p><script>1</script></body></html>', encoding="utf-8")
+    monkeypatch.setattr(dash_app, "BUILD_PAGE", page)
+    monkeypatch.setattr(dash_app, "NEXT_PAGE", tmp_path / "없음.html")
+    r = client.get("/dashboard/build")
+    assert r.status_code == 200 and 'id="only-build"' in r.text and f'<script nonce="{csp_nonce(r)}"' in r.text
+    assert 'id="only-build"' not in client.get("/dashboard").text
+    assert {"/dashboard", "/dashboard/build"} <= server.FREE
+    rail = (ROOT / "static/core/status.html").read_text(encoding="utf-8")
+    assert '<a href="/dashboard" data-feature="dashboard"' in rail and '<a href="/dashboard/build" data-feature="dashboard"' in rail and "<span>대시보드 만들기</span>" in rail
 
 
 def test_next_assets_served_from_web_out(client, monkeypatch, tmp_path):

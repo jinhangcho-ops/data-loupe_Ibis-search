@@ -8,8 +8,6 @@
 .settings-box .row input { flex:1; min-width:0; }
 .settings-box .set-more > summary { cursor:pointer; color:var(--muted); font-weight:600; min-height:1.5rem; }  /* 접힌 묶음(카드 추가 서랍의 [더 많은 설정]과 같은 모양) */
 .settings-box .set-more[open] { display:flex; flex-direction:column; gap:.75rem; }
-/* 연결 이름은 바로 위 줄(.topbar #crumb)에 이미 있다. 위 줄이 숨는 [대시보드만 보기]에서만 제목 옆에 보인다 */
-body:not(.dash-only) .big .d-conn { display:none; }
 /* KPI 값(P15): 상자 폭(아이콘 자리를 뺀)을 글자 폭(--n, Kpi가 textUnits로 어림: 숫자 1·한글 1/0.62)으로 나눈 크기와 상자 높이(보조 줄 --kpi-rest를 뺀)로 맞춘 크기 중 작은 것. 편집 중 좁은 칸에서 "12,2…"로 잘리지 않게.
    가로·세로 가운데, 비교 문장·짝은 아래에 붙는다. fit-center(기본)는 56px까지, fit-fill은 160px까지 키운다. lay-right(P16)는 추이선이 값 오른쪽(값 폭 60%) */
 .cbox.kpi { container-type:size; --kpi-rest:6rem; --kpi-max:3.5rem; --kpi-w:1; }
@@ -22,13 +20,25 @@ body:not(.dash-only) .big .d-conn { display:none; }
 .cbox.kpi .kpi-foot { margin-top:auto; display:flex; flex-direction:column; align-items:center; gap:.125rem; text-align:center; }
 .cbox.kpi .kpi-foot:empty { display:none; }
 /* 대시보드만 보기: 메뉴·도구·패널과 카드의 선택·설정·닫기·크기 손잡이를 숨긴다. 차트의 값 상자 같은 보는 기능은 남는다 */
-body.dash-only :is(.rail, .topbar, .nofeature, .d-tool, .board-ctl, #d-state, #err-dash, #d-gallery-box, #d-panel, .bresize, .bhead .bcheck, .bhead button, .bbadge) { display:none !important; }
+body.dash-only :is(.rail, .topbar, .nofeature, .big, .board-ctl:not(#d-filters, #d-pages), .d-tool > .d-sep, .d-tool > .ml-auto, #d-only, #d-build, #d-demo-bar, #d-more, #err-dash, #d-gallery-box, #d-panel, .bresize, .bhead .bcheck, .bhead button, .bbadge) { display:none !important; }
 body.dash-only:has(.rail) { padding-left:0; }
+/* 도구 줄이 위쪽 줄이 된다: 왼쪽에 이름·연결 이름(알약), 오른쪽에 기간·필터·[최신화]·화면 모드·[보기 끝내기]. 스크롤해도 위에 붙어 있다 */
+body.dash-only .d-tool { position:sticky; top:0; z-index:50; padding:.625rem 1.5rem; margin-bottom:1.25rem; background:var(--bg); border-bottom:1px solid var(--edge); box-shadow:0 .25rem .5rem -.125rem var(--sh-d); }
+.d-tool .d-name { font-size:var(--fs-xl); font-weight:700; letter-spacing:-.025em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.d-tool .d-conn { padding:.125rem .625rem; border-radius:var(--r-pill); background:var(--accent-bg); color:var(--accent); font-size:var(--fs-sm); font-weight:700; white-space:nowrap; }
+body.dash-only .d-tool .d-per { margin-left:auto; }
+body.dash-only .d-tool .d-per .row { width:min(19rem, 40vw); }  /* 날짜 두 개(2025-12-01 ~ 2025-12-31)가 잘리지 않게 */
+body.dash-only .d-tool #d-filters { padding:0; margin:0; }
+body.dash-only .d-tool select { border-radius:var(--r-pill); }
+/* 색: 보라 강조(밝게·어둡게 두 벌). 계열 1번과 7번(보라)을 바꿔 첫 계열이 보라가 된다. 그림자 변수(--raise·--press)는 :root에서 정해져 그대로다 */
+body.dash-only { --accent:#5545c9; --accent-bg:#e3e0f6; --accent-line:#b8b0ea; --dot:#5545c9; }
+:root[data-theme=dark] body.dash-only { --bg:#1b1c25; --card:#20212c; --head:#20212c; --line:#2e3040; --edge:#2b2d3b; --muted:#9496a8; --accent:#a99cf5; --on-accent:#15141f; --accent-bg:#2b2848; --accent-line:#4a4580; --dot:#a99cf5; }
+/* KPI는 왼쪽 정렬(이름 아래 값, 그 아래 비교) */
+body.dash-only .cbox.kpi :is(.kpi-main, .kpi-top) { justify-content:flex-start; }
+body.dash-only .cbox.kpi .kpi-foot { align-items:flex-start; text-align:left; }
 body.dash-only .bhead { pointer-events:none; }
 body.dash-only .btitle { border-color:transparent; background:transparent; }
 body.dash-only .bcard.sel, body.dash-only .bcard.editing { border-color:var(--line); }
-#d-only-exit { position:fixed; top:.625rem; right:.75rem; z-index:60; opacity:.35; }
-#d-only-exit:hover, #d-only-exit:focus-visible { opacity:1; }
 /* N7: 켜진 도구 단추(편집), 카드·카드 모음 칸·패널 단추의 키보드 초점 링, 크기 손잡이 누름 영역 1.5rem */
 .d-tool .btn.on { border-color:var(--accent); background:var(--accent-bg); color:var(--accent); }
 /* 머리 줄(시안 DashboardBody): 대시보드 고르기는 제목처럼 크게, 기간 칸은 한 줄(안내는 있을 때만 옆에), "N분 전 최신화"는 작은 글자 */

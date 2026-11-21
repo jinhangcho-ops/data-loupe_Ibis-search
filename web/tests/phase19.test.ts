@@ -12,16 +12,26 @@ describe("19I1 위쪽 줄 title과 빈 화면", () => {
     expect(bar).not.toContain("다시 구하기</button>");
     expect(bar).toContain('title="왼쪽 메뉴와 단추를 숨기고 카드만 크게 봐요. Esc를 누르면 돌아와요">대시보드만 보기</button>');
   });
-  it("강조 단추 [카드 추가](#d-add-open)는 편집 밖에서도 보이고, 편집을 켜고 서랍을 연다([+ 카드 ▾] 메뉴에는 같은 항목이 없다)", () => {
+  it("강조 단추 [카드 추가](#d-add-open)는 만드는 곳(build)에만 있고 서랍을 연다([+ 카드 ▾] 메뉴에는 같은 항목이 없다)", () => {
     expect(bar).not.toContain('<button role="menuitem" onClick={() => { setMenu(false); dispatch({ type: "select", id: null }); setAddOpen(true); }}');
     const line = bar.split("\n").find(l => l.includes('id="d-add-open"'))!;
     expect(line).toContain('className="btn p"');
     expect(line).toContain("disabled={!state.dash}");
-    expect(line).toContain('dispatch({ type: "editing", on: true }); dispatch({ type: "select", id: null }); setAddOpen(true);');
-    expect(line.trimStart().startsWith("<button")).toBe(true);  // {state.editing && …}로 감싸지 않음
+    expect(line).toContain('onClick={() => { dispatch({ type: "select", id: null }); setAddOpen(true); }}');
+    expect(line.trimStart().startsWith("{build && <button")).toBe(true);
+  });
+  it("보는 곳에는 편집 도구가 없고 [만들기]로, 만드는 곳에는 [편집]·[대시보드만 보기]가 없고 [보러 가기]로 간다", () => {
+    expect(bar).not.toContain("편집 끝내기");
+    expect(bar.split("\n").find(l => l.includes('id="d-view"'))).toContain("flush().then(() => { location.href = viewHref(state.dash?.id); }");
+    expect(bar).toContain('id="d-build" href={buildHref(state.dash?.id)}');
+    expect(bar.replace(/\r/g, "")).toContain('{build && (\n        <div className="drop" ref={drop}');  // [+ 카드 ▾]는 만드는 곳에만
+    expect(src("components/shell/PickDashboard.tsx")).toContain('{build && <span className="drop" ref={wrap}');  // [새 대시보드]도
+    expect(src("components/shell/DashboardScreen.tsx")).toContain('useEffect(() => { dispatch({ type: "editing", on: build }); }, [build, dispatch]);');
+    expect(src("app/dashboard/build/page.tsx")).toContain("<DashboardScreen build />");
+    expect(src("app/dashboard/page.tsx")).toContain("<DashboardScreen build={false} />");
   });
   it("빈 화면은 한 줄 안내와 단추 둘([카드 추가]·[쿼리에서 가져오기]), 쿼리 쪽 방법은 단추 title에", () => {
-    const page = src("app/dashboard/page.tsx");
+    const page = src("components/shell/DashboardScreen.tsx");
     expect(page).not.toContain("① [카드 추가]를 눌러요");  // 단추와 같은 말을 되풀이하던 안내
     expect(page).toContain('title="쿼리 화면에서 차트를 만들고 [대시보드에 추가]를 눌러요">쿼리에서 가져오기</a>');
   });

@@ -59,7 +59,7 @@ describe("currency: 값 글자와 조건 색 규칙이 설정 기호를 쓴다",
 });
 
 describe("cohort_partial: 진행 중인 마지막 기간의 칸을 흐리게", () => {
-  const THEME = { card: "#fff", head: "#eee", ink: "#000", text: "#555", line: "#ddd", err: "#c00", ok: "#070", series: ["#111"] };
+  const THEME = { card: "#fff", head: "#eee", ink: "#000", text: "#555", line: "#ddd", err: "#c00", ok: "#070", series: ["#111"], hi: "#333" };
   const draw = (data: CardData) => {
     const card = { id: "c", kind: "cohort", title: "카드", layout: { x: 0, y: 0, w: 4, h: 4 }, colors: { series: {}, parts: {}, order: [], parts_order: [] },
       view: { type: "", unit: "week", compare: { mode: "span" }, better: "up" }, source: { body: {} }, data } as unknown as Card;

@@ -9,7 +9,7 @@ import { HBARS, ROUND_TYPES, THREE_TYPES } from "../chart/shapes";
 const NO_ZOOM_TYPES: string[] = [...ROUND_TYPES, ...HBARS, ...THREE_TYPES, "radar", "slope"];  // 확대하지 않는 종류(둥근 차트·가로 막대·레이더·슬로프, 3차원은 끌면 돈다)
 
 /** 그리는 색(옛 board.js themeColors + 대시보드 팔레트). err·ok는 상태 색(옛 cssVar("--err")·("--ok")) */
-export type Theme = { card: string; head: string; ink: string; text: string; line: string; err: string; ok: string; series: string[]; palette?: string[] };
+export type Theme = { card: string; head: string; ink: string; text: string; line: string; err: string; ok: string; series: string[]; hi: string; palette?: string[] };
 // 기간(range)의 계열 i 값: 일 값이 있으면 기간으로 묶고, 없으면 날짜 컬럼 없이 구한 값
 export function cardValue(card: Card, i: number, range: Range, merge: string[]): number | null {
   const by = card.data?.by_unit?.day;

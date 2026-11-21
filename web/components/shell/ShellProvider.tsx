@@ -15,7 +15,7 @@ import { useConstants } from "@/lib/constants";
 import { computedUpdate, sameContent, useActionLog, useDash } from "@/lib/store";
 import { compareItem, newOrder, sameSource } from "@/lib/series";
 import { seriesKit } from "@/components/cards/chart/series";
-import type { Card, CompareMode, ComputeResult, Ctx, DashSettings, Dashboard, PrevSpan, Source } from "@/lib/types";
+import type { Card, CompareMode, ComputeResult, Ctx, DashSettings, Dashboard, PickedFilter, PrevSpan, Source } from "@/lib/types";
 
 export type Note = { text: string; bad?: boolean };
 export type Said = { text: string; tone: string; delta_text?: string; [more: string]: unknown };
@@ -36,7 +36,16 @@ export type Shell = {
   compares: Record<string, Said>; recompute: () => Promise<void>; period: Period;
   addOpen: boolean; setAddOpen: (on: boolean) => void; gallery: boolean; setGallery: (on: boolean) => void; dashOnly: boolean; setDashOnly: (on: boolean) => void;
   saving: boolean; undo: Undo;
+  build: boolean;  // 만드는 곳(/dashboard/build)이면 true, 보는 곳(/dashboard)이면 false
+  page: string; setPage: (name: string) => void;  // 지금 보는 쪽(탭) 이름. 쪽 목록에 없으면 첫 쪽으로 본다(저장하지 않는다)
+  picks: PickedFilter[]; setFilter: (column: string, values: string[]) => Promise<void>;  // 필터 칸에서 고른 값, 고르기(빈 목록이면 풀기)
 };
+
+/** 만드는 곳·보는 곳 주소(지금 연 대시보드를 그대로 열게 ?open=id) */
+export const BUILD_PATH = "/dashboard/build", VIEW_PATH = "/dashboard";
+const withOpen = (path: string, id?: string) => path + (id ? "?open=" + encodeURIComponent(id) : "");
+export const buildHref = (id?: string) => withOpen(BUILD_PATH, id);
+export const viewHref = (id?: string) => withOpen(VIEW_PATH, id);
 
 const Ctx_ = createContext<Shell | null>(null);
 /** 화면 틀 상태(ShellProvider 안에서만) */
@@ -52,7 +61,7 @@ export const useCompare = (id: string) => useContext(Ctx_)?.compares[id];
 const typing = () => { const a = document.activeElement as HTMLElement | null; return !!a && !!a.closest(".board") && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); };
 const EMPTY: Fields = { as_of: "", period: "", refresh: "", live: "" };
 
-export function ShellProvider({ children }: { children: React.ReactNode }) {
+export function ShellProvider({ children, build }: { children: React.ReactNode; build: boolean }) {
   const { state, dispatch } = useDash();
   const consts = useConstants();
   const now = useRef(state);
@@ -63,6 +72,9 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
   const [addOpen, setAddOpen] = useState(false);
   const [gallery, setGallery] = useState(false);
   const [dashOnly, setDashOnly] = useState(false);
+  const [page, setPage] = useState("");
+  const [picks, setPicks] = useState<PickedFilter[]>([]);  // 보는 사람이 필터 칸에서 고른 값(저장하지 않는다)
+  const picked = useRef<PickedFilter[]>([]);
   // ---------- 기간 칸(DashCtl) ----------
   const [inputs, setInputs] = useState<Fields>(EMPTY);
   const saved = useRef<Fields>({ ...EMPTY });  // 확정된 값(틀리면 이 값으로 되돌린다)
@@ -130,7 +142,8 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
   const setRange = useCallback(async (c: Ctx | null, asOf: string) => {
     const range = c?.range ?? null;
     const cm = mode.current === "prev" ? undefined : mode.current;  // 기간이 비어도 카드 자신의 기간 줄(서버 own_range)을 같은 비교 기준으로
-    const ctx: Ctx | null = range || asOf || cm ? { range: range ?? undefined, prev: c?.prev ?? null, months: c?.months, as_of: asOf || undefined, compare_mode: cm } : null;
+    const base: Ctx | null = range || asOf || cm ? { range: range ?? undefined, prev: c?.prev ?? null, months: c?.months, as_of: asOf || undefined, compare_mode: cm } : null;
+    const ctx = picked.current.length ? { ...base, filters: picked.current } : base;  // 고른 필터는 기간을 바꿔도 남는다
     dispatch({ type: "ctx", ctx });
     const was = seqs.current.hadRange;
     seqs.current.hadRange = !!range;
@@ -138,6 +151,19 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
     const stale = (now.current.dash?.cards ?? []).map(shown).filter(x => datedCard(x, range, was) || unique(x) || outsideWindow(x, range));
     if (stale.length) await recomputeRange(stale, ctx);
   }, [dispatch, merge, shown, recomputeRange]);
+
+  // 필터 칸에서 값을 고른다(values가 비면 그 필터를 푼다): ctx.filters를 바꾸고 모든 카드를 그 조건으로 다시 구해 화면에만 보인다(저장 값은 거르지 않은 값 그대로).
+  // 필터가 다 풀리고 보는 기간도 없으면 다시 구하지 않고 화면 값을 비워 저장된 값을 보인다.
+  const setFilter = useCallback(async (column: string, values: string[]) => {
+    picked.current = [...picked.current.filter(f => f.column !== column), ...(values.length ? [{ column, in: values }] : [])];
+    setPicks(picked.current);
+    const rest: Ctx = { ...now.current.ctx, filters: undefined };
+    const ctx: Ctx | null = picked.current.length ? { ...rest, filters: picked.current } : Object.values(rest).some(v => v != null) ? rest : null;
+    dispatch({ type: "ctx", ctx });
+    const cards = (now.current.dash?.cards ?? []).filter(c => c.id && !isShell(c));
+    if (!picked.current.length && !ctx?.range) return dispatch({ type: "values", results: cards.map(c => ({ id: c.id })) });
+    await recomputeRange(cards, ctx);
+  }, [dispatch, recomputeRange]);
 
   const stopLive = useCallback((text: string) => {
     live.current.on = false;
@@ -151,11 +177,11 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
   const openRef = useRef<(id: string) => Promise<void>>(async () => {});
   const changed = useCallback(async () => {
     const id = now.current.dash?.id, f = saved.current;
-    if (!id) return;
+    if (!id || !build) return;  // 보는 곳에서는 기간·기준일을 바꿔도 화면에만 적용한다(저장은 만드는 곳에서만)
     const fields: DashSettings = { as_of: f.as_of, period: f.period, compare_mode: mode.current, refresh: { every: f.refresh }, live: { every: f.live } };
     try { await saveSettings(id, fields); dispatch({ type: "meta", patch: fields }); setSettingsError(""); }
     catch (e) { setSettingsError((e as Error).message); await openRef.current(id); }
-  }, [dispatch]);
+  }, [dispatch, build]);
 
   // 기준일과 기간 칸을 서버로 읽어 보는 기간·직전 기간을 정한다(옛 apply). 틀리면 이유를 보이고 이전 값으로 되돌린다
   const apply = useCallback(async (commit: boolean, asofText: string, perText: string) => {
@@ -268,6 +294,7 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
     try {
       const { dashboard } = await getDashboard(id);
       if (mine !== seqs.current.open) return;
+      picked.current = []; setPicks([]);  // 다른 대시보드를 열면 고른 필터를 푼다
       dispatch({ type: "open", dash: dashboard });
       setLast(id).catch(() => {});
     } catch (e) { if (mine === seqs.current.open) dispatch({ type: "error", message: (e as Error).message }); }
@@ -332,6 +359,6 @@ export function ShellProvider({ children }: { children: React.ReactNode }) {
     commitPeriod: (text?: string) => { const t = text ?? inputs.period; setInput("period", t); if (t.trim() !== saved.current.period) apply(true, inputs.as_of, t); },  // text: 달력이 고른 기간(칸 값이 아직 안 바뀐 때)
     commitEvery: kind => { commitEvery(kind); }, toggleLive: () => { toggleLive(); }, saveMin: () => { saveMin(); },
   };
-  const value: Shell = { conn, loadConn, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo };
+  const value: Shell = { conn, loadConn, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo, build, page, setPage, picks, setFilter };
   return <Ctx_.Provider value={value}>{children}</Ctx_.Provider>;
 }

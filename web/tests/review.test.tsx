@@ -15,7 +15,7 @@ import { datedCard, galleryItems, isShell, shellOf } from "@/components/edit/men
 import { keepFocus } from "@/components/shell/calPick";
 import { Calendar } from "@/components/shell/Calendar";
 
-const THEME = { card: "#fff", head: "#eee", ink: "#000", text: "#555", line: "#ddd", err: "#c00", ok: "#070", series: ["#111"] };
+const THEME = { card: "#fff", head: "#eee", ink: "#000", text: "#555", line: "#ddd", err: "#c00", ok: "#070", series: ["#111"], hi: "#333" };
 const card = (kind: CardKind, data: CardData, view: Record<string, unknown> = {}): Card => ({ id: "c", kind, title: "카드", layout: { x: 0, y: 0, w: 4, h: 4 }, colors: { series: {}, parts: {}, order: [], parts_order: [] },
   view: { type: "", unit: "day", compare: { mode: "span" }, better: "up", ...view } as Card["view"], source: { table: "T", body: { series: [{ y: "amt", agg: "sum" }] } }, data });
 const draw = (c: Card) => { const Paint = PAINTERS[c.kind] as ComponentType<P>; return renderToStaticMarkup(<Paint card={c} colors={THEME} range={undefined} merge={["sum", "count"]} />); };
@@ -96,7 +96,7 @@ describe("W7 앞 2계열만 그리는 종류", () => {
 });
 
 describe("W9·W10 캔들 색·히트맵 숫자", () => {
-  it("캔들 오름 색은 주 색(토큰)과 같다", () => expect(draw(card("candle", { values: { labels: ["d"], candles: [{ open: 1, high: 3, low: 0, close: 2 }] } }))).toContain("var(--c1)"));
+  it("캔들 오름 색은 주 색(토큰)과 같다", () => expect(draw(card("candle", { values: { labels: ["d"], candles: [{ open: 1, high: 3, low: 0, close: 2 }] } }))).toContain("var(--mark)"));
   it("히트맵 칸 숫자는 짧게", () => expect(draw(card("heatmap", { values: { rows: ["A"], cols: ["x"], cells: [[12345678]] } }))).toContain(">1234.6만<"));
 });
 

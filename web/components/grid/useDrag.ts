@@ -20,6 +20,8 @@ export function gridItems(cards: Card[]): GridItem[] {
   return items.map(it => ({ ...it, layout: at[it.id] }));
 }
 
+const DRAG_START = 4;  // 이름 칸에서 이만큼(px) 움직여야 끌기로 본다(그보다 적으면 이름 고치기)
+
 export type Drag = {
   /** 끌기 중의 미리보기 자리(id → layout). 끌지 않을 때 null */
   preview: Record<string, Layout> | null;
@@ -43,14 +45,19 @@ export function useDrag(grid: RefObject<HTMLElement | null>, items: GridItem[], 
   function begin(e: ReactPointerEvent, id: string, kind: "move" | "resize") {
     const g = grid.current, handle = e.currentTarget as HTMLElement, box = handle.closest<HTMLElement>(".bcard");
     if (e.button !== 0 || !g || !box) return;
-    if (kind === "move" && (e.target as HTMLElement).closest("input, button, select")) return;
+    // 이름 칸이 머리 줄을 거의 다 차지하므로 이름 칸에서도 끈다. 쓰고 있는 이름 칸(초점)은 글자 고르기라 그대로 두고, 끌지 않고 뗐으면 이름 칸에 초점을 준다
+    const name = kind === "move" ? (e.target as HTMLElement).closest<HTMLInputElement>("input") : null;
+    if (kind === "move" && ((e.target as HTMLElement).closest("button, select") || (name && name === document.activeElement))) return;
     e.preventDefault();
+    let far = false;
     if (kind === "resize") e.stopPropagation();
     const m = metrics(g), at = box.getBoundingClientRect(), grabX = e.clientX - at.left, grabY = e.clientY - at.top;
     try { handle.setPointerCapture(e.pointerId); } catch { /* 잡지 못해도 window가 받는다 */ }
     box.classList.add("dragging");
     let layouts: Record<string, Layout> | null = null;
     const move = (ev: PointerEvent) => {
+      far ||= Math.abs(ev.clientX - e.clientX) + Math.abs(ev.clientY - e.clientY) > DRAG_START;
+      if (name && !far) return;
       const s = sizeAt(ev.clientX - at.left, ev.clientY - at.top, m);
       layouts = kind === "move" ? moveCard(live.current.items, id, cellAt(ev.clientX, ev.clientY, m, grabX, grabY)) : resizeCard(live.current.items, id, s.w, s.h);
       setPreview(layouts);
@@ -63,6 +70,7 @@ export function useDrag(grid: RefObject<HTMLElement | null>, items: GridItem[], 
       box.classList.remove("dragging");
       try { handle.releasePointerCapture(e.pointerId); } catch { /* 이미 풀림 */ }
       setPreview(null);
+      if (name && !far && ev.type === "pointerup") name.focus();
       if (layouts && ev.type === "pointerup") {
         if (kind === "move") {  // 끈 뒤의 click이 카드 고르기로 번지지 않게
           const stop = (c: Event) => c.stopPropagation();

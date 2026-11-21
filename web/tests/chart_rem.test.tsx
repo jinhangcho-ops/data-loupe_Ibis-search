@@ -8,7 +8,7 @@ import { PAINTERS } from "@/components/cards/SvgCards";
 import { Frame } from "@/components/cards/chart/Charts";
 import { BASE_FONT_PX, layoutWidth, rem, rootScale, scaledBox } from "@/components/cards/chart/scale";
 
-const THEME = { card: "#fff", head: "#f5f6f6", ink: "#000", text: "#555", line: "#ddd", err: "#c00", ok: "#070", series: ["#111", "#222"], palette: [] };
+const THEME = { card: "#fff", head: "#f5f6f6", ink: "#000", text: "#555", line: "#ddd", err: "#c00", ok: "#070", series: ["#111", "#222"], hi: "#333", palette: [] };
 
 describe("차트 배율(chart/scale)", () => {
   it("바탕 글자 크기 → 배율: 16px은 1, 20px은 1.25", () => {
