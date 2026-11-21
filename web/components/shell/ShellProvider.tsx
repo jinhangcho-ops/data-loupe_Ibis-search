@@ -177,11 +177,11 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
   const openRef = useRef<(id: string) => Promise<void>>(async () => {});
   const changed = useCallback(async () => {
     const id = now.current.dash?.id, f = saved.current;
-    if (!id) return;
+    if (!id || !build) return;  // 보는 곳에서는 기간·기준일을 바꿔도 화면에만 적용한다(저장은 만드는 곳에서만)
     const fields: DashSettings = { as_of: f.as_of, period: f.period, compare_mode: mode.current, refresh: { every: f.refresh }, live: { every: f.live } };
     try { await saveSettings(id, fields); dispatch({ type: "meta", patch: fields }); setSettingsError(""); }
     catch (e) { setSettingsError((e as Error).message); await openRef.current(id); }
-  }, [dispatch]);
+  }, [dispatch, build]);
 
   // 기준일과 기간 칸을 서버로 읽어 보는 기간·직전 기간을 정한다(옛 apply). 틀리면 이유를 보이고 이전 값으로 되돌린다
   const apply = useCallback(async (commit: boolean, asofText: string, perText: string) => {

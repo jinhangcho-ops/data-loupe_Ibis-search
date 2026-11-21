@@ -44,6 +44,18 @@ describe("쪽(탭)", () => {
   });
 });
 
+describe("보는 곳은 확인만, 고치기는 만드는 곳에서만", () => {
+  it("보는 곳에서 바꾼 기간·기준일은 저장하지 않고, 카드 이름은 고칠 수 있어 보이지 않는다", () => {
+    expect(src("components/shell/ShellProvider.tsx")).toContain("if (!id || !build) return;");
+    expect(src("styles/common.css")).toContain(".btitle:not([readonly]):hover");
+  });
+  it("만드는 곳에서는 이름 칸을 잡고도 카드를 끈다(쓰고 있는 이름 칸은 빼고, 안 끌고 떼면 이름 고치기)", () => {
+    const drag = src("components/grid/useDrag.ts");
+    expect(drag).toContain('closest("button, select") || (name && name === document.activeElement)');
+    expect(drag).toContain('if (name && !far && ev.type === "pointerup") name.focus();');
+  });
+});
+
 describe("값/비율 바꾸기", () => {
   it("계열 하나: 전체 합 가운데의 몫(%)", () => {
     expect(toShare(s([["매출", [10, 30, 60]]]))!.datasets[0].values).toEqual([10, 30, 60]);

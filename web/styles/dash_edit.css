@@ -28,7 +28,8 @@
 .board.grid .bcard { display:flex; flex-direction:column; min-height:0; overflow:hidden; position:relative; cursor:default; }
 .board.grid .bhead.movable { cursor:grab; touch-action:none; user-select:none; }  /* 머리는 늘 한 줄: 이름이 줄어들고(말줄임) ⚙·×는 같은 줄 오른쪽. 값을 구한 시각은 머리의 title */
 .board.grid .bcard.dragging { opacity:.8; box-shadow:0 .5rem 1.5rem rgba(0, 0, 0, .25); z-index:2; }
-.board.grid .bcard.dragging .bhead.movable { cursor:grabbing; }
+.board.grid .bhead.movable .btitle:not(:focus) { cursor:grab; }
+.board.grid .bcard.dragging .bhead.movable, .board.grid .bcard.dragging .btitle { cursor:grabbing; }
 .board.grid .bcard.editing { border-color:var(--accent); }
 .board.grid .bbody { flex:1; aspect-ratio:auto; max-height:none; min-height:2.5rem; }  /* 아주 좁은 카드에서도 그림 자리 한 줄은 남긴다 */
 .board.grid .bwhen { flex:0 1 auto; min-height:0; overflow:hidden; }  /* 자리가 모자라면 아래 안내가 줄어든다(그림과 겹치지 않게) */
