@@ -193,7 +193,7 @@ button.lrow { cursor:pointer; }
 .lstart, .lend { display:flex; align-items:center; gap:.375rem; min-width:0; }
 .ltext { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); }
 .lchip { padding:.0625rem .5rem; font-size:var(--fs-xs); }
-.ltag { padding:.0625rem .5rem; border:.0625rem solid var(--line); border-radius:62.5rem; font-size:var(--fs-xs); white-space:nowrap; }
+.ltag { padding:.0625rem .5rem; border:.0625rem solid var(--line); border-radius:var(--r-pill); font-size:var(--fs-xs); white-space:nowrap; }
 .lnum { font-size:var(--fs-sm); font-variant-numeric:tabular-nums; }
 .lbar { display:flex; align-items:center; gap:.25rem; width:6rem; font-size:var(--fs-xs); color:var(--muted); }
 .lbar > i { flex:1; height:.375rem; border-radius:var(--r-pill); background:linear-gradient(to right, var(--c, var(--accent)) calc(var(--r) * 100%), var(--line) 0); }
