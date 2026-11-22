@@ -2,7 +2,7 @@
 // deviation: 엔티티 × 시간대 표. 칸 = 값, 기준(view.baseline, 없으면 그 엔티티 평균) 대비 ±. 허용 폭(view.threshold, 없으면 기준의 20%)을 넘는 칸을 강조(옛 paintDeviation)
 import { alpha, deviationCells, showValue } from "@/lib/calc";
 import { cardFormat } from "./__pure__";
-import { Box, Say, type P } from "./common";
+import { Box, Empty, type P } from "./common";
 
 const GAP = "3px", RX = "4px";  // 칸 사이 틈, 칸 모서리 둥글기(예시 42-heatmap: 간격 25x22에 칸 22x19, rx 4)
 const TABLE_STYLE = { borderCollapse: "separate", borderSpacing: GAP } as const;
@@ -10,7 +10,7 @@ const CELL_STYLE = { borderBottom: "none", borderRadius: RX } as const;
 
 export function Deviation({ card, colors }: P) {
   const v = card.data?.values as { entities: { name: string; values: (number | null)[] }[]; buckets: string[] } | undefined, view = card.view, fmt = cardFormat(card);
-  if (!v?.entities?.length) return <Say cls="alerts" text="값이 없어요" />;
+  if (!v?.entities?.length) return <Empty />;
   const label = (b: string) => String(b).replace(" 00:00:00", "").slice(0, view.bucket === "hour" || !view.bucket ? 16 : 10);
   return (
     <Box cls="deviation nm-well">

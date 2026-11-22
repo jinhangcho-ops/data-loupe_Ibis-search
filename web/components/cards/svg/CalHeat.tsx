@@ -4,7 +4,7 @@ import { showValue } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { useRootScale } from "../chart/scale";
 import { calendarCells, cardFormat, fillLevels } from "./__pure__";
-import { Box, Frame, NOTHING, Say, more, tone, type P } from "./common";
+import { Box, Empty, Frame, more, tone, type P } from "./common";
 
 const S = 13, G = 2, LW0 = 22, HH0 = 16;  // 칸·간격, 요일 이름 폭·달 이름 높이(화면 크기 배율 1)
 const RX = 3;  // 칸 모서리 둥글기(예시 14-calendar: 칸 10.6에 rx 2.5 = 칸 13에 약 3)
@@ -13,7 +13,7 @@ export function CalHeat(p: P) {
   const s = useRootScale(), LW = LW0 * s, HH = HH0 * s;  // 글자 자리는 글자와 같이 커진다
   const sunday = useConstants()?.week_start === "sun", r = p.range;
   const days = (more(p).days ?? []).filter(x => (!r?.start || x.d >= r.start) && (!r?.end || x.d <= r.end)).map(x => ({ day: x.d, v: x.v }));  // 정렬·빠진 날 채우기는 calendarCells
-  if (!days.some(d => d.v != null)) return <Say text={NOTHING} />;
+  if (!days.some(d => d.v != null)) return <Empty />;
   const { cells, weeks, months } = calendarCells(days, sunday), levels = fillLevels(cells.map(d => d.v)), c = tone(p, "주 색", 0), fmt = cardFormat(p.card);
   const names = sunday ? ["일", "", "화", "", "목", "", "토"] : ["월", "", "수", "", "금", "", "일"];
   return (

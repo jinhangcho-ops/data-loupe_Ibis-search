@@ -37,7 +37,7 @@ MAX_STORE_BYTES = 32 * 1024 * 1024  # 전체 크기
 MAX_DAYS = 3660  # 시간별 카드에 두는 일 값의 최대 일수
 MAX_PALETTE = 12  # 대시보드 팔레트의 색 수
 MAX_COLORS = 100  # 카드 하나의 지정 색 수
-KINDS = ("chart", "analysis", "metric", "kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks",
+KINDS = ("chart", "analysis", "metric", "kpi", "tile", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks",
          "target_trend", "map", "alerts", "deviation", "funnel", "table", "status", "sentence", "geomap",
          "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bullet", "bump", "sankey", "cohort", "candle", "wordcloud")  # 앞의 셋만 1단계에서 만든다. geomap: 좌표 지도(경계·점·영역별 색). 뒤 열둘(4단계 P14)은 값 모양이 종류마다 달라 dash_calc가 따로 구한다
 GONE_KINDS = ("recent_rows",)  # (B11) 앱에서 없앤 카드 종류: 옛 저장본은 열리고 저장되지만 값을 구하지 않는다
@@ -215,15 +215,16 @@ MAX_RULES = 20
 EXTRA_VIEW = ("format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window",
               "cond_rules", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "positions", "bg", "image_path", "group_cols", "formats", "total",
               "template", "blanks", "bucket", "baseline", "threshold", "geo", "rings", "bins", "bands",
-              "funnel_shape", "ladder_scale", "gap_stats", "flow_unlimited", "flow_dropout", "groups", "cloud")  # 3·4단계 카드 종류의 설정
+              "funnel_shape", "ladder_scale", "gap_stats", "flow_unlimited", "flow_dropout", "groups", "cloud", "note", "press")  # 3·4단계 카드 종류의 설정
 GONE_VIEW = ("icon", "fit", "layout")  # (B10b) 없앤 KPI 모양 설정(아이콘·값 맞춤·추이선 자리): 저장된 보기에 있으면 받되 버린다
 FUNNEL_SHAPES = ("flow", "ladder")  # 퍼널 그림: 흐름(생키+표) / 사다리꼴
 GAP_STATS = ("mean", "median", "trimmed")  # 걸린 시간 표에 보일 값
-FRAME_KINDS = ("button", "nav_rail", "top_strip", "page_tabs", "period_pick", "asof_field", "unit_seg", "text")  # (B10) 격자에 놓는 틀 요소 종류. 화면의 한 벌은 web/components/frame/registry.ts
+FRAME_KINDS = ("button", "nav_rail", "top_strip", "page_tabs", "period_pick", "asof_field", "unit_seg", "text", "segment", "chip_row", "filter_bar")  # (B10) 격자에 놓는 틀 요소 종류. 화면의 한 벌은 web/components/frame/registry.ts
 FRAME_ACTIONS = {"export": "", "refresh": "", "page": "page", "theme": "", "dash_only": "", "zoom": "card", "easy": "", "filters_clear": "", "settings": ""}  # 틀 요소의 할 일 → 받는 값(arg)의 종류("" 없음, page 쪽 이름, card 카드 id)
 FRAME_PARTS = ("name", "period", "asof", "theme")  # 위쪽 화면 줄에 보일 칸
-FRAME_KEYS = {"button": ("label", "icon", "action", "arg", "ambient"), "nav_rail": ("items", "ambient"), "top_strip": ("parts", "items"),
-              "page_tabs": (), "period_pick": (), "asof_field": (), "unit_seg": (), "text": ("text", "size", "align")}  # 종류마다 view.frame에 쓸 수 있는 항목
+FRAME_KEYS = {"button": ("label", "icon", "action", "arg", "ambient"), "nav_rail": ("items", "ambient"), "top_strip": ("parts", "items", "period", "as_of"),
+              "page_tabs": (), "period_pick": ("period",), "asof_field": ("as_of",), "unit_seg": ("unit",), "text": ("text", "size", "align"),
+              "segment": ("mode", "column", "cells", "ambient"), "chip_row": ("column", "ambient"), "filter_bar": ("clear_label", "ambient")}  # 종류마다 view.frame에 쓸 수 있는 항목
 MAX_FRAME_TEXT = 500  # 글 요소의 글자 수 상한(문장 카드 template과 같은 값)
 FRAME_TEXT_SIZES = ("sm", "md", "lg")  # 글 요소 글자 크기: 작게·보통·크게
 FRAME_TEXT_ALIGNS = ("left", "center", "right")  # 글 요소 정렬: 왼쪽·가운데·오른쪽
@@ -232,6 +233,16 @@ ITEM_KEYS = ("label", "icon", "action", "arg")  # 줄 안 항목(단추 하나)�
 MAX_FRAME_ITEMS, MAX_FRAME_LABEL = 8, 30  # 줄 안 항목 수, 단추 글자 수
 FRAME_MIN = 1  # 틀 요소의 최소 너비·높이(칸). 카드는 2
 FRAME_EMPTY = "단추에는 글자나 아이콘 중 하나가 있어야 해요."
+LINK_FRAMES = ("segment", "chip_row", "period_pick", "asof_field", "unit_seg", "top_strip")  # (B4) 링크를 보내는 틀 요소
+SENDER_KINDS = ("chart", "tile", *LINK_FRAMES)  # (B4) view.link_to·link_map을 쓸 수 있는 종류(화면 web/lib/links.ts isSender와 같은 한 벌)
+PERIOD_FRAMES = ("period_pick", "asof_field", "unit_seg")  # (B4) 옛 대시보드에서 "모든 카드"로 옮기는 기간 요소(위쪽 화면 줄은 기간 칸이 있을 때만)
+MAX_LINK_COLS = 50  # (B4) 상대 카드 하나에 맞추는 컬럼 수
+TILE_PRESS = ("cond", "period")  # (B2) 숫자 타일 누르기: 조건만 / 기간 줄도
+MAX_TILE_NOTE = 100  # (B2) 숫자 타일 설명 글자 수
+SEG_MODES = ("view", "filter")  # (B2) 세그먼트 방식: 보기 바꾸기 / 값으로 거르기(앞이 처음 값)
+SEG_CELL_KEYS = ("label", "series", "share", "value")  # (B2) 세그먼트 칸 하나의 항목
+MAX_SEG_CELLS = 8  # (B2) 세그먼트 칸 수
+MAX_ELEM_PERIOD = 40  # (B4) 기간 요소에 저장하는 기간 글자 수(대시보드 기간 칸과 같다)
 
 
 def check_frame(frame: object, kind: str) -> dict[str, object]:
@@ -298,6 +309,36 @@ def check_frame(frame: object, kind: str) -> dict[str, object]:
         if align not in FRAME_TEXT_ALIGNS:
             raise ValueError(f"정렬(align)은 {', '.join(FRAME_TEXT_ALIGNS)} 중 하나예요.")
         out["align"] = align
+    if "period" in FRAME_KEYS[kind] and "period" in frame:
+        out["period"] = text(frame["period"], "기간", MAX_ELEM_PERIOD)
+    if "as_of" in FRAME_KEYS[kind] and "as_of" in frame:
+        if not isinstance(frame["as_of"], str) or not (frame["as_of"] == "" or DAY.fullmatch(frame["as_of"])):
+            raise ValueError("요소의 기준일(as_of)은 비우거나 YYYY-MM-DD예요.")
+        out["as_of"] = frame["as_of"]
+    if "unit" in FRAME_KEYS[kind] and "unit" in frame:
+        if frame["unit"] != "" and frame["unit"] not in UNITS:
+            raise ValueError(f"요소의 기간 단위(unit)는 비우거나 {', '.join(UNITS)} 중 하나예요.")
+        out["unit"] = frame["unit"]
+    if kind == "segment":
+        mode = frame.get("mode", SEG_MODES[0])
+        if mode not in SEG_MODES:
+            raise ValueError(f"세그먼트 방식(mode)은 {', '.join(SEG_MODES)} 중 하나예요.")
+        column = text(frame.get("column") or "", "거를 컬럼", MAX_FILTER_NAME)
+        cells = frame.get("cells", [])
+        if not isinstance(cells, list) or len(cells) > MAX_SEG_CELLS:
+            raise ValueError(f"세그먼트 칸(cells)은 목록이며 {MAX_SEG_CELLS}개까지예요.")
+        for c in cells:
+            if not isinstance(c, dict) or set(c) - set(SEG_CELL_KEYS):
+                raise ValueError(f"세그먼트 칸에 쓸 수 없는 항목이 있어요: {', '.join(sorted(set(c) - set(SEG_CELL_KEYS))) if isinstance(c, dict) else c}")
+            if not isinstance(c.get("share", False), bool):
+                raise ValueError("비율로(share)는 참·거짓이에요.")
+        out.update(mode=mode, column=column, cells=[
+            {"label": text(c.get("label") or "", "칸 글자", MAX_FRAME_LABEL, 1), "series": text(c.get("series") or "", "계열 이름", MAX_NAME),
+             "share": c.get("share", False), "value": text(c.get("value") or "", "칸 값", MAX_FILTER_NAME)} for c in cells])
+    if kind == "chip_row":
+        out["column"] = text(frame.get("column") or "", "거를 컬럼", MAX_FILTER_NAME)
+    if kind == "filter_bar":
+        out["clear_label"] = text(frame.get("clear_label") or "", "단추 글자", MAX_FRAME_LABEL)
     return out
 
 
@@ -622,6 +663,12 @@ def check_extra(view):
         if not isinstance(found, list) or not all(isinstance(g, str) and g in GAP_STATS for g in found) or len(set(found)) != len(found):
             raise ValueError(f"gap_stats는 {', '.join(GAP_STATS)} 중에서 겹치지 않게 고른 목록이에요.")
         out["gap_stats"] = found
+    if view.get("note"):
+        out["note"] = text(view["note"], "타일 설명", MAX_TILE_NOTE)
+    if view.get("press"):
+        if view["press"] not in TILE_PRESS:
+            raise ValueError(f"타일 누르기(press)는 {', '.join(TILE_PRESS)} 중 하나예요.")
+        out["press"] = view["press"]
     for name, high in (("unit_text", 10), ("group", 200)):
         if view.get(name):
             out[name] = text(view[name], name, high)
@@ -667,11 +714,28 @@ def check_extra(view):
     return out
 
 
+def check_link(view: dict) -> dict[str, object]:
+    """[SPECIFICATION] plans/dash-blocks.md#check_link
+    보기 설정의 링크 칸(link_to·link_map)을 검사해 있던 키만 정리한 사본을 돌려준다."""
+    out: dict[str, object] = {}
+    if "link_to" in view:
+        found = view["link_to"]
+        if not isinstance(found, list) or len(found) > MAX_CARDS or not all(isinstance(i, str) and ID.fullmatch(i) for i in found) or len(set(found)) != len(found):
+            raise ValueError(f"링크 상대(link_to)는 겹치지 않는 카드 id 목록이며 {MAX_CARDS}개까지예요.")
+        out["link_to"] = found
+    if "link_map" in view:
+        found = view["link_map"]
+        if not isinstance(found, dict) or not all(k in out.get("link_to", []) and isinstance(v, dict) and len(v) <= MAX_LINK_COLS for k, v in found.items()):
+            raise ValueError("맞출 컬럼(link_map)은 {상대 카드 id: {컬럼: 상대 컬럼}} 모양이고 상대는 link_to 안에 있어야 해요.")
+        out["link_map"] = {k: {text(a, "맞출 컬럼", MAX_NAME, 1): text(b, "맞출 컬럼", MAX_NAME, 1) for a, b in v.items()} for k, v in found.items()}
+    return out
+
+
 def check_view(view):
     """보기 설정: type(차트 종류, ""이면 계열마다 정한 대로), unit(일·주·월·분기·연), compare.mode(span·point), better(up·down).
     차트 탭에서 온 것은 styles(계열마다 {type, dash, axis})·ranges(세로축 범위)·ratio(가로/세로), 분석 카드는 analysis_view."""
     view = {} if view is None else view
-    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "connect", "auto", "scale", "all_data", "data_table", "cross", "page", "frame", *EXTRA_VIEW, *GONE_VIEW}:
+    if not isinstance(view, dict) or set(view) - {"type", "unit", "compare", "better", "styles", "ranges", "ratio", "analysis_view", "points", "trend", "show_r", "connect", "auto", "scale", "all_data", "data_table", "cross", "page", "frame", "link_to", "link_map", *EXTRA_VIEW, *GONE_VIEW}:
         raise ValueError("보기(view)에 쓸 수 없는 항목이 있어요.")
     out = {"type": view.get("type") or "", "unit": view.get("unit") or "day", "compare": view.get("compare") or {"mode": "span"}, "better": view.get("better") or "up"}
     if out["type"] and out["type"] not in CHART_TYPES:
@@ -721,6 +785,7 @@ def check_view(view):
                 out[name] = True
     if page := text(view.get("page"), "쪽 이름", MAX_PAGE_NAME):  # 이 카드가 놓인 쪽. 대시보드의 쪽 목록에 없는 이름이면 화면이 첫 쪽에 보인다
         out["page"] = page
+    out.update(check_link(view))
     out.update(check_extra(view))
     if "analysis_view" in view:
         out["analysis_view"] = text(view["analysis_view"], "분석 보기 이름", 20)
@@ -773,7 +838,7 @@ def check_data(data, kind):
     data = {} if data is None else data
     if not isinstance(data, dict):
         raise ValueError("구한 값(data)은 객체여야 해요.")
-    allowed = {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "bins", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair", "since", "window", "x_scale", "x_levels"}
+    allowed = {"computed_at", "def_hash", "note", "x", "columns", "by_unit", "values", "bins", "points", "x_kind", "num_cols", "date_cols", "text", "sentences", "target", "pair", "since", "window", "x_scale", "x_levels", "reads"}
     if unknown := set(data) - allowed:
         raise ValueError(f"data에 쓸 수 없는 항목이 있어요: {', '.join(sorted(unknown))}")
     # 값 안(그룹 이름 "user" 등)은 사용자 데이터라 검사하지 않는다. 최상위 키는 위 허용 목록이 이미 막는다
@@ -823,6 +888,15 @@ def check_card(card):
         out["view"]["frame"] = check_frame((card.get("view") or {}).get("frame"), out["kind"])
     elif (card.get("view") or {}).get("frame") is not None:
         raise ValueError("틀 요소 설정(frame)은 틀 요소 카드에만 써요.")
+    view = out["view"]
+    if ("link_to" in view or "link_map" in view) and out["kind"] not in SENDER_KINDS:
+        raise ValueError("이 종류는 링크를 보내지 않아요.")
+    if out["kind"] != "chart" and card_id in view.get("link_to", []):
+        raise ValueError("자기 자신과는 링크할 수 없어요.")
+    if out["kind"] == "segment" and view["frame"]["mode"] == "view" and len(view.get("link_to", [])) > 1:
+        raise ValueError("보기 바꾸기 세그먼트의 상대 카드는 하나예요.")
+    if ("note" in view or "press" in view) and out["kind"] != "tile":
+        raise ValueError("타일 설명(note)·누르기(press)는 숫자 타일에만 써요.")
     if out["kind"] == "funnel" and not placed:  # 흐름(퍼널) 카드: 다시 구할 전처리(recipe)와 흐름 분석(analysis.kind = funnel)이 있어야 한다
         how = out["source"].get("analysis") or {}
         listed = how.get(FUNNEL_LISTS.get(how.get("kind")))  # 값 목록 퍼널은 steps, 조건 단계 퍼널은 stages
@@ -873,6 +947,21 @@ def check_card(card):
     size = len(json.dumps(out, ensure_ascii=False, separators=(",", ":")))
     if size > MAX_CARD_BYTES:
         raise ValueError(f"카드 '{out['title']}'이 {size:,}자로 카드 하나의 상한 {MAX_CARD_BYTES:,}자를 넘어요.")
+    return out
+
+
+def link_defaults(cards: list[dict]) -> list[dict]:
+    """[SPECIFICATION] plans/dash-blocks.md#link_defaults
+    링크 상대가 없는 옛 누르기 차트·기간 요소에 그때의 모든 데이터 카드를 상대로 채운 카드 목록을 돌려준다."""
+    data = [c["id"] for c in cards if c["kind"] not in FRAME_KINDS]
+    out: list[dict] = []
+    for c in cards:
+        view = c["view"]
+        wants = "link_to" not in view and (
+            (c["kind"] == "chart" and view.get("cross") is True)
+            or c["kind"] in PERIOD_FRAMES
+            or (c["kind"] == "top_strip" and {"period", "asof"} & set(view["frame"].get("parts") or [])))
+        out.append({**c, "view": {**view, "link_to": data}} if wants else c)
     return out
 
 
@@ -1080,7 +1169,8 @@ def delete_template(template_id):
 
 def check_dashboard(d, old=None):
     """대시보드 하나를 검사해 정리한 사본을 돌려준다(id·카드 id는 없으면 새로 만든다). 이름 겹침과 개수는 저장할 때 본다.
-    old: 이미 저장된 같은 대시보드. 기준일이 저장된 값 그대로이면 오늘 뒤인지는 다시 보지 않는다(예전에 미래 날짜로 저장된 것도 카드 옮기기 같은 다른 편집은 저장되게)."""
+    old: 이미 저장된 같은 대시보드. 기준일이 저장된 값 그대로이면 오늘 뒤인지는 다시 보지 않는다(예전에 미래 날짜로 저장된 것도 카드 옮기기 같은 다른 편집은 저장되게).
+    옛 누르기 차트·기간 요소의 링크 상대를 채우고(link_defaults), 누른 필터 칩 보이기(press_chips, 없으면 참)를 둔다."""
     if not isinstance(d, dict):
         raise ValueError("대시보드는 객체여야 해요.")
     dash_id = d.get("id") or secrets.token_hex(8)
@@ -1094,6 +1184,7 @@ def check_dashboard(d, old=None):
     if len(set(ids)) != len(ids):
         raise ValueError("카드 id가 겹쳐요.")
     sections, cards = check_sections(d.get("sections"), cards)
+    cards = link_defaults(cards)
     as_of = d.get("as_of") or ""
     if as_of:
         try:
@@ -1117,10 +1208,13 @@ def check_dashboard(d, old=None):
         north["limits"] = limits
     if any(c and c not in ids for c in [north["card"], *north["counters"]]):
         raise ValueError("북극성·카운터 지표로 고른 카드가 이 대시보드에 없어요.")
+    press_chips = d.get("press_chips", True)
+    if type(press_chips) is not bool:
+        raise ValueError("누른 필터 칩 보이기(press_chips)는 참·거짓이에요.")
     return {"id": dash_id, "name": text(d.get("name"), "대시보드 이름", 50, 1), "template": text(d.get("template"), "템플릿 이름", 50),
             "palette": check_palette(d.get("palette") or []), "period": text(d.get("period") or "", "기간", 40), "as_of": as_of, "compare_mode": mode,
             "pull": check_pull(d.get("pull")), "cards": cards, "sections": sections, "created": text(d.get("created"), "만든 시각", 40),
-            "updated": text(d.get("updated"), "고친 시각", 40), "north_star": north, "filters": check_filters(d.get("filters")), "pages": check_pages(d.get("pages"))}
+            "updated": text(d.get("updated"), "고친 시각", 40), "north_star": north, "filters": check_filters(d.get("filters")), "pages": check_pages(d.get("pages")), "press_chips": press_chips}
 
 
 def check_pages(found):

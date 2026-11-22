@@ -150,8 +150,8 @@
 /* 엠비언트(참조 report.css 700~760줄): 요소의 ambient가 참일 때만 눌린 단추 둘레에 빛이 돈다. 바깥 번짐 없음 */
 @property --fr-amb { syntax: "<angle>"; inherits: false; initial-value: 0deg; }
 @keyframes fr-amb { to { --fr-amb: 360deg; } }
-#dash [data-ambient] .fr-btn[aria-pressed=true]::before { content:""; position:absolute; inset:0; padding:.125rem; border-radius:var(--r-ctl); pointer-events:none; background:conic-gradient(from var(--fr-amb), transparent 0turn, color-mix(in srgb, var(--accent) 20%, transparent) .12turn, color-mix(in srgb, var(--accent) 55%, transparent) .25turn, color-mix(in srgb, var(--accent) 20%, transparent) .38turn, transparent .5turn); mask:linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); animation:fr-amb 3s linear infinite; }
-@media (prefers-reduced-motion: reduce) { #dash [data-ambient] .fr-btn[aria-pressed=true]::before { animation:none; } }
+#dash [data-ambient] :is(.fr-btn, .fr-seg-b, .fr-chip)[aria-pressed=true]::before { content:""; position:absolute; inset:0; padding:.125rem; border-radius:var(--r-ctl); pointer-events:none; background:conic-gradient(from var(--fr-amb), transparent 0turn, color-mix(in srgb, var(--accent) 20%, transparent) .12turn, color-mix(in srgb, var(--accent) 55%, transparent) .25turn, color-mix(in srgb, var(--accent) 20%, transparent) .38turn, transparent .5turn); mask:linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); animation:fr-amb 3s linear infinite; }
+@media (prefers-reduced-motion: reduce) { #dash [data-ambient] :is(.fr-btn, .fr-seg-b, .fr-chip)[aria-pressed=true]::before { animation:none; } }
 @media (max-width:56.25rem) { #dash .fr-top { flex-wrap:wrap; row-gap:.5rem; padding-block:.5rem; overflow:auto; } }
 /* B5 카드 섹션: 섹션이 쪽 격자의 상자(옛 카드 모양), 조각은 섹션 몸통 격자 안에 놓인다 */
 .board.grid .bsection { display:flex; flex-direction:column; min-height:0; position:relative; padding:0; border:1px solid var(--edge); border-radius:var(--r-board); background:var(--card); box-shadow:var(--raise-sm); }
@@ -170,3 +170,18 @@
 .fr-text[data-size=sm] { font-size:var(--fs-sm); }
 .fr-text[data-size=md] { font-size:var(--fs-md); }
 .fr-text[data-size=lg] { font-size:var(--fs-lg); }
+/* B2 0건·구하는 중 한 벌: 0건은 몸통 가운데 한 문구(Empty), 구하는 중은 이전 값을 흐리게 + 가운데 작은 돌림표(Grid Piece·ChipRow의 .busy·.bspin) */
+.cempty { flex:1; display:grid; place-items:center; min-height:100%; color:var(--muted); font-size:var(--fs-sm); }
+#dash :is(.bcard.busy > .bbody, .fr-chips.busy) > :not(.bspin) { opacity:.5; }
+@keyframes bspin { to { transform:rotate(1turn); } }
+#dash .bspin { position:absolute; inset:0; margin:auto; width:1rem; height:1rem; border:.125rem solid var(--line); border-top-color:var(--accent); border-radius:50%; pointer-events:none; animation:bspin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { #dash .bspin { animation:none; } }
+/* B2+B4 새 요소: 칩 줄·걸린 필터 줄·켜진 타일 */
+.fr-chips, .fr-tags { position:relative; display:flex; flex-wrap:wrap; gap:.25rem; align-items:center; min-height:100%; }
+.fr-chip { cursor:pointer; padding:.125rem .625rem; }
+.fr-chip[aria-pressed="true"], #dash .bcard[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); }
+.fr-tag { gap:.25rem; }
+.fr-tag-big { font-size:var(--fs-sm); font-weight:600; }
+.fr-tag-small { font-size:var(--fs-xs); color:var(--muted); }
+.tile-note { margin:0; }
+#dash :is(.fr-seg-b, .fr-chip) { position:relative; }

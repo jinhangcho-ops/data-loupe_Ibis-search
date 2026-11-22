@@ -79,7 +79,7 @@ MAX_POINTS = result.MAX_POINTS  # 산점도·버블의 점 수(분석의 산점�
 SEED = stats.SEED  # 고르게 뽑을 때의 고정 씨앗(다시 구해도 같은 점, 분석의 산점도와 같다)
 POINT_TYPES = ("scatter", "bubble", "scatter3d")  # 점으로 그리는 종류(3차원 산점도는 [크기] 열이 Z축)
 FLOW_GONE = "흐름 보기가 없어져 이 카드는 다시 구할 수 없어요. 탐색에서 다시 만들어 주세요."  # 예전 흐름(source.flow_id)만 가진 카드
-VALUE_KINDS = ("kpi", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "bullet")  # 값 하나(또는 일 값)로 그리는 카드 종류
+VALUE_KINDS = ("kpi", "tile", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks", "target_trend", "bullet")  # 값 하나(또는 일 값)로 그리는 카드 종류
 MAX_GROUPS = 100  # 요약의 기여 분해에 쓰는 그룹 수
 TARGETS_FILE = "targets_file.json"  # 목표 파일 경로만 둔다 {path}
 WATCH_KINDS = ("status", "alerts", "map")  # 엔티티별 최근 행을 상태 규칙(watch.py)으로 보는 카드
@@ -514,19 +514,87 @@ def with_period(body, date, window):
     return {**body, "periods": [*(body.get("periods") or []), f"{date} {window.get('start') or ''} ~ {window.get('end') or ''}"]}
 
 
+def pred_fields(preds: list) -> set[str]:
+    """[SPECIFICATION] plans/dash-blocks.md#pred_fields
+    Ibis 조건 식들이 읽는 컬럼 이름들."""
+    return {f.name for p in preds for f in p.op().find(ibis.expr.operations.Field, filter=ibis.expr.operations.Value)}
+
+
 def with_filters(card: dict, ctx: dict | None) -> tuple[dict, list[str]]:
-    """보는 사람이 고른 필터(ctx.filters = [{column, in: [값 글자]}])를 카드 조회의 조건에 더한 사본과, 이 카드에 걸지 못한 필터의 컬럼 이름들.
+    """보는 사람이 고른 필터(ctx.filters = 값 필터 {column, in} 또는 타일 필터 {body, as?, periods?})를 카드 조회에 더한 사본과, 걸지 못한 필터의 (상대) 컬럼 이름들.
     조인까지 한 테이블에 그 컬럼이 있는 필터만 건다(parse.predicate의 {column, in}). 조회(source.body)가 없는 카드에는 하나도 걸지 못한다. 저장된 카드는 건드리지 않는다."""
     filters = (ctx or {}).get("filters") or []
-    if not isinstance(filters, list) or not all(isinstance(f, dict) and isinstance(f.get("column"), str) for f in filters):
-        raise ValueError("필터(ctx.filters)는 [{column, in: [값]}] 모양이어야 해요.")
+    if not isinstance(filters, list) or not all(
+            isinstance(f, dict) and isinstance(f.get("column"), str) != isinstance(f.get("body"), dict)
+            and ("as" not in f or (isinstance(f["as"], dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in f["as"].items())))
+            and ("periods" not in f or isinstance(f["periods"], bool)) for f in filters):
+        raise ValueError("필터(ctx.filters)는 [{column, in: [값]}] 또는 [{body: 타일의 조회}] 모양이어야 해요.")
+    if not filters:
+        return card, []
     body = card["source"].get("body")
-    if not filters or not isinstance(body, dict):
-        return card, [f["column"] for f in filters]
-    columns = querying.joined(body)[0].columns
-    hit = [{"column": f["column"], "in": f.get("in")} for f in filters if f["column"] in columns]
-    cut = {**card, "source": {**card["source"], "body": {**body, "conditions": [*(body.get("conditions") or []), *hit]}}} if hit else card
-    return cut, [f["column"] for f in filters if f["column"] not in columns]
+    columns = set(querying.joined(body)[0].columns) if isinstance(body, dict) else None
+    more, more_periods, missed = [], [], []
+    for f in filters:
+        if not isinstance(f.get("body"), dict):
+            if columns is not None and f["column"] in columns:
+                more.append({"column": f["column"], "in": f.get("in")})
+            else:
+                missed.append(f["column"])
+            continue
+        conds = f["body"].get("conditions") or []
+        lines = (f["body"].get("periods") or []) if f.get("periods") else []
+        if not conds and not lines:
+            continue
+        t = querying.joined(f["body"])[0]
+        used = pred_fields([*([parse.predicate(conds, t)] if conds else []), *[p for line in lines for p in parse.parse_period(line, t)]])
+        names = f.get("as") or {}
+        need = {names.get(c, c) for c in used}
+        if columns is None or not need <= columns:
+            missed += sorted(need if columns is None else need - columns)
+            continue
+        rename = {c: names[c] for c in sorted(used) if names.get(c, c) != c}
+        if rename:
+            more.append({"as": rename, "where": conds, "periods": lines})
+        else:
+            more += [conds] if conds else []
+            more_periods += lines
+    if not more and not more_periods:
+        return card, missed
+    cut = {**body, "conditions": [*(body.get("conditions") or []), *more], **({"periods": [*(body.get("periods") or []), *more_periods]} if more_periods else {})}
+    return {**card, "source": {**card["source"], "body": cut}}, missed
+
+
+def tile_reads(body: dict) -> dict[str, list[str]]:
+    """[SPECIFICATION] plans/dash-blocks.md#tile_reads
+    숫자 타일 조회의 조건·기간 줄이 읽는 컬럼 이름들 {conditions, periods}."""
+    t = querying.joined(body)[0]
+    conds = body.get("conditions") or []
+    lines = body.get("periods") or []
+    return {"conditions": sorted(pred_fields([parse.predicate(conds, t)])) if conds else [],
+            "periods": sorted(pred_fields([p for line in lines for p in parse.parse_period(line, t)]))}
+
+
+def linked_columns(dash: dict, card: dict) -> set[str]:
+    """[SPECIFICATION] plans/dash-blocks.md#linked_columns
+    이 카드가 링크로 받는 필터가 읽는 이 카드 쪽 컬럼 이름들."""
+    found: set[str] = set()
+    for sender in dash_store.link_defaults(dash["cards"]):
+        view = sender["view"]
+        if card["id"] not in (view.get("link_to") or []):
+            continue
+        frame, body = view.get("frame") or {}, sender["source"].get("body")
+        if sender["kind"] == "chart" and view.get("cross"):
+            reads = [body["x"]] if isinstance(body, dict) and isinstance(body.get("x"), str) else []
+        elif sender["kind"] == "chip_row" or (sender["kind"] == "segment" and frame.get("mode") == "filter"):
+            reads = [frame["column"]] if frame.get("column") else []
+        elif sender["kind"] == "tile" and view.get("press"):
+            tile = tile_reads(body)
+            reads = tile["conditions"] + (tile["periods"] if view["press"] == "period" else [])
+        else:
+            reads = []
+        mapping = (view.get("link_map") or {}).get(card["id"]) or {}
+        found |= {mapping.get(c, c) for c in reads}
+    return found
 
 
 def filter_note(missed: list[str]) -> str:
@@ -541,12 +609,16 @@ def compute_filtered(card: dict, now: str, ctx: dict | None = None) -> dict:
     return {**data, "note": " ".join(filter(None, [data.get("note"), filter_note(missed)]))} if missed else data
 
 
-def filter_values(cards: list[dict], column: str) -> tuple[list[str], bool]:
+def filter_values(cards: list[dict], column: str, filters: list | None = None) -> tuple[list[str], bool, list[str]]:
     """필터 칸에 보일 값 목록: 조회가 있는 카드 가운데 조인까지 한 테이블에 column이 있는 첫 카드에서 result.get_values(서로 다른 값, 더 있는지). 그런 카드가 없으면 ValueError."""
     for card in cards:
         body = card["source"].get("body")
-        if isinstance(body, dict) and column in (t := querying.joined(body)[0]).columns:
-            return run(lambda: result.get_values(t, column))
+        if isinstance(body, dict) and column in querying.joined(body)[0].columns:
+            bare = {k: v for k, v in body.items() if k not in ("conditions", "periods")}
+            cut, missed = with_filters({"source": {"body": bare}}, {"filters": filters or []})
+            t = querying.filtered(cut["source"]["body"])
+            values, more = run(lambda: result.get_values(t, column))
+            return values, more, missed
     raise ValueError(f"'{column}' 컬럼이 있는 카드가 이 대시보드에 없어요.")
 
 
@@ -1320,6 +1392,8 @@ def compute(card, now, ctx=None):
         body = with_period(source["body"], source.get("date"), (ctx or {}).get("range")) if card["kind"] in ("chart", "metric") else source["body"]
         if card["kind"] in VALUE_KINDS:
             found = value_data(card, ctx)
+            if card["kind"] == "tile":
+                found = {**found, "reads": tile_reads(source["body"])}
         elif card["kind"] == "table":
             found = table_data(card, ctx)
         elif card["kind"] == "sentence":

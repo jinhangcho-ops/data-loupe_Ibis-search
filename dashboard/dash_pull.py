@@ -88,9 +88,6 @@ def dash_needs(dash: dict, ctx: dict | None, extra: dict | None = None) -> list[
         entry["columns"].append(columns)
         entry["stacked"] = entry["stacked"] or stacked
 
-    def fields(preds: list) -> set[str]:
-        return {f.name for p in preds for f in p.op().find(ibis.expr.operations.Field, filter=ibis.expr.operations.Value)}
-
     for card in cards:
         src = card["source"]
         body, recipe = src.get("body"), src.get("recipe")
@@ -106,8 +103,8 @@ def dash_needs(dash: dict, ctx: dict | None, extra: dict | None = None) -> list[
             joins = [parse.parse_join(line, names) for line in body.get("joins") or []]
             tables = {n: querying.table_of(n, schema or None) for n in names}
             date = dash_calc.period_column(card) or ""
-            lines = [(line, fields(parse.parse_period(line, expr))) for line in body.get("periods") or []]
-            conds = [(cond, fields([parse.predicate(cond, expr)])) for cond in body.get("conditions") or []]
+            lines = [(line, dash_calc.pred_fields(parse.parse_period(line, expr))) for line in body.get("periods") or []]
+            conds = [(cond, dash_calc.pred_fields([parse.predicate(cond, expr)])) for cond in body.get("conditions") or []]
             null_base = any(j[1] in ("right", "outer", "full") for j in joins)
             # asof 조인의 시각 쌍(on)도 조인 키로 본다
             join_keys = [(name, [*pairs, *([on] if on else [])]) for name, _, pairs, on in joins]
@@ -117,7 +114,8 @@ def dash_needs(dash: dict, ctx: dict | None, extra: dict | None = None) -> list[
             keys = [pair for _, pairs in join_keys for pair in pairs]
             need = None if cols is None else (set(cols) | {c for _, used in lines + conds for c in used}
                                               | {f["column"] for f in dash.get("filters") or [] if f.get("column") in expr.columns}
-                                              | {left for left, _ in keys} | ({date} if date else set()))
+                                              | {left for left, _ in keys} | ({date} if date else set())
+                                              | (dash_calc.linked_columns(dash, card) & set(expr.columns)))
 
             def sendable(item: object, used: set[str], role: str, group_names: list[str], table: str, null: bool, period: bool) -> bool:
                 if parse.SOURCE in used or not all(origins.get(c) == role and all(c in tables[g].columns for g in group_names) for c in used):

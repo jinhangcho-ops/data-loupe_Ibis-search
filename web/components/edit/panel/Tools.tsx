@@ -11,18 +11,21 @@ import { funnelColors, flowDropout, GAP_STATS } from "@/components/cards/svg/__p
 import { cardRequest, chartPoints, computeCard, labels as fetchLabels } from "@/lib/api";
 import { anaView, HEX, POINT_TYPES, shades } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
+import { freshLinks } from "@/lib/links";
 import { pickColor } from "@/lib/series";
+import { useShell } from "@/components/shell/ShellProvider";
 import { computedUpdate, useDash } from "@/lib/store";
 import type { Card, CardData, CardView, ChartType } from "@/lib/types";
 import { autoParams, percentDomain, type AutoRule, type AutoView, type AxisScale, type Order, type ParamSpec } from "@/lib/autoviz";
 import { RulesEditor } from "../RulesEditor";
-import { Check } from "../menu/Fields";
+import { Check, Sel, Txt } from "../menu/Fields";
 import { DATE_X, WATCH } from "../menu/kinds";
 import { GroupPicker } from "./GroupPicker";
 import { parseBands } from "../menu/build";
 import { ROUND_TYPES } from "@/components/cards/chart/shapes";
 
 export const SIZE_LABEL = "버블 크기·Z축";  // 점 차트의 셋째 숫자 컬럼(view.points.size): 버블은 크기, 3차원 산점도는 Z축
+const MAX_NOTE = 100;  // 타일 설명 글자 수 상한(서버 dash_store.MAX_TILE_NOTE)
 const FORMATS: [string, string][] =[["number", "숫자"], ["percent", "%"], ["currency", "금액"]];
 // 목표·값 모양이 없는 SVG 카드(옛 svgTools plain)
 const RINGS: [string, string][] = [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리와 목표 눈금"]];
@@ -63,6 +66,7 @@ const ORDER_REFETCH ="그룹이 많아 서버가 고른 값이에요. 바꾸면 
 export function Tools({ card, columns, onChange }: { card: Card; columns: string[]; onChange: (patch: Partial<Card>) => void }) {
   const consts = useConstants();
   const { state, dispatch } = useDash();
+  const { page } = useShell();
   const theme = useTheme();
   const kit = useMemo(() => consts && seriesKit(consts), [consts]);
   const [msg, setMsg] = useState("");
@@ -114,7 +118,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
       }}>{name}</button>
     );
   };
-  const unitText = ["kpi", "donut_kpi", "stripes", "bullet", "calheat"].includes(card.kind);
+  const unitText = ["kpi", "tile", "donut_kpi", "stripes", "bullet", "calheat"].includes(card.kind);
   const hasRules = card.kind === "table" || card.kind === "sentence" || WATCH.includes(card.kind);
   const withTarget = !CHART_KINDS.includes(card.kind) && !PLAIN.includes(card.kind);
   const target = view.target as { value?: number; name?: string } | undefined, targetErr = (card.data?.target as { error?: string } | undefined)?.error;
@@ -359,6 +363,10 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
           {kindFields}
           {unitSel}
           {unitText && <label className="hint bset">단위<input aria-label="단위" placeholder="단위" maxLength={10} className="w-[5rem] h-[1.5rem] [font-size:.75rem]" value={view.unit_text ?? ""} onChange={e => setView({ unit_text: e.target.value })} /></label>}
+          {card.kind === "tile" && (<>
+            <Txt label="설명" value={card.view.note ?? ""} onChange={v => onChange({ view: { ...card.view, note: v.slice(0, MAX_NOTE) || undefined } })} />
+            <Sel label="누르면" value={card.view.press ?? ""} blank="누르지 않음" options={[["cond", "조건만 걸기"], ["period", "기간 줄도 같이 걸기"]]} onChange={v => onChange({ view: { ...card.view, press: (v || undefined) as CardView["press"] } })} />
+          </>)}
         </div>
       )}
       <GroupPicker card={card} data={shown.data ?? {}} onChange={onChange} recompute={recompute} />
@@ -389,8 +397,8 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
             </label>
           )}
           {CHART_KINDS.includes(card.kind) && look !== "ana" && look !== "points" && (
-            <label className="hint bset" title="보는 곳에서 이 카드의 막대·조각을 누르면 그 가로축 값으로 모든 카드를 걸러요. 다시 누르면 풀려요. 날짜 가로축은 안 돼요(기간으로 거르세요)">누르면 거르기
-              <input type="checkbox" aria-label="누르면 거르기" checked={view.cross === true} onChange={e => (e.target.checked ? setView({ cross: true }) : without("cross"))} />
+            <label className="hint bset" title="보는 곳에서 이 카드의 막대·조각을 누르면 그 가로축 값으로 링크한 카드를 걸러요. 다시 누르면 풀려요. 날짜 가로축은 안 돼요(기간으로 거르세요)">누르면 거르기
+              <input type="checkbox" aria-label="누르면 거르기" checked={view.cross === true} onChange={e => (e.target.checked ? setView({ cross: true, ...(view.link_to || !state.dash ? {} : { link_to: freshLinks(card, state.dash, page) }) }) : without("cross"))} />
             </label>
           )}
         </div>

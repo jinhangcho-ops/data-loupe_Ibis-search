@@ -372,7 +372,7 @@ def card_hours() -> Response:
 
 @app.post("/api/dash/filter/values")
 def filter_values():
-    """필터 칸에 보일 값 목록 {values, more}: 저장한 대시보드(id)의 지금 연결 카드들에서 column의 서로 다른 값(dash_calc.filter_values)."""
+    """필터 칸에 보일 값 목록 {values, more}: 저장한 대시보드(id)의 지금 연결 카드들에서 column의 서로 다른 값(dash_calc.filter_values). filters(칩 줄이 받는 링크 필터)가 있으면 그것으로 좁힌다."""
     body, now = request.json or {}, dash_store.current_source()
     pc = dash_pull.uses_pc(body.get("id"))
     if not now and not pc:
@@ -380,13 +380,14 @@ def filter_values():
     d = dash_store.get_dashboard(body.get("id"))
     cards = [c for c in d["cards"] if not now or not other_source(c["source"].get("key"), now)]
     column = dash_store.text(body.get("column"), "필터 컬럼", dash_store.MAX_FILTER_NAME, 1)
+    filters = body.get("filters") or []
     if not pc:
-        values, more = dash_calc.filter_values(cards, column)
-        return jsonify(values=values, more=more)
+        values, more, missed = dash_calc.filter_values(cards, column, filters)
+        return jsonify(values=values, more=more, note=dash_calc.filter_note(missed))
     files, _ = dash_pull.held_files(d, None)
     with dash_pull.on_pc(files, d["id"]):
-        values, more = dash_calc.filter_values(cards, column)
-    return jsonify(values=values, more=more)
+        values, more, missed = dash_calc.filter_values(cards, column, filters)
+    return jsonify(values=values, more=more, note=dash_calc.filter_note(missed))
 
 
 @app.get("/api/viz")

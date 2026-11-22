@@ -15,10 +15,11 @@ import { isFrame } from "@/components/frame/registry";
 import { CARD_MIME, isShell, shellOf, type Spec } from "@/components/edit/menu/kinds";
 import { useShell } from "@/components/shell/ShellProvider";
 import { cardValue } from "@/components/cards/svg/__pure__";
-import { GRID_COLS, cellAt, clampLayout, compactLayout, isPoints, moveCard, onPage } from "@/lib/calc";
+import { GRID_COLS, cellAt, clampLayout, compactLayout, isPoints, moveCard, onPage, pageOf } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import { sameSource } from "@/lib/series";
+import { freshLinks, isSender, onlySeries } from "@/lib/links";
 import type { Card, Ctx, Dashboard, Layout, Section, Source, Unit } from "@/lib/types";
 import { AlignBar } from "./AlignBar";
 import { MISSING_SECTION, NEW_PIECE, SUB, applySections, dropPiece, movePiece, pieceItems, pieceMin, resizePiece, roomOf, sectionMin, sectionsOf, wrapCard } from "./sections";
@@ -29,6 +30,7 @@ const SHELL_NOTE = "아직 데이터가 없어요. 제목 옆 ⚙를 눌러 테�
 const NO_SPOT = "그 자리에는 조각을 놓을 수 없어요. 다른 조각과 1눈금 이상 떨어진 빈 곳에 놓아 주세요.";
 const LOOK_TIP = "눌러서 크게 봐요. 그림으로 내보낼 카드는 제목 줄의 체크 칸으로 골라요";  // 보는 곳 카드의 풍선
 const PRESSABLE = "button, a, input, select, textarea, label, summary";  // 몸통 안에서 눌러도 큰 창을 열지 않는 것
+const ACTIVE = PRESSABLE + ", .bcard:not(.frame) > .bbody";  // 보는 곳에서 누르면 일이 일어나는 곳(단추·입력·데이터 카드 몸통 = 크게 보기)
 
 /** 카드 아래 안내(옛 dash.js .bwhen): 다른 연결의 이전 값, 서버 안내(값을 구한 시각은 카드 머리 .bhead의 title), 저장된 일 값의 시작일, 기간 기준 날짜, 연결해서 다시 구해야 하는 집계. 한 줄에 하나 */
 export function whenLines(card: Card, d: Card["data"], range: Ctx["range"], conn: Source, merge: string[]) {
@@ -60,6 +62,8 @@ export function useAddShell() {
     if (dash.cards.length >= max) return dispatch({ type: "error", message: `대시보드에는 카드를 ${max}개까지 넣을 수 있어요.` });
     const { sections, cards } = sectionsOf(dash);
     const base = { ...shellOf(spec), id: newCardId(), layout: { x: 0, y: 0, w: 6, h: 8 } } as Card;
+    const target = section ? sections.find(s => s.id === section) : undefined;
+    if (isSender(base.kind)) base.view = { ...base.view, link_to: freshLinks(base, dash, target ? pageOf(target, dash.pages ?? []) : page) };
     let card: Card, placed: Section[];
     if (!section) {
       const wrapped = wrapCard(base, sections, dash.pages, page);
@@ -87,28 +91,31 @@ export function useAddShell() {
   }, [state.dash, dispatch, max, page]);
 }
 
-function WhenLine({ card, d }: { card: Card; d: Card["data"] }) {
-  const { state } = useDash(), { conn } = useShell(), merge = useConstants()?.dash.merge ?? [];
-  return <div className="hint bwhen [padding:0_.625rem]">{whenLines(card, d ?? {}, state.ctx?.range, conn, merge)}</div>;
+function WhenLine({ card, d, range }: { card: Card; d: Card["data"]; range: Ctx["range"] }) {
+  const { conn } = useShell(), merge = useConstants()?.dash.merge ?? [];
+  return <div className="hint bwhen [padding:0_.625rem]">{whenLines(card, d ?? {}, range, conn, merge)}</div>;
 }
 
 const withUnit = (card: Card, unit: Unit | null): Card => unit ? { ...card, view: { ...card.view, unit } } : card;  // 기간 단위 요소가 고른 단위로 그리기만(저장하지 않는다)
 
 type Shared = {
   edit: boolean; look: boolean; star: Dashboard["north_star"]; palette: Dashboard["palette"]; shares: string[];
-  setShares: Dispatch<SetStateAction<string[]>>; pick: (id: string) => void; cross: (column: string, value: string) => void; remove: (id: string) => void;
+  setShares: Dispatch<SetStateAction<string[]>>; pick: (id: string) => void; cross: (from: string, column: string, value: string) => void; remove: (id: string) => void;
 };
 type PieceProps = Shared & { card: Card; l: Layout; drag: Pick<Drag, "startMove" | "startResize"> };
 
 /** 조각 하나(옛 카드 상자): 고르기·크게 보기·%·⚙·×·이름 고치기·비교 문장·안내·틀 요소 */
 function Piece({ card, l, drag, edit, look, star, palette, shares, setShares, pick, cross, remove }: PieceProps) {
   const { state, dispatch } = useDash();
-  const { compares, dashOnly, build, conn, setZoom, unit } = useShell();
+  const { compares, dashOnly, build, conn, setZoom, ctxOf, unitOf, viewOf, presses, press, busy } = useShell();
   const { startMove, startResize } = drag;
+  const cx = ctxOf(card.id), v = viewOf(card.id), loading = busy.includes(card.id);
+  const pressable = look && card.kind === "tile" && !!card.view.press, on = presses.some(p => p.from === card.id);
+  const toggle = () => { press(card.id, on ? null : { tile: { body: card.source.body ?? {}, periods: card.view.press === "period" } }).catch(e => dispatch({ type: "error", message: (e as Error).message })); };
   const key = (e: KeyboardEvent) => {
     if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
     e.preventDefault();
-    if (!look) pick(card.id); else if (!isShell(card)) setZoom(card.id);
+    if (!look) pick(card.id); else if (pressable) toggle(); else if (!isShell(card)) setZoom(card.id);
   };
   const sel = state.picked.includes(card.id), open = state.selected === card.id;
   const tools = edit && (
@@ -134,11 +141,14 @@ function Piece({ card, l, drag, edit, look, star, palette, shares, setShares, pi
     </section>
   );
   const paint = !CHART_KINDS.includes(card.kind);
-  const result = state.values[card.id], said = card.kind === "kpi" ? undefined : compares[card.id];
+  const result = state.values[card.id], said = card.kind === "kpi" || card.kind === "tile" ? undefined : compares[card.id];
+  const drawn = withUnit(v?.series ? { ...card, data: onlySeries(card.data, v.series) } : card, unitOf(card.id));
+  const res = v?.series && result?.data ? { ...result, data: onlySeries(result.data, v.series) } : result;
   const at = isShell(card) ? undefined : (result?.data ?? card.data)?.computed_at;
   return (
     <section data-id={card.id} tabIndex={0} aria-label={card.title + (sel ? " (선택됨)" : "")} title={dashOnly ? undefined : look ? LOOK_TIP : "눌러서 선택해요. 여러 개 고를 수 있어요"}
-      className={"bcard" + (sel ? " sel" : "") + (open && edit ? " editing" : "") + (look && !isShell(card) ? " zoomin" : "")}
+      aria-pressed={pressable ? on : undefined} aria-busy={loading || undefined}
+      className={"bcard" + (sel ? " sel" : "") + (open && edit ? " editing" : "") + (look && !isShell(card) ? " zoomin" : "") + (loading ? " busy" : "")}
       style={{ gridColumn: `${l.x + 1} / span ${l.w}`, gridRow: `${l.y + 1} / span ${l.h}` }}
       onClick={look ? undefined : () => pick(card.id)} onKeyDown={key}>
       <div className={"bhead" + (edit ? " movable" : "")} title={at ? `값을 구한 시각 ${at.replace("T", " ")}` : undefined} onPointerDown={edit ? e => startMove(e, card.id) : undefined}>
@@ -155,11 +165,12 @@ function Piece({ card, l, drag, edit, look, star, palette, shares, setShares, pi
         {!isShell(card) && <button className="ib" title="크게 보기" aria-label={`${card.title} 카드 크게 보기`} onClick={e => { e.stopPropagation(); setZoom(card.id); }}>⤢</button>}
         {tools}
       </div>
-      <div className={"bbody" + (paint ? " paint" : "")} onClick={look && !isShell(card) ? e => { const hit = (e.target as Element).closest(PRESSABLE); if (!hit || !e.currentTarget.contains(hit)) setZoom(card.id); } : undefined}>
-        {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={withUnit(card, unit)} result={result} palette={palette} ctx={state.ctx} onPick={build || !conn ? undefined : cross} share={shares.includes(card.id)} />}
+      <div className={"bbody" + (paint ? " paint" : "")} onClick={look && !isShell(card) ? e => { const hit = (e.target as Element).closest(PRESSABLE); if (!hit || !e.currentTarget.contains(hit)) { if (pressable) toggle(); else setZoom(card.id); } } : undefined}>
+        {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={drawn} result={res} palette={palette} ctx={cx} onPick={build || !conn ? undefined : (column, value) => cross(card.id, column, value)} share={shares.includes(card.id) || !!v?.share} />}
+        {loading && <i className="bspin" aria-hidden="true" />}
       </div>
       {said && <div className={`bcmp ${said.tone} [padding:0_.625rem]`} title={said.delta_text}>{said.text}</div>}
-      {!isShell(card) && <WhenLine card={card} d={result?.data ?? card.data} />}
+      {!isShell(card) && <WhenLine card={card} d={result?.data ?? card.data} range={cx?.range} />}
       {result?.error && <div className="hint bnote [padding:0_.625rem] m-0" role="status">{result.error}</div>}
       {resize}
     </section>
@@ -224,10 +235,13 @@ function SectionBox({ s, l, pieces, all, allSecs, drag, shared, removeAll }: Sec
 
 export function Grid() {
   const { state, dispatch } = useDash();
-  const { dashOnly, build, conn, picks, setFilter, page, zoom, setZoom, unit } = useShell();
+  const { dashOnly, build, conn, presses, press, unitOf, ctxOf, clearFilters, page, zoom, setZoom } = useShell();
   const [shares, setShares] = useState<string[]>([]);  // 비율(%)로 보는 카드 id(저장하지 않는다)
   // 누르면 거르기(4단계): 같은 값을 다시 누르면 푼다. 보는 곳에서 연결돼 있을 때만(만드는 곳에서는 카드 누르기가 설정 열기다)
-  const cross = useCallback((column: string, value: string) => { setFilter(column, picks.some(p => p.column === column && p.in[0] === value) ? [] : [value]); }, [picks, setFilter]);
+  const cross = (from: string, column: string, value: string) => {
+    const on = presses.some(p => p.from === from && p.value?.column === column && p.value.in[0] === value);
+    press(from, on ? null : { value: { column, in: [value] } }).catch(e => dispatch({ type: "error", message: (e as Error).message }));
+  };
   const addShell = useAddShell();
   const ref = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
@@ -277,17 +291,18 @@ export function Grid() {
     addShell(JSON.parse(raw) as Spec, cellAt(e.clientX, e.clientY, metrics(box.querySelector<HTMLElement>(".bsec-body") as HTMLElement, room.cols, room.rows)), box.dataset.section);
   };
 
-  const zoomed = cards.find(c => c.id === zoom), big = zoomed && withUnit(zoomed, unit);
+  const zoomed = cards.find(c => c.id === zoom), big = zoomed && withUnit(zoomed, unitOf(zoomed.id));
   const shared: Shared = { edit, look, star, palette: dash.palette, shares, setShares, pick, cross, remove: id => removePieces([id], allSecs) };
   return (
     <>
-    {big && big.kind === "kpi" && <KpiZoom card={big} result={state.values[big.id]} palette={dash.palette} ctx={state.ctx} unit={unit} live={!!conn && (!big.source?.key || sameSource(big.source.key, conn.key))} onClose={() => setZoom(null)} />}
+    {big && big.kind === "kpi" && <KpiZoom card={big} result={state.values[big.id]} palette={dash.palette} ctx={ctxOf(big.id)} unit={unitOf(big.id)} live={!!conn && (!big.source?.key || sameSource(big.source.key, conn.key))} onClose={() => setZoom(null)} />}
     {big && big.kind !== "kpi" && (
       <Pop title={big.title} cls="zoom-box" onClose={() => setZoom(null)}>
-        <div className={"bbody" + (CHART_KINDS.includes(big.kind) ? "" : " paint")}><CardBody card={big} result={state.values[big.id]} palette={dash.palette} ctx={state.ctx} share={shares.includes(big.id)} /></div>
+        <div className={"bbody" + (CHART_KINDS.includes(big.kind) ? "" : " paint")}><CardBody card={big} result={state.values[big.id]} palette={dash.palette} ctx={ctxOf(big.id)} share={shares.includes(big.id)} /></div>
       </Pop>
     )}
     <div className={"board grid" + (ready ? " drop-ready" : "")} ref={ref} style={secs.length ? undefined : { minHeight: 200 }}
+      onClick={look ? e => { if (!(e.target as Element).closest(ACTIVE)) clearFilters().catch(err => dispatch({ type: "error", message: (err as Error).message })); } : undefined}
       onDragOver={e => { if (gallery(e)) { e.preventDefault(); setReady(true); } }} onDragLeave={e => { if (e.target === e.currentTarget) setReady(false); }} onDrop={drop}>
       {secs.map(s => <SectionBox key={s.id} s={s} l={preview?.[s.id] ?? placed[s.id]} pieces={all.filter(c => c.section === s.id)} all={all} allSecs={allSecs} drag={{ startMove, startResize }} shared={shared} removeAll={removePieces} />)}
     </div>

@@ -1,6 +1,6 @@
 // B10 틀 요소(plans/dash-blocks.md "B10 세부 명세"): 격자에 놓는 조작·틀 요소의 종류와 할 일을 등록하는 화면 쪽의 한 곳(DOM 없음).
 // 요소는 카드와 같은 꼴로 저장한다(kind = 요소 종류, 설정은 view.frame). 서버의 한 벌은 core/dash_store.py의 FRAME_KINDS·FRAME_ACTIONS(web/tests/b10_frames.test.ts가 둘을 견준다).
-import type { PickedFilter } from "@/lib/types";
+import type { PickedFilter, Unit } from "@/lib/types";
 
 /** 추가 메뉴의 묶음 차례. "보기"는 지금의 카드 종류(edit/menu/kinds.ts)이고 요소는 조작·틀에만 있다 */
 export const FRAME_GROUPS = ["조작", "보기", "틀"] as const;
@@ -16,6 +16,9 @@ export const FRAME_KINDS = {
   top_strip: { name: "위쪽 화면 줄", group: "틀", help: "이름·기간·기준일·화면 모드", w: 12, h: 1 },
   page_tabs: { name: "쪽 탭", group: "틀", help: "쪽을 오가는 가로 탭", w: 12, h: 1 },
   text: { name: "글", group: "틀", help: "섹션 안에 글을 적어요", w: 3, h: 1 },
+  segment: { name: "세그먼트", group: "조작", help: "칸을 눌러 보기를 바꾸거나 값으로 걸러요", w: 4, h: 1 },
+  chip_row: { name: "칩 줄", group: "조작", help: "값 칩을 눌러 걸러요", w: 6, h: 1 },
+  filter_bar: { name: "걸린 필터 줄", group: "조작", help: "걸린 필터를 보이고 풀어요", w: 12, h: 1 },
 } as const satisfies Record<string, { name: string; group: FrameGroup; help: string; w: number; h: number }>;
 export type FrameKind = keyof typeof FRAME_KINDS;
 
@@ -39,8 +42,10 @@ export type FramePart = keyof typeof FRAME_PARTS;
 
 /** 단추 하나(단추 요소 자신, 줄 안 항목): 글자·아이콘(둘 중 하나는 꼭)·할 일·받는 값 */
 export type FrameItem = { label: string; icon: string; action: FrameAction | ""; arg: string };
+/** 세그먼트 칸 하나(보기 바꾸기는 label·series·share, 값으로 거르기는 label·value를 쓴다) */
+export type SegCell = { label: string; series: string; share: boolean; value: string };
 /** view.frame: 종류마다 쓰는 항목만 있다(단추는 FrameItem + ambient, 이동 줄은 items + ambient, 위쪽 줄은 parts + items, 나머지는 빈 객체) */
-export type FrameSettings = Partial<FrameItem> & { ambient?: boolean; items?: FrameItem[]; parts?: FramePart[]; text?: string; size?: TextSize; align?: TextAlign };
+export type FrameSettings = Partial<FrameItem> & { ambient?: boolean; items?: FrameItem[]; parts?: FramePart[]; text?: string; size?: TextSize; align?: TextAlign; mode?: "view" | "filter"; column?: string; cells?: SegCell[]; clear_label?: string; period?: string; as_of?: string; unit?: Unit | "" };
 
 /** 글 요소의 꾸밈 한 벌(서버 FRAME_TEXT_SIZES·FRAME_TEXT_ALIGNS와 같은 키·차례) */
 export const TEXT_SIZES = { sm: "작게", md: "보통", lg: "크게" } as const;
@@ -70,6 +75,9 @@ export function freshFrame(kind: FrameKind): FrameSettings {
   if (kind === "nav_rail") return { items: [], ambient: false };
   if (kind === "top_strip") return { parts: Object.keys(FRAME_PARTS) as FramePart[], items: [] };
   if (kind === "text") return { text: "", size: "md", align: "left" };
+  if (kind === "segment") return { mode: "view", column: "", cells: [], ambient: false };
+  if (kind === "chip_row") return { column: "", ambient: false };
+  if (kind === "filter_bar") return { clear_label: "", ambient: false };
   return {};
 }
 
@@ -83,6 +91,9 @@ export function frameError(kind: FrameKind, frame: FrameSettings): string {
     if (need === "page" && (arg ?? "") === "") return "이동할 쪽을 고르세요.";
     if (need === "card" && (arg ?? "") === "") return "크게 볼 카드를 고르세요.";
   }
+  if (kind === "segment" && !(frame.cells ?? []).length) return "칸을 하나 이상 더하세요.";
+  if ((kind === "chip_row" || (kind === "segment" && frame.mode === "filter")) && !(frame.column ?? "")) return "거를 컬럼을 고르세요.";
+  if (kind === "segment" && (frame.cells ?? []).some(c => c.label.trim() === "")) return "칸마다 글자를 적어 주세요.";
   return "";
 }
 
@@ -115,7 +126,7 @@ export function runAction(item: Pick<FrameItem, "action" | "arg">, host: ActionH
 
 /** [SPECIFICATION] plans/dash-blocks.md#filterNote
  *  보고서 그림에 적는 한 줄: 걸린 기간·기준일·필터(없으면 ""). */
-export function filterNote(period: string, asOf: string, picks: PickedFilter[]): string {
+export function filterNote(period: string, asOf: string, picks: PickedFilter[], pressed: string[]): string {
   const parts: string[] = [];
   const p = period.trim();
   if (p !== "") parts.push(`기간 ${p}`);
@@ -124,5 +135,6 @@ export function filterNote(period: string, asOf: string, picks: PickedFilter[]):
   for (const pick of picks) {
     if (pick.in.length > 0) parts.push(`${pick.column}: ${pick.in.join(", ")}`);
   }
+  parts.push(...pressed.filter(p => p !== ""));
   return parts.join(" · ");
 }

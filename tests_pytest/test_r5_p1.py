@@ -91,9 +91,19 @@ window.__calls=[];window.__delay=u=>0;const f=window.fetch;window.fetch=(u,o)=>{
             time.sleep(0.2)
         raise AssertionError(f"기다리다 시간이 지났어요: {cond}")
 
-    def nav(self, path, wait=2.0):
-        self.call("Page.navigate", url=f"http://127.0.0.1:{self.port}{path}")
-        time.sleep(wait)
+    def nav(self, path, wait=2.0, tries=3, secs=8):
+        # PC가 바쁠 때 화면 응답이 앞 64KB만 오고 끊기는 일이 있어, 문서가 다 왔는지 보고 아니면 다시 연다
+        for _ in range(tries):
+            self.ev("window.__old = 1; return 1;")
+            self.call("Page.navigate", url=f"http://127.0.0.1:{self.port}{path}")
+            time.sleep(wait)
+            end = time.time() + secs
+            while time.time() < end:
+                res = self.call("Runtime.evaluate", expression="!window.__old && document.readyState !== 'loading'", returnByValue=True)
+                if res.get("result", {}).get("value") is True:
+                    return
+                time.sleep(0.2)
+        raise AssertionError(f"화면을 열지 못함: {path}")
 
     def close(self):
         if self.ws:

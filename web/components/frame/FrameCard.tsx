@@ -9,6 +9,7 @@ import { ThemeButton, flipEasy, flipTheme } from "@/components/shell/TopBar";
 import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import type { Card, Constants, Unit } from "@/lib/types";
+import { ChipRow, FilterTags, Segment } from "./LinkFrames";
 import { FRAME_ACTIONS, frameError, freshFrame, runAction, type ActionHost, type FrameItem, type FrameKind, type FrameSettings } from "./registry";
 
 /** 그리는 함수가 받는 것: 요소 카드·설정과 앱의 지금 상태 */
@@ -44,14 +45,14 @@ const DRAW: Record<FrameKind, (d: Draw) => ReactNode> = {
     <div className="fr-top">
       {(d.frame.parts ?? []).map(part =>
         part === "name" ? <b key={part} className="fr-name">{d.name}</b>
-        : part === "period" ? <PeriodField key={part} id={`fr-per-${d.card.id}`} />
-        : part === "asof" ? <AsOfField key={part} id={`fr-asof-${d.card.id}`} />
+        : part === "period" ? <PeriodField key={part} id={`fr-per-${d.card.id}`} elem={d.card.id} />
+        : part === "asof" ? <AsOfField key={part} id={`fr-asof-${d.card.id}`} elem={d.card.id} />
         : <span key={part} className="fr-act" inert={!d.live || undefined}><ThemeButton /></span>)}
       <span className="fr-act" inert={!d.live || undefined}>{(d.frame.items ?? []).map((item, i) => <FrameButton key={i} item={item} d={d} />)}</span>
     </div>
   ),
-  period_pick: d => <PeriodField id={`fr-per-${d.card.id}`} />,
-  asof_field: d => <AsOfField id={`fr-asof-${d.card.id}`} />,
+  period_pick: d => <PeriodField id={`fr-per-${d.card.id}`} elem={d.card.id} />,
+  asof_field: d => <AsOfField id={`fr-asof-${d.card.id}`} elem={d.card.id} />,
   unit_seg: d => d.consts && (
     <div className="fr-seg" role="group" aria-label="기간 단위">
       {(Object.entries(d.consts.dash.units) as [Unit, string][]).map(([key, name]) => (
@@ -61,10 +62,13 @@ const DRAW: Record<FrameKind, (d: Draw) => ReactNode> = {
   ),
   page_tabs: () => <PageTabs frame />,
   text: d => <div className="fr-text" data-size={d.frame.size ?? "md"} style={{ textAlign: d.frame.align ?? "left" }}>{d.frame.text ?? ""}</div>,
+  segment: d => <Segment card={d.card} live={d.live} />,
+  chip_row: d => <ChipRow card={d.card} live={d.live} />,
+  filter_bar: d => <FilterTags card={d.card} live={d.live} />,
 };
 
 /** card: 요소 카드(kind가 FRAME_KINDS). live: 눌렀을 때 할 일을 하는지(만드는 곳의 편집 중·추가 메뉴의 미리 보기는 false) */
-export type FrameCardProps = { card: Pick<Card, "id" | "kind" | "view">; live: boolean };
+export type FrameCardProps = { card: Card; live: boolean };
 
 /** [SPECIFICATION] plans/dash-blocks.md#FrameCard
  *  요소 카드 하나의 몸통을 종류에 맞게 그린다. */
@@ -81,6 +85,6 @@ export function FrameCard(props: FrameCardProps): ReactNode {
   };
   return DRAW[kind]({
     card, frame: card.view.frame ?? freshFrame(kind), live, host, page: pages.includes(shell.page) ? shell.page : pages[0] ?? "", zoom: shell.zoom,
-    name: state.dash?.name ?? "", title: state.dash?.cards.find(c => c.id === card.id)?.title, consts, unit: shell.unit, setUnit: shell.setUnit, alert: message => dispatch({ type: "error", message }),
+    name: state.dash?.name ?? "", title: state.dash?.cards.find(c => c.id === card.id)?.title, consts, unit: shell.elems[card.id]?.unit ?? null, setUnit: u => shell.setElemUnit(card.id, u), alert: message => dispatch({ type: "error", message }),
   });
 }

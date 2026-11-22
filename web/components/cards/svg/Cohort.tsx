@@ -1,7 +1,7 @@
 "use client";
 // cohort(P14): 처음 온 기간(코호트)별로 경과 기간마다 남은 비율 표(data.values = {periods, cohorts:[{start, size, retained[0~1]}]}, 상한은 서버).
 // 칸 바탕은 주 색을 비율만큼(최대 60%) 섞고 글자는 본문 색, 빈 칸은 "-". values.partial이면 각 코호트의 마지막 칸(진행 중인 기간)을 흐리게(안내 글은 data.note로 카드 아래에)
-import { Box, NOTHING, Say, more, tone, type P } from "./common";
+import { Box, Empty, more, tone, type P } from "./common";
 
 const OPEN_OPACITY = 0.45;  // 진행 중인 기간의 칸을 흐리게
 const GAP = "3px", RX = "4px";  // 칸 사이 틈, 칸 모서리 둥글기(예시 12-cohort: 칸 33x19, 간격 36x22, rx 4)
@@ -11,7 +11,7 @@ const VALUE_CELL = { ...FLAT_CELL, borderRadius: RX } as const;  // 값 칸: 둥
 
 export function Cohort(p: P) {
   const d = more(p), shown = d.cohorts ?? [];
-  if (!shown.length) return <Say text={NOTHING} />;
+  if (!shown.length) return <Empty />;
   const n = Math.max(...shown.map(c => c.retained?.length ?? 0)), c = tone(p, "주 색", 0);
   return (
     <Box cls="table cohort nm-well">

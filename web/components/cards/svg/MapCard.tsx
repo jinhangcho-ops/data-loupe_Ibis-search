@@ -7,7 +7,7 @@ import { imageUrl } from "@/lib/api";
 import { useDash } from "@/lib/store";
 import { useRootScale } from "../chart/scale";
 import { growFont } from "./__pure__";
-import { LEVEL_NAMES, Say, levelColor, type P } from "./common";
+import { Empty, LEVEL_NAMES, levelColor, type P } from "./common";
 import type { Entity } from "./Status";
 
 const DOT_STROKE = 1.5, DOT_OPACITY = 0.75, RACK_RX = 6;  // 점의 바탕색 테두리 굵기·채움 투명도, 배경 칸 모서리 둥글기(예시 80-bubble-map: 칸 rx 6)
@@ -29,7 +29,7 @@ export function MapCard({ card, colors }: P) {
     }).catch(e => { if (live) setImg({ error: (e as Error).message }); });
     return () => { live = false; if (url) URL.revokeObjectURL(url); };
   }, [bg, dashId, card.id, view.image_path]);
-  if (!entities.length) return <Say cls="alerts" text="보여 줄 대상이 없어요" />;
+  if (!entities.length) return <Empty />;
   const pos: Record<string, [number, number]> = { ...autoGrid(entities), ...(view.positions ?? {}), ...drag };
   const links = [...(view.links ?? []), ...entities.flatMap(e => (e.impact ?? []).map(t => [e.name, t] as [string, string]))];
   const at = (e: React.PointerEvent): [number, number] => {  // 화면 좌표 → SVG 안 좌표 → 0~1

@@ -165,7 +165,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
   };
   const frameButton = (kind: FrameKind) => (
     <button key={kind} type="button" className="cm-kind" onClick={() => place(kind)}>
-      <div className="fr-pic" aria-hidden="true"><FrameCard card={{ id: "", kind, view: { frame: freshFrame(kind) } as Card["view"] }} live={false} /></div>
+      <div className="fr-pic" aria-hidden="true"><FrameCard card={{ id: "", kind, view: { frame: freshFrame(kind) } as Card["view"] } as Card} live={false} /></div>
       <b>{FRAME_KINDS[kind].name}</b><span>{FRAME_KINDS[kind].help}</span></button>
   );
   // 카드 종류를 고르면 보기 화면(폼)으로 간다(찾기에서 골랐을 때도)
@@ -388,9 +388,9 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
 
       <details className="cm-more"><summary>더 많은 설정</summary>
         {/* 비워 둬도 카드가 만들어지는 칸(기본값으로 충분한 것)은 여기에 접어 둔다 */}
-        {is("kpi", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation", "bullet", "calheat") && <Sel label="표시 형식" value={f.format} onChange={v => set("format", v)} options={FORMATS} />}
-        {is("kpi", "donut_kpi", "stripes", "bullet", "calheat") && <Txt label="단위" title="값 뒤에 붙일 글자. 사람 수는 명, 횟수는 회처럼 적어요. 돈이면 표시 형식 금액을 고르거나 원을 적어요" placeholder="단위 (예: 명, 회, 원)" value={f.unitText} onChange={v => set("unitText", v.slice(0, 10))} width={130} />}
-        {is("kpi") && <Sel label="지표" title="지표 하나를 값으로 써요. 비율 지표는 분자와 분모도 작게 보여요" value={f.metric} onChange={v => set("metric", v)} options={metrics} blank="(쓰지 않음)" />}
+        {is("kpi", "tile", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation", "bullet", "calheat") && <Sel label="표시 형식" value={f.format} onChange={v => set("format", v)} options={FORMATS} />}
+        {is("kpi", "tile", "donut_kpi", "stripes", "bullet", "calheat") && <Txt label="단위" title="값 뒤에 붙일 글자. 사람 수는 명, 횟수는 회처럼 적어요. 돈이면 표시 형식 금액을 고르거나 원을 적어요" placeholder="단위 (예: 명, 회, 원)" value={f.unitText} onChange={v => set("unitText", v.slice(0, 10))} width={130} />}
+        {is("kpi", "tile") && <Sel label="지표" title="지표 하나를 값으로 써요. 비율 지표는 분자와 분모도 작게 보여요" value={f.metric} onChange={v => set("metric", v)} options={metrics} blank="(쓰지 않음)" />}
         <label className="hint cm-field">카드 이름<input value={f.title} placeholder="카드 이름 (비우면 자동)" onChange={e => set("title", e.target.value)} /></label>
         <div className="row">
           <input aria-label="목표 파일 경로" title="xlsx, csv, yaml, json, md, txt 파일을 읽을 수 있어요" placeholder="목표 파일 경로" value={path} onChange={e => setPath(e.target.value)} />

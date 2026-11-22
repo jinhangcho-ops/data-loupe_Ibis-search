@@ -1,5 +1,6 @@
 import type { AutoRule, AutoTable, AutoView, AxisScale, Order, Scale, SemanticWords } from "@/lib/autoviz";
 import type { GroupView } from "@/lib/groups";
+import type { CtxFilter } from "@/lib/links";
 import type { FrameKind, FrameSettings } from "@/components/frame/registry";
 
 // Flask API가 주고받는 JSON 모양(core/dash_store.py의 check_* 와 dashboard/dash_app.py가 돌려주는 것 그대로). 이름은 서버 키를 바꾸지 않는다.
@@ -9,7 +10,7 @@ export type Layout = { x: number; y: number; w: number; h: number };
 
 /** 카드 종류(dash_store.KINDS) */
 export type CardKind =
-  | "chart" | "analysis" | "metric" | "kpi" | "donut_kpi" | "gauge" | "summary" | "dual_trend" | "stripes" | "blocks"
+  | "chart" | "analysis" | "metric" | "kpi" | "tile" | "donut_kpi" | "gauge" | "summary" | "dual_trend" | "stripes" | "blocks"
   | "target_trend" | "map" | "alerts" | "deviation" | "funnel" | "table" | "status" | "sentence" | "geomap"
   | "histogram" | "boxplot" | "heatmap" | "calheat" | "treemap" | "sunburst" | "bullet" | "bump" | "sankey" | "cohort" | "candle" | "wordcloud" | FrameKind;
 
@@ -78,7 +79,11 @@ export type CardView = {
   scale?: AxisScale;                  // 값 축 눈금: log | symlog(없으면 보통)
   all_data?: boolean;                 // 모든 데이터: 자동 규칙이 덜어 낸 것을 풀어 그림
   data_table?: boolean;               // 차트 아래 표로 보기
-  cross?: boolean;                    // 누르면 거르기: 보는 곳에서 막대·조각을 누르면 가로축 값으로 모든 카드를 거른다
+  cross?: boolean;                    // 누르면 거르기: 보는 곳에서 막대·조각을 누르면 가로축 값으로 링크한 카드를 거른다
+  link_to?: string[];  // (B4) 이 카드·요소가 보내는 것을 받는 카드 id(빈 목록도 저장)
+  link_map?: Record<string, Record<string, string>>;  // (B4) 상대 id → {보내는 쪽 컬럼: 상대 컬럼}
+  note?: string;  // (B2) 숫자 타일 설명 글
+  press?: "cond" | "period";  // (B2) 타일 누르기: 조건만 / 기간 줄도(없으면 꺼짐)
   page?: string;                      // 놓인 쪽(탭) 이름. 대시보드의 쪽 목록에 없으면 첫 쪽에 보인다
   groups?: GroupView;              // 표시할 그룹 고르기(Phase 4, lib/groups.applyGroups)
   cloud?: { mode: "values" | "labels" | "words"; tags?: string[]; rows?: "all" | "tagged"; match?: "any" | "all"; text?: string; pos?: ("noun" | "verb" | "adj" | "foreign")[]; stop?: string[]; min_len?: number };  // 워드클라우드 방식(Phase 4)
@@ -137,6 +142,7 @@ export type Dashboard = {
   pages?: string[];        // 쪽(탭) 이름 목록. 비었으면 쪽을 나누지 않는다(옛 저장본에는 없다)
   pull?: Pull;             // (B11) 받기 설정(옛 저장본에는 없다: consts.dash.pull.default)
   sections?: Section[];    // (B5) 섹션 목록(옛 저장본에는 없다: 카드마다 섹션 하나로 읽는다)
+  press_chips?: boolean;  // (B4) 누른 값을 도구 줄 필터 줄에 칩으로(옛 저장본에는 없다: 켜짐)
 };
 /** (B11) 갱신 주기 단위(dash_store.PULL_UNITS의 키) */
 export type PullUnit = "s" | "m" | "h";
@@ -167,7 +173,7 @@ export type DashList = { dashboards: DashSummary[]; locked: boolean; last: strin
 export type Span = { start: string | null; end: string | null; days?: number; label: string; error: string | null; [more: string]: unknown };
 export type PrevSpan = { start: string; end: string; text: string };
 /** 카드를 구할 때 보내는 ctx(DashBoard.ctx, dash_refresh.context): 보는 기간·직전 기간·기준일 */
-export type Ctx = { range?: { start: string; end: string }; prev?: PrevSpan | null; months?: number; as_of?: string; compare_mode?: CompareMode; filters?: PickedFilter[] };
+export type Ctx = { range?: { start: string; end: string }; prev?: PrevSpan | null; months?: number; as_of?: string; compare_mode?: CompareMode; filters?: CtxFilter[] };
 /** 대시보드의 필터 칸 하나(만드는 곳에서 정한다): 컬럼 이름과 보일 이름(비면 컬럼 이름) */
 export type DashFilter = { column: string; label: string };
 /** 보는 사람이 필터 칸에서 고른 값(ctx.filters): 컬럼 값이 in 가운데 하나인 행만. 저장하지 않는다 */

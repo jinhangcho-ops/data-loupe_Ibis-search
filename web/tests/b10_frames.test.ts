@@ -33,10 +33,10 @@ describe("등록 자리 한 곳: 화면 registry.ts와 서버 dash_store.py", ()
   it("위쪽 줄의 칸이 서버 FRAME_PARTS와 같은 차례다", () => {
     expect(words(server.match(/^FRAME_PARTS = \(([^)]*)\)/m)![1])).toEqual(Object.keys(FRAME_PARTS));
   });
-  it("요소는 조작·틀 묶음에만 있고(보기는 카드), B2·B3의 요소는 아직 없다", () => {
+  it("요소는 조작·틀 묶음에만 있고(보기는 카드), B3의 요소는 아직 없다", () => {
     expect([...FRAME_GROUPS]).toEqual(["조작", "보기", "틀"]);
     expect(new Set(Object.values(FRAME_KINDS).map(k => k.group))).toEqual(new Set(["조작", "틀"]));
-    expect(Object.keys(FRAME_KINDS).sort()).toEqual(["asof_field", "button", "nav_rail", "page_tabs", "period_pick", "text", "top_strip", "unit_seg"]);
+    expect(Object.keys(FRAME_KINDS).sort()).toEqual(["asof_field", "button", "chip_row", "filter_bar", "nav_rail", "page_tabs", "period_pick", "segment", "text", "top_strip", "unit_seg"]);
   });
   it("할 일 목록에 LLM·도움말처럼 앱에 없는 일이 없다", () => {
     expect(Object.keys(FRAME_ACTIONS).sort()).toEqual(["dash_only", "easy", "export", "filters_clear", "page", "refresh", "settings", "theme", "zoom"]);
@@ -133,9 +133,9 @@ describe("runAction: 이미 있는 기능만 부른다", () => {
 
 describe("filterNote: 보고서에는 조작 요소 대신 걸린 것만 글로", () => {
   it("기간·기준일·필터를 차례로, 없는 것은 뺀다", () => {
-    expect(filterNote("", "", [])).toBe("");
-    expect(filterNote(" 2000-01-01 ~ 2000-01-31 ", "", [])).toBe("기간 2000-01-01 ~ 2000-01-31");
-    expect(filterNote("2000-01-01 ~ 2000-01-31", "2000-02-01", [{ column: "지역", in: ["가", "나"] }, { column: "등급", in: [] }])).toBe("기간 2000-01-01 ~ 2000-01-31 · 기준일 2000-02-01 · 지역: 가, 나");
+    expect(filterNote("", "", [], [])).toBe("");
+    expect(filterNote(" 2000-01-01 ~ 2000-01-31 ", "", [], [])).toBe("기간 2000-01-01 ~ 2000-01-31");
+    expect(filterNote("2000-01-01 ~ 2000-01-31", "2000-02-01", [{ column: "지역", in: ["가", "나"] }, { column: "등급", in: [] }], [])).toBe("기간 2000-01-01 ~ 2000-01-31 · 기준일 2000-02-01 · 지역: 가, 나");
   });
 });
 
@@ -213,7 +213,7 @@ describe("화면 파일이 요소를 잇는다", () => {
   it("할 일이 부르는 기능이 실제로 있다(쉬운 보기·필터 모두 풀기)", () => {
     const top = src("components/shell/TopBar.tsx"), shell = src("components/shell/ShellProvider.tsx");
     for (const word of ["export function flipTheme(", "export function flipEasy("]) expect(top).toContain(word);
-    for (const word of ["clearFilters", "setReport", "setZoom", "setUnit"]) expect(shell).toContain(word);
+    for (const word of ["clearFilters", "setReport", "setZoom", "setElemUnit"]) expect(shell).toContain(word);
     const bar = src("components/shell/Toolbar.tsx");
     expect(bar).not.toContain("const [report, setReport] = useState");  // 그림·보고서 창의 열림 상태는 화면 틀(Shell)에
     expect(bar).toContain("settings, setSettings } = useShell()");  // 설정 창 열림은 Shell에(B11)

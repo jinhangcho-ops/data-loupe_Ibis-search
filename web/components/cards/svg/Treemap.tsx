@@ -8,7 +8,7 @@ import type { TreeItem } from "@/lib/types";
 import { Frame, TIP } from "../chart/Charts";
 import { useRootScale } from "../chart/scale";
 import { fitText, sectorPath, sunburstArcs, treeRoot, withRest } from "./__pure__";
-import { Box, Frame as SvgFrame, NOTHING, Say, more, tone, type P } from "./common";
+import { Box, Empty, Frame as SvgFrame, more, tone, type P } from "./common";
 
 type Painted = TreeItem & { fill: string; fillOpacity?: number; children?: Painted[] };
 // 첫 단계 항목마다 색을 칠해 둘째 단계에 물려준다
@@ -36,7 +36,7 @@ export function TreeCell(n: TreemapNode) {
 
 export function Treemap(p: P) {
   const items = paint(p, withRest(more(p).items));
-  if (!items.length) return <Say text={NOTHING} />;
+  if (!items.length) return <Empty />;
   return (
     <Box cls="treemap">
       <div className="nm-well flex-1 min-h-0">
@@ -49,7 +49,7 @@ export function Treemap(p: P) {
 const S = 320, C = S / 2;
 export function Sunburst(p: P) {
   const font = 11 * useRootScale(), root = treeRoot(p.card.title, withRest(more(p).items)), arcs = sunburstArcs(root);
-  if (!arcs.length) return <Say text={NOTHING} />;
+  if (!arcs.length) return <Empty />;
   const two = arcs.some(a => a.depth === 2), ring = (d: 1 | 2): [number, number] => (d === 1 ? [44, two ? 104 : 156] : [106, 156]);
   return (
     <Box cls="sunburst">

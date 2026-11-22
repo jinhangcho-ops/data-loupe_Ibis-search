@@ -4,14 +4,14 @@ import { showValue } from "@/lib/calc";
 import { tickBy } from "../chart/Charts";
 import { useRootScale } from "../chart/scale";
 import { cardFormat, cardTarget, cardValue } from "./__pure__";
-import { Box, Frame, NOTHING, Say, tone, type P } from "./common";
+import { Box, Empty, Frame, tone, type P } from "./common";
 
 const W = 420, H = 76, L = 8, R = 12, BAR = 24, FONT = 10, TICK_TOP = 46;  // 눈금 글자: 기준 크기, 글자 윗자리(막대·목표 선 아래)
 const TOP = 8, BAND_RX = 6, MARK_INSET = 3;  // 26-bullet: 띠 윗자리, 띠 모서리, 목표 선이 띠 위·아래에서 들어간 만큼(값 막대는 띠 높이의 1/3, 끝이 둥근 알약)
 
 export function Bullet(p: P) {
   const s = useRootScale(), v = cardValue(p.card, 0, p.range, p.merge), t = cardTarget(p.card), fmt = cardFormat(p.card), unit = p.card.view?.unit_text;
-  if (v == null) return <Say text={NOTHING} />;
+  if (v == null) return <Empty />;
   const bands = [...(p.card.view?.bands ?? [])].filter(Number.isFinite).sort((a, b) => a - b);
   const max = Math.max(v, t ?? 0, ...bands, 0) * 1.05 || 1, x = (n: number) => L + ((W - L - R) * Math.max(0, n)) / max, c = tone(p, "주 색", 0);
   const tick = (n: number) => (fmt === "number" ? tickBy(max / 2)(n) : showValue(n, fmt));  // 퍼센트·금액이면 머리글과 같은 모양

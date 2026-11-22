@@ -1,13 +1,13 @@
 "use client";
 // wordcloud(P14): 자주 나온 글자(data.values.words = [{w, n}], 상한은 서버)를 많이 나온 것부터 크게(12~48px), 가운데로 흘려 놓는다(겹치지 않게 줄바꿈 배치)
 import { rem } from "../chart/scale";
-import { Box, NOTHING, Say, more, tone, type P } from "./common";
+import { Box, Empty, more, tone, type P } from "./common";
 
 const BOLD_FROM = 16;  // 이 크기(px) 이상은 굵게 800, 그보다 작으면 600(예시 워드클라우드: 17 이상 800, 15 이하 600)
 
 export function WordCloud(p: P) {
   const shown = (more(p).words ?? []).filter(x => x.w && x.n > 0).sort((a, b) => b.n - a.n);
-  if (!shown.length) return <Say text={NOTHING} />;
+  if (!shown.length) return <Empty />;
   const lo = shown[shown.length - 1].n, hi = shown[0].n, size = (n: number) => (hi === lo ? 24 : 12 + (36 * (n - lo)) / (hi - lo));
   return (
     <Box cls="wordcloud">

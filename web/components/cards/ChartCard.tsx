@@ -12,7 +12,7 @@ import { seriesKit, toShare, type SCard, type Series, type SeriesKit, type Theme
 import { layoutWidth, useRootScale } from "./chart/scale";
 import { useZoomX } from "./useZoomX";
 import { useWidth } from "./useWidth";
-import { Box } from "./svg/common";
+import { Box, Empty } from "./svg/common";
 import { zoomAxis } from "./svg/__pure__";
 import { autoEnv, autoParams, autoSeries, autoUnit, scatterTier, seriesTable, type ChartTable, type Tier } from "@/lib/autoviz";
 import type { Constants, Unit } from "@/lib/types";
@@ -142,7 +142,8 @@ export function ChartCard({ card, data, palette, ctx, onPick, share }: CardProps
   if (!d) return box(null);
   if (!s) return box(<div className="hint bnote">{NO_VALUES}</div>);
   const colors = markColors(palette);
-  const series = !ana && !isPoints(c);  // 계열 차트(비율로 볼 수 있는 것)
+  if (!ana && !isPoints(c) && !s.labels.length) return box(<Empty />);
+  const series =!ana && !isPoints(c);  // 계열 차트(비율로 볼 수 있는 것)
   const pct = share && series ? toShare(s) : null;
   const shareNote = !share || !series ? "" : !pct ? NO_SHARE : s.datasets.length > 1 ? SHARE_MANY : SHARE_ONE;
   let body: ReactNode;

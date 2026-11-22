@@ -4,7 +4,7 @@ import { shownum } from "@/lib/calc";
 import { tickBy } from "../chart/Charts";
 import { useRootScale } from "../chart/scale";
 import { fillLevels, fitText } from "./__pure__";
-import { Box, Frame, NOTHING, Say, more, tone, type P } from "./common";
+import { Box, Empty, Frame, more, tone, type P } from "./common";
 
 const CW0 = 44, CH = 24, LW0 = 90, HH = 22, FONT = 11;  // 칸 폭·높이, 줄 이름 폭, 머리글 높이, 이름 글자 크기(화면 크기 배율 1)
 const GAP = 3, RX = 4;  // 칸 사이 틈, 칸 모서리 둥글기(예시 42-heatmap: 칸 22x19, 간격 25x22, rx 4)
@@ -12,7 +12,7 @@ const GAP = 3, RX = 4;  // 칸 사이 틈, 칸 모서리 둥글기(예시 42-hea
 export function Heatmap(p: P) {
   const s = useRootScale(), CW = CW0 * s, LW = LW0 * s, font = FONT * s;  // 글자가 가로로 들어갈 자리(칸 폭·줄 이름 폭)는 글자와 같이 커진다
   const { rows, cols, cells } = more(p);
-  if (!rows?.length || !cols?.length || !cells) return <Say text={NOTHING} />;
+  if (!rows?.length || !cols?.length || !cells) return <Empty />;
   const levels = fillLevels(rows.flatMap((_, i) => cols.map((_, j) => cells[i]?.[j]))), c = tone(p, "주 색", 0), words = rows.length * cols.length <= 100;
   const real = cells.flat().filter((x): x is number => typeof x === "number"), short = tickBy((Math.max(...real) - Math.min(...real)) / 100);  // 칸 숫자: 값 범위의 1/100까지(툴팁은 전체)
   return (

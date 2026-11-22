@@ -38,7 +38,7 @@ describe("kindGroups: 카드 모음의 묶음 차례, 맨 앞은 차트", () => 
   it("차트 묶음은 chart 하나, 값·목표는 카드 모음 차례 그대로", () => {
     const g = Object.fromEntries(kindGroups());
     expect(g["차트"]).toEqual(["chart"]);
-    expect(g["값·목표"]).toEqual(["kpi", "donut_kpi", "gauge", "summary", "stripes", "blocks", "target_trend", "dual_trend"]);
+    expect(g["값·목표"]).toEqual(["kpi", "tile", "donut_kpi", "gauge", "summary", "stripes", "blocks", "target_trend", "dual_trend"]);
     expect(g["지도"]).toEqual(["geomap"]);
   });
   it("모든 카드 종류가 한 번씩만", () => {

@@ -5,7 +5,7 @@ import { pickColor } from "@/lib/series";
 import { useRootScale } from "../chart/scale";
 import { MIN_POINTS, cardDays, cardFormat, cardTarget, cardValue, growFont, sliceWindow } from "./__pure__";
 import { useZoomX } from "../useZoomX";
-import { Frame, Say, type P } from "./common";
+import { Empty, Frame, type P } from "./common";
 
 const FONT = 11;  // 아래 한 줄 글의 기준 글자 크기(화면 크기 배율 1)
 const LINE_W = 2, TARGET_W = 1.5, TARGET_DASH = "5 4", DOT_R = 3, DOT_MAX = 24;  // 예시 08-control: 선 굵기, 목표(관리 한계) 점선 굵기·모양, 점 반지름. 점을 그리는 최대 점 수(넘으면 선만)
@@ -14,7 +14,7 @@ export function TargetTrend({ card, colors, range, merge }: P) {
   const s = useRootScale(), dated = cardDays(card, 0, range, merge), vs = dated.map(d => d.v), target = cardTarget(card), fmt = cardFormat(card), W = 300, H = 160, pad = 12, color = pickColor(card, "series", card.title, colors, 0);
   const real = vs.filter((x): x is number => x != null);
   const z = useZoomX(vs.length > MIN_POINTS ? { kind: "index", count: vs.length } : null), vsV = sliceWindow(vs, z.view);
-  if (!real.length) return <Say text="이 기간의 값이 없어요" />;
+  if (!real.length) return <Empty />;
   const lo = Math.min(...vsV.filter((x): x is number => x != null), target ?? Infinity), hi = Math.max(...vsV.filter((x): x is number => x != null), target ?? -Infinity);
   const xs = vsV.map((_, i) => pad + (W - 2 * pad) * (vs.length < 2 ? 0.5 : i / (vs.length - 1)));
   const step = (W - 2 * pad) / Math.max(1, vs.length - 1);  // 값 풍선 자리의 너비(점 사이 간격)

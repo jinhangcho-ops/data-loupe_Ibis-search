@@ -30,10 +30,10 @@ describe("필터 줄", () => {
   });
   it("값을 고르면 ctx.filters를 바꾸고 모든 카드를 다시 구한다. 다 풀리면 화면 값을 비운다", () => {
     expect(shell).toContain("picked.current.length ? { ...rest, filters: picked.current }");
-    expect(shell).toContain('if (!picked.current.length && !ctx?.range) return dispatch({ type: "values", results: cards.map(c => ({ id: c.id })) });');
-    expect(shell).toContain("await recomputeRange(cards, ctx);");
+    expect(shell).toContain('if (cards.every(c => !ctxOf(c.id))) return dispatch({ type: "values", results: cards.map(c => ({ id: c.id })) });');
+    expect(shell).toContain("await recomputeRange(cards);");
     expect(shell).toContain("picked.current = []; setPicks([]);");  // 다른 대시보드를 열면 푼다
-    expect(shell).toContain("picked.current.length ? { ...base, filters: picked.current } : base");  // 기간을 바꿔도 남는다
+    expect(shell).toContain("picked.current.length ? { ...span, filters: picked.current } : span");  // 기간을 바꿔도 남는다
   });
   it("행을 직접 읽는 카드는 서버가 걸러 준 조회로 읽는다", () => {
     expect(src("components/cards/SvgCards.tsx")).toContain("filters={ctx?.filters}");

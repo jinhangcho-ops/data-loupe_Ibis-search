@@ -6,7 +6,7 @@ import { useConstants } from "@/lib/constants";
 import { tickBy } from "../chart/Charts";
 import { useRootScale } from "../chart/scale";
 import { fitText } from "./__pure__";
-import { Box, Frame, NOTHING, Say, more, tone, type P } from "./common";
+import { Box, Empty, Frame, more, tone, type P } from "./common";
 
 const W = 480, H = 260, L0 = 48, B0 = 22, T0 = 8, FONT = 11;  // 왼쪽·아래·위 글자 자리와 글자 크기(화면 크기 배율 1)
 const BOX_RX = 6, WHISKER_W = 1.5, MEDIAN_W = 3, OUTLIER_W = 1.5, OUTLIER_R = 3, CAP_RATIO = 16 / 28;  // 상자 모서리 둥글기, 수염·이상치 선 굵기, 중앙값 선 굵기, 이상치 반지름, 수염 끝 가로선 길이 / 상자 폭(예시 37-boxplot: 16 / 28)
@@ -16,7 +16,7 @@ export function BoxPlot(p: P) {
   const consts = useConstants(), s = useRootScale(), L = L0 * s, B = B0 * s, T = T0 * s, font = FONT * s;  // 글자 자리는 글자와 같이 커진다
   // 사분위가 없는 그룹(행이 없음)은 빼고, 수염 끝이 비면 상자 끝으로
   const all = (more(p).groups ?? []).filter(b => fine(b.q1) && fine(b.med) && fine(b.q3)).map(b => ({ ...b, min: fine(b.min) ? b.min : b.q1, max: fine(b.max) ? b.max : b.q3, outliers: (b.outliers ?? []).filter(fine) }));
-  if (!all.length) return <Say text={NOTHING} />;
+  if (!all.length) return <Empty />;
   // 꼬리 자르기: 보이는 범위(P1~P99와 상자)만 그리고, 잘린 건수는 끝에 표시한다
   const tail = p.card.view.all_data === true || !consts?.dash?.auto ? null : autoParams(p.card.view.auto, consts.dash.auto).tail, box = tail ? clipBox(all) : null;
   const shown = box ? all.map(b => ({ ...b, min: Math.max(box.lo, b.min), max: Math.min(box.hi, b.max), outliers: b.outliers.filter(o => o >= box.lo && o <= box.hi) })) : all;

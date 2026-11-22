@@ -15,6 +15,7 @@ import { DualTrend } from "./svg/DualTrend";
 import { Funnel } from "./svg/Funnel";
 import { Gauge } from "./svg/Gauge";
 import { Kpi } from "./svg/Kpi";
+import { Tile } from "./svg/Tile";
 import { MapCard } from "./svg/MapCard";
 import { Table } from "./svg/Rows";
 import { Sentence } from "./svg/Sentence";
@@ -48,7 +49,7 @@ const Geo = (p: P) => (
 
 /** 이 컴포넌트가 그리는 카드 종류 → 컴포넌트(옛 SVG_KINDS) */
 export const PAINTERS: Record<string, ComponentType<P>> = {
-  kpi: Kpi, donut_kpi: Donut, gauge: Gauge, summary: Summary,dual_trend: DualTrend, stripes: Stripes, blocks: Blocks, target_trend: TargetTrend,
+  kpi: Kpi, tile: Tile, donut_kpi: Donut, gauge: Gauge, summary: Summary,dual_trend: DualTrend, stripes: Stripes, blocks: Blocks, target_trend: TargetTrend,
   table: Table, funnel: Funnel, status: Status, sentence: Sentence, alerts: Alerts, map: MapCard, deviation: Deviation, geomap: Geo,
   histogram: Histogram, boxplot: BoxPlot, heatmap: Heatmap, calheat: CalHeat, treemap: Treemap, sunburst: Sunburst, bullet: Bullet, bump: Bump,
   sankey: Sankey, cohort: Cohort, candle: Candle, wordcloud: WordCloud,

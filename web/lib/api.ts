@@ -4,6 +4,7 @@ import type {
   Card, ChartPoints, Columns, CompareItem, CompareMode, ComputeResult, Constants, Ctx, DashList, DashSettings, Dashboard, DayParse,
   LiveMin, PeriodParse, PullCrypt, PullOrphan, PullState, PullTable, PullUnused, Source, Targets, Template,
 } from "./types";
+import type { CtxFilter } from "./links";
 
 /** 서버가 돌려준 오류(응답의 error 문장). driver는 드라이버가 없어 못 붙었을 때의 안내 */
 export class ApiError extends Error {
@@ -134,7 +135,7 @@ export const computeCards = (cards: Card[], ctx: Ctx | null | undefined, dash: s
 /** (B10b) KPI 큰 창의 시간 눈금 값(첫 계열을 시로 묶은 값). 시각 없는 날짜 컬럼이면 빈 목록과 이유(reason) */
 export const cardHours = (card: Card, ctx: Ctx | null, dash: string) => api<{ labels: string[]; values: (number | null)[]; reason: string }>("/api/dash/card/hours", { card: cardRequest(card), ctx, dash });
 /** 필터 칸에 보일 값 목록(저장한 대시보드의 카드 가운데 그 컬럼이 있는 첫 카드의 테이블에서). 연결이 있어야 한다 */
-export const filterValues = (id: string, column: string) => api<{ values: string[]; more: boolean }>("/api/dash/filter/values", { id, column });
+export const filterValues = (id: string, column: string, filters: CtxFilter[] = []) => api<{ values: string[]; more: boolean; note: string }>("/api/dash/filter/values", { id, column, filters });
 /** 옛 dash_ctl.cardRequest:구할 때는 저장된 값 대신 since만 보낸다 */
 export const cardRequest = (c: Card): Card => ({ ...c, data: c.data?.since ? { since: c.data.since } : {} });
 /** 산점도·버블의 점. body는 카드의 source.body(옛 dash.js: {...body, y, size, source_key, date, ctx}) */

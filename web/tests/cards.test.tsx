@@ -56,8 +56,8 @@ describe("새 카드(D2 데이터 예)", () => {
     expect(draw(c)).toContain("#123456");
   });
   it("값이 비면 안내", () => {
-    expect(draw(card("treemap", { values: { items: [] } }))).toContain("그릴 값이 없어요");
-    expect(draw(card("bump", { values: { labels: [], series: [] } }))).toContain("그릴 값이 없어요");
+    expect(draw(card("treemap", { values: { items: [] } }))).toContain("값이 없어요");
+    expect(draw(card("bump", { values: { labels: [], series: [] } }))).toContain("값이 없어요");
   });
   it("KPI: 목표를 채우면 값 색 --ok, 목표 점선", () => {
     const by = { day: { labels: ["2026-01-01", "2026-01-02"], series: [{ name: "합계", agg: "sum", sum: [5, 7], count: [1, 1] }] } };

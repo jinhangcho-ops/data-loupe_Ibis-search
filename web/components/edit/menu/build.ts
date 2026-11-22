@@ -150,14 +150,14 @@ export function buildCard(f: Form, aggs: string[], needs: (agg: string) => boole
     const y = r.y || null;
     return { label: r.label.trim(), y, agg: needs(r.agg) && !y ? "count" : r.agg };
   });
-  const series = values.map(({ y, agg }) => ({ y, agg })), byMetric = k === "kpi" && !!f.metric;
+  const series = values.map(({ y, agg }) => ({ y, agg })), byMetric = (k === "kpi" || k === "tile") && !!f.metric;
   if (!byMetric && minRows && !series.length) throw new Error("값을 하나 이상 넣으세요.");
   if (k === "table" && !series.length) throw new Error("표는 집계할 값을 하나 이상 골라 주세요.");
   if (k === "gauge" && !f.group) throw new Error("게이지는 나눌 컬럼을 고르세요.");
   const body = { ...empty, series: byMetric ? [] : series, ...(k === "gauge" ? { x: f.group } : {}), ...(k === "chart" ? { x: f.cX, order: "auto" as const } : {}), ...(byMetric ? { names: [f.metric] } : {}) };
   const view: Record<string, unknown> = { type: "", ratio: 4 / 3, format: f.format, compare: { mode: f.compare || "span" }, better: f.better || "up" };
   if (byMetric && f.format === "number") delete view.format;  // 형식을 따로 고르지 않은 지표 카드는 지표 파일의 형식을 쓴다(F22: 지표마다 단위가 다르다)
-  if (f.unitText.trim() && ["kpi", "donut_kpi", "stripes", "bullet", "calheat"].includes(k)) view.unit_text = f.unitText.trim();
+  if (f.unitText.trim() && ["kpi", "tile", "donut_kpi", "stripes", "bullet", "calheat"].includes(k)) view.unit_text = f.unitText.trim();
   if (f.targetValue !== "") view.target = { value: num(f.targetValue) };
   else if (f.targetName) view.target = f.targetKeep?.name === f.targetName ? { ...f.targetKeep } : { name: f.targetName };
   if (k === "donut_kpi") { view.ring = f.ring; view.slots = values.map((l, i) => ({ label: l.label || seriesTitle(series[i], aggNames), format: f.format, unit_text: view.unit_text ?? "" })); }

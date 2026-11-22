@@ -6,7 +6,7 @@ import { overTarget, showValue, underTarget } from "@/lib/calc";
 import { compareItem } from "@/lib/series";
 import { useCompare } from "@/components/shell/ShellProvider";
 import { cardFormat, cardTarget, cardValue, sparkY, textUnits } from "./__pure__";
-import { Box, type P } from "./common";
+import { Box, Empty, type P } from "./common";
 import { GRID_DASH, NOW_FILL, PREV_FILL, dayTrend, kpiColor, kpiDelta, sparkParts, trendSpans } from "./kpi_trend";
 
 const SPARK_W = 2.5, END_DOT = 7, GRID_W = 1;  // 77-kpi: 추이선 굵기, 끝 점 지름(r 3.5), 점선 눈금 굵기
@@ -21,6 +21,7 @@ export function Kpi({ card, colors, range, merge, prev, mode = "prev" }: P) {
   const met = v != null && t != null && (view.better === "down" ? !overTarget(v, t) : !underTarget(v, t));
   const goal = t == null ? undefined : `목표 ${showValue(t, fmt, unit)}`, ty = t != null && parts ? sparkY(all.map(p => p.v), t, BOX.h) : null;
   const label = compareItem(card, range, prev, merge, mode)?.label ?? "";
+  if (v == null) return <Box cls="kpi"><Empty /></Box>;
   const spark = parts && (
     <svg viewBox={`0 0 ${BOX.w} ${BOX.h}`} className="kpi-spark" preserveAspectRatio="none" aria-hidden="true">
       {parts.grid.map(y => <line key={y} x1={0} x2={BOX.w} y1={y} y2={y} stroke="var(--line)" strokeWidth={GRID_W} strokeDasharray={GRID_DASH} vectorEffect="non-scaling-stroke" />)}

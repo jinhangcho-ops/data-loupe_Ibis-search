@@ -75,7 +75,7 @@ def test_filter_values(db):
                                        "filters": [{"column": "store", "label": "매장"}]}).get_json()["dashboard"]
     assert saved["filters"] == [{"column": "store", "label": "매장"}]
     assert db.post("/api/dash/open", json={"id": saved["id"]}).get_json()["dashboard"]["filters"] == saved["filters"]
-    assert db.post("/api/dash/filter/values", json={"id": saved["id"], "column": "store"}).get_json() == {"values": ["A", "B", "C"], "more": False}  # store가 있는 첫 카드(orders)에서
+    assert db.post("/api/dash/filter/values", json={"id": saved["id"], "column": "store"}).get_json() == {"values": ["A", "B", "C"], "more": False, "note": ""}  # store가 있는 첫 카드(orders)에서
     assert "없어요" in db.post("/api/dash/filter/values", json={"id": saved["id"], "column": "nope"}).get_json()["error"]
 
 

@@ -95,8 +95,12 @@ def filtered(body):
     """기준 테이블·이어붙이기·조인에 기간·조건까지 건 식(정렬·표시 컬럼 전). 결과 받아 두기(held)는 이것을 받는다."""
     expr = joined(body)[0]
     preds = [p for line in body.get("periods", []) for p in parse.parse_period(line, expr)]
-    preds += [parse.predicate(cond, expr) for cond in body.get("conditions", [])]
-    return expr.filter(preds) if preds else expr
+    conds = body.get("conditions", [])
+    preds += [parse.predicate(c, expr) for c in conds if not (isinstance(c, dict) and "as" in c)]
+    expr = expr.filter(preds) if preds else expr
+    for item in [c for c in conds if isinstance(c, dict) and "as" in c]:
+        expr = parse.filter_as(expr, item)
+    return expr
 
 
 def staged(body, expr, ask=None):

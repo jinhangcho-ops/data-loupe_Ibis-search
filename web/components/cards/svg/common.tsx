@@ -31,8 +31,14 @@ export function useTheme(): Theme {
 export const tone = (p: P, name: string, i: number) => pickColor(p.card, "series", name, markColors(p.colors.palette), i);
 /** 새 카드(P14)의 data.values(서버 dash_calc 모양) */
 export const more = (p: P) => (p.card.data?.values ?? {}) as MoreValues;
-/** 값 모양은 있는데 비었을 때(새 카드) */
-export const NOTHING = "그릴 값이 없어요. 기간이나 조건을 바꿔 다시 구해 보세요.";
+/** (B2) 0건 한 벌: 모든 카드·요소가 몸통 가운데에 같은 문구 */
+export const EMPTY_TEXT = "값이 없어요";
+
+/** [SPECIFICATION] plans/dash-blocks.md#Empty
+ *  0건일 때 카드 몸통 가운데에 EMPTY_TEXT 한 줄을 그린다. */
+export function Empty(): React.ReactNode {
+  return <div className="cempty" role="status">{EMPTY_TEXT}</div>;
+}
 
 export const LEVEL_NAMES: Record<string, string> = { ok: "정상", warn: "주의", bad: "이상" };
 export const levelColor = (level: string, colors: Theme) => level === "bad" ? colors.err : level === "warn" ? "#f08c00" : colors.ok;

@@ -4,7 +4,7 @@ import type { Card, CardKind, Colors } from "@/lib/types";
 
 /** [이름, 값 줄 최소, 최대, 설명] */
 export const CARD_KINDS: Partial<Record<CardKind, [string, number, number, string]>> = {
-  chart: ["차트", 1, 5, "막대, 라인, 도넛, 산점도 같은 그래프"], kpi: ["KPI", 1, 1, "큰 숫자 하나와 지난 기간 비교, 작은 추이선"], donut_kpi: ["도넛 KPI", 1, 5, "가운데 값과 네 모서리 값을 고리로"],
+  chart: ["차트", 1, 5, "막대, 라인, 도넛, 산점도 같은 그래프"], kpi: ["KPI", 1, 1, "큰 숫자 하나와 지난 기간 비교, 작은 추이선"], tile: ["숫자 타일", 1, 1, "이름과 큰 숫자 하나"], donut_kpi: ["도넛 KPI", 1, 5, "가운데 값과 네 모서리 값을 고리로"],
   gauge: ["게이지", 1, 1, "항목마다 차지하는 몫"], summary: ["요약 문장", 1, 1, "목표와 비교한 한 줄 문장"],
   dual_trend: ["두 계열 추이", 2, 2, "두 값을 한 그래프에 겹쳐서"], stripes: ["칸 채우기", 1, 1, "목표까지 몇 칸 찼는지"], blocks: ["블록", 1, 1, "양을 블록 개수로"],
   target_trend: ["목표 추이", 1, 1, "날마다 값과 목표선"], table: ["표", 0, 5, "묶음별 집계 표"], sentence: ["문장", 0, 0, "직접 쓴 문장의 빈칸에 값, 비교, 기준일을 넣어요"],
@@ -55,7 +55,7 @@ export function galleryItems(types: Record<string, string>): Spec[] {
   const charts = Object.entries(types).map(([type, name]) => ({ group: "차트", kind: "chart" as CardKind, type, name, help: POINT_TYPES.includes(type) ? "가로축과 값 하나로 점을 찍어요" : "가로축 컬럼과 값 최대 5개" }));
   const some = (group: string, list: [CardKind, string, string][]) => list.map(([kind, name, help]) => ({ group, kind, name, help }));
   return [...charts,
-    ...some("값·목표", [["kpi", "KPI", "큰 숫자와 비교"], ["donut_kpi", "도넛 KPI", "가운데 값과 모서리 값"], ["gauge", "게이지", "항목마다 몫"], ["summary", "요약 문장", "목표와 비교한 문장"],
+    ...some("값·목표", [["kpi", "KPI", "큰 숫자와 비교"], ["tile", "숫자 타일", "이름과 큰 숫자 하나"], ["donut_kpi", "도넛 KPI", "가운데 값과 모서리 값"], ["gauge", "게이지", "항목마다 몫"], ["summary", "요약 문장", "목표와 비교한 문장"],
       ["stripes", "칸 채우기", "목표까지 찬 칸"], ["blocks", "블록", "양을 블록으로"], ["target_trend", "목표 추이", "날마다 값과 목표선"], ["dual_trend", "두 계열 추이", "두 값을 겹쳐서"]]),
     ...some("표·글", [["table", "표", "집계 또는 원래 행"], ["sentence", "문장", "빈칸에 값과 비교"]]),
     ...some("모니터링", [["status", "상태", "정상, 주의, 이상 수"], ["alerts", "경고 목록", "문제와 지속 시간"], ["map", "배치도", "끌어 옮기는 점"], ["deviation", "편차 표", "대상별 시간대 값"]]),

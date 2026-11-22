@@ -551,15 +551,37 @@ def ends(c, text):
     return c.endswith(text) if WILD.search(text) else c.like(f"%{text}")
 
 
+AS_PREFIX = "__ibis_as"  # (B4) filter_as가 이름이 겹치는 원래 컬럼을 잠깐 두는 이름 앞글자(뒤는 차례 번호)
+
+
+def filter_as(expr: "ibis.expr.types.Table", item: dict) -> "ibis.expr.types.Table":
+    """[SPECIFICATION] plans/dash-blocks.md#filter_as
+    보내는 쪽 컬럼 이름을 상대 컬럼으로 맞춰 조건·기간 줄을 건 표(컬럼은 expr 그대로)를 돌려준다."""
+    names = item["as"]
+    clash = [s for s in names if s in expr.columns]
+    for t in names.values():
+        column(expr, t)  # 없는 컬럼이면 비슷한 이름을 알리는 오류를 먼저 낸다
+    kept = expr.mutate(**{f"{AS_PREFIX}{i}": expr[s] for i, s in enumerate(clash)})
+    m = kept.mutate(**{s: kept[t] for s, t in names.items()})
+    preds = [p for line in item.get("periods") or [] for p in parse_period(line, m)]
+    if item.get("where"):
+        preds.append(predicate(item["where"], m))
+    out = m.filter(preds) if preds else m
+    return out.select(**{c: out[f"{AS_PREFIX}{clash.index(c)}"] if c in clash else out[c] for c in expr.columns})
+
+
 def predicate(cond, expr):
     """조건 하나를 Ibis 식으로. 문자열, 따옴표 해석을 끈 {"line": ..., "quotes": False},
-    화면에서 or로 이은 묶음 {"any": [조건, ...]}, 대시보드 필터 {"column": 컬럼, "in": [값 글자, ...]}, 조건 목록(모두 and) 중 하나다. 묶음 안은 or, 조건끼리는 and."""
+    화면에서 or로 이은 묶음 {"any": [조건, ...]}, 대시보드 필터 {"column": 컬럼, "in": [값 글자, ...]}, 조건 목록(모두 and) 중 하나다. 묶음 안은 or, 조건끼리는 and.
+    맞춘 컬럼 묶음 {as, where, periods}는 여기서 받지 않는다(filter_as)."""
     if isinstance(cond, list):
         if not cond:
             raise ValueError("and로 묶을 조건이 없어요.")
         return functools.reduce(operator.and_, [predicate(c, expr) for c in cond])
     if isinstance(cond, str):
         return parse_condition(cond, expr)
+    if "as" in cond:
+        raise ValueError("맞춘 컬럼으로 거는 조건(as)은 표 하나에 바로 걸어야 해요(parse.filter_as).")
     if "column" in cond:  # 대시보드 필터(dash_calc.with_filters): 컬럼 값이 고른 값들 가운데 하나인 행. 값은 글자로 와서 컬럼 타입으로 바꾼다
         col, values = column(expr, cond["column"]), cond.get("in")
         if not isinstance(values, list) or not 1 <= len(values) <= MAX_TUPLES or not all(isinstance(v, str) for v in values):

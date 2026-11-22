@@ -7,6 +7,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CHART_KINDS } from "@/components/cards/ChartCard";
 import { datedCard, isShell } from "@/components/edit/menu/kinds";
+import { isFrame } from "@/components/frame/registry";
 import { flush, useAutosave } from "@/components/hooks/useAutosave";
 import { useUndo, type Undo } from "@/components/hooks/useUndo";
 import { cardRequest, compare, computeCard, computeCards, getDashboard, getLiveMin, parseDay, parsePeriod, saveSettings, setLast } from "@/lib/api";
@@ -15,8 +16,9 @@ import { useConstants } from "@/lib/constants";
 import { everySeconds, pullOf } from "@/lib/pull";
 import { computedUpdate, sameContent, useActionLog, useDash } from "@/lib/store";
 import { compareItem, newOrder, sameSource } from "@/lib/series";
+import { fieldsFor, filtersFor, linkTargets, type ElemState, type Press, type SeriesView } from "@/lib/links";
 import { seriesKit } from "@/components/cards/chart/series";
-import type { Card, CompareMode, ComputeResult, Ctx, DashSettings, Dashboard, PickedFilter, PrevSpan, Source, Unit } from "@/lib/types";
+import type { Card, CompareMode, ComputeResult, Ctx, DashSettings, Dashboard, PickedFilter, Source, Unit } from "@/lib/types";
 
 export type Note = { text: string; bad?: boolean };
 export type Said = { text: string; tone: string; delta_text?: string; [more: string]: unknown };
@@ -43,7 +45,10 @@ export type Shell = {
   picks: PickedFilter[]; setFilter: (column: string, values: string[]) => Promise<void>;  // 필터 칸에서 고른 값, 고르기(빈 목록이면 풀기)
   report: boolean; setReport: (open: boolean) => void;  // 그림·보고서 창 열림(저장하지 않는다)
   zoom: string | null; setZoom: (id: string | null) => void;  // 크게 보는 카드 id
-  unit: Unit | null; setUnit: (unit: Unit | null) => void;  // 기간 단위 요소가 고른 단위(null = 카드마다 저장된 단위)
+  presses: Press[]; press: (from: string, next: Omit<Press, "from"> | null) => Promise<void>;  // (B4) 보낸 쪽마다 누른 것 하나(저장하지 않는다)
+  elems: Record<string, ElemState>; elemPeriod: (id: string, field: "period" | "as_of", text: string) => Promise<void>; setElemUnit: (id: string, unit: Unit | null) => void; setCell: (id: string, cell: number) => Promise<void>;  // (B4) 요소마다의 값
+  ctxOf: (id: string) => Ctx | null; unitOf: (id: string) => Unit | null; viewOf: (id: string) => SeriesView | null;  // (B4) 카드마다
+  busy: string[];  // (B2) 값을 구하는 요청이 나가 있는 카드 id
   clearFilters: () => Promise<void>;  // 걸린 필터를 모두 푼다
 };
 
@@ -66,6 +71,21 @@ export const useCompare = (id: string) => useContext(Ctx_)?.compares[id];
 // 카드의 입력 칸에 커서가 있는지(옛 typing): 실시간 갱신이 다시 그리면 쓰던 글이 지워지므로 그 회는 미룬다
 const typing = () => { const a = document.activeElement as HTMLElement | null; return !!a && !!a.closest(".board") && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable); };
 const EMPTY: Fields = { as_of: "", period: "" };
+const spanKey = (p: string, a: string, m: CompareMode): string => JSON.stringify([p.trim(), a, m]);
+/** 대시보드를 열 때 처음 눌린 것: 값으로 거르기 세그먼트의 첫 칸(값이 있을 때) */
+const seeds = (cards: Card[]): Press[] => cards.flatMap((seg): Press[] => {
+  const f = seg.view.frame;
+  if (seg.kind !== "segment" || f?.mode !== "filter") return [];
+  const v = f.cells?.[0]?.value;
+  return v ? [{ from: seg.id, value: { column: f.column ?? "", in: [v] } }] : [];
+});
+/** 저장된 기간·기준일·단위를 가진 기간 요소의 처음 값(카드 차례가 뒤일수록 나중에 바꾼 것) */
+const ELEM_KINDS: readonly string[] = ["period_pick", "asof_field", "unit_seg", "top_strip"];
+const seedElems = (cards: Card[]): Record<string, ElemState> => Object.fromEntries(cards.flatMap((c, i): [string, ElemState][] => {
+  const f = c.view.frame;
+  if (!f || !ELEM_KINDS.includes(c.kind) || !("period" in f || "as_of" in f || "unit" in f)) return [];
+  return [[c.id, { at: i + 1, ...("period" in f ? { period: f.period } : {}), ...("as_of" in f ? { as_of: f.as_of } : {}), ...("unit" in f ? { unit: f.unit === "" ? null : f.unit } : {}) }]];
+}));
 const OFFLINE_NOTE = "연결이 없어 받아 둔 데이터로 보고 있어요.";
 
 export function ShellProvider({ children, build }: { children: React.ReactNode; build: boolean }) {
@@ -83,12 +103,20 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
   const [picks, setPicks] = useState<PickedFilter[]>([]);  // 보는 사람이 필터 칸에서 고른 값(저장하지 않는다)
   const [report, setReport] = useState(false);
   const [zoom, setZoom] = useState<string | null>(null);
-  const [unit, setUnit] = useState<Unit | null>(null);
   const [settings, setSettings] = useState(false);
   const [dbMin, setDbMin] = useState(0);
   const [bell, setBells] = useState<BellItem[]>([]);
   const setBell = useCallback((key: string, text: string) => setBells(b => [...b.filter(x => x.key !== key), ...(text ? [{ key, text }] : [])]), []);
+  const [busy, setBusy] = useState<string[]>([]);
+  const hold = useCallback((ids: string[], on: boolean) => setBusy(b => (on ? [...new Set([...b, ...ids])] : b.filter(id => !ids.includes(id)))), []);
   const picked = useRef<PickedFilter[]>([]);
+  const [presses, setPresses] = useState<Press[]>([]);
+  const pressed = useRef<Press[]>([]);
+  const [elems, setElems] = useState<Record<string, ElemState>>({});
+  const elemRef = useRef<Record<string, ElemState>>({});
+  const base = useRef<Ctx | null>(null);  // 저장된 기간·기준일의 ctx(필터 없이)
+  const spans = useRef(new Map<string, Ctx | null>());  // (기간 글, 기준일, 비교 기준) → ctx
+  const atSeq = useRef(0);
   // ---------- 기간 칸(DashCtl) ----------
   const [inputs, setInputs] = useState<Fields>(EMPTY);
   const saved = useRef<Fields>({ ...EMPTY });  // 확정된 값(틀리면 이 값으로 되돌린다)
@@ -123,8 +151,26 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     dispatch({ type: "values", results: results.map(r => r.data ? r : { id: r.id, data: vals[r.id]?.data, error: r.error }) });
   }, [dispatch]);
 
+  // 카드마다의 ctx: 저장된 기간(또는 링크된 요소의 기간·기준일) + 고른 필터 + 누른 것
+  const ctxOf = useCallback((id: string): Ctx | null => {
+    const cards = now.current.dash?.cards ?? [], f = fieldsFor(id, cards, elemRef.current);
+    const b = f.period === undefined && f.as_of === undefined ? base.current : spans.current.get(spanKey(f.period ?? saved.current.period, f.as_of ?? saved.current.as_of, mode.current)) ?? base.current;
+    const filters = [...picked.current, ...filtersFor(id, pressed.current, cards)];
+    return !b && !filters.length ? null : { ...(b ?? {}), ...(filters.length ? { filters } : {}) };
+  }, []);
+  const unitOf = useCallback((id: string): Unit | null => fieldsFor(id, now.current.dash?.cards ?? [], elemRef.current).unit ?? null, []);
+  // 이 카드를 상대로 하는 보기 바꾸기 세그먼트 가운데 가장 나중에 바꾼 것의 칸
+  const viewOf = useCallback((id: string): SeriesView | null => {
+    const cards = now.current.dash?.cards ?? [];
+    const segs = cards.filter(c => c.kind === "segment" && (c.view.frame?.mode ?? "view") === "view" && linkTargets(c, cards)[0] === id);
+    const seg = segs.reduce<Card | null>((best, c) => (best && (elemRef.current[best.id]?.at ?? 0) >= (elemRef.current[c.id]?.at ?? 0) ? best : c), null);
+    if (!seg) return null;
+    const cell = seg.view.frame?.cells?.[elemRef.current[seg.id]?.cell ?? 0];
+    return cell ? { series: cell.series, share: cell.share } : null;
+  }, []);
+
   // 기간 기준 날짜 컬럼이 있는 카드 등을 보는 기간으로 다시 구한다(옛 recomputeRange). 연결이 없거나 다른 연결의 카드는 이유만 적는다.
-  const recomputeRange = useCallback(async (cards: Card[], ctx: Ctx | null) => {
+  const recomputeRange = useCallback(async (cards: Card[]) => {
     const call = ++seqs.current.range, key = connRef.current?.key ?? "", dash = now.current.dash;
     const pc = !!consts && !!dash && pullOf(dash, consts.dash.pull).calc === "pc";  // PC 방식이면 연결이 없어도 보낸다(서버가 받아 둔 파일로 구하거나 카드마다 이유를 준다)
     const notes: ComputeResult[] = [], todo: Card[] = [];
@@ -136,23 +182,111 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     if (notes.length) putResults(notes);
     if (!todo.length) return;
     const mine = (r: ComputeResult) => rangeCall.current.get(r.id) === call;  // 기간을 연달아 바꾸면 카드마다 가장 최근 요청의 것만
-    try { putResults((await computeCards(todo.map(cardRequest), ctx, dash?.id ?? "")).results.filter(mine)); }
-    catch (e) { putResults(todo.filter(c => rangeCall.current.get(c.id) === call).map(c => ({ id: c.id, error: (e as Error).message }))); }
-  }, [putResults, consts]);
+    const groups = new Map<string, Card[]>();  // 같은 ctx끼리 한 번에(카드 차례 유지)
+    todo.forEach(c => { const k = JSON.stringify(ctxOf(c.id)); groups.set(k, [...(groups.get(k) ?? []), c]); });
+    for (const group of groups.values()) {  // 연결은 하나라 묶음끼리는 차례로
+      hold(group.map(c => c.id), true);
+      try { putResults((await computeCards(group.map(cardRequest), ctxOf(group[0].id), dash?.id ?? "")).results.filter(mine)); }
+      catch (e) { putResults(group.filter(c => rangeCall.current.get(c.id) === call).map(c => ({ id: c.id, error: (e as Error).message }))); }
+      finally { hold(group.filter(c => rangeCall.current.get(c.id) === call).map(c => c.id), false); }  // 더 새 요청이 나간 카드는 그 요청이 끝날 때 푼다
+    }
+  }, [putResults, consts, hold, ctxOf]);
 
   // 보는 기간을 바꾼다(옛 setRange): ctx를 두고, 날짜 X축이 아닌데 기간 기준 날짜 컬럼이 있는 카드·고유 개수 카드·읽은 범위 밖 카드만 다시 구한다
   const setRange = useCallback(async (c: Ctx | null, asOf: string) => {
     const range = c?.range ?? null;
     const cm = mode.current === "prev" ? undefined : mode.current;  // 기간이 비어도 카드 자신의 기간 줄(서버 own_range)을 같은 비교 기준으로
-    const base: Ctx | null = range || asOf || cm ? { range: range ?? undefined, prev: c?.prev ?? null, months: c?.months, as_of: asOf || undefined, compare_mode: cm } : null;
-    const ctx = picked.current.length ? { ...base, filters: picked.current } : base;  // 고른 필터는 기간을 바꿔도 남는다
+    const span: Ctx | null = range || asOf || cm ? { range: range ?? undefined, prev: c?.prev ?? null, months: c?.months, as_of: asOf || undefined, compare_mode: cm } : null;  // 필터 없이(지역 이름이 ref base와 겹쳐 span)
+    const ctx = picked.current.length ? { ...span, filters: picked.current } : span;  // 고른 필터는 기간을 바꿔도 남는다
+    base.current = span;
     dispatch({ type: "ctx", ctx });
     const was = seqs.current.hadRange;
     seqs.current.hadRange = !!range;
     const unique = (x: Card) => !CHART_KINDS.includes(x.kind) && !!x.data?.by_unit?.day?.series.some(s => !merge.includes(s.agg));
-    const stale = (now.current.dash?.cards ?? []).map(shown).filter(x => datedCard(x, range, was) || unique(x) || outsideWindow(x, range));
-    if (stale.length) await recomputeRange(stale, ctx);
+    const cards = now.current.dash?.cards ?? [];
+    const stale = cards.map(shown).filter(x => (datedCard(x, range, was) || unique(x) || outsideWindow(x, range)) && fieldsFor(x.id, cards, elemRef.current).period === undefined && fieldsFor(x.id, cards, elemRef.current).as_of === undefined);
+    if (stale.length) await recomputeRange(stale);
   }, [dispatch, merge, shown, recomputeRange]);
+
+  // 누른 것(press)·요소 기간을 받는 카드들을 다시 구한다: 걸린 것이 없는 카드는 저장된 값을 보이고, 나머지만 구한다
+  const refetch = useCallback(async (hit: Card[]) => {
+    const none = hit.filter(c => !ctxOf(c.id)), rest = hit.filter(c => ctxOf(c.id));
+    if (none.length) dispatch({ type: "values", results: none.map(c => ({ id: c.id })) });
+    if (rest.length) await recomputeRange(rest);
+  }, [dispatch, ctxOf, recomputeRange]);
+
+  // 보낸 쪽(from)이 누른 것 하나를 바꾸고 그 쪽의 상대 카드를 다시 구한다
+  const press = useCallback(async (from: string, next: Omit<Press, "from"> | null) => {
+    const cards = now.current.dash?.cards ?? [], sender = cards.find(c => c.id === from);
+    if (!sender) throw new Error("누른 카드가 대시보드에 없어요.");
+    pressed.current = [...pressed.current.filter(p => p.from !== from), ...(next ? [{ from, ...next }] : [])];
+    setPresses(pressed.current);
+    const targets = linkTargets(sender, cards);
+    await refetch(cards.filter(c => targets.includes(c.id) && !isFrame(c.kind) && !isShell(c)));
+  }, [refetch]);
+
+  const setElem = useCallback((id: string, next: ElemState) => { elemRef.current = { ...elemRef.current, [id]: next }; setElems(elemRef.current); }, []);
+
+  // 기준일·기간 글을 읽어 그 읽기의 ctx를 낸다(setRange의 span 식과 같은 꼴)
+  const readSpan = useCallback(async (asofText: string, perText: string) => {
+    const today = await ready();
+    const day = await parseDay(asofText);
+    const parsed = !day.error && perText.trim() ? await parsePeriod(perText, day.date ?? undefined, true, mode.current) : null;
+    const asOf = day.date !== today ? day.date ?? "" : "";
+    const c = parsed?.context ?? null, cm = mode.current === "prev" ? undefined : mode.current;
+    const ctx: Ctx | null = c?.range || asOf || cm ? { range: c?.range ?? undefined, prev: c?.prev ?? null, months: c?.months, as_of: asOf || undefined, compare_mode: cm } : null;
+    return { day, parsed, asOf, ctx };
+  }, [ready]);
+
+  // 요소의 기간·기준일을 받는 카드마다 (기간, 기준일)의 ctx가 spans에 없으면 읽어 채운 뒤 그 카드들을 다시 구한다
+  const spanFill = useCallback(async (cards: Card[]) => {
+    const all = now.current.dash?.cards ?? [];
+    for (const c of cards) {
+      const f = fieldsFor(c.id, all, elemRef.current);
+      if (f.period === undefined && f.as_of === undefined) continue;
+      const p = f.period ?? saved.current.period, a = f.as_of ?? saved.current.as_of, key = spanKey(p, a, mode.current);
+      if (spans.current.has(key)) continue;
+      const { day, parsed, ctx } = await readSpan(a, p);
+      if (!day.error && !parsed?.span.error) spans.current.set(key, ctx);
+    }
+    await recomputeRange(cards);
+  }, [readSpan, recomputeRange]);
+
+  // 기간·기준일 요소(id)가 고른 글: 읽어 요소 값으로 두고, 만드는 곳이면 요소의 저장 값도 고친다
+  const elemPeriod = useCallback(async (id: string, field: "period" | "as_of", text: string) => {
+    const cards = now.current.dash?.cards ?? [], el = cards.find(c => c.id === id);
+    if (!el) throw new Error("요소가 대시보드에 없어요.");
+    const e = elemRef.current[id] ?? { at: 0 };
+    const asofText = field === "as_of" ? text : e.as_of ?? saved.current.as_of;
+    const perText = field === "period" ? text : e.period ?? saved.current.period;
+    const { day, parsed, asOf, ctx } = await readSpan(asofText, perText);
+    if (day.error) return setElem(id, { ...e, notes: { ...e.notes, asof: { text: day.error, bad: true } } });
+    if (parsed?.span.error) return setElem(id, { ...e, notes: { ...e.notes, per: { text: parsed.span.error, bad: true } } });
+    spans.current.set(spanKey(perText, asOf, mode.current), ctx);
+    const kept = field === "as_of" ? { as_of: asOf } : { period: perText.trim() };
+    setElem(id, { ...e, ...kept, at: ++atSeq.current, notes: { asof: { text: day.label }, per: { text: parsed ? parsed.span.label : "기간을 걸지 않아요" } } });
+    if (build) dispatch({ type: "card", id, patch: { view: { ...el.view, frame: { ...el.view.frame, ...kept } } } });  // 보는 곳에서는 저장하지 않는다
+    const targets = linkTargets(el, cards);
+    await spanFill(cards.filter(c => targets.includes(c.id) && !isFrame(c.kind) && !isShell(c)));
+  }, [readSpan, setElem, spanFill, dispatch, build]);
+
+  // 기간 단위 요소가 고른 단위(그리기만, 다시 구하지 않는다). 만드는 곳이면 요소의 저장 값도 고친다
+  const setElemUnit = useCallback((id: string, unit: Unit | null) => {
+    setElem(id, { ...(elemRef.current[id] ?? { at: 0 }), unit, at: ++atSeq.current });
+    const el = (now.current.dash?.cards ?? []).find(c => c.id === id);
+    if (build && el) dispatch({ type: "card", id, patch: { view: { ...el.view, frame: { ...el.view.frame, unit: unit ?? "" } } } });
+  }, [setElem, dispatch, build]);
+
+  // 세그먼트(id)의 칸 고르기: 값으로 거르기면 그 칸의 값을 누른 것으로 보낸다(빈 값이면 푼다)
+  const setCell = useCallback(async (id: string, cell: number) => {
+    const seg = (now.current.dash?.cards ?? []).find(c => c.id === id);
+    if (!seg) throw new Error("세그먼트가 대시보드에 없어요.");
+    setElem(id, { ...(elemRef.current[id] ?? { at: 0 }), cell, at: ++atSeq.current });
+    const f = seg.view.frame;
+    if (f?.mode !== "filter") return;
+    const v = f.cells?.[cell]?.value ?? "";
+    await press(id, v ? { value: { column: f.column ?? "", in: [v] } } : null);
+  }, [setElem, press]);
 
   // 필터 칸에서 값을 고른다(values가 비면 그 필터를 푼다): ctx.filters를 바꾸고 모든 카드를 그 조건으로 다시 구해 화면에만 보인다(저장 값은 거르지 않은 값 그대로).
   // 필터가 다 풀리고 보는 기간도 없으면 다시 구하지 않고 화면 값을 비워 저장된 값을 보인다.
@@ -163,12 +297,25 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     const ctx: Ctx | null = picked.current.length ? { ...rest, filters: picked.current } : Object.values(rest).some(v => v != null) ? rest : null;
     dispatch({ type: "ctx", ctx });
     const cards = (now.current.dash?.cards ?? []).filter(c => c.id && !isShell(c));
-    if (!picked.current.length && !ctx?.range) return dispatch({ type: "values", results: cards.map(c => ({ id: c.id })) });
-    await recomputeRange(cards, ctx);
-  }, [dispatch, recomputeRange]);
+    if (cards.every(c => !ctxOf(c.id))) return dispatch({ type: "values", results: cards.map(c => ({ id: c.id })) });
+    await recomputeRange(cards);
+  }, [dispatch, recomputeRange, ctxOf]);
   const setFilter = useCallback((column: string, values: string[]) => applyPicks([...picked.current.filter(f => f.column !== column), ...(values.length ? [{ column, in: values }] : [])]), [applyPicks]);
   // 걸린 필터를 모두 푼다(걸린 것이 없으면 다시 구하지 않는다)
-  const clearFilters = useCallback(async () => { if (picked.current.length) await applyPicks([]); }, [applyPicks]);
+  // 값으로 거르기 세그먼트는 빈 값 칸이 있으면 그 칸으로 돌리고 누른 것을 풀며, 없으면 칸과 누른 것을 그대로 둔다. 그 밖의 누른 것은 모두 푼다
+  const clearFilters = useCallback(async () => {
+    const cards = now.current.dash?.cards ?? [], had = picked.current.length, before = pressed.current;
+    const segs = cards.filter(c => c.kind === "segment" && c.view.frame?.mode === "filter");
+    const blanks = new Map(segs.map(s => [s.id, (s.view.frame?.cells ?? []).findIndex(c => c.value === "")] as const));
+    const kept = segs.filter(s => blanks.get(s.id)! < 0).map(s => s.id);
+    picked.current = []; setPicks([]);
+    pressed.current = before.filter(p => kept.includes(p.from));
+    setPresses(pressed.current);
+    elemRef.current = { ...elemRef.current, ...Object.fromEntries(segs.filter(s => blanks.get(s.id)! >= 0).map(s => [s.id, { ...(elemRef.current[s.id] ?? { at: 0 }), cell: blanks.get(s.id)! }])) };
+    setElems(elemRef.current);
+    if (!had && pressed.current.length === before.length) return;
+    await refetch(cards.filter(c => c.id && !isFrame(c.kind) && !isShell(c)));
+  }, [refetch]);
 
   // 설정 칸을 확정하면 그 항목만 저장한다. 거부되면 이유를 보이고 저장된 대시보드를 다시 연다
   const openRef = useRef<(id: string) => Promise<void>>(async () => {});
@@ -219,8 +366,18 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     setSettingsError("");
     mode.current = d.compare_mode || "prev";
     setMode(mode.current);
+    const cards = a.dash?.cards ?? [];
+    pressed.current = seeds(cards);
+    setPresses(pressed.current);
+    spans.current.clear();
+    base.current = null;
+    elemRef.current = seedElems(cards);
+    setElems(elemRef.current);
+    atSeq.current = cards.length;
     if (!a.dash) { seqs.current.apply++; dispatch({ type: "ctx", ctx: null }); setPast(false); return; }
-    apply(false, saved.current.as_of, saved.current.period).catch(e => note("per", (e as Error).message, true));
+    apply(false, saved.current.as_of, saved.current.period)
+      .then(() => spanFill(cards.filter(c => { const f = fieldsFor(c.id, cards, elemRef.current); return !isFrame(c.kind) && !isShell(c) && (f.period !== undefined || f.as_of !== undefined); })))  // 저장된 요소 기간을 받는 카드
+      .catch(e => note("per", (e as Error).message, true));
     loadConn();
   });
   // 비교 기준을 바꾸면 대시보드 설정(compare_mode)에 저장하고 기간을 다시 읽어 견줄 기간을 바꾼다
@@ -240,7 +397,6 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
       const { dashboard } = await getDashboard(id);
       if (mine !== seqs.current.open) return;
       picked.current = []; setPicks([]);  // 다른 대시보드를 열면 고른 필터를 푼다
-      setUnit(null);
       dispatch({ type: "open", dash: dashboard });
       setLast(id).catch(() => {});
     } catch (e) { if (mine === seqs.current.open) dispatch({ type: "error", message: (e as Error).message }); }
@@ -258,7 +414,8 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     for (const id of (now.current.dash?.cards ?? []).map(c => c.id)) {
       const card = now.current.dash?.cards.find(c => c.id === id);  // 도는 동안 고친 카드는 지금 정의로 구한다
       if (!card || isShell(card)) continue;  // 지운 카드, 데이터를 아직 정하지 않은 빈 카드
-      const ctx = now.current.ctx;
+      const ctx = ctxOf(id);
+      hold([id], true);
       try {
         const { data } = await computeCard(cardRequest(card), ctx, dash, stamp);
         if (!sameContent(now.current.dash?.cards.find(c => c.id === id)?.source, card.source)) continue;  // 구하는 사이 정의가 바뀌었다: 옛 값을 넣지 않는다
@@ -266,13 +423,14 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
         if (Object.keys(u.patch).length) dispatch({ type: "card", id: card.id, patch: u.patch, auto: true });  // 되돌리기에 쌓지 않는다(사용자 편집이 아니다)
         dispatch({ type: "values", results: [u.result] });
       } catch (e) { failed.push(`${card.title}: ${(e as Error).message}`); }
+      finally { hold([id], false); }
     }
     let why = "";
     try { await flush(); } catch (e) { why = "저장하지 못했어요. " + (e as Error).message; }
     const message = [failed.length ? `카드 ${failed.length}개는 다시 구하지 못해서 이전 값을 그대로 뒀어요. ` + failed.join(" / ") : "", why].filter(Boolean).join(" ");
     dispatch({ type: "error", message });
     setBell("pull", message);
-  }, [dispatch, setBell]);
+  }, [dispatch, setBell, ctxOf, hold]);
 
   // 갱신 주기 사슬(열어 둔 동안만): 앞 갱신이 끝난 뒤 max(주기, 걸린 시간) 뒤에 다음. 연결이 없으면 멈추고 종에 알린다
   const pullEvery = consts && state.dash ? everySeconds(pullOf(state.dash, consts.dash.pull).every, consts.dash.pull) : 0;
@@ -303,8 +461,8 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
   // 비교 문장(옛 recompare): 보는 값·기간이 바뀌면 다시 받는다. 보낼 것이 같으면 묻지 않는다
   useEffect(() => {
     if (!consts) return;
-    const range = state.ctx?.range ?? null, prev: PrevSpan | null = state.ctx?.prev ?? null, items: ReturnType<typeof compareItem>[] = [], who: string[] = [];
-    (state.dash?.cards ?? []).forEach(c => { const item = compareItem({ ...c, data: state.values[c.id]?.data ?? c.data }, range, prev, merge, state.ctx?.compare_mode); if (item) { items.push(item); who.push(c.id); } });
+    const items: ReturnType<typeof compareItem>[] = [], who: string[] = [];
+    (state.dash?.cards ?? []).forEach(c => { const cx = ctxOf(c.id), item = compareItem({ ...c, data: state.values[c.id]?.data ?? c.data }, cx?.range ?? null, cx?.prev ?? null, merge, cx?.compare_mode); if (item) { items.push(item); who.push(c.id); } });
     const key = JSON.stringify([who, items]);
     if (key === seqs.current.cmpKey) return;
     seqs.current.cmpKey = key;
@@ -312,7 +470,7 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     (items.length ? compare(items as NonNullable<(typeof items)[number]>[]) : Promise.resolve({ results: [] as unknown[] }))
       .then(d => { if (seq === seqs.current.cmp) setCompares(Object.fromEntries(d.results.map((r, i) => [who[i], r as Said]))); })
       .catch(() => { if (seq === seqs.current.cmp) setCompares({}); });  // 문장을 못 받으면 문장 없이 그린다
-  }, [consts, merge, state.dash, state.values, state.ctx]);
+  }, [consts, merge, state.dash, state.values, state.ctx, presses, elems, ctxOf]);
 
   // 새 라벨의 색 순서(옛 pickColor가 그리며 card.colors.order에 붙여 저장하던 것): 값이 바뀐 뒤 새 라벨이 생긴 카드만 dispatch card(→ 자동 저장)
   useEffect(() => {
@@ -334,6 +492,6 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     commitDay: (text?: string) => { const t = text ?? inputs.as_of; setInput("as_of", t); if (t !== saved.current.as_of) apply(true, t, inputs.period); },  // 옛 change 이벤트처럼 바뀌었을 때만
     commitPeriod: (text?: string) => { const t = text ?? inputs.period; setInput("period", t); if (t.trim() !== saved.current.period) apply(true, inputs.as_of, t); },  // text: 달력이 고른 기간(칸 값이 아직 안 바뀐 때)
   };
-  const value: Shell = { conn, loadConn, dbMin, settings, setSettings, bell, setBell, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo, build, page, setPage, picks, setFilter, report, setReport, zoom, setZoom, unit, setUnit, clearFilters };
+  const value: Shell = { conn, loadConn, dbMin, settings, setSettings, bell, setBell, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo, build, page, setPage, picks, setFilter, report, setReport, zoom, setZoom, clearFilters, presses, press, elems, elemPeriod, setElemUnit, setCell, ctxOf, unitOf, viewOf, busy };
   return <Ctx_.Provider value={value}>{children}</Ctx_.Provider>;
 }

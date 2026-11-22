@@ -5,7 +5,7 @@ import { tickBy } from "../chart/Charts";
 import { useRootScale } from "../chart/scale";
 import { MIN_POINTS, sliceWindow } from "./__pure__";
 import { useZoomX } from "../useZoomX";
-import { Box, Frame, NOTHING, Say, more, tone, type P } from "./common";
+import { Box, Empty, Frame, more, tone, type P } from "./common";
 
 const W = 600, H = 260, L0 = 48, B0 = 20, T = 8;  // 왼쪽·아래 글자 자리(화면 크기 배율 1)·위 여백
 const WICK_W = 1.5, BODY_RX = 2;  // 심지 굵기, 몸통 모서리 둥글기(예시 09-candlestick)
@@ -14,7 +14,7 @@ export function Candle(p: P) {
   const s = useRootScale(), L = L0 * s, B = B0 * s;  // 글자 자리는 글자와 같이 커진다
   const v = more(p), shown = (v.candles ?? []).map((c, i) => ({ ...c, label: v.labels?.[i] ?? "" })).filter(c => c.high != null && c.low != null);  // 상한은 서버(최근 기간을 남긴다)
   const z = useZoomX(shown.length > MIN_POINTS ? { kind: "index", count: shown.length } : null), vis = sliceWindow(shown, z.view);
-  if (!shown.length) return <Say text={NOTHING} />;
+  if (!shown.length) return <Empty />;
   const up = tone(p, "주 색", 0);  // 오름 몸통 = [색]의 주 색(정하지 않으면 팔레트 첫 색)
   const lo = Math.min(...vis.map(c => c.low!)), hi = Math.max(...vis.map(c => c.high!)), band = (W - L) / vis.length, w = Math.max(1, Math.min(16, band * 0.6));
   const y = (v: number) => (hi === lo ? (T + H - B) / 2 : T + ((H - B - T) * (hi - v)) / (hi - lo)), every = Math.ceil((vis.length * s) / 6);  // 글자가 커지면 가로 이름을 그만큼 드물게

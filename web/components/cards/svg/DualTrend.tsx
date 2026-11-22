@@ -9,7 +9,7 @@ import { pickColor } from "@/lib/series";
 import { useRootScale } from "../chart/scale";
 import { MIN_POINTS, cardDays, cardFormat, growFont, sliceWindow } from "./__pure__";
 import { useZoomX } from "../useZoomX";
-import { Frame, Say, type P } from "./common";
+import { Empty, Frame, type P } from "./common";
 
 const FOOT_FONT = 10, FOOT_TOP = 180;  // 맨 아래 계열 이름 줄: 기준 글자 크기, 글자 윗자리(구간 막대 아래)
 const GRID_LINES = 5, LINE_MAIN = 3, LINE_SUB = 2, SUB_DASH = "5 4", DOT_R = 4, DOT_W = 2.5, DOT_MAX = 16;  // 예시(neumorphism 라인): 눈금선 수, 주 선·보조(점선) 굵기, 점 반지름·테두리, 점을 그리는 최대 점 수(넘으면 점 없이 선만)
@@ -26,7 +26,7 @@ export function DualTrend({ card, colors, range, merge }: P) {
   const fullRows = [cardDays(view, 0, range, merge), cardDays(view, 1, range, merge)], fullShown = fullRows[0].map(d => d.day);
   const z = useZoomX(fullShown.length > MIN_POINTS ? { kind: "index", count: fullShown.length } : null);
   const rows = fullRows.map(r => sliceWindow(r, z.view)), shown = sliceWindow(fullShown, z.view), from = shown[0], to = shown[shown.length - 1];
-  if (!whole.length) return <Say text="이 기간의 값이 없어요" />;
+  if (!whole.length) return <Empty />;
   const all = rows.flat().map(d => d.v).filter((v): v is number => v != null), lo = Math.min(...all), hi = Math.max(...all);
   const xOf = (i: number) => pad + (W - 2 * pad) * (shown.length < 2 ? 0.5 : i / (shown.length - 1)), yOf = (v: number) => top + plot - plot * (hi === lo ? 0.5 : (v - lo) / (hi - lo));
   const names = [0, 1].map(i => card.data?.by_unit?.day?.series[i]?.name ?? `계열 ${i + 1}`), cols = names.map((n, i) => pickColor(card, "series", n, colors, i)), today = new Date().toLocaleDateString("sv");

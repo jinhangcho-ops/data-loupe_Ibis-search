@@ -8,6 +8,7 @@ import { applySections, movePiece, pieceItems, pieceMin, resizePiece, roomOf, se
 import { FramePanel } from "@/components/frame/FramePanel";
 import { FRAME_KINDS, isFrame, type FrameKind } from "@/components/frame/registry";
 import { clampLayout, compactLayout, moveCard, onPage, pageOf, resizeCard, type GridItem } from "@/lib/calc";
+import { useShell } from "@/components/shell/ShellProvider";
 import { computedUpdate, plainCtx, useDash } from "@/lib/store";
 import type { Card, Columns, Layout } from "@/lib/types";
 import { AddCardMenu } from "./AddCardMenu";
@@ -15,6 +16,7 @@ import { refillColors, refillView } from "./menu/build";
 import { Shelf } from "./Shelf";
 import { KIND_NAMES, isShell } from "./menu/kinds";
 import { FIT, StarSection } from "./panel/StarSection";
+import { LinkPanel } from "./panel/LinkPanel";
 import { Tools } from "./panel/Tools";
 
 export type CardPanelProps = { card: Card | null; onChange: (patch: Partial<Card>) => void; onClose: () => void };
@@ -29,6 +31,7 @@ export function CardPanel(props: CardPanelProps) {
 
 function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
   const { state, dispatch } = useDash();
+  const { ctxOf } = useShell();
   const now = useRef(state);
   useEffect(() => { now.current = state; });
   const [folded, setFolded] = useState(false);
@@ -88,10 +91,10 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
   // 이 카드 값을 지금 연결에서 다시 구한다(바꾼 카드로). 실패하면 이유를 보이고 카드는 그대로
   // redefine: 카드 정의(source·view)가 바뀌는 경로(선반 반영·데이터 다시 정하기). 기간이 걸려 있으면 저장할 값을 기간 없이 한 번 더 구한다
   const recompute = async (next: Card, redefine = false) => {
-    const r = await computeCard(cardRequest(next), state.ctx, state.dash?.id ?? ""), plain = await plainData(next, redefine);
-    put(computedUpdate(card.id, r.data, state.ctx, { source: next.source }, plain));
+    const ctx = ctxOf(card.id), r = await computeCard(cardRequest(next), ctx, state.dash?.id ?? ""), plain = await plainData(next, redefine);
+    put(computedUpdate(card.id, r.data, ctx, { source: next.source }, plain));
   };
-  const plainData = async (next: Card, redefine: boolean) => (redefine && state.ctx?.range ? (await computeCard(cardRequest(next), plainCtx(state.ctx), state.dash?.id ?? "")).data : undefined);
+  const plainData = async (next: Card, redefine: boolean) => { const ctx = ctxOf(card.id); return redefine && ctx?.range ? (await computeCard(cardRequest(next), plainCtx(ctx), state.dash?.id ?? "")).data : undefined; };
   // 구한 값을 넣는다: 기간이 걸려 있으면 화면 값에(저장 값은 그대로), 아니면 카드에 저장하고 화면 값을 비운다(lib/store.computedUpdate)
   const put = (u: ReturnType<typeof computedUpdate>) => { onChange(u.patch); dispatch({ type: "values", results: [u.result] }); };
   const again = async () => { try { await recompute(card); setErr(""); } catch (e) { setErr((e as Error).message); } };
@@ -103,9 +106,9 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
   const fill = async (patch: Partial<Card>) => {
     const dash = state.dash?.id, next = { ...card, ...patch, view: refillView(card.view, patch.view ?? {}) } as Card;  // 비운 목표·단위는 지운다
     try {
-      const r = await computeCard(cardRequest({ ...next, data: {} }), state.ctx, dash ?? ""), plain = await plainData({ ...next, data: {} }, true);
+      const ctx = ctxOf(card.id), r = await computeCard(cardRequest({ ...next, data: {} }), ctx, dash ?? ""), plain = await plainData({ ...next, data: {} }, true);
       if (now.current.dash?.id !== dash || !now.current.dash?.cards.some(c => c.id === card.id)) return dispatch({ type: "error", message: "값을 구하는 사이 다른 대시보드를 열어서 카드에 넣지 않았어요." });
-      put(computedUpdate(card.id, r.data, state.ctx, { kind: next.kind, view: next.view, colors: refillColors(card, patch.colors ?? card.colors), title: next.title, source: { ...next.source, ...r.source } }, plain));
+      put(computedUpdate(card.id, r.data, ctx, { kind: next.kind, view: next.view, colors: refillColors(card, patch.colors ?? card.colors), title: next.title, source: { ...next.source, ...r.source } }, plain));
       setBuilder(false);
       setErr("");
       dispatch({ type: "notice", message: "데이터를 정했어요." });
@@ -133,7 +136,8 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
           </select>
         </label>
       )}
-      {frame ? <FramePanel card={card} onChange={f => dispatch({ type: "card", id: card.id, patch: { view: { ...card.view, frame: f } } })} /> : (<>
+      {frame ? <><FramePanel card={card} onChange={f => dispatch({ type: "card", id: card.id, patch: { view: { ...card.view, frame: f } } })} />
+        <LinkPanel card={card} onChange={p => dispatch({ type: "card", id: card.id, patch: p })} /></> : (<>
       <div>
         <h5>데이터</h5>
         <div className="hint">{what}</div>
@@ -143,6 +147,7 @@ function Panel({ card, onChange, onClose }: CardPanelProps & { card: Card }) {
         <div className="pdata"><AddCardMenu open={builder} fill={card} onClose={() => setBuilder(false)} onAdd={fill} /></div>
       </div>
       {!isShell(card) && (<><h5>모양</h5><Tools card={card} columns={cols.map(c => c[0])} onChange={onChange} /></>)}
+      {!isShell(card) && <LinkPanel card={card} onChange={onChange} />}
       <StarSection id={card.id} />
       {isChart && (<><h5 title="컬럼을 끌어 칸에 놓거나, 컬럼을 누른 뒤 칸을 눌러요">차트 구성</h5>
         {cols.length ? <Shelf card={card} columns={cols} onChange={reshelf} /> : <div className="hint">데이터에 연결하면 컬럼을 끌어 가로축, 값, 색, 필터를 바꿀 수 있어요.</div>}</>)}

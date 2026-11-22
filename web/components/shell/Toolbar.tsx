@@ -14,6 +14,7 @@ import { scrollToCard, useAddShell } from "@/components/grid/Grid";
 import { addCard, cardRequest, computeCard, connectDemo } from "@/lib/api";
 import { sectionsOf, wrapCard } from "@/components/grid/sections";
 import { useConstants } from "@/lib/constants";
+import { freshLinks, isSender } from "@/lib/links";
 import { useDash } from "@/lib/store";
 import type { Card } from "@/lib/types";
 import { Bell } from "./Bell";
@@ -37,7 +38,9 @@ export function useAddCard(): (card: Partial<Card>) => Promise<void> {
       const dash = state.dash;
       if (dash) {
         if (dash.cards.length >= max) throw new Error(`대시보드에는 카드를 ${max}개까지 넣을 수 있어요.`);
-        const full = { ...card, id: newCardId() } as Card, r = await computeCard(cardRequest(full), state.ctx, dash.id);
+        const made = { ...card, id: newCardId() } as Card;
+        // (B4) 보내는 카드는 넣을 때 링크 상대를 채운다(id가 여기서 정해져 차트 자기 자신도 들어간다)
+        const full = isSender(made.kind) && !made.view?.link_to ? { ...made, view: { ...made.view, link_to: freshLinks(made, dash, page) } } : made, r = await computeCard(cardRequest(full), state.ctx, dash.id);
         const cur = now.current.dash;
         if (cur?.id !== dash.id) throw new Error("값을 구하는 사이 다른 대시보드를 열어서 카드를 넣지 않았어요.");
         const { sections, cards } = sectionsOf(cur);

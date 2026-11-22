@@ -56,7 +56,7 @@ describe("기간 칸과 최신화 시각", () => {
     expect(period).toContain("export function PeriodField(");
     expect(period.slice(period.indexOf("export function PeriodBar("))).toContain('<PeriodField id="dc-per" />');
     expect(period.match(/<Calendar /g)).toHaveLength(1);
-    expect(period.match(/commitPeriod\(/g)).toHaveLength(3);  // 칸 벗어남·Enter·달력, 한 벌뿐
+    expect(period.match(/commitPeriod\(/g)).toHaveLength(1);  // 칸 벗어남·Enter·달력이 commit 하나를 거친다(요소 기간이면 elemPeriod)
     expect(src("components/shell/SettingsDialog.tsx")).toContain("<PeriodBar />");
     for (const id of ["dc-asof", "dc-cmp"]) expect(period).toContain(`id="${id}"`);  // 나머지 2칸은 설정 창에 그대로
   });

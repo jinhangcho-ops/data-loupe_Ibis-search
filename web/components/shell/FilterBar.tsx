@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { filterValues } from "@/lib/api";
 import { useConstants } from "@/lib/constants";
+import { pressLabel } from "@/lib/links";
 import { useDash } from "@/lib/store";
 import type { DashFilter } from "@/lib/types";
 import { useShell } from "./ShellProvider";
@@ -14,7 +15,7 @@ type Body = { x?: unknown; split?: unknown; series?: { y?: unknown }[] };
 
 export function FilterBar() {
   const { state, dispatch } = useDash();
-  const { conn, build, picks, setFilter } = useShell();
+  const { conn, build, picks, setFilter, presses, press } = useShell();
   const max = useConstants()?.dash.max_filters ?? Infinity;
   const dash = state.dash, id = dash?.id, key = conn?.key ?? "";
   const filters = useMemo(() => dash?.filters ?? [], [dash?.filters]);
@@ -35,7 +36,7 @@ export function FilterBar() {
     const b = (c.source?.body ?? {}) as Body;
     return [b.x, b.split, ...(b.series ?? []).map(s => s.y), ...((c.data as { columns?: unknown } | undefined)?.columns instanceof Array ? (c.data as { columns: unknown[] }).columns : [])];
   }).filter((x): x is string => typeof x === "string" && !!x))].sort(), [dash?.cards]);
-  const pressed = picks.filter(p => !filters.some(f => f.column === p.column));  // 카드를 눌러 건 것(4단계) 가운데 필터 칸이 없는 컬럼: 칩으로 보이고 ×로 푼다
+  const pressed = dash?.press_chips === false ? [] : presses.filter(p => p.value);  // 차트를 눌러 건 것: 칩으로 보이고 ×로 푼다(대시보드마다 켜고 끔, 없으면 켜짐)
   if (!dash || (!filters.length && !build && !pressed.length)) return null;
   const save = (next: DashFilter[]) => dispatch({ type: "meta", patch: { filters: next } });
   const column = name.trim(), taken = filters.some(f => f.column === column);
@@ -55,12 +56,13 @@ export function FilterBar() {
         </label>
       ))}
       {pressed.map(p => (
-        <span key={p.column} className="chip">{p.column}: {p.in.join(", ")}
-          <button type="button" className="ghost" title="이 거르기 풀기" aria-label={`${p.column} 거르기 풀기`} onClick={() => { setFilter(p.column, []); }}>×</button>
+        <span key={p.from} className="chip">{pressLabel(p, dash.cards)}
+          <button type="button" className="ghost" title="이 거르기 풀기" aria-label={`${pressLabel(p, dash.cards)} 거르기 풀기`} onClick={() => { press(p.from, null); }}>×</button>
         </span>
       ))}
       {build && filters.length < max && (
         <>
+          <label className="hint m-0"><input type="checkbox" checked={dash.press_chips !== false} onChange={e => dispatch({ type: "meta", patch: { press_chips: e.target.checked } })} /> 누른 값을 여기에 칩으로 보이기</label>
           <input className="[flex:0_0_11rem] w-auto" list="d-filter-cols" value={name} placeholder="필터로 쓸 컬럼 이름" aria-label="필터로 쓸 컬럼 이름"
             onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && column && !taken) add(); }} />
           <datalist id="d-filter-cols">{known.filter(k => !filters.some(f => f.column === k)).map(k => <option key={k} value={k} />)}</datalist>

@@ -5,14 +5,14 @@ import { shownum } from "@/lib/calc";
 import { AXIS, Frame, MARGIN, TIP } from "../chart/Charts";
 import { MIN_POINTS, sliceWindow } from "./__pure__";
 import { useZoomX } from "../useZoomX";
-import { Box, NOTHING, Say, more, tone, type P } from "./common";
+import { Box, Empty, more, tone, type P } from "./common";
 
 const LINE_W = 4, DOT_R = 9, DOT_FONT = 9.5, DOT_TEXT_DY = 3.5;  // 선 굵기, 점 반지름, 점 안 첫 글자 크기·아래 내림(예시 10-bump)
 
 export function Bump(p: P) {
   const { labels, series } = more(p);
   const z = useZoomX(labels && labels.length > MIN_POINTS ? { kind: "index", count: labels.length } : null);
-  if (!labels?.length || !series?.length) return <Say text={NOTHING} />;
+  if (!labels?.length || !series?.length) return <Empty />;
   const rows = labels.map((label, j) => Object.fromEntries([["label", label], ...series.flatMap((d, i) => [[`s${i}`, d.ranks?.[j] ?? null], [`v${i}`, d.values[j]]])]));
   const worst = Math.max(1, ...series.flatMap(d => (d.ranks ?? []).filter((r): r is number => r != null))), color = series.map((d, i) => tone(p, d.name, i));
   return (

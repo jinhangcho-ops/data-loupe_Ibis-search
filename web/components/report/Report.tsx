@@ -12,6 +12,7 @@ import { isFrame, filterNote } from "@/components/frame/registry";
 import { sectionsOf } from "@/components/grid/sections";
 import { compactLayout } from "@/lib/calc";
 import { useDash } from "@/lib/store";
+import { pressLabel } from "@/lib/links";
 import { CardBody } from "@/components/cards/CardBody";
 import { CHART_KINDS, autoDraw } from "@/components/cards/ChartCard";
 import { seriesKit } from "@/components/cards/chart/series";
@@ -40,7 +41,7 @@ const download = (href: string, name: string) => Object.assign(document.createEl
 
 export function Report({ open, onClose }: ReportProps) {
   const { state } = useDash();
-  const { period, picks: filters } = useShell();
+  const { period, picks: filters, presses, ctxOf } = useShell();
   const [chosen, setPicks] = useState<Picks | null>(null);  // 이 창에서 고른 것. 아직 없으면 설정 쿠키
   const [msg, setMsg] = useState({ text: "", ok: false });
   const [busy, setBusy] = useState("");
@@ -54,7 +55,7 @@ export function Report({ open, onClose }: ReportProps) {
   // 보고서: 섹션은 모두 위로 붙인 자리로(순서·가로 자리는 그대로), 글 요소는 글자로 그리고 다른 요소 자리는 비운다. 걸린 기간·기준일·필터는 글 한 줄로
   const reportCards = cards.filter(c => !isFrame(c.kind) || c.kind === "text"), packed = compactLayout(sections.map(s => ({ id: s.id, layout: s.layout })));
   const placed = sections.map(s => ({ ...s, layout: packed[s.id] }));
-  const note = filterNote(period.inputs.period, period.inputs.as_of, filters);
+  const note = filterNote(period.inputs.period, period.inputs.as_of, filters, presses.map(p => pressLabel(p, state.dash?.cards ?? [])));
   const pick = (key: keyof Picks, value: string) => {
     setPicks({ ...picks, [key]: value });
     saveSetting({ [key]: value }).catch(() => {});
@@ -114,7 +115,7 @@ export function Report({ open, onClose }: ReportProps) {
       const box = cardBox(cards, card.id);
       if (!box) { k++; continue; }
       const raw = state.values[card.id]?.data ?? card.data ?? {};
-      const c = { ...card, data: applyGroups(card, raw), range: state.ctx?.range };
+      const c = { ...card, data: applyGroups(card, raw), range: ctxOf(card.id)?.range };
       const t = autoDraw(c, kit, consts!, box.querySelector<HTMLElement>(".bbody")!.clientWidth, all).table;
       if (!t) { k++; continue; }
       download(URL.createObjectURL(new Blob([CSV_BOM + csvText(t)], { type: "text/csv" })), `${card.title}.csv`);
@@ -150,7 +151,7 @@ export function Report({ open, onClose }: ReportProps) {
           <button className="btn" disabled={!!busy || !cards.length} onClick={reportPdf} title="모든 카드를 화면 배치대로 PDF 한 쪽에 담아요">{label("pdf", "PDF 보고서")}</button>
         </div>
         <div className={msg.ok ? "ok" : "err"} id="err-report">{msg.text}</div>
-        {shot ? createPortal(<div ref={host} aria-hidden="true" style={{ position: "fixed", left: OFFSCREEN_LEFT, top: 0, width: shot.w }}><div className="bbody" style={{ width: shot.w, height: shot.h, aspectRatio: "auto", maxHeight: "none" }}><CardBody card={shot.card} result={state.values[shot.card.id]} palette={state.dash!.palette} ctx={state.ctx} /></div></div>, document.body) : null}
+        {shot ? createPortal(<div ref={host} aria-hidden="true" style={{ position: "fixed", left: OFFSCREEN_LEFT, top: 0, width: shot.w }}><div className="bbody" style={{ width: shot.w, height: shot.h, aspectRatio: "auto", maxHeight: "none" }}><CardBody card={shot.card} result={state.values[shot.card.id]} palette={state.dash!.palette} ctx={ctxOf(shot.card.id)} /></div></div>, document.body) : null}
       </div>
     </div>
   );

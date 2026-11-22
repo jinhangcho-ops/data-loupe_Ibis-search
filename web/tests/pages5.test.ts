@@ -78,7 +78,7 @@ describe("값/비율 바꾸기", () => {
   it("% 단추는 계열 차트 카드에만, 켠 카드만 비율로 그리고 저장하지 않는다", () => {
     const grid = src("components/grid/Grid.tsx");
     expect(grid).toContain('{!isShell(card) && !paint && card.kind !== "analysis" && !isPoints(card) && (');
-    expect(grid).toContain("share={shares.includes(card.id)}");
+    expect(grid).toContain("share={shares.includes(card.id) || !!v?.share}");
     const chart = src("components/cards/ChartCard.tsx");
     expect(chart).toContain("const pct = share && series ? toShare(s) : null;");
     expect(chart).toContain("s={pct ?? s}");
