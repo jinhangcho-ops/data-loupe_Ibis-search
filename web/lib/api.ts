@@ -2,7 +2,7 @@
 // 같은 출처(/api/...)라 열쇠는 Flask가 첫 페이지에서 둔 쿠키(key)로 간다. 경로를 고치면 tests_pytest/test_cr_n0.py가 Flask 라우트와 대조한다.
 import type {
   Card, ChartPoints, Columns, CompareItem, CompareMode, ComputeResult, Constants, Ctx, DashList, DashSettings, Dashboard, DayParse,
-  LiveMin, PeriodParse, PullCrypt, PullOrphan, PullState, PullTable, PullUnused, Source, Targets, Template,
+  LiveMin, MarkValue, PeriodParse, PullCrypt, PullOrphan, PullState, PullTable, PullUnused, Source, Targets, Template,
 } from "./types";
 import type { CtxFilter } from "./links";
 
@@ -113,6 +113,31 @@ export function pullOrphans(): Promise<{ orphans: PullOrphan[]; text: string }> 
  *  (B11) 확인한 뒤 주인 없는 받은 데이터 지우기 POST /api/dash/pull/orphans/drop. */
 export function dropOrphans(): Promise<{ dropped: string[] }> {
   return api<{ dropped: string[] }>("/api/dash/pull/orphans/drop", {});
+}
+/** [SPECIFICATION] plans/dash-blocks.md#setMark
+ *  (B9) 목록 줄 하나의 표시 바꾸기 POST /api/dash/marks/set. */
+export function setMark(dash: string, card: string, key: string, values: Record<string, MarkValue>): Promise<{ key: string; values: Record<string, MarkValue> }> {
+  return api<{ key: string; values: Record<string, MarkValue> }>("/api/dash/marks/set", { dash, card, key, values });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#saveMarksFile
+ *  (B9) 표시를 파일로 저장 POST /api/dash/marks/save(취소하면 path null). */
+export function saveMarksFile(dash: string, card: string): Promise<{ path: string | null }> {
+  return api<{ path: string | null }>("/api/dash/marks/save", { dash, card });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#loadMarksFile
+ *  (B9) 파일에서 표시 가져오기 POST /api/dash/marks/load(취소하면 path null). */
+export function loadMarksFile(dash: string, card: string): Promise<{ path: string | null; added?: number; clashed?: number; clash?: string }> {
+  return api<{ path: string | null; added?: number; clashed?: number; clash?: string }>("/api/dash/marks/load", { dash, card });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#markOrphans
+ *  (B9) 지금 데이터에 없는 줄의 표시 수 POST /api/dash/marks/orphans. */
+export function markOrphans(dash: string, card: string): Promise<{ count: number }> {
+  return api<{ count: number }>("/api/dash/marks/orphans", { dash, card });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#dropMarkOrphans
+ *  (B9) 지금 데이터에 없는 줄의 표시 지우기 POST /api/dash/marks/orphans/drop. */
+export function dropMarkOrphans(dash: string, card: string): Promise<{ dropped: number }> {
+  return api<{ dropped: number }>("/api/dash/marks/orphans/drop", { dash, card });
 }
 /** [SPECIFICATION] plans/dash-blocks.md#pullUnused
  *  (B11) 그 대시보드에서 더는 쓰지 않는 받은 파일 POST /api/dash/pull/unused. */

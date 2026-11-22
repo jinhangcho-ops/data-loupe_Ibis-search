@@ -192,6 +192,18 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     }
   }, [putResults, consts, hold, ctxOf]);
 
+  // (B9) 대시보드를 연 뒤(열린 대시보드 id가 바뀔 때마다 한 번) 표시 칸이 있는 목록을 다시 구한다
+  const openedId = state.dash?.id ?? "";
+  useEffect(() => {
+    const d = now.current.dash;
+    if (!d || d.id !== openedId) return;
+    const pc = !!consts && pullOf(d, consts.dash.pull).calc === "pc";
+    if (!connRef.current && !pc) return;  // 구할 수 없으면 저장본 그대로(안내 줄을 만들지 않는다)
+    const marked = d.cards.filter(c => c.kind === "list" && (c.view.row_marks?.fields.length ?? 0) > 0);
+    if (marked.length) recomputeRange(marked).catch(e => dispatch({ type: "error", message: (e as Error).message }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedId]);
+
   // 보는 기간을 바꾼다(옛 setRange): ctx를 두고, 날짜 X축이 아닌데 기간 기준 날짜 컬럼이 있는 카드·고유 개수 카드·읽은 범위 밖 카드만 다시 구한다
   const setRange = useCallback(async (c: Ctx | null, asOf: string) => {
     const range = c?.range ?? null;

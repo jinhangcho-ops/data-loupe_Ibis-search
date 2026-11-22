@@ -7,6 +7,7 @@ import { linkTargets } from "@/lib/links";
 import { useDash } from "@/lib/store";
 import { Check, LineBox, Sel, Txt } from "@/components/edit/menu/Fields";
 import { ICONS } from "@/components/edit/panel/Tools";
+import { MARK_EMPTY } from "@/lib/marks";
 import { FRAME_ACTIONS, FRAME_PARTS, TEXT_ALIGNS, TEXT_SIZES, frameError, freshFrame, isFrame, type FrameAction, type FrameItem, type FrameKind, type FramePart, type FrameSettings, type SegCell, type TextAlign, type TextSize } from "./registry";
 
 const MAX_LABEL = 30;  // 단추 글자 상한(서버 dash_store.MAX_FRAME_LABEL)
@@ -37,8 +38,12 @@ export function FramePanel(props: FramePanelProps): ReactNode {
   const all = state.dash?.cards ?? [];
   const cards = all.filter(c => !isFrame(c.kind)).map((c): [string, string] => [c.id, c.title]);
   const lists = all.filter(c => c.kind === "list").map((c): [string, string] => [c.id, c.title]);
+  const marked = all.filter(c => c.kind === "list" && (c.view.row_marks?.fields.length ?? 0) > 0);
+  const markLists = marked.map((c): [string, string] => [c.id, c.title]);
+  const markNames = marked.flatMap(c => (c.view.row_marks?.fields ?? []).filter(f => f.kind === "choice").map(f => f.name));
   const [cols, setCols] = useState<string[]>([]);
   const [colsError, setColsError] = useState("");
+  const filterCols = [...cols, ...markNames.filter(n => !cols.includes(n))];
   // 거를 컬럼 후보: 데이터 카드들이 읽는 표마다 한 번 받은 컬럼 이름의 합집합
   const tableKey = JSON.stringify([...new Set(all.filter(c => !isFrame(c.kind) && c.source?.table).map(c => JSON.stringify([c.source.schema ?? "", c.source.table])))].sort());
   const filterKind = kind === "segment" || kind === "chip_row";
@@ -58,6 +63,10 @@ export function FramePanel(props: FramePanelProps): ReactNode {
   const items = frame.items ?? [];
   const parts = frame.parts ?? [];
   const cells = frame.cells ?? [];
+  const src = marked.find(c => c.id === frame.list);
+  const choice = (src?.view.row_marks?.fields ?? []).filter(f => f.kind === "choice");
+  const fld = choice.find(f => f.id === frame.field);
+  const vals = frame.values ?? [];
   const putCell = (i: number, p: Partial<SegCell>) => set({ cells: cells.map((x, j) => (j === i ? { ...x, ...p } : x)) });
   const note = NOTES[kind];
   // 단추 하나의 칸 한 벌(단추 요소 자신, 줄 안 항목마다)
@@ -69,7 +78,7 @@ export function FramePanel(props: FramePanelProps): ReactNode {
         <Sel label="아이콘" value={item.icon ?? ""} blank="없음" options={ICONS} onChange={v => put({ icon: v })} />
         <Sel label="할 일" value={item.action ?? ""} blank="정하지 않음" options={ACTION_OPTS} onChange={v => put({ action: v as FrameAction | "", arg: "" })} />
         {need === "page" && <Sel label="이동할 쪽" value={item.arg ?? ""} blank="" options={pages} onChange={v => put({ arg: v })} />}
-        {need === "card" && <Sel label={item.action === "csv" ? "저장할 목록" : "크게 볼 카드"} value={item.arg ?? ""} blank="" options={item.action === "csv" ? lists : cards} onChange={v => put({ arg: v })} />}
+        {need === "card" && <Sel label={item.action === "csv" ? "저장할 목록" : item.action === "marks_save" || item.action === "marks_load" ? "표시를 주고받을 목록" : "크게 볼 카드"} value={item.arg ?? ""} blank="" options={item.action === "csv" ? lists : item.action === "marks_save" || item.action === "marks_load" ? markLists : cards}onChange={v => put({ arg: v })} />}
       </>
     );
   };
@@ -92,7 +101,7 @@ export function FramePanel(props: FramePanelProps): ReactNode {
       {kind === "segment" && (
         <>
           <Sel label="방식" value={frame.mode ?? "view"} options={[["view", "보기 바꾸기"], ["filter", "값으로 거르기"]]} onChange={v => set({ mode: v as "view" | "filter" })} />
-          {frame.mode === "filter" && <Sel label="거를 컬럼" value={frame.column ?? ""} blank="" options={cols} onChange={v => set({ column: v })} />}
+          {frame.mode === "filter" && <Sel label="거를 컬럼" value={frame.column ?? ""} blank="" options={filterCols} onChange={v => set({ column: v })} />}
           {cells.map((c, i) => (
             <div key={i} className="cm-block">
               <Txt label="칸 글자" value={c.label} onChange={v => putCell(i, { label: v.slice(0, MAX_LABEL) })} />
@@ -110,9 +119,21 @@ export function FramePanel(props: FramePanelProps): ReactNode {
           <button type="button" disabled={cells.length >= MAX_CELLS} onClick={() => set({ cells: [...cells, { ...BLANK_CELL }] })}>칸 추가</button>
         </>
       )}
-      {kind === "chip_row" && <Sel label="거를 컬럼" value={frame.column ?? ""} blank="" options={cols} onChange={v => set({ column: v })} />}
+      {kind === "chip_row" && <Sel label="거를 컬럼" value={frame.column ?? ""} blank="" options={filterCols}onChange={v => set({ column: v })} />}
       {kind === "filter_bar" && <Txt label="모두 풀기 단추 글자(비우면 단추 없음)" value={frame.clear_label ?? ""} onChange={v => set({ clear_label: v.slice(0, MAX_LABEL) })} />}
-      {(kind === "button" || kind === "nav_rail" || kind === "segment" || kind === "chip_row" || kind === "filter_bar") && <Check label="고른 단추에 빛 효과" checked={frame.ambient ?? false} onChange={on => set({ ambient: on })} />}
+      {kind === "mark_count" && (
+        <>
+          <Txt label="글자" value={frame.label ?? ""} onChange={v => set({ label: v.slice(0, MAX_LABEL) })} />
+          <Sel label="셀 목록" value={frame.list ?? ""} blank="" options={markLists} onChange={v => set({ list: v, field: "", values: [] })} />
+          <Sel label="표시 칸" value={frame.field ?? ""} blank="" options={choice.map((f): [string, string] => [f.id, f.name])} onChange={v => set({ field: v, values: [] })} />
+          <Sel label="모양" value={frame.look ?? "number"} options={[["number", "숫자 타일"], ["bar", "진척 칸"]]} onChange={v => set({ look: v as "number" | "bar" })} />
+          {(frame.look ?? "number") === "number" && fld && [...fld.choices, ""].map(x => (
+            <Check key={x} label={x || MARK_EMPTY} checked={vals.includes(x)} onChange={on => set({ values: on ? [...vals, x] : vals.filter(y => y !== x) })} />
+          ))}
+          {!marked.length && <p className="hint">표시 칸이 있는 목록이 없어요. 목록 카드 설정의 [줄 표시]에서 칸을 더하세요.</p>}
+        </>
+      )}
+      {(kind === "button" || kind === "nav_rail" || kind === "segment" || kind === "chip_row" || kind === "filter_bar" || kind === "mark_count") &&<Check label="고른 단추에 빛 효과" checked={frame.ambient ?? false} onChange={on => set({ ambient: on })} />}
       {(kind === "nav_rail" || kind === "top_strip") && (
         <>
           {items.map((item, i) => (

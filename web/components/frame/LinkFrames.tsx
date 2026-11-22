@@ -1,16 +1,21 @@
 "use client";
 // B2+B4 링크를 보내거나 받는 틀 요소의 몸통(plans/dash-blocks.md "B2+B4 세부 명세 (2차, 확정)"): 세그먼트·칩 줄·걸린 필터 줄. FrameCard의 DRAW가 부른다.
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { Empty } from "@/components/cards/svg/common";
 import { useShell } from "@/components/shell/ShellProvider";
 import { filterValues } from "@/lib/api";
 import { filtersFor, pressLabel, tileSmall } from "@/lib/links";
+import { markBars, markTotal } from "@/lib/marks";
 import { useDash } from "@/lib/store";
 import type { Card } from "@/lib/types";
 import { frameError, freshFrame } from "./registry";
 
 /** 칩 줄이 받아 둔 값 목록의 처음 상태 */
 const NO_CHIPS = { values: [] as string[], note: "", error: "", asked: "" };  // asked: 이 값을 받은 요청(컬럼·필터). 지금 요청과 다르면 받는 중
+
+const MARK_NO_LIST = "셀 목록이 대시보드에 없어요.";
+const MARK_NO_FIELD = "고른 표시 칸이 목록에 없어요.";
+const PERCENT = 100;
 
 /** card: 요소 카드. live: 눌렀을 때 할 일을 하는지(만드는 곳의 편집 중·미리 보기는 false) */
 export type LinkFrameProps = { card: Card; live: boolean };
@@ -75,6 +80,44 @@ export function ChipRow(props: LinkFrameProps): ReactNode {
       {s.error && <span className="hint" role="status">{s.error}</span>}
       {loading && <i className="bspin" aria-hidden="true" />}
     </div>
+  );
+}
+
+/** [SPECIFICATION] plans/dash-blocks.md#MarkCount
+ *  표시 세기 요소: 고른 목록의 고르기 표시 칸을 숫자 타일(누르면 그 값으로 거름)이나 진척 칸(값별 몫)으로 그린다. */
+export function MarkCount(props: LinkFrameProps): ReactNode {
+  const { card, live } = props;
+  const { state, dispatch } = useDash();
+  const shell = useShell();
+  const frame = card.view.frame ?? freshFrame("mark_count");
+  const why = frameError("mark_count", frame);
+  if (why) return <span className="hint">{why}</span>;
+  const src = (state.dash?.cards ?? []).find(c => c.id === frame.list && c.kind === "list");
+  if (!src) return <span className="hint">{MARK_NO_LIST}</span>;
+  const field = src.view.row_marks?.fields.find(f => f.id === frame.field && f.kind === "choice");
+  if (!field) return <span className="hint">{MARK_NO_FIELD}</span>;
+  const data = state.values[src.id]?.data ?? src.data;
+  if (frame.look === "bar") {
+    const bars = markBars(data, field);
+    if (!bars.length) return <Empty />;
+    return (
+      <div className="fr-mbar" role="group" aria-label={frame.label || card.title} data-ambient={frame.ambient || undefined}>
+        {frame.label && <span className="fr-mcount-label">{frame.label}</span>}
+        <div className="fr-mbar-track" aria-hidden="true">{bars.map(b => <i key={b.value} style={{ "--r": b.ratio, "--c": b.color } as CSSProperties} />)}</div>
+        <div className="fr-mbar-legend">{bars.map(b => <span key={b.value}><b style={{ "--c": b.color } as CSSProperties} />{`${b.label} ${b.n.toLocaleString()} · ${Math.round(b.ratio * PERCENT)}%`}</span>)}</div>
+      </div>
+    );
+  }
+  const values = frame.values ?? [];
+  const n = markTotal(data, field.id, values);
+  if (n === null) return <Empty />;
+  const on = shell.presses.some(p => p.from === card.id);
+  return (
+    <button type="button" className="fr-mcount" aria-pressed={values.length ? on : undefined} disabled={!live || !values.length} data-ambient={frame.ambient || undefined}
+      onClick={() => shell.press(card.id, on ? null : { value: { column: field.name, in: values } }).catch(e => dispatch({ type: "error", message: (e as Error).message }))}>
+      {frame.label && <span className="fr-mcount-label">{frame.label}</span>}
+      <b className="fr-mcount-n">{n.toLocaleString()}</b>
+    </button>
   );
 }
 

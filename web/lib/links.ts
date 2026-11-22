@@ -6,7 +6,7 @@ import { sectionsOf } from "@/components/grid/sections";
 import { onPage } from "@/lib/calc";
 
 /** 링크를 보내는 틀 요소(서버 dash_store.LINK_FRAMES와 같은 차례) */
-export const SENDER_FRAMES: readonly string[] = ["segment", "chip_row", "period_pick", "asof_field", "unit_seg", "top_strip"];
+export const SENDER_FRAMES: readonly string[] = ["segment", "chip_row", "period_pick", "asof_field", "unit_seg", "top_strip", "mark_count"];
 /** 위쪽 화면 줄에서 기간 요소로 치는 칸 */
 export const PERIOD_PARTS: readonly string[] = ["period", "asof"];
 

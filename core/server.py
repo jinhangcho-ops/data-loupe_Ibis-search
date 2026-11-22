@@ -44,7 +44,7 @@ ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 �
 ask_folder = None  # 저장할 폴더를 묻는 함수(→ 고른 폴더 또는 None). ask_save처럼 desktop.py가 채운다.
 restart = None  # 프로그램을 닫고 다시 여는 함수. ask_save처럼 desktop.py가 채운다(창 없이 돌면 None)
 ask_open = None  # 파일 하나를 고르는 함수(kind → 고른 경로 또는 None). ask_save처럼 desktop.py가 채운다.
-PICK_KINDS = {"env": ("env 파일 (*.env)", "모든 파일 (*.*)"), "metrics": ("지표 파일 (*.yaml;*.yml;*.json)", "모든 파일 (*.*)")}  # /api/pick의 종류 → 파일 대화상자 필터
+PICK_KINDS = {"env": ("env 파일 (*.env)", "모든 파일 (*.*)"), "metrics": ("지표 파일 (*.yaml;*.yml;*.json)", "모든 파일 (*.*)"), "marks": ("표시 파일 (*.csv;*.tsv;*.parquet;*.xlsx)", "모든 파일 (*.*)")}  # /api/pick의 종류 → 파일 대화상자 필터. marks: (B9) 줄 표시 가져오기(dash_marks.READS와 같은 차례)
 PICK_FOLDER = "folder"  # /api/pick의 종류: 파일이 아니라 폴더를 고른다(ask_folder)
 QUERY_TIMEOUT = drivers.QUERY_TIMEOUT  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다. DB 쪽 시간 제한(drivers.settle)도 같은 값.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.

@@ -7,10 +7,11 @@ import { PageTabs } from "@/components/shell/PageTabs";
 import { AsOfField, PeriodField } from "@/components/shell/PeriodBar";
 import { useShell } from "@/components/shell/ShellProvider";
 import { ThemeButton, flipEasy, flipTheme } from "@/components/shell/TopBar";
+import { cardRequest, computeCard, loadMarksFile, saveMarksFile } from "@/lib/api";
 import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import type { Card, Constants, Unit } from "@/lib/types";
-import { ChipRow, FilterTags, Segment } from "./LinkFrames";
+import { ChipRow, FilterTags, MarkCount, Segment } from "./LinkFrames";
 import { FRAME_ACTIONS, frameError, freshFrame, runAction, type ActionHost, type FrameItem, type FrameKind, type FrameSettings } from "./registry";
 
 /** 그리는 함수가 받는 것: 요소 카드·설정과 앱의 지금 상태 */
@@ -66,6 +67,7 @@ const DRAW: Record<FrameKind, (d: Draw) => ReactNode> = {
   segment: d => <Segment card={d.card} live={d.live} />,
   chip_row: d => <ChipRow card={d.card} live={d.live} />,
   filter_bar: d => <FilterTags card={d.card} live={d.live} />,
+  mark_count: d => <MarkCount card={d.card} live={d.live} />,
 };
 
 /** card: 요소 카드(kind가 FRAME_KINDS). live: 눌렀을 때 할 일을 하는지(만드는 곳의 편집 중·추가 메뉴의 미리 보기는 false) */
@@ -84,6 +86,17 @@ export function FrameCard(props: FrameCardProps): ReactNode {
     recompute: shell.recompute, setPage: shell.setPage, dashOnly: shell.dashOnly, setDashOnly: shell.setDashOnly, setReport: shell.setReport, setZoom: shell.setZoom, setSettings: shell.setSettings,
     flipTheme, flipEasy, clearFilters: shell.clearFilters, pages, cardIds: (state.dash?.cards ?? []).map(c => c.id),
     saveCsv: id => { const c = state.dash?.cards.find(x => x.id === id); if (!c) throw new Error("저장할 목록이 없어요."); Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([listCsv(state.values[id]?.data ?? c.data)], { type: "text/csv" })), download: `${c.title}.csv` }).click(); },
+    saveMarks: id => { saveMarksFile(state.dash?.id ?? "", id).catch(e => dispatch({ type: "error", message: (e as Error).message })); },
+    loadMarks: id => {
+      const c = state.dash?.cards.find(x => x.id === id);
+      if (!c) throw new Error("표시를 주고받을 목록이 없어요.");
+      loadMarksFile(state.dash?.id ?? "", id).then(async r => {
+        if (!r.path) return;
+        const { data } = await computeCard(cardRequest({ ...c, data: {} }), shell.ctxOf(id), state.dash?.id ?? "");
+        dispatch({ type: "values", results: [{ id, data }] });
+        dispatch({ type: "error", message: `표시를 가져왔어요: 새 줄 ${r.added ?? 0}개, 같은 줄 ${r.clashed ?? 0}개.` });
+      }).catch(e => dispatch({ type: "error", message: (e as Error).message }));
+    },
   };
   return DRAW[kind]({
     card, frame: card.view.frame ?? freshFrame(kind), live, host, page: pages.includes(shell.page) ? shell.page : pages[0] ?? "", zoom: shell.zoom,

@@ -1,5 +1,5 @@
 // 카드 그리기 컴포넌트(ChartCard·SvgCard)가 함께 받는 props.
-import type { Card, CardData, ComputeResult, Ctx, PickedFilter } from "@/lib/types";
+import type { Card, CardData, ComputeResult, Ctx, MarkValue, PickedFilter } from "@/lib/types";
 
 export type CardProps = {
   card: Card;
@@ -16,6 +16,7 @@ export type CardProps = {
   pressed?: PickedFilter;
   /** (B3) 목록 줄 고르기: 거를 컬럼과 새로 고른 값들(빈 목록 = 풂). 없으면 고르기를 받지 않는다 */
   onPress?: (column: string, values: string[]) => void;
+  /** (B9) 목록 줄 표시 바꾸기: 줄 열쇠와 바꾼 칸(칸 id → 값). 없으면 표시 입력을 그리지 않는다 */ onMark?: (key: string, values: Record<string, MarkValue>) => void;
   /** 값 대신 비율(%)로 그린다(카드 머리의 % 단추, 계열 차트만. 저장하지 않는다) */
   share?: boolean;
 };

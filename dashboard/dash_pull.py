@@ -48,6 +48,22 @@ BAD_RANGE = "다시 받을 기간은 YYYY-MM-DD 꼴로, 시작이 끝보다 늦�
 DAY_RE = re.compile(r"\d{4}-\d{2}-\d{2}")  # 다시 받을 기간의 날짜 글자 모양
 
 
+def parquet_key(con: "ibis.BaseBackend", k: str | None, known: set[str]) -> tuple[dict, dict]:
+    """[SPECIFICATION] plans/dash-blocks.md#parquet_key
+    DuckDB 연결에 Parquet 열쇠를 (아직이면) 등록하고 쓰기·읽기에 넘길 암호화 인자 (write_enc, read_enc)를 돌려준다(열쇠가 없으면 빈 사전 둘)."""
+    if k is None:
+        return {}, {}
+    name = KEY_PREFIX + dash_store.def_hash(k)
+    if name not in known:
+        if not (KEY_NAME_RE.fullmatch(name) and KEY_VALUE_RE.fullmatch(k)):
+            raise ValueError("받은 데이터 열쇠 모양이 맞지 않아요.")
+        exprs = sqlglot.expressions
+        con.raw_sql(exprs.Pragma(this=exprs.Anonymous(this="add_parquet_key", expressions=[exprs.Literal.string(name), exprs.Literal.string(k)])).sql("duckdb"))
+        known.add(name)
+    footer = sqlglot.expressions.Struct(expressions=[sqlglot.expressions.PropertyEQ(this=sqlglot.expressions.to_identifier("footer_key"), expression=sqlglot.expressions.Literal.string(name))])
+    return {"encryption_config": {"footer_key": name}}, {"encryption_config": footer}
+
+
 def card_tables(card: dict) -> list[tuple[str, str]]:
     """[SPECIFICATION] plans/dash-blocks.md#card_tables
     카드가 읽는 모든 테이블 [(스키마, 이름)](조회·이어붙이기·조인·계산 줄·전처리 구성·좌표 단계·지도 영역 표, 가상 테이블 포함). DB에는 메타데이터만 묻는다."""
@@ -245,19 +261,7 @@ def pull_slot(need: dict, dash: dict, renew: bool, full: bool = False) -> dict:
         OPEN["timer"] = threading.Timer(settings.get("pc_idle") * MINUTE, close_idle)
         OPEN["timer"].daemon = True
         OPEN["timer"].start()
-        write_enc: dict = {}
-        read_enc: dict = {}
-        if k is not None:
-            name = KEY_PREFIX + dash_store.def_hash(k)
-            if name not in OPEN["keys"]:
-                if not (KEY_NAME_RE.fullmatch(name) and KEY_VALUE_RE.fullmatch(k)):
-                    raise ValueError("받은 데이터 열쇠 모양이 맞지 않아요.")
-                local.raw_sql(sqlglot.expressions.Pragma(this=sqlglot.expressions.Anonymous(
-                    this="add_parquet_key", expressions=[sqlglot.expressions.Literal.string(name), sqlglot.expressions.Literal.string(k)])).sql("duckdb"))
-                OPEN["keys"].add(name)
-            write_enc = {"encryption_config": {"footer_key": name}}
-            read_enc = {"encryption_config": sqlglot.expressions.Struct(expressions=[sqlglot.expressions.PropertyEQ(
-                this=sqlglot.expressions.to_identifier("footer_key"), expression=sqlglot.expressions.Literal.string(name))])}
+        write_enc, read_enc = parquet_key(local, k, OPEN["keys"])
         t = querying.table_of(need["table"], need["schema"] or None)
 
         def term_pred(term: dict, span: list[str | None] | None) -> "ibis.Value":
@@ -460,17 +464,7 @@ def on_pc(files: dict[tuple[str, str], list[Path]], dash_id: str) -> Iterator["i
                 continue
             man = mans[paths[0].parent.name]
             k = dash_keys.slot_key(man["crypt"]["group"], dash_id, man["crypt"]["salt"])
-            enc = {}
-            if k is not None:
-                name = KEY_PREFIX + dash_store.def_hash(k)
-                if name not in OPEN["keys"]:
-                    if not (KEY_NAME_RE.fullmatch(name) and KEY_VALUE_RE.fullmatch(k)):
-                        raise ValueError("받은 데이터 열쇠 모양이 맞지 않아요.")
-                    local.raw_sql(sqlglot.expressions.Pragma(this=sqlglot.expressions.Anonymous(
-                        this="add_parquet_key", expressions=[sqlglot.expressions.Literal.string(name), sqlglot.expressions.Literal.string(k)])).sql("duckdb"))
-                    OPEN["keys"].add(name)
-                enc = {"encryption_config": sqlglot.expressions.Struct(expressions=[sqlglot.expressions.PropertyEQ(
-                    this=sqlglot.expressions.to_identifier("footer_key"), expression=sqlglot.expressions.Literal.string(name))])}
+            enc = parquet_key(local, k, OPEN["keys"])[1]
             if schema:
                 local.create_database(schema, force=True)
             local.create_view(table, local.read_parquet([str(p) for p in paths], **enc), database=schema or None, overwrite=True)
@@ -542,6 +536,7 @@ def uses_pc(dash_id: str) -> bool:
 def compute(card: dict, now: str, ctx: dict | None, dash_id: str, token: str) -> dict:
     """[SPECIFICATION] plans/dash-blocks.md#compute
     카드 하나의 값: PC 방식이면 받은 파일에서(빠진 구간이 있으면 note에 GAP_NOTE), 아니면 지금처럼 DB에서 dash_calc.compute_filtered로 구한다."""
+    ctx = {**(ctx or {}), "dash": dash_id} if card["kind"] == "list" else ctx  # (B9) 목록이 그 대시보드의 줄 표시를 붙이게(dash_calc.list_data)
     if not uses_pc(dash_id):
         return dash_calc.compute_filtered(card, now, ctx)
     files, missing = files_for(card, ctx, dash_id, token)

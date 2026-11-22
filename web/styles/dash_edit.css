@@ -201,3 +201,20 @@ button.lrow { cursor:pointer; }
 .lprint { display:none; }
 html[data-picture] .lprint { display:table; }
 html[data-picture] .lprint ~ .lscreen, html[data-picture] .lscreen:has(~ .lprint) { display:none; }
+/* B9 줄 표시: 줄 끝 칸(.lmarks)·누르면 뜨는 칸(.lmarkpop), 표시 세기 요소(숫자 타일 .fr-mcount, 진척 칸 .fr-mbar) */
+.clist > li.lmarked { display:flex; align-items:center; flex-wrap:wrap; gap:.375rem; }
+.clist > li.lmarked > .lrow { flex:1; width:auto; min-width:0; }
+.lmarks { display:flex; align-items:center; flex-wrap:wrap; gap:.25rem; }
+.lmarks :is(select, input) { height:var(--h-sm); padding:0 .375rem; border:.0625rem solid var(--line); border-radius:var(--r-ctl); background:var(--bg); color:inherit; font-size:var(--fs-xs); }
+.lmarks input[type="text"] { width:8rem; }
+.lmarks input[type="number"] { width:5rem; }
+.lmarkpop { flex-basis:100%; padding:.375rem .625rem; border:.0625rem dashed var(--line); border-radius:var(--r-ctl); }
+.fr-mcount { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:.125rem; width:100%; height:100%; padding:.5rem .75rem; border:0; border-radius:var(--r-card); background:var(--card); color:inherit; box-shadow:var(--raise-sm); text-align:left; }
+.fr-mcount[aria-pressed="true"] { color:var(--accent); }
+.fr-mcount-label { font-size:var(--fs-xs); color:var(--muted); }
+.fr-mcount-n { font-size:var(--fs-lg); font-variant-numeric:tabular-nums; }
+.fr-mbar { display:flex; flex-direction:column; gap:.375rem; width:100%; }
+.fr-mbar-track { display:flex; height:.5rem; overflow:hidden; border-radius:var(--r-pill); background:var(--line); }
+.fr-mbar-track > i { flex:0 0 calc(var(--r) * 100%); background:var(--c); }
+.fr-mbar-legend { display:flex; flex-wrap:wrap; gap:.25rem .75rem; font-size:var(--fs-xs); color:var(--muted); }
+.fr-mbar-legend b { display:inline-block; width:.5rem; height:.5rem; margin-right:.25rem; border-radius:var(--r-pill); background:var(--c); }

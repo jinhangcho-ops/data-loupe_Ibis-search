@@ -21,6 +21,7 @@ dash_pdf = Later("dashboard.dash_pdf")
 dash_pull = Later("dashboard.dash_pull")
 dash_files = Later("dashboard.dash_files")
 dash_keys = Later("dashboard.dash_keys")
+dash_marks = Later("dashboard.dash_marks")
 dash_refresh = Later("dashboard.dash_refresh")
 dash_store = Later("core.dash_store")
 held = Later("core.held")
@@ -43,7 +44,7 @@ TARGET_PAGE = 100 # 목표 파일의 문제 줄을 한 번에 돌려줄 수(화�
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min",
                     "/api/period/parse", "/api/period/day", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/dashboard/build", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart", "/api/viz",
-                    "/api/dash/pull/state", "/api/dash/pull/crypt", "/api/dash/pull/orphans", "/api/dash/pull/orphans/drop", "/api/dash/bell"})
+                    "/api/dash/pull/state", "/api/dash/pull/crypt", "/api/dash/pull/orphans", "/api/dash/pull/orphans/drop", "/api/dash/bell", "/api/dash/marks/set", "/api/dash/marks/save", "/api/dash/marks/load"})
 
 
 def with_source(card):
@@ -66,6 +67,7 @@ def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버�
     found["dash"].update(auto=viz_rules.AUTO_PARAMS, auto_names=viz_rules.AUTO_NAMES, viz=viz_rules.load_prefs(), orders=viz_rules.ORDERS, order_names=viz_rules.ORDER_NAMES)  # 자동 규칙 수치표·이름, 차트 낱말과 쿼리 화면 기본값, 정렬 다섯 값·이름
     found["dash"]["pull"] = {"calcs": list(dash_store.PULL_CALCS), "ranges": list(dash_store.PULL_RANGES), "crypts": list(dash_store.PULL_CRYPTS), "units": dash_store.PULL_UNITS, "unit_names": dash_store.PULL_UNIT_NAMES, "min_every": dash_store.MIN_PULL_EVERY, "max_every": dash_store.MAX_PULL_EVERY, "default": dash_store.check_pull(None), "gap_note": dash_store.GAP_NOTE}  # 받기 설정 칸(계산 방식·갱신 주기·받는 범위·암호화)의 선택지와 상한
     found["dash"]["list"] = {"max_parts": dash_store.MAX_LIST_PARTS, "max_swaps": dash_store.MAX_LIST_SWAPS, "max_rows": dash_store.MAX_LIST_ROWS, "part_kinds": list(dash_store.LIST_PART_KINDS), "picks": list(dash_store.LIST_PICKS), "bases": list(dash_store.LIST_BASES), "sides": list(dash_store.LIST_SIDES), "reports": list(dash_store.LIST_REPORTS), "default": dash_store.check_list({}, [])}  # (B3) 목록 카드 설정 칸의 상한·선택지·처음 값
+    found["dash"]["row_marks"] = {"kinds": list(dash_store.ROW_MARK_KINDS), "edits": list(dash_store.ROW_MARK_EDITS), "clashes": list(dash_store.ROW_MARK_CLASHES), "looks": list(dash_store.ROW_MARK_LOOKS), "max_fields": dash_store.MAX_ROW_MARK_FIELDS, "max_choices": dash_store.MAX_ROW_MARK_CHOICES, "max_name": dash_store.MAX_ROW_MARK_NAME, "max_text": dash_store.MAX_ROW_MARK_TEXT, "max_rows": dash_store.MAX_ROW_MARK_ROWS, "max_scan": dash_store.MAX_ROW_MARK_SCAN, "default": dash_store.ROW_MARKS_DEFAULT}  # (B9) 줄 표시 칸 설정의 선택지·상한·처음 값
     found["dash"].update(gone_kinds=list(dash_store.GONE_KINDS), gone_text=dash_store.GONE_CARD)  # 앱에서 없앤 카드 종류와 그 안내 글(화면이 서버와 같은 글자로 보인다)
     cal = settings.load()
     found.update(week_start=cal.get("week_start") or "mon", fiscal_start_month=cal.get("fiscal_start_month") or 1)  # 화면의 주·연 묶음(web/lib/calc.ts BUCKET)이 설정을 따르게
@@ -152,6 +154,7 @@ def dash_delete():
             dash_pull.close_pc()
         dash_files.forget(dash_id)
         dash_keys.forget(dash_id)
+        dash_marks.forget(dash_id)
     return jsonify(dash_store.listing())
 
 
@@ -198,12 +201,14 @@ def pull_crypt() -> Response:
     old_keys = {}
     if how == "rewrite":  # 옛 암호문 열쇠는 set_pass가 덮기 전에 구한다
         old_keys = {s: dash_keys.slot_key(m["crypt"]["group"], dash_id, m["crypt"]["salt"]) for s, m in dash_files.slots(dash_id).items()}
+    old_marks = dash_marks.key_of(dash_id)  # (B9) 옛 암호문 열쇠는 set_pass가 덮기 전에 구한다
     if text:
         dash_keys.set_pass(dash_id, text)
     saved = dash_store.update_settings(dash_id, {"pull": {**dash_store.check_pull(d.get("pull")), "crypt": crypt}})
     if how == "rewrite":
         with dash_files.LOCK:
             dash_pull.rewrite_crypt(saved, old_keys)
+    dash_marks.recrypt(saved, old_marks)  # (B9) 표시는 다시 받을 수 없어 어느 방법이든 새 열쇠로 다시 쓴다
     return jsonify(dashboard=saved)
 
 
@@ -318,6 +323,71 @@ def pull_unused_drop() -> Response:
         if slot in still:
             dash_files.drop_user(slot, d["id"])
     return jsonify(dropped=[s for s in slots if s in still], kept=[s for s in slots if s not in still])
+
+
+@app.post("/api/dash/marks/set")
+def marks_set() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#marks_set
+    `POST /api/dash/marks/set` {dash, card, key, values}: 목록 줄 하나의 표시를 바꾼다 {key, values}(설정 폴더 파일만, FREE)."""
+    body = request.json or {}
+    d = dash_store.get_dashboard(body.get("dash"))
+    card = dash_marks.list_card(d, body.get("card"))
+    return jsonify(**dash_marks.set_mark(d, card, body.get("key"), body.get("values")))
+
+
+@app.post("/api/dash/marks/save")
+def marks_save() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#marks_save
+    `POST /api/dash/marks/save` {dash, card}: 저장 대화상자로 표시를 파일로 저장한다 {path}(FREE)."""
+    body = request.json or {}
+    d = dash_store.get_dashboard(body.get("dash"))
+    card = dash_marks.list_card(d, body.get("card"))
+    return jsonify(path=dash_marks.save_file(d, card))
+
+
+@app.post("/api/dash/marks/load")
+def marks_load() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#marks_load
+    `POST /api/dash/marks/load` {dash, card}: 열기 대화상자로 고른 파일의 표시를 가져온다 {path, added, clashed, clash}(FREE)."""
+    body = request.json or {}
+    d = dash_store.get_dashboard(body.get("dash"))
+    card = dash_marks.list_card(d, body.get("card"))
+    got = dash_marks.load_file(d, card)
+    return jsonify(**got) if got else jsonify(path=None)
+
+
+def mark_present(d: dict, card: dict) -> list[str]:
+    """[SPECIFICATION] plans/dash-blocks.md#mark_present
+    목록 카드의 지금 데이터 열쇠들: PC 계산이면 받아 둔 파일(DB에 묻지 않음), 아니면 지금 연결에서 dash_calc.list_keys."""
+    if dash_pull.uses_pc(d["id"]):
+        files, _ = dash_pull.held_files(d, None)
+        with dash_pull.on_pc(files, d["id"]):
+            return dash_calc.list_keys(card)
+    server.get_con()
+    if other_source(card["source"].get("key"), dash_store.current_source()):
+        raise ValueError("다른 연결에서 만든 목록이라 지금 데이터와 견줄 수 없어요. 그 연결로 바꾼 뒤 다시 세어 주세요.")
+    return dash_calc.list_keys(card)
+
+
+@app.post("/api/dash/marks/orphans")
+def marks_orphans() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#marks_orphans
+    `POST /api/dash/marks/orphans` {dash, card}: 지금 데이터에 없는 줄의 표시 수 {count}(차례를 기다린다)."""
+    body = request.json or {}
+    d = dash_store.get_dashboard(body.get("dash"))
+    card = dash_marks.list_card(d, body.get("card"))
+    return jsonify(count=len(dash_marks.orphans(d["id"], card["id"], mark_present(d, card))))
+
+
+@app.post("/api/dash/marks/orphans/drop")
+def marks_orphans_drop() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#marks_orphans_drop
+    `POST /api/dash/marks/orphans/drop` {dash, card}: 다시 세어 지금 데이터에 없는 줄의 표시를 지운다 {dropped}(차례를 기다린다)."""
+    body = request.json or {}
+    d = dash_store.get_dashboard(body.get("dash"))
+    card = dash_marks.list_card(d, body.get("card"))
+    gone = dash_marks.orphans(d["id"], card["id"], mark_present(d, card))
+    return jsonify(dropped=dash_marks.drop_keys(d, card["id"], gone))
 
 
 @app.post("/api/dash/card/add")

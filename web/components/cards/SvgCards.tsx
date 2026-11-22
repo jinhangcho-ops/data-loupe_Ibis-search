@@ -55,7 +55,7 @@ export const PAINTERS: Record<string, ComponentType<P>> = {
   histogram: Histogram, boxplot: BoxPlot, heatmap: Heatmap, calheat: CalHeat, treemap: Treemap, sunburst: Sunburst, bullet: Bullet, bump: Bump,
   sankey: Sankey, cohort: Cohort, candle: Candle, wordcloud: WordCloud,
 };
-export function SvgCard({ card, data, result, palette, ctx, pressed, onPress }: CardProps) {
+export function SvgCard({ card, data, result, palette, ctx, pressed, onPress, onMark }: CardProps) {
   const theme = useTheme(), consts = useConstants(), merge = consts?.merge;
   const colors = useMemo(() => ({ ...theme, palette, ...(palette.length ? { series: shades(palette[0]), hi: palette[1] ?? theme.hi } : {}) }), [theme, palette]);  // 대시보드가 고른 표시색·강조색
   const gone = !!consts && (consts.dash.gone_kinds.includes(card.kind) || (card.kind === "table" && !!card.source?.body && !(card.source.body.series?.length)));  // 더는 지원하지 않는 카드(서버 GONE_KINDS·계열 없는 표)
@@ -63,5 +63,5 @@ export function SvgCard({ card, data, result, palette, ctx, pressed, onPress }: 
   const Paint = PAINTERS[card.kind];
   if (!Paint) return <RawValue data={data} result={result} />;
   if (!(data.by_unit || data.values || data.columns || data.bins)) return <Box cls="summary"><div className="sum-text">아직 구한 값이 없어요</div></Box>;
-  return <Paint card={{ ...card, data }} colors={colors} range={ctx?.range} merge={merge ?? []} filters={ctx?.filters} prev={ctx?.prev} mode={ctx?.compare_mode} pressed={pressed} onPress={onPress} />;
+  return <Paint card={{ ...card, data }} colors={colors} range={ctx?.range} merge={merge ?? []} filters={ctx?.filters} prev={ctx?.prev} mode={ctx?.compare_mode} pressed={pressed} onPress={onPress} onMark={onMark} />;
 }

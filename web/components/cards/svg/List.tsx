@@ -4,8 +4,9 @@
 // 값 바꾸기 단추(view.list.swaps)는 카드 안에서만 바뀌고 저장하지 않는다. 그림·보고서가 "표로"면 같은 값을 표(.lprint)로도 그린다.
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { csvText, type ChartTable } from "@/lib/autoviz";
-import type { CardData, ListView } from "@/lib/types";
+import type { CardData, ListView, MarkField, MarkValue, MarkView } from "@/lib/types";
 import { alpha, compileRules, kindOfValues, matchRule, showValue } from "@/lib/calc";
+import { MARK_EMPTY } from "@/lib/marks";
 import { Box, Empty, type P } from "./common";
 
 /** 꼬리표 바탕 색의 진하기(표 카드 Rows.tsx 칸 색 규칙과 같은 값) */
@@ -18,7 +19,7 @@ export const LIST_NO_PARTS = "카드 설정에서 줄에 넣을 부분을 더하
 export const LIST_CSV_BOM = "﻿";
 
 /** 목록 값의 컬럼 하나(dash_calc.list_data의 columns): 묶음(group) 또는 값(value) */
-export type ListCol = { name: string; kind?: string; agg?: string };
+export type ListCol = { name: string; kind?: string; agg?: string; field?: string; mark?: string }; // field·mark: (B9) 표시 칸 id·종류
 /** 줄 안 부분 하나를 그릴 것: 모양·자리, 글자, 색 규칙의 색(없으면 null), 막대 몫 0~1(막대가 아니면 null) */
 export type ListCell = { kind: ListView["parts"][number]["kind"]; side: "start" | "end"; text: string; color: string | null; ratio: number | null };
 /** 목록 줄 하나: 거를 값(고르기를 안 하거나 거를 컬럼 값이 비면 null)과 부분들(설정 차례) */
@@ -76,18 +77,40 @@ export function listCsv(data: CardData): string {
   return LIST_CSV_BOM + csvText(tableChart(v.columns, v.data));
 }
 
+/** (B9) 줄 하나의 표시 입력: 표시 칸들, 그 줄의 지금 값(칸 id → 값), 묶음 이름(보이는 사람용), 바꾸면 칸 id와 새 값 */
+export type MarkInputsProps = { fields: MarkField[]; values: Record<string, MarkValue>; label: string; onChange: (field: string, value: MarkValue) => void };
+
+/** [SPECIFICATION] plans/dash-blocks.md#MarkInputs
+ *  줄 하나의 표시 칸마다 입력(고르기는 고르는 칸, 글·숫자는 칸을 떠날 때, 날짜는 고르면)을 그린다. */
+export function MarkInputs(p: MarkInputsProps): ReactNode {
+  return (
+    <span className="lmarks" role="group" aria-label={p.label}>{p.fields.map(f => {
+      const v = p.values[f.id] ?? null;
+      if (f.kind === "choice") return <select key={f.id} aria-label={f.name} value={v == null ? "" : String(v)} onChange={e => p.onChange(f.id, e.target.value === "" ? null : e.target.value)}><option value="">{MARK_EMPTY}</option>{f.choices.map(c => <option key={c} value={c}>{c}</option>)}</select>;
+      if (f.kind === "text") return <input key={`${f.id}:${v ?? ""}`} type="text" aria-label={f.name} defaultValue={v == null ? "" : String(v)} onBlur={e => { const t = e.target.value.trim(); if (t !== (v ?? "")) p.onChange(f.id, t === "" ? null : t); }} />;
+      if (f.kind === "date") return <input key={f.id} type="date" aria-label={f.name} value={v == null ? "" : String(v)} onChange={e => p.onChange(f.id, e.target.value || null)} />;
+      return <input key={`${f.id}:${v ?? ""}`} type="number" aria-label={f.name} defaultValue={v == null ? "" : String(v)} onBlur={e => { const t = e.target.value; const n = t === "" ? null : Number(t); if (n !== v && (n === null || Number.isFinite(n))) p.onChange(f.id, n); }} />;
+    })}</span>
+  );
+}
+
 /** [SPECIFICATION] plans/dash-blocks.md#List
  *  목록 카드를 사용자가 만든 줄 부분대로 그린다(줄 고르기·값 바꾸기 단추·보고서용 표). */
 export function List(p: P): ReactNode {
-  const { card, onPress, pressed } = p;
+  const { card, onPress, pressed, onMark } = p;
   const [swap, setSwap] = useState(0);
-  const v = card.data?.values as { columns?: ListCol[]; data?: unknown[][] } | undefined;
+  const [open, setOpen] = useState<string | null>(null);
+  const v = card.data?.values as { columns?: ListCol[]; data?: unknown[][]; keys?: (string | null)[] } | undefined;
   const list = card.view.list as ListView | undefined;
   if (!v?.columns || !v.data) return <Box cls="list"><div className="hint">{LIST_NO_VALUES}</div></Box>;
   if (!list?.parts.length) return <Box cls="list"><div className="hint">{LIST_NO_PARTS}</div></Box>;
   const at = swap < list.swaps.length ? swap : 0;
   const rows = listRows(v.columns, v.data, list, at);
   if (!rows.length) return <Box cls="list"><Empty /></Box>;
+  const marks = card.view.row_marks as MarkView | undefined;
+  const fields = marks?.fields ?? [];
+  const at2 = fields.map(f => v.columns!.findIndex(c => c.kind === "mark" && c.field === f.id));
+  const editable = !!onMark && fields.length > 0 && !!v.keys;
   const cell = (c: ListCell, i: number): ReactNode => {
     const color = c.color ? { color: c.color } : undefined;
     if (c.kind === "text") return <span key={i} className="ltext" style={color}>{c.text}</span>;
@@ -103,9 +126,15 @@ export function List(p: P): ReactNode {
         const inner = <><span className="lstart">{r.cells.filter(c => c.side === "start").map(cell)}</span><span className="lend">{r.cells.filter(c => c.side === "end").map(cell)}</span></>;
         const mine = pressed?.column === list.key ? pressed.in : [];
         const on = r.key !== null && mine.includes(r.key);
-        return <li key={i}>{!!onPress && list.pick !== "none" && r.key !== null
+        const row = !!onPress && list.pick !== "none" && r.key !== null
           ? <button type="button" className="lrow" aria-pressed={on} onClick={() => onPress(list.key, nextPick(list.pick as "one" | "many", mine, r.key as string))}>{inner}</button>
-          : <div className="lrow">{inner}</div>}</li>;
+          : <div className="lrow">{inner}</div>;
+        const k = v.keys?.[i] ?? null;
+        if (!editable || k === null) return <li key={i}>{row}</li>;
+        const vals = Object.fromEntries(fields.map((f, j) => [f.id, (at2[j] === -1 ? null : v.data![at2[j]][i]) as MarkValue]));
+        const inputs = <MarkInputs fields={fields} values={vals} label={`${card.title} ${i + 1}번째 줄`} onChange={(fid, x) => onMark!(k, { [fid]: x })} />;
+        if (marks!.edit === "cell") return <li key={i} className="lmarked">{row}{inputs}</li>;
+        return <li key={i} className="lmarked">{row}<button type="button" className="ib lmarkbtn" aria-expanded={open === k} aria-label={`${i + 1}번째 줄 표시 바꾸기`} onClick={() => setOpen(open === k ? null : k)}>✎</button>{open === k && <div className="lmarkpop">{inputs}</div>}</li>;
       })}</ul>
       {list.report === "table" && <table className="lprint"><thead><tr>{v.columns.map(c => <th key={c.name}>{c.name}</th>)}</tr></thead><tbody>{rows.map((_, r) => <tr key={r}>{v.columns!.map((c, i) => {
         const x = v.data![i][r];

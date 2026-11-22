@@ -11,6 +11,7 @@ import { freshLinks } from "@/lib/links";
 import { computedUpdate, useDash } from "@/lib/store";
 import type { Card, CardData, CardView, ListPart, ListView } from "@/lib/types";
 import { Check, LineBox, Sel, Txt } from "../menu/Fields";
+import { MarkPanel } from "./MarkPanel";
 
 const MAX_LABEL = 30;  // 단추 이름 글자 상한(서버 dash_store.MAX_FRAME_LABEL)
 const PART_NAMES: Record<ListPart["kind"], string> = { text: "글", chip: "칩", tag: "꼬리표", number: "숫자", bar: "작은 막대" };  // 모양의 상수 이름
@@ -100,7 +101,7 @@ export function ListPanel({ card, data, onChange }: ListPanelProps): ReactNode {
         <div key={i} className="cm-block">
           <Sel label="모양" value={p.kind} options={d.part_kinds.map((k): [string, string] => [k, PART_NAMES[k]])} onChange={kind => putPart(i, { kind: kind as ListPart["kind"] })} />
           {list.swaps.length > 0 && <Check label="값 바꾸기 단추를 따름" checked={p.swap} onChange={swap => putPart(i, { swap })} />}
-          {!p.swap && <Sel label="컬럼" value={p.column} options={names} onChange={column => putPart(i, { column })} />}
+          {!p.swap && <Sel label="컬럼" value={p.column} options={[...names, ...(card.view.row_marks?.fields ?? []).map(f => f.name)]} onChange={column => putPart(i, { column })} />}
           <Sel label="값 모양" value={p.format} options={FORMATS} onChange={format => putPart(i, { format: format as ListPart["format"] })} />
           {p.kind === "bar" && <Sel label="막대 기준" value={p.basis} options={BASES} onChange={basis => putPart(i, { basis: basis as ListPart["basis"] })} />}
           <Sel label="자리" value={p.side} options={SIDES} onChange={side => putPart(i, { side: side as ListPart["side"] })} />
@@ -126,6 +127,7 @@ export function ListPanel({ card, data, onChange }: ListPanelProps): ReactNode {
       ))}
       {list.swaps.length < d.max_swaps && <button type="button" className="ghost" onClick={() => put({ ...list, swaps: [...list.swaps, { label: "", value: values[0] ?? "" }] })}>단추 더하기</button>}
       <Sel label="그림·보고서 모양" value={list.report} options={REPORTS} onChange={report => put({ ...list, report: report as ListView["report"] })} />
+      <MarkPanel card={card} groups={groups} onChange={onChange} onApply={resort} />
     </div>
   );
 }

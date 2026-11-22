@@ -1,7 +1,7 @@
 "use client";
 // SVG/HTML 카드가 함께 쓰는 것: 화면 모드 색(useTheme), 상자·그림 틀·단추 아이콘 모양, 상태 이름·색.
 import { useSyncExternalStore } from "react";
-import type { Card, CompareMode, Ctx, MoreValues, PickedFilter } from "@/lib/types";
+import type { Card, CompareMode, Ctx, MarkValue, MoreValues, PickedFilter } from "@/lib/types";
 import { pickColor } from "@/lib/series";
 import { shades } from "@/lib/calc";
 import type { Theme } from "./__pure__";
@@ -9,7 +9,7 @@ import { markColors } from "../ChartCard";
 import { rem } from "../chart/scale";
 
 /** 종류별 카드 컴포넌트가 받는 것: card.data는 이미 그릴 값(구한 값 또는 저장된 값), range는 보는 기간(ctx.range), merge는 상수 merge */
-export type P = { card: Card; colors: Theme; range: Ctx["range"]; merge: string[]; filters?: Ctx["filters"]; prev?: Ctx["prev"]; mode?: CompareMode; pressed?: PickedFilter; onPress?: (column: string, values: string[]) => void };  // filters: 보는 사람이 고른 필터(행을 직접 읽는 카드만 쓴다); prev·mode: 직전 기간·비교 기준(KPI 추이 나누기); pressed·onPress: (B3) 목록 줄 고르기(보는 곳만)
+export type P = { card: Card; colors: Theme; range: Ctx["range"]; merge: string[]; filters?: Ctx["filters"]; prev?: Ctx["prev"]; mode?: CompareMode; pressed?: PickedFilter; onPress?: (column: string, values: string[]) => void; onMark?: (key: string, values: Record<string, MarkValue>) => void };  // onMark: (B9) 목록 줄 표시 바꾸기(저장한 대시보드의 보는 상태만); filters: 보는 사람이 고른 필터(행을 직접 읽는 카드만 쓴다); prev·mode: 직전 기간·비교 기준(KPI 추이 나누기); pressed·onPress: (B3) 목록 줄 고르기(보는 곳만)
 
 const LIGHT: Theme = { card: "#f1f3f7", head: "#e6e9ef", ink: "#1c2230", text: "#586174", line: "#d5dae3", err: "#b53124", ok: "#1c7448",
   series: shades("#6250d6"), hi: "#00968f" };  // common.css 밝게(그리기 전·prerender)

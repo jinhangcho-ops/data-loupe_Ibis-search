@@ -15,12 +15,14 @@ import { isFrame } from "@/components/frame/registry";
 import { CARD_MIME, isShell, shellOf, type Spec } from "@/components/edit/menu/kinds";
 import { useShell } from "@/components/shell/ShellProvider";
 import { cardValue } from "@/components/cards/svg/__pure__";
+import { setMark } from "@/lib/api";
 import { GRID_COLS, cellAt, clampLayout, compactLayout, isPoints, moveCard, onPage, pageOf } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { pullOf } from "@/lib/pull";
 import { useDash } from "@/lib/store";
 import { sameSource } from "@/lib/series";
 import { freshLinks, isSender, onlySeries } from "@/lib/links";
+import { applyMark } from "@/lib/marks";
 import type { Card, Ctx, Dashboard, Layout, Section, Source, Unit } from "@/lib/types";
 import { AlignBar } from "./AlignBar";
 import { MISSING_SECTION, NEW_PIECE, SUB, applySections, dropPiece, movePiece, pieceItems, pieceMin, resizePiece, roomOf, sectionMin, sectionsOf, wrapCard } from "./sections";
@@ -168,7 +170,7 @@ function Piece({ card, l, drag, edit, look, star, palette, shares, setShares, pi
         {tools}
       </div>
       <div className={"bbody" + (paint ? " paint" : "")} onClick={look && !isShell(card) ? e => { const hit = (e.target as Element).closest(PRESSABLE); if (!hit || !e.currentTarget.contains(hit)) { if (pressable) toggle(); else setZoom(card.id); } } : undefined}>
-        {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={drawn} result={res} palette={palette} ctx={cx} onPick={pickable ? (column, value) => cross(card.id, column, value) : undefined} pressed={presses.find(p => p.from === card.id)?.value} onPress={pickable ? (column, values) => { press(card.id, values.length ? { value: { column, in: values } } : null).catch(e => dispatch({ type: "error", message: (e as Error).message })); } : undefined} share={shares.includes(card.id) || !!v?.share} />}
+        {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={drawn} result={res} palette={palette} ctx={cx} onPick={pickable ? (column, value) => cross(card.id, column, value) : undefined} pressed={presses.find(p => p.from === card.id)?.value} onPress={pickable ? (column, values) => { press(card.id, values.length ? { value: { column, in: values } } : null).catch(e => dispatch({ type: "error", message: (e as Error).message })); } : undefined} onMark={look && state.dash?.id ? (key, values) => { setMark(state.dash!.id, card.id, key, values).then(r => dispatch({ type: "values", results: [{ id: card.id, data: applyMark(state.values[card.id]?.data ?? card.data, r.key, r.values) }] })).catch(e => dispatch({ type: "error", message: (e as Error).message })); } : undefined} share={shares.includes(card.id) || !!v?.share} />}
         {loading && <i className="bspin" aria-hidden="true" />}
       </div>
       {said && <div className={`bcmp ${said.tone} [padding:0_.625rem]`} title={said.delta_text}>{said.text}</div>}

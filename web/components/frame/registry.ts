@@ -16,6 +16,7 @@ export const FRAME_KINDS = {
   top_strip: { name: "위쪽 화면 줄", group: "틀", help: "이름·기간·기준일·화면 모드", w: 12, h: 1 },
   page_tabs: { name: "쪽 탭", group: "틀", help: "쪽을 오가는 가로 탭", w: 12, h: 1 },
   text: { name: "글", group: "틀", help: "섹션 안에 글을 적어요", w: 3, h: 1 },
+  mark_count: { name: "표시 세기", group: "조작", help: "목록 줄의 표시를 세어 숫자나 진척 칸으로 보여요", w: 3, h: 2 },
   segment: { name: "세그먼트", group: "조작", help: "칸을 눌러 보기를 바꾸거나 값으로 걸러요", w: 4, h: 1 },
   chip_row: { name: "칩 줄", group: "조작", help: "값 칩을 눌러 걸러요", w: 6, h: 1 },
   filter_bar: { name: "걸린 필터 줄", group: "조작", help: "걸린 필터를 보이고 풀어요", w: 12, h: 1 },
@@ -34,6 +35,8 @@ export const FRAME_ACTIONS = {
   filters_clear: { name: "필터 모두 풀기", arg: "" },
   settings: { name: "대시보드 설정 창 열기", arg: "" },
   csv: { name: "목록을 CSV로 저장", arg: "card" },
+  marks_save: { name: "표시를 파일로 저장", arg: "card" },
+  marks_load: { name: "표시를 파일에서 가져오기", arg: "card" },
 } as const satisfies Record<string, { name: string; arg: "" | "page" | "card" }>;
 export type FrameAction = keyof typeof FRAME_ACTIONS;
 
@@ -46,7 +49,7 @@ export type FrameItem = { label: string; icon: string; action: FrameAction | "";
 /** 세그먼트 칸 하나(보기 바꾸기는 label·series·share, 값으로 거르기는 label·value를 쓴다) */
 export type SegCell = { label: string; series: string; share: boolean; value: string };
 /** view.frame: 종류마다 쓰는 항목만 있다(단추는 FrameItem + ambient, 이동 줄은 items + ambient, 위쪽 줄은 parts + items, 나머지는 빈 객체) */
-export type FrameSettings = Partial<FrameItem> & { ambient?: boolean; items?: FrameItem[]; parts?: FramePart[]; text?: string; size?: TextSize; align?: TextAlign; mode?: "view" | "filter"; column?: string; cells?: SegCell[]; clear_label?: string; period?: string; as_of?: string; unit?: Unit | "" };
+export type FrameSettings = Partial<FrameItem> & { ambient?: boolean; items?: FrameItem[]; parts?: FramePart[]; text?: string; size?: TextSize; align?: TextAlign; mode?: "view" | "filter"; column?: string; cells?: SegCell[]; clear_label?: string; period?: string; as_of?: string; unit?: Unit | ""; list?: string; field?: string; values?: string[]; look?: "number" | "bar" };
 
 /** 글 요소의 꾸밈 한 벌(서버 FRAME_TEXT_SIZES·FRAME_TEXT_ALIGNS와 같은 키·차례) */
 export const TEXT_SIZES = { sm: "작게", md: "보통", lg: "크게" } as const;
@@ -60,7 +63,7 @@ export const TEXT_SIZE_VARS: Record<TextSize, string> = { sm: "--fs-sm", md: "--
 export type ActionHost = {
   recompute: () => unknown; setPage: (page: string) => void; dashOnly: boolean; setDashOnly: (on: boolean) => void;
   setReport: (open: boolean) => void; setZoom: (id: string | null) => void; flipTheme: () => void; pages: string[]; cardIds: string[];
-  flipEasy: () => void; clearFilters: () => unknown; setSettings: (open: boolean) => void; saveCsv: (id: string) => void;
+  flipEasy: () => void; clearFilters: () => unknown; setSettings: (open: boolean) => void; saveCsv: (id: string) => void; saveMarks: (id: string) => void; loadMarks: (id: string) => void;
 };
 
 /** [SPECIFICATION] plans/dash-blocks.md#isFrame
@@ -79,6 +82,7 @@ export function freshFrame(kind: FrameKind): FrameSettings {
   if (kind === "segment") return { mode: "view", column: "", cells: [], ambient: false };
   if (kind === "chip_row") return { column: "", ambient: false };
   if (kind === "filter_bar") return { clear_label: "", ambient: false };
+  if (kind === "mark_count") return { label: "", list: "", field: "", values: [], look: "number", ambient: false };
   return {};
 }
 
@@ -90,11 +94,13 @@ export function frameError(kind: FrameKind, frame: FrameSettings): string {
     if ((label ?? "").trim() === "" && (icon ?? "") === "") return "단추에는 글자나 아이콘 중 하나가 있어야 해요.";
     const need = action ? FRAME_ACTIONS[action].arg : "";
     if (need === "page" && (arg ?? "") === "") return "이동할 쪽을 고르세요.";
-    if (need === "card" && (arg ?? "") === "") return action === "csv" ? "저장할 목록을 고르세요." : "크게 볼 카드를 고르세요.";
+    if (need === "card" && (arg ?? "") === "") return action === "csv" ? "저장할 목록을 고르세요." : action === "marks_save" || action === "marks_load" ? "표시를 주고받을 목록을 고르세요." : "크게 볼 카드를 고르세요.";
   }
   if (kind === "segment" && !(frame.cells ?? []).length) return "칸을 하나 이상 더하세요.";
   if ((kind === "chip_row" || (kind === "segment" && frame.mode === "filter")) && !(frame.column ?? "")) return "거를 컬럼을 고르세요.";
   if (kind === "segment" && (frame.cells ?? []).some(c => c.label.trim() === "")) return "칸마다 글자를 적어 주세요.";
+  if (kind === "mark_count" && !(frame.list ?? "")) return "셀 목록을 고르세요.";
+  if (kind === "mark_count" && !(frame.field ?? "")) return "표시 칸을 고르세요.";
   return "";
 }
 
@@ -115,6 +121,7 @@ export function runAction(item: Pick<FrameItem, "action" | "arg">, host: ActionH
   if (action === "page" && !host.pages.includes(arg)) throw new Error(`'${arg}' 쪽이 없어요.`);
   if (action === "zoom" && !host.cardIds.includes(arg)) throw new Error("크게 볼 카드가 없어요.");
   if (action === "csv" && !host.cardIds.includes(arg)) throw new Error("저장할 목록이 없어요.");
+  if ((action === "marks_save" || action === "marks_load") && !host.cardIds.includes(arg)) throw new Error("표시를 주고받을 목록이 없어요.");
   if (action === "export") host.setReport(true);
   else if (action === "refresh") host.recompute();
   else if (action === "theme") host.flipTheme();
@@ -124,6 +131,8 @@ export function runAction(item: Pick<FrameItem, "action" | "arg">, host: ActionH
   else if (action === "settings") host.setSettings(true);
   else if (action === "page") host.setPage(arg);
   else if (action === "csv") host.saveCsv(arg);
+  else if (action === "marks_save") host.saveMarks(arg);
+  else if (action === "marks_load") host.loadMarks(arg);
   else host.setZoom(arg);
 }
 

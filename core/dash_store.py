@@ -215,16 +215,16 @@ MAX_RULES = 20
 EXTRA_VIEW = ("format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window",
               "cond_rules", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "positions", "bg", "image_path", "group_cols", "formats", "total",
               "template", "blanks", "bucket", "baseline", "threshold", "geo", "rings", "bins", "bands",
-              "funnel_shape", "ladder_scale", "gap_stats", "flow_unlimited", "flow_dropout", "groups", "cloud", "note", "press", "list", "list_sort", "list_rows")  # 3·4단계 카드 종류의 설정
+              "funnel_shape", "ladder_scale", "gap_stats", "flow_unlimited", "flow_dropout", "groups", "cloud", "note", "press", "list", "list_sort", "list_rows", "row_marks")  # 3·4단계 카드 종류의 설정
 GONE_VIEW = ("icon", "fit", "layout")  # (B10b) 없앤 KPI 모양 설정(아이콘·값 맞춤·추이선 자리): 저장된 보기에 있으면 받되 버린다
 FUNNEL_SHAPES = ("flow", "ladder")  # 퍼널 그림: 흐름(생키+표) / 사다리꼴
 GAP_STATS = ("mean", "median", "trimmed")  # 걸린 시간 표에 보일 값
-FRAME_KINDS = ("button", "nav_rail", "top_strip", "page_tabs", "period_pick", "asof_field", "unit_seg", "text", "segment", "chip_row", "filter_bar")  # (B10) 격자에 놓는 틀 요소 종류. 화면의 한 벌은 web/components/frame/registry.ts
-FRAME_ACTIONS = {"export": "", "refresh": "", "page": "page", "theme": "", "dash_only": "", "zoom": "card", "easy": "", "filters_clear": "", "settings": "", "csv": "card"}  # 틀 요소의 할 일 → 받는 값(arg)의 종류("" 없음, page 쪽 이름, card 카드 id)
+FRAME_KINDS = ("button", "nav_rail", "top_strip", "page_tabs", "period_pick", "asof_field", "unit_seg", "text", "mark_count", "segment", "chip_row", "filter_bar")  # (B10) 격자에 놓는 틀 요소 종류. 화면의 한 벌은 web/components/frame/registry.ts
+FRAME_ACTIONS = {"export": "", "refresh": "", "page": "page", "theme": "", "dash_only": "", "zoom": "card", "easy": "", "filters_clear": "", "settings": "", "csv": "card", "marks_save": "card", "marks_load": "card"}  # 틀 요소의 할 일 → 받는 값(arg)의 종류("" 없음, page 쪽 이름, card 카드 id)
 FRAME_PARTS = ("name", "period", "asof", "theme")  # 위쪽 화면 줄에 보일 칸
 FRAME_KEYS = {"button": ("label", "icon", "action", "arg", "ambient"), "nav_rail": ("items", "ambient"), "top_strip": ("parts", "items", "period", "as_of"),
               "page_tabs": (), "period_pick": ("period",), "asof_field": ("as_of",), "unit_seg": ("unit",), "text": ("text", "size", "align"),
-              "segment": ("mode", "column", "cells", "ambient"), "chip_row": ("column", "ambient"), "filter_bar": ("clear_label", "ambient")}  # 종류마다 view.frame에 쓸 수 있는 항목
+              "segment": ("mode", "column", "cells", "ambient"), "chip_row": ("column", "ambient"), "filter_bar": ("clear_label", "ambient"), "mark_count": ("label", "list", "field", "values", "look", "ambient")}  # 종류마다 view.frame에 쓸 수 있는 항목
 MAX_FRAME_TEXT = 500  # 글 요소의 글자 수 상한(문장 카드 template과 같은 값)
 FRAME_TEXT_SIZES = ("sm", "md", "lg")  # 글 요소 글자 크기: 작게·보통·크게
 FRAME_TEXT_ALIGNS = ("left", "center", "right")  # 글 요소 정렬: 왼쪽·가운데·오른쪽
@@ -233,7 +233,7 @@ ITEM_KEYS = ("label", "icon", "action", "arg")  # 줄 안 항목(단추 하나)�
 MAX_FRAME_ITEMS, MAX_FRAME_LABEL = 8, 30  # 줄 안 항목 수, 단추 글자 수
 FRAME_MIN = 1  # 틀 요소의 최소 너비·높이(칸). 카드는 2
 FRAME_EMPTY = "단추에는 글자나 아이콘 중 하나가 있어야 해요."
-LINK_FRAMES = ("segment", "chip_row", "period_pick", "asof_field", "unit_seg", "top_strip")  # (B4) 링크를 보내는 틀 요소
+LINK_FRAMES = ("segment", "chip_row", "period_pick", "asof_field", "unit_seg", "top_strip", "mark_count")  # (B4) 링크를 보내는 틀 요소. (B9) 표시 세기 요소는 숫자 타일을 누르면 보낸다
 SENDER_KINDS = ("chart", "tile", "list", *LINK_FRAMES)  # (B4) view.link_to·link_map을 쓸 수 있는 종류(화면 web/lib/links.ts isSender와 같은 한 벌). (B3) 목록은 줄 고르기로 보낸다
 PERIOD_FRAMES = ("period_pick", "asof_field", "unit_seg")  # (B4) 옛 대시보드에서 "모든 카드"로 옮기는 기간 요소(위쪽 화면 줄은 기간 칸이 있을 때만)
 MAX_LINK_COLS = 50  # (B4) 상대 카드 하나에 맞추는 컬럼 수
@@ -254,6 +254,22 @@ MAX_LIST_PARTS = 12  # (B3) 줄 부분 수 상한(화면은 상수 dash.list.max
 MAX_LIST_SWAPS = 8  # (B3) 값 바꾸기 단추 수 상한(화면은 상수 dash.list.max_swaps)
 MAX_LIST_ROWS = 500  # (B3) 목록 줄 수 상한(표 카드 dash_calc.MAX_TABLE_ROWS와 같은 값, 화면은 상수 dash.list.max_rows)
 LIST_ROWS_DEFAULT = 100  # (B3) 줄 수의 처음 값(사용자가 바꾼다)
+ROW_MARK_KINDS = ("choice", "text", "date", "number")  # (B9) 줄 표시 칸 종류: 고르기·글·날짜·숫자
+ROW_MARK_EDITS = ("cell", "pop")  # (B9) 표시 바꾸는 곳: 줄 끝 칸·누르면 뜨는 칸(앞이 처음 값)
+ROW_MARK_CLASHES = ("keep", "replace", "fill")  # (B9) 가져올 때 같은 줄: 있는 표시 두기·가져온 표시로 바꾸기·빈 칸만 채우기(앞이 처음 값)
+ROW_MARK_LOOKS = ("number", "bar")  # (B9) 표시 세기 요소(mark_count) 모양: 숫자 타일·진척 칸(앞이 처음 값)
+ROW_MARK_KEYS = ("keys", "fields", "edit", "clash")  # (B9) 목록 카드 view.row_marks의 항목
+ROW_MARK_FIELD_KEYS = ("id", "name", "kind", "choices")  # (B9) 표시 칸 하나의 항목
+ROW_MARK_ID = re.compile(r"[a-z0-9]{1,16}")  # (B9) 표시 칸 id(표시 파일의 컬럼 이름이 된다)
+MAX_ROW_MARK_FIELDS = 12  # (B9) 목록 하나의 표시 칸 수
+MAX_ROW_MARK_CHOICES = 20  # (B9) 고르기 칸의 고를 값 수
+MAX_ROW_MARK_NAME = 30  # (B9) 표시 칸 이름·고를 값의 글자 수
+MAX_ROW_MARK_TEXT = 500  # (B9) 글 칸 값의 글자 수
+MAX_ROW_MARK_ROWS = 10_000  # (B9) 목록 하나에 표시를 붙인 줄 수
+MAX_ROW_MARK_SCAN = 10_000  # (B9) 표시 칸이 있는 목록이 받아 세는 줄 수
+ROW_MARKS_DEFAULT = {"keys": [], "fields": [], "edit": "cell", "clash": "keep"}  # (B9) view.row_marks의 처음 값(화면 상수 dash.row_marks.default). keys: 줄을 가리는 열쇠 컬럼들(묶음 컬럼 가운데)
+ROW_MARK_SCAN_OVER = f"표시 칸이 있는 목록은 줄이 {MAX_ROW_MARK_SCAN:,}개까지여야 해요. 카드의 조건이나 기간으로 줄을 줄여 주세요."  # (B9) list_data·list_keys
+CARD_ACTIONS = {"zoom": "크게 보기", "csv": "목록 CSV 저장", "marks_save": "표시 저장", "marks_load": "표시 가져오기"}  # (B9) 받는 값이 카드 id인 할 일의 오류 문구 이름(check_frame)
 
 
 def check_frame(frame: object, kind: str) -> dict[str, object]:
@@ -286,7 +302,7 @@ def check_frame(frame: object, kind: str) -> dict[str, object]:
         if need == "page" and not 1 <= len(arg) <= MAX_PAGE_NAME:
             raise ValueError(f"쪽 이동의 받는 값(arg)은 쪽 이름({MAX_PAGE_NAME}자까지)이에요.")
         if need == "card" and not ID.fullmatch(arg):
-            raise ValueError(f"{'크게 보기' if action == 'zoom' else '목록 CSV 저장'}의 받는 값(arg)은 카드 id예요.")
+            raise ValueError(f"{CARD_ACTIONS[action]}의 받는 값(arg)은 카드 id예요.")
         return {"label": label, "icon": icon, "action": action, "arg": arg}
 
     out: dict[str, object] = {}
@@ -350,6 +366,19 @@ def check_frame(frame: object, kind: str) -> dict[str, object]:
         out["column"] = text(frame.get("column") or "", "거를 컬럼", MAX_FILTER_NAME)
     if kind == "filter_bar":
         out["clear_label"] = text(frame.get("clear_label") or "", "단추 글자", MAX_FRAME_LABEL)
+    if kind == "mark_count":
+        values = frame.get("values", [])
+        if not isinstance(values, list) or len(values) > MAX_ROW_MARK_CHOICES + 1 or not all(isinstance(v, str) and len(v.strip()) <= MAX_ROW_MARK_NAME for v in values) or len({v.strip() for v in values}) != len(values):
+            raise ValueError(f"셀 값(values)은 겹치지 않는 글자 {MAX_ROW_MARK_CHOICES + 1}개까지예요(빈 글자 = 표시 없음).")
+        look = frame.get("look", ROW_MARK_LOOKS[0])
+        if look not in ROW_MARK_LOOKS:
+            raise ValueError(f"모양(look)은 {', '.join(ROW_MARK_LOOKS)} 중 하나예요.")
+        found_list, field = frame.get("list") or "", frame.get("field") or ""
+        if not isinstance(found_list, str) or not (found_list == "" or ID.fullmatch(found_list)):
+            raise ValueError("셀 목록(list)은 카드 id예요.")
+        if not isinstance(field, str) or not (field == "" or ROW_MARK_ID.fullmatch(field)):
+            raise ValueError("표시 칸(field)은 표시 칸 id예요.")
+        out.update(label=text(frame.get("label") or "", "글자", MAX_FRAME_LABEL), list=found_list, field=field, values=[v.strip() for v in values], look=look)
     return out
 
 
@@ -487,6 +516,66 @@ def check_list(view: dict, group_cols: list[str]) -> dict[str, object]:
         raise ValueError(f"줄 수(list_rows)는 1~{MAX_LIST_ROWS} 사이의 정수예요.")
     return {"list": {"parts": out_parts, "pick": pick, "key": key, "swaps": swaps, "report": report},
             "list_sort": {"column": column, "desc": desc}, "list_rows": rows}
+
+
+def check_row_marks(view: dict, group_cols: list[str]) -> dict[str, object]:
+    """[SPECIFICATION] plans/dash-blocks.md#check_row_marks
+    목록 카드의 줄 표시 설정(view.row_marks)을 검사해 {"row_marks": 정리한 사본}을 돌려준다(view에 없으면 빈 사전)."""
+    if "row_marks" not in view:
+        return {}
+    found = view["row_marks"]
+    if not isinstance(found, dict):
+        raise ValueError("줄 표시 설정(row_marks)은 객체여야 해요.")
+    extra = set(found) - set(ROW_MARK_KEYS)
+    if extra:
+        raise ValueError(f"줄 표시 설정(row_marks)에 쓸 수 없는 항목이 있어요: {', '.join(sorted(extra))}")
+    raw = found.get("fields", [])
+    if not isinstance(raw, list) or len(raw) > MAX_ROW_MARK_FIELDS:
+        raise ValueError(f"표시 칸(fields)은 목록이며 {MAX_ROW_MARK_FIELDS}개까지예요.")
+    fields = []
+    for f in raw:
+        if not isinstance(f, dict):
+            raise ValueError(f"표시 칸에 쓸 수 없는 항목이 있어요: {f}")
+        bad = set(f) - set(ROW_MARK_FIELD_KEYS)
+        if bad:
+            raise ValueError(f"표시 칸에 쓸 수 없는 항목이 있어요: {', '.join(sorted(bad))}")
+        fid = f.get("id")
+        if not isinstance(fid, str) or not ROW_MARK_ID.fullmatch(fid):
+            raise ValueError("표시 칸 id는 영문 소문자·숫자 16자까지예요.")
+        name = text(f.get("name"), "표시 칸 이름", MAX_ROW_MARK_NAME, 1)
+        kind = f.get("kind")
+        if kind not in ROW_MARK_KINDS:
+            raise ValueError(f"표시 칸 종류(kind)는 {', '.join(ROW_MARK_KINDS)} 중 하나예요.")
+        if kind == "choice":
+            c = f.get("choices")
+            if not (isinstance(c, list) and 1 <= len(c) <= MAX_ROW_MARK_CHOICES and all(isinstance(x, str) and 1 <= len(x.strip()) <= MAX_ROW_MARK_NAME for x in c)
+                    and len({x.strip() for x in c}) == len(c)):
+                raise ValueError(f"고르기 칸 '{name}'의 고를 값(choices)은 겹치지 않는 글자 1~{MAX_ROW_MARK_CHOICES}개예요.")
+            choices = [x.strip() for x in c]
+        else:
+            if f.get("choices") not in (None, []):
+                raise ValueError("고를 값(choices)은 고르기 칸에만 써요.")
+            choices = []
+        fields.append({"id": fid, "name": name, "kind": kind, "choices": choices})
+    if len({f["id"] for f in fields}) != len(fields):
+        raise ValueError("표시 칸 id가 겹쳐요.")
+    if len({f["name"] for f in fields}) != len(fields):
+        raise ValueError("표시 칸 이름이 겹쳐요.")
+    clash_name = next((f["name"] for f in fields if f["name"] in group_cols), None)
+    if clash_name is not None:
+        raise ValueError(f"표시 칸 이름 '{clash_name}'이 묶음 컬럼과 같아요. 다른 이름을 적어 주세요.")
+    keys = found.get("keys", [])
+    if not (isinstance(keys, list) and all(isinstance(k, str) for k in keys) and len(set(keys)) == len(keys) and all(k in group_cols for k in keys)):
+        raise ValueError("줄을 가리는 열쇠 컬럼(keys)은 묶음 컬럼(group_cols) 가운데 겹치지 않게 골라요.")
+    if fields and not keys:
+        raise ValueError("표시 칸이 있으면 줄을 가리는 열쇠 컬럼(keys)을 하나 이상 골라요.")
+    edit = found.get("edit", ROW_MARK_EDITS[0])
+    if edit not in ROW_MARK_EDITS:
+        raise ValueError(f"표시 바꾸는 곳(edit)은 {', '.join(ROW_MARK_EDITS)} 중 하나예요.")
+    clash = found.get("clash", ROW_MARK_CLASHES[0])
+    if clash not in ROW_MARK_CLASHES:
+        raise ValueError(f"가져올 때 같은 줄 규칙(clash)은 {', '.join(ROW_MARK_CLASHES)} 중 하나예요.")
+    return {"row_marks": {"keys": list(keys), "fields": fields, "edit": edit, "clash": clash}}
 
 
 GEO_AGGS = ("count", "sum", "mean", "min", "max")  # 지도 카드가 영역마다 구하는 값
@@ -980,8 +1069,11 @@ def check_card(card):
     raw = card.get("view") or {}
     if out["kind"] == "list":
         out["view"].update(check_list(raw, out["view"].get("group_cols") or []))
+        out["view"].update(check_row_marks(raw, out["view"].get("group_cols") or []))
     elif {"list", "list_sort", "list_rows"} & set(raw):
         raise ValueError("목록 설정(list·list_sort·list_rows)은 목록 카드에만 써요.")
+    elif "row_marks" in raw:
+        raise ValueError("줄 표시(row_marks)는 목록 카드에만 써요.")
     if out["kind"] == "funnel" and not placed:  # 흐름(퍼널) 카드: 다시 구할 전처리(recipe)와 흐름 분석(analysis.kind = funnel)이 있어야 한다
         how = out["source"].get("analysis") or {}
         listed = how.get(FUNNEL_LISTS.get(how.get("kind")))  # 값 목록 퍼널은 steps, 조건 단계 퍼널은 stages

@@ -11,6 +11,7 @@ import { useDash } from "@/lib/store";
 import type { Constants, Dashboard, Targets } from "@/lib/types";
 import { PeriodBar } from "./PeriodBar";
 import { PeriodField } from "./PeriodBar";
+import { MarkCleanup } from "./MarkCleanup";
 import { PullSettings } from "./PullSettings";
 import { useShell } from "./ShellProvider";
 
@@ -119,12 +120,13 @@ function Body({ dash, onClose }: { dash: Dashboard; onClose: () => void }) {
   };
   const t = targets, tText = tNote || (!t ? "" : t.error || !t.path ? t.error || "목표 파일을 정하면 카드가 이름으로 목표를 찾을 수 있어요"
     : `목표 ${t.rows.length}개를 읽었어요.` + (t.error_total ? ` 읽지 못한 줄이 ${t.error_total}개 있어요(${(t.errors[0] as { message?: string })?.message ?? ""}). ` : ""));
-  if (!build) return <><div className="dc-field"><label className="hint" htmlFor="dc-view-per">기간</label><PeriodField id="dc-view-per" /></div><PullSettings dash={dash} /></>;
+  if (!build) return <><div className="dc-field"><label className="hint" htmlFor="dc-view-per">기간</label><PeriodField id="dc-view-per" /></div><PullSettings dash={dash} /><MarkCleanup dash={dash} /></>;
   return (
     <>
       <PeriodBar />
       <div className="err" role="alert">{period.settingsError}</div>
       <PullSettings dash={dash} />
+      <MarkCleanup dash={dash} />
       <h4>그림 색</h4>
       <div className="row">
         <label className="hint">표시색 <input value={mark} onChange={e => setMark(e.target.value)} placeholder="#6250d6" aria-label="표시색"

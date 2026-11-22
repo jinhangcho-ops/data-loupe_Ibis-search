@@ -33,6 +33,7 @@ from core.server import run
 from lazy import Later, ibis
 
 mapcard = Later("geo.mapcard")  # 지도 카드(geomap)의 값 만들기: 지도 카드를 쓸 때만 geo 패키지가 올라온다
+dash_marks = Later("dashboard.dash_marks")  # (B9) 목록의 줄 표시: 대시보드 모듈끼리 import 고리를 만들지 않게 쓸 때 올린다
 words = Later("dashboard.cloud_words")  # 글 속 단어: 그 방식을 쓸 때만 올라온다(kiwipiepy는 그 안에서)
 
 AGGS = metric_file.AGGS  # 날짜 X축 차트의 집계: 함수 사전(sql_funcs)의 집계 전부(예전 이름 nunique 포함)
@@ -533,9 +534,12 @@ def with_filters(card: dict, ctx: dict | None) -> tuple[dict, list[str]]:
         return card, []
     body = card["source"].get("body")
     columns = set(querying.joined(body)[0].columns) if isinstance(body, dict) else None
+    marked = {f["name"] for f in ((card.get("view") or {}).get("row_marks") or {}).get("fields") or []} if card.get("kind") == "list" else set()  # (B9) 목록의 표시 칸 이름: DB 조건에 넣지 않고 list_data가 표시를 붙인 뒤 건다
     more, more_periods, missed = [], [], []
     for f in filters:
         if not isinstance(f.get("body"), dict):
+            if f["column"] in marked:
+                continue
             if columns is not None and f["column"] in columns:
                 more.append({"column": f["column"], "in": f.get("in")})
             else:
@@ -613,6 +617,12 @@ def compute_filtered(card: dict, now: str, ctx: dict | None = None) -> dict:
 
 def filter_values(cards: list[dict], column: str, filters: list | None = None) -> tuple[list[str], bool, list[str]]:
     """필터 칸에 보일 값 목록: 조회가 있는 카드 가운데 조인까지 한 테이블에 column이 있는 첫 카드에서 result.get_values(서로 다른 값, 더 있는지). 그런 카드가 없으면 ValueError."""
+    for card in cards:  # (B9) 목록의 표시 칸이면 그 고를 값(DB에 묻지 않는다)
+        hit = next((f for f in ((card["view"].get("row_marks") or {}).get("fields") or []) if f["name"] == column), None) if card["kind"] == "list" else None
+        if hit is not None:
+            if hit["kind"] != "choice":
+                raise ValueError(f"표시 칸 '{column}'은 고르기 칸만 거를 수 있어요.")
+            return list(hit["choices"]), False, []
     for card in cards:
         body = card["source"].get("body")
         if isinstance(body, dict) and column in querying.joined(body)[0].columns:
@@ -862,6 +872,10 @@ def list_data(card: dict, ctx: dict | None) -> dict:
     for c in groups:
         parse.check_name(c, expr.columns, "묶음 컬럼")
     names = [series_name(s) for s in series]
+    fields = (view.get("row_marks") or {}).get("fields") or []
+    clash = [f["name"] for f in fields if f["name"] in groups or f["name"] in names]
+    if clash:
+        raise ValueError(f"표시 칸 이름 '{clash[0]}'이 목록의 컬럼 이름과 같아요. 카드 설정에서 표시 칸 이름을 바꾸세요.")
     metrics = {f"__v{i}": final_expr(expr, s) for i, s in enumerate(series)}
     if groups and series:
         t = expr.group_by([expr[c].name(c) for c in groups]).aggregate(**metrics)
@@ -881,15 +895,59 @@ def list_data(card: dict, ctx: dict | None) -> dict:
         raise ValueError(f"정렬 컬럼 '{col}'이 이 목록에 없어요. 카드 설정에서 다시 고르세요.")
     keys = [ibis.desc(k) if sort["desc"] else ibis.asc(k) for k in by] + [ibis.asc(c) for c in groups if c not in by]
     n = view.get("list_rows") or dash_store.LIST_ROWS_DEFAULT
-    out = (t.order_by(keys) if keys else t).limit(n + 1)
+    cap = dash_store.MAX_ROW_MARK_SCAN if fields else n
+    out = (t.order_by(keys) if keys else t).limit(cap + 1)
     cast = {c: out[c].cast("string") for c in out.columns if out[c].type().is_temporal()} | {c: out[c].cast("float64") for c in out.columns if out[c].type().is_decimal()}
     if cast:
         out = out.mutate(**cast)
     frame = run(lambda: out.to_polars())
+    columns = [{"name": c, "kind": "group"} for c in groups] + [{"name": names[i], "kind": "value", "agg": s["agg"]} for i, s in enumerate(series)]
+    if fields:
+        import polars as pl
+        if frame.height > cap:
+            raise ValueError(dash_store.ROW_MARK_SCAN_OVER)
+        frame = frame.with_row_index("__i").with_columns(dash_marks.key_expr(view["row_marks"]["keys"]).alias(dash_marks.KEY_COL)).join(
+            dash_marks.named((ctx or {}).get("dash", ""), card), on=dash_marks.KEY_COL, how="left").sort("__i")  # DB가 정한 정렬을 지킨다
+        total = frame.height
+        counts = {f["id"]: dict(frame.group_by(pl.col(f["name"]).fill_null("").alias("v")).len().iter_rows()) for f in fields if f["kind"] == "choice"}
+        marked = {f["name"]: f for f in fields}
+        picks = [x for x in (ctx or {}).get("filters") or [] if isinstance(x, dict) and x.get("column") in marked]
+        conds = []
+        for x in picks:
+            col = x["column"]
+            if marked[col]["kind"] != "choice":
+                raise ValueError(f"표시 칸 '{col}'은 고르기 칸만 거를 수 있어요.")
+            if not isinstance(x.get("in"), list) or not 1 <= len(x["in"]) <= parse.MAX_TUPLES or not all(isinstance(v, str) for v in x["in"]):
+                raise ValueError(f"필터 값은 글자 1~{parse.MAX_TUPLES}개의 목록이어야 해요.")
+            conds.append(pl.col(col).fill_null("").is_in(x["in"]))
+        if conds:
+            frame = frame.filter(*conds)
+        more = frame.height > n
+        frame = frame.head(n)
+        data = [frame[c].to_list() for c in [*groups, *metrics, *(f["name"] for f in fields)]]
+        columns += [{"name": f["name"], "kind": "mark", "field": f["id"], "mark": f["kind"]} for f in fields]
+        return {"values": {"columns": columns, "data": data, "more": more, "keys": frame[dash_marks.KEY_COL].to_list(), "row_marks": {"total": total, "counts": counts}},
+                "note": f"줄이 많아 앞 {n:,}줄만 보여요." if more else ""}
     data = [s.to_list()[:n] for s in frame.get_columns()]
     more = frame.height > n
-    columns = [{"name": c, "kind": "group"} for c in groups] + [{"name": names[i], "kind": "value", "agg": s["agg"]} for i, s in enumerate(series)]
     return {"values": {"columns": columns, "data": data, "more": more}, "note": f"줄이 많아 앞 {n:,}줄만 보여요." if more else ""}
+
+
+def list_keys(card: dict) -> list[str]:
+    """[SPECIFICATION] plans/dash-blocks.md#list_keys
+    목록 카드에 저장한 조회 그대로(대시보드 기간·필터 없이) 있는 줄 열쇠 값들(글자, list_data와 같은 규칙)."""
+    keys = (card["view"].get("row_marks") or {}).get("keys") or []
+    if not keys:
+        raise ValueError("이 목록에는 표시를 붙이는 열쇠 컬럼이 없어요.")
+    expr = card_expr(card)
+    for c in keys:
+        parse.check_name(c, expr.columns, "열쇠 컬럼")
+    cols = [(expr[c].cast("string") if expr[c].type().is_temporal() else expr[c].cast("float64") if expr[c].type().is_decimal() else expr[c]).name(c) for c in keys]
+    t = expr.select(*cols).distinct().limit(dash_store.MAX_ROW_MARK_SCAN + 1)
+    frame = run(lambda: t.to_polars())
+    if frame.height > dash_store.MAX_ROW_MARK_SCAN:
+        raise ValueError(dash_store.ROW_MARK_SCAN_OVER)
+    return frame.select(dash_marks.key_expr(keys).alias(dash_marks.KEY_COL))[dash_marks.KEY_COL].to_list()
 
 
 def sentence_data(card, ctx):
@@ -1407,7 +1465,7 @@ def definition(card):
     source = card["source"]
     points = {"points": card["view"].get("points")} if card["view"]["type"] in POINT_TYPES else {}
     view = card["view"]
-    keys = ("target", "group", "format") if card["kind"] in VALUE_KINDS else ("group_cols", "template", "blanks", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "bucket", "list_sort", "list_rows") if card["kind"] in TABLE_KINDS else ("geo",) if card["kind"] == "geomap" else ("bins", "unit", "cloud", "flow_unlimited", "flow_dropout") if card["kind"] in SHAPE_KINDS else ()
+    keys = ("target", "group", "format") if card["kind"] in VALUE_KINDS else ("group_cols", "template", "blanks", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "bucket", "list_sort", "list_rows", "row_marks") if card["kind"] in TABLE_KINDS else ("geo",) if card["kind"] == "geomap" else ("bins", "unit", "cloud", "flow_unlimited", "flow_dropout") if card["kind"] in SHAPE_KINDS else ()
     extra = {"view": {k: view[k] for k in keys if k in view}} if keys else {}  # 값에 영향을 주는 설정
     if merges_on_server(card):
         extra = {"view": {**extra.get("view", {}), "groups": {"ranges": card["view"]["groups"]["ranges"], "merge": True}}}

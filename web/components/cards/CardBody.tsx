@@ -1,20 +1,20 @@
 "use client";
 // 카드 몸통: 종류(kind)로 차트 카드(N1)와 SVG/HTML 카드(N2) 중 하나를 고른다. 값은 구한 값이 있으면 그것, 없으면 저장된 값.
 import { memo } from "react";
-import type { Card, ComputeResult, Ctx, PickedFilter } from "@/lib/types";
+import type { Card, ComputeResult, Ctx, MarkValue, PickedFilter } from "@/lib/types";
 import { applyGroups, renameColors } from "@/lib/groups";
 import { CHART_KINDS, ChartCard, Guard } from "./ChartCard";
 import { SvgCard } from "./SvgCards";
 
-type BodyProps = { card: Card; result?: ComputeResult; palette: string[]; ctx: Ctx | null; onPick?: (column: string, value: string) => void; share?: boolean; pressed?: PickedFilter; onPress?: (column: string, values: string[]) => void };
+type BodyProps = { card: Card; result?: ComputeResult; palette: string[]; ctx: Ctx | null; onPick?: (column: string, value: string) => void; share?: boolean; pressed?: PickedFilter; onPress?: (column: string, values: string[]) => void; onMark?: (key: string, values: Record<string, MarkValue>) => void };
 
 // 표시할 그룹 고르기·이름 바꾸기를 입힌 값으로 그린다. applyGroups가 던지면(MERGE_DATE) 바깥 Guard가 보인다.
-function Shown({ card, result, palette, ctx, onPick, share, pressed, onPress }: BodyProps) {
+function Shown({ card, result, palette, ctx, onPick, share, pressed, onPress, onMark }: BodyProps) {
   const raw = result?.data ?? card.data ?? {};
   const data = applyGroups(card, raw);
   const colors = renameColors(card.colors, card.view.groups);
   const shown = data === raw && colors === card.colors ? card : { ...card, data, colors };
-  const props = { card: shown, data, result, palette, ctx, onPick, share, pressed, onPress };
+  const props = { card: shown, data, result, palette, ctx, onPick, share, pressed, onPress, onMark };
   return CHART_KINDS.includes(card.kind) ? <ChartCard {...props} /> : <SvgCard {...props} />;
 }
 
