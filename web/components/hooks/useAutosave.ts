@@ -6,13 +6,13 @@
 import { useEffect } from "react";
 import { draft as drafts, getDashboard, saveDashboard } from "@/lib/api";
 import { useDash, type Action, type DashState } from "@/lib/store";
-import type { Card, Dashboard } from "@/lib/types";
+import type { Card, Dashboard, Section } from "@/lib/types";
 
 export type Autosave = { flush: () => Promise<void>; saving: boolean };
 
 const QUIET = 700;          // 마지막 편집 뒤 저장까지(옛 scheduleSave)
 const DRAFT_QUIET = 2000;   // 저장되지 않은 편집이 이만큼 남으면 초안으로(옛 DRAFT_QUIET)
-type DraftState = { id: string; palette: string[]; north_star: Dashboard["north_star"]; cards: Omit<Card, "data">[] };
+type DraftState = { id: string; palette: string[]; north_star: Dashboard["north_star"]; cards: Omit<Card, "data">[]; sections: Section[] };
 
 // 모듈 공용: 지금 상태·dispatch(훅이 렌더마다 맞춘다), 저장 줄(차례로), 타이머, 초안이 서버에 있을 수 있나, 초안을 물었나
 const cur: { state: DashState | null; dispatch: (a: Action) => void; open: (id: string) => Promise<void> } = { state: null, dispatch: () => {}, open: async () => {} };
@@ -29,7 +29,7 @@ export const isTyping = (t: EventTarget | null) => {
 export const modalOpen = () => !!document.querySelector(".modal:not(.hidden), .menu:not(.hidden)");
 
 // 초안에 담는 모양(옛 dashState와 같게: 카드 값 data는 뺀다)
-export const draftState = (d: Dashboard): DraftState => ({ id: d.id, palette: d.palette, north_star: d.north_star, cards: d.cards.map(c => { const { data, ...rest } = c; void data; return rest; }) });
+export const draftState = (d: Dashboard): DraftState => ({ id: d.id, palette: d.palette, north_star: d.north_star, cards: d.cards.map(c => { const { data, ...rest } = c; void data; return rest; }), sections: d.sections ?? [] });
 
 /** 서버가 이 카드들의 지금 값(data)을 갖고 있다고 적는다(연 직후·저장한 뒤) */
 export const markSaved = (d: Dashboard) => d.cards.forEach(c => onServer.set(c.id, c.data));
@@ -81,7 +81,7 @@ function askDraft() {
           cards = (await getDashboard(draft.state.id)).dashboard.cards;
         }
         const data = Object.fromEntries(cards.map(c => [c.id, c.data]));
-        cur.dispatch({ type: "cards", cards: draft.state.cards.map(c => ({ ...c, data: data[c.id] ?? {} }) as Card) });  // dirty가 켜져 자동 저장이 이어서 쓴다
+        cur.dispatch({ type: "cards", cards: draft.state.cards.map(c => ({ ...c, data: data[c.id] ?? {} }) as Card), sections: draft.state.sections });  // dirty가 켜져 자동 저장이 이어서 쓴다
         cur.dispatch({ type: "meta", patch: { palette: draft.state.palette, north_star: draft.state.north_star } });
         end();
       } catch (e) { note.textContent = (e as Error).message; go.replaceWith(shut); shut.focus(); }  // 대시보드가 없어졌다 같은 이유를 그대로 보인다

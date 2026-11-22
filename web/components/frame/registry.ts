@@ -15,6 +15,7 @@ export const FRAME_KINDS = {
   nav_rail: { name: "화면 이동 줄", group: "틀", help: "세로로 놓는 이동 단추 줄", w: 1, h: 8 },
   top_strip: { name: "위쪽 화면 줄", group: "틀", help: "이름·기간·기준일·화면 모드", w: 12, h: 1 },
   page_tabs: { name: "쪽 탭", group: "틀", help: "쪽을 오가는 가로 탭", w: 12, h: 1 },
+  text: { name: "글", group: "틀", help: "섹션 안에 글을 적어요", w: 3, h: 1 },
 } as const satisfies Record<string, { name: string; group: FrameGroup; help: string; w: number; h: number }>;
 export type FrameKind = keyof typeof FRAME_KINDS;
 
@@ -39,7 +40,15 @@ export type FramePart = keyof typeof FRAME_PARTS;
 /** 단추 하나(단추 요소 자신, 줄 안 항목): 글자·아이콘(둘 중 하나는 꼭)·할 일·받는 값 */
 export type FrameItem = { label: string; icon: string; action: FrameAction | ""; arg: string };
 /** view.frame: 종류마다 쓰는 항목만 있다(단추는 FrameItem + ambient, 이동 줄은 items + ambient, 위쪽 줄은 parts + items, 나머지는 빈 객체) */
-export type FrameSettings = Partial<FrameItem> & { ambient?: boolean; items?: FrameItem[]; parts?: FramePart[] };
+export type FrameSettings = Partial<FrameItem> & { ambient?: boolean; items?: FrameItem[]; parts?: FramePart[]; text?: string; size?: TextSize; align?: TextAlign };
+
+/** 글 요소의 꾸밈 한 벌(서버 FRAME_TEXT_SIZES·FRAME_TEXT_ALIGNS와 같은 키·차례) */
+export const TEXT_SIZES = { sm: "작게", md: "보통", lg: "크게" } as const;
+export type TextSize = keyof typeof TEXT_SIZES;
+export const TEXT_ALIGNS = { left: "왼쪽", center: "가운데", right: "오른쪽" } as const;
+export type TextAlign = keyof typeof TEXT_ALIGNS;
+/** 글자 크기 → 앱의 글자 크기 변수(common.css :root의 rem 값. 화면 CSS와 보고서 그림이 같이 쓴다) */
+export const TEXT_SIZE_VARS: Record<TextSize, string> = { sm: "--fs-sm", md: "--fs-md", lg: "--fs-lg" };
 
 /** 할 일이 부르는 앱의 기능. ShellProvider의 값과 TopBar의 flipTheme·flipEasy로 채운다(FrameCard) */
 export type ActionHost = {
@@ -60,6 +69,7 @@ export function freshFrame(kind: FrameKind): FrameSettings {
   if (kind === "button") return { label: "", icon: "", action: "", arg: "", ambient: false };
   if (kind === "nav_rail") return { items: [], ambient: false };
   if (kind === "top_strip") return { parts: Object.keys(FRAME_PARTS) as FramePart[], items: [] };
+  if (kind === "text") return { text: "", size: "md", align: "left" };
   return {};
 }
 

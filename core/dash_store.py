@@ -219,11 +219,15 @@ EXTRA_VIEW = ("format", "unit_text", "ring", "slots", "target", "full", "cells",
 GONE_VIEW = ("icon", "fit", "layout")  # (B10b) 없앤 KPI 모양 설정(아이콘·값 맞춤·추이선 자리): 저장된 보기에 있으면 받되 버린다
 FUNNEL_SHAPES = ("flow", "ladder")  # 퍼널 그림: 흐름(생키+표) / 사다리꼴
 GAP_STATS = ("mean", "median", "trimmed")  # 걸린 시간 표에 보일 값
-FRAME_KINDS = ("button", "nav_rail", "top_strip", "page_tabs", "period_pick", "asof_field", "unit_seg")  # (B10) 격자에 놓는 틀 요소 종류. 화면의 한 벌은 web/components/frame/registry.ts
+FRAME_KINDS = ("button", "nav_rail", "top_strip", "page_tabs", "period_pick", "asof_field", "unit_seg", "text")  # (B10) 격자에 놓는 틀 요소 종류. 화면의 한 벌은 web/components/frame/registry.ts
 FRAME_ACTIONS = {"export": "", "refresh": "", "page": "page", "theme": "", "dash_only": "", "zoom": "card", "easy": "", "filters_clear": "", "settings": ""}  # 틀 요소의 할 일 → 받는 값(arg)의 종류("" 없음, page 쪽 이름, card 카드 id)
 FRAME_PARTS = ("name", "period", "asof", "theme")  # 위쪽 화면 줄에 보일 칸
 FRAME_KEYS = {"button": ("label", "icon", "action", "arg", "ambient"), "nav_rail": ("items", "ambient"), "top_strip": ("parts", "items"),
-              "page_tabs": (), "period_pick": (), "asof_field": (), "unit_seg": ()}  # 종류마다 view.frame에 쓸 수 있는 항목
+              "page_tabs": (), "period_pick": (), "asof_field": (), "unit_seg": (), "text": ("text", "size", "align")}  # 종류마다 view.frame에 쓸 수 있는 항목
+MAX_FRAME_TEXT = 500  # 글 요소의 글자 수 상한(문장 카드 template과 같은 값)
+FRAME_TEXT_SIZES = ("sm", "md", "lg")  # 글 요소 글자 크기: 작게·보통·크게
+FRAME_TEXT_ALIGNS = ("left", "center", "right")  # 글 요소 정렬: 왼쪽·가운데·오른쪽
+FRAME_TEXT_DEFAULT = {"size": "md", "align": "left"}  # 글 요소 꾸밈의 처음 값
 ITEM_KEYS = ("label", "icon", "action", "arg")  # 줄 안 항목(단추 하나)의 항목
 MAX_FRAME_ITEMS, MAX_FRAME_LABEL = 8, 30  # 줄 안 항목 수, 단추 글자 수
 FRAME_MIN = 1  # 틀 요소의 최소 너비·높이(칸). 카드는 2
@@ -284,6 +288,16 @@ def check_frame(frame: object, kind: str) -> dict[str, object]:
         if not isinstance(parts, list) or not all(isinstance(p, str) and p in FRAME_PARTS for p in parts) or len(set(parts)) != len(parts):
             raise ValueError(f"보일 칸(parts)은 {', '.join(FRAME_PARTS)} 중에서 겹치지 않게 골라요.")
         out["parts"] = parts
+    if kind == "text":
+        out["text"] = text(frame.get("text") or "", "글", MAX_FRAME_TEXT)
+        size = frame.get("size", FRAME_TEXT_DEFAULT["size"])
+        if size not in FRAME_TEXT_SIZES:
+            raise ValueError(f"글자 크기(size)는 {', '.join(FRAME_TEXT_SIZES)} 중 하나예요.")
+        out["size"] = size
+        align = frame.get("align", FRAME_TEXT_DEFAULT["align"])
+        if align not in FRAME_TEXT_ALIGNS:
+            raise ValueError(f"정렬(align)은 {', '.join(FRAME_TEXT_ALIGNS)} 중 하나예요.")
+        out["align"] = align
     return out
 
 
@@ -787,10 +801,21 @@ def check_card(card):
         raise ValueError("카드 id는 영문·숫자·_·- 32자까지예요.")
     if frame and card.get("data") not in (None, {}):
         raise ValueError("틀 요소에는 값(data)을 넣을 수 없어요.")
+    in_section = card.get("section") is not None
+    if in_section and not (isinstance(card["section"], str) and ID.fullmatch(card["section"])):
+        raise ValueError("조각의 섹션(section)은 섹션 id예요.")
+    if in_section:
+        layout = check_spot(card.get("layout"))
+    else:
+        layout = check_layout(card["layout"], FRAME_MIN if frame else 2) if card.get("layout") is not None else {"x": 0, "y": 0, "w": 6, "h": 6}
     out = {"id": card_id, "kind": card["kind"], "title": text(card.get("title"), "카드 이름", 100, 1),
-           "layout": check_layout(card["layout"], FRAME_MIN if frame else 2) if card.get("layout") is not None else {"x": 0, "y": 0, "w": 6, "h": 6},
+           "layout": layout,
            "colors": check_colors(card.get("colors")), "view": check_view(card.get("view")),
            "source": check_source(card.get("source")), "data": {} if frame or card["kind"] in GONE_KINDS else check_data(card.get("data"), card["kind"])}
+    if in_section:
+        out["section"] = card["section"]
+        if "page" in out["view"]:
+            raise ValueError("조각의 쪽은 섹션이 정해요. 조각에는 쪽(page)을 쓰지 않아요.")
     placed = not any(out["source"].get(k) for k in ("body", "recipe", "analysis"))  # 카드 모음에서 막 놓은 빈 틀: 데이터를 정할 때까지 아래 검사를 미룬다
     if frame:
         if not placed:
@@ -849,6 +874,92 @@ def check_card(card):
     if size > MAX_CARD_BYTES:
         raise ValueError(f"카드 '{out['title']}'이 {size:,}자로 카드 하나의 상한 {MAX_CARD_BYTES:,}자를 넘어요.")
     return out
+
+
+SECTION_SUB = (16, 8)  # (B5) 섹션 눈금: 쪽 격자 한 칸을 가로 16·세로 8 눈금으로 나눈다(사용자 답, 화면 web/components/grid/sections.ts SUB와 같다)
+SPOT_CELLS = 12  # (B5) 조각 자리의 바깥 한계: 쪽 격자 최대 12칸(섹션 눈금으로 곱해 쓴다)
+SECTION_GAP = 1  # (B5) 같은 섹션의 조각 사이에 띄울 가장 작은 눈금 수(사용자 답: 붙이기·겹치기 안 됨. 화면 sections.PIECE_GAP과 같다)
+SECTION_FOLLOW = True  # (B5) "섹션 크기를 바꾸면 조각도 같이 바뀜"의 처음 값(사용자 답 2026-11-22)
+MAX_SECTIONS = MAX_CARDS  # (B5) 대시보드 하나의 섹션 수
+SECTION_KEYS = ("id", "title", "layout", "follow", "view")  # (B5) 섹션 하나의 항목
+SECTION_VIEW_KEYS = ("page",)  # (B5) 섹션 view의 항목
+
+
+def check_spot(layout: object) -> dict[str, int]:
+    """[SPECIFICATION] plans/dash-blocks.md#check_spot
+    조각 자리(섹션 눈금의 x·y·w·h)를 섹션과 상관없는 범위로 검사해 정리한 사본을 돌려준다."""
+    ok = isinstance(layout, dict) and all(type(layout.get(k)) is int for k in "xywh")
+    if not ok or not (0 <= layout["x"] and 0 <= layout["y"] and 1 <= layout["w"] and 1 <= layout["h"]
+                      and layout["x"] + layout["w"] <= SPOT_CELLS * SECTION_SUB[0] and layout["y"] + layout["h"] <= SPOT_CELLS * SECTION_SUB[1]):
+        raise ValueError("조각 자리(layout)는 섹션 눈금의 x·y(0 이상)와 너비 w·높이 h(1 이상)예요.")
+    return {k: layout[k] for k in "xywh"}
+
+
+def check_section(found: object) -> dict[str, object]:
+    """[SPECIFICATION] plans/dash-blocks.md#check_section
+    섹션 하나(id·이름·쪽 격자 자리·follow·쪽)를 검사해 정리한 사본을 돌려준다."""
+    if not isinstance(found, dict):
+        raise ValueError("섹션은 객체여야 해요.")
+    if extra := set(found) - set(SECTION_KEYS):
+        raise ValueError(f"섹션에 쓸 수 없는 항목이 있어요: {', '.join(sorted(extra))}")
+    section_id = found.get("id")
+    if not isinstance(section_id, str) or not ID.fullmatch(section_id):
+        raise ValueError("섹션 id는 영문·숫자·_·- 32자까지예요.")
+    title = text(found.get("title") or "", "섹션 이름", 100)
+    layout = check_layout(found.get("layout"), FRAME_MIN)
+    follow = found.get("follow", SECTION_FOLLOW)
+    if type(follow) is not bool:
+        raise ValueError("'섹션 크기를 바꾸면 조각도 같이 바뀜'(follow)은 참·거짓이에요.")
+    view = found.get("view") or {}
+    if not isinstance(view, dict) or set(view) - set(SECTION_VIEW_KEYS):
+        raise ValueError("섹션 보기(view)에는 쪽(page)만 쓸 수 있어요.")
+    page = text(view.get("page"), "쪽 이름", MAX_PAGE_NAME)
+    return {"id": section_id, "title": title, "layout": layout, "follow": follow, "view": {"page": page} if page else {}}
+
+
+def check_sections(found: object, cards: list[dict[str, object]]) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """[SPECIFICATION] plans/dash-blocks.md#check_sections
+    섹션 목록을 검사하고, 섹션이 없는 카드는 그 카드가 꽉 채운 새 섹션으로 옮겨 (섹션들, 카드들)을 돌려준다."""
+    if found is None:
+        found = []
+    limit_error = f"섹션 목록(sections)은 목록이며 {MAX_SECTIONS}개까지예요."
+    if not isinstance(found, list) or len(found) > MAX_SECTIONS:
+        raise ValueError(limit_error)
+    sections = [check_section(s) for s in found]
+    if len({s["id"] for s in sections}) != len(sections):
+        raise ValueError("섹션 id가 겹쳐요.")
+    sub_x, sub_y = SECTION_SUB
+    placed: list[dict[str, object]] = []
+    for card in cards:
+        if "section" in card:
+            placed.append(card)
+            continue
+        if any(s["id"] == card["id"] for s in sections):
+            raise ValueError("섹션 id가 겹쳐요.")
+        view = dict(card["view"])
+        page = view.pop("page", None)
+        spot = card["layout"]
+        sections.append({"id": card["id"], "title": "", "layout": spot, "follow": SECTION_FOLLOW, "view": {"page": page} if page else {}})
+        placed.append({**card, "section": card["id"], "layout": {"x": 0, "y": 0, "w": spot["w"] * sub_x, "h": spot["h"] * sub_y}, "view": view})
+    if len(sections) > MAX_SECTIONS:
+        raise ValueError(limit_error)
+    by_id = {s["id"]: s for s in sections}
+    for card in placed:
+        section = by_id.get(card["section"])
+        if section is None:
+            raise ValueError(f"조각 '{card['title']}'이 놓인 섹션이 없어요.")
+        spot = card["layout"]
+        if spot["x"] + spot["w"] > section["layout"]["w"] * sub_x or spot["y"] + spot["h"] > section["layout"]["h"] * sub_y:
+            raise ValueError(f"조각 '{card['title']}'이 섹션 밖으로 나가요.")
+    for i, a in enumerate(placed):
+        for b in placed[i + 1:]:
+            if a["section"] != b["section"]:
+                continue
+            p, q = a["layout"], b["layout"]
+            if (p["x"] < q["x"] + q["w"] + SECTION_GAP and q["x"] < p["x"] + p["w"] + SECTION_GAP
+                    and p["y"] < q["y"] + q["h"] + SECTION_GAP and q["y"] < p["y"] + p["h"] + SECTION_GAP):
+                raise ValueError(f"조각 '{a['title']}'와 '{b['title']}'이 겹치거나 붙어 있어요. 조각 사이는 {SECTION_GAP}눈금 이상 띄워요.")
+    return sections, placed
 
 
 PULL_CALCS =("pc", "db")  # (B11) 계산 방식: pc = DB는 거르기만 하고 계산은 이 PC, db = 지금처럼 DB가 계산
@@ -982,6 +1093,7 @@ def check_dashboard(d, old=None):
     ids = [c["id"] for c in cards]
     if len(set(ids)) != len(ids):
         raise ValueError("카드 id가 겹쳐요.")
+    sections, cards = check_sections(d.get("sections"), cards)
     as_of = d.get("as_of") or ""
     if as_of:
         try:
@@ -1007,7 +1119,7 @@ def check_dashboard(d, old=None):
         raise ValueError("북극성·카운터 지표로 고른 카드가 이 대시보드에 없어요.")
     return {"id": dash_id, "name": text(d.get("name"), "대시보드 이름", 50, 1), "template": text(d.get("template"), "템플릿 이름", 50),
             "palette": check_palette(d.get("palette") or []), "period": text(d.get("period") or "", "기간", 40), "as_of": as_of, "compare_mode": mode,
-            "pull": check_pull(d.get("pull")), "cards": cards, "created": text(d.get("created"), "만든 시각", 40),
+            "pull": check_pull(d.get("pull")), "cards": cards, "sections": sections, "created": text(d.get("created"), "만든 시각", 40),
             "updated": text(d.get("updated"), "고친 시각", 40), "north_star": north, "filters": check_filters(d.get("filters")), "pages": check_pages(d.get("pages"))}
 
 
@@ -1170,7 +1282,8 @@ def add_card(dash_id, name, card):
             d = {**get_dashboard(dash_id)}
         else:
             d = {"name": name, "cards": []}
-        bottom = max([c["layout"]["y"] + c["layout"]["h"] for c in d["cards"]], default=0)
+        spots = [s["layout"] for s in d.get("sections") or []] + [c["layout"] for c in d["cards"] if not c.get("section")]
+        bottom = max([spot["y"] + spot["h"] for spot in spots], default=0)
         return save_dashboard({**d, "cards": [*d["cards"], {**card, "layout": {"x": 0, "y": min(bottom, 999), "w": 6, "h": 6}}]})
 
 

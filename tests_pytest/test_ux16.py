@@ -98,7 +98,7 @@ def test_no_px_font_sizes_or_radius_literals():
 
 
 FAINT_OK = {"common.css": {".crumb i", ".jobx.idle i", ".cn", ".drop .pop .cal-day:disabled"},
-            "dash_edit.css": {".bresize"}, "sentences.css": set(), "dashboard.css": {".drop .pop .dcal-day:disabled"}}
+            "dash_edit.css": {".bresize", ".sresize"}, "sentences.css": set(), "dashboard.css": {".drop .pop .dcal-day:disabled"}}
 
 
 def test_faint_only_on_decor():

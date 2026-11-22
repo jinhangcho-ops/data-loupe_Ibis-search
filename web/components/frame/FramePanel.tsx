@@ -3,11 +3,12 @@
 import type { ReactNode } from "react";
 import type { Card } from "@/lib/types";
 import { useDash } from "@/lib/store";
-import { Check, Sel, Txt } from "@/components/edit/menu/Fields";
+import { Check, LineBox, Sel, Txt } from "@/components/edit/menu/Fields";
 import { ICONS } from "@/components/edit/panel/Tools";
-import { FRAME_ACTIONS, FRAME_PARTS, frameError, freshFrame, isFrame, type FrameAction, type FrameItem, type FrameKind, type FramePart, type FrameSettings } from "./registry";
+import { FRAME_ACTIONS, FRAME_PARTS, TEXT_ALIGNS, TEXT_SIZES, frameError, freshFrame, isFrame, type FrameAction, type FrameItem, type FrameKind, type FramePart, type FrameSettings, type TextAlign, type TextSize } from "./registry";
 
 const MAX_LABEL = 30;  // 단추 글자 상한(서버 dash_store.MAX_FRAME_LABEL)
+const MAX_TEXT = 500;  // 글 요소 글자 상한(서버 dash_store.MAX_FRAME_TEXT)
 const MAX_ITEMS = 8;  // 줄 안 항목 상한(서버 dash_store.MAX_FRAME_ITEMS)
 const BLANK_ITEM: FrameItem = { label: "", icon: "", action: "", arg: "" };
 const ALL_CARDS = "지금은 이 대시보드의 모든 카드에 적용돼요.";
@@ -52,6 +53,13 @@ export function FramePanel(props: FramePanelProps): ReactNode {
     <div className="cm-block">
       {note && <p className="hint">{note}</p>}
       {kind === "button" && fields(frame, set)}
+      {kind === "text" && (
+        <>
+          <LineBox label="글" value={frame.text ?? ""} placeholder="" parse={() => ({})} onChange={v => set({ text: v.slice(0, MAX_TEXT) })} />
+          <Sel label="글자 크기" value={frame.size ?? "md"} options={Object.entries(TEXT_SIZES)} onChange={v => set({ size: v as TextSize })} />
+          <Sel label="정렬" value={frame.align ?? "left"} options={Object.entries(TEXT_ALIGNS)} onChange={v => set({ align: v as TextAlign })} />
+        </>
+      )}
       {kind === "top_strip" && (Object.keys(FRAME_PARTS) as FramePart[]).map(key => (
         <Check key={key} label={FRAME_PARTS[key]} checked={parts.includes(key)}
           onChange={on => set({ parts: (Object.keys(FRAME_PARTS) as FramePart[]).filter(k => (k === key ? on : parts.includes(k))) })} />

@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { toShare, type Series } from "@/components/cards/chart/series";
-import { onPage, onPageNow, pageOf } from "@/lib/calc";
+import { wrapCard } from "@/components/grid/sections";
+import { onPage, pageOf } from "@/lib/calc";
 import type { Card } from "@/lib/types";
 
 const src = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
@@ -22,16 +23,17 @@ describe("쪽(탭)", () => {
     expect(onPage(cards, undefined, "")).toBe(cards);
   });
   it("새 카드는 지금 쪽에 놓인다(쪽이 없으면 그대로)", () => {
-    expect(onPageNow(card("n"), pages, "조치").view.page).toBe("조치");
-    expect(onPageNow(card("n"), pages, "").view.page).toBe("현황");
-    expect(onPageNow(card("n"), [], "조치").view.page).toBeUndefined();
+    const fresh = { ...card("n"), kind: "kpi", layout: { x: 0, y: 0, w: 6, h: 6 } } as Card;  // B5: 쪽은 새 카드를 감싼 섹션이 가진다
+    expect(wrapCard(fresh, [], pages, "조치").section.view.page).toBe("조치");
+    expect(wrapCard(fresh, [], pages, "").section.view.page).toBe("현황");
+    expect(wrapCard(fresh, [], [], "조치").section.view.page).toBeUndefined();
   });
   it("격자는 지금 쪽만 그리고 빈 줄을 붙이되, 저장할 때는 모든 쪽의 카드를 남긴다", () => {
     const grid = src("components/grid/Grid.tsx");
-    expect(grid).toContain("const cards = onPage(all, dash?.pages, page);");
-    expect(grid).toContain("up = paged ? compactLayout(raw) : null");
-    expect(grid).toContain('dispatch({ type: "cards", cards: all.map(c => (layouts[c.id] ? { ...c, layout: layouts[c.id] } : c)) });');
-    expect(grid).toContain('dispatch({ type: "cards", cards: all.filter(c => c.id !== id) });');
+    expect(grid).toContain("const secs = onPage(allSecs, dash?.pages, page);");  // B5: 쪽은 섹션이 가진다
+    expect(grid).toContain("up = paged || cut ? compactLayout(raw) : null");
+    expect(grid).toContain('const n = applySections(all, allSecs, layouts); dispatch({ type: "cards", cards: n.cards, sections: n.sections });');
+    expect(grid).toContain('dispatch({ type: "cards", cards: all.filter(c => !ids.includes(c.id)), sections });');
   });
   it("쪽 줄은 만드는 곳에서만 더하고 빼며, 카드 설정에 쪽 고르는 칸이 있다", () => {
     const tabs = src("components/shell/PageTabs.tsx");
@@ -40,7 +42,7 @@ describe("쪽(탭)", () => {
     expect(src("components/shell/DashboardScreen.tsx")).toContain("<PageTabs />");
     // [대시보드만 보기]는 .board-ctl을 숨기는데 쪽 줄은 남긴다(안 그러면 그 화면에서 쪽을 못 바꾼다). 이 CSS는 next 빌드가 싣는다(layout.tsx)
     expect(src("styles/dashboard.css")).toContain(".board-ctl:not(#d-filters, #d-pages)");
-    expect(src("components/edit/CardPanel.tsx")).toContain('onChange({ view: { ...card.view, page: e.target.value } })');
+    expect(src("components/edit/CardPanel.tsx")).toContain('sections.map(s => (s.id === sec.id ? { ...s, view: { ...s.view, page: e.target.value } }');
   });
 });
 

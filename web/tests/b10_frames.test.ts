@@ -36,7 +36,7 @@ describe("등록 자리 한 곳: 화면 registry.ts와 서버 dash_store.py", ()
   it("요소는 조작·틀 묶음에만 있고(보기는 카드), B2·B3의 요소는 아직 없다", () => {
     expect([...FRAME_GROUPS]).toEqual(["조작", "보기", "틀"]);
     expect(new Set(Object.values(FRAME_KINDS).map(k => k.group))).toEqual(new Set(["조작", "틀"]));
-    expect(Object.keys(FRAME_KINDS).sort()).toEqual(["asof_field", "button", "nav_rail", "page_tabs", "period_pick", "top_strip", "unit_seg"]);
+    expect(Object.keys(FRAME_KINDS).sort()).toEqual(["asof_field", "button", "nav_rail", "page_tabs", "period_pick", "text", "top_strip", "unit_seg"]);
   });
   it("할 일 목록에 LLM·도움말처럼 앱에 없는 일이 없다", () => {
     expect(Object.keys(FRAME_ACTIONS).sort()).toEqual(["dash_only", "easy", "export", "filters_clear", "page", "refresh", "settings", "theme", "zoom"]);

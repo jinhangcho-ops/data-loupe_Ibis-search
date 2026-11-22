@@ -6,7 +6,10 @@ import { deleteTemplate, listTemplates, saveTemplate } from "@/lib/api";
 import { useDash } from "@/lib/store";
 import type { Card, CardKind, ChartType, Template } from "@/lib/types";
 import { isFrame } from "@/components/frame/registry";
+import { sectionsOf } from "@/components/grid/sections";
 import { freshView } from "./menu/kinds";
+
+const MULTI_PIECE = "조각이 둘 이상인 섹션은 아직 내 템플릿으로 저장할 수 없어요.";
 
 export type TemplatesProps = { onPick?: (t: Template) => void };
 /** 기본 템플릿은 차트 종류(view.type)와 설명(help)을 더 가진다 */
@@ -44,9 +47,12 @@ export function Templates({ onPick }: TemplatesProps) {
   useEffect(() => { onPick?.(all[0]); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
   const save = async () => {
     try {
-      const cards = (state.dash?.cards ?? []).filter(c => !isFrame(c.kind));
+      const { sections, cards: pieces } = sectionsOf(state.dash ?? { cards: [] });
+      const cards = pieces.filter(c => !isFrame(c.kind));
       if (!cards.length) throw new Error("카드가 하나 이상 있어야 템플릿으로 저장할 수 있어요.");
-      setMine((await saveTemplate({ name, cards: cards.map(({ kind, title, layout, colors }) => ({ kind, title, layout, colors })) })).templates);
+      if (sections.some(s => cards.filter(c => c.section === s.id).length > 1)) throw new Error(MULTI_PIECE);
+      const spot = new Map(sections.map(s => [s.id, s.layout]));
+      setMine((await saveTemplate({ name, cards: cards.map(({ kind, title, section, colors }) => ({ kind, title, layout: spot.get(section!)!, colors })) })).templates);
       setNote({ text: "내 템플릿으로 저장했어요. 카드 종류, 자리, 색, 이름만 담겼어요.", ok: true });
     } catch (e) { setNote({ text: (e as Error).message, ok: false }); }
   };

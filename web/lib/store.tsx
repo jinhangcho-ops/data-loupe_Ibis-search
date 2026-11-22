@@ -3,7 +3,7 @@
 // picked는 그림으로 저장할 카드들(여러 개, 옛 board.picked), selected는 카드 설정 패널을 여는 카드 하나. error는 아래 알림 줄의 글이고 ok면 성공 안내(보통 색, 옛 say(…, true)).
 // 자동 저장·되돌리기(N6)는 useActionLog로 모든 액션을 받아 붙인다. 대시보드 열기는 화면 틀(components/shell/ShellProvider의 open) 한 곳에서 한다. 카드·이름·설정을 바꾸는 액션은 dirty를 켜고 saved가 끈다.
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { Card, CardData, ComputeResult, Ctx, DashList, DashSummary, Dashboard } from "./types";
+import type { Card, CardData, ComputeResult, Ctx, DashList, DashSummary, Dashboard, Section } from "./types";
 
 export type DashState = {
   list: DashSummary[];
@@ -23,7 +23,7 @@ export type DashState = {
 export type Action =
   | { type: "list"; list: DashList }
   | { type: "open"; dash: Dashboard | null }                  // 다른 대시보드를 연다(값·선택·dirty를 비운다)
-  | { type: "cards"; cards: Card[] }                           // 카드 목록 통째로(격자 옮기기·지우기·되돌리기)
+  | { type: "cards"; cards: Card[]; sections?: Section[] }     // 카드 목록 통째로(격자 옮기기·지우기·되돌리기). (B5) sections를 주면 섹션 목록도 함께
   | { type: "card"; id: string; patch: Partial<Card>; auto?: boolean } // 카드 하나 고치기(패널·규칙·선반). auto: 화면이 스스로 붙인 것(새 라벨 색 순서) — 되돌리기에 쌓지 않는다
   | { type: "meta"; patch: Partial<Omit<Dashboard, "id" | "cards">> } // 이름·팔레트·기간·기준일·주기·북극성
   | { type: "values"; results: ComputeResult[] }               // 구한 값(덮어쓰기)
@@ -54,7 +54,7 @@ export function reducer(s: DashState, a: Action): DashState {
   switch (a.type) {
     case "list": return { ...s, list: a.list.dashboards, locked: a.list.locked, last: a.list.last };
     case "open": return { ...s, dash: a.dash, values: {}, selected: null, picked: [], dirty: false, error: "", ok: false };
-    case "cards": return s.dash ? { ...s, dash: { ...s.dash, cards: a.cards }, picked: s.picked.filter(id => a.cards.some(c => c.id === id)), dirty: true } : s;  // 뺀 카드는 고른 것에서도
+    case "cards": return s.dash ? { ...s, dash: { ...s.dash, cards: a.cards, ...(a.sections ? { sections: a.sections } : {}) }, picked: s.picked.filter(id => a.cards.some(c => c.id === id)), dirty: true } : s;  // 뺀 카드는 고른 것에서도
     case "card": return s.dash ? { ...s, dash: { ...s.dash, cards: s.dash.cards.map(c => (c.id === a.id ? { ...c, ...a.patch } : c)) }, dirty: true } : s;
     case "meta": return s.dash ? { ...s, dash: { ...s.dash, ...a.patch }, dirty: true } : s;
     case "values": return { ...s, values: { ...s.values, ...Object.fromEntries(a.results.map(r => [r.id, r])) } };

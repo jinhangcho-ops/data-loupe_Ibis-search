@@ -19,7 +19,7 @@ def post(client, url, **body):
 
 def test_save_open_delete(client):
     saved = post(client, "/api/dash", name=" 주간 ", cards=[CARD])["dashboard"]
-    assert saved["name"] == "주간" and saved["cards"][0]["source"]["body"]["base"] == "orders" and saved["cards"][0]["layout"] == {"x": 0, "y": 0, "w": 6, "h": 6}
+    assert saved["name"] == "주간" and saved["cards"][0]["source"]["body"]["base"] == "orders" and saved["sections"][0]["layout"] == {"x": 0, "y": 0, "w": 6, "h": 6} and saved["cards"][0]["layout"] == {"x": 0, "y": 0, "w": 96, "h": 48}  # 섹션이 쪽 격자 6×6, 조각은 그 섹션을 꽉 채운다
     listed = client.get("/api/dash").get_json()
     assert listed == {"dashboards": [{"id": saved["id"], "name": "주간", "cards": 1, "updated": saved["updated"]}], "locked": False, "last": ""}
     assert client.post("/api/dash/open", json={"id": saved["id"]}).get_json()["dashboard"]["cards"][0]["id"] == saved["cards"][0]["id"]
@@ -43,8 +43,8 @@ def test_add_card_to_saved_or_new(client):
     assert first["name"] == "새것" and first["cards"] == 1
     again = post(client, "/api/dash/card/add", dashboard=first["id"], card=CARD)["dashboard"]
     assert again["cards"] == 2
-    cards = client.post("/api/dash/open", json={"id": first["id"]}).get_json()["dashboard"]["cards"]
-    assert [c["layout"]["y"] for c in cards] == [0, 6]
+    sections = client.post("/api/dash/open", json={"id": first["id"]}).get_json()["dashboard"]["sections"]
+    assert [s["layout"]["y"] for s in sections] == [0, 6]
 
 
 def test_josa():

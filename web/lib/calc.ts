@@ -165,20 +165,19 @@ export function resizeCard(items: GridItem[], id: string, w: number, h: number) 
   return compactLayout(items.map(i => (i === item ? { ...i, layout: next } : i)), id);
 }
 
-// 손잡이를 끌 때의 새 크기: 포인터가 카드 왼쪽 위에서 얼마나 떨어졌는지(dx, dy 픽셀)를 칸으로
-export function sizeAt(dx: number, dy: number, { col, row, gap }: GridBox) {
-  return { w: clampInt(Math.round((dx + gap) / col), FRAME_MIN, GRID_MAX), h: clampInt(Math.round((dy + gap) / row), FRAME_MIN, GRID_MAX) };
+// 손잡이를 끌 때의 새 크기: 포인터가 카드 왼쪽 위에서 얼마나 떨어졌는지(dx, dy 픽셀)를 칸으로. (B5) max: 가장 큰 너비·높이(섹션 눈금은 섹션의 눈금 수, 수정 명세 plans/dash-blocks.md "B5 sizeAt (수정)")
+export function sizeAt(dx: number, dy: number, { col, row, gap }: GridBox, max: { w: number; h: number } = { w: GRID_MAX, h: GRID_MAX }) {
+  return { w: clampInt(Math.round((dx + gap) / col), FRAME_MIN, max.w), h: clampInt(Math.round((dy + gap) / row), FRAME_MIN, max.h) };
 }
 
 // 새 카드를 놓을 자리: 맨 아래(왼쪽)
 /** 쪽(탭): 카드가 놓인 쪽 이름. 쪽 목록에 없는 이름(쪽을 정하지 않은 카드, 지운 쪽)은 첫 쪽 */
-export const pageOf = (card: Pick<Card, "view">, pages: string[]) => pages.includes(card.view?.page ?? "") ? card.view.page! : pages[0];
-/** page 쪽의 카드만(page가 목록에 없으면 첫 쪽). 쪽을 나누지 않았으면 전부 */
-export const onPage = <T extends Pick<Card, "view">>(cards: T[], pages: string[] | undefined, page: string) =>
+/** (B5) 쪽이 있는 것: 카드와 섹션(view.page) */
+export type Paged = { view?: { page?: string } };
+export const pageOf = (card: Paged, pages: string[]) => pages.includes(card.view?.page ?? "") ? card.view!.page! : pages[0];
+/** page 쪽의 카드만(page가 목록에 없으면 첫 쪽). 쪽을 나누지 않았으면 전부. (B5) 섹션도 같은 규칙 */
+export const onPage = <T extends Paged>(cards: T[], pages: string[] | undefined, page: string) =>
   !pages?.length ? cards : cards.filter(c => pageOf(c, pages) === (pages.includes(page) ? page : pages[0]));
-/** 새 카드를 지금 보는 쪽에 놓는다(쪽을 나누지 않았으면 그대로) */
-export const onPageNow = (card: Card, pages: string[] | undefined, page: string): Card =>
-  pages?.length ? { ...card, view: { ...card.view, page: pages.includes(page) ? page : pages[0] } } : card;
 export function nextLayout(items: GridItem[], w = 6, h = 8): Layout {
   return { x: 0, y: Math.min(999, Math.max(0, ...items.map(i => i.layout.y + i.layout.h))), w, h };
 }

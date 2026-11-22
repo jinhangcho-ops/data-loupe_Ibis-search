@@ -60,6 +60,7 @@ const DRAW: Record<FrameKind, (d: Draw) => ReactNode> = {
     </div>
   ),
   page_tabs: () => <PageTabs frame />,
+  text: d => <div className="fr-text" data-size={d.frame.size ?? "md"} style={{ textAlign: d.frame.align ?? "left" }}>{d.frame.text ?? ""}</div>,
 };
 
 /** card: 요소 카드(kind가 FRAME_KINDS). live: 눌렀을 때 할 일을 하는지(만드는 곳의 편집 중·추가 메뉴의 미리 보기는 false) */

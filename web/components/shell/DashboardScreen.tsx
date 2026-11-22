@@ -9,6 +9,7 @@ import { CardPanel } from "@/components/edit/CardPanel";
 import { Gallery } from "@/components/edit/Shelf";
 import { isFrame } from "@/components/frame/registry";
 import { Grid, useAddShell } from "@/components/grid/Grid";
+import { sectionsOf } from "@/components/grid/sections";
 import { FilterBar } from "./FilterBar";
 import { PageTabs } from "./PageTabs";
 import { PullCleanup } from "./PullCleanup";
@@ -67,6 +68,11 @@ function DashboardView() {
   const merge = consts?.merge, alerts = useMemo(() => !state.dash || !merge ? [] :
     counterAlerts(state.dash.cards.map(c => ({ ...c, data: state.values[c.id]?.data ?? c.data })), state.dash.north_star, state.ctx?.range, merge), [state.dash, state.values, state.ctx, merge]);
   const card = state.editing && !dashOnly ? selectedCard(state) : null;  // 카드 설정 패널은 편집 모드에서 고른 카드만
+  const pageCardIds = () => {  // 쪽은 섹션이 가진다: 지금 쪽 섹션의 조각 중 틀 요소가 아닌 카드
+    if (!state.dash) return [];
+    const { sections, cards } = sectionsOf(state.dash), secs = onPage(sections, state.dash.pages, page);
+    return cards.filter(c => secs.some(s => s.id === c.section) && !isFrame(c.kind)).map(c => c.id);
+  };
   return (
     <div className="board-view" id="dash">
       <Toolbar />
@@ -77,7 +83,7 @@ function DashboardView() {
       {n > 0 && (state.editing || picked > 0) && (
         <div className="ctl board-ctl">
           <span className="hint" id="d-picked" role="status">{picked ? `카드 ${picked}개 선택함` : "그림으로 내보낼 카드를 눌러 고르세요"}</span>
-          <button id="d-all" className="ghost" title="지금 쪽의 카드를 모두 골라요" onClick={() => dispatch({ type: "pick", ids: onPage(state.dash?.cards ?? [], state.dash?.pages, page).filter(c => !isFrame(c.kind)).map(c => c.id) })}>모두 선택</button>
+          <button id="d-all" className="ghost" title="지금 쪽의 카드를 모두 골라요" onClick={() => dispatch({ type: "pick", ids: pageCardIds() })}>모두 선택</button>
           <button id="d-none" className="ghost" onClick={() => dispatch({ type: "pick", ids: [] })}>선택 해제</button>
         </div>
       )}

@@ -153,3 +153,20 @@
 #dash [data-ambient] .fr-btn[aria-pressed=true]::before { content:""; position:absolute; inset:0; padding:.125rem; border-radius:var(--r-ctl); pointer-events:none; background:conic-gradient(from var(--fr-amb), transparent 0turn, color-mix(in srgb, var(--accent) 20%, transparent) .12turn, color-mix(in srgb, var(--accent) 55%, transparent) .25turn, color-mix(in srgb, var(--accent) 20%, transparent) .38turn, transparent .5turn); mask:linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); animation:fr-amb 3s linear infinite; }
 @media (prefers-reduced-motion: reduce) { #dash [data-ambient] .fr-btn[aria-pressed=true]::before { animation:none; } }
 @media (max-width:56.25rem) { #dash .fr-top { flex-wrap:wrap; row-gap:.5rem; padding-block:.5rem; overflow:auto; } }
+/* B5 카드 섹션: 섹션이 쪽 격자의 상자(옛 카드 모양), 조각은 섹션 몸통 격자 안에 놓인다 */
+.board.grid .bsection { display:flex; flex-direction:column; min-height:0; position:relative; padding:0; border:1px solid var(--edge); border-radius:var(--r-board); background:var(--card); box-shadow:var(--raise-sm); }
+.board.grid .bsection .bcard { border:0; background:none; box-shadow:none; border-radius:0; }
+.board.grid .bsection .bcard.sel, .board.grid .bsection .bcard.editing { outline:.125rem solid var(--accent); outline-offset:-.125rem; }
+.bsec-title { flex:none; padding:var(--card-py) var(--card-px) 0; font-size:var(--fs-sm); font-weight:600; }
+.bsec-body { flex:1; min-height:0; display:grid; grid-template-columns:repeat(var(--cols), minmax(0, 1fr)); grid-template-rows:repeat(var(--rows), minmax(0, 1fr)); gap:0; position:relative; }
+.sec-tools { flex:none; display:flex; align-items:center; gap:.25rem; padding:.25rem .5rem; border-bottom:1px solid var(--line); }
+.sec-tools input { flex:1; min-width:0; }
+.sec-align { display:flex; gap:.125rem; }
+.sresize { position:absolute; right:-.375rem; bottom:-.375rem; z-index:2; width:1.125rem; height:1.125rem; cursor:nwse-resize; touch-action:none; background:linear-gradient(135deg, transparent 52%, var(--faint) 52%, var(--faint) 60%, transparent 60%, transparent 72%, var(--faint) 72%, var(--faint) 80%, transparent 80%); }
+.bsec-body .guide { position:absolute; pointer-events:none; background:var(--accent); z-index:4; }
+.bsec-body .guide.x { top:0; bottom:0; width:.0625rem; }
+.bsec-body .guide.y { left:0; right:0; height:.0625rem; }
+.fr-text { white-space:pre-wrap; overflow:auto; min-height:0; }
+.fr-text[data-size=sm] { font-size:var(--fs-sm); }
+.fr-text[data-size=md] { font-size:var(--fs-md); }
+.fr-text[data-size=lg] { font-size:var(--fs-lg); }

@@ -2,9 +2,9 @@
 // Recharts 차트도 SVG라 차트·SVG·HTML 카드를 모두 같은 길로 그린다: 화면의 카드 몸통을 복사해 계산된 스타일을 박고 SVG foreignObject로 직렬화 → Image → canvas.
 // 그림 모드(밝게·어둡게)는 data-theme을 잠깐 바꿔 그 모드의 계산된 색을 박는다. 몸통은 화면 크기 그대로 그리고 그림 칸에 비율을 지켜 맞춘다(fitRect).
 // 모두 브라우저에서만(단추를 눌렀을 때) 부른다.
-import { fitRect, NOTE_BAND, PICTURE_HEIGHT, REPORT, reportBox, reportLayout, TITLE_BAND } from "./layout";
-import { gridItems } from "@/components/grid/useDrag";
-import type { Card } from "@/lib/types";
+import { fitRect, NOTE_BAND, PICTURE_HEIGHT, pieceRect, REM_VALUE, REPORT, REPORT_REM, reportBox, reportLayout, TEXT_LINE, textLines, TITLE_BAND } from "./layout";
+import { TEXT_SIZE_VARS } from "@/components/frame/registry";
+import type { Card, Section } from "@/lib/types";
 
 export type Colors = { card: string; head: string; ink: string; text: string; line: string };
 const NOPRINT = "[data-noprint]";  // 화면에서만 쓰는 조작 칸(곡면 조절 줄·손잡이): 그림에는 넣지 않는다
@@ -114,12 +114,12 @@ export async function cardPicture(box: HTMLElement, title: string, mode: string,
   return out.toDataURL("image/" + type);
 }
 
-/** 보고서 canvas(옛 reportCanvas): 제목 줄 + 카드마다 격자 자리의 상자(이름 줄 + 그림). 그리지 못한 카드는 이유 글만 */
-export async function reportCanvas(cards: Card[], title: string, mode: string, scale = 2, note = "") {
+/** 보고서 canvas(옛 reportCanvas): 제목 줄 + 섹션마다 격자 자리의 상자(섹션 이름 줄) 안에 조각마다 이름 줄 + 그림. 그리지 못한 조각은 이유 글만. (B5) 수정 명세 plans/dash-blocks.md "B5 reportCanvas (수정)" */
+export async function reportCanvas(sections: Section[], cards: Card[], title: string, mode: string, scale = 2, note = "") {
   const grid = document.querySelector<HTMLElement>(".board.grid");
   if (!grid) throw new Error("화면에 대시보드 격자가 없어 보고서를 그리지 못했어요.");
   const css = getComputedStyle(grid), box = reportBox(name => css.getPropertyValue(name));
-  const colors = themeColors(mode), lay = reportLayout(gridItems(cards), note ? { ...box, head: box.head + NOTE_BAND } : box);  // 화면 격자와 같은 자리(둥근 카드 최소 높이 포함)
+  const colors = themeColors(mode), lay = reportLayout(sections, note ? { ...box, head: box.head + NOTE_BAND } : box);  // 섹션 자리는 부른 쪽이 붙여 둔 것
   const out = Object.assign(document.createElement("canvas"), { width: lay.width * scale, height: lay.height * scale });
   const ctx = out.getContext("2d")!;
   const font = (px: number, weight = 400) => `${weight} ${px * scale}px ${FONT}`;
@@ -136,24 +136,46 @@ export async function reportCanvas(cards: Card[], title: string, mode: string, s
   ctx.textAlign = "left";
   if (note) ctx.fillText(note, box.pad * scale, (REPORT.head + NOTE_BAND / 2) * scale, (lay.width - box.pad * 2) * scale);
   const say = (text: string, x: number, y: number, w: number) => { ctx.fillStyle = colors.text; ctx.font = font(box.small); ctx.fillText(text, x + box.padX * scale, y + (box.padY + REPORT.band + 20) * scale, w - 2 * box.padX * scale); };
-  for (const card of cards) {
-    const r = lay.rects[card.id], [x, y, w, h] = [r.x * scale, r.y * scale, r.w * scale, r.h * scale];
+  for (const sec of sections) {
+    const sr = lay.rects[sec.id], band = sec.title ? REPORT.band : 0;
     ctx.fillStyle = colors.card;
     ctx.strokeStyle = colors.line;
     ctx.lineWidth = scale;
     ctx.beginPath();
-    ctx.roundRect(x, y, w, h, box.radius * scale);
+    ctx.roundRect(sr.x * scale, sr.y * scale, sr.w * scale, sr.h * scale, box.radius * scale);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = colors.ink;
-    ctx.font = font(14, 600);
-    ctx.fillText(card.title, x + box.padX * scale, y + (box.padY + REPORT.band / 2) * scale, w - 2 * box.padX * scale);
-    const bodyH = r.h - 2 * box.padY - REPORT.band, bodyW = r.w - 2 * box.padX, cardEl = cardBox(cards, card.id);
-    if (!cardEl || bodyH < 20) { say(cardEl ? "" : "화면에 없는 카드예요.", x, y, w); continue; }
-    try {
-      const img = await cardImage(cardEl), f = fitRect(img.width, img.height, bodyW, bodyH);
-      ctx.drawImage(img, x + (box.padX + f.x) * scale, y + (box.padY + REPORT.band + f.y) * scale, f.w * scale, f.h * scale);
-    } catch (e) { say((e as Error).message, x, y, w); }
+    if (sec.title) {
+      ctx.fillStyle = colors.ink;
+      ctx.font = font(14, 600);
+      ctx.fillText(sec.title, (sr.x + box.padX) * scale, (sr.y + box.padY + REPORT.band / 2) * scale, (sr.w - 2 * box.padX) * scale);
+    }
+    for (const card of cards.filter(c => c.section === sec.id)) {
+      const r = pieceRect(sr, sec.layout, card.layout, band), [x, y, w] = [r.x * scale, r.y * scale, r.w * scale];
+      if (card.kind === "text") {
+        const f = card.view?.frame ?? {}, sizeVar = TEXT_SIZE_VARS[f.size ?? "md"], raw = css.getPropertyValue(sizeVar).trim();
+        if (!REM_VALUE.test(raw)) throw new Error(`대시보드 모양 값 ${sizeVar}을 읽지 못했어요: "${raw}"`);
+        const px = parseFloat(raw) * REPORT_REM, align = f.align ?? "left";
+        ctx.font = font(px);
+        ctx.fillStyle = colors.ink;
+        ctx.textBaseline = "top";
+        ctx.textAlign = align;
+        const tx = align === "left" ? r.x + box.padX : align === "center" ? r.x + r.w / 2 : r.x + r.w - box.padX;
+        textLines(f.text ?? "", px, r.h, box.padY).forEach((line, i) => ctx.fillText(line, tx * scale, (r.y + box.padY + i * px * TEXT_LINE) * scale, (r.w - 2 * box.padX) * scale));
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        continue;
+      }
+      ctx.fillStyle = colors.ink;
+      ctx.font = font(14, 600);
+      ctx.fillText(card.title, x + box.padX * scale, y + (box.padY + REPORT.band / 2) * scale, w - 2 * box.padX * scale);
+      const bodyH = r.h - 2 * box.padY - REPORT.band, bodyW = r.w - 2 * box.padX, cardEl = cardBox(cards, card.id);
+      if (!cardEl || bodyH < 20) { say(cardEl ? "" : "화면에 없는 카드예요.", x, y, w); continue; }
+      try {
+        const img = await cardImage(cardEl), f = fitRect(img.width, img.height, bodyW, bodyH);
+        ctx.drawImage(img, x + (box.padX + f.x) * scale, y + (box.padY + REPORT.band + f.y) * scale, f.w * scale, f.h * scale);
+      } catch (e) { say((e as Error).message, x, y, w); }
+    }
   }
   return out;
 }

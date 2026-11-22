@@ -121,7 +121,11 @@ export type MoreValues = {
 };
 export type TreeItem = { name: string; value: number; children?: TreeItem[] };
 
-export type Card = { id: string; kind: CardKind; title: string; layout: Layout; colors: Colors; view: CardView; source: CardSource; data: CardData };
+/** 카드(B5부터 "조각"). section이 있으면 layout은 그 섹션 눈금의 자리(dash_store.check_spot), 없으면 옛 카드라 layout은 쪽 격자 자리(섹션 하나를 꽉 채운 조각으로 읽는다: grid/sections.sectionsOf) */
+export type Card = { id: string; kind: CardKind; title: string; layout: Layout; colors: Colors; view: CardView; source: CardSource; data: CardData; section?: string };
+
+/** (B5) 섹션(dash_store.check_section): 쪽 12칸 격자의 자리, 이름(비면 이름 줄 없음), 크기를 바꾸면 조각도 같이 바뀌는지, 놓인 쪽(view.page) */
+export type Section = { id: string; title: string; layout: Layout; follow: boolean; view: { page?: string } };
 
 export type NorthStar = { card: string; counters: string[]; limits?: Record<string, { op: ">=" | "<="; value: number }> };
 
@@ -132,6 +136,7 @@ export type Dashboard = {
   filters?: DashFilter[];  // 필터 칸 목록(옛 저장본에는 없다)
   pages?: string[];        // 쪽(탭) 이름 목록. 비었으면 쪽을 나누지 않는다(옛 저장본에는 없다)
   pull?: Pull;             // (B11) 받기 설정(옛 저장본에는 없다: consts.dash.pull.default)
+  sections?: Section[];    // (B5) 섹션 목록(옛 저장본에는 없다: 카드마다 섹션 하나로 읽는다)
 };
 /** (B11) 갱신 주기 단위(dash_store.PULL_UNITS의 키) */
 export type PullUnit = "s" | "m" | "h";
