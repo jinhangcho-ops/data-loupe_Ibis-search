@@ -15,6 +15,7 @@ import { DualTrend } from "./svg/DualTrend";
 import { Funnel } from "./svg/Funnel";
 import { Gauge } from "./svg/Gauge";
 import { Kpi } from "./svg/Kpi";
+import { List } from "./svg/List";
 import { Tile } from "./svg/Tile";
 import { MapCard } from "./svg/MapCard";
 import { Table } from "./svg/Rows";
@@ -50,11 +51,11 @@ const Geo = (p: P) => (
 /** 이 컴포넌트가 그리는 카드 종류 → 컴포넌트(옛 SVG_KINDS) */
 export const PAINTERS: Record<string, ComponentType<P>> = {
   kpi: Kpi, tile: Tile, donut_kpi: Donut, gauge: Gauge, summary: Summary,dual_trend: DualTrend, stripes: Stripes, blocks: Blocks, target_trend: TargetTrend,
-  table: Table, funnel: Funnel, status: Status, sentence: Sentence, alerts: Alerts, map: MapCard, deviation: Deviation, geomap: Geo,
+  table: Table, list: List, funnel: Funnel, status: Status, sentence: Sentence, alerts: Alerts, map: MapCard, deviation: Deviation, geomap: Geo,
   histogram: Histogram, boxplot: BoxPlot, heatmap: Heatmap, calheat: CalHeat, treemap: Treemap, sunburst: Sunburst, bullet: Bullet, bump: Bump,
   sankey: Sankey, cohort: Cohort, candle: Candle, wordcloud: WordCloud,
 };
-export function SvgCard({ card, data, result, palette, ctx }: CardProps) {
+export function SvgCard({ card, data, result, palette, ctx, pressed, onPress }: CardProps) {
   const theme = useTheme(), consts = useConstants(), merge = consts?.merge;
   const colors = useMemo(() => ({ ...theme, palette, ...(palette.length ? { series: shades(palette[0]), hi: palette[1] ?? theme.hi } : {}) }), [theme, palette]);  // 대시보드가 고른 표시색·강조색
   const gone = !!consts && (consts.dash.gone_kinds.includes(card.kind) || (card.kind === "table" && !!card.source?.body && !(card.source.body.series?.length)));  // 더는 지원하지 않는 카드(서버 GONE_KINDS·계열 없는 표)
@@ -62,5 +63,5 @@ export function SvgCard({ card, data, result, palette, ctx }: CardProps) {
   const Paint = PAINTERS[card.kind];
   if (!Paint) return <RawValue data={data} result={result} />;
   if (!(data.by_unit || data.values || data.columns || data.bins)) return <Box cls="summary"><div className="sum-text">아직 구한 값이 없어요</div></Box>;
-  return <Paint card={{ ...card, data }} colors={colors} range={ctx?.range} merge={merge ?? []} filters={ctx?.filters} prev={ctx?.prev} mode={ctx?.compare_mode} />;
+  return <Paint card={{ ...card, data }} colors={colors} range={ctx?.range} merge={merge ?? []} filters={ctx?.filters} prev={ctx?.prev} mode={ctx?.compare_mode} pressed={pressed} onPress={onPress} />;
 }

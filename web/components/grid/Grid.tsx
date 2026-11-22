@@ -17,6 +17,7 @@ import { useShell } from "@/components/shell/ShellProvider";
 import { cardValue } from "@/components/cards/svg/__pure__";
 import { GRID_COLS, cellAt, clampLayout, compactLayout, isPoints, moveCard, onPage, pageOf } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
+import { pullOf } from "@/lib/pull";
 import { useDash } from "@/lib/store";
 import { sameSource } from "@/lib/series";
 import { freshLinks, isSender, onlySeries } from "@/lib/links";
@@ -108,6 +109,7 @@ type PieceProps = Shared & { card: Card; l: Layout; drag: Pick<Drag, "startMove"
 function Piece({ card, l, drag, edit, look, star, palette, shares, setShares, pick, cross, remove }: PieceProps) {
   const { state, dispatch } = useDash();
   const { compares, dashOnly, build, conn, setZoom, ctxOf, unitOf, viewOf, presses, press, busy } = useShell();
+  const consts = useConstants(), pc = !!consts && !!state.dash && pullOf(state.dash, consts.dash.pull).calc === "pc", pickable = !build && (!!conn || pc);  // 보는 곳에서 연결이 있거나 PC 계산 대시보드면 누르기를 받는다(ShellProvider recomputeRange와 같은 판정)
   const { startMove, startResize } = drag;
   const cx = ctxOf(card.id), v = viewOf(card.id), loading = busy.includes(card.id);
   const pressable = look && card.kind === "tile" && !!card.view.press, on = presses.some(p => p.from === card.id);
@@ -166,7 +168,7 @@ function Piece({ card, l, drag, edit, look, star, palette, shares, setShares, pi
         {tools}
       </div>
       <div className={"bbody" + (paint ? " paint" : "")} onClick={look && !isShell(card) ? e => { const hit = (e.target as Element).closest(PRESSABLE); if (!hit || !e.currentTarget.contains(hit)) { if (pressable) toggle(); else setZoom(card.id); } } : undefined}>
-        {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={drawn} result={res} palette={palette} ctx={cx} onPick={build || !conn ? undefined : (column, value) => cross(card.id, column, value)} share={shares.includes(card.id) || !!v?.share} />}
+        {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={drawn} result={res} palette={palette} ctx={cx} onPick={pickable ? (column, value) => cross(card.id, column, value) : undefined} pressed={presses.find(p => p.from === card.id)?.value} onPress={pickable ? (column, values) => { press(card.id, values.length ? { value: { column, in: values } } : null).catch(e => dispatch({ type: "error", message: (e as Error).message })); } : undefined} share={shares.includes(card.id) || !!v?.share} />}
         {loading && <i className="bspin" aria-hidden="true" />}
       </div>
       {said && <div className={`bcmp ${said.tone} [padding:0_.625rem]`} title={said.delta_text}>{said.text}</div>}
@@ -237,7 +239,7 @@ export function Grid() {
   const { state, dispatch } = useDash();
   const { dashOnly, build, conn, presses, press, unitOf, ctxOf, clearFilters, page, zoom, setZoom } = useShell();
   const [shares, setShares] = useState<string[]>([]);  // 비율(%)로 보는 카드 id(저장하지 않는다)
-  // 누르면 거르기(4단계): 같은 값을 다시 누르면 푼다. 보는 곳에서 연결돼 있을 때만(만드는 곳에서는 카드 누르기가 설정 열기다)
+  // 누르면 거르기(4단계): 같은 값을 다시 누르면 푼다. 보는 곳에서 연결돼 있거나 PC 계산 대시보드일 때(만드는 곳에서는 카드 누르기가 설정 열기다)
   const cross = (from: string, column: string, value: string) => {
     const on = presses.some(p => p.from === from && p.value?.column === column && p.value.in[0] === value);
     press(from, on ? null : { value: { column, in: [value] } }).catch(e => dispatch({ type: "error", message: (e as Error).message }));

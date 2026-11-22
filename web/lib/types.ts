@@ -11,7 +11,7 @@ export type Layout = { x: number; y: number; w: number; h: number };
 /** 카드 종류(dash_store.KINDS) */
 export type CardKind =
   | "chart" | "analysis" | "metric" | "kpi" | "tile" | "donut_kpi" | "gauge" | "summary" | "dual_trend" | "stripes" | "blocks"
-  | "target_trend" | "map" | "alerts" | "deviation" | "funnel" | "table" | "status" | "sentence" | "geomap"
+  | "target_trend" | "map" | "alerts" | "deviation" | "funnel" | "table" | "list" | "status" | "sentence" | "geomap"
   | "histogram" | "boxplot" | "heatmap" | "calheat" | "treemap" | "sunburst" | "bullet" | "bump" | "sankey" | "cohort" | "candle" | "wordcloud" | FrameKind;
 
 /** 차트 종류(dash_store.CHART_TYPES). ""이면 계열마다 정한 대로 */
@@ -29,6 +29,10 @@ export type CondRule = { column: string; match: string; color: string; arrow: "n
 export type StateRule = { column: string; op: string; value: number | string; level: "warn" | "bad" };
 export type Target = { value: number } | { name?: string; period?: string; scope?: string };
 export type Slot = { label: string; format: ValueFormat; unit_text: string; color: string; y?: string; agg?: string };
+/** (B3) 목록 줄의 부분 하나(dash_store.check_list): 모양, 읽을 컬럼(swap이면 값 바꾸기 단추가 고른 값), 값 모양, 색 규칙(맞으면 그 색), 막대 기준, 줄 안 자리 */
+export type ListPart = { kind: "text" | "chip" | "tag" | "number" | "bar"; column: string; swap: boolean; format: ValueFormat; rules: { match: string; color: string }[]; basis: "max" | "sum"; side: "start" | "end" };
+/** (B3) 목록 카드(kind list)의 모양 설정 view.list: 줄 부분들(차례대로), 줄 고르기, 거를 컬럼(묶음 컬럼), 값 바꾸기 단추들, 그림·보고서 모양 */
+export type ListView = { parts: ListPart[]; pick: "none" | "one" | "many"; key: string; swaps: { label: string; value: string }[]; report: "screen" | "table" };
 
 /** 보기 설정(check_view + check_extra + check_more). 3단계 카드 설정은 종류마다 쓰는 것만 있다 */
 export type CardView = {
@@ -84,6 +88,9 @@ export type CardView = {
   link_map?: Record<string, Record<string, string>>;  // (B4) 상대 id → {보내는 쪽 컬럼: 상대 컬럼}
   note?: string;  // (B2) 숫자 타일 설명 글
   press?: "cond" | "period";  // (B2) 타일 누르기: 조건만 / 기간 줄도(없으면 꺼짐)
+  list?: ListView;  // (B3) 목록 카드의 줄 부분·고르기·값 바꾸기·그림 모양
+  list_sort?: { column: string; desc: boolean };  // (B3) 목록 정렬(바꾸면 다시 구함)
+  list_rows?: number;  // (B3) 목록 줄 수
   page?: string;                      // 놓인 쪽(탭) 이름. 대시보드의 쪽 목록에 없으면 첫 쪽에 보인다
   groups?: GroupView;              // 표시할 그룹 고르기(Phase 4, lib/groups.applyGroups)
   cloud?: { mode: "values" | "labels" | "words"; tags?: string[]; rows?: "all" | "tagged"; match?: "any" | "all"; text?: string; pos?: ("noun" | "verb" | "adj" | "foreign")[]; stop?: string[]; min_len?: number };  // 워드클라우드 방식(Phase 4)
@@ -222,6 +229,7 @@ export type Constants = {
     units: Record<Unit, string>; locked: string; max_points: number; aggs: string[]; merge: string[]; agg_names: Record<string, string>;
     auto: AutoTable; auto_names: Record<AutoRule, string>; viz: { words: SemanticWords; query_auto: AutoView }; orders: Order[]; order_names: Record<Order, string>;
     pull: PullConsts;  // (B11) dash_store.PULL_* (dash_app.dash_constants)
+    list: { max_parts: number; max_swaps: number; max_rows: number; part_kinds: ListPart["kind"][]; picks: ListView["pick"][]; bases: ListPart["basis"][]; sides: ListPart["side"][]; reports: ListView["report"][]; default: { list: ListView; list_sort: { column: string; desc: boolean }; list_rows: number } };  // (B3) 목록 카드 상수
     gone_kinds: string[]; gone_text: string;  // (B11) 앱에서 없앤 카드 종류(dash_store.GONE_KINDS)와 그 안내 글(dash_store.GONE_CARD)
   };
   [more: string]: unknown;

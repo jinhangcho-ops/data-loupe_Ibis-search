@@ -56,7 +56,7 @@ export type SeriesView = { series: string; share: boolean };
 /** [SPECIFICATION] plans/dash-blocks.md#isSender
  *  이 종류가 링크를 보내는지(서버 SENDER_KINDS와 같다). */
 export function isSender(kind: string): boolean {
-  return kind === "chart" || kind === "tile" || SENDER_FRAMES.includes(kind);
+  return kind === "chart" || kind === "tile" || kind === "list" || SENDER_FRAMES.includes(kind);
 }
 
 /** [SPECIFICATION] plans/dash-blocks.md#linkTargets

@@ -1,7 +1,7 @@
 // N6 — 카드·보고서 그림(옛 dash_report.js nodeToImage·inlineStyles·inlineTiles·paintedCanvas·reportCanvas, board.js themeColors·titledPicture).
 // Recharts 차트도 SVG라 차트·SVG·HTML 카드를 모두 같은 길로 그린다: 화면의 카드 몸통을 복사해 계산된 스타일을 박고 SVG foreignObject로 직렬화 → Image → canvas.
 // 그림 모드(밝게·어둡게)는 data-theme을 잠깐 바꿔 그 모드의 계산된 색을 박는다. 몸통은 화면 크기 그대로 그리고 그림 칸에 비율을 지켜 맞춘다(fitRect).
-// 모두 브라우저에서만(단추를 눌렀을 때) 부른다.
+// 모두 브라우저에서만(단추를 눌렀을 때) 부른다. (B3) 찍는 동안 html[data-picture]: 목록의 '표로' 모양
 import { fitRect, NOTE_BAND, PICTURE_HEIGHT, pieceRect, REM_VALUE, REPORT, REPORT_REM, reportBox, reportLayout, TEXT_LINE, textLines, TITLE_BAND } from "./layout";
 import { TEXT_SIZE_VARS } from "@/components/frame/registry";
 import type { Card, Section } from "@/lib/types";
@@ -54,8 +54,9 @@ function inlineTiles(root: Element) {
 /** 화면의 요소 하나 → 그 크기의 Image. drop은 복사본에서 뺄 것(카드 머리 줄 등). 스타일은 지금 data-theme 기준 */
 async function nodeToImage(node: HTMLElement, drop = "") {
   const width = Math.max(1, node.clientWidth), height = Math.max(1, node.clientHeight);
+  document.documentElement.dataset.picture = "";
   const copy = node.cloneNode(true) as HTMLElement;
-  inlineStyles(node, copy);
+  try { inlineStyles(node, copy); } finally { delete document.documentElement.dataset.picture; }
   copy.querySelectorAll([drop, NOPRINT].filter(Boolean).join(", ")).forEach(n => n.remove());
   Object.assign(copy.style, { position: "static", left: "0px", top: "0px", margin: "0px", width: width + "px", height: height + "px" });
   await inlineTiles(copy);

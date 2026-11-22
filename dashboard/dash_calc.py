@@ -83,7 +83,7 @@ VALUE_KINDS = ("kpi", "tile", "donut_kpi", "gauge", "summary", "dual_trend", "st
 MAX_GROUPS = 100  # 요약의 기여 분해에 쓰는 그룹 수
 TARGETS_FILE = "targets_file.json"  # 목표 파일 경로만 둔다 {path}
 WATCH_KINDS = ("status", "alerts", "map")  # 엔티티별 최근 행을 상태 규칙(watch.py)으로 보는 카드
-TABLE_KINDS = ("table", "sentence", "deviation", *WATCH_KINDS)
+TABLE_KINDS = ("table", "list", "sentence", "deviation", *WATCH_KINDS)
 MAX_TABLE_ROWS = 500  # 표 카드에 저장하는 집계 행 수
 MAX_ENTITY_ROWS = 2000  # 상태·경고·배치도가 읽는 행 수
 MAX_ENTITIES = 50  # 편차 표의 엔티티 수
@@ -590,6 +590,8 @@ def linked_columns(dash: dict, card: dict) -> set[str]:
         elif sender["kind"] == "tile" and view.get("press"):
             tile = tile_reads(body)
             reads = tile["conditions"] + (tile["periods"] if view["press"] == "period" else [])
+        elif sender["kind"] == "list":
+            reads = [view["list"]["key"]] if (view.get("list") or {}).get("pick", "none") != "none" and view["list"].get("key") else []
         else:
             reads = []
         mapping = (view.get("link_map") or {}).get(card["id"]) or {}
@@ -846,6 +848,48 @@ def table_data(card, ctx):
     key = lambda row: "\x01".join(js_text(v) for v in row[:len(groups)])  # 화면(renderTable)이 행에서 JS String으로 만드는 열쇠와 같게
     return {"values": {"columns": columns, "rows": now[:MAX_TABLE_ROWS], "more": more, "prev": {key(r): r[len(groups):] for r in old} if old else None},
             "note": f"행이 많아 앞 {MAX_TABLE_ROWS}개만 저장했어요." if more else ""}
+
+
+def list_data(card: dict, ctx: dict | None) -> dict:
+    """[SPECIFICATION] plans/dash-blocks.md#list_data
+    목록 카드: 묶음 컬럼별 계열 집계를 사용자가 정한 정렬·줄 수로 구해 컬럼별 값 목록으로 돌려준다."""
+    view, body = card["view"], card["source"]["body"]
+    groups = view.get("group_cols") or []
+    series = clean_series(body["series"]) if body.get("series") else []
+    if not groups and not series:
+        raise ValueError("목록은 묶음 컬럼이나 값을 하나 이상 고르세요.")
+    expr = card_expr(card, ctx, (ctx or {}).get("range"))
+    for c in groups:
+        parse.check_name(c, expr.columns, "묶음 컬럼")
+    names = [series_name(s) for s in series]
+    metrics = {f"__v{i}": final_expr(expr, s) for i, s in enumerate(series)}
+    if groups and series:
+        t = expr.group_by([expr[c].name(c) for c in groups]).aggregate(**metrics)
+    elif groups:
+        t = expr.select(*groups).distinct()
+    else:
+        t = expr.aggregate(**metrics)
+    sort = view.get("list_sort") or {"column": "", "desc": False}
+    col = sort["column"]
+    if col == "":
+        by = groups
+    elif col in groups:
+        by = [col]
+    elif col in names:
+        by = [f"__v{names.index(col)}"]
+    else:
+        raise ValueError(f"정렬 컬럼 '{col}'이 이 목록에 없어요. 카드 설정에서 다시 고르세요.")
+    keys = [ibis.desc(k) if sort["desc"] else ibis.asc(k) for k in by] + [ibis.asc(c) for c in groups if c not in by]
+    n = view.get("list_rows") or dash_store.LIST_ROWS_DEFAULT
+    out = (t.order_by(keys) if keys else t).limit(n + 1)
+    cast = {c: out[c].cast("string") for c in out.columns if out[c].type().is_temporal()} | {c: out[c].cast("float64") for c in out.columns if out[c].type().is_decimal()}
+    if cast:
+        out = out.mutate(**cast)
+    frame = run(lambda: out.to_polars())
+    data = [s.to_list()[:n] for s in frame.get_columns()]
+    more = frame.height > n
+    columns = [{"name": c, "kind": "group"} for c in groups] + [{"name": names[i], "kind": "value", "agg": s["agg"]} for i, s in enumerate(series)]
+    return {"values": {"columns": columns, "data": data, "more": more}, "note": f"줄이 많아 앞 {n:,}줄만 보여요." if more else ""}
 
 
 def sentence_data(card, ctx):
@@ -1363,7 +1407,7 @@ def definition(card):
     source = card["source"]
     points = {"points": card["view"].get("points")} if card["view"]["type"] in POINT_TYPES else {}
     view = card["view"]
-    keys = ("target", "group", "format") if card["kind"] in VALUE_KINDS else ("group_cols", "template", "blanks", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "bucket") if card["kind"] in TABLE_KINDS else ("geo",) if card["kind"] == "geomap" else ("bins", "unit", "cloud", "flow_unlimited", "flow_dropout") if card["kind"] in SHAPE_KINDS else ()
+    keys = ("target", "group", "format") if card["kind"] in VALUE_KINDS else ("group_cols", "template", "blanks", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "bucket", "list_sort", "list_rows") if card["kind"] in TABLE_KINDS else ("geo",) if card["kind"] == "geomap" else ("bins", "unit", "cloud", "flow_unlimited", "flow_dropout") if card["kind"] in SHAPE_KINDS else ()
     extra = {"view": {k: view[k] for k in keys if k in view}} if keys else {}  # 값에 영향을 주는 설정
     if merges_on_server(card):
         extra = {"view": {**extra.get("view", {}), "groups": {"ranges": card["view"]["groups"]["ranges"], "merge": True}}}
@@ -1396,6 +1440,8 @@ def compute(card, now, ctx=None):
                 found = {**found, "reads": tile_reads(source["body"])}
         elif card["kind"] == "table":
             found = table_data(card, ctx)
+        elif card["kind"] == "list":
+            found = list_data(card, ctx)
         elif card["kind"] == "sentence":
             found = sentence_data(card, ctx)
         elif card["kind"] == "deviation":
@@ -1408,7 +1454,7 @@ def compute(card, now, ctx=None):
             found = shape_data(card, ctx)
         else:
             found = range_data(card) if card["kind"] == "chart" and merges_on_server(card) else chart_data({**body, "groups": server_picks(card), "chart_type": card["view"]["type"]}, fetch_window(ctx)) if card["kind"] == "chart" else metric_data(body)
-        if card["kind"] in ("table", "sentence", "deviation"):  # 기간 기준 날짜 컬럼 후보(하나뿐이면 화면이 자동으로 채운다)
+        if card["kind"] in ("table", "list", "sentence", "deviation"):  # 기간 기준 날짜 컬럼 후보(하나뿐이면 화면이 자동으로 채운다)
             found.setdefault("date_cols", date_columns(querying.build(source["body"], select=False)))
         if card["kind"] == "chart" and card["view"]["type"] in POINT_TYPES:  # 점 종류를 고른 카드는 점도 다시 구한다
             found["points"] = points_of(body, (card["view"].get("points") or {}).get("size"), {**(card["view"].get("auto") or {}), **({"density": False} if card["view"].get("all_data") else {})})  # 차트 값과 같은 기간. 모든 데이터면 육각 칸 대신 받은 점 전부

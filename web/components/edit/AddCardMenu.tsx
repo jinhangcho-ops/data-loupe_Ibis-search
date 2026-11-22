@@ -265,7 +265,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       {is("stripes") && <Txt label="칸 수" type="number" min={1} max={100} width={60} value={f.cells} onChange={v => set("cells", v)} />}
       {is("blocks") && <Txt label="한 칸 크기" type="number" placeholder="자동" width={90} value={f.size} onChange={v => set("size", v)} />}
       {is("table") && <Txt label="행 수" type="number" min={1} max={100} width={60} value={f.rowCount} onChange={v => set("rowCount", v)} />}
-      {is("table") && <Txt label="묶음 컬럼" placeholder="예: 매장, 날짜 (쉼표, 3개까지)" value={f.groupCols} onChange={v => set("groupCols", v)} />}
+      {is("table", "list") && <Txt label="묶음 컬럼" placeholder="예: 매장, 날짜 (쉼표, 3개까지)" value={f.groupCols} onChange={v => set("groupCols", v)} />}
       {is("table") && <Check label="합계 줄" checked={f.total} onChange={v => set("total", v)} />}
       {is("table", "sentence") && <LineBox label="색 규칙" value={f.condText} onChange={v => set("condText", v)} parse={parseRuleLine} placeholder={"색 규칙(한 줄에 하나): 컬럼 | 식 | #색 | 화살표 | 칸·줄\n예: 상태 | *지연* | #e03131 | 없음 | 줄"} />}
 

@@ -13,7 +13,7 @@ const src = (p: string) => readFileSync(join(__dirname, "..", p), "utf8");
 const server = readFileSync(join(__dirname, "..", "..", "core", "dash_store.py"), "utf8");
 const words = (text: string) => [...text.matchAll(/"(\w*)"/g)].map(m => m[1]);
 const host = (over: Partial<ActionHost> = {}): ActionHost => ({
-  recompute: vi.fn(), setPage: vi.fn(), dashOnly: false, setDashOnly: vi.fn(), setReport: vi.fn(), setZoom: vi.fn(), flipTheme: vi.fn(), pages: ["첫 쪽", "둘째 쪽"], cardIds: ["c1"],
+  recompute: vi.fn(), setPage: vi.fn(), dashOnly: false, setDashOnly: vi.fn(), setReport: vi.fn(), setZoom: vi.fn(), flipTheme: vi.fn(), pages: ["첫 쪽", "둘째 쪽"], cardIds: ["c1"], saveCsv: vi.fn(),
   flipEasy: vi.fn(), clearFilters: vi.fn(), setSettings: vi.fn(), ...over,
 });
 const frameCard = (kind: string, layout = { x: 0, y: 0, w: 1, h: 1 }) => ({ id: "f1", kind, title: "요소", layout, view: {} }) as unknown as Card;
@@ -39,7 +39,7 @@ describe("등록 자리 한 곳: 화면 registry.ts와 서버 dash_store.py", ()
     expect(Object.keys(FRAME_KINDS).sort()).toEqual(["asof_field", "button", "chip_row", "filter_bar", "nav_rail", "page_tabs", "period_pick", "segment", "text", "top_strip", "unit_seg"]);
   });
   it("할 일 목록에 LLM·도움말처럼 앱에 없는 일이 없다", () => {
-    expect(Object.keys(FRAME_ACTIONS).sort()).toEqual(["dash_only", "easy", "export", "filters_clear", "page", "refresh", "settings", "theme", "zoom"]);
+    expect(Object.keys(FRAME_ACTIONS).sort()).toEqual(["csv", "dash_only", "easy", "export", "filters_clear", "page", "refresh", "settings", "theme", "zoom"]);
   });
 });
 

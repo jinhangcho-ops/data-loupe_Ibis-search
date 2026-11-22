@@ -26,7 +26,7 @@ describe("카드 눌러 서로 거르기", () => {
   it("격자: 같은 값을 다시 누르면 풀고, 만드는 곳이나 연결이 없을 때는 누르기를 받지 않는다", () => {
     const grid = src("components/grid/Grid.tsx");
     expect(grid).toContain("press(from, on ? null : { value: { column, in: [value] } })");
-    expect(grid).toContain("onPick={build || !conn ? undefined : (column, value) => cross(card.id, column, value)}");
+    expect(grid).toContain("onPick={pickable ? (column, value) => cross(card.id, column, value) : undefined}");
     expect(grid).toContain('<CardBody card={big} result={state.values[big.id]} palette={dash.palette} ctx={ctxOf(big.id)} share={shares.includes(big.id)} />');  // 크게 보기 창에서는 받지 않는다
   });
   it("필터 줄: 필터 칸이 없는 컬럼에 걸린 것은 칩으로 보이고 ×로 푼다. 칩만 있어도 줄이 보인다", () => {

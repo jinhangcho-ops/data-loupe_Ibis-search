@@ -178,6 +178,10 @@ export function buildCard(f: Form, aggs: string[], needs: (agg: string) => boole
     view.formats = Object.fromEntries(series.map(s => [seriesTitle(s, aggNames), f.format]));
     view.cond_rules = lines(f.condText, parseRuleLine, "rule");
   }
+  if (k === "list") {
+    view.group_cols = f.groupCols.split(",").map(c => c.trim()).filter(Boolean);
+    if (!(view.group_cols as string[]).length && !series.length) throw new Error("목록은 묶음 컬럼이나 값을 하나 이상 고르세요.");
+  }
   if (k === "sentence") {
     if (!f.template.trim()) throw new Error("문장 틀을 쓰세요. 예: 오늘 매출은 {매출}이에요");
     view.template = f.template.trim();

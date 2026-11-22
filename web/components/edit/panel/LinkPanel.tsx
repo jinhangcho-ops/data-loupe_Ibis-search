@@ -25,7 +25,7 @@ export function LinkPanel({ card, onChange }: LinkPanelProps): ReactNode {
   const to = card.view.link_to ?? linkTargets(card, cards);
   const map = card.view.link_map ?? {};
   const frame = card.view.frame;
-  const sends = card.kind === "chart" || card.kind === "tile" || card.kind === CHIP_ROW || (card.kind === "segment" && frame?.mode === "filter");
+  const sends = card.kind === "list" || card.kind === "chart" || card.kind === "tile" || card.kind === CHIP_ROW || (card.kind === "segment" && frame?.mode === "filter");
   const viewSeg = card.kind === "segment" && !sends;
   const found = (id: string): Card | undefined => cards.find(c => c.id === id);
   // 맞출 컬럼을 고를 상대(데이터 카드): 보내는 쪽이 틀 요소이거나 다른 테이블일 때
@@ -59,6 +59,7 @@ export function LinkPanel({ card, onChange }: LinkPanelProps): ReactNode {
       const r = (card.data as { reads?: TileReads }).reads;
       return r ? [...r.conditions, ...(card.view.press === "period" ? r.periods : [])] : null;
     }
+    if (card.kind === "list") { const l = card.view.list; return l && l.pick !== "none" && l.key ? [l.key] : []; }
     return [frame?.column ?? ""].filter(c => c !== "");
   };
   const read = reads();

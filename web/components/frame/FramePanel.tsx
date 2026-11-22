@@ -34,8 +34,9 @@ export function FramePanel(props: FramePanelProps): ReactNode {
   const frame: FrameSettings = card.view.frame ?? freshFrame(kind);
   const set = (patch: FrameSettings) => onChange({ ...frame, ...patch });
   const pages = state.dash?.pages ?? [];
-  const cards = (state.dash?.cards ?? []).filter(c => !isFrame(c.kind)).map((c): [string, string] => [c.id, c.title]);
   const all = state.dash?.cards ?? [];
+  const cards = all.filter(c => !isFrame(c.kind)).map((c): [string, string] => [c.id, c.title]);
+  const lists = all.filter(c => c.kind === "list").map((c): [string, string] => [c.id, c.title]);
   const [cols, setCols] = useState<string[]>([]);
   const [colsError, setColsError] = useState("");
   // 거를 컬럼 후보: 데이터 카드들이 읽는 표마다 한 번 받은 컬럼 이름의 합집합
@@ -68,7 +69,7 @@ export function FramePanel(props: FramePanelProps): ReactNode {
         <Sel label="아이콘" value={item.icon ?? ""} blank="없음" options={ICONS} onChange={v => put({ icon: v })} />
         <Sel label="할 일" value={item.action ?? ""} blank="정하지 않음" options={ACTION_OPTS} onChange={v => put({ action: v as FrameAction | "", arg: "" })} />
         {need === "page" && <Sel label="이동할 쪽" value={item.arg ?? ""} blank="" options={pages} onChange={v => put({ arg: v })} />}
-        {need === "card" && <Sel label="크게 볼 카드" value={item.arg ?? ""} blank="" options={cards} onChange={v => put({ arg: v })} />}
+        {need === "card" && <Sel label={item.action === "csv" ? "저장할 목록" : "크게 볼 카드"} value={item.arg ?? ""} blank="" options={item.action === "csv" ? lists : cards} onChange={v => put({ arg: v })} />}
       </>
     );
   };

@@ -38,7 +38,7 @@ MAX_DAYS = 3660  # 시간별 카드에 두는 일 값의 최대 일수
 MAX_PALETTE = 12  # 대시보드 팔레트의 색 수
 MAX_COLORS = 100  # 카드 하나의 지정 색 수
 KINDS = ("chart", "analysis", "metric", "kpi", "tile", "donut_kpi", "gauge", "summary", "dual_trend", "stripes", "blocks",
-         "target_trend", "map", "alerts", "deviation", "funnel", "table", "status", "sentence", "geomap",
+         "target_trend", "map", "alerts", "deviation", "funnel", "table", "list", "status", "sentence", "geomap",
          "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bullet", "bump", "sankey", "cohort", "candle", "wordcloud")  # 앞의 셋만 1단계에서 만든다. geomap: 좌표 지도(경계·점·영역별 색). 뒤 열둘(4단계 P14)은 값 모양이 종류마다 달라 dash_calc가 따로 구한다
 GONE_KINDS = ("recent_rows",)  # (B11) 앱에서 없앤 카드 종류: 옛 저장본은 열리고 저장되지만 값을 구하지 않는다
 GONE_CARD = "더는 지원하지 않는 카드예요. 지우고 다른 카드로 만들어 주세요."
@@ -215,12 +215,12 @@ MAX_RULES = 20
 EXTRA_VIEW = ("format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window",
               "cond_rules", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "positions", "bg", "image_path", "group_cols", "formats", "total",
               "template", "blanks", "bucket", "baseline", "threshold", "geo", "rings", "bins", "bands",
-              "funnel_shape", "ladder_scale", "gap_stats", "flow_unlimited", "flow_dropout", "groups", "cloud", "note", "press")  # 3·4단계 카드 종류의 설정
+              "funnel_shape", "ladder_scale", "gap_stats", "flow_unlimited", "flow_dropout", "groups", "cloud", "note", "press", "list", "list_sort", "list_rows")  # 3·4단계 카드 종류의 설정
 GONE_VIEW = ("icon", "fit", "layout")  # (B10b) 없앤 KPI 모양 설정(아이콘·값 맞춤·추이선 자리): 저장된 보기에 있으면 받되 버린다
 FUNNEL_SHAPES = ("flow", "ladder")  # 퍼널 그림: 흐름(생키+표) / 사다리꼴
 GAP_STATS = ("mean", "median", "trimmed")  # 걸린 시간 표에 보일 값
 FRAME_KINDS = ("button", "nav_rail", "top_strip", "page_tabs", "period_pick", "asof_field", "unit_seg", "text", "segment", "chip_row", "filter_bar")  # (B10) 격자에 놓는 틀 요소 종류. 화면의 한 벌은 web/components/frame/registry.ts
-FRAME_ACTIONS = {"export": "", "refresh": "", "page": "page", "theme": "", "dash_only": "", "zoom": "card", "easy": "", "filters_clear": "", "settings": ""}  # 틀 요소의 할 일 → 받는 값(arg)의 종류("" 없음, page 쪽 이름, card 카드 id)
+FRAME_ACTIONS = {"export": "", "refresh": "", "page": "page", "theme": "", "dash_only": "", "zoom": "card", "easy": "", "filters_clear": "", "settings": "", "csv": "card"}  # 틀 요소의 할 일 → 받는 값(arg)의 종류("" 없음, page 쪽 이름, card 카드 id)
 FRAME_PARTS = ("name", "period", "asof", "theme")  # 위쪽 화면 줄에 보일 칸
 FRAME_KEYS = {"button": ("label", "icon", "action", "arg", "ambient"), "nav_rail": ("items", "ambient"), "top_strip": ("parts", "items", "period", "as_of"),
               "page_tabs": (), "period_pick": ("period",), "asof_field": ("as_of",), "unit_seg": ("unit",), "text": ("text", "size", "align"),
@@ -234,7 +234,7 @@ MAX_FRAME_ITEMS, MAX_FRAME_LABEL = 8, 30  # 줄 안 항목 수, 단추 글자 �
 FRAME_MIN = 1  # 틀 요소의 최소 너비·높이(칸). 카드는 2
 FRAME_EMPTY = "단추에는 글자나 아이콘 중 하나가 있어야 해요."
 LINK_FRAMES = ("segment", "chip_row", "period_pick", "asof_field", "unit_seg", "top_strip")  # (B4) 링크를 보내는 틀 요소
-SENDER_KINDS = ("chart", "tile", *LINK_FRAMES)  # (B4) view.link_to·link_map을 쓸 수 있는 종류(화면 web/lib/links.ts isSender와 같은 한 벌)
+SENDER_KINDS = ("chart", "tile", "list", *LINK_FRAMES)  # (B4) view.link_to·link_map을 쓸 수 있는 종류(화면 web/lib/links.ts isSender와 같은 한 벌). (B3) 목록은 줄 고르기로 보낸다
 PERIOD_FRAMES = ("period_pick", "asof_field", "unit_seg")  # (B4) 옛 대시보드에서 "모든 카드"로 옮기는 기간 요소(위쪽 화면 줄은 기간 칸이 있을 때만)
 MAX_LINK_COLS = 50  # (B4) 상대 카드 하나에 맞추는 컬럼 수
 TILE_PRESS = ("cond", "period")  # (B2) 숫자 타일 누르기: 조건만 / 기간 줄도
@@ -243,6 +243,17 @@ SEG_MODES = ("view", "filter")  # (B2) 세그먼트 방식: 보기 바꾸기 / �
 SEG_CELL_KEYS = ("label", "series", "share", "value")  # (B2) 세그먼트 칸 하나의 항목
 MAX_SEG_CELLS = 8  # (B2) 세그먼트 칸 수
 MAX_ELEM_PERIOD = 40  # (B4) 기간 요소에 저장하는 기간 글자 수(대시보드 기간 칸과 같다)
+LIST_KEYS = ("parts", "pick", "key", "swaps", "report")  # (B3) 목록 카드(kind list)의 모양 설정 view.list 항목: 줄 부분들·줄 고르기·거를 컬럼·값 바꾸기 단추·보고서 모양
+LIST_PART_KEYS = ("kind", "column", "swap", "format", "rules", "basis", "side")  # (B3) 줄 부분 하나의 항목
+LIST_PART_KINDS = ("text", "chip", "tag", "number", "bar")  # (B3) 줄 부분 모양: 글·칩·꼬리표·숫자·작은 막대(앞이 처음 값)
+LIST_PICKS = ("none", "one", "many")  # (B3) 줄 고르기: 안 함·하나만·여러 줄(앞이 처음 값)
+LIST_BASES = ("max", "sum")  # (B3) 작은 막대 기준: 보이는 줄의 최댓값 대비·합계 몫(앞이 처음 값)
+LIST_SIDES = ("start", "end")  # (B3) 부분 자리: 줄 앞쪽·뒤쪽(앞이 처음 값)
+LIST_REPORTS = ("screen", "table")  # (B3) 그림·보고서에서의 모양: 화면 그대로·표로(앞이 처음 값)
+MAX_LIST_PARTS = 12  # (B3) 줄 부분 수 상한(화면은 상수 dash.list.max_parts)
+MAX_LIST_SWAPS = 8  # (B3) 값 바꾸기 단추 수 상한(화면은 상수 dash.list.max_swaps)
+MAX_LIST_ROWS = 500  # (B3) 목록 줄 수 상한(표 카드 dash_calc.MAX_TABLE_ROWS와 같은 값, 화면은 상수 dash.list.max_rows)
+LIST_ROWS_DEFAULT = 100  # (B3) 줄 수의 처음 값(사용자가 바꾼다)
 
 
 def check_frame(frame: object, kind: str) -> dict[str, object]:
@@ -275,7 +286,7 @@ def check_frame(frame: object, kind: str) -> dict[str, object]:
         if need == "page" and not 1 <= len(arg) <= MAX_PAGE_NAME:
             raise ValueError(f"쪽 이동의 받는 값(arg)은 쪽 이름({MAX_PAGE_NAME}자까지)이에요.")
         if need == "card" and not ID.fullmatch(arg):
-            raise ValueError("크게 보기의 받는 값(arg)은 카드 id예요.")
+            raise ValueError(f"{'크게 보기' if action == 'zoom' else '목록 CSV 저장'}의 받는 값(arg)은 카드 id예요.")
         return {"label": label, "icon": icon, "action": action, "arg": arg}
 
     out: dict[str, object] = {}
@@ -407,6 +418,75 @@ def check_more(view):
         out["blanks"] = [{"name": text(b.get("name"), "빈칸 이름", 30, 1), "y": text(b.get("y"), "빈칸 컬럼", 200), "agg": text(b.get("agg"), "빈칸 집계", 20),
                           "kind": b.get("kind") if b.get("kind") in BLANK_KINDS else "value", "format": b.get("format") if b.get("format") in FORMATS else "number"} for b in found]
     return out
+
+
+def check_list(view: dict, group_cols: list[str]) -> dict[str, object]:
+    """[SPECIFICATION] plans/dash-blocks.md#check_list
+    목록 카드의 설정(view.list·list_sort·list_rows)을 검사해 세 키를 모두 든(없는 항목은 처음 값) 사본을 돌려준다."""
+    found = view.get("list") or {}
+    if not isinstance(found, dict):
+        raise ValueError("목록 설정(list)은 객체여야 해요.")
+    if extra := set(found) - set(LIST_KEYS):
+        raise ValueError(f"목록 설정(list)에 쓸 수 없는 항목이 있어요: {', '.join(sorted(extra))}")
+    swaps = found.get("swaps", [])
+    if not isinstance(swaps, list) or len(swaps) > MAX_LIST_SWAPS or not all(isinstance(s, dict) and set(s) <= {"label", "value"} for s in swaps):
+        raise ValueError(f"값 바꾸기 단추(swaps)는 {{label, value}} 목록이며 {MAX_LIST_SWAPS}개까지예요.")
+    swaps = [{"label": text(s.get("label") or "", "단추 이름", MAX_FRAME_LABEL, 1), "value": text(s.get("value") or "", "바꿀 값 컬럼", MAX_NAME, 1)} for s in swaps]
+    parts = found.get("parts", [])
+    if not isinstance(parts, list) or len(parts) > MAX_LIST_PARTS:
+        raise ValueError(f"줄 부분(parts)은 목록이며 {MAX_LIST_PARTS}개까지예요.")
+    out_parts = []
+    for p in parts:
+        if not isinstance(p, dict) or set(p) - set(LIST_PART_KEYS):
+            raise ValueError(f"줄 부분에 쓸 수 없는 항목이 있어요: {', '.join(sorted(set(p) - set(LIST_PART_KEYS))) if isinstance(p, dict) else p}")
+        kind = p.get("kind", LIST_PART_KINDS[0])
+        if kind not in LIST_PART_KINDS:
+            raise ValueError(f"줄 부분 모양(kind)은 {', '.join(LIST_PART_KINDS)} 중 하나예요.")
+        swap = p.get("swap", False)
+        if type(swap) is not bool:
+            raise ValueError("값 바꾸기 따르기(swap)는 참·거짓이에요.")
+        column = text(p.get("column") or "", "줄 부분 컬럼", MAX_NAME)
+        if not swap and column == "":
+            raise ValueError("줄 부분의 컬럼을 고르세요(값 바꾸기를 따르는 부분만 비워요).")
+        if swap and not swaps:
+            raise ValueError("값 바꾸기 단추가 없는데 값 바꾸기를 따르는 부분이 있어요.")
+        fmt = p.get("format", FORMATS[0])
+        if fmt not in FORMATS:
+            raise ValueError(f"값 모양(format)은 {', '.join(FORMATS)} 중 하나예요.")
+        basis = p.get("basis", LIST_BASES[0])
+        if basis not in LIST_BASES:
+            raise ValueError(f"막대 기준(basis)은 {', '.join(LIST_BASES)} 중 하나예요.")
+        side = p.get("side", LIST_SIDES[0])
+        if side not in LIST_SIDES:
+            raise ValueError(f"부분 자리(side)는 {', '.join(LIST_SIDES)} 중 하나예요.")
+        rules = p.get("rules", [])
+        if not isinstance(rules, list) or len(rules) > MAX_RULES or not all(isinstance(r, dict) for r in rules):
+            raise ValueError(f"색 규칙(rules)은 {{match, color}} 목록이며 {MAX_RULES}개까지예요.")
+        rules = [{"match": text(r.get("match"), "규칙의 식", 100, 1), "color": check_hex(r.get("color"), "규칙의 색")} for r in rules]
+        out_parts.append({"kind": kind, "column": column, "swap": swap, "format": fmt, "rules": rules, "basis": basis, "side": side})
+    pick = found.get("pick", LIST_PICKS[0])
+    if pick not in LIST_PICKS:
+        raise ValueError(f"줄 고르기(pick)는 {', '.join(LIST_PICKS)} 중 하나예요.")
+    key = text(found.get("key") or "", "거를 컬럼", MAX_NAME)
+    if pick != "none" and key not in group_cols:
+        raise ValueError("거를 컬럼(key)은 묶음 컬럼(group_cols) 가운데 하나예요.")
+    if pick == "none":
+        key = ""
+    report = found.get("report", LIST_REPORTS[0])
+    if report not in LIST_REPORTS:
+        raise ValueError(f"그림·보고서 모양(report)은 {', '.join(LIST_REPORTS)} 중 하나예요.")
+    sort = view.get("list_sort") or {}
+    if not isinstance(sort, dict) or set(sort) - {"column", "desc"}:
+        raise ValueError("정렬(list_sort)은 {column, desc}예요.")
+    desc = sort.get("desc", False)
+    if type(desc) is not bool:
+        raise ValueError("정렬 방향(desc)은 참·거짓이에요.")
+    column = text(sort.get("column") or "", "정렬 컬럼", MAX_NAME)
+    rows = view.get("list_rows", LIST_ROWS_DEFAULT)
+    if not (type(rows) is int and 1 <= rows <= MAX_LIST_ROWS):
+        raise ValueError(f"줄 수(list_rows)는 1~{MAX_LIST_ROWS} 사이의 정수예요.")
+    return {"list": {"parts": out_parts, "pick": pick, "key": key, "swaps": swaps, "report": report},
+            "list_sort": {"column": column, "desc": desc}, "list_rows": rows}
 
 
 GEO_AGGS = ("count", "sum", "mean", "min", "max")  # 지도 카드가 영역마다 구하는 값
@@ -897,6 +977,11 @@ def check_card(card):
         raise ValueError("보기 바꾸기 세그먼트의 상대 카드는 하나예요.")
     if ("note" in view or "press" in view) and out["kind"] != "tile":
         raise ValueError("타일 설명(note)·누르기(press)는 숫자 타일에만 써요.")
+    raw = card.get("view") or {}
+    if out["kind"] == "list":
+        out["view"].update(check_list(raw, out["view"].get("group_cols") or []))
+    elif {"list", "list_sort", "list_rows"} & set(raw):
+        raise ValueError("목록 설정(list·list_sort·list_rows)은 목록 카드에만 써요.")
     if out["kind"] == "funnel" and not placed:  # 흐름(퍼널) 카드: 다시 구할 전처리(recipe)와 흐름 분석(analysis.kind = funnel)이 있어야 한다
         how = out["source"].get("analysis") or {}
         listed = how.get(FUNNEL_LISTS.get(how.get("kind")))  # 값 목록 퍼널은 steps, 조건 단계 퍼널은 stages

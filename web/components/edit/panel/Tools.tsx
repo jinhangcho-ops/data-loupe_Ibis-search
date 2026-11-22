@@ -21,6 +21,7 @@ import { RulesEditor } from "../RulesEditor";
 import { Check, Sel, Txt } from "../menu/Fields";
 import { DATE_X, WATCH } from "../menu/kinds";
 import { GroupPicker } from "./GroupPicker";
+import { ListPanel } from "./ListPanel";
 import { parseBands } from "../menu/build";
 import { ROUND_TYPES } from "@/components/cards/chart/shapes";
 
@@ -29,7 +30,7 @@ const MAX_NOTE = 100;  // 타일 설명 글자 수 상한(서버 dash_store.MAX_
 const FORMATS: [string, string][] =[["number", "숫자"], ["percent", "%"], ["currency", "금액"]];
 // 목표·값 모양이 없는 SVG 카드(옛 svgTools plain)
 const RINGS: [string, string][] = [["stack", "한 고리 누적"], ["double", "겹친 두 고리"], ["half", "반원 게이지"], ["ticks", "고리와 목표 눈금"]];
-const PLAIN = ["gauge", "status", "alerts", "map", "deviation", "table", "sentence", "funnel", "geomap",
+const PLAIN = ["gauge", "status", "alerts", "map", "deviation", "table", "list", "sentence", "funnel", "geomap",
   "histogram", "boxplot", "heatmap", "calheat", "treemap", "sunburst", "bump", "sankey", "cohort", "candle", "wordcloud"];
 // 단추 요소의 아이콘(svg/common ICON_PATHS, FramePanel이 쓴다), P14 겹친 도넛을 쓸 수 있는 차트 종류
 export const ICONS: [string, string][] = [["chart", "막대"], ["up", "오름"], ["user", "사람"], ["cart", "장바구니"], ["coin", "동전"], ["clock", "시계"]];
@@ -207,6 +208,7 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
           }} />
       </label>
     ),
+    list: <ListPanel card={card} data={shown.data ?? {}} onChange={onChange} />,
   }[card.kind as string] ?? null;
   // 순위·캔들·코호트는 기간 단위를 다시 고를 수 있다(서버가 그 단위로 다시 구한다)
   const unitSel = ["bump", "candle", "cohort"].includes(card.kind) && (

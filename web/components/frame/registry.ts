@@ -33,6 +33,7 @@ export const FRAME_ACTIONS = {
   easy: { name: "쉬운 보기 켜고 끄기", arg: "" },
   filters_clear: { name: "필터 모두 풀기", arg: "" },
   settings: { name: "대시보드 설정 창 열기", arg: "" },
+  csv: { name: "목록을 CSV로 저장", arg: "card" },
 } as const satisfies Record<string, { name: string; arg: "" | "page" | "card" }>;
 export type FrameAction = keyof typeof FRAME_ACTIONS;
 
@@ -59,7 +60,7 @@ export const TEXT_SIZE_VARS: Record<TextSize, string> = { sm: "--fs-sm", md: "--
 export type ActionHost = {
   recompute: () => unknown; setPage: (page: string) => void; dashOnly: boolean; setDashOnly: (on: boolean) => void;
   setReport: (open: boolean) => void; setZoom: (id: string | null) => void; flipTheme: () => void; pages: string[]; cardIds: string[];
-  flipEasy: () => void; clearFilters: () => unknown; setSettings: (open: boolean) => void;
+  flipEasy: () => void; clearFilters: () => unknown; setSettings: (open: boolean) => void; saveCsv: (id: string) => void;
 };
 
 /** [SPECIFICATION] plans/dash-blocks.md#isFrame
@@ -89,7 +90,7 @@ export function frameError(kind: FrameKind, frame: FrameSettings): string {
     if ((label ?? "").trim() === "" && (icon ?? "") === "") return "단추에는 글자나 아이콘 중 하나가 있어야 해요.";
     const need = action ? FRAME_ACTIONS[action].arg : "";
     if (need === "page" && (arg ?? "") === "") return "이동할 쪽을 고르세요.";
-    if (need === "card" && (arg ?? "") === "") return "크게 볼 카드를 고르세요.";
+    if (need === "card" && (arg ?? "") === "") return action === "csv" ? "저장할 목록을 고르세요." : "크게 볼 카드를 고르세요.";
   }
   if (kind === "segment" && !(frame.cells ?? []).length) return "칸을 하나 이상 더하세요.";
   if ((kind === "chip_row" || (kind === "segment" && frame.mode === "filter")) && !(frame.column ?? "")) return "거를 컬럼을 고르세요.";
@@ -113,6 +114,7 @@ export function runAction(item: Pick<FrameItem, "action" | "arg">, host: ActionH
   if (!Object.hasOwn(FRAME_ACTIONS, action)) throw new Error(`모르는 할 일이에요: ${action}`);
   if (action === "page" && !host.pages.includes(arg)) throw new Error(`'${arg}' 쪽이 없어요.`);
   if (action === "zoom" && !host.cardIds.includes(arg)) throw new Error("크게 볼 카드가 없어요.");
+  if (action === "csv" && !host.cardIds.includes(arg)) throw new Error("저장할 목록이 없어요.");
   if (action === "export") host.setReport(true);
   else if (action === "refresh") host.recompute();
   else if (action === "theme") host.flipTheme();
@@ -121,6 +123,7 @@ export function runAction(item: Pick<FrameItem, "action" | "arg">, host: ActionH
   else if (action === "filters_clear") host.clearFilters();
   else if (action === "settings") host.setSettings(true);
   else if (action === "page") host.setPage(arg);
+  else if (action === "csv") host.saveCsv(arg);
   else host.setZoom(arg);
 }
 

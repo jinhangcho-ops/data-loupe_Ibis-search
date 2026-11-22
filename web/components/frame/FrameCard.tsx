@@ -2,6 +2,7 @@
 // B10 틀 요소의 몸통(plans/dash-blocks.md "B10 세부 명세"): 단추·화면 이동 줄·위쪽 화면 줄·기간 고르기·기준일·기간 단위.
 import type { ReactNode } from "react";
 import { ICON_PATHS } from "@/components/cards/svg/common";
+import { listCsv } from "@/components/cards/svg/List";
 import { PageTabs } from "@/components/shell/PageTabs";
 import { AsOfField, PeriodField } from "@/components/shell/PeriodBar";
 import { useShell } from "@/components/shell/ShellProvider";
@@ -82,6 +83,7 @@ export function FrameCard(props: FrameCardProps): ReactNode {
   const host: ActionHost = {
     recompute: shell.recompute, setPage: shell.setPage, dashOnly: shell.dashOnly, setDashOnly: shell.setDashOnly, setReport: shell.setReport, setZoom: shell.setZoom, setSettings: shell.setSettings,
     flipTheme, flipEasy, clearFilters: shell.clearFilters, pages, cardIds: (state.dash?.cards ?? []).map(c => c.id),
+    saveCsv: id => { const c = state.dash?.cards.find(x => x.id === id); if (!c) throw new Error("저장할 목록이 없어요."); Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([listCsv(state.values[id]?.data ?? c.data)], { type: "text/csv" })), download: `${c.title}.csv` }).click(); },
   };
   return DRAW[kind]({
     card, frame: card.view.frame ?? freshFrame(kind), live, host, page: pages.includes(shell.page) ? shell.page : pages[0] ?? "", zoom: shell.zoom,

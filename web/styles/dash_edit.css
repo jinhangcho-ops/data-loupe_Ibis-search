@@ -185,3 +185,19 @@
 .fr-tag-small { font-size:var(--fs-xs); color:var(--muted); }
 .tile-note { margin:0; }
 #dash :is(.fr-seg-b, .fr-chip) { position:relative; }
+/* B3 목록 카드: 줄마다 사용자가 고른 부분(앞쪽·뒤쪽), 고른 줄은 강조색 테두리, 넘치면 카드 안 스크롤, 그림을 찍는 동안(html[data-picture])에는 '표로'를 고른 목록이 표로 */
+.clist { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:.25rem; height:100%; min-height:0; overflow:auto; }
+.lrow { display:flex; align-items:center; justify-content:space-between; gap:.5rem; width:100%; padding:.375rem .625rem; border:.0625rem solid var(--line); border-radius:var(--r-ctl); background:none; color:inherit; font:inherit; text-align:left; }
+button.lrow { cursor:pointer; }
+.lrow[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); }
+.lstart, .lend { display:flex; align-items:center; gap:.375rem; min-width:0; }
+.ltext { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-sm); }
+.lchip { padding:.0625rem .5rem; font-size:var(--fs-xs); }
+.ltag { padding:.0625rem .5rem; border:.0625rem solid var(--line); border-radius:62.5rem; font-size:var(--fs-xs); white-space:nowrap; }
+.lnum { font-size:var(--fs-sm); font-variant-numeric:tabular-nums; }
+.lbar { display:flex; align-items:center; gap:.25rem; width:6rem; font-size:var(--fs-xs); color:var(--muted); }
+.lbar > i { flex:1; height:.375rem; border-radius:var(--r-pill); background:linear-gradient(to right, var(--c, var(--accent)) calc(var(--r) * 100%), var(--line) 0); }
+.lswaps { margin-bottom:.375rem; }
+.lprint { display:none; }
+html[data-picture] .lprint { display:table; }
+html[data-picture] .lprint ~ .lscreen, html[data-picture] .lscreen:has(~ .lprint) { display:none; }
