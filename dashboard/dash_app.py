@@ -681,7 +681,7 @@ def templates_import() -> Response:
 @app.post("/api/dash/templates/remote")
 def templates_remote() -> Response:
     """[SPECIFICATION] plans/dash-blocks.md#templates_remote
-    `POST /api/dash/templates/remote` [더 받기]: GitHub 저장소 templates 폴더의 파일 목록 {files}(FREE)."""
+    `POST /api/dash/templates/remote` [더 받기]: GitHub 저장소 templates_more 폴더의 파일 목록 {files}(FREE)."""
     return jsonify(files=dash_templates.remote_list())
 
 

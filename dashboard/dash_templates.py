@@ -1,4 +1,4 @@
-"""(B7) [더 받기]: 사용자가 단추를 누를 때만 GitHub 저장소의 templates 폴더 목록과 고른 파일을 받는다(GitHub contents API, 주소 요청만 보낸다).
+"""(B7) [더 받기]: 사용자가 단추를 누를 때만 GitHub 저장소의 templates_more 폴더 목록과 고른 파일을 받는다(GitHub contents API, 주소 요청만 보낸다).
 받은 것은 JSON으로만 읽고(실행하지 않음) dash_store.read_template의 같은 검사를 거친다. 시험은 fetch_json을 바꿔 끼운다. 명세: plans/dash-blocks.md "B7 세부 명세"."""
 import base64
 import json
@@ -7,7 +7,7 @@ import urllib.request
 
 from core import dash_store
 
-REMOTE_LIST = "https://api.github.com/repos/jinhangcho-ops/data-loupe_Ibis-search/contents/templates"  # 저장소 templates 폴더(소유자·저장소 이름은 core/features.RELEASES와 같다)
+REMOTE_LIST = "https://api.github.com/repos/jinhangcho-ops/data-loupe_Ibis-search/contents/templates_more"  # 저장소 templates_more 폴더(소유자·저장소 이름은 core/features.RELEASES와 같다)
 HTTPS = "https://"  # 받을 수 있는 주소의 머리
 FETCH_WAIT = 15  # 서버가 답하기를 기다리는 시간(초)
 MAX_REPLY_BYTES = 1024 * 1024  # 답 하나의 크기 상한(바이트, base64로 늘어난 템플릿 파일 포함)
@@ -42,7 +42,7 @@ def fetch_json(url: str) -> object:
 
 def remote_list() -> list[dict[str, object]]:
     """[SPECIFICATION] plans/dash-blocks.md#remote_list
-    저장소 templates 폴더의 JSON 파일 목록 [{file, size}](이름 차례)을 돌려준다."""
+    저장소 templates_more 폴더의 JSON 파일 목록 [{file, size}](이름 차례)을 돌려준다."""
     got = fetch_json(REMOTE_LIST)
     if not isinstance(got, list) or not all(isinstance(item, dict) for item in got):
         raise ValueError(BAD_REPLY)
@@ -62,7 +62,7 @@ def remote_list() -> list[dict[str, object]]:
 
 def remote_get(file: str) -> dict:
     """[SPECIFICATION] plans/dash-blocks.md#remote_get
-    저장소 templates 폴더의 파일 하나를 받아 base64를 풀고 dash_store.read_template로 검사한 템플릿을 돌려준다."""
+    저장소 templates_more 폴더의 파일 하나를 받아 base64를 풀고 dash_store.read_template로 검사한 템플릿을 돌려준다."""
     if not REMOTE_NAME.fullmatch(file):
         raise ValueError(BAD_NAME)
     got = fetch_json(f"{REMOTE_LIST}/{file}")

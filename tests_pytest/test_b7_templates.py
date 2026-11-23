@@ -382,3 +382,30 @@ def test_templates_fetch_route_checks_all_before_saving(client, monkeypatch):
     assert [t["name"] for t in one.get_json()["templates"]] == ["받은 것"]
     assert client.post("/api/dash/templates/fetch", json={"files": []}).status_code == 400
     assert client.post("/api/dash/templates/fetch", json={"files": "a.json"}).status_code == 400
+
+
+# ---------- (B8) 더 받기 전용 폴더 ----------
+
+MORE_DIR = store.TEMPLATE_DIR.parent / dash_templates.REMOTE_LIST.rsplit("/", 1)[1]
+
+
+def test_more_folder_is_not_the_builtin_folder():
+    assert MORE_DIR != store.TEMPLATE_DIR and MORE_DIR.is_dir()
+
+
+def test_more_templates_pass_the_file_check_without_work_words():
+    paths = sorted(MORE_DIR.glob("*" + store.TEMPLATE_SUFFIX))
+    assert paths
+    for path in paths:
+        raw = path.read_bytes()
+        assert not any(word in raw.decode("utf-8") for word in ("신고", "조치", "기한")), path.name
+        assert store.read_template(raw, path.stem)["unknown"] == [], path.name
+
+
+def test_more_templates_make_a_dashboard_that_saves():
+    for path in sorted(MORE_DIR.glob("*" + store.TEMPLATE_SUFFIX)):
+        t = store.read_template(path.read_bytes(), path.stem)
+        cards = [{"id": f"c{i}", "kind": p["kind"], "title": p["title"], "section": p["section"], "layout": p["layout"], "colors": p["colors"], "view": p["view"], "source": {}, "data": {}}
+                 for i, p in enumerate(t["pieces"])]
+        saved = store.check_dashboard({"name": t["name"], "pages": t["pages"], "sections": t["sections"], "cards": cards})
+        assert saved["pages"] == t["pages"] and len(saved["cards"]) == len(cards), path.name
