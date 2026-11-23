@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, prep_page
 from test_shortcuts_js import DRAFT, FAKE, MENU, TIP
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
@@ -32,7 +32,7 @@ def run(tmp_path, body, *parts, fake=True):
 
 
 def test_4e2_prep_restore_drops_removed_copy_edits(tmp_path):
-    html = page("prep/prep.html")
+    html = prep_page()
     body = """
 let edits = {}, copies = [], drops = [], filters = [], dedupe = [], sorts = [], formulas = [], pca = {}, geoSteps = [];
 let dedupeOn = null, dedupeFound = null, ddContain = []; const SERVER = { dedupe_limit: 1 };  // 중복 제거 확정 기준(Phase 13) 대역
@@ -103,7 +103,7 @@ console.log(JSON.stringify({ calls, findPrevented: f.defaultPrevented, focused }
 
 
 def test_4e_static_edits():
-    query, prep = page("query/index.html"), page("prep/prep.html")
+    query, prep = page("query/index.html"), prep_page()
     assert 'view === "cards" ? searchState() : null' in query                    # 4E3
     assert "prepUndo.reset()" in fn(prep, "function resetTable() {")             # 4E8(5E2: prof를 비운 뒤 reset)
     assert "draftBase" not in fn(query, "async function restoreSearch(d) {")      # 4E8

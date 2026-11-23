@@ -7,7 +7,7 @@ import subprocess
 import pytest
 import xlsxwriter
 
-from conftest import ROOT
+from conftest import ROOT, prep_page
 from core import targets
 
 
@@ -69,7 +69,7 @@ def test_sentence_particles_for_latin_digit_and_unit():
 def test_examples_in_hints_work():
     """전처리 안내의 like 예시와 문장 기간 칸 예시는 실제로 읽힌다."""
     from dashboard import period
-    assert "like 김%" not in (ROOT / "static/prep/prep.html").read_text(encoding="utf-8")
+    assert "like 김%" not in prep_page()
     assert "지난 7일" not in (ROOT / "static/query/sentences.js").read_text(encoding="utf-8")
     assert period.parse("최근 7일", "2026-10-27")["error"] is None
 

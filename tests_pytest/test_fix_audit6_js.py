@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, prep_page
 from test_shortcuts_js import DRAFT, FAKE, MENU, TIP
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
@@ -73,7 +73,7 @@ console.log(JSON.stringify({ out, selPicked: picked }));"""
 
 
 def test_6e4_prep_open_table_throws_when_strict(tmp_path):
-    html = page("prep/prep.html")
+    html = prep_page()
     body = """
 const els = {}; const $ = id => els[id] ??= { value: "", checked: false, textContent: "" };
 let token = 0, status = "", prof = null, edits = {}, statsOn = false, draftBase = "", pickers = {}, preview = null;
@@ -92,7 +92,7 @@ const api = async () => { throw new Error("x"); }, showAll = () => {}, renderGri
 
 
 def test_6e4_open_config_passes_strict():
-    html = page("prep/prep.html")
+    html = prep_page()
     assert "await openTable(c.base, c, true);" in html
 
 

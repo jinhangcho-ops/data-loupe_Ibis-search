@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from core import dash_store, settings
+from conftest import prep_page
 
 ROOT = Path(__file__).resolve().parent.parent
 OVER = 5  # 자동 상한을 넘겨 넣어 보는 개수
@@ -81,7 +82,7 @@ def test_routes(api):
 
 
 def test_screen_wiring():
-    prep, ana = (ROOT / "static/prep/prep.html").read_text(encoding="utf-8"), (ROOT / "static/prep/analysis.js").read_text(encoding="utf-8")
+    prep, ana = prep_page(), (ROOT / "static/prep/analysis.js").read_text(encoding="utf-8")
     for i in ("a-saved", "a-saved-del", "a-save-name", "a-save", "a-recent", "a-recent-max"):
         assert f'id="{i}"' in prep, i
     assert "if (!full) keepAnalysis();" in ana  # 표본으로 구하기에 성공했을 때만 자동으로 남긴다

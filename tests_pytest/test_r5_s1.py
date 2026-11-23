@@ -15,6 +15,7 @@ from core import calc
 from core import held
 from core import prep_ops
 from core import server
+from conftest import prep_page
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -119,7 +120,7 @@ def test_prep_ops_labels_match_screen(shop):
     found = shop.get("/api/prep/ops").get_json()["ops"]
     assert [o["id"] for o in found] == prep_ops.OPS_NAMES
     assert "/api/prep/ops" in server.FREE
-    html = (ROOT / "static/prep/prep.html").read_text(encoding="utf-8")
+    html = prep_page()
     screen = {m[1]: (m[2], m[3]) for m in re.finditer(r'^  (\w+): \{ label: "([^"]+)", group: "([^"]+)"', html, re.M)}
     assert {o["id"]: (o["label"], o["group"]) for o in found} == screen
     kinds = {None: "any", prep_ops.STRING: "str", prep_ops.NUMBER: "num", prep_ops.DATE: "date"}

@@ -6,7 +6,7 @@ import shutil
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, prep_page
 from dashboard import dash_app
 from test_fix_audit_js import between, run_node
 from test_fix_ui67_c import ELS
@@ -40,7 +40,7 @@ def test_old_pages_may_frame_island(client):
 
 
 def test_no_chartjs_calls_left():
-    prep, sent = (ROOT / "static/prep/prep.html").read_text(encoding="utf-8") + (ROOT / "static/prep/analysis.js").read_text(encoding="utf-8"),(ROOT / "static/query/sentences.js").read_text(encoding="utf-8")
+    prep, sent = prep_page() + (ROOT / "static/prep/analysis.js").read_text(encoding="utf-8"),(ROOT / "static/query/sentences.js").read_text(encoding="utf-8")
     for text in (prep, sent):
         assert "new Chart" not in text and "CHART_JS" not in text
     assert "anaConfig" not in prep and '<iframe id="a-chart" src="/chart" title="분석 그림"' in prep

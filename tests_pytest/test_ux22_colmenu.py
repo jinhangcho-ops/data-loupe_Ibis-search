@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, prep_page
 from core import prep_ops
 
 NODE = shutil.which("node")
@@ -66,7 +66,7 @@ def test_old_items_all_kept(tmp_path):
     was = menu_of(tmp_path, before, f"PrepMenu.items({call}).map(i => i[0])")
     now = menu_of(tmp_path, ROOT / PREPMENU, f"PrepMenu.menu({call}).map(b => [b[0], b[1], b[3].map(i => [i[0], !!i[1]])])")
     assert len(was) == len(prep_ops.LABELS) and set(was) <= set(flat(now))
-    query, prep = ((ROOT / "static" / p).read_text(encoding="utf-8") for p in ("query/index.html", "prep/prep.html"))
+    query, prep = (ROOT / "static/query/index.html").read_text(encoding="utf-8"), prep_page()
     assert "...PrepMenu.menu({" in query and "...PrepMenu.menu({" in prep and "PrepMenu.items(" not in query + prep
     head = query[query.index("function headItems("):query.index("async function dropColumn(")]
     assert all(f'"{label}"' in query for label in HEAD_TOP) and [label for label in HEAD_TOP[2:] if f'["{label}"' in head] == HEAD_TOP[2:]

@@ -5,6 +5,7 @@ from pathlib import Path
 import duckdb
 import fastexcel
 import pytest
+from conftest import prep_page
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -97,7 +98,7 @@ def test_저장_취소와_잘못된_입력(api):
 
 
 def test_화면_글자_확인():
-    html = (ROOT / "static/prep/prep.html").read_text(encoding="utf-8")
+    html = prep_page()
     assert 'id="profile-export"' in html and "/api/profile/export" in html
     assert "expand:" in html and "펼치기" in html
 

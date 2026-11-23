@@ -7,6 +7,7 @@ import pytest
 
 from core import server
 from dashboard import dash_app
+from conftest import prep_page
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 WEB = STATIC.parent / "web"
@@ -62,7 +63,7 @@ def test_add_to_dashboard_chooser_and_link():
     assert "showAdded" not in text  # 알림 줄 쓰기는 core/common.js 한 곳(쿼리·전처리 화면이 함께 씀, R4-D2b에서 dash.js를 지우며 옮김)
     shown = (STATIC / "core" / "common.js").read_text(encoding="utf-8")
     assert '"/dashboard?open=" + encodeURIComponent(added.id)' in shown and "대시보드에서 보기" in shown
-    prep = (STATIC / "prep" / "prep.html").read_text(encoding="utf-8") + (STATIC / "prep" / "analysis.js").read_text(encoding="utf-8")
+    prep = prep_page() + (STATIC / "prep" / "analysis.js").read_text(encoding="utf-8")
     assert 'showAdded("err-ana", added.dashboard)' in prep and "[대시보드] 탭" not in prep  # 분석 화면도 같은 링크
 
 

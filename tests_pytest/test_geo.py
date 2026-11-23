@@ -314,8 +314,8 @@ def test_detect_tm_pair_suggests_systems():
 
 def test_prep_screen_epsg_choices_are_known_systems():
     """전처리 화면의 좌표계 목록(prep.html의 EPSG_LIST)은 geo/tm.py의 SYSTEMS 안의 번호만 쓴다(화면이 geo 패키지를 올리지 않으려 따로 적어 둔다)."""
-    from conftest import ROOT
+    from conftest import prep_page
     import re
-    html = (ROOT / "static" / "prep" / "prep.html").read_text(encoding="utf-8")
+    html = prep_page()
     listed = [int(n) for n in re.findall(r"\[(\d{4}), \"", html[html.index("const EPSG_LIST"):html.index("const EPSG_LIST") + 700])]
     assert listed and set(listed) <= set(tm.SYSTEMS) and listed[0] == 5179

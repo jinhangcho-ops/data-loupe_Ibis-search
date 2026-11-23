@@ -8,6 +8,7 @@ import pytest
 from lazy import ibis
 
 import test_cr_e2 as e2
+from conftest import prep_page
 
 remote, bigquery = e2.remote, e2.bigquery  # 가짜 BigQuery 연결(dry run만 흉내)
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -156,7 +157,7 @@ def test_sentence_fill_periods_uses_result_next_period():
 # ---------- 9. 분석 화면은 옛 대시보드 계산 스크립트를 부르지 않는다 ----------
 
 def test_prep_page_without_old_dash_calc():
-    assert "lib/dash_calc.js" not in (ROOT / "static/prep/prep.html").read_text(encoding="utf-8")
+    assert "lib/dash_calc.js" not in prep_page()
 
 
 # ---------- 10. 작은 것들 ----------

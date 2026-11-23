@@ -6,6 +6,7 @@ import shutil
 import pytest
 
 from test_fix_audit_js import COMMON, GRID_HOST, STATIC, STUBS, between, index_slice, run_node
+from conftest import prep_page
 
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
@@ -78,7 +79,7 @@ const els = {}; globalThis.$ = id => els[id] ??= { value: "t1", classList: { add
 
 
 def test_prep_table_uses_shared_result_table():
-    html = (STATIC / "prep" / "prep.html").read_text(encoding="utf-8") + (STATIC / "prep" / "analysis.js").read_text(encoding="utf-8")
+    html = prep_page() + (STATIC / "prep" / "analysis.js").read_text(encoding="utf-8")
     assert "tableHtml" not in html and 'sortedTable($("a-table"), anaTable(d, A.view), (h, x, s) => resultTable(h, x, s)' in html  # 전처리 표도 공용 resultTable(host, data)을 쓴다(정렬은 Phase 11 sortedTable)
 
 

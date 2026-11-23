@@ -306,16 +306,23 @@ GZIP_FROM = 16 * 1024  # 이보다 큰 응답은 gzip으로 보낸다. 로컬(12
 PACKED_TYPES = {"application/zip", "application/gzip", "application/x-gzip", "application/x-zip-compressed", "application/vnd.apache.parquet", "application/x-parquet", "application/pdf"}  # 이미 압축된(또는 줄어들지 않는) 형식
 
 
+SEND_PIECE = 32 * 1024  # 큰 응답 몸은 이 크기 조각으로 나눠 보낸다. 통째로 보내면 PC가 바쁠 때 가끔 끊긴다(측정: 통째 90KB는 300번에 8번, 8KB·32KB 조각은 1,800번에 0번)
+
+
 @app.after_request
 def squeeze(response):
-    """큰 응답(JSON 등)을 gzip으로 줄여 보낸다. 파일 내려주기(direct_passthrough)·스트림(내보내기는 길이를 알아도 스트림이라 통째로 메모리에 올리지 않는다)·이미 압축한 것(이미지·zip·parquet 등)은 그대로."""
-    if (response.status_code != 200 or response.direct_passthrough or response.is_streamed or response.content_length is None or response.content_length < GZIP_FROM
-            or response.headers.get("Content-Encoding")
-            or response.mimetype.startswith(("image/", "video/", "audio/")) or response.mimetype in PACKED_TYPES or not request.accept_encodings["gzip"]):
+    """큰 응답(JSON 등)을 gzip으로 줄이고 몸을 SEND_PIECE 조각으로 나눠 보낸다. 파일 내려주기(direct_passthrough)·스트림(내보내기는 길이를 알아도 스트림이라 통째로 메모리에 올리지 않는다)은 그대로.
+    200이 아닌 것·이미 압축한 것(이미지·zip·parquet 등)·gzip을 안 받는 요청은 줄이지 않고 나누기만 한다."""
+    if response.direct_passthrough or response.is_streamed or response.content_length is None or response.content_length < GZIP_FROM:
         return response
-    response.set_data(gzip.compress(response.get_data(), 5))
-    response.headers["Content-Encoding"] = "gzip"
-    response.vary.add("Accept-Encoding")
+    data = response.get_data()
+    if (response.status_code == 200 and not response.headers.get("Content-Encoding")
+            and not response.mimetype.startswith(("image/", "video/", "audio/")) and response.mimetype not in PACKED_TYPES and request.accept_encodings["gzip"]):
+        data = gzip.compress(data, 5)
+        response.headers["Content-Encoding"] = "gzip"
+        response.vary.add("Accept-Encoding")
+    response.response = [data[at:at + SEND_PIECE] for at in range(0, len(data), SEND_PIECE)]
+    response.content_length = len(data)
     return response
 
 

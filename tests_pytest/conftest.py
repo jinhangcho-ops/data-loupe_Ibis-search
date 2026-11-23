@@ -11,6 +11,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+PREP_FILES = ("prep.html", "prep.js", "prep_tail.js")  # 전처리 화면과 그 화면만 쓰는 스크립트(B13: 화면 응답을 줄이려 스크립트를 정적 파일로 뺐다)
+
+
+def prep_page() -> str:
+    """전처리 화면의 글자: PREP_FILES를 차례로 이어 붙인 것(분석 부분 analysis.js는 따로 읽는다)."""
+    return "".join((ROOT / "static" / "prep" / name).read_text(encoding="utf-8") for name in PREP_FILES)
 sys.path.insert(0, str(ROOT))
 APPDATA = tempfile.mkdtemp(prefix="ibis_pytest_")
 os.environ["APPDATA"] = APPDATA  # settings.PATH는 import할 때 정해지므로 프로젝트 모듈보다 먼저 바꾼다.

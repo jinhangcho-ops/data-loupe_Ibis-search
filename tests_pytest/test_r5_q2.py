@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import ROOT, kill_edge, spawn_edge
+from conftest import ROOT, kill_edge, prep_page, spawn_edge
 from test_fix_audit_js import COMMON, FAKE_DOM, GRID_HOST, STUBS
 
 CORE = ROOT / "static" / "core"
@@ -626,9 +626,8 @@ def test_context_menu_is_shared():
     """B12: 쿼리·전처리 화면은 우클릭 메뉴를 직접 만들지 않고 common.js ctxMenu(e, items, 사각형)를 부른다(두 벌 금지)."""
     common = (CORE / "common.js").read_text(encoding="utf-8")
     assert "function ctxMenu(e, items, fallbackRect)" in common and "function closeCtx()" in common
-    for page in (ROOT / "static" / "query" / "index.html", ROOT / "static" / "prep" / "prep.html"):
-        text = page.read_text(encoding="utf-8")
-        assert "ctxMenu(e, " in text and "const closeCtx" not in text and "let ctxMenu" not in text and 'setAttribute("role", "menu")' not in text, page.name
+    for name, text in (("index.html", (ROOT / "static" / "query" / "index.html").read_text(encoding="utf-8")), ("prep.html", prep_page())):
+        assert "ctxMenu(e, " in text and "const closeCtx" not in text and "let ctxMenu" not in text and 'setAttribute("role", "menu")' not in text, name
 
 
 @needs_node

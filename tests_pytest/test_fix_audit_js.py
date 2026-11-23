@@ -8,7 +8,7 @@ import subprocess
 
 import pytest
 
-from conftest import ROOT
+from conftest import ROOT, prep_page
 
 pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node가 없다")
 
@@ -46,6 +46,8 @@ STYLES = ROOT / "web" / "styles"  # 공통 CSS 원본(Tailwind 입력). 화면�
 
 
 def read(name):
+    if name == "prep.html":  # 전처리 화면의 스크립트는 정적 파일로 뺐다(B13): 화면과 함께 읽는다
+        return prep_page()
     return next(p for folder in (STATIC, STYLES) for p in folder.rglob(name)).read_text(encoding="utf-8")
 
 
@@ -173,7 +175,7 @@ console.log(JSON.stringify({ picked: pickedFiles(), text: els["flat-count"].text
 
 
 def test_prep_recipe_sends_count_false_only_when_stats_off(tmp_path):
-    html = (STATIC / "prep" / "prep.html").read_text(encoding="utf-8")
+    html = prep_page()
     code = html[html.index("function recipe()"):html.index("// [미리보기]·[실행]·[중복 세기]가 함께 쓴다")]
     prelude = """
 const cols = () => [], edits = {}, OPS = {}, pca = { columns: [], n: 2 }, filters = [], copies = [], drops = [], sorts = [], formulas = [], geoSteps = [], dedupe = [], keepNow = () => null, S = { schema: "", base: "t" };

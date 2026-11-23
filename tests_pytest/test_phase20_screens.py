@@ -139,9 +139,10 @@ def test_func_cuts_one_function():
 # ---------- 20E 분석 스크립트 옮기기 ----------
 
 def test_analysis_script_is_put_back_in_place(client):
-    """분석 부분은 analysis.js에 있고, 내려주는 화면에서는 전처리 스크립트의 원래 자리에 그대로 끼워진다(스크립트를 나누지 않는다: 실행 차례가 그대로다)."""
+    """분석 부분은 analysis.js에 있고, 화면은 전처리 스크립트를 원래 실행 차례대로 정적 파일 셋으로 부른다(B13: 화면 응답을 줄이려 인라인 스크립트를 뺐다)."""
     raw, part, page = read("prep.html"), read("analysis.js"), client.get("/prep").get_data(as_text=True)
-    assert "function drawAna(" not in raw and raw.count("<!--include prep/analysis.js-->") == 1
-    assert part in page and "<!--include" not in page
-    assert page.index("function showView(") < page.index(part) < page.index("resume()", page.index(part))
-    assert "<script" not in page[page.index("function showView("):page.index(part) + len(part)]
+    assert "function drawAna(" not in raw and "function drawAna(" in part and "<!--include" not in page
+    tags = [f'src="/static/prep/{name}"' for name in ("prep.js", "analysis.js", "prep_tail.js")]
+    assert all(page.count(t) == 1 for t in tags) and [page.index(t) for t in tags] == sorted(page.index(t) for t in tags)
+    assert "function showView(" in (STATIC / "prep" / "prep.js").read_text(encoding="utf-8") and "resume()" in (STATIC / "prep" / "prep_tail.js").read_text(encoding="utf-8")
+    assert "function showView(" not in page and part not in page

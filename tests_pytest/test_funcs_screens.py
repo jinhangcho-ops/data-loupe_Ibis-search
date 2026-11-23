@@ -10,7 +10,7 @@ import subprocess
 import pytest
 
 from core import sql_funcs
-from conftest import ROOT
+from conftest import ROOT, prep_page
 
 STATIC = ROOT / "static"
 ORDERS = [(i, "AB"[i % 2], ["서울", "부산"][i % 2], float(i * 7 % 13 + 1), i % 4 + 1) for i in range(1, 25)]  # id, 매장, 지역, 금액, 수량
@@ -169,7 +169,7 @@ def test_allowed_exceptions_still_exist():
 
 
 def test_screens_pick_from_the_catalog():
-    pages = {name: next(STATIC.rglob(name)).read_text(encoding="utf-8") for name in ("index.html", "prep.html")}
+    pages = {"index.html": next(STATIC.rglob("index.html")).read_text(encoding="utf-8"), "prep.html": prep_page()}
     for name, text in pages.items():
         assert '<script src="/static/core/funcs.js"></script>' in text and text.index("funcs.js") > text.index("common.js"), name
     assert "Funcs.picker" in pages["index.html"] and "pickers.chart" in pages["index.html"] and "pickers.pivot" in pages["index.html"]  # 새 컬럼 칸의 폼(pickers.calc)은 없앴다: 새 컬럼 상자가 함수 사전을 쓴다

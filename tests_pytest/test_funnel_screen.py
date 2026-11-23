@@ -14,7 +14,7 @@ from analysis import stats
 from dashboard import dash_calc
 from core import dash_store
 from core import server
-from conftest import ROOT
+from conftest import ROOT, prep_page
 
 T0 = dt.datetime(2026, 1, 1, 12, 0, 0)
 LATER = dt.datetime(2026, 2, 10, 12, 0, 0)
@@ -123,7 +123,7 @@ def test_screens_have_funnel(client):
     prep = client.get("/prep").get_data(as_text=True)
     for part in ('value="funnel"', 'id="a-fuser"', 'id="a-fstep"', 'id="a-ftime"', 'id="a-fsteps"', 'id="a-fwin"', 'id="a-funit"', 'id="a-funnel"', "/static/core/funnel.js"):
         assert part in prep, part
-    assert 'kind: flow ? "funnel" : "analysis"' in prep
+    assert 'kind: flow ? "funnel" : "analysis"' in prep_page() + (ROOT / "static/prep/analysis.js").read_text(encoding="utf-8")  # 스크립트는 정적 파일에 있다(B13)
     web = Path(ROOT, "web", "components")  # 대시보드 화면(Next): 퍼널 카드 그림과 카드 추가 메뉴의 종류
     assert "sankeyLayout(steps, " in(web / "cards" / "svg" / "Funnel.tsx").read_text(encoding="utf-8")
     assert "export function sankeyLayout(" in (web / "cards" / "svg" / "__pure__.ts").read_text(encoding="utf-8")

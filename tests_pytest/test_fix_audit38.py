@@ -4,6 +4,7 @@ import pytest
 
 from lazy import ibis
 from core import calc, scan_size, sql_exec, sql_funcs
+from conftest import prep_page
 
 
 @pytest.fixture
@@ -293,7 +294,7 @@ def test_metric_delete_asks_when_used_and_onehot_removal_keeps_column():
     js = (static / "query" / "sentences.js").read_text(encoding="utf-8")
     remove = js[js.index("async function removeMetric(m)"):js.index("function scopeNow()")]
     assert remove.index("sentUsedBy(") < remove.index("used.metrics.length") < remove.index("sentAsk(") < remove.index("/api/my_metrics/delete")  # 쓰는 지표가 있으면 묻지 않고 거부 이유
-    prep = (static / "prep" / "prep.html").read_text(encoding="utf-8")
+    prep = prep_page()
     assert "e.keepBefore ??= e.keep;" in prep and "e.keep = e.keepBefore ?? true;" in prep  # 원-핫을 빼면 더하기 전의 유지 여부로
 
 

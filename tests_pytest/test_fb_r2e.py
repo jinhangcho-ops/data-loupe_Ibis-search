@@ -5,6 +5,7 @@ from pathlib import Path
 
 import duckdb
 import pytest
+from conftest import prep_page
 
 ROOT = Path(__file__).resolve().parent.parent
 N = 3000
@@ -82,7 +83,7 @@ def test_가장_많은_기간_잘못된_입력(api, how, message):
 
 
 def test_화면_글자_확인():
-    html = (ROOT / "static/prep/prep.html").read_text(encoding="utf-8")
+    html = prep_page()
     assert 'id="full-stats"' in html and "/api/profile/full" in html and "표본과 달라요" in html
     assert 'id="peak-find"' in html and 'kind: "busiest"' in html and "between" in html
     for button in ("full-stats", "peak-find"):
