@@ -63,9 +63,9 @@ jobs:
           # 실행 중에 이름으로 불러오는 모듈은 PyInstaller가 찾지 못하므로 통째로 넣는다(--collect-submodules, --hidden-import).
           # 기능 패키지(core…geo)는 lazy.Later가 이름으로 처음 쓸 때 불러온다. cryptography: Oracle 접속 암호화, xlsxwriter: Excel 저장,
           # confluent_kafka: Kafka 적재, fastexcel: polars가 Excel을 읽을 때, slack_sdk: Slack 봇을 켤 때, pyproj: 좌표 변환, kiwipiepy: 워드클라우드 단어.
-          # 데이터: web/out(Next 대시보드), constraints.txt(드라이버 설치 명령의 -c), ibis-framework 설치 정보(Ibis가 백엔드를 찾는다), pyproj 좌표계 목록, kiwipiepy 형태소 모델.
+          # 데이터: web/out(Next 대시보드), constraints.txt(드라이버 설치 명령의 -c), templates(기본 템플릿 JSON, core/dash_store.TEMPLATE_DIR), ibis-framework 설치 정보(Ibis가 백엔드를 찾는다), pyproj 좌표계 목록, kiwipiepy 형태소 모델.
           pyinstaller desktop.py --name DataLoupe --windowed --noconfirm --noupx --icon installer/DataLoupe.ico `
-            --add-data "static:static" --add-data "web/out:web/out" --add-data "constraints.txt:." `
+            --add-data "static:static" --add-data "web/out:web/out" --add-data "constraints.txt:." --add-data "templates:templates" `
             --copy-metadata ibis-framework --collect-data pyproj --collect-data kiwipiepy_model `
             --collect-submodules sqlglot.dialects --collect-submodules ibis.backends.polars @drivers `
             @features `

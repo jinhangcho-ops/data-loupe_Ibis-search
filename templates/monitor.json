@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "name": "모니터링형",
+  "help": "상태, 경고 목록, 배치도, 편차 표, 집계 표",
+  "pages": [],
+  "sections": [
+    {"id": "s1", "title": "", "layout": {"x": 0, "y": 0, "w": 4, "h": 6}, "follow": true, "view": {}},
+    {"id": "s2", "title": "", "layout": {"x": 4, "y": 0, "w": 8, "h": 6}, "follow": true, "view": {}},
+    {"id": "s3", "title": "", "layout": {"x": 0, "y": 6, "w": 6, "h": 9}, "follow": true, "view": {}},
+    {"id": "s4", "title": "", "layout": {"x": 6, "y": 6, "w": 6, "h": 9}, "follow": true, "view": {}},
+    {"id": "s5", "title": "", "layout": {"x": 0, "y": 15, "w": 12, "h": 8}, "follow": true, "view": {}}
+  ],
+  "pieces": [
+    {"kind": "status", "title": "상태", "section": "s1", "layout": {"x": 0, "y": 0, "w": 64, "h": 48}},
+    {"kind": "alerts", "title": "경고 목록", "section": "s2", "layout": {"x": 0, "y": 0, "w": 128, "h": 48}},
+    {"kind": "map", "title": "배치도", "section": "s3", "layout": {"x": 0, "y": 0, "w": 96, "h": 72}},
+    {"kind": "deviation", "title": "편차 표", "section": "s4", "layout": {"x": 0, "y": 0, "w": 96, "h": 72}},
+    {"kind": "table", "title": "집계 표", "section": "s5", "layout": {"x": 0, "y": 0, "w": 192, "h": 64}}
+  ]
+}

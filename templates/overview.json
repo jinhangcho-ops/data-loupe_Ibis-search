@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "name": "분석 개요형",
+  "help": "핵심 지표 3개, 추이, 구성, 상세 표",
+  "pages": [],
+  "sections": [
+    {"id": "s1", "title": "", "layout": {"x": 0, "y": 0, "w": 4, "h": 4}, "follow": true, "view": {}},
+    {"id": "s2", "title": "", "layout": {"x": 4, "y": 0, "w": 4, "h": 4}, "follow": true, "view": {}},
+    {"id": "s3", "title": "", "layout": {"x": 8, "y": 0, "w": 4, "h": 4}, "follow": true, "view": {}},
+    {"id": "s4", "title": "", "layout": {"x": 0, "y": 4, "w": 8, "h": 8}, "follow": true, "view": {}},
+    {"id": "s5", "title": "", "layout": {"x": 8, "y": 4, "w": 4, "h": 8}, "follow": true, "view": {}},
+    {"id": "s6", "title": "", "layout": {"x": 0, "y": 12, "w": 6, "h": 8}, "follow": true, "view": {}},
+    {"id": "s7", "title": "", "layout": {"x": 6, "y": 12, "w": 6, "h": 8}, "follow": true, "view": {}}
+  ],
+  "pieces": [
+    {"kind": "kpi", "title": "핵심 지표 1", "section": "s1", "layout": {"x": 0, "y": 0, "w": 64, "h": 32}},
+    {"kind": "kpi", "title": "핵심 지표 2", "section": "s2", "layout": {"x": 0, "y": 0, "w": 64, "h": 32}},
+    {"kind": "kpi", "title": "핵심 지표 3", "section": "s3", "layout": {"x": 0, "y": 0, "w": 64, "h": 32}},
+    {"kind": "chart", "title": "추이", "section": "s4", "layout": {"x": 0, "y": 0, "w": 128, "h": 64}, "view": {"type": "line"}},
+    {"kind": "table", "title": "상세 표", "section": "s5", "layout": {"x": 0, "y": 0, "w": 64, "h": 64}},
+    {"kind": "chart", "title": "구성", "section": "s6", "layout": {"x": 0, "y": 0, "w": 96, "h": 64}, "view": {"type": "bar"}},
+    {"kind": "summary", "title": "한 줄 요약", "section": "s7", "layout": {"x": 0, "y": 0, "w": 96, "h": 64}}
+  ]
+}

@@ -1,11 +1,12 @@
 "use client";
 // 새 대시보드는 만드는 곳(useShell().build)에서만 보인다.
 // N4 — 대시보드 고르기·새 대시보드(옛 #d-pick·showList·#d-new·#d-new-go).
-// 고르면 useShell().open(지금 편집을 먼저 저장하고, 못 하면 옮기지 않는다). 새 대시보드는 이름 + 시작 모양(기본 4종 edit/Templates.TEMPLATES·내 템플릿 api.listTemplates)으로 api.saveDashboard → 목록 → 열기.
+// 고르면 useShell().open(지금 편집을 먼저 저장하고, 못 하면 옮기지 않는다). 새 대시보드는 이름 + 시작 모양(lib/templates.allTemplates: 직접 구성·기본 템플릿·내 템플릿, api.listTemplates)으로 api.saveDashboard → 목록 → 열기.
 import { useEffect, useRef, useState } from "react";
-import { TEMPLATES, templateCards } from "@/components/edit/Templates";
+import { newCardId } from "@/components/edit/Templates";
 import { listTemplates, saveDashboard } from "@/lib/api";
 import { useDash } from "@/lib/store";
+import { BLANK, FIRST_PICK, allTemplates, templateDash } from "@/lib/templates";
 import type { Template } from "@/lib/types";
 import { useShell } from "./ShellProvider";
 
@@ -16,11 +17,12 @@ export function PickDashboard() {
   const { open, flush, build } = useShell();
   const [making, setMaking] = useState(false);
   const [name, setName] = useState("");
-  const [tpl, setTpl] = useState("overview");
+  const [tpl, setTpl] = useState(FIRST_PICK);
   const [mine, setMine] = useState<Template[]>([]);
+  const [builtin, setBuiltin] = useState<Template[]>([]);
   const [busy, setBusy] = useState(false);
   const items = state.list.length ? state.list : [{ id: "", name: "저장한 대시보드가 없어요", cards: 0 }];
-  const all = [...TEMPLATES, ...mine.map(t => ({ ...t, id: "my:" + t.id, name: `${t.name} (내 템플릿)`, help: "저장해 둔 카드 배치" }))];
+  const all = allTemplates(builtin, mine);
   const wrap = useRef<HTMLSpanElement>(null), opener = useRef<HTMLButtonElement>(null);
   // 바깥 클릭·Esc로 닫고 [새 대시보드] 단추로 초점을 돌려준다
   useEffect(() => {
@@ -32,14 +34,14 @@ export function PickDashboard() {
   const close = () => { setMaking(false); opener.current?.focus(); };
   const toggle = () => {
     setMaking(!making);
-    if (!making) listTemplates().then(d => setMine(d.templates)).catch(() => setMine([]));  // 내 템플릿을 못 읽어도 기본 4종으로 만든다
+    if (!making) listTemplates().then(d => { setMine(d.templates); setBuiltin(d.builtin); }).catch(e => dispatch({ type: "error", message: (e as Error).message }));
   };
   const make = async () => {
     setBusy(true);
     try {
       await flush();  // 새 대시보드로 옮기기 전에 지금 편집을 저장한다(못 하면 옮기지 않는다)
-      const t = all.find(x => x.id === tpl) ?? TEMPLATES[TEMPLATES.length - 1];
-      const made = await saveDashboard({ name, cards: templateCards(t), template: t.id === "blank" ? "" : t.name });
+      const t = all.find(x => x.id === tpl) ?? BLANK;
+      const made = await saveDashboard({ name, ...templateDash(t, newCardId), template: t.id === BLANK.id ? "" : t.name });
       setName("");
       setMaking(false);
       dispatch({ type: "list", list: made });

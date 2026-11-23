@@ -24,6 +24,7 @@ dash_keys = Later("dashboard.dash_keys")
 dash_marks = Later("dashboard.dash_marks")
 dash_refresh = Later("dashboard.dash_refresh")
 dash_store = Later("core.dash_store")
+dash_templates = Later("dashboard.dash_templates")
 held = Later("core.held")
 kpi_hours = Later("dashboard.kpi_hours")
 metric_file = Later("core.metric_file")
@@ -44,7 +45,11 @@ TARGET_PAGE = 100 # 목표 파일의 문제 줄을 한 번에 돌려줄 수(화�
 LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id}
 server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min",
                     "/api/period/parse", "/api/period/day", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/dashboard/build", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart", "/api/viz",
-                    "/api/dash/pull/state", "/api/dash/pull/crypt", "/api/dash/pull/orphans", "/api/dash/pull/orphans/drop", "/api/dash/bell", "/api/dash/marks/set", "/api/dash/marks/save", "/api/dash/marks/load"})
+                    "/api/dash/pull/state", "/api/dash/pull/crypt", "/api/dash/pull/orphans", "/api/dash/pull/orphans/drop", "/api/dash/bell", "/api/dash/marks/set", "/api/dash/marks/save", "/api/dash/marks/load",
+                    "/api/dash/templates/export", "/api/dash/templates/import", "/api/dash/templates/remote", "/api/dash/templates/fetch"})  # (B7) 템플릿 경로는 연결을 쓰지 않는다
+TEMPLATE_SAVE_KINDS = ("템플릿 (*.json)",)  # (B7) 템플릿 내보내기 저장 대화상자의 형식
+NO_WINDOW = "파일 창을 열 수 없어요(앱 창에서만 돼요)."  # (B7) 저장 대화상자가 없을 때(dash_marks.NO_WINDOW와 같은 글)
+TEMPLATE_GONE = "그 템플릿을 찾지 못했어요. 목록을 다시 열어 주세요."  # (B7)
 
 
 def with_source(card):
@@ -625,22 +630,72 @@ def dash_image():
     return Response(path.read_bytes(), mimetype=IMAGE_TYPES[path.suffix.lower()], headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox", "Cache-Control": "no-store"})
 
 
-# ---------- 내 템플릿(kind·title·layout·colors만 저장) ----------
+# ---------- 템플릿(B7: 형식 번호·섹션·조각·모양 설정, 기본 템플릿·파일·[더 받기]) ----------
 
 @app.get("/api/dash/templates")
 def templates_list():
-    return jsonify(templates=dash_store.load_templates())
+    """GET /api/dash/templates {templates: 내 템플릿, builtin: 기본 템플릿(templates/ 폴더)}(FREE)."""
+    return jsonify(templates=dash_store.load_templates(), builtin=dash_store.builtin_templates())
 
 
 @app.post("/api/dash/templates")
 def templates_save():
-    """내 템플릿 저장: {name, cards: [{kind, title, layout, colors}]}. 같은 이름이면 바꾼다."""
-    return jsonify(templates=dash_store.save_template(request.json or {}))
+    """POST /api/dash/templates {name, dashboard: {pages, sections, cards}}: 편집 중 대시보드의 모양만 내 템플릿으로 저장한다(같은 이름이면 바꾼다, FREE)."""
+    body = request.json or {}
+    return jsonify(templates=dash_store.save_template(dash_store.template_from(body.get("name"), body.get("dashboard"))))
 
 
 @app.post("/api/dash/templates/delete")
 def templates_delete():
     return jsonify(templates=dash_store.delete_template((request.json or {}).get("id")))
+
+
+@app.post("/api/dash/templates/export")
+def templates_export() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#templates_export
+    `POST /api/dash/templates/export` {id}: 내 템플릿 하나를 저장 대화상자로 고른 곳에 JSON 파일로 쓴다 {path}(취소하면 null, FREE)."""
+    body = request.json or {}
+    found = next((t for t in dash_store.load_templates() if t["id"] == body.get("id")), None)
+    if found is None:
+        raise ValueError(TEMPLATE_GONE)
+    if server.ask_save is None:
+        raise ValueError(NO_WINDOW)
+    chosen = server.ask_save(pdf_stem(found["name"]) + dash_store.TEMPLATE_SUFFIX, TEMPLATE_SAVE_KINDS)
+    if not chosen:
+        return jsonify(path=None)
+    path = Path(chosen if chosen.lower().endswith(dash_store.TEMPLATE_SUFFIX) else chosen + dash_store.TEMPLATE_SUFFIX)
+    settings.write_atomic(path, {k: found[k] for k in dash_store.TEMPLATE_FILE_KEYS})
+    return jsonify(path=str(path))
+
+
+@app.post("/api/dash/templates/import")
+def templates_import() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#templates_import
+    `POST /api/dash/templates/import` {text}: 화면이 읽은 파일 글을 read_template로 검사해 내 템플릿에 넣는다 {templates}(FREE)."""
+    text = (request.json or {}).get("text")
+    if not isinstance(text, str):
+        raise ValueError("가져올 템플릿 글(text)이 없어요.")
+    return jsonify(templates=dash_store.save_template(dash_store.read_template(text.encode("utf-8"), None)))
+
+
+@app.post("/api/dash/templates/remote")
+def templates_remote() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#templates_remote
+    `POST /api/dash/templates/remote` [더 받기]: GitHub 저장소 templates 폴더의 파일 목록 {files}(FREE)."""
+    return jsonify(files=dash_templates.remote_list())
+
+
+@app.post("/api/dash/templates/fetch")
+def templates_fetch() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#templates_fetch
+    `POST /api/dash/templates/fetch` {files}: 고른 파일들을 받아 모두 검사한 뒤 내 템플릿에 넣는다 {templates}(FREE)."""
+    files = (request.json or {}).get("files")
+    if not isinstance(files, list) or not 1 <= len(files) <= dash_store.MAX_TEMPLATES or not all(isinstance(f, str) for f in files):
+        raise ValueError(f"받을 템플릿을 1~{dash_store.MAX_TEMPLATES}개 고르세요.")
+    got = [dash_templates.remote_get(f) for f in files]  # 모두 받고 검사한 뒤에만 저장한다
+    for t in got:
+        saved = dash_store.save_template(t)
+    return jsonify(templates=saved)
 
 
 # ---------- 보고서 PDF ----------

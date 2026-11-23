@@ -211,7 +211,12 @@ export type Source = { key: string; label: string } | null;
 export type LiveMin = { source: Source; seconds: number };
 
 // ---------- 그 밖 ----------
-export type Template = { id: string; name: string; cards: Pick<Card, "kind" | "title" | "layout" | "colors">[] };
+/** (B7) 템플릿 조각(dash_store.check_template): 종류·이름·섹션 id·섹션 눈금 자리·색·모양 설정(TEMPLATE_VIEW, 틀 요소는 view.frame). 못 여는 종류(unknown)는 kind·title·section·layout만 */
+export type TemplatePiece = { kind: string; title: string; section: string; layout: Layout; colors?: Colors; view?: Partial<CardView> };
+/** (B7) 템플릿(dash_store.check_template): 형식 번호, id(기본 템플릿은 파일 이름), 설명, 쪽, 섹션, 조각, 이 버전에서 못 여는 종류 */
+export type Template = { format: number; id: string; name: string; help: string; pages: string[]; sections: Section[]; pieces: TemplatePiece[]; unknown: string[] };
+/** (B7) [더 받기] 목록 한 줄(dash_templates.remote_list): 저장소 templates 폴더의 파일 이름과 크기(바이트) */
+export type RemoteTemplate = { file: string; size: number };
 export type Targets = { path: string; rows: Record<string, unknown>[]; errors: unknown[]; error_total: number; offset: number; limit: number; error: string };
 export type CompareItem = { cur: unknown; prev: unknown; fmt?: ValueFormat; mode?: string; label?: string; better?: "up" | "down"; partial?: boolean; digits?: number; zeros?: boolean };
 /** /api/columns: [컬럼, 한글 타입] */

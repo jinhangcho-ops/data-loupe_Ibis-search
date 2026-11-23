@@ -95,24 +95,24 @@ def card(kind="kpi", title="핵심", **more):
 def test_my_templates_save_load_delete(folder):
     assert dash_store.load_templates() == []
     saved = dash_store.save_template({"name": "내 개요", "cards": [card(colors={"series": {"a": "#ff0000"}}, source={"table": "비밀"}, data={"values": 1}, view={"type": "line"}), card("chart", "추이")]})
-    assert [t["name"] for t in saved] == ["내 개요"] and set(saved[0]["cards"][0]) == {"kind", "title", "layout", "colors"}  # source·data·view는 저장하지 않는다
-    assert saved[0]["cards"][0]["colors"]["series"] == {"a": "#ff0000"}
+    assert [t["name"] for t in saved] == ["내 개요"] and not {"source", "data"} & set(saved[0]["pieces"][0])  # (B7) 옛 모양(cards)은 조각으로 옮겨 읽는다. source·data는 저장하지 않는다
+    assert saved[0]["pieces"][0]["colors"]["series"] == {"a": "#ff0000"}
     text = (server.settings.PATH.parent / dash_store.TEMPLATES).read_text(encoding="utf-8")
     assert "비밀" not in text and '"values"' not in text
     again = dash_store.save_template({"name": "내 개요", "cards": [card()]})  # 같은 이름은 바꾼다
-    assert len(again) == 1 and len(again[0]["cards"]) == 1
+    assert len(again) == 1 and len(again[0]["pieces"]) == 1
     assert dash_store.delete_template(again[0]["id"]) == [] and dash_store.load_templates() == []
-    for bad, why in [({"name": "", "cards": [card()]}, "이름"), ({"name": "x", "cards": []}, "카드가"), ({"name": "x", "cards": [card("nope")]}, "종류"),
+    for bad, why in [({"name": "", "cards": [card()]}, "이름"), ({"name": "x", "cards": []}, "조각이"),
                      ({"name": "x", "cards": [card(layout={"x": 0, "y": 0, "w": 1, "h": 4})]}, "12칸"), ({"name": "x", "cards": [card(colors={"series": {"a": "빨강"}})]}, "HEX")]:
         with pytest.raises(ValueError, match=why):
             dash_store.save_template(bad)
 
 
 def test_template_routes(client, folder):
-    got = client.post("/api/dash/templates", json={"name": "모니터링", "cards": [card("status", "상태")]}).get_json()["templates"]
+    got = client.post("/api/dash/templates", json={"name": "모니터링", "dashboard": {"cards": [card("status", "상태")]}}).get_json()["templates"]
     assert got[0]["name"] == "모니터링" and client.get("/api/dash/templates").get_json()["templates"] == got
     assert client.post("/api/dash/templates/delete", json={"id": got[0]["id"]}).get_json()["templates"] == []
-    assert client.post("/api/dash/templates", json={"name": "x", "cards": [card("nope")]}).status_code == 400
+    assert client.post("/api/dash/templates", json={"name": "x", "dashboard": {"cards": [card("nope")]}}).status_code == 400
 
 
 def test_north_star_counter_limits(folder):

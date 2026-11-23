@@ -2,7 +2,7 @@
 // 같은 출처(/api/...)라 열쇠는 Flask가 첫 페이지에서 둔 쿠키(key)로 간다. 경로를 고치면 tests_pytest/test_cr_n0.py가 Flask 라우트와 대조한다.
 import type {
   Card, ChartPoints, Columns, CompareItem, CompareMode, ComputeResult, Constants, Ctx, DashList, DashSettings, Dashboard, DayParse,
-  LiveMin, MarkValue, PeriodParse, PullCrypt, PullOrphan, PullState, PullTable, PullUnused, Source, Targets, Template,
+  LiveMin, MarkValue, PeriodParse, PullCrypt, PullOrphan, PullState, PullTable, PullUnused, RemoteTemplate, Section, Source, Targets, Template,
 } from "./types";
 import type { CtxFilter } from "./links";
 
@@ -175,9 +175,29 @@ export const parseDay = (text: string) => api<DayParse>("/api/period/day", { tex
 export const getLiveMin = () => api<LiveMin>("/api/dash/live_min");
 
 // ---------- 템플릿·보고서 ----------
-export const listTemplates = () => api<{ templates: Template[] }>("/api/dash/templates");
-export const saveTemplate = (t: { name: string; cards: Template["cards"] }) => api<{ templates: Template[] }>("/api/dash/templates", t);
+export const listTemplates = () => api<{ templates: Template[]; builtin: Template[] }>("/api/dash/templates");
+export const saveTemplate = (name: string, dashboard: { pages: string[]; sections: Section[]; cards: Partial<Card>[] }) => api<{ templates: Template[] }>("/api/dash/templates", { name, dashboard });
 export const deleteTemplate = (id: string) => api<{ templates: Template[] }>("/api/dash/templates/delete", { id });
+/** [SPECIFICATION] plans/dash-blocks.md#exportTemplate
+ *  (B7) 내 템플릿 하나를 저장 대화상자로 JSON 파일에 쓴다 POST /api/dash/templates/export(취소하면 path null). */
+export function exportTemplate(id: string): Promise<{ path: string | null }> {
+  return api<{ path: string | null }>("/api/dash/templates/export", { id });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#importTemplate
+ *  (B7) 화면이 읽은 템플릿 파일 글을 서버 검사 뒤 내 템플릿에 넣는다 POST /api/dash/templates/import. */
+export function importTemplate(text: string): Promise<{ templates: Template[] }> {
+  return api<{ templates: Template[] }>("/api/dash/templates/import", { text });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#remoteTemplates
+ *  (B7) [더 받기] 저장소 templates 폴더의 파일 목록 POST /api/dash/templates/remote. */
+export function remoteTemplates(): Promise<{ files: RemoteTemplate[] }> {
+  return api<{ files: RemoteTemplate[] }>("/api/dash/templates/remote", {});
+}
+/** [SPECIFICATION] plans/dash-blocks.md#fetchTemplates
+ *  (B7) 고른 파일들을 받아 서버 검사 뒤 내 템플릿에 넣는다 POST /api/dash/templates/fetch. */
+export function fetchTemplates(files: string[]): Promise<{ templates: Template[] }> {
+  return api<{ templates: Template[] }>("/api/dash/templates/fetch", { files });
+}
 /** 보고서 JPEG(data URL) → 1쪽 PDF. 창이 없으면 window:false와 pdf(data URL)를 돌려줘 화면이 내려받는다 */
 export const savePdf = (image: string, name: string) =>
   api<{ path?: string; cancelled?: boolean; window?: false; name?: string; pdf?: string }>("/api/dash/pdf", { image, name });

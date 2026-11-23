@@ -1313,22 +1313,97 @@ def check_limits(limits, counters):
 
 
 MAX_TEMPLATES = 30  # 내 템플릿 수
-TEMPLATES = "dash_templates.json"  # 설정 폴더의 내 템플릿 {templates: [{id, name, cards: [{kind, title, layout, colors}]}]}. 값·연결·조회는 저장하지 않는다
+TEMPLATES = "dash_templates.json"  # 설정 폴더의 내 템플릿 {templates: [check_template 모양]}. 값·연결·조회는 저장하지 않는다
+TEMPLATE_FORMAT = 1  # (B7) 이 앱이 아는 템플릿 형식 번호(화면 web/lib/templates.ts TEMPLATE_FORMAT과 같다)
+TEMPLATE_KEYS = ("format", "id", "name", "help", "pages", "sections", "pieces", "unknown")  # (B7) 템플릿 하나의 항목(unknown은 검사가 다시 만든다)
+TEMPLATE_FILE_KEYS = ("format", "name", "help", "pages", "sections", "pieces")  # (B7) 파일로 내보낼 때 쓰는 항목
+TEMPLATE_PIECE_KEYS = ("kind", "title", "section", "layout", "colors", "view")  # (B7) 템플릿 조각 하나의 항목
+TEMPLATE_VIEW = ("type", "unit", "compare", "better", "ratio", "trend", "show_r", "connect", "scale", "data_table",
+                 "format", "digits", "zeros", "unit_text", "ring", "rings", "bins", "cells", "total", "bucket",
+                 "funnel_shape", "ladder_scale", "gap_stats", "flow_unlimited", "flow_dropout", "press", "list_rows",
+                 "styles", "ranges", "note", "template", "slots")  # (B7) 템플릿에 담는 컬럼과 무관한 모양 설정(명시 허용 목록. 끝 줄은 사용자 답 2026-11-23)
+TEMPLATE_FRAME = {"button": ("label", "icon", "action", "arg", "ambient"), "nav_rail": ("items", "ambient"), "top_strip": ("parts", "items"),
+                  "page_tabs": (), "period_pick": (), "asof_field": (), "unit_seg": ("unit",), "text": ("text", "size", "align"),
+                  "segment": ("mode", "ambient"), "chip_row": ("ambient",), "filter_bar": ("clear_label", "ambient"), "mark_count": ("label", "look", "ambient")}  # (B7) 틀 요소마다 템플릿에 담는 view.frame 항목
+MAX_TEMPLATE_BYTES = 256 * 1024  # (B7) 템플릿 파일 하나의 크기(바이트)
+MAX_TEMPLATE_HELP = 100  # (B7) 템플릿 설명 글자 수
+MAX_TEMPLATE_NAME = 50  # (B7) 템플릿 이름 글자 수(template_from)
+TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"  # (B7) 기본 템플릿 폴더(저장소 templates/, exe에는 --add-data로 같은 이름)
+TEMPLATE_SUFFIX = ".json"  # (B7) 템플릿 파일 확장자
+TEMPLATE_NEWER = "이 템플릿은 이 앱보다 새 버전의 형식({found})이에요. 앱을 업데이트한 뒤 다시 가져오세요."  # (B7)
+TEMPLATE_BIG = f"템플릿 파일은 {MAX_TEMPLATE_BYTES // 1024}KB까지예요."  # (B7)
+TEMPLATE_NOT_JSON = "템플릿 파일을 JSON으로 읽을 수 없어요."  # (B7)
+TEMPLATE_CARD_ACTION = "템플릿의 단추에는 카드를 가리키는 할 일을 담지 않아요."  # (B7)
 
 
 def check_template(t):
-    """내 템플릿 하나를 검사해 정리한 사본(kind·title·layout·colors만 남긴다). source·data는 받지 않고 버린다."""
+    """[SPECIFICATION] plans/dash-blocks.md#B7 check_template (수정)
+    내 템플릿 하나(형식 번호·섹션·조각·쪽·모양 설정)를 검사해 정리한 사본을 돌려준다."""
     if not isinstance(t, dict):
         raise ValueError("템플릿은 객체여야 해요.")
-    cards = t.get("cards")
-    if not isinstance(cards, list) or not 1 <= len(cards) <= MAX_CARDS:
-        raise ValueError(f"템플릿에는 카드가 1개 이상 {MAX_CARDS}개 이하여야 해요.")
-    out = []
-    for c in cards:
-        if not isinstance(c, dict) or c.get("kind") not in KINDS:
-            raise ValueError(f"템플릿 카드의 종류(kind)는 {', '.join(KINDS)} 중 하나예요.")
-        out.append({"kind": c["kind"], "title": text(c.get("title"), "카드 이름", 100, 1), "layout": check_layout(c.get("layout")), "colors": check_colors(c.get("colors"))})
-    return {"id": t.get("id") or secrets.token_hex(8), "name": text(t.get("name"), "템플릿 이름", 50, 1), "cards": out}
+    if "format" not in t:
+        if "cards" not in t:
+            raise ValueError("템플릿 형식 번호(format)가 없어요.")
+        cards = t["cards"]
+        if not isinstance(cards, list):
+            raise ValueError(f"템플릿에는 조각이 1개 이상 {MAX_CARDS}개 이하여야 해요.")
+        spots = [check_layout(c.get("layout") if isinstance(c, dict) else None) for c in cards]
+        sub_x, sub_y = SECTION_SUB
+        t = {"format": TEMPLATE_FORMAT, "id": t.get("id"), "name": t.get("name"), "sections": [{"id": f"s{i}", "layout": spot} for i, spot in enumerate(spots)],
+             "pieces": [{"kind": c.get("kind"), "title": c.get("title"), "section": f"s{i}", "layout": {"x": 0, "y": 0, "w": spot["w"] * sub_x, "h": spot["h"] * sub_y}, "colors": c.get("colors")}
+                        for i, (c, spot) in enumerate(zip(cards, spots))]}
+    fmt = t["format"]
+    if type(fmt) is not int or fmt < 1:
+        raise ValueError("템플릿 형식 번호(format)는 1 이상의 정수예요.")
+    if fmt > TEMPLATE_FORMAT:
+        raise ValueError(TEMPLATE_NEWER.format(found=fmt))
+    if extra := set(t) - set(TEMPLATE_KEYS):
+        raise ValueError(f"템플릿에 쓸 수 없는 항목이 있어요: {', '.join(sorted(extra))}")
+    template_id = t.get("id") or secrets.token_hex(8)
+    if not isinstance(template_id, str) or not ID.fullmatch(template_id):
+        raise ValueError("템플릿 id는 영문·숫자·_·- 32자까지예요.")
+    name = text(t.get("name"), "템플릿 이름", 50, 1)
+    help_text = text(t.get("help"), "템플릿 설명", MAX_TEMPLATE_HELP)
+    pages = check_pages(t.get("pages"))
+    raw = t.get("pieces")
+    if not isinstance(raw, list) or not 1 <= len(raw) <= MAX_CARDS:
+        raise ValueError(f"템플릿에는 조각이 1개 이상 {MAX_CARDS}개 이하여야 해요.")
+    pieces: list[dict] = []
+    for p in raw:
+        if not isinstance(p, dict) or set(p) - set(TEMPLATE_PIECE_KEYS):
+            raise ValueError(f"템플릿 조각에 쓸 수 없는 항목이 있어요: {', '.join(sorted(set(p) - set(TEMPLATE_PIECE_KEYS))) if isinstance(p, dict) else p}")
+        kind = p.get("kind")
+        if not isinstance(kind, str) or not ID.fullmatch(kind):
+            raise ValueError("템플릿 조각의 종류(kind)는 영문·숫자·_·- 32자까지예요.")
+        if kind not in KINDS and kind not in FRAME_KINDS:
+            section = p.get("section")
+            if not isinstance(section, str) or not ID.fullmatch(section):
+                raise ValueError("조각의 섹션(section)은 섹션 id예요.")
+            pieces.append({"kind": kind, "title": text(p.get("title"), "카드 이름", 100, 1), "section": section, "layout": check_spot(p.get("layout"))})
+            continue
+        view = p.get("view") or {}
+        if not isinstance(view, dict):
+            raise ValueError("템플릿 조각의 보기 설정(view)은 객체여야 해요.")
+        framed = kind in FRAME_KINDS
+        frame = view.get("frame") or {}
+        extra = set(view) - set(TEMPLATE_VIEW) - ({"frame"} if framed else set())
+        if framed and isinstance(frame, dict):
+            extra |= set(frame) - set(TEMPLATE_FRAME[kind])
+        if extra:
+            raise ValueError(f"템플릿 조각 '{p.get('title')}'에 담을 수 없는 설정이 있어요: {', '.join(sorted(extra))}")
+        card = check_card({"kind": kind, "title": p.get("title"), "section": p.get("section"), "layout": p.get("layout"), "colors": p.get("colors"), "view": view})
+        shaped = {k: card["view"][k] for k in TEMPLATE_VIEW if k in card["view"]}
+        if framed:
+            shaped["frame"] = {k: v for k, v in card["view"]["frame"].items() if k in TEMPLATE_FRAME[kind]}
+            if any(FRAME_ACTIONS.get(b.get("action", ""), "") == "card" for b in [shaped["frame"], *shaped["frame"].get("items", [])]):
+                raise ValueError(TEMPLATE_CARD_ACTION)
+        pieces.append({"kind": kind, "title": card["title"], "section": card["section"], "layout": card["layout"], "colors": card["colors"], "view": shaped})
+    sections, _ = check_sections(t.get("sections"), [{"title": p["title"], "section": p["section"], "layout": p["layout"]} for p in pieces])
+    out = {"format": TEMPLATE_FORMAT, "id": template_id, "name": name, "help": help_text, "pages": pages, "sections": sections, "pieces": pieces,
+           "unknown": sorted({p["kind"] for p in pieces if p["kind"] not in KINDS and p["kind"] not in FRAME_KINDS})}
+    if len(json.dumps(out, ensure_ascii=False, separators=(",", ":")).encode("utf-8")) > MAX_TEMPLATE_BYTES:
+        raise ValueError(TEMPLATE_BIG)
+    return out
 
 
 def load_templates():
@@ -1359,6 +1434,50 @@ def delete_template(template_id):
         found = [x for x in load_templates() if x["id"] != template_id]
         settings.write(TEMPLATES, {"templates": found})
     return found
+
+
+def template_from(name: object, dash: object) -> dict:
+    """[SPECIFICATION] plans/dash-blocks.md#template_from
+    편집 중인 대시보드(섹션·조각·쪽)에서 허용 목록의 모양 설정만 남긴 템플릿을 만들어 검사한 사본을 돌려준다."""
+    name = text(name, "템플릿 이름", MAX_TEMPLATE_NAME, 1)
+    if not isinstance(dash, dict):
+        raise ValueError("템플릿으로 저장할 대시보드(dashboard)는 객체여야 해요.")
+    d = check_dashboard({"name": name, "pages": dash.get("pages"), "sections": dash.get("sections"), "cards": dash.get("cards")})
+    pieces: list[dict] = []
+    for c in d["cards"]:
+        if c["kind"] in GONE_KINDS:
+            continue
+        view = {k: c["view"][k] for k in TEMPLATE_VIEW if k in c["view"]}
+        if c["kind"] in FRAME_KINDS:
+            frame = {k: copy.deepcopy(v) for k, v in c["view"]["frame"].items() if k in TEMPLATE_FRAME[c["kind"]]}
+            for b in [frame, *frame.get("items", [])]:
+                if FRAME_ACTIONS.get(b.get("action", ""), "") == "card":
+                    b.update(action="", arg="")  # 카드 id는 새 대시보드에서 뜻이 없다
+            view["frame"] = frame
+        pieces.append({"kind": c["kind"], "title": c["title"], "section": c["section"], "layout": c["layout"], "colors": c["colors"], "view": view})
+    return check_template({"format": TEMPLATE_FORMAT, "name": name, "help": "", "pages": d["pages"], "sections": d["sections"], "pieces": pieces})
+
+
+def read_template(raw: bytes, template_id: str | None) -> dict:
+    """[SPECIFICATION] plans/dash-blocks.md#read_template
+    템플릿 파일 바이트를 크기 검사·JSON 해석·check_template 순서로 읽어 id를 붙인 사본을 돌려준다."""
+    if len(raw) > MAX_TEMPLATE_BYTES:
+        raise ValueError(TEMPLATE_BIG)
+    try:
+        found = json.loads(raw.decode("utf-8-sig"))
+    except ValueError as e:  # UnicodeDecodeError·JSONDecodeError
+        raise ValueError(TEMPLATE_NOT_JSON) from e
+    if not isinstance(found, dict):
+        raise ValueError("템플릿은 객체여야 해요.")
+    return check_template({**found, "id": template_id})
+
+
+def builtin_templates() -> list[dict]:
+    """[SPECIFICATION] plans/dash-blocks.md#builtin_templates
+    기본 템플릿 폴더(TEMPLATE_DIR)의 JSON 파일을 이름 차례로 read_template해 돌려준다(id = 파일 이름)."""
+    if not TEMPLATE_DIR.is_dir():
+        raise ValueError(f"기본 템플릿 폴더가 없어요: {TEMPLATE_DIR}")
+    return [read_template(p.read_bytes(), p.stem) for p in sorted(TEMPLATE_DIR.glob("*" + TEMPLATE_SUFFIX))]
 
 
 def check_dashboard(d, old=None):

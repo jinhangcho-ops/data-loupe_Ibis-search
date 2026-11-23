@@ -40,7 +40,7 @@ def test_geomap_card_is_a_known_kind_and_validates_settings():
                          ({**GEO, "regions": {"table": ""}}, "하나"), ("글자", "쓸 수 없는")):
         with pytest.raises(ValueError, match=message):
             check(geo=geo)
-    assert "tiles" in dash_store.GEO_KEYS and "geomap" in dash_store.check_template({"name": "t", "cards": [{"kind": "geomap", "title": "지도", "layout": {"x": 0, "y": 0, "w": 6, "h": 6}}]})["cards"][0]["kind"]
+    assert "tiles" in dash_store.GEO_KEYS and "geomap" in dash_store.check_template({"name": "t", "cards": [{"kind": "geomap", "title": "지도", "layout": {"x": 0, "y": 0, "w": 6, "h": 6}}]})["pieces"][0]["kind"]
 
 
 def test_geomap_card_keeps_color_rule_and_size_limit():

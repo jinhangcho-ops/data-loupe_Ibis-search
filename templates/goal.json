@@ -1,0 +1,20 @@
+{
+  "format": 1,
+  "name": "목표 달성형",
+  "help": "달성률, 목표 추이, 진행 칸, 한 줄 문장",
+  "pages": [],
+  "sections": [
+    {"id": "s1", "title": "", "layout": {"x": 0, "y": 0, "w": 4, "h": 8}, "follow": true, "view": {}},
+    {"id": "s2", "title": "", "layout": {"x": 4, "y": 0, "w": 8, "h": 8}, "follow": true, "view": {}},
+    {"id": "s3", "title": "", "layout": {"x": 0, "y": 8, "w": 6, "h": 4}, "follow": true, "view": {}},
+    {"id": "s4", "title": "", "layout": {"x": 6, "y": 8, "w": 6, "h": 4}, "follow": true, "view": {}},
+    {"id": "s5", "title": "", "layout": {"x": 0, "y": 12, "w": 12, "h": 3}, "follow": true, "view": {}}
+  ],
+  "pieces": [
+    {"kind": "donut_kpi", "title": "달성률", "section": "s1", "layout": {"x": 0, "y": 0, "w": 64, "h": 64}},
+    {"kind": "target_trend", "title": "목표 추이", "section": "s2", "layout": {"x": 0, "y": 0, "w": 128, "h": 64}},
+    {"kind": "stripes", "title": "진행", "section": "s3", "layout": {"x": 0, "y": 0, "w": 96, "h": 32}},
+    {"kind": "blocks", "title": "채운 양", "section": "s4", "layout": {"x": 0, "y": 0, "w": 96, "h": 32}},
+    {"kind": "sentence", "title": "한 줄 문장", "section": "s5", "layout": {"x": 0, "y": 0, "w": 192, "h": 24}}
+  ]
+}
