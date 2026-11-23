@@ -18,7 +18,7 @@ import { computedUpdate, useDash } from "@/lib/store";
 import type { Card, CardData, CardView, ChartType } from "@/lib/types";
 import { autoParams, percentDomain, type AutoRule, type AutoView, type AxisScale, type Order, type ParamSpec } from "@/lib/autoviz";
 import { RulesEditor } from "../RulesEditor";
-import { Check, Sel, Txt } from "../menu/Fields";
+import { Check, PlacesField, Sel, Txt } from "../menu/Fields";
 import { DATE_X, WATCH } from "../menu/kinds";
 import { GroupPicker } from "./GroupPicker";
 import { ListPanel } from "./ListPanel";
@@ -356,12 +356,14 @@ export function Tools({ card, columns, onChange }: { card: Card; columns: string
             </label>
           ))}
           {dateSel}
-          {(!PLAIN.includes(card.kind) || card.kind === "geomap" || card.kind === "calheat") && (
+          {(!PLAIN.includes(card.kind) || card.kind === "geomap" || card.kind === "calheat") && (<>
             <label className="hint bset">표시 형식<select className="bunit" aria-label="표시 형식" value={view.format ?? "number"} onChange={e => setView({ format: e.target.value as CardView["format"] })}>
                 {FORMATS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
               </select>
             </label>
-          )}
+            <PlacesField value={view} range={consts.dash.digits} onChange={p => { setView(p); setMsg(card.kind === "summary" ? RECOMPUTE : ""); }} />
+          </>)}
+          {card.kind === "sentence" && <PlacesField value={view} range={consts.dash.digits} onChange={p => setView(p)} />}
           {kindFields}
           {unitSel}
           {unitText && <label className="hint bset">단위<input aria-label="단위" placeholder="단위" maxLength={10} className="w-[5rem] h-[1.5rem] [font-size:.75rem]" value={view.unit_text ?? ""} onChange={e => setView({ unit_text: e.target.value })} /></label>}

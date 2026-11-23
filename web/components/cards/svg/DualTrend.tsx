@@ -69,8 +69,8 @@ export function DualTrend({ card, colors, range, merge }: P) {
         <g transform={`translate(${clamp(xOf(tipAt) + 8, 0, W - 150 * s - 2)} ${top})`} pointerEvents="none">
           <rect width={150 * s} height={52 * s} rx={6} fill={colors.card} stroke={colors.line} />
           <text x={8 * s} y={15 * s} fontSize={11 * s} fill={colors.text}>{shown[tipAt]}</text>
-          <text x={8 * s} y={30 * s} fontSize={11 * s} fill={cols[0]}>{`${names[0]} ${showValue(rows[0][tipAt]?.v, fmt)}`}</text>
-          <text x={8 * s} y={45 * s} fontSize={11 * s} fill={cols[1]}>{`${names[1]} ${showValue(rows[1][tipAt]?.v, fmt)}`}</text>
+          <text x={8 * s} y={30 * s} fontSize={11 * s} fill={cols[0]}>{`${names[0]} ${showValue(rows[0][tipAt]?.v, fmt, "", card.view)}`}</text>
+          <text x={8 * s} y={45 * s} fontSize={11 * s} fill={cols[1]}>{`${names[1]} ${showValue(rows[1][tipAt]?.v, fmt, "", card.view)}`}</text>
         </g>
       )}
       {a.map((d, i) => { const h = d.v == null ? 0 : 28 * (d.v - lo) / ((hi - lo) || 1); return <rect key={d.day} x={bx(i) - 1} y={brushY + 28 - h} width={2} height={d.v == null ? 0 : h + 1} fill={colors.text} />; })}

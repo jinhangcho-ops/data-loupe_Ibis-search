@@ -14,15 +14,15 @@ export function Bullet(p: P) {
   if (v == null) return <Empty />;
   const bands = [...(p.card.view?.bands ?? [])].filter(Number.isFinite).sort((a, b) => a - b);
   const max = Math.max(v, t ?? 0, ...bands, 0) * 1.05 || 1, x = (n: number) => L + ((W - L - R) * Math.max(0, n)) / max, c = tone(p, "주 색", 0);
-  const tick = (n: number) => (fmt === "number" ? tickBy(max / 2)(n) : showValue(n, fmt));  // 퍼센트·금액이면 머리글과 같은 모양
+  const tick = (n: number) => (fmt === "number" ? tickBy(max / 2)(n) : showValue(n, fmt, "", p.card.view));  // 퍼센트·금액이면 머리글과 같은 모양
   return (
     <Box cls="bullet">
-      <div className="hint">{`${showValue(v, fmt, unit)}${t == null ? "" : ` · 목표 ${showValue(t, fmt, unit)}`}`}</div>
+      <div className="hint">{`${showValue(v, fmt, unit, p.card.view)}${t == null ? "" : ` · 목표 ${showValue(t, fmt, unit, p.card.view)}`}`}</div>
       <div className="nm-well flex-1 min-h-0"><Frame w={W} h={H} label={p.card.title}>
         <rect x={L} y={TOP} width={W - L - R} height={BAR} rx={BAND_RX} fill={p.colors.line} />
-        {bands.map((b, i) => <rect key={i} x={L} y={TOP} width={x(b) - L} height={BAR} rx={BAND_RX} fill="var(--muted)" fillOpacity={0.12}><title>{`구간 ${showValue(b, fmt, unit)}`}</title></rect>)}
-        <rect className="nm-raise" x={L} y={TOP + BAR / 3} width={x(v) - L} height={BAR / 3} rx={BAR / 6} fill={c}><title>{`값 ${showValue(v, fmt, unit)}`}</title></rect>
-        {t != null && <line x1={x(t)} x2={x(t)} y1={TOP + MARK_INSET} y2={TOP + BAR - MARK_INSET} stroke="var(--text)" strokeWidth={3} strokeLinecap="round"><title>{`목표 ${showValue(t, fmt, unit)}`}</title></line>}
+        {bands.map((b, i) => <rect key={i} x={L} y={TOP} width={x(b) - L} height={BAR} rx={BAND_RX} fill="var(--muted)" fillOpacity={0.12}><title>{`구간 ${showValue(b, fmt, unit, p.card.view)}`}</title></rect>)}
+        <rect className="nm-raise" x={L} y={TOP + BAR / 3} width={x(v) - L} height={BAR / 3} rx={BAR / 6} fill={c}><title>{`값 ${showValue(v, fmt, unit, p.card.view)}`}</title></rect>
+        {t != null && <line x1={x(t)} x2={x(t)} y1={TOP + MARK_INSET} y2={TOP + BAR - MARK_INSET} stroke="var(--text)" strokeWidth={3} strokeLinecap="round"><title>{`목표 ${showValue(t, fmt, unit, p.card.view)}`}</title></line>}
         {[0, 0.5, 1].map(k => <text key={k} x={x(max * k)} y={TICK_TOP + FONT * s} fontSize={FONT * s} textAnchor={k ? (k === 1 ? "end" : "middle") : "start"} fill="var(--muted)">{tick(max * k)}</text>)}
       </Frame></div>
     </Box>

@@ -53,7 +53,7 @@ export function counterAlerts(cards: Card[], star: NorthStar | undefined, range:
     if (v == null || !Number.isFinite(v)) continue;
     const bad = lim.op === ">=" ? underTarget(v, lim.value) : overTarget(v, lim.value), fmt = cardFormat(card);
     if (bad) out.push({ id, title: card.title, value: v, op: lim.op, limit: lim.value,
-      text: `${card.title} 값이 한계를 벗어났어요. 지금 ${showValue(v, fmt)}, 한계 ${showValue(lim.value, fmt)} ${lim.op === ">=" ? "이상" : "이하"}` });
+      text: `${card.title} 값이 한계를 벗어났어요. 지금 ${showValue(v, fmt, "", card.view)}, 한계 ${showValue(lim.value, fmt, "", card.view)} ${lim.op === ">=" ? "이상" : "이하"}` });
   }
   return out;
 }

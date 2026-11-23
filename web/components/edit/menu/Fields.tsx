@@ -1,10 +1,13 @@
 "use client";
 // 카드 추가 메뉴의 칸 부품(라벨이 입력을 감싸 이름이 붙는다). 줄 글 칸(LineBox)은 옛 dash_rules.js lineEditor: 줄마다 읽어 틀린 줄과 이유를 아래에 보인다.
 import { readLines } from "@/lib/calc";
+import type { Places } from "@/lib/types";
 import type { ReactNode } from "react";
 
 export type Opt = string | [string, string];  // 값 또는 [값, 글자]
 const pair = (o: Opt): [string, string] => (typeof o === "string" ? [o, o] : o);
+
+const DIGITS_LABEL = "소수 자릿수", DIGITS_BLANK = "비움(지금 규칙)", ZEROS_LABEL = "끝자리 0 채우기", ZEROS_OFF = "소수 자릿수를 고르면 쓸 수 있어요.";
 
 const Need = () => <b className="cm-need" title="꼭 채울 칸" aria-hidden="true">*</b>;
 
@@ -31,8 +34,19 @@ export function Txt({ label, value, onChange, type = "text", placeholder, title,
   );
 }
 
-export function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return <label className="hint cm-field">{label}<input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="w-[1.5rem] h-[1.5rem] [flex:0_0_auto]" /></label>;
+export function Check({ label, checked, onChange, disabled, title }: { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; title?: string }) {
+  return <label className="hint cm-field" title={title}>{label}<input type="checkbox" checked={checked} disabled={disabled} onChange={e => onChange(e.target.checked)} className="w-[1.5rem] h-[1.5rem] [flex:0_0_auto]" /></label>;
+}
+
+/** [SPECIFICATION] plans/dash-blocks.md#PlacesField
+ *  값 모양 칸 옆의 소수 자릿수 칸과 끝자리 0 채우기 체크 칸을 그린다. */
+export function PlacesField({ value, range, onChange }: { value: Places; range: { min: number; max: number }; onChange: (next: Places) => void }): ReactNode {
+  return (
+    <>
+      <Sel label={DIGITS_LABEL} value={value.digits == null ? "" : String(value.digits)} blank={DIGITS_BLANK} options={Array.from({ length: range.max - range.min + 1 }, (_, i) => String(range.min + i))} onChange={v => onChange(v === "" ? { digits: undefined, zeros: undefined } : { digits: Number(v), zeros: value.zeros ? true : undefined })} />
+      <Check label={ZEROS_LABEL} checked={value.digits != null && !!value.zeros} disabled={value.digits == null} title={value.digits == null ? ZEROS_OFF : undefined} onChange={z => onChange({ digits: value.digits, zeros: z ? true : undefined })} />
+    </>
+  );
 }
 
 /** 여러 줄 글 칸. parse는 한 줄 읽기 함수({error} 또는 결과) */

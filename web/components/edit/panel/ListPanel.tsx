@@ -10,7 +10,7 @@ import { useConstants } from "@/lib/constants";
 import { freshLinks } from "@/lib/links";
 import { computedUpdate, useDash } from "@/lib/store";
 import type { Card, CardData, CardView, ListPart, ListView } from "@/lib/types";
-import { Check, LineBox, Sel, Txt } from "../menu/Fields";
+import { Check, LineBox, PlacesField, Sel, Txt } from "../menu/Fields";
 import { MarkPanel } from "./MarkPanel";
 
 const MAX_LABEL = 30;  // 단추 이름 글자 상한(서버 dash_store.MAX_FRAME_LABEL)
@@ -103,6 +103,7 @@ export function ListPanel({ card, data, onChange }: ListPanelProps): ReactNode {
           {list.swaps.length > 0 && <Check label="값 바꾸기 단추를 따름" checked={p.swap} onChange={swap => putPart(i, { swap })} />}
           {!p.swap && <Sel label="컬럼" value={p.column} options={[...names, ...(card.view.row_marks?.fields ?? []).map(f => f.name)]} onChange={column => putPart(i, { column })} />}
           <Sel label="값 모양" value={p.format} options={FORMATS} onChange={format => putPart(i, { format: format as ListPart["format"] })} />
+          <PlacesField value={p} range={consts.dash.digits} onChange={x => putPart(i, x)} />
           {p.kind === "bar" && <Sel label="막대 기준" value={p.basis} options={BASES} onChange={basis => putPart(i, { basis: basis as ListPart["basis"] })} />}
           <Sel label="자리" value={p.side} options={SIDES} onChange={side => putPart(i, { side: side as ListPart["side"] })} />
           <RuleBox rules={p.rules} onRead={rules => putPart(i, { rules })} />

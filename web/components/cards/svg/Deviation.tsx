@@ -21,11 +21,11 @@ export function Deviation({ card, colors }: P) {
           return (
             <tr key={e.name}>
               <th>{e.name}</th>
-              <td className="num">{showValue(d.base, fmt)}</td>
+              <td className="num">{showValue(d.base, fmt, "", view)}</td>
               {d.cells.map((c, i) => (
                 <td key={i} className="num" style={{ ...CELL_STYLE, ...(c.over ? { background: alpha(c.dev! > 0 ? colors.err : colors.series[0], 0.3) } : undefined) }}>
-                  {c.v == null ? "" : showValue(c.v, fmt)}
-                  {c.dev == null ? null : <div className="hint">{(c.dev > 0 ? "+" : c.dev < 0 ? "−" : "±") + showValue(Math.abs(c.dev), fmt)}</div>}
+                  {c.v == null ? "" : showValue(c.v, fmt, "", view)}
+                  {c.dev == null ? null : <div className="hint">{(c.dev > 0 ? "+" : c.dev < 0 ? "−" : "±") + showValue(Math.abs(c.dev), fmt, "", view)}</div>}
                 </td>
               ))}
             </tr>

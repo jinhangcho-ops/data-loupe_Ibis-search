@@ -20,7 +20,7 @@ export function Donut({ card, colors, range, merge }: P) {
   const s = useRootScale();
   const slots: SlotLike[] = card.view?.slots?.length ? card.view.slots : (card.data?.by_unit?.day?.series ?? []).map(s => ({ label: s.name })), ring = card.view?.ring || "stack";
   const vals = slots.map((_, i) => cardValue(card, i, range, merge)), target = cardTarget(card), main = vals[0] ?? 0, color = (i: number) => slots[i]?.color || pickColor(card, "series", slots[i]?.label ?? String(i), colors, i);
-  const grow = CORNER * (s - 1), W = 260, H = 200 + 2 * grow, cx = W / 2, cy = 100 + grow, hcy = HALF_BASE + grow, c0 = color(0), over = darken(c0), fmt = (i: number) => showValue(vals[i], slots[i]?.format || cardFormat(card), slots[i]?.unit_text);
+  const grow = CORNER * (s - 1), W = 260, H = 200 + 2 * grow, cx = W / 2, cy = 100 + grow, hcy = HALF_BASE + grow, c0 = color(0), over = darken(c0), fmt = (i: number) => showValue(vals[i], slots[i]?.format || cardFormat(card), slots[i]?.unit_text, card.view);
   const kids: React.ReactNode[] = [];
   const ringTrack = (key: string, rad: number) => <circle key={key} cx={cx} cy={cy} r={rad} fill="none" stroke={colors.line} strokeWidth={RING_W} />;  // 고리 아래 트랙(그림자 없음)
   const arc = (key: string, y: number, rad: number, a0: number, a1: number, stroke: string, width: number) => a1 > a0 && <path key={key} className="nm-raise" d={arcPath(cx, y, rad, a0, a1)} fill="none" stroke={stroke} strokeWidth={width} strokeLinecap="round" />;  // 솟고 끝이 둥근 호

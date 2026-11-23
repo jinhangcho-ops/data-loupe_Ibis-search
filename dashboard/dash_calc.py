@@ -778,7 +778,7 @@ def summary_data(card, ctx):
             groups = group_pairs(now, old, series[0]["agg"])
     target = resolve_target(view.get("target"), ctx)
     found = summary_text.summarize(series_name(series[0]), cur, prev, view.get("format", "number"), view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"], partial,
-                                   groups, (target or {}).get("value"))
+                                   groups, (target or {}).get("value"), view.get("digits"), view.get("zeros", False))
     return {"values": {"scalar": [cur], "prev": [prev]}, "text": found["text"], "sentences": found["sentences"], "target": target, **({"note": note} if note else {})}
 
 
@@ -991,7 +991,8 @@ def sentence_data(card, ctx):
                 raise ValueError(errors[i])
             item = {"kind": kind, "cur": cur[i], "prev": prev.get(i), "format": fmt}
             if kind == "delta":
-                item["text"] = compare.compare(item["cur"], item["prev"], fmt, view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"])["text"]
+                item["text"] = compare.compare(item["cur"], item["prev"], fmt, view["compare"]["mode"], (before or {}).get("text") or "직전 기간", view["better"],
+                                               digits=view.get("digits"), zeros=view.get("zeros", False))["text"]
             out[name] = item
         except ValueError as e:
             out[name] = {"kind": kind, "error": str(e), "format": fmt}

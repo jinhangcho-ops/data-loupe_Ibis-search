@@ -68,6 +68,7 @@ def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버�
     found["dash"]["pull"] = {"calcs": list(dash_store.PULL_CALCS), "ranges": list(dash_store.PULL_RANGES), "crypts": list(dash_store.PULL_CRYPTS), "units": dash_store.PULL_UNITS, "unit_names": dash_store.PULL_UNIT_NAMES, "min_every": dash_store.MIN_PULL_EVERY, "max_every": dash_store.MAX_PULL_EVERY, "default": dash_store.check_pull(None), "gap_note": dash_store.GAP_NOTE}  # 받기 설정 칸(계산 방식·갱신 주기·받는 범위·암호화)의 선택지와 상한
     found["dash"]["list"] = {"max_parts": dash_store.MAX_LIST_PARTS, "max_swaps": dash_store.MAX_LIST_SWAPS, "max_rows": dash_store.MAX_LIST_ROWS, "part_kinds": list(dash_store.LIST_PART_KINDS), "picks": list(dash_store.LIST_PICKS), "bases": list(dash_store.LIST_BASES), "sides": list(dash_store.LIST_SIDES), "reports": list(dash_store.LIST_REPORTS), "default": dash_store.check_list({}, [])}  # (B3) 목록 카드 설정 칸의 상한·선택지·처음 값
     found["dash"]["row_marks"] = {"kinds": list(dash_store.ROW_MARK_KINDS), "edits": list(dash_store.ROW_MARK_EDITS), "clashes": list(dash_store.ROW_MARK_CLASHES), "looks": list(dash_store.ROW_MARK_LOOKS), "max_fields": dash_store.MAX_ROW_MARK_FIELDS, "max_choices": dash_store.MAX_ROW_MARK_CHOICES, "max_name": dash_store.MAX_ROW_MARK_NAME, "max_text": dash_store.MAX_ROW_MARK_TEXT, "max_rows": dash_store.MAX_ROW_MARK_ROWS, "max_scan": dash_store.MAX_ROW_MARK_SCAN, "default": dash_store.ROW_MARKS_DEFAULT}  # (B9) 줄 표시 칸 설정의 선택지·상한·처음 값
+    found["dash"]["digits"] = {"min": compare.MIN_DIGITS, "max": compare.MAX_DIGITS}  # (B6) 소수 자릿수 칸의 범위
     found["dash"].update(gone_kinds=list(dash_store.GONE_KINDS), gone_text=dash_store.GONE_CARD)  # 앱에서 없앤 카드 종류와 그 안내 글(화면이 서버와 같은 글자로 보인다)
     cal = settings.load()
     found.update(week_start=cal.get("week_start") or "mon", fiscal_start_month=cal.get("fiscal_start_month") or 1)  # 화면의 주·연 묶음(web/lib/calc.ts BUCKET)이 설정을 따르게
@@ -572,11 +573,11 @@ def period_day():
 
 @app.post("/api/compare")
 def compare_sentences():
-    """비교 문장 여러 개({items: [{cur, prev, fmt, mode, label, better, partial}]})를 compare.compare로 만든다."""
+    """비교 문장 여러 개({items: [{cur, prev, fmt, mode, label, better, partial, digits, zeros}]})를 compare.compare로 만든다."""
     items = (request.json or {}).get("items")
     if not isinstance(items, list) or len(items) > dash_store.MAX_CARDS:
         raise ValueError(f"비교할 값은 {dash_store.MAX_CARDS}개까지 보낼 수 있어요.")
-    keys = ("cur", "prev", "fmt", "mode", "label", "better", "partial")
+    keys = ("cur", "prev", "fmt", "mode", "label", "better", "partial", "digits", "zeros")
     return jsonify(results=[compare.compare(**{k: i[k] for k in keys if k in i}) for i in items])
 
 

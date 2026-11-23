@@ -12,7 +12,7 @@ const CELL_H = 14, CELL_RX = 7;  // 76-progress: 칸 높이와 모서리(막대 
 export function Stripes({ card, colors, range, merge }: P) {
   const s = useRootScale(), n = card.view?.cells || 10, v = cardValue(card, 0, range, merge) ?? 0, target = cardTarget(card), fmt = cardFormat(card), full = card.view?.full || target || (fmt === "percent" ? 1 : Math.max(v, 1));
   const cells = stripeCells(v / full, n, target == null ? null : target / full), W = 260, gap = 4, w = (W - gap * (n - 1)) / n, color = pickColor(card, "series", card.title, colors, 0);
-  const says = `${showValue(v, fmt, card.view?.unit_text)}${target != null ? ` / 목표 ${showValue(target, fmt)}` : ""}`, font = growFont(says, W, FONT, s), y = TEXT_TOP + font;  // 글자가 커지면 그만큼 그림을 아래로 늘린다
+  const says = `${showValue(v, fmt, card.view?.unit_text, card.view)}${target != null ? ` / 목표 ${showValue(target, fmt, "", card.view)}` : ""}`, font = growFont(says, W, FONT, s), y = TEXT_TOP + font;  // 글자가 커지면 그만큼 그림을 아래로 늘린다
   return (
     <div className="nm-well h-full">
     <Frame w={W} h={y + FOOT} label={card.title}>

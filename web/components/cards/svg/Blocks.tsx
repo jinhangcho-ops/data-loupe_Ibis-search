@@ -14,7 +14,7 @@ export function Blocks({ card, colors, range, merge }: P) {
   if (v < 0) return <Say text="값이 음수라 블록으로 그릴 수 없어요" />;
   const target = cardTarget(card), fmt = cardFormat(card), size = card.view?.size || Math.max(+(Math.max(v, target ?? 0) / 20).toPrecision(1), 1e-9);
   const b = blockCells(v, target, size), per = 20, W = 260, cell = W / (per + (per - 1) * CELL_GAP), pitch = cell * (1 + CELL_GAP), color = pickColor(card, "series", card.title, colors, 0), total = b.actual + b.toTarget;
-  const says = `${showValue(v, fmt)}${target != null ? ` / 목표 ${showValue(target, fmt)}` : ""} (한 칸 ${showValue(size * b.scale, fmt)})`, k = growFont(says, W, FONT, s) / FONT;  // 글 줄의 자리도 글자만큼 키운다
+  const says = `${showValue(v, fmt, "", card.view)}${target != null ? ` / 목표 ${showValue(target, fmt, "", card.view)}` : ""} (한 칸 ${showValue(size * b.scale, fmt, "", card.view)})`, k = growFont(says, W, FONT, s) / FONT;  // 글 줄의 자리도 글자만큼 키운다
   const H = Math.ceil(total / per) * pitch + 28 * k;
   return (
     <div className="nm-well h-full">

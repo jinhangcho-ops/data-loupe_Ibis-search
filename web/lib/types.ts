@@ -19,6 +19,8 @@ export type ChartType = "" | "bar" | "hbar" | "stacked" | "line" | "polyline" | 
   | "group" | "stack100" | "hstack" | "hstack100" | "sarea" | "sarea100" | "step" | "combo" | "waterfall" | "pareto" | "radial" | "polar" | "range" | "slope" | "trendline" | "butterfly" | "lollipop" | "bar3d" | "surface3d" | "scatter3d";
 export type Unit = "day" | "week" | "month" | "quarter" | "year";
 export type ValueFormat = "number" | "percent" | "currency";
+/** (B6) 값 모양 칸과 짝인 소수 자릿수(0~6, 없으면 지금 규칙)·끝자리 0 채우기(참일 때만) */
+export type Places = { digits?: number; zeros?: boolean };
 
 /** 지정 색(check_colors): 이름별 HEX와 라벨이 처음 나온 순서 */
 export type Colors = { series: Record<string, string>; parts: Record<string, string>; order: string[]; parts_order: string[] };
@@ -30,7 +32,7 @@ export type StateRule = { column: string; op: string; value: number | string; le
 export type Target = { value: number } | { name?: string; period?: string; scope?: string };
 export type Slot = { label: string; format: ValueFormat; unit_text: string; color: string; y?: string; agg?: string };
 /** (B3) 목록 줄의 부분 하나(dash_store.check_list): 모양, 읽을 컬럼(swap이면 값 바꾸기 단추가 고른 값), 값 모양, 색 규칙(맞으면 그 색), 막대 기준, 줄 안 자리 */
-export type ListPart = { kind: "text" | "chip" | "tag" | "number" | "bar"; column: string; swap: boolean; format: ValueFormat; rules: { match: string; color: string }[]; basis: "max" | "sum"; side: "start" | "end" };
+export type ListPart = { kind: "text" | "chip" | "tag" | "number" | "bar"; column: string; swap: boolean; format: ValueFormat; digits?: number; zeros?: boolean; rules: { match: string; color: string }[]; basis: "max" | "sum"; side: "start" | "end" };
 /** (B3) 목록 카드(kind list)의 모양 설정 view.list: 줄 부분들(차례대로), 줄 고르기, 거를 컬럼(묶음 컬럼), 값 바꾸기 단추들, 그림·보고서 모양 */
 export type ListView = { parts: ListPart[]; pick: "none" | "one" | "many"; key: string; swaps: { label: string; value: string }[]; report: "screen" | "table" };
 /** (B9) 목록 줄에 붙이는 표시 칸 하나(dash_store.check_row_marks): id(표시 파일 컬럼), 이름(사용자가 적음), 종류, 고를 값(고르기 칸만, 그 밖은 빈 목록) */
@@ -55,6 +57,8 @@ export type CardView = {
   show_r?: boolean;
   connect?: boolean;
   format?: ValueFormat;
+  digits?: number;
+  zeros?: boolean;
   unit_text?: string;
   ring?: "stack" | "double" | "half" | "ticks";
   slots?: Slot[];
@@ -209,7 +213,7 @@ export type LiveMin = { source: Source; seconds: number };
 // ---------- 그 밖 ----------
 export type Template = { id: string; name: string; cards: Pick<Card, "kind" | "title" | "layout" | "colors">[] };
 export type Targets = { path: string; rows: Record<string, unknown>[]; errors: unknown[]; error_total: number; offset: number; limit: number; error: string };
-export type CompareItem = { cur: unknown; prev: unknown; fmt?: ValueFormat; mode?: string; label?: string; better?: "up" | "down"; partial?: boolean };
+export type CompareItem = { cur: unknown; prev: unknown; fmt?: ValueFormat; mode?: string; label?: string; better?: "up" | "down"; partial?: boolean; digits?: number; zeros?: boolean };
 /** /api/columns: [컬럼, 한글 타입] */
 export type Columns = { columns: [string, string][]; fields: [string, string][]; origins: Record<string, string> };
 
@@ -238,6 +242,7 @@ export type Constants = {
     pull: PullConsts;  // (B11) dash_store.PULL_* (dash_app.dash_constants)
     list: { max_parts: number; max_swaps: number; max_rows: number; part_kinds: ListPart["kind"][]; picks: ListView["pick"][]; bases: ListPart["basis"][]; sides: ListPart["side"][]; reports: ListView["report"][]; default: { list: ListView; list_sort: { column: string; desc: boolean }; list_rows: number } };  // (B3) 목록 카드 상수
     row_marks: { kinds: MarkField["kind"][]; edits: MarkView["edit"][]; clashes: MarkView["clash"][]; looks: ("number" | "bar")[]; max_fields: number; max_choices: number; max_name: number; max_text: number; max_rows: number; max_scan: number; default: MarkView };  // (B9) dash_store.ROW_MARK_* (dash_app.dash_constants)
+    digits: { min: number; max: number };  // (B6) 소수 자릿수 칸의 범위(compare.MIN_DIGITS·MAX_DIGITS, dash_app.dash_constants)
     gone_kinds: string[]; gone_text: string;  // (B11) 앱에서 없앤 카드 종류(dash_store.GONE_KINDS)와 그 안내 글(dash_store.GONE_CARD)
   };
   [more: string]: unknown;

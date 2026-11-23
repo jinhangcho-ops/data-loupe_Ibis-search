@@ -12,7 +12,7 @@ export function Summary({ card, colors, range, merge }: P) {
       <div className="sum-text">{d.text || "—"}</div>
       {err && <div className="err">{err}</div>}
       {ratio != null ? (
-        <div className="sum-bar" title={`${showValue(v, fmt)} / ${showValue(target, fmt)}`}>
+        <div className="sum-bar" title={`${showValue(v, fmt, "", card.view)} / ${showValue(target, fmt, "", card.view)}`}>
           <i style={{ width: `${clamp(ratio, 0, 1) * 100}%`, background: overTarget(v!, target!) ? darken(colors.series[0]) : colors.series[0] }} />
           <span className="hint">{`목표 대비 ${+(ratio * 100).toFixed(1)}%`}</span>
         </div>

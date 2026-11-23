@@ -2,13 +2,13 @@
 import { NEED_Z } from "@/components/cards/chart/three";
 import { POINT_TYPES, linkLine, readLines, parseRuleLine, parseStateLine, parseLinkLine, ruleLine, stateLine } from "@/lib/calc";
 import { seriesTitle } from "@/lib/series";
-import type { Card, CardKind } from "@/lib/types";
+import type { Card, CardKind, Places } from "@/lib/types";
 import { CARD_KINDS, DATE_X, WATCH, WITH_DATE, blankLine, freshColors, isShell, parseBlankLine } from "./kinds";
 
 export type Row = { label: string; y: string; agg: string };
 export type Form = {
   table: string; kind: CardKind; title: string; rows: Row[];
-  group: string; date: string; metric: string; targetValue: string; targetName: string; format: string; unitText: string; ring: string;
+  group: string; date: string; metric: string; targetValue: string; targetName: string; format: string; places: Places; unitText: string; ring: string;
   cells: string; size: string; rowCount: string; groupCols: string; total: boolean;
   entity: string; timeCol: string; kindCol: string; linkCol: string; stale: string; bg: string; imagePath: string; bucket: string; baseline: string; threshold: string;
   cType: string; cX: string; cSize: string;
@@ -22,7 +22,7 @@ export type Form = {
   fFlow: "steps" | "auto"; fStarts: string[]; fMiddles: string[]; fEnds: string[]; fDepth: string; fDropout: "" | "on" | "off"; fConds: string;  // Phase 3 생키: 방식·자동 흐름 값·깊이·이탈 칸·조건 줄
 };
 export const emptyForm = (kind: CardKind = "kpi", cType = ""): Form => ({
-  table: "", kind, title: "", rows: [], group: "", date: "", metric: "", targetValue: "", targetName: "", format: "number", unitText: "", ring: "stack",
+  table: "", kind, title: "", rows: [], group: "", date: "", metric: "", targetValue: "", targetName: "", format: "number", places: {}, unitText: "", ring: "stack",
   cells: "10", size: "", rowCount: "10", groupCols: "", total: false,
   entity: "", timeCol: "", kindCol: "", linkCol: "", stale: "", bg: "rack", imagePath: "", bucket: "hour", baseline: "", threshold: "",
   cType, cX: "", cSize: "", fUser: "", fStep: "", fTime: "", fSteps: "", fWin: "", fUnit: "minute",
@@ -58,7 +58,7 @@ export function formFromCard(card: Card): Partial<Form> {
     // 가로축·나누기 컬럼(source.body.x·split)과 버블 크기: 종류마다 어느 폼 칸인지(buildCard의 반대)
     date: s(card.source?.date ?? (DATE_X.includes(card.kind) ? b.x : undefined)), cX: card.kind === "chart" ? s(b.x) : "", cSize: s(v.points?.size),
     group: s(v.group ?? (card.kind === "bump" ? b.split : X_GROUP.includes(card.kind) ? b.x : undefined)), split: ["heatmap", "treemap", "sunburst"].includes(card.kind) ? s(b.split) : "",
-    format: v.format ?? "number", unitText: v.unit_text ?? "", better: v.better ?? "up", compare: v.compare?.mode ?? "span",
+    format: v.format ?? "number", places: { digits: v.digits, zeros: v.zeros }, unitText: v.unit_text ?? "", better: v.better ?? "up", compare: v.compare?.mode ?? "span",
     targetValue: s(t?.value), targetName: s(name), targetKeep: { ...keep, name }, ring: v.ring ?? "stack", cells: s(v.cells ?? 10), size: s(v.size), rowCount: s(v.rows ?? 10),
     groupCols: ((v.group_cols ?? []) as string[]).join(", "), total: !!v.total,
     entity: s(v.entity), kindCol: s(v.kind_col), linkCol: s(v.link_col), stale: s(v.stale), bg: v.bg ?? "rack", imagePath: v.image_path ?? "",
@@ -86,7 +86,7 @@ export function refillView(old: Card["view"], fresh: Partial<Card["view"]>): Car
   return { ...rest, ...fresh } as Card["view"];
 }
 /** buildCard가 폼 칸이 비면 만들지 않는 view 키(다시 정할 때 옛 값을 먼저 지운다) */
-export const FORM_KEYS = ["target", "unit_text", "bands", "stale", "time_col", "kind_col", "link_col", "baseline", "threshold", "group", "points", "size", "image_path"] as const;
+export const FORM_KEYS = ["target", "unit_text", "bands", "stale", "time_col", "kind_col", "link_col", "baseline", "threshold", "group", "points", "size", "image_path", "digits", "zeros"] as const;
 /** 꼭 고를 칸: 비었으면 "<이름>을 고르세요." */
 const need = (v: string, what: string) => { if (!v) throw new Error(`${what}을 고르세요.`); return v; };
 /** 글 칸을 줄마다 읽어 틀린 줄이 있으면 그 줄과 이유로 오류를 낸다 */
@@ -143,7 +143,7 @@ export function buildCard(f: Form, aggs: string[], needs: (agg: string) => boole
     if (!!f.gLat !== !!f.gLon) throw new Error("점은 위도와 경도 컬럼을 함께 고르세요.");
     const geo = { ...(regions ? { regions, name: f.gName.trim(), geometry: f.gGeom.trim() || "geometry" } : {}), ...(f.gRegion.trim() ? { region_value: f.gRegion.trim() } : {}),
       ...(f.gLat ? { lat: f.gLat, lon: f.gLon, ...(f.gValue ? { value: f.gValue } : {}), agg: f.gValue ? f.gAgg : "count", points: f.gPoints } : {}), tiles: f.gTiles };
-    return { kind: k, title: f.title.trim() || `${baseName} 지도`, colors: freshColors(), view: { type: "", ratio: 4 / 3, format: f.format, geo } as unknown as Card["view"], data: {},
+    return { kind: k, title: f.title.trim() || `${baseName} 지도`, colors: freshColors(), view: { type: "", ratio: 4 / 3, format: f.format, ...(f.places.digits != null ? { digits: f.places.digits, ...(f.places.zeros ? { zeros: true } : {}) } : {}), geo } as unknown as Card["view"], data: {},
       source: { schema: "", table: baseName, body: empty as unknown as Body, ...(f.date ? { date: f.date } : {}) } };
   }
   const values = f.rows.map(r => {  // 컬럼이 꼭 필요한 집계인데 컬럼을 안 고르면 개수
@@ -155,7 +155,7 @@ export function buildCard(f: Form, aggs: string[], needs: (agg: string) => boole
   if (k === "table" && !series.length) throw new Error("표는 집계할 값을 하나 이상 골라 주세요.");
   if (k === "gauge" && !f.group) throw new Error("게이지는 나눌 컬럼을 고르세요.");
   const body = { ...empty, series: byMetric ? [] : series, ...(k === "gauge" ? { x: f.group } : {}), ...(k === "chart" ? { x: f.cX, order: "auto" as const } : {}), ...(byMetric ? { names: [f.metric] } : {}) };
-  const view: Record<string, unknown> = { type: "", ratio: 4 / 3, format: f.format, compare: { mode: f.compare || "span" }, better: f.better || "up" };
+  const view: Record<string, unknown> = { type: "", ratio: 4 / 3, format: f.format, ...(f.places.digits != null ? { digits: f.places.digits, ...(f.places.zeros ? { zeros: true } : {}) } : {}), compare: { mode: f.compare || "span" }, better: f.better || "up" };
   if (byMetric && f.format === "number") delete view.format;  // 형식을 따로 고르지 않은 지표 카드는 지표 파일의 형식을 쓴다(F22: 지표마다 단위가 다르다)
   if (f.unitText.trim() && ["kpi", "tile", "donut_kpi", "stripes", "bullet", "calheat"].includes(k)) view.unit_text = f.unitText.trim();
   if (f.targetValue !== "") view.target = { value: num(f.targetValue) };

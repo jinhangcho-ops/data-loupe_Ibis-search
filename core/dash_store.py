@@ -14,6 +14,7 @@ import threading
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from core import compare
 from core import credentials
 from core import result
 from core import server
@@ -212,7 +213,7 @@ BGS = ("rack", "network", "image")  # 배치도 바탕: 서버실 칸 / 네트�
 BLANK_KINDS = ("value", "prev", "delta", "asof")  # 문장 빈칸: 이번 기간 값 / 직전 기간 값 / 비교 문장 / 기준일
 BUCKETS = ("hour", "day", "week", "month")
 MAX_RULES = 20
-EXTRA_VIEW = ("format", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window",
+EXTRA_VIEW = ("format", "digits", "zeros", "unit_text", "ring", "slots", "target", "full", "cells", "size", "rows", "group", "window",
               "cond_rules", "rules", "stale", "entity", "time_col", "kind_col", "link_col", "links", "positions", "bg", "image_path", "group_cols", "formats", "total",
               "template", "blanks", "bucket", "baseline", "threshold", "geo", "rings", "bins", "bands",
               "funnel_shape", "ladder_scale", "gap_stats", "flow_unlimited", "flow_dropout", "groups", "cloud", "note", "press", "list", "list_sort", "list_rows", "row_marks")  # 3·4단계 카드 종류의 설정
@@ -244,7 +245,7 @@ SEG_CELL_KEYS = ("label", "series", "share", "value")  # (B2) 세그먼트 칸 �
 MAX_SEG_CELLS = 8  # (B2) 세그먼트 칸 수
 MAX_ELEM_PERIOD = 40  # (B4) 기간 요소에 저장하는 기간 글자 수(대시보드 기간 칸과 같다)
 LIST_KEYS = ("parts", "pick", "key", "swaps", "report")  # (B3) 목록 카드(kind list)의 모양 설정 view.list 항목: 줄 부분들·줄 고르기·거를 컬럼·값 바꾸기 단추·보고서 모양
-LIST_PART_KEYS = ("kind", "column", "swap", "format", "rules", "basis", "side")  # (B3) 줄 부분 하나의 항목
+LIST_PART_KEYS = ("kind", "column", "swap", "format", "rules", "basis", "side", "digits", "zeros")  # (B3) 줄 부분 하나의 항목
 LIST_PART_KINDS = ("text", "chip", "tag", "number", "bar")  # (B3) 줄 부분 모양: 글·칩·꼬리표·숫자·작은 막대(앞이 처음 값)
 LIST_PICKS = ("none", "one", "many")  # (B3) 줄 고르기: 안 함·하나만·여러 줄(앞이 처음 값)
 LIST_BASES = ("max", "sum")  # (B3) 작은 막대 기준: 보이는 줄의 최댓값 대비·합계 몫(앞이 처음 값)
@@ -389,6 +390,21 @@ def number_of(value, what, low=None, high=None):
     return value
 
 
+def check_digits(item: dict, what: str) -> dict[str, object]:
+    """[SPECIFICATION] plans/dash-blocks.md#check_digits
+    값 모양 키 옆의 소수 자릿수(digits)·끝자리 0 채우기(zeros)를 검사해 있는 것만 담은 dict를 돌려준다."""
+    d, z = item.get("digits"), item.get("zeros")
+    if z is not None and type(z) is not bool:
+        raise ValueError(f"{what}의 끝자리 0 채우기(zeros)는 켬(true)이나 끔(false)이에요.")
+    if d is None:
+        if z:
+            raise ValueError(f"{what}의 끝자리 0 채우기(zeros)는 소수 자릿수(digits)를 정했을 때만 써요.")
+        return {}
+    if type(d) is not int or not compare.MIN_DIGITS <= d <= compare.MAX_DIGITS:
+        raise ValueError(f"{what}의 소수 자릿수(digits)는 {compare.MIN_DIGITS}~{compare.MAX_DIGITS} 사이의 정수예요.")
+    return {"digits": d, "zeros": True} if z else {"digits": d}
+
+
 def check_more(view):
     """표·상태·경고·배치도·편차·문장 카드의 설정: cond_rules(조건 색 규칙 {column, match, color, arrow, scope}), rules(상태 규칙, watch.py), stale(끊김 분),
     entity·time_col·kind_col·link_col(엔티티·시각·종류·연결 대상 컬럼), links(연결선 [[출발, 도착]]), positions({이름: [x, y]} 0~1), bg(rack·network·image)와 image_path,
@@ -492,7 +508,7 @@ def check_list(view: dict, group_cols: list[str]) -> dict[str, object]:
         if not isinstance(rules, list) or len(rules) > MAX_RULES or not all(isinstance(r, dict) for r in rules):
             raise ValueError(f"색 규칙(rules)은 {{match, color}} 목록이며 {MAX_RULES}개까지예요.")
         rules = [{"match": text(r.get("match"), "규칙의 식", 100, 1), "color": check_hex(r.get("color"), "규칙의 색")} for r in rules]
-        out_parts.append({"kind": kind, "column": column, "swap": swap, "format": fmt, "rules": rules, "basis": basis, "side": side})
+        out_parts.append({"kind": kind, "column": column, "swap": swap, "format": fmt, "rules": rules, "basis": basis, "side": side, **check_digits(p, "줄 부분")})
     pick = found.get("pick", LIST_PICKS[0])
     if pick not in LIST_PICKS:
         raise ValueError(f"줄 고르기(pick)는 {', '.join(LIST_PICKS)} 중 하나예요.")
@@ -813,7 +829,7 @@ def check_auto(auto: object) -> dict:
 
 
 def check_extra(view):
-    """KPI·도넛 KPI·게이지·요약·최근 행·두 계열 추이·칸 채우기·블록·목표 추이 카드의 설정: format(number·percent·currency), unit_text(값 뒤 글자),
+    """KPI·도넛 KPI·게이지·요약·최근 행·두 계열 추이·칸 채우기·블록·목표 추이 카드의 설정: format(number·percent·currency), digits·zeros(소수 자릿수·끝자리 0, B6), unit_text(값 뒤 글자),
     ring(도넛 고리 4방식), slots(도넛의 칸 {label, y, agg, format, unit_text, color}, 최대 5), target({value} 또는 목표 파일의 {name, period, scope}),
     full(칸 채우기가 가득 찬 값), cells(칸 수), size(블록 한 칸의 값), rows(최근 행 수), group(요약의 기여 분해 컬럼), window(보는 구간 {from, to})."""
     out = {}
@@ -822,6 +838,7 @@ def check_extra(view):
             if view[name] not in allowed:
                 raise ValueError(f"{name}은 {', '.join(allowed)} 중 하나예요.")
             out[name] = view[name]
+    out.update(check_digits(view, "카드"))
     for name in ("ladder_scale", "flow_unlimited", "flow_dropout"):  # False도 남긴다(flow_dropout은 없으면 키를 만들지 않는다)
         if view.get(name) is not None:
             if not isinstance(view[name], bool):

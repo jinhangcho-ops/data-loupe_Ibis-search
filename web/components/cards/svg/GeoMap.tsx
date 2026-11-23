@@ -31,7 +31,7 @@ export default function GeoMap({ card, colors }: P) {
         return (
           <path key={i} className={own || levels[i] != null ? "nm-raise" : undefined} d={r.rings.map(ring => ringPath(ring, frame.project)).join("")} fillRule="evenodd" fill={own || levels[i] != null ? color : "none"}
             fillOpacity={own ? 0.85 : levels[i] == null ? 0 : (levels[i]! * shade).toFixed(3)} stroke={colors.text} strokeOpacity={0.55} strokeWidth={0.8} vectorEffect="non-scaling-stroke">
-            <title>{`${r.name}${r.value == null ? "" : " · " + showValue(r.value, fmt)}`}</title>
+            <title>{`${r.name}${r.value == null ? "" : " · " + showValue(r.value, fmt, "", card.view)}`}</title>
           </path>
         );
       })}
@@ -45,8 +45,8 @@ export default function GeoMap({ card, colors }: P) {
           <defs><linearGradient id={id}><stop offset="0%" stopColor={base} stopOpacity={0.18} /><stop offset="100%" stopColor={base} stopOpacity={0.9} /></linearGradient></defs>
           <rect x={8} y={y} width={BAR_W * s} height={8} rx={4} fill={`url(#${id})`} stroke={colors.line} />
           <text x={8} y={y - 3} fontSize={font} fill={colors.text}>{v.label}</text>
-          <text x={8} y={y + 8 + 11 * s} fontSize={font} fill={colors.text}>{showValue(Math.min(...nums), fmt)}</text>
-          <text x={8 + BAR_W * s} y={y + 8 + 11 * s} fontSize={font} fill={colors.text} textAnchor="end">{showValue(Math.max(...nums), fmt)}</text>
+          <text x={8} y={y + 8 + 11 * s} fontSize={font} fill={colors.text}>{showValue(Math.min(...nums), fmt, "", card.view)}</text>
+          <text x={8 + BAR_W * s} y={y + 8 + 11 * s} fontSize={font} fill={colors.text} textAnchor="end">{showValue(Math.max(...nums), fmt, "", card.view)}</text>
         </>
       )}
       {kept.length > 0 && <text x={frame.w - 4} y={frame.h - 4} fontSize={9 * s} fill="#333" textAnchor="end" stroke="#fff" strokeWidth={2} paintOrder="stroke">{OSM_CREDIT}</text>}

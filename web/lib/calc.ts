@@ -1,11 +1,11 @@
 // 대시보드의 순수 계산: 옛 static/core/lib/{dash_calc,dash_grid,dash_rules,dash_svg}.js에서 옮겨 온 한 벌(원본 JS는 모두 지웠다). 서버 dashboard/dash_calc.py와 규칙을 맞춘다.
-import type { Card, CondRule, DaySeries, Layout, PrevSpan, StateRule } from "./types";
+import type { Card, CondRule, DaySeries, Layout, Places, PrevSpan, StateRule } from "./types";
 
 // ======================= lib/dash_calc.js =======================
 // 숫자는 자릿수 쉼표와 소수 넷째 자리까지
-/** 소수 d자리까지 쉼표 형식(Intl.NumberFormat은 만들 때 비싸서 자리 수마다 한 번만) */
-const FORMATS = new Map<number, Intl.NumberFormat>();
-export const decimals = (d: number) => FORMATS.get(d) ?? FORMATS.set(d, new Intl.NumberFormat(undefined, { maximumFractionDigits: d })).get(d)!;
+/** 소수 d자리까지 쉼표 형식(Intl.NumberFormat은 만들 때 비싸서 자리 수마다 한 번만). zeros면 끝 0을 남긴다 */
+const FORMATS = new Map<string, Intl.NumberFormat>();
+export const decimals = (d: number, zeros = false) => FORMATS.get(`${d}:${zeros}`) ?? FORMATS.set(`${d}:${zeros}`, new Intl.NumberFormat(undefined, { maximumFractionDigits: d, ...(zeros ? { minimumFractionDigits: d } : {}) })).get(`${d}:${zeros}`)!;
 export const shownum = (v: unknown) => v == null ? "" : typeof v === "number" ? decimals(4).format(v) : String(v);
 // HEX 색 검사(#rgb, #rrggbb)와 3자리 → 6자리
 export const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
@@ -385,20 +385,23 @@ export function smoothPath(points: string) {
   return d + ` L${p.at(-1)![0]},${p.at(-1)![1]}`;
 }
 // 값 글자(서버 core/compare.format_value와 같은 모양): number는 쉼표·소수 둘째 자리, percent는 ×100 소수 둘째 자리 %, currency는 통화 기호(setCurrency, 기본 ₩) + 쉼표(음수는 -₩). unit은 뒤에 붙인다.
-// 숫자가 아닌 값(string_agg·first·any_value 등)은 글자 그대로.
-export function showValue(v: unknown, format = "number", unit = "") {
+// 숫자가 아닌 값(string_agg·first·any_value 등)은 글자 그대로. places.digits가 있으면 그 자리 수, zeros면 끝 0을 남긴다(B6).
+export function showValue(v: unknown, format = "number", unit = "", places: Places = {}) {
   if (v == null) return "—";
   if (typeof v !== "number") return String(v) + unit;
-  const text = format === "percent" ? roundText(v * 100, 2) + "%" : format === "currency" ? roundText(v, 0, MONEY.symbol) : roundText(v, 2);
+  const d = places.digits, z = d != null && !!places.zeros;
+  const text = format === "percent" ? roundText(v * 100, d ?? 2, "", z) + "%" : format === "currency" ? roundText(v, d ?? 0, MONEY.symbol, z) : roundText(v, d ?? 2, "", z);
   return text + unit;
 }
 // compare.trimmed와 같은 규칙: 절댓값을 d자리에서 5를 올려 반올림(2.5 → 3), 쉼표, 끝의 0을 떼고, -0은 0. prefix(₩)는 부호 뒤에.
-export function roundText(x: number, d: number, prefix = "") {
+export function roundText(x: number, d: number, prefix = "", zeros = false) {
   const a = Math.abs(x), s = String(a), r = s.includes("e") ? +a.toFixed(d) : Math.round(+`${s}e${d}`) / 10 ** d;  // 10진 글자 그대로 반올림(1.005 → 1.01, toFixed는 1.00)
-  return (x < 0 && r ? "-" : "") + prefix + decimals(d).format(r);
+  return (x < 0 && r ? "-" : "") + prefix + decimals(d, zeros).format(r);
 }
 // 목표와의 차이 글자: percent는 %p, 그 밖은 값 모양대로
-export const showGap = (v: number, format?: string) => format === "percent" ? `${+(Math.abs(v) * 100).toFixed(1)}%p` : showValue(Math.abs(v), format);
+export const showGap = (v: number, format?: string, places: Places = {}) => format === "percent"
+  ? places.digits == null ? `${+(Math.abs(v) * 100).toFixed(1)}%p` : roundText(Math.abs(v) * 100, places.digits, "", !!places.zeros) + "%p"
+  : showValue(Math.abs(v), format, "", places);
 // 어두운 색(목표를 넘은 부분): #rrggbb를 비율만큼 어둡게
 export function darken(hex: string, k = 0.35) {
   const h = hex6(hex);

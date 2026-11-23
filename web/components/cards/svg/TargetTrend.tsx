@@ -21,7 +21,7 @@ export function TargetTrend({ card, colors, range, merge }: P) {
   const daily = zeroWhenEmpty(card.data?.by_unit?.day?.series?.[0]?.agg ?? ""), total = cardValue(card, 0, range, merge);  // 합계·개수의 기간 값은 날들의 합이라 하루 목표와 견줄 수 없다: 선에 그린 날들의 평균과 견준다
   const now = total != null && daily ? real.reduce((a, b) => a + b, 0) / real.length : total;
   const says = target == null ? ((card.data?.target as { error?: string } | undefined)?.error || "목표를 아직 정하지 않았어요") : now == null ? "—"
-    : `${daily ? "일 평균이 " : ""}목표보다 ${showGap(now - target, fmt)} ${underTarget(now, target) ? "낮아요" : overTarget(now, target) ? "높아요" : "같아요"}. 목표 아래로 ${crossDown(vs, target)}번 내려갔어요`;
+    : `${daily ? "일 평균이 " : ""}목표보다 ${showGap(now - target, fmt, card.view)} ${underTarget(now, target) ? "낮아요" : overTarget(now, target) ? "높아요" : "같아요"}. 목표 아래로 ${crossDown(vs, target)}번 내려갔어요`;
   const k = growFont(says, W - 2 * pad, FONT, s) / FONT, foot = 24 * k, yOf = (v: number) => H - foot - (H - foot - pad) * (hi === lo ? 0.5 : (v - lo) / (hi - lo));  // 글 줄의 자리(선 아래)도 글자만큼 키운다
   return (
     <div {...z.bind} className="nm-well">
@@ -30,7 +30,7 @@ export function TargetTrend({ card, colors, range, merge }: P) {
       {target != null && <line x1={pad} x2={W - pad} y1={yOf(target)} y2={yOf(target)} stroke={colors.ink} strokeWidth={TARGET_W} strokeDasharray={TARGET_DASH} />}
       <polyline points={vsV.map((v, i) => v == null ? null : `${xs[i].toFixed(1)},${yOf(v).toFixed(1)}`).filter(Boolean).join(" ")} fill="none" stroke={color} strokeWidth={LINE_W} strokeLinejoin="round" />
       {vsV.length <= DOT_MAX && vsV.map((v, i) => v == null ? null : <circle key={i} cx={xs[i]} cy={yOf(v)} r={DOT_R} fill={color} />)}
-      {sliceWindow(dated, z.view).map((d, i) => d.v == null ? null : <rect key={d.day} x={xs[i] - step / 2} y={pad} width={step} height={H - foot - pad} fill="transparent"><title>{`${d.day}: ${showValue(d.v, fmt)}`}</title></rect>)}{/* 마우스를 올리면 그날 값 */}
+      {sliceWindow(dated, z.view).map((d, i) => d.v == null ? null : <rect key={d.day} x={xs[i] - step / 2} y={pad} width={step} height={H - foot - pad} fill="transparent"><title>{`${d.day}: ${showValue(d.v, fmt, "", card.view)}`}</title></rect>)}{/* 마우스를 올리면 그날 값 */}
       <text x={pad} y={H - 6 * k} fontSize={FONT * k} fill={colors.text}>{says}</text>
     </Frame>
     </div>

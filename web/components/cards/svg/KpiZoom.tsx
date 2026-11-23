@@ -34,7 +34,7 @@ export function KpiZoom({ card, result, palette, ctx, unit, live, onClose }: Kpi
   const kit = useMemo(() => consts && seriesKit(consts), [consts]);
   const shown: Card = { ...card, data: result?.data ?? card.data };
   const fmt = cardFormat(shown), unitText = shown.view?.unit_text ?? "";
-  const num = showValue(cardValue(shown, 0, ctx?.range, merge), fmt);
+  const num = showValue(cardValue(shown, 0, ctx?.range, merge), fmt, "", shown.view);
   const mode = ctx?.compare_mode ?? "prev";
   const said = useCompare(card.id), dash = useDash().state.dash?.id ?? "";
   const label = compareItem(shown, ctx?.range, ctx?.prev, merge, mode)?.label ?? "";
@@ -76,8 +76,8 @@ export function KpiZoom({ card, result, palette, ctx, unit, live, onClose }: Kpi
             <ComposedChart data={rows} margin={MARGIN}>
               <CartesianGrid vertical={false} stroke="var(--line)" strokeDasharray={GRID_DASH} />
               <XAxis dataKey="label" {...AXIS} />
-              <YAxis {...AXIS} tickFormatter={(x: number) => showValue(x, fmt)} />
-              <Tooltip {...TIP} formatter={x => showValue(x as number, fmt, unitText)} />
+              <YAxis {...AXIS} tickFormatter={(x: number) => showValue(x, fmt, "", shown.view)} />
+              <Tooltip {...TIP} formatter={x => showValue(x as number, fmt, unitText, shown.view)} />
               {spans?.prev && <Line dataKey="prev" name={spans.prev.text || PREV_NAME} stroke="var(--muted)" strokeWidth={ZOOM_LINE} dot={false} isAnimationActive={false} />}
               <Area dataKey="now" name={spans ? NOW_NAME : card.title} stroke={color} strokeWidth={ZOOM_LINE} fill={color} fillOpacity={NOW_FILL} dot={false} isAnimationActive={false} />
             </ComposedChart>

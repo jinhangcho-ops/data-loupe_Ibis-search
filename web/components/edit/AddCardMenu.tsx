@@ -11,7 +11,7 @@ import { useConstants } from "@/lib/constants";
 import { withoutHashed } from "@/lib/hashed";
 import { useDash } from "@/lib/store";
 import type { Card, CardKind, CardView, Constants, Targets } from "@/lib/types";
-import { Block, Check, LineBox, Sel, Txt } from "./menu/Fields";
+import { Block, Check, LineBox, PlacesField, Sel, Txt } from "./menu/Fields";
 import { CloudFields, SIZE_LABEL } from "./panel/Tools";
 import { FUNNEL_TEMPLATES, MAX_STAGES, REVISIT_CHOICES, buildCard, condLines, emptyForm, formFromCard, templateStages, type Form, type StageRow } from "./menu/build";
 import { CARD_KINDS, DATE_X, TILE_PICS, WATCH, WITH_DATE, colsOfType, kindGroups, parseBlankLine, shellOf, unitForDate } from "./menu/kinds";
@@ -389,6 +389,7 @@ function Menu({ onClose, onAdd, fill, consts }: AddCardMenuProps & { consts: Con
       <details className="cm-more"><summary>더 많은 설정</summary>
         {/* 비워 둬도 카드가 만들어지는 칸(기본값으로 충분한 것)은 여기에 접어 둔다 */}
         {is("kpi", "tile", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation", "bullet", "calheat") && <Sel label="표시 형식" value={f.format} onChange={v => set("format", v)} options={FORMATS} />}
+        {is("kpi", "tile", "donut_kpi", "summary", "dual_trend", "stripes", "blocks", "target_trend", "gauge", "table", "deviation", "bullet", "calheat", "sentence") && <PlacesField value={f.places} range={consts.dash.digits} onChange={p => set("places", p)} />}
         {is("kpi", "tile", "donut_kpi", "stripes", "bullet", "calheat") && <Txt label="단위" title="값 뒤에 붙일 글자. 사람 수는 명, 횟수는 회처럼 적어요. 돈이면 표시 형식 금액을 고르거나 원을 적어요" placeholder="단위 (예: 명, 회, 원)" value={f.unitText} onChange={v => set("unitText", v.slice(0, 10))} width={130} />}
         {is("kpi", "tile") && <Sel label="지표" title="지표 하나를 값으로 써요. 비율 지표는 분자와 분모도 작게 보여요" value={f.metric} onChange={v => set("metric", v)} options={metrics} blank="(쓰지 않음)" />}
         <label className="hint cm-field">카드 이름<input value={f.title} placeholder="카드 이름 (비우면 자동)" onChange={e => set("title", e.target.value)} /></label>

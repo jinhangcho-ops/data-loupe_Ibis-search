@@ -16,10 +16,10 @@ type Pair = { num_label: string; num: number | null; den_label: string; den: num
 
 export function Kpi({ card, colors, range, merge, prev, mode = "prev" }: P) {
   const v = cardValue(card, 0, range, merge), fmt = cardFormat(card), pair = card.data?.pair as Pair | undefined;
-  const view = card.view ?? {}, unit = view.unit_text ?? "", num = showValue(v, fmt), said = useCompare(card.id), t = cardTarget(card), color = kpiColor(card, colors);
+  const view = card.view ?? {}, unit = view.unit_text ?? "", num = showValue(v, fmt, "", view), said = useCompare(card.id), t = cardTarget(card), color = kpiColor(card, colors);
   const trend = dayTrend(card, trendSpans(card, range, prev, mode), merge), all = [...trend.prev, ...trend.now], parts = sparkParts(trend, BOX.w, BOX.h);
   const met = v != null && t != null && (view.better === "down" ? !overTarget(v, t) : !underTarget(v, t));
-  const goal = t == null ? undefined : `목표 ${showValue(t, fmt, unit)}`, ty = t != null && parts ? sparkY(all.map(p => p.v), t, BOX.h) : null;
+  const goal = t == null ? undefined : `목표 ${showValue(t, fmt, unit, view)}`, ty = t != null && parts ? sparkY(all.map(p => p.v), t, BOX.h) : null;
   const label = compareItem(card, range, prev, merge, mode)?.label ?? "";
   if (v == null) return <Box cls="kpi"><Empty /></Box>;
   const spark = parts && (
@@ -29,7 +29,7 @@ export function Kpi({ card, colors, range, merge, prev, mode = "prev" }: P) {
       {parts.now && <><path d={parts.nowArea} fill={color} fillOpacity={NOW_FILL} /><path d={parts.now} fill="none" stroke={color} strokeWidth={SPARK_W} strokeLinecap="round" vectorEffect="non-scaling-stroke" /></>}
       <path d={`M${parts.end} h0`} stroke={parts.now ? color : "var(--muted)"} strokeWidth={END_DOT} strokeLinecap="round" vectorEffect="non-scaling-stroke" />{/* 끝 점: 늘어나는 그림(preserveAspectRatio none)에서도 둥글게 길이 0 선의 둥근 끝으로 */}
       {ty != null && <line x1={0} x2={BOX.w} y1={ty} y2={ty} stroke="var(--muted)" strokeWidth={1.5} strokeDasharray="4 3" vectorEffect="non-scaling-stroke"><title>{goal}</title></line>}
-      {all.map((p, i) => p.v != null && <rect key={p.key} x={BOX.w * (i - 0.5) / (all.length - 1)} width={BOX.w / (all.length - 1)} height={BOX.h} fill="transparent"><title>{`${p.key}: ${showValue(p.v, fmt, unit)}`}</title></rect>)}{/* 마우스를 올리면 그날 값 */}
+      {all.map((p, i) => p.v != null && <rect key={p.key} x={BOX.w * (i - 0.5) / (all.length - 1)} width={BOX.w / (all.length - 1)} height={BOX.h} fill="transparent"><title>{`${p.key}: ${showValue(p.v, fmt, unit, view)}`}</title></rect>)}{/* 마우스를 올리면 그날 값 */}
     </svg>
   );
   return (

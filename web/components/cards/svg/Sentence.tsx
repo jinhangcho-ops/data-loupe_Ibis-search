@@ -18,10 +18,10 @@ export function Sentence({ card }: P) {
         if (b.error) return <span key={i} className="blank err" title={b.error}>—</span>;
         const said = b.kind === "delta" && b.text && /보다\s*$/.test(parts[i - 1]?.text ?? "") ? b.text.replace(/^[^()]*?보다 /, "") : b.text;
         const value = b.kind === "value" ? b.cur : b.kind === "prev" ? b.prev : said, rule = matchRule(compiled, p.blank, value);
-        const arrow = rule && ruleArrow(rule, b.cur, b.prev, view.better, x => showValue(x, b.format));
+        const arrow = rule && ruleArrow(rule, b.cur, b.prev, view.better, x => showValue(x, b.format, "", view));
         return (
           <span key={i} className="blank" style={rule ? { background: alpha(rule.color, 0.28), borderRadius: 4, padding: "0 4px" } : undefined}>
-            {typeof value === "number" || value == null ? showValue(value, b.format) : String(value)}
+            {typeof value === "number" || value == null ? showValue(value, b.format, "", view) : String(value)}
             {arrow && <span className={"carrow " + arrow.tone} style={arrow.color ? { color: arrow.color } : undefined}>{" " + arrow.text}</span>}
           </span>
         );

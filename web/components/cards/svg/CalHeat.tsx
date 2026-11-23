@@ -23,7 +23,7 @@ export function CalHeat(p: P) {
         {names.map((n, r) => n && <text key={r} x={LW - 4} y={HH + r * (S + G) + S / 2} fontSize={9 * s} textAnchor="end" dominantBaseline="middle" fill="var(--muted)">{n}</text>)}
         {cells.map((d, i) => (
           <rect key={d.day} x={LW + d.col * (S + G)} y={HH + d.row * (S + G)} width={S} height={S} rx={RX} fill={levels[i] == null ? "var(--line)" : c} fillOpacity={levels[i] ?? 1}>
-            <title>{`${d.day}: ${d.v == null ? "-" : showValue(d.v, fmt, p.card.view?.unit_text)}`}</title>
+            <title>{`${d.day}: ${d.v == null ? "-" : showValue(d.v, fmt, p.card.view?.unit_text, p.card.view)}`}</title>
           </rect>
         ))}
       </Frame>

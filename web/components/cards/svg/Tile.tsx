@@ -13,7 +13,7 @@ import { kpiDelta } from "./kpi_trend";
 export function Tile(p: P): ReactNode {
   const { card, range, merge, prev, mode = "prev" } = p;
   const v = cardValue(card, 0, range, merge), fmt = cardFormat(card), unit = card.view?.unit_text ?? "";
-  const num = showValue(v, fmt), said = useCompare(card.id), note = card.view?.note ?? "";
+  const num = showValue(v, fmt, "", card.view), said = useCompare(card.id), note = card.view?.note ?? "";
   const label = compareItem(card, range, prev, merge, mode)?.label ?? "";
   if (v == null) return <Box cls="kpi tile"><Empty /></Box>;
   return (

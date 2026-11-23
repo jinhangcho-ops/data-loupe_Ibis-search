@@ -10,6 +10,8 @@ from core import settings
 
 FORMATS = ("number", "percent", "currency")
 MODES = ("span", "point")
+MIN_DIGITS, MAX_DIGITS = 0, 6  # (B6) 소수 자릿수 칸의 범위(dash_store.check_digits·화면 dash.digits가 같이 쓴다)
+DEFAULT_DIGITS = {"number": 2, "percent": 2, "currency": 0}  # (B6) digits를 안 줬을 때 값 모양별 자릿수
 PARTIAL_NOTES = {"span": "직전 기간 일부만 있음", "point": "비교 시점 값이 일부만 있음"}
 DIGIT_READING = "영일이삼사오육칠팔구"
 LETTER_READING = {"l": "엘", "m": "엠", "n": "엔", "r": "알"}  # 받침 있는 소리로 끝나는 영문(나머지는 받침 없음)
@@ -43,39 +45,44 @@ def finite(value):
     return float(value) if math.isfinite(value) else None
 
 
-def trimmed(value, digits):
+def trimmed(value: float, digits: int, zeros: bool = False) -> str:
     """digits 자리까지 반올림해 끝의 0을 뗀 글자(천 단위 쉼표 포함). -0은 0."""
     text = f"{Decimal(repr(value)).quantize(Decimal(1).scaleb(-digits), ROUND_HALF_UP, context=Context(prec=400)):,.{digits}f}"  # 5를 올리는 반올림(2.5 → 3). 정밀도 400은 float 최댓값(309자리)+소수 자리까지 담는다
-    text = text.rstrip("0").rstrip(".") if "." in text else text
-    return "0" if text in ("-0", "") else text
+    if not zeros and "." in text:
+        text = text.rstrip("0").rstrip(".")
+    if not re.search(r"[1-9]", text):
+        text = text.lstrip("-")
+    return text or "0"
 
 
-def format_value(value, fmt="number"):
-    """값 하나를 글자로. number는 1,234.5, currency는 ₩1,234(기호는 설정 currency_symbol), percent는 비율을 ×100 한 12.3%. 숫자가 아니면 빈 글자."""
+def format_value(value: object, fmt: str = "number", digits: int | None = None, zeros: bool = False) -> str:
+    """값 하나를 글자로. number는 1,234.5, currency는 ₩1,234(기호는 설정 currency_symbol), percent는 비율을 ×100 한 12.3%. 숫자가 아니면 빈 글자. digits를 주면 그 자리 수, zeros면 끝 0을 남긴다(B6)."""
     value = finite(value)
     if value is None:
         return ""
+    d = DEFAULT_DIGITS.get(fmt, DEFAULT_DIGITS["number"]) if digits is None else digits
     if fmt == "percent":
-        return trimmed(value * 100, 2) + "%"
+        return trimmed(value * 100, d, zeros) + "%"
     if fmt == "currency":
-        shown = trimmed(abs(value), 0)
-        return ("-" if value < 0 and shown != "0" else "") + settings.get("currency_symbol") + shown
-    return trimmed(value, 2)
+        shown = trimmed(abs(value), d, zeros)
+        return ("-" if value < 0 and re.search(r"[1-9]", shown) else "") + settings.get("currency_symbol") + shown
+    return trimmed(value, d, zeros)
 
 
-def format_delta(delta, fmt="number"):
+def format_delta(delta: object, fmt: str = "number", digits: int | None = None, zeros: bool = False) -> str:
     """변화량을 부호를 붙인 글자로(+1,234 / -₩500 / +1.5%p). 0은 부호 없이."""
     delta = finite(delta)
     if delta is None:
         return ""
+    d = DEFAULT_DIGITS.get(fmt, DEFAULT_DIGITS["number"]) if digits is None else digits
     head, tail = "", ""
     if fmt == "percent":
-        body, tail = trimmed(abs(delta) * 100, 2), "%p"
+        body, tail = trimmed(abs(delta) * 100, d, zeros), "%p"
     elif fmt == "currency":
-        head, body = settings.get("currency_symbol"), trimmed(abs(delta), 0)
+        head, body = settings.get("currency_symbol"), trimmed(abs(delta), d, zeros)
     else:
-        body = trimmed(abs(delta), 2)
-    return ("" if body == "0" else "+" if delta > 0 else "-") + head + body + tail
+        body = trimmed(abs(delta), d, zeros)
+    return ("" if not re.search(r"[1-9]", body) else "+" if delta > 0 else "-") + head + body + tail
 
 
 def percent_change(cur, prev):
@@ -96,7 +103,7 @@ def tone_of(direction, better):
     return "good" if direction == better else "bad"
 
 
-def compare(cur, prev, fmt="number", mode="span", label="직전 기간", better="up", partial=False):
+def compare(cur: object, prev: object, fmt: str = "number", mode: str = "span", label: str = "직전 기간", better: str = "up", partial: bool = False, digits: int | None = None, zeros: bool = False) -> dict[str, object]:
     """현재 값 cur와 직전 값 prev(없으면 None)를 비교해 {text, delta_text, pct, direction, tone}을 돌려준다.
     label은 비교 대상 이름("직전 7일", "7일 전"), better는 오르는 쪽이 좋으면 "up", 내리는 쪽이 좋으면 "down"(그 밖은 좋고 나쁨 없음).
     pct는 변화율(%) 숫자이고 직전 값이 없거나 0이면 None. direction은 up·down·flat."""
@@ -104,6 +111,12 @@ def compare(cur, prev, fmt="number", mode="span", label="직전 기간", better=
         raise ValueError(f"값 모양은 {', '.join(FORMATS)} 중 하나여야 해요.")
     if mode not in MODES:
         raise ValueError(f"비교 방식은 {', '.join(MODES)} 중 하나여야 해요.")
+    if digits is not None and (type(digits) is not int or not MIN_DIGITS <= digits <= MAX_DIGITS):
+        raise ValueError(f"소수 자릿수는 {MIN_DIGITS}~{MAX_DIGITS} 사이의 정수여야 해요.")
+    if type(zeros) is not bool:
+        raise ValueError("끝자리 0 채우기는 켬(true)이나 끔(false)이어야 해요.")
+    if zeros and digits is None:
+        raise ValueError("끝자리 0 채우기는 소수 자릿수를 정했을 때만 써요.")
     cur, prev = finite(cur), finite(prev)
     note = f" ({PARTIAL_NOTES[mode]})" if partial else ""
     if cur is None:
@@ -113,9 +126,9 @@ def compare(cur, prev, fmt="number", mode="span", label="직전 기간", better=
     delta = cur - base
     shown_zero = lambda text: not re.search(r"[1-9]", text)  # 보이는 숫자가 반올림해 0이면 같은 것으로(0% 늘었어요·초록 화살표를 내지 않게)
     flat = math.isclose(cur, base, rel_tol=1e-12, abs_tol=1e-12) or (
-        prev is not None and (ratio or prev != 0) and shown_zero(format_delta(delta, fmt)) and (ratio or shown_zero(percent_text(percent_change(cur, prev), tiny=False))))
+        prev is not None and (ratio or prev != 0) and shown_zero(format_delta(delta, fmt, digits, zeros)) and (ratio or shown_zero(percent_text(percent_change(cur, prev), tiny=False))))
     direction = "flat" if flat else "up" if delta > 0 else "down"
-    delta_text = format_delta(0 if flat else delta, fmt)
+    delta_text = format_delta(0 if flat else delta, fmt, digits, zeros)
     tone = tone_of(direction, better)
     pct = None if prev is None else percent_change(cur, prev)
     if prev is None or (prev == 0 and not ratio and not flat):
@@ -123,7 +136,7 @@ def compare(cur, prev, fmt="number", mode="span", label="직전 기간", better=
     elif flat:
         text = f"{particle(label, '과', '와')} 같아요"
     elif ratio:
-        text = f"{label}보다 {delta_text.lstrip('+-')} {'늘었어요' if delta > 0 else '줄었어요'} ({format_value(prev, fmt)} → {format_value(cur, fmt)})"
+        text = f"{label}보다 {delta_text.lstrip('+-')} {'늘었어요' if delta > 0 else '줄었어요'} ({format_value(prev, fmt, digits, zeros)} → {format_value(cur, fmt, digits, zeros)})"
     else:
         text = f"{label}보다 {percent_text(pct)} {'늘었어요' if delta > 0 else '줄었어요'} ({delta_text})"
     return {"text": text + note, "delta_text": delta_text, "pct": pct, "direction": direction, "tone": tone}

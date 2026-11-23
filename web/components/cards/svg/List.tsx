@@ -38,7 +38,7 @@ export function listRows(columns: ListCol[], data: unknown[][], list: ListView, 
   const parts = list.parts.map(p => {
     const name = p.swap ? list.swaps[swap]?.value ?? "" : p.column;
     const i = at(name);
-    const texts = data[i].map(v => (typeof v === "number" ? showValue(v, p.format) : v == null ? "" : String(v)));
+    const texts = data[i].map(v => (typeof v === "number" ? showValue(v, p.format, "", p) : v == null ? "" : String(v)));
     const compiled = p.rules ? compileRules(p.rules.map(r => ({ column: name, match: r.match, color: r.color, arrow: "none", scope: "cell" })), { [name]: kindOfValues(data[i]) ?? "" }) : null;
     const colors = data[i].map(v => (compiled ? matchRule(compiled, name, v)?.color ?? null : null));
     const pos = data[i].map(v => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : 0));

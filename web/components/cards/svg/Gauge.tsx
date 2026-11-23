@@ -14,17 +14,17 @@ const THICK = 22, SWATCH_RX = 4, SWATCH_TEXT_DY = 10;  // 74-gauge: 호·트랙 
 export function Gauge({ card, colors }: P) {
   const scale = useRootScale(), v = card.data?.values, labels = v?.labels ?? [], vals = (v?.series?.[0]?.values ?? []) as (number | null)[], segs = gaugeSegments(vals);
   const total = vals.filter((x): x is number => x != null && x > 0).reduce((a, b) => a + b, 0), cx = 90, r = 62, fmt = cardFormat(card);
-  const pitch = Math.max(PITCH, FONT * scale * LINE), H = TOP + ROWS * pitch + 16, W = LEFT + (SWATCH + 5 + TEXT_W) * scale, cy = H / 2, km = growFont(showValue(total, fmt), HOLE, MAIN, scale) / MAIN;  // 범례가 커지는 만큼 그림 상자를 늘린다
+  const pitch = Math.max(PITCH, FONT * scale * LINE), H = TOP + ROWS * pitch + 16, W = LEFT + (SWATCH + 5 + TEXT_W) * scale, cy = H / 2, km = growFont(showValue(total, fmt, "", card.view), HOLE, MAIN, scale) / MAIN;  // 범례가 커지는 만큼 그림 상자를 늘린다
   const color = (i: number) => pickColor(card, "parts", labels[i], colors, i);
   return (
     <Box cls="nm-well"><Frame w={W} h={H} label={card.title}>
       <circle cx={cx} cy={cy} r={r} fill="none" stroke={colors.line} strokeWidth={THICK} />{/* 호 아래 트랙(그림자 없음) */}
       {segs.map(s => (
         <path key={s.index} d={arcPath(cx, cy, r, s.a0, s.a1)} fill="none" stroke={color(s.index)} strokeWidth={THICK}>
-          <title>{`${labels[s.index]}: ${showValue(vals[s.index], fmt)} (${+(s.share * 100).toFixed(1)}%)`}</title>
+          <title>{`${labels[s.index]}: ${showValue(vals[s.index], fmt, "", card.view)} (${+(s.share * 100).toFixed(1)}%)`}</title>
         </path>
       ))}
-      <text x={cx} y={cy + 6 * km} textAnchor="middle" fontSize={MAIN * km} fontWeight={700} fill={colors.ink}>{showValue(total, fmt)}</text>
+      <text x={cx} y={cy + 6 * km} textAnchor="middle" fontSize={MAIN * km} fontWeight={700} fill={colors.ink}>{showValue(total, fmt, "", card.view)}</text>
       {segs.slice(0, ROWS).map((s, k) => (
         <g key={"l" + s.index}>
           <rect x={LEFT} y={TOP + k * pitch} width={SWATCH * scale} height={SWATCH * scale} rx={SWATCH_RX} fill={color(s.index)} />

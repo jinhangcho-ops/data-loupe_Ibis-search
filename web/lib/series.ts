@@ -2,7 +2,7 @@
 // common.js의 sameSource). 본문은 옛 것 그대로이고, 옛 전역 SERVER에서 읽던 merge(다시 묶을 수 있는 집계)·agg_names는 인자로 받는다.
 import { currentWords, semanticTone, TONE_COLORS } from "./autoviz";
 import { daysBetween,labelIndex, ownRange, rollup, shiftDay, zeroWhenEmpty } from "./calc";
-import type { Card, CompareItem, CompareMode, DaySeries, PrevSpan } from "./types";
+import type { Card, CompareItem, CompareMode, DaySeries, PrevSpan, ValueFormat } from "./types";
 
 /** 보는 기간·읽은 범위(열린 쪽은 비움) */
 export type Range = { start?: string | null; end?: string | null } | null | undefined;
@@ -47,19 +47,20 @@ export function compareItem(card: Card, range: { start: string; end: string } | 
   const by = card.data?.by_unit, s = by?.day?.series[0];
   if (!s || !range?.start || !range?.end) return null;
   const days = by!.day!.labels, mode = card.view?.compare?.mode ?? "span", better = card.view?.better ?? "up", n = daysBetween(range.start, range.end);
+  const v = card.view, extra = v?.digits != null ? { fmt: (v.format || card.data?.values?.format || "number") as ValueFormat, digits: v.digits, ...(v.zeros ? { zeros: true } : {}) } : {};
   if (!merge.includes(s.agg)) {  // 고유 개수 같은 집계는 서버가 두 기간으로 따로 구한 값(window_nunique와 그 prev)을 쓴다. 기간 비교만
     type Win = { start?: string; end?: string; values: Record<string, unknown>; prev?: Win };
     const w = card.data?.values?.window_nunique as Win | undefined, same = (a?: { start?: string; end?: string }, b?: { start?: string; end?: string } | null) => !!a && a.start === b?.start && a.end === b?.end;
     if (mode !== "span" || !prev?.start || !w || !same(w, range) || !same(w.prev, prev) || w.values["0"] == null || w.prev!.values["0"] == null) return null;
-    return { cur: w.values["0"], prev: w.prev!.values["0"], mode, label: prev.text, better, partial: prev.start < days[0] };
+    return { cur: w.values["0"], prev: w.prev!.values["0"], mode, label: prev.text, better, partial: prev.start < days[0], ...extra };
   }
   if (mode === "point") {
     const before = shiftDay(range.end, -n);
-    return { cur: pointValue(s, days, range.end, merge), prev: pointValue(s, days, before, merge), mode, label: `${n}일 전`, better, partial: before < days[0] };
+    return { cur: pointValue(s, days, range.end, merge), prev: pointValue(s, days, before, merge), mode, label: `${n}일 전`, better, partial: before < days[0], ...extra };
   }
   if (!prev?.start) return null;
   const loaded = loadedRange(card, merge);
-  return { cur: windowValue(s, days, range.start, range.end, merge, loaded), prev: windowValue(s, days, prev.start, prev.end, merge, loaded), mode, label: prev.text, better, partial: prev.start < days[0] };
+  return { cur: windowValue(s, days, range.start, range.end, merge, loaded), prev: windowValue(s, days, prev.start, prev.end, merge, loaded), mode, label: prev.text, better, partial: prev.start < days[0], ...extra };
 }
 
 // 카드 객체(그리는 한 번에 쓰는 것)마다 색 순서의 복사본. 새 라벨은 이 복사본에만 붙는다(React 상태인 card.colors를 그리는 중에 바꾸지 않는다).

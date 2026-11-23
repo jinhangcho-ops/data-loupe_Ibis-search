@@ -17,11 +17,11 @@ def pair(entry):
     return None, None
 
 
-def change_sentence(name, cur, prev, fmt, mode, label, better, partial):
+def change_sentence(name: str, cur: object, prev: object, fmt: str, mode: str, label: str, better: str, partial: bool, digits: int | None = None, zeros: bool = False) -> str | None:
     """① 변화 문장. 현재 값이 없으면 None."""
     if compare.finite(cur) is None:
         return None
-    return f"{compare.particle(name, '은', '는')} " + compare.compare(cur, prev, fmt, mode, label, better, partial)["text"] + "."
+    return f"{compare.particle(name, '은', '는')} " + compare.compare(cur, prev, fmt, mode, label, better, partial, digits, zeros)["text"] + "."
 
 
 def share_sentence(cur, prev, groups, fmt):
@@ -47,21 +47,21 @@ def share_sentence(cur, prev, groups, fmt):
     return f"{'늘어난' if total > 0 else '줄어든'} 몫의 {compare.trimmed(share * 100, 0)}%가 {group}{compare.ending(group, '이에요', '예요')}."
 
 
-def target_sentence(cur, target, fmt):
+def target_sentence(cur: object, target: object, fmt: str, digits: int | None = None, zeros: bool = False) -> str | None:
     """③ 목표 대비 문장. 현재 값이나 목표가 숫자가 아니거나 목표가 0 이하면 None."""
     cur, target = compare.finite(cur), compare.finite(target)
     if cur is None or target is None or target <= 0:
         return None
     pct = cur / target * 100
-    base = f"목표 {compare.format_value(target, fmt)} 대비 {compare.trimmed(pct, 1)}%"
+    base = f"목표 {compare.format_value(target, fmt, digits, zeros)} 대비 {compare.trimmed(pct, 1)}%"
     if math.isclose(pct, 100, rel_tol=1e-9):  # 합계의 부동소수 꼬리(1.1 + 2.2 = 3.3000000000000003)로 '넘었어요'가 되지 않게
         return base + "로 목표를 채웠어요."
     return base + ("로 목표를 넘었어요." if pct > 100 else "예요.")
 
 
-def summarize(name, cur, prev=None, fmt="number", mode="span", label="직전 기간", better="up", partial=False, groups=None, target=None):
+def summarize(name: str, cur: object, prev: object = None, fmt: str = "number", mode: str = "span", label: str = "직전 기간", better: str = "up", partial: bool = False, groups: dict | None = None, target: object = None, digits: int | None = None, zeros: bool = False) -> dict[str, object]:
     """지표 name의 요약 {text, sentences}. sentences는 위 ①②③ 중 만들 수 있는 문장 목록, text는 공백으로 이은 글.
     groups는 {그룹 이름: (현재, 직전)} 또는 {그룹 이름: {"cur", "prev"}}, target은 목표 숫자(없으면 None)."""
-    found = [change_sentence(name, cur, prev, fmt, mode, label, better, partial), share_sentence(cur, prev, groups, fmt), target_sentence(cur, target, fmt)]
+    found = [change_sentence(name, cur, prev, fmt, mode, label, better, partial, digits, zeros), share_sentence(cur, prev, groups, fmt), target_sentence(cur, target, fmt, digits, zeros)]
     sentences = [s for s in found if s]
     return {"text": " ".join(sentences), "sentences": sentences}

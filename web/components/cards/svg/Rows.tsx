@@ -38,8 +38,8 @@ function TableView({ card, columns, rows, prev }: Pick<P, "card"> & { columns: C
   const compiled = compileRules(view.cond_rules, kinds), groups = columns.filter(c => c.kind === "group").length;
   const order = rows.map((_, i) => i);
   if (sort) order.sort((a, b) => { const [x, y] = [rows[a][sort.i], rows[b][sort.i]] as [never, never]; return Number(x == null) - Number(y == null) || (x > y ? 1 : x < y ? -1 : 0) * sort.dir; });
-  const sum = (i: number) => showValue(rows.reduce<number>((a, r) => a + ((r[i] as number) ?? 0), 0), formats[names[i]] ?? "number");
-  const text = (v: unknown, i: number) => typeof v === "number" ? showValue(v, formats[names[i]] ?? "number") : v == null ? "" : String(v);
+  const sum = (i: number) => showValue(rows.reduce<number>((a, r) => a + ((r[i] as number) ?? 0), 0), formats[names[i]] ?? "number", "", view);
+  const text = (v: unknown, i: number) => typeof v === "number" ? showValue(v, formats[names[i]] ?? "number", "", view) : v == null ? "" : String(v);
   return (
     <>
     {open != null && rows[open] && <RowDetail names={names} values={rows[open].map(text)} onClose={() => setOpen(null)} />}
@@ -55,7 +55,7 @@ function TableView({ card, columns, rows, prev }: Pick<P, "card"> & { columns: C
             <tr key={r} className="pickable" title={ROW_TIP} onClick={e => { e.stopPropagation(); setOpen(r); }} style={whole ? { background: alpha(whole.color, 0.22) } : undefined}>
               {row.map((v, i) => {
                 const fmt = formats[names[i]] ?? "number", before = columns[i].kind === "value" ? old?.[i - groups] : null, num = typeof v === "number";
-                const shown = (x: unknown) => showValue(x, fmt);  // 화면 글이 같으면 =
+                const shown = (x: unknown) => showValue(x, fmt, "", view);  // 화면 글이 같으면 =
                 const arrow = (hits[i] && ruleArrow(hits[i]!, v, before, view.better, shown)) || (num && before != null && !hits[i]?.arrow ?ruleArrow({ arrow: "auto", color: "" }, v, before, view.better, shown) : null);
                 return <Cell key={i} text={text(v, i)} rule={hits[i]?.scope === "cell" ? hits[i] : null} arrow={arrow} num={num} />;
               })}
