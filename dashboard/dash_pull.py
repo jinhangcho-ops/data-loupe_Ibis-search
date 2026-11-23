@@ -235,7 +235,7 @@ def new_rows(fetched: "ibis.Table", tail: "ibis.Table", keys: list[str]) -> "ibi
 def pull_slot(need: dict, dash: dict, renew: bool, full: bool = False) -> dict:
     """[SPECIFICATION] plans/dash-blocks.md#pull_slot
     필요한 것 하나(need)의 칸을 필요하면 DB에서 받아(전부·아직 없는 줄·새 줄) 조각으로 쓰고 pull.json을 고쳐 그 내용을 돌려준다."""
-    with dash_files.LOCK:
+    with dash_files.LOCK, dash_files.slot_held(need["slot"]):
         slot = need["slot"]
         man = dash_files.read_manifest(slot)
         folder = dash_files.root() / slot
@@ -577,7 +577,7 @@ def refetch_range(dash: dict, slot: str, start: str, end: str) -> dict:
         raise ValueError(MANY_DATES)
     if not (DAY_RE.fullmatch(start) and DAY_RE.fullmatch(end)) or date.fromisoformat(start) > date.fromisoformat(end):
         raise ValueError(BAD_RANGE)
-    with dash_files.LOCK:
+    with dash_files.LOCK, dash_files.slot_held(slot):
         group, salt = man["crypt"]["group"], man["crypt"]["salt"]
         k = dash_keys.slot_key(group, dash["id"], salt)
         if OPEN["con"] is not None and OPEN["dash"] != dash["id"]:
@@ -714,27 +714,28 @@ def rewrite_crypt(dash: dict, old_keys: dict[str, str | None]) -> list[str]:
                 continue
             entry = man["users"][dash["id"]]
             s2 = dash_store.def_hash({"source": man["source"], "schema": man["schema"], "table": man["table"], "group": new, "owner": ""})
-            found = dash_files.read_manifest(s2)
-            if found is not None:
-                dash_files.write_manifest(s2, {**found, "users": {**found["users"], dash["id"]: entry}})
-            else:
-                salt = base64.b64encode(secrets.token_bytes(dash_keys.SALT_BYTES)).decode() if new.startswith("pass:") else ""
-                _, read_old = encs(old_keys[old])
-                write_new, read_new = encs(dash_keys.slot_key(new, dash["id"], salt))
-                folder = dash_files.root() / s2
-                folder.mkdir(parents=True, exist_ok=True)
-                part = PART.format(n=1)
-                tmp = folder / (TEMP_PREFIX + part)
-                try:
-                    local.read_parquet([str(dash_files.root() / old / p) for p in man["parts"]], **read_old).to_parquet(tmp, **write_new)
-                except BaseException:
-                    tmp.unlink(missing_ok=True)
-                    raise
-                rows = local.read_parquet([str(tmp)], **read_new).count().to_pyarrow().as_py()
-                tmp.replace(folder / part)
-                dash_files.write_manifest(s2, {**man, "crypt": {"group": new, "salt": salt}, "users": {dash["id"]: entry}, "parts": [part], "rows": rows})
-            dash_files.drop_user(old, dash["id"])
-            made.append(s2)
+            with dash_files.slot_held(old), dash_files.slot_held(s2):
+                found = dash_files.read_manifest(s2)
+                if found is not None:
+                    dash_files.write_manifest(s2, {**found, "users": {**found["users"], dash["id"]: entry}})
+                else:
+                    salt = base64.b64encode(secrets.token_bytes(dash_keys.SALT_BYTES)).decode() if new.startswith("pass:") else ""
+                    _, read_old = encs(old_keys[old])
+                    write_new, read_new = encs(dash_keys.slot_key(new, dash["id"], salt))
+                    folder = dash_files.root() / s2
+                    folder.mkdir(parents=True, exist_ok=True)
+                    part = PART.format(n=1)
+                    tmp = folder / (TEMP_PREFIX + part)
+                    try:
+                        local.read_parquet([str(dash_files.root() / old / p) for p in man["parts"]], **read_old).to_parquet(tmp, **write_new)
+                    except BaseException:
+                        tmp.unlink(missing_ok=True)
+                        raise
+                    rows = local.read_parquet([str(tmp)], **read_new).count().to_pyarrow().as_py()
+                    tmp.replace(folder / part)
+                    dash_files.write_manifest(s2, {**man, "crypt": {"group": new, "salt": salt}, "users": {dash["id"]: entry}, "parts": [part], "rows": rows})
+                dash_files.drop_user(old, dash["id"])
+                made.append(s2)
     return made
 
 

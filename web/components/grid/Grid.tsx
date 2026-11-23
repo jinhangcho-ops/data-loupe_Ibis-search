@@ -110,7 +110,7 @@ type PieceProps = Shared & { card: Card; l: Layout; drag: Pick<Drag, "startMove"
 /** 조각 하나(옛 카드 상자): 고르기·크게 보기·%·⚙·×·이름 고치기·비교 문장·안내·틀 요소 */
 function Piece({ card, l, drag, edit, look, star, palette, shares, setShares, pick, cross, remove }: PieceProps) {
   const { state, dispatch } = useDash();
-  const { compares, dashOnly, build, conn, setZoom, ctxOf, unitOf, viewOf, presses, press, busy } = useShell();
+  const { compares, dashOnly, build, conn, setZoom, ctxOf, unitOf, viewOf, presses, press, busy, shortcut } = useShell();
   const consts = useConstants(), pc = !!consts && !!state.dash && pullOf(state.dash, consts.dash.pull).calc === "pc", pickable = !build && (!!conn || pc);  // 보는 곳에서 연결이 있거나 PC 계산 대시보드면 누르기를 받는다(ShellProvider recomputeRange와 같은 판정)
   const { startMove, startResize } = drag;
   const cx = ctxOf(card.id), v = viewOf(card.id), loading = busy.includes(card.id);
@@ -170,7 +170,7 @@ function Piece({ card, l, drag, edit, look, star, palette, shares, setShares, pi
         {tools}
       </div>
       <div className={"bbody" + (paint ? " paint" : "")} onClick={look && !isShell(card) ? e => { const hit = (e.target as Element).closest(PRESSABLE); if (!hit || !e.currentTarget.contains(hit)) { if (pressable) toggle(); else setZoom(card.id); } } : undefined}>
-        {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={drawn} result={res} palette={palette} ctx={cx} onPick={pickable ? (column, value) => cross(card.id, column, value) : undefined} pressed={presses.find(p => p.from === card.id)?.value} onPress={pickable ? (column, values) => { press(card.id, values.length ? { value: { column, in: values } } : null).catch(e => dispatch({ type: "error", message: (e as Error).message })); } : undefined} onMark={look && state.dash?.id ? (key, values) => { setMark(state.dash!.id, card.id, key, values).then(r => dispatch({ type: "values", results: [{ id: card.id, data: applyMark(state.values[card.id]?.data ?? card.data, r.key, r.values) }] })).catch(e => dispatch({ type: "error", message: (e as Error).message })); } : undefined} share={shares.includes(card.id) || !!v?.share} />}
+        {isShell(card) ? <div className="hint bnote">{SHELL_NOTE}</div> : <CardBody card={drawn} result={res} palette={palette} ctx={cx} onPick={pickable ? (column, value) => cross(card.id, column, value) : undefined} pressed={presses.find(p => p.from === card.id)?.value} onPress={pickable ? (column, values) => { press(card.id, values.length ? { value: { column, in: values } } : null).catch(e => dispatch({ type: "error", message: (e as Error).message })); } : undefined} onMark={look && !shortcut && state.dash?.id ? (key, values) => { setMark(state.dash!.id, card.id, key, values).then(r => dispatch({ type: "values", results: [{ id: card.id, data: applyMark(state.values[card.id]?.data ?? card.data, r.key, r.values) }] })).catch(e => dispatch({ type: "error", message: (e as Error).message })); } : undefined} share={shares.includes(card.id) || !!v?.share} />}
         {loading && <i className="bspin" aria-hidden="true" />}
       </div>
       {said && <div className={`bcmp ${said.tone} [padding:0_.625rem]`} title={said.delta_text}>{said.text}</div>}

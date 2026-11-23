@@ -83,7 +83,7 @@ export function FrameCard(props: FrameCardProps): ReactNode {
   const kind = card.kind as FrameKind;
   const pages = state.dash?.pages ?? [];
   const host: ActionHost = {
-    recompute: shell.recompute, setPage: shell.setPage, dashOnly: shell.dashOnly, setDashOnly: shell.setDashOnly, setReport: shell.setReport, setZoom: shell.setZoom, setSettings: shell.setSettings,
+    recompute: shell.recompute, setPage: shell.setPage, dashOnly: shell.dashOnly, setDashOnly: shell.setDashOnly, setReport: shell.setReport, setZoom: shell.setZoom, setSettings: shell.setSettings, shortcut: shell.shortcut !== "",
     flipTheme, flipEasy, clearFilters: shell.clearFilters, pages, cardIds: (state.dash?.cards ?? []).map(c => c.id),
     saveCsv: id => { const c = state.dash?.cards.find(x => x.id === id); if (!c) throw new Error("저장할 목록이 없어요."); Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([listCsv(state.values[id]?.data ?? c.data)], { type: "text/csv" })), download: `${c.title}.csv` }).click(); },
     saveMarks: id => { saveMarksFile(state.dash?.id ?? "", id).catch(e => dispatch({ type: "error", message: (e as Error).message })); },

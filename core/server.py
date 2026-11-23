@@ -44,7 +44,13 @@ ask_save = None  # 저장 위치를 묻는 함수(기본 파일 이름, 형식 �
 ask_folder = None  # 저장할 폴더를 묻는 함수(→ 고른 폴더 또는 None). ask_save처럼 desktop.py가 채운다.
 restart = None  # 프로그램을 닫고 다시 여는 함수. ask_save처럼 desktop.py가 채운다(창 없이 돌면 None)
 ask_open = None  # 파일 하나를 고르는 함수(kind → 고른 경로 또는 None). ask_save처럼 desktop.py가 채운다.
-PICK_KINDS = {"env": ("env 파일 (*.env)", "모든 파일 (*.*)"), "metrics": ("지표 파일 (*.yaml;*.yml;*.json)", "모든 파일 (*.*)"), "marks": ("표시 파일 (*.csv;*.tsv;*.parquet;*.xlsx)", "모든 파일 (*.*)")}  # /api/pick의 종류 → 파일 대화상자 필터. marks: (B9) 줄 표시 가져오기(dash_marks.READS와 같은 차례)
+PICK_KINDS = {"env": ("env 파일 (*.env)", "모든 파일 (*.*)"), "metrics": ("지표 파일 (*.yaml;*.yml;*.json)", "모든 파일 (*.*)"), "marks": ("표시 파일 (*.csv;*.tsv;*.parquet;*.xlsx)", "모든 파일 (*.*)"),
+              "icon": ("아이콘 (*.ico)", "모든 파일 (*.*)")}  # /api/pick의 종류 → 파일 대화상자 필터. marks: (B9) 줄 표시 가져오기(dash_marks.READS와 같은 차례). icon: (B12) 바로가기 아이콘
+only_dash = ""  # (B12) 바로가기(desktop.py --dash id)로 연 프로세스면 그 대시보드 id, 아니면 "". desktop.py가 채운다
+only_conn = ""  # (B12) 바로가기가 기억한 연결 열쇠(use_counts.connection_key, 비밀번호 없음. 만들 때 연결이 없었으면 ""). desktop.py가 채운다
+SHORTCUT_OPEN: set[tuple[str, str]] = set()  # (B12) 바로가기 프로세스가 받는 (메서드, 경로). 라우트 모듈(dash_app)이 더한다. /next/·/static/ 화면 파일은 따로 받는다
+SHORTCUT_SHUT = "바로가기 창에서는 이 대시보드를 보기만 할 수 있어요."  # (B12) shortcut_gate가 막을 때의 글
+SHORTCUT_FILES = ("/next/", "/static/")  # (B12) shortcut_gate가 그냥 내주는 화면 파일 접두(wait_turn과 같다)
 PICK_FOLDER = "folder"  # /api/pick의 종류: 파일이 아니라 폴더를 고른다(ask_folder)
 QUERY_TIMEOUT = drivers.QUERY_TIMEOUT  # 데이터 작업 하나를 기다리는 시간(초). 넘으면 멈춘다. DB 쪽 시간 제한(drivers.settle)도 같은 값.
 # 화면이 서버와 같은 값을 쓰도록 page가 head.html의 SERVER에 넣는 값(설정 범위, 기본값). 라우트 모듈이 제 것을 더한다.
@@ -268,6 +274,16 @@ def only_window():
     given = request.args.get("key") or request.cookies.get("key", "")
     if not secrets.compare_digest(given.encode(), KEY.encode()):
         abort(403, "프로그램 창에서만 열 수 있어요.")
+
+
+def shortcut_gate() -> None:
+    """[SPECIFICATION] plans/dash-blocks.md#shortcut_gate
+    (B12) 바로가기 프로세스에서만 desktop.py가 before_request로 다는 검사: SHORTCUT_OPEN 밖의 요청을 403으로 막는다."""
+    if request.path.startswith(SHORTCUT_FILES):
+        return None
+    if (request.method, request.path) not in SHORTCUT_OPEN:
+        abort(HTTPStatus.FORBIDDEN, SHORTCUT_SHUT)
+    return None
 
 
 @app.before_request

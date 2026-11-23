@@ -10,7 +10,7 @@ import { datedCard, isShell } from "@/components/edit/menu/kinds";
 import { isFrame } from "@/components/frame/registry";
 import { flush, useAutosave } from "@/components/hooks/useAutosave";
 import { useUndo, type Undo } from "@/components/hooks/useUndo";
-import { cardRequest, compare, computeCard, computeCards, getDashboard, getLiveMin, parseDay, parsePeriod, saveSettings, setLast } from "@/lib/api";
+import { cardRequest, compare, computeCard, computeCards, getDashboard, getLiveMin, parseDay, parsePeriod, saveSettings, setLast, shortcutConnect } from "@/lib/api";
 import { outsideWindow } from "@/lib/calc";
 import { useConstants } from "@/lib/constants";
 import { everySeconds, pullOf } from "@/lib/pull";
@@ -18,7 +18,7 @@ import { computedUpdate, sameContent, useActionLog, useDash } from "@/lib/store"
 import { compareItem, newOrder, sameSource } from "@/lib/series";
 import { fieldsFor, filtersFor, linkTargets, type ElemState, type Press, type SeriesView } from "@/lib/links";
 import { seriesKit } from "@/components/cards/chart/series";
-import type { Card, CompareMode, ComputeResult, Ctx, DashSettings, Dashboard, PickedFilter, Source, Unit } from "@/lib/types";
+import type { Card, CompareMode, ComputeResult, Ctx, DashSettings, Dashboard, PickedFilter, ShortcutConn, Source, Unit } from "@/lib/types";
 
 export type Note = { text: string; bad?: boolean };
 export type Said = { text: string; tone: string; delta_text?: string; [more: string]: unknown };
@@ -48,6 +48,8 @@ export type Shell = {
   presses: Press[]; press: (from: string, next: Omit<Press, "from"> | null) => Promise<void>;  // (B4) 보낸 쪽마다 누른 것 하나(저장하지 않는다)
   elems: Record<string, ElemState>; elemPeriod: (id: string, field: "period" | "as_of", text: string) => Promise<void>; setElemUnit: (id: string, unit: Unit | null) => void; setCell: (id: string, cell: number) => Promise<void>;  // (B4) 요소마다의 값
   ctxOf: (id: string) => Ctx | null; unitOf: (id: string) => Unit | null; viewOf: (id: string) => SeriesView | null;  // (B4) 카드마다
+  shortcut: string;  // (B12) 바로가기 창이면 그 대시보드 id, 아니면 ""(서버 상수)
+  ask: ShortcutConn | null; setAsk: (ask: ShortcutConn | null) => void; startShortcut: () => Promise<void>;  // (B12) 비밀번호 창에 보일 연결(null이면 닫힘), 바로가기 창을 열 때 연결
   busy: string[];  // (B2) 값을 구하는 요청이 나가 있는 카드 id
   clearFilters: () => Promise<void>;  // 걸린 필터를 모두 푼다
 };
@@ -91,6 +93,7 @@ const OFFLINE_NOTE = "연결이 없어 받아 둔 데이터로 보고 있어요.
 export function ShellProvider({ children, build }: { children: React.ReactNode; build: boolean }) {
   const { state, dispatch } = useDash();
   const consts = useConstants();
+  const shortcut = consts?.shortcut ?? "";
   const now = useRef(state);
   useEffect(() => { now.current = state; });
   const [conn, setConn] = useState<Source>(null);
@@ -98,7 +101,11 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
   const [compares, setCompares] = useState<Record<string, Said>>({});
   const [addOpen, setAddOpen] = useState(false);
   const [gallery, setGallery] = useState(false);
-  const [dashOnly, setDashOnly] = useState(false);
+  const [dashOnlyOn, setDashOnlyOn] = useState(false);
+  const dashOnly = shortcut !== "" || dashOnlyOn;
+  const setDashOnly = useCallback((on: boolean) => { if (!shortcut) setDashOnlyOn(on); }, [shortcut]);  // 바로가기 창은 보기를 끝낼 수 없다(Esc·단추·틀 요소 모두)
+  const [ask, setAsk] = useState<ShortcutConn | null>(null);
+  const need = useRef<ShortcutConn | null>(null);  // 비밀번호가 필요한 연결(startShortcut이 채운다)
   const [page, setPage] = useState("");
   const [picks, setPicks] = useState<PickedFilter[]>([]);  // 보는 사람이 필터 칸에서 고른 값(저장하지 않는다)
   const [report, setReport] = useState(false);
@@ -141,6 +148,13 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     setConn(d.source);
     setDbMin(d.seconds);
   }, []);
+  const startShortcut = useCallback(async () => {
+    try {
+      const r = await shortcutConnect();
+      need.current = r.needs ? r : null;  // 비밀번호만("password") 또는 주소까지("address") 물어야 하는 연결
+      if (r.connected) await loadConn();
+    } catch (e) { setBell("shortcut", (e as Error).message); }  // 연결을 못 열어도 저장된 값으로 연다(사용자 답 "받아 둔 데이터로 먼저"). 이유는 종에
+  }, [loadConn, setBell]);
 
   const merge = useMemo(() => consts?.merge ?? [], [consts]);
   // 지금 보이는 값을 단 카드(구한 값이 있으면 그것)
@@ -420,7 +434,7 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
   // 모든 카드를 지금 연결에서 다시 구한다(옛 refreshDash). 기간을 건 채 구한 값은 화면에만, 아니면 카드 값으로(자동 저장이 쓴다)
   // fresh가 false면 갱신 표 없이(받아 둔 것으로) 구한다([전체 갱신] 뒤)
   const recompute = useCallback(async (fresh = true) => {
-    if (!connRef.current) return dispatch({ type: "error", message: "먼저 데이터에 연결하세요." });
+    if (!connRef.current) { if (shortcut && need.current) return setAsk(need.current); return dispatch({ type: "error", message: "먼저 데이터에 연결하세요." }); }
     const stamp = fresh ? crypto.randomUUID() : "", dash = now.current.dash?.id ?? "";
     const failed: string[] = [];
     for (const id of (now.current.dash?.cards ?? []).map(c => c.id)) {
@@ -442,25 +456,26 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     const message = [failed.length ? `카드 ${failed.length}개는 다시 구하지 못해서 이전 값을 그대로 뒀어요. ` + failed.join(" / ") : "", why].filter(Boolean).join(" ");
     dispatch({ type: "error", message });
     setBell("pull", message);
-  }, [dispatch, setBell, ctxOf, hold]);
+  }, [dispatch, setBell, ctxOf, hold, shortcut]);
 
   // 갱신 주기 사슬(열어 둔 동안만): 앞 갱신이 끝난 뒤 max(주기, 걸린 시간) 뒤에 다음. 연결이 없으면 멈추고 종에 알린다
   const pullEvery = consts && state.dash ? everySeconds(pullOf(state.dash, consts.dash.pull).every, consts.dash.pull) : 0;
   const recomputeRef = useRef(recompute);
   useEffect(() => { recomputeRef.current = recompute; });
+  const connected = !!conn;
   useEffect(() => {
     if (!pullEvery) return;
     let on = true, timer: ReturnType<typeof setTimeout>;
     const step = async () => {
       if (!on) return;
-      if (!connRef.current) { on = false; setBell("offline", OFFLINE_NOTE); return; }
+      if (!connRef.current) { on = false; setBell("offline", OFFLINE_NOTE); if (shortcut && need.current) setAsk(need.current); return; }
       const start = performance.now();
       if (!document.hidden && !typing() && !saved.current.as_of) await recomputeRef.current();  // 지난 날짜 기준이면 돌지 않는다
       if (on) timer = setTimeout(step, Math.max(pullEvery * 1000, performance.now() - start));
     };
     timer = setTimeout(step, pullEvery * 1000);
     return () => { on = false; clearTimeout(timer); setBell("offline", ""); };  // 사슬이 다시 돌면 옛 "연결 없음" 소식은 뺀다
-  }, [state.dash?.id, pullEvery, setBell]);
+  }, [state.dash?.id, pullEvery, setBell, shortcut, connected]);
 
   // 종에 담을 빠진 구간 소식: 보이는 값의 note에 서버 gap_note가 든 카드 이름들
   useEffect(() => {
@@ -504,6 +519,6 @@ export function ShellProvider({ children, build }: { children: React.ReactNode; 
     commitDay: (text?: string) => { const t = text ?? inputs.as_of; setInput("as_of", t); if (t !== saved.current.as_of) apply(true, t, inputs.period); },  // 옛 change 이벤트처럼 바뀌었을 때만
     commitPeriod: (text?: string) => { const t = text ?? inputs.period; setInput("period", t); if (t.trim() !== saved.current.period) apply(true, inputs.as_of, t); },  // text: 달력이 고른 기간(칸 값이 아직 안 바뀐 때)
   };
-  const value: Shell = { conn, loadConn, dbMin, settings, setSettings, bell, setBell, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo, build, page, setPage, picks, setFilter, report, setReport, zoom, setZoom, clearFilters, presses, press, elems, elemPeriod, setElemUnit, setCell, ctxOf, unitOf, viewOf, busy };
+  const value: Shell = { conn, loadConn, dbMin, settings, setSettings, bell, setBell, open, flush, compares, recompute, period, addOpen, setAddOpen, gallery, setGallery, dashOnly, setDashOnly, saving, undo, build, page, setPage, picks, setFilter, report, setReport, zoom, setZoom, clearFilters, presses, press, elems, elemPeriod, setElemUnit, setCell, ctxOf, unitOf, viewOf, busy, shortcut, ask, setAsk, startShortcut };
   return <Ctx_.Provider value={value}>{children}</Ctx_.Provider>;
 }

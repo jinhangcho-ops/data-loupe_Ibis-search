@@ -24,7 +24,7 @@ const collect = async (id: string, connected: boolean): Promise<Found> => ({
  *  알림(종) 단추와 그 목록 창. 알림이 없으면 단추만(개수 없이) 그린다. */
 export function Bell(): React.ReactElement {
   const { state } = useDash();
-  const { bell, conn, recompute } = useShell();
+  const { bell, conn, recompute, shortcut } = useShell();
   const dashId = state.dash?.id ?? "";
   const [found, setFound] = useState<Found>(NONE);
   const [read, setRead] = useState<string[]>([]);
@@ -32,11 +32,11 @@ export function Bell(): React.ReactElement {
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState("");
   const [span, setSpan] = useState<Record<string, { start: string; end: string }>>({});
-  const reload = useCallback(() => Promise.all([bellRead(), collect(dashId, !!conn)]).then(([r, f]) => {
+  const reload = useCallback(() => Promise.all([bellRead(), shortcut ? NONE : collect(dashId, !!conn)]).then(([r, f]) => {
     setRead(r.read);
     setFound(f);
     return f;
-  }), [dashId, conn]);
+  }), [dashId, conn, shortcut]);
   useEffect(() => { reload().catch((e: Error) => setErr(e.message)); }, [reload, bell]);
   const act = (work: () => Promise<unknown>) => () => { setErr(""); work().then(reload).catch((e: Error) => setErr(e.message)); };
 

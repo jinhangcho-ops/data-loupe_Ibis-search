@@ -10,6 +10,7 @@ from lazy import Later, preload
 from core import result
 from core import server
 from core import settings
+from core import source
 from core import sql_funcs
 from core import use_counts
 from core.server import app
@@ -31,6 +32,7 @@ metric_file = Later("core.metric_file")
 period = Later("dashboard.period")
 querying = Later("core.querying")
 scan_size = Later("core.scan_size")
+shortcut = Later("dashboard.shortcut")
 targets = Later("core.targets")
 viz_rules = Later("core.viz_rules")
 
@@ -46,7 +48,13 @@ LAST = "dash_last.json"  # 첫 화면에서 마지막으로 연 대시보드 {id
 server.FREE.update({"/api/dash", "/api/dash/delete", "/api/dash/card/add", "/api/dash/settings", "/api/dash/last", "/api/dash/live_min",
                     "/api/period/parse", "/api/period/day", "/api/compare", "/api/targets", "/api/dash/image", "/dashboard", "/dashboard/build", "/api/dash/pdf", "/api/dash/templates", "/api/dash/templates/delete", "/api/dash/constants", "/chart", "/api/viz",
                     "/api/dash/pull/state", "/api/dash/pull/crypt", "/api/dash/pull/orphans", "/api/dash/pull/orphans/drop", "/api/dash/bell", "/api/dash/marks/set", "/api/dash/marks/save", "/api/dash/marks/load",
-                    "/api/dash/templates/export", "/api/dash/templates/import", "/api/dash/templates/remote", "/api/dash/templates/fetch"})  # (B7) 템플릿 경로는 연결을 쓰지 않는다
+                    "/api/dash/templates/export", "/api/dash/templates/import", "/api/dash/templates/remote", "/api/dash/templates/fetch",  # (B7) 템플릿 경로는 연결을 쓰지 않는다
+                    "/api/dash/shortcut"})  # (B12) 바로가기 만들기는 연결을 쓰지 않는다(/api/dash/shortcut/connect는 연결을 바꿔 차례를 기다린다)
+server.SHORTCUT_OPEN.update({  # (B12) 바로가기 창(보기만)이 쓰는 것: 화면, 상수·목록·열기·저장(사용자 답 2차 1), 기간·비교 문장, 카드 값·크게 보기·필터 값, 배치도 그림, 종 읽음, 내보내기(그림·PDF), 연결. 화면 모드 설정(/api/settings)은 없다(그 창에서만, 사용자 답 2차 11)
+    ("GET", "/dashboard"), ("GET", "/api/dash/constants"), ("GET", "/api/dash"), ("POST", "/api/dash"), ("POST", "/api/dash/open"), ("GET", "/api/dash/live_min"),
+    ("POST", "/api/period/parse"), ("POST", "/api/period/day"), ("POST", "/api/compare"),
+    ("POST", "/api/dash/card/compute"), ("POST", "/api/dash/cards/compute"), ("POST", "/api/dash/card/hours"), ("POST", "/api/dash/filter/values"),
+    ("GET", "/api/dash/image"), ("GET", "/api/dash/bell"), ("POST", "/api/dash/bell"), ("POST", "/api/dash/pdf"), ("POST", "/api/images"), ("POST", "/api/dash/shortcut/connect")})
 TEMPLATE_SAVE_KINDS = ("템플릿 (*.json)",)  # (B7) 템플릿 내보내기 저장 대화상자의 형식
 NO_WINDOW = "파일 창을 열 수 없어요(앱 창에서만 돼요)."  # (B7) 저장 대화상자가 없을 때(dash_marks.NO_WINDOW와 같은 글)
 TEMPLATE_GONE = "그 템플릿을 찾지 못했어요. 목록을 다시 열어 주세요."  # (B7)
@@ -78,6 +86,7 @@ def dash_constants(found):  # 카드 그리기(web/)와 차트 선반이 서버�
     cal = settings.load()
     found.update(week_start=cal.get("week_start") or "mon", fiscal_start_month=cal.get("fiscal_start_month") or 1)  # 화면의 주·연 묶음(web/lib/calc.ts BUCKET)이 설정을 따르게
     found.update(currency_symbol=settings.get("currency_symbol"), currency_max=settings.CURRENCY_MAX)  # 값 모양 currency의 기호(web/lib/calc.ts showValue)와 설정 창 칸의 글자 수
+    found["shortcut"] = server.only_dash  # (B12) 바로가기 창이면 그 대시보드 id(화면이 보기만 한다)
 
 
 PRELOAD = ("dashboard.dash_calc", "dashboard.dash_refresh", "dashboard.period", "dashboard.dash_pdf", "dashboard.summary_text")  # 대시보드를 열면 뒤에서 미리 올리는 기능 모듈
@@ -696,6 +705,33 @@ def templates_fetch() -> Response:
     for t in got:
         saved = dash_store.save_template(t)
     return jsonify(templates=saved)
+
+
+# ---------- 바로가기 (B12) ----------
+
+@app.post("/api/dash/shortcut")
+def shortcut_make() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#shortcut_make
+    `POST /api/dash/shortcut` {id, icon}: 저장 대화상자로 고른 곳에 그 대시보드를 보기만 하는 창(지금 연결의 열쇠를 기억)을 여는 .lnk를 쓴다 {path}(취소하면 null, FREE)."""
+    body = request.json or {}
+    dash = dash_store.get_dashboard(body.get("id"))
+    icon = shortcut.icon_path(body.get("icon", ""))
+    if server.ask_save is None:
+        raise ValueError(NO_WINDOW)
+    chosen = server.ask_save(pdf_stem(dash["name"]) + shortcut.LNK_SUFFIX, shortcut.LNK_KINDS)
+    if not chosen:
+        return jsonify(path=None)
+    path = Path(chosen if chosen.lower().endswith(shortcut.LNK_SUFFIX) else chosen + shortcut.LNK_SUFFIX)
+    key = use_counts.connection_key(source.recent(server.state["opened"])) if server.state["opened"] else ""
+    shortcut.write_lnk(path, *shortcut.launch_command(dash["id"], key), icon)
+    return jsonify(path=str(path))
+
+
+@app.post("/api/dash/shortcut/connect")
+def shortcut_connect() -> Response:
+    """[SPECIFICATION] plans/dash-blocks.md#shortcut_connect
+    `POST /api/dash/shortcut/connect` {password?, url?, user?}: 바로가기 창의 연결을 연다 {connected, needs, label, user}(차례를 기다린다)."""
+    return jsonify(shortcut.connect_dash(request.json))
 
 
 # ---------- 보고서 PDF ----------

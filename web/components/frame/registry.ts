@@ -39,6 +39,9 @@ export const FRAME_ACTIONS = {
   marks_load: { name: "표시를 파일에서 가져오기", arg: "card" },
 } as const satisfies Record<string, { name: string; arg: "" | "page" | "card" }>;
 export type FrameAction = keyof typeof FRAME_ACTIONS;
+/** (B12) 바로가기 창(보기만)에서 되는 할 일: 쪽 넘기기·최신화·화면 모드·필터 풀기·카드 크게 보기·내보내기·CSV(사용자 답 2차 6) */
+export const SHORTCUT_ACTIONS: readonly FrameAction[] = ["page", "refresh", "theme", "filters_clear", "zoom", "export", "csv"];
+export const SHORTCUT_NO = "바로가기 창에서는 이 단추를 쓸 수 없어요.";
 
 /** 위쪽 화면 줄에 보일 칸(서버 FRAME_PARTS와 같은 차례) */
 export const FRAME_PARTS = { name: "이름", period: "기간", asof: "기준일", theme: "화면 모드" } as const;
@@ -64,6 +67,7 @@ export type ActionHost = {
   recompute: () => unknown; setPage: (page: string) => void; dashOnly: boolean; setDashOnly: (on: boolean) => void;
   setReport: (open: boolean) => void; setZoom: (id: string | null) => void; flipTheme: () => void; pages: string[]; cardIds: string[];
   flipEasy: () => void; clearFilters: () => unknown; setSettings: (open: boolean) => void; saveCsv: (id: string) => void; saveMarks: (id: string) => void; loadMarks: (id: string) => void;
+  shortcut?: boolean;  // (B12) 바로가기 창이면 true(SHORTCUT_ACTIONS 밖의 할 일은 runAction이 막는다)
 };
 
 /** [SPECIFICATION] plans/dash-blocks.md#isFrame
@@ -118,6 +122,7 @@ export function runAction(item: Pick<FrameItem, "action" | "arg">, host: ActionH
   const { action, arg } = item;
   if (action === "") throw new Error("이 단추가 할 일을 아직 정하지 않았어요.");
   if (!Object.hasOwn(FRAME_ACTIONS, action)) throw new Error(`모르는 할 일이에요: ${action}`);
+  if (host.shortcut && !SHORTCUT_ACTIONS.includes(action)) throw new Error(SHORTCUT_NO);
   if (action === "page" && !host.pages.includes(arg)) throw new Error(`'${arg}' 쪽이 없어요.`);
   if (action === "zoom" && !host.cardIds.includes(arg)) throw new Error("크게 볼 카드가 없어요.");
   if (action === "csv" && !host.cardIds.includes(arg)) throw new Error("저장할 목록이 없어요.");

@@ -2,7 +2,7 @@
 // 같은 출처(/api/...)라 열쇠는 Flask가 첫 페이지에서 둔 쿠키(key)로 간다. 경로를 고치면 tests_pytest/test_cr_n0.py가 Flask 라우트와 대조한다.
 import type {
   Card, ChartPoints, Columns, CompareItem, CompareMode, ComputeResult, Constants, Ctx, DashList, DashSettings, Dashboard, DayParse,
-  LiveMin, MarkValue, PeriodParse, PullCrypt, PullOrphan, PullState, PullTable, PullUnused, RemoteTemplate, Section, Source, Targets, Template,
+  LiveMin, MarkValue, PeriodParse, PullCrypt, PullOrphan, PullState, PullTable, PullUnused, RemoteTemplate, Section, ShortcutConn, Source, Targets, Template,
 } from "./types";
 import type { CtxFilter } from "./links";
 
@@ -203,6 +203,23 @@ export const savePdf = (image: string, name: string) =>
   api<{ path?: string; cancelled?: boolean; window?: false; name?: string; pdf?: string }>("/api/dash/pdf", { image, name });
 /** 그림 여러 개(PNG·JPG data URL)를 고른 폴더에. 창이 없으면 window:false */
 export const saveImages = (images: { name: string; data: string }[]) => api<{ window?: false; [more: string]: unknown }>("/api/images", { images });
+
+// ---------- 바로가기 (B12) ----------
+/** [SPECIFICATION] plans/dash-blocks.md#makeShortcut
+ *  대시보드(id)를 보기만 하는 창을 여는 .lnk를 저장 대화상자로 고른 곳에 쓴다 POST /api/dash/shortcut(icon이 ""면 앱 아이콘, 취소하면 path null). */
+export function makeShortcut(id: string, icon: string): Promise<{ path: string | null }> {
+  return api<{ path: string | null }>("/api/dash/shortcut", { id, icon });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#pickIcon
+ *  파일 고르기 대화상자로 .ico 하나를 고른다 POST /api/pick {kind: "icon"}(취소하면 path null). */
+export function pickIcon(): Promise<{ path: string | null }> {
+  return api<{ path: string | null }>("/api/pick", { kind: "icon" });
+}
+/** [SPECIFICATION] plans/dash-blocks.md#shortcutConnect
+ *  바로가기 창의 연결을 연다 POST /api/dash/shortcut/connect(빈 body면 기억한 연결 가운데 비밀번호가 필요 없는 것만, url을 주면 그 주소로). */
+export function shortcutConnect(body: { password?: string; url?: string; user?: string } = {}): Promise<ShortcutConn> {
+  return api<ShortcutConn>("/api/dash/shortcut/connect", body);
+}
 
 // ---------- 화면 설정·초안 ----------
 /** 앱 설정 몇 항목(theme·board_ratio·image·board_format …)을 바꾼다(/api/settings, 쿠키로 돌아온다) */

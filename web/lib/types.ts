@@ -225,6 +225,9 @@ export type Columns = { columns: [string, string][]; fields: [string, string][];
 /** (B11) 받기 설정 상수(서버 dash_store.PULL_*와 같은 값) */
 export type PullConsts = { calcs: Pull["calc"][]; ranges: Pull["range"][]; crypts: PullCrypt[]; units: Record<PullUnit, number>; unit_names: Record<PullUnit, string>; min_every: number; max_every: number; default: Pull; gap_note: string };
 
+/** (B12) POST /api/dash/shortcut/connect의 답: 연결했나, 더 물어야 할 것(""·비밀번호만 "password"·주소·아이디·비밀번호 "address"), 연결 이름(비밀번호 없음), 아이디 */
+export type ShortcutConn = { connected: boolean; needs: "" | "password" | "address"; label: string; user: string; remembered: boolean };  // remembered: 넣은 주소의 연결을 바로가기 파일이 기억했나
+
 /** GET /api/dash/constants(server.constants("dashboard")) */
 export type Constants = {
   sizes: Record<string, [number, number]>;
@@ -239,6 +242,7 @@ export type Constants = {
   currency_symbol: string;       // 설정: 값 모양 currency의 기호(고른 적이 없으면 서버 기본값)
   currency_max: number;          // 통화 기호의 글자 수 상한(settings.CURRENCY_MAX)
   defaults: Record<string, unknown>;  // 설정 기본값(settings.DEFAULTS)
+  shortcut?: string;  // (B12) 바로가기 창이면 그 대시보드 id, 아니면 ""(server.only_dash, dash_app.dash_constants)
   features: { on: string[]; version: string | null; all: { id: string; name: string; path: string }[] };
   dash: {
     max_cards: number; max_filters: number; max_pages: number;max_dashboards: number; max_palette: number; types: Partial<Record<Exclude<ChartType, "">, string>>; time_types: ChartType[]; max_bins?: number; max_bands?: number; max_cells: number; merge_note: string;

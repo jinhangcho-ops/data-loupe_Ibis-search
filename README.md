@@ -29,7 +29,7 @@ DB·DW나 내 데이터 파일(DuckDB, Parquet, CSV, JSON, Excel, GeoJSON)에 �
 | 분석 | 전처리(행 거르기·컬럼 정리·목록을 행으로 펼치기·계산 컬럼·PCA·K-Means·좌표·중복 제거)해 새 파일·테이블로, 컬럼 요약과 품질 진단, 분석 종류 카드 13개(분포·상관관계·묶음끼리 비교·날짜에 따른 변화·퍼널·리텐션·RFM·파레토·카이제곱 검정·A/B 검정·장바구니 분석·평균이 바뀐 이유·시계열 분해) | [docs/analysis.md](docs/analysis.md) |
 | 수집 | 웹 API·파일 주소·웹페이지에서 받아 저장, DB 테이블·Kafka에 적재, 업로드 기록, 예약 실행 | [docs/collect.md](docs/collect.md) |
 | 연동 | Slack·Notion·웹훅으로 보내기, Slack 명령 받기, GA4 가져오기, LLM 설정 | [docs/integrations.md](docs/integrations.md) |
-| 대시보드 | 모아 둔 차트·KPI·표·상태를 저장된 값으로 보기, 기준일·기간·데이터 받기(DB는 거르기만, 계산은 이 PC)·갱신 주기·알림, 목표와 비교 | [docs/dashboard.md](docs/dashboard.md) |
+| 대시보드 | 모아 둔 차트·KPI·표·상태를 저장된 값으로 보기, 기준일·기간·데이터 받기(DB는 거르기만, 계산은 이 PC)·갱신 주기·알림, 목표와 비교, 대시보드 하나를 따로 창으로 여는 바로가기 만들기 | [docs/dashboard.md](docs/dashboard.md) |
 
 모든 기능에 걸친 설명은 따로 있습니다.
 

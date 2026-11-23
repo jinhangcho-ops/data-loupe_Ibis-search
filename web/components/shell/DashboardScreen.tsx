@@ -1,6 +1,6 @@
 "use client";
 // 대시보드 화면의 뿌리(클라이언트 경계). build면 만드는 곳(/dashboard/build, 늘 편집 상태), 아니면 보는 곳(/dashboard, 편집 도구 없음). 상수·상태·화면 틀 Provider 아래에 위쪽 줄·도구 줄·격자를 놓고(기간 칸·쪽 탭은 요소로만, 쪽 탭 줄은 만드는 곳에만), 목록을 받아 ?open=id → 마지막에 연 것 → 첫 것 순으로 연다.
-// 열 때는 저장된 값을 그대로 보이고, 기간 규칙대로 다시 구할 카드만 연결됐을 때 구한다(ShellProvider). 가운데 격자, 왼쪽 카드 모음, 오른쪽 칸은 카드 설정 패널(편집 모드에서 고른 카드) 또는 카드 추가 서랍(나중에 연 것). 정적 내보내기라 브라우저 값은 useEffect 안에서만 읽는다.
+// 열 때는 저장된 값을 그대로 보이고, 기간 규칙대로 다시 구할 카드만 연결됐을 때 구한다(ShellProvider). 가운데 격자, 왼쪽 카드 모음, 오른쪽 칸은 카드 설정 패널(편집 모드에서 고른 카드) 또는 카드 추가 서랍(나중에 연 것). 정적 내보내기라 브라우저 값은 useEffect 안에서만 읽는다. (B12) 상수를 받기 전에는 틀만 흐리게(.wait) 열지 않는다. 바로가기 창이면 연결(기억한 파일 연결만, startShortcut)부터 한 뒤 그 대시보드 하나만 연다.
 // 제목 줄 아래: 카운터 지표 한계 경고(옛 #d-alerts), 고른 카드 수와 [모두 선택]·[선택 해제](옛 .board-ctl, 편집 중이거나 고른 카드가 있을 때만), 알림 줄(성공 안내는 보통 색 .ok).
 import { useEffect, useMemo, useState } from "react";
 import { counterAlerts } from "@/components/cards/svg/__pure__";
@@ -37,20 +37,22 @@ export function DashboardScreen({ build }: { build: boolean }) {
 
 function DashboardView() {
   const { state, dispatch } = useDash();
-  const { open, dashOnly, setDashOnly, addOpen, setAddOpen, gallery, setGallery, conn, build, page } = useShell();
+  const { open, dashOnly, setDashOnly, addOpen, setAddOpen, gallery, setGallery, conn, build, page, shortcut, startShortcut } = useShell();
   const consts = useConstants();
   const addShell = useAddShell();
   const add = useAddCard();
   const demo = useDemo();
   const [savedOnce, setSavedOnce] = useState(false);  // 연 뒤 한 번이라도 저장했나(옛 d-state "저장했어요")
   useActionLog(a => { if (a.type === "open") setSavedOnce(false); else if (a.type === "saved") setSavedOnce(true); });
+  const ready = consts !== null;  // 바로가기 창인지는 상수로 안다: 받기 전에는 열지 않는다
   useEffect(() => {
-    listDashboards().then(list => {
+    if (!ready) return;
+    (shortcut ? startShortcut() : Promise.resolve()).then(listDashboards).then(list => {
       dispatch({ type: "list", list });
       const want = new URLSearchParams(location.search).get("open") || list.last;
-      open(list.dashboards.some(d => d.id === want) ? want : list.dashboards[0]?.id ?? "");
+      open(shortcut || (list.dashboards.some(d => d.id === want) ? want : list.dashboards[0]?.id ?? ""));
     }).catch(e => dispatch({ type: "error", message: e.message }));
-  }, [dispatch, open]);
+  }, [dispatch, open, ready, shortcut, startShortcut]);
   useEffect(() => { dispatch({ type: "editing", on: build }); }, [build, dispatch]);  // 만드는 곳은 늘 편집 상태, 보는 곳은 늘 아님
   useEffect(() => { if (state.selected) setAddOpen(false); }, [state.selected, setAddOpen]);  // 카드를 고르면 서랍 자리에 카드 설정이 온다
   // 대시보드만 보기: 메뉴·도구를 숨기고(body.dash-only) 도구 줄이 위쪽 줄이 된다(이름·연결·기간·필터·화면 모드·[보기 끝내기]는 Toolbar가 그린다). 색도 보라 강조로 바뀐다(dashboard.css). 선택·편집 모드를 푼다. Esc가 떠 있는 창을 닫았으면(defaultPrevented) 보기는 그대로
@@ -74,7 +76,7 @@ function DashboardView() {
     return cards.filter(c => secs.some(s => s.id === c.section) && !isFrame(c.kind)).map(c => c.id);
   };
   return (
-    <div className="board-view" id="dash">
+    <div className={consts ? "board-view" : "board-view wait"} id="dash">
       <Toolbar />
       <div className="big"><b>{state.dash?.name || "대시보드"}</b><span className="hint ml-[12px]" id="d-state" role="status">{state.dirty ? "저장 중…" : savedOnce ? "저장했어요" : ""}</span></div>
       {alerts.length > 0 && <div className="d-alerts" id="d-alerts" role="alert"><b>카운터 지표가 한계를 벗어났어요</b>{alerts.map(f => <div key={f.id}>{f.text}</div>)}</div>}

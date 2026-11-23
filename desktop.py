@@ -1,7 +1,8 @@
 """쿼리·분석·수집 화면을 프로그램 창으로 연다. exe의 실행 파일이자 유일한 실행 방법.
 '--browser'로 실행하면 서버·메인 창 없이 수집용 브라우저 창 프로세스만 돈다(collect_browser.launch가 띄운다).
 '--run "구성 이름"'으로 실행하면 서버·메인 창 없이 그 구성을 한 번 수집하고 기록·알림 뒤 끝난다(Windows 예약 작업이 띄운다). 종료 코드는 끝 0, 아니면 1.
-'--move-tasks'로 실행하면 서버·창 없이 예전 이름(ibis_search)의 예약 작업을 새 폴더·새 exe로 옮기고 끝난다(설치 프로그램이 끝날 때 부른다). 못 옮겨도 조용히 끝난다."""
+'--move-tasks'로 실행하면 서버·창 없이 예전 이름(ibis_search)의 예약 작업을 새 폴더·새 exe로 옮기고 끝난다(설치 프로그램이 끝날 때 부른다). 못 옮겨도 조용히 끝난다.
+'--dash 대시보드id [연결 열쇠]'로 실행하면(대시보드 바로가기) 그 대시보드만 보기만 하는 창을 따로 연다. 단일 실행 잠금을 잡지 않아 본체·다른 바로가기와 같이 열리고, 대시보드가 없으면 알림 창만 띄우고 끝난다."""
 import sys
 
 from core import drivers, settings
@@ -61,13 +62,29 @@ from query.search_app import app
 
 from core import filelock
 
+if sys.argv[1:2] == ["--dash"]:  # (B12) 바로가기: 그 대시보드만 보기만 하는 따로 창. 단일 실행 잠금을 잡지 않는다(본체·바로가기끼리 같이 열린다)
+    from dashboard import shortcut
+
+    try:
+        ONLY_DASH, ONLY_CONN = shortcut.shortcut_dash(sys.argv)
+        TITLE = shortcut.window_title(ONLY_DASH)
+    except ValueError as e:  # 대시보드가 없거나 인자가 틀림: 알림 창 하나만 띄우고 끝(본체는 열지 않는다)
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(None, str(e), "Data Loupe", 0x30)
+        sys.exit(1)
+else:
+    ONLY_DASH, ONLY_CONN, TITLE = "", "", "Data Loupe"
+
 APP_LOCK = filelock.lock_path("app.lock")  # 단일 실행: 두 번째 실행은 임시 폴더 정리(아래 sweep)로 첫 실행의 작업 폴더를 지우기 전에 막는다
-if not filelock.hold(APP_LOCK):
+if not ONLY_DASH and not filelock.hold(APP_LOCK):
     import ctypes
     ctypes.windll.user32.MessageBoxW(None, "이미 실행 중입니다.", "Data Loupe", 0x40)
     sys.exit(1)
 
 scratch.sweep()  # 지난번에 강제 종료돼 남은 임시 폴더를 지운다.
+server.only_dash, server.only_conn = ONLY_DASH, ONLY_CONN
+if ONLY_DASH:
+    app.before_request(server.shortcut_gate)  # 보기만: 다른 화면·저장·설정 API를 내주지 않는다(only_window는 그대로)
 http = make_server("127.0.0.1", 0, app, threaded=True)  # 0: 비어 있는 포트를 자동으로 고른다. threaded: 조회 중에도 메모리·CPU 요청에 답한다.
 threading.Thread(target=http.serve_forever, daemon=True).start()
 
@@ -86,7 +103,7 @@ def first_size():
 
 
 width, height = first_size()
-window = webview.create_window("Data Loupe", f"http://127.0.0.1:{http.server_port}/?key={server.KEY}", width=width, height=height, min_size=MIN_SIZE)
+window = webview.create_window(TITLE, f"http://127.0.0.1:{http.server_port}" + (f"/dashboard?open={ONLY_DASH}&key={server.KEY}" if ONLY_DASH else f"/?key={server.KEY}"), width=width, height=height, min_size=MIN_SIZE)
 
 
 def ask_save(name, file_types):
@@ -129,13 +146,15 @@ def restart():
     threading.Thread(target=window.destroy, daemon=True).start()
 
 
-server.restart = restart
+if not ONLY_DASH:
+    server.restart = restart
 server.ask_save = ask_save
 server.ask_open = ask_open
 server.ask_folder = ask_folder
 window.events.closing += closing
-threading.Thread(target=schedule.move_old_tasks, daemon=True).start()  # 예전 이름(\ibis_search\ 폴더)으로 등록한 Windows 작업을 새 폴더로 옮긴다(작업 스케줄러가 느려도 창을 막지 않게 뒤에서).
-schedule.start_watch()  # 프로그램 안 예약: 켜져 있는 동안 때가 된 예약을 돌린다.
+if not ONLY_DASH:  # (B12) 바로가기 창은 예약을 돌리지 않는다(본체와 두 번 돌지 않게)
+    threading.Thread(target=schedule.move_old_tasks, daemon=True).start()  # 예전 이름(\ibis_search\ 폴더)으로 등록한 Windows 작업을 새 폴더로 옮긴다(작업 스케줄러가 느려도 창을 막지 않게 뒤에서).
+    schedule.start_watch()  # 프로그램 안 예약: 켜져 있는 동안 때가 된 예약을 돌린다.
 webview.start()  # 창을 닫으면 여기서 끝나고, 서버 스레드도 함께 종료된다.
 schedule.stop_watch()
 bot_app.stop(wait=False)  # 켜 둔 Slack 봇의 연결을 끊는다(켜는 중이면 오래 기다리지 않는다).
@@ -146,7 +165,8 @@ if hasattr(lazy.loaded("collect.collect_browser"), "stop_child"):
 server.release_connection()  # 열어 둔 연결을 닫아 파일을 놓고 임시 폴더를 지운다(도는 쿼리가 있으면 취소하고 5초까지만 기다린다).
 from core import labels  # noqa: E402  끌 때만 쓴다
 
-labels.compact_all()  # 태그 기록을 본 파일에 합친다(실패하면 그대로 알리고, 기록은 남아 데이터를 잃지 않는다)
+if not ONLY_DASH:  # (B12) 바로가기는 태그를 쓰지 않는다(본체가 쓰는 중에 합치지 않게)
+    labels.compact_all()  # 태그 기록을 본 파일에 합친다(실패하면 그대로 알리고, 기록은 남아 데이터를 잃지 않는다)
 filelock.let_go(APP_LOCK)
 if RESTART.is_set():  # 단일 실행 잠금을 놓은 뒤에 띄운다. 이 프로그램이 정한 Polars 코어 수는 지워 새 설정을 읽게 하고, exe는 새 프로세스가 제 환경으로 뜨게 한다
     import os

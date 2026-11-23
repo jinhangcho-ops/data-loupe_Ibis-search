@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { useShell } from "./ShellProvider";
 import { dropOrphans, dropUnused, pullOrphans, pullUnused } from "@/lib/api";
+import { useConstants } from "@/lib/constants";
 import { useDash } from "@/lib/store";
 import type { PullOrphan, PullUnused } from "@/lib/types";
 
@@ -16,21 +17,23 @@ const MB = 1024 * 1024;
 export function PullCleanup(): React.ReactElement | null {
   const { state, dispatch } = useDash();
   const { conn } = useShell();
+  const consts = useConstants();
   const [orphans, setOrphans] = useState<{ orphans: PullOrphan[]; text: string } | null>(null);
   const [unused, setUnused] = useState<PullUnused[]>([]);
   const id = state.dash?.id ?? "";
   const fail = (e: Error) => dispatch({ type: "error", message: e.message });
   useEffect(() => {
+    if (!consts || consts.shortcut) return;
     if (sessionStorage.getItem(ASKED_KEY)) return;
     sessionStorage.setItem(ASKED_KEY, "1");  // 앱을 켠 뒤 한 번만(창을 닫으면 사라져 다음 실행에 다시 묻는다)
     pullOrphans().then(r => { if (r.orphans.length) setOrphans(r); }).catch(fail);
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [consts]);  // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (!id || !conn) return;
+    if (!id || !conn || !consts || consts.shortcut) return;
     let live = true;
     pullUnused(id).then(r => { if (live) setUnused(r.unused); }).catch(fail);
     return () => { live = false; };
-  }, [id, conn]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, conn, consts]);  // eslint-disable-line react-hooks/exhaustive-deps
   if (!orphans && unused.length === 0) return null;
   const keep = () => (orphans ? setOrphans(null) : setUnused([]));
   const drop = () => (orphans ? dropOrphans() : dropUnused(id, unused.map(u => u.slot))).then(keep).catch(fail);
